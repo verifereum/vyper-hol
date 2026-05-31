@@ -52,6 +52,7 @@ Proof
   metis_tac[state_equiv_mono, execution_equiv_mono]
 QED
 
+(* Each function's eliminated vars are a subset of the context-wide union *)
 Theorem elim_subset_all_elim:
   !ctx fn. MEM fn ctx.ctx_functions ==>
     remove_unused_eliminated_vars fn SUBSET remove_unused_all_eliminated ctx
@@ -161,6 +162,7 @@ QED
 (* state_equiv_empty_eq: now in stateEquivPropsTheory *)
 (* step_inst_ctx_irrel: now in venomExecPropsTheory *)
 
+(* remove_unused_function preserves setup_callee (entry label unchanged) *)
 Theorem setup_callee_ru:
   !fn args s.
     setup_callee (remove_unused_function fn) args s = setup_callee fn args s
@@ -185,6 +187,46 @@ QED
 
 
 (* setup_callee_props: now in venomExecPropsTheory *)
+
+Triviality run_blocks_tail_ctx_change_or_error:
+  !fuel ctx fn_t s.
+    ((?e. run_blocks fuel ctx fn_t s = Error e) \/
+     lift_result (state_equiv (remove_unused_all_eliminated ctx))
+                 (execution_equiv (remove_unused_all_eliminated ctx))
+                 (execution_equiv (remove_unused_all_eliminated ctx))
+       (run_blocks fuel ctx fn_t s)
+       (run_blocks fuel (remove_unused_context ctx) fn_t s)) ==>
+    ((?e. (if s.vs_halted then Halt s else run_blocks fuel ctx fn_t s) = Error e) \/
+     lift_result (state_equiv (remove_unused_all_eliminated ctx))
+                 (execution_equiv (remove_unused_all_eliminated ctx))
+                 (execution_equiv (remove_unused_all_eliminated ctx))
+       (if s.vs_halted then Halt s else run_blocks fuel ctx fn_t s)
+       (if s.vs_halted then Halt s else run_blocks fuel (remove_unused_context ctx) fn_t s))
+Proof
+  rpt strip_tac >> Cases_on `s.vs_halted` >> gvs[lift_result_def, execution_equiv_refl]
+QED
+
+Triviality run_blocks_tail_ctx_change_from_ih:
+  !fuel ctx fn_t s.
+    s.vs_inst_idx = 0 /\
+    (!tail_s.
+       tail_s.vs_inst_idx = 0 ==>
+       (?e. run_blocks fuel ctx fn_t tail_s = Error e) \/
+       lift_result (state_equiv (remove_unused_all_eliminated ctx))
+                   (execution_equiv (remove_unused_all_eliminated ctx))
+                   (execution_equiv (remove_unused_all_eliminated ctx))
+         (run_blocks fuel ctx fn_t tail_s)
+         (run_blocks fuel (remove_unused_context ctx) fn_t tail_s)) ==>
+    ((?e. (if s.vs_halted then Halt s else run_blocks fuel ctx fn_t s) = Error e) \/
+     lift_result (state_equiv (remove_unused_all_eliminated ctx))
+                 (execution_equiv (remove_unused_all_eliminated ctx))
+                 (execution_equiv (remove_unused_all_eliminated ctx))
+       (if s.vs_halted then Halt s else run_blocks fuel ctx fn_t s)
+       (if s.vs_halted then Halt s else run_blocks fuel (remove_unused_context ctx) fn_t s))
+Proof
+  rpt strip_tac >> irule run_blocks_tail_ctx_change_or_error >>
+  first_x_assum irule >> simp[]
+QED
 
 (* Block-level ctx change. Strong conclusion:
    - Error on original, OR
@@ -294,8 +336,8 @@ QED
  *
  * Part B at SUC fuel uses: callee from Part A at fuel (for INVOKE),
  *   recursion from Part B at fuel (for OK continuation after block).
- * Part A at SUC fuel uses: same-ctx function_correct (Phase 1) +
- *   Part B at SUC fuel (Phase 2), composed via lift_result transitivity.
+ * Part A at SUC fuel uses: same-ctx function_correct, then
+ *   Part B at SUC fuel, composed via lift_result transitivity.
  *)
 Theorem remove_unused_cross_ctx_fn_equiv:
   !fuel ctx.
@@ -328,7 +370,7 @@ Proof
   >- (
     (* Base: fuel = 0 — both Error *)
     conj_tac >> rpt strip_tac >> simp_tac std_ss [LET_THM] >>
-    DISJ1_TAC >> ONCE_REWRITE_TAC[run_blocks_def] >> simp[])
+    DISJ1_TAC >> simp[run_blocks_def])
   >>
   (* Inductive step: extract IH *)
   `(!fn s.
@@ -360,7 +402,71 @@ Proof
                   (execution_equiv (remove_unused_all_eliminated ctx))
       (run_blocks (SUC fuel) ctx fn_t s)
       (run_blocks (SUC fuel) (remove_unused_context ctx) fn_t s)`
-    by suspend "PartB" >>
+    by (
+      rpt strip_tac >>
+      ONCE_REWRITE_TAC[run_blocks_unfold] >> simp[] >>
+      Cases_on `lookup_block s.vs_current_bb fn_t.fn_blocks`
+      >- simp[lift_result_def]
+      >>
+      rename1 `_ = SOME bb` >> fs[] >>
+      ONCE_REWRITE_TAC[run_block_def] >>
+      qspecl_then [`s`, `bb.bb_instructions`] strip_assume_tac eval_phis_ok_or_error_defs
+      >- (
+      qpat_x_assum `eval_phis s bb.bb_instructions = OK _`
+        (fn eval_ok_th => PURE_REWRITE_TAC[eval_ok_th]) >>
+      simp[] >>
+      qmatch_goalsub_abbrev_tac `exec_block fuel ctx bb s_run` >>
+      `!f callee_s.
+          MEM f ctx.ctx_functions /\
+          callee_s.vs_inst_idx = 0 /\
+          FDOM callee_s.vs_vars = {} /\
+          fn_entry_label f = SOME callee_s.vs_current_bb ==>
+          (?e. run_blocks fuel ctx f callee_s = Error e) \/
+          lift_result (state_equiv (remove_unused_all_eliminated ctx))
+                      (execution_equiv (remove_unused_all_eliminated ctx))
+                      (execution_equiv (remove_unused_all_eliminated ctx))
+            (run_blocks fuel ctx f callee_s)
+            (run_blocks fuel (remove_unused_context ctx)
+                               (remove_unused_function f) callee_s)` by (
+        rpt strip_tac >> metis_tac[]) >>
+      `!tail_s.
+          tail_s.vs_inst_idx = 0 ==>
+          (?e. run_blocks fuel ctx fn_t tail_s = Error e) \/
+          lift_result (state_equiv (remove_unused_all_eliminated ctx))
+                      (execution_equiv (remove_unused_all_eliminated ctx))
+                      (execution_equiv (remove_unused_all_eliminated ctx))
+            (run_blocks fuel ctx fn_t tail_s)
+            (run_blocks fuel (remove_unused_context ctx) fn_t tail_s)` by (
+        rpt strip_tac >> metis_tac[]) >>
+      mp_tac exec_block_cross_ctx_change_ru >>
+      disch_then (qspecl_then
+        [`LENGTH bb.bb_instructions - s_run.vs_inst_idx`,
+         `fuel`, `ctx`, `bb`, `s_run`] mp_tac) >>
+      (impl_tac >- simp[]) >>
+      strip_tac
+      >- (DISJ1_TAC >> gvs[])
+      >- (
+        pop_assum (fn eq => PURE_REWRITE_TAC[eq]) >>
+        Cases_on `exec_block fuel (remove_unused_context ctx) bb s_run` >>
+        fs[lift_result_def, execution_equiv_refl]
+        >- (
+          rename1 `if s_exec.vs_halted then _ else _` >>
+          `s_exec.vs_inst_idx = 0` by (
+            imp_res_tac exec_block_OK_inst_idx_0) >>
+          irule run_blocks_tail_ctx_change_from_ih >>
+          simp[] >>
+          qpat_assum `!tail_s. tail_s.vs_inst_idx = 0 ==> _`
+            (fn th => mp_tac (Q.SPEC `s_exec` th)) >>
+          simp[]))
+      >- (
+        DISJ2_TAC >> fs[] >> simp[lift_result_def])
+      >- (
+        DISJ2_TAC >> fs[] >> simp[lift_result_def]))
+      >- (
+        rename1 `eval_phis s bb.bb_instructions = Error e` >>
+        qpat_x_assum `eval_phis s bb.bb_instructions = Error e`
+          (fn eval_err_th => PURE_REWRITE_TAC[eval_err_th]) >>
+        DISJ1_TAC >> qexists_tac `e` >> simp[])) >>
   qabbrev_tac `all_elim = remove_unused_all_eliminated ctx` >>
   qabbrev_tac `ctx' = remove_unused_context ctx` >>
   conj_tac
@@ -369,19 +475,19 @@ Proof
     rpt strip_tac >> simp_tac std_ss [LET_THM] >>
     `wf_function fn /\ fn_inst_wf fn` by fs[venom_wf_def] >>
     `wf_ssa fn /\ alloca_pointer_confined fn` by metis_tac[] >>
-    (* Phase 1: same ctx, Error ∨ lift_result fn_elim *)
+    (* Same-ctx equivalence: Error ∨ lift_result fn_elim *)
     mp_tac (SIMP_RULE std_ss [LET_THM] remove_unused_function_correct) >>
     disch_then (qspecl_then [`SUC fuel`, `ctx`, `fn`, `s`] mp_tac) >>
     (impl_tac >- fs[]) >>
     strip_tac >- metis_tac[] >>
-    (* Weaken Phase 1 from fn_elim to all_elim *)
+    (* Weaken same-ctx result from fn_elim to all_elim *)
     `lift_result (state_equiv all_elim) (execution_equiv all_elim) (execution_equiv all_elim)
        (run_blocks (SUC fuel) ctx fn s)
        (run_blocks (SUC fuel) ctx (remove_unused_function fn) s)` by (
       irule lift_result_mono >>
       qexists_tac `remove_unused_eliminated_vars fn` >>
       simp[Abbr `all_elim`, elim_subset_all_elim]) >>
-    (* Phase 2: Part B at SUC fuel gives Error ∨ lift_result all_elim *)
+    (* Cross-ctx transition: Part B gives Error ∨ lift_result all_elim *)
     first_x_assum (qspec_then `remove_unused_function fn` mp_tac) >>
     disch_then (qspec_then `s` mp_tac) >> simp[] >>
     strip_tac
@@ -403,66 +509,7 @@ Proof
     simp[Abbr `all_elim`, Abbr `ctx'`])
 QED
 
-Resume remove_unused_cross_ctx_fn_equiv[PartB]:
-  rpt strip_tac >>
-  ONCE_REWRITE_TAC[run_blocks_def] >> simp[] >>
-  Cases_on `lookup_block s.vs_current_bb fn_t.fn_blocks`
-  >- simp[lift_result_def]
-  >>
-  rename1 `_ = SOME bb` >> fs[] >>
-  (* Establish callee hypothesis for exec_block_cross_ctx_change_ru *)
-  `!f callee_s.
-      MEM f ctx.ctx_functions /\
-      callee_s.vs_inst_idx = 0 /\
-      FDOM callee_s.vs_vars = {} /\
-      fn_entry_label f = SOME callee_s.vs_current_bb ==>
-      (?e. run_blocks fuel ctx f callee_s = Error e) \/
-      lift_result (state_equiv (remove_unused_all_eliminated ctx))
-                  (execution_equiv (remove_unused_all_eliminated ctx))
-                  (execution_equiv (remove_unused_all_eliminated ctx))
-        (run_blocks fuel ctx f callee_s)
-        (run_blocks fuel (remove_unused_context ctx)
-                           (remove_unused_function f) callee_s)` by (
-    rpt strip_tac >>
-    qpat_assum `!fn s. MEM fn _ /\ _ /\ _ ==> _`
-      (fn th => mp_tac (Q.SPECL [`f`, `callee_s`] th)) >>
-    simp[]) >>
-  mp_tac exec_block_cross_ctx_change_ru >>
-  disch_then (qspecl_then
-    [`LENGTH bb.bb_instructions - s.vs_inst_idx`,
-     `fuel`, `ctx`, `bb`, `s`] mp_tac) >>
-  (impl_tac >- simp[]) >>
-  strip_tac
-  (* Case 1: Error *)
-  >- (DISJ1_TAC >> Cases_on `exec_block fuel ctx bb s` >> gvs[])
-  (* Case 2: Equal — exec_block results identical *)
-  >- (
-    pop_assum (fn eq => PURE_REWRITE_TAC[eq]) >>
-    Cases_on `exec_block fuel (remove_unused_context ctx) bb s`
-    >- (
-      rename1 `_ = OK s'` >>
-      Cases_on `s'.vs_halted` >> simp[]
-      >- simp[lift_result_def, execution_equiv_refl]
-      >>
-      `s'.vs_inst_idx = 0` by metis_tac[exec_block_OK_inst_idx_0] >>
-      qpat_assum `!fn_t s. s.vs_inst_idx = 0 ==> _`
-        (fn th => mp_tac (Q.SPECL [`fn_t`, `s'`] th)) >>
-      simp[])
-    >- simp[lift_result_def, execution_equiv_refl]
-    >- simp[lift_result_def, execution_equiv_refl]
-    >- simp[lift_result_def, execution_equiv_refl]
-    >- simp[lift_result_def])
-  (* Case 3: Halt *)
-  >- (
-    DISJ2_TAC >> fs[] >> simp[lift_result_def])
-  (* Case 4: Abort *)
-  >- (
-    DISJ2_TAC >> fs[] >> simp[lift_result_def])
-QED
-
-Finalise remove_unused_cross_ctx_fn_equiv;
-
-(* ===== Context-level pass_correct ===== *)
+(* ===== Pass correctness: remove_unused preserves behavior on non-eliminated vars ===== *)
 
 Theorem remove_unused_pass_correct:
   !ctx entry.
@@ -513,17 +560,14 @@ Proof
     rpt strip_tac >>
     first_x_assum (qspec_then `fuel` strip_assume_tac) >>
     fs[terminates_def]) >>
-  simp[pass_correct_def] >> rpt conj_tac
-  >- (
+  simp[pass_correct_def] >> conj_tac >| [
     eq_tac >> strip_tac
-    >- (
-      first_x_assum drule >> strip_tac >>
-      qexists_tac `fuel` >>
-      Cases_on `run_blocks fuel ctx fn s` >>
-      Cases_on `run_blocks fuel ctx' fn' s` >>
-      fs[lift_result_def, terminates_def])
-    >- metis_tac[])
-  >- (
+    >- (first_x_assum drule >> strip_tac >>
+        qexists_tac `fuel` >>
+        Cases_on `run_blocks fuel ctx fn s` >>
+        Cases_on `run_blocks fuel ctx' fn' s` >>
+        fs[lift_result_def, terminates_def])
+    >- metis_tac[],
     rpt strip_tac >>
     `lift_result (state_equiv all_elim) (execution_equiv all_elim) (execution_equiv all_elim)
       (run_blocks fuel ctx fn s) (run_blocks fuel ctx' fn' s)` by
@@ -536,6 +580,6 @@ Proof
      run_blocks fuel' ctx' fn' s` by (
       simp_tac std_ss [Abbr `ctx'`, Abbr `fn'`] >>
       irule run_blocks_deterministic >> simp[]) >>
-    fs[])
+    fs[]]
 QED
 

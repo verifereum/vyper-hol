@@ -23,7 +23,7 @@ Theory concretizeMemLocProofs
 Ancestors
   concretizeMemLocDefs allocaRemapDefs pointerConfinedDefs
   passSimulationProps passSimulationDefs passSharedProps passSharedDefs
-  venomWf venomExecSemantics venomExecProofs
+  venomWf venomExecSemantics venomExecProofs opcodeClass
   venomMemDefs venomMemProofs stateEquiv
   venomInst venomState
   list finite_map pair arithmetic sorting enumeral toto
@@ -242,6 +242,8 @@ Proof
     |> SIMP_RULE std_ss [pos_cmp_transitive, FORALL_PROD]))
 QED
 
+(* first_fit_pos returns a position at or after `start` that does not overlap
+   any reserved region. *)
 Theorem first_fit_pos_correct:
   !reserved size start.
     SORTED (\(p1:num,_:num) (p2,_). p1 <= p2) reserved ==>
@@ -283,7 +285,7 @@ QED
 
 Finalise first_fit_pos_correct
 
-(* allocate_one avoids all reserved regions *)
+(* allocate_one produces a position that does not overlap any reserved region. *)
 Theorem allocate_one_avoids:
   !reserved sz pos rest.
     allocate_one reserved sz = (pos, rest) ==>
@@ -303,8 +305,6 @@ QED
 
 (* -- Main allocator theorem -- *)
 
-(* Precondition: already items are consistent with result and
-   pairwise non-overlapping for simultaneously-live allocas. *)
 (* Helper: MEM through MAP of FILTER *)
 Triviality mem_map_drop_pos:
   !a l sz already.
@@ -325,6 +325,10 @@ Proof
   Induct_on `already` >> simp[FORALL_PROD] >> rw[] >> metis_tac[]
 QED
 
+(* allocate_with_livesets extends an allocation so that simultaneously-live
+   allocas have non-overlapping positions. Existing allocations are preserved;
+   new allocations are placed without overlapping any simultaneously-live
+   already-allocated entry. *)
 Theorem allocate_with_livesets_non_overlapping:
   !global already to_alloc result.
     (!a l p s. MEM (a,l,p,s) already ==> FLOOKUP result a = SOME p) /\
@@ -380,9 +384,11 @@ Proof
   >> simp[Once toto_swap_cases]
 QED
 
+(* Step invariant: after allocating one alloca with allocate_one,
+   the FLOOKUP, non-overlap, freshness, and ALL_DISTINCT invariants of
+   allocate_with_livesets are preserved in the extended state. *)
 Theorem awl_step_invs:
   !global already alloc live_insts pos sz to_alloc result _0.
-    (* Original preconditions *)
     (!a l p s. MEM (a,l,p,s) already ==> FLOOKUP result a = SOME p) /\
     (!a1 a2 l1 l2 p1 p2 s1 s2.
        MEM (a1,l1,p1,s1) already /\
@@ -474,7 +480,7 @@ Finalise allocate_with_livesets_non_overlapping
 
 (* ===== 2. Liveness + Allocator Combined ===== *)
 
-(* Per-instruction step for alloc_result_to_map *)
+(* Per-instruction step for alloc_result_to_map fold *)
 Definition arm_step_def:
   arm_step result amap inst =
     if is_alloca_op inst.inst_opcode then
@@ -701,9 +707,30 @@ Proof
   >> gvs[]
 QED
 
+(* compute_alloc_map + alloc_result_to_map produces an amap satisfying
+   live_non_overlapping: simultaneously-live allocas map to
+   non-overlapping concrete addresses. *)
 Theorem compute_alloc_map_live_non_overlapping:
   !fn bpr mems_used live_pallocas cfg pre_allocated global_reserved.
-    ssa_form fn /\ wf_function fn ==>
+    ssa_form fn /\ fn_inst_ids_distinct fn /\
+    (let alloca_sz = get_alloca_size fn in
+     let alloca_sz_opt = \a. let sz = alloca_sz a in
+                             if sz = 0 then NONE else SOME sz in
+     let livesets = mem_liveness_analyze bpr mems_used alloca_sz_opt
+                      live_pallocas cfg fn in
+     let result = compute_alloc_map fn bpr mems_used live_pallocas cfg
+                    pre_allocated global_reserved in
+       (!a p. FLOOKUP result a = SOME p ==> p < dimword (:256)) /\
+       (!a1 a2 ls1 ls2 p1 p2 sz1 sz2.
+          FLOOKUP result a1 = SOME p1 /\
+          FLOOKUP result a2 = SOME p2 /\
+          a1 <> a2 /\
+          FLOOKUP livesets a1 = SOME ls1 /\
+          FLOOKUP livesets a2 = SOME ls2 /\
+          sinter inst_addr_to ls1 ls2 <> [] /\
+          get_alloca_size fn a1 = sz1 /\
+          get_alloca_size fn a2 = sz2 ==>
+          p1 + sz1 <= p2 \/ p2 + sz2 <= p1)) ==>
     let alloca_sz = get_alloca_size fn in
     let alloca_sz_opt = \a. let sz = alloca_sz a in
                             if sz = 0 then NONE else SOME sz in
@@ -714,7 +741,30 @@ Theorem compute_alloc_map_live_non_overlapping:
          pre_allocated global_reserved) in
     live_non_overlapping livesets amap fn
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  gvs[LET_THM, live_non_overlapping_def] >>
+  rpt strip_tac >>
+  qmatch_asmsub_abbrev_tac `FLOOKUP (alloc_result_to_map fn result) v1` >>
+  qmatch_asmsub_abbrev_tac `FLOOKUP livesets (Allocation aid1)` >>
+  `?aid1' pos1.
+     fn_alloca_id_of_var fn v1 = SOME aid1' /\
+     FLOOKUP result (Allocation aid1') = SOME pos1 /\
+     addr1 = n2w pos1` by
+    (irule alloc_result_to_map_flookup >> simp[Abbr `result`]) >>
+  `?aid2' pos2.
+     fn_alloca_id_of_var fn v2 = SOME aid2' /\
+     FLOOKUP result (Allocation aid2') = SOME pos2 /\
+     addr2 = n2w pos2` by
+    (irule alloc_result_to_map_flookup >> simp[Abbr `result`]) >>
+  `aid1' = aid1` by gvs[] >>
+  `aid2' = aid2` by gvs[] >>
+  gvs[] >>
+  `aid1 <> aid2` by metis_tac[fn_alloca_id_of_var_injective] >>
+  `pos1 < dimword (:256) /\ pos2 < dimword (:256)` by metis_tac[] >>
+  first_x_assum (qspecl_then
+    [`Allocation aid1`, `Allocation aid2`, `ls1`, `ls2`, `pos1`, `pos2`] mp_tac) >>
+  simp[Abbr `result`, Abbr `livesets`] >>
+  strip_tac >> simp[]
 QED
 
 (* ===== 3. Transform Correctness ===== *)
@@ -750,6 +800,9 @@ Proof
   metis_tac[fmap_eq_flookup]
 QED
 
+(* concretize_rel is preserved on the right when s2 is replaced by
+   a state_equiv {} s3 — any state equal on all variable-free fields
+   preserves the concretize simulation relation. *)
 Theorem concretize_rel_right_state_equiv:
   !amap fn livesets init s1 s2 s3.
     concretize_rel amap fn livesets init s1 s2 /\
@@ -795,7 +848,7 @@ QED
    - NOP (original or alloca not in amap → NOP): side 1 steps, side 2 skips
    - ALLOCA in amap → ASSIGN: side 1 bump-allocates, side 2 assigns address
    - Non-alloca, non-INVOKE: same instruction on both CR-related states
-   - INVOKE: same callee from ctx, needs callee IH (cheated for now)
+   - INVOKE: excluded by the block-level theorem precondition
    - Terminator: same terminator, CR transfer through result
 *)
 
@@ -1433,6 +1486,29 @@ QED
 
 Finalise cr_state_equiv_non_pv
 
+Triviality lookup_var_update_var:
+  !x y w s.
+    lookup_var x (update_var y w s) =
+    if x = y then SOME w else lookup_var x s
+Proof
+  rw[lookup_var_def, update_var_def, FLOOKUP_UPDATE]
+QED
+
+Triviality in_alloca_region_update_var:
+  !s out w i.
+    in_alloca_region (update_var out w s) i <=> in_alloca_region s i
+Proof
+  rw[in_alloca_region_def, update_var_def]
+QED
+
+Triviality allocas_non_overlapping_update_var:
+  !s out w.
+    allocas_non_overlapping (update_var out w s) <=>
+    allocas_non_overlapping s
+Proof
+  rw[allocas_non_overlapping_def, update_var_def]
+QED
+
 (* CR preserved by update_var with same value on non-pv output *)
 Triviality cr_update_var_non_pv:
   !amap fn livesets init s1 s2 out v.
@@ -1476,11 +1552,25 @@ Triviality cr_update_var_pv:
       (update_var out w1 s1) (update_var out w2 s2)
 Proof
   rpt strip_tac >>
-  fs[concretize_rel_def, LET_THM, update_var_def, lookup_var_def,
-     FLOOKUP_UPDATE, allocas_non_overlapping_def, in_alloca_region_def] >>
-  rpt conj_tac >> rpt gen_tac >> strip_tac >> gvs[] >>
-  TRY (IF_CASES_TAC >> gvs[] >> metis_tac[]) >>
-  res_tac >> fs[]
+  fs[concretize_rel_def, LET_THM] >>
+  simp[concretize_rel_def, LET_THM, lookup_var_update_var,
+       in_alloca_region_update_var, allocas_non_overlapping_update_var,
+       update_var_def] >>
+  rpt conj_tac
+  >- (
+    rpt strip_tac >>
+    Cases_on `v = out` >> gvs[] >>
+    qpat_x_assum `!v. v NOTIN pointer_derived_vars fn (FDOM amap) ==> _`
+      drule >> simp[])
+  >- (
+    rpt strip_tac >>
+    Cases_on `v = out` >> gvs[]
+    >- (
+      qexistsl_tac [`aid`, `orig_off`, `sz`, `addr`] >>
+      simp[]) >>
+    qpat_x_assum `!v. v IN pointer_derived_vars fn (FDOM amap) ==> _`
+      drule >> simp[])
+  >> metis_tac[]
 QED
 
 (* CR preserved by update_var on alloca reuse: side1 gets n2w off,
@@ -1811,6 +1901,37 @@ in
      exec_read0_def, exec_read1_def]
 end;
 
+Triviality exec_result_helpers_not_intret_cml[simp]:
+  (!f inst s vals s'. exec_pure1 f inst s <> IntRet vals s') /\
+  (!f inst s vals s'. exec_pure2 f inst s <> IntRet vals s') /\
+  (!f inst s vals s'. exec_pure3 f inst s <> IntRet vals s') /\
+  (!f inst s vals s'. exec_read0 f inst s <> IntRet vals s') /\
+  (!f inst s vals s'. exec_read1 f inst s <> IntRet vals s') /\
+  (!f inst s vals s'. exec_write2 f inst s <> IntRet vals s') /\
+  (!inst s alloc_size vals s'. exec_alloca inst s alloc_size <> IntRet vals s') /\
+  (!inst s g a v ao as_ ro rs is_s vals s'.
+     exec_ext_call inst s g a v ao as_ ro rs is_s <> IntRet vals s') /\
+  (!inst s g a ao as_ ro rs vals s'.
+     exec_delegatecall inst s g a ao as_ ro rs <> IntRet vals s') /\
+  (!inst s v off sz salt vals s'.
+     exec_create inst s v off sz salt <> IntRet vals s')
+Proof
+  rw[exec_pure1_def, exec_pure2_def, exec_pure3_def,
+     exec_read0_def, exec_read1_def, exec_write2_def,
+     exec_alloca_def, exec_ext_call_def, exec_delegatecall_def,
+     exec_create_def, extract_venom_result_def] >>
+  gvs[AllCaseEqs()]
+QED
+
+Triviality step_inst_base_intret_terminator[local]:
+  !inst s vals s'.
+    step_inst_base inst s = IntRet vals s' ==>
+    is_terminator inst.inst_opcode
+Proof
+  rw[step_inst_base_def] >>
+  gvs[AllCaseEqs(), is_terminator_def]
+QED
+
 (* Effect-free ops only return OK or Error *)
 Triviality effect_free_step_not_halt_abort_intret:
   !inst s. is_effect_free_op inst.inst_opcode ==>
@@ -1819,10 +1940,17 @@ Triviality effect_free_step_not_halt_abort_intret:
   (!l w. step_inst_base inst s <> IntRet l w)
 Proof
   rpt gen_tac >> strip_tac >>
-  Cases_on `inst.inst_opcode` >> fs[is_effect_free_op_def] >>
-  asm_rewrite_tac[step_inst_base_def] >>
-  simp exec_ok_or_error_thms >>
-  BasicProvers.every_case_tac >> simp[]
+  `~is_terminator inst.inst_opcode` by
+    metis_tac[is_effect_free_op_classes] >>
+  rpt conj_tac
+  >- (spose_not_then strip_assume_tac >>
+      drule opcodeClassTheory.step_inst_base_halt_opcodes >>
+      strip_tac >> gvs[is_effect_free_op_def])
+  >- (spose_not_then strip_assume_tac >>
+      drule opcodeClassTheory.step_inst_base_abort_opcodes >>
+      strip_tac >> gvs[is_effect_free_op_def]) >>
+  spose_not_then strip_assume_tac >>
+  drule step_inst_base_intret_terminator >> gvs[]
 QED
 
 (* Common effect-free non-pv simulation: given that ALL Var operands
@@ -1897,6 +2025,7 @@ Proof
     rename1 `step_inst_base inst s2 = OK v2` >>
     `!v. MEM v inst.inst_outputs ==>
          lookup_var v v1 = lookup_var v v2` by (
+      `inst.inst_opcode <> PHI` by (CCONTR_TAC >> gvs[step_inst_base_def]) >>
       qspecl_then [`inst`, `s1`, `s2`, `v1`, `v2`]
         mp_tac step_inst_base_effect_free_output_determined_vars >>
       simp[]
@@ -1966,6 +2095,18 @@ Proof
   rw[phi_well_formed_def, resolve_phi_def] >> gvs[] >> metis_tac[]
 QED
 
+Triviality pointer_preserving_no_mem_ops[local]:
+  !inst.
+    is_pointer_preserving_op inst.inst_opcode ==>
+    mem_write_ops inst = NONE /\ mem_read_ops inst = NONE
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >>
+  gvs[is_pointer_preserving_op_def,
+      memLocDefsTheory.mem_write_ops_def,
+      memLocDefsTheory.mem_read_ops_def]
+QED
+
 (* pp op + pv output + pointer_confined → outputs ⊆ pv *)
 Triviality pp_pv_outputs_subset_pv:
   !fn (amap : alloc_map) bb inst.
@@ -1980,19 +2121,14 @@ Triviality pp_pv_outputs_subset_pv:
          v' IN pointer_derived_vars fn (FDOM amap)
 Proof
   rpt strip_tac
-  >- (
-    `?v'. MEM (Var v') inst.inst_operands /\
-          v' IN pointer_derived_vars fn (FDOM amap)` by
-      metis_tac[pp_pv_output_has_pv_operand] >>
-    fs[concretize_pointer_confined_def, pointer_confined_def, LET_THM] >>
-    first_x_assum (qspecl_then [`bb`, `inst`, `v'`] mp_tac) >> simp[] >>
-    strip_tac >> gvs[SUBSET_DEF]
-    >- (Cases_on `inst.inst_opcode` >>
-        fs[is_pointer_preserving_op_def, memLocDefsTheory.mem_write_ops_def])
-    >- (Cases_on `inst.inst_opcode` >>
-        fs[is_pointer_preserving_op_def, memLocDefsTheory.mem_read_ops_def])
-  )
-  >> metis_tac[pp_pv_output_has_pv_operand]
+  >- (drule_all pp_pv_output_has_pv_operand >> strip_tac >>
+      fs[concretize_pointer_confined_def, pointer_confined_def, LET_THM] >>
+      qpat_x_assum `!bb inst v. _`
+        (qspecl_then [`bb`, `inst`, `v'`] mp_tac) >>
+      simp[] >> strip_tac >>
+      drule pointer_preserving_no_mem_ops >> strip_tac >>
+      gvs[]) >>
+  drule_all pp_pv_output_has_pv_operand >> simp[]
 QED
 
 (* Word displacement preserved by addition *)
@@ -2043,15 +2179,21 @@ Proof
   rw[concretize_rel_def, LET_THM] >> res_tac >> gvs[]
 QED
 
+val pp_empty_outputs_tac =
+  simp[step_inst_base_def, exec_pure2_def] >>
+  rpt CASE_TAC >> gvs[];
+
 Triviality pp_empty_outputs_error:
   !inst s. is_pointer_preserving_op inst.inst_opcode /\
            inst.inst_outputs = [] ==>
            ?e. step_inst_base inst s = Error e
 Proof
   rpt strip_tac >>
-  Cases_on `inst.inst_opcode` >> fs[is_pointer_preserving_op_def] >>
-  simp[step_inst_base_def, exec_pure1_def, exec_pure2_def] >>
-  rpt CASE_TAC >> gvs[]
+  Cases_on `inst.inst_opcode` >> fs[is_pointer_preserving_op_def]
+  >- pp_empty_outputs_tac
+  >- pp_empty_outputs_tac
+  >- pp_empty_outputs_tac
+  >- pp_empty_outputs_tac
 QED
 
 (* Helper: binary pv op, Case 1: first operand is pv Var *)
@@ -2238,9 +2380,8 @@ Proof
   simp[] >>
   (* containment from pointer_arith_in_region *)
   `orig_off <= w2n (w1 - x) /\ w2n (w1 - x) < orig_off + sz` by (
-    qpat_x_assum `pointer_arith_in_region _ _` mp_tac >>
-    simp[pointer_arith_in_region_def, LET_THM] >>
-    disch_then (qspecl_then
+    fs[pointer_arith_in_region_def, LET_THM] >>
+    first_x_assum (qspecl_then
       [`bb`, `inst`, `s1`, `update_var h (w1 - x) s1`,
        `h`, `w1 - x`, `v'`, `w1`, `aid`, `orig_off`, `sz`] mp_tac) >>
     simp[is_pointer_preserving_op_def,
@@ -2394,49 +2535,8 @@ Proof
     irule sub_pv_case >> simp[] >> metis_tac[]
   )
   >- (
-    (* PHI pv case *)
-    qunabbrev_tac `pv` >>
-    `set inst.inst_outputs SUBSET pointer_derived_vars fn (FDOM amap) /\
-     ?v'. MEM (Var v') inst.inst_operands /\
-          v' IN pointer_derived_vars fn (FDOM amap)` by (
-      irule pp_pv_outputs_subset_pv >>
-      simp[is_pointer_preserving_op_def] >>
-      qpat_x_assum `∃v. _` mp_tac >> simp[] >> metis_tac[MEM]
-    ) >>
-    qpat_x_assum `∃v. _` kall_tac >>
-    simp[step_inst_base_def] >>
-    (`s1.vs_prev_bb = s2.vs_prev_bb` by fs[concretize_rel_def, LET_THM]) >>
-    qpat_x_assum `_ = s2.vs_prev_bb` (SUBST_ALL_TAC o SYM) >>
-    Cases_on `t` >> simp[lift_result_def] >>
-    Cases_on `s1.vs_prev_bb` >> simp[lift_result_def] >>
-    Cases_on `resolve_phi x inst.inst_operands` >> simp[lift_result_def] >>
-    rename1 `resolve_phi prev_lbl inst.inst_operands = SOME val_op` >>
-    (`phi_well_formed inst.inst_operands` by (
-      fs[fn_inst_wf_def] >>
-      first_x_assum (qspecl_then [`bb`, `inst`] mp_tac) >> simp[] >>
-      simp[inst_wf_def])) >>
-    (`?pv_v. val_op = Var pv_v` by metis_tac[phi_resolve_is_var]) >> gvs[] >>
-    (`MEM (Var pv_v) inst.inst_operands` by
-      metis_tac[execEquivParamBaseTheory.resolve_phi_MEM]) >>
-    (`pv_v IN pointer_derived_vars fn (FDOM amap)` by (
-      qpat_x_assum `phi_pv_all_var _ _` mp_tac >>
-      simp[phi_pv_all_var_def, LET_THM] >>
-      disch_then (qspecl_then [`bb`, `inst`] mp_tac) >>
-      simp[] >> impl_tac >- metis_tac[] >>
-      disch_then (fn th => mp_tac (CONJUNCT1 th)) >>
-      disch_then (qspec_then `pv_v` mp_tac) >> simp[])) >>
-    simp[eval_operand_def] >>
-    Cases_on `lookup_var pv_v s1`
-    >- (`lookup_var pv_v s2 = NONE` by (
-          drule cr_pv_var_none >>
-          disch_then (qspec_then `pv_v` mp_tac) >> simp[]) >>
-        simp[lift_result_def]) >>
-    rename1 `lookup_var pv_v s1 = SOME w1` >>
-    (`lookup_var pv_v s1 <> NONE` by simp[]) >>
-    drule_all cr_pv_var_displacement >> strip_tac >> gvs[] >>
-    simp[lift_result_def] >>
-    irule cr_update_var_pv >> asm_rewrite_tac[] >>
-    qexistsl [`addr`, `aid`, `orig_off`, `sz`] >> simp[]
+    (* PHI pv case: sequential PHI execution is impossible under final semantics. *)
+    simp[step_inst_base_def, lift_result_def]
   )
   >- (
     (* ASSIGN pv case *)
@@ -2449,16 +2549,29 @@ Proof
       qpat_x_assum `∃v. _` mp_tac >> simp[] >> metis_tac[MEM]
     ) >>
     asm_rewrite_tac[step_inst_base_def] >>
-    simp[exec_pure1_def, eval_operand_def] >>
-    rpt CASE_TAC >> gvs[lift_result_def, eval_operand_def]
-    >- (fs[concretize_rel_def, LET_THM] >> res_tac >> gvs[])
-    >- (fs[concretize_rel_def, LET_THM] >> res_tac >> gvs[])
-    >> irule cr_update_var_pv >> asm_rewrite_tac[] >>
-    `h IN pointer_derived_vars fn (FDOM amap)` by
-      (fs[SUBSET_DEF] >> first_x_assum irule >> simp[]) >>
-    `lookup_var v' s1 <> NONE` by gvs[] >>
-    drule_all cr_pv_var_displacement >> strip_tac >> gvs[] >>
-    metis_tac[]
+    Cases_on `inst.inst_operands`
+    >- simp[lift_result_def] >>
+    rename1 `inst.inst_operands = op1::ops` >>
+    Cases_on `ops`
+    >- (
+      Cases_on `t` >> simp[lift_result_def, eval_operand_def] >>
+      Cases_on `op1` >> gvs[lift_result_def, eval_operand_def]
+      >- (
+        rename1 `lookup_var pv_v s1` >>
+        `pv_v IN pointer_derived_vars fn (FDOM amap)` by metis_tac[MEM] >>
+        Cases_on `lookup_var pv_v s1`
+        >- (`lookup_var pv_v s2 = NONE` by (
+              drule cr_pv_var_none >>
+              disch_then (qspec_then `pv_v` mp_tac) >> simp[]) >>
+            simp[lift_result_def]) >>
+        rename1 `lookup_var pv_v s1 = SOME w1` >>
+        `lookup_var pv_v s1 <> NONE` by simp[] >>
+        drule_all cr_pv_var_displacement >> strip_tac >> gvs[] >>
+        simp[lift_result_def] >>
+        irule cr_update_var_pv >> asm_rewrite_tac[] >>
+        qexistsl [`addr`, `aid`, `orig_off`, `sz`] >> simp[])
+      >> metis_tac[MEM])
+    >> (Cases_on `t` >> simp[lift_result_def])
   )
 QED
 
@@ -2636,7 +2749,7 @@ Proof
     `!op. MEM op inst.inst_operands ==>
           eval_operand op s1 = eval_operand op s2` by
       metis_tac[cr_non_mem_eval_operand_agree] >>
-    simp[step_inst_base_def] >>
+    ASM_REWRITE_TAC[step_inst_base_def] >> gvs[] >>
     rpt (BasicProvers.TOP_CASE_TAC >> gvs[lift_result_def]) >>
     irule concretize_rel_jump_to >> metis_tac[]
   )
@@ -2965,6 +3078,55 @@ Proof
   `eval_operand op s2 = SOME x` by gvs[] >>
   gvs[lift_result_def] >>
   irule cr_update_var_non_pv >> simp[]
+QED
+
+(* ISTORE updates vs_immutables with operands that are non-pointer values,
+   so both sides perform the same immutable-map update. *)
+Triviality concretize_step_istore:
+  !inst bb amap fn livesets init s1 s2.
+    inst.inst_opcode = ISTORE /\
+    MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+    fn_inst_wf fn /\
+    ssa_form fn /\ amap_from_allocas fn amap /\
+    concretize_pointer_confined fn amap /\
+    concretize_rel amap fn livesets init s1 s2 ==>
+    lift_result
+      (concretize_rel amap fn livesets init)
+      (concretize_rel amap fn livesets init)
+      (concretize_rel amap fn livesets init)
+      (step_inst_base inst s1)
+      (step_inst_base inst s2)
+Proof
+  rpt strip_tac >>
+  `s1.vs_immutables = s2.vs_immutables` by
+    fs[concretize_rel_def, LET_THM] >>
+  `!v. MEM (Var v) inst.inst_operands ==>
+       v NOTIN pointer_derived_vars fn (FDOM amap)` by (
+    rpt strip_tac >> spose_not_then assume_tac >>
+    fs[concretize_pointer_confined_def] >>
+    `pointer_confined fn (FDOM amap)` by simp[] >>
+    fs[pointer_confined_def, LET_THM] >>
+    first_x_assum (qspecl_then [`bb`, `inst`, `v`] mp_tac) >>
+    simp[] >>
+    rpt strip_tac >> gvs[is_pointer_preserving_op_def, is_immutable_op_def]) >>
+  fs[step_inst_base_def] >>
+  Cases_on `inst.inst_operands` >> gvs[lift_result_def] >>
+  Cases_on `t` >> gvs[lift_result_def] >>
+  Cases_on `t'` >> gvs[lift_result_def] >>
+  rename1 `inst.inst_operands = [op_off; op_val]` >>
+  `eval_operand op_off s1 = eval_operand op_off s2` by
+    (Cases_on `op_off` >> fs[eval_operand_def, lookup_var_def,
+                             concretize_rel_def, LET_THM]) >>
+  `eval_operand op_val s1 = eval_operand op_val s2` by
+    (Cases_on `op_val` >> fs[eval_operand_def, lookup_var_def,
+                             concretize_rel_def, LET_THM]) >>
+  Cases_on `eval_operand op_off s1` >> gvs[lift_result_def] >>
+  Cases_on `eval_operand op_val s1` >> gvs[lift_result_def] >>
+  Cases_on `eval_operand op_off s2` >> gvs[lift_result_def] >>
+  Cases_on `eval_operand op_val s2` >> gvs[lift_result_def] >>
+  fs[concretize_rel_def, LET_THM, lookup_var_def,
+     in_alloca_region_def, venomMemDefsTheory.allocas_non_overlapping_def] >>
+  metis_tac[]
 QED
 
 (* SHA3: both sides hash the same bytes from displaced addresses.
@@ -4957,15 +5119,22 @@ QED
 
 Finalise concretize_step_returndatacopy
 
-(* Full per-instruction simulation for non-alloca, non-INVOKE, non-NOP, non-MEMTOP.
-   Combines pure, pointer-preserving, memory, terminator, and side-effect cases.
-   MEMTOP excluded: LENGTH vs_memory may differ between sides after displaced MSTORE. *)
+(* Per-instruction simulation for non-alloca, non-INVOKE, non-NOP, non-MEMTOP
+   opcodes. Under concretize_rel, step_inst_base on the original instruction
+   and (identical) concretized instruction are related — pure ops agree on
+   results, pointer-preserving ops maintain displacement, memory ops use
+   byte correspondence, terminators jump to the same target. MEMTOP excluded
+   because vs_memory LENGTH may differ between sides after displaced writes. *)
 Theorem concretize_step_inst_base_identity:
   !inst bb amap fn livesets init s1 s2.
     ~is_alloca_op inst.inst_opcode /\
     inst.inst_opcode <> INVOKE /\
     inst.inst_opcode <> NOP /\
     inst.inst_opcode <> MEMTOP /\
+    inst.inst_opcode <> LOG /\
+    inst.inst_opcode <> MCOPY /\
+    inst.inst_opcode <> EXTCODECOPY /\
+    ~is_ext_call_op inst.inst_opcode /\
     MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
     fn_inst_wf fn /\
     ssa_form fn /\ amap_from_allocas fn amap /\
@@ -5022,6 +5191,8 @@ Proof
   >- (qexists `init` >> irule concretize_step_return >> metis_tac[]) >>
   Cases_on `inst.inst_opcode = REVERT`
   >- (qexists `init` >> irule concretize_step_revert >> metis_tac[]) >>
+  Cases_on `is_ext_call_op inst.inst_opcode`
+  >- gvs[] >>
   Cases_on `Eff_MEMORY IN read_effects inst.inst_opcode \/
             Eff_MEMORY IN write_effects inst.inst_opcode`
   >- (
@@ -5037,9 +5208,18 @@ Proof
     >- (qexists `init` >> irule concretize_step_dloadbytes >> metis_tac[]) >>
     Cases_on `inst.inst_opcode = RETURNDATACOPY`
     >- (qexists `init` >> irule concretize_step_returndatacopy >> metis_tac[]) >>
-    cheat) >> (* memory-writing non-effect-free: MCOPY, EXTCODECOPY *)
+    Cases_on `inst.inst_opcode = ISTORE`
+    >- (qexists `init` >> irule concretize_step_istore >> metis_tac[]) >>
+    Cases_on `inst.inst_opcode = LOG` >- gvs[] >>
+    Cases_on `inst.inst_opcode` >>
+    gvs[is_effect_free_op_def, is_pointer_preserving_op_def,
+        is_alloca_op_def, is_ext_call_op_def,
+        venomEffectsTheory.read_effects_def,
+        venomEffectsTheory.write_effects_def,
+        venomEffectsTheory.all_effects_def,
+        venomEffectsTheory.empty_effects_def]) >>
   Cases_on `is_ext_call_op inst.inst_opcode`
-  >- cheat >> (* external calls *)
+  >- gvs[] >>
   fs[] >>
   Cases_on `inst.inst_opcode = JMP \/ inst.inst_opcode = JNZ \/
             inst.inst_opcode = DJMP`
@@ -5054,10 +5234,10 @@ Proof
   metis_tac[]
 QED
 
-(* Per-instruction simulation for ALLOCA (in amap) → ASSIGN.
-   Side 1: exec_alloca bump-allocates, sets output to n2w offset.
-   Side 2: exec ASSIGN, sets output to addr from amap.
-   Establishes displacement invariant for the new alloca. *)
+(* ALLOCA on side 1 vs ASSIGN on side 2 preserves concretize_rel.
+   Side 1 bump-allocates at vs_alloca_next; side 2 assigns the concrete
+   address from amap. The displacement invariant (w1 - base = w2 - addr)
+   is established for fresh allocas and maintained for reuse. *)
 Theorem concretize_step_alloca_assign:
   !inst bb amap fn livesets init s1 s2 out addr alloc_size.
     inst.inst_opcode = ALLOCA /\
@@ -5234,6 +5414,400 @@ Proof
   Cases_on `FLOOKUP amap h` >>
   gvs[mk_nop_inst_def, mk_assign_inst_def] >>
   imp_res_tac is_alloca_op_eq >> gvs[is_terminator_def]
+QED
+
+Triviality concretize_inst_phi_identity:
+  !amap inst. inst.inst_opcode = PHI ==> concretize_inst amap inst = inst
+Proof
+  simp[concretize_inst_def, is_alloca_op_def]
+QED
+
+Triviality concretize_inst_phi_iff:
+  !amap inst. (concretize_inst amap inst).inst_opcode = PHI <=> inst.inst_opcode = PHI
+Proof
+  rw[concretize_inst_def] >>
+  rpt (BasicProvers.TOP_CASE_TAC >>
+       gvs[mk_assign_inst_def, mk_nop_inst_def, is_alloca_op_def]) >>
+  Cases_on `inst.inst_opcode` >> gvs[is_alloca_op_def]
+QED
+
+Triviality concretize_phi_prefix_length:
+  !amap insts.
+    phi_prefix_length (MAP (concretize_inst amap) insts) =
+    phi_prefix_length insts
+Proof
+  gen_tac >> Induct >>
+  simp[phi_prefix_length_def, concretize_inst_phi_iff]
+QED
+
+Triviality concretize_eval_phis_same_state:
+  !amap s insts.
+    eval_phis s (MAP (concretize_inst amap) insts) = eval_phis s insts
+Proof
+  gen_tac >> gen_tac >> Induct >>
+  simp[eval_phis_def, concretize_inst_phi_iff, concretize_inst_phi_identity]
+QED
+
+Triviality concretize_bmt_phi_prefix_length:
+  !amap bb.
+    phi_prefix_length
+      (block_map_transform (concretize_inst amap) bb).bb_instructions =
+    phi_prefix_length bb.bb_instructions
+Proof
+  simp[block_map_transform_def, concretize_phi_prefix_length]
+QED
+
+Triviality concretize_bmt_eval_phis_same_state:
+  !amap s bb.
+    eval_phis s (block_map_transform (concretize_inst amap) bb).bb_instructions =
+    eval_phis s bb.bb_instructions
+Proof
+  simp[block_map_transform_def, concretize_eval_phis_same_state]
+QED
+
+Triviality resolve_phi_MEM_operands_concretize:
+  !prev ops val_op. resolve_phi prev ops = SOME val_op ==> MEM val_op ops
+Proof
+  recInduct resolve_phi_ind >> rw[resolve_phi_def]
+QED
+
+Triviality concretize_rel_prev_bb:
+  !amap fn livesets init s1 s2.
+    concretize_rel amap fn livesets init s1 s2 ==>
+    s1.vs_prev_bb = s2.vs_prev_bb
+Proof
+  rw[concretize_rel_def, LET_THM]
+QED
+
+Triviality concretize_phi_operand_non_pv:
+  !amap fn livesets init bb inst out val_op prev s1 s2.
+    ssa_form fn /\ amap_from_allocas fn amap /\
+    concretize_pointer_confined fn amap /\
+    MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+    inst.inst_opcode = PHI /\ MEM out inst.inst_outputs /\
+    out NOTIN pointer_derived_vars fn (FDOM amap) /\
+    resolve_phi prev inst.inst_operands = SOME val_op /\
+    concretize_rel amap fn livesets init s1 s2 ==>
+    eval_operand val_op s1 = eval_operand val_op s2
+Proof
+  rpt strip_tac >>
+  Cases_on `val_op` >> simp[eval_operand_def]
+  >- (
+    `s NOTIN pointer_derived_vars fn (FDOM amap)` by (
+      spose_not_then assume_tac >>
+      `MEM (Var s) inst.inst_operands` by
+        metis_tac[resolve_phi_MEM_operands_concretize] >>
+      `pointer_confined fn (FDOM amap)` by
+        fs[concretize_pointer_confined_def] >>
+      fs[pointer_confined_def, LET_THM] >>
+      first_x_assum (qspecl_then [`bb`, `inst`, `s`] mp_tac) >> simp[] >>
+      strip_tac >> gvs[SUBSET_DEF, is_pointer_preserving_op_def,
+                       memLocDefsTheory.mem_write_ops_def,
+                       memLocDefsTheory.mem_read_ops_def] >>
+      metis_tac[]) >>
+    fs[concretize_rel_def, LET_THM, lookup_var_def]) >>
+  fs[concretize_rel_def, LET_THM]
+QED
+
+Triviality concretize_phi_operand_pv:
+  !amap fn livesets init bb inst out val_op prev s1 s2 w1.
+    ssa_form fn /\ amap_from_allocas fn amap /\ fn_inst_wf fn /\
+    phi_pv_all_var fn (FDOM amap) /\
+    MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+    inst.inst_opcode = PHI /\ MEM out inst.inst_outputs /\
+    out IN pointer_derived_vars fn (FDOM amap) /\
+    resolve_phi prev inst.inst_operands = SOME val_op /\
+    eval_operand val_op s1 = SOME w1 /\
+    concretize_rel amap fn livesets init s1 s2 ==>
+    ?w2 aid orig_off sz addr.
+      eval_operand val_op s2 = SOME w2 /\
+      FLOOKUP s1.vs_allocas aid = SOME (orig_off, sz) /\
+      alloca_concrete_addr amap fn aid = SOME addr /\
+      orig_off <= w2n w1 /\ w2n w1 < orig_off + sz /\
+      w1 - n2w orig_off = w2 - addr /\
+      orig_off + sz < dimword (:256) /\
+      w2n addr + sz < dimword (:256)
+Proof
+  rpt strip_tac >>
+  `?pv_in. MEM (Var pv_in) inst.inst_operands /\
+           pv_in IN pointer_derived_vars fn (FDOM amap)` by (
+    irule pp_pv_output_has_pv_operand >>
+    simp[is_pointer_preserving_op_def] >> metis_tac[]) >>
+  `inst_wf inst` by (fs[fn_inst_wf_def] >> metis_tac[]) >>
+  `phi_well_formed inst.inst_operands` by gvs[inst_wf_def] >>
+  `?src. val_op = Var src` by (
+    mp_tac (Q.SPECL [`prev`, `inst.inst_operands`, `val_op`]
+      phi_resolve_is_var) >> simp[]) >>
+  gvs[eval_operand_def] >>
+  `src IN pointer_derived_vars fn (FDOM amap)` by (
+    fs[phi_pv_all_var_def, LET_THM] >>
+    first_x_assum (qspecl_then [`bb`, `inst`] mp_tac) >> simp[] >>
+    strip_tac >>
+    `MEM (Var src) inst.inst_operands` by
+      metis_tac[resolve_phi_MEM_operands_concretize] >>
+    metis_tac[]) >>
+  `lookup_var src s1 <> NONE` by simp[] >>
+  drule_all cr_pv_var_displacement >> strip_tac >> gvs[] >>
+  qexistsl [`aid`, `orig_off`, `sz`, `addr`] >> simp[]
+QED
+
+Triviality concretize_phi_operand_pv_none:
+  !amap fn livesets init bb inst out val_op prev s1 s2.
+    ssa_form fn /\ amap_from_allocas fn amap /\ fn_inst_wf fn /\
+    phi_pv_all_var fn (FDOM amap) /\
+    MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+    inst.inst_opcode = PHI /\ MEM out inst.inst_outputs /\
+    out IN pointer_derived_vars fn (FDOM amap) /\
+    resolve_phi prev inst.inst_operands = SOME val_op /\
+    eval_operand val_op s1 = NONE /\
+    concretize_rel amap fn livesets init s1 s2 ==>
+    eval_operand val_op s2 = NONE
+Proof
+  rpt strip_tac >>
+  `?pv_in. MEM (Var pv_in) inst.inst_operands /\
+           pv_in IN pointer_derived_vars fn (FDOM amap)` by (
+    irule pp_pv_output_has_pv_operand >>
+    simp[is_pointer_preserving_op_def] >> metis_tac[]) >>
+  `inst_wf inst` by (fs[fn_inst_wf_def] >> metis_tac[]) >>
+  `phi_well_formed inst.inst_operands` by gvs[inst_wf_def] >>
+  `?src. val_op = Var src` by (
+    mp_tac (Q.SPECL [`prev`, `inst.inst_operands`, `val_op`]
+      phi_resolve_is_var) >> simp[]) >>
+  gvs[eval_operand_def] >>
+  `src IN pointer_derived_vars fn (FDOM amap)` by (
+    fs[phi_pv_all_var_def, LET_THM] >>
+    first_x_assum (qspecl_then [`bb`, `inst`] mp_tac) >> simp[] >>
+    strip_tac >>
+    `MEM (Var src) inst.inst_operands` by
+      metis_tac[resolve_phi_MEM_operands_concretize] >>
+    metis_tac[]) >>
+  drule_all cr_pv_var_none >> simp[]
+QED
+
+Triviality eval_one_phi_pv_source:
+  !fn amap bb inst s out w.
+    ssa_form fn /\ amap_from_allocas fn amap /\ fn_inst_wf fn /\
+    phi_pv_all_var fn (FDOM amap) /\
+    MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+    inst.inst_opcode = PHI /\
+    out IN pointer_derived_vars fn (FDOM amap) /\
+    eval_one_phi s inst = SOME (out,w) ==>
+    ?src. src IN pointer_derived_vars fn (FDOM amap) /\ lookup_var src s = SOME w
+Proof
+  rpt strip_tac >>
+  fs[eval_one_phi_def] >>
+  Cases_on `inst.inst_outputs` >> gvs[] >>
+  Cases_on `t` >> gvs[] >>
+  Cases_on `s.vs_prev_bb` >> gvs[] >>
+  Cases_on `resolve_phi x inst.inst_operands` >> gvs[] >>
+  Cases_on `eval_operand x' s` >> gvs[] >>
+  `inst_wf inst` by (fs[fn_inst_wf_def] >> metis_tac[]) >>
+  `phi_well_formed inst.inst_operands` by gvs[inst_wf_def] >>
+  `?pv_in. MEM (Var pv_in) inst.inst_operands /\
+           pv_in IN pointer_derived_vars fn (FDOM amap)` by (
+    irule pp_pv_output_has_pv_operand >>
+    simp[is_pointer_preserving_op_def] >> metis_tac[]) >>
+  `?src. x' = Var src` by (
+    mp_tac (Q.SPECL [`x`, `inst.inst_operands`, `x'`]
+      phi_resolve_is_var) >> simp[]) >>
+  gvs[eval_operand_def] >>
+  `MEM (Var src) inst.inst_operands` by
+    metis_tac[resolve_phi_MEM_operands_concretize] >>
+  qexists `src` >> simp[] >>
+  fs[phi_pv_all_var_def, LET_THM] >>
+  first_x_assum (qspecl_then [`bb`, `inst`] mp_tac) >>
+  simp[] >> metis_tac[]
+QED
+
+Triviality eval_phis_pv_lookup_source:
+  !amap fn bb insts s s' y w.
+    ssa_form fn /\ amap_from_allocas fn amap /\ fn_inst_wf fn /\
+    phi_pv_all_var fn (FDOM amap) /\ MEM bb fn.fn_blocks /\
+    (!inst. MEM inst insts ==> MEM inst bb.bb_instructions) /\
+    eval_phis s insts = OK s' /\
+    y IN pointer_derived_vars fn (FDOM amap) /\
+    lookup_var y s' = SOME w ==>
+    ?src. src IN pointer_derived_vars fn (FDOM amap) /\ lookup_var src s = SOME w
+Proof
+  gen_tac >> gen_tac >> gen_tac >> Induct >>
+  simp[eval_phis_def, lookup_var_def] >> rpt strip_tac
+  >- metis_tac[] >>
+  Cases_on `h.inst_opcode = PHI` >> gvs[]
+  >- (
+    Cases_on `eval_one_phi s h` >> gvs[] >>
+    PairCases_on `x` >> gvs[] >>
+    Cases_on `eval_phis s insts` >> gvs[] >>
+    gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+    Cases_on `y = x0` >> gvs[]
+    >- (
+      mp_tac (Q.SPECL [`fn`, `amap`, `bb`, `h`, `s`, `x0`, `w`]
+        eval_one_phi_pv_source) >>
+      impl_tac >- simp[] >>
+      strip_tac >> qexists `src` >> fs[lookup_var_def]) >>
+    first_x_assum irule >> simp[] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Triviality concretize_eval_one_phi_none:
+  !amap fn livesets init bb inst s1 s2.
+    ssa_form fn /\ amap_from_allocas fn amap /\ fn_inst_wf fn /\
+    concretize_pointer_confined fn amap /\ phi_pv_all_var fn (FDOM amap) /\
+    MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+    inst.inst_opcode = PHI /\
+    concretize_rel amap fn livesets init s1 s2 /\
+    eval_one_phi s1 inst = NONE ==>
+    eval_one_phi s2 inst = NONE
+Proof
+  rpt strip_tac >>
+  fs[eval_one_phi_def] >>
+  Cases_on `inst.inst_outputs` >> gvs[eval_one_phi_def] >>
+  reverse (Cases_on `t`) >-
+    (Cases_on `s1.vs_prev_bb` >> Cases_on `s2.vs_prev_bb` >>
+     gvs[eval_one_phi_def]) >>
+  gvs[eval_one_phi_def] >>
+  Cases_on `s1.vs_prev_bb` >> gvs[]
+  >- (sg `s2.vs_prev_bb = NONE` >- fs[concretize_rel_def, LET_THM] >> simp[]) >>
+  sg `s2.vs_prev_bb = SOME x`
+  >- fs[concretize_rel_def, LET_THM] >>
+  simp[] >>
+  Cases_on `resolve_phi x inst.inst_operands`
+  >- simp[] >>
+  gvs[] >>
+  Cases_on `h IN pointer_derived_vars fn (FDOM amap)`
+  >- (
+    Cases_on `eval_operand (THE (resolve_phi x inst.inst_operands)) s1` >> gvs[] >>
+    mp_tac (Q.SPECL
+      [`amap`, `fn`, `livesets`, `init`, `bb`, `inst`, `h`,
+       `THE (resolve_phi x inst.inst_operands)`, `x`, `s1`, `s2`]
+      concretize_phi_operand_pv_none) >>
+    simp[]) >>
+  Cases_on `THE (resolve_phi x inst.inst_operands)` >> gvs[eval_operand_def]
+  >- (
+    `s NOTIN pointer_derived_vars fn (FDOM amap)` by (
+      spose_not_then assume_tac >>
+      `MEM (Var s) inst.inst_operands` by
+        metis_tac[resolve_phi_MEM_operands_concretize] >>
+      `pointer_confined fn (FDOM amap)` by
+        fs[concretize_pointer_confined_def] >>
+      fs[pointer_confined_def, LET_THM] >>
+      first_x_assum (qspecl_then [`bb`, `inst`, `s`] mp_tac) >> simp[] >>
+      strip_tac >> gvs[SUBSET_DEF, is_pointer_preserving_op_def,
+                       memLocDefsTheory.mem_write_ops_def,
+                       memLocDefsTheory.mem_read_ops_def] >>
+      metis_tac[]) >>
+    fs[concretize_rel_def, LET_THM, lookup_var_def] >>
+    res_tac >> gvs[]) >>
+  fs[concretize_rel_def, LET_THM] >> gvs[]
+QED
+
+Triviality concretize_eval_one_phi_some:
+  !amap fn livesets init bb inst s1 s2 out w1 t1 t2.
+    ssa_form fn /\ amap_from_allocas fn amap /\ fn_inst_wf fn /\
+    concretize_pointer_confined fn amap /\ phi_pv_all_var fn (FDOM amap) /\
+    MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+    inst.inst_opcode = PHI /\
+    concretize_rel amap fn livesets init s1 s2 /\
+    concretize_rel amap fn livesets init t1 t2 /\
+    t1.vs_allocas = s1.vs_allocas /\
+    eval_one_phi s1 inst = SOME (out, w1) ==>
+    ?w2.
+      eval_one_phi s2 inst = SOME (out, w2) /\
+      concretize_rel amap fn livesets init
+        (update_var out w1 t1) (update_var out w2 t2)
+Proof
+  rpt strip_tac >>
+  fs[eval_one_phi_def] >>
+  Cases_on `inst.inst_outputs` >> gvs[] >>
+  Cases_on `t` >> gvs[] >>
+  Cases_on `s1.vs_prev_bb` >> gvs[] >>
+  sg `s2.vs_prev_bb = SOME x`
+  >- fs[concretize_rel_def, LET_THM] >>
+  simp[] >>
+  Cases_on `resolve_phi x inst.inst_operands` >> gvs[] >>
+  Cases_on `eval_operand (THE (resolve_phi x inst.inst_operands)) s1` >> gvs[] >>
+  Cases_on `h IN pointer_derived_vars fn (FDOM amap)`
+  >- (
+    mp_tac (Q.SPECL
+      [`amap`, `fn`, `livesets`, `init`, `bb`, `inst`, `h`,
+       `THE (resolve_phi x inst.inst_operands)`, `x`, `s1`, `s2`, `w1`]
+      concretize_phi_operand_pv) >>
+    impl_tac >- gvs[] >>
+    strip_tac >> gvs[] >>
+    irule cr_update_var_pv >> simp[] >>
+    qexistsl [`addr`, `aid`, `orig_off`, `sz`] >> simp[]) >>
+  mp_tac (Q.SPECL
+    [`amap`, `fn`, `livesets`, `init`, `bb`, `inst`, `h`,
+     `THE (resolve_phi x inst.inst_operands)`, `x`, `s1`, `s2`]
+    concretize_phi_operand_non_pv) >>
+  impl_tac >- gvs[] >>
+  strip_tac >> gvs[] >>
+  qexists `w1` >>
+  conj_tac >- (
+    qpat_x_assum `SOME w1 = eval_operand x' s2` (SUBST1_TAC o SYM) >>
+    simp[]) >>
+  irule cr_update_var_non_pv >> simp[]
+QED
+
+Triviality concretize_eval_phis_rel:
+  !amap fn livesets init bb insts s1 s2.
+    ssa_form fn /\ amap_from_allocas fn amap /\ fn_inst_wf fn /\
+    concretize_pointer_confined fn amap /\ phi_pv_all_var fn (FDOM amap) /\
+    MEM bb fn.fn_blocks /\
+    (!inst. MEM inst insts ==> MEM inst bb.bb_instructions) /\
+    concretize_rel amap fn livesets init s1 s2 ==>
+    lift_result
+      (concretize_rel amap fn livesets init)
+      (concretize_rel amap fn livesets init)
+      (concretize_rel amap fn livesets init)
+      (eval_phis s1 insts) (eval_phis s2 insts)
+Proof
+  gen_tac >> gen_tac >> gen_tac >> gen_tac >> gen_tac >>
+  Induct >> rpt strip_tac >> simp[eval_phis_def, lift_result_def] >>
+  Cases_on `h.inst_opcode = PHI` >> simp[lift_result_def]
+  >- (
+    `MEM h bb.bb_instructions` by metis_tac[MEM] >>
+    Cases_on `eval_one_phi s1 h`
+    >- (
+      `eval_one_phi s2 h = NONE` by
+        (irule concretize_eval_one_phi_none >> simp[] >> metis_tac[]) >>
+      simp[lift_result_def]) >>
+    PairCases_on `x` >>
+    `lift_result
+       (concretize_rel amap fn livesets init)
+       (concretize_rel amap fn livesets init)
+       (concretize_rel amap fn livesets init)
+       (eval_phis s1 insts) (eval_phis s2 insts)` by (
+      first_x_assum irule >> simp[] >> metis_tac[]) >>
+    DISJ_CASES_TAC (Q.SPECL [`s1`, `insts`] eval_phis_ok_or_error_defs)
+    >- (
+      DISJ_CASES_TAC (Q.SPECL [`s2`, `insts`] eval_phis_ok_or_error_defs)
+      >- (
+        gvs[lift_result_def] >>
+        TRY (Cases_on `eval_one_phi s2 h` >> gvs[lift_result_def] >> NO_TAC) >>
+        rename1 `eval_phis s1 insts = OK s1_tail` >>
+        rename1 `eval_phis s2 insts = OK s2_tail` >>
+        `concretize_rel amap fn livesets init s1_tail s2_tail` by (
+          first_x_assum (qspecl_then [`s1`, `s2`] mp_tac) >>
+          simp[lift_result_def]) >>
+        `s1_tail.vs_allocas = s1.vs_allocas` by (
+          mp_tac (Q.SPECL [`s1`, `insts`, `s1_tail`]
+            venomExecProofsTheory.eval_phis_preserves_alloca_fields) >>
+          simp[]) >>
+        mp_tac (Q.SPECL
+          [`amap`, `fn`, `livesets`, `init`, `bb`, `h`,
+           `s1`, `s2`, `x0`, `x1`, `s1_tail`, `s2_tail`]
+          concretize_eval_one_phi_some) >>
+        impl_tac >- simp[] >>
+        strip_tac >> gvs[lift_result_def]) >>
+      first_x_assum (qspecl_then [`s1`, `s2`] mp_tac) >>
+      gvs[lift_result_def]) >>
+    gvs[lift_result_def] >>
+    first_x_assum (qspecl_then [`s1`, `s2`] mp_tac) >>
+    simp[lift_result_def] >>
+    Cases_on `eval_phis s2 insts` >> gvs[lift_result_def] >>
+    Cases_on `eval_one_phi s2 h` >> gvs[lift_result_def] >>
+    PairCases_on `x` >> gvs[lift_result_def]) >>
+  fs[concretize_rel_def, LET_THM]
 QED
 
 (* ALLOCA instructions have [Lit sz] operands and single output *)
@@ -5501,6 +6075,41 @@ Proof
   rw[alloca_sizes_match_def]
 QED
 
+Triviality alloca_write_before_read_update_inst_idx:
+  !fn roots livesets init s n.
+    alloca_write_before_read fn roots livesets init s ==>
+    alloca_write_before_read fn roots livesets init (s with vs_inst_idx := n)
+Proof
+  rw[alloca_write_before_read_def, LET_THM, lookup_var_def]
+QED
+
+Triviality eval_operand_update_inst_idx:
+  !op s n. eval_operand op (s with vs_inst_idx := n) = eval_operand op s
+Proof
+  Cases_on `op` >> rw[eval_operand_def, lookup_var_def]
+QED
+
+Triviality alloca_safe_access_update_inst_idx:
+  !fn roots s n.
+    alloca_safe_access fn roots s ==>
+    alloca_safe_access fn roots (s with vs_inst_idx := n)
+Proof
+  rw[alloca_safe_access_def, LET_THM, lookup_var_def,
+     eval_operand_update_inst_idx]
+QED
+
+Triviality concrete_allocas_non_overlapping_update_inst_idx:
+  !amap fn s n.
+    concrete_allocas_non_overlapping amap fn s ==>
+    concrete_allocas_non_overlapping amap fn (s with vs_inst_idx := n)
+Proof
+  rw[concrete_allocas_non_overlapping_def]
+QED
+
+(* exec_block on the original basic block and on the block_map_transform
+   (concretize_inst amap) block are related by concretize_rel. Handles
+   PHI resolution, alloca→ASSIGN steps, and non-alloca identity steps
+   within a single block. *)
 Theorem exec_block_bmt_sim:
   !n bb amap fn livesets init fuel ctx s1 s2.
     n = LENGTH bb.bb_instructions - s1.vs_inst_idx /\
@@ -5521,9 +6130,33 @@ Theorem exec_block_bmt_sim:
     mem_write_tail_non_pv fn (FDOM amap) /\
     concrete_allocas_non_overlapping amap fn s1 /\
     alloca_sizes_match fn s1 /\
+    (!fuel0 ctx0 inst0 s s'.
+       MEM inst0 bb.bb_instructions /\ step_inst fuel0 ctx0 inst0 s = OK s' /\
+       ~is_terminator inst0.inst_opcode /\
+       alloca_overflow_safe fn amap s ==>
+       alloca_overflow_safe fn amap s') /\
+    (!fuel0 ctx0 inst0 s s' init0 init1.
+       MEM inst0 bb.bb_instructions /\ step_inst fuel0 ctx0 inst0 s = OK s' /\
+       ~is_terminator inst0.inst_opcode /\
+       alloca_write_before_read fn (FDOM amap) livesets init0 s ==>
+       alloca_write_before_read fn (FDOM amap) livesets init1 s') /\
+    (!fuel0 ctx0 inst0 s s'.
+       MEM inst0 bb.bb_instructions /\ step_inst fuel0 ctx0 inst0 s = OK s' /\
+       ~is_terminator inst0.inst_opcode /\
+       alloca_safe_access fn (FDOM amap) s ==>
+       alloca_safe_access fn (FDOM amap) s') /\
+    (!fuel0 ctx0 inst0 s s'.
+       MEM inst0 bb.bb_instructions /\ step_inst fuel0 ctx0 inst0 s = OK s' /\
+       ~is_terminator inst0.inst_opcode /\
+       concrete_allocas_non_overlapping amap fn s ==>
+       concrete_allocas_non_overlapping amap fn s') /\
     EVERY (\i. i.inst_opcode <> INVOKE) bb.bb_instructions /\
     EVERY (\i. i.inst_opcode <> NOP) bb.bb_instructions /\
     EVERY (\i. i.inst_opcode <> MEMTOP) bb.bb_instructions /\
+    EVERY (\i. i.inst_opcode <> LOG) bb.bb_instructions /\
+    EVERY (\i. i.inst_opcode <> MCOPY) bb.bb_instructions /\
+    EVERY (\i. i.inst_opcode <> EXTCODECOPY) bb.bb_instructions /\
+    EVERY (\i. ~is_ext_call_op i.inst_opcode) bb.bb_instructions /\
     concretize_rel amap fn livesets init s1 s2 /\
     s1.vs_inst_idx = s2.vs_inst_idx ==>
     ?init'.
@@ -5566,6 +6199,10 @@ Proof
       `inst.inst_opcode <> INVOKE` by (fs[EVERY_MEM] >> metis_tac[]) >>
       `inst.inst_opcode <> NOP` by (fs[EVERY_MEM] >> metis_tac[]) >>
       `inst.inst_opcode <> MEMTOP` by (fs[EVERY_MEM] >> metis_tac[]) >>
+      `inst.inst_opcode <> LOG` by (fs[EVERY_MEM] >> metis_tac[]) >>
+      `inst.inst_opcode <> MCOPY` by (fs[EVERY_MEM] >> metis_tac[]) >>
+      `inst.inst_opcode <> EXTCODECOPY` by (fs[EVERY_MEM] >> metis_tac[]) >>
+      `~is_ext_call_op inst.inst_opcode` by (fs[EVERY_MEM] >> metis_tac[]) >>
       simp[step_inst_non_invoke] >>
       irule concretize_step_inst_base_identity >> simp[] >> metis_tac[])) >>
   (* Case split step results to wire into block *)
@@ -5589,26 +6226,72 @@ Proof
     Cases_on `v.vs_halted` >> gvs[] >>
     qexists `init'` >> simp[lift_result_def])
   >- ( (* non-terminator: use IH *)
-    first_x_assum irule >> simp[] >>
-    rpt conj_tac
-    >- (irule alloca_inv_update_inst_idx >>
-        metis_tac[alloca_inv_step_inst_proof])
-    >- (irule alloca_sizes_match_update_inst_idx >>
-        match_mp_tac alloca_sizes_match_step_inst >>
-        MAP_EVERY qexists [`fuel`, `ctx`, `inst`, `s1`, `bb`] >>
-        simp[] >> fs[EVERY_MEM] >> metis_tac[])
-    >- cheat (* alloca_overflow_safe preserved by step_inst *)
-    >- cheat (* alloca_safe_access preserved by step_inst *)
-    >- cheat (* concrete_allocas_non_overlapping preserved by step_inst *)
-    >- ( (* write_before_read + concretize_rel for continuation *)
-      qexists `init'` >> conj_tac
-      >- cheat (* alloca_write_before_read preserved by step_inst *)
-      >- (irule concretize_rel_update_inst_idx >> simp[])))
+    `n = LENGTH bb.bb_instructions -
+       (v with vs_inst_idx := SUC s2.vs_inst_idx).vs_inst_idx` by
+      (fs[get_instruction_def, AllCaseEqs()] >> DECIDE_TAC) >>
+    `alloca_inv (v with vs_inst_idx := SUC s2.vs_inst_idx)` by
+      (irule alloca_inv_update_inst_idx >>
+       metis_tac[alloca_inv_step_inst_proof]) >>
+    `alloca_overflow_safe fn amap (v with vs_inst_idx := SUC s2.vs_inst_idx)` by
+      (irule alloca_overflow_safe_update_inst_idx >>
+       qpat_x_assum `!fuel0 ctx0 inst0 s s'.
+         MEM inst0 bb.bb_instructions /\ step_inst fuel0 ctx0 inst0 s = OK s' /\
+         ~is_terminator inst0.inst_opcode /\
+         alloca_overflow_safe fn amap s ==>
+         alloca_overflow_safe fn amap s'`
+         (qspecl_then [`fuel`, `ctx`, `inst`, `s1`, `v`] mp_tac) >>
+       simp[]) >>
+    `alloca_write_before_read fn (FDOM amap) livesets init'
+       (v with vs_inst_idx := SUC s2.vs_inst_idx)` by
+      (irule alloca_write_before_read_update_inst_idx >>
+       qpat_x_assum `!fuel0 ctx0 inst0 s s' init0 init1.
+         MEM inst0 bb.bb_instructions /\ step_inst fuel0 ctx0 inst0 s = OK s' /\
+         ~is_terminator inst0.inst_opcode /\
+         alloca_write_before_read fn (FDOM amap) livesets init0 s ==>
+         alloca_write_before_read fn (FDOM amap) livesets init1 s'`
+         (qspecl_then [`fuel`, `ctx`, `inst`, `s1`, `v`, `init`, `init'`] mp_tac) >>
+       simp[]) >>
+    `alloca_safe_access fn (FDOM amap) (v with vs_inst_idx := SUC s2.vs_inst_idx)` by
+      (irule alloca_safe_access_update_inst_idx >>
+       qpat_x_assum `!fuel0 ctx0 inst0 s s'.
+         MEM inst0 bb.bb_instructions /\ step_inst fuel0 ctx0 inst0 s = OK s' /\
+         ~is_terminator inst0.inst_opcode /\
+         alloca_safe_access fn (FDOM amap) s ==>
+         alloca_safe_access fn (FDOM amap) s'`
+         (qspecl_then [`fuel`, `ctx`, `inst`, `s1`, `v`] mp_tac) >>
+       simp[]) >>
+    `concrete_allocas_non_overlapping amap fn
+       (v with vs_inst_idx := SUC s2.vs_inst_idx)` by
+      (irule concrete_allocas_non_overlapping_update_inst_idx >>
+       qpat_x_assum `!fuel0 ctx0 inst0 s s'.
+         MEM inst0 bb.bb_instructions /\ step_inst fuel0 ctx0 inst0 s = OK s' /\
+         ~is_terminator inst0.inst_opcode /\
+         concrete_allocas_non_overlapping amap fn s ==>
+         concrete_allocas_non_overlapping amap fn s'`
+         (qspecl_then [`fuel`, `ctx`, `inst`, `s1`, `v`] mp_tac) >>
+       simp[]) >>
+    `alloca_sizes_match fn (v with vs_inst_idx := SUC s2.vs_inst_idx)` by
+      (irule alloca_sizes_match_update_inst_idx >>
+       match_mp_tac alloca_sizes_match_step_inst >>
+       MAP_EVERY qexists [`fuel`, `ctx`, `inst`, `s1`, `bb`] >>
+       simp[] >> fs[EVERY_MEM] >> metis_tac[]) >>
+    `concretize_rel amap fn livesets init'
+       (v with vs_inst_idx := SUC s2.vs_inst_idx)
+       (v' with vs_inst_idx := SUC s2.vs_inst_idx)` by
+      (irule concretize_rel_update_inst_idx >> simp[]) >>
+    qpat_x_assum `!bb amap fn livesets init fuel ctx s1 s2.
+      _ ==> ?init'. lift_result _ _ _ (run_block_non_phis fuel ctx bb s1) _`
+      (qspecl_then [`bb`, `amap`, `fn`, `livesets`, `init'`, `fuel`, `ctx`,
+        `v with vs_inst_idx := SUC s2.vs_inst_idx`,
+        `v' with vs_inst_idx := SUC s2.vs_inst_idx`] mp_tac) >>
+    impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[]]) >>
+    simp[])
 QED
 
-(* Block simulation: exec_block on original bb vs exec_block on
-   clear_nops_block (bmt (ci amap) bb). Under all_allocas_mapped + no
-   input NOPs, clear_nops is identity, so this reduces to exec_block_bmt_sim. *)
+(* exec_block on the original block vs exec_block on the concretized block
+   (clear_nops ∘ block_map_transform ∘ concretize_inst) preserves concretize_rel.
+   Under all_allocas_mapped and no input NOPs, clear_nops is identity, so
+   this reduces to exec_block_bmt_sim. *)
 Theorem concretize_exec_block_sim:
   !bb amap fn livesets init fuel ctx s1 s2.
     fn_inst_wf fn /\ ssa_form fn /\ fn_inst_ids_distinct fn /\
@@ -5628,9 +6311,33 @@ Theorem concretize_exec_block_sim:
     mem_write_tail_non_pv fn (FDOM amap) /\
     concrete_allocas_non_overlapping amap fn s1 /\
     alloca_sizes_match fn s1 /\
+    (!fuel0 ctx0 inst0 s s'.
+       MEM inst0 bb.bb_instructions /\ step_inst fuel0 ctx0 inst0 s = OK s' /\
+       ~is_terminator inst0.inst_opcode /\
+       alloca_overflow_safe fn amap s ==>
+       alloca_overflow_safe fn amap s') /\
+    (!fuel0 ctx0 inst0 s s' init0 init1.
+       MEM inst0 bb.bb_instructions /\ step_inst fuel0 ctx0 inst0 s = OK s' /\
+       ~is_terminator inst0.inst_opcode /\
+       alloca_write_before_read fn (FDOM amap) livesets init0 s ==>
+       alloca_write_before_read fn (FDOM amap) livesets init1 s') /\
+    (!fuel0 ctx0 inst0 s s'.
+       MEM inst0 bb.bb_instructions /\ step_inst fuel0 ctx0 inst0 s = OK s' /\
+       ~is_terminator inst0.inst_opcode /\
+       alloca_safe_access fn (FDOM amap) s ==>
+       alloca_safe_access fn (FDOM amap) s') /\
+    (!fuel0 ctx0 inst0 s s'.
+       MEM inst0 bb.bb_instructions /\ step_inst fuel0 ctx0 inst0 s = OK s' /\
+       ~is_terminator inst0.inst_opcode /\
+       concrete_allocas_non_overlapping amap fn s ==>
+       concrete_allocas_non_overlapping amap fn s') /\
     EVERY (\i. i.inst_opcode <> INVOKE) bb.bb_instructions /\
     EVERY (\i. i.inst_opcode <> NOP) bb.bb_instructions /\
     EVERY (\i. i.inst_opcode <> MEMTOP) bb.bb_instructions /\
+    EVERY (\i. i.inst_opcode <> LOG) bb.bb_instructions /\
+    EVERY (\i. i.inst_opcode <> MCOPY) bb.bb_instructions /\
+    EVERY (\i. i.inst_opcode <> EXTCODECOPY) bb.bb_instructions /\
+    EVERY (\i. ~is_ext_call_op i.inst_opcode) bb.bb_instructions /\
     concretize_rel amap fn livesets init s1 s2 /\
     s1.vs_inst_idx = 0 /\ s2.vs_inst_idx = 0 ==>
     ?init'.
@@ -5649,37 +6356,6 @@ Proof
     (irule clear_nops_bmt_identity >> metis_tac[]) >>
   simp[] >>
   irule exec_block_bmt_sim >> simp[] >> metis_tac[]
-QED
-
-Triviality alloca_write_before_read_update_inst_idx:
-  !fn roots livesets init s n.
-    alloca_write_before_read fn roots livesets init s ==>
-    alloca_write_before_read fn roots livesets init (s with vs_inst_idx := n)
-Proof
-  rw[alloca_write_before_read_def, LET_THM, lookup_var_def]
-QED
-
-Triviality eval_operand_update_inst_idx:
-  !op s n. eval_operand op (s with vs_inst_idx := n) = eval_operand op s
-Proof
-  Cases_on `op` >> rw[eval_operand_def, lookup_var_def]
-QED
-
-Triviality alloca_safe_access_update_inst_idx:
-  !fn roots s n.
-    alloca_safe_access fn roots s ==>
-    alloca_safe_access fn roots (s with vs_inst_idx := n)
-Proof
-  rw[alloca_safe_access_def, LET_THM, lookup_var_def,
-     eval_operand_update_inst_idx]
-QED
-
-Triviality concrete_allocas_non_overlapping_update_inst_idx:
-  !amap fn s n.
-    concrete_allocas_non_overlapping amap fn s ==>
-    concrete_allocas_non_overlapping amap fn (s with vs_inst_idx := n)
-Proof
-  rw[concrete_allocas_non_overlapping_def]
 QED
 
 (* alloca_sizes_match preserved by exec_block for non-INVOKE blocks *)
@@ -5724,10 +6400,173 @@ Proof
     simp[])
 QED
 
+Triviality alloca_overflow_safe_state_eq:
+  !fn amap s s'.
+    alloca_overflow_safe fn amap s /\
+    s'.vs_allocas = s.vs_allocas /\
+    s'.vs_alloca_next = s.vs_alloca_next /\
+    s'.vs_memory = s.vs_memory ==>
+    alloca_overflow_safe fn amap s'
+Proof
+  rw[alloca_overflow_safe_def, fn_remaining_alloca_size_def] >> metis_tac[]
+QED
+
+Triviality step_terminator_ok_preserves_alloca_overflow_safe:
+  !fuel ctx inst s s' fn amap.
+    step_inst fuel ctx inst s = OK s' /\
+    is_terminator inst.inst_opcode /\
+    alloca_overflow_safe fn amap s ==>
+    alloca_overflow_safe fn amap s'
+Proof
+  rpt strip_tac >>
+  `inst.inst_opcode <> INVOKE` by
+    (Cases_on `inst.inst_opcode` >> fs[is_terminator_def]) >>
+  gvs[step_inst_non_invoke] >>
+  irule alloca_overflow_safe_state_eq >>
+  qexists_tac `s` >> simp[] >>
+  qpat_x_assum `is_terminator _` mp_tac >>
+  Cases_on `inst.inst_opcode` >> simp[is_terminator_def] >>
+  gvs[step_inst_base_def, LET_THM] >>
+  rpt (BasicProvers.PURE_FULL_CASE_TAC >>
+       gvs[jump_to_def, halt_state_def, revert_state_def,
+           set_returndata_def])
+QED
+
+Triviality alloca_overflow_safe_exec_block:
+  !n fuel ctx bb s s' fn amap.
+    n = LENGTH bb.bb_instructions - s.vs_inst_idx /\
+    exec_block fuel ctx bb s = OK s' /\
+    alloca_overflow_safe fn amap s /\
+    MEM bb fn.fn_blocks /\
+    (!fuel0 ctx0 bb inst0 s0 s1.
+       MEM bb fn.fn_blocks /\ MEM inst0 bb.bb_instructions /\
+       step_inst fuel0 ctx0 inst0 s0 = OK s1 /\
+       ~is_terminator inst0.inst_opcode /\
+       alloca_overflow_safe fn amap s0 ==>
+       alloca_overflow_safe fn amap s1) ==>
+    alloca_overflow_safe fn amap s'
+Proof
+  Induct_on `n`
+  >- (
+    rpt strip_tac >>
+    `~(s.vs_inst_idx < LENGTH bb.bb_instructions)` by DECIDE_TAC >>
+    fs[Once exec_block_def, get_instruction_def]) >>
+  rpt strip_tac >>
+  qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
+  ONCE_REWRITE_TAC[exec_block_def] >>
+  Cases_on `get_instruction bb s.vs_inst_idx` >> simp[] >>
+  rename1 `get_instruction bb s.vs_inst_idx = SOME inst` >>
+  `MEM inst bb.bb_instructions` by
+    (fs[get_instruction_def, AllCaseEqs()] >> metis_tac[MEM_EL]) >>
+  Cases_on `step_inst fuel ctx inst s` >> simp[AllCaseEqs()] >>
+  strip_tac >> gvs[]
+  >- (irule step_terminator_ok_preserves_alloca_overflow_safe >> metis_tac[]) >>
+  sg `alloca_overflow_safe fn amap v`
+  >- (qpat_x_assum `!fuel0 ctx0 bb inst0 s0 s1. _`
+        (qspecl_then [`fuel`, `ctx`, `bb`, `inst`, `s`, `v`] mp_tac) >>
+      simp[]) >>
+  sg `alloca_overflow_safe fn amap (v with vs_inst_idx := SUC s.vs_inst_idx)`
+  >- (irule alloca_overflow_safe_update_inst_idx >> simp[]) >>
+  sg `n = LENGTH bb.bb_instructions - SUC s.vs_inst_idx`
+  >- (fs[get_instruction_def, AllCaseEqs()] >> DECIDE_TAC) >>
+  qpat_x_assum `!fuel ctx bb s s' fn amap. _ ==> alloca_overflow_safe fn amap s'`
+    (qspecl_then [`fuel`, `ctx`, `bb`,
+       `v with vs_inst_idx := SUC s.vs_inst_idx`, `s'`, `fn`, `amap`] mp_tac) >>
+  simp[] >> metis_tac[]
+QED
+
+Triviality eval_phis_alloca_inv_update_inst_idx:
+  !s insts s' n.
+    eval_phis s insts = OK s' /\ alloca_inv s ==>
+    alloca_inv (s' with vs_inst_idx := n)
+Proof
+  rw[] >>
+  drule venomExecProofsTheory.eval_phis_preserves_alloca_fields >>
+  strip_tac >>
+  gvs[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  first_assum ACCEPT_TAC
+QED
+
+Triviality alloca_overflow_safe_update_vars:
+  !fn amap s vars.
+    alloca_overflow_safe fn amap s ==>
+    alloca_overflow_safe fn amap (s with vs_vars := vars)
+Proof
+  rw[alloca_overflow_safe_def, fn_remaining_alloca_size_def] >> metis_tac[]
+QED
+
+Triviality eval_phis_alloca_overflow_safe_update_inst_idx:
+  !fn amap s insts s' n.
+    eval_phis s insts = OK s' /\ alloca_overflow_safe fn amap s ==>
+    alloca_overflow_safe fn amap (s' with vs_inst_idx := n)
+Proof
+  rw[] >>
+  drule venomExecProofsTheory.eval_phis_only_updates_vs_vars >> strip_tac >>
+  gvs[] >>
+  qpat_x_assum `s' = s with vs_vars := s'.vs_vars` SUBST1_TAC >>
+  irule alloca_overflow_safe_update_inst_idx >>
+  irule alloca_overflow_safe_update_vars >> simp[]
+QED
+
+Triviality eval_phis_alloca_write_before_read_update_inst_idx:
+  !amap fn livesets init bb insts s s' n.
+    ssa_form fn /\ amap_from_allocas fn amap /\ fn_inst_wf fn /\
+    phi_pv_all_var fn (FDOM amap) /\ MEM bb fn.fn_blocks /\
+    (!inst. MEM inst insts ==> MEM inst bb.bb_instructions) /\
+    eval_phis s insts = OK s' /\
+    alloca_write_before_read fn (FDOM amap) livesets init s ==>
+    alloca_write_before_read fn (FDOM amap) livesets init
+      (s' with vs_inst_idx := n)
+Proof
+  rw[alloca_write_before_read_def, LET_THM] >>
+  rename1 `v IN pointer_derived_vars fn (FDOM amap)` >>
+  rename1 `lookup_var v (s' with vs_inst_idx := n) = SOME w` >>
+  `lookup_var v s' = SOME w` by fs[lookup_var_def] >>
+  `?src. src IN pointer_derived_vars fn (FDOM amap) /\ lookup_var src s = SOME w` by (
+    irule eval_phis_pv_lookup_source >> simp[] >> metis_tac[]) >>
+  `s'.vs_current_bb = s.vs_current_bb` by
+    metis_tac[venomExecProofsTheory.eval_phis_preserves_current_bb] >>
+  `s'.vs_allocas = s.vs_allocas` by
+    metis_tac[venomExecProofsTheory.eval_phis_preserves_alloca_fields] >>
+  fs[alloca_write_before_read_def, LET_THM] >>
+  first_x_assum (qspecl_then [`src`, `w`, `aid`, `off`, `sz`] mp_tac) >>
+  simp[]
+QED
+
+Triviality eval_phis_concrete_allocas_non_overlapping_update_inst_idx:
+  !amap fn s insts s' n.
+    eval_phis s insts = OK s' /\ concrete_allocas_non_overlapping amap fn s ==>
+    concrete_allocas_non_overlapping amap fn (s' with vs_inst_idx := n)
+Proof
+  rw[] >>
+  drule venomExecProofsTheory.eval_phis_preserves_alloca_fields >>
+  strip_tac >>
+  gvs[concrete_allocas_non_overlapping_def] >>
+  first_assum ACCEPT_TAC
+QED
+
+Triviality eval_phis_alloca_sizes_match_update_inst_idx:
+  !fn s insts s' n.
+    eval_phis s insts = OK s' /\ alloca_sizes_match fn s ==>
+    alloca_sizes_match fn (s' with vs_inst_idx := n)
+Proof
+  rw[] >>
+  drule venomExecProofsTheory.eval_phis_preserves_alloca_fields >>
+  strip_tac >>
+  gvs[alloca_sizes_match_def] >>
+  first_assum ACCEPT_TAC
+QED
+
 (* --- 3c. Main theorem by fuel induction ---
    concretize_function = function_map_transform bt, proved above.
    Fuel induction following block_sim_function_inv_cross pattern. *)
 
+(* Main correctness theorem: concretize_function amap fn produces a
+   function that simulates the original under concretize_rel. Proved by
+   fuel induction: each block step preserves the relation through PHI
+   resolution, instruction-by-instruction simulation, and block
+   continuation. *)
 Theorem concretize_function_correct_proof:
   !amap fn livesets init fuel ctx s1 s2.
     venom_wf ctx /\ fn_inst_wf fn /\ ssa_form fn /\
@@ -5742,6 +6581,46 @@ Theorem concretize_function_correct_proof:
     phi_pv_all_var fn (FDOM amap) /\
     alloca_write_before_read fn (FDOM amap) livesets init s1 /\
     alloca_safe_access fn (FDOM amap) s1 /\
+    (!bb s s' n.
+       MEM bb fn.fn_blocks /\ eval_phis s bb.bb_instructions = OK s' /\
+       alloca_safe_access fn (FDOM amap) s ==>
+       alloca_safe_access fn (FDOM amap) (s' with vs_inst_idx := n)) /\
+    (!fuel ctx bb s s'.
+       MEM bb fn.fn_blocks /\ exec_block fuel ctx bb s = OK s' /\
+       alloca_safe_access fn (FDOM amap) s ==>
+       alloca_safe_access fn (FDOM amap) s') /\
+    (!fuel ctx bb s s' init0 init1.
+       MEM bb fn.fn_blocks /\ exec_block fuel ctx bb s = OK s' /\
+       alloca_write_before_read fn (FDOM amap) livesets init0 s ==>
+       alloca_write_before_read fn (FDOM amap) livesets init1 s') /\
+    (!fuel ctx bb s s'.
+       MEM bb fn.fn_blocks /\ exec_block fuel ctx bb s = OK s' /\
+       concrete_allocas_non_overlapping amap fn s ==>
+       concrete_allocas_non_overlapping amap fn s') /\
+    (!fuel0 ctx0 bb inst0 s s'.
+       MEM bb fn.fn_blocks /\ MEM inst0 bb.bb_instructions /\
+       step_inst fuel0 ctx0 inst0 s = OK s' /\
+       ~is_terminator inst0.inst_opcode /\
+       alloca_overflow_safe fn amap s ==>
+       alloca_overflow_safe fn amap s') /\
+    (!fuel0 ctx0 bb inst0 s s' init0 init1.
+       MEM bb fn.fn_blocks /\ MEM inst0 bb.bb_instructions /\
+       step_inst fuel0 ctx0 inst0 s = OK s' /\
+       ~is_terminator inst0.inst_opcode /\
+       alloca_write_before_read fn (FDOM amap) livesets init0 s ==>
+       alloca_write_before_read fn (FDOM amap) livesets init1 s') /\
+    (!fuel0 ctx0 bb inst0 s s'.
+       MEM bb fn.fn_blocks /\ MEM inst0 bb.bb_instructions /\
+       step_inst fuel0 ctx0 inst0 s = OK s' /\
+       ~is_terminator inst0.inst_opcode /\
+       alloca_safe_access fn (FDOM amap) s ==>
+       alloca_safe_access fn (FDOM amap) s') /\
+    (!fuel0 ctx0 bb inst0 s s'.
+       MEM bb fn.fn_blocks /\ MEM inst0 bb.bb_instructions /\
+       step_inst fuel0 ctx0 inst0 s = OK s' /\
+       ~is_terminator inst0.inst_opcode /\
+       concrete_allocas_non_overlapping amap fn s ==>
+       concrete_allocas_non_overlapping amap fn s') /\
     all_mem_via_pointer fn (FDOM amap) /\
     mem_size_non_pv fn (FDOM amap) /\
     mem_write_tail_non_pv fn (FDOM amap) /\
@@ -5750,7 +6629,11 @@ Theorem concretize_function_correct_proof:
     live_non_overlapping livesets amap fn /\
     EVERY (\bb. EVERY (\i. i.inst_opcode <> INVOKE) bb.bb_instructions /\
                 EVERY (\i. i.inst_opcode <> NOP) bb.bb_instructions /\
-                EVERY (\i. i.inst_opcode <> MEMTOP) bb.bb_instructions)
+                EVERY (\i. i.inst_opcode <> MEMTOP) bb.bb_instructions /\
+                EVERY (\i. i.inst_opcode <> LOG) bb.bb_instructions /\
+                EVERY (\i. i.inst_opcode <> MCOPY) bb.bb_instructions /\
+                EVERY (\i. i.inst_opcode <> EXTCODECOPY) bb.bb_instructions /\
+                EVERY (\i. ~is_ext_call_op i.inst_opcode) bb.bb_instructions)
       fn.fn_blocks /\
     concretize_rel amap fn livesets init s1 s2 ==>
     ?init'.
@@ -5764,105 +6647,138 @@ Proof
   REWRITE_TAC [concretize_function_as_fmt] >>
   MAP_EVERY qid_spec_tac [`s2`,`s1`,`init`] >>
   Induct_on `fuel`
-  >- (rw[run_blocks_def, lift_result_def])
-  >>
+  >- (rpt strip_tac >> qexists `init` >> simp[run_blocks_def, lift_result_def]) >>
   rpt strip_tac >>
-  imp_res_tac concretize_rel_fields >>
-  ONCE_REWRITE_TAC [run_blocks_def] >>
+  ONCE_REWRITE_TAC [run_blocks_unfold] >>
   simp[function_map_transform_def] >>
-  suspend "step"
-QED
-
-(* Resume concretize_function_correct_proof[step]:
-   Fuel induction step for run_blocks. Establishes invariant preservation
-   for inst_idx := 0 states, applies block sim (concretize_exec_block_sim),
-   then handles OK/OK (IH) vs terminal cases.
-   Cheats: alloca_overflow_safe, alloca_write_before_read, alloca_safe_access
-   preservation by exec_block (3 cheats — inductive invariant debt). *)
-Resume concretize_function_correct_proof[step]:
-  `!lbl. lookup_block lbl
-     (MAP (\bb. clear_nops_block
-       (block_map_transform (concretize_inst amap) bb)) fn.fn_blocks) =
-     OPTION_MAP (\bb. clear_nops_block
-       (block_map_transform (concretize_inst amap) bb))
-       (lookup_block lbl fn.fn_blocks)` by
+  qabbrev_tac `bt = \bb. clear_nops_block
+      (block_map_transform (concretize_inst amap) bb)` >>
+  `!lbl. lookup_block lbl (MAP bt fn.fn_blocks) =
+     OPTION_MAP bt (lookup_block lbl fn.fn_blocks)` by
     (strip_tac >> irule lookup_block_map_proof >>
-     simp[clear_nops_block_def, block_map_transform_def]) >>
+     simp[Abbr `bt`, clear_nops_block_def, block_map_transform_def]) >>
+  `s2.vs_current_bb = s1.vs_current_bb` by fs[concretize_rel_def, LET_THM] >>
   simp[] >>
-  Cases_on `lookup_block s2.vs_current_bb fn.fn_blocks`
-  >- simp[lift_result_def]
-  >>
-  simp[] >> rename1 `lookup_block _ _ = SOME bb` >>
+  Cases_on `lookup_block s1.vs_current_bb fn.fn_blocks`
+  >- (qexists `init` >> simp[lift_result_def]) >>
+  rename1 `lookup_block _ _ = SOME bb` >>
   `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
-  `concretize_rel amap fn livesets init
-     (s1 with vs_inst_idx := 0) (s2 with vs_inst_idx := 0)` by
-    (irule concretize_rel_update_inst_idx >> simp[]) >>
-  `alloca_inv (s1 with vs_inst_idx := 0)` by
-    (irule alloca_inv_update_inst_idx >> simp[]) >>
-  `alloca_overflow_safe fn amap (s1 with vs_inst_idx := 0)` by
-    (irule alloca_overflow_safe_update_inst_idx >> simp[]) >>
-  `(s1 with vs_inst_idx := 0).vs_inst_idx = 0 /\
-   (s2 with vs_inst_idx := 0).vs_inst_idx = 0` by simp[] >>
-  `alloca_write_before_read fn (FDOM amap) livesets init
-     (s1 with vs_inst_idx := 0)` by
-    (irule alloca_write_before_read_update_inst_idx >> simp[]) >>
-  `alloca_safe_access fn (FDOM amap) (s1 with vs_inst_idx := 0)` by
-    (irule alloca_safe_access_update_inst_idx >> simp[]) >>
-  `concrete_allocas_non_overlapping amap fn (s1 with vs_inst_idx := 0)` by
-    (irule concrete_allocas_non_overlapping_update_inst_idx >> simp[]) >>
-  `alloca_sizes_match fn (s1 with vs_inst_idx := 0)` by
-    (irule alloca_sizes_match_update_inst_idx >> simp[]) >>
-  `?init'. lift_result
-     (concretize_rel amap fn livesets init')
-     (concretize_rel amap fn livesets init')
-     (concretize_rel amap fn livesets init')
-     (exec_block fuel ctx bb (s1 with vs_inst_idx := 0))
-     (exec_block fuel ctx
-       (clear_nops_block (block_map_transform (concretize_inst amap) bb))
-       (s2 with vs_inst_idx := 0))` by
-    (irule concretize_exec_block_sim >> simp[] >>
-     `EVERY (\i. i.inst_opcode <> INVOKE) bb.bb_instructions /\
-      EVERY (\i. i.inst_opcode <> NOP) bb.bb_instructions /\
-      EVERY (\i. i.inst_opcode <> MEMTOP) bb.bb_instructions` by
-       (fs[EVERY_MEM] >> metis_tac[]) >>
-     metis_tac[]) >>
-  pop_assum strip_assume_tac >>
-  Cases_on `exec_block fuel ctx bb (s1 with vs_inst_idx := 0)` >>
-  Cases_on `exec_block fuel ctx
-    (clear_nops_block (block_map_transform (concretize_inst amap) bb))
-    (s2 with vs_inst_idx := 0)` >>
-  gvs[lift_result_def] >>
-  TRY (qexists `init'` >> simp[lift_result_def] >> NO_TAC) >>
-  (* OK/OK case: need to handle if-halted + IH *)
-  imp_res_tac concretize_rel_fields >>
-  imp_res_tac exec_block_OK_inst_idx_0 >>
-  IF_CASES_TAC >> gvs[]
-  >- (qexists `init'` >> simp[lift_result_def])
-  >> (* not halted — apply IH *)
-  simp[GSYM function_map_transform_def] >>
-  `alloca_inv v` by
-    metis_tac[alloca_inv_exec_block_proof] >>
-  `alloca_overflow_safe fn amap v` by
-    cheat (* alloca_overflow_safe preserved by exec_block *) >>
-  `alloca_write_before_read fn (FDOM amap) livesets init' v` by
-    cheat (* alloca_write_before_read preserved by exec_block *) >>
-  `alloca_safe_access fn (FDOM amap) v` by
-    cheat (* alloca_safe_access preserved by exec_block *) >>
-  `concrete_allocas_non_overlapping amap fn v` by
-    cheat (* concrete_allocas_non_overlapping preserved by exec_block *) >>
-  sg `alloca_sizes_match fn v`
-  >- (
-    match_mp_tac alloca_sizes_match_exec_block >>
-    MAP_EVERY qexists
-      [`LENGTH bb.bb_instructions`, `fuel`, `ctx`, `bb`,
-       `s1 with vs_inst_idx := 0`] >>
-    simp[] >> fs[EVERY_MEM] >> metis_tac[]) >>
-  last_x_assum
-    (qspecl_then [`amap`, `fn`, `livesets`, `init'`,
-                   `ctx`, `v`, `v'`] mp_tac) >>
+  `EVERY (\i. i.inst_opcode <> INVOKE) bb.bb_instructions /\
+   EVERY (\i. i.inst_opcode <> NOP) bb.bb_instructions /\
+   EVERY (\i. i.inst_opcode <> MEMTOP) bb.bb_instructions /\
+   EVERY (\i. i.inst_opcode <> LOG) bb.bb_instructions /\
+   EVERY (\i. i.inst_opcode <> MCOPY) bb.bb_instructions /\
+   EVERY (\i. i.inst_opcode <> EXTCODECOPY) bb.bb_instructions /\
+   EVERY (\i. ~is_ext_call_op i.inst_opcode) bb.bb_instructions` by
+    (fs[EVERY_MEM] >> metis_tac[]) >>
+  `clear_nops_block (block_map_transform (concretize_inst amap) bb) =
+   block_map_transform (concretize_inst amap) bb` by
+    metis_tac[clear_nops_bmt_identity] >>
+  qunabbrev_tac `bt` >>
   simp[] >>
-  disch_then (qx_choose_then `init''` assume_tac) >>
-  qexists `init''` >> simp[]
+  ONCE_REWRITE_TAC[run_block_def] >>
+  simp[concretize_bmt_eval_phis_same_state,
+       concretize_bmt_phi_prefix_length] >>
+  `lift_result
+     (concretize_rel amap fn livesets init)
+     (concretize_rel amap fn livesets init)
+     (concretize_rel amap fn livesets init)
+     (eval_phis s1 bb.bb_instructions)
+     (eval_phis s2 bb.bb_instructions)` by
+    (irule concretize_eval_phis_rel >> simp[] >> metis_tac[]) >>
+  DISJ_CASES_TAC (Q.SPECL [`s1`, `bb.bb_instructions`] eval_phis_ok_or_error_defs)
+  >- (
+    DISJ_CASES_TAC (Q.SPECL [`s2`, `bb.bb_instructions`] eval_phis_ok_or_error_defs)
+    >- (
+      gvs[lift_result_def] >>
+      rename1 `eval_phis s1 bb.bb_instructions = OK s1_phi` >>
+      rename1 `eval_phis s2 bb.bb_instructions = OK s2_phi` >>
+      qabbrev_tac `p = phi_prefix_length bb.bb_instructions` >>
+      `concretize_rel amap fn livesets init s1_phi s2_phi` by
+        first_assum ACCEPT_TAC >>
+      `concretize_rel amap fn livesets init
+         (s1_phi with vs_inst_idx := p) (s2_phi with vs_inst_idx := p)` by
+        (irule concretize_rel_update_inst_idx >> simp[]) >>
+      `alloca_inv (s1_phi with vs_inst_idx := p)` by
+        metis_tac[eval_phis_alloca_inv_update_inst_idx] >>
+      `alloca_overflow_safe fn amap (s1_phi with vs_inst_idx := p)` by
+        metis_tac[eval_phis_alloca_overflow_safe_update_inst_idx] >>
+      `alloca_write_before_read fn (FDOM amap) livesets init
+         (s1_phi with vs_inst_idx := p)` by
+        metis_tac[eval_phis_alloca_write_before_read_update_inst_idx] >>
+      `alloca_safe_access fn (FDOM amap) (s1_phi with vs_inst_idx := p)` by (
+        qpat_x_assum `!bb s s' n.
+          MEM bb fn.fn_blocks /\ eval_phis s bb.bb_instructions = OK s' /\
+          alloca_safe_access fn (FDOM amap) s ==>
+          alloca_safe_access fn (FDOM amap) (s' with vs_inst_idx := n)`
+          (qspecl_then [`bb`, `s1`, `s1_phi`, `p`] mp_tac) >>
+        simp[]) >>
+      `concrete_allocas_non_overlapping amap fn (s1_phi with vs_inst_idx := p)` by
+        metis_tac[eval_phis_concrete_allocas_non_overlapping_update_inst_idx] >>
+      `alloca_sizes_match fn (s1_phi with vs_inst_idx := p)` by
+        metis_tac[eval_phis_alloca_sizes_match_update_inst_idx] >>
+      `?init'. lift_result
+         (concretize_rel amap fn livesets init')
+         (concretize_rel amap fn livesets init')
+         (concretize_rel amap fn livesets init')
+         (exec_block fuel ctx bb (s1_phi with vs_inst_idx := p))
+         (exec_block fuel ctx (block_map_transform (concretize_inst amap) bb)
+            (s2_phi with vs_inst_idx := p))` by (
+        irule exec_block_bmt_sim >> simp[Abbr `p`] >> metis_tac[]) >>
+      pop_assum strip_assume_tac >>
+      Cases_on `exec_block fuel ctx bb (s1_phi with vs_inst_idx := p)` >>
+      Cases_on `exec_block fuel ctx (block_map_transform (concretize_inst amap) bb)
+            (s2_phi with vs_inst_idx := p)` >>
+      gvs[lift_result_def] >>
+      TRY (qexists `init'` >> simp[lift_result_def] >> NO_TAC) >>
+      imp_res_tac concretize_rel_fields >>
+      IF_CASES_TAC >> gvs[]
+      >- (qexists `init'` >> simp[lift_result_def]) >>
+      `alloca_inv v` by
+        metis_tac[alloca_inv_exec_block_proof] >>
+      `alloca_overflow_safe fn amap v` by (
+        mp_tac (Q.SPECL [`LENGTH bb.bb_instructions - p`, `fuel`, `ctx`, `bb`,
+          `s1_phi with vs_inst_idx := p`, `v`, `fn`, `amap`]
+          alloca_overflow_safe_exec_block) >>
+        simp[Abbr `p`] >> metis_tac[]) >>
+      `alloca_write_before_read fn (FDOM amap) livesets init' v` by (
+        qpat_x_assum `!fuel ctx bb s s' init0 init1.
+          MEM bb fn.fn_blocks /\ exec_block fuel ctx bb s = OK s' /\
+          alloca_write_before_read fn (FDOM amap) livesets init0 s ==>
+          alloca_write_before_read fn (FDOM amap) livesets init1 s'`
+          (qspecl_then [`fuel`, `ctx`, `bb`,
+            `s1_phi with vs_inst_idx := p`, `v`, `init`, `init'`] mp_tac) >>
+        simp[]) >>
+      `alloca_safe_access fn (FDOM amap) v` by (
+        qpat_x_assum `!fuel ctx bb s s'.
+          MEM bb fn.fn_blocks /\ exec_block fuel ctx bb s = OK s' /\
+          alloca_safe_access fn (FDOM amap) s ==>
+          alloca_safe_access fn (FDOM amap) s'`
+          (qspecl_then [`fuel`, `ctx`, `bb`,
+            `s1_phi with vs_inst_idx := p`, `v`] mp_tac) >>
+        simp[]) >>
+      `concrete_allocas_non_overlapping amap fn v` by (
+        qpat_x_assum `!fuel ctx bb s s'.
+          MEM bb fn.fn_blocks /\ exec_block fuel ctx bb s = OK s' /\
+          concrete_allocas_non_overlapping amap fn s ==>
+          concrete_allocas_non_overlapping amap fn s'`
+          (qspecl_then [`fuel`, `ctx`, `bb`,
+            `s1_phi with vs_inst_idx := p`, `v`] mp_tac) >>
+        simp[]) >>
+      `alloca_sizes_match fn v` by (
+        match_mp_tac alloca_sizes_match_exec_block >>
+        MAP_EVERY qexists
+          [`LENGTH bb.bb_instructions - p`, `fuel`, `ctx`, `bb`,
+           `s1_phi with vs_inst_idx := p`] >>
+        simp[Abbr `p`] >> metis_tac[]) >>
+      last_x_assum
+        (qspecl_then [`amap`, `fn`, `livesets`, `init'`, `ctx`, `v`, `v'`] mp_tac) >>
+      simp[function_map_transform_def] >>
+      impl_tac >- (rpt conj_tac >> simp[] >> metis_tac[]) >>
+      disch_then (qx_choose_then `init''` assume_tac) >>
+      qexists `init''` >> simp[function_map_transform_def]) >>
+    gvs[lift_result_def]) >>
+  gvs[lift_result_def] >>
+  Cases_on `eval_phis s2 bb.bb_instructions` >> gvs[lift_result_def] >>
+  qexists `init` >> simp[lift_result_def]
 QED
-
-Finalise concretize_function_correct_proof

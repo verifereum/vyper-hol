@@ -60,16 +60,78 @@ fun spa_assume n inst_q s_q s'_q =
 (* ===== Non-terminator result type elimination ======================== *)
 (* ===================================================================== *)
 
+Triviality exec_result_helpers_no_halt_abort[simp]:
+  (!f inst s s'. exec_pure1 f inst s <> Halt s') /\
+  (!f inst s a s'. exec_pure1 f inst s <> Abort a s') /\
+  (!f inst s s'. exec_pure2 f inst s <> Halt s') /\
+  (!f inst s a s'. exec_pure2 f inst s <> Abort a s') /\
+  (!f inst s s'. exec_pure3 f inst s <> Halt s') /\
+  (!f inst s a s'. exec_pure3 f inst s <> Abort a s') /\
+  (!f inst s s'. exec_read0 f inst s <> Halt s') /\
+  (!f inst s a s'. exec_read0 f inst s <> Abort a s') /\
+  (!f inst s s'. exec_read1 f inst s <> Halt s') /\
+  (!f inst s a s'. exec_read1 f inst s <> Abort a s') /\
+  (!f inst s s'. exec_write2 f inst s <> Halt s') /\
+  (!f inst s a s'. exec_write2 f inst s <> Abort a s') /\
+  (!inst s alloc_size s'. exec_alloca inst s alloc_size <> Halt s') /\
+  (!inst s alloc_size a s'. exec_alloca inst s alloc_size <> Abort a s')
+Proof
+  rw[exec_pure1_def, exec_pure2_def, exec_pure3_def,
+     exec_read0_def, exec_read1_def, exec_write2_def,
+     exec_alloca_def] >>
+  gvs[AllCaseEqs()]
+QED
+
+Triviality exec_result_helpers_not_intret[simp]:
+  (!f inst s vs s'. exec_pure1 f inst s <> IntRet vs s') /\
+  (!f inst s vs s'. exec_pure2 f inst s <> IntRet vs s') /\
+  (!f inst s vs s'. exec_pure3 f inst s <> IntRet vs s') /\
+  (!f inst s vs s'. exec_read0 f inst s <> IntRet vs s') /\
+  (!f inst s vs s'. exec_read1 f inst s <> IntRet vs s') /\
+  (!f inst s vs s'. exec_write2 f inst s <> IntRet vs s') /\
+  (!inst s alloc_size vs s'. exec_alloca inst s alloc_size <> IntRet vs s')
+Proof
+  rw[exec_pure1_def, exec_pure2_def, exec_pure3_def,
+     exec_read0_def, exec_read1_def, exec_write2_def,
+     exec_alloca_def] >>
+  gvs[AllCaseEqs()]
+QED
+
+Triviality exec_call_helpers_not_intret[simp]:
+  (!inst s g a v ao as_ ro rs is_s vs s'.
+     exec_ext_call inst s g a v ao as_ ro rs is_s <> IntRet vs s') /\
+  (!inst s g a ao as_ ro rs vs s'.
+     exec_delegatecall inst s g a ao as_ ro rs <> IntRet vs s') /\
+  (!inst s v off sz salt vs s'.
+     exec_create inst s v off sz salt <> IntRet vs s')
+Proof
+  rw[exec_ext_call_def, exec_delegatecall_def, exec_create_def,
+     extract_venom_result_def] >>
+  gvs[AllCaseEqs()]
+QED
+
+Triviality exec_call_helpers_no_halt_abort[simp]:
+  (!inst s g a v ao as_ ro rs is_s s'.
+     exec_ext_call inst s g a v ao as_ ro rs is_s <> Halt s') /\
+  (!inst s g a v ao as_ ro rs is_s ab s'.
+     exec_ext_call inst s g a v ao as_ ro rs is_s <> Abort ab s') /\
+  (!inst s g a ao as_ ro rs s'.
+     exec_delegatecall inst s g a ao as_ ro rs <> Halt s') /\
+  (!inst s g a ao as_ ro rs ab s'.
+     exec_delegatecall inst s g a ao as_ ro rs <> Abort ab s') /\
+  (!inst s v off sz salt s'.
+     exec_create inst s v off sz salt <> Halt s') /\
+  (!inst s v off sz salt ab s'.
+     exec_create inst s v off sz salt <> Abort ab s')
+Proof
+  rw[exec_ext_call_def, exec_delegatecall_def, exec_create_def,
+     extract_venom_result_def] >>
+  gvs[AllCaseEqs()]
+QED
+
 val step_base_result_tac =
   rw[step_inst_base_def] >>
-  gvs[AllCaseEqs(), is_terminator_def] >>
-  fs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def,
-     exec_ext_call_def, exec_delegatecall_def,
-     exec_create_def, exec_alloca_def,
-     extract_venom_result_def] >>
-  gvs[AllCaseEqs()] >>
-  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[])));
+  gvs[AllCaseEqs(), is_terminator_def];
 
 Theorem step_inst_base_no_halt[local]:
   !inst s s'.
@@ -398,9 +460,19 @@ Theorem step_inst_base_abort_returndata[local]:
     s'.vs_returndata = []
 Proof
   rpt strip_tac >>
-  imp_res_tac step_inst_base_abort_opcode >>
-  gvs[step_inst_base_def, AllCaseEqs(),
-      set_returndata_def, revert_state_def, halt_state_def]
+  imp_res_tac step_inst_base_abort_opcode >> gvs[]
+  >- (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+      rw[step_inst_base_def, set_returndata_def,
+         revert_state_def, is_terminator_def,
+         venom_state_component_equality, AllCaseEqs()])
+  >- (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+      rw[step_inst_base_def, set_returndata_def,
+         halt_state_def, is_terminator_def,
+         venom_state_component_equality, AllCaseEqs()])
+  >- (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+      rw[step_inst_base_def, set_returndata_def,
+         halt_state_def, is_terminator_def,
+         venom_state_component_equality, AllCaseEqs()])
 QED
 
 Theorem step_inst_base_abort_type[local]:
@@ -412,7 +484,9 @@ Theorem step_inst_base_abort_type[local]:
     (inst.inst_opcode = RETURNDATACOPY ==> a = ExHalt_abort)
 Proof
   rpt strip_tac >>
-  gvs[step_inst_base_def, AllCaseEqs()]
+  gvs[] >>
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  rw[step_inst_base_def, is_terminator_def, AllCaseEqs()]
 QED
 
 (* Non-INVOKE aborters (ASSERT, ASSERT_UNREACHABLE, RETURNDATACOPY) are all

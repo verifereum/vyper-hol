@@ -254,21 +254,21 @@ Definition evaluate_binop_def:
               w2i $ word_quot ((i2w (i1 * 10000000000)):bytes32) (i2w i2))
                          | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
-     | UAdd => (case v1 of
+     | UnsafeAdd => (case v1 of
          IntV i1 => (case v2 of IntV i2 =>
            wrapped_int_op u (i1 + i2) | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
-     | USub => (case v1 of
+     | UnsafeSub => (case v1 of
          IntV i1 => (case v2 of IntV i2 =>
            wrapped_int_op u (i1 - i2) | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
-     | UMul => (case v1 of
+     | UnsafeMul => (case v1 of
          IntV i1 => (case v2 of IntV i2 =>
            wrapped_int_op u (i1 * i2) | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
-     | UDiv => (case v1 of
+     | UnsafeDiv => (case v1 of
          IntV i1 => (case v2 of IntV i2 =>
-           if i2 = 0 then INR (RuntimeError "UDiv0") else
+           if i2 = 0 then INR (RuntimeError "UnsafeDiv0") else
            wrapped_int_op u $
              (if is_Unsigned u
               then &(w2n $ word_div ((i2w i1):bytes32) (i2w i2))

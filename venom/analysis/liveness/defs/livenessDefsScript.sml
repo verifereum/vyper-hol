@@ -7,6 +7,7 @@
  *
  * TOP-LEVEL:
  *   liveness_analyze      — run full liveness analysis on a function
+ *   liveness_analyze_fuel — bounded liveness analysis for evaluator use
  *   live_vars_at          — query live variables before instruction idx
  *   input_vars_from       — live vars entering target from source (PHI-aware)
  *
@@ -107,6 +108,12 @@ Definition liveness_analyze_def:
   liveness_analyze fn =
     df_analyze Backward [] list_union liveness_transfer
               liveness_edge_transfer fn.fn_blocks NONE fn
+End
+
+Definition liveness_analyze_fuel_def:
+  liveness_analyze_fuel fuel fn =
+    df_analyze_fuel fuel Backward [] list_union liveness_transfer
+                    liveness_edge_transfer fn.fn_blocks NONE fn
 End
 
 (* ==========================================================================

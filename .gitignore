@@ -1,6 +1,8 @@
+.holconfig.toml
+
 # HOL4 build artifacts
-**/.hol/
-**/.alan/
+.hol
+.holbuild
 
 # Interactive HOL4 session files
 .hol_init.sml
@@ -10,6 +12,8 @@
 
 # (symlink to) generated Vyper tests
 tests/vyper-test-exports
+
+.alan/
 
 .claude/
 CLAUDE.local.md

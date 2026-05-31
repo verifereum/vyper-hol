@@ -1059,10 +1059,10 @@ Proof
   >- (rewrite_tac[FOLDL, FST] >> rpt strip_tac >> metis_tac[])
   >> rpt gen_tac >> strip_tac >>
   rename1 `h :: suffix'` >>
-  simp[Once FOLDL] >>
+  PURE_ONCE_REWRITE_TAC[FOLDL] >>
   Cases_on `is_barrier h`
-  >- suspend "barrier"
-  >> suspend "non_barrier"
+  >- (ASM_REWRITE_TAC[] >> suspend "barrier")
+  >> ASM_REWRITE_TAC[] >> suspend "non_barrier"
 QED
 
 Resume add_deps_on_barrier_foldl_backward[barrier]:
@@ -1308,7 +1308,7 @@ Proof
     (rewrite_tac[add_abort_deps_def] >>
      mp_tac (SRULE [LET_THM] add_chain_deps_backward) >>
      disch_then (qspecl_then
-       [`\i. opcode_fail_class i.inst_opcode <> NoFail`, `bi`, `build_eda bi`] mp_tac) >>
+       [`is_fallible`, `bi`, `build_eda bi`] mp_tac) >>
      simp[Abbr `nps`]) >>
   (* Step 3: add_barrier_deps preserves backward *)
   `!j deps dep. j < LENGTH nps /\
@@ -1325,7 +1325,7 @@ Proof
     (rewrite_tac[build_full_eda_def, add_alloca_deps_def] >>
      mp_tac (SRULE [LET_THM] add_chain_deps_backward) >>
      disch_then (qspecl_then
-       [`\i. is_alloca_op i.inst_opcode`, `bi`,
+       [`is_alloca_inst`, `bi`,
         `add_barrier_deps bi (add_abort_deps bi (build_eda bi))`] mp_tac) >>
      simp[Abbr `nps`]) >>
   metis_tac[]
@@ -1413,12 +1413,7 @@ Proof
       irule eda_deps_backward >> metis_tac[])
 QED
 
-(* Weaker: defs_before_uses only for non-pseudo users.
-   Sufficient for eda_topo_compatible because it only quantifies
-   over non-pseudo instructions. *)
 (* non_pseudo_defs_before_uses = np_defs_before_uses from dftTopoSort *)
-(* TODO: pure alias for np_defs_before_uses — consider using
-   np_defs_before_uses directly and removing this indirection *)
 Definition non_pseudo_defs_before_uses_def:
   non_pseudo_defs_before_uses = np_defs_before_uses
 End
@@ -1432,7 +1427,7 @@ QED
 
 Triviality operand_dep_backward_weak:
   !bi inst dep v.
-    non_pseudo_defs_before_uses bi /\
+    np_defs_before_uses bi /\
     MEM inst bi /\ ~is_pseudo inst.inst_opcode /\
     MEM (Var v) inst.inst_operands /\
     producing_inst bi v = SOME dep ==>
@@ -1441,13 +1436,13 @@ Triviality operand_dep_backward_weak:
 Proof
   rpt strip_tac >>
   `?j. j < LENGTH bi /\ EL j bi = inst` by metis_tac[MEM_EL] >>
-  gvs[non_pseudo_defs_before_uses_def, np_defs_before_uses_def] >>
+  gvs[np_defs_before_uses_def] >>
   first_x_assum (qspecl_then [`j`, `v`, `dep`] mp_tac) >>
   simp[] >> strip_tac >>
   qexistsl [`i`, `j`] >> simp[]
 QED
 
-(* eda_topo_compatible from non_pseudo_defs_before_uses
+(* eda_topo_compatible from np_defs_before_uses
    — identical proof to eda_topo_compatible_gen but weaker hypothesis *)
 Theorem eda_topo_compatible_gen_weak:
   !bi order.
@@ -1456,7 +1451,7 @@ Theorem eda_topo_compatible_gen_weak:
     (!k. k < LENGTH bi /\ is_terminator (EL k bi).inst_opcode ==>
          k = PRE (LENGTH bi)) /\
     ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\
-    non_pseudo_defs_before_uses bi ==>
+    np_defs_before_uses bi ==>
     eda_topo_compatible bi (build_full_eda bi) order
 Proof
   rpt strip_tac >>

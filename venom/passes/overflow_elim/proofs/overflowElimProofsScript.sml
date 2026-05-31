@@ -2,8 +2,9 @@
  * Overflow Check Elimination — Main Proofs
  *
  * Depends on overflowElimHelpers for all DFG soundness infrastructure.
- * This file contains: entry_transfer, operand_flookup, dfg_prefix_sound_step,
- * overflow_elim_block_sim, overflow_elim_function_sim, and the final theorem.
+ * This file contains: overflow_elim_block_sim_ind, overflow_elim_block_sim,
+ * overflow_elim_inv_step, overflow_elim_function_sim, and the
+ * final theorem overflow_elim_function_correct_proof.
  *)
 
 Theory overflowElimProofs
@@ -83,6 +84,78 @@ Proof
   simp[analysis_block_transform_widen_def]
 QED
 
+(* Helper: executor output FLOOKUP implies FDOM membership. *)
+Triviality exec_pure1_output_in_fdom[local]:
+  !f inst s s' out.
+    exec_pure1 f inst s = OK s' /\
+    inst.inst_outputs = [out] ==>
+    out IN FDOM s'.vs_vars
+Proof
+  metis_tac[exec_pure1_flookup, FDOM_FLOOKUP]
+QED
+
+Triviality exec_pure2_output_in_fdom[local]:
+  !f inst s s' out.
+    exec_pure2 f inst s = OK s' /\
+    inst.inst_outputs = [out] ==>
+    out IN FDOM s'.vs_vars
+Proof
+  metis_tac[exec_pure2_flookup, FDOM_FLOOKUP]
+QED
+
+Triviality step_assign_output_in_fdom[local]:
+  !inst s s' out.
+    inst.inst_opcode = ASSIGN /\
+    step_inst_base inst s = OK s' /\
+    inst.inst_outputs = [out] ==>
+    out IN FDOM s'.vs_vars
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_operands` >> gvs[step_inst_base_def] >>
+  Cases_on `t` >> gvs[step_inst_base_def] >>
+  Cases_on `eval_operand h s` >> gvs[update_var_def, FDOM_FUPDATE]
+QED
+
+Triviality step_iszero_output_in_fdom[local]:
+  !inst s s' out.
+    inst.inst_opcode = ISZERO /\
+    step_inst_base inst s = OK s' /\
+    inst.inst_outputs = [out] ==>
+    out IN FDOM s'.vs_vars
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_operands` >> gvs[step_inst_base_def, exec_pure1_def] >>
+  Cases_on `t` >> gvs[step_inst_base_def, exec_pure1_def] >>
+  Cases_on `eval_operand h s` >> gvs[update_var_def, FDOM_FUPDATE]
+QED
+
+val tracked_pure2_output_finish_tac =
+  Cases_on `inst.inst_operands` >> gvs[step_inst_base_def, exec_pure2_def] >>
+  Cases_on `t` >> gvs[step_inst_base_def, exec_pure2_def] >>
+  Cases_on `t'` >> gvs[step_inst_base_def, exec_pure2_def] >>
+  Cases_on `eval_operand h s` >> gvs[step_inst_base_def, exec_pure2_def] >>
+  Cases_on `eval_operand h' s` >> gvs[update_var_def, FDOM_FUPDATE];
+
+Triviality step_pure2_output_in_fdom[local]:
+  !inst s s' out.
+    (inst.inst_opcode = EQ \/ inst.inst_opcode = LT \/
+     inst.inst_opcode = GT \/ inst.inst_opcode = SLT \/
+     inst.inst_opcode = SGT \/ inst.inst_opcode = ADD \/
+     inst.inst_opcode = SUB) /\
+    step_inst_base inst s = OK s' /\
+    inst.inst_outputs = [out] ==>
+    out IN FDOM s'.vs_vars
+Proof
+  rpt strip_tac >> gvs[]
+  >- tracked_pure2_output_finish_tac
+  >- tracked_pure2_output_finish_tac
+  >- tracked_pure2_output_finish_tac
+  >- tracked_pure2_output_finish_tac
+  >- tracked_pure2_output_finish_tac
+  >- tracked_pure2_output_finish_tac
+  >- tracked_pure2_output_finish_tac
+QED
+
 (* Helper: after executing a tracked opcode, the output variable is in FDOM *)
 Triviality step_tracked_output_in_fdom[local]:
   !fuel ctx inst s s' out.
@@ -95,8 +168,25 @@ Proof
   imp_res_tac tracked_step_inst_base >>
   qpat_x_assum `dfg_tracked_opcode _`
     (strip_assume_tac o REWRITE_RULE[dfg_tracked_opcode_def]) >>
-  gvs[step_inst_base_def, exec_pure1_def, exec_pure2_def,
-      AllCaseEqs(), update_var_def, FDOM_FUPDATE]
+  gvs[]
+  >- (mp_tac (Q.SPECL [`inst`, `s`, `s'`, `out`]
+        step_assign_output_in_fdom) >> simp[])
+  >- (mp_tac (Q.SPECL [`inst`, `s`, `s'`, `out`]
+        step_iszero_output_in_fdom) >> simp[])
+  >- (mp_tac (Q.SPECL [`inst`, `s`, `s'`, `out`]
+        step_pure2_output_in_fdom) >> simp[])
+  >- (mp_tac (Q.SPECL [`inst`, `s`, `s'`, `out`]
+        step_pure2_output_in_fdom) >> simp[])
+  >- (mp_tac (Q.SPECL [`inst`, `s`, `s'`, `out`]
+        step_pure2_output_in_fdom) >> simp[])
+  >- (mp_tac (Q.SPECL [`inst`, `s`, `s'`, `out`]
+        step_pure2_output_in_fdom) >> simp[])
+  >- (mp_tac (Q.SPECL [`inst`, `s`, `s'`, `out`]
+        step_pure2_output_in_fdom) >> simp[])
+  >- (mp_tac (Q.SPECL [`inst`, `s`, `s'`, `out`]
+        step_pure2_output_in_fdom) >> simp[])
+  >- (mp_tac (Q.SPECL [`inst`, `s`, `s'`, `out`]
+        step_pure2_output_in_fdom) >> simp[])
 QED
 
 Triviality state_equiv_empty_eq[local]:
@@ -121,7 +211,7 @@ Proof
   rpt gen_tac >> Cases_on `r1` >> Cases_on `r2` >> simp[lift_result_def]
 QED
 
-Triviality oe_is_terminator_pres:
+Triviality oe_is_terminator_pres[local]:
   !dfg v inst. is_terminator inst.inst_opcode ==>
     is_terminator (overflow_elim_inst_v dfg v inst).inst_opcode
 Proof
@@ -131,13 +221,71 @@ Proof
   gvs[is_terminator_def]
 QED
 
-Triviality oe_nonterm_pres:
+Triviality oe_nonterm_pres[local]:
   !dfg v inst. ~is_terminator inst.inst_opcode ==>
     ~is_terminator (overflow_elim_inst_v dfg v inst).inst_opcode
 Proof
   rpt gen_tac >> disch_tac >>
   simp[overflow_elim_inst_v_def] >>
   rpt IF_CASES_TAC >> simp[mk_nop_inst_def, is_terminator_def]
+QED
+
+Triviality oe_not_phi_pres[local]:
+  !dfg v inst. inst.inst_opcode <> PHI ==>
+    (overflow_elim_inst_v dfg v inst).inst_opcode <> PHI
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[overflow_elim_inst_v_def] >>
+  rpt IF_CASES_TAC >> simp[mk_nop_inst_def]
+QED
+
+Triviality oe_inst_id[local]:
+  !dfg v inst. (overflow_elim_inst_v dfg v inst).inst_id = inst.inst_id
+Proof
+  rpt gen_tac >> simp[overflow_elim_inst_v_def] >>
+  rpt IF_CASES_TAC >> simp[mk_nop_inst_def]
+QED
+
+Triviality oe_terminator_identity[local]:
+  !dfg v inst. is_terminator inst.inst_opcode ==>
+    overflow_elim_inst_v dfg v inst = inst
+Proof
+  rpt strip_tac >> simp[overflow_elim_inst_v_def] >>
+  rpt IF_CASES_TAC >> simp[] >>
+  gvs[is_terminator_def]
+QED
+
+Triviality oe_phi_pres[local]:
+  !dfg v inst. inst.inst_opcode = PHI ==>
+    (overflow_elim_inst_v dfg v inst).inst_opcode = PHI
+Proof
+  simp[overflow_elim_inst_v_def]
+QED
+
+Triviality oe_phi_identity[local]:
+  !dfg v inst. inst.inst_opcode = PHI ==>
+    overflow_elim_inst_v dfg v inst = inst
+Proof
+  simp[overflow_elim_inst_v_def]
+QED
+
+Triviality phi_prefix_length_el_phi[local]:
+  !insts i. i < phi_prefix_length insts ==> (EL i insts).inst_opcode = PHI
+Proof
+  Induct_on `insts` >> simp[phi_prefix_length_def] >> rw[] >>
+  Cases_on `i` >> simp[phi_prefix_length_def]
+QED
+
+Triviality dfg_prefix_sound_phi_prefix[local]:
+  !dfg bb env idx.
+    idx <= phi_prefix_length bb.bb_instructions ==>
+    dfg_prefix_sound dfg bb env idx
+Proof
+  rw[dfg_prefix_sound_def] >>
+  `k < phi_prefix_length bb.bb_instructions` by decide_tac >>
+  `(EL k bb.bb_instructions).inst_opcode = PHI` by
+    metis_tac[phi_prefix_length_el_phi] >>
+  gvs[dfg_tracked_opcode_def]
 QED
 
 (* exec_block passes non-OK step results through directly *)
@@ -154,7 +302,7 @@ Proof
 QED
 
 (* exec_block on terminator OK = halted/continue result *)
-Triviality exec_block_terminator_OK:
+Triviality exec_block_terminator_OK[local]:
   !fuel ctx bb st s1.
     st.vs_inst_idx < LENGTH bb.bb_instructions /\
     step_inst fuel ctx (EL st.vs_inst_idx bb.bb_instructions) st = OK s1 /\
@@ -166,7 +314,7 @@ Proof
 QED
 
 (* exec_block on non-terminator OK = continuation *)
-Triviality exec_block_nonterm_OK:
+Triviality exec_block_nonterm_OK[local]:
   !fuel ctx bb st s1.
     st.vs_inst_idx < LENGTH bb.bb_instructions /\
     step_inst fuel ctx (EL st.vs_inst_idx bb.bb_instructions) st = OK s1 /\
@@ -180,7 +328,7 @@ QED
 (* Helper: after one non-terminator step, dfg_prefix_sound, range_sound, and
    chain closure all transfer from idx to SUC idx *)
 (* range_sound ignores vs_inst_idx *)
-Triviality range_sound_inst_idx:
+Triviality range_sound_inst_idx[local]:
   !X n s. range_sound X (s with vs_inst_idx := n) = range_sound X s
 Proof
   rw[range_sound_def] >> Cases_on `X` >> simp[]
@@ -265,7 +413,7 @@ Proof
   ]
 QED
 
-Triviality nonterm_ih_step:
+Triviality nonterm_ih_step[local]:
   !fn bb st s1 fuel ctx.
     dfg_prefix_sound (dfg_build_function fn) bb st.vs_vars st.vs_inst_idx /\
     range_sound (df_widen_at NONE (range_analyze fn) bb.bb_label st.vs_inst_idx) st /\
@@ -519,15 +667,62 @@ Theorem overflow_elim_block_sim[local]:
         (run_block fuel ctx (bt bb) s)
 Proof
   simp_tac std_ss [LET_THM] >> rpt strip_tac >>
-  mp_tac overflow_elim_block_sim_ind >>
-  disch_then (qspecl_then [`fn`, `bb`, `LENGTH bb.bb_instructions`,
-    `fuel`, `ctx`, `s`] mp_tac) >>
-  `s with vs_inst_idx := 0 = s` by
-    simp[venomStateTheory.venom_state_component_equality] >>
-  simp[run_block_def] >>
-  (impl_tac >- (rpt conj_tac >> TRY (metis_tac[dfg_ext_sound_implies_prefix]) >>
-                 rpt strip_tac >> fs[])) >>
-  simp[]
+  qmatch_goalsub_abbrev_tac `run_block fuel ctx (bt bb) s` >>
+  `bb_well_formed bb` by fs[wf_function_def] >>
+  `eval_phis s (bt bb).bb_instructions = eval_phis s bb.bb_instructions` by (
+    simp[Abbr`bt`, analysis_block_transform_widen_def] >>
+    irule analysisSimProofsBaseTheory.eval_phis_flat_mapi >>
+    simp[oe_phi_identity, oe_not_phi_pres] >>
+    fs[bb_well_formed_def]) >>
+  `phi_prefix_length (bt bb).bb_instructions =
+   phi_prefix_length bb.bb_instructions` by (
+    simp[Abbr`bt`, analysis_block_transform_widen_def] >>
+    irule analysisSimProofsBaseTheory.phi_prefix_length_flat_mapi >>
+    simp[oe_phi_identity, oe_not_phi_pres] >>
+    fs[bb_well_formed_def]) >>
+  qspecl_then [`s`, `bb.bb_instructions`] strip_assume_tac
+    eval_phis_ok_or_error_defs
+  >- (
+    rename1 `eval_phis s bb.bb_instructions = OK s_phi` >>
+    ONCE_REWRITE_TAC[run_block_def] >> gvs[] >>
+    mp_tac overflow_elim_block_sim_ind >>
+    disch_then (qspecl_then [`fn`, `bb`,
+      `LENGTH bb.bb_instructions - phi_prefix_length bb.bb_instructions`,
+      `fuel`, `ctx`,
+      `s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions`] mp_tac) >>
+    impl_tac >- (
+      rpt conj_tac >| [
+        first_assum ACCEPT_TAC,
+        first_assum ACCEPT_TAC,
+        first_assum ACCEPT_TAC,
+        first_assum ACCEPT_TAC,
+        first_assum ACCEPT_TAC,
+        first_assum ACCEPT_TAC,
+        first_assum ACCEPT_TAC,
+        first_assum ACCEPT_TAC,
+        first_assum ACCEPT_TAC,
+        simp[],
+        mp_tac (Q.SPECL [`dfg_build_function fn`, `bb`,
+          `(s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions).vs_vars`,
+          `(s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions).vs_inst_idx`]
+          dfg_prefix_sound_phi_prefix) >> simp[],
+        simp[] >>
+        mp_tac (Q.SPECL [`fn`, `bb`, `s`, `s_phi`]
+          rangeAnalysisProofsTheory.eval_phis_range_sound) >>
+        impl_tac >- (
+          rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+          irule venomExecPropsTheory.MEM_lookup_block >>
+          qpat_assum `ALL_DISTINCT _` mp_tac >>
+          simp_tac std_ss [fn_labels_def] >> metis_tac[]) >>
+        strip_tac >> gvs[range_sound_def, in_range_state_def],
+        rpt strip_tac >>
+        `k < phi_prefix_length bb.bb_instructions` by fs[] >>
+        `(EL k bb.bb_instructions).inst_opcode = PHI` by
+          metis_tac[phi_prefix_length_el_phi] >>
+        gvs[dfg_tracked_opcode_def]]) >>
+    simp[Abbr`bt`])
+  >- (
+    DISJ1_TAC >> qexists_tac `e` >> gvs[run_block_def])
 QED
 
 (* ================================================================
@@ -545,6 +740,11 @@ Triviality overflow_elim_inv_step:
   (!bb. MEM bb fn.fn_blocks ==>
     !i. i < LENGTH bb.bb_instructions - 1 ==>
       ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
+  (!bb cond false_lbl.
+    (LAST bb.bb_instructions).inst_opcode = JNZ ==>
+    (LAST bb.bb_instructions).inst_operands =
+      [cond; Label false_lbl; Label false_lbl] ==>
+    ~MEM bb fn.fn_blocks) /\
   MEM bb fn.fn_blocks /\
   dfg_ext_sound (dfg_build_function fn) s.vs_vars /\
   range_sound (df_widen_at NONE (range_analyze fn) s.vs_current_bb 0) s /\
@@ -552,15 +752,13 @@ Triviality overflow_elim_inv_step:
   s.vs_inst_idx = 0 /\
   s.vs_current_bb = bb.bb_label /\
   run_block fuel ctx bb s = OK v ==>
+  v.vs_inst_idx = 0 /\
   dfg_ext_sound (dfg_build_function fn) v.vs_vars /\
   range_sound (df_widen_at NONE (range_analyze fn) v.vs_current_bb 0) v /\
   MEM v.vs_current_bb (cfg_analyze fn).cfg_dfs_pre
 Proof
   rpt gen_tac >> strip_tac >>
-  `exec_block fuel ctx bb s = OK v` by
-    (gvs[run_block_def] >>
-     `s with vs_inst_idx := 0 = s` by simp[venomStateTheory.venom_state_component_equality] >>
-     gvs[]) >>
+  conj_tac >- metis_tac[run_block_OK_inst_idx_0] >>
   conj_tac
   >- (
     irule dfg_ext_sound_run_block >>
@@ -579,14 +777,6 @@ Proof
     simp[])
 QED
 
-(* Bridge: run_block = exec_block when vs_inst_idx = 0 *)
-Triviality run_block_is_exec_block[local]:
-  s.vs_inst_idx = 0 ==> run_block f c bb s = exec_block f c bb s
-Proof
-  strip_tac >> simp[run_block_def] >>
-  Cases_on `s` >> gvs[venom_state_fn_updates]
-QED
-
 Theorem overflow_elim_function_sim[local]:
   !fn fuel ctx s.
     wf_function fn /\ fn_inst_wf fn /\
@@ -598,6 +788,11 @@ Theorem overflow_elim_function_sim[local]:
     (!bb. MEM bb fn.fn_blocks ==>
       !i. i < LENGTH bb.bb_instructions - 1 ==>
         ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
+    (!bb cond true_lbl false_lbl. MEM bb fn.fn_blocks /\
+      (LAST bb.bb_instructions).inst_opcode = JNZ /\
+      (LAST bb.bb_instructions).inst_operands =
+        [cond; Label true_lbl; Label false_lbl] ==>
+      true_lbl <> false_lbl) /\
     s.vs_inst_idx = 0 /\
     MEM s.vs_current_bb (cfg_analyze fn).cfg_dfs_pre /\
     dfg_ext_sound (dfg_build_function fn) s.vs_vars /\
@@ -616,6 +811,7 @@ Proof
        (\v inst. [overflow_elim_inst_v (dfg_build_function fn)
                     (range_unwrap v) inst])`
   \\ qabbrev_tac `Inv = \s:venom_state.
+       s.vs_inst_idx = 0 /\
        dfg_ext_sound (dfg_build_function fn) s.vs_vars /\
        range_sound (df_widen_at NONE
          (range_analyze fn : (string |-> value_range) option df_widen_state)
@@ -652,8 +848,6 @@ QED
 Resume overflow_elim_function_sim[p_pres]:
   rpt gen_tac >> strip_tac >>
   imp_res_tac state_equiv_empty_eq >> gvs[] >>
-  `run_block fuel ctx bb s1 = OK s1'` by
-    simp[run_block_is_exec_block] >>
   simp[Abbr `Inv`] >>
   match_mp_tac overflow_elim_inv_step >>
   qexistsl_tac [`bb`, `fuel`, `ctx`, `s1`] >>
@@ -671,9 +865,8 @@ Resume overflow_elim_function_sim[block_sim]:
     gvs[Abbr `Inv`] >> res_tac)) >>
   BETA_TAC >>
   disch_then (qspecl_then [`fuel`, `ctx`, `s1`] mp_tac) >>
-  (* Bridge: run_block = exec_block when vs_inst_idx = 0 *)
-  simp[run_block_is_exec_block, Abbr `bt`] >>
-  gvs[Abbr `Inv`]
+  (impl_tac >- gvs[Abbr `Inv`]) >>
+  simp[Abbr `bt`]
 QED
 
 Finalise overflow_elim_function_sim
@@ -689,7 +882,7 @@ QED
 
 Triviality clear_nops_function_correct_run_function[local]:
   !fuel ctx fn s.
-    s.vs_inst_idx = 0 ==>
+    wf_function fn /\ s.vs_inst_idx = 0 ==>
     result_equiv {} (run_function fuel ctx fn s)
       (run_function fuel ctx (clear_nops_function fn) s)
 Proof
@@ -700,6 +893,42 @@ Proof
   >> simp_tac std_ss [GSYM result_equiv_is_lift_result] >>
   irule passSharedPropsTheory.clear_nops_function_correct >>
   simp[]
+QED
+
+Triviality aftw_singleton_eq_fmt_mapi[local]:
+  !bottom result (f : 'a -> instruction -> instruction) fn.
+    analysis_function_transform_widen bottom result (\v inst. [f v inst]) fn =
+    function_map_transform
+      (\bb. bb with bb_instructions :=
+        MAPi (\idx inst. f (df_widen_at bottom result bb.bb_label idx) inst)
+             bb.bb_instructions) fn
+Proof
+  rw[analysis_function_transform_widen_def, function_map_transform_def,
+     ir_function_component_equality] >>
+  irule listTheory.MAP_CONG >> simp[] >> rpt strip_tac >>
+  simp[analysis_block_transform_widen_def,
+       basic_block_component_equality, FLAT_MAPi_SING]
+QED
+
+Triviality overflow_elim_analysis_transform_wf[local]:
+  !fn. wf_function fn ==>
+    wf_function
+      (analysis_function_transform_widen NONE (range_analyze fn)
+        (\v inst. [overflow_elim_inst_v (dfg_build_function fn)
+                     (range_unwrap v) inst]) fn)
+Proof
+  rpt strip_tac >>
+  qspecl_then
+    [`NONE : range_state option`, `range_analyze fn`,
+     `\v inst. overflow_elim_inst_v (dfg_build_function fn) (range_unwrap v) inst`,
+     `fn`]
+    (fn th => REWRITE_TAC[BETA_RULE th]) aftw_singleton_eq_fmt_mapi >>
+  mp_tac (Q.SPECL
+    [`\bb idx inst. overflow_elim_inst_v (dfg_build_function fn)
+        (range_unwrap (df_widen_at NONE (range_analyze fn) bb.bb_label idx)) inst`,
+     `fn`] passSimulationPropsTheory.mapi_transform_preserves_wf_bb) >>
+  simp[oe_inst_id, oe_terminator_identity, oe_nonterm_pres,
+       oe_phi_pres, oe_not_phi_pres]
 QED
 
 (* Helper: run_function = run_blocks when fn_entry_label known *)
@@ -734,6 +963,11 @@ Theorem overflow_elim_function_correct_proof:
     (!bb. MEM bb fn.fn_blocks ==>
       !i. i < LENGTH bb.bb_instructions - 1 ==>
         ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
+    (!bb cond true_lbl false_lbl. MEM bb fn.fn_blocks /\
+      (LAST bb.bb_instructions).inst_opcode = JNZ /\
+      (LAST bb.bb_instructions).inst_operands =
+        [cond; Label true_lbl; Label false_lbl] ==>
+      true_lbl <> false_lbl) /\
     s.vs_inst_idx = 0 /\
     fn_entry_label fn = SOME s.vs_current_bb /\
     dfg_ext_sound (dfg_build_function fn) s.vs_vars /\
@@ -812,5 +1046,5 @@ Proof
           analysis_block_transform_widen_def])
   \\ pop_assum SUBST1_TAC
   \\ irule clear_nops_function_correct_run_function
-  \\ first_assum ACCEPT_TAC
+  \\ simp[overflow_elim_analysis_transform_wf]
 QED

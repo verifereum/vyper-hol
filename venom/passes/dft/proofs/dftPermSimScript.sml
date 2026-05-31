@@ -1,11 +1,20 @@
 (*
  * DFT Permutation Simulation
  *
- * Key lemma: if all instructions are pairwise bilaterally independent
- * and all succeed (OK), then any permutation produces the same final state.
- *
+ * If all instructions are pairwise bilaterally independent and all
+ * succeed (OK), then any permutation produces the same final state.
  * Uses independent_commute_eq (from dftBlockSimTheory) for adjacent swaps,
  * then extends to arbitrary permutations via PERM induction.
+ *
+ * TOP-LEVEL: run_insts_perm_ok, run_insts_perm_ok_ext,
+ *   run_insts_topo_equiv, run_insts_append, run_insts_bubble_to_front,
+ *   run_insts_bubble_to_front_ext, flip_operands_step_inst,
+ *   flip_operands_step_inst_base, step_inst_nofail_not_halt_abort
+ * Helper: bi_independent, bi_independent_iff_ext, ext_bi_independent,
+ *   ext_bi_independent_sym, bi_independent_imp_ext,
+ *   step_swap_ok_ext, el_delete_map, topo_sorted_delete,
+ *   topo_sorted_tail, perm_cons_delete,
+ *   pairwise_bi_independent, pairwise_ext_bi_independent, topo_sorted
  *)
 
 Theory dftPermSim
@@ -29,6 +38,8 @@ QED
 
 (* ===== run_insts append decomposition ===== *)
 
+(* run_insts distributes over append: run the first list to get an
+   intermediate state, then continue with the second list. *)
 Theorem run_insts_append:
   !fuel ctx l1 l2 s.
     run_insts fuel ctx (l1 ++ l2) s =
@@ -79,7 +90,7 @@ QED
 
 (* ===== Extended bilateral independence (allows INVOKE) ===== *)
 
-(* Like bi_independent but without abort_compatible and ~INVOKE.
+(* Like bi_independent but without the ~INVOKE restriction.
    INVOKE can be reordered past pure ops because effects_independent INVOKE ADD = T.
    The swap proof for ext uses step_inst_ok_frame (all opcodes) instead of
    step_inst_base. *)
@@ -95,6 +106,7 @@ Definition ext_bi_independent_def:
     ~is_ext_call_op i1.inst_opcode /\ ~is_ext_call_op i2.inst_opcode
 End
 
+(* Extended bilateral independence is symmetric. *)
 Theorem ext_bi_independent_sym:
   !i1 i2. ext_bi_independent i1 i2 <=> ext_bi_independent i2 i1
 Proof
@@ -103,10 +115,22 @@ Proof
   metis_tac[DISJOINT_SYM]
 QED
 
+(* Bilateral independence implies extended bilateral independence
+   (drops the INVOKE restriction). *)
 Theorem bi_independent_imp_ext:
   !i1 i2. bi_independent i1 i2 ==> ext_bi_independent i1 i2
 Proof
   simp[bi_independent_def, ext_bi_independent_def]
+QED
+
+(* bi_independent is exactly ext_bi_independent plus the no-INVOKE restriction.
+   Makes explicit the relationship between the two definitions. *)
+Theorem bi_independent_iff_ext:
+  !i1 i2. bi_independent i1 i2 <=>
+    ext_bi_independent i1 i2 /\
+    i1.inst_opcode <> INVOKE /\ i2.inst_opcode <> INVOKE
+Proof
+  rw[bi_independent_def, ext_bi_independent_def] >> metis_tac[]
 QED
 
 (* ===== Helpers for adjacent swap ===== *)
@@ -250,7 +274,8 @@ Proof
   simp[]
 QED
 
-(* Bubble independent element to front of a prefix *)
+(* If every element in prefix is bi_independent with x, bubble x
+   from after the prefix to the front, preserving the OK result. *)
 Theorem run_insts_bubble_to_front:
   !prefix fuel ctx x suffix s r.
     EVERY (bi_independent x) prefix /\
@@ -682,7 +707,8 @@ Proof
     gvs[inst_defs_def, inst_uses_def])
 QED
 
-(* Combining both cases *)
+(* Under ext bilateral independence and well-formedness, swapping the
+   order of two consecutive OK steps produces the same final state. *)
 Theorem step_swap_ok_ext:
   !fuel ctx a b s sa sab.
     ext_bi_independent a b /\
@@ -717,7 +743,9 @@ Proof
   simp[]
 QED
 
-(* Bubble independent element to front, ext version *)
+(* If every element in prefix is ext-bi-independent with x and all are
+   well-formed, bubble x from after the prefix to the front,
+   preserving the OK result. Allows INVOKE. *)
 Theorem run_insts_bubble_to_front_ext:
   !prefix fuel ctx x suffix s r.
     EVERY (ext_bi_independent x) prefix /\
@@ -773,19 +801,22 @@ Triviality run_insts_perm_ok_ext_strong:
 Proof
   ho_match_mp_tac PERM_IND >>
   rw[pairwise_ext_bi_independent_def, EVERY_DEF] >>
-  gvs[pairwise_ext_bi_independent_def, EVERY_DEF]
-  >- (gvs[run_insts_def] >>
-      Cases_on `step_inst fuel ctx x s` >> gvs[] >>
-      res_tac >> gvs[])
-  >- metis_tac[ext_bi_independent_sym]
-  >- (gvs[run_insts_def, AllCaseEqs()] >>
-      rename1 `step_inst _ _ x s = OK sx` >>
-      rename1 `step_inst _ _ y sx = OK sy` >>
-      qspecl_then [`fuel`, `ctx`, `x`, `y`, `s`, `sx`, `sy`] mp_tac
-        step_swap_ok_ext >> simp[] >> strip_tac >>
-      qexists `sb` >> simp[] >> res_tac)
+  gvs[pairwise_ext_bi_independent_def, EVERY_DEF] >|
+  [gvs[run_insts_def] >>
+     Cases_on `step_inst fuel ctx x s` >> gvs[] >>
+     res_tac >> gvs[],
+   metis_tac[ext_bi_independent_sym],
+   gvs[run_insts_def, AllCaseEqs()] >>
+     rename1 `step_inst _ _ x s = OK sx` >>
+     rename1 `step_inst _ _ y sx = OK sy` >>
+     qspecl_then [`fuel`, `ctx`, `x`, `y`, `s`, `sx`, `sy`] mp_tac
+       step_swap_ok_ext >> simp[] >> strip_tac >>
+     qexists `sb` >> simp[] >> res_tac]
 QED
 
+(* Extended pairwise independence version: pairwise ext-bi-independent
+   and well-formed instructions produce the same OK result under any
+   permutation (allows INVOKE). *)
 Theorem run_insts_perm_ok_ext:
   !l1 l2.
     PERM l1 l2 ==>
@@ -865,6 +896,8 @@ Proof
   drule_all step_swap_ok >> strip_tac >> simp[]
 QED
 
+(* Pairwise bi-independent instructions produce the same OK result
+   under any permutation. *)
 Theorem run_insts_perm_ok:
   !l1 l2.
     PERM l1 l2 ==>
@@ -893,8 +926,11 @@ Definition topo_sorted_def:
     !i j. i < j /\ j < LENGTH l ==> ~dep (EL i l) (EL j l)
 End
 
-(* Main theorem *)
-(* Helper: EL in (prefix ++ suffix) relates to (prefix ++ [x] ++ suffix) *)
+(* Two topologically sorted permutations of the same instruction list
+   (w.r.t. dep, where incomparable elements are bi_independent)
+   produce the same run_insts OK result, provided all elements are distinct. *)
+(* EL in the list without x matches EL at a shifted index in the
+   list with x inserted, for indices before the insertion point. *)
 Theorem el_delete_map:
   !n prefix x suffix.
     n < LENGTH prefix + LENGTH suffix ==>
@@ -913,7 +949,8 @@ Proof
      simp[]
 QED
 
-(* Helper: topo_sorted is preserved when removing an element *)
+(* Removing an element from a topologically sorted list preserves
+   the topological ordering. *)
 Theorem topo_sorted_delete:
   !dep prefix x suffix.
     topo_sorted dep (prefix ++ [x] ++ suffix) ==>
@@ -936,7 +973,7 @@ Proof
   rpt (COND_CASES_TAC >> gvs[])
 QED
 
-(* Helper: topo_sorted tail *)
+(* The tail of a topologically sorted list is also topologically sorted. *)
 Theorem topo_sorted_tail:
   !dep x rest. topo_sorted dep (x :: rest) ==> topo_sorted dep rest
 Proof
@@ -944,7 +981,8 @@ Proof
   first_x_assum (qspecl_then [`SUC i`, `SUC j`] mp_tac) >> simp[]
 QED
 
-(* Helper: PERM delete from cons *)
+(* If prefix++[x]++suffix is a permutation of x::rest, then
+   prefix++suffix is a permutation of rest. *)
 Theorem perm_cons_delete:
   !x rest prefix suffix.
     PERM (prefix ++ [x] ++ suffix) (x :: rest) ==>
@@ -1114,8 +1152,10 @@ Triviality flip_commutative:
 Proof
   rpt strip_tac >>
   drule commutative_cases >> drule commutative_not_comparator >>
-  strip_tac >> strip_tac >>
-  fs[flip_operands_def, step_inst_base_def] >>
+  strip_tac >> strip_tac >> gvs[] >>
+  ASM_REWRITE_TAC[flip_operands_def] >>
+  ASM_REWRITE_TAC[step_inst_base_def] >>
+  simp[] >>
   irule exec_pure2_swap >> rw comm_lemmas >> rw[EQ_SYM_EQ]
 QED
 
@@ -1125,14 +1165,17 @@ Triviality flip_comparator:
     step_inst_base (flip_operands i) st = step_inst_base i st
 Proof
   rpt strip_tac >>
-  drule comparator_cases >> strip_tac >>
-  fs[flip_operands_def, is_comparator_def, flip_comparison_opcode_def,
-     step_inst_base_def] >>
+  drule comparator_cases >> strip_tac >> gvs[] >>
+  ASM_REWRITE_TAC[flip_operands_def, is_comparator_def,
+                  flip_comparison_opcode_def] >>
+  ASM_REWRITE_TAC[step_inst_base_def] >>
   (* exec_pure2_opcode_irrel strips the opcode update *)
   simp[] >>
   irule exec_pure2_swap >> rw comm_lemmas
 QED
 
+(* Flipping operand order (and comparison opcode) preserves step_inst_base
+   for flippable (commutative arithmetic and comparison) opcodes. *)
 Theorem flip_operands_step_inst_base:
   !i st. is_flippable i.inst_opcode ==>
     step_inst_base (flip_operands i) st = step_inst_base i st
@@ -1167,6 +1210,7 @@ Proof
   gvs[is_comparator_def, flip_comparison_opcode_def]
 QED
 
+(* flip_operands preserves step_inst semantics for flippable opcodes. *)
 Theorem flip_operands_step_inst:
   !fuel ctx i st. is_flippable i.inst_opcode ==>
     step_inst fuel ctx (flip_operands i) st = step_inst fuel ctx i st
@@ -1216,6 +1260,8 @@ val per_op_no_halt_abort = map (fn (op_tm, clause) =>
 
 val per_op_combined = LIST_CONJ per_op_no_halt_abort;
 
+(* A NoFail non-terminator step_inst_base never produces Halt or Abort
+   — only OK or Error outcomes remain. *)
 Theorem step_inst_nofail_not_halt_abort:
   !inst s.
     opcode_fail_class inst.inst_opcode = NoFail /\
@@ -1224,8 +1270,7 @@ Theorem step_inst_nofail_not_halt_abort:
     (!a es. step_inst_base inst s <> Abort a es)
 Proof
   rpt gen_tac >> Cases_on `inst.inst_opcode` >>
-  simp[opcode_fail_class_def, is_terminator_def] >>
-  metis_tac[per_op_combined]
+  simp[opcode_fail_class_def, is_terminator_def, per_op_combined]
 QED
 
 

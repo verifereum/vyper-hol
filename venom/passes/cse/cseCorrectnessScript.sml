@@ -11,7 +11,7 @@ Ancestors
 
 Theorem cse_function_correct:
   !fuel ctx fn s.
-    fn_inst_wf fn /\ wf_function fn /\ s.vs_inst_idx = 0 ==>
+    fn_inst_wf fn /\ s.vs_inst_idx = 0 ==>
     (?e. run_blocks fuel ctx fn s = Error e) \/
     lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
       (run_blocks fuel ctx fn s)
@@ -21,7 +21,6 @@ Proof
 QED
 
 (* ===== Obligations ===== *)
-(* cse_pass_sound_holds in cseProofsScript.sml: analysis soundness *)
 
 Theorem cse_preserves_ssa_form:
   ∀fn. ssa_form fn ⇒ ssa_form (cse_function fn)

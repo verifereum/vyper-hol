@@ -5,8 +5,6 @@
  * The DFS tiebreaking depends on build_eda processing order,
  * so the pipeline is NOT invariant under instruction permutation.
  *
- * Kept: subset_all_distinct_inj, dfs_step_idle, funpow_dfs_step_idle,
- *       from_block_inst_outputs, from_block_inst_id.
  *)
 
 Theory dftScheduleFixed

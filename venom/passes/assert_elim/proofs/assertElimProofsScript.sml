@@ -9,12 +9,14 @@ Theory assertElimProofs
 Ancestors
   analysisSimDefs
   analysisSimProps
+  analysisSimProofsWiden
   assertElimDefs
   dfAnalyzeWidenDefs
   dfgAnalysisProps
   dfgSoundStep
   execEquivParamProps
   finite_map
+  indexedLists
   list
   passSharedDefs
   passSharedProps
@@ -35,14 +37,9 @@ Ancestors
   venomState
   venomWf
   worklistDefs
+Libs
+  pairLib
 
-(* Bridge: run_block → exec_block when vs_inst_idx = 0 *)
-Triviality run_block_is_exec_block[local]:
-  s.vs_inst_idx = 0 ==> run_block f c bb s = exec_block f c bb s
-Proof
-  strip_tac >> simp[run_block_def] >>
-  Cases_on `s` >> gvs[venom_state_fn_updates]
-QED
 
 (* ===== Helper: range_excludes_zero + in_range ==> w <> 0w ===== *)
 
@@ -55,7 +52,7 @@ Proof
   intLib.ARITH_TAC
 QED
 
-(* ASSERT semantics: avoids unfolding 92-opcode step_inst_base_def *)
+(* ASSERT with one operand: reverts if operand = 0w, continues unchanged otherwise *)
 Theorem step_inst_assert_1:
   !fuel ctx inst s op.
     inst.inst_opcode = ASSERT /\ inst.inst_operands = [op] ==>
@@ -96,8 +93,7 @@ QED
 
 (* ===== Per-instruction simulation ===== *)
 
-(* Core: assert_elim_inst satisfies analysis_inst_simulates_1 *)
-(* Simulation conjunct: ASSERT transform preserves behavior *)
+(* ASSERT transform preserves per-instruction behavior under range_sound *)
 Theorem assert_elim_sim[local]:
   !v fuel ctx inst s.
     range_sound v s /\ inst_wf inst ==>
@@ -150,14 +146,17 @@ Theorem assert_elim_inst_simulates_1[local]:
     (state_equiv {}) (execution_equiv {})
     range_sound assert_elim_inst
 Proof
-  simp[analysis_inst_simulates_1_def] >> rpt conj_tac
-  >- ACCEPT_TAC assert_elim_sim
-  (* 2. Terminators preserved *)
+  simp[analysis_inst_simulates_1_def] >> conj_tac
+  >- ACCEPT_TAC assert_elim_sim >>
+  simp[inst_transform_structural_1_def] >> rpt conj_tac
+  (* Terminators preserved *)
   >- (rpt strip_tac >> simp[assert_elim_inst_def] >>
       Cases_on `inst.inst_opcode` >> fs[is_terminator_def])
-  (* 3. INVOKE preserved *)
+  (* INVOKE preserved *)
   >- (rpt strip_tac >> simp[assert_elim_inst_def])
-  (* 4. Non-term non-INVOKE preserved *)
+  (* PHI preserved *)
+  >- (rpt strip_tac >> simp[assert_elim_inst_def])
+  (* Non-term non-INVOKE non-PHI preserved *)
   >- (rpt strip_tac >> gvs[assert_elim_inst_def] >>
       BasicProvers.every_case_tac >>
       gvs[mk_nop_inst_def, is_terminator_def])
@@ -204,6 +203,141 @@ QED
 
 (* ===== Pre-instantiated framework lemma for range analysis ===== *)
 
+Theorem range_intra_transfer_early[local]:
+  !fn lbl bb idx.
+    wf_function fn /\
+    MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\
+    SUC idx <= LENGTH bb.bb_instructions ==>
+    df_widen_at NONE (range_analyze fn) lbl (SUC idx) =
+    range_transfer_opt (dfg_build_function fn, fn.fn_blocks)
+      (EL idx bb.bb_instructions)
+      (df_widen_at NONE (range_analyze fn) lbl idx)
+Proof
+  rpt strip_tac >>
+  mp_tac (SIMP_RULE std_ss [LET_THM]
+    (REWRITE_RULE [GSYM (SIMP_RULE std_ss [LET_THM] range_analyze_def)]
+    (ISPECL [
+      ``Forward``,
+      ``NONE : (string |-> value_range) option``,
+      ``range_join_opt``,
+      ``range_widen_opt : (string |-> value_range) option
+          -> (string |-> value_range) option
+          -> (string |-> value_range) option``,
+      ``WIDEN_THRESHOLD``,
+      ``range_transfer_opt``,
+      ``range_edge_transfer_opt``,
+      ``(dfg_build_function fn, fn.fn_blocks)``,
+      ``OPTION_MAP (\lbl. (lbl, SOME (FEMPTY : string |-> value_range)))
+          (fn_entry_label fn)``,
+      ``fn : ir_function``,
+      ``lbl : string``,
+      ``bb : basic_block``,
+      ``idx : num``]
+    dfAnalyzeWidenPropsTheory.df_widen_at_intra_transfer))) >>
+  impl_tac >- (
+    conj_tac >- first_assum ACCEPT_TAC >>
+    mp_tac (SIMP_RULE std_ss [LET_THM] range_fixpoint) >> simp[]) >>
+  simp[]
+QED
+
+Theorem range_analysis_block_sim_boundary[local]:
+  !fn sound state_inv f bb fuel run_ctx s.
+    transfer_sound sound range_transfer_opt
+      (dfg_build_function fn, fn.fn_blocks) /\
+    analysis_inst_simulates (state_equiv {}) (execution_equiv {}) sound f /\
+    wf_function fn /\ fn_inst_wf fn /\
+    (!v s1 s2. state_equiv {} s1 s2 /\ sound v s1 ==> sound v s2) /\
+    (!bb inst x. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+       MEM (Var x) inst.inst_operands ==>
+       !s1 s2. state_equiv {} s1 s2 ==> lookup_var x s1 = lookup_var x s2) /\
+    (!bb s s_phi.
+       MEM bb fn.fn_blocks /\
+       MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
+       eval_phis s bb.bb_instructions = OK s_phi /\
+       sound (df_widen_at NONE (range_analyze fn) bb.bb_label 0) s /\
+       state_inv s ==>
+       sound (df_widen_at NONE (range_analyze fn) bb.bb_label
+                (phi_prefix_length bb.bb_instructions))
+         (s_phi with vs_inst_idx := 0)) /\
+    MEM bb fn.fn_blocks /\
+    MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+    s.vs_inst_idx = 0 /\ s.vs_current_bb = bb.bb_label /\
+    sound (df_at NONE (widen_to_df (range_analyze fn)) bb.bb_label 0) s /\
+    state_inv s ==>
+    (?e. run_block fuel run_ctx bb s = Error e) \/
+    lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
+      (run_block fuel run_ctx bb s)
+      (run_block fuel run_ctx
+        (analysis_block_transform NONE (widen_to_df (range_analyze fn)) f bb) s)
+Proof
+  rpt strip_tac >>
+  `bb_well_formed bb` by fs[wf_function_def] >>
+  `EVERY inst_wf bb.bb_instructions` by
+    (fs[fn_inst_wf_def, EVERY_MEM] >> metis_tac[]) >>
+  `!idx. SUC idx <= LENGTH bb.bb_instructions ==>
+     df_at NONE (widen_to_df (range_analyze fn)) bb.bb_label (SUC idx) =
+     range_transfer_opt (dfg_build_function fn, fn.fn_blocks)
+       (EL idx bb.bb_instructions)
+       (df_at NONE (widen_to_df (range_analyze fn)) bb.bb_label idx)` by (
+    rpt strip_tac >>
+    `df_at NONE (widen_to_df (range_analyze fn)) bb.bb_label (SUC idx) =
+     df_widen_at NONE (range_analyze fn) bb.bb_label (SUC idx)` by
+      simp[analysisSimProofsWidenTheory.widen_to_df_def,
+           dfAnalyzeWidenDefsTheory.df_widen_at_def,
+           dfAnalyzeDefsTheory.df_at_def] >>
+    `df_at NONE (widen_to_df (range_analyze fn)) bb.bb_label idx =
+     df_widen_at NONE (range_analyze fn) bb.bb_label idx` by
+      simp[analysisSimProofsWidenTheory.widen_to_df_def,
+           dfAnalyzeWidenDefsTheory.df_widen_at_def,
+           dfAnalyzeDefsTheory.df_at_def] >>
+    simp[] >> irule range_intra_transfer_early >> simp[]) >>
+  qspecl_then [`s`, `bb.bb_instructions`] strip_assume_tac
+    eval_phis_ok_or_error_defs
+  >- (
+    rename1 `eval_phis s bb.bb_instructions = OK s_phi` >>
+    `sound (df_widen_at NONE (range_analyze fn) bb.bb_label 0) s` by (
+      qpat_x_assum `sound (df_at NONE (widen_to_df (range_analyze fn)) bb.bb_label 0) s` mp_tac >>
+      simp[analysisSimProofsWidenTheory.widen_to_df_def,
+           dfAnalyzeWidenDefsTheory.df_widen_at_def,
+           dfAnalyzeDefsTheory.df_at_def]) >>
+    `sound (df_at NONE (widen_to_df (range_analyze fn)) bb.bb_label
+              (phi_prefix_length bb.bb_instructions))
+       (s_phi with vs_inst_idx := 0)` by (
+      qpat_x_assum `!bb s s_phi. _` (qspecl_then [`bb`, `s`, `s_phi`] mp_tac) >>
+      simp[analysisSimProofsWidenTheory.widen_to_df_def,
+           dfAnalyzeWidenDefsTheory.df_widen_at_def,
+           dfAnalyzeDefsTheory.df_at_def]) >>
+    `!inst x. MEM inst bb.bb_instructions /\ MEM (Var x) inst.inst_operands ==>
+       !s1 s2. state_equiv {} s1 s2 ==> lookup_var x s1 = lookup_var x s2` by (
+      rpt strip_tac >>
+      qpat_x_assum `!b i y. MEM b fn.fn_blocks /\ MEM i b.bb_instructions /\
+             MEM (Var y) i.inst_operands ==> _`
+        (qspecl_then [`bb`, `inst`, `x`] mp_tac) >>
+      simp[]) >>
+    irule (ISPECL [
+      ``state_equiv {} : venom_state -> venom_state -> bool``,
+      ``execution_equiv {} : venom_state -> venom_state -> bool``,
+      ``sound : (string |-> value_range) option -> venom_state -> bool``,
+      ``f : (string |-> value_range) option -> instruction -> instruction list``,
+      ``bb : basic_block``,
+      ``NONE : (string |-> value_range) option``,
+      ``widen_to_df (range_analyze fn) : (string |-> value_range) option df_state``,
+      ``range_transfer_opt``,
+      ``(dfg_build_function fn, fn.fn_blocks) : dfg_analysis # basic_block list``]
+      analysisSimProofsBaseTheory.analysis_run_block_sim) >>
+    simp[execEquivParamPropsTheory.state_equiv_execution_equiv_valid_state_rel] >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- metis_tac[stateEquivPropsTheory.execution_equiv_trans] >>
+    conj_tac >- metis_tac[stateEquivPropsTheory.state_equiv_trans] >>
+    goal_assum $ drule_at Any >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    simp[] )
+  >- (
+    DISJ1_TAC >> qexists_tac `e` >> gvs[run_block_def])
+QED
+
 (* Specializes df_analysis_pass_correct_widen_sound_inv to range analysis
    parameters. Eliminates ISPECL + standard obligations. Reusable across
    all range-based passes. *)
@@ -217,10 +351,18 @@ Theorem range_analysis_pass_correct:
          MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
          s.vs_inst_idx = 0 /\ s.vs_current_bb = bb.bb_label /\
          sound (df_widen_at NONE ra bb.bb_label 0) s /\
-         state_inv s /\ exec_block fuel run_ctx bb s = OK v ==>
+         state_inv s /\ run_block fuel run_ctx bb s = OK v ==>
          MEM v.vs_current_bb (cfg_analyze fn).cfg_dfs_pre /\
          sound (df_widen_at NONE ra v.vs_current_bb 0) v /\
          state_inv v) /\
+      (!bb s s_phi.
+         MEM bb fn.fn_blocks /\
+         MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
+         eval_phis s bb.bb_instructions = OK s_phi /\
+         sound (df_widen_at NONE ra bb.bb_label 0) s /\ state_inv s ==>
+         sound (df_widen_at NONE ra bb.bb_label
+                  (phi_prefix_length bb.bb_instructions))
+           (s_phi with vs_inst_idx := 0)) /\
       analysis_inst_simulates (state_equiv {}) (execution_equiv {}) sound f /\
       wf_function fn /\ fn_inst_wf fn /\
       (!v s1 s2. state_equiv {} s1 s2 /\ sound v s1 ==> sound v s2) /\
@@ -240,7 +382,24 @@ Theorem range_analysis_pass_correct:
 Proof
   rpt gen_tac >> simp_tac std_ss [LET_THM] >> strip_tac >>
   rpt gen_tac >> strip_tac >>
-  (* Instantiate framework with range analysis params, folded to range_analyze *)
+  sg `!bb fuel run_ctx s.
+     MEM bb fn.fn_blocks /\
+     MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
+     lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+     s.vs_inst_idx = 0 /\ s.vs_current_bb = bb.bb_label /\
+     sound (df_at NONE (widen_to_df (range_analyze fn)) bb.bb_label 0) s /\
+     state_inv s ==>
+     (?e. run_block fuel run_ctx bb s = Error e) \/
+     lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
+       (run_block fuel run_ctx bb s)
+       (run_block fuel run_ctx
+         (analysis_block_transform NONE (widen_to_df (range_analyze fn)) f bb) s)` >- (
+    rpt gen_tac >> strip_tac >>
+    rename1 `run_block fuel0 run_ctx0 bb0 st` >>
+    mp_tac (Q.SPECL [`fn`, `sound`, `state_inv`, `f`, `bb0`, `fuel0`, `run_ctx0`, `st`]
+      range_analysis_block_sim_boundary) >>
+    impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+    disch_then ACCEPT_TAC) >>
   mp_tac (
     REWRITE_RULE [SIMP_RULE std_ss [LET_THM] (GSYM range_analyze_def)]
     (BETA_RULE (PURE_REWRITE_RULE [LET_DEF]
@@ -264,21 +423,20 @@ Proof
       ``state_inv : venom_state -> bool``,
       ``f : (string |-> value_range) option
           -> instruction -> instruction list``]
-    analysisSimPropsTheory.df_analysis_pass_correct_widen_sound_inv)))) >>
+    analysisSimProofsWidenTheory.df_analysis_pass_correct_widen_block_sim_proof)))) >>
   impl_tac >- (
-    rpt conj_tac
-    >- simp[execEquivParamPropsTheory.state_equiv_execution_equiv_valid_state_rel]
-    >- metis_tac[state_equiv_trans]
-    >- metis_tac[execution_equiv_trans]
-    >- (mp_tac (SIMP_RULE std_ss [LET_THM] range_fixpoint) >> simp[])
-    >- first_assum ACCEPT_TAC
-    >- first_assum ACCEPT_TAC
-    >- first_assum ACCEPT_TAC
-    >- first_assum ACCEPT_TAC (* wf_function *)
-    >- first_assum ACCEPT_TAC
-    >- first_assum ACCEPT_TAC
-    >- first_assum ACCEPT_TAC
-    >- first_assum ACCEPT_TAC) >>
+    rpt conj_tac >| [
+      simp[execEquivParamPropsTheory.state_equiv_execution_equiv_valid_state_rel],
+      metis_tac[state_equiv_trans],
+      metis_tac[execution_equiv_trans],
+      mp_tac (SIMP_RULE std_ss [LET_THM] range_fixpoint) >> simp[],
+      first_assum ACCEPT_TAC,
+      first_assum ACCEPT_TAC,
+      first_assum ACCEPT_TAC,
+      first_assum ACCEPT_TAC,
+      first_assum ACCEPT_TAC,
+      first_assum ACCEPT_TAC,
+      first_assum ACCEPT_TAC]) >>
   disch_then (qspecl_then [`fuel`, `ctx`, `s`] mp_tac) >> simp[]
 QED
 
@@ -295,7 +453,7 @@ Theorem range_analysis_pass_correct_inv2:
          MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
          s.vs_inst_idx = 0 /\ s.vs_current_bb = bb.bb_label /\
          range_sound (df_widen_at NONE ra bb.bb_label 0) s /\
-         state_inv s /\ exec_block fuel run_ctx bb s = OK v ==>
+         state_inv s /\ run_block fuel run_ctx bb s = OK v ==>
          MEM v.vs_current_bb (cfg_analyze fn).cfg_dfs_pre /\
          range_sound (df_widen_at NONE ra v.vs_current_bb 0) v /\
          state_inv v) /\
@@ -317,7 +475,15 @@ Theorem range_analysis_pass_correct_inv2:
          inst_wf inst /\
          state_inv (s with vs_inst_idx := 0) /\
          step_inst fuel ctx inst s = OK s' ==>
-         state_inv (s' with vs_inst_idx := 0))
+         state_inv (s' with vs_inst_idx := 0)) /\
+      (* eval_phis preserves analysis state at block entry *)
+      (!bb s s_phi.
+         MEM bb fn.fn_blocks /\ eval_phis s bb.bb_instructions = OK s_phi /\
+         range_sound (df_widen_at NONE ra bb.bb_label 0) s /\ state_inv s ==>
+         range_sound (df_widen_at NONE ra bb.bb_label
+                       (phi_prefix_length bb.bb_instructions))
+           (s_phi with vs_inst_idx := 0) /\
+         state_inv (s_phi with vs_inst_idx := 0))
     ==>
       !fuel ctx s.
         s.vs_inst_idx = 0 /\ fn_entry_label fn = SOME s.vs_current_bb /\
@@ -386,8 +552,10 @@ Proof
     (* per-step state_inv *)
     >- first_assum ACCEPT_TAC
     (* lookup_var stable under state_equiv {} *)
-    >> (rpt strip_tac >>
-        fs[state_equiv_def, execution_equiv_def, lookup_var_def])) >>
+    >- (rpt strip_tac >>
+        fs[state_equiv_def, execution_equiv_def, lookup_var_def])
+    (* eval_phis obligation *)
+    >> first_assum ACCEPT_TAC) >>
   disch_then (qspecl_then [`fuel`, `ctx`, `s`] mp_tac) >> simp[]
 QED
 
@@ -404,7 +572,7 @@ Theorem range_analysis_pass_correct_excl:
          MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
          s.vs_inst_idx = 0 /\ s.vs_current_bb = bb.bb_label /\
          range_sound (df_widen_at NONE ra bb.bb_label 0) s /\
-         state_inv s /\ exec_block fuel run_ctx bb s = OK v ==>
+         state_inv s /\ run_block fuel run_ctx bb s = OK v ==>
          MEM v.vs_current_bb (cfg_analyze fn).cfg_dfs_pre /\
          range_sound (df_widen_at NONE ra v.vs_current_bb 0) v /\
          state_inv v) /\
@@ -434,7 +602,15 @@ Theorem range_analysis_pass_correct_excl:
       (!bb inst x. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
          MEM (Var x) inst.inst_operands ==>
          !s1 s2. state_equiv excl s1 s2 ==>
-           lookup_var x s1 = lookup_var x s2)
+           lookup_var x s1 = lookup_var x s2) /\
+      (* eval_phis preserves analysis state at block entry *)
+      (!bb s s_phi.
+         MEM bb fn.fn_blocks /\ eval_phis s bb.bb_instructions = OK s_phi /\
+         range_sound (df_widen_at NONE ra bb.bb_label 0) s /\ state_inv s ==>
+         range_sound (df_widen_at NONE ra bb.bb_label
+                       (phi_prefix_length bb.bb_instructions))
+           (s_phi with vs_inst_idx := 0) /\
+         state_inv (s_phi with vs_inst_idx := 0))
     ==>
       !fuel ctx s.
         s.vs_inst_idx = 0 /\ fn_entry_label fn = SOME s.vs_current_bb /\
@@ -503,58 +679,42 @@ Proof
     (* per-step state_inv *)
     >- first_assum ACCEPT_TAC
     (* lookup_var stable *)
+    >- first_assum ACCEPT_TAC
+    (* eval_phis obligation *)
     >> first_assum ACCEPT_TAC) >>
   disch_then (qspecl_then [`fuel`, `ctx`, `s`] mp_tac) >> simp[]
 QED
 
-(* NOTE: range_analysis_pass_correct_excl_idx was planned here but moved to
-   algebraicOptProofs where range_transfer_opt_disjoint_restricted is available.
-   The universal range_sound stability in range_analysis_pass_correct_excl is
-   unprovable for non-empty excl sets — need the disjoint restriction. *)
+(* range_analysis_pass_correct_excl_idx belongs in algebraicOptProofs where
+   range_transfer_opt_disjoint_restricted is available. The universal
+   range_sound stability in range_analysis_pass_correct_excl is unprovable
+   for non-empty excl sets — need the disjoint restriction. *)
 
 (* ===== Range analysis fixpoint wrappers ===== *)
-(* These eliminate the 15-line ISPECL boilerplate for dfAnalyzeWiden theorems
-   specialized to range analysis. Used by range_exit_sound, range_widen_at_some,
-   range_successor_sound, and future range-based passes. *)
+(* Range-analysis specializations of dfAnalyzeWiden theorems, used by
+   range_exit_sound, range_widen_at_some, range_successor_sound, and
+   future range-based passes. *)
 
 
-(* Intra-block transfer: df_widen_at at SUC idx = transfer applied to idx *)
-Theorem range_intra_transfer:
-  !fn lbl bb idx.
-    wf_function fn /\
-    MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
-    lookup_block lbl fn.fn_blocks = SOME bb /\
-    SUC idx <= LENGTH bb.bb_instructions ==>
-    df_widen_at NONE (range_analyze fn) lbl (SUC idx) =
-    range_transfer_opt (dfg_build_function fn, fn.fn_blocks)
-      (EL idx bb.bb_instructions)
-      (df_widen_at NONE (range_analyze fn) lbl idx)
+(* PHI-prefix range soundness helpers live in rangeAnalysisProofsTheory. *)
+
+Triviality phi_prefix_length_lt_wf[local]:
+  !bb. bb_well_formed bb ==>
+       phi_prefix_length bb.bb_instructions < LENGTH bb.bb_instructions
 Proof
-  rpt strip_tac >>
-  mp_tac (SIMP_RULE std_ss [LET_THM]
-    (REWRITE_RULE [GSYM (SIMP_RULE std_ss [LET_THM] range_analyze_def)]
-    (ISPECL [
-      ``Forward``,
-      ``NONE : (string |-> value_range) option``,
-      ``range_join_opt``,
-      ``range_widen_opt : (string |-> value_range) option
-          -> (string |-> value_range) option
-          -> (string |-> value_range) option``,
-      ``WIDEN_THRESHOLD``,
-      ``range_transfer_opt``,
-      ``range_edge_transfer_opt``,
-      ``(dfg_build_function fn, fn.fn_blocks)``,
-      ``OPTION_MAP (\lbl. (lbl, SOME (FEMPTY : string |-> value_range)))
-          (fn_entry_label fn)``,
-      ``fn : ir_function``,
-      ``lbl : string``,
-      ``bb : basic_block``,
-      ``idx : num``]
-    dfAnalyzeWidenPropsTheory.df_widen_at_intra_transfer))) >>
-  impl_tac >- (
-    conj_tac >- first_assum ACCEPT_TAC >>
-    mp_tac (SIMP_RULE std_ss [LET_THM] range_fixpoint) >> simp[]) >>
-  simp[]
+  rpt strip_tac >> fs[bb_well_formed_def] >>
+  `phi_prefix_length bb.bb_instructions <= LENGTH bb.bb_instructions` by
+    metis_tac[venomExecProofsTheory.phi_prefix_length_le] >>
+  CCONTR_TAC >>
+  `phi_prefix_length bb.bb_instructions = LENGTH bb.bb_instructions` by
+    decide_tac >>
+  `PRE (LENGTH bb.bb_instructions) < phi_prefix_length bb.bb_instructions` by
+    (Cases_on `bb.bb_instructions` >> fs[]) >>
+  `(EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions).inst_opcode = PHI` by
+    metis_tac[rangeAnalysisProofsTheory.phi_prefix_length_el_phi] >>
+  `EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions = LAST bb.bb_instructions` by
+    (Cases_on `bb.bb_instructions` >> fs[LAST_EL]) >>
+  gvs[is_terminator_def]
 QED
 
 (* Inter-block transfer: df_widen_at at position 0 = df_widen_entry *)
@@ -592,10 +752,8 @@ Proof
   simp[]
 QED
 
-(* Helper: connect df_fold_block fst output to df_widen_at *)
-(* Bridge: fold result fv = df_widen_at at exit position.
-   Uses df_fold_forward_midpoint + intra_transfer. *)
-(* Helper: fold result agrees with df_widen_at at every position *)
+(* df_fold_forward result agrees with df_widen_at at every position,
+   and the fold output equals df_widen_at at exit position. *)
 Triviality df_fold_widen_at_agree:
   !n transfer lbl instrs entry fv im fn bb.
     wf_function fn /\
@@ -737,7 +895,7 @@ QED
 (* ===== Range soundness at successor entry ===== *)
 
 (* Exit soundness: range_sound at block entry ==> range_sound at block exit.
-   Uses transfer_sound_exit via widen_to_df bridge. *)
+   PHI-prefix evaluation advances the analysis point before exec_block. *)
 Theorem range_exit_sound:
   !fn bb fuel run_ctx s v.
     let ra = range_analyze fn in
@@ -756,77 +914,42 @@ Theorem range_exit_sound:
         (LENGTH bb.bb_instructions)) v
 Proof
   rpt gen_tac >> simp_tac std_ss [LET_THM] >> strip_tac >>
-  (* Bridge: run_block → exec_block *)
-  `exec_block fuel run_ctx bb s = OK v` by
-    metis_tac[run_block_is_exec_block] >>
-  (* Block setup boilerplate *)
-  `bb.bb_instructions <> []` by
-    (imp_res_tac venomExecProofsTheory.exec_block_ok_nonempty) >>
+  `bb_well_formed bb` by fs[wf_function_def] >>
   `EVERY inst_wf bb.bb_instructions` by
     (fs[fn_inst_wf_def, EVERY_MEM] >> metis_tac[]) >>
-  qabbrev_tac `ti = PRE (LENGTH bb.bb_instructions)` >>
-  `ti < LENGTH bb.bb_instructions` by
-    (Cases_on `bb.bb_instructions` >> fs[Abbr `ti`]) >>
-  `is_terminator (EL ti bb.bb_instructions).inst_opcode` by (
-    `bb_well_formed bb` by (fs[wf_function_def] >> metis_tac[]) >>
-    fs[bb_well_formed_def, Abbr `ti`] >>
-    Cases_on `bb.bb_instructions` >> fs[LAST_EL]) >>
-  `!j. j < ti ==> ~is_terminator (EL j bb.bb_instructions).inst_opcode` by (
-    rpt strip_tac >> first_x_assum (qspec_then `bb` mp_tac) >>
-    (impl_tac >- first_assum ACCEPT_TAC) >>
-    disch_then (qspec_then `j` mp_tac) >>
-    impl_tac >- fs[Abbr `ti`] >> simp[]) >>
-  `SUC ti = LENGTH bb.bb_instructions` by
-    (Cases_on `bb.bb_instructions` >> fs[Abbr `ti`]) >>
   `lookup_block bb.bb_label fn.fn_blocks = SOME bb` by (
+    irule venomExecPropsTheory.MEM_lookup_block >>
     qpat_assum `ALL_DISTINCT _` mp_tac >>
-    simp_tac std_ss [fn_labels_def] >> strip_tac >>
-    metis_tac[venomExecPropsTheory.MEM_lookup_block]) >>
-  (* Widen-to-df bridge *)
+    simp_tac std_ss [fn_labels_def] >> metis_tac[]) >>
+  qpat_x_assum `run_block fuel run_ctx bb s = OK v` mp_tac >>
+  ONCE_REWRITE_TAC[run_block_def] >>
+  DISJ_CASES_THEN STRIP_ASSUME_TAC
+    (Q.SPECL [`s`, `bb.bb_instructions`] eval_phis_ok_or_error_defs) >>
+  gvs[] >>
+  rename1 `eval_phis s bb.bb_instructions = OK s_phi` >>
+  strip_tac >>
   qabbrev_tac `result = widen_to_df (range_analyze fn)` >>
   `!idx. df_widen_at NONE (range_analyze fn) bb.bb_label idx =
          df_at NONE result bb.bb_label idx` by
-    simp[Abbr `result`, analysisSimProofsTheory.widen_to_df_def,
+    simp[Abbr `result`, analysisSimProofsWidenTheory.widen_to_df_def,
          dfAnalyzeWidenDefsTheory.df_widen_at_def,
          dfAnalyzeDefsTheory.df_at_def] >>
-  (* Establish intra-transfer equations in df_widen_at terms first *)
-  `!idx. SUC idx <= LENGTH bb.bb_instructions ==>
-     df_widen_at NONE (range_analyze fn) bb.bb_label (SUC idx) =
-     range_transfer_opt (dfg_build_function fn, fn.fn_blocks)
-       (EL idx bb.bb_instructions)
-       (df_widen_at NONE (range_analyze fn) bb.bb_label idx)` by (
-    rpt strip_tac >>
-    mp_tac (SIMP_RULE std_ss [LET_THM]
-      (REWRITE_RULE [GSYM (SIMP_RULE std_ss [LET_THM] range_analyze_def)]
-      (ISPECL [
-        ``Forward``,
-        ``NONE : (string |-> value_range) option``,
-        ``range_join_opt``,
-        ``range_widen_opt : (string |-> value_range) option
-            -> (string |-> value_range) option
-            -> (string |-> value_range) option``,
-        ``WIDEN_THRESHOLD``,
-        ``range_transfer_opt``,
-        ``range_edge_transfer_opt``,
-        ``(dfg_build_function fn, fn.fn_blocks)``,
-        ``OPTION_MAP (\lbl. (lbl, SOME (FEMPTY : string |-> value_range)))
-            (fn_entry_label fn)``,
-        ``fn : ir_function``,
-        ``bb.bb_label``,
-        ``bb : basic_block``,
-        ``idx : num``]
-      dfAnalyzeWidenPropsTheory.df_widen_at_intra_transfer))) >>
-    impl_tac >- (
-      conj_tac >- first_assum ACCEPT_TAC >>
-      mp_tac (SIMP_RULE std_ss [LET_THM] range_fixpoint) >> simp[]) >>
-    simp[]) >>
-  (* Convert to df_at terms using bridge *)
   `!idx. SUC idx <= LENGTH bb.bb_instructions ==>
      df_at NONE result bb.bb_label (SUC idx) =
      range_transfer_opt (dfg_build_function fn, fn.fn_blocks)
        (EL idx bb.bb_instructions)
-       (df_at NONE result bb.bb_label idx)` by metis_tac[] >>
-  (* Apply transfer_sound_exit *)
+       (df_at NONE result bb.bb_label idx)` by (
+    rpt strip_tac >>
+    mp_tac (Q.SPECL [`fn`, `bb.bb_label`, `bb`, `idx`] range_intra_transfer) >>
+    impl_tac >- simp[] >>
+    strip_tac >> gvs[]) >>
+  `range_sound (df_at NONE result bb.bb_label
+       (phi_prefix_length bb.bb_instructions))
+     ((s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)
+        with vs_inst_idx := 0)` by (
+    simp[] >>
+    mp_tac (Q.SPECL [`fn`, `bb`, `s`, `s_phi`] eval_phis_range_sound) >>
+    simp[]) >>
   mp_tac (ISPECL [
     ``state_equiv {} : venom_state -> venom_state -> bool``,
     ``execution_equiv {} : venom_state -> venom_state -> bool``,
@@ -836,20 +959,27 @@ Proof
     ``bb : basic_block``,
     ``NONE : (string |-> value_range) option``,
     ``result : (string |-> value_range) option df_state``]
-    analysisSimPropsTheory.transfer_sound_exit) >>
+    analysisSimProofsTheory.transfer_sound_exit_from_wf_len) >>
   impl_tac >- (
     rpt conj_tac
     >- simp[execEquivParamPropsTheory.state_equiv_execution_equiv_valid_state_rel]
-    >- metis_tac[range_transfer_sound]
+    >- (simp[analysisSimDefsTheory.transfer_sound_wf_def] >>
+        mp_tac (SPEC_ALL range_transfer_sound) >>
+        simp[analysisSimDefsTheory.transfer_sound_def] >> metis_tac[])
+    >- first_assum ACCEPT_TAC
+    >- first_assum ACCEPT_TAC
     >- metis_tac[range_sound_state_equiv]
     >- first_assum ACCEPT_TAC) >>
-  disch_then (qspecl_then [`fuel`, `run_ctx`, `s`, `v`, `ti`] mp_tac) >>
+  disch_then (qspecl_then [`fuel`, `run_ctx`,
+    `s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions`,
+    `v`] mp_tac) >>
   simp[] >>
-  impl_tac >- metis_tac[] >>
-  `df_at NONE result bb.bb_label (LENGTH bb.bb_instructions) =
-   range_transfer_opt (dfg_build_function fn, fn.fn_blocks)
-     (EL ti bb.bb_instructions) (df_at NONE result bb.bb_label ti)` by
-    (first_x_assum (qspec_then `ti` mp_tac) >> simp[]) >>
+  impl_tac >- (
+    conj_tac >- (
+      `phi_prefix_length bb.bb_instructions < LENGTH bb.bb_instructions` by
+        metis_tac[phi_prefix_length_lt_wf] >>
+      Cases_on `bb.bb_instructions` >> fs[]) >>
+    gvs[]) >>
   simp[]
 QED
 
@@ -922,11 +1052,8 @@ Proof
 QED
 
 (* Helper: JNZ branch condition for range_branch_refine_sound.
-   The branch condition is derived from run_block_jnz_condition, which needs
-   distinct JNZ targets. We carry true_lbl <> false_lbl as a local antecedent
-   (degenerate JNZ cond, L, L cannot occur in a realizable function and is
-   handled soundly by range_branch_refine without refining), so no global
-   JNZ-distinct precondition is required. *)
+   When JNZ always has distinct labels, we can derive the branch condition
+   from run_block_jnz_condition. *)
 Theorem jnz_branch_condition_from_run_block:
   !fn bb fuel run_ctx s v succ.
     run_block fuel run_ctx bb s = OK v /\
@@ -937,14 +1064,18 @@ Theorem jnz_branch_condition_from_run_block:
     (!i. i < LENGTH bb.bb_instructions - 1 ==>
       ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
     MEM bb fn.fn_blocks /\
-    lookup_block bb.bb_label fn.fn_blocks = SOME bb ==>
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+    (!bb cond true_lbl false_lbl. MEM bb fn.fn_blocks /\
+      (LAST bb.bb_instructions).inst_opcode = JNZ /\
+      (LAST bb.bb_instructions).inst_operands =
+        [cond; Label true_lbl; Label false_lbl] ==>
+      true_lbl <> false_lbl) ==>
     !bb' cond_op true_lbl false_lbl.
       lookup_block bb.bb_label fn.fn_blocks = SOME bb' /\
       bb'.bb_instructions <> [] /\
       (LAST bb'.bb_instructions).inst_opcode = JNZ /\
       (LAST bb'.bb_instructions).inst_operands =
-        [cond_op; Label true_lbl; Label false_lbl] /\
-      true_lbl <> false_lbl ==>
+        [cond_op; Label true_lbl; Label false_lbl] ==>
       !var. cond_op = Var var ==>
         ?w. FLOOKUP v.vs_vars var = SOME w /\
             (succ = true_lbl ==> w <> 0w) /\
@@ -952,6 +1083,8 @@ Theorem jnz_branch_condition_from_run_block:
 Proof
   rpt strip_tac >> BasicProvers.VAR_EQ_TAC >>
   `bb' = bb` by fs[] >> BasicProvers.VAR_EQ_TAC >>
+  `true_lbl <> false_lbl` by (
+    CCONTR_TAC >> fs[] >> res_tac) >>
   mp_tac run_block_jnz_condition >>
   disch_then (qspecl_then [`fuel`, `run_ctx`, `bb`, `s`, `v`,
     `var`, `true_lbl`, `false_lbl`] mp_tac) >>
@@ -972,6 +1105,11 @@ Theorem range_branch_refine_after_run_block:
       ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
     MEM bb fn.fn_blocks /\
     lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+    (!bb cond true_lbl false_lbl. MEM bb fn.fn_blocks /\
+      (LAST bb.bb_instructions).inst_opcode = JNZ /\
+      (LAST bb.bb_instructions).inst_operands =
+        [cond; Label true_lbl; Label false_lbl] ==>
+      true_lbl <> false_lbl) /\
     in_range_state boundary_rs v.vs_vars /\
     dfg_sound (dfg_build_function fn) v.vs_vars ==>
     in_range_state (range_branch_refine (dfg_build_function fn)
@@ -986,8 +1124,7 @@ Proof
       bb'.bb_instructions <> [] /\
       (LAST bb'.bb_instructions).inst_opcode = JNZ /\
       (LAST bb'.bb_instructions).inst_operands =
-        [cond_op; Label true_lbl; Label false_lbl] /\
-      true_lbl <> false_lbl ==>
+        [cond_op; Label true_lbl; Label false_lbl] ==>
       !var. cond_op = Var var ==>
         ?w. FLOOKUP v.vs_vars var = SOME w /\
             (succ = true_lbl ==> w <> 0w) /\
@@ -1025,6 +1162,11 @@ Theorem range_sound_at_successor:
       (!bb. MEM bb fn.fn_blocks ==>
         !i. i < LENGTH bb.bb_instructions - 1 ==>
           ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
+      (!bb cond true_lbl false_lbl. MEM bb fn.fn_blocks /\
+        (LAST bb.bb_instructions).inst_opcode = JNZ /\
+        (LAST bb.bb_instructions).inst_operands =
+          [cond; Label true_lbl; Label false_lbl] ==>
+        true_lbl <> false_lbl) /\
       MEM bb fn.fn_blocks /\
       MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
       s.vs_inst_idx = 0 /\ s.vs_current_bb = bb.bb_label /\
@@ -1132,7 +1274,7 @@ Proof
   `?hd tl. edge_vals = hd::tl` by (Cases_on `edge_vals` >> gvs[]) >>
   `joined = FOLDL range_join_opt NONE edge_vals` by
     gvs[Abbr `joined`]
-  (* Step 11: MEM *)
+  (* refined_rs via edge_transfer *)
   \\ qabbrev_tac `refined_rs = range_branch_refine (dfg_build_function fn)
         fn.fn_blocks bb.bb_label succ boundary_rs`
   \\ `SOME refined_rs = range_edge_transfer_opt (dfg_build_function fn,
@@ -1148,14 +1290,19 @@ Proof
     qexists_tac `bb.bb_label` >>
     conj_tac >- (BETA_TAC >> REFL_TAC) >>
     first_assum ACCEPT_TAC)
-  (* Step 13: specialize non-terminator hypothesis for bb *)
+  (* Re-derive JNZ distinct-labels in original form *)
+  \\ `!bb' cond true_lbl false_lbl. MEM bb' fn.fn_blocks /\
+        (LAST bb'.bb_instructions).inst_opcode = JNZ /\
+        (LAST bb'.bb_instructions).inst_operands =
+          [cond; Label true_lbl; Label false_lbl] ==>
+        true_lbl <> false_lbl` by (
+    rpt gen_tac >> strip_tac >> CCONTR_TAC >>
+    `true_lbl = false_lbl` by (pop_assum mp_tac >> REWRITE_TAC[]) >>
+    BasicProvers.VAR_EQ_TAC >> res_tac)
+  (* Specialize non-terminator hypothesis for bb *)
   \\ `!i. i < LENGTH bb.bb_instructions - 1 ==>
-      ~is_terminator (EL i bb.bb_instructions).inst_opcode` by (
-    qpat_x_assum `!bb. MEM bb fn.fn_blocks ==> _`
-      (qspec_then `bb` mp_tac) >>
-    impl_tac >- (first_assum ACCEPT_TAC) >>
-    strip_tac >> first_assum ACCEPT_TAC)
-  (* Step 14: in_range_state of branch_refine *)
+      ~is_terminator (EL i bb.bb_instructions).inst_opcode` by metis_tac[]
+  (* in_range_state of branch_refine *)
   \\ `in_range_state refined_rs v.vs_vars` by (
     qpat_x_assum `Abbrev (refined_rs = _)` (REWRITE_TAC o single o
       REWRITE_RULE [markerTheory.Abbrev_def])
@@ -1166,7 +1313,7 @@ Proof
     \\ REWRITE_TAC[]
     \\ impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)
     \\ strip_tac \\ first_assum ACCEPT_TAC)
-  (* Step 15: range_sound via FOLDL *)
+  (* range_sound via FOLDL *)
   \\ `range_sound (FOLDL range_join_opt NONE edge_vals) v` by (
     irule foldl_range_join_opt_sound >>
     qexists_tac `refined_rs` >>
@@ -1186,6 +1333,11 @@ Theorem range_successor_sound:
       (!bb. MEM bb fn.fn_blocks ==>
         !i. i < LENGTH bb.bb_instructions - 1 ==>
           ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
+      (!bb cond true_lbl false_lbl. MEM bb fn.fn_blocks /\
+        (LAST bb.bb_instructions).inst_opcode = JNZ /\
+        (LAST bb.bb_instructions).inst_operands =
+          [cond; Label true_lbl; Label false_lbl] ==>
+        true_lbl <> false_lbl) /\
       MEM bb fn.fn_blocks /\
       MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
       s.vs_inst_idx = 0 /\ s.vs_current_bb = bb.bb_label /\
@@ -1205,17 +1357,16 @@ Theorem range_successor_sound:
          u IN FDOM v.vs_vars)
 Proof
   rpt gen_tac >> simp_tac std_ss [LET_THM] >> strip_tac >>
-  (* Bridge: run_block → exec_block *)
-  `exec_block fuel run_ctx bb s = OK v` by
-    metis_tac[run_block_is_exec_block] >>
   (* Derive block well-formedness *)
   `bb_well_formed bb` by fs[wf_function_def] >>
   `bb.bb_instructions <> []` by fs[bb_well_formed_def] >>
   `EVERY inst_wf bb.bb_instructions` by
     (fs[EVERY_MEM, fn_inst_wf_def] >> metis_tac[]) >>
   (* Successor in cfg_dfs_pre *)
+  `!i. i < LENGTH bb.bb_instructions - 1 ==>
+      ~is_terminator (EL i bb.bb_instructions).inst_opcode` by metis_tac[] >>
   `MEM v.vs_current_bb (bb_succs bb)` by
-    metis_tac[venomExecPropsTheory.exec_block_current_bb_in_succs] >>
+    metis_tac[venomExecPropsTheory.run_block_current_bb_in_succs] >>
   `MEM v.vs_current_bb (cfg_succs_of (cfg_analyze fn) bb.bb_label)` by
     metis_tac[cfgAnalysisPropsTheory.bb_succs_in_cfg_succs] >>
   `MEM v.vs_current_bb (cfg_analyze fn).cfg_dfs_pre` by
@@ -1251,10 +1402,28 @@ Proof
   rpt strip_tac >> imp_res_tac state_equiv_empty_vars_eq >> fs[]
 QED
 
+(* Re-derive original JNZ distinct-labels from HOL-simplified form.
+   HOL simplifies (!bb cond tl fl. ... ==> tl <> fl) to
+   (!bb cond fl. JNZ ==> ops=[...fl;fl] ==> ~MEM bb bbs).
+   range_successor_sound needs the original form. *)
+Theorem jnz_distinct_labels_from_simplified:
+  (!bb cond false_lbl.
+     (LAST bb.bb_instructions).inst_opcode = JNZ ==>
+     (LAST bb.bb_instructions).inst_operands =
+       [cond; Label false_lbl; Label false_lbl] ==>
+     ~MEM bb bbs) ==>
+  (!bb cond true_lbl false_lbl.
+     MEM bb bbs /\
+     (LAST bb.bb_instructions).inst_opcode = JNZ /\
+     (LAST bb.bb_instructions).inst_operands =
+       [cond; Label true_lbl; Label false_lbl] ==>
+     true_lbl <> false_lbl)
+Proof
+  rpt strip_tac >> CCONTR_TAC >> gvs[]
+QED
+
 (* Successor obligation adapted for the framework call context.
-   Uses range_successor_sound. JNZ distinct-target soundness is handled
-   internally by range_branch_refine (degenerate JNZ cond, L, L cannot occur
-   in a realizable function), so no JNZ-distinct precondition is needed. *)
+   Uses range_successor_sound but handles the JNZ hypothesis form mismatch. *)
 Theorem range_successor_obligation:
   wf_function fn /\ fn_inst_wf fn /\
   (!v i1 i2. MEM i1 (fn_insts fn) /\ MEM i2 (fn_insts fn) /\
@@ -1263,7 +1432,12 @@ Theorem range_successor_obligation:
   dfg_block_local fn /\
   (!bb. MEM bb fn.fn_blocks ==>
     !i. i < LENGTH bb.bb_instructions - 1 ==>
-      ~is_terminator (EL i bb.bb_instructions).inst_opcode) ==>
+      ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
+  (!bb cond false_lbl.
+     (LAST bb.bb_instructions).inst_opcode = JNZ ==>
+     (LAST bb.bb_instructions).inst_operands =
+       [cond; Label false_lbl; Label false_lbl] ==>
+     ~MEM bb fn.fn_blocks) ==>
   !bb fuel run_ctx s v.
     MEM bb fn.fn_blocks /\
     MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
@@ -1274,7 +1448,7 @@ Theorem range_successor_obligation:
         vv IN FDOM s.vs_vars /\ dfg_tracked_opcode dinst.inst_opcode /\
         MEM (Var u) dinst.inst_operands ==>
         u IN FDOM s.vs_vars) /\
-    exec_block fuel run_ctx bb s = OK v ==>
+    run_block fuel run_ctx bb s = OK v ==>
     MEM v.vs_current_bb (cfg_analyze fn).cfg_dfs_pre /\
     range_sound (df_widen_at NONE (range_analyze fn) v.vs_current_bb 0) v /\
     dfg_sound (dfg_build_function fn) v.vs_vars /\
@@ -1284,15 +1458,99 @@ Theorem range_successor_obligation:
        u IN FDOM v.vs_vars)
 Proof
   strip_tac
+  >> imp_res_tac jnz_distinct_labels_from_simplified
   >> rpt gen_tac >> strip_tac
-  >> `run_block fuel run_ctx bb s = OK v` by
-       metis_tac[run_block_is_exec_block]
   >> mp_tac (SIMP_RULE std_ss [LET_THM] range_successor_sound)
   >> disch_then (qspecl_then [`fn`, `bb`, `fuel`, `run_ctx`, `s`, `v`] mp_tac)
   >> (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC))
   >> strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
+Theorem assert_elim_inst_cases[local]:
+  !v inst. assert_elim_inst v inst = inst \/
+           assert_elim_inst v inst = mk_nop_inst inst
+Proof
+  rpt gen_tac >> simp[assert_elim_inst_def] >>
+  rpt (BasicProvers.PURE_CASE_TAC >> simp[])
+QED
+
+Theorem assert_elim_inst_id[local]:
+  !v inst. (assert_elim_inst v inst).inst_id = inst.inst_id
+Proof
+  rpt gen_tac >>
+  DISJ_CASES_TAC (SPECL [``v : range_state option``, ``inst : instruction``]
+                        assert_elim_inst_cases) >>
+  simp[mk_nop_inst_def]
+QED
+
+Theorem assert_elim_inst_terminator[local]:
+  !v inst. is_terminator inst.inst_opcode ==> assert_elim_inst v inst = inst
+Proof
+  rpt strip_tac >> simp[assert_elim_inst_def] >>
+  IF_CASES_TAC >> simp[] >>
+  fs[is_terminator_def]
+QED
+
+Theorem assert_elim_inst_not_terminator[local]:
+  !v inst. ~is_terminator inst.inst_opcode ==>
+           ~is_terminator (assert_elim_inst v inst).inst_opcode
+Proof
+  rpt gen_tac >> strip_tac >>
+  DISJ_CASES_TAC (SPECL [``v : range_state option``, ``inst : instruction``]
+                        assert_elim_inst_cases) >>
+  simp[mk_nop_inst_def, is_terminator_def]
+QED
+
+Theorem assert_elim_inst_phi[local]:
+  !v inst. inst.inst_opcode = PHI ==>
+           (assert_elim_inst v inst).inst_opcode = PHI
+Proof
+  rpt strip_tac >> simp[assert_elim_inst_def]
+QED
+
+Theorem assert_elim_inst_not_phi[local]:
+  !v inst. inst.inst_opcode <> PHI ==>
+           (assert_elim_inst v inst).inst_opcode <> PHI
+Proof
+  rpt gen_tac >> strip_tac >>
+  DISJ_CASES_TAC (SPECL [``v : range_state option``, ``inst : instruction``]
+                        assert_elim_inst_cases) >>
+  simp[mk_nop_inst_def]
+QED
+
+Theorem aftw_singleton_eq_fmt_mapi[local]:
+  !bottom result (f : 'a -> instruction -> instruction) fn.
+    analysis_function_transform_widen bottom result (\v inst. [f v inst]) fn =
+    function_map_transform
+      (\bb. bb with bb_instructions :=
+        MAPi (\idx inst. f (df_widen_at bottom result bb.bb_label idx) inst)
+             bb.bb_instructions) fn
+Proof
+  rw[analysis_function_transform_widen_def, function_map_transform_def,
+     ir_function_component_equality] >>
+  irule listTheory.MAP_CONG >> simp[] >> rpt strip_tac >>
+  simp[analysis_block_transform_widen_def,
+       basic_block_component_equality, flat_mapi_singleton]
+QED
+
+Theorem assert_elim_analysis_transform_wf[local]:
+  !fn. wf_function fn ==>
+       wf_function (analysis_function_transform_widen NONE (range_analyze fn)
+         (\v inst. [assert_elim_inst v inst]) fn)
+Proof
+  rpt strip_tac >>
+  ONCE_REWRITE_TAC[aftw_singleton_eq_fmt_mapi] >>
+  mp_tac (Q.SPECL
+    [`\bb idx inst. assert_elim_inst
+        (df_widen_at NONE (range_analyze fn) bb.bb_label idx) inst`,
+     `fn`] passSimulationPropsTheory.mapi_transform_preserves_wf_bb) >>
+  simp[assert_elim_inst_id, assert_elim_inst_terminator,
+       assert_elim_inst_not_terminator, assert_elim_inst_phi,
+       assert_elim_inst_not_phi]
+QED
+
+(* Assert elimination preserves function-level semantics under range soundness.
+   Eliminates provably-true assertions via range analysis, then clears NOPs. *)
 Theorem assert_elim_function_correct_proof:
   !fuel ctx fn s.
     wf_function fn /\
@@ -1304,6 +1562,11 @@ Theorem assert_elim_function_correct_proof:
     (!bb. MEM bb fn.fn_blocks ==>
       !i. i < LENGTH bb.bb_instructions - 1 ==>
         ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
+    (!bb cond true_lbl false_lbl. MEM bb fn.fn_blocks /\
+      (LAST bb.bb_instructions).inst_opcode = JNZ /\
+      (LAST bb.bb_instructions).inst_operands =
+        [cond; Label true_lbl; Label false_lbl] ==>
+      true_lbl <> false_lbl) /\
     s.vs_inst_idx = 0 /\
     fn_entry_label fn = SOME s.vs_current_bb /\
     dfg_sound (dfg_build_function fn) s.vs_vars /\
@@ -1334,6 +1597,14 @@ Proof
       >- (mp_tac range_successor_obligation >>
           (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
           strip_tac >> first_assum ACCEPT_TAC)
+      >- (rpt strip_tac >>
+          rename1 `eval_phis src bb.bb_instructions = OK s_phi` >>
+          irule eval_phis_range_sound >> simp[] >>
+          conj_tac >- (
+            irule venomExecPropsTheory.MEM_lookup_block >>
+            qpat_assum `ALL_DISTINCT _` mp_tac >>
+            simp_tac std_ss [fn_labels_def] >> metis_tac[]) >>
+          qexists_tac `src` >> simp[])
       >- metis_tac[assert_elim_inst_simulates_proof]
       >- first_assum ACCEPT_TAC (* wf_function *)
       >- first_assum ACCEPT_TAC (* fn_inst_wf *)
@@ -1342,20 +1613,27 @@ Proof
       >> rpt strip_tac >>
          fs[state_equiv_def, execution_equiv_def, lookup_var_def])
   \\ disch_then (qspecl_then [`fuel`, `ctx`, `s`] mp_tac)
-  \\ impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)
-  \\ strip_tac
-  >| [ (* Error case *)
-       DISJ1_TAC >> metis_tac[]
-     , (* Success case: compose framework result with clear_nops *)
-       DISJ2_TAC >>
-       irule lift_result_trans >>
-       conj_tac >- (metis_tac[stateEquivPropsTheory.state_equiv_trans]) >>
-       conj_tac >- (metis_tac[stateEquivPropsTheory.execution_equiv_trans]) >>
-       qexists_tac `run_blocks fuel ctx
-         (analysis_function_transform_widen NONE (range_analyze fn)
-           (\v inst. [assert_elim_inst v inst]) fn) s` >>
-       conj_tac >- (first_assum ACCEPT_TAC) >>
-       simp_tac std_ss [GSYM stateEquivPropsTheory.result_equiv_is_lift_result] >>
-       irule passSharedPropsTheory.clear_nops_function_correct >> simp[]
+  \\ impl_tac >- (rpt conj_tac >| [
+       first_assum ACCEPT_TAC,
+       first_assum ACCEPT_TAC,
+       first_assum ACCEPT_TAC,
+       first_assum ACCEPT_TAC,
+       first_assum ACCEPT_TAC])
+  \\ DISCH_TAC
+  \\ qpat_x_assum `(?e. run_blocks fuel ctx fn s = Error e) \/ _`
+       (fn th => DISJ_CASES_TAC th)
+  >| [
+     DISJ1_TAC >> metis_tac[],
+     DISJ2_TAC >>
+     irule lift_result_trans >>
+     conj_tac >- (metis_tac[stateEquivPropsTheory.state_equiv_trans]) >>
+     conj_tac >- (metis_tac[stateEquivPropsTheory.execution_equiv_trans]) >>
+     qexists_tac `run_blocks fuel ctx
+       (analysis_function_transform_widen NONE (range_analyze fn)
+         (\v inst. [assert_elim_inst v inst]) fn) s` >>
+     conj_tac >- (first_assum ACCEPT_TAC) >>
+     simp_tac std_ss [GSYM stateEquivPropsTheory.result_equiv_is_lift_result] >>
+     irule passSharedPropsTheory.clear_nops_function_correct >>
+     simp[assert_elim_analysis_transform_wf]
      ]
 QED

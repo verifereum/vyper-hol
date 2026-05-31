@@ -47,6 +47,8 @@ Definition np_defs_before_uses_def:
       ?i. i < j /\ EL i insts = prod
 End
 
+(* Full defs-before-uses implies the non-pseudo variant (weakening that
+   ignores pseudo-instruction users, which cannot fail at runtime). *)
 Theorem defs_before_implies_np:
   !insts. defs_before_uses insts ==> np_defs_before_uses insts
 Proof
@@ -205,14 +207,14 @@ Triviality flip_operands_data_deps_subset[local]:
     MEM dep (inst_data_deps bi order inst)
 Proof
   rw[inst_data_deps_def, LET_THM, MEM_nub, MEM_APPEND,
-     flip_not_terminator]
-  >- (disj1_tac >> irule map_the_filter_some_mono >>
-      qexists_tac `(flip_operands inst).inst_operands` >>
-      simp[flip_operands_mem_ops])
-  >- simp[]
-  >- (irule map_the_filter_some_mono >>
-      qexists_tac `(flip_operands inst).inst_operands` >>
-      simp[flip_operands_mem_ops])
+     flip_not_terminator] >|
+  [disj1_tac >> irule map_the_filter_some_mono >>
+     qexists_tac `(flip_operands inst).inst_operands` >>
+     simp[flip_operands_mem_ops],
+   simp[],
+   irule map_the_filter_some_mono >>
+     qexists_tac `(flip_operands inst).inst_operands` >>
+     simp[flip_operands_mem_ops]]
 QED
 
 Triviality data_deps_subset_all_deps[local]:
@@ -296,10 +298,9 @@ Triviality producing_inst_position[local]:
     producing_inst bi var = SOME prod ==>
     ?r. r < LENGTH bi /\ EL r bi = prod
 Proof
-  Induct >> rw[producing_inst_def] >>
-  Cases_on `MEM var h.inst_outputs` >> gvs[]
-  >- (qexists_tac `0` >> simp[])
-  >- (res_tac >> qexists_tac `SUC r` >> simp[])
+  Induct >> rw[producing_inst_def] >|
+  [qexists_tac `0` >> simp[],
+   res_tac >> qexists_tac `SUC r` >> simp[]]
 QED
 
 (* producing_inst gives a position strictly before the user position
@@ -555,7 +556,9 @@ Proof
   metis_tac[ALL_DISTINCT_MAP_INJ_IMP]
 QED
 
-(* DfsEmit: inst moves from stack head to output tail *)
+(* Emitting the stack head preserves the full dfs_topo_inv — data-dep
+   producer ordering, EDA dep ordering, stack well-orderedness, set
+   memberships, and distinctness all carry over to the new state. *)
 Theorem topo_inv_emit[local]:
   !bi order state inst rest'.
     dfs_topo_inv bi order eda state /\
@@ -733,6 +736,9 @@ QED
 
 Finalise topo_inv_emit
 
+(* A single DFS step preserves the topological-ordering invariant:
+   data deps, EDA deps, stack ordering, distinctness, and all set
+   membership properties are maintained across visited/pseudo/emit cases. *)
 Theorem dfs_step_preserves_topo:
   !bi order eda offspring_map do_flip state.
     dfs_topo_inv bi order eda state /\
@@ -1168,8 +1174,9 @@ Proof
   simp[init_topo_inv, init_dfs_state_good]
 QED
 
-(* Every non-pseudo producing instruction appears before its user in
-   the DFS schedule output. *)
+(* In the DFS schedule output, every instruction's data-dep producer
+   (via producing_inst in the original block) appears at an earlier
+   position by inst_id match, provided the producer is non-pseudo. *)
 Theorem schedule_output_producer_before:
   !bi order eda offspring_map entries.
     eda_wf eda bi ==>

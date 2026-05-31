@@ -2705,7 +2705,15 @@ QED
 Resume gen_inst_ok_sim[none]:
   Cases_on `inst.inst_opcode` >>
   gvs[venom_to_evm_name_def, is_pre_codegen_opcode_def]
-  >> TRY (qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
+  >> TRY (`inst.inst_opcode <> ISTORE /\
+           inst.inst_opcode <> JMP /\
+           inst.inst_opcode <> JNZ /\
+           inst.inst_opcode <> DJMP /\
+           inst.inst_opcode <> ASSIGN /\
+           inst.inst_opcode <> LOG /\
+           inst.inst_opcode <> ASSERT /\
+           inst.inst_opcode <> ASSERT_UNREACHABLE` by simp[] >>
+          qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
           simp[step_inst_non_invoke, Once step_inst_base_def] >>
           every_case_tac >> simp[] >> NO_TAC)
   >- suspend "istore"

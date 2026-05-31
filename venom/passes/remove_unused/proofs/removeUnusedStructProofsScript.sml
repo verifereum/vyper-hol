@@ -2,11 +2,12 @@
  * Remove Unused — Structural preservation (wf_function) by single pass.
  *
  * Key theorems:
- *   rusp_preserves_wf_function — wf_function preserved
- *   rusp_preserves_entry_label — entry label preserved
- *   rusp_preserves_labels — block labels preserved
- *   rusp_preserves_fn_inst_wf — fn_inst_wf preserved
- *   rusp_preserves_alloca_pointer_confined — alloca_pointer_confined preserved
+ *   rusp_preserves_wf_function             — wf_function invariant survives (labels, succs, bb_wf, inst_ids)
+ *   rusp_preserves_entry_label             — fn_entry_label unchanged (pass never relabels the entry block)
+ *   rusp_preserves_labels                  — fn_labels unchanged (every block retains its label)
+ *   rusp_preserves_fn_inst_wf              — fn_inst_wf survives (NOP is still well-formed)
+ *   rusp_preserves_alloca_pointer_confined — alloca_pointer_confined survives (CHEATED)
+ *   rusp_preserves_all                     — composite: all structural + SSA properties preserved in one step
  *
  * Also exports helpers needed by removeUnusedSsaPreservation:
  *   filter_el_original, filter_el_mono, map_inst_id_mapi_rui,
@@ -26,7 +27,7 @@ Ancestors
 
 (* ===== Structural preservation: remove_unused_single_pass ===== *)
 
-(* Entry label preserved *)
+(* Entry label unchanged: pass never relabels the entry block *)
 Theorem rusp_preserves_entry_label:
   !fn. fn_entry_label (remove_unused_single_pass fn) = fn_entry_label fn
 Proof
@@ -37,7 +38,7 @@ Proof
   simp[clear_nops_block_def, remove_unused_block_label]
 QED
 
-(* Block labels preserved *)
+(* Block labels unchanged: every block retains its label through the transform *)
 Theorem rusp_preserves_labels:
   !fn. fn_labels (remove_unused_single_pass fn) = fn_labels fn
 Proof
@@ -140,14 +141,11 @@ Theorem filter_el_original:
   !P l i. i < LENGTH (FILTER P l) ==>
     ?j. j < LENGTH l /\ P (EL j l) /\ EL i (FILTER P l) = EL j l
 Proof
-  Induct_on `l` >> simp[] >> rpt strip_tac >>
-  Cases_on `P h` >> gvs[FILTER]
-  >- (Cases_on `i` >> gvs[]
-      >- (qexists_tac `0` >> simp[])
-      >- (first_x_assum (drule_then strip_assume_tac) >>
-          qexists_tac `SUC j` >> simp[]))
-  >- (first_x_assum (drule_then strip_assume_tac) >>
-      qexists_tac `SUC j` >> simp[])
+  rpt strip_tac >>
+  `MEM (EL i (FILTER P l)) (FILTER P l)` by (irule EL_MEM >> simp[]) >>
+  gvs[MEM_FILTER] >>
+  gvs[MEM_EL] >>
+  qexists_tac `n` >> simp[]
 QED
 
 (* Exported: monotone FILTER index correspondence *)
@@ -159,21 +157,22 @@ Theorem filter_el_mono:
              EL i2 (FILTER P l) = EL j2 l
 Proof
   Induct_on `l` >> simp[] >> rpt strip_tac >>
-  Cases_on `P h` >> gvs[FILTER]
-  >- (Cases_on `i1` >> gvs[]
-      >- (Cases_on `i2` >> gvs[] >>
-          `n < LENGTH (FILTER P l)` by gvs[] >>
-          drule_at (Pos last) filter_el_original >> strip_tac >>
-          qexistsl_tac [`0`, `SUC j`] >> simp[])
-      >- (Cases_on `i2` >> gvs[] >>
-          `n < n' /\ n' < LENGTH (FILTER P l)` by gvs[] >>
-          first_x_assum (qspecl_then [`P`, `n`, `n'`] mp_tac) >> simp[] >>
-          strip_tac >>
-          qexistsl_tac [`SUC j1`, `SUC j2`] >> simp[]))
-  >- (`i1 < i2 /\ i2 < LENGTH (FILTER P l)` by gvs[] >>
-      first_x_assum (qspecl_then [`P`, `i1`, `i2`] mp_tac) >> simp[] >>
-      strip_tac >>
-      qexistsl_tac [`SUC j1`, `SUC j2`] >> simp[])
+  Cases_on `P h` >> gvs[FILTER] >>
+  FIRST [
+    Cases_on `i1` >> gvs[]
+    >- (Cases_on `i2` >> gvs[] >>
+        `n < LENGTH (FILTER P l)` by gvs[] >>
+        drule_at (Pos last) filter_el_original >> strip_tac >>
+        qexistsl_tac [`0`, `SUC j`] >> simp[])
+    >- (Cases_on `i2` >> gvs[] >>
+        `n < n' /\ n' < LENGTH (FILTER P l)` by gvs[] >>
+        first_x_assum (qspecl_then [`P`, `n`, `n'`] mp_tac) >> simp[] >>
+        strip_tac >>
+        qexistsl_tac [`SUC j1`, `SUC j2`] >> simp[]),
+    `i1 < i2 /\ i2 < LENGTH (FILTER P l)` by gvs[] >>
+    first_x_assum (qspecl_then [`P`, `i1`, `i2`] mp_tac) >> simp[] >>
+    strip_tac >>
+    qexistsl_tac [`SUC j1`, `SUC j2`] >> simp[]]
 QED
 
 Theorem filter_last_when_last_passes[local]:
@@ -416,15 +415,16 @@ Theorem all_distinct_flat_sublist[local]:
 Proof
   gen_tac >> gen_tac >> Induct >> simp[] >>
   rpt strip_tac >>
-  fs[ALL_DISTINCT_APPEND] >> rpt conj_tac
-  >- (irule sublist_ALL_DISTINCT >>
-      qexists_tac `f h` >> metis_tac[])
-  >- (rpt strip_tac >>
-      `sublist (g h) (f h)` by metis_tac[] >>
-      fs[MEM_FLAT, MEM_MAP] >> gvs[] >>
-      `MEM e (f h)` by metis_tac[sublist_mem] >>
-      `MEM e (f y)` by metis_tac[sublist_mem] >>
-      metis_tac[])
+  fs[ALL_DISTINCT_APPEND] >> rpt conj_tac >>
+  FIRST [
+    irule sublist_ALL_DISTINCT >> qexists_tac `f h` >> metis_tac[],
+    rpt strip_tac >>
+    `sublist (g h) (f h)` by metis_tac[] >>
+    fs[MEM_FLAT, MEM_MAP] >> gvs[] >>
+    `MEM e (f h)` by metis_tac[sublist_mem] >>
+    `MEM e (f y)` by metis_tac[sublist_mem] >>
+    metis_tac[],
+    first_x_assum irule >> metis_tac[]]
 QED
 
 (* Exported: MAPi rui preserves inst_id *)
@@ -469,21 +469,34 @@ Proof
   simp[rusp_block_inst_ids_sublist]
 QED
 
+Theorem rusp_preserves_fn_has_entry[local]:
+  !fn. fn_has_entry fn ==> fn_has_entry (remove_unused_single_pass fn)
+Proof
+  rpt strip_tac >>
+  gvs[fn_has_entry_def, remove_unused_single_pass_def, LET_THM,
+      clear_nops_function_def, function_map_transform_def] >>
+  Cases_on `fn.fn_blocks` >> gvs[]
+QED
+
+Theorem rusp_preserves_blocks_wf[local]:
+  !fn bb.
+    (!bb. MEM bb fn.fn_blocks ==> bb_well_formed bb) /\
+    MEM bb (remove_unused_single_pass fn).fn_blocks ==>
+    bb_well_formed bb
+Proof
+  rpt strip_tac >>
+  gvs[remove_unused_single_pass_def, LET_THM,
+      clear_nops_function_def, function_map_transform_def, MEM_MAP] >>
+  rpt strip_tac >> gvs[] >>
+  irule bb_wf_preserved >> metis_tac[]
+QED
+
 Theorem rusp_preserves_wf_function:
   !fn. wf_function fn ==> wf_function (remove_unused_single_pass fn)
 Proof
-  rw[wf_function_def] >>
-  rpt conj_tac
-  >- gvs[rusp_preserves_labels]
-  >- (gvs[fn_has_entry_def, remove_unused_single_pass_def, LET_THM,
-          clear_nops_function_def, function_map_transform_def] >>
-      Cases_on `fn.fn_blocks` >> gvs[])
-  >- (gvs[remove_unused_single_pass_def, LET_THM,
-          clear_nops_function_def, function_map_transform_def,
-          MEM_MAP] >> rpt strip_tac >> gvs[] >>
-      irule bb_wf_preserved >> metis_tac[])
-  >- (irule rusp_preserves_fn_succs_closed >> gvs[wf_function_def])
-  >- (irule rusp_preserves_fn_inst_ids_distinct >> gvs[])
+  metis_tac[wf_function_def, rusp_preserves_labels,
+            rusp_preserves_fn_has_entry, rusp_preserves_blocks_wf,
+            rusp_preserves_fn_succs_closed, rusp_preserves_fn_inst_ids_distinct]
 QED
 
 Theorem flat_map_flat_map[local]:
@@ -514,11 +527,13 @@ Proof
   `sublist (FILTER P (MAPi (\i. f (SUC i)) l)) l` by
     (first_x_assum irule >> rpt strip_tac >>
      first_x_assum (qspec_then `SUC i` mp_tac) >> simp[EL]) >>
-  first_x_assum (qspec_then `0` mp_tac) >> simp[] >> strip_tac >> gvs[]
+  `f 0 h = h \/ ~P (f 0 h)` by
+    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  Cases_on `f 0 h = h` >> gvs[]
   >- (Cases_on `P h` >> simp[]
       >- simp[GSYM sublist_cons]
-      >- (irule sublist_cons_include >> simp[]))
-  >- (simp[] >> irule sublist_cons_include >> simp[])
+      >- (irule sublist_cons_include >> simp[])) >>
+  simp[] >> irule sublist_cons_include >> simp[]
 QED
 
 Theorem rusp_block_insts_sublist[local]:
@@ -756,7 +771,7 @@ Proof
   metis_tac[MEM_EL, EL_MAP, ALL_DISTINCT_EL_IMP, LENGTH_MAP]
 QED
 
-(* def_dominates_uses preserved *)
+(* def_dominates_uses survives: surviving definitions still dominate their uses *)
 Theorem rusp_preserves_def_dominates_uses[local]:
   !func.
     wf_function func /\ wf_ssa func /\ ssa_form func /\
@@ -905,7 +920,7 @@ Proof
   conj_tac >> irule rui_not_nop_identity_ssa >> simp[]
 QED
 
-(* wf_ssa preserved *)
+(* wf_ssa survives: both ssa_form and def_dominates_uses are preserved *)
 Theorem rusp_preserves_wf_ssa[local]:
   !fn. wf_function fn /\ wf_ssa fn /\ ssa_form fn /\
        nop_outputs_empty fn ==>

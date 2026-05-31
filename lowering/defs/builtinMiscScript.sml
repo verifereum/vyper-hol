@@ -9,7 +9,6 @@
  *   compile_blobhash    — blobhash(n) via BLOBHASH opcode
  *   compile_floor       — floor(x) for decimal → int (round toward -∞)
  *   compile_ceil        — ceil(x) for decimal → int (round toward +∞)
- *   compile_isqrt       — isqrt(x) integer square root via Newton's method
  *   compile_as_wei_value — multiply by denomination scale factor
  *   compile_min_value   — minimum value for a type
  *   compile_max_value   — maximum value for a type
@@ -148,101 +147,6 @@ Definition compile_ceil_def:
        (* select: is_pos ? adjusted : val_op *)
        input <- compile_select is_pos adjusted val_op;
        emit_op SDIV [input; Lit (n2w divisor)]
-    od
-End
-
-(* ===== isqrt ===== *)
-(* Integer square root via Babylonian method (branchless, unrolled).
-   Mirrors Python: misc.py lower_isqrt — port of legacy IRnode.
-   Uses select() for conditional updates, no loops.
-   Steps:
-   1. Initialize y=x, z=181
-   2. Scale based on magnitude (4 conditional right-shifts on y, left-shifts on z)
-   3. z = z * (y + 2^16) / 2^18
-   4. 7 iterations of Newton refinement: z = (z + x/z) / 2
-   5. Final: select(lt(z, x/z), z, x/z) *)
-Definition compile_isqrt_def:
-  compile_isqrt val_op =
-    do (* Create mutable variables y and z *)
-       y_var <- fresh_var;
-       z_var <- fresh_var;
-       emit_inst ASSIGN [val_op] [y_var];
-       emit_inst ASSIGN [Lit 181w] [z_var];
-       (* Scale 1: if y >= 2^136: y >>= 128, z <<= 64 *)
-       cond1 <- emit_op LT [Var y_var; Lit (n2w (2 ** 136))];
-       cond1_n <- emit_op ISZERO [cond1];
-       new_y1 <- emit_op SHR [Lit 128w; Var y_var];
-       new_z1 <- emit_op SHL [Lit 64w; Var z_var];
-       (* select: cond1_n ? new_y1 : y *)
-       sel_y1 <- compile_select cond1_n new_y1 (Var y_var);
-       sel_z1 <- compile_select cond1_n new_z1 (Var z_var);
-       emit_inst ASSIGN [sel_y1] [y_var];
-       emit_inst ASSIGN [sel_z1] [z_var];
-       (* Scale 2: if y >= 2^72: y >>= 64, z <<= 32 *)
-       cond2 <- emit_op LT [Var y_var; Lit (n2w (2 ** 72))];
-       cond2_n <- emit_op ISZERO [cond2];
-       new_y2 <- emit_op SHR [Lit 64w; Var y_var];
-       new_z2 <- emit_op SHL [Lit 32w; Var z_var];
-       sel_y2 <- compile_select cond2_n new_y2 (Var y_var);
-       sel_z2 <- compile_select cond2_n new_z2 (Var z_var);
-       emit_inst ASSIGN [sel_y2] [y_var];
-       emit_inst ASSIGN [sel_z2] [z_var];
-       (* Scale 3: if y >= 2^40: y >>= 32, z <<= 16 *)
-       cond3 <- emit_op LT [Var y_var; Lit (n2w (2 ** 40))];
-       cond3_n <- emit_op ISZERO [cond3];
-       new_y3 <- emit_op SHR [Lit 32w; Var y_var];
-       new_z3 <- emit_op SHL [Lit 16w; Var z_var];
-       sel_y3 <- compile_select cond3_n new_y3 (Var y_var);
-       sel_z3 <- compile_select cond3_n new_z3 (Var z_var);
-       emit_inst ASSIGN [sel_y3] [y_var];
-       emit_inst ASSIGN [sel_z3] [z_var];
-       (* Scale 4: if y >= 2^24: y >>= 16, z <<= 8 *)
-       cond4 <- emit_op LT [Var y_var; Lit (n2w (2 ** 24))];
-       cond4_n <- emit_op ISZERO [cond4];
-       new_y4 <- emit_op SHR [Lit 16w; Var y_var];
-       new_z4 <- emit_op SHL [Lit 8w; Var z_var];
-       sel_y4 <- compile_select cond4_n new_y4 (Var y_var);
-       sel_z4 <- compile_select cond4_n new_z4 (Var z_var);
-       emit_inst ASSIGN [sel_y4] [y_var];
-       emit_inst ASSIGN [sel_z4] [z_var];
-       (* z = z * (y + 2^16) / 2^18 *)
-       y_plus <- emit_op ADD [Var y_var; Lit (n2w (2 ** 16))];
-       z_mul <- emit_op MUL [Var z_var; y_plus];
-       z_scaled <- emit_op Div [z_mul; Lit (n2w (2 ** 18))];
-       emit_inst ASSIGN [z_scaled] [z_var];
-       (* 7 Newton iterations: z = (z + x/z) / 2 *)
-       xdz1 <- emit_op Div [val_op; Var z_var];
-       s1 <- emit_op ADD [xdz1; Var z_var];
-       nz1 <- emit_op Div [s1; Lit 2w];
-       emit_inst ASSIGN [nz1] [z_var];
-       xdz2 <- emit_op Div [val_op; Var z_var];
-       s2 <- emit_op ADD [xdz2; Var z_var];
-       nz2 <- emit_op Div [s2; Lit 2w];
-       emit_inst ASSIGN [nz2] [z_var];
-       xdz3 <- emit_op Div [val_op; Var z_var];
-       s3 <- emit_op ADD [xdz3; Var z_var];
-       nz3 <- emit_op Div [s3; Lit 2w];
-       emit_inst ASSIGN [nz3] [z_var];
-       xdz4 <- emit_op Div [val_op; Var z_var];
-       s4 <- emit_op ADD [xdz4; Var z_var];
-       nz4 <- emit_op Div [s4; Lit 2w];
-       emit_inst ASSIGN [nz4] [z_var];
-       xdz5 <- emit_op Div [val_op; Var z_var];
-       s5 <- emit_op ADD [xdz5; Var z_var];
-       nz5 <- emit_op Div [s5; Lit 2w];
-       emit_inst ASSIGN [nz5] [z_var];
-       xdz6 <- emit_op Div [val_op; Var z_var];
-       s6 <- emit_op ADD [xdz6; Var z_var];
-       nz6 <- emit_op Div [s6; Lit 2w];
-       emit_inst ASSIGN [nz6] [z_var];
-       xdz7 <- emit_op Div [val_op; Var z_var];
-       s7 <- emit_op ADD [xdz7; Var z_var];
-       nz7 <- emit_op Div [s7; Lit 2w];
-       emit_inst ASSIGN [nz7] [z_var];
-       (* Final: t = x/z; return select(lt(z, t), z, t) *)
-       t_op <- emit_op Div [val_op; Var z_var];
-       lt_cond <- emit_op LT [Var z_var; t_op];
-       compile_select lt_cond (Var z_var) t_op
     od
 End
 

@@ -7,9 +7,7 @@
 Theory passSimulationProps
 Ancestors
   passSimulationProofs analysisSimDefs venomWf venomInst passSimulationDefs
-  venomExecSemantics
-Libs
-  indexedListsTheory listTheory
+  indexedLists list
 
 (* ===== Utilities ===== *)
 
@@ -72,11 +70,11 @@ Theorem block_sim_function:
     (!bb. (bt bb).bb_label = bb.bb_label) /\
     (!bb. MEM bb fn.fn_blocks ==>
       !fuel ctx s1 s2.
-        R_ok s1 s2 /\ s1.vs_inst_idx = 0 ==>
-        (?e. exec_block fuel ctx bb s1 = Error e) \/
+        R_ok s1 s2 ==>
+        (?e. run_block fuel ctx bb s1 = Error e) \/
         lift_result R_ok R_term R_term
-          (exec_block fuel ctx bb s1)
-          (exec_block fuel ctx (bt bb) s2))
+          (run_block fuel ctx bb s1)
+          (run_block fuel ctx (bt bb) s2))
   ==>
     !fuel ctx s.
       s.vs_inst_idx = 0 ==>
@@ -103,17 +101,17 @@ Theorem block_sim_function_with_pred:
     (!bb. (bt bb).bb_label = bb.bb_label) /\
     (!bb fuel ctx s1 s2 s1' s2'.
        MEM bb fn.fn_blocks /\ R_ok s1 s2 /\ P s1 /\
-       exec_block fuel ctx bb s1 = OK s1' /\
-       exec_block fuel ctx (bt bb) s2 = OK s2' /\
+       run_block fuel ctx bb s1 = OK s1' /\
+       run_block fuel ctx (bt bb) s2 = OK s2' /\
        R_ok s1' s2' ==>
        P s1') /\
     (!bb. MEM bb fn.fn_blocks ==>
       !fuel ctx s1 s2.
-        R_ok s1 s2 /\ P s1 /\ s1.vs_inst_idx = 0 ==>
-        (?e. exec_block fuel ctx bb s1 = Error e) \/
+        R_ok s1 s2 /\ P s1 ==>
+        (?e. run_block fuel ctx bb s1 = Error e) \/
         lift_result R_ok R_term R_term
-          (exec_block fuel ctx bb s1)
-          (exec_block fuel ctx (bt bb) s2))
+          (run_block fuel ctx bb s1)
+          (run_block fuel ctx (bt bb) s2))
   ==>
     !fuel ctx s.
       P s /\ s.vs_inst_idx = 0 ==>
@@ -140,17 +138,17 @@ Theorem block_sim_function_with_pred2:
     (!bb. (bt bb).bb_label = bb.bb_label) /\
     (!bb fuel ctx s1 s2 s1' s2'.
        MEM bb fn.fn_blocks /\ R_ok s1 s2 /\ P s1 s2 /\
-       exec_block fuel ctx bb s1 = OK s1' /\
-       exec_block fuel ctx (bt bb) s2 = OK s2' /\
+       run_block fuel ctx bb s1 = OK s1' /\
+       run_block fuel ctx (bt bb) s2 = OK s2' /\
        R_ok s1' s2' ==>
        P s1' s2') /\
     (!bb. MEM bb fn.fn_blocks ==>
       !fuel ctx s1 s2.
-        R_ok s1 s2 /\ P s1 s2 /\ s1.vs_inst_idx = 0 ==>
-        (?e. exec_block fuel ctx bb s1 = Error e) \/
+        R_ok s1 s2 /\ P s1 s2 ==>
+        (?e. run_block fuel ctx bb s1 = Error e) \/
         lift_result R_ok R_term R_term
-          (exec_block fuel ctx bb s1)
-          (exec_block fuel ctx (bt bb) s2))
+          (run_block fuel ctx bb s1)
+          (run_block fuel ctx (bt bb) s2))
   ==>
     !fuel ctx s.
       P s s /\ s.vs_inst_idx = 0 ==>
@@ -177,20 +175,20 @@ Theorem block_sim_function_with_pred2_bb:
     (!bb. (bt bb).bb_label = bb.bb_label) /\
     (!bb fuel ctx s1 s2 s1' s2'.
        MEM bb fn.fn_blocks /\ R_ok s1 s2 /\ P s1 s2 /\
-       bb.bb_label = s1.vs_current_bb /\ s1.vs_inst_idx = 0 /\
+       bb.bb_label = s1.vs_current_bb /\
        ~s1'.vs_halted /\
-       exec_block fuel ctx bb s1 = OK s1' /\
-       exec_block fuel ctx (bt bb) s2 = OK s2' /\
+       run_block fuel ctx bb s1 = OK s1' /\
+       run_block fuel ctx (bt bb) s2 = OK s2' /\
        R_ok s1' s2' ==>
        P s1' s2') /\
     (!bb. MEM bb fn.fn_blocks ==>
       !fuel ctx s1 s2.
-        R_ok s1 s2 /\ P s1 s2 /\ s1.vs_inst_idx = 0 /\
+        R_ok s1 s2 /\ P s1 s2 /\
         bb.bb_label = s1.vs_current_bb ==>
-        (?e. exec_block fuel ctx bb s1 = Error e) \/
+        (?e. run_block fuel ctx bb s1 = Error e) \/
         lift_result R_ok R_term R_term
-          (exec_block fuel ctx bb s1)
-          (exec_block fuel ctx (bt bb) s2))
+          (run_block fuel ctx bb s1)
+          (run_block fuel ctx (bt bb) s2))
   ==>
     !fuel ctx s.
       P s s /\ s.vs_inst_idx = 0 ==>
@@ -216,15 +214,15 @@ Theorem same_state_to_rel_block_sim:
        MEM inst bb.bb_instructions /\ MEM (Var x) inst.inst_operands ==>
        !s1 s2. R_ok s1 s2 ==> lookup_var x s1 = lookup_var x s2) /\
     MEM bb fn.fn_blocks /\
-    (!fuel ctx s. s.vs_inst_idx = 0 ==>
-      (?e. exec_block fuel ctx bb s = Error e) \/
-      lift_result R_ok R_term R_term (exec_block fuel ctx bb s)
-                               (exec_block fuel ctx bt_bb s))
+    (!fuel ctx s.
+      (?e. run_block fuel ctx bb s = Error e) \/
+      lift_result R_ok R_term R_term (run_block fuel ctx bb s)
+                               (run_block fuel ctx bt_bb s))
   ==>
-    !fuel ctx s1 s2. R_ok s1 s2 /\ s1.vs_inst_idx = 0 ==>
-      (?e. exec_block fuel ctx bb s1 = Error e) \/
-      lift_result R_ok R_term R_term (exec_block fuel ctx bb s1)
-                               (exec_block fuel ctx bt_bb s2)
+    !fuel ctx s1 s2. R_ok s1 s2 ==>
+      (?e. run_block fuel ctx bb s1 = Error e) \/
+      lift_result R_ok R_term R_term (run_block fuel ctx bb s1)
+                               (run_block fuel ctx bt_bb s2)
 Proof
   ACCEPT_TAC same_state_to_rel_block_sim_proof
 QED
@@ -241,10 +239,9 @@ Theorem block_sim_function_pointwise:
     (!bb. (bt bb).bb_label = bb.bb_label) /\
     (!bb. MEM bb fn.fn_blocks ==>
       !fuel ctx s.
-        s.vs_inst_idx = 0 ==>
-        (?e. exec_block fuel ctx bb s = Error e) \/
-        lift_result R_ok R_term R_term (exec_block fuel ctx bb s)
-                                 (exec_block fuel ctx (bt bb) s)) /\
+        (?e. run_block fuel ctx bb s = Error e) \/
+        lift_result R_ok R_term R_term (run_block fuel ctx bb s)
+                                 (run_block fuel ctx (bt bb) s)) /\
     (!bb inst x.
        MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
        MEM (Var x) inst.inst_operands ==>
@@ -270,10 +267,9 @@ Theorem block_sim_function_pointwise_reachable:
     (!bb. (bt bb).bb_label = bb.bb_label) /\
     (!bb. MEM bb fn.fn_blocks ==>
       !fuel ctx s.
-        s.vs_inst_idx = 0 /\
         (bb = HD fn.fn_blocks \/ s.vs_prev_bb <> NONE) ==>
-        lift_result R_ok R_term R_term (exec_block fuel ctx bb s)
-                                 (exec_block fuel ctx (bt bb) s)) /\
+        lift_result R_ok R_term R_term (run_block fuel ctx bb s)
+                                 (run_block fuel ctx (bt bb) s)) /\
     (!bb inst x.
        MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
        MEM (Var x) inst.inst_operands ==>
@@ -303,11 +299,11 @@ Theorem block_sim_function_rel:
     (!bb. (bt bb).bb_label = bb.bb_label) /\
     (!bb. MEM bb fn.fn_blocks ==>
       !fuel ctx s1 s2.
-        R_ok s1 s2 /\ s1.vs_inst_idx = 0 ==>
-        (?e. exec_block fuel ctx bb s1 = Error e) \/
+        R_ok s1 s2 ==>
+        (?e. run_block fuel ctx bb s1 = Error e) \/
         lift_result R_ok R_term R_term
-          (exec_block fuel ctx bb s1)
-          (exec_block fuel ctx (bt bb) s2))
+          (run_block fuel ctx bb s1)
+          (run_block fuel ctx (bt bb) s2))
   ==>
     !fuel ctx s.
       s.vs_inst_idx = 0 ==>
@@ -327,10 +323,10 @@ Theorem two_state_block_sim_function:
     (!bb. (bt bb).bb_label = bb.bb_label) /\
     (!bb. MEM bb fn.fn_blocks ==>
       !fuel ctx s1 s2.
-        R_ok s1 s2 /\ s1.vs_inst_idx = 0 ==>
-        (?e. exec_block fuel ctx bb s1 = Error e) \/
-        lift_result R_ok R_term R_term (exec_block fuel ctx bb s1)
-                                 (exec_block fuel ctx (bt bb) s2))
+        R_ok s1 s2 ==>
+        (?e. run_block fuel ctx bb s1 = Error e) \/
+        lift_result R_ok R_term R_term (run_block fuel ctx bb s1)
+                                 (run_block fuel ctx (bt bb) s2))
   ==>
     !fuel ctx s.
       s.vs_inst_idx = 0 ==>
@@ -355,9 +351,8 @@ Theorem block_sim_function_unconditional:
     (!bb. (bt bb).bb_label = bb.bb_label) /\
     (!bb. MEM bb fn.fn_blocks ==>
       !fuel ctx s.
-        s.vs_inst_idx = 0 ==>
-        lift_result R_ok R_term R_term (exec_block fuel ctx bb s)
-                                 (exec_block fuel ctx (bt bb) s)) /\
+        lift_result R_ok R_term R_term (run_block fuel ctx bb s)
+                                 (run_block fuel ctx (bt bb) s)) /\
     (!bb inst x.
        MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
        MEM (Var x) inst.inst_operands ==>
@@ -394,13 +389,13 @@ Theorem block_sim_function_inv:
     (!s1 s2 s3. R_term s1 s2 /\ R_term s2 s3 ==> R_term s1 s3) /\
     (!bb. (bt bb).bb_label = bb.bb_label) /\
     (!bb fuel ctx s s'.
-       MEM bb fn.fn_blocks /\ Inv s /\ s.vs_inst_idx = 0 /\
-       exec_block fuel ctx bb s = OK s' /\ ~s'.vs_halted ==> Inv s') /\
+       MEM bb fn.fn_blocks /\ Inv s /\
+       run_block fuel ctx bb s = OK s' /\ ~s'.vs_halted ==> Inv s') /\
     (!bb. MEM bb fn.fn_blocks ==>
       !fuel ctx s.
-        Inv s /\ s.vs_inst_idx = 0 ==>
-        lift_result R_ok R_term R_term (exec_block fuel ctx bb s)
-                                 (exec_block fuel ctx (bt bb) s)) /\
+        Inv s ==>
+        lift_result R_ok R_term R_term (run_block fuel ctx bb s)
+                                 (run_block fuel ctx (bt bb) s)) /\
     (!bb inst x.
        MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
        MEM (Var x) inst.inst_operands ==>
@@ -434,21 +429,21 @@ Theorem block_sim_function_inv_rbpr:
     (!s1 s2 s3. R_term s1 s2 /\ R_term s2 s3 ==> R_term s1 s3) /\
     (!bb. (bt bb).bb_label = bb.bb_label) /\
     (!bb fuel ctx s s'.
-       MEM bb fn.fn_blocks /\ Inv s /\ s.vs_inst_idx = 0 /\
-       exec_block fuel ctx bb s = OK s' /\ ~s'.vs_halted ==> Inv s') /\
+       MEM bb fn.fn_blocks /\ Inv s /\
+       run_block fuel ctx bb s = OK s' /\ ~s'.vs_halted ==> Inv s') /\
     (!bb. MEM bb fn.fn_blocks ==>
       !fuel ctx s.
-        Inv s /\ s.vs_inst_idx = 0 ==>
-        lift_result R_ok R_term R_term (exec_block fuel ctx bb s)
-                                 (exec_block fuel ctx (bt bb) s)) /\
+        Inv s ==>
+        lift_result R_ok R_term R_term (run_block fuel ctx bb s)
+                                 (run_block fuel ctx (bt bb) s)) /\
     (!bb fuel ctx s s'.
-       MEM bb fn'.fn_blocks /\ Inv s /\ s.vs_inst_idx = 0 /\
-       exec_block fuel ctx bb s = OK s' /\ ~s'.vs_halted ==> Inv s') /\
+       MEM bb fn'.fn_blocks /\ Inv s /\
+       run_block fuel ctx bb s = OK s' /\ ~s'.vs_halted ==> Inv s') /\
     (!fuel ctx bb s1 s2.
        MEM bb fn'.fn_blocks /\ R_ok s1 s2 /\
-       Inv s1 /\ Inv s2 /\ s1.vs_inst_idx = 0 ==>
-       lift_result R_ok R_term R_term (exec_block fuel ctx bb s1)
-                                (exec_block fuel ctx bb s2))
+       Inv s1 /\ Inv s2 ==>
+       lift_result R_ok R_term R_term (run_block fuel ctx bb s1)
+                                (run_block fuel ctx bb s2))
   ==>
     !fuel ctx s.
       Inv s /\ s.vs_inst_idx = 0 ==>
@@ -471,16 +466,16 @@ Theorem block_sim_function_inv_cross:
     valid_state_rel R_ok R_term /\
     (!bb. (bt bb).bb_label = bb.bb_label) /\
     (!bb fuel ctx s s'.
-       MEM bb fn.fn_blocks /\ Inv s /\ s.vs_inst_idx = 0 /\
-       exec_block fuel ctx bb s = OK s' /\ ~s'.vs_halted ==> Inv s') /\
+       MEM bb fn.fn_blocks /\ Inv s /\
+       run_block fuel ctx bb s = OK s' /\ ~s'.vs_halted ==> Inv s') /\
     (!bb fuel ctx s s'.
-       MEM bb fn'.fn_blocks /\ Inv s /\ s.vs_inst_idx = 0 /\
-       exec_block fuel ctx bb s = OK s' /\ ~s'.vs_halted ==> Inv s') /\
+       MEM bb fn'.fn_blocks /\ Inv s /\
+       run_block fuel ctx bb s = OK s' /\ ~s'.vs_halted ==> Inv s') /\
     (!bb fuel ctx s1 s2.
        MEM bb fn.fn_blocks /\ R_ok s1 s2 /\
-       Inv s1 /\ Inv s2 /\ s1.vs_inst_idx = 0 ==>
-       lift_result R_ok R_term R_term (exec_block fuel ctx bb s1)
-                                (exec_block fuel ctx (bt bb) s2))
+       Inv s1 /\ Inv s2 ==>
+       lift_result R_ok R_term R_term (run_block fuel ctx bb s1)
+                                (run_block fuel ctx (bt bb) s2))
   ==>
     !fuel ctx s.
       Inv s /\ s.vs_inst_idx = 0 ==>
@@ -501,13 +496,13 @@ Theorem block_sim_function_error:
     (!bb. (bt bb).bb_label = bb.bb_label) /\
     (!bb. MEM bb fn.fn_blocks ==>
       !fuel ctx s.
-        s.vs_inst_idx = 0 /\ block_inv s ==>
-        (?e. exec_block fuel ctx bb s = Error e) \/
-        lift_result R_ok R_term R_term (exec_block fuel ctx bb s)
-                                 (exec_block fuel ctx (bt bb) s)) /\
+        block_inv s ==>
+        (?e. run_block fuel ctx bb s = Error e) \/
+        lift_result R_ok R_term R_term (run_block fuel ctx bb s)
+                                 (run_block fuel ctx (bt bb) s)) /\
     (!bb fuel ctx s v.
-       MEM bb fn.fn_blocks /\ block_inv s /\ s.vs_inst_idx = 0 /\
-       exec_block fuel ctx bb s = OK v ==> block_inv v) /\
+       MEM bb fn.fn_blocks /\ block_inv s /\
+       run_block fuel ctx bb s = OK v ==> block_inv v) /\
     (!s1 s2. R_ok s1 s2 /\ block_inv s1 ==> block_inv s2) /\
     (!bb inst x.
        MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
@@ -534,15 +529,14 @@ Theorem block_sim_function_error_bb:
     (!bb. (bt bb).bb_label = bb.bb_label) /\
     (!bb. MEM bb fn.fn_blocks ==>
       !fuel ctx s.
-        s.vs_inst_idx = 0 /\ block_inv s /\
-        s.vs_current_bb = bb.bb_label ==>
-        (?e. exec_block fuel ctx bb s = Error e) \/
-        lift_result R_ok R_term R_term (exec_block fuel ctx bb s)
-                                 (exec_block fuel ctx (bt bb) s)) /\
+        block_inv s /\ s.vs_current_bb = bb.bb_label ==>
+        (?e. run_block fuel ctx bb s = Error e) \/
+        lift_result R_ok R_term R_term (run_block fuel ctx bb s)
+                                 (run_block fuel ctx (bt bb) s)) /\
     (!bb fuel ctx s v.
-       MEM bb fn.fn_blocks /\ block_inv s /\ s.vs_inst_idx = 0 /\
+       MEM bb fn.fn_blocks /\ block_inv s /\
        s.vs_current_bb = bb.bb_label /\
-       exec_block fuel ctx bb s = OK v ==> block_inv v) /\
+       run_block fuel ctx bb s = OK v ==> block_inv v) /\
     (!s1 s2. R_ok s1 s2 /\ block_inv s1 ==> block_inv s2) /\
     (!bb inst x.
        MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
@@ -605,7 +599,7 @@ Theorem module_sim_dual_ctx:
        lookup_function fn_name ctx2.ctx_functions = SOME fn2 /\
        lookup_block lbl fn1.fn_blocks = SOME bb1 /\
        lookup_block lbl fn2.fn_blocks = SOME bb2 /\
-       R_ok s1 s2 /\ s1.vs_inst_idx = 0 /\
+       R_ok s1 s2 /\
        (!callee_name cfn1 cfn2 cs1 cs2.
           lookup_function callee_name ctx1.ctx_functions = SOME cfn1 /\
           lookup_function callee_name ctx2.ctx_functions = SOME cfn2 /\
@@ -616,11 +610,11 @@ Theorem module_sim_dual_ctx:
             (run_blocks fuel ctx1 cfn1 cs1)
             (run_blocks fuel ctx2 cfn2 cs2))
        ==>
-       ((?e1. exec_block fuel ctx1 bb1 s1 = Error e1) /\
-        (?e2. exec_block fuel ctx2 bb2 s2 = Error e2)) \/
+       ((?e1. run_block fuel ctx1 bb1 s1 = Error e1) /\
+        (?e2. run_block fuel ctx2 bb2 s2 = Error e2)) \/
        lift_result R_ok R_term R_term
-         (exec_block fuel ctx1 bb1 s1)
-         (exec_block fuel ctx2 bb2 s2))
+         (run_block fuel ctx1 bb1 s1)
+         (run_block fuel ctx2 bb2 s2))
   ==>
     !fn_name fn1 fn2 fuel s1 s2.
       lookup_function fn_name ctx1.ctx_functions = SOME fn1 /\
@@ -928,239 +922,6 @@ Proof
             mapi_transform_fn_inst_ids_bb, wf_function_def]
 QED
 
-(* ===== FLAT MAP (insertion) block well-formedness =====
-   Insertion analogue of the 1:1 mapi_transform_preserves_wf_bb: a block
-   transform may replace each instruction with a *list* of instructions
-   (FLAT (MAP f ...)).  Reusable across insertion passes (algebraic_opt,
-   mem2var).  The function-level / SSA wrappers are intentionally not provided
-   here: for insertions they require per-pass fresh-id reasoning (new ids are
-   introduced), which is not generic. *)
-
-(* LAST of FLAT MAP when last sub-list is a singleton *)
-Triviality last_flat_map[local]:
-  !(l:'a list) f.
-    l <> [] /\ (!x. MEM x l ==> f x <> []) ==>
-    LAST (FLAT (MAP f l)) = LAST (f (LAST l))
-Proof
-  Induct >- simp[] >>
-  rpt gen_tac >> simp[] >> strip_tac >>
-  Cases_on `l` >- simp[] >>
-  `FLAT (MAP f (h'::t)) <> []` by (
-    simp[listTheory.FLAT_EQ_NIL, listTheory.EVERY_MAP,
-         listTheory.EVERY_MEM]) >>
-  simp[rich_listTheory.LAST_APPEND_NOT_NIL]
-QED
-
-(* FLAT MAP non-empty *)
-Triviality flat_map_ne[local]:
-  !(l:'a list) f.
-    l <> [] /\ (!x. MEM x l ==> f x <> []) ==>
-    FLAT (MAP f l) <> []
-Proof
-  Cases >> simp[]
-QED
-
-(* FRONT of FLAT MAP = FLAT (MAP f (FRONT l)) when f (LAST l) singleton *)
-Triviality front_flat_map_singleton[local]:
-  !(l:'a list) f.
-    l <> [] /\ (!x. MEM x l ==> f x <> []) /\
-    (?v. f (LAST l) = [v]) ==>
-    FRONT (FLAT (MAP f l)) = FLAT (MAP f (FRONT l))
-Proof
-  Induct >- simp[] >>
-  rpt gen_tac >> simp[] >> strip_tac >>
-  Cases_on `l` >- (gvs[] >> Cases_on `f h` >> fs[]) >>
-  `FLAT (MAP f (h'::t)) <> []` by (
-    simp[listTheory.FLAT_EQ_NIL, listTheory.EVERY_MAP,
-         listTheory.EVERY_MEM]) >>
-  simp[rich_listTheory.FRONT_APPEND_NOT_NIL] >>
-  first_x_assum (qspec_then `f` mp_tac) >>
-  impl_tac >- (simp[] >> qexists_tac `v` >> gvs[]) >>
-  simp[]
-QED
-
-(* FLAT MAP preserves PHI prefix ordering.
-   Induction: PHI heads map to singletons, non-PHI heads start a non-PHI tail. *)
-Triviality flat_map_phi_prefix[local]:
-  !l f.
-    (!i j. i < j /\ j < LENGTH l /\ (EL j l).inst_opcode = PHI ==>
-           (EL i l).inst_opcode = PHI) /\
-    (!inst. MEM inst l /\ inst.inst_opcode = PHI ==> f inst = [inst]) /\
-    (!inst r. MEM inst l /\ inst.inst_opcode <> PHI /\ MEM r (f inst) ==>
-              r.inst_opcode <> PHI) /\
-    (!inst. MEM inst l ==> f inst <> [])
-    ==>
-    (!i j. i < j /\ j < LENGTH (FLAT (MAP f l)) /\
-           (EL j (FLAT (MAP f l))).inst_opcode = PHI ==>
-           (EL i (FLAT (MAP f l))).inst_opcode = PHI)
-Proof
-  Induct >- simp[] >>
-  rpt gen_tac >> strip_tac >> rename1 `h :: t` >>
-  `f h <> []` by simp[] >>
-  Cases_on `h.inst_opcode = PHI`
-  >- (
-    `f h = [h]` by simp[] >>
-    fs[] >> rpt strip_tac >>
-    Cases_on `i` >- simp[] >>
-    rename1 `SUC n < j` >>
-    Cases_on `j` >- fs[] >>
-    rename1 `SUC n < SUC m` >>
-    fs[] >>
-    first_x_assum (qspec_then `f` mp_tac) >>
-    impl_tac
-    >- (rpt conj_tac
-        >- (rpt strip_tac >>
-            first_x_assum (qspecl_then [`SUC i`, `SUC j`] mp_tac) >> simp[])
-        >> metis_tac[listTheory.MEM])
-    >> disch_then (qspecl_then [`n`, `m`] mp_tac) >> simp[])
-  >- (
-    (* h is not PHI — no element of t is PHI either *)
-    `EVERY (\inst. inst.inst_opcode <> PHI) t` by (
-      simp[listTheory.EVERY_EL] >> rpt strip_tac >>
-      spose_not_then strip_assume_tac >> gvs[] >>
-      first_x_assum (qspecl_then [`0`, `SUC n`] mp_tac) >> simp[]) >>
-    (* So every element in the flat result is non-PHI — contradiction *)
-    rpt strip_tac >>
-    `EVERY (\r. r.inst_opcode <> PHI) (f h ++ FLAT (MAP f t))` by (
-      simp[listTheory.EVERY_APPEND, listTheory.EVERY_FLAT,
-           listTheory.EVERY_MAP, listTheory.EVERY_MEM] >>
-      conj_tac >> rpt strip_tac
-      >- (`MEM h (h::t)` by simp[] >> metis_tac[])
-      >- (`MEM x (h::t)` by simp[] >>
-          `x.inst_opcode <> PHI` by fs[listTheory.EVERY_MEM] >>
-          metis_tac[])) >>
-    `FLAT (MAP f (h::t)) = f h ++ FLAT (MAP f t)` by simp[] >>
-    fs[] >>
-    `MEM ((f h ++ FLAT (MAP f t))❲j❳) (f h ++ FLAT (MAP f t))` by (
-      irule listTheory.EL_MEM >> simp[]) >>
-    fs[listTheory.MEM_APPEND, listTheory.EVERY_MEM] >>
-    res_tac >> fs[])
-QED
-
-(* Per-block insertion variant of preserves_wf_bb: f maps each instruction to
-   a non-empty list, keeping terminators/PHIs as singletons and not turning
-   non-terminators/non-PHIs into terminators/PHIs. *)
-Theorem flat_map_preserves_bb_wf:
-  !f bb.
-    bb_well_formed bb /\
-    (!inst. MEM inst bb.bb_instructions ==> f inst <> []) /\
-    (!inst. MEM inst bb.bb_instructions /\
-            is_terminator inst.inst_opcode ==> f inst = [inst]) /\
-    (!inst r. MEM inst bb.bb_instructions /\
-              ~is_terminator inst.inst_opcode /\ MEM r (f inst) ==>
-              ~is_terminator r.inst_opcode) /\
-    (!inst. MEM inst bb.bb_instructions /\
-            inst.inst_opcode = PHI ==> f inst = [inst]) /\
-    (!inst r. MEM inst bb.bb_instructions /\
-              inst.inst_opcode <> PHI /\ MEM r (f inst) ==>
-              r.inst_opcode <> PHI)
-    ==>
-    bb_well_formed (bb with bb_instructions := FLAT (MAP f bb.bb_instructions))
-Proof
-  rpt strip_tac >>
-  fs[bb_well_formed_def] >>
-  rpt conj_tac
-  (* non-empty *)
-  >- (irule flat_map_ne >> simp[])
-  (* LAST is terminator *)
-  >- (`LAST (FLAT (MAP f bb.bb_instructions)) =
-       LAST (f (LAST bb.bb_instructions))`
-        by (irule last_flat_map >> simp[]) >>
-      `f (LAST bb.bb_instructions) = [LAST bb.bb_instructions]`
-        by (qpat_x_assum `!inst. MEM inst _ /\ is_terminator _ ==> _`
-              (qspec_then `LAST bb.bb_instructions` mp_tac) >>
-            simp[rich_listTheory.MEM_LAST_NOT_NIL]) >>
-      simp[listTheory.LAST_DEF])
-  (* terminator only at end: use EVERY on FRONT *)
-  >- (rpt strip_tac >>
-      spose_not_then strip_assume_tac >>
-      `FLAT (MAP f bb.bb_instructions) <> []` by (irule flat_map_ne >> simp[]) >>
-      `i < PRE (LENGTH (FLAT (MAP f bb.bb_instructions)))` by simp[] >>
-      (* FRONT of original has no terminators *)
-      `EVERY (\r. ~is_terminator r.inst_opcode) (FRONT bb.bb_instructions)` by (
-        rw[listTheory.EVERY_EL, rich_listTheory.LENGTH_FRONT,
-           rich_listTheory.EL_FRONT, listTheory.NULL_EQ] >>
-        CCONTR_TAC >> fs[] >>
-        qpat_x_assum `!i. i < LENGTH _ /\ is_terminator _ ==> _`
-          (qspec_then `n` mp_tac) >>
-        `n < LENGTH bb.bb_instructions` by
-          (Cases_on `bb.bb_instructions` >> fs[]) >>
-        simp[]) >>
-      (* FRONT(FLAT(MAP f insts)) = FLAT(MAP f (FRONT insts)) *)
-      `FRONT (FLAT (MAP f bb.bb_instructions)) =
-       FLAT (MAP f (FRONT bb.bb_instructions))` by (
-        irule front_flat_map_singleton >> simp[] >>
-        qexists_tac `LAST bb.bb_instructions` >>
-        qpat_x_assum `!inst. MEM inst _ /\ is_terminator _ ==> _`
-          (qspec_then `LAST bb.bb_instructions` mp_tac) >>
-        simp[rich_listTheory.MEM_LAST_NOT_NIL]) >>
-      (* EVERY non-term on FLAT(MAP f (FRONT insts)) *)
-      `EVERY (\r. ~is_terminator r.inst_opcode)
-             (FLAT (MAP f (FRONT bb.bb_instructions)))` by (
-        simp[listTheory.EVERY_FLAT, listTheory.EVERY_MAP,
-             listTheory.EVERY_MEM] >>
-        rpt strip_tac >> rename1 `MEM finst (FRONT bb.bb_instructions)` >>
-        `MEM finst bb.bb_instructions` by
-          (irule rich_listTheory.MEM_FRONT_NOT_NIL >> simp[]) >>
-        `~is_terminator finst.inst_opcode` by
-          fs[listTheory.EVERY_MEM] >>
-        res_tac) >>
-      (* EL i is in FRONT — derive contradiction *)
-      `EL i (FLAT (MAP f bb.bb_instructions)) =
-       EL i (FRONT (FLAT (MAP f bb.bb_instructions)))` by (
-        irule (GSYM rich_listTheory.EL_FRONT) >>
-        fs[listTheory.NULL_EQ, rich_listTheory.LENGTH_FRONT]) >>
-      `~is_terminator (EL i (FRONT (FLAT (MAP f bb.bb_instructions)))).inst_opcode`
-        by (qpat_x_assum `EVERY _ (FLAT (MAP f (FRONT _)))` mp_tac >>
-            qpat_x_assum `FRONT _ = _` (fn th => REWRITE_TAC [GSYM th]) >>
-            simp[listTheory.EVERY_EL, rich_listTheory.LENGTH_FRONT,
-                 listTheory.NULL_EQ]) >>
-      gvs[])
-  (* PHI prefix: use flat_map_phi_prefix helper *)
-  >- (rpt strip_tac >>
-      irule flat_map_phi_prefix >> simp[] >>
-      metis_tac[])
-QED
-
-(* ===== fn_insts / SSA membership utilities =====
-   Shared by insertion passes (algebraic_opt) and alloca remap. *)
-
-(* MEM inst (fn_insts_blocks bbs) from block membership *)
-Theorem mem_fn_insts_blocks:
-  !bbs bb inst. MEM bb bbs /\ MEM inst bb.bb_instructions ==>
-    MEM inst (fn_insts_blocks bbs)
-Proof
-  Induct >> simp[fn_insts_blocks_def] >>
-  rpt strip_tac >> gvs[listTheory.MEM_APPEND] >> metis_tac[]
-QED
-
-(* SSA uniqueness: if ALL_DISTINCT (FLAT (MAP f l)) and v appears in
-   f a and f b for a,b in l, then a = b. *)
-Theorem all_distinct_flat_map_unique:
-  !(l:'a list) (f:'a -> 'b list) a b v.
-    ALL_DISTINCT (FLAT (MAP f l)) /\ MEM a l /\ MEM b l /\
-    MEM v (f a) /\ MEM v (f b) ==> a = b
-Proof
-  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
-  gvs[listTheory.ALL_DISTINCT_APPEND, listTheory.MEM_FLAT,
-      listTheory.MEM_MAP] >>
-  metis_tac[]
-QED
-
-(* run_blocks ignores vs_inst_idx: it resets to 0 before each block.
-   Shared by mem2var and algebraic_opt phase-3 correctness. *)
-Theorem run_blocks_inst_idx_irrel:
-  !fuel ctx fn s.
-    run_blocks fuel ctx fn s =
-    run_blocks fuel ctx fn (s with vs_inst_idx := 0)
-Proof
-  Induct_on `fuel` >> rpt gen_tac
-  >- (ONCE_REWRITE_TAC[run_blocks_def] >> simp[]) >>
-  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV[run_blocks_def])) >>
-  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV[run_blocks_def])) >>
-  simp_tac (srw_ss()) []
-QED
-
 (* Combined: MAPi transform preserves wf_function.
    Conditions: inst_id preserved, terminators unchanged (identity),
    non-terminators stay non-terminators, PHI/non-PHI preserved. *)
@@ -1367,12 +1128,11 @@ QED
 
 (* ===== block_map_transform (MAP) toolkit ===== *)
 
-(* block_map_transform = MAPi with index-ignoring function *)
+(* MAPi with index-ignoring function = MAP *)
 Theorem bmt_eq_mapi[local]:
-  !f bb. block_map_transform f bb =
-         bb with bb_instructions := MAPi (\i x. f x) bb.bb_instructions
+  !f bb. block_map_transform f bb = bb with bb_instructions := MAPi (\i x. f x) bb.bb_instructions
 Proof
-  simp[block_map_transform_def]
+  rw[MAPi_EQ_MAP, passSimulationDefsTheory.block_map_transform_def]
 QED
 
 (* WF preservation for function_map_transform (block_map_transform f) *)
@@ -1391,8 +1151,8 @@ Proof
   `function_map_transform (block_map_transform f) fn =
    function_map_transform
      (\bb. bb with bb_instructions := MAPi (\i x. f x) bb.bb_instructions) fn`
-    by (simp[function_map_transform_def, ir_function_component_equality,
-             MAP_EQ_f, bmt_eq_mapi]) >>
+    by simp[function_map_transform_def, ir_function_component_equality,
+             MAP_EQ_f, bmt_eq_mapi] >>
   pop_assum (fn th => REWRITE_TAC [th]) >>
   irule mapi_transform_preserves_wf >> simp[]
 QED
@@ -1410,8 +1170,8 @@ Proof
   `function_map_transform (block_map_transform f) fn =
    function_map_transform
      (\bb. bb with bb_instructions := MAPi (\i x. f x) bb.bb_instructions) fn`
-    by (simp[function_map_transform_def, ir_function_component_equality,
-             MAP_EQ_f, bmt_eq_mapi]) >>
+    by simp[function_map_transform_def, ir_function_component_equality,
+             MAP_EQ_f, bmt_eq_mapi] >>
   pop_assum (fn th => REWRITE_TAC [th]) >>
   irule fmt_preserves_ssa_form_general >> simp[] >>
   rpt conj_tac
@@ -1425,4 +1185,16 @@ Proof
       qmatch_goalsub_abbrev_tac `ALL_DISTINCT (FLAT (MAP g' _))` >>
       `g = g'` by (unabbrev_all_tac >> simp[FUN_EQ_THM, MAP_EQ_f]) >>
       fs[])
+QED
+
+(* Boundary lemma: lift run_block equality through run_blocks *)
+Theorem run_blocks_fmap_xform_eq:
+  !fuel ctx fn bt s.
+    (!fuel' bb s'. MEM bb fn.fn_blocks ==>
+      run_block fuel' ctx (bt bb) s' = run_block fuel' ctx bb s') /\
+    (!bb. MEM bb fn.fn_blocks ==> (bt bb).bb_label = bb.bb_label) ==>
+    run_blocks fuel ctx (function_map_transform bt fn) s =
+    run_blocks fuel ctx fn s
+Proof
+  ACCEPT_TAC run_blocks_fmap_xform_eq
 QED

@@ -9,8 +9,7 @@ Theory execEquivParamBase
 Ancestors
   execEquivParamDefs passSimulationDefs stateEquivProps execEquivProps
   stateEquiv venomInst venomExecSemantics venomState
-Libs
-  finite_mapTheory listTheory rich_listTheory
+  finite_map list rich_list
 
 open execEquivParamLib
 
@@ -89,7 +88,7 @@ Theorem vsr_R_term_fields:
     s1.vs_allocas = s2.vs_allocas /\
     s1.vs_alloca_next = s2.vs_alloca_next
 Proof
-  rw[valid_state_rel_def]
+  rpt strip_tac >> fs[valid_state_rel_def]
 QED
 
 Theorem vsr_R_ok_R_term:
@@ -115,6 +114,24 @@ QED
 
 Theorem vsr_R_ok_refl:
   !R_ok R_term s. valid_state_rel R_ok R_term ==> R_ok s s
+Proof
+  rw[valid_state_rel_def]
+QED
+
+Theorem vsr_R_ok_halted:
+  !R_ok R_term s1 s2. valid_state_rel R_ok R_term /\ R_ok s1 s2 ==> s1.vs_halted = s2.vs_halted
+Proof
+  rw[valid_state_rel_def]
+QED
+
+Theorem vsr_R_ok_current_bb:
+  !R_ok R_term s1 s2. valid_state_rel R_ok R_term /\ R_ok s1 s2 ==> s1.vs_current_bb = s2.vs_current_bb
+Proof
+  rw[valid_state_rel_def]
+QED
+
+Theorem vsr_R_ok_prev_bb:
+  !R_ok R_term s1 s2. valid_state_rel R_ok R_term /\ R_ok s1 s2 ==> s1.vs_prev_bb = s2.vs_prev_bb
 Proof
   rw[valid_state_rel_def]
 QED
@@ -363,9 +380,17 @@ Theorem vsr_exec_pure3:
          lookup_var x s1 = lookup_var x s2) ==>
     lift_result R_ok R_term R_term (exec_pure3 f inst s1) (exec_pure3 f inst s2)
 Proof
-  rw[exec_pure3_def] >> vsr_eval_ops_tac () >>
-  rpt (CASE_TAC >> gvs[lift_result_def]) >>
-  vsr_irule vsr_update_var_R_ok >> simp[]
+  rw[] >> vsr_eval_ops_tac () >>
+  Cases_on `inst.inst_operands` >> gvs[exec_pure3_def, lift_result_def] >>
+  Cases_on `t` >> gvs[exec_pure3_def, lift_result_def] >>
+  Cases_on `t'` >> gvs[exec_pure3_def, lift_result_def] >>
+  Cases_on `t` >> gvs[exec_pure3_def, lift_result_def] >>
+  Cases_on `inst.inst_outputs` >> gvs[lift_result_def]
+  >- (rpt CASE_TAC >> gvs[lift_result_def]) >>
+  Cases_on `t` >> gvs[lift_result_def]
+  >- (rpt CASE_TAC >> gvs[lift_result_def] >>
+      vsr_irule vsr_update_var_R_ok >> simp[]) >>
+  rpt CASE_TAC >> gvs[lift_result_def]
 QED
 
 Theorem vsr_exec_read0:
@@ -431,7 +456,24 @@ Theorem vsr_exec_ext_call:
       (exec_ext_call inst s1 gas addr value ao as_ ro rs is_static)
       (exec_ext_call inst s2 gas addr value ao as_ ro rs is_static)
 Proof
-  ext_call_proof_tac [exec_ext_call_def]
+  rw[LET_THM, exec_ext_call_def] >>
+  imp_res_tac vsr_R_ok_fields >> gvs[] >>
+  simp[read_memory_def, make_venom_call_state_def,
+       make_venom_delegatecall_state_def, make_venom_create_state_def,
+       make_sub_tx_def, make_rollback_def, venom_to_tx_params_def,
+       LET_THM] >>
+  simp[extract_venom_result_def] >>
+  qmatch_goalsub_abbrev_tac `run evm` >>
+  Cases_on `run evm` >> gvs[lift_result_def, Abbr`evm`] >>
+  PairCases_on `x` >> gvs[lift_result_def] >>
+  Cases_on `x1.contexts` >> gvs[lift_result_def] >>
+  Cases_on `t` >> gvs[lift_result_def] >>
+  PairCases_on `h` >> gvs[] >>
+  Cases_on `x0` >> gvs[lift_result_def] >>
+  TRY (Cases_on `y` >> gvs[lift_result_def]) >>
+  Cases_on `inst.inst_outputs` >> gvs[lift_result_def] >>
+  Cases_on `t` >> gvs[lift_result_def] >>
+  ext_call_result_tac ()
 QED
 
 Theorem vsr_exec_delegatecall:
@@ -441,7 +483,24 @@ Theorem vsr_exec_delegatecall:
       (exec_delegatecall inst s1 gas addr ao as_ ro rs)
       (exec_delegatecall inst s2 gas addr ao as_ ro rs)
 Proof
-  ext_call_proof_tac [exec_delegatecall_def]
+  rw[LET_THM, exec_delegatecall_def] >>
+  imp_res_tac vsr_R_ok_fields >> gvs[] >>
+  simp[read_memory_def, make_venom_call_state_def,
+       make_venom_delegatecall_state_def, make_venom_create_state_def,
+       make_sub_tx_def, make_rollback_def, venom_to_tx_params_def,
+       LET_THM] >>
+  simp[extract_venom_result_def] >>
+  qmatch_goalsub_abbrev_tac `run evm` >>
+  Cases_on `run evm` >> gvs[lift_result_def, Abbr`evm`] >>
+  PairCases_on `x` >> gvs[lift_result_def] >>
+  Cases_on `x1.contexts` >> gvs[lift_result_def] >>
+  Cases_on `t` >> gvs[lift_result_def] >>
+  PairCases_on `h` >> gvs[] >>
+  Cases_on `x0` >> gvs[lift_result_def] >>
+  TRY (Cases_on `y` >> gvs[lift_result_def]) >>
+  Cases_on `inst.inst_outputs` >> gvs[lift_result_def] >>
+  Cases_on `t` >> gvs[lift_result_def] >>
+  ext_call_result_tac ()
 QED
 
 Theorem vsr_exec_create:
@@ -451,8 +510,24 @@ Theorem vsr_exec_create:
       (exec_create inst s1 value offset sz salt_opt)
       (exec_create inst s2 value offset sz salt_opt)
 Proof
-  Cases_on `salt_opt` >>
-  ext_call_proof_tac [exec_create_def]
+  rw[LET_THM, exec_create_def] >>
+  imp_res_tac vsr_R_ok_fields >> gvs[] >>
+  simp[read_memory_def, make_venom_call_state_def,
+       make_venom_delegatecall_state_def, make_venom_create_state_def,
+       make_sub_tx_def, make_rollback_def, venom_to_tx_params_def,
+       LET_THM] >>
+  simp[extract_venom_result_def] >>
+  qmatch_goalsub_abbrev_tac `run evm` >>
+  Cases_on `run evm` >> gvs[lift_result_def, Abbr`evm`] >>
+  PairCases_on `x` >> gvs[lift_result_def] >>
+  Cases_on `x1.contexts` >> gvs[lift_result_def] >>
+  Cases_on `t` >> gvs[lift_result_def] >>
+  PairCases_on `h` >> gvs[] >>
+  Cases_on `x0` >> gvs[lift_result_def] >>
+  TRY (Cases_on `y` >> gvs[lift_result_def]) >>
+  Cases_on `inst.inst_outputs` >> gvs[lift_result_def] >>
+  Cases_on `t` >> gvs[lift_result_def] >>
+  ext_call_result_tac ()
 QED
 
 Theorem vsr_exec_alloca:
@@ -525,4 +600,96 @@ Proof
   vsr_irule vsr_inst_idx_R_ok >> simp[]
 QED
 
-val _ = export_theory()
+Triviality vsr_eval_one_phi[local]:
+  !R_ok R_term s1 s2 inst.
+    valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
+    s1.vs_prev_bb = s2.vs_prev_bb /\
+    (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2)
+    ==> eval_one_phi s1 inst = eval_one_phi s2 inst
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `inst.inst_outputs` >> Cases_on `s1.vs_prev_bb` >> Cases_on `s2.vs_prev_bb` >>
+  fs[eval_one_phi_def] >>
+  Cases_on `t` >> fs[eval_one_phi_def] >>
+  Cases_on `resolve_phi x' inst.inst_operands` >> fs[eval_one_phi_def] >>
+  imp_res_tac resolve_phi_MEM >>
+  `!x. x'' = Var x ==> lookup_var x s1 = lookup_var x s2` by metis_tac[] >>
+  `eval_operand x'' s1 = eval_operand x'' s2` by metis_tac[vsr_eval_operand] >>
+  fs[]
+QED
+
+Theorem eval_phis_preserves_R_ok_ind:
+  !R_ok R_term s1 s2 insts.
+    valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
+    s1.vs_prev_bb = s2.vs_prev_bb /\
+    EVERY (\inst. inst.inst_opcode = PHI ==>
+              !x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) insts ==>
+    !s1' s2'. eval_phis s1 insts = OK s1' /\ eval_phis s2 insts = OK s2' ==> R_ok s1' s2'
+Proof
+  rpt gen_tac >> strip_tac >>
+  Induct_on `insts`
+  >- (rpt strip_tac >> gvs[eval_phis_def])
+  >> gen_tac >> strip_tac >>
+  Cases_on `h.inst_opcode = PHI` >> fs[eval_phis_def] >>
+  Cases_on `eval_one_phi s1 h` >> fs[] >>
+  PairCases_on `x` >> fs[] >>
+  `eval_one_phi s2 h = SOME (x0,x1)` by (
+    qspecl_then [`R_ok`,`R_term`,`s1`,`s2`,`h`] mp_tac vsr_eval_one_phi >>
+    simp[] >> metis_tac[]) >>
+  fs[] >> Cases_on `eval_phis s1 insts` >> Cases_on `eval_phis s2 insts` >> gvs[] >>
+  irule vsr_update_var_R_ok >> simp[] >>
+  qexists_tac `R_term` >> metis_tac[]
+QED
+
+Theorem eval_phis_preserves_R_ok:
+  !R_ok R_term s1 s2 insts s1' s2'.
+    valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
+    s1.vs_prev_bb = s2.vs_prev_bb /\
+    EVERY (\inst. inst.inst_opcode = PHI ==>
+              !x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) insts /\
+    eval_phis s1 insts = OK s1' /\ eval_phis s2 insts = OK s2' ==>
+    R_ok s1' s2'
+Proof
+  metis_tac[eval_phis_preserves_R_ok_ind]
+QED
+
+Theorem eval_phis_agreement:
+  !R_ok R_term s1 s2 insts.
+    valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
+    s1.vs_prev_bb = s2.vs_prev_bb /\
+    EVERY (\inst. inst.inst_opcode = PHI ==>
+              !x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) insts ==>
+    !s1'. eval_phis s1 insts = OK s1' ==>
+          ?s2'. eval_phis s2 insts = OK s2'
+Proof
+  rpt gen_tac >> strip_tac >>
+  Induct_on `insts`
+  >- (rw[eval_phis_def] >> qexists_tac `s2` >> simp[eval_phis_def])
+  >> gen_tac >> strip_tac >> rw[] >>
+  Cases_on `h.inst_opcode = PHI` >> fs[eval_phis_def] >>
+  Cases_on `eval_one_phi s1 h` >> fs[] >>
+  PairCases_on `x` >> fs[] >>
+  `eval_one_phi s2 h = SOME (x0,x1)` by metis_tac[vsr_eval_one_phi] >>
+  fs[] >>
+  Cases_on `eval_phis s1 insts` >> fs[]
+QED
+
+Theorem eval_phis_error_agreement:
+  !R_ok R_term s1 s2 insts.
+    valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
+    s1.vs_prev_bb = s2.vs_prev_bb /\
+    EVERY (\inst. inst.inst_opcode = PHI ==>
+              !x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) insts ==>
+    !e. eval_phis s1 insts = Error e ==>
+          ?e'. eval_phis s2 insts = Error e'
+Proof
+  rpt gen_tac >> strip_tac >>
+  Induct_on `insts`
+  >- (rw[eval_phis_def]) >>
+  gen_tac >> strip_tac >> rw[] >>
+  Cases_on `h.inst_opcode = PHI` >> fs[eval_phis_def] >>
+  `eval_one_phi s2 h = eval_one_phi s1 h` by metis_tac[vsr_eval_one_phi] >>
+  Cases_on `eval_one_phi s1 h` >> fs[] >>
+  PairCases_on `x` >> fs[] >>
+  Cases_on `eval_phis s1 insts` >> fs[]
+QED

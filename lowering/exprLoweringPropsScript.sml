@@ -19,7 +19,7 @@
 Theory exprLoweringProps
 Ancestors
   exprLowering emitHelper compileEnv
-  venomExecSemantics venomState
+  venomExecSemantics venomState venomInst venomInstProps
   vyperInterpreter vyperContext
   vyperState vyperValueOperation
   valueEncoding valueEncodingProofs
@@ -446,105 +446,6 @@ Proof
        emit_def, venomInstTheory.mk_inst_def, comp_return_def, comp_bind_def, comp_ignore_bind_def]
 QED
 
-(* compile_expr ignores the ty parameter for all supported_expr forms.
-   This is because compile_expr uses expr_type e internally, not the passed ty.
-   Generalizes the former compile_expr_ty_indep_Not. *)
-Theorem compile_expr_ty_indep:
-  ∀ e cenv ty1 ty2 st.
-    supported_expr e ⇒
-    compile_expr cenv ty1 e st = compile_expr cenv ty2 e st
-Proof
-  Induct_on `e` >> simp[supported_expr_def] >>
-  rpt strip_tac >>
-  once_rewrite_tac [cj 1 compile_expr_def] >> simp[] >>
-  Cases_on `b` >> gvs[supported_expr_def] >>
-  once_rewrite_tac [cj 2 compile_expr_def] >> simp[]
-QED
-
-Theorem lower_value_ty_indep:
-  ∀ e cenv ty1 ty2 st.
-    supported_expr e ⇒
-    lower_value compile_expr cenv ty1 e st =
-    lower_value compile_expr cenv ty2 e st
-Proof
-  rpt strip_tac >>
-  simp[lower_value_def, comp_bind_def, pairTheory.UNCURRY] >>
-  `compile_expr cenv ty1 e st = compile_expr cenv ty2 e st`
-    by metis_tac[compile_expr_ty_indep] >>
-  simp[]
-QED
-
-Theorem lower_value_not_bool_unfold[local]:
-  ∀ e cenv ann ty st.
-    expr_type e = BaseT BoolT ⇒
-    lower_value compile_expr cenv ty (Builtin ann Not [e]) st =
-    (let (sub_op, st1) = lower_value compile_expr cenv (BaseT BoolT) e st in
-       emit_op ISZERO [sub_op] st1)
-Proof
-  rpt strip_tac >>
-  simp[lower_value_def, comp_bind_def, pairTheory.UNCURRY_DEF] >>
-  qabbrev_tac `rhs_ce = compile_expr cenv (BaseT BoolT) e st` >>
-  CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >>
-  ONCE_REWRITE_TAC [cj 1 compile_expr_def] >> simp[] >>
-  ONCE_REWRITE_TAC [cj 2 compile_expr_def] >> simp[] >>
-  simp[expr_type_def, as_stack_val_def, unwrap_value_def, comp_return_def] >>
-  CONV_TAC (DEPTH_CONV ETA_CONV) >>
-  Cases_on `compile_expr cenv (BaseT BoolT) e st` >>
-  simp[Abbr `rhs_ce`, lower_value_def, comp_bind_def, pairTheory.UNCURRY,
-       unwrap_value_def, comp_return_def] >>
-  Cases_on `unwrap_value cenv q r` >>
-  simp[as_stack_val_def, unwrap_value_def, comp_return_def,
-       emit_op_def, comp_bind_def, fresh_id_def, fresh_var_def,
-       emit_def, comp_ignore_bind_def, LET_THM, pairTheory.UNCURRY_DEF]
-QED
-
-(* Given sub-expression compiles correctly, compile_expr Not is correct. *)
-(* NOTE: original statement was FALSE without expr_type constraint.
-   When expr_type e ≠ BaseT BoolT, compiler emits NOT (bitwise complement)
-   instead of ISZERO. Counterexample: NOT 1w = 0xFFF..FEw ≠ 0w.
-   Fix: added hypothesis "expr_type e = BaseT BoolT". *)
-Theorem compile_not_correct:
-  ∀ cenv cx ann e es ss st op st' v es' b.
-    state_rel cenv cx es ss ∧
-    eval_expr cx (Builtin ann Not [e]) es = (INL (Value v), es') ∧
-    v = BoolV (¬b) ∧
-    expr_type e = BaseT BoolT ∧
-    lower_value compile_expr cenv (BaseT BoolT) (Builtin ann Not [e]) st = (op, st') ∧
-    (let (sub_op, st1) = lower_value compile_expr cenv (BaseT BoolT) e st in
-      st1.cs_current_insts = st.cs_current_insts ++ emitted_insts st st1 ∧
-      ∃ ss_sub.
-        run_inst_seq (emitted_insts st st1) ss = OK ss_sub ∧
-        eval_operand sub_op ss_sub = SOME (val_to_w256 (BoolV b)) ∧
-        state_rel cenv cx es' ss_sub)
-    ⇒
-    ∃ ss'.
-      run_inst_seq (emitted_insts st st') ss = OK ss' ∧
-      eval_operand op ss' = SOME (val_to_w256 v) ∧
-      state_rel cenv cx es' ss'
-Proof
-  rpt gen_tac >> strip_tac >>
-  Cases_on `lower_value compile_expr cenv (BaseT BoolT) e st` >> gvs[] >>
-  qpat_x_assum `lower_value _ _ _ (Builtin _ _ _) _ = _` mp_tac >>
-  simp[lower_value_not_bool_unfold] >>
-  qpat_x_assum `lower_value _ _ _ e st = _` (fn th => rewrite_tac [th]) >>
-  simp[] >> strip_tac >>
-  drule emitted_insts_emit_op_local >> strip_tac >> gvs[] >>
-  qexists `update_var (STRING #"%" (toString r.cs_next_var))
-             (val_to_w256 (BoolV (¬b))) ss_sub` >>
-  rpt conj_tac
-  >- (
-    mp_tac (Q.SPECL [`st`, `r`, `st'`, `ss`, `ss_sub`] run_inst_seq_chain) >>
-    simp[] >> strip_tac >> gvs[] >>
-    simp[Once run_inst_seq_def] >>
-    drule iszero_bool_correct >>
-    disch_then (qspecl_then [`r.cs_next_id`,
-      `STRING #"%" (toString r.cs_next_var)`] mp_tac) >>
-    simp[Once run_inst_seq_def]
-  )
-  >- simp[eval_operand_update_var_local]
-  >- (irule state_rel_update_var_local >> first_assum ACCEPT_TAC)
-QED
-
 (* NOTE: original statement was FALSE when annotation type has different
    bounds than expr_type e. Compiler uses type_bounds(expr_type e) but
    evaluator uses type_to_int_bound(annotation type). Additionally, Neg
@@ -565,53 +466,10 @@ Theorem compile_neg_correct:
       eval_operand op ss' = SOME (val_to_w256 v) ∧
       state_rel cenv cx es' ss'
 Proof
-  CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >>
-  ONCE_REWRITE_TAC [cj 1 compile_expr_def] >> simp[] >> ONCE_REWRITE_TAC [cj 2 compile_expr_def] >> simp[] >>
   cheat
 QED
 
 (* --- Environment variables (CALLER, TIMESTAMP, etc.) --- *)
-
-(* Helper: for simple env vars (single opcode, no args),
-   the emitted instruction is a single read0 that matches the Vyper value *)
-Theorem compile_env_var_correct:
-  ∀ cenv cx ty ann item es ss st op st' v es'.
-    state_rel cenv cx es ss ∧
-    eval_expr cx (Builtin ann (Env item) []) es = (INL (Value v), es') ∧
-    lower_value compile_expr cenv ty (Builtin ann (Env item) []) st = (op, st') ∧
-    item ≠ PrevHash
-    ⇒
-    ∃ ss'.
-      run_inst_seq (emitted_insts st st') ss = OK ss' ∧
-      eval_operand op ss' = SOME (val_to_w256 v) ∧
-      (es':evaluation_state) = es ∧
-      same_blocks st st'
-Proof
-  rpt gen_tac >> strip_tac >>
-  Cases_on `item` >> gvs[] >>
-  qpat_x_assum `lower_value _ _ _ _ _ = _`
-    (fn th => assume_tac (SIMP_RULE (srw_ss())
-      [lower_value_def, comp_bind_def, pairTheory.UNCURRY,
-       compile_expr_def, compile_env_var_def, as_stack_val_def,
-       unwrap_value_def, comp_return_def, emit_op_def,
-       fresh_id_def, fresh_var_def, emit_def, LET_THM,
-       comp_ignore_bind_def, venomInstTheory.mk_inst_def] th)) >>
-  fs[cj 44 evaluate_def,
-     vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
-     vyperStateTheory.return_def, vyperStateTheory.type_check_def,
-     vyperStateTheory.assert_def, builtin_args_length_ok_def,
-     cj 55 evaluate_def, vyperStateTheory.get_accounts_def,
-     evaluate_builtin_def, vyperStateTheory.lift_sum_def,
-     vyperStateTheory.raise_def] >>
-  gvs[run_inst_seq_def, emitted_insts_def,
-      rich_listTheory.DROP_APPEND1, rich_listTheory.DROP_LENGTH_NIL,
-      step_inst_base_def, exec_read0_def,
-      eval_operand_def, update_var_def, lookup_var_def,
-      finite_mapTheory.FLOOKUP_UPDATE,
-      same_blocks_def, state_rel_def, call_ctx_rel_def,
-      val_to_w256_address, integer_wordTheory.i2w_pos,
-      val_to_w256_def]
-QED
 
 (* ===== Prefix / same_blocks Infrastructure ===== *)
 
@@ -1024,16 +882,37 @@ Proof
   rw[blocks_pres_emit_void]
 QED
 
+Theorem blocks_grow_new_block[local]:
+  ∀ lbl sa.
+    LENGTH (SND (new_block lbl sa)).cs_blocks =
+    SUC (LENGTH sa.cs_blocks)
+Proof
+  rw[new_block_def]
+QED
+
+Theorem blocks_pres_scaled_offset[local]:
+  ∀ scale base ctr sa.
+    LENGTH (SND
+      ((if scale = 1 then emit_op ADD [base; ctr]
+        else do scaled <- emit_op MUL [ctr; Lit (n2w scale)];
+                emit_op ADD [base; scaled]
+             od) sa)).cs_blocks =
+    LENGTH sa.cs_blocks
+Proof
+  rw[] >>
+  simp[comp_bind_def, LET_THM, pairTheory.UNCURRY, blocks_pres_emit_op]
+QED
+
 (* compile_word_copy_loop grows blocks by exactly 3 *)
 val blocks_len_rws = [blocks_len_bind,
   SIMP_RULE bool_ss [] (Q.SPECL [`i`,`sa`] (INST_TYPE [alpha |-> ``:unit``] blocks_pres_emit_op)),
   blocks_pres_emit_op, blocks_pres_emit_void, blocks_pres_emit_inst,
   blocks_pres_compile_ptr_load, blocks_pres_compile_ptr_store,
+  blocks_pres_scaled_offset, blocks_grow_new_block,
   SIMP_RULE bool_ss [LET_THM] fresh_var_def,
   SIMP_RULE bool_ss [LET_THM] fresh_id_def,
   SIMP_RULE bool_ss [LET_THM] fresh_label_def,
   SIMP_RULE bool_ss [] emit_def,
-  SIMP_RULE bool_ss [LET_THM] new_block_def,
   comp_return_def];
 
 Theorem blocks_grow_compile_word_copy_loop[local]:
@@ -1042,9 +921,11 @@ Theorem blocks_grow_compile_word_copy_loop[local]:
     LENGTH (SND (compile_word_copy_loop src dst wc ll sl ic sa)).cs_blocks
 Proof
   rw[contextTheory.compile_word_copy_loop_def, LET_THM] >>
-  simp (blocks_len_rws @ [comp_bind_def, pairTheory.UNCURRY,
-        comp_ignore_bind_def]) >>
-  rw[] >> simp blocks_len_rws
+  simp[comp_bind_def, comp_ignore_bind_def, pairTheory.UNCURRY,
+       fresh_label_def, fresh_var_def, comp_return_def,
+       blocks_pres_emit_inst, blocks_pres_emit_op,
+       blocks_pres_compile_ptr_load, blocks_pres_compile_ptr_store,
+       blocks_pres_scaled_offset, blocks_grow_new_block]
 QED
 
 (* ci_mono for compile_word_copy_loop *)
@@ -1635,18 +1516,6 @@ Proof
   simp[builtinMathTheory.compile_pow_mod256_def, ci_mono_emit_op]
 QED
 
-Theorem ci_mono_compile_isqrt[local]:
-  ∀ v sa. ci_mono sa (SND (compile_isqrt v sa))
-Proof
-  rpt gen_tac >>
-  rewrite_tac[builtinMiscTheory.compile_isqrt_def, LET_THM] >> BETA_TAC >>
-  rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
-       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_emit_inst,
-                          ci_mono_fresh_var, ci_mono_comp_return, ci_mono_compile_select]) ORELSE
-       gen_tac ORELSE strip_tac) >>
-  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_emit_inst,
-       ci_mono_fresh_var, ci_mono_comp_return, ci_mono_compile_select]
-QED
 
 Theorem ci_mono_compile_ceil[local]:
   ∀ v d sa. ci_mono sa (SND (compile_ceil v d sa))
@@ -2244,127 +2113,6 @@ Proof
   end
 QED
 
-Theorem ci_mono_compile_store_memory_typed[local]:
-  (∀ cenv dst dst_ty src src_ty sa.
-    ci_mono sa (SND (compile_store_memory_typed cenv dst dst_ty src src_ty sa))) ∧
-  (∀ cenv dst src dst_tys src_tys dst_off src_off sa.
-    ci_mono sa (SND (compile_typed_copy_fields cenv dst src dst_tys src_tys dst_off src_off sa))) ∧
-  (∀ cenv dst dst_elem_ty src src_elem_ty count sa.
-    ci_mono sa (SND (compile_copy_sarray_typed cenv dst dst_elem_ty src src_elem_ty count sa))) ∧
-  (∀ cenv dst dst_elem_ty dst_capacity src src_elem_ty sa.
-    ci_mono sa (SND (compile_copy_dynarray_typed cenv dst dst_elem_ty dst_capacity src src_elem_ty sa))) ∧
-  (∀ cenv dst src dst_fields src_fields dst_off src_off sa.
-    ci_mono sa (SND (compile_struct_typed_copy cenv dst src dst_fields src_fields dst_off src_off sa)))
-Proof
-  ho_match_mp_tac contextTheory.compile_store_memory_typed_ind >>
-  rpt conj_tac >> rpt gen_tac >> rpt (disch_then strip_assume_tac) >>
-  simp[Once contextTheory.compile_store_memory_typed_def, LET_THM] >>
-  rpt gen_tac >>
-  rpt (CHANGED_TAC (
-    TRY (ho_match_mp_tac ci_mono_bind >> conj_tac >-
-      (rpt strip_tac >>
-       simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return,
-            ci_mono_compile_alloc_buffer, ci_mono_compile_word_copy_loop,
-            ci_mono_compile_store_bytestring, ci_mono_compile_copy_memory,
-            ci_mono_compile_copy_memory_dynamic,
-            ci_mono_compile_with_byte_offset,
-            ci_mono_fresh_label, ci_mono_new_block, ci_mono_emit_inst,
-            ci_mono_fresh_var] >>
-       TRY (first_x_assum irule >> gvs[]) >>
-       TRY (IF_CASES_TAC >> gvs[] >> simp[ci_mono_emit_op, ci_mono_emit_void,
-            ci_mono_comp_return, ci_mono_compile_copy_memory,
-            ci_mono_compile_copy_memory_dynamic])) >>
-      rpt strip_tac) >>
-    TRY (ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >-
-      (rpt strip_tac >>
-       simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return,
-            ci_mono_compile_alloc_buffer, ci_mono_compile_word_copy_loop,
-            ci_mono_compile_store_bytestring, ci_mono_compile_copy_memory,
-            ci_mono_compile_copy_memory_dynamic,
-            ci_mono_compile_with_byte_offset,
-            ci_mono_fresh_label, ci_mono_new_block, ci_mono_emit_inst,
-            ci_mono_fresh_var] >>
-       TRY (first_x_assum irule >> gvs[]) >>
-       TRY (IF_CASES_TAC >> gvs[] >> simp[ci_mono_emit_op, ci_mono_emit_void,
-            ci_mono_comp_return, ci_mono_compile_copy_memory,
-            ci_mono_compile_copy_memory_dynamic])) >>
-      rpt strip_tac) >>
-    TRY IF_CASES_TAC >> TRY (gvs[] >> NO_TAC) >>
-    TRY (BasicProvers.TOP_CASE_TAC) >>
-    TRY (simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return,
-              ci_mono_compile_copy_memory, ci_mono_compile_store_bytestring,
-              ci_mono_compile_word_copy_loop, ci_mono_compile_copy_memory_dynamic,
-              ci_mono_compile_with_byte_offset,
-              ci_mono_fresh_label, ci_mono_new_block, ci_mono_emit_inst,
-              ci_mono_fresh_var]) >>
-    TRY (first_x_assum irule >> gvs[])))
-QED
-
-Theorem ci_mono_lower_abi_encode[local]:
-  ∀ ensure_tuple method_id_opt src_op enc_info maxlen sa.
-    ci_mono sa (SND (lower_abi_encode ensure_tuple method_id_opt src_op enc_info maxlen sa))
-Proof
-  rpt gen_tac >>
-  rewrite_tac[builtinAbiTheory.lower_abi_encode_def, LET_THM] >> BETA_TAC >>
-  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_compile_alloc_buffer] >>
-  rpt strip_tac >>
-  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_comp_return] >>
-  rpt strip_tac >>
-  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >>
-  rpt strip_tac >>
-  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >-
-    (BasicProvers.TOP_CASE_TAC >> simp[ci_mono_comp_return] >>
-     irule ci_mono_bind >> simp[ci_mono_emit_op, ci_mono_emit_void]) >>
-  rpt strip_tac >>
-  ho_match_mp_tac ci_mono_bind >> conj_tac >-
-    simp[cj 2 ci_mono_compile_abi_encode] >>
-  rpt strip_tac >>
-  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >-
-    (IF_CASES_TAC >>
-     simp[ci_mono_emit_void] >>
-     irule ci_mono_bind >> simp[ci_mono_emit_op, ci_mono_emit_void]) >>
-  rpt strip_tac >>
-  simp[ci_mono_comp_return]
-QED
-
-Theorem ci_mono_lower_abi_decode[local]:
-  ∀ data_op dec_info abi_min_size abi_max_size output_size sa.
-    ci_mono sa (SND (lower_abi_decode data_op dec_info abi_min_size abi_max_size output_size sa))
-Proof
-  rpt gen_tac >>
-  rewrite_tac[builtinAbiTheory.lower_abi_decode_def, LET_THM] >> BETA_TAC >>
-  ntac 6 (ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac) >> ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac >> ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_emit_void] >> rpt strip_tac >>
-  irule ci_mono_bind >> simp[ci_mono_compile_alloc_buffer] >> rpt strip_tac >> irule ci_mono_bind >> simp[ci_mono_comp_return] >> rpt strip_tac >> irule ci_mono_bind >> simp[ci_mono_emit_op] >> rpt strip_tac >> irule ci_mono_ignore_bind >> simp[cj 1 ci_mono_compile_abi_decode, ci_mono_comp_return]
-QED
-
-Theorem ci_mono_compile_dynarray_append[local]:
-  ∀ cenv base_op val_op word_scale elem_size dst_elem_ty src_elem_ty
-    capacity is_prim load_opc store_opc sa.
-    ci_mono sa (SND (compile_dynarray_append cenv base_op val_op word_scale elem_size
-                      dst_elem_ty src_elem_ty capacity is_prim load_opc store_opc sa))
-Proof
-  rpt gen_tac >>
-  rewrite_tac[exprLoweringTheory.compile_dynarray_append_def, LET_THM] >> BETA_TAC >>
-  ntac 2 (ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac) >>
-  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_emit_void] >> rpt strip_tac >>
-  ntac 3 (ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt strip_tac) >>
-  IF_CASES_TAC
-  >- simp[ci_mono_emit_void, ci_mono_emit_op, ci_mono_bind, ci_mono_ignore_bind]
-  >> IF_CASES_TAC >> gvs[]
-  >- (ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
-      >- (rpt strip_tac >>
-          ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
-          >- (mp_tac (cj 1 ci_mono_compile_store_memory_typed) >> metis_tac[])
-          >> simp[ci_mono_comp_return])
-      >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_bind, ci_mono_ignore_bind])
-  >> ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
-  >- (rpt strip_tac >>
-      ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
-      >- simp[ci_mono_compile_word_copy_loop]
-      >> simp[ci_mono_comp_return])
-  >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_bind, ci_mono_ignore_bind]
-QED
-
 Theorem ci_mono_compile_default_return_path[local]:
   ∀ buf_op result_op default_op addr_op skip_check min_return_size
     max_return_size ret_mem_bytes ret_dec_info is_prim_return sa.
@@ -2602,6 +2350,118 @@ QED
 (* Helper: step_inst_base preserves call/tx/block context for ANY instruction
    that returns OK. Unlike step_inst_base_preserves_inst_idx, we don't need
    ~is_terminator because jump_to only modifies vs_prev_bb/vs_current_bb/vs_inst_idx. *)
+Theorem step_inst_base_ok_terminator_jump[local]:
+  !inst s s'.
+    is_terminator inst.inst_opcode /\
+    step_inst_base inst s = OK s' ==>
+    inst.inst_opcode = JMP \/ inst.inst_opcode = JNZ \/
+    inst.inst_opcode = DJMP
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
+  qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
+  ASM_REWRITE_TAC[step_inst_base_def] >>
+  gvs[AllCaseEqs()]
+QED
+
+Theorem step_inst_base_ok_jmp_ctxs[local]:
+  !inst s s'.
+    inst.inst_opcode = JMP /\ step_inst_base inst s = OK s' ==>
+    s'.vs_call_ctx = s.vs_call_ctx /\
+    s'.vs_tx_ctx = s.vs_tx_ctx /\
+    s'.vs_block_ctx = s.vs_block_ctx
+Proof
+  rw[] >> gvs[step_inst_base_def, AllCaseEqs(), jump_to_def]
+QED
+
+Theorem step_inst_base_ok_jnz_ctxs[local]:
+  !inst s s'.
+    inst.inst_opcode = JNZ /\ step_inst_base inst s = OK s' ==>
+    s'.vs_call_ctx = s.vs_call_ctx /\
+    s'.vs_tx_ctx = s.vs_tx_ctx /\
+    s'.vs_block_ctx = s.vs_block_ctx
+Proof
+  rw[] >> gvs[step_inst_base_def, AllCaseEqs(), jump_to_def]
+QED
+
+Theorem step_inst_base_ok_djmp_ctxs[local]:
+  !inst s s'.
+    inst.inst_opcode = DJMP /\ step_inst_base inst s = OK s' ==>
+    s'.vs_call_ctx = s.vs_call_ctx /\
+    s'.vs_tx_ctx = s.vs_tx_ctx /\
+    s'.vs_block_ctx = s.vs_block_ctx
+Proof
+  rw[] >> gvs[step_inst_base_def, AllCaseEqs(), jump_to_def]
+QED
+
+Theorem step_inst_base_ok_jump_ctxs[local]:
+  !inst s s'.
+    (inst.inst_opcode = JMP \/ inst.inst_opcode = JNZ \/
+     inst.inst_opcode = DJMP) /\
+    step_inst_base inst s = OK s' ==>
+    s'.vs_call_ctx = s.vs_call_ctx /\
+    s'.vs_tx_ctx = s.vs_tx_ctx /\
+    s'.vs_block_ctx = s.vs_block_ctx
+Proof
+  metis_tac[step_inst_base_ok_jmp_ctxs,
+            step_inst_base_ok_jnz_ctxs,
+            step_inst_base_ok_djmp_ctxs]
+QED
+
+Theorem step_inst_base_ok_terminator_ctxs[local]:
+  !inst s s'.
+    step_inst_base inst s = OK s' /\ is_terminator inst.inst_opcode ==>
+    s'.vs_call_ctx = s.vs_call_ctx /\
+    s'.vs_tx_ctx = s.vs_tx_ctx /\
+    s'.vs_block_ctx = s.vs_block_ctx
+Proof
+  rpt strip_tac >>
+  drule_all step_inst_base_ok_terminator_jump >> strip_tac >>
+  metis_tac[step_inst_base_ok_jump_ctxs]
+QED
+
+Theorem step_inst_base_preserves_call_ctx[local]:
+  !inst s s'.
+    step_inst_base inst s = OK s' ==>
+    s'.vs_call_ctx = s.vs_call_ctx
+Proof
+  rpt strip_tac >>
+  Cases_on `is_terminator inst.inst_opcode`
+  >- metis_tac[step_inst_base_ok_terminator_ctxs] >>
+  Cases_on `inst.inst_opcode = INVOKE` >- gvs[step_inst_base_def] >>
+  qspecl_then [`0`, `ARB`, `inst`, `s`, `s'`] mp_tac
+    step_preserves_call_ctx >>
+  ASM_SIMP_TAC bool_ss [step_inst_non_invoke]
+QED
+
+Theorem step_inst_base_preserves_tx_ctx[local]:
+  !inst s s'.
+    step_inst_base inst s = OK s' ==>
+    s'.vs_tx_ctx = s.vs_tx_ctx
+Proof
+  rpt strip_tac >>
+  Cases_on `is_terminator inst.inst_opcode`
+  >- metis_tac[step_inst_base_ok_terminator_ctxs] >>
+  Cases_on `inst.inst_opcode = INVOKE` >- gvs[step_inst_base_def] >>
+  qspecl_then [`0`, `ARB`, `inst`, `s`, `s'`] mp_tac
+    step_preserves_tx_ctx >>
+  ASM_SIMP_TAC bool_ss [step_inst_non_invoke]
+QED
+
+Theorem step_inst_base_preserves_block_ctx[local]:
+  !inst s s'.
+    step_inst_base inst s = OK s' ==>
+    s'.vs_block_ctx = s.vs_block_ctx
+Proof
+  rpt strip_tac >>
+  Cases_on `is_terminator inst.inst_opcode`
+  >- metis_tac[step_inst_base_ok_terminator_ctxs] >>
+  Cases_on `inst.inst_opcode = INVOKE` >- gvs[step_inst_base_def] >>
+  qspecl_then [`0`, `ARB`, `inst`, `s`, `s'`] mp_tac
+    step_preserves_block_ctx >>
+  ASM_SIMP_TAC bool_ss [step_inst_non_invoke]
+QED
+
 Theorem step_inst_base_preserves_ctxs[local]:
   !inst s s'.
     step_inst_base inst s = OK s' ==>
@@ -2609,19 +2469,9 @@ Theorem step_inst_base_preserves_ctxs[local]:
     s'.vs_tx_ctx = s.vs_tx_ctx /\
     s'.vs_block_ctx = s.vs_block_ctx
 Proof
-  rw[step_inst_base_def] >>
-  gvs[AllCaseEqs()] >>
-  fs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def,
-     exec_ext_call_def, exec_delegatecall_def,
-     exec_create_def, exec_alloca_def,
-     extract_venom_result_def] >>
-  gvs[AllCaseEqs()] >>
-  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
-  fs[update_var_def, mstore_def, mstore8_def, sstore_def, tstore_def,
-     write_memory_with_expansion_def, mcopy_def, jump_to_def,
-     revert_state_def, set_returndata_def, halt_state_def,
-     eval_operands_def]
+  metis_tac[step_inst_base_preserves_call_ctx,
+            step_inst_base_preserves_tx_ctx,
+            step_inst_base_preserves_block_ctx]
 QED
 
 (* compile_expr preserves external-facing state components.

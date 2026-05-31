@@ -219,7 +219,7 @@ Definition evaluate_extract32_def:
     bs = DROP n bs
   in case bt
      of BytesT (Fixed m) =>
-          if m ≤ LENGTH bs then
+          if m ≤ LENGTH bs ∧ EVERY ($= 0w) (DROP m (TAKE 32 bs)) then
             INL $ BytesV (TAKE m bs)
           else INR (RuntimeError "evaluate_extract32 bytesM")
       | UintT m =>
@@ -378,9 +378,16 @@ Definition evaluate_builtin_def:
      | _ => INR (TypeError "Not flag type")) ∧
   evaluate_builtin cx _ ty Neg [IntV i] =
     (case type_to_int_bound ty
-     of SOME u => bounded_int_op u (-i)
+     of SOME u =>
+       if within_int_bound u i then bounded_int_op u (-i)
+       else INR (RuntimeError "Neg operand bound")
       | NONE => INR (TypeError "Neg type")) ∧
   evaluate_builtin cx _ _ Neg [DecimalV i] = bounded_decimal_op (-i) ∧
+  evaluate_builtin cx _ ty Abs [IntV i] =
+    (case type_to_int_bound ty
+     of SOME u => bounded_int_op u (ABS i)
+      | NONE => INR (TypeError "Abs type")) ∧
+  evaluate_builtin cx _ _ Abs [DecimalV i] = bounded_decimal_op (ABS i) ∧
   evaluate_builtin cx _ _ Keccak256 [BytesV ls] = INL $ BytesV $
     Keccak_256_w64 ls ∧
   evaluate_builtin cx _ _ Keccak256 [StringV s] = INL $ BytesV $
@@ -439,9 +446,6 @@ Definition evaluate_builtin_def:
   evaluate_builtin cx acc _ (Acc aop) [BytesV bs] =
     (let a = lookup_account (word_of_bytes_be bs) acc in
       INL $ evaluate_account_op aop bs a) ∧
-  evaluate_builtin cx _ _ Isqrt [IntV i] =
-    (if 0 ≤ i then INL $ IntV &(num_sqrt (Num i))
-     else INR (TypeError "Isqrt type")) ∧
   (* method_id: compute keccak256(signature)[:4] - returns 4-byte function selector *)
   evaluate_builtin cx _ _ MethodId [StringV sig] =
     INL $ BytesV (TAKE 4 (Keccak_256_w64 (MAP (n2w o ORD) sig))) ∧
@@ -496,7 +500,6 @@ Definition builtin_args_length_ok_def:
   builtin_args_length_ok BlockHash n = (n = 1) ∧
   builtin_args_length_ok BlobHash n = (n = 1) ∧
   builtin_args_length_ok (Acc _) n = (n = 1) ∧
-  builtin_args_length_ok Isqrt n = (n = 1) ∧
   builtin_args_length_ok MethodId n = (n = 1) ∧
   builtin_args_length_ok ECRecover n = (n = 4) ∧
   builtin_args_length_ok ECAdd n = (n = 2) ∧

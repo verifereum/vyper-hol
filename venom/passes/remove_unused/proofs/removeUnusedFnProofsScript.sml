@@ -31,7 +31,7 @@ Ancestors
 val G_def = ``\g:ir_function. remove_unused_single_pass g <> g``;
 val f_def = ``remove_unused_single_pass``;
 
-(* Forward preservation of structural bundle through OWHILE iteration *)
+(* OWHILE iteration preserves wf, SSA, pointer confinement, entry label; fn_all_outputs only shrinks *)
 Theorem owhile_preserves_bundle[local]:
   !x y.
     OWHILE ^G_def ^f_def x = SOME y ==>
@@ -62,7 +62,7 @@ Proof
 QED
 
 
-(* Helper: nop_outputs of intermediate x are subset of eliminated vars *)
+(* nop_outputs of a function in the OWHILE chain is a subset of the eliminated variable set *)
 Theorem nop_outputs_subset_elim[local]:
   !fn x result.
     remove_unused_single_pass x <> x ==>
@@ -75,15 +75,12 @@ Theorem nop_outputs_subset_elim[local]:
 Proof
   rpt strip_tac >>
   simp[pred_setTheory.SUBSET_DEF, pred_setTheory.IN_DIFF] >>
-  rpt strip_tac
-  >- (
-    (* x' IN fn_all_outputs fn: nop_outputs x <= fn_all_outputs x <= fn_all_outputs fn *)
-    imp_res_tac (SRULE [pred_setTheory.SUBSET_DEF]
-      removeUnusedProofsTheory.nop_outputs_subset_all_outputs) >>
-    metis_tac[pred_setTheory.SUBSET_DEF]
-  )
-  >- (
-    (* x' NOTIN fn_all_outputs result *)
+  rpt strip_tac >| [
+  (* x' IN fn_all_outputs fn: nop_outputs x <= fn_all_outputs x <= fn_all_outputs fn *)
+  imp_res_tac (SRULE [pred_setTheory.SUBSET_DEF]
+    removeUnusedProofsTheory.nop_outputs_subset_all_outputs) >>
+  metis_tac[pred_setTheory.SUBSET_DEF],
+  (* x' NOTIN fn_all_outputs result *)
     (* Step 1: nop_outputs x are not in fn_all_outputs(rusp x) *)
     `x' NOTIN fn_all_outputs (remove_unused_single_pass x)` by
       metis_tac[removeUnusedProofsTheory.nop_outputs_not_in_rusp] >>
@@ -106,10 +103,10 @@ Proof
       metis_tac[owhile_preserves_bundle] >>
     (* Step 5: x' not in result outputs *)
     metis_tac[pred_setTheory.SUBSET_DEF]
-  )
+  ]
 QED
 
-(* Helper: step condition for owhile_lift_result_compose *)
+(* One OWHILE step: running x errors or yields state/execution-equivalent result to remove_unused_single_pass(x) w.r.t. eliminated vars *)
 Theorem rusp_step_condition[local]:
   !fuel ctx fn s result x.
     venom_wf ctx /\ s.vs_inst_idx = 0 /\
@@ -152,7 +149,7 @@ Proof
   >- first_assum ACCEPT_TAC
 QED
 
-(* Helper: preservation condition for owhile_lift_result_compose *)
+(* After one OWHILE step, wf/SSA/pointer-confinement bundle, entry label, and output subset are preserved *)
 Theorem rusp_preservation_condition[local]:
   !fn result s x.
     OWHILE ^G_def ^f_def x = SOME result /\
@@ -182,8 +179,8 @@ Proof
             pred_setTheory.SUBSET_TRANS]
 QED
 
-(* Self-contained function-level correctness under SSA.
-   Uses owhile_lift_result_compose with the bundle as invariant P. *)
+(* Self-contained correctness under wf_ssa: remove_unused_function either errors
+   or yields state/execution-equivalent result w.r.t. the eliminated variable set *)
 Theorem remove_unused_function_correct_ssa:
   !fuel ctx fn s.
     venom_wf ctx /\ wf_function fn /\ fn_inst_wf fn /\

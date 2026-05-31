@@ -647,7 +647,7 @@ QED
 
 
 (* One round preserves the invariant *)
-Theorem cfg_norm_round_preserves_inv:
+Theorem cfg_norm_round_preserves_inv[local]:
   !func func0 id_base func' id_base'.
     cfg_norm_inv func0 func /\
     cfg_norm_round func id_base = (func', T, id_base') ==>
@@ -922,7 +922,7 @@ QED
    - no self-loop critical edges (justified: Venom generates acyclic blocks)
    - no "_split_" in labels (justified: Venom labels are "global", "bb0", etc) *)
 
-Theorem cfg_norm_inv_initial:
+Theorem cfg_norm_inv_initial[local]:
   !func.
     wf_function func /\
     fn_inst_wf func /\
@@ -1021,5 +1021,8 @@ Proof
   simp[cfg_norm_fn_def, LET_THM] >>
   `s with <|vs_current_bb := s.vs_current_bb; vs_inst_idx := 0|> = s`
     by simp[venomStateTheory.venom_state_component_equality] >>
-  gvs[]
+  `s with vs_current_bb := s.vs_current_bb = s`
+    by simp[venomStateTheory.venom_state_component_equality] >>
+  ASM_REWRITE_TAC[] >>
+  first_assum ACCEPT_TAC
 QED

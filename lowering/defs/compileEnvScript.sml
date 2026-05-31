@@ -26,7 +26,8 @@
 Theory compileEnv
 Ancestors
   valueEncoding venomExecSemantics venomInst
-  vyperState vyperContext
+  vyperState vyperContext vyperValue vyperABI contractABI
+  byte keccak finite_map pred_set
 Libs
   monadsyntax
 
@@ -147,20 +148,31 @@ End
 (* ===== ABI Type Properties ===== *)
 
 (* Whether a Vyper type has dynamic ABI encoding (requires tail section).
-   sft: struct field types lookup (string → type list).
+   sfields: finite struct field map.
    Mirrors Python: VyperType.abi_type.is_dynamic()
    StructT: dynamic iff any field type is dynamic.
    Terminates for acyclic struct definitions (Vyper guarantees no recursive structs). *)
 Definition is_abi_dynamic_def:
-  is_abi_dynamic sft (BaseT (BytesT (Dynamic _))) = T ∧
-  is_abi_dynamic sft (BaseT (StringT _)) = T ∧
-  is_abi_dynamic sft (ArrayT _ (Dynamic _)) = T ∧
-  is_abi_dynamic sft (ArrayT elem (Fixed _)) = is_abi_dynamic sft elem ∧
-  is_abi_dynamic sft (TupleT tys) = EXISTS (is_abi_dynamic sft) tys ∧
-  is_abi_dynamic sft (StructT name) = EXISTS (is_abi_dynamic sft) (sft name) ∧
-  is_abi_dynamic sft _ = F
+  is_abi_dynamic sfields (BaseT (BytesT (Dynamic _))) = T ∧
+  is_abi_dynamic sfields (BaseT (StringT _)) = T ∧
+  is_abi_dynamic sfields (ArrayT _ (Dynamic _)) = T ∧
+  is_abi_dynamic sfields (ArrayT elem (Fixed _)) =
+    is_abi_dynamic sfields elem ∧
+  is_abi_dynamic sfields (TupleT tys) =
+    EXISTS (is_abi_dynamic sfields) tys ∧
+  is_abi_dynamic sfields (StructT name) =
+    (case FLOOKUP sfields name of
+       SOME fields =>
+         EXISTS (is_abi_dynamic (sfields \\ name))
+                (MAP (FST o SND) fields)
+     | NONE => F) ∧
+  is_abi_dynamic sfields _ = F
 Termination
-  cheat
+  WF_REL_TAC `inv_image ($< LEX $<) (λ(sfields, ty).
+    (CARD (FDOM sfields), type_size ty))`
+  \\ rw[finite_mapTheory.FDOM_DOMSUB, pred_setTheory.CARD_DELETE]
+  >- (Cases_on `CARD (FDOM sfields)` \\ gvs[])
+  \\ gvs[finite_mapTheory.TO_FLOOKUP]
 End
 
 (* Type depth: used as termination measure for recursive typed copy. *)
@@ -176,60 +188,86 @@ Termination
 End
 
 (* ABI static section size (in bytes). For dynamic types this is 0.
-   sft: struct field types lookup (string → type list).
+   sfields: finite struct field map.
    Mirrors Python: ABIType.static_size()
    StructT: sum of embedded_static_size of each field (same as tuple).
    Terminates for acyclic struct definitions. *)
 Definition abi_static_size_def:
-  abi_static_size sft (BaseT (BytesT (Dynamic _))) = 0 ∧
-  abi_static_size sft (BaseT (StringT _)) = 0 ∧
-  abi_static_size sft (BaseT _) = 32 ∧
-  abi_static_size sft (FlagT _) = 32 ∧
-  abi_static_size sft NoneT = 0 ∧
-  abi_static_size sft (ArrayT elem (Fixed n)) =
-    n * (if is_abi_dynamic sft elem then 32 else abi_static_size sft elem) ∧
-  abi_static_size sft (ArrayT _ (Dynamic _)) = 0 ∧
-  abi_static_size sft (TupleT tys) =
-    SUM (MAP (λt. if is_abi_dynamic sft t then 32
-                  else abi_static_size sft t) tys) ∧
-  abi_static_size sft (StructT name) =
-    SUM (MAP (λt. if is_abi_dynamic sft t then 32
-                  else abi_static_size sft t) (sft name))
+  abi_static_size sfields (BaseT (BytesT (Dynamic _))) = 0 ∧
+  abi_static_size sfields (BaseT (StringT _)) = 0 ∧
+  abi_static_size sfields (BaseT _) = 32 ∧
+  abi_static_size sfields (FlagT _) = 32 ∧
+  abi_static_size sfields NoneT = 0 ∧
+  abi_static_size sfields (ArrayT elem (Fixed n)) =
+    n * (if is_abi_dynamic sfields elem then 32
+         else abi_static_size sfields elem) ∧
+  abi_static_size sfields (ArrayT _ (Dynamic _)) = 0 ∧
+  abi_static_size sfields (TupleT tys) =
+    SUM (MAP (λt. if is_abi_dynamic sfields t then 32
+                  else abi_static_size sfields t) tys) ∧
+  abi_static_size sfields (StructT name) =
+    (case FLOOKUP sfields name of
+       SOME fields =>
+         SUM (MAP (λt. if is_abi_dynamic (sfields \\ name) t then 32
+                       else abi_static_size (sfields \\ name) t)
+                  (MAP (FST o SND) fields))
+     | NONE => 0)
 Termination
-  cheat
+  WF_REL_TAC `inv_image ($< LEX $<) (λ(sfields, ty).
+    (CARD (FDOM sfields), type_size ty))`
+  \\ rw[finite_mapTheory.FDOM_DOMSUB, pred_setTheory.CARD_DELETE]
+  >- (Cases_on `CARD (FDOM sfields)` \\ gvs[])
+  \\ gvs[finite_mapTheory.TO_FLOOKUP]
 End
 
 (* ABI embedded static size: 32 for dynamic types, static_size otherwise.
    Mirrors Python: ABIType.embedded_static_size() *)
 Definition abi_embedded_static_size_def:
-  abi_embedded_static_size sft ty =
-    if is_abi_dynamic sft ty then 32
-    else abi_static_size sft ty
+  abi_embedded_static_size sfields ty =
+    if is_abi_dynamic sfields ty then 32
+    else abi_static_size sfields ty
 End
 
 (* ABI size bound (static + dynamic sections).
-   sft: struct field types lookup (string → type list).
+   sfields: finite struct field map.
    Mirrors Python: ABIType.size_bound()
    StructT: same as tuple (sum of field size bounds). *)
 Definition abi_size_bound_def:
-  abi_size_bound sft (BaseT (BytesT (Dynamic n))) = 32 + ((n + 31) DIV 32) * 32 ∧
-  abi_size_bound sft (BaseT (StringT n)) = 32 + ((n + 31) DIV 32) * 32 ∧
-  abi_size_bound sft (ArrayT elem (Dynamic n)) =
-    32 + n * (abi_embedded_static_size sft elem +
-              (if is_abi_dynamic sft elem then abi_size_bound sft elem else 0)) ∧
-  abi_size_bound sft (ArrayT elem (Fixed n)) =
-    n * (abi_embedded_static_size sft elem +
-         (if is_abi_dynamic sft elem then abi_size_bound sft elem else 0)) ∧
-  abi_size_bound sft (TupleT tys) =
-    SUM (MAP (λt. abi_embedded_static_size sft t +
-                  (if is_abi_dynamic sft t then abi_size_bound sft t else 0)) tys) ∧
-  abi_size_bound sft (StructT name) =
-    SUM (MAP (λt. abi_embedded_static_size sft t +
-                  (if is_abi_dynamic sft t then abi_size_bound sft t else 0))
-         (sft name)) ∧
-  abi_size_bound sft ty = abi_static_size sft ty
+  abi_size_bound sfields (BaseT (BytesT (Dynamic n))) =
+    32 + ((n + 31) DIV 32) * 32 ∧
+  abi_size_bound sfields (BaseT (StringT n)) =
+    32 + ((n + 31) DIV 32) * 32 ∧
+  abi_size_bound sfields (ArrayT elem (Dynamic n)) =
+    32 + n * (abi_embedded_static_size sfields elem +
+              (if is_abi_dynamic sfields elem
+               then abi_size_bound sfields elem
+               else 0)) ∧
+  abi_size_bound sfields (ArrayT elem (Fixed n)) =
+    n * (abi_embedded_static_size sfields elem +
+         (if is_abi_dynamic sfields elem
+          then abi_size_bound sfields elem
+          else 0)) ∧
+  abi_size_bound sfields (TupleT tys) =
+    SUM (MAP (λt. abi_embedded_static_size sfields t +
+                  (if is_abi_dynamic sfields t
+                   then abi_size_bound sfields t
+                   else 0)) tys) ∧
+  abi_size_bound sfields (StructT name) =
+    (case FLOOKUP sfields name of
+       SOME fields =>
+         SUM (MAP (λt. abi_embedded_static_size (sfields \\ name) t +
+                       (if is_abi_dynamic (sfields \\ name) t
+                        then abi_size_bound (sfields \\ name) t
+                        else 0))
+                  (MAP (FST o SND) fields))
+     | NONE => 0) ∧
+  abi_size_bound sfields ty = abi_static_size sfields ty
 Termination
-  cheat
+  WF_REL_TAC `inv_image ($< LEX $<) (λ(sfields, ty).
+    (CARD (FDOM sfields), type_size ty))`
+  \\ rw[finite_mapTheory.FDOM_DOMSUB, pred_setTheory.CARD_DELETE]
+  >- (Cases_on `CARD (FDOM sfields)` \\ gvs[])
+  \\ gvs[finite_mapTheory.TO_FLOOKUP]
 End
 
 (* ===== Compilation Environment ===== *)
@@ -257,9 +295,13 @@ Datatype:
        cannot represent it. Used by compile_subscript for dispatch.
        Mirrors Python: isinstance(base_typ, HashMapT) *)
     ce_is_hashmap : string -> bool;
-    (* Event metadata: event_nsid →
-       (event_id : num, indexed : bool list, topic_is_bytestring : bool list) *)
-    ce_event_info : string -> (num # bool list # bool list);
+    (* Event metadata: event_nsid → SOME (event_hash, arg_types, indexed_flags).
+       NONE means the event is not declared in this compilation unit. Keeping
+       absence explicit prevents unknown events from silently compiling/logging
+       as hash-0/no-arg events. *)
+    ce_event_info : string -> (num # type list # bool list) option;
+    (* Type environment used by ABI conversion for structs/flags/interfaces. *)
+    ce_type_env : (num, type_args) fmap;
     (* Internal return: how many return values passed on stack (0 = memory return).
        Set from func_t.returns_stack_count() at function entry. *)
     ce_returns_count : num;
@@ -316,8 +358,8 @@ Datatype:
     cs_next_label : num;
     cs_next_id : num;
     cs_current_bb : string;
-    cs_current_insts : instruction list;   (* reversed *)
-    cs_blocks : basic_block list;            (* completed blocks *)
+    cs_current_insts : instruction list;   (* emission order *)
+    cs_blocks : basic_block list;          (* completed blocks, newest first *)
     cs_data_sections : data_section list    (* reversed; data segment for codegen *)
   |>
 End
@@ -661,13 +703,22 @@ Definition transient_vars_rel_def:
                   n2w slot_num = slot
 End
 
+(* Check if a type is a bytestring (dynamic Bytes or String).
+   Used by log topics and bytestring-specific copy. *)
+Definition is_bytestring_type_def:
+  is_bytestring_type (BaseT (BytesT (Dynamic _))) = T ∧
+  is_bytestring_type (BaseT (StringT _)) = T ∧
+  is_bytestring_type _ = F
+End
+
 (* ===== Log Equivalence ===== *)
 (* Single log entry equivalence.
    Interpreter log: (nsid, value list) where nsid = (num option, string).
    Venom event: <| logger; topics : bytes32 list; data : byte list |>.
    The lowering (compile_stmt Log) computes:
    - event_hash from ce_event_info → first topic
-   - indexed args → ABI-encoded topics (words)
+   - indexed static args → ABI word topics
+   - indexed bytes/string args → keccak256(raw bytes) topics
    - non-indexed args → ABI-encoded data buffer
    logger = contract address (cc_address).
 
@@ -688,19 +739,78 @@ Definition indexed_values_def:
   indexed_values _ _ = []
 End
 
+Definition indexed_topic_flags_def:
+  indexed_topic_flags [] [] = ([] : bool list) ∧
+  indexed_topic_flags (T :: flags) (b :: bs) =
+    b :: indexed_topic_flags flags bs ∧
+  indexed_topic_flags (F :: flags) (_ :: bs) =
+    indexed_topic_flags flags bs ∧
+  indexed_topic_flags _ _ = []
+End
+
+Definition log_bytestring_topic_def:
+  log_bytestring_topic (BytesV bs) =
+    SOME (word_of_bytes T (0w:bytes32) (Keccak_256_w64 bs)) ∧
+  log_bytestring_topic (StringV s) =
+    SOME (word_of_bytes T (0w:bytes32)
+            (Keccak_256_w64 (MAP (n2w o ORD) s))) ∧
+  log_bytestring_topic _ = NONE
+End
+
+Definition log_topic_equiv_def:
+  log_topic_equiv T v topic = (log_bytestring_topic v = SOME topic) ∧
+  log_topic_equiv F v topic = (topic = val_to_w256 v)
+End
+
+Definition log_indexed_topics_equiv_def:
+  log_indexed_topics_equiv [] [] [] = T ∧
+  log_indexed_topics_equiv (is_bytestring :: bs) (v :: vals) (topic :: topics) =
+    (log_topic_equiv is_bytestring v topic ∧
+     log_indexed_topics_equiv bs vals topics) ∧
+  log_indexed_topics_equiv _ _ _ = F
+End
+
+Definition log_non_indexed_values_def:
+  log_non_indexed_values [] [] = ([] : value list) ∧
+  log_non_indexed_values (T :: flags) (_ :: vals) =
+    log_non_indexed_values flags vals ∧
+  log_non_indexed_values (F :: flags) (v :: vals) =
+    v :: log_non_indexed_values flags vals ∧
+  log_non_indexed_values _ _ = []
+End
+
+Definition log_non_indexed_types_def:
+  log_non_indexed_types [] [] = ([] : type list) ∧
+  log_non_indexed_types (T :: flags) (_ :: tys) =
+    log_non_indexed_types flags tys ∧
+  log_non_indexed_types (F :: flags) (ty :: tys) =
+    ty :: log_non_indexed_types flags tys ∧
+  log_non_indexed_types _ _ = []
+End
+
 Definition log_entry_equiv_def:
   log_entry_equiv cenv (addr:address) ((event_nsid, args) : log) (ev : event) ⇔
     let event_name = nsid_to_string event_nsid in
-    let (event_hash, indexed_flags, _) = cenv.ce_event_info event_name in
-    let idx_vals = indexed_values indexed_flags args in
-    (* Logger is the contract address *)
-    ev.logger = addr ∧
-    (* First topic is the event selector hash, rest are indexed arg values.
-       NOTE: val_to_w256 uses a length-20 heuristic for BytesV addresses.
-       Fully correct encoding needs per-arg types (not in ce_event_info). *)
-    ev.topics = n2w event_hash :: MAP val_to_w256 idx_vals
-    (* NOTE: data encoding relation (non-indexed args → ABI-encoded bytes)
-       deferred — requires full ABI encode specification. *)
+    case cenv.ce_event_info event_name of
+      NONE => F
+    | SOME (event_hash, arg_types, indexed_flags) =>
+        let idx_vals = indexed_values indexed_flags args in
+        let idx_bs = indexed_topic_flags indexed_flags (MAP is_bytestring_type arg_types) in
+        let nidx_vals = log_non_indexed_values indexed_flags args in
+        let nidx_types = log_non_indexed_types indexed_flags arg_types in
+          LENGTH indexed_flags = LENGTH args ∧
+          LENGTH arg_types = LENGTH args ∧
+          ev.logger = addr ∧
+          (* First topic is the event selector hash. Static indexed args match
+             val_to_w256; indexed bytes/string args match keccak256(raw bytes). *)
+          (∃topic_tail.
+             ev.topics = n2w event_hash :: topic_tail ∧
+             log_indexed_topics_equiv idx_bs idx_vals topic_tail) ∧
+          (* Non-indexed args are ABI-encoded into LOG data. *)
+          (?abi_vals.
+             vyper_to_abi_list cenv.ce_type_env nidx_types nidx_vals = SOME abi_vals ∧
+             ev.data = enc (Tuple (vyper_to_abi_types cenv.ce_type_env nidx_types))
+                           (ListV abi_vals))
 End
 
 (* Logs relation: pairwise equivalence *)
@@ -803,7 +913,7 @@ End
 (* ===== Type Classification ===== *)
 
 (* Struct field types function from compile_env.
-   Used as the sft parameter for is_abi_dynamic/abi_static_size/abi_size_bound.
+   Used by definitions that still take a struct-name lookup function.
    Extracts just the type from (name, type, byte_size) triples. *)
 Definition cenv_sft_def:
   cenv_sft cenv name = MAP (FST o SND) (get_struct_fields cenv.ce_struct_fields name)
@@ -1009,12 +1119,4 @@ Definition elem_size_in_location_def:
       (mem_size + 31) DIV 32
     else
       type_memory_bytes cenv elem_ty
-End
-
-(* Check if a type is a bytestring (dynamic Bytes or String).
-   Used to dispatch to bytestring-specific copy (length-aware). *)
-Definition is_bytestring_type_def:
-  is_bytestring_type (BaseT (BytesT (Dynamic _))) = T ∧
-  is_bytestring_type (BaseT (StringT _)) = T ∧
-  is_bytestring_type _ = F
 End

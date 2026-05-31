@@ -158,9 +158,11 @@ fun mk_JE_Name (s, tc_opt, src_id_opt, ty) =
   list_mk_comb(JE_Name_tm, [fromMLstring s,
                            lift_option (mk_option string_ty) fromMLstring tc_opt,
                            src_id_opt, ty])
-fun mk_JE_Attribute (e, attr, tc_opt, src_id_opt, ty) =
+fun mk_JE_Attribute (e, attr, tc_opt, base_ty_name_opt, base_tc_opt, src_id_opt, ty) =
   list_mk_comb(JE_Attribute_tm, [e, fromMLstring attr,
                                  lift_option (mk_option string_ty) fromMLstring tc_opt,
+                                 lift_option (mk_option string_ty) fromMLstring base_ty_name_opt,
+                                 lift_option (mk_option string_ty) fromMLstring base_tc_opt,
                                  src_id_opt, ty])
 fun mk_JE_Subscript (e1, e2, ty) = list_mk_comb(JE_Subscript_tm, [e1, e2, ty])
 fun mk_JE_NamedExpr (e1, e2) = list_mk_comb(JE_NamedExpr_tm, [e1, e2])
@@ -607,23 +609,39 @@ fun d_json_expr () : term decoder = achoose "expr" [
 
   (* Name - extract typeclass, source_id, and type for module references *)
   (* source_id < 0 means main module (NONE), >= 0 means imported module *)
+  (* If folded_value is present (compile-time constant), use that instead *)
   check_ast_type "Name" $
-    JSONDecode.map (fn ((id, (tc, src_id_opt)), ty) => mk_JE_Name(id, tc, src_id_opt, ty)) $
-    tuple2 (tuple2 (field "id" string,
-            tuple2 (try (orElse (field "type" $ field "typeclass" string,
-                                field "type" $ field "type_t" $ field "typeclass" string)),
-                    orElse (field "type" $ field "type_decl_node" $ field "source_id" source_id_tm,
-                            orElse (field "type" $ field "type_t" $ field "type_decl_node" $ field "source_id" source_id_tm,
-                            succeed (intSyntax.term_of_int (Arbint.fromInt ~1)))))),
-            orElse(field "type" json_type, succeed JT_None_tm)),
+    achoose "Name or folded constant" [
+      (* folded_value with NameConstant (bool) *)
+      field "folded_value" $ check_ast_type "NameConstant" $
+        JSONDecode.map mk_JE_Bool (field "value" bool),
+      (* folded_value with Int *)
+      field "folded_value" $ check_ast_type "Int" $
+        JSONDecode.map (fn (v, ty) => mk_JE_Int(v, ty)) $
+        tuple2 (field "value" inttm,
+                orElse(field "type" json_type, succeed JT_None_tm)),
+      (* Normal Name without folded_value *)
+      JSONDecode.map (fn ((id, (tc, src_id_opt)), ty) => mk_JE_Name(id, tc, src_id_opt, ty)) $
+      tuple2 (tuple2 (field "id" string,
+              tuple2 (try (orElse (field "type" $ field "typeclass" string,
+                                  field "type" $ field "type_t" $ field "typeclass" string)),
+                      orElse (field "type" $ field "type_decl_node" $ field "source_id" source_id_tm,
+                              orElse (field "type" $ field "type_t" $ field "type_decl_node" $ field "source_id" source_id_tm,
+                              succeed (intSyntax.term_of_int (Arbint.fromInt ~1)))))),
+              orElse(field "type" json_type, succeed JT_None_tm))
+    ],
 
-  (* Attribute - extract result typeclass, source_id, and type *)
+  (* Attribute - extract result typeclass, base_type_name, base_typeclass, source_id, and type *)
   (* source_id comes from variable_reads[0].decl_node.source_id OR type.type_decl_node.source_id *)
+  (* base_type_name comes from value.type.name - used to distinguish address.code from struct.code *)
+  (* base_typeclass comes from value.type.typeclass - used to distinguish interface.address from struct.address *)
   check_ast_type "Attribute" $
-    JSONDecode.map (fn ((((e, attr), tc_opt), src_id_opt), ty) => mk_JE_Attribute(e, attr, tc_opt, src_id_opt, ty)) $
-    tuple2 (tuple2 (tuple2 (tuple2 (field "value" (delay d_json_expr), field "attr" string),
+    JSONDecode.map (fn ((((((e, attr), tc_opt), base_ty_name_opt), base_tc_opt), src_id_opt), ty) => mk_JE_Attribute(e, attr, tc_opt, base_ty_name_opt, base_tc_opt, src_id_opt, ty)) $
+    tuple2 (tuple2 (tuple2 (tuple2 (tuple2 (tuple2 (field "value" (delay d_json_expr), field "attr" string),
                     try (orElse (field "type" $ field "typeclass" string,
                                 field "type" $ field "type_t" $ field "typeclass" string))),
+            try (field "value" $ field "type" $ field "name" string)),
+            try (field "value" $ field "type" $ field "typeclass" string)),
             orElse (field "variable_reads" $ sub 0 $
                               field "decl_node" $ field "source_id" source_id_tm,
                     orElse (field "type" $ field "type_decl_node" $ field "source_id" source_id_tm,
@@ -707,7 +725,8 @@ fun d_json_expr () : term decoder = achoose "expr" [
     tuple2 (tuple3 (field "func" (delay d_json_expr),
                     field "args" (array (delay d_json_expr)),
                     orElse(field "keywords" (array (delay d_json_keyword)), succeed [])),
-            tuple2 (field "type" json_type,
+            tuple2 ((* type field may be missing or null *)
+                    orElse (field "type" json_type, succeed JT_None_tm),
                     orElse (field "func" $ field "type" $ field "type_decl_node" $ field "source_id" source_id_tm,
                             succeed (intSyntax.term_of_int (Arbint.fromInt ~1))))),
 
@@ -908,7 +927,9 @@ fun d_json_stmt () : term decoder = achoose "stmt" [
       mk_JS_For(var, varty, iter_parse_to_term iter_parsed, body)) $
     tuple3 (field "target" $ check_ast_type "AnnAssign" $
               tuple2 (field "target" $ check_ast_type "Name" $ field "id" string,
-                      field "target" $ field "type" json_type),
+                      (* Type can be in target.type or in annotation field *)
+                      orElse (field "target" $ field "type" json_type,
+                              field "annotation" ast_type)),
             field "iter" json_iter_internal,
             field "body" (array (delay d_json_stmt))),
 
@@ -923,7 +944,9 @@ fun d_json_stmt () : term decoder = achoose "stmt" [
   check_ast_type "AnnAssign" $
     JSONDecode.map (fn (var, ty, v) => mk_JS_AnnAssign(var, ty, v)) $
     tuple3 (field "target" $ check_ast_type "Name" $ field "id" string,
-            field "target" $ field "type" json_type,
+            (* Type can be in target.type or in annotation field *)
+            orElse (field "target" $ field "type" json_type,
+                    field "annotation" ast_type),
             field "value" json_expr),
 
   (* Assign *)
@@ -967,6 +990,14 @@ val json_func_type : term decoder =
   tuple2 (field "argument_types" (array json_type),
           field "return_type" json_type)
 
+(* Decorator name decoder: handles both Name nodes (e.g., @external)
+   and Call nodes (e.g., @override(module_name)).
+   Name: {"ast_type": "Name", "id": "external"}
+   Call: {"ast_type": "Call", "func": {"id": "override"}, ...} *)
+val decorator_name : string decoder =
+  orElse (field "id" string,
+          field "func" $ field "id" string)
+
 (* Interface function signature parser
  * Parses FunctionDef nodes within InterfaceDef body.
  * Mutability comes from either decorator_list or body (as Expr > Name > id).
@@ -983,7 +1014,7 @@ val json_interface_func : term decoder =
     orElse(field "returns" ast_type, succeed JT_None_tm),
     (* decorators from decorator_list and/or body *)
     tuple2 (
-      orElse(field "decorator_list" (array (field "id" string)), succeed []),
+      orElse(field "decorator_list" (array decorator_name), succeed []),
       (* body may contain mutability as Expr > Name > id (e.g., "view", "payable") *)
       orElse(field "body" (array (
         check_ast_type "Expr" $
@@ -1002,9 +1033,11 @@ fun d_export_annotation_expr () : term decoder = achoose "export_annotation" [
 
   (* Attribute - always parse as JE_Attribute, never fold *)
   check_ast_type "Attribute" $
-    JSONDecode.map (fn ((((e, attr), tc_opt), src_id_opt), ty) => mk_JE_Attribute(e, attr, tc_opt, src_id_opt, ty)) $
-    tuple2 (tuple2 (tuple2 (tuple2 (field "value" (delay d_json_expr), field "attr" string),
+    JSONDecode.map (fn ((((((e, attr), tc_opt), base_ty_name_opt), base_tc_opt), src_id_opt), ty) => mk_JE_Attribute(e, attr, tc_opt, base_ty_name_opt, base_tc_opt, src_id_opt, ty)) $
+    tuple2 (tuple2 (tuple2 (tuple2 (tuple2 (tuple2 (field "value" (delay d_json_expr), field "attr" string),
                     try (field "type" $ field "typeclass" string)),
+            try (field "value" $ field "type" $ field "name" string)),
+            try (field "value" $ field "type" $ field "typeclass" string)),
             orElse (field "type" $ field "type_decl_node" $ field "source_id" source_id_tm,
                     orElse (field "variable_reads" $ sub 0 $
                               field "decl_node" $ field "source_id" source_id_tm,
@@ -1021,7 +1054,7 @@ val json_toplevel : term decoder = achoose "toplevel" [
       mk_JTL_FunctionDef(n, d, a, df, f, b)) $
     tuple3 (
       tuple2 (field "name" string,
-              field "decorator_list" (array (field "id" string))),
+              field "decorator_list" (array decorator_name)),
       tuple2 (field "args" $ check_ast_type "arguments" $
                 tuple2 (field "args" (array json_arg),
                         orElse(field "defaults" (array json_expr), succeed [])),

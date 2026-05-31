@@ -304,13 +304,7 @@ Definition range_branch_refine_def:
           else
             case term.inst_operands of
               [cond_op; Label true_lbl; Label false_lbl] =>
-                (* Degenerate JNZ cond, L, L: both branches reach succ, so the
-                   condition is not determined by the edge — refining would be
-                   unsound. Vyper cannot represent this (CFG dedupes the targets),
-                   so this branch never fires on a realizable function; it just
-                   keeps the analysis sound on all inputs. *)
-                if true_lbl = false_lbl then pred_exit
-                else if true_lbl = succ then
+                if true_lbl = succ then
                   range_apply_condition dfg ASSIGN_CHAIN_FUEL
                     cond_op T pred_exit
                 else if false_lbl = succ then

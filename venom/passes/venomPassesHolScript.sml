@@ -42,6 +42,8 @@ Ancestors
   sccp
   (* interprocedural *)
   functionInliner
+  (* dead function traversal *)
+  venomDft
   (* invoke copy forwarding *)
   internalReturnCopyFwdProofs
   readonlyInvokeCopyFwdProofs
