@@ -240,6 +240,63 @@ The strengthened runtime assignment side conditions are derived in each branch:
 
 ## Current status (2026-05-31)
 
+### Blocked status update (2026-06-01)
+
+The fresh type-system rewrite is currently **blocked at
+`eval_all_type_sound_mutual[Expr_Call_ExtCall]`**.  The remaining zero-cheat
+completion goal is not abandoned, but further proof work is not authorized under
+the current task contract until the ExtCall proof interface is redesigned.
+
+Evidence from the C1.2 checkpoint:
+
+- The proposed compact bridge
+  `extcall_driver_continuation_premise_from_compact_ih` was tautological: it
+  consumed exactly the desired compact optional-driver premise and did not derive
+  that premise from the live mutual proof context.
+- The live `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall]` context exposes
+  the optional-driver recursive IH only under the full generated ExtCall monadic
+  prefix, including `eval_exprs`, `check`, `lift_option`,
+  `build_ext_calldata`, `run_ext_call`, `update_accounts`, and
+  `update_transient` temporaries.
+- No compact standalone premise of the shape consumed by
+  `extcall_success_continuation_sound_cond_driver_ih` is naturally available in
+  the Resume context.
+- Recovering that premise locally would require the already-ruled-out brittle
+  generated-prefix specialization/simplification path.
+
+Required redesign before continuing:
+
+- Change the mutual theorem/suspend boundary, or introduce a source-level
+  lemma/suspend structure, so the optional driver continuation IH is available
+  directly in compact form.
+- A successful redesign must avoid packaging the entire generated ExtCall prefix
+  into another adapter theorem.
+- Failure sign: the consumer still has to manually specialize or simplify an IH
+  guarded by `eval_exprs`/`check`/`lift_option`/`build_ext_calldata`/
+  `run_ext_call`/`update_accounts`/`update_transient`.
+
+Do not retry:
+
+- `asm "driver_ih" ...` followed by broad `simp`/`gvs` over the generated
+  ExtCall prefix.
+- Long `qspecl_then` instantiations over generated ExtCall temporaries.
+- Quoted-assumption or `MATCH_MP` plumbing that reconstructs the generated
+  prefix by hand.
+- Helpers that merely repackage the full generated monadic prefix.
+- Treating the removed tautological compact bridge as proof infrastructure.
+
+Known remaining fresh-stack cheats remain useful context:
+
+- `eval_all_type_sound_mutual[Expr_Call_ExtCall]`
+- `eval_all_type_sound_mutual[Expr_Call_RawCallTarget]`
+- `raw_call_return_type_well_formed`
+
+However, `RawCallTarget`, the localized builtin arithmetic cheat, wrapper
+validation, and final validation are superseded as next steps by this blocked
+gate.  The task instruction says the proof should be straightforward and to stop
+on design/plan problems; therefore proof work stops here pending maintainer
+redesign/approval.
+
 ### Completion scope
 
 Completion for this rewrite means:
@@ -356,43 +413,25 @@ Completed foundational checkpoints:
 - Assignment statement branches (AnnAssign, Assign, AugAssign) fully proved.
 - Scope-pop/env-extension reorganisation complete.
 
-Remaining priorities:
+Current stop gate:
 
-The remaining cheats are concentrated in **call soundness** (4 in
-`vyperTypeCallSoundnessScript.sml`) and **expression-call branches in statement
-soundness** (2 in `vyperTypeStmtSoundnessScript.sml`), plus 1 localized builtin
-arithmetic cheat.  This is a much narrower surface than before.
+1. **Blocked ExtCall proof-interface redesign.**  Do not continue proof work from
+   the present `Expr_Call_ExtCall` Resume.  The next maintainer action is a
+   redesign of the mutual proof/suspend boundary, or an equivalent source-level
+   theorem structure, that exposes the optional driver continuation IH in compact
+   form without generated-prefix plumbing.
+2. **After redesign only:** revisit
+   `eval_all_type_sound_mutual[Expr_Call_ExtCall]`, then
+   `eval_all_type_sound_mutual[Expr_Call_RawCallTarget]`.
+3. **After the call-expression design is unblocked:** discharge the localized
+   builtin cheat `raw_call_return_type_well_formed` and rerun wrapper/final
+   validation.
 
-Do **not** spend time first on the known self-contained builtin
-issues unless they block another proof.  In particular, for now it is acceptable
-to leave informal comments and cheats around:
-
-- the ABI encode bound issue;
-- `Env MsgGas` / runtime support for `MsgGas`;
-- other isolated/self-contained builtin lemmas.
-
-These are still part of final completion and must eventually be proved or fixed;
-they are deferred only because they appear localized and should not determine
-the shape of the call proof architecture.
-
-Priority order for the next phase:
-
-1. **ExtCall/RawCallTarget expression branches.**  Prove the 2 cheats in
-   `eval_all_type_sound_mutual[Expr_Call_ExtCall]` and
-   `eval_all_type_sound_mutual[Expr_Call_RawCallTarget]` using a standalone
-   helper theorem plus the already-proved infrastructure (`extcall_static_args_runtime_typed_dest`,
-   `extcall_nonstatic_args_runtime_typed_dest`, `run_ext_call_accounts_well_typed`,
-   `update_accounts_transient_runtime_consistent`, `extcall_return_tail_sound`).
-   Key challenge: bridging the monadic continuation after update_accounts/update_transient
-   to the `extcall_return_tail_sound` interface.
-2. **Builtin localized cheat: `raw_call_return_type_well_formed`.**  This is a
-   localized arithmetic/type-slot-size issue.  Discharge when convenient.
-3. **Audit remaining deferred builtin gaps** (ABI encode bound, `MsgGas`, etc.)
-   for definition-level risks before claiming final no-cheat soundness.
-4. **Retire old theories.**  Once the fresh stack is complete with zero cheats,
-   delete or archive `vyperTypeSoundnessDefsScript.sml`,
-   `vyperTypeSoundnessHelpersScript.sml`, and
-   `vyperTypeSoundnessScript.sml`.
+The previous next-phase priority order (prove ExtCall/RawCallTarget directly,
+then the localized builtin arithmetic cheat, then final audit/retirement) is
+superseded by the blocked status above.  In particular, `raw_call_return_type_well_formed`
+remains localized context but is not an authorized autonomous next step while the
+ExtCall design mismatch is unresolved.
 
 Also eventually update/replace:
 
