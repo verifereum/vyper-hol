@@ -66,7 +66,7 @@ Datatype:
   | SelfDestructK eval_continuation
   | CreateK type create_kind bool eval_continuation
   | IntCallK (num |-> type_args) (num option # identifier) ((identifier # type) list) (expr list) type (stmt list) bool function_mutability eval_continuation
-  | IntCallK1 (num |-> type_args) (num option # identifier) ((identifier # type) list) (value list) type (stmt list) bool function_mutability eval_continuation
+  | IntCallK1 (num |-> type_args) (num option # identifier) ((identifier # type) list) (value list) (scope list) type (stmt list) bool function_mutability eval_continuation
   | IntCallK2 (scope list) type_value bool bool eval_continuation
   | ExprsK (expr list) eval_continuation
   | ExprsK1 value eval_continuation
@@ -410,7 +410,8 @@ Definition apply_exc_def:
   apply_exc cx ex st (SelfDestructK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (CreateK _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (IntCallK _ _ _ _ _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (IntCallK1 _ _ _ _ _ _ _ _ k) = AK (cx with stk updated_by TL) (ApplyExc ex) st k ∧
+  apply_exc cx ex st (IntCallK1 _ _ _ _ prev _ _ _ _ k) =
+    liftk (cx with stk updated_by TL) (K (ApplyExc ex)) (set_scopes prev st) k ∧
   apply_exc cx ex st (IntCallK2 prev rtv nr is_view k) =
     liftk (cx with stk updated_by TL) (ApplyTv o Value)
       (do rv <- finally (handle_function ex)
@@ -662,13 +663,20 @@ Definition apply_vals_def:
      | (INL (INL e), st) => eval_expr_cps cx e st k
      | (INL (INR tv), st) => AK cx (ApplyTv tv) st k) ∧
   apply_vals cx vs st (IntCallK all_tenv src_fn args dflts ret body nr mut k) =
-    eval_exprs_cps (cx with stk updated_by CONS src_fn)
-      (DROP (LENGTH dflts - (LENGTH args - LENGTH vs)) dflts) st
-      (IntCallK1 all_tenv src_fn args vs ret body nr mut k) ∧
-  apply_vals cx dflt_vs st (IntCallK1 all_tenv src_fn args vs ret body nr mut k) =
     (case do
-      env <- lift_option_type (bind_arguments all_tenv args (vs ++ dflt_vs)) "IntCall bind_arguments";
       prev <- get_scopes;
+      set_scopes [FEMPTY];
+      return prev
+    od st of
+     | (INR ex, st) => apply_exc cx ex st k
+     | (INL prev, st) =>
+        eval_exprs_cps (cx with stk updated_by CONS src_fn)
+          (DROP (LENGTH dflts - (LENGTH args - LENGTH vs)) dflts) st
+          (IntCallK1 all_tenv src_fn args vs prev ret body nr mut k)) ∧
+  apply_vals cx dflt_vs st (IntCallK1 all_tenv src_fn args vs prev ret body nr mut k) =
+    (case do
+      set_scopes prev;
+      env <- lift_option_type (bind_arguments all_tenv args (vs ++ dflt_vs)) "IntCall bind_arguments";
       rtv <- lift_option_type (evaluate_type all_tenv ret) "IntCall eval ret";
       is_view <<- (mut = View ∨ mut = Pure);
       (* Acquire lock BEFORE push_function so scopes are unmodified on failure *)
@@ -3059,164 +3067,126 @@ Proof
         \\ simp[apply_exc_owhile_eq])
     \\ rename1`INL call_info`
     \\ PairCases_on`call_info`
-    \\ ntac 3 (pop_assum mp_tac)
-    \\ gvs[CaseEq"prod",CaseEq"sum",return_def]
-    \\ rpt strip_tac
-    \\ TRY (qpat_x_assum `_ = INL _` SUBST_ALL_TAC)
-    \\ TRY (qpat_x_assum `_ = INL _` SUBST_ALL_TAC)
-    \\ qpat_x_assum `∀s0 t0 s1 ts0 t1 s2 tup0 t2 s3 t3.
-          check (¬MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL (),t0) ∧
-          lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 = (INL ts0,t1) ∧
-          lift_option_type (lookup_callable_function cx.in_deploy fn ts0) "IntCall lookup_function" s2 =
-            (INL tup0,t2) ∧
-          type_check
-            (LENGTH es ≤ LENGTH (FST (SND (SND tup0))) ∧
-             LENGTH (FST (SND (SND tup0))) ≤ LENGTH es + LENGTH (FST (SND (SND (SND tup0)))))
-            "IntCall args length" s3 = (INL (),t3) ⇒
-          ∀st0 k0. cont (eval_exprs_cps cx es st0 k0) = _`
-        (drule_then (drule_then drule))
-    \\ simp_tac std_ss [cont_def] \\ disch_then drule
-    \\ simp_tac std_ss [cont_def] \\ disch_then kall_tac
-    \\ gvs[return_def]
-      \\ CASE_TAC
-      \\ reverse CASE_TAC
-      >- gvs[return_def, raise_def, apply_exc_owhile_eq,
-             Once OWHILE_THM, stepk_def, apply_exc_def]
-      >> rw[Once OWHILE_THM, stepk_def, apply_vals_def]
-      \\ drule eval_exprs_length \\ strip_tac
-      \\ qpat_x_assum `∀s0 t0 s1 ts0 t1 s2 tup0 t2 s3 t3 s4 vs0 t4.
-            _ ⇒ ∀st0 k0.
-              cont (eval_exprs_cps (cx with stk updated_by CONS (src_id_opt,fn)) _ st0 k0) = _`
-          (funpow 2 drule_then drule)
-      \\ simp_tac std_ss []
-      \\ disch_then $ drule_then drule \\ asm_simp_tac std_ss []
-      \\ disch_then (fn th => PURE_ONCE_REWRITE_TAC [REWRITE_RULE[cont_def] th])
-      \\ CASE_TAC
-      \\ reverse CASE_TAC
-      >- gvs[return_def, raise_def, apply_exc_owhile_eq,
-             Once OWHILE_THM, stepk_def, apply_exc_def, o_DEF]
-      \\ rw[Once OWHILE_THM, stepk_def, apply_vals_def, bind_def, ignore_bind_def, LET_THM]
-      (* after eval_exprs for defaults, now in IntCallK1: bind_arguments etc *)
-      \\ gvs[CaseEq"prod", CaseEq"sum", return_def]
-      \\ TRY (simp[apply_exc_def, o_DEF])
-      \\ TRY (
-        gvs[o_DEF]
-        \\ rw[Once OWHILE_THM, SimpRHS, stepk_def]
-        \\ CHANGED_TAC $ gvs[apply_exc_def]
-        \\ gvs[o_DEF]
-        \\ rw[Once OWHILE_THM])
-      \\ qmatch_goalsub_abbrev_tac`pair_CASE prefix_res pc`
-      \\ PairCases_on`prefix_res`
-      \\ reverse (Cases_on`prefix_res0`)
-      >- (qpat_x_assum `Abbrev ((INR y,prefix_res1) = _)`
-            (assume_tac o GSYM o REWRITE_RULE[markerTheory.Abbrev_def])
-          \\ qpat_x_assum `(case _ of _ => _) = (INR y,prefix_res1)`
-            (fn h =>
-               assume_tac
-                 (MATCH_MP intcall_prefix_error_eq h
-                  handle HOL_ERR _ => MATCH_MP intcall_prefix_error_nolock_eq h))
-          \\ gvs[Abbr`pc`, apply_exc_owhile_eq,
-                  stepk_def, apply_exc_def, o_DEF]
-          \\ once_rewrite_tac[OWHILE_THM]
-          \\ simp[stepk_def, apply_exc_def, apply_exc_owhile_unfold_eq])
-      \\ rename1`INL call_res`
-      \\ qpat_x_assum `Abbrev ((_,prefix_res1) = _)`
-           (fn th =>
-              let val th' = REWRITE_RULE[markerTheory.Abbrev_def] th in
-                assume_tac th' >> PURE_REWRITE_TAC [GSYM th']
-              end)
-      \\ qpat_x_assum `(_,prefix_res1) = _` (assume_tac o SYM)
-      \\ TRY (
-        qpat_x_assum `(case _ of _ => _) = (INR y,prefix_res1)`
-          (fn h =>
-             assume_tac
-               (MATCH_MP intcall_prefix_error_eq h
-                handle HOL_ERR _ => MATCH_MP intcall_prefix_error_nolock_eq h))
-        \\ gvs[Abbr`pc`, apply_exc_owhile_eq,
-                stepk_def, apply_exc_def, o_DEF])
-      \\ TRY (qpat_x_assum `(case _ of _ => _) = (INL _,prefix_res1)`
-        (fn h =>
-           let
-             val facts =
-               MATCH_MP intcall_prefix_success_tup_facts_by_view h
-               handle HOL_ERR _ =>
-                 MATCH_MP intcall_nonview_prefix_success_tup_facts h
-                 handle HOL_ERR _ =>
-                   MATCH_MP intcall_prefix_success_tup_facts h
-                   handle HOL_ERR _ => MATCH_MP intcall_prefix_success_nolock_tup_facts h
-           in
-             strip_assume_tac facts
-           end))
-      \\ Cases_on `cx.nonreentrant_slot`
-      \\ TRY (
-        qpat_x_assum `(case NONE of _ => _ | _ => _) _ = (INL (),_)` mp_tac
-        \\ simp[raise_def, return_def])
-      \\ simp[raise_def, return_def]
-      \\ qmatch_asmsub_rename_tac`eval_exprs _ (DROP _ _) _ = (INL dflt_vals,dflt_st)`
-      \\ qmatch_asmsub_abbrev_tac`check (¬MEM src_fn cx.stk) "recursion" st = _`
-      \\ TRY (qpat_x_assum `call_res = _` SUBST_ALL_TAC)
-      \\ TRY (qpat_x_assum `lift_option_type (bind_arguments _ _ _) _ _ = _`
-           (fn th => assume_tac th >> PURE_REWRITE_TAC [th]))
-      \\ TRY (qpat_x_assum `get_scopes _ = _`
-           (fn th => assume_tac th >> PURE_REWRITE_TAC [th]))
-      \\ TRY (qpat_x_assum `lift_option_type (evaluate_type _ _) _ _ = _`
-           (fn th => assume_tac th >> PURE_REWRITE_TAC [th]))
-      \\ TRY (qpat_x_assum `(case SOME _ of _ => _ | _ => _) _ = _`
-           (fn th => assume_tac th >> PURE_REWRITE_TAC [th]))
-      \\ TRY (qpat_x_assum `push_function _ _ _ _ = _`
-           (fn th => assume_tac th >> PURE_REWRITE_TAC [th]))
-      \\ simp[bind_def, ignore_bind_def, return_def, raise_def]
-      \\ TRY (simp[Abbr`pc`, o_DEF])
-      \\ rw[return_def, finally_def, try_def, bind_def]
-      \\ simp[o_DEF]
-      (* Fire eval_stmts IH where this is the successful-call branch. *)
-      \\ last_x_assum (funpow 2 drule_then drule)
-      \\ asm_simp_tac std_ss [return_def]
-      \\ fs[]
-      \\ strip_tac
-      \\ FIRST [
-        qpat_x_assum
-          `∀s8 t3 s9 vs0 t4 s10 dflt_vs0 t5 s11 env0 t6 s12 prev0 t7
-             s13 rtv0 t8 s15 cx0 t10 st0 k0.
-             _ ⇒ cont (eval_stmts_cps _ _ _ _) = _`
-          drule_all
-        \\ disch_then (fn th => PURE_REWRITE_TAC [REWRITE_RULE[cont_def] th]),
-        qpat_x_assum
-          `∀s8 t3 s9 vs0 t4 s10 dflt_vs0 t5 s11 env0 t6 s12 prev0 t7
-             s13 rtv0 t8 s14 t9 s15 cx0 t10 st0 k0.
-             _ ⇒ cont (eval_stmts_cps _ _ _ _) = _`
-          drule_all
-        \\ disch_then (fn th => PURE_REWRITE_TAC [REWRITE_RULE[cont_def] th]),
-        ALL_TAC]
-      (* Derive context facts from push_function where available. *)
-      \\ TRY (
-        qpat_x_assum `push_function _ _ _ _ = _` mp_tac
-        \\ simp[push_function_def, return_def]
-        \\ strip_tac \\ gvs[])
-      \\ TRY (
-        qpat_x_assum `(case _ of _ => _) = (INR y,prefix_res1)`
-          (fn th => assume_tac th >> PURE_REWRITE_TAC [th])
-        \\ rw[Once OWHILE_THM, stepk_def, apply_exc_def, o_DEF,
-              apply_exc_owhile_unfold_eq])
-      \\ TRY (
-        qpat_x_assum `(case _ of _ => _) = (INL _,prefix_res1)`
-          (mp_tac o MATCH_MP intcall_prefix_success_missing_slot_raise_eq)
-        \\ simp[])
-      (* Case split on eval_stmts result *)
-      \\ TRY CASE_TAC \\ TRY CASE_TAC
-      \\ rw[Once OWHILE_THM, stepk_def]
-      (* Success/exception: apply IntCallK2 finalizers. *)
-      \\ TRY (simp[intcall_k2_apply_success_eq])
-      \\ TRY (simp[intcall_k2_apply_success_view_eq])
-      \\ TRY (simp[intcall_k2_apply_success_nolock_eq])
-      \\ TRY (simp[intcall_k2_apply_exc_eq])
-      \\ TRY (simp[intcall_k2_apply_exc_view_eq])
-      \\ TRY (simp[intcall_k2_apply_exc_nolock_eq])
-      \\ rw[apply_exc_def, o_DEF, liftk1, bind_def, ignore_bind_def,
-            finally_def, return_def]
-      \\ simp[pop_function_def, set_scopes_def, return_def, raise_def]
-      \\ simp[option_CASE_rator, sum_CASE_rator]
-    \\ rw[] )
+    >> pop_assum mp_tac
+    >> simp[CaseEq"prod",CaseEq"sum",return_def]
+    >> strip_tac >> gvs[]
+    >> first_x_assum drule_all
+    >> simp[cont_def]
+    >> disch_then kall_tac
+    >> CASE_TAC
+    \\ reverse CASE_TAC
+    >- gvs[return_def, raise_def, apply_exc_owhile_eq,
+           Once OWHILE_THM, stepk_def, apply_exc_def]
+    >> simp[Once OWHILE_THM, stepk_def, apply_vals_def, bind_def]
+    >> CASE_TAC
+    >> reverse CASE_TAC
+    >- (simp[Once OWHILE_THM,SimpRHS,stepk_def] >> rw[] >>
+        simp[apply_exc_def] >> simp[Once OWHILE_THM,stepk_def] )
+    >> simp[ignore_bind_def, bind_def]
+    >> CASE_TAC
+    >> reverse CASE_TAC
+    >- gvs[set_scopes_def,return_def]
+    >> pop_assum mp_tac
+    >> simp[return_def]
+    >> strip_tac
+    >> first_x_assum drule_all
+    >> drule eval_exprs_length >> strip_tac
+    >> simp[cont_def]
+    >> disch_then kall_tac
+    \\ CASE_TAC
+    \\ reverse CASE_TAC
+    >- gvs[return_def, raise_def, apply_exc_owhile_eq,
+           Once OWHILE_THM, stepk_def, apply_exc_def, o_DEF,
+           finally_def, bind_def, ignore_bind_def, liftk1,
+           set_scopes_def, return_def]
+    >> qmatch_goalsub_abbrev_tac`finally mm ss zz`
+    >> Cases_on`finally mm ss zz`
+    >> simp[]
+    >> reverse $ Cases_on`q`
+    >> simp[Abbr`ss`,Abbr`zz`]
+    >- (
+      pop_assum mp_tac >>
+      simp[finally_def, ignore_bind_def, bind_def, return_def, raise_def] >>
+      simp[CaseEq"prod",CaseEq"sum"] >>
+      simp[set_scopes_def, return_def] >>
+      simp[Abbr`mm`, bind_def])
+    >> first_x_assum $ funpow 5 drule_then drule
+    >> qunabbrev_tac`mm`
+    >> disch_then drule
+    >> strip_tac
+    >> simp[Once OWHILE_THM,stepk_def,apply_vals_def,bind_def,ignore_bind_def]
+    >> simp[Once set_scopes_def, return_def]
+    >> qhdtm_x_assum`finally`mp_tac
+    >> simp[finally_def,bind_def,ignore_bind_def]
+    >> simp[Once set_scopes_def, return_def]
+    >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC
+    >> qmatch_goalsub_abbrev_tac`pair_CASE (pair_CASE pp _)`
+    >> `∃q r. pp = (q,r)` by (Cases_on`pp` >> gvs[])
+    >> simp[Abbr`pp`]
+    >> reverse $ Cases_on`q`
+    >> simp[]
+    >- (simp[Once OWHILE_THM,SimpRHS,stepk_def] >> rw[] >>
+        simp[apply_exc_def] >> simp[Once OWHILE_THM,stepk_def] )
+    >> qmatch_goalsub_abbrev_tac`pair_CASE (pair_CASE pp _)`
+    >> `∃q r. pp = (q,r)` by (Cases_on`pp` >> gvs[])
+    >> simp[Abbr`pp`]
+    >> reverse $ Cases_on`q`
+    >> simp[]
+    >- (simp[Once OWHILE_THM,SimpRHS,stepk_def] >> rw[] >>
+        simp[apply_exc_def] >> simp[Once OWHILE_THM,stepk_def] )
+    >> qmatch_goalsub_abbrev_tac`pair_CASE (pair_CASE pp _)`
+    >> `∃q r. pp = (q,r)` by (Cases_on`pp` >> gvs[])
+    >> simp[Abbr`pp`]
+    >> reverse $ Cases_on`q`
+    >> simp[]
+    >- (simp[Once OWHILE_THM,SimpRHS,stepk_def] >> rw[] >>
+        simp[apply_exc_def] >> simp[Once OWHILE_THM,stepk_def] )
+    >> qmatch_goalsub_abbrev_tac`pair_CASE (pair_CASE pp _)`
+    >> `∃q r. pp = (q,r)` by (Cases_on`pp` >> gvs[])
+    >> simp[Abbr`pp`]
+    >> reverse $ Cases_on`q`
+    >> simp[]
+    >- (simp[Once OWHILE_THM,SimpRHS,stepk_def] >> rw[] >>
+        simp[apply_exc_def] >> simp[Once OWHILE_THM,stepk_def] )
+    >> first_x_assum drule >> simp[]
+    >> disch_then drule
+    >> gvs[]
+    >> disch_then $ drule_then drule
+    >> simp[cont_def]
+    >> disch_then kall_tac
+    >> simp[try_def, bind_def]
+    >> CASE_TAC
+    >> reverse CASE_TAC
+    >> simp[]
+    >- (
+      simp[Once OWHILE_THM, stepk_def] >>
+      simp[apply_exc_def, liftk1, finally_def, bind_def] >>
+      qmatch_goalsub_rename_tac`handle_function ff ss` >>
+      Cases_on`handle_function ff ss` >>
+      simp[return_def, ignore_bind_def, bind_def] >>
+      AP_TERM_TAC >>
+      gvs[push_function_def, return_def] >>
+      CASE_TAC >> simp[] >>
+      CASE_TAC >> simp[] >>
+      CASE_TAC >> simp[return_def, raise_def] >>
+      CASE_TAC >> simp[] >>
+      CASE_TAC >> simp[] >>
+      CASE_TAC >> simp[] >>
+      CASE_TAC >> simp[] >>
+      CASE_TAC >> simp[] >>
+      CASE_TAC >> simp[] )
+    >> simp[Once OWHILE_THM, stepk_def, apply_def, liftk1]
+    >> simp[bind_def, return_def, ignore_bind_def]
+    >> gvs[push_function_def, return_def]
+    >> AP_TERM_TAC >>
+      CASE_TAC >> simp[] >>
+      CASE_TAC >> simp[] >>
+      CASE_TAC >> simp[return_def, raise_def] >>
+      CASE_TAC >> simp[] >>
+      CASE_TAC >> simp[] >>
+      CASE_TAC >> simp[] >>
+      CASE_TAC >> simp[] >>
+      CASE_TAC >> simp[])
   (* ===== Chain interaction builtins ===== *)
   (* All 5 new cases: CPS eval_exprs then continuation matches big-step body.
      Pattern: unfold both sides, use IH for eval_exprs, match continuation bodies. *)
