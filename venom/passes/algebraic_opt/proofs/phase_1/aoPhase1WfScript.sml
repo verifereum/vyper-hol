@@ -101,11 +101,6 @@ Proof
   fs[inst_wf_def]
 QED
 
-Theorem ao_handle_offset_inst_not_add:
-  !inst. inst.inst_opcode <> ADD ==> ao_handle_offset_inst inst = inst
-Proof
-  simp[ao_handle_offset_inst_def]
-QED
 
 (* ===== Phase 1 preserves wf_function ===== *)
 
@@ -172,33 +167,6 @@ QED
 
 (* ===== Phase 1 preserves iszero no-label property ===== *)
 
-Triviality fn_insts_blocks_map_transform[local]:
-  !blocks f.
-    fn_insts_blocks (MAP (block_map_transform f) blocks) =
-    MAP f (fn_insts_blocks blocks)
-Proof
-  Induct >> simp[fn_insts_blocks_def, block_map_transform_def]
-QED
-
-Theorem ao_phase1_preserves_iszero_no_label:
-  !fn.
-    EVERY (\inst. inst.inst_opcode = ISZERO ==>
-       EVERY (\op. get_label op = NONE) inst.inst_operands) (fn_insts fn) ==>
-    EVERY (\inst. inst.inst_opcode = ISZERO ==>
-       EVERY (\op. get_label op = NONE) inst.inst_operands)
-      (fn_insts (function_map_transform
-        (block_map_transform ao_handle_offset_inst) fn))
-Proof
-  simp[fn_insts_def, function_map_transform_def,
-       fn_insts_blocks_map_transform] >>
-  PURE_REWRITE_TAC[listTheory.EVERY_MAP] >>
-  simp[listTheory.EVERY_MEM, combinTheory.o_DEF] >>
-  rpt strip_tac >>
-  Cases_on `x.inst_opcode = ADD` >- (
-    gvs[ao_handle_offset_inst_def, LET_THM] >>
-    rpt (FULL_CASE_TAC >> gvs[])) >>
-  gvs[ao_handle_offset_inst_not_add] >> res_tac
-QED
 
 (* ===== Phase 1 preserves def_dominates_uses (hence wf_ssa) ===== *)
 
@@ -224,13 +192,6 @@ Proof
   metis_tac[MEM_EL, EL_MAP, ALL_DISTINCT_EL_IMP, LENGTH_MAP]
 QED
 
-Triviality fmt_bmt_labels[local]:
-  !f fn. fn_labels (function_map_transform (block_map_transform f) fn) =
-         fn_labels fn
-Proof
-  simp[fn_labels_def, function_map_transform_def, block_map_transform_def,
-       MAP_MAP_o, combinTheory.o_DEF]
-QED
 
 Triviality fmt_bmt_entry_label[local]:
   !f fn. fn_entry_label (function_map_transform (block_map_transform f) fn) =

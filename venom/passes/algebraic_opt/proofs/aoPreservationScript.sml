@@ -73,24 +73,6 @@ QED
 
 (* ===== Top-level SSA preservation ===== *)
 
-Triviality ao_peephole_inst_last_outputs[local]:
-  !mid dfg ra lbl idx inst.
-    ao_peephole_inst mid dfg ra lbl idx inst <> [] /\
-    (LAST (ao_peephole_inst mid dfg ra lbl idx inst)).inst_outputs =
-      inst.inst_outputs
-Proof
-  rpt gen_tac >>
-  simp[ao_peephole_inst_def, LET_THM] >>
-  rpt IF_CASES_TAC >>
-  simp[ao_opt_shift_def, ao_opt_signextend_def, ao_opt_exp_def,
-       ao_opt_addsub_def, ao_opt_and_def, ao_opt_muldiv_def,
-       ao_opt_or_def, ao_opt_eq_def, ao_opt_comparator_def, LET_THM,
-       ao_cmp_prefer_iz_zero_def, ao_cmp_prefer_iz_max_def,
-       ao_cmp_prefer_iz_general_def,
-       ao_unsigned_boundaries_def, ao_signed_boundaries_def] >>
-  every_case_tac >> gvs[] >>
-  rpt IF_CASES_TAC >> gvs[]
-QED
 
 (* ===== Phase 1 instruction-level facts ===== *)
 

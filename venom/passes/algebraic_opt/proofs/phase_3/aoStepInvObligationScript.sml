@@ -862,63 +862,6 @@ Proof
   res_tac >> gvs[] >> metis_tac[]
 QED
 
-Triviality ao_dfg_outputs_not_in_fv:
-  !fn fn0 dfg x inst.
-    fn0 = fn with fn_blocks :=
-      MAP (\bb. bb with bb_instructions :=
-        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks /\
-    dfg = dfg_build_function fn0 /\
-    (!inst v. MEM inst (fn_insts fn) /\ MEM v inst.inst_outputs ==>
-              v NOTIN ao_fn_fresh_vars fn) /\
-    dfg_get_def dfg x = SOME inst ==>
-    x NOTIN ao_fn_fresh_vars fn
-Proof
-  rpt gen_tac >> strip_tac >> gvs[] >>
-  drule dfg_build_function_correct >> strip_tac >>
-  qpat_x_assum `MEM inst (fn_insts _)` mp_tac >>
-  simp[fn_insts_def] >> strip_tac >>
-  drule fn_insts_blocks_map_offset >> strip_tac >> gvs[] >>
-  fs[ao_handle_offset_inst_outputs] >>
-  first_x_assum irule >> qexists_tac `inst0` >>
-  simp[fn_insts_def]
-QED
-
-Theorem ao_sinv_state_equiv_compat:
-  !fn fn0 dfg targets fv s1 s2.
-    fn0 = fn with fn_blocks :=
-      MAP (\bb. bb with bb_instructions :=
-        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks /\
-    dfg = dfg_build_function fn0 /\
-    targets = ao_compute_fn_iszero_targets fn0 /\
-    fv = ao_fn_fresh_vars fn /\
-    ao_targets_wf targets /\
-    (!inst v. MEM inst (fn_insts fn) /\
-              MEM (Var v) inst.inst_operands ==> v NOTIN fv) /\
-    (!inst v. MEM inst (fn_insts fn) /\
-              MEM v inst.inst_outputs ==> v NOTIN fv) /\
-    state_equiv fv s1 s2 /\
-    ao_dfg_inv dfg (s1 with vs_inst_idx := 0) /\
-    ao_iszero_chain_inv targets s1 /\
-    ao_chain_defined_prefix targets s1 ==>
-    ao_dfg_inv dfg (s2 with vs_inst_idx := 0) /\
-    ao_iszero_chain_inv targets s2 /\
-    ao_chain_defined_prefix targets s2
-Proof
-  rpt gen_tac >> strip_tac >> rpt conj_tac
-  >- (`state_equiv fv (s1 with vs_inst_idx := 0)
-                       (s2 with vs_inst_idx := 0)` by
-        (qpat_x_assum `state_equiv _ _ _` mp_tac >>
-         simp[state_equiv_def, execution_equiv_def, lookup_var_def]) >>
-      `!x inst'. dfg_get_def dfg x = SOME inst' ==> x NOTIN fv` by
-        metis_tac[ao_dfg_outputs_not_in_fv] >>
-      metis_tac[ao_dfg_inv_state_equiv_compat])
-  >- (irule ao_iszero_chain_inv_state_equiv_compat >>
-      qexistsl_tac [`fv`, `s1`] >> simp[] >>
-      rpt strip_tac >>
-      metis_tac[ao_chain_vars_not_in_fv])
-  >- (irule ao_chain_defined_prefix_state_equiv_compat >>
-      simp[] >> metis_tac[ao_chain_vars_not_in_fv])
-QED
 
 (* ===== range_sound state_equiv compatibility ===== *)
 

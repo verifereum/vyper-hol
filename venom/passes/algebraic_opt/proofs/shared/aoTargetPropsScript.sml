@@ -76,17 +76,6 @@ Proof
   first_x_assum irule >> gvs[] >> metis_tac[]
 QED
 
-Triviality iszero_step_alookup_mono[local]:
-  !acc h w.
-    ALOOKUP acc w <> NONE ==>
-    ALOOKUP (ao_compute_iszero_step acc h) w <> NONE
-Proof
-  rpt gen_tac >>
-  simp[ao_compute_iszero_step_def] >>
-  rpt BasicProvers.FULL_CASE_TAC >> gvs[] >>
-  simp[alistTheory.ALOOKUP_def] >>
-  IF_CASES_TAC >> simp[]
-QED
 
 Triviality snoc_var_el_cases[local]:
   !prev key k w.

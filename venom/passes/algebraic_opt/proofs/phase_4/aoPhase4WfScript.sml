@@ -41,32 +41,9 @@ Proof
   res_tac
 QED
 
-Triviality flip_cmp_non_term[local]:
-  !opc. is_comparator opc ==> ~is_terminator (flip_comparison_opcode opc)
-Proof
-  simp[is_comparator_def] >> rpt strip_tac >>
-  gvs[flip_comparison_opcode_def, is_terminator_def]
-QED
-
-Triviality flip_cmp_non_phi[local]:
-  !opc. is_comparator opc ==> flip_comparison_opcode opc <> PHI
-Proof
-  simp[is_comparator_def] >> rpt strip_tac >>
-  gvs[flip_comparison_opcode_def]
-QED
 
 (* ===== ao_cmp_flip_scan characterization ===== *)
 
-Triviality ao_cmp_flip_scan_non_comp_unchanged[local]:
-  !dfg h insts flips removes inserts.
-    ao_cmp_flip_scan dfg (h::insts) = (flips, removes, inserts) /\
-    ~is_comparator h.inst_opcode ==>
-    ao_cmp_flip_scan dfg insts = (flips, removes, inserts)
-Proof
-  rpt strip_tac >>
-  gvs[ao_cmp_flip_scan_def, LET_THM] >>
-  pairarg_tac >> gvs[]
-QED
 
 Triviality scan_step_detail[local]:
   !dfg h rest fl0 rm0 ins0 fl1 rm1 ins1.
@@ -270,11 +247,6 @@ Proof
   Cases >> simp[is_terminator_def, is_comparator_def]
 QED
 
-Triviality phi_not_comparator[local]:
-  ~is_comparator PHI
-Proof
-  simp[is_comparator_def]
-QED
 
 Triviality all_distinct_id_eq[local]:
   !l x y. ALL_DISTINCT (MAP (\i. i.inst_id) l) /\
@@ -437,14 +409,6 @@ Proof
   simp[fn_inst_ids_distinct_def, fn_insts_def, map_id_fn_insts_blocks]
 QED
 
-Triviality all_distinct_sub[local]:
-  !(l1:'a list) l2.
-    ALL_DISTINCT l2 /\ (!x. MEM x l1 ==> MEM x l2) /\
-    ALL_DISTINCT l1 ==>
-    ALL_DISTINCT l1
-Proof
-  simp[]
-QED
 
 Triviality all_distinct_flat_mem[local]:
   !bbs (bb:'a list). ALL_DISTINCT (FLAT bbs) /\ MEM bb bbs ==>
@@ -576,50 +540,6 @@ Proof
   every_case_tac >> gvs[] >> metis_tac[]
 QED
 
-Triviality apply_inst_ids_flip[local]:
-  !mid flips removes inserts inst opc w op.
-    ALOOKUP flips inst.inst_id = SOME (opc, w, op) ==>
-    MAP (\i. i.inst_id)
-      (ao_cmp_flip_apply_inst mid flips removes inserts inst) =
-    [inst.inst_id]
-Proof
-  simp[ao_cmp_flip_apply_inst_def]
-QED
-
-Triviality apply_inst_ids_remove[local]:
-  !mid flips removes inserts inst.
-    ALOOKUP flips inst.inst_id = NONE /\
-    MEM inst.inst_id removes ==>
-    MAP (\i. i.inst_id)
-      (ao_cmp_flip_apply_inst mid flips removes inserts inst) =
-    [inst.inst_id]
-Proof
-  simp[ao_cmp_flip_apply_inst_def]
-QED
-
-Triviality apply_inst_ids_insert[local]:
-  !mid flips removes inserts inst cmp_out fresh_v cmp_id.
-    ALOOKUP flips inst.inst_id = NONE /\
-    ~MEM inst.inst_id removes /\
-    ALOOKUP inserts inst.inst_id = SOME (cmp_out, fresh_v, cmp_id) ==>
-    MAP (\i. i.inst_id)
-      (ao_cmp_flip_apply_inst mid flips removes inserts inst) =
-    [ao_fresh_id mid cmp_id 0; inst.inst_id]
-Proof
-  simp[ao_cmp_flip_apply_inst_def]
-QED
-
-Triviality apply_inst_ids_none[local]:
-  !mid flips removes inserts inst.
-    ALOOKUP flips inst.inst_id = NONE /\
-    ~MEM inst.inst_id removes /\
-    ALOOKUP inserts inst.inst_id = NONE ==>
-    MAP (\i. i.inst_id)
-      (ao_cmp_flip_apply_inst mid flips removes inserts inst) =
-    [inst.inst_id]
-Proof
-  simp[ao_cmp_flip_apply_inst_def]
-QED
 
 Triviality all_distinct_pred_split_local[local]:
   !(l:num list) mid.

@@ -22,11 +22,6 @@ Proof
   simp[ao_fresh_id_def]
 QED
 
-Theorem ao_fresh_id_ge:
-  !mid id slot. ao_fresh_id mid id slot >= mid + 1
-Proof
-  simp[ao_fresh_id_def]
-QED
 
 Theorem ao_fresh_id_inj:
   !mid id1 slot1 id2 slot2.
@@ -124,14 +119,6 @@ QED
 
 (* When inst has empty outputs (terminators), ao_transform_inst returns
    a singleton with the same opcode *)
-Theorem ao_transform_inst_empty_outputs:
-  !mid dfg ra lbl idx targets inst.
-    inst.inst_outputs = [] ==>
-    ao_transform_inst mid dfg ra lbl idx targets inst =
-      [ao_resolve_iszero_inst targets inst]
-Proof
-  simp[ao_transform_inst_def, LET_THM, ao_resolve_iszero_inst_outputs]
-QED
 
 (* PHI maps to singleton *)
 Theorem ao_transform_inst_phi:
@@ -144,55 +131,16 @@ Proof
 QED
 
 (* ASSIGN maps to singleton *)
-Theorem ao_transform_inst_assign:
-  !mid dfg ra lbl idx targets inst.
-    inst.inst_opcode = ASSIGN ==>
-    ao_transform_inst mid dfg ra lbl idx targets inst =
-      [ao_resolve_iszero_inst targets inst]
-Proof
-  simp[ao_transform_inst_def, LET_THM, ao_resolve_iszero_inst_opcode]
-QED
 
 (* ===== ALL_DISTINCT bound split ===== *)
 
 (* If every element is either <= mid or > mid, and both halves are
    ALL_DISTINCT, then the whole list is ALL_DISTINCT *)
-Theorem all_distinct_bound_split:
-  !(l:num list) mid.
-    ALL_DISTINCT (FILTER (\id. id <= mid) l) /\
-    ALL_DISTINCT (FILTER (\id. ~(id <= mid)) l) ==>
-    ALL_DISTINCT l
-Proof
-  Induct >> simp[] >> rpt strip_tac >>
-  Cases_on `h <= mid` >> gvs[listTheory.MEM_FILTER] >>
-  first_x_assum irule >>
-  metis_tac[listTheory.FILTER_ALL_DISTINCT]
-QED
 
-Theorem all_distinct_pred_split:
-  !(l:'a list) P.
-    ALL_DISTINCT (FILTER P l) /\
-    ALL_DISTINCT (FILTER ($~ o P) l) ==>
-    ALL_DISTINCT l
-Proof
-  Induct >> simp[] >> rpt strip_tac >>
-  Cases_on `P h` >> gvs[listTheory.MEM_FILTER] >>
-  first_x_assum irule >>
-  metis_tac[listTheory.FILTER_ALL_DISTINCT]
-QED
 
 (* ===== Top-level preservation ===== *)
 
 (* Phase 1 transform equals function_map_transform *)
-Triviality ao_phase1_eq_fmt[local]:
-  !fn. fn with fn_blocks :=
-    MAP (\bb. bb with bb_instructions :=
-      MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks =
-    function_map_transform (block_map_transform ao_handle_offset_inst) fn
-Proof
-  simp[function_map_transform_def, block_map_transform_def,
-       ir_function_component_equality, listTheory.MAP_EQ_f]
-QED
 
 (* ===== ao_transform_inst: non-empty, non-term, non-phi ===== *)
 
@@ -321,36 +269,8 @@ Proof
 QED
 
 (* resolve_op preserves get_label when target chains have no labels *)
-Triviality resolve_op_get_label_eq[local]:
-  !targets opc op.
-    (!v chain. ALOOKUP targets v = SOME chain ==>
-       EVERY (\op. get_label op = NONE) chain) ==>
-    get_label (ao_resolve_iszero_op targets opc op) = get_label op
-Proof
-  Cases_on `op` >>
-  simp[venomStateTheory.get_label_def, ao_resolve_iszero_op_def] >>
-  rpt strip_tac >> every_case_tac >>
-  simp[venomStateTheory.get_label_def] >>
-  gvs[] >> first_x_assum drule >> simp[listTheory.EVERY_EL]
-QED
 
 (* get_successors preserved by ao_resolve_iszero_inst *)
-Triviality resolve_inst_get_successors[local]:
-  !targets inst.
-    (!v chain. ALOOKUP targets v = SOME chain ==>
-       EVERY (\op. get_label op = NONE) chain) ==>
-    get_successors (ao_resolve_iszero_inst targets inst) =
-    get_successors inst
-Proof
-  rpt strip_tac >>
-  simp[get_successors_def, ao_resolve_iszero_inst_def,
-       ao_resolve_iszero_inst_opcode] >>
-  IF_CASES_TAC >> simp[] >>
-  simp[listTheory.MAP_MAP_o, combinTheory.o_DEF] >>
-  AP_TERM_TAC >> AP_TERM_TAC >>
-  irule listTheory.MAP_CONG >> simp[] >> rpt strip_tac >>
-  irule resolve_op_get_label_eq >> metis_tac[]
-QED
 
 (* ao_resolve_iszero_inst preserves inst_wf for non-PHI opcodes.
    resolve only changes operand VALUES (not LENGTH), and preserves Labels. *)

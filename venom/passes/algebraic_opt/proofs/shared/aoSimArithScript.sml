@@ -79,53 +79,6 @@ QED
 
 (* ===== step_inst_base dispatch helpers ===== *)
 
-Triviality step_base_sdiv[local]:
-  !inst s. inst.inst_opcode = SDIV ==>
-    step_inst_base inst s = exec_pure2 safe_sdiv inst s
-Proof
-  rw[step_inst_base_def]
-QED
-
-Triviality step_base_smod[local]:
-  !inst s. inst.inst_opcode = SMOD ==>
-    step_inst_base inst s = exec_pure2 safe_smod inst s
-Proof
-  rw[step_inst_base_def]
-QED
-
-Triviality step_base_exp[local]:
-  !inst s. inst.inst_opcode = Exp ==>
-    step_inst_base inst s = exec_pure2 $** inst s
-Proof
-  rw[step_inst_base_def]
-QED
-
-Triviality step_base_signextend[local]:
-  !inst s op1 op2 out.
-    inst.inst_opcode = SIGNEXTEND /\
-    inst.inst_operands = [op1; op2] /\
-    inst.inst_outputs = [out] ==>
-    step_inst_base inst s =
-      case (eval_operand op1 s, eval_operand op2 s) of
-        (NONE, _) => Error "undefined operand"
-      | (SOME v1, NONE) => Error "undefined operand"
-      | (SOME v1, SOME v2) => OK (update_var out (sign_extend v1 v2) s)
-Proof
-  rw[step_inst_base_def, exec_pure2_def]
-QED
-
-Triviality step_base_assign[local]:
-  !inst s op out.
-    inst.inst_opcode = ASSIGN /\
-    inst.inst_operands = [op] /\
-    inst.inst_outputs = [out] ==>
-    step_inst_base inst s =
-      case eval_operand op s of
-        NONE => Error "undefined operand"
-      | SOME v => OK (update_var out v s)
-Proof
-  rw[step_inst_base_def]
-QED
 
 (* ===== Operand decomposition helper ===== *)
 

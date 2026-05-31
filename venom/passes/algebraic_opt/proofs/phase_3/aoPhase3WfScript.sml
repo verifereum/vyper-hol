@@ -545,39 +545,6 @@ QED
 
 (* ===== Targets no-label property ===== *)
 
-Triviality ao_compute_iszero_step_no_label[local]:
-  !targets inst.
-    (!k chain. ALOOKUP targets k = SOME chain ==>
-       EVERY (\e. get_label e = NONE) chain) /\
-    (inst.inst_opcode = ISZERO ==>
-       EVERY (\op. get_label op = NONE) inst.inst_operands) ==>
-    !k chain.
-      ALOOKUP (ao_compute_iszero_step targets inst) k = SOME chain ==>
-      EVERY (\e. get_label e = NONE) chain
-Proof
-  rpt strip_tac >>
-  Cases_on `inst.inst_opcode = ISZERO` >>
-  gvs[ao_compute_iszero_step_def] >>
-  rpt (FULL_CASE_TAC >> gvs[LET_THM, listTheory.EVERY_SNOC, get_label_def]) >>
-  res_tac
-QED
-
-Theorem ao_compute_targets_no_label:
-  !insts acc.
-    (!k chain. ALOOKUP acc k = SOME chain ==>
-       EVERY (\e. get_label e = NONE) chain) /\
-    EVERY (\inst. inst.inst_opcode = ISZERO ==>
-             EVERY (\op. get_label op = NONE) inst.inst_operands) insts ==>
-    !k chain.
-      ALOOKUP (FOLDL ao_compute_iszero_step acc insts) k = SOME chain ==>
-      EVERY (\e. get_label e = NONE) chain
-Proof
-  Induct >> simp[] >>
-  rpt gen_tac >> strip_tac >>
-  first_x_assum MATCH_MP_TAC >> simp[] >>
-  match_mp_tac ao_compute_iszero_step_no_label >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
-QED
 
 (* ===== Succs closed ===== *)
 

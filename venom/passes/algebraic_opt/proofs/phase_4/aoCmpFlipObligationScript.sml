@@ -588,16 +588,6 @@ Proof
 QED
 
 (* Helper: ISZERO step when operand is NONE → not OK *)
-Triviality iszero_step_none[local]:
-  !inst_id s cmp_out fresh.
-    lookup_var cmp_out s = NONE ==>
-    !v. step_inst_base
-      <| inst_id := inst_id; inst_opcode := ISZERO;
-         inst_operands := [Var cmp_out]; inst_outputs := [fresh] |> s <>
-    OK v
-Proof
-  simp[step_inst_base_def, exec_pure1_def, eval_operand_def]
-QED
 
 (* Helper: ASSERT step when operand is NONE → not OK *)
 Triviality assert_step_none[local]:
@@ -1294,36 +1284,6 @@ Proof
 QED
 
 (* exec_block on same instruction from state_equiv states at terminator *)
-Triviality exec_block_terminator_equiv[local]:
-  !dead fuel ctx bb1 bb2 s1 s2 n inst.
-    state_equiv dead s1 s2 /\
-    s1.vs_inst_idx = n /\ s2.vs_inst_idx = n /\
-    n < LENGTH bb1.bb_instructions /\
-    n < LENGTH bb2.bb_instructions /\
-    EL n bb1.bb_instructions = inst /\
-    EL n bb2.bb_instructions = inst /\
-    is_terminator inst.inst_opcode /\
-    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN dead)
-    ==>
-    lift_result (state_equiv dead) (execution_equiv dead)
-      (execution_equiv dead)
-      (exec_block fuel ctx bb1 s1) (exec_block fuel ctx bb2 s2)
-Proof
-  rpt strip_tac >>
-  `inst.inst_opcode <> INVOKE` by (Cases_on `inst.inst_opcode` >> gvs[is_terminator_def]) >>
-  ONCE_REWRITE_TAC[exec_block_def] >> simp[get_instruction_def] >>
-  `result_equiv dead (step_inst fuel ctx inst s1)
-                      (step_inst fuel ctx inst s2)` by
-    (irule step_inst_result_equiv >> simp[]) >>
-  Cases_on `step_inst fuel ctx inst s1` >>
-  Cases_on `step_inst fuel ctx inst s2` >>
-  gvs[result_equiv_is_lift_result, stateEquivTheory.lift_result_def] >>
-  `v.vs_halted <=> v'.vs_halted` by
-    gvs[stateEquivTheory.state_equiv_def, stateEquivTheory.execution_equiv_def] >>
-  IF_CASES_TAC >> gvs[] >>
-  gvs[stateEquivTheory.lift_result_def,
-      stateEquivTheory.execution_equiv_def, stateEquivTheory.state_equiv_def]
-QED
 
 (* ===== Non-NULL case: helpers + main proof ===== *)
 
@@ -1480,16 +1440,6 @@ Proof
 QED
 
 (* exec_block_skip_prefix index match for FRONT *)
-Triviality front_prefix_index_match[local]:
-  !bb.
-    bb.bb_instructions <> [] ==>
-    !k. k < LENGTH (FRONT bb.bb_instructions) ==>
-        bb.bb_instructions❲0 + k❳ = (FRONT bb.bb_instructions)❲k❳
-Proof
-  rpt strip_tac >> simp[] >>
-  irule (GSYM rich_listTheory.EL_FRONT) >>
-  gvs[listTheory.NULL_EQ]
-QED
 
 (* ===== Lift-result version of body simulation ===== *)
 
@@ -2670,11 +2620,6 @@ Proof
       gvs[])
 QED
 
-Triviality comparator_not_phi[local]:
-  !opc. is_comparator opc ==> opc <> PHI
-Proof
-  Cases >> simp[is_comparator_def]
-QED
 
 Triviality flip_comparison_not_phi[local]:
   !opc. is_comparator opc ==> flip_comparison_opcode opc <> PHI
@@ -3088,18 +3033,6 @@ Proof
   rpt strip_tac >> res_tac >> gvs[listTheory.EVERY_APPEND]
 QED
 
-Triviality phi_prefix_tail[local]:
-  !h t.
-    (!i j. i < j /\ j < LENGTH (h::t) /\
-           (EL j (h::t)).inst_opcode = PHI ==>
-           (EL i (h::t)).inst_opcode = PHI) /\
-    h.inst_opcode <> PHI ==>
-    !inst. MEM inst t ==> inst.inst_opcode <> PHI
-Proof
-  rpt strip_tac >> CCONTR_TAC >> gvs[] >>
-  `?k. k < LENGTH t /\ EL k t = inst` by metis_tac[listTheory.MEM_EL] >>
-  first_x_assum (qspecl_then [`0`, `SUC k`] mp_tac) >> simp[]
-QED
 
 Triviality flat_map_preserves_phi_prefix[local]:
   !insts f.

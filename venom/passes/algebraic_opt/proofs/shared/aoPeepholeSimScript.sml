@@ -25,16 +25,6 @@ Libs
 (* ===== Pre/post flip preserve step_inst_base ===== *)
 
 (* Helper: swapping operands of a commutative 2-operand exec_pure2 is identity *)
-Triviality exec_pure2_comm[local]:
-  !f inst s.
-    (!a b. f a b = f b a) /\
-    inst.inst_operands = [op1; op2] ==>
-    exec_pure2 f (inst with inst_operands := [op2; op1]) s =
-    exec_pure2 f inst s
-Proof
-  rw[exec_pure2_def] >>
-  Cases_on `eval_operand op1 s` >> Cases_on `eval_operand op2 s` >> simp[]
-QED
 
 (* Helper: equality is symmetric for bool_to_word *)
 Triviality bool_to_word_eq_comm[local]:
@@ -90,12 +80,6 @@ Proof
 QED
 
 (* MAP ao_post_flip_inst over a list preserves step_inst_base for each element *)
-Theorem map_post_flip_step_equiv:
-  !insts. MAP (\i. step_inst_base (ao_post_flip_inst i) s)  insts =
-          MAP (\i. step_inst_base i s) insts
-Proof
-  Induct >> simp[ao_post_flip_step_equiv]
-QED
 
 (* ===== run_insts helpers ===== *)
 
@@ -109,22 +93,8 @@ Proof
 QED
 
 (* run_insts on post-flipped singleton = step_inst on post-flipped *)
-Theorem run_insts_post_flip_singleton:
-  !fuel ctx inst s.
-    run_insts fuel ctx [ao_post_flip_inst inst] s =
-    step_inst fuel ctx (ao_post_flip_inst inst) s
-Proof
-  simp[run_insts_singleton]
-QED
 
 (* For non-INVOKE: step_inst = step_inst_base *)
-Theorem run_insts_non_invoke_singleton:
-  !fuel ctx inst s.
-    inst.inst_opcode <> INVOKE ==>
-    run_insts fuel ctx [inst] s = step_inst_base inst s
-Proof
-  rw[run_insts_singleton, step_inst_non_invoke]
-QED
 
 (* MAP ao_post_flip_inst preserves run_insts when all non-INVOKE *)
 Triviality run_insts_map_post_flip[local]:
@@ -152,13 +122,6 @@ Proof
 QED
 
 (* When two exec_results are EQUAL, lift_result holds *)
-Theorem lift_result_eq:
-  !fv r1 r2.
-    r1 = r2 ==>
-    lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv) r1 r2
-Proof
-  rw[] >> simp[lift_result_same]
-QED
 
 (* ===== Per-opcode peephole simulation ===== *)
 
@@ -209,13 +172,6 @@ QED
 (* ===== Per-rule structural properties ===== *)
 
 (* Helper: check EVERY property for each ao_opt_* *)
-Triviality opt_shift_not_invoke[local]:
-  !inst. inst.inst_opcode <> INVOKE ==>
-    EVERY (\i. i.inst_opcode <> INVOKE) (ao_opt_shift inst)
-Proof
-  simp[ao_opt_shift_def] >> rpt gen_tac >> strip_tac >>
-  every_case_tac >> simp[listTheory.EVERY_DEF]
-QED
 
 Triviality opt_exp_not_invoke[local]:
   !inst. inst.inst_opcode <> INVOKE ==>
@@ -273,17 +229,6 @@ Proof
   every_case_tac >> simp[listTheory.EVERY_DEF]
 QED
 
-Triviality cmp_helpers_not_invoke[local]:
-  (!mid id op1 inst. EVERY (\i. i.inst_opcode <> INVOKE)
-    (ao_cmp_prefer_iz_zero mid id op1 inst)) /\
-  (!mid id op1 inst. EVERY (\i. i.inst_opcode <> INVOKE)
-    (ao_cmp_prefer_iz_max mid id op1 inst)) /\
-  (!mid id op1 op2 inst. EVERY (\i. i.inst_opcode <> INVOKE)
-    (ao_cmp_prefer_iz_general mid id op1 op2 inst))
-Proof
-  simp[ao_cmp_prefer_iz_zero_def, ao_cmp_prefer_iz_max_def,
-       ao_cmp_prefer_iz_general_def, LET_THM, listTheory.EVERY_DEF]
-QED
 
 (* Restricted to comparator opcodes (which is how it's called from ao_peephole_inst).
    This avoids the need for `inst.inst_opcode <> INVOKE` — GT/LT/SGT/SLT <> INVOKE
@@ -315,28 +260,6 @@ Proof
   gvs[listTheory.EVERY_DEF]
 QED
 
-Theorem ao_peephole_inst_not_invoke:
-  !mid dfg ra lbl idx inst.
-    inst.inst_opcode <> INVOKE /\ inst_wf inst ==>
-    EVERY (\i. i.inst_opcode <> INVOKE) (ao_peephole_inst mid dfg ra lbl idx inst)
-Proof
-  rpt strip_tac >>
-  simp[ao_peephole_inst_def, LET_THM] >>
-  rpt (IF_CASES_TAC >> simp[listTheory.EVERY_DEF]) >>
-  gvs[] >>
-  FIRST [
-    irule opt_shift_not_invoke >> gvs[],
-    irule opt_exp_not_invoke >> gvs[],
-    irule opt_addsub_not_invoke >> gvs[],
-    irule opt_and_not_invoke >> gvs[],
-    irule opt_muldiv_not_invoke >> gvs[],
-    irule opt_or_not_invoke >> gvs[],
-    irule opt_eq_not_invoke >> gvs[],
-    irule opt_signextend_not_invoke >> gvs[],
-    irule opt_comparator_not_invoke >> gvs[] >>
-    gvs[inst_wf_def] >> Cases_on `inst.inst_opcode` >> gvs[]
-  ]
-QED
 
 (* Non-terminator helpers — same pattern as not_invoke *)
 Triviality opt_shift_non_term[local]:
@@ -476,11 +399,6 @@ Proof
   rw[ao_pre_flip_inst_def] >> every_case_tac >> simp[]
 QED
 
-Triviality ao_pre_flip_preserves_outputs[local]:
-  !inst. (ao_pre_flip_inst inst).inst_outputs = inst.inst_outputs
-Proof
-  rw[ao_pre_flip_inst_def] >> every_case_tac >> simp[]
-QED
 
 (* General singleton simulation: if a replacement singleton has equivalent
    step_inst_base and is non-INVOKE, the pipeline simulation holds. *)
@@ -519,17 +437,6 @@ Proof
 QED
 
 (* When an operand evaluates to NONE in a binary op, step_inst_base errors *)
-Triviality exec_pure2_none_error[local]:
-  !f inst s op1 op2.
-    inst.inst_operands = [op1; op2] /\
-    (eval_operand op1 s = NONE \/ eval_operand op2 s = NONE) ==>
-    ?e. exec_pure2 f inst s = Error e
-Proof
-  rw[exec_pure2_def] >>
-  Cases_on `eval_operand op1 s` >> Cases_on `eval_operand op2 s` >> gvs[] >>
-  Cases_on `inst.inst_outputs` >> simp[] >>
-  Cases_on `t` >> simp[]
-QED
 
 (* For binary opcodes, step_inst_base = exec_pure2 of appropriate function.
    Rather than unfold step_inst_base_def, we prove specific opcode lemmas. *)
@@ -554,19 +461,6 @@ Proof
   rpt strip_tac >> gvs[step_inst_base_def]
 QED
 
-Triviality step_inst_base_or[local]:
-  !inst s. inst.inst_opcode = OR ==>
-    step_inst_base inst s = exec_pure2 word_or inst s
-Proof
-  rpt strip_tac >> gvs[step_inst_base_def]
-QED
-
-Triviality step_inst_base_mul[local]:
-  !inst s. inst.inst_opcode = MUL ==>
-    step_inst_base inst s = exec_pure2 $* inst s
-Proof
-  rpt strip_tac >> gvs[step_inst_base_def]
-QED
 
 Triviality step_inst_base_eq[local]:
   !inst s. inst.inst_opcode = EQ ==>
@@ -607,56 +501,8 @@ Proof
   rpt strip_tac >> gvs[step_inst_base_def]
 QED
 
-Triviality step_inst_base_div[local]:
-  !inst s. inst.inst_opcode = Div ==>
-    step_inst_base inst s = exec_pure2 safe_div inst s
-Proof
-  rpt strip_tac >> gvs[step_inst_base_def]
-QED
-
-Triviality step_inst_base_mod[local]:
-  !inst s. inst.inst_opcode = Mod ==>
-    step_inst_base inst s = exec_pure2 safe_mod inst s
-Proof
-  rpt strip_tac >> gvs[step_inst_base_def]
-QED
-
-Triviality step_inst_base_sdiv[local]:
-  !inst s. inst.inst_opcode = SDIV ==>
-    step_inst_base inst s = exec_pure2 safe_sdiv inst s
-Proof
-  rpt strip_tac >> gvs[step_inst_base_def]
-QED
-
-Triviality step_inst_base_smod[local]:
-  !inst s. inst.inst_opcode = SMOD ==>
-    step_inst_base inst s = exec_pure2 safe_smod inst s
-Proof
-  rpt strip_tac >> gvs[step_inst_base_def]
-QED
 
 (* Combining: for binary opcodes with a NONE operand, step_inst_base errors *)
-Triviality binary_none_step_error[local]:
-  !inst s op1 op2.
-    inst.inst_operands = [op1; op2] /\
-    (eval_operand op1 s = NONE \/ eval_operand op2 s = NONE) /\
-    (inst.inst_opcode = SUB \/ inst.inst_opcode = XOR \/
-     inst.inst_opcode = AND \/ inst.inst_opcode = OR \/
-     inst.inst_opcode = MUL \/ inst.inst_opcode = EQ \/
-     inst.inst_opcode = GT \/ inst.inst_opcode = LT \/
-     inst.inst_opcode = SGT \/ inst.inst_opcode = SLT \/
-     inst.inst_opcode = Div \/ inst.inst_opcode = Mod \/
-     inst.inst_opcode = SDIV \/ inst.inst_opcode = SMOD) ==>
-    ?e. step_inst_base inst s = Error e
-Proof
-  rpt strip_tac >> gvs[] >>
-  simp[step_inst_base_sub, step_inst_base_xor, step_inst_base_and,
-       step_inst_base_or, step_inst_base_mul, step_inst_base_eq,
-       step_inst_base_gt, step_inst_base_lt, step_inst_base_sgt,
-       step_inst_base_slt, step_inst_base_div, step_inst_base_mod,
-       step_inst_base_sdiv, step_inst_base_smod] >>
-  irule exec_pure2_none_error >> simp[] >> metis_tac[]
-QED
 
 (* 1-to-1 replacement sim via sim_or_error: if the rule theorem gives
    equality conditional on IS_SOME, the binary op errors when NONE.
@@ -698,14 +544,6 @@ Proof
 QED
 
 (* 0w ≠ UINT_MAXw: needed to close contradictory branches *)
-Triviality zero_ne_max[local]:
-  (0w : 'a word) <> UINT_MAXw
-Proof
-  simp[wordsTheory.word_T_def,
-       wordsTheory.UINT_MAX_def, wordsTheory.dimword_def] >>
-  `1 <= dimindex (:'a)` by simp[fcpTheory.DIMINDEX_GE_1] >>
-  simp[]
-QED
 
 (* AND: all branches produce equivalent or error *)
 Triviality ao_and_sim[local]:
@@ -796,23 +634,7 @@ QED
 (* ao_or_sim imported from aoSimPow2Theory *)
 
 (* Singleton helpers: each ao_opt_* returns a singleton list *)
-Triviality ao_opt_and_singleton[local]:
-  !inst0. ?inst'. ao_opt_and inst0 = [inst']
-Proof
-  rw[ao_opt_and_def] >> every_case_tac >> simp[]
-QED
 
-Triviality ao_opt_addsub_singleton[local]:
-  !inst0. ?inst'. ao_opt_addsub inst0 = [inst']
-Proof
-  rw[ao_opt_addsub_def, LET_THM] >> every_case_tac >> simp[]
-QED
-
-Triviality ao_opt_or_singleton[local]:
-  !dfg inst0. ?inst'. ao_opt_or dfg inst0 = [inst']
-Proof
-  rw[ao_opt_or_def] >> every_case_tac >> simp[]
-QED
 
 (* ===== Main single-state peephole sim ===== *)
 

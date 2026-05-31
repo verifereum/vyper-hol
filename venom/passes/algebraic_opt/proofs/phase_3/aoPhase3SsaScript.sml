@@ -68,30 +68,6 @@ Proof
 QED
 
 (* instruction with a fresh prefix followed by clean outputs *)
-Triviality outok_prefix[local]:
-  !fv id origs prefix.
-    EVERY (\v. ~(v IN fv)) origs /\
-    ALL_DISTINCT prefix /\
-    EVERY (\v. v IN fv /\
-               ?s. (s = "not" \/ s = "iz" \/ s = "xor") /\
-                   v = ao_fresh_var id s) prefix ==>
-    outok fv id origs (prefix ++ origs)
-Proof
-  rpt strip_tac >>
-  `FILTER (\v. ~(v IN fv)) prefix = [] /\
-   FILTER (\v. ~(v IN fv)) origs = origs /\
-   FILTER (\v. v IN fv) prefix = prefix /\
-   FILTER (\v. v IN fv) origs = []` by
-    (fs[listTheory.FILTER_EQ_ID, listTheory.FILTER_EQ_NIL,
-        listTheory.EVERY_MEM] >> rw[] >> res_tac >> fs[]) >>
-  `!x. MEM x prefix ==>
-       ?s. (s = "not" \/ s = "iz" \/ s = "xor") /\ x = ao_fresh_var id s` by
-    (rpt strip_tac >> fs[listTheory.EVERY_MEM] >> metis_tac[]) >>
-  `!x. MEM x origs ==> ~(x IN fv)` by
-    (rpt strip_tac >> fs[listTheory.EVERY_MEM] >> metis_tac[]) >>
-  gvs[outok_def, listTheory.FILTER_APPEND_DISTRIB, listTheory.MEM_APPEND] >>
-  metis_tac[]
-QED
 
 (* single fresh output prepended *)
 Triviality outok_one_fresh[local]:
@@ -1080,13 +1056,6 @@ Proof
 QED
 
 (* A single instruction with clean operands satisfies both. *)
-Triviality okin_single_clean[local]:
-  !fv id i.
-    (!w. MEM (Var w) i.inst_operands ==> w NOTIN fv) ==>
-    inok fv id [i] /\ cmpinok fv [i]
-Proof
-  rw[inok_def, cmpinok_def] >> metis_tac[]
-QED
 
 (* targets chain entries are operands/outputs of the source instructions. *)
 Triviality iszero_step_acc[local]:

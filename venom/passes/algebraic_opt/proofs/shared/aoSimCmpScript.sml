@@ -92,27 +92,6 @@ Proof
 QED
 
 (* 3-step run_insts *)
-Theorem run_insts_3step:
-  !fuel ctx i1 i2 i3 s.
-    i1.inst_opcode <> INVOKE /\
-    i2.inst_opcode <> INVOKE /\
-    i3.inst_opcode <> INVOKE ==>
-    run_insts fuel ctx [i1; i2; i3] s =
-      case step_inst_base i1 s of
-        OK s1 => (case step_inst_base i2 s1 of
-                    OK s2 => step_inst_base i3 s2
-                  | err => err)
-      | err => err
-Proof
-  rpt strip_tac >>
-  simp[Once run_insts_def, step_inst_non_invoke] >>
-  simp[Once run_insts_def, step_inst_non_invoke] >>
-  simp[Once run_insts_def, step_inst_non_invoke] >>
-  simp[Once run_insts_def] >>
-  Cases_on `step_inst_base i1 s` >> simp[] >>
-  Cases_on `step_inst_base i2 v` >> simp[] >>
-  Cases_on `step_inst_base i3 v'` >> simp[]
-QED
 
 (* lookup_var / eval_operand through update_var *)
 Triviality lookup_var_update[local]:
@@ -331,13 +310,6 @@ Proof
 QED
 
 (* Helper: INT_MIN <= INT_MAX for 256-bit words *)
-Triviality int_min_le_max_256[local]:
-  INT_MIN (:256) <= INT_MAX (:256)
-Proof
-  mp_tac (INST_TYPE [alpha |-> ``:256``]
-          integer_wordTheory.INT_ZERO_LT_INT_MIN) >>
-  rewrite_tac[integer_wordTheory.INT_MIN_def] >> intLib.ARITH_TAC
-QED
 
 (* Signed: nothing is > INT_MAX *)
 Triviality sgt_never[local]:
@@ -1094,49 +1066,6 @@ QED
 (* ===== Range-based comparator simulation ===== *)
 
 (* Per-opcode step_inst_base rewrite for comparators + ASSIGN *)
-Triviality step_inst_cmp[local]:
-  (step_inst_base
-    (inst with <| inst_opcode := GT;
-                  inst_operands := [op1; op2];
-                  inst_outputs := [out] |>) s =
-   case (eval_operand op1 s, eval_operand op2 s) of
-     (SOME v1, SOME v2) =>
-       OK (update_var out (bool_to_word (w2n v1 > w2n v2)) s)
-   | _ => Error "undefined operand") /\
-  (step_inst_base
-    (inst with <| inst_opcode := LT;
-                  inst_operands := [op1; op2];
-                  inst_outputs := [out] |>) s =
-   case (eval_operand op1 s, eval_operand op2 s) of
-     (SOME v1, SOME v2) =>
-       OK (update_var out (bool_to_word (w2n v1 < w2n v2)) s)
-   | _ => Error "undefined operand") /\
-  (step_inst_base
-    (inst with <| inst_opcode := SGT;
-                  inst_operands := [op1; op2];
-                  inst_outputs := [out] |>) s =
-   case (eval_operand op1 s, eval_operand op2 s) of
-     (SOME v1, SOME v2) =>
-       OK (update_var out (bool_to_word (word_gt v1 v2)) s)
-   | _ => Error "undefined operand") /\
-  (step_inst_base
-    (inst with <| inst_opcode := SLT;
-                  inst_operands := [op1; op2];
-                  inst_outputs := [out] |>) s =
-   case (eval_operand op1 s, eval_operand op2 s) of
-     (SOME v1, SOME v2) =>
-       OK (update_var out (bool_to_word (word_lt v1 v2)) s)
-   | _ => Error "undefined operand") /\
-  (step_inst_base
-    (inst with <| inst_opcode := ASSIGN;
-                  inst_operands := [op1];
-                  inst_outputs := [out] |>) s =
-   case eval_operand op1 s of
-     SOME v => OK (update_var out v s)
-   | NONE => Error "undefined operand")
-Proof
-  rw[step_inst_base_def, exec_pure2_def, exec_pure1_def]
-QED
 
 (* Label goals: range_get_range (Label _) = VR_Top contradicts ¬vr_is_top. *)
 val cmp_range_label_tac =

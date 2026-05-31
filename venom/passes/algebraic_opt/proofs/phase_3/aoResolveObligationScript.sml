@@ -94,66 +94,6 @@ Definition ao_iszero_dfg_inv_def:
 End
 val _ = delsimps ["ao_iszero_dfg_inv_def"]
 
-Theorem ao_iszero_dfg_inv_initial:
-  !dfg s.
-    (!x inst. dfg_get_def dfg x = SOME inst ==>
-              lookup_var x s = NONE) ==>
-    ao_iszero_dfg_inv dfg s
-Proof
-  simp[ao_iszero_dfg_inv_def] >> rpt strip_tac >> res_tac >> gvs[]
-QED
-
-Theorem ao_iszero_dfg_inv_inst_idx_iff:
-  !dfg s n. ao_iszero_dfg_inv dfg (s with vs_inst_idx := n) <=>
-            ao_iszero_dfg_inv dfg s
-Proof
-  rw[ao_iszero_dfg_inv_def, lookup_var_def] >> eq_tac >> rpt strip_tac >>
-  res_tac >> gvs[] >>
-  qpat_x_assum `eval_operand _ _ = _` mp_tac >>
-  Cases_on `op` >> simp[eval_operand_def, lookup_var_def]
-QED
-
-Theorem ao_chains_defined_at_empty:
-  !st. ao_chains_defined_at [] st
-Proof
-  simp[ao_chains_defined_at_def]
-QED
-
-Theorem ao_chains_defined_implies_at:
-  !targets st.
-    ao_chains_defined targets st ==> ao_chains_defined_at targets st
-Proof
-  simp[ao_chains_defined_def, ao_chains_defined_at_def] >> metis_tac[]
-QED
-
-Theorem ao_chains_defined_at_step_preserved:
-  !targets inst fuel ctx st st'.
-    ao_chains_defined_at targets st /\
-    ao_targets_wf targets /\
-    step_inst fuel ctx inst st = OK st' /\
-    (!v chain k. ALOOKUP targets v = SOME chain /\
-                 k < LENGTH chain ==>
-                 eval_operand (EL k chain) st' =
-                 eval_operand (EL k chain) st) ==>
-    ao_chains_defined_at targets st'
-Proof
-  rw[ao_chains_defined_at_def] >> rpt strip_tac >>
-  `1 < LENGTH chain /\ LAST chain = Var v` by
-    (fs[ao_targets_wf_def] >> res_tac) >>
-  `EL (LENGTH chain - 1) chain = Var v` by
-    metis_tac[listTheory.LAST_EL, arithmeticTheory.PRE_SUB1,
-              listTheory.LENGTH_NIL, DECIDE ``1 < (n:num) ==> n <> 0``] >>
-  `LENGTH chain - 1 < LENGTH chain` by simp[] >>
-  `eval_operand (Var v) st' = eval_operand (Var v) st` by
-    metis_tac[] >>
-  `?w'. eval_operand (Var v) st = SOME w'` by metis_tac[] >>
-  `!k'. k' < LENGTH chain ==>
-    ?w''. eval_operand (EL k' chain) st = SOME w''` by metis_tac[] >>
-  `?w''. eval_operand (EL k chain) st = SOME w''` by metis_tac[] >>
-  `eval_operand (EL k chain) st' = eval_operand (EL k chain) st` by
-    metis_tac[] >>
-  metis_tac[]
-QED
 
 Triviality eval_operand_state_equiv_chain_el[local]:
   !fv st1 st2 op.
@@ -165,36 +105,6 @@ Proof
   simp[eval_operand_def, state_equiv_def, execution_equiv_def]
 QED
 
-Theorem ao_chains_defined_at_state_equiv_compat:
-  !targets fv st1 st2.
-    ao_chains_defined_at targets st1 /\
-    ao_targets_wf targets /\
-    state_equiv fv st1 st2 /\
-    (!v chain k x. ALOOKUP targets v = SOME chain /\
-                   k < LENGTH chain /\ EL k chain = Var x ==> x NOTIN fv) ==>
-    ao_chains_defined_at targets st2
-Proof
-  rw[ao_chains_defined_at_def] >> rpt strip_tac >>
-  `1 < LENGTH chain /\ LAST chain = Var v` by
-    (fs[ao_targets_wf_def] >> res_tac) >>
-  `EL (LENGTH chain - 1) chain = Var v` by
-    metis_tac[listTheory.LAST_EL, arithmeticTheory.PRE_SUB1,
-              listTheory.LENGTH_NIL, DECIDE ``1 < (n:num) ==> n <> 0``] >>
-  `LENGTH chain - 1 < LENGTH chain` by simp[] >>
-  `eval_operand (Var v) st2 = eval_operand (Var v) st1` by
-    (qspecl_then [`fv`, `st1`, `st2`, `Var v`]
-       mp_tac eval_operand_state_equiv_chain_el >>
-     impl_tac >- (simp[] >> metis_tac[]) >> simp[]) >>
-  `?w'. eval_operand (Var v) st1 = SOME w'` by metis_tac[] >>
-  `!k'. k' < LENGTH chain ==>
-    ?w''. eval_operand (EL k' chain) st1 = SOME w''` by
-    metis_tac[] >>
-  `eval_operand (EL k chain) st2 = eval_operand (EL k chain) st1` by
-    (qspecl_then [`fv`, `st1`, `st2`, `EL k chain`]
-       mp_tac eval_operand_state_equiv_chain_el >>
-     impl_tac >- (simp[] >> metis_tac[]) >> simp[]) >>
-  metis_tac[]
-QED
 
 (* ===== ao_chain_defined_prefix properties ===== *)
 
@@ -268,21 +178,6 @@ Proof
   Cases >> simp[eval_operand_def, lookup_var_def]
 QED
 
-Theorem ao_chain_defined_prefix_inst_idx_iff:
-  !targets s n.
-    ao_chain_defined_prefix targets (s with vs_inst_idx := n) <=>
-    ao_chain_defined_prefix targets s
-Proof
-  simp[ao_chain_defined_prefix_def, eval_operand_inst_idx_irrel]
-QED
-
-Theorem ao_chains_defined_at_inst_idx_iff:
-  !targets s n.
-    ao_chains_defined_at targets (s with vs_inst_idx := n) <=>
-    ao_chains_defined_at targets s
-Proof
-  simp[ao_chains_defined_at_def, eval_operand_inst_idx_irrel]
-QED
 
 (* ===== Structural: ao_compute_fn_iszero_targets produces wf targets ===== *)
 
@@ -318,18 +213,8 @@ QED
 (* ===== Chain invariant preservation ===== *)
 
 (* Chain invariant holds for empty targets *)
-Theorem ao_iszero_chain_inv_empty:
-  !st. ao_iszero_chain_inv [] st
-Proof
-  simp[ao_iszero_chain_inv_def]
-QED
 
 (* Chain definedness holds for empty targets *)
-Theorem ao_chains_defined_empty:
-  !st. ao_chains_defined [] st
-Proof
-  simp[ao_chains_defined_def]
-QED
 
 (* Chain invariant preserved by step_inst that doesn't modify chain vars.
    In SSA form, a variable is written at most once, so once the chain
@@ -359,96 +244,11 @@ Proof
 QED
 
 (* Chain definedness preserved similarly *)
-Theorem ao_chains_defined_step_preserved:
-  !targets inst fuel ctx st st'.
-    ao_chains_defined targets st /\
-    step_inst fuel ctx inst st = OK st' /\
-    (!v chain k. ALOOKUP targets v = SOME chain /\
-                 k < LENGTH chain ==>
-                 eval_operand (EL k chain) st' =
-                 eval_operand (EL k chain) st) ==>
-    ao_chains_defined targets st'
-Proof
-  simp[ao_chains_defined_def] >> rpt strip_tac >>
-  qpat_x_assum `!v chain k. _ ==> ?w. _`
-    (drule_then (qspec_then `k` strip_assume_tac)) >>
-  gvs[] >>
-  qpat_x_assum `!v chain k. _ /\ _ ==> (eval_operand _ _ = _)`
-    (drule_then (qspec_then `k` mp_tac)) >> simp[]
-QED
 
 (* Chain invariant compatible with state_equiv on fresh vars:
    if two states agree on all non-fresh vars, and the chain uses
    only non-fresh vars, then the chain invariant transfers. *)
-Theorem eval_operand_var_state_equiv:
-  !fv st1 st2 vn.
-    state_equiv fv st1 st2 /\ vn NOTIN fv ==>
-    eval_operand (Var vn) st2 = eval_operand (Var vn) st1
-Proof
-  simp[eval_operand_def, state_equiv_def, execution_equiv_def]
-QED
 
-Theorem eval_operand_nonvar_state_equiv:
-  !fv st1 st2 op.
-    state_equiv fv st1 st2 /\ (!x. op <> Var x) ==>
-    eval_operand op st2 = eval_operand op st1
-Proof
-  Cases_on `op` >>
-  simp[eval_operand_def, state_equiv_def, execution_equiv_def]
-QED
-
-Theorem eval_chain_el_state_equiv:
-  !targets fv st1 st2 v chain j.
-    state_equiv fv st1 st2 /\
-    ALOOKUP targets v = SOME chain /\ j < LENGTH chain /\
-    (!v chain k x. ALOOKUP targets v = SOME chain /\
-                   k < LENGTH chain /\ EL k chain = Var x ==> x NOTIN fv) ==>
-    eval_operand (EL j chain) st2 = eval_operand (EL j chain) st1
-Proof
-  rpt strip_tac >>
-  Cases_on `EL j chain`
-  >- simp[eval_operand_def]
-  >- (simp[eval_operand_def] >>
-      rename1 `EL j chain = Var vname` >>
-      `vname NOTIN fv` by
-        (qpat_x_assum `!v chain k x. _`
-         (qspecl_then [`v`, `chain`, `j`, `vname`] mp_tac) >> simp[]) >>
-      fs[state_equiv_def, execution_equiv_def])
-  >- (simp[eval_operand_def] >>
-      fs[state_equiv_def, execution_equiv_def])
-QED
-
-Theorem ao_iszero_chain_inv_state_equiv_compat:
-  !targets fv st1 st2.
-    ao_iszero_chain_inv targets st1 /\
-    state_equiv fv st1 st2 /\
-    (!v chain k x. ALOOKUP targets v = SOME chain /\
-                   k < LENGTH chain /\ EL k chain = Var x ==> x NOTIN fv) ==>
-    ao_iszero_chain_inv targets st2
-Proof
-  simp[ao_iszero_chain_inv_def] >> rpt strip_tac >>
-  `!v' chain' j'. ALOOKUP targets v' = SOME chain' /\ j' < LENGTH chain' ==>
-    eval_operand (EL j' chain') st2 = eval_operand (EL j' chain') st1` by
-    metis_tac[eval_chain_el_state_equiv] >>
-  first_assum (qspecl_then [`v`, `chain`, `k`] assume_tac) >>
-  first_x_assum (qspecl_then [`v`, `chain`, `k + 1`] assume_tac) >>
-  gvs[] >> metis_tac[]
-QED
-
-Theorem ao_chains_defined_state_equiv_compat:
-  !targets fv st1 st2.
-    ao_chains_defined targets st1 /\
-    state_equiv fv st1 st2 /\
-    (!v chain k x. ALOOKUP targets v = SOME chain /\
-                   k < LENGTH chain /\ EL k chain = Var x ==> x NOTIN fv) ==>
-    ao_chains_defined targets st2
-Proof
-  simp[ao_chains_defined_def] >> rpt strip_tac >>
-  `!v' chain' j'. ALOOKUP targets v' = SOME chain' /\ j' < LENGTH chain' ==>
-    eval_operand (EL j' chain') st2 = eval_operand (EL j' chain') st1` by
-    metis_tac[eval_chain_el_state_equiv] >>
-  metis_tac[]
-QED
 
 (* ===== Chain property lemmas ===== *)
 
@@ -470,31 +270,6 @@ Proof
   Cases_on `val_k = 0w` >> gvs[bool_to_word_def]
 QED
 
-Theorem chain_period2:
-  !targets st v chain m vm vm2.
-    ao_iszero_chain_inv targets st /\
-    ao_chains_defined targets st /\
-    ALOOKUP targets v = SOME chain /\
-    0 < m /\ m + 2 < LENGTH chain /\
-    eval_operand (EL m chain) st = SOME vm /\
-    eval_operand (EL (m + 2) chain) st = SOME vm2 ==>
-    vm2 = vm
-Proof
-  rpt strip_tac >>
-  `m + 1 < LENGTH chain` by simp[] >>
-  `?vm1. eval_operand (EL (m + 1) chain) st = SOME vm1` by
-    metis_tac[ao_chains_defined_def] >>
-  `(m - 1) + 1 = m` by simp[] >>
-  `vm1 = bool_to_word (vm = 0w)` by
-    metis_tac[ao_iszero_chain_inv_def] >>
-  `m + 1 + 1 = m + 2` by simp[] >>
-  `vm2 = bool_to_word (vm1 = 0w)` by
-    metis_tac[ao_iszero_chain_inv_def] >>
-  `(m - 1) + 1 < LENGTH chain` by simp[] >>
-  `vm = 0w \/ vm = 1w` by
-    metis_tac[chain_val_bool] >>
-  gvs[bool_to_word_def]
-QED
 
 Triviality chain_inv_at[local]:
   !targets st v chain k val_k val_k1.
@@ -643,27 +418,6 @@ QED
 
 (* ===== Arithmetic helpers for period-2 instantiation ===== *)
 
-Triviality even_step_eq[local]:
-  !n:num. n MOD 2 = 0 /\ 2 < n ==> 2 + 2 * ((n - 2) DIV 2) = n
-Proof
-  rpt strip_tac >>
-  `(n - 2) MOD 2 = 0` by
-    (`?k. n = 2 * k` by
-       (qexists_tac `n DIV 2` >> simp[bitTheory.DIV_MULT_THM2]) >>
-     `n - 2 = 2 * (k - 1)` by simp[] >> simp[]) >>
-  simp[bitTheory.DIV_MULT_THM2]
-QED
-
-Triviality odd_step_eq[local]:
-  !n:num. n MOD 2 = 1 /\ 1 < n ==> 1 + 2 * ((n - 1) DIV 2) = n
-Proof
-  rpt strip_tac >>
-  `(n - 1) MOD 2 = 0` by
-    (`?k. n = 2 * k + 1` by
-       (qexists_tac `n DIV 2` >> simp[bitTheory.DIV_MULT_THM2]) >>
-     `n - 1 = 2 * k` by simp[] >> simp[]) >>
-  simp[bitTheory.DIV_MULT_THM2]
-QED
 
 Triviality same_parity_period2[local]:
   !targets st v chain k d vk vd.
@@ -849,14 +603,6 @@ QED
 (* ===== Main theorem ===== *)
 
 (* ao_resolve_iszero_inst only changes operands *)
-Theorem resolve_inst_fields:
-  !targets inst.
-    (ao_resolve_iszero_inst targets inst).inst_opcode = inst.inst_opcode /\
-    (ao_resolve_iszero_inst targets inst).inst_outputs = inst.inst_outputs /\
-    (ao_resolve_iszero_inst targets inst).inst_id = inst.inst_id
-Proof
-  simp[ao_resolve_iszero_inst_def]
-QED
 
 (* For non-truthy opcodes: all resolved operands eval the same *)
 Triviality resolve_op_eval_all[local]:
@@ -874,14 +620,6 @@ Proof
 QED
 
 (* MAP of resolve over all-Lit operands is identity *)
-Triviality map_resolve_lit_id[local]:
-  !targets opc ops.
-    EVERY (\op. ?v. op = Lit v) ops ==>
-    MAP (ao_resolve_iszero_op targets opc) ops = ops
-Proof
-  gen_tac >> gen_tac >> Induct >> simp[] >>
-  rpt strip_tac >> gvs[] >> simp[resolve_op_lit]
-QED
 
 (* If original operand is SOME, resolved is also SOME *)
 Triviality resolve_op_some[local]:
@@ -1067,32 +805,6 @@ QED
 (* Variant using ao_chains_defined_at instead of ao_chains_defined.
    Requires the operand (Var v) to be defined, which together with
    ao_chains_defined_at implies chain definedness for that variable. *)
-Theorem ao_resolve_iszero_inst_sim_at:
-  !targets inst fuel ctx st.
-    inst_wf inst /\
-    inst.inst_opcode <> PHI /\
-    ao_targets_wf targets /\
-    ao_chains_defined_at targets st /\
-    ao_iszero_chain_inv targets st /\
-    (!v. MEM (Var v) inst.inst_operands /\
-         (?chain. ALOOKUP targets v = SOME chain) ==>
-         ?w. eval_operand (Var v) st = SOME w) ==>
-    step_inst fuel ctx (ao_resolve_iszero_inst targets inst) st =
-    step_inst fuel ctx inst st
-Proof
-  rpt strip_tac >>
-  irule ao_resolve_iszero_inst_sim_local >> simp[] >>
-  rpt conj_tac >> rpt strip_tac >> (
-    `?w. eval_operand (Var v) st = SOME w` by
-      (qpat_x_assum `!v. _` (qspec_then `v` mp_tac) >>
-       simp[] >> disch_then irule >> metis_tac[]) >>
-    qpat_x_assum `ao_chains_defined_at _ _` mp_tac >>
-    simp[ao_chains_defined_at_def] >>
-    disch_then (qspecl_then [`v`, `chain`] mp_tac) >>
-    simp[] >> disch_then (qspec_then `k` mp_tac) >> simp[] >>
-    TRY (disch_then irule >> simp[] >> NO_TAC) >>
-    fs[ao_iszero_chain_inv_def] >> res_tac)
-QED
 
 (* ===== PHI resolution sim (loop-robust) ===== *)
 

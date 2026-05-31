@@ -36,15 +36,6 @@ Proof
 QED
 
 (* Helper: mask subset — narrower mask is sub-mask of wider *)
-Triviality mask_and_subset[local]:
-  !a b. a <= b ==>
-    ((1w:bytes32) << (a + 1) - 1w) && ((1w:bytes32) << (b + 1) - 1w) =
-    (1w:bytes32) << (a + 1) - 1w
-Proof
-  rpt strip_tac >>
-  rw[fcpTheory.CART_EQ, wordsTheory.word_and_def, fcpTheory.FCP_BETA,
-     wordsTheory.SHIFT_1_SUB_1, DIMINDEX (Arbnum.fromInt 256)]
-QED
 
 (* sign_extend is idempotent for wider extension.
    sign_extend to bp_i bits then to bp_w >= bp_i is the same as bp_i. *)

@@ -92,16 +92,6 @@ Proof
   gvs[]
 QED
 
-Triviality strict_dom_iszero_inv_inst_idx[local]:
-  !fn0 dfg s n.
-    strict_dom_iszero_inv fn0 dfg (s with vs_inst_idx := n) <=>
-    strict_dom_iszero_inv fn0 dfg s
-Proof
-  rw[strict_dom_iszero_inv_def, lookup_var_def] >> eq_tac >>
-  rpt strip_tac >> res_tac >> gvs[] >>
-  qpat_x_assum `eval_operand _ _ = _` mp_tac >>
-  Cases_on `op` >> simp[eval_operand_def, lookup_var_def]
-QED
 
 Theorem strict_dom_iszero_inv_state_equiv_compat:
   !fn0 dfg fv s1 s2.
