@@ -12,6 +12,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C1.1.2 | stuck | risk_mismatch | E0006 | Call plan_oracle review for C1.1.2 with the failure evidence; request decomposition around a smaller tail/evaluator-prefix boundary or permission to revert the partial helper. |
 | C1.1.2.0 | proved |  | E0007 |  |
 | C1.1.2.1 | proved |  | E0008 | Call plan_oracle review for C1.1.2.1, then if accepted commit the source checkpoint without GPG signing before beginning C1.1.2.2. |
+| C1.1.2.2 | proved |  | E0009 | Call plan_oracle review for C1.1.2.2; if accepted, commit the helper checkpoint without GPG signing, then begin C1.1.3. |
 
 ## C0
 
@@ -151,3 +152,25 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 ### Evidence refs
 
 - `TO_type_system_rewrite-20260531T201607Z_m0180_t001` (use `read_tool_output` for exact output)
+
+## C1.1.2.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0009`
+- blocker: 
+- actual effort: 1 sessions, 3 msgs, 42 steps, 43 tools, 14 holbuild, 4,625,694 tok (4,614,498 in, 11,196 out, 4,483,328 cached), 756.7s, $3.233394
+- next: Call plan_oracle review for C1.1.2.2; if accepted, commit the helper checkpoint without GPG signing, then begin C1.1.3.
+
+### Attempts / Evidence
+
+- `E0009` (proved, , actual effort: 1 sessions, 3 msgs, 42 steps, 43 tools, 14 holbuild, 4,625,694 tok (4,614,498 in, 11,196 out, 4,483,328 cached), 756.7s, $3.233394)
+  - Added local theorem extcall_expr_sound_from_generated_ih with generated args/driver IH premises; unfolded ExtCall evaluator prefix, split eval_exprs/static/nonstatic/failure branches, used extcall_*_args_runtime_typed_dest and run_ext_call_accounts_well_typed, then delegated success suffix to extcall_success_continuation_sound. -> Focused holbuild of vyperTypeStmtSoundnessTheory succeeded, validating the helper. Static and nonstatic success branches now use the continuation boundary rather than extcall_after_state_update_tail_sound directly. (`TO_type_system_rewrite-20260531T201607Z_m0229_t001`)
+  - Initial direct irule extcall_success_continuation_sound after rewriting no_type_error_result failed to match/then left large conjunct packaging goals. -> Reordered/explicitly discharged boundary premises and used qexistsl only to package the continuation-boundary existential at success branches; avoided broad metis over the full suffix. (`TO_type_system_rewrite-20260531T201607Z_m0198_t001`, `TO_type_system_rewrite-20260531T201607Z_m0200_t001`, `TO_type_system_rewrite-20260531T201607Z_m0207_t001`)
+  - Nonstatic branch needed one extra normalization of the post-run do-block after get_accounts/get_transient_storage before applying the continuation boundary. -> Simplifying update_accounts/update_transient/bind/return in the local assumption aligned the suffix premise with extcall_success_continuation_sound and build passed. (`TO_type_system_rewrite-20260531T201607Z_m0227_t001`, `TO_type_system_rewrite-20260531T201607Z_m0229_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260531T201607Z_m0229_t001` (use `read_tool_output` for exact output)
