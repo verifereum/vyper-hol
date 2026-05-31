@@ -73,6 +73,14 @@ Proof
   metis_tac[MEM_fn_insts_blocks_local]
 QED
 
+(* ao_handle_offset_inst only rewrites ADD; a JNZ terminator is untouched. *)
+Triviality ao_handle_offset_jnz[local]:
+  !inst. (ao_handle_offset_inst inst).inst_opcode = JNZ ==>
+         ao_handle_offset_inst inst = inst
+Proof
+  rw[ao_handle_offset_inst_def] >> rpt (CASE_TAC >> gvs[])
+QED
+
 Theorem ao_phase3_correct:
   !fuel ctx fn s.
     let fn0 = fn with fn_blocks :=
@@ -87,6 +95,11 @@ Theorem ao_phase3_correct:
     let fv = ao_fn_fresh_vars fn in
     wf_function fn /\ wf_ssa fn /\ EVERY inst_wf (fn_insts fn) /\
     ao_fresh_names_disjoint fn /\ dfg_block_local fn /\
+    (!b cond true_lbl false_lbl. MEM b fn.fn_blocks /\
+       (LAST b.bb_instructions).inst_opcode = JNZ /\
+       (LAST b.bb_instructions).inst_operands =
+         [cond; Label true_lbl; Label false_lbl] ==>
+       true_lbl <> false_lbl) /\
     FDOM s.vs_vars = {} /\
     fn_entry_label fn = SOME s.vs_current_bb ==>
     (?e. run_blocks fuel ctx fn0 s = Error e) \/
@@ -148,6 +161,27 @@ Proof
   `dfg_block_local fn0` by (
     qunabbrev_tac `fn0` >> irule ao_phase1_preserves_dfg_block_local >>
     simp[]) >>
+  `!b cond true_lbl false_lbl. MEM b fn0.fn_blocks /\
+     (LAST b.bb_instructions).inst_opcode = JNZ /\
+     (LAST b.bb_instructions).inst_operands =
+       [cond; Label true_lbl; Label false_lbl] ==>
+     true_lbl <> false_lbl` by (
+    rpt strip_tac >>
+    `?b'. MEM b' fn.fn_blocks /\
+          b = b' with bb_instructions :=
+                MAP ao_handle_offset_inst b'.bb_instructions` by
+      (qpat_x_assum `MEM b fn0.fn_blocks` mp_tac >>
+       simp[Abbr `fn0`, listTheory.MEM_MAP] >> metis_tac[]) >>
+    `b'.bb_instructions <> []` by
+      (`bb_well_formed b'` by fs[wf_function_def] >> fs[bb_well_formed_def]) >>
+    `LAST b.bb_instructions = ao_handle_offset_inst (LAST b'.bb_instructions)` by
+      (gvs[] >> simp[listTheory.LAST_MAP]) >>
+    `(LAST b'.bb_instructions).inst_opcode = JNZ /\
+     (LAST b'.bb_instructions).inst_operands =
+       [cond; Label true_lbl; Label false_lbl]` by
+      (`ao_handle_offset_inst (LAST b'.bb_instructions) = LAST b'.bb_instructions`
+         by (irule ao_handle_offset_jnz >> gvs[]) >> gvs[]) >>
+    metis_tac[]) >>
   qspecl_then [`state_equiv fv`, `execution_equiv fv`,
     `block_inv`, `bt`, `fn0`] mp_tac block_sim_function_error_bb >>
   impl_tac >- (
@@ -164,9 +198,6 @@ Proof
         strip_tac >>
         `range_sound (df_widen_at NONE ra bb.bb_label 0) st` by
           (qpat_x_assum `range_sound _ st` mp_tac >> fs[]) >>
-        `in_range_state (range_at_inst ra bb.bb_label 0) st.vs_vars` by
-          (irule range_sound_in_range_at_inst >>
-           TRY (first_assum ACCEPT_TAC) >> gvs[]) >>
         qspecl_then [`fn`, `fn0`, `mid`, `dfg`, `ra`, `targets`, `bb`]
           mp_tac ao_block_sim_local >>
         impl_tac
@@ -176,10 +207,8 @@ Proof
         disch_then (qspecl_then [`fl`, `cx`, `st`] mp_tac) >>
         impl_tac >- gvs[] >>
         simp[Abbr `bt`, Abbr `fv`])
-    >- (* block_inv preserved through exec_block *)
+    >- (* block_inv preserved through run_block *)
        (qx_genl_tac [`bb`, `fl`, `cx`, `st`, `vt`] >> strip_tac >>
-        `(st with vs_inst_idx := 0) = st` by
-          rw[venom_state_component_equality] >>
         full_simp_tac (srw_ss()) [Abbr `block_inv`] >>
         qspecl_then [`fn0`, `dfg`, `ra`, `targets`, `bb`, `fl`, `cx`,
                      `st`, `vt`] mp_tac ao_block_inv_preserved >>

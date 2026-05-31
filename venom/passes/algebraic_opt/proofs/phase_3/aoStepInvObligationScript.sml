@@ -448,7 +448,8 @@ Proof
       simp[step_inst_def, step_inst_base_def, AllCaseEqs(),
            jump_to_def] >>
       rpt strip_tac >> gvs[])
-  >- (drule_all step_inst_fdom >> strip_tac >>
+  >- (`inst.inst_opcode <> PHI` by (strip_tac >> gvs[step_inst_phi_error]) >>
+      drule_all step_inst_fdom >> strip_tac >>
       simp[pred_setTheory.SUBSET_DEF])
 QED
 

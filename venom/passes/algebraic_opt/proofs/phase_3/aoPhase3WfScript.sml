@@ -377,9 +377,8 @@ Proof
   MATCH_MP_TAC flat_mapi_phi_prefix >> rpt conj_tac
   >- metis_tac[]
   >- (rpt strip_tac >>
-      qexists_tac `ao_resolve_iszero_inst targets (EL i insts)` >>
-      simp[Abbr `g`, ao_transform_inst_phi,
-           ao_resolve_iszero_inst_opcode])
+      qexists_tac `EL i insts` >>
+      simp[Abbr `g`, ao_transform_inst_phi])
   >- (rpt strip_tac >>
       `inst_wf (EL i insts)` by fs[listTheory.EVERY_EL] >>
       `EVERY (\r'. r'.inst_opcode <> PHI)
@@ -741,12 +740,11 @@ Triviality ao_transform_inst_inst_wf[local]:
 Proof
   rpt strip_tac >>
   simp[ao_transform_inst_def, LET_THM] >>
+  IF_CASES_TAC >- simp[] >>
   qabbrev_tac
     `inst0 = ao_resolve_iszero_inst (ao_compute_fn_iszero_targets fn0) inst` >>
   `inst_wf inst0` by
-    (Cases_on `inst.inst_opcode = PHI`
-     >- (simp[Abbr `inst0`] >> irule ao_resolve_iszero_inst_wf_phi >> simp[])
-     >- (simp[Abbr `inst0`] >> irule ao_resolve_iszero_inst_wf >> simp[])) >>
+    (simp[Abbr `inst0`] >> irule ao_resolve_iszero_inst_wf >> simp[]) >>
   `inst0.inst_opcode = inst.inst_opcode /\
    inst0.inst_outputs = inst.inst_outputs` by
     simp[Abbr `inst0`, ao_resolve_iszero_inst_def] >>

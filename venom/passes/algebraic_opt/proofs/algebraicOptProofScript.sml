@@ -24,6 +24,11 @@ Theorem ao_transform_function_correct:
     let fv' = ao_fn_total_fresh_vars fn in
     wf_function fn /\ wf_ssa fn /\ EVERY inst_wf (fn_insts fn) /\
     ao_fresh_names_disjoint fn /\ dfg_block_local fn /\
+    (!b cond true_lbl false_lbl. MEM b fn.fn_blocks /\
+       (LAST b.bb_instructions).inst_opcode = JNZ /\
+       (LAST b.bb_instructions).inst_operands =
+         [cond; Label true_lbl; Label false_lbl] ==>
+       true_lbl <> false_lbl) /\
     FDOM s.vs_vars = {} /\
     fn_entry_label fn = SOME s.vs_current_bb ==>
     (?e. run_blocks fuel ctx fn s = Error e) \/

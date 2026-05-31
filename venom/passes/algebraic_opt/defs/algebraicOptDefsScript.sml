@@ -819,9 +819,19 @@ End
  * 1. Resolve iszero operands (from forward-computed targets)
  * 2. Try producer rules (balance→selfbalance, signextend nesting)
  * 3. Pre-flip + peephole + post-flip
+ *
+ * PHI is left completely unchanged. Under the eval_phis block-entry
+ * semantics, PHIs form a parallel prefix evaluated by eval_phis and are
+ * never executed by exec_block; the simulation framework
+ * (inst_transform_structural) requires per-instruction transforms to map
+ * PHI to [inst]. This is a conservative deviation from Python, whose
+ * _rewrite_iszero_uses also shortens PHI operands; skipping that on PHIs
+ * only forgoes an optimization and never changes behavior.
  *)
 Definition ao_transform_inst_def:
   ao_transform_inst mid dfg ra lbl idx targets inst =
+    if inst.inst_opcode = PHI then [inst]
+    else
     let inst0 = ao_resolve_iszero_inst targets inst in
     if inst0.inst_outputs = [] then [inst0]
     else if inst0.inst_opcode = ASSIGN \/ inst0.inst_opcode = PHI \/

@@ -351,19 +351,23 @@ Theorem ao_transform_inst_sim_inst:
 Proof
   rpt gen_tac >> strip_tac >>
   `step_inst fuel ctx (ao_resolve_iszero_inst targets inst) s =
-   step_inst fuel ctx inst s` by res_tac >>
+   step_inst fuel ctx inst s`
+    by (qpat_x_assum `inst_wf inst ==> _` mp_tac >> simp[]) >>
+  (* PHI is left unchanged and errors under eval_phis: Error disjunct holds *)
+  Cases_on `inst.inst_opcode = PHI`
+  >- simp[step_inst_phi_error] >>
   simp[ao_transform_inst_def, LET_THM,
        ao_resolve_iszero_inst_outputs,
        ao_resolve_iszero_inst_opcode] >>
   (* Trivial cases: outputs=[] or ASSIGN/PHI/PARAM *)
   Cases_on `inst.inst_outputs = []`
   >- (simp[run_insts_singleton] >> DISJ2_TAC >>
-      pop_assum kall_tac >> pop_assum (fn th => REWRITE_TAC [th]) >>
+      qpat_x_assum `step_inst _ _ (ao_resolve_iszero_inst _ _) _ = _`
+        (fn th => REWRITE_TAC [th]) >>
       irule lift_result_refl >>
       simp[state_equiv_refl, execution_equiv_refl]) >>
   simp[] >>
-  Cases_on `inst.inst_opcode = ASSIGN \/ inst.inst_opcode = PHI \/
-            inst.inst_opcode = PARAM`
+  Cases_on `inst.inst_opcode = ASSIGN \/ inst.inst_opcode = PARAM`
   >- (simp[run_insts_singleton] >> DISJ2_TAC >>
       qpat_x_assum `step_inst _ _ (ao_resolve_iszero_inst _ _) _ = _`
         (fn th => REWRITE_TAC [th]) >>

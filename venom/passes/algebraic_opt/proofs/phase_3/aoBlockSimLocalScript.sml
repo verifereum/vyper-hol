@@ -19,7 +19,7 @@ Ancestors
   algebraicOptDefs aoPhase1Wf aoWf aoBlockSim aoTransformInstSim
   aoResolveObligation aoStepInvObligation aoStrictDomObligation
   aoChainStruct aoIsZeroInv aoRangeObligation aoTargetProps
-  aoBlockInvObligation
+  aoBlockInvObligation aoBlockInvPreserved
   analysisSimDefs analysisSimProofsBase
   stateEquiv stateEquivProps execEquivParamProps
   venomExecSemantics venomExecProofs venomExecProps
@@ -40,6 +40,18 @@ Proof
   `(lbl, i) IN IMAGE (\i. (lbl, i)) (count n)` by
     (simp[] >> qexists_tac `i` >> simp[]) >>
   simp[finite_mapTheory.FLOOKUP_FUN_FMAP]
+QED
+
+Triviality range_sound_in_range_at_inst_any[local]:
+  !ra lbl idx s.
+    range_sound (df_widen_at NONE ra lbl idx) s ==>
+    in_range_state (range_at_inst ra lbl idx) s.vs_vars
+Proof
+  rw[range_at_inst_def] >>
+  Cases_on `df_widen_at NONE ra lbl idx` >>
+  fs[range_sound_def, range_unwrap_def, rangeEvalDefsTheory.in_range_state_def,
+     finite_mapTheory.FLOOKUP_EMPTY] >>
+  metis_tac[]
 QED
 
 Triviality test_wf_all_distinct[local]:
@@ -647,7 +659,7 @@ Theorem ao_block_sim_local:
     dfg = dfg_build_function fn0 /\
     ra = range_analyze fn0 /\
     targets = ao_compute_fn_iszero_targets fn0 /\
-    wf_function fn0 /\ wf_ssa fn0 /\
+    wf_function fn0 /\ wf_ssa fn0 /\ dfg_block_local fn0 /\
     ao_targets_wf targets /\
     EVERY inst_wf (fn_insts fn) /\
     (!inst v. MEM inst (fn_insts fn) /\ MEM (Var v) inst.inst_operands ==>
@@ -657,18 +669,17 @@ Theorem ao_block_sim_local:
     MEM bb fn0.fn_blocks /\
     MEM bb.bb_label (cfg_analyze fn0).cfg_dfs_pre ==>
     !fuel ctx s.
-      s.vs_inst_idx = 0 /\
       s.vs_current_bb = bb.bb_label /\
-      in_range_state (range_at_inst ra bb.bb_label 0) s.vs_vars /\
+      range_sound (df_widen_at NONE ra bb.bb_label 0) s /\
       strict_dom_iszero_inv fn0 dfg s /\
       ao_chain_defined_prefix targets s /\
       ao_dfg_inv dfg (s with vs_inst_idx := 0) ==>
-      (?e. exec_block fuel ctx bb s = Error e) \/
+      (?e. run_block fuel ctx bb s = Error e) \/
       lift_result (state_equiv (ao_fn_fresh_vars fn))
         (execution_equiv (ao_fn_fresh_vars fn))
         (execution_equiv (ao_fn_fresh_vars fn))
-        (exec_block fuel ctx bb s)
-        (exec_block fuel ctx (ao_transform_block mid dfg ra targets bb) s)
+        (run_block fuel ctx bb s)
+        (run_block fuel ctx (ao_transform_block mid dfg ra targets bb) s)
 Proof
   rpt gen_tac >> strip_tac >>
   qabbrev_tac `fv = ao_fn_fresh_vars fn` >>
@@ -704,7 +715,7 @@ Proof
      `\v inst. ao_transform_inst mid dfg ra bb.bb_label v targets inst`,
      `bb`, `0`, `idx_df_state bb.bb_label (SUC (LENGTH bb.bb_instructions))`,
      `\(rc:'b) (inst:instruction) v. SUC v`, `ARB:'b`]
-    mp_tac analysis_block_sim_inv_at >>
+    mp_tac analysis_run_block_sim_inv_at >>
   impl_tac
   >- (rpt conj_tac
       >- simp[state_equiv_execution_equiv_valid_state_rel]
@@ -839,15 +850,72 @@ Proof
       (* state_inv preserved through step *)
       >- simp[]
       (* state_inv preserved through R_ok *)
-      >- simp[]) >>
-  disch_then (qspecl_then [`fuel`, `ctx`, `s`] mp_tac) >>
-  `df_at 0 (idx_df_state bb.bb_label (SUC (LENGTH bb.bb_instructions))) bb.bb_label 0 = 0` by
-    (irule idx_df_state_at2 >> simp[]) >>
-  simp[] >>
-  `sound 0 s` by
-    (simp[Abbr `sound`] >> strip_tac >>
-     simp[within_block_iszero_inv_def] >> gvs[ao_dfg_inv_idx0]) >>
-  simp[]
+      >- simp[]
+      (* bb_well_formed bb *)
+      >- first_assum ACCEPT_TAC) >>
+  strip_tac >>
+  qspecl_then [`s`, `bb.bb_instructions`] strip_assume_tac
+    eval_phis_ok_or_error_defs
+  >- (* eval_phis OK: discharge engine result *)
+     (rename1 `eval_phis s bb.bb_instructions = OK s_phi` >>
+      `eval_phis s bb.bb_instructions = OK s_phi /\
+       sound (df_at 0 (idx_df_state bb.bb_label (SUC (LENGTH bb.bb_instructions)))
+                bb.bb_label (phi_prefix_length bb.bb_instructions))
+             (s_phi with vs_inst_idx := 0) /\
+       (\(st:venom_state). T) (s_phi with vs_inst_idx := 0)` by (
+        rpt conj_tac
+        >- first_assum ACCEPT_TAC
+        >- (`df_at 0 (idx_df_state bb.bb_label (SUC (LENGTH bb.bb_instructions)))
+               bb.bb_label (phi_prefix_length bb.bb_instructions) =
+             phi_prefix_length bb.bb_instructions` by
+              (irule idx_df_state_at2 >>
+               `phi_prefix_length bb.bb_instructions <= LENGTH bb.bb_instructions`
+                 by simp[phi_prefix_length_le] >> decide_tac) >>
+            simp[Abbr `sound`] >> strip_tac >>
+            `ssa_form fn0` by fs[wf_ssa_def] >>
+            `strict_dom_iszero_inv fn0 (dfg_build_function fn0) s_phi` by (
+              qspecl_then [`fn0`, `bb`, `s`, `s_phi`] mp_tac
+                eval_phis_strict_dom_iszero_inv >>
+              impl_tac >- gvs[] >> simp[]) >>
+            `ao_chain_defined_prefix targets s_phi` by (
+              qspecl_then [`fn0`, `bb`, `s`, `s_phi`] mp_tac
+                eval_phis_ao_chain_defined_prefix >>
+              impl_tac >- gvs[] >> simp[]) >>
+            `ao_dfg_inv (dfg_build_function fn0) s_phi` by (
+              `ao_dfg_inv dfg s` by fs[ao_dfg_inv_idx0] >>
+              qspecl_then [`fn0`, `bb`, `s`, `s_phi`] mp_tac eval_phis_ao_dfg_inv >>
+              impl_tac >- gvs[] >> simp[]) >>
+            `lookup_block bb.bb_label fn0.fn_blocks = SOME bb` by
+              (irule test_lookup_block >> simp[]) >>
+            `in_range_state (range_at_inst (range_analyze fn0) bb.bb_label
+                 (phi_prefix_length bb.bb_instructions))
+                 (s_phi with vs_inst_idx := 0).vs_vars` by (
+              irule range_sound_in_range_at_inst_any >>
+              qspecl_then [`fn0`, `bb`, `s`, `s_phi`] mp_tac eval_phis_range_sound >>
+              impl_tac >- gvs[] >> simp[]) >>
+            `s_phi.vs_current_bb = bb.bb_label` by (
+              `s_phi = s with vs_vars := s_phi.vs_vars` by
+                metis_tac[eval_phis_only_updates_vs_vars] >>
+              qpat_x_assum `s_phi = _` (fn th => simp[Once th])) >>
+            `within_block_iszero_inv fn0 bb (phi_prefix_length bb.bb_instructions)
+               (s_phi with vs_inst_idx := 0)` by simp[wbiz_phi_prefix] >>
+            `strict_dom_iszero_inv fn0 dfg (s_phi with vs_inst_idx := 0)` by
+              (simp[strict_dom_iszero_inv_inst_idx] >> gvs[]) >>
+            `ao_chain_defined_prefix targets (s_phi with vs_inst_idx := 0)` by
+              (qpat_x_assum `ao_chain_defined_prefix targets s_phi` mp_tac >>
+               rw[ao_chain_defined_prefix_def] >>
+               metis_tac[eval_operand_inst_idx_irrel]) >>
+            `ao_dfg_inv dfg (s_phi with vs_inst_idx := 0)` by
+              (simp[ao_dfg_inv_idx0] >> gvs[]) >>
+            gvs[ao_dfg_inv_idx0])
+        >- simp[]) >>
+      qpat_x_assum `!fuel ctx s s_phi. _`
+        (qspecl_then [`fuel`, `ctx`, `s`, `s_phi`] mp_tac) >>
+      simp[])
+  >- (* eval_phis Error: run_block errors directly *)
+     (rename1 `eval_phis s bb.bb_instructions = Error err` >>
+      disj1_tac >> qexists_tac `err` >>
+      once_rewrite_tac[run_block_def] >> gvs[])
 QED
 
 val _ = export_theory();

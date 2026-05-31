@@ -162,7 +162,7 @@ Proof
               metis_tac[])))
 QED
 
-Triviality chain_consecutive_iszero[local]:
+Theorem chain_consecutive_iszero:
   !fn v chain k w.
     ALOOKUP (ao_compute_fn_iszero_targets fn) v = SOME chain /\
     k + 1 < LENGTH chain /\ EL (k + 1) chain = Var w ==>

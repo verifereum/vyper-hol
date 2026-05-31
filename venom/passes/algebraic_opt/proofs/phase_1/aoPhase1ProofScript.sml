@@ -139,6 +139,34 @@ Proof
   simp[]
 QED
 
+Theorem ao_handle_offset_inst_phi[local]:
+  !inst. inst.inst_opcode = PHI ==> ao_handle_offset_inst inst = inst
+Proof
+  rw[ao_handle_offset_inst_def] >> every_case_tac >> gvs[]
+QED
+
+Theorem ao_handle_offset_inst_is_phi[local]:
+  !inst. ((ao_handle_offset_inst inst).inst_opcode = PHI) <=> (inst.inst_opcode = PHI)
+Proof
+  rw[ao_handle_offset_inst_def] >> every_case_tac >> gvs[]
+QED
+
+Theorem phi_prefix_length_offset[local]:
+  !insts. phi_prefix_length (MAP ao_handle_offset_inst insts) = phi_prefix_length insts
+Proof
+  Induct >> simp[phi_prefix_length_def, ao_handle_offset_inst_is_phi]
+QED
+
+Theorem eval_phis_offset[local]:
+  !insts s. eval_phis s (MAP ao_handle_offset_inst insts) = eval_phis s insts
+Proof
+  Induct >> simp[eval_phis_def] >> rpt strip_tac >>
+  reverse (Cases_on `h.inst_opcode = PHI`)
+  >- simp[eval_phis_def, ao_handle_offset_inst_is_phi] >>
+  `ao_handle_offset_inst h = h` by simp[ao_handle_offset_inst_phi] >>
+  simp[eval_phis_def]
+QED
+
 Theorem ao_phase1_correct:
   !fuel ctx fn s.
     let fn0 = fn with fn_blocks :=
@@ -153,7 +181,7 @@ Proof
   ONCE_REWRITE_TAC[run_blocks_def] >>
   simp[lookup_block_offset_fn] >>
   Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >> gvs[] >>
-  simp[exec_block_offset_eq]
+  simp[exec_block_offset_eq, eval_phis_offset, phi_prefix_length_offset]
 QED
 
 val _ = export_theory();

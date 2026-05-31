@@ -1,7 +1,9 @@
 # Pass simulation definitions
 # From simulation/defs/ relative paths:
-#   ../..    = venom/
 #   ../../.. = project root
 # analysisSimDefs depends on dfAnalyzeDefs + passSimulationDefs + indexedLists
-INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../.. ../../../syntax ../../../semantics \
+# NOTE: ../.. (venom/) back-edge dropped locally — venom/ holds no theory files,
+# so it adds nothing, but it closes an INCLUDES cycle that Holmake (unlike the
+# upstream holbuild tool) rejects fatally. Local build-enablement only.
+INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../../syntax ../../../semantics \
            ../../defs ../../analysis/dataflow/defs ../../analysis/cfg/defs

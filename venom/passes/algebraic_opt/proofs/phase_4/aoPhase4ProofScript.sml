@@ -21,17 +21,7 @@ val _ = delsimps ["ao_cmp_flip_dead_vars_def",
                   "ao_cmp_flip_scan_def"]
 
 (* run_blocks does not depend on vs_inst_idx *)
-Triviality run_blocks_inst_idx_irrel[local]:
-  !fuel ctx fn s.
-    run_blocks fuel ctx fn s =
-    run_blocks fuel ctx fn (s with vs_inst_idx := 0)
-Proof
-  Induct_on `fuel` >> rpt gen_tac
-  >- (ONCE_REWRITE_TAC[run_blocks_def] >> simp[]) >>
-  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV[run_blocks_def])) >>
-  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV[run_blocks_def])) >>
-  simp_tac (srw_ss()) []
-QED
+(* run_blocks_inst_idx_irrel is provided by passSimulationProps *)
 
 (* cmp_flip_iszero_inv reflexive when no vars defined *)
 Triviality iszero_inv_refl_empty[local]:
@@ -169,7 +159,7 @@ Proof
                         Abbr `bt`] >>
                    NO_TAC) >>
               gvs[])
-          >> strip_tac >> DISJ2_TAC >> first_assum ACCEPT_TAC))
+          >> strip_tac >> simp[]))
   >> disch_then (qspecl_then [`fuel`, `ctx`, `s0`] mp_tac) >>
   impl_tac
   >- (conj_tac

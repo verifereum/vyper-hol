@@ -120,14 +120,13 @@ QED
 (* When inst has empty outputs (terminators), ao_transform_inst returns
    a singleton with the same opcode *)
 
-(* PHI maps to singleton *)
+(* PHI is left unchanged (eval_phis block-entry semantics) *)
 Theorem ao_transform_inst_phi:
   !mid dfg ra lbl idx targets inst.
     inst.inst_opcode = PHI ==>
-    ao_transform_inst mid dfg ra lbl idx targets inst =
-      [ao_resolve_iszero_inst targets inst]
+    ao_transform_inst mid dfg ra lbl idx targets inst = [inst]
 Proof
-  simp[ao_transform_inst_def, LET_THM, ao_resolve_iszero_inst_opcode]
+  simp[ao_transform_inst_def]
 QED
 
 (* ASSIGN maps to singleton *)
@@ -227,6 +226,7 @@ Theorem ao_transform_inst_term:
 Proof
   rpt strip_tac >>
   `inst.inst_outputs = []` by metis_tac[terminator_no_outputs] >>
+  `inst.inst_opcode <> PHI` by (strip_tac >> fs[is_terminator_def]) >>
   simp[ao_transform_inst_def, LET_THM, ao_resolve_iszero_inst_outputs]
 QED
 
@@ -499,8 +499,10 @@ QED
 Triviality ao_opt_producer_every_non_special[local]:
   !dfg inst result.
     ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+    inst.inst_opcode <> PHI /\
     ao_opt_producer dfg inst = SOME result ==>
-    EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE) result
+    EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\
+               i.inst_opcode <> PHI) result
 Proof
   rpt strip_tac >>
   qpat_x_assum `ao_opt_producer _ _ = _` mp_tac >>
@@ -514,8 +516,10 @@ QED
 (* MAP ao_post_flip_inst preserves non-terminator non-INVOKE *)
 Triviality map_post_flip_every_non_special[local]:
   !insts.
-    EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE) insts ==>
-    EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE)
+    EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\
+               i.inst_opcode <> PHI) insts ==>
+    EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\
+               i.inst_opcode <> PHI)
           (MAP ao_post_flip_inst insts)
 Proof
   Induct >> simp[] >> rpt strip_tac >> gvs[ao_post_flip_opcode]
@@ -524,8 +528,10 @@ QED
 (* Comparator output is always non-terminator non-INVOKE (wf-free) *)
 Triviality ao_opt_comparator_non_special[local]:
   !mid dfg ra lbl idx inst.
-    ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE ==>
-    EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE)
+    ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+    inst.inst_opcode <> PHI ==>
+    EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\
+               i.inst_opcode <> PHI)
       (ao_opt_comparator mid dfg ra lbl idx inst)
 Proof
   rpt strip_tac >>
@@ -547,8 +553,10 @@ QED
 (* Peephole output is always non-terminator non-INVOKE (wf-free) *)
 Triviality ao_peephole_inst_non_special[local]:
   !mid dfg ra lbl idx inst.
-    ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE ==>
-    EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE)
+    ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+    inst.inst_opcode <> PHI ==>
+    EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\
+               i.inst_opcode <> PHI)
       (ao_peephole_inst mid dfg ra lbl idx inst)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -563,6 +571,34 @@ Proof
   irule ao_opt_comparator_non_special >> simp[is_terminator_def]
 QED
 
+(* Non-term non-INVOKE non-PHI inputs produce only such instructions *)
+Triviality ao_transform_inst_non_special[local]:
+  !mid dfg ra lbl v targets inst.
+    ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+    inst.inst_opcode <> PHI ==>
+    EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\
+               i.inst_opcode <> PHI)
+          (ao_transform_inst mid dfg ra lbl v targets inst)
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[ao_transform_inst_def, LET_THM,
+       ao_resolve_iszero_inst_opcode,
+       ao_resolve_iszero_inst_outputs] >>
+  IF_CASES_TAC
+  >- simp[ao_resolve_iszero_inst_opcode, is_terminator_def] >>
+  IF_CASES_TAC
+  >- simp[ao_resolve_iszero_inst_opcode, is_terminator_def] >>
+  CASE_TAC
+  >| [ (irule map_post_flip_every_non_special >>
+        irule ao_peephole_inst_non_special >>
+        simp[ao_pre_flip_opcode, ao_resolve_iszero_inst_opcode]),
+       (irule map_post_flip_every_non_special >>
+        irule ao_opt_producer_every_non_special >>
+        qexists_tac `dfg` >>
+        qexists_tac `ao_resolve_iszero_inst targets inst` >>
+        simp[ao_resolve_iszero_inst_opcode]) ]
+QED
+
 (* ao_transform_inst is structural: preserves terminator/INVOKE/other class *)
 Theorem ao_transform_inst_structural:
   !mid dfg ra lbl targets.
@@ -572,6 +608,8 @@ Proof
   rpt gen_tac >> simp[inst_transform_structural_def] >> rpt conj_tac
   >- (* Terminators: singleton terminator *)
      (rpt gen_tac >> strip_tac >>
+      `inst.inst_opcode <> PHI` by
+        (strip_tac >> fs[is_terminator_def]) >>
       Cases_on `inst.inst_outputs = []`
       >- (qexists_tac `ao_resolve_iszero_inst targets inst` >>
           simp[ao_transform_inst_def, LET_THM,
@@ -598,31 +636,11 @@ Proof
       qspecl_then [`mid`, `dfg`, `ra`, `lbl`, `v`, `targets`, `inst`]
         strip_assume_tac ao_transform_inst_invoke >>
       gvs[] >> qexists_tac `inst'` >> simp[])
-  >- (* Non-term non-INVOKE: EVERY non-term non-INVOKE *)
+  >- (* PHI: left unchanged *)
+     (rpt gen_tac >> strip_tac >> simp[ao_transform_inst_phi])
+  >- (* Non-term non-INVOKE non-PHI: EVERY non-term non-INVOKE non-PHI *)
      (rpt gen_tac >> strip_tac >>
-      simp[ao_transform_inst_def, LET_THM,
-           ao_resolve_iszero_inst_opcode,
-           ao_resolve_iszero_inst_outputs] >>
-      Cases_on `inst.inst_outputs = []`
-      >- simp[ao_resolve_iszero_inst_opcode, is_terminator_def]
-      >- (simp[] >>
-          Cases_on `inst.inst_opcode = ASSIGN \/ inst.inst_opcode = PHI \/
-                    inst.inst_opcode = PARAM`
-          >- simp[ao_resolve_iszero_inst_opcode, is_terminator_def]
-          >- (simp[ao_resolve_iszero_inst_opcode] >>
-              Cases_on `ao_opt_producer dfg (ao_resolve_iszero_inst targets inst)`
-              >- (simp[] >>
-                  irule map_post_flip_every_non_special >>
-                  irule ao_peephole_inst_non_special >>
-                  simp[ao_pre_flip_opcode, ao_resolve_iszero_inst_opcode])
-              >- (`~is_terminator
-                      (ao_resolve_iszero_inst targets inst).inst_opcode`
-                      by simp[ao_resolve_iszero_inst_opcode] >>
-                  `(ao_resolve_iszero_inst targets inst).inst_opcode <> INVOKE`
-                      by simp[ao_resolve_iszero_inst_opcode] >>
-                  simp[] >>
-                  imp_res_tac ao_opt_producer_every_non_special >>
-                  irule map_post_flip_every_non_special >> simp[]))))
+      irule ao_transform_inst_non_special >> simp[])
 QED
 
 val _ = export_theory();
