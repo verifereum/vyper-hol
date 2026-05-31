@@ -1503,17 +1503,42 @@ Do not reintroduce the long `Q.SPECL` application of `intcall_actual_args_succes
 - Risk: 2
 - Work priority: 80
 - Work units: 5
-- Rationale: This unrelated sibling remains valid but must be scheduled after the active C2.6 IntCall source repair because the current theory source is partial there.
+- Rationale: IntCall is now proved (E1332). ExtCall/RawCallTarget cheats are the remaining statement-soundness expression branches. Tooling blocker (--strict-parse) has been resolved; holbuild works without that option.
 - Dependencies: C2.6.4
 - Checkpoint: yes
 - Progress transition: `refinement`
 
 #### Progress note
-Priority/dependency refined to prevent C2.7 from becoming oracle-next while C2.6.3.3.1.e/d are still open.
+The --strict-parse tooling blocker is resolved. Build passes with 3 remaining cheats: Expr_Call_ExtCall, Expr_Call_RawCallTarget in vyperTypeStmtSoundnessScript.sml and raw_call_return_type_well_formed in vyperTypeBuiltinsScript.sml. IntCall is fully proved.
 
 #### Summary
-- Unchanged proof obligation, rescheduled after C2.6 IntCall repair.
-- Do not start this while the local IntCall continuation theorem remains partial.
+- Prove Expr_Call_ExtCall resume in vyperTypeStmtSoundnessScript.sml.
+- Prove Expr_Call_RawCallTarget resume in vyperTypeStmtSoundnessScript.sml.
+- Both should use a standalone local helper theorem outside the Resume, then the Resume just applies it.
+
+#### Approach
+For **ExtCall**, write `extcall_expr_sound[local]` before the Resume:
+1. Take IHs for eval_exprs and eval_expr (THE drv) as explicit premises.
+2. Unfold `well_typed_expr_def` and `evaluate_def` Once.
+3. Case-split on `eval_exprs cx es st`; use IH for success; error case is trivial (all RuntimeErrors, not TypeErrors).
+4. Case-split on `is_static`; use `extcall_static_args_runtime_typed_dest` or `extcall_nonstatic_args_runtime_typed_dest`.
+5. Step-by-step simplify monadic operations (check, lift_option_type, lift_option, get_accounts, get_transient_storage) — unfold 1-2 defs at a time, case-split results.
+6. For run_ext_call: case-split, use `run_ext_call_accounts_well_typed`.
+7. After check success + update_accounts/update_transient: bridge to `extcall_return_tail_sound`.
+   - Key bridging issue: the evaluator produces `(\\(success,returnData,accounts',tStorage'). ...) result` (lambda applied to result tuple) which must be simplified to match `extcall_return_tail_sound`'s expected shape.
+   - Use `simp[update_accounts_def, update_transient_def, return_def, PAIR_EQ]` then further simplification.
+   - Derive `evaluate_type env.type_defs ret_type2 = SOME ret_tv` from `well_formed_type_def` + `IS_SOME_EXISTS`.
+   - Use `runtime_consistent_def` and `update_accounts_transient_runtime_consistent` for the state after account/transient update.
+   - The driver IH for `eval_expr cx (THE drv)` is in the third premise; pass it through when `drv = SOME e`.
+8. Place-expression second conjunct is vacuously true (`type_place_expr ... Call (ExtCall ...) ... = NONE`).
+
+For **RawCallTarget**, follow the same pattern with the RawCallTarget evaluator clause (simpler: no driver, fewer bound operations).
+
+#### Not to try
+- Do not unfold ALL monadic definitions at once with `simp_tac(srw_ss())[Once evaluate_def, bind_def, ...]` — causes timeout/explosion.
+- Do not use `<| ... |>` record update syntax inside backtick quotations in the Resume context — causes parse errors due to `markerLib.resume` wrapper limitations.
+- Do not try to prove ExtCall inside the Resume inline; use a standalone helper theorem.
+- Do not inline `run_ext_call`/ABI/rollback internals in the Resume.
 
 ### C2.8: Focused statement-soundness build and C2 cheat audit
 - Kind: `build_audit`

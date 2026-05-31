@@ -238,7 +238,7 @@ The strengthened runtime assignment side conditions are derived in each branch:
 4. Tuple/list assignment uses `target_assignment_values_assignable` and rebuild lemmas.
 
 
-## Current status (2026-05-29)
+## Current status (2026-05-31)
 
 ### Completion scope
 
@@ -262,7 +262,7 @@ holbuild build vyperTypeStmtSoundnessTheory      # succeeds, through the proved 
 holbuild build vyperSemanticsHolTheory           # succeeds
 ```
 
-Reachable fresh-stack cheat inventory (source audit, 2026-05-29):
+Reachable fresh-stack cheat inventory (source audit, 2026-05-31):
 
 ```text
 semantics/prop/vyperTypeBuiltinsScript.sml             1
@@ -271,15 +271,13 @@ semantics/prop/vyperTypeBuiltinsScript.sml             1
 semantics/prop/vyperTypeStmtSoundnessScript.sml         2
   - eval_all_type_sound_mutual[Expr_Call_ExtCall]
   - eval_all_type_sound_mutual[Expr_Call_RawCallTarget]
-
-semantics/prop/vyperTypeCallSoundnessScript.sml         4
-  - internal_call_no_type_error
-  - internal_call_soundness (result + state typing)
-  - external_call_no_type_error
-  - call_no_type_error (generic)
 --------------------------------------------------------
-Total reachable fresh-stack cheats                    7
+Total reachable fresh-stack cheats                    3
 ```
+
+The 4 call-soundness cheats from the previous audit are now gone — `internal_call_no_type_error`, `internal_call_type_preservation`, `external_call_no_type_error`, and `special_call_no_type_error` in `vyperTypeCallSoundnessScript.sml` are all proved as projections from the completed mutual expression soundness theorem.
+
+The `holbuild --strict-parse` tooling blocker is resolved; holbuild works correctly without that option.
 
 For comparison, previous audit was 65 cheats. The reduction was achieved by:
 - Proving all assignment target mutual branches (TopLevelVar Type/Value,
@@ -379,20 +377,19 @@ the shape of the call proof architecture.
 
 Priority order for the next phase:
 
-1. **Call soundness.**  Prove the joint call no-TypeError / preservation theorem
-   in `vyperTypeCallSoundnessScript.sml`.  This should follow the strongest-joint-
-   invariant principle: a single combined call theorem covering both no-TypeError
-   and state/env/accounts/result preservation, not separate parallel proof trees.
-   The 4 call cheats should be discharged by proving this joint theorem.
-2. **Expression-call statement branches.**  The 2 cheats in
+1. **ExtCall/RawCallTarget expression branches.**  Prove the 2 cheats in
    `eval_all_type_sound_mutual[Expr_Call_ExtCall]` and
-   `eval_all_type_sound_mutual[Expr_Call_RawCallTarget]` should be discharged
-   once call soundness provides the needed facts.
-3. **Builtin localized cheat: `raw_call_return_type_well_formed`.**  This is a
-   localized arithmetic/type-slot-size issue.  Discharge it when convenient.
-4. **Audit remaining deferred builtin gaps** (ABI encode bound, `MsgGas`, etc.)
+   `eval_all_type_sound_mutual[Expr_Call_RawCallTarget]` using a standalone
+   helper theorem plus the already-proved infrastructure (`extcall_static_args_runtime_typed_dest`,
+   `extcall_nonstatic_args_runtime_typed_dest`, `run_ext_call_accounts_well_typed`,
+   `update_accounts_transient_runtime_consistent`, `extcall_return_tail_sound`).
+   Key challenge: bridging the monadic continuation after update_accounts/update_transient
+   to the `extcall_return_tail_sound` interface.
+2. **Builtin localized cheat: `raw_call_return_type_well_formed`.**  This is a
+   localized arithmetic/type-slot-size issue.  Discharge when convenient.
+3. **Audit remaining deferred builtin gaps** (ABI encode bound, `MsgGas`, etc.)
    for definition-level risks before claiming final no-cheat soundness.
-5. **Retire old theories.**  Once the fresh stack is complete with zero cheats,
+4. **Retire old theories.**  Once the fresh stack is complete with zero cheats,
    delete or archive `vyperTypeSoundnessDefsScript.sml`,
    `vyperTypeSoundnessHelpersScript.sml`, and
    `vyperTypeSoundnessScript.sml`.
