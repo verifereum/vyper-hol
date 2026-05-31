@@ -335,9 +335,54 @@ Proof
   rpt (qpat_x_assum `_ < 31` kall_tac) >>
   rpt (qpat_x_assum `~(_ >= _)` kall_tac) >>
   rpt (qpat_x_assum `!op v. _` kall_tac) >>
-  simp[step_inst_base_def, exec_pure2_def, exec_pure1_def,
-       eval_operand_def] >>
+  simp[Once step_inst_base_def] >> simp[Once step_inst_base_def] >>
+  simp[exec_pure2_def, exec_pure1_def, eval_operand_def] >>
   every_case_tac >> gvs[eval_operand_def]
+QED
+
+(* Per-opcode step_inst_base rewrites with tiny RHS. Using these lets simp
+   resolve step_inst_base for a concrete opcode without rebuilding the full
+   ~50-arm opcode case-expression in every subgoal (which blows up when a
+   proof has many concrete cases, e.g. ao_exp_sim). *)
+Triviality step_base_exp[local]:
+  inst.inst_opcode = Exp ==>
+  step_inst_base inst s = exec_pure2 word_exp inst s
+Proof
+  simp[step_inst_base_def]
+QED
+
+Triviality step_base_iszero[local]:
+  inst.inst_opcode = ISZERO ==>
+  step_inst_base inst s = exec_pure1 (\x. bool_to_word (x = 0w)) inst s
+Proof
+  simp[step_inst_base_def]
+QED
+
+Triviality step_base_assign[local]:
+  inst.inst_opcode = ASSIGN ==>
+  step_inst_base inst s =
+    (case (inst.inst_operands, inst.inst_outputs) of
+       ([op1], [out]) =>
+         (case eval_operand op1 s of
+            SOME v => OK (update_var out v s)
+          | NONE => Error "undefined operand")
+     | _ => Error "assign requires 1 operand and single output")
+Proof
+  simp[step_inst_base_def]
+QED
+
+Triviality step_base_sdiv[local]:
+  inst.inst_opcode = SDIV ==>
+  step_inst_base inst s = exec_pure2 safe_sdiv inst s
+Proof
+  simp[step_inst_base_def]
+QED
+
+Triviality step_base_smod[local]:
+  inst.inst_opcode = SMOD ==>
+  step_inst_base inst s = exec_pure2 safe_smod inst s
+Proof
+  simp[step_inst_base_def]
 QED
 
 (* ===== Exp ===== *)
@@ -356,9 +401,10 @@ Proof
   gvs[ao_opt_exp_def, lit_eq_def] >>
   rpt IF_CASES_TAC >> gvs[] >>
   TRY (simp[] >> NO_TAC) >>
-  (* Brute force: unfold step_inst_base for both sides *)
-  simp[step_inst_base_def, exec_pure2_def, exec_pure1_def,
-       eval_operand_def] >>
+  (* Resolve step_inst_base via per-opcode rewrites (tiny RHS) to avoid
+     rebuilding the full opcode case in each of the many subgoals. *)
+  simp[step_base_exp, step_base_assign, step_base_iszero] >>
+  simp[exec_pure2_def, exec_pure1_def, eval_operand_def] >>
   every_case_tac >> gvs[wordsTheory.word_exp_def,
     arithmeticTheory.EXP_1, arithmeticTheory.ZERO_EXP] >>
   rpt IF_CASES_TAC >> gvs[bool_to_word_def]
@@ -383,9 +429,9 @@ Proof
   gvs[ao_opt_muldiv_def, LET_THM, lit_eq_def] >>
   rpt IF_CASES_TAC >> gvs[] >>
   TRY (simp[] >> NO_TAC) >>
-  (* Brute force: unfold step_inst_base for both sides *)
-  simp[step_inst_base_def, exec_pure2_def, eval_operand_def,
-       safe_sdiv_def] >>
+  (* Resolve step_inst_base via per-opcode rewrites (tiny RHS) then exec_pure *)
+  simp[step_base_sdiv, step_base_assign] >>
+  simp[exec_pure2_def, eval_operand_def, safe_sdiv_def] >>
   every_case_tac >>
   gvs[safe_sdiv_def, word_quot_zero_l, word_quot_one]
 QED
@@ -406,9 +452,9 @@ Proof
   gvs[ao_opt_muldiv_def, LET_THM, lit_eq_def] >>
   rpt IF_CASES_TAC >> gvs[] >>
   TRY (simp[] >> NO_TAC) >>
-  (* Brute force: unfold step_inst_base for both sides *)
-  simp[step_inst_base_def, exec_pure2_def, eval_operand_def,
-       safe_smod_def] >>
+  (* Resolve step_inst_base via per-opcode rewrites (tiny RHS) then exec_pure *)
+  simp[step_base_smod, step_base_assign] >>
+  simp[exec_pure2_def, eval_operand_def, safe_smod_def] >>
   every_case_tac >>
   gvs[safe_smod_def, word_rem_zero_l, word_rem_one]
 QED
