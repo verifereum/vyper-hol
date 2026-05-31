@@ -11,6 +11,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C1.1.1 | proved |  | E0004 |  |
 | C1.1.2 | stuck | risk_mismatch | E0006 | Call plan_oracle review for C1.1.2 with the failure evidence; request decomposition around a smaller tail/evaluator-prefix boundary or permission to revert the partial helper. |
 | C1.1.2.0 | proved |  | E0007 |  |
+| C1.1.2.1 | proved |  | E0008 | Call plan_oracle review for C1.1.2.1, then if accepted commit the source checkpoint without GPG signing before beginning C1.1.2.2. |
 
 ## C0
 
@@ -129,3 +130,24 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 ### Evidence refs
 
 - `TO_type_system_rewrite-20260531T201607Z_m0159_t001` (use `read_tool_output` for exact output)
+
+## C1.1.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0008`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 12 steps, 12 tools, 4 holbuild, 711,735 tok (708,877 in, 2,858 out, 671,232 cached), 226.2s, $0.609581
+- next: Call plan_oracle review for C1.1.2.1, then if accepted commit the source checkpoint without GPG signing before beginning C1.1.2.2.
+
+### Attempts / Evidence
+
+- `E0008` (proved, , actual effort: 1 sessions, 1 msgs, 12 steps, 12 tools, 4 holbuild, 711,735 tok (708,877 in, 2,858 out, 671,232 cached), 226.2s, $0.609581)
+  - Added local theorem extcall_success_continuation_sound after env_consistent_get_tenv; simplified assert/update suffix, rewrote get_tenv from runtime_consistent/env_consistent_get_tenv, extracted evaluate_type witness from well_formed_type, and applied extcall_after_state_update_tail_sound with explicit conjunct/witness discharge. -> Focused build of vyperTypeStmtSoundnessTheory succeeded, validating the new boundary lemma in source. (`TO_type_system_rewrite-20260531T201607Z_m0180_t001`)
+  - Initial proof ended with broad metis_tac after irule extcall_after_state_update_tail_sound. -> Failed/timed out on the packaged existential/conjunct goal; replaced with explicit conjunct_tac and qexistsl, avoiding broad FOL search. (`TO_type_system_rewrite-20260531T201607Z_m0176_t001`, `TO_type_system_rewrite-20260531T201607Z_m0178_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260531T201607Z_m0180_t001` (use `read_tool_output` for exact output)
