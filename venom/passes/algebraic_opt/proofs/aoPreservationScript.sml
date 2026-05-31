@@ -8,105 +8,14 @@
 
 Theory aoPreservation
 Ancestors
-  algebraicOptDefs aoPhase1Wf aoPhase3Wf aoPhase3Ids aoPhase3Ssa
+  algebraicOptDefs aoPhase1Wf aoWf aoPhase3Wf aoPhase3Ids aoPhase3Ssa
   aoPhase4Wf aoPhase4Ssa aoPeepholeSim
   passSimulationDefs passSimulationProps venomWf venomInst
 Libs
   BasicProvers
 
-(* ===== ao_fresh_id properties ===== *)
-
-Theorem ao_fresh_id_gt:
-  !mid id slot. ao_fresh_id mid id slot > mid
-Proof
-  simp[ao_fresh_id_def]
-QED
-
-Theorem ao_fresh_id_ge:
-  !mid id slot. ao_fresh_id mid id slot >= mid + 1
-Proof
-  simp[ao_fresh_id_def]
-QED
-
-Theorem ao_fresh_id_inj:
-  !mid id1 slot1 id2 slot2.
-    slot1 < 3 /\ slot2 < 3 /\
-    ao_fresh_id mid id1 slot1 = ao_fresh_id mid id2 slot2 ==>
-    id1 = id2 /\ slot1 = slot2
-Proof
-  simp[ao_fresh_id_def] >> rpt strip_tac >>
-  `id1 * 3 + slot1 = id2 * 3 + slot2` by simp[] >>
-  `(id1 * 3 + slot1) MOD 3 = (id2 * 3 + slot2) MOD 3` by simp[] >>
-  `slot1 MOD 3 = slot2 MOD 3` by metis_tac[arithmeticTheory.MOD_TIMES] >>
-  `slot1 = slot2` by metis_tac[arithmeticTheory.LESS_MOD]
-QED
-
-Triviality foldl_max_base[local]:
-  !(l:num list) a. a <= FOLDL MAX a l
-Proof
-  Induct >> simp[] >> rpt gen_tac >>
-  `MAX a h <= FOLDL MAX (MAX a h) l` suffices_by simp[] >>
-  metis_tac[]
-QED
-
-Triviality foldl_max_mono[local]:
-  !(l:num list) a b. a <= b ==> FOLDL MAX a l <= FOLDL MAX b l
-Proof
-  Induct >> simp[arithmeticTheory.MAX_DEF]
-QED
-
-Triviality foldl_max_mem[local]:
-  !(l:num list) x a. MEM x l ==> x <= FOLDL MAX a l
-Proof
-  Induct >> simp[] >> rpt gen_tac >>
-  DISCH_THEN DISJ_CASES_TAC
-  >- (pop_assum SUBST_ALL_TAC >>
-      match_mp_tac arithmeticTheory.LESS_EQ_TRANS >>
-      qexists_tac `MAX a h` >>
-      conj_tac >- simp[arithmeticTheory.MAX_LE]
-      >- MATCH_ACCEPT_TAC foldl_max_base)
-  >- (match_mp_tac arithmeticTheory.LESS_EQ_TRANS >>
-      qexists_tac `FOLDL MAX a l` >>
-      conj_tac
-      >- (first_x_assum match_mp_tac >> simp[])
-      >- (irule foldl_max_mono >> simp[]))
-QED
-
-Theorem fn_max_inst_id_bound:
-  !fn inst. MEM inst (fn_insts fn) ==> inst.inst_id <= fn_max_inst_id fn
-Proof
-  rpt strip_tac >>
-  simp[fn_max_inst_id_def] >>
-  irule foldl_max_mem >>
-  simp[listTheory.MEM_MAP] >>
-  metis_tac[]
-QED
-
-(* ===== ALL_DISTINCT splitting ===== *)
-
-Theorem all_distinct_bound_split:
-  !(l:num list) mid.
-    ALL_DISTINCT (FILTER (\id. id <= mid) l) /\
-    ALL_DISTINCT (FILTER (\id. ~(id <= mid)) l) ==>
-    ALL_DISTINCT l
-Proof
-  Induct >> simp[] >> rpt strip_tac >>
-  Cases_on `h <= mid` >> gvs[listTheory.MEM_FILTER] >>
-  first_x_assum irule >>
-  metis_tac[listTheory.FILTER_ALL_DISTINCT]
-QED
-
-Theorem all_distinct_pred_split:
-  !(l:'a list) P.
-    ALL_DISTINCT (FILTER P l) /\
-    ALL_DISTINCT (FILTER ($~ o P) l) ==>
-    ALL_DISTINCT l
-Proof
-  Induct >> simp[] >> rpt strip_tac >>
-  Cases_on `P h` >> gvs[listTheory.MEM_FILTER] >>
-  first_x_assum irule >>
-  metis_tac[listTheory.FILTER_ALL_DISTINCT]
-QED
+(* ao_fresh_id_{gt,ge,inj}, foldl_max_*, fn_max_inst_id_bound,
+   all_distinct_{bound,pred}_split reused from aoWf (transitive ancestor). *)
 
 (* ao_fresh_var is injective on our suffixes *)
 Theorem ao_fresh_var_full_inj:

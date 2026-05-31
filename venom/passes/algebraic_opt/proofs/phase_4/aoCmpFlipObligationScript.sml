@@ -1336,15 +1336,7 @@ Proof
      IF_CASES_TAC >> gvs[] >> strip_tac >> res_tac >> simp[]
 QED
 
-(* Block instruction membership in fn_insts *)
-Triviality mem_fn_insts_blocks[local]:
-  !bbs bb inst.
-    MEM bb bbs /\ MEM inst bb.bb_instructions ==>
-    MEM inst (fn_insts_blocks bbs)
-Proof
-  Induct >> simp[fn_insts_blocks_def] >>
-  rpt strip_tac >> gvs[listTheory.MEM_APPEND] >> metis_tac[]
-QED
+(* mem_fn_insts_blocks shared from passSimulationProps *)
 
 Triviality block_inst_in_fn_insts[local]:
   !lbl fn bb inst.

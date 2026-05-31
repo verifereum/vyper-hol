@@ -17,7 +17,7 @@
 Theory aoPhase3Ssa
 Ancestors
   algebraicOptDefs aoPhase3Wf venomInst venomWf passSimulationDefs
-  passSharedDefs indexedLists rich_list string ASCIInumbers
+  passSimulationProps passSharedDefs indexedLists rich_list string ASCIInumbers
 Libs
   pairLib BasicProvers
 
@@ -736,13 +736,7 @@ Proof
   simp[listTheory.FLAT_APPEND, block_outpieces_snd_snd_flat]
 QED
 
-Triviality mem_fn_insts_blocks[local]:
-  !bbs inst bb.
-    MEM bb bbs /\ MEM inst bb.bb_instructions ==>
-    MEM inst (fn_insts_blocks bbs)
-Proof
-  Induct >> rw[fn_insts_blocks_def] >> metis_tac[]
-QED
+(* mem_fn_insts_blocks shared from passSimulationProps *)
 
 Triviality all_outpieces_outok[local]:
   !mid dfg ra targets fn.

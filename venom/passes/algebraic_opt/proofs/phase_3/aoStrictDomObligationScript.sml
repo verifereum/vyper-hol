@@ -12,38 +12,20 @@ Ancestors
   algebraicOptDefs aoIsZeroInv
   venomWf venomState venomInst venomExecSemantics
   venomInstProps venomExecProps venomExecProofs
-  stateEquiv dfgAnalysisProps
+  stateEquiv dfgAnalysisProps passSimulationProps
 Libs
   pairLib BasicProvers
 
 (* ===== SSA / membership helpers ===== *)
-(* SSA uniqueness: in ALL_DISTINCT (FLAT (MAP f xs)), if v appears in
-   both f(a) and f(b) where a,b ∈ xs, then a = b. *)
-Theorem all_distinct_flat_map_unique:
-  !xs f a b v.
-    ALL_DISTINCT (FLAT (MAP f xs)) /\
-    MEM a xs /\ MEM b xs /\
-    MEM v (f a) /\ MEM v (f b) ==> a = b
-Proof
-  Induct >> rw[listTheory.ALL_DISTINCT_APPEND] >>
-  metis_tac[listTheory.MEM_FLAT, listTheory.MEM_MAP]
-QED
-
-(* Block membership implies function membership for instructions *)
-Triviality mem_block_mem_fn_insts_blocks[local]:
-  !bbs bb inst.
-    MEM bb bbs /\ MEM inst bb.bb_instructions ==>
-    MEM inst (fn_insts_blocks bbs)
-Proof
-  Induct >> simp[fn_insts_blocks_def] >> metis_tac[]
-QED
+(* all_distinct_flat_map_unique and mem_fn_insts_blocks shared from
+   passSimulationProps *)
 
 Theorem mem_block_mem_fn_insts:
   !fn bb inst.
     MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions ==>
     MEM inst (fn_insts fn)
 Proof
-  simp[fn_insts_def] >> metis_tac[mem_block_mem_fn_insts_blocks]
+  simp[fn_insts_def] >> metis_tac[mem_fn_insts_blocks]
 QED
 
 (* ===== strict_dom / wbiz / dominance machinery ===== *)

@@ -7,6 +7,7 @@
 Theory passSimulationProps
 Ancestors
   passSimulationProofs analysisSimDefs venomWf venomInst passSimulationDefs
+  venomExecSemantics
 Libs
   indexedListsTheory listTheory
 
@@ -1119,6 +1120,45 @@ Proof
   >- (rpt strip_tac >>
       irule flat_map_phi_prefix >> simp[] >>
       metis_tac[])
+QED
+
+(* ===== fn_insts / SSA membership utilities =====
+   Shared by insertion passes (algebraic_opt) and alloca remap. *)
+
+(* MEM inst (fn_insts_blocks bbs) from block membership *)
+Theorem mem_fn_insts_blocks:
+  !bbs bb inst. MEM bb bbs /\ MEM inst bb.bb_instructions ==>
+    MEM inst (fn_insts_blocks bbs)
+Proof
+  Induct >> simp[fn_insts_blocks_def] >>
+  rpt strip_tac >> gvs[listTheory.MEM_APPEND] >> metis_tac[]
+QED
+
+(* SSA uniqueness: if ALL_DISTINCT (FLAT (MAP f l)) and v appears in
+   f a and f b for a,b in l, then a = b. *)
+Theorem all_distinct_flat_map_unique:
+  !(l:'a list) (f:'a -> 'b list) a b v.
+    ALL_DISTINCT (FLAT (MAP f l)) /\ MEM a l /\ MEM b l /\
+    MEM v (f a) /\ MEM v (f b) ==> a = b
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  gvs[listTheory.ALL_DISTINCT_APPEND, listTheory.MEM_FLAT,
+      listTheory.MEM_MAP] >>
+  metis_tac[]
+QED
+
+(* run_blocks ignores vs_inst_idx: it resets to 0 before each block.
+   Shared by mem2var and algebraic_opt phase-3 correctness. *)
+Theorem run_blocks_inst_idx_irrel:
+  !fuel ctx fn s.
+    run_blocks fuel ctx fn s =
+    run_blocks fuel ctx fn (s with vs_inst_idx := 0)
+Proof
+  Induct_on `fuel` >> rpt gen_tac
+  >- (ONCE_REWRITE_TAC[run_blocks_def] >> simp[]) >>
+  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV[run_blocks_def])) >>
+  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV[run_blocks_def])) >>
+  simp_tac (srw_ss()) []
 QED
 
 (* Combined: MAPi transform preserves wf_function.

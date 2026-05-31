@@ -8,7 +8,7 @@
 
 Theory aoWf
 Ancestors
-  algebraicOptDefs aoPeepholeSim aoResolveSim
+  algebraicOptDefs aoPhase1Wf aoPeepholeSim aoResolveSim
   venomState venomWf venomInst passSimulationProps passSimulationDefs
   passSharedDefs analysisSimDefs
 Libs
@@ -86,142 +86,8 @@ Proof
   metis_tac[]
 QED
 
-(* ===== Phase 1: offset preserves inst_id ===== *)
-
-Theorem ao_handle_offset_inst_preserves_id:
-  !inst. (ao_handle_offset_inst inst).inst_id = inst.inst_id
-Proof
-  gen_tac >> simp[ao_handle_offset_inst_def] >>
-  IF_CASES_TAC >> simp[] >>
-  Cases_on `inst.inst_operands` >> simp[] >>
-  Cases_on `t` >> simp[] >>
-  Cases_on `h` >> simp[] >>
-  Cases_on `h'` >> simp[] >>
-  Cases_on `t'` >> simp[]
-QED
-
-(* ao_handle_offset_inst preserves outputs *)
-Theorem ao_handle_offset_inst_outputs:
-  !inst. (ao_handle_offset_inst inst).inst_outputs = inst.inst_outputs
-Proof
-  gen_tac >> simp[ao_handle_offset_inst_def] >>
-  IF_CASES_TAC >> simp[] >>
-  Cases_on `inst.inst_operands` >> simp[] >>
-  Cases_on `t` >> simp[] >>
-  Cases_on `h` >> simp[] >>
-  Cases_on `h'` >> simp[] >>
-  Cases_on `t'` >> simp[]
-QED
-
-(* Terminators have opcode <> ADD *)
-Triviality term_not_add[local]:
-  !opc. is_terminator opc ==> opc <> ADD
-Proof
-  Cases >> simp[is_terminator_def]
-QED
-
-(* OFFSET is not a terminator *)
-Triviality offset_not_term[local]:
-  ~is_terminator OFFSET
-Proof
-  simp[is_terminator_def]
-QED
-
-(* OFFSET is not PHI *)
-Triviality offset_not_phi[local]:
-  OFFSET <> PHI
-Proof
-  simp[]
-QED
-
-(* ao_handle_offset_inst: terminators pass through unchanged *)
-Theorem ao_handle_offset_inst_term:
-  !inst. is_terminator inst.inst_opcode ==> ao_handle_offset_inst inst = inst
-Proof
-  rpt strip_tac >>
-  `inst.inst_opcode <> ADD` by metis_tac[term_not_add] >>
-  simp[ao_handle_offset_inst_def]
-QED
-
-(* ao_handle_offset_inst: non-terminators stay non-terminators *)
-Theorem ao_handle_offset_inst_not_term:
-  !inst. ~is_terminator inst.inst_opcode ==>
-    ~is_terminator (ao_handle_offset_inst inst).inst_opcode
-Proof
-  gen_tac >> simp[ao_handle_offset_inst_def] >>
-  IF_CASES_TAC >> simp[] >>
-  Cases_on `inst.inst_operands` >> simp[] >>
-  Cases_on `t` >> simp[] >>
-  Cases_on `h` >> simp[] >>
-  Cases_on `h'` >> simp[] >>
-  Cases_on `t'` >> simp[is_terminator_def]
-QED
-
-(* ao_handle_offset_inst: PHI preserved *)
-Theorem ao_handle_offset_inst_phi:
-  !inst. inst.inst_opcode = PHI ==>
-    (ao_handle_offset_inst inst).inst_opcode = PHI
-Proof
-  simp[ao_handle_offset_inst_def]
-QED
-
-(* ao_handle_offset_inst: non-PHI stays non-PHI *)
-Theorem ao_handle_offset_inst_not_phi:
-  !inst. inst.inst_opcode <> PHI ==>
-    (ao_handle_offset_inst inst).inst_opcode <> PHI
-Proof
-  gen_tac >> simp[ao_handle_offset_inst_def] >>
-  IF_CASES_TAC >> simp[] >>
-  Cases_on `inst.inst_operands` >> simp[] >>
-  Cases_on `t` >> simp[] >>
-  Cases_on `h` >> simp[] >>
-  Cases_on `h'` >> simp[] >>
-  Cases_on `t'` >> simp[]
-QED
-
-(* ao_handle_offset_inst preserves inst_wf *)
-Theorem ao_handle_offset_inst_wf:
-  !inst. inst_wf inst ==> inst_wf (ao_handle_offset_inst inst)
-Proof
-  gen_tac >> strip_tac >>
-  simp[ao_handle_offset_inst_def] >>
-  IF_CASES_TAC >> simp[] >>
-  Cases_on `inst.inst_operands` >> simp[] >>
-  Cases_on `t` >> simp[] >>
-  Cases_on `h` >> simp[] >>
-  Cases_on `h'` >> simp[] >>
-  Cases_on `t'` >> simp[] >>
-  fs[inst_wf_def]
-QED
-
-(* ===== Phase 1 preserves wf_function ===== *)
-
-Theorem ao_phase1_preserves_wf:
-  !fn. wf_function fn ==>
-    wf_function (function_map_transform
-      (block_map_transform ao_handle_offset_inst) fn)
-Proof
-  rpt strip_tac >>
-  irule map_transform_preserves_wf >> simp[] >>
-  metis_tac[ao_handle_offset_inst_preserves_id,
-            ao_handle_offset_inst_term,
-            ao_handle_offset_inst_not_term,
-            ao_handle_offset_inst_phi,
-            ao_handle_offset_inst_not_phi]
-QED
-
-(* ===== Phase 1 preserves ssa_form ===== *)
-
-Theorem ao_phase1_preserves_ssa:
-  !fn. wf_function fn /\ ssa_form fn ==>
-    ssa_form (function_map_transform
-      (block_map_transform ao_handle_offset_inst) fn)
-Proof
-  rpt strip_tac >>
-  irule map_transform_preserves_ssa >>
-  simp[ao_handle_offset_inst_preserves_id, ao_handle_offset_inst_outputs]
-QED
-
+(* ===== Phase 1: offset lemmas (ao_handle_offset_inst_*, term_not_add,
+   ao_phase1_preserves_wf/ssa) reused from aoPhase1Wf ancestor. ===== *)
 
 (* Well-formed terminators have no outputs *)
 Triviality terminator_no_outputs[local]:

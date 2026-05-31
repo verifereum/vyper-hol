@@ -17,7 +17,7 @@ Ancestors
   stateEquiv venomWf venomExecSemantics venomExecProofs venomState
   venomInst venomInstProofs venomInstProps
   analysisSimDefs rangeAnalysisProofs rangeAnalysisDefs rangeEvalDefs
-  dfgAnalysisProps dfAnalyzeWidenDefs
+  dfgAnalysisProps dfAnalyzeWidenDefs passSimulationProps
 Libs
   pairLib BasicProvers
 
@@ -186,21 +186,14 @@ QED
 
 (* ===== sinv step preservation ===== *)
 
-Triviality mem_block_mem_fn_insts_blocks:
-  !bbs bb inst.
-    MEM bb bbs /\ MEM inst bb.bb_instructions ==>
-    MEM inst (fn_insts_blocks bbs)
-Proof
-  Induct >> simp[fn_insts_blocks_def] >>
-  metis_tac[listTheory.MEM_APPEND]
-QED
+(* mem_fn_insts_blocks shared from passSimulationProps *)
 
 Triviality mem_block_mem_fn_insts:
   !fn bb inst.
     MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions ==>
     MEM inst (fn_insts fn)
 Proof
-  simp[fn_insts_def] >> metis_tac[mem_block_mem_fn_insts_blocks]
+  simp[fn_insts_def] >> metis_tac[mem_fn_insts_blocks]
 QED
 
 (* A Var operand of a (handle-offset) block instruction in fn0 is a Var
@@ -266,24 +259,7 @@ Proof
   qexists_tac `bb0` >> simp[]
 QED
 
-Triviality mem_flat_map_intro:
-  !x f b ls. MEM b ls /\ MEM x (f b) ==> MEM x (FLAT (MAP f ls))
-Proof
-  rpt strip_tac >>
-  simp[listTheory.MEM_FLAT, listTheory.MEM_MAP] >> metis_tac[]
-QED
-
-Triviality all_distinct_flat_map_unique:
-  !ls f a b x.
-    ALL_DISTINCT (FLAT (MAP f ls)) /\
-    MEM a ls /\ MEM b ls /\
-    MEM x (f a) /\ MEM x (f b) ==>
-    a = b
-Proof
-  Induct >> simp[] >> rpt strip_tac >>
-  gvs[listTheory.ALL_DISTINCT_APPEND] >>
-  metis_tac[mem_flat_map_intro]
-QED
+(* all_distinct_flat_map_unique shared from passSimulationProps *)
 
 Triviality is_terminator_cases:
   !opc. is_terminator opc ==>

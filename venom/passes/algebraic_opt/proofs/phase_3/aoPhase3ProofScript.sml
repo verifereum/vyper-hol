@@ -37,17 +37,7 @@ Proof
   gen_tac >> Cases_on `fn.fn_blocks` >> simp[]
 QED
 
-Triviality run_blocks_inst_idx_irrel[local]:
-  !fuel ctx fn s.
-    run_blocks fuel ctx fn s =
-    run_blocks fuel ctx fn (s with vs_inst_idx := 0)
-Proof
-  Induct_on `fuel` >> rpt gen_tac
-  >- (ONCE_REWRITE_TAC[run_blocks_def] >> simp[]) >>
-  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV[run_blocks_def])) >>
-  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV[run_blocks_def])) >>
-  simp_tac (srw_ss()) []
-QED
+(* run_blocks_inst_idx_irrel hoisted to passSimulationProps *)
 
 Triviality ao_transform_block_label[local]:
   !mid dfg ra targets bb.

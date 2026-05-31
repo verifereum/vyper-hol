@@ -13,7 +13,7 @@
 
 Theory aoPhase3Ids
 Ancestors
-  algebraicOptDefs venomInst venomWf passSimulationDefs
+  algebraicOptDefs venomInst venomWf passSimulationDefs passSimulationProps
   indexedLists rich_list
 Libs
   pairLib BasicProvers
@@ -395,13 +395,7 @@ Proof
   Induct >> simp[block_pieces_snd_flat]
 QED
 
-Triviality mem_fn_insts_blocks[local]:
-  !bbs inst bb.
-    MEM bb bbs /\ MEM inst bb.bb_instructions ==>
-    MEM inst (fn_insts_blocks bbs)
-Proof
-  Induct >> rw[fn_insts_blocks_def] >> metis_tac[]
-QED
+(* mem_fn_insts_blocks shared from passSimulationProps *)
 
 Triviality all_pieces_idok[local]:
   !mid dfg ra targets fn.

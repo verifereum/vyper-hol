@@ -14,7 +14,7 @@ Ancestors
   aoTargetProps aoResolveObligation
   venomWf venomState venomInst venomExecSemantics
   venomInstProps venomExecProps venomExecProofs
-  stateEquiv dfgAnalysisProps
+  stateEquiv dfgAnalysisProps passSimulationProps
 Libs
   pairLib BasicProvers
 

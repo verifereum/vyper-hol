@@ -16,7 +16,7 @@
 
 Theory aoBlockSimLocal
 Ancestors
-  algebraicOptDefs aoWf aoBlockSim aoTransformInstSim
+  algebraicOptDefs aoPhase1Wf aoWf aoBlockSim aoTransformInstSim
   aoResolveObligation aoStepInvObligation aoStrictDomObligation
   aoChainStruct aoIsZeroInv aoRangeObligation aoTargetProps
   aoBlockInvObligation
