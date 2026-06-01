@@ -240,12 +240,22 @@ The strengthened runtime assignment side conditions are derived in each branch:
 
 ## Current status (2026-05-31)
 
-### Blocked status update (2026-06-01)
+### ExtCall unblocking update (2026-06-01)
 
-The fresh type-system rewrite is currently **blocked at
-`eval_all_type_sound_mutual[Expr_Call_ExtCall]`**.  The remaining zero-cheat
-completion goal is not abandoned, but further proof work is not authorized under
-the current task contract until the ExtCall proof interface is redesigned.
+The fresh type-system rewrite is currently focused on
+`eval_all_type_sound_mutual[Expr_Call_ExtCall]`.  Earlier attempts showed a real
+proof-interface problem when trying to recover the optional-driver recursive IH
+from the top-level Resume context.  Maintainer clarification now authorizes a
+bounded proof-only probe inside `semantics/prop`: keep the semantics/evaluator
+unchanged, but refactor the proof architecture and step through the ExtCall
+monadic chain linearly.
+
+The former stop gate is therefore narrowed, not discarded.  Do not try to derive
+a compact driver premise from the unsplit top-level generated prefix.  It is now
+acceptable to specialize the generated optional-driver IH **only after** the
+proof has reached a single concrete ExtCall success-continuation branch where the
+argument evaluation, checks/lifts, calldata construction, external call, and
+account/transient updates have already been split/discharged.
 
 Evidence from the C1.2 checkpoint:
 
@@ -264,24 +274,29 @@ Evidence from the C1.2 checkpoint:
 - Recovering that premise locally would require the already-ruled-out brittle
   generated-prefix specialization/simplification path.
 
-Required redesign before continuing:
+Authorized proof-only path before continuing:
 
-- Change the mutual theorem/suspend boundary, or introduce a source-level
-  lemma/suspend structure, so the optional driver continuation IH is available
-  directly in compact form.
-- A successful redesign must avoid packaging the entire generated ExtCall prefix
-  into another adapter theorem.
-- Failure sign: the consumer still has to manually specialize or simplify an IH
-  guarded by `eval_exprs`/`check`/`lift_option`/`build_ext_calldata`/
-  `run_ext_call`/`update_accounts`/`update_transient`.
+- Keep edits under `semantics/prop` and do not change evaluator/semantics
+  definitions.
+- Refactor proof architecture as needed inside the fresh proof stack.
+- Prove the ExtCall branch linearly: close the place-expression half first,
+  unfold typing/evaluation once, split `eval_exprs`, checks/lifts,
+  `build_ext_calldata`, `run_ext_call`, `update_accounts`, and
+  `update_transient` one operation at a time, and close each error branch
+  immediately.
+- Use available IHs and preservation/no-TypeError helpers as soon as their
+  branch premises are available; avoid accumulating parallel subgoals.
+- In the final concrete success-continuation branch, local specialization of the
+  generated optional-driver IH is allowed if the prefix has already been split
+  and its premises are concrete branch assumptions.
 
-Do not retry:
+Still do not retry:
 
-- `asm "driver_ih" ...` followed by broad `simp`/`gvs` over the generated
+- `asm "driver_ih" ...` followed by broad `simp`/`gvs` over the unsplit generated
   ExtCall prefix.
-- Long `qspecl_then` instantiations over generated ExtCall temporaries.
-- Quoted-assumption or `MATCH_MP` plumbing that reconstructs the generated
-  prefix by hand.
+- Top-level long `qspecl_then` instantiations over generated ExtCall temporaries.
+- Quoted-assumption or `MATCH_MP` plumbing that reconstructs the whole prefix by
+  hand.
 - Helpers that merely repackage the full generated monadic prefix.
 - Treating the removed tautological compact bridge as proof infrastructure.
 
@@ -291,11 +306,11 @@ Known remaining fresh-stack cheats remain useful context:
 - `eval_all_type_sound_mutual[Expr_Call_RawCallTarget]`
 - `raw_call_return_type_well_formed`
 
-However, `RawCallTarget`, the localized builtin arithmetic cheat, wrapper
-validation, and final validation are superseded as next steps by this blocked
-gate.  The task instruction says the proof should be straightforward and to stop
-on design/plan problems; therefore proof work stops here pending maintainer
-redesign/approval.
+`RawCallTarget`, the localized builtin arithmetic cheat, wrapper validation,
+and final validation remain downstream of ExtCall.  The immediate authorized
+work is the bounded linear ExtCall proof probe described above.  If that probe
+again requires broad generated-prefix reconstruction, stop and re-plan with
+exact evidence.
 
 ### Completion scope
 
@@ -413,25 +428,20 @@ Completed foundational checkpoints:
 - Assignment statement branches (AnnAssign, Assign, AugAssign) fully proved.
 - Scope-pop/env-extension reorganisation complete.
 
-Current stop gate:
+Current priority order:
 
-1. **Blocked ExtCall proof-interface redesign.**  Do not continue proof work from
-   the present `Expr_Call_ExtCall` Resume.  The next maintainer action is a
-   redesign of the mutual proof/suspend boundary, or an equivalent source-level
-   theorem structure, that exposes the optional driver continuation IH in compact
-   form without generated-prefix plumbing.
-2. **After redesign only:** revisit
-   `eval_all_type_sound_mutual[Expr_Call_ExtCall]`, then
+1. **Bounded proof-only ExtCall probe.**  Work only in `semantics/prop`, leave
+   semantics/evaluator definitions unchanged, and attempt the linear
+   branch-by-branch proof of `eval_all_type_sound_mutual[Expr_Call_ExtCall]`.
+   This is authorized only under the discipline above: split the monadic chain
+   locally, close error cases immediately, and specialize the driver IH only in a
+   concrete success-continuation branch after the prefix is discharged.
+2. If the proof still requires broad simplification/specialization of the
+   unsplit generated prefix, stop and re-plan with exact build/goal evidence.
+3. After ExtCall succeeds, revisit
    `eval_all_type_sound_mutual[Expr_Call_RawCallTarget]`.
-3. **After the call-expression design is unblocked:** discharge the localized
-   builtin cheat `raw_call_return_type_well_formed` and rerun wrapper/final
-   validation.
-
-The previous next-phase priority order (prove ExtCall/RawCallTarget directly,
-then the localized builtin arithmetic cheat, then final audit/retirement) is
-superseded by the blocked status above.  In particular, `raw_call_return_type_well_formed`
-remains localized context but is not an authorized autonomous next step while the
-ExtCall design mismatch is unresolved.
+4. Then discharge the localized builtin cheat
+   `raw_call_return_type_well_formed` and rerun wrapper/final validation.
 
 Also eventually update/replace:
 
