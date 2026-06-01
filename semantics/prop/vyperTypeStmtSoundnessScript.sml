@@ -10172,118 +10172,6 @@ Proof
   strip_tac >> gvs[]
 QED
 
-Definition extcall_generated_driver_ih_def:
-  extcall_generated_driver_ih cx es is_static func_name arg_types drv <=>
-    !s_args vs args_st s_check x_check st_check s_target target_addr st_target
-        s_value value_opt arg_vals st_value tenv s_calldata calldata st_calldata
-        s_accounts accounts st_accounts s_code x_code st_code s_tstorage tStorage st_tstorage
-        txParams caller s_run result st_run success returnData accounts' tStorage'
-        s_success x_success st_success s_upd_accounts x_upd_accounts st_upd_accounts
-        s_upd_transient x_upd_transient st_upd_transient.
-       eval_exprs cx es s_args = (INL vs,args_st) /\
-       check (vs <> []) "ExtCall no target" s_check = (INL x_check,st_check) /\
-       lift_option_type (dest_AddressV (HD vs)) "ExtCall target not address" s_target =
-         (INL target_addr,st_target) /\
-       (if is_static then return (NONE,TL vs)
-        else do
-          check (TL vs <> []) "ExtCall no value";
-          v <- lift_option_type (dest_NumV (HD (TL vs))) "ExtCall value not int";
-          return (SOME v,TL (TL vs))
-        od) s_value = (INL (value_opt,arg_vals),st_value) /\
-       tenv = get_tenv cx /\
-       lift_option (build_ext_calldata tenv func_name arg_types arg_vals) "ExtCall build_calldata"
-         s_calldata = (INL calldata,st_calldata) /\
-       get_accounts s_accounts = (INL accounts,st_accounts) /\
-       check (~NULL (lookup_account target_addr accounts).code) "ExtCall target has no code" s_code =
-         (INL x_code,st_code) /\
-       get_transient_storage s_tstorage = (INL tStorage,st_tstorage) /\
-       txParams = vyper_to_tx_params cx.txn /\ caller = cx.txn.target /\
-       lift_option (run_ext_call caller target_addr calldata value_opt accounts tStorage txParams)
-         "ExtCall run failed" s_run = (INL result,st_run) /\
-       (success,returnData,accounts',tStorage') = result /\
-       check success "ExtCall reverted" s_success = (INL x_success,st_success) /\
-       update_accounts (K accounts') s_upd_accounts = (INL x_upd_accounts,st_upd_accounts) /\
-       update_transient (K tStorage') s_upd_transient = (INL x_upd_transient,st_upd_transient) /\
-       returnData = [] /\ IS_SOME drv ==>
-       !env0 st0 res0 st0'.
-         env_consistent env0 cx st0 /\ state_well_typed st0 /\
-         context_well_typed cx /\ accounts_well_typed st0.accounts /\
-         functions_well_typed cx /\ eval_expr cx (THE drv) st0 = (res0,st0') ==>
-         (well_typed_expr env0 (THE drv) ==>
-          state_well_typed st0' /\ env_consistent env0 cx st0' /\
-          accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
-          case res0 of INL tv => expr_result_typed env0 (THE drv) tv | INR _ => T) /\
-         !vt.
-           type_place_expr env0 (THE drv) = SOME vt ==>
-           state_well_typed st0' /\ env_consistent env0 cx st0' /\
-           accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
-           case res0 of INL tv => place_expr_result_typed env0 tv vt | INR _ => T
-End
-
-Theorem extcall_generated_driver_ih_elim_expr[local]:
-  !cx es is_static func_name arg_types drv
-    s_args vs args_st s_check x_check st_check s_target target_addr st_target
-    s_value value_opt arg_vals st_value tenv s_calldata calldata st_calldata
-    s_accounts accounts st_accounts s_code x_code st_code s_tstorage tStorage st_tstorage
-    txParams caller s_run result st_run success returnData accounts' tStorage'
-    s_success x_success st_success s_upd_accounts x_upd_accounts st_upd_accounts
-    s_upd_transient x_upd_transient st_upd_transient.
-    extcall_generated_driver_ih cx es is_static func_name arg_types drv /\
-    eval_exprs cx es s_args = (INL vs,args_st) /\
-    check (vs <> []) "ExtCall no target" s_check = (INL x_check,st_check) /\
-    lift_option_type (dest_AddressV (HD vs)) "ExtCall target not address" s_target =
-      (INL target_addr,st_target) /\
-    (if is_static then return (NONE,TL vs)
-     else do
-       check (TL vs <> []) "ExtCall no value";
-       v <- lift_option_type (dest_NumV (HD (TL vs))) "ExtCall value not int";
-       return (SOME v,TL (TL vs))
-     od) s_value = (INL (value_opt,arg_vals),st_value) /\
-    tenv = get_tenv cx /\
-    lift_option (build_ext_calldata tenv func_name arg_types arg_vals) "ExtCall build_calldata"
-      s_calldata = (INL calldata,st_calldata) /\
-    get_accounts s_accounts = (INL accounts,st_accounts) /\
-    check (~NULL (lookup_account target_addr accounts).code) "ExtCall target has no code" s_code =
-      (INL x_code,st_code) /\
-    get_transient_storage s_tstorage = (INL tStorage,st_tstorage) /\
-    txParams = vyper_to_tx_params cx.txn /\ caller = cx.txn.target /\
-    lift_option (run_ext_call caller target_addr calldata value_opt accounts tStorage txParams)
-      "ExtCall run failed" s_run = (INL result,st_run) /\
-    (success,returnData,accounts',tStorage') = result /\
-    check success "ExtCall reverted" s_success = (INL x_success,st_success) /\
-    update_accounts (K accounts') s_upd_accounts = (INL x_upd_accounts,st_upd_accounts) /\
-    update_transient (K tStorage') s_upd_transient = (INL x_upd_transient,st_upd_transient) ==>
-    (returnData = [] /\ IS_SOME drv ==>
-     !env0 st0 res0 st0'.
-       env_consistent env0 cx st0 /\ state_well_typed st0 /\
-       context_well_typed cx /\ accounts_well_typed st0.accounts /\
-       functions_well_typed cx /\ eval_expr cx (THE drv) st0 = (res0,st0') ==>
-       well_typed_expr env0 (THE drv) ==>
-       state_well_typed st0' /\ env_consistent env0 cx st0' /\
-       accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
-       case res0 of INL tv => expr_result_typed env0 (THE drv) tv | INR _ => T)
-Proof
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `extcall_generated_driver_ih _ _ _ _ _ _` mp_tac >>
-  rewrite_tac[extcall_generated_driver_ih_def] >>
-  disch_then (qspecl_then
-    [`s_args`, `vs`, `args_st`, `s_check`, `x_check`, `st_check`,
-     `s_target`, `target_addr`, `st_target`, `s_value`, `value_opt`,
-     `arg_vals`, `st_value`, `tenv`, `s_calldata`, `calldata`,
-     `st_calldata`, `s_accounts`, `accounts`, `st_accounts`, `s_code`,
-     `x_code`, `st_code`, `s_tstorage`, `tStorage`, `st_tstorage`,
-     `txParams`, `caller`, `s_run`, `result`, `st_run`, `success`,
-     `returnData`, `accounts'`, `tStorage'`, `s_success`, `x_success`,
-     `st_success`, `s_upd_accounts`, `x_upd_accounts`, `st_upd_accounts`,
-     `s_upd_transient`, `x_upd_transient`, `st_upd_transient`]
-    (mk_asm "drv_prefix")) >>
-  strip_tac >> strip_tac >>
-  asm "drv_prefix" mp_tac >>
-  (impl_tac >- metis_tac[]) >> strip_tac >>
-  rpt strip_tac >>
-  first_x_assum (qspecl_then [`env0`, `st0`, `res0`, `st0'`] mp_tac) >>
-  simp[]
-QED
 
 
 Theorem send_args_runtime_typed_dest[local]:
@@ -17475,7 +17363,7 @@ Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result]:
   >- (
     qpat_x_assum `case INL x of INL vs => exprs_runtime_typed env es vs | INR v1 => T` mp_tac >>
     rewrite_tac[sum_case_def] >> BETA_TAC >> strip_tac >>
-    qpat_x_assum `v15 = ret_type` (fn th => rewrite_tac[th]) >>
+    qpat_x_assum `v15 = ret_type` SUBST_ALL_TAC >>
     Cases_on `is_static'`
     >- suspend "Expr_Call_ExtCall_result_static" >>
     suspend "Expr_Call_ExtCall_result_nonstatic") >>

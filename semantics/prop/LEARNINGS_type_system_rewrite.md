@@ -200,17 +200,6 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260531T201607Z_m0780_t004
 - tool_output:TO_type_system_rewrite-20260531T201607Z_m0778_t001
 
-## L0031 scope='C0' tags=ExtCall,generated-IH,proof-interface,suspend,monadic-prefix,risk-mismatch
-shape: A mutual `Resume` exposes a recursive-call IH only as `full_generated_prefix ==> compact_postcondition`, while a downstream continuation lemma needs just the compact driver premise.
-pattern: Treat this as a proof-interface/suspend-boundary failure, not a tactic problem. Do not recover the premise by broad simplification, long specialization over generated temporaries, or an adapter that packages the same prefix. A valid redesign must expose the recursive call in compact form before the monadic prefix is accumulated; if a bounded local boundary probe still shows the generated prefix, close/escalate or stop under a straightforward-proof task contract.
-works_when: Applies when the failed goal contains large generated evaluator-prefix assumptions (`eval_exprs`, checks/lifts, calldata/run/update operations) guarding the recursive IH, and attempts to split locally require broad simp/gvs or theorem plumbing rather than small branch proofs.
-evidence:
-- episode:E0029
-- tool_output:TO_type_system_rewrite-20260531T201607Z_m0862_t001
-- tool_output:TO_type_system_rewrite-20260531T201607Z_m0881_t001
-- tool_output:TO_type_system_rewrite-20260531T201607Z_m0885_t001
-- tool_output:TO_type_system_rewrite-20260531T201607Z_m0886_t001
-
 ## L0034 scope='C0.1.1.2' tags=ExtCall,Resume,generated-IH,simp-timeout,impl_tac
 shape: A generated IH has been specialized and the goal is `(premises ==> post) ==> rest` inside a huge Resume context; plain `simp[]` times out.
 pattern: Avoid simplifying the whole implication in context. Use `(impl_tac >- simp[]) >> strip_tac` to discharge the small premise locally and add the postcondition, while keeping the large generated prefix out of the simplifier. For call typing in the same large context, use `simp[NoAsms, Once well_typed_expr_def]` rather than assumption-enabled simp.
@@ -297,20 +286,6 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260601T081233Z_m1467_t001
 - tool_output:TO_type_system_rewrite-20260601T081233Z_m1471_t001
 
-## L0055 scope='C0' tags=ExtCall,Resume,generated-prefix,proof-boundary,IH,timeout
-shape: A mutual Resume/monadic evaluator branch keeps an optional-recursive-call IH as `full_generated_prefix ==> post`; after local eval/argument splits, even irrelevant error branches still simplify under a >4KiB generated prefix.
-pattern: Treat this as a proof-boundary/interface failure, not a tactic problem. Do not recover the compact recursive-call premise by broad simplification, generated-prefix witness plumbing, or long adapter theorems. A viable replacement must move/suspend/factor the proof before the full monadic prefix is reified, and its first live probe should close an early error branch (e.g. `eval_exprs` argument-error) without the generated driver prefix in the simplification goal.
-works_when: Applies to ExtCall-like evaluator branches where recursive optional-driver IHs are generated as prefix-conditional implications and the task requires straightforward branch-local proofs; especially when `simp[no_type_error_result_def]`/`gvs` times out despite explicit IH discharge.
-evidence:
-- episode:E0067
-- episode:E0070
-- episode:E0072
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m1508_t001
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m1595_t001
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m1599_t001
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m1601_t001
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m1655_t001
-
 ## L0056 scope='C0.3' tags=ExtCall,Resume,generated-prefix,IH,drule_all,boundary-lemma
 shape: A mutual Resume branch has a generated-prefix assumption in context, an IH of the form `!env st res st'. premises ==> post`, and live assumptions already satisfy all premises.
 pattern: Prefer `qpat_x_assum ... (drule_all_then assume_tac)` to consume the IH from live assumptions. Avoid `qspecl_then ... mp_tac >> simp[]` or `impl_tac >- simp[]`, because those create an implication goal whose simplification traverses the generated prefix.
@@ -370,15 +345,6 @@ evidence:
 - episode:E0089
 - source:semantics/prop/vyperTypeStmtSoundnessScript.sml:9930
 
-## L0062 scope='C0.3.3' tags=ExtCall,Resume,boundary-lemma,generated-prefix,postcondition-helper
-shape: A mutual Resume branch has an irrelevant generated optional-driver prefix in context while proving an early-error branch, and separate projection helpers require long instantiation/plumbing or broad cleanup.
-pattern: Package the early-error branch as one outside-Resume postcondition helper whose conclusion is the full conjunctive postcondition needed by the consumer. The helper should use the evaluator early-return equality to identify `res/st'` and then discharge all state/env/accounts/no-type/result conjuncts at once. This avoids both generated-prefix simplification and multiple projection applications inside the Resume.
-works_when: The branch returns before later monadic operations/driver code, and the expression-list IH or caller already provides the returned state/result facts. For ExtCall argument errors, `eval_exprs = INR` returns immediately for any outer `Call` annotation.
-evidence:
-- episode:E0090
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m1987_t001
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m1989_t001
-
 ## L0063 scope='C0.3.3' tags=ExtCall,Resume,generated-prefix,boundary-lemma,helper-interface
 shape: A true outside-Resume postcondition helper is applied by `irule` inside a mutual Resume branch, but its premises become side-condition subgoals under a huge generated optional-driver prefix.
 pattern: If helper premises cannot be discharged by direct, robust tactics in the live Resume context, the helper is still not consumer-shaped enough. Escalate for a boundary/factoring whose conclusion matches the full live goal or whose elimination rule consumes live assumptions before entering the generated-prefix subgoal; do not compensate with assumption-position or quoted-ASSUME plumbing.
@@ -387,3 +353,101 @@ evidence:
 - episode:E0093
 - tool_output:TO_type_system_rewrite-20260601T081233Z_m2024_t001
 - tool_output:TO_type_system_rewrite-20260601T081233Z_m2085_t001
+
+## L0064 scope='C0.3.3' tags=ExtCall,Resume,generated-prefix,equality-lemma,boundary-lemma,targeted-rewrite
+shape: An early-error evaluator branch in a mutual Resume has the returned result/state hidden behind a large generated optional-driver prefix, and postcondition helpers/projections leave brittle side conditions.
+pattern: Prefer an evaluator-only equality/elimination lemma (`res = error_result` and `st' = returned_state`) over a full postcondition helper. In the live Resume branch, derive the equality with `drule_all`, rewrite only those equality facts, then split the postcondition and close conjuncts from IH facts. This avoids generating preservation/typing premises under the generated prefix.
+works_when: The branch returns before later monadic operations/driver code, and the expression-list IH already provides facts about the returned state/result. For ExtCall argument errors, `eval_exprs = INR` returns immediately for any outer `Call` annotation.
+evidence:
+- episode:E0096
+- episode:E0097
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m2105_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m2148_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:9930-9955
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:17458-17483
+
+## L0065 scope='C0.3.3' tags=no_type_error_result,INR,generated-prefix,targeted-rewrite,sumTheory.INR_11
+shape: Goal and assumption are both `no_type_error_result (INR y)` inside a large generated-prefix Resume context, but direct assumption selection, `simp[]`, `gvs[]`, or `metis_tac[]` fails/times out.
+pattern: Move the exact assumption to the goal, use `pure_rewrite_tac[no_type_error_result_def]`, strip the small resulting implication, specialize the universally quantified assumption at `msg`, and rewrite the injected `INR` equality with `sumTheory.INR_11`. Avoid broad simplification of the surrounding context.
+works_when: The no-type-error predicate is on an `INR` result and the surrounding assumptions include a huge generated evaluator-prefix implication that makes ordinary simplification/first-order search inspect too much context.
+evidence:
+- episode:E0097
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m2126_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m2135_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m2148_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:17475-17481
+
+## L0066 scope='C0' tags=PLAN-frontier,OracleBudgetExceeded,scheduler,cheat,blocked
+shape: After a reviewed/proved checkpoint, query_plan has high-risk ancestors, no scheduled frontier/no Oracle next/no blocking episodes, but grep still finds task-scoped cheats.
+pattern: Do not manually choose a ready component or declare completion. Treat this as a planning/scheduler gate: call plan_oracle to repair/decompose the next leaf. If repeated calls return OracleBudgetExceeded, stop as an operational blocker and resume when oracle budget/scheduler repair is available.
+works_when: Applies when `begin_component` cannot be called because no frontier exists, proof-integrity checks fail due to remaining cheats, and plan_oracle is the only legal route to more proof work.
+evidence:
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m2155_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m2158_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m2156_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m2159_t001
+
+## L0067 scope='C0.1' tags=word_size,type_slot_size,arithmetic,FAIL_TAC-probe
+shape: A theorem proof has already reduced to a single cheated arithmetic/type-slot tail after `Cases_on flags`, definition rewrites, `word_size_le`, and a `word_size n < n` split.
+pattern: Use a deliberate `FAIL_TAC` probe to read the exact residual arithmetic goal before choosing between `word_size_le`, `dimword` facts, and `decide_tac`. Avoid broad rewrites or definition changes; the proof should stay local to the existing theorem statement.
+works_when: The source is an infrastructure lemma like `raw_call_return_type_well_formed` where all semantic cases are already discharged and only a numeric side condition remains.
+evidence:
+- source:semantics/prop/vyperTypeBuiltinsScript.sml:3488-3498
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m2228_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m2229_t001
+
+## L0069 scope='C0.2.2' tags=ExtCall,Resume,generated-prefix,simp-timeout,static-branch
+shape: A focused static ExtCall Resume branch has the optional-driver generated prefix as assumption 0, plus concrete `eval_exprs = INL` and argument destructor facts, and the next step is simplifying `eval_expr`/monadic prefix.
+pattern: Do not ask the simplifier to reduce the whole evaluator expression in this context. Even after deriving `x <> []` and `dest_AddressV (HD x) = SOME target_addr`, `simp[...]` over the goal can traverse or retain the generated prefix and time out. First isolate the evaluator equation into a small named fact/helper or otherwise hide/remove the generated prefix from simplifier visibility; if that is not straightforward, close the component as risk_mismatch rather than retrying simplifier variants.
+works_when: Applies to `eval_all_type_sound_mutual[Expr_Call_ExtCall_result_static]` and similar focused Resume branches where the generated optional-driver IH remains visible while proving ExtCall prefix cases.
+evidence:
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m2304_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m2310_t001
+- episode:E0070
+
+## L0071 scope='C0.2' tags=ExtCall,COND_CLAUSES,selected-rewrite,simp-timeout
+shape: A tiny branch-shape assumption is of the form `if T/F then MAP expr_type es = ... else ...` while a generated-prefix universal is visible in assumptions.
+pattern: If a selected conditional fact must be normalized, move only that fact and use `pure_rewrite_tac[boolTheory.COND_CLAUSES]`; do not use `simp[]`. In nonstatic, this derived `MAP expr_type es = BaseT AddressT::BaseT (UintT 256)::arg_types` plus destructor facts without touching the generated prefix; static `simp[]` timed out on the analogous step.
+works_when: Use only for small selected propositions; it does not solve the later evaluator-prefix problem and should not replace the boundary-theorem refactor.
+evidence:
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m2345_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m2331_t001
+
+## L0072 scope='C0.3' tags=RawCallTarget,tail-helper,boundary-lemma,run_ext_call,return-typing
+shape: RawCallTarget Resume after expression-list IH reaches a huge tail goal containing `run_ext_call`, `update_accounts`, `update_transient`, flags, `raw_call_return_type`, no-TypeError, and result typing.
+pattern: Do not finish this in the Resume. Factor into local helpers: (1) `raw_call_args_runtime_typed_dest` for address/bytes/uint destructors, (2) flag-dependent return value typing for `raw_call_return_type flags`, and (3) `raw_call_tail_result_sound`/`_simp` that owns the monadic tail and uses `run_ext_call_accounts_well_typed` plus update preservation. Then the Resume should mirror RawLog by invoking the tail helper.
+works_when: Applies when the evaluator prefix has already split `eval_exprs` to `INL vs,args_st` and well-typed RawCallTarget facts provide length/type constraints. Keep helper statements matching the consumer nested-case/do-form shape to avoid duplicating semantic reasoning.
+evidence:
+- episode:E0106
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m2362_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m2374_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:10289-10774
+
+## L0073 scope='C0.2' tags=ExtCall,Resume,generated-prefix,boundary-theorem,proof-interface,premise-mismatch
+shape: A mutual `Resume` ExtCall branch has an optional-driver IH available only as `full_generated_prefix ==> driver_post`, while a candidate boundary theorem (`extcall_expr_sound_from_generated_ih`) requires an unconditional driver IH premise.
+pattern: Before rebasing a hostile Resume branch to a boundary theorem, compare each theorem premise against the actual generated IH shape. If the theorem wants an unconditional recursive-call IH but the context has only a prefix-guarded implication, do not retry direct theorem application or build a long adapter; request a repaired helper/interface whose premise matches the generated-prefix IH, or restructure to specialize the IH only inside the concrete success continuation.
+works_when: Applies to ExtCall_result in `vyperTypeStmtSoundnessScript.sml` and similar monadic mutual-proof branches where optional recursive calls are guarded by generated evaluator-prefix facts. Equality/type normalization (e.g. `v15 = ret_type`) may be locally fixable but does not address the IH-shape mismatch.
+evidence:
+- episode:E0107
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m2388_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:10059
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:17467
+
+## L0074 scope='C0.2' tags=oracle,planning-gate,tooling-blocker,output-validation
+shape: A required `plan_oracle(mode='review')` after a closed stuck episode repeatedly fails with output-validation errors, while query_plan reports no beginable frontier.
+pattern: Treat this as an operational planning/tooling blocker. Do not perform proof edits/builds or unofficial local redesigns while the PLAN gate says pending strategist review. Preserve the exact failed oracle outputs and resume by retrying/recovering the required review once tooling is fixed.
+works_when: Applies when a blocking episode is recorded, query_plan lists only `plan_oracle(mode='review', ...)` as allowed next action, and repeated oracle calls fail due `UnexpectedModelBehavior` or similar tool validation rather than mathematical content.
+evidence:
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m2392_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m2394_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m2396_t004
+
+## L0077 scope='C0.2.1' tags=ExtCall,generated-IH,proof-interface,boundary-lemma,adapter-plumbing,risk-mismatch
+shape: A helper keeps a generated optional-driver IH opaque through prefix/error cases, but its success-tail eliminator still requires all generated ExtCall prefix witnesses.
+pattern: Do not treat an opaque predicate as a good boundary if eliminating it requires replaying the full generated monadic prefix with a long `qspecl_then`/adapter proof. First validate the eliminator interface at the success tail: it should derive the compact conditional driver postcondition by matching live facts in a few steps. If it needs dozens of generated state/value witnesses or produces >4KiB goals, the abstraction is still wrong-shaped; redesign the suspension/predicate so the compact driver fact is produced where the generated IH is created.
+works_when: Applies to ExtCall-like mutual evaluator proofs where an optional recursive-call IH is semantically needed only at the final success continuation but is generated as `full_prefix ==> post`. Especially relevant under a task contract requiring straightforward proofs and forbidding long generated-prefix adapters.
+evidence:
+- episode:E0109
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m2455_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m2458_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m2460_t001
