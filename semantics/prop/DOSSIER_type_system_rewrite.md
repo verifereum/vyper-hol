@@ -25,7 +25,8 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C0.2 | proved |  | E0077 | Call plan_oracle(mode='review') for C0.2; if accepted, commit the small proof-boundary checkpoint and proceed to C0.3. |
 | C0.2.1 | proved |  | E0069 | Call plan_oracle(mode='review') and then proceed to the focused Resume proof shell component if accepted. |
 | C0.2.2 | stuck | risk_mismatch | E0070 | Call plan_oracle(mode='review', component_id='C0.2.2') with this evidence and ask for a redesigned/de-risked boundary rather than more local simplifier variants. |
-| C0.3 | proved |  | E0075 | Call plan_oracle(mode='review') for C0.3; if accepted, inspect query_plan for whether C0 is complete and then follow the stop/report outcome. |
+| C0.3 | stuck | risk_mismatch | E0079 | Call plan_oracle(mode='review') for C0.3. Ask for a de-risked replacement that avoids raw Resume simplification, likely a postcondition-shaped local helper whose conclusion matches the argument-error branch or a smaller Resume split that removes the generated optional-driver premise without `simp`/`gvs`. |
+| C0.3.1 | proved |  | E0080 | Call plan_oracle(mode='review') for C0.3.1; if accepted, commit the helper checkpoint unsigned and proceed to C0.3.2. |
 | C1.1 | proved |  | E0024 | Call plan_oracle(mode='review') for C1.1, then begin C1.2 if accepted. |
 | C1.1.1 | proved |  | E0012 |  |
 | C1.1.2 | proved |  | E0013 |  |
@@ -622,12 +623,12 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 ### Current Status
 
-- result: `proved`
-- diagnosis: `n/a`
-- latest episode: `E0075`
-- blocker: 
-- actual effort: 1 sessions, 6 steps, 9 tools, 847,873 tok (846,768 in, 1,105 out, 839,936 cached), 35.0s, $0.487278
-- next: Call plan_oracle(mode='review') for C0.3; if accepted, inspect query_plan for whether C0 is complete and then follow the stop/report outcome.
+- result: `stuck`
+- diagnosis: `risk_mismatch` This is not a theorem falsehood: C0.2 boundary builds, and reverting C0.3 to the cheat makes the target build. The failure is the consumer proof interface/decomposition under the huge generated prefix, matching the maintainer warning not to simplify over it.
+- latest episode: `E0079`
+- blocker: C0.3's planned use of the equality boundary `eval_extcall_args_error` inside the raw Resume consumer still leaves the generated optional-driver prefix live; even targeted theorem application followed by minimal `simp[]` times out. A postcondition-shaped helper or different decomposition is needed before further proof work.
+- actual effort: 1 sessions, 3 msgs, 34 steps, 39 tools, 11 holbuild, 3,742,025 tok (3,724,021 in, 18,004 out, 3,603,712 cached), 701.9s, $2.943521
+- next: Call plan_oracle(mode='review') for C0.3. Ask for a de-risked replacement that avoids raw Resume simplification, likely a postcondition-shaped local helper whose conclusion matches the argument-error branch or a smaller Resume split that removes the generated optional-driver premise without `simp`/`gvs`.
 
 ### Attempts / Evidence
 
@@ -636,14 +637,46 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 - `E0075` (proved, , actual effort: 1 sessions, 6 steps, 9 tools, 847,873 tok (846,768 in, 1,105 out, 839,936 cached), 35.0s, $0.487278)
   - Inspected tracked/untracked status and staged only tracked task-owned files under `semantics/prop` for the E0072 stop/report update. -> Only the intended tracked plan/dossier/learnings/state/report files were staged; untracked scratch/legacy files remained untracked. (`TO_type_system_rewrite-20260601T081233Z_m1675_t001`, `TO_type_system_rewrite-20260601T081233Z_m1675_t002`, `TO_type_system_rewrite-20260601T081233Z_m1675_t003`, `TO_type_system_rewrite-20260601T081233Z_m1676_t001`, `TO_type_system_rewrite-20260601T081233Z_m1677_t001`, `TO_type_system_rewrite-20260601T081233Z_m1677_t002`)
   - Committed the stopped ExtCall report/audit checkpoint with `git commit --no-gpg-sign`. -> Unsigned commit `e020b7978 Report ExtCall boundary failure after E0072` was created. Post-commit status has only the known untracked scratch/legacy files. (`TO_type_system_rewrite-20260601T081233Z_m1678_t001`, `TO_type_system_rewrite-20260601T081233Z_m1679_t001`, `TO_type_system_rewrite-20260601T081233Z_m1679_t002`)
+- `E0078` (progressed, other, actual effort: 1 sessions, 2 msgs, 19 steps, 21 tools, 6 holbuild, 2,713,832 tok (2,706,448 in, 7,384 out, 2,642,048 cached), 343.7s, $1.864544)
+  - Replaced the ExtCall_result cheat with a focused C0.3 shell: split result/place conjuncts, one-step rewrite `well_typed_expr_def`/`evaluate_def`, split `eval_exprs`, and consume the expression-list IH. -> The shell reached the argument-result split but is not yet build-clean. Initial `strip_tac` after `conj_tac >-` failed because the first conjunct goal is not an implication. Replacing `qspecl_then ... mp_tac >> simp[]` with `drule_all_then assume_tac` avoided the earlier IH-discharge timeout under the generated prefix. (`TO_type_system_rewrite-20260601T081233Z_m1731_t001`, `TO_type_system_rewrite-20260601T081233Z_m1732_t001`, `TO_type_system_rewrite-20260601T081233Z_m1734_t001`, `TO_type_system_rewrite-20260601T081233Z_m1736_t001`, `TO_type_system_rewrite-20260601T081233Z_m1737_t001`, `TO_type_system_rewrite-20260601T081233Z_m1738_t001`)
+  - Tried to close the `args_res = INR y` branch using the new `eval_extcall_args_error` boundary lemma after preserving the original eval equation with `qpat_assum` rather than removing it. -> Keeping the eval equality is necessary: removing it with `qpat_x_assum ... mp_tac` made later matching fail. However `simp[eval_extcall_args_error]` and `gvs[eval_extcall_args_error,no_type_error_result_def]` still timed out on a >4KiB generated-prefix goal. Last source edit inserted `strip_tac` immediately after the evaluator-unfold simplification so the eval equality may become an assumption before branch splitting, but this edit has not been built yet. (`TO_type_system_rewrite-20260601T081233Z_m1738_t001`, `TO_type_system_rewrite-20260601T081233Z_m1739_t001`, `TO_type_system_rewrite-20260601T081233Z_m1740_t001`, `TO_type_system_rewrite-20260601T081233Z_m1743_t001`, `TO_type_system_rewrite-20260601T081233Z_m1744_t001`, `TO_type_system_rewrite-20260601T081233Z_m1745_t001`)
+- `E0079` (stuck, risk_mismatch, actual effort: 1 sessions, 3 msgs, 34 steps, 39 tools, 11 holbuild, 3,742,025 tok (3,724,021 in, 18,004 out, 3,603,712 cached), 701.9s, $2.943521)
+  - Verify carried partial C0.3 edit, then replace broad `simp[eval_extcall_args_error]` with targeted `drule eval_extcall_args_error`, remove the raw generated case equation, and rewrite only the preserved eval equality/result. -> The branch still timed out at `simp[]`; even after deriving the boundary lemma instance, the live generated optional-driver prefix remained in context and simplifier traversal exceeded the tactic timeout. (`TO_type_system_rewrite-20260601T081233Z_m1750_t001`, `TO_type_system_rewrite-20260601T081233Z_m1756_t001`)
+  - Try additionally dropping a universal generated-prefix assumption (`qpat_x_assum `!s''. _` kall_tac`) before the targeted rewrite. -> The generated prefix was still present and `simp[]` again timed out. This confirms the C0.3 consumer shape remains too broad/fragile for the planned equality-boundary use. (`TO_type_system_rewrite-20260601T081233Z_m1758_t001`)
+  - Revert the partial C0.3 Resume body to the last committed `cheat` baseline and rebuild the target. -> Target builds again with the intentional ExtCall_result cheat restored; no broken partial proof remains in source. (`TO_type_system_rewrite-20260601T081233Z_m1761_t001`)
+
+### Ruled Out
+
+- Broad `simp[eval_extcall_args_error]` or `gvs[...]` in the argument-error branch.
+- Direct targeted `drule eval_extcall_args_error` followed by `simp[]` on the eval equality while the generated prefix remains live.
+- Ad-hoc attempt to kill a universal generated-prefix assumption by `qpat_x_assum `!s''. _` kall_tac` before `simp[]`.
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260601T081233Z_m1675_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m1677_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m1678_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m1679_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m1679_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1750_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1756_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1758_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1761_t001` (use `read_tool_output` for exact output)
+
+## C0.3.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0080`
+- blocker: 
+- actual effort: 1 sessions, 2 msgs, 31 steps, 30 tools, 13 holbuild, 2,746,568 tok (2,740,862 in, 5,706 out, 2,684,032 cached), 514.2s, $1.797346
+- next: Call plan_oracle(mode='review') for C0.3.1; if accepted, commit the helper checkpoint unsigned and proceed to C0.3.2.
+
+### Attempts / Evidence
+
+- `E0080` (proved, , actual effort: 1 sessions, 2 msgs, 31 steps, 30 tools, 13 holbuild, 2,746,568 tok (2,740,862 in, 5,706 out, 2,684,032 cached), 514.2s, $1.797346)
+  - Added local theorem `eval_extcall_args_error_sound` immediately after `eval_extcall_args_error`; proof derives the computation equality via C0.2, substitutes the call result/state, then closes remaining `INR` no-TypeError case by case analysis on `y` and `no_type_error_result_def`. -> `vyperTypeStmtSoundnessTheory` builds successfully with the new helper; no evaluator definitions changed and ExtCall_result Resume remains at its cheat baseline for the next component. (`TO_type_system_rewrite-20260601T081233Z_m1795_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260601T081233Z_m1795_t001` (use `read_tool_output` for exact output)
 
 ## C1.1
 

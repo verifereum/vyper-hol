@@ -310,3 +310,23 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260601T081233Z_m1599_t001
 - tool_output:TO_type_system_rewrite-20260601T081233Z_m1601_t001
 - tool_output:TO_type_system_rewrite-20260601T081233Z_m1655_t001
+
+## L0056 scope='C0.3' tags=ExtCall,Resume,generated-prefix,IH,drule_all,boundary-lemma
+shape: A mutual Resume branch has a generated-prefix assumption in context, an IH of the form `!env st res st'. premises ==> post`, and live assumptions already satisfy all premises.
+pattern: Prefer `qpat_x_assum ... (drule_all_then assume_tac)` to consume the IH from live assumptions. Avoid `qspecl_then ... mp_tac >> simp[]` or `impl_tac >- simp[]`, because those create an implication goal whose simplification traverses the generated prefix.
+works_when: Applies when the needed IH premises are already present as assumptions and the context contains a large generated optional-driver/prefix implication that makes ordinary simplification time out.
+evidence:
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1734_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1736_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1738_t001
+- episode:E0078
+
+## L0057 scope='C0.3' tags=ExtCall,boundary-lemma,rewrite,generated-prefix,simp-timeout
+shape: A small boundary lemma rewrites a subterm/result in a huge generated-prefix branch, but `simp[lemma]`/`gvs[lemma]` times out.
+pattern: Do not use the simplifier as the consumer interface. Specialize the boundary lemma with `qspec`/`drule`/`MATCH_MP`-style tactics and rewrite only the preserved equality/result, or extract a helper whose conclusion is the exact branch postcondition.
+works_when: Applies when the boundary lemma itself proved cleanly outside the Resume context, but the consumer branch still contains the generated optional-driver prefix.
+evidence:
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1720_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1740_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1744_t001
+- episode:E0078
