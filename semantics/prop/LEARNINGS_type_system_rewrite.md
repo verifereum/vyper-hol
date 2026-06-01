@@ -240,19 +240,56 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260601T081233Z_m1147_t001
 - tool_output:TO_type_system_rewrite-20260601T081233Z_m1153_t001
 
-## L0042 scope='C0.1.1.2' tags=ExtCall,generated-IH,proof-interface,wrapper-adapter,linear-proof
-shape: A wrapper around a generated-prefix eliminator needs a long `qspecl_then` list over monadic state witnesses, or direct `irule` fails to match a branch-local conclusion.
-pattern: Treat this as a failed proof boundary, not a witness-order problem. Abandon the wrapper-adapter route and move to a concrete linear proof that splits the evaluator prefix in source order; specialize the generated optional-driver IH only after the concrete success continuation is reached.
-works_when: The generated IH is guarded by a deterministic monadic prefix and the task/maintainer allows branch-by-branch proof inside the final Resume; error cases can be closed immediately by monad/error definitions.
+## L0045 scope='C0.1.1.2.3' tags=Resume,ExtCall,postcondition,strip_tac,helper-interface
+shape: In a mutual `Resume`, generated IH assumptions are followed directly by a conjunctive result postcondition; `strip_tac` turns the target into individual conjunct goals before a helper can match the whole postcondition.
+pattern: Preserve the whole postcondition until helper application. If a helper does not match without destructing the postcondition, request a helper whose conclusion exactly matches the current goal shape rather than unfolding evaluator definitions at the Resume entry.
+works_when: Applies to generated mutual proof Resume blocks where the target is a multi-conjunct soundness postcondition and helper conclusions prove the entire postcondition at once.
 evidence:
-- episode:E0047
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m1238_t001
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m1250_t001
+- episode:E0051
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1302_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1304_t001
 
-## L0043 scope='C0.1.1.2.3' tags=ExtCall,Resume,dirty-probe,handoff
-shape: Handoff occurs after inserting a `FAIL_TAC` probe in a suspended Resume proof but before running holbuild.
-pattern: Record the dirty probe explicitly in STATE and make removal/replacement the first next action. Do not commit or interpret later build failure as mathematical evidence until the probe is handled.
-works_when: The probe is a deliberate temporary tactic in a task-owned source file and no build evidence has been recorded after insertion.
+## L0046 scope='C0.1.1.2.3.1' tags=ExtCall,generated-IH,proof-interface,drule_all,irule,witness-plumbing
+shape: A generated-prefix predicate/eliminator is available for ExtCall and all live prefix assumptions are present, but both manual consumer proof and standalone live-matching probe fail unless prefix witnesses are supplied explicitly.
+pattern: Treat the eliminator as a failed consumer boundary, not as a theorem to instantiate harder. A valid replacement must change the theorem/suspend boundary so the compact conditional driver IH is exposed directly or prove a genuinely matchable small boundary whose probe succeeds. Do not encode generated prefix witness order in consumers, and do not trust a proved eliminator until `drule_all`/`irule` is demonstrated on the intended live-premise shape.
+works_when: Applies when the goal has `returnData=[]`, `IS_SOME drv`, ExtCall success/update facts, and a needed driver expression IH, but `extcall_generated_driver_ih_elim_expr` still quantifies over `s_args`, `vs`, `args_st`, checks/lifts/run/update witnesses.
 evidence:
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m1281_t002
-- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:17231
+- episode:E0055
+- episode:E0056
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1350_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1366_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1368_t001
+
+## L0047 scope='C0.1.1.2.3' tags=PLAN,stale-frontier,dependencies,stop-report
+shape: A stop/report component is accepted for a proof-interface blocker, but sibling/dependent proof components remain scheduled and reference helpers invalidated by the stop/report.
+pattern: Before doing proof work after a stop/report replacement, grep for named helper prerequisites and inspect query_plan dependencies. If a scheduled proof leaf depends on an absent or invalidated helper, close it as `plan_incomplete` and request ancestor/whole-plan repair; do not resurrect the helper locally.
+works_when: Applies after a strategist converts a subtree to stop/report or invalidates prior proof frontiers but the PLAN still contains sibling/audit components with dependencies on the old proof path.
+evidence:
+- episode:E0057
+- episode:E0058
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1380_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1382_t002
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1385_t001
+
+## L0048 scope='C0.1.1.2.4' tags=PLAN-gate,OracleBudgetExceeded,stop-state,commit-hygiene
+shape: A final audit component is closed and source/build status is clean, but mandatory strategist review fails with OracleBudgetExceeded and query_plan has no frontier.
+pattern: Treat this as an operational planner gate, not a proof obligation. Do not commit the regenerated DOSSIER or start sibling proof work until the review succeeds or an explicit blocked outcome is accepted. On resume, retry the exact review with compact evidence; if it fails again, report a tooling/planner blocker with the audit and oracle-failure IDs.
+works_when: Applies when close_component has recorded a terminal audit episode, query_plan says the only allowed next action is plan_oracle(mode='review') for that episode, and repeated plan_oracle calls return OracleBudgetExceeded/schema errors.
+evidence:
+- episode:E0063
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1428_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1429_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1430_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1431_t001
+
+## L0049 scope='C0.1.1.2' tags=ExtCall,stop-state,audit,cheat,source-hygiene
+shape: A proof branch is intentionally stopped with an original `Resume ...: cheat QED`, and final work is to audit absence of invalidated helper artifacts rather than prove the cheat.
+pattern: For stop-state audit leaves, use narrow status/diff/grep/holbuild checks: confirm the intended cheat placeholder remains, invalidated helper names are absent, and the target builds. Record this as blocker/report evidence, not as theorem completion. Keep scratch/legacy untracked files unstaged.
+works_when: Applies under an accepted stop/report plan where the task says to stop if proof is not straightforward and the source is expected to remain build-clean with an explicit cheat placeholder.
+evidence:
+- episode:E0057
+- episode:E0063
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1378_t002
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1427_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1427_t002
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1427_t004

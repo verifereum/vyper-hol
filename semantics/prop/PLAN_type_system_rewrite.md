@@ -2,51 +2,69 @@
 
 ## Structured Components
 
-### C0: Type system rewrite task
-- Kind: `task`
-- Risk: 3
+### C0: Structural parent carry-forward for local ExtCall stop-state
+- Kind: `proof`
+- Risk: 2
 - Work priority: 0
 - Work units: 0
-- Rationale: Derived from child component C0.1.1.2.2.1 risk 3. The static branch-local wrapper is not a straightforward low-risk proof as planned: using the broad eliminator still requires a long generated-prefix witness list, while direct `irule` does not match the conclusion. Under the task instruction and proof-hygiene checkpoint, this should be redesigned rather than tuned.
+- Rationale: Previously high only because C0.1.1.2 remained a Risk-3 blocked proof subtree with no frontier. This update reclassifies that local subtree as an accepted terminal stop/report path under the TASK stop rule and adds a low-risk handoff leaf; no new ancestor-level proof strategy is introduced here.
 - Required for completion: yes
-- Progress transition: `carry_forward`
-- Carries progress/evidence from: C0
+- Progress transition: `refinement`
+- Carries progress/evidence from: C0, E0063
 
 #### Progress note
-Ancestor included only to satisfy dotted component hierarchy; no whole-task strategy change is intended.
+Minimal schema parent update to remove stale inherited high-risk rationale after local stop-state reclassification.
 
 #### Summary
-Carry-forward task root. The current review changes only the ExtCall proof-refactor subtree C0.1.1.2 after E0044 showed a local proof-interface mismatch.
+Schema parent included only to support the C0.1.1.2 augment. The local ExtCall branch is being handled as a terminal stop-state, not proof completion. Existing sibling components are not replanned by this update.
 
-### C0.1: Type soundness proof repair
+#### Approach
+Delegate all concrete work to the C0.1.1.2 subtree. Do not infer permission to work on unrelated siblings from this parent wrapper.
+
+#### Not to try
+Do not use this wrapper to reopen the ExtCall proof or to edit outside `semantics/prop`.
+
+### C0.1: Structural parent carry-forward for local ExtCall stop-state
 - Kind: `proof`
-- Risk: 3
+- Risk: 2
 - Work priority: 0
 - Work units: 0
-- Rationale: Derived from child component C0.1.1.2.2.1 risk 3. The static branch-local wrapper is not a straightforward low-risk proof as planned: using the broad eliminator still requires a long generated-prefix witness list, while direct `irule` does not match the conclusion. Under the task instruction and proof-hygiene checkpoint, this should be redesigned rather than tuned.
-- Progress transition: `carry_forward`
-- Carries progress/evidence from: C0.1
+- Rationale: Previously high only because C0.1.1.2 remained a Risk-3 blocked proof subtree with no frontier. The child is now a low-risk terminal stop/report subtree; this parent carries that local classification without changing siblings.
+- Progress transition: `refinement`
+- Carries progress/evidence from: C0.1, E0063
 
 #### Progress note
-Included as explicit parent; no sibling work is changed.
+Minimal parent update; prior sibling progress remains untouched.
 
 #### Summary
-Carry-forward ancestor for the active type-soundness rewrite. E0044 does not invalidate work outside C0.1.1.2.
+Schema parent included only to support the C0.1.1.2 augment. The update does not add proof work outside the ExtCall stop-state branch.
 
-### C0.1.1: Expression/result mutual proof repair
+#### Approach
+Delegate concrete work to C0.1.1.2.5 and preserve existing sibling plans.
+
+#### Not to try
+Do not treat this as permission for broad proof search or unrelated cleanup.
+
+### C0.1.1: Structural parent carry-forward for local ExtCall stop-state
 - Kind: `proof`
-- Risk: 3
+- Risk: 2
 - Work priority: 0
 - Work units: 0
-- Rationale: Derived from child component C0.1.1.2.2.1 risk 3. The static branch-local wrapper is not a straightforward low-risk proof as planned: using the broad eliminator still requires a long generated-prefix witness list, while direct `irule` does not match the conclusion. Under the task instruction and proof-hygiene checkpoint, this should be redesigned rather than tuned.
-- Progress transition: `carry_forward`
-- Carries progress/evidence from: C0.1.1
+- Rationale: Previously high only because C0.1.1.2 was still classified as a blocked proof subtree. The child now has a low-risk terminal handoff leaf and no authorized theorem-proving frontier.
+- Progress transition: `refinement`
+- Carries progress/evidence from: C0.1.1, E0063
 
 #### Progress note
-Included as explicit parent; strategy outside C0.1.1.2 is unchanged.
+Minimal parent update to clear stale inherited high-risk state; no broader redesign is performed.
 
 #### Summary
-Carry-forward ancestor. The repair is local to the ExtCall result helper/Resume interface.
+Schema parent included only to support the C0.1.1.2 augment. The local ExtCall branch should report blocked/operator handoff rather than proof completion.
+
+#### Approach
+Delegate concrete work to C0.1.1.2.5. Preserve all accepted audit evidence from C0.1.1.2.0--C0.1.1.2.4.
+
+#### Not to try
+Do not resurrect removed child proof leaves or stale generated-prefix helpers.
 
 ### C0.1.1.1: Carry forward audit of the ExtCall helper interface
 - Kind: `proof_interface_audit`
@@ -69,194 +87,244 @@ No action required unless the build reports that one of the theorem names is not
 #### Not to try
 Do not repeat the audit by broad grepping or modifying the helper theorem; this component is carried forward as completed context.
 
-### C0.1.1.2: Close ExtCall result with a matching helper and tiny Resume entry
-- Kind: `proof_refactor`
+### C0.1.1.2: ExtCall result branch terminal stop-state and operator-facing handoff
+- Kind: `terminal_stop_subtree`
 - Risk: 2
-- Work priority: 20
+- Work priority: 0
 - Work units: 0
-- Rationale: The previous low-risk leaf failed because the Resume goal shape is generated-IH assumptions followed by the expression-result implication; direct unfolding at the Resume entry creates huge prefix goals. The repaired decomposition moves ExtCall branch splitting into one local helper whose assumptions match the Resume after folding the generated driver IH predicate, then leaves the Resume proof as a small helper application.
+- Rationale: The mathematical ExtCall proof remains unresolved, but the task contract explicitly says to stop on non-straightforward design/proof issues and the maintainer clarification forbids the failed generated-prefix recovery paths. E0063 establishes the source/build stop-state facts. The remaining work in this subtree is not renewed theorem proving; it is a mechanical terminal handoff/commit/report, so the subtree is executable at low risk.
 - Progress transition: `replacement`
-- Carries progress/evidence from: C0.1.1.2.0, C0.1.1.2.1, C0.1.1.2.2, E0048, E0049, E0050, E0051
-- Invalidates prior progress/evidence: C0.1.1.2.3@stuck, C0.1.1.2.4@old-plan, C0.1.1.2.5@old-plan
+- Carries progress/evidence from: C0.1.1.2.0, C0.1.1.2.1, C0.1.1.2.2, C0.1.1.2.3, C0.1.1.2.4, E0051, E0055, E0056, E0058, E0063, TO_type_system_rewrite-20260601T081233Z_m1436_t001
 
 #### Progress note
-Carries forward the build-clean skeleton, generated-driver predicate/eliminator, and cleanup. E0051 is accepted as evidence that the old direct-linearization/later-driver-IH split was wrong.
+This replaces the prior high-risk blocked-proof parent classification with a terminal stop/report classification. The prior audits and failed-interface evidence still count; what changes is that no unresolved proof leaf remains authorized under this subtree.
 
 #### Summary
-- Accept E0051 as a real risk mismatch.
-- Do not unfold `well_typed_expr` or the ExtCall evaluator in the Resume entry.
-- Add one helper whose hypotheses include `extcall_generated_driver_ih` and the argument-list IH.
-- Prove it by adapting the existing ExtCall helper and using the conditional-driver success-continuation lemma in concrete success branches.
-- Replace the Resume cheat by folding the generated IH predicate and applying the helper.
-- Finish with a narrow build/hygiene audit.
+- Treat the accepted E0063 state as the terminal local outcome for this subtree, not as proof completion of `Expr_Call_ExtCall_result`.
+- The ExtCall Resume/cheat remains in `vyperTypeStmtSoundnessScript.sml`; this is intentional stop-state evidence under the TASK instruction to stop when the proof is not straightforward.
+- Prior forbidden paths remain invalid: no broad ExtCall-prefix simplification, no manual generated-prefix witness plumbing, and no resurrection of `extcall_expr_sound_from_generated_driver_ih`.
+- Existing children C0.1.1.2.0--C0.1.1.2.4 remain valid audits/cleanup; the only new executable action is a final mechanical handoff leaf.
+- Completion of this subtree should report a blocked/operator-facing outcome, not claim the type-system rewrite proof is fully complete.
+
+#### Description
+This component no longer asks the executor to prove the ExtCall result branch. Prior episodes demonstrated that the apparent helper interface is not matchable in the live Resume, that the manual generated-prefix approach is brittle and forbidden, and that broad prefix cleanup violates the maintainer clarification. Since the TASK says to stop on unexpected proof/design issues and the accepted E0063 audit recorded a clean buildable stop-state with the ExtCall Resume still present, the correct local plan is to finish the handoff mechanics and report the blocked proof-interface issue.
+
+#### Approach
+Do not enter HOL proof search for the ExtCall branch. The executor should perform only the terminal handoff child: inspect status/diff, commit only relevant tracked `semantics/prop` progress-memory changes unsigned if present, and end/report that the proof remains blocked at the ExtCall result Resume. If the harness still exposes ready sibling proof components outside this subtree, do not reinterpret this component as authorizing them; this component's local outcome is a stop-state.
+
+#### Not to try
+- Do not retry `extcall_generated_driver_ih_elim_expr` by larger `qspecl_then` or ordered witness instantiation; E0055/E0056 showed this is the wrong consumer interface and it is forbidden by the maintainer clarification.
+- Do not use broad `simp`/`gvs`/`AllCaseEqs()` over the whole ExtCall monadic prefix to recover the driver premise; E0051 showed it loses/splits the postcondition and the clarification explicitly forbids it.
+- Do not recreate `extcall_expr_sound_from_generated_driver_ih`; it was removed as stale and absent in E0058/E0063 audits.
+- Do not claim task completion or source proof completion merely because `holbuild` succeeds with the Resume/cheat still present.
 
 #### Argument
-The generated mutual IH supplies a prefix-conditional driver IH, useful only after the evaluator proof reaches the concrete success continuation containing all prefix equations. Therefore the monadic case split belongs in a local helper, not in the Resume entry. Inside the helper, evaluate arguments, close error branches immediately, use the static/nonstatic runtime-typed destination lemmas, and in each successful `run_ext_call` branch combine `run_ext_call_accounts_well_typed`, `extcall_generated_driver_ih_elim_expr`, and `extcall_success_continuation_sound_cond_driver_ih`. The Resume entry then only folds the generated prefix assumption into `extcall_generated_driver_ih` and applies the helper.
+The subtree's mathematical proof attempt has reached a proof-interface blocker, not a theorem proved state. The accepted invariant for this subtree is therefore operational: preserve the clean, audited source state and expose the unresolved ExtCall proof obligation honestly. E0063 supplies the facts needed for that invariant: the ExtCall Resume is still present, the invalidated helper is absent, no tracked source diff existed at audit time, and `vyperTypeStmtSoundnessTheory` built. Under the TASK's stop-on-non-straightforward rule, this is a valid terminal stop-state to report upward, provided no further proof edits are made and no forbidden proof paths are retried.
 
 #### Definition design
-`extcall_generated_driver_ih` is an opacity boundary for the enormous generated optional-driver IH. Its consumer boundary is `extcall_generated_driver_ih_elim_expr`, used only inside concrete success branches with the prefix equations already available. Failure signs: `AllCaseEqs()` over the entire ExtCall prefix, broad top-level `simp`/`gvs`, or new long prefix-adapter theorems at the Resume site.
+No new definitions or semantic changes are authorized in this subtree. The failed design lesson is that the generated-driver eliminator is valid infrastructure but not a usable live Resume boundary. Any future proof-completion redesign, outside this terminal stop subtree, should capture a compact optional-driver IH before the ExtCall monadic prefix is generated and should first prove a matchable boundary probe; this plan does not authorize that future work.
 
 #### Code structure
-All edits stay in `semantics/prop/vyperTypeStmtSoundnessScript.sml`. Place the new helper after `extcall_generated_driver_ih_elim_expr` if it depends on that theorem and before the `Resume` block. Replace only the `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result]` cheat body.
+All files remain within `semantics/prop`. Do not edit evaluator/semantics definitions and do not edit outside `semantics/prop`. The terminal leaf may update only task-owned progress/state/dossier files if already regenerated by the harness and may commit those tracked changes unsigned. Do not stage untracked `semantics/prop/tmp_helper.txt` or `semantics/prop/LEARNINGS_type_system_rewrite.legacy.md`; do not use `git add -A`.
 
 ### C0.1.1.2.0: Build-clean skeleton state is carried forward
 - Kind: `source_cleanup`
 - Risk: 1
 - Work priority: 0
 - Work units: 0
-- Rationale: E0048 established that failed wrapper insertion was removed and the theory returned to a build-clean cheat skeleton.
+- Rationale: E0052 established that failed wrapper insertion was removed and the theory returned to a build-clean cheat skeleton; no new work is needed.
 - Progress transition: `carry_forward`
-- Carries progress/evidence from: C0.1.1.2.0, E0048
+- Carries progress/evidence from: C0.1.1.2.0, E0052
 
 #### Progress note
-Unchanged carry-forward component included because the ancestor subtree is replaced.
+Prior proof/cleanup evidence remains valid under the stop-state replacement.
 
 #### Summary
-The failed wrapper insertion remains removed. No cleanup is needed before the repaired helper plan.
+- Carry forward the restored source skeleton from E0052.
+- The failed wrapper insertion remains absent.
+- No source edits are authorized here.
+- This component is closed evidence used by the final stop-state audit.
+
+#### Approach
+No action unless an audit discovers drift. If checked, verify only that the source remains in the restored skeleton state and that no failed wrapper code has been reintroduced.
+
+#### Not to try
+Do not use this component to re-open the ExtCall proof or to edit non-task files.
 
 ### C0.1.1.2.1: Opaque generated-driver predicate remains available infrastructure
 - Kind: `infrastructure_lemma`
 - Risk: 1
-- Work priority: 5
+- Work priority: 1
 - Work units: 0
-- Rationale: E0049 proved the predicate and eliminator; they remain valid as a controlled boundary for the generated optional-driver IH.
+- Rationale: E0053 proved the predicate and eliminator. They remain valid infrastructure, but they no longer authorize the stale helper-application proof path.
 - Dependencies: C0.1.1.2.0
 - Progress transition: `carry_forward`
-- Carries progress/evidence from: C0.1.1.2.1, E0049
+- Carries progress/evidence from: C0.1.1.2.1, E0053
 
 #### Progress note
-Carried forward with narrowed intended use: eliminate only inside concrete success branches.
+The proved infrastructure remains in source/task context, but its former downstream proof use is invalidated by E0058.
 
 #### Summary
-`extcall_generated_driver_ih_def` and `extcall_generated_driver_ih_elim_expr` remain valid local infrastructure. Do not build new long prefix-adapter theorem families.
+- Carry forward the generated-driver predicate/eliminator from E0053.
+- Treat it as retained infrastructure only.
+- It is not a sufficient live proof interface for the ExtCall Resume.
+- No new lemma work is scheduled here.
+
+#### Approach
+No action unless an audit discovers drift. Consumers must not unfold or extend this into generated-prefix adapter plumbing in this task.
+
+#### Not to try
+Do not infer from this infrastructure that `extcall_expr_sound_from_generated_driver_ih` exists or can be applied at the Resume site.
 
 ### C0.1.1.2.2: Abandoned wrapper-adapter path remains deleted
 - Kind: `source_cleanup`
 - Risk: 1
-- Work priority: 10
+- Work priority: 2
 - Work units: 0
-- Rationale: E0050 audited/removed the obsolete wrapper-adapter path; the replacement plan does not revive it.
-- Dependencies: C0.1.1.2.1
+- Rationale: E0054 audited/removed the obsolete wrapper-adapter path; the stop-state replacement must not revive it.
+- Dependencies: C0.1.1.2.0
 - Progress transition: `carry_forward`
-- Carries progress/evidence from: C0.1.1.2.2, E0050
+- Carries progress/evidence from: C0.1.1.2.2, E0054
 
 #### Progress note
-Unchanged carry-forward component included because the ancestor subtree is replaced.
+Prior cleanup remains valid and supports the explicit stop-state.
 
 #### Summary
-The stale wrapper-adapter proof path remains invalidated. The new helper is a direct ExtCall expression-result soundness helper.
-
-### C0.1.1.2.3: Use a matching helper for ExtCall result instead of direct Resume linearization
-- Kind: `proof_refactor`
-- Risk: 2
-- Work priority: 20
-- Work units: 0
-- Rationale: The failed direct leaf is replaced by two lower-risk obligations: prove a helper with the right interface and apply it at the Resume entry.
-- Dependencies: C0.1.1.2.2
-- Progress transition: `replacement`
-- Carries progress/evidence from: E0051
-- Invalidates prior progress/evidence: C0.1.1.2.3@stuck
-
-#### Progress note
-E0051 diagnosed the old leaf as the wrong proof shape; this replacement preserves the no-broad-simplification insight but changes the helper interface.
-
-#### Summary
-Replace the stuck direct Resume proof with a local helper plus a small entry proof. The helper owns the ExtCall evaluator branch split and generated-driver IH consumption. The Resume entry only folds the generated IH predicate and applies the helper.
-
-#### Argument
-The helper has enough local context to perform the linear monadic proof without exploding the Resume goal. It receives `extcall_generated_driver_ih` as a hypothesis and, after branch splitting reaches each successful `run_ext_call`, extracts the conditional driver IH using `extcall_generated_driver_ih_elim_expr`. That conditional premise is passed to `extcall_success_continuation_sound_cond_driver_ih`.
-
-#### Definition design
-The helper statement should match Resume assumptions after folding the first generated prefix assumption with `GSYM extcall_generated_driver_ih_def`; it must not require hand-supplying all generated prefix witnesses at the Resume site.
-
-#### Code structure
-Add the helper in the ExtCall helper section, then edit only the `Expr_Call_ExtCall_result` Resume body.
-
-### C0.1.1.2.3.1: Prove ExtCall result helper with generated-driver predicate hypothesis
-- Kind: `infrastructure_lemma`
-- Risk: 2
-- Work priority: 0
-- Work units: 5
-- Rationale: This is a copy/refactor of `extcall_expr_sound_from_generated_ih`: same argument split and error branches, but the driver-IH input is `extcall_generated_driver_ih` and the success branches use the conditional-driver continuation theorem.
-- Dependencies: C0.1.1.2.2
-- Checkpoint: yes
-- Carries progress/evidence from: C0.1.1.2.1, E0049
-
-#### Progress note
-Uses carried-forward generated-driver infrastructure; replaces old direct-linearization work.
-
-#### Statement
-Add a local theorem, suggested name `extcall_expr_sound_from_generated_driver_ih`, with conclusion matching `extcall_expr_sound_from_generated_ih` but with hypotheses:
-
-```sml
-env_consistent env cx st /\ state_well_typed st /\ context_well_typed cx /\
-accounts_well_typed st.accounts /\ functions_well_typed cx /\
-well_typed_expr env (Call ret_type (ExtCall is_static (func_name,arg_types,ret_type)) es drv) /\
-extcall_generated_driver_ih cx es is_static func_name arg_types drv /\
-(!env0 st0 res0 st0'.
-   well_typed_exprs env0 es /\ env_consistent env0 cx st0 /\ state_well_typed st0 /\
-   context_well_typed cx /\ accounts_well_typed st0.accounts /\ functions_well_typed cx /\
-   eval_exprs cx es st0 = (res0,st0') ==>
-   state_well_typed st0' /\ env_consistent env0 cx st0' /\
-   accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
-   case res0 of INL vs => exprs_runtime_typed env0 es vs | INR _ => T) /\
-eval_expr cx (Call ret_type (ExtCall is_static (func_name,arg_types,ret_type)) es drv) st = (res,st')
-```
-
-and the standard result postcondition for that same `Call`.
+- Carry forward deletion of the abandoned wrapper-adapter path.
+- This deletion is part of the proof-interface blocker record.
+- No new source edits are required.
+- Future work must not resurrect this path without a new plan.
 
 #### Approach
-Start from the existing `extcall_expr_sound_from_generated_ih` proof body. Keep its `well_typed_expr` unfolding inside the helper, argument IH application, static/nonstatic branches, destination lemmas, and immediate error closures. In each successful `run_ext_call` branch, use `irule extcall_success_continuation_sound_cond_driver_ih`; prove its conditional-driver premise from `extcall_generated_driver_ih_elim_expr` only after the branch has concrete prefix equations for the argument result, target, value selection, calldata, accounts/code/tstorage, run result, success check, and state updates.
+No action unless an audit discovers drift. If checked, confirm no obsolete wrapper-adapter helper has reappeared in `semantics/prop`.
 
 #### Not to try
-Do not unfold `extcall_generated_driver_ih_def` at the start and manually instantiate all prefix variables. Do not use `AllCaseEqs()` or broad `gvs` over the whole ExtCall prefix. Do not use `extcall_success_continuation_sound`, which requires an unconditional driver IH unavailable from the generated mutual theorem.
+Do not reintroduce wrapper adapters or generated-prefix witnesses as a workaround for the blocked ExtCall proof.
 
-### C0.1.1.2.3.2: Replace the ExtCall result Resume cheat by folding and applying the helper
-- Kind: `proof`
+### C0.1.1.2.3: ExtCall result proof is blocked; preserve accepted stop report
+- Kind: `stop_report_parent`
 - Risk: 1
-- Work priority: 10
-- Work units: 3
-- Rationale: Once the helper exists, the Resume proof is assumption management and a helper application, avoiding the timeout sites in E0051.
+- Work priority: 3
+- Work units: 0
+- Rationale: The only child is the already accepted stop/report component. The stale proof child C0.1.1.2.3.2 is intentionally removed because E0058 shows it depended on an absent invalidated helper and would violate the accepted stop strategy.
+- Dependencies: C0.1.1.2.0, C0.1.1.2.1, C0.1.1.2.2
+- Checkpoint: yes
+- Progress transition: `replacement`
+- Carries progress/evidence from: C0.1.1.2.3, E0057, E0058
+- Invalidates prior progress/evidence: C0.1.1.2.3.2
+
+#### Progress note
+Replaces the mixed stop-plus-stale-proof parent with a pure stop-report parent. E0058 is accepted as valid evidence that the stale proof leaf must be removed.
+
+#### Summary
+- Carry forward E0057 as the accepted stop/report for the ExtCall result proof-interface blocker.
+- Delete the stale helper-application proof leaf.
+- The Resume remains `cheat QED`; this is intentional for the stop report.
+- Downstream work may only audit/report this state, not attempt proof completion.
+
+#### Description
+This parent records the strategic conclusion of E0057 and E0058: the ExtCall result branch is not straightforward under the allowed proof architecture. The previously scheduled proof leaf was a stale remnant and is no longer executable.
+
+#### Not to try
+Do not prove the old helper, do not specialize the generated IH from the top-level Resume prefix, and do not use broad cleanup over the whole monadic ExtCall prefix.
+
+#### Argument
+The proof attempt is blocked because the live Resume context does not provide a matchable premise for the generated optional-driver IH without forbidden generated-prefix reconstruction. Since the task explicitly says to stop on non-straightforward proof/design issues, the correct branch outcome is an accepted stop report, not another proof decomposition.
+
+#### Definition design
+No definitions are changed. The failed interface is the attempted bridge from the generated optional-driver IH to the ExtCall success continuation; it must not be hidden behind a resurrected helper unless a future task redesigns and probes that interface from scratch.
+
+#### Code structure
+Keep source proof code as restored. Maintain stop/blocker documentation in task-owned files under `semantics/prop`; do not add proof helpers or wrapper adapters.
+
+### C0.1.1.2.3.1: Stop/report ExtCall result proof-interface blocker
+- Kind: `stop_report`
+- Risk: 1
+- Work priority: 0
+- Work units: 0
+- Rationale: E0057 validly closed this component: the source remains with the original `Expr_Call_ExtCall_result` cheat, the build-clean restored state was checked, and the blocker was recorded under `semantics/prop`.
+- Dependencies: C0.1.1.2.0, C0.1.1.2.1, C0.1.1.2.2
+- Checkpoint: yes
+- Progress transition: `carry_forward`
+- Carries progress/evidence from: C0.1.1.2.3.1, E0057
+
+#### Progress note
+Accepted stop/report evidence remains the authoritative closure for this branch.
+
+#### Summary
+- Carry forward the accepted E0057 stop/report.
+- Preserve the original `Expr_Call_ExtCall_result` cheat.
+- Record the blocker from E0055/E0056/E0058 rather than attempting proof plumbing.
+- This component is already closed; no redo is requested.
+
+#### Approach
+No proof work remains. If the workflow asks for evidence, cite E0057/E0058 and the fact that no source proof edits were made after the stop decision.
+
+#### Not to try
+Do not reopen this as a proof component or attempt to discharge the Resume cheat here.
+
+### C0.1.1.2.4: Final stop-state audit, unsigned commit, and operator report
+- Kind: `proof_audit`
+- Risk: 1
+- Work priority: 4
+- Work units: 1
+- Rationale: After E0058, only a mechanical final audit/report remains: verify the stop-state has no source proof drift, commit only relevant task-owned progress files unsigned if appropriate, and report that the ExtCall proof remains blocked. No theorem proof is attempted.
 - Dependencies: C0.1.1.2.3.1
 - Checkpoint: yes
 - Progress transition: `replacement`
-- Carries progress/evidence from: E0051
-- Invalidates prior progress/evidence: C0.1.1.2.4@old-plan
+- Carries progress/evidence from: C0.1.1.2.4, E0057, E0058
+- Invalidates prior progress/evidence: C0.1.1.2.3.2
 
 #### Progress note
-Absorbs the old separate driver-IH application component because the helper already performs that work inside concrete success branches.
-
-#### Statement
-Replace the existing `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result]: cheat QED` with a proof using `extcall_expr_sound_from_generated_driver_ih`.
-
-#### Approach
-Before destructing the Resume antecedents, fold the leading generated prefix-IH antecedent with `rewrite_tac[GSYM extcall_generated_driver_ih_def]` so it becomes an `extcall_generated_driver_ih` hypothesis. Strip antecedents only; avoid splitting the postcondition before helper application. Then apply `extcall_expr_sound_from_generated_driver_ih` with the visible `cx env st res st' is_static' func_name arg_types ret_type es drv` and close premises from assumptions with `first_assum ACCEPT_TAC` or small `simp`.
-
-#### Not to try
-Do not start with `reverse conj_tac`; this Resume is not the place-result branch. Do not unfold `well_typed_expr_def` or evaluator definitions in the Resume body. Do not blindly `rpt strip_tac` if it starts splitting the desired conjunctive postcondition. Do not recover the driver premise by broad prefix simplification.
-
-### C0.1.1.2.4: Final ExtCall result build and forbidden-shape audit
-- Kind: `proof_audit`
-- Risk: 1
-- Work priority: 30
-- Work units: 1
-- Rationale: After the helper and Resume proof build, only a mechanical build/hygiene audit remains. The old separate driver-IH application leaf is intentionally removed.
-- Dependencies: C0.1.1.2.3.2
-- Progress transition: `replacement`
-- Carries progress/evidence from: C0.1.1.2.5
-- Invalidates prior progress/evidence: C0.1.1.2.4@old-plan, C0.1.1.2.5@old-plan
-
-#### Progress note
-Reclassifies the old final audit as the only remaining post-proof work.
+Replaces the old final proof/build audit, which depended on a successful helper/Resume proof, with a final stop-state audit/report that depends only on the accepted stop component.
 
 #### Summary
-Build the theory after replacing the ExtCall result Resume cheat. Audit that the proof does not use broad top-level prefix simplification, `AllCaseEqs()` over the whole ExtCall prefix, new long generated-prefix adapters, or edits outside `semantics/prop`. Confirm that the optional driver IH is specialized only inside the helper's concrete success branches.
+- Inspect git status/diff before committing.
+- Confirm `vyperTypeStmtSoundnessScript.sml` still contains the original `Expr_Call_ExtCall_result` cheat and no resurrected helper/proof edits.
+- Stage only relevant tracked task-owned progress/documentation files under `semantics/prop`; do not stage untracked tmp/legacy files unless explicitly intended by the maintainer.
+- Commit unsigned if the checked diff is only the stop-state documentation/progress update.
+- Report to the operator that the ExtCall result proof remains blocked by the accepted proof-interface issue.
 
 #### Approach
-Run/build normally and inspect the helper/Resume body for the forbidden proof shapes from the maintainer clarification and E0051. Escalate if the proof required a new broad adapter theorem or top-level generated-prefix witness plumbing.
+Run a narrow audit: status/diff, grep for `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result]`, and optionally grep that `extcall_expr_sound_from_generated_driver_ih` is absent. If the diff contains only task-owned progress docs, make a small unsigned checkpoint commit; otherwise stop and report the unexpected diff. Do not run or edit proof code except for read-only audit commands.
 
 #### Not to try
-Do not treat a build as sufficient if the proof violates the clarified architecture. Do not broaden scope to RawCallTarget or other remaining cheats.
+Do not attempt to finish `Expr_Call_ExtCall_result`, do not create the absent helper, and do not stage untracked scratch files such as `tmp_helper.txt` or legacy files unless the maintainer explicitly asks for them.
+
+### C0.1.1.2.5: Commit terminal progress memory and end with blocked ExtCall handoff
+- Kind: `terminal_handoff`
+- Risk: 1
+- Work priority: 100
+- Work units: 1
+- Rationale: This is mechanical bookkeeping/reporting only. The proof/build facts were already established by E0063 and accepted in review; the executor must not perform proof edits or broad builds while the local outcome is a stop-state.
+- Dependencies: C0.1.1.2.4
+- Checkpoint: yes
+- Carries progress/evidence from: C0.1.1.2.4, E0063, TO_type_system_rewrite-20260601T081233Z_m1436_t001
+
+#### Progress note
+Added because after E0063 review the plan still had no low-risk frontier and no legal terminal action inside this subtree. This leaf is strictly bookkeeping/reporting; it does not reopen the ExtCall proof.
+
+#### Summary
+- Inspect `git status` and tracked diff under `semantics/prop`.
+- If only task-owned tracked progress/state/dossier files are changed, commit them with `git commit --no-gpg-sign`; otherwise stop and report the unexpected diff.
+- Never stage untracked tmp/legacy files and never use `git add -A`.
+- End/report the task as blocked at the ExtCall result proof-interface issue, with the Resume/cheat intentionally still present.
+- Do not run new ExtCall proof tactics or edit source proof scripts.
+
+#### Description
+This leaf gives the executor a legal final action after E0063 review. It turns the accepted stop-state audit into an operator-facing handoff: preserve any regenerated tracked progress-memory files with an unsigned checkpoint commit if safe, then report that the task cannot honestly be marked proof-complete because `eval_all_type_sound_mutual[Expr_Call_ExtCall_result]` still contains the ExtCall Resume/cheat.
+
+#### Statement
+Operational leaf, no HOL theorem statement. Expected checked facts to cite from prior evidence: ExtCall Resume present in `semantics/prop/vyperTypeStmtSoundnessScript.sml`, `extcall_expr_sound_from_generated_driver_ih` absent, and `vyperTypeStmtSoundnessTheory` built in E0063.
+
+#### Approach
+Run only status/diff inspection commands needed for safe commit hygiene. Stage tracked task-owned progress files with `git add -u semantics/prop/<file>` or an equivalently narrow command; commit with `--no-gpg-sign` if the diff is exactly the expected memory/progress update. Then close the component/report a blocked stop outcome, explicitly saying that no source proof completion was attempted after E0063.
+
+#### Not to try
+- Do not run `holbuild` as a new proof attempt if the harness still blocks builds on high-risk ancestors; the relevant build evidence is already E0063.
+- Do not edit `vyperTypeStmtSoundnessScript.sml` in this leaf.
+- Do not stage untracked files or unrelated repository files.
+- Do not report `complete`; report blocked/operator handoff unless an ancestor-level strategist later reclassifies the entire task outcome.
 
 ### C0.1.2: Prove the focused static ExtCall success continuation
 - Kind: `theorem_proof`

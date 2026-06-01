@@ -2,72 +2,76 @@
 Updated: 2026-06-01
 
 ## Cursor
-- component: C0.1.1.2.3
-- status: in_progress
+- component: C0.1.1.2.4
+- status: blocked
 - active_file: semantics/prop/vyperTypeStmtSoundnessScript.sml
-- next_action: First remove or replace the temporary probe in `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result]` (currently `rpt gen_tac >> strip_tac >> FAIL_TAC "probe extcall resume initial"` at about lines 17231-17233). Then continue C0.1.1.2.3 by constructing the linear ExtCall Resume proof: split expression/place conjuncts as before, unfold only one evaluator layer, destruct `eval_exprs`, close error cases immediately, and proceed one monadic operation at a time.
-- expected_goal_shape: Without removing the probe, holbuild will fail at `FAIL_TAC "probe extcall resume initial"` in `Expr_Call_ExtCall_result`. After replacing it with proof text, expected local proof shape is the ExtCall expression-result conjunct after `rpt gen_tac >> strip_tac`: generated IH assumptions for `eval_exprs` and optional driver are in context, plus `well_typed_expr ... ExtCall ...` and `eval_expr ... = (res,st')`; C0.1.1.2.3 should stop/checkpoint once the proof reaches a single concrete success continuation with target/calldata/accounts/tStorage/run/update facts, before solving the optional-driver IH tail.
-- verify_with: holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=300)
+- next_action: Do not edit/build first. Query PLAN, then perform the only legal unblocking action: retry plan_oracle(mode='review', component_id='C0.1.1.2.4', evidence_ids=['TO_type_system_rewrite-20260601T081233Z_m1427_t001','TO_type_system_rewrite-20260601T081233Z_m1427_t003','TO_type_system_rewrite-20260601T081233Z_m1427_t002','TO_type_system_rewrite-20260601T081233Z_m1427_t004'], planning_reason='review closed episode E0063'). If review again fails with OracleBudgetExceeded while query_plan still has no frontier, report operational planner/oracle-budget blocker; do not prove/redesign locally.
+- expected_goal_shape: query_plan shows no scheduled leaf frontier and no beginable component; only allowed action is strategist review of final stop-state audit episode E0063 for C0.1.1.2.4. E0063 evidence says tracked semantics/prop diff was clean before close, ExtCall Resume remains present, invalidated helper absent, and vyperTypeStmtSoundnessTheory builds. The post-E0063 DOSSIER regeneration is likely an uncommitted tracked memory-file diff because review/commit was blocked by OracleBudgetExceeded.
+- verify_with: After strategist review accepts E0063: holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=300), then git status/diff, stage only relevant tracked semantics/prop memory files with git add -u, and commit --no-gpg-sign. Do not stage untracked tmp/legacy files.
 
 ## If This Fails
-- If failure is only the temporary `FAIL_TAC`, remove/replace it and rebuild. If routine prefix splitting requires broad `gvs`/`AllCaseEqs()` over the whole ExtCall prefix, generated-prefix witness lists, or wrapper-adapter lemmas, checkpoint_progress with the failing goal evidence and close C0.1.1.2.3 as stuck/risk_mismatch if the linear proof is not straightforward.
+- If plan_oracle review again fails with OracleBudgetExceeded/schema error and query_plan still permits only that review, use end_session(outcome='blocked', blocked_kind='tooling_bug' or 'unknown') with E0063 audit evidence and the oracle failure evidence. If review succeeds and opens a frontier, begin exactly Oracle next; if it accepts the stop-state audit, inspect diff and make the unsigned checkpoint commit if only task-owned tracked progress files changed.
 
 ## Do Not Retry
-- Revive static/nonstatic wrapper-adapter lemmas around `extcall_generated_driver_ih_elim_expr`.: E0047 showed direct matching fails and explicit specialization requires brittle generated-prefix witness lists; the strategist invalidated this path.
-  - evidence: episode:E0047
-  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1238_t001
-  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1250_t001
-- Manually instantiate broad generated-prefix eliminators with dozens of `s_*`, `x_*`, and `st_*` witnesses.: This is the exact proof-interface failure the replacement PLAN is avoiding; if it reappears in C0.1.1.2.3/2.4, stop and escalate.
-  - evidence: episode:E0047
-  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1236_t001
-  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1246_t001
-- Use broad `simp`/`gvs` or global `AllCaseEqs()` over the whole ExtCall prefix from the top Resume context.: Prior attempts timed out or produced huge goals; maintainer and PLAN require linear operation-by-operation splitting with immediate error-case closure.
-  - evidence: episode:E0039
-  - evidence: episode:E0041
-  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1250_t001
-- Commit current tracked source as-is.: A temporary `FAIL_TAC "probe extcall resume initial"` is present in `Expr_Call_ExtCall_result`; remove/replace it and verify before any commit.
-  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1281_t002
-  - evidence: source:semantics/prop/vyperTypeStmtSoundnessScript.sml:17231
-- Stage untracked `semantics/prop/tmp_helper.txt` or `semantics/prop/LEARNINGS_type_system_rewrite.legacy.md`, or use `git add -A`.: They are unrelated/ad-hoc files noted across sessions; operator explicitly forbids broad staging.
-  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1281_t002
-  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1216_t001
+- Manual `qspecl_then`/ordered witness instantiation of `extcall_generated_driver_ih_elim_expr` over the ExtCall generated prefix.: E0055 showed this is exactly the brittle generated-prefix plumbing forbidden by maintainer clarification; it is a proof-interface smell, not a parsing or witness-order issue.
+  - evidence: episode:E0055
+  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1350_t001
+  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1351_t001
+- Use unchanged `drule_all extcall_generated_driver_ih_elim_expr` or direct `irule` and expect live matching to infer all prefix variables.: E0056 tested this exact low-risk probe and direct variant; both failed on a standalone theorem with intended live assumptions/conclusion.
+  - evidence: episode:E0056
+  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1366_t001
+  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1368_t001
+- Resurrect or depend on `extcall_expr_sound_from_generated_driver_ih` as if it exists in source.: The helper was part of the failed E0055 strategy and was removed; greps in E0058/E0063 confirm it is absent. Recreating it would violate the accepted stop-report plan.
+  - evidence: episode:E0058
+  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1382_t002
+  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1427_t002
+- Direct Resume linearization by unfolding `well_typed_expr`/`evaluate_def` or broad `simp`/`gvs`/`AllCaseEqs()` over the ExtCall prefix.: E0051 showed this splits/loses the whole postcondition or creates timeout/huge-goal prefix simplification, and maintainer clarification forbids recovering the driver premise this way.
+  - evidence: episode:E0051
+  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1292_t001
+  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1298_t001
+- Stage untracked `semantics/prop/tmp_helper.txt` or `semantics/prop/LEARNINGS_type_system_rewrite.legacy.md`, or use `git add -A`.: They are unrelated/ad-hoc untracked files; task requires careful staging only and commits must be unsigned. Final audit status still shows only these untracked files.
+  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1427_t001
+  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1382_t001
 
 ## Reflection
 ### Tunnel Vision Check
-- Outside-the-box approach now chosen by the strategist: abandon the wrapper/eliminator abstraction and prove the final ExtCall Resume linearly inside the concrete branch. Do not drift back to optimizing wrapper lemmas.
-- Fresh expert should first question the current dirty source: a probe `FAIL_TAC` was inserted at `Expr_Call_ExtCall_result` immediately before handoff and has not been built or removed.
-- The PLAN decomposition is still plausible after E0047: C0.1.1.2.3 handles prefix splitting only; C0.1.1.2.4 handles optional-driver IH only after a concrete success branch. Keep that separation.
-- Do not optimize the old `extcall_expr_sound_from_generated_ih` theorem or the broad `extcall_generated_driver_ih_elim_expr`; use them only as reference/optional infrastructure, not as the new proof target.
-- A fresh expert would inspect the exact generated IH assumptions in the Resume goal before writing tactics, then decide whether the linear proof can consume them without reconstructing internal prefix witnesses.
+- Outside-the-box approach still not considered: change the original suspend/proof boundary so the optional driver IH is captured in compact form before the ExtCall monadic prefix is generated, instead of trying to recover it afterward via generated-prefix eliminators.
+- We may still be optimizing the wrong theorem/helper: `extcall_generated_driver_ih_elim_expr` is proved infrastructure but not a usable consumer boundary for the live Resume; a future redesign should question the boundary theorem shape rather than tactic variants.
+- The current PLAN decomposition is intentionally a stop-state/audit subtree, not a proof-completion subtree. Do not reinterpret ready sibling components (C0.1.2 etc.) as permission to continue while C0.1.1.2 remains high-risk blocked and review-gated.
+- This session did not retry proof tactics; it executed mechanical carry-forward audits. A fresh expert should first ask whether the task contract now requires operator acceptance of an incomplete proof/cheat rather than further proof work.
+- Fresh expert question: why is a required-for-completion top-level proof branch allowed to stop with a cheat? The answer is the task instruction says stop if not straightforward; the next action is operator/strategist handling, not autonomous proof repair.
 
 ### What Went Wrong
-- The static wrapper component C0.1.1.2.2.1 failed because the broad eliminator still required a long `qspecl_then` list over generated monad state witnesses; direct `irule extcall_generated_driver_ih_elim_expr` did not match the branch-local conclusion. Evidence: episode:E0047 and tool outputs TO_type_system_rewrite-20260601T081233Z_m1236_t001, TO_type_system_rewrite-20260601T081233Z_m1238_t001, TO_type_system_rewrite-20260601T081233Z_m1246_t001.
-- The old wrapper abstraction hid the generated IH too late/too low-level: it avoided early simplifier blowups but still forced generated-prefix reconstruction at success tails.
-- During C0.1.1.2.3 setup I inserted a `FAIL_TAC` probe in the final Resume but did not build after it because handoff arrived; this leaves a tracked source diff that the next session must handle first.
+- The final stop-state audit E0063 completed, but its required strategist review failed twice with OracleBudgetExceeded, leaving query_plan with no frontier and a pending review gate.
+- Because review did not complete, the stable progress prompt to commit after E0063 could not legally be followed. Before E0063 close, git status/diff had no tracked semantics/prop diff; after close, DOSSIER was regenerated and likely remains uncommitted.
+- Earlier problem still governs: live matching of the generated-driver IH eliminator failed (E0056), and the stale helper-based proof path was removed. The source is build-clean only because the ExtCall result Resume remains a cheat.
+- Several small audit commits were made unsigned in this session after reviewed carry-forward leaves: skeleton audit, generated-driver infrastructure audit, wrapper-adapter cleanup audit, and stop-report audit. The final E0063 dossier update is not committed due pending review.
 
 ### Ignored Signals
-- The proof-hygiene checkpoint warning about long `qspecl_then` lists applied even inside the planned static wrapper: the wrapper was becoming exactly the brittle generated-prefix plumbing it was supposed to hide.
-- The task says to stop if the proof is not straightforward; E0047 was correctly closed, but only after trying both direct matching and explicit witness specialization.
-- Untracked `semantics/prop/tmp_helper.txt` and `semantics/prop/LEARNINGS_type_system_rewrite.legacy.md` still exist; do not stage them.
+- OracleBudgetExceeded had already occurred in the previous session; retrying the final E0063 review was necessary by the PLAN gate but predictably exposed the same operational limit.
+- The existence of remaining ready siblings in query_plan can be misleading; high-risk C0.1.1.2 still blocks direct proof progress until the pending review is resolved.
+- Grep for `FAIL_TAC` during stop-report audit matched other pre-existing scripts in semantics/prop; this should not be overinterpreted as dirty ExtCall proof state.
 
 ### Strategy Adjustments
-- Follow the accepted replan from TO_type_system_rewrite-20260601T081233Z_m1250_t001: no static/nonstatic wrapper adapters; perform a careful linear branch proof in `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result]`.
-- For C0.1.1.2.3, use targeted local simplification only: `bind_def`, `return_def`, `raise_def`, `check_def`, `lift_option_def`, `lift_option_type_def`, `get_accounts_def`, `get_transient_storage_def`, `update_accounts_def`, `update_transient_def`. Avoid broad `gvs` over the whole prefix.
-- Keep C0.1.1.2.3 focused on reaching the concrete success continuation. Do not solve the optional-driver IH tail in this component if that belongs to C0.1.1.2.4; checkpoint when the single success path is exposed.
-- Commit only reviewed stable progress with `git commit --no-gpg-sign`; current source has an uncommitted probe and must not be committed as-is.
+- Next session should keep actions minimal: query_plan, retry the exact E0063 review, then either commit the accepted final stop-state documentation or report the oracle-budget blocker.
+- Do not run broad proof searches or source edits while the only allowed action is a strategist review. The proof state is already audited; the blocker is planner/oracle review, not HOL.
+- If review succeeds, inspect git diff carefully before committing. Stage only tracked task-owned memory/progress files under semantics/prop; never use git add -A and never stage `semantics/prop/tmp_helper.txt` or `semantics/prop/LEARNINGS_type_system_rewrite.legacy.md`.
+- If a future oracle replaces the stop-state with proof work, require a demonstrated matchable boundary probe before any final ExtCall Resume proof attempt.
 
 ### Oracle Feedback
-- Held: E0047 evidence showed the branch-local wrapper plan was still too low-level; the strategist accepted and replaced it with the maintainer-approved linear proof path in TO_type_system_rewrite-20260601T081233Z_m1250_t001.
-- Held: cleanup/audit components C0.1.1.2.0, C0.1.1.2.1, and C0.1.1.2.2 were reviewed and accepted; the source was build-clean before the probe edit.
-- Missed/obsolete: previous guidance to prove static/nonstatic success-tail eliminators is now invalidated by E0047 and the replacement PLAN. Do not follow old STATE lines about C0.1.1.2.2.1.
-- Current binding PLAN: C0.1.1.2.3 linear monadic branch proof first, then C0.1.1.2.4 local optional-driver IH application in the concrete success continuation.
+- Held: The oracle's E0058 review replacement correctly removed the stale C0.1.1.2.3.2 proof leaf and converted the subtree to mechanical stop-state audits.
+- Held: Reviews for E0059, E0060, E0061, and E0062 accepted the mechanical carry-forward audits with no PLAN changes; the audited source/build facts matched the PLAN.
+- Missed/blocked reality: The final E0063 review could not complete due OracleBudgetExceeded, so the PLAN gate remains stuck even though the audit evidence is complete.
+- Current binding state: query_plan allows only plan_oracle review for C0.1.1.2.4/E0063; no build/edit/commit should occur until that review succeeds or the session reports a tooling/planner blocker.
 
 ## Evidence Pointers
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m1281_t003 - current PLAN/frontier: active C0.1.1.2.3, next work is linear ExtCall Resume proof
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m1281_t002 - git status shows tracked source dirty plus untracked tmp/legacy files
-- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:17231 - `Expr_Call_ExtCall_result` currently contains temporary `FAIL_TAC` probe
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m1250_t001 - strategist replaced wrapper-adapter path with linear branch proof plan
-- episode:E0047 - static wrapper closed stuck/risk_mismatch; broad eliminator/witness-list approach ruled out
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m1268_t001 - last clean holbuild before C0.1.1.2.3 probe edit
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m1275_t002 - source around mutual proof suspend site showing ExtCall Resume entry point
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m1276_t001 - source around `Expr_Call_ExtCall_result` and adjacent proof templates
+- episode:E0063 - final stop-state audit closed for C0.1.1.2.4; review pending due oracle budget
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1427_t001 - final audit git status: no tracked diff, only known untracked tmp/legacy files
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1427_t003 - final audit git diff --stat under semantics/prop had no tracked output
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1427_t002 - grep: ExtCall Resume present and invalidated helper absent
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1427_t004 - final audit holbuild of vyperTypeStmtSoundnessTheory succeeded
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1428_t001 - close_component recorded E0063 and regenerated DOSSIER
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1429_t001 - first required E0063 plan_oracle review failed OracleBudgetExceeded
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1431_t001 - second required E0063 plan_oracle review failed OracleBudgetExceeded
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1430_t001 - query_plan after E0063: no frontier, only allowed action is review E0063
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1433_t004 - handoff inspection confirms same pending-review gate
