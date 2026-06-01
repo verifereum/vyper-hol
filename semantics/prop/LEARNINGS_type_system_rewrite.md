@@ -483,12 +483,12 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260601T081233Z_m2632_t001
 - tool_output:TO_type_system_rewrite-20260601T081233Z_m2638_t001
 
-## L0084 scope='C0.2.1.3' tags=ExtCall,Resume,projection-lemma,split-goal,continuation
-shape: A proved multi-conjunct continuation theorem is semantically right, but a suspended Resume branch exposes only one conjunct such as `state_well_typed st'`.
-pattern: Add small local projection lemmas with identical assumptions and a single-conjunct conclusion; prove each by `drule_all <full-continuation-theorem> >> simp[]`. This avoids replaying the continuation proof and gives a theorem whose conclusion is intended to match split Resume goals.
-works_when: Use for already-proved full postcondition theorems like `extcall_success_continuation_sound_cond_driver_ih`; the projection lemma itself is infrastructure only. The Resume use site may still need explicit instantiation/tail-equality handling if plain `irule` does not match.
+## L0085 scope='C0.2.1.3' tags=ExtCall,Resume,projected-goal,boundary-helper,tail-equality
+shape: A suspended Resume exposes only a projected conjunct such as `state_well_typed st'`, and direct continuation theorem/projection use lacks the branch-local tail equality.
+pattern: Rebase to a local projected-goal boundary helper whose conclusion exactly matches the Resume conjunct and whose proof owns the linear evaluator prefix case splits. Inside that helper, the `run_ext_call = SOME (...)` result and the post-update tail equality become ordinary assumptions, making `run_ext_call_accounts_well_typed` and `extcall_success_continuation_state_well_typed` usable at the concrete success tail.
+works_when: Use when the Resume boundary has already split the theorem postcondition before the final monadic prefix proof. Place the helper after any local argument-shape lemmas it depends on; keep the generated optional-driver IH as a compact premise, not a full generated-prefix implication.
 evidence:
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m2704_t001
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m2705_t001
-- episode:E0125
-- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:9790
+- episode:E0129
+- episode:E0131
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m2748_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m2785_t001
