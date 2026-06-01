@@ -2,72 +2,65 @@
 Updated: 2026-06-01
 
 ## Cursor
-- component: C0.1
-- status: in_progress
-- active_file: semantics/prop/TYPE_SYSTEM_REWRITE_PLAN.md
-- next_action: Finish the documentation-only superseding update for C0.1, then close C0.1 as proved and ask strategist review. After review, begin C0.2 and add/prove the local `eval_extcall_args_error` boundary probe before attempting the ExtCall Resume proof.
-- expected_goal_shape: No HOL proof goal during C0.1. For C0.2, expect a small standalone theorem: from `eval_exprs cx es st = (INR y,args_st)`, one-step evaluation of `Call ret_type (ExtCall is_static (func_name,arg_types,ret_type)) es drv` returns `(INR y,args_st)` without any generated optional-driver prefix.
-- verify_with: C0.1 is documentation-only. For C0.2 and later proof edits, use holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=300). The last clean audit build of the restored intentional-cheat baseline was tool_output:TO_type_system_rewrite-20260601T081233Z_m1671_t003.
+- component: C0.3.4
+- status: blocked
+- active_file: semantics/prop/vyperTypeStmtSoundnessScript.sml
+- next_action: Retry the mandatory strategist review for closed proved episode E0089: plan_oracle(mode='review', component_id='C0.3.4', evidence_ids=['TO_type_system_rewrite-20260601T081233Z_m1907_t001','TO_type_system_rewrite-20260601T081233Z_m1908_t001'], planning_reason='review closed episode E0089'). Do not edit/build/begin C0.3.3 until this review gate is accepted.
+- expected_goal_shape: No HOL goal should be entered while blocked. C0.3.4 source already contains the new local helpers `eval_extcall_args_error_any_call_ty` and five `*_any_call_ty_*` projections; `vyperTypeStmtSoundnessTheory` built successfully. Current blocker is only the pending strategist review, with two OracleBudgetExceeded failures.
+- verify_with: After C0.3.4 review is accepted, optionally re-run holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=300) before committing; then commit task-local stable changes with git commit --no-gpg-sign.
 
 ## If This Fails
-- If the C0.2 boundary probe exposes the generated optional-driver prefix, times out, or requires broad prefix cleanup/long adapter lemmas, checkpoint/close the active component as risk_mismatch and escalate to plan_oracle rather than trying tactic variants.
+- If plan_oracle review again returns OracleBudgetExceeded and query_plan still says review is the only allowed action, do not begin C0.3.3 or build. Either retry review if allowed by the harness or use end_session(outcome='blocked' or handoff as directed) with evidence TO_type_system_rewrite-20260601T081233Z_m1910_t001/TO_type_system_rewrite-20260601T081233Z_m1912_t001/TO_type_system_rewrite-20260601T081233Z_m1911_t001.
 
 ## Do Not Retry
-- Retry the sanitized C0.1 shell (`well_typed_expr` one-step rewrite, `eval_exprs` split, explicit IH discharge, then narrow simplification of `args_res = INR y`).: E0072/m1655 showed this still leaves the generated optional-driver prefix live and times out on the argument-error branch; it is the same proof-boundary failure, not a tactic gap.
-  - evidence: episode:E0072
-  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1655_t001
-- Use broad `simp`, `gvs`, `AllCaseEqs()`, or whole-prefix cleanup on the post-`eval_exprs` ExtCall goal.: Forbidden by the maintainer clarification and repeatedly observed to produce >4KiB generated-prefix goals/timeouts before concrete success branches are isolated.
-  - evidence: episode:E0067
-  - evidence: episode:E0070
-  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1508_t001
-- Direct `irule extcall_expr_sound_from_generated_ih` against the raw Resume goal or tiny `well_typed_expr_def` cleanup before it.: E0066 showed no match and even one-step cleanup timed out under the generated prefix.
-  - evidence: episode:E0066
-  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1489_t001
-  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1491_t001
-- Resurrect old static/nonstatic ExtCall branch leaves C0.2/C0.3 as proof work without first proving a new boundary probe.: The stop/report replacement invalidated those leaves; they depended on C0.1 isolating the argument-success branch, which E0072 refuted.
-  - evidence: episode:E0072
-  - evidence: episode:E0073
-  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1664_t001
-- Commit signed or stage untracked scratch/legacy files.: Task explicitly forbids GPG signing; untracked files are known scratch/legacy and were intentionally left uncommitted.
-  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1678_t001
-  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1679_t002
+- Begin or edit C0.3.3 before C0.3.4 review acceptance.: query_plan reports Beginable now: none and allowed next action is only the C0.3.4 strategist review; proceeding would violate the structured gate even though C0.3.3 is Oracle next after review.
+  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1911_t001
+  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1914_t004
+- Retry C0.3.3 using old narrow C0.3.2 helpers (`eval_extcall_args_error_*`) over `Call ret_type (ExtCall ... ret_type)`.: E0084 showed the live Resume call has independent outer annotation `Call v15 ...`; old helpers fail to match. Use new `*_any_call_ty*` helpers after review instead.
+  - evidence: episode:E0084
+  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1867_t001
+  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1907_t001
+- Force the helper mismatch in raw Resume with broad `simp`/`gvs`/`AllCaseEqs()` or generated-prefix adapter theorems.: Maintainer clarification and prior episodes forbid broad generated-prefix cleanup; previous attempts timed out under the >4KiB optional-driver prefix. The accepted repair is outside-Resume boundary/projection helpers.
+  - evidence: episode:E0081
+  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1811_t001
+  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1818_t001
+- Use `reverse conj_tac` at the start of `Expr_Call_ExtCall_result` Resume.: Prior build evidence showed the first subgoal is the expression-result postcondition; reversing puts the place-expression tactic on the wrong goal.
+  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1863_t001
+  - evidence: episode:E0084
 
 ## Reflection
 ### Tunnel Vision Check
-- Outside-the-box approach still not implemented: redesign the mutual theorem/suspend boundary so the optional-driver IH is consumed before the full ExtCall monadic prefix is reified, or prove a tiny continuation/boundary theorem whose live matchability is validated first.
-- The previous work optimized the current `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result]` boundary; repeated evidence says that boundary itself is the problem, even for argument-error branches where the driver is irrelevant.
-- The current PLAN decomposition is a stop/report subtree, not a proof-completion abstraction. That is correct for the task's stop-if-not-straightforward rule, but it cannot prove ExtCall.
-- Do not retry tactics when the proof need is a new boundary/suspend/induction interface. A fresh expert should first ask where the optional-driver recursive-call IH is introduced and whether proof can be suspended/factored before the generated prefix enters irrelevant branches.
+- Outside-the-box option not yet needed: instead of only projections, a generalized full-postcondition helper over `Call call_ty (ExtCall ... ret_type)` could be added and projections derived from it; current C0.3.4 projections already build, so consider this only if C0.3.3 still needs a broader boundary.
+- Do not optimize the ExtCall success branch yet. The next proof component after review is C0.3.3: argument-error/place shell using the new generalized projections, not C0.4/C0.5 success-prefix work.
+- The PLAN decomposition still looks right: small outside-Resume boundary lemmas first, then a Resume consumer, then linear success-path branches. The only current problem is an oracle review budget gate, not theorem design.
+- If C0.3.3 does not accept the `*_any_call_ty_*` projections by direct `irule`, question the helper statement/goal shape first rather than trying broad simplification in the generated Resume context.
+- A fresh expert should first verify the mandatory review gate is accepted, then inspect the diff and commit C0.3.4 before touching the Resume.
 
 ### What Went Wrong
-- E0072 refuted the sanitized-boundary probe: after one-step typing/evaluator unfolding, splitting `eval_exprs`, and explicitly discharging the expression-list IH, the `args_res = INR y` branch still carried the full generated optional-driver prefix and timed out at narrow `simp[no_type_error_result_def]`.
-- E0073/E0074/E0075 correctly converted the proof-completion attempt into a task-local stop/report state, audited that the source returned to the intentional cheat baseline, and committed the report unsigned as `e020b7978`.
-- The pending C0.3 strategist review was finally accepted with no PLAN changes; query_plan then showed no executable frontier. A requested holbuild check was blocked by the PLAN gate because there is no active component/frontier, not because of a HOL source failure.
+- The earlier scheduler/frontier inconsistency was repaired by replacing/carrying forward the PLAN, and C0.3.4 became beginable. That resolved the prior STATE blocker.
+- C0.3.4 proof itself was straightforward and build-clean, but the required strategist review after closing E0089 failed twice with OracleBudgetExceeded, leaving query_plan in a pending-review state with no beginable component.
+- A holbuild attempt after C0.3.2 was rejected because no component was active; this was harmless but reinforced that build/commit discipline must respect the active/review gate.
 
 ### Ignored Signals
-- Earlier E0067/E0070 already showed branch-by-branch and focused-Resume attempts left the generated prefix live; the later sanitized C0.1 plan underweighted that the prefix also pollutes irrelevant error branches.
-- The first timeout on a supposedly small argument-error simplification was a stop signal, not a cue to try local simplifier variants.
-- Build success in this state only means build-clean-with-intentional-cheat; it must not be reported as proof completion.
+- After C0.3.4 was proved, query_plan explicitly said the only allowed next action was the C0.3.4 review. Do not treat C0.3.3 being listed as Oracle next as permission; Beginable now is none until review acceptance.
+- The old STATE still mentioned the pre-C0.3.4 scheduler block. It is now stale: C0.3.4 has been edited and built successfully; the live blocker is strategist review budget, not scheduler ordering.
 
 ### Strategy Adjustments
-- Next session should not call another handoff or do proof work by default. It should treat the current task as externally blocked unless new maintainer/operator instructions supply a replacement proof architecture.
-- If proof work is reauthorized, demand a first live probe that closes an early `eval_exprs` argument-error branch without the generated optional-driver prefix in the simplification goal before investing in static/nonstatic success branches.
-- Keep untracked `semantics/prop/LEARNINGS_type_system_rewrite.legacy.md` and `semantics/prop/tmp_helper.txt` unstaged unless explicitly instructed.
-- Continue using unsigned commits only (`git commit --no-gpg-sign`) and stage only task-owned tracked files under `semantics/prop`.
+- Next session should begin with git status and query_plan, then immediately retry the required plan_oracle review for E0089 using evidence IDs, without editing/building first.
+- If review is accepted, inspect git diff under semantics/prop and commit the stable C0.3.4 checkpoint unsigned. Include tracked PLAN/DOSSIER/STATE/LEARNINGS changes if they are task-owned; leave `semantics/prop/LEARNINGS_type_system_rewrite.legacy.md` and `semantics/prop/tmp_helper.txt` untracked unless explicitly instructed.
+- Only after accepted review/commit should C0.3.3 begin. Use `conj_tac`, not `reverse conj_tac`; use generalized `*_any_call_ty_*` helpers in the `INR` branch; keep broad raw Resume simplification forbidden.
 
 ### Oracle Feedback
-- Held: strategist accepted E0072 as a proof-boundary failure and replaced proof-completion work with a stop/report subtree; C0.1/C0.2/C0.3 are now reviewed/done.
-- Held: the stop/report plan correctly invalidated old static/nonstatic proof leaves because their prerequisite boundary was refuted.
-- Missed earlier: the replacement sanitized-boundary plan assumed the generated prefix could be kept out of the argument-error branch; E0072/m1655 showed it remains live.
-- Current state is not a HOL proof problem to continue locally; it is an external-precondition blocker requiring a new authorized proof-boundary architecture.
+- Held: E0084 diagnosis was correct. Generalizing the outer `Call` annotation to `call_ty` fixed the helper-interface problem outside the Resume context, and the target built.
+- Held: The old narrow C0.3.2 helpers remain valid but not directly consumable in the live `Call v15 ...` Resume goal.
+- Missed/blocked operationally: mandatory review could not complete because plan_oracle returned OracleBudgetExceeded twice after E0089, even though proof/build evidence is clean.
+- Held: Maintainer constraints were respected: no evaluator/semantics edits, no files outside semantics/prop, no raw generated-prefix simplification, and no optional-driver IH specialization.
 
 ## Evidence Pointers
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m1689_t001 - strategist accepted C0.3/E0075 review with no PLAN changes and instructed stopped/blocked reporting rather than ExtCall proof search
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m1691_t001 - query_plan after review shows no active component, no frontier, no Oracle next, and all C0 leaves done
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m1690_t003 - holbuild request blocked by PLAN gate because no executable frontier remains
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m1655_t001 - E0072 failure evidence: narrow argument-error simplification still timed out under generated optional-driver prefix
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m1671_t003 - last clean targeted build of restored intentional-cheat baseline
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m1678_t001 - unsigned commit `e020b7978 Report ExtCall boundary failure after E0072`
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m1679_t002 - post-commit status had only known untracked scratch/legacy files
-- episode:E0075 - committed stop/report checkpoint for C0.3
-- episode:E0072 - sanitized ExtCall proof-boundary probe stuck with risk_mismatch
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1907_t001 - edit inserted `eval_extcall_args_error_any_call_ty` and five generalized projections in vyperTypeStmtSoundnessScript.sml
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1908_t001 - holbuild of vyperTypeStmtSoundnessTheory succeeded after C0.3.4 helper additions
+- episode:E0089 - C0.3.4 closed proved with source kept; dossier records helper family and build success
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1910_t001 - first mandatory C0.3.4 review attempt failed with OracleBudgetExceeded
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1912_t001 - second mandatory C0.3.4 review attempt failed with OracleBudgetExceeded
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1911_t001 - query_plan shows C0.3.4 done but no component beginable pending strategist review
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1914_t004 - handoff query_plan confirms same pending-review gate

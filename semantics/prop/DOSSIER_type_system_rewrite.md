@@ -7,7 +7,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | Component | Status | Diagnosis | Latest Episode | Next |
 |---|---|---|---|---|
 | C0 | proved |  | E0021 |  |
-| C0.1 | proved |  | E0076 | Call plan_oracle(mode='review') for C0.1, then if accepted begin C0.2 and prove the local argument-error boundary probe. |
+| C0.1 | proved |  | E0085 |  |
 | C0.1.1 | stuck | risk_mismatch | E0033 | Ask strategist to provide a more concrete, low-risk prefix script or a different decomposition; source is currently buildable with the checkpoint placeholder. |
 | C0.1.1.1 | proved |  | E0036 |  |
 | C0.1.1.2 | stuck | risk_mismatch | E0038 | Call plan_oracle(mode='review') for this stuck episode and request a redesign of the ExtCall helper boundary/proof plan under the maintainer constraints. |
@@ -22,12 +22,14 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C0.1.1.2.4 | proved |  | E0063 |  |
 | C0.1.1.2.5 | proved |  | E0064 | Review/handle generated PLAN diff, then report blocked/operator handoff rather than proof completion; do not reopen ExtCall proof. |
 | C0.1.2 | stuck | risk_mismatch | E0065 | Ask the strategist to repair/reconcile the PLAN with source reality, or accept the operator-facing blocked stop-state rather than continuing C0.1.2. |
-| C0.2 | proved |  | E0077 | Call plan_oracle(mode='review') for C0.2; if accepted, commit the small proof-boundary checkpoint and proceed to C0.3. |
+| C0.2 | proved |  | E0086 |  |
 | C0.2.1 | proved |  | E0069 | Call plan_oracle(mode='review') and then proceed to the focused Resume proof shell component if accepted. |
 | C0.2.2 | stuck | risk_mismatch | E0070 | Call plan_oracle(mode='review', component_id='C0.2.2') with this evidence and ask for a redesigned/de-risked boundary rather than more local simplifier variants. |
 | C0.3 | stuck | risk_mismatch | E0079 | Call plan_oracle(mode='review') for C0.3. Ask for a de-risked replacement that avoids raw Resume simplification, likely a postcondition-shaped local helper whose conclusion matches the argument-error branch or a smaller Resume split that removes the generated optional-driver premise without `simp`/`gvs`. |
-| C0.3.1 | proved |  | E0082 | Call plan_oracle(mode='review') for this carried-forward C0.3.1 closure; then begin C0.3.2 to add conjunct-specific projection helpers. |
-| C0.3.2 | proved |  | E0083 | Call plan_oracle(mode='review') for C0.3.2. If accepted, inspect status/diff and commit the helper checkpoint unsigned before beginning C0.3.3. |
+| C0.3.1 | proved |  | E0087 |  |
+| C0.3.2 | proved |  | E0088 |  |
+| C0.3.3 | stuck | risk_mismatch | E0084 | Call plan_oracle(mode='review') for C0.3.3. Request a de-risked repair, likely generalized projection helpers over the outer Call annotation, before any further Resume edits. |
+| C0.3.4 | proved |  | E0089 |  |
 | C1.1 | proved |  | E0024 | Call plan_oracle(mode='review') for C1.1, then begin C1.2 if accepted. |
 | C1.1.1 | proved |  | E0012 |  |
 | C1.1.2 | proved |  | E0013 |  |
@@ -69,10 +71,9 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0076`
+- latest episode: `E0085`
 - blocker: 
-- actual effort: 1 sessions, 6 steps, 8 tools, 461,959 tok (459,256 in, 2,703 out, 435,456 cached), 60.5s, $0.417818
-- next: Call plan_oracle(mode='review') for C0.1, then if accepted begin C0.2 and prove the local argument-error boundary probe.
+- actual effort: 1 sessions, 1 steps, 62,005 tok (61,795 in, 210 out, 54,656 cached), 5.4s, $0.069323
 
 ### Attempts / Evidence
 
@@ -102,15 +103,12 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 - `E0076` (proved, , actual effort: 1 sessions, 6 steps, 8 tools, 461,959 tok (459,256 in, 2,703 out, 435,456 cached), 60.5s, $0.417818)
   - Updated task-local TYPE_SYSTEM_REWRITE_PLAN.md ExtCall blockage section with a 2026-06-01 superseding note after strategist replacement C0 plan. -> The plan now treats the old stop/report state as historical evidence, identifies `eval_extcall_args_error` as the first executable proof-boundary probe, preserves E0072 no-retry guidance, and keeps the restriction against edits outside `semantics/prop`/semantics-definition changes. (`TO_type_system_rewrite-20260601T081233Z_m1703_t001`, `TO_type_system_rewrite-20260601T081233Z_m1705_t002`)
   - Updated STATE cursor for the new executable C0.1/C0.2 flow. -> STATE no longer says no proof/build/edit action is legal under the old stop report; it points to closing C0.1, then beginning C0.2 and proving the local argument-error boundary probe. Diff/grep confirmed the expected markers. (`TO_type_system_rewrite-20260601T081233Z_m1704_t001`, `TO_type_system_rewrite-20260601T081233Z_m1705_t001`, `TO_type_system_rewrite-20260601T081233Z_m1705_t002`)
+- `E0085` (proved, , actual effort: 1 sessions, 1 steps, 62,005 tok (61,795 in, 210 out, 54,656 cached), 5.4s, $0.069323)
+  - Carry-forward documentation/source-cleanup component after scheduler repair; no new source edit needed. -> Scoped dossier shows prior proved C0.1 documentation cleanup (E0076) and active PLAN states no further work required. Component closed to restore carried-forward progress under replaced PLAN. (`TO_type_system_rewrite-20260601T081233Z_m1889_t001`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260601T081233Z_m1699_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m1700_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m1703_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m1704_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m1705_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m1705_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1889_t001` (use `read_tool_output` for exact output)
 
 ## C0.1.1
 
@@ -531,10 +529,9 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0077`
+- latest episode: `E0086`
 - blocker: 
-- actual effort: 1 sessions, 10 steps, 14 tools, 3 holbuild, 1,126,221 tok (1,123,736 in, 2,485 out, 1,098,496 cached), 214.6s, $0.749998
-- next: Call plan_oracle(mode='review') for C0.2; if accepted, commit the small proof-boundary checkpoint and proceed to C0.3.
+- actual effort: 1 sessions, 1 steps, 77,681 tok (77,485 in, 196 out, 73,088 cached), 6.0s, $0.064409
 
 ### Attempts / Evidence
 
@@ -551,17 +548,12 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Added local theorem `eval_extcall_args_error` before the existing ExtCall helper block in `vyperTypeStmtSoundnessScript.sml`. -> The theorem states exactly the boundary probe: if `eval_exprs cx es st = (INR y,args_st)`, then evaluating the ExtCall expression returns `(INR y,args_st)`. It is standalone and does not mention any generated optional-driver IH. (`TO_type_system_rewrite-20260601T081233Z_m1714_t001`, `TO_type_system_rewrite-20260601T081233Z_m1721_t001`, `TO_type_system_rewrite-20260601T081233Z_m1721_t003`)
   - First attempted the lemma with free variable name `is_static` and one-step evaluator/monad simplification. -> HOL parsed `is_static` as an existing function rather than a bool variable, causing a type error; fixed by explicitly quantifying `stat` instead. This was a statement parsing issue, not a proof-boundary/generated-prefix issue. (`TO_type_system_rewrite-20260601T081233Z_m1715_t001`, `TO_type_system_rewrite-20260601T081233Z_m1717_t001`)
   - Proved `eval_extcall_args_error` by one-step `evaluate_def`, monad definitions, and final `gvs[]`, then built `vyperTypeStmtSoundnessTheory`. -> Target build succeeded. The probe is small and outside the generated Resume context; no generated optional-driver prefix was exposed. (`TO_type_system_rewrite-20260601T081233Z_m1718_t001`, `TO_type_system_rewrite-20260601T081233Z_m1719_t001`, `TO_type_system_rewrite-20260601T081233Z_m1720_t001`)
+- `E0086` (proved, , actual effort: 1 sessions, 1 steps, 77,681 tok (77,485 in, 196 out, 73,088 cached), 6.0s, $0.064409)
+  - Carry-forward proof-boundary component under repaired PLAN; no new source edit needed. -> Scoped dossier shows E0077 proved `eval_extcall_args_error` with holbuild success, and current PLAN states no further work unless theorem is missing. Component closed to restore carried-forward progress. (`TO_type_system_rewrite-20260601T081233Z_m1893_t001`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260601T081233Z_m1714_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m1715_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m1717_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m1718_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m1719_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m1720_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m1721_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m1721_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1893_t001` (use `read_tool_output` for exact output)
 
 ## C0.2.1
 
@@ -665,10 +657,9 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0082`
+- latest episode: `E0087`
 - blocker: 
-- actual effort: 1 sessions, 1 steps, 151,700 tok (151,394 in, 306 out, 147,328 cached), 8.5s, $0.103174
-- next: Call plan_oracle(mode='review') for this carried-forward C0.3.1 closure; then begin C0.3.2 to add conjunct-specific projection helpers.
+- actual effort: 1 sessions, 1 steps, 84,761 tok (84,543 in, 218 out, 80,768 cached), 10.8s, $0.065799
 
 ### Attempts / Evidence
 
@@ -676,10 +667,12 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Added local theorem `eval_extcall_args_error_sound` immediately after `eval_extcall_args_error`; proof derives the computation equality via C0.2, substitutes the call result/state, then closes remaining `INR` no-TypeError case by case analysis on `y` and `no_type_error_result_def`. -> `vyperTypeStmtSoundnessTheory` builds successfully with the new helper; no evaluator definitions changed and ExtCall_result Resume remains at its cheat baseline for the next component. (`TO_type_system_rewrite-20260601T081233Z_m1795_t001`)
 - `E0082` (proved, , actual effort: 1 sessions, 1 steps, 151,700 tok (151,394 in, 306 out, 147,328 cached), 8.5s, $0.103174)
   - Carry forward existing committed local theorem `eval_extcall_args_error_sound` as proof infrastructure under the refined C0.3 plan. -> No source edits were needed: the theorem is present in `vyperTypeStmtSoundnessScript.sml`, was already build-verified, reviewed, and committed in `0c29945fa`. It should not be applied directly in the raw Resume context; it remains infrastructure for projection helpers. (`TO_type_system_rewrite-20260601T081233Z_m1795_t001`)
+- `E0087` (proved, , actual effort: 1 sessions, 1 steps, 84,761 tok (84,543 in, 218 out, 80,768 cached), 10.8s, $0.065799)
+  - Carry-forward full postcondition boundary component under repaired PLAN; no new source edit needed. -> Scoped dossier shows E0080/E0082 proved and carried forward `eval_extcall_args_error_sound` with holbuild success; current PLAN states no work required. Component closed to restore carried-forward progress. (`TO_type_system_rewrite-20260601T081233Z_m1897_t001`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260601T081233Z_m1795_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1897_t001` (use `read_tool_output` for exact output)
 
 ## C0.3.2
 
@@ -687,10 +680,9 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0083`
+- latest episode: `E0088`
 - blocker: 
-- actual effort: 1 sessions, 1 msgs, 16 steps, 16 tools, 7 holbuild, 1,057,409 tok (1,052,860 in, 4,549 out, 1,002,496 cached), 320.1s, $0.889538
-- next: Call plan_oracle(mode='review') for C0.3.2. If accepted, inspect status/diff and commit the helper checkpoint unsigned before beginning C0.3.3.
+- actual effort: 1 sessions, 1 steps, 89,413 tok (89,197 in, 216 out, 84,864 cached), 6.1s, $0.070577
 
 ### Attempts / Evidence
 
@@ -700,10 +692,58 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Reverted the C0.3.2 partial Resume proof back to the intentional `cheat` baseline, preserving the committed C0.3.1 helper, and rebuilt. -> `vyperTypeStmtSoundnessTheory` builds again, so the source is stable but C0.3.2 remains unresolved. (`TO_type_system_rewrite-20260601T081233Z_m1822_t001`)
 - `E0083` (proved, , actual effort: 1 sessions, 1 msgs, 16 steps, 16 tools, 7 holbuild, 1,057,409 tok (1,052,860 in, 4,549 out, 1,002,496 cached), 320.1s, $0.889538)
   - Added five local conjunct-specific ExtCall argument-error projection helpers immediately after eval_extcall_args_error_sound; proofs derive the whole-call equality via eval_extcall_args_error and use the caller equation to identify res/st'. -> After adjusting the no_type_error projection to case-split the error value (matching the existing full helper's proof style), vyperTypeStmtSoundnessTheory built cleanly. The Resume proof was not touched, as required for C0.3.2. (`TO_type_system_rewrite-20260601T081233Z_m1837_t001`, `TO_type_system_rewrite-20260601T081233Z_m1848_t001`)
+- `E0088` (proved, , actual effort: 1 sessions, 1 steps, 89,413 tok (89,197 in, 216 out, 84,864 cached), 6.1s, $0.070577)
+  - Carry-forward narrow projection helper component under repaired PLAN; no new source edit needed. -> Scoped dossier shows E0083 proved five narrow conjunct-specific ExtCall argument-error projection helpers with holbuild success; current PLAN says these remain valid infrastructure but too narrow for live Call-v15 consumer. Component closed to restore carried-forward progress. (`TO_type_system_rewrite-20260601T081233Z_m1900_t001`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260601T081233Z_m1848_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1900_t001` (use `read_tool_output` for exact output)
+
+## C0.3.3
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` Likely repair is to generalize `eval_extcall_args_error`/projection helpers over the outer Call annotation (e.g. `call_ty`) or prove additional any-outer-annotation projection helpers outside the Resume context before retrying the shell. This should be strategist-owned because it changes the just-reviewed helper interface.
+- latest episode: `E0084`
+- blocker: C0.3.3's planned consumer use of C0.3.2 projection helpers is blocked because the helpers are too narrow for the live Resume goal: they require `Call ret_type (ExtCall ... ret_type)` but the suspended goal contains `Call v15 (ExtCall ... ret_type)`. The proof is no longer straightforward under the current helper interface.
+- actual effort: 1 sessions, 1 msgs, 15 steps, 16 tools, 4 holbuild, 1,547,421 tok (1,541,432 in, 5,989 out, 1,483,392 cached), 384.0s, $1.211566
+- next: Call plan_oracle(mode='review') for C0.3.3. Request a de-risked repair, likely generalized projection helpers over the outer Call annotation, before any further Resume edits.
+
+### Attempts / Evidence
+
+- `E0084` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 15 steps, 16 tools, 4 holbuild, 1,547,421 tok (1,541,432 in, 5,989 out, 1,483,392 cached), 384.0s, $1.211566)
+  - Replaced ExtCall_result cheat with the planned shell: split result/place conjuncts, rewrote well_typed_expr/evaluator one step, split eval_exprs, applied expression-list IH with drule_all, left INL success as cheat, and tried to close INR branch via conjunct-specific projection helpers. -> The shell reached the INR branch but `irule eval_extcall_args_error_state_well_typed` did not match the live `state_well_typed st'` goal because the live call is `Call v15 (ExtCall ... ret_type)` while the C0.3.2 projection helpers require the outer Call annotation to be the same `ret_type`. This is a helper-interface/statement mismatch, not a tactic gap. Per task stop-on-unexpected-design-issue guidance, the partial Resume proof was reverted to the intentional cheat baseline and the target rebuilt cleanly. (`TO_type_system_rewrite-20260601T081233Z_m1867_t001`, `TO_type_system_rewrite-20260601T081233Z_m1870_t001`)
+  - Also checked the place-expression half orientation by trying `reverse conj_tac` first, then corrected to `conj_tac` after holbuild showed the first subgoal was the expression-result postcondition, not the place half. -> This was a routine orientation correction; the remaining blocker is the projection-helper statement mismatch with the live outer Call type annotation. (`TO_type_system_rewrite-20260601T081233Z_m1863_t001`)
+
+### Ruled Out
+
+- Do not try to force the narrow helper with simplification/equality bridging in the raw Resume context; the live mismatch is at the helper statement and broad bridging is forbidden by E0081.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260601T081233Z_m1867_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1870_t001` (use `read_tool_output` for exact output)
+
+## C0.3.4
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0089`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 4 steps, 4 tools, 1 holbuild, 407,616 tok (405,773 in, 1,843 out, 363,008 cached), 144.5s, $0.450619
+
+### Attempts / Evidence
+
+- `E0089` (proved, , actual effort: 1 sessions, 1 msgs, 4 steps, 4 tools, 1 holbuild, 407,616 tok (405,773 in, 1,843 out, 363,008 cached), 144.5s, $0.450619)
+  - Added generalized ExtCall argument-error computation and five projection helpers over arbitrary outer `call_ty` near existing `eval_extcall_args_error*` lemmas. -> `vyperTypeStmtSoundnessTheory` built successfully. Helpers quantify `call_ty` independently from inner `ret_type`, preserving the C0.3.2 narrow helpers and repairing the E0084 live `Call v15 ...` mismatch for downstream C0.3.3. (`TO_type_system_rewrite-20260601T081233Z_m1907_t001`, `TO_type_system_rewrite-20260601T081233Z_m1908_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260601T081233Z_m1907_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1908_t001` (use `read_tool_output` for exact output)
 
 ## C1.1
 

@@ -340,3 +340,32 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260601T081233Z_m1805_t001
 - tool_output:TO_type_system_rewrite-20260601T081233Z_m1818_t001
 - tool_output:TO_type_system_rewrite-20260601T081233Z_m1824_t001
+
+## L0059 scope='C0.3' tags=ExtCall,Resume,projection-lemma,Call-annotation,helper-interface,risk-mismatch
+shape: A projection/helper for an evaluator branch mentions a `Call` node whose outer annotation was assumed equal to an inner return type, but the mutual Resume goal exposes the outer annotation as an independent variable.
+pattern: Before proving consumer-shaped helpers for suspended mutual goals, inspect the live Resume goal for all constructor fields that must match, not only the semantically relevant payload fields. For ExtCall argument-error, generalize helpers over the outer `Call` annotation (`call_ty`) when evaluation ignores it in the early error branch; otherwise `irule` will fail even though the mathematical branch is correct.
+works_when: Applies to evaluator boundary/projection helpers consumed by `irule` in raw Resume contexts, especially constructors like `Call loc/payload/es/extra` where some fields are syntactic annotations not used by the early evaluator branch.
+evidence:
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1867_t001
+- episode:E0084
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:9858
+
+## L0060 scope='C0' tags=PLAN-frontier,scheduler,dependency,ExtCall,blocked
+shape: Structured PLAN text introduces a prerequisite repair component, but query_plan schedules a downstream component as Oracle next and rejects the prerequisite begin_component call.
+pattern: Treat this as a scheduler/frontier blocker, not permission to work downstream. Under a stop-on-plan-issue task, do not begin the downstream component merely because it is beginable; preserve evidence that the dependency text and frontier disagree, and resume only after scheduler/frontier repair or explicit operator authorization.
+works_when: Applies when the returned PLAN and query_plan component text show a dependency/order requirement (e.g. helper repair before consumer/success branch), but Beginable now/Oracle next points to a downstream leaf and plan_oracle repair is disallowed by the gate.
+evidence:
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1879_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1880_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1880_t002
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1881_t001
+
+## L0061 scope='C0.3.4' tags=ExtCall,boundary-lemma,Call-annotation,projection-helper,Resume
+shape: An evaluator early-error branch ignores a constructor annotation field, while downstream raw Resume goals require syntactic matching on that field.
+pattern: Prove a computation lemma quantified over the ignored annotation field (e.g. `call_ty`) and derive conjunct-specific projections outside the Resume. The proof can copy the narrow computation lemma: one `Once evaluate_def` unfold plus monad primitives; projection helpers then `drule` the generalized computation lemma and `gvs[]` after instantiating all constructor fields. This avoids raw generated-prefix simplification and lets later `irule` instantiate the live annotation variable directly.
+works_when: The branch returns before operations that inspect the annotation, and the downstream goal only needs state/result projections after a whole-call evaluator equation. For ExtCall argument errors, `eval_exprs ... = (INR y,args_st)` returns immediately, so `call_ty` is irrelevant to evaluation but relevant for syntactic helper matching.
+evidence:
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1907_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1908_t001
+- episode:E0089
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:9930
