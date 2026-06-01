@@ -219,3 +219,23 @@ evidence:
 - episode:E0029
 - tool_output:TO_type_system_rewrite-20260531T201607Z_m0862_t001
 - tool_output:TO_type_system_rewrite-20260531T201607Z_m0886_t001
+
+## L0034 scope='C0.1.1.2' tags=ExtCall,Resume,generated-IH,simp-timeout,impl_tac
+shape: A generated IH has been specialized and the goal is `(premises ==> post) ==> rest` inside a huge Resume context; plain `simp[]` times out.
+pattern: Avoid simplifying the whole implication in context. Use `(impl_tac >- simp[]) >> strip_tac` to discharge the small premise locally and add the postcondition, while keeping the large generated prefix out of the simplifier. For call typing in the same large context, use `simp[NoAsms, Once well_typed_expr_def]` rather than assumption-enabled simp.
+works_when: Applies when the premise is exactly the standard local hypotheses already present (well_typed_exprs/env/state/context/accounts/functions/evaluation equation) and broad simp is timing out because of unrelated generated-prefix assumptions.
+evidence:
+- episode:E0035
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m0995_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m0998_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1001_t001
+
+## L0035 scope='C0.1.1' tags=ExtCall,boundary-lemma,Resume,direct-helper
+shape: ExtCall mutual Resume has a local boundary theorem `extcall_expr_sound_from_generated_ih` whose conclusion matches expression soundness, plus `type_place_expr_Call_ExtCall_NONE` for the place conjunct.
+pattern: Prefer a short wrapper proof around the existing boundary theorem over inlining the ExtCall monadic prefix. Split expression/place conjuncts, close place with `type_place_expr_Call_ExtCall_NONE`, then apply the boundary theorem and adapt generated IHs. Do not split static/nonstatic or unfold evaluator definitions in the Resume.
+works_when: Applies under the latest strategist plan for `Expr_Call_ExtCall_result` after E0035 invalidated prefix-splitting; helper names must be in scope as audited in E0034.
+evidence:
+- episode:E0034
+- episode:E0035
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m0989_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1022_t001

@@ -2,66 +2,382 @@
 
 ## Structured Components
 
-### C0: AUTHORIZED BOUNDED PROBE: ExtCall linear proof-only refactor
-- Kind: `proof_architecture_probe`
+### C0: Complete fresh-stack type-system rewrite obligations using an earlier ExtCall proof boundary
+- Kind: `proof_completion_subtree`
 - Risk: 3
 - Work priority: 0
-- Work units: 1
-- Rationale: Maintainer clarification supplies a narrowed unblocking path. Edits remain limited to `semantics/prop`, evaluator/semantics definitions must not change, but proof-architecture refactoring is allowed. Prior evidence still rules out recovering the optional-driver IH from the unsplit top-level generated ExtCall prefix. The authorized probe is instead a careful linear proof of `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall]`: step through the monadic ExtCall chain one operation at a time, close error branches immediately, keep one main success path active, and specialize the generated optional-driver IH only after reaching a single concrete success-continuation branch with the prefix already split/discharged.
+- Work units: 0
+- Rationale: Derived from child component C0.1.1 risk 3. C0.1.1's prescribed first boundary is coherent but insufficiently decomposed; the new suspended goal is still the E0030-style generated ExtCall prefix shape rather than small static/nonstatic continuation subgoals.
 - Required for completion: yes
-- Checkpoint: yes
-- Supersedes: C0, C0.1, C0.2, C0.3, C0.4, C0.5, C0.6
 - Progress transition: `replacement`
-- Carries progress/evidence from: E0029, TO_type_system_rewrite-20260531T201607Z_m0886_t001, TO_type_system_rewrite-20260531T201607Z_m0862_t001, TO_type_system_rewrite-20260531T201607Z_m0864_t001, TO_type_system_rewrite-20260531T201607Z_m0883_t001, E0026, E0027, E0028
-- Invalidates prior progress/evidence: prior C0 external-precondition stop gate and any instruction that no ExtCall proof work is executable absent a source/suspend-boundary redesign
+- Carries progress/evidence from: E0030, E0029, C0.2, C0.3, C0.4, C0.5
+- Invalidates prior progress/evidence: C0.1
 
 #### Progress note
-This replaces the C0 stop gate with a bounded executable proof probe based on maintainer clarification. It carries forward the accepted blocker evidence from E0029, but narrows the prohibition: top-level generated-prefix recovery remains forbidden, while local driver-IH specialization in a fully split concrete success branch is now authorized.
+Carries the task-scoped obligation ordering and the E0030/E0029 diagnosis, but invalidates the old direct-Resume C0.1 proof plan. Downstream obligations are retained because their dependency on ExtCall resolution is unchanged.
 
 #### Summary
-- Required frontier for the fresh type-system rewrite; the task cannot complete while `Expr_Call_ExtCall` remains cheated.
-- Remaining task-owned obligations include `Expr_Call_ExtCall`, `Expr_Call_RawCallTarget`, `raw_call_return_type_well_formed`, status/plan updates, unsigned commit discipline, and final zero-cheat validation.
-- Accepted evidence E0029 still rules out broad generated-prefix simplification/adapters from the top-level Resume context.
-- Maintainer clarification authorizes a proof-only, branch-by-branch ExtCall attempt inside `semantics/prop`, with semantics/evaluator definitions unchanged.
-- The driver IH may be specialized only locally after reaching a concrete ExtCall success-continuation branch where the prefix operations have already been split/discharged.
-
-#### Description
-This component has one executable frontier: a proof-only refactor of the existing `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall]`. The current proof interface still does not expose a compact optional-driver premise at the top level, so the proof must avoid trying to manufacture one there. Instead, it should follow the evaluator structure in small focused steps, split and close each monadic branch immediately, and postpone any use of the generated optional-driver IH until the concrete post-call continuation branch where its generated prefix premises have become ordinary branch facts.
-
-#### Statement
-Authorized C0 probe:
-
-```text
-Attempt a proof-only linear refactor of `eval_all_type_sound_mutual[Expr_Call_ExtCall]` under `semantics/prop`. Do not change evaluator/semantics definitions. Do not recover the optional-driver IH from the unsplit top-level generated prefix. Instead, step through the ExtCall monadic chain in focused branches, close error cases immediately, and specialize the generated optional-driver IH only in the concrete success-continuation branch after the prefix has been discharged.
-```
-
-If this succeeds, continue in order with `Expr_Call_RawCallTarget`, `raw_call_return_type_well_formed`, task plan/status updates plus unsigned commit, and final zero-cheat validation of `vyperSemanticsHolTheory`. If the proof again requires broad generated-prefix simplification or full-prefix adapter plumbing, stop and re-plan with exact evidence.
+- The ExtCall theorem remains the first required blocker, but it must no longer be attacked from the late generated `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall]` context.
+- Replace the top-level ExtCall suspend with an earlier proof-boundary split inside the original `evaluate_ind` proof, then resume smaller static/nonstatic continuation obligations.
+- RawCallTarget, the localized `raw_call_return_type_well_formed` cheat, status update, and final zero-cheat validation remain downstream.
+- All edits stay under `semantics/prop`; evaluator/semantics definitions remain unchanged; commits must be unsigned.
 
 #### Approach
-Start in `semantics/prop/vyperTypeStmtSoundnessScript.sml` at `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall]`. Close the `type_place_expr` half first. For the expression-soundness half, unfold static typing and `evaluate` only as needed, split `eval_exprs`, immediately apply the argument IH in both success/error branches, and then step through each ExtCall check/lift/build/run/update operation one at a time. Each error branch should be discharged before continuing. On the main success path, use existing ExtCall tail helpers and preservation lemmas. If `returnData = []` and `IS_SOME drv`, specialize the generated optional-driver IH only in that focused branch, after the prefix premises are concrete. Use focused `holbuild build vyperTypeStmtSoundnessTheory` feedback after small edits.
+Work ExtCall first, then the remaining known cheats. The first checkpoint is a source-boundary refactor that builds with honest local placeholders for newly split ExtCall subgoals; only after that checkpoint should the executor fill the static/nonstatic branch proofs.
 
 #### Not to try
-Do not retry `asm "driver_ih" mp_tac >> simp[]`, broad `gvs`, broad generated-prefix simplification, or `AllCaseEqs()` cleanup from the unsplit top-level Resume context. Do not manually specialize the generated optional-driver IH with long `qspecl_then` lists over unsplit ExtCall temporaries or rebuild the whole prefix with ASSUME/MATCH_MP/ACCEPT_TAC/CONJ plumbing. Do not add helper theorems whose assumptions merely package the full generated prefix. Do not recreate or rely on the removed tautological compact bridge. Do not proceed to RawCallTarget, `raw_call_return_type_well_formed`, wrapper/final validation, or commits until the ExtCall probe either succeeds or is explicitly re-planned.
+Do not retry the direct late Resume proof from line 17112. Do not recover the driver IH with broad `simp`/`gvs`, `AllCaseEqs()`, long `qspecl_then` lists over generated temporaries, quoted-assumption plumbing, or an adapter theorem that restates the full generated ExtCall prefix.
 
 #### Argument
-The intended ExtCall soundness argument has two phases. First, evaluate the argument list and external-call plumbing while preserving state/accounts/runtime consistency and ruling out TypeErrors in non-driver branches. Second, if the external call succeeds with empty return data and a driver expression is present, invoke recursive expression soundness for `THE drv` on the post-`update_accounts`/`update_transient` state. Existing tail infrastructure such as `extcall_success_continuation_sound`, `extcall_success_continuation_sound_cond_driver_ih`, `extcall_after_state_update_tail_sound`, and `runtime_consistent_get_tenv` is useful only once phase two receives a compact driver premise. E0029 shows the current mutual `Resume` boundary does not expose that compact premise; the only driver fact is conditional on the whole phase-one generated prefix. Therefore the blocker is the boundary between the generated induction principle and the intended continuation lemma, not a missing value/state lemma.
+The mutual induction theorem generated by `evaluate_ind` gives the optional-driver recursive IH under the ExtCall evaluator prefix because the driver call is syntactically nested after argument evaluation, checks/lifts, calldata construction, external call, and state updates. E0030 shows that entering at the late `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall]` goal leaves this generated prefix active in every local simplification step. The repaired argument is to perform the deterministic ExtCall case decomposition before suspending: close the `type_place_expr` half immediately, unfold `well_typed_expr` and `evaluate` once, consume the expression-list IH as soon as `eval_exprs` is split, close error cases locally, and create smaller static/nonstatic success-path suspension points only after the branch context has concrete facts such as `exprs_runtime_typed`, destination/value extraction, calldata/run results, and account well-typedness. In those smaller continuation goals, existing helpers `extcall_static_args_runtime_typed_dest`, `extcall_nonstatic_args_runtime_typed_dest`, `run_ext_call_accounts_well_typed`, and `extcall_success_continuation_sound`/`extcall_success_continuation_sound_cond_driver_ih` should match directly without recovering a compact driver premise from the unsplit top-level prefix.
 
-#### Proof-interface target
-The ideal continuation input remains a compact driver premise of the shape
-
-```sml
-returnData = [] /\ IS_SOME drv ==>
-  !env0 st0 res0 st0'.
-    env_consistent env0 cx st0 /\ state_well_typed st0 /\
-    context_well_typed cx /\ accounts_well_typed st0.accounts /\
-    functions_well_typed cx /\ eval_expr cx (THE drv) st0 = (res0,st0') ==>
-    well_typed_expr env0 (THE drv) ==>
-      state_well_typed st0' /\ env_consistent env0 cx st0' /\
-      accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
-      case res0 of INL tv => expr_result_typed env0 (THE drv) tv | INR _ => T
-```
-
-However, the authorized probe need not produce this as a standalone theorem from the top-level context. It may prove the needed driver fact locally in the final success branch by specializing the generated IH after the monadic prefix has been split. Failure sign: the only way forward is still to simplify or package a giant generated implication over unsplit ExtCall temporaries.
+#### Definition design
+No semantic definitions may change. The proof-interface change is only the suspend/proof boundary in `vyperTypeStmtSoundnessScript.sml`: the generated mutual theorem should expose smaller subgoals by suspending after local ExtCall prefix splitting, not by adding adapter theorems over the full generated prefix. Failure sign: any new leaf again has a >4KiB goal whose main assumption is the full generated implication over `eval_exprs`, `check`, `lift_option_type`, `build_ext_calldata`, `run_ext_call`, `update_accounts`, and `update_transient`; if that appears, stop rather than adding prefix-packaging lemmas.
 
 #### Code structure
-Do not edit outside `semantics/prop`. Do not change evaluator/semantics definitions. The expected source file for the probe is primarily `vyperTypeStmtSoundnessScript.sml`; nearby helper theories under `semantics/prop` may be refactored only if that keeps the proof architecture cleaner and semantics unchanged. Keep `Expr_Call_RawCallTarget` and `raw_call_return_type_well_formed` out of scope until ExtCall either succeeds or is re-planned. Any future commit after authorized progress must use `git commit --no-gpg-sign`.
+All work is in `semantics/prop/vyperTypeStmtSoundnessScript.sml` except the later builtin lemma in `semantics/prop/vyperTypeBuiltinsScript.sml` and task status files under `semantics/prop`. Refactor near the original mutual proof skeleton around the `TRY(rename1 `ExtCall` >> suspend ...)` line: replace the single late ExtCall suspend with an ExtCall-specific proof prefix that creates named smaller suspensions such as static and nonstatic success continuations. Keep existing local helper theorems around lines 9560-9810 if useful, but do not add helpers that merely package the full generated prefix.
+
+### C0.1: Refactor and prove the ExtCall mutual expression case from branch-local success boundaries
+- Kind: `theorem_proof_subtree`
+- Risk: 3
+- Work priority: 0
+- Work units: 0
+- Rationale: Derived from child component C0.1.1.2 risk 3. C0.1.1.2 was not straightforward: resource-safe splitting required tactic adjustments, and creating build-coherent branch placeholders from within this Resume caused parse/build structure failures. The source is restored to the buildable partial placeholder state.
+- Progress transition: `replacement`
+- Carries progress/evidence from: E0031, E0032, E0033
+- Invalidates prior progress/evidence: C0.1@previous
+
+#### Summary
+Replace the unsafe monolithic checkpoint with a linear prefix-splitting checkpoint plus the existing static/nonstatic success proofs. The checkpoint must leave focused static and nonstatic success placeholders, not a generated-prefix megagoal. C0.1.2 and C0.1.3 remain the downstream consumers of those placeholders. The subtree stays within `semantics/prop` and does not change semantics definitions.
+
+#### Argument
+After the normal-expression implication is stripped, unfold only one ExtCall evaluator layer and consume the expression-list IH immediately after `eval_exprs`. In the `INL vs` branch, `exprs_runtime_typed` plus the static/nonstatic argument-shape lemmas proves target/value decoder success; each remaining monadic operation is split one at a time. All error branches produce non-type-error runtime errors. The unique successful post-update branch is handed to the continuation proof, with optional-driver IH used only under `returnData = [] /\ IS_SOME drv`.
+
+#### Definition design
+The proof interface is: `extcall_static_args_runtime_typed_dest` for static target decoding; `extcall_nonstatic_args_runtime_typed_dest` for nonstatic target/value decoding; `run_ext_call_accounts_well_typed` for external-call account preservation; `extcall_success_continuation_sound_cond_driver_ih` for return/driver continuation where the driver IH is conditional. Do not introduce a generated-prefix adapter theorem; specialize the generated optional-driver IH only in the concrete success branch.
+
+#### Code structure
+C0.1.1 edits only the `Expr_Call_ExtCall_result` Resume and may introduce local suspends/placeholders for `Expr_Call_ExtCall_static_success` and `Expr_Call_ExtCall_nonstatic_success`. C0.1.2/C0.1.3 then replace those placeholders. Leave the mutual proof suspend site and later resumes unchanged.
+
+### C0.1.1: Checkpoint: close ExtCall Resume by applying the existing boundary theorem
+- Kind: `proof_refactor_checkpoint`
+- Risk: 3
+- Work priority: 0
+- Work units: 0
+- Rationale: Derived from child component C0.1.1.2 risk 3. The Risk 2 direct-helper wrapper plan has a proof-interface mismatch: `extcall_expr_sound_from_generated_ih` requires an unconditional compact driver IH, but `Expr_Call_ExtCall_result` only supplies a prefix-guarded generated driver IH. The planned small adapter is not available in this context.
+- Checkpoint: yes
+- Progress transition: `replacement`
+- Carries progress/evidence from: C0.1.1.1, E0035
+- Invalidates prior progress/evidence: C0.1.1.2, C0.1.1.3, C0.1.1.4
+
+#### Progress note
+C0.1.1.1's audit still supports the new strategy. E0035 is retained as negative evidence against prefix-skeleton/suspend decomposition and positive evidence that broad simplification is unsafe. Old C0.1.1.2/C0.1.1.3/C0.1.1.4 no longer represent current work.
+
+#### Summary
+Replace the failed prefix-skeleton strategy with a direct boundary-theorem application. Keep the audit result that `extcall_expr_sound_from_generated_ih` and `type_place_expr_Call_ExtCall_NONE` are available. Do not unfold the ExtCall evaluator in the Resume. Eliminate the place conjunct and adapt the generated argument-list/driver IHs to the helper theorem premises. This removes the need for C0.1.1.3/C0.1.1.4.
+
+#### Statement
+Resume `eval_all_type_sound_mutual[Expr_Call_ExtCall_result]` with no remaining `cheat`, using `extcall_expr_sound_from_generated_ih` and `type_place_expr_Call_ExtCall_NONE`.
+
+#### Approach
+Model the proof on lines 17069-17116 for `Expr_Call_IntCall`. Start `rpt gen_tac >> strip_tac >> reverse conj_tac`; close the place branch by pushing the `type_place_expr ... = SOME ...` assumption and simplifying with `type_place_expr_Call_ExtCall_NONE`. In the expression branch, capture the generated `eval_exprs` IH for `es` and the optional-driver IH for `THE drv`, then `MATCH_MP_TAC`/`irule` `extcall_expr_sound_from_generated_ih`; discharge ordinary premises by assumptions and the driver premise by a small adapter selecting the expression conjunct.
+
+#### Not to try
+Do not unfold `Once evaluate_def` in this Resume. Do not split the ExtCall monadic prefix. Do not use nested `suspend` labels for static/nonstatic branches; E0035 showed this was build/parser fragile. Do not use broad `simp`/`gvs` over the full Resume context or generated-prefix adapter theorems.
+
+#### Argument
+After `rpt gen_tac >> strip_tac`, the `Expr_Call_ExtCall_result` Resume splits into normal expression soundness and place-expression soundness. `type_place_expr_Call_ExtCall_NONE` rewrites the place expression to `NONE`, so that conjunct closes by contradiction with `SOME`. For expression soundness, use `extcall_expr_sound_from_generated_ih`; its conclusion matches ExtCall expression soundness assuming the standard state/context/account/function hypotheses, the call typing fact, the generated expression-list IH for `es`, the generated optional-driver IH for `THE drv`, and the concrete evaluation equation. The generated optional-driver IH returns an expression/place conjunction; strip its premises and select the expression conjunct to satisfy the helper.
+
+#### Definition design
+No new definitions are needed. Treat `extcall_expr_sound_from_generated_ih` as the boundary abstraction for the entire ExtCall monadic chain. Treat `type_place_expr_Call_ExtCall_NONE` as the boundary lemma for the place-result conjunct. Failure sign: unfolding `evaluate_def`, `bind_def`, `check_def`, `run_ext_call`, or splitting static/nonstatic inside this Resume indicates regression to the abandoned interface.
+
+#### Code structure
+All edits remain in `semantics/prop/vyperTypeStmtSoundnessScript.sml`, replacing only the current `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result]: cheat ... QED` block near line 17118. Do not rewrite the helper theorem around line 9823. Do not add nested `suspend`/`Resume` labels for static/nonstatic branches.
+
+### C0.1.1.1: Carry forward audit of the ExtCall helper interface
+- Kind: `proof_interface_audit`
+- Risk: 1
+- Work priority: 0
+- Work units: 0
+- Rationale: This audit was already completed and remains relevant: the replacement strategy depends directly on the existing local helper theorem and place-elimination lemma found by the audit.
+- Progress transition: `carry_forward`
+- Carries progress/evidence from: C0.1.1.1, E0034
+
+#### Progress note
+The prior audit is still valid under the direct-helper strategy.
+
+#### Summary
+No new executor work. Preserve the audited fact that `extcall_expr_sound_from_generated_ih` has the right boundary shape for ExtCall expression soundness and that `type_place_expr_Call_ExtCall_NONE` closes the place conjunct. Downstream work should rely on these names rather than rediscovering the ExtCall prefix.
+
+#### Approach
+No action required unless the build reports that one of the theorem names is not in scope. If that happens, stop and report the exact missing-name error rather than editing definitions.
+
+#### Not to try
+Do not repeat the audit by broad grepping or modifying the helper theorem; this component is carried forward as completed context.
+
+### C0.1.1.2: Close ExtCall result with a delayed generated-driver premise
+- Kind: `proof_refactor`
+- Risk: 2
+- Work priority: 20
+- Work units: 0
+- Rationale: The prior helper failed because its statement forced the huge generated driver IH into every simplification context. The repaired interface moves that premise to a delayed final implication, so prefix splitting/error cases run without it and the premise is introduced only in the success-continuation branch.
+- Supersedes: C0.1.1.2, C0.1.1.2.1, C0.1.1.2.2
+- Progress transition: `replacement`
+- Carries progress/evidence from: E0038, E0039, TO_type_system_rewrite-20260601T081233Z_m1060_t001
+- Invalidates prior progress/evidence: C0.1.1.2.1@old, C0.1.1.2.2@old
+
+#### Progress note
+E0039 blocks the old component but identifies the exact repair. m1060 confirms the premise shape parses/types; prior wrapper progress carries forward after delaying the premise.
+
+#### Summary
+Replace the monolithic prefix-aware ExtCall helper by an equivalent delayed-IH helper. Keep the generated optional-driver IH as an undischarged consequent while splitting `eval_exprs`, target/value extraction, calldata construction, account lookup, run result, success check, and updates. Introduce and specialize that IH only in the unique successful continuation branch, then call `extcall_success_continuation_sound_cond_driver_ih`. Clean up the failed partial theorem first, then rewire the ExtCall Resume.
+
+#### Description
+E0039 showed a real proof-interface problem, not a need for cleverer tactics. The old helper's global generated-IH assumption made even `simp[Once well_typed_expr_def]`, `simp[]`, `gvs[no_type_error_result_def]`, and simple runtime-typing destructs time out. The new theorem shape proves `BASE /\ eval_expr ... ==> (DRIVER_IH ==> SOUNDNESS)`, leaving `DRIVER_IH` outside the assumption set until the proof reaches the concrete continuation branch.
+
+#### Approach
+Work only in `semantics/prop/vyperTypeStmtSoundnessScript.sml`. Restore a buildable source state, then state/prove the delayed helper as the failed helper with the big generated driver-IH premise moved out of the initial conjunction and placed after the `eval_expr ... = (res,st')` premise as a final implication. Do not start the proof with a tactic that strips that final implication into assumptions.
+
+#### Not to try
+Do not salvage the old theorem statement by tuning the timed-out `simp`/`gvs` calls. Do not introduce the generated driver IH before `Cases_on args_res`, `Cases_on is_static`, calldata/run cases, or error-branch closure. Do not use broad assumption-enabled simplification, `AllCaseEqs()` over the whole prefix, or long generated-prefix adapter theorems.
+
+#### Argument
+ExtCall soundness splits into prefix and continuation phases. Prefix evaluation and failure exits require only argument soundness, runtime consistency, and existing argument-destruction/run-account lemmas. The generated optional-driver IH is relevant only after successful external call and updates, specifically when `returnData = [] /\ IS_SOME drv`. Therefore the proof boundary must keep the driver premise unavailable during prefix splitting and introduce it exactly when applying `extcall_success_continuation_sound_cond_driver_ih`.
+
+#### Definition design
+No definitions or evaluator semantics change. The proof-interface boundary is theorem shape: delayed implication for the generated driver premise. Failure signs are any pre-success proof state containing the huge `!s_args vs args_st ...` generated IH as an assumption, simplifier timeouts on routine prefix cases, or attempts to reconstruct the generated IH through a large adapter theorem.
+
+#### Code structure
+All code stays in `semantics/prop/vyperTypeStmtSoundnessScript.sml`. Place the delayed helper near the existing ExtCall helpers. Reuse `extcall_success_continuation_sound_cond_driver_ih`, `extcall_static_args_runtime_typed_dest`, `extcall_nonstatic_args_runtime_typed_dest`, and `run_ext_call_accounts_well_typed`.
+
+### C0.1.1.2.0: Restore a buildable source state after the failed prefix-helper attempt
+- Kind: `source_cleanup`
+- Risk: 1
+- Work priority: 0
+- Work units: 1
+- Rationale: The source contains a failing proof body from E0039; removing that stale proof text is mechanical and must precede new proof work.
+- Carries progress/evidence from: E0039
+- Invalidates prior progress/evidence: C0.1.1.2.1@old-failing-proof-body
+
+#### Progress note
+Cleanup is required because the failed episode left source text for the invalid helper interface.
+
+#### Summary
+Remove the failed E0039 proof body or replace it by the new delayed-helper skeleton with `cheat` while proving incrementally. Keep the main ExtCall Resume as `cheat` until the helper is proved. Build/audit to ensure the old timeout line is gone. Do not edit outside `semantics/prop`.
+
+#### Approach
+In `vyperTypeStmtSoundnessScript.sml`, delete the copied/adapted proof script for `extcall_expr_sound_from_generated_prefix_ih` or rename/restate it as the delayed helper with a temporary `cheat`. The point is to eliminate stale executable proof text that encodes the invalid interface.
+
+#### Not to try
+Do not continue editing the old timed-out proof body. Do not change evaluator or semantics definitions.
+
+### C0.1.1.2.1: Prove the delayed-IH ExtCall expression helper
+- Kind: `infrastructure_lemma`
+- Risk: 2
+- Work priority: 10
+- Work units: 5
+- Rationale: This is the same branch-by-branch prefix proof as the prior helper, but without the large driver premise in the simplifier context. That directly fixes the mismatch shown by E0039.
+- Dependencies: C0.1.1.2.0
+- Checkpoint: yes
+- Supersedes: C0.1.1.2.1
+- Progress transition: `replacement`
+- Carries progress/evidence from: E0039, TO_type_system_rewrite-20260601T081233Z_m1060_t001
+- Invalidates prior progress/evidence: C0.1.1.2.1@old
+
+#### Progress note
+The old leaf is replaced. E0039 demonstrates why the old conjunctive-helper statement is not straightforward.
+
+#### Summary
+Prove `extcall_expr_sound_from_generated_prefix_delayed_ih[local]`. It is equivalent to the failed prefix-aware helper except the generated optional-driver IH is the final implication, not a conjunctive assumption. Prefix/error branches use only ordinary assumptions, the `eval_exprs` IH, ExtCall argument-destruction lemmas, and `run_ext_call_accounts_well_typed`. Introduce the delayed driver premise only immediately before applying the continuation lemma in the success branch.
+
+#### Statement
+Suggested theorem shape:
+```hol
+Theorem extcall_expr_sound_from_generated_prefix_delayed_ih[local]:
+  !cx env st res st' is_static func_name arg_types ret_type es drv.
+    env_consistent env cx st /\ state_well_typed st /\
+    context_well_typed cx /\ accounts_well_typed st.accounts /\
+    functions_well_typed cx /\
+    well_typed_expr env (Call ret_type (ExtCall is_static (func_name,arg_types,ret_type)) es drv) /\
+    (* same eval_exprs IH as failed helper lines 9945-9952 *) /\
+    eval_expr cx (Call ret_type (ExtCall is_static (func_name,arg_types,ret_type)) es drv) st = (res,st') ==>
+    (* same generated prefix-driver IH as failed helper lines 9953-9996 *) ==>
+    state_well_typed st' /\ env_consistent env cx st' /\
+    accounts_well_typed st'.accounts /\ no_type_error_result res /\
+    case res of
+    | INL tv => expr_result_typed env (Call ret_type (ExtCall is_static (func_name,arg_types,ret_type)) es drv) tv
+    | INR _ => T
+```
+The two IH blocks are textually the same as in E0039; only the driver-IH block moves from the initial conjunction to the final implication.
+
+#### Approach
+Destruct only the small base assumptions and the evaluation equation. Use `simp[NoAsms, Once well_typed_expr_def]` for typing and `(impl_tac >- simp[])` for the `eval_exprs` IH. Split `args_res`, `is_static`, calldata, account-code, run result, and success cases linearly. Error branches close by monadic definitions and `no_type_error_result_def` without introducing the delayed premise. In success branches, derive `accounts_well_typed accounts'`, introduce the delayed driver premise locally, then apply `extcall_success_continuation_sound_cond_driver_ih` with the update facts.
+
+#### Not to try
+Do not use `rpt gen_tac >> strip_tac` if it strips the delayed premise. Do not run `simp[]`/`gvs[]` while the generated IH is an assumption. Do not create a giant adapter theorem whose job is merely to rebuild the generated premise.
+
+### C0.1.1.2.2: Use the delayed helper in the ExtCall Resume
+- Kind: `proof`
+- Risk: 1
+- Work priority: 20
+- Work units: 2
+- Rationale: After the delayed helper is proved, the Resume wrapper is routine and E0038's progress still applies.
+- Dependencies: C0.1.1.2.1
+- Supersedes: C0.1.1.2.2
+- Progress transition: `replacement`
+- Carries progress/evidence from: E0038
+- Invalidates prior progress/evidence: C0.1.1.2.2@old
+
+#### Progress note
+The old wrapper plan depended on the old helper. Its progress carries forward only through the delayed-helper application.
+
+#### Summary
+Replace the ExtCall Resume cheat by applying `extcall_expr_sound_from_generated_prefix_delayed_ih`. Supply base facts and the `eval_exprs` IH first. Leave the delayed generated driver premise as the final subgoal and discharge it from the generated optional-driver IH only after the helper has fixed the concrete prefix/success-continuation branch.
+
+#### Statement
+Close the existing `eval_all_type_sound_mutual[Expr_Call_ExtCall]` Resume / ExtCall branch in `vyperTypeStmtSoundnessScript.sml`; do not change theorem statements or evaluator definitions.
+
+#### Approach
+At the Resume site, use targeted call-typing destruction and apply the delayed helper. The final generated-driver premise should match the mutual-induction IH shape; specialize it only after the prefix variables are fixed by the helper. This follows the maintainer clarification permitting careful linear branch-by-branch proof.
+
+#### Not to try
+Do not recover the driver premise from the top-level Resume context by broad `simp`/`gvs`, `AllCaseEqs()`, or generated-prefix adapter theorems. Do not edit outside `semantics/prop`.
+
+### C0.1.2: Prove the focused static ExtCall success continuation
+- Kind: `theorem_proof`
+- Risk: 2
+- Work priority: 1
+- Work units: 5
+- Rationale: After C0.1.1, the static branch should no longer require generated-prefix reconstruction: expression-list soundness, target decoding, calldata/run/update success facts, and `value_opt = NONE`/`arg_vals = TL vs` are local assumptions. Existing continuation helpers handle the remaining preservation/result typing.
+- Dependencies: C0.1.1
+- Progress transition: `carry_forward`
+- Carries progress/evidence from: C0.1.2
+
+#### Summary
+Discharge the static success placeholder produced by C0.1.1. Use local success assumptions plus `run_ext_call_accounts_well_typed` and `extcall_success_continuation_sound_cond_driver_ih`. Specialize the generated optional-driver IH only under `returnData = [] /\ IS_SOME drv`.
+
+#### Approach
+Work only inside the focused static Resume/placeholder. First derive `accounts_well_typed accounts'` from the successful `run_ext_call`; then invoke the conditional-driver continuation helper. Error-prefix reasoning should no longer appear in this component.
+
+#### Not to try
+Do not unfold the entire ExtCall evaluator or reconstruct static prefix facts; C0.1.1 must have made them local.
+
+### C0.1.3: Prove the focused nonstatic ExtCall success continuation
+- Kind: `theorem_proof`
+- Risk: 2
+- Work priority: 2
+- Work units: 5
+- Rationale: After C0.1.1, the nonstatic branch has explicit successful target and transfer amount decoding. Existing helper `extcall_nonstatic_args_runtime_typed_dest` and continuation lemmas make the remainder mirror static.
+- Dependencies: C0.1.1
+- Progress transition: `carry_forward`
+- Carries progress/evidence from: C0.1.3
+
+#### Summary
+Discharge the nonstatic success placeholder produced by C0.1.1. Use local assumptions for `SOME amount`, argument tail, successful call/update facts, and conditional driver IH. The proof mirrors the static success continuation with value transfer present.
+
+#### Approach
+Work only inside the focused nonstatic placeholder. Derive account well-typedness from `run_ext_call_accounts_well_typed`, then apply the conditional-driver continuation helper. Keep optional-driver specialization branch-local and conditional.
+
+#### Not to try
+Do not redo nonstatic prefix splitting here; C0.1.1 owns all target/value decoding and monadic prefix cases.
+
+### C0.2: Prove RawCallTarget mutual expression case
+- Kind: `theorem_proof`
+- Risk: 2
+- Work priority: 1
+- Work units: 5
+- Rationale: Downstream call-target branch remains a known cheat, but should be standard after ExtCall because the mutual theorem infrastructure and raw-call builtin typing lemmas are already present. It depends on the ExtCall checkpoint so the executor does not split attention before the current blocker is resolved.
+- Dependencies: C0.1.3
+- Progress transition: `carry_forward`
+- Carries progress/evidence from: C0.2@previous
+
+#### Summary
+- After ExtCall is proved, remove the `eval_all_type_sound_mutual[Expr_Call_RawCallTarget]` cheat.
+- Follow the existing call-expression proof style and raw-call helper lemmas.
+- Keep edits in `semantics/prop/vyperTypeStmtSoundnessScript.sml`.
+- Do not start this before the ExtCall checkpoint closes.
+
+#### Statement
+`Resume eval_all_type_sound_mutual[Expr_Call_RawCallTarget]` must be proved without `cheat`.
+
+#### Approach
+Use the same mutual-theorem assumptions and evaluator unfolding pattern as adjacent call cases, but only after ExtCall is closed. Mine existing raw-call local helper lemmas before introducing new ones.
+
+#### Not to try
+Do not work on RawCallTarget while ExtCall remains blocked; doing so violates the task priority and risks hiding the central proof-boundary issue.
+
+### C0.3: Discharge raw_call_return_type_well_formed arithmetic/type lemma
+- Kind: `infrastructure_lemma`
+- Risk: 2
+- Work priority: 2
+- Work units: 3
+- Rationale: The remaining cheat is localized to `vyperTypeBuiltinsScript.sml` and appears to be arithmetic/type-formation cleanup around `word_size`, `type_slot_size`, and the `flags.rcf_max_outsize < dimword(:256)` bound. No semantic redesign is involved.
+- Dependencies: C0.2
+- Progress transition: `carry_forward`
+- Carries progress/evidence from: C0.3@previous
+
+#### Summary
+- Remove the localized `raw_call_return_type_well_formed` cheat in `semantics/prop/vyperTypeBuiltinsScript.sml`.
+- Prove the arithmetic/type well-formedness obligations directly.
+- Keep any helper lemmas local unless they are already useful elsewhere.
+- Run focused builds after the proof.
+
+#### Statement
+`raw_call_return_type_well_formed` as currently stated in `semantics/prop/vyperTypeBuiltinsScript.sml`, without changing evaluator or semantics definitions.
+
+#### Approach
+Inspect the current theorem statement and unfold only the relevant raw-call return type and well-formedness definitions. Use existing arithmetic libraries/lemmas for word-size and dimword inequalities; do not broaden the builtin typing interface.
+
+#### Not to try
+Do not modify raw-call semantics or builtin typing definitions to make this lemma easier unless a separate unprovability report is produced.
+
+### C0.4: Update task status files and make unsigned progress commit after cheats are removed
+- Kind: `status_update_commit`
+- Risk: 1
+- Work priority: 3
+- Work units: 2
+- Rationale: Mechanical repository hygiene required by the task once proofs are complete. It does not affect theorem truth, but must obey the no-outside-semantics/prop and no-GPG constraints.
+- Dependencies: C0.3
+- Progress transition: `carry_forward`
+- Carries progress/evidence from: C0.4@previous
+
+#### Summary
+- Update `semantics/prop/TYPE_SYSTEM_REWRITE_PLAN.md` and/or `STATE_type_system_rewrite.md` to reflect completed proofs.
+- Audit that source edits stayed under `semantics/prop`.
+- Commit with `git commit --no-gpg-sign` only.
+- Do not commit before proof obligations are actually discharged.
+
+#### Statement
+Repository/status action, not a HOL theorem.
+
+#### Approach
+Use `git status` to confirm paths, update task memory accurately, and commit only relevant `semantics/prop` changes. The commit message should mention ExtCall/RawCallTarget/builtin cheat removal if all are completed.
+
+#### Not to try
+Do not use default `git commit` if it may GPG-sign. Do not include unrelated files outside `semantics/prop`.
+
+### C0.5: Final zero-cheat validation for vyperSemanticsHolTheory
+- Kind: `validation`
+- Risk: 1
+- Work priority: 4
+- Work units: 2
+- Rationale: Mechanical final check specified by the task and plan. It depends on all known reachable cheats being removed first.
+- Dependencies: C0.4
+- Checkpoint: yes
+- Progress transition: `carry_forward`
+- Carries progress/evidence from: C0.5@previous
+
+#### Summary
+- Run `holbuild build vyperSemanticsHolTheory`.
+- Confirm zero CHEAT warnings reachable from `vyperSemanticsHolTheory`.
+- If focused builds pass but final reachable-cheat audit finds a new in-scope cheat, stop and report/re-plan.
+- This is the task completion checkpoint.
+
+#### Statement
+Validation target: `holbuild build vyperSemanticsHolTheory` succeeds with zero reachable fresh-stack CHEAT warnings.
+
+#### Approach
+Run the final build after all source cheats in scope are removed and committed/statused as appropriate. Record exact output in the task state.
+
+#### Not to try
+Do not treat `vyperTypeStmtSoundnessTheory` alone as final validation; the task completion scope is `vyperSemanticsHolTheory` reachable-cheat cleanliness.

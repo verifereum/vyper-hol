@@ -2,72 +2,70 @@
 Updated: 2026-06-01
 
 ## Cursor
-- component: C0
-- status: unblocked_for_bounded_probe
+- component: C0.1.1.1
+- status: blocked
 - active_file: semantics/prop/vyperTypeStmtSoundnessScript.sml
-- next_action: Replace the former external-precondition stop gate with a proof-only bounded probe for `eval_all_type_sound_mutual[Expr_Call_ExtCall]`. Edits are allowed only under `semantics/prop`; evaluator/semantics definitions must not change. Attempt a careful linear proof that steps through the ExtCall monadic chain one operation at a time, closes each error case immediately, and keeps one main success path active. Specialize the generated optional-driver IH only after reaching a single concrete ExtCall success-continuation branch with prefix operations already split/discharged.
-- expected_goal_shape: Inside `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall]`, the proof should first close the `type_place_expr` half, unfold expression typing/evaluation once, split `eval_exprs` and subsequent ExtCall checks/lifts/run/update operations locally, and use IHs/helper lemmas immediately in focused branches. The driver IH should not be coerced into a compact standalone premise at the top-level Resume context.
-- verify_with: During the probe, use focused `holbuild build vyperTypeStmtSoundnessTheory` for feedback. After ExtCall succeeds, continue with `Expr_Call_RawCallTarget`, `raw_call_return_type_well_formed`, then final `holbuild build vyperSemanticsHolTheory` with zero reachable fresh-stack CHEAT warnings.
+- next_action: Resolve the pending strategist-review gate created by E0036: call plan_oracle(mode='review', component_id='C0.1.1.1', evidence_ids=['TO_type_system_rewrite-20260601T081233Z_m0988_t001','TO_type_system_rewrite-20260601T081233Z_m0989_t001'], planning_reason='review closed episode E0036'). If accepted, immediately query_plan/begin the oracle-next C0.1.1.2 and replace `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result]: cheat` with the direct-helper wrapper from plan TO_type_system_rewrite-20260601T081233Z_m1022_t001.
+- expected_goal_shape: Before the pending review is cleared, query_plan reports Beginable now: none and Allowed next action is the E0036 plan_oracle review. After review acceptance, C0.1.1.2 should be beginable; its target proof is a short wrapper: split expression/place conjunct, place branch closes with type_place_expr_Call_ExtCall_NONE, expression branch applies extcall_expr_sound_from_generated_ih using generated eval_exprs IH and optional-driver IH.
+- verify_with: holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=300)
 
 ## If This Fails
-- If the bounded linear proof still requires broad generated-prefix simplification from the top-level Resume context, long qspecl_then over unsplit generated temporaries, ASSUME-quoted reconstruction, MATCH_MP/ACCEPT_TAC/CONJ plumbing over the full prefix, or an adapter theorem packaging the full prefix, stop and record exact holbuild evidence. Local specialization of the driver IH is allowed only after reaching a single concrete ExtCall success-continuation branch where the prefix operations have already been split/discharged.
+- If the pending plan_oracle review again returns OracleBudgetExceeded, do not edit/build; report/handle as planning-tool budget blocker or wait for reset. If the C0.1.1.2 direct-helper wrapper fails after begin_component, checkpoint_progress with exact holbuild goal; do not resurrect prefix-splitting/suspend experiments.
 
 ## Do Not Retry
-- Use asm "driver_ih" mp_tac >> simp[], broad gvs, or broad simplification to recover the compact optional-driver premise from the generated driver IH.: Repeated evidence shows this exposes or times out on the full generated ExtCall prefix; E0029 confirms the C0.1 local boundary still has the same structural problem.
-  - evidence: episode:E0029
-  - evidence: tool_output:TO_type_system_rewrite-20260531T201607Z_m0862_t001
-  - evidence: tool_output:TO_type_system_rewrite-20260531T201607Z_m0864_t001
-- Manually specialize the generated optional-driver IH with long qspecl_then lists over ExtCall prefix temporaries or rebuild assumptions with ASSUME/MATCH_MP/ACCEPT_TAC/CONJ plumbing.: This is the prohibited generated-prefix reconstruction path and violates the task's straightforward-proof constraint; the current PLAN marks it as the wrong abstraction.
-  - evidence: tool_output:TO_type_system_rewrite-20260531T201607Z_m0886_t001
-  - evidence: episode:E0029
-- Add another helper/adapter theorem whose assumptions package the full generated ExtCall prefix in order to derive the compact driver premise.: Such adapters reproduce the same proof-interface problem and do not change what the live Resume context exposes; prior tautological/adapter routes were rejected.
-  - evidence: tool_output:TO_type_system_rewrite-20260531T201607Z_m0886_t001
-  - evidence: tool_output:TO_type_system_rewrite-20260531T201607Z_m0526_t001
-- Proceed to Expr_Call_RawCallTarget, raw_call_return_type_well_formed, wrapper/final validation, or commits before the ExtCall bounded probe has either succeeded or been explicitly re-planned.: C0 remains required-for-completion and downstream work depends on resolving ExtCall first.
-  - evidence: tool_output:TO_type_system_rewrite-20260531T201607Z_m0886_t001
-  - evidence: tool_output:TO_type_system_rewrite-20260531T201607Z_m0897_t003
-- Treat the new authorization as permission for arbitrary generated-prefix plumbing.: The only newly allowed generated-IH use is local specialization in a single concrete success-continuation branch after the prefix has been split/discharged.
-  - evidence: user:2026-06-01 maintainer clarification
+- Retry the C0.1.1.2 prefix-skeleton plan by unfolding `evaluate_def`, splitting `eval_exprs`/`args_res`, and creating static/nonstatic nested suspend labels.: E0035 showed this path is not straightforward: broad simps timed out, nested suspends/placeholders caused parse/build structure failures, and the latest oracle invalidated this strategy in favor of a direct helper wrapper.
+  - evidence: episode:E0035
+  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m0995_t001
+  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m0998_t001
+- Use assumption-enabled `simp[Once well_typed_expr_def]` or plain `simp[]` in the full ExtCall Resume context.: These time out on the large generated-prefix context. If call typing must be destructed, use `simp[NoAsms, Once well_typed_expr_def]` and targeted rewrites only.
+  - evidence: episode:E0035
+  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m0995_t001
+  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m0998_t001
+- Run holbuild or edit source before clearing the pending E0036 strategist-review gate.: query_plan reports Beginable now: none and allowed next action is exactly the plan_oracle review for E0036; edits/builds are not authorized until that gate clears.
+  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1027_t001
+  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1029_t004
+- Proceed to RawCallTarget or raw_call_return_type_well_formed before ExtCall is closed.: PLAN dependencies keep downstream obligations queued behind ExtCall; doing sibling work would hide the central blocker.
+  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m0990_t002
+  - evidence: plan:C0.2
+  - evidence: plan:C0.3
 
 ## Reflection
 ### Tunnel Vision Check
-- The authorized route is proof-only: no evaluator/semantics changes, no edits outside `semantics/prop`.
-- The useful outside-the-box idea is a disciplined proof decomposition, not a semantic refactor: follow the ExtCall monadic chain linearly, close error branches immediately, and use IHs when their branch premises become available.
-- Likely wrong optimization target: improving extcall_success_continuation_sound_cond_driver_ih. It is useful only after the proof reaches the continuation point; the current probe should focus on reaching that point without exploding the generated prefix.
-- Do not retry top-level generated-prefix tactics. E0029 remains evidence against broad simp/metis over the unsplit prefix, but maintainer clarification permits local driver-IH specialization after the prefix is split in one concrete success branch.
+- Fresh expert should question the old premise that ExtCall must be split into static/nonstatic suspended leaves: the latest oracle explicitly replaced that with a direct wrapper around extcall_expr_sound_from_generated_ih.
+- Another outside-the-box route now authorized is to treat extcall_expr_sound_from_generated_ih as the abstraction boundary and avoid evaluator unfolding entirely inside the Resume.
+- Do not optimize the monadic prefix theorem body or nested suspend mechanics; the active target is now matching generated IHs to an existing helper, similar to the IntCall wrapper.
+- The apparent contradiction with older do-not-retry notes matters: do not manufacture a compact driver premise by broad prefix reconstruction, but do use the existing boundary theorem as the latest PLAN instructs.
+- Fresh expert should first inspect lines ~17069-17116 IntCall and line ~17118 ExtCall, not the failed prefix experiments.
 
 ### What Went Wrong
-- The replacement C0.1 assumption failed: moving the proof boundary locally inside the existing Expr_Call_ExtCall Resume did not expose a compact optional-driver premise.
-- The first unfold/probe still showed the driver IH as a giant generated prefix implication over eval_exprs, checks/lifts, build_ext_calldata, run_ext_call, update_accounts, and update_transient.
-- Continuing the approved split immediately ran into timeouts/failures on basic local simplification (gvs[no_type_error_result_def], simp[], and Cases_on is_static' >> gvs[]), so the Risk-2 rating was wrong, not merely a tactic choice.
-- Experimental edits were reverted to the honest ExtCall cheat, and vyperTypeStmtSoundnessTheory builds at the cheated baseline.
-- This session performed only startup/blockage assessment. query_plan still shows C0 Risk 4 BLOCKED with no frontier/beginable component, and git status shows only task memory/plan files plus a legacy LEARNINGS file modified/untracked.
+- The first earlier-boundary refactor (E0031/E0032) was build-coherent but still suspended too early; FAIL_TAC showed the generated ExtCall prefix survived under the new label.
+- The prefix-splitting repair (E0035) was not straightforward: `simp[Once well_typed_expr_def]` timed out unless assumptions were ignored, and plain `simp[]` after specializing the list IH timed out on the full prefix.
+- Using `(impl_tac >- simp[]) >> strip_tac` did consume the generated eval_exprs IH and reached useful INL facts, but attempts to introduce nested suspend labels/branch cheats caused downstream parse/build errors; this path was reverted.
+- A carry-forward audit E0036 was closed, but its required strategist review failed with OracleBudgetExceeded, leaving query_plan blocked with no beginable component.
 
 ### Ignored Signals
-- Earlier evidence already warned that generated-prefix adapters were the wrong abstraction; C0.1 confirmed the same shape rather than derisking it.
-- A local Resume boundary probe was authorized, but the first visible goal already exceeded 4KiB and contained the forbidden prefix shape; that should be treated as design failure, not a cue for more tactic search.
-- The task says the proof should be entirely straightforward and to stop on design/plan issues; under the new clarification, the ExtCall bounded probe is authorized, but downstream RawCallTarget, builtin cleanup, commits, and final validation remain unauthorized until ExtCall is resolved or re-planned.
-- Do not interpret query_plan's generic complete option as proof completion; task-owned cheats remain and C0 is required-for-completion.
+- Repeated >4KiB goals and timeout/store failures were design/interface signals, not invitations to tune simplifiers.
+- Nested `suspend` inside the existing Resume caused parse/resume-structure trouble; continuing to fiddle with syntax would be tactic thrashing.
+- The source STATE is stale relative to PLAN/DOSSIER; query_plan is authoritative and currently requires the E0036 review gate before C0.1.1.2 can begin.
 
 ### Strategy Adjustments
-- Future sessions may start the bounded ExtCall proof probe directly in `semantics/prop/vyperTypeStmtSoundnessScript.sml`, using focused holbuild feedback.
-- Future work should avoid recovering the optional driver IH from the unsplit generated full ExtCall prefix; instead reach the concrete success-continuation branch first, then specialize locally if needed.
-- Keep runtime_consistent_get_tenv and extcall_success_continuation_sound_cond_driver_ih as potentially useful post-run continuation infrastructure, but do not build new helpers around the full generated driver IH.
-- Commit discipline remains: all edits under semantics/prop only, and any future commit must use git commit --no-gpg-sign.
+- First legal action next session is clearing the pending E0036 strategist review; do not build/edit before that unless the harness/plan gate changes.
+- After review, follow latest plan TO_type_system_rewrite-20260601T081233Z_m1022_t001: direct-helper wrapper, no evaluator unfolding, no static/nonstatic suspends.
+- Use the completed IntCall Resume as the template for capturing generated IHs and applying a local helper theorem.
+- When destructing call typing, use `simp[NoAsms, Once well_typed_expr_def]` if needed; avoid assumption-enabled simplification in the huge Resume context.
+- Keep all edits under semantics/prop and do not proceed to RawCallTarget or builtin lemma until ExtCall closes.
 
-### Oracle / Maintainer Feedback
-- Held from prior evidence: C0.1 failed as proof-interface evidence for top-level generated-prefix recovery, not as evidence that the ExtCall theorem is false.
-- Held from prior evidence: generated-prefix adapters and broad generated-prefix simplification remain prohibited and wrong for this task's straightforward-proof contract.
-- Updated by maintainer clarification: a bounded proof-only frontier now exists. It may step through the ExtCall monadic chain linearly and specialize the driver IH only after reaching a concrete success-continuation branch with prefix operations split/discharged.
-- Missed by prior replacement: the local Resume-boundary probe was too coarse. The new probe must avoid exposing the whole prefix at once and must close branches as soon as they arise.
+### Oracle Feedback
+- Held: broad simplification / generated-prefix reconstruction is unsafe; E0035 confirmed timeouts/resource failures.
+- Held: helper interface audit found the required local theorems; E0034/E0036 support relying on local ExtCall helper names.
+- Missed/changed: the earlier oracle strategy to make focused static/nonstatic suspend leaves was build/parser fragile in this context; latest oracle replaced it with direct application of extcall_expr_sound_from_generated_ih.
+- Latest binding insight: the ExtCall Resume should be a short wrapper around extcall_expr_sound_from_generated_ih plus type_place_expr_Call_ExtCall_NONE, structurally analogous to Expr_Call_IntCall.
 
 ## Evidence Pointers
-- tool_output:TO_type_system_rewrite-20260531T201607Z_m0897_t003 - current handoff query_plan confirms C0 Risk 4 BLOCKED, no frontier/beginable/oracle-next
-- tool_output:TO_type_system_rewrite-20260531T201607Z_m0897_t001 - STATE cursor and do-not-retry list before this handoff
-- tool_output:TO_type_system_rewrite-20260531T201607Z_m0897_t002 - dossier summary for C0 including E0029 risk_mismatch and reverted baseline
-- tool_output:TO_type_system_rewrite-20260531T201607Z_m0895_t001 - startup git status: only task memory/plan files modified plus legacy LEARNINGS file, no source proof action taken this session
-- tool_output:TO_type_system_rewrite-20260531T201607Z_m0895_t002 - startup query_plan confirmed same C0 Risk 4 blocked gate before blocked end_session
-- tool_output:TO_type_system_rewrite-20260531T201607Z_m0886_t001 - strategist replacement restoring external-precondition stop gate after E0029
-- episode:E0029 - terminal C0.1 risk_mismatch episode: local boundary probe failed and source was reverted
-- tool_output:TO_type_system_rewrite-20260531T201607Z_m0862_t001 - first C0.1 probe showed full generated ExtCall prefix guarding driver IH
-- tool_output:TO_type_system_rewrite-20260531T201607Z_m0883_t001 - focused baseline build succeeded after reverting experimental edits
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1029_t004 - current query_plan: no beginable component until E0036 strategist review; C0.1.1.2 is oracle-next afterward
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1026_t001 - plan_oracle review for E0036 failed with OracleBudgetExceeded
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1022_t001 - latest replacement plan: use extcall_expr_sound_from_generated_ih direct-helper wrapper, no prefix splitting
+- episode:E0035 - prefix-skeleton/suspend attempt failed and was reverted; contains useful NoAsms/impl_tac evidence
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1020_t001 - source verified buildable after reverting failed C0.1.1.2 experiment to `Expr_Call_ExtCall_result: cheat`
+- episode:E0034 - helper interface audit proved and reviewed; local ExtCall helper names confirmed
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m0989_t001 - strategist accepted E0034 audit
