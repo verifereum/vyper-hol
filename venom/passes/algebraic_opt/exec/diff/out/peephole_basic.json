@@ -1,0 +1,342 @@
+{
+  "name": "_global",
+  "before": {
+    "name": "_global",
+    "blocks": [
+      {
+        "label": "main",
+        "instructions": [
+          {
+            "opcode": "param",
+            "operands": [],
+            "outputs": [
+              "par"
+            ]
+          },
+          {
+            "opcode": "assign",
+            "operands": [
+              {
+                "var": "par"
+              }
+            ],
+            "outputs": [
+              "1"
+            ]
+          },
+          {
+            "opcode": "assign",
+            "operands": [
+              {
+                "lit": "64"
+              }
+            ],
+            "outputs": [
+              "2"
+            ]
+          },
+          {
+            "opcode": "add",
+            "operands": [
+              {
+                "var": "1"
+              },
+              {
+                "var": "2"
+              }
+            ],
+            "outputs": [
+              "3"
+            ]
+          },
+          {
+            "opcode": "or",
+            "operands": [
+              {
+                "var": "3"
+              },
+              {
+                "lit": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+              }
+            ],
+            "outputs": [
+              "x"
+            ]
+          },
+          {
+            "opcode": "mul",
+            "operands": [
+              {
+                "var": "3"
+              },
+              {
+                "lit": "1"
+              }
+            ],
+            "outputs": [
+              "m"
+            ]
+          },
+          {
+            "opcode": "iszero",
+            "operands": [
+              {
+                "var": "3"
+              }
+            ],
+            "outputs": [
+              "y"
+            ]
+          },
+          {
+            "opcode": "iszero",
+            "operands": [
+              {
+                "var": "y"
+              }
+            ],
+            "outputs": [
+              "z"
+            ]
+          },
+          {
+            "opcode": "jnz",
+            "operands": [
+              {
+                "var": "z"
+              },
+              {
+                "label": "then"
+              },
+              {
+                "label": "else"
+              }
+            ],
+            "outputs": []
+          }
+        ]
+      },
+      {
+        "label": "then",
+        "instructions": [
+          {
+            "opcode": "add",
+            "operands": [
+              {
+                "lit": "10"
+              },
+              {
+                "var": "3"
+              }
+            ],
+            "outputs": [
+              "4"
+            ]
+          },
+          {
+            "opcode": "sink",
+            "operands": [
+              {
+                "var": "4"
+              }
+            ],
+            "outputs": []
+          }
+        ]
+      },
+      {
+        "label": "else",
+        "instructions": [
+          {
+            "opcode": "mul",
+            "operands": [
+              {
+                "var": "3"
+              },
+              {
+                "lit": "1"
+              }
+            ],
+            "outputs": [
+              "5"
+            ]
+          },
+          {
+            "opcode": "sink",
+            "operands": [
+              {
+                "var": "5"
+              }
+            ],
+            "outputs": []
+          }
+        ]
+      }
+    ]
+  },
+  "after": {
+    "name": "_global",
+    "blocks": [
+      {
+        "label": "main",
+        "instructions": [
+          {
+            "opcode": "param",
+            "operands": [],
+            "outputs": [
+              "par"
+            ]
+          },
+          {
+            "opcode": "assign",
+            "operands": [
+              {
+                "var": "par"
+              }
+            ],
+            "outputs": [
+              "1"
+            ]
+          },
+          {
+            "opcode": "assign",
+            "operands": [
+              {
+                "lit": "64"
+              }
+            ],
+            "outputs": [
+              "2"
+            ]
+          },
+          {
+            "opcode": "add",
+            "operands": [
+              {
+                "var": "1"
+              },
+              {
+                "var": "2"
+              }
+            ],
+            "outputs": [
+              "3"
+            ]
+          },
+          {
+            "opcode": "assign",
+            "operands": [
+              {
+                "lit": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+              }
+            ],
+            "outputs": [
+              "x"
+            ]
+          },
+          {
+            "opcode": "assign",
+            "operands": [
+              {
+                "var": "3"
+              }
+            ],
+            "outputs": [
+              "m"
+            ]
+          },
+          {
+            "opcode": "iszero",
+            "operands": [
+              {
+                "var": "3"
+              }
+            ],
+            "outputs": [
+              "y"
+            ]
+          },
+          {
+            "opcode": "iszero",
+            "operands": [
+              {
+                "var": "y"
+              }
+            ],
+            "outputs": [
+              "z"
+            ]
+          },
+          {
+            "opcode": "jnz",
+            "operands": [
+              {
+                "var": "3"
+              },
+              {
+                "label": "then"
+              },
+              {
+                "label": "else"
+              }
+            ],
+            "outputs": []
+          }
+        ]
+      },
+      {
+        "label": "then",
+        "instructions": [
+          {
+            "opcode": "add",
+            "operands": [
+              {
+                "lit": "10"
+              },
+              {
+                "var": "3"
+              }
+            ],
+            "outputs": [
+              "4"
+            ]
+          },
+          {
+            "opcode": "sink",
+            "operands": [
+              {
+                "var": "4"
+              }
+            ],
+            "outputs": []
+          }
+        ]
+      },
+      {
+        "label": "else",
+        "instructions": [
+          {
+            "opcode": "assign",
+            "operands": [
+              {
+                "var": "3"
+              }
+            ],
+            "outputs": [
+              "5"
+            ]
+          },
+          {
+            "opcode": "sink",
+            "operands": [
+              {
+                "var": "5"
+              }
+            ],
+            "outputs": []
+          }
+        ]
+      }
+    ]
+  }
+}

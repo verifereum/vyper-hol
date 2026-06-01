@@ -1,0 +1,16 @@
+main:
+    %par = param
+    %1 = %par
+    %2 = 64
+    %3 = add %1, %2
+    %x = or %3, -1
+    %m = mul %3, 1
+    %y = iszero %3
+    %z = iszero %y
+    jnz %z, @then, @else
+then:
+    %4 = add 10, %3
+    sink %4
+else:
+    %5 = mul %3, 1
+    sink %5

@@ -1,0 +1,12 @@
+main:
+    %a = param
+    %b = param
+    %g = gt %a, %b
+    %c = iszero %g
+    %z = add %a, 0
+    %y = and %b, 0
+    jnz %c, @t, @f
+t:
+    sink %z
+f:
+    sink %y
