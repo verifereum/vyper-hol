@@ -166,6 +166,18 @@ End
  *   If keep < depth: replace op with chain[keep]
  *
  * Note: iszero uses are skipped (they preserve the chain).
+ *
+ * The extra `get_label (EL keep chain) = NONE` guard below has no Python
+ * counterpart and never fires on any IR Vyper emits: chain roots are
+ * iszero operands and chain interior elements are iszero outputs, none of
+ * which are labels in well-formed code, so the substituted operand is
+ * always a non-label and the guard is a no-op (zero bytecode divergence).
+ * It is kept only as a soundness refinement: get_successors-preservation
+ * for a resolved JNZ condition needs the replacement to be a non-label,
+ * and "chain elements are non-labels" is NOT derivable from inst_wf /
+ * wf_function / wf_ssa (ISZERO operands and JNZ conditions are
+ * label-unconstrained there). Removing the guard would require adding a
+ * new well-formedness precondition, which we avoid.
  *)
 Definition ao_resolve_iszero_op_def:
   ao_resolve_iszero_op targets use_opcode op =
@@ -812,6 +824,59 @@ Definition ao_cmp_flip_function_def:
           fn.fn_blocks
 End
 
+(* ===== OR-truthy mini-pass =====
+ *
+ * Python _rule_or: `x | n -> 1` in truthy positions when n is a nonzero
+ * literal and every use of the output is a TRUTHY_INSTRUCTION.  This is a
+ * value-changing rewrite (output becomes 1 rather than x|n), so unlike the
+ * value-preserving peephole it cannot live in the per-instruction sim
+ * engine (which preserves all non-fresh var values).  It is a separate
+ * mini-pass, justified at the usage level: x|n with n<>0 is always nonzero
+ * and 1 is nonzero, so the two agree in every truthy-consuming use.
+ *
+ * After phase 3, surviving `or op1 (Lit n)` instructions have n<>0 and
+ * n<>(-1) (those were turned into ASSIGN by ao_opt_or), so the scan's n<>0
+ * guard selects exactly the Python truthy case.
+ *)
+
+(* Scan for OR instructions eligible for the truthy rewrite: opcode OR,
+   operands [op1; Lit n] with n<>0, and all uses truthy. *)
+Definition ao_or_truthy_scan_def:
+  ao_or_truthy_scan dfg [] = [] /\
+  ao_or_truthy_scan dfg (inst :: rest) =
+    let ids = ao_or_truthy_scan dfg rest in
+    if inst.inst_opcode = OR /\
+       (case inst.inst_operands of
+          [op1; Lit n] => n <> 0w
+        | _ => F) /\
+       ao_all_truthy dfg inst then
+      inst.inst_id :: ids
+    else ids
+End
+
+(* Apply the OR-truthy rewrite to a single instruction.
+   The opcode = OR guard is redundant for scanned ids (which are all ORs) but
+   makes the transform provably leave terminators and PHIs untouched, which the
+   generic WF/SSA-preservation lemmas require. *)
+Definition ao_or_truthy_apply_inst_def:
+  ao_or_truthy_apply_inst ids inst =
+    if inst.inst_opcode = OR /\ MEM inst.inst_id ids then
+      inst with <| inst_opcode := ASSIGN; inst_operands := [Lit 1w] |>
+    else inst
+End
+
+(* Apply OR-truthy to a function: scan all instructions, then MAP per block. *)
+Definition ao_or_truthy_function_def:
+  ao_or_truthy_function dfg fn =
+    let ids = ao_or_truthy_scan dfg (fn_insts fn) in
+    if NULL ids then fn
+    else
+      fn with fn_blocks :=
+        MAP (\bb. bb with bb_instructions :=
+          MAP (ao_or_truthy_apply_inst ids) bb.bb_instructions)
+          fn.fn_blocks
+End
+
 (* ===== Block and Function Transform ===== *)
 
 (*
@@ -820,13 +885,11 @@ End
  * 2. Try producer rules (balance→selfbalance, signextend nesting)
  * 3. Pre-flip + peephole + post-flip
  *
- * PHI is left completely unchanged. Under the eval_phis block-entry
- * semantics, PHIs form a parallel prefix evaluated by eval_phis and are
- * never executed by exec_block; the simulation framework
- * (inst_transform_structural) requires per-instruction transforms to map
- * PHI to [inst]. This is a conservative deviation from Python, whose
- * _rewrite_iszero_uses also shortens PHI operands; skipping that on PHIs
- * only forgoes an optimization and never changes behavior.
+ * PHI is mapped to [inst] here so the per-instruction simulation engine
+ * (inst_transform_structural / inst_transform_phi) can keep treating PHIs as
+ * a fixed parallel prefix that is left literally unchanged.  PHI iszero-use
+ * resolution (matching Python's _rewrite_iszero_uses on PHIs) is applied
+ * separately as a post-pass by ao_resolve_phis_block (see ao_transform_block).
  *)
 Definition ao_transform_inst_def:
   ao_transform_inst mid dfg ra lbl idx targets inst =
@@ -845,13 +908,68 @@ Definition ao_transform_inst_def:
           MAP ao_post_flip_inst result
 End
 
+(* Resolve iszero chains inside PHI operands only (Python:
+   _rewrite_iszero_uses applied to PHIs).  Non-PHI instructions are left
+   untouched.  Resolution only rewrites operands, so opcode/outputs/inst_id
+   and the PHI prefix structure are preserved. *)
+Definition ao_resolve_phis_block_def:
+  ao_resolve_phis_block targets bb =
+    bb with bb_instructions :=
+      MAP (\inst. if inst.inst_opcode = PHI
+                  then ao_resolve_iszero_inst targets inst
+                  else inst) bb.bb_instructions
+End
+
+(* ao_transform_inst keeps PHI -> [inst] (the structural sim engine requires
+   PHIs to be left literally unchanged), so PHI iszero-use resolution is run
+   as a post-pass over the transformed block.  ao_transform_inst maps PHIs to
+   themselves and never produces a PHI from a non-PHI input, hence this
+   resolves exactly the original PHI prefix and leaves the transformed body
+   untouched. *)
 Definition ao_transform_block_def:
   ao_transform_block mid dfg ra targets bb =
-    bb with bb_instructions :=
-      FLAT (MAPi (\idx inst.
-        ao_transform_inst mid dfg ra bb.bb_label idx targets inst)
-        bb.bb_instructions)
+    ao_resolve_phis_block targets
+      (bb with bb_instructions :=
+        FLAT (MAPi (\idx inst.
+          ao_transform_inst mid dfg ra bb.bb_label idx targets inst)
+          bb.bb_instructions))
 End
+
+(* ===== ao_resolve_phis_block structural preservation =====
+   ao_resolve_phis_block only rewrites PHI operands, so it preserves block
+   label, per-instruction ids/outputs, and the flattened-output projections
+   the WF/SSA/Ids proofs reason about.  These let those proofs strip the
+   resolve post-pass and reduce to the pre-resolution transformed block. *)
+
+Theorem ao_resolve_phis_block_label[simp]:
+  (ao_resolve_phis_block targets bb).bb_label = bb.bb_label
+Proof
+  simp[ao_resolve_phis_block_def]
+QED
+
+Theorem ao_resolve_phis_block_inst_ids:
+  MAP (\i. i.inst_id) (ao_resolve_phis_block targets bb).bb_instructions =
+  MAP (\i. i.inst_id) bb.bb_instructions
+Proof
+  simp[ao_resolve_phis_block_def, listTheory.MAP_MAP_o, combinTheory.o_DEF] >>
+  irule listTheory.MAP_CONG >> simp[] >> rw[ao_resolve_iszero_inst_def]
+QED
+
+Theorem ao_resolve_phis_block_outputs:
+  MAP (\i. i.inst_outputs) (ao_resolve_phis_block targets bb).bb_instructions =
+  MAP (\i. i.inst_outputs) bb.bb_instructions
+Proof
+  simp[ao_resolve_phis_block_def, listTheory.MAP_MAP_o, combinTheory.o_DEF] >>
+  irule listTheory.MAP_CONG >> simp[] >> rw[ao_resolve_iszero_inst_def]
+QED
+
+Theorem ao_resolve_phis_block_opcodes:
+  MAP (\i. i.inst_opcode) (ao_resolve_phis_block targets bb).bb_instructions =
+  MAP (\i. i.inst_opcode) bb.bb_instructions
+Proof
+  simp[ao_resolve_phis_block_def, listTheory.MAP_MAP_o, combinTheory.o_DEF] >>
+  irule listTheory.MAP_CONG >> simp[] >> rw[ao_resolve_iszero_inst_def]
+QED
 
 (*
  * Full pass structure (matches Python run_pass):
@@ -877,7 +995,10 @@ Definition ao_transform_function_def:
     (* Phase 4: comparator iszero flip *)
     let dfg1 = dfg_build_function fn1 in
     let mid1 = fn_max_inst_id fn1 in
-    ao_cmp_flip_function mid1 dfg1 fn1
+    let fn2 = ao_cmp_flip_function mid1 dfg1 fn1 in
+    (* Phase 5: OR-truthy rewrite (x|n -> assign 1) *)
+    let dfg2 = dfg_build_function fn2 in
+    ao_or_truthy_function dfg2 fn2
 End
 
 (* Variables whose values may change under cmp_flip:
@@ -891,6 +1012,16 @@ Definition ao_cmp_flip_dead_vars_def:
           MEM v inst.inst_outputs } UNION
     { fresh | ?aid out_var cmp_id.
           MEM (aid, out_var, fresh, cmp_id) inserts }
+End
+
+(* Variables whose values change under OR-truthy: the outputs of the OR
+   instructions rewritten to `assign 1` (originally x|n, now 1). *)
+Definition ao_or_truthy_dead_vars_def:
+  ao_or_truthy_dead_vars dfg fn =
+    let ids = ao_or_truthy_scan dfg (fn_insts fn) in
+    { v | ?inst. MEM inst (fn_insts fn) /\
+          MEM inst.inst_id ids /\
+          MEM v inst.inst_outputs }
 End
 
 Definition ao_transform_context_def:
@@ -946,7 +1077,11 @@ Definition ao_fn_total_fresh_vars_def:
     let fn1 = fn0 with fn_blocks :=
       MAP (ao_transform_block mid dfg ra targets) fn0.fn_blocks in
     let dfg1 = dfg_build_function fn1 in
-    ao_fn_fresh_vars fn UNION ao_cmp_flip_dead_vars dfg1 fn1
+    let mid1 = fn_max_inst_id fn1 in
+    let fn2 = ao_cmp_flip_function mid1 dfg1 fn1 in
+    let dfg2 = dfg_build_function fn2 in
+    ao_fn_fresh_vars fn UNION ao_cmp_flip_dead_vars dfg1 fn1 UNION
+    ao_or_truthy_dead_vars dfg2 fn2
 End
 
 (* DFG runtime invariant: tracked opcode outputs have expected values *)

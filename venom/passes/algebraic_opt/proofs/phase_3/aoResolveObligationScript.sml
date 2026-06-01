@@ -1022,3 +1022,314 @@ Proof
   simp_tac (srw_ss()) [] >> strip_tac >>
   gvs[step_inst_base_def, exec_read0_def]
 QED
+
+(* ==========================================================================
+   PHI iszero-resolution: eval_phis-level bridge.
+
+   ao_transform_inst maps PHI -> [inst]; PHI iszero-use resolution is run as a
+   post-pass (ao_resolve_phis_block).  The simulation engine relates a block to
+   its pre-resolution transformed body at the run_block level.  These lemmas
+   bridge run_block (ao_resolve_phis_block targets tbb) s to run_block tbb s by
+   showing the PHI resolution preserves eval_phis (value-preserving on defined
+   PHI operands) and leaves the non-PHI body untouched.
+   ========================================================================== *)
+
+(* eval_one_phi agreement under the global chain invariant: if the original
+   PHI evaluates to SOME (out, w), so does the resolved PHI. *)
+Theorem ao_resolve_eval_one_phi_eq_global:
+  !targets inst s out w.
+    inst.inst_opcode = PHI /\
+    ao_iszero_chain_inv targets s /\
+    ao_chains_defined_at targets s /\
+    ao_targets_wf targets /\
+    (!v chain k. ALOOKUP targets v = SOME chain /\ 0 < k /\ k < LENGTH chain ==>
+       ?u. EL k chain = Var u) /\
+    eval_one_phi s inst = SOME (out, w) ==>
+    eval_one_phi s (ao_resolve_iszero_inst targets inst) = SOME (out, w)
+Proof
+  rpt strip_tac >>
+  qabbrev_tac `g = ao_resolve_iszero_op targets PHI` >>
+  `(ao_resolve_iszero_inst targets inst).inst_outputs = inst.inst_outputs /\
+   (ao_resolve_iszero_inst targets inst).inst_operands = MAP g inst.inst_operands`
+    by simp[ao_resolve_iszero_inst_def, Abbr `g`] >>
+  `!lbl. g (Label lbl) = Label lbl` by simp[Abbr `g`, ao_resolve_iszero_op_def] >>
+  `!op lbl. g op = Label lbl ==> op = Label lbl` by
+    metis_tac[ao_resolve_iszero_op_not_label] >>
+  qpat_x_assum `eval_one_phi s inst = SOME (out, w)` mp_tac >>
+  simp[eval_one_phi_def] >>
+  Cases_on `inst.inst_outputs` >> simp[] >>
+  Cases_on `t` >> simp[] >>
+  Cases_on `s.vs_prev_bb` >> simp[] >>
+  rename1 `s.vs_prev_bb = SOME prev` >>
+  Cases_on `resolve_phi prev inst.inst_operands` >> simp[] >>
+  rename1 `resolve_phi prev inst.inst_operands = SOME val_op` >>
+  Cases_on `eval_operand val_op s` >> simp[] >>
+  strip_tac >>
+  simp[eval_one_phi_def] >>
+  `resolve_phi prev (MAP g inst.inst_operands) =
+   OPTION_MAP g (resolve_phi prev inst.inst_operands)` by
+    (irule resolve_phi_map_label_pres >> simp[]) >>
+  simp[] >>
+  `eval_operand (g val_op) s = eval_operand val_op s` by
+    (qunabbrev_tac `g` >> irule resolve_op_eval_eq_at >> simp[]) >>
+  gvs[]
+QED
+
+(* Loop-robust per-operand version: filters targets to the PHI's operand keys
+   (mirrors ao_resolve_phi_sim_local) so only per-operand chain facts are
+   needed, then reduces to the global version. *)
+Theorem ao_resolve_eval_one_phi_eq:
+  !targets inst s out w.
+    inst.inst_opcode = PHI /\
+    ao_targets_wf targets /\
+    (!v chain k. ALOOKUP targets v = SOME chain /\ 0 < k /\ k < LENGTH chain ==>
+       ?u. EL k chain = Var u) /\
+    (!v chain k. MEM (Var v) inst.inst_operands /\
+                 ALOOKUP targets v = SOME chain /\
+                 (?w0. eval_operand (Var v) s = SOME w0) /\
+                 k < LENGTH chain ==>
+                 ?u. eval_operand (EL k chain) s = SOME u) /\
+    (!v chain k. MEM (Var v) inst.inst_operands /\
+                 ALOOKUP targets v = SOME chain /\ k + 1 < LENGTH chain ==>
+                 !val_k val_k1.
+                   eval_operand (EL k chain) s = SOME val_k /\
+                   eval_operand (EL (k + 1) chain) s = SOME val_k1 ==>
+                   val_k1 = bool_to_word (val_k = 0w)) /\
+    eval_one_phi s inst = SOME (out, w) ==>
+    eval_one_phi s (ao_resolve_iszero_inst targets inst) = SOME (out, w)
+Proof
+  rpt strip_tac >>
+  qabbrev_tac `P = \v:string. MEM (Var v) inst.inst_operands` >>
+  qabbrev_tac `rt = FILTER (\(v, chain). P v) targets` >>
+  `!v. P v ==> ALOOKUP rt v = ALOOKUP targets v` by
+    simp[Abbr `rt`, alistTheory.ALOOKUP_FILTER] >>
+  `!v. ~P v ==> ALOOKUP rt v = NONE` by
+    simp[Abbr `rt`, alistTheory.ALOOKUP_FILTER] >>
+  `ao_resolve_iszero_inst targets inst = ao_resolve_iszero_inst rt inst` by
+    (simp[ao_resolve_iszero_inst_def, instruction_component_equality] >>
+     irule listTheory.MAP_CONG >> simp[] >> rpt strip_tac >>
+     Cases_on `x` >> simp[ao_resolve_iszero_op_def] >>
+     rename1 `Var vn` >> `P vn` by simp[Abbr `P`] >>
+     first_x_assum drule >> simp[]) >>
+  pop_assum (fn th => REWRITE_TAC [th]) >>
+  `ao_targets_wf rt` by
+    (rw[ao_targets_wf_def] >> rpt strip_tac >> (
+     `P v` by (CCONTR_TAC >> `ALOOKUP rt v = NONE` by metis_tac[] >> gvs[]) >>
+     `ALOOKUP targets v = SOME chain` by metis_tac[] >>
+     metis_tac[ao_targets_wf_def])) >>
+  `!v chain k. ALOOKUP rt v = SOME chain /\ 0 < k /\ k < LENGTH chain ==>
+     ?u. EL k chain = Var u` by
+    (rpt strip_tac >>
+     `P v` by (CCONTR_TAC >> `ALOOKUP rt v = NONE` by metis_tac[] >> gvs[]) >>
+     `ALOOKUP targets v = SOME chain` by metis_tac[] >> metis_tac[]) >>
+  `ao_iszero_chain_inv rt s` by
+    (rw[ao_iszero_chain_inv_def] >> rpt strip_tac >>
+     `P v` by (CCONTR_TAC >> `ALOOKUP rt v = NONE` by metis_tac[] >> gvs[]) >>
+     `ALOOKUP targets v = SOME chain` by metis_tac[] >>
+     `MEM (Var v) inst.inst_operands` by fs[Abbr `P`] >>
+     qpat_x_assum `!v chain k. MEM _ _ /\ _ /\ k + 1 < _ ==> _`
+       (qspecl_then [`v`, `chain`, `k`] mp_tac) >> simp[]) >>
+  `ao_chains_defined_at rt s` by
+    (rw[ao_chains_defined_at_def] >> rpt strip_tac >>
+     `P v` by (CCONTR_TAC >> `ALOOKUP rt v = NONE` by metis_tac[] >> gvs[]) >>
+     `ALOOKUP targets v = SOME chain` by metis_tac[] >>
+     `MEM (Var v) inst.inst_operands` by fs[Abbr `P`] >>
+     qpat_x_assum `!v chain k. MEM _ _ /\ _ /\ _ /\ k < _ ==> ?u. _`
+       (qspecl_then [`v`, `chain`, `k`] mp_tac) >> simp[] >>
+     disch_then irule >> metis_tac[]) >>
+  irule ao_resolve_eval_one_phi_eq_global >> simp[] >>
+  first_assum ACCEPT_TAC
+QED
+
+(* phi_prefix_length is determined by opcodes, so an opcode-preserving map
+   leaves it unchanged. *)
+Triviality phi_prefix_length_map_opcode_pres[local]:
+  !hf l. (!x. (hf x).inst_opcode = x.inst_opcode) ==>
+    phi_prefix_length (MAP hf l) = phi_prefix_length l
+Proof
+  ntac 2 strip_tac >> Induct_on `l` >> rw[phi_prefix_length_def]
+QED
+
+(* ao_resolve_phis_block only rewrites PHI operands; at every execution step a
+   PHI errors identically and a non-PHI is untouched, so exec_block is
+   unaffected. *)
+Triviality exec_block_resolve_phis_eq[local]:
+  !n fuel ctx targets tbb s.
+    LENGTH tbb.bb_instructions - s.vs_inst_idx = n ==>
+    exec_block fuel ctx (ao_resolve_phis_block targets tbb) s =
+    exec_block fuel ctx tbb s
+Proof
+  completeInduct_on `n` >> rpt strip_tac >>
+  qabbrev_tac `hf = \inst:instruction.
+    if inst.inst_opcode = PHI then ao_resolve_iszero_inst targets inst else inst` >>
+  qabbrev_tac `R = ao_resolve_phis_block targets tbb` >>
+  `R.bb_instructions = MAP hf tbb.bb_instructions` by
+    simp[Abbr `R`, Abbr `hf`, ao_resolve_phis_block_def] >>
+  `!x. (hf x).inst_opcode = x.inst_opcode` by
+    (rw[Abbr `hf`] >> simp[ao_resolve_iszero_inst_def]) >>
+  ONCE_REWRITE_TAC[exec_block_def] >>
+  reverse (Cases_on `s.vs_inst_idx < LENGTH tbb.bb_instructions`)
+  >- (`get_instruction R s.vs_inst_idx = NONE /\
+       get_instruction tbb s.vs_inst_idx = NONE` by
+        simp[get_instruction_def] >> simp[]) >>
+  `get_instruction R s.vs_inst_idx = SOME (hf (EL s.vs_inst_idx tbb.bb_instructions)) /\
+   get_instruction tbb s.vs_inst_idx = SOME (EL s.vs_inst_idx tbb.bb_instructions)` by
+    simp[get_instruction_def, listTheory.EL_MAP] >>
+  qabbrev_tac `inst = EL s.vs_inst_idx tbb.bb_instructions` >>
+  simp[] >>
+  Cases_on `inst.inst_opcode = PHI`
+  >- (`(hf inst).inst_opcode = PHI` by simp[] >>
+      `inst.inst_opcode <> INVOKE /\ (hf inst).inst_opcode <> INVOKE` by simp[] >>
+      `step_inst fuel ctx (hf inst) s = Error "phi outside prefix" /\
+       step_inst fuel ctx inst s = Error "phi outside prefix"` by
+        simp[step_inst_non_invoke, step_inst_base_def] >>
+      simp[]) >>
+  `hf inst = inst` by simp[Abbr `hf`] >>
+  simp[] >>
+  Cases_on `step_inst fuel ctx inst s` >> simp[] >>
+  IF_CASES_TAC >> simp[] >>
+  rename1 `step_inst fuel ctx inst s = OK s'` >>
+  first_x_assum (qspec_then `LENGTH tbb.bb_instructions - SUC s.vs_inst_idx` mp_tac) >>
+  impl_tac >- simp[] >>
+  disch_then (qspecl_then [`fuel`, `ctx`, `targets`, `tbb`,
+    `s' with vs_inst_idx := SUC s.vs_inst_idx`] mp_tac) >>
+  simp[Abbr `R`]
+QED
+
+(* ===== Generic FLAT/MAPi prefix helpers ===== *)
+
+Triviality phi_prefix_len_le[local]:
+  !l. phi_prefix_length l <= LENGTH l
+Proof
+  Induct >> rw[phi_prefix_length_def]
+QED
+
+(* eval_phis OK means every prefix PHI evaluates to SOME. *)
+Theorem eval_phis_ok_prefix_phi_some:
+  !insts s s'.
+    eval_phis s insts = OK s' ==>
+    !idx. idx < phi_prefix_length insts ==>
+      ?out w. eval_one_phi s (EL idx insts) = SOME (out, w)
+Proof
+  Induct >- simp[phi_prefix_length_def] >>
+  rpt strip_tac >>
+  rename1 `eval_phis s (phi::insts) = OK s'` >>
+  `phi.inst_opcode = PHI` by (CCONTR_TAC >> fs[phi_prefix_length_def]) >>
+  qpat_x_assum `eval_phis s (phi::insts) = OK s'` mp_tac >>
+  simp[Once eval_phis_def] >>
+  Cases_on `eval_one_phi s phi` >> simp[] >>
+  rename1 `eval_one_phi s phi = SOME outv` >> Cases_on `outv` >> simp[] >>
+  Cases_on `eval_phis s insts` >> simp[] >> strip_tac >>
+  Cases_on `idx` >> gvs[] >>
+  rename1 `eval_phis s insts = OK s''` >>
+  first_x_assum (qspecl_then [`s`, `s''`] mp_tac) >>
+  impl_tac >- simp[] >>
+  disch_then (qspec_then `n` mp_tac) >>
+  impl_tac >- fs[phi_prefix_length_def] >>
+  simp[]
+QED
+
+(* For a map that is identity-as-singleton on the PHI prefix, FLAT over the
+   prefix is the prefix itself. *)
+Triviality flat_take_phi_prefix_eq[local]:
+  !f l.
+    (!i. i < phi_prefix_length l ==> f i (EL i l) = [EL i l]) ==>
+    FLAT (TAKE (phi_prefix_length l) (MAPi f l)) = TAKE (phi_prefix_length l) l
+Proof
+  Induct_on `l` >- simp[phi_prefix_length_def] >>
+  rpt strip_tac >> simp[phi_prefix_length_def] >>
+  Cases_on `h.inst_opcode = PHI` >> simp[] >>
+  `f 0 h = [h]` by (first_x_assum (qspec_then `0` mp_tac) >> simp[phi_prefix_length_def]) >>
+  simp[indexedListsTheory.MAPi_def, combinTheory.o_DEF] >>
+  first_x_assum ho_match_mp_tac >> rpt strip_tac >>
+  rename1 `j < phi_prefix_length l` >>
+  qpat_x_assum `!i. i < phi_prefix_length (h::l) ==> _`
+    (qspec_then `SUC j` mp_tac) >> simp[phi_prefix_length_def]
+QED
+
+(* Within the PHI prefix, FLAT (MAPi f l) agrees pointwise with l. *)
+Theorem prefix_el_flat_mapi:
+  !f l idx.
+    (!i. i < phi_prefix_length l ==> f i (EL i l) = [EL i l]) /\
+    idx < phi_prefix_length l ==>
+    EL idx (FLAT (MAPi f l)) = EL idx l
+Proof
+  rpt strip_tac >>
+  `phi_prefix_length l <= LENGTH l` by simp[phi_prefix_len_le] >>
+  `FLAT (TAKE (phi_prefix_length l) (MAPi f l)) = TAKE (phi_prefix_length l) l` by
+    (irule flat_take_phi_prefix_eq >> simp[]) >>
+  `MAPi f l = TAKE (phi_prefix_length l) (MAPi f l) ++
+              DROP (phi_prefix_length l) (MAPi f l)` by simp[] >>
+  `FLAT (MAPi f l) = TAKE (phi_prefix_length l) l ++
+                     FLAT (DROP (phi_prefix_length l) (MAPi f l))` by
+    metis_tac[listTheory.FLAT_APPEND] >>
+  pop_assum SUBST1_TAC >>
+  `idx < LENGTH (TAKE (phi_prefix_length l) l)` by simp[listTheory.LENGTH_TAKE] >>
+  simp[rich_listTheory.EL_APPEND1, listTheory.EL_TAKE]
+QED
+
+(* eval_phis is preserved by PHI resolution given per-prefix-index eval_one_phi
+   agreement (established by callers from the chain invariant). *)
+Theorem eval_phis_resolve_eq:
+  !targets s insts s_phi.
+    eval_phis s insts = OK s_phi /\
+    (!idx. idx < phi_prefix_length insts ==>
+       eval_one_phi s (ao_resolve_iszero_inst targets (EL idx insts)) =
+       eval_one_phi s (EL idx insts)) ==>
+    eval_phis s
+      (MAP (\inst. if inst.inst_opcode = PHI
+                   then ao_resolve_iszero_inst targets inst else inst) insts) =
+    OK s_phi
+Proof
+  Induct_on `insts` >- simp[eval_phis_def] >>
+  rpt gen_tac >> strip_tac >>
+  rename1 `eval_phis s (phi::insts) = OK s_phi` >>
+  reverse (Cases_on `phi.inst_opcode = PHI`)
+  >- (qpat_x_assum `eval_phis s (phi::insts) = OK s_phi` mp_tac >>
+      simp[eval_phis_def]) >>
+  `eval_one_phi s (ao_resolve_iszero_inst targets phi) = eval_one_phi s phi` by
+    (first_x_assum (qspec_then `0` mp_tac) >> simp[phi_prefix_length_def]) >>
+  `(ao_resolve_iszero_inst targets phi).inst_opcode = PHI` by
+    simp[ao_resolve_iszero_inst_def] >>
+  qpat_x_assum `eval_phis s (phi::insts) = OK s_phi` mp_tac >>
+  simp[Once eval_phis_def] >>
+  Cases_on `eval_one_phi s phi` >> simp[] >>
+  rename1 `eval_one_phi s phi = SOME outv` >> Cases_on `outv` >> simp[] >>
+  rename1 `eval_one_phi s phi = SOME (out, w)` >>
+  Cases_on `eval_phis s insts` >> simp[] >>
+  rename1 `eval_phis s insts = OK s'` >> strip_tac >>
+  `eval_phis s (MAP (\inst. if inst.inst_opcode = PHI
+                   then ao_resolve_iszero_inst targets inst else inst) insts) =
+   OK s'` by
+    (first_x_assum irule >> simp[] >> rpt strip_tac >>
+     first_x_assum (qspec_then `SUC idx` mp_tac) >>
+     simp[phi_prefix_length_def]) >>
+  simp[Once eval_phis_def]
+QED
+
+(* Top-level bridge: run_block is unchanged by the PHI resolution post-pass,
+   given eval_one_phi agreement on the prefix PHIs at the entry state. *)
+Theorem run_block_resolve_phis_bridge:
+  !targets tbb fuel ctx s s_phi.
+    eval_phis s tbb.bb_instructions = OK s_phi /\
+    (!idx. idx < phi_prefix_length tbb.bb_instructions ==>
+       eval_one_phi s (ao_resolve_iszero_inst targets (EL idx tbb.bb_instructions)) =
+       eval_one_phi s (EL idx tbb.bb_instructions)) ==>
+    run_block fuel ctx (ao_resolve_phis_block targets tbb) s =
+    run_block fuel ctx tbb s
+Proof
+  rpt strip_tac >>
+  `eval_phis s (ao_resolve_phis_block targets tbb).bb_instructions = OK s_phi` by
+    (simp[ao_resolve_phis_block_def] >> irule eval_phis_resolve_eq >>
+     first_assum (irule_at Any) >> simp[]) >>
+  `phi_prefix_length (ao_resolve_phis_block targets tbb).bb_instructions =
+   phi_prefix_length tbb.bb_instructions` by
+    (simp[ao_resolve_phis_block_def] >> irule phi_prefix_length_map_opcode_pres >>
+     rw[] >> simp[ao_resolve_iszero_inst_def]) >>
+  simp[run_block_def] >>
+  qspecl_then [`LENGTH tbb.bb_instructions - phi_prefix_length tbb.bb_instructions`,
+    `fuel`, `ctx`, `targets`, `tbb`,
+    `s_phi with vs_inst_idx := phi_prefix_length tbb.bb_instructions`]
+    mp_tac exec_block_resolve_phis_eq >>
+  simp[]
+QED

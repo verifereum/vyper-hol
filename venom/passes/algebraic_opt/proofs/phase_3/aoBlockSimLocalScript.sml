@@ -650,6 +650,134 @@ Proof
   metis_tac[]
 QED
 
+(* Chain adjacency relation for one prefix instruction's operands, packaged
+   from strict_dom + within_block invariants with canonical (dfg_build /
+   ao_compute) argument forms so the discharge needs no rewriting. *)
+Triviality ao_resolve_chain_rel_local[local]:
+  !fn0 dfg targets bb idx s.
+    wf_function fn0 /\ wf_ssa fn0 /\
+    dfg = dfg_build_function fn0 /\
+    targets = ao_compute_fn_iszero_targets fn0 /\
+    ao_targets_wf targets /\
+    MEM bb fn0.fn_blocks /\
+    idx < LENGTH bb.bb_instructions /\
+    s.vs_current_bb = bb.bb_label /\
+    strict_dom_iszero_inv fn0 dfg s /\
+    within_block_iszero_inv fn0 bb idx s ==>
+    !v chain k. MEM (Var v) (EL idx bb.bb_instructions).inst_operands /\
+      ALOOKUP targets v = SOME chain /\
+      k + 1 < LENGTH chain ==>
+      !val_k val_k1.
+        eval_operand (EL k chain) s = SOME val_k /\
+        eval_operand (EL (k + 1) chain) s = SOME val_k1 ==>
+        val_k1 = bool_to_word (val_k = 0w)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`fn0`, `dfg`, `targets`, `bb`, `idx`,
+    `EL idx bb.bb_instructions`, `s`] mp_tac chain_iszero_rel_from_inv >>
+  impl_tac >- simp[] >> simp[]
+QED
+
+(* The PHI iszero-resolution post-pass is value-preserving on the transformed
+   block: every prefix PHI's selected operand resolves to the same value, using
+   the local chain invariant (strict_dom + within_block-vacuous-on-PHIs) rather
+   than the global chain invariant. *)
+Triviality ao_resolve_transform_run_block_eq[local]:
+  !fn0 mid dfg ra targets bb s fuel ctx s_phi.
+    wf_function fn0 /\ wf_ssa fn0 /\
+    dfg = dfg_build_function fn0 /\
+    targets = ao_compute_fn_iszero_targets fn0 /\
+    ao_targets_wf targets /\
+    MEM bb fn0.fn_blocks /\
+    bb_well_formed bb /\ EVERY inst_wf bb.bb_instructions /\
+    s.vs_current_bb = bb.bb_label /\
+    strict_dom_iszero_inv fn0 dfg s /\
+    ao_chain_defined_prefix targets s /\
+    eval_phis s bb.bb_instructions = OK s_phi ==>
+    run_block fuel ctx
+      (ao_resolve_phis_block targets
+        (bb with bb_instructions := FLAT (MAPi
+          (\idx inst. ao_transform_inst mid dfg ra bb.bb_label idx targets inst)
+          bb.bb_instructions))) s =
+    run_block fuel ctx
+      (bb with bb_instructions := FLAT (MAPi
+        (\idx inst. ao_transform_inst mid dfg ra bb.bb_label idx targets inst)
+        bb.bb_instructions)) s
+Proof
+  rpt strip_tac >>
+  qabbrev_tac `tbody = bb with bb_instructions := FLAT (MAPi
+      (\idx inst. ao_transform_inst mid dfg ra bb.bb_label idx targets inst)
+      bb.bb_instructions)` >>
+  `tbody.bb_instructions = FLAT (MAPi
+      (\idx inst. ao_transform_inst mid dfg ra bb.bb_label idx targets inst)
+      bb.bb_instructions)` by simp[Abbr `tbody`] >>
+  `inst_transform_structural
+     (\(v:num) inst. ao_transform_inst mid dfg ra bb.bb_label v targets inst)` by
+    simp[ao_transform_inst_structural] >>
+  `eval_phis s (FLAT (MAPi
+      (\idx inst. ao_transform_inst mid dfg ra bb.bb_label idx targets inst)
+      bb.bb_instructions)) = eval_phis s bb.bb_instructions` by (
+    match_mp_tac (GEN_ALL eval_phis_flat_mapi) >> rpt conj_tac
+    >- (rpt strip_tac >> drule inst_transform_phi >> simp[])
+    >- (rpt strip_tac >> drule inst_transform_non_phi_weak >> simp[])
+    >- (rpt strip_tac >> fs[bb_well_formed_def] >> metis_tac[])) >>
+  `phi_prefix_length (FLAT (MAPi
+      (\idx inst. ao_transform_inst mid dfg ra bb.bb_label idx targets inst)
+      bb.bb_instructions)) = phi_prefix_length bb.bb_instructions` by (
+    match_mp_tac (GEN_ALL phi_prefix_length_flat_mapi) >> rpt conj_tac
+    >- (rpt strip_tac >> drule inst_transform_phi >> simp[])
+    >- (rpt strip_tac >> drule inst_transform_non_phi_weak >> simp[])
+    >- (rpt strip_tac >> fs[bb_well_formed_def] >> metis_tac[])) >>
+  `eval_phis s tbody.bb_instructions = OK s_phi` by metis_tac[] >>
+  `phi_prefix_length tbody.bb_instructions =
+   phi_prefix_length bb.bb_instructions` by metis_tac[] >>
+  `!idx. idx < phi_prefix_length bb.bb_instructions ==>
+     (\idx inst. ao_transform_inst mid dfg ra bb.bb_label idx targets inst)
+       idx (EL idx bb.bb_instructions) = [EL idx bb.bb_instructions]` by
+    (rpt strip_tac >> simp[] >> irule ao_transform_inst_phi >>
+     metis_tac[phi_prefix_el_phi]) >>
+  `ao_chains_defined_at targets s` by
+    metis_tac[ao_chain_defined_prefix_implies_at] >>
+  irule run_block_resolve_phis_bridge >>
+  first_assum (irule_at Any) >>
+  rpt strip_tac >>
+  `idx < phi_prefix_length bb.bb_instructions` by metis_tac[] >>
+  `idx < LENGTH bb.bb_instructions` by
+    metis_tac[phi_prefix_length_le, arithmeticTheory.LESS_LESS_EQ_TRANS] >>
+  `EL idx tbody.bb_instructions = EL idx bb.bb_instructions` by
+    (qpat_x_assum `tbody.bb_instructions = _` SUBST1_TAC >>
+     irule prefix_el_flat_mapi >> simp[]) >>
+  `(EL idx bb.bb_instructions).inst_opcode = PHI` by metis_tac[phi_prefix_el_phi] >>
+  `?out w. eval_one_phi s (EL idx bb.bb_instructions) = SOME (out, w)` by
+    metis_tac[eval_phis_ok_prefix_phi_some] >>
+  `within_block_iszero_inv fn0 bb idx s` by
+    (irule wbiz_mono >> qexists_tac `phi_prefix_length bb.bb_instructions` >>
+     simp[wbiz_phi_prefix]) >>
+  (* the three nontrivial antecedents of ao_resolve_eval_one_phi_eq *)
+  `!v chain k. ALOOKUP targets v = SOME chain /\ 0 < k /\ k < LENGTH chain ==>
+     ?u. EL k chain = Var u` by metis_tac[ao_fn_targets_chain_tail_var] >>
+  `!v chain k. MEM (Var v) (EL idx bb.bb_instructions).inst_operands /\
+     ALOOKUP targets v = SOME chain /\
+     (?w0. eval_operand (Var v) s = SOME w0) /\ k < LENGTH chain ==>
+     ?u. eval_operand (EL k chain) s = SOME u` by
+    (rpt strip_tac >>
+     qpat_x_assum `ao_chains_defined_at targets s` mp_tac >>
+     simp[ao_chains_defined_at_def] >> metis_tac[]) >>
+  `!v chain k. MEM (Var v) (EL idx bb.bb_instructions).inst_operands /\
+     ALOOKUP targets v = SOME chain /\ k + 1 < LENGTH chain ==>
+     !val_k val_k1.
+       eval_operand (EL k chain) s = SOME val_k /\
+       eval_operand (EL (k + 1) chain) s = SOME val_k1 ==>
+       val_k1 = bool_to_word (val_k = 0w)` by
+    (qspecl_then [`fn0`, `dfg`, `targets`, `bb`, `idx`, `s`] mp_tac
+       ao_resolve_chain_rel_local >>
+     impl_tac >- simp[] >> disch_then ACCEPT_TAC) >>
+  qpat_x_assum `EL idx tbody.bb_instructions = _` (fn th => REWRITE_TAC[th]) >>
+  qpat_assum `eval_one_phi s (EL idx bb.bb_instructions) = _`
+    (fn th => REWRITE_TAC[th]) >>
+  irule ao_resolve_eval_one_phi_eq >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
 Theorem ao_block_sim_local:
   !fn fn0 mid dfg ra targets bb.
     fn0 = fn with fn_blocks :=
@@ -694,21 +822,10 @@ Proof
       ao_dfg_inv dfg (st with vs_inst_idx := 0) /\
       st.vs_current_bb = bb.bb_label` >>
   rpt gen_tac >> strip_tac >>
-  (* Rewrite ao_transform_block to analysis_block_transform *)
-  `ao_transform_block mid dfg ra targets bb =
-   analysis_block_transform 0
-     (idx_df_state bb.bb_label (SUC (LENGTH bb.bb_instructions)))
-     (\v inst. ao_transform_inst mid dfg ra bb.bb_label v targets inst) bb` by
-    (simp[analysis_block_transform_def, ao_transform_block_def] >>
-     `MAPi (\idx inst. ao_transform_inst mid dfg ra bb.bb_label idx targets inst)
-          bb.bb_instructions =
-      MAPi (\idx inst. ao_transform_inst mid dfg ra bb.bb_label
-          (df_at 0 (idx_df_state bb.bb_label (SUC (LENGTH bb.bb_instructions)))
-             bb.bb_label idx) targets inst) bb.bb_instructions`
-       suffices_by simp[] >>
-     irule MAPi_CONG' >> simp[] >> rpt strip_tac >>
-     simp[idx_df_state_at2]) >>
-  ASM_REWRITE_TAC [] >>
+  (* The engine proves sim against the analysis form (analysis_block_transform).
+     With the M2 PHI post-pass, ao_transform_block = ao_resolve_phis_block targets
+     (analysis form), so we bridge run_block over the post-pass in the OK case via
+     ao_resolve_transform_run_block_eq rather than rewriting ao_transform_block here. *)
   qspecl_then
     [`state_equiv fv`, `execution_equiv fv`, `sound`,
      `\(st:venom_state). T`,
@@ -909,6 +1026,35 @@ Proof
               (simp[ao_dfg_inv_idx0] >> gvs[]) >>
             gvs[ao_dfg_inv_idx0])
         >- simp[]) >>
+      (* Bridge run_block over the M2 PHI post-pass back to the analysis form,
+         which is what the engine result is stated against. *)
+      `run_block fuel ctx (ao_transform_block mid dfg ra targets bb) s =
+       run_block fuel ctx
+         (analysis_block_transform 0
+            (idx_df_state bb.bb_label (SUC (LENGTH bb.bb_instructions)))
+            (\v inst. ao_transform_inst mid dfg ra bb.bb_label v targets inst) bb)
+         s` by (
+        `analysis_block_transform 0
+           (idx_df_state bb.bb_label (SUC (LENGTH bb.bb_instructions)))
+           (\v inst. ao_transform_inst mid dfg ra bb.bb_label v targets inst) bb =
+         bb with bb_instructions := FLAT (MAPi
+           (\idx inst. ao_transform_inst mid dfg ra bb.bb_label idx targets inst)
+           bb.bb_instructions)` by (
+          simp[analysis_block_transform_def] >>
+          `MAPi (\idx inst. ao_transform_inst mid dfg ra bb.bb_label
+              (df_at 0 (idx_df_state bb.bb_label (SUC (LENGTH bb.bb_instructions)))
+                 bb.bb_label idx) targets inst) bb.bb_instructions =
+           MAPi (\idx inst. ao_transform_inst mid dfg ra bb.bb_label idx targets inst)
+              bb.bb_instructions`
+            suffices_by simp[] >>
+          irule MAPi_CONG' >> simp[] >> rpt strip_tac >> simp[idx_df_state_at2]) >>
+        pop_assum SUBST1_TAC >>
+        REWRITE_TAC[ao_transform_block_def] >>
+        qspecl_then [`fn0`, `mid`, `dfg`, `ra`, `targets`, `bb`, `s`, `fuel`, `ctx`,
+          `s_phi`] mp_tac ao_resolve_transform_run_block_eq >>
+        impl_tac >- simp[] >> disch_then ACCEPT_TAC) >>
+      qpat_x_assum `run_block fuel ctx (ao_transform_block mid dfg ra targets bb) s = _`
+        (fn th => REWRITE_TAC[th]) >>
       qpat_x_assum `!fuel ctx s s_phi. _`
         (qspecl_then [`fuel`, `ctx`, `s`, `s_phi`] mp_tac) >>
       simp[])

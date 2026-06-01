@@ -191,6 +191,22 @@ Proof
   metis_tac[ao_resolve_iszero_op_phi_var, ao_resolve_iszero_op_phi_nonvar]
 QED
 
+(* The resolve post-pass rewrites PHIs through ao_resolve_iszero_inst (which
+   preserves inst_wf for PHIs, above) and leaves non-PHIs untouched, hence
+   preserves inst_wf across the whole block. *)
+Triviality ao_resolve_phis_block_inst_wf[local]:
+  !fn0 bb.
+    EVERY inst_wf bb.bb_instructions ==>
+    EVERY inst_wf
+      (ao_resolve_phis_block (ao_compute_fn_iszero_targets fn0) bb).bb_instructions
+Proof
+  rpt strip_tac >>
+  simp[ao_resolve_phis_block_def, listTheory.EVERY_MAP] >>
+  fs[listTheory.EVERY_MEM] >> rpt strip_tac >>
+  IF_CASES_TAC >> simp[] >>
+  irule ao_resolve_iszero_inst_wf_phi >> simp[]
+QED
+
 
 (* ===== FLAT MAPi helpers ===== *)
 
@@ -391,6 +407,32 @@ QED
 
 (* ===== bb_well_formed for ao_transform_block ===== *)
 
+(* ao_resolve_phis_block only rewrites PHI operands, preserving every
+   instruction's opcode and the block length, so bb_well_formed (which depends
+   only on opcodes + length) is invariant under it.  This lets the WF proof
+   strip the resolve post-pass and reduce to the pre-resolution block. *)
+Triviality ao_resolve_phis_block_bb_well_formed[local]:
+  !targets bb.
+    bb_well_formed bb ==>
+    bb_well_formed (ao_resolve_phis_block targets bb)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qabbrev_tac `h = \inst. if inst.inst_opcode = PHI
+                          then ao_resolve_iszero_inst targets inst else inst` >>
+  `(ao_resolve_phis_block targets bb).bb_instructions = MAP h bb.bb_instructions`
+    by simp[ao_resolve_phis_block_def, Abbr `h`] >>
+  `!x. (h x).inst_opcode = x.inst_opcode` by
+    rw[Abbr `h`, ao_resolve_iszero_inst_opcode] >>
+  `!n. n < LENGTH bb.bb_instructions ==>
+    (MAP h bb.bb_instructions)❲n❳.inst_opcode = bb.bb_instructions❲n❳.inst_opcode`
+    by (rpt strip_tac >>
+        `(MAP h bb.bb_instructions)❲n❳ = h (bb.bb_instructions❲n❳)`
+          by simp[listTheory.EL_MAP] >>
+        fs[]) >>
+  fs[bb_well_formed_def, listTheory.LAST_MAP] >>
+  rw[] >> res_tac >> fs[]
+QED
+
 Triviality ao_transform_block_bb_wf[local]:
   !mid dfg ra targets bb.
     bb_well_formed bb /\
@@ -398,7 +440,9 @@ Triviality ao_transform_block_bb_wf[local]:
     bb_well_formed (ao_transform_block mid dfg ra targets bb)
 Proof
   rpt strip_tac >>
-  simp[ao_transform_block_def, bb_well_formed_def] >>
+  simp[ao_transform_block_def] >>
+  irule ao_resolve_phis_block_bb_well_formed >>
+  simp[bb_well_formed_def] >>
   fs[bb_well_formed_def] >>
   qabbrev_tac `insts = bb.bb_instructions` >>
   qabbrev_tac `g = \idx inst.
@@ -500,6 +544,31 @@ Proof
   simp[ao_resolve_iszero_op_get_label]
 QED
 
+Triviality get_succ_last_map[local]:
+  !f l. l <> [] /\ (!x. get_successors (f x) = get_successors x) ==>
+        get_successors (LAST (MAP f l)) = get_successors (LAST l)
+Proof
+  rpt strip_tac >> fs[listTheory.LAST_MAP]
+QED
+
+(* The resolve post-pass only touches PHI operands, and get_successors is
+   invariant under iszero resolution, so bb_succs is preserved. *)
+Triviality ao_resolve_phis_block_bb_succs[local]:
+  !targets bb. bb_succs (ao_resolve_phis_block targets bb) = bb_succs bb
+Proof
+  rpt gen_tac >>
+  simp[bb_succs_def, ao_resolve_phis_block_def] >>
+  qmatch_goalsub_abbrev_tac `MAP h bb.bb_instructions` >>
+  `!x. get_successors (h x) = get_successors x` by
+    rw[Abbr `h`, ao_resolve_iszero_inst_get_successors] >>
+  Cases_on `bb.bb_instructions` >> fs[] >>
+  `get_successors (LAST (h h'::MAP h t)) = get_successors (LAST (h'::t))`
+    suffices_by simp[] >>
+  `h h'::MAP h t = MAP h (h'::t)` by simp[] >>
+  pop_assum SUBST1_TAC >>
+  irule get_succ_last_map >> fs[]
+QED
+
 Triviality ao_transform_block_label[local]:
   !mid dfg ra targets bb.
     (ao_transform_block mid dfg ra targets bb).bb_label = bb.bb_label
@@ -514,7 +583,8 @@ Triviality ao_transform_block_bb_succs[local]:
     bb_succs (ao_transform_block mid dfg ra targets bb) = bb_succs bb
 Proof
   rpt strip_tac >>
-  simp[ao_transform_block_def, bb_succs_def] >>
+  simp[ao_transform_block_def, ao_resolve_phis_block_bb_succs] >>
+  simp[bb_succs_def] >>
   fs[bb_well_formed_def] >>
   qabbrev_tac `insts = bb.bb_instructions` >>
   qabbrev_tac `g = \idx inst.
@@ -776,7 +846,9 @@ Triviality ao_transform_block_inst_wf[local]:
          (ao_compute_fn_iszero_targets fn0) bb).bb_instructions
 Proof
   rpt strip_tac >>
-  simp[ao_transform_block_def, listTheory.EVERY_MEM, listTheory.MEM_FLAT,
+  simp[ao_transform_block_def] >>
+  irule ao_resolve_phis_block_inst_wf >>
+  simp[listTheory.EVERY_MEM, listTheory.MEM_FLAT,
        indexedListsTheory.MEM_MAPi, PULL_EXISTS] >>
   rpt strip_tac >>
   qmatch_asmsub_abbrev_tac `MEM x (ao_transform_inst _ _ _ _ i _ _)` >>

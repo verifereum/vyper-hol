@@ -667,7 +667,7 @@ Triviality block_outpieces_snd_snd_flat[local]:
       (ao_transform_block mid dfg ra targets bb).bb_instructions)
 Proof
   rw[block_outpieces_def, ao_transform_block_def, map_mapi,
-     flat_map_flat_mapi]
+     flat_map_flat_mapi, ao_resolve_phis_block_outputs]
 QED
 
 Definition all_outpieces_def:
@@ -809,12 +809,71 @@ QED
 
 (* ===== no_cmp_iz: phase-4's inserted fresh "iz" vars avoid phase-3 outputs ===== *)
 
-(* pieces carrying the transformed instruction list (not just outputs) *)
+(* The M2 PHI iszero-resolution post-pass only rewrites PHI operands, so it
+   preserves opcode/id/outputs of every instruction.  These let the cmpiece
+   plumbing carry the resolved instructions (= the actual transformed block)
+   while the cmpok/outok reasoning reduces to the pre-resolution form. *)
+Triviality resolve_phi_inst_opcode[local]:
+  !targets i.
+    (if i.inst_opcode = PHI then ao_resolve_iszero_inst targets i else i).inst_opcode =
+    i.inst_opcode
+Proof
+  rw[ao_resolve_iszero_inst_def]
+QED
+
+Triviality resolve_phi_inst_id[local]:
+  !targets i.
+    (if i.inst_opcode = PHI then ao_resolve_iszero_inst targets i else i).inst_id =
+    i.inst_id
+Proof
+  rw[ao_resolve_iszero_inst_def]
+QED
+
+Triviality resolve_phi_inst_outputs[local]:
+  !targets i.
+    (if i.inst_opcode = PHI then ao_resolve_iszero_inst targets i else i).inst_outputs =
+    i.inst_outputs
+Proof
+  rw[ao_resolve_iszero_inst_def]
+QED
+
+Triviality map_resolve_phi_outputs[local]:
+  !targets l.
+    FLAT (MAP (\i. i.inst_outputs)
+      (MAP (\inst. if inst.inst_opcode = PHI
+                   then ao_resolve_iszero_inst targets inst else inst) l)) =
+    FLAT (MAP (\i. i.inst_outputs) l)
+Proof
+  Induct_on `l` >> simp[resolve_phi_inst_outputs]
+QED
+
+Triviality cmpok_map_resolve[local]:
+  !targets fv base l.
+    cmpok fv base l ==>
+    cmpok fv base
+      (MAP (\inst. if inst.inst_opcode = PHI
+                   then ao_resolve_iszero_inst targets inst else inst) l)
+Proof
+  rpt gen_tac >> simp[cmpok_def] >> strip_tac >> conj_tac
+  >- (rw[listTheory.MEM_MAP] >>
+      gvs[resolve_phi_inst_opcode, resolve_phi_inst_id] >>
+      first_x_assum irule >> simp[])
+  >> simp[map_resolve_phi_outputs] >> strip_tac >>
+     first_x_assum irule >>
+     gvs[listTheory.MEM_MAP, resolve_phi_inst_opcode] >>
+     metis_tac[resolve_phi_inst_opcode]
+QED
+
+(* pieces carrying the transformed instruction list (not just outputs);
+   PHI pieces carry the resolved instruction so the FLAT equals the actual
+   transformed block (see block_cmppieces_snd_snd_flat). *)
 Definition block_cmppieces_def:
   block_cmppieces mid dfg ra targets bb =
     MAPi (\idx inst.
       (inst.inst_id, inst.inst_outputs,
-       ao_transform_inst mid dfg ra bb.bb_label idx targets inst))
+       MAP (\i. if i.inst_opcode = PHI
+                then ao_resolve_iszero_inst targets i else i)
+         (ao_transform_inst mid dfg ra bb.bb_label idx targets inst)))
       bb.bb_instructions
 End
 
@@ -831,7 +890,8 @@ Triviality block_cmppieces_snd_snd_flat[local]:
     FLAT (MAP (\p. SND (SND p)) (block_cmppieces mid dfg ra targets bb)) =
     (ao_transform_block mid dfg ra targets bb).bb_instructions
 Proof
-  rw[block_cmppieces_def, ao_transform_block_def, map_mapi] >>
+  rw[block_cmppieces_def, ao_transform_block_def, ao_resolve_phis_block_def,
+     map_mapi, listTheory.MAP_FLAT] >>
   simp[combinTheory.o_DEF]
 QED
 
@@ -879,6 +939,7 @@ Proof
     (simp[fn_insts_def] >> irule mem_fn_insts_blocks >>
      qpat_x_assum `MEM _ fn.fn_blocks` (irule_at Any) >>
      simp[listTheory.MEM_EL, Abbr`inst`] >> metis_tac[]) >>
+  irule cmpok_map_resolve >>
   irule transform_inst_cmpok >>
   simp[listTheory.EVERY_MEM] >> rpt strip_tac >> metis_tac[]
 QED
@@ -894,6 +955,7 @@ Proof
   rw[all_cmppieces_def, listTheory.EVERY_MEM, listTheory.MEM_FLAT,
      listTheory.MEM_MAP] >>
   gvs[block_cmppieces_def, indexedListsTheory.MEM_MAPi] >>
+  simp[map_resolve_phi_outputs] >>
   qmatch_goalsub_abbrev_tac `ao_transform_inst _ _ _ _ _ _ inst` >>
   `MEM inst (fn_insts fn)` by
     (simp[fn_insts_def] >> irule mem_fn_insts_blocks >>
@@ -1492,6 +1554,59 @@ Proof
   ]
 QED
 
+(* ===== resolve post-pass preserves inok / cmpinok ===== *)
+
+(* The M2 PHI resolution rewrites a PHI operand to an earlier iszero-chain
+   entry.  Chain entries are clean (chain-vars-not-fresh hypothesis), so a
+   fresh operand of a resolved instruction must have come from the original
+   operand list, where inok already constrains it. *)
+Triviality inok_map_resolve[local]:
+  !targets fv id l.
+    (!ch w. MEM ch (MAP SND targets) /\ MEM (Var w) ch ==> w NOTIN fv) /\
+    inok fv id l ==>
+    inok fv id
+      (MAP (\inst. if inst.inst_opcode = PHI
+                   then ao_resolve_iszero_inst targets inst else inst) l)
+Proof
+  rw[inok_def, listTheory.MEM_MAP] >>
+  rename1 `MEM xx l` >>
+  reverse (Cases_on `xx.inst_opcode = PHI`) >> gvs[]
+  >- metis_tac[] >>
+  qpat_x_assum `MEM (Var w) (ao_resolve_iszero_inst _ _).inst_operands` mp_tac >>
+  simp[ao_resolve_iszero_inst_def, listTheory.MEM_MAP] >> rpt strip_tac >>
+  qmatch_asmsub_rename_tac `Var w = ao_resolve_iszero_op targets PHI op` >>
+  qspecl_then [`targets`, `PHI`, `op`] strip_assume_tac resolve_op_cases
+  >- (gvs[] >> metis_tac[]) >>
+  gvs[] >>
+  `?yy. chain = SND yy /\ MEM yy targets` by
+    (qexists_tac `(vv, chain)` >> simp[] >> metis_tac[alistTheory.ALOOKUP_MEM]) >>
+  `w NOTIN fv` by metis_tac[] >> gvs[]
+QED
+
+Triviality cmpinok_map_resolve[local]:
+  !targets fv l.
+    (!ch w. MEM ch (MAP SND targets) /\ MEM (Var w) ch ==> w NOTIN fv) /\
+    cmpinok fv l ==>
+    cmpinok fv
+      (MAP (\inst. if inst.inst_opcode = PHI
+                   then ao_resolve_iszero_inst targets inst else inst) l)
+Proof
+  rw[cmpinok_def] >>
+  `?p. MEM p l /\ is_comparator p.inst_opcode` by
+    (gvs[listTheory.MEM_MAP] >> metis_tac[resolve_phi_inst_opcode]) >>
+  `!q w. MEM q l /\ MEM (Var w) q.inst_operands ==> w NOTIN fv` by metis_tac[] >>
+  gvs[listTheory.MEM_MAP] >>
+  qmatch_asmsub_rename_tac
+    `MEM (Var _) (if zz.inst_opcode = PHI
+                  then ao_resolve_iszero_inst targets zz else zz).inst_operands` >>
+  reverse (Cases_on `zz.inst_opcode = PHI`) >> gvs[]
+  >- metis_tac[] >>
+  qspecl_then [`targets`, `zz`, `fv`] mp_tac resolve_inst_opnds_clean >>
+  impl_tac
+  >- (conj_tac >- metis_tac[] >> rw[listTheory.MEM_MAP] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
 (* ===== all_cmppieces operand invariants ===== *)
 
 Triviality all_cmppieces_inok[local]:
@@ -1511,6 +1626,8 @@ Proof
     (simp[fn_insts_def] >> irule mem_fn_insts_blocks >>
      qpat_x_assum `MEM _ fn.fn_blocks` (irule_at Any) >>
      simp[listTheory.MEM_EL, Abbr`inst`] >> metis_tac[]) >>
+  irule inok_map_resolve >> conj_tac
+  >- (rpt strip_tac >> metis_tac[listTheory.MEM_MAP]) >>
   irule transform_inst_inok >>
   simp[listTheory.MEM_MAP, listTheory.EVERY_MEM] >>
   rpt strip_tac >> metis_tac[]
@@ -1533,6 +1650,8 @@ Proof
     (simp[fn_insts_def] >> irule mem_fn_insts_blocks >>
      qpat_x_assum `MEM _ fn.fn_blocks` (irule_at Any) >>
      simp[listTheory.MEM_EL, Abbr`inst`] >> metis_tac[]) >>
+  irule cmpinok_map_resolve >> conj_tac
+  >- (rpt strip_tac >> metis_tac[listTheory.MEM_MAP]) >>
   irule transform_inst_cmpinok >>
   simp[listTheory.MEM_MAP, listTheory.EVERY_MEM] >>
   rpt strip_tac >> metis_tac[]

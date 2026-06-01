@@ -5,7 +5,7 @@
 Theory algebraicOptProof
 Ancestors
   algebraicOptDefs
-  aoPhase1Proof aoPhase2Proof aoPhase3Proof aoPhase4Proof
+  aoPhase1Proof aoPhase2Proof aoPhase3Proof aoPhase4Proof aoPhase5Proof
   aoPreservation aoTargetProps
   stateEquiv stateEquivProps execEquivProps
   venomExecSemantics venomExecProofs venomWf venomState venomInst
@@ -92,6 +92,27 @@ Proof
      simp[Abbr `dfg1`, Abbr `dead`] >>
      disch_then match_mp_tac >>
      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
+  (* Phase-1-4 output (fn2) is wf + ssa, enabling the phase-5 step *)
+  qabbrev_tac `fn2 = ao_cmp_flip_function (fn_max_inst_id fn1) dfg1 fn1` >>
+  qabbrev_tac `dfg2 = dfg_build_function fn2` >>
+  qabbrev_tac `dead5 = ao_or_truthy_dead_vars dfg2 fn2` >>
+  `wf_function fn2 /\ ssa_form fn2` by
+    (mp_tac (SIMP_RULE std_ss [LET_THM] ao_phases1234_preserve_wf_ssa) >>
+     disch_then (qspec_then `fn` mp_tac) >>
+     simp[Abbr `fn0`, Abbr `fn1`, Abbr `targets`, Abbr `dfg`,
+          Abbr `ra`, Abbr `mid`, Abbr `dfg1`, Abbr `fn2`] >>
+     metis_tac[]) >>
+  `fn_inst_ids_distinct fn2` by fs[wf_function_def] >>
+  (* Phase 5: fn2 → OR-truthy simulation *)
+  `(?e. run_blocks fuel ctx fn2 s = Error e) \/
+   lift_result (state_equiv dead5) (execution_equiv dead5)
+     (execution_equiv dead5) (run_blocks fuel ctx fn2 s)
+     (run_blocks fuel ctx (ao_or_truthy_function dfg2 fn2) s)` by
+    (mp_tac (SIMP_RULE std_ss [LET_THM] ao_phase5_correct) >>
+     disch_then (qspecl_then [`fuel`,`ctx`,`fn2`,`s`] mp_tac) >>
+     simp[Abbr `dfg2`, Abbr `dead5`] >>
+     disch_then match_mp_tac >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
   (* Case split: fn0 error or lift_result *)
   Cases_on `?e. run_blocks fuel ctx fn0 s = Error e`
   >- (DISJ1_TAC >> gvs[]) >>
@@ -101,20 +122,25 @@ Proof
     (strip_tac >>
      Cases_on `run_blocks fuel ctx fn s` >> gvs[lift_result_def]) >>
   gvs[] >>
+  (* fn2 can't error either: contradicts phase-4 lift_result *)
+  `~(?e. run_blocks fuel ctx fn2 s = Error e)` by
+    (strip_tac >>
+     Cases_on `run_blocks fuel ctx fn1 s` >> gvs[lift_result_def]) >>
+  gvs[] >>
   (* Rewrite goal target *)
-  `ao_transform_function fn =
-   ao_cmp_flip_function (fn_max_inst_id fn1) dfg1 fn1` by
+  `ao_transform_function fn = ao_or_truthy_function dfg2 fn2` by
     simp[ao_transform_function_def, LET_THM,
          Abbr `fn1`, Abbr `fn0`, Abbr `dfg`, Abbr `ra`,
-         Abbr `mid`, Abbr `targets`, Abbr `dfg1`] >>
+         Abbr `mid`, Abbr `targets`, Abbr `dfg1`, Abbr `fn2`, Abbr `dfg2`] >>
   `ao_fn_total_fresh_vars fn =
-   ao_fn_fresh_vars fn UNION dead` by
+   ao_fn_fresh_vars fn UNION dead UNION dead5` by
     simp[ao_fn_total_fresh_vars_def, LET_THM,
          Abbr `fn1`, Abbr `fn0`, Abbr `dfg`, Abbr `ra`,
-         Abbr `mid`, Abbr `targets`, Abbr `dead`, Abbr `dfg1`] >>
+         Abbr `mid`, Abbr `targets`, Abbr `dead`, Abbr `dfg1`,
+         Abbr `fn2`, Abbr `dfg2`, Abbr `dead5`] >>
   qpat_x_assum `ao_transform_function fn = _` SUBST1_TAC >>
   qpat_x_assum `ao_fn_total_fresh_vars fn = _` SUBST1_TAC >>
-  (* Compose via lift_result_trans + lift_result_mono *)
+  (* Compose the three simulations via nested lift_result_trans + mono *)
   irule (UNDISCH_ALL lift_result_trans) >>
   conj_tac >- metis_tac[state_equiv_trans] >>
   conj_tac >- metis_tac[execution_equiv_trans] >>
@@ -125,12 +151,22 @@ Proof
                     `execution_equiv (ao_fn_fresh_vars fn)`] >>
       rpt strip_tac >> simp[] >>
       metis_tac[state_equiv_subset, execution_equiv_subset,
-                pred_setTheory.SUBSET_UNION])
+                pred_setTheory.SUBSET_UNION, pred_setTheory.SUBSET_TRANS]) >>
+  irule (UNDISCH_ALL lift_result_trans) >>
+  conj_tac >- metis_tac[state_equiv_trans] >>
+  conj_tac >- metis_tac[execution_equiv_trans] >>
+  qexists_tac `run_blocks fuel ctx fn2 s` >>
+  conj_tac
   >- (irule lift_result_mono >>
       qexistsl_tac [`state_equiv dead`, `execution_equiv dead`] >>
       rpt strip_tac >> simp[] >>
       metis_tac[state_equiv_subset, execution_equiv_subset,
-                pred_setTheory.SUBSET_UNION])
+                pred_setTheory.SUBSET_UNION, pred_setTheory.SUBSET_TRANS])
+  >- (irule lift_result_mono >>
+      qexistsl_tac [`state_equiv dead5`, `execution_equiv dead5`] >>
+      rpt strip_tac >> simp[] >>
+      metis_tac[state_equiv_subset, execution_equiv_subset,
+                pred_setTheory.SUBSET_UNION, pred_setTheory.SUBSET_TRANS])
 QED
 
 val _ = export_theory();

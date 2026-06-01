@@ -355,7 +355,8 @@ Triviality block_pieces_snd_flat[local]:
     MAP (\i. i.inst_id)
       (ao_transform_block mid dfg ra targets bb).bb_instructions
 Proof
-  rw[block_pieces_def, ao_transform_block_def] >>
+  rw[block_pieces_def] >>
+  simp[ao_transform_block_def, ao_resolve_phis_block_inst_ids] >>
   qspecl_then [`bb.bb_instructions`,
     `\idx inst. MAP (\i. i.inst_id)
        (ao_transform_inst mid dfg ra bb.bb_label idx targets inst)`,

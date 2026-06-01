@@ -49,9 +49,15 @@ QED
 (* ===== Transform equivalence =====
  *
  * analysis_block_transform 0 (idx_df_state lbl n) f bb
- * = ao_transform_block mid dfg ra targets bb
+ * = the pre-resolution transformed block body of ao_transform_block,
  * when f = \v inst. ao_transform_inst mid dfg ra lbl v targets inst
- * and n >= LENGTH bb.bb_instructions
+ * and n >= LENGTH bb.bb_instructions.
+ *
+ * Note: ao_transform_block additionally applies ao_resolve_phis_block as a
+ * post-pass (PHI iszero-use resolution).  That post-pass only rewrites PHI
+ * operands and is value-preserving; it is bridged at the run_block level in
+ * aoBlockSimLocal (where eval_phis is reasoned about), not here.  This
+ * exec_block-level lemma therefore targets the un-resolved body.
  *)
 Triviality transform_eq[local]:
   !mid dfg ra targets bb.
@@ -59,9 +65,12 @@ Triviality transform_eq[local]:
     let n = LENGTH bb.bb_instructions in
     let f = \v inst. ao_transform_inst mid dfg ra lbl v targets inst in
     analysis_block_transform 0 (idx_df_state lbl n) f bb =
-    ao_transform_block mid dfg ra targets bb
+    bb with bb_instructions :=
+      FLAT (MAPi (\idx inst.
+        ao_transform_inst mid dfg ra lbl idx targets inst)
+        bb.bb_instructions)
 Proof
-  rw[LET_THM, analysis_block_transform_def, ao_transform_block_def] >>
+  rw[LET_THM, analysis_block_transform_def] >>
   `FLAT (MAPi (\idx inst.
      ao_transform_inst mid dfg ra bb.bb_label
        (df_at 0 (idx_df_state bb.bb_label (LENGTH bb.bb_instructions))
@@ -117,7 +126,11 @@ Theorem ao_phase3_block_sim:
       (?e. exec_block fuel ctx bb s = Error e) \/
       lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
         (exec_block fuel ctx bb s)
-        (exec_block fuel ctx (ao_transform_block mid dfg ra targets bb) s)
+        (exec_block fuel ctx
+          (bb with bb_instructions :=
+            FLAT (MAPi (\idx inst.
+              ao_transform_inst mid dfg ra bb.bb_label idx targets inst)
+              bb.bb_instructions)) s)
 Proof
   rpt gen_tac >> strip_tac >>
   rpt gen_tac >> strip_tac >>
