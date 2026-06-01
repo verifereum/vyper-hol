@@ -230,12 +230,33 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260601T081233Z_m0998_t001
 - tool_output:TO_type_system_rewrite-20260601T081233Z_m1001_t001
 
-## L0035 scope='C0.1.1' tags=ExtCall,boundary-lemma,Resume,direct-helper
-shape: ExtCall mutual Resume has a local boundary theorem `extcall_expr_sound_from_generated_ih` whose conclusion matches expression soundness, plus `type_place_expr_Call_ExtCall_NONE` for the place conjunct.
-pattern: Prefer a short wrapper proof around the existing boundary theorem over inlining the ExtCall monadic prefix. Split expression/place conjuncts, close place with `type_place_expr_Call_ExtCall_NONE`, then apply the boundary theorem and adapt generated IHs. Do not split static/nonstatic or unfold evaluator definitions in the Resume.
-works_when: Applies under the latest strategist plan for `Expr_Call_ExtCall_result` after E0035 invalidated prefix-splitting; helper names must be in scope as audited in E0034.
+## L0039 scope='C0.1.1.2.1' tags=ExtCall,Definition,eliminator,mk_asm,impl_tac
+shape: Eliminator for a large opaque predicate fails under broad `rw[def]` or if the success-condition antecedent is not in context.
+pattern: For large generated-prefix predicates, unfold with targeted `rewrite_tac[def]`, specialize the theorem, label it with `mk_asm`, strip the small success condition (`returnData=[]`, `IS_SOME drv`) before applying the labelled implication, then specialize only the compact postcondition variables.
+works_when: The component's job is only to open an opaque boundary, not to prove evaluator facts; all prefix facts are already assumptions and can discharge the predicate antecedent by direct matching after the success condition is available.
 evidence:
-- episode:E0034
-- episode:E0035
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m0989_t001
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m1022_t001
+- episode:E0043
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1137_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1147_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1153_t001
+
+## L0040 scope='C0.1.1.2' tags=ExtCall,generated-IH,opaque-predicate,branch-local-eliminator,proof-interface
+shape: A generated optional-driver IH is hidden behind an opaque predicate, but a broad eliminator still requires reconstructing a full monadic prefix when used in a consumer helper.
+pattern: Use a two-layer boundary. Keep `extcall_generated_driver_ih` atomic during prefix/error splitting; prove the broad eliminator once; then wrap it in branch-local success-tail eliminators whose statements mention only natural static/nonstatic branch facts and whose conclusions exactly match the continuation lemma's conditional driver premise. Consumers should call only the branch-local eliminators, never the broad generated-prefix eliminator.
+works_when: The generated driver IH is needed only under `returnData = [] /\ IS_SOME drv` after a concrete run-success branch, and static/nonstatic branch facts determine target/value decoding, calldata, code check, and `run_ext_call` result.
+evidence:
+- episode:E0043
+- episode:E0044
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1211_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1206_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:9939
+
+## L0041 scope='C0.1.1.2.2' tags=ExtCall,MATCH_MP_TAC,qexistsl,generated-prefix,risk-mismatch
+shape: `MATCH_MP_TAC` on a broad generated-prefix eliminator creates an existential over dozens of `s_*` monad states inside a higher-level consumer proof.
+pattern: Treat this as a boundary failure, not a witness-order problem. Move the witness plumbing into a specifically named branch-local lemma, or ask the strategist to redesign the eliminator; do not keep extending `qexistsl` lists in the consumer proof.
+works_when: The consumer theorem is supposed to be a linear proof over evaluator branches and the generated-prefix variables are artifacts of the predicate definition rather than meaningful consumer-level facts.
+evidence:
+- episode:E0044
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1179_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1182_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1198_t001
