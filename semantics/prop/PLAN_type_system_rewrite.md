@@ -4,10 +4,10 @@
 
 ### C0: Type-system rewrite proof completion
 - Kind: `proof`
-- Risk: 2
+- Risk: 3
 - Work priority: 0
 - Work units: 0
-- Rationale: This local merge only repairs the ExtCall_result subtree; no new whole-task obstruction is introduced by E0111 once the generated IH is quarantined rather than kept as a simplification assumption.
+- Rationale: Derived from child component C0.2.1.1.2 risk 3. The quarantined static-prefix proof is build-clean with a tail cheat, but the required low-risk success-tail interface failed: neither `irule driver_ih` nor `match_mp_tac driver_ih` can match the captured generated optional-driver theorem to the compact conditional premise of `extcall_success_continuation_sound_cond_driver_ih`. Proceeding would require a manual full-prefix instantiation or generated-prefix adapter, which the PLAN forbids.
 - Required for completion: yes
 - Progress transition: `refinement`
 - Carries progress/evidence from: C0
@@ -47,10 +47,10 @@ Do not change `raw_call_return_type`, `type_slot_size`, or ABI-size definitions.
 
 ### C0.2: ExtCall type-soundness proof work
 - Kind: `proof`
-- Risk: 2
+- Risk: 3
 - Work priority: 0
 - Work units: 0
-- Rationale: The ExtCall_result branch remains plausible after E0111 if the generated optional-driver implication is treated as an opaque theorem object and removed from assumptions during prefix splitting.
+- Rationale: Derived from child component C0.2.1.1.2 risk 3. The quarantined static-prefix proof is build-clean with a tail cheat, but the required low-risk success-tail interface failed: neither `irule driver_ih` nor `match_mp_tac driver_ih` can match the captured generated optional-driver theorem to the compact conditional premise of `extcall_success_continuation_sound_cond_driver_ih`. Proceeding would require a manual full-prefix instantiation or generated-prefix adapter, which the PLAN forbids.
 - Progress transition: `refinement`
 - Carries progress/evidence from: C0.2
 
@@ -62,10 +62,10 @@ ExtCall proof subtree. The key repair is local theorem quarantine, not evaluator
 
 ### C0.2.1: Quarantine generated ExtCall driver IH and prove ExtCall_result branches
 - Kind: `proof_refactor`
-- Risk: 2
+- Risk: 3
 - Work priority: 0
 - Work units: 0
-- Rationale: E0111 showed the previous direct proof was not Risk 2 while the raw generated prefix implication was live. The revised proof interface removes that implication from the assumptions before simplification and reuses it only at the single success tail, matching the maintainer-approved specialization point.
+- Rationale: Derived from child component C0.2.1.1.2 risk 3. The quarantined static-prefix proof is build-clean with a tail cheat, but the required low-risk success-tail interface failed: neither `irule driver_ih` nor `match_mp_tac driver_ih` can match the captured generated optional-driver theorem to the compact conditional premise of `extcall_success_continuation_sound_cond_driver_ih`. Proceeding would require a manual full-prefix instantiation or generated-prefix adapter, which the PLAN forbids.
 - Progress transition: `refinement`
 - Carries progress/evidence from: C0.2.1, E0111
 - Invalidates prior progress/evidence: C0.2.1.1.2@previous
@@ -80,139 +80,143 @@ Carries forward the overall ExtCall_result goal but replaces the failed live-ass
 - Reapply it only in the concrete success-continuation branch.
 - Do not revive generated-prefix adapter theorems or edit outside `semantics/prop`.
 
-### C0.2.1.1: Prove ExtCall expression result soundness with quarantined optional-driver IH
+### C0.2.1.1: Prove ExtCall expression result soundness with branch-local native driver-IH specialization
 - Kind: `proof`
 - Risk: 2
 - Work priority: 0
 - Work units: 0
-- Rationale: E0111 invalidated the previous Risk-2 claim for leaving the generated optional-driver implication live. The revised subtree is Risk 2 because it makes quarantine a required proof interface: the raw generated implication is removed before any `simp`/`gvs`, preventing prefix-error cleanup from traversing the >4KiB generated premise. The only non-mechanical step is reapplying the captured theorem in the final success tail by matching its conclusion, exactly the maintainer-approved specialization point.
+- Rationale: The previous compact conditional helper interface is invalidated by E0114, but the hard prefix hazard is now de-risked: E0113/E0114 show `pop_last_assum` quarantines the generated IH and the static prefix/error branches build with only the success tail cheated. The remaining strategy is standard but precise: after reaching the single success-continuation branch, specialize the captured generated IH in its native full-prefix shape using the live prefix equations, then project the expression-result conjunct needed by the existing tail helper. This is permitted by the maintainer clarification and avoids broad simplification or persistent adapter theorems.
 - Progress transition: `replacement`
-- Carries progress/evidence from: C0.2.1.1.1, E0110, E0111
-- Invalidates prior progress/evidence: C0.2.1.1.2@previous
+- Carries progress/evidence from: E0110, E0112, E0113, E0114
+- Invalidates prior progress/evidence: C0.2.1.1@previous, C0.2.1.1.2@previous, C0.2.1.1.3@previous
 
 #### Progress note
-Carries forward the successful cleanup of obsolete generated-prefix artifacts from E0110 and the negative evidence from E0111. Invalidates only the earlier direct-linear approach that kept the raw driver implication live during prefix splitting.
+Carries forward the cleanup and the validated quarantine/prefix skeleton. Replaces only the failed compact-premise consumption interface; E0114's No-match evidence is accepted and used to change the proof boundary for both static and nonstatic result branches.
 
 #### Summary
-- Local replacement for the ExtCall_result proof branch after E0111.
-- The raw generated optional-driver implication is proof data, not a simplification assumption.
-- Capture/remove it at the start of each ExtCall branch with `qpat_x_assum ... (fn driver_ih => ...)`.
-- Do all prefix-error and static/nonstatic splitting while that theorem is absent from assumptions.
-- Reintroduce it only in the final concrete success-continuation branch to discharge the conditional driver premise of `extcall_success_continuation_sound_cond_driver_ih`.
-
-#### Description
-E0111 showed that even narrow simplification and local case splitting time out when the raw generated optional-driver implication remains among assumptions. The revised invariant is therefore syntactic as much as mathematical: before simplification of the ExtCall evaluator prefix, consume the generated implication by `qpat_x_assum` into an ML theorem value and thereby remove it from the goal. Prefix work then uses existing small boundary lemmas without broad assumption simplification.
+- Keep the generated optional-driver IH out of assumptions during evaluator-prefix splitting with `pop_last_assum (fn driver_ih => ...)`.
+- Do not ask HOL matching to turn the native generated full-prefix IH into the compact conditional premise automatically; E0114 proves that interface does not match.
+- At the single success-continuation branch, locally specialize the captured `driver_ih` with the live prefix equations and project the expression-result half.
+- Reuse existing tail soundness lemmas after deriving the driver premise; do not resurrect generated-prefix adapter artifacts.
 
 #### Approach
-In each `Expr_Call_ExtCall_result_static`/nonstatic branch, immediately capture the generated optional-driver IH assumption using a precise `qpat_x_assum` pattern whose body is the long `∀s'' vs ... . ... ⇒ ∀env st res st'. ...` implication. The continuation tactic should run all evaluator-prefix splitting with that theorem bound as `driver_ih` and no longer present as an assumption. At the success tail, invoke `extcall_success_continuation_sound_cond_driver_ih`; for its conditional driver premise, `strip_tac` the `returnData = [] /\ IS_SOME drv` antecedent, then use `irule driver_ih` or `match_mp_tac driver_ih` so HOL instantiates the generated prefix from the concrete prefix equalities already in context, followed only by narrow rewriting of those prefix equalities.
+Treat captured `driver_ih` as a native full-prefix theorem. Use it only after the success case is selected and the driver path premise `returnData = [] /\ IS_SOME drv` is current. Specialize it with the concrete prefix variables/equations already in the branch, prove the generated prefix antecedent by live equalities and narrow monadic rewrites, and project the first conjunct.
 
 #### Not to try
-Do not leave the raw generated optional-driver implication in the assumption set while calling `simp[]`, `gvs[]`, `Cases_on vs`, or unfolding `evaluate_def`; E0111 shows this causes timeouts and huge goals. Do not resurrect `extcall_generated_driver_ih`, build long generated-prefix adapter theorems, or use broad `AllCaseEqs()`/assumption cleanup over the whole ExtCall prefix. Do not manually `qspecl_then` the generated IH with the entire prefix-state variable list; if matching cannot instantiate it from the concrete success branch, stop and escalate.
+- Do not use `irule driver_ih` or `match_mp_tac driver_ih` directly for the compact premise; E0114 showed both fail.
+- Do not resurrect `extcall_generated_driver_ih_def`, `extcall_generated_driver_ih_elim_expr`, or any named long generated-prefix adapter theorem.
+- Do not leave the generated IH in assumptions while simplifying the evaluator prefix.
+- Do not use broad `simp`/`gvs`, `AllCaseEqs()`, or broad `qpat_x_assum` patterns over the full ExtCall prefix.
 
 #### Argument
-The ExtCall result proof has two phases. First, the evaluator prefix establishes either an immediate error result or a single successful external-call continuation with concrete `accounts'`, `tStorage'`, `returnData`, and updated state. This phase does not need the optional-driver IH and should not expose it to simplification. Second, only in the success continuation, the return-data/driver tail is exactly the computation covered by `extcall_success_continuation_sound_cond_driver_ih`; if `returnData = []` and `drv` is present, the captured generated IH supplies soundness of `eval_expr cx (THE drv)` after the preceding prefix equations have all been established. Thus prefix facts are produced linearly and the generated IH is consumed once at its natural boundary.
+The ExtCall_result branch has two proof phases. First, split the concrete evaluator prefix linearly while the huge generated optional-driver IH is quarantined as an ML theorem value, so ordinary rewriting does not traverse it. E0113/E0114 validate this phase for the static branch: target extraction, calldata construction, missing-code error, failed-run error, and revert error all close with narrow monadic rewrites when the raw IH is absent from assumptions.
+
+Second, in the success branch only, the evaluator prefix has already produced concrete equations for every operation in the generated optional-driver IH antecedent: `eval_exprs`, target checks, calldata construction, account/transient reads, `run_ext_call`, success check, and account/transient updates. Consume the generated IH in that native implication shape. Its conclusion is stronger than the tail helper needs: it gives the expression-result soundness conjunct plus an additional place-expression conjunct. Project the expression conjunct and use it to satisfy the driver premise of `extcall_success_continuation_sound_cond_driver_ih`.
+
+This avoids a separate generated-prefix adapter theorem. The only full-prefix reasoning is branch-local, after all prefix equations have concrete names and after all error branches have been discharged. If specialization still requires broad `gvs`, `AllCaseEqs`, or moving the generated IH back into assumptions before prefix splitting, stop again.
 
 #### Definition design
-No evaluator or semantics definitions may change. The proof interface is local theorem management: the generated optional-driver IH is treated like an opaque theorem object. Boundary lemmas should have compact conclusions matching use sites: static args give `dest_AddressV (HD vs) = SOME target_addr` and `vs <> []`; the tail helper consumes a compact conditional optional-driver premise plus updated accounts/transient state. Failure sign: any prefix proof goal whose assumptions still contain the raw `∀s'' vs ... update_transient ... returnData = [] /\ IS_SOME drv ⇒ ...` implication means quarantine was missed and the proof should stop.
+No evaluator or semantics definitions may change. The proof interface for this subtree is boundary-theorem/tactic based:
+
+- `extcall_static_args_runtime_typed_dest` and `extcall_static_args_runtime_typed_nonempty` remain the boundary for extracting the static target address and nonempty argument list from `exprs_runtime_typed`.
+- `extcall_success_continuation_sound_cond_driver_ih` may still be used for the post-`run_ext_call` tail, but its compact driver premise must be supplied by a local native specialization of `driver_ih`, not by `irule driver_ih`/`match_mp_tac driver_ih` directly.
+- The nonstatic branch uses `extcall_nonstatic_args_runtime_typed_dest` and then follows the same native-specialization interface.
+- Failure signs: reintroducing `extcall_generated_driver_ih`, proving a named long prefix adapter, leaving `driver_ih` live while simplifying the prefix, or broad `AllCaseEqs()`/whole-prefix `gvs` before success-branch isolation.
 
 #### Code structure
-All work remains in `semantics/prop/vyperTypeStmtSoundnessScript.sml`. Keep the existing local helper block near `extcall_success_continuation_sound_cond_driver_ih` and the static/nonstatic argument destructor lemmas. The Resume bodies at `Expr_Call_ExtCall_result_static` and then `Expr_Call_ExtCall_result_nonstatic` should implement the quarantine pattern directly; add only tiny local helper lemmas for repeated argument destructuring, not generated-prefix adapters.
+All edits stay in `semantics/prop/vyperTypeStmtSoundnessScript.sml` and plan/state markdown under `semantics/prop`. Keep helper theorems local near the existing ExtCall helper block. Do not edit evaluator/semantics files. The generated-prefix adapter artifacts deleted in earlier episodes must remain absent. If a small local tactic idiom is needed to specialize `driver_ih`, keep it inline inside the relevant Resume proof rather than adding a global theorem whose statement mirrors the generated prefix.
 
-### C0.2.1.1.1: Remove obsolete generated-prefix ExtCall driver artifacts
+### C0.2.1.1.1: Keep obsolete generated-prefix ExtCall driver artifacts removed
 - Kind: `source_cleanup`
 - Risk: 1
 - Work priority: 0
 - Work units: 0
-- Rationale: Already completed and build-checked in E0110; keep as carried-forward cleanup because the replacement subtree still depends on not reviving the obsolete generated-prefix adapter path.
+- Rationale: Already completed and build-checked; the replacement subtree still depends on not reviving the deleted adapter route.
 - Progress transition: `carry_forward`
-- Carries progress/evidence from: E0110, C0.2.1.1.1
+- Carries progress/evidence from: E0110, E0112, C0.2.1.1.1@previous
 
 #### Progress note
-E0110 proved this cleanup; no further executor work is required.
+No new work. Prior audit/build evidence remains applicable because the new plan also forbids these artifacts.
 
 #### Summary
-- Completed cleanup leaf retained for continuity.
-- Obsolete generated-prefix artifacts remain deleted.
-- This prevents accidental return to the forbidden E0109 adapter-theorem approach.
-
-#### Description
-No direct work remains. The build-clean baseline after E0111 confirms exploratory edits were reverted and the cleanup remains valid.
+- Preserve prior deletion of generated-prefix adapter artifacts.
+- Audit evidence already showed no `extcall_generated_driver_ih` references remain.
+- This cleanup remains a dependency because stale adapter code would invite the forbidden route.
 
 #### Approach
-No action unless a later build shows the cleanup was accidentally reverted. If so, restore the E0110 state and build-check.
+No edit needed unless the artifacts have reappeared. If checking, grep only within `semantics/prop` for `extcall_generated_driver_ih` and confirm the theory still builds after proof changes.
 
 #### Not to try
-Do not reintroduce the deleted generated-prefix theorem family as a workaround for the static/nonstatic branch proof.
+Do not recreate these definitions as a shortcut for C0.2.1.1.2 or C0.2.1.1.3.
 
-### C0.2.1.1.2: Static ExtCall_result branch with generated-driver IH quarantined
+### C0.2.1.1.2: Static ExtCall_result branch using branch-local native driver-IH specialization
 - Kind: `proof_refactor`
 - Risk: 2
 - Work priority: 1
 - Work units: 5
-- Rationale: The static branch is Risk 2 only under the explicit quarantine pattern. The previously observed timeouts are avoided because the raw generated implication is removed before simplification and case splitting. The success-tail use is localized to the exact branch where all prefix equalities are present.
+- Rationale: The static prefix and error cases are already validated with the `pop_last_assum` quarantine. The remaining success-tail issue is now decomposed to branch-local native specialization of the captured generated theorem, which the maintainer clarification permits after the concrete success branch is reached. Risk is standard provided the proof does not attempt automatic `irule` matching against the compact premise.
 - Dependencies: C0.2.1.1.1
 - Checkpoint: yes
 - Progress transition: `replacement`
-- Carries progress/evidence from: E0111
-- Invalidates prior progress/evidence: C0.2.1.1.2@previous
+- Carries progress/evidence from: E0113, E0114, C0.2.1.1.2@previous
+- Invalidates prior progress/evidence: C0.2.1.1.2@previous:compact-driver-premise-interface
 
 #### Progress note
-E0111 remains supporting evidence for why the old live-assumption approach is invalid. This component replaces it with a stricter proof interface rather than retrying the same simplification sequence.
+Accepts E0114 as a real interface failure. Carries forward the build-clean quarantine skeleton with a tail cheat, but replaces the failed `irule driver_ih`/`match_mp_tac driver_ih` step by branch-local specialization of the native generated IH.
 
 #### Summary
-- Prove `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result_static]`.
-- First action inside the proof must capture/remove the raw generated optional-driver implication.
-- Simplify the static typing conditional with `rewrite_tac[boolTheory.COND_CLAUSES]`, not `simp[]` over all assumptions.
-- Use existing static argument destructor/nonempty lemmas; avoid local `Cases_on vs` with `gvs[]` while large assumptions are live.
-- Split the evaluator prefix linearly and close error cases immediately.
-- At the single success tail, apply `extcall_success_continuation_sound_cond_driver_ih` and discharge its conditional driver premise using the captured `driver_ih` by matching, not manual prefix instantiation.
-
-#### Description
-This is the direct repair for the failed episode. The proof must demonstrate that the quarantine tactic prevents the timeouts seen in E0111. Because this is a checkpoint, stop after the static branch builds and report whether the captured theorem can be reapplied at the success tail without a long generated-prefix adapter.
+- Finish `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result_static]`.
+- Keep the existing `pop_last_assum (fn driver_ih => ...)` structure.
+- Preserve the linear prefix/error-case proof that already builds with a success-tail cheat.
+- In the `run_ext_call` success branch, derive the driver-expression soundness premise by specializing `driver_ih` in its native prefix shape and projecting the expression-result conjunct.
+- Build `vyperTypeStmtSoundnessTheory` after removing the tail cheat.
 
 #### Statement
 Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result_static]:
-  (* prove the static ExtCall result branch of the mutual type soundness theorem *)
+  (* prove the static ExtCall result branch of the mutual type soundness theorem, replacing the current success-tail cheat *)
 
 #### Approach
-Begin with `rpt gen_tac >> strip_tac`, then immediately use `qpat_x_assum` to remove the long generated optional-driver implication into a theorem variable, e.g. `fn driver_ih => ...`. Inside that continuation, rewrite the static typing conditional using `rewrite_tac[boolTheory.COND_CLAUSES] >> strip_tac`, derive address/nonempty facts via `extcall_static_args_runtime_typed_dest` and `extcall_static_args_runtime_typed_nonempty`, and unfold only the current evaluator/monadic prefix. For the final tail, `irule extcall_success_continuation_sound_cond_driver_ih`; the driver-premise subgoal should be solved by `strip_tac >> irule driver_ih` (or `match_mp_tac driver_ih`) followed by narrow rewriting from the concrete prefix equations in context.
+Start from the current build-clean partial proof with the success-tail cheat. In the success branch, after proving the concrete returned accounts are well typed and stripping the final evaluator equality, use `extcall_success_continuation_sound_cond_driver_ih` for the tail. Prove its conditional driver premise by a local assertion: assuming `returnData = [] /\ IS_SOME drv`, specialize `driver_ih` to the current generated prefix variables/equations, discharge the prefix antecedent using the live branch equations plus narrow monadic rewrites, then for arbitrary `env0 st0 res0 st0'` apply the resulting theorem and take the first conjunct. Ignore/project away the extra place-expression conjunct.
 
 #### Not to try
-Do not call `simp[]` or `gvs[]` while the generated optional-driver implication is still an assumption; this is exactly what timed out in E0111. Do not prove `vs <> []` by `Cases_on vs >> gvs[exprs_runtime_typed_def]`; use `extcall_static_args_runtime_typed_nonempty`. Do not manually instantiate the generated IH with every `s'³'`, `t'⁴'`, etc.; matching from the concrete success branch is the required low-risk interface. If matching cannot discharge the generated prefix antecedent after all success-prefix facts are assumptions, escalate rather than building an adapter theorem.
+- Do not retry `irule driver_ih` or `match_mp_tac driver_ih` against the compact conditional premise; E0114 shows that route fails.
+- Do not solve the prefix antecedent by broad whole-goal simplification with the generated IH in assumptions.
+- Do not create a named adapter theorem whose statement restates the generated ExtCall prefix.
+- Do not continue if the local specialization grows into a long brittle proof over multiple branches.
 
-### C0.2.1.1.3: Nonstatic ExtCall_result branch with the same quarantine interface
+### C0.2.1.1.3: Nonstatic ExtCall_result branch using the same native driver-IH pattern
 - Kind: `proof_refactor`
 - Risk: 2
 - Work priority: 2
 - Work units: 5
-- Rationale: The nonstatic branch should mirror the static proof once C0.2.1.1.2 proves the quarantine pattern works. It has one extra value-argument split, but the same proof boundary and success-tail helper apply.
+- Rationale: The nonstatic branch has the same success-tail driver issue plus one extra value-argument split. It should be attempted only after the static checkpoint proves the native-specialization pattern. The existing nonstatic destructor lemma supplies the extra target/amount facts, so no new proof architecture is expected.
 - Dependencies: C0.2.1.1.2
 - Checkpoint: yes
-- Progress transition: `refinement`
-- Carries progress/evidence from: C0.2.1.1.3
+- Progress transition: `replacement`
+- Carries progress/evidence from: C0.2.1.1.3@previous, E0114
+- Invalidates prior progress/evidence: C0.2.1.1.3@previous:compact-driver-premise-interface
 
 #### Progress note
-Refines the old not-started success-tail component into the nonstatic branch proof using the same validated quarantine interface.
+Replaces the previous 'mirror static compact helper' plan because E0114 invalidated that interface. It still carries forward the idea that nonstatic mirrors static after the proof-interface repair.
 
 #### Summary
-- Prove `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result_nonstatic]` after the static checkpoint.
-- Reuse the same generated-IH quarantine pattern as the static branch.
-- Split the additional nonstatic value argument prefix linearly and close error cases immediately.
-- Reuse the existing tail helper at the success continuation.
-- Escalate if the nonstatic argument destructor interface is missing a compact helper analogous to the static destructor lemmas.
-
-#### Description
-This component should not start until the static branch confirms the proof interface. The expected difference from static is the extra `dest_NumV`/value argument handling before `build_ext_calldata`; if existing helper lemmas do not provide a compact destructor/nonempty fact, request a small boundary lemma rather than unfolding `exprs_runtime_typed_def` under large goals.
+- Prove `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result_nonstatic]` after the static checkpoint succeeds.
+- Mirror the static branch's quarantine and native driver-IH specialization.
+- Use `extcall_nonstatic_args_runtime_typed_dest` to extract target address and amount.
+- Keep error cases linear and closed immediately.
+- Stop if the nonstatic proof requires a new adapter theorem or broad prefix cleanup.
 
 #### Statement
 Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result_nonstatic]:
   (* prove the nonstatic ExtCall result branch of the mutual type soundness theorem *)
 
 #### Approach
-Copy the static branch structure: capture/remove the generated optional-driver implication first; rewrite the nonstatic typing conditional narrowly; derive target address and value-argument facts through compact helper lemmas; unfold and split one monadic operation at a time. Use `extcall_success_continuation_sound_cond_driver_ih` at the final success tail and discharge the conditional driver premise with the captured theorem by matching.
+Follow the static proof structure. After rewriting the nonstatic typing conditional, derive target address and amount with `extcall_nonstatic_args_runtime_typed_dest`; then step through the evaluator prefix one operation at a time, closing each error case immediately. At the single success continuation, use the same branch-local native specialization of captured `driver_ih` that C0.2.1.1.2 established.
 
 #### Not to try
-Do not generalize the nonstatic branch into a shared generated-prefix adapter. Do not use broad `AllCaseEqs()` or whole-prefix `gvs[]`. If a needed nonstatic argument destructor is absent, add/request a tiny boundary lemma instead of destructing the whole `exprs_runtime_typed` relation in the Resume body.
+- Do not start before the static checkpoint.
+- Do not unfold `exprs_runtime_typed_def` to recover address/amount facts; use the destructor lemma.
+- Do not introduce generated-prefix adapter artifacts or broad `AllCaseEqs()` cleanup.
 
 ### C0.2.1.2: Use the opaque-driver helper to discharge the static ExtCall_result Resume
 - Kind: `proof`

@@ -442,12 +442,12 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260601T081233Z_m2394_t001
 - tool_output:TO_type_system_rewrite-20260601T081233Z_m2396_t004
 
-## L0077 scope='C0.2.1' tags=ExtCall,generated-IH,proof-interface,boundary-lemma,adapter-plumbing,risk-mismatch
-shape: A helper keeps a generated optional-driver IH opaque through prefix/error cases, but its success-tail eliminator still requires all generated ExtCall prefix witnesses.
-pattern: Do not treat an opaque predicate as a good boundary if eliminating it requires replaying the full generated monadic prefix with a long `qspecl_then`/adapter proof. First validate the eliminator interface at the success tail: it should derive the compact conditional driver postcondition by matching live facts in a few steps. If it needs dozens of generated state/value witnesses or produces >4KiB goals, the abstraction is still wrong-shaped; redesign the suspension/predicate so the compact driver fact is produced where the generated IH is created.
-works_when: Applies to ExtCall-like mutual evaluator proofs where an optional recursive-call IH is semantically needed only at the final success continuation but is generated as `full_prefix ==> post`. Especially relevant under a task contract requiring straightforward proofs and forbidding long generated-prefix adapters.
+## L0078 scope='C0.2.1.1.2' tags=ExtCall,generated-IH,quarantine,assumption-selection,Resume
+shape: A `Resume` branch contains a huge generated optional-driver prefix implication that must be kept for the success tail but causes prefix simplification timeouts if left as an assumption.
+pattern: In this ExtCall static Resume goal, capture/remove the generated optional-driver IH before any prefix simplification with `pop_last_assum (fn driver_ih => ...)`, not broad `qpat_x_assum` or `first_x_assum`. Then do static typing rewrite/destructors/evaluator-prefix splits while the theorem is absent from assumptions; reapply `driver_ih` only in the compact success-tail conditional premise.
+works_when: Works when the generated IH is the oldest assumption in the suspended branch context. Verify by build/probe if the Resume skeleton changes; if `pop_last_assum` removes the wrong fact, stop and inspect rather than simplifying with the raw IH live.
 evidence:
-- episode:E0109
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m2455_t001
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m2458_t001
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m2460_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m2520_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m2527_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m2529_t001
+- episode:E0113

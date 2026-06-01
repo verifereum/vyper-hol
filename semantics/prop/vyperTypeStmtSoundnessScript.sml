@@ -17386,7 +17386,43 @@ Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result]:
 QED
 
 Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result_static]:
-  cheat
+  rpt gen_tac >> strip_tac >>
+  pop_last_assum (fn driver_ih =>
+      qpat_x_assum `if T then MAP expr_type es = _ else _` mp_tac >>
+      rewrite_tac[boolTheory.COND_CLAUSES] >> strip_tac >>
+      rename1 `exprs_runtime_typed env es vs` >>
+      drule_all extcall_static_args_runtime_typed_dest >> strip_tac >>
+      `vs <> []` by (drule_all extcall_static_args_runtime_typed_nonempty >> simp[]) >>
+      qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
+                           check_def, assert_def, return_def, raise_def,
+                           lift_option_type_def, lift_option_def,
+                           get_accounts_def, get_transient_storage_def,
+                           update_accounts_def, update_transient_def,
+                           no_type_error_result_def] >>
+      qpat_x_assum `eval_exprs cx es st = (INL vs,args_st)` (fn th => rewrite_tac[th]) >>
+      rewrite_tac[] >>
+      Cases_on `build_ext_calldata (get_tenv cx) func_name arg_types (TL vs)` >>
+      gvs[return_def, raise_def]
+      >- (strip_tac >> gvs[assert_def, bind_def, return_def, raise_def,
+                             get_accounts_def, get_transient_storage_def,
+                             no_type_error_result_def]) >>
+      Cases_on `NULL (lookup_account target_addr args_st.accounts).code` >>
+      gvs[return_def, raise_def]
+      >- (strip_tac >> gvs[assert_def, bind_def, return_def, raise_def,
+                             get_accounts_def, get_transient_storage_def,
+                             no_type_error_result_def]) >>
+      Cases_on `run_ext_call cx.txn.target target_addr x NONE args_st.accounts args_st.tStorage (vyper_to_tx_params cx.txn)` >>
+      gvs[return_def, raise_def]
+      >- (strip_tac >> gvs[assert_def, bind_def, return_def, raise_def,
+                             get_accounts_def, get_transient_storage_def,
+                             no_type_error_result_def]) >>
+      PairCases_on `x'` >> gvs[] >>
+      Cases_on `x'0` >> gvs[return_def, raise_def]
+      >- cheat >>
+      strip_tac >> gvs[assert_def, bind_def, return_def, raise_def,
+                       get_accounts_def, get_transient_storage_def,
+                       no_type_error_result_def])
 QED
 
 Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result_nonstatic]:
