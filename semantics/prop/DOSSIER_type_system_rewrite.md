@@ -32,6 +32,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C0.3.3.1 | proved |  | E0094 | Proceed to C0.3.3.2 cleanup of the partial/broken Resume edit before new proof work. |
 | C0.3.3.2 | proved |  | E0095 | Call strategist review, then proceed to C0.3.3.3 to add `eval_extcall_args_error_any_call_ty_result_eq`. |
 | C0.3.3.3 | proved |  | E0096 | Call strategist review, then proceed to C0.3.3.4 to use the equality lemma in the ExtCall_result INR branch. |
+| C0.3.3.4 | proved |  | E0097 | Call strategist review for E0097. If accepted, commit this ExtCall_result INR-branch proof checkpoint unsigned. |
 | C0.3.4 | proved |  | E0089 |  |
 | C1.1 | proved |  | E0024 | Call plan_oracle(mode='review') for C1.1, then begin C1.2 if accepted. |
 | C1.1.1 | proved |  | E0012 |  |
@@ -806,6 +807,27 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - `TO_type_system_rewrite-20260601T081233Z_m2104_t001` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260601T081233Z_m2105_t001` (use `read_tool_output` for exact output)
+
+## C0.3.3.4
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0097`
+- blocker: 
+- actual effort: 1 sessions, 3 msgs, 36 steps, 35 tools, 15 holbuild, 4,147,678 tok (4,140,393 in, 7,285 out, 4,025,344 cached), 599.1s, $2.806467
+- next: Call strategist review for E0097. If accepted, commit this ExtCall_result INR-branch proof checkpoint unsigned.
+
+### Attempts / Evidence
+
+- `E0097` (proved, , actual effort: 1 sessions, 3 msgs, 36 steps, 35 tools, 15 holbuild, 4,147,678 tok (4,140,393 in, 7,285 out, 4,025,344 cached), 599.1s, $2.806467)
+  - Replaced the ExtCall_result cheat with a skeleton that unfolds typing once, splits `eval_exprs`, leaves the INL success branch cheated, and in the INR branch applies `eval_extcall_args_error_any_call_ty_result_eq` to rewrite `res`/`st'`. -> Initial broad `gvs`/`simp` closures timed out under the generated optional-driver prefix; revised proof avoids broad cleanup, rewrites only the equality facts, splits the postcondition, and closes conjuncts directly/from the moved `no_type_error_result` assumption. Final case closes by `rewrite_tac[sum_case_def]`. Target builds successfully. (`TO_type_system_rewrite-20260601T081233Z_m2115_t001`, `TO_type_system_rewrite-20260601T081233Z_m2148_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260601T081233Z_m2114_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m2148_t001` (use `read_tool_output` for exact output)
 
 ## C0.3.4
 

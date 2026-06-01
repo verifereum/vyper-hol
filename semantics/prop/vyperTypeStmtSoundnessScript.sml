@@ -17456,7 +17456,30 @@ Resume eval_all_type_sound_mutual[Expr_Call_IntCall]:
 QED
 
 Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result]:
-  cheat
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `well_typed_expr env (Call _ (ExtCall _ _) _ _)` mp_tac >>
+  rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
+  Cases_on `eval_exprs cx es st` >>
+  rename1 `eval_exprs cx es st = (args_res,args_st)` >>
+  first_x_assum drule_all >> strip_tac >>
+  Cases_on `args_res`
+  >- cheat >>
+  first_x_assum kall_tac >>
+  drule_all eval_extcall_args_error_any_call_ty_result_eq >>
+  strip_tac >>
+  qpat_x_assum `res = INR y` (fn th => rewrite_tac[th]) >>
+  qpat_x_assum `st' = args_st` (fn th => rewrite_tac[th]) >>
+  conj_tac >- qpat_x_assum `state_well_typed args_st` ACCEPT_TAC >>
+  conj_tac >- qpat_x_assum `env_consistent env cx args_st` ACCEPT_TAC >>
+  conj_tac >- qpat_x_assum `accounts_well_typed args_st.accounts` ACCEPT_TAC >>
+  conj_tac >- (
+    qpat_x_assum `no_type_error_result (INR y)` mp_tac >>
+    pure_rewrite_tac[no_type_error_result_def] >>
+    rpt strip_tac >>
+    first_x_assum (qspec_then `msg` mp_tac) >>
+    qpat_x_assum `INR y = INR (Error (TypeError msg))` mp_tac >>
+    rewrite_tac[sumTheory.INR_11]) >>
+  rewrite_tac[sum_case_def]
 QED
 
 Resume eval_all_type_sound_mutual[Expr_Call_Send]:
