@@ -17419,7 +17419,9 @@ Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result_static]:
                              no_type_error_result_def]) >>
       PairCases_on `x'` >> gvs[] >>
       Cases_on `x'0` >> gvs[return_def, raise_def]
-      >- cheat >>
+      >- (
+        `accounts_well_typed x'2` by (drule_all run_ext_call_accounts_well_typed >> simp[]) >>
+        cheat) >>
       strip_tac >> gvs[assert_def, bind_def, return_def, raise_def,
                        get_accounts_def, get_transient_storage_def,
                        no_type_error_result_def])

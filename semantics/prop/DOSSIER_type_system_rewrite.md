@@ -24,10 +24,10 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C0.1.2 | stuck | risk_mismatch | E0065 | Ask the strategist to repair/reconcile the PLAN with source reality, or accept the operator-facing blocked stop-state rather than continuing C0.1.2. |
 | C0.2 | stuck | risk_mismatch | E0102 | Ask strategist for a concrete replacement or augmentation that does not rely on the ruled-out helper shortcut; if the task's stop condition is binding, preserve the build-clean cheated source and await operator/design input. |
 | C0.2.1 | stuck | risk_mismatch | E0108 | Call plan_oracle(mode='review') for C0.2.1. Given the user instruction to stop on unexpected design issues, request either an accepted blocked state or a smaller de-risked helper/suspension shape that avoids the large generated-prefix IH before any further proof edits. |
-| C0.2.1.1 | proved |  | E0119 | Review this carry-forward closure, then begin C0.2.1.2 static success branch if accepted. |
+| C0.2.1.1 | proved |  | E0122 | Call plan_oracle review, then begin C0.2.1.2 cleanup if accepted. |
 | C0.2.1.1.1 | proved |  | E0115 |  |
 | C0.2.1.1.2 | stuck | risk_mismatch | E0116 | Call plan_oracle(mode='review') for C0.2.1.1.2. Given the repeated success-tail interface failures and the user's stop-on-design-issues instruction, request either acceptance that this design is blocked or a substantially different proof boundary that avoids both full-prefix adapter plumbing and mismatch with the current conjunctive goal shape. |
-| C0.2.1.2 | stuck | risk_mismatch | E0118 | Call plan_oracle(mode='review') for C0.2.1.2 and request a replacement boundary that matches the prefix-guarded generated driver IH, or accept the component as blocked under the task stop condition. |
+| C0.2.1.2 | proved |  | E0123 | Call plan_oracle review, then begin C0.2.1.3 to close the static success tail by applying the continuation theorem directly to the current goal. |
 | C0.2.2 | stuck | risk_mismatch | E0104 | Request strategist review/repair for C0.2.2. The repair should de-risk the generated optional-driver prefix, likely by a safe branch-local way to label/hide/use it or by replacing the Resume interface, rather than asking for more simplifier variants. |
 | C0.2.3 | stuck | risk_mismatch | E0105 | Request strategist review/repair for C0.2.3 and the scheduling order. The repair should likely make C0.2.2.1-style opaque generated-IH/static proof-interface work a prerequisite before attempting either static or nonstatic full prefix proof, or provide a shared low-risk selected-equation proof pattern. |
 | C0.3 | stuck | missing_helper | E0106 | Ask strategist to repair C0.3 with a small local RawCallTarget tail helper/boundary or another de-risked proof interface before attempting more proof edits. |
@@ -632,10 +632,10 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0119`
+- latest episode: `E0122`
 - blocker: 
-- actual effort: 1 sessions, 1 msgs, 1 steps, 120,894 tok (120,454 in, 440 out, 92,032 cached), 10.5s, $0.201326
-- next: Review this carry-forward closure, then begin C0.2.1.2 static success branch if accepted.
+- actual effort: 1 sessions, 1 steps, 82,678 tok (82,445 in, 233 out, 78,208 cached), 10.8s, $0.067279
+- next: Call plan_oracle review, then begin C0.2.1.2 cleanup if accepted.
 
 ### Attempts / Evidence
 
@@ -646,14 +646,12 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Audited ExtCall helper stack around `extcall_return_tail_sound` through `extcall_expr_sound_from_generated_ih` by source inspection and build. -> No `cheat` appears in the planned helper stack; `extcall_expr_sound_from_generated_ih` is proved and exposes generated-IH-shaped premises for `eval_exprs` over `es` and `eval_expr` over `THE drv`; target build succeeds with current intentional downstream cheats outside this audit leaf. (`TO_type_system_rewrite-20260601T081233Z_m2624_t001`, `TO_type_system_rewrite-20260601T081233Z_m2624_t003`, `TO_type_system_rewrite-20260601T081233Z_m2624_t002`, `TO_type_system_rewrite-20260601T081233Z_m2624_t004`)
 - `E0119` (proved, , actual effort: 1 sessions, 1 msgs, 1 steps, 120,894 tok (120,454 in, 440 out, 92,032 cached), 10.5s, $0.201326)
   - Carry forward E0117 helper-stack audit under replacement plan; no source edits required. -> The replacement plan states no redo is needed: helper stack exists locally and `extcall_success_continuation_sound_cond_driver_ih` is the relevant Resume-facing boundary. Prior audit/build evidence remains valid; this carry-forward leaf has no executor work remaining. (`TO_type_system_rewrite-20260601T081233Z_m2624_t001`, `TO_type_system_rewrite-20260601T081233Z_m2624_t002`, `TO_type_system_rewrite-20260601T081233Z_m2624_t003`, `TO_type_system_rewrite-20260601T081233Z_m2624_t004`, `TO_type_system_rewrite-20260601T081233Z_m2640_t001`)
+- `E0122` (proved, , actual effort: 1 sessions, 1 steps, 82,678 tok (82,445 in, 233 out, 78,208 cached), 10.8s, $0.067279)
+  - Carry-forward helper-stack audit under replacement plan; no source edits required. -> begin_component injected prior proved E0117/E0119 audit evidence and the new plan states the helper stack remains valid; this leaf has no executor work beyond carrying forward the audit. (`TO_type_system_rewrite-20260601T081233Z_m2675_t001`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260601T081233Z_m2624_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m2624_t002` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m2624_t003` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m2624_t004` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m2640_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m2675_t001` (use `read_tool_output` for exact output)
 
 ## C0.2.1.1.1
 
@@ -731,29 +729,31 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 ### Current Status
 
-- result: `stuck`
-- diagnosis: `risk_mismatch` This confirms stale learning L0073: `extcall_expr_sound_from_generated_ih` requires an unconditional driver IH, but the Resume provides only a full-prefix implication to the driver postcondition. Proving the premise would require forbidden prefix reconstruction or a different boundary theorem whose premise matches the generated IH shape.
-- latest episode: `E0118`
-- blocker: The planned consumer boundary theorem `extcall_expr_sound_from_generated_ih` does not match the actual generated IH available in the suspended Resume: the available driver fact is prefix-guarded by the full ExtCall monadic chain, not unconditional. Direct compact wiring recreates the old generated-prefix blocker.
-- actual effort: 1 sessions, 7 steps, 7 tools, 1 holbuild, 762,264 tok (758,801 in, 3,463 out, 745,088 cached), 334.0s, $0.544999
-- next: Call plan_oracle(mode='review') for C0.2.1.2 and request a replacement boundary that matches the prefix-guarded generated driver IH, or accept the component as blocked under the task stop condition.
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0123`
+- blocker: 
+- actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 267,600 tok (266,568 in, 1,032 out, 259,712 cached), 58.1s, $0.195096
+- next: Call plan_oracle review, then begin C0.2.1.3 to close the static success tail by applying the continuation theorem directly to the current goal.
 
 ### Attempts / Evidence
 
 - `E0118` (stuck, risk_mismatch, actual effort: 1 sessions, 7 steps, 7 tools, 1 holbuild, 762,264 tok (758,801 in, 3,463 out, 745,088 cached), 334.0s, $0.544999)
   - Replaced `Expr_Call_ExtCall_result` Resume with compact `irule extcall_expr_sound_from_generated_ih`, selecting top assumptions and generated IHs by shape; deleted stale static/nonstatic sub-resumes in the attempted edit. -> Build failed at the boundary theorem's driver-IH premise: the live generated optional-driver IH is still a full ExtCall-prefix implication, while `extcall_expr_sound_from_generated_ih` requires an unconditional driver IH. The goal exposed the forbidden full prefix (`eval_exprs` through update_transient and `returnData = [] /\ IS_SOME drv ==> ...`) rather than a directly usable premise. Source was restored to the pre-attempt baseline. (`TO_type_system_rewrite-20260601T081233Z_m2631_t001`, `TO_type_system_rewrite-20260601T081233Z_m2632_t001`, `TO_type_system_rewrite-20260601T081233Z_m2635_t001`, `TO_type_system_rewrite-20260601T081233Z_m2636_t001`)
-
-### Ruled Out
-
-- Direct `irule extcall_expr_sound_from_generated_ih` in the suspended Resume with shape-selected generated IHs.
-- Deleting static/nonstatic sub-resumes before establishing a boundary that consumes the actual prefix-guarded driver IH.
+- `E0120` (progressed, other, actual effort: 1 sessions, 2 msgs, 12 steps, 13 tools, 3 holbuild, 1,732,799 tok (1,727,147 in, 5,652 out, 1,666,560 cached), 279.7s, $1.305775)
+  - In static ExtCall success branch, replaced success-tail `cheat` with a local application attempt of `extcall_success_continuation_sound_cond_driver_ih`; first kept `rewrite_tac[GSYM no_type_error_result_def]` before `irule`, then wrapped the tail theorem in a `by` subgoal to avoid top-level conjunct-splitting mismatch. -> Progressed far enough to identify two distinct issues: (1) applying the conditional tail theorem at top level after `rewrite_tac[GSYM no_type_error_result_def]` produced a MATCH_MP_TAC/goal-shape mismatch while the visible goal remained `state_well_typed st'`; (2) wrapping the full tail postcondition in a `by` subgoal avoided top-level splitting but that subgoal still failed, likely because rewriting the conclusion to `no_type_error_result` before `irule` changed the theorem matching shape. A final unbuilt edit removed that rewrite before `irule`; source is dirty/partial and must be inspected/restored or built next session before further conclusions. (`TO_type_system_rewrite-20260601T081233Z_m2648_t001`, `TO_type_system_rewrite-20260601T081233Z_m2650_t001`, `TO_type_system_rewrite-20260601T081233Z_m2653_t001`, `TO_type_system_rewrite-20260601T081233Z_m2655_t001`, `TO_type_system_rewrite-20260601T081233Z_m2656_t001`)
+- `E0121` (stuck, risk_mismatch, actual effort: 1 sessions, 3 msgs, 26 steps, 30 tools, 6 holbuild, 2,715,232 tok (2,703,022 in, 12,210 out, 2,577,152 cached), 570.2s, $2.284226)
+  - Tested latest dirty `by`-subgoal version applying `extcall_success_continuation_sound_cond_driver_ih` to the full static success-tail postcondition, with the pre-`irule` `GSYM no_type_error_result_def` rewrite removed. -> The theorem now reaches the conditional driver-premise shape, but the local `by` proof still fails and leaves the outer `state_well_typed st'` conjunct unsolved, showing the boundary still does not close the already-split Resume tail straightforwardly. (`TO_type_system_rewrite-20260601T081233Z_m2662_t001`)
+  - Replaced the conditional driver premise cheat with `ACCEPT_TAC driver_ih`. -> The proof still failed with the same two-goal shape; the saved generated IH is not accepted as a direct proof of the conditional premise in this context. (`TO_type_system_rewrite-20260601T081233Z_m2667_t001`)
+  - Inserted a temporary `mp_tac driver_ih >> FAIL_TAC` probe at the driver-premise position to inspect whether the saved IH is usable there. -> The probe did not produce a clean smaller obligation; holbuild still reports the by-subgoal as failing with the driver-premise/outer-conjunct split. The temporary probe was removed and restored to the prior cheated premise. (`TO_type_system_rewrite-20260601T081233Z_m2669_t001`)
+- `E0123` (proved, , actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 267,600 tok (266,568 in, 1,032 out, 259,712 cached), 58.1s, $0.195096)
+  - Removed the failed static `by`-subgoal/full-tail assertion block from `Expr_Call_ExtCall_result_static`, preserving the clean linear prefix split and `accounts_well_typed x'2` derivation with a single explicit success-tail `cheat` for the next component. -> The obsolete by-wrapper and direct/cheated conditional-premise block are gone; no `ACCEPT_TAC driver_ih` or FAIL_TAC probe remains in the static success tail. (`TO_type_system_rewrite-20260601T081233Z_m2679_t001`)
+  - Built `vyperTypeStmtSoundnessTheory` after cleanup. -> Target builds successfully with the intentional remaining downstream cheats, confirming the failed proof artifact was removed and source is back to a clean prefix-split baseline for C0.2.1.3. (`TO_type_system_rewrite-20260601T081233Z_m2680_t001`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260601T081233Z_m2631_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m2632_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m2635_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m2636_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m2679_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m2680_t001` (use `read_tool_output` for exact output)
 
 ## C0.2.2
 
