@@ -2,75 +2,72 @@
 Updated: 2026-06-01
 
 ## Cursor
-- component: C0.1.1.2.1
-- status: ready
+- component: C0.1.1.2.3
+- status: in_progress
 - active_file: semantics/prop/vyperTypeStmtSoundnessScript.sml
-- next_action: First inspect git status/diff and, if still build-clean and diffs are only the reviewed stable predicate/PLAN/DOSSIER/STATE/LEARNINGS changes, make an unsigned checkpoint commit. Then begin_component('C0.1.1.2.1') and carry forward the already-proved `extcall_generated_driver_ih_def`/`extcall_generated_driver_ih_elim_expr` component; after that follow scheduler to C0.1.1.2.2.1 static success-tail eliminator.
-- expected_goal_shape: C0.1.1.2.1 is a carry-forward component: source should already contain `extcall_generated_driver_ih_def` and proved `extcall_generated_driver_ih_elim_expr` immediately before `send_args_runtime_typed_dest`, with no `extcall_expr_sound_from_generated_prefix_delayed_ih` and no E0044 inserted `extcall_expr_sound_from_generated_prefix_driver_pred` body. For C0.1.1.2.2.1, expected goal is the static branch-local eliminator whose conclusion is the full conditional driver premise including `context_well_typed cx` and `functions_well_typed cx`.
+- next_action: First remove or replace the temporary probe in `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result]` (currently `rpt gen_tac >> strip_tac >> FAIL_TAC "probe extcall resume initial"` at about lines 17231-17233). Then continue C0.1.1.2.3 by constructing the linear ExtCall Resume proof: split expression/place conjuncts as before, unfold only one evaluator layer, destruct `eval_exprs`, close error cases immediately, and proceed one monadic operation at a time.
+- expected_goal_shape: Without removing the probe, holbuild will fail at `FAIL_TAC "probe extcall resume initial"` in `Expr_Call_ExtCall_result`. After replacing it with proof text, expected local proof shape is the ExtCall expression-result conjunct after `rpt gen_tac >> strip_tac`: generated IH assumptions for `eval_exprs` and optional driver are in context, plus `well_typed_expr ... ExtCall ...` and `eval_expr ... = (res,st')`; C0.1.1.2.3 should stop/checkpoint once the proof reaches a single concrete success continuation with target/calldata/accounts/tStorage/run/update facts, before solving the optional-driver IH tail.
 - verify_with: holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=300)
 
 ## If This Fails
-- If the carry-forward component is not build-clean, inspect whether failed E0044 helper text reappeared and restore E0043 source shape; checkpoint_progress with build evidence. If branch-local eliminator proof requires direct consumer-side `MATCH_MP_TAC extcall_generated_driver_ih_elim_expr` or long generated-prefix witness plumbing outside the eliminator lemma, stop and close the active component as stuck/risk_mismatch rather than tuning.
+- If failure is only the temporary `FAIL_TAC`, remove/replace it and rebuild. If routine prefix splitting requires broad `gvs`/`AllCaseEqs()` over the whole ExtCall prefix, generated-prefix witness lists, or wrapper-adapter lemmas, checkpoint_progress with the failing goal evidence and close C0.1.1.2.3 as stuck/risk_mismatch if the linear proof is not straightforward.
 
 ## Do Not Retry
-- Reinsert the E0044 monolithic `extcall_expr_sound_from_generated_prefix_driver_pred` and try to prove success tails with direct `irule`/`MATCH_MP_TAC extcall_generated_driver_ih_elim_expr`.: This forced a large existential over all generated prefix states and brittle witness lists in the consumer helper; strategist replaced it with branch-local eliminators.
-  - evidence: episode:E0044
-  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1179_t001
-  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1206_t001
-- Unfold `extcall_generated_driver_ih_def` in the expression helper or final Resume during prefix/error splitting.: The predicate exists to keep the huge generated prefix out of routine cleanup; unfolding it outside boundary lemmas recreates E0041/E0044 failures.
-  - evidence: episode:E0041
-  - evidence: episode:E0044
-  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1137_t001
-- Use broad `simp`/`gvs`/`AllCaseEqs()` over goals containing generated ExtCall prefix or driver predicate structure.: Repeatedly timed out or created huge goals; use targeted rewrite/branch-local boundary lemmas instead.
+- Revive static/nonstatic wrapper-adapter lemmas around `extcall_generated_driver_ih_elim_expr`.: E0047 showed direct matching fails and explicit specialization requires brittle generated-prefix witness lists; the strategist invalidated this path.
+  - evidence: episode:E0047
+  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1238_t001
+  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1250_t001
+- Manually instantiate broad generated-prefix eliminators with dozens of `s_*`, `x_*`, and `st_*` witnesses.: This is the exact proof-interface failure the replacement PLAN is avoiding; if it reappears in C0.1.1.2.3/2.4, stop and escalate.
+  - evidence: episode:E0047
+  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1236_t001
+  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1246_t001
+- Use broad `simp`/`gvs` or global `AllCaseEqs()` over the whole ExtCall prefix from the top Resume context.: Prior attempts timed out or produced huge goals; maintainer and PLAN require linear operation-by-operation splitting with immediate error-case closure.
   - evidence: episode:E0039
   - evidence: episode:E0041
-  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1104_t001
-- Drop `context_well_typed cx` or `functions_well_typed cx` from branch-local driver-IH eliminator conclusions to make statements shorter.: E0044 weakened/partially simplified conditional goals did not match the continuation lemma; the new PLAN explicitly requires the full premise shape.
-  - evidence: episode:E0044
-  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1173_t001
-  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1211_t001
-- Stage all files with `git add -A` or include untracked `tmp_helper.txt` / `LEARNINGS_type_system_rewrite.legacy.md`.: Operator forbids unrelated/ad-hoc files; untracked tmp/legacy files were noted and should be left alone unless explicitly requested.
+  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1250_t001
+- Commit current tracked source as-is.: A temporary `FAIL_TAC "probe extcall resume initial"` is present in `Expr_Call_ExtCall_result`; remove/replace it and verify before any commit.
+  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1281_t002
+  - evidence: source:semantics/prop/vyperTypeStmtSoundnessScript.sml:17231
+- Stage untracked `semantics/prop/tmp_helper.txt` or `semantics/prop/LEARNINGS_type_system_rewrite.legacy.md`, or use `git add -A`.: They are unrelated/ad-hoc files noted across sessions; operator explicitly forbids broad staging.
+  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1281_t002
   - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1216_t001
 
 ## Reflection
 ### Tunnel Vision Check
-- Fresh expert should first question whether the next component C0.1.1.2.1 is only a bookkeeping/carry-forward closure, not a place for new proof search; the real next proof work is C0.1.1.2.2.1 after scheduler advances.
-- Outside-the-box approach not yet tried: instead of proving static/nonstatic eliminators via the broad eliminator theorem, unfold `extcall_generated_driver_ih_def` directly inside each branch-local eliminator and specialize/label as in E0043; this may avoid `MATCH_MP_TAC` existential witness headaches.
-- The PLAN decomposition is now likely the right abstraction: generated-prefix witness plumbing is quarantined inside static/nonstatic boundary lemmas, while the expression helper remains consumer-level. If even those branch-local lemmas are hard, the predicate definition may be wrong-shaped and should be re-planned.
-- Do not optimize the old monolithic expression helper. E0044 proved the theorem statement may be semantically right but the proof interface is wrong for a straightforward task.
-- A fresh expert would inspect the exact statement order of `extcall_generated_driver_ih_elim_expr_static_success` before writing tactics, ensuring its conclusion matches `extcall_success_continuation_sound_cond_driver_ih` without dropped `context_well_typed`/`functions_well_typed` antecedents.
+- Outside-the-box approach now chosen by the strategist: abandon the wrapper/eliminator abstraction and prove the final ExtCall Resume linearly inside the concrete branch. Do not drift back to optimizing wrapper lemmas.
+- Fresh expert should first question the current dirty source: a probe `FAIL_TAC` was inserted at `Expr_Call_ExtCall_result` immediately before handoff and has not been built or removed.
+- The PLAN decomposition is still plausible after E0047: C0.1.1.2.3 handles prefix splitting only; C0.1.1.2.4 handles optional-driver IH only after a concrete success branch. Keep that separation.
+- Do not optimize the old `extcall_expr_sound_from_generated_ih` theorem or the broad `extcall_generated_driver_ih_elim_expr`; use them only as reference/optional infrastructure, not as the new proof target.
+- A fresh expert would inspect the exact generated IH assumptions in the Resume goal before writing tactics, then decide whether the linear proof can consume them without reconstructing internal prefix witnesses.
 
 ### What Went Wrong
-- The monolithic predicate-based helper assumption failed: hiding the generated driver IH as an atomic predicate solved early simplifier timeouts, but success tails still required reconstructing the full generated monadic prefix to use `extcall_generated_driver_ih_elim_expr`. Evidence: episode:E0044 and tool_output:TO_type_system_rewrite-20260601T081233Z_m1179_t001.
-- I tried to force the broad eliminator directly in the consumer helper (`irule`/`MATCH_MP_TAC` plus explicit `qexistsl` witnesses). That recreated the forbidden generated-prefix plumbing and ran into brittle state-type/record-update constraints. Evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m1182_t001, tool_output:TO_type_system_rewrite-20260601T081233Z_m1198_t001, tool_output:TO_type_system_rewrite-20260601T081233Z_m1206_t001.
-- After closing E0044, the strategist accepted the failure and replaced the subtree with branch-local static/nonstatic eliminators. C0.1.1.2.0 was then re-closed/reviewed as build-clean, but the stable changes have not been committed yet.
-- Current STATE on disk is stale relative to the latest PLAN: it still points to old C0.1.1.2.2 monolithic helper. This handoff updates the cursor to the new scheduler state.
+- The static wrapper component C0.1.1.2.2.1 failed because the broad eliminator still required a long `qspecl_then` list over generated monad state witnesses; direct `irule extcall_generated_driver_ih_elim_expr` did not match the branch-local conclusion. Evidence: episode:E0047 and tool outputs TO_type_system_rewrite-20260601T081233Z_m1236_t001, TO_type_system_rewrite-20260601T081233Z_m1238_t001, TO_type_system_rewrite-20260601T081233Z_m1246_t001.
+- The old wrapper abstraction hid the generated IH too late/too low-level: it avoided early simplifier blowups but still forced generated-prefix reconstruction at success tails.
+- During C0.1.1.2.3 setup I inserted a `FAIL_TAC` probe in the final Resume but did not build after it because handoff arrived; this leaves a tracked source diff that the next session must handle first.
 
 ### Ignored Signals
-- The first continuation-lemma subgoal at E0044 already showed a large existential over continuation witnesses; that was a decomposition smell, not just a tactic-order issue.
-- Repeated type-constraint failures while building explicit prefix witnesses were a proof-interface signal: generated-prefix states do not belong in the expression helper consumer proof.
-- I underweighted the task instruction to stop if not straightforward; after two eliminator matching failures, the right action was to close/escalate, which was eventually done.
-- Untracked `semantics/prop/tmp_helper.txt` and `semantics/prop/LEARNINGS_type_system_rewrite.legacy.md` still exist; do not `git add -A`.
+- The proof-hygiene checkpoint warning about long `qspecl_then` lists applied even inside the planned static wrapper: the wrapper was becoming exactly the brittle generated-prefix plumbing it was supposed to hide.
+- The task says to stop if the proof is not straightforward; E0047 was correctly closed, but only after trying both direct matching and explicit witness specialization.
+- Untracked `semantics/prop/tmp_helper.txt` and `semantics/prop/LEARNINGS_type_system_rewrite.legacy.md` still exist; do not stage them.
 
 ### Strategy Adjustments
-- Follow new PLAN exactly: begin C0.1.1.2.1 first (carry-forward), then prove C0.1.1.2.2.1 static and C0.1.1.2.2.2 nonstatic branch-local eliminators before reintroducing the expression helper.
-- Inside branch-local eliminators only, it is allowed to reconstruct generated-prefix witnesses or unfold/specialize `extcall_generated_driver_ih_def`; outside those lemmas, keep the predicate opaque.
-- For branch-local lemmas, preserve the full continuation premise shape: include `context_well_typed cx` and `functions_well_typed cx` in the antecedent so the conclusion matches `extcall_success_continuation_sound_cond_driver_ih` exactly.
-- When proving the later expression helper, use old `extcall_expr_sound_from_generated_ih` only as linear prefix/error-case template; success tails should call `drule_all extcall_generated_driver_ih_elim_expr_static_success` or nonstatic, never the broad eliminator directly.
-- Commit stable reviewed changes with `git commit --no-gpg-sign` only after checking status/diff and build-clean state; stage only relevant tracked files under `semantics/prop`, never untracked tmp/legacy files unless explicitly instructed.
+- Follow the accepted replan from TO_type_system_rewrite-20260601T081233Z_m1250_t001: no static/nonstatic wrapper adapters; perform a careful linear branch proof in `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result]`.
+- For C0.1.1.2.3, use targeted local simplification only: `bind_def`, `return_def`, `raise_def`, `check_def`, `lift_option_def`, `lift_option_type_def`, `get_accounts_def`, `get_transient_storage_def`, `update_accounts_def`, `update_transient_def`. Avoid broad `gvs` over the whole prefix.
+- Keep C0.1.1.2.3 focused on reaching the concrete success continuation. Do not solve the optional-driver IH tail in this component if that belongs to C0.1.1.2.4; checkpoint when the single success path is exposed.
+- Commit only reviewed stable progress with `git commit --no-gpg-sign`; current source has an uncommitted probe and must not be committed as-is.
 
 ### Oracle Feedback
-- Held: E0041/E0043 oracle insight that the generated driver IH must be opaque was correct; the predicate and broad eliminator are proved and retained.
-- Missed reality: the broad eliminator was still too low-level for the monolithic expression helper; E0044 showed that consumer-side use forced generated-prefix witness plumbing.
-- New binding oracle guidance from TO_type_system_rewrite-20260601T081233Z_m1211_t001: prove static/nonstatic success-tail eliminators as the consumer API, then retry the expression helper using those branch-local lemmas.
-- E0045 review accepted the restored buildable skeleton; scheduler now wants C0.1.1.2.1 next, not direct work on C0.1.1.2.2.1 until the carry-forward component is begun/closed/reviewed if needed.
+- Held: E0047 evidence showed the branch-local wrapper plan was still too low-level; the strategist accepted and replaced it with the maintainer-approved linear proof path in TO_type_system_rewrite-20260601T081233Z_m1250_t001.
+- Held: cleanup/audit components C0.1.1.2.0, C0.1.1.2.1, and C0.1.1.2.2 were reviewed and accepted; the source was build-clean before the probe edit.
+- Missed/obsolete: previous guidance to prove static/nonstatic success-tail eliminators is now invalidated by E0047 and the replacement PLAN. Do not follow old STATE lines about C0.1.1.2.2.1.
+- Current binding PLAN: C0.1.1.2.3 linear monadic branch proof first, then C0.1.1.2.4 local optional-driver IH application in the concrete success continuation.
 
 ## Evidence Pointers
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m1218_t004 - current PLAN/frontier: no high risk, beginable now C0.1.1.2.1, then branch-local eliminators
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m1211_t001 - strategist review replacing failed monolithic helper with static/nonstatic success-tail eliminators
-- episode:E0044 - monolithic predicate-based helper closed stuck/risk_mismatch; direct broad eliminator use in consumer is ruled out
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m1209_t001 - holbuild success after reverting failed E0044 helper; buildable skeleton restored
-- episode:E0045 - C0.1.1.2.0 buildable skeleton checkpoint proved/reviewed
-- episode:E0043 - `extcall_generated_driver_ih_def` and broad `extcall_generated_driver_ih_elim_expr` proved
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m1153_t001 - build success after proving predicate and broad eliminator
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m1216_t001 - git status: tracked task/source files modified; untracked tmp/legacy files should not be staged
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1281_t003 - current PLAN/frontier: active C0.1.1.2.3, next work is linear ExtCall Resume proof
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1281_t002 - git status shows tracked source dirty plus untracked tmp/legacy files
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:17231 - `Expr_Call_ExtCall_result` currently contains temporary `FAIL_TAC` probe
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1250_t001 - strategist replaced wrapper-adapter path with linear branch proof plan
+- episode:E0047 - static wrapper closed stuck/risk_mismatch; broad eliminator/witness-list approach ruled out
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1268_t001 - last clean holbuild before C0.1.1.2.3 probe edit
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1275_t002 - source around mutual proof suspend site showing ExtCall Resume entry point
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1276_t001 - source around `Expr_Call_ExtCall_result` and adjacent proof templates

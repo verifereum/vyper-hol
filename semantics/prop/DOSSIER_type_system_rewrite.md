@@ -11,9 +11,11 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C0.1.1 | stuck | risk_mismatch | E0033 | Ask strategist to provide a more concrete, low-risk prefix script or a different decomposition; source is currently buildable with the checkpoint placeholder. |
 | C0.1.1.1 | proved |  | E0036 |  |
 | C0.1.1.2 | stuck | risk_mismatch | E0038 | Call plan_oracle(mode='review') for this stuck episode and request a redesign of the ExtCall helper boundary/proof plan under the maintainer constraints. |
-| C0.1.1.2.0 | proved |  | E0045 | Proceed to C0.1.1.2.1 carry-forward or C0.1.1.2.2.1 static success-tail eliminator per scheduler. |
-| C0.1.1.2.1 | proved |  | E0046 |  |
-| C0.1.1.2.2 | stuck | risk_mismatch | E0044 | Call plan_oracle review for C0.1.1.2.2 and request decomposition/interface repair; do not continue tactic tuning the monolithic helper. |
+| C0.1.1.2.0 | proved |  | E0052 |  |
+| C0.1.1.2.1 | proved |  | E0049 |  |
+| C0.1.1.2.2 | proved |  | E0050 |  |
+| C0.1.1.2.2.1 | stuck | risk_mismatch | E0047 | Call plan_oracle review for C0.1.1.2.2.1 and request a more robust static wrapper interface/proof strategy that avoids long generated-prefix witness plumbing. |
+| C0.1.1.2.3 | stuck | risk_mismatch | E0051 | Call plan_oracle(mode="review") for C0.1.1.2.3 with this risk-mismatch evidence; request a precise replacement/augmentation for the Resume-entry proof shape or permission to factor a small matching helper if the component should remain low risk. |
 | C0.2 | proved |  | E0027 |  |
 | C0.3 | proved |  | E0028 |  |
 | C1.1 | proved |  | E0024 | Call plan_oracle(mode='review') for C1.1, then begin C1.2 if accepted. |
@@ -190,10 +192,9 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0045`
+- latest episode: `E0052`
 - blocker: 
-- actual effort: 1 sessions, 1 steps, 143,126 tok (142,904 in, 222 out, 139,648 cached), 6.6s, $0.092764
-- next: Proceed to C0.1.1.2.1 carry-forward or C0.1.1.2.2.1 static success-tail eliminator per scheduler.
+- actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 209,322 tok (208,999 in, 323 out, 204,544 cached), 24.3s, $0.134237
 
 ### Attempts / Evidence
 
@@ -203,10 +204,15 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Preserved E0040 buildable skeleton after E0041 proof attempt; verified `vyperTypeStmtSoundnessTheory` builds with the planned helper/Resume cheats restored. -> Build passed; the cleanup/skeleton component remains complete under the new predicate-based PLAN. (`TO_type_system_rewrite-20260601T081233Z_m1124_t001`)
 - `E0045` (proved, , actual effort: 1 sessions, 1 steps, 143,126 tok (142,904 in, 222 out, 139,648 cached), 6.6s, $0.092764)
   - Verified carry-forward buildable skeleton after reverting failed E0044 monolithic helper insertion. -> `vyperTypeStmtSoundnessTheory` is build-clean in the E0043/E0042 source state; no stale failed helper body remains. (`TO_type_system_rewrite-20260601T081233Z_m1209_t001`)
+- `E0048` (proved, , actual effort: 1 sessions, 1 steps, 113,939 tok (113,645 in, 294 out, 107,904 cached), 10.0s, $0.091477)
+  - Audited current source after E0047 replacement for stale wrapper theorem names and verified the target builds. -> No `extcall_generated_driver_ih_elim_expr_static_success` or nonstatic sibling remains in the source grep output; only pre-existing mutual-proof suspends/cheat mentions unrelated to the abandoned wrapper path were found. `vyperTypeStmtSoundnessTheory` builds cleanly after the failed wrapper insertion was removed. (`TO_type_system_rewrite-20260601T081233Z_m1252_t001`, `TO_type_system_rewrite-20260601T081233Z_m1248_t002`)
+- `E0052` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 209,322 tok (208,999 in, 323 out, 204,544 cached), 24.3s, $0.134237)
+  - Verified the repaired/reverted skeleton state after E0051 review: source contains the tracked `Expr_Call_ExtCall_result` cheat placeholder and no failed partial proof/probe, and `vyperTypeStmtSoundnessTheory` builds. -> Build passed; carry-forward skeleton cleanup remains valid for the replacement helper plan. (`TO_type_system_rewrite-20260601T081233Z_m1309_t001`, `TO_type_system_rewrite-20260601T081233Z_m1314_t001`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260601T081233Z_m1209_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1309_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1314_t001` (use `read_tool_output` for exact output)
 
 ## C0.1.1.2.1
 
@@ -214,9 +220,9 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0046`
+- latest episode: `E0049`
 - blocker: 
-- actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 135,224 tok (134,965 in, 259 out, 113,408 cached), 13.9s, $0.172259
+- actual effort: 1 sessions, 1 msgs, 2 steps, 1 tools, 1 holbuild, 246,054 tok (245,822 in, 232 out, 213,760 cached), 24.0s, $0.274150
 
 ### Attempts / Evidence
 
@@ -232,21 +238,22 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Initial eliminator proof used broad `rw[extcall_generated_driver_ih_def]`, then an `impl_tac` before the `returnData=[] /\ IS_SOME drv` conclusion was stripped. -> Both failed: broad `rw` timed out, and the premature `impl_tac` lacked the success-condition assumptions. Repaired by targeted `rewrite_tac[extcall_generated_driver_ih_def]`, labelling the specialized theorem with `mk_asm`, stripping the success condition first, then applying the labelled implication. (`TO_type_system_rewrite-20260601T081233Z_m1137_t001`, `TO_type_system_rewrite-20260601T081233Z_m1139_t001`, `TO_type_system_rewrite-20260601T081233Z_m1147_t001`)
 - `E0046` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 135,224 tok (134,965 in, 259 out, 113,408 cached), 13.9s, $0.172259)
   - Carry-forward verification of existing `extcall_generated_driver_ih_def` and proved `extcall_generated_driver_ih_elim_expr` under active component. -> `vyperTypeStmtSoundnessTheory` builds cleanly; no source edits were needed for this carry-forward component. (`TO_type_system_rewrite-20260601T081233Z_m1222_t001`)
+- `E0049` (proved, , actual effort: 1 sessions, 1 msgs, 2 steps, 1 tools, 1 holbuild, 246,054 tok (245,822 in, 232 out, 213,760 cached), 24.0s, $0.274150)
+  - Carry-forward re-verification of optional `extcall_generated_driver_ih_def` / `extcall_generated_driver_ih_elim_expr` infrastructure after replanning downgraded its role. -> `vyperTypeStmtSoundnessTheory` builds cleanly; no edits were needed and no static/nonstatic wrapper adapters were introduced. (`TO_type_system_rewrite-20260601T081233Z_m1260_t001`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260601T081233Z_m1222_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1260_t001` (use `read_tool_output` for exact output)
 
 ## C0.1.1.2.2
 
 ### Current Status
 
-- result: `stuck`
-- diagnosis: `risk_mismatch` The opaque predicate avoids early simplifier timeout, but the planned monolithic helper still forces brittle generated-prefix plumbing at success tails. This suggests the decomposition should split into smaller static/nonstatic branch-local helpers or adjust the eliminator/helper interface so the continuation lemma's conditional premise matches directly.
-- latest episode: `E0044`
-- blocker: Predicate-based helper was not straightforward: success-tail eliminator application requires reconstructing many monadic prefix state witnesses and did not match the conditional driver goal without brittle generated-prefix witness plumbing.
-- actual effort: 1 sessions, 3 msgs, 49 steps, 56 tools, 13 holbuild, 4,810,891 tok (4,795,059 in, 15,832 out, 4,551,680 cached), 632.5s, $3.967695
-- next: Call plan_oracle review for C0.1.1.2.2 and request decomposition/interface repair; do not continue tactic tuning the monolithic helper.
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0050`
+- blocker: 
+- actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 261,313 tok (261,042 in, 271 out, 255,744 cached), 28.2s, $0.162492
 
 ### Attempts / Evidence
 
@@ -254,22 +261,79 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Inserted `extcall_expr_sound_from_generated_prefix_driver_pred` by copying the old direct ExtCall helper and replacing the unconditional driver premise with `extcall_generated_driver_ih`; used `extcall_success_continuation_sound_cond_driver_ih` at success tails. -> The prefix proof progressed to the static run-success tail, but applying the continuation lemma exposed an existential/conditional driver premise whose exact generated-prefix state witnesses did not line up straightforwardly. (`TO_type_system_rewrite-20260601T081233Z_m1164_t001`, `TO_type_system_rewrite-20260601T081233Z_m1167_t001`)
   - Tried to discharge the conditional driver premise by deriving the exact implication with `extcall_generated_driver_ih_elim_expr`, first via `irule`, then `MATCH_MP_TAC`, with explicit prefix witnesses for static and nonstatic success branches. -> The eliminator did not match the weakened/partially simplified conditional goal directly; `MATCH_MP_TAC` produced a large existential over all prefix states, and explicit witnesses ran into non-straightforward state-type/monad-state constraints. This contradicts the Risk 2 expectation that the helper would be a straightforward template copy. (`TO_type_system_rewrite-20260601T081233Z_m1173_t001`, `TO_type_system_rewrite-20260601T081233Z_m1179_t001`, `TO_type_system_rewrite-20260601T081233Z_m1182_t001`, `TO_type_system_rewrite-20260601T081233Z_m1198_t001`, `TO_type_system_rewrite-20260601T081233Z_m1206_t001`)
   - Removed the failed helper insertion and rebuilt `vyperTypeStmtSoundnessTheory`. -> Source is restored to the previous build-clean E0043 state; the component proof itself remains unproved. (`TO_type_system_rewrite-20260601T081233Z_m1209_t001`)
-
-### Ruled Out
-
-- Copying the old `extcall_expr_sound_from_generated_ih` proof and simply swapping in `extcall_success_continuation_sound_cond_driver_ih`.
-- Using `irule extcall_generated_driver_ih_elim_expr` directly on the continuation conditional premise.
-- Using `MATCH_MP_TAC extcall_generated_driver_ih_elim_expr` plus a long explicit `qexistsl` prefix-witness list inside the monolithic helper.
+- `E0050` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 261,313 tok (261,042 in, 271 out, 255,744 cached), 28.2s, $0.162492)
+  - Audited `vyperTypeStmtSoundnessScript.sml` for abandoned wrapper-adapter theorem names (`extcall_generated_driver_ih_elim_expr_static_success`, nonstatic sibling, predicate-based helper, delayed helper) and rebuilt target. -> No stale wrapper/helper names were present; `vyperTypeStmtSoundnessTheory` builds cleanly. No source edits were needed. (`TO_type_system_rewrite-20260601T081233Z_m1267_t001`, `TO_type_system_rewrite-20260601T081233Z_m1268_t001`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260601T081233Z_m1164_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m1173_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m1179_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m1182_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m1198_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m1206_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m1209_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1267_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1268_t001` (use `read_tool_output` for exact output)
+
+## C0.1.1.2.2.1
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` The component was intended to be the sole place where static witness reconstruction is allowed, but the required reconstruction is still brittle enough to be a proof-interface/decomposition issue.
+- latest episode: `E0047`
+- blocker: The static branch-local wrapper is not a straightforward low-risk proof as planned: using the broad eliminator still requires a long generated-prefix witness list, while direct `irule` does not match the conclusion. Under the task instruction and proof-hygiene checkpoint, this should be redesigned rather than tuned.
+- actual effort: 1 sessions, 2 msgs, 20 steps, 22 tools, 7 holbuild, 1,825,761 tok (1,818,251 in, 7,510 out, 1,731,072 cached), 360.4s, $1.526731
+- next: Call plan_oracle review for C0.1.1.2.2.1 and request a more robust static wrapper interface/proof strategy that avoids long generated-prefix witness plumbing.
+
+### Attempts / Evidence
+
+- `E0047` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 20 steps, 22 tools, 7 holbuild, 1,825,761 tok (1,818,251 in, 7,510 out, 1,731,072 cached), 360.4s, $1.526731)
+  - Inserted the planned static branch-local theorem statement with `cheat` to validate parsing/type shape. -> The statement built with a cheat, confirming the planned API is syntactically/type valid in the current file. (`TO_type_system_rewrite-20260601T081233Z_m1234_t001`)
+  - Tried to prove the static wrapper by directly specializing `extcall_generated_driver_ih_elim_expr` with concrete static monad witnesses and targeted simplification of `check`/`lift_option`/state accessor/update definitions. -> The proof turned into a brittle long `qspecl_then` witness list; parsing/specialization repeatedly failed, and a direct `irule extcall_generated_driver_ih_elim_expr` did not match the branch-local conclusion. This violates the task's 'straightforward; stop if not' constraint and the proof-hygiene warning against long generated-prefix plumbing, even inside this component. (`TO_type_system_rewrite-20260601T081233Z_m1236_t001`, `TO_type_system_rewrite-20260601T081233Z_m1238_t001`, `TO_type_system_rewrite-20260601T081233Z_m1246_t001`)
+  - Removed the failed static theorem insertion and rebuilt the target. -> Source restored to the prior build-clean state; `vyperTypeStmtSoundnessTheory` builds from cache. (`TO_type_system_rewrite-20260601T081233Z_m1248_t001`, `TO_type_system_rewrite-20260601T081233Z_m1248_t002`)
+
+### Ruled Out
+
+- Direct `irule extcall_generated_driver_ih_elim_expr` on the static branch-local conclusion.
+- Long `qspecl_then`/generated-prefix witness list over all broad eliminator variables in the static wrapper.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260601T081233Z_m1234_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1236_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1238_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1246_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1248_t002` (use `read_tool_output` for exact output)
+
+## C0.1.1.2.3
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` Risk estimate/decomposition mismatch: the maintainer-approved linear proof may still be viable, but the current component lacks a precise Resume-entry tactic shape that preserves the conjunctive postcondition while reaching the concrete monadic success branch. The next plan should specify the exact initial goal manipulation (e.g. avoid premature `strip_tac` that splits the postcondition, or factor a small helper matching the current Resume goal) without broad simplification or generated-prefix adapters.
+- latest episode: `E0051`
+- blocker: The active low-risk component is not straightforward as planned. The Resume goal shape exposes two leading generated IH assumptions and then an already-split expression-result conjunct; naive `strip_tac` loses the whole postcondition, while direct unfolding/linearization immediately causes timeout/huge-goal symptoms. A helper application also does not match without changing the goal setup, and continuing would be proof-architecture redesign rather than tactical execution.
+- actual effort: 1 sessions, 2 msgs, 25 steps, 27 tools, 6 holbuild, 2,007,636 tok (1,996,779 in, 10,857 out, 1,901,952 cached), 380.9s, $1.750821
+- next: Call plan_oracle(mode="review") for C0.1.1.2.3 with this risk-mismatch evidence; request a precise replacement/augmentation for the Resume-entry proof shape or permission to factor a small matching helper if the component should remain low risk.
+
+### Attempts / Evidence
+
+- `E0051` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 25 steps, 27 tools, 6 holbuild, 2,007,636 tok (1,996,779 in, 10,857 out, 1,901,952 cached), 380.9s, $1.750821)
+  - Replaced temporary ExtCall Resume probe with a direct linear proof adapted from existing `extcall_expr_sound_from_generated_ih`, initially splitting the place conjunct and then unfolding `well_typed_expr`/`evaluate_def` locally. -> The place-conjunct split was structurally wrong for the current Resume goal: after `rpt gen_tac >> strip_tac`, the remaining goal was already the expression-result postcondition, not a conjunction. `qpat_x_assum` for `type_place_expr` failed. (`TO_type_system_rewrite-20260601T081233Z_m1290_t001`)
+  - Removed the place split and tried to unfold `well_typed_expr` and apply the expression-argument IH before linear evaluator case splitting. -> `simp[Once well_typed_expr_def]` and then even the IH-antecedent `simp[]` timed out/left a huge goal. This reproduced the forbidden broad-prefix simplification smell rather than a straightforward linear branch proof. (`TO_type_system_rewrite-20260601T081233Z_m1292_t001`, `TO_type_system_rewrite-20260601T081233Z_m1294_t001`, `TO_type_system_rewrite-20260601T081233Z_m1298_t001`)
+  - Stepped back and tried a small wrapper application of existing `extcall_expr_sound_from_generated_ih` by labelling the generated driver IH and args IH, avoiding generated witness lists. -> This also did not match the current goal shape: after `strip_tac`, the goal had already split to a single conjunct (`state_well_typed st'`), so `MATCH_MP_TAC` could not match the helper conclusion. A preceding `disch_tac` was invalid because the goal was not an implication. Source was restored to HEAD (`cheat`) rather than leaving a broken partial proof. (`TO_type_system_rewrite-20260601T081233Z_m1302_t001`, `TO_type_system_rewrite-20260601T081233Z_m1304_t001`, `TO_type_system_rewrite-20260601T081233Z_m1308_t001`, `TO_type_system_rewrite-20260601T081233Z_m1309_t001`)
+
+### Ruled Out
+
+- Starting with `reverse conj_tac`/place branch split in this Resume goal; no such top-level conjunction is present after the generated IH assumptions.
+- Unfolding `well_typed_expr`/IH antecedents with broad `simp[]` at the top; it times out and produces a huge whole-prefix goal.
+- Applying `extcall_expr_sound_from_generated_ih` after `strip_tac`; the goal has already been reduced to a single conjunct and no longer matches the helper conclusion.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260601T081233Z_m1290_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1292_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1294_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1298_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1302_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1304_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1308_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1309_t001` (use `read_tool_output` for exact output)
 
 ## C0.2
 

@@ -240,23 +240,19 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260601T081233Z_m1147_t001
 - tool_output:TO_type_system_rewrite-20260601T081233Z_m1153_t001
 
-## L0040 scope='C0.1.1.2' tags=ExtCall,generated-IH,opaque-predicate,branch-local-eliminator,proof-interface
-shape: A generated optional-driver IH is hidden behind an opaque predicate, but a broad eliminator still requires reconstructing a full monadic prefix when used in a consumer helper.
-pattern: Use a two-layer boundary. Keep `extcall_generated_driver_ih` atomic during prefix/error splitting; prove the broad eliminator once; then wrap it in branch-local success-tail eliminators whose statements mention only natural static/nonstatic branch facts and whose conclusions exactly match the continuation lemma's conditional driver premise. Consumers should call only the branch-local eliminators, never the broad generated-prefix eliminator.
-works_when: The generated driver IH is needed only under `returnData = [] /\ IS_SOME drv` after a concrete run-success branch, and static/nonstatic branch facts determine target/value decoding, calldata, code check, and `run_ext_call` result.
+## L0042 scope='C0.1.1.2' tags=ExtCall,generated-IH,proof-interface,wrapper-adapter,linear-proof
+shape: A wrapper around a generated-prefix eliminator needs a long `qspecl_then` list over monadic state witnesses, or direct `irule` fails to match a branch-local conclusion.
+pattern: Treat this as a failed proof boundary, not a witness-order problem. Abandon the wrapper-adapter route and move to a concrete linear proof that splits the evaluator prefix in source order; specialize the generated optional-driver IH only after the concrete success continuation is reached.
+works_when: The generated IH is guarded by a deterministic monadic prefix and the task/maintainer allows branch-by-branch proof inside the final Resume; error cases can be closed immediately by monad/error definitions.
 evidence:
-- episode:E0043
-- episode:E0044
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m1211_t001
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m1206_t001
-- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:9939
+- episode:E0047
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1238_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1250_t001
 
-## L0041 scope='C0.1.1.2.2' tags=ExtCall,MATCH_MP_TAC,qexistsl,generated-prefix,risk-mismatch
-shape: `MATCH_MP_TAC` on a broad generated-prefix eliminator creates an existential over dozens of `s_*` monad states inside a higher-level consumer proof.
-pattern: Treat this as a boundary failure, not a witness-order problem. Move the witness plumbing into a specifically named branch-local lemma, or ask the strategist to redesign the eliminator; do not keep extending `qexistsl` lists in the consumer proof.
-works_when: The consumer theorem is supposed to be a linear proof over evaluator branches and the generated-prefix variables are artifacts of the predicate definition rather than meaningful consumer-level facts.
+## L0043 scope='C0.1.1.2.3' tags=ExtCall,Resume,dirty-probe,handoff
+shape: Handoff occurs after inserting a `FAIL_TAC` probe in a suspended Resume proof but before running holbuild.
+pattern: Record the dirty probe explicitly in STATE and make removal/replacement the first next action. Do not commit or interpret later build failure as mathematical evidence until the probe is handled.
+works_when: The probe is a deliberate temporary tactic in a task-owned source file and no build evidence has been recorded after insertion.
 evidence:
-- episode:E0044
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m1179_t001
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m1182_t001
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m1198_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1281_t002
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:17231
