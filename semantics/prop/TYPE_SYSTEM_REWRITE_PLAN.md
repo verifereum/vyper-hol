@@ -240,77 +240,80 @@ The strengthened runtime assignment side conditions are derived in each branch:
 
 ## Current status (2026-05-31)
 
-### ExtCall unblocking update (2026-06-01)
+### ExtCall generated-prefix blockage update (2026-06-01)
 
-The fresh type-system rewrite is currently focused on
-`eval_all_type_sound_mutual[Expr_Call_ExtCall]`.  Earlier attempts showed a real
-proof-interface problem when trying to recover the optional-driver recursive IH
-from the top-level Resume context.  Maintainer clarification now authorizes a
-bounded proof-only probe inside `semantics/prop`: keep the semantics/evaluator
-unchanged, but refactor the proof architecture and step through the ExtCall
-monadic chain linearly.
+The bounded proof-only ExtCall probe has now been stopped with checked evidence.
+The theorem has **not** been shown false, and no evaluator/semantics definitions
+were changed.  The blocker is proof-architecture/goal shape: the permitted
+straightforward proof path did not materialize.
 
-The former stop gate is therefore narrowed, not discarded.  Do not try to derive
-a compact driver premise from the unsplit top-level generated prefix.  It is now
-acceptable to specialize the generated optional-driver IH **only after** the
-proof has reached a single concrete ExtCall success-continuation branch where the
-argument evaluation, checks/lifts, calldata construction, external call, and
-account/transient updates have already been split/discharged.
+Maintainer clarification allowed a careful branch-by-branch proof of
+`eval_all_type_sound_mutual[Expr_Call_ExtCall_result]` inside
+`semantics/prop`, provided it avoided broad reconstruction of the generated
+optional-driver prefix.  C0.2.2 attempted that focused `Resume` proof shell, but
+E0070 showed that the focused shell still exposes the generated optional-driver
+prefix after the `eval_exprs` split, before concrete static/nonstatic success
+continuation branches are reached.
 
-Evidence from the C1.2 checkpoint:
+Checked evidence:
 
-- The proposed compact bridge
-  `extcall_driver_continuation_premise_from_compact_ih` was tautological: it
-  consumed exactly the desired compact optional-driver premise and did not derive
-  that premise from the live mutual proof context.
-- The live `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall]` context exposes
-  the optional-driver recursive IH only under the full generated ExtCall monadic
-  prefix, including `eval_exprs`, `check`, `lift_option`,
-  `build_ext_calldata`, `run_ext_call`, `update_accounts`, and
-  `update_transient` temporaries.
-- No compact standalone premise of the shape consumed by
-  `extcall_success_continuation_sound_cond_driver_ih` is naturally available in
-  the Resume context.
-- Recovering that premise locally would require the already-ruled-out brittle
-  generated-prefix specialization/simplification path.
+- `TO_type_system_rewrite-20260601T081233Z_m1595_t001`: after unfolding the
+  focused `Resume` shell and splitting `eval_exprs cx es st`, using `simp[]` to
+  discharge the specialized `eval_exprs` IH antecedent timed out with the
+  generated optional-driver prefix still live.
+- `TO_type_system_rewrite-20260601T081233Z_m1599_t001`: changing the proof to
+  use `impl_tac >- simp[]` progressed to `Cases_on args_res`, but
+  `gvs[no_type_error_result_def]` on the argument-error branch again timed out
+  with the same generated prefix present.
+- `TO_type_system_rewrite-20260601T081233Z_m1601_t001`: a `FAIL_TAC` probe after
+  the `args_res` split confirmed that the live goal still contains the full
+  generated prefix from argument evaluation through ExtCall checks/lifts,
+  external call, account update, transient update, and optional-driver
+  continuation.
+- `TO_type_system_rewrite-20260601T081233Z_m1602_t001`: the failed proof shell
+  was restored to the stable source baseline.
+- `TO_type_system_rewrite-20260601T081233Z_m1616_t003`: the restored
+  `vyperTypeStmtSoundnessTheory` target builds again on the intentional cheated
+  baseline.
 
-Authorized proof-only path before continuing:
+E0072 update (2026-06-01): a replacement sanitized-boundary probe was also
+attempted and accepted as blocked.  That probe stripped the result implication,
+rewrote `well_typed_expr` once, unfolded one evaluator layer through
+`eval_exprs`, split `eval_exprs`, and discharged the expression-list IH by
+explicit `impl_tac`/conjunction assumptions rather than by bare `simp[]`.
+Nevertheless, `TO_type_system_rewrite-20260601T081233Z_m1655_t001` shows that
+closing the `args_res = INR y` branch with the planned narrow
+`simp[no_type_error_result_def]` still timed out because the full generated
+optional-driver prefix remained live in the goal.  The failed proof text was
+restored (`TO_type_system_rewrite-20260601T081233Z_m1656_t001`), the target
+builds again on the intentional cheated baseline
+(`TO_type_system_rewrite-20260601T081233Z_m1657_t002`), and the strategist
+accepted E0072 as a proof-boundary failure
+(`TO_type_system_rewrite-20260601T081233Z_m1659_t001`).
 
-- Keep edits under `semantics/prop` and do not change evaluator/semantics
+Therefore the current ExtCall state is an operator-facing stop/report state:
+
+- Do **not** retry broad `simp`/`gvs`, `AllCaseEqs()`, or whole-prefix cleanup on
+  the post-`eval_exprs` goal.
+- Do **not** retry the sanitized C0.1 shell or any branch-local variant that
+  simplifies while the generated optional-driver prefix remains live.
+- Do **not** introduce a long generated-prefix adapter theorem merely to recover
+  the optional-driver premise.
+- Do **not** edit outside `semantics/prop`, and do not change evaluator/semantics
   definitions.
-- Refactor proof architecture as needed inside the fresh proof stack.
-- Prove the ExtCall branch linearly: close the place-expression half first,
-  unfold typing/evaluation once, split `eval_exprs`, checks/lifts,
-  `build_ext_calldata`, `run_ext_call`, `update_accounts`, and
-  `update_transient` one operation at a time, and close each error branch
-  immediately.
-- Use available IHs and preservation/no-TypeError helpers as soon as their
-  branch premises are available; avoid accumulating parallel subgoals.
-- In the final concrete success-continuation branch, local specialization of the
-  generated optional-driver IH is allowed if the prefix has already been split
-  and its premises are concrete branch assumptions.
+- Treat the remaining `Resume ...[Expr_Call_ExtCall_result]: cheat QED` as the
+  honest marker for this checked proof-architecture blockage, not as completed
+  proof work.
+- Treat the previous static/nonstatic ExtCall branch leaves as invalidated: they
+  depended on first isolating the argument-success branch, and E0072 showed that
+  prerequisite boundary does not hold.
 
-Still do not retry:
-
-- `asm "driver_ih" ...` followed by broad `simp`/`gvs` over the unsplit generated
-  ExtCall prefix.
-- Top-level long `qspecl_then` instantiations over generated ExtCall temporaries.
-- Quoted-assumption or `MATCH_MP` plumbing that reconstructs the whole prefix by
-  hand.
-- Helpers that merely repackage the full generated monadic prefix.
-- Treating the removed tautological compact bridge as proof infrastructure.
-
-Known remaining fresh-stack cheats remain useful context:
-
-- `eval_all_type_sound_mutual[Expr_Call_ExtCall]`
-- `eval_all_type_sound_mutual[Expr_Call_RawCallTarget]`
-- `raw_call_return_type_well_formed`
-
-`RawCallTarget`, the localized builtin arithmetic cheat, wrapper validation,
-and final validation remain downstream of ExtCall.  The immediate authorized
-work is the bounded linear ExtCall proof probe described above.  If that probe
-again requires broad generated-prefix reconstruction, stop and re-plan with
-exact evidence.
+Any future proof-repair attempt needs a new proof boundary or induction/suspend
+interface that avoids reifying the optional-driver IH as a full ExtCall monadic
+success-prefix implication in the live branch goal.  In particular, the first
+probe for any replacement must close the `eval_exprs` argument-error branch
+without the generated driver prefix in the live simplification goal.  That is new
+proof architecture, not the straightforward linear proof authorized for this run.
 
 ### Completion scope
 
@@ -430,18 +433,20 @@ Completed foundational checkpoints:
 
 Current priority order:
 
-1. **Bounded proof-only ExtCall probe.**  Work only in `semantics/prop`, leave
-   semantics/evaluator definitions unchanged, and attempt the linear
-   branch-by-branch proof of `eval_all_type_sound_mutual[Expr_Call_ExtCall]`.
-   This is authorized only under the discipline above: split the monadic chain
-   locally, close error cases immediately, and specialize the driver IH only in a
-   concrete success-continuation branch after the prefix is discharged.
-2. If the proof still requires broad simplification/specialization of the
-   unsplit generated prefix, stop and re-plan with exact build/goal evidence.
-3. After ExtCall succeeds, revisit
-   `eval_all_type_sound_mutual[Expr_Call_RawCallTarget]`.
-4. Then discharge the localized builtin cheat
-   `raw_call_return_type_well_formed` and rerun wrapper/final validation.
+1. **Stop/report ExtCall generated-prefix blockage.**  The bounded proof-only
+   ExtCall probe has reached the stop condition above: the focused
+   `Expr_Call_ExtCall_result` Resume still exposes the generated optional-driver
+   prefix after the `eval_exprs` split, and local simplification times out before
+   concrete success-continuation branches are isolated.  Do not reopen proof
+   search in this run.
+2. Any future work on `eval_all_type_sound_mutual[Expr_Call_ExtCall_result]`
+   needs a new proof boundary or induction/suspend interface that avoids the live
+   generated-prefix obligation.  This is new proof architecture, not a
+   continuation of the straightforward linear probe.
+3. `eval_all_type_sound_mutual[Expr_Call_RawCallTarget]`,
+   `raw_call_return_type_well_formed`, wrapper validation, and final validation
+   remain downstream and should not be attempted until the ExtCall boundary issue
+   is resolved by a replacement plan.
 
 Also eventually update/replace:
 

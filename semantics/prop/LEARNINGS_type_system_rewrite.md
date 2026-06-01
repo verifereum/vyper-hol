@@ -211,15 +211,6 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260531T201607Z_m0885_t001
 - tool_output:TO_type_system_rewrite-20260531T201607Z_m0886_t001
 
-## L0032 scope='C0' tags=ExtCall,Resume,driver_ih,proof-boundary,generated-prefix
-shape: Optional recursive driver IH inside Resume eval_all_type_sound_mutual[Expr_Call_ExtCall] appears only as a full evaluator-prefix implication rather than the compact continuation premise needed by downstream ExtCall helper lemmas.
-pattern: Treat this as a proof-boundary/design failure, not a tactic problem: move or redesign the source/suspend/theorem boundary so the recursive driver call is exposed before the ExtCall monadic prefix is accumulated. Do not try to recover the compact premise by simplifying or packaging the generated prefix.
-works_when: Applies when the visible goal/assumptions contain eval_exprs/check/lift/build_ext_calldata/run_ext_call/update_accounts/update_transient prefix obligations guarding the driver IH and the task requires straightforward proofs.
-evidence:
-- episode:E0029
-- tool_output:TO_type_system_rewrite-20260531T201607Z_m0862_t001
-- tool_output:TO_type_system_rewrite-20260531T201607Z_m0886_t001
-
 ## L0034 scope='C0.1.1.2' tags=ExtCall,Resume,generated-IH,simp-timeout,impl_tac
 shape: A generated IH has been specialized and the goal is `(premises ==> post) ==> rest` inside a huge Resume context; plain `simp[]` times out.
 pattern: Avoid simplifying the whole implication in context. Use `(impl_tac >- simp[]) >> strip_tac` to discharge the small premise locally and add the postcondition, while keeping the large generated prefix out of the simplifier. For call typing in the same large context, use `simp[NoAsms, Once well_typed_expr_def]` rather than assumption-enabled simp.
@@ -293,3 +284,28 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260601T081233Z_m1427_t001
 - tool_output:TO_type_system_rewrite-20260601T081233Z_m1427_t002
 - tool_output:TO_type_system_rewrite-20260601T081233Z_m1427_t004
+
+## L0051 scope='C0' tags=ExtCall,operator-blocked,PLAN-frontier,stop-state,cheat,source-boundary
+shape: A required proof branch is accepted as an operator-facing stop-state with an intentional `Resume ...: cheat QED`, and later proof frontiers/descendants appear or remain scheduled despite the source exposing only the blocked whole-Resume boundary.
+pattern: Treat low-risk scheduled leaves after an accepted stop-state as suspect until source-boundary fidelity is checked. If a probe shows the planned focused subgoal does not exist and the task contract says to stop on non-straightforward design issues, escalate/replace the ancestor PLAN to a blocked operator-facing state rather than proving siblings or inventing local subgoals. Build-clean evidence with a cheat is blocker/report evidence, not theorem completion.
+works_when: Applies when the unresolved branch is required-for-completion, source remains build-clean only because an intentional cheat placeholder remains, and attempts to prove from the current boundary would require forbidden generated-prefix reconstruction or broad prefix cleanup.
+evidence:
+- episode:E0063
+- episode:E0064
+- episode:E0065
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1460_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1467_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1471_t001
+
+## L0054 scope='C0' tags=ExtCall,Resume,generated-prefix,proof-boundary,IH,timeout
+shape: A mutual Resume/monadic branch keeps an optional-recursive-call IH as `full_generated_prefix ==> post`; after local eval/argument splits, simplification still sees >4KiB prefix goals.
+pattern: Treat this as a proof-boundary/interface failure, not a tactic problem. Do not try to recover the compact recursive-call premise by broad simplification, generated-prefix witness plumbing, or a long adapter theorem. A viable replacement must move/suspend/factor the proof so the recursive-call IH is consumed before the full monadic prefix is reified, or first validate a small boundary lemma by live `irule`/`drule_all` matching.
+works_when: Applies to ExtCall-like evaluator branches where recursive optional-driver IHs are generated as prefix-conditional implications and the task requires straightforward branch-local proofs.
+evidence:
+- episode:E0067
+- episode:E0070
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1508_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1528_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1595_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1599_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1601_t001
