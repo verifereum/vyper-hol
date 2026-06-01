@@ -35,6 +35,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C0.2.1.4 | stuck | risk_mismatch | E0135 | Call plan_oracle(mode='review', component_id='C0.2.1.4') to repair the conditional driver premise strategy or reschedule to the static branch. |
 | C0.2.1.4.1 | proved |  | E0137 |  |
 | C0.2.1.4.2 | proved |  | E0138 |  |
+| C0.2.1.4.3 | stuck | risk_mismatch | E0139 | Call plan_oracle(mode='review', component_id='C0.2.1.4.3', evidence_ids=[...]) and request a repair of the consumer interface; do not continue tactic search in the Resume. |
 | C0.2.2 | stuck | risk_mismatch | E0134 | Call plan_oracle(mode='review', component_id='C0.2.2') for a schedule/design repair or a narrower de-risked subcomponent for the generated optional-driver premise. |
 | C0.2.3 | stuck | risk_mismatch | E0105 | Request strategist review/repair for C0.2.3 and the scheduling order. The repair should likely make C0.2.2.1-style opaque generated-IH/static proof-interface work a prerequisite before attempting either static or nonstatic full prefix proof, or provide a shared low-risk selected-equation proof pattern. |
 | C0.3 | stuck | missing_helper | E0106 | Ask strategist to repair C0.3 with a small local RawCallTarget tail helper/boundary or another de-risked proof interface before attempting more proof edits. |
@@ -951,6 +952,33 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 ### Evidence refs
 
 - `TO_type_system_rewrite-20260601T220715Z_m2920_t001` (use `read_tool_output` for exact output)
+
+## C0.2.1.4.3
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` The boundary lemma itself is proved and committed, but the Resume consumer interface remains mismatched. This is a decomposition/interface issue for the strategist: either the boundary lemma premise must be adjusted to match the actual generated IH shape in a de-risked way, or C0.2.1.4.3 must use another local branch proof shape.
+- latest episode: `E0139`
+- blocker: C0.2.1.4.3 was rated Risk 2, but the planned short Resume consumer does not mechanically match: the generated optional-driver IH available in the suspended Resume is still a full prefix-guarded theorem, not the compact premise required by the accepted boundary lemma. Per task instruction, stop rather than building generated-prefix adapter plumbing.
+- actual effort: 1 sessions, 14 steps, 13 tools, 5 holbuild, 1,653,467 tok (1,647,785 in, 5,682 out, 1,620,224 cached), 386.5s, $1.118377
+- next: Call plan_oracle(mode='review', component_id='C0.2.1.4.3', evidence_ids=[...]) and request a repair of the consumer interface; do not continue tactic search in the Resume.
+
+### Attempts / Evidence
+
+- `E0139` (stuck, risk_mismatch, actual effort: 1 sessions, 14 steps, 13 tools, 5 holbuild, 1,653,467 tok (1,647,785 in, 5,682 out, 1,620,224 cached), 386.5s, $1.118377)
+  - Tried to replace `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result_nonstatic]` cheat with a short consumer of `extcall_nonstatic_projected_state_well_typed`: strip assumptions, simplify the nonstatic `if F` type-shape fact, rename the successful `eval_exprs` branch, and apply the new boundary lemma with `args_st`/`vs`. -> Not straightforward. `irule extcall_nonstatic_projected_state_well_typed` failed with `MATCH_MP_TAC No match` at the projected `state_well_typed st'` goal; a `drule_all` variant also failed. The visible generated optional-driver IH remains a full generated prefix implication, while the boundary lemma expects a compact driver-IH premise. The attempted Resume edit was reverted to the intentional `cheat`; target builds clean again. (`TO_type_system_rewrite-20260601T220715Z_m2935_t001`, `TO_type_system_rewrite-20260601T220715Z_m2937_t001`, `TO_type_system_rewrite-20260601T220715Z_m2939_t001`)
+
+### Ruled Out
+
+- Top-level/short `irule extcall_nonstatic_projected_state_well_typed` from the suspended nonstatic Resume after only simplifying the `if F` type-shape fact.
+- `drule_all extcall_nonstatic_projected_state_well_typed` as a direct consumer in the suspended nonstatic Resume.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260601T220715Z_m2935_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m2937_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m2939_t001` (use `read_tool_output` for exact output)
 
 ## C0.2.2
 
