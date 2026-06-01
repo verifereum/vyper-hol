@@ -349,6 +349,16 @@ Proof
   simp[]
 QED
 
+(* ao_resolve_phis_block (the PHI post-pass in ao_transform_block) only
+   rewrites PHI operands, so it preserves every instruction's id. *)
+Triviality ao_resolve_phis_block_inst_ids[local]:
+  MAP (\i. i.inst_id) (ao_resolve_phis_block targets bb).bb_instructions =
+  MAP (\i. i.inst_id) bb.bb_instructions
+Proof
+  simp[ao_resolve_phis_block_def, listTheory.MAP_MAP_o, combinTheory.o_DEF] >>
+  irule listTheory.MAP_CONG >> simp[] >> rw[ao_resolve_iszero_inst_def]
+QED
+
 Triviality block_pieces_snd_flat[local]:
   !mid dfg ra targets bb.
     FLAT (MAP SND (block_pieces mid dfg ra targets bb)) =

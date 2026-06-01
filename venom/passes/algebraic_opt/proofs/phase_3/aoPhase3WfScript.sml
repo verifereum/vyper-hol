@@ -573,7 +573,7 @@ Triviality ao_transform_block_label[local]:
   !mid dfg ra targets bb.
     (ao_transform_block mid dfg ra targets bb).bb_label = bb.bb_label
 Proof
-  simp[ao_transform_block_def]
+  simp[ao_transform_block_def, ao_resolve_phis_block_def]
 QED
 
 Triviality ao_transform_block_bb_succs[local]:

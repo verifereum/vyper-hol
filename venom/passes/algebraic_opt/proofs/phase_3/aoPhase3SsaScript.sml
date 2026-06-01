@@ -660,6 +660,16 @@ Proof
   rw[block_outpieces_def, map_mapi, mapi_no_index] >> simp[ETA_AX]
 QED
 
+(* ao_resolve_phis_block (the PHI post-pass in ao_transform_block) only
+   rewrites PHI operands, so it preserves every instruction's outputs. *)
+Triviality ao_resolve_phis_block_outputs[local]:
+  MAP (\i. i.inst_outputs) (ao_resolve_phis_block targets bb).bb_instructions =
+  MAP (\i. i.inst_outputs) bb.bb_instructions
+Proof
+  simp[ao_resolve_phis_block_def, listTheory.MAP_MAP_o, combinTheory.o_DEF] >>
+  irule listTheory.MAP_CONG >> simp[] >> rw[ao_resolve_iszero_inst_def]
+QED
+
 Triviality block_outpieces_snd_snd_flat[local]:
   !mid dfg ra targets bb.
     FLAT (MAP (\p. SND (SND p)) (block_outpieces mid dfg ra targets bb)) =

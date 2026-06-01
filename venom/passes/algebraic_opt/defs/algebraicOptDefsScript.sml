@@ -46,11 +46,21 @@ End
    Convention: the modified original instruction keeps inst.inst_id.
    Helper instructions inserted before it get IDs from a range that is
    disjoint from original IDs.  We achieve this by offsetting into a
-   high range: max_id is the maximum instruction ID in the function
-   (passed in from ao_transform_block/ao_transform_function).
+   high range: max_id is the maximum instruction ID in the function, passed
+   in as `mid` and threaded through ao_transform_block, ao_transform_inst,
+   ao_peephole_inst, ao_opt_eq, ao_opt_comparator, ao_cmp_prefer_iz_{zero,max,
+   general} and ao_cmp_flip_apply_inst.
    Helper k for original inst_id gets  max_id + 1 + inst_id * 3 + k
    where k ∈ {0,1,2}.  This is injective and > max_id, so it cannot
-   collide with any original ID or with helpers from other instructions. *)
+   collide with any original ID or with helpers from other instructions.
+
+   Output-safety: inst_id is internal instruction identity (the analogue of
+   Python's object identity) and is never emitted to bytecode.  Threading
+   `mid` only ensures each produced instruction gets a distinct id; it changes
+   no opcode, operand or output, so the emitted code is identical.  Distinct
+   ids are in fact REQUIRED for correctness, not merely provability: a single
+   shared id per expansion would break fn_inst_ids_distinct and would mis-key
+   the id-indexed ALOOKUPs in ao_cmp_flip_apply_inst. *)
 Definition ao_fresh_id_def:
   ao_fresh_id (max_id:num) (id:num) (slot:num) = max_id + 1 + id * 3 + slot
 End
@@ -220,7 +230,11 @@ End
  * Rules:
  *   balance(address()) → selfbalance()
  *   extcodesize → skip (no optimizations)
- *   signextend(n, signextend(m, x)) where n >= m → assign(x)
+ *   signextend(n, signextend(m, x)) where n >=+ m → assign(x)
+ *     (>=+ is the UNSIGNED word compare: the byte-count operand is a
+ *      magnitude, matching Python's plain-int comparison.  It agrees with
+ *      the signed >= on every width that can actually occur (0..31), so this
+ *      is a model-faithfulness fix, not a change to the emitted output.)
  *)
 Definition ao_opt_producer_def:
   ao_opt_producer dfg inst =
@@ -418,10 +432,13 @@ Definition ao_opt_muldiv_def:
     | _ => [inst]
 End
 
-(* Or: x | MAX → MAX, x | 0 → x
+(* Or: x | MAX → MAX, x | 0 → x   (value-preserving cases only)
    Commutative: after pre-flip, literal at op2.
-   NOTE: truthy case (x | nonzero → 1) disabled — value-changing
-   optimization requires usage-level proof, not per-instruction sim *)
+   Python _rule_or has a third, value-CHANGING case — x | nonzero_lit → 1 in
+   truthy contexts — which lives in the separate ao_or_truthy_function
+   mini-pass (phase 5; see "OR-truthy mini-pass" below), NOT here: this
+   peephole runs inside the value-preserving per-instruction engine, which is
+   not allowed to change any non-fresh variable's value. *)
 Definition ao_opt_or_def:
   ao_opt_or dfg inst =
     case inst.inst_operands of
@@ -935,48 +952,13 @@ Definition ao_transform_block_def:
           bb.bb_instructions))
 End
 
-(* ===== ao_resolve_phis_block structural preservation =====
-   ao_resolve_phis_block only rewrites PHI operands, so it preserves block
-   label, per-instruction ids/outputs, and the flattened-output projections
-   the WF/SSA/Ids proofs reason about.  These let those proofs strip the
-   resolve post-pass and reduce to the pre-resolution transformed block. *)
-
-Theorem ao_resolve_phis_block_label[simp]:
-  (ao_resolve_phis_block targets bb).bb_label = bb.bb_label
-Proof
-  simp[ao_resolve_phis_block_def]
-QED
-
-Theorem ao_resolve_phis_block_inst_ids:
-  MAP (\i. i.inst_id) (ao_resolve_phis_block targets bb).bb_instructions =
-  MAP (\i. i.inst_id) bb.bb_instructions
-Proof
-  simp[ao_resolve_phis_block_def, listTheory.MAP_MAP_o, combinTheory.o_DEF] >>
-  irule listTheory.MAP_CONG >> simp[] >> rw[ao_resolve_iszero_inst_def]
-QED
-
-Theorem ao_resolve_phis_block_outputs:
-  MAP (\i. i.inst_outputs) (ao_resolve_phis_block targets bb).bb_instructions =
-  MAP (\i. i.inst_outputs) bb.bb_instructions
-Proof
-  simp[ao_resolve_phis_block_def, listTheory.MAP_MAP_o, combinTheory.o_DEF] >>
-  irule listTheory.MAP_CONG >> simp[] >> rw[ao_resolve_iszero_inst_def]
-QED
-
-Theorem ao_resolve_phis_block_opcodes:
-  MAP (\i. i.inst_opcode) (ao_resolve_phis_block targets bb).bb_instructions =
-  MAP (\i. i.inst_opcode) bb.bb_instructions
-Proof
-  simp[ao_resolve_phis_block_def, listTheory.MAP_MAP_o, combinTheory.o_DEF] >>
-  irule listTheory.MAP_CONG >> simp[] >> rw[ao_resolve_iszero_inst_def]
-QED
-
 (*
  * Full pass structure (matches Python run_pass):
  *   1. Handle offset conversion (add(lit,label) → offset)
  *   2. Compute iszero targets
  *   3. Single rewrite pass: iszero resolution + producer + peephole
  *   4. Comparator iszero flip (separate mini-pass)
+ *   5. OR-truthy rewrite x|n → 1 (separate mini-pass)
  *)
 Definition ao_transform_function_def:
   ao_transform_function fn =
@@ -1001,7 +983,8 @@ Definition ao_transform_function_def:
     ao_or_truthy_function dfg2 fn2
 End
 
-(* Variables whose values may change under cmp_flip:
+(* Proof-only (not used by the pass): characterises which variables the
+   cmp-flip phase may change — the simulation theorem's "modulo" set.
    - Comparator outputs that get flipped (out_var differs)
    - Fresh variables introduced by insert (ISZERO before ASSERT) *)
 Definition ao_cmp_flip_dead_vars_def:
@@ -1014,8 +997,8 @@ Definition ao_cmp_flip_dead_vars_def:
           MEM (aid, out_var, fresh, cmp_id) inserts }
 End
 
-(* Variables whose values change under OR-truthy: the outputs of the OR
-   instructions rewritten to `assign 1` (originally x|n, now 1). *)
+(* Proof-only (not used by the pass): the variables OR-truthy may change —
+   outputs of the OR instructions rewritten to `assign 1` (originally x|n). *)
 Definition ao_or_truthy_dead_vars_def:
   ao_or_truthy_dead_vars dfg fn =
     let ids = ao_or_truthy_scan dfg (fn_insts fn) in
@@ -1029,7 +1012,12 @@ Definition ao_transform_context_def:
     ctx with ctx_functions := MAP ao_transform_function ctx.ctx_functions
 End
 
-(* ===== Proof Invariant Definitions ===== *)
+(* ===== Proof-only definitions =====
+ * None of the definitions below are referenced by ao_transform_function or
+ * ao_transform_context (the pass itself); they exist solely to STATE and
+ * PROVE the correctness theorems — fresh-/dead-variable sets, the
+ * fresh-names precondition, and a runtime DFG invariant — and therefore have
+ * no effect on the instructions the pass emits. *)
 
 Definition ao_fn_fresh_vars_def:
   ao_fn_fresh_vars fn =
