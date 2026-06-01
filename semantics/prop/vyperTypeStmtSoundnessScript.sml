@@ -9820,6 +9820,21 @@ Proof
   qexists_tac `Num i` >> simp[]
 QED
 
+Theorem eval_extcall_args_error[local]:
+  !cx es st y args_st ret_type stat func_name arg_types drv.
+    eval_exprs cx es st = (INR y,args_st) ==>
+    eval_expr cx (Call ret_type (ExtCall stat (func_name,arg_types,ret_type)) es drv) st =
+      (INR y,args_st)
+Proof
+  rpt strip_tac >>
+  simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
+                       check_def, assert_def, return_def, raise_def,
+                       lift_option_type_def, lift_option_def,
+                       get_accounts_def, get_transient_storage_def,
+                       update_accounts_def, update_transient_def] >>
+  gvs[]
+QED
+
 Theorem extcall_expr_sound_from_generated_ih[local]:
   !cx env st res st' is_static func_name arg_types ret_type es drv.
     env_consistent env cx st /\ state_well_typed st /\

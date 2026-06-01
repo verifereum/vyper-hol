@@ -22,7 +22,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C0.1.1.2.4 | proved |  | E0063 |  |
 | C0.1.1.2.5 | proved |  | E0064 | Review/handle generated PLAN diff, then report blocked/operator handoff rather than proof completion; do not reopen ExtCall proof. |
 | C0.1.2 | stuck | risk_mismatch | E0065 | Ask the strategist to repair/reconcile the PLAN with source reality, or accept the operator-facing blocked stop-state rather than continuing C0.1.2. |
-| C0.2 | proved |  | E0074 | Call plan_oracle(mode='review') for C0.2, then proceed to the unsigned commit/report component C0.3 if accepted. |
+| C0.2 | proved |  | E0077 | Call plan_oracle(mode='review') for C0.2; if accepted, commit the small proof-boundary checkpoint and proceed to C0.3. |
 | C0.2.1 | proved |  | E0069 | Call plan_oracle(mode='review') and then proceed to the focused Resume proof shell component if accepted. |
 | C0.2.2 | stuck | risk_mismatch | E0070 | Call plan_oracle(mode='review', component_id='C0.2.2') with this evidence and ask for a redesigned/de-risked boundary rather than more local simplifier variants. |
 | C0.3 | proved |  | E0075 | Call plan_oracle(mode='review') for C0.3; if accepted, inspect query_plan for whether C0 is complete and then follow the stop/report outcome. |
@@ -529,10 +529,10 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0074`
+- latest episode: `E0077`
 - blocker: 
-- actual effort: 1 sessions, 2 steps, 3 tools, 1 holbuild, 272,504 tok (272,022 in, 482 out, 267,008 cached), 19.0s, $0.173034
-- next: Call plan_oracle(mode='review') for C0.2, then proceed to the unsigned commit/report component C0.3 if accepted.
+- actual effort: 1 sessions, 10 steps, 14 tools, 3 holbuild, 1,126,221 tok (1,123,736 in, 2,485 out, 1,098,496 cached), 214.6s, $0.749998
+- next: Call plan_oracle(mode='review') for C0.2; if accepted, commit the small proof-boundary checkpoint and proceed to C0.3.
 
 ### Attempts / Evidence
 
@@ -545,12 +545,21 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 - `E0074` (proved, , actual effort: 1 sessions, 2 steps, 3 tools, 1 holbuild, 272,504 tok (272,022 in, 482 out, 267,008 cached), 19.0s, $0.173034)
   - Audited the ExtCall result Resume source around the target label. -> The proof body is restored to the intentional `cheat QED` baseline; no failed sanitized-boundary proof text remains in `vyperTypeStmtSoundnessScript.sml`. (`TO_type_system_rewrite-20260601T081233Z_m1671_t001`, `TO_type_system_rewrite-20260601T081233Z_m1671_t002`)
   - Built `vyperTypeStmtSoundnessTheory` after the report update and source audit. -> The target builds successfully on the honest stopped/cheated baseline. This is not proof completion; it validates that the stopped state has no broken proof edits. (`TO_type_system_rewrite-20260601T081233Z_m1671_t003`)
+- `E0077` (proved, , actual effort: 1 sessions, 10 steps, 14 tools, 3 holbuild, 1,126,221 tok (1,123,736 in, 2,485 out, 1,098,496 cached), 214.6s, $0.749998)
+  - Added local theorem `eval_extcall_args_error` before the existing ExtCall helper block in `vyperTypeStmtSoundnessScript.sml`. -> The theorem states exactly the boundary probe: if `eval_exprs cx es st = (INR y,args_st)`, then evaluating the ExtCall expression returns `(INR y,args_st)`. It is standalone and does not mention any generated optional-driver IH. (`TO_type_system_rewrite-20260601T081233Z_m1714_t001`, `TO_type_system_rewrite-20260601T081233Z_m1721_t001`, `TO_type_system_rewrite-20260601T081233Z_m1721_t003`)
+  - First attempted the lemma with free variable name `is_static` and one-step evaluator/monad simplification. -> HOL parsed `is_static` as an existing function rather than a bool variable, causing a type error; fixed by explicitly quantifying `stat` instead. This was a statement parsing issue, not a proof-boundary/generated-prefix issue. (`TO_type_system_rewrite-20260601T081233Z_m1715_t001`, `TO_type_system_rewrite-20260601T081233Z_m1717_t001`)
+  - Proved `eval_extcall_args_error` by one-step `evaluate_def`, monad definitions, and final `gvs[]`, then built `vyperTypeStmtSoundnessTheory`. -> Target build succeeded. The probe is small and outside the generated Resume context; no generated optional-driver prefix was exposed. (`TO_type_system_rewrite-20260601T081233Z_m1718_t001`, `TO_type_system_rewrite-20260601T081233Z_m1719_t001`, `TO_type_system_rewrite-20260601T081233Z_m1720_t001`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260601T081233Z_m1671_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m1671_t002` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m1671_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1714_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1715_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1717_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1718_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1719_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1720_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1721_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1721_t003` (use `read_tool_output` for exact output)
 
 ## C0.2.1
 
