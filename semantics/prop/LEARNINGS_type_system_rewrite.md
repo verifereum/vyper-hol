@@ -330,3 +330,13 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260601T081233Z_m1740_t001
 - tool_output:TO_type_system_rewrite-20260601T081233Z_m1744_t001
 - episode:E0078
+
+## L0058 scope='C0.3' tags=ExtCall,Resume,generated-prefix,projection-lemma,conjunct-splitting
+shape: A full postcondition helper is valid outside a mutual Resume, but the live Resume subgoal is already split to one conjunct while a large generated optional-driver prefix remains in assumptions.
+pattern: Do not apply the full helper directly or bridge it with simp/impl_tac in the raw context. Prove conjunct-specific projection lemmas outside the Resume context whose conclusions exactly match the split subgoals (`state_well_typed st'`, `env_consistent ... st'`, `accounts_well_typed st'.accounts`, `no_type_error_result res`, result-typed case). Then consume those projections with irule/assumption matching.
+works_when: Use when a computation-boundary or full-postcondition lemma proved cleanly, but raw Resume consumer goals are split conjuncts and any implication/simp bridge traverses a generated prefix.
+evidence:
+- episode:E0081
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1805_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1818_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1824_t001

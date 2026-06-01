@@ -26,7 +26,8 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C0.2.1 | proved |  | E0069 | Call plan_oracle(mode='review') and then proceed to the focused Resume proof shell component if accepted. |
 | C0.2.2 | stuck | risk_mismatch | E0070 | Call plan_oracle(mode='review', component_id='C0.2.2') with this evidence and ask for a redesigned/de-risked boundary rather than more local simplifier variants. |
 | C0.3 | stuck | risk_mismatch | E0079 | Call plan_oracle(mode='review') for C0.3. Ask for a de-risked replacement that avoids raw Resume simplification, likely a postcondition-shaped local helper whose conclusion matches the argument-error branch or a smaller Resume split that removes the generated optional-driver premise without `simp`/`gvs`. |
-| C0.3.1 | proved |  | E0080 | Call plan_oracle(mode='review') for C0.3.1; if accepted, commit the helper checkpoint unsigned and proceed to C0.3.2. |
+| C0.3.1 | proved |  | E0082 | Call plan_oracle(mode='review') for this carried-forward C0.3.1 closure; then begin C0.3.2 to add conjunct-specific projection helpers. |
+| C0.3.2 | proved |  | E0083 | Call plan_oracle(mode='review') for C0.3.2. If accepted, inspect status/diff and commit the helper checkpoint unsigned before beginning C0.3.3. |
 | C1.1 | proved |  | E0024 | Call plan_oracle(mode='review') for C1.1, then begin C1.2 if accepted. |
 | C1.1.1 | proved |  | E0012 |  |
 | C1.1.2 | proved |  | E0013 |  |
@@ -664,19 +665,45 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0080`
+- latest episode: `E0082`
 - blocker: 
-- actual effort: 1 sessions, 2 msgs, 31 steps, 30 tools, 13 holbuild, 2,746,568 tok (2,740,862 in, 5,706 out, 2,684,032 cached), 514.2s, $1.797346
-- next: Call plan_oracle(mode='review') for C0.3.1; if accepted, commit the helper checkpoint unsigned and proceed to C0.3.2.
+- actual effort: 1 sessions, 1 steps, 151,700 tok (151,394 in, 306 out, 147,328 cached), 8.5s, $0.103174
+- next: Call plan_oracle(mode='review') for this carried-forward C0.3.1 closure; then begin C0.3.2 to add conjunct-specific projection helpers.
 
 ### Attempts / Evidence
 
 - `E0080` (proved, , actual effort: 1 sessions, 2 msgs, 31 steps, 30 tools, 13 holbuild, 2,746,568 tok (2,740,862 in, 5,706 out, 2,684,032 cached), 514.2s, $1.797346)
   - Added local theorem `eval_extcall_args_error_sound` immediately after `eval_extcall_args_error`; proof derives the computation equality via C0.2, substitutes the call result/state, then closes remaining `INR` no-TypeError case by case analysis on `y` and `no_type_error_result_def`. -> `vyperTypeStmtSoundnessTheory` builds successfully with the new helper; no evaluator definitions changed and ExtCall_result Resume remains at its cheat baseline for the next component. (`TO_type_system_rewrite-20260601T081233Z_m1795_t001`)
+- `E0082` (proved, , actual effort: 1 sessions, 1 steps, 151,700 tok (151,394 in, 306 out, 147,328 cached), 8.5s, $0.103174)
+  - Carry forward existing committed local theorem `eval_extcall_args_error_sound` as proof infrastructure under the refined C0.3 plan. -> No source edits were needed: the theorem is present in `vyperTypeStmtSoundnessScript.sml`, was already build-verified, reviewed, and committed in `0c29945fa`. It should not be applied directly in the raw Resume context; it remains infrastructure for projection helpers. (`TO_type_system_rewrite-20260601T081233Z_m1795_t001`)
 
 ### Evidence refs
 
 - `TO_type_system_rewrite-20260601T081233Z_m1795_t001` (use `read_tool_output` for exact output)
+
+## C0.3.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0083`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 16 steps, 16 tools, 7 holbuild, 1,057,409 tok (1,052,860 in, 4,549 out, 1,002,496 cached), 320.1s, $0.889538
+- next: Call plan_oracle(mode='review') for C0.3.2. If accepted, inspect status/diff and commit the helper checkpoint unsigned before beginning C0.3.3.
+
+### Attempts / Evidence
+
+- `E0081` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 20 steps, 19 tools, 7 holbuild, 2,566,724 tok (2,560,261 in, 6,463 out, 2,505,216 cached), 534.6s, $1.721723)
+  - Replaced ExtCall_result cheat with a focused Resume shell: unfold typing/evaluator one step, split `eval_exprs`, consume expr-list IH with `drule_all_then assume_tac`, and try to close the `INR y,args_st` branch using new helper `eval_extcall_args_error_sound`. -> `irule eval_extcall_args_error_sound` did not match because the proof context had already split the final postcondition to a single conjunct (`state_well_typed st'`) under the generated prefix. (`TO_type_system_rewrite-20260601T081233Z_m1805_t001`)
+  - Changed helper use to a specialized `qspecl_then ... mp_tac eval_extcall_args_error_sound` with an explicit antecedent proof, and changed `strip_tac` to `disch_tac` after evaluator unfolding to avoid splitting the postcondition too early. -> The explicit antecedent proof and later `simp[]` bridge still timed out by traversing the >4KiB generated optional-driver prefix. This repeats the E0079 failure mode even with the postcondition helper. (`TO_type_system_rewrite-20260601T081233Z_m1811_t001`, `TO_type_system_rewrite-20260601T081233Z_m1818_t001`, `TO_type_system_rewrite-20260601T081233Z_m1820_t001`)
+  - Reverted the C0.3.2 partial Resume proof back to the intentional `cheat` baseline, preserving the committed C0.3.1 helper, and rebuilt. -> `vyperTypeStmtSoundnessTheory` builds again, so the source is stable but C0.3.2 remains unresolved. (`TO_type_system_rewrite-20260601T081233Z_m1822_t001`)
+- `E0083` (proved, , actual effort: 1 sessions, 1 msgs, 16 steps, 16 tools, 7 holbuild, 1,057,409 tok (1,052,860 in, 4,549 out, 1,002,496 cached), 320.1s, $0.889538)
+  - Added five local conjunct-specific ExtCall argument-error projection helpers immediately after eval_extcall_args_error_sound; proofs derive the whole-call equality via eval_extcall_args_error and use the caller equation to identify res/st'. -> After adjusting the no_type_error projection to case-split the error value (matching the existing full helper's proof style), vyperTypeStmtSoundnessTheory built cleanly. The Resume proof was not touched, as required for C0.3.2. (`TO_type_system_rewrite-20260601T081233Z_m1837_t001`, `TO_type_system_rewrite-20260601T081233Z_m1848_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260601T081233Z_m1848_t001` (use `read_tool_output` for exact output)
 
 ## C1.1
 
