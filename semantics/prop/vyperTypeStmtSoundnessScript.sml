@@ -9865,6 +9865,18 @@ Proof
 QED
 
 
+Theorem extcall_nonstatic_args_runtime_typed_nonempty[local]:
+  exprs_runtime_typed env args vs /\
+  MAP expr_type args = BaseT AddressT :: BaseT (UintT 256) :: arg_tys ==>
+  vs <> [] /\ TL vs <> []
+Proof
+  rw[exprs_runtime_typed_def] >>
+  Cases_on `args` >> gvs[] >>
+  Cases_on `t` >> gvs[] >>
+  Cases_on `vs` >> gvs[listTheory.LIST_REL_EL_EQN] >>
+  Cases_on `t` >> gvs[listTheory.LIST_REL_EL_EQN]
+QED
+
 Theorem extcall_static_projected_state_well_typed[local]:
   !env cx st res st' args_st vs func_name arg_types ret_type es drv.
     env_consistent env cx st /\ state_well_typed st /\ context_well_typed cx /\

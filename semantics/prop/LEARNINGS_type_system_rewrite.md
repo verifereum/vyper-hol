@@ -483,12 +483,31 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260601T081233Z_m2632_t001
 - tool_output:TO_type_system_rewrite-20260601T081233Z_m2638_t001
 
-## L0085 scope='C0.2.1.3' tags=ExtCall,Resume,projected-goal,boundary-helper,tail-equality
-shape: A suspended Resume exposes only a projected conjunct such as `state_well_typed st'`, and direct continuation theorem/projection use lacks the branch-local tail equality.
-pattern: Rebase to a local projected-goal boundary helper whose conclusion exactly matches the Resume conjunct and whose proof owns the linear evaluator prefix case splits. Inside that helper, the `run_ext_call = SOME (...)` result and the post-update tail equality become ordinary assumptions, making `run_ext_call_accounts_well_typed` and `extcall_success_continuation_state_well_typed` usable at the concrete success tail.
-works_when: Use when the Resume boundary has already split the theorem postcondition before the final monadic prefix proof. Place the helper after any local argument-shape lemmas it depends on; keep the generated optional-driver IH as a compact premise, not a full generated-prefix implication.
+## L0086 scope='C0.2.1.3' tags=ExtCall,Resume,generated-IH,branch-local,proof-interface
+shape: A generated mutual-IH in a suspended ExtCall Resume is a full monadic-prefix implication with extra conjuncts, while a proved helper expects an unconditional compact driver IH.
+pattern: Do not consume the helper at the top of the Resume. Keep the explicit linear monadic split in the Resume until the success continuation branch where the generated prefix assumptions are concrete; then use tail lemmas such as `extcall_after_state_update_tail_sound` and project/specialize the generated IH only locally. A standalone projected helper may be a proof template, not the actual consumer interface.
+works_when: Use when holbuild shows `driver_ih` guarded by the full ExtCall prefix and direct helper application leaves `MATCH_MP_TAC No match`, `DISCH_THEN` failure, or metis timeout. Applies under the maintainer rule forbidding broad generated-prefix simplification/adapters.
 evidence:
-- episode:E0129
-- episode:E0131
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m2748_t001
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m2785_t001
+- episode:E0132
+- episode:E0133
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m2812_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m2819_t001
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m2825_t001
+
+## L0087 scope='C0.2.1.4' tags=ExtCall,generated-prefix,boundary-lemma,Resume
+shape: Resume proof has a full generated optional-driver prefix assumption; local `gvs`/`simp` over monadic prefix times out or exceeds 4KiB.
+pattern: Move ExtCall prefix reasoning out of the Resume into a local projected-state boundary theorem with compact assumptions and a compact optional-driver IH premise. Then make the Resume a small consumer of that boundary lemma instead of simplifying evaluator internals with the generated prefix visible.
+works_when: The boundary theorem can be stated from successful `eval_exprs`, runtime-typed argument facts, MAP expression-type shape, and a compact driver-IH premise; it should conclude only the needed invariant such as `state_well_typed st'`.
+evidence:
+- episode:E0136
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m2884_t001
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m2894_t001
+
+## L0088 scope='C0.2.1.4' tags=ExtCall,exprs_runtime_typed,list-nonempty,helper
+shape: Need `vs <> [] /\ TL vs <> []` from nonstatic ExtCall runtime-typed args and `MAP expr_type args = Address :: Uint256 :: arg_tys`.
+pattern: Prove a small helper outside the Resume context: `extcall_nonstatic_args_runtime_typed_nonempty[local]`. Use it in later boundary/helper proofs instead of unfolding `exprs_runtime_typed_def` where generated Resume assumptions are present.
+works_when: The proof context is a clean local lemma over `exprs_runtime_typed env args vs` and MAP shape, not a suspended Resume branch with generated prefix implications.
+evidence:
+- episode:E0137
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m2892_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml
