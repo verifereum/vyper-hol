@@ -297,15 +297,16 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260601T081233Z_m1467_t001
 - tool_output:TO_type_system_rewrite-20260601T081233Z_m1471_t001
 
-## L0054 scope='C0' tags=ExtCall,Resume,generated-prefix,proof-boundary,IH,timeout
-shape: A mutual Resume/monadic branch keeps an optional-recursive-call IH as `full_generated_prefix ==> post`; after local eval/argument splits, simplification still sees >4KiB prefix goals.
-pattern: Treat this as a proof-boundary/interface failure, not a tactic problem. Do not try to recover the compact recursive-call premise by broad simplification, generated-prefix witness plumbing, or a long adapter theorem. A viable replacement must move/suspend/factor the proof so the recursive-call IH is consumed before the full monadic prefix is reified, or first validate a small boundary lemma by live `irule`/`drule_all` matching.
-works_when: Applies to ExtCall-like evaluator branches where recursive optional-driver IHs are generated as prefix-conditional implications and the task requires straightforward branch-local proofs.
+## L0055 scope='C0' tags=ExtCall,Resume,generated-prefix,proof-boundary,IH,timeout
+shape: A mutual Resume/monadic evaluator branch keeps an optional-recursive-call IH as `full_generated_prefix ==> post`; after local eval/argument splits, even irrelevant error branches still simplify under a >4KiB generated prefix.
+pattern: Treat this as a proof-boundary/interface failure, not a tactic problem. Do not recover the compact recursive-call premise by broad simplification, generated-prefix witness plumbing, or long adapter theorems. A viable replacement must move/suspend/factor the proof before the full monadic prefix is reified, and its first live probe should close an early error branch (e.g. `eval_exprs` argument-error) without the generated driver prefix in the simplification goal.
+works_when: Applies to ExtCall-like evaluator branches where recursive optional-driver IHs are generated as prefix-conditional implications and the task requires straightforward branch-local proofs; especially when `simp[no_type_error_result_def]`/`gvs` times out despite explicit IH discharge.
 evidence:
 - episode:E0067
 - episode:E0070
+- episode:E0072
 - tool_output:TO_type_system_rewrite-20260601T081233Z_m1508_t001
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m1528_t001
 - tool_output:TO_type_system_rewrite-20260601T081233Z_m1595_t001
 - tool_output:TO_type_system_rewrite-20260601T081233Z_m1599_t001
 - tool_output:TO_type_system_rewrite-20260601T081233Z_m1601_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1655_t001

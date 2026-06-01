@@ -291,7 +291,17 @@ builds again on the intentional cheated baseline
 accepted E0072 as a proof-boundary failure
 (`TO_type_system_rewrite-20260601T081233Z_m1659_t001`).
 
-Therefore the current ExtCall state is an operator-facing stop/report state:
+2026-06-01 superseding update: the old operator-facing stop/report state above
+is historical evidence, not the current scheduler state.  After the narrowed
+maintainer clarification was re-reviewed, the strategist replaced the stop-only
+C0 subtree with a new executable ExtCall proof subtree.  The first executable
+step is **not** another raw `Resume` simplification; it is a proof-boundary probe
+lemma, tentatively named `eval_extcall_args_error`, proving that
+`eval_exprs cx es st = (INR y,args_st)` makes
+`eval_expr cx (Call ret_type (ExtCall is_static (func_name,arg_types,ret_type)) es drv) st`
+return `(INR y,args_st)` by one-step evaluator unfolding.
+
+The E0072 evidence remains binding as negative guidance for the new proof:
 
 - Do **not** retry broad `simp`/`gvs`, `AllCaseEqs()`, or whole-prefix cleanup on
   the post-`eval_exprs` goal.
@@ -302,18 +312,10 @@ Therefore the current ExtCall state is an operator-facing stop/report state:
 - Do **not** edit outside `semantics/prop`, and do not change evaluator/semantics
   definitions.
 - Treat the remaining `Resume ...[Expr_Call_ExtCall_result]: cheat QED` as the
-  honest marker for this checked proof-architecture blockage, not as completed
-  proof work.
-- Treat the previous static/nonstatic ExtCall branch leaves as invalidated: they
-  depended on first isolating the argument-success branch, and E0072 showed that
-  prerequisite boundary does not hold.
-
-Any future proof-repair attempt needs a new proof boundary or induction/suspend
-interface that avoids reifying the optional-driver IH as a full ExtCall monadic
-success-prefix implication in the live branch goal.  In particular, the first
-probe for any replacement must close the `eval_exprs` argument-error branch
-without the generated driver prefix in the live simplification goal.  That is new
-proof architecture, not the straightforward linear proof authorized for this run.
+  current proof target, not as completed proof work.
+- Treat the previous static/nonstatic ExtCall branch leaves as invalidated until
+  the new argument-error boundary probe is proved and the argument-success branch
+  is isolated without the generated optional-driver prefix.
 
 ### Completion scope
 

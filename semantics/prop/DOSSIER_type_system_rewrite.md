@@ -7,7 +7,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | Component | Status | Diagnosis | Latest Episode | Next |
 |---|---|---|---|---|
 | C0 | proved |  | E0021 |  |
-| C0.1 | proved |  | E0073 | Call plan_oracle(mode='review') for C0.1, then proceed to C0.2 audit if accepted. |
+| C0.1 | proved |  | E0076 | Call plan_oracle(mode='review') for C0.1, then if accepted begin C0.2 and prove the local argument-error boundary probe. |
 | C0.1.1 | stuck | risk_mismatch | E0033 | Ask strategist to provide a more concrete, low-risk prefix script or a different decomposition; source is currently buildable with the checkpoint placeholder. |
 | C0.1.1.1 | proved |  | E0036 |  |
 | C0.1.1.2 | stuck | risk_mismatch | E0038 | Call plan_oracle(mode='review') for this stuck episode and request a redesign of the ExtCall helper boundary/proof plan under the maintainer constraints. |
@@ -25,7 +25,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C0.2 | proved |  | E0074 | Call plan_oracle(mode='review') for C0.2, then proceed to the unsigned commit/report component C0.3 if accepted. |
 | C0.2.1 | proved |  | E0069 | Call plan_oracle(mode='review') and then proceed to the focused Resume proof shell component if accepted. |
 | C0.2.2 | stuck | risk_mismatch | E0070 | Call plan_oracle(mode='review', component_id='C0.2.2') with this evidence and ask for a redesigned/de-risked boundary rather than more local simplifier variants. |
-| C0.3 | proved |  | E0028 |  |
+| C0.3 | proved |  | E0075 | Call plan_oracle(mode='review') for C0.3; if accepted, inspect query_plan for whether C0 is complete and then follow the stop/report outcome. |
 | C1.1 | proved |  | E0024 | Call plan_oracle(mode='review') for C1.1, then begin C1.2 if accepted. |
 | C1.1.1 | proved |  | E0012 |  |
 | C1.1.2 | proved |  | E0013 |  |
@@ -67,10 +67,10 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0073`
+- latest episode: `E0076`
 - blocker: 
-- actual effort: 1 sessions, 1 msgs, 5 steps, 6 tools, 596,951 tok (595,042 in, 1,909 out, 553,856 cached), 46.9s, $0.540128
-- next: Call plan_oracle(mode='review') for C0.1, then proceed to C0.2 audit if accepted.
+- actual effort: 1 sessions, 6 steps, 8 tools, 461,959 tok (459,256 in, 2,703 out, 435,456 cached), 60.5s, $0.417818
+- next: Call plan_oracle(mode='review') for C0.1, then if accepted begin C0.2 and prove the local argument-error boundary probe.
 
 ### Attempts / Evidence
 
@@ -97,12 +97,18 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 - `E0073` (proved, , actual effort: 1 sessions, 1 msgs, 5 steps, 6 tools, 596,951 tok (595,042 in, 1,909 out, 553,856 cached), 46.9s, $0.540128)
   - Updated `semantics/prop/TYPE_SYSTEM_REWRITE_PLAN.md` ExtCall blockage section with an E0072 addendum. -> The report now records that the sanitized-boundary probe discharged the eval_exprs IH explicitly but still timed out on `args_res = INR y` because the generated optional-driver prefix remained live; it also says the old static/nonstatic C0.2-C0.5 leaves are invalidated unless a new boundary first isolates the argument-success branch. (`TO_type_system_rewrite-20260601T081233Z_m1664_t001`, `TO_type_system_rewrite-20260601T081233Z_m1665_t002`)
   - Checked report text for the new E0072/sanitized-shell markers. -> Grep confirms the dated E0072 update and no-retry sanitized-shell warning are present in the task-local plan report. (`TO_type_system_rewrite-20260601T081233Z_m1665_t001`)
+- `E0076` (proved, , actual effort: 1 sessions, 6 steps, 8 tools, 461,959 tok (459,256 in, 2,703 out, 435,456 cached), 60.5s, $0.417818)
+  - Updated task-local TYPE_SYSTEM_REWRITE_PLAN.md ExtCall blockage section with a 2026-06-01 superseding note after strategist replacement C0 plan. -> The plan now treats the old stop/report state as historical evidence, identifies `eval_extcall_args_error` as the first executable proof-boundary probe, preserves E0072 no-retry guidance, and keeps the restriction against edits outside `semantics/prop`/semantics-definition changes. (`TO_type_system_rewrite-20260601T081233Z_m1703_t001`, `TO_type_system_rewrite-20260601T081233Z_m1705_t002`)
+  - Updated STATE cursor for the new executable C0.1/C0.2 flow. -> STATE no longer says no proof/build/edit action is legal under the old stop report; it points to closing C0.1, then beginning C0.2 and proving the local argument-error boundary probe. Diff/grep confirmed the expected markers. (`TO_type_system_rewrite-20260601T081233Z_m1704_t001`, `TO_type_system_rewrite-20260601T081233Z_m1705_t001`, `TO_type_system_rewrite-20260601T081233Z_m1705_t002`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260601T081233Z_m1664_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m1665_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m1665_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1699_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1700_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1703_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1704_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1705_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1705_t002` (use `read_tool_output` for exact output)
 
 ## C0.1.1
 
@@ -609,24 +615,26 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0028`
+- latest episode: `E0075`
 - blocker: 
-- actual effort: 1 sessions, 1 msgs, 6 steps, 9 tools, 558,111 tok (556,711 in, 1,400 out, 518,912 cached), 38.6s, $0.490451
+- actual effort: 1 sessions, 6 steps, 9 tools, 847,873 tok (846,768 in, 1,105 out, 839,936 cached), 35.0s, $0.487278
+- next: Call plan_oracle(mode='review') for C0.3; if accepted, inspect query_plan for whether C0 is complete and then follow the stop/report outcome.
 
 ### Attempts / Evidence
 
 - `E0028` (proved, , actual effort: 1 sessions, 1 msgs, 6 steps, 9 tools, 558,111 tok (556,711 in, 1,400 out, 518,912 cached), 38.6s, $0.490451)
   - Audited semantics/prop diffs, staged only relevant tracked task-owned files, and committed the source cleanup/status-report checkpoint with `git commit --no-gpg-sign`. -> Unsigned commit `59acfa4d5 Record ExtCall proof-interface blocker` created. Post-commit status has only pre-existing untracked `semantics/prop/LEARNINGS_type_system_rewrite.legacy.md`; tracked task changes are committed. Focused `vyperTypeStmtSoundnessTheory` build had already succeeded after the source cleanup, and plan markdown edits do not affect HOL build. (`TO_type_system_rewrite-20260531T201607Z_m0543_t001`, `TO_type_system_rewrite-20260531T201607Z_m0556_t001`, `TO_type_system_rewrite-20260531T201607Z_m0558_t001`, `TO_type_system_rewrite-20260531T201607Z_m0558_t002`, `TO_type_system_rewrite-20260531T201607Z_m0559_t001`, `TO_type_system_rewrite-20260531T201607Z_m0560_t001`, `TO_type_system_rewrite-20260531T201607Z_m0560_t002`)
+- `E0075` (proved, , actual effort: 1 sessions, 6 steps, 9 tools, 847,873 tok (846,768 in, 1,105 out, 839,936 cached), 35.0s, $0.487278)
+  - Inspected tracked/untracked status and staged only tracked task-owned files under `semantics/prop` for the E0072 stop/report update. -> Only the intended tracked plan/dossier/learnings/state/report files were staged; untracked scratch/legacy files remained untracked. (`TO_type_system_rewrite-20260601T081233Z_m1675_t001`, `TO_type_system_rewrite-20260601T081233Z_m1675_t002`, `TO_type_system_rewrite-20260601T081233Z_m1675_t003`, `TO_type_system_rewrite-20260601T081233Z_m1676_t001`, `TO_type_system_rewrite-20260601T081233Z_m1677_t001`, `TO_type_system_rewrite-20260601T081233Z_m1677_t002`)
+  - Committed the stopped ExtCall report/audit checkpoint with `git commit --no-gpg-sign`. -> Unsigned commit `e020b7978 Report ExtCall boundary failure after E0072` was created. Post-commit status has only the known untracked scratch/legacy files. (`TO_type_system_rewrite-20260601T081233Z_m1678_t001`, `TO_type_system_rewrite-20260601T081233Z_m1679_t001`, `TO_type_system_rewrite-20260601T081233Z_m1679_t002`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260531T201607Z_m0543_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260531T201607Z_m0556_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260531T201607Z_m0558_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260531T201607Z_m0558_t002` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260531T201607Z_m0559_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260531T201607Z_m0560_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260531T201607Z_m0560_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1675_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1677_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1678_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1679_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1679_t002` (use `read_tool_output` for exact output)
 
 ## C1.1
 
