@@ -511,3 +511,12 @@ evidence:
 - episode:E0137
 - tool_output:TO_type_system_rewrite-20260601T220715Z_m2892_t001
 - source:semantics/prop/vyperTypeStmtSoundnessScript.sml
+
+## L0089 scope='C0.2.1.3' tags=ExtCall,Resume,case-split,success-flag,driver-IH
+shape: After `PairCases_on` a `run_ext_call` result, `Cases_on x'0` splits the ExtCall success flag before `check success`.
+pattern: Verify branch orientation before placing continuation proof: the failure/revert branch closes with `no_type_error_result_def`/`raise_def`, while the success branch is where `accounts_well_typed`, `runtime_consistent`, and `extcall_success_continuation_state_well_typed` belong. Misplacing the tail theorem leaves a projected `state_well_typed st'` goal or `first subgoal not solved` failure.
+works_when: Use in static/nonstatic ExtCall Resume proofs after `run_ext_call ... = SOME (...)` and `PairCases_on` have exposed the success flag and return data.
+evidence:
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m2955_t001
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m2959_t001
+- episode:E0140

@@ -31,7 +31,8 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C0.2.1.3 | stuck | risk_mismatch | E0124 | Call plan_oracle(mode='review') for C0.2.1.3; request either a precise projection-helper plan for already-split conjuncts or an ancestor replacement that changes the Resume goal shape before conjunct splitting. |
 | C0.2.1.3.1 | proved |  | E0130 | Review this carry-forward closure, then begin C0.2.1.3.2 to add `extcall_static_projected_state_well_typed`. |
 | C0.2.1.3.2 | proved |  | E0132 |  |
-| C0.2.1.3.3 | stuck | risk_mismatch | E0133 | Call plan_oracle(mode='review') for C0.2.1.3.3 and request a repair/augment of the consumer interface. Do not continue tactic search on the generated prefix. |
+| C0.2.1.3.3 | stuck | risk_mismatch | E0141 | Call plan_oracle(mode='review') for C0.2.1.3.3 with the cited evidence; ask for a revised/local helper interface or replacement decomposition before any further edits. |
+| C0.2.1.3.3.1 | proved |  | E0142 | Call plan_oracle review, then proceed to C0.2.1.3.3.2 to refactor the static Resume to use the new helper. |
 | C0.2.1.4 | stuck | risk_mismatch | E0135 | Call plan_oracle(mode='review', component_id='C0.2.1.4') to repair the conditional driver premise strategy or reschedule to the static branch. |
 | C0.2.1.4.1 | proved |  | E0137 |  |
 | C0.2.1.4.2 | proved |  | E0138 |  |
@@ -860,11 +861,11 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 ### Current Status
 
 - result: `stuck`
-- diagnosis: `risk_mismatch` The downstream consumer reveals the helper statement is not the right interface for the actual generated `driver_ih`; it needs either a stronger helper premise matching the generated conjunctive/full-prefix driver shape or a small projection/wrapper explicitly accepted by the strategist.
-- latest episode: `E0133`
-- blocker: The Risk-1 consumer plan was not straightforward. Direct `irule extcall_static_projected_state_well_typed`/specialized `qspecl_then` use in the static Resume failed to match the projected `state_well_typed st'` goal; a constrained `metis_tac[extcall_static_projected_state_well_typed, driver_ih]` timed out. The available `driver_ih` is still the generated full-prefix implication with an extra place-expression conjunct, while the helper expects an unconditional compact expression-only driver IH. This is a proof-interface mismatch, not a semantic counterexample.
-- actual effort: 1 sessions, 1 msgs, 17 steps, 16 tools, 5 holbuild, 1,876,378 tok (1,868,957 in, 7,421 out, 1,815,424 cached), 533.5s, $1.398007
-- next: Call plan_oracle(mode='review') for C0.2.1.3.3 and request a repair/augment of the consumer interface. Do not continue tactic search on the generated prefix.
+- diagnosis: `risk_mismatch` The decomposition/interface is still misaligned: either the split point is not where the monadic continuation equation has the shape required by `extcall_success_continuation_sound_cond_driver_ih`, or a smaller branch-local helper/interface is missing. This is not a semantic counterexample.
+- latest episode: `E0141`
+- blocker: C0.2.1.3.3 was rated Risk 2 and expected to be a straightforward branch-local linear proof, but after the concrete `Cases_on x'0` split the first branch remains a `state_well_typed st'` subgoal and the success-tail helper does not match the live Resume continuation. Per task instruction and PLAN not-to-try constraints, do not continue tactic search.
+- actual effort: 1 sessions, 3 msgs, 38 steps, 42 tools, 11 holbuild, 3,892,187 tok (3,877,982 in, 14,205 out, 3,739,904 cached), 599.2s, $2.986492
+- next: Call plan_oracle(mode='review') for C0.2.1.3.3 with the cited evidence; ask for a revised/local helper interface or replacement decomposition before any further edits.
 
 ### Attempts / Evidence
 
@@ -872,20 +873,45 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Replaced the static Resume success-tail proof with direct `irule extcall_static_projected_state_well_typed`, using `pop_last_assum` to save `driver_ih`, rewriting the static `if T` type fact, and supplying `args_st`/`vs`. -> Failed with `MATCH_MP_TAC No match` on the active projected `state_well_typed st'` goal. Holbuild showed the saved `driver_ih` remains a full ExtCall-prefix implication, not the compact driver premise required by the helper. (`TO_type_system_rewrite-20260601T081233Z_m2812_t001`)
   - Tried explicit `qspecl_then` of `extcall_static_projected_state_well_typed` on the visible `env,cx,st,res,st',args_st,vs,...` variables, followed by `simp[]` and `disch_then irule`. -> Failed at `DISCH_THEN`; after simplification the same two-goal shape remained, showing the helper antecedent was not reduced to a single usable implication in this context. (`TO_type_system_rewrite-20260601T081233Z_m2815_t001`, `TO_type_system_rewrite-20260601T081233Z_m2817_t001`)
   - Tried a fallback constrained `metis_tac[extcall_static_projected_state_well_typed, driver_ih]` after the static type rewrite and renaming. -> Timed out under the fixed tactic budget, consistent with the forbidden/generated-prefix plumbing path. Restored the static Resume to the prior explicit-cheat baseline and verified the target builds cleanly. (`TO_type_system_rewrite-20260601T081233Z_m2819_t001`, `TO_type_system_rewrite-20260601T081233Z_m2821_t001`)
+- `E0140` (progressed, risk_mismatch, actual effort: 1 sessions, 2 msgs, 15 steps, 16 tools, 4 holbuild, 2,169,947 tok (2,164,549 in, 5,398 out, 2,103,424 cached), 276.4s, $1.519277)
+  - Probed the static Resume success branch after replacing the `cheat` with a branch-local linear proof skeleton. First `FAIL_TAC "static_success_probe"` confirmed the proof reaches the run-ext-call success area with the generated driver IH still present as a full prefix-guarded implication. -> Probe showed the static success branch is reachable, but the generated IH remains guarded by a long ExtCall prefix. Evidence also revealed the existing `Cases_on x'0 >> gvs[return_def, raise_def] >- ...` orientation was likely backwards for the success flag: the branch after the `>-` is where the success-continuation proof should go, not the first subgoal. (`TO_type_system_rewrite-20260601T220715Z_m2949_t001`)
+  - Moved the attempted `extcall_success_continuation_state_well_typed` call after `Cases_on x'0`; tried both the original branch orientation and a revised orientation with `Cases_on x'0 >> gvs[assert_def, bind_def, return_def, raise_def, update_accounts_def, update_transient_def]`, ending in `FAIL_TAC "driver_goal_probe"`/`static_true_branch_probe`. -> The attempted continuation placement still did not produce a closed prefix; holbuild reported a remaining top-level `state_well_typed st'` with the generated driver IH as assumption and `MATCH_MP_TAC No match`/`first subgoal not solved` failures. Current source is not stable and contains a probe marker in the static Resume; next session must remove/replace the probe before verifying. (`TO_type_system_rewrite-20260601T220715Z_m2951_t001`, `TO_type_system_rewrite-20260601T220715Z_m2955_t001`, `TO_type_system_rewrite-20260601T220715Z_m2959_t001`)
+- `E0141` (stuck, risk_mismatch, actual effort: 1 sessions, 3 msgs, 38 steps, 42 tools, 11 holbuild, 3,892,187 tok (3,877,982 in, 14,205 out, 3,739,904 cached), 599.2s, $2.986492)
+  - Inspected static Resume branch orientation by alternating probes/cheats around `Cases_on x'0`; first branch consistently exposed a remaining `state_well_typed st'` subgoal, second branch was the full ExtCall postcondition. -> Confirmed the existing skeleton is still not a straightforward success/error split at the expected point; evidence shows the generated driver IH remains prefix-guarded and branch goals are not closing by local monadic simplification. (`TO_type_system_rewrite-20260601T220715Z_m2965_t001`, `TO_type_system_rewrite-20260601T220715Z_m2979_t001`)
+  - Tried mirroring the standalone helper tail after `Cases_on x'0`: `gvs[assert_def, bind_def, return_def, raise_def, update_accounts_def, update_transient_def]`, establish `accounts_well_typed x'2` and `runtime_consistent env cx args_st`, then `irule extcall_success_continuation_sound_cond_driver_ih >> simp[] >> metis_tac[]`. -> Failed with `MATCH_MP_TAC No match`; the continuation helper does not match the live Resume branch as expected, despite being branch-local and after the run-ext-call split. (`TO_type_system_rewrite-20260601T220715Z_m2984_t001`)
+  - Also briefly tested branch-local `drule_all extcall_static_projected_state_well_typed` only after `Cases_on x'0` to see if the state-only first branch had become compact enough. -> Failed with an assertion/predicate error, confirming the old compact projected helper interface still does not fit this Resume context even after the local split. (`TO_type_system_rewrite-20260601T220715Z_m2982_t001`)
 
 ### Ruled Out
 
-- Plain `irule extcall_static_projected_state_well_typed` in the static Resume with `args_st`/`vs` witnesses.
-- Explicit `qspecl_then` followed by `simp[]`/`disch_then irule` at the static Resume goal.
-- Constrained `metis_tac` combining the helper and generated `driver_ih`.
+- Top-level or branch-local direct use of `extcall_static_projected_state_well_typed` as a compact helper in the Resume context.
+- Broad continuation-helper application after `Cases_on x'0` with a final `metis_tac[]`; it fails to match rather than needing a minor arithmetic/simp tweak.
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260601T081233Z_m2812_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m2815_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m2817_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m2819_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m2821_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m2965_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m2979_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m2982_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m2984_t001` (use `read_tool_output` for exact output)
+
+## C0.2.1.3.3.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0142`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 18 steps, 17 tools, 6 holbuild, 1,966,366 tok (1,961,312 in, 5,054 out, 1,912,064 cached), 429.2s, $1.353892
+- next: Call plan_oracle review, then proceed to C0.2.1.3.3.2 to refactor the static Resume to use the new helper.
+
+### Attempts / Evidence
+
+- `E0142` (proved, , actual effort: 1 sessions, 1 msgs, 18 steps, 17 tools, 6 holbuild, 1,966,366 tok (1,961,312 in, 5,054 out, 1,912,064 cached), 429.2s, $1.353892)
+  - Added local theorem `extcall_after_state_update_tail_sound_cond_driver_ih` adjacent to ExtCall tail helpers; proof copies the after-update tail reasoning, splitting on `returnData = [] /\ IS_SOME drv`, using conditional driver IH in driver branch and `evaluate_abi_decode_return_well_typed` in decode branch. -> `holbuild(targets=["vyperTypeStmtSoundnessTheory"])` succeeds, so the new helper is proved and exported in the current source prefix. Static Resume remains a separate downstream component (currently restored to `cheat` rather than the failed probe/tactic). (`TO_type_system_rewrite-20260601T220715Z_m3004_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260601T220715Z_m3004_t001` (use `read_tool_output` for exact output)
 
 ## C0.2.1.4
 
