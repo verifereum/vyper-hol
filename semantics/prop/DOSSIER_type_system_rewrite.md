@@ -29,7 +29,9 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C0.3.1 | proved |  | E0087 |  |
 | C0.3.2 | proved |  | E0088 |  |
 | C0.3.3 | stuck | risk_mismatch | E0090 | Call plan_oracle(mode='review') for C0.3.3 and request a de-risked repair, likely a single outside-Resume postcondition helper over arbitrary `call_ty` whose conclusion matches the whole argument-error branch after substituting `res/st'`, or a smaller Resume factoring that removes/isolates the generated optional-driver prefix before the error branch. |
-| C0.3.3.1 | proved |  | E0092 | Call strategist review for C0.3.3.1, then preserve the stable helper proof with an unsigned commit if accepted. |
+| C0.3.3.1 | proved |  | E0094 | Proceed to C0.3.3.2 cleanup of the partial/broken Resume edit before new proof work. |
+| C0.3.3.2 | proved |  | E0095 | Call strategist review, then proceed to C0.3.3.3 to add `eval_extcall_args_error_any_call_ty_result_eq`. |
+| C0.3.3.3 | proved |  | E0096 | Call strategist review, then proceed to C0.3.3.4 to use the equality lemma in the ExtCall_result INR branch. |
 | C0.3.4 | proved |  | E0089 |  |
 | C1.1 | proved |  | E0024 | Call plan_oracle(mode='review') for C1.1, then begin C1.2 if accepted. |
 | C1.1.1 | proved |  | E0012 |  |
@@ -741,10 +743,10 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0092`
+- latest episode: `E0094`
 - blocker: 
-- actual effort: 1 sessions, 1 msgs, 16 steps, 18 tools, 5 holbuild, 1,799,689 tok (1,794,210 in, 5,479 out, 1,746,944 cached), 322.6s, $1.274172
-- next: Call strategist review for C0.3.3.1, then preserve the stable helper proof with an unsigned commit if accepted.
+- actual effort: 1 sessions, 1 steps, 53,275 tok (52,948 in, 327 out, 48,000 cached), 8.4s, $0.058550
+- next: Proceed to C0.3.3.2 cleanup of the partial/broken Resume edit before new proof work.
 
 ### Attempts / Evidence
 
@@ -752,10 +754,58 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Added local theorem `eval_extcall_args_error_any_call_ty_postcondition` after the generalized C0.3.4 helpers; proof derives the any-call immediate-return equality with `drule eval_extcall_args_error_any_call_ty` and specializes it to the live `call_ty`/`ret_type`/ExtCall fields. -> The helper statement parses and proof reaches a single remaining subgoal `no_type_error_result (INR y)` with the same fact visible as an assumption. Current final tactic `qpat_assum ... ACCEPT_TAC` unexpectedly fails; likely a small tactic issue. Source is partial and target does not build until this final line is fixed. (`TO_type_system_rewrite-20260601T081233Z_m1989_t001`, `TO_type_system_rewrite-20260601T081233Z_m1995_t001`)
 - `E0092` (proved, , actual effort: 1 sessions, 1 msgs, 16 steps, 18 tools, 5 holbuild, 1,799,689 tok (1,794,210 in, 5,479 out, 1,746,944 cached), 322.6s, $1.274172)
   - Replace the final assumption-selection tactic in `eval_extcall_args_error_any_call_ty_postcondition` with `Cases_on `y` >> gvs[no_type_error_result_def]`. -> The packaged any-call ExtCall argument-error postcondition helper now proves, and `vyperTypeStmtSoundnessTheory` builds cleanly through the target. (`TO_type_system_rewrite-20260601T081233Z_m2002_t001`, `TO_type_system_rewrite-20260601T081233Z_m2003_t001`)
+- `E0094` (proved, , actual effort: 1 sessions, 1 steps, 53,275 tok (52,948 in, 327 out, 48,000 cached), 8.4s, $0.058550)
+  - Carry forward previously proved local theorem `eval_extcall_args_error_any_call_ty_postcondition`; no source edits for this component. -> Strategist review marked this helper valid and harmless; it is no longer the primary consumer interface but remains proved by prior clean build evidence. (`TO_type_system_rewrite-20260601T081233Z_m2003_t001`)
 
 ### Evidence refs
 
 - `TO_type_system_rewrite-20260601T081233Z_m2003_t001` (use `read_tool_output` for exact output)
+
+## C0.3.3.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0095`
+- blocker: 
+- actual effort: 1 sessions, 5 steps, 6 tools, 1 holbuild, 329,178 tok (328,552 in, 626 out, 313,216 cached), 36.8s, $0.252068
+- next: Call strategist review, then proceed to C0.3.3.3 to add `eval_extcall_args_error_any_call_ty_result_eq`.
+
+### Attempts / Evidence
+
+- `E0093` (stuck, risk_mismatch, actual effort: 1 sessions, 5 msgs, 75 steps, 75 tools, 30 holbuild, 8,409,712 tok (8,389,432 in, 20,280 out, 8,198,784 cached), 1471.3s, $5.661032)
+  - Replaced the `Expr_Call_ExtCall_result` cheat with a Resume proof prefix: unfold `well_typed_expr` once, split `eval_exprs`, consume expression-list IH, leave INL success as `cheat`, and try to close the INR branch via `eval_extcall_args_error_any_call_ty_postcondition`. -> Reached the intended INR branch, but applying the packaged helper left existential/antecedent subgoals under the large generated optional-driver prefix. `simp[]` on helper side-conditions timed out and was not allowed by the plan's generated-prefix restrictions. (`TO_type_system_rewrite-20260601T081233Z_m2024_t001`)
+  - Supplied helper witnesses explicitly (`args_st`, `st`, `y`) and tried to close side conditions by `first_assum ACCEPT_TAC`, `MATCH_ACCEPT_TAC`, `qpat_x_assum`, `qhdtm_x_assum`, `mp_tac`/`disch_tac`, `pop_assum`, and quoted `ASSUME` fallbacks. -> Multiple attempts failed even on goals whose visible assumptions matched the conclusion; broad `gvs`/`simp` either timed out or hit the generated-prefix context. The proof is now brittle theorem plumbing rather than the planned one-step boundary application. (`TO_type_system_rewrite-20260601T081233Z_m2026_t001`, `TO_type_system_rewrite-20260601T081233Z_m2030_t001`, `TO_type_system_rewrite-20260601T081233Z_m2049_t001`, `TO_type_system_rewrite-20260601T081233Z_m2055_t001`, `TO_type_system_rewrite-20260601T081233Z_m2085_t001`)
+  - Tried falling back to the single projection helper `eval_extcall_args_error_any_call_ty_state_well_typed` for the first conjunct. -> `irule` did not match the full conjunctive postcondition goal because the Resume goal had not been split into individual conjuncts in the expected way; this confirms the current consumer factoring/goal shape is not the simple projection or packaged-helper use predicted by the plan. (`TO_type_system_rewrite-20260601T081233Z_m2079_t001`)
+- `E0095` (proved, , actual effort: 1 sessions, 5 steps, 6 tools, 1 holbuild, 329,178 tok (328,552 in, 626 out, 313,216 cached), 36.8s, $0.252068)
+  - Replaced the failed partial `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result]` proof suffix with the intentional minimal `cheat` baseline. -> Target `vyperTypeStmtSoundnessTheory` builds again, providing a clean baseline for the equality/elimination helper component. (`TO_type_system_rewrite-20260601T081233Z_m2099_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260601T081233Z_m2098_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m2099_t001` (use `read_tool_output` for exact output)
+
+## C0.3.3.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0096`
+- blocker: 
+- actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 225,957 tok (225,402 in, 555 out, 218,752 cached), 118.5s, $0.159276
+- next: Call strategist review, then proceed to C0.3.3.4 to use the equality lemma in the ExtCall_result INR branch.
+
+### Attempts / Evidence
+
+- `E0096` (proved, , actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 225,957 tok (225,402 in, 555 out, 218,752 cached), 118.5s, $0.159276)
+  - Added local theorem `eval_extcall_args_error_any_call_ty_result_eq` immediately after `eval_extcall_args_error_any_call_ty`, proved by `drule`/specializing existing early-return equality and `gvs[]`. -> The theorem is mechanical and `vyperTypeStmtSoundnessTheory` builds successfully after insertion. (`TO_type_system_rewrite-20260601T081233Z_m2104_t001`, `TO_type_system_rewrite-20260601T081233Z_m2105_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260601T081233Z_m2104_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m2105_t001` (use `read_tool_output` for exact output)
 
 ## C0.3.4
 

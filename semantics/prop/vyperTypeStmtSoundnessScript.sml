@@ -9941,6 +9941,19 @@ Proof
                        update_accounts_def, update_transient_def] >>
   gvs[]
 QED
+Theorem eval_extcall_args_error_any_call_ty_result_eq[local]:
+  !cx es st y args_st call_ty stat func_name arg_types ret_type drv res st'.
+    eval_exprs cx es st = (INR y,args_st) /\
+    eval_expr cx (Call call_ty (ExtCall stat (func_name,arg_types,ret_type)) es drv) st =
+      (res,st') ==>
+    res = INR y /\ st' = args_st
+Proof
+  rpt strip_tac >>
+  drule eval_extcall_args_error_any_call_ty >> strip_tac >>
+  first_x_assum (qspecl_then [`call_ty`, `ret_type`, `stat`, `func_name`, `arg_types`, `drv`] assume_tac) >>
+  gvs[]
+QED
+
 
 Theorem eval_extcall_args_error_any_call_ty_state_well_typed[local]:
   !cx env st args_st y res st' call_ty stat func_name arg_types ret_type es drv.

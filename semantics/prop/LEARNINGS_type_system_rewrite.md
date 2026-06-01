@@ -378,3 +378,12 @@ evidence:
 - episode:E0090
 - tool_output:TO_type_system_rewrite-20260601T081233Z_m1987_t001
 - tool_output:TO_type_system_rewrite-20260601T081233Z_m1989_t001
+
+## L0063 scope='C0.3.3' tags=ExtCall,Resume,generated-prefix,boundary-lemma,helper-interface
+shape: A true outside-Resume postcondition helper is applied by `irule` inside a mutual Resume branch, but its premises become side-condition subgoals under a huge generated optional-driver prefix.
+pattern: If helper premises cannot be discharged by direct, robust tactics in the live Resume context, the helper is still not consumer-shaped enough. Escalate for a boundary/factoring whose conclusion matches the full live goal or whose elimination rule consumes live assumptions before entering the generated-prefix subgoal; do not compensate with assumption-position or quoted-ASSUME plumbing.
+works_when: Use this when the branch's mathematics is already packaged outside the Resume, but applying it still leaves side conditions in a hostile generated-prefix context. The evidence is especially strong when visible assumptions identical to side goals fail to close reliably and simplification times out.
+evidence:
+- episode:E0093
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m2024_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m2085_t001
