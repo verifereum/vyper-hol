@@ -9787,6 +9787,39 @@ Proof
   simp[toplevel_value_typed_def]
 QED
 
+Theorem extcall_success_continuation_state_well_typed[local]:
+  !env cx args_st accounts' tStorage' returnData res st'
+   is_static func_name arg_types ret_type es drv.
+    runtime_consistent env cx args_st /\ functions_well_typed cx /\
+    accounts_well_typed accounts' /\ well_typed_opt env drv /\
+    well_formed_type env.type_defs ret_type /\
+    (!e. drv = SOME e ==> expr_type e = ret_type) /\
+    (returnData = [] /\ IS_SOME drv ==>
+      !env0 st0 res0 st0'.
+        env_consistent env0 cx st0 /\ state_well_typed st0 /\
+        context_well_typed cx /\ accounts_well_typed st0.accounts /\
+        functions_well_typed cx /\ eval_expr cx (THE drv) st0 = (res0,st0') ==>
+        (well_typed_expr env0 (THE drv) ==>
+         state_well_typed st0' /\ env_consistent env0 cx st0' /\
+         accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
+         case res0 of INL tv => expr_result_typed env0 (THE drv) tv | INR _ => T)) /\
+    (do
+       _ <- assert T (Error (RuntimeError "ExtCall reverted"));
+       _ <- update_accounts (K accounts');
+       _ <- update_transient (K tStorage');
+       if returnData = [] /\ IS_SOME drv then eval_expr cx (THE drv)
+       else do
+         ret_val <- lift_sum_runtime (evaluate_abi_decode_return (get_tenv cx) ret_type returnData);
+         return (Value ret_val)
+       od
+     od) args_st = (res,st') ==>
+    state_well_typed st'
+Proof
+  rpt strip_tac >>
+  drule_all extcall_success_continuation_sound_cond_driver_ih >>
+  simp[]
+QED
+
 
 
 

@@ -80,10 +80,10 @@ Keep all ExtCall helper theorem work and the relevant `Resume` edits in `semanti
 
 ### C0.2.1: Unblock ExtCall result branches by direct branch-local tail-boundary application
 - Kind: `proof_subtree`
-- Risk: 2
+- Risk: 3
 - Work priority: 0
 - Work units: 0
-- Rationale: The prior failure was a proof-interface placement problem, not evidence that the statements are false. The available `extcall_success_continuation_sound_cond_driver_ih` has the right semantic tail conclusion if applied directly to the current success-tail goal, with a branch-local expression-only driver IH extracted from the generated optional-driver IH.
+- Rationale: Derived from child component C0.2.1.3 risk 3. The replacement plan expected direct application/projection of `extcall_success_continuation_sound_cond_driver_ih` to be a short local proof, but the actual clean success branch is already split to a single `state_well_typed st'` conjunct. Direct projection via `cj 1` does not match, and constrained metis times out. Proceeding would require either new projection helpers/goal-shape strategy or broader proof search/plumbing contrary to the stop condition.
 - Supersedes: C0.2.1
 - Progress transition: `replacement`
 - Carries progress/evidence from: C0.2.1.1, E0119
@@ -155,34 +155,108 @@ Keep clean prefix splits and the `accounts_well_typed` derivation if present. Re
 #### Not to try
 Do not patch the old `by` assertion with more `simp`, `gvs`, or generated prefix equations.
 
-### C0.2.1.3: Close the static ExtCall success tail by direct continuation-theorem application
+### C0.2.1.3: Close static ExtCall success tail using split-goal projection interface
 - Kind: `proof_refactor`
 - Risk: 2
-- Work priority: 20
-- Work units: 5
-- Rationale: After cleanup, this is a standard branch-local use of the existing continuation theorem plus a guarded generated-IH projection.
-- Dependencies: C0.2.1.2
-- Checkpoint: yes
-- Carries progress/evidence from: C0.2.1.1, E0119
+- Work priority: 0
+- Work units: 0
+- Rationale: The stuck evidence identifies a goal-shape mismatch, not a semantic obstacle. The repaired interface avoids matching a multi-conjunct theorem against a single conjunct goal by proving the full tail postcondition as a local assertion or by using explicit projection lemmas.
+- Supersedes: C0.2.1.3
+- Progress transition: `replacement`
+- Carries progress/evidence from: E0124, extcall_success_continuation_sound_cond_driver_ih, run_ext_call_accounts_well_typed
+- Invalidates prior progress/evidence: C0.2.1.3-old-direct-irule-strategy
 
 #### Progress note
-New proof obligation replacing the failed static by-subgoal strategy.
+E0124's branch cleanup and inspected goal shape are retained as evidence; only the consumption interface for the continuation theorem is replaced.
 
 #### Summary
-- Work in `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result_static]`.
-- Split through `build_ext_calldata`, code-present check, `run_ext_call ... NONE`, success, account update, and transient update.
-- Prove returned accounts well-typed with `run_ext_call_accounts_well_typed`.
-- Apply `extcall_success_continuation_sound_cond_driver_ih` directly to the current tail goal.
-- Supply the conditional driver premise from a short local specialization/projection of the saved generated optional-driver IH.
+Replace the failed direct-tail application strategy for `eval_all_type_sound_mutual[Expr_Call_ExtCall_result_static]`. The current Resume branch is already split to a single conjunct (`state_well_typed st'` in E0124), so do not `irule` or `MATCH_MP_TAC` the full continuation theorem directly against that goal. Add small projection helpers from `extcall_success_continuation_sound_cond_driver_ih` and/or prove a stronger full-tail postcondition locally, then finish the split conjunct by simplification. Keep the proof linear and specialize the generated optional-driver IH only after the concrete success prefix has been split.
 
-#### Statement
-Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result_static] closes without cheat in the static successful ExtCall result branch.
+#### Description
+This component supersedes the failed C0.2.1.3 strategy from E0124. The success-tail theorem is still the right semantic boundary, but its conclusion must be consumed through a split-goal interface. Keep the existing branch cleanup through `run_ext_call_accounts_well_typed`, then derive/use the exact post-update tail theorem to establish the needed conjunct.
 
 #### Approach
-Use `irule extcall_success_continuation_sound_cond_driver_ih` as the final step for the current success-tail goal, not inside a local backquoted assertion. Discharge easy premises from current assumptions and instantiate the tail with the branch's `args_st`, returned accounts, return data, and transient storage. For the conditional premise, introduce `returnData = [] /\ IS_SOME drv` and the driver evaluation assumptions, specialize the saved generated IH in this same success branch, discharge its guard using only existing branch equations, and project the expression-soundness conjunct.
+At the clean success branch after `accounts_well_typed x'2`, do not try `irule (cj 1 extcall_success_continuation_sound_cond_driver_ih)` on `state_well_typed st'`. Instead either invoke the new projection lemma for `state_well_typed`, or assert the full conjunction concluded by `extcall_success_continuation_sound_cond_driver_ih` in a subproof and then discharge the current single goal by `gvs[]`/`simp[]`. Prove the conditional driver premise by specializing the saved `driver_ih` only in this concrete branch, using already-present prefix equalities and `returnData = [] /\ IS_SOME drv`.
 
 #### Not to try
-Do not use `ACCEPT_TAC driver_ih` directly; it is guarded and has an extra place conjunct. Do not use broad `AllCaseEqs()`, broad whole-prefix cleanup, or a reusable generated-prefix adapter theorem. If the local extraction grows beyond a short branch-local proof, stop and escalate.
+Do not use constrained or unconstrained `metis_tac` to discover the whole tail theorem application from the split conjunct; E0124 showed this times out. Do not create a theorem that replays the entire generated ExtCall prefix just to obtain the driver premise. Do not unfold the whole evaluator prefix with broad `gvs[AllCaseEqs()]`; continue the existing linear branch split.
+
+#### Argument
+The static successful ExtCall branch has already evaluated arguments, built calldata, checked target code, and obtained a successful `run_ext_call` result. The only semantic work after this point is the common ExtCall continuation: assert success, install returned accounts/transient storage, and either evaluate the optional driver or ABI-decode return data. Existing local theorem `extcall_success_continuation_sound_cond_driver_ih` proves the complete postcondition for precisely that continuation. Because the suspended Resume goal may be one conjunct of that postcondition, the proof must first produce the full postcondition or use a projection lemma whose conclusion matches the split goal.
+
+#### Definition design
+No evaluator or semantics definitions change. The proof interface is: branch facts produce `accounts_well_typed accounts'` via `run_ext_call_accounts_well_typed`; the common continuation theorem consumes the post-update monadic tail and conditional driver IH; projection lemmas expose individual conjuncts when the Resume goal has already been split.
+
+#### Code structure
+All edits stay in `semantics/prop/vyperTypeStmtSoundnessScript.sml`. Place projection helper lemmas immediately after `extcall_success_continuation_sound_cond_driver_ih` and before the argument-shape lemmas. Replace only the success-tail cheat after `run_ext_call_accounts_well_typed`.
+
+### C0.2.1.3.1: Add split-tail projection lemmas for the ExtCall continuation theorem
+- Kind: `infrastructure_lemma`
+- Risk: 1
+- Work priority: 0
+- Work units: 2
+- Rationale: These are direct projections of an already-proved local theorem, with conclusions shaped to match already-split Resume goals.
+- Carries progress/evidence from: extcall_success_continuation_sound_cond_driver_ih, E0124
+
+#### Progress note
+This directly addresses the E0124 goal-shape mismatch by providing single-conjunct conclusions.
+
+#### Summary
+Add small local projection lemmas after `extcall_success_continuation_sound_cond_driver_ih`. At minimum include a `state_well_typed st'` projection for the currently inspected split goal. Prefer also adding projections for `env_consistent env cx st'`, `accounts_well_typed st'.accounts`, `no_type_error_result res`, and the result-typing case if subsequent split conjuncts appear. Each lemma should have the same assumptions as `extcall_success_continuation_sound_cond_driver_ih` and a single conjunct conclusion.
+
+#### Statement
+Suggested primary lemma:
+
+`Theorem extcall_success_continuation_state_well_typed[local]:
+  !env cx args_st accounts' tStorage' returnData res st' is_static func_name arg_types ret_type es drv.
+    <same assumptions as extcall_success_continuation_sound_cond_driver_ih> ==>
+    state_well_typed st'`
+
+Optional analogous projections replace the final conclusion with `env_consistent env cx st'`, `accounts_well_typed st'.accounts`, `no_type_error_result res`, and the `expr_result_typed` result case.
+
+#### Approach
+Keep the assumptions text identical to `extcall_success_continuation_sound_cond_driver_ih` so `drule_all` or `irule` instantiates without manual plumbing. For each projection, derive the full postcondition from the existing theorem, strip/simplify the conjunction, and select the desired conjunct. Do not unfold the monadic continuation or ABI decoding in these projections.
+
+#### Not to try
+Do not prove these by replaying `assert_def`, `bind_def`, account updates, or ABI decoding; that duplicates the existing continuation theorem. Do not use `cj 1` at the Resume use site. Do not add generated-prefix assumptions to these lemmas.
+
+### C0.2.1.3.2: Replace the static success-tail cheat with a stronger tail-postcondition assertion
+- Kind: `proof`
+- Risk: 2
+- Work priority: 1
+- Work units: 3
+- Rationale: The branch facts and helper theorem already exist; the remaining work is to connect them in the concrete success branch without broad proof search. The only mildly delicate point is specializing the saved generated `driver_ih` after the concrete prefix has been split, which the maintainer clarification permits.
+- Dependencies: C0.2.1.3.1
+- Checkpoint: yes
+- Progress transition: `replacement`
+- Carries progress/evidence from: E0124, TO_type_system_rewrite-20260601T081233Z_m2690_t001, run_ext_call_accounts_well_typed
+- Invalidates prior progress/evidence: C0.2.1.3-old-success-tail-cheat
+
+#### Progress note
+Retains E0124's clean branch state and replaces the failed theorem-consumption step with a split-goal-compatible proof shape.
+
+#### Summary
+In `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result_static]`, replace the cheat after `accounts_well_typed x'2`. Keep the existing linear splits through `build_ext_calldata`, target-code check, `run_ext_call`, pair decomposition, and `success` case. At the success-tail point, prove the current split conjunct by applying the projection lemma from C0.2.1.3.1 or by first asserting the full postcondition from `extcall_success_continuation_sound_cond_driver_ih`. The proof must build without cheats and without broad generated-prefix cleanup.
+
+#### Statement
+Target source location:
+
+`Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result_static]`
+
+Replace:
+
+```
+`accounts_well_typed x'2` by (drule_all run_ext_call_accounts_well_typed >> simp[]) >>
+cheat
+```
+
+with a proof of the active split goal observed in E0124 as `state_well_typed st'`.
+
+#### Approach
+After deriving `accounts_well_typed x'2`, form the exact continuation-tail fact needed by the projection/helper using branch equalities and only local definitions `assert_def`, `bind_def`, `return_def`, `update_accounts_def`, and `update_transient_def`. Supply `runtime_consistent env cx args_st`, `functions_well_typed cx`, `well_typed_opt env drv`, `well_formed_type env.type_defs ret_type`, and the `drv` return-type fact from surrounding hypotheses. For the conditional driver premise, assume `returnData = [] /\ IS_SOME drv` and specialize the saved `driver_ih` in this now-concrete branch using the already-present prefix equations; do not recover it from the top-level context before branch splitting.
+
+#### Not to try
+Do not call `irule extcall_success_continuation_sound_cond_driver_ih` directly on `state_well_typed st'`; prove a stronger full postcondition or use the state projection. Do not use `metis_tac` with the continuation theorem and monadic definitions to solve the branch; E0124 timed out. Do not move the proof back to broad top-level simplification over the whole ExtCall prefix.
 
 ### C0.2.1.4: Close the nonstatic ExtCall success tail using the validated direct pattern
 - Kind: `proof_refactor`
