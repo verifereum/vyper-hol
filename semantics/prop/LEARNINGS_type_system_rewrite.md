@@ -442,12 +442,34 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260601T081233Z_m2394_t001
 - tool_output:TO_type_system_rewrite-20260601T081233Z_m2396_t004
 
-## L0078 scope='C0.2.1.1.2' tags=ExtCall,generated-IH,quarantine,assumption-selection,Resume
-shape: A `Resume` branch contains a huge generated optional-driver prefix implication that must be kept for the success tail but causes prefix simplification timeouts if left as an assumption.
-pattern: In this ExtCall static Resume goal, capture/remove the generated optional-driver IH before any prefix simplification with `pop_last_assum (fn driver_ih => ...)`, not broad `qpat_x_assum` or `first_x_assum`. Then do static typing rewrite/destructors/evaluator-prefix splits while the theorem is absent from assumptions; reapply `driver_ih` only in the compact success-tail conditional premise.
-works_when: Works when the generated IH is the oldest assumption in the suspended branch context. Verify by build/probe if the Resume skeleton changes; if `pop_last_assum` removes the wrong fact, stop and inspect rather than simplifying with the raw IH live.
+## L0079 scope='C0.2.1.1.2' tags=ExtCall,generated-IH,quarantine,Resume,success-tail,proof-interface
+shape: A `Resume` ExtCall_result branch has a huge generated optional-driver IH; prefix/error branches work only if it is quarantined, but the success tail still needs a proof boundary.
+pattern: Use `pop_last_assum (fn driver_ih => ...)` to remove the generated IH before static prefix simplification; broad `qpat_x_assum` and `first_x_assum` are wrong in this goal. Treat this only as a prefix-quarantine technique, not a complete proof interface. If the success tail requires direct `irule`/`match_mp_tac`, local `drule_all` generated-prefix specialization, or applying `extcall_success_continuation_sound_cond_driver_ih` after goal splitting, stop and redesign: E0114/E0116 show those routes do not align straightforwardly.
+works_when: Works to reach/build the static prefix/error skeleton with a tail cheat when the generated IH is the oldest assumption. Does not solve the success tail; use it only under an authorized replacement plan that provides a new success-tail boundary and avoids generated-prefix adapters.
 evidence:
+- episode:E0113
+- episode:E0114
+- episode:E0116
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m2520_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m2574_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m2594_t001
+
+## L0080 scope='C0.2.1' tags=ExtCall,generated-IH,quarantine,Resume,simp-timeout
+shape: Resume branch contains a raw generated mutual-IH/full-prefix implication plus local ExtCall prefix/error proof obligations
+pattern: If a generated full-prefix IH is live in assumptions, assumption-using simplification/case cleanup can traverse it and time out or expose unreadable goals. In this Resume shape, capturing/removing it first with `pop_last_assum (fn driver_ih => ...)` quarantines the prefix enough for error branches to build; do not leave it live during prefix simplification.
+works_when: Useful only for prefix/error branch cleanup where the IH is not needed until the success tail. It does not solve the later need to consume the IH; a separate compact continuation boundary is required.
+evidence:
+- episode:E0111
+- episode:E0113
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m2496_t001
 - tool_output:TO_type_system_rewrite-20260601T081233Z_m2520_t001
 - tool_output:TO_type_system_rewrite-20260601T081233Z_m2527_t001
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m2529_t001
-- episode:E0113
+
+## L0081 scope='C0.2.1' tags=proof-interface,driver_ih,ExtCall,boundary-lemma
+shape: Helper with compact driver premise is applied after the ExtCall success-tail goal has already been split into conjunctive invariant obligations
+pattern: Validate a success-tail boundary against the unsplit continuation goal before investing in branch proof text. A helper can be compact in statement yet fail after `strip_tac`/conjunct splitting; if it does not match even with its hardest premise cheated, the boundary is wrong rather than the premise proof being merely missing.
+works_when: Applies to helpers intended to consume generated mutual-IH continuations or prove multiple invariant conjuncts after monadic success paths. First probe helper alignment on a minimal suspended/unsplit goal.
+evidence:
+- episode:E0116
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m2594_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m2611_t001
