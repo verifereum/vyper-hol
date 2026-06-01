@@ -10014,6 +10014,26 @@ Proof
   gvs[]
 QED
 
+Theorem eval_extcall_args_error_any_call_ty_postcondition[local]:
+  !cx env st args_st y res st' call_ty stat func_name arg_types ret_type es drv.
+    eval_exprs cx es st = (INR y,args_st) /\
+    eval_expr cx (Call call_ty (ExtCall stat (func_name,arg_types,ret_type)) es drv) st =
+      (res,st') /\
+    state_well_typed args_st /\ env_consistent env cx args_st /\
+    accounts_well_typed args_st.accounts /\ no_type_error_result (INR y) ==>
+    state_well_typed st' /\ env_consistent env cx st' /\
+    accounts_well_typed st'.accounts /\ no_type_error_result res /\
+    (case res of
+     | INL tv => expr_result_typed env (Call call_ty (ExtCall stat (func_name,arg_types,ret_type)) es drv) tv
+     | INR _ => T)
+Proof
+  rpt strip_tac >>
+  drule eval_extcall_args_error_any_call_ty >> strip_tac >>
+  first_x_assum (qspecl_then [`call_ty`, `ret_type`, `stat`, `func_name`, `arg_types`, `drv`] assume_tac) >>
+  gvs[] >>
+  Cases_on `y` >> gvs[no_type_error_result_def]
+QED
+
 Theorem extcall_expr_sound_from_generated_ih[local]:
   !cx env st res st' is_static func_name arg_types ret_type es drv.
     env_consistent env cx st /\ state_well_typed st /\

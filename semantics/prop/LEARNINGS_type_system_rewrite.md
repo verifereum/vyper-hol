@@ -369,3 +369,12 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260601T081233Z_m1908_t001
 - episode:E0089
 - source:semantics/prop/vyperTypeStmtSoundnessScript.sml:9930
+
+## L0062 scope='C0.3.3' tags=ExtCall,Resume,boundary-lemma,generated-prefix,postcondition-helper
+shape: A mutual Resume branch has an irrelevant generated optional-driver prefix in context while proving an early-error branch, and separate projection helpers require long instantiation/plumbing or broad cleanup.
+pattern: Package the early-error branch as one outside-Resume postcondition helper whose conclusion is the full conjunctive postcondition needed by the consumer. The helper should use the evaluator early-return equality to identify `res/st'` and then discharge all state/env/accounts/no-type/result conjuncts at once. This avoids both generated-prefix simplification and multiple projection applications inside the Resume.
+works_when: The branch returns before later monadic operations/driver code, and the expression-list IH or caller already provides the returned state/result facts. For ExtCall argument errors, `eval_exprs = INR` returns immediately for any outer `Call` annotation.
+evidence:
+- episode:E0090
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1987_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m1989_t001

@@ -4,10 +4,10 @@
 
 ### C0: Complete the task-scoped type-system rewrite obligations in semantics/prop
 - Kind: `proof`
-- Risk: 2
+- Risk: 3
 - Work priority: 0
 - Work units: 0
-- Rationale: The only current blocker is a scheduler/dependency representation issue, not mathematical uncertainty. The ExtCall helper-interface mismatch from E0084 has a standard low-risk repair via generalized outside-Resume helpers, and all remaining proof work stays inside semantics/prop under the maintainer clarification.
+- Rationale: Derived from child component C0.3.3 risk 3. C0.3.3 is not the straightforward consumer repair predicted by the PLAN. Even with C0.3.4's generalized helpers, the live Resume branch retains a large generated optional-driver prefix and the proof either times out under cleanup or requires brittle long manual instantiation/plumbing. The decomposition/helper interface likely needs another boundary lemma or different Resume factoring.
 - Required for completion: yes
 - Progress transition: `refinement`
 - Carries progress/evidence from: C0, E0076, E0077, E0080, E0082, E0083, E0084
@@ -89,10 +89,10 @@ Do not reopen this as a raw Resume proof. Do not replace it with a generated-pre
 
 ### C0.3: Close the ExtCall argument-error and place-expression shell using annotation-polymorphic boundaries
 - Kind: `proof_refactor`
-- Risk: 2
+- Risk: 3
 - Work priority: 20
 - Work units: 0
-- Rationale: E0084 identified a helper-interface mismatch, not an unprovable branch. The repair is to add annotation-polymorphic boundary/projection lemmas before retrying the Resume consumer. The scheduler repair is encoded by leaf dependencies and priorities in C0.3.4 -> C0.3.3 -> C0.4.
+- Rationale: Derived from child component C0.3.3 risk 3. C0.3.3 is not the straightforward consumer repair predicted by the PLAN. Even with C0.3.4's generalized helpers, the live Resume branch retains a large generated optional-driver prefix and the proof either times out under cleanup or requires brittle long manual instantiation/plumbing. The decomposition/helper interface likely needs another boundary lemma or different Resume factoring.
 - Dependencies: C0.2
 - Progress transition: `refinement`
 - Carries progress/evidence from: C0.3, C0.3.1, C0.3.2, E0082, E0083, E0084
@@ -173,40 +173,110 @@ No work. Use these helpers only if their conclusion exactly matches a goal, or a
 #### Not to try
 Do not retry these helpers directly in the live Resume context; prior evidence produced a no-match failure.
 
-### C0.3.3: Rewrite the ExtCall Resume shell to consume generalized projection helpers and close the no-place half
+### C0.3.3: Package and consume the ExtCall argument-error branch without touching the generated driver prefix
 - Kind: `proof_refactor`
 - Risk: 2
-- Work priority: 20
-- Work units: 5
-- Rationale: Once C0.3.4 is available, the previously failing `irule` should match the live `Call v15 ...` goal directly. The remaining work is a standard linear Resume shell: split result/place conjuncts, use the expression-list IH for argument evaluation, and close argument-error projections with the generalized helpers.
+- Work priority: 30
+- Work units: 0
+- Rationale: The blocker is precisely localized: individual projection helpers are too fine-grained for the live Resume goal under the generated optional-driver prefix. A single postcondition-shaped helper over arbitrary `call_ty` makes the INR argument-error branch a one-step boundary application, avoiding both broad `gvs` over the prefix and long `qspecl_then` plumbing.
 - Dependencies: C0.3.4
+- Supersedes: C0.3.3@E0090
 - Progress transition: `refinement`
-- Carries progress/evidence from: E0084
+- Carries progress/evidence from: C0.3.3, C0.3.4, E0090
+
+#### Progress note
+E0090's failed Resume attempts are accepted as design feedback, not discarded. C0.3.4's generalized any-call helpers remain valid and support the new packaged helper; the old C0.3.3 direct-consumer obligation is refined into a boundary lemma plus a smaller Resume edit.
 
 #### Summary
-- Retry `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result]` only after C0.3.4 builds.
-- Start with `conj_tac`; the first goal is expression-result postcondition, the second is place-expression.
-- In the result half, unfold only to the first `eval_exprs` split and consume the expression-list IH with `drule_all`.
-- In the `eval_exprs = INR ...` branch, apply generalized C0.3.4 projections by direct `irule`.
-- Close the place half with `type_place_expr_Call_ExtCall_NONE`.
-- Leave later argument-success/success-continuation work to C0.4/C0.5 as needed.
+Replace the brittle direct use of five generalized projection helpers with one postcondition-shaped boundary lemma. The helper quantifies the outer `call_ty` independently of the inner ExtCall return type and packages all expression-result postconditions for the argument-evaluation error case. The Resume branch should apply this helper before any broad simplification can inspect the generated optional-driver success-prefix implication. This is a local repair for the ExtCall argument-error/place shell; it does not change evaluator definitions or work outside `semantics/prop`.
 
 #### Description
-This component is the consumer repair for E0084. The source experiment from the failed narrow-helper attempt was reverted, so restart from the intentional-cheat baseline. The goal is not to finish the entire ExtCall success path here unless it falls out mechanically; it is to remove the argument-error/place shell blockage and hand the unique `INL vs` argument-success path to C0.4.
+The live suspended goal contains a large implication for the optional driver success continuation even while proving the unrelated `eval_exprs = INR ...` branch. E0090 shows that trying to clean this context with `gvs` times out, and trying to manually apply separate state/env/accounts/no-type/result helpers creates brittle theorem plumbing. The correct interface is a single theorem whose conclusion is exactly the full expression-result postcondition needed in the INR branch, so the Resume proof only has to supply the argument-error eval equation, the whole-call eval equation, and facts obtained from the expression-list IH.
+
+#### Approach
+First prove the packaged helper outside the Resume. Then in the Resume INR branch, invoke that helper directly with the live whole-call eval equation and the expression-list IH facts for `args_st`; do not simplify the generated optional-driver prefix. Leave the INL success path for the later ExtCall success component if that is already the surrounding plan shape; C0.3.3 is only the argument-error/place shell repair.
+
+#### Not to try
+Do not use broad `simp`/`gvs`/`AllCaseEqs()` after the whole ExtCall eval equation has expanded into the generated optional-driver prefix. Do not apply the five projection helpers separately with long `qspecl_then`/`impl_tac` plumbing. Do not build adapter theorems for the generated prefix or recover driver premises from the top-level Resume context.
+
+#### Argument
+In the argument-error branch, `eval_exprs cx es st = (INR err,args_st)` makes the ExtCall evaluator return immediately, before target decoding, calldata construction, account lookup, external execution, or optional-driver execution. Therefore the whole call result/state must be `(INR err,args_st)` for any outer call annotation `call_ty`. The expression-list IH already gives `state_well_typed args_st`, `env_consistent env cx args_st`, `accounts_well_typed args_st.accounts`, and `no_type_error_result (INR err)`. Combining immediate-return equality with these IH facts proves the entire expression-result postcondition; the typed-value case is vacuous because the result is `INR`. The proof should never need to reason about the generated driver prefix in this branch.
+
+#### Definition design
+No evaluator or semantic definition changes are allowed. The proof interface is a boundary theorem around the existing evaluator equation: consumers should not unfold `evaluate_def` past the first `eval_exprs` split in this branch. The new boundary must have a conclusion matching the full conjunctive postcondition used by `eval_all_type_sound_mutual[Expr_Call_ExtCall_result]`; if the consumer still needs several projection applications, quoted assumptions, or broad `gvs` over a multi-kilobyte goal, the interface is wrong.
+
+#### Code structure
+Add the new local theorem near the existing ExtCall argument-error helpers in `semantics/prop/vyperTypeStmtSoundnessScript.sml`, after the generalized `eval_extcall_args_error_any_call_ty_*` lemmas from C0.3.4. Then edit only the `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result]` block. Keep changes inside `semantics/prop`; do not modify evaluator definitions or files outside the task scope.
+
+### C0.3.3.1: Prove a packaged any-call ExtCall argument-error postcondition helper
+- Kind: `boundary_lemma`
+- Risk: 2
+- Work priority: 0
+- Work units: 2
+- Rationale: This is a direct packaging of C0.3.4's immediate-return equality/projections. The only care is statement shape: the conclusion must match the Resume expression-result postcondition exactly enough for `irule`/`drule` use.
+- Dependencies: C0.3.4
+- Carries progress/evidence from: C0.3.4, E0090
+
+#### Progress note
+New helper introduced specifically because E0090 showed the existing projection interface is too granular under the generated-prefix context.
+
+#### Summary
+Add one local theorem that packages the whole INR argument-error expression-result postcondition for `Call call_ty (ExtCall stat (...,ret_type)) es drv`. It should assume `eval_exprs cx es st = (INR y,args_st)`, the live whole-call eval equation, and the four IH-produced facts on `args_st`. Its conclusion should be the full conjunction: `state_well_typed st'`, `env_consistent env cx st'`, `accounts_well_typed st'.accounts`, `no_type_error_result res`, and the expression-result typed case for the call. The proof should reduce through `eval_extcall_args_error_any_call_ty` or the generalized projections and then rewrite the vacuous `INR` result case.
 
 #### Statement
-Fill the suspended proof segment:
+Suggested theorem shape:
+```sml
+Theorem eval_extcall_args_error_any_call_ty_postcondition[local]:
+  !cx env st args_st y res st' call_ty stat func_name arg_types ret_type es drv.
+    eval_exprs cx es st = (INR y,args_st) /\
+    eval_expr cx (Call call_ty (ExtCall stat (func_name,arg_types,ret_type)) es drv) st = (res,st') /\
+    state_well_typed args_st /\ env_consistent env cx args_st /\
+    accounts_well_typed args_st.accounts /\ no_type_error_result (INR y) ==>
+    state_well_typed st' /\ env_consistent env cx st' /\
+    accounts_well_typed st'.accounts /\ no_type_error_result res /\
+    (case res of
+     | INL tv => expr_result_typed env (Call call_ty (ExtCall stat (func_name,arg_types,ret_type)) es drv) tv
+     | INR _ => T)
+```
+If the exact live goal has a slightly different conjunction order, prefer matching the live goal over preserving this order.
+
+#### Approach
+Prove it by deriving `eval_expr cx (Call call_ty ... ) st = (INR y,args_st)` from `eval_extcall_args_error_any_call_ty`, then use the supplied whole-call eval equation to identify `res` and `st'`. The `INL` branch of the final case disappears after this identification; no typing facts about successful ExtCall values are needed. Keep the proof local and deterministic: `drule`/`qspecl_then` for the immediate-return lemma plus `gvs[no_type_error_result_def]` after `Cases_on y` if needed.
+
+#### Not to try
+Do not unfold the whole ExtCall evaluator in this theorem beyond what `eval_extcall_args_error_any_call_ty` already encapsulates. Do not require `well_typed_expr` or driver IH assumptions; the argument-error branch returns before they matter.
+
+### C0.3.3.2: Rewrite the ExtCall_result Resume INR branch to use the packaged postcondition helper
+- Kind: `proof_refactor`
+- Risk: 2
+- Work priority: 10
+- Work units: 3
+- Rationale: With C0.3.3.1, the Resume branch no longer has to compose multiple projection lemmas under the generated prefix. The remaining edit is a small consumer refactor: split to `eval_exprs`, consume the expression-list IH, and close the `INR` branch with one helper application.
+- Dependencies: C0.3.3.1
+- Checkpoint: yes
+- Progress transition: `refinement`
+- Carries progress/evidence from: C0.3.3, E0090
+
+#### Progress note
+This refines the failed direct Resume edit from E0090. The successful prefix work remains useful, but the branch closure must use the new packaged helper instead of separate projections or broad cleanup.
+
+#### Summary
+Edit `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result]` so the expression-result half unfolds only to the first `eval_exprs` split. Use the generated expression-list IH to obtain the four facts about `args_st`. In the `INR err` branch, apply `eval_extcall_args_error_any_call_ty_postcondition` to close the full postcondition in one step. Keep the successful `INL vs` ExtCall path intentionally isolated for the later success proof component if it is still outside C0.3.3. Close the place-expression half by the existing no-place/simple `type_place_expr` argument, without interacting with the generated prefix.
+
+#### Statement
+Target edit is the suspended block:
 ```sml
 Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result]:
   ...
+QED
 ```
-for the ExtCall expression-result/place conjuncts in `vyperTypeStmtSoundnessScript.sml`, using the C0.3.4 generalized helpers in the `eval_exprs cx es st = (INR y,args_st)` branch.
+For this component, the required closure is the argument-error expression-result branch plus the simple place-expression/no-place shell; the ExtCall `INL` success path may remain as the planned downstream cheat/suspend if the surrounding plan already assigns it elsewhere.
 
 #### Approach
-Use the known prefix: `rpt gen_tac >> strip_tac >> conj_tac`, rewrite the `well_typed_expr` assumption once, move the eval assumption, unfold `evaluate_def`/monadic primitives only to the first `eval_exprs` split, then apply the expression-list IH. In the `INR` branch, each generalized projection should close by `irule` plus existing assumptions. For the second conjunct, expose the `type_place_expr` assumption and close using `type_place_expr_Call_ExtCall_NONE`.
+Use `conj_tac` for expression-result versus place-result. In the expression-result half, move `well_typed_expr` and the whole-call eval equation, rewrite `well_typed_expr_def` once and `evaluate_def` once only far enough to split `eval_exprs cx es st`. Immediately specialize the expression-list IH to `env, st, args_res, args_st`; after `Cases_on args_res`, close the `INR err` branch with the new packaged helper using the original whole-call eval equation and the IH facts. For the place half, push the `type_place_expr env (Call _ (ExtCall _ _) _ _) = SOME vt` assumption through the existing one-step definition rewrite; it should collapse without evaluating the ExtCall prefix.
 
 #### Not to try
-Do not use the old C0.3.2 narrow helpers in the live goal. Do not use `reverse conj_tac` at the start. Do not use broad `simp`/`gvs`/`AllCaseEqs()` over the generated ExtCall prefix. Do not specialize the optional-driver IH before the single concrete success-continuation branch.
+Do not substitute the whole-call eval equation and then run `gvs[]`; E0090 shows this expands the generated optional-driver prefix and times out. Do not prove the result by separately instantiating state/env/accounts/no-type/typed projection lemmas. Do not specialize the optional-driver IH in the argument-error branch; the driver is not reached when argument evaluation returns `INR`.
 
 ### C0.3.4: Add generalized ExtCall argument-error helpers over arbitrary outer Call annotation
 - Kind: `boundary_lemma`

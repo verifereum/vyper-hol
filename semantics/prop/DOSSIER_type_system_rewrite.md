@@ -28,7 +28,8 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C0.3 | stuck | risk_mismatch | E0079 | Call plan_oracle(mode='review') for C0.3. Ask for a de-risked replacement that avoids raw Resume simplification, likely a postcondition-shaped local helper whose conclusion matches the argument-error branch or a smaller Resume split that removes the generated optional-driver premise without `simp`/`gvs`. |
 | C0.3.1 | proved |  | E0087 |  |
 | C0.3.2 | proved |  | E0088 |  |
-| C0.3.3 | stuck | risk_mismatch | E0084 | Call plan_oracle(mode='review') for C0.3.3. Request a de-risked repair, likely generalized projection helpers over the outer Call annotation, before any further Resume edits. |
+| C0.3.3 | stuck | risk_mismatch | E0090 | Call plan_oracle(mode='review') for C0.3.3 and request a de-risked repair, likely a single outside-Resume postcondition helper over arbitrary `call_ty` whose conclusion matches the whole argument-error branch after substituting `res/st'`, or a smaller Resume factoring that removes/isolates the generated optional-driver prefix before the error branch. |
+| C0.3.3.1 | proved |  | E0092 | Call strategist review for C0.3.3.1, then preserve the stable helper proof with an unsigned commit if accepted. |
 | C0.3.4 | proved |  | E0089 |  |
 | C1.1 | proved |  | E0024 | Call plan_oracle(mode='review') for C1.1, then begin C1.2 if accepted. |
 | C1.1.1 | proved |  | E0012 |  |
@@ -704,26 +705,57 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 ### Current Status
 
 - result: `stuck`
-- diagnosis: `risk_mismatch` Likely repair is to generalize `eval_extcall_args_error`/projection helpers over the outer Call annotation (e.g. `call_ty`) or prove additional any-outer-annotation projection helpers outside the Resume context before retrying the shell. This should be strategist-owned because it changes the just-reviewed helper interface.
-- latest episode: `E0084`
-- blocker: C0.3.3's planned consumer use of C0.3.2 projection helpers is blocked because the helpers are too narrow for the live Resume goal: they require `Call ret_type (ExtCall ... ret_type)` but the suspended goal contains `Call v15 (ExtCall ... ret_type)`. The proof is no longer straightforward under the current helper interface.
-- actual effort: 1 sessions, 1 msgs, 15 steps, 16 tools, 4 holbuild, 1,547,421 tok (1,541,432 in, 5,989 out, 1,483,392 cached), 384.0s, $1.211566
-- next: Call plan_oracle(mode='review') for C0.3.3. Request a de-risked repair, likely generalized projection helpers over the outer Call annotation, before any further Resume edits.
+- diagnosis: `risk_mismatch` The helper-interface mismatch from E0084 is fixed, but C0.3.3's planned in-Resume direct projection consumption is still too brittle. The live branch after `eval_exprs = INR ...` has the desired inherited facts and early-return equality, yet the remaining goal shape includes generated prefix assumptions; the proof needs a better outside-Resume postcondition-shaped helper or a more precise branch boundary, not more tactic search.
+- latest episode: `E0090`
+- blocker: C0.3.3 is not the straightforward consumer repair predicted by the PLAN. Even with C0.3.4's generalized helpers, the live Resume branch retains a large generated optional-driver prefix and the proof either times out under cleanup or requires brittle long manual instantiation/plumbing. The decomposition/helper interface likely needs another boundary lemma or different Resume factoring.
+- actual effort: 1 sessions, 4 msgs, 63 steps, 79 tools, 19 holbuild, 6,642,859 tok (6,622,707 in, 20,152 out, 6,338,816 cached), 1105.4s, $5.193423
+- next: Call plan_oracle(mode='review') for C0.3.3 and request a de-risked repair, likely a single outside-Resume postcondition helper over arbitrary `call_ty` whose conclusion matches the whole argument-error branch after substituting `res/st'`, or a smaller Resume factoring that removes/isolates the generated optional-driver prefix before the error branch.
 
 ### Attempts / Evidence
 
 - `E0084` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 15 steps, 16 tools, 4 holbuild, 1,547,421 tok (1,541,432 in, 5,989 out, 1,483,392 cached), 384.0s, $1.211566)
   - Replaced ExtCall_result cheat with the planned shell: split result/place conjuncts, rewrote well_typed_expr/evaluator one step, split eval_exprs, applied expression-list IH with drule_all, left INL success as cheat, and tried to close INR branch via conjunct-specific projection helpers. -> The shell reached the INR branch but `irule eval_extcall_args_error_state_well_typed` did not match the live `state_well_typed st'` goal because the live call is `Call v15 (ExtCall ... ret_type)` while the C0.3.2 projection helpers require the outer Call annotation to be the same `ret_type`. This is a helper-interface/statement mismatch, not a tactic gap. Per task stop-on-unexpected-design-issue guidance, the partial Resume proof was reverted to the intentional cheat baseline and the target rebuilt cleanly. (`TO_type_system_rewrite-20260601T081233Z_m1867_t001`, `TO_type_system_rewrite-20260601T081233Z_m1870_t001`)
   - Also checked the place-expression half orientation by trying `reverse conj_tac` first, then corrected to `conj_tac` after holbuild showed the first subgoal was the expression-result postcondition, not the place half. -> This was a routine orientation correction; the remaining blocker is the projection-helper statement mismatch with the live outer Call type annotation. (`TO_type_system_rewrite-20260601T081233Z_m1863_t001`)
+- `E0090` (stuck, risk_mismatch, actual effort: 1 sessions, 4 msgs, 63 steps, 79 tools, 19 holbuild, 6,642,859 tok (6,622,707 in, 20,152 out, 6,338,816 cached), 1105.4s, $5.193423)
+  - Replaced ExtCall_result cheat with planned shell: `conj_tac`, one-step `well_typed_expr`/`evaluate_def` unfold, split `eval_exprs`, consume expression-list IH, leave INL success as `cheat`, close INR branch via generalized any-call helpers or direct early-return equality. -> Argument-error branch can derive the early-return equality, but the branch still leaves a large generated optional-driver success-prefix implication in context. Broad `simp`/`gvs` over the branch times out, and using repeated projection helper applications with long `qspecl_then`/`impl_tac` plumbing mis-associates with remaining conjunct goals. This violates the component's 'straightforward direct irule' expectation and the brittle-proof warning. (`TO_type_system_rewrite-20260601T081233Z_m1968_t001`, `TO_type_system_rewrite-20260601T081233Z_m1970_t001`, `TO_type_system_rewrite-20260601T081233Z_m1974_t001`, `TO_type_system_rewrite-20260601T081233Z_m1980_t001`)
+  - Reverted the partial Resume proof back to the intentional `cheat` baseline after failed attempts and rebuilt the target. -> Source is clean/buildable again with C0.3.4 helpers committed; C0.3.3 remains unresolved. This preserves stable progress and avoids leaving a broken prefix. (`TO_type_system_rewrite-20260601T081233Z_m1982_t002`, `TO_type_system_rewrite-20260601T081233Z_m1985_t002`)
 
 ### Ruled Out
 
-- Do not try to force the narrow helper with simplification/equality bridging in the raw Resume context; the live mismatch is at the helper statement and broad bridging is forbidden by E0081.
+- Do not continue with broad `simp`/`gvs` on the generated ExtCall prefix; it times out and is forbidden by the maintainer clarification.
+- Do not keep manually instantiating five projection helpers with long `qspecl_then`/`impl_tac` plumbing inside the Resume; this is brittle and failed to compose with the remaining split conjuncts.
+- Do not retry the old narrow helpers; C0.3.4 generalized helpers are present, but the remaining issue is generated-prefix/branch factoring.
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260601T081233Z_m1867_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m1870_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1968_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1970_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1974_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1980_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1982_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m1985_t002` (use `read_tool_output` for exact output)
+
+## C0.3.3.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0092`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 16 steps, 18 tools, 5 holbuild, 1,799,689 tok (1,794,210 in, 5,479 out, 1,746,944 cached), 322.6s, $1.274172
+- next: Call strategist review for C0.3.3.1, then preserve the stable helper proof with an unsigned commit if accepted.
+
+### Attempts / Evidence
+
+- `E0091` (progressed, other, actual effort: 1 sessions, 1 msgs, 9 steps, 10 tools, 3 holbuild, 1,347,994 tok (1,345,326 in, 2,668 out, 1,312,640 cached), 130.3s, $0.899790)
+  - Added local theorem `eval_extcall_args_error_any_call_ty_postcondition` after the generalized C0.3.4 helpers; proof derives the any-call immediate-return equality with `drule eval_extcall_args_error_any_call_ty` and specializes it to the live `call_ty`/`ret_type`/ExtCall fields. -> The helper statement parses and proof reaches a single remaining subgoal `no_type_error_result (INR y)` with the same fact visible as an assumption. Current final tactic `qpat_assum ... ACCEPT_TAC` unexpectedly fails; likely a small tactic issue. Source is partial and target does not build until this final line is fixed. (`TO_type_system_rewrite-20260601T081233Z_m1989_t001`, `TO_type_system_rewrite-20260601T081233Z_m1995_t001`)
+- `E0092` (proved, , actual effort: 1 sessions, 1 msgs, 16 steps, 18 tools, 5 holbuild, 1,799,689 tok (1,794,210 in, 5,479 out, 1,746,944 cached), 322.6s, $1.274172)
+  - Replace the final assumption-selection tactic in `eval_extcall_args_error_any_call_ty_postcondition` with `Cases_on `y` >> gvs[no_type_error_result_def]`. -> The packaged any-call ExtCall argument-error postcondition helper now proves, and `vyperTypeStmtSoundnessTheory` builds cleanly through the target. (`TO_type_system_rewrite-20260601T081233Z_m2002_t001`, `TO_type_system_rewrite-20260601T081233Z_m2003_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260601T081233Z_m2003_t001` (use `read_tool_output` for exact output)
 
 ## C0.3.4
 
