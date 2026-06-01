@@ -3485,6 +3485,15 @@ Proof
   gvs[]
 QED
 
+Theorem word_size_not_lt_self:
+  0 < n ∧ ¬(word_size n < n) ==> n = 1
+Proof
+  rw[vfmConstantsTheory.word_size_def] >>
+  Cases_on `n` >> gvs[] >>
+  Cases_on `n'` >> gvs[arithmeticTheory.DIV_LT_X] >>
+  decide_tac
+QED
+
 Theorem raw_call_return_type_well_formed:
   flags.rcf_max_outsize < dimword(:256) ==>
   well_formed_type tenv (raw_call_return_type flags)
@@ -3495,7 +3504,8 @@ Proof
   `word_size n ≤ n` by (irule word_size_le >> rw[]) >>
   Cases_on`word_size n < n` >> gvs[type_slot_size_def] >>
   rw[] >>
-  cheat
+  `n = 1` by (irule word_size_not_lt_self >> rw[]) >>
+  gvs[vfmConstantsTheory.word_size_def]
 QED
 
 Theorem internal_call_signature_sound:

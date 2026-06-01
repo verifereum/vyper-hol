@@ -7,7 +7,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | Component | Status | Diagnosis | Latest Episode | Next |
 |---|---|---|---|---|
 | C0 | proved |  | E0021 |  |
-| C0.1 | proved |  | E0085 |  |
+| C0.1 | proved |  | E0100 |  |
 | C0.1.1 | stuck | risk_mismatch | E0033 | Ask strategist to provide a more concrete, low-risk prefix script or a different decomposition; source is currently buildable with the checkpoint placeholder. |
 | C0.1.1.1 | proved |  | E0036 |  |
 | C0.1.1.2 | stuck | risk_mismatch | E0038 | Call plan_oracle(mode='review') for this stuck episode and request a redesign of the ExtCall helper boundary/proof plan under the maintainer constraints. |
@@ -34,6 +34,8 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C0.3.3.3 | proved |  | E0096 | Call strategist review, then proceed to C0.3.3.4 to use the equality lemma in the ExtCall_result INR branch. |
 | C0.3.3.4 | proved |  | E0097 | Call strategist review for E0097. If accepted, commit this ExtCall_result INR-branch proof checkpoint unsigned. |
 | C0.3.4 | proved |  | E0089 |  |
+| C0.4 | stuck | risk_mismatch | E0098 | Call `plan_oracle(mode='review', component_id='C0.4', ...)` with this evidence; request a decomposition/interface repair before any further ExtCall proof attempts. |
+| C0.5 | stuck | plan_incomplete | E0099 | Call `plan_oracle(mode='review', component_id='C0.5', ...)` to accept the premature-validation failure and repair scheduling/dependencies so C0.4.1 is next. |
 | C1.1 | proved |  | E0024 | Call plan_oracle(mode='review') for C1.1, then begin C1.2 if accepted. |
 | C1.1.1 | proved |  | E0012 |  |
 | C1.1.2 | proved |  | E0013 |  |
@@ -75,9 +77,9 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0085`
+- latest episode: `E0100`
 - blocker: 
-- actual effort: 1 sessions, 1 steps, 62,005 tok (61,795 in, 210 out, 54,656 cached), 5.4s, $0.069323
+- actual effort: 1 sessions, 3 msgs, 24 steps, 29 tools, 7 holbuild, 1,696,243 tok (1,688,875 in, 7,368 out, 1,612,800 cached), 373.0s, $1.407815
 
 ### Attempts / Evidence
 
@@ -109,10 +111,13 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Updated STATE cursor for the new executable C0.1/C0.2 flow. -> STATE no longer says no proof/build/edit action is legal under the old stop report; it points to closing C0.1, then beginning C0.2 and proving the local argument-error boundary probe. Diff/grep confirmed the expected markers. (`TO_type_system_rewrite-20260601T081233Z_m1704_t001`, `TO_type_system_rewrite-20260601T081233Z_m1705_t001`, `TO_type_system_rewrite-20260601T081233Z_m1705_t002`)
 - `E0085` (proved, , actual effort: 1 sessions, 1 steps, 62,005 tok (61,795 in, 210 out, 54,656 cached), 5.4s, $0.069323)
   - Carry-forward documentation/source-cleanup component after scheduler repair; no new source edit needed. -> Scoped dossier shows prior proved C0.1 documentation cleanup (E0076) and active PLAN states no further work required. Component closed to restore carried-forward progress under replaced PLAN. (`TO_type_system_rewrite-20260601T081233Z_m1889_t001`)
+- `E0100` (proved, , actual effort: 1 sessions, 3 msgs, 24 steps, 29 tools, 7 holbuild, 1,696,243 tok (1,688,875 in, 7,368 out, 1,612,800 cached), 373.0s, $1.407815)
+  - Replaced the `raw_call_return_type_well_formed` cheat with local arithmetic: added `word_size_not_lt_self` showing positive `n` with `¬(word_size n < n)` forces `n = 1`, then used it to close the remaining slot-size bound. -> `vyperTypeBuiltinsTheory` builds cleanly; the former `FAIL_TAC`/`cheat` site is proved. (`TO_type_system_rewrite-20260601T081233Z_m2249_t001`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260601T081233Z_m1889_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m2249_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m2250_t002` (use `read_tool_output` for exact output)
 
 ## C0.1.1
 
@@ -848,6 +853,70 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - `TO_type_system_rewrite-20260601T081233Z_m1907_t001` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260601T081233Z_m1908_t001` (use `read_tool_output` for exact output)
+
+## C0.4
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` Proof-interface/decomposition mismatch: either C0.4 needs a smaller Resume factoring/boundary lemma that removes the generated prefix before monadic tail splitting, or the optional-driver IH must be exposed in a directly consumable form without long generated-prefix plumbing.
+- latest episode: `E0098`
+- blocker: C0.4 was rated Risk 2 and expected to close by a straightforward linear monadic split, but the live Resume context keeps the large generated optional-driver prefix active. Even targeted rewrites/case splits quickly require broad simplification or a usable generated-prefix boundary that does not currently match.
+- actual effort: 1 sessions, 3 msgs, 47 steps, 46 tools, 16 holbuild, 4,175,556 tok (4,161,484 in, 14,072 out, 4,020,352 cached), 1369.8s, $3.137996
+- next: Call `plan_oracle(mode='review', component_id='C0.4', ...)` with this evidence; request a decomposition/interface repair before any further ExtCall proof attempts.
+
+### Attempts / Evidence
+
+- `E0098` (stuck, risk_mismatch, actual effort: 1 sessions, 3 msgs, 47 steps, 46 tools, 16 holbuild, 4,175,556 tok (4,161,484 in, 14,072 out, 4,020,352 cached), 1369.8s, $3.137996)
+  - Probed the C0.4 `args_res = INL vs` branch; introduced local `extcall_static_args_runtime_typed_nonempty` helper and began a static-case linear split by rewriting only the expression-list result, call return type equality, static type-shape condition, nonempty/dest facts, and one-step `evaluate_def`/monadic definitions. -> The helper builds and the main Resume was reverted to the intentional `cheat`, so `vyperTypeStmtSoundnessTheory` is build-clean. The live branch still exposes the generated optional-driver prefix as a large antecedent, and even targeted progression immediately hits timeout/large-goal failures when trying to simplify the next monadic prefix cases. (`TO_type_system_rewrite-20260601T081233Z_m2190_t001`, `TO_type_system_rewrite-20260601T081233Z_m2196_t001`, `TO_type_system_rewrite-20260601T081233Z_m2209_t001`, `TO_type_system_rewrite-20260601T081233Z_m2212_t001`)
+  - Tried to package the generated optional-driver prefix into `extcall_generated_driver_ih` by labeling the raw generated IH and rewriting with `extcall_generated_driver_ih_def`. -> This failed due matching/type mismatch rather than producing a usable live premise. This confirms the existing generated-prefix adapter shape is not a straightforward consumer in the Resume branch. (`TO_type_system_rewrite-20260601T081233Z_m2176_t001`, `TO_type_system_rewrite-20260601T081233Z_m2178_t001`)
+  - Tried replacing broad `gvs[]` with targeted rewrites for `sum_case_def`, `boolTheory.COND_CLAUSES`, the `eval_exprs` equality, `vs <> []`, and `dest_AddressV (HD vs)` equality. -> This made some prefix progress but the next `build_ext_calldata` case split still timed out under `gvs[return_def, raise_def]` with a >4KiB goal retaining the whole generated optional-driver prefix. Continuing would violate C0.4's not-to-try guidance against broad generated-prefix cleanup. (`TO_type_system_rewrite-20260601T081233Z_m2188_t001`, `TO_type_system_rewrite-20260601T081233Z_m2199_t001`, `TO_type_system_rewrite-20260601T081233Z_m2206_t001`, `TO_type_system_rewrite-20260601T081233Z_m2209_t001`)
+
+### Ruled Out
+
+- Broad `gvs[]`/`simp[]` over the live generated prefix: timed out and forbidden by C0.4.
+- Directly using the raw generated prefix as `extcall_generated_driver_ih` by rewriting the definition: failed due matching/type mismatch.
+- Continuing the current branch with `gvs[return_def, raise_def]` after `build_ext_calldata` split: timed out with >4KiB generated-prefix goal.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260601T081233Z_m2176_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m2178_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m2190_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m2196_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m2206_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m2209_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m2212_t001` (use `read_tool_output` for exact output)
+
+## C0.5
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `plan_incomplete` Scheduling/dependency mismatch after C0.4 subtree replacement. C0.5 depends on completion of the replacement C0.4 subtree (at least C0.4.5), not merely parent C0.4 being marked ready.
+- latest episode: `E0099`
+- blocker: C0.5 is an integration audit that explicitly requires the ExtCall_result INL cheat to be gone, but the replacement C0.4 children have not yet run and grep confirms the cheat remains. The structured scheduler nevertheless made C0.5 Oracle next.
+- actual effort: 1 sessions, 2 steps, 2 tools, 1 holbuild, 256,382 tok (255,443 in, 939 out, 252,672 cached), 27.2s, $0.168361
+- next: Call `plan_oracle(mode='review', component_id='C0.5', ...)` to accept the premature-validation failure and repair scheduling/dependencies so C0.4.1 is next.
+
+### Attempts / Evidence
+
+- `E0099` (stuck, plan_incomplete, actual effort: 1 sessions, 2 steps, 2 tools, 1 holbuild, 256,382 tok (255,443 in, 939 out, 252,672 cached), 27.2s, $0.168361)
+  - Executed C0.5's mechanical validation: built `vyperTypeStmtSoundnessTheory` and grepped `vyperTypeStmtSoundnessScript.sml` for `cheat`. -> Build is clean, but grep still shows the ExtCall_result INL branch cheat at line 17475 (and RawCallTarget cheat at 17544). Therefore C0.5 cannot be proved; it was scheduled before replacement children C0.4.1-C0.4.5 removed the ExtCall_result cheat. (`TO_type_system_rewrite-20260601T081233Z_m2219_t002`, `TO_type_system_rewrite-20260601T081233Z_m2219_t001`)
+  - Attempted to request scheduler repair after C0.4 subtree replacement because query_plan made C0.5 Oracle next before C0.4.1-C0.4.5. -> `plan_oracle(mode='augment')` was blocked by the harness as not allowed, leaving begin C0.5 as the only legal next action despite the dependency mismatch. (`TO_type_system_rewrite-20260601T081233Z_m2215_t001`, `TO_type_system_rewrite-20260601T081233Z_m2216_t001`, `TO_type_system_rewrite-20260601T081233Z_m2217_t001`)
+
+### Ruled Out
+
+- Completing C0.5 now: proof integrity fails because grep shows the ExtCall_result `>- cheat` remains.
+- Bypassing the gate to begin C0.4.1 manually: begin_component only allowed C0.5 as Oracle next.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260601T081233Z_m2215_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m2216_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m2217_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m2219_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m2219_t002` (use `read_tool_output` for exact output)
 
 ## C1.1
 
