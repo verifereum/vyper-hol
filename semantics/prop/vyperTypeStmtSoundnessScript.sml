@@ -9802,6 +9802,15 @@ Proof
   Cases_on `v_addr` >> gvs[value_has_type_def, dest_AddressV_def]
 QED
 
+Theorem extcall_static_args_runtime_typed_nonempty[local]:
+  exprs_runtime_typed env args vs /\
+  MAP expr_type args = BaseT AddressT :: arg_tys ==>
+  vs <> []
+Proof
+  rw[exprs_runtime_typed_def] >>
+  Cases_on `vs` >> gvs[listTheory.LIST_REL_EL_EQN]
+QED
+
 Theorem extcall_nonstatic_args_runtime_typed_dest[local]:
   exprs_runtime_typed env args vs /\
   MAP expr_type args = BaseT AddressT :: BaseT (UintT 256) :: arg_tys ==>
@@ -17463,7 +17472,13 @@ Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result]:
   rename1 `eval_exprs cx es st = (args_res,args_st)` >>
   first_x_assum drule_all >> strip_tac >>
   Cases_on `args_res`
-  >- cheat >>
+  >- (
+    qpat_x_assum `case INL x of INL vs => exprs_runtime_typed env es vs | INR v1 => T` mp_tac >>
+    rewrite_tac[sum_case_def] >> BETA_TAC >> strip_tac >>
+    qpat_x_assum `v15 = ret_type` (fn th => rewrite_tac[th]) >>
+    Cases_on `is_static'`
+    >- suspend "Expr_Call_ExtCall_result_static" >>
+    suspend "Expr_Call_ExtCall_result_nonstatic") >>
   first_x_assum kall_tac >>
   drule_all eval_extcall_args_error_any_call_ty_result_eq >>
   strip_tac >>
@@ -17480,6 +17495,14 @@ Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result]:
     qpat_x_assum `INR y = INR (Error (TypeError msg))` mp_tac >>
     rewrite_tac[sumTheory.INR_11]) >>
   rewrite_tac[sum_case_def]
+QED
+
+Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result_static]:
+  cheat
+QED
+
+Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result_nonstatic]:
+  cheat
 QED
 
 Resume eval_all_type_sound_mutual[Expr_Call_Send]:
