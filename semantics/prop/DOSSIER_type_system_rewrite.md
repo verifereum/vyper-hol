@@ -29,7 +29,8 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C0.2.1.1.2 | stuck | risk_mismatch | E0116 | Call plan_oracle(mode='review') for C0.2.1.1.2. Given the repeated success-tail interface failures and the user's stop-on-design-issues instruction, request either acceptance that this design is blocked or a substantially different proof boundary that avoids both full-prefix adapter plumbing and mismatch with the current conjunctive goal shape. |
 | C0.2.1.2 | proved |  | E0123 | Call plan_oracle review, then begin C0.2.1.3 to close the static success tail by applying the continuation theorem directly to the current goal. |
 | C0.2.1.3 | stuck | risk_mismatch | E0124 | Call plan_oracle(mode='review') for C0.2.1.3; request either a precise projection-helper plan for already-split conjuncts or an ancestor replacement that changes the Resume goal shape before conjunct splitting. |
-| C0.2.1.3.1 | proved |  | E0125 | Call plan_oracle review, then begin C0.2.1.3.2 to replace the static success-tail cheat using the new projection lemma. |
+| C0.2.1.3.1 | proved |  | E0128 | Call plan_oracle review for the carried-forward C0.2.1.3.1 leaf, then begin C0.2.1.3.2 to implement the full-postcondition-before-splitting static success-tail refactor. |
+| C0.2.1.3.2 | stuck | risk_mismatch | E0127 | Ask the strategist to review/repair C0.2.1.3.2. Likely options: change the Resume/suspend boundary so the full tail postcondition is available before splitting, or add a use-site-specific boundary theorem whose conclusion and premises match the exact generated split goal without broad prefix reconstruction. |
 | C0.2.2 | stuck | risk_mismatch | E0104 | Request strategist review/repair for C0.2.2. The repair should de-risk the generated optional-driver prefix, likely by a safe branch-local way to label/hide/use it or by replacing the Resume interface, rather than asking for more simplifier variants. |
 | C0.2.3 | stuck | risk_mismatch | E0105 | Request strategist review/repair for C0.2.3 and the scheduling order. The repair should likely make C0.2.2.1-style opaque generated-IH/static proof-interface work a prerequisite before attempting either static or nonstatic full prefix proof, or provide a shared low-risk selected-equation proof pattern. |
 | C0.3 | stuck | missing_helper | E0106 | Ask strategist to repair C0.3 with a small local RawCallTarget tail helper/boundary or another de-risked proof interface before attempting more proof edits. |
@@ -797,21 +798,59 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0125`
+- latest episode: `E0128`
 - blocker: 
-- actual effort: 1 sessions, 4 steps, 3 tools, 1 holbuild, 539,587 tok (538,434 in, 1,153 out, 529,408 cached), 129.7s, $0.344424
-- next: Call plan_oracle review, then begin C0.2.1.3.2 to replace the static success-tail cheat using the new projection lemma.
+- actual effort: 1 sessions, 1 steps, 85,329 tok (85,019 in, 310 out, 80,256 cached), 7.7s, $0.073243
+- next: Call plan_oracle review for the carried-forward C0.2.1.3.1 leaf, then begin C0.2.1.3.2 to implement the full-postcondition-before-splitting static success-tail refactor.
 
 ### Attempts / Evidence
 
 - `E0125` (proved, , actual effort: 1 sessions, 4 steps, 3 tools, 1 holbuild, 539,587 tok (538,434 in, 1,153 out, 529,408 cached), 129.7s, $0.344424)
   - Added local projection lemma `extcall_success_continuation_state_well_typed` immediately after `extcall_success_continuation_sound_cond_driver_ih`, with identical assumptions and conclusion `state_well_typed st'`. -> The lemma is a direct projection: `drule_all extcall_success_continuation_sound_cond_driver_ih >> simp[]` closes it without unfolding the continuation or replaying evaluator internals. (`TO_type_system_rewrite-20260601T081233Z_m2704_t001`)
   - Built `vyperTypeStmtSoundnessTheory` after adding the projection lemma. -> Target builds successfully; the new projection helper is accepted and available for the already-split static success-tail goal. (`TO_type_system_rewrite-20260601T081233Z_m2705_t001`)
+- `E0128` (proved, , actual effort: 1 sessions, 1 steps, 85,329 tok (85,019 in, 310 out, 80,256 cached), 7.7s, $0.073243)
+  - Retained the already-proved local projection infrastructure and rebuilt the target after restoring the static success-tail source to the explicit cheat baseline. -> No source change was required for this carry-forward infrastructure leaf; `extcall_success_continuation_state_well_typed` remains present and `vyperTypeStmtSoundnessTheory` builds cleanly with the remaining static-tail cheat baseline. (`TO_type_system_rewrite-20260601T081233Z_m2730_t003`, `TO_type_system_rewrite-20260601T081233Z_m2732_t001`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260601T081233Z_m2704_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m2705_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m2730_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m2732_t001` (use `read_tool_output` for exact output)
+
+## C0.2.1.3.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` This appears to be a proof-interface/decomposition mismatch at the Resume boundary, not a semantic counterexample. The current source is restored to the explicit cheat baseline and holbuild is clean with that cheat.
+- latest episode: `E0127`
+- blocker: The Risk-2 use-site plan is not straightforward: the active split goal has only `state_well_typed st'` visible, while the projection theorem requires an exact monadic tail equality and conditional driver premise not present in a directly matchable form. Direct projection, direct use of the saved driver IH, and a simple pushed-driver probe all fail or time out.
+- actual effort: 1 sessions, 2 msgs, 22 steps, 32 tools, 7 holbuild, 1,944,113 tok (1,934,708 in, 9,405 out, 1,827,072 cached), 590.1s, $1.733866
+- next: Ask the strategist to review/repair C0.2.1.3.2. Likely options: change the Resume/suspend boundary so the full tail postcondition is available before splitting, or add a use-site-specific boundary theorem whose conclusion and premises match the exact generated split goal without broad prefix reconstruction.
+
+### Attempts / Evidence
+
+- `E0126` (progressed, other, actual effort: 1 sessions, 1 msgs, 5 steps, 6 tools, 1 holbuild, 762,864 tok (761,075 in, 1,789 out, 717,184 cached), 288.6s, $0.631717)
+  - Replaced the static success-tail cheat with `irule extcall_success_continuation_state_well_typed` after deriving `accounts_well_typed x'2`; supplied easy premises and left conditional driver premise as a cheat for this probe. -> Build still fails with `MATCH_MP_TAC No match` on the active `state_well_typed st'` goal. The source is currently dirty/partial with this failed attempt in place; it has not been restored to the prior buildable cheat baseline after this probe. (`TO_type_system_rewrite-20260601T081233Z_m2712_t001`, `TO_type_system_rewrite-20260601T081233Z_m2713_t001`, `TO_type_system_rewrite-20260601T081233Z_m2714_t001`)
+- `E0127` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 22 steps, 32 tools, 7 holbuild, 1,944,113 tok (1,934,708 in, 9,405 out, 1,827,072 cached), 590.1s, $1.733866)
+  - Restored the static success-tail source to the prior explicit `cheat` baseline and verified the target builds cleanly with that cheat. -> Source has no remaining SML diff after restoring the baseline; `holbuild` passes, so failed proof probes did not leave a broken prefix. (`TO_type_system_rewrite-20260601T081233Z_m2730_t001`, `TO_type_system_rewrite-20260601T081233Z_m2730_t003`)
+  - Tried replacing the cheat with the planned `irule extcall_success_continuation_state_well_typed`, supplying easy premises and leaving the conditional driver premise as a cheat shape probe. -> Still failed with `MATCH_MP_TAC No match` on the split goal `state_well_typed st'`; the projection lemma is not directly matching this Resume branch shape. (`TO_type_system_rewrite-20260601T081233Z_m2719_t004`, `TO_type_system_rewrite-20260601T081233Z_m2720_t001`)
+  - Checked whether the saved `driver_ih` itself could close the split `state_well_typed st'` goal via direct acceptance/matching. -> `ACCEPT_TAC driver_ih` failed and `MATCH_ACCEPT_TAC driver_ih` failed with a conjunction/equality match error, confirming the saved/generated IH is not the needed tail fact. (`TO_type_system_rewrite-20260601T081233Z_m2722_t001`, `TO_type_system_rewrite-20260601T081233Z_m2726_t001`)
+  - Pushed `driver_ih` with `mp_tac driver_ih >> simp[]` as a shape probe. -> Timed out under the fixed 2.5s tactic budget, indicating this path risks broad generated-prefix simplification/search contrary to the maintainer stop condition. (`TO_type_system_rewrite-20260601T081233Z_m2728_t001`)
+
+### Ruled Out
+
+- Plain `irule extcall_success_continuation_state_well_typed` at the split goal.
+- Direct `ACCEPT_TAC`/`MATCH_ACCEPT_TAC` using the saved `driver_ih` on `state_well_typed st'`.
+- Using `mp_tac driver_ih >> simp[]` to recover the needed fact by simplification/search.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260601T081233Z_m2719_t004` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m2720_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m2722_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m2726_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m2728_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T081233Z_m2730_t003` (use `read_tool_output` for exact output)
 
 ## C0.2.2
 

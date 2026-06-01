@@ -473,3 +473,22 @@ evidence:
 - episode:E0116
 - tool_output:TO_type_system_rewrite-20260601T081233Z_m2594_t001
 - tool_output:TO_type_system_rewrite-20260601T081233Z_m2611_t001
+
+## L0083 scope='C0.2.1' tags=ExtCall,generated-IH,boundary,conditional-premise
+shape: Generated optional-driver IH appears as `full ExtCall prefix /\ returnData = [] /\ IS_SOME drv ==> !env st res st'. ...`, while helper wants driver soundness.
+pattern: A helper requiring an unconditional driver IH is the wrong boundary for this Resume. The usable boundary must keep the driver obligation conditional on `returnData = [] /\ IS_SOME drv` and be applied only in the single success branch where prefix equations are already present.
+works_when: Applies to ExtCall static/nonstatic result branches after argument evaluation and `run_ext_call` success have been isolated. If the proof must reconstruct the whole prefix outside that branch, stop/escalate.
+evidence:
+- episode:E0118
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m2632_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m2638_t001
+
+## L0084 scope='C0.2.1.3' tags=ExtCall,Resume,projection-lemma,split-goal,continuation
+shape: A proved multi-conjunct continuation theorem is semantically right, but a suspended Resume branch exposes only one conjunct such as `state_well_typed st'`.
+pattern: Add small local projection lemmas with identical assumptions and a single-conjunct conclusion; prove each by `drule_all <full-continuation-theorem> >> simp[]`. This avoids replaying the continuation proof and gives a theorem whose conclusion is intended to match split Resume goals.
+works_when: Use for already-proved full postcondition theorems like `extcall_success_continuation_sound_cond_driver_ih`; the projection lemma itself is infrastructure only. The Resume use site may still need explicit instantiation/tail-equality handling if plain `irule` does not match.
+evidence:
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m2704_t001
+- tool_output:TO_type_system_rewrite-20260601T081233Z_m2705_t001
+- episode:E0125
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:9790
