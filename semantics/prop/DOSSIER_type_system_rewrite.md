@@ -34,6 +34,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C0.2.1.3.3 | stuck | risk_mismatch | E0133 | Call plan_oracle(mode='review') for C0.2.1.3.3 and request a repair/augment of the consumer interface. Do not continue tactic search on the generated prefix. |
 | C0.2.1.4 | stuck | risk_mismatch | E0135 | Call plan_oracle(mode='review', component_id='C0.2.1.4') to repair the conditional driver premise strategy or reschedule to the static branch. |
 | C0.2.1.4.1 | proved |  | E0137 |  |
+| C0.2.1.4.2 | proved |  | E0138 |  |
 | C0.2.2 | stuck | risk_mismatch | E0134 | Call plan_oracle(mode='review', component_id='C0.2.2') for a schedule/design repair or a narrower de-risked subcomponent for the generated optional-driver premise. |
 | C0.2.3 | stuck | risk_mismatch | E0105 | Request strategist review/repair for C0.2.3 and the scheduling order. The repair should likely make C0.2.2.1-style opaque generated-IH/static proof-interface work a prerequisite before attempting either static or nonstatic full prefix proof, or provide a shared low-risk selected-equation proof pattern. |
 | C0.3 | stuck | missing_helper | E0106 | Ask strategist to repair C0.3 with a small local RawCallTarget tail helper/boundary or another de-risked proof interface before attempting more proof edits. |
@@ -931,6 +932,25 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 ### Evidence refs
 
 - `TO_type_system_rewrite-20260601T220715Z_m2892_t001` (use `read_tool_output` for exact output)
+
+## C0.2.1.4.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0138`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 17 steps, 19 tools, 4 holbuild, 1,440,238 tok (1,436,934 in, 3,304 out, 1,367,936 cached), 239.1s, $1.128078
+
+### Attempts / Evidence
+
+- `E0138` (proved, , actual effort: 1 sessions, 1 msgs, 17 steps, 19 tools, 4 holbuild, 1,440,238 tok (1,436,934 in, 3,304 out, 1,367,936 cached), 239.1s, $1.128078)
+  - Added `extcall_nonstatic_projected_state_well_typed[local]` immediately after the static projected helper; proof mirrors the static theorem with nonstatic `Address, Uint256` argument destructors, `build_ext_calldata ... (TL (TL vs))`, `run_ext_call ... (SOME amount)`, and `extcall_success_continuation_state_well_typed` with explicit witnesses. -> Target `vyperTypeStmtSoundnessTheory` builds cleanly. Initial broad `metis_tac[]` at the continuation helper was replaced by explicit witnesses plus direct reuse of the compact driver-IH premise, avoiding generated-prefix plumbing. (`TO_type_system_rewrite-20260601T220715Z_m2916_t001`, `TO_type_system_rewrite-20260601T220715Z_m2920_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260601T220715Z_m2920_t001` (use `read_tool_output` for exact output)
 
 ## C0.2.2
 
