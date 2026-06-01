@@ -520,3 +520,41 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260601T220715Z_m2955_t001
 - tool_output:TO_type_system_rewrite-20260601T220715Z_m2959_t001
 - episode:E0140
+
+## L0090 scope='C0.2.1.3.3' tags=ExtCall,Resume,after-update,conditional-IH,boundary-helper
+shape: A Resume branch has already simplified `assert T`, `update_accounts`, and `update_transient`, so helpers over the larger `do assert; update; update; tail od` do not match the live post-update tail.
+pattern: Factor an after-state-update boundary helper whose semantic equation starts at `(base_st with <| accounts := accounts'; tStorage := tStorage' |>)` and takes a conditional optional-driver IH. Prove the full ExtCall postcondition in the helper, then in the Resume derive/provide the conditional premise locally from the generated IH rather than matching a larger do-block.
+works_when: Use after `run_ext_call` has returned a concrete success tuple and the Resume proof has simplified account/transient updates. Works best when ordinary state/account facts are discharged manually and the conditional driver premise is asserted explicitly.
+evidence:
+- episode:E0142
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3004_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml
+
+## L0091 scope='C0.2.1.3.3.4' tags=ExtCall,Resume,projection,tail-helper,state_well_typed
+shape: Suspended Resume subgoal is a projection such as `state_well_typed st'`, while available ExtCall tail helper proves a full conjunctive postcondition.
+pattern: Do not `irule` a full-postcondition tail theorem directly against the projected goal. First prove/assert the full postcondition as a local fact and project, or use a state-only projection lemma whose conclusion matches the Resume subgoal. Only after this match issue is solved should the proof enter the concrete driver-IH branch.
+works_when: Use in `eval_all_type_sound_mutual[Expr_Call_ExtCall_result_static]` after the linear ExtCall prefix split and success branch when holbuild reports `MATCH_MP_TAC No match` on a projected invariant goal.
+evidence:
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3080_t001
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3081_t001
+- episode:E0148
+
+## L0092 scope='C0.2.1.3.3' tags=PLAN,blocked_report,status-mismatch,cheat,ExtCall
+shape: A documentation leaf says to record proof completion/unblock, but source and reviewed episodes show an intentional `cheat` stop-state.
+pattern: Before editing documentation-only leaves after a PLAN replacement, audit the source obligation and latest reviewed episodes. If the leaf would claim a proof is complete while source still contains an intentional `cheat`, close/escalate the leaf as wrong_statement instead of writing false status.
+works_when: Use for stop-state subtrees where proof attempts were reverted and PLAN/doc leaves may be stale after replacement.
+evidence:
+- episode:E0151
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3106_t001
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3108_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:17638
+
+## L0093 scope='C0' tags=blocked_task_gate,cheat,ExtCall,frontier,completion
+shape: A required theorem remains intentionally `cheat`, holbuild succeeds, but query_plan has no beginable frontier and downstream ready-looking leaves conflict with the blocked gate.
+pattern: Treat build success as an intentional-cheat baseline, not completion. Escalate to the strategist to consolidate the plan into a blocked task gate or produce a new authorized low-risk frontier; if the strategist confirms blocked status, stop with a blocked operator outcome rather than manually beginning downstream ready components.
+works_when: Use when task completion requires zero cheats and accepted evidence says a required proof branch is a stop-state rather than a false theorem.
+evidence:
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3147_t001
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3150_t003
+- episode:E0155
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:17638

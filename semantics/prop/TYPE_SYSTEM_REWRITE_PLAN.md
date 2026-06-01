@@ -1434,3 +1434,24 @@ The final public theorem can wrap the executable checker predicates as needed, b
 - Avoid broad tactics that leave many unrelated subgoals open.
 - Do not use `THENL`; prefer helper lemmas or careful `>-` / `conj_tac >- ... >> ...` structure.
 - Split large builtin/type-builtin proofs into no-TypeError and success-type lemmas, with per-constructor helpers where branches have genuinely different mathematical arguments.
+
+## ExtCall static Resume blocked status (2026-06-02)
+
+The static `Expr_Call_ExtCall_result_static` Resume is intentionally left at its explicit `cheat` placeholder after the accepted stops in E0144 and E0149. The theorem is not proved and has not been shown false; this is a proof-architecture stop under the maintainer's "straightforward proof only" rule.
+
+Stable progress retained:
+
+- `extcall_after_state_update_tail_sound_cond_driver_ih` was proved and accepted in E0142.
+- Stable helper checkpoint: commit `c1063d611` (`Add ExtCall after-update continuation helper`).
+- The failed consumer proof experiment was cleaned in E0146.
+- E0149 reverted the later direct-driver proof experiment; `vyperTypeStmtSoundnessScript.sml` again contains only the explicit static Resume `cheat`, and `holbuild(targets=["vyperTypeStmtSoundnessTheory"])` completed on that reverted source.
+
+Blocked design issue:
+
+- The static Resume has only the recursor-generated optional-driver IH guarded by the full ExtCall monadic prefix.
+- The after-update helper expects a small conditional driver-IH premise.
+- E0144 showed that obtaining this premise from `driver_ih` still requires replaying/simplifying the generated full ExtCall prefix and timed out under holbuild's tactic limit.
+- A maintainer-approved direct branch-by-branch proof was attempted next, but E0149 showed that after the projected-goal/full-postcondition mismatch is fixed, the success branch still reaches the same forbidden route: `mp_tac driver_ih >> simp[]` over the generated full prefix, and it timed out.
+- Per the maintainer clarification and current PLAN, this is not a straightforward proof step and must not be solved by broad `simp`/`gvs`, `AllCaseEqs()`, `metis_tac`, or a long generated-prefix adapter theorem.
+
+Until a new proof architecture is approved, do not proceed to downstream nonstatic ExtCall work and do not claim the static ExtCall proof obligation is complete.

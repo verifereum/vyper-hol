@@ -1,71 +1,73 @@
 # STATE_type_system_rewrite
-Updated: 2026-06-01
+Updated: 2026-06-02
 
 ## Cursor
-- component: C0.2.1.3.3
-- status: in_progress
-- active_file: semantics/prop/vyperTypeStmtSoundnessScript.sml
-- next_action: Open the static Resume around `eval_all_type_sound_mutual[Expr_Call_ExtCall_result_static]`; remove/replace the current `FAIL_TAC` probe left in the `Cases_on x'0` area, then continue only C0.2.1.3.3. First determine which `x'0` branch is success (`check success` succeeds) and put `extcall_success_continuation_state_well_typed`/`extcall_after_state_update_tail_sound` on that branch, not at the top of the Resume.
-- expected_goal_shape: After linear ExtCall prefix split in the static Resume: assumptions include generated `driver_ih` as a full prefix-guarded implication, `run_ext_call ... NONE ... = SOME (...)`, `accounts_well_typed` for returned accounts, `runtime_consistent env cx args_st`, and a projected conclusion `state_well_typed st'`. The hard subgoal is the conditional driver-IH premise for the success continuation, under `returnData = [] /\ IS_SOME drv`, using generated prefix facts already split locally.
-- verify_with: holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=300)
+- component: C0
+- status: blocked
+- active_file: semantics/prop/PLAN_type_system_rewrite.md
+- next_action: Do not edit/build/prove under the current task contract. The task is blocked at the required static ExtCall cheat. Resume only after explicit maintainer/user approval of a new static ExtCall proof architecture or changed scope; then call plan_oracle to replace/decompose the blocked C0/C0.2 static ExtCall gate before any proof-script edits.
+- expected_goal_shape: No HOL goal expected. query_plan shows C0/C0.2/C0.2.1/C0.2.1.3/C0.2.1.3.3 high-risk blocked with no scheduled leaf frontier, no beginable component, and no Oracle next. `eval_all_type_sound_mutual[Expr_Call_ExtCall_result_static]` remains an intentional explicit cheat, so zero-cheat completion is not satisfied.
+- verify_with: If a new architecture is approved later: first run git status and query_plan; after plan_oracle creates an authorized low-risk frontier, begin the scheduled component and verify with holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=300). Under the current PLAN, holbuild is blocked by the risk gate.
 
 ## If This Fails
-- If the final driver-IH discharge cannot be solved by matching the saved generated IH after the success branch is concrete, checkpoint_progress with the exact holbuild goal and close C0.2.1.3.3 as stuck/risk_mismatch only if terminal. Do not broaden to top-level projected helpers, whole-prefix AllCaseEqs/gvs, or generated-prefix adapter theorems.
+- If query_plan still shows no frontier, do not handoff-loop or proof-search; report blocked to the operator. If plan_oracle creates a new frontier after explicit approval, begin exactly the scheduled component before edits/builds. Leave untracked semantics/prop/LEARNINGS_type_system_rewrite.legacy.md and semantics/prop/tmp_helper.txt unstaged.
 
 ## Do Not Retry
-- Apply `extcall_static_projected_state_well_typed` or `extcall_nonstatic_projected_state_well_typed` directly at a suspended Resume entry goal.: The available generated optional-driver IH is a full prefix-guarded implication with an extra place-expression conjunct, while these helpers require a compact unconditional driver-IH premise; direct `irule`/`drule_all` failed or timed out.
-  - evidence: episode:E0133
-  - evidence: episode:E0139
-  - evidence: tool_output:TO_type_system_rewrite-20260601T081233Z_m2812_t001
-- Use broad `gvs`/`simp`/`AllCaseEqs()` over the whole generated ExtCall prefix to recover the driver premise.: Maintainer/PLAN forbids this, and earlier attempts timed out with large generated-prefix goals. It is a decomposition smell, not a tactic problem.
-  - evidence: episode:E0135
-  - evidence: episode:E0136
-  - evidence: tool_output:TO_type_system_rewrite-20260601T220715Z_m2869_t001
-- Leave or commit the current `FAIL_TAC` probe in `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result_static]`.: The active source is partial and intentionally failing for inspection; it must be removed/replaced before a clean build or any commit.
-  - evidence: episode:E0140
-  - evidence: tool_output:TO_type_system_rewrite-20260601T220715Z_m2959_t001
-- Stage untracked `semantics/prop/LEARNINGS_type_system_rewrite.legacy.md` or `semantics/prop/tmp_helper.txt`.: They were pre-existing/untracked working-tree artifacts and not part of stable proof progress. Use `git add -u semantics/prop` or explicit tracked paths only.
-  - evidence: tool_output:TO_type_system_rewrite-20260601T220715Z_m2906_t001
-  - evidence: tool_output:TO_type_system_rewrite-20260601T220715Z_m2923_t001
+- Prove static ExtCall by deriving the compact driver premise from generated driver_ih using mp_tac driver_ih >> simp[], broad gvs, AllCaseEqs(), drule_all, metis_tac, or a long generated-prefix adapter theorem.: E0144/E0149 show this route times out and violates both PLAN not-to-try guards and the maintainer clarification that only straightforward branch-local proof is allowed.
+  - evidence: episode:E0144
+  - evidence: episode:E0149
+  - evidence: tool_output:TO_type_system_rewrite-20260601T220715Z_m3090_t001
+- Proceed to nonstatic ExtCall, RawCallTarget, wrapper, or final zero-cheat audit components while static ExtCall remains intentionally cheated.: Final C0 blocked_task_gate says downstream leaves are invalidated/not executable because the required static ExtCall gate blocks completion.
+  - evidence: tool_output:TO_type_system_rewrite-20260601T220715Z_m3147_t001
+  - evidence: tool_output:TO_type_system_rewrite-20260601T220715Z_m3159_t003
+- Describe the task as complete or zero-cheat clean because a previous holbuild succeeded.: The build succeeded only on an intentional-cheat baseline; proof-integrity completion is not satisfied while Expr_Call_ExtCall_result_static remains cheated, and current holbuild is PLAN-gated blocked.
+  - evidence: tool_output:TO_type_system_rewrite-20260601T220715Z_m3137_t004
+  - evidence: tool_output:TO_type_system_rewrite-20260601T220715Z_m3138_t001
+  - evidence: tool_output:TO_type_system_rewrite-20260601T220715Z_m3152_t002
+- Stage or commit untracked semantics/prop/LEARNINGS_type_system_rewrite.legacy.md or semantics/prop/tmp_helper.txt.: They are known pre-existing untracked artifacts outside stable task progress; commits should stage only relevant tracked task-local files with explicit paths/add -u and --no-gpg-sign.
+  - evidence: tool_output:TO_type_system_rewrite-20260601T220715Z_m3159_t002
+  - evidence: tool_output:TO_type_system_rewrite-20260601T220715Z_m3150_t002
 
 ## Reflection
 ### Tunnel Vision Check
-- Outside-the-box approach not yet exhausted: instead of using `extcall_success_continuation_state_well_typed`, try applying `extcall_after_state_update_tail_sound` directly once `evaluate_type`/`get_tenv` facts are established, because it may match the concrete post-update tail better and avoid the `do assert T; update...` wrapper.
-- A fresh expert would first question the branch orientation after `Cases_on x'0`: prior attempts may have placed success-continuation logic on the wrong branch. Verify which subgoal corresponds to `success = T` before adding tail proof.
-- The PLAN decomposition is still plausible: linear branch-local proof, not top-level compact helper. The danger is accidentally optimizing the wrong consumer theorem (`extcall_static_projected_state_well_typed`) rather than the concrete Resume branch.
-- Do not retry tactics blindly; if the saved generated IH cannot be consumed after the branch is concrete, the missing piece is a small local projection of the expression half of the generated IH, not a larger simplifier search.
-- Current source is partial and contains a probe; do not commit until the probe is removed and holbuild succeeds.
+- Outside-the-box approach not yet authorized: avoid the generated Resume IH entirely by changing mutual theorem/suspension granularity or proving a new evaluator-specific continuation theorem before the generated ExtCall prefix is introduced.
+- We were optimizing the static ExtCall Resume consumer proof, but accepted evidence says the current theorem/proof interface is the wrong abstraction under the straightforward-proof constraint; further tactic tuning is counterproductive.
+- The prior deep PLAN decomposition was not the right abstraction after E0149/E0150: carry-forward leaves were cleanup/status bookkeeping, then the strategist consolidated the task into a blocked_task_gate.
+- A fresh expert should first question the proof boundary for the generated optional-driver IH, not individual simp/gvs tactics, and should check the source line with the intentional cheat before trusting proof-completion docs.
+- Do not retry tactics when the needed change is a maintainer-approved helper, boundary lemma, induction/suspension interface, or oracle replanning.
 
 ### What Went Wrong
-- C0.2.1.4.2 was successfully proved and committed, but its direct consumer C0.2.1.4.3 failed; oracle replaced the nonstatic plan with a linear Resume proof and rescheduled C0.2.1.3.3 first.
-- For C0.2.1.3.3, I began probing the static Resume. The proof reached the run-ext-call success area, but the generated driver IH remained a full prefix-guarded implication. Current partial source has `FAIL_TAC` in the static Resume branch.
-- An attempted `irule extcall_success_continuation_state_well_typed` placement after `Cases_on x'0` still produced a remaining projected `state_well_typed st'`/`MATCH_MP_TAC No match` or branch-not-solved failure, suggesting the branch orientation or match point was wrong.
+- The maintainer-approved direct branch-by-branch static ExtCall attempt was still not straightforward: after the projection mismatch was fixed, the success branch required broad generated-prefix simplification of driver_ih and timed out.
+- The PLAN temporarily mixed a blocked static stop-state with downstream ready leaves; after reviewed carry-forward closures, plan_oracle replaced C0 with a task-level blocked gate.
+- STATE had previously lagged behind accepted E0153/E0154/E0155 and the final blocked-plan replacement; this session committed the tracked PLAN/STATE/LEARNINGS update as 9eb1b922d.
+- holbuild cannot currently be used as a source verification step because the structured PLAN correctly blocks builds while high-risk C0 blockers have no low-risk frontier.
 
 ### Ignored Signals
-- The `Cases_on x'0 >> gvs[return_def, raise_def] >- (...)` shape is easy to misread: since `x'0` is the success flag, the `F` branch is the reverted/error branch and the `T` branch is the continuation branch. Verify from holbuild, do not assume.
-- The generated IH assumption printed by holbuild is an implication from the entire ExtCall prefix; any attempt to consume it before those prefix equations are local concrete assumptions will reproduce E0133/E0139.
-- Current working tree has untracked legacy/tmp files predating this handoff; do not stage them. Only stage relevant tracked semantics/prop changes after a clean build.
+- The explicit cheat in Expr_Call_ExtCall_result_static means proof-integrity completion cannot be claimed, even if a previous holbuild succeeded on the intentional-cheat baseline.
+- No scheduled frontier with high-risk ancestors is a terminal planning/blocked-state signal, not a reason to choose unscheduled ready components manually.
+- Untracked LEARNINGS_type_system_rewrite.legacy.md and tmp_helper.txt repeatedly appear in status and must remain unstaged.
+- The task instruction says to stop if the proof/design is not straightforward; this governs the outcome more than the existence of downstream ready-looking components.
 
 ### Strategy Adjustments
-- Next session should start by reading the current static Resume lines and removing the `FAIL_TAC` probe; do not run holbuild expecting success until that is done.
-- Use the proved helper `extcall_static_projected_state_well_typed` only as a script template, not as a direct theorem at the Resume goal.
-- At the final success branch, explicitly establish small facts (`accounts_well_typed`, `runtime_consistent`, `well_formed_type`/`evaluate_type`, `get_tenv`) before applying the tail theorem.
-- For driver IH discharge, prefer `strip_tac` on `returnData = [] /\ IS_SOME drv`, then use the saved `driver_ih` by matching its generated implication after prefix equations are in assumptions; avoid broad simplification over the whole prefix.
+- Next session should not do proof work unless the user/maintainer explicitly changes the task contract or approves a new static ExtCall proof architecture.
+- If resumed under a new architecture, first call plan_oracle to replace/decompose the blocked static ExtCall gate; do not locally redesign or jump to downstream components.
+- Keep commits small and unsigned with git commit --no-gpg-sign; stage only relevant tracked files under semantics/prop, never git add -A.
+- Treat prior holbuild success as success on an intentional-cheat baseline, not proof completion.
+- Current git status after commit 9eb1b922d has only the known untracked legacy/tmp files.
 
 ### Oracle Feedback
-- Held: Oracle diagnosis that top-level projected-helper consumption is wrong was confirmed again by E0139; the generated IH is not compact at Resume entry.
-- Held: Proving compact boundary lemmas outside the Resume works; C0.2.1.4.2 built cleanly and was committed.
-- Missed/needs care: The later oracle repair for nonstatic changed scheduling to static C0.2.1.3.3; despite Risk 2, the exact branch orientation and generated IH discharge remain delicate.
-- Current oracle direction is binding: work active C0.2.1.3.3 first, branch-local linear static proof; no unrelated work and no direct `extcall_static_projected_state_well_typed` retry.
+- Held: Strategist accepted E0155 and confirmed the static ExtCall source is intentionally cheated, no stale partial proof remains, and downstream nonstatic ExtCall is not authorized.
+- Held: Final strategist replacement reclassified C0 as a blocked_task_gate because zero reachable cheats is required and the static ExtCall cheat remains.
+- Held: Accepted evidence E0144/E0149/E0150/E0155 is a proof-architecture stop, not a mathematical falsehood; end outcome should be blocked, not complete/unprovable.
+- Missed earlier reality: the plan previously left ready downstream leaves despite the required static gate being blocked; the final plan_oracle call corrected this by invalidating stale downstream leaves.
 
 ## Evidence Pointers
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m2920_t001 - C0.2.1.4.2 nonstatic projected-state boundary lemma build clean
-- episode:E0138 - C0.2.1.4.2 proved/reviewed and committed
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m2935_t001 - C0.2.1.4.3 direct `irule` of boundary lemma failed in Resume
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m2937_t001 - C0.2.1.4.3 direct `drule_all` of boundary lemma failed in Resume
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m2939_t001 - after reverting C0.2.1.4.3 experiment, target build clean
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m2942_t001 - oracle replacement plan: static C0.2.1.3.3 is Oracle next, branch-local linear proof
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m2949_t001 - static success probe reached generated prefix-guarded driver IH context
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m2955_t001 - attempted success-continuation placement had branch/subgoal mismatch
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m2959_t001 - revised static branch probe still not closed; current source partial
-- episode:E0140 - non-terminal checkpoint for current partial C0.2.1.3.3 probe evidence
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3159_t003 - current query_plan: high-risk C0 blockers, no scheduled frontier, no beginable component, no Oracle next
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3152_t002 - holbuild is blocked by structured PLAN risk gate under current state
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3156_t001 - committed tracked task-memory blocked-plan update as 9eb1b922d with --no-gpg-sign
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3159_t002 - current git status: only known untracked legacy/tmp files remain
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3147_t001 - final strategist replacement: C0 blocked_task_gate; no further proof work authorized until new architecture/scope
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3138_t001 - source audit: static ExtCall Resume remains explicit cheat at vyperTypeStmtSoundnessScript.sml:17638-17640
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3137_t004 - previous holbuild succeeded only on intentional-cheat baseline
+- episode:E0149 - direct branch-by-branch attempt closed stuck/risk_mismatch after forbidden generated-prefix simplification timed out
+- episode:E0155 - accepted stop-state carry-forward closure with source/build/status audit
