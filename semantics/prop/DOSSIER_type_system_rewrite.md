@@ -74,6 +74,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C0.4.3.a | proved |  | E0244 |  |
 | C0.4.3.b | proved |  | E0245 |  |
 | C0.4.3.c | proved |  | E0246 |  |
+| C0.4.4 | proved |  | E0247 |  |
 | C0.5 | stuck | plan_incomplete | E0099 | Call `plan_oracle(mode='review', component_id='C0.5', ...)` to accept the premature-validation failure and repair scheduling/dependencies so C0.4.1 is next. |
 | C1.1 | proved |  | E0024 | Call plan_oracle(mode='review') for C1.1, then begin C1.2 if accepted. |
 | C1.1.1 | proved |  | E0012 |  |
@@ -2171,6 +2172,27 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 - `TO_type_system_rewrite-20260602T195240Z_m4618_t001` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260602T195240Z_m4619_t001` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260602T195240Z_m4619_t003` (use `read_tool_output` for exact output)
+
+## C0.4.4
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0247`
+- blocker: 
+- actual effort: 1 sessions, 2 steps, 3 tools, 1 holbuild, 203,967 tok (203,472 in, 495 out, 199,424 cached), 42.9s, $0.134802
+
+### Attempts / Evidence
+
+- `E0247` (proved, , actual effort: 1 sessions, 2 steps, 3 tools, 1 holbuild, 203,967 tok (203,472 in, 495 out, 199,424 cached), 42.9s, $0.134802)
+  - Audited static ExtCall source area with grep for static resume names, obsolete `Expr_Call_ExtCall_result_static_success`, and remaining cheats; then rebuilt `vyperTypeStmtSoundnessTheory`. -> No obsolete `Expr_Call_ExtCall_result_static_success` scaffolding remains. Static ExtCall has parent resume plus calldata/empty-code/run-none subresumes only; remaining cheats are the planned nonstatic ExtCall and RawCallTarget obligations. Focused build passed. No source edits were needed. (`TO_type_system_rewrite-20260602T195240Z_m4626_t001`, `TO_type_system_rewrite-20260602T195240Z_m4626_t003`, `TO_type_system_rewrite-20260602T195240Z_m4626_t002`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260602T195240Z_m4626_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4626_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4626_t002` (use `read_tool_output` for exact output)
 
 ## C0.5
 
