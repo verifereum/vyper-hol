@@ -596,3 +596,12 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260601T220715Z_m3227_t001
 - episode:E0157
 - episode:E0158
+
+## L0098 scope='C0.2.2' tags=ExtCall,Resume,generated-IH,simp-timeout,rewrite_tac
+shape: A helper proof times out at `simp[Once well_typed_expr_def]` after adding nearby ExtCall boundary lemmas, before reaching the target Resume.
+pattern: Use `rewrite_tac[Once well_typed_expr_def]` for the exact one-step well-typed expression unfold instead of invoking the full simplifier over a large ExtCall/IH context. This preserves the intended proof state and avoids unrelated simplifier search.
+works_when: The needed step is only unfolding `well_typed_expr_def` once for a known constructor and no assumption-driven simplification is required.
+evidence:
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3333_t001
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3336_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml

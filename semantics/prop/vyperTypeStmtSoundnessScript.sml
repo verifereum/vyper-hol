@@ -10400,6 +10400,17 @@ Proof
   Cases_on `y` >> gvs[no_type_error_result_def]
 QED
 
+Theorem well_typed_opt_THE[local]:
+  !env drv. well_typed_opt env drv /\ IS_SOME drv ==> well_typed_expr env (THE drv)
+Proof
+  rpt strip_tac >>
+  Cases_on `drv` >- gvs[optionTheory.IS_SOME_EXISTS] >>
+  rename1 `SOME drv_expr` >>
+  qpat_x_assum `well_typed_opt env (SOME drv_expr)` mp_tac >>
+  rewrite_tac[Once well_typed_expr_def] >>
+  simp[]
+QED
+
 Theorem extcall_expr_sound_from_generated_ih[local]:
   !cx env st res st' is_static func_name arg_types ret_type es drv.
     env_consistent env cx st /\ state_well_typed st /\
@@ -10432,7 +10443,7 @@ Theorem extcall_expr_sound_from_generated_ih[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `well_typed_expr _ _` mp_tac >>
-  simp[Once well_typed_expr_def] >> strip_tac >>
+  rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
                        check_def, assert_def, return_def, raise_def,
