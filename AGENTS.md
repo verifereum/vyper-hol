@@ -15,7 +15,7 @@ Prefer using dedicated tools instead of bash operation:
 - **Read tool** for ALL file reading (not `cat`, `head`, `tail`, `less`)
 - **Grep tool** for searching file contents (not `grep`, `rg`, or `Search` with paths)
 - **Write/Edit tools** for file modifications (not `echo`, `sed`, `awk`)
-- **`holbuild`** for HOL operations/builds.
+- **`holbuild`** for HOL operations/builds and proof feedback when authorized. The old HOL4 MCP tools (`hol_send`, `hol_file_init`, `hol_state_at`, MCP `holmake`, etc.) are deprecated and should not be used.
 
 ## Completion Standard
 
@@ -87,6 +87,17 @@ Use direct script edits plus `holbuild` for HOL proof development and build vali
 
 **No interactive mode:** Do not use interactive proof-state workflows, including `g()`, `e()`, or `p()`.
 
+Use **holbuild** for HOL4 build/proof feedback when authorized by the user.
+
+The old HOL4 MCP workflow is deprecated. Do **not** use `hol_send`, `hol_file_init`,
+`hol_state_at`, or MCP `holmake` for proof development.
+
+When proof-tool use is authorized, prefer a holbuild-centered workflow:
+1. Edit the relevant theory file.
+2. Run holbuild/build feedback on the file or target theory.
+3. Use the reported goal/error context to refine the proof.
+4. Keep changes small and re-check frequently.
+
 **Never use `--skip-goalfrag`:** It is not allowed.
 
 ### File Conventions (repo-specific)
@@ -104,6 +115,8 @@ The proofs should not depend on automatically generated variable names. Use `ren
 When generalizing a definition (adding parameters), the general version gets the clean name. If the old simpler version is kept as a helper, it gets a suffix (`_simple`, `_helper`). Never the reverse (`_gen`, `_ctx`). Top-level API = shortest, clearest name.
 
 ## HOL4 Tactics Reference
+
+For monadic/list preservation proofs and other branch-heavy HOL4 scripts, also read `docs/HOL4_PROOF_CONTROL_LESSONS.md`. It records project-specific lessons about controlling parallel subgoals, preserving specialized facts, and using `drule_all` safely.
 
 ### Fast tactics (prefer these)
 - `simp[thm]` - simplification
@@ -208,12 +221,10 @@ Re-use existing theorems as much as possible. Before creating a new helper lemma
 
 ## Reference Repos
 
-$SOURCES is where the user keeps reference repos, often $HOME but you may need to ask for clarification.
+- `vyper-ref/` - Vyper compiler source (reference for Venom IR semantics)
+- `~/verifereum/` - Verifereum EVM formalization (provides word256, memory model)
 
-- `$HOME/vyper/` - Vyper compiler source (reference for Venom IR semantics)
-- `$HOME/verifereum/` - Verifereum EVM formalization (provides word256, memory model)
-
-If these are missing, ask the user to provide access.
+If these symlinks are missing, ask the operator to provide access.
 
 ## Proof Strategy
 
@@ -244,40 +255,40 @@ When proving properties about `ALOOKUP` on mapped or filtered lists:
 
 1. **Use abbreviations systematically** - Abbreviate complex terms to make proof structure clear:
    ```sml
-   >> qmatch_goalsub_abbrev_tac`option_CASE alo`
-   >> `alo = SOME z` suffices_by simp[]
+   \\ qmatch_goalsub_abbrev_tac`option_CASE alo`
+   \\ `alo = SOME z` suffices_by simp[]
    ```
 
 2. **Show function equality for MAP** - When using `ALOOKUP_MAP_KEY_INJ`:
    ```sml
-   >> qmatch_goalsub_abbrev_tac`MAP fi`
-   >> `fi = $, src_id ## I` by simp[Abbr`fi`, FUN_EQ_THM, FORALL_PROD]
-   >> pop_assum SUBST_ALL_TAC
+   \\ qmatch_goalsub_abbrev_tac`MAP fi`
+   \\ `fi = $, src_id ## I` by simp[Abbr`fi`, FUN_EQ_THM, FORALL_PROD]
+   \\ pop_assum SUBST_ALL_TAC
    ```
 
 3. **Substitute in the right direction** - Use `SUBST1_TAC o SYM` when needed:
    ```sml
-   >> pop_assum $ SUBST1_TAC o SYM
+   \\ pop_assum $ SUBST1_TAC o SYM
    ```
 
 4. **For drule with extra quantifiers** - Use `drule_all_then` with `qspec_then`:
    ```sml
-   >> drule_all_then(qspec_then`src_id_opt`strip_assume_tac) lookup_callable_function_eq_ALOOKUP_module_fns
+   \\ drule_all_then(qspec_then`src_id_opt`strip_assume_tac) lookup_callable_function_eq_ALOOKUP_module_fns
    ```
 
 5. **Chain drules properly** - Use `drule_at_then`:
    ```sml
-   >> drule_at_then Any drule ALOOKUP_FLAT_MAP_module_fns
+   \\ drule_at_then Any drule ALOOKUP_FLAT_MAP_module_fns
    ```
 
 6. **For filter equality** - Abbreviate predicate, prove equality, substitute:
    ```sml
-   >> qmatch_goalsub_abbrev_tac`ALOOKUP (FILTER P ls) k`
-   >> `P = λ(k,v). ¬MEM k cx.stk` by simp[Abbr`P`,FUN_EQ_THM,FORALL_PROD]
-   >> pop_assum SUBST_ALL_TAC
+   \\ qmatch_goalsub_abbrev_tac`ALOOKUP (FILTER P ls) k`
+   \\ `P = λ(k,v). ¬MEM k cx.stk` by simp[Abbr`P`,FUN_EQ_THM,FORALL_PROD]
+   \\ pop_assum SUBST_ALL_TAC
    ```
 
-7. **Avoid `rw[]` too early** - Use `rpt gen_tac >> simp[]` then `strip_tac` to control when hypotheses are introduced
+7. **Avoid `rw[]` too early** - Use `rpt gen_tac \\ simp[]` then `strip_tac` to control when hypotheses are introduced
 
 8. **Use `reverse strip_tac`** - To handle disjunctive cases in the natural order after `CaseEq"option"`
 
@@ -306,7 +317,7 @@ Libs
 
 ## Code Simplification
 
-- **Consolidate similar theorems:** If multiple cases have the same proof, make one theorem with /\
+- **Consolidate similar theorems:** If 12 cases have the same proof, make one theorem with /\
 - **Derive corollaries:** Prove general case, derive specifics via `metis_tac[general_thm]`
 - **Reuse theorems:** `drule_all existing_thm` instead of re-proving inline
 - **Combine case tactics:** If all case branches have identical proofs, apply tactic after case split

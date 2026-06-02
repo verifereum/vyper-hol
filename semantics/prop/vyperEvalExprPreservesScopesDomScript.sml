@@ -712,6 +712,31 @@ Proof
   \\ imp_res_tac release_nonreentrant_lock_scopes \\ gvs[]
 QED
 
+Theorem finally_set_scopes_scopes[local]:
+  ∀f prev s res s'.
+    finally f (set_scopes prev) s = (res,s') ⇒
+    MAP FDOM s'.scopes = MAP FDOM prev
+Proof
+  rw[finally_def, bind_def, ignore_bind_def,
+     set_scopes_def, return_def, raise_def, AllCaseEqs()]
+  \\ gvs[]
+QED
+
+Theorem lock_acquire_cond_scopes_dom[local]:
+  ∀nr slot_opt addr is_view st res st'.
+    (if nr then
+       case slot_opt of
+       | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | SOME slot => acquire_nonreentrant_lock addr slot is_view
+     else return ()) st = (res,st') ⇒
+    MAP FDOM st'.scopes = MAP FDOM st.scopes
+Proof
+  rpt gen_tac \\ strip_tac
+  \\ Cases_on `nr` \\ gvs[return_def]
+  \\ Cases_on `slot_opt` \\ gvs[raise_def]
+  \\ imp_res_tac acquire_nonreentrant_lock_scopes \\ gvs[]
+QED
+
 Resume eval_mutual_preserves_scopes_dom[IntCall]:
   rpt gen_tac
   \\ strip_tac
@@ -765,15 +790,18 @@ Resume eval_mutual_preserves_scopes_dom[IntCall]:
   \\ BasicProvers.TOP_CASE_TAC
   \\ first_x_assum $ funpow 2 drule_then drule
   \\ simp[]
-  \\ disch_then $ funpow 2 drule_then drule
   \\ strip_tac
+  \\ gvs[get_scopes_def, return_def]
+  \\ rewrite_tac[bind_def, ignore_bind_def]
+  \\ BasicProvers.TOP_CASE_TAC
   \\ reverse BasicProvers.TOP_CASE_TAC
-  >- (
-    imp_res_tac check_scopes >> imp_res_tac type_check_scopes
-    \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
-    \\ rw[] \\ gvs[])
-  (* Expand get_scopes — always succeeds, simplify directly *)
-  \\ SIMP_TAC std_ss [bind_def, ignore_bind_def, get_scopes_def, return_def]
+  >- (strip_tac >> gvs[]
+      >> drule finally_set_scopes_scopes >> simp[] >> strip_tac
+      >> imp_res_tac check_scopes >> imp_res_tac type_check_scopes
+      >> imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
+      >> gvs[])
+  \\ `MAP FDOM r'⁵'.scopes = MAP FDOM r'⁴'.scopes` by
+       (drule finally_set_scopes_scopes >> simp[])
   (* Peel evaluate_type *)
   \\ rewrite_tac[bind_def, ignore_bind_def]
   \\ BasicProvers.TOP_CASE_TAC
@@ -790,19 +818,20 @@ Resume eval_mutual_preserves_scopes_dom[IntCall]:
       \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
       \\ imp_res_tac check_scopes >> imp_res_tac type_check_scopes
       \\ rw[] \\ gvs[])
-  (* Peel lock acquire — COND_RATOR already applied above *)
+  (* Peel lock acquire; error branch preserves scope domains by primitive lock helper. *)
+  \\ rewrite_tac[bind_def, ignore_bind_def]
   \\ BasicProvers.TOP_CASE_TAC
-  \\ reverse BasicProvers.TOP_CASE_TAC
-  >- (rpt(qpat_x_assum`!x. _`kall_tac)
-      \\ strip_tac \\ gvs[]
-      \\ Cases_on `nr` \\ gvs[return_def]
-      \\ Cases_on `cx.nonreentrant_slot` \\ gvs[raise_def]
+  \\ reverse (Cases_on `q` \\ gvs[AllCaseEqs()])
+  >- (strip_tac \\ gvs[]
+      \\ imp_res_tac lock_acquire_cond_scopes_dom
       \\ imp_res_tac acquire_nonreentrant_lock_scopes
       \\ imp_res_tac lift_option_type_scopes
-      \\ imp_res_tac check_scopes >> imp_res_tac type_check_scopes \\ gvs[])
+      \\ imp_res_tac check_scopes >> imp_res_tac type_check_scopes
+      \\ gvs[])
   (* Expand push_function — always succeeds — and pop_function *)
   \\ simp[push_function_def, return_def, pop_function_def]
   (* Now goal has: case finally (...) (bind (set_scopes prev) ...) s of ... *)
+  \\ rewrite_tac[bind_def, ignore_bind_def]
   \\ BasicProvers.TOP_CASE_TAC
   \\ drule finally_intcall_handler_scopes
   \\ reverse BasicProvers.TOP_CASE_TAC

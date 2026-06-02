@@ -553,6 +553,20 @@ Proof
   simp[value_has_type_def]
 QED
 
+Theorem vht_ArrayTV_Fixed[local]:
+  value_has_type (ArrayTV tv (Fixed n)) (ArrayV (SArrayV sparse)) <=>
+  SORTED $< (MAP FST sparse) /\ sparse_has_type tv n sparse
+Proof
+  simp[value_has_type_def]
+QED
+
+Theorem vht_ArrayTV_Dynamic[local]:
+  value_has_type (ArrayTV tv (Dynamic max)) (ArrayV (DynArrayV vs)) <=>
+  LENGTH vs <= max /\ all_have_type tv vs
+Proof
+  simp[value_has_type_def]
+QED
+
 (* Floor/Ceil: decimal division stays within int256 bounds *)
 Theorem floor_decimal_in_int256_bounds[local]:
   within_int_bound (Signed 168) i ==>
@@ -702,6 +716,18 @@ Proof
   rpt (FULL_CASE_TAC >> gvs[])
 QED
 
+Theorem evaluate_type_ArrayT[local]:
+  !tenv t bd tv atv.
+    evaluate_type tenv t = SOME tv /\
+    evaluate_type tenv (ArrayT t bd) = SOME atv ==>
+    atv = ArrayTV tv bd
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `evaluate_type tenv (ArrayT t bd) = SOME atv` mp_tac >>
+  simp[Once evaluate_type_def, AllCaseEqs(), PULL_EXISTS] >>
+  rpt strip_tac >> gvs[]
+QED
+
 (* evaluate_concat_loop preserves value kind *)
 Theorem evaluate_concat_loop_string_typed[local]:
   !n v sa ba vs r.
@@ -801,6 +827,7 @@ Theorem evaluate_builtin_well_typed:
     evaluate_builtin cx acc ty bt vs = INL v /\
     well_typed_builtin_app ty bt arg_tys /\
     context_well_typed cx /\
+    accounts_well_typed acc /\
     LIST_REL (\v t. ?tyv. evaluate_type (get_tenv cx) t = SOME tyv /\
                           value_has_type tyv v) vs arg_tys /\
     IS_SOME (evaluate_type (get_tenv cx) ty) ==>
@@ -955,8 +982,107 @@ Resume evaluate_builtin_well_typed[Uint2Str]:
   gvs[vht_StringV, compatible_bound_def]
 QED
 
+Theorem evaluate_type_TupleT_values_have_types[local]:
+  !tenv ts tvs vs.
+    evaluate_type tenv (TupleT ts) = SOME (TupleTV tvs) /\
+    LIST_REL (\v t. ?tyv. evaluate_type tenv t = SOME tyv /\ value_has_type tyv v) vs ts ==>
+    values_have_types tvs vs
+Proof
+  rpt strip_tac >> simp[values_have_types_LIST_REL] >>
+  gvs[evaluate_type_def, AllCaseEqs(), evaluate_types_OPT_MMAP, OPT_MMAP_SOME_IFF,
+      LIST_REL_EL_EQN, EL_MAP, EVERY_EL] >>
+  rpt strip_tac >>
+  qpat_x_assum `!n. n < LENGTH ts ==> ?tyv. _` (qspec_then `n` mp_tac) >>
+  simp[] >> strip_tac >> simp[]
+QED
+
+Theorem LIST_REL_every_same_type_EVERY_vht[local]:
+  !tenv elem_ty tv ts vs.
+    evaluate_type tenv elem_ty = SOME tv /\
+    EVERY ($= elem_ty) ts /\
+    LIST_REL (\v t. ?tyv. evaluate_type tenv t = SOME tyv /\ value_has_type tyv v) vs ts ==>
+    EVERY (value_has_type tv) vs
+Proof
+  Induct_on `ts` >> Cases_on `vs` >> simp[LIST_REL_CONS1] >>
+  metis_tac[optionTheory.SOME_11]
+QED
+
+Theorem evaluate_type_TupleT_TupleTV[local]:
+  !tenv ts x. evaluate_type tenv (TupleT ts) = SOME x ==> ?tvs. x = TupleTV tvs
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `_ = SOME x` mp_tac >>
+  simp[Once evaluate_type_def] >>
+  CASE_TAC >> simp[] >>
+  strip_tac >> qexists_tac `x'` >> simp[]
+QED
+
+Theorem make_array_dynamic_has_type[local]:
+  !tenv tv n vs arg_tys elem_ty.
+    evaluate_type tenv (ArrayT elem_ty (Dynamic n)) = SOME (ArrayTV tv (Dynamic n)) /\
+    evaluate_type tenv elem_ty = SOME tv /\
+    LIST_REL (\v t. ?tyv. evaluate_type tenv t = SOME tyv /\ value_has_type tyv v) vs arg_tys /\
+    EVERY ($= elem_ty) arg_tys /\
+    LENGTH arg_tys <= n ==>
+    value_has_type (ArrayTV tv (Dynamic n)) (ArrayV (DynArrayV vs))
+Proof
+  rpt strip_tac >>
+  gvs[vht_ArrayTV_Dynamic, all_have_type_EVERY] >>
+  conj_tac >- (drule LIST_REL_LENGTH >> simp[]) >>
+  irule LIST_REL_every_same_type_EVERY_vht >> qexistsl [`elem_ty`, `tenv`, `arg_tys`] >> simp[]
+QED
+Theorem make_array_fixed_has_type[local]:
+  !tenv tv n vs arg_tys elem_ty.
+    evaluate_type tenv (ArrayT elem_ty (Fixed n)) = SOME (ArrayTV tv (Fixed n)) /\
+    evaluate_type tenv elem_ty = SOME tv /\
+    LIST_REL (\v t. ?tyv. evaluate_type tenv t = SOME tyv /\ value_has_type tyv v) vs arg_tys /\
+    EVERY ($= elem_ty) arg_tys /\
+    n = LENGTH arg_tys ==>
+    value_has_type (ArrayTV tv (Fixed n)) (ArrayV (SArrayV (enumerate_static_array (default_value tv) 0 vs)))
+Proof
+  rpt strip_tac >>
+  gvs[make_array_value_def, vht_ArrayTV_Fixed] >>
+  conj_tac >- (irule SORTED_MAP_FST_enumerate_static_array >> simp[]) >>
+  ho_match_mp_tac sparse_has_type_enumerate >>
+  conj_tac >- (irule LIST_REL_every_same_type_EVERY_vht >> qexistsl [`elem_ty`, `tenv`, `arg_tys`] >> simp[]) >>
+  conj_tac >- (drule LIST_REL_LENGTH >> simp[]) >>
+  simp[]
+QED
+
 Resume evaluate_builtin_well_typed[MakeArray]:
-  gvs[well_typed_builtin_app_def]
+  gvs[well_typed_builtin_app_def, evaluate_builtin_def, AllCaseEqs()]
+  >- (
+    Cases_on `evaluate_type (get_tenv cx) (TupleT arg_tys)` >> gvs[] >>
+    drule evaluate_type_TupleT_TupleTV >> strip_tac >>
+    gvs[] >>
+    simp[value_has_type_def] >>
+    irule evaluate_type_TupleT_values_have_types >>
+    qexistsl [`get_tenv cx`, `arg_tys`] >> simp[])
+  >- (
+    qexists `ArrayTV tv b` >>
+    conj_tac >- (
+      Cases_on `evaluate_type (get_tenv cx) (ArrayT t b)` >> gvs[] >>
+      metis_tac[evaluate_type_ArrayT]
+    ) >>
+    Cases_on `b` >> gvs[make_array_value_def]
+    >- (
+      gvs[vht_ArrayTV_Fixed, compatible_bound_def] >>
+      conj_tac >- (irule SORTED_MAP_FST_enumerate_static_array >> simp[]) >>
+      ho_match_mp_tac sparse_has_type_enumerate >>
+      conj_tac >- (
+        irule LIST_REL_every_same_type_EVERY_vht >>
+        qexistsl [`t`, `get_tenv cx`, `arg_tys`] >> simp[]
+      ) >>
+      conj_tac >- (drule LIST_REL_LENGTH >> simp[]) >>
+      simp[]
+    )
+    >- (
+      gvs[vht_ArrayTV_Dynamic, compatible_bound_def, all_have_type_EVERY] >>
+      conj_tac >- (drule LIST_REL_LENGTH >> simp[]) >>
+      irule LIST_REL_every_same_type_EVERY_vht >>
+      qexistsl [`t`, `get_tenv cx`, `arg_tys`] >> simp[]
+    ))
+
 QED
 
 Resume evaluate_builtin_well_typed[Ceil]:
@@ -1090,7 +1216,24 @@ Resume evaluate_builtin_well_typed[Env]:
 QED
 
 Resume evaluate_builtin_well_typed[Acc]:
-  gvs[well_typed_builtin_app_def]
+  gvs[well_typed_builtin_app_def, evaluate_builtin_def, AllCaseEqs()] >>
+  Cases_on `vs` >> gvs[LIST_REL_CONS1] >>
+  Cases_on `h` >> gvs[evaluate_builtin_def, AllCaseEqs()] >>
+  Cases_on `a` >> gvs[evaluate_account_op_def, account_item_type_def] >>
+  imp_res_tac evaluate_type_BaseT >> gvs[] >>
+  rpt conj_tac >>
+  TRY (simp[value_has_type_def] >> NO_TAC) >>
+  TRY (simp[vht_BytesV_Fixed, LENGTH_Keccak_256_w64] >> NO_TAC) >>
+  TRY (
+    simp[vht_IntV_UintT] >>
+    fs[accounts_well_typed_def] >>
+    first_x_assum (qspec_then `word_of_bytes_be l` mp_tac) >>
+    simp[account_well_typed_def] >> intLib.ARITH_TAC >>
+    NO_TAC) >>
+  simp[vht_BytesV_Dynamic, compatible_bound_def] >>
+  fs[accounts_well_typed_def] >>
+  first_x_assum (qspec_then `word_of_bytes_be l` mp_tac) >>
+  simp[account_well_typed_def]
 QED
 
 Resume evaluate_builtin_well_typed[MethodId]:

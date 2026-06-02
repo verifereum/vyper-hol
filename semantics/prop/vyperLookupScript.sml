@@ -532,13 +532,13 @@ QED
 
 Theorem assign_target_name_update:
   ∀cx st n ty bop v v'.
-    lookup_name st n = SOME v ∧ var_assignable st n ∧
+    lookup_name_typed st n = SOME entry ∧ var_assignable st n ∧
     evaluate_binop (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
-                   NoneTV bop v v' = INL new_v ⇒
+                   entry.type bop entry.value v' = INL new_v ⇒
     assign_target cx (BaseTargetV (ScopedVar n) []) (Update ty bop v') st =
     (INL NONE, update_name st n new_v)
 Proof
-  rw[lookup_name_SOME, var_assignable_def] >>
+  rw[var_assignable_def] >>
   gvs[lookup_name_typed_def] >>
   `IS_SOME (find_containing_scope (string_to_num n) st.scopes)`
     by (irule lookup_scopes_find_containing >> simp[]) >>
@@ -585,7 +585,12 @@ Proof
       rename1 `ArrayV av` >> Cases_on `av` >> gvs[pop_element_def, popped_value_def])
   (* step case *)
   >> rpt gen_tac >>
-  Cases_on `h` >> simp[assign_subscripts_def, evaluate_subscripts_def] >>
+  Cases_on `h` >> simp[assign_subscripts_def, evaluate_subscripts_def]
+  >- (Cases_on `v` >> simp[assign_subscripts_def, evaluate_subscripts_def] >>
+      simp[AllCaseEqs()] >> strip_tac >> gvs[] >>
+      Cases_on `a` >>
+      gvs[assign_subscripts_def, evaluate_subscripts_def] >>
+      simp[AllCaseEqs()] >> gvs[AllCaseEqs()]) >>
   simp[AllCaseEqs()] >> strip_tac >> gvs[] >>
   (* AttrSubscript: case split on the value being subscripted *)
   Cases_on `a` >>
