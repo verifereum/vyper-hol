@@ -609,13 +609,12 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260601T220715Z_m4090_t001
 - episode:E0207
 
-## L0135 scope='C0.4' tags=ExtCall,conditional_IH,suspend,generated-prefix
-shape: Static ExtCall mutual Resume has generated optional-driver IH guarded by the full ExtCall prefix; helper wants driver IH only at post-update tail.
-pattern: Do not try to turn the generated optional-driver IH into an unconditional premise at the outer call boundary. Keep the proof branch-local: split concrete ExtCall prefix operations, close error branches immediately, and apply a tail helper whose driver premise is conditional on `returnData = [] /\ IS_SOME drv` only after the success continuation has concrete `returnData`, `accounts'`, and `tStorage'` facts.
-works_when: Applies to `eval_all_type_sound_mutual[Expr_Call_ExtCall]` static/nonstatic branches where the evaluator induction generates an IH guarded by the monadic prefix and a driver condition; requires an existing conditional tail helper such as `extcall_success_continuation_sound_cond_driver_ih`.
+## L0136 scope='C0.4' tags=ExtCall,generated-prefix,Resume,manual-progress,proof-boundary
+shape: Static ExtCall mutual proof exposes a generated optional-driver premise before concrete `run_ext_call = SOME ...` tail facts.
+pattern: If direct tail work after `Cases_on run_ext_call` yields generated-prefix fanout, do not mine the prefix. A viable boundary is to inline/structure the static branch so the administrative generated-driver premise is discharged first, then leave/prove only the concrete ExtCall tail. Keep the generated premise opaque; source reality may move the remaining cheat from a separate `*_static_success` Resume into the parent static Resume.
+works_when: Applies to the static ExtCall mutual proof in `vyperTypeStmtSoundnessScript.sml` when the generated optional-driver IH is guarded by the monadic ExtCall prefix and the maintainer forbids broad prefix adapters.
 evidence:
-- episode:E0233
-- episode:E0239
-- episode:E0240
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m4485_t001
-- tool_output:TO_type_system_rewrite-20260602T090518Z_m4493_t001
+- episode:E0241
+- episode:E0244
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m4577_t001
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m4577_t003

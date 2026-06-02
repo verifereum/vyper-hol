@@ -71,6 +71,8 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C0.4.1 | proved |  | E0242 |  |
 | C0.4.2 | proved |  | E0243 |  |
 | C0.4.3 | stuck | risk_mismatch | E0241 | Call plan_oracle(mode='review', component_id='C0.4.3', evidence_ids=[...]) for a replacement/decomposition; do not continue tactical work on this component until the strategist repairs the plan. |
+| C0.4.3.a | proved |  | E0244 |  |
+| C0.4.3.b | proved |  | E0245 |  |
 | C0.5 | stuck | plan_incomplete | E0099 | Call `plan_oracle(mode='review', component_id='C0.5', ...)` to accept the premature-validation failure and repair scheduling/dependencies so C0.4.1 is next. |
 | C1.1 | proved |  | E0024 | Call plan_oracle(mode='review') for C1.1, then begin C1.2 if accepted. |
 | C1.1.1 | proved |  | E0012 |  |
@@ -2104,6 +2106,48 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 - `TO_type_system_rewrite-20260602T125148Z_m4538_t001` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260602T125148Z_m4553_t001` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260602T125148Z_m4555_t001` (use `read_tool_output` for exact output)
+
+## C0.4.3.a
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0244`
+- blocker: 
+- actual effort: 2 sessions, 2 msgs, 8 steps, 13 tools, 2 holbuild, 1,190,911 tok (1,188,105 in, 2,806 out, 1,015,936 cached), 112.5s, $1.452993
+
+### Attempts / Evidence
+
+- `E0244` (proved, , actual effort: 2 sessions, 2 msgs, 8 steps, 13 tools, 2 holbuild, 1,190,911 tok (1,188,105 in, 2,806 out, 1,015,936 cached), 112.5s, $1.452993)
+  - Reviewed maintainer's manual progress in `Expr_Call_ExtCall_result_static`: source now inlines the static branch, splits `run_ext_call`, rewrites the concrete tail enough to pass the generated optional-driver premise using the live generated IH, then leaves only a downstream concrete-tail `cheat`. -> This satisfies C0.4.3.a's probe: the administrative generated optional-driver premise is no longer blocking, and focused `vyperTypeStmtSoundnessTheory` builds with the remaining cheat after the passthrough. The remaining work is C0.4.3.c concrete `SOME` tail, not the generated-IH passthrough. (`TO_type_system_rewrite-20260602T195240Z_m4577_t001`, `TO_type_system_rewrite-20260602T195240Z_m4577_t003`)
+  - Checked git history for manual progress. -> Latest source commit `eb2633148 Make some progress on a cheat` modifies only `semantics/prop/vyperTypeStmtSoundnessScript.sml`, matching the manually reported progress; working tree has no tracked modifications, only pre-existing untracked legacy/temp files. (`TO_type_system_rewrite-20260602T195240Z_m4576_t001`, `TO_type_system_rewrite-20260602T195240Z_m4577_t002`, `TO_type_system_rewrite-20260602T195240Z_m4578_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260602T195240Z_m4577_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4577_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4577_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4578_t001` (use `read_tool_output` for exact output)
+
+## C0.4.3.b
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0245`
+- blocker: 
+- actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 97,842 tok (97,554 in, 288 out, 93,952 cached), 14.2s, $0.073626
+
+### Attempts / Evidence
+
+- `E0245` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 97,842 tok (97,554 in, 288 out, 93,952 cached), 14.2s, $0.073626)
+  - Focused `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` with existing `Expr_Call_ExtCall_static_run_none` subresume unchanged. -> Build completed successfully, confirming the carried-forward `run_ext_call = NONE` static branch remains referenced/proved and no source edits were needed for this component. (`TO_type_system_rewrite-20260602T195240Z_m4585_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260602T195240Z_m4585_t001` (use `read_tool_output` for exact output)
 
 ## C0.5
 

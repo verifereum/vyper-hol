@@ -2,68 +2,67 @@
 Updated: 2026-06-02
 
 ## Cursor
-- component: C0.4.2
-- status: ready
+- component: C0.4.3.a
+- status: blocked
 - active_file: semantics/prop/vyperTypeStmtSoundnessScript.sml
-- next_action: First call plan_oracle(mode='review', component_id='C0.4.2', evidence_ids=['TO_type_system_rewrite-20260602T125148Z_m4517_t001','TO_type_system_rewrite-20260602T125148Z_m4517_t002','TO_type_system_rewrite-20260602T125148Z_m4517_t003'], planning_reason='review closed episode E0240'). If accepted, begin Oracle-next C0.4.3 and work only on the remaining `SOME result` tail cheat in `Expr_Call_ExtCall_result_static_success`.
-- expected_goal_shape: After C0.4.3 begins, expected local source shape is `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result_static_success]` with calldata/empty-code/run-none subresumes already proved and a single intentional `cheat` after `Cases_on run_ext_call ...` for the `SOME result` branch. The desired proof should split the concrete result tuple, close `success = F` as an assert/runtime-error branch, and use `extcall_success_continuation_sound_cond_driver_ih` in the `success = T` branch with the generated driver IH guarded by `returnData = [] /\ IS_SOME drv`.
-- verify_with: holbuild(targets=["vyperSemanticsHolTheory"], timeout=600)
+- next_action: First call plan_oracle(mode='review', component_id='C0.4.3.a', evidence_ids=['TO_type_system_rewrite-20260602T195240Z_m4577_t001','TO_type_system_rewrite-20260602T195240Z_m4577_t003','TO_type_system_rewrite-20260602T195240Z_m4577_t002','TO_type_system_rewrite-20260602T195240Z_m4578_t001'], planning_reason='review closed episode E0244'). If accepted, query_plan; expected next executable leaf is C0.4.3.b or C0.4.3.c depending on strategist scheduling.
+- expected_goal_shape: Source now has manual progress in `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result_static]` (not a separate `Expr_Call_ExtCall_result_static_success` block): static branch is inlined, `run_ext_call ...` is split, the generated optional-driver premise has been discharged, and the remaining intentional `cheat` is after `strip_tac` around line 17803 in the concrete ExtCall `SOME` tail. `vyperTypeStmtSoundnessTheory` builds with that remaining cheat.
+- verify_with: holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)
 
 ## If This Fails
-- If the review rejects E0240, follow the updated PLAN. If the C0.4.3 proof again exposes a many-goal generated optional-driver prefix before concrete `SOME (success,returnData,accounts',tStorage')` facts, stop immediately and close/checkpoint with risk_mismatch evidence; do not use broad generated-prefix simplification or adapter theorems. If holbuild/tooling fails outside active proof obligations, checkpoint_progress with tool_limit evidence and stop.
+- If review rejects E0244, follow updated PLAN. If the next concrete tail proof again exposes generated-prefix obligations before concrete tuple/success facts, checkpoint or close with risk_mismatch evidence; do not use broad `gvs[]`/`AllCaseEqs()` or generated-prefix adapter theorems. If focused build fails outside active obligations, checkpoint_progress with tool_limit evidence and stop.
 
 ## Do Not Retry
-- Apply `extcall_static_projected_sound` or `extcall_static_projected_state_well_typed` at the outer `Expr_Call_ExtCall_result_static` Resume boundary.: E0233 showed the required unconditional compact driver IH is unavailable there; the live IH is generated-prefix guarded.
+- Apply `extcall_static_projected_sound` or `extcall_static_projected_state_well_typed` at the outer static ExtCall Resume boundary.: E0233 showed the required unconditional compact driver IH is unavailable there; the live IH is generated-prefix guarded.
   - evidence: episode:E0233
   - evidence: tool_output:TO_type_system_rewrite-20260601T220715Z_m4485_t001
-- Transcribe the old `extcall_static_projected_sound` tail immediately after `Cases_on run_ext_call ...` and expect `(do _ od) args_st = (res,st')` in the top goal.: E0232 showed that path exposes 9 generated-prefix goals before concrete success facts; it is the forbidden boundary/fanout path.
+- Transcribe the old projected-tail skeleton immediately after `Cases_on run_ext_call` and expect a single concrete `SOME result` branch.: E0232/E0241 showed that old boundary exposes 9 generated-prefix goals before concrete success facts; manual progress has now changed the source boundary instead.
   - evidence: episode:E0232
-  - evidence: tool_output:TO_type_system_rewrite-20260601T220715Z_m4464_t001
-- Use broad `simp`/`gvs`/`AllCaseEqs()` or a long generated-prefix adapter theorem to mine the optional-driver premise.: Maintainer clarification and current PLAN forbid generated-prefix mining/adapters; if helper application requires this, close/escalate as proof-interface mismatch.
-  - evidence: episode:E0232
-  - evidence: episode:E0233
-  - evidence: plan:C0.4
-- Proceed to C0.5/C0.6 before C0.4.3/C0.4.4 close static ExtCall.: Static ExtCall remains the scheduled blocker; C0.5+ are queued downstream and should wait until the static success tail and cleanup are done/reviewed.
-  - evidence: tool_output:TO_type_system_rewrite-20260602T125148Z_m4519_t003
+  - evidence: episode:E0241
+  - evidence: tool_output:TO_type_system_rewrite-20260602T125148Z_m4534_t001
+- Use broad `gvs[]`, `AllCaseEqs()`, or generated-prefix adapter theorems to mine the optional-driver premise.: Forbidden by task/PLAN and empirically timed out on the large generated-prefix state.
+  - evidence: episode:E0241
+  - evidence: tool_output:TO_type_system_rewrite-20260602T125148Z_m4553_t001
+  - evidence: plan:C0.4.3.a
+- Continue using the old `Expr_Call_ExtCall_result_static_success` Resume location as the active source target without checking current source.: Manual commit `eb2633148` inlined/changed the static branch; the remaining cheat is now in `Expr_Call_ExtCall_result_static` around line 17803.
+  - evidence: tool_output:TO_type_system_rewrite-20260602T195240Z_m4577_t001
+  - evidence: tool_output:TO_type_system_rewrite-20260602T195240Z_m4577_t002
 - Stage or commit `semantics/prop/LEARNINGS_type_system_rewrite.legacy.md` or `semantics/prop/tmp_helper.txt`.: They are pre-existing untracked artifacts unrelated to task-owned proof progress.
-  - evidence: tool_output:TO_type_system_rewrite-20260602T125148Z_m4513_t001
+  - evidence: tool_output:TO_type_system_rewrite-20260602T195240Z_m4576_t001
 
 ## Reflection
 ### Tunnel Vision Check
-- Outside-the-box approach now authorized but not yet executed: consume the generated optional-driver IH exactly inside the branch-local concrete success tail, not by trying to create an unconditional driver theorem or applying the old projected helper at the outer branch.
-- Do not optimize the old `extcall_static_projected_sound` consumer interface; E0233 proved it mismatches the mutual Resume boundary. The right abstraction for next work is the conditional tail helper `extcall_success_continuation_sound_cond_driver_ih`.
-- PLAN decomposition is currently plausible again: C0.4.1 audited the helper/prefix, C0.4.2 confirmed prefix error subresumes are already proved, and C0.4.3 owns only the concrete success/revert tail.
-- If C0.4.3 needs copied/generated prefix assumptions in bulk, that is a helper-boundary smell, not a tactic challenge. Escalate rather than building a long adapter.
-- A fresh expert should first inspect the exact assumptions at the `SOME result` branch and ask whether the generated driver IH antecedent can be discharged from live branch facts without broad `gvs` or `AllCaseEqs()`.
+- Manual progress changed the proof boundary: the static ExtCall branch is now inlined in `Expr_Call_ExtCall_result_static`; do not assume the old `Expr_Call_ExtCall_result_static_success` Resume still exists.
+- Outside-the-box approach that worked: do not force a separate static-success Resume boundary; inline enough of the branch to discharge the generated optional-driver premise before the concrete tail.
+- The PLAN decomposition is plausible after E0244, but it may need the strategist to mark C0.4.3.a done and adjust C0.4.3.b/c to the new source shape.
+- Fresh expert should first inspect lines 17758--17804 and ask: is the remaining `cheat` purely concrete-tail soundness, or are there still hidden generated-premise obligations?
+- Avoid optimizing old projected helpers. The immediate issue is finishing the concrete tail after manual progress, not re-proving `extcall_static_projected_sound`.
 
 ### What Went Wrong
-- Earlier replacement strategy tried applying `extcall_static_projected_sound` at the outer `Expr_Call_ExtCall_result_static` boundary; E0233 showed the live driver IH was still a generated prefix implication, not the compact unconditional premise the helper needs.
-- Multiple sessions were blocked by API holbuild tactic-timeout issues in unrelated dependencies; these are now resolved by dependency proof edits, and `vyperSemanticsHolTheory` builds through the API.
-- C0.4.2 in this session was audit/proof-status work, not a source edit: the three static prefix error subresumes were already proved in the restored baseline, while the static `SOME result` tail cheat remains for C0.4.3.
+- Earlier C0.4.3 assumed the concrete `SOME` tail appeared immediately after `Cases_on run_ext_call`; E0241 showed a large generated optional-driver premise came first.
+- I initially retried direct assumption acceptance (`first_assum MATCH_ACCEPT_TAC`) in the old source shape; it failed because the exact source boundary still exposed the generated premise as a separate top goal with noisy assumptions.
+- Manual progress in commit `eb2633148` made the actual proof-state boundary better: static branch is inlined and the generated premise is discharged before the remaining tail cheat.
 
 ### Ignored Signals
-- The earlier E0232 failure already showed the inner `run_ext_call` split could fan out into generated-prefix obligations; the current PLAN addresses this by only proving error subresumes first and leaving the concrete success tail to a conditional-IH strategy.
-- Do not ignore the maintainer restriction against broad generated-prefix mining: even if a simplifier variant seems tempting, it would violate both PLAN and task clarification.
-- Git status includes only task memory changes plus pre-existing untracked artifacts; do not stage `LEARNINGS_type_system_rewrite.legacy.md` or `tmp_helper.txt`.
+- E0232/E0241 already showed the branch split produced 9 subgoals and a generated-prefix premise; this was a decomposition signal, not a cue to search for stronger simplifiers.
+- The user's manual-progress note meant source reality could have superseded STATE/PLAN wording; I checked the source and found the old `Expr_Call_ExtCall_result_static_success` block had indeed been replaced/merged.
+- Pre-existing untracked `semantics/prop/LEARNINGS_type_system_rewrite.legacy.md` and `semantics/prop/tmp_helper.txt` remain unrelated and must not be staged.
 
 ### Strategy Adjustments
-- Next session must review E0240 with the strategist before beginning C0.4.3; query_plan says no beginable component until that review.
-- For C0.4.3, work branch-locally in `Expr_Call_ExtCall_result_static_success`; close `success = F` immediately, then for `success = T` derive `accounts_well_typed accounts'` via `run_ext_call_accounts_well_typed` and `runtime_consistent env cx args_st` from current facts before applying `extcall_success_continuation_sound_cond_driver_ih`.
-- Use `holbuild(targets=["vyperSemanticsHolTheory"], timeout=600)` for verification; it succeeded after tooling/dependency fixes.
-- After reviewed stable progress, inspect diff/status and commit only relevant tracked task-owned memory/source progress unsigned; never `git add -A`.
+- Next session should treat E0244 as the authoritative proof-status update: C0.4.3.a is closed proved pending required strategist review.
+- After review, continue only the scheduled leaf. For C0.4.3.c, work at the remaining `cheat` after `strip_tac` in the inlined static branch; do not resurrect the deleted static-success Resume boundary.
+- Use focused verification `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` first; aggregate `vyperSemanticsHolTheory` can be used after a stable source checkpoint.
+- If proving the tail, derive account well-typedness via `run_ext_call_accounts_well_typed`, runtime consistency from `env_consistent/state_well_typed/accounts_well_typed` facts, and use `extcall_after_state_update_tail_sound` or the existing local tail helper pattern.
 
 ### Oracle Feedback
-- Held: strategist review after E0233 correctly replaced the invalid outer projected-helper plan with the branch-local conditional-driver tail plan.
-- Held: C0.4.1 audit plan prevented re-entering the failed outer-boundary strategy and verified the helper/prefix before new proof edits.
-- Held: C0.4.2 was low-risk because source already had proved static prefix error subresumes; E0240 captured that only the `SOME result` tail remains.
-- Still pending: E0240 has not yet received the required plan_oracle review because handoff interrupted immediately after closing it.
+- Held: strategist's E0241 replacement insight that generated-IH passthrough must precede concrete-tail work was correct; manual progress appears to implement that.
+- Missed/source drift: PLAN still mentions `Expr_Call_ExtCall_result_static_success`, but source now inlines the static branch under `Expr_Call_ExtCall_result_static`; strategist review should reconcile wording with source reality.
+- Held: maintaining prefix error subresumes remains valid; `Expr_Call_ExtCall_static_run_none` is still present and builds.
 
 ## Evidence Pointers
-- episode:E0233 - outer projected-helper strategy failed; driver IH remained generated-prefix guarded at outer static Resume
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m4485_t001 - exact FAIL probe showing generated prefix IH at outer static boundary
-- episode:E0239 - C0.4.1 audit proved/reviewed; helper and prefix restored and aggregate build succeeded
-- tool_output:TO_type_system_rewrite-20260602T125148Z_m4513_t003 - `vyperSemanticsHolTheory` build succeeded after tooling fixes
-- episode:E0240 - C0.4.2 closed proved; static calldata/empty-code/run-none subresumes already proved, success-tail cheat remains for C0.4.3
-- tool_output:TO_type_system_rewrite-20260602T125148Z_m4517_t001 - read of static ExtCall area showing prefix error subresumes and remaining success-tail cheat
-- tool_output:TO_type_system_rewrite-20260602T125148Z_m4517_t003 - aggregate build succeeded for C0.4.2 baseline
-- tool_output:TO_type_system_rewrite-20260602T125148Z_m4519_t003 - query_plan after E0240: next required action is plan_oracle review for C0.4.2, then C0.4.3
+- episode:E0244 - closed C0.4.3.a proved after reviewing manual source progress and focused build
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m4577_t001 - read of current static ExtCall source showing inlined branch and remaining tail cheat at line 17803
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m4577_t003 - focused `vyperTypeStmtSoundnessTheory` build succeeds with remaining intentional cheat
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m4577_t002 - git log shows manual source commit `eb2633148 Make some progress on a cheat`
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m4578_t001 - commit stat confirms manual progress only modified `semantics/prop/vyperTypeStmtSoundnessScript.sml`
+- episode:E0241 - previous old-boundary C0.4.3 attempt failed with generated-prefix fanout, motivating the replacement plan
