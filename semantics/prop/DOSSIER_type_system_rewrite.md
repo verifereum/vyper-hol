@@ -86,7 +86,8 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C0.5.4.4 | stuck | risk_mismatch | E0262 | Call plan_oracle(mode='review', component_id='C0.5.4.4', evidence_ids=[...]) so the strategist can repair/decompose the success-boundary plan. |
 | C0.5.4.4.1 | proved |  | E0265 | Call plan_oracle(mode='review', component_id='C0.5.4.4.1', evidence_ids=[...]) and, if accepted, proceed to C0.5.4.4.2. |
 | C0.5.4.4.2 | proved |  | E0266 | Call plan_oracle(mode='review', component_id='C0.5.4.4.2', evidence_ids=[...]); if accepted, proceed to C0.5.4.5 to prove the success subresume using the exposed tail equality and generated IH without replaying the prefix. |
-| C0.5.4.5 | stuck | plan_incomplete | E0263 | Call plan_oracle(mode='review', component_id='C0.5.4.5', evidence_ids=[...]) to repair dependencies/frontier so C0.5.4.4.1 is next. |
+| C0.5.4.4.3 | proved |  | E0269 |  |
+| C0.5.4.5 | stuck | risk_mismatch | E0267 | Call plan_oracle(mode='review', component_id='C0.5.4.5', evidence_ids=[...]) to redesign the success-tail interface, likely requiring a smaller helper/boundary that avoids both broad context simplification and generated-prefix specialization. |
 | C0.5.5 | stuck | plan_incomplete | E0258 | Call plan_oracle(mode='review') for C0.5.5 and request scheduling repair so C0.5.4.4 becomes beginable before C0.5.4.5 and audits. |
 | C1.1 | proved |  | E0024 | Call plan_oracle(mode='review') for C1.1, then begin C1.2 if accepted. |
 | C1.1.1 | proved |  | E0012 |  |
@@ -2486,31 +2487,63 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 - `TO_type_system_rewrite-20260602T195240Z_m4892_t001` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260602T195240Z_m4893_t001` (use `read_tool_output` for exact output)
 
+## C0.5.4.4.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0269`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 16 steps, 16 tools, 7 holbuild, 1,031,858 tok (1,027,556 in, 4,302 out, 982,528 cached), 322.5s, $0.845464
+
+### Attempts / Evidence
+
+- `E0268` (progressed, other, actual effort: 1 sessions, 2 msgs, 26 steps, 27 tools, 11 holbuild, 3,708,672 tok (3,699,820 in, 8,852 out, 3,632,896 cached), 391.5s, $2.416628)
+  - Inserted proposed live-tenv wrapper theorem `extcall_after_state_update_tail_sound_cond_driver_ih_get_tenv` near the existing ExtCall tail helpers; statement uses `evaluate_abi_decode_return (get_tenv cx)` in the tail equation and rewrites `get_tenv cx = env.type_defs` via `runtime_consistent_get_tenv`. -> The statement parses and reaches the old helper application, but the proof is not yet complete. Current source is partial/broken: last edit changed the old-helper application to `MATCH_MP_TAC extcall_after_state_update_tail_sound_cond_driver_ih` and has not been rebuilt after that edit. Prior builds showed the wrapper proof can reduce to the old helper premises, but tactic structure with `irule`/explicit `qexistsl` triggered holbuild 'no goals' instrumentation failures or exposed premise ordering issues. (`TO_type_system_rewrite-20260602T195240Z_m4925_t001`, `TO_type_system_rewrite-20260602T195240Z_m4926_t001`, `TO_type_system_rewrite-20260602T195240Z_m4935_t001`, `TO_type_system_rewrite-20260602T195240Z_m4940_t001`, `TO_type_system_rewrite-20260602T195240Z_m4945_t001`, `TO_type_system_rewrite-20260602T195240Z_m4947_t001`)
+- `E0269` (proved, , actual effort: 1 sessions, 1 msgs, 16 steps, 16 tools, 7 holbuild, 1,031,858 tok (1,027,556 in, 4,302 out, 982,528 cached), 322.5s, $0.845464)
+  - Proved live-tenv wrapper by deriving get_tenv equality via runtime_consistent_get_tenv, explicitly specializing extcall_after_state_update_tail_sound_cond_driver_ih, discharging the old helper antecedent with controlled conj_tac and a small metis_tac for the optional-driver IH premise. -> Focused holbuild of vyperTypeStmtSoundnessTheory passed; wrapper theorem is installed and build-clean. (`TO_type_system_rewrite-20260602T195240Z_m4968_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260602T195240Z_m4968_t001` (use `read_tool_output` for exact output)
+
 ## C0.5.4.5
 
 ### Current Status
 
 - result: `stuck`
-- diagnosis: `plan_incomplete` This is a scheduling/dependency mismatch, not a theorem/proof failure. The safe next work is C0.5.4.4.1, then C0.5.4.4.2, then C0.5.4.5.
-- latest episode: `E0263`
-- blocker: Structured scheduler made C0.5.4.5 beginable before the newly planned C0.5.4.4.1 probe and C0.5.4.4.2 boundary install were completed. The C0.5.4.5 proof contract explicitly requires the compact optional-driver IH supplied by C0.5.4.4, which is not present in source.
-- actual effort: 1 sessions, 1 steps, 121,072 tok (120,486 in, 586 out, 117,120 cached), 15.1s, $0.092970
-- next: Call plan_oracle(mode='review', component_id='C0.5.4.5', evidence_ids=[...]) to repair dependencies/frontier so C0.5.4.4.1 is next.
+- diagnosis: `risk_mismatch` The suspicious source range is `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_nonstatic_success]` lines ~18006 onward. The plan's new direct-tail boundary exposes the generated IH and concrete tail equation, but it does not provide a small compact conditional driver IH consumable by `extcall_after_state_update_tail_sound_cond_driver_ih`; using the exposed generated IH still forces the forbidden prefix plumbing.
+- latest episode: `E0267`
+- blocker: C0.5.4.5 was rated Risk 2 and expected a direct success-tail proof from the exposed payload, but applying the existing tail helper still requires either nontrivial tail-equation rewriting in a huge context or forbidden long generated-prefix instantiation of the optional-driver IH. The current interface is not sufficiently compact for a straightforward proof.
+- actual effort: 1 sessions, 2 msgs, 21 steps, 22 tools, 7 holbuild, 2,340,992 tok (2,334,852 in, 6,140 out, 2,257,280 cached), 270.7s, $1.700700
+- next: Call plan_oracle(mode='review', component_id='C0.5.4.5', evidence_ids=[...]) to redesign the success-tail interface, likely requiring a smaller helper/boundary that avoids both broad context simplification and generated-prefix specialization.
 
 ### Attempts / Evidence
 
 - `E0263` (stuck, plan_incomplete, actual effort: 1 sessions, 1 steps, 121,072 tok (120,486 in, 586 out, 117,120 cached), 15.1s, $0.092970)
   - Began C0.5.4.5 only because structured gate made it Oracle next after a failed scheduling-repair request; inspected injected plan context before edits. -> Injected C0.5.4.5 plan itself says it depends on C0.5.4.4 supplying a compact optional-driver IH. C0.5.4.4.1/.2 are newly planned but not proved/installed, so attempting the success subresume now would violate the strategy and recreate the forbidden generated-prefix recovery. No source edits or builds were made under C0.5.4.5. (`TO_type_system_rewrite-20260602T195240Z_m4856_t001`, `TO_type_system_rewrite-20260602T195240Z_m4857_t001`, `TO_type_system_rewrite-20260602T195240Z_m4858_t001`)
+- `E0267` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 21 steps, 22 tools, 7 holbuild, 2,340,992 tok (2,334,852 in, 6,140 out, 2,257,280 cached), 270.7s, $1.700700)
+  - Attempted to prove `Expr_Call_ExtCall_nonstatic_success` by copying the static success-tail proof shape: derive `accounts_well_typed pr2`, `runtime_consistent env cx args_st`, rewrite `get_tenv`, then apply `extcall_after_state_update_tail_sound_cond_driver_ih`. -> The straightforward helper application failed at the tail-equation premise because the live equation uses `get_tenv cx` while the helper instance expects the rewritten `env.type_defs`; a naive `first_assum ACCEPT_TAC` could not solve it. This exposed that the downstream proof is not just a direct helper application. (`TO_type_system_rewrite-20260602T195240Z_m4905_t001`)
+  - Tried local fixes for the tail-equation premise using targeted `qpat_x_assum`/`simp` and `runtime_consistent_get_tenv`, avoiding broad prefix cleanup. -> Targeted simplification still failed or timed out on the large post-RESUME goal; `gvs[]` timed out at the 2.5s tactic limit on the large context. This is already a proof-interface smell for a Risk-2 component. (`TO_type_system_rewrite-20260602T195240Z_m4908_t001`, `TO_type_system_rewrite-20260602T195240Z_m4910_t001`, `TO_type_system_rewrite-20260602T195240Z_m4912_t001`, `TO_type_system_rewrite-20260602T195240Z_m4914_t001`)
+  - As a probe, attempted to use the exposed generated optional-driver IH by a long `qspecl_then` instantiation over the generated ExtCall prefix. -> This recreated the forbidden brittle generated-prefix plumbing called out by the plan/not-to-try guidance and failed with multiple subgoals. Source was restored to HEAD afterward and focused holbuild is clean. This confirms C0.5.4.5 is not straightforward under the current interface. (`TO_type_system_rewrite-20260602T195240Z_m4916_t001`, `TO_type_system_rewrite-20260602T195240Z_m4919_t001`, `TO_type_system_rewrite-20260602T195240Z_m4920_t002`)
 
 ### Ruled Out
 
-- Proving `Expr_Call_ExtCall_nonstatic_success` before compact driver IH boundary is installed.
+- Static success-tail proof copied directly with `extcall_after_state_update_tail_sound_cond_driver_ih` and `first_assum ACCEPT_TAC` for all premises.
+- Targeted simplification of the tail-equation premise using `runtime_consistent_get_tenv` inside the large post-RESUME context.
+- Long manual `qspecl_then` over generated ExtCall prefix variables to extract the optional-driver IH.
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260602T195240Z_m4856_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260602T195240Z_m4857_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260602T195240Z_m4858_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4905_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4908_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4910_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4912_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4914_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4916_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4919_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4920_t002` (use `read_tool_output` for exact output)
 
 ## C0.5.5
 

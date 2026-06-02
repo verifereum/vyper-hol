@@ -9740,6 +9740,51 @@ Proof
   rw[runtime_consistent_def, env_consistent_def, env_context_consistent_def]
 QED
 
+Theorem extcall_after_state_update_tail_sound_cond_driver_ih_get_tenv[local]:
+  !env cx es stat func_name arg_types ret_type drv returnData
+   base_st accounts' tStorage' res st'.
+    runtime_consistent env cx base_st /\ functions_well_typed cx /\
+    accounts_well_typed accounts' /\ well_typed_opt env drv /\
+    well_formed_type env.type_defs ret_type /\
+    (!e. drv = SOME e ==> expr_type e = ret_type) /\
+    (returnData = [] /\ IS_SOME drv ==>
+      !env0 st0 res0 st0'.
+        env_consistent env0 cx st0 /\ state_well_typed st0 /\
+        context_well_typed cx /\ accounts_well_typed st0.accounts /\
+        functions_well_typed cx /\ eval_expr cx (THE drv) st0 = (res0,st0') ==>
+        (well_typed_expr env0 (THE drv) ==>
+         state_well_typed st0' /\ env_consistent env0 cx st0' /\
+         accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
+         case res0 of INL tv => expr_result_typed env0 (THE drv) tv | INR _ => T)) /\
+    (if returnData = [] /\ IS_SOME drv then eval_expr cx (THE drv)
+     else do
+       ret_val <- lift_sum_runtime (evaluate_abi_decode_return (get_tenv cx) ret_type returnData);
+       return (Value ret_val)
+     od) (base_st with <| accounts := accounts'; tStorage := tStorage' |>) = (res,st') ==>
+    state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
+    no_type_error_result res /\
+    case res of
+    | INL tv => expr_result_typed env (Call ret_type (ExtCall stat (func_name,arg_types,ret_type)) es drv) tv
+    | INR _ => T
+Proof
+  rpt gen_tac >> strip_tac >>
+  `get_tenv cx = env.type_defs` by metis_tac[runtime_consistent_get_tenv] >>
+  gvs[] >>
+  qspecl_then [`env`, `cx`, `es`, `stat`, `func_name`, `arg_types`, `ret_type`,
+                `drv`, `returnData`, `base_st`, `accounts'`, `tStorage'`, `res`, `st'`]
+    mp_tac extcall_after_state_update_tail_sound_cond_driver_ih >>
+  impl_tac >- (
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- metis_tac[] >>
+    first_assum ACCEPT_TAC) >>
+  simp[]
+QED
+
 Theorem extcall_success_continuation_sound[local]:
   !env cx args_st accounts' tStorage' returnData res st'
    is_static func_name arg_types ret_type es drv.

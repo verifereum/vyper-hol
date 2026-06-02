@@ -668,3 +668,12 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260602T195240Z_m4864_t001
 - tool_output:TO_type_system_rewrite-20260602T195240Z_m4866_t001
 - plan:C0.5.4.4.1
+
+## L0142 scope='C0.5.4.4.3' tags=ExtCall,get_tenv,runtime_consistent_get_tenv,boundary-lemma,helper-interface
+shape: A helper expects a tail equation with `evaluate_abi_decode_return env.type_defs ...`, but the live Resume context has `evaluate_abi_decode_return (get_tenv cx) ...`.
+pattern: Package the `get_tenv cx = env.type_defs` rewrite in a small wrapper lemma whose premise syntactically matches the live tail equation. Do not perform this rewrite inside the large generated Resume context; specialize/apply the old env.type_defs helper in the wrapper's small theorem context.
+works_when: Applies when `runtime_consistent env cx base_st` is available and the only mismatch is the type-environment argument in the ABI-decode tail; the wrapper must not mention generated ExtCall prefix operations.
+evidence:
+- episode:E0267
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m4922_t001
+- episode:E0268
