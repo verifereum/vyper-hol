@@ -80,9 +80,11 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C0.5.2 | proved |  | E0251 |  |
 | C0.5.3 | proved |  | E0252 | Call plan_oracle(mode='review', component_id='C0.5.3', evidence_ids=[...]) before beginning C0.5.4. |
 | C0.5.4 | stuck | risk_mismatch | E0253 | Call plan_oracle(mode='review', component_id='C0.5.4', evidence_ids=[...]) for strategist repair before any further edits. |
-| C0.5.4.1 | proved |  | E0254 | Review C0.5.4.1, then begin C0.5.4.2 to prove the calldata-error subresume. |
-| C0.5.4.2 | proved |  | E0255 |  |
+| C0.5.4.1 | proved |  | E0259 |  |
+| C0.5.4.2 | proved |  | E0260 |  |
 | C0.5.4.3 | proved |  | E0256 |  |
+| C0.5.4.4 | stuck | risk_mismatch | E0257 | Call plan_oracle(mode='review') for C0.5.4.4. The likely repair is to adjust C0.5.4.1/parent success suspend so it derives a compact optional-driver IH before suspending success, mirroring the static proof's lines 17808-17816, rather than attempting that generated-prefix simplification in the subresume. |
+| C0.5.5 | stuck | plan_incomplete | E0258 | Call plan_oracle(mode='review') for C0.5.5 and request scheduling repair so C0.5.4.4 becomes beginable before C0.5.4.5 and audits. |
 | C1.1 | proved |  | E0024 | Call plan_oracle(mode='review') for C1.1, then begin C1.2 if accepted. |
 | C1.1.1 | proved |  | E0012 |  |
 | C1.1.2 | proved |  | E0013 |  |
@@ -2336,21 +2338,22 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0254`
+- latest episode: `E0259`
 - blocker: 
-- actual effort: 1 sessions, 1 msgs, 8 steps, 7 tools, 3 holbuild, 1,043,982 tok (1,041,676 in, 2,306 out, 998,912 cached), 125.6s, $0.782456
-- next: Review C0.5.4.1, then begin C0.5.4.2 to prove the calldata-error subresume.
+- actual effort: 1 sessions, 1 steps, 135,971 tok (135,710 in, 261 out, 131,968 cached), 7.9s, $0.092524
 
 ### Attempts / Evidence
 
 - `E0254` (proved, , actual effort: 1 sessions, 1 msgs, 8 steps, 7 tools, 3 holbuild, 1,043,982 tok (1,041,676 in, 2,306 out, 998,912 cached), 125.6s, $0.782456)
   - Replaced `Expr_Call_ExtCall_result_nonstatic` cheat with a branch-suspended skeleton: derives nonstatic target/amount/nonempty facts, unfolds the evaluator prefix, and emits named suspends for calldata error, empty-code error, run-none, revert, and success. -> Initial skeleton reached all planned suspension points. `IF_CASES_TAC` did not split after pair result until adding `return_def` to the local simplifier before the success/revert split; after that the parent skeleton compiled. (`TO_type_system_rewrite-20260602T195240Z_m4721_t001`, `TO_type_system_rewrite-20260602T195240Z_m4722_t001`, `TO_type_system_rewrite-20260602T195240Z_m4724_t001`)
   - Added placeholder `Resume ...: cheat QED` blocks for the five planned suspended subgoals so `Finalise eval_all_type_sound_mutual` can build while downstream C0.5.4.2-.4 components discharge them. -> Focused `vyperTypeStmtSoundnessTheory` build passed with the planned subresume cheats present and covered by the newly decomposed PLAN leaves. (`TO_type_system_rewrite-20260602T195240Z_m4726_t001`, `TO_type_system_rewrite-20260602T195240Z_m4727_t001`)
+- `E0259` (proved, , actual effort: 1 sessions, 1 steps, 135,971 tok (135,710 in, 261 out, 131,968 cached), 7.9s, $0.092524)
+  - Carry-forward checkpoint for already-proved nonstatic branch-suspended skeleton from E0254; inspected source region showing skeleton and focused build remains clean with planned success cheat. -> No source edits needed; C0.5.4.1 remains proved/carry-forward under replacement plan. (`TO_type_system_rewrite-20260602T195240Z_m4788_t001`, `TO_type_system_rewrite-20260602T195240Z_m4792_t003`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260602T195240Z_m4721_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260602T195240Z_m4727_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4788_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4792_t003` (use `read_tool_output` for exact output)
 
 ## C0.5.4.2
 
@@ -2358,19 +2361,21 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0255`
+- latest episode: `E0260`
 - blocker: 
-- actual effort: 1 sessions, 2 msgs, 12 steps, 17 tools, 3 holbuild, 998,985 tok (994,636 in, 4,349 out, 925,184 cached), 181.4s, $0.940322
+- actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 102,207 tok (101,941 in, 266 out, 98,048 cached), 26.4s, $0.076469
 
 ### Attempts / Evidence
 
 - `E0255` (proved, , actual effort: 1 sessions, 2 msgs, 12 steps, 17 tools, 3 holbuild, 998,985 tok (994,636 in, 4,349 out, 925,184 cached), 181.4s, $0.940322)
   - Replaced nonstatic calldata-error subresume cheat with `RESUME_TAC`, deleted generated-prefix universal via `qpat_x_assum`, extracted suspended concrete do-equation, and simplified only `bind_def/return_def/raise_def` to close no-type-error postcondition. -> Focused `vyperTypeStmtSoundnessTheory` build succeeds; proof stays within branch-local subresume and avoids broad generated-prefix simplification. (`TO_type_system_rewrite-20260602T195240Z_m4745_t001`)
+- `E0260` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 102,207 tok (101,941 in, 266 out, 98,048 cached), 26.4s, $0.076469)
+  - Carry-forward checkpoint for `Expr_Call_ExtCall_nonstatic_calldata_error`; no source edits, focused holbuild re-run under active component. -> Focused `vyperTypeStmtSoundnessTheory` build succeeds, confirming E0255 calldata-error subresume proof remains valid under current source. (`TO_type_system_rewrite-20260602T195240Z_m4807_t001`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260602T195240Z_m4744_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260602T195240Z_m4745_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4806_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4807_t001` (use `read_tool_output` for exact output)
 
 ## C0.5.4.3
 
@@ -2393,6 +2398,65 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 - `TO_type_system_rewrite-20260602T195240Z_m4755_t001` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260602T195240Z_m4757_t001` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260602T195240Z_m4758_t001` (use `read_tool_output` for exact output)
+
+## C0.5.4.4
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` The error subresumes validated the branch-suspend interface, but the success subresume needs the parent skeleton to derive/pass a compact optional-driver IH before suspending, or a new branch-local helper whose premise is the concrete post-update tail plus a compact driver IH. Do not retry broad generated-prefix simplification inside the success subresume.
+- latest episode: `E0257`
+- blocker: C0.5.4.4 was rated Risk 2, but deriving the optional-driver IH in the success subresume still requires simplifying/specializing the large generated-prefix universal antecedent, and the static-style derivation times out. The success-tail helper matches only after a concrete optional-driver IH is available; the current parent suspend boundary did not carry that IH as a small assumption.
+- actual effort: 1 sessions, 1 msgs, 20 steps, 21 tools, 6 holbuild, 1,960,579 tok (1,953,729 in, 6,850 out, 1,901,056 cached), 318.9s, $1.419393
+- next: Call plan_oracle(mode='review') for C0.5.4.4. The likely repair is to adjust C0.5.4.1/parent success suspend so it derives a compact optional-driver IH before suspending success, mirroring the static proof's lines 17808-17816, rather than attempting that generated-prefix simplification in the subresume.
+
+### Attempts / Evidence
+
+- `E0257` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 20 steps, 21 tools, 6 holbuild, 1,960,579 tok (1,953,729 in, 6,850 out, 1,901,056 cached), 318.9s, $1.419393)
+  - Probed `Expr_Call_ExtCall_nonstatic_success` after `RESUME_TAC`; goal has concrete success tail plus the large generated-prefix universal optional-driver antecedent. -> Confirmed expected concrete success branch shape, but the optional-driver IH is still only available through the generated-prefix universal. (`TO_type_system_rewrite-20260602T195240Z_m4768_t001`)
+  - Tried applying `extcall_success_continuation_sound_cond_driver_ih` directly after deriving `accounts_well_typed pr2` and `runtime_consistent env cx args_st`. -> `drule_all` failed to match because the live branch equation is the post-update tail `(if pr1=[] /\ IS_SOME drv then ... else ...) (args_st with ...) = (res,st')`, while the helper expects a larger do-block or the after-update helper with a separately supplied optional-driver IH. (`TO_type_system_rewrite-20260602T195240Z_m4772_t001`)
+  - Tried the static-proof pattern: move the generated-prefix universal to the goal and simplify the prefix to derive the concrete optional-driver IH, then apply `extcall_after_state_update_tail_sound_cond_driver_ih`. -> The simplification of the generated-prefix universal at subresume level timed out after 2.5s, recreating the forbidden generated-prefix simplification problem. Source was restored to the `cheat` placeholder and focused build is clean again. (`TO_type_system_rewrite-20260602T195240Z_m4781_t001`, `TO_type_system_rewrite-20260602T195240Z_m4782_t001`, `TO_type_system_rewrite-20260602T195240Z_m4783_t001`)
+
+### Ruled Out
+
+- Direct `drule_all extcall_success_continuation_sound_cond_driver_ih` from the success subresume context.
+- Static-style `qpat_x_assum !s'' vs t ... mp_tac >> simp[...]` over the generated-prefix universal inside the subresume.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260602T195240Z_m4768_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4772_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4781_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4782_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4783_t001` (use `read_tool_output` for exact output)
+
+## C0.5.5
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `plan_incomplete` This is a structured scheduling/dependency mismatch after the E0257 replacement plan, not a HOL proof failure in the audit itself. The correct next proof work remains C0.5.4.4 (strengthen success suspend boundary), then C0.5.4.5, then audit.
+- latest episode: `E0258`
+- blocker: C0.5.5 audit was scheduled before the replacement C0.5.4.4 boundary-refactor and C0.5.4.5 success proof leaves were executable/completed. The audit precondition is false: the nonstatic success subresume still has a planned `cheat`.
+- actual effort: 1 sessions, 2 steps, 3 tools, 1 holbuild, 253,810 tok (253,079 in, 731 out, 248,576 cached), 23.1s, $0.168733
+- next: Call plan_oracle(mode='review') for C0.5.5 and request scheduling repair so C0.5.4.4 becomes beginable before C0.5.4.5 and audits.
+
+### Attempts / Evidence
+
+- `E0258` (stuck, plan_incomplete, actual effort: 1 sessions, 2 steps, 3 tools, 1 holbuild, 253,810 tok (253,079 in, 731 out, 248,576 cached), 23.1s, $0.168733)
+  - Executed C0.5.5 audit as the oracle-scheduled next component: grep nonstatic ExtCall region for `cheat`/failed scaffold and run focused build. -> Audit fails as expected: `Expr_Call_ExtCall_nonstatic_success` still contains `cheat` at line 18007. Focused build is clean only because the planned success obligation remains cheated. This confirms C0.5.5 was scheduled before its dependency C0.5.4.4/C0.5.4.5 was completed. (`TO_type_system_rewrite-20260602T195240Z_m4792_t001`, `TO_type_system_rewrite-20260602T195240Z_m4792_t003`)
+
+### Ruled Out
+
+- Treating a clean holbuild with the success `cheat` as completion.
+- Editing unrelated proof obligations during the audit.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260602T195240Z_m4792_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4792_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4789_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4791_t001` (use `read_tool_output` for exact output)
 
 ## C1.1
 

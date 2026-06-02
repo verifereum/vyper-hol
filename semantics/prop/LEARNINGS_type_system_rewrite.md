@@ -648,3 +648,13 @@ evidence:
 - episode:E0254
 - tool_output:TO_type_system_rewrite-20260602T195240Z_m4713_t001
 - tool_output:TO_type_system_rewrite-20260602T195240Z_m4727_t001
+
+## L0140 scope='C0.5.4.4' tags=ExtCall,nonstatic,success,suspend,driver-IH,boundary
+shape: A success subresume has a concrete post-update tail equation but only the large generated-prefix universal contains the optional-driver IH.
+pattern: Do not recover the optional-driver premise inside the subresume. Refactor the parent success suspend boundary to specialize the generated mutual IH once before `suspend`, yielding a compact conditional assumption `returnData = [] /\ IS_SOME drv ==> !env0 st0 res0 st0'. ...`. Then the success subresume can apply `extcall_after_state_update_tail_sound_cond_driver_ih` using concrete `run_ext_call` success facts and `run_ext_call_accounts_well_typed`.
+works_when: Applies to C0.5.4 nonstatic ExtCall success after error branches are already suspended/proved and the success branch has `run_ext_call ... = SOME (T, returnData, accounts', tStorage')`. It is not needed for runtime-error branches, where the generated-prefix universal can be deleted.
+evidence:
+- episode:E0257
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m4768_t001
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m4781_t001
+- plan:C0.5.4.4
