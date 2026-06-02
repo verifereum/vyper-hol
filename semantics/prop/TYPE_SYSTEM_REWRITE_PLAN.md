@@ -291,31 +291,43 @@ builds again on the intentional cheated baseline
 accepted E0072 as a proof-boundary failure
 (`TO_type_system_rewrite-20260601T081233Z_m1659_t001`).
 
-2026-06-01 superseding update: the old operator-facing stop/report state above
-is historical evidence, not the current scheduler state.  After the narrowed
-maintainer clarification was re-reviewed, the strategist replaced the stop-only
-C0 subtree with a new executable ExtCall proof subtree.  The first executable
-step is **not** another raw `Resume` simplification; it is a proof-boundary probe
-lemma, tentatively named `eval_extcall_args_error`, proving that
-`eval_exprs cx es st = (INR y,args_st)` makes
-`eval_expr cx (Call ret_type (ExtCall is_static (func_name,arg_types,ret_type)) es drv) st`
-return `(INR y,args_st)` by one-step evaluator unfolding.
+2026-06-02 terminal update: the later narrowed ExtCall proof-boundary plan was
+executed far enough to test its core assumption and is now stopped.  The
+strategist has replaced the old proof-completion subtree with a terminal
+stop/report component (`C0`) rather than another proof attempt.
 
-The E0072 evidence remains binding as negative guidance for the new proof:
+Checked superseding evidence:
 
-- Do **not** retry broad `simp`/`gvs`, `AllCaseEqs()`, or whole-prefix cleanup on
-  the post-`eval_exprs` goal.
-- Do **not** retry the sanitized C0.1 shell or any branch-local variant that
-  simplifies while the generated optional-driver prefix remains live.
-- Do **not** introduce a long generated-prefix adapter theorem merely to recover
-  the optional-driver premise.
-- Do **not** edit outside `semantics/prop`, and do not change evaluator/semantics
-  definitions.
-- Treat the remaining `Resume ...[Expr_Call_ExtCall_result]: cheat QED` as the
-  current proof target, not as completed proof work.
-- Treat the previous static/nonstatic ExtCall branch leaves as invalidated until
-  the new argument-error boundary probe is proved and the argument-success branch
-  is isolated without the generated optional-driver prefix.
+- E0217 / `TO_type_system_rewrite-20260601T220715Z_m4232_t001`: the intended
+  straight-line static-success split from the current `Resume` boundary did not
+  reach a single concrete `run_ext_call` success-continuation branch.  Instead,
+  `Cases_on run_ext_call` / result splitting produced 9 input goals and a large
+  generated optional-driver prefix before the guarded continuation helpers could
+  match.
+- E0218 / `TO_type_system_rewrite-20260601T220715Z_m4241_t001`: the strategist
+  accepted this as a proof-boundary blocked report and warned not to continue the
+  stale downstream ExtCall components.
+- `TO_type_system_rewrite-20260601T220715Z_m4239_t002` and
+  `TO_type_system_rewrite-20260601T220715Z_m4255_t001`: the focused
+  `vyperTypeStmtSoundnessTheory` target builds on the restored intentional-cheat
+  baseline.  This is restoration evidence only, not proof completion.
+- `TO_type_system_rewrite-20260601T220715Z_m4252_t002` followed by the C0
+  replacement plan: the old ready-looking C0.3--C0.7 leaves are superseded and
+  must not be attempted in this run.
+
+Binding stop guidance:
+
+- Do **not** retry the straight-line `run_ext_call` split from the current
+  static-success `Resume` boundary.
+- Do **not** solve the generated-prefix goals individually, use broad
+  `simp`/`gvs`/`AllCaseEqs()` to recover the optional-driver premise, or add long
+  generated-prefix adapter theorems.
+- Do **not** claim the theorem is false; no counterexample has been checked.
+- Do **not** claim proof completion; remaining intentional cheats are still in
+  the restored baseline.
+- Any future work requires a new proof boundary or induction/suspend interface
+  that avoids this generated-prefix fanout, and should be planned as fresh proof
+  architecture inside `semantics/prop`.
 
 ### Completion scope
 
