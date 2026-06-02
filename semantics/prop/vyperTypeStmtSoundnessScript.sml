@@ -17932,6 +17932,59 @@ Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_static_run_none]:
 QED
 
 Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result_nonstatic]:
+  rpt gen_tac >>
+  qpat_x_assum `if F then _ else _` mp_tac >>
+  pure_rewrite_tac[boolTheory.COND_CLAUSES] >> strip_tac >>
+  drule_all extcall_nonstatic_args_runtime_typed_dest >> strip_tac >>
+  `x <> [] /\ TL x <> []` by (drule_all extcall_nonstatic_args_runtime_typed_nonempty >> simp[]) >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
+                       check_def, assert_def, return_def, raise_def,
+                       lift_option_type_def, lift_option_def,
+                       get_accounts_def, get_transient_storage_def,
+                       update_accounts_def, update_transient_def] >>
+  qpat_assum `eval_exprs cx es st = (INL x,args_st)` (fn th => rewrite_tac[th]) >>
+  simp_tac(srw_ss())[] >>
+  asm_rewrite_tac[] >>
+  simp_tac(srw_ss()++boolSimps.LET_ss)[return_def] >>
+  Cases_on `build_ext_calldata (get_tenv cx) func_name arg_types (TL (TL x))` >>
+  rewrite_tac[return_def, raise_def]
+  >- (strip_tac >> suspend "Expr_Call_ExtCall_nonstatic_calldata_error") >>
+  Cases_on `NULL (lookup_account target_addr args_st.accounts).code` >>
+  rewrite_tac[return_def, raise_def]
+  >- (strip_tac >> suspend "Expr_Call_ExtCall_nonstatic_empty_code_error") >>
+  simp_tac(srw_ss())[return_def,get_accounts_def,assert_def,
+                     get_transient_storage_def,raise_def,bind_def] >>
+  asm_rewrite_tac[] >> simp_tac(srw_ss())[] >>
+  Cases_on `run_ext_call cx.txn.target target_addr x' (SOME amount) args_st.accounts args_st.tStorage (vyper_to_tx_params cx.txn)` >>
+  rewrite_tac[return_def, raise_def]
+  >- (strip_tac >> suspend "Expr_Call_ExtCall_nonstatic_run_none") >>
+  qmatch_assum_rename_tac`_ = SOME pr` >>
+  PairCases_on`pr` >>
+  simp_tac(srw_ss())[assert_def,bind_def,return_def] >>
+  reverse IF_CASES_TAC >>
+  simp_tac(srw_ss())[] >- (strip_tac >> suspend "Expr_Call_ExtCall_nonstatic_reverted") >>
+  simp_tac(srw_ss())[update_accounts_def,update_transient_def,return_def] >>
+  strip_tac >> suspend "Expr_Call_ExtCall_nonstatic_success"
+QED
+
+Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_nonstatic_calldata_error]:
+  cheat
+QED
+
+Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_nonstatic_empty_code_error]:
+  cheat
+QED
+
+Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_nonstatic_run_none]:
+  cheat
+QED
+
+Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_nonstatic_reverted]:
+  cheat
+QED
+
+Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_nonstatic_success]:
   cheat
 QED
 

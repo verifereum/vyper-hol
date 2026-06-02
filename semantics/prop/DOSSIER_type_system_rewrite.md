@@ -79,6 +79,8 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C0.5.1 | proved |  | E0250 |  |
 | C0.5.2 | proved |  | E0251 |  |
 | C0.5.3 | proved |  | E0252 | Call plan_oracle(mode='review', component_id='C0.5.3', evidence_ids=[...]) before beginning C0.5.4. |
+| C0.5.4 | stuck | risk_mismatch | E0253 | Call plan_oracle(mode='review', component_id='C0.5.4', evidence_ids=[...]) for strategist repair before any further edits. |
+| C0.5.4.1 | proved |  | E0254 | Review C0.5.4.1, then begin C0.5.4.2 to prove the calldata-error subresume. |
 | C1.1 | proved |  | E0024 | Call plan_oracle(mode='review') for C1.1, then begin C1.2 if accepted. |
 | C1.1.1 | proved |  | E0012 |  |
 | C1.1.2 | proved |  | E0013 |  |
@@ -2296,6 +2298,57 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 - `TO_type_system_rewrite-20260602T195240Z_m4699_t002` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260602T195240Z_m4701_t001` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260602T195240Z_m4697_t002` (use `read_tool_output` for exact output)
+
+## C0.5.4
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` This matches the PLAN stop condition: do not continue after a large generated-prefix or timeout shape. Need strategist repair/decomposition, likely a smaller branch subresume or helper boundary that obtains `res = INR (Error (RuntimeError ...))` and `st'=args_st` without rewriting the full generated prefix in the main Resume.
+- latest episode: `E0253`
+- blocker: C0.5.4 was rated Risk 2 and expected to be a straightforward branch-by-branch Resume, but the first nonstatic calldata error branch still exposes a >4KiB generated-prefix goal and times out even with branch-local helper use. The current Resume boundary does not make concrete error facts available without simplifying the generated prefix.
+- actual effort: 1 sessions, 1 msgs, 10 steps, 9 tools, 3 holbuild, 1,082,390 tok (1,077,424 in, 4,966 out, 1,015,552 cached), 159.5s, $0.966116
+- next: Call plan_oracle(mode='review', component_id='C0.5.4', evidence_ids=[...]) for strategist repair before any further edits.
+
+### Attempts / Evidence
+
+- `E0253` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 10 steps, 9 tools, 3 holbuild, 1,082,390 tok (1,077,424 in, 4,966 out, 1,015,552 cached), 159.5s, $0.966116)
+  - Attempted maintainer-approved linear nonstatic ExtCall Resume by adapting the static branch locally: split argument success, target/value extraction, calldata, no-code, run_ext_call, revert/success, intending to use `extcall_nonstatic_runtime_error_sound` for error branches and `extcall_success_continuation_sound_cond_driver_ih` for success. -> The first calldata-failure branch exposed the same large generated-prefix goal shape (>4KiB) and the planned branch-local closure timed out at `simp[no_type_error_result_def]`. This violates C0.5.4's stop condition and shows the proof is not straightforward under the current Resume boundary. (`TO_type_system_rewrite-20260602T195240Z_m4713_t001`)
+  - Refined the first error branch to avoid the final full-goal simp and instead extract the monadic failure equation and apply `extcall_nonstatic_runtime_error_sound`. -> Still timed out on the large generated-prefix monadic assumption at `simp[bind_def, raise_def]`; even targeted simplification of the isolated failure equation keeps the generated-prefix assumption active. This is a proof-interface/decomposition mismatch, not a routine tactic issue. (`TO_type_system_rewrite-20260602T195240Z_m4715_t001`)
+  - Reverted the C0.5.4 source edit back to the intentional nonstatic cheat and rebuilt the focused target. -> Source is back to the stable cheated baseline; focused `vyperTypeStmtSoundnessTheory` build passes. (`TO_type_system_rewrite-20260602T195240Z_m4716_t001`, `TO_type_system_rewrite-20260602T195240Z_m4717_t001`)
+
+### Ruled Out
+
+- Copy/adapt static Resume proof with simple `VAR_EQ_TAC >> simp[no_type_error_result_def]` error branches; times out on >4KiB generated-prefix goal.
+- Targeted `mp_tac` of the `case NONE` monadic tail followed by `simp[bind_def, raise_def]`; still times out because the generated-prefix assumption remains too large.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260602T195240Z_m4713_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4715_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4717_t001` (use `read_tool_output` for exact output)
+
+## C0.5.4.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0254`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 8 steps, 7 tools, 3 holbuild, 1,043,982 tok (1,041,676 in, 2,306 out, 998,912 cached), 125.6s, $0.782456
+- next: Review C0.5.4.1, then begin C0.5.4.2 to prove the calldata-error subresume.
+
+### Attempts / Evidence
+
+- `E0254` (proved, , actual effort: 1 sessions, 1 msgs, 8 steps, 7 tools, 3 holbuild, 1,043,982 tok (1,041,676 in, 2,306 out, 998,912 cached), 125.6s, $0.782456)
+  - Replaced `Expr_Call_ExtCall_result_nonstatic` cheat with a branch-suspended skeleton: derives nonstatic target/amount/nonempty facts, unfolds the evaluator prefix, and emits named suspends for calldata error, empty-code error, run-none, revert, and success. -> Initial skeleton reached all planned suspension points. `IF_CASES_TAC` did not split after pair result until adding `return_def` to the local simplifier before the success/revert split; after that the parent skeleton compiled. (`TO_type_system_rewrite-20260602T195240Z_m4721_t001`, `TO_type_system_rewrite-20260602T195240Z_m4722_t001`, `TO_type_system_rewrite-20260602T195240Z_m4724_t001`)
+  - Added placeholder `Resume ...: cheat QED` blocks for the five planned suspended subgoals so `Finalise eval_all_type_sound_mutual` can build while downstream C0.5.4.2-.4 components discharge them. -> Focused `vyperTypeStmtSoundnessTheory` build passed with the planned subresume cheats present and covered by the newly decomposed PLAN leaves. (`TO_type_system_rewrite-20260602T195240Z_m4726_t001`, `TO_type_system_rewrite-20260602T195240Z_m4727_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260602T195240Z_m4721_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4727_t001` (use `read_tool_output` for exact output)
 
 ## C1.1
 
