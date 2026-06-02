@@ -83,7 +83,9 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C0.5.4.1 | proved |  | E0259 |  |
 | C0.5.4.2 | proved |  | E0260 |  |
 | C0.5.4.3 | proved |  | E0261 |  |
-| C0.5.4.4 | stuck | risk_mismatch | E0257 | Call plan_oracle(mode='review') for C0.5.4.4. The likely repair is to adjust C0.5.4.1/parent success suspend so it derives a compact optional-driver IH before suspending success, mirroring the static proof's lines 17808-17816, rather than attempting that generated-prefix simplification in the subresume. |
+| C0.5.4.4 | stuck | risk_mismatch | E0262 | Call plan_oracle(mode='review', component_id='C0.5.4.4', evidence_ids=[...]) so the strategist can repair/decompose the success-boundary plan. |
+| C0.5.4.4.1 | proved |  | E0265 | Call plan_oracle(mode='review', component_id='C0.5.4.4.1', evidence_ids=[...]) and, if accepted, proceed to C0.5.4.4.2. |
+| C0.5.4.5 | stuck | plan_incomplete | E0263 | Call plan_oracle(mode='review', component_id='C0.5.4.5', evidence_ids=[...]) to repair dependencies/frontier so C0.5.4.4.1 is next. |
 | C0.5.5 | stuck | plan_incomplete | E0258 | Call plan_oracle(mode='review') for C0.5.5 and request scheduling repair so C0.5.4.4 becomes beginable before C0.5.4.5 and audits. |
 | C1.1 | proved |  | E0024 | Call plan_oracle(mode='review') for C1.1, then begin C1.2 if accepted. |
 | C1.1.1 | proved |  | E0012 |  |
@@ -2404,11 +2406,11 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 ### Current Status
 
 - result: `stuck`
-- diagnosis: `risk_mismatch` The error subresumes validated the branch-suspend interface, but the success subresume needs the parent skeleton to derive/pass a compact optional-driver IH before suspending, or a new branch-local helper whose premise is the concrete post-update tail plus a compact driver IH. Do not retry broad generated-prefix simplification inside the success subresume.
-- latest episode: `E0257`
-- blocker: C0.5.4.4 was rated Risk 2, but deriving the optional-driver IH in the success subresume still requires simplifying/specializing the large generated-prefix universal antecedent, and the static-style derivation times out. The success-tail helper matches only after a concrete optional-driver IH is available; the current parent suspend boundary did not carry that IH as a small assumption.
-- actual effort: 1 sessions, 1 msgs, 20 steps, 21 tools, 6 holbuild, 1,960,579 tok (1,953,729 in, 6,850 out, 1,901,056 cached), 318.9s, $1.419393
-- next: Call plan_oracle(mode='review') for C0.5.4.4. The likely repair is to adjust C0.5.4.1/parent success suspend so it derives a compact optional-driver IH before suspending success, mirroring the static proof's lines 17808-17816, rather than attempting that generated-prefix simplification in the subresume.
+- diagnosis: `risk_mismatch` The suspicious source range is `Expr_Call_ExtCall_result_nonstatic` around lines 17967--17968. A clean approach must avoid long manual specialization of the generated prefix; likely the plan needs a different boundary/interface, e.g. a small helper stated to match the generated nonstatic prefix or a different suspend payload strategy. Source restored to stable HEAD and focused build clean.
+- latest episode: `E0262`
+- blocker: C0.5.4.4 was rated Risk 2 and expected a straightforward parent-boundary derivation, but the nonstatic generated optional-driver IH does not align with the static proof pattern without long generated-prefix instantiation. Attempting to derive the compact IH in the parent led to brittle `qspecl_then` plumbing over the generated prefix, which the plan explicitly forbids.
+- actual effort: 1 sessions, 2 msgs, 33 steps, 35 tools, 11 holbuild, 3,142,134 tok (3,131,759 in, 10,375 out, 3,029,888 cached), 455.1s, $2.335549
+- next: Call plan_oracle(mode='review', component_id='C0.5.4.4', evidence_ids=[...]) so the strategist can repair/decompose the success-boundary plan.
 
 ### Attempts / Evidence
 
@@ -2416,19 +2418,74 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Probed `Expr_Call_ExtCall_nonstatic_success` after `RESUME_TAC`; goal has concrete success tail plus the large generated-prefix universal optional-driver antecedent. -> Confirmed expected concrete success branch shape, but the optional-driver IH is still only available through the generated-prefix universal. (`TO_type_system_rewrite-20260602T195240Z_m4768_t001`)
   - Tried applying `extcall_success_continuation_sound_cond_driver_ih` directly after deriving `accounts_well_typed pr2` and `runtime_consistent env cx args_st`. -> `drule_all` failed to match because the live branch equation is the post-update tail `(if pr1=[] /\ IS_SOME drv then ... else ...) (args_st with ...) = (res,st')`, while the helper expects a larger do-block or the after-update helper with a separately supplied optional-driver IH. (`TO_type_system_rewrite-20260602T195240Z_m4772_t001`)
   - Tried the static-proof pattern: move the generated-prefix universal to the goal and simplify the prefix to derive the concrete optional-driver IH, then apply `extcall_after_state_update_tail_sound_cond_driver_ih`. -> The simplification of the generated-prefix universal at subresume level timed out after 2.5s, recreating the forbidden generated-prefix simplification problem. Source was restored to the `cheat` placeholder and focused build is clean again. (`TO_type_system_rewrite-20260602T195240Z_m4781_t001`, `TO_type_system_rewrite-20260602T195240Z_m4782_t001`, `TO_type_system_rewrite-20260602T195240Z_m4783_t001`)
+- `E0262` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 33 steps, 35 tools, 11 holbuild, 3,142,134 tok (3,131,759 in, 10,375 out, 3,029,888 cached), 455.1s, $2.335549)
+  - Copied the static parent-boundary pattern into nonstatic parent: after success branch update, used `qmatch_abbrev_tac`, specialized generated optional-driver IH before `suspend`, and attempted to derive a compact conditional IH. -> First direct static-style transfer failed at `disch_then drule`; the nonstatic generated IH prefix shape differs from static and the second `drule` did not match the live antecedents. (`TO_type_system_rewrite-20260602T195240Z_m4825_t001`)
+  - Tried manually specializing the generated-prefix universal into a compact conditional driver IH using a long `qspecl_then` list and then discharging the prefix equations. -> This became exactly the forbidden brittle generated-prefix adapter/plumbing: multiple attempts only reached prefix equality/implication subgoals and required long manual instantiation rather than a clean parent-boundary derivation. It violated the component's not-to-try condition, so source was restored. (`TO_type_system_rewrite-20260602T195240Z_m4828_t001`, `TO_type_system_rewrite-20260602T195240Z_m4849_t001`)
+  - Restored `vyperTypeStmtSoundnessScript.sml` to HEAD and reran focused holbuild. -> Focused `vyperTypeStmtSoundnessTheory` build succeeds again with the planned success cheat still present, so failed experiments were reverted and source is stable. (`TO_type_system_rewrite-20260602T195240Z_m4853_t001`, `TO_type_system_rewrite-20260602T195240Z_m4853_t002`)
 
 ### Ruled Out
 
-- Direct `drule_all extcall_success_continuation_sound_cond_driver_ih` from the success subresume context.
-- Static-style `qpat_x_assum !s'' vs t ... mp_tac >> simp[...]` over the generated-prefix universal inside the subresume.
+- Direct static-style transfer with `qmatch_abbrev_tac` then `first_x_assum drule`/`disch_then drule` in the nonstatic parent.
+- Long manual `qspecl_then` adapter over the generated optional-driver IH prefix.
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260602T195240Z_m4768_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260602T195240Z_m4772_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260602T195240Z_m4781_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260602T195240Z_m4782_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260602T195240Z_m4783_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4825_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4828_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4849_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4853_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4853_t002` (use `read_tool_output` for exact output)
+
+## C0.5.4.4.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0265`
+- blocker: 
+- actual effort: 1 sessions, 3 steps, 3 tools, 1 holbuild, 171,102 tok (170,529 in, 573 out, 163,456 cached), 25.8s, $0.134283
+- next: Call plan_oracle(mode='review', component_id='C0.5.4.4.1', evidence_ids=[...]) and, if accepted, proceed to C0.5.4.4.2.
+
+### Attempts / Evidence
+
+- `E0264` (stuck, risk_mismatch, actual effort: 1 sessions, 8 steps, 7 tools, 3 holbuild, 1,085,273 tok (1,082,346 in, 2,927 out, 1,064,448 cached), 113.3s, $0.709524)
+  - Inserted the C0.5.4.4.1 probe assertion in the nonstatic parent success branch and attempted the strategist-requested goal-directed proof: after stripping compact premises, used a sufficient stronger conjunction matching the generated IH conclusion and `first_x_assum irule`, with only local prefix rewrites and concrete facts. -> The goal-directed `irule` path timed out at 2.5s and exposed the same large generated-prefix universal/whole-tail goal shape; it did not yield a clean compact IH without generated-prefix plumbing. This is the exact failure condition for the probe. Source was restored to HEAD afterward. (`TO_type_system_rewrite-20260602T195240Z_m4864_t001`, `TO_type_system_rewrite-20260602T195240Z_m4866_t001`)
+  - Restored `vyperTypeStmtSoundnessScript.sml` to HEAD and reran focused holbuild. -> Focused `vyperTypeStmtSoundnessTheory` build is clean again with the planned success cheat still present; failed probe edits were reverted. (`TO_type_system_rewrite-20260602T195240Z_m4867_t001`, `TO_type_system_rewrite-20260602T195240Z_m4868_t001`)
+- `E0265` (proved, , actual effort: 1 sessions, 3 steps, 3 tools, 1 holbuild, 171,102 tok (170,529 in, 573 out, 163,456 cached), 25.8s, $0.134283)
+  - Audited parent `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result_nonstatic]` for the failed E0264 compact-IH assertion and simple success suspend shape; ran focused `holbuild`. -> No `pr1 = [] /\ IS_SOME drv` compact-IH assertion was present; parent success branch ends with `strip_tac >> suspend "Expr_Call_ExtCall_nonstatic_success"`, success Resume remains the planned cheat, and focused `vyperTypeStmtSoundnessTheory` build is clean. (`TO_type_system_rewrite-20260602T195240Z_m4882_t001`, `TO_type_system_rewrite-20260602T195240Z_m4882_t002`, `TO_type_system_rewrite-20260602T195240Z_m4883_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260602T195240Z_m4882_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4882_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4883_t001` (use `read_tool_output` for exact output)
+
+## C0.5.4.5
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `plan_incomplete` This is a scheduling/dependency mismatch, not a theorem/proof failure. The safe next work is C0.5.4.4.1, then C0.5.4.4.2, then C0.5.4.5.
+- latest episode: `E0263`
+- blocker: Structured scheduler made C0.5.4.5 beginable before the newly planned C0.5.4.4.1 probe and C0.5.4.4.2 boundary install were completed. The C0.5.4.5 proof contract explicitly requires the compact optional-driver IH supplied by C0.5.4.4, which is not present in source.
+- actual effort: 1 sessions, 1 steps, 121,072 tok (120,486 in, 586 out, 117,120 cached), 15.1s, $0.092970
+- next: Call plan_oracle(mode='review', component_id='C0.5.4.5', evidence_ids=[...]) to repair dependencies/frontier so C0.5.4.4.1 is next.
+
+### Attempts / Evidence
+
+- `E0263` (stuck, plan_incomplete, actual effort: 1 sessions, 1 steps, 121,072 tok (120,486 in, 586 out, 117,120 cached), 15.1s, $0.092970)
+  - Began C0.5.4.5 only because structured gate made it Oracle next after a failed scheduling-repair request; inspected injected plan context before edits. -> Injected C0.5.4.5 plan itself says it depends on C0.5.4.4 supplying a compact optional-driver IH. C0.5.4.4.1/.2 are newly planned but not proved/installed, so attempting the success subresume now would violate the strategy and recreate the forbidden generated-prefix recovery. No source edits or builds were made under C0.5.4.5. (`TO_type_system_rewrite-20260602T195240Z_m4856_t001`, `TO_type_system_rewrite-20260602T195240Z_m4857_t001`, `TO_type_system_rewrite-20260602T195240Z_m4858_t001`)
+
+### Ruled Out
+
+- Proving `Expr_Call_ExtCall_nonstatic_success` before compact driver IH boundary is installed.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260602T195240Z_m4856_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4857_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4858_t001` (use `read_tool_output` for exact output)
 
 ## C0.5.5
 

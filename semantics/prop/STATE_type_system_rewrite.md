@@ -2,68 +2,74 @@
 Updated: 2026-06-02
 
 ## Cursor
-- component: C0.5.4.1
+- component: C0.5.4.4.1
 - status: blocked
 - active_file: semantics/prop/vyperTypeStmtSoundnessScript.sml
-- next_action: First call `plan_oracle(mode='review', component_id='C0.5.4.1', evidence_ids=['TO_type_system_rewrite-20260602T195240Z_m4788_t001','TO_type_system_rewrite-20260602T195240Z_m4792_t003'], planning_reason='review closed episode E0259')`. This review failed once with OracleBudgetExceeded; retry it before any begin_component/build/edit. If accepted, query_plan; expected scheduling should advance through carry-forward C0.5.4.2/C0.5.4.3 toward C0.5.4.4, whose live work is to strengthen the nonstatic success suspend boundary.
-- expected_goal_shape: No active HOL goal. Source is stable and focused holbuild was clean with the planned `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_nonstatic_success]: cheat` still present. query_plan currently blocks all begin_component calls pending strategist review of E0259; after review, C0.5.4.4 should edit the parent `Expr_Call_ExtCall_result_nonstatic` success branch around lines 17962--17968 so the success subresume receives a compact conditional optional-driver IH rather than only the large generated-prefix universal.
+- next_action: Retry the required strategist review for closed stuck episode E0264 before any begin_component/build/edit: plan_oracle(mode='review', component_id='C0.5.4.4.1', evidence_ids=['TO_type_system_rewrite-20260602T195240Z_m4864_t001','TO_type_system_rewrite-20260602T195240Z_m4866_t001','TO_type_system_rewrite-20260602T195240Z_m4867_t001','TO_type_system_rewrite-20260602T195240Z_m4868_t001'], planning_reason='review closed episode E0264'). Two review attempts already failed with OracleBudgetExceeded; query_plan shows this review is the only allowed next action.
+- expected_goal_shape: No active HOL goal. Source was restored to HEAD after the failed C0.5.4.4.1 probe and focused holbuild was clean, with the planned `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_nonstatic_success]: cheat` still present. PLAN gate is blocked by unresolved E0264; no beginable frontier exists until strategist review succeeds.
 - verify_with: holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)
 
 ## If This Fails
-- If the E0259 review again fails due oracle budget/tooling, do not edit/build; retry review if permitted, otherwise end_session(blocked, blocked_kind='tooling_bug' or 'unknown') with the oracle-budget evidence. If review accepts but schedule points to carry-forward C0.5.4.2/C0.5.4.3, begin and close those carry-forward leaves only as directed; do not reopen their source. If C0.5.4.4 becomes beginable, begin it and modify only the parent nonstatic success suspend boundary, keeping the success subresume cheated until C0.5.4.5.
+- If E0264 review again fails due OracleBudgetExceeded/tooling, do not edit/build; retry review if permitted, otherwise report blocked(tooling_bug/unknown) with TO_type_system_rewrite-20260602T195240Z_m4870_t001, TO_type_system_rewrite-20260602T195240Z_m4872_t001, and query_plan evidence TO_type_system_rewrite-20260602T195240Z_m4871_t001. If review returns a repaired PLAN, follow the new Oracle next exactly.
 
 ## Do Not Retry
-- Recover the optional-driver IH inside `Expr_Call_ExtCall_nonstatic_success` by moving the large generated-prefix universal and simplifying `check_def`, `lift_option_def`, `get_accounts_def`, `get_transient_storage_def`, `update_accounts_def`, etc.: E0257 showed this recreates the forbidden generated-prefix simplification and times out after 2.5s; the compact IH must be produced at the parent suspend boundary instead.
+- Recover the optional-driver IH inside `Expr_Call_ExtCall_nonstatic_success` by broad simplification of the generated prefix or whole ExtCall prefix.: E0257 already showed this recreates the forbidden generated-prefix simplification and times out; the success subresume must not reconstruct the driver premise locally.
   - evidence: episode:E0257
   - evidence: tool_output:TO_type_system_rewrite-20260602T195240Z_m4781_t001
-- Apply `drule_all extcall_success_continuation_sound_cond_driver_ih` directly in the current success subresume context without first supplying a compact conditional driver IH and matching tail equation.: The live branch equation is the post-update tail; direct matching failed, and the helper premise requires the optional-driver IH separately.
-  - evidence: tool_output:TO_type_system_rewrite-20260602T195240Z_m4772_t001
+- Apply `drule_all extcall_success_continuation_sound_cond_driver_ih` directly in the current success subresume without a compact conditional driver IH and matching tail equation.: The live branch equation is the post-update tail and the helper requires the optional-driver IH separately; direct matching failed.
   - evidence: episode:E0257
-- Treat C0.5.5 or C0.5.4.6 audit as complete while `Expr_Call_ExtCall_nonstatic_success` still contains `cheat`.: E0258 showed focused holbuild can be clean only because the planned success obligation remains cheated; audits must wait until C0.5.4.5 removes it.
-  - evidence: episode:E0258
-  - evidence: tool_output:TO_type_system_rewrite-20260602T195240Z_m4792_t001
-- Stage or commit untracked `semantics/prop/LEARNINGS_type_system_rewrite.legacy.md` or `semantics/prop/tmp_helper.txt`.: They are pre-existing unrelated artifacts and must remain untracked.
-  - evidence: tool_output:TO_type_system_rewrite-20260602T195240Z_m4733_t001
+  - evidence: tool_output:TO_type_system_rewrite-20260602T195240Z_m4772_t001
+- Replay static proof's parent-boundary sequence `qmatch_abbrev_tac; first_x_assum drule; disch_then drule` in the nonstatic parent success branch.: E0262 showed the nonstatic generated optional-driver IH has a different/extra prefix shape and the second `drule` does not match.
+  - evidence: episode:E0262
+  - evidence: tool_output:TO_type_system_rewrite-20260602T195240Z_m4825_t001
+- Use long manual `qspecl_then` lists over generated ExtCall prefix variables to derive the compact driver IH.: This is forbidden generated-prefix adapter plumbing, stalled on prefix subgoals, and violates the proof-interface discipline.
+  - evidence: episode:E0262
+  - evidence: tool_output:TO_type_system_rewrite-20260602T195240Z_m4828_t001
+  - evidence: tool_output:TO_type_system_rewrite-20260602T195240Z_m4849_t001
+- Retry C0.5.4.4.1's sufficient stronger conjunction plus `first_x_assum irule` over the same generated optional-driver universal in the same late parent success context.: E0264 directly tested this refined plan; it timed out and exposed the same huge generated-prefix/whole-tail goal instead of a compact IH.
+  - evidence: episode:E0264
+  - evidence: tool_output:TO_type_system_rewrite-20260602T195240Z_m4864_t001
+  - evidence: tool_output:TO_type_system_rewrite-20260602T195240Z_m4866_t001
 
 ## Reflection
 ### Tunnel Vision Check
-- Outside-the-box approach now validated for error branches: top-level named `suspend` subresumes plus deletion of the generated-prefix universal turns large generated-prefix goals into tiny runtime-error proofs.
-- The success branch is different from error branches: deleting the generated-prefix universal is not enough because the optional-driver IH is semantically needed. Optimizing the success subresume tactic is the wrong target; the parent suspend boundary must pass a compact IH.
-- The current PLAN decomposition is right after E0258: C0.5.4.4 must be a boundary refactor before C0.5.4.5 proves success. If the schedule drifts to audits or carry-forward leaves, verify dependencies before doing proof edits.
-- Do not keep retrying `simp` variations on the success subresume. A fresh expert should first ask: where can the generated optional-driver IH be specialized once, before `suspend`, so the subresume gets a small conditional assumption?
+- Outside-the-box approach to consider next: stop trying to extract the optional-driver IH from the generated mutual IH inside the late success branch. A fresh expert should ask whether the driver case can be factored before ExtCall prefix generation, or whether a small helper around `eval_all_type_sound_mutual` can expose the optional driver IH without the generated prefix.
+- We may be optimizing the wrong boundary: the parent suspend payload might be too late. The concrete success branch has already accumulated a huge generated prefix; the right abstraction may be an earlier branch-local helper or a direct continuation proof that avoids exposing the generated universal.
+- The PLAN decomposition after E0264 is not yet trustworthy; its key de-risking claim (goal-directed `irule` over the generated optional-driver IH) failed. Do not treat this as a tactic-search problem until the strategist reviews E0264.
+- Fresh expert question: why is the optional driver theorem tied to the whole ExtCall prefix at all? Can we prove a standalone theorem about `well_typed_opt env drv` and the mutual theorem's expression case, or carry the needed IH from the original mutual induction before entering ExtCall prefix code?
 
 ### What Went Wrong
-- C0.5.4.2 and C0.5.4.3 succeeded and were committed/reviewed, but C0.5.4.4 exposed a real boundary flaw: the success subresume still received only the large generated-prefix universal for the optional-driver premise.
-- Direct `drule_all extcall_success_continuation_sound_cond_driver_ih` did not match the live success-tail equation, and a static-style attempt to simplify the generated-prefix universal inside the success subresume timed out, confirming E0257 risk_mismatch.
-- After E0257, the oracle produced the right replacement plan but the structured scheduler briefly made terminal audit C0.5.5 next; E0258 recorded this as plan_incomplete and the oracle repaired dependencies.
-- The session then had to process carry-forward C0.5.4.1; closing E0259 was valid bookkeeping, but its required review hit OracleBudgetExceeded, leaving the next session blocked on that review.
+- C0.5.4.1, C0.5.4.2, and C0.5.4.3 carry-forward leaves were reviewed/closed and source stayed build-clean; commits were made with `--no-gpg-sign` for E0260/E0261 bookkeeping.
+- C0.5.4.4 old parent-boundary approach failed: static-style `qmatch_abbrev_tac; first_x_assum drule; disch_then drule` did not match the nonstatic generated IH shape, and manual `qspecl_then` over generated variables became forbidden brittle prefix plumbing. Source was restored and build-clean; episode E0262 records this.
+- The oracle decomposed C0.5.4.4 into C0.5.4.4.1/.2, but scheduler initially made C0.5.4.5 beginable. E0263 was closed as plan_incomplete/scheduling conflict with no proof edits; oracle then repaired dependencies so C0.5.4.4.1 became next.
+- C0.5.4.4.1 probe failed exactly at its failure condition: sufficient stronger conjunction plus goal-directed `first_x_assum irule` over the generated optional-driver IH timed out and exposed the large generated-prefix/whole-tail goal. Source was restored and focused holbuild clean; E0264 was closed stuck/risk_mismatch.
+- The required E0264 review failed twice with OracleBudgetExceeded, leaving the PLAN gate blocked with no beginable components.
 
 ### Ignored Signals
-- The success branch needs a positive semantic dependency (optional-driver IH), unlike runtime-error branches. Treating it as just another subresume where the generated-prefix universal can be discarded was under-specified.
-- The static proof around lines 17808--17816 derives the driver premise before the final tail. That pattern should be moved to the parent nonstatic skeleton, not replayed inside the success subresume.
-- A clean focused build with `Expr_Call_ExtCall_nonstatic_success` still cheated is not progress for completion; E0258 confirmed audits must grep for that cheat before accepting build cleanliness.
+- The generated optional-driver IH's antecedent is not just a small prefix: even goal-directed `irule` leaves a huge goal containing the whole generated ExtCall prefix and continuation tail, a strong signal that the interface is wrong-shaped for late-branch extraction.
+- The plan's instruction to avoid generated-prefix plumbing was correct, but the replacement still relied on the same generated universal becoming manageable by unification; E0264 shows that assumption was under-validated.
+- A clean focused build is only source stability here; the nonstatic success subresume remains cheated and must not be mistaken for proof progress.
 
 ### Strategy Adjustments
-- Next session should not edit source until E0259 review is accepted or the oracle explicitly repairs the pending-review state.
-- Once C0.5.4.4 is beginable, work in `Expr_Call_ExtCall_result_nonstatic` near the success split, not initially in the success `Resume` body. The checkpoint passes if after `RESUME_TAC` the success subresume context contains a compact conditional driver IH.
-- For C0.5.4.5, only after the compact IH is visible should the success proof apply `run_ext_call_accounts_well_typed`, `runtime_consistent_def`/`env_consistent_get_tenv`, and `extcall_after_state_update_tail_sound_cond_driver_ih`.
-- Keep commits narrow and unsigned. Do not stage untracked `semantics/prop/LEARNINGS_type_system_rewrite.legacy.md` or `semantics/prop/tmp_helper.txt`.
+- Next session must not begin any component or edit/build until the E0264 strategist review succeeds or explicitly repairs the plan. query_plan currently confirms this as the only legal action.
+- When review succeeds, prefer a redesigned interface that does not rely on late `irule` over the generated universal. Ask for a higher-level helper/boundary if the returned plan still looks like generated-prefix extraction.
+- Keep source edits confined to `semantics/prop/vyperTypeStmtSoundnessScript.sml`; do not alter evaluator/semantics definitions and do not edit outside `semantics/prop`.
+- Do not stage untracked `semantics/prop/LEARNINGS_type_system_rewrite.legacy.md` or `semantics/prop/tmp_helper.txt`. Current tracked diffs are PLAN/DOSSIER from recorded episodes/reviews; leave them for the next stable checkpoint unless instructed by commit prompt.
 
 ### Oracle Feedback
-- Held: E0257 review insight was correct: derive/pass compact optional-driver IH at the parent success suspend boundary rather than recovering it in the subresume.
-- Held: E0258 review corrected the premature terminal audit schedule; C0.5.5 must wait until C0.5.4.6.
-- Missed/tooling: E0259 carry-forward review is still pending because plan_oracle failed with OracleBudgetExceeded, so the next session must clear that administrative gate before proof work.
+- Held: E0262 review correctly recognized that C0.5.4.5 must wait for a compact optional-driver IH boundary and repaired the earlier scheduling conflict after E0263.
+- Missed: The refined C0.5.4.4.1 plan claimed goal-directed `irule` over the generated optional-driver IH would instantiate prefix variables without explicit plumbing; E0264 falsified this in the actual goal state.
+- Tooling blocker: Two required E0264 review calls failed with OracleBudgetExceeded (TO_type_system_rewrite-20260602T195240Z_m4870_t001 and TO_type_system_rewrite-20260602T195240Z_m4872_t001), so the session ended blocked.
 
 ## Evidence Pointers
-- episode:E0255 - C0.5.4.2 calldata-error subresume proved
-- tool_output:TO_type_system_rewrite-20260602T195240Z_m4745_t001 - focused build after calldata proof
-- episode:E0256 - C0.5.4.3 empty-code/run-none/reverted subresumes proved
-- tool_output:TO_type_system_rewrite-20260602T195240Z_m4758_t001 - focused build after three error branches
-- episode:E0257 - success subresume stuck/risk_mismatch; optional-driver IH boundary too weak
-- tool_output:TO_type_system_rewrite-20260602T195240Z_m4781_t001 - static-style generated-prefix simplification in success subresume timed out
-- tool_output:TO_type_system_rewrite-20260602T195240Z_m4783_t001 - source restored to success cheat and focused build clean
-- episode:E0258 - premature C0.5.5 audit found remaining nonstatic success cheat
-- tool_output:TO_type_system_rewrite-20260602T195240Z_m4794_t001 - oracle repaired plan/dependencies after E0258
-- episode:E0259 - carry-forward C0.5.4.1 closed proved, awaiting review
-- tool_output:TO_type_system_rewrite-20260602T195240Z_m4798_t001 - E0259 review failed with OracleBudgetExceeded
-- tool_output:TO_type_system_rewrite-20260602T195240Z_m4799_t001 - query_plan shows pending E0259 review as the only allowed next action
+- episode:E0262 - old C0.5.4.4 parent-boundary/static-style and manual generated-prefix attempts failed and source was restored
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m4825_t001 - static-style nonstatic parent derivation failed at `disch_then drule`
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m4849_t001 - manual/generated-prefix route still exposed large prefix/equality obligations
+- episode:E0263 - C0.5.4.5 was closed stuck only as scheduling/dependency mismatch, not theorem failure
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m4858_t001 - begin_component C0.5.4.5 showed it required boundary from C0.5.4.4
+- episode:E0264 - C0.5.4.4.1 goal-directed generated-IH probe failed and source restored
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m4864_t001 - C0.5.4.4.1 `irule` probe timed out and exposed huge generated-prefix goal
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m4868_t001 - focused holbuild clean after restoring source
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m4871_t001 - query_plan shows no frontier and E0264 review as only allowed action
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m4870_t001 - first E0264 review failed OracleBudgetExceeded
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m4872_t001 - second E0264 review failed OracleBudgetExceeded

@@ -658,3 +658,13 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260602T195240Z_m4768_t001
 - tool_output:TO_type_system_rewrite-20260602T195240Z_m4781_t001
 - plan:C0.5.4.4
+
+## L0141 scope='C0.5.4.4.1' tags=ExtCall,nonstatic,generated-IH,driver-IH,proof-interface,irule,suspend
+shape: A generated mutual IH contains the optional-driver fact behind the whole nonstatic ExtCall prefix; the desired assertion is a compact conditional driver IH in the parent success branch.
+pattern: Goal-directed `irule` over the generated universal is not a safe abstraction boundary here: even with a sufficient stronger conjunction matching the generated conclusion, HOL leaves/times out on the large generated-prefix and whole-tail goal. Treat this as a proof-interface failure and ask for a higher-level helper/boundary rather than more tactic search.
+works_when: Applies to the nonstatic ExtCall success branch after failure/error branches are split and concrete facts include `build_ext_calldata ... = SOME x'`, `run_ext_call ... = SOME (pr0,pr1,pr2,pr3)`, and `pr0`. Do not use it as a reason to retry manual generated-variable instantiation; the lesson is to redesign the boundary.
+evidence:
+- episode:E0264
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m4864_t001
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m4866_t001
+- plan:C0.5.4.4.1
