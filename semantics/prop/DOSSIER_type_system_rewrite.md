@@ -82,7 +82,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C0.5.4 | stuck | risk_mismatch | E0253 | Call plan_oracle(mode='review', component_id='C0.5.4', evidence_ids=[...]) for strategist repair before any further edits. |
 | C0.5.4.1 | proved |  | E0259 |  |
 | C0.5.4.2 | proved |  | E0260 |  |
-| C0.5.4.3 | proved |  | E0256 |  |
+| C0.5.4.3 | proved |  | E0261 |  |
 | C0.5.4.4 | stuck | risk_mismatch | E0257 | Call plan_oracle(mode='review') for C0.5.4.4. The likely repair is to adjust C0.5.4.1/parent success suspend so it derives a compact optional-driver IH before suspending success, mirroring the static proof's lines 17808-17816, rather than attempting that generated-prefix simplification in the subresume. |
 | C0.5.5 | stuck | plan_incomplete | E0258 | Call plan_oracle(mode='review') for C0.5.5 and request scheduling repair so C0.5.4.4 becomes beginable before C0.5.4.5 and audits. |
 | C1.1 | proved |  | E0024 | Call plan_oracle(mode='review') for C1.1, then begin C1.2 if accepted. |
@@ -2383,21 +2383,21 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0256`
+- latest episode: `E0261`
 - blocker: 
-- actual effort: 1 sessions, 1 msgs, 8 steps, 8 tools, 3 holbuild, 606,321 tok (604,287 in, 2,034 out, 575,488 cached), 114.3s, $0.492759
+- actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 116,103 tok (115,818 in, 285 out, 111,872 cached), 13.9s, $0.084216
 
 ### Attempts / Evidence
 
 - `E0256` (proved, , actual effort: 1 sessions, 1 msgs, 8 steps, 8 tools, 3 holbuild, 606,321 tok (604,287 in, 2,034 out, 575,488 cached), 114.3s, $0.492759)
   - Filled three nonstatic error subresumes: empty-code and run-none delete generated-prefix universal then simplify concrete suspended equations; reverted branch already resumes to concrete `res`/`st'` facts and closes by `gvs[no_type_error_result_def]`. -> Focused `vyperTypeStmtSoundnessTheory` build succeeds; all C0.5.4.3 error branches are proved without broad generated-prefix simplification. (`TO_type_system_rewrite-20260602T195240Z_m4758_t001`)
+- `E0261` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 1 holbuild, 116,103 tok (115,818 in, 285 out, 111,872 cached), 13.9s, $0.084216)
+  - Carry-forward checkpoint for nonstatic empty-code, run-none, and revert-error subresumes; no source edits, focused holbuild re-run under active component. -> Focused `vyperTypeStmtSoundnessTheory` build succeeds, confirming E0256 subresume proofs remain valid under current source. (`TO_type_system_rewrite-20260602T195240Z_m4814_t001`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260602T195240Z_m4753_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260602T195240Z_m4755_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260602T195240Z_m4757_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260602T195240Z_m4758_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4813_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4814_t001` (use `read_tool_output` for exact output)
 
 ## C0.5.4.4
 
