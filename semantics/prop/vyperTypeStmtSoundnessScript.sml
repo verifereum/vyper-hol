@@ -17800,7 +17800,36 @@ Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result_static]:
   disch_then(qspec_then`args_st`mp_tac) >>
   simp[raise_def, return_def] >>
   strip_tac >>
-  cheat
+  unabbrev_all_tac >>
+  `accounts_well_typed pr2` by (
+    drule_all run_ext_call_accounts_well_typed >>
+    simp[]) >>
+  `runtime_consistent env cx args_st` by simp[runtime_consistent_def] >>
+  `get_tenv cx = env.type_defs` by metis_tac[env_consistent_get_tenv] >>
+  qpat_x_assum `get_tenv cx = env.type_defs` (fn th => rewrite_tac[th]) >>
+  strip_tac >>
+  `state_well_typed st' /\ env_consistent env cx st' /\
+   accounts_well_typed st'.accounts /\ no_type_error_result res /\
+   case res of
+   | INL tv => expr_result_typed env (Call ret_type (ExtCall T (func_name,arg_types,ret_type)) es drv) tv
+   | INR v1 => T` suffices_by simp[no_type_error_result_def] >>
+  qspecl_then [`env`, `cx`, `es`, `T`, `func_name`, `arg_types`, `ret_type`,
+               `drv`, `pr1`, `args_st`, `pr2`, `pr3`, `res`, `st'`]
+    mp_tac extcall_after_state_update_tail_sound_cond_driver_ih >>
+  disch_then irule >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- (
+    rpt strip_tac >>
+    qpat_x_assum `!env' st'' res' st'''. _`
+      (qspecl_then [`env0`, `st0`, `res0`, `st0'`] mp_tac) >>
+    impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+    strip_tac >>
+    metis_tac[]) >>
+  rpt conj_tac >>
+  first_assum ACCEPT_TAC
 QED
 
 Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_static_calldata_error]:

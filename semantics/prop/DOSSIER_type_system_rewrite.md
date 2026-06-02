@@ -73,6 +73,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C0.4.3 | stuck | risk_mismatch | E0241 | Call plan_oracle(mode='review', component_id='C0.4.3', evidence_ids=[...]) for a replacement/decomposition; do not continue tactical work on this component until the strategist repairs the plan. |
 | C0.4.3.a | proved |  | E0244 |  |
 | C0.4.3.b | proved |  | E0245 |  |
+| C0.4.3.c | proved |  | E0246 |  |
 | C0.5 | stuck | plan_incomplete | E0099 | Call `plan_oracle(mode='review', component_id='C0.5', ...)` to accept the premature-validation failure and repair scheduling/dependencies so C0.4.1 is next. |
 | C1.1 | proved |  | E0024 | Call plan_oracle(mode='review') for C1.1, then begin C1.2 if accepted. |
 | C1.1.1 | proved |  | E0012 |  |
@@ -2148,6 +2149,28 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 ### Evidence refs
 
 - `TO_type_system_rewrite-20260602T195240Z_m4585_t001` (use `read_tool_output` for exact output)
+
+## C0.4.3.c
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0246`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 29 steps, 34 tools, 12 holbuild, 2,474,395 tok (2,465,917 in, 8,478 out, 2,382,208 cached), 659.0s, $1.863989
+
+### Attempts / Evidence
+
+- `E0246` (proved, , actual effort: 1 sessions, 1 msgs, 29 steps, 34 tools, 12 holbuild, 2,474,395 tok (2,465,917 in, 8,478 out, 2,382,208 cached), 659.0s, $1.863989)
+  - Replaced the remaining `cheat` in `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result_static]` concrete `SOME` tail. Derived `accounts_well_typed pr2` via `run_ext_call_accounts_well_typed`, established `runtime_consistent env cx args_st` and `get_tenv cx = env.type_defs`, then applied `extcall_after_state_update_tail_sound_cond_driver_ih` with the live generated conditional driver IH only inside the concrete tail. -> Focused `vyperTypeStmtSoundnessTheory` build passed. Grep shows the static ExtCall tail cheat is gone; remaining cheats are the planned nonstatic ExtCall and RawCallTarget obligations. (`TO_type_system_rewrite-20260602T195240Z_m4618_t001`, `TO_type_system_rewrite-20260602T195240Z_m4619_t001`, `TO_type_system_rewrite-20260602T195240Z_m4619_t003`)
+  - Earlier probe/iterations used `FAIL_TAC` and direct `irule` attempts to inspect the concrete tail; broad `gvs[]`/`simp[]` over the large generated state timed out, so final proof used targeted assumption acceptance and small `metis_tac[]` only for the conditional driver IH consequence. -> Avoided forbidden broad generated-prefix cleanup and kept the proof branch-local; final source is build-clean for the focused target. (`TO_type_system_rewrite-20260602T195240Z_m4595_t001`, `TO_type_system_rewrite-20260602T195240Z_m4597_t001`, `TO_type_system_rewrite-20260602T195240Z_m4618_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260602T195240Z_m4618_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4619_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4619_t003` (use `read_tool_output` for exact output)
 
 ## C0.5
 
