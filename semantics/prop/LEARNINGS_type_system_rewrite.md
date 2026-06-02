@@ -619,22 +619,22 @@ evidence:
 - episode:E0218
 - tool_output:TO_type_system_rewrite-20260601T220715Z_m4241_t001
 
-## L0129 scope='C0' tags=ExtCall,Resume,generated-prefix,driver-IH,proof-boundary,blocked-report
-shape: A large mutual-proof Resume branch exposes an optional-driver IH only as a full monadic-prefix implication, and local case-splitting fans out before the concrete continuation helper can match.
-pattern: Treat this as a proof-boundary/interface blocker, not a tactic problem. Under constraints forbidding generated-prefix reconstruction, the reusable repair is ancestor-level proof architecture: move/refactor the suspend/induction boundary so the optional-driver IH is available natively in a compact concrete success branch, or stop/report if the task says proof must be straightforward. Do not try to recover an unconditional IH or solve generated-prefix goals individually.
-works_when: Applies to ExtCall static/nonstatic success Resume proofs where direct helper application or local splitting yields multiple input goals, >4KiB generated-prefix goals, or an IH guarded by the whole evaluator prefix. Does not apply if a future PLAN proves a new branch container that gives one concrete success goal before helper application.
+## L0131 scope='C0' tags=ExtCall,generated-prefix,Resume,run_ext_call,driver-IH,proof-boundary
+shape: At an ExtCall static-success mutual `Resume`, a local `Cases_on run_ext_call` reaches multiple generated-prefix goals before `run_ext_call = SOME (...)` can be named, and the optional-driver IH remains guarded by the full monadic prefix.
+pattern: Treat this as a proof-boundary/interface blocker, not a local tactic problem. Under restrictions forbidding generated-prefix reconstruction, do not keep splitting or mining the IH. The reusable repair direction is ancestor-level proof architecture: move/refactor the mutual proof or suspend boundary so the optional-driver IH is produced natively as a compact branch-local premise before applying projected ExtCall helpers.
+works_when: Applies when a minimal post-`Cases_on run_ext_call` probe fails before naming the SOME result, or when helper application requires broad simplification of a generated ExtCall monadic prefix. Does not apply if a future PLAN creates a genuinely compact success continuation before helper matching.
 evidence:
-- episode:E0217
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m4232_t001
-- episode:E0218
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m4241_t001
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m4261_t001
+- episode:E0221
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m4291_t001
+- episode:E0222
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m4305_t001
 
-## L0130 scope='C0' tags=ExtCall,Resume,proof-boundary,generated-prefix,IH
-shape: At an ExtCall static-success Resume boundary, splitting `run_ext_call` before obtaining a concrete success continuation produces many generated-prefix goals and the optional-driver IH remains guarded by the full monadic prefix.
-pattern: Do not treat this as a local case-split problem. The reusable diagnostic is to move the proof boundary or add strategist-owned architecture so the optional-driver IH is generated inside a compact branch-local continuation; otherwise helper application attempts will be mismatched with the live goal interface.
-works_when: Applies to the current vyperTypeStmtSoundness ExtCall mutual proof boundary and similar generated monadic-prefix proofs where broad prefix simplification is forbidden and branch-local IH exposure is needed.
+## L0132 scope='C0' tags=ExtCall,Resume,generated-prefix,driver-IH,proof-boundary
+shape: A mutual `Resume` branch reaches `Cases_on run_ext_call`, but the success branch exposes multiple goals and a generated optional-driver IH guarded by the full monadic prefix before a compact `SOME` continuation can be named.
+pattern: Treat this as a proof-boundary/interface blocker, not a local tactic problem. Under restrictions forbidding generated-prefix reconstruction, stop the current decomposition and require ancestor-level architecture that generates the optional-driver IH natively inside a compact branch-local success continuation. A successful focused build after reverting only proves baseline restoration if cheats remain.
+works_when: Applies to ExtCall/static-success style branches where minimal inspection after the semantic split yields >4KiB generated-prefix goals or 9-way fanout before helper matching. Does not apply if a future PLAN creates a genuinely compact success continuation before the helper is invoked.
 evidence:
-- episode:E0217
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m4232_t001
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m4253_t001
+- episode:E0223
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m4328_t001
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m4332_t001
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m4347_t001

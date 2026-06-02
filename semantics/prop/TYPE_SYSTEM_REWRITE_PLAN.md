@@ -1624,3 +1624,71 @@ maintainer-authorized ancestor-level proof-boundary redesign inside
 so the optional-driver recursive IH is exposed natively as a compact branch-local
 premise.  Do not schedule downstream ExtCall, RawCallTarget, or final
 zero-cheat-validation work while that compact driver IH is absent.
+
+
+## ExtCall post-clarification boundary probe stop update (2026-06-02)
+
+After the maintainer clarification narrowed the stop gate and explicitly allowed a
+careful linear branch-by-branch proof, the authorized boundary probe was retried
+under component C0.2.  The probe was deliberately minimal: at
+`Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result_static_success]`,
+after the existing `Cases_on run_ext_call ...`, it attempted only to name the
+`SOME` branch result and split that tuple before inspecting the continuation.
+
+Checked evidence in E0221 shows that this still fails before a compact
+`run_ext_call = SOME (success, returnData, accounts', tStorage')` continuation is
+available.  Holbuild output
+`TO_type_system_rewrite-20260601T220715Z_m4291_t001` reports 9 input goals and a
+>4KiB top goal containing the full generated ExtCall optional-driver prefix
+before the `rename1` step can match.  This reproduces the old generated-prefix
+fanout at the current Resume boundary rather than exposing a helper-fit point.
+
+The failed probe was reverted immediately; the source is back to the intentional
+static ExtCall `cheat` placeholder, and
+`holbuild(targets=["vyperTypeStmtSoundnessTheory"])` finished on that restored
+baseline (`TO_type_system_rewrite-20260601T220715Z_m4293_t001`).  This is not a
+proof completion claim and not a counterexample to the theorem; it is a
+proof-boundary/design stop under the task requirement that the proof be
+straightforward.
+
+Do not retry C0.2/C0.3/C0.4 under this same source-point decomposition.  In
+particular, do not solve the generated-prefix goals individually, do not use
+broad `simp`/`gvs`/`AllCaseEqs()` over the generated ExtCall prefix, and do not
+introduce long generated-prefix adapter theorems.  Future proof progress would
+need a maintainer-authorized ancestor-level proof-boundary redesign inside
+`semantics/prop` that avoids this fanout before helper application.
+
+## ExtCall accepted E0223 boundary stop update (2026-06-02)
+
+After the previous post-clarification E0221 stop was briefly reopened by a
+replacement proof-boundary checkpoint, the checkpoint was tried again in the
+narrowest permitted way.  In E0223, the proof was restored to the existing
+static-success branch point and a `FAIL_TAC` probe was inserted immediately after
+`Cases_on run_ext_call ...` in
+`Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result_static_success]`.
+No broad `simp`/`gvs`, `AllCaseEqs()`, generated-prefix adapter theorem, or
+fanout-goal proof attempt was used.
+
+Holbuild evidence `TO_type_system_rewrite-20260601T220715Z_m4328_t001` again
+reports 9 input goals and a top goal exceeding 4KiB.  The visible goal is the
+recursor-generated optional-driver IH guarded by the full ExtCall monadic prefix,
+plus the current branch facts, before a compact branch-local
+`run_ext_call = SOME (success, returnData, accounts', tStorage')` continuation
+can be used.  This exactly matches the proof-boundary stop condition and shows
+that the current static-success `Resume` point still does not provide the compact
+interface required by the projected ExtCall helpers.
+
+The probe was reverted immediately; the source is back at the intentional static
+ExtCall `cheat` baseline and the focused target builds on that baseline
+(`TO_type_system_rewrite-20260601T220715Z_m4330_t001`).  Strategist review
+accepted E0223 as a real risk-mismatch/proof-boundary failure
+(`TO_type_system_rewrite-20260601T220715Z_m4332_t001`).  This is not a proof
+completion claim and not a counterexample to the theorem; it is a controlled
+proof-boundary/design stop under the task requirement that the proof be
+straightforward.
+
+Consequently, the old downstream static ExtCall, nonstatic ExtCall,
+RawCallTarget, and final zero-cheat validation leaves are not authorized under
+this decomposition.  Future proof progress would require a genuinely different
+ancestor-level proof-boundary architecture inside `semantics/prop`, or explicit
+maintainer relaxation of the generated-prefix restrictions.
