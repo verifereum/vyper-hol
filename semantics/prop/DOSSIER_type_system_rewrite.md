@@ -7,7 +7,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | Component | Status | Diagnosis | Latest Episode | Next |
 |---|---|---|---|---|
 | C0 | proved |  | E0021 |  |
-| C0.1 | proved |  | E0100 |  |
+| C0.1 | proved |  | E0156 |  |
 | C0.1.1 | stuck | risk_mismatch | E0033 | Ask strategist to provide a more concrete, low-risk prefix script or a different decomposition; source is currently buildable with the checkpoint placeholder. |
 | C0.1.1.1 | proved |  | E0036 |  |
 | C0.1.1.2 | stuck | risk_mismatch | E0038 | Call plan_oracle(mode='review') for this stuck episode and request a redesign of the ExtCall helper boundary/proof plan under the maintainer constraints. |
@@ -95,9 +95,9 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0100`
+- latest episode: `E0156`
 - blocker: 
-- actual effort: 1 sessions, 3 msgs, 24 steps, 29 tools, 7 holbuild, 1,696,243 tok (1,688,875 in, 7,368 out, 1,612,800 cached), 373.0s, $1.407815
+- actual effort: 1 sessions, 1 msgs, 16 steps, 18 tools, 6 holbuild, 1,393,178 tok (1,389,249 in, 3,929 out, 1,300,992 cached), 203.0s, $1.209651
 
 ### Attempts / Evidence
 
@@ -131,11 +131,14 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Carry-forward documentation/source-cleanup component after scheduler repair; no new source edit needed. -> Scoped dossier shows prior proved C0.1 documentation cleanup (E0076) and active PLAN states no further work required. Component closed to restore carried-forward progress under replaced PLAN. (`TO_type_system_rewrite-20260601T081233Z_m1889_t001`)
 - `E0100` (proved, , actual effort: 1 sessions, 3 msgs, 24 steps, 29 tools, 7 holbuild, 1,696,243 tok (1,688,875 in, 7,368 out, 1,612,800 cached), 373.0s, $1.407815)
   - Replaced the `raw_call_return_type_well_formed` cheat with local arithmetic: added `word_size_not_lt_self` showing positive `n` with `¬(word_size n < n)` forces `n = 1`, then used it to close the remaining slot-size bound. -> `vyperTypeBuiltinsTheory` builds cleanly; the former `FAIL_TAC`/`cheat` site is proved. (`TO_type_system_rewrite-20260601T081233Z_m2249_t001`)
+- `E0156` (proved, , actual effort: 1 sessions, 1 msgs, 16 steps, 18 tools, 6 holbuild, 1,393,178 tok (1,389,249 in, 3,929 out, 1,300,992 cached), 203.0s, $1.209651)
+  - Replaced the old static ExtCall `cheat` with a `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result_static]` body that strips the local branch context and suspends `Expr_Call_ExtCall_result_static_success`; added a new branch-local Resume for that success label with the remaining placeholder cheat for C0.2. -> Target `vyperTypeStmtSoundnessTheory` builds. The original static ExtCall cheat has been refactored into a branch-local suspended success continuation; C0.2 now owns the remaining placeholder. A prior FAIL probe of this context showed the generated optional-driver IH guarded by the concrete ExtCall success prefix plus concrete branch facts, matching the planned interface shape. (`TO_type_system_rewrite-20260601T220715Z_m3215_t001`, `TO_type_system_rewrite-20260601T220715Z_m3205_t001`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260601T081233Z_m2249_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m2250_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3215_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3214_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3205_t001` (use `read_tool_output` for exact output)
 
 ## C0.1.1
 

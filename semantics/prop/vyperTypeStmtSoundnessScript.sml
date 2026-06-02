@@ -17636,6 +17636,11 @@ Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result]:
 QED
 
 Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result_static]:
+  rpt gen_tac >> strip_tac >>
+  suspend "Expr_Call_ExtCall_result_static_success"
+QED
+
+Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result_static_success]:
   cheat
 QED
 

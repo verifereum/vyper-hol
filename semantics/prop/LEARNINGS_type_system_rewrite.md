@@ -558,3 +558,31 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260601T220715Z_m3150_t003
 - episode:E0155
 - source:semantics/prop/vyperTypeStmtSoundnessScript.sml:17638
+
+## L0094 scope='C0' tags=ExtCall,Resume,driver_ih,monadic-prefix,proof-boundary
+shape: Generated optional-driver IH is hidden behind a long monadic ExtCall prefix in a suspended mutual proof; consumer needs a compact branch-local driver premise.
+pattern: Do not recover the compact premise from the top-level Resume context by broad simplification/case cleanup or a generated-prefix adapter. Treat this as a proof-boundary mismatch: obtain maintainer/strategist approval for a new branch-local boundary/suspension interface and prove small probes before attempting the Resume consumer.
+works_when: Applies when a suspended evaluator proof exposes an IH only through a generated prefix and the task requires straightforward branch-local proof; especially when broad `gvs`/`AllCaseEqs()` or long adapters are forbidden or time out.
+evidence:
+- episode:E0149
+- episode:E0155
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3166_t001
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3174_t002
+
+## L0095 scope='C0' tags=PLAN-gate,risk,frontier,blocked,ExtCall
+shape: High-risk required component has no scheduled leaf frontier, but descendants appear ready
+pattern: Do not begin or locally select ready-looking descendants under a blocked required ancestor. Treat no-frontier/high-risk query_plan plus holbuild PLAN-gate block as an external proof-architecture precondition: obtain explicit scope/architecture approval and strategist replacement of the ancestor before edits/builds.
+works_when: Applies when the top-level required component is Risk >=3, query_plan reports no frontier/beginable component/Oracle next, and remaining completion requires a cheated or blocked obligation in that ancestor.
+evidence:
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3179_t003
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3177_t001
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3166_t001
+
+## L0096 scope='C0' tags=ExtCall,generated-IH,proof-boundary,branch-local
+shape: Static ExtCall success continuation needs optional-driver IH/premise after monadic prefix splitting.
+pattern: If a generated mutual/optional-driver IH is only recoverable by broad cleanup of a large generated ExtCall prefix, stop and move the proof boundary earlier: expose the needed driver premise via a branch-local continuation theorem, suspension/interface adjustment, or other authorized boundary before the prefix is introduced. Consumer-level broad simp/gvs/AllCaseEqs recovery is not a straightforward proof interface.
+works_when: Applies to this task's static ExtCall proof architecture under the maintainer clarification forbidding broad generated-prefix cleanup and long adapter plumbing; requires strategist/maintainer approval before edits.
+evidence:
+- episode:E0149
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3166_t001
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3190_t001
