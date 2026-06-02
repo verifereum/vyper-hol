@@ -1455,3 +1455,160 @@ Blocked design issue:
 - Per the maintainer clarification and current PLAN, this is not a straightforward proof step and must not be solved by broad `simp`/`gvs`, `AllCaseEqs()`, `metis_tac`, or a long generated-prefix adapter theorem.
 
 Until a new proof architecture is approved, do not proceed to downstream nonstatic ExtCall work and do not claim the static ExtCall proof obligation is complete.
+
+
+## ExtCall static driver-branch stop update (2026-06-02)
+
+The earlier static ExtCall stop has been superseded by a narrower proof state.  The
+static-success `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result_static_success]`
+is no longer merely the old whole-Resume `cheat`; it has useful proof-script
+progress that linearly reaches a single remaining success-continuation branch.
+The current source intentionally stops at:
+
+```sml
+FAIL_TAC "c0_2_3_2_2_1_driver_branch_remaining"
+```
+
+This is a proof-architecture blocker, not a semantic counterexample and not a
+claim that the theorem is false.  No evaluator/semantics definitions were changed.
+
+Focused facts at the marker, as checked by
+`holbuild(targets=["vyperTypeStmtSoundnessTheory"])` in
+`TO_type_system_rewrite-20260601T220715Z_m3535_t001`, include:
+
+```sml
+run_ext_call cx.txn.target target_addr x' NONE args_st.accounts args_st.tStorage
+  (vyper_to_tx_params cx.txn) = SOME (T,[],q'',r)
+
+eval_expr cx (THE drv) (args_st with <|accounts := q''; tStorage := r|>) =
+  (res,st')
+
+runtime_consistent env cx args_st
+accounts_well_typed q''
+get_tenv cx = env.type_defs
+IS_SOME drv
+```
+
+The remaining goal is one projection of the postcondition, beginning with
+`state_well_typed st'`; three sibling projections are in the same focused
+branch.  The context also contains the labelled generated optional-driver IH:
+
+```sml
+generated_driver_ih :
+  !generated_prefix_variables.
+    <full generated ExtCall prefix> /\ returnData = [] /\ IS_SOME drv ==>
+    !env st res st'.
+      env_consistent env cx st /\ state_well_typed st /\ context_well_typed cx /\
+      accounts_well_typed st.accounts /\ functions_well_typed cx /\
+      eval_expr cx (THE drv) st = (res,st') ==>
+      (well_typed_expr env (THE drv) ==>
+         state_well_typed st' /\ env_consistent env cx st' /\
+         accounts_well_typed st'.accounts /\ no_type_error_result res /\
+         case res of INL tv => expr_result_typed env (THE drv) tv | INR _ => T) /\
+      ... place-expression projection ...
+```
+
+The existing boundary theorem
+`extcall_after_state_update_tail_sound_cond_driver_ih` would close this branch
+if the proof had a compact conditional driver premise of the following shape:
+
+```sml
+q' = [] /\ IS_SOME drv ==>
+  !env0 st0 res0 st0'.
+    env_consistent env0 cx st0 /\ state_well_typed st0 /\
+    context_well_typed cx /\ accounts_well_typed st0.accounts /\
+    functions_well_typed cx /\
+    eval_expr cx (THE drv) st0 = (res0,st0') ==>
+    well_typed_expr env0 (THE drv) ==>
+      state_well_typed st0' /\ env_consistent env0 cx st0' /\
+      accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
+      case res0 of INL tv => expr_result_typed env0 (THE drv) tv | INR _ => T
+```
+
+Accepted negative evidence shows this compact IH is not currently recoverable by
+the allowed proof style:
+
+- E0174 / `TO_type_system_rewrite-20260601T220715Z_m3487_t001` and
+  `TO_type_system_rewrite-20260601T220715Z_m3489_t001`: attempting to derive the
+  compact driver IH early is based on a false premise.  The early Resume context
+  does not expose the generated prefix as native assumptions; specializing only
+  `generated_driver_ih` leaves a huge generated-prefix implication.
+- E0176 / `TO_type_system_rewrite-20260601T220715Z_m3515_t001`: at the concrete
+  driver branch, `asm "generated_driver_ih" mp_tac >> simp[...]` times out under
+  the fixed holbuild tactic limit.
+- E0176 / `TO_type_system_rewrite-20260601T220715Z_m3517_t001`: a more targeted
+  `drule_then mp_tac` variant that first matches the native `eval_exprs` prefix
+  fact also times out.
+- E0177 / `TO_type_system_rewrite-20260601T220715Z_m3519_t001` and
+  `TO_type_system_rewrite-20260601T220715Z_m3510_t001`: the failed probes were
+  reverted, preserving the useful proof progress that narrows the source to the
+  single true driver branch marker above.
+
+Do not try more local variants of `asm "generated_driver_ih" mp_tac`,
+`drule_then`, `qspec_then`, broad `simp`/`gvs`/`AllCaseEqs()` over the generated
+prefix, long explicit generated-variable instantiations, or generated-prefix
+adapter theorems.  Those routes are either explicitly forbidden by the maintainer
+clarification or have timed out.
+
+Recommended maintainer-level options:
+
+1. Refactor the mutual proof/suspension architecture so the optional-driver
+   recursive IH is exposed natively as the compact conditional premise needed by
+   `extcall_after_state_update_tail_sound_cond_driver_ih`; or
+2. Explicitly relax the proof-style constraint to allow a generated-prefix
+   adapter theorem or long generated instantiation for this branch.
+
+Until one of those options is approved, do not proceed to downstream nonstatic
+ExtCall or RawCallTarget work and do not claim the static ExtCall success proof is
+complete.
+
+
+## ExtCall static driver-tail final stop/stabilization update (2026-06-02)
+
+The narrower driver-branch marker described above has now also been cleaned back to
+a stable intentional-cheat baseline.  In E0201, the diagnostic marker
+
+```sml
+FAIL_TAC "c0_2_3_2_2_2_1_isolated_static_driver_success"
+```
+
+and the associated `Expr_Call_ExtCall_static_driver_tail` `Resume` block were
+removed.  The source now places a local `cheat` at the original static ExtCall
+success proof point where the tail had been suspended.  This is intentionally a
+buildable placeholder, not a proof of the ExtCall obligation.
+
+Checked stable source status:
+
+- `semantics/prop/vyperTypeStmtSoundnessScript.sml` builds with the intentional
+  ExtCall cheat: `TO_type_system_rewrite-20260601T220715Z_m3934_t001`.
+- Attempts to replace only the `Resume` body by `cheat` or `RESUME_TAC >> cheat`
+  failed at `Finalise` with “No resumption proof found”
+  (`TO_type_system_rewrite-20260601T220715Z_m3921_t001`,
+  `TO_type_system_rewrite-20260601T220715Z_m3923_t001`), so the stable cleanup is
+  the local cheat at the original suspend site, with no separate Resume for that
+  label.
+- No evaluator/semantics definitions were changed and no files outside
+  `semantics/prop` were edited.
+
+The useful proof evidence is still E0199: the branch-by-branch proof can reach a
+concrete static ExtCall driver-success continuation with exact run/update facts
+and labelled `generated_driver_ih`.  The blocking evidence is E0200: all local
+routes tried to convert the full generated-prefix IH into the compact
+branch-local optional-driver IH failed or timed out:
+
+1. direct `asm "generated_driver_ih" irule` did not match the desired compact IH
+   (`TO_type_system_rewrite-20260601T220715Z_m3864_t001`);
+2. explicit generated-prefix conjunction plus forward chaining/specialization
+   failed (`TO_type_system_rewrite-20260601T220715Z_m3879_t001`);
+3. `asm "generated_driver_ih" mp_tac >> simp[]` timed out and is the forbidden
+   broad generated-prefix traversal route
+   (`TO_type_system_rewrite-20260601T220715Z_m3882_t001`).
+
+Therefore local static-driver-tail proof work is stopped.  This is not evidence
+that the theorem is false; it is a proof-interface/design blocker under the task
+requirement that the proof be straightforward.  Future progress requires
+maintainer-authorized ancestor-level proof-boundary redesign inside
+`semantics/prop`, such as moving/refactoring the mutual proof or suspend boundary
+so the optional-driver recursive IH is exposed natively as a compact branch-local
+premise.  Do not schedule downstream ExtCall, RawCallTarget, or final
+zero-cheat-validation work while that compact driver IH is absent.

@@ -183,23 +183,6 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260531T201607Z_m0543_t001
 - tool_output:TO_type_system_rewrite-20260531T201607Z_m0559_t001
 
-## L0029 scope='C0' tags=ExtCall,generated-IH,proof-interface,OracleBudgetExceeded,planning-gate
-shape: A high-risk proof-interface blocker has no low-risk frontier; repeated required strategist calls begin returning OracleBudgetExceeded.
-pattern: When the PLAN gate forbids edits/builds and the required strategist call fails with OracleBudgetExceeded, stop as an operational planning blocker rather than attempting source probes. Preserve the latest successful strategist verdict and resume only after oracle budget reset or external design input.
-works_when: Applies when query_plan shows a high-risk required component with no scheduled frontier and no beginable component, and plan_oracle is the only legal next action but repeatedly fails due to budget/tool limits.
-evidence:
-- tool_output:TO_type_system_rewrite-20260531T201607Z_m0637_t001
-- tool_output:TO_type_system_rewrite-20260531T201607Z_m0698_t001
-- tool_output:TO_type_system_rewrite-20260531T201607Z_m0700_t004
-
-## L0030 scope='C0' tags=ExtCall,proof-interface,generated-IH,planning-gate,no-build
-shape: A high-risk PLAN gate forbids holbuild/source probes, but a generic operator/startup instruction says to run holbuild before continuing.
-pattern: When the structured PLAN has a required high-risk gate with no frontier and explicitly forbids holbuild-as-proof-work, do not run holbuild merely to satisfy a generic startup habit. Execute the gate's legal next action (usually query_plan/plan_oracle or blocked report) and cite the conflict; build only after a replacement PLAN authorizes executable work.
-works_when: Applies when query_plan shows no beginable component/no Oracle next under a blocker that explicitly covers build/probe work, and the build would be proof exploration rather than a previously authorized cleanup syntax check.
-evidence:
-- tool_output:TO_type_system_rewrite-20260531T201607Z_m0780_t004
-- tool_output:TO_type_system_rewrite-20260531T201607Z_m0778_t001
-
 ## L0034 scope='C0.1.1.2' tags=ExtCall,Resume,generated-IH,simp-timeout,impl_tac
 shape: A generated IH has been specialized and the goal is `(premises ==> post) ==> rest` inside a huge Resume context; plain `simp[]` times out.
 pattern: Avoid simplifying the whole implication in context. Use `(impl_tac >- simp[]) >> strip_tac` to discharge the small premise locally and add the postcondition, while keeping the large generated prefix out of the simplifier. For call typing in the same large context, use `simp[NoAsms, Once well_typed_expr_def]` rather than assumption-enabled simp.
@@ -377,16 +360,6 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260601T081233Z_m2148_t001
 - source:semantics/prop/vyperTypeStmtSoundnessScript.sml:17475-17481
 
-## L0066 scope='C0' tags=PLAN-frontier,OracleBudgetExceeded,scheduler,cheat,blocked
-shape: After a reviewed/proved checkpoint, query_plan has high-risk ancestors, no scheduled frontier/no Oracle next/no blocking episodes, but grep still finds task-scoped cheats.
-pattern: Do not manually choose a ready component or declare completion. Treat this as a planning/scheduler gate: call plan_oracle to repair/decompose the next leaf. If repeated calls return OracleBudgetExceeded, stop as an operational blocker and resume when oracle budget/scheduler repair is available.
-works_when: Applies when `begin_component` cannot be called because no frontier exists, proof-integrity checks fail due to remaining cheats, and plan_oracle is the only legal route to more proof work.
-evidence:
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m2155_t001
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m2158_t001
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m2156_t001
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m2159_t001
-
 ## L0067 scope='C0.1' tags=word_size,type_slot_size,arithmetic,FAIL_TAC-probe
 shape: A theorem proof has already reduced to a single cheated arithmetic/type-slot tail after `Cases_on flags`, definition rewrites, `word_size_le`, and a `word_size n < n` split.
 pattern: Use a deliberate `FAIL_TAC` probe to read the exact residual arithmetic goal before choosing between `word_size_le`, `dimword` facts, and `decide_tac`. Avoid broad rewrites or definition changes; the proof should stay local to the existing theorem statement.
@@ -549,44 +522,6 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260601T220715Z_m3108_t001
 - source:semantics/prop/vyperTypeStmtSoundnessScript.sml:17638
 
-## L0093 scope='C0' tags=blocked_task_gate,cheat,ExtCall,frontier,completion
-shape: A required theorem remains intentionally `cheat`, holbuild succeeds, but query_plan has no beginable frontier and downstream ready-looking leaves conflict with the blocked gate.
-pattern: Treat build success as an intentional-cheat baseline, not completion. Escalate to the strategist to consolidate the plan into a blocked task gate or produce a new authorized low-risk frontier; if the strategist confirms blocked status, stop with a blocked operator outcome rather than manually beginning downstream ready components.
-works_when: Use when task completion requires zero cheats and accepted evidence says a required proof branch is a stop-state rather than a false theorem.
-evidence:
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m3147_t001
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m3150_t003
-- episode:E0155
-- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:17638
-
-## L0094 scope='C0' tags=ExtCall,Resume,driver_ih,monadic-prefix,proof-boundary
-shape: Generated optional-driver IH is hidden behind a long monadic ExtCall prefix in a suspended mutual proof; consumer needs a compact branch-local driver premise.
-pattern: Do not recover the compact premise from the top-level Resume context by broad simplification/case cleanup or a generated-prefix adapter. Treat this as a proof-boundary mismatch: obtain maintainer/strategist approval for a new branch-local boundary/suspension interface and prove small probes before attempting the Resume consumer.
-works_when: Applies when a suspended evaluator proof exposes an IH only through a generated prefix and the task requires straightforward branch-local proof; especially when broad `gvs`/`AllCaseEqs()` or long adapters are forbidden or time out.
-evidence:
-- episode:E0149
-- episode:E0155
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m3166_t001
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m3174_t002
-
-## L0095 scope='C0' tags=PLAN-gate,risk,frontier,blocked,ExtCall
-shape: High-risk required component has no scheduled leaf frontier, but descendants appear ready
-pattern: Do not begin or locally select ready-looking descendants under a blocked required ancestor. Treat no-frontier/high-risk query_plan plus holbuild PLAN-gate block as an external proof-architecture precondition: obtain explicit scope/architecture approval and strategist replacement of the ancestor before edits/builds.
-works_when: Applies when the top-level required component is Risk >=3, query_plan reports no frontier/beginable component/Oracle next, and remaining completion requires a cheated or blocked obligation in that ancestor.
-evidence:
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m3179_t003
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m3177_t001
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m3166_t001
-
-## L0096 scope='C0' tags=ExtCall,generated-IH,proof-boundary,branch-local
-shape: Static ExtCall success continuation needs optional-driver IH/premise after monadic prefix splitting.
-pattern: If a generated mutual/optional-driver IH is only recoverable by broad cleanup of a large generated ExtCall prefix, stop and move the proof boundary earlier: expose the needed driver premise via a branch-local continuation theorem, suspension/interface adjustment, or other authorized boundary before the prefix is introduced. Consumer-level broad simp/gvs/AllCaseEqs recovery is not a straightforward proof interface.
-works_when: Applies to this task's static ExtCall proof architecture under the maintainer clarification forbidding broad generated-prefix cleanup and long adapter plumbing; requires strategist/maintainer approval before edits.
-evidence:
-- episode:E0149
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m3166_t001
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m3190_t001
-
 ## L0097 scope='C0.2.1' tags=ExtCall,Resume,suspend,generated-IH,proof-boundary
 shape: A suspended mutual-proof subgoal still resumes to projection goals containing a full generated ExtCall prefix, rather than a small tail-helper obligation.
 pattern: Treat this as evidence that the suspension boundary is still too early. Do not proceed by replaying or simplifying the generated prefix inside the Resume; ask for a helper/boundary whose conclusion matches the resumed projection obligations, or move the cut point so the helper sees only concrete post-update tail facts.
@@ -605,3 +540,86 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260601T220715Z_m3333_t001
 - tool_output:TO_type_system_rewrite-20260601T220715Z_m3336_t001
 - source:semantics/prop/vyperTypeStmtSoundnessScript.sml
+
+## L0102 scope='C0.2.3.2.1' tags=ExtCall,linear-prefix,skeleton,checkpoint
+shape: Static ExtCall success Resume with intentional marker at post-update tail.
+pattern: A linear prefix skeleton can reach a single concrete static ExtCall success tail while preserving useful facts (`eval_exprs`, argument runtime typing, calldata build, code check, `run_ext_call = SOME (T,q',q'',r)`, continuation equation) and labelled `generated_driver_ih`. This is a good inspection/checkpoint boundary, but not a proof of the driver premise.
+works_when: Use as a baseline for further strategist-approved redesign; keep marker or restore cheat until the tail proof is solved.
+evidence:
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3482_t002
+- episode:E0173
+
+## L0104 scope='C0.2.3.2.2.1' tags=ExtCall,continuation,branch-split,vacuous-IH
+shape: Static ExtCall success tail with `(if returnData = [] /\ IS_SOME drv then eval_expr ... else ABI-decode) updated_st = (res,st')`; prove branches where condition is false.
+pattern: Split on `returnData = [] /\ IS_SOME drv` after the monadic prefix is already linearized. In the false branch, use `extcall_after_state_update_tail_sound_cond_driver_ih` with a vacuous conditional-driver premise, plus local `runtime_consistent`, `run_ext_call_accounts_well_typed`, and direct `drule runtime_consistent_get_tenv >> simp[]`; do not mention generated_driver_ih.
+works_when: The context already has concrete `run_ext_call ... = SOME (T,returnData,accounts',tStorage')`, updated-state tail equation, `state_well_typed args_st`, `env_consistent env cx args_st`, and `accounts_well_typed args_st.accounts`.
+evidence:
+- episode:E0175
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3510_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:17793-17811
+
+## L0109 scope='C0.2.3.2' tags=ExtCall,Resume,suspend,generated_driver_ih,proof_boundary
+shape: A generated mutual `Resume` branch is suspended at a concrete recursive-call continuation; native branch facts appear, but the recursive IH remains `full_generated_prefix ==> driver_post`.
+pattern: A focused `suspend`/`Resume` boundary is useful for exposing concrete branch facts and confirming the real tail state, but it does not by itself compact a generated IH. If the Resume still exposes only `generated_driver_ih` guarded by the full monadic prefix, local `qspec` plus simplification is still generated-prefix recovery and should be treated as a proof-interface failure, not a tactic problem.
+works_when: Use this pattern to distinguish useful branch-focusing from actual IH producer repair in generated mutual proofs. It applies when the focused goal has native success facts but the only recursive IH is still a full-prefix universal.
+evidence:
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3610_t001
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3622_t001
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3624_t001
+- episode:E0187
+- episode:E0188
+
+## L0110 scope='C0' tags=ExtCall,PLAN-gate,terminal-blocker,generated-IH,no-build,blocked
+shape: Accepted terminal-blocker/bookkeeping leaf for a required theorem branch; source remains intentionally partial and query_plan may still show ready-looking descendants.
+pattern: Treat the reviewed terminal disposition as blocked task evidence, not theorem progress. Do not build/probe from generic startup habits, do not start downstream leaves, and do not commit partial source. Resume proof work only after a maintainer/strategist supplies an ancestor-scoped PLAN update with a genuine low-risk proof-producer frontier that resolves the hostile generated-prefix IH (or relaxes the constraints).
+works_when: Applies when strategist-reviewed evidence says a required branch exposes only a generated-prefix-shaped IH or analogous missing producer interface, the task contract says to stop on design issues, and the active leaf is `terminal_blocker_disposition`/bookkeeping rather than a HOL theorem proof.
+evidence:
+- episode:E0189
+- episode:E0188
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3637_t001
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3640_t004
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3622_t001
+
+## L0117 scope='C0.2.3.2.2' tags=ExtCall,branch-selection,TRY,generated_driver_ih
+shape: Multi-goal Resume where driver-specific exact facts are valid only in the concrete success goal, and sibling decode/non-driver goals remain open.
+pattern: Do not use `TRY (...)` to apply branch-specific proof-producing assertions across all goals; it can silently discard failures and hide absence of the intended assumption. Instead select the concrete goal first with a goal-pattern selector such as `all_tac >~ [pat] >- (...)`, replay exact facts inside that branch, and verify with a FAIL_TAC marker before deriving downstream IHs.
+works_when: Applies when branch facts mention concrete success data like `run_ext_call ... = SOME (T,[],q'',r)` or updated-state driver evaluation, while sibling goals have different return-data/evaluation shapes.
+evidence:
+- episode:E0195
+- episode:E0196
+- episode:E0198
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3852_t001
+
+## L0118 scope='C0.2.3.2.2.2.2' tags=ExtCall,generated_driver_ih,proof-interface,branch-isolation,timeout
+shape: Isolated ExtCall driver-success branch has exact prefix facts, but recursive IH is still a full generated-prefix universal `full_generated_prefix ==> !env st res st'. driver_post`.
+pattern: Branch isolation alone does not make the generated mutual IH a compact local IH. If direct `irule`, branch-local `drule_then`, and local `mp_tac >> simp[]` fail/time out, treat this as a decomposition/interface blocker, not a tactic-search problem. Redesign the proof boundary so the compact optional-driver IH is native, or obtain maintainer/strategist direction before continuing.
+works_when: Applies when the branch has concrete `run_ext_call ... = SOME (T,[],q'',r)`, exact check/update facts, and `IS_SOME drv`, but the only recursive fact is labelled `generated_driver_ih` with the entire generated ExtCall prefix as antecedent.
+evidence:
+- episode:E0200
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3864_t001
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3879_t001
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3882_t001
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3886_t001
+
+## L0119 scope='C0.2.3.2.2.2' tags=ExtCall,generated_driver_ih,IH,proof-interface,branch-isolation
+shape: After isolating a concrete ExtCall static driver-success branch, a generated IH still has a full generated-prefix premise but caller wants a compact conditional driver IH.
+pattern: Branch isolation can expose exact concrete facts but does not by itself make a full-prefix generated IH usable. If direct `irule`, exact-prefix `drule` specialization, and local `mp_tac >> simp[]` fail/time out, treat it as a proof-boundary mismatch and replan at an ancestor boundary rather than adding another local adapter tactic.
+works_when: Applies under the maintainer restriction forbidding broad generated-prefix cleanup or long generated-prefix adapter theorems; use it to decide escalation/redesign, not as a proof tactic.
+evidence:
+- episode:E0199
+- episode:E0200
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3864_t001
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3879_t001
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3882_t001
+
+## L0120 scope='C0.2.3.2.2.2' tags=ExtCall,generated_driver_ih,IH,proof_boundary,Resume
+shape: A generated mutual-recursion IH is guarded by a large generated monadic prefix, while the consumer helper needs a compact branch-local conditional IH.
+pattern: Treat this as a proof-boundary/interface problem, not a local tactic problem. Even after linear branch isolation provides exact prefix facts, direct `irule`, branch-prefix `drule` specialization, and broad `mp_tac >> simp[]` can fail or timeout. The reusable repair direction is to move/refactor the proof/suspend boundary so the recursive IH is exposed natively in compact form, or obtain explicit authorization for generated-prefix adapter plumbing.
+works_when: Applies when branch isolation has already reached a concrete success continuation but the only available IH still has the full generated prefix as an antecedent and task constraints forbid broad prefix reconstruction.
+evidence:
+- episode:E0199
+- episode:E0200
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3864_t001
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3879_t001
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3882_t001
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3911_t001

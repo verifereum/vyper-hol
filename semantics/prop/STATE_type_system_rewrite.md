@@ -2,64 +2,64 @@
 Updated: 2026-06-02
 
 ## Cursor
-- component: C0.2.2
-- status: in_progress
+- component: C0.2.3.2.2.3
+- status: ready
 - active_file: semantics/prop/vyperTypeStmtSoundnessScript.sml
-- next_action: Continue active C0.2.2. First inspect the current source around `extcall_expr_sound_from_generated_ih` and `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result_static_success]`; verify that the Resume is back to `cheat` and that `extcall_expr_sound_from_generated_ih` uses `rewrite_tac[Once well_typed_expr_def]`. Then replace only the static-success Resume cheat with a proof that runs `RESUME_TAC` and closes the first generated optional-driver premise from `TO_type_system_rewrite-20260601T220715Z_m3336_t001`; leave projection goals for C0.2.3 unless they close trivially using placeholders/suspension permitted by the PLAN.
-- expected_goal_shape: After `RESUME_TAC`, two goals were observed. Goal 1 is a generated optional-driver premise: a universally quantified ExtCall prefix ending in `returnData = [] /\ IS_SOME drv ==> !env st res st'. ... eval_expr cx (THE drv) st = (res,st') ==> (well_typed_expr env (THE drv) ==> full postcondition) /\ !vt. ...`. Goal 2 is the first projection goal `state_well_typed st'` with ordinary assumptions including `eval_expr cx (Call ret_type (ExtCall T ...)) st = (res,st')`, `eval_exprs cx es st = (INL x,args_st)`, and `exprs_runtime_typed env es x`.
-- verify_with: holbuild(targets=['vyperTypeStmtSoundnessTheory'], timeout=300)
+- next_action: Begin/report C0.2.3.2.2.3 only after the documentation update episode is closed/reviewed. Do not do proof search. Report that the static ExtCall driver-tail is intentionally stabilized with a local cheat and remains blocked by the generated optional-driver IH proof-interface.
+- expected_goal_shape: `vyperTypeStmtSoundnessTheory` builds with an intentional ExtCall cheat at the original static ExtCall tail proof point. There is no longer a diagnostic `FAIL_TAC "c0_2_3_2_2_2_1_isolated_static_driver_success"` or `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_static_driver_tail]` block in the stable source.
+- verify_with: holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=300)
 
 ## If This Fails
-- If the first generated driver-premise goal cannot be closed by stripping the guard, case-analyzing `drv` from `IS_SOME drv`, deriving `well_typed_expr env (THE drv)` from `well_typed_opt env drv`, and specializing the available driver IH, stop and checkpoint/close C0.2.2 with evidence rather than simplifying the ExtCall prefix. If a build fails before the Resume due to `extcall_expr_sound_from_generated_ih`, keep the targeted `rewrite_tac[Once well_typed_expr_def]` fix and avoid reverting to timed-out `simp[Once well_typed_expr_def]`.
+- If a future build fails at Finalise with “No resumption proof found”, check that no orphan `suspend "Expr_Call_ExtCall_static_driver_tail"` or corresponding Resume mismatch has been reintroduced.
+- If a future PLAN asks for local proof-producing work on the static driver tail, first cite E0200 and request/require an ancestor-level proof-boundary redesign; do not retry generated-prefix matching/simplification locally.
 
 ## Do Not Retry
-- Revert `extcall_expr_sound_from_generated_ih` opening back to `simp[Once well_typed_expr_def]`.: After adding the static projected helper, that `simp` timed out before reaching C0.2.2; the targeted `rewrite_tac[Once well_typed_expr_def]` progressed to the Resume probe.
-  - evidence: tool_output:TO_type_system_rewrite-20260601T220715Z_m3333_t001
-  - evidence: tool_output:TO_type_system_rewrite-20260601T220715Z_m3336_t001
-- For C0.2.2, simplify or replay the long generated ExtCall prefix (`build_ext_calldata`, account lookup, `run_ext_call`, updates) to recover the optional-driver premise.: The PLAN explicitly forbids this; prior E0108/E0157/E0158 show it is non-straightforward and timeout-prone. C0.2.2 should use only the guard facts `returnData = []` and `IS_SOME drv` plus the driver IH.
-  - evidence: episode:E0108
-  - evidence: episode:E0157
-  - evidence: episode:E0158
-- Leave or commit the `FAIL_TAC "c0_2_2_after_resume"` probe in the static success Resume.: It was inspection-only; source was restored to the `cheat` placeholder before handoff. Reintroduce a probe only briefly if the exact goal must be rechecked, then remove it.
-  - evidence: tool_output:TO_type_system_rewrite-20260601T220715Z_m3336_t001
-  - evidence: tool_output:TO_type_system_rewrite-20260601T220715Z_m3338_t001
-- Stage untracked `semantics/prop/LEARNINGS_type_system_rewrite.legacy.md` or `semantics/prop/tmp_helper.txt`.: They are known pre-existing artifacts outside stable task progress; commits should stage only relevant tracked files under semantics/prop and use `--no-gpg-sign`.
-  - evidence: tool_output:TO_type_system_rewrite-20260601T220715Z_m3339_t002
+- Directly prove compact `static_driver_ih` by `asm "generated_driver_ih" irule` after branch isolation.: It does not match the generated IH conclusion even in the isolated concrete static success branch; this is a proof-interface mismatch, not a missing simp lemma.
+  - evidence: tool_output:TO_type_system_rewrite-20260601T220715Z_m3864_t001
+  - evidence: episode:E0200
+- Assert the concrete generated-prefix conjunction and use `asm "generated_driver_ih" (drule_then (qspecl_then [...] mp_tac))`.: Branch-local forward chaining failed and still relies on brittle generated-prefix reconstruction.
+  - evidence: tool_output:TO_type_system_rewrite-20260601T220715Z_m3879_t001
+  - evidence: episode:E0200
+- Use `asm "generated_driver_ih" mp_tac >> simp[]` or broad simplification over the full generated prefix.: Timed out under the fixed 2.5s tactic limit and violates maintainer/PLAN restriction against broad generated-prefix traversal.
+  - evidence: tool_output:TO_type_system_rewrite-20260601T220715Z_m3882_t001
+  - evidence: episode:E0176
+  - evidence: episode:E0191
+- Wrap driver-specific exact facts or compact-IH assertion in `TRY`.: Earlier evidence showed `TRY` can hide that desired facts/IH were never produced, making downstream markers misleading.
+  - evidence: episode:E0196
+  - evidence: tool_output:TO_type_system_rewrite-20260601T220715Z_m3834_t001
+  - evidence: tool_output:TO_type_system_rewrite-20260601T220715Z_m3835_t001
+- Begin downstream ExtCall/RawCallTarget consumers before a reviewed producer for compact/static driver IH exists.: Those consumers depend on the compact driver IH; the current stable source has only an intentional ExtCall cheat.
+  - evidence: episode:E0200
+  - evidence: episode:E0201
 
 ## Reflection
 ### Tunnel Vision Check
-- Outside-the-box approach still worth questioning: instead of proving the generated driver premise inside the same Resume, create a tiny local lemma that consumes `well_typed_opt env drv`, `IS_SOME drv`, and an unconditional driver IH; but do not include the long ExtCall prefix in that lemma statement.
-- The PLAN decomposition seems improved for C0.2.1: the semantic boundary helper was the right abstraction. C0.2.2 is now at the exact generated-premise boundary; if it becomes hard, the issue is likely still the Resume proof interface, not an ExtCall evaluator fact.
-- Do not optimize the projection proof yet. C0.2.2 is only the optional-driver premise; C0.2.3 owns applying `extcall_static_projected_sound` to projection goals.
-- A fresh expert should first ask whether the first RESUME_TAC goal already contains a usable generated expression IH in assumptions, or whether the premise itself is that IH and merely needs a simple proof from the original driver IH in the suspended context.
+- Branch isolation was useful but not sufficient: exact prefix facts do not make the generated optional-driver IH a usable local proof interface.
+- The correct next proof-producing route, if any, is an ancestor-level proof-boundary redesign that exposes the optional-driver IH natively, not another local tactic under the old driver-tail producer.
+- The current source is intentionally stable/buildable with a cheat; that is preferable to leaving diagnostic `FAIL_TAC` markers or orphan Resume blocks.
 
 ### What Went Wrong
-- C0.2.1 succeeded and was committed as 90cf9f9d0: `extcall_static_projected_sound` is now proved and accepted by strategist review.
-- While starting C0.2.2, a probe of the static success Resume was needed. The probe showed the expected two-goal shape, but the probe theorem was restored to `cheat` before handoff because the session ended before proving the premise.
-- Adding the new helper changed proof performance earlier in the file: `simp[Once well_typed_expr_def]` in `extcall_expr_sound_from_generated_ih` timed out, while the more targeted `rewrite_tac[Once well_typed_expr_def]` reached the C0.2.2 Resume probe.
-
-### Ignored Signals
-- The timeout in `extcall_expr_sound_from_generated_ih` was not a semantic failure; it was a simplifier-scope problem. Broad `simp` on a large context can become unstable after adding helpers, even when a one-step rewrite is enough.
-- The first RESUME_TAC goal is large, but the PLAN permits focusing only on the driver-premise guard facts. Do not read the size as authorization to replay the prefix; it is a signal to ignore the prefix except `returnData = []` and `IS_SOME drv`.
-- There is uncommitted partial source after the C0.2.1 commit: `vyperTypeStmtSoundnessScript.sml` plus checkpoint-updated memory files. Do not assume the repo is clean.
+- E0199 showed the proof can linearly reach a concrete static ExtCall driver-success branch with `generated_driver_ih`, run/update facts, and updated-state driver evaluation.
+- E0200 showed the planned compact-IH producer is not straightforward: direct matching failed, explicit generated-prefix conjunction/forward chaining failed, and broad simplification timed out/violates the maintainer restriction.
+- E0201 restored the source to a stable intentional-cheat baseline. Trying to put `cheat` only inside the Resume body failed Finalise; replacing the original suspend point with a local cheat built successfully.
 
 ### Strategy Adjustments
-- Next session should begin from active C0.2.2, not re-begin C0.2.1 or call plan_oracle. Use the checkpoint evidence E0160 and exact goal in `TO_type_system_rewrite-20260601T220715Z_m3336_t001`.
-- For C0.2.2, prove the driver premise by pure logical stripping/case analysis on `drv`; no `build_ext_calldata`, account lookup, `run_ext_call`, update, `AllCaseEqs`, or generated-prefix simplification should appear.
-- Once C0.2.2 is proved/reviewed, commit only after a clean holbuild; use `git commit --no-gpg-sign` and do not stage `semantics/prop/LEARNINGS_type_system_rewrite.legacy.md` or `semantics/prop/tmp_helper.txt`.
-- If the driver IH is not available or matching fails after two focused attempts, checkpoint/close stuck and ask for a smaller premise helper rather than building a long adapter theorem.
+- Keep all edits under `semantics/prop`; do not change evaluator/semantics definitions.
+- Do not perform further proof search for `Expr_Call_ExtCall_static_driver_tail` under the current decomposition.
+- Future work requires maintainer-approved architecture changes inside `semantics/prop` or an explicit relaxation allowing generated-prefix adapter/plumbing.
+- Commit only reviewed, build-verified stable checkpoints; use `git commit --no-gpg-sign`.
 
 ### Oracle Feedback
-- Held: strategist's C0.2.1 replacement insight was correct; a semantic helper over ordinary evaluator assumptions was provable and accepted.
-- Held so far: C0.2.2's expected first goal shape is real; `RESUME_TAC` exposes the guarded optional-driver premise exactly as the PLAN described.
-- Still unverified: the PLAN's claim that the driver premise is straightforward from the available driver IH. The next session must confirm this without prefix replay.
-- Prior oracle miss remains relevant: old linear prefix strategies are invalidated by E0108/E0157/E0158 and should not be retried.
+- E0201 was reviewed and accepted: stable cleanup is valid and does not claim to solve ExtCall.
+- Proceed only to the status/report leaves, not downstream proof components.
 
 ## Evidence Pointers
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m3320_t001 - C0.2.1 helper build succeeded
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m3322_t001 - strategist accepted C0.2.1/E0159 and authorized C0.2.2
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m3326_t001 - unsigned commit 90cf9f9d0 saved proved C0.2.1 checkpoint
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m3333_t001 - broad `simp[Once well_typed_expr_def]` timed out in `extcall_expr_sound_from_generated_ih`
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m3336_t001 - C0.2.2 `RESUME_TAC` probe showing two-goal shape and driver-premise goal
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m3340_t001 - nonterminal C0.2.2 checkpoint E0160 recorded
-- source:semantics/prop/vyperTypeStmtSoundnessScript.sml - static success Resume restored to `cheat`; `extcall_expr_sound_from_generated_ih` has targeted rewrite_tac change
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3934_t001 - `vyperTypeStmtSoundnessTheory` builds after replacing the diagnostic static-driver-tail marker with an intentional local cheat.
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3921_t001 - `cheat` inside the Resume body failed Finalise with no resumption proof.
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3923_t001 - `RESUME_TAC >> cheat` inside the Resume body also failed Finalise.
+- episode:E0201 - reviewed source cleanup/stabilization episode for C0.2.3.2.2.1.
+- episode:E0199 - branch isolation proved/reviewed; concrete static driver-success facts were exposed.
+- episode:E0200 - terminal risk_mismatch episode for compact-IH producer.
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3864_t001 - direct `generated_driver_ih` irule did not match compact IH.
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3879_t001 - explicit branch-prefix conjunction plus drule specialization failed.
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3882_t001 - local `mp_tac >> simp[]` over generated IH timed out.

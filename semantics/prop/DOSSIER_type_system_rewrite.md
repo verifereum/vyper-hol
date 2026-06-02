@@ -42,8 +42,20 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C0.2.1.4.2 | proved |  | E0138 |  |
 | C0.2.1.4.3 | stuck | risk_mismatch | E0139 | Call plan_oracle(mode='review', component_id='C0.2.1.4.3', evidence_ids=[...]) and request a repair of the consumer interface; do not continue tactic search in the Resume. |
 | C0.2.2 | proved |  | E0164 |  |
-| C0.2.3 | stuck | risk_mismatch | E0105 | Request strategist review/repair for C0.2.3 and the scheduling order. The repair should likely make C0.2.2.1-style opaque generated-IH/static proof-interface work a prerequisite before attempting either static or nonstatic full prefix proof, or provide a shared low-risk selected-equation proof pattern. |
-| C0.3 | stuck | missing_helper | E0106 | Ask strategist to repair C0.3 with a small local RawCallTarget tail helper/boundary or another de-risked proof interface before attempting more proof edits. |
+| C0.2.3 | stuck | risk_mismatch | E0165 | Call plan_oracle(mode='review') for C0.2.3 with this evidence and request a repair/de-risked local boundary or schedule update. |
+| C0.2.3.1 | proved |  | E0168 |  |
+| C0.2.3.2 | stuck | risk_mismatch | E0170 | Call plan_oracle(mode='review') for C0.2.3.2 with the timeout/stuck evidence and request a repaired boundary or operator-facing stop according to the task stop condition. |
+| C0.2.3.2.1 | proved |  | E0187 | Review this proof-boundary insertion. Then begin C0.2.3.2.2 to prove the focused static driver-tail Resume using only branch-local IH consumption. |
+| C0.2.3.2.2 | stuck | risk_mismatch | E0188 | Call plan_oracle(mode='review') for C0.2.3.2.2. Request either a new proof architecture that exposes a compact driver IH natively, or an accepted stop/blocker disposition under the task constraints. |
+| C0.2.3.2.2.1 | proved |  | E0201 | Call plan_oracle(mode='review') for C0.2.3.2.2.1, then begin the documentation/update leaf C0.2.3.2.2.2 if accepted. |
+| C0.2.3.2.2.2 | proved |  | E0202 | Call plan_oracle(mode='review') for C0.2.3.2.2.2, then begin/report C0.2.3.2.2.3 if accepted; do not perform proof search. |
+| C0.2.3.2.2.2.1 | proved |  | E0199 |  |
+| C0.2.3.2.2.2.2 | stuck | risk_mismatch | E0200 | Call plan_oracle(mode='review') for this stuck episode and request a repaired proof boundary or ancestor redesign for producing the compact optional-driver IH without forbidden generated-prefix traversal. |
+| C0.2.3.2.2.3 | proved |  | E0203 | Review this terminal report leaf. If accepted, commit the stable cleanup/docs checkpoint with --no-gpg-sign and report to the user that local static ExtCall proof work is stopped pending maintainer-authorized proof-boundary redesign. |
+| C0.2.3.2.2.4 | stuck | risk_mismatch | E0193 | Call plan_oracle(mode='review') for C0.2.3.2.2.4 with this evidence; request ancestor-level redesign or an explicit stop if no low-risk compact-IH producer remains. |
+| C0.2.3.2.2.5 | proved |  | E0194 | Review this report leaf with plan_oracle. If accepted and no proof frontier exists, stop/report blocked for maintainer guidance rather than continuing ExtCall proof search. |
+| C0.2.3.2.3 | stuck | plan_incomplete | E0185 | Call plan_oracle(mode='review') for C0.2.3.2.3 with the maintainer clarification and oracle-rejection evidence; request acceptance of this close and an ancestor-scoped repair/replacement for C0.2.3.2 or higher before proof work. |
+| C0.3 | stuck | plan_incomplete | E0186 | Call plan_oracle(mode='review') for C0.3 and request scheduler/dependency repair so C0.2.3.2.1 is Oracle next/beginable. |
 | C0.3.1 | proved |  | E0087 |  |
 | C0.3.2 | proved |  | E0088 |  |
 | C0.3.3 | stuck | risk_mismatch | E0090 | Call plan_oracle(mode='review') for C0.3.3 and request a de-risked repair, likely a single outside-Resume postcondition helper over arbitrary `call_ty` whose conclusion matches the whole argument-error branch after substituting `res/st'`, or a smaller Resume factoring that removes/isolates the generated optional-driver prefix before the error branch. |
@@ -1184,11 +1196,11 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 ### Current Status
 
 - result: `stuck`
-- diagnosis: `risk_mismatch` The nonstatic branch shares the same proof-interface problem as C0.2.2: generated optional-driver IH remains visible and pollutes branch-local prefix work. The plan should not schedule C0.2.3 independently ahead of C0.2.2.1-style interface repair, or it should apply that repair pattern to both branches.
-- latest episode: `E0105`
-- blocker: C0.2.3 was rated Risk 2 and scheduled ahead of the repaired static subcomponents, but the focused nonstatic Resume still exposes the same generated optional-driver prefix hazard. A selected pure rewrite can derive nonstatic argument facts, yet unfolding the selected eval equation immediately produces a >4KiB goal with the prefix still visible, so the linear prefix proof is not straightforward under the current interface.
-- actual effort: 1 sessions, 1 msgs, 10 steps, 9 tools, 4 holbuild, 976,014 tok (972,974 in, 3,040 out, 939,776 cached), 374.6s, $0.727078
-- next: Request strategist review/repair for C0.2.3 and the scheduling order. The repair should likely make C0.2.2.1-style opaque generated-IH/static proof-interface work a prerequisite before attempting either static or nonstatic full prefix proof, or provide a shared low-risk selected-equation proof pattern.
+- diagnosis: `risk_mismatch` Need a de-risked proof interface for converting the generated guarded premise into the unconditional driver IH at the concrete tail, or a sanctioned small boundary lemma that avoids copying the whole generated prefix.
+- latest episode: `E0165`
+- blocker: C0.2.3 was rated Risk 2/straightforward, but direct helper reuse fails because the generated premise is guarded by the full ExtCall prefix, and a linear-prefix proof attempt encountered unexpected replay/timeout before the active Resume. Under the task's stop condition, this needs strategist repair rather than more tactic search.
+- actual effort: 1 sessions, 1 msgs, 12 steps, 13 tools, 5 holbuild, 829,702 tok (822,667 in, 7,035 out, 763,904 cached), 336.5s, $0.886817
+- next: Call plan_oracle(mode='review') for C0.2.3 with this evidence and request a repair/de-risked local boundary or schedule update.
 
 ### Attempts / Evidence
 
@@ -1197,30 +1209,409 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Used a focused selected-fact rewrite `qpat_x_assum `if F then _ else _` mp_tac >> pure_rewrite_tac[boolTheory.COND_CLAUSES]` and `drule_all extcall_nonstatic_args_runtime_typed_dest`. -> This small step succeeded and derived `MAP expr_type es = BaseT AddressT::BaseT (UintT 256)::arg_types`, `dest_AddressV (HD x) = SOME target_addr`, and `dest_NumV (HD (TL x)) = SOME amount`, showing focused pure rewriting can avoid the earlier `simp[]` timeout for the branch-shape fact. (`TO_type_system_rewrite-20260601T081233Z_m2345_t001`)
   - Continued by moving only the selected nonstatic `eval_expr` equation, unfolding `Once evaluate_def` with monadic definitions using `simp_tac(srw_ss())` on the conclusion, and rewriting the selected `eval_exprs cx es st = (INL x,args_st)` fact. -> The proof reached the monadic prefix case expression, but the live goal exceeded 4KiB with the generated optional-driver prefix still visible. This is already beyond the task's 'entirely straightforward' expectation and mirrors the C0.2.2 generated-prefix proof-interface risk, so the nonstatic branch should not be pursued by more local simplifier/case variants without strategist repair. (`TO_type_system_rewrite-20260601T081233Z_m2347_t001`)
   - Restored the nonstatic Resume to `cheat` and rebuilt `vyperTypeStmtSoundnessTheory`. -> Source is build-clean with both static and nonstatic placeholders cheated; the stable parent `SUBST_ALL_TAC` improvement remains. (`TO_type_system_rewrite-20260601T081233Z_m2349_t001`)
+- `E0165` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 12 steps, 13 tools, 5 holbuild, 829,702 tok (822,667 in, 7,035 out, 763,904 cached), 336.5s, $0.886817)
+  - Built current handoff probe `RESUME_TAC >> qpat_x_assum ... (mk_asm "generated_driver_ih") >> FAIL_TAC ...`. -> Naming the generated optional-driver premise succeeded and exposed two projection goals; the first goal was `state_well_typed st'` with the large generated implication as a labelled assumption. This confirms E0161/L0099 shape but still leaves the full proof. (`TO_type_system_rewrite-20260601T220715Z_m3401_t001`)
+  - Tried linear prefix splitting following `extcall_static_projected_sound`, closing early error cases and probing at the success tail. -> The attempt was not straightforward under the current build/proof interface: holbuild timed out before reaching the active Resume, in an unrelated earlier theorem after the edit invalidated/replayed source. This is an unexpected issue under the task instruction to stop on unexpected tooling/design issues. (`TO_type_system_rewrite-20260601T220715Z_m3405_t001`)
+  - Restored static-success Resume to a stable `cheat`, then tried direct `drule_all extcall_static_projected_sound` after naming the generated premise. -> Direct reuse failed: the projected helper requires an unconditional driver IH, while the Resume context has only the generated conditional premise guarded by the ExtCall prefix. Thus the proof needs nontrivial prefix discharge before helper application, contrary to the 'entirely straightforward' stop condition. (`TO_type_system_rewrite-20260601T220715Z_m3409_t001`)
+  - Restored `Expr_Call_ExtCall_result_static_success` to `cheat` baseline and rebuilt. -> Target is build-clean again with the static-success obligation still cheated; no unverified `FAIL_TAC` probe remains in source. (`TO_type_system_rewrite-20260601T220715Z_m3411_t001`)
 
 ### Ruled Out
 
-- Forbidden `extcall_expr_sound_from_generated_ih` shortcut was not retried.
-- Broad `gvs`/`fs`/`AllCaseEqs()` over the generated prefix was not used.
-- Continuing through the >4KiB unfolded monadic prefix with more local case variants was stopped under the maintainer instruction that the proof should be straightforward.
+- Immediate `RESUME_TAC >- ...` standalone-premise approach (E0161/L0099).
+- Direct `drule_all extcall_static_projected_sound` from the projection context without first discharging the generated prefix guard.
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260601T081233Z_m2343_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m2345_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m2347_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m2349_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3401_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3405_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3409_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3411_t001` (use `read_tool_output` for exact output)
+
+## C0.2.3.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0168`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 141,766 tok (141,523 in, 243 out, 136,576 cached), 7.7s, $0.100313
+
+### Attempts / Evidence
+
+- `E0166` (proved, , actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 269,742 tok (267,916 in, 1,826 out, 258,688 cached), 115.6s, $0.230264)
+  - Replaced the static-success cheat with a controlled probe: `RESUME_TAC`, labelled generated premise, selected branch-shape rewrite, static args destructors, then split `build_ext_calldata`, target-code check, and `run_ext_call` in evaluator order, ending with `FAIL_TAC "c0_2_3_static_tail_ready"`. -> Probe reached the intended single concrete static success tail. The failed goal is `state_well_typed st'` with labelled `generated_driver_ih` and ordinary facts: static `MAP expr_type es = BaseT AddressT::arg_types`, `dest_AddressV (HD x) = SOME target_addr`, calldata build success, nonempty target code, `run_ext_call ... = SOME (T,q',q'',r)`, and the tail continuation equality on `args_st with <|accounts := q''; tStorage := r|>`. No broad `AllCaseEqs`/global cleanup was needed. (`TO_type_system_rewrite-20260601T220715Z_m3417_t001`)
+- `E0168` (proved, , actual effort: 1 sessions, 1 steps, 141,766 tok (141,523 in, 243 out, 136,576 cached), 7.7s, $0.100313)
+  - Carry-forward closure of completed prefix probe E0166 under replacement plan. -> No new source work needed; E0166 already established the static Resume prefix reaches the concrete success tail with labelled generated premise and ordinary tail facts. Current source is stable cheated baseline pending C0.2.3.2/3 integration. (`TO_type_system_rewrite-20260601T220715Z_m3417_t001`, `TO_type_system_rewrite-20260601T220715Z_m3441_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260601T220715Z_m3417_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3441_t001` (use `read_tool_output` for exact output)
+
+## C0.2.3.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` Risk 2 estimate was wrong: both direct backward matching and the allowed small forward-chain attempt fail. The local boundary needs strategist repair or an accepted stop state.
+- latest episode: `E0170`
+- blocker: The only permitted forward-chaining/projection attempt on the labelled generated_driver_ih was not straightforward: after retaining the eval_exprs prefix fact, `asm "generated_driver_ih" mp_tac >> disch_then drule >> simp[...]` timed out under the fixed 2.5s tactic limit. Direct `irule` matching had already failed in E0169. Continuing would require either broad prefix simplification, long generated-variable instantiation, or a generated-prefix adapter theorem, all forbidden by the PLAN and task stop condition. The static-success Resume was restored to `cheat` and the target builds cleanly as a cheated baseline.
+- actual effort: 1 sessions, 7 steps, 7 tools, 3 holbuild, 433,811 tok (429,893 in, 3,918 out, 410,240 cached), 128.9s, $0.420925
+- next: Call plan_oracle(mode='review') for C0.2.3.2 with the timeout/stuck evidence and request a repaired boundary or operator-facing stop according to the task stop condition.
+
+### Attempts / Evidence
+
+- `E0167` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 22 steps, 21 tools, 8 holbuild, 2,562,857 tok (2,553,860 in, 8,997 out, 2,460,416 cached), 552.0s, $1.967338)
+  - Reused C0.2.3.1 selected-prefix skeleton, derived `accounts_well_typed q''` and `runtime_consistent env cx args_st`, then tried to apply `extcall_success_continuation_state_well_typed` by explicit specialization. -> The tail helper could be specialized, but it generated a conditional-driver subgoal requiring conversion of the labelled generated premise. Manual `qspecl_then` over the generated premise failed with a quotation parse problem around the long generated instantiation; this confirms the proof would require brittle generated-variable plumbing. (`TO_type_system_rewrite-20260601T220715Z_m3426_t001`, `TO_type_system_rewrite-20260601T220715Z_m3428_t001`)
+  - Replaced manual generated-premise specialization with matching style `asm "generated_driver_ih" irule` on the conditional-driver subgoal. -> Matching failed (`No match`) even though the subgoal shape is visibly close to the generated premise consequent. This is the exact mismatch the PLAN said to escalate rather than broadening tactic search. (`TO_type_system_rewrite-20260601T220715Z_m3439_t001`)
+  - Restored the static-success Resume to `cheat` and rebuilt the target. -> Source is back to a stable cheated baseline and `vyperTypeStmtSoundnessTheory` builds cleanly; no `FAIL_TAC` probe remains. (`TO_type_system_rewrite-20260601T220715Z_m3441_t001`)
+- `E0169` (progressed, risk_mismatch, actual effort: 1 sessions, 1 msgs, 4 steps, 5 tools, 1 holbuild, 612,638 tok (609,666 in, 2,972 out, 563,712 cached), 82.1s, $0.600786)
+  - Under replacement C0.2.3.2, inserted the C0.2.3.1 prefix skeleton and asserted the full generated consequent (expression-result plus place-result conjunct) guarded by `q' = [] /\ IS_SOME drv`, then tried `asm "generated_driver_ih" irule`. -> Even when the asserted boundary includes the extra place-result conjunct rather than projecting it away first, direct matching against the labelled generated premise failed with `No match`. Source is left partial with this failed boundary assertion/probe; next session should either repair this assertion using a non-`irule` matching/forward-chaining method or restore `cheat` before unrelated work. (`TO_type_system_rewrite-20260601T220715Z_m3450_t001`)
+- `E0170` (stuck, risk_mismatch, actual effort: 1 sessions, 7 steps, 7 tools, 3 holbuild, 433,811 tok (429,893 in, 3,918 out, 410,240 cached), 128.9s, $0.420925)
+  - Kept the `eval_exprs cx es st = (INL x,args_st)` assumption while rewriting the prefix, then tried a small forward-chain/projection proof for the local boundary: `strip_tac >> asm "generated_driver_ih" mp_tac >> disch_then drule >> simp[check_def,lift_option_type_def,lift_option_def,return_def,get_accounts_def,get_transient_storage_def,update_accounts_def,update_transient_def]`. -> The tactic timed out after 2.5s at the local boundary. This shows the repaired boundary is not straightforward under the current interface and cannot be completed within the PLAN's restrictions without forbidden broad simplification or generated-variable plumbing. (`TO_type_system_rewrite-20260601T220715Z_m3459_t001`)
+  - Restored `eval_all_type_sound_mutual[Expr_Call_ExtCall_result_static_success]` to a `cheat` placeholder and rebuilt `vyperTypeStmtSoundnessTheory`. -> The target builds cleanly in the restored cheated baseline, so no partial failed proof remains in the source. (`TO_type_system_rewrite-20260601T220715Z_m3461_t001`)
+
+### Ruled Out
+
+- Direct `asm "generated_driver_ih" irule` against the boundary or tail-helper premise (E0169 and prior evidence).
+- Manual 40+ generated-variable `qspecl_then` instantiation.
+- Broad `gvs`/`simp`/`AllCaseEqs()` over the generated ExtCall prefix.
+- Long global generated-prefix adapter theorem.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260601T220715Z_m3459_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3461_t001` (use `read_tool_output` for exact output)
+
+## C0.2.3.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0187`
+- blocker: 
+- actual effort: 1 sessions, 6 steps, 5 tools, 2 holbuild, 572,278 tok (570,897 in, 1,381 out, 558,848 cached), 91.7s, $0.381099
+- next: Review this proof-boundary insertion. Then begin C0.2.3.2.2 to prove the focused static driver-tail Resume using only branch-local IH consumption.
+
+### Attempts / Evidence
+
+- `E0171` (proved, , actual effort: 1 sessions, 1 msgs, 4 steps, 3 tools, 1 holbuild, 322,475 tok (320,476 in, 1,999 out, 284,672 cached), 66.2s, $0.381326)
+  - Replaced the static-success Resume cheat with a linear prefix skeleton: labelled `generated_driver_ih`, simplified the static value branch, derived static argument runtime facts, split calldata/account/run_ext_call/update prefix in order, closed immediate error branches, retained key success facts including `eval_exprs cx es st = (INL x,args_st)`, `build_ext_calldata ... = SOME x'`, and `run_ext_call ... = SOME (T,q',q'',r)`, then inserted an intentional `FAIL_TAC "c0_2_3_2_1_static_success_prefix_skeleton_tail"` at the single tail point. -> Holbuild reaches the intentional marker. The goal has the intended single concrete static success tail with labelled `generated_driver_ih` and prefix facts preserved; remaining subgoals are projection goals such as `state_well_typed st'`. This completes the skeleton/refactor leaf, but source is intentionally partial for the next leaf. (`TO_type_system_rewrite-20260601T220715Z_m3468_t001`)
+- `E0173` (proved, , actual effort: 1 sessions, 2 steps, 2 tools, 1 holbuild, 228,171 tok (227,674 in, 497 out, 217,344 cached), 30.5s, $0.175232)
+  - Audited the carried-forward C0.2.3.2.1 skeleton after the replacement plan: read the static-success Resume and rebuilt `vyperTypeStmtSoundnessTheory`. -> Source still contains the intended `FAIL_TAC "c0_2_3_2_1_static_success_prefix_skeleton_tail"`, and holbuild reaches exactly that marker with the concrete static success tail and preserved prefix facts. This confirms the reviewed skeleton baseline remains intact for the next replacement leaf. (`TO_type_system_rewrite-20260601T220715Z_m3482_t001`, `TO_type_system_rewrite-20260601T220715Z_m3482_t002`)
+- `E0180` (proved, , actual effort: 1 sessions, 1 steps, 95,109 tok (94,660 in, 449 out, 87,936 cached), 10.3s, $0.091058)
+  - Began the carry-forward/audit leaf after the repaired stop PLAN and reused the already checked marker evidence without editing. -> The component is a checkpoint-carry-forward record, not new proof work. Current holbuild evidence from the same session confirms the static-success Resume reaches the focused `c0_2_3_2_2_1_driver_branch_remaining` marker with the narrowed true driver branch; E0178/E0179 already accepted this as the preserved skeleton reality. No source changes were made for this leaf. (`TO_type_system_rewrite-20260601T220715Z_m3535_t001`, `TO_type_system_rewrite-20260601T220715Z_m3543_t001`, `TO_type_system_rewrite-20260601T220715Z_m3545_t001`)
+- `E0187` (proved, , actual effort: 1 sessions, 6 steps, 5 tools, 2 holbuild, 572,278 tok (570,897 in, 1,381 out, 558,848 cached), 91.7s, $0.381099)
+  - Replaced the old driver-branch FAIL_TAC marker with `suspend "Expr_Call_ExtCall_static_driver_tail"`, then added a focused `Resume ...[Expr_Call_ExtCall_static_driver_tail]` containing `RESUME_TAC >> FAIL_TAC "c0_2_3_2_1_static_driver_tail_probe"` to inspect the generated obligation. -> The initial build without a Resume failed at Finalise with 'No resumption proof found', confirming a Resume block is required. After adding the focused Resume/probe, holbuild reaches the new probe and prints the focused branch obligation. Native assumptions include the desired branch facts: successful static `run_ext_call ... = SOME (T,[],q'',r)`, driver evaluation in `(args_st with <|accounts := q''; tStorage := r|>)`, `runtime_consistent env cx args_st`, `accounts_well_typed q''`, `get_tenv cx = env.type_defs`, and `IS_SOME drv`. This completes the proof-boundary insertion/check; the source remains intentionally partial for C0.2.3.2.2 to prove the focused Resume. (`TO_type_system_rewrite-20260601T220715Z_m3606_t001`, `TO_type_system_rewrite-20260601T220715Z_m3607_t001`, `TO_type_system_rewrite-20260601T220715Z_m3609_t001`, `TO_type_system_rewrite-20260601T220715Z_m3610_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260601T220715Z_m3606_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3607_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3609_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3610_t001` (use `read_tool_output` for exact output)
+
+## C0.2.3.2.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` No evaluator/semantics definitions or files outside semantics/prop were changed. Source is partial with the focused Resume proof attempt replacing the probe; the current build is not clean. The failure is at the explicit PLAN failure criterion for C0.2.3.2.2.
+- latest episode: `E0188`
+- blocker: Focused branch-local proof boundary exposes the desired native success facts, but the generated optional-driver IH remains a full generated-prefix universal; branch-local specialization/simplification still times out. Completing this would require a forbidden/generated-prefix recovery route or a new proof architecture/helper boundary.
+- actual effort: 1 sessions, 1 msgs, 9 steps, 10 tools, 3 holbuild, 1,091,937 tok (1,087,875 in, 4,062 out, 1,024,896 cached), 155.7s, $0.949203
+- next: Call plan_oracle(mode='review') for C0.2.3.2.2. Request either a new proof architecture that exposes a compact driver IH natively, or an accepted stop/blocker disposition under the task constraints.
+
+### Attempts / Evidence
+
+- `E0172` (stuck, risk_mismatch, actual effort: 1 sessions, 7 steps, 6 tools, 2 holbuild, 669,930 tok (666,993 in, 2,937 out, 648,320 cached), 105.5s, $0.505635)
+  - At the concrete static-success tail, replaced the skeleton marker with the local driver-IH assertion and tried `strip_tac >> asm "generated_driver_ih" (qspec_then `st` mp_tac) >> simp[check_def,lift_option_type_def,lift_option_def,return_def,get_accounts_def,get_transient_storage_def,update_accounts_def,update_transient_def]`. -> Holbuild timed out the tactic after 2.5s. Even a branch-local specialization before simplification is not straightforward; completing it appears to require the forbidden broad/generated-prefix machinery or a more specific strategist-designed method. (`TO_type_system_rewrite-20260601T220715Z_m3475_t001`)
+  - Reverted the failed C0.2.3.2.2 assertion to the prior C0.2.3.2.1 intentional marker and rebuilt. -> Holbuild again reaches the skeleton tail marker with the intended preserved prefix facts. Source remains partial at the reviewed skeleton checkpoint, not with the failed driver-IH attempt. (`TO_type_system_rewrite-20260601T220715Z_m3477_t001`)
+- `E0174` (stuck, risk_mismatch, actual effort: 1 sessions, 7 steps, 6 tools, 3 holbuild, 890,394 tok (887,800 in, 2,594 out, 871,040 cached), 119.6s, $0.597140)
+  - Inserted `FAIL_TAC "c0_2_3_2_2_early_context_probe"` immediately after `qpat_x_assum `if T then _ else _` mp_tac >> pure_rewrite_tac[boolTheory.COND_CLAUSES] >> strip_tac`. -> Holbuild showed that the early context does not contain the full generated prefix as stripped/native assumptions. It contains the labelled universal generated_driver_ih and only early facts such as `eval_exprs cx es st = (INL x,args_st)`, state/env/account facts, exprs_runtime_typed, and `MAP expr_type es = ...`. Therefore the new plan's 'consume while generated prefix assumptions are still present' assumption is not realized at this proof point. (`TO_type_system_rewrite-20260601T220715Z_m3487_t001`)
+  - Replaced the early probe with `asm "generated_driver_ih" (qspec_then `st` mp_tac) >> FAIL_TAC "c0_2_3_2_2_after_qspec_probe"`. -> Specializing only `s''` to `st` is cheap but leaves a huge universally quantified generated-prefix implication subgoal. This is not the compact conditional driver IH and still requires generated-prefix instantiation/reconstruction, forbidden by the plan. (`TO_type_system_rewrite-20260601T220715Z_m3489_t001`)
+  - Reverted the probes to the reviewed C0.2.3.2.1 skeleton and rebuilt. -> Holbuild again reaches the intentional skeleton tail marker with preserved concrete tail facts. Source is back to the partial skeleton baseline, not left with failed probes. (`TO_type_system_rewrite-20260601T220715Z_m3491_t001`)
+- `E0188` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 9 steps, 10 tools, 3 holbuild, 1,091,937 tok (1,087,875 in, 4,062 out, 1,024,896 cached), 155.7s, $0.949203)
+  - In the focused `Expr_Call_ExtCall_static_driver_tail` Resume, replaced the probe with a branch-local proof attempt: assert the full five-conjunct postcondition, apply `extcall_after_state_update_tail_sound_cond_driver_ih`, instantiate the after-update state/accounts/returnData witnesses, then try to specialize `generated_driver_ih` only at `st` and simplify the native branch equations one at a time. -> The attempt timed out under the fixed 2.5s tactic limit at exactly the conditional driver-IH discharge. Even with the new focused branch boundary and native success facts, consuming the generated full-prefix IH still requires simplifier traversal/generated-prefix recovery. This matches the component's explicit failure criterion: close stuck rather than broad `simp`/`gvs`, `AllCaseEqs`, long generated instantiation, or generated-prefix adapter theorem. (`TO_type_system_rewrite-20260601T220715Z_m3615_t003`, `TO_type_system_rewrite-20260601T220715Z_m3617_t001`, `TO_type_system_rewrite-20260601T220715Z_m3622_t001`)
+  - Fixed an initial proof-structure issue by replacing `suffices_by simp[]` with an explicit `by (...) >> gvs[]` assertion of the full postcondition. -> This removed the trivial projection-discharge problem but exposed the real blocker: the branch-local generated IH consumption itself times out. The remaining problem is not the projection structure; it is the inaccessible generated-prefix IH interface. (`TO_type_system_rewrite-20260601T220715Z_m3618_t001`, `TO_type_system_rewrite-20260601T220715Z_m3619_t001`, `TO_type_system_rewrite-20260601T220715Z_m3620_t001`, `TO_type_system_rewrite-20260601T220715Z_m3621_t001`, `TO_type_system_rewrite-20260601T220715Z_m3622_t001`)
+
+### Ruled Out
+
+- Broad `simp`/`gvs`/`AllCaseEqs()` over the full generated ExtCall prefix.
+- Long explicit generated-variable `qspecl_then` instantiation.
+- Generated-prefix adapter theorem or ASSUME-quoted full-prefix plumbing.
+- Continuing tactic search after the focused branch-local IH consumption timed out.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260601T220715Z_m3615_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3617_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3618_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3619_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3620_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3621_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3622_t001` (use `read_tool_output` for exact output)
+
+## C0.2.3.2.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0201`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 18 steps, 18 tools, 3 holbuild, 1,255,797 tok (1,253,607 in, 2,190 out, 1,189,632 cached), 145.3s, $0.980391
+- next: Call plan_oracle(mode='review') for C0.2.3.2.2.1, then begin the documentation/update leaf C0.2.3.2.2.2 if accepted.
+
+### Attempts / Evidence
+
+- `E0175` (proved, , actual effort: 1 sessions, 1 msgs, 8 steps, 9 tools, 3 holbuild, 605,452 tok (602,426 in, 3,026 out, 512,512 cached), 140.4s, $0.796606)
+  - At the reviewed static ExtCall tail, added runtime/account/get_tenv facts, split on `q' = [] /\ IS_SOME drv`, and used `extcall_after_state_update_tail_sound_cond_driver_ih` with a vacuous conditional-driver premise for the false branch; left an intentional `FAIL_TAC "c0_2_3_2_2_1_driver_branch_remaining"` marker after the split. -> holbuild now passes all non-driver/decode branches and reaches only the true driver branch (`q'= []`, `IS_SOME drv`, continuation is `eval_expr cx (THE drv) updated_st`) with four projection goals. This satisfies the checkpoint leaf's target of leaving at most the driver branch open. (`TO_type_system_rewrite-20260601T220715Z_m3510_t001`)
+  - Replaced a timed-out `metis_tac[runtime_consistent_get_tenv]` side proof with direct `drule runtime_consistent_get_tenv >> simp[]`. -> Avoided the fixed 2.5s tactic timeout and reached the intended driver-branch marker. (`TO_type_system_rewrite-20260601T220715Z_m3508_t001`, `TO_type_system_rewrite-20260601T220715Z_m3510_t001`)
+- `E0177` (proved, , actual effort: 1 sessions, 1 steps, 118,174 tok (117,875 in, 299 out, 110,464 cached), 7.3s, $0.101257)
+  - Carried forward E0175 as a progress-record leaf after the operator-stop redesign; verified source remains at `FAIL_TAC "c0_2_3_2_2_1_driver_branch_remaining"` with only the narrowed true driver branch after non-driver/decode branches are closed. -> No new proof edits were made for this record leaf. The already reviewed E0175 evidence remains the source/proof reality needed for the blocker report. (`TO_type_system_rewrite-20260601T220715Z_m3519_t001`, `TO_type_system_rewrite-20260601T220715Z_m3510_t001`)
+- `E0181` (proved, , actual effort: 1 sessions, 1 steps, 104,364 tok (104,011 in, 353 out, 96,640 cached), 9.5s, $0.095765)
+  - Began the progress-record/carry-forward leaf after scheduler requested it; no edits or proof tactics. -> This leaf is already completed evidence per E0175/E0177. The current session's holbuild evidence still confirms the marker and focused driver branch facts used by the accepted blocker report. No source change was made; this close only records that the narrowed tail evidence is carried forward under the replacement stop plan. (`TO_type_system_rewrite-20260601T220715Z_m3535_t001`, `TO_type_system_rewrite-20260601T220715Z_m3549_t001`)
+- `E0189` (proved, , actual effort: 1 sessions, 1 steps, 66,383 tok (65,912 in, 471 out, 59,776 cached), 10.1s, $0.074698)
+  - Began terminal blocker disposition leaf and made no source/proof/build edits, per PLAN. -> Recorded that the static ExtCall driver-tail remains blocked at `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_static_driver_tail]` because `generated_driver_ih` is still full-prefix-shaped; E0187 provides focused branch facts and E0188/timeout evidence shows the permitted branch-local compact-IH conversion is exhausted. This leaf is a reporting/bookkeeping disposition only; downstream work remains gated by parent C0.2.3.2.2. (`TO_type_system_rewrite-20260601T220715Z_m3635_t001`, `TO_type_system_rewrite-20260601T220715Z_m3632_t002`, `TO_type_system_rewrite-20260601T220715Z_m3622_t001`)
+- `E0190` (proved, , actual effort: 1 sessions, 1 msgs, 25 steps, 26 tools, 7 holbuild, 1,948,736 tok (1,942,681 in, 6,055 out, 1,836,416 cached), 411.8s, $1.631183)
+  - Replaced timed-out driver-tail tactic with branch-local labelled prefix facts in `Expr_Call_ExtCall_static_driver_tail`; added labels for eval args/nonempty/target/calldata/target-code/run success and proved small one-operation facts for check, address lift, static value return, calldata lift, get_accounts, target-code check, and get_transient_storage; left a `FAIL_TAC` marker immediately after these facts. -> holbuild resumes to the intentional marker `c0_2_3_2_2_1_named_static_extcall_prefix_facts`. The goal state shows the useful labelled native branch facts (`extcall_eval_args`, `extcall_args_nonempty`, `extcall_target_addr`, `extcall_calldata`, `extcall_target_has_code`, `extcall_run_success`) plus original driver evaluation/IS_SOME assumptions still in context. This satisfies the refactor leaf's source-shape goal; source remains partial for downstream compact-IH work. (`TO_type_system_rewrite-20260601T220715Z_m3693_t001`, `TO_type_system_rewrite-20260601T220715Z_m3716_t001`)
+  - Attempted to additionally assert run-lift/update monadic facts in the refactor leaf. -> The run-lift assertion did not close with the simple labelled rewrite; removed those assertions to avoid starting C0.2.3.2.2.2-style generated-prefix proof work under the refactor leaf. The remaining verified prefix preserves exact branch facts and small prefix facts without broad cleanup. (`TO_type_system_rewrite-20260601T220715Z_m3711_t001`, `TO_type_system_rewrite-20260601T220715Z_m3716_t001`)
+- `E0195` (proved, , actual effort: 1 sessions, 2 msgs, 33 steps, 34 tools, 9 holbuild, 2,639,152 tok (2,630,459 in, 8,693 out, 2,511,232 cached), 380.2s, $2.112541)
+  - At `Expr_Call_ExtCall_static_driver_tail`, preserved branch-local generic facts and added guarded (`TRY`) exact facts for the concrete driver branch: `lift_option run_ext_call = INL (T,[],q'',r)`, tuple destructuring/reflexive result fact, success check, account update, transient update, and `IS_SOME drv`. Non-driver/decode subgoals skip these driver-specific facts rather than forcing the `returnData=[]` prefix globally. -> Focused holbuild now reaches the new intentional marker `c0_2_3_2_2_1_completed_static_extcall_prefix_facts`. The instrumented goal shows assumptions 39-43 contain the required exact run-lift/check/update facts in the concrete driver branch, while source remains partial for the next compact-IH leaf. (`TO_type_system_rewrite-20260601T220715Z_m3828_t001`, `TO_type_system_rewrite-20260601T220715Z_m3829_t001`)
+  - Removed duplicate labelled `extcall_run_success` after matching failures showed that the named label was not needed and broad assertion across all four Resume goals forced driver-only `returnData=[]` facts into decode goals. -> The guarded exact-fact block avoids parallel-branch failure and keeps proof work inside the authorized branch-local prefix-fact component. (`TO_type_system_rewrite-20260601T220715Z_m3825_t001`, `TO_type_system_rewrite-20260601T220715Z_m3828_t001`)
+- `E0201` (proved, , actual effort: 1 sessions, 1 msgs, 18 steps, 18 tools, 3 holbuild, 1,255,797 tok (1,253,607 in, 2,190 out, 1,189,632 cached), 145.3s, $0.980391)
+  - Replaced the diagnostic `FAIL_TAC "c0_2_3_2_2_2_1_isolated_static_driver_success"`/Resume block with an intentional local `cheat` at the static ExtCall success proof point, then rebuilt `vyperTypeStmtSoundnessTheory`. -> The first attempt to make the Resume body `cheat`/`RESUME_TAC >> cheat` still failed Finalise with no resumption proof. Moving the intentional cheat to the original proof point (replacing `suspend "Expr_Call_ExtCall_static_driver_tail"` and removing the now-unneeded Resume block) restored a stable buildable cheated baseline. `holbuild` built `vyperTypeStmtSoundnessTheory` successfully. (`TO_type_system_rewrite-20260601T220715Z_m3921_t001`, `TO_type_system_rewrite-20260601T220715Z_m3923_t001`, `TO_type_system_rewrite-20260601T220715Z_m3934_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260601T220715Z_m3918_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3919_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3932_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3934_t001` (use `read_tool_output` for exact output)
+
+## C0.2.3.2.2.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0202`
+- blocker: 
+- actual effort: 1 sessions, 5 steps, 6 tools, 1 holbuild, 529,047 tok (526,015 in, 3,032 out, 503,680 cached), 77.6s, $0.454475
+- next: Call plan_oracle(mode='review') for C0.2.3.2.2.2, then begin/report C0.2.3.2.2.3 if accepted; do not perform proof search.
+
+### Attempts / Evidence
+
+- `E0176` (stuck, risk_mismatch, actual effort: 1 sessions, 7 steps, 6 tools, 3 holbuild, 686,625 tok (683,667 in, 2,958 out, 664,192 cached), 131.1s, $0.518211)
+  - At the focused driver branch, asserted the fixed-state driver soundness fact and tried `rpt strip_tac >> asm "generated_driver_ih" mp_tac >> simp[check_def, return_def, raise_def, bind_def, lift_option_def, lift_option_type_def, get_accounts_def, get_transient_storage_def, update_accounts_def, update_transient_def]`. -> Timed out under the fixed 2.5s tactic limit before reaching the probe marker; simplification of the generated universal/prefix is still too large even at the concrete branch. (`TO_type_system_rewrite-20260601T220715Z_m3515_t001`)
+  - Replaced raw `mp_tac` with `asm "generated_driver_ih" (drule_then mp_tac)` to match the first `eval_exprs` antecedent from native assumptions before simplifying the remaining generated prefix. -> Also timed out under 2.5s; matching the first antecedent did not sufficiently reduce the generated-prefix obligation. Continuing would require long generated-prefix instantiation or broader cleanup, both forbidden by the task/PLAN. (`TO_type_system_rewrite-20260601T220715Z_m3517_t001`)
+  - Reverted the failed probe artifacts back to `FAIL_TAC "c0_2_3_2_2_1_driver_branch_remaining"` after the proved non-driver/decode branch split and rebuilt. -> holbuild again reaches only the focused true driver branch with `q'= []`, `IS_SOME drv`, concrete updated-state `eval_expr`, concrete `run_ext_call`, and labelled `generated_driver_ih`. The C0.2.3.2.2.1 source progress is preserved. (`TO_type_system_rewrite-20260601T220715Z_m3519_t001`)
+- `E0178` (proved, , actual effort: 1 sessions, 5 steps, 6 tools, 1 holbuild, 326,547 tok (323,892 in, 2,655 out, 295,808 cached), 79.7s, $0.367974)
+  - Began operator-stop component, ran holbuild to recheck current proof state, and appended an operator-facing stop update to semantics/prop/TYPE_SYSTEM_REWRITE_PLAN.md. -> Report deliverable completed. holbuild confirms the source intentionally stops at `FAIL_TAC "c0_2_3_2_2_1_driver_branch_remaining"` with the narrowed static ExtCall empty-return-data optional-driver branch and labelled generated_driver_ih; the plan file now records the focused facts, desired compact IH shape, negative evidence, and maintainer-level options. Target is intentionally not build-clean because this is a blocker report, not a proof completion. (`TO_type_system_rewrite-20260601T220715Z_m3535_t001`, `TO_type_system_rewrite-20260601T220715Z_m3538_t001`)
+- `E0182` (proved, , actual effort: 1 sessions, 1 steps, 114,326 tok (113,887 in, 439 out, 105,856 cached), 11.3s, $0.106253)
+  - Began the accepted operator-facing report carry-forward leaf; no edits/builds/proof tactics were needed. -> This terminal leaf had already been completed and reviewed as E0178. The current replacement PLAN explicitly says no new action except operator reporting if not already done; the report is already present in TYPE_SYSTEM_REWRITE_PLAN.md and reviewed. This close records the accepted report as the final carried-forward component under current constraints. (`TO_type_system_rewrite-20260601T220715Z_m3553_t001`, `TO_type_system_rewrite-20260601T220715Z_m3551_t001`, `TO_type_system_rewrite-20260601T220715Z_m3538_t001`)
+- `E0191` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 8 steps, 7 tools, 3 holbuild, 846,618 tok (843,544 in, 3,074 out, 801,792 cached), 130.3s, $0.701876)
+  - Inside the local compact driver-IH assertion, tried `asm "generated_driver_ih" (drule_all_then mp_tac) >> simp[...]` after C0.2.3.2.2.1 labelled facts. -> Failed with an internal `assert`/predicate error before deriving the compact IH; exact automatic discharge did not apply to the full generated-prefix conjunctive antecedent. (`TO_type_system_rewrite-20260601T220715Z_m3721_t001`)
+  - Replaced with the PLAN-recommended curried form: `asm "generated_driver_ih" (mp_tac o REWRITE_RULE [GSYM AND_IMP_INTRO]) >> simp[...]`. -> Timed out under the fixed 2.5s tactic limit, reproducing the forbidden/generated-prefix recovery problem even after labelled branch facts. This is not a straightforward Risk-2 leaf under current constraints. (`TO_type_system_rewrite-20260601T220715Z_m3724_t001`)
+  - Reverted the failed compact-IH probe to the accepted C0.2.3.2.2.1 marker and rebuilt. -> holbuild again reaches the intentional named-prefix-facts marker with the stabilized branch facts preserved; source remains partial but no failed compact-IH probe artifact remains. (`TO_type_system_rewrite-20260601T220715Z_m3726_t001`)
+- `E0196` (stuck, risk_mismatch, actual effort: 1 sessions, 7 steps, 6 tools, 2 holbuild, 838,438 tok (835,283 in, 3,155 out, 815,744 cached), 109.9s, $0.600217)
+  - Inserted a local assertion for the PLAN's compact `static_driver_ih` after the exact driver-prefix facts, proved by `rpt strip_tac >> asm "generated_driver_ih" (drule_all_then mp_tac) >> disch_then (qspecl_then [env0,st0,res0,st0'] mp_tac) >> simp[]`, guarded inside the driver-specific `TRY` block. -> holbuild reached the following marker, but the instrumented goal showed the `TRY` block had skipped on the top driver goal and no `static_driver_ih` or exact run-lift/update facts were retained there. Thus the planned local `drule_all_then` specialization did not robustly derive the compact IH even after C0.2.3.2.2.1 facts. (`TO_type_system_rewrite-20260601T220715Z_m3834_t001`, `TO_type_system_rewrite-20260601T220715Z_m3835_t001`)
+  - Reverted the failed compact-IH probe to the reviewed exact-prefix marker `c0_2_3_2_2_1_completed_static_extcall_prefix_facts` and rebuilt. -> Source is back at the accepted C0.2.3.2.2.1 partial state; holbuild verifies the marker and the concrete prefix facts remain available for any replacement plan. (`TO_type_system_rewrite-20260601T220715Z_m3837_t001`, `TO_type_system_rewrite-20260601T220715Z_m3838_t001`)
+- `E0202` (proved, , actual effort: 1 sessions, 5 steps, 6 tools, 1 holbuild, 529,047 tok (526,015 in, 3,032 out, 503,680 cached), 77.6s, $0.454475)
+  - Updated in-scope status files for the ExtCall generated-IH blocker: appended a current stop/stabilization section to `TYPE_SYSTEM_REWRITE_PLAN.md` and rewrote `STATE_type_system_rewrite.md` cursor/reflection to the stable cheated baseline/report state. -> Documentation now records that E0199 branch isolation is useful evidence, E0200 blocks local compact-IH production, E0201 restored a buildable intentional-cheat baseline, and downstream ExtCall/RawCallTarget work must not proceed without maintainer-authorized ancestor-level proof-boundary redesign. Rebuilt `vyperTypeStmtSoundnessTheory`; it remains build-clean with intentional cheat(s). (`TO_type_system_rewrite-20260601T220715Z_m3941_t001`, `TO_type_system_rewrite-20260601T220715Z_m3941_t002`, `TO_type_system_rewrite-20260601T220715Z_m3942_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260601T220715Z_m3939_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3939_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3941_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3941_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3942_t001` (use `read_tool_output` for exact output)
+
+## C0.2.3.2.2.2.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0199`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 9 steps, 11 tools, 1 holbuild, 1,071,279 tok (1,066,089 in, 5,190 out, 1,008,000 cached), 145.7s, $0.950145
+
+### Attempts / Evidence
+
+- `E0192` (proved, , actual effort: 1 sessions, 2 steps, 1 tools, 254,624 tok (254,040 in, 584 out, 247,552 cached), 19.5s, $0.173736)
+  - Inspected git status and current PLAN/report context; no proof edits/builds were attempted for the reporting leaf. -> Recorded the terminal operator-facing blocker: after C0.2.3.2.2.1 the focused static ExtCall branch has useful native/labelled facts, but E0191 shows `generated_driver_ih` remains full-prefix-shaped and cannot be converted to the compact conditional driver premise by the approved exact-chaining/narrow-rewrite approaches. Source is intentionally partial at `FAIL_TAC "c0_2_3_2_2_1_named_static_extcall_prefix_facts"`; target is not build-clean; C0.2.3.2.2.3/downstream ExtCall work remains gated pending ancestor redesign. (`TO_type_system_rewrite-20260601T220715Z_m3733_t001`, `TO_type_system_rewrite-20260601T220715Z_m3728_t001`, `TO_type_system_rewrite-20260601T220715Z_m3729_t001`, `TO_type_system_rewrite-20260601T220715Z_m3726_t001`)
+- `E0198` (progressed, other, actual effort: 1 sessions, 1 msgs, 5 steps, 6 tools, 762,871 tok (760,760 in, 2,111 out, 715,136 cached), 54.4s, $0.649018)
+  - Replaced the accepted guarded `TRY (...) >> FAIL_TAC "c0_2_3_2_2_1_completed_static_extcall_prefix_facts"` shape with an explicit `all_tac >~ [...] >- (...)` branch selector keyed by the updated-state driver-evaluation goal, replaying the driver-specific run-lift/check/update/IS_SOME facts only inside that selected branch and ending at marker `c0_2_3_2_2_2_1_isolated_static_driver_success`. -> Source edit is in place but unverified because handoff was requested before holbuild. Next session must build immediately to confirm the selector isolates the concrete driver-success goal and does not leave sibling goals mishandled. (`TO_type_system_rewrite-20260601T220715Z_m3852_t001`)
+- `E0199` (proved, , actual effort: 1 sessions, 1 msgs, 9 steps, 11 tools, 1 holbuild, 1,071,279 tok (1,066,089 in, 5,190 out, 1,008,000 cached), 145.7s, $0.950145)
+  - Verified current `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_static_driver_tail]` branch-selection edit with holbuild; it reaches the intentional `FAIL_TAC "c0_2_3_2_2_2_1_isolated_static_driver_success"` marker only after selecting the static success branch and replaying exact prefix facts. -> The displayed top goal contains `generated_driver_ih`, the concrete `run_ext_call ... = SOME (T,[],q'',r)` fact, driver evaluation in `(args_st with <|accounts := q''; tStorage := r|>)`, and exact update facts, satisfying this proof-refactor checkpoint. Build failure is the intentional marker for the next producer leaf, not an earlier/mis-selected goal. (`TO_type_system_rewrite-20260601T220715Z_m3857_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260601T220715Z_m3857_t001` (use `read_tool_output` for exact output)
+
+## C0.2.3.2.2.2.2
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` This is a proof-interface/decomposition failure around `generated_driver_ih : full_generated_prefix ==> driver_post`, not an evaluator/semantics issue. The selected branch has exact facts, but the generated IH cannot be consumed in the PLAN's approved matching/linear way.
+- latest episode: `E0200`
+- blocker: Risk-2 compact-IH producer is not straightforward even after C0.2.3.2.2.2.1 isolated the branch. Direct matching fails, forward-chaining fails, and local mp_tac/simp over the generated IH times out. Producing `static_driver_ih` appears to require a different proof interface/decomposition or forbidden generated-prefix machinery.
+- actual effort: 1 sessions, 1 msgs, 24 steps, 23 tools, 7 holbuild, 2,218,327 tok (2,210,572 in, 7,755 out, 2,115,072 cached), 304.5s, $1.767686
+- next: Call plan_oracle(mode='review') for this stuck episode and request a repaired proof boundary or ancestor redesign for producing the compact optional-driver IH without forbidden generated-prefix traversal.
+
+### Attempts / Evidence
+
+- `E0200` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 24 steps, 23 tools, 7 holbuild, 2,218,327 tok (2,210,572 in, 7,755 out, 2,115,072 cached), 304.5s, $1.767686)
+  - In the isolated concrete static driver-success branch, stated the planned compact `static_driver_ih` local assertion and tried to prove it by `rpt strip_tac >> asm "generated_driver_ih" irule >> simp[...]`. -> Direct matching of the generated IH against the compact postcondition failed with `No match` even after branch isolation and exact prefix facts. This reproduces the proof-interface mismatch rather than a simple tactic gap. (`TO_type_system_rewrite-20260601T220715Z_m3864_t001`)
+  - Replaced direct `irule` with an explicit branch-prefix conjunction fact and attempted forward use via `asm "generated_driver_ih" (drule_then (qspecl_then [`env0`,`st0`,`res0`,`st0'`] mp_tac)) >> simp[]`. -> Forward-chaining continuation failed (`FIRST_ASSUM`) rather than yielding the compact theorem; the generated-prefix IH interface still does not expose a straightforward branch-local consequence. (`TO_type_system_rewrite-20260601T220715Z_m3879_t001`)
+  - Tried the broader but still local fallback `asm "generated_driver_ih" mp_tac >> simp[]` after asserting the concrete prefix conjunction. -> The simplifier timed out under the fixed 2.5s tactic limit. This is the forbidden/generated-prefix traversal problem, now encountered in the isolated branch. The failed proof attempt was reverted to the accepted C0.2.3.2.2.2.1 marker and holbuild rechecked that marker. (`TO_type_system_rewrite-20260601T220715Z_m3882_t001`, `TO_type_system_rewrite-20260601T220715Z_m3884_t001`)
+
+### Ruled Out
+
+- Direct `asm "generated_driver_ih" irule` after branch isolation.
+- Branch-local generated-prefix conjunction plus `drule_then` specialization.
+- Local `asm "generated_driver_ih" mp_tac >> simp[]` over the generated prefix (timed out).
+- Leaving failed compact-IH proof artifacts in source.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260601T220715Z_m3864_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3879_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3882_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3884_t001` (use `read_tool_output` for exact output)
+
+## C0.2.3.2.2.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0203`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 125,429 tok (124,971 in, 458 out, 119,168 cached), 10.8s, $0.102339
+- next: Review this terminal report leaf. If accepted, commit the stable cleanup/docs checkpoint with --no-gpg-sign and report to the user that local static ExtCall proof work is stopped pending maintainer-authorized proof-boundary redesign.
+
+### Attempts / Evidence
+
+- `E0197` (stuck, plan_incomplete, actual effort: 1 sessions, 1 steps, 138,758 tok (138,021 in, 737 out, 134,016 cached), 15.5s, $0.109143)
+  - Inspected query_plan after the E0196 augment; attempted to begin prerequisite C0.2.3.2.2.2.1, but begin_component rejected it because Oracle next was downstream C0.2.3.2.2.3. Query_plan for C0.2.3.2.2.3 confirms it depends on C0.2.3.2.2.2 and assumes `static_driver_ih` already exists. -> This is a scheduling/dependency blocker, not a proof attempt. No source edits/builds were made for C0.2.3.2.2.3. The component cannot be executed before producing `static_driver_ih`. (`TO_type_system_rewrite-20260601T220715Z_m3842_t001`, `TO_type_system_rewrite-20260601T220715Z_m3843_t001`, `TO_type_system_rewrite-20260601T220715Z_m3845_t001`, `TO_type_system_rewrite-20260601T220715Z_m3846_t001`)
+- `E0203` (proved, , actual effort: 1 sessions, 1 steps, 125,429 tok (124,971 in, 458 out, 119,168 cached), 10.8s, $0.102339)
+  - Prepared terminal stop/report for static ExtCall driver tail using the already-reviewed stabilization and documentation evidence; no proof search or source edits were performed under this report leaf. -> Report obligation is satisfied: E0199 established useful branch-isolation evidence, E0200 established the generated-IH proof-interface blocker and failed/forbidden local routes, E0201 restored a stable intentional-cheat baseline, and E0202 recorded this in TYPE_SYSTEM_REWRITE_PLAN.md/STATE. `vyperTypeStmtSoundnessTheory` builds with intentional ExtCall cheat(s), so the repository is stable for reporting rather than continuing proof work. (`TO_type_system_rewrite-20260601T220715Z_m3934_t001`, `TO_type_system_rewrite-20260601T220715Z_m3942_t001`, `TO_type_system_rewrite-20260601T220715Z_m3944_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260601T220715Z_m3946_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3934_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3942_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3944_t001` (use `read_tool_output` for exact output)
+
+## C0.2.3.2.2.4
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` This is the same proof-interface problem moved one suspend level earlier: the generated IH conclusion is logically right but its antecedent prefix is too large/brittle for local matching under the task constraints and tactic timeout.
+- latest episode: `E0193`
+- blocker: The planned Risk-2 parent-branch pre-specialization still requires consuming the raw generated ExtCall prefix; matching/simplification either fails or times out, so the compact `static_driver_ih` cannot be produced by the authorized local refactor.
+- actual effort: 1 sessions, 3 msgs, 39 steps, 39 tools, 14 holbuild, 3,839,972 tok (3,826,417 in, 13,555 out, 3,656,832 cached), 584.7s, $3.082991
+- next: Call plan_oracle(mode='review') for C0.2.3.2.2.4 with this evidence; request ancestor-level redesign or an explicit stop if no low-risk compact-IH producer remains.
+
+### Attempts / Evidence
+
+- `E0193` (stuck, risk_mismatch, actual effort: 1 sessions, 3 msgs, 39 steps, 39 tools, 14 holbuild, 3,839,972 tok (3,826,417 in, 13,555 out, 3,656,832 cached), 584.7s, $3.082991)
+  - Insert compact `static_driver_ih` assertion in parent `Expr_Call_ExtCall_result_static_success` and prove via `asm "generated_driver_ih" (drule_all_then mp_tac) >> simp[]` after branch split. -> Failed with internal predicate-not-true at the compact IH subgoal; `drule_all` still cannot match/discharge the generated prefix in this focused parent branch. (`TO_type_system_rewrite-20260601T220715Z_m3755_t001`)
+  - Add one-step monadic branch facts in parent branch, keep `generated_driver_ih`, and try backwards `irule`/`first_assum irule` after simplifying small monadic definitions. -> `irule` did not match the generated-driver IH conclusion, or keeping duplicate unlabelled IH polluted earlier branches causing timeout; this did not produce a compact IH without brittle matching. (`TO_type_system_rewrite-20260601T220715Z_m3773_t001`, `TO_type_system_rewrite-20260601T220715Z_m3776_t001`)
+  - Use labelled `generated_driver_ih` with `mp_tac` and local simplification over only small monadic definitions plus labelled `run_ext_call` success, avoiding tail-side broad prefix cleanup. -> Timed out under fixed 2.5s tactic limit at the compact IH assertion; even in the parent branch, simplifying the generated prefix as an implication remains too heavy/brittle. (`TO_type_system_rewrite-20260601T220715Z_m3781_t001`)
+  - Revert exploratory parent-branch proof edits back to prior source state and rebuild to confirm the known marker state. -> Source is back at the existing static driver-tail `FAIL_TAC` marker with named branch facts; no stable compact IH was added. (`TO_type_system_rewrite-20260601T220715Z_m3784_t001`)
+
+### Ruled Out
+
+- `drule_all_then mp_tac` over `generated_driver_ih` in parent branch
+- Backwards `irule`/`first_assum irule` against the labelled or duplicate generated-driver IH
+- `mp_tac` plus local small-definition simplification over the generated prefix in the parent branch
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260601T220715Z_m3755_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3773_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3781_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3784_t001` (use `read_tool_output` for exact output)
+
+## C0.2.3.2.2.5
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0194`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 135,808 tok (135,364 in, 444 out, 130,432 cached), 13.6s, $0.103196
+- next: Review this report leaf with plan_oracle. If accepted and no proof frontier exists, stop/report blocked for maintainer guidance rather than continuing ExtCall proof search.
+
+### Attempts / Evidence
+
+- `E0194` (proved, , actual effort: 1 sessions, 1 steps, 135,808 tok (135,364 in, 444 out, 130,432 cached), 13.6s, $0.103196)
+  - Mechanical operator-facing report leaf for E0193 blocker. -> Recorded the accepted proof-architecture blocker in PLAN/DOSSIER context: C0.2.3.2.2.4 failed, compact `static_driver_ih` is absent, C0.2.3.2.2.3 must not begin, and current source remains at the known static driver-tail FAIL_TAC marker. (`TO_type_system_rewrite-20260601T220715Z_m3786_t001`, `TO_type_system_rewrite-20260601T220715Z_m3784_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260601T220715Z_m3786_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3784_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3785_t001` (use `read_tool_output` for exact output)
+
+## C0.2.3.2.3
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `plan_incomplete` No proof edits/builds were made. The issue is scheduler/PLAN disposition: C0.2.3.2.3 owns no theorem proof but blocks ancestor repair until closed.
+- latest episode: `E0185`
+- blocker: The active terminal blocked-disposition leaf conflicts with the task-file maintainer clarification that permits a constrained ExtCall proof attempt; oracle repair must be active-leaf/ancestor-scoped after closing this disposition artifact.
+- actual effort: 1 sessions, 4 msgs, 21 steps, 28 tools, 1,137,026 tok (1,122,588 in, 14,438 out, 983,424 cached), 565.5s, $1.620672
+- next: Call plan_oracle(mode='review') for C0.2.3.2.3 with the maintainer clarification and oracle-rejection evidence; request acceptance of this close and an ancestor-scoped repair/replacement for C0.2.3.2 or higher before proof work.
+
+### Attempts / Evidence
+
+- `E0179` (stuck, plan_incomplete, actual effort: 1 sessions, 1 steps, 82,830 tok (82,039 in, 791 out, 75,648 cached), 16.5s, $0.093509)
+  - After required begin_component(C0.2.3.2.3), compared injected component assumptions against reviewed episode E0178/operator-stop evidence before editing. -> C0.2.3.2.3 is not executable under current source/PLAN reality: its rationale says it starts once C0.2.3.2.2 supplies a compact local `static_driver_ih_cond`, but reviewed E0178 explicitly accepted that no such compact optional-driver IH is available and the correct action is to stop/report rather than proceed to downstream ExtCall/RawCallTarget work. Continuing would contradict the task stop condition and require forbidden generated-prefix recovery. (`TO_type_system_rewrite-20260601T220715Z_m3540_t001`, `TO_type_system_rewrite-20260601T220715Z_m3541_t001`, `TO_type_system_rewrite-20260601T220715Z_m3535_t001`)
+- `E0183` (stuck, bad_definition, actual effort: 1 sessions, 1 steps, 56,734 tok (56,005 in, 729 out, 51,072 cached), 14.9s, $0.072071)
+  - Procedural operator-stop leaf: began C0.2.3.2.3, did not edit/build/prove, and treated accepted E0182/E0178 evidence as terminal report state per PLAN. -> Confirmed this leaf is a report/stop action, not a HOL proof. The static ExtCall success theorem remains intentionally partial at the driver-branch marker because the compact optional-driver IH is inaccessible from the generated Resume interface under current constraints. (`TO_type_system_rewrite-20260601T220715Z_m3567_t001`, `TO_type_system_rewrite-20260601T220715Z_m3563_t001`, `TO_type_system_rewrite-20260601T220715Z_m3535_t001`)
+  - Attempted requested current-state holbuild after E0182 review. -> holbuild was blocked by the structured high-risk/no-frontier gate; no build or proof execution occurred. This confirms there is no authorized proof action beyond stop/report/review. (`TO_type_system_rewrite-20260601T220715Z_m3564_t001`, `TO_type_system_rewrite-20260601T220715Z_m3566_t002`)
+- `E0184` (progressed, bad_definition, actual effort: 1 sessions, 4 msgs, 14 steps, 19 tools, 765,608 tok (754,038 in, 11,570 out, 632,576 cached), 273.2s, $1.270698)
+  - Rechecked active PLAN and scoped dossier for C0.2.3.2.3 without editing/building/proving. -> Confirmed current leaf is a terminal_blocker_disposition rather than a HOL theorem-proving component: PLAN authorizes no source edits, tactics, builds, commits, or downstream work; dossier carries accepted E0183/E0179 evidence that the remaining static ExtCall optional-driver IH interface is blocked under current constraints. (`TO_type_system_rewrite-20260601T220715Z_m3585_t002`, `TO_type_system_rewrite-20260601T220715Z_m3586_t001`)
+  - Checked repository status before taking any action. -> There is pre-existing modified/untracked semantics/prop state, including the intentionally partial vyperTypeStmtSoundnessScript.sml and memory/plan files. No stable build-clean checkpoint is available to commit under this terminal blocker leaf. (`TO_type_system_rewrite-20260601T220715Z_m3585_t001`)
+- `E0185` (stuck, plan_incomplete, actual effort: 1 sessions, 4 msgs, 21 steps, 28 tools, 1,137,026 tok (1,122,588 in, 14,438 out, 983,424 cached), 565.5s, $1.620672)
+  - Checked startup STATE/PLAN and dossier for active C0.2.3.2.3, then attempted ancestor-scoped oracle augment for C0.2.3.2 because the task file contains a maintainer clarification permitting carefully constrained ExtCall proof work. -> The active leaf remains a terminal_blocker_disposition authorizing no edits/builds/proof work, while the task file's maintainer clarification appears to supersede the old terminal stop gate. plan_oracle rejected ancestor-scoped repair while C0.2.3.2.3 is active and required closing the active component first. This is a plan-disposition mismatch, not a proof tactic failure. (`TO_type_system_rewrite-20260601T220715Z_m3585_t002`, `TO_type_system_rewrite-20260601T220715Z_m3590_t001`, `TO_type_system_rewrite-20260601T220715Z_m3591_t001`, `TO_type_system_rewrite-20260601T220715Z_m3592_t001`, `TO_type_system_rewrite-20260601T220715Z_m3593_t001`)
+
+### Ruled Out
+
+- Do not edit/build under C0.2.3.2.3 because its PLAN explicitly forbids proof work.
+- Do not report blocked yet because the current task clarification may provide the required maintainer-approved path.
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260601T220715Z_m3585_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3590_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3591_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3592_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3593_t001` (use `read_tool_output` for exact output)
 
 ## C0.3
 
 ### Current Status
 
 - result: `stuck`
-- diagnosis: `missing_helper` This is not theorem falsehood. The missing helper should capture state/account preservation, no TypeError, and result typing for the raw_call monadic tail, using `raw_call_return_type_well_formed`, `run_ext_call_accounts_well_typed`, update preservation, and bytes/tuple value typing. Without that helper the consumer proof mixes prefix unfolding with result typing and produces an unreadable >4KiB goal.
-- latest episode: `E0106`
-- blocker: The direct neighboring-branch proof leaves a >4KiB RawCallTarget tail obligation involving `run_ext_call`, account/transient updates, revert flags, max_outsize-dependent return values, and result typing. This needs a RawCallTarget tail boundary lemma (analogous to existing raw_log/raw_revert/selfdestruct tail helpers) or a repaired decomposition; the current plan's claim that the branch is straightforward by direct unfolding is under-specified.
-- actual effort: 1 sessions, 1 msgs, 17 steps, 23 tools, 5 holbuild, 2,311,534 tok (2,307,133 in, 4,401 out, 2,236,288 cached), 200.3s, $1.604399
-- next: Ask strategist to repair C0.3 with a small local RawCallTarget tail helper/boundary or another de-risked proof interface before attempting more proof edits.
+- diagnosis: `plan_incomplete` No proof edits/builds were made. This is a scheduler/dependency mismatch after plan repair, not a HOL proof failure.
+- latest episode: `E0186`
+- blocker: Structured scheduler made C0.3 beginable even though C0.3's own dependency text and the repaired C0.2.3 plan require C0.2.3.2.1 -> C0.2.3.2.2 -> C0.2.3.2.3 before C0.3.
+- actual effort: 1 sessions, 1 steps, 81,660 tok (81,016 in, 644 out, 75,648 cached), 13.4s, $0.083984
+- next: Call plan_oracle(mode='review') for C0.3 and request scheduler/dependency repair so C0.2.3.2.1 is Oracle next/beginable.
 
 ### Attempts / Evidence
 
@@ -1241,18 +1632,20 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Tried a neighboring RawLog/RawRevert-style direct proof: unfold `well_typed_expr`/`evaluate_def`, split `eval_exprs`, apply expression-list IH, split argument result, then use broad tail cleanup with `AllCaseEqs()` and `raw_call_return_type_well_formed`. -> The proof reached the RawCallTarget monadic tail but failed with 9 remaining subgoals. The main displayed goal still contains the full raw_call tail and requires state/account preservation and return-value typing across `run_ext_call`, `update_accounts`, `update_transient`, and the return-shape flags. This is a >4KiB consumer goal, indicating a missing boundary lemma rather than a straightforward tactic issue. (`TO_type_system_rewrite-20260601T081233Z_m2362_t001`)
   - Tried a small follow-up by destructing the `result` tuple before tail cleanup and including `update_accounts_def`/`update_transient_def` plus `run_ext_call_accounts_well_typed`. -> This failed because `result` was not yet a pair variable in the selected nested case equation; the live goal still had the entire raw_call nested case tail. Continuing would require factoring a raw_call tail soundness helper analogous to RawLog/RawRevert/SelfDestruct, which is not in the current C0.3 plan and is nontrivial proof-architecture work. (`TO_type_system_rewrite-20260601T081233Z_m2367_t001`)
   - Restored `Expr_Call_RawCallTarget` to the cheated baseline and rebuilt `vyperTypeStmtSoundnessTheory`. -> Source is build-clean again with RawCallTarget restored to `cheat`. No broken partial proof remains. (`TO_type_system_rewrite-20260601T081233Z_m2372_t001`)
+- `E0186` (stuck, plan_incomplete, actual effort: 1 sessions, 1 steps, 81,660 tok (81,016 in, 644 out, 75,648 cached), 13.4s, $0.083984)
+  - Began scheduler-selected C0.3 only because begin_component gate required it, then inspected injected component text before any edit/build. -> The injected C0.3 component explicitly says 'Begin only after C0.2.3 is proved and reviewed' and 'Do not start this before C0.2.3', while the just-repaired C0/C0.2.3 plan says the intended next leaf is C0.2.3.2.1. Therefore C0.3 is incorrectly beginable and cannot be worked without violating its own dependency and the ExtCall static-success rebase plan. (`TO_type_system_rewrite-20260601T220715Z_m3598_t001`, `TO_type_system_rewrite-20260601T220715Z_m3599_t001`, `TO_type_system_rewrite-20260601T220715Z_m3600_t001`, `TO_type_system_rewrite-20260601T220715Z_m3601_t001`)
 
 ### Ruled Out
 
-- Direct RawLog/RawRevert-style broad tail cleanup is not sufficient for RawCallTarget because its tail has external-call side effects and flag-dependent return shapes.
-- Continuing to case-thrash inside the >4KiB nested raw_call tail goal was stopped per proof hygiene and task instruction.
+- Do not work on C0.3 before C0.2.3 static success rebase is proved/reviewed.
+- Do not use C0.3 as a workaround for the C0.2.3.2.1 begin gate.
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260601T081233Z_m2360_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m2362_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m2367_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m2372_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3598_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3599_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3600_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3601_t001` (use `read_tool_output` for exact output)
 
 ## C0.3.1
 
