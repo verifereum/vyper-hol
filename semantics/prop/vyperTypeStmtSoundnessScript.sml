@@ -6305,8 +6305,12 @@ Resume eval_all_type_sound_mutual[If]:
   rename1 `eval_expr cx e st = (cond_res, st1)` >>
   reverse(Cases_on `cond_res`)
   >- (
+    simp_tac(srw_ss())[] >>
+    strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+    simp_tac(srw_ss())[] >>
+    first_x_assum drule >>
+    simp_tac(srw_ss())[no_type_error_result_def] >>
     strip_tac >>
-    gvs[no_type_error_result_def] >>
     drule_all eval_expr_exception_return_typed >> simp[]
   ) >>
   simp_tac(srw_ss())[ignore_bind_def, bind_def] >>
@@ -7364,7 +7368,9 @@ Resume eval_all_type_sound_mutual[BaseTarget_Subscript]:
           qexistsl_tac [`vt'`, `e`, `expr_type e`, `st'`, `st'`, `Value v`] >>
           simp[get_Value_def, return_def]) >>
       strip_tac >> gvs[]) >>
-  strip_tac >> pop_assum mp_tac >> simp[] >> strip_tac >>
+  strip_tac >> pop_assum mp_tac >>
+  simp_tac(srw_ss())[] >>
+  strip_tac >>
   qpat_x_assum `INR y = res` (fn th => SUBST_ALL_TAC (SYM th)) >>
   qpat_x_assum `st1 = st'` (fn th => SUBST_ALL_TAC (SYM th)) >>
   simp[no_type_error_result_def]
@@ -10878,7 +10884,7 @@ Theorem create_tail_result_sound_simp[local]:
      | INL tv => expr_result_typed env (Call (BaseT AddressT) (CreateTarget kind rof) es NONE) tv
      | INR _ => T)
 Proof
-  rpt strip_tac >>
+  rpt gen_tac >> strip_tac >>
   qspecl_then [`env`, `cx`, `es`, `vs`, `st`, `kind`, `rof`, `BaseT AddressT`]
     mp_tac create_tail_sound >>
   impl_tac >- simp[] >>

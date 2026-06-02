@@ -28,7 +28,10 @@ Proof
   Cases_on`from_ty` >> Cases_on`to_ty` >>
   gvs[valid_conversion_def, evaluate_type_def, AllCaseEqs()] >>
   gvs[oneline value_has_type_def, evaluate_convert_def] >>
-  Cases_on`v` >> gvs[evaluate_convert_def]
+  reverse(Cases_on`∃i. v = IntV i`)
+  >- (Cases_on`v` >> gvs[])
+  >> gvs[evaluate_convert_def]
+  >> Cases_on`v` >> gvs[evaluate_convert_def]
 QED
 
 Theorem evaluate_max_value_well_typed:

@@ -2083,7 +2083,9 @@ Proof
           simp[] \\
           gvs[type_check_def, assert_def] \\
           decide_tac) \\
-      gvs[type_check_def, assert_def] \\
+      qhdtm_x_assum`type_check`mp_tac >>
+      simp_tac(srw_ss())[type_check_def, assert_def] >>
+      strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
       decide_tac) \\
   qspecl_then
     [`cx`, `src_id_opt`, `fn`, `es`,
