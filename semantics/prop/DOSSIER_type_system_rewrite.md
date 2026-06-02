@@ -75,7 +75,9 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C0.4.3.b | proved |  | E0245 |  |
 | C0.4.3.c | proved |  | E0246 |  |
 | C0.4.4 | proved |  | E0247 |  |
-| C0.5 | stuck | plan_incomplete | E0099 | Call `plan_oracle(mode='review', component_id='C0.5', ...)` to accept the premature-validation failure and repair scheduling/dependencies so C0.4.1 is next. |
+| C0.5 | stuck | missing_helper | E0248 | Call plan_oracle(mode='review', component_id='C0.5', evidence_ids=[...]) to decompose/repair C0.5 with an appropriate compact nonstatic helper or revised proof boundary. |
+| C0.5.1 | proved |  | E0250 |  |
+| C0.5.2 | proved |  | E0251 |  |
 | C1.1 | proved |  | E0024 | Call plan_oracle(mode='review') for C1.1, then begin C1.2 if accepted. |
 | C1.1.1 | proved |  | E0012 |  |
 | C1.1.2 | proved |  | E0013 |  |
@@ -2199,30 +2201,77 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 ### Current Status
 
 - result: `stuck`
-- diagnosis: `plan_incomplete` Scheduling/dependency mismatch after C0.4 subtree replacement. C0.5 depends on completion of the replacement C0.4 subtree (at least C0.4.5), not merely parent C0.4 being marked ready.
-- latest episode: `E0099`
-- blocker: C0.5 is an integration audit that explicitly requires the ExtCall_result INL cheat to be gone, but the replacement C0.4 children have not yet run and grep confirms the cheat remains. The structured scheduler nevertheless made C0.5 Oracle next.
-- actual effort: 1 sessions, 2 steps, 2 tools, 1 holbuild, 256,382 tok (255,443 in, 939 out, 252,672 cached), 27.2s, $0.168361
-- next: Call `plan_oracle(mode='review', component_id='C0.5', ...)` to accept the premature-validation failure and repair scheduling/dependencies so C0.4.1 is next.
+- diagnosis: `missing_helper` This matches the PLAN's stop condition: if the finalized static proof reveals a missing compact helper interface for nonstatic ExtCall, stop as NEW_DEPENDENCY rather than producing theorem plumbing.
+- latest episode: `E0248`
+- blocker: C0.5 requires a compact nonstatic ExtCall branch/tail helper matching the finalized static proof boundary. The existing `extcall_nonstatic_projected_state_well_typed` only proves state well-typedness, and direct branch-local integration exposes large generated-prefix/error-branch goals with timeouts.
+- actual effort: 1 sessions, 1 msgs, 16 steps, 17 tools, 5 holbuild, 1,942,577 tok (1,936,214 in, 6,363 out, 1,887,232 cached), 440.6s, $1.379416
+- next: Call plan_oracle(mode='review', component_id='C0.5', evidence_ids=[...]) to decompose/repair C0.5 with an appropriate compact nonstatic helper or revised proof boundary.
 
 ### Attempts / Evidence
 
 - `E0099` (stuck, plan_incomplete, actual effort: 1 sessions, 2 steps, 2 tools, 1 holbuild, 256,382 tok (255,443 in, 939 out, 252,672 cached), 27.2s, $0.168361)
   - Executed C0.5's mechanical validation: built `vyperTypeStmtSoundnessTheory` and grepped `vyperTypeStmtSoundnessScript.sml` for `cheat`. -> Build is clean, but grep still shows the ExtCall_result INL branch cheat at line 17475 (and RawCallTarget cheat at 17544). Therefore C0.5 cannot be proved; it was scheduled before replacement children C0.4.1-C0.4.5 removed the ExtCall_result cheat. (`TO_type_system_rewrite-20260601T081233Z_m2219_t002`, `TO_type_system_rewrite-20260601T081233Z_m2219_t001`)
   - Attempted to request scheduler repair after C0.4 subtree replacement because query_plan made C0.5 Oracle next before C0.4.1-C0.4.5. -> `plan_oracle(mode='augment')` was blocked by the harness as not allowed, leaving begin C0.5 as the only legal next action despite the dependency mismatch. (`TO_type_system_rewrite-20260601T081233Z_m2215_t001`, `TO_type_system_rewrite-20260601T081233Z_m2216_t001`, `TO_type_system_rewrite-20260601T081233Z_m2217_t001`)
+- `E0248` (stuck, missing_helper, actual effort: 1 sessions, 1 msgs, 16 steps, 17 tools, 5 holbuild, 1,942,577 tok (1,936,214 in, 6,363 out, 1,887,232 cached), 440.6s, $1.379416)
+  - Probed `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result_nonstatic]` by replacing the cheat with `FAIL_TAC` to inspect the live goal. -> The live resume context has concrete argument-success facts and the generated conditional driver IH, but no compact branch-local nonstatic helper matching the finalized static-tail boundary; goal is the full combined mutual postcondition for the nonstatic call. (`TO_type_system_rewrite-20260602T195240Z_m4638_t001`)
+  - Tried a careful linear nonstatic proof mirroring the finalized static branch: expose nonstatic argument facts, split calldata/empty-code/run_ext_call branches, and use `extcall_after_state_update_tail_sound_cond_driver_ih` for the success tail. -> The proof immediately hit large error-branch goals and tactic timeouts even with targeted rewrites; this indicates the current helper interface is insufficient for straightforward nonstatic integration, contrary to Risk 2 expectation. Reverted the source back to the intentional nonstatic `cheat`; focused build is clean again. (`TO_type_system_rewrite-20260602T195240Z_m4641_t001`, `TO_type_system_rewrite-20260602T195240Z_m4643_t001`, `TO_type_system_rewrite-20260602T195240Z_m4645_t001`, `TO_type_system_rewrite-20260602T195240Z_m4647_t001`)
 
 ### Ruled Out
 
-- Completing C0.5 now: proof integrity fails because grep shows the ExtCall_result `>- cheat` remains.
-- Bypassing the gate to begin C0.4.1 manually: begin_component only allowed C0.5 as Oracle next.
+- Broad generated-prefix simplification or adapter theorem, forbidden by task/PLAN.
+- Continuing direct branch-local proof after large timeout goals; not straightforward as required by user.
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260601T081233Z_m2215_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m2216_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m2217_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m2219_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m2219_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4638_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4641_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4643_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4645_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4647_t001` (use `read_tool_output` for exact output)
+
+## C0.5.1
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0250`
+- blocker: 
+- actual effort: 1 sessions, 2 steps, 3 tools, 1 holbuild, 195,536 tok (195,111 in, 425 out, 191,232 cached), 15.4s, $0.127761
+
+### Attempts / Evidence
+
+- `E0249` (stuck, risk_mismatch, actual effort: 1 sessions, 7 steps, 10 tools, 3 holbuild, 559,303 tok (556,138 in, 3,165 out, 532,096 cached), 110.8s, $0.481208)
+  - Added a local `extcall_nonstatic_projected_sound` full-postcondition helper by adapting the existing static projected proof to nonstatic arguments (`TL (TL vs)`, `SOME amount`, `stat=F`) so it could serve as the C0.5.1 helper-suite boundary. -> Build timed out at the `run_ext_call` case split cleanup (`gvs[return_def, raise_def]`) with a >4KiB generated-prefix goal and 34 subgoals. This exactly matches the PLAN stop condition: helper-suite proof still exposes large generated monadic prefix rather than a straightforward branch-local boundary. (`TO_type_system_rewrite-20260602T195240Z_m4669_t001`, `TO_type_system_rewrite-20260602T195240Z_m4670_t001`)
+  - Deleted the failed helper attempt and rebuilt the focused target. -> Source reverted to stable state; `vyperTypeStmtSoundnessTheory` builds clean again with the existing intentional nonstatic/RawCall cheats unchanged. (`TO_type_system_rewrite-20260602T195240Z_m4671_t001`, `TO_type_system_rewrite-20260602T195240Z_m4672_t001`)
+- `E0250` (proved, , actual effort: 1 sessions, 2 steps, 3 tools, 1 holbuild, 195,536 tok (195,111 in, 425 out, 191,232 cached), 15.4s, $0.127761)
+  - Audited source for failed full-call helper and current nonstatic Resume baseline, then focused build. -> `extcall_nonstatic_projected_sound` is absent; `Expr_Call_ExtCall_result_nonstatic` still contains the intentional `cheat`; focused `vyperTypeStmtSoundnessTheory` build is clean. Baseline guard complete. (`TO_type_system_rewrite-20260602T195240Z_m4677_t001`, `TO_type_system_rewrite-20260602T195240Z_m4677_t002`, `TO_type_system_rewrite-20260602T195240Z_m4677_t003`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260602T195240Z_m4677_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4677_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4677_t003` (use `read_tool_output` for exact output)
+
+## C0.5.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0251`
+- blocker: 
+- actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 330,252 tok (329,403 in, 849 out, 324,224 cached), 135.2s, $0.213477
+
+### Attempts / Evidence
+
+- `E0251` (proved, , actual effort: 1 sessions, 3 steps, 2 tools, 1 holbuild, 330,252 tok (329,403 in, 849 out, 324,224 cached), 135.2s, $0.213477)
+  - Added a single branch-local `[local]` helper `extcall_nonstatic_runtime_error_sound` whose premises are only concrete RuntimeError result equality, unchanged state, and current state/env/accounts invariants; it does not mention the full `eval_expr ... ExtCall F ...` prefix. -> Focused `vyperTypeStmtSoundnessTheory` build passed. The helper provides the exact mutual postcondition for unchanged-state nonstatic ExtCall RuntimeError branches, covering calldata failure, no-code, run-none, and revert branches without generated-prefix simplification. (`TO_type_system_rewrite-20260602T195240Z_m4682_t001`, `TO_type_system_rewrite-20260602T195240Z_m4683_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260602T195240Z_m4682_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4683_t001` (use `read_tool_output` for exact output)
 
 ## C1.1
 

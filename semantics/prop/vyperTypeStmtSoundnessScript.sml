@@ -10177,6 +10177,20 @@ Proof
   qpat_x_assum `!env0 st0 res0 st0'. _` ACCEPT_TAC
 QED
 
+Theorem extcall_nonstatic_runtime_error_sound[local]:
+  !env cx cur_st st' res msg ret_type func_name arg_types es drv.
+    state_well_typed cur_st /\ env_consistent env cx cur_st /\
+    accounts_well_typed cur_st.accounts /\
+    res = INR (Error (RuntimeError msg)) /\ st' = cur_st ==>
+    state_well_typed st' /\ env_consistent env cx st' /\
+    accounts_well_typed st'.accounts /\ no_type_error_result res /\
+    case res of
+    | INL tv => expr_result_typed env (Call ret_type (ExtCall F (func_name,arg_types,ret_type)) es drv) tv
+    | INR _ => T
+Proof
+  rw[no_type_error_result_def]
+QED
+
 Theorem eval_extcall_args_error[local]:
   !cx es st y args_st ret_type stat func_name arg_types drv.
     eval_exprs cx es st = (INR y,args_st) ==>

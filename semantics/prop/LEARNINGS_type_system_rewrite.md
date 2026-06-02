@@ -618,3 +618,23 @@ evidence:
 - episode:E0244
 - tool_output:TO_type_system_rewrite-20260602T195240Z_m4577_t001
 - tool_output:TO_type_system_rewrite-20260602T195240Z_m4577_t003
+
+## L0137 scope='C0.5' tags=ExtCall,nonstatic,helper-boundary,generated-prefix,missing-helper
+shape: Nonstatic ExtCall Resume has full mutual postcondition plus generated conditional driver IH; existing helper proves only `state_well_typed`.
+pattern: Do not fill the nonstatic ExtCall Resume by copying static proof plumbing directly. First provide/decompose to a compact nonstatic full-postcondition helper or subresumes: error branches should be local/mechanical, and the success tail should invoke `extcall_after_state_update_tail_sound_cond_driver_ih` only after concrete `run_ext_call = SOME (T, returnData, accounts', tStorage')` facts are available.
+works_when: Applies to C0.5 after static ExtCall is finalized and `Expr_Call_ExtCall_result_nonstatic` still contains the planned cheat; direct branch proof exposes large monadic/generated-prefix goals or timeouts.
+evidence:
+- episode:E0248
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m4638_t001
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m4645_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:10115
+
+## L0138 scope='C0.5' tags=ExtCall,nonstatic,RuntimeError,branch-helper,mutual-postcondition
+shape: Already-isolated nonstatic ExtCall error branch: `res = INR (Error (RuntimeError msg))` and `st' = cur_st` with current state/env/accounts invariants.
+pattern: Use a tiny branch-local helper (`extcall_nonstatic_runtime_error_sound`) to close unchanged-state RuntimeError branches. The helper has no full `eval_expr (Call ... ExtCall F ...)` premise; it rewrites only `no_type_error_result_def` and returns the exact mutual postcondition, avoiding generated-prefix simplification entirely.
+works_when: Applies after the final Resume has isolated calldata failure, no-code, run-none, or revert as a concrete RuntimeError with unchanged `args_st`/current state. Do not use for success branches that update accounts/transient storage.
+evidence:
+- episode:E0251
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m4682_t001
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m4683_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:10180
