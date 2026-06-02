@@ -68,7 +68,9 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C0.3.3.4 | proved |  | E0097 | Call strategist review for E0097. If accepted, commit this ExtCall_result INR-branch proof checkpoint unsigned. |
 | C0.3.4 | proved |  | E0089 |  |
 | C0.4 | stuck | risk_mismatch | E0230 | Call plan_oracle(mode='review', component_id='C0.4') with the stuck evidence; request a replacement/augmentation that either provides a conditional projected helper matching the generated prefix or rebases the static success boundary. |
-| C0.4.1 | proved |  | E0231 |  |
+| C0.4.1 | proved |  | E0242 |  |
+| C0.4.2 | proved |  | E0243 |  |
+| C0.4.3 | stuck | risk_mismatch | E0241 | Call plan_oracle(mode='review', component_id='C0.4.3', evidence_ids=[...]) for a replacement/decomposition; do not continue tactical work on this component until the strategist repairs the plan. |
 | C0.5 | stuck | plan_incomplete | E0099 | Call `plan_oracle(mode='review', component_id='C0.5', ...)` to accept the premature-validation failure and repair scheduling/dependencies so C0.4.1 is next. |
 | C1.1 | proved |  | E0024 | Call plan_oracle(mode='review') for C1.1, then begin C1.2 if accepted. |
 | C1.1.1 | proved |  | E0012 |  |
@@ -2011,20 +2013,97 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - result: `proved`
 - diagnosis: `n/a`
-- latest episode: `E0231`
+- latest episode: `E0242`
 - blocker: 
-- actual effort: 1 sessions, 2 steps, 2 tools, 1 holbuild, 295,364 tok (294,783 in, 581 out, 291,072 cached), 22.4s, $0.181521
+- actual effort: 1 sessions, 1 msgs, 1 steps, 120,049 tok (119,739 in, 310 out, 96,640 cached), 9.3s, $0.173115
 
 ### Attempts / Evidence
 
 - `E0231` (proved, , actual effort: 1 sessions, 2 steps, 2 tools, 1 holbuild, 295,364 tok (294,783 in, 581 out, 291,072 cached), 22.4s, $0.181521)
   - Audited `Expr_Call_ExtCall_result_static_success` prefix replay under active C0.4.1. -> The current source has the required branch-local prefix: `RESUME_TAC`, static type-shape normalization, runtime-typed target/nonempty facts, one-step evaluator unfold, exact splits for calldata construction, empty-code check, and `run_ext_call`, preserving the existing suspended calldata/empty-code/run-none branches and ending with the intentional success-branch `cheat` for downstream C0.4.2--C0.4.4. (`TO_type_system_rewrite-20260601T220715Z_m4446_t001`)
   - Built `vyperTypeStmtSoundnessTheory` after confirming the prefix state. -> Focused statement-soundness target builds cleanly on the current prefix-with-success-placeholder baseline. This validates C0.4.1's refactor/prefix state, not the final static-success proof. (`TO_type_system_rewrite-20260601T220715Z_m4446_t002`)
+- `E0233` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 8 steps, 7 tools, 3 holbuild, 791,057 tok (788,811 in, 2,246 out, 716,288 cached), 97.8s, $0.788139)
+  - Replaced `Expr_Call_ExtCall_result_static` body temporarily with `rpt gen_tac >> strip_tac >> FAIL_TAC "C0.4.1 outer static ExtCall probe"` to inspect whether the outer branch exposes a compact driver IH before unfolding the ExtCall prefix. -> Probe failed at the outer static branch with 2 goals. The top `state_well_typed st'` goal had normal expression-list success facts and the whole-call equation, but the driver IH remained a generated prefix implication whose antecedent includes ExtCall prefix operations through `run_ext_call`, account/transient updates, and `returnData = [] ∧ IS_SOME drv`. This means `extcall_static_projected_sound` cannot be applied with the required compact unconditional driver IH at this boundary. (`TO_type_system_rewrite-20260601T220715Z_m4485_t001`)
+  - Restored the outer static branch to the prior intentional `suspend "Expr_Call_ExtCall_result_static_success"` baseline and rebuilt the focused target. -> Source is back to the stable intentional-cheat/suspend baseline; `vyperTypeStmtSoundnessTheory` builds cleanly. No failed probe text remains. (`TO_type_system_rewrite-20260601T220715Z_m4487_t001`, `TO_type_system_rewrite-20260601T220715Z_m4488_t001`)
+- `E0234` (progressed, tool_limit, actual effort: 1 sessions, 4 steps, 6 tools, 1 holbuild, 475,795 tok (474,209 in, 1,586 out, 461,312 cached), 39.5s, $0.342721)
+  - Audited replacement C0.4.1 boundary after oracle review: grepped/read helper and static-success Resume blocks. -> Confirmed `extcall_success_continuation_sound_cond_driver_ih` exists with conditional premise guarded by `returnData = [] /\ IS_SOME drv`; confirmed static-success prefix still suspends calldata/empty-code/run-none branches and retains the intentional success `cheat`; confirmed the temporary C0.4.1 FAIL probe is absent. Only task-owned memory files differ in git status; no source proof edit is currently present. (`TO_type_system_rewrite-20260602T090518Z_m4493_t001`, `TO_type_system_rewrite-20260602T090518Z_m4493_t002`, `TO_type_system_rewrite-20260602T090518Z_m4493_t003`, `TO_type_system_rewrite-20260602T090518Z_m4493_t004`)
+  - Tried to re-run focused `holbuild(targets=["vyperTypeStmtSoundnessTheory"])` for the audit build check. -> Unexpected tooling failure: holbuild returned `unknown build option: --strict-parse`, despite the same focused target having built cleanly earlier after source restoration. This prevents completing the audit/build check or further sound proof work in this session. (`TO_type_system_rewrite-20260602T090518Z_m4494_t001`)
+- `E0235` (progressed, tool_limit, actual effort: 3 sessions, 2 msgs, 10 steps, 17 tools, 4 holbuild, 1,226,700 tok (1,223,198 in, 3,502 out, 954,880 cached), 578.0s, $1.924090)
+  - After user reported tactic timeout default changed to 30s, reran focused `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` to complete the C0.4.1 audit build check. -> Build still fails in an unrelated dependency `vyperEncodeDecodeTheory` with `holbuild tactic timeout after 2.5s`, specifically at `within_int_bound_signed_256` line 547. This shows the tool/runtime is still using 2.5s despite `holproject.toml` containing `tactic_timeout = 30`, so the audit cannot be verified by build yet. (`TO_type_system_rewrite-20260602T091745Z_m4500_t001`, `TO_type_system_rewrite-20260602T091745Z_m4501_t001`)
+- `E0236` (progressed, tool_limit, actual effort: 4 sessions, 3 msgs, 13 steps, 21 tools, 5 holbuild, 1,619,914 tok (1,615,329 in, 4,585 out, 1,212,672 cached), 655.4s, $2.757171)
+  - Reran focused audit build after user said tooling was resolved. -> Build still fails before active target proof checking in unrelated dependency `vyperEncodeDecodeTheory`, with `holbuild tactic timeout after 2.5s` at `within_int_bound_signed_256` line 547. Output still says cache entries are unusable for contract `requested 2.5`, so holbuild/runtime is not honoring the intended 30s tactic timeout for this run. (`TO_type_system_rewrite-20260602T115210Z_m4504_t003`)
+- `E0237` (progressed, tool_limit, actual effort: 5 sessions, 4 msgs, 16 steps, 25 tools, 6 holbuild, 2,023,593 tok (2,017,863 in, 5,730 out, 1,477,632 cached), 752.0s, $3.611871)
+  - Tested the exact aggregate command the user mentioned by running `holbuild(targets=["vyperSemanticsHolTheory"], timeout=600)`. -> The tool still fails before reaching active C0.4.1 proof work, in unrelated `vyperEncodeDecodeTheory`, reporting `holbuild tactic timeout after 2.5s` and cache warnings with `requested 2.5`. So I am not using a different build target now; even `vyperSemanticsHolTheory` fails through this API/tool invocation. (`TO_type_system_rewrite-20260602T115441Z_m4507_t003`)
+- `E0238` (progressed, tool_limit, actual effort: 6 sessions, 5 msgs, 19 steps, 27 tools, 7 holbuild, 2,435,777 tok (2,429,056 in, 6,721 out, 1,749,760 cached), 793.5s, $4.472990)
+  - User requested trying `--tactic-timeout=30` explicitly. The API `holbuild` tool does not expose a tactic-timeout argument, so I reran the aggregate target available through the tool: `holbuild(targets=["vyperSemanticsHolTheory"], timeout=600)`. -> The API invocation still uses 2.5s internally and fails in unrelated `vyperEncodeDecodeTheory` at `within_int_bound_signed_256` line 547 with `holbuild tactic timeout after 2.5s`. Therefore I cannot explicitly pass `--tactic-timeout=30` via the available tool interface; the active C0.4.1 audit build check remains blocked by the API holbuild configuration. (`TO_type_system_rewrite-20260602T115812Z_m4510_t001`)
+- `E0239` (proved, , actual effort: 7 sessions, 6 msgs, 22 steps, 31 tools, 8 holbuild, 2,852,722 tok (2,845,020 in, 7,702 out, 2,024,960 cached), 834.3s, $5.343840)
+  - Completed C0.4.1 audit after dependency/tooling fixes: checked plan active leaf, confirmed no source edits in active component, and ran aggregate build `vyperSemanticsHolTheory`. Prior source audit already confirmed `extcall_success_continuation_sound_cond_driver_ih` exists with guarded `returnData = [] /\ IS_SOME drv` premise, static-success prefix is restored, and prior FAIL probe is absent. -> Aggregate build now succeeds through the API (`holbuild finished in 2.198s`). This completes the audit obligations: helper/prefix restored and build-clean on current baseline. (`TO_type_system_rewrite-20260602T090518Z_m4493_t001`, `TO_type_system_rewrite-20260602T090518Z_m4493_t002`, `TO_type_system_rewrite-20260602T090518Z_m4493_t003`, `TO_type_system_rewrite-20260602T125148Z_m4513_t003`)
+- `E0242` (proved, , actual effort: 1 sessions, 1 msgs, 1 steps, 120,049 tok (119,739 in, 310 out, 96,640 cached), 9.3s, $0.173115)
+  - Reviewed repaired PLAN after E0241 replacement and began carried-forward C0.4.1 audit leaf. -> C0.4.1 is explicitly a carried-forward audit with no executor work remaining; existing source is restored to the stable static-success prefix with the intentional downstream tail cheat and the focused target was build-clean after restoration. (`TO_type_system_rewrite-20260602T125148Z_m4555_t001`, `TO_type_system_rewrite-20260602T125148Z_m4560_t001`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260601T220715Z_m4446_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T220715Z_m4446_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T125148Z_m4555_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T125148Z_m4560_t001` (use `read_tool_output` for exact output)
+
+## C0.4.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0243`
+- blocker: 
+- actual effort: 1 sessions, 1 steps, 126,060 tok (125,792 in, 268 out, 122,752 cached), 8.9s, $0.084616
+
+### Attempts / Evidence
+
+- `E0232` (stuck, risk_mismatch, actual effort: 1 sessions, 8 steps, 11 tools, 3 holbuild, 588,435 tok (585,191 in, 3,244 out, 565,760 cached), 107.9s, $0.477355)
+  - Replaced the remaining static-success `cheat` after `Cases_on run_ext_call ...` with the corresponding tail skeleton from `extcall_static_projected_sound`: `rename1 SOME result`, push the live `(do _ od) args_st = (res,st')` equation, destruct result/success tuple, derive `accounts_well_typed accounts'`, `runtime_consistent env cx args_st`, `evaluate_type`, and `get_tenv` facts, leaving only a final `cheat`. -> Failed immediately after the `run_ext_call` split: instead of a single concrete `SOME result` branch, holbuild reported 9 failed input goals and the top goal was the >4KiB generated optional-driver prefix. The expected `(do _ od) args_st = (res,st')` assumption was not available in the top generated-prefix goal, so this repeats the forbidden boundary/fanout before C0.4.2 can derive the run-success facts. (`TO_type_system_rewrite-20260601T220715Z_m4464_t001`)
+  - Restored `Expr_Call_ExtCall_result_static_success` to the prior intentional-cheat baseline after the failed probe and rebuilt the focused target. -> Focused `vyperTypeStmtSoundnessTheory` build succeeds again; no failed experimental proof text remains. Static-success cheat remains unresolved for replanning. (`TO_type_system_rewrite-20260601T220715Z_m4465_t001`, `TO_type_system_rewrite-20260601T220715Z_m4466_t001`)
+- `E0240` (proved, , actual effort: 1 sessions, 2 steps, 3 tools, 1 holbuild, 297,137 tok (296,341 in, 796 out, 287,488 cached), 22.8s, $0.211889)
+  - Audited the three static ExtCall prefix error subresumes under active C0.4.2 and ran aggregate build. -> `Expr_Call_ExtCall_static_calldata_error`, `Expr_Call_ExtCall_static_empty_code_error`, and `Expr_Call_ExtCall_static_run_none` are present as proved Resume blocks with no local `cheat`; the only static-success `cheat` remains in the main `SOME result` tail reserved for C0.4.3. `holbuild(targets=["vyperSemanticsHolTheory"])` succeeds, so the prefix error subresumes are closed on the current baseline. (`TO_type_system_rewrite-20260602T125148Z_m4517_t001`, `TO_type_system_rewrite-20260602T125148Z_m4517_t002`, `TO_type_system_rewrite-20260602T125148Z_m4517_t003`)
+- `E0243` (proved, , actual effort: 1 sessions, 1 steps, 126,060 tok (125,792 in, 268 out, 122,752 cached), 8.9s, $0.084616)
+  - Reviewed carried-forward C0.4.2 in repaired PLAN and scoped dossier. -> C0.4.2 has no new executor work: static ExtCall prefix error subresumes were already proved by E0240 and remain unaffected by the generated-IH passthrough repair. Current stable build evidence remains available from the restored baseline. (`TO_type_system_rewrite-20260602T125148Z_m4517_t001`, `TO_type_system_rewrite-20260602T125148Z_m4517_t003`, `TO_type_system_rewrite-20260602T125148Z_m4564_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260602T125148Z_m4517_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T125148Z_m4517_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T125148Z_m4564_t001` (use `read_tool_output` for exact output)
+
+## C0.4.3
+
+### Current Status
+
+- result: `stuck`
+- diagnosis: `risk_mismatch` The existing decomposition/helper interface does not make the conditional driver IH available as straightforwardly as planned. Continuing would require exactly the broad generated-prefix mining/adapters the PLAN and maintainer clarification forbid.
+- latest episode: `E0241`
+- blocker: C0.4.3 was rated Risk 2 and expected the `SOME result` tail to be branch-local, but the live proof state after `run_ext_call` split still exposes 9 simultaneous goals headed by a large generated-prefix obligation. Simple local tactics cannot reach the concrete success tail without forbidden broad generated-prefix simplification/adaptation.
+- actual effort: 1 sessions, 2 msgs, 33 steps, 35 tools, 12 holbuild, 2,899,800 tok (2,888,915 in, 10,885 out, 2,656,768 cached), 730.7s, $2.815669
+- next: Call plan_oracle(mode='review', component_id='C0.4.3', evidence_ids=[...]) for a replacement/decomposition; do not continue tactical work on this component until the strategist repairs the plan.
+
+### Attempts / Evidence
+
+- `E0241` (stuck, risk_mismatch, actual effort: 1 sessions, 2 msgs, 33 steps, 35 tools, 12 holbuild, 2,899,800 tok (2,888,915 in, 10,885 out, 2,656,768 cached), 730.7s, $2.815669)
+  - After `Cases_on run_ext_call ...`, tried to continue branch-locally with `rename1`/`qmatch_asmsub_rename_tac` for the `SOME result` branch, then destruct the result and probe the tail. -> Unexpectedly, after the run split the proof state had 9 simultaneous subgoals and the first was a >4KiB generated-prefix obligation; simple renaming failed before reaching concrete success facts. (`TO_type_system_rewrite-20260602T125148Z_m4534_t001`, `TO_type_system_rewrite-20260602T125148Z_m4542_t001`)
+  - Tried to solve the generated-prefix driver premise subgoal locally using `rpt strip_tac >> first_x_assum drule_all`. -> Failed: `first_x_assum drule_all` did not find an applicable assumption in the large generated-prefix goal. This indicates the conditional driver premise is not immediately recoverable by the planned simple local discharge. (`TO_type_system_rewrite-20260602T125148Z_m4538_t001`)
+  - Tried a minimal `gvs[]` after the run split to normalize the `SOME` branch across the remaining goals. -> Timed out under the fixed 2.5s tactic timeout on the large generated-prefix goal; this matches the forbidden broad generated-prefix cleanup pattern rather than a straightforward branch-local proof. (`TO_type_system_rewrite-20260602T125148Z_m4553_t001`)
+  - Restored the original `cheat` placeholder and rebuilt `vyperTypeStmtSoundnessTheory`. -> Source is back to the stable baseline with the remaining intentional C0.4.3 cheat; focused build succeeds. (`TO_type_system_rewrite-20260602T125148Z_m4554_t001`, `TO_type_system_rewrite-20260602T125148Z_m4555_t001`)
+
+### Ruled Out
+
+- Outer projected-helper strategy (ruled out by E0233, not retried)
+- Immediate `rename1`/`qmatch_asmsub_rename_tac` after `run_ext_call` split
+- Local `first_x_assum drule_all` discharge of generated driver premise
+- Broad `gvs[]` over the post-run generated-prefix state
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260602T125148Z_m4534_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T125148Z_m4538_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T125148Z_m4553_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T125148Z_m4555_t001` (use `read_tool_output` for exact output)
 
 ## C0.5
 
