@@ -18004,6 +18004,7 @@ Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_nonstatic_reverted]:
 QED
 
 Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_nonstatic_success]:
+  RESUME_TAC >>
   cheat
 QED
 

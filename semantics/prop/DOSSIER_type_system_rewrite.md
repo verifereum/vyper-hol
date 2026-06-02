@@ -85,6 +85,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C0.5.4.3 | proved |  | E0261 |  |
 | C0.5.4.4 | stuck | risk_mismatch | E0262 | Call plan_oracle(mode='review', component_id='C0.5.4.4', evidence_ids=[...]) so the strategist can repair/decompose the success-boundary plan. |
 | C0.5.4.4.1 | proved |  | E0265 | Call plan_oracle(mode='review', component_id='C0.5.4.4.1', evidence_ids=[...]) and, if accepted, proceed to C0.5.4.4.2. |
+| C0.5.4.4.2 | proved |  | E0266 | Call plan_oracle(mode='review', component_id='C0.5.4.4.2', evidence_ids=[...]); if accepted, proceed to C0.5.4.5 to prove the success subresume using the exposed tail equality and generated IH without replaying the prefix. |
 | C0.5.4.5 | stuck | plan_incomplete | E0263 | Call plan_oracle(mode='review', component_id='C0.5.4.5', evidence_ids=[...]) to repair dependencies/frontier so C0.5.4.4.1 is next. |
 | C0.5.5 | stuck | plan_incomplete | E0258 | Call plan_oracle(mode='review') for C0.5.5 and request scheduling repair so C0.5.4.4 becomes beginable before C0.5.4.5 and audits. |
 | C1.1 | proved |  | E0024 | Call plan_oracle(mode='review') for C1.1, then begin C1.2 if accepted. |
@@ -2460,6 +2461,30 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 - `TO_type_system_rewrite-20260602T195240Z_m4882_t001` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260602T195240Z_m4882_t002` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260602T195240Z_m4883_t001` (use `read_tool_output` for exact output)
+
+## C0.5.4.4.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0266`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 5 steps, 4 tools, 2 holbuild, 416,532 tok (415,567 in, 965 out, 369,024 cached), 73.1s, $0.446177
+- next: Call plan_oracle(mode='review', component_id='C0.5.4.4.2', evidence_ids=[...]); if accepted, proceed to C0.5.4.5 to prove the success subresume using the exposed tail equality and generated IH without replaying the prefix.
+
+### Attempts / Evidence
+
+- `E0266` (proved, , actual effort: 1 sessions, 1 msgs, 5 steps, 4 tools, 2 holbuild, 416,532 tok (415,567 in, 965 out, 369,024 cached), 73.1s, $0.446177)
+  - Changed success Resume placeholder from bare `cheat` to `RESUME_TAC >> FAIL_TAC "payload probe"` and ran focused holbuild to inspect the suspend payload. -> After `RESUME_TAC`, the goal context visibly contains the generated optional-driver IH as assumption 0 and the concrete final success-tail equality as assumption 25 over `(args_st with <|accounts := pr2; tStorage := pr3|>)`. The goal is large because it is the actual downstream proof obligation, but this component only checks payload exposure; no IH specialization or prefix simplification was attempted. (`TO_type_system_rewrite-20260602T195240Z_m4890_t001`, `TO_type_system_rewrite-20260602T195240Z_m4891_t001`)
+  - Restored stable checkpoint form `RESUME_TAC >> cheat` for the downstream proof and reran focused holbuild. -> Focused `vyperTypeStmtSoundnessTheory` build is clean with the success subresume still intentionally cheated after `RESUME_TAC`, preserving the exposed payload shape for C0.5.4.5. (`TO_type_system_rewrite-20260602T195240Z_m4892_t001`, `TO_type_system_rewrite-20260602T195240Z_m4893_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260602T195240Z_m4890_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4891_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4892_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4893_t001` (use `read_tool_output` for exact output)
 
 ## C0.5.4.5
 
