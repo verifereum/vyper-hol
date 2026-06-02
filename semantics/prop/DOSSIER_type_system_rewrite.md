@@ -78,6 +78,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C0.5 | stuck | missing_helper | E0248 | Call plan_oracle(mode='review', component_id='C0.5', evidence_ids=[...]) to decompose/repair C0.5 with an appropriate compact nonstatic helper or revised proof boundary. |
 | C0.5.1 | proved |  | E0250 |  |
 | C0.5.2 | proved |  | E0251 |  |
+| C0.5.3 | proved |  | E0252 | Call plan_oracle(mode='review', component_id='C0.5.3', evidence_ids=[...]) before beginning C0.5.4. |
 | C1.1 | proved |  | E0024 | Call plan_oracle(mode='review') for C1.1, then begin C1.2 if accepted. |
 | C1.1.1 | proved |  | E0012 |  |
 | C1.1.2 | proved |  | E0013 |  |
@@ -2272,6 +2273,29 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - `TO_type_system_rewrite-20260602T195240Z_m4682_t001` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260602T195240Z_m4683_t001` (use `read_tool_output` for exact output)
+
+## C0.5.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0252`
+- blocker: 
+- actual effort: 1 sessions, 6 steps, 7 tools, 1 holbuild, 441,193 tok (439,747 in, 1,446 out, 423,680 cached), 45.8s, $0.335555
+- next: Call plan_oracle(mode='review', component_id='C0.5.3', evidence_ids=[...]) before beginning C0.5.4.
+
+### Attempts / Evidence
+
+- `E0252` (proved, , actual effort: 1 sessions, 6 steps, 7 tools, 1 holbuild, 441,193 tok (439,747 in, 1,446 out, 423,680 cached), 45.8s, $0.335555)
+  - Inspected existing local theorem `extcall_success_continuation_sound_cond_driver_ih` and adjacent `run_ext_call_accounts_well_typed`; did not add a redundant adapter theorem. -> The existing theorem already has the exact C0.5.3 adapter shape for any `is_static`, including `F`: after concrete success-tail do-block facts it proves the full mutual ExtCall postcondition, with driver IH required only under `returnData = [] /\ IS_SOME drv`. `run_ext_call_accounts_well_typed` is available separately for the final Resume to derive `accounts_well_typed accounts'` from the concrete `run_ext_call = SOME (...)` fact. (`TO_type_system_rewrite-20260602T195240Z_m4699_t002`, `TO_type_system_rewrite-20260602T195240Z_m4700_t001`, `TO_type_system_rewrite-20260602T195240Z_m4701_t001`)
+  - Focused build of `vyperTypeStmtSoundnessTheory` after the reviewed C0.5.2 checkpoint and before any C0.5.3 source edits. -> Build passed; no new source edit was needed for C0.5.3 because the existing conditional success-tail lemma is the prepared adapter. (`TO_type_system_rewrite-20260602T195240Z_m4697_t002`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260602T195240Z_m4699_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4701_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4697_t002` (use `read_tool_output` for exact output)
 
 ## C1.1
 
