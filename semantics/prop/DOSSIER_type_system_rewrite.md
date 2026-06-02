@@ -21,7 +21,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C0.1.1.2.3.2 | stuck | plan_incomplete | E0058 | Call plan_oracle(mode='review') for this stuck episode and request removal/replacement of the stale scheduled C0.1.1.2.3.2 frontier or an explicit operator-facing stop state. |
 | C0.1.1.2.4 | proved |  | E0063 |  |
 | C0.1.1.2.5 | proved |  | E0064 | Review/handle generated PLAN diff, then report blocked/operator handoff rather than proof completion; do not reopen ExtCall proof. |
-| C0.1.2 | stuck | risk_mismatch | E0065 | Ask the strategist to repair/reconcile the PLAN with source reality, or accept the operator-facing blocked stop-state rather than continuing C0.1.2. |
+| C0.1.2 | proved |  | E0208 |  |
 | C0.2 | stuck | risk_mismatch | E0157 | Call plan_oracle(mode='review', component_id='C0.2') with this evidence to repair/decompose the C0.2 proof boundary. |
 | C0.2.1 | proved |  | E0163 |  |
 | C0.2.1.1 | proved |  | E0122 | Call plan_oracle review, then begin C0.2.1.2 cleanup if accepted. |
@@ -559,28 +559,25 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 ### Current Status
 
-- result: `stuck`
-- diagnosis: `risk_mismatch` The PLAN/source interface is mismatched: no focused static placeholder exists to discharge, and the visible goal shape is the forbidden generated-prefix shape.
-- latest episode: `E0065`
-- blocker: C0.1.2 assumes C0.1.1 produced a focused static success placeholder with local success assumptions, but the source still exposes only the whole `Expr_Call_ExtCall_result` Resume with the generated-prefix driver premise. Continuing would violate the maintainer clarification and PLAN not-to-try guidance.
-- actual effort: 1 sessions, 8 steps, 11 tools, 3 holbuild, 502,369 tok (499,778 in, 2,591 out, 469,504 cached), 92.2s, $0.463852
-- next: Ask the strategist to repair/reconcile the PLAN with source reality, or accept the operator-facing blocked stop-state rather than continuing C0.1.2.
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0208`
+- blocker: 
+- actual effort: 1 sessions, 4 msgs, 52 steps, 54 tools, 18 holbuild, 5,918,751 tok (5,902,336 in, 16,415 out, 5,729,792 cached), 763.5s, $4.220066
 
 ### Attempts / Evidence
 
 - `E0065` (stuck, risk_mismatch, actual effort: 1 sessions, 8 steps, 11 tools, 3 holbuild, 502,369 tok (499,778 in, 2,591 out, 469,504 cached), 92.2s, $0.463852)
   - Began C0.1.2 and inserted a temporary FAIL_TAC probe at `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result]` after `rpt gen_tac >> strip_tac`, then restored the original `cheat`. -> The live goal is not a focused static success placeholder. It is the whole ExtCall result proof with a large generated-prefix implication as assumption 0, plus args IH and top-level eval/well-typed assumptions. Proving it would require exactly the generated-prefix recovery / whole ExtCall branch reconstruction that the task/PLAN says not to do. Source was restored and build returned to the prior cheat-clean state. (`TO_type_system_rewrite-20260601T081233Z_m1459_t001`, `TO_type_system_rewrite-20260601T081233Z_m1460_t001`, `TO_type_system_rewrite-20260601T081233Z_m1462_t001`, `TO_type_system_rewrite-20260601T081233Z_m1463_t001`)
-
-### Ruled Out
-
-- Starting a careful static-branch proof inside C0.1.2 as planned, because the source has no separate static placeholder; the next visible obligation is the entire ExtCall Resume goal.
-- Broad unfolding or generated-prefix reconstruction from assumption 0, because it is explicitly forbidden by the maintainer clarification and prior do-not-retry entries.
+- `E0207` (progressed, other, actual effort: 1 sessions, 3 msgs, 37 steps, 38 tools, 13 holbuild, 5,013,905 tok (5,003,991 in, 9,914 out, 4,883,840 cached), 505.4s, $3.340095)
+  - Worked on `Expr_Call_ExtCall_static_calldata_error`: after `RESUME_TAC`, used targeted rewrites with `pairTheory.pair_case_thm`, `sumTheory.sum_case_def`, monad definitions, branch facts for `x <> []`, `dest_AddressV ... = SOME target_addr`, and `build_ext_calldata ... = NONE`; then consumed the reduced evaluation equality with `SIMP_RULE (srw_ss())` and closed by `gvs[no_type_error_result_def]`. -> Focused `holbuild(targets=["vyperTypeStmtSoundnessTheory"])` succeeded at TO_type_system_rewrite-20260601T220715Z_m4090_t001, so the calldata failure placeholder was replaced by a verified proof at that point. (`TO_type_system_rewrite-20260601T220715Z_m4061_t001`, `TO_type_system_rewrite-20260601T220715Z_m4063_t001`, `TO_type_system_rewrite-20260601T220715Z_m4065_t001`, `TO_type_system_rewrite-20260601T220715Z_m4084_t001`, `TO_type_system_rewrite-20260601T220715Z_m4090_t001`)
+  - Began `Expr_Call_ExtCall_static_empty_code_error`: probed the branch-local goal, then replaced the cheat with an analogous targeted proof skeleton using branch facts `build_ext_calldata ... = SOME x'` and `NULL (lookup_account target_addr args_st.accounts).code`. -> The branch probe showed the expected local assumptions and no need for driver IH. The final edited empty-code proof skeleton was not rebuilt before handoff, so source is partial/unverified and next session must build first before trusting it. (`TO_type_system_rewrite-20260601T220715Z_m4093_t001`)
+- `E0208` (proved, , actual effort: 1 sessions, 4 msgs, 52 steps, 54 tools, 18 holbuild, 5,918,751 tok (5,902,336 in, 16,415 out, 5,729,792 cached), 763.5s, $4.220066)
+  - Completed the three static ExtCall prefix-error Resume placeholders with focused branch-local equality simplification; calldata was already verified, empty-code fixed by reducing selected equality to `res = INR ... ∧ args_st = st'`, and run-none followed the same focused pattern with `get_transient_storage`/`run_ext_call = NONE`. -> `holbuild(targets=["vyperTypeStmtSoundnessTheory"])` builds cleanly with all three C0.1.2 placeholders proved; remaining cheats are outside this component (outer success/nonstatic branches). (`TO_type_system_rewrite-20260601T220715Z_m4104_t001`, `TO_type_system_rewrite-20260601T220715Z_m4109_t001`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260601T081233Z_m1456_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m1460_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m1463_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m4109_t001` (use `read_tool_output` for exact output)
 
 ## C0.2
 

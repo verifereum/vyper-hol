@@ -618,3 +618,14 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260601T220715Z_m3864_t001
 - tool_output:TO_type_system_rewrite-20260601T220715Z_m3879_t001
 - tool_output:TO_type_system_rewrite-20260601T220715Z_m3882_t001
+
+## L0125 scope='C0.1.2' tags=ExtCall,Resume,prefix-error,SIMP_RULE,generated-prefix,timeout
+shape: A branch-local prefix-error Resume has a huge generated optional-driver premise in context plus a selected evaluation equality `(case ...)= (res,st')`; goal-level `simp/gvs` times out.
+pattern: Push only the selected evaluation equality with `mp_tac`, rewrite concrete branch facts into it, then consume it via `disch_then (assume_tac o SIMP_RULE (srw_ss()) [pairTheory.pair_case_thm, sumTheory.sum_case_def, bind_def, return_def, raise_def, ...])`. After the equality is simplified into concrete `res/st'` facts, use `gvs[no_type_error_result_def]` to close preservation/no-TypeError goals. Kill irrelevant generated-driver premises before final cleanup if they pollute simplification.
+works_when: Works for prefix-failure branches that do not evaluate the optional driver and have concrete branch facts such as `build_ext_calldata ... = NONE` or an assertion failure. Do not use for the run-success optional-driver branch, where a real conditional driver IH is needed.
+evidence:
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m4063_t001
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m4065_t001
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m4084_t001
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m4090_t001
+- episode:E0207

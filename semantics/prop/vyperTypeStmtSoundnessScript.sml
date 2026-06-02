@@ -17777,15 +17777,91 @@ Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result_static_success]:
 QED
 
 Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_static_calldata_error]:
-  cheat
+  RESUME_TAC >>
+  qpat_x_assum `(case (INL x,args_st) of _ => _) = (res,st')` mp_tac >>
+  qpat_assum `x <> []` (fn th => rewrite_tac[th]) >>
+  qpat_assum `dest_AddressV (HD x) = SOME target_addr` (fn th => rewrite_tac[th]) >>
+  qpat_assum `build_ext_calldata (get_tenv cx) func_name arg_types (TL x) = NONE` (fn th => rewrite_tac[th]) >>
+  pure_rewrite_tac[pairTheory.pair_case_thm, sumTheory.sum_case_def,
+                   bind_def, return_def, raise_def,
+                   check_def, lift_option_type_def, lift_option_def,
+                   LET_THM, boolTheory.COND_CLAUSES] >>
+  BETA_TAC >>
+  qpat_assum `build_ext_calldata (get_tenv cx) func_name arg_types (TL x) = NONE` (fn th => rewrite_tac[th]) >>
+  pure_rewrite_tac[bind_def, return_def, raise_def,
+                   pairTheory.pair_case_thm, sumTheory.sum_case_def] >>
+  BETA_TAC >>
+  strip_tac >>
+  qpat_x_assum `!s'' vs t s'³' x t' s'⁴' target_addr t'' s'⁵' value_opt arg_vals t'³' tenv s'⁶' calldata t'⁴' s'⁷' accounts t'⁵' s'⁸' x' t'⁶' s'⁹' tStorage t'⁷' txParams caller s'¹⁰' result t'⁸' success returnData accounts' tStorage' s'¹¹' x'' t'⁹' s'¹²' x'³' t'¹⁰' s'¹³' x'⁴' t'¹¹'. _` kall_tac >>
+  qpat_x_assum `(case if x <> [] then _ else _ of _ => _) = (res,st')` mp_tac >>
+  qpat_assum `x <> []` (fn th => rewrite_tac[th]) >>
+  qpat_assum `dest_AddressV (HD x) = SOME target_addr` (fn th => rewrite_tac[th]) >>
+  qpat_assum `build_ext_calldata (get_tenv cx) func_name arg_types (TL x) = NONE` (fn th => rewrite_tac[th]) >>
+  disch_then (assume_tac o SIMP_RULE (srw_ss())
+    [pairTheory.pair_case_thm, sumTheory.sum_case_def,
+     bind_def, return_def, raise_def, boolTheory.COND_CLAUSES]) >>
+  gvs[no_type_error_result_def]
 QED
 
 Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_static_empty_code_error]:
-  cheat
+  RESUME_TAC >>
+  qpat_x_assum `(case (INL x,args_st) of _ => _) = (res,st')` mp_tac >>
+  qpat_assum `x <> []` (fn th => rewrite_tac[th]) >>
+  qpat_assum `dest_AddressV (HD x) = SOME target_addr` (fn th => rewrite_tac[th]) >>
+  qpat_assum `build_ext_calldata (get_tenv cx) func_name arg_types (TL x) = SOME x'` (fn th => rewrite_tac[th]) >>
+  qpat_assum `NULL (lookup_account target_addr args_st.accounts).code` (fn th => rewrite_tac[th]) >>
+  pure_rewrite_tac[pairTheory.pair_case_thm, sumTheory.sum_case_def,
+                   bind_def, return_def, raise_def,
+                   check_def, lift_option_type_def, lift_option_def,
+                   assert_def, get_accounts_def,
+                   LET_THM, boolTheory.COND_CLAUSES] >>
+  BETA_TAC >> strip_tac >>
+  qpat_x_assum `!s'' vs t s'³' x t' s'⁴' target_addr t'' s'⁵' value_opt arg_vals t'³' tenv s'⁶' calldata t'⁴' s'⁷' accounts t'⁵' s'⁸' x' t'⁶' s'⁹' tStorage t'⁷' txParams caller s'¹⁰' result t'⁸' success returnData accounts' tStorage' s'¹¹' x'' t'⁹' s'¹²' x'³' t'¹⁰' s'¹³' x'⁴' t'¹¹'. _` kall_tac >>
+  qpat_x_assum `(case if x <> [] then _ else _ of _ => _) = (res,st')` mp_tac >>
+  qpat_assum `x <> []` (fn th => rewrite_tac[th]) >>
+  qpat_assum `dest_AddressV (HD x) = SOME target_addr` (fn th => rewrite_tac[th]) >>
+  qpat_assum `build_ext_calldata (get_tenv cx) func_name arg_types (TL x) = SOME x'` (fn th => rewrite_tac[th]) >>
+  qpat_assum `NULL (lookup_account target_addr args_st.accounts).code` (fn th => rewrite_tac[th]) >>
+  disch_then (assume_tac o SIMP_RULE (srw_ss())
+    [pairTheory.pair_case_thm, sumTheory.sum_case_def,
+     bind_def, return_def, raise_def, assert_def, get_accounts_def,
+     boolTheory.COND_CLAUSES]) >>
+  qpat_x_assum `(case return target_addr args_st of _ => _) = (res,st')` mp_tac >>
+  simp[no_type_error_result_def, pairTheory.pair_case_thm, sumTheory.sum_case_def,
+       bind_def, return_def, raise_def, assert_def, boolTheory.COND_CLAUSES] >>
+  strip_tac >> gvs[]
 QED
 
 Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_static_run_none]:
-  cheat
+  RESUME_TAC >>
+  qpat_x_assum `(case (INL x,args_st) of _ => _) = (res,st')` mp_tac >>
+  qpat_assum `x <> []` (fn th => rewrite_tac[th]) >>
+  qpat_assum `dest_AddressV (HD x) = SOME target_addr` (fn th => rewrite_tac[th]) >>
+  qpat_assum `build_ext_calldata (get_tenv cx) func_name arg_types (TL x) = SOME x'` (fn th => rewrite_tac[th]) >>
+  qpat_assum `~NULL (lookup_account target_addr args_st.accounts).code` (fn th => rewrite_tac[th]) >>
+  qpat_assum `run_ext_call cx.txn.target target_addr x' NONE args_st.accounts args_st.tStorage (vyper_to_tx_params cx.txn) = NONE` (fn th => rewrite_tac[th]) >>
+  pure_rewrite_tac[pairTheory.pair_case_thm, sumTheory.sum_case_def,
+                   bind_def, return_def, raise_def,
+                   check_def, lift_option_type_def, lift_option_def,
+                   assert_def, get_accounts_def, get_transient_storage_def,
+                   LET_THM, boolTheory.COND_CLAUSES] >>
+  BETA_TAC >> strip_tac >>
+  qpat_x_assum `!s'' vs t s'³' x t' s'⁴' target_addr t'' s'⁵' value_opt arg_vals t'³' tenv s'⁶' calldata t'⁴' s'⁷' accounts t'⁵' s'⁸' x' t'⁶' s'⁹' tStorage t'⁷' txParams caller s'¹⁰' result t'⁸' success returnData accounts' tStorage' s'¹¹' x'' t'⁹' s'¹²' x'³' t'¹⁰' s'¹³' x'⁴' t'¹¹'. _` kall_tac >>
+  qpat_x_assum `(case if x <> [] then _ else _ of _ => _) = (res,st')` mp_tac >>
+  qpat_assum `x <> []` (fn th => rewrite_tac[th]) >>
+  qpat_assum `dest_AddressV (HD x) = SOME target_addr` (fn th => rewrite_tac[th]) >>
+  qpat_assum `build_ext_calldata (get_tenv cx) func_name arg_types (TL x) = SOME x'` (fn th => rewrite_tac[th]) >>
+  qpat_assum `~NULL (lookup_account target_addr args_st.accounts).code` (fn th => rewrite_tac[th]) >>
+  qpat_assum `run_ext_call cx.txn.target target_addr x' NONE args_st.accounts args_st.tStorage (vyper_to_tx_params cx.txn) = NONE` (fn th => rewrite_tac[th]) >>
+  disch_then (assume_tac o SIMP_RULE (srw_ss())
+    [pairTheory.pair_case_thm, sumTheory.sum_case_def,
+     bind_def, return_def, raise_def, assert_def, get_accounts_def,
+     get_transient_storage_def, lift_option_def, boolTheory.COND_CLAUSES]) >>
+  qpat_x_assum `(case return target_addr args_st of _ => _) = (res,st')` mp_tac >>
+  simp[no_type_error_result_def, pairTheory.pair_case_thm, sumTheory.sum_case_def,
+       bind_def, return_def, raise_def, assert_def, get_transient_storage_def,
+       lift_option_def, boolTheory.COND_CLAUSES] >>
+  strip_tac >> gvs[]
 QED
 
 Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result_nonstatic]:
