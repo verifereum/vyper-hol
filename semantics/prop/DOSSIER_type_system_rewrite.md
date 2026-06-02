@@ -22,8 +22,8 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C0.1.1.2.4 | proved |  | E0063 |  |
 | C0.1.1.2.5 | proved |  | E0064 | Review/handle generated PLAN diff, then report blocked/operator handoff rather than proof completion; do not reopen ExtCall proof. |
 | C0.1.2 | stuck | risk_mismatch | E0065 | Ask the strategist to repair/reconcile the PLAN with source reality, or accept the operator-facing blocked stop-state rather than continuing C0.1.2. |
-| C0.2 | stuck | risk_mismatch | E0102 | Ask strategist for a concrete replacement or augmentation that does not rely on the ruled-out helper shortcut; if the task's stop condition is binding, preserve the build-clean cheated source and await operator/design input. |
-| C0.2.1 | stuck | risk_mismatch | E0108 | Call plan_oracle(mode='review') for C0.2.1. Given the user instruction to stop on unexpected design issues, request either an accepted blocked state or a smaller de-risked helper/suspension shape that avoids the large generated-prefix IH before any further proof edits. |
+| C0.2 | stuck | risk_mismatch | E0157 | Call plan_oracle(mode='review', component_id='C0.2') with this evidence to repair/decompose the C0.2 proof boundary. |
+| C0.2.1 | proved |  | E0159 |  |
 | C0.2.1.1 | proved |  | E0122 | Call plan_oracle review, then begin C0.2.1.2 cleanup if accepted. |
 | C0.2.1.1.1 | proved |  | E0115 |  |
 | C0.2.1.1.2 | stuck | risk_mismatch | E0116 | Call plan_oracle(mode='review') for C0.2.1.1.2. Given the repeated success-tail interface failures and the user's stop-on-design-issues instruction, request either acceptance that this design is blocked or a substantially different proof boundary that avoids both full-prefix adapter plumbing and mismatch with the current conjunctive goal shape. |
@@ -558,11 +558,11 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 ### Current Status
 
 - result: `stuck`
-- diagnosis: `risk_mismatch` This episode mainly confirms that targeted call-type substitution fixes only the superficial mismatch; it does not provide a safe low-risk path through the generated optional-driver prefix. A more concrete de-risked tactic skeleton or a better-shaped boundary lemma is needed before more edits.
-- latest episode: `E0102`
-- blocker: C0.2 remains non-straightforward. The refined plan asks for a linear prefix proof, but the immediately available helper/shortcut path is explicitly ruled out and still exposes a >4KiB generated-prefix premise. Continuing would risk repeating the known forbidden simplification/proof-interface hazard rather than executing a low-risk leaf.
-- actual effort: 1 sessions, 7 steps, 6 tools, 2 holbuild, 756,863 tok (753,442 in, 3,421 out, 735,360 cached), 175.6s, $0.560720
-- next: Ask strategist for a concrete replacement or augmentation that does not rely on the ruled-out helper shortcut; if the task's stop condition is binding, preserve the build-clean cheated source and await operator/design input.
+- diagnosis: `risk_mismatch` The C0.1 suspension boundary localized the placeholder, but did not reduce C0.2 to the expected small success-tail helper application; the generated prefix remains in the resumed goal. Need strategist repair/decomposition, likely a helper whose statement matches the resumed projection obligations or a more precise suspension after prefix splitting.
+- latest episode: `E0157`
+- blocker: C0.2 was rated Risk 2, but the branch-local success continuation still resumes to >4KiB goals with the generated optional-driver IH as a full monadic-prefix implication. `RESUME_TAC` splits the suspended obligations, but the first projection goal remains a large prefix/state_well_typed obligation rather than a straightforward tail-helper application. Continuing would require a new boundary/helper or forbidden generated-prefix plumbing, contrary to the task stop condition.
+- actual effort: 1 sessions, 1 msgs, 8 steps, 7 tools, 3 holbuild, 918,641 tok (916,350 in, 2,291 out, 879,104 cached), 90.5s, $0.694512
+- next: Call plan_oracle(mode='review', component_id='C0.2') with this evidence to repair/decompose the C0.2 proof boundary.
 
 ### Attempts / Evidence
 
@@ -588,26 +588,32 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 - `E0102` (stuck, risk_mismatch, actual effort: 1 sessions, 7 steps, 6 tools, 2 holbuild, 756,863 tok (753,442 in, 3,421 out, 735,360 cached), 175.6s, $0.560720)
   - After strategist refinement, tested whether targeted substitution of the call-type equality (`v15 = ret_type`) would make `extcall_expr_sound_from_generated_ih` usable without broad cleanup. -> The match progressed past the earlier call-type mismatch but exposed multiple large premises including the generated optional-driver prefix; the approach still depends on the shortcut the repaired PLAN told us not to use and does not straightforwardly close the branch. (`TO_type_system_rewrite-20260601T081233Z_m2273_t001`)
   - Restored `Expr_Call_ExtCall_result` to the prior intentional `cheat` baseline and rebuilt the statement-soundness target. -> `vyperTypeStmtSoundnessTheory` is build-clean again; no failed proof text remains from this attempt. (`TO_type_system_rewrite-20260601T081233Z_m2276_t001`, `TO_type_system_rewrite-20260601T081233Z_m2277_t001`)
+- `E0157` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 8 steps, 7 tools, 3 holbuild, 918,641 tok (916,350 in, 2,291 out, 879,104 cached), 90.5s, $0.694512)
+  - Replaced the C0.2 placeholder with `FAIL_TAC "c0_2_probe"` to inspect the exact suspended goal. -> The Resume goal exceeded 4KiB and consisted of generated-prefix implications plus suspended projection obligations; this confirms the remaining obligation is not a small, direct continuation-helper goal. (`TO_type_system_rewrite-20260601T220715Z_m3225_t001`)
+  - Tried `RESUME_TAC >> FAIL_TAC "c0_2_after_resume"` to split the suspended obligations and inspect the first subgoal. -> `RESUME_TAC` split to two goals, but the first goal was still the large generated-prefix context with target `state_well_typed st'`; helper application is not straightforward from the live shape. (`TO_type_system_rewrite-20260601T220715Z_m3227_t001`)
+  - Restored the C0.2 placeholder `cheat` after the probe and rebuilt the target. -> Source is back to the reviewed C0.1 branch-local placeholder baseline and `vyperTypeStmtSoundnessTheory` builds; no failed proof text remains. (`TO_type_system_rewrite-20260601T220715Z_m3229_t001`, `TO_type_system_rewrite-20260601T220715Z_m3230_t001`)
 
 ### Ruled Out
 
-- Direct/near-direct use of `extcall_expr_sound_from_generated_ih` even after targeted `v15 = ret_type` substitution: it leaves large generated-prefix premises and is forbidden by the refined PLAN.
+- Treating the resumed goal as already a direct `extcall_success_continuation_*` tail application; the inspected goal is still a generated-prefix projection obligation.
+- Continuing with broad simplification/AllCaseEqs/drule_all over the generated prefix; forbidden and previously shown to time out.
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260601T081233Z_m2273_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m2277_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3225_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3227_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3229_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3230_t001` (use `read_tool_output` for exact output)
 
 ## C0.2.1
 
 ### Current Status
 
-- result: `stuck`
-- diagnosis: `risk_mismatch` The generated driver IH still pollutes the branch context before the prefix is discharged; a truly branch-local helper/suspension may need to consume or quarantine that IH without global simplification. The current direct linear proof shape is not mechanically low-risk.
-- latest episode: `E0108`
-- blocker: The replacement C0.2.1 plan rated the static suspended branch Risk 2 and straightforward by linear prefix unfolding, but even the first static-branch prefix split leaves multiple active goals with the huge generated optional-driver IH and causes simplification/cleanup timeouts. Proceeding would require design/proof-interface work contrary to the user's stop condition.
-- actual effort: 1 sessions, 1 msgs, 18 steps, 22 tools, 7 holbuild, 1,290,747 tok (1,284,834 in, 5,913 out, 1,214,720 cached), 285.8s, $1.135320
-- next: Call plan_oracle(mode='review') for C0.2.1. Given the user instruction to stop on unexpected design issues, request either an accepted blocked state or a smaller de-risked helper/suspension shape that avoids the large generated-prefix IH before any further proof edits.
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0159`
+- blocker: 
+- actual effort: 1 sessions, 5 msgs, 72 steps, 73 tools, 28 holbuild, 6,898,061 tok (6,882,833 in, 15,228 out, 6,708,224 cached), 1109.7s, $4.683997
 
 ### Attempts / Evidence
 
@@ -625,22 +631,15 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Probe `Expr_Call_ExtCall_result_static` Resume with `FAIL_TAC "static probe"`. -> Confirmed the static suspended branch goal contains the generated optional-driver IH as a large guarded prefix implication plus the expected branch-local assumptions (`eval_exprs = INL`, `exprs_runtime_typed`, static MAP fact). This matches the repaired plan's target shape but shows the large generated IH remains live in the branch context. (`TO_type_system_rewrite-20260601T081233Z_m2411_t001`)
   - Started a linear static branch proof: expose static MAP fact by rewrite, use `extcall_static_args_runtime_typed_dest`, unfold one layer of `evaluate_def`/monadic defs, and rewrite `eval_exprs`. -> The proof became non-straightforward before reaching the first real prefix case: simplification over the live goal timed out under the 2.5s tactic limit because the generated optional-driver prefix and multiple conjunct goals remained active. Replacing broad simp with targeted rewrites progressed further but then `gvs` on the first `build_ext_calldata` split again timed out on a >4KiB goal. This violates the task's stop condition that the proof should be straightforward. (`TO_type_system_rewrite-20260601T081233Z_m2413_t001`, `TO_type_system_rewrite-20260601T081233Z_m2415_t001`, `TO_type_system_rewrite-20260601T081233Z_m2417_t001`, `TO_type_system_rewrite-20260601T081233Z_m2421_t001`)
   - Restored the static Resume to the build-clean `cheat` placeholder and rebuilt `vyperTypeStmtSoundnessTheory`. -> The target builds again on the placeholder baseline; no failed proof fragment remains in the static branch. A pre-existing nearby diff in `Expr_Call_ExtCall_result` remains, but the attempted static-branch proof text was reverted. (`TO_type_system_rewrite-20260601T081233Z_m2422_t001`, `TO_type_system_rewrite-20260601T081233Z_m2423_t001`, `TO_type_system_rewrite-20260601T081233Z_m2423_t002`)
-
-### Ruled Out
-
-- Broad `simp[]` after exposing the static MAP fact: timed out while acting on large generated-prefix context.
-- Asserting nonemptiness early using `extcall_static_args_runtime_typed_nonempty`: interacted poorly with already-split goals and did not resolve the structural issue.
-- Targeted unfolding plus `gvs` after the first `build_ext_calldata` case split: timed out on a >4KiB generated-prefix goal.
+- `E0158` (stuck, risk_mismatch, actual effort: 1 sessions, 1 steps, 137,851 tok (136,957 in, 894 out, 130,432 cached), 18.1s, $0.124661)
+  - Reviewed the active C0.2.1 scoped dossier and current plan after begin_component. -> The injected dossier contains prior C0.2.1 E0108 stuck evidence for the same proposed linear prefix proof, including timeouts on static branch prefix splitting and restoration to the placeholder baseline. Current E0157 review evidence also shows the resumed C0.2 goal is still >4KiB/pre-tail. No source edits were made under C0.2.1 because the planned approach is already ruled out by current scoped evidence. (`TO_type_system_rewrite-20260601T220715Z_m3236_t001`, `TO_type_system_rewrite-20260601T220715Z_m3232_t001`, `TO_type_system_rewrite-20260601T220715Z_m3225_t001`, `TO_type_system_rewrite-20260601T220715Z_m3227_t001`)
+- `E0159` (proved, , actual effort: 1 sessions, 5 msgs, 72 steps, 73 tools, 28 holbuild, 6,898,061 tok (6,882,833 in, 15,228 out, 6,708,224 cached), 1109.7s, $4.683997)
+  - Added local theorem `extcall_static_projected_sound` adjacent to existing ExtCall helper block, strengthening `extcall_static_projected_state_well_typed` to expose full postcondition. Reused ordinary `eval_expr`/`eval_exprs` static branch splitting and `extcall_after_state_update_tail_sound`; avoided generated Resume prefix assumptions. -> `vyperTypeStmtSoundnessTheory` builds. The helper is proved as a semantic boundary lemma over ordinary evaluator assumptions, not a generated-prefix adapter. (`TO_type_system_rewrite-20260601T220715Z_m3317_t001`, `TO_type_system_rewrite-20260601T220715Z_m3320_t001`)
+  - Replaced timeout-prone broad `gvs` steps in the copied proof body with targeted `rewrite_tac`/`asm_rewrite_tac`, explicit run_ext_call result destructuring, and direct application of `extcall_after_state_update_tail_sound`. -> Resolved tactic timeouts and pair destructuring mismatch; final build succeeded. (`TO_type_system_rewrite-20260601T220715Z_m3253_t001`, `TO_type_system_rewrite-20260601T220715Z_m3305_t001`, `TO_type_system_rewrite-20260601T220715Z_m3320_t001`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260601T081233Z_m2411_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m2413_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m2415_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m2417_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m2421_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m2423_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m2423_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m3320_t001` (use `read_tool_output` for exact output)
 
 ## C0.2.1.1
 

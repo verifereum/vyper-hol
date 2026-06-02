@@ -586,3 +586,13 @@ evidence:
 - episode:E0149
 - tool_output:TO_type_system_rewrite-20260601T220715Z_m3166_t001
 - tool_output:TO_type_system_rewrite-20260601T220715Z_m3190_t001
+
+## L0097 scope='C0.2.1' tags=ExtCall,Resume,suspend,generated-IH,proof-boundary
+shape: A suspended mutual-proof subgoal still resumes to projection goals containing a full generated ExtCall prefix, rather than a small tail-helper obligation.
+pattern: Treat this as evidence that the suspension boundary is still too early. Do not proceed by replaying or simplifying the generated prefix inside the Resume; ask for a helper/boundary whose conclusion matches the resumed projection obligations, or move the cut point so the helper sees only concrete post-update tail facts.
+works_when: Applies when `RESUME_TAC` on a branch-local `suspend` yields >4KiB goals with the generated optional-driver IH as a guarded monadic prefix implication, and existing tail helpers do not directly match the first projection goal.
+evidence:
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3225_t001
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m3227_t001
+- episode:E0157
+- episode:E0158

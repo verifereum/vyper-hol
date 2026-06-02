@@ -10012,6 +10012,100 @@ Proof
   simp[]
 QED
 
+Theorem extcall_static_projected_sound[local]:
+  !env cx st res st' args_st vs func_name arg_types ret_type es drv.
+    env_consistent env cx st /\ state_well_typed st /\ context_well_typed cx /\
+    accounts_well_typed st.accounts /\ functions_well_typed cx /\
+    eval_expr cx (Call ret_type (ExtCall T (func_name,arg_types,ret_type)) es drv) st = (res,st') /\
+    well_typed_exprs env es /\ well_typed_opt env drv /\
+    well_formed_type env.type_defs ret_type /\
+    MAP expr_type es = BaseT AddressT::arg_types /\
+    (!e. drv = SOME e ==> expr_type e = ret_type) /\
+    eval_exprs cx es st = (INL vs,args_st) /\
+    state_well_typed args_st /\ env_consistent env cx args_st /\
+    accounts_well_typed args_st.accounts /\ exprs_runtime_typed env es vs /\
+    (!env0 st0 res0 st0'.
+       env_consistent env0 cx st0 /\ state_well_typed st0 /\
+       context_well_typed cx /\ accounts_well_typed st0.accounts /\
+       functions_well_typed cx /\ eval_expr cx (THE drv) st0 = (res0,st0') ==>
+       (well_typed_expr env0 (THE drv) ==>
+        state_well_typed st0' /\ env_consistent env0 cx st0' /\
+        accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
+        case res0 of INL tv => expr_result_typed env0 (THE drv) tv | INR _ => T))
+    ==> state_well_typed st' /\ env_consistent env cx st' /\
+        accounts_well_typed st'.accounts /\ no_type_error_result res /\
+        case res of
+        | INL tv => expr_result_typed env (Call ret_type (ExtCall T (func_name,arg_types,ret_type)) es drv) tv
+        | INR _ => T
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `!env0 st0 res0 st0'. _` $ mk_asm "drv_ih" >>
+  drule_all extcall_static_args_runtime_typed_dest >> strip_tac >>
+  `vs <> []` by (drule_all extcall_static_args_runtime_typed_nonempty >> simp[]) >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
+                       check_def, assert_def, return_def, raise_def,
+                       lift_option_type_def, lift_option_def,
+                       get_accounts_def, get_transient_storage_def,
+                       update_accounts_def, update_transient_def,
+                       no_type_error_result_def] >>
+  qpat_x_assum `eval_exprs cx es st = (INL vs,args_st)` (fn th => rewrite_tac[th]) >>
+  rewrite_tac[] >>
+  Cases_on `build_ext_calldata (get_tenv cx) func_name arg_types (TL vs)` >>
+  rewrite_tac[return_def, raise_def]
+  >- (strip_tac >> gvs[assert_def, bind_def, return_def, raise_def,
+                         get_accounts_def, get_transient_storage_def,
+                         no_type_error_result_def]) >>
+  Cases_on `NULL (lookup_account target_addr args_st.accounts).code` >>
+  rewrite_tac[return_def, raise_def]
+  >- (strip_tac >> gvs[assert_def, bind_def, return_def, raise_def,
+                         get_accounts_def, get_transient_storage_def,
+                         no_type_error_result_def]) >>
+  strip_tac >>
+  pop_assum mp_tac >>
+  asm_rewrite_tac[bind_def, return_def, raise_def, assert_def,
+                  get_accounts_def, get_transient_storage_def] >>
+  strip_tac >>
+  Cases_on `run_ext_call cx.txn.target target_addr x NONE args_st.accounts args_st.tStorage (vyper_to_tx_params cx.txn)` >>
+  gvs[return_def, raise_def]
+  >- (qpat_x_assum `(do _ od) args_st = (res,st')` mp_tac >>
+      simp[bind_def, return_def, raise_def, assert_def,
+           get_accounts_def, get_transient_storage_def] >>
+      strip_tac >> gvs[]) >>
+  rename1 `SOME result` >>
+  qpat_x_assum `(do _ od) args_st = (res,st')` mp_tac >>
+  simp[bind_def, return_def, raise_def, assert_def,
+       get_accounts_def, get_transient_storage_def] >>
+  strip_tac >>
+  Cases_on `result` >> gvs[] >>
+  Cases_on `r` >> gvs[] >>
+  Cases_on `r''` >> gvs[] >>
+  Cases_on `q` >>
+  gvs[assert_def, bind_def, return_def, raise_def,
+      update_accounts_def, update_transient_def] >>
+  rename1 `run_ext_call _ _ _ _ _ _ _ = SOME (T, returnData, accounts', tStorage')` >>
+  `accounts_well_typed accounts'` by (
+    drule_all run_ext_call_accounts_well_typed >>
+    simp[]) >>
+  `runtime_consistent env cx args_st` by simp[runtime_consistent_def] >>
+  qpat_x_assum `well_formed_type env.type_defs ret_type` mp_tac >>
+  simp[well_formed_type_def] >> strip_tac >>
+  Cases_on `evaluate_type env.type_defs ret_type` >> gvs[] >>
+  `get_tenv cx = env.type_defs` by metis_tac[env_consistent_get_tenv] >>
+  gvs[] >>
+  qspecl_then [`env`, `cx`, `es`, `T`, `func_name`, `arg_types`, `ret_type`,
+               `x'`, `drv`, `returnData`, `args_st`, `accounts'`, `tStorage'`,
+               `res`, `st'`]
+    mp_tac extcall_after_state_update_tail_sound >>
+  simp[] >>
+  (impl_tac >- (
+    rpt strip_tac >>
+    asm "drv_ih" (qspecl_then [`env0`, `st0`, `res0`, `st0'`] mp_tac) >>
+    simp[])) >>
+  strip_tac >>
+  metis_tac[no_type_error_result_def]
+QED
+
 Theorem extcall_nonstatic_projected_state_well_typed[local]:
   !env cx st res st' args_st vs func_name arg_types ret_type es drv.
     env_consistent env cx st /\ state_well_typed st /\ context_well_typed cx /\
