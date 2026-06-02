@@ -81,6 +81,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C0.5.3 | proved |  | E0252 | Call plan_oracle(mode='review', component_id='C0.5.3', evidence_ids=[...]) before beginning C0.5.4. |
 | C0.5.4 | stuck | risk_mismatch | E0253 | Call plan_oracle(mode='review', component_id='C0.5.4', evidence_ids=[...]) for strategist repair before any further edits. |
 | C0.5.4.1 | proved |  | E0254 | Review C0.5.4.1, then begin C0.5.4.2 to prove the calldata-error subresume. |
+| C0.5.4.2 | proved |  | E0255 |  |
 | C1.1 | proved |  | E0024 | Call plan_oracle(mode='review') for C1.1, then begin C1.2 if accepted. |
 | C1.1.1 | proved |  | E0012 |  |
 | C1.1.2 | proved |  | E0013 |  |
@@ -2349,6 +2350,26 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - `TO_type_system_rewrite-20260602T195240Z_m4721_t001` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260602T195240Z_m4727_t001` (use `read_tool_output` for exact output)
+
+## C0.5.4.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0255`
+- blocker: 
+- actual effort: 1 sessions, 2 msgs, 12 steps, 17 tools, 3 holbuild, 998,985 tok (994,636 in, 4,349 out, 925,184 cached), 181.4s, $0.940322
+
+### Attempts / Evidence
+
+- `E0255` (proved, , actual effort: 1 sessions, 2 msgs, 12 steps, 17 tools, 3 holbuild, 998,985 tok (994,636 in, 4,349 out, 925,184 cached), 181.4s, $0.940322)
+  - Replaced nonstatic calldata-error subresume cheat with `RESUME_TAC`, deleted generated-prefix universal via `qpat_x_assum`, extracted suspended concrete do-equation, and simplified only `bind_def/return_def/raise_def` to close no-type-error postcondition. -> Focused `vyperTypeStmtSoundnessTheory` build succeeds; proof stays within branch-local subresume and avoids broad generated-prefix simplification. (`TO_type_system_rewrite-20260602T195240Z_m4745_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260602T195240Z_m4744_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4745_t001` (use `read_tool_output` for exact output)
 
 ## C1.1
 

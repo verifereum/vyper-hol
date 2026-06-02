@@ -638,3 +638,13 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260602T195240Z_m4682_t001
 - tool_output:TO_type_system_rewrite-20260602T195240Z_m4683_t001
 - source:semantics/prop/vyperTypeStmtSoundnessScript.sml:10180
+
+## L0139 scope='C0.5.4' tags=ExtCall,nonstatic,suspend,generated-prefix,branch-proof
+shape: Monolithic nonstatic ExtCall Resume exposes a large generated-prefix universal antecedent before concrete branch equations can be simplified.
+pattern: Use a branch-suspended parent Resume: derive nonstatic target/amount/nonempty facts once, split to named `suspend`s for calldata/no-code/run-none/revert/success, and prove each branch in its own `Resume`. In each subresume, delete the generated-prefix universal antecedent before simplifying monadic definitions; then close runtime-error branches with `extcall_nonstatic_runtime_error_sound` or success with `extcall_success_continuation_sound_cond_driver_ih`.
+works_when: Applies to C0.5.4 after E0253: direct inline branch proof times out on >4KiB generated-prefix goals, but the parent skeleton with five planned subresumes builds cleanly.
+evidence:
+- episode:E0253
+- episode:E0254
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m4713_t001
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m4727_t001

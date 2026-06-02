@@ -2,67 +2,64 @@
 Updated: 2026-06-02
 
 ## Cursor
-- component: C0.4.3.a
-- status: blocked
+- component: C0.5.4.2
+- status: in_progress
 - active_file: semantics/prop/vyperTypeStmtSoundnessScript.sml
-- next_action: First call plan_oracle(mode='review', component_id='C0.4.3.a', evidence_ids=['TO_type_system_rewrite-20260602T195240Z_m4577_t001','TO_type_system_rewrite-20260602T195240Z_m4577_t003','TO_type_system_rewrite-20260602T195240Z_m4577_t002','TO_type_system_rewrite-20260602T195240Z_m4578_t001'], planning_reason='review closed episode E0244'). If accepted, query_plan; expected next executable leaf is C0.4.3.b or C0.4.3.c depending on strategist scheduling.
-- expected_goal_shape: Source now has manual progress in `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result_static]` (not a separate `Expr_Call_ExtCall_result_static_success` block): static branch is inlined, `run_ext_call ...` is split, the generated optional-driver premise has been discharged, and the remaining intentional `cheat` is after `strip_tac` around line 17803 in the concrete ExtCall `SOME` tail. `vyperTypeStmtSoundnessTheory` builds with that remaining cheat.
+- next_action: Prove `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_nonstatic_calldata_error]` at the new nonstatic ExtCall subresume block (around line 17971). Replace its `cheat` only; start with `RESUME_TAC`, rewrite concrete branch facts (`x <> []`, `TL x <> []`, `dest_AddressV (HD x) = SOME target_addr`, `dest_NumV (HD (TL x)) = SOME amount`, and `build_ext_calldata ... (TL (TL x)) = NONE`), then delete the large generated-prefix universal assumption before simplifying monadic definitions. Close via `extcall_nonstatic_runtime_error_sound`.
+- expected_goal_shape: Active leaf C0.5.4.2. Source already has reviewed/committed C0.5.4.1 skeleton: parent `Expr_Call_ExtCall_result_nonstatic` derives target/amount/nonempty facts and suspends five branches; placeholder cheats remain for `Expr_Call_ExtCall_nonstatic_calldata_error`, empty-code, run-none, reverted, success. The calldata subresume goal should have concrete `build_ext_calldata (get_tenv cx) func_name arg_types (TL (TL x)) = NONE` plus the suspended branch equation; if the large generated-prefix `!s'' vs t ...` antecedent is still present, remove it with `qpat_x_assum ... kall_tac` before any `simp[bind_def,raise_def]`.
 - verify_with: holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)
 
 ## If This Fails
-- If review rejects E0244, follow updated PLAN. If the next concrete tail proof again exposes generated-prefix obligations before concrete tuple/success facts, checkpoint or close with risk_mismatch evidence; do not use broad `gvs[]`/`AllCaseEqs()` or generated-prefix adapter theorems. If focused build fails outside active obligations, checkpoint_progress with tool_limit evidence and stop.
+- If the calldata subresume still times out after the generated-prefix assumption is removed, call `checkpoint_progress` or `close_component(result='stuck', diagnosis_tag='risk_mismatch')` with the failing holbuild evidence; do not try broader `gvs`/`AllCaseEqs()` or generated-prefix adapter theorems. If it proves/builds, close C0.5.4.2 as proved, call mandatory `plan_oracle(mode='review')`, then commit only relevant tracked `semantics/prop` files with `git commit --no-gpg-sign`.
 
 ## Do Not Retry
-- Apply `extcall_static_projected_sound` or `extcall_static_projected_state_well_typed` at the outer static ExtCall Resume boundary.: E0233 showed the required unconditional compact driver IH is unavailable there; the live IH is generated-prefix guarded.
-  - evidence: episode:E0233
-  - evidence: tool_output:TO_type_system_rewrite-20260601T220715Z_m4485_t001
-- Transcribe the old projected-tail skeleton immediately after `Cases_on run_ext_call` and expect a single concrete `SOME result` branch.: E0232/E0241 showed that old boundary exposes 9 generated-prefix goals before concrete success facts; manual progress has now changed the source boundary instead.
-  - evidence: episode:E0232
-  - evidence: episode:E0241
-  - evidence: tool_output:TO_type_system_rewrite-20260602T125148Z_m4534_t001
-- Use broad `gvs[]`, `AllCaseEqs()`, or generated-prefix adapter theorems to mine the optional-driver premise.: Forbidden by task/PLAN and empirically timed out on the large generated-prefix state.
-  - evidence: episode:E0241
-  - evidence: tool_output:TO_type_system_rewrite-20260602T125148Z_m4553_t001
-  - evidence: plan:C0.4.3.a
-- Continue using the old `Expr_Call_ExtCall_result_static_success` Resume location as the active source target without checking current source.: Manual commit `eb2633148` inlined/changed the static branch; the remaining cheat is now in `Expr_Call_ExtCall_result_static` around line 17803.
-  - evidence: tool_output:TO_type_system_rewrite-20260602T195240Z_m4577_t001
-  - evidence: tool_output:TO_type_system_rewrite-20260602T195240Z_m4577_t002
-- Stage or commit `semantics/prop/LEARNINGS_type_system_rewrite.legacy.md` or `semantics/prop/tmp_helper.txt`.: They are pre-existing untracked artifacts unrelated to task-owned proof progress.
-  - evidence: tool_output:TO_type_system_rewrite-20260602T195240Z_m4576_t001
+- Reintroduce `extcall_nonstatic_projected_sound` or any helper with premise `eval_expr cx (Call ... ExtCall F ...) st = (res,st')`.: E0249 showed this full-call boundary recreates the generated-prefix timeout shape and is explicitly invalidated by the PLAN.
+  - evidence: episode:E0249
+  - evidence: tool_output:TO_type_system_rewrite-20260602T195240Z_m4670_t001
+- Prove the nonstatic ExtCall Resume as one monolithic branch-by-branch proof with inline error closures.: E0253 showed the first calldata branch still times out on >4KiB generated-prefix goals; the repaired PLAN requires named subresumes.
+  - evidence: episode:E0253
+  - evidence: tool_output:TO_type_system_rewrite-20260602T195240Z_m4713_t001
+  - evidence: tool_output:TO_type_system_rewrite-20260602T195240Z_m4715_t001
+- Run `simp[bind_def, raise_def]`, broad `gvs`, or `AllCaseEqs()` in a nonstatic subresume while the large generated-prefix universal assumption is still in context.: Even targeted simplification timed out when that assumption remained. Delete the generated-prefix assumption first, then simplify only the concrete suspended equation.
+  - evidence: tool_output:TO_type_system_rewrite-20260602T195240Z_m4715_t001
+  - evidence: plan:C0.5.4.2
+- Stage/commit untracked `semantics/prop/LEARNINGS_type_system_rewrite.legacy.md` or `semantics/prop/tmp_helper.txt`.: They are pre-existing unrelated artifacts; commits should stage only relevant tracked task-owned files and use `--no-gpg-sign`.
+  - evidence: tool_output:TO_type_system_rewrite-20260602T195240Z_m4733_t001
 
 ## Reflection
 ### Tunnel Vision Check
-- Manual progress changed the proof boundary: the static ExtCall branch is now inlined in `Expr_Call_ExtCall_result_static`; do not assume the old `Expr_Call_ExtCall_result_static_success` Resume still exists.
-- Outside-the-box approach that worked: do not force a separate static-success Resume boundary; inline enough of the branch to discharge the generated optional-driver premise before the concrete tail.
-- The PLAN decomposition is plausible after E0244, but it may need the strategist to mark C0.4.3.a done and adjust C0.4.3.b/c to the new source shape.
-- Fresh expert should first inspect lines 17758--17804 and ask: is the remaining `cheat` purely concrete-tail soundness, or are there still hidden generated-premise obligations?
-- Avoid optimizing old projected helpers. The immediate issue is finishing the concrete tail after manual progress, not re-proving `extcall_static_projected_sound`.
+- Outside-the-box approach now validated: the nonstatic ExtCall branch should be treated like the existing static branch, with parent skeleton + named `suspend` subresumes rather than one monolithic proof.
+- Do not optimize `extcall_nonstatic_projected_state_well_typed` or resurrect `extcall_nonstatic_projected_sound`; those are the wrong abstraction for full mutual postcondition proof.
+- The PLAN decomposition is now the right abstraction if each subresume can discard the generated-prefix universal before simplification. If a subresume still cannot, the branch boundary is still too late/early and should be escalated.
+- Do not retry tactics on >4KiB generated-prefix timeouts. The next proof should be small: prove one calldata runtime-error branch using concrete branch facts and `extcall_nonstatic_runtime_error_sound`.
+- A fresh expert should first inspect the suspended calldata goal and verify exactly which assumption is the large generated-prefix antecedent to delete before any monadic simplification.
 
 ### What Went Wrong
-- Earlier C0.4.3 assumed the concrete `SOME` tail appeared immediately after `Cases_on run_ext_call`; E0241 showed a large generated optional-driver premise came first.
-- I initially retried direct assumption acceptance (`first_assum MATCH_ACCEPT_TAC`) in the old source shape; it failed because the exact source boundary still exposed the generated premise as a separate top goal with noisy assumptions.
-- Manual progress in commit `eb2633148` made the actual proof-state boundary better: static branch is inlined and the generated premise is discharged before the remaining tail cheat.
+- The direct C0.5.4 branch-by-branch proof repeated the E0248/E0249 generated-prefix problem: even the first calldata error branch timed out on a >4KiB goal at `simp[no_type_error_result_def]` and then at targeted `simp[bind_def,raise_def]`.
+- The failure was a proof-boundary issue, not a missing semantic fact: the branch facts were not top-level/concrete enough until the proof was decomposed with `suspend` subresumes.
+- STATE on disk was stale from before this session; PLAN/DOSSIER/git history now carry the real status. This handoff cursor supersedes old STATE lines.
 
 ### Ignored Signals
-- E0232/E0241 already showed the branch split produced 9 subgoals and a generated-prefix premise; this was a decomposition signal, not a cue to search for stronger simplifiers.
-- The user's manual-progress note meant source reality could have superseded STATE/PLAN wording; I checked the source and found the old `Expr_Call_ExtCall_result_static_success` block had indeed been replaced/merged.
-- Pre-existing untracked `semantics/prop/LEARNINGS_type_system_rewrite.legacy.md` and `semantics/prop/tmp_helper.txt` remain unrelated and must not be staged.
+- Earlier PLAN stop conditions explicitly said to stop on generated-prefix timeout; after one monolithic attempt failed, the correct move was strategist review, which produced the branch-suspended decomposition.
+- The existing static ExtCall subresumes were the working pattern; the first nonstatic attempt underweighted that proof-shape evidence and tried to prove error branches inline.
 
 ### Strategy Adjustments
-- Next session should treat E0244 as the authoritative proof-status update: C0.4.3.a is closed proved pending required strategist review.
-- After review, continue only the scheduled leaf. For C0.4.3.c, work at the remaining `cheat` after `strip_tac` in the inlined static branch; do not resurrect the deleted static-success Resume boundary.
-- Use focused verification `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` first; aggregate `vyperSemanticsHolTheory` can be used after a stable source checkpoint.
-- If proving the tail, derive account well-typedness via `run_ext_call_accounts_well_typed`, runtime consistency from `env_consistent/state_well_typed/accounts_well_typed` facts, and use `extcall_after_state_update_tail_sound` or the existing local tail helper pattern.
+- Continue from active C0.5.4.2; do not call `begin_component` again unless the active component state has been cleared by the harness.
+- For each nonstatic error subresume, first `RESUME_TAC`, rewrite concrete branch facts, then delete the large generated-prefix universal assumption before simplification. Use `extcall_nonstatic_runtime_error_sound` for the final postcondition.
+- After C0.5.4.2, follow PLAN order: C0.5.4.3 for empty-code/run-none/revert, then C0.5.4.4 for success with `run_ext_call_accounts_well_typed` and `extcall_success_continuation_sound_cond_driver_ih`.
+- Keep commits narrow and unsigned; untracked `semantics/prop/LEARNINGS_type_system_rewrite.legacy.md` and `semantics/prop/tmp_helper.txt` remain unrelated and must not be staged.
 
 ### Oracle Feedback
-- Held: strategist's E0241 replacement insight that generated-IH passthrough must precede concrete-tail work was correct; manual progress appears to implement that.
-- Missed/source drift: PLAN still mentions `Expr_Call_ExtCall_result_static_success`, but source now inlines the static branch under `Expr_Call_ExtCall_result_static`; strategist review should reconcile wording with source reality.
-- Held: maintaining prefix error subresumes remains valid; `Expr_Call_ExtCall_static_run_none` is still present and builds.
+- Held: E0253 review correctly diagnosed the monolithic nonstatic Resume as wrong-shaped and decomposed it into branch-suspended leaves.
+- Held: C0.5.4.1 review accepted the skeleton with exactly five planned subresume placeholders; focused build passed, confirming the source shape is viable.
+- Missed earlier: the first C0.5.4 plan still underestimated generated-prefix brittleness; subresume boundaries were needed from the start.
 
 ## Evidence Pointers
-- episode:E0244 - closed C0.4.3.a proved after reviewing manual source progress and focused build
-- tool_output:TO_type_system_rewrite-20260602T195240Z_m4577_t001 - read of current static ExtCall source showing inlined branch and remaining tail cheat at line 17803
-- tool_output:TO_type_system_rewrite-20260602T195240Z_m4577_t003 - focused `vyperTypeStmtSoundnessTheory` build succeeds with remaining intentional cheat
-- tool_output:TO_type_system_rewrite-20260602T195240Z_m4577_t002 - git log shows manual source commit `eb2633148 Make some progress on a cheat`
-- tool_output:TO_type_system_rewrite-20260602T195240Z_m4578_t001 - commit stat confirms manual progress only modified `semantics/prop/vyperTypeStmtSoundnessScript.sml`
-- episode:E0241 - previous old-boundary C0.4.3 attempt failed with generated-prefix fanout, motivating the replacement plan
+- episode:E0253 - monolithic C0.5.4 attempt closed stuck/risk_mismatch due generated-prefix timeout
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m4713_t001 - timeout at first calldata error branch with >4KiB generated-prefix goal
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m4715_t001 - targeted branch-local simplification still timed out while generated-prefix assumption remained
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m4717_t001 - source reverted to stable cheated baseline before replanning
+- episode:E0254 - C0.5.4.1 skeleton proved/reviewed
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m4721_t001 - source edit adding parent skeleton and named nonstatic suspends
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m4727_t001 - focused build passed with planned subresume placeholders
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m4733_t002 - query_plan shows active C0.5.4.2 and next calldata-error subresume guidance

@@ -17969,7 +17969,12 @@ Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result_nonstatic]:
 QED
 
 Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_nonstatic_calldata_error]:
-  cheat
+  RESUME_TAC >>
+  qpat_x_assum `!s'' vs t. _` kall_tac >>
+  qpat_x_assum `(do calldata <- _; accounts <- _; _ od) args_st = (res,st')` mp_tac >>
+  simp[bind_def, return_def, raise_def, pairTheory.pair_case_thm, sumTheory.sum_case_def] >>
+  strip_tac >>
+  gvs[no_type_error_result_def]
 QED
 
 Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_nonstatic_empty_code_error]:
