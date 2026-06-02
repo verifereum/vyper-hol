@@ -17978,15 +17978,29 @@ Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_nonstatic_calldata_error]:
 QED
 
 Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_nonstatic_empty_code_error]:
-  cheat
+  RESUME_TAC >>
+  qpat_x_assum `!s'' vs t. _` kall_tac >>
+  qpat_x_assum `(do accounts <- _; x <- _; _ od) args_st = (res,st')` mp_tac >>
+  simp[bind_def, return_def, raise_def, assert_def, get_accounts_def,
+       pairTheory.pair_case_thm, sumTheory.sum_case_def, boolTheory.COND_CLAUSES] >>
+  strip_tac >>
+  gvs[no_type_error_result_def]
 QED
 
 Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_nonstatic_run_none]:
-  cheat
+  RESUME_TAC >>
+  qpat_x_assum `!s'' vs t. _` kall_tac >>
+  qpat_x_assum `(case (case NONE of NONE => _ | SOME v => _) args_st of _ => _) = (res,st')` mp_tac >>
+  simp[bind_def, return_def, raise_def, assert_def,
+       pairTheory.pair_case_thm, sumTheory.sum_case_def, boolTheory.COND_CLAUSES] >>
+  strip_tac >>
+  gvs[no_type_error_result_def]
 QED
 
 Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_nonstatic_reverted]:
-  cheat
+  RESUME_TAC >>
+  qpat_x_assum `!s'' vs t. _` kall_tac >>
+  gvs[no_type_error_result_def]
 QED
 
 Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_nonstatic_success]:

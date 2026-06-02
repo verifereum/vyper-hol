@@ -82,6 +82,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C0.5.4 | stuck | risk_mismatch | E0253 | Call plan_oracle(mode='review', component_id='C0.5.4', evidence_ids=[...]) for strategist repair before any further edits. |
 | C0.5.4.1 | proved |  | E0254 | Review C0.5.4.1, then begin C0.5.4.2 to prove the calldata-error subresume. |
 | C0.5.4.2 | proved |  | E0255 |  |
+| C0.5.4.3 | proved |  | E0256 |  |
 | C1.1 | proved |  | E0024 | Call plan_oracle(mode='review') for C1.1, then begin C1.2 if accepted. |
 | C1.1.1 | proved |  | E0012 |  |
 | C1.1.2 | proved |  | E0013 |  |
@@ -2370,6 +2371,28 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 - `TO_type_system_rewrite-20260602T195240Z_m4744_t001` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260602T195240Z_m4745_t001` (use `read_tool_output` for exact output)
+
+## C0.5.4.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0256`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 8 steps, 8 tools, 3 holbuild, 606,321 tok (604,287 in, 2,034 out, 575,488 cached), 114.3s, $0.492759
+
+### Attempts / Evidence
+
+- `E0256` (proved, , actual effort: 1 sessions, 1 msgs, 8 steps, 8 tools, 3 holbuild, 606,321 tok (604,287 in, 2,034 out, 575,488 cached), 114.3s, $0.492759)
+  - Filled three nonstatic error subresumes: empty-code and run-none delete generated-prefix universal then simplify concrete suspended equations; reverted branch already resumes to concrete `res`/`st'` facts and closes by `gvs[no_type_error_result_def]`. -> Focused `vyperTypeStmtSoundnessTheory` build succeeds; all C0.5.4.3 error branches are proved without broad generated-prefix simplification. (`TO_type_system_rewrite-20260602T195240Z_m4758_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260602T195240Z_m4753_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4755_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4757_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m4758_t001` (use `read_tool_output` for exact output)
 
 ## C1.1
 
