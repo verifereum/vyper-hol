@@ -7,42 +7,29 @@
 - Risk: 2
 - Work priority: 0
 - Work units: 0
-- Rationale: Risk 2 because all executable leaves are either audits, localized arithmetic, or integrations through existing local helper lemmas (`extcall_static_projected_sound`, `extcall_nonstatic_projected_state_well_typed`, `eval_extcall_args_error_*`, `extcall_after_state_update_tail_sound*`). The prior Risk/blocked evidence is addressed by not retrying the current static-success Resume boundary as the primary proof interface; the new proof path first proves/uses compact branch facts and only specializes the optional-driver IH after the success continuation branch is concrete.
+- Rationale: Risk is lowered back to 2 after replacing stuck C0.4 with a low-risk branch-local decomposition. E0230 shows the old projected-helper use was wrong, but the maintainer clarification authorizes the replacement linear proof discipline and existing siblings are preserved.
 - Required for completion: yes
-- Supersedes: C0, E0223, E0224, E0225, E0226
-- Progress transition: `replacement`
-- Carries progress/evidence from: E0223, E0224, E0225, E0226, TO_type_system_rewrite-20260601T220715Z_m4328_t001, TO_type_system_rewrite-20260601T220715Z_m4389_t002, TO_type_system_rewrite-20260601T220715Z_m4347_t003
+- Progress transition: `refinement`
+- Carries progress/evidence from: C0.1, C0.2, C0.3, E0227, E0228, E0229, E0230
 
 #### Progress note
-Replaces the terminal blocked-report meaning of C0 with an authorized proof-completion subtree because the operator checkpoint requires continued work and the PLAN incorrectly exposed no frontier despite residual reachable cheats. Prior evidence still counts as negative proof-interface evidence: do not retry the failed current-boundary `run_ext_call` fanout or generated-prefix reconstruction. Prior build/cheat audit evidence provides baseline state only, not proof completion.
+C0.1--C0.3 remain valid completed work. E0230 is carried forward only as diagnostic evidence for replacing C0.4; it does not invalidate the whole C0 subtree.
 
 #### Summary
-- Complete exactly the remaining fresh-stack task obligations reachable from `vyperSemanticsHolTheory` inside `semantics/prop`.
-- Cover the localized `raw_call_return_type_well_formed` cheat and the statement-soundness cheats at ExtCall/static success, ExtCall/nonstatic result, and RawCallTarget.
-- Keep evaluator/semantics definitions unchanged and edit only files under `semantics/prop`.
-- The ExtCall route must not solve generated-prefix goals; it must use compact projected helper lemmas and integrate them only after concrete success/error branches are exposed.
-- Final completion requires focused builds plus a reachable-cheat audit showing no CHEAT warnings/`cheat` proofs reachable from `vyperSemanticsHolTheory`.
-
-#### Description
-This subtree is proof completion, not another blocked-report closure. Its central design is to avoid the failed `Expr_Call_ExtCall_result_static_success` boundary as a source of optional-driver premises. Existing local helper lemmas around lines ~9600--10450 already express the correct compact interface: argument evaluation gives a typed `vs,args_st`; static/nonstatic ExtCall execution is handled by projected lemmas; successful external-call continuation delegates to `extcall_after_state_update_tail_sound` or its conditional-driver-IH variant. The executor should make small, auditable changes in `vyperTypeStmtSoundnessScript.sml` and `vyperTypeBuiltinsScript.sml`, building after each proof cluster. Commit progress unsigned (`git commit --no-gpg-sign`) only after clean task-local proof milestones.
-
-#### Statement
-Task-scoped completion obligation: remove all remaining reachable fresh-stack cheats in `semantics/prop` needed for `vyperSemanticsHolTheory` proof integrity, without editing outside `semantics/prop` or changing evaluator/semantics definitions.
-
-#### Approach
-Work in audit-first order, then close the small builtins arithmetic cheat, then close ExtCall and RawCallTarget statement-expression proof branches using local projected/boundary lemmas. For ExtCall, the key invariant is the mutual theorem's combined postcondition: state/env/accounts preservation, no-TypeError, and result typing are proved together by each projected branch helper and then supplied to the suspended branch. Specialize the optional-driver IH only inside a concrete branch where `returnData = [] ∧ IS_SOME drv` is the active continuation premise; otherwise use decode-return typing and account-preservation helpers.
-
-#### Not to try
-Do not retry E0223's path: post-`Cases_on run_ext_call ...` generated-prefix fanout from `Expr_Call_ExtCall_result_static_success`, broad `simp`/`gvs`/`AllCaseEqs()` over the whole ExtCall prefix, or long generated-prefix adapter theorems. Do not recover driver premises from the top-level generated Resume context. Do not claim completion from a build while source-level `cheat` proofs or CHEAT warnings remain reachable. Do not edit evaluator definitions or any file outside `semantics/prop`.
+- Continue the task-local proof completion inside `semantics/prop` only.
+- Completed audit/raw-call helper/static boundary-probe work remains valid.
+- Replace the failed C0.4 one-step projected-helper integration with a linear static-success proof.
+- Downstream ExtCall/RawCall components remain preserved but blocked until C0.4 closes.
+- No evaluator/semantics definitions may be changed.
 
 #### Argument
-The proof stack succeeds by maintaining the strongest joint evaluator invariant already encoded in `eval_all_type_sound_mutual`: after evaluation, the resulting state, environment consistency, accounts typing, no-TypeError property, and expression-result typing all hold together. For calls, split first on argument-list evaluation. The `INR` argument-error branch is semantically identical to the argument error; use `eval_extcall_args_error*` helpers rather than unfolding the whole call prefix. The `INL vs` branches should use well-typedness to derive the exact runtime argument shape (`extcall_static_args_runtime_typed_*` or `extcall_nonstatic_args_runtime_typed_*`). Static and nonstatic external-call chains then reduce to the same compact continuation invariant: if the external call succeeds, account typing is preserved by `run_ext_call_accounts_well_typed`, the state update preserves runtime consistency, and the return tail is handled by ABI decoding or the optional driver IH. RawCallTarget should follow the same branch-local pattern: argument/target/return-type facts first, external/raw-call operation next, and continuation/result typing last. The localized builtins arithmetic lemma is independent and should be discharged before statement integration so final audits have one fewer source of CHEAT noise.
+The remaining task is proof completion, not semantics redesign. For ExtCall branches, argument evaluation has already produced a well-typed intermediate state and runtime-typed argument values. Error prefixes preserve state and yield non-type-error failures; success prefixes rely on `run_ext_call` account preservation and then hand the post-update state to the optional driver/tail proof. The critical invariant is that the optional driver IH is consumed only at the concrete post-call continuation where its generated prefix antecedent has already been discharged.
 
 #### Definition design
-No new evaluator or semantics definitions are authorized. If a proof interface is missing, add only local theorem boundaries in `vyperTypeStmtSoundnessScript.sml` or `vyperTypeBuiltinsScript.sml`. Good ExtCall boundary lemmas have conclusions exactly of the mutual postcondition shape, with hypotheses such as `eval_exprs ... = (INL vs,args_st)`, `exprs_runtime_typed env es vs`, `MAP expr_type es = ...`, and a conditional driver IH guarded by `returnData = [] ∧ IS_SOME drv`. Bad boundaries expose the generated monadic prefix or require manually reconstructing 20+ generated variables. Failure sign: after a branch split, HOL shows multiple generated-prefix goals or a multi-KiB optional-driver implication before a concrete `run_ext_call = SOME (...)` continuation is available; stop and replan instead of proving those goals one-by-one.
+No definitions outside `semantics/prop` are to be edited. The intended proof interface is local branch facts: runtime-typed argument destructors, `run_ext_call_accounts_well_typed`, `env_consistent_get_tenv`, and `extcall_after_state_update_tail_sound`. Generated-prefix theorem plumbing is a failure sign, not an acceptable interface.
 
 #### Code structure
-All work stays in `semantics/prop`. Put the arithmetic proof for `raw_call_return_type_well_formed` in `vyperTypeBuiltinsScript.sml` at the existing theorem. Keep ExtCall and RawCallTarget helper lemmas local in `vyperTypeStmtSoundnessScript.sml` near the existing ExtCall helper block (~9600--10450) or immediately before the relevant `Resume` blocks if they are purely integration helpers. Do not introduce new theories or touch old retired proof stack files unless they are already imported by the fresh stack and strictly necessary. Update `semantics/prop/TYPE_SYSTEM_REWRITE_PLAN.md` / `STATE_type_system_rewrite.md` only to record actual progress and stop conditions, and commit with `--no-gpg-sign` after clean milestones.
+All edits remain in `semantics/prop/vyperTypeStmtSoundnessScript.sml`. Existing local helper theorems near `extcall_static_projected_*` may be reused. New helper theorems, if any, must be compact and task-local; the C0.4 proof itself should live in the existing `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result_static_success]` block.
 
 ### C0.1: Baseline audit of reachable residual cheats and authorized edit scope
 - Kind: `proof_audit`
@@ -131,39 +118,149 @@ Do not begin at the old `Expr_Call_ExtCall_result_static_success` fanout. Instea
 #### Not to try
 Do not run `AllCaseEqs()` over the whole evaluator prefix. Do not prove generated-prefix adapter theorems. Do not attempt to solve the old 9 generated-prefix goals individually; that is a failed boundary, not a proof obligation.
 
-### C0.4: Integrate ExtCall static branch and remove static-success cheat
-- Kind: `mutual_resume_proof`
+### C0.4: Integrate ExtCall static branch with a branch-local success proof
+- Kind: `mutual_resume_proof_subtree`
 - Risk: 2
 - Work priority: 30
-- Work units: 5
-- Rationale: Risk 2 after C0.3: the static branch has existing local lemmas for target address/nonempty arguments, calldata/empty-code/run-none errors, external-call success account typing, and continuation soundness.
+- Work units: 0
+- Rationale: Risk 2 after decomposition: E0230 invalidates the direct projected-helper application, but the source already contains proved static projected lemmas and the maintainer explicitly permits a careful linear proof that specializes the optional-driver IH only in the single concrete success-continuation branch.
 - Dependencies: C0.3
-- Checkpoint: yes
-- Supersedes: E0223
+- Supersedes: C0.4
 - Progress transition: `replacement`
-- Carries progress/evidence from: C0.3
+- Carries progress/evidence from: C0.3, E0229, E0230
+- Invalidates prior progress/evidence: C0.4@old-leaf
 
 #### Progress note
-Replaces the old blocked static-success leaf with a compact-helper integration path validated by C0.3.
+Carries C0.3/E0229 as evidence that the compact static helper theorem is mathematically sound, and E0230 as evidence that this helper cannot be applied directly from the live Resume boundary. The old C0.4 leaf strategy is invalidated and replaced by children C0.4.1--C0.4.4.
 
 #### Summary
-- Replace the `cheat` in `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result_static_success]`.
-- Keep the current linear prefix splits for calldata error, empty code, and `run_ext_call = NONE`; close error branches immediately.
-- For `run_ext_call = SOME (success, returnData, accounts', tStorage')`, split `success`; reverted/error case is RuntimeError/no-TypeError, success case delegates to `extcall_after_state_update_tail_sound` or `extcall_static_projected_sound`.
-- Specialize optional-driver IH only inside the concrete success continuation and only if `returnData = [] ∧ IS_SOME drv`.
+- Replace the failed one-step projected-helper integration with a branch-local static-success proof.
+- Keep all work inside `semantics/prop/vyperTypeStmtSoundnessScript.sml`.
+- Follow `extcall_static_projected_sound` as the semantic model.
+- Specialize the generated optional-driver IH only after the concrete successful ExtCall continuation is reached.
+- Remove the static-success `cheat` without broad generated-prefix cleanup.
+
+#### Description
+The prior plan assumed that `extcall_static_projected_state_well_typed` or `extcall_static_projected_sound` could be applied directly after `RESUME_TAC`; E0230 shows the live optional-driver IH remains behind a generated prefix implication. The replacement proof must proceed linearly through the ExtCall monadic chain, close error branches immediately, and then use the generated IH in the single success branch where all prefix facts are concrete.
+
+#### Approach
+Use the code around lines 17748--17776 and the proof of `extcall_static_projected_sound` as templates. Split `run_ext_call`, pair-destruct the result, split success/revert, perform account/transient updates, derive `accounts_well_typed` by `run_ext_call_accounts_well_typed`, derive `runtime_consistent env cx args_st`, evaluate `ret_type`, and close with `extcall_after_state_update_tail_sound`. For `drv = SOME _`, specialize the live generated implication only after these concrete prefix equations exist; for `drv = NONE`, avoid invoking `THE drv`.
+
+#### Not to try
+Do not retry `irule`, `MATCH_MP_TAC`, or `drule_all extcall_static_projected_state_well_typed` on the initial projection goal. Do not introduce a long generated-prefix adapter theorem. Do not use broad `gvs[AllCaseEqs()]`, broad `simp`, or top-level prefix mining to recover the driver premise.
+
+#### Argument
+The static ExtCall soundness argument is the same as the proved projected helper: runtime-typed arguments determine the target and calldata inputs; prefix errors are non-type-error failures; successful external calls preserve account well-typedness; post-call account/transient updates produce the state on which the optional driver runs. The optional driver IH is therefore a tail-continuation fact and should be instantiated at that continuation, not at the start of the Resume.
+
+#### Definition design
+No evaluator or semantics definition changes. The proof interface consists of small branch-local facts and existing helpers: `extcall_static_args_runtime_typed_dest`, `extcall_static_args_runtime_typed_nonempty`, `run_ext_call_accounts_well_typed`, `env_consistent_get_tenv`, and `extcall_after_state_update_tail_sound`. Failure sign: any need to restate the whole generated prefix as a named theorem or recover it by global simplification.
+
+#### Code structure
+Edit only `semantics/prop/vyperTypeStmtSoundnessScript.sml`. Work in `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result_static_success]` around line 17748. If a tiny helper is unavoidable, place it near the existing static ExtCall local helpers and keep its statement compact; do not edit outside `semantics/prop`.
+
+### C0.4.1: Re-establish the static success branch prefix without using the projected helper
+- Kind: `proof_refactor`
+- Risk: 1
+- Work priority: 0
+- Work units: 2
+- Rationale: Risk 1: mechanical replay of existing prefix splits through calldata construction, empty-code check, and `run_ext_call`, preserving current suspended error branches and avoiding the failed helper application.
+- Dependencies: C0.3
+- Progress transition: `refinement`
+- Carries progress/evidence from: E0230
+
+#### Progress note
+Refines the old C0.4 attempt by keeping the useful linear prefix structure while removing the invalid projected-helper application at the initial projection goal.
+
+#### Summary
+- Work in `Expr_Call_ExtCall_result_static_success`.
+- Keep `RESUME_TAC`, condition rewrite, static argument destructor, and nonempty proof.
+- Unfold the evaluator one operation at a time.
+- Preserve existing calldata, empty-code, and run-failed suspended/error branches.
+- End with a focused concrete `run_ext_call = SOME ...` success branch.
+
+#### Approach
+Start from the intentional baseline around lines 17748--17776. Replay the current prefix with exact `Cases_on` for `build_ext_calldata`, `NULL ...code`, and `run_ext_call`; do not apply `extcall_static_projected_state_well_typed`. The expected result is not a closed theorem yet, but a focused success branch ready for tail reasoning.
+
+#### Not to try
+Do not attempt to close `state_well_typed st'` before destructing the concrete successful `run_ext_call` result. Do not simplify the large generated IH assumption globally.
+
+### C0.4.2: Derive static run-success preservation facts before optional driver use
+- Kind: `infrastructure_lemma`
+- Risk: 2
+- Work priority: 10
+- Work units: 3
+- Rationale: Risk 2: this follows the already-proved projected static helper tail, but must be transcribed carefully in the live Resume branch with generated names.
+- Dependencies: C0.4.1
+
+#### Summary
+- In the `run_ext_call = SOME result` branch, destruct the returned tuple.
+- Close revert/error cases immediately with exact rewrites.
+- On success, prove `accounts_well_typed accounts'` using `run_ext_call_accounts_well_typed`.
+- Establish `runtime_consistent env cx args_st` and `get_tenv cx = env.type_defs`.
+- Prepare the post-update facts consumed by tail soundness.
+
+#### Approach
+Mirror the proof of `extcall_static_projected_sound`: `PairCases_on` the result, split success, rewrite `assert_def`, `update_accounts_def`, and `update_transient_def`, then derive account preservation with `drule_all run_ext_call_accounts_well_typed`. Use `well_formed_type_def`, `evaluate_type`, and `env_consistent_get_tenv` as in the helper proof.
+
+#### Not to try
+Do not call `extcall_static_projected_sound` here; its compact driver premise is not available in the live context. Do not manually instantiate generated prefix variables except later for the driver IH after the single success continuation is reached.
+
+### C0.4.3: Specialize the generated optional-driver IH in the concrete static success continuation
+- Kind: `proof_boundary_probe`
+- Risk: 2
+- Work priority: 20
+- Work units: 3
+- Rationale: Risk 2: E0230 identified this as the mismatch, but the maintainer clarification explicitly allows this specialization after reaching the single concrete ExtCall success-continuation branch.
+- Dependencies: C0.4.2
+- Checkpoint: yes
+
+#### Summary
+- Derive a local compact driver theorem for `THE drv` only in the concrete success continuation.
+- Match the driver premise needed by `extcall_after_state_update_tail_sound`.
+- Specialize the live generated implication with concrete branch values and discharge already-split prefix equations.
+- Handle `drv = NONE` separately.
+- Checkpoint: stop if this requires broad prefix mining or a generated-prefix adapter theorem.
 
 #### Statement
-```sml
-Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result_static_success]:
-  ...
-QED
+Local derived fact inside the Resume branch, under the branch condition where `IS_SOME drv`:
+```
+!env0 st0 res0 st0'.
+  env_consistent env0 cx st0 /\ state_well_typed st0 /\
+  context_well_typed cx /\ accounts_well_typed st0.accounts /\
+  functions_well_typed cx /\ eval_expr cx (THE drv) st0 = (res0,st0') ==>
+  well_typed_expr env0 (THE drv) ==>
+  state_well_typed st0' /\ env_consistent env0 cx st0' /\
+  accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
+  case res0 of INL tv => expr_result_typed env0 (THE drv) tv | INR _ => T
 ```
 
 #### Approach
-Use the current proof through `Cases_on run_ext_call ...`; immediately close `NONE` using the existing `Expr_Call_ExtCall_static_run_none` proof if it remains valid. In the `SOME` case, destruct the tuple and success boolean with `PairCases_on`/`Cases_on`, derive `accounts_well_typed accounts'` via `run_ext_call_accounts_well_typed`, establish `runtime_consistent env cx args_st`, then invoke the tail/continuation helper. Use `extcall_static_projected_sound` if the direct Resume context is still too noisy; its conclusion exactly matches the mutual postcondition.
+Case-split `drv` or expose `IS_SOME drv` only at the point where the driver is evaluated. In the `SOME` case, instantiate the generated implication with the actual prefix witnesses fixed by C0.4.1--C0.4.2 and discharge its antecedent with exact assumptions/equalities from the linear proof. Then use the resulting compact fact by ordinary `drule`/`disch_then` at the tail use site.
 
 #### Not to try
-Do not leave multiple monadic prefix branches open while applying driver IH. Do not use broad `gvs` to mine the generated optional-driver prefix from the top-level Resume context. If `Cases_on run_ext_call` creates the E0223 9-goal fanout before a compact helper applies, stop and escalate rather than continuing.
+Do not recover this fact at the top of the Resume. Do not use ASSUME-quoted copies of the whole generated prefix or a many-screen `qspecl_then` adapter theorem; if only that works, escalate.
+
+### C0.4.4: Close the static ExtCall success cheat using tail soundness
+- Kind: `mutual_resume_proof`
+- Risk: 2
+- Work priority: 30
+- Work units: 3
+- Rationale: Risk 2: after C0.4.3 supplies the correct local driver interface, the remaining proof is the same tail closure already proved in `extcall_static_projected_sound`.
+- Dependencies: C0.4.3
+- Checkpoint: yes
+
+#### Summary
+- Invoke `extcall_after_state_update_tail_sound` in the final success branch.
+- Supply state, environment, accounts, return-type, runtime-consistency, and driver facts from C0.4.2--C0.4.3.
+- Close all projections of the mutual proof result.
+- Remove the static-success `cheat` around line 17776.
+- Build and grep to confirm C0.4 is no longer among remaining cheats.
+
+#### Approach
+Use the final block of `extcall_static_projected_sound` as the checklist: establish the conjunction by `irule extcall_after_state_update_tail_sound`, simplify concrete branch facts, and use the local driver IH from C0.4.3 only for the optional-driver subcase. After closure, run the task-local build and grep for `cheat`; expected remaining cheats should correspond only to downstream planned components.
+
+#### Not to try
+Do not finish by proving projection goals one-by-one with manual theorem plumbing. If `extcall_after_state_update_tail_sound` does not match after C0.4.3, stop and report the exact residual goal rather than broadening simplification.
 
 ### C0.5: Integrate ExtCall nonstatic branch and remove nonstatic cheat
 - Kind: `mutual_resume_proof`

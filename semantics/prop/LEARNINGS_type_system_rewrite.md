@@ -609,22 +609,12 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260601T220715Z_m4090_t001
 - episode:E0207
 
-## L0131 scope='C0' tags=ExtCall,generated-prefix,Resume,run_ext_call,driver-IH,proof-boundary
-shape: At an ExtCall static-success mutual `Resume`, a local `Cases_on run_ext_call` reaches multiple generated-prefix goals before `run_ext_call = SOME (...)` can be named, and the optional-driver IH remains guarded by the full monadic prefix.
-pattern: Treat this as a proof-boundary/interface blocker, not a local tactic problem. Under restrictions forbidding generated-prefix reconstruction, do not keep splitting or mining the IH. The reusable repair direction is ancestor-level proof architecture: move/refactor the mutual proof or suspend boundary so the optional-driver IH is produced natively as a compact branch-local premise before applying projected ExtCall helpers.
-works_when: Applies when a minimal post-`Cases_on run_ext_call` probe fails before naming the SOME result, or when helper application requires broad simplification of a generated ExtCall monadic prefix. Does not apply if a future PLAN creates a genuinely compact success continuation before helper matching.
+## L0133 scope='C0.4' tags=ExtCall,Resume,generated-prefix,driver-IH,proof-boundary
+shape: Static ExtCall success `Resume` projection goal has a full generated optional-driver prefix implication in assumptions; compact projected helpers require an unconditional driver IH.
+pattern: Do not apply projected helper theorems at the initial projection goal. First linearize to a concrete run-success/post-update continuation, then derive the compact driver fact locally from the generated implication. If helper application requires mining/copying the full generated prefix, the proof boundary is wrong.
+works_when: Applies to `eval_all_type_sound_mutual[Expr_Call_ExtCall_result_static_success]` and analogous ExtCall Resume branches where generated optional-driver IH is guarded by the whole monadic prefix.
 evidence:
-- episode:E0221
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m4291_t001
-- episode:E0222
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m4305_t001
-
-## L0132 scope='C0' tags=ExtCall,Resume,generated-prefix,driver-IH,proof-boundary
-shape: A mutual `Resume` branch reaches `Cases_on run_ext_call`, but the success branch exposes multiple goals and a generated optional-driver IH guarded by the full monadic prefix before a compact `SOME` continuation can be named.
-pattern: Treat this as a proof-boundary/interface blocker, not a local tactic problem. Under restrictions forbidding generated-prefix reconstruction, stop the current decomposition and require ancestor-level architecture that generates the optional-driver IH natively inside a compact branch-local success continuation. A successful focused build after reverting only proves baseline restoration if cheats remain.
-works_when: Applies to ExtCall/static-success style branches where minimal inspection after the semantic split yields >4KiB generated-prefix goals or 9-way fanout before helper matching. Does not apply if a future PLAN creates a genuinely compact success continuation before the helper is invoked.
-evidence:
-- episode:E0223
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m4328_t001
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m4332_t001
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m4347_t001
+- episode:E0230
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m4432_t001
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m4438_t001
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m4443_t001
