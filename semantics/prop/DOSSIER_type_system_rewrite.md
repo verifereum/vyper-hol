@@ -7,8 +7,8 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | Component | Status | Diagnosis | Latest Episode | Next |
 |---|---|---|---|---|
 | C0 | proved |  | E0021 |  |
-| C0.1 | proved |  | E0162 |  |
-| C0.1.1 | stuck | risk_mismatch | E0033 | Ask strategist to provide a more concrete, low-risk prefix script or a different decomposition; source is currently buildable with the checkpoint placeholder. |
+| C0.1 | stuck | risk_mismatch | E0205 | Call plan_oracle(mode='review', component_id='C0.1') with the stuck evidence; request C0 replacement/augmentation that handles the kept partial prefix branches and the unresolved run-success split. |
+| C0.1.1 | proved |  | E0206 |  |
 | C0.1.1.1 | proved |  | E0036 |  |
 | C0.1.1.2 | stuck | risk_mismatch | E0038 | Call plan_oracle(mode='review') for this stuck episode and request a redesign of the ExtCall helper boundary/proof plan under the maintainer constraints. |
 | C0.1.1.2.0 | proved |  | E0059 |  |
@@ -105,11 +105,12 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 ### Current Status
 
-- result: `proved`
-- diagnosis: `n/a`
-- latest episode: `E0162`
-- blocker: 
-- actual effort: 1 sessions, 1 steps, 108,760 tok (108,395 in, 365 out, 100,736 cached), 8.5s, $0.099613
+- result: `stuck`
+- diagnosis: `risk_mismatch` This is not theorem falsehood. It is a proof-boundary/refactor interface failure under the maintainer/user stop condition and the C0.1 not-to-try constraints. A strategist replacement should either accept the partial prefix-branch refactor and redefine subsequent leaves accordingly, or give a different suspend placement for the run-success branch that Finalise recognizes.
+- latest episode: `E0205`
+- blocker: C0.1 Risk-2 refactor is not straightforward: static prefix error branches can be exposed and build-clean, but the required run-success semantic branch split either times out when continued locally or fails Finalise when suspended as its own Resume leaf.
+- actual effort: 1 sessions, 1 msgs, 22 steps, 24 tools, 7 holbuild, 1,662,955 tok (1,652,246 in, 10,709 out, 1,580,288 cached), 576.6s, $1.471204
+- next: Call plan_oracle(mode='review', component_id='C0.1') with the stuck evidence; request C0 replacement/augmentation that handles the kept partial prefix branches and the unresolved run-success split.
 
 ### Attempts / Evidence
 
@@ -147,22 +148,40 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Replaced the old static ExtCall `cheat` with a `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result_static]` body that strips the local branch context and suspends `Expr_Call_ExtCall_result_static_success`; added a new branch-local Resume for that success label with the remaining placeholder cheat for C0.2. -> Target `vyperTypeStmtSoundnessTheory` builds. The original static ExtCall cheat has been refactored into a branch-local suspended success continuation; C0.2 now owns the remaining placeholder. A prior FAIL probe of this context showed the generated optional-driver IH guarded by the concrete ExtCall success prefix plus concrete branch facts, matching the planned interface shape. (`TO_type_system_rewrite-20260601T220715Z_m3215_t001`, `TO_type_system_rewrite-20260601T220715Z_m3205_t001`)
 - `E0162` (proved, , actual effort: 1 sessions, 1 steps, 108,760 tok (108,395 in, 365 out, 100,736 cached), 8.5s, $0.099613)
   - Carry-forward/scheduler-repair closure for C0.1 after strategist refinement; no source edit attempted because C0.1 plan says the refactor is already completed by E0156 and imposes no remaining work. -> Current `vyperTypeStmtSoundnessTheory` build is clean on the cheated baseline, and source still contains the C0.1 refactor shape: `Expr_Call_ExtCall_result_static` strips and suspends `Expr_Call_ExtCall_result_static_success`. This restores completed C0.1 status under the replaced PLAN so C0.2.2 can become the executable frontier. (`TO_type_system_rewrite-20260601T220715Z_m3366_t001`, `TO_type_system_rewrite-20260601T220715Z_m3372_t001`)
+- `E0204` (progressed, other, actual effort: 1 sessions, 1 msgs, 16 steps, 18 tools, 5 holbuild, 1,164,353 tok (1,155,927 in, 8,426 out, 1,091,072 cached), 485.1s, $1.122591)
+  - Removed stale `generated_driver_ih` qpat_x_assum from `Expr_Call_ExtCall_result_static_success` and refactored static prefix branches to branch-local suspends for calldata error, empty-code error, and run_ext_call NONE; added cheated Resume placeholders for those labels. -> Focused build of `vyperTypeStmtSoundnessTheory` succeeds on the intentional cheated baseline after the refactor. Grep confirms `generated_driver_ih` no longer appears and the new static-prefix labels are present. (`TO_type_system_rewrite-20260601T220715Z_m4039_t001`, `TO_type_system_rewrite-20260601T220715Z_m4040_t001`, `TO_type_system_rewrite-20260601T220715Z_m4040_t002`)
+  - Tried to split the `run_ext_call = SOME ...` success continuation into a separate `Expr_Call_ExtCall_static_run_success` suspend/Resume leaf. -> This produced a Finalise error (`No resumption proof found for label Expr_Call_ExtCall_static_run_success`) despite the source containing both the suspend and Resume; reverted that success split to an inline intentional `cheat` so the theory builds. The prefix-error branch split remains kept. (`TO_type_system_rewrite-20260601T220715Z_m4036_t001`, `TO_type_system_rewrite-20260601T220715Z_m4038_t001`, `TO_type_system_rewrite-20260601T220715Z_m4039_t001`)
+- `E0205` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 22 steps, 24 tools, 7 holbuild, 1,662,955 tok (1,652,246 in, 10,709 out, 1,580,288 cached), 576.6s, $1.471204)
+  - Removed the stale `generated_driver_ih` assumption-mining step and exposed three static-prefix branches (`build_ext_calldata = NONE`, empty code assertion, `run_ext_call = NONE`) as separate suspend/Resume placeholders. -> This partial refactor is build-clean: `vyperTypeStmtSoundnessTheory` builds with intentional branch cheats, and grep shows the forbidden `generated_driver_ih` path is absent. The source edit is kept and only touches `semantics/prop/vyperTypeStmtSoundnessScript.sml`. (`TO_type_system_rewrite-20260601T220715Z_m4039_t001`, `TO_type_system_rewrite-20260601T220715Z_m4040_t001`, `TO_type_system_rewrite-20260601T220715Z_m4040_t002`, `TO_type_system_rewrite-20260601T220715Z_m4046_t001`)
+  - Tried twice to refactor the `run_ext_call = SOME ...` success continuation into a separate branch-local suspend/Resume label: first `Expr_Call_ExtCall_static_run_success`, then a parenthesized/renamed `Expr_Call_ExtCall_static_run_some`. -> Both attempts failed at `Finalise` with `No resumption proof found for label ...` despite the corresponding source-level `suspend` and `Resume` blocks being present. Reverted the success split to an inline intentional `cheat` to keep the target build-clean. Under the C0.1 requirement to split semantic branch leaves, this is a terminal decomposition/tooling-interface blocker for this leaf rather than a routine tactic issue. (`TO_type_system_rewrite-20260601T220715Z_m4036_t001`, `TO_type_system_rewrite-20260601T220715Z_m4044_t001`, `TO_type_system_rewrite-20260601T220715Z_m4045_t001`, `TO_type_system_rewrite-20260601T220715Z_m4046_t001`)
+  - Earlier, tried to continue through the `run_ext_call` case split with local rewriting instead of suspending the success branch. -> The immediate `gvs[return_def, raise_def]` over the post-run split timed out on the large generated prefix; replacing it with `rewrite_tac` avoided timeout but the `NONE` branch assumption pattern no longer matched. This reinforced that local tactic continuation is not straightforward under the live prefix; a clean suspend boundary was needed but then failed Finalise for the success branch. (`TO_type_system_rewrite-20260601T220715Z_m4030_t001`, `TO_type_system_rewrite-20260601T220715Z_m4032_t001`)
+
+### Ruled Out
+
+- Do not reintroduce `qpat_x_assum ... (mk_asm "generated_driver_ih")`; it was removed and is explicitly forbidden.
+- Do not use broad `gvs`/generated-prefix simplification at the post-run split; `gvs[return_def, raise_def]` timed out on the large generated prefix.
+- The exact success suspend/Resume attempts `Expr_Call_ExtCall_static_run_success` and `Expr_Call_ExtCall_static_run_some` failed Finalise and should not be retried unchanged.
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260601T220715Z_m3366_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T220715Z_m3372_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m4030_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m4032_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m4036_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m4039_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m4040_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m4040_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m4044_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m4046_t001` (use `read_tool_output` for exact output)
 
 ## C0.1.1
 
 ### Current Status
 
-- result: `stuck`
-- diagnosis: `risk_mismatch` This attempt used a too-broad `gvs[no_type_error_result_def]` after splitting `args_res`, which matches the forbidden broad-cleanup smell; per task instruction to stop on unexpected proof/design issues, do not continue tactic experimentation without strategist review.
-- latest episode: `E0033`
-- blocker: The revised checkpoint still is not straightforward to execute: a direct local prefix split/probe over the current `Expr_Call_ExtCall_result` Resume ran out of store before reaching focused static/nonstatic labels.
-- actual effort: 1 sessions, 1 msgs, 9 steps, 8 tools, 3 holbuild, 663,618 tok (660,905 in, 2,713 out, 629,632 cached), 114.3s, $0.552571
-- next: Ask strategist to provide a more concrete, low-risk prefix script or a different decomposition; source is currently buildable with the checkpoint placeholder.
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0206`
+- blocker: 
+- actual effort: 1 sessions, 2 steps, 3 tools, 1 holbuild, 194,564 tok (194,034 in, 530 out, 187,648 cached), 21.1s, $0.141654
 
 ### Attempts / Evidence
 
@@ -174,17 +193,14 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Probed the new leaf by temporarily replacing its placeholder with `FAIL_TAC` and rebuilding, then restored the placeholder. -> The new leaf still exposes the forbidden large generated ExtCall prefix: the driver IH is guarded by an implication over `eval_exprs`, `check`, `lift_option_type`, `build_ext_calldata`, `run_ext_call`, `update_accounts`, and `update_transient`; the leaf is not yet split into static/nonstatic focused continuation obligations. (`TO_type_system_rewrite-20260601T081233Z_m0966_t001`, `TO_type_system_rewrite-20260601T081233Z_m0967_t001`)
 - `E0033` (stuck, risk_mismatch, actual effort: 1 sessions, 1 msgs, 9 steps, 8 tools, 3 holbuild, 663,618 tok (660,905 in, 2,713 out, 629,632 cached), 114.3s, $0.552571)
   - After strategist replacement, attempted to push the `Expr_Call_ExtCall_result` Resume one step further by stripping the `well_typed_expr` premise, unfolding one layer of ExtCall evaluator, case-splitting `eval_exprs`, then `Cases_on args_res >> gvs[no_type_error_result_def]` as a probe before replacing with static/nonstatic labels. -> The build ran out of store / interrupted, indicating the attempted prefix split was not the straightforward local decomposition required by the task. The experiment was reverted to the buildable cheated placeholder. (`TO_type_system_rewrite-20260601T081233Z_m0975_t001`, `TO_type_system_rewrite-20260601T081233Z_m0978_t001`, `TO_type_system_rewrite-20260601T081233Z_m0979_t001`, `TO_type_system_rewrite-20260601T081233Z_m0980_t001`)
-
-### Ruled Out
-
-- Continuing to tune simplification/case-splitting inside the current `Expr_Call_ExtCall_result` Resume after a store exhaustion.
+- `E0206` (proved, , actual effort: 1 sessions, 2 steps, 3 tools, 1 holbuild, 194,564 tok (194,034 in, 530 out, 187,648 cached), 21.1s, $0.141654)
+  - Audited the ExtCall static-success source shape after E0205: checked git status, grepped for stale `generated_driver_ih` and failed success labels, and rebuilt `vyperTypeStmtSoundnessTheory`. -> Source matches the intended C0.1.1 baseline: no `generated_driver_ih`, no orphan `Expr_Call_ExtCall_static_run_success`/`_run_some` labels, three explicit static prefix placeholders remain, one inline success cheat remains, and the focused theory build succeeds. No additional source cleanup was needed beyond the already kept E0205 refactor. (`TO_type_system_rewrite-20260601T220715Z_m4052_t002`, `TO_type_system_rewrite-20260601T220715Z_m4052_t001`, `TO_type_system_rewrite-20260601T220715Z_m4052_t003`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260601T081233Z_m0975_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m0978_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m0979_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T081233Z_m0980_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m4052_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m4052_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m4052_t003` (use `read_tool_output` for exact output)
 
 ## C0.1.1.1
 

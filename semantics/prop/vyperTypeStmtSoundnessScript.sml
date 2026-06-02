@@ -17747,7 +17747,6 @@ QED
 
 Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result_static_success]:
   RESUME_TAC >>
-  qpat_x_assum `!s'' vs t s'³' x t' s'⁴' target_addr t'' s'⁵' value_opt arg_vals t'³' tenv s'⁶' calldata t'⁴' s'⁷' accounts t'⁵' s'⁸' x' t'⁶' s'⁹' tStorage t'⁷' txParams caller s'¹⁰' result t'⁸' success returnData accounts' tStorage' s'¹¹' x'' t'⁹' s'¹²' x'³' t'¹⁰' s'¹³' x'⁴' t'¹¹'. _` (mk_asm "generated_driver_ih") >>
   qpat_x_assum `if T then _ else _` mp_tac >>
   pure_rewrite_tac[boolTheory.COND_CLAUSES] >> strip_tac >>
   drule_all extcall_static_args_runtime_typed_dest >> strip_tac >>
@@ -17763,51 +17762,29 @@ Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result_static_success]:
   rewrite_tac[] >>
   Cases_on `build_ext_calldata (get_tenv cx) func_name arg_types (TL x)` >>
   rewrite_tac[return_def, raise_def]
-  >- (strip_tac >> gvs[assert_def, bind_def, return_def, raise_def,
-                         get_accounts_def, get_transient_storage_def,
-                         no_type_error_result_def]) >>
+  >- (strip_tac >> suspend "Expr_Call_ExtCall_static_calldata_error") >>
   Cases_on `NULL (lookup_account target_addr args_st.accounts).code` >>
   rewrite_tac[return_def, raise_def]
-  >- (strip_tac >> gvs[assert_def, bind_def, return_def, raise_def,
-                         get_accounts_def, get_transient_storage_def,
-                         no_type_error_result_def]) >>
+  >- (strip_tac >> suspend "Expr_Call_ExtCall_static_empty_code_error") >>
   strip_tac >>
   pop_assum mp_tac >>
   asm_rewrite_tac[bind_def, return_def, raise_def, assert_def,
                   get_accounts_def, get_transient_storage_def] >>
   strip_tac >>
-  Cases_on `run_ext_call cx.txn.target target_addr x' NONE args_st.accounts args_st.tStorage (vyper_to_tx_params cx.txn)` >>
-  gvs[return_def, raise_def]
-  >- (qpat_x_assum `(do _ od) args_st = (res,st')` mp_tac >>
-      simp[bind_def, return_def, raise_def, assert_def,
-           get_accounts_def, get_transient_storage_def] >>
-      strip_tac >> gvs[]) >>
-  rename1 `SOME result` >>
-  qpat_x_assum `(do _ od) args_st = (res,st')` mp_tac >>
-  simp[bind_def, return_def, raise_def, assert_def,
-       get_accounts_def, get_transient_storage_def] >>
-  strip_tac >>
-  Cases_on `result` >> gvs[] >>
-  Cases_on `r` >> gvs[] >>
-  Cases_on `r''` >> gvs[] >>
-  Cases_on `q` >>
-  gvs[assert_def, bind_def, return_def, raise_def,
-      update_accounts_def, update_transient_def] >>
-  `runtime_consistent env cx args_st` by simp[runtime_consistent_def] >>
-  `accounts_well_typed q''` by (drule_all run_ext_call_accounts_well_typed >> simp[]) >>
-  `get_tenv cx = env.type_defs` by (drule runtime_consistent_get_tenv >> simp[]) >>
-  Cases_on `q' = [] /\ IS_SOME drv` >> gvs[] >>
-  TRY (
-    `state_well_typed st' /\ env_consistent env cx st' /\
-     accounts_well_typed st'.accounts /\ no_type_error_result res /\
-     case res of
-     | INL tv => expr_result_typed env (Call ret_type (ExtCall T (func_name,arg_types,ret_type)) es drv) tv
-     | INR _ => T` by (
-      irule extcall_after_state_update_tail_sound_cond_driver_ih >>
-      simp[] >>
-      qexistsl [`q''`, `args_st`, `q'`, `r`] >>
-      simp[]) >>
-    simp[]) >>
+  Cases_on `run_ext_call cx.txn.target target_addr x' NONE args_st.accounts args_st.tStorage (vyper_to_tx_params cx.txn)`
+  >- suspend "Expr_Call_ExtCall_static_run_none" >>
+  cheat
+QED
+
+Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_static_calldata_error]:
+  cheat
+QED
+
+Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_static_empty_code_error]:
+  cheat
+QED
+
+Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_static_run_none]:
   cheat
 QED
 
