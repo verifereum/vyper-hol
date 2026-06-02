@@ -7,7 +7,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | Component | Status | Diagnosis | Latest Episode | Next |
 |---|---|---|---|---|
 | C0 | proved |  | E0219 |  |
-| C0.1 | stuck | risk_mismatch | E0205 | Call plan_oracle(mode='review', component_id='C0.1') with the stuck evidence; request C0 replacement/augmentation that handles the kept partial prefix branches and the unresolved run-success split. |
+| C0.1 | proved |  | E0220 |  |
 | C0.1.1 | proved |  | E0215 |  |
 | C0.1.1.1 | proved |  | E0036 |  |
 | C0.1.1.2 | stuck | risk_mismatch | E0038 | Call plan_oracle(mode='review') for this stuck episode and request a redesign of the ExtCall helper boundary/proof plan under the maintainer constraints. |
@@ -114,12 +114,11 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 
 ### Current Status
 
-- result: `stuck`
-- diagnosis: `risk_mismatch` This is not theorem falsehood. It is a proof-boundary/refactor interface failure under the maintainer/user stop condition and the C0.1 not-to-try constraints. A strategist replacement should either accept the partial prefix-branch refactor and redefine subsequent leaves accordingly, or give a different suspend placement for the run-success branch that Finalise recognizes.
-- latest episode: `E0205`
-- blocker: C0.1 Risk-2 refactor is not straightforward: static prefix error branches can be exposed and build-clean, but the required run-success semantic branch split either times out when continued locally or fails Finalise when suspended as its own Resume leaf.
-- actual effort: 1 sessions, 1 msgs, 22 steps, 24 tools, 7 holbuild, 1,662,955 tok (1,652,246 in, 10,709 out, 1,580,288 cached), 576.6s, $1.471204
-- next: Call plan_oracle(mode='review', component_id='C0.1') with the stuck evidence; request C0 replacement/augmentation that handles the kept partial prefix branches and the unresolved run-success split.
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0220`
+- blocker: 
+- actual effort: 1 sessions, 4 steps, 9 tools, 1 holbuild, 260,482 tok (259,452 in, 1,030 out, 235,008 cached), 34.5s, $0.270624
 
 ### Attempts / Evidence
 
@@ -164,23 +163,16 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
   - Removed the stale `generated_driver_ih` assumption-mining step and exposed three static-prefix branches (`build_ext_calldata = NONE`, empty code assertion, `run_ext_call = NONE`) as separate suspend/Resume placeholders. -> This partial refactor is build-clean: `vyperTypeStmtSoundnessTheory` builds with intentional branch cheats, and grep shows the forbidden `generated_driver_ih` path is absent. The source edit is kept and only touches `semantics/prop/vyperTypeStmtSoundnessScript.sml`. (`TO_type_system_rewrite-20260601T220715Z_m4039_t001`, `TO_type_system_rewrite-20260601T220715Z_m4040_t001`, `TO_type_system_rewrite-20260601T220715Z_m4040_t002`, `TO_type_system_rewrite-20260601T220715Z_m4046_t001`)
   - Tried twice to refactor the `run_ext_call = SOME ...` success continuation into a separate branch-local suspend/Resume label: first `Expr_Call_ExtCall_static_run_success`, then a parenthesized/renamed `Expr_Call_ExtCall_static_run_some`. -> Both attempts failed at `Finalise` with `No resumption proof found for label ...` despite the corresponding source-level `suspend` and `Resume` blocks being present. Reverted the success split to an inline intentional `cheat` to keep the target build-clean. Under the C0.1 requirement to split semantic branch leaves, this is a terminal decomposition/tooling-interface blocker for this leaf rather than a routine tactic issue. (`TO_type_system_rewrite-20260601T220715Z_m4036_t001`, `TO_type_system_rewrite-20260601T220715Z_m4044_t001`, `TO_type_system_rewrite-20260601T220715Z_m4045_t001`, `TO_type_system_rewrite-20260601T220715Z_m4046_t001`)
   - Earlier, tried to continue through the `run_ext_call` case split with local rewriting instead of suspending the success branch. -> The immediate `gvs[return_def, raise_def]` over the post-run split timed out on the large generated prefix; replacing it with `rewrite_tac` avoided timeout but the `NONE` branch assumption pattern no longer matched. This reinforced that local tactic continuation is not straightforward under the live prefix; a clean suspend boundary was needed but then failed Finalise for the success branch. (`TO_type_system_rewrite-20260601T220715Z_m4030_t001`, `TO_type_system_rewrite-20260601T220715Z_m4032_t001`)
-
-### Ruled Out
-
-- Do not reintroduce `qpat_x_assum ... (mk_asm "generated_driver_ih")`; it was removed and is explicitly forbidden.
-- Do not use broad `gvs`/generated-prefix simplification at the post-run split; `gvs[return_def, raise_def]` timed out on the large generated prefix.
-- The exact success suspend/Resume attempts `Expr_Call_ExtCall_static_run_success` and `Expr_Call_ExtCall_static_run_some` failed Finalise and should not be retried unchanged.
+- `E0220` (proved, , actual effort: 1 sessions, 4 steps, 9 tools, 1 holbuild, 260,482 tok (259,452 in, 1,030 out, 235,008 cached), 34.5s, $0.270624)
+  - Focused baseline build under active C0.1 and source audit of ExtCall proof state/helpers. -> `vyperTypeStmtSoundnessTheory` builds under active component; source audit confirms local helpers `run_ext_call_accounts_well_typed`, `extcall_static_projected_state_well_typed`, and `extcall_static_projected_sound` exist, and remaining ExtCall placeholders are exactly static success (`cheat` after `run_ext_call SOME`), nonstatic result (`cheat`), and another nearby ExtCall-related cheat at line 17921; static prefix error Resume blocks are present. (`TO_type_system_rewrite-20260601T220715Z_m4279_t003`, `TO_type_system_rewrite-20260601T220715Z_m4280_t003`, `TO_type_system_rewrite-20260601T220715Z_m4281_t003`, `TO_type_system_rewrite-20260601T220715Z_m4281_t001`, `TO_type_system_rewrite-20260601T220715Z_m4281_t002`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260601T220715Z_m4030_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T220715Z_m4032_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T220715Z_m4036_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T220715Z_m4039_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T220715Z_m4040_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T220715Z_m4040_t002` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T220715Z_m4044_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260601T220715Z_m4046_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m4279_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m4280_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m4281_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m4281_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260601T220715Z_m4281_t002` (use `read_tool_output` for exact output)
 
 ## C0.1.1
 

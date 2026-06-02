@@ -5,70 +5,75 @@ Updated: 2026-06-02
 - component: C0
 - status: blocked
 - active_file: semantics/prop/vyperTypeStmtSoundnessScript.sml
-- next_action: Do not edit/build. Retry the required strategist replanning when oracle budget/tooling is available: call plan_oracle(mode="replace", component_id="C0", planning_reason="decompose/replace high-risk C0 after accepted blocked_report; no authorized frontier remains and completion is not valid", evidence_ids=["TO_type_system_rewrite-20260601T220715Z_m4250_t003","TO_type_system_rewrite-20260601T220715Z_m4246_t001","TO_type_system_rewrite-20260601T220715Z_m4247_t001","TO_type_system_rewrite-20260601T220715Z_m4241_t001"]).
-- expected_goal_shape: No HOL goal should be active. query_plan currently shows high-risk [C0,C0.1], no scheduled leaf frontier, beginable now none, Oracle next none. Any proof/build action before a replacement/decomposition plan violates the structured gate.
-- verify_with: holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=300) only after a future PLAN authorizes a component/build; last focused build succeeded at tool_output:TO_type_system_rewrite-20260601T220715Z_m4239_t002.
+- next_action: Do not edit/build/prove under the current PLAN. query_plan shows C0 done with no frontier/beginable component/Oracle next. If the maintainer/user authorizes fresh ExtCall proof architecture inside semantics/prop or relaxes the generated-prefix restrictions, call plan_oracle(mode="replace", component_id="C0", planning_reason="fresh ExtCall proof architecture after terminal blocked_report", evidence_ids=["TO_type_system_rewrite-20260601T220715Z_m4232_t001","TO_type_system_rewrite-20260601T220715Z_m4241_t001","TO_type_system_rewrite-20260601T220715Z_m4253_t001","TO_type_system_rewrite-20260601T220715Z_m4261_t001","TO_type_system_rewrite-20260601T220715Z_m4270_t001"]) before any begin_component/build/edit.
+- expected_goal_shape: No HOL goal should be active. The PLAN is terminal: C0 blocked_report done, no scheduled frontier, no beginable component, no Oracle next. Existing prior holbuild success is only restored intentional-cheat baseline evidence; proof completion is not valid. A build attempted with no active executable component is now rejected by the PLAN gate.
+- verify_with: After a new authorized PLAN component exists and begin_component succeeds, first verify the baseline with holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=300), then follow that component's verification instructions. Do not build under the current terminal PLAN unless the operator/harness permits a baseline-only check.
 
 ## If This Fails
-- If the required plan_oracle replace/decompose call again returns OracleBudgetExceeded, do not edit/build. Either retry once with minimal evidence IDs and no reads, or report end_session(outcome="blocked", blocked_kind="tooling_bug") citing repeated OracleBudgetExceeded and query_plan no-frontier evidence. If plan_oracle returns an authorized frontier, begin_component exactly as scheduled before edits/builds.
+- If plan_oracle/maintainer authorization still produces no low-risk executable frontier, report blocked/design-stop rather than handoff-looping or starting old superseded leaves. If a future authorized proof probe again produces generated-prefix fanout or >4KiB prefix goals before a concrete run_ext_call success continuation, checkpoint or close that authorized component with evidence and escalate; do not solve those fanout goals individually.
 
 ## Do Not Retry
-- Begin C0.3-C0.7 or any ready-looking sibling while query_plan has high-risk [C0,C0.1] and no scheduled frontier.: Structured gate blocks all proof/edit/build work until the strategist replaces/decomposes C0 or provides an authorized frontier.
-  - evidence: tool_output:TO_type_system_rewrite-20260601T220715Z_m4250_t003
-- Reapply the same straight-line `Cases_on run_ext_call` / `rename1 SOME result` probe in `Expr_Call_ExtCall_result_static_success`.: E0217 tested this and failed before helper matching with 9 input goals and a huge generated prefix; repeating it is tactic thrashing against a bad boundary.
+- Retry the straight-line `Cases_on run_ext_call` / tuple-result split / `rename1 SOME result` probe at the current static-success Resume boundary.: E0217 already tested this and failed before helper matching with 9 input goals and a huge generated optional-driver prefix; repeating it is tactic thrashing at a bad proof boundary.
   - evidence: episode:E0217
   - evidence: tool_output:TO_type_system_rewrite-20260601T220715Z_m4232_t001
-- Solve the 5/9 generated-prefix goals individually, or use broad `simp`/`gvs`/`AllCaseEqs()` to mine an optional-driver IH.: Maintainer clarification and PLAN forbid generated-prefix reconstruction; evidence shows the goals are large and structurally wrong for straightforward proof.
+- Solve the generated-prefix fanout goals individually, or use broad `simp`/`gvs`/`AllCaseEqs()` to mine the optional-driver premise from the top-level generated context.: Maintainer clarification and PLAN forbid generated-prefix reconstruction; prior probes/timeouts show this produces hostile large goals and violates the allowed straightforward proof path.
   - evidence: episode:E0212
   - evidence: episode:E0217
   - evidence: tool_output:TO_type_system_rewrite-20260601T220715Z_m4165_t001
-- Apply `extcall_static_projected_sound` or `extcall_static_projected_state_well_typed` at the top/current Resume boundary.: Earlier probe showed direct `irule` does not match and explicit specialization requires an unavailable unconditional driver IH.
+- Apply `extcall_static_projected_sound` or `extcall_static_projected_state_well_typed` at the top/current Resume boundary as if an unconditional driver IH were available.: Earlier probes showed direct `irule` does not match; explicit specialization requires an unavailable unconditional driver IH and times out on the generated premise.
   - evidence: episode:E0213
   - evidence: tool_output:TO_type_system_rewrite-20260601T220715Z_m4178_t001
   - evidence: tool_output:TO_type_system_rewrite-20260601T220715Z_m4188_t001
-- Call end_session(outcome='complete') because holbuild succeeds.: Build succeeds only for a cheated/restored baseline; proof-integrity completion is invalid while task obligations/cheats remain and PLAN has high-risk blocked components.
-  - evidence: tool_output:TO_type_system_rewrite-20260601T220715Z_m4239_t002
-  - evidence: tool_output:TO_type_system_rewrite-20260601T220715Z_m4250_t003
+- Begin old ready-looking C0.3-C0.7 leaves or claim completion because holbuild previously succeeded.: The C0 replacement superseded those leaves. Build success is only for the restored intentional-cheat baseline, and proof-integrity completion is invalid while cheats/obligations remain.
+  - evidence: tool_output:TO_type_system_rewrite-20260601T220715Z_m4253_t001
+  - evidence: tool_output:TO_type_system_rewrite-20260601T220715Z_m4255_t001
+  - evidence: tool_output:TO_type_system_rewrite-20260601T220715Z_m4267_t004
+- Run holbuild under the current terminal PLAN without first obtaining a new executable component/frontier.: The structured PLAN gate blocks builds when no active component and no executable frontier remain; the latest baseline-build attempt was rejected.
+  - evidence: tool_output:TO_type_system_rewrite-20260601T220715Z_m4270_t001
+  - evidence: tool_output:TO_type_system_rewrite-20260601T220715Z_m4272_t003
 
 ## Reflection
 ### Tunnel Vision Check
-- Outside-the-box route not yet explored: a future maintainer-authorized redesign could create a different branch container that prevents final postcondition conjunction fanout before run_ext_call; current PLAN does not authorize constructing it.
-- We may be optimizing the wrong boundary, not the wrong tactic: the guarded continuation helpers look semantically right, but the current Resume source point cannot expose their consumer shape without generated-prefix plumbing.
-- The current PLAN decomposition is not executable: after accepted blocked_report, C0/C0.1 are high-risk and no low-risk frontier exists despite ready-looking C0.3-C0.7 siblings.
-- Do not retry branch-splitting tactics. The failure happened before helper matching, so a stronger helper or oracle-owned boundary redesign is needed, not a better `rename1`/`PairCases_on` sequence.
-- A fresh expert should first question whether the mutual proof should suspend earlier/later around the final conjunction, or whether the task should stop exactly as requested because proof-boundary design became non-straightforward.
+- Outside-the-box route still not executed: restructure/suspend the mutual proof earlier or later so the optional-driver IH is produced natively inside a compact concrete success-continuation branch, instead of trying to expose it from the current static-success Resume boundary.
+- We may be optimizing the wrong boundary, not the wrong tactic: guarded continuation helpers can be semantically right while the current Resume point is too late/too broad and fans out before helper matching.
+- The current PLAN decomposition is intentionally terminal, not executable. A fresh expert should first question whether new ancestor-level proof architecture is authorized, not how to patch old C0.3-C0.7 tactics.
+- Do not retry branch-splitting when a boundary lemma, suspend/refactor, definition-level proof interface, or oracle/maintainer authorization is needed.
+- A fresh expert should ask first whether the task stop condition has already been satisfied: the theorem is neither proved nor shown false, but the allowed straightforward path has been checked and became a design/proof-boundary stop.
 
 ### What Went Wrong
-- C0.2, C0.1.1, and C0.1.2 carry-forward checkpoints were reviewed and committed successfully, but the real C0.1.3.1 probe failed: straight-line run_ext_call splitting from the current static-success cheat produced 9 input goals and a >4KiB generated optional-driver prefix before reaching a concrete success branch (episode:E0217, tool_output:TO_type_system_rewrite-20260601T220715Z_m4232_t001).
-- The prior assumption that guarded continuation helpers could simply be tested after a local split was false at this Resume boundary. The helper-fit point was never reached.
-- The replacement blocked_report was accepted and committed, leaving the source restored/build-clean for the cheated baseline, but query_plan then had no authorized frontier and completion was invalid because remaining cheats/obligations still exist.
-- The mandatory high-risk replanning call was attempted correctly with mode='replace', component_id='C0', but two consecutive calls failed OracleBudgetExceeded, creating an operational tooling blocker rather than a HOL proof blocker.
+- The failed assumption was that a careful linear split at the current static-success Resume boundary would reach one concrete `run_ext_call` SOME/success continuation before helper matching. E0217 showed it produced 9 input goals and a large generated optional-driver prefix before that point.
+- Earlier E0212 already showed delayed-equality repair left multiple goals before `run_ext_call`; E0217 confirmed the issue is structural at this proof boundary, not a local rename/case-split issue.
+- The optional-driver IH repeatedly appeared guarded by the full monadic ExtCall prefix. Plans or tactics that required an unconditional driver IH did not match the live proof interface.
+- The latest session confirmed the terminal state: query_plan has no frontier; the user-requested holbuild check was blocked by the structured PLAN gate because no executable component remains; end_session(blocked) was accepted as the only legal outcome path.
 
 ### Ignored Signals
-- E0212 already showed the boundary was split into multiple goals before run_ext_call; the later straight-line split failed in the same family with 9 goals, confirming this was structural.
-- Repeated evidence that generated optional-driver IH is guarded by a full monadic prefix means any path that requires it unconditionally or before concrete branch facts is suspect.
-- Ready-looking siblings under a high-risk parent are not beginable; query_plan's scheduled frontier is authoritative.
-- A clean holbuild of the cheated baseline is only restoration evidence, not task completion.
+- Multiple prior probes produced >4KiB generated-prefix goals/timeouts whenever broad simplification or prefix recovery was attempted; this should have ruled out another local split sooner.
+- Ready-looking old leaves C0.3-C0.7 were under a superseded/invalidated ancestor; scheduler/frontier output, not apparent leaf readiness, is authoritative.
+- A clean focused holbuild of vyperTypeStmtSoundnessTheory is only source-restoration evidence while intentional cheats/obligations remain; it is not proof completion.
+- The maintainer clarification forbade recovering the driver premise from the top-level generated context by broad simp/gvs/AllCaseEqs or long generated-prefix adapter theorems.
 
 ### Strategy Adjustments
-- Next session should start with query_plan/git status, then immediately retry the plan_oracle replace/decompose call for C0 if the oracle budget is available; do not begin any ready-looking sibling until the PLAN provides an authorized frontier.
-- If plan_oracle authorizes only a terminal stop/report, commit any task-memory update unsigned and report blocked/operator stop, not complete or unprovable.
-- If a future plan authorizes proof redesign, insist on a Risk 1-2 leaf that first proves/probes the branch container prevents conjunction fanout; do not re-enter the old static-success Resume with the same run_ext_call split.
-- Keep source restored and build-clean after any probe; untracked `semantics/prop/LEARNINGS_type_system_rewrite.legacy.md` and `semantics/prop/tmp_helper.txt` should remain unstaged unless the user explicitly asks.
+- Future proof work must start with a strategist-owned replacement architecture that prevents postcondition-conjunction fanout before `run_ext_call`, or otherwise exposes a compact branch-local optional-driver IH.
+- If fresh work is authorized, require the first Risk 1-2 leaf to be a boundary probe demonstrating a single concrete success goal before helper application, not a full proof attempt.
+- Keep all edits inside semantics/prop; do not alter evaluator/semantics definitions; do not stage pre-existing untracked `semantics/prop/LEARNINGS_type_system_rewrite.legacy.md` or `semantics/prop/tmp_helper.txt` unless explicitly requested.
+- Commits must be unsigned; prior terminal tracked updates were committed with --no-gpg-sign as c96fea117. Current git status before handoff showed STATE/LEARNINGS modified by task memory plus the same untracked legacy/temp files.
 
 ### Oracle Feedback
-- Held: carry-forward checkpoint reviews for C0.2, C0.1.1, and C0.1.2 were accepted; the audited static prefix-error branches remain build-clean.
-- Held: after E0217, oracle correctly replaced C0.1.3.1 with a blocked_report and warned not to continue C0.1.3.2.
-- Missed reality earlier: the guarded-continuation probe plan still assumed a straight-line split would reach one concrete branch; holbuild showed 9 goals before the helper-fit point.
-- Current oracle/tool issue: the required no-frontier replacement/decomposition call for C0 failed twice with OracleBudgetExceeded, so the session ended blocked on tooling.
+- Held: The final C0 replacement correctly treated the evidence as a task stop/report obligation, not semantic unprovability or proof completion.
+- Held: The reviewed E0219 closure accepted the task-local report/update and no further proof redesign was attempted without authorization.
+- Missed reality earlier: several plans assumed local splitting would reach a guarded-continuation helper-fit point; holbuild evidence showed the current Resume boundary fans out first.
+- Current PLAN state is terminal rather than executable: query_plan shows C0 done, no high-risk components, no frontier, no Oracle next; holbuild is blocked under that gate.
 
 ## Evidence Pointers
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m4250_t003 - final query_plan: high-risk [C0,C0.1], no frontier/beginable component
-- episode:E0217 - failed C0.1.3.1 proof-boundary probe; run_ext_call split fanned to 9 goals before helper fit
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m4232_t001 - exact holbuild failure at `rename1`, 9 input goals, >4KiB generated prefix
-- episode:E0218 - accepted blocked_report closure for C0.1.3.1
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m4241_t001 - strategist accepted E0218; no PLAN changes, then no frontier remained
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m4239_t002 - focused build clean after source restoration
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m4246_t001 - first required plan_oracle replace/decompose failed OracleBudgetExceeded
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m4247_t001 - second required plan_oracle replace/decompose failed OracleBudgetExceeded
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m4248_t001 - final git status: only pre-existing untracked files remain
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m4272_t003 - handoff query_plan: C0 done, no frontier/beginable/Oracle next
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m4272_t001 - STATE cursor and do-not-retry list reviewed before handoff
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m4272_t002 - latest C0 dossier: E0219 terminal report/update, E0217 failed boundary probe, E0218 blocked_report
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m4269_t001 - current git status before blocked end-session: task memory modified; legacy/temp files untracked
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m4269_t002 - current PLAN gate before blocked end-session: no executable frontier
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m4270_t001 - user-requested holbuild check rejected because no PLAN component/frontier remains
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m4232_t001 - E0217 exact failure: straight-line run_ext_call/static-success split produced 9 input goals and huge generated prefix before helper fit
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m4253_t001 - strategist C0 replacement: terminal stop/report superseding old C0.3-C0.7
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m4261_t001 - strategist reviewed/accepted E0219; appropriate terminal outcome is blocked/design-stop
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m4255_t001 - prior focused build succeeds only on restored intentional-cheat baseline, not proof completion
+- episode:E0217 - failed proof-boundary probe for C0.1.3.1
+- episode:E0218 - accepted blocked_report leaf after failed ExtCall boundary

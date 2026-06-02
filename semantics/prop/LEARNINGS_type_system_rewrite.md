@@ -598,27 +598,6 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260601T220715Z_m3957_t001
 - episode:E0203
 
-## L0123 scope='C0' tags=ExtCall,generated_driver_ih,proof-boundary,branch-isolation,Resume,timeout
-shape: Concrete ExtCall static driver-success branch is isolated with exact run/update facts, but the only recursive optional-driver IH remains guarded by the full generated monadic prefix.
-pattern: Treat this as a proof-boundary/interface blocker, not a local tactic problem. Branch isolation can prove that the right concrete facts are available, but direct `irule`, branch-prefix `drule`/specialization, and local `mp_tac >> simp[]` can still fail or timeout because the generated IH's antecedent is the wrong abstraction. The reusable repair direction is to move/refactor the proof/suspend boundary so the optional-driver IH is exposed natively in compact branch-local form, or get explicit maintainer authorization for a different architecture.
-works_when: Applies under the maintainer restriction forbidding broad generated-prefix simplification, `AllCaseEqs()` cleanup over the ExtCall prefix, and long generated-prefix adapter theorems; use it to trigger ancestor-level replanning/blocking rather than another local tactic attempt.
-evidence:
-- episode:E0199
-- episode:E0200
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m3864_t001
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m3879_t001
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m3882_t001
-
-## L0124 scope='C0' tags=ExtCall,generated_driver_ih,suspend,proof_boundary,IH
-shape: In a large mutual proof Resume branch, a generated recursive IH is only available behind a long monadic prefix, while the consumer needs a compact branch-local optional-driver IH.
-pattern: Treat this as a proof-boundary/interface problem rather than a tactical simp problem. A viable replacement plan should move or refactor the suspend/mutual-proof boundary so the optional-driver IH is produced natively in the concrete success continuation, or otherwise expose a compact boundary lemma without broad generated-prefix traversal.
-works_when: Applies when direct irule against the generated IH fails after branch isolation and attempts to recover prefix premises require broad gvs/AllCaseEqs or generated-prefix adapter reconstruction forbidden by task guidance.
-evidence:
-- episode:E0200
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m3864_t001
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m3879_t001
-- tool_output:TO_type_system_rewrite-20260601T220715Z_m3882_t001
-
 ## L0125 scope='C0.1.2' tags=ExtCall,Resume,prefix-error,SIMP_RULE,generated-prefix,timeout
 shape: A branch-local prefix-error Resume has a huge generated optional-driver premise in context plus a selected evaluation equality `(case ...)= (res,st')`; goal-level `simp/gvs` times out.
 pattern: Push only the selected evaluation equality with `mp_tac`, rewrite concrete branch facts into it, then consume it via `disch_then (assume_tac o SIMP_RULE (srw_ss()) [pairTheory.pair_case_thm, sumTheory.sum_case_def, bind_def, return_def, raise_def, ...])`. After the equality is simplified into concrete `res/st'` facts, use `gvs[no_type_error_result_def]` to close preservation/no-TypeError goals. Kill irrelevant generated-driver premises before final cleanup if they pollute simplification.
@@ -639,3 +618,23 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260601T220715Z_m4232_t001
 - episode:E0218
 - tool_output:TO_type_system_rewrite-20260601T220715Z_m4241_t001
+
+## L0129 scope='C0' tags=ExtCall,Resume,generated-prefix,driver-IH,proof-boundary,blocked-report
+shape: A large mutual-proof Resume branch exposes an optional-driver IH only as a full monadic-prefix implication, and local case-splitting fans out before the concrete continuation helper can match.
+pattern: Treat this as a proof-boundary/interface blocker, not a tactic problem. Under constraints forbidding generated-prefix reconstruction, the reusable repair is ancestor-level proof architecture: move/refactor the suspend/induction boundary so the optional-driver IH is available natively in a compact concrete success branch, or stop/report if the task says proof must be straightforward. Do not try to recover an unconditional IH or solve generated-prefix goals individually.
+works_when: Applies to ExtCall static/nonstatic success Resume proofs where direct helper application or local splitting yields multiple input goals, >4KiB generated-prefix goals, or an IH guarded by the whole evaluator prefix. Does not apply if a future PLAN proves a new branch container that gives one concrete success goal before helper application.
+evidence:
+- episode:E0217
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m4232_t001
+- episode:E0218
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m4241_t001
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m4261_t001
+
+## L0130 scope='C0' tags=ExtCall,Resume,proof-boundary,generated-prefix,IH
+shape: At an ExtCall static-success Resume boundary, splitting `run_ext_call` before obtaining a concrete success continuation produces many generated-prefix goals and the optional-driver IH remains guarded by the full monadic prefix.
+pattern: Do not treat this as a local case-split problem. The reusable diagnostic is to move the proof boundary or add strategist-owned architecture so the optional-driver IH is generated inside a compact branch-local continuation; otherwise helper application attempts will be mismatched with the live goal interface.
+works_when: Applies to the current vyperTypeStmtSoundness ExtCall mutual proof boundary and similar generated monadic-prefix proofs where broad prefix simplification is forbidden and branch-local IH exposure is needed.
+evidence:
+- episode:E0217
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m4232_t001
+- tool_output:TO_type_system_rewrite-20260601T220715Z_m4253_t001
