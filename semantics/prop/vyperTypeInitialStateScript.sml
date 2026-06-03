@@ -549,7 +549,8 @@ Theorem evaluate_all_constants_preserves_bare_global_type:
       (case ALOOKUP am_c.immutables cx.txn.target of SOME m => m | NONE => []))
     id = SOME (tv,v)
 Proof
-  cheat
+  rw[] >>
+  metis_tac[evaluate_all_constants_preserves_bare_global_lookup]
 QED
 
 Theorem deployment_setup_immutables_ready:
