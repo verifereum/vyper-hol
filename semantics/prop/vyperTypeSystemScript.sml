@@ -785,11 +785,24 @@ Definition fn_sigs_consistent_def:
         sig.num_defaults = LENGTH dflts
 End
 
+Definition fn_sigs_complete_def:
+  fn_sigs_complete fn_sigs cx <=>
+    !src_id_opt fn ts fm nr params dflts ret body.
+      get_module_code cx src_id_opt = SOME ts /\
+      lookup_callable_function cx.in_deploy fn ts =
+        SOME (fm, nr, params, dflts, ret, body) ==>
+      FLOOKUP fn_sigs (src_id_opt, fn) =
+        SOME <| param_types := MAP SND params;
+                num_defaults := LENGTH dflts;
+                ret_ty := ret |>
+End
+
 Definition env_context_consistent_def:
   env_context_consistent env cx <=>
     env.type_defs = get_tenv cx /\
     env.current_src = current_module cx /\
     fn_sigs_consistent env.fn_sigs cx /\
+    fn_sigs_complete env.fn_sigs cx /\
     (!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty ==>
        ?ts. get_module_code cx src = SOME ts /\
             FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\
@@ -909,6 +922,7 @@ Definition functions_well_typed_def:
   functions_well_typed cx <=>
     !fn_sigs bare_globals toplevel_vtypes flag_members.
       fn_sigs_consistent fn_sigs cx /\
+      fn_sigs_complete fn_sigs cx /\
       (!src id ty. FLOOKUP bare_globals (src,id) = SOME ty ==>
          ?ts. get_module_code cx src = SOME ts /\
               FLOOKUP toplevel_vtypes (src,id) = SOME (Type ty) /\

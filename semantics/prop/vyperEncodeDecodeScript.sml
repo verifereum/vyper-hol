@@ -544,7 +544,11 @@ Proof
   `(if i < 0 then Num (-i) ≤ 2 ** (n − 1) else Num i < 2 ** (n − 1)) ∧ 0 < n`
     by gvs[within_int_bound_def] >>
   `n − 1 ≤ 255` by simp[] >>
-  `2 ** (n − 1) ≤ 2 ** 255` by simp[] >>
+  sg `2n ** (n − 1) ≤ 2 ** 255` >- (
+    qspec_then`2`mp_tac (iffRL EXP_BASE_LE_MONO) >>
+    impl_tac >- rw[] >>
+    disch_then drule >>
+    rewrite_tac[]) >>
   Cases_on `i < 0`
   >- (
     `Num (-i) ≤ 2 ** (n − 1)` by gvs[] >>

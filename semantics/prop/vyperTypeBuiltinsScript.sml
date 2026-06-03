@@ -32,10 +32,9 @@ Theorem Env_builtin_success_type:
   evaluate_builtin cx acc (env_item_type item) (Env item) [] = INL v ==>
   value_has_type tv v
 Proof
-  strip_tac >> Cases_on `item` >>
-  gvs[evaluate_builtin_def, env_item_type_def, evaluate_type_def,
-      value_has_type_def, context_well_typed_def]
-  >> rw[value_has_type_def]
+  Cases_on`item` >> simp[evaluate_builtin_def, env_item_type_def] >>
+  rw[] >> gvs[value_has_type_def, evaluate_type_def] >>
+  gvs[context_well_typed_def]
   >> gvs[evaluate_block_hash_def, AllCaseEqs(), LET_THM, value_has_type_def]
   >> simp[LENGTH_word_to_bytes,word_to_bytes_be_def]
 QED
@@ -1159,7 +1158,15 @@ Proof
   Cases_on `i < 0` >> gvs[] >>
   irule LESS_EQ_LESS_TRANS >>
   qexists_tac `2 ** (n - 1)` >>
-  unabbrev_all_tac >> simp[]
+  unabbrev_all_tac >>
+  (reverse conj_tac >- simp[]) >>
+  irule LESS_LESS_EQ_TRANS >>
+  qexists_tac`2 ** 256` >>
+  (reverse conj_tac >- (
+     rewrite_tac[LESS_OR_EQ] >>
+     disj2_tac >>
+     simp[])) >>
+  simp[]
 QED
 
 Theorem uint2str_strlen_bound:

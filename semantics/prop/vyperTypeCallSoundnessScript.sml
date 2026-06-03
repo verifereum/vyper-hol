@@ -40,6 +40,7 @@ QED
 
 Theorem functions_well_typed_body:
   functions_well_typed cx /\ fn_sigs_consistent fn_sigs cx /\
+  fn_sigs_complete fn_sigs cx /\
   get_module_code cx src = SOME ts /\
   lookup_callable_function cx.in_deploy fn ts = SOME (fm,nr,args,dflts,ret,fn_body) /\
   (* Concrete maps supplied by caller must satisfy the consistency side-condition. *)

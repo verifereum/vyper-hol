@@ -763,8 +763,10 @@ Resume eval_expr_no_control_with_bt[ExtCall]:
   (* Handle the if-tail *)
   >> qpat_x_assum `(if _ then _ else _) _ = _` mp_tac
   >> simp[COND_RATOR] >> strip_tac
-  >> gvs[return_def, bind_def, AllCaseEqs()]
-  >> TRY (imp_res_tac lift_sum_runtime_no_control >> NO_TAC)
+  >> pop_assum mp_tac
+  >> simp[return_def, bind_def, AllCaseEqs()]
+  >> reverse strip_tac
+  >- (imp_res_tac lift_sum_runtime_no_control)
   (* Instantiate IH via chained drule *)
   >> qpat_x_assum `∀s'' vs t. _`
        (mp_tac o REWRITE_RULE [GSYM AND_IMP_INTRO])
