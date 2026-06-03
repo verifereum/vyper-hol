@@ -253,7 +253,9 @@ Theorem callable_entry_no_type_error:
   args_values_typed (get_tenv cx) args vals ==>
   no_type_error_eval (eval_stmts cx body (initial_state am [scope]))
 Proof
-  cheat
+  metis_tac[
+    callable_entry_establishes_type_soundness_preconditions,
+    typed_stmts_no_type_error]
 QED
 
 (* Explicit non-vacuity corollary: there exists a concrete configuration
