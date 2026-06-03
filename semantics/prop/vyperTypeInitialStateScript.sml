@@ -478,6 +478,41 @@ Proof
   simp[empty_immutables_def, FLOOKUP_FUNION]
 QED
 
+Theorem evaluate_all_constants_preserves_bare_global_lookup_MEM[local]:
+  constants_do_not_clobber_bare_globals mods bare_globals /\
+  FLOOKUP bare_globals (src,id) = SOME ty /\
+  evaluate_all_constants cx am addr mods = SOME am_c /\
+  FLOOKUP
+    (get_source_immutables src
+      (case ALOOKUP am.immutables addr of SOME m => m | NONE => []))
+    id = SOME x ==>
+  FLOOKUP
+    (get_source_immutables src
+      (case ALOOKUP am_c.immutables addr of SOME m => m | NONE => []))
+    id = SOME x
+Proof
+  qid_spec_tac `am_c` >>
+  qid_spec_tac `am` >>
+  Induct_on `mods` >- (rw[evaluate_all_constants_def] >> gvs[]) >>
+  rw[evaluate_all_constants_def] >>
+  PairCases_on `h` >>
+  gvs[evaluate_all_constants_def, AllCaseEqs()] >>
+  first_x_assum irule >>
+  conj_tac
+  >- (qexists `merge_constants addr h0 cenv am` >>
+      simp[] >>
+      irule merge_constants_preserves_lookup >>
+      simp[] >>
+      strip_tac >>
+      gvs[] >>
+      irule constants_env_no_bare_global_lookup_MEM >>
+      qexistsl [`addr`, `am`, `bare_globals`, `set_current_module cx h0`,
+                `(h0,h1)::mods`, `h0`, `h1`, `ty`] >>
+      simp[]) >>
+  gvs[constants_do_not_clobber_bare_globals_def] >>
+  metis_tac[]
+QED
+
 Theorem evaluate_all_constants_preserves_bare_global_lookup:
   constants_do_not_clobber_bare_globals mods bare_globals /\
   ALOOKUP mods src = SOME ts /\
@@ -492,9 +527,10 @@ Theorem evaluate_all_constants_preserves_bare_global_lookup:
       (case ALOOKUP am_c.immutables addr of SOME m => m | NONE => []))
     id = SOME x
 Proof
-  cheat
+  rw[] >>
+  irule evaluate_all_constants_preserves_bare_global_lookup_MEM >>
+  metis_tac[]
 QED
-
 
 Theorem evaluate_all_constants_preserves_bare_global_type:
   constants_do_not_clobber_bare_globals mods env_base.bare_globals /\
