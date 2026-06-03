@@ -97,6 +97,19 @@ Proof
   simp[fn_sigs_consistent_def]
 QED
 
+Theorem fn_sigs_complete_FLOOKUP[local]:
+  fn_sigs_complete fn_sigs cx /\
+  get_module_code cx src_id_opt = SOME ts /\
+  lookup_callable_function cx.in_deploy fn ts =
+    SOME (fm, nr, params, dflts, ret, fn_body) ==>
+  FLOOKUP fn_sigs (src_id_opt, fn) =
+    SOME <| param_types := MAP SND params;
+            num_defaults := LENGTH dflts;
+            ret_ty := ret |>
+Proof
+  simp[fn_sigs_complete_def]
+QED
+
 Theorem lift_option_type_SOME_not_INR[local]:
   opt = SOME v ==> lift_option_type opt msg st <> (INR e,st')
 Proof
@@ -165,13 +178,20 @@ Proof
   simp[fn_sigs_consistent_def, get_module_code_def]
 QED
 
+Theorem fn_sigs_complete_stk_irrelevant[local]:
+  !sigs cx f. fn_sigs_complete sigs (cx with stk updated_by f) <=>
+              fn_sigs_complete sigs cx
+Proof
+  simp[fn_sigs_complete_def, get_module_code_def]
+QED
+
 Theorem functions_well_typed_stk_irrelevant[local]:
   !cx f. functions_well_typed (cx with stk updated_by f) <=>
          functions_well_typed cx
 Proof
   simp[functions_well_typed_def, get_module_code_def,
        get_tenv_stk_irrelevant, fn_sigs_consistent_stk_irrelevant,
-       well_formed_type_def]
+       fn_sigs_complete_stk_irrelevant, well_formed_type_def]
 QED
 
 Theorem context_well_typed_stk_irrelevant[local]:
@@ -202,8 +222,8 @@ Proof
   rw[env_consistent_def]
   >- (gvs[env_context_consistent_def] >>
       rw[env_context_consistent_def, get_tenv_stk_irrelevant,
-         fn_sigs_consistent_stk_irrelevant, get_module_code_stk_irrelevant,
-         current_module_def] >>
+         fn_sigs_consistent_stk_irrelevant, fn_sigs_complete_stk_irrelevant,
+         get_module_code_stk_irrelevant, current_module_def] >>
       first_x_assum drule_all >> simp[lookup_var_slot_from_layout_def])
   >- (gvs[env_scopes_consistent_def] >>
       rw[env_scopes_consistent_def, get_tenv_stk_irrelevant] >>
@@ -1167,6 +1187,7 @@ QED
 Theorem callable_body_typing_from_functions_well_typed[local]:
   functions_well_typed cx /\
   fn_sigs_consistent fn_sigs cx /\
+  fn_sigs_complete fn_sigs cx /\
   (!src id ty. FLOOKUP bare_globals (src,id) = SOME ty ==>
      ?ts. get_module_code cx src = SOME ts /\
           FLOOKUP toplevel_vtypes (src,id) = SOME (Type ty) /\
@@ -1341,8 +1362,8 @@ Proof
   rw[env_consistent_def]
   >- (gvs[env_context_consistent_def] >>
       rw[env_context_consistent_def, get_tenv_stk_irrelevant,
-         fn_sigs_consistent_stk_irrelevant, get_module_code_stk_irrelevant,
-         current_module_def] >>
+         fn_sigs_consistent_stk_irrelevant, fn_sigs_complete_stk_irrelevant,
+         get_module_code_stk_irrelevant, current_module_def] >>
       first_x_assum drule_all >> simp[lookup_var_slot_from_layout_def])
   >- (gvs[env_immutables_consistent_def] >>
       rw[env_immutables_consistent_def, get_tenv_stk_irrelevant,
@@ -2011,9 +2032,11 @@ Proof
   gvs[env_consistent_def, env_context_consistent_def,
       env_immutables_consistent_def, state_well_typed_def,
       current_module_def, get_tenv_def, get_module_code_def,
-      fn_sigs_consistent_def, lookup_var_slot_from_layout_def] >>
+      fn_sigs_consistent_def, lookup_var_slot_from_layout_def,
+      fn_sigs_complete_stk_irrelevant] >>
   metis_tac[]
 QED
+
 Theorem intcall_pushed_body_preconditions[local]:
   !env_body pushed_cx dflt_st lock_st call_env.
     env_context_consistent env_body pushed_cx /\
