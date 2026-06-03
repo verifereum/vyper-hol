@@ -748,3 +748,11 @@ evidence:
 - source:semantics/prop/vyperTypeStmtSoundnessScript.sml:10701
 - source:semantics/prop/vyperTypeStmtSoundnessScript.sml:10723
 - source:semantics/prop/vyperTypeStmtSoundnessScript.sml:18247
+
+## L0195 scope='C0.6' tags=RawCall,GEN_ALL,Q.SPEC,LENGTH_TAKE_EQ,typed-value
+shape: Local theorem has a free variable but live RawCall size goal needs a concrete slot bound such as LENGTH (TAKE flags.rcf_max_outsize xs) <= flags.rcf_max_outsize.
+pattern: Generalize the helper with GEN_ALL and explicitly specialize with Q.SPEC at the concrete field (e.g. flags.rcf_max_outsize), then finish length-of-TAKE goals with LENGTH_TAKE_EQ; do not rely on drule/mp_tac to infer the free variable.
+works_when: The goal is already in the single RawCall success-continuation branch and prefix operations/typed-argument destructors have been split/discharged.
+evidence:
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m6080_t001
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m6082_t001
