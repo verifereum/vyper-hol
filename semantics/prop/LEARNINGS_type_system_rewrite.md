@@ -750,3 +750,21 @@ evidence:
 - episode:E0324
 - tool_output:TO_type_system_rewrite-20260602T195240Z_m5921_t001
 - source:semantics/prop/TASK_type_system_rewrite.md
+
+## L0190 scope='C0.5.4.5.1.2' tags=ExtCall,Resume,generated-IH,branch-local,COND_CLAUSES
+shape: Resume branch with `(if pr1 = [] /\ IS_SOME drv then eval_expr cx (THE drv) else ...) updated_state = (res,st')` and generated IH for optional driver buried in context
+pattern: Split first on `pr1 = [] /\ IS_SOME drv`. In the true branch, keep the split facts, rewrite the continuation with only `pr1 = []`, `IS_SOME drv`, and `COND_CLAUSES`, derive `well_typed_expr env (THE drv)` via `well_typed_opt_THE`, then specialize the generated IH once at `args_st with <|accounts := pr2; tStorage := pr3|>`. Avoid simplifying the full Resume context.
+works_when: The ExtCall prefix facts are already in context: value/calldata facts, successful `run_ext_call`, `accounts_well_typed pr2`, `runtime_consistent env cx args_st`, and final continuation equation.
+evidence:
+- episode:E0327
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m5967_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:18110-18132
+
+## L0191 scope='C0.5.4.5.1.2' tags=ExtCall,tail-theorem,non-driver,impl_tac
+shape: False branch of `Cases_on `pr1 = [] /\ IS_SOME drv`` needing `extcall_nonstatic_success_tail_sound_cond_driver_ih`
+pattern: Use explicit `qspecl_then [...] mp_tac extcall_nonstatic_success_tail_sound_cond_driver_ih` followed by `impl_tac` to supply premises in order. Discharge the conditional driver premise with `strip_tac >> metis_tac[]` from the false branch, rather than applying `irule` and letting existential premise variables appear.
+works_when: The branch has `~(pr1 = [] /\ IS_SOME drv)` and the ordinary tail theorem premises as named assumptions.
+evidence:
+- episode:E0326
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m5940_t001
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m5936_t001

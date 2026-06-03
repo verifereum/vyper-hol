@@ -96,7 +96,8 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C0.5.4.5.1.2.3 | proved |  | E0328 | Call plan_oracle(mode='review', component_id='C0.5.4.5.1.2.3', evidence_ids=[...]); if accepted, stage relevant tracked semantics/prop files only and commit unsigned. |
 | C0.5.4.5.1.3 | stuck | risk_mismatch | E0323 | Call plan_oracle(mode='review') for this stuck leaf and request a replacement/redesign of the producer interface or proof architecture; do not continue tactical work on C0.5.4.5.1.3 without a new PLAN. |
 | C0.5.4.5.1.4 | stuck | risk_mismatch | E0324 | Call plan_oracle(mode='review') and request PLAN repair: C0.5.4.5.1.4 should not remain a Risk-2 beginable proof leaf unless a new component supplies the driver premise or the proof architecture is redesigned. |
-| C0.5.5 | stuck | plan_incomplete | E0258 | Call plan_oracle(mode='review') for C0.5.5 and request scheduling repair so C0.5.4.4 becomes beginable before C0.5.4.5 and audits. |
+| C0.5.4.6 | proved |  | E0329 | Call plan_oracle(mode='review', component_id='C0.5.4.6', evidence_ids=[...]); if accepted, proceed to C0.5.5. |
+| C0.5.5 | proved |  | E0330 |  |
 | C1.1 | proved |  | E0024 | Call plan_oracle(mode='review') for C1.1, then begin C1.2 if accepted. |
 | C1.1.1 | proved |  | E0012 |  |
 | C1.1.2 | proved |  | E0013 |  |
@@ -2869,33 +2870,52 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 - `TO_type_system_rewrite-20260602T195240Z_m5907_t001` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260602T195240Z_m5909_t002` (use `read_tool_output` for exact output)
 
+## C0.5.4.6
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0329`
+- blocker: 
+- actual effort: 1 sessions, 2 steps, 5 tools, 1 holbuild, 282,659 tok (281,917 in, 742 out, 275,200 cached), 27.1s, $0.193445
+- next: Call plan_oracle(mode='review', component_id='C0.5.4.6', evidence_ids=[...]); if accepted, proceed to C0.5.5.
+
+### Attempts / Evidence
+
+- `E0329` (proved, , actual effort: 1 sessions, 2 steps, 5 tools, 1 holbuild, 282,659 tok (281,917 in, 742 out, 275,200 cached), 27.1s, $0.193445)
+  - Audit completed nonstatic ExtCall Resume and source stability. -> Focused `vyperTypeStmtSoundnessTheory` build succeeds. Read/grep evidence confirms the nonstatic ExtCall success Resume is local-cheat-free, the local tail helper remains in source, no forbidden `extcall_nonstatic_success_tail_sound_from_resume_driver_ih` bridge occurs in grep results, and the only remaining source `cheat` in the region is later `Expr_Call_RawCallTarget` outside this component. Git status has no tracked modifications after the prior unsigned checkpoint commit; only pre-existing untracked semantics/prop scratch/legacy files remain unstaged. (`TO_type_system_rewrite-20260602T195240Z_m5982_t005`, `TO_type_system_rewrite-20260602T195240Z_m5982_t004`, `TO_type_system_rewrite-20260602T195240Z_m5982_t001`, `TO_type_system_rewrite-20260602T195240Z_m5982_t003`, `TO_type_system_rewrite-20260602T195240Z_m5982_t002`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260602T195240Z_m5982_t005` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m5982_t004` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m5982_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m5982_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m5982_t002` (use `read_tool_output` for exact output)
+
 ## C0.5.5
 
 ### Current Status
 
-- result: `stuck`
-- diagnosis: `plan_incomplete` This is a structured scheduling/dependency mismatch after the E0257 replacement plan, not a HOL proof failure in the audit itself. The correct next proof work remains C0.5.4.4 (strengthen success suspend boundary), then C0.5.4.5, then audit.
-- latest episode: `E0258`
-- blocker: C0.5.5 audit was scheduled before the replacement C0.5.4.4 boundary-refactor and C0.5.4.5 success proof leaves were executable/completed. The audit precondition is false: the nonstatic success subresume still has a planned `cheat`.
-- actual effort: 1 sessions, 2 steps, 3 tools, 1 holbuild, 253,810 tok (253,079 in, 731 out, 248,576 cached), 23.1s, $0.168733
-- next: Call plan_oracle(mode='review') for C0.5.5 and request scheduling repair so C0.5.4.4 becomes beginable before C0.5.4.5 and audits.
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0330`
+- blocker: 
+- actual effort: 1 sessions, 2 steps, 3 tools, 1 holbuild, 102,634 tok (102,064 in, 570 out, 93,440 cached), 17.8s, $0.106940
 
 ### Attempts / Evidence
 
 - `E0258` (stuck, plan_incomplete, actual effort: 1 sessions, 2 steps, 3 tools, 1 holbuild, 253,810 tok (253,079 in, 731 out, 248,576 cached), 23.1s, $0.168733)
   - Executed C0.5.5 audit as the oracle-scheduled next component: grep nonstatic ExtCall region for `cheat`/failed scaffold and run focused build. -> Audit fails as expected: `Expr_Call_ExtCall_nonstatic_success` still contains `cheat` at line 18007. Focused build is clean only because the planned success obligation remains cheated. This confirms C0.5.5 was scheduled before its dependency C0.5.4.4/C0.5.4.5 was completed. (`TO_type_system_rewrite-20260602T195240Z_m4792_t001`, `TO_type_system_rewrite-20260602T195240Z_m4792_t003`)
-
-### Ruled Out
-
-- Treating a clean holbuild with the success `cheat` as completion.
-- Editing unrelated proof obligations during the audit.
+- `E0330` (proved, , actual effort: 1 sessions, 2 steps, 3 tools, 1 holbuild, 102,634 tok (102,064 in, 570 out, 93,440 cached), 17.8s, $0.106940)
+  - grep `Expr_Call_ExtCall_nonstatic_success|extcall_nonstatic_projected_sound|cheat|Expr_Call_RawCallTarget` and read ExtCall nonstatic region; build `vyperTypeStmtSoundnessTheory`. -> Terminal audit passes: ExtCall nonstatic success Resume is proved with QED and no local cheat, no `extcall_nonstatic_projected_sound` scaffold appears, focused holbuild succeeds. The only executable cheat hit is `Expr_Call_RawCallTarget`, which PLAN assigns to C0.6 outside C0.5. (`TO_type_system_rewrite-20260602T195240Z_m5995_t002`, `TO_type_system_rewrite-20260602T195240Z_m5995_t001`, `TO_type_system_rewrite-20260602T195240Z_m5995_t003`)
 
 ### Evidence refs
 
-- `TO_type_system_rewrite-20260602T195240Z_m4792_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260602T195240Z_m4792_t003` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260602T195240Z_m4789_t001` (use `read_tool_output` for exact output)
-- `TO_type_system_rewrite-20260602T195240Z_m4791_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m5995_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m5995_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m5995_t003` (use `read_tool_output` for exact output)
 
 ## C1.1
 
