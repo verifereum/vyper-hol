@@ -532,6 +532,30 @@ Proof
   metis_tac[]
 QED
 
+Theorem evaluate_all_constants_preserves_bare_global_lookup_type:
+  constants_do_not_clobber_bare_globals mods (bare_globals:num option # num |-> type) /\
+  ALOOKUP mods src = SOME ts /\
+  FLOOKUP bare_globals (src,id) = SOME ty /\
+  evaluate_all_constants cx am addr mods = SOME am_c /\
+  FLOOKUP
+    (get_source_immutables src
+      (case ALOOKUP am.immutables addr of SOME m => m | NONE => []))
+    id = SOME x ==>
+  FLOOKUP
+    (get_source_immutables src
+      (case ALOOKUP am_c.immutables addr of SOME m => m | NONE => []))
+    id = SOME x
+Proof
+  rw[] >>
+  irule (INST_TYPE [``:'a`` |-> ``:type``]
+           evaluate_all_constants_preserves_bare_global_lookup) >>
+  goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >>
+  simp[]
+QED
+
 Theorem evaluate_all_constants_preserves_bare_global_type:
   constants_do_not_clobber_bare_globals mods env_base.bare_globals /\
   env_context_consistent env_base cx /\
@@ -550,10 +574,11 @@ Theorem evaluate_all_constants_preserves_bare_global_type:
     id = SOME (tv,v)
 Proof
   rw[] >>
-  metis_tac[evaluate_all_constants_preserves_bare_global_lookup]
+  metis_tac[evaluate_all_constants_preserves_bare_global_lookup_type]
 QED
 
 Theorem deployment_setup_immutables_ready:
+  bare_globals_match_immutable_decl_types env_base cx /\
   constants_do_not_clobber_bare_globals mods env_base.bare_globals /\
   env_context_consistent env_base cx /\
   ALOOKUP cx.sources cx.txn.target = SOME mods /\
@@ -567,7 +592,82 @@ Theorem deployment_setup_immutables_ready:
     cx
     am_c.immutables
 Proof
-  cheat
+  rw[immutables_ready_def]
+  >- (drule env_context_consistent_bare_global_find_NONE >>
+      disch_then drule >>
+      strip_tac >>
+      gvs[get_module_code_def] >>
+      `?x. FLOOKUP (get_source_immutables src imms) id = SOME x` by
+        metis_tac[initial_immutables_contains_bare_global, IS_SOME_EXISTS] >>
+      gvs[IS_SOME_EXISTS] >>
+      qexists `x` >>
+      irule evaluate_all_constants_preserves_bare_global_lookup_type >>
+      goal_assum (drule_at Any) >>
+      goal_assum (drule_at Any) >>
+      goal_assum (drule_at Any) >>
+      goal_assum (drule_at Any) >>
+      simp[initial_target_immutables_lookup])
+  >- (drule env_context_consistent_bare_global_find_NONE >>
+      disch_then drule >>
+      strip_tac >>
+      gvs[get_module_code_def] >>
+      `?x. FLOOKUP (get_source_immutables src imms) id = SOME x` by
+        metis_tac[initial_immutables_contains_bare_global, IS_SOME_EXISTS] >>
+      `FLOOKUP
+         (get_source_immutables src
+          (case ALOOKUP am_c.immutables cx.txn.target of SOME m => m | NONE => []))
+         id = SOME x` by
+        (irule evaluate_all_constants_preserves_bare_global_lookup_type >>
+         goal_assum (drule_at Any) >>
+         goal_assum (drule_at Any) >>
+         goal_assum (drule_at Any) >>
+         goal_assum (drule_at Any) >>
+         simp[initial_target_immutables_lookup]) >>
+      gvs[] >>
+      metis_tac[initial_immutables_bare_global_type])
+  >- (gvs[env_context_consistent_def] >>
+      Cases_on `FLOOKUP env_base.bare_globals (src,id)`
+      >- (qpat_x_assum `!src' id' ty'. FLOOKUP env_base.toplevel_vtypes (src',id') = SOME (Type ty') /\ FLOOKUP env_base.bare_globals (src',id') = NONE ==> _`
+            (qspecl_then [`src`,`id`,`ty`] mp_tac) >>
+          simp[] >> rw[] >> gvs[]) >>
+      qpat_x_assum `!src id ty. FLOOKUP env_base.bare_globals (src,id) = SOME ty ==> _`
+        (qspecl_then [`src`,`id`,`x`] mp_tac) >>
+      simp[] >> rw[] >> gvs[])
+  >- (gvs[env_context_consistent_def] >>
+      Cases_on `FLOOKUP env_base.bare_globals (src,id)`
+      >- (qpat_x_assum `!src' id' ty'. FLOOKUP env_base.toplevel_vtypes (src',id') = SOME (Type ty') /\ FLOOKUP env_base.bare_globals (src',id') = NONE ==> _`
+            (qspecl_then [`src`,`id`,`ty`] mp_tac) >>
+          simp[] >> rw[] >> gvs[]) >>
+      qpat_x_assum `!src id ty. FLOOKUP env_base.bare_globals (src,id) = SOME ty ==> _`
+        (qspecl_then [`src`,`id`,`x`] mp_tac) >>
+      simp[] >> rw[] >> gvs[])
+  >- (Cases_on `FLOOKUP env_base.bare_globals (src,id)`
+      >- (gvs[env_context_consistent_def] >>
+          qpat_x_assum `!src' id' ty'. FLOOKUP env_base.toplevel_vtypes (src',id') = SOME (Type ty') /\ FLOOKUP env_base.bare_globals (src',id') = NONE ==> _`
+            (qspecl_then [`src`,`id`,`ty`] mp_tac) >>
+          simp[] >> rw[] >> gvs[]) >>
+      rename1 `FLOOKUP env_base.bare_globals (src,id) = SOME bare_ty` >>
+      `FLOOKUP env_base.toplevel_vtypes (src,id) = SOME (Type bare_ty)` by
+        metis_tac[env_context_consistent_bare_global_find_NONE] >>
+      gvs[] >>
+      drule env_context_consistent_bare_global_find_NONE >>
+      disch_then drule >>
+      strip_tac >>
+      gvs[get_module_code_def] >>
+      `?x. FLOOKUP (get_source_immutables src imms) id = SOME x` by
+        metis_tac[initial_immutables_contains_bare_global, IS_SOME_EXISTS] >>
+      `FLOOKUP
+         (get_source_immutables src
+          (case ALOOKUP am_c.immutables cx.txn.target of SOME m => m | NONE => []))
+         id = SOME x` by
+        (irule evaluate_all_constants_preserves_bare_global_lookup_type >>
+         goal_assum (drule_at Any) >>
+         goal_assum (drule_at Any) >>
+         goal_assum (drule_at Any) >>
+         goal_assum (drule_at Any) >>
+         simp[initial_target_immutables_lookup]) >>
+      gvs[] >>
+      metis_tac[initial_immutables_bare_global_type])
 QED
 
 Theorem initial_state_accounts_well_typed:
