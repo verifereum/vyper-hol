@@ -123,6 +123,28 @@ Proof
   simp[machine_well_typed_def, initial_state_def, state_well_typed_def]
 QED
 
+Theorem env_context_consistent_empty_static_maps:
+  env.current_src = current_module cx /\
+  env.type_defs = get_tenv cx /\
+  env.fn_sigs = fn_sigs /\
+  env.bare_globals = FEMPTY /\
+  env.toplevel_vtypes = FEMPTY /\
+  env.flag_members = FEMPTY /\
+  fn_sigs_consistent fn_sigs cx /\
+  fn_sigs_complete fn_sigs cx ==>
+  env_context_consistent env cx
+Proof
+  simp[env_context_consistent_def]
+QED
+
+Theorem env_immutables_consistent_empty_static_maps:
+  env.bare_globals = FEMPTY /\
+  env.toplevel_vtypes = FEMPTY ==>
+  env_immutables_consistent env cx st
+Proof
+  simp[env_immutables_consistent_def]
+QED
+
 (* Main #282 theorem: callable-entry setup establishes the preconditions of the
  * statement type-soundness theorem for the selected function body.
  *
