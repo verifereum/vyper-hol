@@ -1,0 +1,179 @@
+(*
+ * Establishing type-soundness preconditions for callable entry states.
+ *
+ * This theory is intended to address #282: show that the assumptions of the
+ * statement/expression type-soundness theorems are not merely vacuous, but are
+ * established by the ordinary callable-entry setup (argument binding plus an
+ * initialized abstract machine).
+ *)
+
+Theory vyperTypeInitialState
+Ancestors
+  list rich_list pred_set arithmetic finite_map option pair
+  vyperAST vyperValue vyperTyping vyperInterpreter vyperContext
+  vyperTypeSystem vyperTypeStmtSoundness vyperTypeSoundness
+Libs
+  wordsLib
+
+val _ = Parse.hide "body";
+
+(* Runtime well-typedness of an abstract machine, separated from any particular
+ * function environment.  Readiness of globals/immutables is target- and
+ * environment-dependent, so it is captured separately by immutables_ready below. *)
+Definition machine_well_typed_def:
+  machine_well_typed (am:abstract_machine) <=>
+    accounts_well_typed am.accounts /\
+    EVERY (\(addr, imms). imms_well_typed imms) am.immutables
+End
+
+(* The values supplied at function entry have the parameter types expected by
+ * the Vyper function signature.  This is the semantic counterpart of successful
+ * ABI decoding / test-runner argument construction, but is kept abstract here. *)
+Definition args_values_typed_def:
+  args_values_typed tenv (args:(string # type) list) (vals:value list) <=>
+    LENGTH args = LENGTH vals /\
+    !i tv.
+      i < LENGTH args /\
+      evaluate_type tenv (SND (EL i args)) = SOME tv ==>
+      value_has_type tv (EL i vals)
+End
+
+(* Static maps used in a typing_env agree with the code/context.  This packages
+ * the side condition expected by functions_well_typed_body and is deliberately
+ * phrased independently of any already-built env_consistent witness. *)
+Definition global_maps_consistent_def:
+  global_maps_consistent cx bare_globals toplevel_vtypes flag_members <=>
+    (!src id ty. FLOOKUP bare_globals (src,id) = SOME ty ==>
+       ?ts. get_module_code cx src = SOME ts /\
+            FLOOKUP toplevel_vtypes (src,id) = SOME (Type ty) /\
+            is_immutable_decl id ts /\
+            find_var_decl_by_num id ts = NONE /\
+            ty <> NoneT) /\
+    (!src id vt ts.
+       FLOOKUP toplevel_vtypes (src,id) = SOME vt /\
+       get_module_code cx src = SOME ts ==>
+       ((?ty. vt = Type ty /\
+          ((!is_transient typ id_str.
+              find_var_decl_by_num id ts =
+                SOME (StorageVarDecl is_transient typ,id_str) ==> typ = ty) /\
+           (!is_transient kt hv id_str.
+              find_var_decl_by_num id ts =
+                SOME (HashMapVarDecl is_transient kt hv,id_str) ==> F) /\
+           (find_var_decl_by_num id ts = NONE ==>
+              IS_SOME (evaluate_type (get_tenv cx) ty)))) \/
+        (?kt hv. vt = HashMapT kt hv /\
+           ?is_transient id_str.
+             find_var_decl_by_num id ts =
+               SOME (HashMapVarDecl is_transient kt hv,id_str)))) /\
+    (!src fid ls.
+       FLOOKUP flag_members (src,fid) = SOME ls ==>
+       ?ts. get_module_code cx src = SOME ts /\
+            lookup_flag fid ts = SOME ls /\
+            FLOOKUP (get_tenv cx) (string_to_num fid) =
+              SOME (FlagArgs (LENGTH ls)))
+End
+
+(* Runtime global/immutable readiness for the current transaction target.
+ * This is the non-circular piece needed to establish env_immutables_consistent:
+ * every bare global is present in the machine's immutables/constants table, and
+ * any stored type tags agree with the current combined type environment. *)
+Definition immutables_ready_def:
+  immutables_ready bare_globals toplevel_vtypes cx imms <=>
+    (!src id ty. FLOOKUP bare_globals (src,id) = SOME ty ==>
+       IS_SOME (FLOOKUP
+         (get_source_immutables src
+           (case ALOOKUP imms cx.txn.target of SOME m => m | NONE => []))
+         id)) /\
+    (!src id ty tv v.
+       FLOOKUP bare_globals (src,id) = SOME ty /\
+       FLOOKUP
+         (get_source_immutables src
+           (case ALOOKUP imms cx.txn.target of SOME m => m | NONE => []))
+         id = SOME (tv,v) ==>
+       evaluate_type (get_tenv cx) ty = SOME tv) /\
+    (!src id ty ts.
+       FLOOKUP toplevel_vtypes (src,id) = SOME (Type ty) /\
+       get_module_code cx src = SOME ts ==>
+       (!is_transient typ id_str.
+          find_var_decl_by_num id ts =
+            SOME (StorageVarDecl is_transient typ,id_str) ==> typ = ty) /\
+       (!is_transient kt vt id_str.
+          find_var_decl_by_num id ts =
+            SOME (HashMapVarDecl is_transient kt vt,id_str) ==> F) /\
+       (find_var_decl_by_num id ts = NONE ==>
+        !tv v.
+          FLOOKUP
+            (get_source_immutables src
+              (case ALOOKUP imms cx.txn.target of SOME m => m | NONE => []))
+            id = SOME (tv,v) ==>
+          evaluate_type (get_tenv cx) ty = SOME tv))
+End
+
+(* Main #282 theorem: callable-entry setup establishes the preconditions of the
+ * statement type-soundness theorem for the selected function body.
+ *
+ * The explicit current_module assumption is intentional.  The top-level
+ * call_external integration has to ensure that the evaluation context's current
+ * module is the module containing the selected function; exported-module calls
+ * should be handled at that layer. *)
+Theorem callable_entry_establishes_type_soundness_preconditions:
+  functions_well_typed cx /\
+  context_well_typed cx /\
+  machine_well_typed am /\
+  current_module cx = src /\
+  fn_sigs_consistent fn_sigs cx /\
+  fn_sigs_complete fn_sigs cx /\
+  global_maps_consistent cx bare_globals toplevel_vtypes flag_members /\
+  immutables_ready bare_globals toplevel_vtypes cx am.immutables /\
+  get_module_code cx src = SOME ts /\
+  lookup_callable_function cx.in_deploy fn ts =
+    SOME (fm,nr,args,dflts,ret,body) /\
+  bind_arguments (get_tenv cx) args vals = SOME scope /\
+  args_values_typed (get_tenv cx) args vals ==>
+  ?env_body env_after st.
+    st = initial_state am [scope] /\
+    accounts_well_typed st.accounts /\
+    state_well_typed st /\
+    env_consistent env_body cx st /\
+    type_stmts env_body ret body = SOME env_after
+Proof
+  cheat
+QED
+
+(* Direct corollary for type soundness: once callable-entry setup has established
+ * the existing preconditions, the already-proved statement theorem gives no
+ * runtime TypeError for executing the body from the entry state. *)
+Theorem callable_entry_no_type_error:
+  functions_well_typed cx /\
+  context_well_typed cx /\
+  machine_well_typed am /\
+  current_module cx = src /\
+  fn_sigs_consistent fn_sigs cx /\
+  fn_sigs_complete fn_sigs cx /\
+  global_maps_consistent cx bare_globals toplevel_vtypes flag_members /\
+  immutables_ready bare_globals toplevel_vtypes cx am.immutables /\
+  get_module_code cx src = SOME ts /\
+  lookup_callable_function cx.in_deploy fn ts =
+    SOME (fm,nr,args,dflts,ret,body) /\
+  bind_arguments (get_tenv cx) args vals = SOME scope /\
+  args_values_typed (get_tenv cx) args vals ==>
+  no_type_error_eval (eval_stmts cx body (initial_state am [scope]))
+Proof
+  cheat
+QED
+
+(* Explicit non-vacuity corollary: there exists a concrete configuration
+ * satisfying the core statement type-soundness preconditions. *)
+Theorem type_soundness_preconditions_satisfiable:
+  ?cx am env_body env_after st.
+    functions_well_typed cx /\
+    context_well_typed cx /\
+    accounts_well_typed st.accounts /\
+    state_well_typed st /\
+    env_consistent env_body cx st /\
+    type_stmts env_body NoneT [] = SOME env_after
+Proof
+  cheat
+QED
+
+val _ = export_theory();
