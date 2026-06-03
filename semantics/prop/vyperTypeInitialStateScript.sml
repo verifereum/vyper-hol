@@ -109,6 +109,20 @@ Definition immutables_ready_def:
           evaluate_type (get_tenv cx) ty = SOME tv))
 End
 
+Theorem initial_state_accounts_well_typed:
+  machine_well_typed am ==>
+  accounts_well_typed (initial_state am scs).accounts
+Proof
+  simp[machine_well_typed_def, initial_state_def]
+QED
+
+Theorem initial_state_single_scope_well_typed:
+  machine_well_typed am /\ scope_well_typed scope ==>
+  state_well_typed (initial_state am [scope])
+Proof
+  simp[machine_well_typed_def, initial_state_def, state_well_typed_def]
+QED
+
 (* Main #282 theorem: callable-entry setup establishes the preconditions of the
  * statement type-soundness theorem for the selected function body.
  *
