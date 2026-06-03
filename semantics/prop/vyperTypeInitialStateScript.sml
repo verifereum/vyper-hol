@@ -226,7 +226,7 @@ Theorem immutables_ready_env_immutables_consistent:
   immutables_ready env_base.bare_globals env_base.toplevel_vtypes cx am.immutables ==>
   env_immutables_consistent env cx (initial_state am [scope])
 Proof
-  cheat
+  rw[immutables_ready_def, env_immutables_consistent_def, initial_state_def] >> metis_tac[]
 QED
 
 (* Main #282 theorem: callable-entry setup establishes the preconditions of the
