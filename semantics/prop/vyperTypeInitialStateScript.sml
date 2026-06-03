@@ -10,7 +10,7 @@
 Theory vyperTypeInitialState
 Ancestors
   list rich_list pred_set arithmetic finite_map option pair
-  vyperAST vyperValue vyperTyping vyperInterpreter vyperContext
+  vyperAST vyperValue vyperTyping vyperState vyperInterpreter vyperContext
   vyperTypeSystem vyperTypeStmtSoundness vyperTypeSoundness
 Libs
   wordsLib
@@ -78,6 +78,226 @@ Definition immutables_ready_def:
             id = SOME (tv,v) ==>
           evaluate_type (get_tenv cx) ty = SOME tv))
 End
+
+(* Constants and immutables share runtime storage.  This side condition records
+ * the static fact needed to show that evaluating constants cannot overwrite the
+ * immutable entries needed for bare globals. *)
+Definition constants_do_not_clobber_bare_globals_def:
+  constants_do_not_clobber_bare_globals mods bare_globals <=>
+    !src ts vis e id typ slot.
+      ALOOKUP mods src = SOME ts /\
+      MEM (VariableDecl vis (Constant e) id typ slot) ts ==>
+      FLOOKUP bare_globals (src,string_to_num id) = NONE
+End
+
+
+(* Small lookup/update facts for the runtime immutable association-list and
+ * finite-map layers.  Keeping these as boundary lemmas prevents downstream
+ * proofs from repeatedly unfolding the representation. *)
+Theorem get_source_immutables_set_same:
+  get_source_immutables src (set_source_immutables src fm imms) = fm
+Proof
+  simp[get_source_immutables_def, set_source_immutables_def]
+QED
+
+Theorem get_source_immutables_set_other:
+  src <> src' ==>
+  get_source_immutables src (set_source_immutables src' fm imms) =
+  get_source_immutables src imms
+Proof
+  simp[get_source_immutables_def, set_source_immutables_def,
+       alistTheory.ALOOKUP_ADELKEY]
+QED
+
+Theorem update_immutable_lookup_same:
+  FLOOKUP (get_source_immutables src (update_immutable src id tv v imms)) id =
+  SOME (tv,v)
+Proof
+  simp[update_immutable_def, get_source_immutables_set_same,
+       finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem update_immutable_preserves_other_source:
+  src <> src' ==>
+  get_source_immutables src (update_immutable src' id tv v imms) =
+  get_source_immutables src imms
+Proof
+  simp[update_immutable_def, get_source_immutables_set_other]
+QED
+
+Theorem update_immutable_preserves_lookup:
+  (src' = src ==> key <> id) /\
+  FLOOKUP (get_source_immutables src imms) id = SOME x ==>
+  FLOOKUP (get_source_immutables src (update_immutable src' key tv v imms)) id = SOME x
+Proof
+  rw[update_immutable_def] >>
+  Cases_on `src' = src` >>
+  gvs[get_source_immutables_set_same, get_source_immutables_set_other,
+      finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem FLOOKUP_FUNION_left_none:
+  FLOOKUP f k = NONE /\ FLOOKUP g k = SOME x ==>
+  FLOOKUP (FUNION f g) k = SOME x
+Proof
+  simp[FLOOKUP_FUNION]
+QED
+
+Theorem initial_target_immutables_lookup:
+  ALOOKUP ((am with immutables updated_by CONS (addr, imms)).immutables) addr = SOME imms
+Proof
+  simp[]
+QED
+(* ===== Runtime immutable setup ===== *)
+
+Theorem initial_immutables_module_preserves_lookup:
+  initial_immutables_module tenv src ts acc = SOME imms /\
+  IS_SOME (FLOOKUP (get_source_immutables src acc) id) ==>
+  IS_SOME (FLOOKUP (get_source_immutables src imms) id)
+Proof
+  qid_spec_tac `acc` >>
+  Induct_on `ts` >>
+  rw[initial_immutables_module_def] >>
+  gvs[] >>
+  Cases_on `h` >>
+  gvs[initial_immutables_module_def, AllCaseEqs()] >>
+  TRY (Cases_on `v0` >> gvs[initial_immutables_module_def, AllCaseEqs()]) >>
+  first_x_assum drule >>
+  disch_then irule >>
+  Cases_on `string_to_num s = id` >>
+  gvs[update_immutable_lookup_same] >>
+  gvs[update_immutable_def, get_source_immutables_set_same,
+      finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem initial_immutables_module_contains_immutable:
+  initial_immutables_module tenv src ts acc = SOME imms /\
+  is_immutable_decl id ts /\
+  find_var_decl_by_num id ts = NONE ==>
+  IS_SOME (FLOOKUP (get_source_immutables src imms) id)
+Proof
+  qid_spec_tac `acc` >>
+  Induct_on `ts` >>
+  rw[initial_immutables_module_def, is_immutable_decl_def,
+     find_var_decl_by_num_def] >>
+  gvs[] >>
+  Cases_on `h` >>
+  gvs[initial_immutables_module_def, is_immutable_decl_def,
+      find_var_decl_by_num_def] >>
+  TRY (Cases_on `v0` >>
+       gvs[initial_immutables_module_def, is_immutable_decl_def,
+           find_var_decl_by_num_def]) >>
+  rw[] >>
+  gvs[AllCaseEqs(), update_immutable_lookup_same] >>
+  FIRST_PROVE [
+    irule initial_immutables_module_preserves_lookup >>
+    goal_assum (drule_at Any) >>
+    simp[update_immutable_lookup_same],
+    first_x_assum drule >> simp[]]
+QED
+
+Theorem initial_immutables_contains_bare_global:
+  env_context_consistent env_base cx /\
+  ALOOKUP cx.sources cx.txn.target = SOME mods /\
+  ALOOKUP mods src = SOME ts /\
+  initial_immutables (get_tenv cx) mods = SOME imms /\
+  FLOOKUP env_base.bare_globals (src,id) = SOME ty ==>
+  IS_SOME (FLOOKUP (get_source_immutables src imms) id)
+Proof
+  cheat
+QED
+
+Theorem initial_immutables_bare_global_type:
+  env_context_consistent env_base cx /\
+  ALOOKUP cx.sources cx.txn.target = SOME mods /\
+  ALOOKUP mods src = SOME ts /\
+  initial_immutables (get_tenv cx) mods = SOME imms /\
+  FLOOKUP env_base.bare_globals (src,id) = SOME ty /\
+  FLOOKUP (get_source_immutables src imms) id = SOME (tv,v) ==>
+  evaluate_type (get_tenv cx) ty = SOME tv
+Proof
+  cheat
+QED
+
+Theorem constants_env_no_bare_global_lookup:
+  constants_do_not_clobber_bare_globals mods bare_globals /\
+  ALOOKUP mods src = SOME ts /\
+  constants_env cx am addr src ts FEMPTY = SOME cenv /\
+  FLOOKUP bare_globals (src,id) = SOME ty ==>
+  FLOOKUP cenv id = NONE
+Proof
+  cheat
+QED
+
+Theorem merge_constants_preserves_lookup:
+  (src = src_c ==> FLOOKUP cenv id = NONE) /\
+  FLOOKUP
+    (get_source_immutables src
+      (case ALOOKUP am.immutables addr of SOME m => m | NONE => []))
+    id = SOME x ==>
+  FLOOKUP
+    (get_source_immutables src
+      (case ALOOKUP (merge_constants addr src_c cenv am).immutables addr of
+       | SOME m => m
+       | NONE => []))
+    id = SOME x
+Proof
+  cheat
+QED
+
+Theorem evaluate_all_constants_preserves_bare_global_lookup:
+  constants_do_not_clobber_bare_globals mods bare_globals /\
+  ALOOKUP mods src = SOME ts /\
+  FLOOKUP bare_globals (src,id) = SOME ty /\
+  evaluate_all_constants cx am addr mods = SOME am_c /\
+  FLOOKUP
+    (get_source_immutables src
+      (case ALOOKUP am.immutables addr of SOME m => m | NONE => []))
+    id = SOME x ==>
+  FLOOKUP
+    (get_source_immutables src
+      (case ALOOKUP am_c.immutables addr of SOME m => m | NONE => []))
+    id = SOME x
+Proof
+  cheat
+QED
+
+Theorem evaluate_all_constants_preserves_bare_global_type:
+  constants_do_not_clobber_bare_globals mods env_base.bare_globals /\
+  env_context_consistent env_base cx /\
+  ALOOKUP cx.sources cx.txn.target = SOME mods /\
+  ALOOKUP mods src = SOME ts /\
+  FLOOKUP env_base.bare_globals (src,id) = SOME ty /\
+  evaluate_all_constants cx am cx.txn.target mods = SOME am_c /\
+  FLOOKUP
+    (get_source_immutables src
+      (case ALOOKUP am.immutables cx.txn.target of SOME m => m | NONE => []))
+    id = SOME (tv,v) /\
+  evaluate_type (get_tenv cx) ty = SOME tv ==>
+  FLOOKUP
+    (get_source_immutables src
+      (case ALOOKUP am_c.immutables cx.txn.target of SOME m => m | NONE => []))
+    id = SOME (tv,v)
+Proof
+  cheat
+QED
+
+Theorem deployment_setup_immutables_ready:
+  constants_do_not_clobber_bare_globals mods env_base.bare_globals /\
+  env_context_consistent env_base cx /\
+  ALOOKUP cx.sources cx.txn.target = SOME mods /\
+  initial_immutables (get_tenv cx) mods = SOME imms /\
+  evaluate_all_constants cx
+    (am with immutables updated_by CONS (cx.txn.target, imms))
+    cx.txn.target mods = SOME am_c ==>
+  immutables_ready
+    env_base.bare_globals
+    env_base.toplevel_vtypes
+    cx
+    am_c.immutables
+Proof
+  cheat
+QED
 
 Theorem initial_state_accounts_well_typed:
   machine_well_typed am ==>
@@ -232,10 +452,12 @@ QED
 (* Main #282 theorem: callable-entry setup establishes the preconditions of the
  * statement type-soundness theorem for the selected function body.
  *
- * The explicit current_module assumption is intentional.  The top-level
- * call_external integration has to ensure that the evaluation context's current
- * module is the module containing the selected function; exported-module calls
- * should be handled at that layer. *)
+ * The source/current-module alignment is expressed through env_base:
+ * env_context_consistent env_base cx ties env_base.current_src to
+ * current_module cx, while env_base.current_src = src selects the callable
+ * body source.  The top-level call_external integration still has to ensure
+ * that the evaluation context is aligned with the selected function source;
+ * exported-module calls should be handled at that layer. *)
 Theorem callable_entry_establishes_type_soundness_preconditions:
   functions_well_typed cx /\
   context_well_typed cx /\
