@@ -261,7 +261,27 @@ Theorem callable_entry_establishes_type_soundness_preconditions:
     env_consistent env_body cx st /\
     type_stmts env_body ret body = SOME env_after
 Proof
-  cheat
+  strip_tac >> gvs[] >>
+  drule_all functions_well_typed_callable_body_env_base >>
+  strip_tac >>
+  `scope_well_typed scope` by
+    (qspecl_then [`get_tenv cx`, `args`, `vals`, `scope`] mp_tac
+       bind_arguments_scope_well_typed_stmt >>
+     simp[] >>
+     disch_then irule >>
+     rpt strip_tac >>
+     gvs[args_values_typed_def]) >>
+  qexistsl [`env_body`, `env_after`] >>
+  rw[initial_state_accounts_well_typed, initial_state_single_scope_well_typed] >>
+  rw[env_consistent_def]
+  >- (irule env_context_consistent_same_static_maps >> qexists `env_base` >> gvs[])
+  >- (`env_scopes_consistent env_body cx
+         ((initial_state am [scope]) with scopes := [scope])` suffices_by
+        gvs[initial_state_def] >>
+      irule bind_arguments_env_scopes_consistent >>
+      qexistsl [`args`, `get_tenv cx`, `vals`] >>
+      gvs[] >> metis_tac[])
+  >- (irule immutables_ready_env_immutables_consistent >> qexists `env_base` >> gvs[])
 QED
 
 (* Direct corollary for type soundness: once callable-entry setup has established
