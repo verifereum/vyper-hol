@@ -85,7 +85,7 @@ End
 Definition constants_do_not_clobber_bare_globals_def:
   constants_do_not_clobber_bare_globals mods bare_globals <=>
     !src ts vis e id typ slot.
-      ALOOKUP mods src = SOME ts /\
+      MEM (src,ts) mods /\
       MEM (VariableDecl vis (Constant e) id typ slot) ts ==>
       FLOOKUP bare_globals (src,string_to_num id) = NONE
 End
@@ -424,9 +424,9 @@ Proof
   metis_tac[]
 QED
 
-Theorem constants_env_no_bare_global_lookup:
+Theorem constants_env_no_bare_global_lookup_MEM:
   constants_do_not_clobber_bare_globals mods bare_globals /\
-  ALOOKUP mods src = SOME ts /\
+  MEM (src,ts) mods /\
   constants_env cx am addr src ts FEMPTY = SOME cenv /\
   FLOOKUP bare_globals (src,id) = SOME ty ==>
   FLOOKUP cenv id = NONE
@@ -443,6 +443,19 @@ Proof
   disch_then drule >>
   strip_tac >>
   gvs[]
+QED
+
+Theorem constants_env_no_bare_global_lookup:
+  constants_do_not_clobber_bare_globals mods bare_globals /\
+  ALOOKUP mods src = SOME ts /\
+  constants_env cx am addr src ts FEMPTY = SOME cenv /\
+  FLOOKUP bare_globals (src,id) = SOME ty ==>
+  FLOOKUP cenv id = NONE
+Proof
+  rw[] >>
+  irule constants_env_no_bare_global_lookup_MEM >>
+  simp[] >>
+  metis_tac[alistTheory.ALOOKUP_MEM]
 QED
 
 Theorem merge_constants_preserves_lookup:
@@ -481,6 +494,7 @@ Theorem evaluate_all_constants_preserves_bare_global_lookup:
 Proof
   cheat
 QED
+
 
 Theorem evaluate_all_constants_preserves_bare_global_type:
   constants_do_not_clobber_bare_globals mods env_base.bare_globals /\
