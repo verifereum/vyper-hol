@@ -264,13 +264,14 @@ Theorem type_soundness_preconditions_satisfiable:
   ?cx am env_body env_after st.
     functions_well_typed cx /\
     context_well_typed cx /\
+    machine_well_typed am /\
     accounts_well_typed st.accounts /\
     state_well_typed st /\
     env_consistent env_body cx st /\
     type_stmts env_body NoneT [] = SOME env_after
 Proof
   qexists `empty_evaluation_context` >>
-  qexists `ARB` >>
+  qexists `initial_machine_state` >>
   qexists `<| current_src := NONE;
               var_types := FEMPTY;
               var_assignable := FEMPTY;
@@ -295,9 +296,7 @@ Proof
        env_scopes_consistent_def, env_immutables_consistent_def,
        fn_sigs_consistent_def, fn_sigs_complete_def, state_well_typed_def,
        scope_well_typed_def, vyperStateTheory.lookup_scopes_def,
-       accounts_well_typed_def, account_well_typed_def,
+       accounts_well_typed_def, account_well_typed_def, machine_well_typed_def,
        vfmStateTheory.lookup_account_def, vfmStateTheory.empty_accounts_def,
        vfmStateTheory.empty_account_state_def]
 QED
-
-val _ = export_theory();
