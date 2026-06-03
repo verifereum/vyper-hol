@@ -401,6 +401,29 @@ Proof
   simp[]
 QED
 
+Theorem constants_env_lookup_origin:
+  constants_env cx am addr src ts acc = SOME cenv /\
+  FLOOKUP cenv id = SOME x ==>
+  FLOOKUP acc id = SOME x \/
+  ?vis e id_str typ slot.
+    MEM (VariableDecl vis (Constant e) id_str typ slot) ts /\
+    string_to_num id_str = id
+Proof
+  qid_spec_tac `x` >>
+  qid_spec_tac `id` >>
+  qid_spec_tac `cenv` >>
+  qid_spec_tac `acc` >>
+  qid_spec_tac `ts` >>
+  qid_spec_tac `src` >>
+  qid_spec_tac `addr` >>
+  qid_spec_tac `am` >>
+  qid_spec_tac `cx` >>
+  recInduct constants_env_ind >>
+  rw[constants_env_def] >>
+  gvs[AllCaseEqs(), finite_mapTheory.FLOOKUP_UPDATE] >>
+  metis_tac[]
+QED
+
 Theorem constants_env_no_bare_global_lookup:
   constants_do_not_clobber_bare_globals mods bare_globals /\
   ALOOKUP mods src = SOME ts /\
@@ -408,7 +431,18 @@ Theorem constants_env_no_bare_global_lookup:
   FLOOKUP bare_globals (src,id) = SOME ty ==>
   FLOOKUP cenv id = NONE
 Proof
-  cheat
+  rw[] >>
+  Cases_on `FLOOKUP cenv id` >>
+  simp[] >>
+  drule constants_env_lookup_origin >>
+  disch_then drule >>
+  strip_tac >>
+  gvs[] >>
+  gvs[constants_do_not_clobber_bare_globals_def] >>
+  first_x_assum drule >>
+  disch_then drule >>
+  strip_tac >>
+  gvs[]
 QED
 
 Theorem merge_constants_preserves_lookup:
