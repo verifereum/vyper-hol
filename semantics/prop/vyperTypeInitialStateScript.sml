@@ -170,6 +170,29 @@ Proof
       finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
+Theorem initial_immutables_module_preserves_any_lookup:
+  initial_immutables_module tenv init_src ts acc = SOME imms /\
+  IS_SOME (FLOOKUP (get_source_immutables query_src acc) id) ==>
+  IS_SOME (FLOOKUP (get_source_immutables query_src imms) id)
+Proof
+  qid_spec_tac `acc` >>
+  Induct_on `ts` >>
+  rw[initial_immutables_module_def] >>
+  gvs[] >>
+  Cases_on `h` >>
+  gvs[initial_immutables_module_def, AllCaseEqs()] >>
+  TRY (Cases_on `v0` >> gvs[initial_immutables_module_def, AllCaseEqs()]) >>
+  first_x_assum drule >>
+  disch_then irule >>
+  Cases_on `init_src = query_src` >>
+  gvs[update_immutable_preserves_other_source] >>
+  Cases_on `string_to_num s = id` >>
+  gvs[update_immutable_lookup_same] >>
+  gvs[update_immutable_def, get_source_immutables_set_same,
+      finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+
 Theorem initial_immutables_module_contains_immutable:
   initial_immutables_module tenv src ts acc = SOME imms /\
   is_immutable_decl id ts /\
@@ -194,6 +217,33 @@ Proof
     goal_assum (drule_at Any) >>
     simp[update_immutable_lookup_same],
     first_x_assum drule >> simp[]]
+QED
+
+Theorem initial_immutables_contains_decl:
+  initial_immutables tenv mods = SOME imms /\
+  ALOOKUP mods src = SOME ts /\
+  is_immutable_decl id ts /\
+  find_var_decl_by_num id ts = NONE ==>
+  IS_SOME (FLOOKUP (get_source_immutables src imms) id)
+Proof
+  qid_spec_tac `imms` >>
+  qid_spec_tac `src` >>
+  qid_spec_tac `ts` >>
+  qid_spec_tac `id` >>
+  Induct_on `mods` >>
+  simp[initial_immutables_def] >>
+  rpt gen_tac >>
+  PairCases_on `h` >>
+  Cases_on `h0 = src` >>
+  rw[initial_immutables_def] >>
+  gvs[AllCaseEqs()]
+  >- (irule initial_immutables_module_contains_immutable >>
+      qexistsl [`acc`,`tenv`,`h1`] >>
+      simp[]) >>
+  irule initial_immutables_module_preserves_any_lookup >>
+  goal_assum (drule_at Any) >>
+  first_x_assum irule >>
+  simp[]
 QED
 
 Theorem initial_immutables_contains_bare_global:
