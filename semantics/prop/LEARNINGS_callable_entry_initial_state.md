@@ -20,3 +20,21 @@ evidence:
 - episode:E0004
 - tool_output:TO_callable_entry_initial_state-20260603T143413Z_m0036_t001
 - tool_output:TO_callable_entry_initial_state-20260603T143413Z_m0039_t001
+
+## L0003 scope='C3' tags=corollary,metis_tac,typed_stmts_no_type_error
+shape: Goal `no_type_error_eval (eval_stmts cx body (initial_state am [scope]))` with hypotheses matching callable-entry theorem.
+pattern: After proving `callable_entry_establishes_type_soundness_preconditions`, the no-TypeError callable-entry corollary can be a direct `metis_tac` over that theorem and `typed_stmts_no_type_error`; do not unfold runtime invariants or use lower-level statement soundness.
+works_when: The assumptions exactly match the main callable-entry theorem and `typed_stmts_no_type_error` is in scope via vyperTypeSoundness.
+evidence:
+- episode:E0006
+- tool_output:TO_callable_entry_initial_state-20260603T143413Z_m0081_t001
+- tool_output:TO_callable_entry_initial_state-20260603T143413Z_m0082_t001
+
+## L0004 scope='C4' tags=existential,empty_context,FEMPTY,record,qualified_defs
+shape: Existential satisfiability of `functions_well_typed`, `context_well_typed`, `state_well_typed`, `env_consistent`, and `type_stmts env NoneT []`.
+pattern: Use `empty_evaluation_context`, empty `typing_env` records, `initial_state initial_machine_state [FEMPTY]`, and simplify definitions. For irrelevant existentials use `ARB`; qualify external simplification theorems like `vfmStateTheory.empty_accounts_def` and `vyperStateTheory.lookup_scopes_def` when unqualified names are not imported.
+works_when: The statement only requires existence of soundness preconditions for an empty statement list and does not relate the abstract-machine existential to the chosen state.
+evidence:
+- episode:E0007
+- tool_output:TO_callable_entry_initial_state-20260603T143413Z_m0105_t001
+- tool_output:TO_callable_entry_initial_state-20260603T143413Z_m0112_t001
