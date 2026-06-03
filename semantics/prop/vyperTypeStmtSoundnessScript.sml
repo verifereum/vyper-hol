@@ -10698,6 +10698,55 @@ Proof
   qexists_tac `Num i` >> simp[]
 QED
 
+Theorem raw_call_bytes_slot_size_bound[local]:
+  n < dimword(:256) ==>
+   type_slot_size (BaseTV (BytesT (Dynamic n))) <= dimword(:256) /\
+   type_slot_size_list [BaseTV BoolT; BaseTV (BytesT (Dynamic n))] <= dimword(:256) /\
+   type_slot_size (TupleTV [BaseTV BoolT; BaseTV (BytesT (Dynamic n))]) <= dimword(:256)
+Proof
+  strip_tac >>
+  `type_slot_size (BaseTV (BytesT (Dynamic n))) + 2 <= dimword(:256)` by (
+    `type_slot_size (BaseTV (BytesT (Dynamic n))) = 1 + (n + 31) DIV 32`
+      by EVAL_TAC >>
+    `(n + 31) DIV 32 <= (dimword(:256) - 1 + 31) DIV 32` by
+      (irule DIV_LE_MONOTONE >> DECIDE_TAC) >>
+    `(dimword(:256) - 1 + 31) DIV 32 + 3 <= dimword(:256)` by EVAL_TAC >>
+    DECIDE_TAC) >>
+  `type_slot_size_list [BaseTV BoolT; BaseTV (BytesT (Dynamic n))] =
+   1 + type_slot_size (BaseTV (BytesT (Dynamic n)))` by EVAL_TAC >>
+  `type_slot_size (TupleTV [BaseTV BoolT; BaseTV (BytesT (Dynamic n))]) =
+   1 + type_slot_size (BaseTV (BytesT (Dynamic n)))` by
+     simp[type_slot_size_def] >>
+  DECIDE_TAC
+QED
+
+Theorem raw_call_args_runtime_typed_dest[local]:
+  exprs_runtime_typed env es vs /\
+  LENGTH es = 3 /\
+  EL 0 (MAP expr_type es) = BaseT AddressT /\
+  EL 1 (MAP expr_type es) = BaseT (BytesT bd) /\
+  EL 2 (MAP expr_type es) = BaseT (UintT 256) ==>
+  ?target_addr data amount. dest_AddressV (HD vs) = SOME target_addr /\
+                            dest_BytesV (EL 1 vs) = SOME data /\
+                            dest_NumV (EL 2 vs) = SOME amount
+Proof
+  rw[exprs_runtime_typed_def] >>
+  Cases_on `es` >> gvs[] >>
+  Cases_on `t` >> gvs[] >>
+  Cases_on `t'` >> gvs[] >>
+  gvs[evaluate_type_def] >>
+  Cases_on `bd` >> gvs[] >>
+  rename1 `value_has_type (BaseTV AddressT) v_addr` >>
+  rename1 `value_has_type (BaseTV (BytesT bd_data)) v_data` >>
+  rename1 `value_has_type (BaseTV (UintT 256)) v_amt` >>
+  Cases_on `v_addr` >> gvs[value_has_type_def, dest_AddressV_def] >>
+  Cases_on `v_data` >> gvs[value_has_type_def, dest_BytesV_def] >>
+  Cases_on `v_amt` >> gvs[value_has_type_def, dest_NumV_def] >>
+  rename1 `0 <= i` >>
+  `~(i < 0:int)` by intLib.ARITH_TAC >>
+  qexists_tac `Num i` >> simp[]
+QED
+
 Theorem raw_log_args_runtime_typed_dest[local]:
   exprs_runtime_typed env es vs /\
   LENGTH es = 2 /\
@@ -18196,7 +18245,58 @@ Resume eval_all_type_sound_mutual[Expr_Call_Send]:
 QED
 
 Resume eval_all_type_sound_mutual[Expr_Call_RawCallTarget]:
-  cheat
+  rpt gen_tac >> strip_tac >>
+  conj_tac
+  >- (
+    strip_tac >>
+    qpat_x_assum `well_typed_expr env (Call _ (RawCallTarget _) _ _)` mp_tac >>
+    rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
+    qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+    simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
+                         type_check_def, assert_def, return_def, raise_def,
+                         lift_option_type_def] >>
+    simp[] >>
+    Cases_on `eval_exprs cx es st` >>
+    rename1 `eval_exprs cx es st = (args_res,args_st)` >>
+    first_x_assum drule_all >> strip_tac >>
+    Cases_on `args_res` >> gvs[no_type_error_result_def]
+    >- (
+      rename1 `exprs_runtime_typed env es vs` >>
+      mp_tac raw_call_args_runtime_typed_dest >>
+      impl_tac >- simp[] >>
+      strip_tac >> gvs[] >>
+      `LENGTH vs = 3` by (gvs[exprs_runtime_typed_def] >> metis_tac[listTheory.LIST_REL_LENGTH]) >>
+      simp_tac(srw_ss())[bind_def, ignore_bind_def, check_def, assert_def,
+                           return_def, raise_def, lift_option_def,
+                           get_accounts_def, get_transient_storage_def,
+                           update_accounts_def, update_transient_def] >>
+      Cases_on `flags.rcf_is_delegate` >> gvs[return_def, raise_def, no_type_error_result_def]
+      >- (strip_tac >> gvs[]) >>
+      Cases_on `run_ext_call cx.txn.target target_addr data
+                  (if flags.rcf_is_static then NONE else SOME amount)
+                  args_st.accounts args_st.tStorage (vyper_to_tx_params cx.txn)` >>
+      gvs[return_def, raise_def, no_type_error_result_def]
+      >- (strip_tac >> gvs[]) >>
+      PairCases_on `x` >> gvs[] >>
+      `accounts_well_typed x2` by (drule_all run_ext_call_accounts_well_typed >> simp[]) >>
+      strip_tac >> gvs[update_accounts_def, update_transient_def, bind_def, return_def] >>
+      `runtime_consistent env cx (args_st with <|accounts := x2; tStorage := x3|>)` by
+        metis_tac[update_accounts_transient_runtime_consistent, runtime_consistent_def] >>
+      Cases_on `x0` >> Cases_on `flags.rcf_revert_on_failure` >>
+      Cases_on `flags.rcf_max_outsize = 0` >>
+      gvs[check_def, assert_def, bind_def, return_def, raise_def,
+          runtime_consistent_def, no_type_error_result_def,
+          expr_result_typed_def, expr_runtime_typed_def, expr_type_def,
+          toplevel_value_typed_def, value_has_type_def, raw_call_return_type_def,
+          evaluate_type_def, is_HashMapRef_def] >>
+      mp_tac (Q.SPEC `flags.rcf_max_outsize` (GEN_ALL raw_call_bytes_slot_size_bound)) >>
+      impl_tac >- simp[] >>
+      TRY strip_tac >>
+      gvs[listTheory.LENGTH_TAKE_EQ, value_has_type_def, evaluate_type_def,
+          raw_call_return_type_def] >>
+      decide_tac) >>
+    strip_tac >> gvs[]) >>
+  rpt strip_tac >> gvs[Once well_typed_expr_def]
 QED
 
 Resume eval_all_type_sound_mutual[Expr_Call_RawLog]:

@@ -768,3 +768,22 @@ evidence:
 - episode:E0326
 - tool_output:TO_type_system_rewrite-20260602T195240Z_m5940_t001
 - tool_output:TO_type_system_rewrite-20260602T195240Z_m5936_t001
+
+## L0192 scope='C0.6' tags=RawCallTarget,Resume,raw_call_return_type,slot-size,boundary-lemma
+shape: RawCallTarget success branch value typing leaves goals for dynamic bytes/tuple return: `type_slot_size ... <= dimword(:256)`, `LENGTH (TAKE n xs) <= n`, or `value_has_type` for `BytesV (TAKE n xs)` / `ArrayV (TupleV [BoolV ...; BytesV ...])`.
+pattern: Use a small slot-size boundary lemma for `n < dimword(:256)` before simplifying value typing. The helper shape copied from `vyperTypeSoundnessHelpersScript.sml` is: bound `type_slot_size (BaseTV (BytesT (Dynamic n)))`, `type_slot_size_list [BaseTV BoolT; BaseTV (BytesT (Dynamic n))]`, and `type_slot_size (TupleTV [BaseTV BoolT; BaseTV (BytesT (Dynamic n))])`; the tuple-size equality is `1 + type_slot_size (BaseTV (BytesT (Dynamic n)))`, not `1 + type_slot_size_list ...`.
+works_when: Applies after `well_typed_expr` exposes `flags.rcf_max_outsize < dimword(:256)` and RawCall return-type simplification has reduced the goal to dynamic bytes/tuple slot-size facts.
+evidence:
+- source:semantics/prop/vyperTypeSoundnessHelpersScript.sml:722-744
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:10701
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m6046_t001
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m6050_t001
+
+## L0193 scope='C0.6' tags=RawCallTarget,exprs_runtime_typed,dest_AddressV,dest_BytesV,dest_NumV
+shape: RawCallTarget after `eval_exprs cx es st = (INL vs,args_st)` with typed args: `LENGTH es = 3`, arg types Address/Bytes/Uint256, and need concrete `dest_*` successes for `HD vs`, `EL 1 vs`, `EL 2 vs`.
+pattern: A local destructor lemma `raw_call_args_runtime_typed_dest` is useful: from `exprs_runtime_typed env es vs` plus the three type/length facts, derive existential `target_addr data amount` with `dest_AddressV (HD vs) = SOME target_addr`, `dest_BytesV (EL 1 vs) = SOME data`, and `dest_NumV (EL 2 vs) = SOME amount`. In the Resume branch, apply it explicitly with `mp_tac ... >> impl_tac >- simp[]` rather than `drule_all` if matching fails.
+works_when: Use after opening the RawCall `well_typed_expr` case and the generated exprs IH has provided `exprs_runtime_typed env es vs`.
+evidence:
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:10722
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m6018_t001
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m6022_t001

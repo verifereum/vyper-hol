@@ -98,6 +98,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C0.5.4.5.1.4 | stuck | risk_mismatch | E0324 | Call plan_oracle(mode='review') and request PLAN repair: C0.5.4.5.1.4 should not remain a Risk-2 beginable proof leaf unless a new component supplies the driver premise or the proof architecture is redesigned. |
 | C0.5.4.6 | proved |  | E0329 | Call plan_oracle(mode='review', component_id='C0.5.4.6', evidence_ids=[...]); if accepted, proceed to C0.5.5. |
 | C0.5.5 | proved |  | E0330 |  |
+| C0.6 | proved |  | E0332 |  |
 | C1.1 | proved |  | E0024 | Call plan_oracle(mode='review') for C1.1, then begin C1.2 if accepted. |
 | C1.1.1 | proved |  | E0012 |  |
 | C1.1.2 | proved |  | E0013 |  |
@@ -2916,6 +2917,28 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 - `TO_type_system_rewrite-20260602T195240Z_m5995_t002` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260602T195240Z_m5995_t001` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260602T195240Z_m5995_t003` (use `read_tool_output` for exact output)
+
+## C0.6
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0332`
+- blocker: 
+- actual effort: 1 sessions, 5 msgs, 75 steps, 94 tools, 25 holbuild, 8,060,662 tok (8,040,523 in, 20,139 out, 7,736,960 cached), 1440.8s, $5.990465
+
+### Attempts / Evidence
+
+- `E0331` (progressed, missing_helper, actual effort: 1 sessions, 4 msgs, 55 steps, 73 tools, 19 holbuild, 6,847,126 tok (6,832,683 in, 14,443 out, 6,594,176 cached), 1155.1s, $4.922913)
+  - Replaced RawCallTarget cheat with branch-local Resume skeleton modeled on RawLog/RawRevert: expose `well_typed_expr`, split `eval_exprs`, use generated exprs IH, add local `raw_call_args_runtime_typed_dest` and `raw_call_bytes_slot_size_bound`, then step RawCall monadic prefix through delegate/run_ext_call/update branches. -> Useful progress but not closed. The current proof reaches only three small success-result typing/size subgoals after the `run_ext_call = SOME (T,x1,x2,x3)` path with `flags.rcf_max_outsize <> 0`; earlier error branches and state/env/accounts side-conditions are mostly discharged. Latest edit replaces a failing `drule` with `mp_tac raw_call_bytes_slot_size_bound >> impl_tac ...`; this has not yet been rebuilt. Previous failure showed remaining goals about `word_size flags.rcf_max_outsize + 1 <= dimword(:256)`, `LENGTH (TAKE ...) <= ...`, and tuple/bytes value typing. (`TO_type_system_rewrite-20260602T195240Z_m6010_t001`, `TO_type_system_rewrite-20260602T195240Z_m6026_t001`, `TO_type_system_rewrite-20260602T195240Z_m6043_t001`, `TO_type_system_rewrite-20260602T195240Z_m6053_t001`, `TO_type_system_rewrite-20260602T195240Z_m6058_t001`)
+  - Probed initial RawCallTarget goal by temporarily using `qexists_tac` and `FAIL_TAC` probes, then restored proof skeleton. -> Confirmed Resume goal has an exprs IH as first assumption and two conjuncts: expression soundness and place-expression branch. The existential-looking `∃v. ¬v` failure at top is not a real source goal; it is holbuild's wrapper after an unsolved branch deeper in the proof. Do not chase it by changing the opening tactic. (`TO_type_system_rewrite-20260602T195240Z_m6040_t001`, `TO_type_system_rewrite-20260602T195240Z_m6042_t001`)
+- `E0332` (proved, , actual effort: 1 sessions, 5 msgs, 75 steps, 94 tools, 25 holbuild, 8,060,662 tok (8,040,523 in, 20,139 out, 7,736,960 cached), 1440.8s, $5.990465)
+  - Specialized `GEN_ALL raw_call_bytes_slot_size_bound` at `flags.rcf_max_outsize`, discharged the antecedent by `simp[]`, used `TRY strip_tac` to handle both implication/non-implication post-simp subgoals, and replaced `LENGTH_TAKE` with `LENGTH_TAKE_EQ` so `decide_tac` closes the RawCall result length obligations. -> `holbuild(targets=['vyperTypeStmtSoundnessTheory'], timeout=600)` now builds cleanly; the `Resume eval_all_type_sound_mutual[Expr_Call_RawCallTarget]` cheat is replaced by a proof. (`TO_type_system_rewrite-20260602T195240Z_m6076_t001`, `TO_type_system_rewrite-20260602T195240Z_m6080_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260602T195240Z_m6080_t001` (use `read_tool_output` for exact output)
 
 ## C1.1
 
