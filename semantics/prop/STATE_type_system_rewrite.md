@@ -1,72 +1,77 @@
 # STATE_type_system_rewrite
-Updated: 2026-06-02
+Updated: 2026-06-03
 
 ## Cursor
-- component: C0.5.4.4.3
-- status: in_progress
+- component: C0.5.4.5.1.2
+- status: blocked
 - active_file: semantics/prop/vyperTypeStmtSoundnessScript.sml
-- next_action: Read `vyperTypeStmtSoundnessScript.sml` around the inserted wrapper theorem `extcall_after_state_update_tail_sound_cond_driver_ih_get_tenv` (~lines 9743-9790), then run `holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)` to see the current exact failure. Current source is partial/uncommitted and likely not build-clean because the last edit changed the old-helper application to `MATCH_MP_TAC extcall_after_state_update_tail_sound_cond_driver_ih` but was not rebuilt before handoff.
-- expected_goal_shape: A small wrapper-lemma proof goal, not the generated ExtCall Resume prefix. The theorem statement has the live tail equation using `evaluate_abi_decode_return (get_tenv cx) ret_type returnData`; after `get_tenv cx = env.type_defs` and `gvs[]`, the remaining obligation should be applying `extcall_after_state_update_tail_sound_cond_driver_ih` with compact premises: runtime/functions/accounts/well_typed_opt/well_formed/driver-type/conditional-driver-IH/tail equation.
-- verify_with: holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600)
+- next_action: Do not edit, build, or begin proof work unless the user/maintainer has supplied a new explicit unblock. First query_plan(); if it still shows no beginable frontier and no new instruction changes the proof-interface constraints, report end_session(outcome='blocked'). If a new unblock exists, call plan_oracle with that instruction and the C0.5.4.5.1.2 evidence to request a low-risk executable frontier.
+- expected_goal_shape: No authorized proof goal under the current PLAN. The remaining source obligation is the final `cheat` in `Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_nonstatic_success]`; applying `extcall_nonstatic_success_tail_sound_cond_driver_ih` leaves the missing compact optional-driver IH premise as a large existential/conditional package.
+- verify_with: Only after a future PLAN creates a beginable low-risk component: holbuild(targets=["vyperTypeStmtSoundnessTheory"], timeout=600). Current PLAN gate blocks holbuild because high-risk blockers have no frontier.
 
 ## If This Fails
-- If failure is a small premise-ordering/matching issue in the wrapper, repair the wrapper proof only using explicit `qspecl_then ... mp_tac`, `impl_tac`, `conj_tac`, and live assumptions; checkpoint_progress after useful partial evidence. If proof again requires generated ExtCall prefix facts or broad Resume-context simplification, close C0.5.4.4.3 as stuck/risk_mismatch and call plan_oracle review with E0268 evidence.
+- If a future authorized plan again requires broad cleanup or brittle generated-IH plumbing, stop immediately. Use checkpoint_progress for partial, nonterminal evidence; close_component(result='stuck', diagnosis_tag='risk_mismatch' or 'plan_incomplete') only for a terminal failure, then call plan_oracle review.
 
 ## Do Not Retry
-- Use broad `gvs[]`/`simp[]` in the large `Expr_Call_ExtCall_nonstatic_success` Resume goal to rewrite `get_tenv cx` to `env.type_defs`.: E0267 showed this times out or fails in the huge post-RESUME context; the rewrite belongs in C0.5.4.4.3's small wrapper theorem.
-  - evidence: episode:E0267
-  - evidence: tool_output:TO_type_system_rewrite-20260602T195240Z_m4910_t001
-  - evidence: tool_output:TO_type_system_rewrite-20260602T195240Z_m4914_t001
-- Manually instantiate the generated optional-driver IH with a long `qspecl_then` list over ExtCall prefix variables.: This is forbidden generated-prefix adapter plumbing and failed again during E0267.
-  - evidence: episode:E0267
-  - evidence: tool_output:TO_type_system_rewrite-20260602T195240Z_m4916_t001
-  - evidence: episode:E0262
-- Use unguarded `rpt conj_tac >> TRY (first_assum ACCEPT_TAC)` in the wrapper proof.: It over-solved/left the tactic stream in a bad state and produced holbuild `no goals` instrumentation failures; use explicit premise order instead.
-  - evidence: episode:E0268
-  - evidence: tool_output:TO_type_system_rewrite-20260602T195240Z_m4930_t001
-  - evidence: tool_output:TO_type_system_rewrite-20260602T195240Z_m4947_t001
-- Treat C0.5.4.4.2's exposed payload as sufficient to start/finish C0.5.4.5 without the live-tenv wrapper.: E0267 proved the exposed payload alone still leaves the old helper's tail-equation mismatch in the huge Resume goal.
-  - evidence: episode:E0267
-  - evidence: tool_output:TO_type_system_rewrite-20260602T195240Z_m4905_t001
-  - evidence: tool_output:TO_type_system_rewrite-20260602T195240Z_m4922_t001
+- Generic `res_tac`, `imp_res_tac`, or `metis_tac[]` over the full Resume context to instantiate the generated optional-driver IH.: Timed out even with prefix facts present and was invalidated by strategist/maintainer constraints; it searches the generated context rather than exposing a compact branch-local premise.
+  - evidence: episode:E0320
+  - evidence: tool_output:TO_type_system_rewrite-20260602T195240Z_m5852_t001
+  - evidence: tool_output:TO_type_system_rewrite-20260602T195240Z_m5856_t001
+- Goal-directed generated-IH consumption by `first_x_assum`, `last_x_assum`, `qpat_x_assum`, or ASSUM_LIST numeric indexing.: E0323 showed selector-based application did not cleanly find/apply the huge generated IH; ASSUM_LIST indexing is brittle and timed out, violating the task stop condition.
+  - evidence: episode:E0323
+  - evidence: tool_output:TO_type_system_rewrite-20260602T195240Z_m5881_t001
+  - evidence: tool_output:TO_type_system_rewrite-20260602T195240Z_m5897_t001
+- Close the Resume by only applying `extcall_nonstatic_success_tail_sound_cond_driver_ih` and simplifying/conjoining the result.: The theorem matches the postcondition but leaves the missing conditional driver-premise existential package; simplification timed out on a large design-signal goal.
+  - evidence: episode:E0324
+  - evidence: tool_output:TO_type_system_rewrite-20260602T195240Z_m5907_t001
+- Revive outside-Resume bridge theorem or build a generated-prefix adapter replaying the ExtCall prefix into the optional-driver IH.: Earlier bridge attempts were brittle, parser/name-fragile, and timed out; maintainer clarification forbids long generated-prefix adapter plumbing under the current task constraints.
+  - evidence: episode:E0315
+  - evidence: tool_output:TO_type_system_rewrite-20260602T195240Z_m5784_t001
+  - evidence: tool_output:TO_type_system_rewrite-20260602T195240Z_m5788_t001
+- Broad `simp`/`gvs`/`AllCaseEqs()` cleanup over the whole ExtCall prefix or long `qspecl_then` lists over generated binders/ASSUME-quoted assumptions.: Explicitly forbidden by maintainer clarification and repeatedly associated with large goals, timeouts, no-goals replay, and generated-context fragility.
+  - evidence: source:semantics/prop/TASK_type_system_rewrite.md
+  - evidence: episode:E0311
+  - evidence: episode:E0317
 
 ## Reflection
 ### Tunnel Vision Check
-- Outside-the-box: instead of wrapping the old helper with backward `irule`, prove a more direct tail theorem by copying the old helper proof but with `get_tenv cx`; this may avoid brittle theorem application entirely while staying prefix-free.
-- We may be optimizing the old helper interface too literally. A fresh expert should ask whether the wrapper conclusion should be exactly the consumer goal or only a smaller lemma rewriting the tail equation under the `(if ... else ...)` term.
-- The PLAN decomposition is currently plausible: C0.5.4.4.3 is a prefix-free boundary lemma and is the right abstraction before returning to the huge Resume goal. Do not jump back to C0.5.4.5 until the wrapper builds.
-- Do not keep trying generated-IH extraction tactics. The active problem is now a small wrapper theorem; if it becomes large or prefix-shaped, the wrapper statement is wrong.
-- Fresh expert question: can `extcall_after_state_update_tail_sound_cond_driver_ih_get_tenv` be proved by `qspecl_then [...] mp_tac old_helper >> simp[]` with the full antecedent discharged as one implication, avoiding `irule` existential subgoals and holbuild's no-goals instrumentation issue?
+- Outside-the-box approach still needed: change the proof-generator/Resume interface or proof boundary so the optional-driver expression IH is exposed as a compact branch-local premise before the ExtCall success tail, rather than buried in a generated continuation assumption.
+- A fresh expert should question C0.5.4.5.1’s decomposition: producer and consumer were split, but the producer premise is not actually obtainable under current constraints. Optimizing the tail theorem or suffix tactics is likely the wrong target.
+- The semantic theorem still appears likely true; the failure is proof-interface access to the generated optional-driver IH, not the validity of `extcall_nonstatic_success_tail_sound_cond_driver_ih`.
+- Do not retry tactics. Evidence now spans resolution, goal-directed assumption selection, context indexing, and direct tail theorem application. This is a boundary/interface issue requiring maintainer/strategist action.
+- Fresh expert first question: can the mutual induction/Resume be refactored so the recursive eval_expr call for `THE drv` is named and exported locally at the exact branch point, without replaying the whole generated prefix?
 
 ### What Went Wrong
-- E0267 showed C0.5.4.5 was not actually Risk 2 under the exposed-payload-only interface: direct use of the env.type_defs helper in the large Resume goal failed on the `get_tenv cx` tail equation and local simplification timed out.
-- The strategist repaired this by adding C0.5.4.4.3, a live-tenv wrapper lemma. I inserted the wrapper theorem, but did not finish it before handoff.
-- Several wrapper proof shapes with `irule extcall_after_state_update_tail_sound_cond_driver_ih` plus explicit witnesses reached the intended compact old-helper obligation, but the tactic script either exposed premise-ordering issues or triggered holbuild `no goals` instrumentation failures after subgoals were solved early.
-- Current source is partial and uncommitted; the last edit to use `MATCH_MP_TAC extcall_after_state_update_tail_sound_cond_driver_ih` was not rebuilt. PLAN/DOSSIER also have uncommitted tracked diffs from E0267 review and E0268 checkpoint.
+- The PLAN assumption that the generated optional-driver IH could be consumed goal-directed after reaching the concrete success branch was false. E0323 showed first/last/qpat selection failed and ASSUM_LIST indexing timed out.
+- C0.5.4.5.1.4/tail consumption was scheduled as if the driver premise existed. E0324 showed direct use of the tail theorem matches the postcondition but leaves exactly the missing driver-premise package; simplifying that package timed out and produced a >4KiB design-signal goal.
+- The latest strategist augment confirmed the current leaf is terminally blocked under the scoped proof interface; no low-risk child proof is authorized until an ancestor-level interface change or maintainer relaxation exists.
+- A user-requested holbuild check at session start could not be performed because the PLAN gate blocked builds while high-risk components have no frontier.
 
 ### Ignored Signals
-- The old helper's theorem shape after `irule` produces an existential-packed antecedent, so blindly combining `rpt conj_tac`, `qexistsl`, and `TRY` is brittle and can confuse the checkpoint/instrumentation path.
-- The wrapper proof is small enough that broad `gvs[]` or `metis_tac[]` should not be necessary after the initial `get_tenv` rewrite; when `metis_tac[]` timed out on a structured conjunction, the proof needed explicit premise management.
-- The success subresume remains cheated; clean focused builds before C0.5.4.5 only mean the partial wrapper is absent or the source was restored, not task completion.
+- E0311/E0315/E0320/E0323 all pointed to the same generated-IH interface problem; treating later suffix proof leaves as tactical was stale after E0323.
+- The >4KiB conditional driver-premise package after tail-theorem application was a decomposition smell, not a request for stronger simplification.
+- The task says the proof should be straightforward and to stop on design/plan issues; continuing local suffix experiments would violate that stop condition.
+- The source is intentionally partial and stable through a cheat; it should not be treated as completion or committed as a completed proof.
 
 ### Strategy Adjustments
-- Next session should stay on C0.5.4.4.3. Do not begin C0.5.4.5 until the wrapper theorem is proved, reviewed, and committed if prompted.
-- Use an explicit forward application of `extcall_after_state_update_tail_sound_cond_driver_ih`: specialize it, prove its antecedent with `impl_tac`/controlled `conj_tac`, then use the resulting conclusion; this may avoid `irule`/existential matching quirks.
-- If the current `MATCH_MP_TAC` edit fails badly, restore just the wrapper proof body to the last readable `irule`/explicit-witness shape from E0268 or rewrite the proof by copying the old helper proof directly with the live `get_tenv` equation.
-- Keep edits confined to `semantics/prop/vyperTypeStmtSoundnessScript.sml`; do not stage untracked `LEARNINGS_type_system_rewrite.legacy.md` or `tmp_helper.txt`; commit with `--no-gpg-sign` only after focused build is clean and strategist review accepts a proved component.
+- Next session should perform no proof action unless new maintainer/strategist instructions explicitly change the proof interface or constraints.
+- Any future plan should produce a fact that exactly matches the conditional driver premise consumed by `extcall_nonstatic_success_tail_sound_cond_driver_ih`, with ExtCall prefix operations already discharged in a stable, branch-local way.
+- Keep the current useful partial source: local tail theorem plus value-extraction/calldata prefix facts. Do not retain or revive failed generated-IH suffixes.
+- If a stable checkpoint commit is considered, first inspect git status/diff; stage only relevant task-owned files and commit with `git commit --no-gpg-sign`. Do not claim final completion while cheats remain.
 
 ### Oracle Feedback
-- Held: E0267 review correctly identified the real interface mismatch as `get_tenv cx` versus `env.type_defs` and introduced the right small boundary-lemma component C0.5.4.4.3.
-- Held: C0.5.4.4.3 should not mention generated prefix operations; all wrapper attempts so far stayed prefix-free.
-- Still unvalidated: the wrapper is claimed Risk 2/straightforward, but tactic structuring around the old helper has not yet built. If simple explicit application fails again, escalate rather than tactic-thrashing.
+- Held: the strategist correctly preserved the local tail theorem and prefix facts as useful carry-forward evidence.
+- Missed earlier: the claim that generated IH could be consumed goal-directed as Risk 2 was falsified by E0323 under holbuild/tactic constraints.
+- Corrected later: the latest augment `TO_type_system_rewrite-20260602T195240Z_m5921_t001` explicitly classifies C0.5.4.5.1.2 as terminal blocked proof-interface status and says to report blocked rather than continue proof search.
+- Current binding state: query_plan still shows no scheduled leaf frontier and no beginable component; proof work/builds are gated.
 
 ## Evidence Pointers
-- episode:E0267 - C0.5.4.5 stuck: old env.type_defs helper mismatch and generated-prefix route forbidden
-- episode:E0268 - nonterminal checkpoint for C0.5.4.4.3 wrapper insertion/proof attempts
-- tool_output:TO_type_system_rewrite-20260602T195240Z_m4922_t001 - strategist introduced live-tenv wrapper plan
-- tool_output:TO_type_system_rewrite-20260602T195240Z_m4925_t001 - inserted wrapper theorem statement/source location
-- tool_output:TO_type_system_rewrite-20260602T195240Z_m4926_t001 - naive old-helper application timed out on structured conjunction
-- tool_output:TO_type_system_rewrite-20260602T195240Z_m4935_t001 - FAIL_TAC probe showed compact existential-packed old-helper obligation after four premises
-- tool_output:TO_type_system_rewrite-20260602T195240Z_m4940_t001 - explicit specialization exposed conditional-driver-IH premise ordering
-- tool_output:TO_type_system_rewrite-20260602T195240Z_m4947_t001 - `irule`/explicit witness proof shape hit holbuild no-goals instrumentation failure
-- tool_output:TO_type_system_rewrite-20260602T195240Z_m4949_t002 - git status at handoff: source/PLAN/DOSSIER modified plus untracked legacy/temp files
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m5923_t003 - latest query_plan: high-risk blockers remain, no scheduled leaf frontier, no beginable component
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m5921_t001 - strategist augment: C0.5.4.5.1.2 is terminal blocked proof-interface status; do not prove/build under current constraints
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m5919_t001 - attempted holbuild was blocked by PLAN gate due to high-risk components with no frontier
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m5920_t003 - git diff/source shows stable local tail theorem and prefix facts, but final Resume still ends in cheat
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m5920_t004 - grep confirms remaining cheats in vyperTypeStmtSoundnessScript.sml including ExtCall nonstatic success
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m5923_t002 - dossier for C0.5.4.5.1.2 summarizing E0305/E0307/E0317/E0319/E0322 evidence
+- episode:E0323 - generated optional-driver IH consumption by goal-directed selection/context indexing failed; suffix reverted
+- episode:E0324 - direct tail theorem application failed, leaving missing driver-premise package; suffix reverted
+- episode:E0322 - stable prefix facts audited and retained

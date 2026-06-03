@@ -677,3 +677,76 @@ evidence:
 - episode:E0267
 - tool_output:TO_type_system_rewrite-20260602T195240Z_m4922_t001
 - episode:E0268
+
+## L0179 scope='C0.5.4.5.1' tags=holbuild,Resume,no-goals,validation
+shape: A Resume proof suffix appears to discharge all goals, but holbuild failed-prefix replay raises `HOL_ERR goalStack.top_goals "no goals"` with no HOL subgoal.
+pattern: Treat no-goals replay as validation failure, not proof success. If a minimized proof exposes a real goal, replan from that goal; if an explicit suffix again no-goals, replace the proof interface rather than perturbing checkpoints or keeping brittle manual instantiation.
+works_when: Applies to suspended Resume branches under holbuild checkpoint/goalfrag replay where no ordinary HOL subgoal is shown. Record evidence and escalate/replan; do not repeat identical builds.
+evidence:
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m5319_t002
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m5679_t001
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m5694_t001
+- episode:E0303
+- episode:E0305
+- episode:E0307
+
+## L0181 scope='C0.5.4.5.1.3' tags=simp-timeout,conjunction,boundary-lemma,ExtCall
+shape: After explicit instantiation of a helper, the remaining goal is just a conjunction of premises already in assumptions, but `simp[]` times out.
+pattern: Discharge the conjunction structurally with bounded tactics such as `rpt conj_tac >> first_assum ACCEPT_TAC` instead of invoking the simplifier over a large context.
+works_when: Use for wrapper/boundary lemmas where all premises are exactly present as assumptions and simplifier search is unnecessary or too expensive.
+evidence:
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m5715_t001
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m5716_t001
+- episode:E0310
+
+## L0184 scope='C0.5.4.5.1' tags=ExtCall,Resume,optional-driver-IH,proof-interface,generated-prefix
+shape: ExtCall nonstatic success Resume has concrete success facts and a generated optional-driver IH, but needs the compact conditional driver premise for `extcall_nonstatic_success_tail_sound_cond_driver_ih`.
+pattern: Treat the semantic tail lemma as good and the generated optional-driver IH as the bad producer interface. Do not try to bridge by replaying generated ExtCall prefixes or by direct parser-sensitive matching. A future approved architecture must expose the driver IH as a clean named/matchable premise before generated prefix accumulation, and first prove only the compact conditional premise as a small probe.
+works_when: Applies to future replanning for C0.5.4.5.1 after maintainer/operator approval. It is a stop-pattern, not an authorization to edit/build; use only to reject generated-prefix adapter routes and to design the first low-risk probe.
+evidence:
+- episode:E0315
+- episode:E0317
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m5814_t001
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m5816_t001
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m5820_t001
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m5824_t001
+
+## L0185 scope='C0.5.4.5.1' tags=ExtCall,boundary-lemma,tail,bounded-conjunction
+shape: Post-update ExtCall success tail after `run_ext_call` has `runtime_consistent env cx args_st`, `accounts_well_typed pr2`, driver well-typedness, return type well-formedness, and conditional driver premise.
+pattern: Keep `extcall_nonstatic_success_tail_sound_cond_driver_ih` as the semantic boundary. It proved cleanly by wrapping `extcall_after_state_update_tail_sound_cond_driver_ih_get_tenv`; discharge its simple conjunction premises with bounded `rpt conj_tac >> first_assum ACCEPT_TAC`, not broad `simp[]` that can time out.
+works_when: Use only after the compact conditional driver premise is already available from a clean interface. This lemma does not solve the generated-IH producer problem.
+evidence:
+- episode:E0310
+- episode:E0314
+- episode:E0316
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m5716_t001
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m5808_t001
+
+## L0186 scope='C0.5.4.5.1.2' tags=ExtCall,monad,EVAL_TAC,assert,prefix-fact
+shape: Small closed monadic prefix fact `(do assert T ...; v <- return amount; return ... od) args_st = ...` inside a large Resume context; `simp[bind_def, return_def, assert_def]` fails to close.
+pattern: For closed computation facts over `assert T`/`return` that do not depend on assumptions, use `EVAL_TAC` rather than simplifier search in the large Resume context. Keep the fact small and separate from generated-IH antecedents.
+works_when: Applies to standalone monadic computation facts with no symbolic branch choice except definitions; not a replacement for proving generated-IH producer premises.
+evidence:
+- episode:E0319
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m5843_t001
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m5846_t001
+
+## L0188 scope='C0.5.4.5.1' tags=ExtCall,generated-IH,proof-interface,driver-premise,blocked
+shape: A tail boundary theorem needs a compact optional-driver premise, but the only available generated mutual/Resume IH is a huge prefix-continuation assumption.
+pattern: Treat this as a proof-interface blocker, not a tactic problem. Preserve small prefix facts and the tail boundary theorem, but do not try to recover the compact premise through search, broad simplification, generated-binder specialization, context-position selection, or generated-prefix bridge reconstruction. A new architecture must expose the optional-driver soundness premise directly as a small branch-local fact.
+works_when: Applies in `Expr_Call_ExtCall_nonstatic_success` after the Resume has reached the concrete success branch and the two prefix facts are present. Use only to decide escalation/blocked status; it is not a proof tactic.
+evidence:
+- episode:E0320
+- episode:E0323
+- episode:E0324
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m5913_t001
+
+## L0189 scope='C0.5.4.5.1' tags=ExtCall,Resume,generated-IH,proof-interface,blocked
+shape: Resume proof has a generated optional-driver IH buried in the context; a tail theorem needs a compact conditional driver premise.
+pattern: If a generated mutual-Resume IH is not exposed as a compact branch-local fact, do not try to recover it with global assumption search, ASSUM_LIST indexing, or generated-prefix replay. Treat the missing premise as a proof-interface boundary problem and request an ancestor-level refactor that names/exposes the recursive-call IH at the concrete branch point.
+works_when: Applies to ExtCall nonstatic success and similar generated Resume branches where the semantic tail theorem is proved but its recursive-call IH premise remains inaccessible without broad prefix cleanup or brittle generated context plumbing.
+evidence:
+- episode:E0323
+- episode:E0324
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m5921_t001
+- source:semantics/prop/TASK_type_system_rewrite.md
