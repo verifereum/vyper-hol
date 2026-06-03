@@ -145,6 +145,40 @@ Proof
   simp[env_immutables_consistent_def]
 QED
 
+Theorem functions_well_typed_callable_body_empty_static_maps:
+  functions_well_typed cx /\
+  fn_sigs_consistent fn_sigs cx /\
+  fn_sigs_complete fn_sigs cx /\
+  get_module_code cx src = SOME ts /\
+  lookup_callable_function cx.in_deploy fn ts =
+    SOME (fm,nr,args,dflts,ret,body) ==>
+  ?env_body env_after.
+    env_body.current_src = src /\
+    env_body.type_defs = get_tenv cx /\
+    env_body.fn_sigs = fn_sigs /\
+    env_body.bare_globals = FEMPTY /\
+    env_body.toplevel_vtypes = FEMPTY /\
+    env_body.flag_members = FEMPTY /\
+    type_stmts env_body ret body = SOME env_after /\
+    (!id typ. MEM (id,typ) args ==>
+       FLOOKUP env_body.var_types (string_to_num id) = SOME typ /\
+       FLOOKUP env_body.var_assignable (string_to_num id) = SOME T) /\
+    (!n ty. FLOOKUP env_body.var_types n = SOME ty ==>
+       ?id. MEM (id,ty) args /\ n = string_to_num id) /\
+    (!n b. FLOOKUP env_body.var_assignable n = SOME b ==>
+       ?id typ. MEM (id,typ) args /\ n = string_to_num id /\ b = T)
+Proof
+  rw[functions_well_typed_def] >>
+  first_x_assum (qspecl_then [`fn_sigs`, `FEMPTY`, `FEMPTY`, `FEMPTY`] mp_tac) >>
+  simp[] >>
+  disch_then (qspecl_then [`src`, `fn`, `ts`, `fm`, `nr`, `args`, `dflts`, `ret`, `body`] mp_tac) >>
+  simp[] >>
+  rw[] >>
+  qexistsl [`env_body`, `env_after`] >>
+  gvs[] >>
+  metis_tac[]
+QED
+
 (* Main #282 theorem: callable-entry setup establishes the preconditions of the
  * statement type-soundness theorem for the selected function body.
  *
