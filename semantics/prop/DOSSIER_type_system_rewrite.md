@@ -92,6 +92,8 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C0.5.4.5.1.1 | proved |  | E0325 | Call plan_oracle(mode='review', component_id='C0.5.4.5.1.1', evidence_ids=[...]); if accepted, begin the next scheduled low-risk leaf. |
 | C0.5.4.5.1.2 | proved |  | E0322 |  |
 | C0.5.4.5.1.2.1 | proved |  | E0326 | Call plan_oracle(mode='review', component_id='C0.5.4.5.1.2.1', evidence_ids=[...]); if accepted, begin C0.5.4.5.1.2.2 to close the true driver branch. |
+| C0.5.4.5.1.2.2 | proved |  | E0327 | Call plan_oracle(mode='review', component_id='C0.5.4.5.1.2.2', evidence_ids=[...]); if accepted, begin C0.5.4.5.1.2.3 audit. |
+| C0.5.4.5.1.2.3 | proved |  | E0328 | Call plan_oracle(mode='review', component_id='C0.5.4.5.1.2.3', evidence_ids=[...]); if accepted, stage relevant tracked semantics/prop files only and commit unsigned. |
 | C0.5.4.5.1.3 | stuck | risk_mismatch | E0323 | Call plan_oracle(mode='review') for this stuck leaf and request a replacement/redesign of the producer interface or proof architecture; do not continue tactical work on C0.5.4.5.1.3 without a new PLAN. |
 | C0.5.4.5.1.4 | stuck | risk_mismatch | E0324 | Call plan_oracle(mode='review') and request PLAN repair: C0.5.4.5.1.4 should not remain a Risk-2 beginable proof leaf unless a new component supplies the driver premise or the proof architecture is redesigned. |
 | C0.5.5 | stuck | plan_incomplete | E0258 | Call plan_oracle(mode='review') for C0.5.5 and request scheduling repair so C0.5.4.4 becomes beginable before C0.5.4.5 and audits. |
@@ -2741,6 +2743,54 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 - `TO_type_system_rewrite-20260602T195240Z_m5941_t001` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260602T195240Z_m5941_t002` (use `read_tool_output` for exact output)
 - `TO_type_system_rewrite-20260602T195240Z_m5941_t003` (use `read_tool_output` for exact output)
+
+## C0.5.4.5.1.2.2
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0327`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 20 steps, 25 tools, 6 holbuild, 2,240,086 tok (2,234,559 in, 5,527 out, 2,169,856 cached), 275.5s, $1.574253
+- next: Call plan_oracle(mode='review', component_id='C0.5.4.5.1.2.2', evidence_ids=[...]); if accepted, begin C0.5.4.5.1.2.3 audit.
+
+### Attempts / Evidence
+
+- `E0327` (proved, , actual effort: 1 sessions, 1 msgs, 20 steps, 25 tools, 6 holbuild, 2,240,086 tok (2,234,559 in, 5,527 out, 2,169,856 cached), 275.5s, $1.574253)
+  - Replace true-driver branch cheat with branch-local generated IH specialization after `pr1 = [] /\ IS_SOME drv` split. -> Focused holbuild succeeds. The proof rewrites the final continuation to the concrete `eval_expr cx (THE drv)` equation, derives driver well-typedness with `well_typed_opt_THE`, specializes the generated IH once using concrete prefix facts, and rewraps the result for the enclosing ExtCall. Grep/read evidence confirms `Expr_Call_ExtCall_nonstatic_success` no longer contains a local cheat; the remaining grep cheat is in the later Send Resume, outside this component. (`TO_type_system_rewrite-20260602T195240Z_m5967_t001`, `TO_type_system_rewrite-20260602T195240Z_m5968_t001`, `TO_type_system_rewrite-20260602T195240Z_m5968_t002`, `TO_type_system_rewrite-20260602T195240Z_m5968_t003`)
+  - Probe and incremental fixes for true branch. -> Initial `simp[]` over the branch condition timed out, so the proof now rewrites only with the retained `pr1 = []` and `IS_SOME drv` assumptions plus `COND_CLAUSES`. The final result typing needed an explicit `expr_type (THE drv) = ret_type` fact before `gvs`; after adding it, holbuild succeeded. (`TO_type_system_rewrite-20260602T195240Z_m5951_t001`, `TO_type_system_rewrite-20260602T195240Z_m5956_t001`, `TO_type_system_rewrite-20260602T195240Z_m5960_t001`, `TO_type_system_rewrite-20260602T195240Z_m5967_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260602T195240Z_m5967_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m5968_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m5968_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m5968_t003` (use `read_tool_output` for exact output)
+
+## C0.5.4.5.1.2.3
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0328`
+- blocker: 
+- actual effort: 1 sessions, 3 steps, 7 tools, 1 holbuild, 390,734 tok (389,871 in, 863 out, 380,032 cached), 30.2s, $0.265101
+- next: Call plan_oracle(mode='review', component_id='C0.5.4.5.1.2.3', evidence_ids=[...]); if accepted, stage relevant tracked semantics/prop files only and commit unsigned.
+
+### Attempts / Evidence
+
+- `E0328` (proved, , actual effort: 1 sessions, 3 steps, 7 tools, 1 holbuild, 390,734 tok (389,871 in, 863 out, 380,032 cached), 30.2s, $0.265101)
+  - Integration audit for ExtCall nonstatic success closure: focused build, local grep/read, diff/status inspection. -> `vyperTypeStmtSoundnessTheory` builds. The `Expr_Call_ExtCall_nonstatic_success` Resume region has no local `cheat`; grep's remaining source `cheat` is in `Expr_Call_RawCallTarget` outside this component. Diff is confined to semantics/prop and the current checkpoint source change is the replacement of the true-driver branch cheat by the branch-local generated-IH proof. (`TO_type_system_rewrite-20260602T195240Z_m5972_t004`, `TO_type_system_rewrite-20260602T195240Z_m5972_t002`, `TO_type_system_rewrite-20260602T195240Z_m5972_t001`, `TO_type_system_rewrite-20260602T195240Z_m5972_t003`, `TO_type_system_rewrite-20260602T195240Z_m5973_t001`, `TO_type_system_rewrite-20260602T195240Z_m5973_t002`, `TO_type_system_rewrite-20260602T195240Z_m5973_t003`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260602T195240Z_m5972_t004` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m5972_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m5973_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m5973_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m5973_t003` (use `read_tool_output` for exact output)
 
 ## C0.5.4.5.1.3
 

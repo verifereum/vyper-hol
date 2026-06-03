@@ -18108,7 +18108,28 @@ Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_nonstatic_success]:
     qpat_assum `build_ext_calldata (get_tenv cx) func_name arg_types (TL (TL x)) = SOME x'` (fn th => rewrite_tac[th]) >>
     simp[return_def]) >>
   Cases_on `pr1 = [] /\ IS_SOME drv`
-  >- cheat >>
+  >- (
+    qpat_x_assum `pr1 = [] /\ IS_SOME drv` strip_assume_tac >>
+    qpat_x_assum `(if _ then _ else _) _ = _` mp_tac >>
+    qpat_assum `pr1 = []` (fn th => rewrite_tac[th]) >>
+    qpat_assum `IS_SOME drv` (fn th => rewrite_tac[th]) >>
+    rewrite_tac[boolTheory.COND_CLAUSES] >> strip_tac >>
+    `well_typed_expr env (THE drv)` by metis_tac[well_typed_opt_THE] >>
+    qpat_x_assum `!s1 value_opt arg_vals t1 s2 calldata t2 s3 s4 s5 t3 accounts tStorage env0 st0 res0 st1. _`
+      (qspecl_then [`args_st`, `SOME amount`, `TL (TL x)`, `args_st`,
+                    `args_st`, `x'`, `args_st`, `args_st`, `args_st`,
+                    `args_st`, `args_st`, `pr2`, `pr3`, `env`,
+                    `args_st with <|accounts := pr2; tStorage := pr3|>`,
+                    `res`, `st'`] mp_tac) >>
+    impl_tac >- (
+      simp[assert_def, bind_def, return_def, raise_def] >>
+      metis_tac[update_accounts_transient_runtime_consistent, runtime_consistent_def]) >>
+    strip_tac >>
+    qpat_x_assum `well_typed_expr env (THE drv) ==> _` mp_tac >>
+    simp[] >> strip_tac >>
+    `expr_type (THE drv) = ret_type` by (Cases_on `drv` >> gvs[] >> metis_tac[]) >>
+    Cases_on `res` >> gvs[expr_result_typed_def, expr_runtime_typed_def, expr_type_def] >>
+    metis_tac[well_typed_expr_not_hashmap_place]) >>
   qspecl_then [`env`, `cx`, `es`, `func_name`, `arg_types`, `ret_type`,
                `drv`, `args_st`, `pr1`, `pr2`, `pr3`, `res`, `st'`]
     mp_tac extcall_nonstatic_success_tail_sound_cond_driver_ih >>
