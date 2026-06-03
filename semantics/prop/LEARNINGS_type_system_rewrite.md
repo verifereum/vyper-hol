@@ -172,17 +172,6 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260531T201607Z_m0403_t001
 - episode:E0025
 
-## L0028 scope='C0' tags=task-contract,blocked-report,cleanup,cheat-placeholder
-shape: A proof branch is confirmed blocked by design, but source contains failed-probe artifacts (`FAIL_TAC` marker, tautological helper) rather than a stable placeholder/report state.
-pattern: For a task that explicitly says to stop on design issues, the correct terminal action can be a cleanup/report gate: remove stale failed-probe artifacts, restore an honest placeholder if needed for build coherence, update the task plan with evidence/do-not-retry/redesign requirements, run only a minimal syntax/build check, and commit with the required no-GPG option.
-works_when: Applies only after strategist review accepts the blocker and authorizes stop/report cleanup; not a substitute for proving obligations when the plan still has executable low-risk proof leaves.
-evidence:
-- episode:E0026
-- episode:E0027
-- episode:E0028
-- tool_output:TO_type_system_rewrite-20260531T201607Z_m0543_t001
-- tool_output:TO_type_system_rewrite-20260531T201607Z_m0559_t001
-
 ## L0034 scope='C0.1.1.2' tags=ExtCall,Resume,generated-IH,simp-timeout,impl_tac
 shape: A generated IH has been specialized and the goal is `(premises ==> post) ==> rest` inside a huge Resume context; plain `simp[]` times out.
 pattern: Avoid simplifying the whole implication in context. Use `(impl_tac >- simp[]) >> strip_tac` to discharge the small premise locally and add the postcondition, while keeping the large generated prefix out of the simplifier. For call typing in the same large context, use `simp[NoAsms, Once well_typed_expr_def]` rather than assumption-enabled simp.
@@ -296,16 +285,6 @@ evidence:
 - episode:E0084
 - source:semantics/prop/vyperTypeStmtSoundnessScript.sml:9858
 
-## L0060 scope='C0' tags=PLAN-frontier,scheduler,dependency,ExtCall,blocked
-shape: Structured PLAN text introduces a prerequisite repair component, but query_plan schedules a downstream component as Oracle next and rejects the prerequisite begin_component call.
-pattern: Treat this as a scheduler/frontier blocker, not permission to work downstream. Under a stop-on-plan-issue task, do not begin the downstream component merely because it is beginable; preserve evidence that the dependency text and frontier disagree, and resume only after scheduler/frontier repair or explicit operator authorization.
-works_when: Applies when the returned PLAN and query_plan component text show a dependency/order requirement (e.g. helper repair before consumer/success branch), but Beginable now/Oracle next points to a downstream leaf and plan_oracle repair is disallowed by the gate.
-evidence:
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m1879_t001
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m1880_t001
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m1880_t002
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m1881_t001
-
 ## L0061 scope='C0.3.4' tags=ExtCall,boundary-lemma,Call-annotation,projection-helper,Resume
 shape: An evaluator early-error branch ignores a constructor annotation field, while downstream raw Resume goals require syntactic matching on that field.
 pattern: Prove a computation lemma quantified over the ignored annotation field (e.g. `call_ty`) and derive conjunct-specific projections outside the Resume. The proof can copy the narrow computation lemma: one `Once evaluate_def` unfold plus monad primitives; projection helpers then `drule` the generalized computation lemma and `gvs[]` after instantiating all constructor fields. This avoids raw generated-prefix simplification and lets later `irule` instantiate the live annotation variable directly.
@@ -373,16 +352,6 @@ works_when: Use only for small selected propositions; it does not solve the late
 evidence:
 - tool_output:TO_type_system_rewrite-20260601T081233Z_m2345_t001
 - tool_output:TO_type_system_rewrite-20260601T081233Z_m2331_t001
-
-## L0072 scope='C0.3' tags=RawCallTarget,tail-helper,boundary-lemma,run_ext_call,return-typing
-shape: RawCallTarget Resume after expression-list IH reaches a huge tail goal containing `run_ext_call`, `update_accounts`, `update_transient`, flags, `raw_call_return_type`, no-TypeError, and result typing.
-pattern: Do not finish this in the Resume. Factor into local helpers: (1) `raw_call_args_runtime_typed_dest` for address/bytes/uint destructors, (2) flag-dependent return value typing for `raw_call_return_type flags`, and (3) `raw_call_tail_result_sound`/`_simp` that owns the monadic tail and uses `run_ext_call_accounts_well_typed` plus update preservation. Then the Resume should mirror RawLog by invoking the tail helper.
-works_when: Applies when the evaluator prefix has already split `eval_exprs` to `INL vs,args_st` and well-typed RawCallTarget facts provide length/type constraints. Keep helper statements matching the consumer nested-case/do-form shape to avoid duplicating semantic reasoning.
-evidence:
-- episode:E0106
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m2362_t001
-- tool_output:TO_type_system_rewrite-20260601T081233Z_m2374_t001
-- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:10289-10774
 
 ## L0073 scope='C0.2' tags=ExtCall,Resume,generated-prefix,boundary-theorem,proof-interface,premise-mismatch
 shape: A mutual `Resume` ExtCall branch has an optional-driver IH available only as `full_generated_prefix ==> driver_post`, while a candidate boundary theorem (`extcall_expr_sound_from_generated_ih`) requires an unconditional driver IH premise.
@@ -769,21 +738,13 @@ evidence:
 - tool_output:TO_type_system_rewrite-20260602T195240Z_m5940_t001
 - tool_output:TO_type_system_rewrite-20260602T195240Z_m5936_t001
 
-## L0192 scope='C0.6' tags=RawCallTarget,Resume,raw_call_return_type,slot-size,boundary-lemma
-shape: RawCallTarget success branch value typing leaves goals for dynamic bytes/tuple return: `type_slot_size ... <= dimword(:256)`, `LENGTH (TAKE n xs) <= n`, or `value_has_type` for `BytesV (TAKE n xs)` / `ArrayV (TupleV [BoolV ...; BytesV ...])`.
-pattern: Use a small slot-size boundary lemma for `n < dimword(:256)` before simplifying value typing. The helper shape copied from `vyperTypeSoundnessHelpersScript.sml` is: bound `type_slot_size (BaseTV (BytesT (Dynamic n)))`, `type_slot_size_list [BaseTV BoolT; BaseTV (BytesT (Dynamic n))]`, and `type_slot_size (TupleTV [BaseTV BoolT; BaseTV (BytesT (Dynamic n))])`; the tuple-size equality is `1 + type_slot_size (BaseTV (BytesT (Dynamic n)))`, not `1 + type_slot_size_list ...`.
-works_when: Applies after `well_typed_expr` exposes `flags.rcf_max_outsize < dimword(:256)` and RawCall return-type simplification has reduced the goal to dynamic bytes/tuple slot-size facts.
+## L0194 scope='C0.6' tags=RawCallTarget,Resume,exprs_runtime_typed,raw_call_return_type,slot-size,LENGTH_TAKE_EQ
+shape: RawCallTarget Resume after `eval_exprs` succeeds needs address/bytes/uint destructors plus dynamic bytes/tuple return-value typing or `LENGTH (TAKE n xs) <= n`.
+pattern: Keep the RawCallTarget proof branch-local: use a small destructor lemma from `exprs_runtime_typed` and the MAP type facts to obtain `dest_AddressV`, `dest_BytesV`, and `dest_NumV`; for dynamic return typing, use a slot-size boundary lemma for `n < dimword(:256)` and simplify lengths with `listTheory.LENGTH_TAKE_EQ` (not conditional `LENGTH_TAKE`) before arithmetic. If the local helper theorem has a free variable, specialize `GEN_ALL helper` at `flags.rcf_max_outsize` and discharge the antecedent by `simp[]`.
+works_when: Applies after `well_typed_expr` exposes RawCallTarget argument types and `flags.rcf_max_outsize < dimword(:256)`, and the evaluator prefix has been split to the `run_ext_call = SOME ...` success branch.
 evidence:
-- source:semantics/prop/vyperTypeSoundnessHelpersScript.sml:722-744
+- episode:E0332
+- tool_output:TO_type_system_rewrite-20260602T195240Z_m6080_t001
 - source:semantics/prop/vyperTypeStmtSoundnessScript.sml:10701
-- tool_output:TO_type_system_rewrite-20260602T195240Z_m6046_t001
-- tool_output:TO_type_system_rewrite-20260602T195240Z_m6050_t001
-
-## L0193 scope='C0.6' tags=RawCallTarget,exprs_runtime_typed,dest_AddressV,dest_BytesV,dest_NumV
-shape: RawCallTarget after `eval_exprs cx es st = (INL vs,args_st)` with typed args: `LENGTH es = 3`, arg types Address/Bytes/Uint256, and need concrete `dest_*` successes for `HD vs`, `EL 1 vs`, `EL 2 vs`.
-pattern: A local destructor lemma `raw_call_args_runtime_typed_dest` is useful: from `exprs_runtime_typed env es vs` plus the three type/length facts, derive existential `target_addr data amount` with `dest_AddressV (HD vs) = SOME target_addr`, `dest_BytesV (EL 1 vs) = SOME data`, and `dest_NumV (EL 2 vs) = SOME amount`. In the Resume branch, apply it explicitly with `mp_tac ... >> impl_tac >- simp[]` rather than `drule_all` if matching fails.
-works_when: Use after opening the RawCall `well_typed_expr` case and the generated exprs IH has provided `exprs_runtime_typed env es vs`.
-evidence:
-- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:10722
-- tool_output:TO_type_system_rewrite-20260602T195240Z_m6018_t001
-- tool_output:TO_type_system_rewrite-20260602T195240Z_m6022_t001
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:10723
+- source:semantics/prop/vyperTypeStmtSoundnessScript.sml:18247

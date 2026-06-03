@@ -99,6 +99,7 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 | C0.5.4.6 | proved |  | E0329 | Call plan_oracle(mode='review', component_id='C0.5.4.6', evidence_ids=[...]); if accepted, proceed to C0.5.5. |
 | C0.5.5 | proved |  | E0330 |  |
 | C0.6 | proved |  | E0332 |  |
+| C0.7 | proved |  | E0333 |  |
 | C1.1 | proved |  | E0024 | Call plan_oracle(mode='review') for C1.1, then begin C1.2 if accepted. |
 | C1.1.1 | proved |  | E0012 |  |
 | C1.1.2 | proved |  | E0013 |  |
@@ -2939,6 +2940,31 @@ PLAN: `semantics/prop/PLAN_type_system_rewrite.md`
 ### Evidence refs
 
 - `TO_type_system_rewrite-20260602T195240Z_m6080_t001` (use `read_tool_output` for exact output)
+
+## C0.7
+
+### Current Status
+
+- result: `proved`
+- diagnosis: `n/a`
+- latest episode: `E0333`
+- blocker: 
+- actual effort: 1 sessions, 1 msgs, 7 steps, 16 tools, 1 holbuild, 771,244 tok (768,913 in, 2,331 out, 711,296 cached), 71.4s, $0.713663
+
+### Attempts / Evidence
+
+- `E0333` (proved, , actual effort: 1 sessions, 1 msgs, 7 steps, 16 tools, 1 holbuild, 771,244 tok (768,913 in, 2,331 out, 711,296 cached), 71.4s, $0.713663)
+  - Ran focused final build and source audit for task-scoped obligations: `holbuild(targets=['vyperTypeStmtSoundnessTheory'], timeout=600)`, grep for executable `cheat`/`CHEAT` in `semantics/prop/*.sml`, grep for `Expr_Call_ExtCall_nonstatic_success` and `Expr_Call_RawCallTarget`, and inspected the only cheat hit plus the ExtCall/RawCallTarget Resume bodies. -> Focused build succeeds. Grep found no executable cheat in task-owned SML; the only hit is a historical comment saying a deleted branch was cheated. ExtCall nonstatic success and RawCallTarget Resume bodies are present as proofs, not cheat placeholders. Git status after the C0.6 unsigned commit shows only LEARNINGS compaction plus pre-existing untracked scratch/legacy files, with tracked source/task proof progress already committed unsigned in 166a02d19. (`TO_type_system_rewrite-20260602T195240Z_m6091_t004`, `TO_type_system_rewrite-20260602T195240Z_m6091_t001`, `TO_type_system_rewrite-20260602T195240Z_m6091_t002`, `TO_type_system_rewrite-20260602T195240Z_m6092_t003`, `TO_type_system_rewrite-20260602T195240Z_m6092_t002`, `TO_type_system_rewrite-20260602T195240Z_m6091_t003`, `TO_type_system_rewrite-20260602T195240Z_m6086_t001`)
+  - Attempted oracle-tag audit by searching expected generated `*Theory.txt` locations and project tree. -> No project `*Theory.txt` files or `.holbuild/gen`/`.holbuild/objs` directories were present to inspect in this holbuild layout; focused holbuild itself completed with no cheat/oracle warnings. (`TO_type_system_rewrite-20260602T195240Z_m6092_t001`, `TO_type_system_rewrite-20260602T195240Z_m6094_t002`, `TO_type_system_rewrite-20260602T195240Z_m6094_t003`, `TO_type_system_rewrite-20260602T195240Z_m6095_t001`)
+
+### Evidence refs
+
+- `TO_type_system_rewrite-20260602T195240Z_m6091_t004` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m6091_t001` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m6091_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m6092_t003` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m6092_t002` (use `read_tool_output` for exact output)
+- `TO_type_system_rewrite-20260602T195240Z_m6086_t001` (use `read_tool_output` for exact output)
 
 ## C1.1
 
