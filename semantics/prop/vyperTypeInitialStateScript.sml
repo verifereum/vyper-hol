@@ -458,7 +458,11 @@ Theorem merge_constants_preserves_lookup:
        | NONE => []))
     id = SOME x
 Proof
-  cheat
+  rw[merge_constants_def] >>
+  Cases_on `src = src_c` >>
+  gvs[get_source_immutables_set_same, get_source_immutables_set_other,
+      alistTheory.ALOOKUP_ADELKEY] >>
+  simp[empty_immutables_def, FLOOKUP_FUNION]
 QED
 
 Theorem evaluate_all_constants_preserves_bare_global_lookup:
