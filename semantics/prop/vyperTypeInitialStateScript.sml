@@ -90,6 +90,16 @@ Definition constants_do_not_clobber_bare_globals_def:
       FLOOKUP bare_globals (src,string_to_num id) = NONE
 End
 
+Definition bare_globals_match_immutable_decl_types_def:
+  bare_globals_match_immutable_decl_types env cx <=>
+    !src id ty ts vis vid typ slot.
+      FLOOKUP env.bare_globals (src,id) = SOME ty /\
+      get_module_code cx src = SOME ts /\
+      MEM (VariableDecl vis Immutable vid typ slot) ts /\
+      string_to_num vid = id ==>
+      typ = ty
+End
+
 
 (* Small lookup/update facts for the runtime immutable association-list and
  * finite-map layers.  Keeping these as boundary lemmas prevents downstream
@@ -192,6 +202,21 @@ Proof
       finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
+Theorem initial_immutables_module_preserves_other_source:
+  init_src <> query_src /\
+  initial_immutables_module tenv init_src ts acc = SOME imms ==>
+  get_source_immutables query_src imms = get_source_immutables query_src acc
+Proof
+  qid_spec_tac `acc` >>
+  Induct_on `ts` >>
+  rw[initial_immutables_module_def] >>
+  Cases_on `h` >>
+  gvs[initial_immutables_module_def, AllCaseEqs()] >>
+  TRY (Cases_on `v0` >> gvs[initial_immutables_module_def, AllCaseEqs()]) >>
+  first_x_assum drule >>
+  simp[update_immutable_preserves_other_source]
+QED
+
 
 Theorem initial_immutables_module_contains_immutable:
   initial_immutables_module tenv src ts acc = SOME imms /\
@@ -264,7 +289,95 @@ Proof
   simp[]
 QED
 
+(* The old unstrengthened initial_immutables_bare_global_type statement is
+ * false: env_context_consistent ensures that a bare global key corresponds to
+ * some immutable declaration, but not that the declaration annotation matches
+ * the bare_globals type.  The strengthened theorem below uses the explicit
+ * bare_globals_match_immutable_decl_types side condition. *)
+
+Theorem initial_immutables_module_bare_global_type_acc:
+  (!vis vid typ slot.
+     MEM (VariableDecl vis Immutable vid typ slot) ts /\
+     string_to_num vid = id ==> typ = ty) /\
+  initial_immutables_module tenv src ts acc = SOME imms /\
+  FLOOKUP (get_source_immutables src imms) id = SOME (tv,v) /\
+  (is_immutable_decl id ts \/
+   (FLOOKUP (get_source_immutables src acc) id = SOME (tv,v) ==>
+    evaluate_type tenv ty = SOME tv)) ==>
+  evaluate_type tenv ty = SOME tv
+Proof
+  qid_spec_tac `acc` >>
+  Induct_on `ts` >>
+  rw[initial_immutables_module_def, is_immutable_decl_def] >>
+  Cases_on `h` >>
+  gvs[initial_immutables_module_def, is_immutable_decl_def, AllCaseEqs()] >>
+  TRY (Cases_on `v0` >>
+       gvs[initial_immutables_module_def, is_immutable_decl_def, AllCaseEqs()]) >>
+  first_x_assum irule >>
+  conj_tac >- (rw[] >> metis_tac[]) >>
+  TRY (goal_assum (drule_at Any)) >>
+  rw[] >>
+  Cases_on `string_to_num s = id` >>
+  gvs[update_immutable_lookup_same] >>
+  gvs[update_immutable_def, get_source_immutables_set_same,
+      finite_mapTheory.FLOOKUP_UPDATE] >>
+  TRY (qpat_x_assum `!vis0 vid0 typ0 slot0. _`
+         (qspecl_then [`vis`,`vid`,`typ`,`slot`] mp_tac) >> simp[])
+QED
+
+Theorem initial_immutables_module_bare_global_type:
+  (!vis vid typ slot.
+     MEM (VariableDecl vis Immutable vid typ slot) ts /\
+     string_to_num vid = id ==> typ = ty) /\
+  initial_immutables_module tenv src ts acc = SOME imms /\
+  FLOOKUP (get_source_immutables src imms) id = SOME (tv,v) /\
+  is_immutable_decl id ts ==>
+  evaluate_type tenv ty = SOME tv
+Proof
+  rw[] >>
+  irule initial_immutables_module_bare_global_type_acc >>
+  qexistsl [`acc`, `id`, `imms`, `src`, `ts`, `v`] >>
+  simp[] >>
+  metis_tac[]
+QED
+
+Theorem initial_immutables_all_bare_global_type:
+  (!vis vid typ slot.
+     MEM (VariableDecl vis Immutable vid typ slot) ts /\
+     string_to_num vid = id ==> typ = ty) /\
+  ALOOKUP mods src = SOME ts /\
+  initial_immutables tenv mods = SOME imms /\
+  is_immutable_decl id ts /\
+  FLOOKUP (get_source_immutables src imms) id = SOME (tv,v) ==>
+  evaluate_type tenv ty = SOME tv
+Proof
+  qid_spec_tac `imms` >>
+  qid_spec_tac `src` >>
+  qid_spec_tac `ts` >>
+  qid_spec_tac `tv` >>
+  qid_spec_tac `v` >>
+  Induct_on `mods` >>
+  simp[initial_immutables_def] >>
+  rpt gen_tac >>
+  PairCases_on `h` >>
+  Cases_on `h0 = src` >>
+  rw[initial_immutables_def] >>
+  gvs[AllCaseEqs()]
+  >- (irule initial_immutables_module_bare_global_type >>
+      qexistsl [`acc`, `id`, `imms`, `h0`, `h1`, `v`] >>
+      simp[] >>
+      metis_tac[]) >>
+  drule initial_immutables_module_preserves_other_source >>
+  disch_then drule >>
+  strip_tac >>
+  gvs[] >>
+  first_x_assum irule >>
+  qexistsl [`src`, `ts`, `v`] >>
+  metis_tac[]
+QED
+
 Theorem initial_immutables_bare_global_type:
+  bare_globals_match_immutable_decl_types env_base cx /\
   env_context_consistent env_base cx /\
   ALOOKUP cx.sources cx.txn.target = SOME mods /\
   ALOOKUP mods src = SOME ts /\
@@ -273,7 +386,19 @@ Theorem initial_immutables_bare_global_type:
   FLOOKUP (get_source_immutables src imms) id = SOME (tv,v) ==>
   evaluate_type (get_tenv cx) ty = SOME tv
 Proof
-  cheat
+  rw[] >>
+  drule env_context_consistent_bare_global_find_NONE >>
+  disch_then drule >>
+  strip_tac >>
+  gvs[get_module_code_def] >>
+  irule initial_immutables_all_bare_global_type >>
+  qexistsl [`id`, `imms`, `mods`, `src`, `ts`, `v`] >>
+  simp[] >>
+  rpt strip_tac >>
+  gvs[bare_globals_match_immutable_decl_types_def, get_module_code_def] >>
+  first_x_assum irule >>
+  qexistsl [`slot`, `src`, `ts`, `vid`, `vis`] >>
+  simp[]
 QED
 
 Theorem constants_env_no_bare_global_lookup:
