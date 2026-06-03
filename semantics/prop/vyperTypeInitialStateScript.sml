@@ -254,7 +254,14 @@ Theorem initial_immutables_contains_bare_global:
   FLOOKUP env_base.bare_globals (src,id) = SOME ty ==>
   IS_SOME (FLOOKUP (get_source_immutables src imms) id)
 Proof
-  cheat
+  rw[] >>
+  drule env_context_consistent_bare_global_find_NONE >>
+  disch_then drule >>
+  strip_tac >>
+  gvs[get_module_code_def] >>
+  irule initial_immutables_contains_decl >>
+  qexistsl [`mods`, `get_tenv cx`, `ts`] >>
+  simp[]
 QED
 
 Theorem initial_immutables_bare_global_type:
