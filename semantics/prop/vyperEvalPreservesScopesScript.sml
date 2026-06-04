@@ -1,5 +1,6 @@
 Theory vyperEvalPreservesScopes
 Ancestors
+  vyperTypeInvariants
   vyperState vyperInterpreter vyperLookup
   vyperEvalExprPreservesScopesDom vyperScopePreservation
   vyperMisc vyperImmutablesPreservation vyperStatePreservation

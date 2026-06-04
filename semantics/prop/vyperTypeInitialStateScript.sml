@@ -11,7 +11,7 @@ Theory vyperTypeInitialState
 Ancestors
   list rich_list pred_set arithmetic finite_map option pair
   vyperAST vyperValue vyperTyping vyperState vyperInterpreter vyperContext
-  vyperTypeSystem vyperTypeStmtSoundness vyperTypeSoundness
+  vyperTypeSystem vyperTypeInvariants vyperTypeStmtSoundness vyperTypeSoundness
 Libs
   wordsLib
 

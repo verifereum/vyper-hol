@@ -1,5 +1,6 @@
 Theory vyperEvalMisc
 Ancestors
+  vyperTypeInvariants
   vyperAST vyperMisc vyperContext vyperState vyperInterpreter
   vyperArray vyperBareGlobalName vyperValue vyperValueOperation
 Libs

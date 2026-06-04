@@ -7,7 +7,7 @@ Ancestors
   list rich_list pred_set prim_rec arithmetic finite_map option pair
   vyperAST vyperValue vyperValueOperation vyperMisc vyperABI
   vyperState vyperContext vyperStorage vyperInterpreter
-  vyperTyping vyperEncodeDecode vyperArith vyperTypeSystem
+  vyperTyping vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeInvariants
 Libs
   wordsLib
 

@@ -7,7 +7,7 @@ Ancestors
   list rich_list finite_map option pair arithmetic
   vyperAST vyperValue vyperValueOperation vyperMisc vyperABI
   vyperInterpreter vyperState vyperContext vyperStorage vyperTyping
-  vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeValues
+  vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeInvariants vyperTypeValues
   vyperTypeEnv vyperTypeExprSoundness vyperTypeStatePreservation
   vyperTypeBuiltins vyperExprNoControl
 Libs

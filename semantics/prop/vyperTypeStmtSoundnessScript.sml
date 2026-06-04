@@ -8,7 +8,7 @@ Ancestors
   list rich_list pred_set prim_rec arithmetic finite_map option pair sum
   vyperAST vyperValue vyperValueOperation vyperMisc vyperABI
   vyperInterpreter vyperState vyperContext vyperStorage vyperTyping
-  vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeValues
+  vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeInvariants vyperTypeValues
   vyperTypeEnv vyperTypeEnvExtension vyperTypeEnvPreservation vyperTypeScopePop
   vyperTypeABI
   vyperTypeBuiltins vyperTypeExprSoundness vyperTypeAssignSoundness
