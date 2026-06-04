@@ -84,8 +84,10 @@ Definition add_toplevel_static_maps_def:
                     cta_toplevel_vtypes updated_by
                     (flip FUPDATE ((src,string_to_num id), Type typ)) |>
     | VariableDecl _ (Constant e) id typ _ =>
-        art with cta_toplevel_vtypes updated_by
-          (flip FUPDATE ((src,string_to_num id), Type typ))
+        art with <| cta_bare_globals updated_by
+                    (flip FUPDATE ((src,string_to_num id), typ));
+                    cta_toplevel_vtypes updated_by
+                    (flip FUPDATE ((src,string_to_num id), Type typ)) |>
     | VariableDecl _ Storage id typ _ =>
         art with cta_toplevel_vtypes updated_by
           (flip FUPDATE ((src,string_to_num id), Type typ))

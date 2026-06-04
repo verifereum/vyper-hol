@@ -276,7 +276,8 @@ Theorem initial_immutables_contains_bare_global:
   ALOOKUP cx.sources cx.txn.target = SOME mods /\
   ALOOKUP mods src = SOME ts /\
   initial_immutables (get_tenv cx) mods = SOME imms /\
-  FLOOKUP env_base.bare_globals (src,id) = SOME ty ==>
+  FLOOKUP env_base.bare_globals (src,id) = SOME ty /\
+  is_immutable_decl id ts ==>
   IS_SOME (FLOOKUP (get_source_immutables src imms) id)
 Proof
   rw[] >>

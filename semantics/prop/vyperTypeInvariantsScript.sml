@@ -62,16 +62,67 @@ Definition fn_sigs_complete_def:
                 ret_ty := ret |>
 End
 
+Definition toplevel_vtypes_complete_def:
+  toplevel_vtypes_complete toplevel_vtypes cx <=>
+    (!src ts vis mut id ty init.
+       get_module_code cx src = SOME ts /\
+       MEM (VariableDecl vis mut id ty init) ts ==>
+       FLOOKUP toplevel_vtypes (src,string_to_num id) = SOME (Type ty)) /\
+    (!src ts vis is_transient id kt vt init.
+       get_module_code cx src = SOME ts /\
+       MEM (HashMapDecl vis is_transient id kt vt init) ts ==>
+       FLOOKUP toplevel_vtypes (src,string_to_num id) = SOME (HashMapT kt vt))
+End
+
+Definition is_bare_global_decl_def:
+  is_bare_global_decl n [] = F /\
+  is_bare_global_decl n (VariableDecl _ Immutable vid _ _ :: ts) =
+    (if string_to_num vid = n then T else is_bare_global_decl n ts) /\
+  is_bare_global_decl n (VariableDecl _ (Constant e) vid _ _ :: ts) =
+    (if string_to_num vid = n then T else is_bare_global_decl n ts) /\
+  is_bare_global_decl n (_ :: ts) = is_bare_global_decl n ts
+End
+
+Theorem is_immutable_decl_imp_is_bare_global_decl:
+  is_immutable_decl id ts ==> is_bare_global_decl id ts
+Proof
+  Induct_on `ts` >>
+  rw[is_immutable_decl_def, is_bare_global_decl_def] >>
+  Cases_on `h` >>
+  gvs[is_immutable_decl_def, is_bare_global_decl_def] >>
+  TRY (Cases_on `v0` >> gvs[is_immutable_decl_def, is_bare_global_decl_def])
+QED
+
+Definition bare_globals_complete_def:
+  bare_globals_complete bare_globals cx <=>
+    !src ts vis mut id ty init.
+      get_module_code cx src = SOME ts /\
+      MEM (VariableDecl vis mut id ty init) ts /\
+      (mut = Immutable \/ ?e. mut = Constant e) ==>
+      FLOOKUP bare_globals (src,string_to_num id) = SOME ty
+End
+
+Definition flag_members_complete_def:
+  flag_members_complete flag_members cx <=>
+    !src ts fid members.
+      get_module_code cx src = SOME ts /\
+      lookup_flag fid ts = SOME members ==>
+      FLOOKUP flag_members (src,fid) = SOME members
+End
+
 Definition env_context_consistent_def:
   env_context_consistent env cx <=>
     env.type_defs = get_tenv cx /\
     env.current_src = current_module cx /\
     fn_sigs_consistent env.fn_sigs cx /\
     fn_sigs_complete env.fn_sigs cx /\
+    toplevel_vtypes_complete env.toplevel_vtypes cx /\
+    bare_globals_complete env.bare_globals cx /\
+    flag_members_complete env.flag_members cx /\
     (!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty ==>
        ?ts. get_module_code cx src = SOME ts /\
             FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\
-            is_immutable_decl id ts /\
+            is_bare_global_decl id ts /\
             find_var_decl_by_num id ts = NONE /\
             ty <> NoneT) /\
     (!src id vt. FLOOKUP env.toplevel_vtypes (src,id) = SOME vt ==>
@@ -97,12 +148,21 @@ Definition env_context_consistent_def:
             FLOOKUP (get_tenv cx) (string_to_num fid) = SOME (FlagArgs (LENGTH ls)))
 End
 
+Theorem env_context_consistent_static_completeness:
+  env_context_consistent env cx ==>
+    toplevel_vtypes_complete env.toplevel_vtypes cx /\
+    bare_globals_complete env.bare_globals cx /\
+    flag_members_complete env.flag_members cx
+Proof
+  rw[env_context_consistent_def]
+QED
+
 Theorem env_context_consistent_bare_global_old:
   env_context_consistent env cx /\
   FLOOKUP env.bare_globals (src,id) = SOME ty /\
   get_module_code cx src = SOME ts ==>
     FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\
-    is_immutable_decl id ts /\ ty <> NoneT
+    is_bare_global_decl id ts /\ ty <> NoneT
 Proof
   rw[env_context_consistent_def] >>
   first_x_assum drule >> rw[] >> gvs[]
@@ -113,7 +173,7 @@ Theorem env_context_consistent_bare_global_find_NONE:
   FLOOKUP env.bare_globals (src,id) = SOME ty ==>
     ?ts. get_module_code cx src = SOME ts /\
          FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\
-         is_immutable_decl id ts /\
+         is_bare_global_decl id ts /\
          find_var_decl_by_num id ts = NONE /\
          ty <> NoneT
 Proof
@@ -170,7 +230,7 @@ Theorem env_consistent_bare_global_find_NONE:
   FLOOKUP env.bare_globals (src,id) = SOME ty ==>
     ?ts. get_module_code cx src = SOME ts /\
          FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\
-         is_immutable_decl id ts /\
+         is_bare_global_decl id ts /\
          find_var_decl_by_num id ts = NONE /\
          ty <> NoneT
 Proof
@@ -184,10 +244,13 @@ Definition functions_well_typed_def:
     !fn_sigs bare_globals toplevel_vtypes flag_members.
       fn_sigs_consistent fn_sigs cx /\
       fn_sigs_complete fn_sigs cx /\
+      toplevel_vtypes_complete toplevel_vtypes cx /\
+      bare_globals_complete bare_globals cx /\
+      flag_members_complete flag_members cx /\
       (!src id ty. FLOOKUP bare_globals (src,id) = SOME ty ==>
          ?ts. get_module_code cx src = SOME ts /\
               FLOOKUP toplevel_vtypes (src,id) = SOME (Type ty) /\
-              is_immutable_decl id ts /\
+              is_bare_global_decl id ts /\
               find_var_decl_by_num id ts = NONE /\
               ty <> NoneT) /\
       (!src id vt ts.
