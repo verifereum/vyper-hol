@@ -1735,7 +1735,7 @@ Proof
   qexists_tac `entry` >> simp[]
 QED
 
-Theorem bind_arguments_env_scopes_consistent[local]:
+Theorem bind_arguments_env_scopes_consistent:
   !tenv args vs sc env_body cx.
     bind_arguments tenv args vs = SOME sc /\ tenv = get_tenv cx /\
     (!id typ. MEM (id,typ) args ==>
@@ -1774,7 +1774,7 @@ Proof
   qexists_tac `entry` >> gvs[]
 QED
 
-Theorem bind_arguments_scope_well_typed_stmt[local]:
+Theorem bind_arguments_scope_well_typed_stmt:
   !tenv params vs sc.
     bind_arguments tenv params vs = SOME sc /\
     (!i tv. i < LENGTH params /\ i < LENGTH vs /\
