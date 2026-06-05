@@ -338,7 +338,7 @@ QED
 
 Theorem flag_member_sound:
   well_typed_expr env (FlagMember ty nsid mid) /\ env_consistent env cx st ==>
-  ?members. ty = FlagT (SND nsid) /\ FLOOKUP env.flag_members nsid = SOME members /\ MEM mid members
+  ?members. ty = FlagT nsid /\ FLOOKUP env.flag_members nsid = SOME members /\ MEM mid members
 Proof
   Cases_on `nsid` >> rw[well_typed_expr_def]
 QED
