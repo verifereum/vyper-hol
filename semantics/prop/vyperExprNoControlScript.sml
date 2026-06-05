@@ -378,12 +378,18 @@ val at_mono = [bind_def, ignore_bind_def, return_def, raise_def,
 
 (* Fast resolution for common assign_target branches before the broader search. *)
 val at_resolve_quick = FIRST [
-  imp_res_tac assign_result_no_control >> gvs[no_control_exc_def] >> NO_TAC,
-  imp_res_tac lift_sum_no_control >> gvs[no_control_exc_def] >> NO_TAC,
-  imp_res_tac read_storage_slot_no_control >> gvs[no_control_exc_def] >> NO_TAC,
-  imp_res_tac write_storage_slot_no_control >> gvs[no_control_exc_def] >> NO_TAC,
-  imp_res_tac lift_option_type_no_control >> gvs[no_control_exc_def] >> NO_TAC,
-  imp_res_tac lookup_global_no_control >> gvs[no_control_exc_def] >> NO_TAC
+  qpat_x_assum `assign_result _ _ _ _ _ = (INR _, _)`
+    (mp_tac o MATCH_MP assign_result_no_control) >> gvs[no_control_exc_def] >> NO_TAC,
+  qpat_x_assum `lift_sum _ _ = (INR _, _)`
+    (mp_tac o MATCH_MP lift_sum_no_control) >> gvs[no_control_exc_def] >> NO_TAC,
+  qpat_x_assum `read_storage_slot _ _ _ _ _ = (INR _, _)`
+    (mp_tac o MATCH_MP read_storage_slot_no_control) >> gvs[no_control_exc_def] >> NO_TAC,
+  qpat_x_assum `write_storage_slot _ _ _ _ _ _ = (INR _, _)`
+    (mp_tac o MATCH_MP write_storage_slot_no_control) >> gvs[no_control_exc_def] >> NO_TAC,
+  qpat_x_assum `lift_option_type _ _ _ = (INR _, _)`
+    (mp_tac o MATCH_MP lift_option_type_no_control) >> gvs[no_control_exc_def] >> NO_TAC,
+  qpat_x_assum `lookup_global _ _ _ _ = (INR _, _)`
+    (mp_tac o MATCH_MP lookup_global_no_control) >> gvs[no_control_exc_def] >> NO_TAC
 ];
 
 (* Resolution: try each helper, closing the goal completely *)
