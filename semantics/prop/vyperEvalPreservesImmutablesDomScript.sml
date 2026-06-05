@@ -2155,6 +2155,17 @@ Proof
   simp[get_scopes_def, return_def]
 QED
 
+Theorem type_check_intcall_args_length_sub[local]:
+  type_check (LENGTH es ≤ LENGTH args ∧ LENGTH args ≤ LENGTH es + LENGTH dflts)
+    msg s = (INL x,t) ==>
+  type_check (LENGTH es ≤ LENGTH args ∧ LENGTH args − LENGTH es ≤ LENGTH dflts)
+    msg s = (INL x,t)
+Proof
+  simp[type_check_def, assert_def] \\
+  IF_CASES_TAC \\ simp[] \\
+  decide_tac
+QED
+
 Theorem intcall_live_post_default_setup_from_generated_ih[local]:
   ∀cx src_id_opt fn es ih_check_s ih_mod_s ih_fun_s ih_len_s ih_args_s
      xrec srec ts smod tup sfun xlen slen vs sevl needed_dflts cxd
@@ -2273,10 +2284,10 @@ Proof
           simp[] \\
           disch_then irule \\
           simp[] \\
-          gvs[type_check_def, assert_def] \\
-          decide_tac) \\
-      gvs[type_check_def, assert_def] \\
-      decide_tac) \\
+          drule type_check_intcall_args_length_sub \\
+          simp[]) \\
+      drule type_check_intcall_args_length_sub \\
+      simp[]) \\
   simp[intcall_tail_body_provider_def] \\
   rpt strip_tac \\
   `type_check
