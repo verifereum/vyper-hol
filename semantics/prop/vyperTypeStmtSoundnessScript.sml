@@ -8,7 +8,7 @@ Ancestors
   list rich_list pred_set prim_rec arithmetic finite_map option pair sum
   vyperAST vyperValue vyperValueOperation vyperMisc vyperABI
   vyperInterpreter vyperState vyperContext vyperStorage vyperTyping
-  vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeValues
+  vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeInvariants vyperTypeValues
   vyperTypeEnv vyperTypeEnvExtension vyperTypeEnvPreservation vyperTypeScopePop
   vyperTypeABI
   vyperTypeBuiltins vyperTypeExprSoundness vyperTypeAssignSoundness
@@ -185,13 +185,50 @@ Proof
   simp[fn_sigs_complete_def, get_module_code_def]
 QED
 
+Theorem toplevel_vtypes_complete_stk_irrelevant[local]:
+  !toplevel_vtypes cx f.
+    toplevel_vtypes_complete toplevel_vtypes (cx with stk updated_by f) <=>
+    toplevel_vtypes_complete toplevel_vtypes cx
+Proof
+  simp[toplevel_vtypes_complete_def, get_module_code_stk_irrelevant]
+QED
+
+Theorem bare_globals_complete_stk_irrelevant[local]:
+  !bare_globals cx f.
+    bare_globals_complete bare_globals (cx with stk updated_by f) <=>
+    bare_globals_complete bare_globals cx
+Proof
+  simp[bare_globals_complete_def, get_module_code_stk_irrelevant]
+QED
+
+Theorem bare_global_assignable_complete_stk_irrelevant[local]:
+  !bare_global_assignable cx f.
+    bare_global_assignable_complete bare_global_assignable (cx with stk updated_by f) <=>
+    bare_global_assignable_complete bare_global_assignable cx
+Proof
+  simp[bare_global_assignable_complete_def, get_module_code_stk_irrelevant]
+QED
+
+Theorem flag_members_complete_stk_irrelevant[local]:
+  !flag_members cx f.
+    flag_members_complete flag_members (cx with stk updated_by f) <=>
+    flag_members_complete flag_members cx
+Proof
+  simp[flag_members_complete_def, get_module_code_stk_irrelevant]
+QED
+
 Theorem functions_well_typed_stk_irrelevant[local]:
   !cx f. functions_well_typed (cx with stk updated_by f) <=>
          functions_well_typed cx
 Proof
   simp[functions_well_typed_def, get_module_code_def,
        get_tenv_stk_irrelevant, fn_sigs_consistent_stk_irrelevant,
-       fn_sigs_complete_stk_irrelevant, well_formed_type_def]
+       fn_sigs_complete_stk_irrelevant,
+       toplevel_vtypes_complete_stk_irrelevant,
+       bare_globals_complete_stk_irrelevant,
+       bare_global_assignable_complete_stk_irrelevant,
+       flag_members_complete_stk_irrelevant,
+       well_formed_type_def]
 QED
 
 Theorem context_well_typed_stk_irrelevant[local]:
@@ -223,6 +260,10 @@ Proof
   >- (gvs[env_context_consistent_def] >>
       rw[env_context_consistent_def, get_tenv_stk_irrelevant,
          fn_sigs_consistent_stk_irrelevant, fn_sigs_complete_stk_irrelevant,
+         toplevel_vtypes_complete_stk_irrelevant,
+         bare_globals_complete_stk_irrelevant,
+         bare_global_assignable_complete_stk_irrelevant,
+         flag_members_complete_stk_irrelevant,
          get_module_code_stk_irrelevant, current_module_def] >>
       first_x_assum drule_all >> simp[lookup_var_slot_from_layout_def])
   >- (gvs[env_scopes_consistent_def] >>
@@ -1188,8 +1229,19 @@ Theorem callable_body_typing_from_functions_well_typed[local]:
   functions_well_typed cx /\
   fn_sigs_consistent fn_sigs cx /\
   fn_sigs_complete fn_sigs cx /\
+  toplevel_vtypes_complete toplevel_vtypes cx /\
+  bare_globals_complete bare_globals cx /\
+  bare_global_assignable_complete bare_global_assignable cx /\
+  flag_members_complete flag_members cx /\
   (!src id ty. FLOOKUP bare_globals (src,id) = SOME ty ==>
      ?ts. get_module_code cx src = SOME ts /\
+          FLOOKUP toplevel_vtypes (src,id) = SOME (Type ty) /\
+          is_bare_global_decl id ts /\
+          find_var_decl_by_num id ts = NONE /\
+          ty <> NoneT) /\
+  (!src id ty. FLOOKUP bare_global_assignable (src,id) = SOME ty ==>
+     ?ts. get_module_code cx src = SOME ts /\
+          FLOOKUP bare_globals (src,id) = SOME ty /\
           FLOOKUP toplevel_vtypes (src,id) = SOME (Type ty) /\
           is_immutable_decl id ts /\
           find_var_decl_by_num id ts = NONE /\
@@ -1221,6 +1273,7 @@ Theorem callable_body_typing_from_functions_well_typed[local]:
     env_body.type_defs = get_tenv cx /\
     env_body.fn_sigs = fn_sigs /\
     env_body.bare_globals = bare_globals /\
+    env_body.bare_global_assignable = bare_global_assignable /\
     env_body.toplevel_vtypes = toplevel_vtypes /\
     env_body.flag_members = flag_members /\
     evaluate_type (get_tenv cx) ret = SOME ret_tv /\
@@ -1254,6 +1307,7 @@ Theorem callable_body_typing_from_env_consistent[local]:
     env_body.type_defs = get_tenv cx /\
     env_body.fn_sigs = env.fn_sigs /\
     env_body.bare_globals = env.bare_globals /\
+    env_body.bare_global_assignable = env.bare_global_assignable /\
     env_body.toplevel_vtypes = env.toplevel_vtypes /\
     env_body.flag_members = env.flag_members /\
     evaluate_type (get_tenv cx) ret = SOME ret_tv /\
@@ -1274,6 +1328,7 @@ Proof
      functions_well_typed_def] >>
   first_x_assum
     (qspecl_then [`env.fn_sigs`, `env.bare_globals`,
+                  `env.bare_global_assignable`,
                   `env.toplevel_vtypes`, `env.flag_members`] mp_tac) >>
   simp[] >>
   impl_tac
@@ -1352,6 +1407,7 @@ Theorem intcall_env_body_consistency_for_defaults[local]:
     env_body.type_defs = get_tenv cx /\
     env_body.fn_sigs = env.fn_sigs /\
     env_body.bare_globals = env.bare_globals /\
+    env_body.bare_global_assignable = env.bare_global_assignable /\
     env_body.toplevel_vtypes = env.toplevel_vtypes /\
     env_body.flag_members = env.flag_members ==>
     env_context_consistent env_body
@@ -1363,6 +1419,10 @@ Proof
   >- (gvs[env_context_consistent_def] >>
       rw[env_context_consistent_def, get_tenv_stk_irrelevant,
          fn_sigs_consistent_stk_irrelevant, fn_sigs_complete_stk_irrelevant,
+         toplevel_vtypes_complete_stk_irrelevant,
+         bare_globals_complete_stk_irrelevant,
+         bare_global_assignable_complete_stk_irrelevant,
+         flag_members_complete_stk_irrelevant,
          get_module_code_stk_irrelevant, current_module_def] >>
       first_x_assum drule_all >> simp[lookup_var_slot_from_layout_def])
   >- (gvs[env_immutables_consistent_def] >>
@@ -1382,6 +1442,7 @@ Theorem intcall_default_env_side_conditions[local]:
     env_body.type_defs = get_tenv cx /\
     env_body.fn_sigs = env.fn_sigs /\
     env_body.bare_globals = env.bare_globals /\
+    env_body.bare_global_assignable = env.bare_global_assignable /\
     env_body.toplevel_vtypes = env.toplevel_vtypes /\
     env_body.flag_members = env.flag_members ==>
     env_context_consistent env_body
@@ -2020,6 +2081,7 @@ Theorem push_function_frame_consistent[local]:
     env_consistent env cx st /\ state_well_typed st /\
     env_body.current_src = src /\ env_body.type_defs = env.type_defs /\
     env_body.fn_sigs = env.fn_sigs /\ env_body.bare_globals = env.bare_globals /\
+    env_body.bare_global_assignable = env.bare_global_assignable /\
     env_body.toplevel_vtypes = env.toplevel_vtypes /\
     env_body.flag_members = env.flag_members /\
     env_scopes_consistent env_body (cx with stk updated_by CONS (src,fn)) (st with scopes := [sc]) /\
@@ -2029,12 +2091,20 @@ Theorem push_function_frame_consistent[local]:
     (accounts_well_typed st.accounts ==> accounts_well_typed stf.accounts)
 Proof
   rw[push_function_def, return_def] >>
-  gvs[env_consistent_def, env_context_consistent_def,
-      env_immutables_consistent_def, state_well_typed_def,
-      current_module_def, get_tenv_def, get_module_code_def,
-      fn_sigs_consistent_def, lookup_var_slot_from_layout_def,
-      fn_sigs_complete_stk_irrelevant] >>
-  metis_tac[]
+  gvs[env_consistent_def, state_well_typed_def] >>
+  rw[]
+  >- (gvs[env_context_consistent_def,
+          current_module_def, get_tenv_def, get_module_code_def,
+          fn_sigs_consistent_def, lookup_var_slot_from_layout_def,
+          fn_sigs_complete_stk_irrelevant,
+          toplevel_vtypes_complete_stk_irrelevant,
+          bare_globals_complete_stk_irrelevant,
+          bare_global_assignable_complete_stk_irrelevant,
+          flag_members_complete_stk_irrelevant] >>
+      metis_tac[lookup_var_slot_from_layout_def])
+  >- (gvs[env_immutables_consistent_def, get_tenv_stk_irrelevant,
+          get_module_code_stk_irrelevant] >>
+      metis_tac[])
 QED
 
 Theorem intcall_pushed_body_preconditions[local]:
@@ -2206,6 +2276,7 @@ Theorem intcall_pushed_body_preconditions_live_from_defaults[local]:
     env_body.type_defs = get_tenv cx /\
     env_body.fn_sigs = env.fn_sigs /\
     env_body.bare_globals = env.bare_globals /\
+    env_body.bare_global_assignable = env.bare_global_assignable /\
     env_body.toplevel_vtypes = env.toplevel_vtypes /\
     env_body.flag_members = env.flag_members /\
     env_immutables_consistent env_body
@@ -2243,6 +2314,7 @@ Theorem intcall_live_pushed_body_preconditions[local]:
     env_body.type_defs = get_tenv cx /\
     env_body.fn_sigs = env.fn_sigs /\
     env_body.bare_globals = env.bare_globals /\
+    env_body.bare_global_assignable = env.bare_global_assignable /\
     env_body.toplevel_vtypes = env.toplevel_vtypes /\
     env_body.flag_members = env.flag_members /\
     env_immutables_consistent env_body
@@ -7312,7 +7384,7 @@ Resume eval_all_type_sound_mutual[BaseTarget_BareGlobal]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `type_place_target _ (BareGlobalNameTarget _) = _` mp_tac >>
   simp[type_place_target_BareGlobalNameTarget] >> strip_tac >> gvs[] >>
-  drule_all env_consistent_bare_global_ready >> strip_tac >>
+  drule_all env_consistent_bare_global_assignable_ready >> strip_tac >>
   drule eval_base_target_BareGlobalNameTarget_preserves_state >> strip_tac >> gvs[] >>
   `!msg. res <> INR (Error (TypeError msg))` by
     metis_tac[eval_base_target_BareGlobalNameTarget_no_type_error] >>
@@ -11594,6 +11666,7 @@ Theorem intcall_default_exprs_frame_sound_from_generated_ih[local]:
     env_body.type_defs = get_tenv cx /\
     env_body.fn_sigs = env.fn_sigs /\
     env_body.bare_globals = env.bare_globals /\
+    env_body.bare_global_assignable = env.bare_global_assignable /\
     env_body.toplevel_vtypes = env.toplevel_vtypes /\
     env_body.flag_members = env.flag_members /\
     state_well_typed sevl /\
@@ -12027,6 +12100,7 @@ Theorem intcall_cleanup_frame_restore_sound[local]:
       (cx with stk updated_by CONS (src_id_opt,fn)) st_bdy /\
     env_body.type_defs = get_tenv cx /\
     env_body.bare_globals = env.bare_globals /\
+    env_body.bare_global_assignable = env.bare_global_assignable /\
     env_body.toplevel_vtypes = env.toplevel_vtypes /\
     state_well_typed args_st /\
     state_well_typed st_bdy /\
@@ -12057,6 +12131,7 @@ Theorem intcall_cleanup_after_body_preserves_caller_frame[local]:
       (cx with stk updated_by CONS (src_id_opt,fn)) st_bdy /\
     env_body.type_defs = get_tenv cx /\
     env_body.bare_globals = env.bare_globals /\
+    env_body.bare_global_assignable = env.bare_global_assignable /\
     env_body.toplevel_vtypes = env.toplevel_vtypes /\
     state_well_typed args_st /\
     state_well_typed st_bdy /\
@@ -12112,6 +12187,7 @@ Theorem intcall_default_finally_inr_preserves_frame[local]:
     functions_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
     env_body.type_defs = get_tenv cx /\
     env_body.bare_globals = env.bare_globals /\
+    env_body.bare_global_assignable = env.bare_global_assignable /\
     env_body.toplevel_vtypes = env.toplevel_vtypes /\
     finally
       (try (do eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body;
@@ -12188,6 +12264,7 @@ Theorem intcall_default_finally_inr_preserves_frame_from_caller_ctx[local]:
     functions_well_typed cx /\
     env_body.type_defs = get_tenv cx /\
     env_body.bare_globals = env.bare_globals /\
+    env_body.bare_global_assignable = env.bare_global_assignable /\
     env_body.toplevel_vtypes = env.toplevel_vtypes /\
     finally
       (try (do eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body;
@@ -12263,6 +12340,7 @@ Theorem intcall_default_success_post_push_outer_inr_frame[local]:
     functions_well_typed cx /\
     env_body.type_defs = get_tenv cx /\
     env_body.bare_globals = env.bare_globals /\
+    env_body.bare_global_assignable = env.bare_global_assignable /\
     env_body.toplevel_vtypes = env.toplevel_vtypes ==>
     state_well_typed fin_st /\ env_consistent env cx fin_st /\
     accounts_well_typed fin_st.accounts
@@ -12315,6 +12393,7 @@ Theorem intcall_default_success_post_push_outer_inr_frame_live[local]:
     functions_well_typed cx /\
     env_body.type_defs = get_tenv cx /\
     env_body.bare_globals = env.bare_globals /\
+    env_body.bare_global_assignable = env.bare_global_assignable /\
     env_body.toplevel_vtypes = env.toplevel_vtypes /\
     finally
       (try (do eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body;
@@ -12376,6 +12455,7 @@ Theorem intcall_default_success_post_push_outer_inr_frame_apply[local]:
     functions_well_typed cx ==>
     env_body.type_defs = get_tenv cx ==>
     env_body.bare_globals = env.bare_globals ==>
+    env_body.bare_global_assignable = env.bare_global_assignable ==>
     env_body.toplevel_vtypes = env.toplevel_vtypes ==>
     finally
       (try (do eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body;
@@ -12391,7 +12471,7 @@ Theorem intcall_default_success_post_push_outer_inr_frame_apply[local]:
     state_well_typed fin_st /\ env_consistent env cx fin_st /\
     accounts_well_typed fin_st.accounts
 Proof
-  rpt gen_tac >> ntac 13 strip_tac >>
+  rpt gen_tac >> ntac 14 strip_tac >>
   qspecl_then [`cx`, `env`, `env_body`, `args_st`, `lock_st`,
                 `call_env`, `fn`, `fm`, `nr`, `body'`, `env_after`,
                 `y`, `fin_st`] mp_tac
@@ -12438,6 +12518,7 @@ Theorem intcall_default_success_post_push_outer_inr_frame_ret[local]:
     functions_well_typed cx ==>
     env_body.type_defs = get_tenv cx ==>
     env_body.bare_globals = env.bare_globals ==>
+    env_body.bare_global_assignable = env.bare_global_assignable ==>
     env_body.toplevel_vtypes = env.toplevel_vtypes ==>
     finally
       (try (do eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body;
@@ -12453,7 +12534,7 @@ Theorem intcall_default_success_post_push_outer_inr_frame_ret[local]:
     state_well_typed fin_st /\ env_consistent env cx fin_st /\
     accounts_well_typed fin_st.accounts
 Proof
-  rpt gen_tac >> ntac 13 strip_tac >>
+  rpt gen_tac >> ntac 14 strip_tac >>
   gvs[]
   >- (
     qspecl_then [`cx`, `env`, `env_body`, `args_st`, `lock_st`,
@@ -12981,6 +13062,7 @@ Theorem intcall_default_success_post_push_no_type_error[local]:
     context_well_typed cx /\ accounts_well_typed dflt_st.accounts /\
     functions_well_typed cx /\ env_body.type_defs = get_tenv cx /\
     env_body.fn_sigs = env.fn_sigs /\ env_body.bare_globals = env.bare_globals /\
+    env_body.bare_global_assignable = env.bare_global_assignable /\
     env_body.toplevel_vtypes = env.toplevel_vtypes /\
     env_body.flag_members = env.flag_members /\
     env_immutables_consistent env_body
@@ -13073,6 +13155,7 @@ Theorem intcall_default_success_post_push_sound[local]:
     context_well_typed cx /\ accounts_well_typed dflt_st.accounts /\
     functions_well_typed cx /\ env_body.type_defs = get_tenv cx /\
     env_body.fn_sigs = env.fn_sigs /\ env_body.bare_globals = env.bare_globals /\
+    env_body.bare_global_assignable = env.bare_global_assignable /\
     env_body.toplevel_vtypes = env.toplevel_vtypes /\
     env_body.flag_members = env.flag_members /\
     env_immutables_consistent env_body
@@ -13151,6 +13234,7 @@ Proof
       simp[] >> strip_tac >> strip_tac >>
       `env_after.type_defs = get_tenv cx /\
        env_after.bare_globals = env.bare_globals /\
+       env_after.bare_global_assignable = env.bare_global_assignable /\
        env_after.toplevel_vtypes = env.toplevel_vtypes` by
         (drule type_stmts_env_preserved_static >> simp[]) >>
       `state_well_typed fin_st /\ env_consistent env cx fin_st /\
@@ -13177,6 +13261,7 @@ Proof
     gvs[] >>
     `env_exn.type_defs = get_tenv cx /\
      env_exn.bare_globals = env.bare_globals /\
+     env_exn.bare_global_assignable = env.bare_global_assignable /\
      env_exn.toplevel_vtypes = env.toplevel_vtypes` by
       (gvs[env_extends_def]) >>
     `state_well_typed fin_st /\ env_consistent env cx fin_st /\
@@ -13247,6 +13332,7 @@ Proof
     gvs[] >>
     `env_exn.type_defs = get_tenv cx /\
      env_exn.bare_globals = env.bare_globals /\
+     env_exn.bare_global_assignable = env.bare_global_assignable /\
      env_exn.toplevel_vtypes = env.toplevel_vtypes` by
       (gvs[env_extends_def]) >>
     `state_well_typed fin_st /\ env_consistent env cx fin_st /\
@@ -13413,6 +13499,7 @@ Theorem intcall_default_success_lock_success_tail_no_type_error[local]:
     env_body.type_defs = get_tenv cx ==>
     env_body.fn_sigs = env.fn_sigs ==>
     env_body.bare_globals = env.bare_globals ==>
+    env_body.bare_global_assignable = env.bare_global_assignable ==>
     env_body.toplevel_vtypes = env.toplevel_vtypes ==>
     env_body.flag_members = env.flag_members ==>
     env_immutables_consistent env_body
@@ -13483,6 +13570,7 @@ Theorem intcall_default_success_lock_success_tail_not_type_error[local]:
     env_body.type_defs = get_tenv cx ==>
     env_body.fn_sigs = env.fn_sigs ==>
     env_body.bare_globals = env.bare_globals ==>
+    env_body.bare_global_assignable = env.bare_global_assignable ==>
     env_body.toplevel_vtypes = env.toplevel_vtypes ==>
     env_body.flag_members = env.flag_members ==>
     env_immutables_consistent env_body
@@ -13552,6 +13640,7 @@ Theorem intcall_default_success_none_tail_no_type_error[local]:
     env_body.type_defs = get_tenv cx ==>
     env_body.fn_sigs = env.fn_sigs ==>
     env_body.bare_globals = env.bare_globals ==>
+    env_body.bare_global_assignable = env.bare_global_assignable ==>
     env_body.toplevel_vtypes = env.toplevel_vtypes ==>
     env_body.flag_members = env.flag_members ==>
     env_immutables_consistent env_body
@@ -13625,6 +13714,7 @@ Theorem intcall_default_success_push_tail_no_type_error[local]:
     env_body.type_defs = get_tenv cx ==>
     env_body.fn_sigs = env.fn_sigs ==>
     env_body.bare_globals = env.bare_globals ==>
+    env_body.bare_global_assignable = env.bare_global_assignable ==>
     env_body.toplevel_vtypes = env.toplevel_vtypes ==>
     env_body.flag_members = env.flag_members ==>
     env_immutables_consistent env_body
@@ -13700,6 +13790,7 @@ Theorem intcall_default_success_bound_continuation_no_type_error[local]:
     env_body.type_defs = get_tenv cx ==>
     env_body.fn_sigs = env.fn_sigs ==>
     env_body.bare_globals = env.bare_globals ==>
+    env_body.bare_global_assignable = env.bare_global_assignable ==>
     env_body.toplevel_vtypes = env.toplevel_vtypes ==>
     env_body.flag_members = env.flag_members ==>
     env_immutables_consistent env_body
@@ -13854,6 +13945,7 @@ Theorem intcall_default_success_continuation_no_type_error[local]:
     context_well_typed cx /\ accounts_well_typed dflt_st.accounts /\
     functions_well_typed cx /\ env_body.current_src = src_id_opt /\
     env_body.fn_sigs = env.fn_sigs /\ env_body.bare_globals = env.bare_globals /\
+    env_body.bare_global_assignable = env.bare_global_assignable /\
     env_body.toplevel_vtypes = env.toplevel_vtypes /\
     env_body.flag_members = env.flag_members /\
     env_immutables_consistent env_body
@@ -14088,6 +14180,7 @@ Theorem intcall_default_success_post_lock_no_type_error_from_body_ih[local]:
     env_body.type_defs = get_tenv cx /\
     env_body.fn_sigs = env.fn_sigs /\
     env_body.bare_globals = env.bare_globals /\
+    env_body.bare_global_assignable = env.bare_global_assignable /\
     env_body.toplevel_vtypes = env.toplevel_vtypes /\
     env_body.flag_members = env.flag_members /\
     env_immutables_consistent env_body
@@ -14166,6 +14259,7 @@ Theorem intcall_default_success_post_lock_no_type_error_from_post_push_body_ih[l
     env_body.type_defs = get_tenv cx /\
     env_body.fn_sigs = env.fn_sigs /\
     env_body.bare_globals = env.bare_globals /\
+    env_body.bare_global_assignable = env.bare_global_assignable /\
     env_body.toplevel_vtypes = env.toplevel_vtypes /\
     env_body.flag_members = env.flag_members /\
     env_immutables_consistent env_body
@@ -14257,6 +14351,7 @@ Theorem intcall_default_success_NoneT_post_lock_consumer_no_type_error[local]:
     env_body.type_defs = get_tenv cx /\
     env_body.fn_sigs = env.fn_sigs /\
     env_body.bare_globals = env.bare_globals /\
+    env_body.bare_global_assignable = env.bare_global_assignable /\
     env_body.toplevel_vtypes = env.toplevel_vtypes /\
     env_body.flag_members = env.flag_members /\
     env_immutables_consistent env_body
@@ -14353,6 +14448,7 @@ Theorem intcall_default_success_general_post_lock_consumer_type_error_contradict
     env_body.type_defs = get_tenv cx /\
     env_body.fn_sigs = env.fn_sigs /\
     env_body.bare_globals = env.bare_globals /\
+    env_body.bare_global_assignable = env.bare_global_assignable /\
     env_body.toplevel_vtypes = env.toplevel_vtypes /\
     env_body.flag_members = env.flag_members /\
     env_immutables_consistent env_body
@@ -14442,6 +14538,7 @@ Theorem intcall_default_success_general_post_lock_consumer_no_type_error[local]:
     env_body.type_defs = get_tenv cx /\
     env_body.fn_sigs = env.fn_sigs /\
     env_body.bare_globals = env.bare_globals /\
+    env_body.bare_global_assignable = env.bare_global_assignable /\
     env_body.toplevel_vtypes = env.toplevel_vtypes /\
     env_body.flag_members = env.flag_members /\
     env_immutables_consistent env_body
@@ -14794,6 +14891,7 @@ Theorem intcall_actual_args_success_post_lock_no_type_error[local]:
     env_body.type_defs = get_tenv cx /\
     env_body.fn_sigs = env.fn_sigs /\
     env_body.bare_globals = env.bare_globals /\
+    env_body.bare_global_assignable = env.bare_global_assignable /\
     env_body.toplevel_vtypes = env.toplevel_vtypes /\
     env_body.flag_members = env.flag_members /\
     env_immutables_consistent env_body
@@ -15036,6 +15134,7 @@ Theorem intcall_actual_args_success_post_lock_no_type_error_general[local]:
     env_body.type_defs = get_tenv cx /\
     env_body.fn_sigs = env.fn_sigs /\
     env_body.bare_globals = env.bare_globals /\
+    env_body.bare_global_assignable = env.bare_global_assignable /\
     env_body.toplevel_vtypes = env.toplevel_vtypes /\
     env_body.flag_members = env.flag_members /\
     env_immutables_consistent env_body
@@ -15089,6 +15188,7 @@ Proof
   (CONJ_TAC THEN1 (qpat_assum `_.type_defs = _` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (qpat_assum `_.fn_sigs = _` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (qpat_assum `_.bare_globals = _` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `_.bare_global_assignable = _` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (qpat_assum `_.toplevel_vtypes = _` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (qpat_assum `_.flag_members = _` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (qpat_assum `env_immutables_consistent _ _ _` ACCEPT_TAC)) >>
@@ -15385,6 +15485,7 @@ Theorem intcall_defaults_result_package_from_generated_ih_general[local]:
     env_body.type_defs = get_tenv cx /\
     env_body.fn_sigs = env.fn_sigs /\
     env_body.bare_globals = env.bare_globals /\
+    env_body.bare_global_assignable = env.bare_global_assignable /\
     env_body.toplevel_vtypes = env.toplevel_vtypes /\
     env_body.flag_members = env.flag_members /\
     evaluate_type (get_tenv cx) ret = SOME ret_tv /\
@@ -15551,6 +15652,7 @@ Theorem intcall_defaults_result_frame_package_from_generated_ih_general[local]:
     env_body.type_defs = get_tenv cx /\
     env_body.fn_sigs = env.fn_sigs /\
     env_body.bare_globals = env.bare_globals /\
+    env_body.bare_global_assignable = env.bare_global_assignable /\
     env_body.toplevel_vtypes = env.toplevel_vtypes /\
     env_body.flag_members = env.flag_members /\
     evaluate_type (get_tenv cx) ret = SOME ret_tv /\
@@ -15714,6 +15816,7 @@ Theorem intcall_successful_defaults_continuation_no_type_error_general[local]:
     env_body.type_defs = get_tenv cx /\
     env_body.fn_sigs = env.fn_sigs /\
     env_body.bare_globals = env.bare_globals /\
+    env_body.bare_global_assignable = env.bare_global_assignable /\
     env_body.toplevel_vtypes = env.toplevel_vtypes /\
     env_body.flag_members = env.flag_members /\
     env_immutables_consistent env_body
@@ -15928,6 +16031,7 @@ Theorem intcall_successful_defaults_lock_success_sound_from_body_ih[local]:
     context_well_typed cx /\ accounts_well_typed dflt_st.accounts /\
     functions_well_typed cx /\ env_body.type_defs = get_tenv cx /\
     env_body.fn_sigs = env.fn_sigs /\ env_body.bare_globals = env.bare_globals /\
+    env_body.bare_global_assignable = env.bare_global_assignable /\
     env_body.toplevel_vtypes = env.toplevel_vtypes /\
     env_body.flag_members = env.flag_members /\
     env_immutables_consistent env_body
@@ -15980,6 +16084,7 @@ Proof
   (CONJ_TAC THEN1 (qpat_assum `env_body.type_defs = get_tenv cx` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (qpat_assum `env_body.fn_sigs = env.fn_sigs` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (qpat_assum `env_body.bare_globals = env.bare_globals` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `env_body.bare_global_assignable = env.bare_global_assignable` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (qpat_assum `env_body.toplevel_vtypes = env.toplevel_vtypes` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (qpat_assum `env_body.flag_members = env.flag_members` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (qpat_assum `env_immutables_consistent _ _ _` ACCEPT_TAC)) >>
@@ -16076,6 +16181,7 @@ Theorem intcall_successful_defaults_lock_success_sound_general[local]:
     env_body.type_defs = get_tenv cx /\
     env_body.fn_sigs = env.fn_sigs /\
     env_body.bare_globals = env.bare_globals /\
+    env_body.bare_global_assignable = env.bare_global_assignable /\
     env_body.toplevel_vtypes = env.toplevel_vtypes /\
     env_body.flag_members = env.flag_members /\
     env_immutables_consistent env_body
@@ -16154,6 +16260,7 @@ Proof
   (CONJ_TAC THEN1 (qpat_assum `env_body.type_defs = get_tenv cx` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (qpat_assum `env_body.fn_sigs = env.fn_sigs` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (qpat_assum `env_body.bare_globals = env.bare_globals` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `env_body.bare_global_assignable = env.bare_global_assignable` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (qpat_assum `env_body.toplevel_vtypes = env.toplevel_vtypes` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (qpat_assum `env_body.flag_members = env.flag_members` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (
@@ -16252,6 +16359,7 @@ Theorem intcall_successful_defaults_continuation_lock_success_case[local]:
     env_body.type_defs = get_tenv cx /\
     env_body.fn_sigs = env.fn_sigs /\
     env_body.bare_globals = env.bare_globals /\
+    env_body.bare_global_assignable = env.bare_global_assignable /\
     env_body.toplevel_vtypes = env.toplevel_vtypes /\
     env_body.flag_members = env.flag_members /\
     env_immutables_consistent env_body
@@ -16313,6 +16421,7 @@ Proof
   (CONJ_TAC THEN1 (qpat_assum `env_body.type_defs = get_tenv cx` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (qpat_assum `env_body.fn_sigs = env.fn_sigs` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (qpat_assum `env_body.bare_globals = env.bare_globals` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `env_body.bare_global_assignable = env.bare_global_assignable` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (qpat_assum `env_body.toplevel_vtypes = env.toplevel_vtypes` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (qpat_assum `env_body.flag_members = env.flag_members` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (qpat_assum `env_immutables_consistent _ _ _` ACCEPT_TAC)) >>
@@ -16407,6 +16516,7 @@ Theorem intcall_successful_defaults_continuation_sound_general[local]:
     env_body.type_defs = get_tenv cx /\
     env_body.fn_sigs = env.fn_sigs /\
     env_body.bare_globals = env.bare_globals /\
+    env_body.bare_global_assignable = env.bare_global_assignable /\
     env_body.toplevel_vtypes = env.toplevel_vtypes /\
     env_body.flag_members = env.flag_members /\
     env_immutables_consistent env_body
@@ -16475,6 +16585,7 @@ Proof
     (CONJ_TAC THEN1 (qpat_assum `env_body.type_defs = get_tenv cx` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `env_body.fn_sigs = env.fn_sigs` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `env_body.bare_globals = env.bare_globals` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `env_body.bare_global_assignable = env.bare_global_assignable` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `env_body.toplevel_vtypes = env.toplevel_vtypes` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `env_body.flag_members = env.flag_members` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `env_immutables_consistent _ _ _` ACCEPT_TAC)) >>
@@ -16594,6 +16705,7 @@ Theorem intcall_actual_args_success_no_type_error_from_generated_ih_general[loca
     env_body.type_defs = get_tenv cx /\
     env_body.fn_sigs = env.fn_sigs /\
     env_body.bare_globals = env.bare_globals /\
+    env_body.bare_global_assignable = env.bare_global_assignable /\
     env_body.toplevel_vtypes = env.toplevel_vtypes /\
     env_body.flag_members = env.flag_members /\
     evaluate_type (get_tenv cx) ret = SOME ret_tv /\
@@ -16698,6 +16810,7 @@ Proof
     (CONJ_TAC THEN1 (first_assum ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (first_assum ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (first_assum ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `env_body.flag_members = env.flag_members` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `env_immutables_consistent env_body (cx with stk updated_by CONS (src_id_opt,fn)) dflt_st` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `scope_well_typed call_env` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `env_scopes_consistent env_body cx (dflt_st with scopes := [call_env])` ACCEPT_TAC)) >>
@@ -16910,6 +17023,7 @@ Theorem intcall_actual_args_success_default_success_branch[local]:
     env_body.type_defs = get_tenv cx /\
     env_body.fn_sigs = env.fn_sigs /\
     env_body.bare_globals = env.bare_globals /\
+    env_body.bare_global_assignable = env.bare_global_assignable /\
     env_body.toplevel_vtypes = env.toplevel_vtypes /\
     env_body.flag_members = env.flag_members /\
     env_immutables_consistent env_body
@@ -17031,6 +17145,7 @@ Theorem intcall_actual_args_success_default_success_branch_pair[local]:
     env_body.type_defs = get_tenv cx /\
     env_body.fn_sigs = env.fn_sigs /\
     env_body.bare_globals = env.bare_globals /\
+    env_body.bare_global_assignable = env.bare_global_assignable /\
     env_body.toplevel_vtypes = env.toplevel_vtypes /\
     env_body.flag_members = env.flag_members /\
     env_immutables_consistent env_body
@@ -17165,6 +17280,7 @@ Theorem intcall_actual_args_success_sound_from_generated_ih_general[local]:
     env_body.type_defs = get_tenv cx /\
     env_body.fn_sigs = env.fn_sigs /\
     env_body.bare_globals = env.bare_globals /\
+    env_body.bare_global_assignable = env.bare_global_assignable /\
     env_body.toplevel_vtypes = env.toplevel_vtypes /\
     env_body.flag_members = env.flag_members /\
     well_typed_expr env (Call loc (IntCall (src_id_opt,fn)) es extra) /\
@@ -17324,6 +17440,7 @@ Proof
     (CONJ_TAC THEN1 (qpat_assum `env_body.type_defs = get_tenv cx` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `env_body.fn_sigs = env.fn_sigs` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `env_body.bare_globals = env.bare_globals` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `env_body.bare_global_assignable = env.bare_global_assignable` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `env_body.toplevel_vtypes = env.toplevel_vtypes` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `env_body.flag_members = env.flag_members` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `env_immutables_consistent _ _ _` ACCEPT_TAC)) >>
@@ -17805,6 +17922,7 @@ Proof
     (CONJ_TAC THEN1 (qpat_assum `env_body.type_defs = get_tenv cx` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `env_body.fn_sigs = env.fn_sigs` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `env_body.bare_globals = env.bare_globals` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `env_body.bare_global_assignable = env.bare_global_assignable` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `env_body.toplevel_vtypes = env.toplevel_vtypes` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `env_body.flag_members = env.flag_members` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (simp[Once well_typed_expr_def] >> qexists `sig` >> simp[])) >>

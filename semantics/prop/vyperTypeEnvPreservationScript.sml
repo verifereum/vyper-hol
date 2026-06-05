@@ -6,7 +6,7 @@ Theory vyperTypeEnvPreservation
 Ancestors
   alist list rich_list pred_set prim_rec arithmetic finite_map option pair
   vyperAST vyperValue vyperMisc vyperABI vyperInterpreter vyperState
-  vyperContext vyperStorage vyperTyping vyperTypeSystem vyperTypeValues
+  vyperContext vyperStorage vyperTyping vyperTypeSystem vyperTypeInvariants vyperTypeValues
   vyperLookup vyperStatePreservation vyperStorageBackend vyperTypeEnv vyperTypeEnvExtension
   vyperEvalPreservesScopes vyperScopePreservation vyperEvalExprPreservesScopesDom
   vyperEvalPreservesImmutablesDom

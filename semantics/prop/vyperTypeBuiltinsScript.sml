@@ -9,7 +9,7 @@ Ancestors
   list rich_list pred_set prim_rec arithmetic finite_map option pair sorting
   words byte integer keccak vyperAST vyperValue vyperValueOperation vyperMisc
   vyperABI vyperInterpreter vyperState vyperContext vyperStorage
-  vyperTyping vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeValues
+  vyperTyping vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeInvariants vyperTypeValues
   vyperTypeBytesCrypto vyperTypeDefaults vyperTypeConversions vyperTypeABI vyperEvalBinop
   vyperAssignPreservesType bn254 vfmExecution
 Libs

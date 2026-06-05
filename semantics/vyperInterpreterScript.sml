@@ -1644,7 +1644,7 @@ Definition send_call_value_def:
   send_call_value mut cx =
   let n = cx.txn.value in
   if n = 0 then return () else do
-    type_check (mut = Payable) "not Payable";
+    check (mut = Payable) "not Payable";
     transfer_value cx.txn.sender cx.txn.target n
   od
 End

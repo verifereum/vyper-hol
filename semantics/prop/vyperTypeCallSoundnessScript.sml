@@ -7,7 +7,7 @@ Ancestors
   list rich_list pred_set prim_rec arithmetic finite_map option pair
   vyperAST vyperValue vyperValueOperation vyperMisc vyperABI
   vyperInterpreter vyperState vyperContext vyperStorage vyperTyping
-  vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeValues
+  vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeInvariants vyperTypeValues
   vyperTypeEnv vyperTypeBuiltins vyperTypeExprSoundness
   vyperTypeStmtSoundness vyperTypeStatePreservation
 Libs
@@ -32,6 +32,7 @@ Theorem defaults_env_erases_locals:
   (defaults_env env).type_defs = env.type_defs /\
   (defaults_env env).fn_sigs = env.fn_sigs /\
   (defaults_env env).bare_globals = env.bare_globals /\
+  (defaults_env env).bare_global_assignable = env.bare_global_assignable /\
   (defaults_env env).toplevel_vtypes = env.toplevel_vtypes /\
   (defaults_env env).flag_members = env.flag_members
 Proof
@@ -41,11 +42,21 @@ QED
 Theorem functions_well_typed_body:
   functions_well_typed cx /\ fn_sigs_consistent fn_sigs cx /\
   fn_sigs_complete fn_sigs cx /\
+  toplevel_vtypes_complete toplevel_vtypes cx /\
+  bare_globals_complete bare_globals cx /\
+  bare_global_assignable_complete bare_global_assignable cx /\
+  flag_members_complete flag_members cx /\
   get_module_code cx src = SOME ts /\
   lookup_callable_function cx.in_deploy fn ts = SOME (fm,nr,args,dflts,ret,fn_body) /\
   (* Concrete maps supplied by caller must satisfy the consistency side-condition. *)
   (!src id ty. FLOOKUP bare_globals (src,id) = SOME ty ==>
      ?ts. get_module_code cx src = SOME ts /\
+          FLOOKUP toplevel_vtypes (src,id) = SOME (Type ty) /\
+          is_bare_global_decl id ts /\ find_var_decl_by_num id ts = NONE /\
+          ty <> NoneT) /\
+  (!src id ty. FLOOKUP bare_global_assignable (src,id) = SOME ty ==>
+     ?ts. get_module_code cx src = SOME ts /\
+          FLOOKUP bare_globals (src,id) = SOME ty /\
           FLOOKUP toplevel_vtypes (src,id) = SOME (Type ty) /\
           is_immutable_decl id ts /\ find_var_decl_by_num id ts = NONE /\
           ty <> NoneT) /\
@@ -69,6 +80,7 @@ Theorem functions_well_typed_body:
     env_body.type_defs = get_tenv cx /\
     env_body.fn_sigs = fn_sigs /\
     env_body.bare_globals = bare_globals /\
+    env_body.bare_global_assignable = bare_global_assignable /\
     env_body.toplevel_vtypes = toplevel_vtypes /\
     env_body.flag_members = flag_members /\
     evaluate_type (get_tenv cx) ret = SOME ret_tv /\

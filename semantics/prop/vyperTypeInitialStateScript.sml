@@ -11,7 +11,7 @@ Theory vyperTypeInitialState
 Ancestors
   list rich_list pred_set arithmetic finite_map option pair
   vyperAST vyperValue vyperTyping vyperState vyperInterpreter vyperContext
-  vyperTypeSystem vyperTypeStmtSoundness vyperTypeSoundness
+  vyperTypeSystem vyperTypeInvariants vyperTypeStmtSoundness vyperTypeSoundness
 Libs
   wordsLib
 
@@ -276,7 +276,8 @@ Theorem initial_immutables_contains_bare_global:
   ALOOKUP cx.sources cx.txn.target = SOME mods /\
   ALOOKUP mods src = SOME ts /\
   initial_immutables (get_tenv cx) mods = SOME imms /\
-  FLOOKUP env_base.bare_globals (src,id) = SOME ty ==>
+  FLOOKUP env_base.bare_globals (src,id) = SOME ty /\
+  is_immutable_decl id ts ==>
   IS_SOME (FLOOKUP (get_source_immutables src imms) id)
 Proof
   rw[] >>
@@ -383,6 +384,7 @@ Theorem initial_immutables_bare_global_type:
   ALOOKUP mods src = SOME ts /\
   initial_immutables (get_tenv cx) mods = SOME imms /\
   FLOOKUP env_base.bare_globals (src,id) = SOME ty /\
+  is_immutable_decl id ts /\
   FLOOKUP (get_source_immutables src imms) id = SOME (tv,v) ==>
   evaluate_type (get_tenv cx) ty = SOME tv
 Proof
@@ -396,11 +398,9 @@ Proof
   simp[] >>
   rpt strip_tac >>
   gvs[bare_globals_match_immutable_decl_types_def, get_module_code_def] >>
-  first_x_assum irule >>
-  qexistsl [`slot`, `src`, `ts`, `vid`, `vis`] >>
+  first_x_assum (qspecl_then [`src`, `ty`, `ts`, `vis`, `vid`, `typ`, `slot`] mp_tac) >>
   simp[]
 QED
-
 Theorem constants_env_lookup_origin:
   constants_env cx am addr src ts acc = SOME cenv /\
   FLOOKUP cenv id = SOME x ==>
@@ -458,6 +458,41 @@ Proof
   metis_tac[alistTheory.ALOOKUP_MEM]
 QED
 
+
+Theorem is_bare_global_decl_cases[local]:
+  is_bare_global_decl id ts ==>
+  is_immutable_decl id ts \/
+  ?vis e vid typ slot.
+    MEM (VariableDecl vis (Constant e) vid typ slot) ts /\
+    string_to_num vid = id
+Proof
+  qid_spec_tac `id` >>
+  Induct_on `ts` >>
+  rw[is_bare_global_decl_def, is_immutable_decl_def] >>
+  Cases_on `h` >>
+  gvs[is_bare_global_decl_def, is_immutable_decl_def] >>
+  TRY (Cases_on `v0` >>
+       gvs[is_bare_global_decl_def, is_immutable_decl_def] >>
+       metis_tac[])
+QED
+
+Theorem constants_do_not_clobber_bare_global_decl_is_immutable[local]:
+  constants_do_not_clobber_bare_globals mods bare_globals /\
+  ALOOKUP mods src = SOME ts /\
+  FLOOKUP bare_globals (src,id) = SOME ty /\
+  is_bare_global_decl id ts ==>
+  is_immutable_decl id ts
+Proof
+  rw[constants_do_not_clobber_bare_globals_def] >>
+  drule is_bare_global_decl_cases >>
+  strip_tac >>
+  gvs[] >>
+  qpat_x_assum `ALOOKUP mods src = SOME ts` (assume_tac o MATCH_MP alistTheory.ALOOKUP_MEM) >>
+  first_x_assum drule >>
+  disch_then drule >>
+  strip_tac >>
+  gvs[]
+QED
 Theorem merge_constants_preserves_lookup:
   (src = src_c ==> FLOOKUP cenv id = NONE) /\
   FLOOKUP
@@ -597,6 +632,8 @@ Proof
       disch_then drule >>
       strip_tac >>
       gvs[get_module_code_def] >>
+      `is_immutable_decl id ts` by
+        metis_tac[constants_do_not_clobber_bare_global_decl_is_immutable] >>
       `?x. FLOOKUP (get_source_immutables src imms) id = SOME x` by
         metis_tac[initial_immutables_contains_bare_global, IS_SOME_EXISTS] >>
       gvs[IS_SOME_EXISTS] >>
@@ -611,6 +648,8 @@ Proof
       disch_then drule >>
       strip_tac >>
       gvs[get_module_code_def] >>
+      `is_immutable_decl id ts` by
+        metis_tac[constants_do_not_clobber_bare_global_decl_is_immutable] >>
       `?x. FLOOKUP (get_source_immutables src imms) id = SOME x` by
         metis_tac[initial_immutables_contains_bare_global, IS_SOME_EXISTS] >>
       `FLOOKUP
@@ -654,6 +693,8 @@ Proof
       disch_then drule >>
       strip_tac >>
       gvs[get_module_code_def] >>
+      `is_immutable_decl id ts` by
+        metis_tac[constants_do_not_clobber_bare_global_decl_is_immutable] >>
       `?x. FLOOKUP (get_source_immutables src imms) id = SOME x` by
         metis_tac[initial_immutables_contains_bare_global, IS_SOME_EXISTS] >>
       `FLOOKUP
@@ -689,10 +730,15 @@ Theorem env_context_consistent_empty_static_maps:
   env.type_defs = get_tenv cx /\
   env.fn_sigs = fn_sigs /\
   env.bare_globals = FEMPTY /\
+  env.bare_global_assignable = FEMPTY /\
   env.toplevel_vtypes = FEMPTY /\
   env.flag_members = FEMPTY /\
   fn_sigs_consistent fn_sigs cx /\
-  fn_sigs_complete fn_sigs cx ==>
+  fn_sigs_complete fn_sigs cx /\
+  toplevel_vtypes_complete FEMPTY cx /\
+  bare_globals_complete FEMPTY cx /\
+  bare_global_assignable_complete FEMPTY cx /\
+  flag_members_complete FEMPTY cx ==>
   env_context_consistent env cx
 Proof
   simp[env_context_consistent_def]
@@ -700,6 +746,7 @@ QED
 
 Theorem env_immutables_consistent_empty_static_maps:
   env.bare_globals = FEMPTY /\
+  env.bare_global_assignable = FEMPTY /\
   env.toplevel_vtypes = FEMPTY ==>
   env_immutables_consistent env cx st
 Proof
@@ -711,7 +758,7 @@ Theorem env_context_consistent_static_maps_function_side_condition:
     (!src id ty. FLOOKUP env_base.bare_globals (src,id) = SOME ty ==>
        ?ts. get_module_code cx src = SOME ts /\
             FLOOKUP env_base.toplevel_vtypes (src,id) = SOME (Type ty) /\
-            is_immutable_decl id ts /\
+            is_bare_global_decl id ts /\
             find_var_decl_by_num id ts = NONE /\
             ty <> NoneT) /\
     (!src id vt ts.
@@ -772,6 +819,7 @@ Theorem functions_well_typed_callable_body_env_base:
     env_body.type_defs = env_base.type_defs /\
     env_body.fn_sigs = env_base.fn_sigs /\
     env_body.bare_globals = env_base.bare_globals /\
+    env_body.bare_global_assignable = env_base.bare_global_assignable /\
     env_body.toplevel_vtypes = env_base.toplevel_vtypes /\
     env_body.flag_members = env_base.flag_members /\
     type_stmts env_body ret body = SOME env_after /\
@@ -786,6 +834,7 @@ Proof
   rw[functions_well_typed_def] >>
   first_x_assum
     (qspecl_then [`env_base.fn_sigs`, `env_base.bare_globals`,
+                  `env_base.bare_global_assignable`,
                   `env_base.toplevel_vtypes`, `env_base.flag_members`] mp_tac) >>
   impl_tac
   >- (drule env_context_consistent_static_maps_function_side_condition >>
@@ -804,6 +853,7 @@ Theorem env_context_consistent_same_static_maps:
   env.type_defs = env_base.type_defs /\
   env.fn_sigs = env_base.fn_sigs /\
   env.bare_globals = env_base.bare_globals /\
+  env.bare_global_assignable = env_base.bare_global_assignable /\
   env.toplevel_vtypes = env_base.toplevel_vtypes /\
   env.flag_members = env_base.flag_members ==>
   env_context_consistent env cx
@@ -813,6 +863,7 @@ QED
 
 Theorem immutables_ready_env_immutables_consistent:
   env.bare_globals = env_base.bare_globals /\
+  env.bare_global_assignable = env_base.bare_global_assignable /\
   env.toplevel_vtypes = env_base.toplevel_vtypes /\
   immutables_ready env_base.bare_globals env_base.toplevel_vtypes cx am.immutables ==>
   env_immutables_consistent env cx (initial_state am [scope])
@@ -847,6 +898,7 @@ Theorem callable_entry_establishes_type_soundness_preconditions:
     env_body.type_defs = env_base.type_defs /\
     env_body.fn_sigs = env_base.fn_sigs /\
     env_body.bare_globals = env_base.bare_globals /\
+    env_body.bare_global_assignable = env_base.bare_global_assignable /\
     env_body.toplevel_vtypes = env_base.toplevel_vtypes /\
     env_body.flag_members = env_base.flag_members /\
     accounts_well_typed st.accounts /\
@@ -917,6 +969,7 @@ Proof
               var_types := FEMPTY;
               var_assignable := FEMPTY;
               bare_globals := FEMPTY;
+              bare_global_assignable := FEMPTY;
               toplevel_vtypes := FEMPTY;
               type_defs := FEMPTY;
               fn_sigs := FEMPTY;
@@ -925,6 +978,7 @@ Proof
               var_types := FEMPTY;
               var_assignable := FEMPTY;
               bare_globals := FEMPTY;
+              bare_global_assignable := FEMPTY;
               toplevel_vtypes := FEMPTY;
               type_defs := FEMPTY;
               fn_sigs := FEMPTY;
@@ -934,6 +988,8 @@ Proof
        empty_evaluation_context_def, empty_call_txn_def, get_tenv_def,
        get_module_code_def, current_module_def, functions_well_typed_def,
        context_well_typed_def, env_consistent_def, env_context_consistent_def,
+       toplevel_vtypes_complete_def, bare_globals_complete_def,
+       bare_global_assignable_complete_def, flag_members_complete_def,
        env_scopes_consistent_def, env_immutables_consistent_def,
        fn_sigs_consistent_def, fn_sigs_complete_def, state_well_typed_def,
        scope_well_typed_def, vyperStateTheory.lookup_scopes_def,
