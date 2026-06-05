@@ -22,9 +22,10 @@ Libs
 
 Datatype:
   contract_type_artifact = <|
-    cta_fn_sigs         : ((num option # string) |-> fn_sig);
-    cta_bare_globals    : ((num option # num) |-> type);
-    cta_toplevel_vtypes : ((num option # num) |-> value_type);
+    cta_fn_sigs                  : ((num option # string) |-> fn_sig);
+    cta_bare_globals             : ((num option # num) |-> type);
+    cta_bare_global_assignable   : ((num option # num) |-> type);
+    cta_toplevel_vtypes          : ((num option # num) |-> value_type);
     cta_flag_members    : ((num option # string) |-> string list)
   |>
 End
@@ -33,6 +34,7 @@ Definition empty_contract_type_artifact_def:
   empty_contract_type_artifact =
     <| cta_fn_sigs := FEMPTY;
        cta_bare_globals := FEMPTY;
+       cta_bare_global_assignable := FEMPTY;
        cta_toplevel_vtypes := FEMPTY;
        cta_flag_members := FEMPTY |>
 End
@@ -43,6 +45,7 @@ Definition artifact_env_def:
        var_types := FEMPTY;
        var_assignable := FEMPTY;
        bare_globals := art.cta_bare_globals;
+       bare_global_assignable := art.cta_bare_global_assignable;
        toplevel_vtypes := art.cta_toplevel_vtypes;
        type_defs := type_env_all_modules mods;
        fn_sigs := art.cta_fn_sigs;
@@ -80,6 +83,8 @@ Definition add_toplevel_static_maps_def:
         else art
     | VariableDecl _ Immutable id typ _ =>
         art with <| cta_bare_globals updated_by
+                    (flip FUPDATE ((src,string_to_num id), typ));
+                    cta_bare_global_assignable updated_by
                     (flip FUPDATE ((src,string_to_num id), typ));
                     cta_toplevel_vtypes updated_by
                     (flip FUPDATE ((src,string_to_num id), Type typ)) |>

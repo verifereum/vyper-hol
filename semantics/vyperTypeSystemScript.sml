@@ -357,9 +357,10 @@ Datatype:
   typing_env = <|
     current_src     : num option;
     var_types       : (num |-> type);
-    var_assignable  : (num |-> bool);
-    bare_globals    : ((num option # num) |-> type);
-    toplevel_vtypes : ((num option # num) |-> value_type);
+    var_assignable          : (num |-> bool);
+    bare_globals            : ((num option # num) |-> type);
+    bare_global_assignable  : ((num option # num) |-> type);
+    toplevel_vtypes         : ((num option # num) |-> value_type);
     type_defs       : (num |-> type_args);
     fn_sigs         : ((num option # string) |-> fn_sig);
     flag_members    : ((num option # string) |-> string list)
@@ -558,7 +559,7 @@ Definition well_typed_expr_def:
      | (SOME ty, SOME T) => SOME (Type ty)
      | _ => NONE) /\
   type_place_target env (BareGlobalNameTarget id) =
-    (case FLOOKUP env.bare_globals (env.current_src, string_to_num id) of
+    (case FLOOKUP env.bare_global_assignable (env.current_src, string_to_num id) of
      | SOME ty => SOME (Type ty) | NONE => NONE) /\
   type_place_target env (TopLevelNameTarget (src_id_opt, id)) =
     (let n = string_to_num id in
