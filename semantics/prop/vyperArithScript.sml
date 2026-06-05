@@ -92,9 +92,11 @@ Proof
   \\ Cases_on`n = 0` >> gvs[]
   \\ `2 ** (n − 1) ≤ words$INT_MIN (:256)` by
        simp[wordsTheory.INT_MIN_def, arithmeticTheory.EXP_BASE_LE_MONO]
-  \\ Cases_on `i < 0` \\ gvs[]
+  \\ Cases_on `i < 0`
   >- (* i < 0 *)
-     (`Num (-i) ≤ words$INT_MIN (:256)` by
+     (qpat_x_assum `(if i < 0 then _ else _)` mp_tac
+      \\ simp[] \\ strip_tac
+      \\ `Num (-i) ≤ words$INT_MIN (:256)` by
         (irule arithmeticTheory.LESS_EQ_TRANS
          \\ qexists_tac `2 ** (n − 1)` \\ simp[])
       \\ `0 ≤ -i` by simp[]
@@ -106,6 +108,8 @@ Proof
       \\ gvs[integer_wordTheory.INT_MIN_def, integer_wordTheory.INT_MAX_def,
              INT_LE_NEG, INT_OF_NUM_LE, wordsTheory.INT_MIN_def])
   (* i ≥ 0 *)
+  \\ qpat_x_assum `(if i < 0 then _ else _)` mp_tac
+  \\ simp[] \\ strip_tac
   \\ `Num i < words$INT_MIN (:256)` by
        (irule arithmeticTheory.LESS_LESS_EQ_TRANS
         \\ qexists_tac `2 ** (n − 1)` \\ simp[])
