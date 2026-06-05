@@ -1,6 +1,6 @@
 Theory vyperAST
 Ancestors
-  string words numpair vyperMisc
+  string words numpair vyperMisc[ignore_grammar]
 Libs
   cv_transLib
 
@@ -17,7 +17,7 @@ End
 val () = cv_auto_trans source_key_def;
 
 Definition type_name_key_def:
-  type_name_key id = string_to_num id
+  type_name_key id = vyperMisc$string_to_num id
 End
 
 val () = cv_auto_trans type_name_key_def;
