@@ -258,7 +258,7 @@ Theorem assignable_type_well_formed:
   !tenv ty. assignable_type tenv ty ==> well_formed_type tenv ty
 Proof
   recInduct assignable_type_ind >> rw[assignable_type_def, well_formed_type_def] >>
-  Cases_on `FLOOKUP tenv (string_to_num id)` >> gvs[] >>
+  Cases_on `FLOOKUP tenv (type_key nsid)` >> gvs[] >>
   Cases_on `x` >> gvs[]
 QED
 
@@ -269,10 +269,10 @@ Proof
   >- (Cases_on `b` >> gvs[] >> TRY (Cases_on `b'` >> gvs[]))
   >- (Cases_on `evaluate_types tenv l []` >> gvs[])
   >- (Cases_on `evaluate_type tenv t` >> gvs[])
-  >- (Cases_on `FLOOKUP tenv (string_to_num s)` >> gvs[] >>
+  >- (Cases_on `FLOOKUP tenv (type_key p)` >> gvs[] >>
       Cases_on `x` >> gvs[] >>
-      Cases_on `evaluate_types (tenv \\ string_to_num s) (MAP SND l) []` >> gvs[])
-  >- (Cases_on `FLOOKUP tenv (string_to_num s)` >> gvs[] >> Cases_on `x` >> gvs[])
+      Cases_on `evaluate_types (tenv \\ type_key p) (MAP SND l) []` >> gvs[])
+  >- (Cases_on `FLOOKUP tenv (type_key p)` >> gvs[] >> Cases_on `x` >> gvs[])
 QED
 
 Theorem assignable_type_evaluate_not_NoneTV:
