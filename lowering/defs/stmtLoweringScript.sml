@@ -376,7 +376,7 @@ Definition compile_get_target_ptr_def:
        loc_opt <- return (FST (SND result));
        base_type_opt <- return (SND (SND result));
        struct_name <- return (case base_type_opt of
-                                SOME (StructT sn) => sn
+                                SOME (StructT sn) => nsid_to_string sn
                               | _ => "");
        fields <- return (get_struct_fields cenv.ce_struct_fields struct_name);
        is_storage <- return (case loc_opt of
@@ -613,8 +613,8 @@ Definition compile_tuple_unpack_def:
   compile_tuple_unpack cenv ty targets src_op =
     let elem_types = (case ty of
         TupleT tys => tys
-      | StructT name =>
-          MAP (FST o SND) (get_struct_fields cenv.ce_struct_fields name)
+      | StructT nsid =>
+          MAP (FST o SND) (get_struct_fields cenv.ce_struct_fields (nsid_to_string nsid))
       | _ => REPLICATE (LENGTH targets) (BaseT (UintT 256))) in
     (* Stage source tuple to prevent aliasing when complex members present.
        Python stages when source_is_memory_view ∧ any(!_is_prim_word).
@@ -967,8 +967,8 @@ Definition compile_stmt_def:
                   Mirrors Python: stmt.py _lower_internal_return *)
                elem_types <- return (case ty of
                    TupleT tys => tys
-                 | StructT name =>
-                     MAP (FST o SND) (get_struct_fields cenv.ce_struct_fields name)
+                 | StructT nsid =>
+                     MAP (FST o SND) (get_struct_fields cenv.ce_struct_fields (nsid_to_string nsid))
                  | _ => []);
                src_ty <- return (expr_type e);
                compile_internal_return cenv (SOME val_op) rpc

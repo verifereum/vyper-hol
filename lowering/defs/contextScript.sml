@@ -596,9 +596,9 @@ val compile_store_memory_typed_defn = Defn.Hol_defn "compile_store_memory_typed"
           compile_copy_sarray_typed cenv dst dst_elem src src_elem n
       | (TupleT dst_tys, TupleT src_tys) =>
           compile_typed_copy_fields cenv dst src dst_tys src_tys 0 0
-      | (StructT dst_name, StructT src_name) =>
-          let dst_fields = get_struct_fields cenv.ce_struct_fields dst_name in
-          let src_fields = get_struct_fields cenv.ce_struct_fields src_name in
+      | (StructT dst_nsid, StructT src_nsid) =>
+          let dst_fields = get_struct_fields cenv.ce_struct_fields (nsid_to_string dst_nsid) in
+          let src_fields = get_struct_fields cenv.ce_struct_fields (nsid_to_string src_nsid) in
           compile_struct_typed_copy cenv
             dst src dst_fields src_fields 0 0
       | _ =>
