@@ -30,7 +30,7 @@ val _ = delsimps ["ao_or_truthy_dead_vars_def",
 (* ===== Basic word fact ===== *)
 
 Triviality word_or_nonzero[local]:
-  !(x:bytes32) n. n <> 0w ==> word_or x n <> 0w
+  !(n:bytes32) x. n <> 0w ==> word_or n x <> 0w
 Proof
   rw[wordsTheory.word_or_def, wordsTheory.word_0,
      fcpTheory.CART_EQ, fcpTheory.FCP_BETA] >> metis_tac[]
@@ -82,7 +82,7 @@ Triviality scan_mem_imp[local]:
     MEM id (ao_or_truthy_scan dfg insts) ==>
     ?inst. MEM inst insts /\ inst.inst_id = id /\
            inst.inst_opcode = OR /\
-           (?op1 n. inst.inst_operands = [op1; Lit n] /\ n <> 0w) /\
+           (?op1 n. inst.inst_operands = [Lit n; op1] /\ n <> 0w) /\
            ao_all_truthy dfg inst
 Proof
   Induct_on `insts` >- simp[ao_or_truthy_scan_def] >>
@@ -299,7 +299,7 @@ Triviality scanned_inst_shape[local]:
     MEM inst (fn_insts fn) /\
     MEM inst.inst_id (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn)) ==>
     inst.inst_opcode = OR /\
-    (?op1 n. inst.inst_operands = [op1; Lit n] /\ n <> 0w) /\
+    (?op1 n. inst.inst_operands = [Lit n; op1] /\ n <> 0w) /\
     (?out. inst.inst_outputs = [out])
 Proof
   rpt gen_tac >> strip_tac >>
@@ -520,7 +520,7 @@ Triviality scanned_or_step[local]:
 Proof
   rpt strip_tac >>
   qabbrev_tac `dead = ao_or_truthy_dead_vars (dfg_build_function fn) fn` >>
-  `?op1 n. inst.inst_operands = [op1; Lit n] /\ n <> 0w` by
+  `?op1 n. inst.inst_operands = [Lit n; op1] /\ n <> 0w` by
     metis_tac[scanned_inst_shape] >>
   `?out. inst.inst_outputs = [out]` by metis_tac[scanned_inst_shape] >>
   `out IN dead` by (qunabbrev_tac `dead` >> irule scanned_output_dead >>
@@ -535,7 +535,7 @@ Proof
   Cases_on `eval_operand op1 s1`
   >- (DISJ1_TAC >> simp[]) >>
   rename1 `eval_operand op1 s1 = SOME v` >> simp[] >>
-  `state_equiv dead (update_var out (word_or v n) s1) (update_var out 1w s2)` by
+  `state_equiv dead (update_var out (word_or n v) s1) (update_var out 1w s2)` by
     (irule update_dead_var_state_equiv >> simp[]) >>
   simp[] >>
   simp[or_truthy_inv_def] >> rpt gen_tac >> strip_tac >>

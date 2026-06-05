@@ -158,11 +158,79 @@ Proof
   rw[ao_post_flip_inst_def] >> every_case_tac >> simp[]
 QED
 
-(* ao_pre_flip preserves opcode *)
-Triviality ao_pre_flip_opcode[local]:
-  !inst. (ao_pre_flip_inst inst).inst_opcode = inst.inst_opcode
+(* ao_pre_flip preserves the terminator / PHI / INVOKE class.  It either is
+   identity or swaps a comparator to another comparator (gt<->lt, sgt<->slt),
+   which is still non-terminator / non-PHI / non-INVOKE. *)
+Triviality ao_pre_flip_not_term[local]:
+  !inst. ~is_terminator inst.inst_opcode ==>
+         ~is_terminator (ao_pre_flip_inst inst).inst_opcode
 Proof
-  rw[ao_pre_flip_inst_def] >> every_case_tac >> simp[]
+  rw[ao_pre_flip_inst_def] >> every_case_tac >>
+  gvs[is_comparator_def, flip_comparison_opcode_def, is_terminator_def]
+QED
+
+Triviality ao_pre_flip_not_phi[local]:
+  !inst. inst.inst_opcode <> PHI ==>
+         (ao_pre_flip_inst inst).inst_opcode <> PHI
+Proof
+  rw[ao_pre_flip_inst_def] >> every_case_tac >>
+  gvs[is_comparator_def, flip_comparison_opcode_def]
+QED
+
+Triviality ao_pre_flip_not_invoke[local]:
+  !inst. inst.inst_opcode <> INVOKE ==>
+         (ao_pre_flip_inst inst).inst_opcode <> INVOKE
+Proof
+  rw[ao_pre_flip_inst_def] >> every_case_tac >>
+  gvs[is_comparator_def, flip_comparison_opcode_def]
+QED
+
+(* ao_pre_flip is identity on opcode for terminators (neither commutative
+   nor a comparator), so the opcode is unchanged. *)
+Triviality ao_pre_flip_term_id[local]:
+  !inst. is_terminator inst.inst_opcode ==>
+         (ao_pre_flip_inst inst).inst_opcode = inst.inst_opcode
+Proof
+  rw[ao_pre_flip_inst_def] >> every_case_tac >>
+  gvs[is_comparator_def, flip_comparison_opcode_def, is_terminator_def]
+QED
+
+(* post-flipping the last instruction (Fix B: ao_post_flip_last) preserves
+   non-emptiness and per-instruction opcode-class properties. *)
+Triviality post_flip_last_nil[local]:
+  !l. (ao_post_flip_last l = []) <=> (l = [])
+Proof
+  ho_match_mp_tac ao_post_flip_last_ind >> rw[ao_post_flip_last_def]
+QED
+
+Triviality post_flip_last_every_non_term[local]:
+  !insts. EVERY (\i. ~is_terminator i.inst_opcode) insts ==>
+          EVERY (\i. ~is_terminator i.inst_opcode) (ao_post_flip_last insts)
+Proof
+  ho_match_mp_tac ao_post_flip_last_ind >>
+  rw[ao_post_flip_last_def] >> gvs[ao_post_flip_opcode]
+QED
+
+Triviality post_flip_last_every_non_phi[local]:
+  !insts. EVERY (\i. i.inst_opcode <> PHI) insts ==>
+          EVERY (\i. i.inst_opcode <> PHI) (ao_post_flip_last insts)
+Proof
+  ho_match_mp_tac ao_post_flip_last_ind >>
+  rw[ao_post_flip_last_def] >> gvs[ao_post_flip_opcode]
+QED
+
+(* EVERY non-term/non-INVOKE/non-PHI is preserved by post-flipping the last
+   instruction (Fix B: ao_post_flip_last). *)
+Triviality post_flip_last_every_non_special[local]:
+  !insts.
+    EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\
+               i.inst_opcode <> PHI) insts ==>
+    EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\
+               i.inst_opcode <> PHI)
+          (ao_post_flip_last insts)
+Proof
+  ho_match_mp_tac ao_post_flip_last_ind >>
+  rw[ao_post_flip_last_def] >> gvs[ao_post_flip_opcode]
 QED
 
 Triviality ao_opt_comparator_ne[local]:
@@ -213,8 +281,8 @@ Proof
   simp[ao_transform_inst_def, LET_THM] >>
   rpt (IF_CASES_TAC >> simp[]) >>
   Cases_on `ao_opt_producer dfg (ao_resolve_iszero_inst targets inst)`
-  >- simp[listTheory.MAP_EQ_NIL, ao_peephole_inst_ne]
-  >- (simp[listTheory.MAP_EQ_NIL] >> drule ao_opt_producer_ne >> simp[])
+  >- simp[post_flip_last_nil, ao_peephole_inst_ne]
+  >- (simp[post_flip_last_nil] >> drule ao_opt_producer_ne >> simp[])
 QED
 
 (* ao_transform_inst: terminators are preserved (given inst_wf) *)
@@ -293,12 +361,12 @@ Triviality ao_pre_flip_inst_wf[local]:
   !inst. inst_wf inst ==> inst_wf (ao_pre_flip_inst inst)
 Proof
   rpt strip_tac >>
-  gvs[ao_pre_flip_inst_def] >>
+  simp[ao_pre_flip_inst_def] >>
   Cases_on `inst.inst_operands` >> gvs[] >>
   Cases_on `t` >> gvs[] >>
   Cases_on `t'` >> gvs[] >>
-  IF_CASES_TAC >> gvs[] >>
-  fs[inst_wf_def]
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  gvs[is_comparator_def, flip_comparison_opcode_def, inst_wf_def]
 QED
 
 (* ao_transform_inst: non-terminators produce only non-terminators *)
@@ -319,20 +387,15 @@ Proof
              (ao_peephole_inst mid dfg ra lbl idx
                (ao_pre_flip_inst (ao_resolve_iszero_inst targets inst)))` by (
         irule ao_peephole_inst_non_term >>
-        simp[ao_pre_flip_opcode, ao_resolve_iszero_inst_opcode] >>
+        simp[ao_pre_flip_not_term, ao_resolve_iszero_inst_opcode] >>
         irule ao_pre_flip_inst_wf >>
         irule ao_resolve_iszero_inst_wf >>
         gvs[ao_resolve_iszero_inst_opcode]) >>
-      simp[listTheory.EVERY_MAP, ao_post_flip_opcode] >>
-      fs[listTheory.EVERY_MEM] >> rpt strip_tac >>
-      res_tac >> simp[ao_post_flip_opcode])
+      simp[] >> irule post_flip_last_every_non_term >> gvs[])
   >- (* SOME: producer path *)
-     (simp[listTheory.EVERY_MAP, ao_post_flip_opcode] >>
-      fs[listTheory.EVERY_MEM] >> rpt strip_tac >>
-      `EVERY (\i. ~is_terminator i.inst_opcode) x` by (
-        drule ao_opt_producer_non_term >>
-        simp[ao_resolve_iszero_inst_opcode]) >>
-      fs[listTheory.EVERY_MEM] >> res_tac >> simp[ao_post_flip_opcode])
+     (simp[] >> irule post_flip_last_every_non_term >>
+      drule ao_opt_producer_non_term >>
+      simp[ao_resolve_iszero_inst_opcode])
 QED
 
 (* Each ao_opt_* function returns instructions with non-PHI opcodes *)
@@ -462,17 +525,12 @@ Proof
              (ao_peephole_inst mid dfg ra lbl idx
                (ao_pre_flip_inst (ao_resolve_iszero_inst targets inst)))` by (
         irule ao_peephole_inst_non_phi >>
-        simp[ao_pre_flip_opcode, ao_resolve_iszero_inst_opcode]) >>
-      simp[listTheory.EVERY_MAP, ao_post_flip_opcode] >>
-      fs[listTheory.EVERY_MEM] >> rpt strip_tac >>
-      res_tac >> simp[ao_post_flip_opcode])
+        simp[ao_pre_flip_not_phi, ao_resolve_iszero_inst_opcode]) >>
+      simp[] >> irule post_flip_last_every_non_phi >> gvs[])
   >- (* SOME: producer path *)
-     (simp[listTheory.EVERY_MAP, ao_post_flip_opcode] >>
-      fs[listTheory.EVERY_MEM] >> rpt strip_tac >>
-      `EVERY (\i. i.inst_opcode <> PHI) x` by (
-        drule ao_opt_producer_non_phi >>
-        simp[ao_resolve_iszero_inst_opcode]) >>
-      fs[listTheory.EVERY_MEM] >> res_tac >> simp[ao_post_flip_opcode])
+     (simp[] >> irule post_flip_last_every_non_phi >>
+      drule ao_opt_producer_non_phi >>
+      simp[ao_resolve_iszero_inst_opcode])
 QED
 
 (* ===== ao_transform_inst structural property (wf-free) ===== *)
@@ -511,18 +569,6 @@ Proof
   rpt (CASE_TAC >> gvs[]) >>
   rpt (IF_CASES_TAC >> gvs[]) >>
   rpt strip_tac >> gvs[listTheory.EVERY_DEF, is_terminator_def]
-QED
-
-(* MAP ao_post_flip_inst preserves non-terminator non-INVOKE *)
-Triviality map_post_flip_every_non_special[local]:
-  !insts.
-    EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\
-               i.inst_opcode <> PHI) insts ==>
-    EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\
-               i.inst_opcode <> PHI)
-          (MAP ao_post_flip_inst insts)
-Proof
-  Induct >> simp[] >> rpt strip_tac >> gvs[ao_post_flip_opcode]
 QED
 
 (* Comparator output is always non-terminator non-INVOKE (wf-free) *)
@@ -589,10 +635,11 @@ Proof
   IF_CASES_TAC
   >- simp[ao_resolve_iszero_inst_opcode, is_terminator_def] >>
   CASE_TAC
-  >| [ (irule map_post_flip_every_non_special >>
+  >| [ (irule post_flip_last_every_non_special >>
         irule ao_peephole_inst_non_special >>
-        simp[ao_pre_flip_opcode, ao_resolve_iszero_inst_opcode]),
-       (irule map_post_flip_every_non_special >>
+        simp[ao_pre_flip_not_term, ao_pre_flip_not_invoke, ao_pre_flip_not_phi,
+             ao_resolve_iszero_inst_opcode]),
+       (irule post_flip_last_every_non_special >>
         irule ao_opt_producer_every_non_special >>
         qexists_tac `dfg` >>
         qexists_tac `ao_resolve_iszero_inst targets inst` >>
@@ -623,14 +670,14 @@ Proof
              (ao_pre_flip_inst (ao_resolve_iszero_inst targets inst)) =
            [ao_pre_flip_inst (ao_resolve_iszero_inst targets inst)]` by
             (irule ao_peephole_inst_terminator >>
-             simp[ao_pre_flip_opcode, ao_resolve_iszero_inst_opcode]) >>
+             simp[ao_pre_flip_term_id, ao_resolve_iszero_inst_opcode]) >>
           qexists_tac
             `ao_post_flip_inst
                (ao_pre_flip_inst (ao_resolve_iszero_inst targets inst))` >>
           gvs[ao_transform_inst_def, LET_THM,
               ao_resolve_iszero_inst_opcode,
-              ao_resolve_iszero_inst_outputs,
-              ao_post_flip_opcode, ao_pre_flip_opcode]))
+              ao_resolve_iszero_inst_outputs, ao_post_flip_last_def,
+              ao_post_flip_opcode, ao_pre_flip_term_id]))
   >- (* INVOKE: singleton INVOKE *)
      (rpt gen_tac >> strip_tac >>
       qspecl_then [`mid`, `dfg`, `ra`, `lbl`, `v`, `targets`, `inst`]

@@ -10,7 +10,7 @@
  *)
 Theory aoTransformInstSim
 Ancestors
-  algebraicOptDefs aoPeepholeSim aoResolveSim aoWf
+  algebraicOptDefs passSharedDefs aoPeepholeSim aoResolveSim aoWf
   passSimulationProps passSimulationDefs
   venomExecSemantics venomExecProofs venomState venomInst venomWf
   stateEquiv stateEquivProps execEquivProps
@@ -376,13 +376,13 @@ Proof
   simp[] >>
   Cases_on `ao_opt_producer dfg (ao_resolve_iszero_inst targets inst)`
   >- (* NONE: peephole path *)
-     (simp[] >>
+     (simp[run_insts_post_flip_last_eq_map] >>
       `~is_terminator inst.inst_opcode` by
         (strip_tac >> imp_res_tac terminator_no_outputs >> gvs[]) >>
       Cases_on `inst.inst_opcode = INVOKE`
       >- (simp[ao_peephole_inst_def, LET_THM,
                ao_resolve_iszero_inst_opcode,
-               ao_pre_flip_inst_non_comm,
+               ao_pre_flip_inst_non_comm, is_comparator_def,
                ao_post_flip_inst_non_comm,
                run_insts_singleton] >>
           DISJ2_TAC >>
@@ -393,7 +393,7 @@ Proof
       >- (irule ao_peephole_path_sim >> gvs[] >>
           metis_tac[ao_resolve_iszero_inst_id]))
   >- (* SOME: producer path *)
-     (simp[] >>
+     (simp[run_insts_post_flip_last_eq_map] >>
       qpat_x_assum `step_inst _ _ (ao_resolve_iszero_inst _ _) _ = _`
         (fn th => REWRITE_TAC [SYM th]) >>
       irule ao_opt_producer_sim >>

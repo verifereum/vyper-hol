@@ -421,6 +421,29 @@ Proof
   metis_tac[])
 QED
 
+(* Bridge: the emitted flip (lit-at-op1, opcode flipped back to the original
+   via the double flip) steps identically to the var-at-op1 flipped comparator
+   that per_inst_flip / per_inst_lr_flip reason about.  This is just comparator
+   swap: `a > b` <=> `b < a`. *)
+Triviality flip_emit_step_eq_full[local]:
+  !inst fuel ctx s x2 new_w.
+    is_comparator inst.inst_opcode ==>
+    step_inst fuel ctx
+      (inst with <| inst_opcode :=
+         flip_comparison_opcode (flip_comparison_opcode inst.inst_opcode);
+                    inst_operands := [Lit new_w; x2] |>) s =
+    step_inst fuel ctx
+      (inst with <| inst_opcode := flip_comparison_opcode inst.inst_opcode;
+                    inst_operands := [x2; Lit new_w] |>) s
+Proof
+  rpt strip_tac >> gvs[is_comparator_def] >>
+  simp[step_inst_non_invoke, flip_comparison_opcode_def] >>
+  simp[step_inst_base_def, exec_pure2_def, eval_operand_def] >>
+  Cases_on `eval_operand x2 s` >> simp[] >>
+  Cases_on `inst.inst_outputs` >> simp[] >> Cases_on `t` >> simp[] >>
+  simp[arithmeticTheory.GREATER_DEF, wordsTheory.WORD_GREATER]
+QED
+
 (* Case 2: Flip — flipped comparator output = iszero(original) *)
 Triviality per_inst_flip[local]:
   !dead flips all_insts inst fuel ctx s1 s2 w out_var x2.
@@ -866,12 +889,14 @@ Proof
   `~MEM inst.inst_id removes /\ ALOOKUP inserts inst.inst_id = NONE` by
     (first_x_assum (qspec_then `inst.inst_id` mp_tac) >> simp[]) >>
   `ao_cmp_flip_apply_inst mid flips removes inserts inst =
-   [inst with <| inst_opcode := flip_comparison_opcode inst.inst_opcode;
-                 inst_operands := [x2; Lit (if inst.inst_opcode = GT \/
-                   inst.inst_opcode = SGT then w + 1w else w - 1w)] |>]` by
+   [inst with <| inst_opcode :=
+       flip_comparison_opcode (flip_comparison_opcode inst.inst_opcode);
+                 inst_operands := [Lit (if inst.inst_opcode = GT \/
+                   inst.inst_opcode = SGT then w + 1w else w - 1w); x2] |>]` by
     simp[ao_cmp_flip_apply_inst_def] >>
   pop_assum (fn th => REWRITE_TAC [th]) >>
   REWRITE_TAC [run_insts_singleton] >>
+  simp[flip_emit_step_eq_full] >>
   irule per_inst_flip_exp >> simp[] >>
   `ALOOKUP flips inst.inst_id <> NONE` by simp[] >>
   metis_tac[listTheory.MEM]
@@ -1820,12 +1845,14 @@ Proof
   `~MEM inst.inst_id removes /\ ALOOKUP inserts inst.inst_id = NONE` by
     (first_x_assum (qspec_then `inst.inst_id` mp_tac) >> simp[]) >>
   `ao_cmp_flip_apply_inst mid flips removes inserts inst =
-   [inst with <| inst_opcode := flip_comparison_opcode inst.inst_opcode;
-                 inst_operands := [x2; Lit (if inst.inst_opcode = GT \/
-                   inst.inst_opcode = SGT then w + 1w else w - 1w)] |>]` by
+   [inst with <| inst_opcode :=
+       flip_comparison_opcode (flip_comparison_opcode inst.inst_opcode);
+                 inst_operands := [Lit (if inst.inst_opcode = GT \/
+                   inst.inst_opcode = SGT then w + 1w else w - 1w); x2] |>]` by
     simp[ao_cmp_flip_apply_inst_def] >>
   pop_assum (fn th => REWRITE_TAC [th]) >>
   REWRITE_TAC [run_insts_singleton] >>
+  simp[flip_emit_step_eq_full] >>
   `step_inst fuel ctx inst s1 = step_inst_base inst s1` by
     (irule step_inst_non_invoke >> simp[]) >>
   `step_inst fuel ctx
@@ -2591,6 +2618,14 @@ Proof
      disch_then drule >> simp[]
 QED
 
+(* flip_comparison_opcode never turns a non-terminator into a terminator
+   (it only permutes GT/LT/SGT/SLT, all non-terminators). *)
+Triviality flip_preserves_non_term[local]:
+  !opc. ~is_terminator opc ==> ~is_terminator (flip_comparison_opcode opc)
+Proof
+  Cases >> simp[flip_comparison_opcode_def, is_terminator_def]
+QED
+
 Triviality apply_inst_every_non_term_non_invoke[local]:
   !mid flips removes inserts inst.
     ~is_terminator inst.inst_opcode /\
@@ -2602,6 +2637,7 @@ Proof
   rpt strip_tac >>
   simp[ao_cmp_flip_apply_inst_def] >>
   every_case_tac >> gvs[listTheory.EVERY_DEF] >>
+  TRY (irule flip_preserves_non_term >> res_tac >> gvs[] >> NO_TAC) >>
   TRY (res_tac >> gvs[]) >>
   simp[is_terminator_def]
 QED
@@ -2645,6 +2681,13 @@ Proof
   Cases >> simp[is_comparator_def, flip_comparison_opcode_def]
 QED
 
+(* flip_comparison_opcode never produces PHI from a non-PHI opcode. *)
+Triviality flip_preserves_non_phi[local]:
+  !opc. opc <> PHI ==> flip_comparison_opcode opc <> PHI
+Proof
+  Cases >> simp[flip_comparison_opcode_def]
+QED
+
 Triviality apply_inst_non_phi[local]:
   !mid flips removes inserts inst.
     inst.inst_opcode <> PHI /\
@@ -2662,7 +2705,7 @@ Proof
       simp[listTheory.EVERY_DEF] >>
       PairCases_on `x` >> simp[listTheory.EVERY_DEF])
   >- (PairCases_on `x` >> simp[listTheory.EVERY_DEF] >>
-      res_tac)
+      irule flip_preserves_non_phi >> res_tac)
 QED
 
 (* Terminator operands are never dead: dead vars are either flip outputs

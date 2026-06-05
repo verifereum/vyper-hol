@@ -27,6 +27,12 @@ Proof
   every_case_tac
 QED
 
+Triviality flip_preserves_non_term[local]:
+  !opc. ~is_terminator opc ==> ~is_terminator (flip_comparison_opcode opc)
+Proof
+  Cases >> simp[flip_comparison_opcode_def, is_terminator_def]
+QED
+
 Triviality ao_cmp_flip_apply_non_term[local]:
   !mid flips removes inserts inst.
     ~is_terminator inst.inst_opcode /\
@@ -38,7 +44,7 @@ Proof
   rpt strip_tac >>
   simp[ao_cmp_flip_apply_inst_def] >>
   every_case_tac >> gvs[listTheory.EVERY_DEF, is_terminator_def] >>
-  res_tac
+  res_tac >> metis_tac[flip_preserves_non_term]
 QED
 
 
@@ -346,6 +352,12 @@ Proof
   gvs[]
 QED
 
+Triviality flip_preserves_non_phi[local]:
+  !opc. opc <> PHI ==> flip_comparison_opcode opc <> PHI
+Proof
+  Cases >> simp[flip_comparison_opcode_def]
+QED
+
 Triviality ao_cmp_flip_apply_non_phi[local]:
   !mid flips removes inserts inst.
     inst.inst_opcode <> PHI /\
@@ -356,7 +368,7 @@ Proof
   rpt strip_tac >>
   simp[ao_cmp_flip_apply_inst_def] >>
   every_case_tac >> gvs[] >>
-  CCONTR_TAC >> gvs[]
+  metis_tac[flip_preserves_non_phi]
 QED
 
 (* ===== Phase 4 preserves wf_function ===== *)

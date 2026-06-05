@@ -720,11 +720,16 @@ Definition ao_pre_flip_inst_def:
   ao_pre_flip_inst inst =
     case inst.inst_operands of
       [op1; op2] =>
-        if is_lit_op op1 /\ ~is_lit_op op2 /\
-           (inst.inst_opcode = ADD \/ inst.inst_opcode = MUL \/
-            inst.inst_opcode = AND \/ inst.inst_opcode = OR \/
-            inst.inst_opcode = XOR \/ inst.inst_opcode = EQ) then
-          inst with inst_operands := [op2; op1]
+        if is_lit_op op1 /\ ~is_lit_op op2 then
+          if inst.inst_opcode = ADD \/ inst.inst_opcode = MUL \/
+             inst.inst_opcode = AND \/ inst.inst_opcode = OR \/
+             inst.inst_opcode = XOR \/ inst.inst_opcode = EQ then
+            inst with inst_operands := [op2; op1]
+          else if is_comparator inst.inst_opcode then
+            (* comparator: swap operands AND flip opcode (gt<->lt, sgt<->slt) *)
+            inst with <| inst_operands := [op2; op1];
+                         inst_opcode := flip_comparison_opcode inst.inst_opcode |>
+          else inst
         else inst
     | _ => inst
 End
@@ -742,6 +747,15 @@ Definition ao_post_flip_inst_def:
           inst with inst_operands := [op2; op1]
         else inst
     | _ => inst
+End
+
+(* Post-flip only the rewritten original instruction, which a rule always emits
+   LAST (any inserted helpers precede it, matching Python's add_before).  Python
+   applies _flip_inst to the rewritten inst only, never to inserted helpers. *)
+Definition ao_post_flip_last_def:
+  ao_post_flip_last [] = [] /\
+  ao_post_flip_last [inst] = [ao_post_flip_inst inst] /\
+  ao_post_flip_last (inst :: rest) = inst :: ao_post_flip_last rest
 End
 
 (* ===== Comparator Iszero Flip Mini-Pass ===== *)
@@ -812,8 +826,10 @@ Definition ao_cmp_flip_apply_inst_def:
   ao_cmp_flip_apply_inst mid flips removes inserts inst =
     case ALOOKUP flips inst.inst_id of
       SOME (new_opc, new_w, orig_op1) =>
-        [inst with <| inst_opcode := new_opc;
-                      inst_operands := [orig_op1; Lit new_w] |>]
+        (* Python emits (new_opc orig_op1 (Lit new_w)) and then _flip_inst swaps
+           it to lit-at-op1, flipping the opcode back to the original. *)
+        [inst with <| inst_opcode := flip_comparison_opcode new_opc;
+                      inst_operands := [Lit new_w; orig_op1] |>]
     | NONE =>
         if MEM inst.inst_id removes then
           [inst with <| inst_opcode := ASSIGN |>]
@@ -851,20 +867,21 @@ End
  * mini-pass, justified at the usage level: x|n with n<>0 is always nonzero
  * and 1 is nonzero, so the two agree in every truthy-consuming use.
  *
- * After phase 3, surviving `or op1 (Lit n)` instructions have n<>0 and
+ * After phase 3, surviving `or (Lit n) op1` instructions have n<>0 and
  * n<>(-1) (those were turned into ASSIGN by ao_opt_or), so the scan's n<>0
- * guard selects exactly the Python truthy case.
+ * guard selects exactly the Python truthy case.  The literal sits at op1
+ * because ao_post_flip_inst normalises commutative ops to lit-at-op1.
  *)
 
 (* Scan for OR instructions eligible for the truthy rewrite: opcode OR,
-   operands [op1; Lit n] with n<>0, and all uses truthy. *)
+   operands [Lit n; op1] with n<>0, and all uses truthy. *)
 Definition ao_or_truthy_scan_def:
   ao_or_truthy_scan dfg [] = [] /\
   ao_or_truthy_scan dfg (inst :: rest) =
     let ids = ao_or_truthy_scan dfg rest in
     if inst.inst_opcode = OR /\
        (case inst.inst_operands of
-          [op1; Lit n] => n <> 0w
+          [Lit n; op1] => n <> 0w
         | _ => F) /\
        ao_all_truthy dfg inst then
       inst.inst_id :: ids
@@ -918,11 +935,11 @@ Definition ao_transform_inst_def:
             inst0.inst_opcode = PARAM then [inst0]
     else
       case ao_opt_producer dfg inst0 of
-        SOME result => MAP ao_post_flip_inst result
+        SOME result => ao_post_flip_last result
       | NONE =>
           let inst1 = ao_pre_flip_inst inst0 in
           let result = ao_peephole_inst mid dfg ra lbl idx inst1 in
-          MAP ao_post_flip_inst result
+          ao_post_flip_last result
 End
 
 (* Resolve iszero chains inside PHI operands only (Python:

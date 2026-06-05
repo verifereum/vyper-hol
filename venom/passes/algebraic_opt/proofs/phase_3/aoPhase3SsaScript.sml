@@ -143,11 +143,12 @@ Proof
   rw[ao_post_flip_inst_def] >> every_case_tac >> gvs[]
 QED
 
-Triviality map_post_flip_outputs[local]:
-  !l. FLAT (MAP (\i. i.inst_outputs) (MAP ao_post_flip_inst l)) =
+Triviality post_flip_last_outputs[local]:
+  !l. FLAT (MAP (\i. i.inst_outputs) (ao_post_flip_last l)) =
       FLAT (MAP (\i. i.inst_outputs) l)
 Proof
-  Induct >> simp[post_flip_outputs]
+  ho_match_mp_tac ao_post_flip_last_ind >>
+  rw[ao_post_flip_last_def, post_flip_outputs]
 QED
 
 (* ===== output lists for each per-opcode helper ===== *)
@@ -307,13 +308,13 @@ Triviality transform_inst_outok[local]:
         (ao_transform_inst mid dfg ra lbl idx targets inst)))
 Proof
   rpt strip_tac >>
-  simp[ao_transform_inst_def, LET_THM, map_post_flip_outputs] >>
+  simp[ao_transform_inst_def, LET_THM, post_flip_last_outputs] >>
   rpt (FIRST [CASE_TAC, IF_CASES_TAC] >>
-       simp[map_post_flip_outputs, resolve_outputs]) >>
+       simp[post_flip_last_outputs, resolve_outputs]) >>
   TRY (irule outok_clean >> simp[resolve_outputs] >> fs[] >> NO_TAC) >>
   FIRST [
     (drule producer_outs >> strip_tac >>
-     gvs[map_post_flip_outputs, resolve_outputs] >>
+     gvs[post_flip_last_outputs, resolve_outputs] >>
      irule outok_clean >> fs[]),
     (qspecl_then [`g`, `mid`, `dfg`, `ra`, `lbl`, `idx`,
        `ao_pre_flip_inst (ao_resolve_iszero_inst targets inst)`]
@@ -321,7 +322,7 @@ Proof
      impl_tac
      >- (gvs[pre_flip_id, resolve_id, pre_flip_outputs, resolve_outputs])
      >- simp[pre_flip_id, resolve_id, pre_flip_outputs, resolve_outputs,
-             map_post_flip_outputs])
+             post_flip_last_outputs])
   ]
 QED
 
@@ -365,17 +366,40 @@ Proof
   rw[ao_post_flip_inst_def] >> every_case_tac >> gvs[]
 QED
 
-Triviality cmpok_map_post_flip[local]:
-  !fv base l. cmpok fv base l ==> cmpok fv base (MAP ao_post_flip_inst l)
+Triviality post_flip_operand_mem[local]:
+  !x inst. MEM x (ao_post_flip_inst inst).inst_operands ==> MEM x inst.inst_operands
+Proof
+  rw[ao_post_flip_inst_def] >> every_case_tac >> gvs[] >> metis_tac[]
+QED
+
+(* Fix B: every member of ao_post_flip_last l is either an original element or
+   the post-flip of one; either way it has the same opcode/id and its operands
+   are a subset (post_flip only swaps operands). *)
+Triviality post_flip_last_mem[local]:
+  !l p. MEM p (ao_post_flip_last l) ==>
+        ?q. MEM q l /\ p.inst_opcode = q.inst_opcode /\
+            p.inst_id = q.inst_id /\
+            (!x. MEM x p.inst_operands ==> MEM x q.inst_operands)
+Proof
+  ho_match_mp_tac ao_post_flip_last_ind >> rpt conj_tac
+  >- rw[ao_post_flip_last_def]
+  >- (rw[ao_post_flip_last_def] >>
+      gvs[post_flip_opcode, post_flip_id] >>
+      metis_tac[post_flip_operand_mem])
+  >- (rw[ao_post_flip_last_def] >> gvs[]
+      >- (qexists_tac `inst` >> simp[])
+      >- (first_x_assum drule >> strip_tac >> qexists_tac `q` >> simp[]))
+QED
+
+Triviality cmpok_post_flip_last[local]:
+  !fv base l. cmpok fv base l ==> cmpok fv base (ao_post_flip_last l)
 Proof
   rpt gen_tac >> simp[cmpok_def] >> strip_tac >> conj_tac
-  >- (rw[listTheory.MEM_MAP] >>
-      gvs[post_flip_opcode, post_flip_id] >>
-      first_x_assum irule >> simp[])
-  >> simp[map_post_flip_outputs] >> strip_tac >>
+  >- (rpt strip_tac >> drule post_flip_last_mem >> strip_tac >>
+      gvs[] >> first_x_assum irule >> simp[])
+  >> simp[post_flip_last_outputs] >> rpt strip_tac >>
      first_x_assum irule >>
-     gvs[listTheory.MEM_MAP, post_flip_opcode] >>
-     metis_tac[post_flip_opcode]
+     drule post_flip_last_mem >> strip_tac >> gvs[] >> metis_tac[]
 QED
 
 (* per-opt cmpok: single-piece opts stay clean originals;
@@ -526,11 +550,10 @@ Proof
   TRY (irule cmpok_single_clean >> simp[resolve_id, resolve_outputs] >>
        gvs[] >> NO_TAC) >>
   FIRST [
-    (irule cmpok_no_comp >> rw[listTheory.MEM_MAP] >>
-     gvs[post_flip_opcode] >>
-     drule producer_no_comp >> simp[listTheory.EVERY_MEM] >>
-     rpt strip_tac >> first_x_assum drule >> simp[]),
-    (irule cmpok_map_post_flip >>
+    (irule cmpok_post_flip_last >> irule cmpok_no_comp >> rpt strip_tac >>
+     drule producer_no_comp >> strip_tac >>
+     fs[listTheory.EVERY_MEM] >> metis_tac[]),
+    (irule cmpok_post_flip_last >>
      qspecl_then [`fv`, `mid`, `dfg`, `ra`, `lbl`, `idx`,
        `ao_pre_flip_inst (ao_resolve_iszero_inst targets inst)`]
        mp_tac peephole_cmpok >>
@@ -1229,30 +1252,19 @@ Proof
   rw[ao_pre_flip_inst_def] >> every_case_tac >> gvs[] >> metis_tac[]
 QED
 
-Triviality post_flip_operand_mem[local]:
-  !x inst. MEM x (ao_post_flip_inst inst).inst_operands ==> MEM x inst.inst_operands
+Triviality inok_post_flip_last[local]:
+  !fv id l. inok fv id l ==> inok fv id (ao_post_flip_last l)
 Proof
-  rw[ao_post_flip_inst_def] >> every_case_tac >> gvs[] >> metis_tac[]
-QED
-
-Triviality inok_map_post_flip[local]:
-  !fv id l. inok fv id l ==> inok fv id (MAP ao_post_flip_inst l)
-Proof
-  rw[inok_def, listTheory.MEM_MAP] >>
-  drule post_flip_operand_mem >> rw[] >>
+  rw[inok_def] >>
+  drule post_flip_last_mem >> strip_tac >> gvs[] >>
   first_x_assum irule >> metis_tac[]
 QED
 
-Triviality cmpinok_map_post_flip[local]:
-  !fv l. cmpinok fv l ==> cmpinok fv (MAP ao_post_flip_inst l)
+Triviality cmpinok_post_flip_last[local]:
+  !fv l. cmpinok fv l ==> cmpinok fv (ao_post_flip_last l)
 Proof
   rw[cmpinok_def] >>
-  `?p. MEM p l /\ is_comparator p.inst_opcode` by
-    (gvs[listTheory.MEM_MAP] >> metis_tac[post_flip_opcode]) >>
-  `!q w. MEM q l /\ MEM (Var w) q.inst_operands ==> w NOTIN fv` by
-    metis_tac[] >>
-  gvs[listTheory.MEM_MAP] >>
-  metis_tac[post_flip_operand_mem]
+  imp_res_tac post_flip_last_mem >> metis_tac[]
 QED
 
 (* ===== per-opt operand cleanliness (simple opts) ===== *)
@@ -1524,9 +1536,9 @@ Proof
   rpt (FIRST [CASE_TAC, IF_CASES_TAC] >> simp[]) >>
   TRY (irule inok_clean >> rpt strip_tac >> gvs[] >> metis_tac[] >> NO_TAC) >>
   FIRST [
-    (irule inok_map_post_flip >> irule inok_clean >> rpt strip_tac >>
+    (irule inok_post_flip_last >> irule inok_clean >> rpt strip_tac >>
      drule_all producer_opnds >> metis_tac[]),
-    (irule inok_map_post_flip >>
+    (irule inok_post_flip_last >>
      qspecl_then [`fv`, `mid`, `dfg`, `ra`, `lbl`, `idx`,
        `ao_pre_flip_inst (ao_resolve_iszero_inst targets inst)`]
        mp_tac peephole_inok >>
@@ -1550,11 +1562,10 @@ Proof
   rpt (FIRST [CASE_TAC, IF_CASES_TAC] >> simp[]) >>
   TRY (irule cmpinok_clean >> rpt strip_tac >> gvs[] >> metis_tac[] >> NO_TAC) >>
   FIRST [
-    (irule cmpinok_no_comp >> rw[listTheory.MEM_MAP] >>
-     gvs[post_flip_opcode] >>
-     drule producer_no_comp >> simp[listTheory.EVERY_MEM] >>
-     rpt strip_tac >> first_x_assum drule >> simp[]),
-    (irule cmpinok_map_post_flip >>
+    (irule cmpinok_post_flip_last >> irule cmpinok_no_comp >> rpt strip_tac >>
+     drule producer_no_comp >> strip_tac >>
+     fs[listTheory.EVERY_MEM] >> metis_tac[]),
+    (irule cmpinok_post_flip_last >>
      qspecl_then [`fv`, `mid`, `dfg`, `ra`, `lbl`, `idx`,
        `ao_pre_flip_inst (ao_resolve_iszero_inst targets inst)`]
        mp_tac peephole_cmpinok >>

@@ -53,11 +53,12 @@ Proof
   rw[ao_post_flip_inst_def] >> every_case_tac >> gvs[]
 QED
 
-Triviality map_post_flip_ids[local]:
-  !l. MAP (\i. i.inst_id) (MAP ao_post_flip_inst l) =
+Triviality post_flip_last_ids[local]:
+  !l. MAP (\i. i.inst_id) (ao_post_flip_last l) =
       MAP (\i. i.inst_id) l
 Proof
-  Induct >> simp[post_flip_id]
+  ho_match_mp_tac ao_post_flip_last_ind >>
+  rw[ao_post_flip_last_def, post_flip_id]
 QED
 
 (* ===== id-distinctness invariant for a single transformed instruction ===== *)
@@ -219,18 +220,18 @@ Triviality transform_inst_idok[local]:
         (ao_transform_inst mid dfg ra lbl idx targets inst))
 Proof
   rpt strip_tac >>
-  simp[ao_transform_inst_def, LET_THM, resolve_id, map_post_flip_ids] >>
+  simp[ao_transform_inst_def, LET_THM, resolve_id, post_flip_last_ids] >>
   rpt (FIRST [CASE_TAC, IF_CASES_TAC] >>
-       simp[resolve_id, map_post_flip_ids]) >>
+       simp[resolve_id, post_flip_last_ids]) >>
   FIRST [
     irule idok_single >> simp[],
     (drule producer_ids >> strip_tac >>
-     gvs[map_post_flip_ids, resolve_id] >> irule idok_single >> simp[]),
+     gvs[post_flip_last_ids, resolve_id] >> irule idok_single >> simp[]),
     (qspecl_then [`mid`, `dfg`, `ra`, `lbl`, `idx`,
        `ao_pre_flip_inst (ao_resolve_iszero_inst targets inst)`]
        mp_tac peephole_idok >>
      impl_tac >- gvs[pre_flip_id, resolve_id] >>
-     simp[pre_flip_id, resolve_id, map_post_flip_ids])
+     simp[pre_flip_id, resolve_id, post_flip_last_ids])
   ]
 QED
 

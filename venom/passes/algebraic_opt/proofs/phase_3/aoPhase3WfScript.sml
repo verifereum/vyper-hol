@@ -53,12 +53,12 @@ Triviality ao_pre_flip_inst_wf[local]:
   !inst. inst_wf inst ==> inst_wf (ao_pre_flip_inst inst)
 Proof
   rpt strip_tac >>
-  gvs[ao_pre_flip_inst_def] >>
+  simp[ao_pre_flip_inst_def] >>
   Cases_on `inst.inst_operands` >> gvs[] >>
   Cases_on `t` >> gvs[] >>
   Cases_on `t'` >> gvs[] >>
-  IF_CASES_TAC >> gvs[] >>
-  fs[inst_wf_def]
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  gvs[is_comparator_def, flip_comparison_opcode_def, inst_wf_def]
 QED
 
 (* ===== Iszero chain invariant: internal positions are Vars ===== *)
@@ -779,6 +779,16 @@ Proof
   every_case_tac >> gvs[] >> fs[inst_wf_def]
 QED
 
+(* Fix B: post-flipping only the trailing instruction preserves inst_wf. *)
+Triviality post_flip_last_inst_wf[local]:
+  !l. EVERY inst_wf l ==> EVERY inst_wf (ao_post_flip_last l)
+Proof
+  ho_match_mp_tac ao_post_flip_last_ind >> rpt conj_tac
+  >- simp[ao_post_flip_last_def]
+  >- (rw[ao_post_flip_last_def] >> irule ao_post_flip_inst_wf >> fs[])
+  >- (rw[ao_post_flip_last_def] >> fs[])
+QED
+
 Triviality ao_peephole_inst_inst_wf[local]:
   !mid dfg ra lbl idx inst.
     inst_wf inst ==>
@@ -822,20 +832,12 @@ Proof
   IF_CASES_TAC >- simp[] >>
   CASE_TAC
   >- (* NONE: pre-flip then peephole then post-flip *)
-     (simp[LET_THM, listTheory.EVERY_MAP] >>
-      `EVERY inst_wf
-         (ao_peephole_inst mid dfg ra lbl idx
-            (ao_pre_flip_inst inst0))` by
-        (irule ao_peephole_inst_inst_wf >> irule ao_pre_flip_inst_wf >>
-         simp[]) >>
-      fs[listTheory.EVERY_MEM] >> rpt strip_tac >>
-      irule ao_post_flip_inst_wf >> res_tac)
+     (simp[LET_THM] >> irule post_flip_last_inst_wf >>
+      irule ao_peephole_inst_inst_wf >> irule ao_pre_flip_inst_wf >> simp[])
   >- (* SOME result: post-flip *)
      (rename1 `ao_opt_producer dfg inst0 = SOME result` >>
-      simp[listTheory.EVERY_MAP] >>
-      `EVERY inst_wf result` by (irule ao_opt_producer_inst_wf >> metis_tac[]) >>
-      fs[listTheory.EVERY_MEM] >> rpt strip_tac >>
-      irule ao_post_flip_inst_wf >> res_tac)
+      irule post_flip_last_inst_wf >>
+      irule ao_opt_producer_inst_wf >> metis_tac[])
 QED
 
 Triviality ao_transform_block_inst_wf[local]:

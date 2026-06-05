@@ -55,6 +55,24 @@ Proof
        wordsTheory.WORD_XOR_COMM, bool_to_word_eq_comm]
 QED
 
+(* Comparator flip: swapping operands AND flipping the opcode (gt<->lt,
+   sgt<->slt) preserves step_inst_base, since `a > b` <=> `b < a` (both
+   unsigned via w2n and signed via word_lt/word_gt). *)
+Triviality cmp_swap_step_equiv[local]:
+  !inst op1 op2 s.
+    inst.inst_operands = [op1; op2] /\ is_comparator inst.inst_opcode ==>
+    step_inst_base
+      (inst with <| inst_opcode := flip_comparison_opcode inst.inst_opcode;
+                    inst_operands := [op2; op1] |>) s =
+    step_inst_base inst s
+Proof
+  rpt strip_tac >> gvs[is_comparator_def] >>
+  gvs[step_inst_base_def, flip_comparison_opcode_def, exec_pure2_def] >>
+  Cases_on `eval_operand op1 s` >> Cases_on `eval_operand op2 s` >> gvs[] >>
+  Cases_on `inst.inst_outputs` >> gvs[] >> Cases_on `t` >> gvs[] >>
+  simp[arithmeticTheory.GREATER_DEF, wordsTheory.WORD_GREATER]
+QED
+
 Theorem ao_pre_flip_step_equiv:
   !inst s. step_inst_base (ao_pre_flip_inst inst) s = step_inst_base inst s
 Proof
@@ -63,8 +81,9 @@ Proof
   Cases_on `inst.inst_operands` >> simp[] >>
   Cases_on `t` >> simp[] >>
   Cases_on `t'` >> simp[] >>
-  IF_CASES_TAC >> simp[] >>
-  gvs[] >> irule comm_swap_step_equiv >> simp[]
+  rpt (IF_CASES_TAC >> simp[]) >> gvs[] >>
+  FIRST [irule comm_swap_step_equiv >> simp[],
+         irule cmp_swap_step_equiv >> simp[is_comparator_def]]
 QED
 
 Theorem ao_post_flip_step_equiv:
@@ -167,6 +186,17 @@ Proof
   (* JMP/JNZ/DJMP/STOP/RETURN/REVERT all have no outputs *)
   Cases_on `inst.inst_outputs` >> simp[] >>
   Cases_on `inst.inst_opcode` >> gvs[is_terminator_def]
+QED
+
+(* ao_peephole_inst dispatches comparators (with an output) to ao_opt_comparator *)
+Theorem ao_peephole_inst_comparator:
+  !mid dfg ra lbl idx inst.
+    is_comparator inst.inst_opcode /\ inst.inst_outputs <> [] ==>
+    ao_peephole_inst mid dfg ra lbl idx inst =
+    ao_opt_comparator mid dfg ra lbl idx inst
+Proof
+  rpt strip_tac >> gvs[is_comparator_def] >>
+  simp[ao_peephole_inst_def, LET_THM]
 QED
 
 (* ===== Per-rule structural properties ===== *)
@@ -387,10 +417,42 @@ Proof
   rw[ao_post_flip_inst_def] >> every_case_tac >> simp[]
 QED
 
-Triviality ao_pre_flip_opcode[local]:
-  !inst. (ao_pre_flip_inst inst).inst_opcode = inst.inst_opcode
+(* post_flip preserves step_inst on every instruction (operand swap on a
+   commutative op, identity otherwise — including INVOKE). *)
+Triviality step_inst_post_flip[local]:
+  !fuel ctx inst s.
+    step_inst fuel ctx (ao_post_flip_inst inst) s = step_inst fuel ctx inst s
 Proof
-  rw[ao_pre_flip_inst_def] >> every_case_tac >> simp[]
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode = INVOKE`
+  >- (`ao_post_flip_inst inst = inst` by
+        (simp[ao_post_flip_inst_def] >> every_case_tac >> gvs[]) >>
+      simp[]) >>
+  `(ao_post_flip_inst inst).inst_opcode <> INVOKE` by simp[ao_post_flip_opcode] >>
+  simp[step_inst_non_invoke, ao_post_flip_step_equiv]
+QED
+
+(* Fix B: post-flipping only the trailing rewritten instruction
+   (ao_post_flip_last) runs identically to MAP ao_post_flip_inst, since
+   post_flip preserves step_inst on every instruction. *)
+Theorem run_insts_post_flip_last_eq_map:
+  !insts fuel ctx s.
+    run_insts fuel ctx (ao_post_flip_last insts) s =
+    run_insts fuel ctx (MAP ao_post_flip_inst insts) s
+Proof
+  ho_match_mp_tac ao_post_flip_last_ind >> rpt conj_tac >> rpt strip_tac >>
+  simp[ao_post_flip_last_def, run_insts_def, step_inst_post_flip] >>
+  CASE_TAC >> simp[]
+QED
+
+(* pre_flip preserves non-INVOKE-ness: comparators flip to comparators,
+   everything else keeps its opcode. *)
+Triviality ao_pre_flip_not_invoke[local]:
+  !inst. inst.inst_opcode <> INVOKE ==>
+         (ao_pre_flip_inst inst).inst_opcode <> INVOKE
+Proof
+  rw[ao_pre_flip_inst_def] >> every_case_tac >>
+  gvs[is_comparator_def, flip_comparison_opcode_def]
 QED
 
 Triviality ao_pre_flip_preserves_operands_length[local]:
@@ -652,6 +714,69 @@ QED
    rules produce semantically equivalent instructions regardless
    of whether the DFG analysis is accurate. *)
 
+(* Comparator dispatch: pre_flip may flip the opcode (gt<->lt, sgt<->slt) but
+   keeps it a comparator, so the peephole dispatches to ao_opt_comparator; the
+   opcode equality is not needed, only the semantic equivalence of pre_flip. *)
+Theorem ao_cmp_dispatch_full_sim:
+  !fv mid dfg ra lbl idx inst fuel ctx s.
+    is_comparator inst.inst_opcode /\
+    inst.inst_opcode <> INVOKE /\
+    inst_wf inst /\
+    ao_fresh_var inst.inst_id "not" IN fv /\
+    ao_fresh_var inst.inst_id "iz" IN fv /\
+    ao_fresh_var inst.inst_id "xor" IN fv /\
+    (!op v. MEM op inst.inst_operands /\
+            eval_operand op s = SOME v ==>
+            in_range (range_get_range ra lbl idx op) v) ==>
+    (?e. step_inst fuel ctx inst s = Error e) \/
+    lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
+      (step_inst fuel ctx inst s)
+      (run_insts fuel ctx
+        (MAP ao_post_flip_inst
+          (ao_peephole_inst mid dfg ra lbl idx (ao_pre_flip_inst inst))) s)
+Proof
+  rpt strip_tac >>
+  `step_inst fuel ctx inst s = step_inst_base inst s` by simp[step_inst_non_invoke] >>
+  qabbrev_tac `inst0 = ao_pre_flip_inst inst` >>
+  `step_inst_base inst0 s = step_inst_base inst s`
+    by simp[Abbr`inst0`, ao_pre_flip_step_equiv] >>
+  `inst0.inst_outputs = inst.inst_outputs` by
+    (markerLib.UNABBREV_TAC "inst0" >> simp[ao_pre_flip_inst_def] >>
+     every_case_tac >> simp[]) >>
+  `is_comparator inst0.inst_opcode` by
+    (markerLib.UNABBREV_TAC "inst0" >> simp[ao_pre_flip_inst_def] >>
+     every_case_tac >> gvs[is_comparator_def, flip_comparison_opcode_def]) >>
+  `LENGTH inst.inst_operands = 2 /\ LENGTH inst.inst_outputs = 1`
+    by (Cases_on `inst.inst_opcode` >> fs[inst_wf_def, is_comparator_def]) >>
+  `LENGTH inst0.inst_operands = 2`
+    by simp[Abbr`inst0`, ao_pre_flip_preserves_operands_length] >>
+  `inst0.inst_id = inst.inst_id` by
+    (markerLib.UNABBREV_TAC "inst0" >> simp[ao_pre_flip_inst_def] >>
+     every_case_tac >> simp[]) >>
+  `inst0.inst_outputs <> []` by (Cases_on `inst.inst_outputs` >> gvs[]) >>
+  `ao_peephole_inst mid dfg ra lbl idx inst0 =
+     ao_opt_comparator mid dfg ra lbl idx inst0` by
+    (irule ao_peephole_inst_comparator >> gvs[]) >>
+  pop_assum (fn th => simp[th]) >>
+  `EVERY (\i. i.inst_opcode <> INVOKE)
+         (ao_opt_comparator mid dfg ra lbl idx inst0)` by
+    (irule opt_comparator_not_invoke >> gvs[is_comparator_def]) >>
+  simp[run_insts_map_post_flip] >>
+  `!op v. MEM op inst0.inst_operands /\
+          eval_operand op s = SOME v ==>
+          in_range (range_get_range ra lbl idx op) v` by (
+    rpt strip_tac >> first_x_assum irule >>
+    `set inst0.inst_operands = set inst.inst_operands` by (
+      markerLib.UNABBREV_TAC "inst0" >> simp[ao_pre_flip_inst_def] >>
+      every_case_tac >> simp[pred_setTheory.EXTENSION] >> metis_tac[]) >>
+    fs[pred_setTheory.EXTENSION] >> metis_tac[]) >>
+  mp_tac (Q.SPECL [`fv`, `mid`, `dfg`, `ra`, `lbl`, `idx`, `inst0`,
+                    `s`, `fuel`, `ctx`] ao_cmp_sim_full) >>
+  impl_tac >- gvs[is_comparator_def] >>
+  strip_tac >- metis_tac[] >>
+  DISJ2_TAC >> metis_tac[]
+QED
+
 Theorem ao_peephole_full_sim:
   !fv mid dfg ra lbl idx inst fuel ctx s.
     inst.inst_opcode <> INVOKE /\
@@ -678,18 +803,32 @@ Proof
   `inst0.inst_outputs = inst.inst_outputs` by
     (markerLib.UNABBREV_TAC "inst0" >> simp[ao_pre_flip_inst_def] >>
      every_case_tac >> simp[]) >>
-  `inst0.inst_opcode = inst.inst_opcode` by
-    (markerLib.UNABBREV_TAC "inst0" >> simp[ao_pre_flip_inst_def] >>
-     every_case_tac >> simp[]) >>
   `step_inst fuel ctx inst s = step_inst_base inst s`
     by simp[step_inst_non_invoke] >>
-  simp[ao_peephole_inst_def, LET_THM] >>
-  rpt (IF_CASES_TAC >> simp[]) >> gvs[] >>
-  (* 24 goals. Close identity goals (ASSIGN, PHI, PARAM, catch-all) *)
-  TRY (
-    DISJ2_TAC >> irule singleton_post_flip_sim >>
-    markerLib.UNABBREV_TAC "inst0" >>
-    simp[ao_pre_flip_opcode, ao_pre_flip_step_equiv] >> NO_TAC)
+  (* pre_flip changes the opcode only for comparators (gt<->lt, sgt<->slt),
+     so split: comparators dispatch to ao_opt_comparator (handled via
+     ao_cmp_sim_full, opcode-equality not needed); everything else keeps
+     its opcode and runs the per-opcode peephole rules. *)
+  reverse (Cases_on `is_comparator inst.inst_opcode`) >| [
+   (* ===== non-comparator: opcode preserved ===== *)
+   (`inst0.inst_opcode = inst.inst_opcode` by
+      (markerLib.UNABBREV_TAC "inst0" >> simp[ao_pre_flip_inst_def] >>
+       every_case_tac >> gvs[is_comparator_def]) >>
+    `inst0.inst_opcode <> GT /\ inst0.inst_opcode <> LT /\
+     inst0.inst_opcode <> SGT /\ inst0.inst_opcode <> SLT` by
+      gvs[is_comparator_def] >>
+    simp[ao_peephole_inst_def, LET_THM] >>
+    rpt (IF_CASES_TAC >> simp[]) >> gvs[] >>
+    (* Close identity goals (ASSIGN, PHI, PARAM, catch-all) *)
+    TRY (
+      DISJ2_TAC >> irule singleton_post_flip_sim >>
+      markerLib.UNABBREV_TAC "inst0" >>
+      simp[ao_pre_flip_step_equiv] >>
+      irule ao_pre_flip_not_invoke >> gvs[] >> NO_TAC)),
+   (* ===== comparator: delegate to ao_cmp_dispatch_full_sim ===== *)
+   (markerLib.UNABBREV_TAC "inst0" >>
+    irule ao_cmp_dispatch_full_sim >> gvs[])
+  ]
   (* ===== 20 remaining ao_opt_* goals =====
 
      GENUINE BLOCKERS found during proof attempt:
@@ -982,35 +1121,6 @@ Proof
       irule opt_eq_not_invoke >> simp[]) >>
     simp[run_insts_map_post_flip] >>
     mp_tac (Q.SPECL [`fv`, `mid`, `dfg`, `inst0`, `s`, `fuel`, `ctx`] ao_eq_sim) >>
-    impl_tac >- simp[] >>
-    strip_tac >- metis_tac[] >>
-    DISJ2_TAC >> metis_tac[])
-  (* GT/LT/SGT/SLT — 1-to-N: use ao_cmp_sim_full *)
-  >> (
-    `LENGTH inst.inst_operands = 2 /\ LENGTH inst.inst_outputs = 1`
-      by (Cases_on `inst.inst_opcode` >> fs[inst_wf_def]) >>
-    `LENGTH inst0.inst_operands = 2`
-      by simp[Abbr`inst0`, ao_pre_flip_preserves_operands_length] >>
-    `inst0.inst_id = inst.inst_id` by
-      (markerLib.UNABBREV_TAC "inst0" >> simp[ao_pre_flip_inst_def] >>
-       every_case_tac >> simp[]) >>
-    `EVERY (\i. i.inst_opcode <> INVOKE)
-           (ao_opt_comparator mid dfg ra lbl idx inst0)` by (
-      irule opt_comparator_not_invoke >> simp[]) >>
-    simp[run_insts_map_post_flip] >>
-    `!op v. MEM op inst0.inst_operands /\
-            eval_operand op s = SOME v ==>
-            in_range (range_get_range ra lbl idx op) v` by (
-      rpt strip_tac >>
-      first_x_assum irule >>
-      `set inst0.inst_operands = set inst.inst_operands` by (
-        markerLib.UNABBREV_TAC "inst0" >>
-        simp[ao_pre_flip_inst_def] >>
-        every_case_tac >>
-        simp[pred_setTheory.EXTENSION] >> metis_tac[]) >>
-      fs[pred_setTheory.EXTENSION] >> metis_tac[]) >>
-    mp_tac (Q.SPECL [`fv`, `mid`, `dfg`, `ra`, `lbl`, `idx`, `inst0`,
-                      `s`, `fuel`, `ctx`] ao_cmp_sim_full) >>
     impl_tac >- simp[] >>
     strip_tac >- metis_tac[] >>
     DISJ2_TAC >> metis_tac[])
