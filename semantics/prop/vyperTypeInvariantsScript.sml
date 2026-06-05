@@ -102,6 +102,14 @@ Definition bare_globals_complete_def:
       FLOOKUP bare_globals (src,string_to_num id) = SOME ty
 End
 
+Definition bare_global_assignable_complete_def:
+  bare_global_assignable_complete bare_global_assignable cx <=>
+    !src ts vis id ty init.
+      get_module_code cx src = SOME ts /\
+      MEM (VariableDecl vis Immutable id ty init) ts ==>
+      FLOOKUP bare_global_assignable (src,string_to_num id) = SOME ty
+End
+
 Definition flag_members_complete_def:
   flag_members_complete flag_members cx <=>
     !src ts fid members.
@@ -118,11 +126,19 @@ Definition env_context_consistent_def:
     fn_sigs_complete env.fn_sigs cx /\
     toplevel_vtypes_complete env.toplevel_vtypes cx /\
     bare_globals_complete env.bare_globals cx /\
+    bare_global_assignable_complete env.bare_global_assignable cx /\
     flag_members_complete env.flag_members cx /\
     (!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty ==>
        ?ts. get_module_code cx src = SOME ts /\
             FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\
             is_bare_global_decl id ts /\
+            find_var_decl_by_num id ts = NONE /\
+            ty <> NoneT) /\
+    (!src id ty. FLOOKUP env.bare_global_assignable (src,id) = SOME ty ==>
+       ?ts. get_module_code cx src = SOME ts /\
+            FLOOKUP env.bare_globals (src,id) = SOME ty /\
+            FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\
+            is_immutable_decl id ts /\
             find_var_decl_by_num id ts = NONE /\
             ty <> NoneT) /\
     (!src id vt. FLOOKUP env.toplevel_vtypes (src,id) = SOME vt ==>
@@ -152,6 +168,7 @@ Theorem env_context_consistent_static_completeness:
   env_context_consistent env cx ==>
     toplevel_vtypes_complete env.toplevel_vtypes cx /\
     bare_globals_complete env.bare_globals cx /\
+    bare_global_assignable_complete env.bare_global_assignable cx /\
     flag_members_complete env.flag_members cx
 Proof
   rw[env_context_consistent_def]
@@ -174,6 +191,20 @@ Theorem env_context_consistent_bare_global_find_NONE:
     ?ts. get_module_code cx src = SOME ts /\
          FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\
          is_bare_global_decl id ts /\
+         find_var_decl_by_num id ts = NONE /\
+         ty <> NoneT
+Proof
+  rw[env_context_consistent_def] >>
+  first_x_assum drule >> rw[] >> gvs[]
+QED
+
+Theorem env_context_consistent_bare_global_assignable_find_NONE:
+  env_context_consistent env cx /\
+  FLOOKUP env.bare_global_assignable (src,id) = SOME ty ==>
+    ?ts. get_module_code cx src = SOME ts /\
+         FLOOKUP env.bare_globals (src,id) = SOME ty /\
+         FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\
+         is_immutable_decl id ts /\
          find_var_decl_by_num id ts = NONE /\
          ty <> NoneT
 Proof
@@ -241,16 +272,24 @@ QED
 
 Definition functions_well_typed_def:
   functions_well_typed cx <=>
-    !fn_sigs bare_globals toplevel_vtypes flag_members.
+    !fn_sigs bare_globals bare_global_assignable toplevel_vtypes flag_members.
       fn_sigs_consistent fn_sigs cx /\
       fn_sigs_complete fn_sigs cx /\
       toplevel_vtypes_complete toplevel_vtypes cx /\
       bare_globals_complete bare_globals cx /\
+      bare_global_assignable_complete bare_global_assignable cx /\
       flag_members_complete flag_members cx /\
       (!src id ty. FLOOKUP bare_globals (src,id) = SOME ty ==>
          ?ts. get_module_code cx src = SOME ts /\
               FLOOKUP toplevel_vtypes (src,id) = SOME (Type ty) /\
               is_bare_global_decl id ts /\
+              find_var_decl_by_num id ts = NONE /\
+              ty <> NoneT) /\
+      (!src id ty. FLOOKUP bare_global_assignable (src,id) = SOME ty ==>
+         ?ts. get_module_code cx src = SOME ts /\
+              FLOOKUP bare_globals (src,id) = SOME ty /\
+              FLOOKUP toplevel_vtypes (src,id) = SOME (Type ty) /\
+              is_immutable_decl id ts /\
               find_var_decl_by_num id ts = NONE /\
               ty <> NoneT) /\
       (!src id vt ts.
@@ -277,6 +316,7 @@ Definition functions_well_typed_def:
           env_body.type_defs = get_tenv cx /\
           env_body.fn_sigs = fn_sigs /\
           env_body.bare_globals = bare_globals /\
+          env_body.bare_global_assignable = bare_global_assignable /\
           env_body.toplevel_vtypes = toplevel_vtypes /\
           env_body.flag_members = flag_members /\
           evaluate_type (get_tenv cx) ret = SOME ret_tv /\

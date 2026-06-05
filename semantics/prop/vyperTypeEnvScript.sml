@@ -78,7 +78,7 @@ QED
 Theorem type_place_target_BareGlobalNameTarget:
   type_place_target env (BareGlobalNameTarget id) = SOME vt <=>
   ?ty. vt = Type ty /\
-       FLOOKUP env.bare_globals (env.current_src, string_to_num id) = SOME ty
+       FLOOKUP env.bare_global_assignable (env.current_src, string_to_num id) = SOME ty
 Proof
   CONV_TAC(LAND_CONV(ONCE_REWRITE_CONV[well_typed_expr_def])) >>
   simp[AllCaseEqs(), PULL_EXISTS] >>
@@ -92,7 +92,7 @@ Theorem env_consistent_bare_global_ready_src:
     FLOOKUP env.bare_globals (src,id) = SOME ty ==>
       ty <> NoneT /\
       (?ts. get_module_code cx src = SOME ts /\
-            is_immutable_decl id ts) /\
+            is_bare_global_decl id ts) /\
       IS_SOME (FLOOKUP (get_source_immutables src
         (case ALOOKUP st.immutables cx.txn.target of SOME m => m | NONE => [])) id)
 Proof
@@ -112,13 +112,35 @@ Theorem env_consistent_bare_global_ready:
       env.current_src = current_module cx /\
       ty <> NoneT /\
       (?ts. get_module_code cx (current_module cx) = SOME ts /\
-            is_immutable_decl id ts) /\
+            is_bare_global_decl id ts) /\
       IS_SOME (FLOOKUP (get_source_immutables (current_module cx)
         (case ALOOKUP st.immutables cx.txn.target of SOME m => m | NONE => [])) id)
 Proof
   rpt strip_tac >>
   drule_all env_consistent_bare_global_ready_src >>
   gvs[env_consistent_def, env_context_consistent_def]
+QED
+
+Theorem env_consistent_bare_global_assignable_ready:
+  !env cx st id ty.
+    env_consistent env cx st /\
+    FLOOKUP env.bare_global_assignable (env.current_src,id) = SOME ty ==>
+      env.current_src = current_module cx /\
+      FLOOKUP env.bare_globals (env.current_src,id) = SOME ty /\
+      ty <> NoneT /\
+      (?ts. get_module_code cx (current_module cx) = SOME ts /\
+            is_immutable_decl id ts /\
+            find_var_decl_by_num id ts = NONE) /\
+      IS_SOME (FLOOKUP (get_source_immutables (current_module cx)
+        (case ALOOKUP st.immutables cx.txn.target of SOME m => m | NONE => [])) id)
+Proof
+  rpt strip_tac >>
+  gvs[env_consistent_def, env_context_consistent_def, env_immutables_consistent_def] >>
+  qpat_x_assum `!src id ty. FLOOKUP env.bare_global_assignable (src,id) = SOME ty ==> ?ts. _`
+    (drule_then strip_assume_tac) >>
+  qpat_x_assum `!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty ==> IS_SOME _`
+    drule >>
+  rw[]
 QED
 Theorem type_place_target_TopLevelNameTarget_IS_SOME:
   FLOOKUP env.bare_globals (src_id_opt,string_to_num id) = SOME x ==>

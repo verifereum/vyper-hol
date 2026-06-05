@@ -59,6 +59,21 @@ Proof
   gvs[return_def, raise_def]
 QED
 
+Theorem eval_base_target_BareGlobalNameTarget_non_immutable_type_error[local]:
+  ∀cx st id ts imms res st'.
+    ALOOKUP st.immutables cx.txn.target = SOME imms ∧
+    get_module_code cx (current_module cx) = SOME ts ∧
+    ¬is_immutable_decl (string_to_num id) ts ∧
+    eval_base_target cx (BareGlobalNameTarget id) st = (res, st') ⇒
+      res = INR (Error (TypeError "assign to constant")) ∧ st' = st
+Proof
+  simp[Once evaluate_def, bind_def, get_immutables_def,
+       get_address_immutables_def, lift_option_def, lift_option_type_def,
+       type_check_def, assert_def, check_def, ignore_bind_def,
+       return_def, raise_def, LET_THM] >>
+  rpt strip_tac >> gvs[return_def, raise_def]
+QED
+
 Theorem eval_base_target_BareGlobalNameTarget:
   ∀cx st n.
     IS_SOME (lookup_bare_global_name cx st n) ∧

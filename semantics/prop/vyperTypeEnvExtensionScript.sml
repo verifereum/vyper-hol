@@ -47,6 +47,7 @@ Theorem extend_local_preserves_static:
   (extend_local env id ty assignable).current_src = env.current_src /\
   (extend_local env id ty assignable).fn_sigs = env.fn_sigs /\
   (extend_local env id ty assignable).bare_globals = env.bare_globals /\
+  (extend_local env id ty assignable).bare_global_assignable = env.bare_global_assignable /\
   (extend_local env id ty assignable).toplevel_vtypes = env.toplevel_vtypes /\
   (extend_local env id ty assignable).flag_members = env.flag_members
 Proof
@@ -57,6 +58,7 @@ Theorem type_stmt_preserve_nonlocal_fields:
   type_stmt env ret_ty s = SOME env' ==>
   env'.current_src = env.current_src /\
   env'.bare_globals = env.bare_globals /\
+  env'.bare_global_assignable = env.bare_global_assignable /\
   env'.toplevel_vtypes = env.toplevel_vtypes /\
   env'.type_defs = env.type_defs /\
   env'.fn_sigs = env.fn_sigs /\
@@ -70,6 +72,7 @@ Theorem type_stmts_preserve_nonlocal_fields:
   type_stmts env ret_ty ss = SOME env' ==>
   env'.current_src = env.current_src /\
   env'.bare_globals = env.bare_globals /\
+  env'.bare_global_assignable = env.bare_global_assignable /\
   env'.toplevel_vtypes = env.toplevel_vtypes /\
   env'.type_defs = env.type_defs /\
   env'.fn_sigs = env.fn_sigs /\
@@ -87,6 +90,7 @@ Theorem type_stmt_env_preserved_static:
   type_stmt env ret_ty s = SOME env' ==>
   env'.type_defs = env.type_defs /\ env'.current_src = env.current_src /\
   env'.fn_sigs = env.fn_sigs /\ env'.bare_globals = env.bare_globals /\
+  env'.bare_global_assignable = env.bare_global_assignable /\
   env'.toplevel_vtypes = env.toplevel_vtypes /\ env'.flag_members = env.flag_members
 Proof
   metis_tac[type_stmt_preserve_nonlocal_fields]
@@ -96,6 +100,7 @@ Theorem type_stmts_env_preserved_static:
   type_stmts env ret_ty ss = SOME env' ==>
   env'.type_defs = env.type_defs /\ env'.current_src = env.current_src /\
   env'.fn_sigs = env.fn_sigs /\ env'.bare_globals = env.bare_globals /\
+  env'.bare_global_assignable = env.bare_global_assignable /\
   env'.toplevel_vtypes = env.toplevel_vtypes /\ env'.flag_members = env.flag_members
 Proof
   metis_tac[type_stmts_preserve_nonlocal_fields]
@@ -105,6 +110,7 @@ Theorem type_stmt_env_consistent_preserved_static:
   type_stmt env ret_ty s = SOME env' /\ env_consistent env cx st ==>
   env'.type_defs = env.type_defs /\ env'.current_src = env.current_src /\
   env'.fn_sigs = env.fn_sigs /\ env'.bare_globals = env.bare_globals /\
+  env'.bare_global_assignable = env.bare_global_assignable /\
   env'.toplevel_vtypes = env.toplevel_vtypes /\ env'.flag_members = env.flag_members
 Proof
   metis_tac[type_stmt_env_preserved_static]
@@ -114,6 +120,7 @@ Theorem type_stmts_env_consistent_preserved_static:
   type_stmts env ret_ty ss = SOME env' /\ env_consistent env cx st ==>
   env'.type_defs = env.type_defs /\ env'.current_src = env.current_src /\
   env'.fn_sigs = env.fn_sigs /\ env'.bare_globals = env.bare_globals /\
+  env'.bare_global_assignable = env.bare_global_assignable /\
   env'.toplevel_vtypes = env.toplevel_vtypes /\ env'.flag_members = env.flag_members
 Proof
   metis_tac[type_stmts_env_preserved_static]
@@ -219,6 +226,7 @@ Definition env_extends_def:
   env_extends env env' <=>
     env'.type_defs = env.type_defs /\ env'.current_src = env.current_src /\
     env'.fn_sigs = env.fn_sigs /\ env'.bare_globals = env.bare_globals /\
+    env'.bare_global_assignable = env.bare_global_assignable /\
     env'.toplevel_vtypes = env.toplevel_vtypes /\ env'.flag_members = env.flag_members /\
     (!id ty. FLOOKUP env.var_types id = SOME ty ==> FLOOKUP env'.var_types id = SOME ty) /\
     (!id. FLOOKUP env.var_assignable id = SOME T ==> FLOOKUP env'.var_assignable id = SOME T)
