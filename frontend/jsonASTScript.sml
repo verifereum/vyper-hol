@@ -26,15 +26,15 @@ End
 
 Datatype:
   json_type
-  = JT_Named string                           (* name field only, e.g. "bool", "address" *)
+  = JT_Named (int option) string              (* optional declaration source_id, name *)
   | JT_Integer num bool                       (* bits, is_signed *)
   | JT_BytesM num                             (* m for bytes1..bytes32 *)
   | JT_String num                             (* length *)
   | JT_Bytes num                              (* length *)
   | JT_StaticArray json_type num              (* value_type, length *)
   | JT_DynArray json_type num                 (* value_type, length *)
-  | JT_Struct string                          (* name *)
-  | JT_Flag string                            (* name *)
+  | JT_Struct (int option) string             (* optional declaration source_id, name *)
+  | JT_Flag (int option) string               (* optional declaration source_id, name *)
   | JT_Tuple (json_type list)                 (* member_types *)
   | JT_HashMap json_type json_type            (* key_type, value_type *)
   | JT_None                                   (* null type *)

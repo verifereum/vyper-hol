@@ -231,14 +231,14 @@ Definition assignable_type_def:
     (well_formed_type tenv (TupleT tys) /\ EVERY (assignable_type tenv) tys) /\
   assignable_type tenv (ArrayT elem bd) =
     (well_formed_type tenv (ArrayT elem bd) /\ assignable_type tenv elem) /\
-  assignable_type tenv (StructT id) =
-    (let nid = string_to_num id in
-     case FLOOKUP tenv nid of
+  assignable_type tenv (StructT nsid) =
+    (let key = type_key nsid in
+     case FLOOKUP tenv key of
      | SOME (StructArgs args) =>
-         well_formed_type tenv (StructT id) /\
-         EVERY (assignable_type (tenv \\ nid) o SND) args
+         well_formed_type tenv (StructT nsid) /\
+         EVERY (assignable_type (tenv \\ key) o SND) args
      | _ => F) /\
-  assignable_type tenv (FlagT id) = well_formed_type tenv (FlagT id) /\
+  assignable_type tenv (FlagT nsid) = well_formed_type tenv (FlagT nsid) /\
   assignable_type tenv NoneT = F
 Termination
   WF_REL_TAC `inv_image ($< LEX $<) (\(tenv, ty). (CARD (FDOM tenv), type_size ty))` >>
@@ -331,8 +331,8 @@ Definition subscript_vtype_def:
 End
 
 Definition attribute_type_def:
-  attribute_type tenv (StructT sname) field_id =
-    (case FLOOKUP tenv (string_to_num sname) of
+  attribute_type tenv (StructT nsid) field_id =
+    (case FLOOKUP tenv (type_key nsid) of
        SOME (StructArgs fields) => ALOOKUP fields field_id
      | _ => NONE) /\
   attribute_type _ (BaseT _) _ = NONE /\
@@ -471,9 +471,9 @@ Definition well_typed_expr_def:
   well_typed_expr env (TopLevelName ty (src_id_opt, id)) =
     (FLOOKUP env.toplevel_vtypes (src_id_opt, string_to_num id) = SOME (Type ty) /\
      well_formed_type env.type_defs ty /\ ty <> NoneT) /\
-  well_typed_expr env (FlagMember ty (src_id_opt, fid) mid) =
-    (ty = FlagT fid /\ well_formed_type env.type_defs ty /\
-     ?ls. FLOOKUP env.flag_members (src_id_opt, fid) = SOME ls /\ MEM mid ls) /\
+  well_typed_expr env (FlagMember ty nsid mid) =
+    (ty = FlagT nsid /\ well_formed_type env.type_defs ty /\
+     ?ls. FLOOKUP env.flag_members nsid = SOME ls /\ MEM mid ls) /\
   well_typed_expr env (IfExp ty cond e1 e2) =
     (well_typed_expr env cond /\ well_typed_expr env e1 /\ well_typed_expr env e2 /\
      expr_type cond = BaseT BoolT /\ expr_type e1 = ty /\ expr_type e2 = ty /\
@@ -482,8 +482,8 @@ Definition well_typed_expr_def:
     (well_typed_literal ty l /\ well_formed_type env.type_defs ty) /\
   well_typed_expr env (StructLit ty nsid kes) =
     (well_typed_named_exprs env kes /\ well_formed_type env.type_defs ty /\
-     ?id args. ty = StructT id /\ SND nsid = id /\
-       FLOOKUP env.type_defs (string_to_num id) = SOME (StructArgs args) /\
+     ?args. ty = StructT nsid /\
+       FLOOKUP env.type_defs (type_key nsid) = SOME (StructArgs args) /\
        MAP FST kes = MAP FST args /\ MAP (expr_type o SND) kes = MAP SND args) /\
   well_typed_expr env (Subscript ty e1 e2) =
     (well_typed_expr env e2 /\ well_formed_type env.type_defs ty /\
