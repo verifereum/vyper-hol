@@ -283,23 +283,30 @@ QED
    and do_swap. Use every_case_tac but first PURE_REWRITE to avoid unfolding
    sub-function definitions which cause goal explosion. *)
 
-(* Tactic for proving sa_fn_eom preservation through reorder_one's sub-calls *)
-val reorder_alloc_tac =
-  every_case_tac >> gvs[] >>
-  rpt (pairarg_tac >> gvs[]);
-
 Theorem reorder_one_fn_eom:
   !dfg target_ops target_idx op ps ops ps'.
     reorder_one dfg target_ops target_idx op ps = (ops, ps') ==>
     ps'.ps_alloc.sa_fn_eom = ps.ps_alloc.sa_fn_eom
 Proof
-  rpt gen_tac >> simp[reorder_one_def] >>
-  reorder_alloc_tac >> reorder_alloc_tac >> reorder_alloc_tac >>
-  strip_tac >> gvs[] >>
-  rpt (TRY (drule do_restore_fn_eom >> strip_tac >> gvs[]) >>
-       TRY (drule reduce_depth_plan_fn_eom >> strip_tac >> gvs[]) >>
-       TRY (first_x_assum (fn th =>
-              mp_tac (MATCH_MP do_swap_fn_eom th)) >> strip_tac >> gvs[]))
+  rpt gen_tac >>
+  rewrite_tac[reorder_one_def] >>
+  BasicProvers.LET_ELIM_TAC >>
+  qpat_x_assum`_ = (_,ps')`mp_tac >>
+  BasicProvers.TOP_CASE_TAC >- (
+    strip_tac >> gvs[AllCaseEqs()] >>
+    drule do_restore_fn_eom >> strip_tac >> gvs[]) >>
+  BasicProvers.LET_ELIM_TAC >>
+  qpat_x_assum`_ = (_,ps')`mp_tac >>
+  BasicProvers.TOP_CASE_TAC >- (
+    strip_tac >> gvs[AllCaseEqs()] >>
+    drule reduce_depth_plan_fn_eom >> strip_tac >> gvs[] >>
+    drule do_restore_fn_eom >> strip_tac >> gvs[]) >>
+  BasicProvers.LET_ELIM_TAC >>
+  gvs[AllCaseEqs()] >>
+  TRY(drule do_restore_fn_eom >> strip_tac >> gvs[]) >>
+  TRY(drule reduce_depth_plan_fn_eom >> strip_tac >> gvs[]) >>
+  imp_res_tac do_swap_fn_eom >> gvs[] >>
+  gvs[Abbr`ps'`]
 QED
 
 Theorem reorder_one_next_offset:
@@ -307,13 +314,25 @@ Theorem reorder_one_next_offset:
     reorder_one dfg target_ops target_idx op ps = (ops, ps') ==>
     ps.ps_alloc.sa_next_offset <= ps'.ps_alloc.sa_next_offset
 Proof
-  rpt gen_tac >> simp[reorder_one_def] >>
-  reorder_alloc_tac >> reorder_alloc_tac >> reorder_alloc_tac >>
-  strip_tac >> gvs[] >>
-  rpt (TRY (drule do_restore_next_offset >> strip_tac >> gvs[]) >>
-       TRY (drule reduce_depth_plan_next_offset >> strip_tac >> gvs[]) >>
-       TRY (first_x_assum (fn th =>
-              mp_tac (MATCH_MP do_swap_next_offset th)) >> strip_tac >> gvs[]))
+  rpt gen_tac >>
+  rewrite_tac[reorder_one_def] >>
+  BasicProvers.LET_ELIM_TAC >>
+  qpat_x_assum`_ = (_,ps')`mp_tac >>
+  BasicProvers.TOP_CASE_TAC >- (
+    strip_tac >> gvs[AllCaseEqs()] >>
+    drule do_restore_next_offset >> strip_tac >> gvs[]) >>
+  BasicProvers.LET_ELIM_TAC >>
+  qpat_x_assum`_ = (_,ps')`mp_tac >>
+  BasicProvers.TOP_CASE_TAC >- (
+    strip_tac >> gvs[AllCaseEqs()] >>
+    drule reduce_depth_plan_next_offset >> strip_tac >> gvs[] >>
+    drule do_restore_next_offset >> strip_tac >> gvs[]) >>
+  BasicProvers.LET_ELIM_TAC >>
+  gvs[AllCaseEqs()] >>
+  TRY(drule do_restore_next_offset >> strip_tac >> gvs[]) >>
+  TRY(drule reduce_depth_plan_next_offset >> strip_tac >> gvs[]) >>
+  imp_res_tac do_swap_next_offset >> gvs[] >>
+  gvs[Abbr`ps'`]
 QED
 
 (* ========== FOLDL invariants for plan_state threading ========== *)
