@@ -161,25 +161,6 @@ QED
 (* ===== Section 5: Write-Opcode Field Preservation ==================== *)
 (* ===================================================================== *)
 
-val write_finish_tac =
-  gvs[AllCaseEqs(), exec_write2_def, exec_alloca_def, exec_ext_call_def,
-      exec_delegatecall_def, exec_create_def,
-      extract_venom_result_def] >>
-  gvs[AllCaseEqs()] >>
-  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
-  simp[update_var_def, mstore_def, mstore8_def, sstore_def, tstore_def,
-       write_memory_with_expansion_def, mcopy_def,
-       contract_storage_def, revert_state_def,
-       lookup_var_def, FLOOKUP_UPDATE, eval_operands_def];
-
-val step_specific_write_tac =
-  rw[Once step_inst_def] >>
-  gvs[] >>
-  qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
-  simp[Once step_inst_base_def] >>
-  strip_tac >>
-  write_finish_tac;
-
 Theorem step_mstore_preserves:
   !fuel ctx inst s s'.
     step_inst fuel ctx inst s = OK s' /\ inst.inst_opcode = MSTORE ==>
@@ -195,7 +176,12 @@ Theorem step_mstore_preserves:
     s'.vs_prev_bb = s.vs_prev_bb /\
     (!v. lookup_var v s' = lookup_var v s)
 Proof
-  step_specific_write_tac
+  simp[Once step_inst_def] >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  qhdtm_x_assum`step_inst_base`mp_tac >>
+  simp[Once step_inst_base_def] >>
+  strip_tac >> gvs[exec_write2_def,AllCaseEqs()] >>
+  simp[mstore_def, lookup_var_def]
 QED
 
 Theorem step_mstore8_preserves:
@@ -213,7 +199,12 @@ Theorem step_mstore8_preserves:
     s'.vs_prev_bb = s.vs_prev_bb /\
     (!v. lookup_var v s' = lookup_var v s)
 Proof
-  step_specific_write_tac
+  simp[Once step_inst_def] >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  qhdtm_x_assum`step_inst_base`mp_tac >>
+  simp[Once step_inst_base_def] >>
+  strip_tac >> gvs[exec_write2_def,AllCaseEqs()] >>
+  simp[mstore8_def, lookup_var_def]
 QED
 
 Theorem step_sstore_preserves:
@@ -231,7 +222,12 @@ Theorem step_sstore_preserves:
     s'.vs_prev_bb = s.vs_prev_bb /\
     (!v. lookup_var v s' = lookup_var v s)
 Proof
-  step_specific_write_tac
+  simp[Once step_inst_def] >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  qhdtm_x_assum`step_inst_base`mp_tac >>
+  simp[Once step_inst_base_def] >>
+  strip_tac >> gvs[exec_write2_def,AllCaseEqs()] >>
+  simp[sstore_def, lookup_var_def]
 QED
 
 Theorem step_tstore_preserves:
@@ -249,7 +245,12 @@ Theorem step_tstore_preserves:
     s'.vs_prev_bb = s.vs_prev_bb /\
     (!v. lookup_var v s' = lookup_var v s)
 Proof
-  step_specific_write_tac
+  simp[Once step_inst_def] >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  qhdtm_x_assum`step_inst_base`mp_tac >>
+  simp[Once step_inst_base_def] >>
+  strip_tac >> gvs[exec_write2_def,AllCaseEqs()] >>
+  simp[tstore_def, lookup_var_def]
 QED
 
 Theorem step_istore_preserves:
@@ -267,7 +268,12 @@ Theorem step_istore_preserves:
     s'.vs_prev_bb = s.vs_prev_bb /\
     (!v. lookup_var v s' = lookup_var v s)
 Proof
-  step_specific_write_tac
+  simp[Once step_inst_def] >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  qhdtm_x_assum`step_inst_base`mp_tac >>
+  simp[Once step_inst_base_def] >>
+  strip_tac >> gvs[exec_write2_def,AllCaseEqs()] >>
+  simp[lookup_var_def]
 QED
 
 Theorem step_log_preserves:
@@ -285,7 +291,12 @@ Theorem step_log_preserves:
     s'.vs_prev_bb = s.vs_prev_bb /\
     (!v. lookup_var v s' = lookup_var v s)
 Proof
-  step_specific_write_tac
+  simp[Once step_inst_def] >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  qhdtm_x_assum`step_inst_base`mp_tac >>
+  simp[Once step_inst_base_def] >>
+  strip_tac >> gvs[exec_write2_def,AllCaseEqs()] >>
+  simp[lookup_var_def]
 QED
 
 (* ===================================================================== *)
@@ -526,10 +537,7 @@ Proof
       gvs[is_alloca_op_def] >>
       gvs[step_inst_base_def] >>
       step_base_field_finish_tac)
-  >- (Cases_on `inst.inst_opcode` >>
-      gvs[is_ext_call_op_def] >>
-      gvs[step_inst_base_def] >>
-      step_base_field_finish_tac)
+  >- suspend"g1"
   >- (gvs[step_inst_base_def] >> step_base_field_finish_tac)
   >- (gvs[step_inst_base_def] >> step_base_field_finish_tac)
   >- (gvs[step_inst_base_def] >> step_base_field_finish_tac)
@@ -538,6 +546,29 @@ Proof
   >- (gvs[step_inst_base_def] >> step_base_field_finish_tac)
   >- gvs[step_inst_base_def]
 QED
+
+Resume step_inst_base_preserves_all[g1]:
+      gvs[Once step_inst_base_def,AllCaseEqs(),
+          is_ext_call_op_def,is_terminator_def,
+          exec_ext_call_def,update_var_def,
+          exec_delegatecall_def,
+          extract_venom_result_def, is_alloca_op_def,
+          write_effects_def, pairTheory.UNCURRY] >>
+      gvs[AllCaseEqs(), lookup_var_def, all_effects_def] >>
+      gvs[FLOOKUP_UPDATE]
+      >- (
+        gvs[exec_create_def, AllCaseEqs(),
+            extract_venom_result_def, update_var_def,
+            pairTheory.UNCURRY, FLOOKUP_UPDATE])
+      >- (
+        gvs[exec_create_def, AllCaseEqs(),
+            extract_venom_result_def, update_var_def,
+            pairTheory.UNCURRY, FLOOKUP_UPDATE]) >>
+      Cases_on`result` >> gvs[] >>
+      Cases_on`y` >> gvs[]
+QED
+
+Finalise step_inst_base_preserves_all
 
 (* Generic lift: from step_inst_base mega-lemma to step_inst for any field *)
 fun step_inst_lift_from_all_tac field_fn =
