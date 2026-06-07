@@ -684,11 +684,12 @@ Resume compile_abi_encode_to_buf_correct[prim]:
     Cases_on`v` >> gvs[value_has_type_def] >>
     goal_assum $ drule_at Any >>
     gvs[type_memory_size_def]) >>
-  `∃bt. ty = BaseT bt` by (Cases_on`ty` \\ gvs[] >>
+  `∃bt. ty = BaseT bt` by (
+     Cases_on`ty` \\ gvs[] >>
      pop_assum mp_tac >> CASE_TAC >> gvs[] >>
      CASE_TAC >> gvs[vyperValueTheory.evaluate_type_def] >>
      gvs[exprLoweringTheory.type_to_abi_enc_info_def] >>
-     Cases_on`FLOOKUP sfields s` >> gvs[] >>
+     gvs[AllCaseEqs()] >>
      gvs[sfields_tenv_consistent_def] >>
      first_x_assum drule >>
      first_x_assum drule >>
