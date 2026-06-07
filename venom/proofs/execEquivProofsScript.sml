@@ -490,10 +490,13 @@ Triviality step_inst_assert_equiv:
 Proof
   rw[] >> simp[step_inst_base_def] >>
   imp_res_tac eval_operand_equiv >>
-  rpt CASE_TAC >> gvs[result_equiv_def, revert_equiv_def,
-    revert_state_def, halt_state_def, set_returndata_def,
-    execution_equiv_def, lookup_var_def] >>
-  fs[state_equiv_def, execution_equiv_def, lookup_var_def]
+  CASE_TAC >> gvs[result_equiv_def] >>
+  CASE_TAC >> gvs[result_equiv_def] >>
+  CASE_TAC >> gvs[result_equiv_def] >>
+  CASE_TAC >> gvs[result_equiv_def, execution_equiv_def] >>
+  gvs[revert_state_def, set_returndata_def, lookup_var_def] >>
+  fs[state_equiv_def, execution_equiv_def, lookup_var_def,
+     halt_state_def]
 QED
 
 Triviality eval_operands_equiv:
