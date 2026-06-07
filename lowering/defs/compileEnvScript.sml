@@ -527,17 +527,18 @@ End
 Definition sfields_tenv_consistent_def:
   sfields_tenv_consistent sfields tenv ⇔
     (* Every struct in tenv exists in sfields with matching field types *)
-    (∀ name args.
-       FLOOKUP tenv (string_to_num name) = SOME (StructArgs args) ⇒
+    (∀ nsid args.
+       FLOOKUP tenv (type_key nsid) = SOME (StructArgs args) ⇒
        ∃ fields.
-         FLOOKUP sfields name = SOME fields ∧
+         FLOOKUP sfields (nsid_to_string nsid) = SOME fields ∧
          MAP FST fields = MAP FST args ∧
          MAP (FST o SND) fields = MAP SND args) ∧
     (* Every struct in sfields exists in tenv *)
     (∀ name fields.
        FLOOKUP sfields name = SOME fields ⇒
-       ∃ args.
-         FLOOKUP tenv (string_to_num name) = SOME (StructArgs args) ∧
+       ∃ nsid args.
+         name = nsid_to_string nsid ∧
+         FLOOKUP tenv (type_key nsid) = SOME (StructArgs args) ∧
          MAP FST fields = MAP FST args ∧
          MAP (FST o SND) fields = MAP SND args)
 End
