@@ -1,6 +1,6 @@
 Theory vyperAST
 Ancestors
-  string words numpair vyperMisc[ignore_grammar]
+  ASCIInumbers string words vyperMisc[ignore_grammar]
 Libs
   cv_transLib
 
@@ -9,21 +9,9 @@ Type identifier = “:string”;
 (* Namespaced identifier: (source_id, name) where NONE = self, SOME n = module *)
 Type nsid = “:num option # identifier”;
 
-Definition source_key_def:
-  source_key NONE = 0n ∧
-  source_key (SOME n) = n + 1
-End
-
-val () = cv_auto_trans source_key_def;
-
-Definition type_name_key_def:
-  type_name_key id = vyperMisc$string_to_num id
-End
-
-val () = cv_auto_trans type_name_key_def;
-
 Definition type_key_def:
-  type_key nsid = npair (source_key (FST nsid)) (type_name_key (SND nsid))
+  type_key (NONE, name) = vyperMisc$string_to_num name ∧
+  type_key (SOME n, name) = vyperMisc$string_to_num (toString n ++ "." ++ name)
 End
 
 val () = cv_auto_trans type_key_def;
