@@ -77,7 +77,7 @@ val JT_Tuple_tm = jastk "JT_Tuple"
 val JT_HashMap_tm = jastk "JT_HashMap"
 val JT_None_tm = jastk "JT_None"
 
-fun mk_JT_Named s = mk_comb(JT_Named_tm, fromMLstring s)
+fun mk_JT_Named (sid_opt, s) = list_mk_comb(JT_Named_tm, [sid_opt, fromMLstring s])
 fun mk_JT_Integer (bits, is_signed) =
   list_mk_comb(JT_Integer_tm, [bits, mk_bool is_signed])
 fun mk_JT_BytesM m = mk_comb(JT_BytesM_tm, m)
@@ -85,8 +85,8 @@ fun mk_JT_String len = mk_comb(JT_String_tm, len)
 fun mk_JT_Bytes len = mk_comb(JT_Bytes_tm, len)
 fun mk_JT_StaticArray (vt, len) = list_mk_comb(JT_StaticArray_tm, [vt, len])
 fun mk_JT_DynArray (vt, len) = list_mk_comb(JT_DynArray_tm, [vt, len])
-fun mk_JT_Struct s = mk_comb(JT_Struct_tm, fromMLstring s)
-fun mk_JT_Flag s = mk_comb(JT_Flag_tm, fromMLstring s)
+fun mk_JT_Struct (sid_opt, s) = list_mk_comb(JT_Struct_tm, [sid_opt, fromMLstring s])
+fun mk_JT_Flag (sid_opt, s) = list_mk_comb(JT_Flag_tm, [sid_opt, fromMLstring s])
 fun mk_JT_Tuple ts = mk_comb(JT_Tuple_tm, mk_list(ts, json_type_ty))
 fun mk_JT_HashMap (kt, vt) = list_mk_comb(JT_HashMap_tm, [kt, vt])
 
@@ -416,11 +416,17 @@ fun d_json_type () : term decoder = achoose "json_type" [
 
   (* Struct: typeclass = "struct" *)
   check (field "typeclass" string) (fn s => s = "struct") "not struct" $
-    JSONDecode.map mk_JT_Struct (field "name" string),
+    JSONDecode.map mk_JT_Struct $
+    tuple2 (orElse (JSONDecode.map mk_some (field "type_decl_node" $ field "source_id" inttm),
+                    succeed (mk_none intSyntax.int_ty)),
+            field "name" string),
 
   (* Flag: typeclass = "flag" *)
   check (field "typeclass" string) (fn s => s = "flag") "not flag" $
-    JSONDecode.map mk_JT_Flag (field "name" string),
+    JSONDecode.map mk_JT_Flag $
+    tuple2 (orElse (JSONDecode.map mk_some (field "type_decl_node" $ field "source_id" inttm),
+                    succeed (mk_none intSyntax.int_ty)),
+            field "name" string),
 
   (* Tuple: typeclass = "tuple" *)
   check (field "typeclass" string) (fn s => s = "tuple") "not tuple" $
@@ -433,10 +439,13 @@ fun d_json_type () : term decoder = achoose "json_type" [
 
   (* Interface - treat as named type *)
   check (field "typeclass" string) (fn s => s = "interface") "not interface" $
-    succeed (mk_JT_Named "address"),
+    succeed (mk_JT_Named (mk_none intSyntax.int_ty, "address")),
 
-  (* Named types (bool, address, decimal, etc) - just use name field *)
-  JSONDecode.map mk_JT_Named (field "name" string),
+  (* Named types (bool, address, decimal, etc) - preserve type declaration source if present *)
+  JSONDecode.map mk_JT_Named $
+    tuple2 (orElse (JSONDecode.map mk_some (field "type_decl_node" $ field "source_id" inttm),
+                    succeed (mk_none intSyntax.int_ty)),
+            field "name" string),
 
   (* Null type *)
   null JT_None_tm
@@ -468,7 +477,7 @@ fun d_ast_type () : term decoder = achoose "ast_type" [
         in mk_JT_BytesM(mk_num_from_int m) end) $
       field "id" string,
     (* Named types *)
-    JSONDecode.map mk_JT_Named (field "id" string)
+    JSONDecode.map (fn s => mk_JT_Named (mk_none intSyntax.int_ty, s)) (field "id" string)
   ],
 
   (* Subscript node - for String[N], Bytes[N], DynArray[T, N], etc. *)
@@ -519,7 +528,7 @@ fun d_ast_type () : term decoder = achoose "ast_type" [
 
   (* Attribute node - cross-module type reference: library.SomeStruct, lib1.Roles *)
   check_ast_type "Attribute" $
-    JSONDecode.map mk_JT_Named (field "attr" string),
+    JSONDecode.map (fn s => mk_JT_Named (mk_none intSyntax.int_ty, s)) (field "attr" string),
 
   (* null type *)
   null JT_None_tm
@@ -669,7 +678,7 @@ fun d_json_expr () : term decoder = achoose "expr" [
 
   (* Compare (treated like BinOp) - result type is always bool *)
   check_ast_type "Compare" $
-    JSONDecode.map (fn (l, op_tm, r) => mk_JE_BinOp(l, op_tm, r, mk_JT_Named "bool")) $
+    JSONDecode.map (fn (l, op_tm, r) => mk_JE_BinOp(l, op_tm, r, mk_JT_Named (mk_none intSyntax.int_ty, "bool"))) $
     tuple3 (field "left" (delay d_json_expr),
             field "op" json_binop,
             field "right" (delay d_json_expr)),

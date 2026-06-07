@@ -466,12 +466,9 @@ Triviality ext_call_not_halt_abort[local]:
     step_inst_base inst s <> Abort a vs'
 Proof
   rpt gen_tac >> strip_tac >> conj_tac
-  >- (strip_tac >>
-      drule ext_call_opcode_cases >> strip_tac >>
-      gvs[step_inst_base_def] >> every_case_tac >> gvs[]) >>
-  strip_tac >>
-  drule ext_call_opcode_cases >> strip_tac >>
-  gvs[step_inst_base_def] >> every_case_tac >> gvs[]
+  >> (strip_tac >>
+      drule ext_call_opcode_cases >>
+      gvs[step_inst_base_def, AllCaseEqs()])
 QED
 
 Triviality storage_imm_log_assert_not_halt[local]:

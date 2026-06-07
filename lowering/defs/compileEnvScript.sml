@@ -145,6 +145,14 @@ Datatype:
       (* is_dynamic, list of (elem_info, abi_embedded_static_size, mem_size) *)
 End
 
+(* ===== Namespace ID ===== *)
+(* Convert (module_id option, name) to lookup string.
+   Mirrors Python: NamespaceID representation *)
+Definition nsid_to_string_def:
+  nsid_to_string (NONE, name) = name ∧
+  nsid_to_string (SOME (n:num), name) = (toString n) ++ "." ++ name
+End
+
 (* ===== ABI Type Properties ===== *)
 
 (* Whether a Vyper type has dynamic ABI encoding (requires tail section).
@@ -160,8 +168,9 @@ Definition is_abi_dynamic_def:
     is_abi_dynamic sfields elem ∧
   is_abi_dynamic sfields (TupleT tys) =
     EXISTS (is_abi_dynamic sfields) tys ∧
-  is_abi_dynamic sfields (StructT name) =
-    (case FLOOKUP sfields name of
+  is_abi_dynamic sfields (StructT nsid) =
+    (let name = nsid_to_string nsid in
+     case FLOOKUP sfields name of
        SOME fields =>
          EXISTS (is_abi_dynamic (sfields \\ name))
                 (MAP (FST o SND) fields)
@@ -205,8 +214,9 @@ Definition abi_static_size_def:
   abi_static_size sfields (TupleT tys) =
     SUM (MAP (λt. if is_abi_dynamic sfields t then 32
                   else abi_static_size sfields t) tys) ∧
-  abi_static_size sfields (StructT name) =
-    (case FLOOKUP sfields name of
+  abi_static_size sfields (StructT nsid) =
+    (let name = nsid_to_string nsid in
+     case FLOOKUP sfields name of
        SOME fields =>
          SUM (MAP (λt. if is_abi_dynamic (sfields \\ name) t then 32
                        else abi_static_size (sfields \\ name) t)
@@ -252,8 +262,9 @@ Definition abi_size_bound_def:
                   (if is_abi_dynamic sfields t
                    then abi_size_bound sfields t
                    else 0)) tys) ∧
-  abi_size_bound sfields (StructT name) =
-    (case FLOOKUP sfields name of
+  abi_size_bound sfields (StructT nsid) =
+    (let name = nsid_to_string nsid in
+     case FLOOKUP sfields name of
        SOME fields =>
          SUM (MAP (λt. abi_embedded_static_size (sfields \\ name) t +
                        (if is_abi_dynamic (sfields \\ name) t
@@ -516,17 +527,18 @@ End
 Definition sfields_tenv_consistent_def:
   sfields_tenv_consistent sfields tenv ⇔
     (* Every struct in tenv exists in sfields with matching field types *)
-    (∀ name args.
-       FLOOKUP tenv (string_to_num name) = SOME (StructArgs args) ⇒
+    (∀ nsid args.
+       FLOOKUP tenv (type_key nsid) = SOME (StructArgs args) ⇒
        ∃ fields.
-         FLOOKUP sfields name = SOME fields ∧
+         FLOOKUP sfields (nsid_to_string nsid) = SOME fields ∧
          MAP FST fields = MAP FST args ∧
          MAP (FST o SND) fields = MAP SND args) ∧
     (* Every struct in sfields exists in tenv *)
     (∀ name fields.
        FLOOKUP sfields name = SOME fields ⇒
-       ∃ args.
-         FLOOKUP tenv (string_to_num name) = SOME (StructArgs args) ∧
+       ∃ nsid args.
+         name = nsid_to_string nsid ∧
+         FLOOKUP tenv (type_key nsid) = SOME (StructArgs args) ∧
          MAP FST fields = MAP FST args ∧
          MAP (FST o SND) fields = MAP SND args)
 End
@@ -723,14 +735,6 @@ End
    logger = contract address (cc_address).
 
    The relation uses ce_event_info to determine which args are indexed. *)
-(* ===== Namespace ID ===== *)
-(* Convert (module_id option, name) to lookup string.
-   Mirrors Python: NamespaceID representation *)
-Definition nsid_to_string_def:
-  nsid_to_string (NONE, name) = name ∧
-  nsid_to_string (SOME (n:num), name) = (toString n) ++ "." ++ name
-End
-
 (* Extract indexed values from args based on flags *)
 Definition indexed_values_def:
   indexed_values [] [] = ([] : value list) ∧
@@ -964,12 +968,12 @@ End
 Definition returns_stack_count_def:
   returns_stack_count (sft : string -> type list) NoneT = (0:num) ∧
   returns_stack_count sft (TupleT tys) = tuple_like_stack_count tys ∧
-  returns_stack_count sft (StructT name) =
+  returns_stack_count sft (StructT nsid) =
     (* Python: field_types = [ft for (_, ft) in struct_t.members]; then
        tuple_like_stack_count(field_types). Structs with ≤2 word fields use stack.
        Uses is_word_type (not just size=32) to exclude compound types like
        uint256[1] that are 32 bytes but not primitive words. *)
-    tuple_like_stack_count (sft name) ∧
+    tuple_like_stack_count (sft (nsid_to_string nsid)) ∧
   returns_stack_count sft ty =
     if is_word_type ty then 1 else (0:num)
 End
@@ -1100,8 +1104,8 @@ Definition type_memory_bytes_def:
     n * type_memory_bytes cenv elem_ty ∧
   type_memory_bytes cenv (ArrayT elem_ty (Dynamic n)) =
     32 + n * type_memory_bytes cenv elem_ty ∧
-  type_memory_bytes cenv (StructT name) =
-    SUM (MAP (SND o SND) (get_struct_fields cenv.ce_struct_fields name)) ∧
+  type_memory_bytes cenv (StructT nsid) =
+    SUM (MAP (SND o SND) (get_struct_fields cenv.ce_struct_fields (nsid_to_string nsid))) ∧
   type_memory_bytes cenv (TupleT tys) =
     SUM (MAP (type_memory_bytes cenv) tys) ∧
   type_memory_bytes cenv NoneT = 0

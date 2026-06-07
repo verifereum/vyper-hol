@@ -27,10 +27,10 @@ Definition vyper_to_abi_type_def[simp]:
   vyper_to_abi_type env (TupleT ts) = Tuple (vyper_to_abi_types env ts) ∧
   vyper_to_abi_type env (ArrayT t (Dynamic _)) = Array NONE (vyper_to_abi_type env t) ∧
   vyper_to_abi_type env (ArrayT t (Fixed n)) = Array (SOME n) (vyper_to_abi_type env t) ∧
-  vyper_to_abi_type env (StructT id) =
-    (let nid = string_to_num id in
-     case FLOOKUP env nid of
-     | SOME (StructArgs args) => Tuple (vyper_to_abi_types (env \\ nid) (MAP SND args))
+  vyper_to_abi_type env (StructT nsid) =
+    (let key = type_key nsid in
+     case FLOOKUP env key of
+     | SOME (StructArgs args) => Tuple (vyper_to_abi_types (env \\ key) (MAP SND args))
      | _ => Tuple []) ∧
   vyper_to_abi_type env (FlagT _) = Uint 256 ∧
   vyper_to_abi_type env NoneT = Tuple [] ∧
@@ -40,7 +40,7 @@ Termination
   WF_REL_TAC ‘inv_image ($< LEX $<) (λx. case x of
       INL (env, t) => (CARD (FDOM env), type_size t)
     | INR (env, ts) => (CARD (FDOM env), list_size type_size ts))’
-  \\ rw[FLOOKUP_DEF]
+  \\ rw[FLOOKUP_DEF] >> gvs[type_key_def]
   \\ disj1_tac
   \\ CCONTR_TAC
   \\ fs[]
@@ -58,6 +58,7 @@ val () = cv_auto_trans_rec vyper_to_abi_type_def (
   \\ disj1_tac
   \\ pop_assum mp_tac
   \\ qmatch_goalsub_abbrev_tac `cv_lookup ck`
+  >> gvs[cv_type_key_def]
   \\ `cv_ispair ck = cv$Num 0`
   by (
     rw[Abbr`ck`, cv_string_to_num_def]
@@ -127,15 +128,15 @@ Definition abi_to_vyper_def[simp]:
 	     | SOME tv => SOME $ ArrayV $ make_array_value tv b vs
       else NONE ) ∧
   abi_to_vyper env NoneT (ListV ls) = (if NULL ls then SOME NoneV else NONE) ∧
-  abi_to_vyper env (StructT id) (ListV vs) =
-    (let nid = string_to_num id in
-      case FLOOKUP env nid of
+  abi_to_vyper env (StructT nsid) (ListV vs) =
+    (let key = type_key nsid in
+      case FLOOKUP env key of
        | SOME (StructArgs args) =>
-         (case abi_to_vyper_list (env \\ nid) (MAP SND args) vs of NONE => NONE
+         (case abi_to_vyper_list (env \\ key) (MAP SND args) vs of NONE => NONE
           | SOME vs => SOME $ StructV $ ZIP (MAP FST args, vs))
        | _ => NONE) ∧
-  abi_to_vyper env (FlagT id) (NumV n) =
-    (case FLOOKUP env (string_to_num id) of
+  abi_to_vyper env (FlagT nsid) (NumV n) =
+    (case FLOOKUP env (type_key nsid) of
       | SOME (FlagArgs m) =>
         if m ≤ 256 ∧ n < 2 ** m then SOME $ FlagV (&n) else NONE
       | _ => NONE) ∧
@@ -174,10 +175,10 @@ Definition vyper_is_dynamic_def:
   vyper_is_dynamic env (TupleT ts) = vyper_any_dynamic env ts ∧
   vyper_is_dynamic env (ArrayT t (Dynamic _)) = T ∧
   vyper_is_dynamic env (ArrayT t (Fixed _)) = vyper_is_dynamic env t ∧
-  vyper_is_dynamic env (StructT id) =
-    (let nid = string_to_num id in
-     case FLOOKUP env nid of
-     | SOME (StructArgs args) => vyper_any_dynamic (env \\ nid) (MAP SND args)
+  vyper_is_dynamic env (StructT nsid) =
+    (let key = type_key nsid in
+     case FLOOKUP env key of
+     | SOME (StructArgs args) => vyper_any_dynamic (env \\ key) (MAP SND args)
      | _ => F) ∧
   vyper_is_dynamic env (FlagT _) = F ∧
   vyper_is_dynamic env NoneT = F ∧
@@ -188,7 +189,7 @@ Termination
   WF_REL_TAC ‘inv_image ($< LEX $<) (λx. case x of
       INL (env, t) => (CARD (FDOM env), type_size t)
     | INR (env, ts) => (CARD (FDOM env), list_size type_size ts))’
-  \\ rw[FLOOKUP_DEF]
+  \\ rw[FLOOKUP_DEF] >> gvs[type_key_def]
   \\ disj1_tac
   \\ CCONTR_TAC
   \\ fs[]
@@ -208,6 +209,7 @@ val () = cv_auto_trans_rec vyper_is_dynamic_def (
   \\ disj1_tac
   \\ pop_assum mp_tac
   \\ qmatch_goalsub_abbrev_tac `cv_lookup ck`
+  >> gvs[cv_type_key_def]
   \\ `cv_ispair ck = cv$Num 0`
   by (
     rw[Abbr`ck`, cv_string_to_num_def]
@@ -260,11 +262,11 @@ Definition vyper_abi_size_bound_def:
     32 + n * vyper_abi_embedded_size env t ∧
   vyper_abi_size_bound env (ArrayT t (Fixed n)) =
     n * vyper_abi_embedded_size env t ∧
-  vyper_abi_size_bound env (StructT id) =
-    (let nid = string_to_num id in
-     case FLOOKUP env nid of
+  vyper_abi_size_bound env (StructT nsid) =
+    (let key = type_key nsid in
+     case FLOOKUP env key of
      | SOME (StructArgs args) =>
-         vyper_abi_size_bound_list (env \\ nid) (MAP SND args)
+         vyper_abi_size_bound_list (env \\ key) (MAP SND args)
      | _ => 0) ∧
   vyper_abi_size_bound env (FlagT _) = 32 ∧
   vyper_abi_size_bound env NoneT = 0 ∧
@@ -283,7 +285,7 @@ Termination
     | INR (INL (env, t)) => (CARD (FDOM env), 2 * type_size t + 1)
     (* vyper_abi_size_bound_list *)
     | INR (INR (env, ts)) => (CARD (FDOM env), 2 * list_size type_size ts))’
-  \\ rw[FLOOKUP_DEF]
+  \\ rw[FLOOKUP_DEF] >> gvs[type_key_def]
   \\ TRY (disj1_tac \\ CCONTR_TAC \\ fs[] \\ NO_TAC)
   \\ simp[type_size_def]
 End
@@ -301,6 +303,7 @@ val () = cv_auto_trans_rec vyper_abi_size_bound_def (
   \\ disj1_tac
   \\ pop_assum mp_tac
   \\ qmatch_goalsub_abbrev_tac `cv_lookup ck`
+  >> gvs[cv_type_key_def]
   \\ `cv_ispair ck = cv$Num 0`
   by (
     rw[Abbr`ck`, cv_string_to_num_def]
@@ -477,11 +480,11 @@ Definition vyper_to_abi_def[simp]:
          | NONE => NONE) ∧
   vyper_to_abi env (FlagT _) (FlagV n) = SOME (NumV n) ∧
   vyper_to_abi env NoneT NoneV = SOME (ListV []) ∧
-  vyper_to_abi env (StructT id) (StructV fields) =
-    (let nid = string_to_num id in
-     case FLOOKUP env nid of
+  vyper_to_abi env (StructT nsid) (StructV fields) =
+    (let key = type_key nsid in
+     case FLOOKUP env key of
      | SOME (StructArgs args) =>
-         (case vyper_to_abi_list (env \\ nid) (MAP SND args) (MAP SND fields) of
+         (case vyper_to_abi_list (env \\ key) (MAP SND args) (MAP SND fields) of
           | SOME avs => SOME (ListV avs)
           | NONE => NONE)
      | _ => NONE) ∧
@@ -638,6 +641,7 @@ val vyper_to_abi_pre_def = cv_auto_trans_pre_rec
       \\ gvs[]
       \\ NO_TAC)
   (* Handle StructT cv_delete - first try the disjunction case *)
+  >> gvs[cv_type_key_def]
   \\ TRY (
       disj1_tac
       \\ pop_assum mp_tac

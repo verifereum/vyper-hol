@@ -161,7 +161,7 @@ Definition env_context_consistent_def:
     (!src fid ls.
        FLOOKUP env.flag_members (src, fid) = SOME ls ==>
        ?ts. get_module_code cx src = SOME ts /\ lookup_flag fid ts = SOME ls /\
-            FLOOKUP (get_tenv cx) (string_to_num fid) = SOME (FlagArgs (LENGTH ls)))
+            FLOOKUP (get_tenv cx) (type_key (src,fid)) = SOME (FlagArgs (LENGTH ls)))
 End
 
 Theorem env_context_consistent_static_completeness:
@@ -306,7 +306,7 @@ Definition functions_well_typed_def:
       (!src fid ls.
          FLOOKUP flag_members (src,fid) = SOME ls ==>
          ?ts. get_module_code cx src = SOME ts /\ lookup_flag fid ts = SOME ls /\
-              FLOOKUP (get_tenv cx) (string_to_num fid) = SOME (FlagArgs (LENGTH ls))) ==>
+              FLOOKUP (get_tenv cx) (type_key (src,fid)) = SOME (FlagArgs (LENGTH ls))) ==>
       !src_id_opt fn ts fm nr args dflts ret body.
         get_module_code cx src_id_opt = SOME ts /\
         lookup_callable_function cx.in_deploy fn ts = SOME (fm,nr,args,dflts,ret,body) ==>

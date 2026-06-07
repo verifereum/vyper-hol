@@ -781,7 +781,7 @@ Theorem env_context_consistent_static_maps_function_side_condition:
        FLOOKUP env_base.flag_members (src,fid) = SOME ls ==>
        ?ts. get_module_code cx src = SOME ts /\
             lookup_flag fid ts = SOME ls /\
-            FLOOKUP (get_tenv cx) (string_to_num fid) =
+            FLOOKUP (get_tenv cx) (type_key (src,fid)) =
               SOME (FlagArgs (LENGTH ls)))
 Proof
   rw[env_context_consistent_def]

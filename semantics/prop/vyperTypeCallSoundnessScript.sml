@@ -74,7 +74,7 @@ Theorem functions_well_typed_body:
   (!src fid ls.
      FLOOKUP flag_members (src,fid) = SOME ls ==>
      ?ts. get_module_code cx src = SOME ts /\ lookup_flag fid ts = SOME ls /\
-          FLOOKUP (get_tenv cx) (string_to_num fid) = SOME (FlagArgs (LENGTH ls))) ==>
+          FLOOKUP (get_tenv cx) (type_key (src,fid)) = SOME (FlagArgs (LENGTH ls))) ==>
   ?env_body ret_tv env_after.
     env_body.current_src = src /\
     env_body.type_defs = get_tenv cx /\

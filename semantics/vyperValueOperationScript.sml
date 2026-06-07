@@ -613,9 +613,8 @@ Definition evaluate_convert_def:
      if within_int_bound (Unsigned n) i
      then INL $ IntV i
      else INR (RuntimeError "convert flag uint bound")) ∧
-  evaluate_convert tenv (IntV i) (FlagT id) =
-    (let nid = string_to_num id in
-     case FLOOKUP tenv nid of SOME (FlagArgs m) =>
+  evaluate_convert tenv (IntV i) (FlagT nsid) =
+    (case FLOOKUP tenv (type_key nsid) of SOME (FlagArgs m) =>
        if 0 ≤ i ∧ Num i < 2 ** m then INL $ FlagV (Num i)
        else INR (RuntimeError "convert int flag bound")
      | _ => INR (TypeError "convert to unknown flag")) ∧

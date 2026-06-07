@@ -669,7 +669,10 @@ Triviality effect_free_direct_not_terminal[local]:
     (!a s'. step_inst_base inst s <> Abort a s') /\
     (!v s'. step_inst_base inst s <> IntRet v s')
 Proof
-  effect_free_not_terminal_tac
+  fs[step_inst_base_def] >>
+  rpt gen_tac >> strip_tac >>
+  asm_rewrite_tac[] >>
+  simp_tac(srw_ss())[AllCaseEqs()]
 QED
 
 Triviality effect_free_opcode_cases[local]:

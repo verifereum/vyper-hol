@@ -53,15 +53,15 @@ signature jsonASTLib = sig
   val JT_HashMap_tm : term
   val JT_None_tm : term
 
-  val mk_JT_Named : string -> term
+  val mk_JT_Named : term * string -> term
   val mk_JT_Integer : term * bool -> term
   val mk_JT_BytesM : term -> term
   val mk_JT_String : term -> term
   val mk_JT_Bytes : term -> term
   val mk_JT_StaticArray : term * term -> term
   val mk_JT_DynArray : term * term -> term
-  val mk_JT_Struct : string -> term
-  val mk_JT_Flag : string -> term
+  val mk_JT_Struct : term * string -> term
+  val mk_JT_Flag : term * string -> term
   val mk_JT_Tuple : term list -> term
   val mk_JT_HashMap : term * term -> term
 

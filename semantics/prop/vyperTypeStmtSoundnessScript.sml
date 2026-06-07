@@ -1264,7 +1264,7 @@ Theorem callable_body_typing_from_functions_well_typed[local]:
   (!src fid ls.
      FLOOKUP flag_members (src,fid) = SOME ls ==>
      ?ts. get_module_code cx src = SOME ts /\ lookup_flag fid ts = SOME ls /\
-          FLOOKUP (get_tenv cx) (string_to_num fid) = SOME (FlagArgs (LENGTH ls))) /\
+          FLOOKUP (get_tenv cx) (type_key (src,fid)) = SOME (FlagArgs (LENGTH ls))) /\
   get_module_code cx src_id_opt = SOME ts /\
   lookup_callable_function cx.in_deploy fn ts = SOME (fm,nr,args,dflts,ret,fn_body) ==>
   (nr ==> cx.nonreentrant_slot <> NONE) /\
@@ -7558,8 +7558,10 @@ Resume eval_all_type_sound_mutual[Expr_FlagMember]:
       gvs[env_consistent_def, env_context_consistent_def] >>
       qpat_x_assum `!src fid ls. FLOOKUP env.flag_members (src,fid) = SOME ls ==> _`
         (drule_then strip_assume_tac) >>
-      `LENGTH members <= 256` by
+      `LENGTH members <= 256` by (
+        qpat_x_assum `well_typed_expr env (FlagMember _ _ _)` mp_tac >>
         gvs[well_typed_expr_def, well_formed_type_def, evaluate_type_def] >>
+        decide_tac) >>
       qpat_x_assum `lookup_flag_mem _ _ _ _ = _` mp_tac >>
       simp[lookup_flag_mem_def, return_def, raise_def] >>
       Cases_on `INDEX_OF mid members` >> strip_tac >>
@@ -7837,12 +7839,12 @@ Proof
   first_x_assum (qspecl_then [`tenv`, `nid`] mp_tac) >> simp[]
 QED
 Theorem struct_lit_expr_result_typed[local]:
-  well_formed_type env.type_defs (StructT id) /\
-  FLOOKUP env.type_defs (string_to_num id) = SOME (StructArgs args) /\
+  well_formed_type env.type_defs (StructT nsid) /\
+  FLOOKUP env.type_defs (type_key nsid) = SOME (StructArgs args) /\
   MAP FST kes = MAP FST args /\
   MAP (expr_type o SND) kes = MAP SND args /\
   exprs_runtime_typed env (MAP SND kes) vs ==>
-  expr_result_typed env (StructLit (StructT id) (src_id_opt,id) kes)
+  expr_result_typed env (StructLit (StructT nsid) nsid kes)
     (Value (StructV (ZIP (MAP FST args,vs))))
 Proof
   rw[exprs_runtime_typed_def, expr_result_typed_def, expr_runtime_typed_def,
@@ -8971,7 +8973,7 @@ Proof
   gvs[get_Value_def, return_def, bind_def] >>
   `?field_tv. evaluate_type env.type_defs ty = SOME field_tv /\
               ALOOKUP (ZIP (MAP FST fields,tvs)) id = SOME field_tv` by (
-    qspecl_then [`env.type_defs`,`StructT s`,`id`,`ty`,
+    qspecl_then [`env.type_defs`,`StructT p`,`id`,`ty`,
                  `ZIP (MAP FST fields,tvs)`] mp_tac attribute_type_evaluates >>
     simp[attribute_type_def, evaluate_type_def]) >>
   drule_all evaluate_attribute_value_has_type >> strip_tac >>

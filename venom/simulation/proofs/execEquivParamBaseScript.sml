@@ -357,7 +357,11 @@ Theorem vsr_exec_pure1:
     lift_result R_ok R_term R_term (exec_pure1 f inst s1) (exec_pure1 f inst s2)
 Proof
   rw[exec_pure1_def] >> vsr_eval_ops_tac () >>
-  rpt (CASE_TAC >> gvs[lift_result_def]) >>
+  CASE_TAC >> gvs[lift_result_def] >>
+  CASE_TAC >> gvs[lift_result_def] >>
+  CASE_TAC >> gvs[lift_result_def] >>
+  CASE_TAC >> gvs[lift_result_def] >>
+  CASE_TAC >> gvs[lift_result_def] >>
   vsr_irule vsr_update_var_R_ok >> simp[]
 QED
 
@@ -369,7 +373,13 @@ Theorem vsr_exec_pure2:
     lift_result R_ok R_term R_term (exec_pure2 f inst s1) (exec_pure2 f inst s2)
 Proof
   rw[exec_pure2_def] >> vsr_eval_ops_tac () >>
-  rpt (CASE_TAC >> gvs[lift_result_def]) >>
+  CASE_TAC >> gvs[lift_result_def] >>
+  CASE_TAC >> gvs[lift_result_def] >>
+  CASE_TAC >> gvs[lift_result_def] >>
+  CASE_TAC >> gvs[lift_result_def] >>
+  CASE_TAC >> gvs[lift_result_def] >>
+  CASE_TAC >> gvs[lift_result_def] >>
+  CASE_TAC >> gvs[lift_result_def] >>
   vsr_irule vsr_update_var_R_ok >> simp[]
 QED
 
