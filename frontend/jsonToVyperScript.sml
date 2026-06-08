@@ -71,12 +71,16 @@ Definition ctx_consts_def:
   ctx_consts ctx = FST (SND ctx)
 End
 
+Definition ctx_current_nsid_def:
+  ctx_current_nsid ctx = FST (SND (SND ctx))
+End
+
 Definition ctx_import_map_def:
-  ctx_import_map ctx = FST (SND (SND ctx))
+  ctx_import_map ctx = FST (SND (SND (SND ctx)))
 End
 
 Definition ctx_all_import_maps_def:
-  ctx_all_import_maps ctx = SND (SND (SND ctx))
+  ctx_all_import_maps ctx = SND (SND (SND (SND ctx)))
 End
 
 Definition resolve_qualified_type_base_def:
@@ -97,6 +101,13 @@ Definition translate_type_ctx_def:
   (translate_type_ctx ctx (JT_StaticArray vt len) = ArrayT (translate_type_ctx ctx vt) (Fixed len)) ∧
   (translate_type_ctx ctx (JT_DynArray vt len) = ArrayT (translate_type_ctx ctx vt) (Dynamic len)) ∧
   (translate_type_ctx ctx (JT_Tuple tys) = TupleT (MAP (translate_type_ctx ctx) tys)) ∧
+  (translate_type_ctx ctx (JT_Struct NONE name) = StructT (ctx_current_nsid ctx, name)) ∧
+  (translate_type_ctx ctx (JT_Flag NONE name) = FlagT (ctx_current_nsid ctx, name)) ∧
+  (translate_type_ctx ctx (JT_Named NONE name) =
+     if name = "bool" then BaseT BoolT
+     else if name = "address" ∨ name = "self" then BaseT AddressT
+     else if name = "decimal" then BaseT DecimalT
+     else StructT (ctx_current_nsid ctx, name)) ∧
   (translate_type_ctx ctx (JT_Attribute base attr) =
     case resolve_qualified_type_base ctx base of
     | SOME src_id => StructT (SOME src_id, attr)
@@ -1569,15 +1580,16 @@ val () = cv_auto_trans filter_some_def;
 Definition translate_module_def:
   translate_module all_import_maps (JModule main_src_id toplevels) =
     let import_map = build_import_map (collect_imports toplevels) in
-    let ctx = (main_src_id, collect_consts_and_immutables toplevels, import_map, all_import_maps) in
+    let ctx = (main_src_id, collect_consts_and_immutables toplevels, NONE, import_map, all_import_maps) in
     filter_some (MAP (translate_toplevel ctx) toplevels)
 End
 
 Definition translate_imported_module_def:
   translate_imported_module all_import_maps main_src_id (JImportedModule src_id path body) =
+    let nsid = Num (src_id + &builtin_source_id_offset) in
     let import_map = build_import_map (collect_imports body) in
-    let ctx = (main_src_id, collect_consts_and_immutables body, import_map, all_import_maps) in
-    (SOME (Num (src_id + &builtin_source_id_offset)), filter_some (MAP (translate_toplevel ctx) body))
+    let ctx = (main_src_id, collect_consts_and_immutables body, SOME nsid, import_map, all_import_maps) in
+    (SOME nsid, filter_some (MAP (translate_toplevel ctx) body))
 End
 
 (* Extract toplevels from a JModule (needed to get import infos) *)
