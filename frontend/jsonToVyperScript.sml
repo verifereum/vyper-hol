@@ -67,90 +67,74 @@ End
 
 val () = cv_auto_trans translate_type_def;
 
-Definition ctx_consts_def:
-  ctx_consts ctx = FST (SND ctx)
+Definition tctx_current_nsid_def:
+  tctx_current_nsid tctx = FST (SND tctx)
 End
 
-Definition ctx_current_nsid_def:
-  ctx_current_nsid ctx = FST (SND (SND ctx))
-End
-
-Definition ctx_import_map_def:
-  ctx_import_map ctx = FST (SND (SND (SND ctx)))
-End
-
-Definition ctx_all_import_maps_def:
-  ctx_all_import_maps ctx = SND (SND (SND (SND ctx)))
+Definition tctx_import_map_def:
+  tctx_import_map tctx = SND (SND tctx)
 End
 
 Definition resolve_qualified_type_path_def:
-  (resolve_qualified_type_path ctx [] = NONE) ∧
-  (resolve_qualified_type_path ctx [alias] = ALOOKUP (ctx_import_map ctx) alias) ∧
-  (resolve_qualified_type_path ctx (alias::next::rest) =
-    case ALOOKUP (ctx_import_map ctx) alias of
+  (resolve_qualified_type_path all_import_maps tctx [] = NONE) ∧
+  (resolve_qualified_type_path all_import_maps tctx [alias] = ALOOKUP (tctx_import_map tctx) alias) ∧
+  (resolve_qualified_type_path all_import_maps tctx (alias::next::rest) =
+    case ALOOKUP (tctx_import_map tctx) alias of
     | NONE => NONE
     | SOME parent_src_id =>
-        case ALOOKUP (ctx_all_import_maps ctx) parent_src_id of
+        case ALOOKUP all_import_maps parent_src_id of
         | NONE => NONE
-        | SOME parent_import_map => resolve_qualified_type_path (FST ctx, ctx_consts ctx, SOME parent_src_id, parent_import_map, ctx_all_import_maps ctx) (next::rest))
+        | SOME parent_import_map => resolve_qualified_type_path all_import_maps (FST tctx, SOME parent_src_id, parent_import_map) (next::rest))
 Termination
-  WF_REL_TAC `measure (λ(_,path). LENGTH path)` >> simp[]
+  WF_REL_TAC `measure (λ(_,_,path). LENGTH path)` >> simp[]
 End
 
 Definition translate_type_ctx_def:
   (translate_type_ctx ctx (JT_StaticArray vt len) = ArrayT (translate_type_ctx ctx vt) (Fixed len)) ∧
   (translate_type_ctx ctx (JT_DynArray vt len) = ArrayT (translate_type_ctx ctx vt) (Dynamic len)) ∧
   (translate_type_ctx ctx (JT_Tuple tys) = TupleT (MAP (translate_type_ctx ctx) tys)) ∧
-  (translate_type_ctx ctx (JT_Struct NONE name) = StructT (ctx_current_nsid ctx, name)) ∧
-  (translate_type_ctx ctx (JT_Flag NONE name) = FlagT (ctx_current_nsid ctx, name)) ∧
+  (translate_type_ctx ctx (JT_Struct NONE name) = StructT (tctx_current_nsid ctx, name)) ∧
+  (translate_type_ctx ctx (JT_Flag NONE name) = FlagT (tctx_current_nsid ctx, name)) ∧
   (translate_type_ctx ctx (JT_Named NONE name) =
      if name = "bool" then BaseT BoolT
      else if name = "address" ∨ name = "self" then BaseT AddressT
      else if name = "decimal" then BaseT DecimalT
-     else StructT (ctx_current_nsid ctx, name)) ∧
-  (translate_type_ctx ctx (JT_Qualified path name) =
-    case resolve_qualified_type_path ctx path of
-    | SOME src_id => StructT (SOME src_id, name)
-    | NONE => translate_type (FST ctx) (JT_Qualified path name)) ∧
+     else StructT (tctx_current_nsid ctx, name)) ∧
+  (translate_type_ctx ctx (JT_Qualified path name) = translate_type (FST ctx) (JT_Qualified path name)) ∧
   (translate_type_ctx ctx ty = translate_type (FST ctx) ty)
 Termination
   WF_REL_TAC `measure (λ(_,ty). json_type_size ty)` >> simp[]
 End
 
+Definition translate_qualified_annotation_def:
+  translate_qualified_annotation all_import_maps ctx inferred path attr =
+    case inferred of
+    | JT_Flag _ name =>
+        if attr = name then
+          case resolve_qualified_type_path all_import_maps ctx path of
+          | SOME src_id => FlagT (SOME src_id, name)
+          | NONE => translate_type_ctx ctx (JT_Flag NONE name)
+        else translate_type_ctx ctx inferred
+    | JT_Struct _ name =>
+        if attr = name then
+          case resolve_qualified_type_path all_import_maps ctx path of
+          | SOME src_id => StructT (SOME src_id, name)
+          | NONE => translate_type_ctx ctx (JT_Struct NONE name)
+        else translate_type_ctx ctx inferred
+    | JT_Named _ name =>
+        if attr = name then
+          case resolve_qualified_type_path all_import_maps ctx path of
+          | SOME src_id => StructT (SOME src_id, name)
+          | NONE => translate_type_ctx ctx (JT_Named NONE name)
+        else translate_type_ctx ctx inferred
+    | _ => translate_type_ctx ctx inferred
+End
+
 Definition translate_type_with_annotation_def:
-  (translate_type_with_annotation ctx (JT_StaticArray vt len) (JT_StaticArray avt alen) =
-    ArrayT (translate_type_with_annotation ctx vt avt) (Fixed len)) ∧
-  (translate_type_with_annotation ctx (JT_DynArray vt len) (JT_DynArray avt alen) =
-    ArrayT (translate_type_with_annotation ctx vt avt) (Dynamic len)) ∧
-  (translate_type_with_annotation ctx (JT_Tuple tys) (JT_Tuple anns) =
-    TupleT (translate_type_with_annotation_list ctx tys anns)) ∧
-  (translate_type_with_annotation ctx (JT_Flag _ name) (JT_Qualified path attr) =
-    if attr = name then
-      case resolve_qualified_type_path ctx path of
-      | SOME src_id => FlagT (SOME src_id, name)
-      | NONE => translate_type_ctx ctx (JT_Flag NONE name)
-    else translate_type_ctx ctx (JT_Flag NONE name)) ∧
-  (translate_type_with_annotation ctx (JT_Struct _ name) (JT_Qualified path attr) =
-    if attr = name then
-      case resolve_qualified_type_path ctx path of
-      | SOME src_id => StructT (SOME src_id, name)
-      | NONE => translate_type_ctx ctx (JT_Struct NONE name)
-    else translate_type_ctx ctx (JT_Struct NONE name)) ∧
-  (translate_type_with_annotation ctx (JT_Named _ name) (JT_Qualified path attr) =
-    if attr = name then
-      case resolve_qualified_type_path ctx path of
-      | SOME src_id => StructT (SOME src_id, name)
-      | NONE => translate_type_ctx ctx (JT_Named NONE name)
-    else translate_type_ctx ctx (JT_Named NONE name)) ∧
-  (translate_type_with_annotation ctx inferred ann = translate_type_ctx ctx inferred) ∧
-  (translate_type_with_annotation_list ctx [] [] = []) ∧
-  (translate_type_with_annotation_list ctx (ty::tys) (ann::anns) =
-    translate_type_with_annotation ctx ty ann :: translate_type_with_annotation_list ctx tys anns) ∧
-  (translate_type_with_annotation_list ctx tys anns = MAP (translate_type_ctx ctx) tys)
-Termination
-  WF_REL_TAC `measure (λx. case x of
-    | INL (ctx,inferred,ann) => json_type_size inferred + json_type_size ann
-    | INR (ctx,tys,anns) => list_size json_type_size tys + list_size json_type_size anns)` >> simp[]
+  translate_type_with_annotation all_import_maps ctx inferred ann =
+    case ann of
+    | JT_Qualified path attr => translate_qualified_annotation all_import_maps ctx inferred path attr
+    | _ => translate_type_ctx ctx inferred
 End
 
 (* ===== Helper: int_bound from type ===== *)
@@ -700,13 +684,13 @@ val () = cv_auto_trans collect_consts_and_immutables_def;
 (* Make Name or BareGlobalName based on constants/immutables list *)
 Definition make_name_def:
   make_name ctx ty id =
-    if MEM id (ctx_consts ctx) then BareGlobalName ty id else Name ty id
+    if MEM id (SND ctx) then BareGlobalName ty id else Name ty id
 End
 
 (* Make NameTarget or BareGlobalNameTarget based on constants/immutables list *)
 Definition make_name_target_def:
   make_name_target ctx id =
-    if MEM id (ctx_consts ctx) then BareGlobalNameTarget id else NameTarget id
+    if MEM id (SND ctx) then BareGlobalNameTarget id else NameTarget id
 End
 
 (* ===== Expression Translation ===== *)
@@ -1052,10 +1036,10 @@ val () = cv_auto_trans get_iter_bound_def;
 
 Definition translate_iter_def:
   (translate_iter ctx var_ty (JIter_Range [] _ _) =
-    Range (Literal (translate_type_ctx ctx var_ty) (IntL (integer$int_of_num 0)))
-          (Literal (translate_type_ctx ctx var_ty) (IntL (integer$int_of_num 0)))) /\
+    Range (Literal (translate_type (FST ctx) var_ty) (IntL (integer$int_of_num 0)))
+          (Literal (translate_type (FST ctx) var_ty) (IntL (integer$int_of_num 0)))) /\
   (translate_iter ctx var_ty (JIter_Range [e] _ _) =
-    Range (Literal (translate_type_ctx ctx var_ty) (IntL (integer$int_of_num 0)))
+    Range (Literal (translate_type (FST ctx) var_ty) (IntL (integer$int_of_num 0)))
           (translate_expr ctx e)) /\
   (translate_iter ctx var_ty (JIter_Range (s::e::_) _ _) =
     Range (translate_expr ctx s) (translate_expr ctx e)) /\
@@ -1087,12 +1071,12 @@ Definition translate_stmt_def:
        (MAP (translate_stmt ctx) body)
        (MAP (translate_stmt ctx) orelse)) /\
   (translate_stmt ctx (JS_For var ty iter body) =
-    For var (translate_type_ctx ctx ty) (translate_iter ctx ty iter)
+    For var (translate_type (FST ctx) ty) (translate_iter ctx ty iter)
         (get_iter_bound iter) (MAP (translate_stmt ctx) body)) /\
   (translate_stmt ctx (JS_Assign tgt val) =
     Assign (translate_target ctx tgt) (translate_expr ctx val)) /\
   (translate_stmt ctx (JS_AnnAssign var ty val) =
-    AnnAssign var (translate_type_ctx ctx ty) (translate_expr ctx val)) /\
+    AnnAssign var (translate_type (FST ctx) ty) (translate_expr ctx val)) /\
   (translate_stmt ctx (JS_AugAssign tgt op val) =
     AugAssign (expr_type (translate_expr ctx val))
       (translate_base_target ctx tgt) (translate_binop op) (translate_expr ctx val)) /\
@@ -1167,12 +1151,12 @@ End
 val () = cv_auto_trans translate_args_with_types_def;
 
 Definition translate_args_with_types_ctx_def:
-  translate_args_with_types_ctx ctx args tys =
+  translate_args_with_types_ctx all_import_maps ctx args tys =
     case (args, tys) of
       ([], []) => []
     | (JArg name ann :: args', ty :: tys') =>
-        (name, translate_type_with_annotation ctx ty ann) ::
-        translate_args_with_types_ctx ctx args' tys'
+        (name, translate_type_with_annotation all_import_maps ctx ty ann) ::
+        translate_args_with_types_ctx all_import_maps ctx args' tys'
     | _ => MAP (translate_arg_ctx ctx) args
 End
 
@@ -1208,54 +1192,54 @@ End
 (* val () = cv_auto_trans translate_var_mutability_def; *)
 
 Definition translate_toplevel_def:
-  (translate_toplevel ctx (JTL_FunctionDef name decs args defaults (JFuncType arg_tys ret_ty) ret_ann body) =
+  (translate_toplevel all_import_maps expr_ctx type_ctx (JTL_FunctionDef name decs args defaults (JFuncType arg_tys ret_ty) ret_ann body) =
     SOME (FunctionDecl
       (translate_visibility decs)
       (translate_mutability decs)
       (MEM "nonreentrant" decs)
       (MEM "raw_return" decs)
       name
-      (translate_args_with_types_ctx ctx args arg_tys)
-      (MAP (translate_expr ctx) defaults)
-      (translate_type_with_annotation ctx ret_ty ret_ann)
-      (MAP (translate_stmt ctx) body))) /\
+      (translate_args_with_types_ctx all_import_maps type_ctx args arg_tys)
+      (MAP (translate_expr expr_ctx) defaults)
+      (translate_type_with_annotation all_import_maps type_ctx ret_ty ret_ann)
+      (MAP (translate_stmt expr_ctx) body))) /\
 
-  (translate_toplevel ctx (JTL_VariableDecl name ty ann_ty is_public is_immutable is_transient const_val) =
+  (translate_toplevel all_import_maps expr_ctx type_ctx (JTL_VariableDecl name ty ann_ty is_public is_immutable is_transient const_val) =
     SOME (VariableDecl
       (if is_public then Public else Private)
-      (translate_var_mutability ctx is_immutable is_transient
+      (translate_var_mutability expr_ctx is_immutable is_transient
         (case const_val of SOME _ => T | NONE => F) const_val)
       name
-      (translate_type_with_annotation ctx ty ann_ty)
+      (translate_type_with_annotation all_import_maps type_ctx ty ann_ty)
       NONE)) /\
 
-  (translate_toplevel ctx (JTL_HashMapDecl name key_ty val_ty is_public is_transient) =
+  (translate_toplevel all_import_maps expr_ctx type_ctx (JTL_HashMapDecl name key_ty val_ty is_public is_transient) =
     SOME (HashMapDecl
       (if is_public then Public else Private)
       is_transient
       name
-      (translate_type_ctx ctx key_ty)
-      (translate_value_type_ctx ctx val_ty)
+      (translate_type_ctx type_ctx key_ty)
+      (translate_value_type_ctx type_ctx val_ty)
       NONE)) /\
 
-  (translate_toplevel ctx (JTL_EventDef name args) =
-    SOME (EventDecl name (MAP (λ(a,idx). (translate_arg_ctx ctx a, idx)) args))) /\
+  (translate_toplevel all_import_maps expr_ctx type_ctx (JTL_EventDef name args) =
+    SOME (EventDecl name (MAP (λ(a,idx). (translate_arg_ctx type_ctx a, idx)) args))) /\
 
-  (translate_toplevel ctx (JTL_StructDef name args) =
-    SOME (StructDecl name (MAP (translate_arg_ctx ctx) args))) /\
+  (translate_toplevel all_import_maps expr_ctx type_ctx (JTL_StructDef name args) =
+    SOME (StructDecl name (MAP (translate_arg_ctx type_ctx) args))) /\
 
-  (translate_toplevel ctx (JTL_FlagDef name members) =
+  (translate_toplevel all_import_maps expr_ctx type_ctx (JTL_FlagDef name members) =
     SOME (FlagDecl name members)) /\
 
-  (translate_toplevel ctx (JTL_InterfaceDef name funcs) =
-    SOME (InterfaceDecl name (MAP (translate_interface_func_ctx ctx) funcs))) /\
+  (translate_toplevel all_import_maps expr_ctx type_ctx (JTL_InterfaceDef name funcs) =
+    SOME (InterfaceDecl name (MAP (translate_interface_func_ctx type_ctx) funcs))) /\
 
   (* Module declarations are compiled away - the imported content is already inlined *)
-  (translate_toplevel ctx (JTL_Import _) = NONE) /\
-  (translate_toplevel ctx (JTL_ExportsDecl _) = NONE) /\
-  (translate_toplevel ctx (JTL_InitializesDecl _) = NONE) /\
-  (translate_toplevel ctx (JTL_UsesDecl _) = NONE) /\
-  (translate_toplevel ctx (JTL_ImplementsDecl _) = NONE)
+  (translate_toplevel all_import_maps expr_ctx type_ctx (JTL_Import _) = NONE) /\
+  (translate_toplevel all_import_maps expr_ctx type_ctx (JTL_ExportsDecl _) = NONE) /\
+  (translate_toplevel all_import_maps expr_ctx type_ctx (JTL_InitializesDecl _) = NONE) /\
+  (translate_toplevel all_import_maps expr_ctx type_ctx (JTL_UsesDecl _) = NONE) /\
+  (translate_toplevel all_import_maps expr_ctx type_ctx (JTL_ImplementsDecl _) = NONE)
 End
 
 (* val () = cv_auto_trans translate_toplevel_def; *)
@@ -1559,12 +1543,16 @@ Definition build_exports_map_def:
 End
 
 (* Main function: extract exports from main module given imports *)
-Definition extract_exports_def:
-  extract_exports (JModule _ toplevels) imports =
-    let all_import_maps = build_all_import_maps imports in
+Definition extract_exports_with_import_maps_def:
+  extract_exports_with_import_maps all_import_maps (JModule _ toplevels) imports =
     let exports_map = build_exports_map all_import_maps imports [] imports in
     let import_map = build_import_map (collect_imports toplevels) in
     expand_exports_from_toplevels exports_map all_import_maps imports import_map toplevels
+End
+
+Definition extract_exports_def:
+  extract_exports main imports =
+    extract_exports_with_import_maps (build_all_import_maps imports) main imports
 End
 
 (* ===== Module Translation ===== *)
@@ -1580,16 +1568,18 @@ val () = cv_auto_trans filter_some_def;
 Definition translate_module_def:
   translate_module all_import_maps (JModule main_src_id toplevels) =
     let import_map = build_import_map (collect_imports toplevels) in
-    let ctx = (main_src_id, collect_consts_and_immutables toplevels, NONE, import_map, all_import_maps) in
-    filter_some (MAP (translate_toplevel ctx) toplevels)
+    let expr_ctx = (main_src_id, collect_consts_and_immutables toplevels) in
+    let type_ctx = (main_src_id, NONE, import_map) in
+    filter_some (MAP (translate_toplevel all_import_maps expr_ctx type_ctx) toplevels)
 End
 
 Definition translate_imported_module_def:
   translate_imported_module all_import_maps main_src_id (JImportedModule src_id path body) =
     let nsid = Num (src_id + &builtin_source_id_offset) in
     let import_map = build_import_map (collect_imports body) in
-    let ctx = (main_src_id, collect_consts_and_immutables body, SOME nsid, import_map, all_import_maps) in
-    (SOME nsid, filter_some (MAP (translate_toplevel ctx) body))
+    let expr_ctx = (main_src_id, collect_consts_and_immutables body) in
+    let type_ctx = (main_src_id, SOME nsid, import_map) in
+    (SOME nsid, filter_some (MAP (translate_toplevel all_import_maps expr_ctx type_ctx) body))
 End
 
 (* Extract toplevels from a JModule (needed to get import infos) *)
@@ -1642,7 +1632,7 @@ Definition translate_annotated_ast_def:
     let import_map = build_import_map import_infos in
     let all_import_maps = build_all_import_maps imports in
     let sources = (NONE, translate_module all_import_maps main) :: MAP (translate_imported_module all_import_maps main_src_id) imports in
-    let exports = extract_exports main imports in
+    let exports = extract_exports_with_import_maps all_import_maps main imports in
     SOME (sources, exports, import_map)
 End
 

@@ -1104,7 +1104,7 @@ val json_toplevel : term decoder = achoose "toplevel" [
 
   (* VariableDecl (non-hashmap) *)
   check_ast_type "VariableDecl" $
-    JSONDecode.map (fn (((n, t), ann_ty), (p, i), (tr, v)) =>
+    JSONDecode.map (fn ((n, t), ann_ty, (p, i), (tr, v)) =>
       mk_JTL_VariableDecl(n, t, ann_ty, p, i, tr, v)) $
     tuple4 (
       tuple2 (
