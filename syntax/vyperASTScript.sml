@@ -9,9 +9,15 @@ Type identifier = “:string”;
 (* Namespaced identifier: (source_id, name) where NONE = self, SOME n = module *)
 Type nsid = “:num option # identifier”;
 
+Definition pair_num_def:
+  pair_num (x:num) y = if x < y then y * y + x else x * x + x + y
+End
+
+val () = cv_auto_trans pair_num_def;
+
 Definition type_key_def:
-  type_key (NONE, name) = vyperMisc$string_to_num name ∧
-  type_key (SOME n, name) = vyperMisc$string_to_num (toString n ++ "." ++ name)
+  type_key (NONE, name) = 2 * vyperMisc$string_to_num name ∧
+  type_key (SOME n, name) = 2 * pair_num n (vyperMisc$string_to_num name) + 1
 End
 
 val () = cv_auto_trans type_key_def;

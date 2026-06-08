@@ -135,10 +135,9 @@ val () = cv_auto_trans_rec evaluate_type_def (
   by (
     rw[Abbr`ck`, cv_string_to_num_def]
     \\ rw[Once keccakTheory.cv_l2n_def]
-  >> goalStack.print_tac "hih3"
-    \\ rw[cv_ispair_cv_add] )
+    \\ rw[cv_ispair_cv_add, cv_ispair_cv_mul]
+  )
   \\ pop_assum mp_tac
-  >> goalStack.print_tac "hih2"
   \\ qid_spec_tac`cv_tenv`
   \\ qid_spec_tac`ck`
   \\ rpt (pop_assum kall_tac)
@@ -156,7 +155,6 @@ val () = cv_auto_trans_rec evaluate_type_def (
     \\ simp[Once cv_delete_def]
     \\ rw[Once cv_stdTheory.cv_size'_def]
     \\ rw[Once cv_stdTheory.cv_size'_def] )
-  >> goalStack.print_tac "hih"
   \\ Cases_on`cv_tenv` \\ gs[]
   \\ Cases_on`ck` \\ gs[]
   \\ strip_tac

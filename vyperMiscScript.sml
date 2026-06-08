@@ -383,6 +383,14 @@ Proof
   \\ metis_tac[]
 QED
 
+Theorem cv_ispair_cv_mul:
+  cv_ispair (cv_mul x y) = cv$Num 0
+Proof
+  Cases_on`x` >>
+  Cases_on`y` >>
+  rw[cv_mul_def]
+QED
+
 Theorem option_CASE_rator =
   DatatypeSimps.mk_case_rator_thm_tyinfo
     (Option.valOf (TypeBase.read {Thy="option",Tyop="option"}));
