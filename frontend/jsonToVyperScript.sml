@@ -48,7 +48,7 @@ Definition translate_type_def:
   (translate_type main_src_id (JT_DynArray vt len) = ArrayT (translate_type main_src_id vt) (Dynamic len)) /\
   (translate_type main_src_id (JT_Struct src_id_opt name) = StructT (source_id_opt_to_nsid main_src_id src_id_opt name)) /\
   (translate_type main_src_id (JT_Flag src_id_opt name) = FlagT (source_id_opt_to_nsid main_src_id src_id_opt name)) /\
-  (translate_type main_src_id (JT_Attribute _ attr) = StructT (NONE, attr)) /\
+  (translate_type main_src_id (JT_Qualified _ name) = StructT (NONE, name)) /\
   (translate_type main_src_id (JT_Tuple tys) = TupleT (translate_type_list main_src_id tys)) /\
   (translate_type main_src_id (JT_HashMap _ _) = NoneT) /\
   (translate_type main_src_id JT_None = NoneT) /\
@@ -83,18 +83,18 @@ Definition ctx_all_import_maps_def:
   ctx_all_import_maps ctx = SND (SND (SND (SND ctx)))
 End
 
-Definition resolve_qualified_type_base_def:
-  (resolve_qualified_type_base ctx (JT_Named _ alias) = ALOOKUP (ctx_import_map ctx) alias) ∧
-  (resolve_qualified_type_base ctx (JT_Attribute base alias) =
-    case resolve_qualified_type_base ctx base of
+Definition resolve_qualified_type_path_def:
+  (resolve_qualified_type_path ctx [] = NONE) ∧
+  (resolve_qualified_type_path ctx [alias] = ALOOKUP (ctx_import_map ctx) alias) ∧
+  (resolve_qualified_type_path ctx (alias::next::rest) =
+    case ALOOKUP (ctx_import_map ctx) alias of
     | NONE => NONE
     | SOME parent_src_id =>
         case ALOOKUP (ctx_all_import_maps ctx) parent_src_id of
         | NONE => NONE
-        | SOME parent_import_map => ALOOKUP parent_import_map alias) ∧
-  (resolve_qualified_type_base ctx _ = NONE)
+        | SOME parent_import_map => resolve_qualified_type_path (FST ctx, ctx_consts ctx, SOME parent_src_id, parent_import_map, ctx_all_import_maps ctx) (next::rest))
 Termination
-  WF_REL_TAC `measure (λ(_,ty). json_type_size ty)` >> simp[]
+  WF_REL_TAC `measure (λ(_,path). LENGTH path)` >> simp[]
 End
 
 Definition translate_type_ctx_def:
@@ -108,10 +108,10 @@ Definition translate_type_ctx_def:
      else if name = "address" ∨ name = "self" then BaseT AddressT
      else if name = "decimal" then BaseT DecimalT
      else StructT (ctx_current_nsid ctx, name)) ∧
-  (translate_type_ctx ctx (JT_Attribute base attr) =
-    case resolve_qualified_type_base ctx base of
-    | SOME src_id => StructT (SOME src_id, attr)
-    | NONE => translate_type (FST ctx) (JT_Attribute base attr)) ∧
+  (translate_type_ctx ctx (JT_Qualified path name) =
+    case resolve_qualified_type_path ctx path of
+    | SOME src_id => StructT (SOME src_id, name)
+    | NONE => translate_type (FST ctx) (JT_Qualified path name)) ∧
   (translate_type_ctx ctx ty = translate_type (FST ctx) ty)
 Termination
   WF_REL_TAC `measure (λ(_,ty). json_type_size ty)` >> simp[]
@@ -124,21 +124,21 @@ Definition translate_type_with_annotation_def:
     ArrayT (translate_type_with_annotation ctx vt avt) (Dynamic len)) ∧
   (translate_type_with_annotation ctx (JT_Tuple tys) (JT_Tuple anns) =
     TupleT (translate_type_with_annotation_list ctx tys anns)) ∧
-  (translate_type_with_annotation ctx (JT_Flag _ name) (JT_Attribute base attr) =
+  (translate_type_with_annotation ctx (JT_Flag _ name) (JT_Qualified path attr) =
     if attr = name then
-      case resolve_qualified_type_base ctx base of
+      case resolve_qualified_type_path ctx path of
       | SOME src_id => FlagT (SOME src_id, name)
       | NONE => translate_type_ctx ctx (JT_Flag NONE name)
     else translate_type_ctx ctx (JT_Flag NONE name)) ∧
-  (translate_type_with_annotation ctx (JT_Struct _ name) (JT_Attribute base attr) =
+  (translate_type_with_annotation ctx (JT_Struct _ name) (JT_Qualified path attr) =
     if attr = name then
-      case resolve_qualified_type_base ctx base of
+      case resolve_qualified_type_path ctx path of
       | SOME src_id => StructT (SOME src_id, name)
       | NONE => translate_type_ctx ctx (JT_Struct NONE name)
     else translate_type_ctx ctx (JT_Struct NONE name)) ∧
-  (translate_type_with_annotation ctx (JT_Named _ name) (JT_Attribute base attr) =
+  (translate_type_with_annotation ctx (JT_Named _ name) (JT_Qualified path attr) =
     if attr = name then
-      case resolve_qualified_type_base ctx base of
+      case resolve_qualified_type_path ctx path of
       | SOME src_id => StructT (SOME src_id, name)
       | NONE => translate_type_ctx ctx (JT_Named NONE name)
     else translate_type_ctx ctx (JT_Named NONE name)) ∧
@@ -690,8 +690,8 @@ Definition collect_consts_and_immutables_def:
   collect_consts_and_immutables [] = [] ∧
   collect_consts_and_immutables (t :: rest) =
     (case t of
-       JTL_VariableDecl name _ _ T _ _ => name :: collect_consts_and_immutables rest
-     | JTL_VariableDecl name _ _ _ _ (SOME _) => name :: collect_consts_and_immutables rest
+       JTL_VariableDecl name _ _ _ T _ _ => name :: collect_consts_and_immutables rest
+     | JTL_VariableDecl name _ _ _ _ _ (SOME _) => name :: collect_consts_and_immutables rest
      | _ => collect_consts_and_immutables rest)
 End
 
@@ -1220,13 +1220,13 @@ Definition translate_toplevel_def:
       (translate_type_with_annotation ctx ret_ty ret_ann)
       (MAP (translate_stmt ctx) body))) /\
 
-  (translate_toplevel ctx (JTL_VariableDecl name ty is_public is_immutable is_transient const_val) =
+  (translate_toplevel ctx (JTL_VariableDecl name ty ann_ty is_public is_immutable is_transient const_val) =
     SOME (VariableDecl
       (if is_public then Public else Private)
       (translate_var_mutability ctx is_immutable is_transient
         (case const_val of SOME _ => T | NONE => F) const_val)
       name
-      (translate_type_ctx ctx ty)
+      (translate_type_with_annotation ctx ty ann_ty)
       NONE)) /\
 
   (translate_toplevel ctx (JTL_HashMapDecl name key_ty val_ty is_public is_transient) =
@@ -1350,7 +1350,7 @@ End
 
 (* Get name of a public variable or hashmap (generates an external getter) *)
 Definition get_public_var_name_def:
-  get_public_var_name (JTL_VariableDecl name _ T _ _ _) = SOME name ∧
+  get_public_var_name (JTL_VariableDecl name _ _ T _ _ _) = SOME name ∧
   get_public_var_name (JTL_HashMapDecl name _ _ T _) = SOME name ∧
   get_public_var_name _ = NONE
 End
