@@ -35,6 +35,7 @@ Datatype:
   | JT_DynArray json_type num                 (* value_type, length *)
   | JT_Struct (int option) string             (* optional declaration source_id, name *)
   | JT_Flag (int option) string               (* optional declaration source_id, name *)
+  | JT_Qualified (string list) string         (* qualified annotation: path.name *)
   | JT_Tuple (json_type list)                 (* member_types *)
   | JT_HashMap json_type json_type            (* key_type, value_type *)
   | JT_None                                   (* null type *)
@@ -176,10 +177,10 @@ End
 
 Datatype:
   json_toplevel
-  = JTL_FunctionDef string (string list) (json_arg list) (json_expr list) json_func_type (json_stmt list)
-      (* name, decorators, args, defaults, func_type, body *)
-  | JTL_VariableDecl string json_type bool bool bool (json_expr option)
-      (* name, type, is_public, is_immutable, is_transient, value (for constants) *)
+  = JTL_FunctionDef string (string list) (json_arg list) (json_expr list) json_func_type json_type (json_stmt list)
+      (* name, decorators, args, defaults, func_type, syntactic return annotation, body *)
+  | JTL_VariableDecl string json_type json_type bool bool bool (json_expr option)
+      (* name, inferred type, syntactic annotation, is_public, is_immutable, is_transient, value (for constants) *)
   | JTL_HashMapDecl string json_type json_value_type bool bool
       (* name, key_type, value_type, is_public, is_transient *)
   | JTL_EventDef string ((json_arg # bool) list)  (* bool = indexed *)

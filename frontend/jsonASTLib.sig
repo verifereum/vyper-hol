@@ -49,6 +49,7 @@ signature jsonASTLib = sig
   val JT_DynArray_tm : term
   val JT_Struct_tm : term
   val JT_Flag_tm : term
+  val JT_Qualified_tm : term
   val JT_Tuple_tm : term
   val JT_HashMap_tm : term
   val JT_None_tm : term
@@ -62,6 +63,7 @@ signature jsonASTLib = sig
   val mk_JT_DynArray : term * term -> term
   val mk_JT_Struct : term * string -> term
   val mk_JT_Flag : term * string -> term
+  val mk_JT_Qualified : string list * string -> term
   val mk_JT_Tuple : term list -> term
   val mk_JT_HashMap : term * term -> term
 
@@ -212,8 +214,8 @@ signature jsonASTLib = sig
   val mk_JFuncType : term list * term -> term
   val mk_JVT_Type : term -> term
   val mk_JVT_HashMap : term * term -> term
-  val mk_JTL_FunctionDef : string * string list * term list * term list * term * term list -> term
-  val mk_JTL_VariableDecl : string * term * bool * bool * bool * term option -> term
+  val mk_JTL_FunctionDef : string * string list * term list * term list * term * term * term list -> term
+  val mk_JTL_VariableDecl : string * term * term * bool * bool * bool * term option -> term
   val mk_JTL_HashMapDecl : string * term * term * bool * bool -> term
   val mk_JTL_EventDef : string * term list -> term
   val mk_JTL_StructDef : string * term list -> term

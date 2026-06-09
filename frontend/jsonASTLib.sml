@@ -73,6 +73,7 @@ val JT_StaticArray_tm = jastk "JT_StaticArray"
 val JT_DynArray_tm = jastk "JT_DynArray"
 val JT_Struct_tm = jastk "JT_Struct"
 val JT_Flag_tm = jastk "JT_Flag"
+val JT_Qualified_tm = jastk "JT_Qualified"
 val JT_Tuple_tm = jastk "JT_Tuple"
 val JT_HashMap_tm = jastk "JT_HashMap"
 val JT_None_tm = jastk "JT_None"
@@ -87,6 +88,8 @@ fun mk_JT_StaticArray (vt, len) = list_mk_comb(JT_StaticArray_tm, [vt, len])
 fun mk_JT_DynArray (vt, len) = list_mk_comb(JT_DynArray_tm, [vt, len])
 fun mk_JT_Struct (sid_opt, s) = list_mk_comb(JT_Struct_tm, [sid_opt, fromMLstring s])
 fun mk_JT_Flag (sid_opt, s) = list_mk_comb(JT_Flag_tm, [sid_opt, fromMLstring s])
+fun mk_JT_Qualified (path, name) =
+  list_mk_comb(JT_Qualified_tm, [mk_list(List.map fromMLstring path, string_ty), fromMLstring name])
 fun mk_JT_Tuple ts = mk_comb(JT_Tuple_tm, mk_list(ts, json_type_ty))
 fun mk_JT_HashMap (kt, vt) = list_mk_comb(JT_HashMap_tm, [kt, vt])
 
@@ -278,17 +281,18 @@ fun mk_JFuncType (argtys, retty) =
   list_mk_comb(JFuncType_tm, [mk_list(argtys, json_type_ty), retty])
 fun mk_JVT_Type ty = mk_comb(JVT_Type_tm, ty)
 fun mk_JVT_HashMap (kt, vt) = list_mk_comb(JVT_HashMap_tm, [kt, vt])
-fun mk_JTL_FunctionDef (name, decs, args, defaults, func_type, body) =
+fun mk_JTL_FunctionDef (name, decs, args, defaults, func_type, ret_ann, body) =
   list_mk_comb(JTL_FunctionDef_tm,
     [fromMLstring name,
      mk_list(List.map fromMLstring decs, string_ty),
      mk_list(args, json_arg_ty),
      mk_list(defaults, json_expr_ty),
      func_type,
+     ret_ann,
      mk_list(body, json_stmt_ty)])
-fun mk_JTL_VariableDecl (name, ty, is_public, is_immutable, is_transient, valopt) =
+fun mk_JTL_VariableDecl (name, ty, ann_ty, is_public, is_immutable, is_transient, valopt) =
   list_mk_comb(JTL_VariableDecl_tm,
-    [fromMLstring name, ty, mk_bool is_public, mk_bool is_immutable,
+    [fromMLstring name, ty, ann_ty, mk_bool is_public, mk_bool is_immutable,
      mk_bool is_transient, lift_option (mk_option json_expr_ty) I valopt])
 fun mk_JTL_HashMapDecl (name, kt, vt, is_public, is_transient) =
   list_mk_comb(JTL_HashMapDecl_tm,
@@ -453,6 +457,16 @@ fun d_json_type () : term decoder = achoose "json_type" [
 
 val json_type = delay d_json_type
 
+fun d_qualified_type_path () : (string list * string) decoder =
+  check_ast_type "Attribute" $
+    JSONDecode.map (fn ((path, name), attr) => (path @ [name], attr)) $
+      tuple2 (field "value" $ achoose "qualified type base" [
+                check_ast_type "Name" $
+                  JSONDecode.map (fn id => ([], id)) (field "id" string),
+                delay d_qualified_type_path
+              ],
+              field "attr" string)
+
 (* Type from AST node (for subscript/name patterns) *)
 fun d_ast_type () : term decoder = achoose "ast_type" [
   (* Name node - check id for primitive types *)
@@ -526,9 +540,9 @@ fun d_ast_type () : term decoder = achoose "ast_type" [
           (fn p => p = ("Name", "indexed")) "not indexed" $
     field "args" $ sub 0 (delay d_ast_type),
 
-  (* Attribute node - cross-module type reference: library.SomeStruct, lib1.Roles *)
-  check_ast_type "Attribute" $
-    JSONDecode.map (fn s => mk_JT_Named (mk_none intSyntax.int_ty, s)) (field "attr" string),
+  (* Attribute node - syntactic qualified type reference: library.SomeStruct, lib1.Roles *)
+  JSONDecode.map (fn (path, name) => mk_JT_Qualified(path, name)) $
+    d_qualified_type_path (),
 
   (* null type *)
   null JT_None_tm
@@ -1059,15 +1073,16 @@ val export_annotation_expr : term decoder = d_export_annotation_expr ()
 val json_toplevel : term decoder = achoose "toplevel" [
   (* FunctionDef *)
   check_ast_type "FunctionDef" $
-    JSONDecode.map (fn ((n, d), ((a, df), f), b) =>
-      mk_JTL_FunctionDef(n, d, a, df, f, b)) $
+    JSONDecode.map (fn ((n, d), (((a, df), f), ret_ann), b) =>
+      mk_JTL_FunctionDef(n, d, a, df, f, ret_ann, b)) $
     tuple3 (
       tuple2 (field "name" string,
               field "decorator_list" (array decorator_name)),
-      tuple2 (field "args" $ check_ast_type "arguments" $
-                tuple2 (field "args" (array json_arg),
-                        orElse(field "defaults" (array json_expr), succeed [])),
-              field "func_type" json_func_type),
+      tuple2 (tuple2 (field "args" $ check_ast_type "arguments" $
+                        tuple2 (field "args" (array json_arg),
+                                orElse(field "defaults" (array json_expr), succeed [])),
+                      field "func_type" json_func_type),
+              orElse(field "returns" ast_type, succeed JT_None_tm)),
       field "body" (array json_stmt)
     ),
 
@@ -1089,13 +1104,14 @@ val json_toplevel : term decoder = achoose "toplevel" [
 
   (* VariableDecl (non-hashmap) *)
   check_ast_type "VariableDecl" $
-    JSONDecode.map (fn ((n, t), (p, i), (tr, v)) =>
-      mk_JTL_VariableDecl(n, t, p, i, tr, v)) $
-    tuple3 (
+    JSONDecode.map (fn ((n, t), ann_ty, (p, i), (tr, v)) =>
+      mk_JTL_VariableDecl(n, t, ann_ty, p, i, tr, v)) $
+    tuple4 (
       tuple2 (
         field "target" $ check_ast_type "Name" $ field "id" string,
         field "target" $ field "type" json_type
       ),
+      orElse(field "annotation" ast_type, succeed JT_None_tm),
       tuple2 (field "is_public" bool, field "is_immutable" bool),
       tuple2 (
         field "is_transient" bool,
@@ -1233,7 +1249,7 @@ val nonreentrancy_by_default : bool decoder =
 fun inject_nonreentrant_decs tl_tm =
   let val (f, args) = strip_comb tl_tm in
     if same_const f JTL_FunctionDef_tm then
-      let val [name, decs, fargs, defaults, func_type, body] = args
+      let val [name, decs, fargs, defaults, func_type, ret_ann, body] = args
           val dec_strs = fst (listSyntax.dest_list decs)
           val dec_mls = List.map stringSyntax.fromHOLstring dec_strs
       in
@@ -1242,7 +1258,7 @@ fun inject_nonreentrant_decs tl_tm =
            andalso not (List.exists (fn s => s = "reentrant") dec_mls)
         then
           let val new_decs = mk_list(dec_strs @ [fromMLstring "nonreentrant"], string_ty)
-          in list_mk_comb(JTL_FunctionDef_tm, [name, new_decs, fargs, defaults, func_type, body])
+          in list_mk_comb(JTL_FunctionDef_tm, [name, new_decs, fargs, defaults, func_type, ret_ann, body])
           end
         else tl_tm
       end

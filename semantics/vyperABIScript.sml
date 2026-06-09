@@ -63,7 +63,7 @@ val () = cv_auto_trans_rec vyper_to_abi_type_def (
   by (
     rw[Abbr`ck`, cv_string_to_num_def]
     \\ rw[Once keccakTheory.cv_l2n_def]
-    \\ rw[cv_ispair_cv_add] )
+    \\ rw[cv_ispair_cv_add,cv_ispair_cv_mul] )
   \\ pop_assum mp_tac
   \\ qid_spec_tac `cv_env`
   \\ qid_spec_tac `ck`
@@ -214,7 +214,7 @@ val () = cv_auto_trans_rec vyper_is_dynamic_def (
   by (
     rw[Abbr`ck`, cv_string_to_num_def]
     \\ rw[Once keccakTheory.cv_l2n_def]
-    \\ rw[cv_ispair_cv_add] )
+    \\ rw[cv_ispair_cv_add,cv_ispair_cv_mul] )
   \\ pop_assum mp_tac
   \\ qid_spec_tac `cv_env`
   \\ qid_spec_tac `ck`
@@ -308,7 +308,7 @@ val () = cv_auto_trans_rec vyper_abi_size_bound_def (
   by (
     rw[Abbr`ck`, cv_string_to_num_def]
     \\ rw[Once keccakTheory.cv_l2n_def]
-    \\ rw[cv_ispair_cv_add] )
+    \\ rw[cv_ispair_cv_add,cv_ispair_cv_mul] )
   \\ pop_assum mp_tac
   \\ qid_spec_tac `cv_env`
   \\ qid_spec_tac `ck`
@@ -649,7 +649,7 @@ val vyper_to_abi_pre_def = cv_auto_trans_pre_rec
       \\ `cv_ispair ck = cv$Num 0`
          by (rw[Abbr`ck`, cv_string_to_num_def]
              \\ rw[Once keccakTheory.cv_l2n_def]
-             \\ rw[cv_ispair_cv_add])
+             \\ rw[cv_ispair_cv_add, cv_ispair_cv_mul])
       \\ pop_assum mp_tac
       \\ qid_spec_tac `cv_env`
       \\ qid_spec_tac `ck`

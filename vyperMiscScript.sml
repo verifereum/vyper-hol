@@ -2,22 +2,12 @@ Theory vyperMisc
 Ancestors
   ASCIInumbers byte pair integer string pred_set
   int_bitwise numposrep list rich_list words
-  numpair cv cv_std vfmTypes
+  cv cv_std vfmTypes
 Libs
   cv_transLib blastLib
 
 (* Miscellaneous definitions/theorems/translations that need to be organised
  * and upstreamed to HOL where appropriate *)
-
-val () = cv_auto_trans npair_def;
-
-val cv_npair_def = definition"cv_npair_def";
-
-Theorem cv_ispair_cv_npair[simp]:
-  cv_ispair (cv_npair x y) = cv$Num 0
-Proof
-  rw[cv_npair_def]
-QED
 
 Definition CHR_o_w2n_def:
   CHR_o_w2n (b: byte) = CHR (w2n b)
@@ -391,6 +381,14 @@ Proof
   \\ Induct_on `ls` \\ simp[]
   \\ Cases \\ rw[]
   \\ metis_tac[]
+QED
+
+Theorem cv_ispair_cv_mul:
+  cv_ispair (cv_mul x y) = cv$Num 0
+Proof
+  Cases_on`x` >>
+  Cases_on`y` >>
+  rw[cv_mul_def]
 QED
 
 Theorem option_CASE_rator =
