@@ -1,38 +1,55 @@
 name: 'Setup holbuild'
-description: 'Checks out holbuild, exposes its HOL4 pin, and optionally builds it'
+description: 'Checks out pinned holbuild, builds it, and adds it to PATH'
 
 inputs:
   holbuild-repo:
     required: false
     default: 'https://github.com/charles-cooper/holbuild.git'
     description: 'holbuild repository URL'
-  build:
+  holbuild-ref:
+    required: true
+    description: 'holbuild git revision to use'
+  hol4-ref:
     required: false
-    default: 'true'
-    description: 'Whether to build holbuild and add it to PATH'
+    default: 'bf0dec986904cecbd1a1c6bce62ccf1c256eaca1'
+    description: 'HOL4 revision used to build holbuild itself'
 
 outputs:
   holbuild-rev:
     description: 'Resolved holbuild revision'
     value: ${{ steps.version.outputs.holbuild-rev }}
-  hol4-rev:
-    description: 'HOL4 revision pinned by holbuild'
-    value: ${{ steps.hol4-pin.outputs.hol4-rev }}
 
 runs:
   using: 'composite'
   steps:
-    - name: Read holbuild pin from Verifereum
+    - name: Set holbuild revision
       id: version
       shell: bash
-      run: echo "holbuild-rev=$(tr -d '[:space:]' < $VFMDIR/PINS/holbuild.txt)" >> "$GITHUB_OUTPUT"
+      run: echo "holbuild-rev=${{ inputs.holbuild-ref }}" >> "$GITHUB_OUTPUT"
+
+    - name: Cache bootstrap HOL4
+      uses: actions/cache@v5
+      id: cache-bootstrap-hol4
+      with:
+        path: ~/HOL-bootstrap
+        key: holbuild-bootstrap-hol-${{ runner.os }}-${{ inputs.hol4-ref }}
+
+    - name: Build bootstrap HOL4
+      if: steps.cache-bootstrap-hol4.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        git clone https://github.com/HOL-Theorem-Prover/HOL.git "$HOME/HOL-bootstrap"
+        cd "$HOME/HOL-bootstrap"
+        git checkout --detach "${{ inputs.hol4-ref }}"
+        poly < tools/smart-configure.sml
+        bin/build
 
     - name: Cache holbuild checkout/build
       uses: actions/cache@v5
       id: cache-holbuild
       with:
         path: ~/holbuild
-        key: holbuild-tool-${{ runner.os }}-${{ steps.version.outputs.holbuild-rev }}
+        key: holbuild-tool-${{ runner.os }}-${{ steps.version.outputs.holbuild-rev }}-${{ inputs.hol4-ref }}
 
     - name: Clone holbuild
       shell: bash
@@ -48,19 +65,12 @@ runs:
         git fetch origin "${{ steps.version.outputs.holbuild-rev }}"
         git checkout --detach "${{ steps.version.outputs.holbuild-rev }}"
 
-    - name: Read HOL4 pin from holbuild
-      id: hol4-pin
-      shell: bash
-      run: echo "hol4-rev=$(tr -d '[:space:]' < $HOME/holbuild/PINS/hol.txt)" >> "$GITHUB_OUTPUT"
-
     - name: Build holbuild
-      if: inputs.build == 'true'
       shell: bash
       run: |
         cd "$HOME/holbuild"
-        make HOLDIR="$HOLDIR"
+        make HOLDIR="$HOME/HOL-bootstrap"
 
     - name: Add holbuild to PATH
-      if: inputs.build == 'true'
       shell: bash
       run: echo "$HOME/holbuild/bin" >> "$GITHUB_PATH"

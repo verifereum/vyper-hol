@@ -1,12 +1,13 @@
 [holbuild]
-schema = 1
+schema = 2
 
 [project]
 name = "vyper-hol"
-version = "0.1.0"
+version = "0.1.1"
 
 [build]
 roots = ["vyperHolScript.sml"]
 
 [dependencies.verifereum]
-path = "$VFMDIR" # set env dir, or override in .holconfig.toml
+git = "https://github.com/verifereum/verifereum.git"
+rev = "74df5bcfef1983c0daecc5f81702fefabf77595b"
