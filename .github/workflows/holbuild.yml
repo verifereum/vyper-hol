@@ -16,7 +16,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     outputs:
-      holbuild-cache-key: ${{ steps.cache-key.outputs.key }}
+      holbuild-cache-key: ${{ steps.cache-key.outputs.build-key }}
     steps:
       - uses: actions/checkout@v6
 
@@ -31,18 +31,21 @@ jobs:
       - name: Configure holbuild cache
         run: echo "HOLBUILD_CACHE=$HOME/.cache/holbuild" >> "$GITHUB_ENV"
 
-      - name: Compute holbuild cache key
+      - name: Compute holbuild cache keys
         id: cache-key
         run: |
-          echo "key=holbuild-v2-${{ runner.os }}-${{ steps.polyml.outputs.polyml-rev }}-${{ env.HOLBUILD_REF }}-${{ hashFiles('holproject.toml') }}" >> "$GITHUB_OUTPUT"
+          base="holbuild-v2-${{ runner.os }}-${{ steps.polyml.outputs.polyml-rev }}-${{ env.HOLBUILD_REF }}-${{ hashFiles('holproject.toml') }}"
+          echo "toolchain-key=${base}-toolchain" >> "$GITHUB_OUTPUT"
+          echo "build-key=${base}-build" >> "$GITHUB_OUTPUT"
 
       - name: Restore holbuild global cache
         id: cache-holbuild-global
         uses: actions/cache/restore@v5
         with:
           path: ~/.cache/holbuild
-          key: ${{ steps.cache-key.outputs.key }}
+          key: ${{ steps.cache-key.outputs.build-key }}
           restore-keys: |
+            ${{ steps.cache-key.outputs.toolchain-key }}
             holbuild-v2-${{ runner.os }}-${{ steps.polyml.outputs.polyml-rev }}-${{ env.HOLBUILD_REF }}-
             holbuild-v2-${{ runner.os }}-${{ steps.polyml.outputs.polyml-rev }}-
             holbuild-v2-${{ runner.os }}-
@@ -50,12 +53,13 @@ jobs:
       - name: Build schema-2 HOL toolchain
         run: holbuild buildhol
 
-      - name: Save holbuild global cache after buildhol
-        if: steps.cache-holbuild-global.outputs.cache-hit != 'true'
+      - name: Save holbuild toolchain cache after buildhol
+        if: steps.cache-holbuild-global.outputs.cache-primary-key != steps.cache-key.outputs.build-key
         uses: actions/cache/save@v5
+        continue-on-error: true
         with:
           path: ~/.cache/holbuild
-          key: ${{ steps.cache-key.outputs.key }}
+          key: ${{ steps.cache-key.outputs.toolchain-key }}
 
       - name: Build project with holbuild
         env:
@@ -63,6 +67,13 @@ jobs:
         run: |
           holbuild --verbose -j"$(nproc)" build --skip-checkpoints --skip-goalfrag \
             vyperHolTheory
+
+      - name: Save holbuild global cache after build
+        if: steps.cache-holbuild-global.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ~/.cache/holbuild
+          key: ${{ steps.cache-key.outputs.build-key }}
 
       - name: Verify no successful-build checkpoints remain
         run: |
