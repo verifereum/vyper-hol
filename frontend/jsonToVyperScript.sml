@@ -75,20 +75,6 @@ Definition tctx_import_map_def:
   tctx_import_map tctx = SND (SND tctx)
 End
 
-Definition resolve_qualified_type_path_def:
-  (resolve_qualified_type_path all_import_maps tctx [] = NONE) ∧
-  (resolve_qualified_type_path all_import_maps tctx [alias] = ALOOKUP (tctx_import_map tctx) alias) ∧
-  (resolve_qualified_type_path all_import_maps tctx (alias::next::rest) =
-    case ALOOKUP (tctx_import_map tctx) alias of
-    | NONE => NONE
-    | SOME parent_src_id =>
-        case ALOOKUP all_import_maps parent_src_id of
-        | NONE => NONE
-        | SOME parent_import_map => resolve_qualified_type_path all_import_maps (FST tctx, SOME parent_src_id, parent_import_map) (next::rest))
-Termination
-  WF_REL_TAC `measure (λ(_,_,path). LENGTH path)` >> simp[]
-End
-
 Definition translate_type_ctx_def:
   (translate_type_ctx ctx (JT_StaticArray vt len) = ArrayT (translate_type_ctx ctx vt) (Fixed len)) ∧
   (translate_type_ctx ctx (JT_DynArray vt len) = ArrayT (translate_type_ctx ctx vt) (Dynamic len)) ∧
@@ -104,6 +90,24 @@ Definition translate_type_ctx_def:
   (translate_type_ctx ctx ty = translate_type (FST ctx) ty)
 Termination
   WF_REL_TAC `measure (λ(_,ty). json_type_size ty)` >> simp[]
+End
+
+(* Qualified syntactic annotations are resolved locally using the current
+   module import map.  We only use them as namespace hints; the inferred
+   type supplies the kind (flag/struct/named). *)
+Definition resolve_qualified_type_path_def:
+  (resolve_qualified_type_path all_import_maps ctx [] = NONE) ∧
+  (resolve_qualified_type_path all_import_maps ctx [alias] = ALOOKUP (tctx_import_map ctx) alias) ∧
+  (resolve_qualified_type_path all_import_maps ctx (alias::next::rest) =
+    case ALOOKUP (tctx_import_map ctx) alias of
+    | NONE => NONE
+    | SOME parent_src_id =>
+        case ALOOKUP all_import_maps parent_src_id of
+        | NONE => NONE
+        | SOME parent_import_map =>
+            resolve_qualified_type_path all_import_maps (FST ctx, SOME parent_src_id, parent_import_map) (next::rest))
+Termination
+  WF_REL_TAC `measure (λ(_,_,path). LENGTH path)` >> simp[]
 End
 
 Definition translate_qualified_annotation_def:
@@ -136,10 +140,6 @@ Definition translate_type_with_annotation_def:
     | JT_Qualified path attr => translate_qualified_annotation all_import_maps ctx inferred path attr
     | _ => translate_type_ctx ctx inferred
 End
-
-(* ===== Helper: int_bound from type ===== *)
-
-(* ===== Operator Translation ===== *)
 
 Definition translate_binop_def:
   (translate_binop JBop_Add = Add) /\
@@ -1424,14 +1424,26 @@ Definition get_interface_func_names_def:
     name :: get_interface_func_names rest
 End
 
-(* Look up an inline interface definition by name in a module's toplevels *)
-Definition find_inline_interface_def:
-  find_inline_interface_def name [] = NONE ∧
-  find_inline_interface_def name (JTL_InterfaceDef iname funcs :: ts) =
-    (if iname = name then SOME (get_interface_func_names funcs)
-     else find_inline_interface_def name ts) ∧
-  find_inline_interface_def name (_ :: ts) =
-    find_inline_interface_def name ts
+(* Collect inline interface definitions into a compact name -> function-name map. *)
+Definition collect_inline_interfaces_def:
+  collect_inline_interfaces [] = [] ∧
+  collect_inline_interfaces (JTL_InterfaceDef iname funcs :: ts) =
+    (iname, get_interface_func_names funcs) :: collect_inline_interfaces ts ∧
+  collect_inline_interfaces (_ :: ts) = collect_inline_interfaces ts
+End
+
+Definition build_all_inline_interface_maps_def:
+  build_all_inline_interface_maps [] = [] ∧
+  build_all_inline_interface_maps (JImportedModule src_id _ body :: rest) =
+    let nsid = Num (src_id + &builtin_source_id_offset) in
+    (nsid, collect_inline_interfaces body) :: build_all_inline_interface_maps rest
+End
+
+Definition lookup_inline_interface_def:
+  lookup_inline_interface all_inline_maps src_id name =
+    case ALOOKUP all_inline_maps src_id of
+    | SOME imap => ALOOKUP imap name
+    | NONE => NONE
 End
 
 (* Look up interface function names for a named export.
@@ -1455,99 +1467,135 @@ Definition find_interface_functions_def:
         | NONE => NONE
 End
 
-(* Expand a single export expression using pre-computed exports_map.
-   exports_map: source_id -> list of (func_name, source_id) exports
-   all_import_maps: source_id -> import_map for each module
-   import_map: alias -> source_id for the current module's imports
-   all_imports: the full imports list (for looking up module bodies) *)
+(* Expand a single export expression using only compact indexes.
+   exports_map: already-computed source_id -> exported (name, defining source_id)
+   all_import_maps: source_id -> alias map
+   all_inline_maps: source_id -> inline interface map
+   import_map: alias map for the current module *)
 Definition expand_single_export_def:
-  expand_single_export exports_map all_import_maps all_imports import_map
+  expand_single_export exports_map all_import_maps all_inline_maps import_map
     (JE_Attribute base func_name _ _ _ _ _) =
     (case resolve_module_expr all_import_maps import_map base of
      | NONE => []
      | SOME src_id =>
          if func_name = "__interface__" then
            case ALOOKUP exports_map src_id of
-           | NONE => []
            | SOME exps => exps
+           | NONE => []
          else
-           (* Check if the function is a direct export *)
            case ALOOKUP exports_map src_id of
            | SOME exps =>
                (case ALOOKUP exps func_name of
                 | SOME final_src_id => [(func_name, final_src_id)]
                 | NONE =>
-                    (* Not a direct function — check if it's a named interface *)
-                    case find_interface_functions exports_map all_import_maps
-                           src_id func_name of
-                    | SOME iface_fns =>
-                        (* Expand to all interface functions, mapped to src_id *)
-                        MAP (λn. (n, src_id)) iface_fns
+                    case find_interface_functions exports_map all_import_maps src_id func_name of
+                    | SOME iface_fns => MAP (λn. (n, src_id)) iface_fns
                     | NONE =>
-                        (* Check inline interface definitions *)
-                        let body = find_module_body_nsid src_id all_imports in
-                        case find_inline_interface_def func_name body of
-                        | SOME iface_fns =>
-                            MAP (λn. (n, src_id)) iface_fns
+                        case lookup_inline_interface all_inline_maps src_id func_name of
+                        | SOME iface_fns => MAP (λn. (n, src_id)) iface_fns
                         | NONE => [(func_name, src_id)])
            | NONE => [(func_name, src_id)]) ∧
   expand_single_export _ _ _ _ _ = []
 End
 
-(* Expand exports from a tuple of export expressions *)
 Definition expand_tuple_exports_def:
-  expand_tuple_exports exports_map all_import_maps all_imports import_map [] = [] ∧
-  expand_tuple_exports exports_map all_import_maps all_imports import_map (e::es) =
-    expand_single_export exports_map all_import_maps all_imports import_map e ++
-    expand_tuple_exports exports_map all_import_maps all_imports import_map es
+  expand_tuple_exports exports_map all_import_maps all_inline_maps import_map [] = [] ∧
+  expand_tuple_exports exports_map all_import_maps all_inline_maps import_map (e::es) =
+    expand_single_export exports_map all_import_maps all_inline_maps import_map e ++
+    expand_tuple_exports exports_map all_import_maps all_inline_maps import_map es
 End
 
-(* Expand exports from an ExportsDecl annotation *)
 Definition expand_export_annotation_def:
-  expand_export_annotation exports_map all_import_maps all_imports import_map (JE_Tuple exprs) =
-    expand_tuple_exports exports_map all_import_maps all_imports import_map exprs ∧
-  expand_export_annotation exports_map all_import_maps all_imports import_map (JE_Attribute base attr tc btn btc sid ty) =
-    expand_single_export exports_map all_import_maps all_imports import_map (JE_Attribute base attr tc btn btc sid ty) ∧
+  expand_export_annotation exports_map all_import_maps all_inline_maps import_map (JE_Tuple exprs) =
+    expand_tuple_exports exports_map all_import_maps all_inline_maps import_map exprs ∧
+  expand_export_annotation exports_map all_import_maps all_inline_maps import_map (JE_Attribute base attr tc btn btc sid ty) =
+    expand_single_export exports_map all_import_maps all_inline_maps import_map (JE_Attribute base attr tc btn btc sid ty) ∧
   expand_export_annotation _ _ _ _ _ = []
 End
 
-(* Expand all exports from a module's toplevels *)
-Definition expand_exports_from_toplevels_def:
-  expand_exports_from_toplevels exports_map all_import_maps all_imports import_map [] = [] ∧
-  expand_exports_from_toplevels exports_map all_import_maps all_imports import_map (t::ts) =
-    (case get_export_annotation t of
-     | SOME ann => expand_export_annotation exports_map all_import_maps all_imports import_map ann
-     | NONE => []) ++
-    expand_exports_from_toplevels exports_map all_import_maps all_imports import_map ts
+Definition collect_export_annotations_def:
+  collect_export_annotations [] = [] ∧
+  collect_export_annotations (JTL_ExportsDecl ann :: ts) = ann :: collect_export_annotations ts ∧
+  collect_export_annotations (_ :: ts) = collect_export_annotations ts
 End
 
-(* Compute a single module's full exports: its external functions + expanded re-exports *)
-Definition compute_module_exports_def:
-  compute_module_exports exports_map all_import_maps all_imports src_id body =
-    let ext_funcs = MAP (λn. (n, src_id)) (get_external_func_names body) in
-    let import_map = build_import_map (collect_imports body) in
-    let reexports = expand_exports_from_toplevels exports_map all_import_maps all_imports import_map body in
+Definition expand_export_annotations_def:
+  expand_export_annotations exports_map all_import_maps all_inline_maps import_map [] = [] ∧
+  expand_export_annotations exports_map all_import_maps all_inline_maps import_map (ann::anns) =
+    expand_export_annotation exports_map all_import_maps all_inline_maps import_map ann ++
+    expand_export_annotations exports_map all_import_maps all_inline_maps import_map anns
+End
+
+Definition module_compact_index_def:
+  module_compact_index nsid body =
+    (nsid,
+     build_import_map (collect_imports body),
+     get_external_func_names body,
+     collect_inline_interfaces body,
+     collect_export_annotations body)
+End
+
+Definition build_import_compact_indexes_def:
+  build_import_compact_indexes [] = [] ∧
+  build_import_compact_indexes (JImportedModule src_id _ body :: rest) =
+    module_compact_index (Num (src_id + &builtin_source_id_offset)) body ::
+    build_import_compact_indexes rest
+End
+
+Definition compact_index_import_map_def:
+  compact_index_import_map (src_id, import_map, ext_names, inline_map, export_anns) = import_map
+End
+
+Definition compact_index_ext_names_def:
+  compact_index_ext_names (src_id, import_map, ext_names, inline_map, export_anns) = ext_names
+End
+
+Definition compact_index_export_anns_def:
+  compact_index_export_anns (src_id, import_map, ext_names, inline_map, export_anns) = export_anns
+End
+
+Definition build_import_maps_from_indexes_def:
+  build_import_maps_from_indexes [] = [] ∧
+  build_import_maps_from_indexes ((src_id, import_map, ext_names, inline_map, export_anns)::rest) =
+    (src_id, import_map) :: build_import_maps_from_indexes rest
+End
+
+Definition build_inline_maps_from_indexes_def:
+  build_inline_maps_from_indexes [] = [] ∧
+  build_inline_maps_from_indexes ((src_id, import_map, ext_names, inline_map, export_anns)::rest) =
+    (src_id, inline_map) :: build_inline_maps_from_indexes rest
+End
+
+Definition compute_index_exports_def:
+  compute_index_exports exports_map all_import_maps all_inline_maps
+    (src_id, import_map, ext_names, inline_map, export_anns) =
+    let ext_funcs = MAP (λn. (n, src_id)) ext_names in
+    let reexports = expand_export_annotations exports_map all_import_maps all_inline_maps import_map export_anns in
     ext_funcs ++ reexports
 End
 
-(* Build exports_map by processing imports in topological order.
-   Requires: imports list is topologically sorted (validated by imports_topsorted).
-   This ensures when we process module M, any module M references via
-   __interface__ has already been added to the accumulator. *)
-Definition build_exports_map_def:
-  build_exports_map all_import_maps all_imports acc [] = acc ∧
-  build_exports_map all_import_maps all_imports acc (JImportedModule src_id _ body :: rest) =
-    let nsid = Num (src_id + &builtin_source_id_offset) in
-    let exps = compute_module_exports acc all_import_maps all_imports nsid body in
-    build_exports_map all_import_maps all_imports ((nsid, exps) :: acc) rest
+Definition build_exports_map_from_indexes_def:
+  build_exports_map_from_indexes all_import_maps all_inline_maps acc [] = acc ∧
+  build_exports_map_from_indexes all_import_maps all_inline_maps acc (idx::rest) =
+    let src_id = FST idx in
+    let exps = compute_index_exports acc all_import_maps all_inline_maps idx in
+    build_exports_map_from_indexes all_import_maps all_inline_maps ((src_id, exps) :: acc) rest
 End
 
-(* Main function: extract exports from main module given imports *)
+Definition extract_exports_with_indexes_def:
+  extract_exports_with_indexes all_import_maps all_inline_maps exports_map main_index =
+    expand_export_annotations exports_map all_import_maps all_inline_maps
+      (compact_index_import_map main_index)
+      (compact_index_export_anns main_index)
+End
+
 Definition extract_exports_with_import_maps_def:
-  extract_exports_with_import_maps all_import_maps (JModule _ toplevels) imports =
-    let exports_map = build_exports_map all_import_maps imports [] imports in
-    let import_map = build_import_map (collect_imports toplevels) in
-    expand_exports_from_toplevels exports_map all_import_maps imports import_map toplevels
+  extract_exports_with_import_maps all_import_maps (JModule main_src_id toplevels) imports =
+    let import_indexes = build_import_compact_indexes imports in
+    let all_inline_maps = build_inline_maps_from_indexes import_indexes in
+    let exports_map = build_exports_map_from_indexes all_import_maps all_inline_maps [] import_indexes in
+    let main_index = module_compact_index 0 toplevels in
+    extract_exports_with_indexes all_import_maps all_inline_maps exports_map main_index
 End
 
 Definition extract_exports_def:
@@ -1580,6 +1628,13 @@ Definition translate_imported_module_def:
     let expr_ctx = (main_src_id, collect_consts_and_immutables body) in
     let type_ctx = (main_src_id, SOME nsid, import_map) in
     (SOME nsid, filter_some (MAP (translate_toplevel all_import_maps expr_ctx type_ctx) body))
+End
+
+Definition translate_imported_modules_def:
+  translate_imported_modules all_import_maps main_src_id [] = [] ∧
+  translate_imported_modules all_import_maps main_src_id (imp::imports) =
+    translate_imported_module all_import_maps main_src_id imp ::
+    translate_imported_modules all_import_maps main_src_id imports
 End
 
 (* Extract toplevels from a JModule (needed to get import infos) *)
@@ -1628,11 +1683,14 @@ Definition translate_annotated_ast_def:
   translate_annotated_ast (JAnnotatedAST (JModule main_src_id toplevels) imports) =
     if ¬imports_topsorted [] imports then NONE else
     let main = JModule main_src_id toplevels in
-    let import_infos = collect_imports (main_toplevels main) in
-    let import_map = build_import_map import_infos in
-    let all_import_maps = build_all_import_maps imports in
-    let sources = (NONE, translate_module all_import_maps main) :: MAP (translate_imported_module all_import_maps main_src_id) imports in
-    let exports = extract_exports_with_import_maps all_import_maps main imports in
+    let import_indexes = build_import_compact_indexes imports in
+    let all_import_maps = build_import_maps_from_indexes import_indexes in
+    let all_inline_maps = build_inline_maps_from_indexes import_indexes in
+    let exports_map = build_exports_map_from_indexes all_import_maps all_inline_maps [] import_indexes in
+    let main_index = module_compact_index 0 toplevels in
+    let import_map = compact_index_import_map main_index in
+    let sources = (NONE, translate_module all_import_maps main) :: translate_imported_modules all_import_maps main_src_id imports in
+    let exports = extract_exports_with_indexes all_import_maps all_inline_maps exports_map main_index in
     SOME (sources, exports, import_map)
 End
 
