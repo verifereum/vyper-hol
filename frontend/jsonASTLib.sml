@@ -460,7 +460,7 @@ val json_type = delay d_json_type
 fun d_qualified_type_path () : (string list * string) decoder =
   check_ast_type "Attribute" $
     JSONDecode.map (fn ((path, name), attr) => (path @ [name], attr)) $
-      tuple2 (achoose "qualified type base" [
+      tuple2 (field "value" $ achoose "qualified type base" [
                 check_ast_type "Name" $
                   JSONDecode.map (fn id => ([], id)) (field "id" string),
                 delay d_qualified_type_path
