@@ -39,6 +39,39 @@ Definition ao_fresh_var_def:
     STRCAT "ao_" (STRCAT (toString id) (STRCAT "_" suffix))
 End
 
+(* Fresh instruction ID for helper instructions in 1-to-N expansions.
+   Python creates genuinely new IRInstruction objects (identity by reference);
+   in HOL4 we need explicit distinct IDs.
+
+   Convention: the modified original instruction keeps inst.inst_id.
+   Helper instructions inserted before it get IDs from a range that is
+   disjoint from original IDs.  We achieve this by offsetting into a
+   high range: max_id is the maximum instruction ID in the function, passed
+   in as `mid` and threaded through ao_transform_block, ao_transform_inst,
+   ao_peephole_inst, ao_opt_eq, ao_opt_comparator, ao_cmp_prefer_iz_{zero,max,
+   general} and ao_cmp_flip_apply_inst.
+   Helper k for original inst_id gets  max_id + 1 + inst_id * 3 + k
+   where k ∈ {0,1,2}.  This is injective and > max_id, so it cannot
+   collide with any original ID or with helpers from other instructions.
+
+   Output-safety: inst_id is internal instruction identity (the analogue of
+   Python's object identity) and is never emitted to bytecode.  Threading
+   `mid` only ensures each produced instruction gets a distinct id; it changes
+   no opcode, operand or output, so the emitted code is identical.  Distinct
+   ids are in fact REQUIRED for correctness, not merely provability: a single
+   shared id per expansion would break fn_inst_ids_distinct and would mis-key
+   the id-indexed ALOOKUPs in ao_cmp_flip_apply_inst. *)
+Definition ao_fresh_id_def:
+  ao_fresh_id (max_id:num) (id:num) (slot:num) = max_id + 1 + id * 3 + slot
+End
+
+(* Maximum instruction ID in a function.  Used to compute ao_fresh_id base. *)
+Definition fn_max_inst_id_def:
+  fn_max_inst_id fn =
+    FOLDL MAX 0
+      (MAP (\i. i.inst_id) (fn_insts fn))
+End
+
 (* Truthy instructions: can accept a truthy value (0/nonzero).
    Matches Python TRUTHY_INSTRUCTIONS = ("iszero", "jnz", "assert", "assert_unreachable").
    ISZERO is included for use-analysis (OR truthy, EQ prefer_iszero).
@@ -143,6 +176,18 @@ End
  *   If keep < depth: replace op with chain[keep]
  *
  * Note: iszero uses are skipped (they preserve the chain).
+ *
+ * The extra `get_label (EL keep chain) = NONE` guard below has no Python
+ * counterpart and never fires on any IR Vyper emits: chain roots are
+ * iszero operands and chain interior elements are iszero outputs, none of
+ * which are labels in well-formed code, so the substituted operand is
+ * always a non-label and the guard is a no-op (zero bytecode divergence).
+ * It is kept only as a soundness refinement: get_successors-preservation
+ * for a resolved JNZ condition needs the replacement to be a non-label,
+ * and "chain elements are non-labels" is NOT derivable from inst_wf /
+ * wf_function / wf_ssa (ISZERO operands and JNZ conditions are
+ * label-unconstrained there). Removing the guard would require adding a
+ * new well-formedness precondition, which we avoid.
  *)
 Definition ao_resolve_iszero_op_def:
   ao_resolve_iszero_op targets use_opcode op =
@@ -161,7 +206,8 @@ Definition ao_resolve_iszero_op_def:
                    depth MOD 2
                  else
                    2 - depth MOD 2 in
-               if keep < depth /\ keep < LENGTH chain then
+               if keep < depth /\ keep < LENGTH chain /\
+                  get_label (EL keep chain) = NONE then
                  EL keep chain
                else op)
     | _ => op
@@ -184,7 +230,11 @@ End
  * Rules:
  *   balance(address()) → selfbalance()
  *   extcodesize → skip (no optimizations)
- *   signextend(n, signextend(m, x)) where n >= m → assign(x)
+ *   signextend(n, signextend(m, x)) where n >=+ m → assign(x)
+ *     (>=+ is the UNSIGNED word compare: the byte-count operand is a
+ *      magnitude, matching Python's plain-int comparison.  It agrees with
+ *      the signed >= on every width that can actually occur (0..31), so this
+ *      is a model-faithfulness fix, not a change to the emitted output.)
  *)
 Definition ao_opt_producer_def:
   ao_opt_producer dfg inst =
@@ -214,7 +264,7 @@ Definition ao_opt_producer_def:
                     if producer.inst_opcode = SIGNEXTEND then
                       (case producer.inst_operands of
                          [Lit inner_w; _] =>
-                           if w >= inner_w then
+                           if w >=+ inner_w then
                              SOME [inst with <| inst_opcode := ASSIGN;
                                                 inst_operands := [x] |>]
                            else NONE
@@ -382,8 +432,13 @@ Definition ao_opt_muldiv_def:
     | _ => [inst]
 End
 
-(* Or: x | MAX → MAX, x | 0 → x, x | nonzero_lit → 1 (truthy context)
-   Commutative: after pre-flip, literal at op2. *)
+(* Or: x | MAX → MAX, x | 0 → x   (value-preserving cases only)
+   Commutative: after pre-flip, literal at op2.
+   Python _rule_or has a third, value-CHANGING case — x | nonzero_lit → 1 in
+   truthy contexts — which lives in the separate ao_or_truthy_function
+   mini-pass (phase 5; see "OR-truthy mini-pass" below), NOT here: this
+   peephole runs inside the value-preserving per-instruction engine, which is
+   not allowed to change any non-fresh variable's value. *)
 Definition ao_opt_or_def:
   ao_opt_or dfg inst =
     case inst.inst_operands of
@@ -391,11 +446,6 @@ Definition ao_opt_or_def:
         if lit_eq op2 (0w - 1w) then
           [inst with <| inst_opcode := ASSIGN;
                         inst_operands := [Lit (0w - 1w)] |>]
-        (* x | nonzero_lit → 1 when all uses are truthy *)
-        else if ao_all_truthy dfg inst /\
-                is_lit_op op2 /\ ~lit_eq op2 0w then
-          [inst with <| inst_opcode := ASSIGN;
-                        inst_operands := [Lit 1w] |>]
         else if lit_eq op2 0w then
           [inst with <| inst_opcode := ASSIGN; inst_operands := [op1] |>]
         else [inst]
@@ -406,7 +456,7 @@ End
        prefer_iszero: eq(x,y) → iszero(xor(x,y))
    Commutative: after pre-flip, literal at op2. *)
 Definition ao_opt_eq_def:
-  ao_opt_eq dfg inst =
+  ao_opt_eq mid dfg inst =
     case inst.inst_operands of
       [op1; op2] =>
         if op1 = op2 then
@@ -416,7 +466,7 @@ Definition ao_opt_eq_def:
         else if lit_eq op2 (0w - 1w) then
           let id = inst.inst_id in
           let tmp = ao_fresh_var id "not" in
-          [<| inst_id := id; inst_opcode := NOT;
+          [<| inst_id := ao_fresh_id mid id 0; inst_opcode := NOT;
               inst_operands := [op1]; inst_outputs := [tmp] |>;
            inst with <| inst_opcode := ISZERO;
                         inst_operands := [Var tmp] |>]
@@ -424,7 +474,7 @@ Definition ao_opt_eq_def:
         else if ao_all_prefer_iszero dfg inst then
           let id = inst.inst_id in
           let tmp = ao_fresh_var id "xor" in
-          [<| inst_id := id; inst_opcode := XOR;
+          [<| inst_id := ao_fresh_id mid id 0; inst_opcode := XOR;
               inst_operands := [op1; op2]; inst_outputs := [tmp] |>;
            inst with <| inst_opcode := ISZERO;
                         inst_operands := [Var tmp] |>]
@@ -518,9 +568,9 @@ End
 (* Helper: prefer_iszero + almost_always with val=0
    gt x 0 in iszero context → iszero(iszero(x)) *)
 Definition ao_cmp_prefer_iz_zero_def:
-  ao_cmp_prefer_iz_zero id op1 inst =
+  ao_cmp_prefer_iz_zero mid id op1 inst =
     let tmp = ao_fresh_var id "iz" in
-    [<| inst_id := id; inst_opcode := ISZERO;
+    [<| inst_id := ao_fresh_id mid id 0; inst_opcode := ISZERO;
         inst_operands := [op1]; inst_outputs := [tmp] |>;
      inst with <| inst_opcode := ISZERO;
                   inst_operands := [Var tmp] |>]
@@ -529,12 +579,12 @@ End
 (* Helper: prefer_iszero + almost_always with val=-1
    slt x MAX in iszero context → iszero(iszero(not(x))) *)
 Definition ao_cmp_prefer_iz_max_def:
-  ao_cmp_prefer_iz_max id op1 inst =
+  ao_cmp_prefer_iz_max mid id op1 inst =
     let inner = ao_fresh_var id "not" in
     let tmp = ao_fresh_var id "iz" in
-    [<| inst_id := id; inst_opcode := NOT;
+    [<| inst_id := ao_fresh_id mid id 0; inst_opcode := NOT;
         inst_operands := [op1]; inst_outputs := [inner] |>;
-     <| inst_id := id; inst_opcode := ISZERO;
+     <| inst_id := ao_fresh_id mid id 1; inst_opcode := ISZERO;
         inst_operands := [Var inner]; inst_outputs := [tmp] |>;
      inst with <| inst_opcode := ISZERO;
                   inst_operands := [Var tmp] |>]
@@ -543,12 +593,12 @@ End
 (* Helper: prefer_iszero + almost_always with general val
    cmp x val in iszero context → iszero(iszero(xor(x, val))) *)
 Definition ao_cmp_prefer_iz_general_def:
-  ao_cmp_prefer_iz_general id op1 op2 inst =
+  ao_cmp_prefer_iz_general mid id op1 op2 inst =
     let inner = ao_fresh_var id "xor" in
     let tmp = ao_fresh_var id "iz" in
-    [<| inst_id := id; inst_opcode := XOR;
+    [<| inst_id := ao_fresh_id mid id 0; inst_opcode := XOR;
         inst_operands := [op1; op2]; inst_outputs := [inner] |>;
-     <| inst_id := id; inst_opcode := ISZERO;
+     <| inst_id := ao_fresh_id mid id 1; inst_opcode := ISZERO;
         inst_operands := [Var inner]; inst_outputs := [tmp] |>;
      inst with <| inst_opcode := ISZERO;
                   inst_operands := [Var tmp] |>]
@@ -564,7 +614,7 @@ End
  *   - prefer_iszero + almost_always uses xor/not pattern (not eq)
  *)
 Definition ao_opt_comparator_def:
-  ao_opt_comparator dfg ra lbl idx inst =
+  ao_opt_comparator mid dfg ra lbl idx inst =
     let opc = inst.inst_opcode in
     case inst.inst_operands of
       [op1; op2] =>
@@ -576,7 +626,7 @@ Definition ao_opt_comparator_def:
           let signed = (opc = SGT \/ opc = SLT) in
           (* Range-based optimization *)
           let range_result = ao_opt_cmp_range ra lbl idx inst is_gt signed in
-          case range_result of
+          (case range_result of
             SOME replacement =>
               [inst with <| inst_opcode := ASSIGN;
                             inst_operands := [replacement] |>]
@@ -601,7 +651,7 @@ Definition ao_opt_comparator_def:
               (* eq x (-1) → iszero(not(x)) *)
               let id = inst.inst_id in
               let tmp = ao_fresh_var id "not" in
-              [<| inst_id := id; inst_opcode := NOT;
+              [<| inst_id := ao_fresh_id mid id 0; inst_opcode := NOT;
                   inst_operands := [op1]; inst_outputs := [tmp] |>;
                inst with <| inst_opcode := ISZERO;
                             inst_operands := [Var tmp] |>]
@@ -617,22 +667,22 @@ Definition ao_opt_comparator_def:
             let id = inst.inst_id in
             let val_w = case op2 of Lit w => w | _ => 0w in
             if val_w = 0w then
-              ao_cmp_prefer_iz_zero id op1 inst
+              ao_cmp_prefer_iz_zero mid id op1 inst
             else if val_w = 0w - 1w then
-              ao_cmp_prefer_iz_max id op1 inst
+              ao_cmp_prefer_iz_max mid id op1 inst
             else
-              ao_cmp_prefer_iz_general id op1 op2 inst
+              ao_cmp_prefer_iz_general mid id op1 op2 inst
           (* gt x 0 → iszero(iszero(x)). Only for unsigned GT with literal 0. *)
           else if opc = GT /\ lit_eq op2 0w then
             let id = inst.inst_id in
             let tmp = ao_fresh_var id "iz" in
-            [<| inst_id := id; inst_opcode := ISZERO;
+            [<| inst_id := ao_fresh_id mid id 0; inst_opcode := ISZERO;
                 inst_operands := [op1]; inst_outputs := [tmp] |>;
              inst with <| inst_opcode := ISZERO;
                           inst_operands := [Var tmp] |>]
           (* Remaining comparators: iszero insertion/removal handled by
              ao_cmp_flip_function (separate mini-pass after peephole). *)
-          else [inst]
+          else [inst])
     | _ => [inst]
 End
 
@@ -643,7 +693,7 @@ End
  * Pre-flip is applied before dispatch, post-flip after.
  *)
 Definition ao_peephole_inst_def:
-  ao_peephole_inst (dfg : dfg_analysis) ra lbl idx inst =
+  ao_peephole_inst mid (dfg : dfg_analysis) ra lbl idx inst =
     let opc = inst.inst_opcode in
     if inst.inst_outputs = [] then [inst]
     else if opc = ASSIGN \/ opc = PHI \/ opc = PARAM then [inst]
@@ -655,9 +705,9 @@ Definition ao_peephole_inst_def:
     else if opc = MUL \/ opc = Div \/ opc = SDIV \/
             opc = Mod \/ opc = SMOD then ao_opt_muldiv inst
     else if opc = OR then ao_opt_or dfg inst
-    else if opc = EQ then ao_opt_eq dfg inst
+    else if opc = EQ then ao_opt_eq mid dfg inst
     else if opc = GT \/ opc = LT \/ opc = SGT \/ opc = SLT then
-      ao_opt_comparator dfg ra lbl idx inst
+      ao_opt_comparator mid dfg ra lbl idx inst
     else [inst]
 End
 
@@ -670,11 +720,16 @@ Definition ao_pre_flip_inst_def:
   ao_pre_flip_inst inst =
     case inst.inst_operands of
       [op1; op2] =>
-        if is_lit_op op1 /\ ~is_lit_op op2 /\
-           (inst.inst_opcode = ADD \/ inst.inst_opcode = MUL \/
-            inst.inst_opcode = AND \/ inst.inst_opcode = OR \/
-            inst.inst_opcode = XOR \/ inst.inst_opcode = EQ) then
-          inst with inst_operands := [op2; op1]
+        if is_lit_op op1 /\ ~is_lit_op op2 then
+          if inst.inst_opcode = ADD \/ inst.inst_opcode = MUL \/
+             inst.inst_opcode = AND \/ inst.inst_opcode = OR \/
+             inst.inst_opcode = XOR \/ inst.inst_opcode = EQ then
+            inst with inst_operands := [op2; op1]
+          else if is_comparator inst.inst_opcode then
+            (* comparator: swap operands AND flip opcode (gt<->lt, sgt<->slt) *)
+            inst with <| inst_operands := [op2; op1];
+                         inst_opcode := flip_comparison_opcode inst.inst_opcode |>
+          else inst
         else inst
     | _ => inst
 End
@@ -692,6 +747,15 @@ Definition ao_post_flip_inst_def:
           inst with inst_operands := [op2; op1]
         else inst
     | _ => inst
+End
+
+(* Post-flip only the rewritten original instruction, which a rule always emits
+   LAST (any inserted helpers precede it, matching Python's add_before).  Python
+   applies _flip_inst to the rewritten inst only, never to inserted helpers. *)
+Definition ao_post_flip_last_def:
+  ao_post_flip_last [] = [] /\
+  ao_post_flip_last [inst] = [ao_post_flip_inst inst] /\
+  ao_post_flip_last (inst :: rest) = inst :: ao_post_flip_last rest
 End
 
 (* ===== Comparator Iszero Flip Mini-Pass ===== *)
@@ -759,18 +823,20 @@ End
 
 (* Apply cmp_flip changes to a single instruction. *)
 Definition ao_cmp_flip_apply_inst_def:
-  ao_cmp_flip_apply_inst flips removes inserts inst =
+  ao_cmp_flip_apply_inst mid flips removes inserts inst =
     case ALOOKUP flips inst.inst_id of
       SOME (new_opc, new_w, orig_op1) =>
-        [inst with <| inst_opcode := new_opc;
-                      inst_operands := [orig_op1; Lit new_w] |>]
+        (* Python emits (new_opc orig_op1 (Lit new_w)) and then _flip_inst swaps
+           it to lit-at-op1, flipping the opcode back to the original. *)
+        [inst with <| inst_opcode := flip_comparison_opcode new_opc;
+                      inst_operands := [Lit new_w; orig_op1] |>]
     | NONE =>
         if MEM inst.inst_id removes then
           [inst with <| inst_opcode := ASSIGN |>]
         else
           case ALOOKUP inserts inst.inst_id of
             SOME (cmp_out, fresh, cmp_id) =>
-              [<| inst_id := cmp_id; inst_opcode := ISZERO;
+              [<| inst_id := ao_fresh_id mid cmp_id 0; inst_opcode := ISZERO;
                   inst_operands := [Var cmp_out];
                   inst_outputs := [fresh] |>;
                inst with <| inst_operands := [Var fresh] |>]
@@ -779,15 +845,69 @@ End
 
 (* Apply cmp_flip to a function: scan all instructions, then FLAT MAP per block. *)
 Definition ao_cmp_flip_function_def:
-  ao_cmp_flip_function dfg fn =
+  ao_cmp_flip_function mid dfg fn =
     let all_insts = fn_insts fn in
     let (flips, removes, inserts) = ao_cmp_flip_scan dfg all_insts in
     if NULL flips then fn
     else
       fn with fn_blocks :=
         MAP (\bb. bb with bb_instructions :=
-          FLAT (MAP (ao_cmp_flip_apply_inst flips removes inserts)
+          FLAT (MAP (ao_cmp_flip_apply_inst mid flips removes inserts)
                     bb.bb_instructions))
+          fn.fn_blocks
+End
+
+(* ===== OR-truthy mini-pass =====
+ *
+ * Python _rule_or: `x | n -> 1` in truthy positions when n is a nonzero
+ * literal and every use of the output is a TRUTHY_INSTRUCTION.  This is a
+ * value-changing rewrite (output becomes 1 rather than x|n), so unlike the
+ * value-preserving peephole it cannot live in the per-instruction sim
+ * engine (which preserves all non-fresh var values).  It is a separate
+ * mini-pass, justified at the usage level: x|n with n<>0 is always nonzero
+ * and 1 is nonzero, so the two agree in every truthy-consuming use.
+ *
+ * After phase 3, surviving `or (Lit n) op1` instructions have n<>0 and
+ * n<>(-1) (those were turned into ASSIGN by ao_opt_or), so the scan's n<>0
+ * guard selects exactly the Python truthy case.  The literal sits at op1
+ * because ao_post_flip_inst normalises commutative ops to lit-at-op1.
+ *)
+
+(* Scan for OR instructions eligible for the truthy rewrite: opcode OR,
+   operands [Lit n; op1] with n<>0, and all uses truthy. *)
+Definition ao_or_truthy_scan_def:
+  ao_or_truthy_scan dfg [] = [] /\
+  ao_or_truthy_scan dfg (inst :: rest) =
+    let ids = ao_or_truthy_scan dfg rest in
+    if inst.inst_opcode = OR /\
+       (case inst.inst_operands of
+          [Lit n; op1] => n <> 0w
+        | _ => F) /\
+       ao_all_truthy dfg inst then
+      inst.inst_id :: ids
+    else ids
+End
+
+(* Apply the OR-truthy rewrite to a single instruction.
+   The opcode = OR guard is redundant for scanned ids (which are all ORs) but
+   makes the transform provably leave terminators and PHIs untouched, which the
+   generic WF/SSA-preservation lemmas require. *)
+Definition ao_or_truthy_apply_inst_def:
+  ao_or_truthy_apply_inst ids inst =
+    if inst.inst_opcode = OR /\ MEM inst.inst_id ids then
+      inst with <| inst_opcode := ASSIGN; inst_operands := [Lit 1w] |>
+    else inst
+End
+
+(* Apply OR-truthy to a function: scan all instructions, then MAP per block. *)
+Definition ao_or_truthy_function_def:
+  ao_or_truthy_function dfg fn =
+    let ids = ao_or_truthy_scan dfg (fn_insts fn) in
+    if NULL ids then fn
+    else
+      fn with fn_blocks :=
+        MAP (\bb. bb with bb_instructions :=
+          MAP (ao_or_truthy_apply_inst ids) bb.bb_instructions)
           fn.fn_blocks
 End
 
@@ -798,28 +918,55 @@ End
  * 1. Resolve iszero operands (from forward-computed targets)
  * 2. Try producer rules (balance→selfbalance, signextend nesting)
  * 3. Pre-flip + peephole + post-flip
+ *
+ * PHI is mapped to [inst] here so the per-instruction simulation engine
+ * (inst_transform_structural / inst_transform_phi) can keep treating PHIs as
+ * a fixed parallel prefix that is left literally unchanged.  PHI iszero-use
+ * resolution (matching Python's _rewrite_iszero_uses on PHIs) is applied
+ * separately as a post-pass by ao_resolve_phis_block (see ao_transform_block).
  *)
 Definition ao_transform_inst_def:
-  ao_transform_inst dfg ra lbl idx targets inst =
+  ao_transform_inst mid dfg ra lbl idx targets inst =
+    if inst.inst_opcode = PHI then [inst]
+    else
     let inst0 = ao_resolve_iszero_inst targets inst in
     if inst0.inst_outputs = [] then [inst0]
     else if inst0.inst_opcode = ASSIGN \/ inst0.inst_opcode = PHI \/
             inst0.inst_opcode = PARAM then [inst0]
     else
       case ao_opt_producer dfg inst0 of
-        SOME result => MAP ao_post_flip_inst result
+        SOME result => ao_post_flip_last result
       | NONE =>
           let inst1 = ao_pre_flip_inst inst0 in
-          let result = ao_peephole_inst dfg ra lbl idx inst1 in
-          MAP ao_post_flip_inst result
+          let result = ao_peephole_inst mid dfg ra lbl idx inst1 in
+          ao_post_flip_last result
 End
 
-Definition ao_transform_block_def:
-  ao_transform_block dfg ra targets bb =
+(* Resolve iszero chains inside PHI operands only (Python:
+   _rewrite_iszero_uses applied to PHIs).  Non-PHI instructions are left
+   untouched.  Resolution only rewrites operands, so opcode/outputs/inst_id
+   and the PHI prefix structure are preserved. *)
+Definition ao_resolve_phis_block_def:
+  ao_resolve_phis_block targets bb =
     bb with bb_instructions :=
-      FLAT (MAPi (\idx inst.
-        ao_transform_inst dfg ra bb.bb_label idx targets inst)
-        bb.bb_instructions)
+      MAP (\inst. if inst.inst_opcode = PHI
+                  then ao_resolve_iszero_inst targets inst
+                  else inst) bb.bb_instructions
+End
+
+(* ao_transform_inst keeps PHI -> [inst] (the structural sim engine requires
+   PHIs to be left literally unchanged), so PHI iszero-use resolution is run
+   as a post-pass over the transformed block.  ao_transform_inst maps PHIs to
+   themselves and never produces a PHI from a non-PHI input, hence this
+   resolves exactly the original PHI prefix and leaves the transformed body
+   untouched. *)
+Definition ao_transform_block_def:
+  ao_transform_block mid dfg ra targets bb =
+    ao_resolve_phis_block targets
+      (bb with bb_instructions :=
+        FLAT (MAPi (\idx inst.
+          ao_transform_inst mid dfg ra bb.bb_label idx targets inst)
+          bb.bb_instructions))
 End
 
 (*
@@ -828,6 +975,7 @@ End
  *   2. Compute iszero targets
  *   3. Single rewrite pass: iszero resolution + producer + peephole
  *   4. Comparator iszero flip (separate mini-pass)
+ *   5. OR-truthy rewrite x|n → 1 (separate mini-pass)
  *)
 Definition ao_transform_function_def:
   ao_transform_function fn =
@@ -840,14 +988,115 @@ Definition ao_transform_function_def:
     (* Phase 3: main rewrite pass *)
     let dfg = dfg_build_function fn0 in
     let ra = range_analyze fn0 in
+    let mid = fn_max_inst_id fn0 in
     let fn1 = fn0 with fn_blocks :=
-      MAP (ao_transform_block dfg ra targets) fn0.fn_blocks in
+      MAP (ao_transform_block mid dfg ra targets) fn0.fn_blocks in
     (* Phase 4: comparator iszero flip *)
     let dfg1 = dfg_build_function fn1 in
-    ao_cmp_flip_function dfg1 fn1
+    let mid1 = fn_max_inst_id fn1 in
+    let fn2 = ao_cmp_flip_function mid1 dfg1 fn1 in
+    (* Phase 5: OR-truthy rewrite (x|n -> assign 1) *)
+    let dfg2 = dfg_build_function fn2 in
+    ao_or_truthy_function dfg2 fn2
+End
+
+(* Proof-only (not used by the pass): characterises which variables the
+   cmp-flip phase may change — the simulation theorem's "modulo" set.
+   - Comparator outputs that get flipped (out_var differs)
+   - Fresh variables introduced by insert (ISZERO before ASSERT) *)
+Definition ao_cmp_flip_dead_vars_def:
+  ao_cmp_flip_dead_vars dfg fn =
+    let (flips, removes, inserts) = ao_cmp_flip_scan dfg (fn_insts fn) in
+    { v | ?inst. MEM inst (fn_insts fn) /\
+          MEM inst.inst_id (MAP FST flips) /\
+          MEM v inst.inst_outputs } UNION
+    { fresh | ?aid out_var cmp_id.
+          MEM (aid, out_var, fresh, cmp_id) inserts }
+End
+
+(* Proof-only (not used by the pass): the variables OR-truthy may change —
+   outputs of the OR instructions rewritten to `assign 1` (originally x|n). *)
+Definition ao_or_truthy_dead_vars_def:
+  ao_or_truthy_dead_vars dfg fn =
+    let ids = ao_or_truthy_scan dfg (fn_insts fn) in
+    { v | ?inst. MEM inst (fn_insts fn) /\
+          MEM inst.inst_id ids /\
+          MEM v inst.inst_outputs }
 End
 
 Definition ao_transform_context_def:
   ao_transform_context ctx =
     ctx with ctx_functions := MAP ao_transform_function ctx.ctx_functions
+End
+
+(* ===== Proof-only definitions =====
+ * None of the definitions below are referenced by ao_transform_function or
+ * ao_transform_context (the pass itself); they exist solely to STATE and
+ * PROVE the correctness theorems — fresh-/dead-variable sets, the
+ * fresh-names precondition, and a runtime DFG invariant — and therefore have
+ * no effect on the instructions the pass emits. *)
+
+Definition ao_fn_fresh_vars_def:
+  ao_fn_fresh_vars fn =
+    { v | ?id.
+        MEM id (MAP (\i. i.inst_id) (fn_insts fn)) /\
+        (v = ao_fresh_var id "not" \/
+         v = ao_fresh_var id "iz" \/
+         v = ao_fresh_var id "xor") }
+End
+
+(* Fresh-var disjointness: no name synthesized by the pass collides with a
+   source operand or output.  Not derivable from wf_function (which imposes no
+   naming constraint); carried as an explicit precondition, matching the
+   convention of every other insertion pass (m2v_fresh_names_disjoint,
+   branch_opt's bo_fresh_vars_fn).  Satisfiable because real Venom variable
+   names never use the synthetic "ao_<id>_<suffix>" scheme.
+   Stronger than output-only disjointness (the operand clause is needed by
+   the phase-3 simulation proof); implies the output-only fact used by the
+   WF/SSA preservation proofs. *)
+Definition ao_fresh_names_disjoint_def:
+  ao_fresh_names_disjoint fn <=>
+    !v. v IN ao_fn_fresh_vars fn ==>
+      !inst. MEM inst (fn_insts fn) ==>
+        ~MEM v inst.inst_outputs /\ ~MEM (Var v) inst.inst_operands
+End
+
+Definition ao_cmp_fresh_vars_def:
+  ao_cmp_fresh_vars fn =
+    { v | ?id.
+        (?i. MEM i (fn_insts fn) /\
+             is_comparator i.inst_opcode /\
+             i.inst_id = id) /\
+        v = ao_fresh_var id "iz" }
+End
+
+Definition ao_fn_total_fresh_vars_def:
+  ao_fn_total_fresh_vars fn =
+    let fn0 = fn with fn_blocks :=
+      MAP (\bb. bb with bb_instructions :=
+        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks in
+    let targets = ao_compute_fn_iszero_targets fn0 in
+    let dfg = dfg_build_function fn0 in
+    let ra = range_analyze fn0 in
+    let mid = fn_max_inst_id fn0 in
+    let fn1 = fn0 with fn_blocks :=
+      MAP (ao_transform_block mid dfg ra targets) fn0.fn_blocks in
+    let dfg1 = dfg_build_function fn1 in
+    let mid1 = fn_max_inst_id fn1 in
+    let fn2 = ao_cmp_flip_function mid1 dfg1 fn1 in
+    let dfg2 = dfg_build_function fn2 in
+    ao_fn_fresh_vars fn UNION ao_cmp_flip_dead_vars dfg1 fn1 UNION
+    ao_or_truthy_dead_vars dfg2 fn2
+End
+
+(* DFG runtime invariant: tracked opcode outputs have expected values *)
+Definition ao_dfg_inv_def:
+  ao_dfg_inv dfg s <=>
+    !x inst val. dfg_get_def dfg x = SOME inst /\
+      lookup_var x s = SOME val ==>
+      (inst.inst_opcode = ADDRESS ==>
+        val = w2w s.vs_call_ctx.cc_address) /\
+      (inst.inst_opcode = SIGNEXTEND ==>
+        !w inner_op. inst.inst_operands = [Lit w; inner_op] ==>
+        ?inner_val. val = sign_extend w inner_val)
 End

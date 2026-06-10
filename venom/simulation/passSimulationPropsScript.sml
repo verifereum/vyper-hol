@@ -7,9 +7,32 @@
 Theory passSimulationProps
 Ancestors
   passSimulationProofs analysisSimDefs venomWf venomInst passSimulationDefs
+  venomExecSemantics venomState instIdxIndep
   indexedLists list
 
 (* ===== Utilities ===== *)
+
+(* MEM inst (fn_insts fn) from block membership *)
+Theorem mem_fn_insts_blocks:
+  !bbs bb inst. MEM bb bbs /\ MEM inst bb.bb_instructions ==>
+    MEM inst (fn_insts_blocks bbs)
+Proof
+  Induct >> simp[fn_insts_blocks_def] >>
+  rpt strip_tac >> gvs[listTheory.MEM_APPEND] >> metis_tac[]
+QED
+
+(* SSA uniqueness: if ALL_DISTINCT (FLAT (MAP f l)) and v appears in
+   f a and f b for a,b in l, then a = b. *)
+Theorem all_distinct_flat_map_unique:
+  !(l:'a list) (f:'a -> 'b list) a b v.
+    ALL_DISTINCT (FLAT (MAP f l)) /\ MEM a l /\ MEM b l /\
+    MEM v (f a) /\ MEM v (f b) ==> a = b
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  gvs[listTheory.ALL_DISTINCT_APPEND, listTheory.MEM_FLAT,
+      listTheory.MEM_MAP] >>
+  metis_tac[]
+QED
 
 Theorem lookup_block_map:
   !lbl bbs bt.
@@ -1197,4 +1220,56 @@ Theorem run_blocks_fmap_xform_eq:
     run_blocks fuel ctx fn s
 Proof
   ACCEPT_TAC run_blocks_fmap_xform_eq
+QED
+
+(* ===== inst_idx irrelevance for run_block / run_blocks ===== *)
+
+Triviality eval_one_phi_inst_idx:
+  !p s n.
+    eval_one_phi (s with vs_inst_idx := n) p =
+    eval_one_phi s p
+Proof
+  Cases >> simp[eval_one_phi_def, eval_op_inst_idx]
+QED
+
+Triviality eval_phis_inst_idx:
+  !insts s n.
+    eval_phis (s with vs_inst_idx := n) insts =
+    exec_result_map (\s'. s' with vs_inst_idx := n) (eval_phis s insts)
+Proof
+  Induct >> simp[eval_phis_def, exec_result_map_def] >>
+  rpt gen_tac >> Cases_on `h.inst_opcode = PHI` >> simp[] >>
+  simp[eval_one_phi_inst_idx] >>
+  Cases_on `eval_one_phi s h` >> simp[exec_result_map_def] >>
+  rename1 `pair_CASE p` >> Cases_on `p` >> simp[update_var_def] >>
+  Cases_on `eval_phis s insts` >> simp[exec_result_map_def]
+QED
+
+Theorem run_block_inst_idx_irrel:
+  !fuel ctx bb s.
+    run_block fuel ctx bb s = run_block fuel ctx bb (s with vs_inst_idx := 0)
+Proof
+  rpt gen_tac >> ONCE_REWRITE_TAC[run_block_def] >>
+  simp[eval_phis_inst_idx] >>
+  Cases_on `eval_phis s bb.bb_instructions` >> simp[exec_result_map_def]
+QED
+
+Theorem run_blocks_inst_idx_irrel:
+  !fuel ctx fn s.
+    run_blocks fuel ctx fn s = run_blocks fuel ctx fn (s with vs_inst_idx := 0)
+Proof
+  Induct_on `fuel` >> rpt gen_tac
+  >- (simp[run_blocks_def]) >>
+  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV[run_blocks_unfold])) >>
+  CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV[run_blocks_unfold])) >>
+  Cases_on `lookup_block s.vs_current_bb fn.fn_blocks`
+  >- (simp_tac (srw_ss()) [] >>
+      qpat_x_assum `lookup_block s.vs_current_bb fn.fn_blocks = NONE`
+        (fn th => REWRITE_TAC [th]) >>
+      simp_tac std_ss []) >>
+  simp_tac (srw_ss()) [] >>
+  qpat_x_assum `lookup_block s.vs_current_bb fn.fn_blocks = SOME x`
+    (fn th => REWRITE_TAC [th]) >>
+  PURE_ONCE_REWRITE_TAC [GSYM run_block_inst_idx_irrel] >>
+  simp_tac (srw_ss()) []
 QED
