@@ -138,6 +138,13 @@ Definition flag_member_keys_toplevel_def:
   flag_member_keys_toplevel _ _ = []
 End
 
+Definition type_def_keys_toplevel_def:
+  type_def_keys_toplevel src (StructDecl id _) = [(src,id)] /\
+  type_def_keys_toplevel src (FlagDecl id _) = [(src,id)] /\
+  type_def_keys_toplevel src (InterfaceDecl id _) = [(src,id)] /\
+  type_def_keys_toplevel _ _ = []
+End
+
 Definition contract_keys_def:
   contract_keys f mods = FLAT (MAP (\(src,tls). FLAT (MAP (f src) tls)) mods)
 End
@@ -147,7 +154,8 @@ Definition contract_namespaces_ok_def:
     ALL_DISTINCT (MAP FST mods) /\
     ALL_DISTINCT (contract_keys (fn_sig_keys_toplevel in_deploy) mods) /\
     ALL_DISTINCT (contract_keys toplevel_vtype_keys_toplevel mods) /\
-    ALL_DISTINCT (contract_keys flag_member_keys_toplevel mods)
+    ALL_DISTINCT (contract_keys flag_member_keys_toplevel mods) /\
+    ALL_DISTINCT (contract_keys type_def_keys_toplevel mods)
 End
 
 Definition params_ok_def:
