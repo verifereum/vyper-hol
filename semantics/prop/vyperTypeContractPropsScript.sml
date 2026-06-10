@@ -877,6 +877,30 @@ Proof
   simp[toplevel_vtype_keys_toplevel_def]
 QED
 
+Theorem module_toplevel_vtype_key_MEM_Variable[local]:
+  MEM (VariableDecl vis mut id ty init) ts ==>
+  MEM ((src : num option),string_to_num id)
+    (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))
+Proof
+  rw[MEM_FLAT, MEM_MAP] >>
+  qexists `[(src,string_to_num id)]` >> simp[] >>
+  qexists `VariableDecl vis mut id ty init` >>
+  simp[toplevel_vtype_keys_toplevel_def]
+QED
+
+
+Theorem find_var_decl_by_num_NONE_after_variable_head_key[local]:
+  ALL_DISTINCT
+    (FLAT (MAP (toplevel_vtype_keys_toplevel (src : num option))
+       (VariableDecl vis mut id ty init :: ts))) ==>
+  find_var_decl_by_num (string_to_num id) ts = NONE
+Proof
+  rw[] >>
+  `~MEM ((src : num option),string_to_num id)
+      (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))` by
+    gvs[toplevel_vtype_keys_toplevel_def] >>
+  metis_tac[find_var_decl_by_num_NONE_not_toplevel_string_key]
+QED
 
 
 (* The old same-source StructDecl/FlagDecl shadowing probe is intentionally not
