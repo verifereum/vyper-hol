@@ -1450,6 +1450,121 @@ Proof
   simp[] >> metis_tac[]
 QED
 
+Theorem lookup_flag_SOME_MEM_FlagDecl[local]:
+  lookup_flag fid ts = SOME members ==>
+  MEM (FlagDecl fid members) ts
+Proof
+  Induct_on `ts` >- rw[lookup_flag_def] >>
+  gen_tac >> Cases_on `h` >>
+  rw[lookup_flag_def] >>
+  gvs[AllCaseEqs()]
+QED
+
+Theorem add_toplevel_static_maps_flag_members_complete[local]:
+  FLOOKUP (add_toplevel_static_maps F src (FlagDecl fid members) art).cta_flag_members
+    (src,fid) = SOME members
+Proof
+  rw[add_toplevel_static_maps_def, FLOOKUP_UPDATE]
+QED
+
+Theorem add_toplevel_static_maps_flag_members_preserve[local]:
+  FLOOKUP art.cta_flag_members k = SOME members /\
+  ~(MEM k (flag_member_keys_toplevel src tl)) ==>
+  FLOOKUP (add_toplevel_static_maps F src tl art).cta_flag_members k = SOME members
+Proof
+  Cases_on `tl` >>
+  rw[add_toplevel_static_maps_def, flag_member_keys_toplevel_def, FLOOKUP_UPDATE] >>
+  TRY (Cases_on `v0` >> gvs[add_toplevel_static_maps_def, flag_member_keys_toplevel_def, FLOOKUP_UPDATE])
+QED
+
+Theorem add_module_static_maps_flag_members_preserve[local]:
+  FLOOKUP art.cta_flag_members k = SOME members /\
+  ~(MEM k (FLAT (MAP (flag_member_keys_toplevel src) tls))) ==>
+  FLOOKUP (add_module_static_maps F src tls art).cta_flag_members k = SOME members
+Proof
+  qid_spec_tac `art` >>
+  Induct_on `tls` >- rw[add_module_static_maps_def] >>
+  rw[add_module_static_maps_def] >>
+  simp[GSYM add_module_static_maps_def] >>
+  first_x_assum (qspec_then `add_toplevel_static_maps F src h art` irule) >>
+  simp[] >>
+  irule add_toplevel_static_maps_flag_members_preserve >>
+  simp[]
+QED
+
+Theorem add_module_static_maps_flag_members_complete[local]:
+  ALL_DISTINCT (FLAT (MAP (flag_member_keys_toplevel (src : num option)) tls)) /\
+  MEM (FlagDecl fid members) tls ==>
+  FLOOKUP (add_module_static_maps F src tls art).cta_flag_members (src,fid) = SOME members
+Proof
+  qid_spec_tac `art` >>
+  Induct_on `tls` >- rw[add_module_static_maps_def] >>
+  gen_tac >> rw[add_module_static_maps_def] >> gvs[] >-
+    (simp[GSYM add_module_static_maps_def] >>
+     irule add_module_static_maps_flag_members_preserve >>
+     simp[add_toplevel_static_maps_flag_members_complete] >>
+     gvs[ALL_DISTINCT_APPEND, flag_member_keys_toplevel_def]) >>
+  gvs[ALL_DISTINCT_APPEND] >>
+  first_x_assum (qspec_then `add_toplevel_static_maps F src h art` mp_tac) >>
+  simp[add_module_static_maps_def] >> strip_tac >>
+  irule add_toplevel_static_maps_flag_members_preserve >>
+  simp[] >>
+  gvs[MEM_FLAT, MEM_MAP] >>
+  metis_tac[flag_member_key_MEM]
+QED
+
+Theorem add_contract_static_maps_flag_members_preserve[local]:
+  FLOOKUP art.cta_flag_members k = SOME members /\
+  ~(MEM k (contract_keys flag_member_keys_toplevel mods)) ==>
+  FLOOKUP (FOLDL (\art (src,tls). add_module_static_maps F src tls art) art mods).cta_flag_members k = SOME members
+Proof
+  qid_spec_tac `art` >>
+  Induct_on `mods` >- rw[] >>
+  gen_tac >> PairCases_on `h` >> rw[contract_keys_def] >>
+  first_x_assum (qspec_then `add_module_static_maps F h0 h1 art` irule) >>
+  conj_tac >- simp[contract_keys_def] >>
+  irule add_module_static_maps_flag_members_preserve >>
+  simp[]
+QED
+
+Theorem add_contract_static_maps_flag_members_complete_MEM[local]:
+  contract_namespaces_ok F mods /\ MEM (src,tls) mods /\
+  MEM (FlagDecl fid members) tls ==>
+  FLOOKUP (FOLDL (\art (src,tls). add_module_static_maps F src tls art) art mods).cta_flag_members
+    (src,fid) = SOME members
+Proof
+  qid_spec_tac `art` >>
+  Induct_on `mods` >- rw[] >>
+  gen_tac >> PairCases_on `h` >> rw[] >> gvs[] >-
+    (irule add_contract_static_maps_flag_members_preserve >>
+     conj_tac >-
+       (gvs[contract_namespaces_ok_def, contract_keys_def, ALL_DISTINCT_APPEND] >>
+        metis_tac[flag_member_key_MEM]) >>
+     irule add_module_static_maps_flag_members_complete >>
+     gvs[contract_namespaces_ok_def, contract_keys_def, ALL_DISTINCT_APPEND] >>
+     metis_tac[]) >>
+  first_x_assum (qspec_then `add_module_static_maps F h0 h1 art` mp_tac) >>
+  impl_tac >-
+    (gvs[contract_namespaces_ok_def, contract_keys_def, ALL_DISTINCT_APPEND]) >>
+  simp[] >> strip_tac >>
+  irule add_module_static_maps_flag_members_preserve >>
+  simp[] >>
+  gvs[contract_namespaces_ok_def, contract_keys_def, ALL_DISTINCT_APPEND] >>
+  metis_tac[flag_member_key_MEM]
+QED
+
+Theorem build_contract_type_artifact_flag_members_complete[local]:
+  contract_namespaces_ok F mods /\
+  ALOOKUP mods src = SOME ts /\
+  MEM (FlagDecl fid members) ts ==>
+  FLOOKUP (build_contract_type_artifact F mods).cta_flag_members
+    (src,fid) = SOME members
+Proof
+  rw[build_contract_type_artifact_def] >>
+  drule ALOOKUP_MEM >> strip_tac >> gvs[] >>
+  metis_tac[add_contract_static_maps_flag_members_complete_MEM]
+QED
+
 Theorem check_contract_flag_members_complete_initial:
   check_contract F layouts addr mods = SOME art /\
   ALOOKUP sources addr = SOME mods /\
@@ -1457,7 +1572,11 @@ Theorem check_contract_flag_members_complete_initial:
   flag_members_complete art.cta_flag_members
     (initial_evaluation_context sources layouts tx)
 Proof
-  cheat
+  rw[check_contract_def, flag_members_complete_def] >> gvs[] >>
+  gvs[get_module_code_def, initial_evaluation_context_def] >>
+  drule lookup_flag_SOME_MEM_FlagDecl >> strip_tac >>
+  irule build_contract_type_artifact_flag_members_complete >>
+  simp[] >> metis_tac[]
 QED
 
 
