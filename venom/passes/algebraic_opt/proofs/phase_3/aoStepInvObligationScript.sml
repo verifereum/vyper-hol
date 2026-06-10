@@ -1,7 +1,7 @@
 (* Step-level invariant obligations for algebraic optimization.
  *
  * Three obligations required by analysis_block_sim_inv_at in
- * ao_block_sim_range (algebraicOptProofsScript.sml):
+ * ao_block_sim_local (aoBlockSimLocalScript.sml):
  *
  *   1. in_range_state compatible with state_equiv fv
  *   2. sinv (dfg + chain_inv + chains_defined) preserved by step_inst

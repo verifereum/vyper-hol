@@ -25,8 +25,6 @@ Ancestors
 Libs
   execEquivParamLib
 
-open execEquivParamLib
-
 (* ===== Helpers ===== *)
 
 Theorem venom_state_idx_self_update:

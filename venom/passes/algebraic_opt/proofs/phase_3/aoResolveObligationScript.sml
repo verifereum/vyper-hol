@@ -2,18 +2,13 @@
  *
  * Reformulated with chain invariant preconditions.
  *
- * Integration with algebraicOptProofsScript.sml:
- *   1. Extend sinv to: ao_dfg_inv /\ ao_iszero_chain_inv /\ ao_chains_defined
- *   2. ao_transform_inst_sim_inst (line ~1909): replace H_resolve precondition
- *      with ao_iszero_chain_inv + ao_chains_defined from the extended sinv
- *   3. ao_per_inst_sim_fn0 (line ~1981): propagate extended sinv
- *   4. ao_phases123_run_blocks_sim (line ~2028): remove H_resolve from
- *      preconditions, use ao_resolve_iszero_inst_sim with chain invariant
- *      from extended sinv
- *   5. Prove sinv preservation: ao_iszero_chain_inv and ao_chains_defined
- *      are maintained by step_inst (SSA ensures no overwriting)
- *   6. Prove sinv initial: ao_iszero_chain_inv_initial for block entry
- *   7. Prove sinv compat: chain invariant compatible with state_equiv fv
+ * Integration: the chain invariant defined here is a component of sinv
+ * (ao_dfg_inv /\ ao_iszero_chain_inv /\ ao_chains_defined), which
+ * ao_block_sim_local (aoBlockSimLocalScript.sml) threads through the block
+ * and aoPhase3ProofScript.sml composes at function level.  Its step
+ * preservation, block-entry establishment, and state_equiv compatibility
+ * are proved in aoStepInvObligationScript.sml and
+ * aoBlockInvObligationScript.sml / aoBlockInvPreservedScript.sml.
  *)
 Theory aoResolveObligation
 Ancestors

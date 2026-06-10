@@ -13,11 +13,11 @@
  * range_step_inv: step_inst preserves in_range_state for the next
  *   instruction, given that inst is the actual instruction at (lbl, idx).
  *
- * Integration with algebraicOptProofsScript.sml:
+ * Integration (aoBlockSimLocalScript.sml / aoPhase3ProofScript.sml):
  *   Use in_range_state as block_inv component (via range_at_inst ... 0).
  *   Per-instruction, derive H_range from in_range_state + range_analyze_sound.
  *   Thread in_range_state through block via range_step_inv.
- *   See ao_per_inst_sim_fn0_inv in algebraicOptProofsScript.sml.
+ *   See ao_block_sim_local in aoBlockSimLocalScript.sml.
  *)
 Theory aoRangeObligation
 Ancestors

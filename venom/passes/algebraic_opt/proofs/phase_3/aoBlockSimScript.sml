@@ -89,7 +89,7 @@ QED
  * executing the original instruction relates to executing the transformed
  * instruction list via lift_result.
  *
- * Currently cheated in algebraicOptProofsScript.sml (ao_transform_inst_sim).
+ * Proved as ao_transform_inst_sim_inst in aoTransformInstSimScript.sml.
  * We re-state it here as the main hypothesis of our block sim theorem.
  *)
 

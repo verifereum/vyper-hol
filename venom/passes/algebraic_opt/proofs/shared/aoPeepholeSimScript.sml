@@ -10,7 +10,8 @@
  *   ao_peephole_identity_sim — identity case (returns [inst])
  *   ao_peephole_1to1_sim     — 1-to-1 replacement case
  *
- * For 1-to-N cases, see segment proofs in algebraicOptProofsScript.sml.
+ * For 1-to-N cases, see aoSimCmpScript.sml (state_equiv_1to3 and the
+ * per-expansion sims) and aoTransformInstSimScript.sml.
  *)
 Theory aoPeepholeSim
 Ancestors
