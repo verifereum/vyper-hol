@@ -854,6 +854,14 @@ Proof
   TRY (Cases_on `v0` >> gvs[find_var_decl_by_num_def])
 QED
 
+Theorem find_var_decl_by_num_NONE_not_toplevel_string_key[local]:
+  ~MEM ((src : num option),string_to_num id)
+      (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts)) ==>
+  find_var_decl_by_num (string_to_num id) ts = NONE
+Proof
+  metis_tac[find_var_decl_by_num_NONE_not_toplevel_key]
+QED
+
 Theorem module_toplevel_vtype_key_MEM[local]:
   (MEM (VariableDecl vis mut id ty init) ts \/
    MEM (HashMapDecl vis is_transient id kt vty init2) ts) ==>
