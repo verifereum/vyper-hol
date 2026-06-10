@@ -1,5 +1,0 @@
-# Variable range analysis definitions
-# From variable_range/defs/:
-#   ../../../defs  = venom/defs
-#   ../../../.. = project root (for syntax/semantics)
-INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../../defs ../../../../syntax ../../../../semantics ../../cfg/defs ../../dataflow/defs ../../dfg/defs

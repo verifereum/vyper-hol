@@ -1,2 +1,0 @@
-# Core Vyper semantics
-INCLUDES = ../syntax ../frontend $(VFMDIR)/util $(VFMDIR)/spec $(VFMDIR)/spec/prop $(HOLDIR)/examples/Crypto/Keccak $(HOLDIR)/examples/Crypto/SHA-2
