@@ -1023,6 +1023,102 @@ Proof
   cheat
 QED
 
+
+
+Theorem check_contract_toplevel_decl_MEM[local]:
+  check_contract F layouts addr mods = SOME art /\
+  ALOOKUP mods src = SOME ts /\
+  MEM tl ts ==>
+  check_toplevel_decl layouts addr mods art src tl
+Proof
+  rw[check_contract_def] >> gvs[] >>
+  `MEM (src,ts) mods` by metis_tac[ALOOKUP_MEM] >>
+  `check_module layouts addr mods (build_contract_type_artifact F mods) (src,ts)` by
+    metis_tac[EVERY_MEM] >>
+  pop_assum mp_tac >>
+  simp[check_module_def, EVERY_MEM] >>
+  metis_tac[]
+QED
+
+Theorem contract_namespaces_ok_module_toplevel_vtype_keys[local]:
+  contract_namespaces_ok F mods /\ MEM (src,tls) mods ==>
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) tls))
+Proof
+  rw[contract_namespaces_ok_def, contract_keys_def] >>
+  qpat_x_assum `ALL_DISTINCT (FLAT (MAP _ mods))` mp_tac >>
+  Induct_on `mods` >- rw[] >>
+  gen_tac >> PairCases_on `h` >> rw[] >> gvs[ALL_DISTINCT_APPEND]
+QED
+
+
+
+Theorem check_value_type_well_formed_vtype[local]:
+  !tenv vt. check_value_type tenv vt ==> well_formed_vtype tenv vt
+Proof
+  Induct_on `vt` >>
+  rw[check_value_type_def, well_formed_vtype_def] >>
+  metis_tac[assignable_type_well_formed]
+QED
+
+Theorem find_var_decl_by_num_SOME_storage_var[local]:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (src : num option)) ts)) /\
+  MEM (VariableDecl vis mut id ty init) ts /\
+  (mut = Storage \/ mut = Transient) ==>
+  find_var_decl_by_num (string_to_num id) ts =
+    SOME (StorageVarDecl (mut = Transient) ty,id)
+Proof
+  Induct_on `ts` >- rw[find_var_decl_by_num_def] >>
+  gen_tac >> Cases_on `h` >>
+  rw[find_var_decl_by_num_def, toplevel_vtype_keys_toplevel_def] >>
+  TRY (Cases_on `v0` >> gvs[find_var_decl_by_num_def, toplevel_vtype_keys_toplevel_def]) >>
+  gvs[ALL_DISTINCT_APPEND] >>
+  metis_tac[module_toplevel_vtype_key_MEM_Variable]
+QED
+
+
+Theorem find_var_decl_by_num_SOME_storage_var_Storage[local]:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (src : num option)) ts)) /\
+  MEM (VariableDecl vis mut id ty init) ts /\
+  mut = Storage ==>
+  find_var_decl_by_num (string_to_num id) ts =
+    SOME (StorageVarDecl F ty,id)
+Proof
+  Induct_on `ts` >- rw[find_var_decl_by_num_def] >>
+  gen_tac >> Cases_on `h` >>
+  rw[find_var_decl_by_num_def, toplevel_vtype_keys_toplevel_def] >>
+  TRY (Cases_on `v0` >> gvs[find_var_decl_by_num_def, toplevel_vtype_keys_toplevel_def]) >>
+  gvs[ALL_DISTINCT_APPEND] >>
+  metis_tac[module_toplevel_vtype_key_MEM_Variable]
+QED
+
+Theorem find_var_decl_by_num_SOME_storage_var_Transient[local]:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (src : num option)) ts)) /\
+  MEM (VariableDecl vis mut id ty init) ts /\
+  mut = Transient ==>
+  find_var_decl_by_num (string_to_num id) ts =
+    SOME (StorageVarDecl T ty,id)
+Proof
+  Induct_on `ts` >- rw[find_var_decl_by_num_def] >>
+  gen_tac >> Cases_on `h` >>
+  rw[find_var_decl_by_num_def, toplevel_vtype_keys_toplevel_def] >>
+  TRY (Cases_on `v0` >> gvs[find_var_decl_by_num_def, toplevel_vtype_keys_toplevel_def]) >>
+  gvs[ALL_DISTINCT_APPEND] >>
+  metis_tac[module_toplevel_vtype_key_MEM_Variable]
+QED
+
+Theorem find_var_decl_by_num_SOME_hashmap[local]:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (src : num option)) ts)) /\
+  MEM (HashMapDecl vis is_transient id kt vt init) ts ==>
+  find_var_decl_by_num (string_to_num id) ts =
+    SOME (HashMapVarDecl is_transient kt vt,id)
+Proof
+  Induct_on `ts` >- rw[find_var_decl_by_num_def] >>
+  gen_tac >> Cases_on `h` >>
+  rw[find_var_decl_by_num_def, toplevel_vtype_keys_toplevel_def] >>
+  TRY (Cases_on `v0` >> gvs[find_var_decl_by_num_def, toplevel_vtype_keys_toplevel_def]) >>
+  gvs[ALL_DISTINCT_APPEND] >>
+  metis_tac[module_toplevel_vtype_key_MEM]
+QED
 (* ===== Static-map consistency bridges for contract artifacts ===== *)
 
 Theorem check_contract_bare_globals_consistent_initial:
@@ -1037,7 +1133,56 @@ Theorem check_contract_bare_globals_consistent_initial:
          find_var_decl_by_num id ts = NONE /\
          ty <> NoneT
 Proof
-  cheat
+  rw[check_contract_def] >> gvs[] >>
+  drule_all build_contract_type_artifact_bare_globals_sound >> rw[]
+  >- (qexists `ts` >>
+      simp[get_module_code_def, initial_evaluation_context_def] >>
+      conj_tac >-
+       (`toplevel_vtypes_complete (build_contract_type_artifact F mods).cta_toplevel_vtypes
+           (initial_evaluation_context sources layouts tx)` by
+          (irule check_contract_toplevel_vtypes_complete_initial >>
+           simp[check_contract_def]) >>
+        gvs[toplevel_vtypes_complete_def] >>
+        qpat_x_assum `!src ts vis mut id ty init. _` irule >>
+        simp[get_module_code_def, initial_evaluation_context_def] >> metis_tac[]) >>
+      conj_tac >- metis_tac[is_bare_global_decl_MEM_Immutable] >>
+      conj_tac >-
+       (irule find_var_decl_by_num_NONE_non_storage_var >>
+        conj_tac >-
+         (qexists `src` >>
+          irule contract_namespaces_ok_module_toplevel_vtype_keys >>
+          metis_tac[ALOOKUP_MEM]) >>
+        metis_tac[]) >>
+      `check_toplevel_decl layouts tx.target mods (build_contract_type_artifact F mods) src
+         (VariableDecl vis Immutable id_str ty init)` by
+        (irule check_contract_toplevel_decl_MEM >> simp[check_contract_def] >>
+         metis_tac[]) >>
+      gvs[check_toplevel_decl_def] >>
+      metis_tac[assignable_type_not_NoneT]) >>
+  qexists `ts` >>
+  simp[get_module_code_def, initial_evaluation_context_def] >>
+  conj_tac >-
+   (`toplevel_vtypes_complete (build_contract_type_artifact F mods).cta_toplevel_vtypes
+       (initial_evaluation_context sources layouts tx)` by
+      (irule check_contract_toplevel_vtypes_complete_initial >>
+       simp[check_contract_def]) >>
+    gvs[toplevel_vtypes_complete_def] >>
+        qpat_x_assum `!src ts vis mut id ty init. _` irule >>
+        simp[get_module_code_def, initial_evaluation_context_def] >> metis_tac[]) >>
+  conj_tac >- metis_tac[is_bare_global_decl_MEM_Constant] >>
+  conj_tac >-
+   (irule find_var_decl_by_num_NONE_non_storage_var >>
+    conj_tac >-
+     (qexists `src` >>
+      irule contract_namespaces_ok_module_toplevel_vtype_keys >>
+      metis_tac[ALOOKUP_MEM]) >>
+    metis_tac[]) >>
+  `check_toplevel_decl layouts tx.target mods (build_contract_type_artifact F mods) src
+     (VariableDecl vis (Constant e) id_str ty init)` by
+    (irule check_contract_toplevel_decl_MEM >> simp[check_contract_def] >>
+     metis_tac[]) >>
+  gvs[check_toplevel_decl_def] >>
+  metis_tac[assignable_type_not_NoneT]
 QED
 
 Theorem check_contract_bare_global_assignable_consistent_initial:
@@ -1053,7 +1198,38 @@ Theorem check_contract_bare_global_assignable_consistent_initial:
          find_var_decl_by_num id ts = NONE /\
          ty <> NoneT
 Proof
-  cheat
+  rw[check_contract_def] >> gvs[] >>
+  drule_all build_contract_type_artifact_bare_global_assignable_sound >> rw[] >>
+  qexists `ts` >>
+  simp[get_module_code_def, initial_evaluation_context_def] >>
+  conj_tac >-
+   (`bare_globals_complete (build_contract_type_artifact F mods).cta_bare_globals
+       (initial_evaluation_context sources layouts tx)` by
+      (irule check_contract_bare_globals_complete_initial >> simp[check_contract_def]) >>
+    gvs[bare_globals_complete_def] >>
+    qpat_x_assum `!src ts vis mut id ty init. _` irule >>
+    simp[get_module_code_def, initial_evaluation_context_def] >> metis_tac[]) >>
+  conj_tac >-
+   (`toplevel_vtypes_complete (build_contract_type_artifact F mods).cta_toplevel_vtypes
+       (initial_evaluation_context sources layouts tx)` by
+      (irule check_contract_toplevel_vtypes_complete_initial >> simp[check_contract_def]) >>
+    gvs[toplevel_vtypes_complete_def] >>
+    qpat_x_assum `!src ts vis mut id ty init. _` irule >>
+    simp[get_module_code_def, initial_evaluation_context_def] >> metis_tac[]) >>
+  conj_tac >- metis_tac[is_immutable_decl_MEM] >>
+  conj_tac >-
+   (irule find_var_decl_by_num_NONE_non_storage_var >>
+    conj_tac >-
+     (qexists `src` >>
+      irule contract_namespaces_ok_module_toplevel_vtype_keys >>
+      metis_tac[ALOOKUP_MEM]) >>
+    metis_tac[]) >>
+  `check_toplevel_decl layouts tx.target mods (build_contract_type_artifact F mods) src
+     (VariableDecl vis Immutable id_str ty init)` by
+    (irule check_contract_toplevel_decl_MEM >> simp[check_contract_def] >>
+     metis_tac[]) >>
+  gvs[check_toplevel_decl_def] >>
+  metis_tac[assignable_type_not_NoneT]
 QED
 
 Theorem check_contract_toplevel_vtypes_consistent_initial:
@@ -1081,7 +1257,67 @@ Theorem check_contract_toplevel_vtypes_consistent_initial:
        IS_SOME (lookup_var_slot_from_layout
          (initial_evaluation_context sources layouts tx) is_transient src id_str))
 Proof
-  cheat
+  rw[check_contract_def] >> gvs[] >> rpt conj_tac
+  >- (rpt strip_tac >>
+      drule_all build_contract_type_artifact_toplevel_vtypes_sound >> rw[]
+      >- (`check_toplevel_decl layouts tx.target mods (build_contract_type_artifact F mods) src
+             (VariableDecl vis mut id_str ty init)` by
+            (irule check_contract_toplevel_decl_MEM >> simp[check_contract_def] >> metis_tac[]) >>
+          Cases_on `mut` >> gvs[check_toplevel_decl_def, well_formed_vtype_def] >>
+          metis_tac[assignable_type_well_formed]) >>
+      `check_toplevel_decl layouts tx.target mods (build_contract_type_artifact F mods) src
+         (HashMapDecl vis is_transient id_str kt vty init)` by
+        (irule check_contract_toplevel_decl_MEM >> simp[check_contract_def] >> metis_tac[]) >>
+      gvs[check_toplevel_decl_def, well_formed_vtype_def] >>
+      metis_tac[check_value_type_well_formed_vtype])
+  >- (rpt strip_tac >>
+      drule_all build_contract_type_artifact_toplevel_vtypes_sound >> rw[] >> gvs[] >>
+      `mut = Storage \/ mut = Transient` by
+        (Cases_on `mut` >> gvs[]
+         >- (`bare_globals_complete (build_contract_type_artifact F mods).cta_bare_globals
+                (initial_evaluation_context sources layouts tx)` by
+               (irule check_contract_bare_globals_complete_initial >> simp[check_contract_def]) >>
+             gvs[bare_globals_complete_def] >>
+             qpat_x_assum `!src ts vis mut id ty init. _`
+               (qspecl_then [`src`,`ts`,`vis`,`Constant e`,`id_str`,`ty`,`init`] mp_tac) >>
+             simp[get_module_code_def, initial_evaluation_context_def]) >>
+         `bare_globals_complete (build_contract_type_artifact F mods).cta_bare_globals
+            (initial_evaluation_context sources layouts tx)` by
+           (irule check_contract_bare_globals_complete_initial >> simp[check_contract_def]) >>
+         gvs[bare_globals_complete_def] >>
+         qpat_x_assum `!src ts vis mut id ty init. _`
+           (qspecl_then [`src`,`ts`,`vis`,`Immutable`,`id_str`,`ty`,`init`] mp_tac) >>
+         simp[get_module_code_def, initial_evaluation_context_def]) >>
+      qexistsl [`ts`,`mut = Transient`,`id_str`] >>
+      simp[get_module_code_def, initial_evaluation_context_def,
+           lookup_var_slot_from_layout_def, lookup_var_slot_in_layouts_def] >>
+      conj_tac >-
+       metis_tac[find_var_decl_by_num_SOME_storage_var_Storage,
+                 find_var_decl_by_num_SOME_storage_var_Transient,
+                 contract_namespaces_ok_module_toplevel_vtype_keys, ALOOKUP_MEM] >>
+      `check_toplevel_decl layouts tx.target mods (build_contract_type_artifact F mods) src
+         (VariableDecl vis mut id_str ty init)` by
+        (irule check_contract_toplevel_decl_MEM >> simp[check_contract_def] >> metis_tac[]) >>
+      Cases_on `mut` >>
+      gvs[check_toplevel_decl_def,
+          lookup_var_slot_in_layouts_def, lookup_var_slot_from_layout_def] >>
+      metis_tac[assignable_type_well_formed, well_formed_type_def,
+                find_var_decl_by_num_SOME_storage_var_Storage,
+                find_var_decl_by_num_SOME_storage_var_Transient,
+                contract_namespaces_ok_module_toplevel_vtype_keys, ALOOKUP_MEM]) >>
+  rpt strip_tac >>
+  drule_all build_contract_type_artifact_toplevel_vtypes_sound >> rw[] >> gvs[] >>
+  qexistsl [`ts`,`is_transient`,`id_str`] >>
+  simp[get_module_code_def, initial_evaluation_context_def,
+       lookup_var_slot_from_layout_def, lookup_var_slot_in_layouts_def] >>
+  conj_tac >-
+   metis_tac[find_var_decl_by_num_SOME_hashmap,
+             contract_namespaces_ok_module_toplevel_vtype_keys, ALOOKUP_MEM] >>
+  `check_toplevel_decl layouts tx.target mods (build_contract_type_artifact F mods) src
+     (HashMapDecl vis is_transient id_str kt vt init)` by
+    (irule check_contract_toplevel_decl_MEM >> simp[check_contract_def] >> metis_tac[]) >>
+  gvs[check_toplevel_decl_def, lookup_var_slot_in_layouts_def,
+      lookup_var_slot_from_layout_def]
 QED
 
 Theorem check_contract_flag_members_consistent_initial:
@@ -1095,7 +1331,17 @@ Theorem check_contract_flag_members_consistent_initial:
          FLOOKUP (type_env_all_modules mods) (type_key (src,fid)) =
            SOME (FlagArgs (LENGTH ls))
 Proof
-  cheat
+  rw[check_contract_def] >> gvs[] >>
+  drule_all build_contract_type_artifact_flag_members_sound >> rw[] >>
+  qexists `ts` >>
+  simp[get_module_code_def, initial_evaluation_context_def] >>
+  conj_tac >-
+   (irule lookup_flag_MEM_FlagDecl >>
+    conj_tac >-
+     (qexists `src` >> irule contract_namespaces_ok_module_flag_member_keys >>
+      metis_tac[ALOOKUP_MEM]) >>
+    simp[]) >>
+  metis_tac[flag_decl_type_env_all_modules]
 QED
 
 (* ===== Env-context bridge for initial contexts ===== *)
