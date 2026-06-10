@@ -1,3 +1,0 @@
-# Venom IR definitions
-INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec $(HOLDIR)/examples/Crypto/Keccak \
-           ../../syntax ../../semantics

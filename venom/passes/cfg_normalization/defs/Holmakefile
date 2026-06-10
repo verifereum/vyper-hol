@@ -1,3 +1,0 @@
-# CFG normalization pass definitions
-# NOTE: $(VFMDIR)/spec omitted to avoid vfmExecution$run_blocks overload ambiguity
-INCLUDES = $(VFMDIR)/util ../../.. ../../../../syntax ../../../../semantics

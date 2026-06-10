@@ -1,6 +1,0 @@
-# DFT pass proofs
-INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../.. ../../../../syntax ../../../../semantics ../defs \
-  ../../../simulation ../../../simulation/defs ../../../simulation/proofs \
-  ../../../analysis/stack_order/defs ../../../analysis/cfg/defs ../../../analysis/liveness/defs \
-  ../../../defs ../../../proofs ../../../props \
-  ../../shared ../../shared/defs ../../shared/proofs
