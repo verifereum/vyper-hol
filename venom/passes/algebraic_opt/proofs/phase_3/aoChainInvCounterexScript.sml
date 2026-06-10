@@ -92,4 +92,3 @@ Proof
   metis_tac[cex_chain_inv_holds, cex_chain_inv_broken]
 QED
 
-val _ = export_theory();

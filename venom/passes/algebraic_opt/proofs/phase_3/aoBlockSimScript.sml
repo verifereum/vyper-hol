@@ -172,4 +172,3 @@ QED
    Per-instruction sim requires BOTH sound AND state_inv.
    state_inv is preserved through step_inst and state_equiv. *)
 
-val _ = export_theory();

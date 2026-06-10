@@ -877,4 +877,3 @@ Proof
   first_x_assum irule >> simp[]
 QED
 
-val _ = export_theory();

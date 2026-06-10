@@ -1095,4 +1095,3 @@ Proof
   impl_tac >- first_assum ACCEPT_TAC >> strip_tac >> gvs[]
 QED
 
-val _ = export_theory();

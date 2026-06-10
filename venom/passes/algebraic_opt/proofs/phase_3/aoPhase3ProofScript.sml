@@ -299,4 +299,3 @@ Proof
   disch_then ACCEPT_TAC
 QED
 
-val _ = export_theory();

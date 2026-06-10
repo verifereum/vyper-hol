@@ -251,4 +251,3 @@ QED
    the flipped value, which equals iszero(original_value). *)
 
 
-val _ = export_theory();

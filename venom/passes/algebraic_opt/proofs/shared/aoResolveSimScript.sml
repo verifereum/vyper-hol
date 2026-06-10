@@ -230,4 +230,3 @@ QED
 (* ao_cmp_flip_apply_inst: non-terminators produce non-INVOKE
    (for the identity case) *)
 
-val _ = export_theory();

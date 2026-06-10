@@ -244,4 +244,3 @@ Proof
   rpt strip_tac >> gvs[] >> metis_tac[]
 QED
 
-val _ = export_theory();

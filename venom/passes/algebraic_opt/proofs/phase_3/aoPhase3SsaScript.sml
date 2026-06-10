@@ -1795,4 +1795,3 @@ Proof
   simp[]
 QED
 
-val _ = export_theory();

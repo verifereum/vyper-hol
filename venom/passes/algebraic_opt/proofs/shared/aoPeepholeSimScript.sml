@@ -1126,4 +1126,3 @@ Proof
     DISJ2_TAC >> metis_tac[])
 QED
 
-val _ = export_theory();

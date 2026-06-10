@@ -1296,4 +1296,3 @@ Proof
   )
 QED
 
-val _ = export_theory();

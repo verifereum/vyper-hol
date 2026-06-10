@@ -690,4 +690,3 @@ Proof
       irule ao_transform_inst_non_special >> simp[])
 QED
 
-val _ = export_theory();

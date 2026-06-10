@@ -1064,4 +1064,3 @@ Proof
       once_rewrite_tac[run_block_def] >> gvs[])
 QED
 
-val _ = export_theory();

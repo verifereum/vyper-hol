@@ -459,4 +459,3 @@ Proof
   gvs[safe_smod_def, word_rem_zero_l, word_rem_one]
 QED
 
-val _ = export_theory();

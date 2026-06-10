@@ -332,4 +332,3 @@ Proof
   >- (irule ao_phase1_preserves_def_dominates_uses >> simp[])
 QED
 
-val _ = export_theory();

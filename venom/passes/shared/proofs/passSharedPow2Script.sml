@@ -29,30 +29,35 @@ Proof
 QED
 
 (* Variant with ≤ and ≠ *)
-val bit_h_pred_le = prove(
-  ``!h n. 2 ** h <= n ==> n <> 2 ** h ==> n < 2 ** SUC h ==>
-          BIT h (n - 1)``,
-  rpt strip_tac >> irule bit_h_pred >> decide_tac);
+Triviality bit_h_pred_le[local]:
+  !h n. 2 ** h <= n ==> n <> 2 ** h ==> n < 2 ** SUC h ==>
+        BIT h (n - 1)
+Proof
+  rpt strip_tac >> irule bit_h_pred >> decide_tac
+QED
 
 (* LOG2_PROPERTY rewritten to use bit.LOG2 *)
 val LOG2_PROPERTY' =
   REWRITE_RULE [GSYM bitTheory.LOG2_def] logrootTheory.LOG2_PROPERTY;
 
 (* word_bit in terms of BIT on w2n *)
-val WORD_BIT_W2N = prove(
-  ``!n (w:'a word). word_bit n w <=> n < dimindex(:'a) /\ BIT n (w2n w)``,
+Triviality WORD_BIT_W2N[local]:
+  !n (w:'a word). word_bit n w <=> n < dimindex(:'a) /\ BIT n (w2n w)
+Proof
   rpt gen_tac >>
   `w = n2w (w2n w)` by simp[wordsTheory.n2w_w2n] >>
   pop_assum SUBST1_TAC >>
   simp[wordsTheory.word_bit_n2w, wordsTheory.w2n_n2w, wordsTheory.w2n_lt] >>
   EQ_TAC >> strip_tac >> simp[] >>
-  `1 <= dimindex(:'a)` by simp[fcpTheory.DIMINDEX_GE_1] >> simp[]);
+  `1 <= dimindex(:'a)` by simp[fcpTheory.DIMINDEX_GE_1] >> simp[]
+QED
 
-(* Main theorem proved at SML level to avoid overloading issues *)
-val is_power_of_two_exp = save_thm("is_power_of_two_exp",
-  prove(
-    ``!w : bytes32. is_power_of_two w ==>
-      ?k. w2n w = 2 ** k /\ k < dimindex(:256)``,
+(* Main bridge theorem.  bit_h_pred_le is instantiated via SML term-building in
+   the let-block below to keep ** overload resolution stable in batch mode. *)
+Theorem is_power_of_two_exp:
+  !w : bytes32. is_power_of_two w ==>
+    ?k. w2n w = 2 ** k /\ k < dimindex(:256)
+Proof
     rw[is_power_of_two_def] >> rpt strip_tac >>
     qexists_tac `LOG2 (w2n w)` >>
     conj_tac >| [
@@ -86,6 +91,5 @@ val is_power_of_two_exp = save_thm("is_power_of_two_exp",
       gvs[wordsTheory.word_bit_0],
       (* Second conjunct: LOG2 (w2n w) < 256 *)
       imp_res_tac wordsTheory.LOG2_w2n_lt >> fs[]
-    ]));
-
-val _ = export_theory();
+    ]
+QED

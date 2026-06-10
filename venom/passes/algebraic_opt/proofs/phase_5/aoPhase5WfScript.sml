@@ -142,4 +142,3 @@ Proof
      combinTheory.o_DEF, apply_outputs]
 QED
 
-val _ = export_theory();

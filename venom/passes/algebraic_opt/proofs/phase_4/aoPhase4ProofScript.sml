@@ -168,4 +168,3 @@ Proof
   >> simp_tac std_ss []
 QED
 
-val _ = export_theory();

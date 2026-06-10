@@ -54,4 +54,3 @@ Proof
       simp[eval_operand_def, lookup_var_def, finite_mapTheory.FLOOKUP_DEF])
 QED
 
-val _ = export_theory();

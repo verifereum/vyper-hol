@@ -184,4 +184,3 @@ Proof
   simp[exec_block_offset_eq, eval_phis_offset, phi_prefix_length_offset]
 QED
 
-val _ = export_theory();

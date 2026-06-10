@@ -1098,4 +1098,3 @@ Proof
      qexists_tac `mid` >> simp[]
 QED
 
-val _ = export_theory();

@@ -285,4 +285,3 @@ Proof
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
-val _ = export_theory();

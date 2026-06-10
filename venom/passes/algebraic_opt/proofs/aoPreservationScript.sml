@@ -469,4 +469,3 @@ Proof
   simp[listTheory.MEM_FLAT, listTheory.MEM_MAP] >> metis_tac[]
 QED
 
-val _ = export_theory();

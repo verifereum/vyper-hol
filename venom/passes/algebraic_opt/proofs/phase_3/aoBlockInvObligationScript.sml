@@ -369,4 +369,3 @@ Proof
   rpt strip_tac >> gvs[range_sound_fempty, range_sound_bottom]
 QED
 
-val _ = export_theory();

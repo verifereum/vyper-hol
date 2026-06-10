@@ -169,4 +169,3 @@ Proof
                 pred_setTheory.SUBSET_UNION, pred_setTheory.SUBSET_TRANS])
 QED
 
-val _ = export_theory();

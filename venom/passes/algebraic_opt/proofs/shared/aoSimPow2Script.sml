@@ -176,4 +176,3 @@ Proof
   every_case_tac >> gvs[neg1_is_max, wordsTheory.WORD_OR_CLAUSES]
 QED
 
-val _ = export_theory();

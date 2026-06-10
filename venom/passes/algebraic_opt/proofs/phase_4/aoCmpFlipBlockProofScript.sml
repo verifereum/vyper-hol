@@ -56,4 +56,3 @@ Libs
  * From flip pair: iszero(val_st1) = val_st2. So iz_out agrees. *)
 
 
-val _ = export_theory();

@@ -271,4 +271,3 @@ Proof
   first_x_assum irule >> gvs[]
 QED
 
-val _ = export_theory();

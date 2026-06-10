@@ -907,4 +907,3 @@ Proof
   metis_tac[]
 QED
 
-val _ = export_theory();
