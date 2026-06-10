@@ -88,38 +88,32 @@ Next steps include formalising the front-end (parsing and full type-checking), p
 
 This work is developed in the [HOL4 theorem prover](https://hol-theorem-prover.org), and makes use of the Ethereum Virtual Machine (EVM) formalisation in the [Verifereum](https://verifereum.org) project, and the test suite for the [Vyper language](https://vyperlang.org) from [its repository](https://github.com/vyperlang/vyper).
 
-**Pinned versions:** The repository uses a `PINS/` directory to pin compatible dependency versions for reproducible builds:
-  - `PINS/verifereum.txt` pins the [Verifereum](https://github.com/verifereum/verifereum) commit
-  - Verifereum's `PINS/holbuild.txt` pins the [`holbuild`](https://github.com/charles-cooper/holbuild) version
-  - holbuild's `PINS/hol.txt` pins the [HOL4](https://github.com/HOL-Theorem-Prover/HOL) commit
+The project is built with [`holbuild`](https://github.com/charles-cooper/holbuild). The repository's `holproject.toml` is the source of truth for the project configuration and pinned HOL dependencies, including the compatible [Verifereum](https://github.com/verifereum/verifereum) revision. The CI workflow (`.github/workflows/holbuild.yml`) is the recommended reference for the exact automated build.
 
-The CI workflow (`.github/workflows/holbuild.yml`) follows this pin chain automatically. For local development, you can use the pinned commits or track the latest versions (which usually work but may occasionally diverge).
+For a local build, install `holbuild` and run:
 
-The [Verifereum repository](https://github.com/verifereum/verifereum) includes instructions on how to build HOL4, and the Vyper repository includes its own installation instructions.
+```bash
+holbuild buildhol
+holbuild -j"$(nproc)" build vyperHolTheory
+```
+
+`holbuild buildhol` builds and caches the HOL toolchain and project dependencies specified by `holproject.toml`.
 
 ### Running the Vyper test suite
 
-The test runner expects exported JSON fixtures to be available at `tests/vyper-test-exports`.
+The test runner expects exported JSON fixtures to be available at `tests/vyper-test-exports`. To generate them locally, clone and install Vyper, then export the functional tests:
 
-**CI workflow (recommended reference):** The GitHub Actions workflow (`.github/workflows/holbuild.yml`) automates the full process:
-
-1. Sets up PolyML, HOL4, Verifereum, and `holbuild`
-2. Clones Vyper, installs it, and exports tests via `pytest -s -n0 --export ../tests/vyper-test-exports -m "not fuzzing" tests/functional`
-3. Runs test groups in parallel using `holbuild` targeting `vyperTest_*Theory`
-
-**Local setup:**
-
-1. Install HOL4, set `HOLDIR` to your HOL installation, and install [`holbuild`](https://github.com/charles-cooper/holbuild).
-2. Clone Verifereum and set `VFMDIR` to its path (referenced by `holproject.toml`).
-3. Export Vyper tests:
 ```bash
-      git clone https://github.com/vyperlang/vyper.git vyper-src
-      cd vyper-src
-      pip install . --group test
-      pytest -s -n0 --export ../tests/vyper-test-exports -m "not fuzzing" tests/functional
+git clone https://github.com/vyperlang/vyper.git vyper-src
+cd vyper-src
+pip install . --group test
+pytest -s -n0 --export ../tests/vyper-test-exports -m "not fuzzing" tests/functional
 ```
 
-4. Run tests with holbuild, e.g.:
+Then run individual generated test theories with `holbuild`, for example:
+
 ```bash
-     holbuild --holdir "$HOLDIR" -j$(nproc) build vyperTest_functional_builtins_codegen_test_abi_decodeTheory
+holbuild -j"$(nproc)" build vyperTest_functional_builtins_codegen_test_abi_decodeTheory
 ```
+
+The CI workflow runs the generated tests in parallel groups; see `.github/workflows/holbuild.yml` for that full setup.
