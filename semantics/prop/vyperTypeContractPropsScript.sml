@@ -918,6 +918,65 @@ Proof
   gvs[ALL_DISTINCT_APPEND]
 QED
 
+
+Theorem find_var_decl_by_num_NONE_Immutable[local]:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (src : num option)) ts)) /\
+  MEM (VariableDecl vis Immutable id ty init) ts ==>
+  find_var_decl_by_num (string_to_num id) ts = NONE
+Proof
+  Induct_on `ts` >- rw[find_var_decl_by_num_def] >>
+  gen_tac >> Cases_on `h` >>
+  rw[find_var_decl_by_num_def, toplevel_vtype_keys_toplevel_def] >>
+  TRY (Cases_on `v0` >> gvs[find_var_decl_by_num_def, toplevel_vtype_keys_toplevel_def]) >>
+  metis_tac[find_var_decl_by_num_NONE_after_variable_head_key,
+            find_var_decl_by_num_NONE_not_toplevel_string_key,
+            distinct_toplevel_keys_no_tail_Immutable_same_id,
+            module_toplevel_vtype_key_MEM_Variable]
+QED
+
+
+Theorem distinct_toplevel_keys_no_tail_Constant_same_id[local]:
+  ALL_DISTINCT
+    (FLAT (MAP (toplevel_vtype_keys_toplevel (src : num option)) (h::ts))) /\
+  MEM (VariableDecl vis (Constant e) id ty init) ts /\
+  MEM ((src : num option),string_to_num id)
+      (toplevel_vtype_keys_toplevel src h) ==>
+  F
+Proof
+  rpt strip_tac >>
+  `MEM ((src : num option),string_to_num id)
+      (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))` by
+    metis_tac[module_toplevel_vtype_key_MEM_Variable] >>
+  gvs[ALL_DISTINCT_APPEND]
+QED
+
+
+Theorem find_var_decl_by_num_NONE_Constant[local]:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (src : num option)) ts)) /\
+  MEM (VariableDecl vis (Constant e) id ty init) ts ==>
+  find_var_decl_by_num (string_to_num id) ts = NONE
+Proof
+  Induct_on `ts` >- rw[find_var_decl_by_num_def] >>
+  gen_tac >> Cases_on `h` >>
+  rw[find_var_decl_by_num_def, toplevel_vtype_keys_toplevel_def] >>
+  TRY (Cases_on `v0` >> gvs[find_var_decl_by_num_def, toplevel_vtype_keys_toplevel_def]) >>
+  metis_tac[find_var_decl_by_num_NONE_after_variable_head_key,
+            find_var_decl_by_num_NONE_not_toplevel_string_key,
+            distinct_toplevel_keys_no_tail_Constant_same_id,
+            module_toplevel_vtype_key_MEM_Variable]
+QED
+
+
+Theorem find_var_decl_by_num_NONE_non_storage_var[local]:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (src : num option)) ts)) /\
+  MEM (VariableDecl vis mut id ty init) ts /\
+  (mut = Immutable \/ (?e. mut = Constant e)) ==>
+  find_var_decl_by_num (string_to_num id) ts = NONE
+Proof
+  rw[] >-
+   metis_tac[find_var_decl_by_num_NONE_Immutable] >>
+  metis_tac[find_var_decl_by_num_NONE_Constant]
+QED
 (* The old same-source StructDecl/FlagDecl shadowing probe is intentionally not
    kept as a theorem: checked contracts now reject such collisions via
    type_def_keys_toplevel in contract_namespaces_ok. *)
