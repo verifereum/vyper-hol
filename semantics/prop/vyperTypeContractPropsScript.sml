@@ -903,6 +903,21 @@ Proof
 QED
 
 
+Theorem distinct_toplevel_keys_no_tail_Immutable_same_id[local]:
+  ALL_DISTINCT
+    (FLAT (MAP (toplevel_vtype_keys_toplevel (src : num option)) (h::ts))) /\
+  MEM (VariableDecl vis Immutable id ty init) ts /\
+  MEM ((src : num option),string_to_num id)
+      (toplevel_vtype_keys_toplevel src h) ==>
+  F
+Proof
+  rpt strip_tac >>
+  `MEM ((src : num option),string_to_num id)
+      (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))` by
+    metis_tac[module_toplevel_vtype_key_MEM_Variable] >>
+  gvs[ALL_DISTINCT_APPEND]
+QED
+
 (* The old same-source StructDecl/FlagDecl shadowing probe is intentionally not
    kept as a theorem: checked contracts now reject such collisions via
    type_def_keys_toplevel in contract_namespaces_ok. *)
