@@ -9,7 +9,7 @@
 
 Theory vyperTypeContractProps
 Ancestors
-  list rich_list arithmetic finite_map alist option pair
+  list rich_list arithmetic finite_map alist option pair patricia_casts
   vyperAST vyperValue vyperMisc vyperContext vyperState vyperInterpreter
   vyperTypeSystem vyperTypeContract vyperTypeInvariants
 Libs
@@ -593,6 +593,216 @@ Proof
   gen_tac >> PairCases_on `h` >> rw[] >> gvs[ALL_DISTINCT_APPEND]
 QED
 
+Theorem square_lt[local]:
+  a < b ==> a ** 2 < b ** 2
+Proof
+  rw[EXP_2]
+QED
+
+Theorem square_suc_expand[local]:
+  (SUC n) ** 2 = SUC (n + (n + n ** 2))
+Proof
+  rewrite_tac [EXP_2] >> simp[MULT_CLAUSES, ADD_CLAUSES]
+QED
+
+Theorem square_suc_bound[local]:
+  b <= n ==> n ** 2 + b < (SUC n) ** 2
+Proof
+  rw[square_suc_expand] >> decide_tac
+QED
+
+Theorem square_le[local]:
+  a <= b ==> a ** 2 <= b ** 2
+Proof
+  metis_tac[LESS_OR_EQ, square_lt]
+QED
+
+Theorem pair_num_mixed_lt_left[local]:
+  b <= n /\ n < a ==> n + n ** 2 + b < n + a ** 2
+Proof
+  rw[] >>
+  `n ** 2 + b < (SUC n) ** 2` by metis_tac[square_suc_bound] >>
+  `(SUC n) ** 2 <= a ** 2` by metis_tac[square_le, LESS_EQ] >>
+  decide_tac
+QED
+
+Theorem pair_num_same_left_11[local]:
+  pair_num n a = pair_num n b ==> a = b
+Proof
+  rw[pair_num_def]
+  >- (`b <= n` by decide_tac >>
+      drule_all pair_num_mixed_lt_left >> decide_tac)
+  >- (`a < b` by decide_tac >>
+      `n + n ** 2 + a < n + b ** 2` by
+        (irule pair_num_mixed_lt_left >> simp[]) >>
+      decide_tac)
+QED
+
+Theorem square_suc_bound_sum[local]:
+  b <= n ==> n + n ** 2 + b < (SUC n) ** 2
+Proof
+  rw[square_suc_expand] >> decide_tac
+QED
+
+Theorem pair_num_square_bounds[local]:
+  MAX x y ** 2 <= pair_num x y /\
+  pair_num x y < (SUC (MAX x y)) ** 2
+Proof
+  Cases_on `x < y` >> simp[pair_num_def, MAX_DEF]
+  >- (`y ** 2 + x < (SUC y) ** 2` by
+        (irule square_suc_bound >> simp[]) >>
+      decide_tac) >>
+  `x + x ** 2 + y < (SUC x) ** 2` by
+    (irule square_suc_bound_sum >> simp[]) >>
+  decide_tac
+QED
+
+Theorem square_interval_unique[local]:
+  m ** 2 <= p /\ p < (SUC m) ** 2 /\
+  n ** 2 <= p /\ p < (SUC n) ** 2 ==> m = n
+Proof
+  rw[] >>
+  Cases_on `m < n`
+  >- (`SUC m <= n` by decide_tac >>
+      `(SUC m) ** 2 <= n ** 2` by metis_tac[square_le] >>
+      decide_tac) >>
+  Cases_on `n < m`
+  >- (`SUC n <= m` by decide_tac >>
+      `(SUC n) ** 2 <= m ** 2` by metis_tac[square_le] >>
+      decide_tac) >>
+  decide_tac
+QED
+
+Theorem pair_num_11[local]:
+  pair_num a b = pair_num c d <=> a = c /\ b = d
+Proof
+  eq_tac >- (
+    strip_tac >>
+    `MAX a b = MAX c d` by
+      (irule square_interval_unique >>
+       qexists `pair_num a b` >>
+       metis_tac[pair_num_square_bounds]) >>
+    Cases_on `a < b` >> Cases_on `c < d` >>
+    gvs[pair_num_def, MAX_DEF] >> decide_tac) >>
+  rw[]
+QED
+
+Theorem type_key_same_src_11[local]:
+  type_key (src,a) = type_key (src,b) <=> a = b
+Proof
+  Cases_on `src` >> simp[type_key_def] >>
+  metis_tac[pair_num_same_left_11, string_to_num_inj]
+QED
+
+Theorem type_key_even_odd[local]:
+  2 * m <> 2 * n + 1
+Proof
+  strip_tac >>
+  `EVEN (2 * m)` by simp[EVEN_DOUBLE] >>
+  `ODD (2 * n + 1)` by simp[GSYM ADD1, ODD_DOUBLE] >>
+  metis_tac[EVEN_ODD]
+QED
+
+Theorem type_key_11[local]:
+  type_key (src1,a) = type_key (src2,b) <=> src1 = src2 /\ a = b
+Proof
+  Cases_on `src1` >> Cases_on `src2` >> simp[type_key_def, type_key_even_odd]
+  >- metis_tac[string_to_num_inj]
+  >- (eq_tac >> rw[] >> gvs[] >> metis_tac[pair_num_11, string_to_num_inj])
+QED
+
+Theorem type_def_key_MEM_FlagDecl:
+  MEM (FlagDecl fid members) ts ==>
+  MEM ((src : num option),fid) (FLAT (MAP (type_def_keys_toplevel src) ts))
+Proof
+  rw[MEM_FLAT, MEM_MAP] >>
+  qexists `[(src,fid)]` >> simp[] >>
+  qexists `FlagDecl fid members` >>
+  simp[type_def_keys_toplevel_def]
+QED
+Theorem type_def_key_MEM_contract_keys[local]:
+  MEM (src,ts) mods /\ MEM (FlagDecl fid members) ts ==>
+  MEM (src,fid) (contract_keys type_def_keys_toplevel mods)
+Proof
+  rw[contract_keys_def, MEM_FLAT, MEM_MAP] >>
+  qexists `FLAT (MAP (type_def_keys_toplevel src) ts)` >> simp[] >>
+  conj_tac >- (qexists `(src,ts)` >> simp[]) >>
+  rw[MEM_FLAT, MEM_MAP] >>
+  qexists `[(src,fid)]` >> simp[] >>
+  qexists `FlagDecl fid members` >> simp[type_def_keys_toplevel_def]
+QED
+
+
+Theorem contract_namespaces_ok_module_type_def_keys:
+  contract_namespaces_ok F mods /\ MEM (src,tls) mods ==>
+  ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel src) tls))
+Proof
+  rw[contract_namespaces_ok_def, contract_keys_def] >>
+  qpat_x_assum `ALL_DISTINCT (FLAT (MAP _ mods))` mp_tac >>
+  Induct_on `mods` >- rw[] >>
+  gen_tac >> PairCases_on `h` >> rw[] >> gvs[ALL_DISTINCT_APPEND]
+QED
+
+Theorem flag_decl_type_env_for_module:
+  MEM (FlagDecl fid members) ts /\
+  ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel src) ts)) ==>
+  FLOOKUP (type_env_for_module src ts) (type_key (src,fid)) =
+    SOME (FlagArgs (LENGTH members))
+Proof
+  Induct_on `ts` >- rw[type_env_for_module_def] >>
+  gen_tac >> Cases_on `h` >>
+  rw[type_env_for_module_def, type_def_keys_toplevel_def, FLOOKUP_UPDATE] >>
+  gvs[type_env_for_module_def, type_def_keys_toplevel_def, FLOOKUP_UPDATE,
+      type_key_same_src_11] >>
+  metis_tac[type_def_key_MEM_FlagDecl]
+QED
+
+Theorem type_env_for_module_lookup_type_def_key[local]:
+  FLOOKUP (type_env_for_module src ts) (type_key (src',id)) = SOME v ==>
+  MEM (src',id) (FLAT (MAP (type_def_keys_toplevel src) ts))
+Proof
+  qid_spec_tac `src'` >> qid_spec_tac `id` >> qid_spec_tac `v` >>
+  Induct_on `ts` >- rw[type_env_for_module_def] >>
+  gen_tac >> Cases_on `h` >>
+  rw[type_env_for_module_def, type_def_keys_toplevel_def, FLOOKUP_UPDATE] >>
+  gvs[type_key_11]
+QED
+
+Theorem flag_decl_type_env_all_modules:
+  contract_namespaces_ok F mods /\
+  ALOOKUP mods src = SOME ts /\
+  MEM (FlagDecl fid members) ts ==>
+  FLOOKUP (type_env_all_modules mods) (type_key (src,fid)) =
+    SOME (FlagArgs (LENGTH members))
+Proof
+  rw[contract_namespaces_ok_def] >>
+  qpat_x_assum `ALL_DISTINCT (contract_keys (fn_sig_keys_toplevel F) mods)` kall_tac >>
+  qpat_x_assum `ALL_DISTINCT (contract_keys toplevel_vtype_keys_toplevel mods)` kall_tac >>
+  qpat_x_assum `ALL_DISTINCT (contract_keys flag_member_keys_toplevel mods)` kall_tac >>
+  qpat_x_assum `MEM (FlagDecl fid members) ts` mp_tac >>
+  qpat_x_assum `ALOOKUP mods src = SOME ts` mp_tac >>
+  qpat_x_assum `ALL_DISTINCT (MAP FST mods)` mp_tac >>
+  qpat_x_assum `ALL_DISTINCT (contract_keys type_def_keys_toplevel mods)` mp_tac >>
+  qid_spec_tac `mods` >> qid_spec_tac `ts` >> qid_spec_tac `src` >>
+  qid_spec_tac `members` >> qid_spec_tac `fid` >>
+  Induct_on `mods` >- rw[contract_keys_def, type_env_all_modules_def] >>
+  gen_tac >> gen_tac >> gen_tac >> gen_tac >> PairCases_on `h` >>
+  rw[type_env_all_modules_def, contract_keys_def, ALL_DISTINCT_APPEND, FLOOKUP_FUNION] >>
+  gvs[]
+  >- (`FLOOKUP (type_env_for_module h0 h1) (type_key (h0,fid)) =
+         SOME (FlagArgs (LENGTH members))` by
+        (irule flag_decl_type_env_for_module >> simp[]) >>
+      simp[]) >>
+  Cases_on `FLOOKUP (type_env_for_module h0 h1) (type_key (src,fid))` >> simp[]
+  >- (first_x_assum irule >> simp[contract_keys_def]) >>
+  `MEM (src,fid) (FLAT (MAP (type_def_keys_toplevel h0) h1))` by
+    metis_tac[type_env_for_module_lookup_type_def_key] >>
+  `MEM (src,ts) mods` by metis_tac[ALOOKUP_MEM] >>
+  `MEM (src,fid) (contract_keys type_def_keys_toplevel mods)` by
+    metis_tac[type_def_key_MEM_contract_keys] >>
+  metis_tac[contract_keys_def]
+QED
+
 Theorem build_contract_type_artifact_flag_members_sound:
   contract_namespaces_ok F mods /\
   FLOOKUP (build_contract_type_artifact F mods).cta_flag_members (src,fid) = SOME members ==>
@@ -603,6 +813,63 @@ Proof
   qexists `tls` >> simp[] >>
   irule ALOOKUP_ALL_DISTINCT_MEM >> gvs[contract_namespaces_ok_def] >> metis_tac[]
 QED
+
+Theorem is_bare_global_decl_MEM_Immutable[local]:
+  MEM (VariableDecl vis Immutable id ty init) ts ==>
+  is_bare_global_decl (string_to_num id) ts
+Proof
+  Induct_on `ts` >- rw[is_bare_global_decl_def] >>
+  gen_tac >> Cases_on `h` >> gvs[is_bare_global_decl_def] >>
+  TRY (Cases_on `v0` >> gvs[is_bare_global_decl_def]) >>
+  metis_tac[]
+QED
+
+Theorem is_bare_global_decl_MEM_Constant[local]:
+  MEM (VariableDecl vis (Constant e) id ty init) ts ==>
+  is_bare_global_decl (string_to_num id) ts
+Proof
+  Induct_on `ts` >- rw[is_bare_global_decl_def] >>
+  gen_tac >> Cases_on `h` >> gvs[is_bare_global_decl_def] >>
+  TRY (Cases_on `v0` >> gvs[is_bare_global_decl_def]) >>
+  metis_tac[]
+QED
+
+Theorem is_immutable_decl_MEM[local]:
+  MEM (VariableDecl vis Immutable id ty init) ts ==>
+  is_immutable_decl (string_to_num id) ts
+Proof
+  Induct_on `ts` >- rw[is_immutable_decl_def] >>
+  gen_tac >> Cases_on `h` >> gvs[is_immutable_decl_def] >>
+  TRY (Cases_on `v0` >> gvs[is_immutable_decl_def]) >>
+  metis_tac[]
+QED
+
+Theorem find_var_decl_by_num_NONE_not_toplevel_key[local]:
+  ~MEM ((src : num option),n) (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts)) ==>
+  find_var_decl_by_num n ts = NONE
+Proof
+  Induct_on `ts` >- rw[find_var_decl_by_num_def] >>
+  gen_tac >> Cases_on `h` >>
+  rw[find_var_decl_by_num_def, toplevel_vtype_keys_toplevel_def] >>
+  TRY (Cases_on `v0` >> gvs[find_var_decl_by_num_def])
+QED
+
+Theorem module_toplevel_vtype_key_MEM[local]:
+  (MEM (VariableDecl vis mut id ty init) ts \/
+   MEM (HashMapDecl vis is_transient id kt vty init2) ts) ==>
+  MEM ((src : num option),string_to_num id)
+    (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))
+Proof
+  rw[MEM_FLAT, MEM_MAP] >-
+    (qexists `[(src,string_to_num id)]` >> simp[] >>
+     qexists `VariableDecl vis mut id ty init` >>
+     simp[toplevel_vtype_keys_toplevel_def]) >>
+  qexists `[(src,string_to_num id)]` >> simp[] >>
+  qexists `HashMapDecl vis is_transient id kt vty init2` >>
+  simp[toplevel_vtype_keys_toplevel_def]
+QED
+
+
 
 (* The old same-source StructDecl/FlagDecl shadowing probe is intentionally not
    kept as a theorem: checked contracts now reject such collisions via
