@@ -3026,3 +3026,65 @@ Proof
     checked_explicit_external_entry_establishes_type_soundness_preconditions,
     eval_stmts_no_type_error]
 QED
+
+(* ===== External lookup provenance for checked contracts ===== *)
+
+Definition is_public_getter_decl_def:
+  is_public_getter_decl fn (VariableDecl Public mut id typ init) = (id = fn) /\
+  is_public_getter_decl fn (HashMapDecl Public is_transient id kt vt init) = (id = fn) /\
+  is_public_getter_decl _ _ = F
+End
+
+Definition external_getter_tuple_def:
+  external_getter_tuple src (VariableDecl Public mut id typ init) =
+    (if ~is_ArrayT typ then
+       SOME (View,F,[],[],typ,[Return (SOME (TopLevelName NoneT (src,id)))])
+     else
+       SOME (getter (TopLevelName NoneT (src,id)) (BaseT (UintT 256)) (Type (ArrayT_type typ)))) /\
+  external_getter_tuple src (HashMapDecl Public is_transient id kt vt init) =
+    SOME (getter (TopLevelName NoneT (src,id)) kt vt) /\
+  external_getter_tuple _ _ = NONE
+End
+
+Theorem lookup_function_External_cases[local]:
+  lookup_function src fn External ts = SOME (mut,nr,args,dflts,ret,body) ==>
+  (?raw. MEM (FunctionDecl External mut nr raw fn args dflts ret body) ts) \/
+  (?decl. MEM decl ts /\ is_public_getter_decl fn decl /\
+          external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,body))
+Proof
+  Induct_on `ts` >- rw[lookup_function_def] >>
+  gen_tac >> Cases_on `h` >>
+  rw[lookup_function_def, is_public_getter_decl_def, external_getter_tuple_def] >>
+  TRY (Cases_on `v`) >>
+  gvs[AllCaseEqs(), lookup_function_def, is_public_getter_decl_def, external_getter_tuple_def] >>
+  TRY (disj1_tac >> qexists `b0` >> simp[] >> NO_TAC) >>
+  TRY (disj1_tac >> qexists `raw` >> simp[] >> NO_TAC) >>
+  TRY (disj1_tac >> goal_assum (drule_at Any) >> simp[] >> NO_TAC) >>
+  TRY (disj2_tac >> qexists `VariableDecl Public v0 fn ret o'` >>
+       simp[is_public_getter_decl_def, external_getter_tuple_def] >> NO_TAC) >>
+  TRY (disj2_tac >> qexists `VariableDecl Public v0 fn t o'` >>
+       simp[is_public_getter_decl_def, external_getter_tuple_def] >> NO_TAC) >>
+  TRY (disj2_tac >> qexists `HashMapDecl Public b fn t v0 o'` >>
+       simp[is_public_getter_decl_def, external_getter_tuple_def] >> NO_TAC) >>
+  TRY (disj2_tac >> goal_assum (drule_at Any) >>
+       simp[is_public_getter_decl_def, external_getter_tuple_def] >> NO_TAC) >>
+  metis_tac[]
+QED
+
+Theorem lookup_exported_function_checked_cases_selected:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  ALOOKUP am.sources tx.target = SOME mods /\
+  cx = initial_evaluation_context am.sources am.layouts tx /\
+  src = find_function_module cx am tx.function_name /\
+  get_module_code cx src = SOME ts /\
+  lookup_exported_function cx am tx.function_name =
+    SOME (mut,nr,args,dflts,ret,body) ==>
+  (?raw.
+     MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts) \/
+  (?decl.
+     MEM decl ts /\
+     is_public_getter_decl tx.function_name decl /\
+     external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,body))
+Proof
+  cheat
+QED
