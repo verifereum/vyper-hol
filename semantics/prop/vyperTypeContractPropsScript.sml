@@ -4088,7 +4088,16 @@ Theorem call_external_function_deploy_success_preserves_immutable_type_tags_from
       (get_source_immutables src
         (case ALOOKUP am_out.immutables cx.txn.target of SOME m => m | NONE => [])) id = SOME (tv,y)
 Proof
-  cheat
+  rw[] >>
+  drule_all call_external_function_deploy_success_cases >>
+  strip_tac >>
+  gvs[] >-
+    (irule call_external_function_deploy_normal_success_lookup_transport >>
+     qexistsl [`am_c`, `body`, `env`, `mut`, `nr`, `st_body`, `st_unlocked`, `()`, `x`] >>
+     simp[]) >>
+  irule call_external_function_deploy_return_success_lookup_transport >>
+  qexistsl [`am_c`, `body`, `env`, `mut`, `nr`, `st_body`, `st_unlocked`, `()`, `v_ret`, `x`] >>
+  simp[]
 QED
 
 Theorem deployed_toplevel_vtypes_immutables_ready_clause[local]:
