@@ -2806,11 +2806,43 @@ Proof
   rpt strip_tac >> gvs[params_ok_def] >>
   drule_all FOLDL_extend_local_args_var_assignable_range >> simp[]
 QED
+Theorem check_contract_lookup_callable_function_F_body[local]:
+  check_contract F layouts addr mods = SOME art /\
+  ALOOKUP mods src = SOME ts /\
+  lookup_callable_function F fn ts = SOME (fm,nr,args,dflts,ret,body) ==>
+  check_function_body layouts addr mods art src fm nr args dflts ret body
+Proof
+  rw[] >>
+  drule lookup_callable_function_F_SOME_MEM >> strip_tac >>
+  drule_all check_contract_function_body_MEM >> simp[]
+QED
+
 Theorem check_contract_functions_well_typed_initial:
   check_contract F layouts addr mods = SOME art /\
   ALOOKUP sources addr = SOME mods /\
   tx.target = addr ==>
   functions_well_typed (initial_evaluation_context sources layouts tx)
 Proof
-  cheat
+  simp[functions_well_typed_def] >>
+  strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  `ALOOKUP mods src_id_opt = SOME ts` by
+    gvs[get_module_code_def, initial_evaluation_context_def] >>
+  conj_tac >-
+   (`check_function_body layouts addr mods art src_id_opt fm nr args dflts ret body` by
+      (irule check_contract_lookup_callable_function_F_body >>
+       simp[] >>
+       qexists `fn` >>
+       gvs[initial_evaluation_context_def]) >>
+    gvs[initial_evaluation_context_def, check_function_body_def] >>
+    Cases_on `lookup_nonreentrant_slot layouts tx.target` >> gvs[] >>
+    qexists `fn` >> simp[]) >>
+  `check_function_body layouts addr mods art src_id_opt fm nr args dflts ret body` by
+    (irule check_contract_lookup_callable_function_F_body >>
+     simp[] >>
+     qexists `fn` >>
+     gvs[initial_evaluation_context_def]) >>
+  drule_all check_function_body_static_maps_transfer_initial >>
+  simp[]
 QED
