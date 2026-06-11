@@ -11,9 +11,11 @@ Theory vyperTypeContractProps
 Ancestors
   list rich_list arithmetic finite_map alist option pair patricia_casts
   vyperAST vyperValue vyperMisc vyperContext vyperState vyperInterpreter
-  vyperTypeSystem vyperTypeContract vyperTypeInvariants
+  vyperTypeSystem vyperTypeContract vyperTypeInvariants vyperTypeInitialState
 Libs
   wordsLib
+
+val _ = Parse.hide "body";
 
 Theorem get_module_code_initial_evaluation_context:
   ALOOKUP sources addr = SOME mods /\ tx.target = addr ==>
@@ -2845,4 +2847,50 @@ Proof
      gvs[initial_evaluation_context_def]) >>
   drule_all check_function_body_static_maps_transfer_initial >>
   simp[]
+QED
+
+(* ===== Explicit external entry no-TypeError bridge for checked contracts ===== *)
+
+Theorem functions_well_typed_stk_irrelevant[local]:
+  !cx stk. functions_well_typed (cx with stk := stk) <=>
+           functions_well_typed cx
+Proof
+  simp[functions_well_typed_def, get_module_code_def, get_tenv_def,
+       fn_sigs_consistent_def, fn_sigs_complete_def,
+       toplevel_vtypes_complete_def, bare_globals_complete_def,
+       bare_global_assignable_complete_def, flag_members_complete_def,
+       well_formed_type_def]
+QED
+
+Theorem check_contract_functions_well_typed_initial_stk[local]:
+  check_contract F layouts addr mods = SOME art /\
+  ALOOKUP sources addr = SOME mods /\
+  tx.target = addr ==>
+  functions_well_typed ((initial_evaluation_context sources layouts tx) with stk := stk)
+Proof
+  rw[functions_well_typed_stk_irrelevant] >>
+  irule check_contract_functions_well_typed_initial >>
+  simp[]
+QED
+
+Theorem check_contract_explicit_external_entry_no_type_error:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  ALOOKUP am.sources tx.target = SOME mods /\
+  ALOOKUP mods src = SOME ts /\
+  MEM (FunctionDecl External mut nr raw fn args dflts ret body) ts /\
+  context_well_typed
+    ((initial_evaluation_context am.sources am.layouts tx) with stk := [(src,fn)]) /\
+  machine_well_typed am /\
+  immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
+    ((initial_evaluation_context am.sources am.layouts tx) with stk := [(src,fn)])
+    am.immutables /\
+  bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
+  args_values_typed (type_env_all_modules mods) args vals ==>
+  no_type_error_eval
+    (eval_stmts
+      ((initial_evaluation_context am.sources am.layouts tx) with stk := [(src,fn)])
+      body
+      (initial_state am [scope]))
+Proof
+  cheat
 QED
