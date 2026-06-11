@@ -3335,6 +3335,13 @@ Definition call_tx_well_typed_def:
     tx.prev_randao < 2 ** 256
 End
 
+Theorem call_tx_well_typed_empty_zero_witness:
+  ?tx. tx.args = [] /\ tx.value = 0 /\ call_tx_well_typed tx
+Proof
+  qexists `empty_call_txn` >>
+  simp[empty_call_txn_def, call_tx_well_typed_def]
+QED
+
 Theorem checked_call_external_no_type_error:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\
