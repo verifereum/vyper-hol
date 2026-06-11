@@ -2949,6 +2949,60 @@ Proof
   qexistsl [`env_body`, `env_after`] >> simp[] >> metis_tac[]
 QED
 
+Theorem checked_explicit_external_entry_establishes_type_soundness_preconditions[local]:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  ALOOKUP am.sources tx.target = SOME mods /\
+  ALOOKUP mods src = SOME ts /\
+  MEM (FunctionDecl External mut nr raw fn args dflts ret body) ts /\
+  context_well_typed
+    ((initial_evaluation_context am.sources am.layouts tx) with stk := [(src,fn)]) /\
+  machine_well_typed am /\
+  immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
+    ((initial_evaluation_context am.sources am.layouts tx) with stk := [(src,fn)])
+    am.immutables /\
+  bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
+  args_values_typed (type_env_all_modules mods) args vals ==>
+  ?env_body env_after st.
+    st = initial_state am [scope] /\
+    functions_well_typed
+      ((initial_evaluation_context am.sources am.layouts tx) with stk := [(src,fn)]) /\
+    accounts_well_typed st.accounts /\
+    state_well_typed st /\
+    env_consistent env_body
+      ((initial_evaluation_context am.sources am.layouts tx) with stk := [(src,fn)]) st /\
+    type_stmts env_body ret body = SOME env_after
+Proof
+  strip_tac >> gvs[] >>
+  drule_all checked_explicit_external_body_typing_package >>
+  strip_tac >>
+  `scope_well_typed scope` by
+    (qspecl_then [`type_env_all_modules mods`, `args`, `vals`, `scope`] mp_tac
+       bind_arguments_scope_well_typed_stmt >>
+     simp[] >>
+     disch_then irule >>
+     rpt strip_tac >>
+     gvs[args_values_typed_def]) >>
+  qexistsl [`env_body`, `env_after`] >>
+  rw[initial_state_accounts_well_typed, initial_state_single_scope_well_typed] >-
+    (irule check_contract_functions_well_typed_initial_stk >> simp[]) >>
+  rw[env_consistent_def]
+  >- (irule env_context_consistent_same_static_maps >>
+      qexists `artifact_env art mods env_body.current_src` >>
+      rpt (conj_tac >- simp[artifact_env_def, get_tenv_def, initial_evaluation_context_def]) >>
+      irule check_contract_env_context_consistent_initial_with_current_src >>
+      simp[])
+  >- (`env_scopes_consistent env_body
+         ((initial_evaluation_context am.sources am.layouts tx) with stk := [(env_body.current_src,fn)])
+         ((initial_state am [scope]) with scopes := [scope])` suffices_by
+        gvs[initial_state_def] >>
+      irule bind_arguments_env_scopes_consistent >>
+      qexistsl [`args`, `type_env_all_modules mods`, `vals`] >>
+      gvs[get_tenv_def, initial_evaluation_context_def] >> metis_tac[])
+  >- (irule immutables_ready_env_immutables_consistent >>
+      qexists `artifact_env art mods src` >>
+      gvs[artifact_env_def])
+QED
+
 Theorem check_contract_explicit_external_entry_no_type_error:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\
