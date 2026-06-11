@@ -3121,6 +3121,39 @@ Proof
        lift_option_def, return_def, raise_def]
 QED
 
+Theorem checked_assumptions_missing_source_immutable_eval_TypeError_probe:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  ALOOKUP am.sources tx.target = SOME mods /\
+  machine_well_typed am /\
+  FLOOKUP art.cta_bare_globals (src,string_to_num id) = SOME ty /\
+  get_module_code (initial_evaluation_context am.sources am.layouts tx) src = SOME code /\
+  find_var_decl_by_num (string_to_num id) code = NONE /\
+  ALOOKUP am.immutables tx.target = SOME imms /\
+  FLOOKUP (get_source_immutables src imms) (string_to_num id) = NONE ==>
+  ?msg.
+    eval_expr (initial_evaluation_context am.sources am.layouts tx)
+      (TopLevelName ty (src,id)) (initial_state am []) =
+      (INR (Error (TypeError msg)), initial_state am [])
+Proof
+  rw[initial_state_def] >>
+  irule TopLevelName_missing_source_immutable_TypeError_probe >>
+  simp[initial_evaluation_context_def]
+QED
+
+Theorem public_immutable_scalar_getter_body_TopLevelName_probe:
+  ~is_ArrayT typ /\
+  external_getter_tuple src (VariableDecl Public Immutable id typ init) =
+    SOME (mut,nr,args,dflts,ret,body) ==>
+  mut = View /\
+  nr = F /\
+  args = [] /\
+  dflts = [] /\
+  ret = typ /\
+  body = [Return (SOME (TopLevelName NoneT (src,id)))]
+Proof
+  rw[external_getter_tuple_def] >> gvs[]
+QED
+
 Definition call_tx_well_typed_def:
   call_tx_well_typed tx <=>
     tx.value < 2 ** 256 /\
