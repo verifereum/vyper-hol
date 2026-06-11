@@ -3154,6 +3154,47 @@ Proof
   rw[external_getter_tuple_def] >> gvs[]
 QED
 
+Theorem scalar_getter_call_external_function_eval_TypeError_probe:
+  cx.in_deploy = F /\
+  cx.txn.value = 0 /\
+  eval_expr cx (TopLevelName NoneT (src,id)) (initial_state am [FEMPTY]) =
+    (INR (Error (TypeError msg)), initial_state am [FEMPTY]) ==>
+  call_external_function am cx F View ts all_mods [] [] []
+    [Return (SOME (TopLevelName NoneT (src,id)))] ret =
+    (INR (Error (TypeError msg)), am)
+Proof
+  rw[Once call_external_function_def, evaluate_defaults_def, bind_arguments_def,
+     send_call_value_def, bind_def, ignore_bind_def, return_def, raise_def,
+     Once evaluate_def] >>
+  `eval_expr cx (TopLevelName NoneT (src,id)) (initial_state am [FEMPTY]) =
+     (INR (Error (TypeError msg)), initial_state am [FEMPTY])` by
+    simp[Once evaluate_def] >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, return_def, raise_def] >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, return_def, raise_def] >>
+  gvs[]
+QED
+
+Theorem scalar_getter_call_external_dispatch_TypeError_probe:
+  cx = initial_evaluation_context am.sources am.layouts tx /\
+  ALOOKUP am.sources tx.target = SOME all_mods /\
+  src = find_function_module cx am tx.function_name /\
+  get_module_code cx src = SOME ts /\
+  lookup_exported_function cx am tx.function_name =
+    SOME (View,F,[],[],ret,[Return (SOME (TopLevelName NoneT (src,id)))]) /\
+  tx.args = [] /\
+  tx.value = 0 /\
+  eval_expr cx (TopLevelName NoneT (src,id)) (initial_state am [FEMPTY]) =
+    (INR (Error (TypeError msg)), initial_state am [FEMPTY]) ==>
+  call_external am tx = (INR (Error (TypeError msg)), am)
+Proof
+  rw[Once call_external_def] >> gvs[AllCaseEqs()] >>
+  qexists `ts` >>
+  conj_tac >- (Cases_on `find_function_module (initial_evaluation_context am.sources am.layouts tx) am tx.function_name` >>
+                gvs[get_self_code_def]) >>
+  irule scalar_getter_call_external_function_eval_TypeError_probe >>
+  simp[initial_evaluation_context_def]
+QED
+
 Definition call_tx_well_typed_def:
   call_tx_well_typed tx <=>
     tx.value < 2 ** 256 /\
