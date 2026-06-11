@@ -3440,6 +3440,17 @@ Proof
   qexists `a` >> simp[]
 QED
 
+Theorem call_external_function_deploy_success_evaluate_all_constants[local]:
+  cx.in_deploy /\
+  call_external_function am cx nr mut ts all_mods args dflts vals body ret =
+    (INL v, am_out) ==>
+  ?am_c.
+    evaluate_all_constants cx am cx.txn.target all_mods = SOME am_c
+Proof
+  rw[call_external_function_def] >>
+  gvs[AllCaseEqs()]
+QED
+
 Theorem load_contract_establishes_immutables_ready:
   load_contract am deploy_tx mods exps = INL am_deployed /\
   check_contract F am_deployed.layouts call_tx.target mods = SOME call_art /\
