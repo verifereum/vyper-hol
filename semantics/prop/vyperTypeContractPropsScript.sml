@@ -3402,3 +3402,51 @@ Theorem checked_call_external_no_type_error:
 Proof
   cheat
 QED
+
+(* ===== Deployment establishes runtime immutable readiness ===== *)
+
+Theorem load_contract_success_cases[local]:
+  load_contract am tx mods exps = INL am_deployed ==>
+  ?imms ts mut nr args dflts ret body v am_ctor.
+    initial_immutables (type_env_all_modules mods) mods = SOME imms /\
+    ts = (case ALOOKUP mods NONE of SOME ts => ts | NONE => []) /\
+    lookup_function NONE tx.function_name Deploy ts =
+      SOME (mut,nr,args,dflts,ret,body) /\
+    call_external_function
+      (am with <| immutables updated_by CONS (tx.target,imms);
+                 exports updated_by CONS (tx.target,exps) |>)
+      ((initial_evaluation_context ((tx.target,mods)::am.sources)
+          am.layouts tx) with in_deploy := T)
+      nr mut ts mods args dflts tx.args body ret = (INL v, am_ctor) /\
+    am_deployed = am_ctor with sources updated_by CONS (tx.target,mods)
+Proof
+  rw[load_contract_def] >>
+  Cases_on `initial_immutables (type_env_all_modules mods) mods` >> gvs[] >>
+  Cases_on `lookup_function NONE tx.function_name Deploy
+              (case ALOOKUP mods NONE of SOME ts => ts | NONE => [])` >> gvs[] >>
+  Cases_on `x'` >> gvs[] >>
+  Cases_on `r` >> gvs[] >>
+  Cases_on `r''` >> gvs[] >>
+  Cases_on `r` >> gvs[] >>
+  Cases_on `r''` >> gvs[] >>
+  Cases_on `call_external_function
+      (am with <|immutables updated_by CONS (tx.target,x);
+                exports updated_by CONS (tx.target,exps)|>)
+      ((initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts tx)
+         with in_deploy := T)
+      q' q (case ALOOKUP mods NONE of SOME ts => ts | NONE => []) mods q'' q''' tx.args r q''''` >>
+  gvs[] >>
+  Cases_on `q'''''` >> gvs[] >>
+  qexists `a` >> simp[]
+QED
+
+Theorem load_contract_establishes_immutables_ready:
+  load_contract am deploy_tx mods exps = INL am_deployed /\
+  check_contract F am_deployed.layouts call_tx.target mods = SOME call_art /\
+  call_tx.target = deploy_tx.target ==>
+  immutables_ready call_art.cta_bare_globals call_art.cta_toplevel_vtypes
+    (initial_evaluation_context am_deployed.sources am_deployed.layouts call_tx)
+    am_deployed.immutables
+Proof
+  cheat
+QED
