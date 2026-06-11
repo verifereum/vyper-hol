@@ -2520,6 +2520,101 @@ QED
 
 
 
+Theorem well_typed_atarget_static_maps_transfer_env[local]:
+  !env1 tgt ty.
+    well_typed_atarget env1 tgt ty ==>
+    !env2. static_maps_transfer_env env1 env2 ==>
+      well_typed_atarget env2 tgt ty
+Proof
+  recInduct well_typed_atarget_ind >>
+  rw[well_typed_atarget_def, well_typed_target_def]
+  >- metis_tac[type_place_target_static_maps_transfer_env]
+  >> gvs[LIST_REL_EL_EQN] >>
+  rw[] >>
+  first_x_assum irule >>
+  simp[MEM_EL] >>
+  conj_tac >- (qexists `n` >> simp[]) >>
+  qexists `tys` >> qexists `n` >> simp[] >>
+  first_x_assum irule >>
+  simp[]
+QED
+
+Theorem well_typed_iterator_static_maps_transfer_env[local]:
+  well_typed_iterator env1 typ it /\ static_maps_transfer_env env1 env2 ==>
+  well_typed_iterator env2 typ it
+Proof
+  Cases_on `it` >>
+  rw[well_typed_iterator_def] >>
+  metis_tac[well_typed_expr_static_maps_transfer_env]
+QED
+
+Theorem type_stmt_static_maps_transfer_mutual[local]:
+  (!env1 ret s env1'.
+     type_stmt env1 ret s = SOME env1' ==>
+     !env2.
+       static_maps_transfer_env env1 env2 ==>
+       ?env2'. type_stmt env2 ret s = SOME env2' /\ static_maps_transfer_env env1' env2') /\
+  (!env1 ret ss env1'.
+     type_stmts env1 ret ss = SOME env1' ==>
+     !env2.
+       static_maps_transfer_env env1 env2 ==>
+       ?env2'. type_stmts env2 ret ss = SOME env2' /\ static_maps_transfer_env env1' env2')
+Proof
+  ho_match_mp_tac type_stmt_ind >>
+  rw[type_stmt_def, AllCaseEqs()] >>
+  gvs[] >>
+  TRY (rename1 `well_typed_expr env1 e` >> qexists `env2` >> simp[] >>
+       conj_tac >- metis_tac[type_place_expr_no_hash_static_maps_transfer_env] >>
+       irule well_typed_expr_static_maps_transfer_env >> simp[]) >>
+  rpt (first_x_assum (drule_then strip_assume_tac)) >>
+  gvs[] >>
+  rpt (first_x_assum (drule_then strip_assume_tac)) >>
+  gvs[] >>
+  TRY (irule_at Any static_maps_transfer_env_extend_local >> simp[]) >>
+  TRY (irule_at Any well_typed_expr_static_maps_transfer_env >> simp[]) >>
+  TRY (irule_at Any well_typed_exprs_static_maps_transfer_env >> simp[]) >>
+  TRY (irule_at Any type_place_target_static_maps_transfer_env >> simp[]) >>
+  TRY (irule_at Any type_place_expr_no_hash_static_maps_transfer_env >> simp[]) >>
+  TRY (rename1 `?env. static_maps_transfer_env env env2 /\ well_typed_expr env expr` >>
+       qexists `env1` >> simp[]) >>
+  TRY (rename1 `?env. (!kt vt. type_place_expr env expr <> SOME (HashMapT kt vt)) /\ static_maps_transfer_env env env2 /\ well_typed_expr env expr` >>
+       qexists `env1` >> simp[]) >>
+  TRY (rename1 `?env. static_maps_transfer_env env env2 /\ well_typed_exprs env es` >>
+       qexists `env1` >> simp[]) >>
+  TRY (rename1 `assignable_type env2.type_defs ty` >>
+       gvs[static_maps_transfer_env_def]) >>
+  TRY (rename1 `assignable_type env2.type_defs (expr_type e)` >>
+       gvs[static_maps_transfer_env_def]) >>
+  TRY (rename1 `string_to_num id NOTIN FDOM env2.var_types` >>
+       gvs[static_maps_transfer_env_def]) >>
+  TRY (rename1 `type_place_target env1 bt = SOME (Type (ArrayT ty (Dynamic n)))` >>
+       qexistsl [`n`,`env1`,`env1`] >> simp[static_maps_transfer_env_def]) >>
+  TRY (rename1 `well_typed_atarget env1 tgt (expr_type e)` >>
+       irule well_typed_atarget_static_maps_transfer_env >>
+       qexists `env1` >> simp[]) >>
+  TRY (rename1 `well_typed_target env1 bt ty` >>
+       gvs[well_typed_target_def] >>
+       irule type_place_target_static_maps_transfer_env >>
+       qexists `env1` >> simp[]) >>
+  TRY (rename1 `IS_SOME (type_stmts env2 ret ss)` >>
+       metis_tac[IS_SOME_EXISTS]) >>
+  TRY (rename1 `IS_SOME (type_stmts env2 ret ss')` >>
+       metis_tac[IS_SOME_EXISTS]) >>
+  TRY (rename1 `IS_SOME (type_stmts (extend_local env2 (string_to_num id) typ F) ret ss)` >>
+       metis_tac[IS_SOME_EXISTS, static_maps_transfer_env_extend_local]) >>
+  TRY (rename1 `well_typed_iterator env2 typ it` >>
+       irule well_typed_iterator_static_maps_transfer_env >>
+       qexists `env1` >> simp[]) >>
+  gvs[static_maps_transfer_env_def] >>
+  metis_tac[static_maps_transfer_env_extend_local,
+            well_typed_expr_static_maps_transfer_env,
+            well_typed_exprs_static_maps_transfer_env,
+            well_typed_atarget_static_maps_transfer_env,
+            well_typed_iterator_static_maps_transfer_env,
+            type_place_target_static_maps_transfer_env,
+            type_place_expr_no_hash_static_maps_transfer_env]
+QED
+
 Theorem check_contract_functions_well_typed_initial:
   check_contract F layouts addr mods = SOME art /\
   ALOOKUP sources addr = SOME mods /\
