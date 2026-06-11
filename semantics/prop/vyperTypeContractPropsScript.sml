@@ -3086,5 +3086,7 @@ Theorem lookup_exported_function_checked_cases_selected:
      is_public_getter_decl tx.function_name decl /\
      external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,body))
 Proof
-  cheat
+  rw[lookup_exported_function_def, find_function_module_def, get_self_code_def] >>
+  gvs[AllCaseEqs()] >>
+  metis_tac[lookup_function_External_cases]
 QED
