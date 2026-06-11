@@ -12,7 +12,8 @@ Ancestors
   list rich_list arithmetic finite_map alist option pair patricia_casts
   vyperAST vyperValue vyperMisc vyperContext vyperState vyperInterpreter
   vyperTypeSystem vyperTypeContract vyperTypeInvariants vyperTypeStmtSoundness
-  vyperTypeInitialState
+  vyperTypeInitialState vyperEvalPreservesScopes vyperScopePreservation
+  vyperStatePreservation
 Libs
   wordsLib
 
@@ -3787,6 +3788,119 @@ Proof
   disch_then drule >>
   strip_tac >>
   gvs[get_tenv_def, initial_evaluation_context_def]
+QED
+
+Theorem send_call_value_preserves_tv[local]:
+  send_call_value mut cx st = (res,st') ==>
+  preserves_tv cx st st'
+Proof
+  rw[send_call_value_def, bind_def, ignore_bind_def, check_def,
+     return_def, raise_def] >>
+  gvs[AllCaseEqs(), preserves_tv_def] >>
+  TRY (qpat_x_assum `assert _ _ _ = _` mp_tac >> rw[assert_def] >> gvs[]) >>
+  imp_res_tac transfer_value_scopes >>
+  imp_res_tac transfer_value_immutables >>
+  gvs[preserves_tv_def]
+QED
+Theorem call_lock_action_preserves_tv[local]:
+  (if nr then
+     case cx.nonreentrant_slot of
+       NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+     | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
+   else return ()) st = (res,st') ==>
+  preserves_tv cx st st'
+Proof
+  rw[] >>
+  gvs[return_def, raise_def, preserves_tv_def] >>
+  Cases_on `cx.nonreentrant_slot` >> gvs[return_def, raise_def, preserves_tv_def] >>
+  imp_res_tac acquire_nonreentrant_lock_scopes >>
+  imp_res_tac acquire_nonreentrant_lock_immutables >>
+  gvs[preserves_tv_def]
+QED
+
+Theorem call_unlock_action_preserves_immutables[local]:
+  (if nr /\ ~(mut = View \/ mut = Pure) then
+     case cx.nonreentrant_slot of
+       NONE => return ()
+     | SOME slot => release_nonreentrant_lock cx.txn.target slot
+   else return ()) st = (res,st') ==>
+  st'.immutables = st.immutables
+Proof
+  rw[] >>
+  gvs[return_def] >>
+  Cases_on `cx.nonreentrant_slot` >> gvs[return_def] >>
+  imp_res_tac release_nonreentrant_lock_immutables >>
+  gvs[]
+QED
+
+Theorem call_body_prefix_preserves_tv[local]:
+  (do
+     (if nr then
+        case cx.nonreentrant_slot of
+          NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
+      else return ());
+     send_call_value mut cx;
+     eval_stmts cx body
+   od st = (res,st')) ==>
+  preserves_tv cx st st'
+Proof
+  rw[bind_def, ignore_bind_def] >>
+  gvs[AllCaseEqs()] >>
+  imp_res_tac call_lock_action_preserves_tv >>
+  imp_res_tac send_call_value_preserves_tv >>
+  imp_res_tac (cj 2 eval_preserves_tv) >>
+  `preserves_tv cx st s''` by
+    (Cases_on `cx.nonreentrant_slot` >> gvs[raise_def, return_def, preserves_tv_def] >>
+     imp_res_tac acquire_nonreentrant_lock_scopes >>
+     imp_res_tac acquire_nonreentrant_lock_immutables >>
+     gvs[preserves_tv_def]) >>
+  gvs[preserves_tv_def] >>
+  rpt strip_tac >>
+  res_tac >> res_tac >>
+  metis_tac[]
+QED
+
+Theorem call_body_prefix_lock_preserves_tv[local]:
+  (do
+     (case cx.nonreentrant_slot of
+        NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+      | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view);
+     send_call_value mut cx;
+     eval_stmts cx body
+   od st = (res,st')) ==>
+  preserves_tv cx st st'
+Proof
+  rw[bind_def, ignore_bind_def] >>
+  gvs[AllCaseEqs()] >>
+  imp_res_tac send_call_value_preserves_tv >>
+  imp_res_tac (cj 2 eval_preserves_tv) >>
+  `preserves_tv cx st s''` by
+    (Cases_on `cx.nonreentrant_slot` >> gvs[raise_def, return_def, preserves_tv_def] >>
+     imp_res_tac acquire_nonreentrant_lock_scopes >>
+     imp_res_tac acquire_nonreentrant_lock_immutables >>
+     gvs[preserves_tv_def]) >>
+  gvs[preserves_tv_def] >>
+  rpt strip_tac >>
+  res_tac >> res_tac >>
+  metis_tac[]
+QED
+
+
+Theorem call_external_function_deploy_success_preserves_immutable_type_tags_from_constants[local]:
+  cx.in_deploy /\
+  call_external_function am cx nr mut ts all_mods args dflts vals body ret =
+    (INL v, am_out) /\
+  evaluate_all_constants cx am cx.txn.target all_mods = SOME am_c /\
+  FLOOKUP
+    (get_source_immutables src
+      (case ALOOKUP am_c.immutables cx.txn.target of SOME m => m | NONE => [])) id = SOME (tv,x) ==>
+  ?y.
+    FLOOKUP
+      (get_source_immutables src
+        (case ALOOKUP am_out.immutables cx.txn.target of SOME m => m | NONE => [])) id = SOME (tv,y)
+Proof
+  cheat
 QED
 
 Theorem deployed_toplevel_vtypes_immutables_ready_clause[local]:
