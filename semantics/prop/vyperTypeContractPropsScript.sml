@@ -2077,6 +2077,96 @@ Proof
   simp[check_toplevel_body_def]
 QED
 
+Theorem FOLDL_extend_local_args_not_mem[local]:
+  !args (base : typing_env) n.
+    ~MEM n (MAP (string_to_num o FST) args) ==>
+    FLOOKUP (FOLDL (\env (id,ty). extend_local env (string_to_num id) ty T) base args).var_types n =
+      FLOOKUP base.var_types n /\
+    FLOOKUP (FOLDL (\env (id,ty). extend_local env (string_to_num id) ty T) base args).var_assignable n =
+      FLOOKUP base.var_assignable n
+Proof
+  Induct >- rw[] >>
+  gen_tac >> PairCases_on `h` >> rw[extend_local_def] >>
+  qpat_x_assum `!base n. _` (qspecl_then [`extend_local base' (string_to_num h0) h1 T`,`n`] mp_tac) >>
+  simp[extend_local_def, FLOOKUP_UPDATE]
+QED
+
+Theorem FOLDL_extend_local_args_formal_lookup[local]:
+  !args (base : typing_env) id typ.
+    ALL_DISTINCT (MAP (string_to_num o FST) args) /\
+    MEM (id,typ) args ==>
+    FLOOKUP (FOLDL (\env (id,ty). extend_local env (string_to_num id) ty T) base args).var_types
+      (string_to_num id) = SOME typ /\
+    FLOOKUP (FOLDL (\env (id,ty). extend_local env (string_to_num id) ty T) base args).var_assignable
+      (string_to_num id) = SOME T
+Proof
+  Induct >- rw[] >>
+  gen_tac >> PairCases_on `h` >> rw[] >> gvs[extend_local_def, FLOOKUP_UPDATE] >-
+    (qspecl_then [`args`,`extend_local base' (string_to_num h0) h1 T`,`string_to_num h0`]
+       mp_tac FOLDL_extend_local_args_not_mem >>
+     simp[extend_local_def, FLOOKUP_UPDATE] >>
+     strip_tac >> gvs[]) >-
+    (qspecl_then [`args`,`extend_local base' (string_to_num h0) h1 T`,`string_to_num h0`]
+       mp_tac FOLDL_extend_local_args_not_mem >>
+     simp[extend_local_def, FLOOKUP_UPDATE] >>
+     strip_tac >> gvs[]) >>
+  qpat_x_assum `!base id typ. _`
+    (qspecl_then [`extend_local base' (string_to_num h0) h1 T`,`id`,`typ`] mp_tac) >>
+  simp[extend_local_def]
+QED
+
+Theorem FOLDL_extend_local_args_var_types_range[local]:
+  !args (base : typing_env) n ty.
+    ALL_DISTINCT (MAP (string_to_num o FST) args) /\
+    FLOOKUP (FOLDL (\env (id,ty). extend_local env (string_to_num id) ty T) base args).var_types n = SOME ty ==>
+    FLOOKUP base.var_types n = SOME ty \/
+    ?id. MEM (id,ty) args /\ n = string_to_num id
+Proof
+  Induct >- rw[] >>
+  gen_tac >> PairCases_on `h` >> rw[] >> gvs[extend_local_def] >>
+  last_x_assum drule >>
+  simp[extend_local_def, FLOOKUP_UPDATE] >>
+  strip_tac >> gvs[] >>
+  Cases_on `string_to_num h0 = n` >> gvs[] >>
+  metis_tac[]
+QED
+
+Theorem FOLDL_extend_local_args_var_assignable_range[local]:
+  !args (base : typing_env) n b.
+    ALL_DISTINCT (MAP (string_to_num o FST) args) /\
+    FLOOKUP (FOLDL (\env (id,ty). extend_local env (string_to_num id) ty T) base args).var_assignable n = SOME b ==>
+    FLOOKUP base.var_assignable n = SOME b \/
+    ?id typ. MEM (id,typ) args /\ n = string_to_num id /\ b = T
+Proof
+  Induct >- rw[] >>
+  gen_tac >> PairCases_on `h` >> rw[] >> gvs[extend_local_def] >>
+  last_x_assum drule >>
+  simp[extend_local_def, FLOOKUP_UPDATE] >>
+  strip_tac >> gvs[] >>
+  Cases_on `string_to_num h0 = n` >> gvs[] >>
+  metis_tac[]
+QED
+
+Theorem FOLDL_extend_local_args_lookup[local]:
+  !args (base : typing_env) env.
+  ALL_DISTINCT (MAP (string_to_num o FST) args) /\
+  env = FOLDL (\env (id,ty). extend_local env (string_to_num id) ty T) base args /\
+  base.var_types = FEMPTY /\ base.var_assignable = FEMPTY ==>
+  (!id typ. MEM (id,typ) args ==>
+     FLOOKUP env.var_types (string_to_num id) = SOME typ /\
+     FLOOKUP env.var_assignable (string_to_num id) = SOME T) /\
+  (!n ty. FLOOKUP env.var_types n = SOME ty ==>
+     ?id. MEM (id,ty) args /\ n = string_to_num id) /\
+  (!n b. FLOOKUP env.var_assignable n = SOME b ==>
+     ?id typ. MEM (id,typ) args /\ n = string_to_num id /\ b = T)
+Proof
+  rw[] >-
+    (drule_all FOLDL_extend_local_args_formal_lookup >> simp[])
+  >- (drule_all FOLDL_extend_local_args_formal_lookup >> simp[])
+  >- (drule_all FOLDL_extend_local_args_var_types_range >> rw[] >> gvs[])
+  >- (drule_all FOLDL_extend_local_args_var_assignable_range >> rw[] >> gvs[])
+QED
+
 Theorem check_contract_functions_well_typed_initial:
   check_contract F layouts addr mods = SOME art /\
   ALOOKUP sources addr = SOME mods /\
