@@ -2615,6 +2615,18 @@ Proof
             type_place_expr_no_hash_static_maps_transfer_env]
 QED
 
+
+Theorem type_stmts_static_maps_transfer[local]:
+  type_stmts env1 ret body = SOME env_after /\
+  static_maps_transfer_env env1 env2 ==>
+  ?env_after2. type_stmts env2 ret body = SOME env_after2
+Proof
+  rw[] >>
+  drule (cj 2 type_stmt_static_maps_transfer_mutual) >>
+  disch_then (qspec_then `env2` mp_tac) >>
+  simp[] >>
+  metis_tac[]
+QED
 Theorem check_contract_functions_well_typed_initial:
   check_contract F layouts addr mods = SOME art /\
   ALOOKUP sources addr = SOME mods /\
