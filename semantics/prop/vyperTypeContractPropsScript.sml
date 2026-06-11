@@ -2726,6 +2726,8 @@ Proof
   simp[]
 QED
 Theorem check_function_body_static_maps_transfer_initial[local]:
+  !layouts addr mods art sources tx fn_sigs bare_globals bare_global_assignable
+   toplevel_vtypes flag_members entry_src mut nr args dflts ret body.
   check_contract F layouts addr mods = SOME art /\
   ALOOKUP sources addr = SOME mods /\
   tx.target = addr /\
@@ -2899,6 +2901,52 @@ Proof
   simp[] >>
   disch_then (qspecl_then [`src`, `id`, `ty`] mp_tac) >>
   simp[]
+QED
+
+Theorem checked_explicit_external_body_typing_package[local]:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  ALOOKUP am.sources tx.target = SOME mods /\
+  ALOOKUP mods src = SOME ts /\
+  MEM (FunctionDecl External mut nr raw fn args dflts ret body) ts ==>
+  ?env_body env_after.
+    env_body.current_src = src /\
+    env_body.type_defs = get_tenv (initial_evaluation_context am.sources am.layouts tx) /\
+    env_body.fn_sigs = art.cta_fn_sigs /\
+    env_body.bare_globals = art.cta_bare_globals /\
+    env_body.bare_global_assignable = art.cta_bare_global_assignable /\
+    env_body.toplevel_vtypes = art.cta_toplevel_vtypes /\
+    env_body.flag_members = art.cta_flag_members /\
+    type_stmts env_body ret body = SOME env_after /\
+    (!id typ. MEM (id,typ) args ==>
+       FLOOKUP env_body.var_types (string_to_num id) = SOME typ /\
+       FLOOKUP env_body.var_assignable (string_to_num id) = SOME T) /\
+    (!n ty. FLOOKUP env_body.var_types n = SOME ty ==>
+       ?id. MEM (id,ty) args /\ n = string_to_num id) /\
+    (!n b. FLOOKUP env_body.var_assignable n = SOME b ==>
+       ?id typ. MEM (id,typ) args /\ n = string_to_num id /\ b = T)
+Proof
+  rw[] >>
+  `check_function_body am.layouts tx.target mods art src mut nr args dflts ret body` by
+    metis_tac[check_contract_function_body_MEM] >>
+  `fn_sigs_complete art.cta_fn_sigs (initial_evaluation_context am.sources am.layouts tx) /\
+   bare_globals_complete art.cta_bare_globals (initial_evaluation_context am.sources am.layouts tx) /\
+   bare_global_assignable_complete art.cta_bare_global_assignable (initial_evaluation_context am.sources am.layouts tx) /\
+   toplevel_vtypes_complete art.cta_toplevel_vtypes (initial_evaluation_context am.sources am.layouts tx) /\
+   flag_members_complete art.cta_flag_members (initial_evaluation_context am.sources am.layouts tx) /\
+   (!src' id ty. FLOOKUP art.cta_bare_globals (src',id) = SOME ty ==>
+      ?ts'. get_module_code (initial_evaluation_context am.sources am.layouts tx) src' = SOME ts' /\
+            FLOOKUP art.cta_toplevel_vtypes (src',id) = SOME (Type ty) /\
+            is_bare_global_decl id ts' /\
+            find_var_decl_by_num id ts' = NONE /\ ty <> NoneT)` by
+    (irule checked_contract_static_maps_transfer_inputs_initial >> simp[]) >>
+  qspecl_then
+    [`am.layouts`, `tx.target`, `mods`, `art`, `am.sources`, `tx`,
+     `art.cta_fn_sigs`, `art.cta_bare_globals`,
+     `art.cta_bare_global_assignable`, `art.cta_toplevel_vtypes`,
+     `art.cta_flag_members`, `src`, `mut`, `nr`, `args`, `dflts`, `ret`, `body`]
+    mp_tac check_function_body_static_maps_transfer_initial >>
+  simp[] >> rw[] >>
+  qexistsl [`env_body`, `env_after`] >> simp[] >> metis_tac[]
 QED
 
 Theorem check_contract_explicit_external_entry_no_type_error:
