@@ -3195,6 +3195,133 @@ Proof
   simp[initial_evaluation_context_def]
 QED
 
+Theorem checked_scalar_getter_missing_source_immutable_call_external_TypeError_probe:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  ALOOKUP am.sources tx.target = SOME mods /\
+  machine_well_typed am /\
+  call_tx_well_typed tx /\
+  cx = initial_evaluation_context am.sources am.layouts tx /\
+  src = find_function_module cx am tx.function_name /\
+  get_module_code cx src = SOME code /\
+  find_var_decl_by_num (string_to_num id) code = NONE /\
+  ALOOKUP am.immutables tx.target = SOME imms /\
+  FLOOKUP (get_source_immutables src imms) (string_to_num id) = NONE /\
+  lookup_exported_function cx am tx.function_name =
+    SOME (View,F,[],[],ret,[Return (SOME (TopLevelName NoneT (src,id)))]) /\
+  tx.args = [] /\
+  tx.value = 0 ==>
+  ?msg.
+    call_external am tx = (INR (Error (TypeError msg)), am) /\
+    ~no_type_error_result (INR (Error (TypeError msg)))
+Proof
+  rpt strip_tac >>
+  `?msg.
+     eval_expr cx (TopLevelName NoneT (src,id)) (initial_state am [FEMPTY]) =
+       (INR (Error (TypeError msg)), initial_state am [FEMPTY])` by
+    (irule TopLevelName_missing_source_immutable_TypeError_probe >>
+     gvs[initial_state_def, initial_evaluation_context_def]) >>
+  qexists `msg` >>
+  conj_tac >-
+    (irule scalar_getter_call_external_dispatch_TypeError_probe >>
+     simp[] >>
+     qexistsl [`id`, `ret`, `code`] >>
+     gvs[initial_state_def]) >>
+  strip_tac >>
+  drule no_type_error_result_INR_not_type_error >>
+  simp[]
+QED
+
+Theorem checked_public_immutable_scalar_getter_selection_witness:
+  ?am tx mods art cx src code id ret.
+    check_contract F am.layouts tx.target mods = SOME art /\
+    ALOOKUP am.sources tx.target = SOME mods /\
+    cx = initial_evaluation_context am.sources am.layouts tx /\
+    src = find_function_module cx am tx.function_name /\
+    get_module_code cx src = SOME code /\
+    lookup_exported_function cx am tx.function_name =
+      SOME (View,F,[],[],ret,[Return (SOME (TopLevelName NoneT (src,id)))]) /\
+    find_var_decl_by_num (string_to_num id) code = NONE
+Proof
+  qexists `initial_machine_state with sources :=
+             [(0w,[(NONE,[VariableDecl Public Immutable "x" (BaseT BoolT) NONE])])]` >>
+  qexists `empty_call_txn with function_name := "x"` >>
+  qexists `[(NONE,[VariableDecl Public Immutable "x" (BaseT BoolT) NONE])]` >>
+  qexists `build_contract_type_artifact F
+             [(NONE,[VariableDecl Public Immutable "x" (BaseT BoolT) NONE])]` >>
+  qexists `initial_evaluation_context
+             (initial_machine_state with sources :=
+                [(0w,[(NONE,[VariableDecl Public Immutable "x" (BaseT BoolT) NONE])])]).sources
+             (initial_machine_state with sources :=
+                [(0w,[(NONE,[VariableDecl Public Immutable "x" (BaseT BoolT) NONE])])]).layouts
+             (empty_call_txn with function_name := "x")` >>
+  qexists `NONE` >>
+  qexists `[VariableDecl Public Immutable "x" (BaseT BoolT) NONE]` >>
+  qexists `"x"` >>
+  qexists `BaseT BoolT` >>
+  simp[check_contract_def, build_contract_type_artifact_def, add_module_static_maps_def,
+       add_toplevel_static_maps_def, contract_namespaces_ok_def, contract_keys_def,
+       check_module_def, check_toplevel_decl_def, check_toplevel_body_def,
+       assignable_type_def, well_formed_type_def, evaluate_type_def,
+       type_env_all_modules_def, type_env_for_module_def,
+       fn_sig_keys_toplevel_def, toplevel_vtype_keys_toplevel_def,
+       flag_member_keys_toplevel_def, type_def_keys_toplevel_def,
+       include_fn_sig_def, initial_machine_state_def,
+       initial_evaluation_context_def, empty_call_txn_def, lookup_exported_function_def,
+       find_function_module_def, get_self_code_def, get_module_code_def,
+       lookup_function_def, find_var_decl_by_num_def]
+QED
+
+Theorem checked_public_immutable_scalar_missing_runtime_immutables_witness:
+  ?am tx mods art cx src code id ret imms.
+    check_contract F am.layouts tx.target mods = SOME art /\
+    ALOOKUP am.sources tx.target = SOME mods /\
+    cx = initial_evaluation_context am.sources am.layouts tx /\
+    src = find_function_module cx am tx.function_name /\
+    get_module_code cx src = SOME code /\
+    lookup_exported_function cx am tx.function_name =
+      SOME (View,F,[],[],ret,[Return (SOME (TopLevelName NoneT (src,id)))]) /\
+    find_var_decl_by_num (string_to_num id) code = NONE /\
+    machine_well_typed am /\
+    ALOOKUP am.immutables tx.target = SOME imms /\
+    FLOOKUP (get_source_immutables src imms) (string_to_num id) = NONE
+Proof
+  qexists `initial_machine_state with <|
+             sources := [(0w,[(NONE,[VariableDecl Public Immutable "x" (BaseT BoolT) NONE])])];
+             immutables := [(0w,empty_immutables)] |>` >>
+  qexists `empty_call_txn with function_name := "x"` >>
+  qexists `[(NONE,[VariableDecl Public Immutable "x" (BaseT BoolT) NONE])]` >>
+  qexists `build_contract_type_artifact F
+             [(NONE,[VariableDecl Public Immutable "x" (BaseT BoolT) NONE])]` >>
+  qexists `initial_evaluation_context
+             (initial_machine_state with <|
+                sources := [(0w,[(NONE,[VariableDecl Public Immutable "x" (BaseT BoolT) NONE])])];
+                immutables := [(0w,empty_immutables)] |>).sources
+             (initial_machine_state with <|
+                sources := [(0w,[(NONE,[VariableDecl Public Immutable "x" (BaseT BoolT) NONE])])];
+                immutables := [(0w,empty_immutables)] |>).layouts
+             (empty_call_txn with function_name := "x")` >>
+  qexists `NONE` >>
+  qexists `[VariableDecl Public Immutable "x" (BaseT BoolT) NONE]` >>
+  qexists `"x"` >>
+  qexists `BaseT BoolT` >>
+  qexists `empty_immutables` >>
+  simp[check_contract_def, build_contract_type_artifact_def, add_module_static_maps_def,
+       add_toplevel_static_maps_def, contract_namespaces_ok_def, contract_keys_def,
+       check_module_def, check_toplevel_decl_def, check_toplevel_body_def,
+       assignable_type_def, well_formed_type_def, evaluate_type_def,
+       type_env_all_modules_def, type_env_for_module_def,
+       fn_sig_keys_toplevel_def, toplevel_vtype_keys_toplevel_def,
+       flag_member_keys_toplevel_def, type_def_keys_toplevel_def,
+       include_fn_sig_def, initial_machine_state_def,
+       initial_evaluation_context_def, empty_call_txn_def, lookup_exported_function_def,
+       find_function_module_def, get_self_code_def, get_module_code_def,
+       lookup_function_def, find_var_decl_by_num_def, machine_well_typed_def,
+       imms_well_typed_def, empty_immutables_def, get_source_immutables_def,
+       accounts_well_typed_def, account_well_typed_def,
+       vfmStateTheory.lookup_account_def, vfmStateTheory.empty_accounts_def,
+       vfmStateTheory.empty_account_state_def]
+QED
+
 Definition call_tx_well_typed_def:
   call_tx_well_typed tx <=>
     tx.value < 2 ** 256 /\
