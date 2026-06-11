@@ -2391,6 +2391,45 @@ Proof
   gvs[] >>
   metis_tac[]
 QED
+Definition static_maps_transfer_env_def:
+  static_maps_transfer_env env1 env2 <=>
+    env2.current_src = env1.current_src /\
+    env2.type_defs = env1.type_defs /\
+    env2.var_types = env1.var_types /\
+    env2.var_assignable = env1.var_assignable /\
+    (!k sig. FLOOKUP env1.fn_sigs k = SOME sig ==>
+       FLOOKUP env2.fn_sigs k = SOME sig) /\
+    (!k ty. FLOOKUP env1.bare_globals k = SOME ty ==>
+       FLOOKUP env2.bare_globals k = SOME ty) /\
+    (!k ty. FLOOKUP env1.bare_global_assignable k = SOME ty ==>
+       FLOOKUP env2.bare_global_assignable k = SOME ty) /\
+    (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt ==>
+       FLOOKUP env2.toplevel_vtypes k = SOME vt) /\
+    (!k members. FLOOKUP env1.flag_members k = SOME members ==>
+       FLOOKUP env2.flag_members k = SOME members) /\
+    (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt /\
+            FLOOKUP env1.bare_globals k = NONE ==>
+       FLOOKUP env2.bare_globals k = NONE)
+End
+Theorem well_typed_defaults_static_maps_transfer[local]:
+  well_typed_exprs (defaults_env env1) dflts /\
+  env2.current_src = env1.current_src /\
+  env2.type_defs = env1.type_defs /\
+  (!k sig. FLOOKUP env1.fn_sigs k = SOME sig ==> FLOOKUP env2.fn_sigs k = SOME sig) /\
+  (!k ty. FLOOKUP env1.bare_globals k = SOME ty ==> FLOOKUP env2.bare_globals k = SOME ty) /\
+  (!k ty. FLOOKUP env1.bare_global_assignable k = SOME ty ==> FLOOKUP env2.bare_global_assignable k = SOME ty) /\
+  (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt ==> FLOOKUP env2.toplevel_vtypes k = SOME vt) /\
+  (!k members. FLOOKUP env1.flag_members k = SOME members ==> FLOOKUP env2.flag_members k = SOME members) /\
+  (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt /\ FLOOKUP env1.bare_globals k = NONE ==> FLOOKUP env2.bare_globals k = NONE) ==>
+  well_typed_exprs (defaults_env env2) dflts
+Proof
+  rw[defaults_env_def] >>
+  irule (cj 4 well_typed_static_maps_transfer) >>
+  first_assum $ irule_at Any >>
+  simp[]
+QED
+
+
 
 
 Theorem check_contract_functions_well_typed_initial:
