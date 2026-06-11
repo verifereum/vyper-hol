@@ -3649,6 +3649,24 @@ Proof
   TRY (first_x_assum irule >> metis_tac[]) >>
   metis_tac[module_toplevel_vtype_key_MEM_Variable_any]
 QED
+Theorem module_immutable_string_num_type_unique[local]:
+  !src ts visI idI tyI initI visJ idJ tyJ initJ.
+    ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts)) /\
+    MEM (VariableDecl visI Immutable idI tyI initI) ts /\
+    MEM (VariableDecl visJ Immutable idJ tyJ initJ) ts /\
+    string_to_num idJ = string_to_num idI ==>
+    tyJ = tyI
+Proof
+  gen_tac >> Induct_on `ts` >- rw[] >>
+  gen_tac >> gen_tac >> gen_tac >> gen_tac >>
+  gen_tac >> gen_tac >> gen_tac >> gen_tac >>
+  Cases_on `h` >>
+  rw[toplevel_vtype_keys_toplevel_def, ALL_DISTINCT_APPEND] >>
+  gvs[toplevel_vtype_keys_toplevel_def] >>
+  TRY (first_x_assum irule >> metis_tac[]) >>
+  metis_tac[module_toplevel_vtype_key_MEM_Variable_any]
+QED
+
 
 Theorem constants_do_not_clobber_single_immutable[local]:
   contract_namespaces_ok F mods /\
@@ -3691,7 +3709,84 @@ Theorem deploy_constants_setup_bare_globals_ready[local]:
          (case ALOOKUP am_c.immutables target of SOME m => m | NONE => [])) id = SOME (tv,v) ==>
      evaluate_type (type_env_all_modules mods) ty = SOME tv)
 Proof
-  cheat
+  rw[check_contract_def] >>
+  gvs[]
+  >- (rw[] >>
+      drule build_contract_type_artifact_bare_globals_sound >>
+      disch_then drule >>
+      strip_tac >>
+      gvs[]
+      >- (`IS_SOME (FLOOKUP (get_source_immutables src imms) (string_to_num id_str))` by
+            (irule initial_immutables_contains_decl >>
+             qexists `mods` >> qexists `type_env_all_modules mods` >> qexists `ts` >>
+             simp[] >>
+             conj_tac
+             >- (irule find_var_decl_by_num_NONE_Immutable >>
+                 conj_tac
+                 >- (qexists `src` >>
+                     irule contract_namespaces_ok_module_toplevel_vtype_keys >>
+                     metis_tac[alistTheory.ALOOKUP_MEM]) >>
+                 metis_tac[]) >>
+             metis_tac[is_immutable_decl_MEM]) >>
+          gvs[IS_SOME_EXISTS] >>
+          qexists `x` >>
+          irule evaluate_all_constants_preserves_bare_global_lookup_type >>
+          qexistsl [`am with immutables updated_by CONS (tx.target,imms)`,
+                   `FEMPTY |+ ((src,string_to_num id_str),ty)`,
+                   `initial_evaluation_context sources layouts tx`, `mods`, `ts`, `ty`] >>
+          gvs[FLOOKUP_UPDATE, initial_target_immutables_lookup] >>
+          metis_tac[constants_do_not_clobber_single_immutable]) >>
+      metis_tac[evaluate_all_constants_contains_constant_type, IS_SOME_EXISTS]) >>
+  rw[] >>
+  `(?ts vis id_str init.
+      ALOOKUP mods src = SOME ts /\
+      MEM (VariableDecl vis Immutable id_str ty init) ts /\
+      id = string_to_num id_str) \/
+   (?ts vis e id_str init.
+      ALOOKUP mods src = SOME ts /\
+      MEM (VariableDecl vis (Constant e) id_str ty init) ts /\
+      id = string_to_num id_str)` by
+    metis_tac[build_contract_type_artifact_bare_globals_sound] >>
+  gvs[]
+  >- (`IS_SOME (FLOOKUP (get_source_immutables src imms) (string_to_num id_str))` by
+        (irule initial_immutables_contains_decl >>
+         qexists `mods` >> qexists `type_env_all_modules mods` >> qexists `ts` >>
+         simp[] >>
+         conj_tac
+         >- (irule find_var_decl_by_num_NONE_Immutable >>
+             conj_tac
+             >- (qexists `src` >>
+                 irule contract_namespaces_ok_module_toplevel_vtype_keys >>
+                 metis_tac[alistTheory.ALOOKUP_MEM]) >>
+             metis_tac[]) >>
+         metis_tac[is_immutable_decl_MEM]) >>
+      gvs[IS_SOME_EXISTS] >>
+      `FLOOKUP
+         (get_source_immutables src
+            (case ALOOKUP am_c.immutables tx.target of NONE => [] | SOME m => m))
+         (string_to_num id_str) = SOME x` by
+        (irule evaluate_all_constants_preserves_bare_global_lookup_type >>
+         qexistsl [`am with immutables updated_by CONS (tx.target,imms)`,
+                   `FEMPTY |+ ((src,string_to_num id_str),ty)`,
+                   `initial_evaluation_context sources layouts tx`, `mods`, `ts`, `ty`] >>
+         gvs[FLOOKUP_UPDATE, initial_target_immutables_lookup] >>
+         metis_tac[constants_do_not_clobber_single_immutable]) >>
+      gvs[] >>
+      `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))` by
+        (irule contract_namespaces_ok_module_toplevel_vtype_keys >>
+         metis_tac[alistTheory.ALOOKUP_MEM]) >>
+      `is_immutable_decl (string_to_num id_str) ts` by
+        metis_tac[is_immutable_decl_MEM] >>
+      irule initial_immutables_all_bare_global_type >>
+      qexistsl [`string_to_num id_str`, `imms`, `mods`, `src`, `ts`, `v`] >>
+      gvs[] >>
+      metis_tac[module_immutable_string_num_type_unique]) >>
+  drule evaluate_all_constants_contains_constant_type >>
+  disch_then drule >>
+  disch_then drule >>
+  disch_then drule >>
+  strip_tac >>
+  gvs[get_tenv_def, initial_evaluation_context_def]
 QED
 
 Theorem load_contract_establishes_immutables_ready:
