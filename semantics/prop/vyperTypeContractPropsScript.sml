@@ -12,8 +12,8 @@ Ancestors
   list rich_list arithmetic finite_map alist option pair patricia_casts
   vyperAST vyperValue vyperMisc vyperContext vyperState vyperInterpreter
   vyperTypeSystem vyperTypeContract vyperTypeInvariants vyperTypeStmtSoundness
-  vyperTypeInitialState vyperEvalPreservesScopes vyperScopePreservation
-  vyperStatePreservation
+  vyperTypeInitialState vyperEvalPreservesScopes vyperEvalPreservesImmutablesDom
+  vyperScopePreservation vyperStatePreservation
 Libs
   wordsLib
 
@@ -4098,6 +4098,163 @@ Proof
   irule call_external_function_deploy_return_success_lookup_transport >>
   qexistsl [`am_c`, `body`, `env`, `mut`, `nr`, `st_body`, `st_unlocked`, `()`, `v_ret`, `x`] >>
   simp[]
+QED
+
+Theorem send_call_value_preserves_immutables[local]:
+  send_call_value mut cx st = (res,st') ==>
+  st'.immutables = st.immutables
+Proof
+  rw[send_call_value_def, bind_def, ignore_bind_def, check_def,
+     type_check_def, assert_def, return_def, raise_def] >>
+  gvs[AllCaseEqs()] >>
+  imp_res_tac transfer_value_immutables >>
+  gvs[]
+QED
+
+Theorem call_lock_action_preserves_immutables[local]:
+  (if nr then
+     case cx.nonreentrant_slot of
+       NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+     | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
+   else return ()) st = (res,st') ==>
+  st'.immutables = st.immutables
+Proof
+  rw[] >>
+  gvs[return_def, raise_def] >>
+  Cases_on `cx.nonreentrant_slot` >> gvs[return_def, raise_def] >>
+  imp_res_tac acquire_nonreentrant_lock_immutables >>
+  gvs[]
+QED
+
+Theorem call_body_prefix_preserves_immutables_dom[local]:
+  (do
+     (if nr then
+        case cx.nonreentrant_slot of
+          NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
+      else return ());
+     send_call_value mut cx;
+     eval_stmts cx body
+   od (initial_state am_c [env]) = (res,st')) ==>
+  preserves_immutables_dom cx (initial_state am_c [env]) st'
+Proof
+  rw[bind_def, ignore_bind_def] >>
+  gvs[AllCaseEqs()] >>
+  TRY (`s''.immutables = (initial_state am_c [env]).immutables` by
+         (qpat_x_assum `(case cx.nonreentrant_slot of NONE => _ | SOME slot => _) _ = _` mp_tac >>
+          Cases_on `cx.nonreentrant_slot` >> rw[return_def, raise_def] >>
+          imp_res_tac acquire_nonreentrant_lock_immutables) >> gvs[]) >>
+  gvs[initial_state_def] >>
+  imp_res_tac send_call_value_preserves_immutables >>
+  imp_res_tac eval_stmts_preserves_immutables_addr_dom >>
+  imp_res_tac eval_stmts_preserves_immutables_dom >>
+  gvs[return_def] >>
+  simp[preserves_immutables_dom_def, initial_state_def] >>
+  rpt gen_tac >> rpt disch_tac >> TRY eq_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem preserves_immutables_dom_final_lookup_exists_in_initial[local]:
+  preserves_immutables_dom cx st0 st_body /\
+  st0.immutables = am_c.immutables /\
+  st_unlocked.immutables = st_body.immutables /\
+  FLOOKUP
+    (get_source_immutables src
+      (case ALOOKUP st_unlocked.immutables cx.txn.target of SOME m => m | NONE => [])) id = SOME (tv,x) ==>
+  ?tv0 y.
+    FLOOKUP
+      (get_source_immutables src
+        (case ALOOKUP am_c.immutables cx.txn.target of SOME m => m | NONE => [])) id = SOME (tv0,y)
+Proof
+  rw[preserves_immutables_dom_def] >>
+  Cases_on `ALOOKUP am_c.immutables cx.txn.target` >>
+  gvs[get_source_immutables_def]
+  >- (Cases_on `ALOOKUP st_body.immutables cx.txn.target` >>
+      gvs[get_source_immutables_def] >>
+      qpat_x_assum `!tgt. _` (qspec_then `cx.txn.target` mp_tac) >>
+      simp[IS_SOME_EXISTS]) >>
+  rename1 `ALOOKUP am_c.immutables cx.txn.target = SOME imms0` >>
+  Cases_on `ALOOKUP st_body.immutables cx.txn.target` >>
+  gvs[get_source_immutables_def] >>
+  rename1 `ALOOKUP st_body.immutables cx.txn.target = SOME imms1` >>
+  qpat_x_assum `!src' n. _`
+    (qspecl_then [`src`,`id`] mp_tac) >>
+  simp[IS_SOME_EXISTS, EXISTS_PROD]
+QED
+
+Theorem call_external_function_deploy_success_final_lookup_source_exists_in_constants[local]:
+  cx.in_deploy /\
+  call_external_function am cx nr mut ts all_mods args dflts vals body ret =
+    (INL v, am_out) /\
+  evaluate_all_constants cx am cx.txn.target all_mods = SOME am_c /\
+  FLOOKUP
+    (get_source_immutables src
+      (case ALOOKUP am_out.immutables cx.txn.target of SOME m => m | NONE => [])) id = SOME (tv,x) ==>
+  ?tv0 y.
+    FLOOKUP
+      (get_source_immutables src
+        (case ALOOKUP am_c.immutables cx.txn.target of SOME m => m | NONE => [])) id = SOME (tv0,y)
+Proof
+  rw[] >>
+  drule_all call_external_function_deploy_success_cases >>
+  strip_tac >>
+  gvs[]
+  >- (imp_res_tac call_body_prefix_preserves_immutables_dom >>
+      `st_unlocked.immutables = st_body.immutables` by
+        (Cases_on `nr` >> gvs[return_def] >>
+         Cases_on `mut = View` >> gvs[return_def] >>
+         Cases_on `mut = Pure` >> gvs[return_def] >>
+         Cases_on `cx.nonreentrant_slot` >> gvs[return_def] >>
+         imp_res_tac release_nonreentrant_lock_immutables) >>
+      gvs[abstract_machine_from_state_def] >>
+      irule preserves_immutables_dom_final_lookup_exists_in_initial >>
+      qexists `initial_state am_c [env]` >>
+      qexists `st_body` >>
+      qexists `am_c with immutables := st_body.immutables` >>
+      qexists `tv` >>
+      qexists `x` >> simp[initial_state_def]) >>
+  imp_res_tac call_body_prefix_preserves_immutables_dom >>
+  `st_unlocked.immutables = st_body.immutables` by
+    (Cases_on `nr` >> gvs[return_def] >>
+     Cases_on `mut = View` >> gvs[return_def] >>
+     Cases_on `mut = Pure` >> gvs[return_def] >>
+     Cases_on `cx.nonreentrant_slot` >> gvs[return_def] >>
+     imp_res_tac release_nonreentrant_lock_immutables) >>
+  gvs[abstract_machine_from_state_def] >>
+  irule preserves_immutables_dom_final_lookup_exists_in_initial >>
+      qexists `initial_state am_c [env]` >>
+      qexists `st_body` >>
+      qexists `am_c with immutables := st_body.immutables` >>
+      qexists `tv` >>
+      qexists `x` >> simp[initial_state_def]
+QED
+
+Theorem deploy_call_success_transports_bare_global_readiness_clause[local]:
+  cx.in_deploy /\
+  call_external_function am cx nr mut ts all_mods args dflts vals body ret =
+    (INL v, am_out) /\
+  evaluate_all_constants cx am cx.txn.target all_mods = SOME am_c /\
+  (!src id ty tv v.
+     FLOOKUP call_art.cta_bare_globals (src,id) = SOME ty /\
+     FLOOKUP
+       (get_source_immutables src
+         (case ALOOKUP am_c.immutables cx.txn.target of SOME m => m | NONE => [])) id = SOME (tv,v) ==>
+     evaluate_type (type_env_all_modules all_mods) ty = SOME tv) ==>
+  !src id ty tv v.
+    FLOOKUP call_art.cta_bare_globals (src,id) = SOME ty /\
+    FLOOKUP
+      (get_source_immutables src
+        (case ALOOKUP am_out.immutables cx.txn.target of SOME m => m | NONE => [])) id = SOME (tv,v) ==>
+    evaluate_type (type_env_all_modules all_mods) ty = SOME tv
+Proof
+  rw[] >>
+  drule_all call_external_function_deploy_success_final_lookup_source_exists_in_constants >>
+  strip_tac >>
+  drule_all call_external_function_deploy_success_preserves_immutable_type_tags_from_constants >>
+  strip_tac >>
+  gvs[] >>
+  first_x_assum irule >>
+  first_assum (irule_at Any) >>
+  first_assum (irule_at Any)
 QED
 
 Theorem deployed_toplevel_vtypes_immutables_ready_clause[local]:
