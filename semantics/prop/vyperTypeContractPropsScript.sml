@@ -3604,19 +3604,72 @@ Proof
         disch_then drule >>
         simp[]) >>
      qexistsl [`tv`,`v`] >>
-     gvs[set_current_module_def, get_tenv_def]) >-
-    (qexistsl [`tv`,`v`] >>
-     conj_tac >-
-       (gvs[contract_namespaces_ok_def] >>
-        drule evaluate_all_constants_preserves_merged_lookup_not_source >>
-        disch_then drule >>
-        disch_then drule >>
-        simp[]) >>
      gvs[set_current_module_def, get_tenv_def]) >>
   first_x_assum irule >>
   gvs[contract_namespaces_ok_def] >>
   conj_tac >- metis_tac[] >>
   gvs[contract_keys_def, ALL_DISTINCT_APPEND]
+QED
+
+Theorem contract_toplevel_vtype_key_MEM_Variable[local]:
+  MEM (src,ts) mods /\ MEM (VariableDecl vis mut id ty init) ts ==>
+  MEM ((src : num option),string_to_num id)
+    (contract_keys toplevel_vtype_keys_toplevel mods)
+Proof
+  rw[contract_keys_def, MEM_FLAT, MEM_MAP] >>
+  qexists `FLAT (MAP (toplevel_vtype_keys_toplevel src) ts)` >> simp[] >>
+  conj_tac >- (qexists `(src,ts)` >> simp[]) >>
+  metis_tac[module_toplevel_vtype_key_MEM_Variable]
+QED
+Theorem module_toplevel_vtype_key_MEM_Variable_any[local]:
+  MEM (VariableDecl vis mut id ty init) ts ==>
+  MEM (src,string_to_num id)
+    (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))
+Proof
+  rw[MEM_FLAT, MEM_MAP] >>
+  qexists `[(src,string_to_num id)]` >> simp[] >>
+  qexists `VariableDecl vis mut id ty init` >>
+  simp[toplevel_vtype_keys_toplevel_def]
+QED
+
+
+Theorem module_immutable_constant_string_nums_distinct[local]:
+  !src ts visI idI tyI initI visC e idC tyC slotC.
+    ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts)) /\
+    MEM (VariableDecl visI Immutable idI tyI initI) ts /\
+    MEM (VariableDecl visC (Constant e) idC tyC slotC) ts ==>
+    string_to_num idI <> string_to_num idC
+Proof
+  gen_tac >> Induct_on `ts` >- rw[] >>
+  gen_tac >> gen_tac >> gen_tac >> gen_tac >> gen_tac >>
+  gen_tac >> gen_tac >> gen_tac >> gen_tac >> gen_tac >>
+  Cases_on `h` >>
+  rw[toplevel_vtype_keys_toplevel_def, ALL_DISTINCT_APPEND] >>
+  gvs[toplevel_vtype_keys_toplevel_def] >>
+  TRY (first_x_assum irule >> metis_tac[]) >>
+  metis_tac[module_toplevel_vtype_key_MEM_Variable_any]
+QED
+
+Theorem constants_do_not_clobber_single_immutable[local]:
+  contract_namespaces_ok F mods /\
+  ALOOKUP mods src = SOME ts /\
+  MEM (VariableDecl vis Immutable id_str ty init) ts ==>
+  constants_do_not_clobber_bare_globals
+    mods (FEMPTY |+ ((src,string_to_num id_str), ty))
+Proof
+  rw[constants_do_not_clobber_bare_globals_def, FLOOKUP_UPDATE] >>
+  gvs[] >>
+  rename1 `ALOOKUP mods src0 = SOME ts` >>
+  `MEM (src0,ts) mods` by metis_tac[alistTheory.ALOOKUP_MEM] >>
+  `ALOOKUP mods src0 = SOME ts'` by
+    (irule alistTheory.ALOOKUP_ALL_DISTINCT_MEM >>
+     gvs[contract_namespaces_ok_def]) >>
+  gvs[] >>
+  `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src0) ts))` by
+    metis_tac[contract_namespaces_ok_module_toplevel_vtype_keys] >>
+  irule module_immutable_constant_string_nums_distinct >>
+  qexistsl [`e`,`init`,`slot`,`src0`,`ts`,`typ`,`ty`,`vis'`,`vis`] >>
+  simp[]
 QED
 
 Theorem deploy_constants_setup_bare_globals_ready[local]:
