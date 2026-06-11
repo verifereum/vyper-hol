@@ -3022,5 +3022,7 @@ Theorem check_contract_explicit_external_entry_no_type_error:
       body
       (initial_state am [scope]))
 Proof
-  cheat
+  metis_tac[
+    checked_explicit_external_entry_establishes_type_soundness_preconditions,
+    eval_stmts_no_type_error]
 QED
