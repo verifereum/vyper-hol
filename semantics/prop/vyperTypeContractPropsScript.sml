@@ -11,7 +11,8 @@ Theory vyperTypeContractProps
 Ancestors
   list rich_list arithmetic finite_map alist option pair patricia_casts
   vyperAST vyperValue vyperMisc vyperContext vyperState vyperInterpreter
-  vyperTypeSystem vyperTypeContract vyperTypeInvariants vyperTypeInitialState
+  vyperTypeSystem vyperTypeContract vyperTypeInvariants vyperTypeStmtSoundness
+  vyperTypeInitialState
 Libs
   wordsLib
 
@@ -2870,6 +2871,33 @@ Theorem check_contract_functions_well_typed_initial_stk[local]:
 Proof
   rw[functions_well_typed_stk_irrelevant] >>
   irule check_contract_functions_well_typed_initial >>
+  simp[]
+QED
+
+Theorem checked_contract_static_maps_transfer_inputs_initial[local]:
+  check_contract F layouts addr mods = SOME art /\
+  ALOOKUP sources addr = SOME mods /\
+  tx.target = addr ==>
+  fn_sigs_complete art.cta_fn_sigs (initial_evaluation_context sources layouts tx) /\
+  bare_globals_complete art.cta_bare_globals (initial_evaluation_context sources layouts tx) /\
+  bare_global_assignable_complete art.cta_bare_global_assignable (initial_evaluation_context sources layouts tx) /\
+  toplevel_vtypes_complete art.cta_toplevel_vtypes (initial_evaluation_context sources layouts tx) /\
+  flag_members_complete art.cta_flag_members (initial_evaluation_context sources layouts tx) /\
+  (!src id ty. FLOOKUP art.cta_bare_globals (src,id) = SOME ty ==>
+     ?ts. get_module_code (initial_evaluation_context sources layouts tx) src = SOME ts /\
+          FLOOKUP art.cta_toplevel_vtypes (src,id) = SOME (Type ty) /\
+          is_bare_global_decl id ts /\
+          find_var_decl_by_num id ts = NONE /\ ty <> NoneT)
+Proof
+  rw[] >> rpt conj_tac
+  >- (irule check_contract_fn_sigs_complete_initial >> simp[])
+  >- (irule check_contract_bare_globals_complete_initial >> simp[])
+  >- (irule check_contract_bare_global_assignable_complete_initial >> simp[])
+  >- (irule check_contract_toplevel_vtypes_complete_initial >> simp[])
+  >- (irule check_contract_flag_members_complete_initial >> simp[]) >>
+  drule check_contract_bare_globals_consistent_initial >>
+  simp[] >>
+  disch_then (qspecl_then [`src`, `id`, `ty`] mp_tac) >>
   simp[]
 QED
 
