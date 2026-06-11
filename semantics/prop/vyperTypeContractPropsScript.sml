@@ -2048,3 +2048,40 @@ Proof
       simp[get_tenv_stk, get_tenv_def, initial_evaluation_context_def,
            get_module_code_stk])
 QED
+
+(* ===== Function-body bridge for checked contracts ===== *)
+
+Theorem check_contract_toplevel_body_MEM[local]:
+  check_contract F layouts addr mods = SOME art /\
+  ALOOKUP mods src = SOME ts /\
+  MEM tl ts ==>
+  check_toplevel_body layouts addr mods art src tl
+Proof
+  rw[check_contract_def] >> gvs[] >>
+  `MEM (src,ts) mods` by metis_tac[ALOOKUP_MEM] >>
+  `check_module layouts addr mods (build_contract_type_artifact F mods) (src,ts)` by
+    metis_tac[EVERY_MEM] >>
+  pop_assum mp_tac >>
+  simp[check_module_def, EVERY_MEM] >>
+  metis_tac[]
+QED
+
+Theorem check_contract_function_body_MEM[local]:
+  check_contract F layouts addr mods = SOME art /\
+  ALOOKUP mods src = SOME ts /\
+  MEM (FunctionDecl vis mut nr raw fn args dflts ret body) ts ==>
+  check_function_body layouts addr mods art src mut nr args dflts ret body
+Proof
+  rw[] >>
+  drule_all check_contract_toplevel_body_MEM >>
+  simp[check_toplevel_body_def]
+QED
+
+Theorem check_contract_functions_well_typed_initial:
+  check_contract F layouts addr mods = SOME art /\
+  ALOOKUP sources addr = SOME mods /\
+  tx.target = addr ==>
+  functions_well_typed (initial_evaluation_context sources layouts tx)
+Proof
+  cheat
+QED
