@@ -3955,6 +3955,41 @@ Proof
 QED
 
 
+Theorem call_external_function_deploy_return_success_lookup_transport[local]:
+  (do
+     (if nr then
+        case cx.nonreentrant_slot of
+          NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
+      else return ());
+     send_call_value mut cx;
+     eval_stmts cx body
+   od (initial_state am_c [env]) = (INR (ReturnException v_ret),st_body)) /\
+  (if nr /\ ~(mut = View \/ mut = Pure) then
+     case cx.nonreentrant_slot of
+       NONE => return ()
+     | SOME slot => release_nonreentrant_lock cx.txn.target slot
+   else return ()) st_body = (INL u,st_unlocked) /\
+  am_out = abstract_machine_from_state am_c.sources am_c.exports am_c.layouts st_unlocked /\
+  FLOOKUP
+    (get_source_immutables src
+      (case ALOOKUP am_c.immutables cx.txn.target of SOME m => m | NONE => [])) id = SOME (tv,x) ==>
+  ?y.
+    FLOOKUP
+      (get_source_immutables src
+        (case ALOOKUP am_out.immutables cx.txn.target of SOME m => m | NONE => [])) id = SOME (tv,y)
+Proof
+  rw[] >>
+  `preserves_tv cx (initial_state am_c [env]) st_body` by
+    metis_tac[call_body_prefix_lock_preserves_tv,
+              call_body_prefix_preserves_tv, return_def, bind_def] >>
+  `st_unlocked.immutables = st_body.immutables` by
+    (Cases_on `cx.nonreentrant_slot` >> gvs[return_def] >>
+     imp_res_tac release_nonreentrant_lock_immutables) >>
+  metis_tac[preserves_tv_unlock_abstract_machine_immutables_lookup]
+QED
+
+
 Theorem call_external_function_deploy_success_preserves_immutable_type_tags_from_constants[local]:
   cx.in_deploy /\
   call_external_function am cx nr mut ts all_mods args dflts vals body ret =
