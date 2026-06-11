@@ -3990,6 +3990,91 @@ Proof
 QED
 
 
+Theorem call_external_function_success_result_cases[local]:
+  (\(res,st). (res,st))
+    (case body_res of
+       (INL (), st) =>
+         (case unlock st of
+            (INL u, st') => (INL NoneV, abstract_machine_from_state srcs exps layouts st')
+          | (INR e, st') => (INR e, am))
+     | (INR (ReturnException v_ret), st) =>
+         (case unlock st of
+            (INL u, st') =>
+              (case evaluate_type tenv ret of
+                 NONE => (INR (Error (RuntimeError "eval ret")), am)
+               | SOME tv =>
+                   case safe_cast tv v_ret of
+                     NONE => (INR (Error (RuntimeError "ext cast ret")), am)
+                   | SOME v_cast =>
+                       (INL v_cast, abstract_machine_from_state srcs exps layouts st'))
+          | (INR e, st') => (INR e, am))
+     | (INR e, st) => (INR e, am)) = (INL v, am_out) ==>
+  ((?st_body st_unlocked u.
+      body_res = (INL (), st_body) /\
+      unlock st_body = (INL u, st_unlocked) /\
+      am_out = abstract_machine_from_state srcs exps layouts st_unlocked) \/
+   (?v_ret st_body st_unlocked u tv v_cast.
+      body_res = (INR (ReturnException v_ret), st_body) /\
+      unlock st_body = (INL u, st_unlocked) /\
+      evaluate_type tenv ret = SOME tv /\
+      safe_cast tv v_ret = SOME v_cast /\
+      am_out = abstract_machine_from_state srcs exps layouts st_unlocked))
+Proof
+  PairCases_on `body_res` >>
+  Cases_on `body_res0` >> gvs[] >>
+  rpt (BasicProvers.TOP_CASE_TAC >> gvs[]) >>
+  metis_tac[]
+QED
+
+Theorem call_external_function_deploy_success_cases[local]:
+  cx.in_deploy /\
+  call_external_function am cx nr mut ts all_mods args dflts vals body ret =
+    (INL v, am_out) /\
+  evaluate_all_constants cx am cx.txn.target all_mods = SOME am_c ==>
+  ?dflt_vs env.
+    evaluate_defaults cx am (DROP (LENGTH dflts + LENGTH vals - LENGTH args) dflts) = SOME dflt_vs /\
+    bind_arguments (type_env_all_modules all_mods) args (vals ++ dflt_vs) = SOME env /\
+    ((?st_body st_unlocked u.
+        (do
+           (if nr then
+              case cx.nonreentrant_slot of
+                NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+              | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
+            else return ());
+           send_call_value mut cx;
+           eval_stmts cx body
+         od (initial_state am_c [env]) = (INL (), st_body)) /\
+        (if nr /\ ~(mut = View \/ mut = Pure) then
+           case cx.nonreentrant_slot of
+             NONE => return ()
+           | SOME slot => release_nonreentrant_lock cx.txn.target slot
+         else return ()) st_body = (INL u, st_unlocked) /\
+        am_out = abstract_machine_from_state am_c.sources am_c.exports am_c.layouts st_unlocked) \/
+     (?v_ret st_body st_unlocked u tv v_cast.
+        (do
+           (if nr then
+              case cx.nonreentrant_slot of
+                NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+              | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
+            else return ());
+           send_call_value mut cx;
+           eval_stmts cx body
+         od (initial_state am_c [env]) = (INR (ReturnException v_ret), st_body)) /\
+        (if nr /\ ~(mut = View \/ mut = Pure) then
+           case cx.nonreentrant_slot of
+             NONE => return ()
+           | SOME slot => release_nonreentrant_lock cx.txn.target slot
+         else return ()) st_body = (INL u, st_unlocked) /\
+        evaluate_type (type_env_all_modules all_mods) ret = SOME tv /\
+        safe_cast tv v_ret = SOME v_cast /\
+        am_out = abstract_machine_from_state am_c.sources am_c.exports am_c.layouts st_unlocked))
+Proof
+  rw[call_external_function_def] >>
+  gvs[AllCaseEqs()] >>
+  drule call_external_function_success_result_cases >>
+  simp[]
+QED
+
 Theorem call_external_function_deploy_success_preserves_immutable_type_tags_from_constants[local]:
   cx.in_deploy /\
   call_external_function am cx nr mut ts all_mods args dflts vals body ret =
