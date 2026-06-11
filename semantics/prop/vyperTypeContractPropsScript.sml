@@ -3090,3 +3090,57 @@ Proof
   gvs[AllCaseEqs()] >>
   metis_tac[lookup_function_External_cases]
 QED
+
+(* ===== Top-level checked call_external no-TypeError theorem ===== *)
+
+Theorem TopLevelName_missing_address_immutables_RuntimeError_probe:
+  get_module_code cx src = SOME code /\
+  find_var_decl_by_num (string_to_num id) code = NONE /\
+  ALOOKUP st.immutables cx.txn.target = NONE ==>
+  eval_expr cx (TopLevelName ty (src,id)) st =
+    (INR (Error (RuntimeError "get_address_immutables")), st)
+Proof
+  simp[Once evaluate_def, Once lookup_global_def, bind_def,
+       lift_option_type_def, get_immutables_def, get_address_immutables_def,
+       lift_option_def, return_def, raise_def]
+QED
+
+Theorem TopLevelName_missing_source_immutable_TypeError_probe:
+  get_module_code cx src = SOME code /\
+  find_var_decl_by_num (string_to_num id) code = NONE /\
+  ALOOKUP st.immutables cx.txn.target = SOME imms /\
+  FLOOKUP (get_source_immutables src imms) (string_to_num id) = NONE ==>
+  ?msg.
+    eval_expr cx (TopLevelName ty (src,id)) st =
+      (INR (Error (TypeError msg)), st)
+Proof
+  rpt strip_tac >>
+  qexists_tac `"lookup_global: var not found"` >>
+  simp[Once evaluate_def, Once lookup_global_def, bind_def,
+       lift_option_type_def, get_immutables_def, get_address_immutables_def,
+       lift_option_def, return_def, raise_def]
+QED
+
+Definition call_tx_well_typed_def:
+  call_tx_well_typed tx <=>
+    tx.value < 2 ** 256 /\
+    tx.time_stamp < 2 ** 256 /\
+    tx.block_number < 2 ** 256 /\
+    tx.blob_base_fee < 2 ** 256 /\
+    tx.gas_price < 2 ** 256 /\
+    tx.chain_id < 2 ** 256 /\
+    tx.gas_limit < 2 ** 256 /\
+    tx.base_fee < 2 ** 256 /\
+    tx.prev_randao < 2 ** 256
+End
+
+Theorem checked_call_external_no_type_error:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  ALOOKUP am.sources tx.target = SOME mods /\
+  machine_well_typed am /\
+  call_tx_well_typed tx /\
+  call_external am tx = (res,am') ==>
+  no_type_error_result res
+Proof
+  cheat
+QED
