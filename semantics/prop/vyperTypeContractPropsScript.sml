@@ -2429,6 +2429,94 @@ Proof
   simp[]
 QED
 
+Theorem static_maps_transfer_env_extend_local[local]:
+  static_maps_transfer_env env1 env2 ==>
+  static_maps_transfer_env (extend_local env1 n ty a) (extend_local env2 n ty a)
+Proof
+  rw[static_maps_transfer_env_def, extend_local_def]
+QED
+
+Theorem well_typed_expr_static_maps_transfer_env[local]:
+  well_typed_expr env1 e /\ static_maps_transfer_env env1 env2 ==> well_typed_expr env2 e
+Proof
+  rw[static_maps_transfer_env_def] >>
+  irule (cj 1 well_typed_static_maps_transfer) >>
+  first_assum $ irule_at Any >>
+  simp[]
+QED
+
+Theorem well_typed_exprs_static_maps_transfer_env[local]:
+  well_typed_exprs env1 es /\ static_maps_transfer_env env1 env2 ==> well_typed_exprs env2 es
+Proof
+  rw[static_maps_transfer_env_def] >>
+  irule (cj 4 well_typed_static_maps_transfer) >>
+  first_assum $ irule_at Any >>
+  simp[]
+QED
+
+Theorem type_place_expr_static_maps_transfer_env[local]:
+  type_place_expr env1 e = SOME vt /\ static_maps_transfer_env env1 env2 ==>
+  type_place_expr env2 e = SOME vt
+Proof
+  rw[static_maps_transfer_env_def] >>
+  drule (cj 2 well_typed_static_maps_transfer) >>
+  disch_then (qspec_then `env2` mp_tac) >>
+  simp[]
+QED
+
+Theorem type_place_target_static_maps_transfer_env[local]:
+  type_place_target env1 tgt = SOME vt /\ static_maps_transfer_env env1 env2 ==>
+  type_place_target env2 tgt = SOME vt
+Proof
+  rw[static_maps_transfer_env_def] >>
+  drule (cj 3 well_typed_static_maps_transfer) >>
+  disch_then (qspec_then `env2` mp_tac) >>
+  simp[]
+QED
+
+Theorem type_place_expr_static_maps_transfer_env_reverse_SOME[local]:
+  !e env1 env2 vt.
+    well_typed_expr env1 e /\
+    static_maps_transfer_env env1 env2 /\
+    type_place_expr env2 e = SOME vt ==>
+    type_place_expr env1 e = SOME vt
+Proof
+  Induct >>
+  rw[well_typed_expr_def, static_maps_transfer_env_def, AllCaseEqs()] >>
+  gvs[] >>
+  TRY (PairCases_on `p` >> gvs[well_typed_expr_def, vtype_annotation_ok_def]) >>
+  gvs[well_typed_expr_def, vtype_annotation_ok_def] >>
+  TRY (rename1 `FLOOKUP env1.toplevel_vtypes (src,string_to_num id) = SOME (Type ty)` >>
+       `FLOOKUP env2.toplevel_vtypes (src,string_to_num id) = SOME (Type ty)` by metis_tac[] >>
+       gvs[]) >>
+  TRY (`static_maps_transfer_env env1 env2` by rw[static_maps_transfer_env_def]) >>
+  TRY (rename1 `subscript_vtype base_vt (expr_type idx) = SOME result_vt` >>
+       qpat_x_assum `!env1 env2 vt. well_typed_expr env1 e /\ static_maps_transfer_env env1 env2 /\ type_place_expr env2 e = SOME vt ==> type_place_expr env1 e = SOME vt`
+         (qspecl_then [`env1`,`env2`,`base_vt`] mp_tac) >>
+       simp[] >> strip_tac >>
+       qexists `base_vt` >> simp[]) >>
+  TRY (rename1 `type_place_expr env2 e = SOME env2_vt` >>
+       qpat_x_assum `!env1 env2 vt. well_typed_expr env1 e /\ static_maps_transfer_env env1 env2 /\ type_place_expr env2 e = SOME vt ==> type_place_expr env1 e = SOME vt`
+         (qspecl_then [`env1`,`env2`,`env2_vt`] mp_tac) >>
+       simp[] >> strip_tac >> gvs[]) >>
+  TRY (rename1 `type_place_expr env1 e = SOME base_vt` >>
+       `type_place_expr env2 e = SOME base_vt` by metis_tac[type_place_expr_static_maps_transfer_env] >>
+       gvs[]) >>
+  metis_tac[]
+QED
+
+Theorem type_place_expr_no_hash_static_maps_transfer_env[local]:
+  well_typed_expr env1 e /\
+  static_maps_transfer_env env1 env2 /\
+  (!kt vt. type_place_expr env1 e <> SOME (HashMapT kt vt)) ==>
+  (!kt vt. type_place_expr env2 e <> SOME (HashMapT kt vt))
+Proof
+  rw[] >>
+  strip_tac >>
+  drule_all type_place_expr_static_maps_transfer_env_reverse_SOME >>
+  metis_tac[]
+QED
+
 
 
 
