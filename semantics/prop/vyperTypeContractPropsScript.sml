@@ -3451,6 +3451,136 @@ Proof
   gvs[AllCaseEqs()]
 QED
 
+Theorem deployed_check_contract_bare_globals_consistent[local]:
+  load_contract am deploy_tx mods exps = INL am_deployed /\
+  check_contract F am_deployed.layouts call_tx.target mods = SOME call_art /\
+  call_tx.target = deploy_tx.target ==>
+  !src id ty.
+    FLOOKUP call_art.cta_bare_globals (src,id) = SOME ty ==>
+    ?ts.
+      get_module_code
+        (initial_evaluation_context am_deployed.sources am_deployed.layouts call_tx) src = SOME ts /\
+      FLOOKUP call_art.cta_toplevel_vtypes (src,id) = SOME (Type ty) /\
+      is_bare_global_decl id ts /\
+      find_var_decl_by_num id ts = NONE /\
+      ty <> NoneT
+Proof
+  rw[] >>
+  drule load_contract_success_cases >>
+  strip_tac >> gvs[] >>
+  drule check_contract_bare_globals_consistent_initial >>
+  simp[] >>
+  disch_then (qspecl_then [`src`, `id`, `ty`] mp_tac) >>
+  simp[]
+QED
+
+Theorem constants_env_preserves_lookup_not_key[local]:
+  constants_env cx am addr src ts acc = SOME cenv /\
+  ~(MEM (src,id) (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))) /\
+  FLOOKUP acc id = SOME x ==>
+  FLOOKUP cenv id = SOME x
+Proof
+  qid_spec_tac `cenv` >> qid_spec_tac `acc` >>
+  Induct_on `ts` >- (rw[constants_env_def] >> gvs[]) >>
+  gen_tac >> gen_tac >> Cases_on `h` >>
+  rw[constants_env_def, toplevel_vtype_keys_toplevel_def] >>
+  TRY (Cases_on `v0` >>
+       gvs[constants_env_def, toplevel_vtype_keys_toplevel_def]) >>
+  gvs[AllCaseEqs(), FLOOKUP_UPDATE] >>
+  TRY (first_x_assum (qspecl_then [`acc |+ (string_to_num s,(tv,v))`,`cenv`] mp_tac) >>
+       simp[FLOOKUP_UPDATE] >> NO_TAC) >>
+  first_x_assum (qspecl_then [`acc`,`cenv`] mp_tac) >> simp[]
+QED
+
+
+Theorem constants_env_head_constant_type[local]:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src)
+    ((VariableDecl vis (Constant e) id ty init)::ts))) /\
+  constants_env cx am addr src
+    ((VariableDecl vis (Constant e) id ty init)::ts) acc = SOME cenv ==>
+  ?tv v. FLOOKUP cenv (string_to_num id) = SOME (tv,v) /\
+         evaluate_type (get_tenv cx) ty = SOME tv
+Proof
+  rw[constants_env_def, toplevel_vtype_keys_toplevel_def] >>
+  gvs[AllCaseEqs()] >>
+  qexists `v` >> simp[] >>
+  metis_tac[constants_env_preserves_lookup_not_key, FLOOKUP_UPDATE]
+QED
+Theorem constants_env_contains_constant_type[local]:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts)) /\
+  constants_env cx am addr src ts acc = SOME cenv /\
+  MEM (VariableDecl vis (Constant e) id ty init) ts ==>
+  ?tv v. FLOOKUP cenv (string_to_num id) = SOME (tv,v) /\
+         evaluate_type (get_tenv cx) ty = SOME tv
+Proof
+  qid_spec_tac `init` >> qid_spec_tac `ty` >> qid_spec_tac `id` >>
+  qid_spec_tac `e` >> qid_spec_tac `vis` >>
+  qid_spec_tac `cenv` >> qid_spec_tac `acc` >>
+  qid_spec_tac `ts` >> qid_spec_tac `src` >> qid_spec_tac `addr` >>
+  qid_spec_tac `am` >> qid_spec_tac `cx` >>
+  recInduct constants_env_ind >>
+  rw[constants_env_def, toplevel_vtype_keys_toplevel_def] >>
+  gvs[AllCaseEqs(), FLOOKUP_UPDATE] >>
+  metis_tac[constants_env_head_constant_type, constants_env_preserves_lookup_not_key,
+            FLOOKUP_UPDATE]
+QED
+
+Theorem merge_constants_preserves_lookup_not_source[local]:
+  src <> src' /\
+  FLOOKUP (get_source_immutables src
+    (case ALOOKUP am.immutables addr of SOME m => m | NONE => [])) id = SOME x ==>
+  FLOOKUP (get_source_immutables src
+    (case ALOOKUP (merge_constants addr src' cenv am).immutables addr of
+     | SOME m => m
+     | NONE => [])) id = SOME x
+Proof
+  rw[merge_constants_def, get_source_immutables_set_other,
+     empty_immutables_def, alistTheory.ALOOKUP_ADELKEY]
+QED
+
+Theorem evaluate_all_constants_preserves_lookup_not_source[local]:
+  ~(MEM src (MAP FST mods)) /\
+  evaluate_all_constants cx am addr mods = SOME am_c /\
+  FLOOKUP (get_source_immutables src
+    (case ALOOKUP am.immutables addr of SOME m => m | NONE => [])) id = SOME x ==>
+  FLOOKUP (get_source_immutables src
+    (case ALOOKUP am_c.immutables addr of SOME m => m | NONE => [])) id = SOME x
+Proof
+  qid_spec_tac `am_c` >> qid_spec_tac `am` >>
+  Induct_on `mods` >- (rw[evaluate_all_constants_def] >> gvs[]) >>
+  gen_tac >> gen_tac >> PairCases_on `h` >>
+  rw[evaluate_all_constants_def] >>
+  gvs[AllCaseEqs()] >>
+  first_x_assum irule >>
+  simp[] >>
+  qexists `merge_constants addr h0 cenv am` >>
+  simp[] >>
+  irule merge_constants_preserves_lookup_not_source >>
+  simp[]
+QED
+
+Theorem deploy_constants_setup_bare_globals_ready[local]:
+  check_contract F layouts target mods = SOME call_art /\
+  ALOOKUP sources target = SOME mods /\
+  tx.target = target /\
+  initial_immutables (type_env_all_modules mods) mods = SOME imms /\
+  evaluate_all_constants (initial_evaluation_context sources layouts tx)
+    (am with immutables updated_by CONS (target,imms)) target mods = SOME am_c ==>
+  (!src id ty.
+     FLOOKUP call_art.cta_bare_globals (src,id) = SOME ty ==>
+     IS_SOME (FLOOKUP
+       (get_source_immutables src
+         (case ALOOKUP am_c.immutables target of SOME m => m | NONE => [])) id)) /\
+  (!src id ty tv v.
+     FLOOKUP call_art.cta_bare_globals (src,id) = SOME ty /\
+     FLOOKUP
+       (get_source_immutables src
+         (case ALOOKUP am_c.immutables target of SOME m => m | NONE => [])) id = SOME (tv,v) ==>
+     evaluate_type (type_env_all_modules mods) ty = SOME tv)
+Proof
+  cheat
+QED
+
 Theorem load_contract_establishes_immutables_ready:
   load_contract am deploy_tx mods exps = INL am_deployed /\
   check_contract F am_deployed.layouts call_tx.target mods = SOME call_art /\
