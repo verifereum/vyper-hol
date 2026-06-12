@@ -3660,6 +3660,26 @@ Proof
   metis_tac[generated_hashmap_subscript_step_no_type_error]
 QED
 
+
+Theorem generated_hashmap_subscript_step_error_no_type_error_params[local]:
+  !tenv params vals scope n kt vt cx e am is_transient slot st1 err st2.
+  bind_arguments tenv params vals = SOME scope /\
+  MEM (num_to_dec_string n, kt) params /\
+  (!id typ id' typ'. MEM (id,typ) params /\ MEM (id',typ') params /\
+      string_to_num id' = string_to_num id ==> typ' = typ) /\
+  check_value_type (get_tenv cx) vt /\
+  pure_expr e /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME NoneTV /\
+  eval_expr cx e (initial_state am [scope]) =
+    (INL (HashMapRef is_transient slot kt vt),st1) /\
+  eval_expr cx (Subscript NoneT e (Name NoneT (num_to_dec_string n)))
+    (initial_state am [scope]) = (INR err,st2) ==>
+  no_type_error_result (INR err)
+Proof
+  rpt strip_tac >> drule_all generated_hashmap_subscript_step_no_type_error_params >>
+  asm_rewrite_tac[] >> strip_tac >>
+  fs[vyperTypeExprSoundnessTheory.no_type_error_result_def]
+QED
 Theorem generated_hashmap_array_subscript_step_no_type_error_params[local]:
   !tenv params vals scope n kt t b cx e am is_transient slot st1 res st2.
   bind_arguments tenv params vals = SOME scope /\
@@ -6514,7 +6534,7 @@ QED
 Theorem generated_array_getter_recursive_step_no_type_error_materialisable_ambient[local]:
   build_getter (Subscript NoneT e (Name NoneT (num_to_dec_string n)))
     (BaseT (UintT 256)) (Type vt) (SUC n) = (args',ret,exp) /\
-  bind_arguments (get_tenv cx) all_args vals = SOME scope /\
+  bind_arguments tenv all_args vals = SOME scope /\
   MEM (num_to_dec_string n, BaseT (UintT 256)) all_args /\
   (!id typ id' typ'. MEM (id,typ) all_args /\ MEM (id',typ') all_args /\
       string_to_num id' = string_to_num id ==> typ' = typ) /\
@@ -6582,7 +6602,7 @@ QED
 
 
 Theorem generated_array_subscript_step_NoneTV_carrier_no_type_error_ambient[local]:
-  bind_arguments (get_tenv cx) all_args vals = SOME scope /\
+  bind_arguments tenv all_args vals = SOME scope /\
   MEM (num_to_dec_string n, BaseT (UintT 256)) all_args /\
   (!id typ id' typ'. MEM (id,typ) all_args /\ MEM (id',typ') all_args /\
       string_to_num id' = string_to_num id ==> typ' = typ) /\
@@ -6605,7 +6625,7 @@ Proof
   metis_tac[generated_array_subscript_base_error_no_type_error]
 QED
 Theorem generated_array_subscript_step_NoneTV_materialisable_ambient[local]:
-  bind_arguments (get_tenv cx) all_args vals = SOME scope /\
+  bind_arguments tenv all_args vals = SOME scope /\
   MEM (num_to_dec_string n, BaseT (UintT 256)) all_args /\
   (!id typ id' typ'. MEM (id,typ) all_args /\ MEM (id',typ') all_args /\
       string_to_num id' = string_to_num id ==> typ' = typ) /\
@@ -6637,7 +6657,7 @@ QED
 
 Theorem generated_array_getter_ArrayT_tail_IH_package_ambient[local]:
   build_getter e (BaseT (UintT 256)) (Type (ArrayT vt b)) n = (args,ret,exp) /\
-  bind_arguments (get_tenv cx) all_args vals = SOME scope /\
+  bind_arguments tenv all_args vals = SOME scope /\
   (!id typ. MEM (id,typ) args ==> MEM (id,typ) all_args) /\
   (!id typ id' typ'. MEM (id,typ) all_args /\ MEM (id',typ') all_args /\
       string_to_num id' = string_to_num id ==> typ' = typ) /\
@@ -6698,7 +6718,7 @@ QED
 
 Theorem generated_array_getter_ArrayT_tail_IH_package_ambient_ArrayT[local]:
   build_getter e (BaseT (UintT 256)) (Type (ArrayT t b)) n = (args,ret,exp) /\
-  bind_arguments (get_tenv cx) all_args vals = SOME scope /\
+  bind_arguments tenv all_args vals = SOME scope /\
   (!id typ. MEM (id,typ) args ==> MEM (id,typ) all_args) /\
   (!id typ id' typ'. MEM (id,typ) all_args /\ MEM (id',typ') all_args /\
       string_to_num id' = string_to_num id ==> typ' = typ) /\
@@ -6754,7 +6774,7 @@ QED
 Theorem generated_array_getter_ArrayT_step_carrier_shape_ambient[local]:
   build_getter (Subscript NoneT e (Name NoneT (num_to_dec_string n)))
     (BaseT (UintT 256)) (Type t) (SUC n) = (args_tail,ret_tail,exp_tail) /\
-  bind_arguments (get_tenv cx) all_args vals = SOME scope /\
+  bind_arguments tenv all_args vals = SOME scope /\
   MEM (num_to_dec_string n, BaseT (UintT 256)) all_args /\
   (!id typ id' typ'. MEM (id,typ) all_args /\ MEM (id',typ') all_args /\
       string_to_num id' = string_to_num id ==> typ' = typ) /\
@@ -6789,7 +6809,7 @@ Proof
       irule generated_array_getter_recursive_step_no_type_error_materialisable_ambient >>
       simp[evaluate_type_def] >>
       qexistsl [`all_args`,`am`,`args_tail`,`cx`,`e`,`exp_tail`,`n`,`ret_tail`,
-                `scope`,`st1`,`step_st`,`Value (ArrayV av)`,`vals`,`t`] >>
+                `scope`,`st1`,`step_st`,`tenv`,`Value (ArrayV av)`,`vals`,`t`] >>
       simp[evaluate_type_def] >> metis_tac[])
   >- (qsuff_tac `no_type_error_result step_res /\
         (case step_res of
@@ -6801,7 +6821,7 @@ Proof
       irule generated_array_getter_recursive_step_no_type_error_materialisable_ambient >>
       simp[evaluate_type_def] >>
       qexistsl [`all_args`,`am`,`args_tail`,`cx`,`e`,`exp_tail`,`n`,`ret_tail`,
-                `scope`,`st1`,`step_st`,`ArrayRef is_transient slot (ArrayTV tv b) bd`,`vals`,`t`] >>
+                `scope`,`st1`,`step_st`,`tenv`,`ArrayRef is_transient slot (ArrayTV tv b) bd`,`vals`,`t`] >>
       simp[evaluate_type_def] >> metis_tac[]) >>
   qpat_x_assum `eval_expr cx (Subscript _ _ _) _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, return_def, raise_def] >>
@@ -6811,7 +6831,7 @@ QED
 Theorem generated_array_getter_ArrayT_unfolded_tail_IH_antecedents_ambient[local]:
   build_getter (Subscript NoneT e (Name NoneT (num_to_dec_string n)))
     (BaseT (UintT 256)) (Type t) (SUC n) = (args_tail,ret_tail,exp_tail) /\
-  bind_arguments (get_tenv cx) all_args vals = SOME scope /\
+  bind_arguments tenv all_args vals = SOME scope /\
   (!id typ. (id = num_to_dec_string n /\ typ = BaseT (UintT 256) \/ MEM (id,typ) args_tail) ==> MEM (id,typ) all_args) /\
   (!id typ id' typ'. MEM (id,typ) all_args /\ MEM (id',typ') all_args /\
       string_to_num id' = string_to_num id ==> typ' = typ) /\
@@ -6855,7 +6875,7 @@ QED
 Theorem generated_array_getter_expr_no_type_error_ambient_aux[local]:
   !vt e n args ret exp vals scope base_res st1 res st' cx am elem_tv all_args.
   build_getter e (BaseT (UintT 256)) (Type vt) n = (args,ret,exp) /\
-  bind_arguments (get_tenv cx) all_args vals = SOME scope /\
+  bind_arguments tenv all_args vals = SOME scope /\
   (!id typ. MEM (id,typ) args ==> MEM (id,typ) all_args) /\
   (!id typ id' typ'. MEM (id,typ) all_args /\ MEM (id',typ') all_args /\
       string_to_num id' = string_to_num id ==> typ' = typ) /\
@@ -6897,7 +6917,7 @@ QED
 Theorem generated_array_getter_expr_materialisable_shape_ambient_aux[local]:
   !vt e n args ret exp vals scope base_res st1 res st' cx am elem_tv all_args.
   build_getter e (BaseT (UintT 256)) (Type vt) n = (args,ret,exp) /\
-  bind_arguments (get_tenv cx) all_args vals = SOME scope /\
+  bind_arguments tenv all_args vals = SOME scope /\
   (!id typ. MEM (id,typ) args ==> MEM (id,typ) all_args) /\
   (!id typ id' typ'. MEM (id,typ) all_args /\ MEM (id',typ') all_args /\
       string_to_num id' = string_to_num id ==> typ' = typ) /\
@@ -6941,7 +6961,7 @@ QED
 Theorem generated_array_getter_expr_no_type_error_materialisable_ambient_aux[local]:
   !vt e n args ret exp vals scope base_res st1 res st' cx am elem_tv all_args.
   build_getter e (BaseT (UintT 256)) (Type vt) n = (args,ret,exp) /\
-  bind_arguments (get_tenv cx) all_args vals = SOME scope /\
+  bind_arguments tenv all_args vals = SOME scope /\
   (!id typ. MEM (id,typ) args ==> MEM (id,typ) all_args) /\
   (!id typ id' typ'. MEM (id,typ) all_args /\ MEM (id',typ') all_args /\
       string_to_num id' = string_to_num id ==> typ' = typ) /\
@@ -6989,6 +7009,36 @@ Proof
   simp[] >> metis_tac[build_getter_args_num_unique]
 QED
 
+Theorem build_getter_base_error_no_type_error[local]:
+  !e kt vt n args ret exp cx am scope err st1 res st'.
+  build_getter e kt vt n = (args,ret,exp) /\
+  eval_expr cx e (initial_state am [scope]) = (INR err,st1) /\
+  no_type_error_result (INR err) /\
+  eval_expr cx exp (initial_state am [scope]) = (res,st') ==>
+  no_type_error_result res
+Proof
+  recInduct build_getter_ind >> rpt strip_tac >>
+  qpat_x_assum `build_getter _ _ _ _ = _` mp_tac >>
+  simp[Once build_getter_def] >>
+  Cases_on `is_ArrayT vt` >> simp[] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rw[] >> gvs[]
+  >- (first_x_assum irule >> simp[] >>
+      qexistsl [`am`, `cx`, `err`, `scope`, `st'`, `st1`] >>
+      simp[] >>
+      qpat_x_assum `eval_expr cx e _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, return_def, raise_def]) 
+  >- (qpat_x_assum `eval_expr cx (Subscript _ _ _) _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, return_def, raise_def] >>
+      simp[] >> strip_tac >> gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def]) >>
+  first_x_assum irule >> simp[] >>
+  qexistsl [`am`, `cx`, `err`, `scope`, `st'`, `st1`] >>
+  simp[] >>
+  qpat_x_assum `eval_expr cx e _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, return_def, raise_def]
+QED
+
+
 Theorem generated_hashmap_getter_expr_no_type_error[local]:
   !e kt vt n args ret exp tenv params vals scope cx am
     is_transient slot st1 res st'.
@@ -7005,7 +7055,72 @@ Theorem generated_hashmap_getter_expr_no_type_error[local]:
   eval_expr cx exp (initial_state am [scope]) = (res,st') ==>
   no_type_error_result res
 Proof
-  cheat
+  recInduct build_getter_ind >> rpt strip_tac >>
+  qpat_x_assum `build_getter _ _ _ _ = _` mp_tac >>
+  simp[Once build_getter_def] >>
+  Cases_on `is_ArrayT vt` >> simp[] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rw[] >> gvs[]
+  >- (Cases_on `vt` >> gvs[is_ArrayT_def, ArrayT_type_def, check_value_type_def,
+                              assignable_type_def, well_formed_type_def,
+                              evaluate_type_def, AllCaseEqs(), IS_SOME_EXISTS] >>
+      Cases_on `eval_expr cx (Subscript NoneT e (Name NoneT (num_to_dec_string n)))
+                  (initial_state am [scope])` >> gvs[] >>
+      `MEM (num_to_dec_string n,kt) params` by metis_tac[] >>
+      `check_value_type (get_tenv cx) (Type (ArrayT t b))` by
+        simp[check_value_type_def, assignable_type_def, well_formed_type_def,
+             evaluate_type_def] >>
+      `no_type_error_result q` by
+        (drule_all generated_hashmap_subscript_step_no_type_error_params >>
+         simp[]) >>
+      irule (cj 1 generated_array_getter_expr_no_type_error_materialisable_ambient_aux) >>
+      qexistsl [`params`,`am`,`args'`,`q`,`cx`,
+                `Subscript NoneT e (Name NoneT (num_to_dec_string n))`,
+                `tv`,`exp`,`SUC n`,`ret`,`scope`,`st'`,`r`,`tenv`,`vals`,`t`] >>
+      simp[pure_expr_def, expr_type_def, evaluate_type_def] >>
+      Cases_on `q` >> gvs[]
+      >- (conj_tac >- metis_tac[] >>
+          `MEM (num_to_dec_string n,kt) params` by metis_tac[] >>
+          drule_all generated_hashmap_array_tail_subscript_typed_package >>
+          simp[] >> metis_tac[]) >>
+      metis_tac[])
+  >- (drule_all generated_hashmap_subscript_step_no_type_error_params >> simp[]) >>
+  Cases_on `eval_expr cx (Subscript NoneT e (Name NoneT (num_to_dec_string n)))
+              (initial_state am [scope])` >> gvs[]
+  >- (Cases_on `q` >> gvs[]
+      >- (`MEM (num_to_dec_string n,kt) params` by metis_tac[] >>
+          drule_all generated_hashmap_subscript_step_success_carrier >> strip_tac >> gvs[] >>
+          first_x_assum irule >>
+          simp[pure_expr_def, expr_type_def, evaluate_type_def, check_value_type_def] >>
+          qexistsl [`am`, `cx`, `is_transient`, `params`, `scope`, `slot'`, `st'`, `r`, `tenv`, `vals`] >>
+          simp[check_value_type_def] >>
+          conj_tac >- metis_tac[] >>
+          qpat_x_assum `check_value_type _ (HashMapT _ _)` mp_tac >>
+          simp[Once check_value_type_def]) >>
+      `MEM (num_to_dec_string n,kt) params` by metis_tac[] >>
+      `check_value_type (get_tenv cx) vtyp` by
+        (qpat_x_assum `check_value_type _ (HashMapT _ _)` mp_tac >>
+         simp[Once check_value_type_def]) >>
+      `no_type_error_result (INR y)` by
+        (drule_all generated_hashmap_subscript_step_error_no_type_error_params >> simp[]) >>
+      drule_all build_getter_base_error_no_type_error >> simp[]) >>
+  Cases_on `q` >> gvs[]
+  >- (`MEM (num_to_dec_string n,kt) params` by metis_tac[] >>
+      drule_all generated_hashmap_subscript_step_success_carrier >> strip_tac >> gvs[] >>
+      first_x_assum irule >>
+      simp[pure_expr_def, expr_type_def, evaluate_type_def, check_value_type_def] >>
+      qexistsl [`am`, `cx`, `is_transient`, `params`, `scope`, `slot'`, `st'`, `r`, `tenv`, `vals`] >>
+      simp[check_value_type_def] >>
+      conj_tac >- metis_tac[] >>
+      qpat_x_assum `check_value_type _ (HashMapT _ _)` mp_tac >>
+      simp[Once check_value_type_def]) >>
+  `MEM (num_to_dec_string n,kt) params` by metis_tac[] >>
+  `check_value_type (get_tenv cx) vtyp` by
+    (qpat_x_assum `check_value_type _ (HashMapT _ _)` mp_tac >>
+     simp[Once check_value_type_def]) >>
+  `no_type_error_result (INR y)` by
+    (drule_all generated_hashmap_subscript_step_error_no_type_error_params >> simp[]) >>
+  drule_all build_getter_base_error_no_type_error >> simp[]
 QED
 
 Theorem generated_public_array_getter_expr_no_type_error_materialisable[local]:
