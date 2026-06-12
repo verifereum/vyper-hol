@@ -3108,6 +3108,37 @@ Theorem raw_getter_index_name_annotation_contradiction[local]:
 Proof
   rw[well_typed_expr_def]
 QED
+
+Theorem checked_scalar_public_getter_body_typing_package_contradiction[local]:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  ALOOKUP am.sources tx.target = SOME mods /\
+  ALOOKUP mods src = SOME ts /\
+  MEM (VariableDecl Public mut fn typ init) ts /\
+  ~is_ArrayT typ ==>
+  ~(?env_after.
+      type_stmts (artifact_env art mods src) typ
+        [Return (SOME (TopLevelName NoneT (src,fn)))] = SOME env_after)
+Proof
+  rw[] >>
+  `FLOOKUP art.cta_toplevel_vtypes (src,string_to_num fn) = SOME (Type typ)` by
+    (`toplevel_vtypes_complete art.cta_toplevel_vtypes
+        (initial_evaluation_context am.sources am.layouts tx)` by
+       (irule check_contract_toplevel_vtypes_complete_initial >> simp[]) >>
+     gvs[toplevel_vtypes_complete_def, get_module_code_def,
+         initial_evaluation_context_def] >>
+     metis_tac[]) >>
+  `check_toplevel_decl am.layouts tx.target mods art src
+     (VariableDecl Public mut fn typ init)` by
+    metis_tac[check_contract_toplevel_decl_MEM] >>
+  `typ <> NoneT` by
+    (Cases_on `mut` >> gvs[check_toplevel_decl_def] >>
+     metis_tac[assignable_type_not_NoneT]) >>
+  `type_stmts (artifact_env art mods src) typ
+     [Return (SOME (TopLevelName NoneT (src,fn)))] = NONE` by
+    (irule scalar_raw_public_getter_body_typing_annotation_contradiction >>
+     simp[artifact_env_def]) >>
+  gvs[]
+QED
 (* ===== Top-level checked call_external no-TypeError theorem ===== *)
 
 Theorem TopLevelName_missing_address_immutables_RuntimeError_probe:
