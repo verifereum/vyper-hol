@@ -6958,7 +6958,9 @@ Theorem generated_array_getter_expr_no_type_error_materialisable_aux[local]:
                 (?is_transient slot elem_tv bd. tvl' = ArrayRef is_transient slot elem_tv bd)
    | INR _ => T)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  irule generated_array_getter_expr_no_type_error_materialisable_ambient_aux >>
+  simp[] >> metis_tac[build_getter_args_num_unique]
 QED
 
 Theorem generated_hashmap_getter_expr_no_type_error[local]:
