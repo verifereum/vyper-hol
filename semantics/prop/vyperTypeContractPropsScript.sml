@@ -6400,6 +6400,61 @@ Proof
   metis_tac[]
 QED
 
+
+Theorem generated_array_subscript_step_NoneTV_carrier_no_type_error_ambient[local]:
+  bind_arguments (get_tenv cx) all_args vals = SOME scope /\
+  MEM (num_to_dec_string n, BaseT (UintT 256)) all_args /\
+  (!id typ id' typ'. MEM (id,typ) all_args /\ MEM (id',typ') all_args /\
+      string_to_num id' = string_to_num id ==> typ' = typ) /\
+  pure_expr e /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME NoneTV /\
+  eval_expr cx e (initial_state am [scope]) = (base_res,st1) /\
+  no_type_error_result base_res /\
+  (case base_res of
+   | INL tvl =>
+       ((?av bd. tvl = Value (ArrayV av) /\ value_has_type (ArrayTV elem_tv bd) (ArrayV av)) \/
+        (?is_transient slot bd. tvl = ArrayRef is_transient slot elem_tv bd))
+   | INR _ => T) /\
+  eval_expr cx (Subscript NoneT e (Name NoneT (num_to_dec_string n)))
+    (initial_state am [scope]) = (res,st') ==>
+  no_type_error_result res
+Proof
+  rpt strip_tac >> Cases_on `base_res` >> gvs[]
+  >- metis_tac[generated_array_subscript_step_NoneTV_carrier_no_type_error]
+  >- metis_tac[generated_array_subscript_step_NoneTV_carrier_no_type_error] >>
+  metis_tac[generated_array_subscript_base_error_no_type_error]
+QED
+Theorem generated_array_subscript_step_NoneTV_materialisable_ambient[local]:
+  bind_arguments (get_tenv cx) all_args vals = SOME scope /\
+  MEM (num_to_dec_string n, BaseT (UintT 256)) all_args /\
+  (!id typ id' typ'. MEM (id,typ) all_args /\ MEM (id',typ') all_args /\
+      string_to_num id' = string_to_num id ==> typ' = typ) /\
+  pure_expr e /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME NoneTV /\
+  eval_expr cx e (initial_state am [scope]) = (base_res,st1) /\
+  no_type_error_result base_res /\
+  (case base_res of
+   | INL tvl =>
+       ((?av bd. tvl = Value (ArrayV av) /\ value_has_type (ArrayTV elem_tv bd) (ArrayV av)) \/
+        (?is_transient slot bd. tvl = ArrayRef is_transient slot elem_tv bd))
+   | INR _ => T) /\
+  eval_expr cx (Subscript NoneT e (Name NoneT (num_to_dec_string n)))
+    (initial_state am [scope]) = (res,st') ==>
+  no_type_error_result res /\
+  (case res of INL tvl' => (?v. tvl' = Value v) \/
+                (?is_transient slot elem_tv bd. tvl' = ArrayRef is_transient slot elem_tv bd)
+   | INR _ => T)
+Proof
+  rpt strip_tac
+  >- metis_tac[generated_array_subscript_step_NoneTV_carrier_no_type_error_ambient] >>
+  Cases_on `base_res` >> gvs[]
+  >- metis_tac[cj 2 generated_array_subscript_step_NoneTV_materialisable]
+  >- metis_tac[cj 2 generated_array_subscript_step_NoneTV_materialisable] >>
+  qpat_x_assum `eval_expr cx (Subscript _ _ _) _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, return_def, raise_def] >>
+  simp[] >> strip_tac >> gvs[]
+QED
+
 Theorem generated_array_getter_expr_no_type_error_ambient_aux[local]:
   !vt e n args ret exp vals scope base_res st1 res st' cx am elem_tv all_args.
   build_getter e (BaseT (UintT 256)) (Type vt) n = (args,ret,exp) /\
