@@ -3680,6 +3680,64 @@ Proof
   metis_tac[]
 QED
 
+Theorem generated_hashmap_array_tail_subscript_success_carrier[local]:
+  bind_arguments tenv args vals = SOME scope /\
+  MEM (num_to_dec_string n, kt) args /\
+  (!id typ id' typ'. MEM (id,typ) args /\ MEM (id',typ') args /\
+      string_to_num id' = string_to_num id ==> typ' = typ) /\
+  check_value_type (get_tenv cx) (Type vt) /\ is_ArrayT vt /\
+  pure_expr e /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME NoneTV /\
+  eval_expr cx e (initial_state am [scope]) =
+    (INL (HashMapRef is_transient slot kt (Type vt)),st1) /\
+  eval_expr cx (Subscript NoneT e (Name NoneT (num_to_dec_string n)))
+    (initial_state am [scope]) = (INL tvl,st2) ==>
+  (?av. tvl = Value (ArrayV av)) \/
+  (?is_transient' slot' elem_tv bd. tvl = ArrayRef is_transient' slot' elem_tv bd)
+Proof
+  rpt strip_tac >>
+  `?entry. FLOOKUP scope (string_to_num (num_to_dec_string n)) = SOME entry /\
+           evaluate_type tenv kt = SOME entry.type /\ entry.assignable` by
+    (qspecl_then [`tenv`, `args`, `vals`, `scope`, `num_to_dec_string n`, `kt`]
+       mp_tac bind_arguments_scope_covers_params_getter >>
+     simp[] >>
+     (impl_tac >-
+       (rpt strip_tac >>
+        first_x_assum (qspecl_then [`num_to_dec_string n`, `kt`, `id'`, `typ'`] mp_tac) >>
+        simp[])) >>
+     simp[]) >>
+  `st1 = initial_state am [scope]` by metis_tac[eval_expr_preserves_state] >>
+  gvs[initial_state_def] >>
+  qpat_x_assum `eval_expr cx (Subscript _ _ _) _ = _` mp_tac >>
+  simp[Once evaluate_def, Once evaluate_def,
+       get_scopes_def, lookup_scopes_val_def, bind_def, lift_option_def,
+       lift_option_type_def, return_def, raise_def] >>
+  Cases_on `entry.value` >> simp[bind_def, return_def, raise_def] >>
+  Cases_on `vt` >> gvs[is_ArrayT_def, check_value_type_def,
+                        assignable_type_def, well_formed_type_def,
+                        evaluate_type_def, AllCaseEqs(), bind_def,
+                        return_def, raise_def, IS_SOME_EXISTS] >>
+  rename [`evaluate_type (get_tenv cx) t = SOME elem_tv`,
+          `type_slot_size (ArrayTV elem_tv bd)`] >>
+  gvs[check_array_bounds_def, ignore_bind_def, lift_sum_def,
+      evaluate_subscript_def, evaluate_type_def, LET_THM,
+      bind_def, return_def, raise_def] >>
+  Cases_on `entry.value` >> gvs[check_array_bounds_def, return_def] >>
+  Cases_on `read_storage_slot cx is_transient
+             (hashmap_slot slot (encode_hashmap_key kt entry.value))
+             (ArrayTV elem_tv bd) (initial_state am [scope])` >>
+  Cases_on `q` >> gvs[initial_state_def, bind_def, return_def, raise_def] >>
+  rpt strip_tac >> gvs[] >>
+  (`well_formed_type_value (ArrayTV elem_tv bd)` by
+    (`evaluate_type (get_tenv cx) (ArrayT t bd) = SOME (ArrayTV elem_tv bd)` by
+       simp[evaluate_type_def] >>
+     metis_tac[vyperTypeValuesTheory.evaluate_type_well_formed_type_value])) >>
+  drule_all vyperTypeStatePreservationTheory.read_storage_slot_success_type >>
+  strip_tac >>
+  Cases_on `x` >> gvs[vyperTypingTheory.value_has_type_def] >>
+  metis_tac[]
+QED
+
 Theorem build_getter_args_current[local]:
   !e kt vt n args ret exp.
     build_getter e kt vt n = (args,ret,exp) ==>
