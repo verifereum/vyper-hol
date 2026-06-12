@@ -7600,3 +7600,42 @@ Proof
   irule (cj 2 generated_public_hashmap_getter_expr_no_type_error_materialisable) >>
   simp[Abbr `cx`] >> metis_tac[]
 QED
+
+Theorem checked_public_getter_entry_no_type_error[local]:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  checked_contract_runtime_ready art mods am tx /\
+  machine_well_typed am /\
+  ALOOKUP mods src = SOME ts /\
+  MEM decl ts /\
+  is_public_getter_decl fn decl /\
+  external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,body) /\
+  bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
+  eval_stmts (initial_evaluation_context am.sources am.layouts tx) body
+    (initial_state am [scope]) = (res,st') ==>
+  no_type_error_result res
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?exp. body = [Return (SOME exp)]` by
+    (Cases_on `decl` >> gvs[is_public_getter_decl_def]
+     >- (Cases_on `v` >> gvs[] >> Cases_on `is_ArrayT t` >> gvs[]
+         >- (drule_all array_public_getter_tuple_shape >> metis_tac[]) >>
+         qpat_x_assum `external_getter_tuple _ _ = _` mp_tac >>
+         simp[external_getter_tuple_def] >> strip_tac >> gvs[] >> metis_tac[]) >>
+     Cases_on `v` >> gvs[is_public_getter_decl_def] >>
+     drule_all hashmap_public_getter_tuple_shape >> metis_tac[]) >>
+  gvs[] >>
+  qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts tx` >>
+  Cases_on `eval_expr cx exp (initial_state am [scope])` >>
+  irule eval_stmts_single_Return_no_type_error >>
+  qexistsl [`cx`, `exp`, `q`, `initial_state am [scope]`, `st'`, `r`] >> simp[] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      irule materialise_getter_result_no_type_error >>
+      qexistsl [`cx`, `r`, `st2`, `tv`] >> simp[] >>
+      qunabbrev_tac `cx` >>
+      drule_all selected_public_getter_expr_no_type_error_materialisable >>
+      simp[] >> metis_tac[]) >>
+  qunabbrev_tac `cx` >>
+  irule (cj 1 selected_public_getter_expr_no_type_error_materialisable) >>
+  metis_tac[]
+QED
