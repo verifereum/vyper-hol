@@ -3393,9 +3393,17 @@ Proof
   simp[]
 QED
 
+Definition checked_contract_runtime_ready_def:
+  checked_contract_runtime_ready art mods am tx <=>
+    ALOOKUP am.sources tx.target = SOME mods /\
+    immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
+      (initial_evaluation_context am.sources am.layouts tx)
+      am.immutables
+End
+
 Theorem checked_call_external_no_type_error:
   check_contract F am.layouts tx.target mods = SOME art /\
-  ALOOKUP am.sources tx.target = SOME mods /\
+  checked_contract_runtime_ready art mods am tx /\
   machine_well_typed am /\
   call_tx_well_typed tx /\
   call_external am tx = (res,am') ==>
@@ -4755,4 +4763,17 @@ Proof
      simp[initial_evaluation_context_def] >>
      strip_tac >>
      gvs[initial_evaluation_context_def]
+QED
+
+Theorem load_contract_establishes_checked_contract_runtime_ready:
+  load_contract am deploy_tx mods exps = INL am_deployed /\
+  check_contract F am_deployed.layouts call_tx.target mods = SOME art /\
+  call_tx.target = deploy_tx.target ==>
+  checked_contract_runtime_ready art mods am_deployed call_tx
+Proof
+  rw[checked_contract_runtime_ready_def]
+  >- (drule load_contract_success_cases >> strip_tac >> gvs[])
+  >> irule load_contract_establishes_immutables_ready
+  >> qexistsl [`am`, `deploy_tx`, `exps`, `mods`]
+  >> simp[]
 QED
