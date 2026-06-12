@@ -3092,6 +3092,14 @@ Proof
   metis_tac[lookup_function_External_cases]
 QED
 
+
+Theorem scalar_raw_public_getter_body_typing_annotation_contradiction[local]:
+  typ <> NoneT /\
+  FLOOKUP env.toplevel_vtypes (src,string_to_num fn) = SOME (Type typ) ==>
+  type_stmts env typ [Return (SOME (TopLevelName NoneT (src,fn)))] = NONE
+Proof
+  rw[type_stmt_def, well_typed_expr_def]
+QED
 (* ===== Top-level checked call_external no-TypeError theorem ===== *)
 
 Theorem TopLevelName_missing_address_immutables_RuntimeError_probe:
