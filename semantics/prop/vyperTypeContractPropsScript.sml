@@ -3360,6 +3360,25 @@ Proof
      initial_evaluation_context_def]
 QED
 
+Theorem call_external_args_defaults_bind_typed[local]:
+  evaluate_defaults cx am (DROP (LENGTH dflts + LENGTH vals - LENGTH args) dflts) = SOME dflt_vs /\
+  bind_arguments (type_env_all_modules all_mods) args (vals ++ dflt_vs) = SOME scope /\
+  LIST_REL
+    (\v arg. ?tv. evaluate_type (type_env_all_modules all_mods) (SND arg) = SOME tv /\
+                   value_has_type tv v)
+    (vals ++ dflt_vs) args ==>
+  args_values_typed (type_env_all_modules all_mods) args (vals ++ dflt_vs)
+Proof
+  rw[args_values_typed_def]
+  >- (imp_res_tac LIST_REL_LENGTH >> gvs[LENGTH_APPEND] >> decide_tac) >>
+  imp_res_tac LIST_REL_LENGTH >>
+  qpat_x_assum `LIST_REL _ _ _` mp_tac >>
+  simp[listTheory.LIST_REL_EL_EQN] >>
+  strip_tac >>
+  first_x_assum drule >>
+  simp[]
+QED
+
 Theorem checked_call_external_no_type_error_counterexample:
   ?am tx mods art msg.
     check_contract F am.layouts tx.target mods = SOME art /\
