@@ -3343,6 +3343,23 @@ Proof
   simp[empty_call_txn_def, call_tx_well_typed_def]
 QED
 
+Theorem call_tx_well_typed_initial_context[local]:
+  call_tx_well_typed tx ==>
+  context_well_typed (initial_evaluation_context sources layouts tx)
+Proof
+  rw[call_tx_well_typed_def, context_well_typed_def,
+     initial_evaluation_context_def]
+QED
+
+Theorem call_tx_well_typed_initial_context_stk[local]:
+  call_tx_well_typed tx ==>
+  context_well_typed
+    ((initial_evaluation_context sources layouts tx) with stk := [(src,fn)])
+Proof
+  rw[call_tx_well_typed_def, context_well_typed_def,
+     initial_evaluation_context_def]
+QED
+
 Theorem checked_call_external_no_type_error_counterexample:
   ?am tx mods art msg.
     check_contract F am.layouts tx.target mods = SOME art /\
