@@ -6369,7 +6369,13 @@ Theorem generated_array_subscript_base_error_no_type_error[local]:
   no_type_error_result step_res /\
   (case step_res of INR _ => T | INL _ => T)
 Proof
-  cheat
+  rpt strip_tac >>
+  qpat_x_assum `eval_expr cx (Subscript NoneT e idx) _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, return_def, raise_def] >>
+  simp[] >>
+  strip_tac >> gvs[] >>
+  qpat_x_assum `no_type_error_result (INR err)` mp_tac >>
+  simp[vyperTypeExprSoundnessTheory.no_type_error_result_def]
 QED
 
 Theorem generated_array_getter_expr_no_type_error_ambient_aux[local]:
