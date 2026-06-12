@@ -3348,6 +3348,81 @@ Proof
   Cases_on `r` >> gvs[] >> metis_tac[]
 QED
 
+Theorem build_getter_args_index_ge_aux[local]:
+  !e kt vt n args ret exp id typ.
+    build_getter e kt vt n = (args,ret,exp) /\ MEM (id,typ) args ==>
+    ?m. n <= m /\ id = num_to_dec_string m
+Proof
+  recInduct build_getter_ind >> rpt strip_tac >>
+  qpat_x_assum `build_getter _ _ _ _ = _` mp_tac >>
+  simp[Once build_getter_def] >>
+  gvs[AllCaseEqs()] >>
+  rpt (pairarg_tac >> gvs[]) >> rw[] >> gvs[] >>
+  first_x_assum drule >> rw[] >>
+  qexists_tac `m` >> simp[]
+QED
+
+Theorem string_to_num_eq_imp[local]:
+  !s t. string_to_num s = string_to_num t ==> s = t
+Proof
+  metis_tac[string_to_num_inj]
+QED
+
+Theorem build_getter_args_no_current_name[local]:
+  !e kt vt n args ret exp typ.
+    build_getter e kt vt (SUC n) = (args,ret,exp) /\
+    MEM (num_to_dec_string n,typ) args ==> F
+Proof
+  rpt strip_tac >>
+  drule_all build_getter_args_index_ge_aux >>
+  strip_tac >>
+  gvs[ASCIInumbersTheory.toString_11] >>
+  decide_tac
+QED
+
+Theorem build_getter_args_no_current_num[local]:
+  !e kt vt n args ret exp id typ.
+    build_getter e kt vt (SUC n) = (args,ret,exp) /\
+    MEM (id,typ) args /\
+    string_to_num id = string_to_num (num_to_dec_string n) ==> F
+Proof
+  rpt strip_tac >>
+  drule string_to_num_eq_imp >>
+  strip_tac >> gvs[] >>
+  metis_tac[build_getter_args_no_current_name]
+QED
+
+Theorem build_getter_args_num_unique[local]:
+  !e kt vt n args ret exp id typ id' typ'.
+    build_getter e kt vt n = (args,ret,exp) /\
+    MEM (id,typ) args /\ MEM (id',typ') args /\
+    string_to_num id' = string_to_num id ==> typ' = typ
+Proof
+  recInduct build_getter_ind >> rpt strip_tac >>
+  qpat_x_assum `build_getter _ _ _ _ = _` mp_tac >>
+  simp[Once build_getter_def] >>
+  Cases_on `is_ArrayT vt` >> simp[] >>
+  rpt (pairarg_tac >> gvs[]) >> rw[] >> gvs[] >>
+  imp_res_tac string_to_num_eq_imp >>
+  gvs[ASCIInumbersTheory.toString_11] >>
+  TRY (imp_res_tac build_getter_args_no_current_name) >>
+  TRY (imp_res_tac build_getter_args_no_current_num) >>
+  metis_tac[]
+QED
+
+Theorem build_getter_bound_Name_eval_no_type_error[local]:
+  build_getter e kt vt n = (args,ret,exp) /\
+  MEM (id,typ) args /\
+  bind_arguments tenv args vals = SOME scope /\
+  eval_expr cx (Name NoneT id) (initial_state am [scope]) = (res,st') ==>
+  no_type_error_result res
+Proof
+  rpt strip_tac >>
+  irule bind_arguments_Name_eval_no_type_error >>
+  simp[] >>
+  metis_tac[build_getter_args_num_unique]
+QED
+
 Theorem TopLevelName_missing_address_immutables_RuntimeError_probe:
   get_module_code cx src = SOME code /\
   find_var_decl_by_num (string_to_num id) code = NONE /\
