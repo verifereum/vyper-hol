@@ -3500,6 +3500,36 @@ Proof
   metis_tac[]
 QED
 
+Theorem checked_public_hashmap_TopLevelName_no_type_error[local]:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  ALOOKUP am.sources tx.target = SOME mods /\
+  ALOOKUP mods src = SOME ts /\
+  MEM (HashMapDecl Public is_transient id kt vt init) ts /\
+  eval_expr (initial_evaluation_context am.sources am.layouts tx)
+    (TopLevelName NoneT (src,id)) (initial_state am [scope]) = (res,st') ==>
+  no_type_error_result res
+Proof
+  rpt strip_tac >>
+  `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))` by
+    (irule contract_namespaces_ok_module_toplevel_vtype_keys >>
+     gvs[check_contract_def] >> metis_tac[ALOOKUP_MEM]) >>
+  `find_var_decl_by_num (string_to_num id) ts =
+     SOME (HashMapVarDecl is_transient kt vt,id)` by
+    metis_tac[find_var_decl_by_num_SOME_hashmap] >>
+  `check_toplevel_decl am.layouts tx.target mods art src
+     (HashMapDecl Public is_transient id kt vt init)` by
+    metis_tac[check_contract_toplevel_decl_MEM] >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, lookup_global_def, get_module_code_def,
+       initial_evaluation_context_def, bind_def, lift_option_type_def,
+       return_def, raise_def, lookup_var_slot_from_layout_def,
+       lookup_var_slot_in_layouts_def,
+       vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+  gvs[check_toplevel_decl_def, lookup_var_slot_in_layouts_def] >>
+  rpt strip_tac >> gvs[IS_SOME_EXISTS, return_def, raise_def,
+                       vyperTypeExprSoundnessTheory.no_type_error_result_def]
+QED
+
 Theorem build_getter_args_index_ge_aux[local]:
   !e kt vt n args ret exp id typ.
     build_getter e kt vt n = (args,ret,exp) /\ MEM (id,typ) args ==>
@@ -7166,4 +7196,40 @@ Proof
   goal_assum $ drule_at Any >>
   simp[get_tenv_def, initial_evaluation_context_def] >>
   metis_tac[]
+QED
+
+Theorem generated_public_hashmap_getter_expr_no_type_error[local]:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  ALOOKUP am.sources tx.target = SOME mods /\ machine_well_typed am /\
+  immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
+    (initial_evaluation_context am.sources am.layouts tx) am.immutables /\
+  ALOOKUP mods src = SOME ts /\
+  MEM (HashMapDecl Public is_transient id kt vt init) ts /\
+  build_getter (TopLevelName NoneT (src,id)) kt vt 0 = (args,ret,exp) /\
+  bind_arguments (get_tenv (initial_evaluation_context am.sources am.layouts tx)) args vals = SOME scope /\
+  eval_expr (initial_evaluation_context am.sources am.layouts tx) exp
+    (initial_state am [scope]) = (res,st') ==>
+  no_type_error_result res
+Proof
+  rpt gen_tac >> strip_tac >>
+  qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts tx` >>
+  Cases_on `eval_expr cx (TopLevelName NoneT (src,id)) (initial_state am [scope])` >>
+  `no_type_error_result q` by
+    (qunabbrev_tac `cx` >> metis_tac[checked_public_hashmap_TopLevelName_no_type_error]) >>
+  Cases_on `q` >> gvs[]
+  >- (`?slot. x = HashMapRef is_transient slot kt vt` by
+        (qunabbrev_tac `cx` >> metis_tac[checked_public_hashmap_TopLevelName_carrier]) >>
+      gvs[] >>
+      `check_value_type (get_tenv cx) vt` by
+        (qunabbrev_tac `cx` >>
+         `check_value_type (type_env_all_modules mods) vt` by
+           metis_tac[checked_hashmap_decl_value_type_checked] >>
+         gvs[get_tenv_def, initial_evaluation_context_def]) >>
+      irule generated_hashmap_getter_expr_no_type_error >>
+      qexistsl [`am`, `args`, `cx`, `TopLevelName NoneT (src,id)`, `exp`,
+                `is_transient`, `kt`, `0`, `args`, `ret`, `scope`, `slot`,
+                `st'`, `r`, `get_tenv cx`, `vals`, `vt`] >>
+      simp[pure_expr_def, expr_type_def, evaluate_type_def] >>
+      metis_tac[build_getter_args_num_unique]) >>
+  drule_all build_getter_base_error_no_type_error >> simp[]
 QED
