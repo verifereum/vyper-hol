@@ -6889,7 +6889,27 @@ Theorem generated_array_getter_expr_materialisable_shape_ambient_aux[local]:
                 (?is_transient slot elem_tv bd. tvl' = ArrayRef is_transient slot elem_tv bd)
    | INR _ => T)
 Proof
-  cheat
+  completeInduct_on `value_type_size (Type vt)` >> rpt strip_tac >>
+  TRY (metis_tac[build_getter_total]) >>
+  qpat_x_assum `build_getter _ _ _ _ = _` mp_tac >>
+  simp[Once build_getter_def] >>
+  Cases_on `is_ArrayT vt` >> simp[] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rw[] >> gvs[]
+  >- (Cases_on `vt` >> gvs[is_ArrayT_def, ArrayT_type_def, evaluate_type_def, AllCaseEqs()] >>
+      Cases_on `eval_expr cx (Subscript NoneT e (Name NoneT (num_to_dec_string n))) (initial_state am [scope])` >> gvs[] >>
+      drule_all generated_array_getter_ArrayT_unfolded_tail_IH_antecedents_ambient >>
+      strip_tac >> gvs[] >>
+      first_x_assum (qspec_then `value_type_size (Type t)` mp_tac) >>
+      impl_tac >- simp[] >>
+      disch_then (qspec_then `t` mp_tac) >> simp[] >>
+      disch_then (qspecl_then
+        [`Subscript NoneT e (Name NoneT (num_to_dec_string n))`, `SUC n`,
+         `args'`, `ret`, `exp`, `vals`, `scope`, `q`, `r`,
+         `res`, `st'`, `cx`, `am`, `tv`, `all_args`] mp_tac) >>
+      simp[] >> metis_tac[]) >>
+  drule_all generated_array_subscript_step_NoneTV_materialisable_ambient >>
+  simp[]
 QED
 
 Theorem generated_array_getter_expr_no_type_error_materialisable_ambient_aux[local]:
