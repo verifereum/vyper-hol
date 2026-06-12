@@ -6934,7 +6934,9 @@ Theorem generated_array_getter_expr_no_type_error_materialisable_ambient_aux[loc
                 (?is_transient slot elem_tv bd. tvl' = ArrayRef is_transient slot elem_tv bd)
    | INR _ => T)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (drule_all generated_array_getter_expr_no_type_error_ambient_aux >> simp[])
+  >> drule_all generated_array_getter_expr_materialisable_shape_ambient_aux >> simp[]
 QED
 
 Theorem generated_array_getter_expr_no_type_error_materialisable_aux[local]:
