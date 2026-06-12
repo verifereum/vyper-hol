@@ -6670,6 +6670,162 @@ Proof
   strip_tac >> gvs[]
 QED
 
+Theorem generated_array_getter_ArrayT_tail_IH_package_ambient_ArrayT[local]:
+  build_getter e (BaseT (UintT 256)) (Type (ArrayT t b)) n = (args,ret,exp) /\
+  bind_arguments (get_tenv cx) all_args vals = SOME scope /\
+  (!id typ. MEM (id,typ) args ==> MEM (id,typ) all_args) /\
+  (!id typ id' typ'. MEM (id,typ) all_args /\ MEM (id',typ') all_args /\
+      string_to_num id' = string_to_num id ==> typ' = typ) /\
+  pure_expr e /\ evaluate_type (get_tenv cx) (expr_type e) = SOME NoneTV /\
+  evaluate_type (get_tenv cx) t = SOME tv /\
+  0 < type_slot_size tv /\
+  type_slot_size (ArrayTV tv b) <
+    115792089237316195423570985008687907853269984665640564039457584007913129639936 /\
+  eval_expr cx e (initial_state am [scope]) = (base_res,st1) /\
+  no_type_error_result base_res /\
+  (case base_res of
+   | INL tvl =>
+       ((?av bd. tvl = Value (ArrayV av) /\ value_has_type (ArrayTV (ArrayTV tv b) bd) (ArrayV av)) \/
+        (?is_transient slot bd. tvl = ArrayRef is_transient slot (ArrayTV tv b) bd))
+   | INR _ => T) /\
+  eval_expr cx (Subscript NoneT e (Name NoneT (num_to_dec_string n)))
+    (initial_state am [scope]) = (step_res,step_st) ==>
+  no_type_error_result step_res /\
+  pure_expr (Subscript NoneT e (Name NoneT (num_to_dec_string n))) /\
+  evaluate_type (get_tenv cx)
+    (expr_type (Subscript NoneT e (Name NoneT (num_to_dec_string n)))) = SOME NoneTV /\
+  (case step_res of
+   | INL tvl' =>
+       ((?av' bd'. tvl' = Value (ArrayV av') /\ value_has_type (ArrayTV tv bd') (ArrayV av')) \/
+        (?is_transient slot' bd'. tvl' = ArrayRef is_transient slot' tv bd'))
+   | INR _ => T) /\
+  ?args_tail ret_tail exp_tail.
+    build_getter (Subscript NoneT e (Name NoneT (num_to_dec_string n)))
+      (BaseT (UintT 256)) (Type t) (SUC n) = (args_tail,ret_tail,exp_tail) /\
+    args = ((num_to_dec_string n,BaseT (UintT 256))::args_tail) /\
+    ret = ret_tail /\ exp = exp_tail /\
+    (!id typ. MEM (id,typ) args_tail ==> MEM (id,typ) all_args)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `evaluate_type (get_tenv cx) (ArrayT t b) = SOME (ArrayTV tv b)` by
+    simp[evaluate_type_def] >>
+  drule_all generated_array_getter_ArrayT_tail_IH_package_ambient >>
+  simp[]
+QED
+
+Theorem ArrayT_type_value_type_size_lt[local]:
+  is_ArrayT vt ==> value_type_size (Type (ArrayT_type vt)) < value_type_size (Type vt)
+Proof
+  Cases_on `vt` >> simp[is_ArrayT_def, ArrayT_type_def]
+QED
+
+Theorem build_getter_total[local]:
+  ?args ret exp. build_getter e kt vt n = (args,ret,exp)
+Proof
+  Cases_on `build_getter e kt vt n` >> PairCases_on `r` >> gvs[] >> metis_tac[]
+QED
+
+Theorem generated_array_getter_ArrayT_step_carrier_shape_ambient[local]:
+  build_getter (Subscript NoneT e (Name NoneT (num_to_dec_string n)))
+    (BaseT (UintT 256)) (Type t) (SUC n) = (args_tail,ret_tail,exp_tail) /\
+  bind_arguments (get_tenv cx) all_args vals = SOME scope /\
+  MEM (num_to_dec_string n, BaseT (UintT 256)) all_args /\
+  (!id typ id' typ'. MEM (id,typ) all_args /\ MEM (id',typ') all_args /\
+      string_to_num id' = string_to_num id ==> typ' = typ) /\
+  pure_expr e /\ evaluate_type (get_tenv cx) (expr_type e) = SOME NoneTV /\
+  evaluate_type (get_tenv cx) t = SOME tv /\
+  0 < type_slot_size tv /\
+  type_slot_size (ArrayTV tv b) <
+    115792089237316195423570985008687907853269984665640564039457584007913129639936 /\
+  eval_expr cx e (initial_state am [scope]) = (base_res,st1) /\
+  (case base_res of
+   | INL tvl =>
+       ((?av bd. tvl = Value (ArrayV av) /\ value_has_type (ArrayTV (ArrayTV tv b) bd) (ArrayV av)) \/
+        (?is_transient slot bd. tvl = ArrayRef is_transient slot (ArrayTV tv b) bd))
+   | INR _ => T) /\
+  eval_expr cx (Subscript NoneT e (Name NoneT (num_to_dec_string n)))
+    (initial_state am [scope]) = (step_res,step_st) ==>
+  (case step_res of
+   | INL tvl' =>
+       ((?av' bd'. tvl' = Value (ArrayV av') /\ value_has_type (ArrayTV tv bd') (ArrayV av')) \/
+        (?is_transient slot' bd'. tvl' = ArrayRef is_transient slot' tv bd'))
+   | INR _ => T)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `base_res` >> gvs[]
+  >- (qsuff_tac `no_type_error_result step_res /\
+        (case step_res of
+         | INL tvl' =>
+             ((?av'. tvl' = Value (ArrayV av') /\ value_has_type (ArrayTV tv b) (ArrayV av')) \/
+              (?is_transient slot'. tvl' = ArrayRef is_transient slot' tv b))
+         | INR _ => T)`
+      >- (strip_tac >> Cases_on `step_res` >> gvs[] >> metis_tac[]) >>
+      irule generated_array_getter_recursive_step_no_type_error_materialisable_ambient >>
+      simp[evaluate_type_def] >>
+      qexistsl [`all_args`,`am`,`args_tail`,`cx`,`e`,`exp_tail`,`n`,`ret_tail`,
+                `scope`,`st1`,`step_st`,`Value (ArrayV av)`,`vals`,`t`] >>
+      simp[evaluate_type_def] >> metis_tac[])
+  >- (qsuff_tac `no_type_error_result step_res /\
+        (case step_res of
+         | INL tvl' =>
+             ((?av'. tvl' = Value (ArrayV av') /\ value_has_type (ArrayTV tv b) (ArrayV av')) \/
+              (?is_transient slot'. tvl' = ArrayRef is_transient slot' tv b))
+         | INR _ => T)`
+      >- (strip_tac >> Cases_on `step_res` >> gvs[] >> metis_tac[]) >>
+      irule generated_array_getter_recursive_step_no_type_error_materialisable_ambient >>
+      simp[evaluate_type_def] >>
+      qexistsl [`all_args`,`am`,`args_tail`,`cx`,`e`,`exp_tail`,`n`,`ret_tail`,
+                `scope`,`st1`,`step_st`,`ArrayRef is_transient slot (ArrayTV tv b) bd`,`vals`,`t`] >>
+      simp[evaluate_type_def] >> metis_tac[]) >>
+  qpat_x_assum `eval_expr cx (Subscript _ _ _) _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, return_def, raise_def] >>
+  strip_tac >> gvs[]
+QED
+
+Theorem generated_array_getter_ArrayT_unfolded_tail_IH_antecedents_ambient[local]:
+  build_getter (Subscript NoneT e (Name NoneT (num_to_dec_string n)))
+    (BaseT (UintT 256)) (Type t) (SUC n) = (args_tail,ret_tail,exp_tail) /\
+  bind_arguments (get_tenv cx) all_args vals = SOME scope /\
+  (!id typ. (id = num_to_dec_string n /\ typ = BaseT (UintT 256) \/ MEM (id,typ) args_tail) ==> MEM (id,typ) all_args) /\
+  (!id typ id' typ'. MEM (id,typ) all_args /\ MEM (id',typ') all_args /\
+      string_to_num id' = string_to_num id ==> typ' = typ) /\
+  pure_expr e /\ evaluate_type (get_tenv cx) (expr_type e) = SOME NoneTV /\
+  evaluate_type (get_tenv cx) t = SOME tv /\
+  0 < type_slot_size tv /\
+  type_slot_size (ArrayTV tv b) <
+    115792089237316195423570985008687907853269984665640564039457584007913129639936 /\
+  eval_expr cx e (initial_state am [scope]) = (base_res,st1) /\
+  no_type_error_result base_res /\
+  (case base_res of
+   | INL tvl =>
+       ((?av bd. tvl = Value (ArrayV av) /\ value_has_type (ArrayTV (ArrayTV tv b) bd) (ArrayV av)) \/
+        (?is_transient slot bd. tvl = ArrayRef is_transient slot (ArrayTV tv b) bd))
+   | INR _ => T) /\
+  eval_expr cx (Subscript NoneT e (Name NoneT (num_to_dec_string n)))
+    (initial_state am [scope]) = (step_res,step_st) ==>
+  no_type_error_result step_res /\
+  pure_expr (Subscript NoneT e (Name NoneT (num_to_dec_string n))) /\
+  evaluate_type (get_tenv cx)
+    (expr_type (Subscript NoneT e (Name NoneT (num_to_dec_string n)))) = SOME NoneTV /\
+  (case step_res of
+   | INL tvl' =>
+       ((?av' bd'. tvl' = Value (ArrayV av') /\ value_has_type (ArrayTV tv bd') (ArrayV av')) \/
+        (?is_transient slot' bd'. tvl' = ArrayRef is_transient slot' tv bd'))
+   | INR _ => T) /\
+  (!id typ. MEM (id,typ) args_tail ==> MEM (id,typ) all_args)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `MEM (num_to_dec_string n, BaseT (UintT 256)) all_args` by metis_tac[] >>
+  conj_tac
+  >- (drule_all generated_array_subscript_step_NoneTV_carrier_no_type_error_ambient >> simp[]) >>
+  conj_tac >- simp[pure_expr_def] >>
+  conj_tac >- simp[expr_type_def, evaluate_type_def] >>
+  conj_tac
+  >- (drule_all generated_array_getter_ArrayT_step_carrier_shape_ambient >> simp[]) >>
+  rpt strip_tac >> first_x_assum irule >> simp[]
+QED
+
+
 Theorem generated_array_getter_expr_no_type_error_ambient_aux[local]:
   !vt e n args ret exp vals scope base_res st1 res st' cx am elem_tv all_args.
   build_getter e (BaseT (UintT 256)) (Type vt) n = (args,ret,exp) /\
@@ -6689,7 +6845,27 @@ Theorem generated_array_getter_expr_no_type_error_ambient_aux[local]:
   eval_expr cx exp (initial_state am [scope]) = (res,st') ==>
   no_type_error_result res
 Proof
-  cheat
+  completeInduct_on `value_type_size (Type vt)` >> rpt strip_tac >>
+  TRY (metis_tac[build_getter_total]) >>
+  qpat_x_assum `build_getter _ _ _ _ = _` mp_tac >>
+  simp[Once build_getter_def] >>
+  Cases_on `is_ArrayT vt` >> simp[] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rw[] >> gvs[]
+  >- (Cases_on `vt` >> gvs[is_ArrayT_def, ArrayT_type_def, evaluate_type_def, AllCaseEqs()] >>
+      Cases_on `eval_expr cx (Subscript NoneT e (Name NoneT (num_to_dec_string n))) (initial_state am [scope])` >> gvs[] >>
+      drule_all generated_array_getter_ArrayT_unfolded_tail_IH_antecedents_ambient >>
+      strip_tac >> gvs[] >>
+      first_x_assum (qspec_then `value_type_size (Type t)` mp_tac) >>
+      impl_tac >- simp[] >>
+      disch_then (qspec_then `t` mp_tac) >> simp[] >>
+      disch_then (qspecl_then
+        [`Subscript NoneT e (Name NoneT (num_to_dec_string n))`, `SUC n`,
+         `args'`, `ret`, `exp`, `vals`, `scope`, `q`, `r`,
+         `res`, `st'`, `cx`, `am`, `tv`, `all_args`] mp_tac) >>
+      simp[] >> metis_tac[]) >>
+  drule_all generated_array_subscript_step_NoneTV_carrier_no_type_error_ambient >>
+  simp[]
 QED
 
 Theorem generated_array_getter_expr_materialisable_shape_ambient_aux[local]:
