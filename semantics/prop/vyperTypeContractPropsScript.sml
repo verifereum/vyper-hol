@@ -3706,9 +3706,55 @@ Proof
   metis_tac[]
 QED
 
+
+Theorem all_have_type_oEL_nested_array[local]:
+  all_have_type tv vs /\ oEL j vs = SOME v ==> value_has_type tv v
+Proof
+  rw[vyperTypingTheory.all_have_type_EVERY, oEL_THM, EVERY_EL] >>
+  first_x_assum irule >> simp[]
+QED
+
+Theorem sparse_has_type_ALOOKUP_nested_array[local]:
+  sparse_has_type tv n sparse /\ ALOOKUP sparse k = SOME v ==>
+  value_has_type tv v
+Proof
+  Induct_on `sparse` >> simp[vyperTypingTheory.value_has_type_def] >>
+  Cases >> rw[vyperTypingTheory.value_has_type_def] >>
+  Cases_on `q = k` >> gvs[] >>
+  first_x_assum drule_all >> simp[]
+QED
+
+Theorem typed_ArrayV_array_index_nested_carrier[local]:
+  well_formed_type_value (ArrayTV inner_tv inner_bd) /\
+  value_has_type (ArrayTV (ArrayTV inner_tv inner_bd) bd) (ArrayV av) /\
+  array_index (ArrayTV (ArrayTV inner_tv inner_bd) bd) av i = SOME v ==>
+  ?av'. v = ArrayV av' /\ value_has_type (ArrayTV inner_tv inner_bd) (ArrayV av')
+Proof
+  rpt strip_tac >>
+  `value_has_type (ArrayTV inner_tv inner_bd) v` by
+    (qspecl_then [`ArrayTV (ArrayTV inner_tv inner_bd) bd`,
+                  `ArrayTV inner_tv inner_bd`,`bd`,`av`,`i`,`v`]
+       mp_tac vyperAssignPreservesTypeTheory.array_index_has_type >>
+     simp[]) >>
+  Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def]
+QED
+
+Theorem evaluate_subscript_typed_Value_ArrayV_nested_carrier[local]:
+  well_formed_type_value (ArrayTV inner_tv inner_bd) /\
+  value_has_type (ArrayTV (ArrayTV inner_tv inner_bd) bd) (ArrayV av) /\
+  evaluate_subscript tenv (ArrayTV (ArrayTV inner_tv inner_bd) bd)
+    (Value (ArrayV av)) (IntV i) = INL (INL tvl) ==>
+  ?av'. tvl = Value (ArrayV av') /\
+        value_has_type (ArrayTV inner_tv inner_bd) (ArrayV av')
+Proof
+  rw[evaluate_subscript_def, AllCaseEqs()] >>
+  drule_all typed_ArrayV_array_index_nested_carrier >>
+  strip_tac >> gvs[]
+QED
 Theorem eval_stmts_single_Return_no_type_error[local]:
   eval_expr cx e st = (expr_res,st1) /\
   no_type_error_result expr_res /\
+
   (!tv mat_res st2.
      expr_res = INL tv /\ materialise cx tv st1 = (mat_res,st2) ==>
      no_type_error_result mat_res) /\
