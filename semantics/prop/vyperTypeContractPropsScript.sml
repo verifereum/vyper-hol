@@ -3981,6 +3981,7 @@ Proof
   metis_tac[]
 QED
 
+
 Theorem checked_public_array_TopLevelName_typed_indexable_carrier[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\ machine_well_typed am /\
@@ -4094,6 +4095,31 @@ Proof
       get_tenv_def, initial_evaluation_context_def] >>
   gvs[evaluate_type_def, IS_SOME_EXISTS, AllCaseEqs(), bind_def, return_def] >>
   metis_tac[]
+QED
+
+Theorem checked_public_array_TopLevelName_typed_indexable_carrier_ArrayT[local]:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  ALOOKUP am.sources tx.target = SOME mods /\ machine_well_typed am /\
+  immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
+    (initial_evaluation_context am.sources am.layouts tx) am.immutables /\
+  ALOOKUP mods src = SOME ts /\ MEM (VariableDecl Public mut fn (ArrayT t b) init) ts /\
+  evaluate_type (get_tenv (initial_evaluation_context am.sources am.layouts tx)) t = SOME elem_tv /\
+  0 < type_slot_size elem_tv /\
+  type_slot_size (ArrayTV elem_tv b) <
+    115792089237316195423570985008687907853269984665640564039457584007913129639936 /\
+  eval_expr (initial_evaluation_context am.sources am.layouts tx)
+    (TopLevelName NoneT (src,fn)) (initial_state am [scope]) = (INL tvl,st') ==>
+  ((?av. tvl = Value (ArrayV av) /\
+         value_has_type (ArrayTV elem_tv b) (ArrayV av)) \/
+   (?is_transient slot. tvl = ArrayRef is_transient slot elem_tv b))
+Proof
+  rpt strip_tac >>
+  irule (Q.INST [`typ` |-> `ArrayT t b`, `bd` |-> `b`]
+           checked_public_array_TopLevelName_typed_indexable_carrier) >>
+  qexistsl [`am`, `art`, `fn`, `init`, `mods`, `mut`, `scope`, `src`,
+            `st'`, `t`, `ts`, `tx`] >>
+  simp[is_ArrayT_def, evaluate_type_def, get_tenv_def,
+       initial_evaluation_context_def]
 QED
 
 
@@ -6989,7 +7015,7 @@ Theorem generated_public_array_getter_expr_no_type_error_materialisable[local]:
     (initial_evaluation_context am.sources am.layouts tx) am.immutables /\
   ALOOKUP mods src = SOME ts /\ MEM (VariableDecl Public mut fn typ init) ts /\
   is_ArrayT typ /\
-  build_getter (TopLevelName NoneT (src,fn)) kt (Type (ArrayT_type typ)) 0 = (args,ret,exp) /\
+  build_getter (TopLevelName NoneT (src,fn)) (BaseT (UintT 256)) (Type (ArrayT_type typ)) 0 = (args,ret,exp) /\
   bind_arguments (get_tenv (initial_evaluation_context am.sources am.layouts tx)) args vals = SOME scope /\
   eval_expr (initial_evaluation_context am.sources am.layouts tx) exp
     (initial_state am [scope]) = (res,st') ==>
@@ -6998,5 +7024,31 @@ Theorem generated_public_array_getter_expr_no_type_error_materialisable[local]:
                 (?is_transient slot elem_tv bd. tvl = ArrayRef is_transient slot elem_tv bd)
    | INR _ => T)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts tx` >>
+  Cases_on `eval_expr cx (TopLevelName NoneT (src,fn)) (initial_state am [scope])` >>
+  `no_type_error_result q` by
+    (qunabbrev_tac `cx` >> metis_tac[checked_scalar_public_getter_eval_no_type_error]) >>
+  Cases_on `typ` >> gvs[is_ArrayT_def, ArrayT_type_def, Abbr `cx`] >>
+  `check_toplevel_decl am.layouts tx.target mods art src
+     (VariableDecl Public mut fn (ArrayT t b) init)` by
+    metis_tac[check_contract_toplevel_decl_MEM] >>
+  Cases_on `mut` >> gvs[check_toplevel_decl_def, assignable_type_def, well_formed_type_def] >>
+  Cases_on `evaluate_type (get_tenv (initial_evaluation_context am.sources am.layouts tx)) t` >>
+  gvs[check_toplevel_decl_def, assignable_type_def, well_formed_type_def,
+      evaluate_type_def, get_tenv_def, initial_evaluation_context_def] >>
+  irule generated_array_getter_expr_no_type_error_materialisable_aux >>
+  qexistsl [`am`, `args`, `q`, `initial_evaluation_context am.sources am.layouts tx`,
+            `TopLevelName NoneT (src,fn)`, `x`, `exp`, `0`, `ret`, `scope`,
+            `st'`, `r`, `vals`, `t`] >>
+  simp[pure_expr_def, expr_type_def, evaluate_type_def,
+       get_tenv_def, initial_evaluation_context_def] >>
+  Cases_on `q` >> simp[] >>
+  `(?av. x' = Value (ArrayV av) /\ value_has_type (ArrayTV x b) (ArrayV av)) \/
+   (?is_transient slot. x' = ArrayRef is_transient slot x b)` suffices_by metis_tac[] >>
+  irule checked_public_array_TopLevelName_typed_indexable_carrier_ArrayT >>
+  simp[get_tenv_def, initial_evaluation_context_def] >>
+  goal_assum $ drule_at Any >>
+  simp[get_tenv_def, initial_evaluation_context_def] >>
+  metis_tac[]
 QED
