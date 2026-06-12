@@ -3100,6 +3100,14 @@ Theorem scalar_raw_public_getter_body_typing_annotation_contradiction[local]:
 Proof
   rw[type_stmt_def, well_typed_expr_def]
 QED
+
+Theorem raw_getter_index_name_annotation_contradiction[local]:
+  kt <> NoneT /\
+  FLOOKUP env.var_types (string_to_num vn) = SOME kt ==>
+  ~well_typed_expr env (Name NoneT vn)
+Proof
+  rw[well_typed_expr_def]
+QED
 (* ===== Top-level checked call_external no-TypeError theorem ===== *)
 
 Theorem TopLevelName_missing_address_immutables_RuntimeError_probe:
