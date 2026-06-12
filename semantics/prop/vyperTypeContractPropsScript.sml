@@ -6378,6 +6378,28 @@ Proof
   simp[vyperTypeExprSoundnessTheory.no_type_error_result_def]
 QED
 
+Theorem build_getter_ArrayT_tail_all_args[local]:
+  build_getter e kt (Type (ArrayT vt b)) n = (args,ret,exp) /\
+  (!id typ. MEM (id,typ) args ==> MEM (id,typ) all_args) ==>
+  ?args_tail ret_tail exp_tail.
+    build_getter (Subscript NoneT e (Name NoneT (num_to_dec_string n)))
+      (BaseT (UintT 256)) (Type vt) (SUC n) = (args_tail,ret_tail,exp_tail) /\
+    args = ((num_to_dec_string n,kt)::args_tail) /\
+    ret = ret_tail /\ exp = exp_tail /\
+    (!id typ. MEM (id,typ) args_tail ==> MEM (id,typ) all_args) /\
+    MEM (num_to_dec_string n,kt) all_args
+Proof
+  rpt strip_tac >>
+  qabbrev_tac `tail = build_getter (Subscript NoneT e (Name NoneT (num_to_dec_string n)))
+                  (BaseT (UintT 256)) (Type vt) (SUC n)` >>
+  PairCases_on `tail` >>
+  qexistsl [`tail0`, `tail1`, `tail2`] >>
+  qpat_x_assum `build_getter _ _ _ _ = _` mp_tac >>
+  simp[Once build_getter_def, is_ArrayT_def, ArrayT_type_def] >>
+  strip_tac >> gvs[] >>
+  metis_tac[]
+QED
+
 Theorem generated_array_getter_expr_no_type_error_ambient_aux[local]:
   !vt e n args ret exp vals scope base_res st1 res st' cx am elem_tv all_args.
   build_getter e (BaseT (UintT 256)) (Type vt) n = (args,ret,exp) /\
