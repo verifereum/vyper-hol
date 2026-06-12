@@ -12,7 +12,7 @@ Ancestors
   list rich_list arithmetic finite_map alist option pair patricia_casts
   vyperAST vyperValue vyperMisc vyperContext vyperState vyperInterpreter
   vyperTypeSystem vyperTypeContract vyperTypeInvariants vyperTypeStmtSoundness
-  vyperTypeInitialState vyperEvalPreservesScopes vyperEvalPreservesImmutablesDom
+  vyperTypeInitialState vyperPureExpr vyperEvalPreservesScopes vyperEvalPreservesImmutablesDom
   vyperScopePreservation vyperStatePreservation
 Libs
   wordsLib
@@ -3341,6 +3341,14 @@ Proof
   metis_tac[evaluate_subscript_hashmap_getter_error_not_TypeError]
 QED
 
+Theorem evaluate_subscript_Value_ArrayV_IntV_error_not_TypeError[local]:
+  evaluate_subscript tenv arr_tv (Value (ArrayV av)) (IntV i) = INR err ==>
+  !msg. err <> TypeError msg
+Proof
+  rw[evaluate_subscript_def, vyperValueOperationTheory.array_index_def,
+     AllCaseEqs(), LET_THM]
+QED
+
 Theorem materialise_getter_result_no_type_error[local]:
   ((?v. tv = Value v) \/
    (?is_transient base_slot elem_tv bd.
@@ -3751,6 +3759,231 @@ Proof
   drule_all typed_ArrayV_array_index_nested_carrier >>
   strip_tac >> gvs[]
 QED
+
+Theorem check_array_bounds_error_not_TypeError_getter[local]:
+  check_array_bounds cx tv v st = (INR err,st') ==> !msg. err <> Error (TypeError msg)
+Proof
+  rpt strip_tac >> Cases_on `tv` >> Cases_on `v` >>
+  TRY (Cases_on `b0`) >>
+  gvs[check_array_bounds_def, bind_def, return_def, raise_def,
+      get_storage_backend_def, check_def, assert_def, AllCaseEqs()] >>
+  metis_tac[vyperTypeExprSoundnessTheory.get_storage_backend_no_error]
+QED
+
+Theorem check_array_bounds_ArrayRef_error_not_TypeError_getter[local]:
+  check_array_bounds cx (ArrayRef is_transient slot elem_tv bd) (IntV i) st =
+    (INR err,st') ==>
+  !msg. err <> Error (TypeError msg)
+Proof
+  rpt strip_tac >> Cases_on `bd` >>
+  gvs[check_array_bounds_def, bind_def, return_def, raise_def,
+      get_storage_backend_def, check_def, assert_def, AllCaseEqs()] >>
+  metis_tac[vyperTypeExprSoundnessTheory.get_storage_backend_no_error]
+QED
+
+Theorem evaluate_subscript_ArrayRef_nested_carrier[local]:
+  evaluate_subscript tenv (ArrayTV (ArrayTV inner_tv inner_bd) bd)
+    (ArrayRef is_transient slot (ArrayTV inner_tv inner_bd) bd) (IntV i) = INL (INL tvl) ==>
+  ?slot'. tvl = ArrayRef is_transient slot' inner_tv inner_bd
+Proof
+  rw[evaluate_subscript_def, bound_length_def, AllCaseEqs(), LET_THM]
+QED
+
+Theorem evaluate_subscript_ArrayRef_nested_error_not_TypeError[local]:
+  evaluate_subscript tenv (ArrayTV (ArrayTV inner_tv inner_bd) bd)
+    (ArrayRef is_transient slot (ArrayTV inner_tv inner_bd) bd) (IntV i) = INR err ==>
+  !msg. err <> TypeError msg
+Proof
+  rw[evaluate_subscript_def, bound_length_def, AllCaseEqs(), LET_THM]
+QED
+
+Theorem generated_array_subscript_step_Value_typed_carrier[local]:
+  bind_arguments tenv args vals = SOME scope /\
+  MEM (num_to_dec_string n, BaseT (UintT 256)) args /\
+  (!id typ id' typ'. MEM (id,typ) args /\ MEM (id',typ') args /\
+      string_to_num id' = string_to_num id ==> typ' = typ) /\
+  pure_expr e /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME (ArrayTV (ArrayTV inner_tv inner_bd) bd) /\
+  eval_expr cx e (initial_state am [scope]) = (INL (Value (ArrayV av)),st1) /\
+  value_has_type (ArrayTV (ArrayTV inner_tv inner_bd) bd) (ArrayV av) /\
+  well_formed_type_value (ArrayTV inner_tv inner_bd) /\
+  eval_expr cx (Subscript NoneT e (Name NoneT (num_to_dec_string n)))
+    (initial_state am [scope]) = (res,st2) ==>
+  no_type_error_result res /\
+  (case res of
+   | INL tvl' =>
+       ?av'. tvl' = Value (ArrayV av') /\ value_has_type (ArrayTV inner_tv inner_bd) (ArrayV av')
+   | INR _ => T)
+Proof
+  rpt strip_tac >>
+  `?i entry. FLOOKUP scope (string_to_num (num_to_dec_string n)) = SOME entry /\
+             entry.type = BaseTV (UintT 256) /\ entry.assignable /\
+             entry.value = IntV i` by
+    (qspecl_then [`tenv`, `args`, `vals`, `scope`, `num_to_dec_string n`]
+       mp_tac bind_arguments_scope_covers_uint_getter >>
+     simp[] >>
+     (impl_tac >-
+       (rpt strip_tac >>
+        first_x_assum (qspecl_then [`num_to_dec_string n`, `BaseT (UintT 256)`, `id'`, `typ'`] mp_tac) >>
+        simp[])) >>
+     simp[]) >>
+  `st1 = initial_state am [scope]` by metis_tac[eval_expr_preserves_state] >>
+  gvs[initial_state_def] >>
+  qpat_x_assum `eval_expr cx (Subscript _ _ _) _ = _` mp_tac >>
+  simp[Once evaluate_def, Once evaluate_def,
+       get_scopes_def, lookup_scopes_val_def, bind_def, lift_option_def,
+       lift_option_type_def, return_def, raise_def] >>
+  Cases_on `check_array_bounds cx (Value (ArrayV av)) (IntV i)
+              <|immutables := am.immutables; logs := []; scopes := [scope];
+                accounts := am.accounts; tStorage := am.tStorage|>` >>
+  rename1 `check_array_bounds _ _ _ _ = (bounds_res,bounds_st)` >>
+  Cases_on `bounds_res` >> simp[bind_def, return_def, raise_def]
+  >- (Cases_on `evaluate_subscript (get_tenv cx) (ArrayTV (ArrayTV inner_tv inner_bd) bd)
+          (Value (ArrayV av)) (IntV i)` >> simp[lift_sum_def, bind_def, return_def, raise_def]
+      >- (Cases_on `x'` >> simp[bind_def, return_def, raise_def] >>
+          rpt strip_tac >>
+          qpat_x_assum `do check_array_bounds _ _ _; _ od _ = _` mp_tac >>
+          qpat_x_assum `check_array_bounds _ _ _ _ = (INL _,bounds_st)` (fn th => simp[th, bind_def, ignore_bind_def, return_def, raise_def]) >>
+          rpt strip_tac >> gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+          gvs[evaluate_subscript_def, AllCaseEqs()] >>
+          drule_all evaluate_subscript_typed_Value_ArrayV_nested_carrier >> simp[]) >>
+      strip_tac >>
+      gvs[bind_def, ignore_bind_def, return_def, raise_def,
+          vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+      drule_all evaluate_subscript_Value_ArrayV_IntV_error_not_TypeError >> simp[]) >>
+  rpt strip_tac >>
+  gvs[bind_def, ignore_bind_def, return_def, raise_def,
+      vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+  gvs[check_array_bounds_def, return_def, raise_def] >>
+  Cases_on `evaluate_subscript (get_tenv cx) (ArrayTV (ArrayTV inner_tv inner_bd) bd)
+              (Value (ArrayV av)) (IntV i)` >>
+  gvs[lift_sum_def, bind_def, return_def, raise_def]
+  >- (Cases_on `x` >> gvs[bind_def, return_def, raise_def] >>
+      gvs[evaluate_subscript_def, AllCaseEqs()] >>
+      drule_all typed_ArrayV_array_index_nested_carrier >> simp[])
+QED
+
+Theorem generated_array_subscript_step_ArrayRef_typed_carrier[local]:
+  bind_arguments tenv args vals = SOME scope /\
+  MEM (num_to_dec_string n, BaseT (UintT 256)) args /\
+  (!id typ id' typ'. MEM (id,typ) args /\ MEM (id',typ') args /\
+      string_to_num id' = string_to_num id ==> typ' = typ) /\
+  pure_expr e /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME (ArrayTV (ArrayTV inner_tv inner_bd) bd) /\
+  eval_expr cx e (initial_state am [scope]) = (INL (ArrayRef is_transient slot (ArrayTV inner_tv inner_bd) bd),st1) /\
+  well_formed_type_value (ArrayTV inner_tv inner_bd) /\
+  eval_expr cx (Subscript NoneT e (Name NoneT (num_to_dec_string n)))
+    (initial_state am [scope]) = (res,st2) ==>
+  no_type_error_result res /\
+  (case res of
+   | INL tvl' => ?slot'. tvl' = ArrayRef is_transient slot' inner_tv inner_bd
+   | INR _ => T)
+Proof
+  rpt strip_tac >>
+  `?i entry. FLOOKUP scope (string_to_num (num_to_dec_string n)) = SOME entry /\
+             entry.type = BaseTV (UintT 256) /\ entry.assignable /\
+             entry.value = IntV i` by
+    (qspecl_then [`tenv`, `args`, `vals`, `scope`, `num_to_dec_string n`]
+       mp_tac bind_arguments_scope_covers_uint_getter >>
+     simp[] >>
+     (impl_tac >-
+       (rpt strip_tac >>
+        first_x_assum (qspecl_then [`num_to_dec_string n`, `BaseT (UintT 256)`, `id'`, `typ'`] mp_tac) >>
+        simp[])) >>
+     simp[]) >>
+  `st1 = initial_state am [scope]` by metis_tac[eval_expr_preserves_state] >>
+  gvs[initial_state_def] >>
+  qpat_x_assum `eval_expr cx (Subscript _ _ _) _ = _` mp_tac >>
+  simp[Once evaluate_def, Once evaluate_def,
+       get_scopes_def, lookup_scopes_val_def, bind_def, lift_option_def,
+       lift_option_type_def, return_def, raise_def] >>
+  Cases_on `check_array_bounds cx (ArrayRef is_transient slot (ArrayTV inner_tv inner_bd) bd) (IntV i)
+              <|immutables := am.immutables; logs := []; scopes := [scope];
+                accounts := am.accounts; tStorage := am.tStorage|>` >>
+  rename1 `check_array_bounds _ _ _ _ = (bounds_res,bounds_st)` >>
+  Cases_on `bounds_res`
+  >- (Cases_on `evaluate_subscript (get_tenv cx) (ArrayTV (ArrayTV inner_tv inner_bd) bd)
+          (ArrayRef is_transient slot (ArrayTV inner_tv inner_bd) bd) (IntV i)` >>
+      simp[lift_sum_def, bind_def, return_def, raise_def]
+      >- (Cases_on `x'` >> simp[bind_def, return_def, raise_def] >>
+          rpt strip_tac >>
+          qpat_x_assum `do check_array_bounds _ _ _; _ od _ = _` mp_tac >>
+          simp[bind_def, ignore_bind_def, return_def, raise_def] >>
+          rpt strip_tac >>
+          gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+          gvs[evaluate_subscript_def, bound_length_def, AllCaseEqs(), LET_THM] >>
+          drule_all evaluate_subscript_ArrayRef_nested_carrier >> simp[]) >>
+      rpt strip_tac >>
+      qpat_x_assum `do check_array_bounds _ _ _; _ od _ = _` mp_tac >>
+      simp[bind_def, ignore_bind_def, return_def, raise_def] >>
+      rpt strip_tac >> gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+      drule_all evaluate_subscript_ArrayRef_nested_error_not_TypeError >> simp[]) >>
+  simp[bind_def, return_def, raise_def] >>
+  rpt strip_tac >>
+  qpat_x_assum `do check_array_bounds _ _ _; _ od _ = _` mp_tac >>
+  simp[bind_def, ignore_bind_def, return_def, raise_def] >>
+  rpt strip_tac >> gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+  Cases_on `bd` >>
+  gvs[check_array_bounds_def, bind_def, return_def, raise_def,
+      get_storage_backend_def, check_def, assert_def, AllCaseEqs()] >>
+  gvs[vyperTypeExprSoundnessTheory.get_storage_backend_no_error] >>
+  gvs[evaluate_subscript_def, lift_sum_def, bind_def, ignore_bind_def,
+      return_def, raise_def, bound_length_def, AllCaseEqs(), LET_THM] >>
+  Cases_on `0 <= i /\ Num i < n'` >>
+  gvs[bind_def, return_def, raise_def, AllCaseEqs(), LET_THM]
+QED
+
+Theorem generated_array_subscript_step_typed_carrier[local]:
+  bind_arguments tenv args vals = SOME scope /\
+  MEM (num_to_dec_string n, BaseT (UintT 256)) args /\
+  (!id typ id' typ'. MEM (id,typ) args /\ MEM (id',typ') args /\
+      string_to_num id' = string_to_num id ==> typ' = typ) /\
+  pure_expr e /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME (ArrayTV (ArrayTV inner_tv inner_bd) bd) /\
+  eval_expr cx e (initial_state am [scope]) = (INL tvl,st1) /\
+  ((?av. tvl = Value (ArrayV av) /\
+         value_has_type (ArrayTV (ArrayTV inner_tv inner_bd) bd) (ArrayV av)) \/
+   (?is_transient slot. tvl = ArrayRef is_transient slot (ArrayTV inner_tv inner_bd) bd)) /\
+  well_formed_type_value (ArrayTV inner_tv inner_bd) /\
+  eval_expr cx (Subscript NoneT e (Name NoneT (num_to_dec_string n)))
+    (initial_state am [scope]) = (res,st2) ==>
+  no_type_error_result res /\
+  (case res of
+   | INL tvl' =>
+       ((?av'. tvl' = Value (ArrayV av') /\ value_has_type (ArrayTV inner_tv inner_bd) (ArrayV av')) \/
+        (?is_transient slot'. tvl' = ArrayRef is_transient slot' inner_tv inner_bd))
+   | INR _ => T)
+Proof
+  rpt strip_tac >> gvs[]
+  >- (drule_all_then assume_tac generated_array_subscript_step_Value_typed_carrier >> gvs[])
+  >- (drule_all_then assume_tac generated_array_subscript_step_Value_typed_carrier >> Cases_on `res` >> gvs[])
+  >- (drule_all_then assume_tac generated_array_subscript_step_ArrayRef_typed_carrier >> gvs[]) >>
+  drule_all_then assume_tac generated_array_subscript_step_ArrayRef_typed_carrier >> Cases_on `res` >> gvs[]
+QED
+Theorem build_getter_recursive_base_expr_type_NoneTV_probe[local]:
+  evaluate_type tenv (expr_type (Subscript NoneT e idx)) = SOME NoneTV
+Proof
+  simp[expr_type_def, evaluate_type_def]
+QED
+
+Theorem generated_outer_subscript_uses_NoneTV_probe[local]:
+  eval_expr cx (Subscript NoneT e idx1) st = (INL tvl,st1) /\
+  eval_expr cx idx2 st1 = (INL (Value v),st2) ==>
+  eval_expr cx (Subscript NoneT (Subscript NoneT e idx1) idx2) st =
+    (do
+       check_array_bounds cx tvl v;
+       res <- lift_sum (evaluate_subscript (get_tenv cx) NoneTV tvl v);
+       case res of
+       | INL v => return v
+       | INR (is_transient,slot,tv) =>
+           do v <- read_storage_slot cx is_transient slot tv; return (Value v) od
+     od) st2
+Proof
+  rpt strip_tac >>
+  simp[Once evaluate_def, bind_def, return_def, raise_def,
+       lift_option_type_def, expr_type_def, evaluate_type_def]
+QED
+
 Theorem eval_stmts_single_Return_no_type_error[local]:
   eval_expr cx e st = (expr_res,st1) /\
   no_type_error_result expr_res /\
