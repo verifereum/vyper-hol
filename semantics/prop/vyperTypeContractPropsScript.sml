@@ -3984,6 +3984,42 @@ Proof
        lift_option_type_def, expr_type_def, evaluate_type_def]
 QED
 
+Theorem evaluate_subscript_NoneTV_Value_ArrayV_result_probe[local]:
+  evaluate_subscript tenv NoneTV (Value (ArrayV av)) (IntV i) =
+    (case array_index NoneTV av i of
+     | SOME v => INL (INL (Value v))
+     | NONE => INR (RuntimeError "subscript array_index"))
+Proof
+  simp[evaluate_subscript_def]
+QED
+
+Theorem evaluate_subscript_NoneTV_Value_ArrayV_error_not_TypeError_probe[local]:
+  evaluate_subscript tenv NoneTV (Value (ArrayV av)) (IntV i) = INR err ==>
+  !msg. err <> TypeError msg
+Proof
+  rw[evaluate_subscript_def, AllCaseEqs()]
+QED
+
+Theorem evaluate_subscript_NoneTV_ArrayRef_result_probe[local]:
+  evaluate_subscript tenv NoneTV (ArrayRef is_transient base_slot elem_tv bd) (IntV i) =
+    (if 0 <= i /\ Num i < bound_length bd then
+       let elem_offset = (case bd of Fixed _ => 0 | Dynamic _ => 1) in
+       let slot = base_slot + n2w (elem_offset + Num i * type_slot_size elem_tv) in
+       case elem_tv of
+       | ArrayTV inner_tv inner_bd => INL (INL (ArrayRef is_transient slot inner_tv inner_bd))
+       | _ => INL (INR (is_transient,slot,elem_tv))
+     else INR (RuntimeError "subscript array out of bounds"))
+Proof
+  rw[evaluate_subscript_def]
+QED
+
+Theorem evaluate_subscript_NoneTV_ArrayRef_error_not_TypeError_probe[local]:
+  evaluate_subscript tenv NoneTV (ArrayRef is_transient base_slot elem_tv bd) (IntV i) = INR err ==>
+  !msg. err <> TypeError msg
+Proof
+  rw[evaluate_subscript_def, AllCaseEqs(), LET_THM]
+QED
+
 Theorem eval_stmts_single_Return_no_type_error[local]:
   eval_expr cx e st = (expr_res,st1) /\
   no_type_error_result expr_res /\
