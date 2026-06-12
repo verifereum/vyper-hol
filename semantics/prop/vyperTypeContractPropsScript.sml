@@ -3232,6 +3232,122 @@ Proof
   imp_res_tac vyperTypeExprSoundnessTheory.read_storage_slot_error >> gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def]
 QED
 
+Theorem bind_arguments_scope_covers_params_getter[local]:
+  !tenv params vs sc id typ.
+    bind_arguments tenv params vs = SOME sc /\ MEM (id,typ) params /\
+    (!id' typ'. MEM (id',typ') params /\ string_to_num id' = string_to_num id ==> typ' = typ) ==>
+    ?entry. FLOOKUP sc (string_to_num id) = SOME entry /\
+            evaluate_type tenv typ = SOME entry.type /\ entry.assignable
+Proof
+  Induct_on `params` >> simp[Once bind_arguments_def] >>
+  Cases >> simp[Once bind_arguments_def] >>
+  rpt gen_tac >> Cases_on `vs` >> simp[Once bind_arguments_def] >>
+  simp[AllCaseEqs(), PULL_EXISTS] >>
+  rpt strip_tac
+  >- (qexists_tac `<|assignable := T; type := tv; value := v'|>` >>
+      qpat_x_assum `id = q` SUBST_ALL_TAC >>
+      qpat_x_assum `typ = r` SUBST_ALL_TAC >>
+      rewrite_tac[FLOOKUP_UPDATE] >> simp[]) >>
+  Cases_on `string_to_num q = string_to_num id`
+  >- (qexists_tac `<|assignable := T; type := tv; value := v'|>` >>
+      `r = typ` by metis_tac[] >>
+      qpat_x_assum `r = typ` SUBST_ALL_TAC >>
+      asm_rewrite_tac[FLOOKUP_UPDATE] >> simp[]) >>
+  first_x_assum (qspecl_then [`tenv`, `t`, `m`, `id`, `typ`] mp_tac) >>
+  impl_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!id'' typ''. _` (qspecl_then [`id'`, `typ'`] mp_tac) >>
+      simp[]) >>
+  strip_tac >>
+  qexists_tac `entry` >> asm_rewrite_tac[FLOOKUP_UPDATE] >> simp[]
+QED
+
+Theorem bind_arguments_Name_eval_no_type_error[local]:
+  bind_arguments tenv args vals = SOME scope /\
+  MEM (id,typ) args /\
+  (!id' typ'. MEM (id',typ') args /\ string_to_num id' = string_to_num id ==> typ' = typ) /\
+  eval_expr cx (Name NoneT id) (initial_state am [scope]) = (res,st') ==>
+  no_type_error_result res
+Proof
+  rpt strip_tac >>
+  drule_all bind_arguments_scope_covers_params_getter >> strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, initial_state_def, get_scopes_def,
+       lookup_scopes_val_def, bind_def, lift_option_def, lift_option_type_def,
+       return_def, raise_def,
+       vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+  rpt strip_tac >> gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def]
+QED
+
+Theorem evaluate_subscript_hashmap_getter_error_not_TypeError[local]:
+  !vt.
+    check_value_type tenv vt /\
+    evaluate_subscript tenv arr_tv (HashMapRef is_transient slot kt vt) idx = INR err ==>
+    !msg. err <> TypeError msg
+Proof
+  Induct_on `vt` >>
+  rw[check_value_type_def, evaluate_subscript_def, AllCaseEqs(), LET_THM] >>
+  Cases_on `t` >> gvs[assignable_type_def, well_formed_type_def,
+                    evaluate_type_def, AllCaseEqs()]
+QED
+
+Theorem evaluate_subscript_getter_error_not_TypeError[local]:
+  ((?av i. x = Value (ArrayV av) /\ idx = IntV i) \/
+   (?is_transient slot kt vt.
+      x = HashMapRef is_transient slot kt vt /\ check_value_type tenv vt) \/
+   (?is_transient slot elem_tv bd i.
+      x = ArrayRef is_transient slot elem_tv bd /\ idx = IntV i)) /\
+  evaluate_subscript tenv arr_tv x idx = INR err ==>
+  !msg. err <> TypeError msg
+Proof
+  rpt strip_tac >> gvs[] >>
+  gvs[evaluate_subscript_def, vyperValueOperationTheory.array_index_def, AllCaseEqs(), LET_THM] >>
+  TRY (Cases_on `t` >> gvs[check_value_type_def, assignable_type_def,
+                          well_formed_type_def, evaluate_type_def, AllCaseEqs()]) >>
+  metis_tac[evaluate_subscript_hashmap_getter_error_not_TypeError]
+QED
+
+Theorem materialise_getter_result_no_type_error[local]:
+  ((?v. tv = Value v) \/
+   (?is_transient base_slot elem_tv bd.
+      tv = ArrayRef is_transient base_slot elem_tv bd)) /\
+  materialise cx tv st = (res,st') ==>
+  no_type_error_result res
+Proof
+  rpt strip_tac >> gvs[materialise_def, bind_def, return_def, raise_def,
+                       vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+  Cases_on `read_storage_slot cx is_transient base_slot (ArrayTV elem_tv bd) st` >>
+  Cases_on `q` >> gvs[return_def, raise_def] >>
+  imp_res_tac vyperTypeExprSoundnessTheory.read_storage_slot_error >>
+  gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def]
+QED
+
+Theorem array_public_getter_tuple_shape[local]:
+  is_ArrayT typ /\
+  external_getter_tuple src (VariableDecl Public mut id typ init) =
+    SOME (gm,gnr,args,dflts,ret,body) ==>
+  gm = View /\ gnr = F /\ dflts = [] /\
+  ?kt vt exp. build_getter (TopLevelName NoneT (src,id)) kt (Type vt) 0 =
+                 (args,ret,exp) /\ body = [Return (SOME exp)]
+Proof
+  rw[external_getter_tuple_def, getter_def] >>
+  Cases_on `build_getter (TopLevelName NoneT (src,id)) (BaseT (UintT 256))
+              (Type (ArrayT_type typ)) 0` >>
+  Cases_on `r` >> gvs[] >> metis_tac[]
+QED
+
+Theorem hashmap_public_getter_tuple_shape[local]:
+  external_getter_tuple src (HashMapDecl Public is_transient id kt vt init) =
+    SOME (gm,gnr,args,dflts,ret,body) ==>
+  gm = View /\ gnr = F /\ dflts = [] /\
+  ?exp. build_getter (TopLevelName NoneT (src,id)) kt vt 0 =
+          (args,ret,exp) /\ body = [Return (SOME exp)]
+Proof
+  rw[external_getter_tuple_def, getter_def] >>
+  Cases_on `build_getter (TopLevelName NoneT (src,id)) kt vt 0` >>
+  Cases_on `r` >> gvs[] >> metis_tac[]
+QED
+
 Theorem TopLevelName_missing_address_immutables_RuntimeError_probe:
   get_module_code cx src = SOME code /\
   find_var_decl_by_num (string_to_num id) code = NONE /\
