@@ -6685,6 +6685,12 @@ Theorem checked_explicit_external_entry_no_type_error_selected[local]:
 Proof
   metis_tac[call_external_function_exact_selected_no_type_error_c53]
 QED
+Theorem initial_state_immutables[local]:
+  (initial_state am scs).immutables = am.immutables
+Proof
+  simp[initial_state_def]
+QED
+
 Theorem preserves_immutables_dom_same_initial_from_mid[local]:
   st0.immutables = am_c.immutables /\
   (?st_mid. st_mid.immutables = am_c.immutables /\
@@ -6741,8 +6747,7 @@ Proof
   imp_res_tac send_call_value_preserves_immutables >>
   imp_res_tac eval_stmts_preserves_immutables_addr_dom >>
   imp_res_tac eval_stmts_preserves_immutables_dom >>
-  gvs[initial_state_def] >>
-  fs[preserves_immutables_dom_def] >> rw[] >> gvs[]
+  fs[preserves_immutables_dom_def, initial_state_immutables] >> rw[] >> gvs[]
 QED
 
 Theorem preserves_immutables_dom_final_lookup_exists_in_initial[local]:
@@ -9965,6 +9970,82 @@ Proof
       >- metis_tac[vyperStatePreservationTheory.read_storage_slot_state]) >>
   drule vyperTypeExprSoundnessTheory.read_storage_slot_error >>
   strip_tac >> gvs[]
+QED
+
+Theorem raw_abi_eval_TopLevelName_storage_result_ok[local]:
+  well_typed_expr env (TopLevelName ty (src,id)) /\
+  raw_abi_formal_scope_ready (get_tenv cx) params vals scope env cx st /\
+  functions_well_typed cx /\
+  FLOOKUP env.bare_globals (src,string_to_num id) = NONE /\
+  get_module_code cx src = SOME ts /\
+  find_var_decl_by_num (string_to_num id) ts = SOME (StorageVarDecl is_transient ty,id_str) /\
+  lookup_var_slot_from_layout cx is_transient src id_str = SOME slot /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\
+  eval_expr cx (TopLevelName ty (src,id)) st = (res,st') ==>
+    no_type_error_result res /\
+    case res of
+    | INL tvl => raw_expr_value_ok (get_tenv cx) (expr_type (TopLevelName ty (src,id))) tvl /\
+                 raw_abi_formal_scope_ready (get_tenv cx) params vals scope env cx st'
+    | INR _ => T
+Proof
+  strip_tac >>
+  `env_consistent env cx st /\ context_well_typed cx /\ accounts_well_typed st.accounts` by
+    gvs[raw_abi_formal_scope_ready_def, raw_abi_runtime_consistent_def] >>
+  `FLOOKUP env.toplevel_vtypes (src,string_to_num id) = SOME (Type ty)` by
+    gvs[well_typed_expr_def] >>
+  `env.type_defs = get_tenv cx` by
+    gvs[env_consistent_def, env_context_consistent_def] >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, Once lookup_global_def, bind_def, lift_option_type_def,
+       return_def, raise_def,
+       vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+  simp[] >>
+  Cases_on `tv` >>
+  gvs[return_def, bind_def, expr_type_def,
+      vyperTypeExprSoundnessTheory.no_type_error_result_def]
+  >- (strip_tac >> gvs[] >>
+      qpat_x_assum `(case read_storage_slot _ _ _ _ _ of
+                       (INL v,s'') => (INL (Value v),s'')
+                     | (INR e,s'') => (INR e,s'')) = _` mp_tac >>
+      BasicProvers.TOP_CASE_TAC >> gvs[] >>
+      strip_tac >> gvs[] >>
+      drule_all raw_abi_read_storage_slot_result_ok >> strip_tac >>
+      Cases_on `q` >> gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def])
+  >- (strip_tac >> gvs[] >>
+      qpat_x_assum `(case read_storage_slot _ _ _ _ _ of
+                       (INL v,s'') => (INL (Value v),s'')
+                     | (INR e,s'') => (INR e,s'')) = _` mp_tac >>
+      BasicProvers.TOP_CASE_TAC >> gvs[] >>
+      strip_tac >> gvs[] >>
+      drule_all raw_abi_read_storage_slot_result_ok >> strip_tac >>
+      Cases_on `q` >> gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def])
+  >- (strip_tac >> gvs[] >>
+      irule raw_expr_value_ok_typed >>
+      qexists `ArrayTV t b` >> simp[toplevel_value_typed_def])
+  >- (strip_tac >> gvs[] >>
+      qpat_x_assum `(case read_storage_slot _ _ _ _ _ of
+                       (INL v,s'') => (INL (Value v),s'')
+                     | (INR e,s'') => (INR e,s'')) = _` mp_tac >>
+      BasicProvers.TOP_CASE_TAC >> gvs[] >>
+      strip_tac >> gvs[] >>
+      drule_all raw_abi_read_storage_slot_result_ok >> strip_tac >>
+      Cases_on `q` >> gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def])
+  >- (strip_tac >> gvs[] >>
+      qpat_x_assum `(case read_storage_slot _ _ _ _ _ of
+                       (INL v,s'') => (INL (Value v),s'')
+                     | (INR e,s'') => (INR e,s'')) = _` mp_tac >>
+      BasicProvers.TOP_CASE_TAC >> gvs[] >>
+      strip_tac >> gvs[] >>
+      drule_all raw_abi_read_storage_slot_result_ok >> strip_tac >>
+      Cases_on `q` >> gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def]) >>
+  strip_tac >> gvs[] >>
+  qpat_x_assum `(case read_storage_slot _ _ _ _ _ of
+                   (INL v,s'') => (INL (Value v),s'')
+                 | (INR e,s'') => (INR e,s'')) = _` mp_tac >>
+  BasicProvers.TOP_CASE_TAC >> gvs[] >>
+  strip_tac >> gvs[] >>
+  drule_all raw_abi_read_storage_slot_result_ok >> strip_tac >>
+      Cases_on `q` >> gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def]
 QED
 
 Theorem safe_cast_list_length[local]:
