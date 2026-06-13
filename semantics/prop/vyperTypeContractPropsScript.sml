@@ -7639,3 +7639,51 @@ Proof
   irule (cj 1 selected_public_getter_expr_no_type_error_materialisable) >>
   metis_tac[]
 QED
+
+Theorem send_call_value_preserves_scopes[local]:
+  send_call_value mut cx st = (res,st') ==>
+  st'.scopes = st.scopes
+Proof
+  rw[send_call_value_def, bind_def, ignore_bind_def, check_def,
+     assert_def, return_def, raise_def] >>
+  gvs[AllCaseEqs()] >>
+  imp_res_tac transfer_value_scopes >> gvs[]
+QED
+
+Theorem call_lock_action_preserves_scopes[local]:
+  (if nr then
+     case cx.nonreentrant_slot of
+       NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+     | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
+   else return ()) st = (res,st') ==>
+  st'.scopes = st.scopes
+Proof
+  rw[] >> gvs[return_def, raise_def] >>
+  Cases_on `cx.nonreentrant_slot` >> gvs[return_def, raise_def] >>
+  imp_res_tac acquire_nonreentrant_lock_scopes >> gvs[]
+QED
+
+Theorem call_lock_send_prefix_body_state_ready[local]:
+  machine_well_typed am /\
+  scope_well_typed env /\
+  (do
+     (if nr then
+        case cx.nonreentrant_slot of
+          NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
+      else return ());
+     send_call_value mut cx
+   od (initial_state am [env]) = (INL (),st)) ==>
+  st.scopes = [env] /\
+  st.immutables = am.immutables /\
+  state_well_typed st
+Proof
+  rw[bind_def, ignore_bind_def] >> gvs[AllCaseEqs()] >>
+  TRY (Cases_on `cx.nonreentrant_slot` >> gvs[return_def, raise_def]) >>
+  imp_res_tac acquire_nonreentrant_lock_scopes >>
+  imp_res_tac acquire_nonreentrant_lock_immutables >>
+  imp_res_tac send_call_value_preserves_scopes >>
+  imp_res_tac send_call_value_preserves_immutables >>
+  gvs[initial_state_def, state_well_typed_def, machine_well_typed_def]
+QED
+
