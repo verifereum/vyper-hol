@@ -7828,6 +7828,95 @@ Proof
   drule_all generated_array_getter_expr_materialisable_shape_post_prefix_aux >> simp[]
 QED
 
+Theorem generated_hashmap_subscript_step_no_type_error_post_prefix[local]:
+  !tenv params vals scope n kt vt cx e st is_transient slot st1 res st2.
+  bind_arguments tenv params vals = SOME scope /\
+  MEM (num_to_dec_string n, kt) params /\
+  (!id typ id' typ'. MEM (id,typ) params /\ MEM (id',typ') params /\
+      string_to_num id' = string_to_num id ==> typ' = typ) /\
+  check_value_type (get_tenv cx) vt /\
+  pure_expr e /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME NoneTV /\
+  eval_expr cx e st = (INL (HashMapRef is_transient slot kt vt),st1) /\
+  st.scopes = [scope] /\
+  eval_expr cx (Subscript NoneT e (Name NoneT (num_to_dec_string n))) st = (res,st2) ==>
+  no_type_error_result res
+Proof
+  rpt strip_tac >>
+  `?entry. FLOOKUP scope (string_to_num (num_to_dec_string n)) = SOME entry /\
+           evaluate_type tenv kt = SOME entry.type /\ entry.assignable` by
+    (qspecl_then [`tenv`, `params`, `vals`, `scope`, `num_to_dec_string n`, `kt`]
+       mp_tac bind_arguments_scope_covers_params_getter >>
+     simp[] >>
+     (impl_tac >-
+       (rpt strip_tac >>
+        first_x_assum (qspecl_then [`num_to_dec_string n`, `kt`, `id'`, `typ'`] mp_tac) >>
+        simp[])) >> simp[]) >>
+  `st1 = st` by metis_tac[eval_expr_preserves_state] >> gvs[] >>
+  qpat_x_assum `eval_expr cx (Subscript _ _ _) _ = _` mp_tac >>
+  simp[Once evaluate_def, Once evaluate_def,
+       get_scopes_def, lookup_scopes_val_def, bind_def, lift_option_def,
+       lift_option_type_def, return_def, raise_def] >>
+  Cases_on `entry.value` >> simp[bind_def, return_def, raise_def] >>
+  rpt strip_tac >>
+  irule Subscript_NoneTV_HashMapRef_no_TypeError >>
+  qexistsl [`slot`, `cx`, `is_transient`, `kt`, `entry.value`, `st`, `st2`, `vt`] >>
+  simp[]
+QED
+
+Theorem generated_hashmap_subscript_step_materialisable_post_prefix[local]:
+  !tenv params vals scope n kt t cx e st is_transient slot st1 res st2.
+  bind_arguments tenv params vals = SOME scope /\
+  MEM (num_to_dec_string n, kt) params /\
+  (!id typ id' typ'. MEM (id,typ) params /\ MEM (id',typ') params /\
+      string_to_num id' = string_to_num id ==> typ' = typ) /\
+  check_value_type (get_tenv cx) (Type t) /\
+  pure_expr e /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME NoneTV /\
+  eval_expr cx e st =
+    (INL (HashMapRef is_transient slot kt (Type t)),st1) /\
+  st.scopes = [scope] /\
+  eval_expr cx (Subscript NoneT e (Name NoneT (num_to_dec_string n))) st = (res,st2) ==>
+  (case res of INL tvl => (?v. tvl = Value v) \/
+                           (?is_transient slot elem_tv bd. tvl = ArrayRef is_transient slot elem_tv bd)
+             | INR _ => T)
+Proof
+  rpt strip_tac >>
+  `?entry. FLOOKUP scope (string_to_num (num_to_dec_string n)) = SOME entry /\
+           evaluate_type tenv kt = SOME entry.type /\ entry.assignable` by
+    (qspecl_then [`tenv`, `params`, `vals`, `scope`, `num_to_dec_string n`, `kt`]
+       mp_tac bind_arguments_scope_covers_params_getter >>
+     simp[] >>
+     (impl_tac >-
+       (rpt strip_tac >>
+        first_x_assum (qspecl_then [`num_to_dec_string n`, `kt`, `id'`, `typ'`] mp_tac) >>
+        simp[])) >> simp[]) >>
+  `st1 = st` by metis_tac[eval_expr_preserves_state] >> gvs[] >>
+  qpat_x_assum `eval_expr cx (Subscript _ _ _) _ = _` mp_tac >>
+  simp[Once evaluate_def, Once evaluate_def,
+       get_scopes_def, lookup_scopes_val_def, bind_def, lift_option_def,
+       lift_option_type_def, return_def, raise_def] >>
+  Cases_on `entry.value` >> simp[bind_def, return_def, raise_def] >>
+  simp[check_array_bounds_def, ignore_bind_def, lift_sum_def,
+       evaluate_subscript_def, return_def, raise_def, LET_THM] >>
+  rpt strip_tac >> gvs[return_def, raise_def, bind_def] >>
+  Cases_on `evaluate_type (get_tenv cx) t` >>
+  gvs[return_def, raise_def, bind_def, check_value_type_def,
+      assignable_type_def, well_formed_type_def] >>
+  TRY (Cases_on `res'` >> gvs[return_def, raise_def, bind_def] >>
+       Cases_on `y` >> gvs[return_def, raise_def, bind_def] >>
+       Cases_on `read_storage_slot cx q r r' s''` >>
+       Cases_on `q'` >> gvs[return_def, raise_def, bind_def]) >>
+  qpat_x_assum `(case read_storage_slot _ _ _ _ _ of
+                   (INL (v:value),s'') => (INL (Value v),s'')
+                 | (INR (err:vyperState$exception),s'') => (INR err,s'')) = (res,st2)` mp_tac >>
+  CASE_TAC >> CASE_TAC >>
+  gvs[return_def, raise_def, bind_def, vyperStorageTheory.encode_hashmap_key_def] >>
+  TRY (Cases_on `q` >> gvs[]) >>
+  rpt strip_tac >> gvs[]
+QED
+
+
 
 
 
