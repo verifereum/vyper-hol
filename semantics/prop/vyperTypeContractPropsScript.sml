@@ -10446,6 +10446,54 @@ Definition raw_exec_exprs_ok_def:
       | INR _ => T
 End
 
+Theorem raw_exec_exprs_cons_non_None_ok[local]:
+  raw_exec_expr_ok tenv env e /\
+  raw_exec_exprs_ok tenv env es /\
+  expr_type e <> NoneT ==>
+  raw_exec_exprs_ok tenv env (e::es)
+Proof
+  rw[raw_exec_expr_ok_def, raw_exec_exprs_ok_def] >>
+  qpat_x_assum `eval_exprs _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, return_def] >>
+  Cases_on `eval_expr cx e st` >>
+  rename1 `eval_expr cx e st = (head_res,head_st)` >>
+  first_x_assum (qspecl_then [`cx`, `st`, `head_res`, `head_st`] mp_tac) >>
+  simp[] >>
+  strip_tac >>
+  Cases_on `head_res`
+  >- (rename1 `eval_expr cx e st = (INL tv,head_st)` >> gvs[] >>
+      Cases_on `materialise cx tv head_st` >>
+      rename1 `materialise cx tv head_st = (mat_res,mat_st)` >>
+      drule_all raw_expr_value_ok_non_None_materialise_result_ok >> strip_tac >>
+      Cases_on `mat_res` >> gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def]
+      >- (rename1 `materialise cx tv head_st = (INL v,mat_st)` >>
+          Cases_on `eval_exprs cx es mat_st` >>
+          rename1 `eval_exprs cx es mat_st = (tail_res,tail_st)` >>
+          gvs[] >>
+          first_x_assum (qspecl_then [`cx`, `mat_st`, `tail_res`, `tail_st`] mp_tac) >>
+          simp[] >>
+          strip_tac >>
+          Cases_on `tail_res` >> gvs[raw_expr_values_ok_def] >>
+          strip_tac >> gvs[]) >>
+      strip_tac >> gvs[]) >>
+  gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def]
+  >- (strip_tac >> gvs[])
+  >- (Cases_on `materialise cx x head_st` >>
+      rename1 `materialise cx x head_st = (mat_res,mat_st)` >>
+      drule_all raw_expr_value_ok_non_None_materialise_result_ok >> strip_tac >>
+      Cases_on `mat_res` >> gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def]
+      >- (rename1 `materialise cx x head_st = (INL v,mat_st)` >>
+          Cases_on `eval_exprs cx es mat_st` >>
+          rename1 `eval_exprs cx es mat_st = (tail_res,tail_st)` >>
+          gvs[] >>
+          first_x_assum (qspecl_then [`cx`, `mat_st`, `tail_res`, `tail_st`] mp_tac) >>
+          simp[] >> strip_tac >>
+          Cases_on `tail_res` >> gvs[raw_expr_values_ok_def] >>
+          strip_tac >> gvs[]) >>
+      strip_tac >> gvs[]) >>
+  strip_tac >> gvs[]
+QED
+
 Definition raw_exec_opt_ok_def:
   raw_exec_opt_ok tenv env opt <=>
     tenv = env.type_defs ==>
