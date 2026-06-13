@@ -9601,3 +9601,41 @@ Proof
 QED
 
 
+
+Theorem safe_cast_unsorted_sarray_c26[local]:
+  safe_cast (ArrayTV (BaseTV (UintT 256)) (Fixed 3))
+    (ArrayV (SArrayV [(2, IntV 1); (0, IntV 2)])) =
+  SOME (ArrayV (SArrayV [(2, IntV 1); (0, IntV 2)]))
+Proof
+  `safe_cast_list (REPLICATE 2 (BaseTV (UintT 256))) [IntV 1; IntV 2] [] =
+     SOME [IntV 1; IntV 2]` by
+    (irule vyperTypingTheory.safe_cast_list_identity_nil >>
+     conj_tac >- metis_tac[vyperTypingTheory.safe_cast_well_typed] >>
+     EVAL_TAC >> intLib.ARITH_TAC) >>
+  simp[Once vyperValueOperationTheory.safe_cast_def, within_int_bound_def,
+       listTheory.ZIP]
+QED
+
+Theorem not_value_has_type_unsorted_sarray_c26[local]:
+  ~value_has_type (ArrayTV (BaseTV (UintT 256)) (Fixed 3))
+    (ArrayV (SArrayV [(2, IntV 1); (0, IntV 2)]))
+Proof
+  simp[vyperTypingTheory.value_has_type_def, sortingTheory.SORTED_DEF]
+QED
+
+Theorem bind_arguments_success_not_scope_well_typed_c26_counterexample[local]:
+  ?scope.
+    bind_arguments FEMPTY
+      [("x", ArrayT (BaseT (UintT 256)) (Fixed 3))]
+      [ArrayV (SArrayV [(2, IntV 1); (0, IntV 2)])] = SOME scope /\
+    ~scope_well_typed scope
+Proof
+  qexists_tac `FEMPTY |+ (string_to_num "x",
+    <| assignable := T; type := ArrayTV (BaseTV (UintT 256)) (Fixed 3);
+       value := ArrayV (SArrayV [(2, IntV 1); (0, IntV 2)]) |>)` >>
+  conj_tac
+  >- simp[Once bind_arguments_def, Once bind_arguments_def, evaluate_type_def,
+          type_slot_size_def, safe_cast_unsorted_sarray_c26] >>
+  rw[scope_well_typed_def, FLOOKUP_UPDATE] >>
+  simp[not_value_has_type_unsorted_sarray_c26]
+QED
