@@ -10272,6 +10272,28 @@ Proof
      vyperTypeExprSoundnessTheory.no_type_error_result_def]
 QED
 
+Theorem raw_expr_value_ok_Value_materialise_result_ok[local]:
+  raw_expr_value_ok tenv ty (Value v) /\
+  raw_abi_formal_scope_ready tenv params vals scope env cx st /\
+  materialise cx (Value v) st = (res,st') ==>
+  no_type_error_result res /\
+  (case res of
+   | INL mv => st' = st /\ raw_abi_formal_scope_ready tenv params vals scope env cx st'
+   | INR _ => T)
+Proof
+  rw[materialise_def, return_def,
+     vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+  gvs[]
+QED
+
+Theorem raw_expr_value_ok_Value_materialise_success_ready[local]:
+  raw_expr_value_ok tenv ty (Value v) /\
+  raw_abi_formal_scope_ready tenv params vals scope env cx st /\
+  materialise cx (Value v) st = (INL mv,st') ==>
+  st' = st /\ raw_abi_formal_scope_ready tenv params vals scope env cx st'
+Proof
+  rpt strip_tac >> gvs[materialise_def, return_def]
+QED
 
 
 Theorem checked_explicit_external_raw_abi_runtime_consistent[local]:
