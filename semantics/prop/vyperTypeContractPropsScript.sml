@@ -10325,6 +10325,33 @@ Proof
 QED
 
 
+
+Theorem eval_expr_type_sound_from_mutual[local]:
+  env_consistent env cx st /\ state_well_typed st /\
+  context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
+  eval_expr cx e st = (res,st') /\ well_typed_expr env e ==>
+  state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
+  no_type_error_result res /\
+  case res of
+  | INL tv => expr_result_typed env e tv
+  | INR _ => T
+Proof
+  metis_tac[cj 8 eval_all_type_sound_mutual]
+QED
+
+Theorem eval_exprs_type_sound_from_mutual[local]:
+  well_typed_exprs env es /\ env_consistent env cx st /\ state_well_typed st /\
+  context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
+  eval_exprs cx es st = (res,st') ==>
+  state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
+  no_type_error_result res /\
+  case res of
+  | INL vs => exprs_runtime_typed env es vs
+  | INR _ => T
+Proof
+  metis_tac[cj 9 eval_all_type_sound_mutual]
+QED
+
 Theorem raw_abi_eval_stmts_no_type_error[local]:
   type_stmts env ret_ty body = SOME env' /\
   raw_abi_formal_scope_ready tenv params vals scope env cx st /\
