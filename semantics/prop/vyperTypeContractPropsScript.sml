@@ -11,7 +11,7 @@ Theory vyperTypeContractProps
 Ancestors
   list rich_list arithmetic finite_map alist option pair patricia_casts
   vyperAST vyperValue vyperMisc vyperContext vyperState vyperInterpreter
-  vyperTypeSystem vyperTypeContract vyperTypeInvariants vyperTypeStmtSoundness
+  vyperTypeSystem vyperTypeContract vyperTypeInvariants vyperTypeValues vyperTypeStmtSoundness
   vyperTypeInitialState vyperPureExpr vyperEvalPreservesScopes vyperEvalPreservesImmutablesDom
   vyperScopePreservation vyperStatePreservation
 Libs
@@ -9788,6 +9788,62 @@ Proof
      return_def] >>
   qexistsl [`id'`, `raw`] >> simp[]
 QED
+Definition raw_expr_value_ok_def:
+  raw_expr_value_ok tenv ty tv <=>
+    (?rt. evaluate_type tenv ty = SOME rt /\ toplevel_value_typed tv rt) \/
+    (?rt raw v. tv = Value v /\ evaluate_type tenv ty = SOME rt /\
+                safe_cast rt raw = SOME v)
+End
+
+Theorem raw_expr_value_ok_typed[local]:
+  evaluate_type tenv ty = SOME rt /\
+  toplevel_value_typed tv rt ==>
+  raw_expr_value_ok tenv ty tv
+Proof
+  rw[raw_expr_value_ok_def] >> metis_tac[]
+QED
+
+Theorem raw_expr_value_ok_safe_cast[local]:
+  evaluate_type tenv ty = SOME rt /\
+  safe_cast rt raw = SOME v ==>
+  raw_expr_value_ok tenv ty (Value v)
+Proof
+  rw[raw_expr_value_ok_def] >> metis_tac[]
+QED
+
+Theorem raw_expr_value_ok_literal[local]:
+  well_typed_literal ty lit /\
+  evaluate_type tenv ty = SOME rt ==>
+  raw_expr_value_ok tenv ty (Value (evaluate_literal lit))
+Proof
+  rw[raw_expr_value_ok_def] >>
+  metis_tac[literal_toplevel_value_typed]
+QED
+
+Theorem raw_abi_formal_Name_result_ok[local]:
+  well_typed_expr env (Name ty id) /\
+  raw_abi_formal_scope_ready tenv params vals scope env cx st /\
+  eval_expr cx (Name ty id) st = (INL tv,st') ==>
+  raw_expr_value_ok tenv ty tv /\ st' = st
+Proof
+  strip_tac >>
+  `FLOOKUP env.var_types (string_to_num id) = SOME ty` by
+    gvs[well_typed_expr_def] >>
+  `?sv. lookup_scopes (string_to_num id) st.scopes = SOME sv` by
+    (gvs[well_typed_expr_def, raw_abi_formal_scope_ready_def,
+         raw_abi_runtime_consistent_def, env_consistent_def,
+         env_scopes_consistent_def, IS_SOME_EXISTS] >>
+     metis_tac[]) >>
+  drule_all raw_abi_formal_lookup_safe_cast_origin >>
+  strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  drule_all lookup_scopes_val_from_lookup_scopes >>
+  rw[Once evaluate_def, bind_def, get_scopes_def, lift_option_type_def,
+     return_def, raw_expr_value_ok_def] >>
+  disj2_tac >>
+  qexists `raw` >> simp[]
+QED
+
 
 Theorem checked_explicit_external_raw_abi_runtime_consistent[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
