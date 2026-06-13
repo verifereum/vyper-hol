@@ -9944,6 +9944,29 @@ Proof
   simp[toplevel_value_typed_Value]
 QED
 
+Theorem raw_abi_read_storage_slot_result_ok[local]:
+  evaluate_type tenv ty = SOME tv /\
+  read_storage_slot cx is_transient slot tv st = (rr,st') ==>
+    no_type_error_result rr /\
+    case rr of
+    | INL v => raw_expr_value_ok tenv ty (Value v) /\ st' = st
+    | INR _ => T
+Proof
+  strip_tac >>
+  Cases_on `rr` >>
+  gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def]
+  >- (conj_tac
+      >- (irule raw_expr_value_ok_typed >>
+          qexists `tv` >> simp[toplevel_value_typed_Value] >>
+          drule vyperTypeValuesTheory.evaluate_type_well_formed_type_value >>
+          strip_tac >>
+          drule_all vyperTypeStatePreservationTheory.read_storage_slot_success_type >>
+          simp[])
+      >- metis_tac[vyperStatePreservationTheory.read_storage_slot_state]) >>
+  drule vyperTypeExprSoundnessTheory.read_storage_slot_error >>
+  strip_tac >> gvs[]
+QED
+
 Theorem safe_cast_list_length[local]:
   !rts raws acc out.
     safe_cast_list rts raws acc = SOME out ==>
