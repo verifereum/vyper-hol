@@ -9439,6 +9439,75 @@ Proof
   metis_tac[]
 QED
 
+Theorem call_external_function_exact_selected_getter_no_type_error_c53[local]:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  checked_contract_runtime_ready art mods am tx /\
+  machine_well_typed am /\
+  ALOOKUP mods src = SOME ts /\
+  MEM decl ts /\
+  is_public_getter_decl tx.function_name decl /\
+  external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,body) /\
+  bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
+  cx = initial_evaluation_context am.sources am.layouts tx src /\
+  call_external_function am cx nr mut ts mods args dflts vals body ret = (res,am') ==>
+  no_type_error_result res
+Proof
+  rpt strip_tac >>
+  `nr = F /\ mut = View /\ dflts = [] /\ ?exp. body = [Return (SOME exp)]` by
+    (Cases_on `decl` >> gvs[is_public_getter_decl_def, external_getter_tuple_def]
+     >- (Cases_on `v` >> gvs[] >> Cases_on `is_ArrayT t` >> gvs[]
+         >- (drule_all array_public_getter_tuple_shape >> metis_tac[]) >>
+         gvs[external_getter_tuple_def]) >>
+     Cases_on `v` >> gvs[is_public_getter_decl_def] >>
+     drule_all hashmap_public_getter_tuple_shape >> metis_tac[]) >>
+  gvs[] >>
+  drule call_external_function_exact_args_rewrites_c53 >> strip_tac >>
+  qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[call_external_function_def, evaluate_defaults_def,
+       initial_evaluation_context_def,
+       vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+  gvs[bind_def, ignore_bind_def, return_def, raise_def] >>
+  Cases_on `send_call_value View (initial_evaluation_context am.sources am.layouts tx src)
+              (initial_state am [scope])` >>
+  Cases_on `q` >> gvs[return_def, raise_def]
+  >- (`no_type_error_result (FST (eval_stmts
+          (initial_evaluation_context am.sources am.layouts tx src) [Return (SOME exp)] r))` by
+        (`r = initial_state am [scope]` by
+           (qpat_x_assum `send_call_value View _ _ = _` mp_tac >>
+            rw[send_call_value_def, bind_def, ignore_bind_def, check_def,
+               assert_def, return_def, raise_def] >>
+            gvs[AllCaseEqs(), return_def, raise_def]) >>
+         gvs[] >>
+         Cases_on `eval_stmts (initial_evaluation_context am.sources am.layouts tx src)
+                    [Return (SOME exp)] (initial_state am [scope])` >>
+         drule_all checked_public_getter_entry_no_type_error >>
+         simp[]) >>
+      Cases_on `eval_stmts (initial_evaluation_context am.sources am.layouts tx src)
+                  [Return (SOME exp)] r` >>
+      Cases_on `q` >>
+      gvs[initial_evaluation_context_def,
+          vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+      TRY (Cases_on `e`) >>
+      gvs[initial_evaluation_context_def,
+          vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+      rpt (BasicProvers.TOP_CASE_TAC >>
+           gvs[initial_evaluation_context_def, return_def, raise_def,
+               vyperTypeExprSoundnessTheory.no_type_error_result_def]) >>
+      rpt strip_tac >> gvs[]) >>
+  `no_type_error_eval
+     (send_call_value View (initial_evaluation_context am.sources am.layouts tx src)
+        (initial_state am [scope]))` by simp[send_call_value_no_type_error_c53] >>
+  gvs[initial_evaluation_context_def,
+      vyperTypeExprSoundnessTheory.no_type_error_eval_def,
+      vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+  Cases_on `y` >> gvs[] >>
+  TRY (Cases_on `e`) >> gvs[] >>
+  rpt (BasicProvers.TOP_CASE_TAC >>
+       gvs[return_def, raise_def,
+           vyperTypeExprSoundnessTheory.no_type_error_result_def]) >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
 Theorem send_call_value_preserves_scopes[local]:
   send_call_value mut cx st = (res,st') ==>
   st'.scopes = st.scopes
