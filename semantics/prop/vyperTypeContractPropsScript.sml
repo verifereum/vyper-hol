@@ -9745,6 +9745,14 @@ Definition raw_abi_formal_scope_ready_def:
             ?id. MEM (id,ty) params /\ n = string_to_num id)
 End
 
+Theorem raw_abi_formal_scope_ready_soundness_preconditions_weak[local]:
+  raw_abi_formal_scope_ready tenv params vals scope env cx st ==>
+  env_consistent env cx st /\ context_well_typed cx /\ accounts_well_typed st.accounts
+Proof
+  rw[raw_abi_formal_scope_ready_def, raw_abi_runtime_consistent_def]
+QED
+
+
 Theorem raw_abi_formal_lookup_safe_cast_origin[local]:
   raw_abi_formal_scope_ready tenv params vals scope env cx st /\
   FLOOKUP env.var_types n = SOME ty /\
