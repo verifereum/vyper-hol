@@ -9508,6 +9508,80 @@ Proof
   rpt strip_tac >> gvs[] >> metis_tac[]
 QED
 
+Theorem bind_arguments_success_mem_zip_safe_cast[local]:
+  !tenv params vals scope id ty raw.
+    bind_arguments tenv params vals = SOME scope /\
+    MEM ((id,ty),raw) (ZIP (params, vals)) ==>
+    ?tv cast_v.
+      evaluate_type tenv ty = SOME tv /\
+      safe_cast tv raw = SOME cast_v
+Proof
+  ho_match_mp_tac bind_arguments_ind >>
+  rw[bind_arguments_def] >>
+  gvs[AllCaseEqs()] >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem MEM_ZIP_FST[local]:
+  !xs ys x y. MEM (x,y) (ZIP (xs,ys)) ==> MEM x xs
+Proof
+  Induct >> Cases_on `ys` >> rw[ZIP_def] >> gvs[] >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem bind_arguments_success_flookup_safe_cast[local]:
+  !tenv params vals scope id ty raw sv.
+    bind_arguments tenv params vals = SOME scope /\
+    ALL_DISTINCT (MAP (string_to_num o FST) params) /\
+    MEM ((id,ty),raw) (ZIP (params, vals)) /\
+    FLOOKUP scope (string_to_num id) = SOME sv ==>
+      sv.assignable /\
+      ?tv.
+        evaluate_type tenv ty = SOME tv /\
+        safe_cast tv raw = SOME sv.value /\
+        sv.type = tv
+Proof
+  ho_match_mp_tac bind_arguments_ind >>
+  rw[bind_arguments_def] >>
+  gvs[AllCaseEqs(), FLOOKUP_UPDATE, MEM_MAP] >>
+  gvs[] >>
+  imp_res_tac MEM_ZIP_FST >>
+  gvs[] >>
+  first_x_assum drule >>
+  disch_then (qspec_then `sv` mp_tac) >>
+  simp[]
+QED
+
+Theorem lookup_exported_function_current_lookup_function[local]:
+  find_function_module am tx.target tx.function_name = src /\
+  get_module_code (initial_evaluation_context am.sources am.layouts tx src) src = SOME ts /\
+  lookup_exported_function (initial_evaluation_context am.sources am.layouts tx src) am tx.function_name =
+    SOME (mut,nr,args,dflts,ret,body) ==>
+  lookup_function src tx.function_name External ts = SOME (mut,nr,args,dflts,ret,body)
+Proof
+  rw[lookup_exported_function_def, find_function_module_def, get_self_code_def,
+     initial_evaluation_context_def, get_module_code_def] >>
+  gvs[AllCaseEqs()]
+QED
+
+Theorem lookup_exported_function_checked_cases_current[local]:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  ALOOKUP am.sources tx.target = SOME mods /\
+  src = find_function_module am tx.target tx.function_name /\
+  get_module_code (initial_evaluation_context am.sources am.layouts tx src) src = SOME ts /\
+  lookup_exported_function (initial_evaluation_context am.sources am.layouts tx src) am tx.function_name =
+    SOME (mut,nr,args,dflts,ret,body) ==>
+  (?raw.
+     MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts) \/
+  (?decl.
+     MEM decl ts /\
+     is_public_getter_decl tx.function_name decl /\
+     external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,body))
+Proof
+  metis_tac[lookup_exported_function_checked_cases_selected]
+QED
+
+
 Theorem send_call_value_preserves_scopes[local]:
   send_call_value mut cx st = (res,st') ==>
   st'.scopes = st.scopes
@@ -9713,46 +9787,3 @@ Proof
   EVAL_TAC
 QED
 
-Theorem bind_arguments_success_mem_zip_safe_cast[local]:
-  !tenv params vals scope id ty raw.
-    bind_arguments tenv params vals = SOME scope /\
-    MEM ((id,ty),raw) (ZIP (params, vals)) ==>
-    ?tv cast_v.
-      evaluate_type tenv ty = SOME tv /\
-      safe_cast tv raw = SOME cast_v
-Proof
-  ho_match_mp_tac bind_arguments_ind >>
-  rw[bind_arguments_def] >>
-  gvs[AllCaseEqs()] >>
-  first_x_assum drule >> simp[]
-QED
-
-Theorem MEM_ZIP_FST[local]:
-  !xs ys x y. MEM (x,y) (ZIP (xs,ys)) ==> MEM x xs
-Proof
-  Induct >> Cases_on `ys` >> rw[ZIP_def] >> gvs[] >>
-  first_x_assum drule >> simp[]
-QED
-
-Theorem bind_arguments_success_flookup_safe_cast[local]:
-  !tenv params vals scope id ty raw sv.
-    bind_arguments tenv params vals = SOME scope /\
-    ALL_DISTINCT (MAP (string_to_num o FST) params) /\
-    MEM ((id,ty),raw) (ZIP (params, vals)) /\
-    FLOOKUP scope (string_to_num id) = SOME sv ==>
-      sv.assignable /\
-      ?tv.
-        evaluate_type tenv ty = SOME tv /\
-        safe_cast tv raw = SOME sv.value /\
-        sv.type = tv
-Proof
-  ho_match_mp_tac bind_arguments_ind >>
-  rw[bind_arguments_def] >>
-  gvs[AllCaseEqs(), FLOOKUP_UPDATE, MEM_MAP] >>
-  gvs[] >>
-  imp_res_tac MEM_ZIP_FST >>
-  gvs[] >>
-  first_x_assum drule >>
-  disch_then (qspec_then `sv` mp_tac) >>
-  simp[]
-QED
