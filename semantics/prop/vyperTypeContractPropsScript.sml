@@ -9577,6 +9577,19 @@ Proof
   qexists `tv` >> simp[]
 QED
 
+Theorem scope_abi_casts_flookup[local]:
+  scope_abi_casts tenv params vals scope /\
+  MEM ((id,ty),raw) (ZIP (params,vals)) /\
+  FLOOKUP scope (string_to_num id) = SOME sv ==>
+  sv.assignable /\
+  ?tv. evaluate_type tenv ty = SOME tv /\
+       sv.type = tv /\ safe_cast tv raw = SOME sv.value
+Proof
+  rw[scope_abi_casts_def] >>
+  first_x_assum (qspecl_then [`id`, `ty`, `raw`, `sv`] mp_tac) >>
+  simp[]
+QED
+
 Theorem checked_explicit_external_raw_bind_env_package[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\
