@@ -9851,6 +9851,15 @@ Proof
   rw[raw_expr_value_ok_def] >> metis_tac[]
 QED
 
+Theorem expr_result_typed_raw_expr_value_ok[local]:
+  well_typed_expr env e /\ expr_result_typed env e tv ==>
+  raw_expr_value_ok env.type_defs (expr_type e) tv
+Proof
+  rw[expr_result_typed_def, vyperTypeExprSoundnessTheory.expr_runtime_typed_def] >>
+  irule raw_expr_value_ok_typed >>
+  metis_tac[]
+QED
+
 Theorem raw_expr_value_ok_safe_cast[local]:
   evaluate_type tenv ty = SOME rt /\
   safe_cast rt raw = SOME v ==>
