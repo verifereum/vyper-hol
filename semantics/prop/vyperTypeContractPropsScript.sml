@@ -10048,6 +10048,63 @@ Proof
       Cases_on `q` >> gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def]
 QED
 
+Theorem raw_abi_eval_TopLevelName_immutable_result_ok[local]:
+  well_typed_expr env (TopLevelName ty (src,id)) /\
+  raw_abi_formal_scope_ready (get_tenv cx) params vals scope env cx st /\
+  functions_well_typed cx /\
+  FLOOKUP env.bare_globals (src,string_to_num id) = SOME ty /\
+  eval_expr cx (TopLevelName ty (src,id)) st = (res,st') ==>
+    no_type_error_result res /\
+    case res of
+    | INL tvl => raw_expr_value_ok (get_tenv cx) (expr_type (TopLevelName ty (src,id))) tvl /\
+                 raw_abi_formal_scope_ready (get_tenv cx) params vals scope env cx st'
+    | INR _ => T
+Proof
+  strip_tac >>
+  `env_consistent env cx st /\ context_well_typed cx /\ accounts_well_typed st.accounts` by
+    gvs[raw_abi_formal_scope_ready_def, raw_abi_runtime_consistent_def] >>
+  `env.type_defs = get_tenv cx` by
+    gvs[env_consistent_def, env_context_consistent_def] >>
+  `?ts. get_module_code cx src = SOME ts /\
+        FLOOKUP env.toplevel_vtypes (src,string_to_num id) = SOME (Type ty) /\
+        is_bare_global_decl (string_to_num id) ts /\
+        find_var_decl_by_num (string_to_num id) ts = NONE /\ ty <> NoneT` by
+    (gvs[env_consistent_def] >>
+     drule_all env_context_consistent_bare_global_find_NONE >> rw[]) >>
+  `IS_SOME (FLOOKUP (get_source_immutables src
+      (case ALOOKUP st.immutables cx.txn.target of SOME m => m | NONE => []))
+      (string_to_num id))` by
+    (gvs[env_consistent_def, env_immutables_consistent_def] >>
+     first_x_assum drule >> simp[]) >>
+  gvs[IS_SOME_EXISTS] >>
+  PairCases_on `x` >>
+  `evaluate_type (get_tenv cx) ty = SOME x0` by
+    (gvs[env_consistent_def, env_immutables_consistent_def] >>
+     first_x_assum drule_all >> simp[]) >>
+  `imms_well_typed
+     (case ALOOKUP st.immutables cx.txn.target of SOME m => m | NONE => [])` by
+    (Cases_on `ALOOKUP st.immutables cx.txn.target` >>
+     gvs[raw_abi_formal_scope_ready_def, raw_abi_runtime_consistent_def]
+     >- rw[imms_well_typed_def] >>
+     rw[] >>
+     gvs[EVERY_MEM, FORALL_PROD] >>
+     first_x_assum irule >>
+     imp_res_tac ALOOKUP_MEM >>
+     goal_assum drule) >>
+  `value_has_type x0 x1` by
+    (drule_all vyperTypeEnvTheory.imms_well_typed_get_source_immutables >> simp[]) >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, Once lookup_global_def, bind_def, lift_option_type_def,
+       get_immutables_def, get_address_immutables_def, lift_option_def,
+       return_def, raise_def,
+       vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+  Cases_on `ALOOKUP st.immutables cx.txn.target` >>
+  gvs[get_source_immutables_def, return_def, raise_def] >>
+  rw[expr_type_def] >>
+  gvs[] >>
+  irule raw_expr_value_ok_typed >>
+  qexists `x0` >> simp[toplevel_value_typed_Value]
+QED
 Theorem safe_cast_list_length[local]:
   !rts raws acc out.
     safe_cast_list rts raws acc = SOME out ==>
