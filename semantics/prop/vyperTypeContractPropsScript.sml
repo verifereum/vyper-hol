@@ -9552,6 +9552,49 @@ Proof
   simp[]
 QED
 
+Theorem checked_explicit_external_raw_bind_env_package[local]:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  ALOOKUP am.sources tx.target = SOME mods /\
+  ALOOKUP mods src = SOME ts /\
+  MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
+  cx = initial_evaluation_context am.sources am.layouts tx src /\
+  immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes cx am.immutables /\
+  bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
+  st.scopes = [scope] /\ st.immutables = am.immutables ==>
+  ?env_body env_after.
+    type_stmts env_body ret body = SOME env_after /\
+    env_context_consistent env_body cx /\
+    env_scopes_consistent env_body cx st /\
+    env_immutables_consistent env_body cx st
+Proof
+  strip_tac >> gvs[] >>
+  drule_all checked_explicit_external_body_typing_package >>
+  strip_tac >>
+  qexistsl [`env_body`, `env_after`] >> simp[] >>
+  conj_tac
+  >- (gvs[] >>
+      irule env_context_consistent_same_static_maps >>
+      qexists `artifact_env art mods env_body.current_src` >>
+      rpt (conj_tac >- simp[artifact_env_def, get_tenv_def, initial_evaluation_context_def]) >>
+      irule check_contract_env_context_consistent_initial_src >>
+      simp[]) >>
+  conj_tac
+  >- (`(st with scopes := [scope]) = st` by
+        gvs[evaluation_state_component_equality] >>
+      pop_assum (fn th => SUBST1_TAC (GSYM th)) >>
+      irule bind_arguments_env_scopes_consistent >>
+      qexistsl [`args`, `type_env_all_modules mods`, `vals`] >>
+      gvs[get_tenv_def, initial_evaluation_context_def] >> metis_tac[]) >>
+  gvs[env_immutables_consistent_def] >>
+  rw[] >>
+  qpat_x_assum `immutables_ready _ _ _ _` mp_tac >>
+  simp[immutables_ready_def] >>
+  strip_tac >>
+  first_x_assum drule_all >>
+  simp[]
+QED
+
+
 Theorem lookup_exported_function_current_lookup_function[local]:
   find_function_module am tx.target tx.function_name = src /\
   get_module_code (initial_evaluation_context am.sources am.layouts tx src) src = SOME ts /\
