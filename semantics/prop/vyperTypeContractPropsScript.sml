@@ -7697,6 +7697,138 @@ Proof
   rpt strip_tac >> first_x_assum irule >> simp[]
 QED
 
+Theorem generated_array_getter_expr_no_type_error_post_prefix_aux[local]:
+  !vt e n args ret exp tenv vals scope base_res st st1 res st' cx elem_tv all_args.
+  build_getter e (BaseT (UintT 256)) (Type vt) n = (args,ret,exp) /\
+  bind_arguments tenv all_args vals = SOME scope /\
+  (!id typ. MEM (id,typ) args ==> MEM (id,typ) all_args) /\
+  (!id typ id' typ'. MEM (id,typ) all_args /\ MEM (id',typ') all_args /\
+      string_to_num id' = string_to_num id ==> typ' = typ) /\
+  st.scopes = [scope] /\ pure_expr e /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME NoneTV /\
+  evaluate_type (get_tenv cx) vt = SOME elem_tv /\
+  eval_expr cx e st = (base_res,st1) /\ no_type_error_result base_res /\
+  (case base_res of
+   | INL tvl =>
+       ((?av bd. tvl = Value (ArrayV av) /\ value_has_type (ArrayTV elem_tv bd) (ArrayV av)) \/
+        (?is_transient slot bd. tvl = ArrayRef is_transient slot elem_tv bd))
+   | INR _ => T) /\
+  eval_expr cx exp st = (res,st') ==>
+  no_type_error_result res
+Proof
+  completeInduct_on `value_type_size (Type vt)` >> rpt strip_tac >>
+  TRY (irule build_getter_total) >>
+  qpat_x_assum `build_getter _ _ _ _ = _` mp_tac >>
+  simp[Once build_getter_def] >>
+  Cases_on `is_ArrayT vt` >> simp[] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rw[] >> gvs[]
+  >- (Cases_on `vt` >> gvs[is_ArrayT_def, ArrayT_type_def, evaluate_type_def, AllCaseEqs()] >>
+      Cases_on `eval_expr cx (Subscript NoneT e (Name NoneT (num_to_dec_string n))) st` >> gvs[] >>
+      drule_all generated_array_getter_ArrayT_unfolded_tail_IH_antecedents_post_prefix >>
+      strip_tac >> gvs[] >>
+      first_x_assum (qspec_then `value_type_size (Type t)` mp_tac) >>
+      impl_tac >- simp[] >>
+      disch_then (qspec_then `t` mp_tac) >> simp[] >>
+      disch_then (qspecl_then
+        [`Subscript NoneT e (Name NoneT (num_to_dec_string n))`, `SUC n`,
+         `args'`, `ret`, `exp`, `tenv`, `vals`, `scope`, `q`, `st`, `r`,
+         `res`, `st'`, `cx`, `tv`, `all_args`] mp_tac) >>
+      simp[] >> metis_tac[]) >>
+  Cases_on `base_res` >> gvs[]
+  >- (irule (cj 1 generated_array_subscript_step_NoneTV_materialisable_post_prefix) >>
+      qexistsl [`all_args`,`cx`,`e`,`n`,`scope`,`st`,`st1`,`st'`,`tenv`,
+                `Value (ArrayV av)`,`vals`] >>
+      simp[] >> metis_tac[])
+  >- (irule (cj 1 generated_array_subscript_step_NoneTV_materialisable_post_prefix) >>
+      qexistsl [`all_args`,`cx`,`e`,`n`,`scope`,`st`,`st1`,`st'`,`tenv`,
+                `ArrayRef is_transient slot elem_tv bd`,`vals`] >>
+      simp[] >> metis_tac[]) >>
+  gvs[Once evaluate_def, bind_def, return_def, raise_def,
+      vyperTypeExprSoundnessTheory.no_type_error_result_def]
+QED
+
+Theorem generated_array_getter_expr_materialisable_shape_post_prefix_aux[local]:
+  !vt e n args ret exp tenv vals scope base_res st st1 res st' cx elem_tv all_args.
+  build_getter e (BaseT (UintT 256)) (Type vt) n = (args,ret,exp) /\
+  bind_arguments tenv all_args vals = SOME scope /\
+  (!id typ. MEM (id,typ) args ==> MEM (id,typ) all_args) /\
+  (!id typ id' typ'. MEM (id,typ) all_args /\ MEM (id',typ') all_args /\
+      string_to_num id' = string_to_num id ==> typ' = typ) /\
+  st.scopes = [scope] /\ pure_expr e /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME NoneTV /\
+  evaluate_type (get_tenv cx) vt = SOME elem_tv /\
+  eval_expr cx e st = (base_res,st1) /\ no_type_error_result base_res /\
+  (case base_res of
+   | INL tvl =>
+       ((?av bd. tvl = Value (ArrayV av) /\ value_has_type (ArrayTV elem_tv bd) (ArrayV av)) \/
+        (?is_transient slot bd. tvl = ArrayRef is_transient slot elem_tv bd))
+   | INR _ => T) /\
+  eval_expr cx exp st = (res,st') ==>
+  (case res of INL tvl' => (?v. tvl' = Value v) \/
+                (?is_transient slot elem_tv bd. tvl' = ArrayRef is_transient slot elem_tv bd)
+   | INR _ => T)
+Proof
+  completeInduct_on `value_type_size (Type vt)` >> rpt strip_tac >>
+  TRY (irule build_getter_total) >>
+  qpat_x_assum `build_getter _ _ _ _ = _` mp_tac >>
+  simp[Once build_getter_def] >>
+  Cases_on `is_ArrayT vt` >> simp[] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rw[] >> gvs[]
+  >- (Cases_on `vt` >> gvs[is_ArrayT_def, ArrayT_type_def, evaluate_type_def, AllCaseEqs()] >>
+      Cases_on `eval_expr cx (Subscript NoneT e (Name NoneT (num_to_dec_string n))) st` >> gvs[] >>
+      drule_all generated_array_getter_ArrayT_unfolded_tail_IH_antecedents_post_prefix >>
+      strip_tac >> gvs[] >>
+      first_x_assum (qspec_then `value_type_size (Type t)` mp_tac) >>
+      impl_tac >- simp[] >>
+      disch_then (qspec_then `t` mp_tac) >> simp[] >>
+      disch_then (qspecl_then
+        [`Subscript NoneT e (Name NoneT (num_to_dec_string n))`, `SUC n`,
+         `args'`, `ret`, `exp`, `tenv`, `vals`, `scope`, `q`, `st`, `r`,
+         `res`, `st'`, `cx`, `tv`, `all_args`] mp_tac) >>
+      simp[] >> metis_tac[]) >>
+  Cases_on `base_res` >> gvs[]
+  >- (irule (cj 2 generated_array_subscript_step_NoneTV_materialisable_post_prefix) >>
+      qexistsl [`all_args`,`cx`,`e`,`n`,`scope`,`st`,`st1`,`st'`,`tenv`,
+                `Value (ArrayV av)`,`vals`] >>
+      simp[] >> metis_tac[])
+  >- (irule (cj 2 generated_array_subscript_step_NoneTV_materialisable_post_prefix) >>
+      qexistsl [`all_args`,`cx`,`e`,`n`,`scope`,`st`,`st1`,`st'`,`tenv`,
+                `ArrayRef is_transient slot elem_tv bd`,`vals`] >>
+      simp[] >> metis_tac[]) >>
+  gvs[Once evaluate_def, bind_def, return_def, raise_def]
+QED
+
+Theorem generated_array_getter_expr_no_type_error_materialisable_post_prefix_aux[local]:
+  !vt e n args ret exp tenv vals scope base_res st st1 res st' cx elem_tv all_args.
+  build_getter e (BaseT (UintT 256)) (Type vt) n = (args,ret,exp) /\
+  bind_arguments tenv all_args vals = SOME scope /\
+  (!id typ. MEM (id,typ) args ==> MEM (id,typ) all_args) /\
+  (!id typ id' typ'. MEM (id,typ) all_args /\ MEM (id',typ') all_args /\
+      string_to_num id' = string_to_num id ==> typ' = typ) /\
+  st.scopes = [scope] /\
+  pure_expr e /\ evaluate_type (get_tenv cx) (expr_type e) = SOME NoneTV /\
+  evaluate_type (get_tenv cx) vt = SOME elem_tv /\
+  eval_expr cx e st = (base_res,st1) /\
+  no_type_error_result base_res /\
+  (case base_res of
+   | INL tvl =>
+       ((?av bd. tvl = Value (ArrayV av) /\ value_has_type (ArrayTV elem_tv bd) (ArrayV av)) \/
+        (?is_transient slot bd. tvl = ArrayRef is_transient slot elem_tv bd))
+   | INR _ => T) /\
+  eval_expr cx exp st = (res,st') ==>
+  no_type_error_result res /\
+  (case res of INL tvl' => (?v. tvl' = Value v) \/
+                (?is_transient slot elem_tv bd. tvl' = ArrayRef is_transient slot elem_tv bd)
+   | INR _ => T)
+Proof
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (drule_all generated_array_getter_expr_no_type_error_post_prefix_aux >> simp[]) >>
+  drule_all generated_array_getter_expr_materialisable_shape_post_prefix_aux >> simp[]
+QED
+
+
 
 
 
