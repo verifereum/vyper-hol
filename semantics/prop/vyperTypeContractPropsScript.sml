@@ -9693,6 +9693,22 @@ Proof
      vyperTypeExprSoundnessTheory.no_type_error_result_def]
 QED
 
+Theorem raw_abi_eval_Name_well_typed_no_type_error[local]:
+  well_typed_expr env (Name ty id) /\
+  raw_abi_runtime_consistent tenv params vals scope env cx st ==>
+  no_type_error_eval (eval_expr cx (Name ty id) st)
+Proof
+  strip_tac >>
+  `?sv. lookup_scopes (string_to_num id) st.scopes = SOME sv` by
+    (gvs[well_typed_expr_def, raw_abi_runtime_consistent_def,
+         env_consistent_def, env_scopes_consistent_def, IS_SOME_EXISTS] >>
+     metis_tac[]) >>
+  drule_all lookup_scopes_val_from_lookup_scopes >>
+  rw[Once evaluate_def, bind_def, get_scopes_def, lift_option_type_def, return_def,
+     vyperTypeExprSoundnessTheory.no_type_error_eval_def,
+     vyperTypeExprSoundnessTheory.no_type_error_result_def]
+QED
+
 Theorem checked_explicit_external_raw_abi_runtime_consistent[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\
