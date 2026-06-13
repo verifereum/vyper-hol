@@ -9860,6 +9860,23 @@ Proof
   metis_tac[]
 QED
 
+Definition raw_expr_values_ok_def:
+  raw_expr_values_ok tenv es vs <=>
+    LIST_REL (\e v. raw_expr_value_ok tenv (expr_type e) (Value v)) es vs
+End
+
+Theorem exprs_runtime_typed_raw_expr_values_ok[local]:
+  well_typed_exprs env es /\ exprs_runtime_typed env es vs ==>
+  raw_expr_values_ok env.type_defs es vs
+Proof
+  rw[raw_expr_values_ok_def, vyperTypeExprSoundnessTheory.exprs_runtime_typed_def] >>
+  gvs[LIST_REL_EL_EQN] >>
+  rw[] >>
+  irule raw_expr_value_ok_typed >>
+  gvs[toplevel_value_typed_Value] >>
+  metis_tac[]
+QED
+
 Theorem raw_expr_value_ok_safe_cast[local]:
   evaluate_type tenv ty = SOME rt /\
   safe_cast rt raw = SOME v ==>
