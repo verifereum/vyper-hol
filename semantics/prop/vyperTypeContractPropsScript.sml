@@ -3827,6 +3827,65 @@ Proof
                        vyperTypeExprSoundnessTheory.no_type_error_result_def]
 QED
 
+
+Theorem checked_public_hashmap_TopLevelName_carrier_post_prefix[local]:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  ALOOKUP am.sources tx.target = SOME mods /\
+  ALOOKUP mods src = SOME ts /\
+  MEM (HashMapDecl Public is_transient id kt vt init) ts /\
+  eval_expr (initial_evaluation_context am.sources am.layouts tx)
+    (TopLevelName NoneT (src,id)) st = (INL tvl,st') ==>
+  ?slot. tvl = HashMapRef is_transient slot kt vt
+Proof
+  rpt strip_tac >>
+  `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))` by
+    (irule contract_namespaces_ok_module_toplevel_vtype_keys >>
+     gvs[check_contract_def] >> metis_tac[ALOOKUP_MEM]) >>
+  `find_var_decl_by_num (string_to_num id) ts =
+     SOME (HashMapVarDecl is_transient kt vt,id)` by
+    metis_tac[find_var_decl_by_num_SOME_hashmap] >>
+  `check_toplevel_decl am.layouts tx.target mods art src
+     (HashMapDecl Public is_transient id kt vt init)` by
+    metis_tac[check_contract_toplevel_decl_MEM] >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, lookup_global_def, get_module_code_def,
+       initial_evaluation_context_def, bind_def, lift_option_type_def,
+       return_def, raise_def, lookup_var_slot_from_layout_def,
+       lookup_var_slot_in_layouts_def] >>
+  gvs[check_toplevel_decl_def, lookup_var_slot_in_layouts_def] >>
+  rpt strip_tac >> gvs[IS_SOME_EXISTS, return_def, raise_def] >>
+  metis_tac[]
+QED
+
+Theorem checked_public_hashmap_TopLevelName_no_type_error_post_prefix[local]:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  ALOOKUP am.sources tx.target = SOME mods /\
+  ALOOKUP mods src = SOME ts /\
+  MEM (HashMapDecl Public is_transient id kt vt init) ts /\
+  eval_expr (initial_evaluation_context am.sources am.layouts tx)
+    (TopLevelName NoneT (src,id)) st = (res,st') ==>
+  no_type_error_result res
+Proof
+  rpt strip_tac >>
+  `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))` by
+    (irule contract_namespaces_ok_module_toplevel_vtype_keys >>
+     gvs[check_contract_def] >> metis_tac[ALOOKUP_MEM]) >>
+  `find_var_decl_by_num (string_to_num id) ts =
+     SOME (HashMapVarDecl is_transient kt vt,id)` by
+    metis_tac[find_var_decl_by_num_SOME_hashmap] >>
+  `check_toplevel_decl am.layouts tx.target mods art src
+     (HashMapDecl Public is_transient id kt vt init)` by
+    metis_tac[check_contract_toplevel_decl_MEM] >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, lookup_global_def, get_module_code_def,
+       initial_evaluation_context_def, bind_def, lift_option_type_def,
+       return_def, raise_def, lookup_var_slot_from_layout_def,
+       lookup_var_slot_in_layouts_def,
+       vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+  gvs[check_toplevel_decl_def, lookup_var_slot_in_layouts_def] >>
+  rpt strip_tac >> gvs[IS_SOME_EXISTS, return_def, raise_def,
+                       vyperTypeExprSoundnessTheory.no_type_error_result_def]
+QED
 Theorem build_getter_args_index_ge_aux[local]:
   !e kt vt n args ret exp id typ.
     build_getter e kt vt n = (args,ret,exp) /\ MEM (id,typ) args ==>
@@ -4467,6 +4526,192 @@ Proof
             `st'`, `t`, `ts`, `tx`] >>
   simp[is_ArrayT_def, evaluate_type_def, get_tenv_def,
        initial_evaluation_context_def]
+QED
+
+Theorem checked_public_array_TopLevelName_typed_indexable_carrier_post_prefix[local]:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  ALOOKUP am.sources tx.target = SOME mods /\ machine_well_typed am /\
+  immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
+    (initial_evaluation_context am.sources am.layouts tx) am.immutables /\
+  ALOOKUP mods src = SOME ts /\ MEM (VariableDecl Public mut fn typ init) ts /\
+  is_ArrayT typ /\
+  evaluate_type (get_tenv (initial_evaluation_context am.sources am.layouts tx)) typ =
+    SOME (ArrayTV elem_tv bd) /\
+  st.immutables = am.immutables /\
+  eval_expr (initial_evaluation_context am.sources am.layouts tx)
+    (TopLevelName NoneT (src,fn)) st = (INL tvl,st') ==>
+  ((?av. tvl = Value (ArrayV av) /\
+         value_has_type (ArrayTV elem_tv bd) (ArrayV av)) \/
+   (?is_transient slot. tvl = ArrayRef is_transient slot elem_tv bd))
+Proof
+  rpt strip_tac >>
+  `get_module_code (initial_evaluation_context am.sources am.layouts tx) src = SOME ts` by
+    simp[get_module_code_def, initial_evaluation_context_def] >>
+  `FLOOKUP art.cta_toplevel_vtypes (src,string_to_num fn) = SOME (Type typ)` by
+    (`toplevel_vtypes_complete art.cta_toplevel_vtypes
+        (initial_evaluation_context am.sources am.layouts tx)` by
+       (irule check_contract_toplevel_vtypes_complete_initial >> simp[]) >>
+     gvs[toplevel_vtypes_complete_def] >> metis_tac[]) >>
+  `check_toplevel_decl am.layouts tx.target mods art src
+     (VariableDecl Public mut fn typ init)` by
+    metis_tac[check_contract_toplevel_decl_MEM] >>
+  `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))` by
+    (irule contract_namespaces_ok_module_toplevel_vtype_keys >>
+     gvs[check_contract_def] >> metis_tac[ALOOKUP_MEM]) >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
+       return_def, raise_def, initial_evaluation_context_def] >>
+  Cases_on `typ` >> gvs[is_ArrayT_def] >>
+  Cases_on `mut` >> gvs[check_toplevel_decl_def, assignable_type_def,
+                        well_formed_type_def]
+  >- (`find_var_decl_by_num (string_to_num fn) ts = NONE` by
+        (irule find_var_decl_by_num_NONE_Constant >> simp[] >> metis_tac[]) >>
+      `FLOOKUP art.cta_bare_globals (src,string_to_num fn) = SOME (ArrayT t b)` by
+        (`bare_globals_complete art.cta_bare_globals
+            (initial_evaluation_context am.sources am.layouts tx)` by
+           (irule check_contract_bare_globals_complete_initial >> simp[]) >>
+         gvs[bare_globals_complete_def] >> metis_tac[]) >>
+      gvs[immutables_ready_def] >>
+      qpat_x_assum `∀src' id ty. FLOOKUP art.cta_bare_globals (src',id) = SOME ty ⇒ _`
+        (qspecl_then [`src`,`string_to_num fn`,`ArrayT t b`] mp_tac) >>
+      qpat_x_assum `∀src' id ty tv v. _`
+        (qspecl_then [`src`,`string_to_num fn`,`ArrayT t b`] mp_tac) >>
+      simp[initial_evaluation_context_def] >>
+      rpt strip_tac >> gvs[IS_SOME_EXISTS] >>
+      Cases_on `ALOOKUP am.immutables tx.target` >>
+      gvs[get_immutables_def, get_address_immutables_def, lift_option_def,
+          bind_def, return_def, raise_def, get_source_immutables_def,
+          AllCaseEqs()] >>
+      rpt strip_tac >> gvs[] >>
+      PairCases_on `x'` >> gvs[] >>
+      `FLOOKUP (get_source_immutables src
+          (case ALOOKUP am.immutables tx.target of SOME m => m | NONE => []))
+         (string_to_num fn) = SOME (ArrayTV elem_tv bd,x'1)` by
+        simp[get_source_immutables_def] >>
+      `value_has_type (ArrayTV elem_tv bd) x'1 /\
+       well_formed_type_value (ArrayTV elem_tv bd)` by
+        metis_tac[machine_well_typed_get_source_immutables_value_has_type] >>
+      gvs[evaluate_type_def, AllCaseEqs()] >>
+      Cases_on `x'1` >> gvs[vyperTypingTheory.value_has_type_def] >>
+      metis_tac[])
+  >- (`find_var_decl_by_num (string_to_num fn) ts = NONE` by
+        (irule find_var_decl_by_num_NONE_Immutable >> simp[] >> metis_tac[]) >>
+      `FLOOKUP art.cta_bare_globals (src,string_to_num fn) = SOME (ArrayT t b)` by
+        (`bare_globals_complete art.cta_bare_globals
+            (initial_evaluation_context am.sources am.layouts tx)` by
+           (irule check_contract_bare_globals_complete_initial >> simp[]) >>
+         gvs[bare_globals_complete_def] >> metis_tac[]) >>
+      gvs[immutables_ready_def] >>
+      qpat_x_assum `∀src' id ty. FLOOKUP art.cta_bare_globals (src',id) = SOME ty ⇒ _`
+        (qspecl_then [`src`,`string_to_num fn`,`ArrayT t b`] mp_tac) >>
+      qpat_x_assum `∀src' id ty tv v. _`
+        (qspecl_then [`src`,`string_to_num fn`,`ArrayT t b`] mp_tac) >>
+      simp[initial_evaluation_context_def] >>
+      rpt strip_tac >> gvs[IS_SOME_EXISTS] >>
+      Cases_on `ALOOKUP am.immutables tx.target` >>
+      gvs[get_immutables_def, get_address_immutables_def, lift_option_def,
+          bind_def, return_def, raise_def, get_source_immutables_def,
+          AllCaseEqs()] >>
+      rpt strip_tac >> gvs[] >>
+      PairCases_on `x'` >> gvs[] >>
+      `FLOOKUP (get_source_immutables src
+          (case ALOOKUP am.immutables tx.target of SOME m => m | NONE => []))
+         (string_to_num fn) = SOME (ArrayTV elem_tv bd,x'1)` by
+        simp[get_source_immutables_def] >>
+      `value_has_type (ArrayTV elem_tv bd) x'1 /\
+       well_formed_type_value (ArrayTV elem_tv bd)` by
+        metis_tac[machine_well_typed_get_source_immutables_value_has_type] >>
+      gvs[evaluate_type_def, AllCaseEqs()] >>
+      Cases_on `x'1` >> gvs[vyperTypingTheory.value_has_type_def] >>
+      metis_tac[])
+  >- (`find_var_decl_by_num (string_to_num fn) ts =
+         SOME (StorageVarDecl T (ArrayT t b),fn)` by
+        metis_tac[find_var_decl_by_num_SOME_storage_var_Transient,
+                  contract_namespaces_ok_module_toplevel_vtype_keys,
+                  ALOOKUP_MEM, check_contract_def] >>
+      gvs[lookup_var_slot_from_layout_def, lookup_var_slot_in_layouts_def,
+          get_tenv_def, initial_evaluation_context_def] >>
+      gvs[evaluate_type_def, IS_SOME_EXISTS, AllCaseEqs(), bind_def, return_def] >>
+      metis_tac[]) >>
+  `find_var_decl_by_num (string_to_num fn) ts =
+     SOME (StorageVarDecl F (ArrayT t b),fn)` by
+    metis_tac[find_var_decl_by_num_SOME_storage_var_Storage,
+              contract_namespaces_ok_module_toplevel_vtype_keys,
+              ALOOKUP_MEM, check_contract_def] >>
+  gvs[lookup_var_slot_from_layout_def, lookup_var_slot_in_layouts_def,
+      get_tenv_def, initial_evaluation_context_def] >>
+  gvs[evaluate_type_def, IS_SOME_EXISTS, AllCaseEqs(), bind_def, return_def] >>
+  metis_tac[]
+QED
+
+Theorem checked_public_array_TopLevelName_typed_indexable_carrier_ArrayT_post_prefix[local]:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  ALOOKUP am.sources tx.target = SOME mods /\ machine_well_typed am /\
+  immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
+    (initial_evaluation_context am.sources am.layouts tx) am.immutables /\
+  ALOOKUP mods src = SOME ts /\ MEM (VariableDecl Public mut fn (ArrayT t b) init) ts /\
+  evaluate_type (get_tenv (initial_evaluation_context am.sources am.layouts tx)) t = SOME elem_tv /\
+  0 < type_slot_size elem_tv /\
+  type_slot_size (ArrayTV elem_tv b) <
+    115792089237316195423570985008687907853269984665640564039457584007913129639936 /\
+  st.immutables = am.immutables /\
+  eval_expr (initial_evaluation_context am.sources am.layouts tx)
+    (TopLevelName NoneT (src,fn)) st = (INL tvl,st') ==>
+  ((?av. tvl = Value (ArrayV av) /\
+         value_has_type (ArrayTV elem_tv b) (ArrayV av)) \/
+   (?is_transient slot. tvl = ArrayRef is_transient slot elem_tv b))
+Proof
+  rpt strip_tac >>
+  irule (Q.INST [`typ` |-> `ArrayT t b`, `bd` |-> `b`]
+           checked_public_array_TopLevelName_typed_indexable_carrier_post_prefix) >>
+  qexistsl [`am`, `art`, `fn`, `init`, `mods`, `mut`, `src`,
+            `st`, `st'`, `t`, `ts`, `tx`] >>
+  simp[is_ArrayT_def, evaluate_type_def, get_tenv_def,
+       initial_evaluation_context_def]
+QED
+
+Theorem checked_public_array_TopLevelName_materialisable_carrier_ArrayT_post_prefix[local]:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  ALOOKUP am.sources tx.target = SOME mods /\ machine_well_typed am /\
+  immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
+    (initial_evaluation_context am.sources am.layouts tx) am.immutables /\
+  ALOOKUP mods src = SOME ts /\ MEM (VariableDecl Public mut fn (ArrayT t b) init) ts /\
+  evaluate_type (get_tenv (initial_evaluation_context am.sources am.layouts tx)) t = SOME elem_tv /\
+  0 < type_slot_size elem_tv /\
+  type_slot_size (ArrayTV elem_tv b) <
+    115792089237316195423570985008687907853269984665640564039457584007913129639936 /\
+  st.immutables = am.immutables /\
+  eval_expr (initial_evaluation_context am.sources am.layouts tx)
+    (TopLevelName NoneT (src,fn)) st = (INL tvl,st') ==>
+  (?v. tvl = Value v) \/
+  (?is_transient slot elem_tv bd. tvl = ArrayRef is_transient slot elem_tv bd)
+Proof
+  rpt strip_tac >>
+  drule_all checked_public_array_TopLevelName_typed_indexable_carrier_ArrayT_post_prefix >>
+  simp[] >> strip_tac >> gvs[]
+QED
+
+Theorem checked_public_array_TopLevelName_typed_indexable_carrier_ArrayT_post_prefix_any_bd[local]:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  ALOOKUP am.sources tx.target = SOME mods /\ machine_well_typed am /\
+  immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
+    (initial_evaluation_context am.sources am.layouts tx) am.immutables /\
+  ALOOKUP mods src = SOME ts /\ MEM (VariableDecl Public mut fn (ArrayT t b) init) ts /\
+  evaluate_type (get_tenv (initial_evaluation_context am.sources am.layouts tx)) t = SOME elem_tv /\
+  0 < type_slot_size elem_tv /\
+  type_slot_size (ArrayTV elem_tv b) <
+    115792089237316195423570985008687907853269984665640564039457584007913129639936 /\
+  st.immutables = am.immutables /\
+  eval_expr (initial_evaluation_context am.sources am.layouts tx)
+    (TopLevelName NoneT (src,fn)) st = (INL tvl,st') ==>
+  ((?av bd. tvl = Value (ArrayV av) /\ value_has_type (ArrayTV elem_tv bd) (ArrayV av)) \/
+   (?is_transient slot bd. tvl = ArrayRef is_transient slot elem_tv bd))
+Proof
+  rpt strip_tac >>
+  drule_all checked_public_array_TopLevelName_typed_indexable_carrier_ArrayT_post_prefix >>
+  simp[] >> strip_tac >> gvs[]
+  >- (qexists `b` >> simp[]) >>
+  metis_tac[]
 QED
 
 
@@ -5521,6 +5766,47 @@ Definition checked_contract_runtime_ready_def:
       (initial_evaluation_context am.sources am.layouts tx)
       am.immutables
 End
+
+Theorem checked_exported_explicit_BareGlobalName_plain_context_TypeError_counterexample:
+  ?am tx mods art.
+    check_contract F am.layouts tx.target mods = SOME art /\
+    checked_contract_runtime_ready art mods am tx /\
+    machine_well_typed am /\
+    call_tx_well_typed tx /\
+    call_external am tx = (INR (Error (TypeError "BareGlobalName not found")), am) /\
+    ~no_type_error_result (INR (Error (TypeError "BareGlobalName not found")))
+Proof
+  qexists `initial_machine_state with <|
+             sources := [(0w,
+               [(NONE,[]);
+                (SOME 1,
+                 [VariableDecl Private Immutable "x" (BaseT BoolT) NONE;
+                  FunctionDecl External View F F "f" [] [] (BaseT BoolT)
+                    [Return (SOME (BareGlobalName (BaseT BoolT) "x"))]])])];
+             exports := [(0w,[("f",1)])];
+             immutables := [(0w,[(SOME 1,
+               FEMPTY |+ (string_to_num "x",(BaseTV BoolT,BoolV T)))])]
+           |>` >>
+  qexists `empty_call_txn with function_name := "f"` >>
+  qexists `[(NONE,[]);
+            (SOME 1,
+             [VariableDecl Private Immutable "x" (BaseT BoolT) NONE;
+              FunctionDecl External View F F "f" [] [] (BaseT BoolT)
+                [Return (SOME (BareGlobalName (BaseT BoolT) "x"))]])]` >>
+  qexists `build_contract_type_artifact F
+            [(NONE,[]);
+             (SOME 1,
+              [VariableDecl Private Immutable "x" (BaseT BoolT) NONE;
+               FunctionDecl External View F F "f" [] [] (BaseT BoolT)
+                 [Return (SOME (BareGlobalName (BaseT BoolT) "x"))]])]` >>
+  EVAL_TAC >> rw[finite_mapTheory.FLOOKUP_UPDATE, evaluate_type_def,
+                  find_var_decl_by_num_def,
+                  vyperTypingTheory.value_has_type_def,
+                  vyperTypingTheory.well_formed_type_value_def] >>
+  gvs[finite_mapTheory.FLOOKUP_UPDATE,
+      vyperTypingTheory.value_has_type_def,
+      vyperTypingTheory.well_formed_type_value_def]
+QED
 
 Theorem checked_call_external_no_type_error:
   check_contract F am.layouts tx.target mods = SOME art /\
@@ -8621,6 +8907,341 @@ Proof
   simp[Abbr `cx`] >> metis_tac[]
 QED
 
+Theorem generated_public_array_getter_args_num_unique[local]:
+  build_getter (TopLevelName NoneT (src,fn)) (BaseT (UintT 256)) (Type t) 0 =
+    (args,ret,exp) ==>
+  !id typ id' typ'.
+    MEM (id,typ) args /\ MEM (id',typ') args /\
+    string_to_num id' = string_to_num id ==> typ' = typ
+Proof
+  metis_tac[build_getter_args_num_unique]
+QED
+
+Theorem checked_public_array_TopLevelName_base_result_for_generated_getter_aux[local]:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  ALOOKUP am.sources tx.target = SOME mods /\
+  machine_well_typed am /\
+  immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
+    (initial_evaluation_context am.sources am.layouts tx) am.immutables /\
+  ALOOKUP mods src = SOME ts /\
+  MEM (VariableDecl Public mut fn (ArrayT t b) init) ts /\
+  st.immutables = am.immutables /\ state_well_typed st /\
+  evaluate_type (get_tenv (initial_evaluation_context am.sources am.layouts tx)) t = SOME x /\
+  eval_expr (initial_evaluation_context am.sources am.layouts tx)
+    (TopLevelName NoneT (src,fn)) st = (base_res,r) ==>
+  no_type_error_result base_res /\
+  (case base_res of
+     INL tvl =>
+       (?av bd. tvl = Value (ArrayV av) /\ value_has_type (ArrayTV x bd) (ArrayV av)) \/
+       (?is_transient slot bd. tvl = ArrayRef is_transient slot x bd)
+   | INR _ => T)
+Proof
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (
+    `get_module_code (initial_evaluation_context am.sources am.layouts tx) src = SOME ts` by
+      simp[get_module_code_def, initial_evaluation_context_def] >>
+    `FLOOKUP art.cta_toplevel_vtypes (src,string_to_num fn) = SOME (Type (ArrayT t b))` by
+      (`toplevel_vtypes_complete art.cta_toplevel_vtypes
+          (initial_evaluation_context am.sources am.layouts tx)` by
+         (irule check_contract_toplevel_vtypes_complete_initial >> simp[]) >>
+       gvs[toplevel_vtypes_complete_def] >> metis_tac[]) >>
+    `check_toplevel_decl am.layouts tx.target mods art src
+       (VariableDecl Public mut fn (ArrayT t b) init)` by
+      metis_tac[check_contract_toplevel_decl_MEM] >>
+    `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))` by
+      (irule contract_namespaces_ok_module_toplevel_vtype_keys >>
+       gvs[check_contract_def] >> metis_tac[ALOOKUP_MEM]) >>
+    qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+    simp[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
+         return_def, raise_def, initial_evaluation_context_def] >>
+    Cases_on `mut` >> gvs[check_toplevel_decl_def, assignable_type_def,
+                          well_formed_type_def]
+    >- (`find_var_decl_by_num (string_to_num fn) ts = NONE` by
+          (irule find_var_decl_by_num_NONE_Constant >> simp[] >> metis_tac[]) >>
+        `FLOOKUP art.cta_bare_globals (src,string_to_num fn) = SOME (expr_type e)` by
+          (`bare_globals_complete art.cta_bare_globals
+              (initial_evaluation_context am.sources am.layouts tx)` by
+             (irule check_contract_bare_globals_complete_initial >> simp[]) >>
+           gvs[bare_globals_complete_def] >> metis_tac[]) >>
+        gvs[immutables_ready_def] >>
+        qpat_x_assum `∀src' id ty. FLOOKUP art.cta_bare_globals (src',id) = SOME ty ⇒ _`
+          (qspecl_then [`src`,`string_to_num fn`,`expr_type e`] mp_tac) >>
+        simp[initial_evaluation_context_def] >>
+        strip_tac >> gvs[IS_SOME_EXISTS] >>
+        Cases_on `ALOOKUP am.immutables tx.target` >>
+        gvs[get_immutables_def, get_address_immutables_def, lift_option_def,
+            bind_def, return_def, raise_def, get_source_immutables_def,
+            AllCaseEqs()] >>
+        rpt strip_tac >> gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def])
+    >- (`find_var_decl_by_num (string_to_num fn) ts = NONE` by
+          (irule find_var_decl_by_num_NONE_Immutable >> simp[] >> metis_tac[]) >>
+        `FLOOKUP art.cta_bare_globals (src,string_to_num fn) = SOME (ArrayT t b)` by
+          (`bare_globals_complete art.cta_bare_globals
+              (initial_evaluation_context am.sources am.layouts tx)` by
+             (irule check_contract_bare_globals_complete_initial >> simp[]) >>
+           gvs[bare_globals_complete_def] >> metis_tac[]) >>
+        gvs[immutables_ready_def] >>
+        qpat_x_assum `∀src' id ty. FLOOKUP art.cta_bare_globals (src',id) = SOME ty ⇒ _`
+          (qspecl_then [`src`,`string_to_num fn`,`ArrayT t b`] mp_tac) >>
+        simp[initial_evaluation_context_def] >>
+        strip_tac >> gvs[IS_SOME_EXISTS] >>
+        Cases_on `ALOOKUP am.immutables tx.target` >>
+        gvs[get_immutables_def, get_address_immutables_def, lift_option_def,
+            bind_def, return_def, raise_def, get_source_immutables_def,
+            AllCaseEqs()] >>
+        rpt strip_tac >> gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def])
+    >- (`find_var_decl_by_num (string_to_num fn) ts =
+           SOME (StorageVarDecl T (ArrayT t b),fn)` by
+          metis_tac[find_var_decl_by_num_SOME_storage_var_Transient,
+                    contract_namespaces_ok_module_toplevel_vtype_keys,
+                    ALOOKUP_MEM, check_contract_def] >>
+        gvs[lookup_var_slot_from_layout_def, lookup_var_slot_in_layouts_def,
+            get_tenv_def, initial_evaluation_context_def] >>
+        drule assignable_type_well_formed >> simp[well_formed_type_def] >>
+        strip_tac >> gvs[IS_SOME_EXISTS] >>
+        Cases_on `x'` >> simp[return_def, bind_def, vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+        gvs[AllCaseEqs(), bind_def, return_def] >> rpt strip_tac >> gvs[] >>
+        imp_res_tac vyperTypeExprSoundnessTheory.read_storage_slot_error >>
+        gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def]) >>
+    `find_var_decl_by_num (string_to_num fn) ts =
+       SOME (StorageVarDecl F (ArrayT t b),fn)` by
+      metis_tac[find_var_decl_by_num_SOME_storage_var_Storage,
+                contract_namespaces_ok_module_toplevel_vtype_keys,
+                ALOOKUP_MEM, check_contract_def] >>
+    gvs[lookup_var_slot_from_layout_def, lookup_var_slot_in_layouts_def,
+        get_tenv_def, initial_evaluation_context_def] >>
+    drule assignable_type_well_formed >> simp[well_formed_type_def] >>
+    strip_tac >> gvs[IS_SOME_EXISTS] >>
+    Cases_on `x'` >> simp[return_def, bind_def, vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+    gvs[AllCaseEqs(), bind_def, return_def] >> rpt strip_tac >> gvs[] >>
+    imp_res_tac vyperTypeExprSoundnessTheory.read_storage_slot_error >>
+    gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def]) >>
+  Cases_on `base_res` >> simp[] >>
+  `0 < type_slot_size x /\ type_slot_size (ArrayTV x b) < dimword(:256)` by
+    (`check_toplevel_decl am.layouts tx.target mods art src
+        (VariableDecl Public mut fn (ArrayT t b) init)` by
+       metis_tac[check_contract_toplevel_decl_MEM] >>
+     Cases_on `mut` >>
+     gvs[check_toplevel_decl_def, assignable_type_def, well_formed_type_def,
+         evaluate_type_def, get_tenv_def, initial_evaluation_context_def,
+         IS_SOME_EXISTS]) >>
+  irule checked_public_array_TopLevelName_typed_indexable_carrier_ArrayT_post_prefix_any_bd >>
+  simp[] >>
+  qexistsl [`am`,`art`,`b`,`fn`,`init`,`mods`,`mut`,`src`,`st`,`r`,`t`,`ts`,`tx`] >>
+  gvs[]
+QED
+
+Theorem generated_public_array_getter_aux_premises_from_wrapper[local]:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  ALOOKUP am.sources tx.target = SOME mods /\ machine_well_typed am /\
+  immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
+    (initial_evaluation_context am.sources am.layouts tx) am.immutables /\
+  ALOOKUP mods src = SOME ts /\
+  MEM (VariableDecl Public mut fn typ init) ts /\
+  is_ArrayT typ /\
+  build_getter (TopLevelName NoneT (src,fn)) (BaseT (UintT 256))
+    (Type (ArrayT_type typ)) 0 = (args,ret,exp) /\
+  st.immutables = am.immutables /\ state_well_typed st /\
+  eval_expr (initial_evaluation_context am.sources am.layouts tx)
+    (TopLevelName NoneT (src,fn)) st = (base_res,st1) ==>
+  ?elem_tv.
+    no_type_error_result base_res /\
+    (!id aty id' aty'. MEM (id,aty) args /\ MEM (id',aty') args /\
+       string_to_num id' = string_to_num id ==> aty' = aty) /\
+    pure_expr (TopLevelName NoneT (src,fn)) /\
+    evaluate_type (get_tenv (initial_evaluation_context am.sources am.layouts tx))
+      (expr_type (TopLevelName NoneT (src,fn))) = SOME NoneTV /\
+    evaluate_type (get_tenv (initial_evaluation_context am.sources am.layouts tx))
+      (ArrayT_type typ) = SOME elem_tv /\
+    (case base_res of
+       INL tvl =>
+         (?av bd. tvl = Value (ArrayV av) /\ value_has_type (ArrayTV elem_tv bd) (ArrayV av)) \/
+         (?is_transient slot bd. tvl = ArrayRef is_transient slot elem_tv bd)
+     | INR _ => T)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `typ` >> gvs[is_ArrayT_def, ArrayT_type_def] >>
+  rename1 `ArrayT t b` >>
+  `check_toplevel_decl am.layouts tx.target mods art src
+     (VariableDecl Public mut fn (ArrayT t b) init)` by
+    metis_tac[check_contract_toplevel_decl_MEM] >>
+  Cases_on `mut` >>
+  gvs[check_toplevel_decl_def, assignable_type_def, well_formed_type_def,
+      IS_SOME_EXISTS] >>
+  Cases_on `evaluate_type (type_env_all_modules mods) t` >>
+  gvs[evaluate_type_def] >>
+  rename1 `evaluate_type (type_env_all_modules mods) t = SOME elem_tv` >>
+  `evaluate_type (get_tenv (initial_evaluation_context am.sources am.layouts tx)) t = SOME elem_tv` by
+    simp[get_tenv_def, initial_evaluation_context_def] >>
+  qexists `elem_tv` >>
+  `no_type_error_result base_res /\
+   (case base_res of
+      INL tvl =>
+        (?av bd. tvl = Value (ArrayV av) /\ value_has_type (ArrayTV elem_tv bd) (ArrayV av)) \/
+        (?is_transient slot bd. tvl = ArrayRef is_transient slot elem_tv bd)
+    | INR _ => T)` by
+    metis_tac[checked_public_array_TopLevelName_base_result_for_generated_getter_aux] >>
+  simp[pure_expr_def, expr_type_def, evaluate_type_def,
+       get_tenv_def, initial_evaluation_context_def] >>
+  metis_tac[generated_public_array_getter_args_num_unique]
+QED
+
+Theorem generated_public_array_getter_expr_no_type_error_materialisable_post_prefix[local]:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  ALOOKUP am.sources tx.target = SOME mods /\ machine_well_typed am /\
+  immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
+    (initial_evaluation_context am.sources am.layouts tx) am.immutables /\
+  ALOOKUP mods src = SOME ts /\ MEM (VariableDecl Public mut fn typ init) ts /\
+  is_ArrayT typ /\
+  build_getter (TopLevelName NoneT (src,fn)) (BaseT (UintT 256)) (Type (ArrayT_type typ)) 0 = (args,ret,exp) /\
+  bind_arguments (get_tenv (initial_evaluation_context am.sources am.layouts tx)) args vals = SOME scope /\
+  st.scopes = [scope] /\ st.immutables = am.immutables /\ state_well_typed st /\
+  eval_expr (initial_evaluation_context am.sources am.layouts tx) exp st = (res,st') ==>
+  no_type_error_result res /\
+  (case res of INL tvl => (?v. tvl = Value v) \/
+                (?is_transient slot elem_tv bd. tvl = ArrayRef is_transient slot elem_tv bd)
+   | INR _ => T)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `eval_expr (initial_evaluation_context am.sources am.layouts tx)
+              (TopLevelName NoneT (src,fn)) st` >>
+  drule_all generated_public_array_getter_aux_premises_from_wrapper >>
+  strip_tac >>
+  qspecl_then
+    [`ArrayT_type typ`, `TopLevelName NoneT (src,fn)`, `0`, `args`,
+     `ret`, `exp`, `get_tenv (initial_evaluation_context am.sources am.layouts tx)`,
+     `vals`, `scope`, `q`, `st`, `r`, `res`, `st'`,
+     `initial_evaluation_context am.sources am.layouts tx`, `elem_tv`, `args`]
+    mp_tac generated_array_getter_expr_no_type_error_materialisable_post_prefix_aux >>
+  simp[] >>
+  impl_tac >- metis_tac[] >>
+  simp[]
+QED
+
+Theorem generated_public_hashmap_getter_expr_no_type_error_materialisable_post_prefix[local]:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  ALOOKUP am.sources tx.target = SOME mods /\ machine_well_typed am /\
+  immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
+    (initial_evaluation_context am.sources am.layouts tx) am.immutables /\
+  ALOOKUP mods src = SOME ts /\
+  MEM (HashMapDecl Public is_transient id kt vt init) ts /\
+  build_getter (TopLevelName NoneT (src,id)) kt vt 0 = (args,ret,exp) /\
+  bind_arguments (get_tenv (initial_evaluation_context am.sources am.layouts tx)) args vals = SOME scope /\
+  st.scopes = [scope] /\
+  eval_expr (initial_evaluation_context am.sources am.layouts tx) exp st = (res,st') ==>
+  no_type_error_result res /\
+  (case res of INL tvl => (?v. tvl = Value v) \/
+                           (?is_transient slot elem_tv bd. tvl = ArrayRef is_transient slot elem_tv bd)
+             | INR _ => T)
+Proof
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (
+    qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts tx` >>
+    Cases_on `eval_expr cx (TopLevelName NoneT (src,id)) st` >>
+    Cases_on `q` >> gvs[]
+    >- (`?slot. x = HashMapRef is_transient slot kt vt` by
+          (qunabbrev_tac `cx` >> metis_tac[checked_public_hashmap_TopLevelName_carrier_post_prefix]) >>
+        gvs[] >>
+        `check_value_type (get_tenv cx) vt` by
+          (qunabbrev_tac `cx` >>
+           `check_value_type (type_env_all_modules mods) vt` by
+             metis_tac[checked_hashmap_decl_value_type_checked] >>
+           gvs[get_tenv_def, initial_evaluation_context_def]) >>
+        irule generated_hashmap_getter_expr_no_type_error_post_prefix >>
+        qexistsl [`args`, `cx`, `TopLevelName NoneT (src,id)`, `exp`,
+                  `is_transient`, `kt`, `0`, `args`, `ret`, `scope`, `slot`,
+                  `st`, `st'`, `r`, `get_tenv cx`, `vals`, `vt`] >>
+        simp[pure_expr_def, expr_type_def, evaluate_type_def] >>
+        metis_tac[build_getter_args_num_unique]) >>
+    `no_type_error_result (INR y)` by
+      (qunabbrev_tac `cx` >>
+       `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))` by
+         (irule contract_namespaces_ok_module_toplevel_vtype_keys >>
+          gvs[check_contract_def] >> metis_tac[ALOOKUP_MEM]) >>
+       `find_var_decl_by_num (string_to_num id) ts =
+          SOME (HashMapVarDecl is_transient kt vt,id)` by
+         metis_tac[find_var_decl_by_num_SOME_hashmap] >>
+       `check_toplevel_decl am.layouts tx.target mods art src
+          (HashMapDecl Public is_transient id kt vt init)` by
+         metis_tac[check_contract_toplevel_decl_MEM] >>
+       qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+       simp[Once evaluate_def, lookup_global_def, get_module_code_def,
+            initial_evaluation_context_def, bind_def, lift_option_type_def,
+            return_def, raise_def, lookup_var_slot_from_layout_def,
+            lookup_var_slot_in_layouts_def,
+            vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+       gvs[check_toplevel_decl_def, lookup_var_slot_in_layouts_def] >>
+       rpt strip_tac >> gvs[IS_SOME_EXISTS, return_def, raise_def,
+                            vyperTypeExprSoundnessTheory.no_type_error_result_def]) >>
+    qspecl_then [`TopLevelName NoneT (src,id)`, `kt`, `vt`, `0`, `args`,
+                 `ret`, `exp`, `cx`, `st`, `y`, `r`, `res`, `st'`]
+      mp_tac build_getter_base_error_no_type_error_post_prefix >>
+    simp[]) >>
+  qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts tx` >>
+  Cases_on `eval_expr cx (TopLevelName NoneT (src,id)) st` >>
+  Cases_on `q` >> gvs[]
+  >- (`?slot. x = HashMapRef is_transient slot kt vt` by
+        (qunabbrev_tac `cx` >> metis_tac[checked_public_hashmap_TopLevelName_carrier_post_prefix]) >>
+      gvs[] >>
+      `check_value_type (get_tenv cx) vt` by
+        (qunabbrev_tac `cx` >>
+         `check_value_type (type_env_all_modules mods) vt` by
+           metis_tac[checked_hashmap_decl_value_type_checked] >>
+         gvs[get_tenv_def, initial_evaluation_context_def]) >>
+      irule generated_hashmap_getter_expr_materialisable_shape_post_prefix >>
+      qexistsl [`args`, `cx`, `TopLevelName NoneT (src,id)`, `exp`,
+                `is_transient`, `kt`, `0`, `args`, `ret`, `scope`, `slot`,
+                `st`, `st'`, `r`, `get_tenv cx`, `vals`, `vt`] >>
+      simp[pure_expr_def, expr_type_def, evaluate_type_def] >>
+      metis_tac[build_getter_args_num_unique]) >>
+  qspecl_then [`TopLevelName NoneT (src,id)`, `kt`, `vt`, `0`, `args`,
+               `ret`, `exp`, `cx`, `st`, `y`, `r`, `res`, `st'`]
+    mp_tac build_getter_base_error_materialisable_shape_post_prefix >>
+  simp[]
+QED
+
+Theorem selected_public_getter_expr_no_type_error_materialisable_post_prefix[local]:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  checked_contract_runtime_ready art mods am tx /\
+  machine_well_typed am /\
+  ALOOKUP mods src = SOME ts /\
+  MEM decl ts /\
+  is_public_getter_decl fn decl /\
+  external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,[Return (SOME exp)]) /\
+  bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
+  st.scopes = [scope] /\ st.immutables = am.immutables /\ state_well_typed st /\
+  eval_expr (initial_evaluation_context am.sources am.layouts tx) exp st = (res,st') ==>
+  no_type_error_result res /\
+  (case res of INL tvl => (?v. tvl = Value v) \/
+                           (?is_transient slot elem_tv bd. tvl = ArrayRef is_transient slot elem_tv bd)
+             | INR _ => T)
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[checked_contract_runtime_ready_def] >>
+  qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts tx` >>
+  `get_tenv cx = type_env_all_modules mods` by
+    simp[Abbr `cx`, get_tenv_def, initial_evaluation_context_def] >>
+  Cases_on `decl` >> gvs[is_public_getter_decl_def, external_getter_tuple_def]
+  >- (Cases_on `v` >> gvs[] >>
+      Cases_on `is_ArrayT t` >> gvs[]
+      >- (qpat_x_assum `external_getter_tuple _ _ = _` mp_tac >>
+          simp[external_getter_tuple_def, getter_def] >>
+          Cases_on `build_getter (TopLevelName NoneT (src,s)) (BaseT (UintT 256))
+                      (Type (ArrayT_type t)) 0` >>
+          Cases_on `r` >> gvs[] >> strip_tac >> gvs[] >>
+          gvs[is_public_getter_decl_def] >>
+          irule generated_public_array_getter_expr_no_type_error_materialisable_post_prefix >>
+          simp[] >> metis_tac[]) >>
+      qpat_x_assum `external_getter_tuple _ _ = _` mp_tac >>
+      simp[external_getter_tuple_def] >> strip_tac >> gvs[is_public_getter_decl_def] >>
+      qunabbrev_tac `cx` >>
+      drule_all checked_scalar_public_getter_eval_no_type_error_materialisable_post_prefix >> simp[]) >>
+  Cases_on `v` >> gvs[is_public_getter_decl_def] >>
+  drule_all hashmap_public_getter_tuple_shape >> strip_tac >> gvs[] >>
+  irule generated_public_hashmap_getter_expr_no_type_error_materialisable_post_prefix >>
+  simp[Abbr `cx`] >> metis_tac[]
+QED
+
 Theorem checked_public_getter_entry_no_type_error[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\
@@ -8751,3 +9372,4 @@ Proof
       first_x_assum drule_all >>
       simp[])
 QED
+
