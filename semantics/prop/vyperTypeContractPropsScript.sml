@@ -9857,6 +9857,28 @@ Proof
   rw[raw_expr_value_ok_def] >>
   metis_tac[literal_toplevel_value_typed]
 QED
+Theorem raw_abi_eval_Literal_result_ok[local]:
+  well_typed_expr env (Literal ty lit) /\
+  raw_abi_formal_scope_ready (get_tenv cx) params vals scope env cx st /\
+  eval_expr cx (Literal ty lit) st = (res,st') ==>
+    no_type_error_result res /\
+    case res of
+    | INL tv => raw_expr_value_ok (get_tenv cx) (expr_type (Literal ty lit)) tv /\
+                raw_abi_formal_scope_ready (get_tenv cx) params vals scope env cx st'
+    | INR _ => T
+Proof
+  strip_tac >>
+  `env_consistent env cx st` by
+    gvs[raw_abi_formal_scope_ready_def, raw_abi_runtime_consistent_def] >>
+  `env.type_defs = get_tenv cx` by
+    gvs[env_consistent_def, env_context_consistent_def] >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, return_def,
+       vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+  rw[expr_type_def] >>
+  gvs[well_typed_expr_def, well_formed_type_def, IS_SOME_EXISTS] >>
+  drule_all raw_expr_value_ok_literal >> simp[]
+QED
 
 Theorem raw_abi_formal_Name_result_ok[local]:
   well_typed_expr env (Name ty id) /\
@@ -9880,6 +9902,34 @@ Proof
      return_def, raw_expr_value_ok_def] >>
   disj2_tac >>
   qexists `raw` >> simp[]
+QED
+Theorem raw_abi_eval_Name_result_ok[local]:
+  well_typed_expr env (Name ty id) /\
+  raw_abi_formal_scope_ready (get_tenv cx) params vals scope env cx st /\
+  eval_expr cx (Name ty id) st = (res,st') ==>
+    no_type_error_result res /\
+    case res of
+    | INL tv => raw_expr_value_ok (get_tenv cx) (expr_type (Name ty id)) tv /\
+                raw_abi_formal_scope_ready (get_tenv cx) params vals scope env cx st'
+    | INR _ => T
+Proof
+  strip_tac >>
+  `FLOOKUP env.var_types (string_to_num id) = SOME ty` by
+    gvs[well_typed_expr_def] >>
+  `?sv. lookup_scopes (string_to_num id) st.scopes = SOME sv` by
+    (gvs[well_typed_expr_def, raw_abi_formal_scope_ready_def,
+         raw_abi_runtime_consistent_def, env_consistent_def,
+         env_scopes_consistent_def, IS_SOME_EXISTS] >>
+     metis_tac[]) >>
+  drule_all raw_abi_formal_lookup_safe_cast_origin >>
+  strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  drule_all lookup_scopes_val_from_lookup_scopes >>
+  rw[Once evaluate_def, bind_def, get_scopes_def, lift_option_type_def,
+     return_def, vyperTypeExprSoundnessTheory.no_type_error_result_def,
+     expr_type_def, raw_expr_value_ok_def] >>
+  simp[] >>
+  disj2_tac >> qexists `raw` >> simp[]
 QED
 Theorem raw_abi_BareGlobalName_lookup_ok[local]:
   well_typed_expr env (BareGlobalName ty id) /\
