@@ -10364,6 +10364,7 @@ QED
 
 Definition raw_exec_expr_ok_def:
   raw_exec_expr_ok tenv env e <=>
+    tenv = env.type_defs ==>
     !cx st res st'.
       raw_exec_ready tenv env cx st /\ functions_well_typed cx /\
       eval_expr cx e st = (res,st') ==>
@@ -10376,6 +10377,7 @@ End
 
 Definition raw_exec_place_expr_ok_def:
   raw_exec_place_expr_ok tenv env e <=>
+    tenv = env.type_defs ==>
     !vt cx st.
       type_place_expr env e = SOME vt /\
       raw_exec_ready tenv env cx st /\ functions_well_typed cx ==>
@@ -10384,6 +10386,7 @@ End
 
 Definition raw_exec_place_target_ok_def:
   raw_exec_place_target_ok tenv env tgt <=>
+    tenv = env.type_defs ==>
     !vt cx st.
       type_place_target env tgt = SOME vt /\
       raw_exec_ready tenv env cx st /\ functions_well_typed cx ==>
@@ -10392,6 +10395,7 @@ End
 
 Definition raw_exec_exprs_ok_def:
   raw_exec_exprs_ok tenv env es <=>
+    tenv = env.type_defs ==>
     !cx st res st'.
       raw_exec_ready tenv env cx st /\ functions_well_typed cx /\
       eval_exprs cx es st = (res,st') ==>
@@ -10404,6 +10408,7 @@ End
 
 Definition raw_exec_opt_ok_def:
   raw_exec_opt_ok tenv env opt <=>
+    tenv = env.type_defs ==>
     case opt of
     | NONE => T
     | SOME e => raw_exec_expr_ok tenv env e
@@ -10411,6 +10416,7 @@ End
 
 Definition raw_exec_named_exprs_ok_def:
   raw_exec_named_exprs_ok tenv env kes <=>
+    tenv = env.type_defs ==>
     raw_exec_exprs_ok tenv env (MAP SND kes)
 End
 
