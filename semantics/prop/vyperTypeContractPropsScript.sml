@@ -21,7 +21,7 @@ val _ = Parse.hide "body";
 
 Theorem get_module_code_initial_evaluation_context:
   ALOOKUP sources addr = SOME mods /\ tx.target = addr ==>
-  get_module_code (initial_evaluation_context sources layouts tx) src = ALOOKUP mods src
+  get_module_code (initial_evaluation_context sources layouts tx src) src = ALOOKUP mods src
 Proof
   rw[get_module_code_def, initial_evaluation_context_def]
 QED
@@ -304,7 +304,7 @@ Theorem check_contract_fn_sigs_consistent_initial:
   ALOOKUP sources addr = SOME mods /\
   tx.target = addr ==>
   fn_sigs_consistent art.cta_fn_sigs
-    (initial_evaluation_context sources layouts tx)
+    (initial_evaluation_context sources layouts tx src)
 Proof
   rw[check_contract_def, fn_sigs_consistent_def] >> gvs[] >>
   drule build_contract_type_artifact_fn_sigs_sound >>
@@ -319,7 +319,7 @@ Theorem check_contract_fn_sigs_complete_initial:
   ALOOKUP sources addr = SOME mods /\
   tx.target = addr ==>
   fn_sigs_complete art.cta_fn_sigs
-    (initial_evaluation_context sources layouts tx)
+    (initial_evaluation_context sources layouts tx src)
 Proof
   rw[check_contract_def, fn_sigs_complete_def] >> gvs[] >>
   gvs[get_module_code_def, initial_evaluation_context_def] >>
@@ -1420,7 +1420,7 @@ Theorem check_contract_toplevel_vtypes_complete_initial:
   ALOOKUP sources addr = SOME mods /\
   tx.target = addr ==>
   toplevel_vtypes_complete art.cta_toplevel_vtypes
-    (initial_evaluation_context sources layouts tx)
+    (initial_evaluation_context sources layouts tx src)
 Proof
   rw[check_contract_def, toplevel_vtypes_complete_def] >> gvs[] >>
   gvs[get_module_code_def, initial_evaluation_context_def] >>
@@ -1433,7 +1433,7 @@ Theorem check_contract_bare_globals_complete_initial:
   ALOOKUP sources addr = SOME mods /\
   tx.target = addr ==>
   bare_globals_complete art.cta_bare_globals
-    (initial_evaluation_context sources layouts tx)
+    (initial_evaluation_context sources layouts tx src)
 Proof
   rw[check_contract_def, bare_globals_complete_def] >> gvs[] >>
   gvs[get_module_code_def, initial_evaluation_context_def] >>
@@ -1446,7 +1446,7 @@ Theorem check_contract_bare_global_assignable_complete_initial:
   ALOOKUP sources addr = SOME mods /\
   tx.target = addr ==>
   bare_global_assignable_complete art.cta_bare_global_assignable
-    (initial_evaluation_context sources layouts tx)
+    (initial_evaluation_context sources layouts tx src)
 Proof
   rw[check_contract_def, bare_global_assignable_complete_def] >> gvs[] >>
   gvs[get_module_code_def, initial_evaluation_context_def] >>
@@ -1574,7 +1574,7 @@ Theorem check_contract_flag_members_complete_initial:
   ALOOKUP sources addr = SOME mods /\
   tx.target = addr ==>
   flag_members_complete art.cta_flag_members
-    (initial_evaluation_context sources layouts tx)
+    (initial_evaluation_context sources layouts tx src)
 Proof
   rw[check_contract_def, flag_members_complete_def] >> gvs[] >>
   gvs[get_module_code_def, initial_evaluation_context_def] >>
@@ -1687,7 +1687,7 @@ Theorem check_contract_bare_globals_consistent_initial:
   tx.target = addr ==>
   !src id ty.
     FLOOKUP art.cta_bare_globals (src,id) = SOME ty ==>
-    ?ts. get_module_code (initial_evaluation_context sources layouts tx) src = SOME ts /\
+    ?ts. get_module_code (initial_evaluation_context sources layouts tx src) src = SOME ts /\
          FLOOKUP art.cta_toplevel_vtypes (src,id) = SOME (Type ty) /\
          is_bare_global_decl id ts /\
          find_var_decl_by_num id ts = NONE /\
@@ -1699,7 +1699,7 @@ Proof
       simp[get_module_code_def, initial_evaluation_context_def] >>
       conj_tac >-
        (`toplevel_vtypes_complete (build_contract_type_artifact F mods).cta_toplevel_vtypes
-           (initial_evaluation_context sources layouts tx)` by
+           (initial_evaluation_context sources layouts tx src)` by
           (irule check_contract_toplevel_vtypes_complete_initial >>
            simp[check_contract_def]) >>
         gvs[toplevel_vtypes_complete_def] >>
@@ -1723,7 +1723,7 @@ Proof
   simp[get_module_code_def, initial_evaluation_context_def] >>
   conj_tac >-
    (`toplevel_vtypes_complete (build_contract_type_artifact F mods).cta_toplevel_vtypes
-       (initial_evaluation_context sources layouts tx)` by
+       (initial_evaluation_context sources layouts tx src)` by
       (irule check_contract_toplevel_vtypes_complete_initial >>
        simp[check_contract_def]) >>
     gvs[toplevel_vtypes_complete_def] >>
@@ -1751,7 +1751,7 @@ Theorem check_contract_bare_global_assignable_consistent_initial:
   tx.target = addr ==>
   !src id ty.
     FLOOKUP art.cta_bare_global_assignable (src,id) = SOME ty ==>
-    ?ts. get_module_code (initial_evaluation_context sources layouts tx) src = SOME ts /\
+    ?ts. get_module_code (initial_evaluation_context sources layouts tx src) src = SOME ts /\
          FLOOKUP art.cta_bare_globals (src,id) = SOME ty /\
          FLOOKUP art.cta_toplevel_vtypes (src,id) = SOME (Type ty) /\
          is_immutable_decl id ts /\
@@ -1764,14 +1764,14 @@ Proof
   simp[get_module_code_def, initial_evaluation_context_def] >>
   conj_tac >-
    (`bare_globals_complete (build_contract_type_artifact F mods).cta_bare_globals
-       (initial_evaluation_context sources layouts tx)` by
+       (initial_evaluation_context sources layouts tx src)` by
       (irule check_contract_bare_globals_complete_initial >> simp[check_contract_def]) >>
     gvs[bare_globals_complete_def] >>
     qpat_x_assum `!src ts vis mut id ty init. _` irule >>
     simp[get_module_code_def, initial_evaluation_context_def] >> metis_tac[]) >>
   conj_tac >-
    (`toplevel_vtypes_complete (build_contract_type_artifact F mods).cta_toplevel_vtypes
-       (initial_evaluation_context sources layouts tx)` by
+       (initial_evaluation_context sources layouts tx src)` by
       (irule check_contract_toplevel_vtypes_complete_initial >> simp[check_contract_def]) >>
     gvs[toplevel_vtypes_complete_def] >>
     qpat_x_assum `!src ts vis mut id ty init. _` irule >>
@@ -1803,19 +1803,19 @@ Theorem check_contract_toplevel_vtypes_consistent_initial:
      FLOOKUP art.cta_toplevel_vtypes (src,id) = SOME (Type ty) /\
      FLOOKUP art.cta_bare_globals (src,id) = NONE ==>
      ?ts is_transient typ id_str.
-       get_module_code (initial_evaluation_context sources layouts tx) src = SOME ts /\
+       get_module_code (initial_evaluation_context sources layouts tx src) src = SOME ts /\
        find_var_decl_by_num id ts = SOME (StorageVarDecl is_transient typ,id_str) /\
        typ = ty /\
        IS_SOME (evaluate_type (type_env_all_modules mods) typ) /\
        IS_SOME (lookup_var_slot_from_layout
-         (initial_evaluation_context sources layouts tx) is_transient src id_str)) /\
+         (initial_evaluation_context sources layouts tx src) is_transient src id_str)) /\
   (!src id kt vt.
      FLOOKUP art.cta_toplevel_vtypes (src,id) = SOME (HashMapT kt vt) ==>
      ?ts is_transient id_str.
-       get_module_code (initial_evaluation_context sources layouts tx) src = SOME ts /\
+       get_module_code (initial_evaluation_context sources layouts tx src) src = SOME ts /\
        find_var_decl_by_num id ts = SOME (HashMapVarDecl is_transient kt vt,id_str) /\
        IS_SOME (lookup_var_slot_from_layout
-         (initial_evaluation_context sources layouts tx) is_transient src id_str))
+         (initial_evaluation_context sources layouts tx src) is_transient src id_str))
 Proof
   rw[check_contract_def] >> gvs[] >> rpt conj_tac
   >- (rpt strip_tac >>
@@ -1835,14 +1835,14 @@ Proof
       `mut = Storage \/ mut = Transient` by
         (Cases_on `mut` >> gvs[]
          >- (`bare_globals_complete (build_contract_type_artifact F mods).cta_bare_globals
-                (initial_evaluation_context sources layouts tx)` by
+                (initial_evaluation_context sources layouts tx src)` by
                (irule check_contract_bare_globals_complete_initial >> simp[check_contract_def]) >>
              gvs[bare_globals_complete_def] >>
              qpat_x_assum `!src ts vis mut id ty init. _`
                (qspecl_then [`src`,`ts`,`vis`,`Constant e`,`id_str`,`ty`,`init`] mp_tac) >>
              simp[get_module_code_def, initial_evaluation_context_def]) >>
          `bare_globals_complete (build_contract_type_artifact F mods).cta_bare_globals
-            (initial_evaluation_context sources layouts tx)` by
+            (initial_evaluation_context sources layouts tx src)` by
            (irule check_contract_bare_globals_complete_initial >> simp[check_contract_def]) >>
          gvs[bare_globals_complete_def] >>
          qpat_x_assum `!src ts vis mut id ty init. _`
@@ -1886,7 +1886,7 @@ Theorem check_contract_flag_members_consistent_initial:
   tx.target = addr ==>
   !src fid ls.
     FLOOKUP art.cta_flag_members (src,fid) = SOME ls ==>
-    ?ts. get_module_code (initial_evaluation_context sources layouts tx) src = SOME ts /\
+    ?ts. get_module_code (initial_evaluation_context sources layouts tx src) src = SOME ts /\
          lookup_flag fid ts = SOME ls /\
          FLOOKUP (type_env_all_modules mods) (type_key (src,fid)) =
            SOME (FlagArgs (LENGTH ls))
@@ -1911,7 +1911,7 @@ Theorem check_contract_env_context_consistent_initial_NONE:
   ALOOKUP sources addr = SOME mods /\
   tx.target = addr ==>
   env_context_consistent (artifact_env art mods NONE)
-    (initial_evaluation_context sources layouts tx)
+    (initial_evaluation_context sources layouts tx NONE)
 Proof
   rw[env_context_consistent_def, artifact_env_def]
   >- simp[get_tenv_def, initial_evaluation_context_def]
@@ -1922,22 +1922,28 @@ Proof
   >- (irule check_contract_bare_globals_complete_initial >> simp[])
   >- (irule check_contract_bare_global_assignable_complete_initial >> simp[])
   >- (irule check_contract_flag_members_complete_initial >> simp[])
-  >- metis_tac[check_contract_bare_globals_consistent_initial]
+  >- (dxrule check_contract_bare_globals_consistent_initial >>
+      simp[] >> disch_then (qspecl_then [`tx`,`sources`,`src`,`id`,`ty`] mp_tac) >>
+      simp[get_module_code_def, initial_evaluation_context_def])
   >- (dxrule check_contract_bare_global_assignable_consistent_initial >>
-      simp[] >> disch_then (qspecl_then [`src`,`id`,`ty`] mp_tac) >> simp[])
+      simp[] >> disch_then (qspecl_then [`tx`,`sources`,`src`,`id`,`ty`] mp_tac) >>
+      simp[get_module_code_def, initial_evaluation_context_def])
   >- (dxrule check_contract_toplevel_vtypes_consistent_initial >>
       simp[] >> disch_then (qspecl_then [`tx`,`sources`] mp_tac) >>
-      simp[] >> strip_tac >> metis_tac[])
+      simp[get_module_code_def, lookup_var_slot_from_layout_def,
+           get_tenv_def, initial_evaluation_context_def] >> strip_tac >> metis_tac[])
   >- (dxrule check_contract_toplevel_vtypes_consistent_initial >>
       simp[] >> disch_then (qspecl_then [`tx`,`sources`] mp_tac) >>
-      simp[get_tenv_def, initial_evaluation_context_def] >> strip_tac >> metis_tac[])
+      simp[get_module_code_def, lookup_var_slot_from_layout_def,
+           get_tenv_def, initial_evaluation_context_def] >> strip_tac >> metis_tac[])
   >- (dxrule check_contract_toplevel_vtypes_consistent_initial >>
       simp[] >> disch_then (qspecl_then [`tx`,`sources`] mp_tac) >>
-      simp[] >> strip_tac >> metis_tac[])
+      simp[get_module_code_def, lookup_var_slot_from_layout_def,
+           get_tenv_def, initial_evaluation_context_def] >> strip_tac >> metis_tac[])
   >- (dxrule check_contract_flag_members_consistent_initial >>
       simp[] >> strip_tac >>
       first_x_assum (qspecl_then [`tx`,`sources`,`src`,`fid`,`ls`] mp_tac) >>
-      simp[get_tenv_def, initial_evaluation_context_def])
+      simp[get_module_code_def, get_tenv_def, initial_evaluation_context_def])
 QED
 
 Theorem get_tenv_stk[local]:
@@ -2004,12 +2010,57 @@ Proof
   simp[flag_members_complete_def, get_module_code_stk]
 QED
 
+Theorem check_contract_env_context_consistent_initial_src:
+  check_contract F layouts addr mods = SOME art /\
+  ALOOKUP sources addr = SOME mods /\
+  tx.target = addr ==>
+  env_context_consistent (artifact_env art mods src)
+    (initial_evaluation_context sources layouts tx src)
+Proof
+  rw[env_context_consistent_def, artifact_env_def]
+  >- simp[get_tenv_def, initial_evaluation_context_def]
+  >- simp[current_module_def, initial_evaluation_context_def]
+  >- (irule check_contract_fn_sigs_consistent_initial >> simp[])
+  >- (irule check_contract_fn_sigs_complete_initial >> simp[])
+  >- (irule check_contract_toplevel_vtypes_complete_initial >> simp[])
+  >- (irule check_contract_bare_globals_complete_initial >> simp[])
+  >- (irule check_contract_bare_global_assignable_complete_initial >> simp[])
+  >- (irule check_contract_flag_members_complete_initial >> simp[])
+  >- (dxrule check_contract_bare_globals_consistent_initial >>
+      simp[] >> strip_tac >>
+      first_x_assum (qspecl_then [`tx`,`sources`,`src'`,`id`,`ty`] mp_tac) >>
+      simp[get_module_code_def, initial_evaluation_context_def])
+  >- (dxrule check_contract_bare_global_assignable_consistent_initial >>
+      simp[] >> strip_tac >>
+      first_x_assum (qspecl_then [`tx`,`sources`,`src'`,`id`,`ty`] mp_tac) >>
+      simp[get_module_code_def, initial_evaluation_context_def])
+  >- (dxrule check_contract_toplevel_vtypes_consistent_initial >>
+      simp[] >> disch_then (qspecl_then [`tx`,`sources`] mp_tac) >>
+      simp[get_module_code_def, initial_evaluation_context_def,
+           lookup_var_slot_from_layout_def, get_tenv_def] >>
+      strip_tac >> metis_tac[])
+  >- (dxrule check_contract_toplevel_vtypes_consistent_initial >>
+      simp[] >> disch_then (qspecl_then [`tx`,`sources`] mp_tac) >>
+      simp[get_tenv_def, initial_evaluation_context_def,
+           get_module_code_def, lookup_var_slot_from_layout_def] >>
+      strip_tac >> metis_tac[])
+  >- (dxrule check_contract_toplevel_vtypes_consistent_initial >>
+      simp[] >> disch_then (qspecl_then [`tx`,`sources`] mp_tac) >>
+      simp[get_module_code_def, initial_evaluation_context_def,
+           lookup_var_slot_from_layout_def] >>
+      strip_tac >> metis_tac[])
+  >- (dxrule check_contract_flag_members_consistent_initial >>
+      simp[] >> strip_tac >>
+      first_x_assum (qspecl_then [`tx`,`sources`,`src'`,`fid`,`ls`] mp_tac) >>
+      simp[get_tenv_def, initial_evaluation_context_def, get_module_code_def])
+QED
+
 Theorem check_contract_env_context_consistent_initial_with_current_src:
   check_contract F layouts addr mods = SOME art /\
   ALOOKUP sources addr = SOME mods /\
   tx.target = addr ==>
   env_context_consistent (artifact_env art mods src)
-    ((initial_evaluation_context sources layouts tx) with stk := [(src, fn)])
+    ((initial_evaluation_context sources layouts tx src) with stk := [(src, fn)])
 Proof
   rw[env_context_consistent_def, artifact_env_def]
   >- simp[get_tenv_stk, get_tenv_def, initial_evaluation_context_def]
@@ -2029,28 +2080,32 @@ Proof
   >- (dxrule check_contract_bare_globals_consistent_initial >>
       simp[] >> strip_tac >>
       first_x_assum (qspecl_then [`tx`,`sources`,`src'`,`id`,`ty`] mp_tac) >>
-      simp[get_module_code_stk])
+      simp[get_module_code_stk, get_module_code_def, initial_evaluation_context_def])
   >- (dxrule check_contract_bare_global_assignable_consistent_initial >>
       simp[] >> strip_tac >>
       first_x_assum (qspecl_then [`tx`,`sources`,`src'`,`id`,`ty`] mp_tac) >>
-      simp[get_module_code_stk])
+      simp[get_module_code_stk, get_module_code_def, initial_evaluation_context_def])
   >- (dxrule check_contract_toplevel_vtypes_consistent_initial >>
       simp[] >> disch_then (qspecl_then [`tx`,`sources`] mp_tac) >>
-      simp[] >> strip_tac >> metis_tac[])
+      simp[get_module_code_stk, get_module_code_def, initial_evaluation_context_def,
+           lookup_var_slot_from_layout_stk, lookup_var_slot_from_layout_def,
+           get_tenv_stk, get_tenv_def] >> strip_tac >> metis_tac[])
   >- (dxrule check_contract_toplevel_vtypes_consistent_initial >>
       simp[] >> disch_then (qspecl_then [`tx`,`sources`] mp_tac) >>
       simp[get_tenv_stk, get_tenv_def, initial_evaluation_context_def,
-           get_module_code_stk, lookup_var_slot_from_layout_stk] >>
+           get_module_code_stk, get_module_code_def,
+           lookup_var_slot_from_layout_stk, lookup_var_slot_from_layout_def] >>
       strip_tac >> metis_tac[])
   >- (dxrule check_contract_toplevel_vtypes_consistent_initial >>
       simp[] >> disch_then (qspecl_then [`tx`,`sources`] mp_tac) >>
-      simp[get_module_code_stk, lookup_var_slot_from_layout_stk] >>
+      simp[get_module_code_stk, get_module_code_def, initial_evaluation_context_def,
+           lookup_var_slot_from_layout_stk, lookup_var_slot_from_layout_def] >>
       strip_tac >> metis_tac[])
   >- (dxrule check_contract_flag_members_consistent_initial >>
       simp[] >> strip_tac >>
       first_x_assum (qspecl_then [`tx`,`sources`,`src'`,`fid`,`ls`] mp_tac) >>
       simp[get_tenv_stk, get_tenv_def, initial_evaluation_context_def,
-           get_module_code_stk])
+           get_module_code_stk, get_module_code_def])
 QED
 
 (* ===== Function-body bridge for checked contracts ===== *)
@@ -2190,8 +2245,8 @@ Theorem artifact_fn_sigs_lookup_transfer_initial[local]:
   check_contract F layouts addr mods = SOME art /\
   ALOOKUP sources addr = SOME mods /\
   tx.target = addr /\
-  fn_sigs_complete fn_sigs (initial_evaluation_context sources layouts tx) /\
-  FLOOKUP (function_entry_env art mods src args).fn_sigs k = SOME sig ==>
+  fn_sigs_complete fn_sigs (initial_evaluation_context sources layouts tx src) /\
+  FLOOKUP (function_entry_env art mods entry_src args).fn_sigs k = SOME sig ==>
   FLOOKUP fn_sigs k = SOME sig
 Proof
   PairCases_on `k` >>
@@ -2206,8 +2261,8 @@ Theorem artifact_bare_globals_lookup_transfer_initial[local]:
   check_contract F layouts addr mods = SOME art /\
   ALOOKUP sources addr = SOME mods /\
   tx.target = addr /\
-  bare_globals_complete bare_globals (initial_evaluation_context sources layouts tx) /\
-  FLOOKUP (function_entry_env art mods src args).bare_globals k = SOME ty ==>
+  bare_globals_complete bare_globals (initial_evaluation_context sources layouts tx src) /\
+  FLOOKUP (function_entry_env art mods entry_src args).bare_globals k = SOME ty ==>
   FLOOKUP bare_globals k = SOME ty
 Proof
   PairCases_on `k` >>
@@ -2221,8 +2276,8 @@ Theorem artifact_bare_global_assignable_lookup_transfer_initial[local]:
   check_contract F layouts addr mods = SOME art /\
   ALOOKUP sources addr = SOME mods /\
   tx.target = addr /\
-  bare_global_assignable_complete bare_global_assignable (initial_evaluation_context sources layouts tx) /\
-  FLOOKUP (function_entry_env art mods src args).bare_global_assignable k = SOME ty ==>
+  bare_global_assignable_complete bare_global_assignable (initial_evaluation_context sources layouts tx src) /\
+  FLOOKUP (function_entry_env art mods entry_src args).bare_global_assignable k = SOME ty ==>
   FLOOKUP bare_global_assignable k = SOME ty
 Proof
   PairCases_on `k` >>
@@ -2236,8 +2291,8 @@ Theorem artifact_toplevel_vtypes_lookup_transfer_initial[local]:
   check_contract F layouts addr mods = SOME art /\
   ALOOKUP sources addr = SOME mods /\
   tx.target = addr /\
-  toplevel_vtypes_complete toplevel_vtypes (initial_evaluation_context sources layouts tx) /\
-  FLOOKUP (function_entry_env art mods src args).toplevel_vtypes k = SOME vt ==>
+  toplevel_vtypes_complete toplevel_vtypes (initial_evaluation_context sources layouts tx src) /\
+  FLOOKUP (function_entry_env art mods entry_src args).toplevel_vtypes k = SOME vt ==>
   FLOOKUP toplevel_vtypes k = SOME vt
 Proof
   PairCases_on `k` >>
@@ -2251,8 +2306,8 @@ Theorem artifact_flag_members_lookup_transfer_initial[local]:
   check_contract F layouts addr mods = SOME art /\
   ALOOKUP sources addr = SOME mods /\
   tx.target = addr /\
-  flag_members_complete flag_members (initial_evaluation_context sources layouts tx) /\
-  FLOOKUP (function_entry_env art mods src args).flag_members k = SOME members ==>
+  flag_members_complete flag_members (initial_evaluation_context sources layouts tx src) /\
+  FLOOKUP (function_entry_env art mods entry_src args).flag_members k = SOME members ==>
   FLOOKUP flag_members k = SOME members
 Proof
   PairCases_on `k` >>
@@ -2265,9 +2320,9 @@ QED
 Theorem artifact_toplevel_non_bare_globals_NONE_transfer_initial[local]:
   check_contract F layouts addr mods = SOME art /\
   ALOOKUP sources addr = SOME mods /\ tx.target = addr /\
-  (!src id ty. FLOOKUP bare_globals (src,id) = SOME ty ==>
-     ?ts. get_module_code (initial_evaluation_context sources layouts tx) src = SOME ts /\
-          FLOOKUP toplevel_vtypes (src,id) = SOME (Type ty) /\
+  (!src' id ty. FLOOKUP bare_globals (src',id) = SOME ty ==>
+     ?ts. get_module_code (initial_evaluation_context sources layouts tx cx_src) src' = SOME ts /\
+          FLOOKUP toplevel_vtypes (src',id) = SOME (Type ty) /\
           is_bare_global_decl id ts /\
           find_var_decl_by_num id ts = NONE /\ ty <> NoneT) /\
   FLOOKUP (function_entry_env art mods entry_src args).toplevel_vtypes (src,id) = SOME vt /\
@@ -2652,14 +2707,14 @@ Theorem function_entry_env_static_maps_transfer_initial[local]:
   check_contract F layouts addr mods = SOME art /\
   ALOOKUP sources addr = SOME mods /\
   tx.target = addr /\
-  fn_sigs_complete fn_sigs (initial_evaluation_context sources layouts tx) /\
-  bare_globals_complete bare_globals (initial_evaluation_context sources layouts tx) /\
-  bare_global_assignable_complete bare_global_assignable (initial_evaluation_context sources layouts tx) /\
-  toplevel_vtypes_complete toplevel_vtypes (initial_evaluation_context sources layouts tx) /\
-  flag_members_complete flag_members (initial_evaluation_context sources layouts tx) /\
-  (!src id ty. FLOOKUP bare_globals (src,id) = SOME ty ==>
-     ?ts. get_module_code (initial_evaluation_context sources layouts tx) src = SOME ts /\
-          FLOOKUP toplevel_vtypes (src,id) = SOME (Type ty) /\
+  fn_sigs_complete fn_sigs (initial_evaluation_context sources layouts tx src) /\
+  bare_globals_complete bare_globals (initial_evaluation_context sources layouts tx src) /\
+  bare_global_assignable_complete bare_global_assignable (initial_evaluation_context sources layouts tx src) /\
+  toplevel_vtypes_complete toplevel_vtypes (initial_evaluation_context sources layouts tx src) /\
+  flag_members_complete flag_members (initial_evaluation_context sources layouts tx src) /\
+  (!src' id ty. FLOOKUP bare_globals (src',id) = SOME ty ==>
+     ?ts. get_module_code (initial_evaluation_context sources layouts tx src) src' = SOME ts /\
+          FLOOKUP toplevel_vtypes (src',id) = SOME (Type ty) /\
           is_bare_global_decl id ts /\
           find_var_decl_by_num id ts = NONE /\ ty <> NoneT) /\
   env_body = FOLDL (\env (id,ty). extend_local env (string_to_num id) ty T)
@@ -2669,7 +2724,7 @@ Theorem function_entry_env_static_maps_transfer_initial[local]:
        bare_globals := bare_globals;
        bare_global_assignable := bare_global_assignable;
        toplevel_vtypes := toplevel_vtypes;
-       type_defs := get_tenv (initial_evaluation_context sources layouts tx);
+       type_defs := get_tenv (initial_evaluation_context sources layouts tx src);
        fn_sigs := fn_sigs;
        flag_members := flag_members |>) args ==>
   static_maps_transfer_env (function_entry_env art mods entry_src args) env_body
@@ -2690,7 +2745,7 @@ Proof
   >> (simp[FOLDL_extend_local_args_static] >>
       PairCases_on `k` >>
       irule artifact_toplevel_non_bare_globals_NONE_transfer_initial >>
-      qexistsl [`tx.target`, `args`, `art`, `entry_src`, `layouts`, `mods`, `sources`, `toplevel_vtypes`, `tx`, `vt`] >>
+      qexistsl [`tx.target`, `args`, `art`, `src`, `entry_src`, `layouts`, `mods`, `sources`, `toplevel_vtypes`, `tx`, `vt`] >>
       simp[])
 QED
 
@@ -2698,14 +2753,14 @@ Theorem function_entry_env_static_maps_transfer_initial_explicit[local]:
   check_contract F layouts addr mods = SOME art /\
   ALOOKUP sources addr = SOME mods /\
   tx.target = addr /\
-  fn_sigs_complete fn_sigs (initial_evaluation_context sources layouts tx) /\
-  bare_globals_complete bare_globals (initial_evaluation_context sources layouts tx) /\
-  bare_global_assignable_complete bare_global_assignable (initial_evaluation_context sources layouts tx) /\
-  toplevel_vtypes_complete toplevel_vtypes (initial_evaluation_context sources layouts tx) /\
-  flag_members_complete flag_members (initial_evaluation_context sources layouts tx) /\
-  (!src id ty. FLOOKUP bare_globals (src,id) = SOME ty ==>
-     ?ts. get_module_code (initial_evaluation_context sources layouts tx) src = SOME ts /\
-          FLOOKUP toplevel_vtypes (src,id) = SOME (Type ty) /\
+  fn_sigs_complete fn_sigs (initial_evaluation_context sources layouts tx src) /\
+  bare_globals_complete bare_globals (initial_evaluation_context sources layouts tx src) /\
+  bare_global_assignable_complete bare_global_assignable (initial_evaluation_context sources layouts tx src) /\
+  toplevel_vtypes_complete toplevel_vtypes (initial_evaluation_context sources layouts tx src) /\
+  flag_members_complete flag_members (initial_evaluation_context sources layouts tx src) /\
+  (!src' id ty. FLOOKUP bare_globals (src',id) = SOME ty ==>
+     ?ts. get_module_code (initial_evaluation_context sources layouts tx src) src' = SOME ts /\
+          FLOOKUP toplevel_vtypes (src',id) = SOME (Type ty) /\
           is_bare_global_decl id ts /\
           find_var_decl_by_num id ts = NONE /\ ty <> NoneT) ==>
   static_maps_transfer_env (function_entry_env art mods entry_src args)
@@ -2716,14 +2771,14 @@ Theorem function_entry_env_static_maps_transfer_initial_explicit[local]:
          bare_globals := bare_globals;
          bare_global_assignable := bare_global_assignable;
          toplevel_vtypes := toplevel_vtypes;
-         type_defs := get_tenv (initial_evaluation_context sources layouts tx);
+         type_defs := get_tenv (initial_evaluation_context sources layouts tx src);
          fn_sigs := fn_sigs;
          flag_members := flag_members |>) args)
 Proof
   rw[] >>
   irule function_entry_env_static_maps_transfer_initial >>
   qexistsl [`tx.target`, `bare_global_assignable`, `bare_globals`, `flag_members`, `fn_sigs`,
-            `layouts`, `sources`, `toplevel_vtypes`, `tx`] >>
+            `layouts`, `sources`, `src`, `toplevel_vtypes`, `tx`] >>
   simp[]
 QED
 Theorem check_function_body_static_maps_transfer_initial[local]:
@@ -2732,26 +2787,26 @@ Theorem check_function_body_static_maps_transfer_initial[local]:
   check_contract F layouts addr mods = SOME art /\
   ALOOKUP sources addr = SOME mods /\
   tx.target = addr /\
-  fn_sigs_complete fn_sigs (initial_evaluation_context sources layouts tx) /\
-  bare_globals_complete bare_globals (initial_evaluation_context sources layouts tx) /\
-  bare_global_assignable_complete bare_global_assignable (initial_evaluation_context sources layouts tx) /\
-  toplevel_vtypes_complete toplevel_vtypes (initial_evaluation_context sources layouts tx) /\
-  flag_members_complete flag_members (initial_evaluation_context sources layouts tx) /\
-  (!src id ty. FLOOKUP bare_globals (src,id) = SOME ty ==>
-     ?ts. get_module_code (initial_evaluation_context sources layouts tx) src = SOME ts /\
-          FLOOKUP toplevel_vtypes (src,id) = SOME (Type ty) /\
+  fn_sigs_complete fn_sigs (initial_evaluation_context sources layouts tx src) /\
+  bare_globals_complete bare_globals (initial_evaluation_context sources layouts tx src) /\
+  bare_global_assignable_complete bare_global_assignable (initial_evaluation_context sources layouts tx src) /\
+  toplevel_vtypes_complete toplevel_vtypes (initial_evaluation_context sources layouts tx src) /\
+  flag_members_complete flag_members (initial_evaluation_context sources layouts tx src) /\
+  (!src' id ty. FLOOKUP bare_globals (src',id) = SOME ty ==>
+     ?ts. get_module_code (initial_evaluation_context sources layouts tx src) src' = SOME ts /\
+          FLOOKUP toplevel_vtypes (src',id) = SOME (Type ty) /\
           is_bare_global_decl id ts /\
           find_var_decl_by_num id ts = NONE /\ ty <> NoneT) /\
   check_function_body layouts addr mods art entry_src mut nr args dflts ret body ==>
   ?env_body ret_tv env_after.
     env_body.current_src = entry_src /\
-    env_body.type_defs = get_tenv (initial_evaluation_context sources layouts tx) /\
+    env_body.type_defs = get_tenv (initial_evaluation_context sources layouts tx src) /\
     env_body.fn_sigs = fn_sigs /\
     env_body.bare_globals = bare_globals /\
     env_body.bare_global_assignable = bare_global_assignable /\
     env_body.toplevel_vtypes = toplevel_vtypes /\
     env_body.flag_members = flag_members /\
-    evaluate_type (get_tenv (initial_evaluation_context sources layouts tx)) ret = SOME ret_tv /\
+    evaluate_type (get_tenv (initial_evaluation_context sources layouts tx src)) ret = SOME ret_tv /\
     type_stmts env_body ret body = SOME env_after /\
     (ret = NoneT \/ stmts_no_fallthrough body) /\
     stmts_no_control_escape body /\
@@ -2776,7 +2831,7 @@ Proof
       (<|current_src := entry_src; var_types := FEMPTY; var_assignable := FEMPTY;
         bare_globals := bare_globals; bare_global_assignable := bare_global_assignable;
         toplevel_vtypes := toplevel_vtypes;
-        type_defs := get_tenv (initial_evaluation_context sources layouts tx);
+        type_defs := get_tenv (initial_evaluation_context sources layouts tx src);
         fn_sigs := fn_sigs; flag_members := flag_members|>) args)` by
     (irule function_entry_env_static_maps_transfer_initial_explicit >>
      simp[]) >>
@@ -2785,21 +2840,21 @@ Proof
       (<|current_src := entry_src; var_types := FEMPTY; var_assignable := FEMPTY;
         bare_globals := bare_globals; bare_global_assignable := bare_global_assignable;
         toplevel_vtypes := toplevel_vtypes;
-        type_defs := get_tenv (initial_evaluation_context sources layouts tx);
+        type_defs := get_tenv (initial_evaluation_context sources layouts tx src);
         fn_sigs := fn_sigs; flag_members := flag_members|>) args) ret body = SOME env_after` by
     (drule type_stmts_static_maps_transfer >>
      disch_then (qspec_then `FOLDL (\env (id,ty). extend_local env (string_to_num id) ty T)
       (<|current_src := entry_src; var_types := FEMPTY; var_assignable := FEMPTY;
         bare_globals := bare_globals; bare_global_assignable := bare_global_assignable;
         toplevel_vtypes := toplevel_vtypes;
-        type_defs := get_tenv (initial_evaluation_context sources layouts tx);
+        type_defs := get_tenv (initial_evaluation_context sources layouts tx src);
         fn_sigs := fn_sigs; flag_members := flag_members|>) args` mp_tac) >>
      simp[]) >>
   qexistsl [`FOLDL (\env (id,ty). extend_local env (string_to_num id) ty T)
       (<|current_src := entry_src; var_types := FEMPTY; var_assignable := FEMPTY;
         bare_globals := bare_globals; bare_global_assignable := bare_global_assignable;
         toplevel_vtypes := toplevel_vtypes;
-        type_defs := get_tenv (initial_evaluation_context sources layouts tx);
+        type_defs := get_tenv (initial_evaluation_context sources layouts tx src);
         fn_sigs := fn_sigs; flag_members := flag_members|>) args`, `ret_tv`, `env_after`] >>
   simp[FOLDL_extend_local_args_static, get_tenv_def, initial_evaluation_context_def] >>
   conj_tac >- (irule well_typed_defaults_static_maps_transfer >>
@@ -2827,7 +2882,7 @@ Theorem check_contract_functions_well_typed_initial:
   check_contract F layouts addr mods = SOME art /\
   ALOOKUP sources addr = SOME mods /\
   tx.target = addr ==>
-  functions_well_typed (initial_evaluation_context sources layouts tx)
+  functions_well_typed (initial_evaluation_context sources layouts tx src)
 Proof
   simp[functions_well_typed_def] >>
   strip_tac >>
@@ -2870,7 +2925,7 @@ Theorem check_contract_functions_well_typed_initial_stk[local]:
   check_contract F layouts addr mods = SOME art /\
   ALOOKUP sources addr = SOME mods /\
   tx.target = addr ==>
-  functions_well_typed ((initial_evaluation_context sources layouts tx) with stk := stk)
+  functions_well_typed ((initial_evaluation_context sources layouts tx src) with stk := stk)
 Proof
   rw[functions_well_typed_stk_irrelevant] >>
   irule check_contract_functions_well_typed_initial >>
@@ -2881,14 +2936,14 @@ Theorem checked_contract_static_maps_transfer_inputs_initial[local]:
   check_contract F layouts addr mods = SOME art /\
   ALOOKUP sources addr = SOME mods /\
   tx.target = addr ==>
-  fn_sigs_complete art.cta_fn_sigs (initial_evaluation_context sources layouts tx) /\
-  bare_globals_complete art.cta_bare_globals (initial_evaluation_context sources layouts tx) /\
-  bare_global_assignable_complete art.cta_bare_global_assignable (initial_evaluation_context sources layouts tx) /\
-  toplevel_vtypes_complete art.cta_toplevel_vtypes (initial_evaluation_context sources layouts tx) /\
-  flag_members_complete art.cta_flag_members (initial_evaluation_context sources layouts tx) /\
-  (!src id ty. FLOOKUP art.cta_bare_globals (src,id) = SOME ty ==>
-     ?ts. get_module_code (initial_evaluation_context sources layouts tx) src = SOME ts /\
-          FLOOKUP art.cta_toplevel_vtypes (src,id) = SOME (Type ty) /\
+  fn_sigs_complete art.cta_fn_sigs (initial_evaluation_context sources layouts tx src) /\
+  bare_globals_complete art.cta_bare_globals (initial_evaluation_context sources layouts tx src) /\
+  bare_global_assignable_complete art.cta_bare_global_assignable (initial_evaluation_context sources layouts tx src) /\
+  toplevel_vtypes_complete art.cta_toplevel_vtypes (initial_evaluation_context sources layouts tx src) /\
+  flag_members_complete art.cta_flag_members (initial_evaluation_context sources layouts tx src) /\
+  (!src' id ty. FLOOKUP art.cta_bare_globals (src',id) = SOME ty ==>
+     ?ts. get_module_code (initial_evaluation_context sources layouts tx src) src' = SOME ts /\
+          FLOOKUP art.cta_toplevel_vtypes (src',id) = SOME (Type ty) /\
           is_bare_global_decl id ts /\
           find_var_decl_by_num id ts = NONE /\ ty <> NoneT)
 Proof
@@ -2900,8 +2955,8 @@ Proof
   >- (irule check_contract_flag_members_complete_initial >> simp[]) >>
   drule check_contract_bare_globals_consistent_initial >>
   simp[] >>
-  disch_then (qspecl_then [`src`, `id`, `ty`] mp_tac) >>
-  simp[]
+  disch_then (qspecl_then [`tx`, `sources`, `src'`, `id`, `ty`] mp_tac) >>
+  simp[get_module_code_def, initial_evaluation_context_def]
 QED
 
 Theorem checked_explicit_external_body_typing_package[local]:
@@ -2911,7 +2966,7 @@ Theorem checked_explicit_external_body_typing_package[local]:
   MEM (FunctionDecl External mut nr raw fn args dflts ret body) ts ==>
   ?env_body env_after.
     env_body.current_src = src /\
-    env_body.type_defs = get_tenv (initial_evaluation_context am.sources am.layouts tx) /\
+    env_body.type_defs = get_tenv (initial_evaluation_context am.sources am.layouts tx src) /\
     env_body.fn_sigs = art.cta_fn_sigs /\
     env_body.bare_globals = art.cta_bare_globals /\
     env_body.bare_global_assignable = art.cta_bare_global_assignable /\
@@ -2929,13 +2984,13 @@ Proof
   rw[] >>
   `check_function_body am.layouts tx.target mods art src mut nr args dflts ret body` by
     metis_tac[check_contract_function_body_MEM] >>
-  `fn_sigs_complete art.cta_fn_sigs (initial_evaluation_context am.sources am.layouts tx) /\
-   bare_globals_complete art.cta_bare_globals (initial_evaluation_context am.sources am.layouts tx) /\
-   bare_global_assignable_complete art.cta_bare_global_assignable (initial_evaluation_context am.sources am.layouts tx) /\
-   toplevel_vtypes_complete art.cta_toplevel_vtypes (initial_evaluation_context am.sources am.layouts tx) /\
-   flag_members_complete art.cta_flag_members (initial_evaluation_context am.sources am.layouts tx) /\
+  `fn_sigs_complete art.cta_fn_sigs (initial_evaluation_context am.sources am.layouts tx src) /\
+   bare_globals_complete art.cta_bare_globals (initial_evaluation_context am.sources am.layouts tx src) /\
+   bare_global_assignable_complete art.cta_bare_global_assignable (initial_evaluation_context am.sources am.layouts tx src) /\
+   toplevel_vtypes_complete art.cta_toplevel_vtypes (initial_evaluation_context am.sources am.layouts tx src) /\
+   flag_members_complete art.cta_flag_members (initial_evaluation_context am.sources am.layouts tx src) /\
    (!src' id ty. FLOOKUP art.cta_bare_globals (src',id) = SOME ty ==>
-      ?ts'. get_module_code (initial_evaluation_context am.sources am.layouts tx) src' = SOME ts' /\
+      ?ts'. get_module_code (initial_evaluation_context am.sources am.layouts tx src) src' = SOME ts' /\
             FLOOKUP art.cta_toplevel_vtypes (src',id) = SOME (Type ty) /\
             is_bare_global_decl id ts' /\
             find_var_decl_by_num id ts' = NONE /\ ty <> NoneT)` by
@@ -2956,21 +3011,21 @@ Theorem checked_explicit_external_entry_establishes_type_soundness_preconditions
   ALOOKUP mods src = SOME ts /\
   MEM (FunctionDecl External mut nr raw fn args dflts ret body) ts /\
   context_well_typed
-    ((initial_evaluation_context am.sources am.layouts tx) with stk := [(src,fn)]) /\
+    ((initial_evaluation_context am.sources am.layouts tx src) with stk := [(src,fn)]) /\
   machine_well_typed am /\
   immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
-    ((initial_evaluation_context am.sources am.layouts tx) with stk := [(src,fn)])
+    ((initial_evaluation_context am.sources am.layouts tx src) with stk := [(src,fn)])
     am.immutables /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
   args_values_typed (type_env_all_modules mods) args vals ==>
   ?env_body env_after st.
     st = initial_state am [scope] /\
     functions_well_typed
-      ((initial_evaluation_context am.sources am.layouts tx) with stk := [(src,fn)]) /\
+      ((initial_evaluation_context am.sources am.layouts tx src) with stk := [(src,fn)]) /\
     accounts_well_typed st.accounts /\
     state_well_typed st /\
     env_consistent env_body
-      ((initial_evaluation_context am.sources am.layouts tx) with stk := [(src,fn)]) st /\
+      ((initial_evaluation_context am.sources am.layouts tx src) with stk := [(src,fn)]) st /\
     type_stmts env_body ret body = SOME env_after
 Proof
   strip_tac >> gvs[] >>
@@ -2993,9 +3048,9 @@ Proof
       irule check_contract_env_context_consistent_initial_with_current_src >>
       simp[])
   >- (`env_scopes_consistent env_body
-         ((initial_evaluation_context am.sources am.layouts tx) with stk := [(env_body.current_src,fn)])
-         ((initial_state am [scope]) with scopes := [scope])` suffices_by
-        gvs[initial_state_def] >>
+         ((initial_evaluation_context am.sources am.layouts tx env_body.current_src) with stk := [(env_body.current_src,fn)])
+         ((initial_state am []) with scopes := [scope])` suffices_by
+        simp[initial_state_def] >>
       irule bind_arguments_env_scopes_consistent >>
       qexistsl [`args`, `type_env_all_modules mods`, `vals`] >>
       gvs[get_tenv_def, initial_evaluation_context_def] >> metis_tac[])
@@ -3010,16 +3065,16 @@ Theorem check_contract_explicit_external_entry_no_type_error:
   ALOOKUP mods src = SOME ts /\
   MEM (FunctionDecl External mut nr raw fn args dflts ret body) ts /\
   context_well_typed
-    ((initial_evaluation_context am.sources am.layouts tx) with stk := [(src,fn)]) /\
+    ((initial_evaluation_context am.sources am.layouts tx src) with stk := [(src,fn)]) /\
   machine_well_typed am /\
   immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
-    ((initial_evaluation_context am.sources am.layouts tx) with stk := [(src,fn)])
+    ((initial_evaluation_context am.sources am.layouts tx src) with stk := [(src,fn)])
     am.immutables /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
   args_values_typed (type_env_all_modules mods) args vals ==>
   no_type_error_eval
     (eval_stmts
-      ((initial_evaluation_context am.sources am.layouts tx) with stk := [(src,fn)])
+      ((initial_evaluation_context am.sources am.layouts tx src) with stk := [(src,fn)])
       body
       (initial_state am [scope]))
 Proof
@@ -3027,6 +3082,61 @@ Proof
     checked_explicit_external_entry_establishes_type_soundness_preconditions,
     eval_stmts_no_type_error]
 QED
+
+Theorem checked_explicit_external_post_prefix_body_no_type_error_selected[local]:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  ALOOKUP am.sources tx.target = SOME mods /\
+  ALOOKUP mods src = SOME ts /\
+  MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
+  cx = initial_evaluation_context am.sources am.layouts tx src /\
+  context_well_typed cx /\ machine_well_typed am /\
+  immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes cx am.immutables /\
+  bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
+  args_values_typed (type_env_all_modules mods) args vals /\
+  st.scopes = [scope] /\ st.immutables = am.immutables /\
+  state_well_typed st /\ accounts_well_typed st.accounts ==>
+  no_type_error_eval (eval_stmts cx body st)
+Proof
+  strip_tac >> gvs[] >>
+  drule_all checked_explicit_external_body_typing_package >>
+  strip_tac >>
+  `functions_well_typed (initial_evaluation_context am.sources am.layouts tx src)` by
+    (irule check_contract_functions_well_typed_initial >> simp[]) >>
+  irule eval_stmts_no_type_error >>
+  simp[] >>
+  rpt (conj_tac >- simp[]) >>
+  qexistsl [`env_body`, `env_after`, `ret`] >> simp[] >>
+  rw[env_consistent_def]
+  >- (irule env_context_consistent_same_static_maps >>
+      qexists `artifact_env art mods env_body.current_src` >>
+      rpt (conj_tac >- simp[artifact_env_def, get_tenv_def, initial_evaluation_context_def]) >>
+      irule check_contract_env_context_consistent_initial_src >>
+      simp[])
+  >- (`(st with scopes := [scope]) = st` by
+        gvs[evaluation_state_component_equality] >>
+      pop_assum (fn th => SUBST1_TAC (GSYM th)) >>
+      irule bind_arguments_env_scopes_consistent >>
+      qexistsl [`args`, `type_env_all_modules mods`, `vals`] >>
+      gvs[get_tenv_def, initial_evaluation_context_def] >> metis_tac[])
+  >- (gvs[env_immutables_consistent_def] >>
+      rw[] >>
+      qpat_x_assum `immutables_ready _ _ _ _` mp_tac >>
+      simp[immutables_ready_def] >>
+      strip_tac >>
+      first_x_assum drule_all >>
+      simp[])
+QED
+
+Theorem immutables_ready_initial_evaluation_context_source[local]:
+  immutables_ready bare_globals toplevel_vtypes
+    (initial_evaluation_context sources layouts tx NONE) imms ==>
+  immutables_ready bare_globals toplevel_vtypes
+    (initial_evaluation_context sources layouts tx src) imms
+Proof
+  rw[immutables_ready_def, get_tenv_def, get_module_code_def,
+     initial_evaluation_context_def] >> metis_tac[]
+QED
+
 
 (* ===== External lookup provenance for checked contracts ===== *)
 
@@ -3075,8 +3185,8 @@ QED
 Theorem lookup_exported_function_checked_cases_selected:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\
-  cx = initial_evaluation_context am.sources am.layouts tx /\
-  src = find_function_module cx am tx.function_name /\
+  cx = initial_evaluation_context am.sources am.layouts tx src /\
+  src = find_function_module am tx.target tx.function_name /\
   get_module_code cx src = SOME ts /\
   lookup_exported_function cx am tx.function_name =
     SOME (mut,nr,args,dflts,ret,body) ==>
@@ -3087,9 +3197,11 @@ Theorem lookup_exported_function_checked_cases_selected:
      is_public_getter_decl tx.function_name decl /\
      external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,body))
 Proof
-  rw[lookup_exported_function_def, find_function_module_def, get_self_code_def] >>
-  gvs[AllCaseEqs()] >>
-  metis_tac[lookup_function_External_cases]
+  rpt strip_tac >>
+  gvs[find_function_module_def, initial_evaluation_context_def] >>
+  gvs[lookup_exported_function_def, get_self_code_def, AllCaseEqs()] >>
+  drule lookup_function_External_cases >>
+  simp[]
 QED
 
 
@@ -3122,7 +3234,7 @@ Proof
   rw[] >>
   `FLOOKUP art.cta_toplevel_vtypes (src,string_to_num fn) = SOME (Type typ)` by
     (`toplevel_vtypes_complete art.cta_toplevel_vtypes
-        (initial_evaluation_context am.sources am.layouts tx)` by
+        (initial_evaluation_context am.sources am.layouts tx src)` by
        (irule check_contract_toplevel_vtypes_complete_initial >> simp[]) >>
      gvs[toplevel_vtypes_complete_def, get_module_code_def,
          initial_evaluation_context_def] >>
@@ -3145,19 +3257,19 @@ Theorem checked_scalar_public_getter_eval_no_type_error[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\
   immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
-    (initial_evaluation_context am.sources am.layouts tx) am.immutables /\
+    (initial_evaluation_context am.sources am.layouts tx src) am.immutables /\
   ALOOKUP mods src = SOME ts /\
   MEM (VariableDecl Public mut fn typ init) ts /\
-  eval_expr (initial_evaluation_context am.sources am.layouts tx)
+  eval_expr (initial_evaluation_context am.sources am.layouts tx src)
     (TopLevelName NoneT (src,fn)) (initial_state am [scope]) = (res,st') ==>
   no_type_error_result res
 Proof
   rpt strip_tac >>
-  `get_module_code (initial_evaluation_context am.sources am.layouts tx) src = SOME ts` by
+  `get_module_code (initial_evaluation_context am.sources am.layouts tx src) src = SOME ts` by
     simp[get_module_code_def, initial_evaluation_context_def] >>
   `FLOOKUP art.cta_toplevel_vtypes (src,string_to_num fn) = SOME (Type typ)` by
     (`toplevel_vtypes_complete art.cta_toplevel_vtypes
-        (initial_evaluation_context am.sources am.layouts tx)` by
+        (initial_evaluation_context am.sources am.layouts tx src)` by
        (irule check_contract_toplevel_vtypes_complete_initial >> simp[]) >>
      gvs[toplevel_vtypes_complete_def] >> metis_tac[]) >>
   `check_toplevel_decl am.layouts tx.target mods art src
@@ -3175,7 +3287,7 @@ Proof
         (irule find_var_decl_by_num_NONE_Constant >> simp[] >> metis_tac[]) >>
       `FLOOKUP art.cta_bare_globals (src,string_to_num fn) = SOME (expr_type e)` by
         (`bare_globals_complete art.cta_bare_globals
-            (initial_evaluation_context am.sources am.layouts tx)` by
+            (initial_evaluation_context am.sources am.layouts tx src)` by
            (irule check_contract_bare_globals_complete_initial >> simp[]) >>
          gvs[bare_globals_complete_def] >> metis_tac[]) >>
       gvs[immutables_ready_def] >>
@@ -3192,7 +3304,7 @@ Proof
         (irule find_var_decl_by_num_NONE_Immutable >> simp[] >> metis_tac[]) >>
       `FLOOKUP art.cta_bare_globals (src,string_to_num fn) = SOME typ` by
         (`bare_globals_complete art.cta_bare_globals
-            (initial_evaluation_context am.sources am.layouts tx)` by
+            (initial_evaluation_context am.sources am.layouts tx src)` by
            (irule check_contract_bare_globals_complete_initial >> simp[]) >>
          gvs[bare_globals_complete_def] >> metis_tac[]) >>
       gvs[immutables_ready_def] >>
@@ -3235,10 +3347,10 @@ Theorem checked_scalar_public_getter_eval_no_type_error_materialisable[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\
   immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
-    (initial_evaluation_context am.sources am.layouts tx) am.immutables /\
+    (initial_evaluation_context am.sources am.layouts tx src) am.immutables /\
   ALOOKUP mods src = SOME ts /\
   MEM (VariableDecl Public mut fn typ init) ts /\
-  eval_expr (initial_evaluation_context am.sources am.layouts tx)
+  eval_expr (initial_evaluation_context am.sources am.layouts tx src)
     (TopLevelName NoneT (src,fn)) (initial_state am [scope]) = (res,st') ==>
   no_type_error_result res /\
   (case res of INL tvl => (?v. tvl = Value v) \/
@@ -3247,11 +3359,11 @@ Theorem checked_scalar_public_getter_eval_no_type_error_materialisable[local]:
 Proof
   rpt gen_tac >> strip_tac >> conj_tac
   >- (irule checked_scalar_public_getter_eval_no_type_error >> metis_tac[]) >>
-  `get_module_code (initial_evaluation_context am.sources am.layouts tx) src = SOME ts` by
+  `get_module_code (initial_evaluation_context am.sources am.layouts tx src) src = SOME ts` by
     simp[get_module_code_def, initial_evaluation_context_def] >>
   `FLOOKUP art.cta_toplevel_vtypes (src,string_to_num fn) = SOME (Type typ)` by
     (`toplevel_vtypes_complete art.cta_toplevel_vtypes
-        (initial_evaluation_context am.sources am.layouts tx)` by
+        (initial_evaluation_context am.sources am.layouts tx src)` by
        (irule check_contract_toplevel_vtypes_complete_initial >> simp[]) >>
      gvs[toplevel_vtypes_complete_def] >> metis_tac[]) >>
   `check_toplevel_decl am.layouts tx.target mods art src
@@ -3269,7 +3381,7 @@ Proof
         (irule find_var_decl_by_num_NONE_Constant >> simp[] >> metis_tac[]) >>
       `FLOOKUP art.cta_bare_globals (src,string_to_num fn) = SOME (expr_type e)` by
         (`bare_globals_complete art.cta_bare_globals
-            (initial_evaluation_context am.sources am.layouts tx)` by
+            (initial_evaluation_context am.sources am.layouts tx src)` by
            (irule check_contract_bare_globals_complete_initial >> simp[]) >>
          gvs[bare_globals_complete_def] >> metis_tac[]) >>
       gvs[immutables_ready_def] >>
@@ -3286,7 +3398,7 @@ Proof
         (irule find_var_decl_by_num_NONE_Immutable >> simp[] >> metis_tac[]) >>
       `FLOOKUP art.cta_bare_globals (src,string_to_num fn) = SOME typ` by
         (`bare_globals_complete art.cta_bare_globals
-            (initial_evaluation_context am.sources am.layouts tx)` by
+            (initial_evaluation_context am.sources am.layouts tx src)` by
            (irule check_contract_bare_globals_complete_initial >> simp[]) >>
          gvs[bare_globals_complete_def] >> metis_tac[]) >>
       gvs[immutables_ready_def] >>
@@ -3327,11 +3439,11 @@ Theorem checked_scalar_public_getter_eval_no_type_error_materialisable_post_pref
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\
   immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
-    (initial_evaluation_context am.sources am.layouts tx) am.immutables /\
+    (initial_evaluation_context am.sources am.layouts tx src) am.immutables /\
   ALOOKUP mods src = SOME ts /\
   MEM (VariableDecl Public mut fn typ init) ts /\
   st.scopes = [scope] /\ st.immutables = am.immutables /\ state_well_typed st /\
-  eval_expr (initial_evaluation_context am.sources am.layouts tx)
+  eval_expr (initial_evaluation_context am.sources am.layouts tx src)
     (TopLevelName NoneT (src,fn)) st = (res,st') ==>
   no_type_error_result res /\
   (case res of INL tvl => (?v. tvl = Value v) \/
@@ -3340,11 +3452,11 @@ Theorem checked_scalar_public_getter_eval_no_type_error_materialisable_post_pref
 Proof
   rpt gen_tac >> strip_tac >> conj_tac
   >- (
-    `get_module_code (initial_evaluation_context am.sources am.layouts tx) src = SOME ts` by
+    `get_module_code (initial_evaluation_context am.sources am.layouts tx src) src = SOME ts` by
       simp[get_module_code_def, initial_evaluation_context_def] >>
     `FLOOKUP art.cta_toplevel_vtypes (src,string_to_num fn) = SOME (Type typ)` by
       (`toplevel_vtypes_complete art.cta_toplevel_vtypes
-          (initial_evaluation_context am.sources am.layouts tx)` by
+          (initial_evaluation_context am.sources am.layouts tx src)` by
          (irule check_contract_toplevel_vtypes_complete_initial >> simp[]) >>
        gvs[toplevel_vtypes_complete_def] >> metis_tac[]) >>
     `check_toplevel_decl am.layouts tx.target mods art src
@@ -3362,7 +3474,7 @@ Proof
           (irule find_var_decl_by_num_NONE_Constant >> simp[] >> metis_tac[]) >>
         `FLOOKUP art.cta_bare_globals (src,string_to_num fn) = SOME (expr_type e)` by
           (`bare_globals_complete art.cta_bare_globals
-              (initial_evaluation_context am.sources am.layouts tx)` by
+              (initial_evaluation_context am.sources am.layouts tx src)` by
              (irule check_contract_bare_globals_complete_initial >> simp[]) >>
            gvs[bare_globals_complete_def] >> metis_tac[]) >>
         gvs[immutables_ready_def] >>
@@ -3379,7 +3491,7 @@ Proof
           (irule find_var_decl_by_num_NONE_Immutable >> simp[] >> metis_tac[]) >>
         `FLOOKUP art.cta_bare_globals (src,string_to_num fn) = SOME typ` by
           (`bare_globals_complete art.cta_bare_globals
-              (initial_evaluation_context am.sources am.layouts tx)` by
+              (initial_evaluation_context am.sources am.layouts tx src)` by
              (irule check_contract_bare_globals_complete_initial >> simp[]) >>
            gvs[bare_globals_complete_def] >> metis_tac[]) >>
         gvs[immutables_ready_def] >>
@@ -3418,11 +3530,11 @@ Proof
     gvs[AllCaseEqs(), bind_def, return_def] >> rpt strip_tac >> gvs[] >>
     imp_res_tac vyperTypeExprSoundnessTheory.read_storage_slot_error >>
     gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def]) >>
-  `get_module_code (initial_evaluation_context am.sources am.layouts tx) src = SOME ts` by
+  `get_module_code (initial_evaluation_context am.sources am.layouts tx src) src = SOME ts` by
     simp[get_module_code_def, initial_evaluation_context_def] >>
   `FLOOKUP art.cta_toplevel_vtypes (src,string_to_num fn) = SOME (Type typ)` by
     (`toplevel_vtypes_complete art.cta_toplevel_vtypes
-        (initial_evaluation_context am.sources am.layouts tx)` by
+        (initial_evaluation_context am.sources am.layouts tx src)` by
        (irule check_contract_toplevel_vtypes_complete_initial >> simp[]) >>
      gvs[toplevel_vtypes_complete_def] >> metis_tac[]) >>
   `check_toplevel_decl am.layouts tx.target mods art src
@@ -3440,7 +3552,7 @@ Proof
         (irule find_var_decl_by_num_NONE_Constant >> simp[] >> metis_tac[]) >>
       `FLOOKUP art.cta_bare_globals (src,string_to_num fn) = SOME (expr_type e)` by
         (`bare_globals_complete art.cta_bare_globals
-            (initial_evaluation_context am.sources am.layouts tx)` by
+            (initial_evaluation_context am.sources am.layouts tx src)` by
            (irule check_contract_bare_globals_complete_initial >> simp[]) >>
          gvs[bare_globals_complete_def] >> metis_tac[]) >>
       gvs[immutables_ready_def] >>
@@ -3457,7 +3569,7 @@ Proof
         (irule find_var_decl_by_num_NONE_Immutable >> simp[] >> metis_tac[]) >>
       `FLOOKUP art.cta_bare_globals (src,string_to_num fn) = SOME typ` by
         (`bare_globals_complete art.cta_bare_globals
-            (initial_evaluation_context am.sources am.layouts tx)` by
+            (initial_evaluation_context am.sources am.layouts tx src)` by
            (irule check_contract_bare_globals_complete_initial >> simp[]) >>
          gvs[bare_globals_complete_def] >> metis_tac[]) >>
       gvs[immutables_ready_def] >>
@@ -3773,7 +3885,7 @@ Theorem checked_public_hashmap_TopLevelName_carrier[local]:
   ALOOKUP am.sources tx.target = SOME mods /\
   ALOOKUP mods src = SOME ts /\
   MEM (HashMapDecl Public is_transient id kt vt init) ts /\
-  eval_expr (initial_evaluation_context am.sources am.layouts tx)
+  eval_expr (initial_evaluation_context am.sources am.layouts tx src)
     (TopLevelName NoneT (src,id)) (initial_state am [scope]) = (INL tvl,st') ==>
   ?slot. tvl = HashMapRef is_transient slot kt vt
 Proof
@@ -3802,7 +3914,7 @@ Theorem checked_public_hashmap_TopLevelName_no_type_error[local]:
   ALOOKUP am.sources tx.target = SOME mods /\
   ALOOKUP mods src = SOME ts /\
   MEM (HashMapDecl Public is_transient id kt vt init) ts /\
-  eval_expr (initial_evaluation_context am.sources am.layouts tx)
+  eval_expr (initial_evaluation_context am.sources am.layouts tx src)
     (TopLevelName NoneT (src,id)) (initial_state am [scope]) = (res,st') ==>
   no_type_error_result res
 Proof
@@ -3833,7 +3945,7 @@ Theorem checked_public_hashmap_TopLevelName_carrier_post_prefix[local]:
   ALOOKUP am.sources tx.target = SOME mods /\
   ALOOKUP mods src = SOME ts /\
   MEM (HashMapDecl Public is_transient id kt vt init) ts /\
-  eval_expr (initial_evaluation_context am.sources am.layouts tx)
+  eval_expr (initial_evaluation_context am.sources am.layouts tx src)
     (TopLevelName NoneT (src,id)) st = (INL tvl,st') ==>
   ?slot. tvl = HashMapRef is_transient slot kt vt
 Proof
@@ -3862,7 +3974,7 @@ Theorem checked_public_hashmap_TopLevelName_no_type_error_post_prefix[local]:
   ALOOKUP am.sources tx.target = SOME mods /\
   ALOOKUP mods src = SOME ts /\
   MEM (HashMapDecl Public is_transient id kt vt init) ts /\
-  eval_expr (initial_evaluation_context am.sources am.layouts tx)
+  eval_expr (initial_evaluation_context am.sources am.layouts tx src)
     (TopLevelName NoneT (src,id)) st = (res,st') ==>
   no_type_error_result res
 Proof
@@ -4275,20 +4387,20 @@ Theorem checked_public_array_TopLevelName_indexable_carrier[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\ machine_well_typed am /\
   immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
-    (initial_evaluation_context am.sources am.layouts tx) am.immutables /\
+    (initial_evaluation_context am.sources am.layouts tx src) am.immutables /\
   ALOOKUP mods src = SOME ts /\ MEM (VariableDecl Public mut fn typ init) ts /\
   is_ArrayT typ /\
-  eval_expr (initial_evaluation_context am.sources am.layouts tx)
+  eval_expr (initial_evaluation_context am.sources am.layouts tx src)
     (TopLevelName NoneT (src,fn)) (initial_state am [scope]) = (INL tvl,st') ==>
   (?av. tvl = Value (ArrayV av)) \/
   (?is_transient slot elem_tv bd. tvl = ArrayRef is_transient slot elem_tv bd)
 Proof
   rpt strip_tac >>
-  `get_module_code (initial_evaluation_context am.sources am.layouts tx) src = SOME ts` by
+  `get_module_code (initial_evaluation_context am.sources am.layouts tx src) src = SOME ts` by
     simp[get_module_code_def, initial_evaluation_context_def] >>
   `FLOOKUP art.cta_toplevel_vtypes (src,string_to_num fn) = SOME (Type typ)` by
     (`toplevel_vtypes_complete art.cta_toplevel_vtypes
-        (initial_evaluation_context am.sources am.layouts tx)` by
+        (initial_evaluation_context am.sources am.layouts tx src)` by
        (irule check_contract_toplevel_vtypes_complete_initial >> simp[]) >>
      gvs[toplevel_vtypes_complete_def] >> metis_tac[]) >>
   `check_toplevel_decl am.layouts tx.target mods art src
@@ -4307,7 +4419,7 @@ Proof
         (irule find_var_decl_by_num_NONE_Constant >> simp[] >> metis_tac[]) >>
       `FLOOKUP art.cta_bare_globals (src,string_to_num fn) = SOME (ArrayT t b)` by
         (`bare_globals_complete art.cta_bare_globals
-            (initial_evaluation_context am.sources am.layouts tx)` by
+            (initial_evaluation_context am.sources am.layouts tx src)` by
            (irule check_contract_bare_globals_complete_initial >> simp[]) >>
          gvs[bare_globals_complete_def] >> metis_tac[]) >>
       gvs[immutables_ready_def] >>
@@ -4339,7 +4451,7 @@ Proof
         (irule find_var_decl_by_num_NONE_Immutable >> simp[] >> metis_tac[]) >>
       `FLOOKUP art.cta_bare_globals (src,string_to_num fn) = SOME (ArrayT t b)` by
         (`bare_globals_complete art.cta_bare_globals
-            (initial_evaluation_context am.sources am.layouts tx)` by
+            (initial_evaluation_context am.sources am.layouts tx src)` by
            (irule check_contract_bare_globals_complete_initial >> simp[]) >>
          gvs[bare_globals_complete_def] >> metis_tac[]) >>
       gvs[immutables_ready_def] >>
@@ -4392,23 +4504,23 @@ Theorem checked_public_array_TopLevelName_typed_indexable_carrier[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\ machine_well_typed am /\
   immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
-    (initial_evaluation_context am.sources am.layouts tx) am.immutables /\
+    (initial_evaluation_context am.sources am.layouts tx src) am.immutables /\
   ALOOKUP mods src = SOME ts /\ MEM (VariableDecl Public mut fn typ init) ts /\
   is_ArrayT typ /\
-  evaluate_type (get_tenv (initial_evaluation_context am.sources am.layouts tx)) typ =
+  evaluate_type (get_tenv (initial_evaluation_context am.sources am.layouts tx src)) typ =
     SOME (ArrayTV elem_tv bd) /\
-  eval_expr (initial_evaluation_context am.sources am.layouts tx)
+  eval_expr (initial_evaluation_context am.sources am.layouts tx src)
     (TopLevelName NoneT (src,fn)) (initial_state am [scope]) = (INL tvl,st') ==>
   ((?av. tvl = Value (ArrayV av) /\
          value_has_type (ArrayTV elem_tv bd) (ArrayV av)) \/
    (?is_transient slot. tvl = ArrayRef is_transient slot elem_tv bd))
 Proof
   rpt strip_tac >>
-  `get_module_code (initial_evaluation_context am.sources am.layouts tx) src = SOME ts` by
+  `get_module_code (initial_evaluation_context am.sources am.layouts tx src) src = SOME ts` by
     simp[get_module_code_def, initial_evaluation_context_def] >>
   `FLOOKUP art.cta_toplevel_vtypes (src,string_to_num fn) = SOME (Type typ)` by
     (`toplevel_vtypes_complete art.cta_toplevel_vtypes
-        (initial_evaluation_context am.sources am.layouts tx)` by
+        (initial_evaluation_context am.sources am.layouts tx src)` by
        (irule check_contract_toplevel_vtypes_complete_initial >> simp[]) >>
      gvs[toplevel_vtypes_complete_def] >> metis_tac[]) >>
   `check_toplevel_decl am.layouts tx.target mods art src
@@ -4427,7 +4539,7 @@ Proof
         (irule find_var_decl_by_num_NONE_Constant >> simp[] >> metis_tac[]) >>
       `FLOOKUP art.cta_bare_globals (src,string_to_num fn) = SOME (ArrayT t b)` by
         (`bare_globals_complete art.cta_bare_globals
-            (initial_evaluation_context am.sources am.layouts tx)` by
+            (initial_evaluation_context am.sources am.layouts tx src)` by
            (irule check_contract_bare_globals_complete_initial >> simp[]) >>
          gvs[bare_globals_complete_def] >> metis_tac[]) >>
       gvs[immutables_ready_def] >>
@@ -4457,7 +4569,7 @@ Proof
         (irule find_var_decl_by_num_NONE_Immutable >> simp[] >> metis_tac[]) >>
       `FLOOKUP art.cta_bare_globals (src,string_to_num fn) = SOME (ArrayT t b)` by
         (`bare_globals_complete art.cta_bare_globals
-            (initial_evaluation_context am.sources am.layouts tx)` by
+            (initial_evaluation_context am.sources am.layouts tx src)` by
            (irule check_contract_bare_globals_complete_initial >> simp[]) >>
          gvs[bare_globals_complete_def] >> metis_tac[]) >>
       gvs[immutables_ready_def] >>
@@ -4507,13 +4619,13 @@ Theorem checked_public_array_TopLevelName_typed_indexable_carrier_ArrayT[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\ machine_well_typed am /\
   immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
-    (initial_evaluation_context am.sources am.layouts tx) am.immutables /\
+    (initial_evaluation_context am.sources am.layouts tx src) am.immutables /\
   ALOOKUP mods src = SOME ts /\ MEM (VariableDecl Public mut fn (ArrayT t b) init) ts /\
-  evaluate_type (get_tenv (initial_evaluation_context am.sources am.layouts tx)) t = SOME elem_tv /\
+  evaluate_type (get_tenv (initial_evaluation_context am.sources am.layouts tx src)) t = SOME elem_tv /\
   0 < type_slot_size elem_tv /\
   type_slot_size (ArrayTV elem_tv b) <
     115792089237316195423570985008687907853269984665640564039457584007913129639936 /\
-  eval_expr (initial_evaluation_context am.sources am.layouts tx)
+  eval_expr (initial_evaluation_context am.sources am.layouts tx src)
     (TopLevelName NoneT (src,fn)) (initial_state am [scope]) = (INL tvl,st') ==>
   ((?av. tvl = Value (ArrayV av) /\
          value_has_type (ArrayTV elem_tv b) (ArrayV av)) \/
@@ -4532,24 +4644,24 @@ Theorem checked_public_array_TopLevelName_typed_indexable_carrier_post_prefix[lo
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\ machine_well_typed am /\
   immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
-    (initial_evaluation_context am.sources am.layouts tx) am.immutables /\
+    (initial_evaluation_context am.sources am.layouts tx src) am.immutables /\
   ALOOKUP mods src = SOME ts /\ MEM (VariableDecl Public mut fn typ init) ts /\
   is_ArrayT typ /\
-  evaluate_type (get_tenv (initial_evaluation_context am.sources am.layouts tx)) typ =
+  evaluate_type (get_tenv (initial_evaluation_context am.sources am.layouts tx src)) typ =
     SOME (ArrayTV elem_tv bd) /\
   st.immutables = am.immutables /\
-  eval_expr (initial_evaluation_context am.sources am.layouts tx)
+  eval_expr (initial_evaluation_context am.sources am.layouts tx src)
     (TopLevelName NoneT (src,fn)) st = (INL tvl,st') ==>
   ((?av. tvl = Value (ArrayV av) /\
          value_has_type (ArrayTV elem_tv bd) (ArrayV av)) \/
    (?is_transient slot. tvl = ArrayRef is_transient slot elem_tv bd))
 Proof
   rpt strip_tac >>
-  `get_module_code (initial_evaluation_context am.sources am.layouts tx) src = SOME ts` by
+  `get_module_code (initial_evaluation_context am.sources am.layouts tx src) src = SOME ts` by
     simp[get_module_code_def, initial_evaluation_context_def] >>
   `FLOOKUP art.cta_toplevel_vtypes (src,string_to_num fn) = SOME (Type typ)` by
     (`toplevel_vtypes_complete art.cta_toplevel_vtypes
-        (initial_evaluation_context am.sources am.layouts tx)` by
+        (initial_evaluation_context am.sources am.layouts tx src)` by
        (irule check_contract_toplevel_vtypes_complete_initial >> simp[]) >>
      gvs[toplevel_vtypes_complete_def] >> metis_tac[]) >>
   `check_toplevel_decl am.layouts tx.target mods art src
@@ -4568,7 +4680,7 @@ Proof
         (irule find_var_decl_by_num_NONE_Constant >> simp[] >> metis_tac[]) >>
       `FLOOKUP art.cta_bare_globals (src,string_to_num fn) = SOME (ArrayT t b)` by
         (`bare_globals_complete art.cta_bare_globals
-            (initial_evaluation_context am.sources am.layouts tx)` by
+            (initial_evaluation_context am.sources am.layouts tx src)` by
            (irule check_contract_bare_globals_complete_initial >> simp[]) >>
          gvs[bare_globals_complete_def] >> metis_tac[]) >>
       gvs[immutables_ready_def] >>
@@ -4598,7 +4710,7 @@ Proof
         (irule find_var_decl_by_num_NONE_Immutable >> simp[] >> metis_tac[]) >>
       `FLOOKUP art.cta_bare_globals (src,string_to_num fn) = SOME (ArrayT t b)` by
         (`bare_globals_complete art.cta_bare_globals
-            (initial_evaluation_context am.sources am.layouts tx)` by
+            (initial_evaluation_context am.sources am.layouts tx src)` by
            (irule check_contract_bare_globals_complete_initial >> simp[]) >>
          gvs[bare_globals_complete_def] >> metis_tac[]) >>
       gvs[immutables_ready_def] >>
@@ -4648,14 +4760,14 @@ Theorem checked_public_array_TopLevelName_typed_indexable_carrier_ArrayT_post_pr
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\ machine_well_typed am /\
   immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
-    (initial_evaluation_context am.sources am.layouts tx) am.immutables /\
+    (initial_evaluation_context am.sources am.layouts tx src) am.immutables /\
   ALOOKUP mods src = SOME ts /\ MEM (VariableDecl Public mut fn (ArrayT t b) init) ts /\
-  evaluate_type (get_tenv (initial_evaluation_context am.sources am.layouts tx)) t = SOME elem_tv /\
+  evaluate_type (get_tenv (initial_evaluation_context am.sources am.layouts tx src)) t = SOME elem_tv /\
   0 < type_slot_size elem_tv /\
   type_slot_size (ArrayTV elem_tv b) <
     115792089237316195423570985008687907853269984665640564039457584007913129639936 /\
   st.immutables = am.immutables /\
-  eval_expr (initial_evaluation_context am.sources am.layouts tx)
+  eval_expr (initial_evaluation_context am.sources am.layouts tx src)
     (TopLevelName NoneT (src,fn)) st = (INL tvl,st') ==>
   ((?av. tvl = Value (ArrayV av) /\
          value_has_type (ArrayTV elem_tv b) (ArrayV av)) \/
@@ -4674,14 +4786,14 @@ Theorem checked_public_array_TopLevelName_materialisable_carrier_ArrayT_post_pre
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\ machine_well_typed am /\
   immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
-    (initial_evaluation_context am.sources am.layouts tx) am.immutables /\
+    (initial_evaluation_context am.sources am.layouts tx src) am.immutables /\
   ALOOKUP mods src = SOME ts /\ MEM (VariableDecl Public mut fn (ArrayT t b) init) ts /\
-  evaluate_type (get_tenv (initial_evaluation_context am.sources am.layouts tx)) t = SOME elem_tv /\
+  evaluate_type (get_tenv (initial_evaluation_context am.sources am.layouts tx src)) t = SOME elem_tv /\
   0 < type_slot_size elem_tv /\
   type_slot_size (ArrayTV elem_tv b) <
     115792089237316195423570985008687907853269984665640564039457584007913129639936 /\
   st.immutables = am.immutables /\
-  eval_expr (initial_evaluation_context am.sources am.layouts tx)
+  eval_expr (initial_evaluation_context am.sources am.layouts tx src)
     (TopLevelName NoneT (src,fn)) st = (INL tvl,st') ==>
   (?v. tvl = Value v) \/
   (?is_transient slot elem_tv bd. tvl = ArrayRef is_transient slot elem_tv bd)
@@ -4695,14 +4807,14 @@ Theorem checked_public_array_TopLevelName_typed_indexable_carrier_ArrayT_post_pr
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\ machine_well_typed am /\
   immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
-    (initial_evaluation_context am.sources am.layouts tx) am.immutables /\
+    (initial_evaluation_context am.sources am.layouts tx src) am.immutables /\
   ALOOKUP mods src = SOME ts /\ MEM (VariableDecl Public mut fn (ArrayT t b) init) ts /\
-  evaluate_type (get_tenv (initial_evaluation_context am.sources am.layouts tx)) t = SOME elem_tv /\
+  evaluate_type (get_tenv (initial_evaluation_context am.sources am.layouts tx src)) t = SOME elem_tv /\
   0 < type_slot_size elem_tv /\
   type_slot_size (ArrayTV elem_tv b) <
     115792089237316195423570985008687907853269984665640564039457584007913129639936 /\
   st.immutables = am.immutables /\
-  eval_expr (initial_evaluation_context am.sources am.layouts tx)
+  eval_expr (initial_evaluation_context am.sources am.layouts tx src)
     (TopLevelName NoneT (src,fn)) st = (INL tvl,st') ==>
   ((?av bd. tvl = Value (ArrayV av) /\ value_has_type (ArrayTV elem_tv bd) (ArrayV av)) \/
    (?is_transient slot bd. tvl = ArrayRef is_transient slot elem_tv bd))
@@ -5436,222 +5548,6 @@ Proof
        lift_option_def, return_def, raise_def]
 QED
 
-Theorem TopLevelName_missing_source_immutable_TypeError_probe:
-  get_module_code cx src = SOME code /\
-  find_var_decl_by_num (string_to_num id) code = NONE /\
-  ALOOKUP st.immutables cx.txn.target = SOME imms /\
-  FLOOKUP (get_source_immutables src imms) (string_to_num id) = NONE ==>
-  ?msg.
-    eval_expr cx (TopLevelName ty (src,id)) st =
-      (INR (Error (TypeError msg)), st)
-Proof
-  rpt strip_tac >>
-  qexists_tac `"lookup_global: var not found"` >>
-  simp[Once evaluate_def, Once lookup_global_def, bind_def,
-       lift_option_type_def, get_immutables_def, get_address_immutables_def,
-       lift_option_def, return_def, raise_def]
-QED
-
-Theorem checked_assumptions_missing_source_immutable_eval_TypeError_probe:
-  check_contract F am.layouts tx.target mods = SOME art /\
-  ALOOKUP am.sources tx.target = SOME mods /\
-  machine_well_typed am /\
-  FLOOKUP art.cta_bare_globals (src,string_to_num id) = SOME ty /\
-  get_module_code (initial_evaluation_context am.sources am.layouts tx) src = SOME code /\
-  find_var_decl_by_num (string_to_num id) code = NONE /\
-  ALOOKUP am.immutables tx.target = SOME imms /\
-  FLOOKUP (get_source_immutables src imms) (string_to_num id) = NONE ==>
-  ?msg.
-    eval_expr (initial_evaluation_context am.sources am.layouts tx)
-      (TopLevelName ty (src,id)) (initial_state am []) =
-      (INR (Error (TypeError msg)), initial_state am [])
-Proof
-  rw[initial_state_def] >>
-  irule TopLevelName_missing_source_immutable_TypeError_probe >>
-  simp[initial_evaluation_context_def]
-QED
-
-Theorem public_immutable_scalar_getter_body_TopLevelName_probe:
-  ~is_ArrayT typ /\
-  external_getter_tuple src (VariableDecl Public Immutable id typ init) =
-    SOME (mut,nr,args,dflts,ret,body) ==>
-  mut = View /\
-  nr = F /\
-  args = [] /\
-  dflts = [] /\
-  ret = typ /\
-  body = [Return (SOME (TopLevelName NoneT (src,id)))]
-Proof
-  rw[external_getter_tuple_def] >> gvs[]
-QED
-
-Theorem scalar_getter_call_external_function_eval_TypeError_probe:
-  cx.in_deploy = F /\
-  cx.txn.value = 0 /\
-  eval_expr cx (TopLevelName NoneT (src,id)) (initial_state am [FEMPTY]) =
-    (INR (Error (TypeError msg)), initial_state am [FEMPTY]) ==>
-  call_external_function am cx F View ts all_mods [] [] []
-    [Return (SOME (TopLevelName NoneT (src,id)))] ret =
-    (INR (Error (TypeError msg)), am)
-Proof
-  rw[Once call_external_function_def, evaluate_defaults_def, bind_arguments_def,
-     send_call_value_def, bind_def, ignore_bind_def, return_def, raise_def,
-     Once evaluate_def] >>
-  `eval_expr cx (TopLevelName NoneT (src,id)) (initial_state am [FEMPTY]) =
-     (INR (Error (TypeError msg)), initial_state am [FEMPTY])` by
-    simp[Once evaluate_def] >>
-  simp[Once evaluate_def, bind_def, ignore_bind_def, return_def, raise_def] >>
-  simp[Once evaluate_def, bind_def, ignore_bind_def, return_def, raise_def] >>
-  gvs[]
-QED
-
-Theorem scalar_getter_call_external_dispatch_TypeError_probe:
-  cx = initial_evaluation_context am.sources am.layouts tx /\
-  ALOOKUP am.sources tx.target = SOME all_mods /\
-  src = find_function_module cx am tx.function_name /\
-  get_module_code cx src = SOME ts /\
-  lookup_exported_function cx am tx.function_name =
-    SOME (View,F,[],[],ret,[Return (SOME (TopLevelName NoneT (src,id)))]) /\
-  tx.args = [] /\
-  tx.value = 0 /\
-  eval_expr cx (TopLevelName NoneT (src,id)) (initial_state am [FEMPTY]) =
-    (INR (Error (TypeError msg)), initial_state am [FEMPTY]) ==>
-  call_external am tx = (INR (Error (TypeError msg)), am)
-Proof
-  rw[Once call_external_def] >> gvs[AllCaseEqs()] >>
-  qexists `ts` >>
-  conj_tac >- (Cases_on `find_function_module (initial_evaluation_context am.sources am.layouts tx) am tx.function_name` >>
-                gvs[get_self_code_def]) >>
-  irule scalar_getter_call_external_function_eval_TypeError_probe >>
-  simp[initial_evaluation_context_def]
-QED
-
-Theorem checked_scalar_getter_missing_source_immutable_call_external_TypeError_probe:
-  check_contract F am.layouts tx.target mods = SOME art /\
-  ALOOKUP am.sources tx.target = SOME mods /\
-  machine_well_typed am /\
-  call_tx_well_typed tx /\
-  cx = initial_evaluation_context am.sources am.layouts tx /\
-  src = find_function_module cx am tx.function_name /\
-  get_module_code cx src = SOME code /\
-  find_var_decl_by_num (string_to_num id) code = NONE /\
-  ALOOKUP am.immutables tx.target = SOME imms /\
-  FLOOKUP (get_source_immutables src imms) (string_to_num id) = NONE /\
-  lookup_exported_function cx am tx.function_name =
-    SOME (View,F,[],[],ret,[Return (SOME (TopLevelName NoneT (src,id)))]) /\
-  tx.args = [] /\
-  tx.value = 0 ==>
-  ?msg.
-    call_external am tx = (INR (Error (TypeError msg)), am) /\
-    ~no_type_error_result (INR (Error (TypeError msg)))
-Proof
-  rpt strip_tac >>
-  `?msg.
-     eval_expr cx (TopLevelName NoneT (src,id)) (initial_state am [FEMPTY]) =
-       (INR (Error (TypeError msg)), initial_state am [FEMPTY])` by
-    (irule TopLevelName_missing_source_immutable_TypeError_probe >>
-     gvs[initial_state_def, initial_evaluation_context_def]) >>
-  qexists `msg` >>
-  conj_tac >-
-    (irule scalar_getter_call_external_dispatch_TypeError_probe >>
-     simp[] >>
-     qexistsl [`id`, `ret`, `code`] >>
-     gvs[initial_state_def]) >>
-  strip_tac >>
-  drule no_type_error_result_INR_not_type_error >>
-  simp[]
-QED
-
-Theorem checked_public_immutable_scalar_getter_selection_witness:
-  ?am tx mods art cx src code id ret.
-    check_contract F am.layouts tx.target mods = SOME art /\
-    ALOOKUP am.sources tx.target = SOME mods /\
-    cx = initial_evaluation_context am.sources am.layouts tx /\
-    src = find_function_module cx am tx.function_name /\
-    get_module_code cx src = SOME code /\
-    lookup_exported_function cx am tx.function_name =
-      SOME (View,F,[],[],ret,[Return (SOME (TopLevelName NoneT (src,id)))]) /\
-    find_var_decl_by_num (string_to_num id) code = NONE
-Proof
-  qexists `initial_machine_state with sources :=
-             [(0w,[(NONE,[VariableDecl Public Immutable "x" (BaseT BoolT) NONE])])]` >>
-  qexists `empty_call_txn with function_name := "x"` >>
-  qexists `[(NONE,[VariableDecl Public Immutable "x" (BaseT BoolT) NONE])]` >>
-  qexists `build_contract_type_artifact F
-             [(NONE,[VariableDecl Public Immutable "x" (BaseT BoolT) NONE])]` >>
-  qexists `initial_evaluation_context
-             (initial_machine_state with sources :=
-                [(0w,[(NONE,[VariableDecl Public Immutable "x" (BaseT BoolT) NONE])])]).sources
-             (initial_machine_state with sources :=
-                [(0w,[(NONE,[VariableDecl Public Immutable "x" (BaseT BoolT) NONE])])]).layouts
-             (empty_call_txn with function_name := "x")` >>
-  qexists `NONE` >>
-  qexists `[VariableDecl Public Immutable "x" (BaseT BoolT) NONE]` >>
-  qexists `"x"` >>
-  qexists `BaseT BoolT` >>
-  simp[check_contract_def, build_contract_type_artifact_def, add_module_static_maps_def,
-       add_toplevel_static_maps_def, contract_namespaces_ok_def, contract_keys_def,
-       check_module_def, check_toplevel_decl_def, check_toplevel_body_def,
-       assignable_type_def, well_formed_type_def, evaluate_type_def,
-       type_env_all_modules_def, type_env_for_module_def,
-       fn_sig_keys_toplevel_def, toplevel_vtype_keys_toplevel_def,
-       flag_member_keys_toplevel_def, type_def_keys_toplevel_def,
-       include_fn_sig_def, initial_machine_state_def,
-       initial_evaluation_context_def, empty_call_txn_def, lookup_exported_function_def,
-       find_function_module_def, get_self_code_def, get_module_code_def,
-       lookup_function_def, find_var_decl_by_num_def]
-QED
-
-Theorem checked_public_immutable_scalar_missing_runtime_immutables_witness:
-  ?am tx mods art cx src code id ret imms.
-    check_contract F am.layouts tx.target mods = SOME art /\
-    ALOOKUP am.sources tx.target = SOME mods /\
-    cx = initial_evaluation_context am.sources am.layouts tx /\
-    src = find_function_module cx am tx.function_name /\
-    get_module_code cx src = SOME code /\
-    lookup_exported_function cx am tx.function_name =
-      SOME (View,F,[],[],ret,[Return (SOME (TopLevelName NoneT (src,id)))]) /\
-    find_var_decl_by_num (string_to_num id) code = NONE /\
-    machine_well_typed am /\
-    ALOOKUP am.immutables tx.target = SOME imms /\
-    FLOOKUP (get_source_immutables src imms) (string_to_num id) = NONE
-Proof
-  qexists `initial_machine_state with <|
-             sources := [(0w,[(NONE,[VariableDecl Public Immutable "x" (BaseT BoolT) NONE])])];
-             immutables := [(0w,empty_immutables)] |>` >>
-  qexists `empty_call_txn with function_name := "x"` >>
-  qexists `[(NONE,[VariableDecl Public Immutable "x" (BaseT BoolT) NONE])]` >>
-  qexists `build_contract_type_artifact F
-             [(NONE,[VariableDecl Public Immutable "x" (BaseT BoolT) NONE])]` >>
-  qexists `initial_evaluation_context
-             (initial_machine_state with <|
-                sources := [(0w,[(NONE,[VariableDecl Public Immutable "x" (BaseT BoolT) NONE])])];
-                immutables := [(0w,empty_immutables)] |>).sources
-             (initial_machine_state with <|
-                sources := [(0w,[(NONE,[VariableDecl Public Immutable "x" (BaseT BoolT) NONE])])];
-                immutables := [(0w,empty_immutables)] |>).layouts
-             (empty_call_txn with function_name := "x")` >>
-  qexists `NONE` >>
-  qexists `[VariableDecl Public Immutable "x" (BaseT BoolT) NONE]` >>
-  qexists `"x"` >>
-  qexists `BaseT BoolT` >>
-  qexists `empty_immutables` >>
-  simp[check_contract_def, build_contract_type_artifact_def, add_module_static_maps_def,
-       add_toplevel_static_maps_def, contract_namespaces_ok_def, contract_keys_def,
-       check_module_def, check_toplevel_decl_def, check_toplevel_body_def,
-       assignable_type_def, well_formed_type_def, evaluate_type_def,
-       type_env_all_modules_def, type_env_for_module_def,
-       fn_sig_keys_toplevel_def, toplevel_vtype_keys_toplevel_def,
-       flag_member_keys_toplevel_def, type_def_keys_toplevel_def,
-       include_fn_sig_def, initial_machine_state_def,
-       initial_evaluation_context_def, empty_call_txn_def, lookup_exported_function_def,
-       find_function_module_def, get_self_code_def, get_module_code_def,
-       lookup_function_def, find_var_decl_by_num_def, machine_well_typed_def,
-       imms_well_typed_def, empty_immutables_def, get_source_immutables_def,
-       accounts_well_typed_def, account_well_typed_def,
-       vfmStateTheory.lookup_account_def, vfmStateTheory.empty_accounts_def,
-       vfmStateTheory.empty_account_state_def]
-QED
 
 Definition call_tx_well_typed_def:
   call_tx_well_typed tx <=>
@@ -5675,7 +5571,7 @@ QED
 
 Theorem call_tx_well_typed_initial_context[local]:
   call_tx_well_typed tx ==>
-  context_well_typed (initial_evaluation_context sources layouts tx)
+  context_well_typed (initial_evaluation_context sources layouts tx src)
 Proof
   rw[call_tx_well_typed_def, context_well_typed_def,
      initial_evaluation_context_def]
@@ -5684,7 +5580,7 @@ QED
 Theorem call_tx_well_typed_initial_context_stk[local]:
   call_tx_well_typed tx ==>
   context_well_typed
-    ((initial_evaluation_context sources layouts tx) with stk := [(src,fn)])
+    ((initial_evaluation_context sources layouts tx src) with stk := [(src,fn)])
 Proof
   rw[call_tx_well_typed_def, context_well_typed_def,
      initial_evaluation_context_def]
@@ -5709,115 +5605,16 @@ Proof
   simp[]
 QED
 
-Theorem checked_call_external_no_type_error_counterexample:
-  ?am tx mods art msg.
-    check_contract F am.layouts tx.target mods = SOME art /\
-    ALOOKUP am.sources tx.target = SOME mods /\
-    machine_well_typed am /\
-    call_tx_well_typed tx /\
-    call_external am tx = (INR (Error (TypeError msg)), am) /\
-    ~no_type_error_result (INR (Error (TypeError msg)))
-Proof
-  qexists `initial_machine_state with <|
-             sources := [(0w,[(NONE,[VariableDecl Public Immutable "x" (BaseT BoolT) NONE])])];
-             immutables := [(0w,empty_immutables)] |>` >>
-  qexists `empty_call_txn with function_name := "x"` >>
-  qexists `[(NONE,[VariableDecl Public Immutable "x" (BaseT BoolT) NONE])]` >>
-  qexists `build_contract_type_artifact F
-             [(NONE,[VariableDecl Public Immutable "x" (BaseT BoolT) NONE])]` >>
-  simp[check_contract_def, build_contract_type_artifact_def, add_module_static_maps_def,
-       add_toplevel_static_maps_def, contract_namespaces_ok_def, contract_keys_def,
-       check_module_def, check_toplevel_decl_def, check_toplevel_body_def,
-       assignable_type_def, well_formed_type_def, evaluate_type_def,
-       type_env_all_modules_def, type_env_for_module_def,
-       fn_sig_keys_toplevel_def, toplevel_vtype_keys_toplevel_def,
-       flag_member_keys_toplevel_def, type_def_keys_toplevel_def,
-       include_fn_sig_def, initial_machine_state_def,
-       initial_evaluation_context_def, empty_call_txn_def, machine_well_typed_def,
-       imms_well_typed_def, empty_immutables_def, accounts_well_typed_def,
-       account_well_typed_def, vfmStateTheory.lookup_account_def,
-       vfmStateTheory.empty_accounts_def, vfmStateTheory.empty_account_state_def,
-       call_tx_well_typed_def] >>
-  once_rewrite_tac[EQ_SYM_EQ] >>
-  irule checked_scalar_getter_missing_source_immutable_call_external_TypeError_probe >>
-  simp[check_contract_def, build_contract_type_artifact_def, add_module_static_maps_def,
-       add_toplevel_static_maps_def, contract_namespaces_ok_def, contract_keys_def,
-       check_module_def, check_toplevel_decl_def, check_toplevel_body_def,
-       assignable_type_def, well_formed_type_def, evaluate_type_def,
-       type_env_all_modules_def, type_env_for_module_def,
-       fn_sig_keys_toplevel_def, toplevel_vtype_keys_toplevel_def,
-       flag_member_keys_toplevel_def, type_def_keys_toplevel_def,
-       include_fn_sig_def, initial_machine_state_def,
-       initial_evaluation_context_def, empty_call_txn_def, lookup_exported_function_def,
-       find_function_module_def, get_self_code_def, get_module_code_def,
-       lookup_function_def, find_var_decl_by_num_def, machine_well_typed_def,
-       imms_well_typed_def, empty_immutables_def, get_source_immutables_def,
-       accounts_well_typed_def, account_well_typed_def,
-       vfmStateTheory.lookup_account_def, vfmStateTheory.empty_accounts_def,
-       vfmStateTheory.empty_account_state_def, call_tx_well_typed_def] >>
-  qexists `\tx. T` >>
-  simp[]
-QED
-
 Definition checked_contract_runtime_ready_def:
   checked_contract_runtime_ready art mods am tx <=>
     ALOOKUP am.sources tx.target = SOME mods /\
     immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
-      (initial_evaluation_context am.sources am.layouts tx)
+      (initial_evaluation_context am.sources am.layouts tx NONE)
       am.immutables
 End
 
-Theorem checked_exported_explicit_BareGlobalName_plain_context_TypeError_counterexample:
-  ?am tx mods art.
-    check_contract F am.layouts tx.target mods = SOME art /\
-    checked_contract_runtime_ready art mods am tx /\
-    machine_well_typed am /\
-    call_tx_well_typed tx /\
-    call_external am tx = (INR (Error (TypeError "BareGlobalName not found")), am) /\
-    ~no_type_error_result (INR (Error (TypeError "BareGlobalName not found")))
-Proof
-  qexists `initial_machine_state with <|
-             sources := [(0w,
-               [(NONE,[]);
-                (SOME 1,
-                 [VariableDecl Private Immutable "x" (BaseT BoolT) NONE;
-                  FunctionDecl External View F F "f" [] [] (BaseT BoolT)
-                    [Return (SOME (BareGlobalName (BaseT BoolT) "x"))]])])];
-             exports := [(0w,[("f",1)])];
-             immutables := [(0w,[(SOME 1,
-               FEMPTY |+ (string_to_num "x",(BaseTV BoolT,BoolV T)))])]
-           |>` >>
-  qexists `empty_call_txn with function_name := "f"` >>
-  qexists `[(NONE,[]);
-            (SOME 1,
-             [VariableDecl Private Immutable "x" (BaseT BoolT) NONE;
-              FunctionDecl External View F F "f" [] [] (BaseT BoolT)
-                [Return (SOME (BareGlobalName (BaseT BoolT) "x"))]])]` >>
-  qexists `build_contract_type_artifact F
-            [(NONE,[]);
-             (SOME 1,
-              [VariableDecl Private Immutable "x" (BaseT BoolT) NONE;
-               FunctionDecl External View F F "f" [] [] (BaseT BoolT)
-                 [Return (SOME (BareGlobalName (BaseT BoolT) "x"))]])]` >>
-  EVAL_TAC >> rw[finite_mapTheory.FLOOKUP_UPDATE, evaluate_type_def,
-                  find_var_decl_by_num_def,
-                  vyperTypingTheory.value_has_type_def,
-                  vyperTypingTheory.well_formed_type_value_def] >>
-  gvs[finite_mapTheory.FLOOKUP_UPDATE,
-      vyperTypingTheory.value_has_type_def,
-      vyperTypingTheory.well_formed_type_value_def]
-QED
-
-Theorem checked_call_external_no_type_error:
-  check_contract F am.layouts tx.target mods = SOME art /\
-  checked_contract_runtime_ready art mods am tx /\
-  machine_well_typed am /\
-  call_tx_well_typed tx /\
-  call_external am tx = (res,am') ==>
-  no_type_error_result res
-Proof
-  cheat
-QED
+(* checked_call_external_no_type_error is proved near the end of this file,
+   after its explicit-function and public-getter branch helpers. *)
 
 (* ===== Deployment establishes runtime immutable readiness ===== *)
 
@@ -5832,7 +5629,7 @@ Theorem load_contract_success_cases[local]:
       (am with <| immutables updated_by CONS (tx.target,imms);
                  exports updated_by CONS (tx.target,exps) |>)
       ((initial_evaluation_context ((tx.target,mods)::am.sources)
-          am.layouts tx) with in_deploy := T)
+          am.layouts tx NONE) with in_deploy := T)
       nr mut ts mods args dflts tx.args body ret = (INL v, am_ctor) /\
     am_deployed = am_ctor with sources updated_by CONS (tx.target,mods)
 Proof
@@ -5848,7 +5645,7 @@ Proof
   Cases_on `call_external_function
       (am with <|immutables updated_by CONS (tx.target,x);
                 exports updated_by CONS (tx.target,exps)|>)
-      ((initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts tx)
+      ((initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts tx NONE)
          with in_deploy := T)
       q' q (case ALOOKUP mods NONE of SOME ts => ts | NONE => []) mods q'' q''' tx.args r q''''` >>
   gvs[] >>
@@ -5876,7 +5673,7 @@ Theorem deployed_check_contract_bare_globals_consistent[local]:
     FLOOKUP call_art.cta_bare_globals (src,id) = SOME ty ==>
     ?ts.
       get_module_code
-        (initial_evaluation_context am_deployed.sources am_deployed.layouts call_tx) src = SOME ts /\
+        (initial_evaluation_context am_deployed.sources am_deployed.layouts call_tx src) src = SOME ts /\
       FLOOKUP call_art.cta_toplevel_vtypes (src,id) = SOME (Type ty) /\
       is_bare_global_decl id ts /\
       find_var_decl_by_num id ts = NONE /\
@@ -6544,6 +6341,350 @@ Proof
   gvs[]
 QED
 
+
+Theorem bind_arguments_length_c53[local]:
+  !tenv args vs env.
+    bind_arguments tenv args vs = SOME env ==> LENGTH args = LENGTH vs
+Proof
+  Induct_on `args` >> simp[bind_arguments_def] >>
+  Cases_on `vs` >> simp[bind_arguments_def] >>
+  rpt gen_tac >> PairCases_on `h'` >>
+  simp[bind_arguments_def] >>
+  Cases_on `evaluate_type tenv h'1` >> simp[] >>
+  Cases_on `safe_cast x h` >> simp[] >>
+  Cases_on `bind_arguments tenv args t` >> simp[] >>
+  strip_tac >> res_tac
+QED
+
+Theorem call_external_function_exact_args_rewrites_c53[local]:
+  bind_arguments (type_env_all_modules all_mods) args vals = SOME scope ==>
+  LENGTH vals = LENGTH args /\
+  DROP (LENGTH dflts + LENGTH vals - LENGTH args) dflts = [] /\
+  vals ++ [] = vals
+Proof
+  strip_tac >>
+  `LENGTH vals = LENGTH args` by metis_tac[bind_arguments_length_c53] >>
+  simp[]
+QED
+
+Theorem transfer_value_no_type_error_c53[local]:
+  !from to amount st s.
+    FST (transfer_value from to amount st) <> INR (Error (TypeError s))
+Proof
+  rw[transfer_value_def, bind_def, ignore_bind_def, get_accounts_def, return_def,
+     check_def, assert_def, raise_def, update_accounts_def] >>
+  rpt (CASE_TAC >> gvs[return_def, raise_def])
+QED
+
+Theorem transfer_value_accounts_well_typed_c53[local]:
+  !from to amount st.
+    accounts_well_typed st.accounts ==>
+    accounts_well_typed (SND (transfer_value from to amount st)).accounts
+Proof
+  rw[transfer_value_def, bind_def, ignore_bind_def, get_accounts_def, return_def,
+     check_def, assert_def, raise_def, update_accounts_def] >>
+  gvs[accounts_well_typed_def, account_well_typed_def,
+      vfmStateTheory.lookup_account_def, vfmStateTheory.update_account_def,
+      combinTheory.APPLY_UPDATE_THM] >>
+  rpt strip_tac >> gvs[] >>
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  first_x_assum (qspec_then `addr` mp_tac) >> decide_tac
+QED
+
+Theorem send_call_value_no_type_error_c53[local]:
+  no_type_error_eval (send_call_value mut cx st)
+Proof
+  rw[send_call_value_def, bind_def, ignore_bind_def, check_def,
+     assert_def, return_def, raise_def,
+     vyperTypeExprSoundnessTheory.no_type_error_eval_def,
+     vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+  gvs[AllCaseEqs()] >>
+  Cases_on `mut = Payable` >> gvs[return_def, raise_def] >>
+  metis_tac[transfer_value_no_type_error_c53]
+QED
+
+Theorem send_call_value_preserves_scopes_c53[local]:
+  send_call_value mut cx st = (res,st') ==>
+  st'.scopes = st.scopes
+Proof
+  rw[send_call_value_def, bind_def, ignore_bind_def, check_def,
+     assert_def, return_def, raise_def] >>
+  gvs[AllCaseEqs()] >>
+  imp_res_tac transfer_value_scopes >> gvs[]
+QED
+
+Theorem send_call_value_accounts_well_typed_c53[local]:
+  accounts_well_typed st.accounts /\
+  send_call_value mut cx st = (res,st') ==>
+  accounts_well_typed st'.accounts
+Proof
+  rw[send_call_value_def, bind_def, ignore_bind_def, check_def,
+     assert_def, return_def, raise_def] >>
+  gvs[AllCaseEqs(), return_def, raise_def] >>
+  `accounts_well_typed
+     (SND (transfer_value cx.txn.sender cx.txn.target cx.txn.value st)).accounts` by
+    metis_tac[transfer_value_accounts_well_typed_c53] >>
+  gvs[]
+QED
+
+Theorem call_lock_action_preserves_accounts_c53[local]:
+  (if nr then
+     case cx.nonreentrant_slot of
+       NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+     | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
+   else return ()) st = (res,st') ==>
+  st'.accounts = st.accounts
+Proof
+  rw[] >> gvs[return_def, raise_def] >>
+  Cases_on `cx.nonreentrant_slot` >> gvs[return_def, raise_def] >>
+  qpat_x_assum `acquire_nonreentrant_lock _ _ _ _ = _` mp_tac >>
+  rw[acquire_nonreentrant_lock_def, bind_def, ignore_bind_def,
+     get_transient_storage_def, update_transient_def, return_def, raise_def,
+     assert_def, check_def] >>
+  gvs[AllCaseEqs(), return_def, raise_def]
+QED
+
+Theorem call_lock_action_preserves_scopes_c53[local]:
+  (if nr then
+     case cx.nonreentrant_slot of
+       NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+     | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
+   else return ()) st = (res,st') ==>
+  st'.scopes = st.scopes
+Proof
+  rw[] >> gvs[return_def, raise_def] >>
+  Cases_on `cx.nonreentrant_slot` >> gvs[return_def, raise_def] >>
+  imp_res_tac acquire_nonreentrant_lock_scopes >> gvs[]
+QED
+
+Theorem call_lock_send_prefix_body_state_ready_c53[local]:
+  machine_well_typed am /\
+  scope_well_typed env /\
+  (do
+     (if nr then
+        case cx.nonreentrant_slot of
+          NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
+      else return ());
+     send_call_value mut cx
+   od (initial_state am [env]) = (INL (),st)) ==>
+  st.scopes = [env] /\
+  st.immutables = am.immutables /\
+  state_well_typed st
+Proof
+  rw[bind_def, ignore_bind_def] >> gvs[AllCaseEqs()] >>
+  TRY (Cases_on `cx.nonreentrant_slot` >> gvs[return_def, raise_def]) >>
+  imp_res_tac acquire_nonreentrant_lock_scopes >>
+  imp_res_tac acquire_nonreentrant_lock_immutables >>
+  imp_res_tac send_call_value_preserves_scopes_c53 >>
+  imp_res_tac send_call_value_preserves_immutables >>
+  gvs[initial_state_def, state_well_typed_def, machine_well_typed_def]
+QED
+
+Theorem call_lock_action_no_type_error_c53[local]:
+  no_type_error_eval
+    ((if nr then
+        case cx.nonreentrant_slot of
+          NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
+      else return ()) st)
+Proof
+  rw[vyperTypeExprSoundnessTheory.no_type_error_eval_def,
+     vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+  gvs[return_def, raise_def] >>
+  Cases_on `cx.nonreentrant_slot` >> gvs[return_def, raise_def] >>
+  rw[acquire_nonreentrant_lock_def, bind_def, ignore_bind_def,
+     get_transient_storage_def, update_transient_def,
+     return_def, raise_def, assert_def, check_def] >>
+  gvs[AllCaseEqs(), return_def, raise_def]
+QED
+
+Theorem unlock_action_no_type_error_c53[local]:
+
+  no_type_error_eval
+    ((if nr /\ mut <> View /\ mut <> Pure then
+        case cx.nonreentrant_slot of
+          NONE => return ()
+        | SOME slot => release_nonreentrant_lock cx.txn.target slot
+      else return ()) st)
+Proof
+  rw[vyperTypeExprSoundnessTheory.no_type_error_eval_def,
+     vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+  gvs[return_def, raise_def] >>
+  Cases_on `cx.nonreentrant_slot` >> gvs[return_def, raise_def] >>
+  rw[release_nonreentrant_lock_def, bind_def, ignore_bind_def,
+     get_transient_storage_def, update_transient_def,
+     return_def, raise_def, assert_def, check_def] >>
+  gvs[AllCaseEqs(), return_def, raise_def]
+QED
+
+Theorem call_lock_send_eval_prefix_no_type_error_c53[local]:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  checked_contract_runtime_ready art mods am tx /\
+  machine_well_typed am /\ call_tx_well_typed tx /\
+  ALOOKUP mods src = SOME ts /\
+  MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
+  bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
+  args_values_typed (type_env_all_modules mods) args vals /\
+  cx = initial_evaluation_context am.sources am.layouts tx src ==>
+  no_type_error_eval
+    (do
+       (if nr then
+          case cx.nonreentrant_slot of
+            NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
+        else return ());
+       send_call_value mut cx;
+       eval_stmts cx body
+     od (initial_state am [scope]))
+Proof
+  rpt strip_tac >>
+  gvs[checked_contract_runtime_ready_def] >>
+  `context_well_typed (initial_evaluation_context am.sources am.layouts tx src)` by
+    metis_tac[call_tx_well_typed_initial_context] >>
+  `immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
+     (initial_evaluation_context am.sources am.layouts tx src) am.immutables` by
+    metis_tac[immutables_ready_initial_evaluation_context_source] >>
+  `scope_well_typed scope` by
+    (qspecl_then [`type_env_all_modules mods`, `args`, `vals`, `scope`] mp_tac
+       bind_arguments_scope_well_typed_stmt >>
+     simp[] >>
+     disch_then irule >>
+     rpt strip_tac >>
+     gvs[args_values_typed_def]) >>
+  simp[vyperTypeExprSoundnessTheory.no_type_error_eval_def,
+       bind_def, ignore_bind_def] >>
+  Cases_on `(if nr then
+               case (initial_evaluation_context am.sources am.layouts tx src).nonreentrant_slot of
+                 NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+               | SOME slot => acquire_nonreentrant_lock
+                   (initial_evaluation_context am.sources am.layouts tx src).txn.target slot
+                   (mut = View \/ mut = Pure)
+             else return ()) (initial_state am [scope])` >>
+  Cases_on `q` >> gvs[]
+  >- (Cases_on `send_call_value mut (initial_evaluation_context am.sources am.layouts tx src) r` >>
+      Cases_on `q` >> gvs[]
+      >- (`r''.scopes = [scope] /\ r''.immutables = am.immutables /\ state_well_typed r''` by
+            (irule call_lock_send_prefix_body_state_ready_c53 >>
+             simp[bind_def, ignore_bind_def] >>
+             qexistsl [`initial_evaluation_context am.sources am.layouts tx src`, `mut`, `nr`] >>
+             simp[]) >>
+          `accounts_well_typed r.accounts` by
+            (imp_res_tac call_lock_action_preserves_accounts_c53 >>
+             gvs[initial_state_accounts_well_typed]) >>
+          `accounts_well_typed r''.accounts` by
+            (imp_res_tac send_call_value_accounts_well_typed_c53 >> gvs[]) >>
+          simp[GSYM vyperTypeExprSoundnessTheory.no_type_error_eval_def] >>
+          irule checked_explicit_external_post_prefix_body_no_type_error_selected >>
+          simp[] >>
+          qexistsl [`am`, `args`, `art`, `dflts`, `mods`, `mut`, `nr`, `raw`,
+                    `ret`, `src`, `ts`, `tx`, `vals`] >>
+          simp[]) >>
+      `no_type_error_eval
+         (send_call_value mut (initial_evaluation_context am.sources am.layouts tx src) r)` by
+        simp[send_call_value_no_type_error_c53] >>
+      gvs[vyperTypeExprSoundnessTheory.no_type_error_eval_def]) >>
+  `no_type_error_eval
+     ((if nr then
+         case (initial_evaluation_context am.sources am.layouts tx src).nonreentrant_slot of
+           NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+         | SOME slot => acquire_nonreentrant_lock
+             (initial_evaluation_context am.sources am.layouts tx src).txn.target slot
+             (mut = View \/ mut = Pure)
+       else return ()) (initial_state am [scope]))` by
+    simp[call_lock_action_no_type_error_c53] >>
+  gvs[vyperTypeExprSoundnessTheory.no_type_error_eval_def]
+QED
+
+Theorem call_external_function_exact_selected_no_type_error_c53[local]:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  checked_contract_runtime_ready art mods am tx /\
+  machine_well_typed am /\ call_tx_well_typed tx /\
+  ALOOKUP mods src = SOME ts /\
+  MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
+  bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
+  args_values_typed (type_env_all_modules mods) args vals /\
+  cx = initial_evaluation_context am.sources am.layouts tx src /\
+  call_external_function am cx nr mut ts mods args dflts vals body ret = (res,am') ==>
+  no_type_error_result res
+Proof
+  rpt strip_tac >>
+  gvs[checked_contract_runtime_ready_def] >>
+  `context_well_typed (initial_evaluation_context am.sources am.layouts tx src)` by
+    metis_tac[call_tx_well_typed_initial_context] >>
+  `immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
+     (initial_evaluation_context am.sources am.layouts tx src) am.immutables` by
+    metis_tac[immutables_ready_initial_evaluation_context_source] >>
+  `scope_well_typed scope` by
+    (qspecl_then [`type_env_all_modules mods`, `args`, `vals`, `scope`] mp_tac
+       bind_arguments_scope_well_typed_stmt >>
+     simp[] >>
+     disch_then irule >>
+     rpt strip_tac >>
+     gvs[args_values_typed_def]) >>
+  `no_type_error_eval
+     (do
+        (if nr then
+           case (initial_evaluation_context am.sources am.layouts tx src).nonreentrant_slot of
+             NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+           | SOME slot => acquire_nonreentrant_lock
+               (initial_evaluation_context am.sources am.layouts tx src).txn.target slot
+               (mut = View \/ mut = Pure)
+         else return ());
+        send_call_value mut (initial_evaluation_context am.sources am.layouts tx src);
+        eval_stmts (initial_evaluation_context am.sources am.layouts tx src) body
+      od (initial_state am [scope]))` by
+    metis_tac[call_lock_send_eval_prefix_no_type_error_c53,
+              checked_contract_runtime_ready_def] >>
+  drule call_external_function_exact_args_rewrites_c53 >> strip_tac >>
+  qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[call_external_function_def, evaluate_defaults_def,
+       initial_evaluation_context_def,
+       vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+  gvs[bind_def, ignore_bind_def, return_def, raise_def,
+      initial_evaluation_context_def] >>
+  rpt strip_tac >> gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+  gvs[AllCaseEqs(), return_def, raise_def,
+      vyperTypeExprSoundnessTheory.no_type_error_eval_def,
+      vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+  qpat_x_assum `!msg. FST _ <> INR (Error (TypeError msg))`
+    (qspec_then `msg` mp_tac) >>
+  qpat_x_assum `(\(res,st). (res,st)) _ = _` mp_tac >>
+  rpt (BasicProvers.TOP_CASE_TAC >> gvs[return_def, raise_def,
+        vyperTypeExprSoundnessTheory.no_type_error_eval_def,
+        vyperTypeExprSoundnessTheory.no_type_error_result_def]) >>
+  gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+  rpt strip_tac >>
+  qpat_x_assum
+    `(if nr /\ mut <> View /\ mut <> Pure then
+        case lookup_nonreentrant_slot am.layouts tx.target of
+          NONE => return ()
+        | SOME slot => release_nonreentrant_lock tx.target slot
+      else return ()) r = (INR y,r'')` mp_tac >>
+  Cases_on `lookup_nonreentrant_slot am.layouts tx.target` >>
+  Cases_on `nr` >>
+  Cases_on `mut` >>
+  gvs[release_nonreentrant_lock_def, bind_def, ignore_bind_def,
+      get_transient_storage_def, update_transient_def,
+      return_def, raise_def, assert_def, check_def,
+      vyperTypeExprSoundnessTheory.no_type_error_eval_def,
+      vyperTypeExprSoundnessTheory.no_type_error_result_def]
+QED
+
+Theorem checked_explicit_external_entry_no_type_error_selected[local]:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  checked_contract_runtime_ready art mods am tx /\
+  machine_well_typed am /\ call_tx_well_typed tx /\
+  ALOOKUP mods src = SOME ts /\
+  MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
+  bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
+  args_values_typed (type_env_all_modules mods) args vals /\
+  call_external_function am (initial_evaluation_context am.sources am.layouts tx src)
+    nr mut ts mods args dflts vals body ret = (res,am') ==>
+  no_type_error_result res
+Proof
+  metis_tac[call_external_function_exact_selected_no_type_error_c53]
+QED
 Theorem call_body_prefix_preserves_immutables_dom[local]:
   (do
      (if nr then
@@ -6679,7 +6820,7 @@ Theorem deploy_context_constants_bare_globals_type_ready[local]:
   check_contract F am.layouts deploy_tx.target mods = SOME call_art /\
   initial_immutables (type_env_all_modules mods) mods = SOME imms /\
   evaluate_all_constants
-    ((initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts deploy_tx)
+    ((initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts deploy_tx NONE)
        with in_deploy := T)
     (am with <|immutables updated_by CONS (deploy_tx.target,imms);
                exports updated_by CONS (deploy_tx.target,exps)|>)
@@ -6699,7 +6840,7 @@ Proof
   drule deploy_constants_setup_bare_globals_ready >>
   strip_tac >>
   first_x_assum (qspecl_then [`deploy_tx`, `(deploy_tx.target,mods)::am.sources`, `imms`,
-    `(initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts deploy_tx with in_deploy := T)`,
+    `(initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts deploy_tx NONE with in_deploy := T)`,
     `am_c`, `((am:abstract_machine) with exports updated_by CONS (deploy_tx.target,exps))`] mp_tac) >>
   gvs[get_tenv_def, initial_evaluation_context_def, alistTheory.ALOOKUP_def] >>
   strip_tac >>
@@ -6746,11 +6887,11 @@ Theorem deploy_constructor_success_bare_global_type_from_constants[local]:
   call_external_function
     (am with <|immutables updated_by CONS (deploy_tx.target,imms);
                exports updated_by CONS (deploy_tx.target,exps)|>)
-    ((initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts deploy_tx)
+    ((initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts deploy_tx NONE)
        with in_deploy := T)
     nr mut ts mods args dflts deploy_tx.args body ret = (INL v',am_ctor) /\
   evaluate_all_constants
-    ((initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts deploy_tx)
+    ((initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts deploy_tx NONE)
        with in_deploy := T)
     (am with <|immutables updated_by CONS (deploy_tx.target,imms);
                exports updated_by CONS (deploy_tx.target,exps)|>)
@@ -6764,7 +6905,7 @@ Theorem deploy_constructor_success_bare_global_type_from_constants[local]:
 Proof
   rw[] >>
   qabbrev_tac
-    `cx0 = ((initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts deploy_tx)
+    `cx0 = ((initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts deploy_tx NONE)
        with in_deploy := T)` >>
   `cx0.in_deploy` by simp[Abbr `cx0`] >>
   `cx0.txn.target = deploy_tx.target` by
@@ -6839,10 +6980,10 @@ Theorem load_contract_success_constructor_constants_context[local]:
     call_external_function
       (am with <|immutables updated_by CONS (deploy_tx.target,imms);
                  exports updated_by CONS (deploy_tx.target,exps)|>)
-      ((initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts deploy_tx) with in_deploy := T)
+      ((initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts deploy_tx NONE) with in_deploy := T)
       nr mut ts mods args dflts deploy_tx.args body ret = (INL v, am_ctor) /\
     evaluate_all_constants
-      ((initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts deploy_tx) with in_deploy := T)
+      ((initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts deploy_tx NONE) with in_deploy := T)
       (am with <|immutables updated_by CONS (deploy_tx.target,imms);
                  exports updated_by CONS (deploy_tx.target,exps)|>)
       deploy_tx.target mods = SOME am_c /\
@@ -6855,7 +6996,7 @@ Proof
     [`am with <|immutables updated_by CONS (deploy_tx.target,imms);
                 exports updated_by CONS (deploy_tx.target,exps)|>`,
      `((initial_evaluation_context ((deploy_tx.target,mods)::am.sources)
-          am.layouts deploy_tx) with in_deploy := T)`,
+          am.layouts deploy_tx NONE) with in_deploy := T)`,
      `nr`, `mut`, `(case ALOOKUP mods NONE of SOME ts => ts | NONE => [])`,
      `mods`, `args`, `dflts`, `deploy_tx.args`, `body`, `ret`, `v`, `am_ctor`]
     mp_tac call_external_function_deploy_success_evaluate_all_constants >>
@@ -6881,12 +7022,12 @@ Theorem load_contract_constructor_context_bare_global_type_from_constants[local]
   call_external_function
     (am with <|immutables updated_by CONS (deploy_tx.target,imms);
                exports updated_by CONS (deploy_tx.target,exps)|>)
-    ((initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts deploy_tx)
+    ((initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts deploy_tx NONE)
        with in_deploy := T)
     nr mut (case ALOOKUP mods NONE of SOME ts => ts | NONE => []) mods args dflts
     deploy_tx.args body ret = (INL v',am_ctor) /\
   evaluate_all_constants
-    ((initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts deploy_tx)
+    ((initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts deploy_tx NONE)
        with in_deploy := T)
     (am with <|immutables updated_by CONS (deploy_tx.target,imms);
                exports updated_by CONS (deploy_tx.target,exps)|>)
@@ -6899,7 +7040,7 @@ Theorem load_contract_constructor_context_bare_global_type_from_constants[local]
 Proof
   rw[] >>
   qabbrev_tac
-    `cx0 = ((initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts deploy_tx)
+    `cx0 = ((initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts deploy_tx NONE)
        with in_deploy := T)` >>
   `cx0.in_deploy` by simp[Abbr `cx0`] >>
   `cx0.txn.target = deploy_tx.target` by
@@ -6938,7 +7079,7 @@ Theorem load_contract_deployed_bare_globals_immutables_ready_clause[local]:
       (get_source_immutables src
         (case ALOOKUP am_deployed.immutables call_tx.target of SOME m => m | NONE => [])) id = SOME (tv,v) ==>
     evaluate_type
-      (get_tenv (initial_evaluation_context am_deployed.sources am_deployed.layouts call_tx))
+      (get_tenv (initial_evaluation_context am_deployed.sources am_deployed.layouts call_tx NONE))
       ty = SOME tv
 Proof
   rw[] >>
@@ -6964,12 +7105,12 @@ Theorem deployed_toplevel_vtypes_immutables_ready_clause[local]:
        (get_source_immutables src
          (case ALOOKUP am_deployed.immutables call_tx.target of SOME m => m | NONE => [])) id = SOME (tv,v) ==>
      evaluate_type
-       (get_tenv (initial_evaluation_context am_deployed.sources am_deployed.layouts call_tx))
+       (get_tenv (initial_evaluation_context am_deployed.sources am_deployed.layouts call_tx NONE))
        ty = SOME tv) ==>
   !src id ty ts.
     FLOOKUP call_art.cta_toplevel_vtypes (src,id) = SOME (Type ty) /\
     get_module_code
-      (initial_evaluation_context am_deployed.sources am_deployed.layouts call_tx) src = SOME ts ==>
+      (initial_evaluation_context am_deployed.sources am_deployed.layouts call_tx NONE) src = SOME ts ==>
     (!is_transient typ id_str.
        find_var_decl_by_num id ts = SOME (StorageVarDecl is_transient typ,id_str) ==>
        typ = ty) /\
@@ -6982,7 +7123,7 @@ Theorem deployed_toplevel_vtypes_immutables_ready_clause[local]:
          (get_source_immutables src
            (case ALOOKUP am_deployed.immutables call_tx.target of SOME m => m | NONE => [])) id = SOME (tv,v) ==>
        evaluate_type
-         (get_tenv (initial_evaluation_context am_deployed.sources am_deployed.layouts call_tx))
+         (get_tenv (initial_evaluation_context am_deployed.sources am_deployed.layouts call_tx NONE))
          ty = SOME tv)
 Proof
   rw[] >>
@@ -6998,47 +7139,58 @@ Proof
       ?ts is_transient typ id_str.
         get_module_code
           (initial_evaluation_context ((deploy_tx.target,mods)::am_ctor.sources)
-             am_ctor.layouts call_tx) src = SOME ts /\
+             am_ctor.layouts call_tx src) src = SOME ts /\
         find_var_decl_by_num id ts = SOME (StorageVarDecl is_transient typ,id_str) /\
         typ = ty /\
         IS_SOME (evaluate_type (type_env_all_modules mods) typ) /\
         IS_SOME (lookup_var_slot_from_layout
           (initial_evaluation_context ((deploy_tx.target,mods)::am_ctor.sources)
-             am_ctor.layouts call_tx) is_transient src id_str)) /\
+             am_ctor.layouts call_tx src) is_transient src id_str)) /\
     (!src id kt vt.
       FLOOKUP call_art.cta_toplevel_vtypes (src,id) = SOME (HashMapT kt vt) ==>
       ?ts is_transient id_str.
         get_module_code
           (initial_evaluation_context ((deploy_tx.target,mods)::am_ctor.sources)
-             am_ctor.layouts call_tx) src = SOME ts /\
+             am_ctor.layouts call_tx src) src = SOME ts /\
         find_var_decl_by_num id ts = SOME (HashMapVarDecl is_transient kt vt,id_str) /\
         IS_SOME (lookup_var_slot_from_layout
           (initial_evaluation_context ((deploy_tx.target,mods)::am_ctor.sources)
-             am_ctor.layouts call_tx) is_transient src id_str))` by
+             am_ctor.layouts call_tx src) is_transient src id_str))` by
     (irule check_contract_toplevel_vtypes_consistent_initial >> simp[]) >>
   rpt conj_tac
   >- (Cases_on `FLOOKUP call_art.cta_bare_globals (src,id)` >> gvs[]
       >- (qpat_x_assum `!src id ty. FLOOKUP call_art.cta_toplevel_vtypes (src,id) = SOME (Type ty) /\ FLOOKUP call_art.cta_bare_globals (src,id) = NONE ==> _`
-            (qspecl_then [`src`,`id`,`ty`] mp_tac) >> simp[] >> rw[] >> gvs[]) >>
+            (qspecl_then [`src`,`id`,`ty`] mp_tac) >>
+            simp[get_module_code_def, initial_evaluation_context_def] >>
+            rw[] >> gvs[get_module_code_def, initial_evaluation_context_def]) >>
       rename1 `FLOOKUP call_art.cta_bare_globals (src,id) = SOME bare_ty` >>
       drule check_contract_bare_globals_consistent_initial >>
-      disch_then (qspecl_then [`call_tx`,`(deploy_tx.target,mods)::am_ctor.sources`,`src`,`id`,`bare_ty`] mp_tac) >> simp[] >> rw[] >> gvs[])
+      disch_then (qspecl_then [`call_tx`,`(deploy_tx.target,mods)::am_ctor.sources`,`src`,`id`,`bare_ty`] mp_tac) >>
+      simp[get_module_code_def, initial_evaluation_context_def] >>
+      rw[] >> gvs[get_module_code_def, initial_evaluation_context_def])
   >- (rpt strip_tac >>
       Cases_on `FLOOKUP call_art.cta_bare_globals (src,id)` >> gvs[]
       >- (qpat_x_assum `!src id ty. FLOOKUP call_art.cta_toplevel_vtypes (src,id) = SOME (Type ty) /\ FLOOKUP call_art.cta_bare_globals (src,id) = NONE ==> _`
-            (qspecl_then [`src`,`id`,`ty`] mp_tac) >> simp[] >> rw[] >> gvs[]) >>
+            (qspecl_then [`src`,`id`,`ty`] mp_tac) >>
+            simp[get_module_code_def, initial_evaluation_context_def] >>
+            rw[] >> gvs[get_module_code_def, initial_evaluation_context_def]) >>
       rename1 `FLOOKUP call_art.cta_bare_globals (src,id) = SOME bare_ty` >>
       drule check_contract_bare_globals_consistent_initial >>
-      disch_then (qspecl_then [`call_tx`,`(deploy_tx.target,mods)::am_ctor.sources`,`src`,`id`,`bare_ty`] mp_tac) >> simp[] >> rw[] >> gvs[])
+      disch_then (qspecl_then [`call_tx`,`(deploy_tx.target,mods)::am_ctor.sources`,`src`,`id`,`bare_ty`] mp_tac) >>
+      simp[get_module_code_def, initial_evaluation_context_def] >>
+      rw[] >> gvs[get_module_code_def, initial_evaluation_context_def])
   >> rpt strip_tac >>
      Cases_on `FLOOKUP call_art.cta_bare_globals (src,id)` >> gvs[]
      >- (qpat_x_assum `!src id ty. FLOOKUP call_art.cta_toplevel_vtypes (src,id) = SOME (Type ty) /\ FLOOKUP call_art.cta_bare_globals (src,id) = NONE ==> _`
-           (qspecl_then [`src`,`id`,`ty`] mp_tac) >> simp[] >> rw[] >> gvs[]) >>
+           (qspecl_then [`src`,`id`,`ty`] mp_tac) >>
+            simp[get_module_code_def, initial_evaluation_context_def] >>
+            rw[] >> gvs[get_module_code_def, initial_evaluation_context_def]) >>
      rename1 `FLOOKUP call_art.cta_bare_globals (src,id) = SOME bare_ty` >>
      `bare_ty = ty` by
        (drule check_contract_bare_globals_consistent_initial >>
         disch_then (qspecl_then [`call_tx`,`(deploy_tx.target,mods)::am_ctor.sources`,`src`,`id`,`bare_ty`] mp_tac) >>
-        simp[]) >>
+        simp[get_module_code_def, initial_evaluation_context_def] >>
+        rw[] >> gvs[get_module_code_def, initial_evaluation_context_def]) >>
      gvs[] >>
      qpat_x_assum `!src' id' ty' tv' v'. FLOOKUP call_art.cta_bare_globals (src',id') = SOME ty' /\ FLOOKUP _ id' = SOME (tv',v') ==> _`
        (qspecl_then [`src`,`id`,`bare_ty`,`tv`,`v`] mp_tac) >>
@@ -7049,7 +7201,7 @@ Theorem deploy_context_constants_bare_globals_lookup_exists[local]:
   check_contract F am.layouts deploy_tx.target mods = SOME call_art /\
   initial_immutables (type_env_all_modules mods) mods = SOME imms /\
   evaluate_all_constants
-    ((initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts deploy_tx)
+    ((initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts deploy_tx NONE)
        with in_deploy := T)
     (am with <|immutables updated_by CONS (deploy_tx.target,imms);
                exports updated_by CONS (deploy_tx.target,exps)|>)
@@ -7065,7 +7217,7 @@ Proof
   drule deploy_constants_setup_bare_globals_ready >>
   simp[get_tenv_def, initial_evaluation_context_def, IS_SOME_EXISTS, EXISTS_PROD] >>
   disch_then (qspecl_then [`deploy_tx`, `(deploy_tx.target,mods)::am.sources`,
-    `(initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts deploy_tx with in_deploy := T)`,
+    `(initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts deploy_tx NONE with in_deploy := T)`,
     `am_c`, `am with exports updated_by CONS (deploy_tx.target,exps)`] mp_tac) >>
   simp[get_tenv_def, initial_evaluation_context_def, IS_SOME_EXISTS, EXISTS_PROD] >>
   impl_tac >- gvs[initial_evaluation_context_def] >>
@@ -7105,7 +7257,7 @@ Proof
   drule load_contract_success_constructor_constants_context >>
   strip_tac >>
   gvs[] >>
-  qspecl_then [`(initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts deploy_tx with in_deploy := T)`,
+  qspecl_then [`(initial_evaluation_context ((deploy_tx.target,mods)::am.sources) am.layouts deploy_tx NONE with in_deploy := T)`,
     `am with <|exports updated_by CONS (deploy_tx.target,exps);
               immutables updated_by CONS (deploy_tx.target,imms)|>`,
     `nr`, `mut`, `case ALOOKUP mods NONE of NONE => [] | SOME ts => ts`, `mods`,
@@ -7126,7 +7278,7 @@ Theorem load_contract_establishes_immutables_ready:
   check_contract F am_deployed.layouts call_tx.target mods = SOME call_art /\
   call_tx.target = deploy_tx.target ==>
   immutables_ready call_art.cta_bare_globals call_art.cta_toplevel_vtypes
-    (initial_evaluation_context am_deployed.sources am_deployed.layouts call_tx)
+    (initial_evaluation_context am_deployed.sources am_deployed.layouts call_tx NONE)
     am_deployed.immutables
 Proof
   rw[immutables_ready_def]
@@ -8585,12 +8737,12 @@ Theorem generated_public_array_getter_expr_no_type_error_materialisable[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\ machine_well_typed am /\
   immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
-    (initial_evaluation_context am.sources am.layouts tx) am.immutables /\
+    (initial_evaluation_context am.sources am.layouts tx src) am.immutables /\
   ALOOKUP mods src = SOME ts /\ MEM (VariableDecl Public mut fn typ init) ts /\
   is_ArrayT typ /\
   build_getter (TopLevelName NoneT (src,fn)) (BaseT (UintT 256)) (Type (ArrayT_type typ)) 0 = (args,ret,exp) /\
-  bind_arguments (get_tenv (initial_evaluation_context am.sources am.layouts tx)) args vals = SOME scope /\
-  eval_expr (initial_evaluation_context am.sources am.layouts tx) exp
+  bind_arguments (get_tenv (initial_evaluation_context am.sources am.layouts tx src)) args vals = SOME scope /\
+  eval_expr (initial_evaluation_context am.sources am.layouts tx src) exp
     (initial_state am [scope]) = (res,st') ==>
   no_type_error_result res /\
   (case res of INL tvl => (?v. tvl = Value v) \/
@@ -8598,7 +8750,7 @@ Theorem generated_public_array_getter_expr_no_type_error_materialisable[local]:
    | INR _ => T)
 Proof
   rpt gen_tac >> strip_tac >>
-  qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts tx` >>
+  qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts tx src` >>
   Cases_on `eval_expr cx (TopLevelName NoneT (src,fn)) (initial_state am [scope])` >>
   `no_type_error_result q` by
     (qunabbrev_tac `cx` >> metis_tac[checked_scalar_public_getter_eval_no_type_error]) >>
@@ -8607,11 +8759,11 @@ Proof
      (VariableDecl Public mut fn (ArrayT t b) init)` by
     metis_tac[check_contract_toplevel_decl_MEM] >>
   Cases_on `mut` >> gvs[check_toplevel_decl_def, assignable_type_def, well_formed_type_def] >>
-  Cases_on `evaluate_type (get_tenv (initial_evaluation_context am.sources am.layouts tx)) t` >>
+  Cases_on `evaluate_type (get_tenv (initial_evaluation_context am.sources am.layouts tx src)) t` >>
   gvs[check_toplevel_decl_def, assignable_type_def, well_formed_type_def,
       evaluate_type_def, get_tenv_def, initial_evaluation_context_def] >>
   irule generated_array_getter_expr_no_type_error_materialisable_aux >>
-  qexistsl [`am`, `args`, `q`, `initial_evaluation_context am.sources am.layouts tx`,
+  qexistsl [`am`, `args`, `q`, `initial_evaluation_context am.sources am.layouts tx src`,
             `TopLevelName NoneT (src,fn)`, `x`, `exp`, `0`, `ret`, `scope`,
             `st'`, `r`, `vals`, `t`] >>
   simp[pure_expr_def, expr_type_def, evaluate_type_def,
@@ -8630,17 +8782,17 @@ Theorem generated_public_hashmap_getter_expr_no_type_error[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\ machine_well_typed am /\
   immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
-    (initial_evaluation_context am.sources am.layouts tx) am.immutables /\
+    (initial_evaluation_context am.sources am.layouts tx src) am.immutables /\
   ALOOKUP mods src = SOME ts /\
   MEM (HashMapDecl Public is_transient id kt vt init) ts /\
   build_getter (TopLevelName NoneT (src,id)) kt vt 0 = (args,ret,exp) /\
-  bind_arguments (get_tenv (initial_evaluation_context am.sources am.layouts tx)) args vals = SOME scope /\
-  eval_expr (initial_evaluation_context am.sources am.layouts tx) exp
+  bind_arguments (get_tenv (initial_evaluation_context am.sources am.layouts tx src)) args vals = SOME scope /\
+  eval_expr (initial_evaluation_context am.sources am.layouts tx src) exp
     (initial_state am [scope]) = (res,st') ==>
   no_type_error_result res
 Proof
   rpt gen_tac >> strip_tac >>
-  qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts tx` >>
+  qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts tx src` >>
   Cases_on `eval_expr cx (TopLevelName NoneT (src,id)) (initial_state am [scope])` >>
   `no_type_error_result q` by
     (qunabbrev_tac `cx` >> metis_tac[checked_public_hashmap_TopLevelName_no_type_error]) >>
@@ -8792,12 +8944,12 @@ Theorem generated_public_hashmap_getter_expr_no_type_error_materialisable[local]
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\ machine_well_typed am /\
   immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
-    (initial_evaluation_context am.sources am.layouts tx) am.immutables /\
+    (initial_evaluation_context am.sources am.layouts tx src) am.immutables /\
   ALOOKUP mods src = SOME ts /\
   MEM (HashMapDecl Public is_transient id kt vt init) ts /\
   build_getter (TopLevelName NoneT (src,id)) kt vt 0 = (args,ret,exp) /\
-  bind_arguments (get_tenv (initial_evaluation_context am.sources am.layouts tx)) args vals = SOME scope /\
-  eval_expr (initial_evaluation_context am.sources am.layouts tx) exp
+  bind_arguments (get_tenv (initial_evaluation_context am.sources am.layouts tx src)) args vals = SOME scope /\
+  eval_expr (initial_evaluation_context am.sources am.layouts tx src) exp
     (initial_state am [scope]) = (res,st') ==>
   no_type_error_result res /\
   (case res of INL tvl => (?v. tvl = Value v) \/
@@ -8806,7 +8958,7 @@ Theorem generated_public_hashmap_getter_expr_no_type_error_materialisable[local]
 Proof
   rpt gen_tac >> strip_tac >> conj_tac
   >- (drule_all generated_public_hashmap_getter_expr_no_type_error >> simp[]) >>
-  qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts tx` >>
+  qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts tx src` >>
   Cases_on `eval_expr cx (TopLevelName NoneT (src,id)) (initial_state am [scope])` >>
   Cases_on `q` >> gvs[]
   >- (`?slot. x = HashMapRef is_transient slot kt vt` by
@@ -8835,15 +8987,17 @@ Theorem selected_public_getter_expr_no_type_error[local]:
   is_public_getter_decl fn decl /\
   external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,[Return (SOME exp)]) /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
-  eval_expr (initial_evaluation_context am.sources am.layouts tx) exp
+  eval_expr (initial_evaluation_context am.sources am.layouts tx src) exp
     (initial_state am [scope]) = (res,st') ==>
   no_type_error_result res
 Proof
   rpt gen_tac >> strip_tac >>
   gvs[checked_contract_runtime_ready_def] >>
-  qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts tx` >>
+  qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts tx src` >>
   `get_tenv cx = type_env_all_modules mods` by
     simp[Abbr `cx`, get_tenv_def, initial_evaluation_context_def] >>
+  `immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes cx am.immutables` by
+    (qunabbrev_tac `cx` >> metis_tac[immutables_ready_initial_evaluation_context_source]) >>
   Cases_on `decl` >> gvs[is_public_getter_decl_def, external_getter_tuple_def]
   >- (Cases_on `v` >> gvs[] >>
       Cases_on `is_ArrayT t` >> gvs[]
@@ -8873,7 +9027,7 @@ Theorem selected_public_getter_expr_no_type_error_materialisable[local]:
   is_public_getter_decl fn decl /\
   external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,[Return (SOME exp)]) /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
-  eval_expr (initial_evaluation_context am.sources am.layouts tx) exp
+  eval_expr (initial_evaluation_context am.sources am.layouts tx src) exp
     (initial_state am [scope]) = (res,st') ==>
   no_type_error_result res /\
   (case res of INL tvl => (?v. tvl = Value v) \/
@@ -8883,9 +9037,11 @@ Proof
   rpt gen_tac >> strip_tac >> conj_tac
   >- (irule selected_public_getter_expr_no_type_error >> metis_tac[]) >>
   gvs[checked_contract_runtime_ready_def] >>
-  qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts tx` >>
+  qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts tx src` >>
   `get_tenv cx = type_env_all_modules mods` by
     simp[Abbr `cx`, get_tenv_def, initial_evaluation_context_def] >>
+  `immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes cx am.immutables` by
+    (qunabbrev_tac `cx` >> metis_tac[immutables_ready_initial_evaluation_context_source]) >>
   Cases_on `decl` >> gvs[is_public_getter_decl_def, external_getter_tuple_def]
   >- (Cases_on `v` >> gvs[] >>
       Cases_on `is_ArrayT t` >> gvs[]
@@ -8922,12 +9078,12 @@ Theorem checked_public_array_TopLevelName_base_result_for_generated_getter_aux[l
   ALOOKUP am.sources tx.target = SOME mods /\
   machine_well_typed am /\
   immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
-    (initial_evaluation_context am.sources am.layouts tx) am.immutables /\
+    (initial_evaluation_context am.sources am.layouts tx src) am.immutables /\
   ALOOKUP mods src = SOME ts /\
   MEM (VariableDecl Public mut fn (ArrayT t b) init) ts /\
   st.immutables = am.immutables /\ state_well_typed st /\
-  evaluate_type (get_tenv (initial_evaluation_context am.sources am.layouts tx)) t = SOME x /\
-  eval_expr (initial_evaluation_context am.sources am.layouts tx)
+  evaluate_type (get_tenv (initial_evaluation_context am.sources am.layouts tx src)) t = SOME x /\
+  eval_expr (initial_evaluation_context am.sources am.layouts tx src)
     (TopLevelName NoneT (src,fn)) st = (base_res,r) ==>
   no_type_error_result base_res /\
   (case base_res of
@@ -8938,11 +9094,11 @@ Theorem checked_public_array_TopLevelName_base_result_for_generated_getter_aux[l
 Proof
   rpt gen_tac >> strip_tac >> conj_tac
   >- (
-    `get_module_code (initial_evaluation_context am.sources am.layouts tx) src = SOME ts` by
+    `get_module_code (initial_evaluation_context am.sources am.layouts tx src) src = SOME ts` by
       simp[get_module_code_def, initial_evaluation_context_def] >>
     `FLOOKUP art.cta_toplevel_vtypes (src,string_to_num fn) = SOME (Type (ArrayT t b))` by
       (`toplevel_vtypes_complete art.cta_toplevel_vtypes
-          (initial_evaluation_context am.sources am.layouts tx)` by
+          (initial_evaluation_context am.sources am.layouts tx src)` by
          (irule check_contract_toplevel_vtypes_complete_initial >> simp[]) >>
        gvs[toplevel_vtypes_complete_def] >> metis_tac[]) >>
     `check_toplevel_decl am.layouts tx.target mods art src
@@ -8960,7 +9116,7 @@ Proof
           (irule find_var_decl_by_num_NONE_Constant >> simp[] >> metis_tac[]) >>
         `FLOOKUP art.cta_bare_globals (src,string_to_num fn) = SOME (expr_type e)` by
           (`bare_globals_complete art.cta_bare_globals
-              (initial_evaluation_context am.sources am.layouts tx)` by
+              (initial_evaluation_context am.sources am.layouts tx src)` by
              (irule check_contract_bare_globals_complete_initial >> simp[]) >>
            gvs[bare_globals_complete_def] >> metis_tac[]) >>
         gvs[immutables_ready_def] >>
@@ -8977,7 +9133,7 @@ Proof
           (irule find_var_decl_by_num_NONE_Immutable >> simp[] >> metis_tac[]) >>
         `FLOOKUP art.cta_bare_globals (src,string_to_num fn) = SOME (ArrayT t b)` by
           (`bare_globals_complete art.cta_bare_globals
-              (initial_evaluation_context am.sources am.layouts tx)` by
+              (initial_evaluation_context am.sources am.layouts tx src)` by
              (irule check_contract_bare_globals_complete_initial >> simp[]) >>
            gvs[bare_globals_complete_def] >> metis_tac[]) >>
         gvs[immutables_ready_def] >>
@@ -9035,23 +9191,23 @@ Theorem generated_public_array_getter_aux_premises_from_wrapper[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\ machine_well_typed am /\
   immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
-    (initial_evaluation_context am.sources am.layouts tx) am.immutables /\
+    (initial_evaluation_context am.sources am.layouts tx src) am.immutables /\
   ALOOKUP mods src = SOME ts /\
   MEM (VariableDecl Public mut fn typ init) ts /\
   is_ArrayT typ /\
   build_getter (TopLevelName NoneT (src,fn)) (BaseT (UintT 256))
     (Type (ArrayT_type typ)) 0 = (args,ret,exp) /\
   st.immutables = am.immutables /\ state_well_typed st /\
-  eval_expr (initial_evaluation_context am.sources am.layouts tx)
+  eval_expr (initial_evaluation_context am.sources am.layouts tx src)
     (TopLevelName NoneT (src,fn)) st = (base_res,st1) ==>
   ?elem_tv.
     no_type_error_result base_res /\
     (!id aty id' aty'. MEM (id,aty) args /\ MEM (id',aty') args /\
        string_to_num id' = string_to_num id ==> aty' = aty) /\
     pure_expr (TopLevelName NoneT (src,fn)) /\
-    evaluate_type (get_tenv (initial_evaluation_context am.sources am.layouts tx))
+    evaluate_type (get_tenv (initial_evaluation_context am.sources am.layouts tx src))
       (expr_type (TopLevelName NoneT (src,fn))) = SOME NoneTV /\
-    evaluate_type (get_tenv (initial_evaluation_context am.sources am.layouts tx))
+    evaluate_type (get_tenv (initial_evaluation_context am.sources am.layouts tx src))
       (ArrayT_type typ) = SOME elem_tv /\
     (case base_res of
        INL tvl =>
@@ -9071,7 +9227,7 @@ Proof
   Cases_on `evaluate_type (type_env_all_modules mods) t` >>
   gvs[evaluate_type_def] >>
   rename1 `evaluate_type (type_env_all_modules mods) t = SOME elem_tv` >>
-  `evaluate_type (get_tenv (initial_evaluation_context am.sources am.layouts tx)) t = SOME elem_tv` by
+  `evaluate_type (get_tenv (initial_evaluation_context am.sources am.layouts tx src)) t = SOME elem_tv` by
     simp[get_tenv_def, initial_evaluation_context_def] >>
   qexists `elem_tv` >>
   `no_type_error_result base_res /\
@@ -9090,28 +9246,28 @@ Theorem generated_public_array_getter_expr_no_type_error_materialisable_post_pre
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\ machine_well_typed am /\
   immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
-    (initial_evaluation_context am.sources am.layouts tx) am.immutables /\
+    (initial_evaluation_context am.sources am.layouts tx src) am.immutables /\
   ALOOKUP mods src = SOME ts /\ MEM (VariableDecl Public mut fn typ init) ts /\
   is_ArrayT typ /\
   build_getter (TopLevelName NoneT (src,fn)) (BaseT (UintT 256)) (Type (ArrayT_type typ)) 0 = (args,ret,exp) /\
-  bind_arguments (get_tenv (initial_evaluation_context am.sources am.layouts tx)) args vals = SOME scope /\
+  bind_arguments (get_tenv (initial_evaluation_context am.sources am.layouts tx src)) args vals = SOME scope /\
   st.scopes = [scope] /\ st.immutables = am.immutables /\ state_well_typed st /\
-  eval_expr (initial_evaluation_context am.sources am.layouts tx) exp st = (res,st') ==>
+  eval_expr (initial_evaluation_context am.sources am.layouts tx src) exp st = (res,st') ==>
   no_type_error_result res /\
   (case res of INL tvl => (?v. tvl = Value v) \/
                 (?is_transient slot elem_tv bd. tvl = ArrayRef is_transient slot elem_tv bd)
    | INR _ => T)
 Proof
   rpt gen_tac >> strip_tac >>
-  Cases_on `eval_expr (initial_evaluation_context am.sources am.layouts tx)
+  Cases_on `eval_expr (initial_evaluation_context am.sources am.layouts tx src)
               (TopLevelName NoneT (src,fn)) st` >>
   drule_all generated_public_array_getter_aux_premises_from_wrapper >>
   strip_tac >>
   qspecl_then
     [`ArrayT_type typ`, `TopLevelName NoneT (src,fn)`, `0`, `args`,
-     `ret`, `exp`, `get_tenv (initial_evaluation_context am.sources am.layouts tx)`,
+     `ret`, `exp`, `get_tenv (initial_evaluation_context am.sources am.layouts tx src)`,
      `vals`, `scope`, `q`, `st`, `r`, `res`, `st'`,
-     `initial_evaluation_context am.sources am.layouts tx`, `elem_tv`, `args`]
+     `initial_evaluation_context am.sources am.layouts tx src`, `elem_tv`, `args`]
     mp_tac generated_array_getter_expr_no_type_error_materialisable_post_prefix_aux >>
   simp[] >>
   impl_tac >- metis_tac[] >>
@@ -9122,13 +9278,13 @@ Theorem generated_public_hashmap_getter_expr_no_type_error_materialisable_post_p
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\ machine_well_typed am /\
   immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
-    (initial_evaluation_context am.sources am.layouts tx) am.immutables /\
+    (initial_evaluation_context am.sources am.layouts tx src) am.immutables /\
   ALOOKUP mods src = SOME ts /\
   MEM (HashMapDecl Public is_transient id kt vt init) ts /\
   build_getter (TopLevelName NoneT (src,id)) kt vt 0 = (args,ret,exp) /\
-  bind_arguments (get_tenv (initial_evaluation_context am.sources am.layouts tx)) args vals = SOME scope /\
+  bind_arguments (get_tenv (initial_evaluation_context am.sources am.layouts tx src)) args vals = SOME scope /\
   st.scopes = [scope] /\
-  eval_expr (initial_evaluation_context am.sources am.layouts tx) exp st = (res,st') ==>
+  eval_expr (initial_evaluation_context am.sources am.layouts tx src) exp st = (res,st') ==>
   no_type_error_result res /\
   (case res of INL tvl => (?v. tvl = Value v) \/
                            (?is_transient slot elem_tv bd. tvl = ArrayRef is_transient slot elem_tv bd)
@@ -9136,7 +9292,7 @@ Theorem generated_public_hashmap_getter_expr_no_type_error_materialisable_post_p
 Proof
   rpt gen_tac >> strip_tac >> conj_tac
   >- (
-    qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts tx` >>
+    qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts tx src` >>
     Cases_on `eval_expr cx (TopLevelName NoneT (src,id)) st` >>
     Cases_on `q` >> gvs[]
     >- (`?slot. x = HashMapRef is_transient slot kt vt` by
@@ -9177,7 +9333,7 @@ Proof
                  `ret`, `exp`, `cx`, `st`, `y`, `r`, `res`, `st'`]
       mp_tac build_getter_base_error_no_type_error_post_prefix >>
     simp[]) >>
-  qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts tx` >>
+  qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts tx src` >>
   Cases_on `eval_expr cx (TopLevelName NoneT (src,id)) st` >>
   Cases_on `q` >> gvs[]
   >- (`?slot. x = HashMapRef is_transient slot kt vt` by
@@ -9210,7 +9366,7 @@ Theorem selected_public_getter_expr_no_type_error_materialisable_post_prefix[loc
   external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,[Return (SOME exp)]) /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
   st.scopes = [scope] /\ st.immutables = am.immutables /\ state_well_typed st /\
-  eval_expr (initial_evaluation_context am.sources am.layouts tx) exp st = (res,st') ==>
+  eval_expr (initial_evaluation_context am.sources am.layouts tx src) exp st = (res,st') ==>
   no_type_error_result res /\
   (case res of INL tvl => (?v. tvl = Value v) \/
                            (?is_transient slot elem_tv bd. tvl = ArrayRef is_transient slot elem_tv bd)
@@ -9218,9 +9374,11 @@ Theorem selected_public_getter_expr_no_type_error_materialisable_post_prefix[loc
 Proof
   rpt gen_tac >> strip_tac >>
   gvs[checked_contract_runtime_ready_def] >>
-  qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts tx` >>
+  qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts tx src` >>
   `get_tenv cx = type_env_all_modules mods` by
     simp[Abbr `cx`, get_tenv_def, initial_evaluation_context_def] >>
+  `immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes cx am.immutables` by
+    (qunabbrev_tac `cx` >> metis_tac[immutables_ready_initial_evaluation_context_source]) >>
   Cases_on `decl` >> gvs[is_public_getter_decl_def, external_getter_tuple_def]
   >- (Cases_on `v` >> gvs[] >>
       Cases_on `is_ArrayT t` >> gvs[]
@@ -9251,7 +9409,7 @@ Theorem checked_public_getter_entry_no_type_error[local]:
   is_public_getter_decl fn decl /\
   external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,body) /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
-  eval_stmts (initial_evaluation_context am.sources am.layouts tx) body
+  eval_stmts (initial_evaluation_context am.sources am.layouts tx src) body
     (initial_state am [scope]) = (res,st') ==>
   no_type_error_result res
 Proof
@@ -9265,7 +9423,7 @@ Proof
      Cases_on `v` >> gvs[is_public_getter_decl_def] >>
      drule_all hashmap_public_getter_tuple_shape >> metis_tac[]) >>
   gvs[] >>
-  qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts tx` >>
+  qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts tx src` >>
   Cases_on `eval_expr cx exp (initial_state am [scope])` >>
   irule eval_stmts_single_Return_no_type_error >>
   qexistsl [`cx`, `exp`, `q`, `initial_state am [scope]`, `st'`, `r`] >> simp[] >>
@@ -9333,7 +9491,7 @@ Theorem checked_explicit_external_post_prefix_body_no_type_error[local]:
   ALOOKUP am.sources tx.target = SOME mods /\
   ALOOKUP mods src = SOME ts /\
   MEM (FunctionDecl External mut nr raw fn args dflts ret body) ts /\
-  cx = ((initial_evaluation_context am.sources am.layouts tx) with stk := [(src,fn)]) /\
+  cx = ((initial_evaluation_context am.sources am.layouts tx src) with stk := [(src,fn)]) /\
   context_well_typed cx /\ machine_well_typed am /\
   immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes cx am.immutables /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
@@ -9346,7 +9504,7 @@ Proof
   drule_all checked_explicit_external_body_typing_package >>
   strip_tac >>
   `functions_well_typed
-     ((initial_evaluation_context am.sources am.layouts tx) with stk := [(src,fn)])` by
+     ((initial_evaluation_context am.sources am.layouts tx src) with stk := [(src,fn)])` by
     (irule check_contract_functions_well_typed_initial_stk >> simp[]) >>
   irule eval_stmts_no_type_error >>
   simp[] >>
@@ -9372,4 +9530,5 @@ Proof
       first_x_assum drule_all >>
       simp[])
 QED
+
 
