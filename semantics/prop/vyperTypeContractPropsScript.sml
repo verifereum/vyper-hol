@@ -9552,6 +9552,31 @@ Proof
   simp[]
 QED
 
+Definition abi_cast_value_def:
+  abi_cast_value tv v <=> ?raw. safe_cast tv raw = SOME v
+End
+
+Definition scope_abi_casts_def:
+  scope_abi_casts tenv params vals scope <=>
+    !id ty raw sv.
+      MEM ((id,ty),raw) (ZIP (params,vals)) /\
+      FLOOKUP scope (string_to_num id) = SOME sv ==>
+        sv.assignable /\
+        ?tv. evaluate_type tenv ty = SOME tv /\
+             sv.type = tv /\ safe_cast tv raw = SOME sv.value
+End
+
+Theorem bind_arguments_scope_abi_casts[local]:
+  bind_arguments tenv params vals = SOME scope /\
+  ALL_DISTINCT (MAP (string_to_num o FST) params) ==>
+  scope_abi_casts tenv params vals scope
+Proof
+  rw[scope_abi_casts_def] >>
+  drule_all bind_arguments_success_flookup_safe_cast >>
+  rw[] >>
+  qexists `tv` >> simp[]
+QED
+
 Theorem checked_explicit_external_raw_bind_env_package[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\
