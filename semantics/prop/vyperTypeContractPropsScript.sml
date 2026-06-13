@@ -6685,6 +6685,32 @@ Theorem checked_explicit_external_entry_no_type_error_selected[local]:
 Proof
   metis_tac[call_external_function_exact_selected_no_type_error_c53]
 QED
+Theorem preserves_immutables_dom_same_initial_from_mid[local]:
+  st0.immutables = am_c.immutables /\
+  (?st_mid. st_mid.immutables = am_c.immutables /\
+            preserves_immutables_dom cx st_mid st') ==>
+  preserves_immutables_dom cx st0 st'
+Proof
+  rw[preserves_immutables_dom_def] >> metis_tac[]
+QED
+
+Theorem preserves_immutables_dom_eq_local[local]:
+  st'.immutables = st.immutables ==> preserves_immutables_dom cx st st'
+Proof
+  rw[preserves_immutables_dom_def] >> gvs[]
+QED
+
+Theorem preserves_immutables_dom_trans_local[local]:
+  preserves_immutables_dom cx st1 st2 /\
+  preserves_immutables_dom cx st2 st3 ==>
+  preserves_immutables_dom cx st1 st3
+Proof
+  rw[preserves_immutables_dom_def] >>
+  `?imms2. ALOOKUP st2.immutables cx.txn.target = SOME imms2` by
+    (gvs[IS_SOME_EXISTS] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
 Theorem call_body_prefix_preserves_immutables_dom[local]:
   (do
      (if nr then
@@ -6698,18 +6724,25 @@ Theorem call_body_prefix_preserves_immutables_dom[local]:
   preserves_immutables_dom cx (initial_state am_c [env]) st'
 Proof
   rw[bind_def, ignore_bind_def] >>
+  imp_res_tac call_lock_action_preserves_immutables >>
   gvs[AllCaseEqs()] >>
-  TRY (`s''.immutables = (initial_state am_c [env]).immutables` by
-         (qpat_x_assum `(case cx.nonreentrant_slot of NONE => _ | SOME slot => _) _ = _` mp_tac >>
-          Cases_on `cx.nonreentrant_slot` >> rw[return_def, raise_def] >>
-          imp_res_tac acquire_nonreentrant_lock_immutables) >> gvs[]) >>
-  gvs[initial_state_def] >>
+  TRY (`s''.immutables = am_c.immutables` by
+         (qpat_x_assum `(case cx.nonreentrant_slot of NONE => _ | SOME slot => _) _ = (INL (),s'')` mp_tac >>
+          Cases_on `cx.nonreentrant_slot` >> rw[return_def, raise_def, initial_state_def] >>
+          imp_res_tac acquire_nonreentrant_lock_immutables >> gvs[initial_state_def]) >>
+       gvs[]) >>
+  TRY (`s''.immutables = am_c.immutables` by
+         (qpat_x_assum `(case cx.nonreentrant_slot of NONE => _ | SOME slot => _) _ = (INR e,s'')` mp_tac >>
+          Cases_on `cx.nonreentrant_slot` >> rw[return_def, raise_def, initial_state_def] >>
+          imp_res_tac acquire_nonreentrant_lock_immutables >> gvs[initial_state_def]) >>
+       gvs[]) >>
+  TRY (qpat_x_assum `return () _ = (INL (),s'')` mp_tac >>
+       rw[return_def, initial_state_def]) >>
   imp_res_tac send_call_value_preserves_immutables >>
   imp_res_tac eval_stmts_preserves_immutables_addr_dom >>
   imp_res_tac eval_stmts_preserves_immutables_dom >>
-  gvs[return_def] >>
-  simp[preserves_immutables_dom_def, initial_state_def] >>
-  rpt gen_tac >> rpt disch_tac >> TRY eq_tac >> gvs[] >> metis_tac[]
+  gvs[initial_state_def] >>
+  fs[preserves_immutables_dom_def] >> rw[] >> gvs[]
 QED
 
 Theorem preserves_immutables_dom_final_lookup_exists_in_initial[local]:
@@ -9843,6 +9876,74 @@ Proof
   disj2_tac >>
   qexists `raw` >> simp[]
 QED
+Theorem raw_abi_BareGlobalName_lookup_ok[local]:
+  well_typed_expr env (BareGlobalName ty id) /\
+  raw_abi_formal_scope_ready tenv params vals scope env cx st ==>
+  ?rt v.
+    FLOOKUP (get_source_immutables (current_module cx)
+      (case ALOOKUP st.immutables cx.txn.target of SOME m => m | NONE => []))
+      (string_to_num id) = SOME (rt,v) /\
+    evaluate_type (get_tenv cx) ty = SOME rt /\
+    value_has_type rt v
+Proof
+  strip_tac >>
+  `FLOOKUP env.bare_globals (env.current_src,string_to_num id) = SOME ty` by
+    gvs[well_typed_expr_def] >>
+  `env_consistent env cx st` by
+    gvs[raw_abi_formal_scope_ready_def, raw_abi_runtime_consistent_def] >>
+  `env.current_src = current_module cx` by
+    gvs[env_consistent_def, env_context_consistent_def] >>
+  `IS_SOME (FLOOKUP (get_source_immutables (current_module cx)
+     (case ALOOKUP st.immutables cx.txn.target of SOME m => m | NONE => []))
+     (string_to_num id))` by
+    (gvs[env_consistent_def, env_immutables_consistent_def] >>
+     first_x_assum drule >> simp[]) >>
+  pop_assum mp_tac >> simp[IS_SOME_EXISTS] >>
+  strip_tac >> PairCases_on `x` >> gvs[] >>
+  `evaluate_type (get_tenv cx) ty = SOME x0` by
+    (gvs[env_consistent_def, env_immutables_consistent_def] >>
+     first_x_assum drule_all >> simp[]) >>
+  `imms_well_typed
+     (case ALOOKUP st.immutables cx.txn.target of SOME m => m | NONE => [])` by
+    (Cases_on `ALOOKUP st.immutables cx.txn.target` >>
+     gvs[raw_abi_formal_scope_ready_def, raw_abi_runtime_consistent_def]
+     >- rw[imms_well_typed_def] >>
+     rw[] >>
+     gvs[EVERY_MEM, FORALL_PROD] >>
+     first_x_assum irule >>
+     imp_res_tac ALOOKUP_MEM >>
+     goal_assum drule) >>
+  drule_all vyperTypeEnvTheory.imms_well_typed_get_source_immutables >>
+  rw[] >>
+  qexistsl [`x0`, `x1`] >> simp[]
+QED
+
+Theorem raw_abi_eval_BareGlobalName_result_ok[local]:
+  well_typed_expr env (BareGlobalName ty id) /\
+  raw_abi_formal_scope_ready (get_tenv cx) params vals scope env cx st /\
+  eval_expr cx (BareGlobalName ty id) st = (res,st') ==>
+    no_type_error_result res /\
+    case res of
+    | INL tv => raw_expr_value_ok (get_tenv cx) (expr_type (BareGlobalName ty id)) tv /\
+                raw_abi_formal_scope_ready (get_tenv cx) params vals scope env cx st'
+    | INR _ => T
+Proof
+  strip_tac >>
+  drule_all raw_abi_BareGlobalName_lookup_ok >>
+  strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, get_immutables_def,
+       get_address_immutables_def, lift_option_def, lift_option_type_def,
+       return_def, raise_def,
+       vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+  Cases_on `ALOOKUP st.immutables cx.txn.target` >> gvs[return_def, raise_def] >>
+  rw[expr_type_def] >>
+  gvs[] >>
+  irule raw_expr_value_ok_typed >>
+  qexists_tac `rt` >>
+  simp[toplevel_value_typed_Value]
+QED
+
 Theorem safe_cast_list_length[local]:
   !rts raws acc out.
     safe_cast_list rts raws acc = SOME out ==>
