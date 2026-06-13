@@ -10386,6 +10386,48 @@ Proof
   metis_tac[cj 9 eval_all_type_sound_mutual]
 QED
 
+Theorem raw_abi_eval_expr_generic_result_ok[local]:
+  well_typed_expr env e /\
+  raw_abi_formal_scope_ready tenv params vals scope env cx st /\
+  state_well_typed st /\ functions_well_typed cx /\
+  eval_expr cx e st = (res,st') ==>
+  state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
+  no_type_error_result res /\
+  case res of
+  | INL tv => raw_expr_value_ok env.type_defs (expr_type e) tv
+  | INR _ => T
+Proof
+  strip_tac >>
+  `env_consistent env cx st /\ context_well_typed cx /\
+   accounts_well_typed st.accounts` by
+    metis_tac[raw_abi_formal_scope_ready_soundness_preconditions_weak] >>
+  drule_all eval_expr_type_sound_from_mutual >>
+  strip_tac >> simp[] >>
+  Cases_on `res` >> gvs[] >>
+  metis_tac[expr_result_typed_raw_expr_value_ok]
+QED
+
+Theorem raw_abi_eval_exprs_generic_result_ok[local]:
+  well_typed_exprs env es /\
+  raw_abi_formal_scope_ready tenv params vals scope env cx st /\
+  state_well_typed st /\ functions_well_typed cx /\
+  eval_exprs cx es st = (res,st') ==>
+  state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
+  no_type_error_result res /\
+  case res of
+  | INL vs => raw_expr_values_ok env.type_defs es vs
+  | INR _ => T
+Proof
+  strip_tac >>
+  `env_consistent env cx st /\ context_well_typed cx /\
+   accounts_well_typed st.accounts` by
+    metis_tac[raw_abi_formal_scope_ready_soundness_preconditions_weak] >>
+  drule_all eval_exprs_type_sound_from_mutual >>
+  strip_tac >> simp[] >>
+  Cases_on `res` >> gvs[] >>
+  metis_tac[exprs_runtime_typed_raw_expr_values_ok]
+QED
+
 Theorem raw_abi_eval_stmts_no_type_error[local]:
   type_stmts env ret_ty body = SOME env' /\
   raw_abi_formal_scope_ready tenv params vals scope env cx st /\
