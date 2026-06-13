@@ -10117,6 +10117,47 @@ Proof
   >- (Cases_on `safe_cast h' h` >> gvs[] >> first_x_assum drule >> rw[])
 QED
 
+
+Theorem bare_globals_agrees_toplevel_type[local]:
+  env_consistent env cx st /\
+  FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\
+  FLOOKUP env.bare_globals (src,id) = SOME ty' ==>
+  ty' = ty
+Proof
+  rw[env_consistent_def] >>
+  drule_all env_context_consistent_bare_global_find_NONE >> rw[] >> gvs[]
+QED
+Theorem raw_abi_eval_TopLevelName_result_ok[local]:
+  well_typed_expr env (TopLevelName ty (src,id)) /\
+  raw_abi_formal_scope_ready (get_tenv cx) params vals scope env cx st /\
+  functions_well_typed cx /\
+  eval_expr cx (TopLevelName ty (src,id)) st = (res,st') ==>
+    no_type_error_result res /\
+    case res of
+    | INL tv => raw_expr_value_ok (get_tenv cx) (expr_type (TopLevelName ty (src,id))) tv /\
+                raw_abi_formal_scope_ready (get_tenv cx) params vals scope env cx st'
+    | INR _ => T
+Proof
+  strip_tac >>
+  `env_consistent env cx st` by
+    gvs[raw_abi_formal_scope_ready_def, raw_abi_runtime_consistent_def] >>
+  `FLOOKUP env.toplevel_vtypes (src,string_to_num id) = SOME (Type ty)` by
+    gvs[well_typed_expr_def] >>
+  Cases_on `FLOOKUP env.bare_globals (src,string_to_num id)`
+  >- (`?ts is_transient typ id_str.
+         get_module_code cx src = SOME ts /\
+         find_var_decl_by_num (string_to_num id) ts = SOME (StorageVarDecl is_transient typ,id_str) /\
+         typ = ty /\
+         IS_SOME (evaluate_type (get_tenv cx) typ) /\
+         IS_SOME (lookup_var_slot_from_layout cx is_transient src id_str)` by
+        (gvs[env_consistent_def, env_context_consistent_def] >>
+         first_x_assum drule_all >> rw[]) >>
+      gvs[IS_SOME_EXISTS] >>
+      drule_all raw_abi_eval_TopLevelName_storage_result_ok >> simp[]) >>
+  drule_all bare_globals_agrees_toplevel_type >> strip_tac >> gvs[] >>
+  drule_all raw_abi_eval_TopLevelName_immutable_result_ok >> simp[]
+QED
+
 Theorem safe_cast_idempotent[local]:
   (!rt raw v. safe_cast rt raw = SOME v ==> safe_cast rt v = SOME v) /\
   (!rts raws acc out.
