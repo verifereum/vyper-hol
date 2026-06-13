@@ -7485,6 +7485,65 @@ Proof
   simp[Once evaluate_def, bind_def, return_def, raise_def]
 QED
 
+Theorem build_getter_base_error_no_type_error_post_prefix[local]:
+  !e kt vt n args ret exp cx st err st1 res st'.
+  build_getter e kt vt n = (args,ret,exp) /\
+  eval_expr cx e st = (INR err,st1) /\
+  no_type_error_result (INR err) /\
+  eval_expr cx exp st = (res,st') ==>
+  no_type_error_result res
+Proof
+  recInduct build_getter_ind >> rpt strip_tac >>
+  qpat_x_assum `build_getter _ _ _ _ = _` mp_tac >>
+  simp[Once build_getter_def] >>
+  Cases_on `is_ArrayT vt` >> simp[] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rw[] >> gvs[]
+  >- (first_x_assum irule >> simp[] >>
+      qexistsl [`cx`, `err`, `st`, `st'`, `st1`] >>
+      simp[] >>
+      qpat_x_assum `eval_expr cx e _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, return_def, raise_def])
+  >- (qpat_x_assum `eval_expr cx (Subscript _ _ _) _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, return_def, raise_def] >>
+      simp[] >> strip_tac >> gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def]) >>
+  first_x_assum irule >> simp[] >>
+  qexistsl [`cx`, `err`, `st`, `st'`, `st1`] >>
+  simp[] >>
+  qpat_x_assum `eval_expr cx e _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, return_def, raise_def]
+QED
+
+Theorem build_getter_base_error_materialisable_shape_post_prefix[local]:
+  !e kt vt n args ret exp cx st err st1 res st'.
+  build_getter e kt vt n = (args,ret,exp) /\
+  eval_expr cx e st = (INR err,st1) /\
+  eval_expr cx exp st = (res,st') ==>
+  (case res of INL tvl => (?v. tvl = Value v) \/
+                           (?is_transient slot elem_tv bd. tvl = ArrayRef is_transient slot elem_tv bd)
+             | INR _ => T)
+Proof
+  recInduct build_getter_ind >> rpt strip_tac >>
+  qpat_x_assum `build_getter _ _ _ _ = _` mp_tac >>
+  simp[Once build_getter_def] >>
+  Cases_on `is_ArrayT vt` >> simp[] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rw[] >> gvs[]
+  >- (first_x_assum irule >> simp[] >>
+      qexistsl [`cx`, `err`, `st`, `st'`, `st1`] >>
+      simp[] >>
+      qpat_x_assum `eval_expr cx e _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, return_def, raise_def])
+  >- (qpat_x_assum `eval_expr cx (Subscript _ _ _) _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, return_def, raise_def] >>
+      simp[] >> strip_tac >> gvs[]) >>
+  first_x_assum irule >> simp[] >>
+  qexistsl [`cx`, `err`, `st`, `st'`, `st1`] >>
+  simp[] >>
+  qpat_x_assum `eval_expr cx e _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, return_def, raise_def]
+QED
+
 
 Theorem generated_hashmap_getter_expr_no_type_error[local]:
   !e kt vt n args ret exp tenv params vals scope cx am
