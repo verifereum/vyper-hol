@@ -9843,6 +9843,82 @@ Proof
   disj2_tac >>
   qexists `raw` >> simp[]
 QED
+Theorem safe_cast_list_length[local]:
+  !rts raws acc out.
+    safe_cast_list rts raws acc = SOME out ==>
+    LENGTH out = LENGTH acc + LENGTH rts /\ LENGTH rts = LENGTH raws
+Proof
+  Induct >> Cases_on `raws` >>
+  rw[Once vyperValueOperationTheory.safe_cast_def]
+  >- simp[listTheory.LENGTH_REVERSE]
+  >- (Cases_on `safe_cast h' h` >> gvs[] >> first_x_assum drule >> rw[])
+  >- (Cases_on `safe_cast h' h` >> gvs[] >> first_x_assum drule >> rw[])
+QED
+
+Theorem safe_cast_idempotent[local]:
+  (!rt raw v. safe_cast rt raw = SOME v ==> safe_cast rt v = SOME v) /\
+  (!rts raws acc out.
+     safe_cast_list rts raws acc = SOME out ==>
+     ?suffix.
+       out = REVERSE acc ++ suffix /\
+       safe_cast_list rts suffix [] = SOME suffix /\
+       !acc'. safe_cast_list rts suffix acc' = SOME (REVERSE acc' ++ suffix))
+Proof
+  ho_match_mp_tac vyperValueOperationTheory.safe_cast_ind >>
+  rw[Once vyperValueOperationTheory.safe_cast_def]
+  >- (Cases_on `rt` >> Cases_on `raw` >>
+      gvs[Once vyperValueOperationTheory.safe_cast_def, AllCaseEqs()] >>
+      simp[Once vyperValueOperationTheory.safe_cast_def, within_int_bound_def] >>
+      qpat_assum `safe_cast_list _ _ [] = SOME _`
+        (fn th => assume_tac (MATCH_MP safe_cast_list_length th)) >>
+      rw[] >> gvs[MAP_ZIP] >> metis_tac[])
+  >- (qexists `[]` >> gvs[vyperValueOperationTheory.safe_cast_def])
+  >- (qpat_x_assum `safe_cast_list (rt::rts) (raw::raws) acc = SOME out` mp_tac >>
+      once_rewrite_tac[vyperValueOperationTheory.safe_cast_def] >>
+      Cases_on `safe_cast rt raw` >> gvs[] >> strip_tac >>
+      first_x_assum drule >> strip_tac >>
+      qexists `x::suffix` >>
+      simp[Once vyperValueOperationTheory.safe_cast_def, APPEND_ASSOC] >>
+      rw[] >>
+      first_x_assum (qspec_then `x::acc'` mp_tac) >>
+      simp[Once vyperValueOperationTheory.safe_cast_def, APPEND_ASSOC])
+  >- gvs[Once vyperValueOperationTheory.safe_cast_def]
+QED
+
+Theorem lift_safe_cast_success_no_type_error[local]:
+  safe_cast rt v = SOME v' /\
+  lift_option_type (safe_cast rt v) msg st = (res,st') ==>
+  no_type_error_result res
+Proof
+  strip_tac >>
+  gvs[lift_option_type_def, return_def, raise_def,
+      vyperTypeExprSoundnessTheory.no_type_error_result_def]
+QED
+
+
+Theorem raw_expr_value_ok_Value_return_safe_cast_no_type_error[local]:
+  raw_expr_value_ok tenv ty (Value v) /\
+  evaluate_type tenv ty = SOME rt /\
+  lift_option_type (safe_cast rt v) msg st = (res,st') ==>
+  no_type_error_result res
+Proof
+  rw[raw_expr_value_ok_def]
+  >- (gvs[toplevel_value_typed_Value] >>
+      drule vyperTypingTheory.safe_cast_well_typed >> strip_tac >>
+      metis_tac[lift_safe_cast_success_no_type_error])
+  >- (drule (CONJUNCT1 safe_cast_idempotent) >> strip_tac >>
+      gvs[] >>
+      metis_tac[lift_safe_cast_success_no_type_error])
+QED
+Theorem raw_expr_value_ok_Value_materialise_no_type_error[local]:
+  raw_expr_value_ok tenv ty (Value v) /\
+  materialise cx (Value v) st = (res,st') ==>
+  no_type_error_result res
+Proof
+  rw[materialise_def, return_def,
+     vyperTypeExprSoundnessTheory.no_type_error_result_def]
+QED
+
 
 
 Theorem checked_explicit_external_raw_abi_runtime_consistent[local]:
