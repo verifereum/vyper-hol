@@ -9698,6 +9698,29 @@ Proof
   rw[] >>
   qexistsl [`id`, `raw`] >> simp[]
 QED
+Definition raw_abi_formal_scope_ready_def:
+  raw_abi_formal_scope_ready tenv params vals scope env cx st <=>
+    raw_abi_runtime_consistent tenv params vals scope env cx st /\
+    (!n ty. FLOOKUP env.var_types n = SOME ty ==>
+            ?id. MEM (id,ty) params /\ n = string_to_num id)
+End
+
+Theorem raw_abi_formal_lookup_safe_cast_origin[local]:
+  raw_abi_formal_scope_ready tenv params vals scope env cx st /\
+  FLOOKUP env.var_types n = SOME ty /\
+  lookup_scopes n st.scopes = SOME sv ==>
+  ?id raw tv.
+    MEM (id,ty) params /\ n = string_to_num id /\
+    MEM ((id,ty),raw) (ZIP (params,vals)) /\
+    evaluate_type tenv ty = SOME tv /\
+    sv.type = tv /\ safe_cast tv raw = SOME sv.value
+Proof
+  rw[raw_abi_formal_scope_ready_def] >>
+  drule_all raw_abi_env_lookup_safe_cast_origin >>
+  rw[] >>
+  qexistsl [`id`, `raw`, `tv`] >> simp[]
+QED
+
 
 Theorem raw_abi_eval_Name_no_type_error[local]:
   raw_abi_runtime_consistent tenv params vals scope env cx st /\
