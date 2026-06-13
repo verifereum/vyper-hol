@@ -10420,6 +10420,60 @@ Definition raw_exec_named_exprs_ok_def:
     raw_exec_exprs_ok tenv env (MAP SND kes)
 End
 
+Theorem raw_exec_ready_env_type_defs[local]:
+  raw_exec_ready env.type_defs env cx st ==>
+  env.type_defs = get_tenv cx
+Proof
+  rw[raw_exec_ready_def, env_context_consistent_def]
+QED
+
+Theorem raw_exec_Name_branch_ok[local]:
+  well_typed_expr env (Name ty id) ==>
+  raw_exec_expr_ok tenv env (Name ty id)
+Proof
+  rw[raw_exec_expr_ok_def] >>
+  drule_all raw_exec_eval_Name_result_ok >>
+  simp[]
+QED
+
+Theorem raw_exec_Literal_branch_ok[local]:
+  well_typed_expr env (Literal ty lit) ==>
+  raw_exec_expr_ok tenv env (Literal ty lit)
+Proof
+  rw[raw_exec_expr_ok_def] >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, return_def,
+       vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+  rw[expr_type_def] >>
+  gvs[well_typed_expr_def, well_formed_type_def, IS_SOME_EXISTS,
+      raw_exec_ready_def, env_context_consistent_def] >>
+  conj_tac >-
+    (irule raw_expr_value_ok_literal >> simp[]) >>
+  gvs[]
+QED
+
+Theorem raw_exec_BareGlobalName_branch_ok[local]:
+  well_typed_expr env (BareGlobalName ty id) ==>
+  raw_exec_expr_ok tenv env (BareGlobalName ty id)
+Proof
+  rw[raw_exec_expr_ok_def] >>
+  drule raw_exec_ready_env_type_defs >> strip_tac >> gvs[] >>
+  drule_all raw_exec_eval_BareGlobalName_result_ok >>
+  simp[]
+QED
+
+Theorem raw_exec_TopLevelName_branch_ok[local]:
+  well_typed_expr env (TopLevelName ty sid_id) ==>
+  raw_exec_expr_ok tenv env (TopLevelName ty sid_id)
+Proof
+  Cases_on `sid_id` >>
+  rw[raw_exec_expr_ok_def] >>
+  drule raw_exec_ready_env_type_defs >> strip_tac >> gvs[] >>
+  drule_all raw_exec_eval_TopLevelName_result_ok >>
+  simp[]
+QED
+
+
 Theorem raw_abi_eval_Literal_result_ok[local]:
   well_typed_expr env (Literal ty lit) /\
   raw_abi_formal_scope_ready (get_tenv cx) params vals scope env cx st /\
