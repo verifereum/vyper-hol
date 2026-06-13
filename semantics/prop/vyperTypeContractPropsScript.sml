@@ -9884,6 +9884,454 @@ Theorem raw_expr_value_ok_safe_cast[local]:
 Proof
   rw[raw_expr_value_ok_def] >> metis_tac[]
 QED
+Definition raw_var_value_ok_def:
+  raw_var_value_ok tenv ty sv <=>
+    ?rt. evaluate_type tenv ty = SOME rt /\
+         sv.type = rt /\
+         raw_expr_value_ok tenv ty (Value sv.value)
+End
+
+Definition raw_scope_env_ok_def:
+  raw_scope_env_ok tenv env st <=>
+    !n ty. FLOOKUP env.var_types n = SOME ty ==>
+      ?sv. lookup_scopes n st.scopes = SOME sv /\
+           raw_var_value_ok tenv ty sv
+End
+
+Definition raw_exec_ready_def:
+  raw_exec_ready tenv env cx st <=>
+    env_context_consistent env cx /\
+    context_well_typed cx /\
+    accounts_well_typed st.accounts /\
+    env_immutables_consistent env cx st /\
+    EVERY (\(addr,imms). imms_well_typed imms) st.immutables /\
+    raw_scope_env_ok tenv env st
+End
+
+Theorem raw_abi_formal_scope_ready_raw_exec_ready[local]:
+  raw_abi_formal_scope_ready tenv params vals scope env cx st ==>
+  raw_exec_ready tenv env cx st
+Proof
+  strip_tac >>
+  `env_consistent env cx st /\ context_well_typed cx /\
+   accounts_well_typed st.accounts` by
+    metis_tac[raw_abi_formal_scope_ready_soundness_preconditions_weak] >>
+  rw[raw_exec_ready_def]
+  >- gvs[env_consistent_def]
+  >- gvs[env_consistent_def]
+  >- gvs[raw_abi_formal_scope_ready_def, raw_abi_runtime_consistent_def]
+  >- (rw[raw_scope_env_ok_def, raw_var_value_ok_def] >>
+      `?sv. lookup_scopes n st.scopes = SOME sv` by
+        (gvs[env_consistent_def, env_scopes_consistent_def, IS_SOME_EXISTS] >>
+         metis_tac[]) >>
+      qexists `sv` >> simp[] >>
+      drule_all raw_abi_formal_lookup_safe_cast_origin >>
+      strip_tac >>
+      simp[] >>
+      irule raw_expr_value_ok_safe_cast >>
+      qexists `raw` >> simp[])
+QED
+
+
+Theorem raw_exec_ready_type_defs[local]:
+  raw_exec_ready (get_tenv cx) env cx st ==>
+  env.type_defs = get_tenv cx
+Proof
+  rw[raw_exec_ready_def, env_context_consistent_def]
+QED
+
+Theorem raw_exec_ready_preserve_state_same_static[local]:
+  raw_exec_ready tenv env cx st /\
+  st'.accounts = st.accounts /\
+  st'.immutables = st.immutables /\
+  st'.scopes = st.scopes ==>
+  raw_exec_ready tenv env cx st'
+Proof
+  rw[raw_exec_ready_def, env_immutables_consistent_def, raw_scope_env_ok_def] >>
+  metis_tac[]
+QED
+
+Theorem env_context_consistent_extend_local_raw[local]:
+  env_context_consistent env cx ==>
+  env_context_consistent (extend_local env n ty a) cx
+Proof
+  rw[env_context_consistent_def, extend_local_def] >>
+  metis_tac[]
+QED
+
+Theorem raw_exec_ready_extend_local_new_variable[local]:
+  raw_exec_ready tenv env cx st /\
+  evaluate_type tenv ty = SOME tv /\
+  raw_expr_value_ok tenv ty (Value v) /\
+  new_variable id tv v st = (INL u,st') ==>
+  raw_exec_ready tenv (extend_local env (string_to_num id) ty T) cx st'
+Proof
+  strip_tac >>
+  gvs[new_variable_def, bind_def, ignore_bind_def, get_scopes_def,
+      type_check_def, assert_def, set_scopes_def, return_def, raise_def,
+      AllCaseEqs(), list_CASE_rator] >>
+  rw[raw_exec_ready_def]
+  >- (irule env_context_consistent_extend_local_raw >> gvs[raw_exec_ready_def])
+  >- gvs[raw_exec_ready_def]
+  >- gvs[raw_exec_ready_def]
+  >- (gvs[raw_exec_ready_def, env_immutables_consistent_def, extend_local_def] >>
+      metis_tac[])
+  >- gvs[raw_exec_ready_def]
+  >- (gvs[raw_exec_ready_def, raw_scope_env_ok_def, raw_var_value_ok_def,
+          extend_local_def, FLOOKUP_UPDATE] >>
+      rw[] >> gvs[]
+      >- (qexists `<|assignable := T; type := tv; value := v|>` >>
+          simp[lookup_scopes_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
+      first_x_assum drule >> rw[] >>
+      qexists `sv` >> simp[] >>
+      gvs[lookup_scopes_def, FLOOKUP_UPDATE])
+QED
+
+Theorem raw_exec_ready_assign_target_scoped_replace_value[local]:
+  raw_exec_ready tenv env cx st /\
+  FLOOKUP env.var_types (string_to_num id) = SOME ty /\
+  evaluate_type tenv ty = SOME tv /\
+  raw_expr_value_ok tenv ty (Value v) /\
+  assign_target cx (BaseTargetV (ScopedVar id) []) (Replace v) st = (INL ar,st') ==>
+  no_type_error_result (INL ar) /\ raw_exec_ready tenv env cx st'
+Proof
+  strip_tac >>
+  `?sv. lookup_scopes (string_to_num id) st.scopes = SOME sv /\
+        raw_var_value_ok tenv ty sv` by
+    (gvs[raw_exec_ready_def, raw_scope_env_ok_def] >> metis_tac[]) >>
+  qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
+  simp[Once assign_target_def, bind_def, get_scopes_def, lift_option_def,
+       lift_sum_def, type_check_def, assert_def, ignore_bind_def,
+       set_scopes_def, assign_result_def, Once assign_subscripts_def, return_def, raise_def,
+       vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+  Cases_on `find_containing_scope (string_to_num id) st.scopes` >> gvs[]
+  >- gvs[raise_def] >>
+  PairCases_on `x` >> gvs[] >>
+  drule vyperLookupTheory.find_containing_scope_lookup >> strip_tac >> gvs[] >>
+  gvs[raw_var_value_ok_def] >>
+  Cases_on `sv.assignable` >>
+  gvs[return_def, bind_def, ignore_bind_def, set_scopes_def, assert_def] >>
+  strip_tac >> gvs[] >>
+  drule vyperLookupTheory.find_containing_scope_pre_none >> strip_tac >>
+  drule vyperLookupTheory.find_containing_scope_structure >> strip_tac >> gvs[] >>
+  rw[raw_exec_ready_def]
+  >- gvs[raw_exec_ready_def]
+  >- gvs[raw_exec_ready_def]
+  >- gvs[raw_exec_ready_def]
+  >- (gvs[raw_exec_ready_def, env_immutables_consistent_def] >> metis_tac[])
+  >- gvs[raw_exec_ready_def]
+  >- (gvs[raw_exec_ready_def, raw_scope_env_ok_def] >>
+      rw[] >>
+      Cases_on `n = string_to_num id` >> gvs[]
+      >- (qexists `sv with value := v` >>
+          gvs[raw_var_value_ok_def] >>
+          simp[vyperLookupTheory.lookup_scopes_update]) >>
+      first_x_assum drule >> rw[] >>
+      qexists `sv'` >> simp[] >>
+      qspecl_then [`x0`, `n`, `string_to_num id`, `x1`,
+                   `sv with value := v`, `x3`] mp_tac
+        vyperTypeEnvPreservationTheory.lookup_scopes_append_fupdate_other >>
+      simp[] >>
+      metis_tac[listTheory.APPEND, listTheory.APPEND_ASSOC])
+QED
+
+Theorem raw_exec_eval_Name_result_ok[local]:
+  well_typed_expr env (Name ty id) /\
+  raw_exec_ready tenv env cx st /\
+  eval_expr cx (Name ty id) st = (res,st') ==>
+    no_type_error_result res /\
+    case res of
+    | INL tv => raw_expr_value_ok tenv (expr_type (Name ty id)) tv /\
+                raw_exec_ready tenv env cx st'
+    | INR _ => T
+Proof
+  strip_tac >>
+  `FLOOKUP env.var_types (string_to_num id) = SOME ty` by
+    gvs[well_typed_expr_def] >>
+  `?sv. lookup_scopes (string_to_num id) st.scopes = SOME sv /\
+        raw_var_value_ok tenv ty sv` by
+    (gvs[raw_exec_ready_def, raw_scope_env_ok_def] >> metis_tac[]) >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  drule_all lookup_scopes_val_from_lookup_scopes >>
+  rw[Once evaluate_def, bind_def, get_scopes_def, lift_option_type_def,
+     return_def, vyperTypeExprSoundnessTheory.no_type_error_result_def,
+     expr_type_def] >>
+  gvs[raw_var_value_ok_def]
+QED
+
+Theorem raw_exec_BareGlobalName_lookup_ok[local]:
+  well_typed_expr env (BareGlobalName ty id) /\
+  raw_exec_ready (get_tenv cx) env cx st ==>
+  ?rt v.
+    FLOOKUP (get_source_immutables (current_module cx)
+      (case ALOOKUP st.immutables cx.txn.target of SOME m => m | NONE => []))
+      (string_to_num id) = SOME (rt,v) /\
+    evaluate_type (get_tenv cx) ty = SOME rt /\
+    value_has_type rt v
+Proof
+  strip_tac >>
+  `FLOOKUP env.bare_globals (env.current_src,string_to_num id) = SOME ty` by
+    gvs[well_typed_expr_def] >>
+  `env.current_src = current_module cx` by
+    gvs[raw_exec_ready_def, env_context_consistent_def] >>
+  `IS_SOME (FLOOKUP (get_source_immutables (current_module cx)
+     (case ALOOKUP st.immutables cx.txn.target of SOME m => m | NONE => []))
+     (string_to_num id))` by
+    (gvs[raw_exec_ready_def, env_immutables_consistent_def] >>
+     first_x_assum drule >> simp[]) >>
+  pop_assum mp_tac >> simp[IS_SOME_EXISTS] >>
+  strip_tac >> PairCases_on `x` >> gvs[] >>
+  `evaluate_type (get_tenv cx) ty = SOME x0` by
+    (gvs[raw_exec_ready_def, env_immutables_consistent_def] >>
+     first_x_assum drule_all >> simp[]) >>
+  `imms_well_typed
+     (case ALOOKUP st.immutables cx.txn.target of SOME m => m | NONE => [])` by
+    (Cases_on `ALOOKUP st.immutables cx.txn.target` >>
+     gvs[raw_exec_ready_def]
+     >- rw[imms_well_typed_def] >>
+     rw[] >>
+     gvs[EVERY_MEM, FORALL_PROD] >>
+     first_x_assum irule >>
+     imp_res_tac ALOOKUP_MEM >>
+     goal_assum drule) >>
+  drule_all vyperTypeEnvTheory.imms_well_typed_get_source_immutables >>
+  rw[] >>
+  qexistsl [`x0`, `x1`] >> simp[]
+QED
+
+Theorem raw_exec_eval_BareGlobalName_result_ok[local]:
+  well_typed_expr env (BareGlobalName ty id) /\
+  raw_exec_ready (get_tenv cx) env cx st /\
+  eval_expr cx (BareGlobalName ty id) st = (res,st') ==>
+    no_type_error_result res /\
+    case res of
+    | INL tv => raw_expr_value_ok (get_tenv cx) (expr_type (BareGlobalName ty id)) tv /\
+                raw_exec_ready (get_tenv cx) env cx st'
+    | INR _ => T
+Proof
+  strip_tac >>
+  drule_all raw_exec_BareGlobalName_lookup_ok >>
+  strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, get_immutables_def,
+       get_address_immutables_def, lift_option_def, lift_option_type_def,
+       return_def, raise_def,
+       vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+  Cases_on `ALOOKUP st.immutables cx.txn.target` >> gvs[return_def, raise_def] >>
+  rw[expr_type_def] >>
+  gvs[] >>
+  irule raw_expr_value_ok_typed >>
+  qexists_tac `rt` >>
+  simp[toplevel_value_typed_Value]
+QED
+
+Theorem raw_exec_read_storage_slot_result_ok[local]:
+  evaluate_type tenv ty = SOME tv /\
+  read_storage_slot cx is_transient slot tv st = (rr,st') ==>
+    no_type_error_result rr /\
+    case rr of
+    | INL v => raw_expr_value_ok tenv ty (Value v) /\ st' = st
+    | INR _ => T
+Proof
+  strip_tac >>
+  Cases_on `rr` >>
+  gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def]
+  >- (conj_tac
+      >- (irule raw_expr_value_ok_typed >>
+          qexists `tv` >> simp[toplevel_value_typed_Value] >>
+          drule vyperTypeValuesTheory.evaluate_type_well_formed_type_value >>
+          strip_tac >>
+          drule_all vyperTypeStatePreservationTheory.read_storage_slot_success_type >>
+          simp[])
+      >- metis_tac[vyperStatePreservationTheory.read_storage_slot_state]) >>
+  drule vyperTypeExprSoundnessTheory.read_storage_slot_error >>
+  strip_tac >> gvs[]
+QED
+
+Theorem raw_exec_eval_TopLevelName_storage_result_ok[local]:
+  well_typed_expr env (TopLevelName ty (src,id)) /\
+  raw_exec_ready (get_tenv cx) env cx st /\
+  functions_well_typed cx /\
+  FLOOKUP env.bare_globals (src,string_to_num id) = NONE /\
+  get_module_code cx src = SOME ts /\
+  find_var_decl_by_num (string_to_num id) ts = SOME (StorageVarDecl is_transient ty,id_str) /\
+  lookup_var_slot_from_layout cx is_transient src id_str = SOME slot /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\
+  eval_expr cx (TopLevelName ty (src,id)) st = (res,st') ==>
+    no_type_error_result res /\
+    case res of
+    | INL tvl => raw_expr_value_ok (get_tenv cx) (expr_type (TopLevelName ty (src,id))) tvl /\
+                 raw_exec_ready (get_tenv cx) env cx st'
+    | INR _ => T
+Proof
+  strip_tac >>
+  `FLOOKUP env.toplevel_vtypes (src,string_to_num id) = SOME (Type ty)` by
+    gvs[well_typed_expr_def] >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, Once lookup_global_def, bind_def, lift_option_type_def,
+       return_def, raise_def,
+       vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+  simp[] >>
+  Cases_on `tv` >>
+  gvs[return_def, bind_def, expr_type_def,
+      vyperTypeExprSoundnessTheory.no_type_error_result_def]
+  >- (strip_tac >> gvs[] >>
+      qpat_x_assum `(case read_storage_slot _ _ _ _ _ of
+                       (INL v,s'') => (INL (Value v),s'')
+                     | (INR e,s'') => (INR e,s'')) = _` mp_tac >>
+      BasicProvers.TOP_CASE_TAC >> gvs[] >>
+      strip_tac >> gvs[] >>
+      drule_all raw_exec_read_storage_slot_result_ok >> strip_tac >>
+      Cases_on `q` >> gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def])
+  >- (strip_tac >> gvs[] >>
+      qpat_x_assum `(case read_storage_slot _ _ _ _ _ of
+                       (INL v,s'') => (INL (Value v),s'')
+                     | (INR e,s'') => (INR e,s'')) = _` mp_tac >>
+      BasicProvers.TOP_CASE_TAC >> gvs[] >>
+      strip_tac >> gvs[] >>
+      drule_all raw_exec_read_storage_slot_result_ok >> strip_tac >>
+      Cases_on `q` >> gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def])
+  >- (strip_tac >> gvs[] >>
+      irule raw_expr_value_ok_typed >>
+      qexists `ArrayTV t b` >> simp[toplevel_value_typed_def])
+  >- (strip_tac >> gvs[] >>
+      qpat_x_assum `(case read_storage_slot _ _ _ _ _ of
+                       (INL v,s'') => (INL (Value v),s'')
+                     | (INR e,s'') => (INR e,s'')) = _` mp_tac >>
+      BasicProvers.TOP_CASE_TAC >> gvs[] >>
+      strip_tac >> gvs[] >>
+      drule_all raw_exec_read_storage_slot_result_ok >> strip_tac >>
+      Cases_on `q` >> gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def])
+  >- (strip_tac >> gvs[] >>
+      qpat_x_assum `(case read_storage_slot _ _ _ _ _ of
+                       (INL v,s'') => (INL (Value v),s'')
+                     | (INR e,s'') => (INR e,s'')) = _` mp_tac >>
+      BasicProvers.TOP_CASE_TAC >> gvs[] >>
+      strip_tac >> gvs[] >>
+      drule_all raw_exec_read_storage_slot_result_ok >> strip_tac >>
+      Cases_on `q` >> gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def]) >>
+  strip_tac >> gvs[] >>
+  qpat_x_assum `(case read_storage_slot _ _ _ _ _ of
+                   (INL v,s'') => (INL (Value v),s'')
+                 | (INR e,s'') => (INR e,s'')) = _` mp_tac >>
+  BasicProvers.TOP_CASE_TAC >> gvs[] >>
+  strip_tac >> gvs[] >>
+  drule_all raw_exec_read_storage_slot_result_ok >> strip_tac >>
+  Cases_on `q` >> gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def]
+QED
+
+Theorem raw_exec_eval_TopLevelName_immutable_result_ok[local]:
+  well_typed_expr env (TopLevelName ty (src,id)) /\
+  raw_exec_ready (get_tenv cx) env cx st /\
+  functions_well_typed cx /\
+  FLOOKUP env.bare_globals (src,string_to_num id) = SOME ty /\
+  eval_expr cx (TopLevelName ty (src,id)) st = (res,st') ==>
+    no_type_error_result res /\
+    case res of
+    | INL tvl => raw_expr_value_ok (get_tenv cx) (expr_type (TopLevelName ty (src,id))) tvl /\
+                 raw_exec_ready (get_tenv cx) env cx st'
+    | INR _ => T
+Proof
+  strip_tac >>
+  `?ts. get_module_code cx src = SOME ts /\
+        FLOOKUP env.toplevel_vtypes (src,string_to_num id) = SOME (Type ty) /\
+        is_bare_global_decl (string_to_num id) ts /\
+        find_var_decl_by_num (string_to_num id) ts = NONE /\ ty <> NoneT` by
+    (gvs[raw_exec_ready_def, env_context_consistent_def] >>
+     drule_all env_context_consistent_bare_global_find_NONE >> rw[]) >>
+  `IS_SOME (FLOOKUP (get_source_immutables src
+      (case ALOOKUP st.immutables cx.txn.target of SOME m => m | NONE => []))
+      (string_to_num id))` by
+    (gvs[raw_exec_ready_def, env_immutables_consistent_def] >>
+     first_x_assum drule >> simp[]) >>
+  gvs[IS_SOME_EXISTS] >>
+  PairCases_on `x` >>
+  `evaluate_type (get_tenv cx) ty = SOME x0` by
+    (gvs[raw_exec_ready_def, env_immutables_consistent_def] >>
+     first_x_assum drule_all >> simp[]) >>
+  `imms_well_typed
+     (case ALOOKUP st.immutables cx.txn.target of SOME m => m | NONE => [])` by
+    (Cases_on `ALOOKUP st.immutables cx.txn.target` >>
+     gvs[raw_exec_ready_def]
+     >- rw[imms_well_typed_def] >>
+     rw[] >>
+     gvs[EVERY_MEM, FORALL_PROD] >>
+     first_x_assum irule >>
+     imp_res_tac ALOOKUP_MEM >>
+     goal_assum drule) >>
+  `value_has_type x0 x1` by
+    (drule_all vyperTypeEnvTheory.imms_well_typed_get_source_immutables >> simp[]) >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, Once lookup_global_def, bind_def, lift_option_type_def,
+       get_immutables_def, get_address_immutables_def, lift_option_def,
+       return_def, raise_def,
+       vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+  Cases_on `ALOOKUP st.immutables cx.txn.target` >>
+  gvs[get_source_immutables_def, return_def, raise_def] >>
+  rw[expr_type_def] >>
+  gvs[] >>
+  irule raw_expr_value_ok_typed >>
+  qexists `x0` >> simp[toplevel_value_typed_Value]
+QED
+
+Theorem raw_exec_bare_globals_agrees_toplevel_type[local]:
+  raw_exec_ready (get_tenv cx) env cx st /\
+  FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\
+  FLOOKUP env.bare_globals (src,id) = SOME ty' ==>
+  ty' = ty
+Proof
+  rw[raw_exec_ready_def, env_context_consistent_def] >>
+  qpat_x_assum `!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty ==> _`
+    drule >>
+  rw[] >> gvs[]
+QED
+
+Theorem raw_exec_eval_TopLevelName_result_ok[local]:
+  well_typed_expr env (TopLevelName ty (src,id)) /\
+  raw_exec_ready (get_tenv cx) env cx st /\
+  functions_well_typed cx /\
+  eval_expr cx (TopLevelName ty (src,id)) st = (res,st') ==>
+    no_type_error_result res /\
+    case res of
+    | INL tv => raw_expr_value_ok (get_tenv cx) (expr_type (TopLevelName ty (src,id))) tv /\
+                raw_exec_ready (get_tenv cx) env cx st'
+
+    | INR _ => T
+Proof
+  strip_tac >>
+  `FLOOKUP env.toplevel_vtypes (src,string_to_num id) = SOME (Type ty)` by
+    gvs[well_typed_expr_def] >>
+  Cases_on `FLOOKUP env.bare_globals (src,string_to_num id)`
+  >- (`?ts is_transient typ id_str.
+         get_module_code cx src = SOME ts /\
+         find_var_decl_by_num (string_to_num id) ts = SOME (StorageVarDecl is_transient typ,id_str) /\
+         typ = ty /\
+         IS_SOME (evaluate_type (get_tenv cx) typ) /\
+         IS_SOME (lookup_var_slot_from_layout cx is_transient src id_str)` by
+        (gvs[raw_exec_ready_def, env_context_consistent_def] >>
+         first_x_assum drule_all >> rw[]) >>
+      gvs[IS_SOME_EXISTS] >>
+      drule_all raw_exec_eval_TopLevelName_storage_result_ok >> simp[]) >>
+  `x = ty` by
+    (drule_all raw_exec_bare_globals_agrees_toplevel_type >> simp[]) >>
+  gvs[] >>
+  drule_all raw_exec_eval_TopLevelName_immutable_result_ok >> simp[]
+QED
+
+Theorem raw_exec_materialise_Value_result_ok[local]:
+  raw_expr_value_ok tenv ty (Value v) /\
+  raw_exec_ready tenv env cx st /\
+  materialise cx (Value v) st = (res,st') ==>
+  no_type_error_result res /\
+  (case res of
+   | INL mv => st' = st /\ raw_exec_ready tenv env cx st'
+   | INR _ => T)
+Proof
+  rw[materialise_def, return_def,
+     vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+  gvs[]
+QED
+
 
 Theorem raw_expr_value_ok_literal[local]:
   well_typed_literal ty lit /\
@@ -9893,6 +10341,27 @@ Proof
   rw[raw_expr_value_ok_def] >>
   metis_tac[literal_toplevel_value_typed]
 QED
+Theorem raw_exec_eval_Literal_result_ok[local]:
+  well_typed_expr env (Literal ty lit) /\
+  raw_exec_ready (get_tenv cx) env cx st /\
+  eval_expr cx (Literal ty lit) st = (res,st') ==>
+    no_type_error_result res /\
+    case res of
+    | INL tv => raw_expr_value_ok (get_tenv cx) (expr_type (Literal ty lit)) tv /\
+                raw_exec_ready (get_tenv cx) env cx st'
+    | INR _ => T
+Proof
+  strip_tac >>
+  `env.type_defs = get_tenv cx` by
+    gvs[raw_exec_ready_def, env_context_consistent_def] >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, return_def,
+       vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+  rw[expr_type_def] >>
+  gvs[well_typed_expr_def, well_formed_type_def, IS_SOME_EXISTS] >>
+  drule_all raw_expr_value_ok_literal >> simp[]
+QED
+
 Theorem raw_abi_eval_Literal_result_ok[local]:
   well_typed_expr env (Literal ty lit) /\
   raw_abi_formal_scope_ready (get_tenv cx) params vals scope env cx st /\
