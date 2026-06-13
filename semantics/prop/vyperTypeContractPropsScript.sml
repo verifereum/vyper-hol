@@ -9712,3 +9712,47 @@ Theorem checked_raw_arg_unsorted_sarray_assign_subscript_no_TypeError_probe[loca
 Proof
   EVAL_TAC
 QED
+
+Theorem bind_arguments_success_mem_zip_safe_cast[local]:
+  !tenv params vals scope id ty raw.
+    bind_arguments tenv params vals = SOME scope /\
+    MEM ((id,ty),raw) (ZIP (params, vals)) ==>
+    ?tv cast_v.
+      evaluate_type tenv ty = SOME tv /\
+      safe_cast tv raw = SOME cast_v
+Proof
+  ho_match_mp_tac bind_arguments_ind >>
+  rw[bind_arguments_def] >>
+  gvs[AllCaseEqs()] >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem MEM_ZIP_FST[local]:
+  !xs ys x y. MEM (x,y) (ZIP (xs,ys)) ==> MEM x xs
+Proof
+  Induct >> Cases_on `ys` >> rw[ZIP_def] >> gvs[] >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem bind_arguments_success_flookup_safe_cast[local]:
+  !tenv params vals scope id ty raw sv.
+    bind_arguments tenv params vals = SOME scope /\
+    ALL_DISTINCT (MAP (string_to_num o FST) params) /\
+    MEM ((id,ty),raw) (ZIP (params, vals)) /\
+    FLOOKUP scope (string_to_num id) = SOME sv ==>
+      sv.assignable /\
+      ?tv.
+        evaluate_type tenv ty = SOME tv /\
+        safe_cast tv raw = SOME sv.value /\
+        sv.type = tv
+Proof
+  ho_match_mp_tac bind_arguments_ind >>
+  rw[bind_arguments_def] >>
+  gvs[AllCaseEqs(), FLOOKUP_UPDATE, MEM_MAP] >>
+  gvs[] >>
+  imp_res_tac MEM_ZIP_FST >>
+  gvs[] >>
+  first_x_assum drule >>
+  disch_then (qspec_then `sv` mp_tac) >>
+  simp[]
+QED
