@@ -7864,6 +7864,29 @@ Proof
   simp[]
 QED
 
+Theorem generated_hashmap_subscript_step_error_no_type_error_post_prefix[local]:
+  !tenv params vals scope n kt vt cx e st is_transient slot st1 err st2.
+  bind_arguments tenv params vals = SOME scope /\
+  MEM (num_to_dec_string n, kt) params /\
+  (!id typ id' typ'. MEM (id,typ) params /\ MEM (id',typ') params /\
+      string_to_num id' = string_to_num id ==> typ' = typ) /\
+  check_value_type (get_tenv cx) vt /\
+  pure_expr e /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME NoneTV /\
+  eval_expr cx e st = (INL (HashMapRef is_transient slot kt vt),st1) /\
+  st.scopes = [scope] /\
+  eval_expr cx (Subscript NoneT e (Name NoneT (num_to_dec_string n))) st = (INR err,st2) ==>
+  no_type_error_result (INR err)
+Proof
+  rpt strip_tac >>
+  qspecl_then [`tenv`,`params`,`vals`,`scope`,`n`,`kt`,`vt`,`cx`,`e`,`st`,
+               `is_transient`,`slot`,`st1`,`INR err`,`st2`]
+    mp_tac generated_hashmap_subscript_step_no_type_error_post_prefix >>
+  simp[] >>
+  impl_tac >- metis_tac[] >>
+  strip_tac >> gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def]
+QED
+
 Theorem generated_hashmap_subscript_step_materialisable_post_prefix[local]:
   !tenv params vals scope n kt t cx e st is_transient slot st1 res st2.
   bind_arguments tenv params vals = SOME scope /\
@@ -7918,7 +7941,274 @@ QED
 
 
 
+Theorem generated_hashmap_subscript_step_success_carrier_post_prefix[local]:
+  bind_arguments tenv args vals = SOME scope /\
+  MEM (num_to_dec_string n, kt) args /\
+  (!id typ id' typ'. MEM (id,typ) args /\ MEM (id',typ') args /\
+      string_to_num id' = string_to_num id ==> typ' = typ) /\
+  pure_expr e /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME NoneTV /\
+  eval_expr cx e st =
+    (INL (HashMapRef is_transient slot kt (HashMapT kt' vt')),st1) /\
+  st.scopes = [scope] /\
+  eval_expr cx (Subscript NoneT e (Name NoneT (num_to_dec_string n))) st = (INL tvl,st2) ==>
+  ?slot'. tvl = HashMapRef is_transient slot' kt' vt'
+Proof
+  rpt strip_tac >>
+  `?entry. FLOOKUP scope (string_to_num (num_to_dec_string n)) = SOME entry /\
+           evaluate_type tenv kt = SOME entry.type /\ entry.assignable` by
+    (qspecl_then [`tenv`, `args`, `vals`, `scope`, `num_to_dec_string n`, `kt`]
+       mp_tac bind_arguments_scope_covers_params_getter >>
+     simp[] >>
+     (impl_tac >-
+       (rpt strip_tac >>
+        first_x_assum (qspecl_then [`num_to_dec_string n`, `kt`, `id'`, `typ'`] mp_tac) >>
+        simp[])) >>
+     simp[]) >>
+  `st1 = st` by metis_tac[eval_expr_preserves_state] >> gvs[] >>
+  qpat_x_assum `eval_expr cx (Subscript _ _ _) _ = _` mp_tac >>
+  simp[Once evaluate_def, Once evaluate_def,
+       get_scopes_def, lookup_scopes_val_def, bind_def, lift_option_def,
+       lift_option_type_def, return_def, raise_def] >>
+  Cases_on `entry.value` >> simp[bind_def, return_def, raise_def] >>
+  simp[check_array_bounds_def, ignore_bind_def, lift_sum_def,
+       evaluate_subscript_def, return_def, raise_def, LET_THM] >>
+  rpt strip_tac >>
+  gvs[bind_def, ignore_bind_def, return_def, raise_def] >>
+  metis_tac[]
+QED
 
+Theorem generated_hashmap_array_tail_subscript_typed_package_post_prefix[local]:
+  bind_arguments tenv params vals = SOME scope /\
+  MEM (num_to_dec_string n, kt) params /\
+  (!id typ id' typ'. MEM (id,typ) params /\ MEM (id',typ') params /\
+      string_to_num id' = string_to_num id ==> typ' = typ) /\
+  assignable_type (get_tenv cx) elem_ast /\
+  pure_expr e /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME NoneTV /\
+  evaluate_type (get_tenv cx) elem_ast = SOME elem_tv /\
+  eval_expr cx e st =
+    (INL (HashMapRef is_transient slot kt (Type (ArrayT elem_ast bd_ast))),st1) /\
+  st.scopes = [scope] /\
+  eval_expr cx (Subscript NoneT e (Name NoneT (num_to_dec_string n))) st = (INL tvl,step_st) ==>
+  ((?av bd. tvl = Value (ArrayV av) /\
+            value_has_type (ArrayTV elem_tv bd) (ArrayV av)) \/
+   (?is_transient' slot' bd. tvl = ArrayRef is_transient' slot' elem_tv bd))
+Proof
+  rpt strip_tac >>
+  `?entry. FLOOKUP scope (string_to_num (num_to_dec_string n)) = SOME entry /\
+           evaluate_type tenv kt = SOME entry.type /\ entry.assignable` by
+    (qspecl_then [`tenv`, `params`, `vals`, `scope`, `num_to_dec_string n`, `kt`]
+       mp_tac bind_arguments_scope_covers_params_getter >>
+     simp[] >>
+     (impl_tac >-
+       (rpt strip_tac >>
+        first_x_assum (qspecl_then [`num_to_dec_string n`, `kt`, `id'`, `typ'`] mp_tac) >>
+        simp[])) >>
+     simp[]) >>
+  `st1 = st` by metis_tac[eval_expr_preserves_state] >> gvs[] >>
+  qpat_x_assum `eval_expr cx (Subscript _ _ _) _ = _` mp_tac >>
+  simp[Once evaluate_def, Once evaluate_def,
+       get_scopes_def, lookup_scopes_val_def, bind_def, lift_option_def,
+       lift_option_type_def, return_def, raise_def] >>
+  Cases_on `entry.value` >> simp[bind_def, return_def, raise_def] >>
+  gvs[check_array_bounds_def, ignore_bind_def, lift_sum_def,
+      evaluate_subscript_def, evaluate_type_def, LET_THM,
+      bind_def, return_def, raise_def] >>
+  Cases_on `entry.value` >> gvs[check_array_bounds_def, return_def] >>
+  Cases_on `0 < type_slot_size elem_tv /\
+            type_slot_size (ArrayTV elem_tv bd_ast) < dimword (:256)` >>
+  gvs[bind_def, return_def, raise_def] >>
+  Cases_on `read_storage_slot cx is_transient
+             (hashmap_slot slot (encode_hashmap_key kt entry.value))
+             (ArrayTV elem_tv bd_ast) st` >>
+  Cases_on `q` >> gvs[bind_def, return_def, raise_def] >>
+  rpt strip_tac >> gvs[] >>
+  (`well_formed_type_value (ArrayTV elem_tv bd_ast)` by
+    (`evaluate_type (get_tenv cx) (ArrayT elem_ast bd_ast) = SOME (ArrayTV elem_tv bd_ast)` by
+       simp[evaluate_type_def] >>
+     metis_tac[vyperTypeValuesTheory.evaluate_type_well_formed_type_value])) >>
+  drule_all vyperTypeStatePreservationTheory.read_storage_slot_success_type >>
+  strip_tac >>
+  Cases_on `x` >> gvs[vyperTypingTheory.value_has_type_def] >>
+  metis_tac[]
+QED
+
+Theorem generated_hashmap_getter_expr_no_type_error_post_prefix[local]:
+  !e kt vt n args ret exp tenv params vals scope cx st
+    is_transient slot st1 res st'.
+  build_getter e kt vt n = (args,ret,exp) /\
+  bind_arguments tenv params vals = SOME scope /\
+  (!id typ. MEM (id,typ) args ==> MEM (id,typ) params) /\
+  (!id typ id' typ'. MEM (id,typ) params /\ MEM (id',typ') params /\
+      string_to_num id' = string_to_num id ==> typ' = typ) /\
+  check_value_type (get_tenv cx) vt /\
+  pure_expr e /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME NoneTV /\
+  eval_expr cx e st = (INL (HashMapRef is_transient slot kt vt),st1) /\
+  st.scopes = [scope] /\
+  eval_expr cx exp st = (res,st') ==>
+  no_type_error_result res
+Proof
+  recInduct build_getter_ind >> rpt strip_tac >>
+  qpat_x_assum `build_getter _ _ _ _ = _` mp_tac >>
+  simp[Once build_getter_def] >>
+  Cases_on `is_ArrayT vt` >> simp[] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rw[] >> gvs[]
+  >- (Cases_on `vt` >> gvs[is_ArrayT_def, ArrayT_type_def, check_value_type_def,
+                              assignable_type_def, well_formed_type_def,
+                              evaluate_type_def, AllCaseEqs(), IS_SOME_EXISTS] >>
+      Cases_on `eval_expr cx (Subscript NoneT e (Name NoneT (num_to_dec_string n))) st` >> gvs[] >>
+      `MEM (num_to_dec_string n,kt) params` by metis_tac[] >>
+      `check_value_type (get_tenv cx) (Type (ArrayT t b))` by
+        simp[check_value_type_def, assignable_type_def, well_formed_type_def,
+             evaluate_type_def] >>
+      `no_type_error_result q` by
+        (drule_all generated_hashmap_subscript_step_no_type_error_post_prefix >> simp[]) >>
+      irule (cj 1 generated_array_getter_expr_no_type_error_materialisable_post_prefix_aux) >>
+      qexistsl [`params`,`args'`,`q`,`cx`,
+                `Subscript NoneT e (Name NoneT (num_to_dec_string n))`,
+                `tv`,`exp`,`SUC n`,`ret`,`scope`,`st`,`st'`,`r`,`tenv`,`vals`,`t`] >>
+      simp[pure_expr_def, expr_type_def, evaluate_type_def] >>
+      Cases_on `q` >> gvs[]
+      >- (conj_tac >- metis_tac[] >>
+          `MEM (num_to_dec_string n,kt) params` by metis_tac[] >>
+          drule_all generated_hashmap_array_tail_subscript_typed_package_post_prefix >>
+          simp[] >> metis_tac[]) >>
+      metis_tac[])
+  >- (drule_all generated_hashmap_subscript_step_no_type_error_post_prefix >> simp[]) >>
+  Cases_on `eval_expr cx (Subscript NoneT e (Name NoneT (num_to_dec_string n))) st` >> gvs[]
+  >- (Cases_on `q` >> gvs[]
+      >- (`MEM (num_to_dec_string n,kt) params` by metis_tac[] >>
+          drule_all generated_hashmap_subscript_step_success_carrier_post_prefix >> strip_tac >> gvs[] >>
+          first_x_assum irule >>
+          simp[pure_expr_def, expr_type_def, evaluate_type_def, check_value_type_def] >>
+          qexistsl [`cx`, `is_transient`, `params`, `scope`, `slot'`, `st`, `st'`, `r`, `tenv`, `vals`] >>
+          simp[check_value_type_def] >>
+          conj_tac >- metis_tac[] >>
+          qpat_x_assum `check_value_type _ (HashMapT _ _)` mp_tac >>
+          simp[Once check_value_type_def]) >>
+      `MEM (num_to_dec_string n,kt) params` by metis_tac[] >>
+      `check_value_type (get_tenv cx) vtyp` by
+        (qpat_x_assum `check_value_type _ (HashMapT _ _)` mp_tac >>
+         simp[Once check_value_type_def]) >>
+      `no_type_error_result (INR y)` by
+        (drule_all generated_hashmap_subscript_step_error_no_type_error_post_prefix >> simp[]) >>
+      drule_all build_getter_base_error_no_type_error_post_prefix >> simp[]) >>
+  Cases_on `q` >> gvs[]
+  >- (`MEM (num_to_dec_string n,kt) params` by metis_tac[] >>
+      drule_all generated_hashmap_subscript_step_success_carrier_post_prefix >> strip_tac >> gvs[] >>
+      first_x_assum irule >>
+      simp[pure_expr_def, expr_type_def, evaluate_type_def, check_value_type_def] >>
+      qexistsl [`cx`, `is_transient`, `params`, `scope`, `slot'`, `st`, `st'`, `r`, `tenv`, `vals`] >>
+      simp[check_value_type_def] >>
+      conj_tac >- metis_tac[] >>
+      qpat_x_assum `check_value_type _ (HashMapT _ _)` mp_tac >>
+      simp[Once check_value_type_def]) >>
+  `MEM (num_to_dec_string n,kt) params` by metis_tac[] >>
+  `check_value_type (get_tenv cx) vtyp` by
+    (qpat_x_assum `check_value_type _ (HashMapT _ _)` mp_tac >>
+     simp[Once check_value_type_def]) >>
+  `no_type_error_result (INR y)` by
+    (drule_all generated_hashmap_subscript_step_error_no_type_error_post_prefix >> simp[]) >>
+  drule_all build_getter_base_error_no_type_error_post_prefix >> simp[]
+QED
+
+Theorem generated_hashmap_getter_expr_materialisable_shape_post_prefix[local]:
+  !e kt vt n args ret exp tenv params vals scope cx st
+    is_transient slot st1 res st'.
+  build_getter e kt vt n = (args,ret,exp) /\
+  bind_arguments tenv params vals = SOME scope /\
+  (!id typ. MEM (id,typ) args ==> MEM (id,typ) params) /\
+  (!id typ id' typ'. MEM (id,typ) params /\ MEM (id',typ') params /\
+      string_to_num id' = string_to_num id ==> typ' = typ) /\
+  check_value_type (get_tenv cx) vt /\
+  pure_expr e /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME NoneTV /\
+  eval_expr cx e st = (INL (HashMapRef is_transient slot kt vt),st1) /\
+  st.scopes = [scope] /\
+  eval_expr cx exp st = (res,st') ==>
+  (case res of INL tvl => (?v. tvl = Value v) \/
+                           (?is_transient slot elem_tv bd. tvl = ArrayRef is_transient slot elem_tv bd)
+             | INR _ => T)
+Proof
+  recInduct build_getter_ind >> rpt strip_tac >>
+  qpat_x_assum `build_getter _ _ _ _ = _` mp_tac >>
+  simp[Once build_getter_def] >>
+  Cases_on `is_ArrayT vt` >> simp[] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rw[] >> gvs[]
+  >- (Cases_on `vt` >> gvs[is_ArrayT_def, ArrayT_type_def, check_value_type_def,
+                            assignable_type_def, well_formed_type_def,
+                            evaluate_type_def, AllCaseEqs(), IS_SOME_EXISTS] >>
+      Cases_on `eval_expr cx (Subscript NoneT e (Name NoneT (num_to_dec_string n))) st` >> gvs[] >>
+      `MEM (num_to_dec_string n,kt) params` by metis_tac[] >>
+      `check_value_type (get_tenv cx) (Type (ArrayT t b))` by
+        simp[check_value_type_def, assignable_type_def, well_formed_type_def,
+             evaluate_type_def] >>
+      `no_type_error_result q` by
+        (drule_all generated_hashmap_subscript_step_no_type_error_post_prefix >> simp[]) >>
+      irule (cj 2 generated_array_getter_expr_no_type_error_materialisable_post_prefix_aux) >>
+      qexistsl [`params`,`args'`,`q`,`cx`,
+                `Subscript NoneT e (Name NoneT (num_to_dec_string n))`,
+                `tv`,`exp`,`SUC n`,`ret`,`scope`,`st`,`st'`,`r`,`tenv`,`vals`,`t`] >>
+      simp[pure_expr_def, expr_type_def, evaluate_type_def] >>
+      Cases_on `q` >> gvs[]
+      >- (conj_tac >- metis_tac[] >>
+          `MEM (num_to_dec_string n,kt) params` by metis_tac[] >>
+          drule_all generated_hashmap_array_tail_subscript_typed_package_post_prefix >>
+          simp[] >> metis_tac[]) >>
+      metis_tac[])
+  >- (drule_all generated_hashmap_subscript_step_materialisable_post_prefix >> simp[]) >>
+  Cases_on `eval_expr cx (Subscript NoneT e (Name NoneT (num_to_dec_string n))) st` >> gvs[]
+  >- (Cases_on `q` >> gvs[]
+      >- (`MEM (num_to_dec_string n,kt) params` by metis_tac[] >>
+          drule_all generated_hashmap_subscript_step_success_carrier_post_prefix >> strip_tac >> gvs[] >>
+          first_x_assum irule >>
+          simp[pure_expr_def, expr_type_def, evaluate_type_def, check_value_type_def] >>
+          qexistsl [`cx`, `is_transient`, `params`, `scope`, `slot'`, `st`, `st'`, `r`, `tenv`, `vals`] >>
+          simp[check_value_type_def] >>
+          conj_tac >- metis_tac[] >>
+          qpat_x_assum `check_value_type _ (HashMapT _ _)` mp_tac >>
+          simp[Once check_value_type_def]) >>
+      drule_all build_getter_base_error_materialisable_shape_post_prefix >> simp[]) >>
+  Cases_on `q` >> gvs[]
+  >- (`MEM (num_to_dec_string n,kt) params` by metis_tac[] >>
+      drule_all generated_hashmap_subscript_step_success_carrier_post_prefix >> strip_tac >> gvs[] >>
+      first_x_assum irule >>
+      simp[pure_expr_def, expr_type_def, evaluate_type_def, check_value_type_def] >>
+      qexistsl [`cx`, `is_transient`, `params`, `scope`, `slot'`, `st`, `st'`, `r`, `tenv`, `vals`] >>
+      simp[check_value_type_def] >>
+      conj_tac >- metis_tac[] >>
+      qpat_x_assum `check_value_type _ (HashMapT _ _)` mp_tac >>
+      simp[Once check_value_type_def]) >>
+  drule_all build_getter_base_error_materialisable_shape_post_prefix >> simp[]
+QED
+
+Theorem generated_hashmap_getter_expr_no_type_error_materialisable_post_prefix[local]:
+  !e kt vt n args ret exp tenv params vals scope cx st
+    is_transient slot st1 res st'.
+  build_getter e kt vt n = (args,ret,exp) /\
+  bind_arguments tenv params vals = SOME scope /\
+  (!id typ. MEM (id,typ) args ==> MEM (id,typ) params) /\
+  (!id typ id' typ'. MEM (id,typ) params /\ MEM (id',typ') params /\
+      string_to_num id' = string_to_num id ==> typ' = typ) /\
+  check_value_type (get_tenv cx) vt /\
+  pure_expr e /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME NoneTV /\
+  eval_expr cx e st = (INL (HashMapRef is_transient slot kt vt),st1) /\
+  st.scopes = [scope] /\
+  eval_expr cx exp st = (res,st') ==>
+  no_type_error_result res /\
+  (case res of INL tvl => (?v. tvl = Value v) \/
+                           (?is_transient slot elem_tv bd. tvl = ArrayRef is_transient slot elem_tv bd)
+             | INR _ => T)
+Proof
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (drule_all generated_hashmap_getter_expr_no_type_error_post_prefix >> simp[]) >>
+  drule_all generated_hashmap_getter_expr_materialisable_shape_post_prefix >> simp[]
+QED
 
 
 Theorem generated_hashmap_getter_expr_no_type_error[local]:
