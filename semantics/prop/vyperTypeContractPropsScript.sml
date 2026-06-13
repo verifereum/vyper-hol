@@ -3611,6 +3611,40 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
+Theorem bind_arguments_Name_eval_post_prefix[local]:
+  bind_arguments tenv args vals = SOME scope /\
+  MEM (id,typ) args /\
+  (!id' typ'. MEM (id',typ') args /\ string_to_num id' = string_to_num id ==> typ' = typ) /\
+  st.scopes = [scope] ==>
+  ?entry. FLOOKUP scope (string_to_num id) = SOME entry /\
+          evaluate_type tenv typ = SOME entry.type /\ entry.assignable /\
+          eval_expr cx (Name NoneT id) st = (INL (Value entry.value),st)
+Proof
+  rpt strip_tac >>
+  drule_all bind_arguments_scope_covers_params_getter >> strip_tac >>
+  qexists_tac `entry` >>
+  gvs[Once evaluate_def, get_scopes_def, lookup_scopes_val_def,
+      bind_def, lift_option_def, lift_option_type_def, return_def]
+QED
+
+Theorem bind_arguments_generated_Name_eval_post_prefix[local]:
+  bind_arguments tenv args vals = SOME scope /\
+  MEM (num_to_dec_string n,typ) args /\
+  (!id typ id' typ'. MEM (id,typ) args /\ MEM (id',typ') args /\
+      string_to_num id' = string_to_num id ==> typ' = typ) /\
+  st.scopes = [scope] ==>
+  ?entry. FLOOKUP scope (string_to_num (num_to_dec_string n)) = SOME entry /\
+          evaluate_type tenv typ = SOME entry.type /\ entry.assignable /\
+          eval_expr cx (Name NoneT (num_to_dec_string n)) st =
+            (INL (Value entry.value),st)
+Proof
+  rpt strip_tac >>
+  irule bind_arguments_Name_eval_post_prefix >>
+  simp[] >>
+  qexistsl [`args`,`vals`] >> simp[] >>
+  metis_tac[]
+QED
+
 Theorem evaluate_subscript_hashmap_getter_error_not_TypeError[local]:
   !vt.
     check_value_type tenv vt /\
