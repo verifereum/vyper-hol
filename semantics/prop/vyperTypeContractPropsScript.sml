@@ -10323,6 +10323,21 @@ Proof
 QED
 
 
+Theorem raw_abi_eval_stmts_no_type_error[local]:
+  type_stmts env ret_ty body = SOME env' /\
+  raw_abi_formal_scope_ready tenv params vals scope env cx st /\
+  state_well_typed st /\
+  functions_well_typed cx /\
+  eval_stmts cx body st = (res,st') ==>
+  no_type_error_result res
+Proof
+  strip_tac >>
+  `env_consistent env cx st /\ context_well_typed cx /\
+   accounts_well_typed st.accounts` by
+    gvs[raw_abi_formal_scope_ready_def, raw_abi_runtime_consistent_def] >>
+  drule_all (cj 2 eval_all_type_sound_mutual) >> simp[]
+QED
+
 Theorem lookup_exported_function_current_lookup_function[local]:
   find_function_module am tx.target tx.function_name = src /\
   get_module_code (initial_evaluation_context am.sources am.layouts tx src) src = SOME ts /\
