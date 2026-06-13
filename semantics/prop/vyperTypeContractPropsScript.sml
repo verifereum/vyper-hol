@@ -9871,6 +9871,25 @@ Proof
       first_x_assum drule_all >>
       simp[])
 QED
+Theorem checked_explicit_external_raw_body_no_type_error[local]:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  ALOOKUP am.sources tx.target = SOME mods /\
+  ALOOKUP mods src = SOME ts /\
+  MEM (FunctionDecl External mut nr raw fn args dflts ret body) ts /\
+  cx = ((initial_evaluation_context am.sources am.layouts tx src) with stk := [(src,fn)]) /\
+  context_well_typed cx /\ machine_well_typed am /\
+  immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes cx am.immutables /\
+  bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
+  args_values_typed (type_env_all_modules mods) args vals /\
+  st.scopes = [scope] /\ st.immutables = am.immutables /\
+  accounts_well_typed st.accounts ==>
+  no_type_error_eval (eval_stmts cx body st)
+Proof
+  strip_tac >>
+  `state_well_typed st` by metis_tac[checked_explicit_external_raw_state_well_typed] >>
+  metis_tac[checked_explicit_external_post_prefix_body_no_type_error]
+QED
+
 
 
 
