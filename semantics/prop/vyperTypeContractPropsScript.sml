@@ -9679,6 +9679,26 @@ Proof
   rw[] >> qexists `raw0` >> simp[]
 QED
 
+Theorem raw_abi_env_lookup_safe_cast_origin[local]:
+  raw_abi_runtime_consistent tenv params vals scope env cx st /\
+  (!n ty. FLOOKUP env.var_types n = SOME ty ==>
+          ?id. MEM (id,ty) params /\ n = string_to_num id) /\
+  FLOOKUP env.var_types n = SOME ty /\
+  lookup_scopes n st.scopes = SOME sv ==>
+  ?id raw tv.
+    MEM (id,ty) params /\ n = string_to_num id /\
+    MEM ((id,ty),raw) (ZIP (params,vals)) /\
+    evaluate_type tenv ty = SOME tv /\
+    sv.type = tv /\ safe_cast tv raw = SOME sv.value
+Proof
+  strip_tac >>
+  first_x_assum drule >>
+  strip_tac >> gvs[] >>
+  drule_all raw_abi_scope_lookup_safe_cast_origin >>
+  rw[] >>
+  qexistsl [`id`, `raw`] >> simp[]
+QED
+
 Theorem raw_abi_eval_Name_no_type_error[local]:
   raw_abi_runtime_consistent tenv params vals scope env cx st /\
   MEM (id,ty) params /\
@@ -9734,6 +9754,7 @@ Proof
   gvs[raw_abi_runtime_consistent_def, env_consistent_def, machine_well_typed_def] >>
   metis_tac[bind_arguments_scope_abi_casts, bind_arguments_length_c53]
 QED
+
 
 Theorem lookup_exported_function_current_lookup_function[local]:
   find_function_module am tx.target tx.function_name = src /\
@@ -9949,6 +9970,17 @@ Proof
       return_def, raise_def, assert_def, check_def,
       vyperTypeExprSoundnessTheory.no_type_error_eval_def,
       vyperTypeExprSoundnessTheory.no_type_error_result_def]
+QED
+
+Theorem checked_call_external_no_type_error:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  checked_contract_runtime_ready art mods am tx /\
+  machine_well_typed am /\
+  call_tx_well_typed tx /\
+  call_external am tx = (res,am') ==>
+  no_type_error_result res
+Proof
+  cheat
 QED
 
 
