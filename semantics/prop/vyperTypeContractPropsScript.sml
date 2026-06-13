@@ -9752,6 +9752,43 @@ Proof
      vyperTypeExprSoundnessTheory.no_type_error_result_def]
 QED
 
+Theorem raw_abi_formal_eval_Name_well_typed_no_type_error[local]:
+  well_typed_expr env (Name ty id) /\
+  raw_abi_formal_scope_ready tenv params vals scope env cx st ==>
+  no_type_error_eval (eval_expr cx (Name ty id) st)
+Proof
+  rw[raw_abi_formal_scope_ready_def] >>
+  irule raw_abi_eval_Name_well_typed_no_type_error >>
+  metis_tac[]
+QED
+
+Theorem raw_abi_formal_eval_Name_safe_cast_origin[local]:
+  well_typed_expr env (Name ty id) /\
+  raw_abi_formal_scope_ready tenv params vals scope env cx st /\
+  eval_expr cx (Name ty id) st = (INL (Value v),st') ==>
+  ?id' raw tv.
+    MEM (id',ty) params /\ string_to_num id = string_to_num id' /\
+    MEM ((id',ty),raw) (ZIP (params,vals)) /\
+    evaluate_type tenv ty = SOME tv /\
+    safe_cast tv raw = SOME v /\ st' = st
+Proof
+  strip_tac >>
+  `FLOOKUP env.var_types (string_to_num id) = SOME ty` by
+    gvs[well_typed_expr_def] >>
+  `?sv. lookup_scopes (string_to_num id) st.scopes = SOME sv` by
+    (gvs[well_typed_expr_def, raw_abi_formal_scope_ready_def,
+         raw_abi_runtime_consistent_def, env_consistent_def,
+         env_scopes_consistent_def, IS_SOME_EXISTS] >>
+     metis_tac[]) >>
+  drule_all raw_abi_formal_lookup_safe_cast_origin >>
+  strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  drule_all lookup_scopes_val_from_lookup_scopes >>
+  rw[Once evaluate_def, bind_def, get_scopes_def, lift_option_type_def,
+     return_def] >>
+  qexistsl [`id'`, `raw`] >> simp[]
+QED
+
 Theorem checked_explicit_external_raw_abi_runtime_consistent[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\
