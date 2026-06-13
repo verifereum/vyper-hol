@@ -9889,6 +9889,68 @@ Proof
   `state_well_typed st` by metis_tac[checked_explicit_external_raw_state_well_typed] >>
   metis_tac[checked_explicit_external_post_prefix_body_no_type_error]
 QED
+Theorem checked_explicit_external_call_external_function_no_type_error_raw[local]:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  checked_contract_runtime_ready art mods am tx /\
+  machine_well_typed am /\ call_tx_well_typed tx /\
+  ALOOKUP mods src = SOME ts /\
+  MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
+  evaluate_defaults cx am (DROP (LENGTH dflts + LENGTH vals - LENGTH args) dflts) = SOME dflt_vs /\
+  bind_arguments (type_env_all_modules mods) args (vals ++ dflt_vs) = SOME scope /\
+  args_values_typed (type_env_all_modules mods) args (vals ++ dflt_vs) /\
+  cx = initial_evaluation_context am.sources am.layouts tx src /\
+  call_external_function am cx nr mut ts mods args dflts vals body ret = (res,am') ==>
+  no_type_error_result res
+Proof
+  rpt strip_tac >>
+  gvs[checked_contract_runtime_ready_def] >>
+  `no_type_error_eval
+     (do
+        (if nr then
+           case (initial_evaluation_context am.sources am.layouts tx src).nonreentrant_slot of
+             NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+           | SOME slot => acquire_nonreentrant_lock
+               (initial_evaluation_context am.sources am.layouts tx src).txn.target slot
+               (mut = View \/ mut = Pure)
+         else return ());
+        send_call_value mut (initial_evaluation_context am.sources am.layouts tx src);
+        eval_stmts (initial_evaluation_context am.sources am.layouts tx src) body
+      od (initial_state am [scope]))` by
+    metis_tac[call_lock_send_eval_prefix_no_type_error_c53,
+              checked_contract_runtime_ready_def] >>
+  qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[call_external_function_def, initial_evaluation_context_def,
+       vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+  gvs[bind_def, ignore_bind_def, return_def, raise_def,
+      initial_evaluation_context_def] >>
+  rpt strip_tac >> gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+  gvs[AllCaseEqs(), return_def, raise_def,
+      vyperTypeExprSoundnessTheory.no_type_error_eval_def,
+      vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+  qpat_x_assum `!msg. FST _ <> INR (Error (TypeError msg))`
+    (qspec_then `msg` mp_tac) >>
+  qpat_x_assum `(\(res,st). (res,st)) _ = _` mp_tac >>
+  rpt (BasicProvers.TOP_CASE_TAC >> gvs[return_def, raise_def,
+        vyperTypeExprSoundnessTheory.no_type_error_eval_def,
+        vyperTypeExprSoundnessTheory.no_type_error_result_def]) >>
+  gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+  rpt strip_tac >>
+  qpat_x_assum
+    `(if nr /\ mut <> View /\ mut <> Pure then
+        case lookup_nonreentrant_slot am.layouts tx.target of
+          NONE => return ()
+        | SOME slot => release_nonreentrant_lock tx.target slot
+      else return ()) r = (INR y,r'')` mp_tac >>
+  Cases_on `lookup_nonreentrant_slot am.layouts tx.target` >>
+  Cases_on `nr` >>
+  Cases_on `mut` >>
+  gvs[release_nonreentrant_lock_def, bind_def, ignore_bind_def,
+      get_transient_storage_def, update_transient_def,
+      return_def, raise_def, assert_def, check_def,
+      vyperTypeExprSoundnessTheory.no_type_error_eval_def,
+      vyperTypeExprSoundnessTheory.no_type_error_result_def]
+QED
+
 
 
 
