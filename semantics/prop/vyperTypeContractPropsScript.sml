@@ -9639,3 +9639,76 @@ Proof
   rw[scope_well_typed_def, FLOOKUP_UPDATE] >>
   simp[not_value_has_type_unsorted_sarray_c26]
 QED
+
+Theorem checked_raw_arg_unsorted_sarray_subscript_no_TypeError_probe[local]:
+  let mods =
+    ([(NONE : num option,
+       [FunctionDecl External Nonpayable F F "f"
+         [("x", ArrayT (BaseT (UintT 256)) (Fixed 3))]
+         [] (BaseT (UintT 256))
+         [Return (SOME (Subscript (BaseT (UintT 256))
+           (Name (ArrayT (BaseT (UintT 256)) (Fixed 3)) "x")
+           (Literal (BaseT (UintT 256)) (IntL 0))))]])] :
+      (num option # toplevel list) list) in
+  let srcs =
+    ([((0w:address), mods)] :
+       (address # (num option # toplevel list) list) list) in
+  let am = initial_machine_state with sources := srcs in
+  let tx = empty_call_txn with <|
+    function_name := "f";
+    args := [ArrayV (SArrayV [(2, IntV 1); (0, IntV 2)])]
+  |> in
+    FST (call_external am tx) = INL (IntV 2)
+Proof
+  EVAL_TAC
+QED
+
+Theorem checked_raw_arg_unsorted_sarray_return_array_no_TypeError_probe[local]:
+  let mods =
+    ([(NONE : num option,
+       [FunctionDecl External Nonpayable F F "f"
+         [("x", ArrayT (BaseT (UintT 256)) (Fixed 3))]
+         [] (ArrayT (BaseT (UintT 256)) (Fixed 3))
+         [Return (SOME (Name (ArrayT (BaseT (UintT 256)) (Fixed 3)) "x"))]])] :
+      (num option # toplevel list) list) in
+  let srcs =
+    ([((0w:address), mods)] :
+       (address # (num option # toplevel list) list) list) in
+  let am = initial_machine_state with sources := srcs in
+  let tx = empty_call_txn with <|
+    function_name := "f";
+    args := [ArrayV (SArrayV [(2, IntV 1); (0, IntV 2)])]
+  |> in
+    FST (call_external am tx) =
+      INL (ArrayV (SArrayV [(2, IntV 1); (0, IntV 2)]))
+Proof
+  EVAL_TAC
+QED
+
+Theorem checked_raw_arg_unsorted_sarray_assign_subscript_no_TypeError_probe[local]:
+  let mods =
+    ([(NONE : num option,
+       [FunctionDecl External Nonpayable F F "f"
+         [("x", ArrayT (BaseT (UintT 256)) (Fixed 3))]
+         [] (BaseT (UintT 256))
+         [Assign
+            (BaseTarget
+              (SubscriptTarget (NameTarget "x")
+                (Literal (BaseT (UintT 256)) (IntL 1))))
+            (Literal (BaseT (UintT 256)) (IntL 7));
+          Return (SOME (Subscript (BaseT (UintT 256))
+            (Name (ArrayT (BaseT (UintT 256)) (Fixed 3)) "x")
+            (Literal (BaseT (UintT 256)) (IntL 1))))]])] :
+      (num option # toplevel list) list) in
+  let srcs =
+    ([((0w:address), mods)] :
+       (address # (num option # toplevel list) list) list) in
+  let am = initial_machine_state with sources := srcs in
+  let tx = empty_call_txn with <|
+    function_name := "f";
+    args := [ArrayV (SArrayV [(2, IntV 1); (0, IntV 2)])]
+  |> in
+    FST (call_external am tx) = INL (IntV 7)
+Proof
+  EVAL_TAC
+QED
