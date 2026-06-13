@@ -10520,6 +10520,49 @@ Proof
   gvs[initial_state_def, state_well_typed_def, machine_well_typed_def]
 QED
 
+Theorem acquire_nonreentrant_lock_accounts[local]:
+  acquire_nonreentrant_lock target slot ro st = (res,st') ==>
+  st'.accounts = st.accounts
+Proof
+  rw[acquire_nonreentrant_lock_def, bind_def, ignore_bind_def,
+     get_transient_storage_def, update_transient_def, return_def, raise_def,
+     assert_def, check_def] >>
+  gvs[AllCaseEqs(), return_def, raise_def]
+QED
+
+Theorem call_lock_send_prefix_raw_formals_ready[local]:
+  machine_well_typed am /\
+  raw_abi_formal_scope_ready tenv params vals scope env cx (initial_state am [scope]) /\
+  (do
+     (if nr then
+        case cx.nonreentrant_slot of
+          NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
+      else return ());
+     send_call_value mut cx
+   od (initial_state am [scope]) = (INL (),st)) ==>
+  st.scopes = [scope] /\
+  st.immutables = am.immutables /\
+  accounts_well_typed st.accounts /\
+  raw_abi_formal_scope_ready tenv params vals scope env cx st
+Proof
+  rw[bind_def, ignore_bind_def] >> gvs[AllCaseEqs()] >>
+  TRY (Cases_on `cx.nonreentrant_slot` >> gvs[return_def, raise_def]) >>
+  imp_res_tac call_lock_action_preserves_scopes >>
+  imp_res_tac call_lock_action_preserves_immutables >>
+  imp_res_tac call_lock_action_preserves_accounts_c53 >>
+  imp_res_tac acquire_nonreentrant_lock_scopes >>
+  imp_res_tac acquire_nonreentrant_lock_immutables >>
+  imp_res_tac acquire_nonreentrant_lock_accounts >>
+  imp_res_tac send_call_value_preserves_scopes >>
+  imp_res_tac send_call_value_preserves_immutables >>
+  imp_res_tac send_call_value_accounts_well_typed_c53 >>
+  gvs[raw_abi_formal_scope_ready_def, raw_abi_runtime_consistent_def,
+      env_consistent_def, env_scopes_consistent_def,
+      env_immutables_consistent_def, initial_state_def] >>
+  metis_tac[]
+QED
+
 
 Theorem checked_explicit_external_raw_body_no_type_error[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
