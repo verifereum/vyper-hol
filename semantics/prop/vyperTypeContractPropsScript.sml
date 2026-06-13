@@ -10494,6 +10494,22 @@ Proof
   strip_tac >> gvs[]
 QED
 
+Theorem raw_exec_exprs_all_non_None_ok[local]:
+  EVERY (\e. raw_exec_expr_ok tenv env e) es /\
+  EVERY (\e. expr_type e <> NoneT) es ==>
+  raw_exec_exprs_ok tenv env es
+Proof
+  Induct_on `es` >> rw[]
+  >- (rw[raw_exec_exprs_ok_def] >>
+      qpat_x_assum `eval_exprs _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, return_def,
+           vyperTypeExprSoundnessTheory.no_type_error_result_def,
+           raw_expr_values_ok_def] >>
+      rw[] >> gvs[]) >>
+  irule raw_exec_exprs_cons_non_None_ok >>
+  simp[]
+QED
+
 Definition raw_exec_opt_ok_def:
   raw_exec_opt_ok tenv env opt <=>
     tenv = env.type_defs ==>
