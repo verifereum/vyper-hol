@@ -9812,6 +9812,21 @@ Proof
   gvs[initial_state_def, state_well_typed_def, machine_well_typed_def]
 QED
 
+Theorem checked_explicit_external_raw_state_well_typed[local]:
+  machine_well_typed am /\
+  bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
+  args_values_typed (type_env_all_modules mods) args vals /\
+  st.scopes = [scope] /\ st.immutables = am.immutables ==>
+  state_well_typed st
+Proof
+  strip_tac >>
+  `scope_well_typed scope` by
+    (irule bind_arguments_scope_well_typed_stmt >>
+     qexistsl [`args`, `type_env_all_modules mods`, `vals`] >>
+     gvs[args_values_typed_def]) >>
+  gvs[state_well_typed_def, machine_well_typed_def]
+QED
+
 Theorem checked_explicit_external_post_prefix_body_no_type_error[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\
