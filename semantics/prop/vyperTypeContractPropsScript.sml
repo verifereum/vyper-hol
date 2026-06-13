@@ -10332,6 +10332,46 @@ Proof
   gvs[]
 QED
 
+Theorem raw_expr_value_ok_non_None_materialise_result_ok[local]:
+  raw_expr_value_ok tenv ty tv /\
+  ty <> NoneT /\
+  raw_exec_ready tenv env cx st /\
+  materialise cx tv st = (res,st') ==>
+  no_type_error_result res /\
+  case res of
+  | INL v => raw_expr_value_ok tenv ty (Value v) /\ raw_exec_ready tenv env cx st'
+  | INR _ => T
+Proof
+  rw[raw_expr_value_ok_def]
+  >- (Cases_on `tv` >>
+      gvs[materialise_def, bind_def, return_def, raise_def, toplevel_value_typed_def,
+          vyperTypeExprSoundnessTheory.no_type_error_result_def]
+      >- metis_tac[vyperTypeValuesTheory.evaluate_type_NoneTV_imp_NoneT] >>
+      qpat_x_assum `(case read_storage_slot _ _ _ _ _ of
+                       (INL v,s'') => (INL v,s'')
+                     | (INR e,s'') => (INR e,s'')) = _` mp_tac >>
+      BasicProvers.TOP_CASE_TAC >> gvs[] >>
+      strip_tac >> gvs[] >>
+      drule_all raw_exec_read_storage_slot_result_ok >> strip_tac >>
+      Cases_on `q` >> gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def])
+  >- (Cases_on `tv` >>
+      gvs[materialise_def, bind_def, return_def, raise_def, toplevel_value_typed_def,
+          vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+      qpat_x_assum `(case read_storage_slot _ _ _ _ _ of
+                       (INL v,s'') => (INL v,s'')
+                     | (INR e,s'') => (INR e,s'')) = _` mp_tac >>
+      BasicProvers.TOP_CASE_TAC >> gvs[] >>
+      strip_tac >> gvs[] >>
+      drule_all raw_exec_read_storage_slot_result_ok >> strip_tac >>
+      Cases_on `q` >>
+      gvs[raw_expr_value_ok_def, toplevel_value_typed_Value,
+          vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+      metis_tac[]) >>
+  gvs[materialise_def, return_def, raw_expr_value_ok_def,
+      vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+  metis_tac[]
+QED
+
 
 Theorem raw_expr_value_ok_literal[local]:
   well_typed_literal ty lit /\
@@ -10427,6 +10467,15 @@ Proof
   rw[raw_exec_ready_def, env_context_consistent_def]
 QED
 
+Theorem raw_expr_value_ok_Bool_toplevel_value_typed[local]:
+  raw_expr_value_ok tenv (BaseT BoolT) tv ==>
+  toplevel_value_typed tv (BaseTV BoolT)
+Proof
+  rw[raw_expr_value_ok_def] >> gvs[Once evaluate_type_def] >>
+  Cases_on `raw` >> gvs[Once vyperValueOperationTheory.safe_cast_def,
+                         toplevel_value_typed_Value, vyperTypingTheory.value_has_type_def]
+QED
+
 Theorem raw_exec_Name_branch_ok[local]:
   well_typed_expr env (Name ty id) ==>
   raw_exec_expr_ok tenv env (Name ty id)
@@ -10472,6 +10521,7 @@ Proof
   drule_all raw_exec_eval_TopLevelName_result_ok >>
   simp[]
 QED
+
 
 
 Theorem raw_abi_eval_Literal_result_ok[local]:
