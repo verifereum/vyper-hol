@@ -9652,7 +9652,9 @@ Theorem checked_explicit_external_raw_bind_env_package[local]:
     type_stmts env_body ret body = SOME env_after /\
     env_context_consistent env_body cx /\
     env_scopes_consistent env_body cx st /\
-    env_immutables_consistent env_body cx st
+    env_immutables_consistent env_body cx st /\
+    (!n ty. FLOOKUP env_body.var_types n = SOME ty ==>
+       ?id. MEM (id,ty) args /\ n = string_to_num id)
 Proof
   strip_tac >> gvs[] >>
   drule_all checked_explicit_external_body_typing_package >>
@@ -10415,6 +10417,48 @@ Proof
   gvs[initial_state_def, state_well_typed_def, machine_well_typed_def]
 QED
 
+
+Theorem checked_explicit_external_raw_body_no_type_error[local]:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  checked_contract_runtime_ready art mods am tx /\
+  machine_well_typed am /\ call_tx_well_typed tx /\
+  ALOOKUP mods src = SOME ts /\
+  MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
+  bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
+  ALL_DISTINCT (MAP (string_to_num o FST) args) /\
+  cx = initial_evaluation_context am.sources am.layouts tx src /\
+  st.scopes = [scope] /\ st.immutables = am.immutables /\
+  state_well_typed st /\ accounts_well_typed st.accounts /\
+  eval_stmts cx body st = (res,st') ==>
+  no_type_error_result res
+Proof
+  rpt strip_tac >>
+  `ALOOKUP am.sources tx.target = SOME mods /\
+   immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
+     (initial_evaluation_context am.sources am.layouts tx NONE) am.immutables` by
+    gvs[checked_contract_runtime_ready_def] >>
+  `context_well_typed cx` by
+    (gvs[] >> irule call_tx_well_typed_initial_context >> simp[]) >>
+  `immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes cx am.immutables` by
+    (gvs[] >> metis_tac[immutables_ready_initial_evaluation_context_source]) >>
+  drule_all checked_explicit_external_raw_bind_env_package >>
+  strip_tac >>
+  `raw_abi_runtime_consistent (type_env_all_modules mods) args vals scope env_body cx st` by
+    (rw[raw_abi_runtime_consistent_def]
+     >- rw[env_consistent_def]
+     >- metis_tac[bind_arguments_length_c53]
+     >- metis_tac[bind_arguments_scope_abi_casts]
+     >- gvs[machine_well_typed_def]) >>
+  `raw_abi_formal_scope_ready (type_env_all_modules mods) args vals scope env_body cx st` by
+    (rw[raw_abi_formal_scope_ready_def] >> metis_tac[]) >>
+  irule raw_abi_eval_stmts_no_type_error >>
+  qexistsl [`body`, `cx`, `env_body`, `env_after`, `args`, `ret`,
+            `scope`, `st`, `st'`, `type_env_all_modules mods`, `vals`] >>
+  simp[] >>
+  `functions_well_typed cx` by
+    metis_tac[check_contract_functions_well_typed_initial] >>
+  gvs[]
+QED
 
 Theorem checked_call_external_no_type_error:
   check_contract F am.layouts tx.target mods = SOME art /\
