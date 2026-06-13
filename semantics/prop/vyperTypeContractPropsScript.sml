@@ -9590,6 +9590,17 @@ Proof
   simp[]
 QED
 
+Definition raw_abi_runtime_consistent_def:
+  raw_abi_runtime_consistent tenv params vals scope env cx st <=>
+    env_consistent env cx st /\
+    context_well_typed cx /\
+    accounts_well_typed st.accounts /\
+    st.scopes = [scope] /\
+    LENGTH params = LENGTH vals /\
+    scope_abi_casts tenv params vals scope /\
+    EVERY (\(addr,imms). imms_well_typed imms) st.immutables
+End
+
 Theorem checked_explicit_external_raw_bind_env_package[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\
@@ -9632,6 +9643,81 @@ Proof
   simp[]
 QED
 
+
+Theorem MEM_ZIP_FST_EXISTS[local]:
+  LENGTH xs = LENGTH ys /\ MEM x xs ==> ?y. MEM (x,y) (ZIP (xs,ys))
+Proof
+  MAP_EVERY qid_spec_tac [`ys`, `x`] >>
+  Induct_on `xs` >> Cases_on `ys` >> rw[ZIP_def] >> gvs[] >>
+  metis_tac[]
+QED
+
+Theorem lookup_scopes_val_from_lookup_scopes[local]:
+  lookup_scopes n scs = SOME sv ==> lookup_scopes_val n scs = SOME sv.value
+Proof
+  Induct_on `scs` >> rw[lookup_scopes_def, lookup_scopes_val_def] >>
+  gvs[AllCaseEqs()]
+QED
+
+Theorem raw_abi_scope_lookup_safe_cast_origin[local]:
+  raw_abi_runtime_consistent tenv params vals scope env cx st /\
+  MEM (id,ty) params /\
+  FLOOKUP env.var_types (string_to_num id) = SOME ty /\
+  lookup_scopes (string_to_num id) st.scopes = SOME sv ==>
+  ?tv raw.
+    MEM ((id,ty),raw) (ZIP (params,vals)) /\
+    evaluate_type tenv ty = SOME tv /\
+    sv.type = tv /\ safe_cast tv raw = SOME sv.value
+Proof
+  strip_tac >>
+  `?raw0. MEM ((id,ty),raw0) (ZIP (params,vals))` by
+    metis_tac[raw_abi_runtime_consistent_def, MEM_ZIP_FST_EXISTS] >>
+  gvs[raw_abi_runtime_consistent_def] >>
+  `FLOOKUP scope (string_to_num id) = SOME sv` by
+    gvs[lookup_scopes_def, AllCaseEqs()] >>
+  drule_all scope_abi_casts_flookup >>
+  rw[] >> qexists `raw0` >> simp[]
+QED
+
+Theorem raw_abi_eval_Name_no_type_error[local]:
+  raw_abi_runtime_consistent tenv params vals scope env cx st /\
+  MEM (id,ty) params /\
+  FLOOKUP env.var_types (string_to_num id) = SOME ty /\
+  lookup_scopes (string_to_num id) st.scopes = SOME sv ==>
+  no_type_error_eval (eval_expr cx (Name ty id) st)
+Proof
+  strip_tac >>
+  drule_all lookup_scopes_val_from_lookup_scopes >>
+  rw[Once evaluate_def, bind_def, get_scopes_def, lift_option_type_def, return_def,
+     vyperTypeExprSoundnessTheory.no_type_error_eval_def,
+     vyperTypeExprSoundnessTheory.no_type_error_result_def]
+QED
+
+Theorem checked_explicit_external_raw_abi_runtime_consistent[local]:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  ALOOKUP am.sources tx.target = SOME mods /\
+  ALOOKUP mods src = SOME ts /\
+  MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
+  cx = initial_evaluation_context am.sources am.layouts tx src /\
+  context_well_typed cx /\
+  machine_well_typed am /\
+  immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes cx am.immutables /\
+  bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
+  ALL_DISTINCT (MAP (string_to_num o FST) args) /\
+  st.scopes = [scope] /\ st.immutables = am.immutables /\
+  accounts_well_typed st.accounts ==>
+  ?env_body env_after.
+    type_stmts env_body ret body = SOME env_after /\
+    raw_abi_runtime_consistent
+      (type_env_all_modules mods) args vals scope env_body cx st
+Proof
+  strip_tac >>
+  drule_all checked_explicit_external_raw_bind_env_package >>
+  gvs[] >> strip_tac >>
+  qexistsl [`env_body`, `env_after`] >> simp[] >>
+  gvs[raw_abi_runtime_consistent_def, env_consistent_def, machine_well_typed_def] >>
+  metis_tac[bind_arguments_scope_abi_casts, bind_arguments_length_c53]
+QED
 
 Theorem lookup_exported_function_current_lookup_function[local]:
   find_function_module am tx.target tx.function_name = src /\
