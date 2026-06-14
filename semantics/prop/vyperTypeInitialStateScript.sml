@@ -11,7 +11,8 @@ Theory vyperTypeInitialState
 Ancestors
   list rich_list pred_set arithmetic finite_map option pair
   vyperAST vyperValue vyperTyping vyperState vyperInterpreter vyperContext
-  vyperTypeSystem vyperTypeInvariants vyperTypeStmtSoundness vyperTypeSoundness
+  vyperTypeSystem vyperTypeInvariants vyperTypeBindArguments
+  vyperTypeStmtSoundness vyperTypeSoundness
 Libs
   wordsLib
 
@@ -910,12 +911,7 @@ Proof
   drule_all functions_well_typed_callable_body_env_base >>
   strip_tac >>
   `scope_well_typed scope` by
-    (qspecl_then [`get_tenv cx`, `args`, `vals`, `scope`] mp_tac
-       bind_arguments_scope_well_typed_stmt >>
-     simp[] >>
-     disch_then irule >>
-     rpt strip_tac >>
-     gvs[args_values_typed_def]) >>
+    metis_tac[bind_arguments_scope_well_typed_from_success] >>
   qexistsl [`env_body`, `env_after`] >>
   rw[initial_state_accounts_well_typed, initial_state_single_scope_well_typed] >>
   rw[env_consistent_def]

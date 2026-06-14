@@ -335,6 +335,12 @@ Proof
   metis_tac[materialise_preserves_type]
 QED
 
+Theorem expr_result_typed_runtime_typed:
+  expr_result_typed env e tv ==> expr_runtime_typed env e tv
+Proof
+  rw[expr_result_typed_def]
+QED
+
 Theorem expr_result_typed_materialise_preserves_value_type:
   state_well_typed st /\ expr_result_typed env e tvl /\
   evaluate_type env.type_defs (expr_type e) = SOME tyv /\
