@@ -9884,6 +9884,7 @@ Theorem raw_expr_value_ok_safe_cast[local]:
 Proof
   rw[raw_expr_value_ok_def] >> metis_tac[]
 QED
+
 Definition raw_var_value_ok_def:
   raw_var_value_ok tenv ty sv <=>
     ?rt. evaluate_type tenv ty = SOME rt /\
@@ -11628,6 +11629,40 @@ Proof
   strip_tac >>
   drule raw_exec_ready_type_defs >> strip_tac >> gvs[raw_exec_exprs_ok_def] >>
   first_x_assum drule_all >> simp[]
+QED
+
+Theorem raw_stmt_exec_ready_expr_success[local]:
+  raw_stmt_exec_ready (get_tenv cx) env cx st /\
+  raw_exec_expr_ok (get_tenv cx) env e /\
+  functions_well_typed cx /\
+  eval_expr cx e st = (INL tv,st') ==>
+  raw_expr_value_ok (get_tenv cx) (expr_type e) tv /\
+  raw_stmt_exec_ready (get_tenv cx) env cx st'
+Proof
+  strip_tac >>
+  `raw_exec_ready (get_tenv cx) env cx st` by gvs[raw_stmt_exec_ready_def] >>
+  drule_all raw_exec_expr_ok_result >> strip_tac >> gvs[] >>
+  irule raw_stmt_exec_ready_map_fdom >>
+  simp[] >>
+  qexists `st` >>
+  imp_res_tac eval_expr_preserves_scopes_dom >> simp[]
+QED
+
+Theorem raw_stmt_exec_ready_exprs_success[local]:
+  raw_stmt_exec_ready (get_tenv cx) env cx st /\
+  raw_exec_exprs_ok (get_tenv cx) env es /\
+  functions_well_typed cx /\
+  eval_exprs cx es st = (INL vs,st') ==>
+  raw_expr_values_ok (get_tenv cx) es vs /\
+  raw_stmt_exec_ready (get_tenv cx) env cx st'
+Proof
+  strip_tac >>
+  `raw_exec_ready (get_tenv cx) env cx st` by gvs[raw_stmt_exec_ready_def] >>
+  drule_all raw_exec_exprs_ok_result >> strip_tac >> gvs[] >>
+  irule raw_stmt_exec_ready_map_fdom >>
+  simp[] >>
+  qexists `st` >>
+  imp_res_tac eval_exprs_preserves_scopes_dom >> simp[]
 QED
 
 Theorem raw_stmt_exec_ready_AnnAssign_result_ok[local]:
