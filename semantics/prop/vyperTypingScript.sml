@@ -738,6 +738,91 @@ Proof
   irule struct_has_type_ZIP >> simp[]
 QED
 
+Theorem values_have_types_nil_acc_elim:
+  !tvs out.
+    (!acc_tys. values_have_types acc_tys [] ==>
+      values_have_types (REVERSE acc_tys ++ tvs) out) ==>
+    values_have_types tvs out
+Proof
+  rpt strip_tac >> irule values_have_types_empty_acc_result >> simp[]
+QED
+
+Theorem values_have_types_acc_reverse:
+  !acc_tys acc.
+    values_have_types acc_tys acc ==>
+    values_have_types (REVERSE acc_tys) (REVERSE acc)
+Proof
+  simp[values_have_types_REVERSE]
+QED
+
+Theorem APPEND_SING_APPEND_CONS[local]:
+  !xs x ys. xs ++ [x] ++ ys = xs ++ x::ys
+Proof
+  Induct >> simp[]
+QED
+
+Theorem values_have_types_cons_acc_step:
+  !acc_tys acc tv v' tvs out.
+    value_has_type tv v' /\ values_have_types acc_tys acc /\
+    (!acc_tys'. values_have_types acc_tys' (v'::acc) ==>
+      values_have_types (REVERSE acc_tys' ++ tvs) out) ==>
+    values_have_types (REVERSE acc_tys ++ tv::tvs) out
+Proof
+  rpt strip_tac >>
+  first_x_assum (qspec_then `tv::acc_tys` mp_tac) >>
+  (impl_tac >- simp[Once value_has_type_def]) >>
+  strip_tac >>
+  qpat_x_assum `values_have_types (REVERSE (tv::acc_tys) ++ tvs) out` mp_tac >>
+  simp[listTheory.REVERSE_DEF, APPEND_SING_APPEND_CONS]
+QED
+
+Theorem fixed_sparse_cast_result_components_from_ih[local]:
+  !t n al vs.
+    (!acc_tys. values_have_types acc_tys [] ==>
+      values_have_types (REVERSE acc_tys ++ REPLICATE (LENGTH al) t) vs) /\
+    SORTED $< (MAP FST al) /\
+    EVERY (\(k,v). k < n) al /\
+    EVERY (\v. v <> default_value t) vs ==>
+    SORTED $< (MAP FST (ZIP (MAP FST al, vs))) /\
+    sparse_has_type t n (ZIP (MAP FST al, vs))
+Proof
+  rpt strip_tac >>
+  `values_have_types (REPLICATE (LENGTH al) t) vs`
+    by (irule values_have_types_nil_acc_elim >> simp[]) >>
+  drule_all fixed_sparse_cast_result_value_has_type >>
+  simp[Once value_has_type_def]
+QED
+
+Theorem dynamic_cast_result_components_from_ih[local]:
+  !t n raw_vs vs.
+    (!acc_tys. values_have_types acc_tys [] ==>
+      values_have_types (REVERSE acc_tys ++ REPLICATE (LENGTH raw_vs) t) vs) /\
+    ~(n < LENGTH raw_vs) ==>
+    LENGTH vs <= n /\ all_have_type t vs
+Proof
+  rpt gen_tac >> strip_tac >>
+  `values_have_types (REPLICATE (LENGTH raw_vs) t) vs`
+    by (first_x_assum (qspec_then `[]` mp_tac) >> simp[Once value_has_type_def]) >>
+  conj_tac
+  >- (`LENGTH vs = LENGTH raw_vs` by (drule values_have_types_length >> simp[]) >>
+      decide_tac) >>
+  drule values_have_types_replicate_all_have_type >> simp[]
+QED
+
+Theorem struct_cast_result_components_from_ih[local]:
+  !args al vs.
+    (!acc_tys. values_have_types acc_tys [] ==>
+      values_have_types (REVERSE acc_tys ++ MAP SND args) vs) /\
+    MAP FST al = MAP FST args ==>
+    struct_has_type args (ZIP (MAP FST args, vs))
+Proof
+  rpt strip_tac >>
+  `values_have_types (MAP SND args) vs`
+    by (irule values_have_types_nil_acc_elim >> simp[]) >>
+  drule_all struct_cast_result_value_has_type >>
+  simp[Once value_has_type_def]
+QED
+
 Theorem safe_cast_result_well_typed_mutual:
   (!tv v v'. safe_cast tv v = SOME v' ==> value_has_type tv v') /\
   (!tvs vs acc acc_tys out.
@@ -745,11 +830,26 @@ Theorem safe_cast_result_well_typed_mutual:
      safe_cast_list tvs vs acc = SOME out ==>
      values_have_types (REVERSE acc_tys ++ tvs) out)
 Proof
-  (* C3.2.1 cleanup: remove the known-brittle TRY/final metis proof skeleton.
-     C3.2.2 will add branch-boundary lemmas immediately above this theorem,
-     and C3.2.3 will replace this temporary cheat with the boundary-based
-     mutual induction proof. *)
-  cheat
+  ho_match_mp_tac safe_cast_ind >>
+  rw[Once safe_cast_def, AllCaseEqs(), within_int_bound_def] >>
+  gvs[Once value_has_type_def] >>
+  pop_assum mp_tac >>
+  simp[Once safe_cast_def, AllCaseEqs(), Once value_has_type_def,
+       within_int_bound_def] >>
+  rpt strip_tac >> gvs[Once value_has_type_def, within_int_bound_def]
+  >- (irule values_have_types_nil_acc_elim >> simp[])
+  >- (irule fixed_sparse_cast_result_components_from_ih >> simp[])
+  >- (`values_have_types (REPLICATE (LENGTH vs) t') vs'`
+        by (first_x_assum (qspec_then `[]` mp_tac) >> simp[Once value_has_type_def]) >>
+      conj_tac
+      >- (`LENGTH vs' = LENGTH vs` by (drule values_have_types_length >> simp[]) >>
+          decide_tac) >>
+      drule values_have_types_replicate_all_have_type >> simp[])
+  >- (irule struct_has_type_ZIP >>
+      irule values_have_types_nil_acc_elim >> simp[])
+  >- (irule values_have_types_acc_reverse >> simp[])
+  >- (irule values_have_types_cons_acc_step >>
+      qexistsl [`acc`, `v'`] >> simp[])
 QED
 Theorem safe_cast_preserves_well_typed:
   !tv v v'. value_has_type tv v /\ safe_cast tv v = SOME v' ==>
