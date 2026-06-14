@@ -11423,6 +11423,21 @@ Proof
   metis_tac[exprs_runtime_typed_raw_expr_values_ok]
 QED
 
+Theorem checked_explicit_raw_body_no_type_error[local]:
+  type_stmts env ret body = SOME env_after /\
+  raw_abi_formal_scope_ready tenv params vals scope env cx st /\
+  state_well_typed st /\ functions_well_typed cx /\
+  eval_stmts cx body st = (res,st') ==>
+  no_type_error_result res
+Proof
+  strip_tac >>
+  `env_consistent env cx st /\ context_well_typed cx /\
+   accounts_well_typed st.accounts` by
+    metis_tac[raw_abi_formal_scope_ready_soundness_preconditions_weak] >>
+  drule_all eval_stmts_no_type_error >>
+  rw[vyperTypeExprSoundnessTheory.no_type_error_eval_def]
+QED
+
 
 Theorem lookup_exported_function_current_lookup_function[local]:
   find_function_module am tx.target tx.function_name = src /\
