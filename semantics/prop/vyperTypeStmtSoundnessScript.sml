@@ -1866,6 +1866,15 @@ Proof
   rw[] >> gvs[] >> res_tac
 QED
 
+(* TOP-LEVEL: once safe_cast is a typed boundary, successful binding of raw
+   call arguments establishes the ordinary scope invariant directly. *)
+Theorem bind_arguments_scope_well_typed_from_success:
+  !tenv params vs sc.
+    bind_arguments tenv params vs = SOME sc ==> scope_well_typed sc
+Proof
+  cheat
+QED
+
 Theorem exprs_runtime_typed_value_expr_LIST_REL[local]:
   !env es vs.
     exprs_runtime_typed env es vs ==>

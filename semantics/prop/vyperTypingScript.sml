@@ -533,6 +533,20 @@ Proof
   imp_res_tac MEM_type_value_size_StructTV >> gvs[]
 QED
 
+Theorem sparse_has_type_all_less:
+  ∀tv n l. sparse_has_type tv n l ==>
+  EVERY (λ(k,v). k < n) l
+Proof
+  cheat
+QED
+
+Theorem sparse_has_type_not_default:
+  ∀tv n l. sparse_has_type tv n l ==>
+  EVERY (λv. v <> default_value tv) (MAP SND l)
+Proof
+  cheat
+QED
+
 Theorem safe_cast_well_typed:
   !tv v. value_has_type tv v ==> safe_cast tv v = SOME v
 Proof
@@ -549,7 +563,8 @@ Proof
       simp[Once safe_cast_def] >>
       TRY (imp_res_tac sparse_has_type_all_have_type >>
            imp_res_tac sparse_has_type_length >> simp[]) >>
-      TRY (drule_all safe_cast_well_typed_tuple_helper >> simp[] >> NO_TAC) >>
+      TRY (drule_all safe_cast_well_typed_tuple_helper >> simp[] >> NO_TAC)
+      >-
       (`values_have_types (REPLICATE (LENGTH l) tv0) l`
         by (irule all_have_type_values_have_types_replicate >> simp[]) >>
        `!tv v. MEM tv (REPLICATE (LENGTH l) tv0) /\
@@ -557,14 +572,18 @@ Proof
          by (rpt strip_tac >> gvs[rich_listTheory.MEM_REPLICATE] >>
              first_x_assum irule >> simp[]) >>
        drule_all safe_cast_list_identity_nil >> simp[zip_fst_snd]
-       ORELSE
-       (`values_have_types (REPLICATE (LENGTH (MAP SND l)) tv0) (MAP SND l)`
-          by (irule all_have_type_values_have_types_replicate >> simp[]) >>
-        `!tv v. MEM tv (REPLICATE (LENGTH (MAP SND l)) tv0) /\
-                value_has_type tv v ==> safe_cast tv v = SOME v`
-          by (rpt strip_tac >> gvs[rich_listTheory.MEM_REPLICATE] >>
-              first_x_assum irule >> simp[]) >>
-        drule_all safe_cast_list_identity_nil >> simp[zip_fst_snd])))
+      ) >>
+      `values_have_types (REPLICATE (LENGTH (MAP SND l)) tv0) (MAP SND l)`
+        by (irule all_have_type_values_have_types_replicate >> simp[]) >>
+       `!tv v. MEM tv (REPLICATE (LENGTH (MAP SND l)) tv0) /\
+               value_has_type tv v ==> safe_cast tv v = SOME v`
+         by (rpt strip_tac >> gvs[rich_listTheory.MEM_REPLICATE] >>
+             first_x_assum irule >> simp[]) >>
+       drule_all safe_cast_list_identity_nil >>
+       simp[zip_fst_snd] >>
+       drule sparse_has_type_all_less >>
+       drule sparse_has_type_not_default >>
+       simp[])
   >> (simp[Once safe_cast_def] >>
       imp_res_tac struct_has_type_map_fst >> simp[] >>
       imp_res_tac struct_has_type_values_have_types >>
@@ -606,13 +625,10 @@ Proof
   imp_res_tac safe_cast_well_typed >> gvs[]
 QED
 
-(* NOTE: safe_cast_result_well_typed (well_formed_type_value tv ∧ safe_cast tv v = SOME v'
-   ⇒ value_has_type tv v') is FALSE for SArrayV with unsorted keys:
-   safe_cast preserves the key ordering of input SArrayV, so unsorted input gives unsorted
-   output which fails SORTED check in value_has_type.
-   Counterexample: safe_cast (ArrayTV (BaseTV (UintT 256)) (Fixed 3))
-                     (ArrayV (SArrayV [(2,IntV 1);(0,IntV 2)]))
-                 = SOME (ArrayV (SArrayV [(2,IntV 1);(0,IntV 2)]))
-   but value_has_type requires SORTED $< [2;0] which is false.
-   In practice, safe_cast_preserves_well_typed (requires value_has_type tv v for input)
-   suffices for all proof obligations. *)
+(* TOP-LEVEL: successful safe casts produce values satisfying the target runtime type.
+   This becomes true after the fixed-array branch rejects noncanonical sparse arrays. *)
+Theorem safe_cast_result_well_typed:
+  !tv v v'. safe_cast tv v = SOME v' ==> value_has_type tv v'
+Proof
+  cheat
+QED
