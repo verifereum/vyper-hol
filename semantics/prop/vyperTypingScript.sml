@@ -546,7 +546,9 @@ Theorem sparse_has_type_not_default:
   ∀tv n l. sparse_has_type tv n l ==>
   EVERY (λv. v <> default_value tv) (MAP SND l)
 Proof
-  cheat
+  Induct_on `l` >> simp[Once value_has_type_def] >>
+  Cases >> simp[Once value_has_type_def] >>
+  rpt strip_tac >> res_tac
 QED
 
 Theorem safe_cast_well_typed:
