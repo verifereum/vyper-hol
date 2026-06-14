@@ -11220,6 +11220,18 @@ Proof
   gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def]
 QED
 
+Theorem raw_exec_place_expr_any_ok[local]:
+  raw_exec_place_expr_ok tenv env e
+Proof
+  rw[raw_exec_place_expr_ok_def]
+QED
+
+Theorem raw_exec_place_target_any_ok[local]:
+  raw_exec_place_target_ok tenv env tgt
+Proof
+  rw[raw_exec_place_target_ok_def]
+QED
+
 Theorem lift_safe_cast_success_no_type_error[local]:
   safe_cast rt v = SOME v' /\
   lift_option_type (safe_cast rt v) msg st = (res,st') ==>
