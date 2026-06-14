@@ -12018,6 +12018,81 @@ Proof
   metis_tac[]
 QED
 
+Theorem checked_explicit_external_raw_body_setup[local]:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  checked_contract_runtime_ready art mods am tx /\
+  machine_well_typed am /\ call_tx_well_typed tx /\
+  ALOOKUP mods src = SOME ts /\
+  MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
+  cx = initial_evaluation_context am.sources am.layouts tx src /\
+  bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
+  ALL_DISTINCT (MAP (string_to_num o FST) args) /\
+  st.scopes = [scope] /\ st.immutables = am.immutables /\
+  state_well_typed st /\ accounts_well_typed st.accounts ==>
+  ?env_body env_after.
+    type_stmts env_body ret body = SOME env_after /\
+    raw_abi_formal_scope_ready (type_env_all_modules mods) args vals scope env_body cx st /\
+    functions_well_typed cx
+Proof
+  strip_tac >> gvs[checked_contract_runtime_ready_def] >>
+  `immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
+     (initial_evaluation_context am.sources am.layouts tx src) am.immutables` by
+    metis_tac[immutables_ready_initial_evaluation_context_source] >>
+  `functions_well_typed (initial_evaluation_context am.sources am.layouts tx src)` by
+    (irule check_contract_functions_well_typed_initial >> simp[]) >>
+  drule_all checked_explicit_external_body_typing_package >>
+  strip_tac >>
+  qexistsl [`env_body`, `env_after`] >> simp[] >>
+  rw[raw_abi_formal_scope_ready_def, raw_abi_runtime_consistent_def]
+  >- (rw[env_consistent_def]
+      >- (irule env_context_consistent_same_static_maps >>
+          qexists `artifact_env art mods env_body.current_src` >>
+          rpt (conj_tac >- simp[artifact_env_def, get_tenv_def, initial_evaluation_context_def]) >>
+          irule check_contract_env_context_consistent_initial_src >>
+          simp[])
+      >- (`(st with scopes := [scope]) = st` by
+            gvs[evaluation_state_component_equality] >>
+          pop_assum (fn th => SUBST1_TAC (GSYM th)) >>
+          irule bind_arguments_env_scopes_consistent >>
+          qexistsl [`args`, `type_env_all_modules mods`, `vals`] >>
+          gvs[get_tenv_def, initial_evaluation_context_def] >> metis_tac[])
+      >- (gvs[env_immutables_consistent_def] >>
+          rw[] >>
+          qpat_x_assum `immutables_ready _ _ _ _` mp_tac >>
+          simp[immutables_ready_def] >>
+          strip_tac >>
+          first_x_assum drule_all >>
+          simp[]))
+  >- metis_tac[call_tx_well_typed_initial_context]
+  >- metis_tac[bind_arguments_length_c53]
+  >- metis_tac[bind_arguments_scope_abi_casts]
+  >- gvs[state_well_typed_def]
+QED
+
+Theorem checked_explicit_external_raw_body_no_type_error_selected[local]:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  checked_contract_runtime_ready art mods am tx /\
+  machine_well_typed am /\ call_tx_well_typed tx /\
+  ALOOKUP mods src = SOME ts /\
+  MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
+  cx = initial_evaluation_context am.sources am.layouts tx src /\
+  bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
+  ALL_DISTINCT (MAP (string_to_num o FST) args) /\
+  st.scopes = [scope] /\ st.immutables = am.immutables /\
+  state_well_typed st /\ accounts_well_typed st.accounts /\
+  eval_stmts cx body st = (res,st') ==>
+  no_type_error_result res
+Proof
+  strip_tac >>
+  drule_all checked_explicit_external_raw_body_setup >>
+  strip_tac >>
+  `env_consistent env_body cx st /\ context_well_typed cx /\
+   accounts_well_typed st.accounts` by
+    metis_tac[raw_abi_formal_scope_ready_soundness_preconditions_weak] >>
+  drule_all eval_stmts_no_type_error >>
+  rw[vyperTypeExprSoundnessTheory.no_type_error_eval_def]
+QED
+
 
 
 
