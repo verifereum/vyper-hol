@@ -11232,6 +11232,43 @@ Proof
   rw[raw_exec_place_target_ok_def]
 QED
 
+
+Theorem raw_exec_FlagMember_branch_ok[local]:
+  well_typed_expr env (FlagMember ty nsid mid) ==>
+  raw_exec_expr_ok tenv env (FlagMember ty nsid mid)
+Proof
+  simp[raw_exec_expr_ok_def] >> strip_tac >>
+  rpt strip_tac >>
+  imp_res_tac lookup_flag_mem_state >> gvs[] >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def] >> strip_tac >> gvs[] >>
+  PairCases_on `nsid` >>
+  gvs[raw_exec_ready_def, env_context_consistent_def, well_typed_expr_def] >>
+  `?ts. get_module_code cx nsid0 = SOME ts /\
+        lookup_flag nsid1 ts = SOME ls /\
+        FLOOKUP (get_tenv cx) (type_key (nsid0,nsid1)) = SOME (FlagArgs (LENGTH ls))` by
+    metis_tac[] >>
+  gvs[] >>
+  `LENGTH ls <= 256` by
+    (gvs[well_formed_type_def, evaluate_type_def] >> decide_tac) >>
+  qpat_x_assum `lookup_flag_mem _ _ _ _ = _` mp_tac >>
+  simp[lookup_flag_mem_def, return_def, raise_def] >>
+  Cases_on `INDEX_OF mid ls` >> strip_tac >>
+  gvs[return_def, vyperTypeExprSoundnessTheory.no_type_error_result_def,
+      expr_type_def, raw_expr_value_ok_def, toplevel_value_typed_Value,
+      evaluate_type_def, vyperTypingTheory.value_has_type_def,
+      INDEX_OF_eq_NONE, INDEX_OF_eq_SOME] >>
+  metis_tac[bitTheory.TWOEXP_MONO]
+QED
+
+
+(* The previous blanket mutual theorem
+   `well_typed_expr env e ==> raw_exec_expr_ok env.type_defs env e`
+   is intentionally not stated here: arbitrary well-typed StructLit fields may
+   have type NoneT, while expression-list materialisation requires explicit
+   non-None side conditions.  Downstream generated-getter code uses the
+   getter-scoped raw execution exports below instead. *)
+
 Theorem lift_safe_cast_success_no_type_error[local]:
   safe_cast rt v = SOME v' /\
   lift_option_type (safe_cast rt v) msg st = (res,st') ==>
