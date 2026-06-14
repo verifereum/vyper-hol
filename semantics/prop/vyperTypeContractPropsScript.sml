@@ -9723,6 +9723,72 @@ QED
 
 
 
+Theorem call_external_function_selected_explicit_raw_args_no_type_error_c53[local]:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  checked_contract_runtime_ready art mods am tx /\
+  machine_well_typed am /\ call_tx_well_typed tx /\
+  ALOOKUP mods src = SOME ts /\
+  MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
+  cx = initial_evaluation_context am.sources am.layouts tx src /\
+  call_external_function am cx nr mut ts mods args dflts tx.args body ret = (res,am') ==>
+  no_type_error_result res
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once call_external_function_def, evaluate_defaults_def] >>
+  gvs[AllCaseEqs(), initial_evaluation_context_def] >>
+  TRY (gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def] >> NO_TAC) >>
+  strip_tac >>
+  TRY (gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def] >> NO_TAC) >>
+  irule checked_explicit_external_entry_no_type_error_selected >>
+  qexistsl [`am`, `am'`, `args`, `art`, `body`, `dflts`, `mods`,
+            `mut`, `nr`, `raw`, `ret`, `env`, `src`, `ts`, `tx`,
+            `tx.args ++ dflt_vs`] >> simp[]
+  >- (drule call_external_function_exact_args_rewrites_c53 >> strip_tac >>
+      gvs[] >>
+      qpat_x_assum `(\(res,st). (res,st)) _ = _` mp_tac >>
+      simp[Once call_external_function_def, evaluate_defaults_def,
+           initial_evaluation_context_def] >>
+      gvs[AllCaseEqs(), initial_evaluation_context_def] >>
+      strip_tac >> gvs[]) >>
+  metis_tac[]
+QED
+
+
+Theorem call_external_function_selected_getter_raw_args_no_type_error_c53[local]:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  checked_contract_runtime_ready art mods am tx /\
+  machine_well_typed am /\
+  ALOOKUP mods src = SOME ts /\
+  MEM decl ts /\
+  is_public_getter_decl tx.function_name decl /\
+  external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,body) /\
+  cx = initial_evaluation_context am.sources am.layouts tx src /\
+  call_external_function am cx nr mut ts mods args dflts tx.args body ret = (res,am') ==>
+  no_type_error_result res
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once call_external_function_def, evaluate_defaults_def] >>
+  gvs[AllCaseEqs(), initial_evaluation_context_def] >>
+  TRY (gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def] >> NO_TAC) >>
+  strip_tac >>
+  TRY (gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def] >> NO_TAC) >>
+  irule call_external_function_exact_selected_getter_no_type_error_c53 >>
+  qexistsl [`am`, `am'`, `args`, `art`, `body`,
+            `initial_evaluation_context am.sources am.layouts tx src`,
+            `decl`, `dflts`, `mods`, `mut`, `nr`, `ret`, `env`, `src`, `ts`, `tx`,
+            `tx.args ++ dflt_vs`] >> simp[]
+  >- (drule call_external_function_exact_args_rewrites_c53 >> strip_tac >>
+      gvs[] >>
+      qpat_x_assum `(\(res,st). (res,st)) _ = _` mp_tac >>
+      simp[Once call_external_function_def, evaluate_defaults_def,
+           initial_evaluation_context_def] >>
+      gvs[AllCaseEqs(), initial_evaluation_context_def] >>
+      strip_tac >> gvs[]) >>
+  metis_tac[]
+QED
+
 
 Theorem checked_call_external_no_type_error:
   check_contract F am.layouts tx.target mods = SOME art /\
@@ -9732,7 +9798,60 @@ Theorem checked_call_external_no_type_error:
   call_external am tx = (res,am') ==>
   no_type_error_result res
 Proof
-  cheat
+  rpt strip_tac >>
+  qpat_x_assum `call_external am tx = (res,am')` mp_tac >>
+  simp[Once call_external_def,
+       vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+  gvs[AllCaseEqs(),
+      vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+  strip_tac >>
+  gvs[checked_contract_runtime_ready_def, get_self_code_def,
+      vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+  `(?raw.
+      MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body') ts) \/
+   (?decl.
+      MEM decl ts /\
+      is_public_getter_decl tx.function_name decl /\
+      external_getter_tuple (find_function_module am tx.target tx.function_name) decl =
+        SOME (mut,nr,args,dflts,ret,body'))` by
+    (irule lookup_exported_function_checked_cases_current >> simp[] >> metis_tac[]) >>
+  gvs[]
+  >- (simp[GSYM vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+      irule call_external_function_selected_explicit_raw_args_no_type_error_c53 >>
+      qexistsl [`am`, `am'`, `args`, `art`, `body'`,
+                `initial_evaluation_context am.sources am.layouts tx
+                   (find_function_module am tx.target tx.function_name)`,
+                `dflts`, `all_mods`, `mut`, `nr`, `raw`, `ret`,
+                `find_function_module am tx.target tx.function_name`, `ts`, `tx`] >>
+      gvs[checked_contract_runtime_ready_def, get_module_code_def,
+          initial_evaluation_context_def])
+  >- (simp[GSYM vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+      irule call_external_function_selected_getter_raw_args_no_type_error_c53 >>
+      qexistsl [`am`, `am'`, `args`, `art`, `body'`,
+                `initial_evaluation_context am.sources am.layouts tx
+                   (find_function_module am tx.target tx.function_name)`,
+                `decl`, `dflts`, `all_mods`, `mut`, `nr`, `ret`,
+                `find_function_module am tx.target tx.function_name`, `ts`, `tx`] >>
+      gvs[checked_contract_runtime_ready_def, get_module_code_def,
+          initial_evaluation_context_def])
+  >- (simp[GSYM vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+      irule call_external_function_selected_explicit_raw_args_no_type_error_c53 >>
+      qexistsl [`am`, `am'`, `args`, `art`, `body'`,
+                `initial_evaluation_context am.sources am.layouts tx
+                   (find_function_module am tx.target tx.function_name)`,
+                `dflts`, `all_mods`, `mut`, `nr`, `raw`, `ret`,
+                `find_function_module am tx.target tx.function_name`, `ts`, `tx`] >>
+      gvs[checked_contract_runtime_ready_def, get_module_code_def,
+          initial_evaluation_context_def]) >>
+  simp[GSYM vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+  irule call_external_function_selected_getter_raw_args_no_type_error_c53 >>
+  qexistsl [`am`, `am'`, `args`, `art`, `body'`,
+            `initial_evaluation_context am.sources am.layouts tx
+               (find_function_module am tx.target tx.function_name)`,
+            `decl`, `dflts`, `all_mods`, `mut`, `nr`, `ret`,
+            `find_function_module am tx.target tx.function_name`, `ts`, `tx`] >>
+  gvs[checked_contract_runtime_ready_def, get_module_code_def,
+      initial_evaluation_context_def]
 QED
 
 
