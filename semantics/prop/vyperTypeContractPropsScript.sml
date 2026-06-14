@@ -10557,6 +10557,22 @@ Proof
                          toplevel_value_typed_Value, vyperTypingTheory.value_has_type_def]
 QED
 
+Theorem raw_expr_value_ok_IfExp_true_branch_lift[local]:
+  well_typed_expr env (IfExp ty cond e_true e_false) /\
+  raw_expr_value_ok tenv (expr_type e_true) tv ==>
+  raw_expr_value_ok tenv (expr_type (IfExp ty cond e_true e_false)) tv
+Proof
+  rw[well_typed_expr_def, expr_type_def] >> metis_tac[]
+QED
+
+Theorem raw_expr_value_ok_IfExp_false_branch_lift[local]:
+  well_typed_expr env (IfExp ty cond e_true e_false) /\
+  raw_expr_value_ok tenv (expr_type e_false) tv ==>
+  raw_expr_value_ok tenv (expr_type (IfExp ty cond e_true e_false)) tv
+Proof
+  rw[well_typed_expr_def, expr_type_def] >> metis_tac[]
+QED
+
 Theorem raw_exec_Name_branch_ok[local]:
   well_typed_expr env (Name ty id) ==>
   raw_exec_expr_ok tenv env (Name ty id)
