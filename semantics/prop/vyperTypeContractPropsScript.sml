@@ -10607,6 +10607,36 @@ Proof
     drule_all raw_expr_value_ok_IfExp_false_branch_lift >> simp[]
   ]
 QED
+Theorem raw_exec_IfExp_branch_ok[local]:
+  well_typed_expr env (IfExp ty cond e_true e_false) /\
+  raw_exec_expr_ok tenv env cond /\
+  raw_exec_expr_ok tenv env e_true /\
+  raw_exec_expr_ok tenv env e_false ==>
+  raw_exec_expr_ok tenv env (IfExp ty cond e_true e_false)
+Proof
+  rpt strip_tac >>
+  simp[raw_exec_expr_ok_def] >>
+  strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def] >>
+  Cases_on `eval_expr cx cond st` >>
+  rename1 `eval_expr cx cond st = (cond_res,cond_st)` >>
+  qpat_x_assum `raw_exec_expr_ok _ _ cond` mp_tac >>
+  simp[raw_exec_expr_ok_def] >>
+  disch_then (qspec_then `cx` (qspec_then `st` (qspec_then `cond_res` (qspec_then `cond_st` mp_tac)))) >>
+  simp[] >> strip_tac >>
+  Cases_on `cond_res` >> gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def]
+  >- (gvs[well_typed_expr_def] >>
+      `well_typed_expr env (IfExp (expr_type e_true) cond e_true e_false)` by
+        simp[well_typed_expr_def] >>
+      drule raw_expr_value_ok_Bool_toplevel_value_typed >> strip_tac >>
+      strip_tac >>
+      drule_all raw_exec_IfExp_switch_BoolV_post >>
+      simp[vyperTypeExprSoundnessTheory.no_type_error_result_def]) >>
+  rw[] >> gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def]
+QED
+
 
 Theorem raw_exec_Name_branch_ok[local]:
   well_typed_expr env (Name ty id) ==>
