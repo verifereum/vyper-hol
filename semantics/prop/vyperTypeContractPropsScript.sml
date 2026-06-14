@@ -10794,6 +10794,48 @@ Termination
             | INR (_,_,_,ss,_) => list_size stmt_size ss)`
 End
 
+Theorem raw_exec_stmts_ok_nil[local]:
+  raw_exec_stmts_ok tenv env ret [] env' <=> env' = env
+Proof
+  simp[raw_exec_stmt_ok_def]
+QED
+
+Theorem raw_exec_stmts_ok_cons[local]:
+  raw_exec_stmts_ok tenv env ret (s::ss) env'' <=>
+    ?env'. raw_exec_stmt_ok tenv env ret s env' /\
+           raw_exec_stmts_ok tenv env' ret ss env''
+Proof
+  simp[raw_exec_stmt_ok_def]
+QED
+
+Theorem raw_exec_stmt_stmts_ok_type[local]:
+  (!tenv env ret s env'.
+     raw_exec_stmt_ok tenv env ret s env' ==>
+     type_stmt env ret s = SOME env') /\
+  (!tenv env ret ss env'.
+     raw_exec_stmts_ok tenv env ret ss env' ==>
+     type_stmts env ret ss = SOME env')
+Proof
+  ho_match_mp_tac raw_exec_stmt_ok_ind >>
+  rw[raw_exec_stmt_ok_def, type_stmt_def, optionTheory.IS_SOME_EXISTS] >>
+  gvs[] >>
+  res_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem raw_exec_stmt_ok_type_stmt[local]:
+  raw_exec_stmt_ok tenv env ret s env' ==>
+  type_stmt env ret s = SOME env'
+Proof
+  metis_tac[raw_exec_stmt_stmts_ok_type]
+QED
+
+Theorem raw_exec_stmts_ok_type_stmts[local]:
+  raw_exec_stmts_ok tenv env ret ss env' ==>
+  type_stmts env ret ss = SOME env'
+Proof
+  metis_tac[raw_exec_stmt_stmts_ok_type]
+QED
+
 Theorem raw_exec_ready_env_type_defs[local]:
   raw_exec_ready env.type_defs env cx st ==>
   env.type_defs = get_tenv cx
