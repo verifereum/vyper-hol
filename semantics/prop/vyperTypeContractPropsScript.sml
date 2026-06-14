@@ -11262,6 +11262,39 @@ Proof
 QED
 
 
+Theorem raw_exec_expr_ok_result[local]:
+  raw_exec_expr_ok (get_tenv cx) env e /\
+  raw_exec_ready (get_tenv cx) env cx st /\
+  functions_well_typed cx /\
+  eval_expr cx e st = (res,st') ==>
+  no_type_error_result res /\
+  case res of
+  | INL tv => raw_expr_value_ok (get_tenv cx) (expr_type e) tv /\
+              raw_exec_ready (get_tenv cx) env cx st'
+  | INR _ => T
+Proof
+  strip_tac >>
+  drule raw_exec_ready_type_defs >> strip_tac >> gvs[raw_exec_expr_ok_def] >>
+  first_x_assum drule_all >> simp[]
+QED
+
+Theorem raw_exec_exprs_ok_result[local]:
+  raw_exec_exprs_ok (get_tenv cx) env es /\
+  raw_exec_ready (get_tenv cx) env cx st /\
+  functions_well_typed cx /\
+  eval_exprs cx es st = (res,st') ==>
+  no_type_error_result res /\
+  case res of
+  | INL vs => raw_expr_values_ok (get_tenv cx) es vs /\
+              raw_exec_ready (get_tenv cx) env cx st'
+  | INR _ => T
+Proof
+  strip_tac >>
+  drule raw_exec_ready_type_defs >> strip_tac >> gvs[raw_exec_exprs_ok_def] >>
+  first_x_assum drule_all >> simp[]
+QED
+
+
 (* The previous blanket mutual theorem
    `well_typed_expr env e ==> raw_exec_expr_ok env.type_defs env e`
    is intentionally not stated here: arbitrary well-typed StructLit fields may
