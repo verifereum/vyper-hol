@@ -11691,6 +11691,26 @@ Proof
   drule_all raw_expr_value_ok_not_hashmap_non_None >> simp[]
 QED
 
+Theorem raw_stmt_exec_ready_IfExp_selected_branch_not_hashmap[local]:
+  toplevel_value_typed cond_tv (BaseTV BoolT) /\
+  (!tv st'.
+     eval_expr cx e_true st = (INL tv,st') /\
+     raw_stmt_exec_ready (get_tenv cx) env cx st' ==>
+     ~is_HashMapRef tv) /\
+  (!tv st'.
+     eval_expr cx e_false st = (INL tv,st') /\
+     raw_stmt_exec_ready (get_tenv cx) env cx st' ==>
+     ~is_HashMapRef tv) /\
+  switch_BoolV cond_tv (eval_expr cx e_true) (eval_expr cx e_false) st = (INL tv,st') /\
+  raw_stmt_exec_ready (get_tenv cx) env cx st' ==>
+  ~is_HashMapRef tv
+Proof
+  strip_tac >>
+  drule toplevel_value_typed_BoolTV >> strip_tac >>
+  Cases_on `b` >> gvs[switch_BoolV_def] >>
+  metis_tac[]
+QED
+
 Theorem raw_stmt_exec_ready_AnnAssign_result_ok[local]:
   raw_stmt_exec_ready (get_tenv cx) env cx st /\
   functions_well_typed cx /\
