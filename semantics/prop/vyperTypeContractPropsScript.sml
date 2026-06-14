@@ -9987,6 +9987,37 @@ Proof
       gvs[lookup_scopes_def, FLOOKUP_UPDATE])
 QED
 
+
+Theorem raw_exec_ready_new_variable_result_ok[local]:
+  raw_exec_ready tenv env cx st /\
+  st.scopes <> [] /\
+  lookup_scopes (string_to_num id) st.scopes = NONE /\
+  evaluate_type tenv ty = SOME tv /\
+  raw_expr_value_ok tenv ty (Value v) /\
+  new_variable id tv v st = (res,st') ==>
+  no_type_error_result res /\
+  (case res of
+   | INL u => raw_exec_ready tenv (extend_local env (string_to_num id) ty T) cx st'
+   | INR _ => T)
+Proof
+  strip_tac >>
+  Cases_on `res`
+  >- (conj_tac
+      >- (qpat_x_assum `new_variable _ _ _ _ = _` mp_tac >>
+          simp[new_variable_def, bind_def, ignore_bind_def, get_scopes_def,
+               type_check_def, assert_def, set_scopes_def, return_def, raise_def,
+               vyperTypeExprSoundnessTheory.no_type_error_result_def,
+               AllCaseEqs(), list_CASE_rator] >>
+          Cases_on `st.scopes` >> gvs[]) >>
+      drule_all raw_exec_ready_extend_local_new_variable >> simp[]) >>
+  qpat_x_assum `new_variable _ _ _ _ = _` mp_tac >>
+  simp[new_variable_def, bind_def, ignore_bind_def, get_scopes_def,
+       type_check_def, assert_def, set_scopes_def, return_def, raise_def,
+       vyperTypeExprSoundnessTheory.no_type_error_result_def,
+       AllCaseEqs(), list_CASE_rator] >>
+  Cases_on `st.scopes` >> gvs[]
+QED
+
 Theorem raw_exec_ready_assign_target_scoped_replace_value[local]:
   raw_exec_ready tenv env cx st /\
   FLOOKUP env.var_types (string_to_num id) = SOME ty /\
