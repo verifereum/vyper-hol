@@ -864,5 +864,5 @@ QED
 Theorem safe_cast_result_well_typed:
   !tv v v'. safe_cast tv v = SOME v' ==> value_has_type tv v'
 Proof
-  cheat
+  metis_tac [safe_cast_result_well_typed_mutual]
 QED
