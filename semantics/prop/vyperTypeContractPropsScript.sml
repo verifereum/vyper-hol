@@ -9885,6 +9885,16 @@ Proof
   rw[raw_expr_value_ok_def] >> metis_tac[]
 QED
 
+Theorem raw_expr_value_ok_not_hashmap_non_None[local]:
+  raw_expr_value_ok tenv ty tv /\ ty <> NoneT ==> ~is_HashMapRef tv
+Proof
+  rw[raw_expr_value_ok_def] >> strip_tac
+  >- (drule_all vyperTypeValuesTheory.toplevel_value_typed_not_hashmap_material >>
+      strip_tac >>
+      drule_all vyperTypeValuesTheory.evaluate_type_not_NoneT_imp_not_NoneTV >> simp[])
+  >- gvs[is_HashMapRef_def]
+QED
+
 Definition raw_var_value_ok_def:
   raw_var_value_ok tenv ty sv <=>
     ?rt. evaluate_type tenv ty = SOME rt /\
@@ -11663,6 +11673,22 @@ Proof
   simp[] >>
   qexists `st` >>
   imp_res_tac eval_exprs_preserves_scopes_dom >> simp[]
+QED
+
+Theorem raw_stmt_exec_ready_expr_success_not_hashmap[local]:
+  raw_stmt_exec_ready (get_tenv cx) env cx st /\
+  well_typed_expr env e /\
+  expr_type e <> NoneT /\
+  raw_exec_expr_ok (get_tenv cx) env e /\
+  functions_well_typed cx /\
+  eval_expr cx e st = (INL tv,st') ==>
+  ~is_HashMapRef tv /\
+  raw_expr_value_ok (get_tenv cx) (expr_type e) tv /\
+  raw_stmt_exec_ready (get_tenv cx) env cx st'
+Proof
+  strip_tac >>
+  drule_all raw_stmt_exec_ready_expr_success >> strip_tac >>
+  drule_all raw_expr_value_ok_not_hashmap_non_None >> simp[]
 QED
 
 Theorem raw_stmt_exec_ready_AnnAssign_result_ok[local]:
