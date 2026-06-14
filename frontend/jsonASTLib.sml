@@ -1287,13 +1287,17 @@ val json_imported_module : term decoder =
                   field "body" (array json_toplevel)),
           nonreentrancy_by_default)
 
-(* Parse complete annotated AST with imports *)
-(* Returns JAnnotatedAST with main module and list of imported modules *)
+(* Parse raw Vyper `-f annotated_ast` output. *)
+(* Returns JAnnotatedAST with main module and list of imported modules. *)
 val annotated_ast : term decoder =
-  field "annotated_ast" $
   JSONDecode.map mk_JAnnotatedAST $
   tuple2 (field "ast" json_module,
           orElse (field "imports" (array json_imported_module), succeed []))
+
+(* Parse an object containing an annotated_ast field, as used by Vyper's
+   exported deployment traces. *)
+val wrapped_annotated_ast : term decoder =
+  field "annotated_ast" annotated_ast
 
 (* ===== Storage Layout ===== *)
 

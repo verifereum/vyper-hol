@@ -243,6 +243,7 @@ signature jsonASTLib = sig
   val json_module : term JSONDecode.decoder
   val json_imported_module : term JSONDecode.decoder
   val annotated_ast : term JSONDecode.decoder
+  val wrapped_annotated_ast : term JSONDecode.decoder
 
   (* ===== Storage Layout ===== *)
   val storage_slot_info_ty : hol_type
