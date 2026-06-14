@@ -621,6 +621,32 @@ Proof
   Induct >> Cases_on `vs` >> simp[Once value_has_type_def]
 QED
 
+Theorem values_have_types_replicate_all_have_type:
+  ∀n t vs. values_have_types (REPLICATE n t) vs ==> all_have_type t vs
+Proof
+  Induct_on `vs` >> Cases_on `n` >>
+  simp[Once value_has_type_def, Once value_has_type_def] >>
+  rpt strip_tac >> res_tac
+QED
+
+Theorem MAP_FST_ZIP_MAP_FST:
+  ∀al vs. LENGTH vs = LENGTH al ==>
+    MAP FST (ZIP (MAP FST al, vs)) = MAP FST al
+Proof
+  Induct_on `al` >> Cases_on `vs` >> simp[]
+QED
+
+Theorem sparse_has_type_ZIP_cast_results:
+  ∀t n al vs.
+    values_have_types (REPLICATE (LENGTH al) t) vs ∧
+    EVERY (λ(k,v). k < n) al ∧
+    EVERY (λv. v <> default_value t) vs ==>
+    sparse_has_type t n (ZIP (MAP FST al, vs))
+Proof
+  Induct_on `al` >> Cases_on `vs` >> simp[Once value_has_type_def] >>
+  Cases >> simp[Once value_has_type_def]
+QED
+
 Theorem safe_cast_preserves_well_typed:
   !tv v v'. value_has_type tv v /\ safe_cast tv v = SOME v' ==>
     value_has_type tv v'
