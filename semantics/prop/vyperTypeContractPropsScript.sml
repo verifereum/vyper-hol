@@ -10018,6 +10018,82 @@ Proof
   Cases_on `st.scopes` >> gvs[]
 QED
 
+Definition raw_stmt_exec_ready_def:
+  raw_stmt_exec_ready tenv env cx st <=>
+    raw_exec_ready tenv env cx st /\
+    st.scopes <> [] /\
+    (!n. IS_SOME (lookup_scopes n st.scopes) <=> n IN FDOM env.var_types)
+End
+
+Theorem raw_stmt_exec_ready_raw_exec_ready[local]:
+  raw_stmt_exec_ready tenv env cx st ==> raw_exec_ready tenv env cx st
+Proof
+  rw[raw_stmt_exec_ready_def]
+QED
+
+Theorem raw_stmt_exec_ready_scopes_nonempty[local]:
+  raw_stmt_exec_ready tenv env cx st ==> st.scopes <> []
+Proof
+  rw[raw_stmt_exec_ready_def]
+QED
+
+Theorem raw_stmt_exec_ready_fresh_lookup[local]:
+  raw_stmt_exec_ready tenv env cx st /\ id NOTIN FDOM env.var_types ==>
+  lookup_scopes id st.scopes = NONE
+Proof
+  rw[raw_stmt_exec_ready_def] >>
+  first_x_assum (qspec_then `id` mp_tac) >>
+  Cases_on `lookup_scopes id st.scopes` >> gvs[]
+QED
+
+Theorem raw_stmt_exec_ready_new_variable_result_ok[local]:
+  raw_stmt_exec_ready tenv env cx st /\
+  string_to_num id NOTIN FDOM env.var_types /\
+  evaluate_type tenv ty = SOME tv /\
+  raw_expr_value_ok tenv ty (Value v) /\
+  new_variable id tv v st = (res,st') ==>
+  no_type_error_result res /\
+  (case res of
+   | INL u => raw_stmt_exec_ready tenv (extend_local env (string_to_num id) ty T) cx st'
+   | INR _ => T)
+Proof
+  strip_tac >>
+  `st.scopes <> []` by gvs[raw_stmt_exec_ready_def] >>
+  `lookup_scopes (string_to_num id) st.scopes = NONE` by
+    (irule raw_stmt_exec_ready_fresh_lookup >> metis_tac[]) >>
+  `raw_exec_ready tenv env cx st` by gvs[raw_stmt_exec_ready_def] >>
+  drule_all raw_exec_ready_new_variable_result_ok >> strip_tac >>
+  conj_tac >- simp[] >>
+  Cases_on `res` >> gvs[] >>
+  qpat_x_assum `new_variable _ _ _ _ = _` mp_tac >>
+  simp[new_variable_def, bind_def, ignore_bind_def, get_scopes_def,
+       type_check_def, assert_def, set_scopes_def, return_def, raise_def,
+       AllCaseEqs(), list_CASE_rator] >>
+  Cases_on `st.scopes` >> gvs[] >>
+  strip_tac >> gvs[raw_stmt_exec_ready_def, extend_local_def] >>
+  rw[lookup_scopes_def, FLOOKUP_UPDATE, FDOM_FUPDATE] >>
+  first_x_assum (qspec_then `n` mp_tac) >>
+  gvs[lookup_scopes_def]
+QED
+
+Theorem raw_abi_formal_scope_ready_raw_stmt_exec_ready[local]:
+  raw_abi_formal_scope_ready tenv params vals scope env cx st ==>
+  raw_stmt_exec_ready tenv env cx st
+Proof
+  strip_tac >>
+  rw[raw_stmt_exec_ready_def]
+  >- metis_tac[raw_abi_formal_scope_ready_raw_exec_ready]
+  >- gvs[raw_abi_formal_scope_ready_def, raw_abi_runtime_consistent_def,
+          env_consistent_def, env_scopes_consistent_def]
+  >- (gvs[raw_abi_formal_scope_ready_def, raw_abi_runtime_consistent_def,
+          env_consistent_def, env_scopes_consistent_def] >>
+      eq_tac >> rw[]
+      >- (Cases_on `lookup_scopes n st.scopes` >> gvs[] >>
+          first_x_assum drule >> simp[FLOOKUP_DEF]) >>
+      first_x_assum (qspecl_then [`n`, `env.var_types ' n`] mp_tac) >>
+      simp[FLOOKUP_DEF])
+QED
+
 Theorem raw_exec_ready_assign_target_scoped_replace_value[local]:
   raw_exec_ready tenv env cx st /\
   FLOOKUP env.var_types (string_to_num id) = SOME ty /\
