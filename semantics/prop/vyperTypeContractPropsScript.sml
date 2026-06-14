@@ -9908,6 +9908,29 @@ Definition raw_exec_ready_def:
     raw_scope_env_ok tenv env st
 End
 
+Theorem raw_exec_ready_from_env_consistent_state[local]:
+  env_consistent env cx st /\
+  state_well_typed st /\
+  context_well_typed cx /\
+  accounts_well_typed st.accounts ==>
+  raw_exec_ready (get_tenv cx) env cx st
+Proof
+  rw[raw_exec_ready_def]
+  >- gvs[env_consistent_def]
+  >- gvs[env_consistent_def]
+  >- gvs[state_well_typed_def]
+  >- (rw[raw_scope_env_ok_def] >>
+      gvs[env_consistent_def, env_scopes_consistent_def, state_well_typed_def,
+          optionTheory.IS_SOME_EXISTS] >>
+      qpat_x_assum `!id ty'. FLOOKUP env.var_types id = SOME ty' ==> _`
+        (qspec_then `n` mp_tac) >> simp[] >> strip_tac >>
+      qexists `x` >> simp[raw_var_value_ok_def] >>
+      drule_all vyperTypeEnvTheory.scope_well_typed_lookup_scopes >> strip_tac >>
+      qpat_x_assum `!id ty entry. FLOOKUP env.var_types id = SOME ty /\ _ ==> _`
+        drule_all >> strip_tac >>
+      gvs[raw_expr_value_ok_def, toplevel_value_typed_Value])
+QED
+
 Theorem raw_abi_formal_scope_ready_raw_exec_ready[local]:
   raw_abi_formal_scope_ready tenv params vals scope env cx st ==>
   raw_exec_ready tenv env cx st
@@ -10024,6 +10047,24 @@ Definition raw_stmt_exec_ready_def:
     st.scopes <> [] /\
     (!n. IS_SOME (lookup_scopes n st.scopes) <=> n IN FDOM env.var_types)
 End
+
+Theorem raw_stmt_exec_ready_from_env_consistent_state[local]:
+  env_consistent env cx st /\
+  state_well_typed st /\
+  context_well_typed cx /\
+  accounts_well_typed st.accounts ==>
+  raw_stmt_exec_ready (get_tenv cx) env cx st
+Proof
+  rw[raw_stmt_exec_ready_def]
+  >- metis_tac[raw_exec_ready_from_env_consistent_state]
+  >- gvs[env_consistent_def, env_scopes_consistent_def]
+  >- (gvs[env_consistent_def, env_scopes_consistent_def] >>
+      eq_tac >> rw[]
+      >- (Cases_on `lookup_scopes n st.scopes` >> gvs[] >>
+          first_x_assum drule >> simp[FLOOKUP_DEF]) >>
+      first_x_assum (qspecl_then [`n`, `env.var_types ' n`] mp_tac) >>
+      simp[FLOOKUP_DEF])
+QED
 
 Theorem raw_stmt_exec_ready_raw_exec_ready[local]:
   raw_stmt_exec_ready tenv env cx st ==> raw_exec_ready tenv env cx st
@@ -11637,6 +11678,45 @@ Proof
           strip_tac >> gvs[]) >>
       strip_tac >> gvs[]) >>
   strip_tac >> gvs[]
+QED
+
+Theorem raw_exec_stmt_stmts_ok_result[local]:
+  (!env ret s env' st res st' cx.
+     raw_exec_stmt_ok (get_tenv cx) env ret s env' /\
+     raw_stmt_exec_ready (get_tenv cx) env cx st /\
+     env_consistent env cx st /\
+     state_well_typed st /\ functions_well_typed cx /\
+     eval_stmt cx s st = (res,st') ==>
+       no_type_error_result res /\
+       (case res of INL u => raw_stmt_exec_ready (get_tenv cx) env' cx st' | INR _ => T)) /\
+  (!env ret ss env' st res st' cx.
+     raw_exec_stmts_ok (get_tenv cx) env ret ss env' /\
+     raw_stmt_exec_ready (get_tenv cx) env cx st /\
+     env_consistent env cx st /\
+     state_well_typed st /\ functions_well_typed cx /\
+     eval_stmts cx ss st = (res,st') ==>
+       no_type_error_result res /\
+       (case res of INL u => raw_stmt_exec_ready (get_tenv cx) env' cx st' | INR _ => T))
+Proof
+  conj_tac
+  >- (rpt strip_tac >>
+      `type_stmt env ret s = SOME env'` by metis_tac[raw_exec_stmt_ok_type_stmt] >>
+      `context_well_typed cx /\ accounts_well_typed st.accounts` by
+        gvs[raw_stmt_exec_ready_def, raw_exec_ready_def, env_consistent_def] >>
+      `no_type_error_eval (eval_stmt cx s st)` by metis_tac[eval_stmt_no_type_error] >>
+      gvs[vyperTypeExprSoundnessTheory.no_type_error_eval_def] >>
+      Cases_on `res` >> gvs[] >>
+      drule_all eval_stmt_type_preservation_success >> strip_tac >>
+      metis_tac[raw_stmt_exec_ready_from_env_consistent_state]) >>
+  rpt strip_tac >>
+  `type_stmts env ret ss = SOME env'` by metis_tac[raw_exec_stmts_ok_type_stmts] >>
+  `context_well_typed cx /\ accounts_well_typed st.accounts` by
+    gvs[raw_stmt_exec_ready_def, raw_exec_ready_def, env_consistent_def] >>
+  `no_type_error_eval (eval_stmts cx ss st)` by metis_tac[eval_stmts_no_type_error] >>
+  gvs[vyperTypeExprSoundnessTheory.no_type_error_eval_def] >>
+  Cases_on `res` >> gvs[] >>
+  drule_all eval_stmts_type_preservation_success >> strip_tac >>
+  metis_tac[raw_stmt_exec_ready_from_env_consistent_state]
 QED
 
 
