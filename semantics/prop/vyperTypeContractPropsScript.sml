@@ -10524,6 +10524,23 @@ Definition raw_exec_named_exprs_ok_def:
     raw_exec_exprs_ok tenv env (MAP SND kes)
 End
 
+Theorem raw_exec_opt_ok_from_expr_ok[local]:
+  (case opt of NONE => T | SOME e => raw_exec_expr_ok tenv env e) ==>
+  raw_exec_opt_ok tenv env opt
+Proof
+  Cases_on `opt` >> rw[raw_exec_opt_ok_def]
+QED
+
+Theorem raw_exec_named_exprs_all_non_None_ok[local]:
+  EVERY (\ke. raw_exec_expr_ok tenv env (SND ke)) kes /\
+  EVERY (\ke. expr_type (SND ke) <> NoneT) kes ==>
+  raw_exec_named_exprs_ok tenv env kes
+Proof
+  rw[raw_exec_named_exprs_ok_def] >>
+  irule raw_exec_exprs_all_non_None_ok >>
+  gvs[EVERY_MAP]
+QED
+
 Theorem raw_exec_ready_env_type_defs[local]:
   raw_exec_ready env.type_defs env cx st ==>
   env.type_defs = get_tenv cx
