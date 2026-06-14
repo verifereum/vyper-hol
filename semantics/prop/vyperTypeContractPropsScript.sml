@@ -11067,6 +11067,159 @@ Proof
   >- gvs[Once vyperValueOperationTheory.safe_cast_def]
 QED
 
+Theorem raw_expr_value_ok_Value_safe_cast[local]:
+  raw_expr_value_ok tenv ty (Value v) /\
+  evaluate_type tenv ty = SOME rt ==>
+  safe_cast rt v = SOME v
+Proof
+  rw[raw_expr_value_ok_def]
+  >- (gvs[toplevel_value_typed_Value] >>
+      drule vyperTypingTheory.safe_cast_well_typed >> simp[])
+  >- (gvs[] >> drule (CONJUNCT1 safe_cast_idempotent) >> simp[])
+QED
+
+Theorem raw_expr_values_ok_safe_cast_list_acc[local]:
+  raw_expr_values_ok tenv es vs /\
+  LIST_REL (\e rt. evaluate_type tenv (expr_type e) = SOME rt) es rts ==>
+  safe_cast_list rts vs acc = SOME (REVERSE acc ++ vs)
+Proof
+  qid_spec_tac `rts` >> qid_spec_tac `vs` >> qid_spec_tac `acc` >>
+  Induct_on `es` >> rw[raw_expr_values_ok_def]
+  >- simp[Once vyperValueOperationTheory.safe_cast_def] >>
+  simp[Once vyperValueOperationTheory.safe_cast_def] >>
+  drule_all raw_expr_value_ok_Value_safe_cast >> simp[] >>
+  first_x_assum (qspecl_then [`v::acc`, `ys`, `ys'`] mp_tac) >>
+  simp[raw_expr_values_ok_def, APPEND_ASSOC]
+QED
+
+Theorem raw_expr_values_ok_safe_cast_list[local]:
+  raw_expr_values_ok tenv es vs /\
+  LIST_REL (\e rt. evaluate_type tenv (expr_type e) = SOME rt) es rts ==>
+  safe_cast_list rts vs [] = SOME vs
+Proof
+  rpt strip_tac >> drule_all raw_expr_values_ok_safe_cast_list_acc >> simp[]
+QED
+
+Theorem OPT_MMAP_evaluate_type_mono_raw[local]:
+  !types tenv nid tvs.
+    OPT_MMAP (evaluate_type (tenv \\ nid)) types = SOME tvs ==>
+    OPT_MMAP (evaluate_type tenv) types = SOME tvs
+Proof
+  Induct >> simp[OPT_MMAP_def] >>
+  rpt gen_tac >>
+  Cases_on `evaluate_type (tenv \\ nid) h` >> simp[] >>
+  Cases_on `OPT_MMAP (evaluate_type (tenv \\ nid)) types` >> simp[] >>
+  strip_tac >> gvs[] >>
+  imp_res_tac evaluate_type_mono >> simp[] >>
+  first_x_assum (qspecl_then [`tenv`, `nid`] mp_tac) >> simp[]
+QED
+
+Theorem OPT_MMAP_evaluate_type_LIST_REL_raw[local]:
+  OPT_MMAP (evaluate_type tenv) tys = SOME tvs ==>
+  LIST_REL (\ty tv. evaluate_type tenv ty = SOME tv) tys tvs
+Proof
+  qid_spec_tac `tvs` >> Induct_on `tys` >> rw[OPT_MMAP_def] >>
+  Cases_on `evaluate_type tenv h` >> gvs[] >>
+  Cases_on `OPT_MMAP (evaluate_type tenv) tys` >> gvs[]
+QED
+
+Theorem raw_expr_value_ok_StructLit[local]:
+  well_typed_expr env (StructLit ty nsid kes) /\
+  raw_expr_values_ok env.type_defs (MAP SND kes) vs ==>
+  raw_expr_value_ok env.type_defs (expr_type (StructLit ty nsid kes))
+    (Value (StructV (ZIP (MAP FST kes,vs))))
+Proof
+  rw[well_typed_expr_def, expr_type_def, raw_expr_value_ok_def] >>
+  disj2_tac >>
+  gvs[well_formed_type_def, IS_SOME_EXISTS] >>
+  qpat_x_assum `evaluate_type _ _ = SOME _` mp_tac >>
+  simp[Once evaluate_type_def, AllCaseEqs(), evaluate_types_OPT_MMAP] >>
+  strip_tac >> gvs[] >>
+  qexists `StructV (ZIP (MAP FST kes,vs))` >>
+  simp[Once vyperValueOperationTheory.safe_cast_def] >>
+  gvs[raw_expr_values_ok_def] >>
+  imp_res_tac LIST_REL_LENGTH >>
+  `LENGTH tvs = LENGTH args` by
+    (imp_res_tac vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[]) >>
+  simp[MAP_ZIP] >>
+  `LENGTH vs = LENGTH args` by
+    (gvs[LENGTH_MAP] >> metis_tac[LENGTH_MAP]) >>
+  conj_tac >- simp[MAP_ZIP] >>
+  `MAP SND (ZIP (MAP FST args,vs)) = vs` by simp[MAP_ZIP] >>
+  simp[] >>
+  `OPT_MMAP (evaluate_type env.type_defs) (MAP SND args) = SOME tvs` by
+    metis_tac[OPT_MMAP_evaluate_type_mono_raw] >>
+  `OPT_MMAP (evaluate_type env.type_defs) (MAP (expr_type o SND) kes) = SOME tvs` by
+    gvs[] >>
+  drule OPT_MMAP_evaluate_type_LIST_REL_raw >>
+  strip_tac >>
+  gvs[LIST_REL_EL_EQN, EL_MAP] >>
+  `raw_expr_values_ok env.type_defs (MAP SND kes) vs` by
+    (rw[raw_expr_values_ok_def, LIST_REL_EL_EQN, EL_MAP]) >>
+  `LIST_REL (\e rt. evaluate_type env.type_defs (expr_type e) = SOME rt)
+     (MAP SND kes) tvs` by
+    (rw[LIST_REL_EL_EQN, EL_MAP]) >>
+  drule_all raw_expr_values_ok_safe_cast_list >>
+  simp[]
+QED
+
+Theorem raw_exec_StructLit_eval_success[local]:
+  (eval_exprs cx (MAP SND kes) st = (INL vs,st1)) ==>
+  (eval_expr cx (StructLit ty nsid kes) st = (res,st')) ==>
+  (res = INL (Value (StructV (ZIP (MAP FST kes,vs)))) /\ st' = st1)
+Proof
+  PairCases_on `nsid` >>
+  ntac 2 strip_tac >>
+  qpat_x_assum `eval_expr _ (StructLit _ _ _) _ = _` mp_tac >>
+  simp_tac(srw_ss())[Once evaluate_def, bind_def, return_def] >>
+  strip_tac >>
+  qpat_x_assum `(let ks = MAP FST kes in do vs <- eval_exprs cx (MAP SND kes); return (Value (StructV (ZIP (ks,vs)))) od) st = (res,st')` mp_tac >>
+  asm_simp_tac(srw_ss())[bind_def, return_def, LET_THM]
+QED
+
+Theorem raw_exec_StructLit_eval_error[local]:
+  eval_exprs cx (MAP SND kes) st = (INR err,st1) ==>
+  eval_expr cx (StructLit ty nsid kes) st = (res,st') ==>
+  (res = INR err /\ st' = st1)
+Proof
+  PairCases_on `nsid` >>
+  ntac 2 strip_tac >>
+  qpat_x_assum `eval_expr _ (StructLit _ _ _) _ = _` mp_tac >>
+  simp_tac(srw_ss())[Once evaluate_def, bind_def, return_def] >>
+  strip_tac >>
+  qpat_x_assum `(let ks = MAP FST kes in do vs <- eval_exprs cx (MAP SND kes); return (Value (StructV (ZIP (ks,vs)))) od) st = (res,st')` mp_tac >>
+  asm_simp_tac(srw_ss())[bind_def, return_def, LET_THM]
+QED
+
+Theorem raw_exec_StructLit_branch_ok[local]:
+  well_typed_expr env (StructLit ty nsid kes) /\
+  raw_exec_named_exprs_ok tenv env kes ==>
+  raw_exec_expr_ok tenv env (StructLit ty nsid kes)
+Proof
+  rpt strip_tac >>
+  simp[raw_exec_expr_ok_def] >>
+  strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, return_def, LET_THM] >>
+  Cases_on `eval_exprs cx (MAP SND kes) st` >>
+  rename1 `eval_exprs cx (MAP SND kes) st = (exprs_res,exprs_st)` >>
+  qpat_x_assum `raw_exec_named_exprs_ok _ _ kes` mp_tac >>
+  simp[raw_exec_named_exprs_ok_def, raw_exec_exprs_ok_def] >>
+  disch_then (qspec_then `cx` (qspec_then `st` (qspec_then `exprs_res` (qspec_then `exprs_st` mp_tac)))) >>
+  simp[] >> strip_tac >>
+  Cases_on `exprs_res` >> gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def]
+  >- (strip_tac >>
+      drule_all raw_exec_StructLit_eval_success >> strip_tac >> gvs[] >>
+      `raw_expr_value_ok env.type_defs (expr_type (StructLit ty nsid kes))
+         (Value (StructV (ZIP (MAP FST kes,x))))` by
+        (drule_all raw_expr_value_ok_StructLit >> simp[]) >>
+      simp[vyperTypeExprSoundnessTheory.no_type_error_result_def]) >>
+  strip_tac >>
+  drule_all raw_exec_StructLit_eval_error >> strip_tac >>
+  gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def]
+QED
+
 Theorem lift_safe_cast_success_no_type_error[local]:
   safe_cast rt v = SOME v' /\
   lift_option_type (safe_cast rt v) msg st = (res,st') ==>
