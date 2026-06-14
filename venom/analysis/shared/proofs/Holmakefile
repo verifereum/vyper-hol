@@ -1,4 +1,0 @@
-# Shared analysis proofs (memory location properties)
-# From shared/proofs/:
-#   ../../../defs = venom/defs/
-INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../../defs ../../../../syntax ../../../../semantics ../defs

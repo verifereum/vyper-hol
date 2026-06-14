@@ -3,11 +3,11 @@ schema = 2
 
 [project]
 name = "vyper-hol"
-version = "0.1.1"
+version = "0.1.2"
 
 [build]
 roots = ["vyperHolScript.sml"]
 
 [dependencies.verifereum]
 git = "https://github.com/verifereum/verifereum.git"
-rev = "5cacc6adc7753b49f562db26da26a447472ad984"
+rev = "cb3fdd7c220ad27497b73de0e57cd6ec17fa433e"
