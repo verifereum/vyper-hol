@@ -10573,6 +10573,41 @@ Proof
   rw[well_typed_expr_def, expr_type_def] >> metis_tac[]
 QED
 
+Theorem raw_exec_IfExp_switch_BoolV_post[local]:
+  well_typed_expr env (IfExp ty cond e_true e_false) /\
+  raw_exec_expr_ok env.type_defs env e_true /\
+  raw_exec_expr_ok env.type_defs env e_false /\
+  raw_exec_ready env.type_defs env cx st /\
+  functions_well_typed cx /\
+  toplevel_value_typed cond_tv (BaseTV BoolT) /\
+  switch_BoolV cond_tv (eval_expr cx e_true) (eval_expr cx e_false) st = (res,st') ==>
+  no_type_error_result res /\
+  case res of
+  | INL tv => raw_expr_value_ok env.type_defs (expr_type (IfExp ty cond e_true e_false)) tv /\
+              raw_exec_ready env.type_defs env cx st'
+  | INR _ => T
+Proof
+  rpt strip_tac >>
+  drule toplevel_value_typed_BoolTV >> strip_tac >>
+  Cases_on `b` >> gvs[switch_BoolV_def] >>
+  FIRST [
+    qpat_assum `eval_expr cx e_true st = (res,st')` kall_tac >>
+    qpat_x_assum `raw_exec_expr_ok _ _ e_true` mp_tac >>
+    rw[raw_exec_expr_ok_def] >>
+    first_x_assum (qspecl_then [`cx`, `st`, `res`, `st'`] mp_tac) >>
+    simp[] >> strip_tac >>
+    Cases_on `res` >> gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+    drule_all raw_expr_value_ok_IfExp_true_branch_lift >> simp[],
+    qpat_assum `eval_expr cx e_false st = (res,st')` kall_tac >>
+    qpat_x_assum `raw_exec_expr_ok _ _ e_false` mp_tac >>
+    rw[raw_exec_expr_ok_def] >>
+    first_x_assum (qspecl_then [`cx`, `st`, `res`, `st'`] mp_tac) >>
+    simp[] >> strip_tac >>
+    Cases_on `res` >> gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+    drule_all raw_expr_value_ok_IfExp_false_branch_lift >> simp[]
+  ]
+QED
+
 Theorem raw_exec_Name_branch_ok[local]:
   well_typed_expr env (Name ty id) ==>
   raw_exec_expr_ok tenv env (Name ty id)
