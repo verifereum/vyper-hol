@@ -108,7 +108,7 @@ Theorem vyper_to_venom_correct:
                    dense_buckets entry_info entry_label in
     (* tx targets a known external function *)
     lookup_exported_function
-      (initial_evaluation_context am.sources am.layouts tx) am
+      (initial_evaluation_context am.sources am.layouts tx (find_function_module am tx.target tx.function_name)) am
       tx.function_name = SOME (mut, nr, args, dflts, ret, body) /\
     (* Calldata encodes the call *)
     calldata_encodes tenv tx.function_name (MAP SND args) tx.args
@@ -122,7 +122,7 @@ Theorem vyper_to_venom_correct:
     ==>
     ?fuel.
       external_call_result_rel tenv cenv
-        (initial_evaluation_context am.sources am.layouts tx)
+        (initial_evaluation_context am.sources am.layouts tx (find_function_module am tx.target tx.function_name))
         ret (call_external am tx) (run_context fuel ctx vs)
 Proof
   cheat
