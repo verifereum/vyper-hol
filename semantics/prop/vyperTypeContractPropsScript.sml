@@ -12,8 +12,8 @@ Ancestors
   list rich_list arithmetic finite_map alist option pair patricia_casts
   vyperAST vyperValue vyperMisc vyperContext vyperState vyperInterpreter
   vyperTypeSystem vyperTypeContract vyperTypeInvariants vyperTypeValues vyperTypeStmtSoundness
-  vyperTypeInitialState vyperPureExpr vyperEvalPreservesScopes vyperEvalPreservesImmutablesDom
-  vyperScopePreservation vyperStatePreservation
+  vyperTypeInitialState vyperPureExpr vyperEvalPreservesScopes vyperEvalExprPreservesScopesDom
+  vyperEvalPreservesImmutablesDom vyperScopePreservation vyperStatePreservation
 Libs
   wordsLib
 
@@ -10046,6 +10046,24 @@ Proof
   Cases_on `lookup_scopes id st.scopes` >> gvs[]
 QED
 
+Theorem raw_stmt_exec_ready_map_fdom[local]:
+  raw_stmt_exec_ready tenv env cx st /\
+  raw_exec_ready tenv env cx st' /\
+  MAP FDOM st.scopes = MAP FDOM st'.scopes ==>
+  raw_stmt_exec_ready tenv env cx st'
+Proof
+  rw[raw_stmt_exec_ready_def]
+  >- (Cases_on `st.scopes` >> Cases_on `st'.scopes` >> gvs[])
+  >- (`!m. lookup_scopes m st.scopes = NONE <=> lookup_scopes m st'.scopes = NONE` by
+        (strip_tac >> eq_tac >> strip_tac
+         >- (irule lookup_scopes_none_map_fdom >> qexists `st.scopes` >> simp[])
+         >- (irule lookup_scopes_none_map_fdom >> qexists `st'.scopes` >> simp[])) >>
+      first_x_assum (qspec_then `n` mp_tac) >>
+      first_x_assum (qspec_then `n` mp_tac) >>
+      Cases_on `lookup_scopes n st.scopes` >> Cases_on `lookup_scopes n st'.scopes` >>
+      gvs[optionTheory.IS_SOME_DEF])
+QED
+
 Theorem raw_stmt_exec_ready_new_variable_result_ok[local]:
   raw_stmt_exec_ready tenv env cx st /\
   string_to_num id NOTIN FDOM env.var_types /\
@@ -10178,6 +10196,7 @@ Proof
   first_x_assum (qspecl_then [`x3`, `x0`, `x2 with value := v`, `n`] mp_tac) >>
   simp[]
 QED
+
 
 Theorem raw_exec_eval_Name_result_ok[local]:
   well_typed_expr env (Name ty id) /\
@@ -10684,6 +10703,96 @@ Proof
   irule raw_exec_exprs_all_non_None_ok >>
   gvs[EVERY_MAP]
 QED
+
+Definition raw_exec_atarget_ok_def:
+  raw_exec_atarget_ok tenv env (BaseTarget bt) =
+    raw_exec_place_target_ok tenv env bt /\
+  raw_exec_atarget_ok tenv env (TupleTarget tgts) = T
+End
+
+Definition raw_exec_iterator_ok_def:
+  raw_exec_iterator_ok tenv env typ (Array e) =
+    (well_typed_iterator env typ (Array e) /\
+     raw_exec_expr_ok tenv env e) /\
+  raw_exec_iterator_ok tenv env typ (Range e1 e2) =
+    (well_typed_iterator env typ (Range e1 e2) /\
+     raw_exec_expr_ok tenv env e1 /\
+     raw_exec_expr_ok tenv env e2)
+End
+
+Definition raw_exec_stmt_ok_def:
+  raw_exec_stmt_ok tenv env ret Pass env' = (env' = env) /\
+  raw_exec_stmt_ok tenv env ret Continue env' = (env' = env) /\
+  raw_exec_stmt_ok tenv env ret Break env' = (env' = env) /\
+  raw_exec_stmt_ok tenv env ret (Expr e) env' =
+    (well_typed_expr env e /\
+     ~(?kt vt. type_place_expr env e = SOME (HashMapT kt vt)) /\
+     raw_exec_expr_ok tenv env e /\
+     env' = env) /\
+  raw_exec_stmt_ok tenv env ret (Return NONE) env' =
+    (ret = NoneT /\ env' = env) /\
+  raw_exec_stmt_ok tenv env ret (Return (SOME e)) env' =
+    (well_typed_expr env e /\ expr_type e = ret /\ ret <> NoneT /\
+     raw_exec_expr_ok tenv env e /\ env' = env) /\
+  raw_exec_stmt_ok tenv env ret (Raise RaiseBare) env' = (env' = env) /\
+  raw_exec_stmt_ok tenv env ret (Raise RaiseUnreachable) env' = (env' = env) /\
+  raw_exec_stmt_ok tenv env ret (Raise (RaiseReason e)) env' =
+    (well_typed_expr env e /\ (?n. expr_type e = BaseT (StringT n)) /\
+     raw_exec_expr_ok tenv env e /\ env' = env) /\
+  raw_exec_stmt_ok tenv env ret (Assert e AssertBare) env' =
+    (well_typed_expr env e /\ expr_type e = BaseT BoolT /\
+     raw_exec_expr_ok tenv env e /\ env' = env) /\
+  raw_exec_stmt_ok tenv env ret (Assert e AssertUnreachable) env' =
+    (well_typed_expr env e /\ expr_type e = BaseT BoolT /\
+     raw_exec_expr_ok tenv env e /\ env' = env) /\
+  raw_exec_stmt_ok tenv env ret (Assert e (AssertReason se)) env' =
+    (well_typed_expr env e /\ well_typed_expr env se /\ expr_type e = BaseT BoolT /\
+     (?n. expr_type se = BaseT (StringT n)) /\
+     raw_exec_expr_ok tenv env e /\ raw_exec_expr_ok tenv env se /\ env' = env) /\
+  raw_exec_stmt_ok tenv env ret (Log id es) env' =
+    (well_typed_exprs env es /\ raw_exec_exprs_ok tenv env es /\ env' = env) /\
+  raw_exec_stmt_ok tenv env ret (AnnAssign id typ e) env' =
+    (well_typed_expr env e /\ assignable_type env.type_defs typ /\
+     expr_type e = typ /\ string_to_num id NOTIN FDOM env.var_types /\
+     raw_exec_expr_ok tenv env e /\
+     env' = extend_local env (string_to_num id) typ T) /\
+  raw_exec_stmt_ok tenv env ret (Append bt e) env' =
+    ((?elem_ty n.
+        type_place_target env bt = SOME (Type (ArrayT elem_ty (Dynamic n))) /\
+        well_typed_expr env e /\ expr_type e = elem_ty /\
+        assignable_type env.type_defs elem_ty /\
+        raw_exec_place_target_ok tenv env bt /\ raw_exec_expr_ok tenv env e) /\
+     env' = env) /\
+  raw_exec_stmt_ok tenv env ret (Assign tgt e) env' =
+    (well_typed_atarget env tgt (expr_type e) /\ well_typed_expr env e /\
+     assignable_type env.type_defs (expr_type e) /\
+     raw_exec_atarget_ok tenv env tgt /\ raw_exec_expr_ok tenv env e /\ env' = env) /\
+  raw_exec_stmt_ok tenv env ret (AugAssign ty bt bop e) env' =
+    (well_typed_target env bt ty /\ well_typed_expr env e /\
+     assignable_type env.type_defs ty /\ assignable_type env.type_defs (expr_type e) /\
+     well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
+     raw_exec_place_target_ok tenv env bt /\ raw_exec_expr_ok tenv env e /\ env' = env) /\
+  raw_exec_stmt_ok tenv env ret (If e ss1 ss2) env' =
+    (well_typed_expr env e /\ expr_type e = BaseT BoolT /\
+     raw_exec_expr_ok tenv env e /\
+     (?env1 env2. raw_exec_stmts_ok tenv env ret ss1 env1 /\
+                  raw_exec_stmts_ok tenv env ret ss2 env2) /\
+     env' = env) /\
+  raw_exec_stmt_ok tenv env ret (For id typ it n body) env' =
+    (assignable_type env.type_defs typ /\ well_typed_iterator env typ it /\
+     string_to_num id NOTIN FDOM env.var_types /\
+     raw_exec_iterator_ok tenv env typ it /\
+     (?body_env. raw_exec_stmts_ok tenv (extend_local env (string_to_num id) typ F) ret body body_env) /\
+     env' = env) /\
+  raw_exec_stmts_ok tenv env ret [] env' = (env' = env) /\
+  raw_exec_stmts_ok tenv env ret (s::ss) env'' =
+    (?env'. raw_exec_stmt_ok tenv env ret s env' /\
+            raw_exec_stmts_ok tenv env' ret ss env'')
+Termination
+  WF_REL_TAC `measure (\x.
+    case x of INL (_,_,_,s,_) => stmt_size s
+            | INR (_,_,_,ss,_) => list_size stmt_size ss)`
+End
 
 Theorem raw_exec_ready_env_type_defs[local]:
   raw_exec_ready env.type_defs env cx st ==>
@@ -11436,6 +11545,56 @@ Proof
   strip_tac >>
   drule raw_exec_ready_type_defs >> strip_tac >> gvs[raw_exec_exprs_ok_def] >>
   first_x_assum drule_all >> simp[]
+QED
+
+Theorem raw_stmt_exec_ready_AnnAssign_result_ok[local]:
+  raw_stmt_exec_ready (get_tenv cx) env cx st /\
+  functions_well_typed cx /\
+  raw_exec_expr_ok (get_tenv cx) env e /\
+  assignable_type env.type_defs typ /\
+  expr_type e = typ /\
+  string_to_num id NOTIN FDOM env.var_types /\
+  eval_stmt cx (AnnAssign id typ e) st = (res,st') ==>
+  no_type_error_result res /\
+  (case res of
+   | INL u => raw_stmt_exec_ready (get_tenv cx)
+                (extend_local env (string_to_num id) typ T) cx st'
+   | INR _ => T)
+Proof
+  strip_tac >>
+  `raw_exec_ready (get_tenv cx) env cx st` by gvs[raw_stmt_exec_ready_def] >>
+  `env.type_defs = get_tenv cx` by gvs[raw_exec_ready_def, env_context_consistent_def] >>
+  `?tyv. evaluate_type (get_tenv cx) typ = SOME tyv` by
+    (gvs[] >> drule assignable_type_well_formed >>
+     simp[well_formed_type_def, optionTheory.IS_SOME_EXISTS]) >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, lift_option_type_def, return_def, raise_def] >>
+  qpat_assum `evaluate_type (get_tenv cx) typ = SOME tyv` (fn th => rewrite_tac[th]) >>
+  Cases_on `eval_expr cx e st` >>
+  rename1 `eval_expr cx e st = (expr_res,st1)` >>
+  drule_all raw_exec_expr_ok_result >> strip_tac >>
+  Cases_on `expr_res` >> gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def]
+  >- (rename1 `eval_expr cx e st = (INL tv,st1)` >>
+      Cases_on `materialise cx tv st1` >>
+      rename1 `materialise cx tv st1 = (mat_res,st2)` >>
+      `expr_type e <> NoneT` by metis_tac[assignable_type_not_NoneT] >>
+      drule_all raw_expr_value_ok_non_None_materialise_result_ok >>
+      strip_tac >>
+      Cases_on `mat_res` >> gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def]
+      >- (rename1 `materialise cx tv st1 = (INL v,st2)` >>
+          `raw_stmt_exec_ready (get_tenv cx) env cx st2` by
+            (`MAP FDOM st.scopes = MAP FDOM st2.scopes` by
+               (imp_res_tac materialise_scopes >>
+                drule eval_expr_preserves_scopes_dom >> simp[]) >>
+             metis_tac[raw_stmt_exec_ready_map_fdom]) >>
+          Cases_on `new_variable id tyv v st2` >>
+          rename1 `new_variable id tyv v st2 = (new_res,st3)` >>
+          drule_all raw_stmt_exec_ready_new_variable_result_ok >>
+          strip_tac >>
+          Cases_on `new_res` >> gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+          strip_tac >> gvs[]) >>
+      strip_tac >> gvs[]) >>
+  strip_tac >> gvs[]
 QED
 
 
