@@ -537,7 +537,9 @@ Theorem sparse_has_type_all_less:
   ∀tv n l. sparse_has_type tv n l ==>
   EVERY (λ(k,v). k < n) l
 Proof
-  cheat
+  Induct_on `l` >> simp[Once value_has_type_def] >>
+  Cases >> simp[Once value_has_type_def] >>
+  rpt strip_tac >> res_tac
 QED
 
 Theorem sparse_has_type_not_default:
