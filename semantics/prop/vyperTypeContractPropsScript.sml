@@ -10142,6 +10142,43 @@ Proof
       metis_tac[listTheory.APPEND, listTheory.APPEND_ASSOC])
 QED
 
+Theorem raw_stmt_exec_ready_assign_target_scoped_replace_value[local]:
+  raw_stmt_exec_ready tenv env cx st /\
+  FLOOKUP env.var_types (string_to_num id) = SOME ty /\
+  evaluate_type tenv ty = SOME tv /\
+  raw_expr_value_ok tenv ty (Value v) /\
+  assign_target cx (BaseTargetV (ScopedVar id) []) (Replace v) st = (INL ar,st') ==>
+  no_type_error_result (INL ar) /\ raw_stmt_exec_ready tenv env cx st'
+Proof
+  strip_tac >>
+  `raw_exec_ready tenv env cx st` by gvs[raw_stmt_exec_ready_def] >>
+  drule_all raw_exec_ready_assign_target_scoped_replace_value >> strip_tac >>
+  conj_tac >- simp[] >>
+  qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
+  simp[Once assign_target_def, bind_def, get_scopes_def, lift_option_def,
+       lift_sum_def, type_check_def, assert_def, ignore_bind_def,
+       set_scopes_def, assign_result_def, Once assign_subscripts_def, return_def, raise_def] >>
+  Cases_on `find_containing_scope (string_to_num id) st.scopes` >> gvs[]
+  >- gvs[raise_def] >>
+  PairCases_on `x` >> gvs[] >>
+  drule vyperLookupTheory.find_containing_scope_lookup >> strip_tac >> gvs[] >>
+  Cases_on `x2.assignable` >> gvs[return_def, bind_def, ignore_bind_def, set_scopes_def, assert_def] >>
+  strip_tac >> gvs[] >>
+  drule vyperLookupTheory.find_containing_scope_structure >> strip_tac >> gvs[] >>
+  `!m. IS_SOME (lookup_scopes m st.scopes) <=> m IN FDOM env.var_types` by
+    gvs[raw_stmt_exec_ready_def] >>
+  rw[raw_stmt_exec_ready_def] >>
+  qabbrev_tac `upd = x2 with value := v` >>
+  qpat_x_assum `!m. IS_SOME (lookup_scopes m st.scopes) <=> _`
+    (qspec_then `n` mp_tac) >>
+  drule (Q.SPECL [`n`, `x0`, `x1`, `string_to_num id`, `upd`, `x3`]
+           vyperLookupTheory.lookup_scopes_update_preserves) >>
+  simp[Abbr `upd`] >>
+  strip_tac >> strip_tac >>
+  first_x_assum (qspecl_then [`x3`, `x0`, `x2 with value := v`, `n`] mp_tac) >>
+  simp[]
+QED
+
 Theorem raw_exec_eval_Name_result_ok[local]:
   well_typed_expr env (Name ty id) /\
   raw_exec_ready tenv env cx st /\
