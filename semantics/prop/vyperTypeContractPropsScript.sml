@@ -11882,7 +11882,7 @@ Proof
 QED
 
 Theorem checked_explicit_raw_body_no_type_error[local]:
-  type_stmts env ret body = SOME env_after /\
+  raw_exec_stmts_ok (get_tenv cx) env ret body env_after /\
   raw_abi_formal_scope_ready tenv params vals scope env cx st /\
   state_well_typed st /\ functions_well_typed cx /\
   eval_stmts cx body st = (res,st') ==>
@@ -11892,8 +11892,9 @@ Proof
   `env_consistent env cx st /\ context_well_typed cx /\
    accounts_well_typed st.accounts` by
     metis_tac[raw_abi_formal_scope_ready_soundness_preconditions_weak] >>
-  drule_all eval_stmts_no_type_error >>
-  rw[vyperTypeExprSoundnessTheory.no_type_error_eval_def]
+  `raw_stmt_exec_ready (get_tenv cx) env cx st` by
+    metis_tac[raw_stmt_exec_ready_from_env_consistent_state] >>
+  metis_tac[cj 2 raw_exec_stmt_stmts_ok_result]
 QED
 
 
