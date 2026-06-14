@@ -1872,7 +1872,20 @@ Theorem bind_arguments_scope_well_typed_from_success:
   !tenv params vs sc.
     bind_arguments tenv params vs = SOME sc ==> scope_well_typed sc
 Proof
-  cheat
+  MAP_EVERY qid_spec_tac [`sc`, `vs`, `params`, `tenv`] >>
+  Induct_on `params`
+  >- (rpt gen_tac >> Cases_on `vs` >>
+      simp[Once bind_arguments_def, scope_well_typed_def, FLOOKUP_DEF]) >>
+  simp[pairTheory.FORALL_PROD] >>
+  rpt gen_tac >> Cases_on `vs` >> simp[Once bind_arguments_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  rename1 `safe_cast tv0 hval = SOME v0` >>
+  `value_has_type tv0 v0` by metis_tac[safe_cast_result_well_typed] >>
+  `well_formed_type_value tv0` by metis_tac[evaluate_type_well_formed] >>
+  rename1 `bind_arguments tenv params tl = SOME sc0` >>
+  `scope_well_typed sc0` by metis_tac[] >>
+  gvs[scope_well_typed_def, FLOOKUP_UPDATE] >>
+  rw[] >> gvs[] >> res_tac
 QED
 
 Theorem exprs_runtime_typed_value_expr_LIST_REL[local]:
