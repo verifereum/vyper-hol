@@ -145,7 +145,7 @@ jobs:
           echo "Group $group: tests $start to $((start + per_group - 1)) of $total"
           targets=$(echo "$tests" | tail -n +$((start + 1)) | head -n "$per_group" | sed 's/Script\.sml$/Theory/' | tr '\n' ' ')
           echo "Building: $targets"
-          holbuild --verbose --maxheap 12288 -j"$(nproc)" build --skip-checkpoints --skip-proof-steps $targets
+          holbuild --verbose --maxheap 3072 -j"$(nproc)" build --skip-checkpoints --skip-proof-steps $targets
 
       - name: Verify no successful-build checkpoints remain
         run: |
