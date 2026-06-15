@@ -122,7 +122,8 @@ Theorem internal_call_type_preservation:
 Proof
   strip_tac >>
   drule_all (cj 8 eval_all_type_sound_mutual) >>
-  simp[expr_result_typed_def]
+  strip_tac >> gvs[] >>
+  metis_tac[expr_result_typed_runtime_typed]
 QED
 
 Theorem external_call_no_type_error:

@@ -173,7 +173,7 @@ Definition valid_function_call_def:
   valid_function_call tenv am tx selectors calldata args ret <=>
     (?mut nr dflts body.
        lookup_exported_function
-         (initial_evaluation_context am.sources am.layouts tx) am
+         (initial_evaluation_context am.sources am.layouts tx (find_function_module am tx.target tx.function_name)) am
          tx.function_name = SOME (mut, nr, args, dflts, ret, body)) /\
     calldata_encodes tenv tx.function_name (MAP SND args) tx.args
       calldata /\

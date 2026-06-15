@@ -117,7 +117,7 @@ Definition valid_vyper_call_def:
   valid_vyper_call am tx tenv calldata ret ⇔
     ∃mut nr args dflts body.
       lookup_exported_function
-        (initial_evaluation_context am.sources am.layouts tx) am
+        (initial_evaluation_context am.sources am.layouts tx (find_function_module am tx.target tx.function_name)) am
         tx.function_name = SOME (mut, nr, args, dflts, ret, body) ∧
       calldata_encodes tenv tx.function_name (MAP SND args) tx.args
         calldata
@@ -237,7 +237,7 @@ QED
 Theorem valid_vyper_call_valid_function_call[local]:
   !am tx tenv selectors calldata args ret mut nr dflts body.
     lookup_exported_function
-      (initial_evaluation_context am.sources am.layouts tx) am
+      (initial_evaluation_context am.sources am.layouts tx (find_function_module am tx.target tx.function_name)) am
       tx.function_name = SOME (mut, nr, args, dflts, ret, body) /\
     calldata_encodes tenv tx.function_name (MAP SND args) tx.args calldata /\
     (?sel fn_lbl htz.
@@ -665,7 +665,7 @@ Proof
      \\ qexists `abi_val` \\ simp[])
    \\ (* state_effects_match *)
    mp_tac (Q.SPECL [`cenv.ce_type_env`, `cenv`,
-      `initial_evaluation_context am.sources am.layouts tx`, `am'`, `v`]
+      `initial_evaluation_context am.sources am.layouts tx (find_function_module am tx.target tx.function_name)`, `am'`, `v`]
       external_call_state_rel_logs_correspond)
    \\ simp[initial_evaluation_context_def] \\ strip_tac
    \\ simp[state_effects_match_def]

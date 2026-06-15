@@ -729,10 +729,14 @@ Definition safe_cast_def:
         of SOME vs => SOME $ ArrayV (DynArrayV vs)
          | _ => NONE)
      | (Fixed n, ArrayV (SArrayV al)) =>
-       (if n < LENGTH al then NONE else
+       (if SORTED $< (MAP FST al) ∧ EVERY (λ(k,v). k < n) al then
         case safe_cast_list (REPLICATE (LENGTH al) t) (MAP SND al) []
-        of SOME vs => SOME $ ArrayV (SArrayV (ZIP (MAP FST al, vs)))
-         | _ => NONE)
+        of SOME vs =>
+             if EVERY (λv. v ≠ default_value t) vs then
+               SOME $ ArrayV (SArrayV (ZIP (MAP FST al, vs)))
+             else NONE
+         | _ => NONE
+        else NONE)
      | _ => NONE)
   | StructTV args =>
     (case v of StructV al =>
@@ -782,6 +786,7 @@ Theorem safe_cast_pre[cv_pre]:
 Proof
   ho_match_mp_tac safe_cast_ind \\ rw[]
   \\ rw[Once safe_cast_pre_def]
+  >> gvs[LAMBDA_PROD]
 QED
 
 (* mutating arrays *)
