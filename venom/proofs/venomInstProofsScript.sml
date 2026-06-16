@@ -285,6 +285,32 @@ val step_class_write_tac =
       is_ext_call_op_def, is_terminator_def] >>
   write_finish_tac;
 
+val mem_write_class_opcode_tac =
+  gvs[Once step_inst_def, AllCaseEqs()] >>
+  qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
+  simp[Once step_inst_base_def] >>
+  strip_tac >>
+  gvs[exec_write2_def, AllCaseEqs()] >>
+  gvs[mstore_def, mstore8_def, mcopy_def,
+      write_memory_with_expansion_def,
+      update_var_def, lookup_var_def];
+
+val alloca_class_opcode_tac =
+  fs[Once step_inst_def] >>
+  fs[Once step_inst_base_def] >>
+  gvs[exec_alloca_def, AllCaseEqs(), update_var_def, lookup_var_def];
+
+val ext_call_class_opcode_tac =
+  qpat_x_assum `step_inst fuel ctx inst s = OK s'` mp_tac >>
+  simp[Once step_inst_def, Once step_inst_base_def] >>
+  strip_tac >>
+  gvs[exec_ext_call_def, exec_delegatecall_def, exec_create_def,
+      extract_venom_result_def, AllCaseEqs(),
+      update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
+  TRY (Cases_on `result` >> gvs[]) >>
+  TRY (Cases_on `y` >> gvs[]);
+
 Theorem step_mem_write_preserves:
   !fuel ctx inst s s'.
     step_inst fuel ctx inst s = OK s' /\ is_mem_write_op inst.inst_opcode ==>
@@ -308,7 +334,16 @@ Theorem step_mem_write_preserves:
     s'.vs_prev_bb = s.vs_prev_bb /\
     (!v. lookup_var v s' = lookup_var v s)
 Proof
-  step_class_write_tac
+  rpt gen_tac >> strip_tac >>
+  Cases_on `inst.inst_opcode` >> gvs[is_mem_write_op_def]
+  >- mem_write_class_opcode_tac
+  >- mem_write_class_opcode_tac
+  >- mem_write_class_opcode_tac
+  >- mem_write_class_opcode_tac
+  >- mem_write_class_opcode_tac
+  >- mem_write_class_opcode_tac
+  >- mem_write_class_opcode_tac
+  >- mem_write_class_opcode_tac
 QED
 
 Theorem step_alloca_preserves:
@@ -334,7 +369,13 @@ Theorem step_alloca_preserves:
     s'.vs_prev_bb = s.vs_prev_bb /\
     (!v. ~MEM v inst.inst_outputs ==> lookup_var v s' = lookup_var v s)
 Proof
-  step_class_write_tac
+  rpt gen_tac >> strip_tac >>
+  Cases_on `inst.inst_opcode` >> gvs[is_alloca_op_def]
+  >- (qpat_x_assum `step_inst fuel ctx inst s = OK s'` mp_tac >>
+      simp[Once step_inst_def, step_inst_base_def] >>
+      strip_tac >>
+      gvs[exec_alloca_def, AllCaseEqs(), update_var_def, lookup_var_def,
+          FLOOKUP_UPDATE])
 QED
 
 Theorem step_ext_call_preserves:
@@ -356,7 +397,13 @@ Theorem step_ext_call_preserves:
     s'.vs_prev_bb = s.vs_prev_bb /\
     (!v. ~MEM v inst.inst_outputs ==> lookup_var v s' = lookup_var v s)
 Proof
-  step_class_write_tac
+  rpt gen_tac >> strip_tac >>
+  Cases_on `inst.inst_opcode` >> gvs[is_ext_call_op_def]
+  >- ext_call_class_opcode_tac
+  >- ext_call_class_opcode_tac
+  >- ext_call_class_opcode_tac
+  >- ext_call_class_opcode_tac
+  >- ext_call_class_opcode_tac
 QED
 
 (* ===================================================================== *)
@@ -406,6 +453,20 @@ QED
 (* ===== Section 3b: step_effect_free_state_equiv ====================== *)
 (* ===================================================================== *)
 
+val effect_free_opcode_tac =
+  fs[step_inst_base_def] >>
+  FIRST [
+    drule exec_pure1_state_equiv >> simp[],
+    drule exec_pure2_state_equiv >> simp[],
+    drule exec_pure3_state_equiv >> simp[],
+    drule exec_read0_state_equiv >> simp[],
+    drule exec_read1_state_equiv >> simp[],
+    gvs[AllCaseEqs()] >>
+    TRY (irule state_equiv_refl) >>
+    TRY (irule state_equiv_subset >> qexists_tac `{out}` >>
+         simp[update_var_state_equiv, SUBSET_DEF])
+  ];
+
 Theorem step_inst_base_effect_free_state_equiv:
   !inst s s'.
     step_inst_base inst s = OK s' /\
@@ -413,16 +474,68 @@ Theorem step_inst_base_effect_free_state_equiv:
     state_equiv (set inst.inst_outputs) s s'
 Proof
   rpt strip_tac >>
-  Cases_on `inst.inst_opcode` >> gvs[is_effect_free_op_def] >>
-  fs[step_inst_base_def] >>
-  TRY (metis_tac[exec_pure1_state_equiv, exec_pure2_state_equiv,
-                 exec_pure3_state_equiv, exec_read0_state_equiv,
-                 exec_read1_state_equiv]) >>
-  (* Remaining: NOP, ASSIGN, PARAM, PHI, SHA3, OFFSET *)
-  gvs[AllCaseEqs()] >>
-  TRY (irule state_equiv_refl) >>
-  TRY (irule state_equiv_subset >> qexists_tac `{out}` >>
-       simp[update_var_state_equiv, SUBSET_DEF])
+  Cases_on `inst.inst_opcode` >> gvs[is_effect_free_op_def]
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
+  >- effect_free_opcode_tac
 QED
 
 Theorem step_effect_free_state_equiv:

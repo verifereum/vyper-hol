@@ -9,7 +9,7 @@ Ancestors
   list rich_list pred_set prim_rec arithmetic finite_map option pair sorting
   words byte integer keccak vyperAST vyperValue vyperValueOperation vyperMisc
   vyperABI vyperInterpreter vyperState vyperContext vyperStorage
-  vyperTyping vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeValues
+  vyperTyping vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeInvariants vyperTypeValues
   vyperTypeBytesCrypto vyperTypeDefaults vyperTypeConversions vyperTypeABI vyperEvalBinop
   vyperAssignPreservesType bn254 vfmExecution
 Libs
@@ -2992,7 +2992,7 @@ Proof
            w2n_and_low_mask_lt] >>
        TRY (irule uint_not_result_bound >> simp[]) >> NO_TAC) >>
   TRY (rename1 `evaluate_builtin _ _ (FlagT fid) Not [_] = INL _` >>
-       Cases_on `FLOOKUP (get_tenv cx) (string_to_num fid)` >> gvs[] >>
+       Cases_on `FLOOKUP (get_tenv cx) (type_key fid)` >> gvs[] >>
        Cases_on `x` >> gvs[] >>
        gvs[value_has_type_def, evaluate_builtin_def, evaluate_type_def] >>
        rewrite_tac[wordsTheory.WORD_NEG_1, GSYM wordsTheory.WORD_NOT_0] >>

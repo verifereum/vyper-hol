@@ -35,6 +35,7 @@ Ancestors
   stateEquiv stateEquivProps
   venomExecSemantics
   e2eDefs
+  vyperInterpreter
   codegenCorrectness
 
 (* =====================================================================
@@ -87,7 +88,7 @@ Theorem vyper_lowering_correct_draft:
     ==>
     !fuel.
       external_call_result_rel tenv cenv
-        (initial_evaluation_context am.sources am.layouts tx)
+        (initial_evaluation_context am.sources am.layouts tx (find_function_module am tx.target tx.function_name))
         ret (call_external am tx) (run_context fuel ctx vs)
 Proof
   cheat (* Bridge: requires proving lowering translation correct.

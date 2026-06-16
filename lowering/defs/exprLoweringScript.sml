@@ -878,8 +878,9 @@ Definition type_to_abi_enc_info_def:
                           abi_embedded_static_size cenv.ce_struct_fields t,
                           type_memory_bytes cenv t,
                           is_abi_dynamic cenv.ce_struct_fields t)) tys) ∧
-  type_to_abi_enc_info sfields cenv (StructT name) =
-    (case FLOOKUP sfields name of
+  type_to_abi_enc_info sfields cenv (StructT nsid) =
+    (let name = nsid_to_string nsid in
+     case FLOOKUP sfields name of
        NONE => AbiPrimWord
      | SOME fields =>
          AbiComplex (MAP (λ(fn, fty, sz).
@@ -936,8 +937,9 @@ Definition type_to_abi_dec_info_def:
       (MAP (λt. (type_to_abi_dec_info sfields cenv t,
                  abi_embedded_static_size cenv.ce_struct_fields t,
                  type_memory_bytes cenv t)) tys) ∧
-  type_to_abi_dec_info sfields cenv (StructT name) =
-    (case FLOOKUP sfields name of
+  type_to_abi_dec_info sfields cenv (StructT nsid) =
+    (let name = nsid_to_string nsid in
+     case FLOOKUP sfields name of
        NONE => DecPrimWord NoClamp
      | SOME fields =>
          DecComplex (EXISTS (is_abi_dynamic cenv.ce_struct_fields)
@@ -947,8 +949,8 @@ Definition type_to_abi_dec_info_def:
                     abi_embedded_static_size cenv.ce_struct_fields fty,
                     type_memory_bytes cenv fty))
                 fields)) ∧
-  type_to_abi_dec_info sfields cenv (FlagT name) =
-    DecPrimWord (IntClamp (cenv.ce_flag_n_members name) F) ∧
+  type_to_abi_dec_info sfields cenv (FlagT nsid) =
+    DecPrimWord (IntClamp (cenv.ce_flag_n_members (nsid_to_string nsid)) F) ∧
   type_to_abi_dec_info sfields cenv ty = DecPrimWord (type_to_abi_clamp ty)
 Termination
   WF_REL_TAC `inv_image ($< LEX $<) (λ(sfields, cenv, ty).
@@ -1882,9 +1884,9 @@ Definition compile_subscript_def:
                   (SUM (TAKE idx (MAP (elem_size_in_location cenv base_loc) tys)));
            return (LocatedValue ret_ty (mk_ptr p base_loc))
         od
-    | SOME (StructT sname) =>
+    | SOME (StructT nsid) =>
         let idx = literal_int_index idx_e in
-        let fld_info = get_struct_fields cenv.ce_struct_fields sname in
+        let fld_info = get_struct_fields cenv.ce_struct_fields (nsid_to_string nsid) in
         do base_vv <- cfn cenv ty base_e;
            base_op <- return (vv_operand base_vv);
            base_loc <- return (case vv_location base_vv of
@@ -1942,7 +1944,7 @@ Definition compile_attribute_def:
                              SOME l => l | NONE => LocMemory) in
            let struct_name = (case base_e of
                                 Name _ id => (case cenv.ce_var_type id of
-                                                SOME (StructT sn) => sn
+                                                SOME (StructT sn) => nsid_to_string sn
                                               | _ => "")
                               | _ => "") in
            let is_storage_loc = (case base_loc of
@@ -1967,7 +1969,7 @@ Definition compile_struct_lit_def:
   compile_struct_lit cfn cenv ty ((fname, e)::rest) buf_op cur_offset =
     let e_ty = expr_type e in
     let is_prim = is_word_type e_ty in
-    let struct_name = (case ty of StructT n => n | _ => "") in
+    let struct_name = (case ty of StructT n => nsid_to_string n | _ => "") in
     let fld_info = get_struct_fields cenv.ce_struct_fields struct_name in
     let field_size = (case ALOOKUP fld_info fname of
         SOME (fty, sz) => sz | NONE => 32) in
@@ -2185,8 +2187,8 @@ Definition compile_store_words_def:
 End
 
 Definition compile_invert_def:
-  compile_invert v (FlagT flag_name) cenv =
-    (let n_members = cenv.ce_flag_n_members flag_name in
+  compile_invert v (FlagT flag_nsid) cenv =
+    (let n_members = cenv.ce_flag_n_members (nsid_to_string flag_nsid) in
      let mask = (2 ** n_members) - 1 in
      emit_op XOR [v; Lit (n2w mask)]) ∧
   compile_invert v _ cenv = emit_op NOT [v]
@@ -2262,7 +2264,7 @@ val compile_expr_defn = Defn.Hol_defn "compile_expr" `
    | Attribute _ base_e fld_name =>
        compile_attribute compile_expr cenv ret_ty ty base_e fld_name st
    | StructLit _ name fields =>
-       (let struct_name = SND name in
+       (let struct_name = nsid_to_string name in
         let fld_info = get_struct_fields cenv.ce_struct_fields struct_name in
         let total_size = SUM (MAP (SND o SND) fld_info) in
                 let (buf_alloc, st2) = compile_alloc_buffer total_size st in
@@ -2576,9 +2578,9 @@ val compile_expr_defn = Defn.Hol_defn "compile_expr" `
           let src_ty = expr_type e1 in
           let (v, st1) = lower_value compile_expr cenv src_ty e1 st in
           case ret_ty of
-            FlagT flag_name =>
+            FlagT flag_nsid =>
               as_stack_val vv_ty (compile_type_convert v
-                (ConvToFlag (cenv.ce_flag_n_members flag_name)) st1)
+                (ConvToFlag (cenv.ce_flag_n_members (nsid_to_string flag_nsid))) st1)
           | _ => as_stack_val vv_ty (compile_type_convert v
                    (mk_convert_op src_ty ret_ty) st1))
      | Empty => (StackValue vv_ty (Lit 0w), st)

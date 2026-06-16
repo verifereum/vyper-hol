@@ -1040,22 +1040,22 @@ Proof
   drule_all abi_av_list_tuple_bound_enc_tuple >> simp[]
 QED
 Theorem abi_av_list_struct_bound_from_eval_vht[local]:
-  !tenv id args fields avs tv.
+  !tenv nsid args fields avs tv.
     (!tvs.
-       LIST_REL (\ty tv. evaluate_type (tenv \\ string_to_num id) ty = SOME tv)
+       LIST_REL (\ty tv. evaluate_type (tenv \\ type_key nsid) ty = SOME tv)
          (MAP SND args) tvs /\
        values_have_types tvs (MAP SND fields) ==>
-       abi_av_list_bound_rel (tenv \\ string_to_num id) (MAP SND args) avs tvs) /\
-    FLOOKUP tenv (string_to_num id) = SOME (StructArgs args) /\
-    evaluate_type tenv (StructT id) = SOME tv /\
+       abi_av_list_bound_rel (tenv \\ type_key nsid) (MAP SND args) avs tvs) /\
+    FLOOKUP tenv (type_key nsid) = SOME (StructArgs args) /\
+    evaluate_type tenv (StructT nsid) = SOME tv /\
     value_has_type tv (StructV fields) ==>
     LENGTH
-      (enc_tuple (head_lengths (vyper_to_abi_types (tenv \\ string_to_num id) (MAP SND args)) 0) 0
-         (vyper_to_abi_types (tenv \\ string_to_num id) (MAP SND args)) avs [] []) <=
-    vyper_abi_size_bound tenv (StructT id)
+      (enc_tuple (head_lengths (vyper_to_abi_types (tenv \\ type_key nsid) (MAP SND args)) 0) 0
+         (vyper_to_abi_types (tenv \\ type_key nsid) (MAP SND args)) avs [] []) <=
+    vyper_abi_size_bound tenv (StructT nsid)
 Proof
   rpt strip_tac >>
-  qpat_x_assum `evaluate_type tenv (StructT id) = SOME tv` mp_tac >>
+  qpat_x_assum `evaluate_type tenv (StructT nsid) = SOME tv` mp_tac >>
   simp[Once evaluate_type_def, AllCaseEqs(), LET_THM] >>
   strip_tac >> gvs[value_has_type_def, vyper_abi_size_bound_def] >>
   `LENGTH tvs = LENGTH args` by
@@ -1064,7 +1064,7 @@ Proof
      imp_res_tac OPT_MMAP_LENGTH >> simp[LENGTH_MAP]) >>
   `values_have_types tvs (MAP SND fields)` by
     (drule_all struct_has_type_values_have_types >> simp[MAP_ZIP]) >>
-  `abi_av_list_bound_rel (tenv \\ string_to_num id) (MAP SND args) avs tvs` by
+  `abi_av_list_bound_rel (tenv \\ type_key nsid) (MAP SND args) avs tvs` by
     (qpat_x_assum `!tvs. _ ==> abi_av_list_bound_rel _ _ _ _`
        (qspec_then `tvs` irule) >>
      simp[] >> irule evaluate_types_LIST_REL >> simp[]) >>

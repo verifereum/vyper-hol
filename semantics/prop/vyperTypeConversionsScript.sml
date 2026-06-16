@@ -31,7 +31,8 @@ Proof
   reverse(Cases_on`∃i. v = IntV i`)
   >- (Cases_on`v` >> gvs[])
   >> gvs[evaluate_convert_def]
-  >> Cases_on`v` >> gvs[evaluate_convert_def]
+  >> Cases_on`v` >> gvs[]
+  >> gvs[evaluate_convert_def]
 QED
 
 Theorem evaluate_max_value_well_typed:

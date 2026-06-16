@@ -833,7 +833,8 @@ Proof
         (qspec_then `SUC i` mp_tac) >> simp[]) >>
   `FILTER (\inst. is_terminator inst.inst_opcode) insts = [LAST insts]` by
     metis_tac[] >>
-  `LAST (h::insts) = LAST insts` by (Cases_on `insts` >> gvs[LAST_DEF]) >>
+  simp[] >>
+  Cases_on`insts` >- fs[] >>
   simp[]
 QED
 
@@ -892,8 +893,10 @@ Proof
       fs[]) >>
   `i = LENGTH prefix` by fs[] >>
   `LENGTH prefix = LENGTH pseudos + LENGTH regulars` by simp[Abbr `prefix`] >>
-  `PRE (LENGTH (prefix ++ [LAST insts])) = LENGTH prefix` by simp[] >>
-  simp[]
+  BasicProvers.VAR_EQ_TAC >>
+  pop_assum SUBST1_TAC >>
+  BasicProvers.VAR_EQ_TAC >>
+  simp_tac(srw_ss()++ARITH_ss)[arithmeticTheory.PRE_SUB1]
 QED
 
 Theorem transform_block_well_formed:

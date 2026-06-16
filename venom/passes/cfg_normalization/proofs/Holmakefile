@@ -1,2 +1,0 @@
-# CFG normalization pass proofs
-INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../.. ../../../defs ../../../proofs ../../../props ../../../simulation ../../../../syntax ../../../../frontend ../../../../semantics ../defs

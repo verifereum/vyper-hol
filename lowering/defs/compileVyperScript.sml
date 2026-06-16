@@ -50,8 +50,8 @@ Definition type_mem_bytes_def:
     n * type_mem_bytes sft elem_ty ∧
   type_mem_bytes sft (ArrayT elem_ty (Dynamic n)) =
     32 + n * type_mem_bytes sft elem_ty ∧
-  type_mem_bytes sft (StructT name) =
-    SUM (MAP (SND o SND) (sft name)) ∧
+  type_mem_bytes sft (StructT nsid) =
+    SUM (MAP (SND o SND) (sft (nsid_to_string nsid))) ∧
   type_mem_bytes sft (TupleT tys) =
     SUM (MAP (type_mem_bytes sft) tys) ∧
   type_mem_bytes sft NoneT = 0

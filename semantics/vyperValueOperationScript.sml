@@ -613,9 +613,8 @@ Definition evaluate_convert_def:
      if within_int_bound (Unsigned n) i
      then INL $ IntV i
      else INR (RuntimeError "convert flag uint bound")) ∧
-  evaluate_convert tenv (IntV i) (FlagT id) =
-    (let nid = string_to_num id in
-     case FLOOKUP tenv nid of SOME (FlagArgs m) =>
+  evaluate_convert tenv (IntV i) (FlagT nsid) =
+    (case FLOOKUP tenv (type_key nsid) of SOME (FlagArgs m) =>
        if 0 ≤ i ∧ Num i < 2 ** m then INL $ FlagV (Num i)
        else INR (RuntimeError "convert int flag bound")
      | _ => INR (TypeError "convert to unknown flag")) ∧
@@ -730,10 +729,14 @@ Definition safe_cast_def:
         of SOME vs => SOME $ ArrayV (DynArrayV vs)
          | _ => NONE)
      | (Fixed n, ArrayV (SArrayV al)) =>
-       (if n < LENGTH al then NONE else
+       (if SORTED $< (MAP FST al) ∧ EVERY (λ(k,v). k < n) al then
         case safe_cast_list (REPLICATE (LENGTH al) t) (MAP SND al) []
-        of SOME vs => SOME $ ArrayV (SArrayV (ZIP (MAP FST al, vs)))
-         | _ => NONE)
+        of SOME vs =>
+             if EVERY (λv. v ≠ default_value t) vs then
+               SOME $ ArrayV (SArrayV (ZIP (MAP FST al, vs)))
+             else NONE
+         | _ => NONE
+        else NONE)
      | _ => NONE)
   | StructTV args =>
     (case v of StructV al =>
@@ -783,6 +786,7 @@ Theorem safe_cast_pre[cv_pre]:
 Proof
   ho_match_mp_tac safe_cast_ind \\ rw[]
   \\ rw[Once safe_cast_pre_def]
+  >> gvs[LAMBDA_PROD]
 QED
 
 (* mutating arrays *)

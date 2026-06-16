@@ -1226,7 +1226,31 @@ Proof
     simp[ci_mono_compile_keccak256_key, ci_mono_comp_return]) >>
    irule ci_mono_lower_value_cfn >> metis_tac[]) >>
   (* non-hashmap: case on ce_var_type *)
-  rpt BasicProvers.TOP_CASE_TAC >> simp[] >> rpt (irule ci_mono_bind >> simp[ci_mono_comp_return, ci_mono_compile_tuple_subscript, ci_mono_compile_array_subscript] >> rpt strip_tac) >> TRY (irule ci_mono_lower_value_cfn >> rpt strip_tac >> first_x_assum irule)
+  qmatch_asmsub_abbrev_tac`¬_(cbe)` >>
+  BasicProvers.TOP_CASE_TAC >> gvs[] >- (
+    irule ci_mono_bind >> gvs[] >> rpt strip_tac >>
+    irule ci_mono_bind >> gvs[ci_mono_comp_return] >> rpt strip_tac >>
+    irule ci_mono_bind >> gvs[] >> rpt gen_tac >>
+    reverse conj_tac >- (
+      rpt gen_tac >>
+      irule ci_mono_lower_value_cfn >>
+      rpt strip_tac >> first_x_assum irule) >>
+    rpt gen_tac >>
+    irule ci_mono_bind >> gvs[ci_mono_compile_array_subscript] >> rpt gen_tac >>
+    simp[ci_mono_comp_return] ) >>
+  BasicProvers.CASE_TAC >> gvs[] >>
+  irule ci_mono_bind >> gvs[] >> rpt strip_tac >>
+  irule ci_mono_bind >> gvs[ci_mono_comp_return] >> rpt strip_tac >>
+  irule ci_mono_bind >> gvs[] >> rpt strip_tac >>
+  TRY (
+    rpt gen_tac >>
+    irule ci_mono_lower_value_cfn >>
+    rpt strip_tac >> first_x_assum irule) >>
+  TRY (
+    irule ci_mono_bind >>
+    gvs[ci_mono_compile_array_subscript] >>
+    rpt gen_tac ) >>
+  simp[ci_mono_comp_return, ci_mono_compile_tuple_subscript]
 QED
 
 Theorem ci_mono_compile_acc_cfn[local]:
@@ -2361,6 +2385,7 @@ Proof
   Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
   qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
   ASM_REWRITE_TAC[step_inst_base_def] >>
+  simp_tac(srw_ss())[] >>
   gvs[AllCaseEqs()]
 QED
 

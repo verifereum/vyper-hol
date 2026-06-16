@@ -157,15 +157,21 @@ End
 
 val () = cv_auto_trans get_self_code_def;
 
+Definition type_env_for_module_def:
+  type_env_for_module src_id [] = FEMPTY ∧
+  type_env_for_module src_id (StructDecl id args :: ts) =
+    type_env_for_module src_id ts |+ (type_key (src_id, id), StructArgs args) ∧
+  type_env_for_module src_id (FlagDecl id ls :: ts) =
+    type_env_for_module src_id ts |+ (type_key (src_id, id), FlagArgs (LENGTH ls)) ∧
+  type_env_for_module src_id (InterfaceDecl id funcs :: ts) =
+    type_env_for_module src_id ts |+ (type_key (src_id, id), InterfaceArgs funcs) ∧
+  type_env_for_module src_id (_ :: ts) = type_env_for_module src_id ts
+End
+
+val () = cv_auto_trans type_env_for_module_def;
+
 Definition type_env_def:
-  type_env [] = FEMPTY ∧
-  type_env (StructDecl id args :: ts) =
-    type_env ts |+ (string_to_num id, StructArgs args) ∧
-  type_env (FlagDecl id ls :: ts) =
-    type_env ts |+ (string_to_num id, FlagArgs (LENGTH ls)) ∧
-  type_env (InterfaceDecl id funcs :: ts) =
-    type_env ts |+ (string_to_num id, InterfaceArgs funcs) ∧
-  type_env (_ :: ts) = type_env ts
+  type_env ts = type_env_for_module NONE ts
 End
 
 val () = cv_auto_trans type_env_def;
@@ -175,7 +181,7 @@ val () = cv_auto_trans type_env_def;
 Definition type_env_all_modules_def:
   type_env_all_modules [] = FEMPTY ∧
   type_env_all_modules ((src_id, ts) :: rest) =
-    FUNION (type_env ts) (type_env_all_modules rest)
+    FUNION (type_env_for_module src_id ts) (type_env_all_modules rest)
 End
 
 val () = cv_auto_trans type_env_all_modules_def;
@@ -196,7 +202,7 @@ Definition lookup_interface_def:
     case get_module_code cx src_id_opt of
     | NONE => NONE
     | SOME ts =>
-        case FLOOKUP (type_env ts) (string_to_num iface_name) of
+        case FLOOKUP (type_env_for_module src_id_opt ts) (type_key (src_id_opt, iface_name)) of
         | SOME (InterfaceArgs funcs) => SOME funcs
         | _ => NONE
 End

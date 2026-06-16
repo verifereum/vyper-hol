@@ -1,0 +1,408 @@
+Theory vyperMisc
+Ancestors
+  ASCIInumbers byte pair integer string pred_set
+  int_bitwise numposrep list rich_list words
+  cv cv_std vfmTypes
+Libs
+  cv_transLib blastLib
+
+(* Miscellaneous definitions/theorems/translations that need to be organised
+ * and upstreamed to HOL where appropriate *)
+
+Definition CHR_o_w2n_def:
+  CHR_o_w2n (b: byte) = CHR (w2n b)
+End
+
+val CHR_o_w2n_pre_def = cv_auto_trans_pre "CHR_o_w2n_pre" CHR_o_w2n_def;
+
+Theorem CHR_o_w2n_pre[cv_pre]:
+  CHR_o_w2n_pre x
+Proof
+  rw[CHR_o_w2n_pre_def]
+  \\ qspec_then`x`mp_tac w2n_lt
+  \\ rw[]
+QED
+
+Theorem CHR_o_w2n_eq:
+  CHR_o_w2n = CHR o w2n
+Proof
+  rw[FUN_EQ_THM, CHR_o_w2n_def]
+QED
+
+(* Inverse: convert char to word8 *)
+Definition n2w_o_ORD_def:
+  n2w_o_ORD (c: char) = (n2w (ORD c) : word8)
+End
+
+val () = cv_auto_trans n2w_o_ORD_def;
+
+Theorem n2w_o_ORD_eq:
+  n2w_o_ORD = n2w o ORD
+Proof
+  rw[FUN_EQ_THM, n2w_o_ORD_def]
+QED
+
+Definition MAP_HEX_def:
+  MAP_HEX [] = [] ∧
+  MAP_HEX (x::xs) = HEX x :: MAP_HEX xs
+End
+
+val MAP_HEX_pre_def = cv_auto_trans_pre "MAP_HEX_pre" MAP_HEX_def;
+
+Theorem MAP_HEX_pre_EVERY:
+  MAP_HEX_pre ls = EVERY (λx. x < 16) ls
+Proof
+  Induct_on`ls` \\ rw[Once MAP_HEX_pre_def]
+QED
+
+Theorem MAP_HEX_MAP:
+  MAP_HEX = MAP HEX
+Proof
+  simp[FUN_EQ_THM]
+  \\ Induct \\ rw[MAP_HEX_def]
+QED
+
+val num_to_dec_string_pre_def =
+  num_to_dec_string_def
+  |> SRULE [n2s_def, FUN_EQ_THM, GSYM MAP_HEX_MAP]
+  |> cv_trans_pre "num_to_dec_string_pre";
+
+Theorem num_to_dec_string_pre[cv_pre]:
+  num_to_dec_string_pre x
+Proof
+  rw[num_to_dec_string_pre_def, MAP_HEX_pre_EVERY]
+  \\ qspecl_then[`10`,`x`]mp_tac n2l_BOUND
+  \\ rw[EVERY_MEM]
+  \\ first_x_assum drule \\ rw[]
+QED
+
+Theorem int_exp_num:
+  (i:int) ** n =
+  if 0 ≤ i then &(Num i ** n)
+  else if EVEN n then &(Num (-i) ** n)
+  else -&(Num (-i) ** n)
+Proof
+  Cases_on`i` \\ simp[INT_POW_NEG]
+QED
+
+val () = cv_trans int_exp_num;
+
+Theorem Num_int_exp:
+  0 ≤ i ⇒ Num (i ** n) = Num i ** n
+Proof
+  Cases_on`i` \\ rw[]
+QED
+
+(* TODO: I don't know if this is the best way to translate this... *)
+val () = cv_auto_trans num_of_bits_def;
+val () = cv_auto_trans int_of_bits_def;
+val () = cv_auto_trans bits_of_int_def;
+
+Definition bits_bitwise_and_def:
+  bits_bitwise_and = bits_bitwise $/\
+End
+
+val bits_bitwise_and_pre_def = (bits_bitwise_def
+ |> oneline
+ |> Q.GEN`f`
+ |> Q.ISPEC`$/\`
+ |> SRULE [GSYM bits_bitwise_and_def]
+ |> cv_trans_pre_rec "bits_bitwise_and_pre")
+    (WF_REL_TAC `inv_image ($< LEX $<) (λ(x,y). (cv_size x, cv_size y))`
+     \\ rw[]
+     \\ Cases_on`cv_v` \\ gvs[]
+     \\ Cases_on`cv_v0` \\ gvs[]
+     \\ qmatch_assum_rename_tac`_ (cv_ispair p)`
+     \\ Cases_on`p` \\ gvs[]
+     \\ qmatch_assum_rename_tac`_ (cv_ispair p)`
+     \\ Cases_on`p` \\ gvs[]);
+
+Theorem bits_bitwise_and_pre[cv_pre]:
+  ∀x y. bits_bitwise_and_pre x y
+Proof
+  simp[FORALL_PROD]
+  \\ qid_spec_tac`f:bool -> bool -> bool`
+  \\ ho_match_mp_tac bits_bitwise_ind
+  \\ rw[]
+  \\ rw[Once bits_bitwise_and_pre_def]
+QED
+
+val () = int_and_def
+  |> SRULE [FUN_EQ_THM, int_bitwise_def, GSYM bits_bitwise_and_def]
+  |> cv_trans;
+
+Definition bits_bitwise_or_def:
+  bits_bitwise_or = bits_bitwise $\/
+End
+
+val bits_bitwise_or_pre_def = (bits_bitwise_def
+ |> oneline
+ |> Q.GEN`f`
+ |> Q.ISPEC`$\/`
+ |> SRULE [GSYM bits_bitwise_or_def]
+ |> cv_trans_pre_rec "bits_bitwise_or_pre")
+    (WF_REL_TAC `inv_image ($< LEX $<) (λ(x,y). (cv_size x, cv_size y))`
+     \\ rw[]
+     \\ Cases_on`cv_v` \\ gvs[]
+     \\ Cases_on`cv_v0` \\ gvs[]
+     \\ qmatch_assum_rename_tac`_ (cv_ispair p)`
+     \\ Cases_on`p` \\ gvs[]
+     \\ qmatch_assum_rename_tac`_ (cv_ispair p)`
+     \\ Cases_on`p` \\ gvs[]);
+
+Theorem bits_bitwise_or_pre[cv_pre]:
+  ∀x y. bits_bitwise_or_pre x y
+Proof
+  simp[FORALL_PROD]
+  \\ qid_spec_tac`f:bool -> bool -> bool`
+  \\ ho_match_mp_tac bits_bitwise_ind
+  \\ rw[]
+  \\ rw[Once bits_bitwise_or_pre_def]
+QED
+
+val () = int_or_def
+  |> SRULE [FUN_EQ_THM, int_bitwise_def, GSYM bits_bitwise_or_def]
+  |> cv_trans;
+
+Definition bits_bitwise_xor_def:
+  bits_bitwise_xor = bits_bitwise ((≠) : bool -> bool -> bool)
+End
+
+val bits_bitwise_xor_pre_def = (bits_bitwise_def
+ |> oneline
+ |> Q.GEN`f`
+ |> Q.ISPEC`λx:bool y. x ≠ y`
+ |> SRULE [GSYM bits_bitwise_xor_def]
+ |> cv_trans_pre_rec "bits_bitwise_xor_pre")
+    (WF_REL_TAC `inv_image ($< LEX $<) (λ(x,y). (cv_size x, cv_size y))`
+     \\ rw[]
+     \\ Cases_on`cv_v` \\ gvs[]
+     \\ Cases_on`cv_v0` \\ gvs[]
+     \\ qmatch_assum_rename_tac`_ (cv_ispair p)`
+     \\ Cases_on`p` \\ gvs[]
+     \\ qmatch_assum_rename_tac`_ (cv_ispair p)`
+     \\ Cases_on`p` \\ gvs[]);
+
+Theorem bits_bitwise_xor_pre[cv_pre]:
+  ∀x y. bits_bitwise_xor_pre x y
+Proof
+  simp[FORALL_PROD]
+  \\ qid_spec_tac`f:bool -> bool -> bool`
+  \\ ho_match_mp_tac bits_bitwise_ind
+  \\ rw[]
+  \\ rw[Once bits_bitwise_xor_pre_def]
+QED
+
+val () = int_xor_def
+  |> SRULE [FUN_EQ_THM, int_bitwise_def, GSYM bits_bitwise_xor_def]
+  |> cv_trans;
+
+val () = cv_auto_trans int_shift_left_def;
+val () = cv_auto_trans int_shift_right_def;
+
+Theorem SUM_MAP_FILTER_MEM_LE:
+  MEM x ls /\ ~P x ==>
+  SUM (MAP f (FILTER P ls)) + f x <= SUM (MAP f ls)
+Proof
+  qid_spec_tac`x`
+  \\ Induct_on`ls`
+  \\ rw[] \\ gs[]
+  >- (
+    irule SUM_SUBLIST \\ simp[]
+    \\ irule MAP_SUBLIST \\ simp[]
+    \\ irule FILTER_sublist )
+  \\ first_x_assum drule \\ rw[]
+QED
+
+Theorem list_size_SUM_MAP:
+  list_size f ls = LENGTH ls + SUM (MAP f ls)
+Proof
+  Induct_on `ls` \\ rw[list_size_def]
+QED
+
+Theorem list_size_pair_size_map:
+  list_size (pair_size f1 f2) ls =
+  list_size f1 (MAP FST ls) +
+  list_size f2 (MAP SND ls)
+Proof
+  Induct_on`ls` \\ rw[]
+  \\ Cases_on`h` \\ gvs[]
+QED
+
+Definition member_def:
+  member x [] = F ∧
+  member x (y::ys) = ((x = y) ∨ member x ys)
+End
+
+val () = cv_trans member_def;
+
+Theorem member_intro:
+  ∀x ys. MEM x ys = member x ys
+Proof
+  Induct_on `ys` \\ rw[member_def]
+QED
+
+Theorem cv_size_cv_map_snd_le:
+  ∀l. cv_size (cv_map_snd l) ≤ cv_size l
+Proof
+  ho_match_mp_tac cv_map_snd_ind
+  \\ rw[]
+  \\ rw[Once cv_map_snd_def] \\ gvs[]
+  \\ Cases_on`l` \\ gvs[]
+  \\ qmatch_goalsub_rename_tac`cv_snd p`
+  \\ Cases_on`p` \\ gvs[]
+QED
+
+Definition string_to_num_def:
+  string_to_num s = l2n 257 (MAP (SUC o ORD) s)
+End
+
+val () = cv_auto_trans string_to_num_def;
+
+Theorem l2n_257_inj:
+  ∀l1 l2. EVERY ($> 257) l1 ∧ EVERY ($> 257) l2 ∧
+          EVERY (λx. 0 < x) l1 ∧ EVERY (λx. 0 < x) l2 ∧
+          l2n 257 l1 = l2n 257 l2 ⇒ l1 = l2
+Proof
+  rpt strip_tac
+  \\ Cases_on `l1 = []`
+  >- (
+    gvs[l2n_def, l2n_eq_0]
+    \\ Cases_on `l2` \\ gvs[]
+  )
+  \\ Cases_on `l2 = []`
+  >- (
+    gvs[l2n_def, l2n_eq_0]
+    \\ Cases_on `l1` \\ gvs[]
+  )
+  \\ `0 < LAST l1 ∧ 0 < LAST l2`
+     by gvs[EVERY_MEM, MEM_LAST_NOT_NIL]
+  \\ `LOG 257 (l2n 257 l1) = PRE (LENGTH l1)`
+     by (irule LOG_l2n >> simp[])
+  \\ `LOG 257 (l2n 257 l2) = PRE (LENGTH l2)`
+     by (irule LOG_l2n >> simp[])
+  \\ gvs[]
+  \\ `LENGTH l1 ≠ 0 ∧ LENGTH l2 ≠ 0` by gvs[LENGTH_NIL_SYM]
+  \\ `LENGTH l1 = LENGTH l2` by decide_tac
+  \\ `l2n 257 (l1 ++ [1]) = l2n 257 (l2 ++ [1])`
+     by simp[l2n_APPEND]
+  \\ metis_tac[l2n_11, DECIDE ``1n < 257``,
+               GSYM SNOC_APPEND, SNOC_11]
+QED
+
+Theorem string_to_num_inj:
+  ∀n1 n2. n1 ≠ n2 ⇒ string_to_num n1 ≠ string_to_num n2
+Proof
+  simp[string_to_num_def]
+  \\ rpt strip_tac
+  \\ `MAP (SUC ∘ ORD) n1 = MAP (SUC ∘ ORD) n2`
+     by (
+       irule l2n_257_inj \\ simp[]
+       \\ simp[EVERY_MAP, EVERY_MEM]
+       \\ rw[]
+       \\ qspec_then `x` mp_tac ORD_BOUND
+       \\ simp[]
+     )
+  \\ `n1 = n2` suffices_by gvs[]
+  \\ sg `INJ (SUC ∘ ORD) (set n1 ∪ set n2) UNIV`
+  >- (simp[INJ_DEF] \\ metis_tac[ORD_11])
+  \\ drule_all INJ_MAP_EQ \\ simp[]
+QED
+
+(* Integer square root using Newton's method iteration *)
+Definition num_sqrt_aux_def:
+  num_sqrt_aux n r =
+    if r = 0 then 0
+    else let r' = (r + n DIV r) DIV 2 in
+      if r' < r then num_sqrt_aux n r'
+      else r
+Termination
+  WF_REL_TAC `measure SND`
+End
+
+val () = cv_auto_trans num_sqrt_aux_def;
+
+Definition num_sqrt_def:
+  num_sqrt n = if n = 0 then 0 else num_sqrt_aux n n
+End
+
+val () = cv_auto_trans num_sqrt_def;
+
+(* Helper: projections don't increase size *)
+Theorem cv_size_cv_fst_le:
+  !x. cv_size (cv_fst x) <= cv_size x
+Proof
+  Cases >> rw[cv_size_def, cv_fst_def]
+QED
+
+Theorem cv_size_cv_snd_le:
+  !x. cv_size (cv_snd x) <= cv_size x
+Proof
+  Cases >> rw[cv_size_def, cv_snd_def]
+QED
+
+Theorem c2n_le_cv_size:
+  !x. cv$c2n x <= cv_size x
+Proof
+  Cases >> rw[c2n_def, cv_size_def]
+QED
+
+Theorem OPT_MMAP_SOME_IFF:
+  ∀f ls vs.
+    OPT_MMAP f ls = SOME vs ⇔
+    EVERY IS_SOME (MAP f ls) ∧
+    vs = MAP (THE o f) ls
+Proof
+  Induct_on `ls` \\ rw[]
+  \\ Cases_on `f h` \\ rw[EQ_IMP_THM]
+QED
+
+Theorem ZIP_REPLICATE:
+  ZIP (REPLICATE n x, REPLICATE n y) =
+  REPLICATE n (x,y)
+Proof
+  Induct_on `n` \\ rw[]
+QED
+
+Theorem TAKE_SNOC_EL:
+  LENGTH vs = SUC n ⇒ TAKE n vs ++ [EL n vs] = vs
+Proof
+  rw[LIST_EQ_REWRITE, EL_APPEND_EQN, EL_TAKE, LENGTH_TAKE]
+  \\ Cases_on `x < n` \\ gvs[EL_TAKE]
+  \\ `x = n` by gvs[] \\ gvs[]
+QED
+
+Theorem ALOOKUP_MAP_KEY_INJ:
+  (∀x y. f x = f y ⇒ x = y) ∧ fk = (f k) ⇒
+  ALOOKUP (MAP (f ## I) ls) fk =
+  ALOOKUP ls k
+Proof
+  map_every qid_spec_tac[`k`,`fk`]
+  \\ Induct_on `ls` \\ simp[]
+  \\ Cases \\ rw[]
+  \\ metis_tac[]
+QED
+
+Theorem cv_ispair_cv_mul:
+  cv_ispair (cv_mul x y) = cv$Num 0
+Proof
+  Cases_on`x` >>
+  Cases_on`y` >>
+  rw[cv_mul_def]
+QED
+
+Theorem option_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="option",Tyop="option"}));
+
+Theorem sum_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="sum",Tyop="sum"}));
+
+Theorem list_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="list",Tyop="list"}));
+
+Theorem prod_CASE_rator =
+  DatatypeSimps.mk_case_rator_thm_tyinfo
+    (Option.valOf (TypeBase.read {Thy="pair",Tyop="prod"}));

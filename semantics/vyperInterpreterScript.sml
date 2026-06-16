@@ -1520,11 +1520,11 @@ End
 val () = cv_auto_trans lookup_nonreentrant_slot_def;
 
 Definition initial_evaluation_context_def:
-  initial_evaluation_context srcs layouts tx =
+  initial_evaluation_context srcs layouts tx src_id_opt =
   <| sources := srcs
    ; layouts := layouts
    ; txn := tx
-   ; stk := [(NONE, tx.function_name)]
+   ; stk := [(src_id_opt, tx.function_name)]
    ; in_deploy := F
    ; nonreentrant_slot := lookup_nonreentrant_slot layouts tx.target
    |>
@@ -1644,7 +1644,7 @@ Definition send_call_value_def:
   send_call_value mut cx =
   let n = cx.txn.value in
   if n = 0 then return () else do
-    type_check (mut = Payable) "not Payable";
+    check (mut = Payable) "not Payable";
     transfer_value cx.txn.sender cx.txn.target n
   od
 End
@@ -1745,8 +1745,8 @@ End
 
 (* Find which module a function is in (for exported functions) *)
 Definition find_function_module_def:
-  find_function_module cx am func_name =
-    case ALOOKUP am.exports cx.txn.target of
+  find_function_module am target func_name =
+    case ALOOKUP am.exports target of
       NONE => NONE  (* Use main module *)
     | SOME export_map =>
         ALOOKUP export_map func_name  (* Returns SOME src_id if exported *)
@@ -1754,13 +1754,13 @@ End
 
 Definition call_external_def:
   call_external am tx =
-  let cx = initial_evaluation_context am.sources am.layouts tx in
+  (* Determine which module to use for type environment *)
+  let src_id_opt = find_function_module am tx.target tx.function_name in
+  let cx = initial_evaluation_context am.sources am.layouts tx src_id_opt in
   (* Get all modules for this contract (needed for combined type_env) *)
   case ALOOKUP am.sources tx.target of
     NONE => (INR $ Error (RuntimeError "call get sources"), am)
   | SOME all_mods =>
-  (* Determine which module to use for type environment *)
-  let src_id_opt = find_function_module cx am tx.function_name in
   case (case src_id_opt of
           NONE => get_self_code cx
         | SOME src_id => get_module_code cx (SOME src_id))
@@ -1785,7 +1785,7 @@ Definition load_contract_def:
   case lookup_function NONE tx.function_name Deploy ts of
      | NONE => INR $ Error (RuntimeError "no constructor")
      | SOME (mut, nr, args, dflts, ret, body) =>
-       let cx = (initial_evaluation_context ((addr,mods)::am.sources) am.layouts tx)
+       let cx = (initial_evaluation_context ((addr,mods)::am.sources) am.layouts tx NONE)
                 with in_deploy := T in
        case call_external_function am cx nr mut ts mods args dflts tx.args body ret
          of (INR e, _) => INR e

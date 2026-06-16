@@ -8,7 +8,7 @@ Ancestors
   vyperAST vyperValue vyperValueOperation vyperMisc vyperABI
   vyperInterpreter vyperState vyperContext vyperStorage vyperTyping
   vyperStorageBackend vyperLookup vyperEncodeDecode vyperArith vyperAssignPreservesType
-  vyperTypeSystem vyperTypeValues vyperTypeDefaults
+  vyperTypeSystem vyperTypeInvariants vyperTypeValues vyperTypeDefaults
   vyperScopePreservation vyperImmutablesPreservation vyperLookupStorage
   vyperStatePreservation vyperTypeEnv vyperTypeEnvPreservation vyperTypeABI vyperTypeBuiltins vyperTypeExprSoundness vyperEvalPreservesScopes
 Libs

@@ -9,54 +9,71 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
+env:
+  HOLBUILD_REF: v0.6.0
+
 jobs:
   build:
     runs-on: ubuntu-latest
     outputs:
-      holbuild-cache-key: ${{ steps.cache-key.outputs.key }}
+      holbuild-cache-key: ${{ steps.cache-key.outputs.build-key }}
     steps:
       - uses: actions/checkout@v6
 
       - uses: ./.github/actions/setup-polyml
         id: polyml
-      - uses: ./.github/actions/setup-verifereum
-        id: verifereum
+
       - uses: ./.github/actions/setup-holbuild
         id: holbuild
         with:
-          build: 'false'
-      - uses: ./.github/actions/setup-hol4
-        id: hol4
-        with:
-          hol4-ref: ${{ steps.holbuild.outputs.hol4-rev }}
-          polyml-rev: ${{ steps.polyml.outputs.polyml-rev }}
-      - uses: ./.github/actions/setup-holbuild
+          holbuild-ref: ${{ env.HOLBUILD_REF }}
 
       - name: Configure holbuild cache
         run: echo "HOLBUILD_CACHE=$HOME/.cache/holbuild" >> "$GITHUB_ENV"
 
-      - name: Compute holbuild cache key
+      - name: Compute holbuild cache keys
         id: cache-key
         run: |
-          echo "key=holbuild-global-${{ runner.os }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.hol4.outputs.hol4-rev }}-${{ steps.verifereum.outputs.verifereum-rev }}-${{ steps.holbuild.outputs.holbuild-rev }}-${{ github.sha }}-build" >> "$GITHUB_OUTPUT"
+          base="holbuild-v2-${{ runner.os }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.holbuild.outputs.holbuild-rev }}-${{ steps.holbuild.outputs.hol-source-rev }}-${{ hashFiles('holproject.toml') }}"
+          echo "toolchain-key=${base}-toolchain" >> "$GITHUB_OUTPUT"
+          echo "build-key=${base}-build" >> "$GITHUB_OUTPUT"
 
       - name: Restore holbuild global cache
-        uses: actions/cache@v5
+        id: cache-holbuild-global
+        uses: actions/cache/restore@v5
         with:
           path: ~/.cache/holbuild
-          key: ${{ steps.cache-key.outputs.key }}
+          key: ${{ steps.cache-key.outputs.build-key }}
           restore-keys: |
-            holbuild-global-${{ runner.os }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.hol4.outputs.hol4-rev }}-${{ steps.verifereum.outputs.verifereum-rev }}-${{ steps.holbuild.outputs.holbuild-rev }}-
-            holbuild-global-${{ runner.os }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.hol4.outputs.hol4-rev }}-${{ steps.verifereum.outputs.verifereum-rev }}-
-            holbuild-global-${{ runner.os }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.hol4.outputs.hol4-rev }}-
-            holbuild-global-${{ runner.os }}-
+            ${{ steps.cache-key.outputs.toolchain-key }}
+            holbuild-v2-${{ runner.os }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.holbuild.outputs.holbuild-rev }}-
+            holbuild-v2-${{ runner.os }}-${{ steps.polyml.outputs.polyml-rev }}-
+            holbuild-v2-${{ runner.os }}-
+
+      - name: Build schema-2 HOL toolchain
+        run: holbuild buildhol
+
+      - name: Save holbuild toolchain cache after buildhol
+        if: steps.cache-holbuild-global.outputs.cache-primary-key != steps.cache-key.outputs.build-key
+        uses: actions/cache/save@v5
+        continue-on-error: true
+        with:
+          path: ~/.cache/holbuild
+          key: ${{ steps.cache-key.outputs.toolchain-key }}
 
       - name: Build project with holbuild
         env:
           TMPDIR: ${{ runner.temp }}
         run: |
-          holbuild --verbose --holdir "$HOLDIR" -j"$(nproc)" build --skip-checkpoints --skip-goalfrag \
+          holbuild --verbose -j"$(nproc)" build --skip-checkpoints --skip-proof-steps \
             vyperHolTheory
+
+      - name: Save holbuild global cache after build
+        if: steps.cache-holbuild-global.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ~/.cache/holbuild
+          key: ${{ steps.cache-key.outputs.build-key }}
 
       - name: Verify no successful-build checkpoints remain
         run: |
@@ -87,18 +104,11 @@ jobs:
 
       - uses: ./.github/actions/setup-polyml
         id: polyml
-      - uses: ./.github/actions/setup-verifereum
-        id: verifereum
+
       - uses: ./.github/actions/setup-holbuild
         id: holbuild
         with:
-          build: 'false'
-      - uses: ./.github/actions/setup-hol4
-        id: hol4
-        with:
-          hol4-ref: ${{ steps.holbuild.outputs.hol4-rev }}
-          polyml-rev: ${{ steps.polyml.outputs.polyml-rev }}
-      - uses: ./.github/actions/setup-holbuild
+          holbuild-ref: ${{ env.HOLBUILD_REF }}
 
       - name: Configure holbuild cache
         run: echo "HOLBUILD_CACHE=$HOME/.cache/holbuild" >> "$GITHUB_ENV"
@@ -135,7 +145,7 @@ jobs:
           echo "Group $group: tests $start to $((start + per_group - 1)) of $total"
           targets=$(echo "$tests" | tail -n +$((start + 1)) | head -n "$per_group" | sed 's/Script\.sml$/Theory/' | tr '\n' ' ')
           echo "Building: $targets"
-          holbuild --verbose --holdir "$HOLDIR" -j"$(nproc)" build --skip-checkpoints --skip-goalfrag $targets
+          holbuild --verbose -j"$(nproc)" build --skip-checkpoints --skip-proof-steps $targets
 
       - name: Verify no successful-build checkpoints remain
         run: |

@@ -74,20 +74,20 @@ Definition evaluate_type_def:
        if 0 < type_slot_size tv ∧ type_slot_size atv < dimword(:256)
        then SOME atv else NONE
      | _ => NONE) ∧
-  evaluate_type tenv (StructT id) =
-  (let nid = string_to_num id in
-   case FLOOKUP tenv nid of
+  evaluate_type tenv (StructT nsid) =
+  (let key = type_key nsid in
+   case FLOOKUP tenv key of
    | SOME $ StructArgs args =>
      (let names = MAP FST args in
-      case evaluate_types (tenv \\ nid) (MAP SND args) []
+      case evaluate_types (tenv \\ key) (MAP SND args) []
       of SOME tvs =>
         let tv = StructTV (ZIP (names, tvs)) in
         if type_slot_size tv ≤ dimword(:256) then SOME tv else NONE
        | _ => NONE)
    | _ => NONE) ∧
-  evaluate_type tenv (FlagT id) =
-  (let nid = string_to_num id in
-   case FLOOKUP tenv nid of
+  evaluate_type tenv (FlagT nsid) =
+  (let key = type_key nsid in
+   case FLOOKUP tenv key of
    | SOME $ FlagArgs m =>
        (if m ≤ 256 then SOME $ FlagTV m
         else NONE)
@@ -103,7 +103,7 @@ Termination
     case x
       of INL (env, t) => (CARD (FDOM env), type_size t)
        | INR (env, ts, _) => (CARD (FDOM env), list_size type_size ts))’
-  \\ rw[FLOOKUP_DEF]
+  \\ rw[FLOOKUP_DEF, type_key_def] >> gvs[]
   \\ disj1_tac
   \\ CCONTR_TAC
   \\ fs[]
@@ -130,11 +130,13 @@ val () = cv_auto_trans_rec evaluate_type_def (
   \\ disj1_tac
   \\ pop_assum mp_tac
   \\ qmatch_goalsub_abbrev_tac`cv_lookup ck`
+  >> gvs[cv_type_key_def]
   \\ `cv_ispair ck = cv$Num 0`
   by (
     rw[Abbr`ck`, cv_string_to_num_def]
     \\ rw[Once keccakTheory.cv_l2n_def]
-    \\ rw[cv_ispair_cv_add] )
+    \\ rw[cv_ispair_cv_add, cv_ispair_cv_mul]
+  )
   \\ pop_assum mp_tac
   \\ qid_spec_tac`cv_tenv`
   \\ qid_spec_tac`ck`

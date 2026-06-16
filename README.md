@@ -21,7 +21,7 @@ The interpreter operates on abstract syntax (defined in `vyperAST`) and an evalu
 The repository is organised into the following directories:
 
 - **`syntax/`** — Vyper abstract syntax tree definitions
-- **`frontend/`** — JSON import and parsing
+- **`frontend/`** — JSON import and translation into the core AST
 - **`semantics/`** — Vyper semantics, organised across several theories covering values and types, value-level operations, storage encoding, ABI encoding, evaluation context and builtins, interpreter state and monad, the definitional interpreter itself, and a CPS/small-step version for efficient execution
   - **`semantics/prop/`** — Properties of the semantics (scope preservation, state preservation, etc.)
 - **`tests/`** — Test infrastructure and generated test scripts from the Vyper test suite
@@ -37,7 +37,7 @@ The abstract syntax tree (AST) for Vyper is defined in `vyperAST`. The main data
 
 We syntactically restrict the targets for assignment statements/expressions, using the `assignment_target` type which can be seen as a restriction of the expression syntax to only variables (`x`), subscripting (`x[3]`), and attribute selection (`x.y`) with arbitrary nesting. This in particular also applies to the `append` and `pop` builtin functions on arrays, which are stateful (mutating) operations that we treat as assignments.
 
-Interface declarations (`InterfaceDecl`) are included in the AST, with interface function signatures parsed from JSON and stored in the interpreter's type environment. This enables resolution of external calls to interface-typed targets. Full type-checking of interfaces remains future work (see [#47](https://github.com/verifereum/vyper-hol/issues/47)). Module imports and exports are supported: the AST includes `ImportDecl` and `ExportsDecl` top-level declarations, and expressions carry `source_id` information to identify which module they belong to.
+Interface declarations (`InterfaceDecl`) are included in the AST, with interface function signatures parsed from JSON and stored in the interpreter's type environment. This enables resolution of external calls to interface-typed targets. Full type-checking of interfaces remains future work (see [#47](https://github.com/verifereum/vyper-hol/issues/47)). Module imports and exports are handled by the JSON frontend/translation layer, and expressions carry `source_id` information to identify which module they belong to.
 
 ### Semantics (`semantics/`)
 
@@ -70,7 +70,7 @@ The decoding of JSON into our AST type is somewhat ad-hoc, in part because the J
 
 ## Current Limitations
 
-The formal semantics covers the core Vyper language including external calls (`staticcall`, `extcall`), reentrancy protection (`@nonreentrant`), `raw_call`, contract creation builtins, transient storage, and module imports. The main limitation is the **front-end**: there is no formal parser (we operate on abstract syntax exported as JSON, [#46](https://github.com/verifereum/vyper-hol/issues/46)) and type-checking is partial ([#47](https://github.com/verifereum/vyper-hol/issues/47)). A small number of minor features remain unimplemented: `print`, `msg.gas`, and the `gas=` parameter for external calls ([#98](https://github.com/verifereum/vyper-hol/issues/98)).
+The formal semantics covers the core Vyper language including external calls (`staticcall`, `extcall`), reentrancy protection (`@nonreentrant`), `raw_call`, contract creation builtins, transient storage, and module imports. The main limitation is the **front-end**: there is no formal parser (we operate on abstract syntax exported as JSON, [#46](https://github.com/verifereum/vyper-hol/issues/46)) and type-checking is partial ([#47](https://github.com/verifereum/vyper-hol/issues/47)). A small number of minor features remain unimplemented, including `print` and gas modelling for `msg.gas`/`msg.mana` and external call gas limits ([#98](https://github.com/verifereum/vyper-hol/issues/98)).
 
 ## Outcomes and Next Steps
 
@@ -88,38 +88,32 @@ Next steps include formalising the front-end (parsing and full type-checking), p
 
 This work is developed in the [HOL4 theorem prover](https://hol-theorem-prover.org), and makes use of the Ethereum Virtual Machine (EVM) formalisation in the [Verifereum](https://verifereum.org) project, and the test suite for the [Vyper language](https://vyperlang.org) from [its repository](https://github.com/vyperlang/vyper).
 
-**Pinned versions:** The repository uses a `PINS/` directory to pin compatible dependency versions for reproducible builds:
-  - `PINS/verifereum.txt` pins the [Verifereum](https://github.com/verifereum/verifereum) commit
-  - Verifereum's `PINS/holbuild.txt` pins the [`holbuild`](https://github.com/charles-cooper/holbuild) version
-  - holbuild's `PINS/hol.txt` pins the [HOL4](https://github.com/HOL-Theorem-Prover/HOL) commit
+The project is built with [`holbuild`](https://github.com/charles-cooper/holbuild). The repository's `holproject.toml` is the source of truth for the project configuration and pinned HOL dependencies, including the compatible [Verifereum](https://github.com/verifereum/verifereum) revision. The CI workflow (`.github/workflows/holbuild.yml`) is the recommended reference for the exact automated build.
 
-The CI workflow (`.github/workflows/holbuild.yml`) follows this pin chain automatically. For local development, you can use the pinned commits or track the latest versions (which usually work but may occasionally diverge).
+For a local build, install `holbuild` and run:
 
-The [Verifereum repository](https://github.com/verifereum/verifereum) includes instructions on how to build HOL4, and the Vyper repository includes its own installation instructions.
+```bash
+holbuild buildhol
+holbuild -j"$(nproc)" build vyperHolTheory
+```
+
+`holbuild buildhol` builds and caches the HOL toolchain and project dependencies specified by `holproject.toml`.
 
 ### Running the Vyper test suite
 
-The test runner expects exported JSON fixtures to be available at `tests/vyper-test-exports`.
+The test runner expects exported JSON fixtures to be available at `tests/vyper-test-exports`. To generate them locally, clone and install Vyper, then export the functional tests:
 
-**CI workflow (recommended reference):** The GitHub Actions workflow (`.github/workflows/holbuild.yml`) automates the full process:
-
-1. Sets up PolyML, HOL4, Verifereum, and `holbuild`
-2. Clones Vyper, installs it, and exports tests via `pytest -s -n0 --export ../tests/vyper-test-exports -m "not fuzzing" tests/functional`
-3. Runs test groups in parallel using `holbuild` targeting `vyperTest_*Theory`
-
-**Local setup:**
-
-1. Install HOL4, set `HOLDIR` to your HOL installation, and install [`holbuild`](https://github.com/charles-cooper/holbuild).
-2. Clone Verifereum and set `VFMDIR` to its path (referenced by `holproject.toml`).
-3. Export Vyper tests:
 ```bash
-      git clone https://github.com/vyperlang/vyper.git vyper-src
-      cd vyper-src
-      pip install . --group test
-      pytest -s -n0 --export ../tests/vyper-test-exports -m "not fuzzing" tests/functional
+git clone https://github.com/vyperlang/vyper.git vyper-src
+cd vyper-src
+pip install . --group test
+pytest -s -n0 --export ../tests/vyper-test-exports -m "not fuzzing" tests/functional
 ```
 
-4. Run tests with holbuild, e.g.:
+Then run individual generated test theories with `holbuild`, for example:
+
 ```bash
-     holbuild --holdir "$HOLDIR" -j$(nproc) build vyperTest_functional_builtins_codegen_test_abi_decodeTheory
+holbuild -j"$(nproc)" build vyperTest_functional_builtins_codegen_test_abi_decodeTheory
 ```
+
+The CI workflow runs the generated tests in parallel groups; see `.github/workflows/holbuild.yml` for that full setup.

@@ -1,3 +1,0 @@
-# Shared analysis infrastructure: memory locations, access helpers
-# defs/ = definitions, proofs/ = property proofs
-INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../defs ../../../syntax ../../../semantics defs proofs
