@@ -3479,7 +3479,9 @@ Finalise well_typed_type_builtin_success_type
 
 (* ===== Calls / special targets ===== *)
 
-(* TODO: move *)
+(* TODO(cleanup): word_size arithmetic facts are general VFM/word-size support
+   lemmas and should move to a shared arithmetic/support theory when consumers
+   are reorganized. *)
 Theorem word_size_le:
   0 < n ==> word_size n ≤ n
 Proof

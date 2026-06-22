@@ -1892,8 +1892,9 @@ Theorem well_typed_update_binop_no_type_error:
   u = (case type_to_int_bound lhs_ty of NONE => Unsigned 0 | SOME u => u) ==>
   evaluate_binop u lhs_tv bop lhs rhs <> INR (TypeError msg)
 Proof
-  (* TODO: prove directly by binop-family inversion.  This is exactly the
-     assignment-shaped instance of the existing builtin no-TypeError theorem. *)
+  (* TODO(proof-cleanup): this could be proved directly by binop-family
+     inversion.  For now it is the assignment-shaped instance of the existing
+     builtin no-TypeError theorem. *)
   metis_tac[well_typed_binop_no_type_error]
 QED
 

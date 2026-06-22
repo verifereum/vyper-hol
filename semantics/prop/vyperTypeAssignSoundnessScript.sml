@@ -52,17 +52,6 @@ Proof
   gvs[update_accounts_def, return_def]
 QED
 
-(* TEMPORARILY CHEATED - moved into fresh assignment helper theory; the direct
-   proof is routine but currently needs a small proof-control cleanup around
-   write_storage_slot/get_storage_backend case splitting.
-Proof attempt preserved:
-Proof
-  rw[write_storage_slot_def, bind_apply, AllCaseEqs()] >> gvs[]
-  >- (Cases_on `encode_value d e` >> gvs[lift_option_def, return_def, raise_def]) >>
-  Cases_on `b` >> gvs[get_storage_backend_def, get_accounts_def,
-    get_transient_storage_def, return_def]
-QED
-*)
 Theorem write_storage_slot_error:
   write_storage_slot a b c d e f = (INR g, h) ==> ?m. g = Error m
 Proof

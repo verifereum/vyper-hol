@@ -493,7 +493,9 @@ Proof
 QED
 
 (* ===== assign_target properties ===== *)
-(* TODO: refactor proofs and move to vyperAssignTarget *)
+(* TODO(cleanup): these reusable assign_target facts should live in
+   vyperAssignTarget; they remain here for now to avoid changing theorem
+   dependencies while preserving logical content. *)
 
 Theorem assign_target_scoped_var_implies_var_assignable:
   ∀cx st n sbs ao.

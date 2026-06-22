@@ -1,6 +1,12 @@
 (*
- * Statement and statement-list type soundness skeleton for the fresh executable
- * Vyper type system.
+ * Statement and statement-list type soundness for the executable Vyper type
+ * system.
+ *
+ * This file contains the main statement-level type-soundness development,
+ * including local exception/result-shape helpers, internal/external call
+ * lemmas, assignment/control-flow cases, and the final exported soundness
+ * theorems.  It is intentionally an implementation/proof file rather than a
+ * small API surface.
  *)
 
 Theory vyperTypeStmtSoundness

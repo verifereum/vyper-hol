@@ -398,7 +398,7 @@ Definition evaluate_builtin_def:
     Keccak_256_w64 ls ∧
   evaluate_builtin cx _ _ Keccak256 [StringV s] = INL $ BytesV $
     Keccak_256_w64 (MAP (n2w o ORD) s) ∧
-  (* TODO: reject BytesV with invalid bounds for Keccak256 *)
+  (* TODO(semantic-limitation): BytesV bounds are not validated before Keccak256. *)
   evaluate_builtin cx _ _ Sha256 [BytesV ls] = INL $ BytesV $
     word_to_bytes (SHA_256_bytes ls : bytes32) T ∧
   evaluate_builtin cx _ _ Sha256 [StringV s] = INL $ BytesV $

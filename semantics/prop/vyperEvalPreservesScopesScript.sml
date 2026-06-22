@@ -1358,7 +1358,8 @@ Proof
   >> metis_tac[preserves_tv_trans]
 QED
 
-(* TODO: move *)
+(* TODO(cleanup): this generic handle_function state-frame fact belongs with
+   the interpreter/function-call support lemmas once those are split out. *)
 Theorem handle_function_state:
   handle_function x y = (a,b) ==> b = y
 Proof
