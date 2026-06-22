@@ -2,7 +2,7 @@ Theory jsonToVyper
 Ancestors
   integer alist jsonAST vyperAST
 Libs
-  cv_transLib intLib
+  intLib
 
 
 (* Vyper uses negative source_ids for builtin modules (e.g., -2 for math).
@@ -11,7 +11,6 @@ Libs
 Definition builtin_source_id_offset_def:
   builtin_source_id_offset = 2n
 End
-val () = cv_trans_deep_embedding EVAL builtin_source_id_offset_def;
 
 (* Convert a JSON source_id (int) to a vyperAST source_id (num option).
    main_src_id maps to NONE (main module), others are offset to be non-negative. *)
@@ -20,7 +19,6 @@ Definition source_id_to_nsid_def:
     if src_id = main_src_id then NONE
     else SOME (Num (src_id + &builtin_source_id_offset))
 End
-val () = cv_auto_trans source_id_to_nsid_def;
 
 Definition json_nsid_to_nsid_def:
   json_nsid_to_nsid (main_src_id:int) (src_id:int, name:string) =
@@ -35,7 +33,6 @@ Definition source_id_opt_to_nsid_def:
     (source_id_to_nsid main_src_id src_id, name)
 End
 
-val () = cv_auto_trans source_id_opt_to_nsid_def;
 
 Definition translate_type_def:
   (translate_type main_src_id (JT_Integer bits T) = BaseT (IntT bits)) /\
@@ -64,7 +61,6 @@ Termination
     | INR (_,ts) => list_size json_type_size ts)` >> simp[]
 End
 
-val () = cv_auto_trans translate_type_def;
 
 Definition tctx_current_nsid_def:
   tctx_current_nsid tctx = FST (SND tctx)
@@ -165,7 +161,6 @@ Definition translate_binop_def:
   (translate_binop JBop_NotIn = NotIn)
 End
 
-val () = cv_auto_trans translate_binop_def;
 
 (* ===== Hex String to Word8 List Conversion ===== *)
 
@@ -189,13 +184,11 @@ Definition hex_digit_to_num_def:
     if c = #"f" \/ c = #"F" then 15 else 0
 End
 
-val () = cv_auto_trans hex_digit_to_num_def;
 
 Definition hex_pair_to_word8_def:
   hex_pair_to_word8 hi lo = n2w (hex_digit_to_num hi * 16 + hex_digit_to_num lo) : word8
 End
 
-val () = cv_auto_trans hex_pair_to_word8_def;
 
 Definition hex_string_to_bytes_def:
   (hex_string_to_bytes [] = []) /\
@@ -205,7 +198,6 @@ Termination
   WF_REL_TAC `measure LENGTH` >> simp[]
 End
 
-val () = cv_auto_trans hex_string_to_bytes_def;
 
 Definition strip_0x_def:
   (strip_0x [] = []) /\
@@ -216,7 +208,6 @@ Definition strip_0x_def:
      else c1::c2::rest)
 End
 
-val () = cv_auto_trans strip_0x_def;
 
 (* ===== Decimal String Parsing ===== *)
 
@@ -226,7 +217,6 @@ Definition is_digit_def:
      c = #"5" \/ c = #"6" \/ c = #"7" \/ c = #"8" \/ c = #"9")
 End
 
-val () = cv_auto_trans is_digit_def;
 
 Definition digit_to_num_def:
   digit_to_num c =
@@ -242,7 +232,6 @@ Definition digit_to_num_def:
     if c = #"9" then 9 else 0
 End
 
-val () = cv_auto_trans digit_to_num_def;
 
 Definition num_of_digits_acc_def:
   (num_of_digits_acc acc [] = acc) /\
@@ -250,13 +239,11 @@ Definition num_of_digits_acc_def:
      num_of_digits_acc (acc * 10 + digit_to_num c) cs)
 End
 
-val () = cv_auto_trans num_of_digits_acc_def;
 
 Definition num_of_digits_def:
   num_of_digits cs = num_of_digits_acc 0 cs
 End
 
-val () = cv_auto_trans num_of_digits_def;
 
 Definition strip_sign_def:
   (strip_sign [] = (F, [])) /\
@@ -266,7 +253,6 @@ Definition strip_sign_def:
      else (F, c::cs))
 End
 
-val () = cv_auto_trans strip_sign_def;
 
 Definition drop_nondigit_def:
   (drop_nondigit [] = []) /\
@@ -274,7 +260,6 @@ Definition drop_nondigit_def:
      if is_digit c then (c::cs) else drop_nondigit cs)
 End
 
-val () = cv_auto_trans drop_nondigit_def;
 
 Definition split_at_e_def:
   (split_at_e [] = ([], [])) /\
@@ -283,7 +268,6 @@ Definition split_at_e_def:
      else let (l, r) = split_at_e cs in (c::l, r))
 End
 
-val () = cv_auto_trans split_at_e_def;
 
 Definition split_at_dot_def:
   (split_at_dot [] = ([], [])) /\
@@ -292,14 +276,12 @@ Definition split_at_dot_def:
      else let (l, r) = split_at_dot cs in (c::l, r))
 End
 
-val () = cv_auto_trans split_at_dot_def;
 
 Definition pad_right_zeros_def:
   pad_right_zeros n xs =
     if LENGTH xs < n then xs ++ REPLICATE (n - LENGTH xs) #"0" else xs
 End
 
-val () = cv_auto_trans pad_right_zeros_def;
 
 Definition decimal_string_to_int_def:
   decimal_string_to_int s =
@@ -321,7 +303,6 @@ Definition decimal_string_to_int_def:
       if neg then &0 - &n else &n
 End
 
-val () = cv_auto_trans decimal_string_to_int_def;
 
 (* ===== BoolOp Helpers ===== *)
 (* These work on vyper expr lists (post-translation) *)
@@ -334,7 +315,6 @@ Termination
   WF_REL_TAC `measure LENGTH` >> simp[]
 End
 
-val () = cv_auto_trans boolop_and_def;
 
 Definition boolop_or_def:
   (boolop_or [] = Literal (BaseT BoolT) (BoolL F)) /\
@@ -344,7 +324,6 @@ Termination
   WF_REL_TAC `measure LENGTH` >> simp[]
 End
 
-val () = cv_auto_trans boolop_or_def;
 
 (* ===== Builtin Call Helper (non-recursive, defined before translate_expr) ===== *)
 (* This takes already-translated args and kwargs *)
@@ -355,14 +334,12 @@ Definition is_prefix_def:
   (is_prefix (p::ps) (s::ss) = ((p = s) /\ is_prefix ps ss))
 End
 
-val () = cv_auto_trans is_prefix_def;
 
 Definition is_capitalized_def:
   (is_capitalized [] = F) /\
   (is_capitalized (c::cs) = (#"A" <= c /\ c <= #"Z"))
 End
 
-val () = cv_auto_trans is_capitalized_def;
 
 Definition is_cast_name_def:
   is_cast_name name =
@@ -375,7 +352,6 @@ Definition is_cast_name_def:
      name = "address")
 End
 
-val () = cv_auto_trans is_cast_name_def;
 
 Definition is_builtin_cast_name_def:
   is_builtin_cast_name name =
@@ -387,7 +363,6 @@ Definition is_builtin_cast_name_def:
      name = "address" \/ name = "Address")
 End
 
-val () = cv_auto_trans is_builtin_cast_name_def;
 
 Definition denomination_of_string_def:
   denomination_of_string s =
@@ -413,14 +388,12 @@ Definition denomination_of_string_def:
     if s = "tether" then SOME TEther else NONE
 End
 
-val () = cv_auto_trans denomination_of_string_def;
 
 Definition denomination_of_expr_def:
   denomination_of_expr (Literal _ (StringL s)) = denomination_of_string s /\
   denomination_of_expr _ = NONE
 End
 
-val () = cv_auto_trans denomination_of_expr_def;
 
 (* ===== Keyword Argument Helpers ===== *)
 
@@ -432,7 +405,6 @@ Definition kwarg_bool_def:
     | _ => default
 End
 
-val () = cv_auto_trans kwarg_bool_def;
 
 (* Extract numeric kwarg: pattern match IntL *)
 Definition kwarg_num_def:
@@ -442,7 +414,6 @@ Definition kwarg_num_def:
     | _ => default
 End
 
-val () = cv_auto_trans kwarg_num_def;
 
 (* Extract expression kwarg with default *)
 Definition kwarg_expr_def:
@@ -452,7 +423,6 @@ Definition kwarg_expr_def:
     | NONE => default
 End
 
-val () = cv_auto_trans kwarg_expr_def;
 
 (* Check if kwarg is present *)
 Definition has_kwarg_def:
@@ -460,7 +430,6 @@ Definition has_kwarg_def:
     IS_SOME (ALOOKUP kwargs key)
 End
 
-val () = cv_auto_trans has_kwarg_def;
 
 Definition make_builtin_call_def:
   make_builtin_call main_src_id name args kwargs ret_ty =
@@ -597,7 +566,6 @@ Definition make_builtin_call_def:
               else Call ty (IntCall (NONE, name)) args NONE)
 End
 
-val () = cv_auto_trans make_builtin_call_def;
 
 (* ===== Module Call Helpers ===== *)
 
@@ -609,7 +577,6 @@ Definition extract_func_name_def:
   (extract_func_name _ = "")
 End
 
-val () = cv_auto_trans extract_func_name_def;
 
 (* Check if a func expression has interface typeclass (for cross-module interface constructors) *)
 Definition is_interface_constructor_def:
@@ -618,7 +585,6 @@ Definition is_interface_constructor_def:
   (is_interface_constructor _ = F)
 End
 
-val () = cv_auto_trans is_interface_constructor_def;
 
 (* Extract the innermost module's source_id from a module chain *)
 (* For lib1: returns SOME 0 (from JE_Name) *)
@@ -634,7 +600,6 @@ Definition extract_innermost_module_src_def:
   (extract_innermost_module_src _ = NONE)
 End
 
-val () = cv_auto_trans extract_innermost_module_src_def;
 
 (* Check if an expression is a module reference (not an interface-typed value).
    Used to detect nested module attribute access: mod3.mod2.mod1.X
@@ -646,7 +611,6 @@ Definition is_module_expr_def:
   (is_module_expr _ = F)
 End
 
-val () = cv_auto_trans is_module_expr_def;
 
 (* Detect cross-module flag member pattern: lib1.Action.BUY or lib1.lib2.Roles3.NOBODY *)
 (* Returns SOME (src_id_opt, flag_name) if it matches, NONE otherwise *)
@@ -662,7 +626,6 @@ Definition extract_module_flag_def:
   (extract_module_flag main_src_id _ = NONE)
 End
 
-val () = cv_auto_trans extract_module_flag_def;
 
 (* ===== Constants/Immutables and Name Helpers ===== *)
 
@@ -678,7 +641,6 @@ Definition collect_consts_and_immutables_def:
      | _ => collect_consts_and_immutables rest)
 End
 
-val () = cv_auto_trans collect_consts_and_immutables_def;
 
 (* Make Name or BareGlobalName based on constants/immutables list *)
 Definition make_name_def:
@@ -702,7 +664,6 @@ Definition find_keyword_def:
     else find_keyword name rest
 End
 
-val () = cv_auto_trans find_keyword_def;
 
 (* Lemma: if find_keyword returns SOME v, then v is in the keyword list *)
 Theorem find_keyword_MEM:
@@ -939,8 +900,6 @@ Termination
   >> gvs[]
 End
 
-(* Skip cv_auto_trans for translate_expr - cv_auto doesn't handle mutual recursion well *)
-(* val () = cv_auto_trans translate_expr_def; *)
 
 (* ===== Assignment Target Translation ===== *)
 (* Defined after translate_expr since it uses it for subscript indices *)
@@ -957,8 +916,6 @@ Termination
   WF_REL_TAC `measure (json_base_target_size o SND)` >> simp[]
 End
 
-(* Skip cv_auto_trans for functions that depend on translate_expr *)
-(* val () = cv_auto_trans translate_base_target_def; *)
 
 Definition translate_target_def:
   (translate_target ctx (JTgt_Base bt) = BaseTarget (translate_base_target ctx bt)) /\
@@ -967,7 +924,6 @@ Termination
   WF_REL_TAC `measure (json_target_size o SND)` >> simp[]
 End
 
-(* val () = cv_auto_trans translate_target_def; *)
 
 (* ===== Iterator Translation ===== *)
 
@@ -988,7 +944,6 @@ Definition json_expr_int_opt_def:
   (json_expr_int_opt _ = NONE)
 End
 
-val () = cv_auto_trans json_expr_int_opt_def;
 
 Definition range_bound_of_args_def:
   (range_bound_of_args [] = NONE) /\
@@ -1003,7 +958,6 @@ Definition range_bound_of_args_def:
      | _ => NONE)
 End
 
-val () = cv_auto_trans range_bound_of_args_def;
 
 Definition folded_bound_of_args_def:
   (folded_bound_of_args [] = NONE) /\
@@ -1018,7 +972,6 @@ Definition folded_bound_of_args_def:
      | _ => NONE)
 End
 
-val () = cv_auto_trans folded_bound_of_args_def;
 
 Definition get_iter_bound_def:
   (get_iter_bound (JIter_Range args _ (SOME n)) = n) /\
@@ -1031,7 +984,6 @@ Definition get_iter_bound_def:
   (get_iter_bound (JIter_Array _ _) = 0)
 End
 
-val () = cv_auto_trans get_iter_bound_def;
 
 Definition translate_iter_def:
   (translate_iter ctx var_ty (JIter_Range [] _ _) =
@@ -1046,7 +998,6 @@ Definition translate_iter_def:
     Array (translate_expr ctx e))
 End
 
-(* val () = cv_auto_trans translate_iter_def; *)
 
 (* ===== Statement Translation ===== *)
 
@@ -1086,7 +1037,6 @@ Termination
   rw[] >> simp[json_stmt_size_def]
 End
 
-(* val () = cv_auto_trans translate_stmt_def; *)
 
 (* ===== Top-level Translation ===== *)
 
@@ -1097,7 +1047,6 @@ Definition translate_visibility_def:
     else Internal
 End
 
-(* val () = cv_auto_trans translate_visibility_def; *)
 
 Definition translate_mutability_def:
   translate_mutability decs =
@@ -1107,13 +1056,11 @@ Definition translate_mutability_def:
     else Nonpayable
 End
 
-(* val () = cv_auto_trans translate_mutability_def; *)
 
 Definition translate_arg_def:
   translate_arg main_src_id (JArg name ty) = (name, translate_type main_src_id ty)
 End
 
-val () = cv_auto_trans translate_arg_def;
 
 Definition translate_arg_ctx_def:
   translate_arg_ctx ctx (JArg name ty) = (name, translate_type_ctx ctx ty)
@@ -1135,7 +1082,6 @@ Definition translate_interface_func_ctx_def:
      translate_mutability decs) : interface_func
 End
 
-(* val () = cv_auto_trans translate_interface_func_def; *)
 
 Definition translate_args_with_types_def:
   translate_args_with_types main_src_id args tys =
@@ -1147,7 +1093,6 @@ Definition translate_args_with_types_def:
     | _ => MAP (translate_arg main_src_id) args
 End
 
-val () = cv_auto_trans translate_args_with_types_def;
 
 Definition translate_args_with_types_ctx_def:
   translate_args_with_types_ctx all_import_maps ctx args tys =
@@ -1167,7 +1112,6 @@ Termination
   WF_REL_TAC `measure (json_value_type_size o SND)` >> simp[]
 End
 
-val () = cv_auto_trans translate_value_type_def;
 
 Definition translate_value_type_ctx_def:
   (translate_value_type_ctx ctx (JVT_Type ty) = Type (translate_type_ctx ctx ty)) ∧
@@ -1188,7 +1132,6 @@ Definition translate_var_mutability_def:
     else Storage
 End
 
-(* val () = cv_auto_trans translate_var_mutability_def; *)
 
 Definition translate_toplevel_def:
   (translate_toplevel all_import_maps expr_ctx type_ctx (JTL_FunctionDef name decs args defaults (JFuncType arg_tys ret_ty) ret_ann body) =
@@ -1241,7 +1184,6 @@ Definition translate_toplevel_def:
   (translate_toplevel all_import_maps expr_ctx type_ctx (JTL_ImplementsDecl _) = NONE)
 End
 
-(* val () = cv_auto_trans translate_toplevel_def; *)
 
 (* ===== Exports Extraction ===== *)
 
@@ -1252,7 +1194,6 @@ Definition build_import_map_def:
     (alias, Num (src_id + &builtin_source_id_offset)) :: build_import_map rest
 End
 
-val () = cv_auto_trans build_import_map_def;
 
 (* Extract import infos from a toplevel (returns list since JTL_Import has list) *)
 Definition get_import_infos_def:
@@ -1260,7 +1201,6 @@ Definition get_import_infos_def:
   get_import_infos _ = []
 End
 
-val () = cv_auto_trans get_import_infos_def;
 
 (* Collect all import infos from toplevels *)
 Definition collect_imports_def:
@@ -1268,7 +1208,6 @@ Definition collect_imports_def:
   collect_imports (t::ts) = get_import_infos t ++ collect_imports ts
 End
 
-val () = cv_auto_trans collect_imports_def;
 
 (* Extract source_ids that a module depends on from its body *)
 Definition get_module_deps_def:
@@ -1276,7 +1215,6 @@ Definition get_module_deps_def:
     MAP (λinfo. case info of JImportInfo _ src_id _ => src_id) (collect_imports body)
 End
 
-val () = cv_auto_trans get_module_deps_def;
 
 (* Check if imports are topologically sorted (dependencies come before dependents).
    seen: list of source_ids already processed
@@ -1307,7 +1245,6 @@ Definition transform_layout_key_def:
         | SOME src_id => (SOME src_id, var_name)
 End
 
-val () = cv_auto_trans transform_layout_key_def;
 
 (* Transform all keys in a storage layout *)
 Definition transform_storage_layout_def:
@@ -1317,7 +1254,6 @@ Definition transform_storage_layout_def:
     transform_storage_layout import_map rest
 End
 
-val () = cv_auto_trans transform_storage_layout_def;
 
 (* Check if a function decl is external *)
 Definition is_external_function_def:
@@ -1610,7 +1546,6 @@ Definition filter_some_def:
   (filter_some (SOME x :: rest) = x :: filter_some rest)
 End
 
-val () = cv_auto_trans filter_some_def;
 
 Definition translate_module_def:
   translate_module all_import_maps (JModule main_src_id toplevels) =
@@ -1641,7 +1576,6 @@ Definition main_toplevels_def:
   main_toplevels (JModule _ toplevels) = toplevels
 End
 
-val () = cv_auto_trans main_toplevels_def;
 
 (* ===== Annotate Storage Slots ===== *)
 
