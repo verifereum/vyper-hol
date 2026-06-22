@@ -9,7 +9,7 @@ Ancestors
   vyperInterpreter vyperState vyperContext vyperStorage vyperTyping
   vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeInvariants vyperTypeValues
   vyperTypeEnv vyperTypeBuiltins vyperTypeExprSoundness
-  vyperTypeEvalSoundness vyperTypeStmtSoundness vyperTypeStatePreservation
+  vyperTypeEvalSoundness vyperTypeStatePreservation
 Libs
   wordsLib
 

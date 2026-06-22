@@ -12,7 +12,7 @@ Ancestors
   list rich_list pred_set arithmetic finite_map option pair
   vyperAST vyperValue vyperTyping vyperState vyperInterpreter vyperContext
   vyperTypeSystem vyperTypeInvariants vyperTypeBindArguments
-  vyperTypeStmtSoundness vyperTypeSoundness
+  vyperTypeSoundness
 Libs
   wordsLib
 
@@ -238,11 +238,10 @@ Proof
            find_var_decl_by_num_def]) >>
   rw[] >>
   gvs[AllCaseEqs(), update_immutable_lookup_same] >>
-  FIRST_PROVE [
-    irule initial_immutables_module_preserves_lookup >>
-    goal_assum (drule_at Any) >>
-    simp[update_immutable_lookup_same],
-    first_x_assum drule >> simp[]]
+  TRY (first_x_assum drule >> simp[] >> NO_TAC) >>
+  irule initial_immutables_module_preserves_lookup >>
+  goal_assum (drule_at Any) >>
+  simp[update_immutable_lookup_same]
 QED
 
 Theorem initial_immutables_contains_decl:
