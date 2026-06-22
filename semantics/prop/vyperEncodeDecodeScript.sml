@@ -802,19 +802,6 @@ Proof
 QED
 
 (* Helper: word_size n ≤ n for positive n *)
-Theorem word_size_le[local]:
-  0 < n ⇒ word_size n ≤ n
-Proof
-  strip_tac >>
-  simp[vfmConstantsTheory.word_size_def] >>
-  `n + 31 ≤ 32 * n` by simp[] >>
-  `(n + 31) DIV 32 ≤ (32 * n) DIV 32` by
-    (irule DIV_LE_MONOTONE >> simp[]) >>
-  `(32 * n) DIV 32 = n` by simp[MULT_TO_DIV] >>
-  gvs[]
-QED
-
-(* Main dynamic bytes roundtrip *)
 Theorem encode_dyn_bytes_roundtrip[local]:
   ∀bs max base storage.
     LENGTH bs ≤ max ∧ max < dimword(:256) ⇒

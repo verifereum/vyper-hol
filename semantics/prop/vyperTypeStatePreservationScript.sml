@@ -1035,18 +1035,6 @@ Definition assign_target_assignable_context_def:
 End
 
 
-Theorem lookup_scopes_find_containing_scope[local]:
-  !scopes id entry.
-    lookup_scopes id scopes = SOME entry ==>
-    ?pre env rest.
-      find_containing_scope id scopes = SOME (pre, env, entry, rest)
-Proof
-  Induct >> simp[lookup_scopes_def, find_containing_scope_def] >>
-  rpt gen_tac >> Cases_on `FLOOKUP h id` >> gvs[] >>
-  strip_tac >> first_x_assum drule >> strip_tac >>
-  qexists_tac `h::pre` >> qexists_tac `env` >> qexists_tac `rest` >> simp[]
-QED
-
 Theorem find_containing_scope_preserved_under_preserves_tv[local]:
   preserves_tv cx st st' ==>
   MAP FDOM st'.scopes = MAP FDOM st.scopes ==>

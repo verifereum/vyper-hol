@@ -3,7 +3,6 @@ Ancestors
   integer alist jsonAST vyperAST
 Libs
   cv_transLib intLib
-  integerTheory[qualified]
 
 
 (* Vyper uses negative source_ids for builtin modules (e.g., -2 for math).

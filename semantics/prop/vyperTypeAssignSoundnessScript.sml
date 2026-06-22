@@ -6,7 +6,7 @@ Theory vyperTypeAssignSoundness
 Ancestors
   list rich_list finite_map option pair arithmetic
   vyperAST vyperValue vyperValueOperation vyperMisc vyperABI
-  vyperInterpreter vyperState vyperContext vyperStorage vyperTyping
+  vyperInterpreter vyperState vyperContext vyperStorage vyperTyping vyperLookup
   vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeInvariants vyperTypeValues
   vyperTypeEnv vyperTypeExprSoundness vyperTypeStatePreservation
   vyperTypeBuiltins vyperExprNoControl
@@ -139,19 +139,6 @@ QED
 (* ===== Dynamic assignability side condition ===== *)
 
 (* assign_target_assignable moved to vyperTypeStatePreservationScript.sml. *)
-
-Theorem lookup_scopes_find_containing_scope:
-  !scopes id entry.
-    lookup_scopes id scopes = SOME entry ==>
-    ?pre env rest.
-      find_containing_scope id scopes = SOME (pre, env, entry, rest)
-Proof
-  Induct >> simp[lookup_scopes_def, find_containing_scope_def] >>
-  rpt gen_tac >> Cases_on `FLOOKUP h id` >> gvs[] >>
-  strip_tac >> first_x_assum drule >> strip_tac >>
-  qexists_tac `h::pre` >> qexists_tac `env` >> qexists_tac `rest` >>
-  simp[]
-QED
 
 Theorem well_typed_target_NameTarget_assignable:
   !env cx st id ty.
