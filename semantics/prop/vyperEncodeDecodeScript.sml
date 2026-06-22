@@ -10,7 +10,7 @@
 
 Theory vyperEncodeDecode
 Ancestors
-  vyperTyping vyperStorage vyperValue vfmState byte list rich_list combin bitstring
+  vyperTyping vyperStorage vyperValue vyperArith vfmState byte list rich_list combin bitstring
   bit sorting arithmetic pair indexedLists vfmConstants
 Libs
   wordsLib dep_rewrite
@@ -941,13 +941,6 @@ Proof
 QED
 
 (* ===== General encode_decode_roundtrip_ok from value_has_type ===== *)
-
-Theorem lt_dimword_256[local]:
-  ∀n k. k < 2 ** n ∧ n ≤ 256 ⇒ k < dimword(:256)
-Proof
-  rpt strip_tac >> simp[wordsTheory.dimword_def] >>
-  irule LESS_LESS_EQ_TRANS >> qexists_tac `2 ** n` >> simp[]
-QED
 
 Theorem int_lt_dimword_256[local]:
   ∀n i. 0 ≤ i ∧ Num i < 2 ** n ∧ n ≤ 256 ⇒ i < &dimword(:256)

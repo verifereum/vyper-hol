@@ -12,7 +12,7 @@ Theory vyperTypeEvalSoundness
 Ancestors
   list rich_list pred_set prim_rec arithmetic finite_map option pair sum
   vyperAST vyperValue vyperValueOperation vyperMisc vyperABI
-  vyperInterpreter vyperState vyperContext vyperStorage vyperTyping
+  vyperInterpreter vyperState vyperContext vyperStorage vyperTyping vyperLookup
   vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeInvariants vyperTypeValues
   vyperTypeEnv vyperTypeEnvExtension vyperTypeEnvPreservation vyperTypeScopePop
   vyperTypeABI vyperTypeBindArguments vyperTypeExprResult vyperTypeStmtResult
@@ -186,15 +186,6 @@ Proof
   drule_then assume_tac materialise_type_error_imp_HashMapRef >>
   gvs[expr_result_typed_def] >>
   metis_tac[well_typed_expr_not_hashmap_place]
-QED
-
-Theorem lookup_scopes_val_SOME[local]:
-  !id sc v.
-    lookup_scopes_val id sc = SOME v <=>
-    ?entry. lookup_scopes id sc = SOME entry /\ entry.value = v
-Proof
-  Induct_on `sc` >> simp[lookup_scopes_val_def, lookup_scopes_def] >>
-  rpt gen_tac >> Cases_on `FLOOKUP h id` >> simp[]
 QED
 
 Theorem eval_expr_exception_return_typed:

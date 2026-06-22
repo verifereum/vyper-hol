@@ -122,13 +122,6 @@ Proof
 QED
 
 (* Helper: bounded_decimal_op never produces TypeError *)
-Theorem bounded_decimal_op_no_type_error[local,simp]:
-  !r msg. bounded_decimal_op r <> INR (TypeError msg)
-Proof
-  simp[bounded_decimal_op_def] >> Cases_on `within_int_bound (Signed 168) r` >> simp[]
-QED
-
-(* Helper: wrapped_int_op never produces TypeError *)
 Theorem wrapped_int_op_no_type_error[local,simp]:
   !u r msg. wrapped_int_op u r <> INR (TypeError msg)
 Proof
