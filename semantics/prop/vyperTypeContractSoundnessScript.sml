@@ -2288,7 +2288,6 @@ Theorem generated_array_getter_expr_materialisable_shape_ambient_aux[local]:
    | INR _ => T)
 Proof
   completeInduct_on `value_type_size (Type vt)` >> rpt strip_tac >>
-  TRY (metis_tac[build_getter_total]) >>
   qpat_x_assum `build_getter _ _ _ _ = _` mp_tac >>
   simp[Once build_getter_def] >>
   Cases_on `is_ArrayT vt` >> simp[] >>
