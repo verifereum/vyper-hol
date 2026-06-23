@@ -34,9 +34,10 @@ jobs:
       - name: Compute holbuild cache keys
         id: cache-key
         run: |
-          base="holbuild-v2-${{ runner.os }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.holbuild.outputs.holbuild-rev }}-${{ hashFiles('holproject.toml') }}"
-          echo "toolchain-key=${base}-toolchain" >> "$GITHUB_OUTPUT"
-          echo "build-key=${base}-build" >> "$GITHUB_OUTPUT"
+          toolchain_base="holbuild-v2-toolchain-${{ runner.os }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.holbuild.outputs.holbuild-rev }}"
+          build_base="holbuild-v2-build-${{ runner.os }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.holbuild.outputs.holbuild-rev }}-${{ hashFiles('holproject.toml') }}"
+          echo "toolchain-key=${toolchain_base}" >> "$GITHUB_OUTPUT"
+          echo "build-key=${build_base}" >> "$GITHUB_OUTPUT"
 
       - name: Restore holbuild global cache
         id: cache-holbuild-global
@@ -44,12 +45,13 @@ jobs:
         with:
           path: ~/.cache/holbuild
           key: ${{ steps.cache-key.outputs.build-key }}
+          restore-keys: |
+            ${{ steps.cache-key.outputs.toolchain-key }}
 
       - name: Build schema-2 HOL toolchain
         run: holbuild buildhol
 
       - name: Save holbuild toolchain cache after buildhol
-        if: steps.cache-holbuild-global.outputs.cache-primary-key != steps.cache-key.outputs.build-key
         uses: actions/cache/save@v5
         continue-on-error: true
         with:
