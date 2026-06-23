@@ -2243,8 +2243,8 @@ Theorem generated_array_getter_expr_no_type_error_ambient_aux[local]:
   eval_expr cx exp (initial_state am [scope]) = (res,st') ==>
   no_type_error_result res
 Proof
-  completeInduct_on `value_type_size (Type vt)` >> rpt strip_tac >>
-  TRY (metis_tac[build_getter_total]) >>
+  completeInduct_on `value_type_size (Type vt)` >>
+  rpt strip_tac >>
   qpat_x_assum `build_getter _ _ _ _ = _` mp_tac >>
   simp[Once build_getter_def] >>
   Cases_on `is_ArrayT vt` >> simp[] >>
