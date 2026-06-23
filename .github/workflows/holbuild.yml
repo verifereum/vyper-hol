@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  HOLBUILD_REF: v0.6.0
+  HOLBUILD_REF: v0.8.0
 
 jobs:
   build:
@@ -34,7 +34,7 @@ jobs:
       - name: Compute holbuild cache keys
         id: cache-key
         run: |
-          base="holbuild-v2-${{ runner.os }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.holbuild.outputs.holbuild-rev }}-${{ steps.holbuild.outputs.hol-source-rev }}-${{ hashFiles('holproject.toml') }}"
+          base="holbuild-v2-${{ runner.os }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.holbuild.outputs.holbuild-rev }}-${{ hashFiles('holproject.toml') }}"
           echo "toolchain-key=${base}-toolchain" >> "$GITHUB_OUTPUT"
           echo "build-key=${base}-build" >> "$GITHUB_OUTPUT"
 
