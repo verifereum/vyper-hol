@@ -12,7 +12,7 @@ Ancestors
   list rich_list pred_set arithmetic finite_map option pair
   vyperAST vyperValue vyperTyping vyperState vyperInterpreter vyperContext
   vyperTypeSystem vyperTypeInvariants vyperTypeBindArguments
-  vyperTypeSoundness
+  vyperTypeExprSoundness vyperTypeStmtSoundness
 Libs
   wordsLib
 
@@ -943,7 +943,7 @@ Theorem callable_entry_no_type_error:
 Proof
   metis_tac[
     callable_entry_establishes_type_soundness_preconditions,
-    typed_stmts_no_type_error]
+    eval_stmts_no_type_error]
 QED
 
 (* Explicit non-vacuity corollary: there exists a concrete configuration

@@ -1,5 +1,10 @@
 (*
- * Public fresh type-soundness theorem surface.
+ * Public type-soundness theorem package.
+ *
+ * This theory is the single type-soundness ancestor intended for top-level
+ * roll-up theories.  It owns short consumer-friendly typed-expression and
+ * typed-statement wrappers, and imports the initial-state and checked-contract
+ * soundness theories that own the larger setup/deployment/call theorems.
  *)
 
 Theory vyperTypeSoundness
@@ -10,7 +15,7 @@ Ancestors
   vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeInvariants vyperTypeValues
   vyperTypeEnv vyperTypeBuiltins vyperTypeExprSoundness
   vyperTypeEvalSoundness vyperTypeStatePreservation vyperTypeStmtSoundness
-  vyperTypeCallSoundness
+  vyperTypeCallSoundness vyperTypeInitialState vyperTypeContractSoundness
 Libs
   wordsLib
 

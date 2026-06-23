@@ -1,5 +1,5 @@
 (*
- * Bridge properties for the whole-contract Vyper type checker.
+ * Checked-contract type-soundness bridge properties.
  *
  * The definitions in vyperTypeContract build a contract_type_artifact from a
  * module set and check that declarations/bodies satisfy the static rules.  This
@@ -7,7 +7,7 @@
  * predicates used by the type-soundness theorems.
  *)
 
-Theory vyperTypeContractProps
+Theory vyperTypeContractSoundness
 Ancestors
   list rich_list arithmetic finite_map alist option pair patricia_casts
   vyperAST vyperValue vyperMisc vyperContext vyperState vyperInterpreter
