@@ -1,10 +1,9 @@
 (*
- * Checked-contract type-soundness bridge properties.
+ * Initial-context consistency for checked contracts.
  *
- * The definitions in vyperTypeContract build a contract_type_artifact from a
- * module set and check that declarations/bodies satisfy the static rules.  This
- * theory proves that successful checking supplies the proof-facing consistency
- * predicates used by the type-soundness theorems.
+ * This theory turns the static maps produced by check_contract into the
+ * env/context consistency facts and transfer helpers needed by checked function
+ * body soundness.
  *)
 
 Theory vyperTypeContractContext
@@ -19,6 +18,8 @@ Libs
   wordsLib
 
 val _ = Parse.hide "body";
+
+(* ===== Env-context bridge for initial contexts ===== *)
 
 Theorem check_contract_env_context_consistent_initial_NONE:
   check_contract F layouts addr mods = SOME art /\
@@ -222,7 +223,7 @@ Proof
            get_module_code_stk, get_module_code_def])
 QED
 
-(* ===== Function-body bridge for checked contracts ===== *)
+(* ===== Static-map transfer helpers ===== *)
 
 Theorem check_contract_toplevel_body_MEM[local]:
   check_contract F layouts addr mods = SOME art /\

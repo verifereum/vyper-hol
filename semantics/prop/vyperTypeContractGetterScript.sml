@@ -1,10 +1,9 @@
 (*
- * Checked-contract type-soundness bridge properties.
+ * Public getter soundness helpers for checked contracts.
  *
- * The definitions in vyperTypeContract build a contract_type_artifact from a
- * module set and check that declarations/bodies satisfy the static rules.  This
- * theory proves that successful checking supplies the proof-facing consistency
- * predicates used by the type-soundness theorems.
+ * This theory proves external lookup/provenance facts and generated scalar,
+ * hashmap, and array public-getter no-TypeError helpers used by the final
+ * checked external-call theorem.
  *)
 
 Theory vyperTypeContractGetter
@@ -131,7 +130,7 @@ Proof
      simp[artifact_env_def]) >>
   gvs[]
 QED
-(* ===== Top-level checked call_external no-TypeError theorem ===== *)
+(* ===== Scalar public getter helpers ===== *)
 
 Theorem checked_scalar_public_getter_eval_no_type_error:
   check_contract F am.layouts tx.target mods = SOME art /\
@@ -636,6 +635,8 @@ Proof
   qexistsl [`args`,`vals`] >> simp[] >>
   metis_tac[]
 QED
+
+(* ===== HashMap public getter helpers ===== *)
 
 Theorem evaluate_subscript_hashmap_getter_error_not_TypeError[local]:
   !vt.
@@ -1262,6 +1263,8 @@ Proof
   Cases_on `ALOOKUP x src` >> gvs[] >>
   metis_tac[]
 QED
+
+(* ===== Array public getter helpers ===== *)
 
 Theorem checked_public_array_TopLevelName_indexable_carrier[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
@@ -1992,66 +1995,6 @@ Proof
   >- (drule_all_then assume_tac generated_array_subscript_step_ArrayRef_typed_carrier >> gvs[]) >>
   drule_all_then assume_tac generated_array_subscript_step_ArrayRef_typed_carrier >> Cases_on `res` >> gvs[]
 QED
-Theorem build_getter_recursive_base_expr_type_NoneTV_probe[local]:
-  evaluate_type tenv (expr_type (Subscript NoneT e idx)) = SOME NoneTV
-Proof
-  simp[expr_type_def, evaluate_type_def]
-QED
-
-Theorem generated_outer_subscript_uses_NoneTV_probe[local]:
-  eval_expr cx (Subscript NoneT e idx1) st = (INL tvl,st1) /\
-  eval_expr cx idx2 st1 = (INL (Value v),st2) ==>
-  eval_expr cx (Subscript NoneT (Subscript NoneT e idx1) idx2) st =
-    (do
-       check_array_bounds cx tvl v;
-       res <- lift_sum (evaluate_subscript (get_tenv cx) NoneTV tvl v);
-       case res of
-       | INL v => return v
-       | INR (is_transient,slot,tv) =>
-           do v <- read_storage_slot cx is_transient slot tv; return (Value v) od
-     od) st2
-Proof
-  rpt strip_tac >>
-  simp[Once evaluate_def, bind_def, return_def, raise_def,
-       lift_option_type_def, expr_type_def, evaluate_type_def]
-QED
-
-Theorem evaluate_subscript_NoneTV_Value_ArrayV_result_probe[local]:
-  evaluate_subscript tenv NoneTV (Value (ArrayV av)) (IntV i) =
-    (case array_index NoneTV av i of
-     | SOME v => INL (INL (Value v))
-     | NONE => INR (RuntimeError "subscript array_index"))
-Proof
-  simp[evaluate_subscript_def]
-QED
-
-Theorem evaluate_subscript_NoneTV_Value_ArrayV_error_not_TypeError_probe[local]:
-  evaluate_subscript tenv NoneTV (Value (ArrayV av)) (IntV i) = INR err ==>
-  !msg. err <> TypeError msg
-Proof
-  rw[evaluate_subscript_def, AllCaseEqs()]
-QED
-
-Theorem evaluate_subscript_NoneTV_ArrayRef_result_probe[local]:
-  evaluate_subscript tenv NoneTV (ArrayRef is_transient base_slot elem_tv bd) (IntV i) =
-    (if 0 <= i /\ Num i < bound_length bd then
-       let elem_offset = (case bd of Fixed _ => 0 | Dynamic _ => 1) in
-       let slot = base_slot + n2w (elem_offset + Num i * type_slot_size elem_tv) in
-       case elem_tv of
-       | ArrayTV inner_tv inner_bd => INL (INL (ArrayRef is_transient slot inner_tv inner_bd))
-       | _ => INL (INR (is_transient,slot,elem_tv))
-     else INR (RuntimeError "subscript array out of bounds"))
-Proof
-  rw[evaluate_subscript_def]
-QED
-
-Theorem evaluate_subscript_NoneTV_ArrayRef_error_not_TypeError_probe[local]:
-  evaluate_subscript tenv NoneTV (ArrayRef is_transient base_slot elem_tv bd) (IntV i) = INR err ==>
-  !msg. err <> TypeError msg
-Proof
-  rw[evaluate_subscript_def, AllCaseEqs(), LET_THM]
-QED
-
 Theorem Subscript_NoneTV_Value_ArrayV_no_TypeError[local]:
   (do
      check_array_bounds cx (Value (ArrayV av)) (IntV i);

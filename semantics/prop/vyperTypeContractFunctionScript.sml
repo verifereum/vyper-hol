@@ -1,10 +1,9 @@
 (*
- * Checked-contract type-soundness bridge properties.
+ * Checked function-body soundness bridges.
  *
- * The definitions in vyperTypeContract build a contract_type_artifact from a
- * module set and check that declarations/bodies satisfy the static rules.  This
- * theory proves that successful checking supplies the proof-facing consistency
- * predicates used by the type-soundness theorems.
+ * This theory packages the static-map/context facts from check_contract into
+ * function-body typing premises and selected explicit-external-entry
+ * no-TypeError results.
  *)
 
 Theory vyperTypeContractFunction
@@ -19,6 +18,8 @@ Libs
   wordsLib
 
 val _ = Parse.hide "body";
+
+(* ===== Function-body bridge for checked contracts ===== *)
 
 Definition static_maps_transfer_env_def:
   static_maps_transfer_env env1 env2 <=>

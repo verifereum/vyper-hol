@@ -22,7 +22,7 @@ Ancestors
 Libs
   wordsLib markerLib intLib
 
-(* ===== Exception/result typing ===== *)
+(* ===== Generic exception/result typing helpers ===== *)
 
 Theorem lift_option_type_INL_eq[local]:
   lift_option_type opt msg st = (INL v,st') <=> opt = SOME v /\ st' = st
@@ -1238,11 +1238,12 @@ Proof
   qexists_tac `ret_ty` >> qexists_tac `body_stmts` >> simp[]
 QED
 
-(* ===== Statement soundness ===== *)
+(* ===== Mutual theorem skeleton and statement/target cases ===== *)
 
-(* TOP-LEVEL WORKHORSE: mutual no-TypeError proof for statements, statement
- * lists, and for-loops.  This follows the evaluator recursion and is the
- * intended final shape for removing the no-TypeError cheats. *)
+(* TOP-LEVEL WORKHORSE: mutual type-soundness proof for statements, statement
+ * lists, iterators, targets, and expressions.  The main theorem uses
+ * suspend/Resume extensively; keep the theorem, all Resume blocks, and the
+ * Finalise in this theory unless deliberately redesigning the proof. *)
 
 (* ===== Scope-bracket helpers for block statements ===== *)
 
@@ -3461,6 +3462,8 @@ Resume eval_all_type_sound_mutual[Expr_FlagMember]:
 QED
 
 
+(* ===== If-expression helpers and Resume block ===== *)
+
 Theorem evaluate_type_BaseT_BoolT[local]:
   evaluate_type tenv (BaseT BoolT) = SOME (BaseTV BoolT)
 Proof
@@ -3687,6 +3690,8 @@ Resume eval_all_type_sound_mutual[Expr_Literal]:
 QED
 
 
+(* ===== Struct literal helpers and Resume block ===== *)
+
 Theorem well_typed_named_exprs_MAP_SND_stmt[local]:
   !env kes. well_typed_named_exprs env kes ==> well_typed_exprs env (MAP SND kes)
 Proof
@@ -3800,6 +3805,8 @@ Resume eval_all_type_sound_mutual[Expr_StructLit]:
     simp[no_type_error_result_def])
 QED
 
+
+(* ===== Subscript expression helpers and Resume block ===== *)
 
 Theorem subscript_type_ok_evaluate_stmt[local]:
   !ct it rt tenv atv.
@@ -4698,6 +4705,8 @@ Resume eval_all_type_sound_mutual[Expr_Subscript]:
 QED
 
 
+(* ===== Attribute expression helpers and Resume block ===== *)
+
 Theorem struct_has_type_lookup_type_stmt[local]:
   !ftypes fields id field_tv.
     struct_has_type ftypes fields /\ ALOOKUP ftypes id = SOME field_tv ==>
@@ -4802,6 +4811,8 @@ Resume eval_all_type_sound_mutual[Expr_Attribute]:
   gen_tac >> strip_tac >>
   gvs[Once well_typed_expr_def]
 QED
+
+(* ===== Builtin, type-builtin, and pop expression cases ===== *)
 
 Theorem nested_return_value_case[local]:
   ((case (case INL x of INL v => return v | INR e => raise (Error e)) st of
@@ -5134,6 +5145,8 @@ Resume eval_all_type_sound_mutual[Expr_Pop_assign_inr]:
   simp[]
 QED
 
+
+(* ===== Internal call helpers and Resume block ===== *)
 
 Theorem defaults_env_empty_frame_consistent[local]:
   !env_body cx st.
@@ -8700,6 +8713,8 @@ Proof
          evaluate_type_def, bind_apply])
   >- (strip_tac >> gvs[no_type_error_result_def])
 QED
+(* ===== Internal call final placement helper ===== *)
+
 Theorem type_place_expr_Call_IntCall_NONE[local]:
   !env ty src_id_opt fn es drv.
     type_place_expr env (Call ty (IntCall (src_id_opt,fn)) es drv) = NONE
@@ -8755,6 +8770,8 @@ Resume eval_all_type_sound_mutual[Expr_Call_IntCall]:
    asm "body_ih" (fn th => MATCH_ACCEPT_TAC th) ORELSE
    first_assum ACCEPT_TAC)
 QED
+
+(* ===== External and special call Resume blocks ===== *)
 
 Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result]:
   rpt gen_tac >> strip_tac >>

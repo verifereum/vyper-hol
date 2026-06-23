@@ -1,10 +1,9 @@
 (*
- * Checked-contract type-soundness bridge properties.
+ * Static-map consequences of whole-contract type checking.
  *
- * The definitions in vyperTypeContract build a contract_type_artifact from a
- * module set and check that declarations/bodies satisfy the static rules.  This
- * theory proves that successful checking supplies the proof-facing consistency
- * predicates used by the type-soundness theorems.
+ * Successful check_contract/build_contract_type_artifact calls populate the
+ * function-signature, top-level-vtype, bare-global, assignability, and flag
+ * member maps used by later checked-contract soundness proofs.
  *)
 
 Theory vyperTypeContractStaticMaps
@@ -981,10 +980,6 @@ Proof
    metis_tac[find_var_decl_by_num_NONE_Immutable] >>
   metis_tac[find_var_decl_by_num_NONE_Constant]
 QED
-(* The old same-source StructDecl/FlagDecl shadowing probe is intentionally not
-   kept as a theorem: checked contracts now reject such collisions via
-   type_def_keys_toplevel in contract_namespaces_ok. *)
-
 
 Theorem add_toplevel_static_maps_toplevel_vtypes_complete_Variable[local]:
   FLOOKUP (add_toplevel_static_maps F src (VariableDecl vis mut id ty init) art).cta_toplevel_vtypes

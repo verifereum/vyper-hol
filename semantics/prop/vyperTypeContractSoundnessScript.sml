@@ -1,10 +1,8 @@
 (*
- * Checked-contract type-soundness bridge properties.
+ * Final checked-contract type-soundness theorems.
  *
- * The definitions in vyperTypeContract build a contract_type_artifact from a
- * module set and check that declarations/bodies satisfy the static rules.  This
- * theory proves that successful checking supplies the proof-facing consistency
- * predicates used by the type-soundness theorems.
+ * This theory owns the public transaction/runtime-readiness predicates and the
+ * final deployment/readiness and checked external-call no-TypeError theorems.
  *)
 
 Theory vyperTypeContractSoundness
@@ -21,18 +19,7 @@ Libs
 
 val _ = Parse.hide "body";
 
-Theorem TopLevelName_missing_address_immutables_RuntimeError_probe:
-  get_module_code cx src = SOME code /\
-  find_var_decl_by_num (string_to_num id) code = NONE /\
-  ALOOKUP st.immutables cx.txn.target = NONE ==>
-  eval_expr cx (TopLevelName ty (src,id)) st =
-    (INR (Error (RuntimeError "get_address_immutables")), st)
-Proof
-  simp[Once evaluate_def, Once lookup_global_def, bind_def,
-       lift_option_type_def, get_immutables_def, get_address_immutables_def,
-       lift_option_def, return_def, raise_def]
-QED
-
+(* ===== Public transaction and runtime-readiness predicates ===== *)
 
 Definition call_tx_well_typed_def:
   call_tx_well_typed tx <=>
@@ -4280,6 +4267,8 @@ Proof
   metis_tac[]
 QED
 
+
+(* ===== Checked external call no-TypeError ===== *)
 
 Theorem checked_call_external_no_type_error:
   check_contract F am.layouts tx.target mods = SOME art /\
