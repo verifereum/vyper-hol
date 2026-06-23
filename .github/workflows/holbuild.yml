@@ -44,11 +44,6 @@ jobs:
         with:
           path: ~/.cache/holbuild
           key: ${{ steps.cache-key.outputs.build-key }}
-          restore-keys: |
-            ${{ steps.cache-key.outputs.toolchain-key }}
-            holbuild-v2-${{ runner.os }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.holbuild.outputs.holbuild-rev }}-
-            holbuild-v2-${{ runner.os }}-${{ steps.polyml.outputs.polyml-rev }}-
-            holbuild-v2-${{ runner.os }}-
 
       - name: Build schema-2 HOL toolchain
         run: holbuild buildhol
