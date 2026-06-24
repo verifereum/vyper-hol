@@ -14,6 +14,10 @@
  *   gen_inst_simulation     — per-instruction simulation (OK case)
  *   gen_block_simulation    — block-level simulation (all result cases)
  *   gen_fn_simulation       — function-level simulation
+ *
+ * STATUS: These are central open/cheated Venom→Asm simulation targets.
+ * Several helper proof layers exist, but theorem statements/preconditions may
+ * need stabilization before proof repair; see docs/compiler-proof-roadmap.md.
  *)
 
 Theory venomToAsmProps

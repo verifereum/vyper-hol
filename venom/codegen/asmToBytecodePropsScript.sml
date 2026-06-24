@@ -25,6 +25,10 @@
  *   encode_inst_length       - encode_inst produces asm_inst_size bytes
  *   encode_at                - bytes at offset match encode_inst
  *   assemble_parse_correct   - parse_code gives right opname at each position
+ *
+ * STATUS: The top-level asm_bytecode_sim theorem is currently open/cheated.
+ * Known precondition issues around asm calls and EVM context depth are
+ * documented in docs/compiler-proof-drafts-and-counterexamples.md.
  *)
 
 Theory asmToBytecodeProps
