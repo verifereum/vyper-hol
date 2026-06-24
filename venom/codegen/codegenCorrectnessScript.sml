@@ -461,8 +461,7 @@ Theorem codegen_correct:
                 lookup_function name ctx.ctx_functions = SOME efn ⇒
                 entry_fn_no_ret efn) ∧
     codegen ctx fn_eom_map data_seg = SOME bytecode ∧
-    (∀fn inst vs1 vs2 fuel'.
-       MEM fn ctx.ctx_functions ∧
+    (∀inst vs1 vs2 fuel'.
        step_inst fuel' ctx inst vs1 = OK vs2 ⇒
        step_mem_safe <| sa_fn_eom := 0;
                         sa_next_offset := spill_hwm;
