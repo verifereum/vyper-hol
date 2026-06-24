@@ -82,8 +82,8 @@ Theorem asm_bytecode_sim:
                   exc <> Reverted /\
                   asm_evm_rel prog as' es'))
 Proof
-  (* FALSE AS STATED. Missing preconditions (counterexamples in
-     counterexamplesScript.sml, Counterexample 6):
+  (* FALSE AS STATED. Missing preconditions (see
+     docs/compiler-proof-drafts-and-counterexamples.md, asm_bytecode_sim):
      1. no_asm_calls prog
         — pipeline obligation: codegen never emits CALL/CREATE/etc.
           asm uses single-context model; EVM pushes new contexts.
