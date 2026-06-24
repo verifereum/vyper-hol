@@ -122,13 +122,6 @@ Proof
 QED
 
 (* Helper: bounded_decimal_op never produces TypeError *)
-Theorem bounded_decimal_op_no_type_error[local,simp]:
-  !r msg. bounded_decimal_op r <> INR (TypeError msg)
-Proof
-  simp[bounded_decimal_op_def] >> Cases_on `within_int_bound (Signed 168) r` >> simp[]
-QED
-
-(* Helper: wrapped_int_op never produces TypeError *)
 Theorem wrapped_int_op_no_type_error[local,simp]:
   !u r msg. wrapped_int_op u r <> INR (TypeError msg)
 Proof
@@ -3479,28 +3472,9 @@ Finalise well_typed_type_builtin_success_type
 
 (* ===== Calls / special targets ===== *)
 
-(* TODO: move *)
-Theorem word_size_le:
-  0 < n ==> word_size n ≤ n
-Proof
-  strip_tac >>
-  simp[vfmConstantsTheory.word_size_def] >>
-  `n + 31 ≤ 32 * n` by simp[] >>
-  `(n + 31) DIV 32 ≤ (32 * n) DIV 32` by
-    (irule DIV_LE_MONOTONE >> simp[]) >>
-  `(32 * n) DIV 32 = n` by simp[MULT_TO_DIV] >>
-  gvs[]
-QED
-
-Theorem word_size_not_lt_self:
-  0 < n ∧ ¬(word_size n < n) ==> n = 1
-Proof
-  rw[vfmConstantsTheory.word_size_def] >>
-  Cases_on `n` >> gvs[] >>
-  Cases_on `n'` >> gvs[arithmeticTheory.DIV_LT_X] >>
-  decide_tac
-QED
-
+(* TODO(cleanup): word_size arithmetic facts are general VFM/word-size support
+   lemmas and should move to a shared arithmetic/support theory when consumers
+   are reorganized. *)
 Theorem raw_call_return_type_well_formed:
   flags.rcf_max_outsize < dimword(:256) ==>
   well_formed_type tenv (raw_call_return_type flags)

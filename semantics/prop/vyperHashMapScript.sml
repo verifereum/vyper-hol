@@ -27,9 +27,9 @@
 Theory vyperHashMap
 Ancestors
   vyperHashMapStorage vyperLookupStorage vyperState vyperArith
-  vyperStorageBackend vyperInterpreter
+  vyperStorageBackend vyperInterpreter words integer integer_word
 Libs
-  wordsLib wordsTheory integerTheory integer_wordTheory
+  wordsLib
 
 (* ===== Ref-level: indexing ===== *)
 

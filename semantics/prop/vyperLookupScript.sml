@@ -139,6 +139,19 @@ Proof
   rpt gen_tac >> Cases_on `FLOOKUP h id` >> simp[]
 QED
 
+Theorem lookup_scopes_find_containing_scope:
+  !scopes id entry.
+    lookup_scopes id scopes = SOME entry ==>
+    ?pre env rest.
+      find_containing_scope id scopes = SOME (pre, env, entry, rest)
+Proof
+  Induct >> simp[lookup_scopes_def, find_containing_scope_def] >>
+  rpt gen_tac >> Cases_on `FLOOKUP h id` >> gvs[] >>
+  strip_tac >> first_x_assum drule >> strip_tac >>
+  qexists_tac `h::pre` >> qexists_tac `env` >> qexists_tac `rest` >>
+  simp[]
+QED
+
 Theorem find_containing_scope_none_lookup_scopes_none:
   ∀id sc. find_containing_scope id sc = NONE ⇒ lookup_scopes id sc = NONE
 Proof
@@ -493,7 +506,9 @@ Proof
 QED
 
 (* ===== assign_target properties ===== *)
-(* TODO: refactor proofs and move to vyperAssignTarget *)
+(* TODO(cleanup): these reusable assign_target facts should live in
+   vyperAssignTarget; they remain here for now to avoid changing theorem
+   dependencies while preserving logical content. *)
 
 Theorem assign_target_scoped_var_implies_var_assignable:
   ∀cx st n sbs ao.

@@ -766,7 +766,9 @@ Theorem assign_operation_CASE_rator =
     (Option.valOf (TypeBase.read {Thy="vyperState",Tyop="assign_operation"}));
 
 Definition assign_subscripts_def:
-  assign_subscripts tv a [] (Replace v) = INL v (* TODO: cast to type of a *) ∧
+  (* TODO(semantic-limitation): replacement currently trusts callers/type
+     checks to provide a value castable to the target type. *)
+  assign_subscripts tv a [] (Replace v) = INL v ∧
   assign_subscripts tv a [] (Update ty bop v) =
     (let u = case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0 in
        evaluate_binop u tv bop a v) ∧

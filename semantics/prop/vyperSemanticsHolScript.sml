@@ -8,7 +8,6 @@ Ancestors
   vyperLookupStorageScopes
   vyperBareGlobalName
   vyperTypeSoundness
-  vyperTypeInitialState
   vyperUpdateTarget
   vyperHashMap
   vyperStorageFrame

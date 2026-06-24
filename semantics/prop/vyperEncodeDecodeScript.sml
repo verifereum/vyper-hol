@@ -10,7 +10,7 @@
 
 Theory vyperEncodeDecode
 Ancestors
-  vyperTyping vyperStorage vyperValue vfmState byte list rich_list combin bitstring
+  vyperTyping vyperStorage vyperValue vyperArith vfmState byte list rich_list combin bitstring
   bit sorting arithmetic pair indexedLists vfmConstants
 Libs
   wordsLib dep_rewrite
@@ -802,19 +802,6 @@ Proof
 QED
 
 (* Helper: word_size n ≤ n for positive n *)
-Theorem word_size_le[local]:
-  0 < n ⇒ word_size n ≤ n
-Proof
-  strip_tac >>
-  simp[vfmConstantsTheory.word_size_def] >>
-  `n + 31 ≤ 32 * n` by simp[] >>
-  `(n + 31) DIV 32 ≤ (32 * n) DIV 32` by
-    (irule DIV_LE_MONOTONE >> simp[]) >>
-  `(32 * n) DIV 32 = n` by simp[MULT_TO_DIV] >>
-  gvs[]
-QED
-
-(* Main dynamic bytes roundtrip *)
 Theorem encode_dyn_bytes_roundtrip[local]:
   ∀bs max base storage.
     LENGTH bs ≤ max ∧ max < dimword(:256) ⇒
@@ -941,13 +928,6 @@ Proof
 QED
 
 (* ===== General encode_decode_roundtrip_ok from value_has_type ===== *)
-
-Theorem lt_dimword_256[local]:
-  ∀n k. k < 2 ** n ∧ n ≤ 256 ⇒ k < dimword(:256)
-Proof
-  rpt strip_tac >> simp[wordsTheory.dimword_def] >>
-  irule LESS_LESS_EQ_TRANS >> qexists_tac `2 ** n` >> simp[]
-QED
 
 Theorem int_lt_dimword_256[local]:
   ∀n i. 0 ≤ i ∧ Num i < 2 ** n ∧ n ≤ 256 ⇒ i < &dimword(:256)

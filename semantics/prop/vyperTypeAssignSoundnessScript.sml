@@ -6,7 +6,7 @@ Theory vyperTypeAssignSoundness
 Ancestors
   list rich_list finite_map option pair arithmetic
   vyperAST vyperValue vyperValueOperation vyperMisc vyperABI
-  vyperInterpreter vyperState vyperContext vyperStorage vyperTyping
+  vyperInterpreter vyperState vyperContext vyperStorage vyperTyping vyperLookup
   vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeInvariants vyperTypeValues
   vyperTypeEnv vyperTypeExprSoundness vyperTypeStatePreservation
   vyperTypeBuiltins vyperExprNoControl
@@ -52,17 +52,6 @@ Proof
   gvs[update_accounts_def, return_def]
 QED
 
-(* TEMPORARILY CHEATED - moved into fresh assignment helper theory; the direct
-   proof is routine but currently needs a small proof-control cleanup around
-   write_storage_slot/get_storage_backend case splitting.
-Proof attempt preserved:
-Proof
-  rw[write_storage_slot_def, bind_apply, AllCaseEqs()] >> gvs[]
-  >- (Cases_on `encode_value d e` >> gvs[lift_option_def, return_def, raise_def]) >>
-  Cases_on `b` >> gvs[get_storage_backend_def, get_accounts_def,
-    get_transient_storage_def, return_def]
-QED
-*)
 Theorem write_storage_slot_error:
   write_storage_slot a b c d e f = (INR g, h) ==> ?m. g = Error m
 Proof
@@ -150,19 +139,6 @@ QED
 (* ===== Dynamic assignability side condition ===== *)
 
 (* assign_target_assignable moved to vyperTypeStatePreservationScript.sml. *)
-
-Theorem lookup_scopes_find_containing_scope:
-  !scopes id entry.
-    lookup_scopes id scopes = SOME entry ==>
-    ?pre env rest.
-      find_containing_scope id scopes = SOME (pre, env, entry, rest)
-Proof
-  Induct >> simp[lookup_scopes_def, find_containing_scope_def] >>
-  rpt gen_tac >> Cases_on `FLOOKUP h id` >> gvs[] >>
-  strip_tac >> first_x_assum drule >> strip_tac >>
-  qexists_tac `h::pre` >> qexists_tac `env` >> qexists_tac `rest` >>
-  simp[]
-QED
 
 Theorem well_typed_target_NameTarget_assignable:
   !env cx st id ty.
