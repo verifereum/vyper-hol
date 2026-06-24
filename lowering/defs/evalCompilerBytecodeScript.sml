@@ -1,3 +1,11 @@
+(*
+ * Compiler Bytecode Evaluation Fixtures
+ *
+ * STATUS: Regression/evaluation support, not core lowering definitions.
+ * Compares executable compiler output against bytecode fixture files using
+ * EVAL_TAC and evalCompilerBytecodeLib.
+ *)
+
 Theory evalCompilerBytecode
 Ancestors evalCompiler compileVyper concretizeMemLocDefs alist byte integer_word option
 Libs evalCompilerBytecodeLib finite_mapLib computeLib wordsLib
