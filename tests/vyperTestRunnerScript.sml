@@ -4,21 +4,22 @@ Ancestors
 Libs
   cv_transLib wordsLib
 
-(* TODO: move to contractABITheory? *)
+(* TODO(cleanup): move this ABI test-runner representation to contractABITheory
+   or another shared ABI support theory. *)
 
 Datatype:
   abi_function = <|
     name: string
   ; inputs: (string # abi_type) list
   ; outputs: (string # abi_type) list
-  ; mutability: function_mutability (* TODO: not dependent on Vyper *)
+  ; mutability: function_mutability (* TODO(cleanup): not dependent on Vyper. *)
   |>
 End
 
 Datatype:
   abi_entry
   = Function abi_function
-  | Event string (* TODO need any info on event args? *)
+  | Event string (* TODO(test-semantics): determine whether event argument metadata is needed. *)
 End
 
 Datatype:
@@ -221,8 +222,8 @@ Definition run_call_def:
           ; base_fee := 0
           ; prev_randao := 0
           ; origin := ct.sender |>;
-    (* TODO: set static based on ct.static *)
-    (* TODO: set env data somewhere? *)
+    (* TODO(test-semantics): set static-call context based on ct.static. *)
+    (* TODO(test-semantics): thread additional environment data from the trace. *)
   in (call_external am tx, (retTys, (retTypes, tenv)))
 End
 
@@ -245,7 +246,7 @@ Definition do_transfer_def:
     target = lookup_account taddr acc;
     value = ct.value;
     sbal = sender.balance;
-    (* TODO: charge gas too *)
+    (* TODO(test-semantics): charge gas for value transfers. *)
   in
     if value ≤ sbal then
       INL $
@@ -309,7 +310,7 @@ Definition run_trace_def:
         call_res = FST cr;
         am = SND call_res in
        case FST call_res
-       of (* TODO: maybe AssertException is ok though? *)
+       of (* TODO(test-semantics): decide whether AssertException should satisfy expected failure traces. *)
        | INR ex => if IS_NONE ct.expectedOutput then INL am
                    else INR ex
        | INL v =>

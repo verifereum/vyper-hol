@@ -1276,4 +1276,5 @@ Proof
   irule abi_avs_fixed_array_bound >> simp[]
 QED
 
-(* TODO: AbiEncode result typing needs a static encoded-size bound in the type system. *)
+(* TODO(semantic-limitation): AbiEncode result typing needs a static
+   encoded-size bound in the type system. *)

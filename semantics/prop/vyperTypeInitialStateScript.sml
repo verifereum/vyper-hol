@@ -12,7 +12,7 @@ Ancestors
   list rich_list pred_set arithmetic finite_map option pair
   vyperAST vyperValue vyperTyping vyperState vyperInterpreter vyperContext
   vyperTypeSystem vyperTypeInvariants vyperTypeBindArguments
-  vyperTypeStmtSoundness vyperTypeSoundness
+  vyperTypeExprSoundness vyperTypeStmtSoundness
 Libs
   wordsLib
 
@@ -238,11 +238,10 @@ Proof
            find_var_decl_by_num_def]) >>
   rw[] >>
   gvs[AllCaseEqs(), update_immutable_lookup_same] >>
-  FIRST_PROVE [
-    irule initial_immutables_module_preserves_lookup >>
-    goal_assum (drule_at Any) >>
-    simp[update_immutable_lookup_same],
-    first_x_assum drule >> simp[]]
+  TRY (first_x_assum drule >> simp[] >> NO_TAC) >>
+  irule initial_immutables_module_preserves_lookup >>
+  goal_assum (drule_at Any) >>
+  simp[update_immutable_lookup_same]
 QED
 
 Theorem initial_immutables_contains_decl:
@@ -944,7 +943,7 @@ Theorem callable_entry_no_type_error:
 Proof
   metis_tac[
     callable_entry_establishes_type_soundness_preconditions,
-    typed_stmts_no_type_error]
+    eval_stmts_no_type_error]
 QED
 
 (* Explicit non-vacuity corollary: there exists a concrete configuration
