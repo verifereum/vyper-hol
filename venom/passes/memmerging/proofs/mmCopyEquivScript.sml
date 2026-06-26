@@ -6,7 +6,6 @@
  * bulk copy, under appropriate conditions.
  *
  * TOP-LEVEL:
- *   word_bytes_roundtrip      — word_to_bytes ∘ word_of_bytes = id (len 32)
  *   mload_mstore_is_mcopy     — mstore dst (mload src s) ≡ mcopy dst src 32
  *   write_mem_append          — two adjacent writes = one combined write
  *   mcopy_merge               — mcopy d₂ s₂ 32 ∘ mcopy d₁ s₁ 32 = mcopy d s 64
@@ -15,43 +14,13 @@
 
 Theory mmCopyEquiv
 Ancestors
-  mmCopy mmInterval venomState venomExecSemantics
+  mmCopy mmInterval venomState venomExecSemantics venomMemProps
   byte words fcp list rich_list arithmetic
-
-(* ===== dimindex(:256) helpers ===== *)
-
-Theorem dimindex_256[simp]:
-  dimindex(:256) = 256
-Proof
-  simp[index_bit0, dimindex_128, finite_bit0, finite_128, index_one, finite_one]
-QED
-
-Theorem dimword_256_val:
-  dimword(:256) =
-    115792089237316195423570985008687907853269984665640564039457584007913129639936
-Proof
-  simp[dimword_def]
-QED
 
 (* ===== Word ↔ Bytes roundtrip ===== *)
 
-(* Key property: converting 32 bytes to a word and back is identity.
-   This underlies the equivalence between mload+mstore and mcopy.
-   Uses get_byte_word_of_bytes_be + first_byte_at_0w to show
-   each byte of the output matches the input. *)
-Theorem word_bytes_roundtrip:
-  !bytes.
-    LENGTH bytes = 32 ==>
-    word_to_bytes (word_of_bytes T (0w:bytes32) bytes) T = bytes
-Proof
-  rw[LIST_EQ_REWRITE, LENGTH_word_to_bytes]
-  >> fs[]
-  >> rw[word_to_bytes_def]
-  >> simp[EL_word_to_bytes_aux]
-  >> simp[get_byte_word_of_bytes_be]
-  >> simp[first_byte_at_0w, dimword_256_val]
-QED
-
+(* The 32-byte word/byte roundtrip used below is the :256 instance of the
+   general word_bytes_roundtrip theorem from venomMemProps. *)
 (* ===== mload+mstore = mcopy 32 ===== *)
 
 (* A single mload followed by mstore is equivalent to mcopy of 32 bytes.
@@ -74,7 +43,7 @@ Theorem mload_mstore_eq_mcopy_state:
 Proof
   rw[mstore_def, mload_def, mcopy_def, write_memory_with_expansion_def]
   >> simp[LENGTH_TAKE, LENGTH_DROP, LENGTH_APPEND]
-  >> simp[word_bytes_roundtrip]
+  >> simp[word_bytes_roundtrip_256]
 QED
 
 Theorem mload_mstore_is_mcopy:
@@ -370,7 +339,7 @@ Theorem calldataload_mstore_eq_calldatacopy:
 Proof
   rw[mstore_def, write_memory_with_expansion_def]
   >> simp[LENGTH_TAKE, LENGTH_DROP, LENGTH_APPEND]
-  >> simp[word_bytes_roundtrip]
+  >> simp[word_bytes_roundtrip_256]
 QED
 
 (* dload+mstore = dloadbytes 32.
@@ -386,7 +355,7 @@ Theorem dload_mstore_eq_dloadbytes:
 Proof
   rw[mstore_def, write_memory_with_expansion_def]
   >> simp[LENGTH_TAKE, LENGTH_DROP, LENGTH_APPEND]
-  >> simp[word_bytes_roundtrip]
+  >> simp[word_bytes_roundtrip_256]
 QED
 
 (* ===== Zero word helper ===== *)

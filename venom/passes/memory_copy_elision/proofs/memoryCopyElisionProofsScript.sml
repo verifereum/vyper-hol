@@ -4907,36 +4907,6 @@ QED
 
 (* ===== Stage 2 helpers: store idempotency ===== *)
 
-(* word_to_bytes ∘ word_of_bytes roundtrip for 32-byte words.
-   Adapted from mmCopyEquivScript. *)
-Triviality dimindex_256[local]:
-  dimindex(:256) = 256
-Proof
-  simp[fcpTheory.index_bit0, dimindex_128,
-       fcpTheory.finite_bit0, finite_128,
-       fcpTheory.index_one, fcpTheory.finite_one]
-QED
-
-Triviality dimword_256_val[local]:
-  dimword(:256) =
-    115792089237316195423570985008687907853269984665640564039457584007913129639936
-Proof
-  simp[dimword_def, dimindex_256]
-QED
-
-Triviality word_bytes_roundtrip_32[local]:
-  !bytes.
-    LENGTH bytes = 32 ==>
-    word_to_bytes (word_of_bytes T (0w:bytes32) bytes) T = bytes
-Proof
-  rw[LIST_EQ_REWRITE, byteTheory.LENGTH_word_to_bytes, dimindex_256] >>
-  fs[] >>
-  rw[byteTheory.word_to_bytes_def, dimindex_256] >>
-  simp[byteTheory.EL_word_to_bytes_aux, dimindex_256] >>
-  simp[byteTheory.get_byte_word_of_bytes_be, dimindex_256] >>
-  simp[byteTheory.first_byte_at_0w, dimword_256_val]
-QED
-
 (* sstore(key, sload(key, s), s) = s *)
 Triviality sstore_sload_id[local]:
   !key s. sstore key (sload key s) s = s
@@ -4981,7 +4951,7 @@ Proof
   (* Bytes roundtrip *)
   `LENGTH (TAKE 32 (DROP offset s.vs_memory)) = 32` by
     simp[LENGTH_TAKE] >>
-  simp[word_bytes_roundtrip_32] >>
+  simp[word_bytes_roundtrip_256] >>
   (* Splice identity: TAKE n l ++ TAKE 32 (DROP n l) ++ DROP (n+32) l = l *)
   `DROP offset s.vs_memory =
    TAKE 32 (DROP offset s.vs_memory) ++ DROP 32 (DROP offset s.vs_memory)` by
