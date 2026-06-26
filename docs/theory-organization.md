@@ -88,11 +88,31 @@ clear and unambiguous.
 
 Technical facts should continue to come from the relevant `*Proofs` theory.
 
-## Current model
+## Current cleanup status
 
-`cfgTransformProps` / `cfgTransformProofs` is the current model cleanup:
+`cfgTransformProps` / `cfgTransformProofs` is the completed model cleanup:
 
 - `cfgTransformProps` owns the stable public facts about CFG transformation
   operations.
 - `cfgTransformProofs` contains technical extras and depends on
   `cfgTransformProps` rather than duplicating its public theorem names.
+
+`venomMemProps` / `venomMemProofs` is partially migrated:
+
+- `venomMemProps` is the public interface for stable memory facts and no longer
+  uses exact `ACCEPT_TAC` re-export wrappers.
+- Consumers touched during cleanup now use `venomMemProps` for public alloca and
+  memory facts rather than referring directly to `venomMemProofsTheory.*_proof`
+  names.
+- Common bytes32 facts such as `dimindex_256` and
+  `word_bytes_roundtrip_256` are consolidated in `venomMemProps`; several
+  pass-local duplicates have been deleted.
+- `venomMemProofs` still contains transitional `_proof` source theorems used to
+  derive the public `venomMemProps` interface.  Future cleanup should move proof
+  bodies or expose more precisely named technical helpers so these duplicate
+  public concepts can be removed.
+
+When a theorem looks more general than its current theory, first look for an
+existing owner before introducing a new common/shared theory.  Some generally
+useful HOL/library facts may ultimately be better upstreamed or kept temporarily
+in an existing `Misc`/props-style theory rather than causing theory proliferation.
