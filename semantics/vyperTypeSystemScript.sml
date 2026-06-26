@@ -396,6 +396,7 @@ Definition valid_conversion_def:
   valid_conversion (BaseT (IntT _)) (BaseT AddressT) = T /\
   valid_conversion (FlagT _) (BaseT (IntT _)) = T /\
   valid_conversion (FlagT _) (BaseT (UintT _)) = T /\
+  valid_conversion (FlagT _) (BaseT (BytesT bd)) = (bd = Fixed 32) /\
   valid_conversion (BaseT (UintT _)) (FlagT _) = T /\
   valid_conversion (BaseT (IntT _)) (FlagT _) = T /\
   valid_conversion (BaseT (UintT _)) (BaseT (BytesT _)) = T /\
