@@ -13,6 +13,11 @@
  *   alloca_inv_run_block              — alloca_inv preserved by run_block
  *   alloca_inv_run_blocks             — alloca_inv preserved by run_blocks
  *   alloca_inv_run_function           — alloca_inv preserved by run_function
+ *   step_inst_base_preserves_allocas — step_inst_base preserves alloca map
+ *   step_inst_base_preserves_alloca_next — step_inst_base preserves next alloca offset
+ *   step_inst_base_preserves_alloca_state — step_inst_base preserves alloca map+next
+ *   step_inst_preserves_alloca_state — step_inst preserves alloca map+next
+ *   step_inst_non_alloca_preserves_allocas — non-ALLOCA step_inst preserves alloca map
  *   allocas_non_overlapping_step_inst — preserved by step_inst (needs alloca_inv)
  *   allocas_non_overlapping_run_block — preserved by run_block (needs alloca_inv)
  *   allocas_non_overlapping_exec_block — preserved by exec_block
@@ -27,7 +32,7 @@
 
 Theory venomMemProps
 Ancestors
-  venomMemDefs venomMemProofs venomExecSemantics divides
+  venomMemDefs venomMemProofs venomExecSemantics venomInst venomEffects divides
 Libs
   wordsLib
 
@@ -105,6 +110,76 @@ Theorem step_inst_base_preserves_allocas:
     s'.vs_allocas = s.vs_allocas
 Proof
   metis_tac[venomMemProofsTheory.step_inst_base_preserves_allocas]
+QED
+
+Theorem step_inst_base_preserves_alloca_next:
+  ∀inst s s'.
+    (step_inst_base inst s = OK s' ∨
+     step_inst_base inst s = Halt s' ∨
+     (∃a. step_inst_base inst s = Abort a s') ∨
+     (∃v. step_inst_base inst s = IntRet v s')) ∧
+    inst.inst_opcode ≠ INVOKE ∧
+    inst.inst_opcode ≠ ALLOCA ⇒
+    s'.vs_alloca_next = s.vs_alloca_next
+Proof
+  metis_tac[venomMemProofsTheory.step_inst_base_preserves_alloca_next]
+QED
+
+Theorem step_inst_base_preserves_alloca_state:
+  ∀inst s s'.
+    step_inst_base inst s = OK s' ∧
+    ¬is_terminator inst.inst_opcode ∧
+    ¬is_alloca_op inst.inst_opcode ⇒
+    s'.vs_allocas = s.vs_allocas ∧
+    s'.vs_alloca_next = s.vs_alloca_next
+Proof
+  rpt gen_tac >> strip_tac >>
+  `inst.inst_opcode ≠ INVOKE` by (
+    CCONTR_TAC >> gvs[] >>
+    qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
+    ASM_REWRITE_TAC[step_inst_base_def] >> simp[]) >>
+  `inst.inst_opcode ≠ ALLOCA` by (CCONTR_TAC >> gvs[is_alloca_op_def]) >>
+  metis_tac[step_inst_base_preserves_allocas,
+            step_inst_base_preserves_alloca_next]
+QED
+
+Theorem step_inst_preserves_alloca_state:
+  ∀fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' ∧
+    ¬is_terminator inst.inst_opcode ∧
+    ¬is_alloca_op inst.inst_opcode ∧
+    ¬is_ext_call_op inst.inst_opcode ∧
+    inst.inst_opcode ≠ INVOKE ⇒
+    s'.vs_allocas = s.vs_allocas ∧
+    s'.vs_alloca_next = s.vs_alloca_next
+Proof
+  rpt strip_tac >>
+  `step_inst_base inst s = OK s'` by gvs[step_inst_non_invoke] >>
+  metis_tac[step_inst_base_preserves_alloca_state]
+QED
+
+Theorem step_inst_non_alloca_preserves_allocas:
+  ∀fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' ∧
+    ¬is_alloca_op inst.inst_opcode ∧
+    inst.inst_opcode ≠ INVOKE ⇒
+    s'.vs_allocas = s.vs_allocas
+Proof
+  rpt strip_tac >>
+  `inst.inst_opcode ≠ ALLOCA` by (Cases_on `inst.inst_opcode` >> fs[is_alloca_op_def]) >>
+  `step_inst_base inst s = OK s'` by metis_tac[step_inst_non_invoke] >>
+  metis_tac[step_inst_base_preserves_allocas]
+QED
+
+Theorem step_inst_non_alloca_non_term_preserves_allocas:
+  ∀fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' ∧
+    ¬is_alloca_op inst.inst_opcode ∧
+    ¬is_terminator inst.inst_opcode ∧
+    inst.inst_opcode ≠ INVOKE ⇒
+    s'.vs_allocas = s.vs_allocas
+Proof
+  metis_tac[step_inst_non_alloca_preserves_allocas]
 QED
 
 Theorem allocas_non_overlapping_step_inst:

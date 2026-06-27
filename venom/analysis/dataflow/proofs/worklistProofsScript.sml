@@ -12,7 +12,7 @@
 
 Theory worklistProofs
 Ancestors
-  worklistDefs latticeProofs
+  worklistDefs latticeDefs
 
 (* --- Shared infrastructure for worklist convergence --- *)
 

@@ -1258,24 +1258,6 @@ Proof
   simp[]
 QED
 
-(* allocas preserved by non-ALLOCA non-INVOKE instructions.
-   Proof follows basePtrProofsScript.step_inst_allocas. *)
-Triviality step_preserves_allocas[local]:
-  !fuel ctx inst s s'.
-    step_inst fuel ctx inst s = OK s' /\
-    ~is_alloca_op inst.inst_opcode /\
-    inst.inst_opcode <> INVOKE ==>
-    s'.vs_allocas = s.vs_allocas
-Proof
-  rpt strip_tac >>
-  `inst.inst_opcode <> ALLOCA` by
-    (Cases_on `inst.inst_opcode` >> fs[is_alloca_op_def]) >>
-  `step_inst_base inst s = OK s'` by
-    metis_tac[venomExecSemanticsTheory.step_inst_non_invoke] >>
-  irule venomMemProofsTheory.step_inst_base_preserves_allocas >>
-  qexists_tac `inst` >> simp[]
-QED
-
 (* cf_sound is preserved by DRESTRICT (subset of entries) *)
 Triviality cf_sound_drestrict[local]:
   !bp dfg cfl s keys.
@@ -1433,7 +1415,7 @@ Proof
     >- metis_tac[step_terminator_preserves_fields]
     >> metis_tac[step_plain_preserves_memory]) >>
   `inst.inst_opcode <> INVOKE` by metis_tac[not_invoke_if_no_mem_effect] >>
-  `s'.vs_allocas = s.vs_allocas` by metis_tac[step_preserves_allocas] >>
+  `s'.vs_allocas = s.vs_allocas` by metis_tac[step_inst_non_alloca_preserves_allocas] >>
   `s'.vs_labels = s.vs_labels` by (
     Cases_on `is_terminator inst.inst_opcode`
     >- (imp_res_tac venomExecPropsTheory.step_inst_preserves_labels_always >>
@@ -2322,7 +2304,7 @@ Resume copy_fact_transfer_sound_thm[no_mem_effect]:
   `~is_ext_call_op inst.inst_opcode` by gvs[] >>
   `inst.inst_opcode <> INVOKE` by metis_tac[not_invoke_if_no_mem_effect] >>
   `s'.vs_allocas = s.vs_allocas` by
-    (irule step_preserves_allocas >> metis_tac[]) >>
+    (irule step_inst_non_alloca_preserves_allocas >> metis_tac[]) >>
   (* cf_sound_opt: from cft_case4 *)
   conj_asm1_tac
   >- (irule cft_case4 >> metis_tac[])
@@ -2374,7 +2356,7 @@ QED
 
 Resume copy_fact_transfer_sound_thm[mst_alloca]:
   `s'.vs_allocas = s.vs_allocas` by (
-    mp_tac step_preserves_allocas >>
+    mp_tac step_inst_non_alloca_preserves_allocas >>
     disch_then (qspecl_then [`fuel`,`run_ctx`,`inst`,`s`,`s'`] mp_tac) >>
     gvs[is_alloca_op_def, opcode2num_thm]) >>
   simp[cf_alloca_ok_opt_def, copy_fact_invalidate_def] >>

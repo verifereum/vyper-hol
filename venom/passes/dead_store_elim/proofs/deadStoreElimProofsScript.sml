@@ -302,20 +302,6 @@ Proof
   rpt strip_tac >> simp[tload_def, tstore_def, contract_transient_def, lookup_storage_def, update_storage_def, combinTheory.APPLY_UPDATE_THM]
 QED
 
-(* Non-ALLOCA, non-terminator instructions preserve vs_allocas.
-   Uses step_inst_non_invoke for non-INVOKE case.
-   ALLOCA is the ONLY opcode that modifies vs_allocas in step_inst_base. *)
-Theorem step_non_alloca_non_term_preserves_allocas:
-  !fuel ctx inst s s'.
-    step_inst fuel ctx inst s = OK s' /\
-    ~is_alloca_op inst.inst_opcode /\
-    ~is_terminator inst.inst_opcode /\
-    inst.inst_opcode <> INVOKE ==>
-    s'.vs_allocas = s.vs_allocas
-Proof
-  rpt strip_tac >> `inst.inst_opcode ≠ ALLOCA` by metis_tac[is_alloca_op_def] >> gvs[step_inst_non_invoke] >> irule step_inst_base_preserves_allocas >> qexists `inst` >> simp[] >> disj1_tac >> simp[]
-QED
-
 (* Memory-def opcodes are not ALLOCA operations.
    ALLOCA has empty write_effects, so no effect can be in write_effects ALLOCA,
    which makes is_memory_def_opcode false for ALLOCA. *)
@@ -384,7 +370,7 @@ Proof
   TRY (drule step_preserves_labels >> simp[] >> NO_TAC) >>
   TRY (drule step_preserves_params >> simp[] >> NO_TAC) >>
   TRY (drule step_preserves_prev_hashes >> simp[] >> NO_TAC) >>
-  TRY (drule step_non_alloca_non_term_preserves_allocas >> simp[] >> NO_TAC) >>
+  TRY (drule step_inst_non_alloca_non_term_preserves_allocas >> simp[] >> NO_TAC) >>
   metis_tac[effect_distinct, write_effects_sound_transient, write_effects_sound_memory,
             write_effects_sound_accounts, write_effects_sound_returndata,
             write_effects_sound_log, write_effects_sound_immutables]

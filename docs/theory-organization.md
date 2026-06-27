@@ -112,6 +112,14 @@ Technical facts should continue to come from the relevant `*Proofs` theory.
   bodies or expose more precisely named technical helpers so these duplicate
   public concepts can be removed.
 
+Small proof-only layers have been folded away where they only contained public
+facts and had no independent technical role:
+
+- `memLocProofs` was folded into `memLocProps`.
+- `latticeProofs` was folded into `latticeProps`.
+- `dfIterateProps` now owns public iterate corollaries directly; the remaining
+  `dfIterateProofs` facts are technical orbit/step lemmas used by other proofs.
+
 When a theorem looks more general than its current theory, first look for an
 existing owner before introducing a new common/shared theory.  Some generally
 useful HOL/library facts may ultimately be better upstreamed or kept temporarily
