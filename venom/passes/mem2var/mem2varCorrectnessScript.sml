@@ -5,7 +5,7 @@ Ancestors
   passSimulationDefs passSimulationProps
   stateEquiv
   venomExecSemantics venomState venomWf
-  venomMemDefs venomExecProofs venomInst
+  venomMemDefs venomMemProps venomExecProofs venomInst
   pointerConfinedDefs memLocDefs instIdxIndep
   finite_map list pred_set rich_list
   While
@@ -1090,7 +1090,7 @@ Proof
           impl_tac >- simp[] >>
           DISCH_THEN ACCEPT_TAC)
       >- (mp_tac (Q.SPECL [`fl`, `cx`, `bk`, `sa`, `sa'`]
-            venomMemProofsTheory.alloca_inv_run_block_proof) >>
+            venomMemPropsTheory.alloca_inv_run_block) >>
           impl_tac >- simp[] >>
           DISCH_THEN ACCEPT_TAC)
       >- (mp_tac (Q.SPECL [`fn`, `bk`, `fl`, `cx`, `sa`, `sa'`]

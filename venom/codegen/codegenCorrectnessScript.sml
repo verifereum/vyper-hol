@@ -9,6 +9,10 @@
  *   codegen_correct    — whole-context correctness (run_context vs run)
  *   codegen_fn_correct — per-function correctness (run_blocks vs run)
  *
+ * STATUS: Final codegen correctness theorems are currently open/cheated and
+ * depend on closing/stabilizing Venom→Asm and Asm→EVM simulation layers.
+ * See docs/compiler-proof-roadmap.md.
+ *
  * MEMTOP Exclusion
  * ===============
  * MEMTOP correspondence is excluded: asm/EVM memory may be longer

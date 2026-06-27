@@ -25,6 +25,10 @@
  *   encode_inst_length       - encode_inst produces asm_inst_size bytes
  *   encode_at                - bytes at offset match encode_inst
  *   assemble_parse_correct   - parse_code gives right opname at each position
+ *
+ * STATUS: The top-level asm_bytecode_sim theorem is currently open/cheated.
+ * Known precondition issues around asm calls and EVM context depth are
+ * documented in docs/compiler-proof-drafts-and-counterexamples.md.
  *)
 
 Theory asmToBytecodeProps
@@ -82,8 +86,8 @@ Theorem asm_bytecode_sim:
                   exc <> Reverted /\
                   asm_evm_rel prog as' es'))
 Proof
-  (* FALSE AS STATED. Missing preconditions (counterexamples in
-     counterexamplesScript.sml, Counterexample 6):
+  (* FALSE AS STATED. Missing preconditions (see
+     docs/compiler-proof-drafts-and-counterexamples.md, asm_bytecode_sim):
      1. no_asm_calls prog
         — pipeline obligation: codegen never emits CALL/CREATE/etc.
           asm uses single-context model; EVM pushes new contexts.

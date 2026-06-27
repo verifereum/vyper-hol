@@ -1,3 +1,11 @@
+(*
+ * Compiler Evaluation Fixtures
+ *
+ * STATUS: Regression/evaluation support, not core lowering definitions.
+ * Defines small Vyper AST programs and proves by EVAL_TAC that the executable
+ * compiler produces SOME bytecode. Currently kept build-checked under defs/.
+ *)
+
 Theory evalCompiler
 Ancestors compileVyper concretizeMemLocDefs alist byte integer_word option
 Libs finite_mapLib computeLib wordsLib

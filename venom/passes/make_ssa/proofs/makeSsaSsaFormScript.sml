@@ -435,7 +435,7 @@ Proof
   qspecl_then [`s`, `x with bb_instructions := insts'`, `bbs`] mp_tac
     cfgTransformProofsTheory.ALL_DISTINCT_replace_block >>
   (impl_tac >- gvs[]) >>
-  REWRITE_TAC[cfgTransformProofsTheory.fn_labels_replace_block
+  REWRITE_TAC[cfgTransformPropsTheory.fn_labels_replace_block
     |> Q.SPECL [`s`, `x with bb_instructions := insts'`]
     |> SIMP_RULE std_ss [combinTheory.K_THM]] >>
   strip_tac >>
@@ -443,7 +443,7 @@ Proof
   qspecl_then [`succs`, `rs`, `s`,
     `replace_block s (x with bb_instructions := insts') bbs`] mp_tac
     update_succ_phis_preserves_outputs >>
-  (impl_tac >- gvs[cfgTransformProofsTheory.fn_labels_replace_block]) >>
+  (impl_tac >- gvs[cfgTransformPropsTheory.fn_labels_replace_block]) >>
   strip_tac >>
   (* 4. lookup exists in bbs2 via labels_eq_lookup_exists *)
   qspecl_then [`lbl`,
@@ -505,7 +505,7 @@ Proof
   >- gvs[]
   >- (gvs[] >>
       simp[Abbr `bbs_mid`, update_succ_phis_preserves_labels,
-           cfgTransformProofsTheory.fn_labels_replace_block])
+           cfgTransformPropsTheory.fn_labels_replace_block])
   >> (rpt gen_tac >> simp[dom_tree_labels_def] >> strip_tac >>
       qunabbrev_tac `bbs_mid` >>
       qspecl_then [`s`, `x`, `insts'`, `rs1`,
@@ -703,7 +703,7 @@ Proof
   drule lookup_block_label >> strip_tac >> gvs[] >>
   rpt conj_tac
   >- simp[update_succ_phis_preserves_labels,
-          cfgTransformProofsTheory.fn_labels_replace_block]
+          cfgTransformPropsTheory.fn_labels_replace_block]
   >- (simp[update_succ_phis_preserves_labels] >>
       irule cfgTransformProofsTheory.ALL_DISTINCT_replace_block >> gvs[])
   >- (rpt strip_tac >>
@@ -769,7 +769,7 @@ Proof
   drule lookup_block_label >> strip_tac >> gvs[] >>
   (* Step 1: block exists in replace_block result *)
   qspecl_then [`x.bb_label`, `x with bb_instructions := insts'`, `bbs`]
-    mp_tac cfgTransformProofsTheory.lookup_block_replace_eq >>
+    mp_tac cfgTransformPropsTheory.lookup_block_replace_eq >>
   (impl_tac >- gvs[]) >> strip_tac >>
   (* Step 2: ALL_DISTINCT for replace_block result *)
   qspecl_then [`x.bb_label`, `x with bb_instructions := insts'`, `bbs`]

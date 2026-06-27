@@ -23,7 +23,7 @@ Ancestors
   memoryCopyElisionDefs analysisSimDefs analysisSimProps
   passSimulationDefs passSimulationProps passSharedDefs passSharedProps
   venomWf venomInst venomInstProps venomState venomExecSemantics
-  venomEffects venomMemDefs venomMemProofs
+  venomEffects venomMemDefs venomMemProps venomMemProofs
   stateEquiv stateEquivProps execEquivParamDefs execEquivParamProps
   dfgAnalysisProps dfgDefs dfAnalyzeDefs
   basePtrDefs memLocDefs memAliasDefs memAliasProofs
@@ -1447,13 +1447,6 @@ Proof
 QED
 
 (* ===== Memory write / disjoint read helpers ===== *)
-
-(* dimindex(:256) = 256; needed for word_to_bytes length *)
-Theorem dimindex_256[local,simp]:
-  dimindex(:256) = 256
-Proof
-  ACCEPT_TAC (fcpLib.INDEX_CONV ``dimindex(:256)``)
-QED
 
 (* word_to_bytes of a bytes32 has length 32 *)
 Theorem word_to_bytes32_length[local,simp]:

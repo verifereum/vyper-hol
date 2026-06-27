@@ -1,6 +1,10 @@
 (*
  * Venom Memory Proofs
  *
+ * Workhorse memory proof theory.  Stable public theorem names are presented in
+ * venomMemProps; the `_proof` theorems here are technical sources used to derive
+ * that public interface during the ongoing Props/Proofs cleanup.
+ *
  * TOP-LEVEL:
  *   alloca_inv_empty_proof                    — alloca_inv holds when allocas map is empty
  *   alloca_inv_step_inst_proof                 — step_inst preserves alloca_inv

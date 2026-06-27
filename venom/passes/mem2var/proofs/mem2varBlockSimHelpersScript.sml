@@ -1,7 +1,7 @@
 Theory mem2varBlockSimHelpers
 Ancestors
   mem2varProofs passSharedTransfer passSharedField instIdxIndep
-  venomMemProofs venomExecProofs venomInstProofs
+  venomMemProps venomMemProofs venomExecProofs venomInstProofs
   mem2varDefs
   venomExecSemantics venomState venomWf
   venomInst
@@ -3517,17 +3517,10 @@ QED
 
 (* --- Resume blocks for m2v_nonpromoted_mem_dispatch --- *)
 
-Triviality dimindex_256_local:
-  dimindex (:256) = 256
-Proof
-  rw[fcpTheory.index_bit0, fcpTheory.index_bit1, fcpTheory.index_one,
-     fcpTheory.finite_bit0, fcpTheory.finite_bit1, fcpTheory.finite_one]
-QED
-
 Triviality lt_32_dimword_256:
   32 < dimword (:256)
 Proof
-  simp[wordsTheory.dimword_def, dimindex_256_local]
+  simp[wordsTheory.dimword_def]
 QED
 
 (* Helper tactic: NAS write disjointness after step_inst_base unfold.
@@ -4273,22 +4266,6 @@ Proof
   >- metis_tac[]
   (* sync *)
   >> metis_tac[mstore_preserves]
-QED
-
-Theorem dimindex_256:
-  dimindex (:256) = 256
-Proof
-  rw[dimindex_256_local]
-QED
-
-(* word_to_bytes roundtrip specialized to bytes32 *)
-Theorem word_bytes_roundtrip_256:
-  !bytes. LENGTH bytes = 32 ==>
-    word_to_bytes (word_of_bytes T (0w:bytes32) bytes) T = bytes
-Proof
-  rpt strip_tac >>
-  mp_tac (INST_TYPE [alpha |-> ``:256``] word_bytes_roundtrip_proof) >>
-  simp[dimindex_256, dividesTheory.divides_def]
 QED
 
 (* Return data after mstore roundtrip agrees with original.

@@ -717,5 +717,3 @@ Definition compile_vyper_eval_def:
     | SOME deploy_bytecode =>
       SOME (deploy_bytecode, runtime_bytecode)
 End
-
-val _ = export_theory();

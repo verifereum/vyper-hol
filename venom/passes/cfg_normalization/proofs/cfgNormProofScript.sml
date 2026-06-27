@@ -6,12 +6,12 @@
 
 Theory cfgNormProof
 Ancestors
-  cfgNormBase cfgNormDefs cfgNormSim cfgTransformProofs stateEquiv stateEquivProps
+  cfgNormBase cfgNormDefs cfgNormSim cfgTransformProofs cfgTransformProps stateEquiv stateEquivProps
   venomExecSemantics execEquivProofs venomWf venomExecProps venomInstProps
   venomExecProofs prevBbIndep
 Libs
   cfgNormBaseTheory cfgNormDefsTheory cfgNormSimTheory cfgTransformTheory
-  cfgTransformProofsTheory stateEquivTheory stateEquivPropsTheory
+  cfgTransformProofsTheory cfgTransformPropsTheory stateEquivTheory stateEquivPropsTheory
   venomExecSemanticsTheory venomInstPropsTheory
   venomInstTheory venomStateTheory venomWfTheory venomExecPropsTheory
   venomExecProofsTheory prevBbIndepTheory finite_mapTheory
@@ -644,7 +644,7 @@ Proof
         (subst_label_terminator target_bb.bb_label split_bb.bb_label pred_bb)
         func.fn_blocks) =
    MAP (\b. b.bb_label) func.fn_blocks` by
-    (irule cfgTransformProofsTheory.fn_labels_replace_block >>
+    (irule cfgTransformPropsTheory.fn_labels_replace_block >>
      rw[cfgNormSimTheory.subst_label_terminator_bb_label]) >>
   `MEM target_bb.bb_label (MAP (\b. b.bb_label) func.fn_blocks)` by
     (rw[listTheory.MEM_MAP] >> qexists_tac `target_bb` >> fs[]) >>

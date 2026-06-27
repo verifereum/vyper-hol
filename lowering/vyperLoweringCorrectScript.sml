@@ -17,6 +17,10 @@
  * TOP-LEVEL:
  *   external_call_result_rel -- cross-domain result relation
  *   vyper_to_venom_correct   -- lowering preserves execution semantics
+ *
+ * STATUS: Top-level lowering theorem is currently an open/cheated target.
+ * Before major proof repair, check lowering definitions against the chosen
+ * upstream compiler target; see docs/compiler-definition-parity.md.
  *)
 
 Theory vyperLoweringCorrect

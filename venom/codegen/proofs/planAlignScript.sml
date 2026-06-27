@@ -429,5 +429,3 @@ Resume emit_one_input_ss_align[no_restore]:
 QED
 
 Finalise emit_one_input_ss_align
-
-val _ = export_theory();

@@ -514,12 +514,6 @@ QED
 (* ================================================================== *)
 
 
-Triviality dimindex_256:
-  dimindex(:256) = 256
-Proof
-  simp[index_bit0, finite_bit0, index_one, finite_one]
-QED
-
 Triviality w2n_32_256:
   w2n (32w:256 word) = 32
 Proof

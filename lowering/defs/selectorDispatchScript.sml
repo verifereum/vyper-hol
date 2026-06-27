@@ -94,5 +94,3 @@ End
    This is the key correctness property for the linear strategy.
    The sparse and dense strategies have analogous properties but with
    different CFG structures (buckets, jumptables). *)
-
-val _ = export_theory();

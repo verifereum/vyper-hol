@@ -2673,5 +2673,3 @@ Resume compile_safe_mul_in_range[ovf_256]:
 QED
 
 Finalise compile_safe_mul_in_range
-
-val _ = export_theory();
