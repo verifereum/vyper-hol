@@ -15,7 +15,7 @@
 
 Theory memLocProps
 Ancestors
-  memLocDefs memLocProofs
+  memLocDefs
 Libs
   finite_mapTheory
 
@@ -24,7 +24,16 @@ Libs
 Theorem may_overlap_sym:
   ∀m1 m2. may_overlap m1 m2 ⇔ may_overlap m2 m1
 Proof
-  ACCEPT_TAC memLocProofsTheory.may_overlap_sym_proof
+  rw[may_overlap_def] >>
+  Cases_on `m1.ml_size = SOME 0` >> simp[] >>
+  Cases_on `m2.ml_size = SOME 0` >> simp[] >>
+  Cases_on `IS_SOME m1.ml_alloca` >>
+  Cases_on `IS_SOME m2.ml_alloca` >> simp[] >>
+  Cases_on `m1.ml_alloca = m2.ml_alloca` >> simp[] >>
+  Cases_on `m1.ml_offset` >> simp[] >>
+  Cases_on `m2.ml_offset` >> simp[] >>
+  Cases_on `m1.ml_size` >> Cases_on `m2.ml_size` >> simp[] >>
+  rw[LET_THM] >> DECIDE_TAC
 QED
 
 Theorem may_overlap_comm:
@@ -68,7 +77,13 @@ Theorem completely_contains_trans:
     completely_contains m1 m2 ∧ completely_contains m2 m3 ⇒
     completely_contains m1 m3
 Proof
-  ACCEPT_TAC memLocProofsTheory.completely_contains_trans_proof
+  rw[completely_contains_def] >>
+  Cases_on `m3.ml_size = SOME 0` >> gvs[] >>
+  Cases_on `m2.ml_size = SOME 0` >> gvs[] >>
+  Cases_on `m1.ml_offset` >> Cases_on `m1.ml_size` >>
+  Cases_on `m2.ml_offset` >> Cases_on `m2.ml_size` >>
+  Cases_on `m3.ml_offset` >> Cases_on `m3.ml_size` >>
+  gvs[]
 QED
 
 (* Reflexive when offset and size are both known. *)
@@ -85,6 +100,10 @@ Theorem contains_implies_overlap:
     completely_contains m1 m2 ∧ m2.ml_size ≠ SOME 0 ⇒
     may_overlap m1 m2
 Proof
-  ACCEPT_TAC memLocProofsTheory.contains_implies_overlap_proof
+  rw[completely_contains_def, may_overlap_def] >>
+  Cases_on `m1.ml_offset` >> Cases_on `m1.ml_size` >>
+  Cases_on `m2.ml_offset` >> Cases_on `m2.ml_size` >>
+  Cases_on `m1.ml_alloca` >> Cases_on `m2.ml_alloca` >>
+  gvs[LET_THM]
 QED
 
