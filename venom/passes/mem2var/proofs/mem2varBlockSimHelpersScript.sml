@@ -832,45 +832,6 @@ Proof
   Induct_on `l` >> simp[FIND_thm] >> rw[] >> CASE_TAC >> simp[]
 QED
 
-(* Helper: step_inst_base preserves vs_allocas and vs_alloca_next
-   for non-alloca, non-terminator ops. *)
-Theorem step_inst_base_preserves_allocas:
-  !inst s s'.
-    step_inst_base inst s = OK s' /\
-    ~is_terminator inst.inst_opcode /\
-    ~is_alloca_op inst.inst_opcode ==>
-    s'.vs_allocas = s.vs_allocas /\
-    s'.vs_alloca_next = s.vs_alloca_next
-Proof
-  rpt gen_tac >> strip_tac >>
-  `inst.inst_opcode <> INVOKE` by (
-    CCONTR_TAC >> gvs[] >>
-    qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
-    ASM_REWRITE_TAC[step_inst_base_def] >> simp[]) >>
-  `inst.inst_opcode <> ALLOCA` by (CCONTR_TAC >> gvs[is_alloca_op_def]) >>
-  conj_tac
-  >- (qspecl_then [`inst`, `s`, `s'`] mp_tac
-        venomMemProofsTheory.step_inst_base_preserves_allocas >> simp[])
-  >- (qspecl_then [`inst`, `s`, `s'`] mp_tac
-        venomMemProofsTheory.step_inst_base_preserves_alloca_next >> simp[])
-QED
-
-(* Lift to step_inst *)
-Theorem step_inst_preserves_allocas:
-  !fuel ctx inst s s'.
-    step_inst fuel ctx inst s = OK s' /\
-    ~is_terminator inst.inst_opcode /\
-    ~is_alloca_op inst.inst_opcode /\
-    ~is_ext_call_op inst.inst_opcode /\
-    inst.inst_opcode <> INVOKE ==>
-    s'.vs_allocas = s.vs_allocas /\
-    s'.vs_alloca_next = s.vs_alloca_next
-Proof
-  rpt strip_tac >>
-  `step_inst_base inst s = OK s'` by gvs[step_inst_non_invoke] >>
-  metis_tac[step_inst_base_preserves_allocas]
-QED
-
 (* Write-effects exclusion: non-ext-call, non-terminator, non-invoke ops
    without MEMORY writes don't write RETURNDATA.
    STATICCALL (ext_call) writes RETURNDATA, but is excluded. *)
@@ -1051,7 +1012,7 @@ Theorem m2v_inv_noix_step_nonpromoted:
     m2v_inv_noix fn v1 v2
 Proof
   rpt strip_tac >>
-  imp_res_tac step_inst_preserves_allocas >>
+  imp_res_tac step_inst_preserves_alloca_state >>
   imp_res_tac step_inst_preserves_all >>
   imp_res_tac no_mem_write_excludes_others >>
   qpat_x_assum `step_inst _ _ inst s1 = _` assume_tac >>
@@ -4963,7 +4924,7 @@ Proof
   Cases_on `is_alloca_op inst.inst_opcode`
   >- metis_tac[step_inst_alloca_alloca_next_mono]
   >> `s'.vs_alloca_next = s.vs_alloca_next` suffices_by simp[] >>
-     metis_tac[step_inst_preserves_allocas]
+     metis_tac[step_inst_preserves_alloca_state]
 QED
 
 (* HD(m2v_promote_inst) inherits Eff_MEMORY exclusion for non-terminators *)
