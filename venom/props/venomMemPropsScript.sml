@@ -21,6 +21,12 @@
  *   allocas_non_overlapping_step_inst — preserved by step_inst (needs alloca_inv)
  *   allocas_non_overlapping_run_block — preserved by run_block (needs alloca_inv)
  *   allocas_non_overlapping_exec_block — preserved by exec_block
+ *   LENGTH_write_memory_with_expansion — exact length after memory write
+ *   LENGTH_mstore_eq                  — exact length after MSTORE
+ *   LENGTH_mstore8_eq                 — exact length after MSTORE8
+ *   write_memory_with_expansion_nondecreasing — memory write does not shrink
+ *   mstore_memory_nondecreasing       — MSTORE does not shrink memory
+ *   mstore8_memory_nondecreasing      — MSTORE8 does not shrink memory
  *   mload_mstore_disjoint             — disjoint 32-byte write/read independence
  *   mload_mstore8_disjoint            — disjoint 1-byte write / 32-byte read
  *   mload_mstore_same                 — same-offset 32-byte write/read
@@ -32,7 +38,7 @@
 
 Theory venomMemProps
 Ancestors
-  venomMemDefs venomMemProofs venomExecSemantics venomInst venomEffects divides
+  venomMemDefs venomMemProofs venomExecSemantics venomState venomInst venomEffects divides
 Libs
   wordsLib
 
@@ -207,6 +213,50 @@ Theorem allocas_non_overlapping_exec_block:
     allocas_non_overlapping s'
 Proof
   metis_tac[venomMemProofsTheory.allocas_non_overlapping_exec_block_proof]
+QED
+
+Theorem LENGTH_write_memory_with_expansion:
+  ∀offset bytes s.
+    LENGTH (write_memory_with_expansion offset bytes s).vs_memory =
+    MAX (LENGTH s.vs_memory) (offset + LENGTH bytes)
+Proof
+  rw[write_memory_with_expansion_def, LET_THM, arithmeticTheory.MAX_DEF]
+QED
+
+Theorem LENGTH_mstore_eq:
+  ∀off (v:bytes32) s.
+    LENGTH (mstore off v s).vs_memory = MAX (LENGTH s.vs_memory) (off + 32)
+Proof
+  rw[mstore_def, LET_THM, byteTheory.LENGTH_word_to_bytes,
+     arithmeticTheory.MAX_DEF]
+QED
+
+Theorem LENGTH_mstore8_eq:
+  ∀off (v:bytes32) s.
+    LENGTH (mstore8 off v s).vs_memory = MAX (LENGTH s.vs_memory) (off + 1)
+Proof
+  rw[mstore8_def, LET_THM, arithmeticTheory.MAX_DEF]
+QED
+
+Theorem write_memory_with_expansion_nondecreasing:
+  ∀offset bytes s.
+    LENGTH s.vs_memory ≤ LENGTH (write_memory_with_expansion offset bytes s).vs_memory
+Proof
+  rw[LENGTH_write_memory_with_expansion, arithmeticTheory.MAX_DEF]
+QED
+
+Theorem mstore_memory_nondecreasing:
+  ∀offset (value:bytes32) s.
+    LENGTH s.vs_memory ≤ LENGTH (mstore offset value s).vs_memory
+Proof
+  rw[LENGTH_mstore_eq, arithmeticTheory.MAX_DEF]
+QED
+
+Theorem mstore8_memory_nondecreasing:
+  ∀offset (value:bytes32) s.
+    LENGTH s.vs_memory ≤ LENGTH (mstore8 offset value s).vs_memory
+Proof
+  rw[LENGTH_mstore8_eq, arithmeticTheory.MAX_DEF]
 QED
 
 Theorem mload_mstore_disjoint:

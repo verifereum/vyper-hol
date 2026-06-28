@@ -1392,42 +1392,6 @@ QED
    extend memory (append 0s if needed), so LENGTH result >= LENGTH s.vs_memory.
    Proof: expand definition, case-split on whether expansion occurs,
    then arithmetic on LENGTH_APPEND/LENGTH_REPLICATE/LENGTH_TAKE_EQ/LENGTH_DROP. *)
-Triviality mstore_memory_nondecreasing[local]:
-  !offset value s.
-    LENGTH (mstore offset value s).vs_memory >= LENGTH s.vs_memory
-Proof
-  rw[mstore_def, LET_THM] >>
-  qabbrev_tac `mem = s.vs_memory` >>
-  simp[dimindex_256_div_8] >> decide_tac
-QED
-
-Triviality mstore8_memory_nondecreasing[local]:
-  !offset value s.
-    LENGTH (mstore8 offset value s).vs_memory >= LENGTH s.vs_memory
-Proof
-  rw[mstore8_def, LET_THM] >> decide_tac
-QED
-
-Triviality write_memory_with_expansion_nondecreasing[local]:
-  !offset bytes s.
-    LENGTH (write_memory_with_expansion offset bytes s).vs_memory >= LENGTH s.vs_memory
-Proof
-  rw[write_memory_with_expansion_def, LET_THM] >> decide_tac
-QED
-
-(* MSTORE step produces a state that differs from s only in vs_memory.
-   So we can extract LENGTH information from the mstore definition. *)
-Triviality step_inst_base_mstore_memory_nondecreasing[local]:
-  !inst s v.
-    step_inst_base inst s = OK v /\ inst.inst_opcode = MSTORE ==>
-    LENGTH v.vs_memory >= LENGTH s.vs_memory
-Proof
-  rpt strip_tac >>
-  gvs[step_inst_base_def, step_inst_non_invoke] >>
-  gvs[AllCaseEqs(), exec_write2_def] >>
-  irule mstore_memory_nondecreasing >> simp[]
-QED
-
 (* When pointer_derived_vars is empty, alloca_safe_access is vacuously
    true (clause 2 quantifies over v IN pv which is empty).
    Clause 1 (off + asz <= LENGTH vs_memory) was removed from

@@ -1475,14 +1475,6 @@ QED
 
 
 
-(* Memory doesn't shrink after write_memory_with_expansion *)
-Theorem write_mem_length_ge[local]:
-  !d (bytes:word8 list) s.
-    LENGTH (write_memory_with_expansion d bytes s).vs_memory >= LENGTH s.vs_memory
-Proof
-  rw[write_memory_with_expansion_def, LET_THM]
-QED
-
 (* Padded read as GENLIST of mem_byte_at *)
 Triviality take_drop_pad_as_genlist[local]:
   !mem:(word8 list) off n.
@@ -1515,8 +1507,8 @@ Proof
   >- (
     (* Case 1: In-bounds. Strip padding via TAKE_APPEND1, use wmwe_disjoint_read. *)
     `n <= LENGTH (DROP off s.vs_memory)` by simp[LENGTH_DROP] >>
-    `LENGTH (write_memory_with_expansion d bytes s).vs_memory >= LENGTH s.vs_memory` by
-      simp[write_mem_length_ge] >>
+    `LENGTH s.vs_memory <= LENGTH (write_memory_with_expansion d bytes s).vs_memory` by
+      (irule write_memory_with_expansion_nondecreasing) >>
     `n <= LENGTH (DROP off (write_memory_with_expansion d bytes s).vs_memory)` by
       simp[LENGTH_DROP] >>
     simp[TAKE_APPEND1] >>
@@ -1684,15 +1676,6 @@ Proof
 QED
 
 (* Memory doesn't shrink after mstore *)
-Triviality mstore_mem_length_ge[local,simp]:
-  !addr_w (v':bytes32) s.
-    LENGTH s.vs_memory <= LENGTH (mstore addr_w v' s).vs_memory
-Proof
-  rw[mstore_eq_write_mem] >>
-  mp_tac (SPECL [``addr_w:num``, ``word_to_bytes (v':bytes32) T``,
-                  ``s:venom_state``] write_mem_length_ge) >> simp[]
-QED
-
 (* ===== MSTORE transfer case ===== *)
 
 (* For MSTORE with literal destination operand Lit n:
@@ -1797,7 +1780,7 @@ Proof
   Cases_on `memloc_runtime_region ml s` >> gvs[] >>
   PairCases_on `x` >> gvs[LET_THM] >>
   rename1 `SOME (addr_ml, sz_ml)` >>
-  mp_tac (Q.SPECL [`write_off`, `bytes`, `s`] write_mem_length_ge) >>
+  mp_tac (Q.SPECL [`write_off`, `bytes`, `s`] write_memory_with_expansion_nondecreasing) >>
   strip_tac >>
   rpt conj_tac
   >- suspend "mem_len"

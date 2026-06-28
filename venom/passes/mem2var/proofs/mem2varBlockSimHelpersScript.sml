@@ -4100,30 +4100,6 @@ Theorem nao_bounded_ext:
 Proof simp[arithmeticTheory.MAX_DEF] >> rpt (COND_CASES_TAC >> gvs[])
 QED
 
-(* General LENGTH for write_memory_with_expansion *)
-Theorem LENGTH_write_memory_with_expansion:
-  !offset bytes s.
-    LENGTH (write_memory_with_expansion offset bytes s).vs_memory =
-    MAX (LENGTH s.vs_memory) (offset + LENGTH bytes)
-Proof
-  rw[write_memory_with_expansion_def, LET_THM, arithmeticTheory.MAX_DEF]
-QED
-
-(* Exact length of memory after mstore — consequence of the above *)
-Theorem LENGTH_mstore_eq:
-  !off (v:bytes32) s.
-    LENGTH (mstore off v s).vs_memory = MAX (LENGTH s.vs_memory) (off + 32)
-Proof
-  rw[mstore_def, LET_THM, len_word_to_bytes_256, arithmeticTheory.MAX_DEF]
-QED
-
-Theorem LENGTH_mstore8_eq:
-  !off (v:bytes32) s.
-    LENGTH (mstore8 off v s).vs_memory = MAX (LENGTH s.vs_memory) (off + 1)
-Proof
-  rw[mstore8_def, LET_THM, arithmeticTheory.MAX_DEF]
-QED
-
 (* exec_block at terminal: wraps step_inst result *)
 Theorem exec_block_terminal_lift:
   !R inst inst2 bb bb2 s1 s2 fuel ctx.
