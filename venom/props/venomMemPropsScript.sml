@@ -18,6 +18,11 @@
  *   step_inst_base_preserves_alloca_state — step_inst_base preserves alloca map+next
  *   step_inst_preserves_alloca_state — step_inst preserves alloca map+next
  *   step_inst_non_alloca_preserves_allocas — non-ALLOCA step_inst preserves alloca map
+ *   exec_alloca_alloca_next_mono      — exec_alloca does not decrease next alloca offset
+ *   step_inst_alloca_alloca_next_mono — ALLOCA step_inst does not decrease next offset
+ *   exec_alloca_preserves_memory      — exec_alloca does not change memory
+ *   step_inst_alloca_preserves_memory — ALLOCA step_inst does not change memory
+ *   step_inst_alloca_next_mono        — non-ext-call step_inst does not decrease next offset
  *   allocas_non_overlapping_step_inst — preserved by step_inst (needs alloca_inv)
  *   allocas_non_overlapping_run_block — preserved by run_block (needs alloca_inv)
  *   allocas_non_overlapping_exec_block — preserved by exec_block
@@ -186,6 +191,76 @@ Theorem step_inst_non_alloca_non_term_preserves_allocas:
     s'.vs_allocas = s.vs_allocas
 Proof
   metis_tac[step_inst_non_alloca_preserves_allocas]
+QED
+
+Theorem exec_alloca_alloca_next_mono:
+  ∀inst s sz s'.
+    exec_alloca inst s sz = OK s' ⇒
+    s.vs_alloca_next ≤ s'.vs_alloca_next
+Proof
+  simp[exec_alloca_def, AllCaseEqs(), update_var_def, LET_THM] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem step_inst_alloca_alloca_next_mono:
+  ∀fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' ∧
+    is_alloca_op inst.inst_opcode ∧
+    inst.inst_opcode ≠ INVOKE ⇒
+    s.vs_alloca_next ≤ s'.vs_alloca_next
+Proof
+  rpt strip_tac >>
+  `inst.inst_opcode = ALLOCA` by
+    (Cases_on `inst.inst_opcode` >> gvs[is_alloca_op_def]) >>
+  `step_inst_base inst s = OK s'` by gvs[step_inst_non_invoke] >>
+  pop_assum mp_tac >> simp[step_inst_base_def] >>
+  Cases_on `inst.inst_operands` >- simp[exec_alloca_def] >>
+  Cases_on `t` >> simp[] >>
+  Cases_on `h` >> simp[] >>
+  metis_tac[exec_alloca_alloca_next_mono]
+QED
+
+Theorem exec_alloca_preserves_memory:
+  ∀inst s sz s'.
+    exec_alloca inst s sz = OK s' ⇒
+    s'.vs_memory = s.vs_memory
+Proof
+  simp[exec_alloca_def, AllCaseEqs(), update_var_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem step_inst_alloca_preserves_memory:
+  ∀fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' ∧
+    is_alloca_op inst.inst_opcode ∧
+    inst.inst_opcode ≠ INVOKE ⇒
+    s'.vs_memory = s.vs_memory
+Proof
+  rpt strip_tac >>
+  `inst.inst_opcode = ALLOCA` by
+    (Cases_on `inst.inst_opcode` >> gvs[is_alloca_op_def]) >>
+  `step_inst_base inst s = OK s'` by gvs[step_inst_non_invoke] >>
+  pop_assum mp_tac >>
+  simp[step_inst_base_def] >>
+  Cases_on `inst.inst_operands` >- simp[exec_alloca_def] >>
+  Cases_on `t` >> simp[] >>
+  Cases_on `h` >> simp[] >>
+  metis_tac[exec_alloca_preserves_memory]
+QED
+
+Theorem step_inst_alloca_next_mono:
+  ∀fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' ∧
+    ¬is_terminator inst.inst_opcode ∧
+    ¬is_ext_call_op inst.inst_opcode ∧
+    inst.inst_opcode ≠ INVOKE ⇒
+    s.vs_alloca_next ≤ s'.vs_alloca_next
+Proof
+  rpt strip_tac >>
+  Cases_on `is_alloca_op inst.inst_opcode`
+  >- metis_tac[step_inst_alloca_alloca_next_mono] >>
+  `s'.vs_alloca_next = s.vs_alloca_next` suffices_by simp[] >>
+  metis_tac[step_inst_preserves_alloca_state]
 QED
 
 Theorem allocas_non_overlapping_step_inst:

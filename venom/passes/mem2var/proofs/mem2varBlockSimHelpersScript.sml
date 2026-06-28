@@ -4811,63 +4811,6 @@ Theorem nao_preserved_same_expansion:
 Proof simp[]
 QED
 
-(* exec_alloca doesn't decrease vs_alloca_next *)
-Theorem exec_alloca_alloca_next_mono:
-  !inst s sz s'. exec_alloca inst s sz = OK s' ==>
-    s.vs_alloca_next <= s'.vs_alloca_next
-Proof
-  simp[exec_alloca_def, AllCaseEqs(), update_var_def, LET_THM] >>
-  rpt strip_tac >> gvs[]
-QED
-
-(* step_inst for ALLOCA doesn't decrease vs_alloca_next *)
-Theorem step_inst_alloca_alloca_next_mono:
-  !fuel ctx inst s s'.
-    step_inst fuel ctx inst s = OK s' /\
-    is_alloca_op inst.inst_opcode /\
-    inst.inst_opcode <> INVOKE ==>
-    s.vs_alloca_next <= s'.vs_alloca_next
-Proof
-  rpt strip_tac >>
-  `inst.inst_opcode = ALLOCA` by
-    (Cases_on `inst.inst_opcode` >> gvs[is_alloca_op_def]) >>
-  `step_inst_base inst s = OK s'` by gvs[step_inst_non_invoke] >>
-  pop_assum mp_tac >> simp[step_inst_base_def] >>
-  Cases_on `inst.inst_operands` >- simp[exec_alloca_def] >>
-  Cases_on `t` >> simp[] >>
-  Cases_on `h` >> simp[] >>
-  metis_tac[exec_alloca_alloca_next_mono]
-QED
-
-(* exec_alloca doesn't change vs_memory *)
-Theorem exec_alloca_preserves_memory:
-  !inst s sz s'. exec_alloca inst s sz = OK s' ==>
-    s'.vs_memory = s.vs_memory
-Proof
-  simp[exec_alloca_def, AllCaseEqs(), update_var_def] >>
-  rpt strip_tac >> gvs[]
-QED
-
-(* step_inst for ALLOCA preserves vs_memory *)
-Theorem step_inst_alloca_preserves_memory:
-  !fuel ctx inst s s'.
-    step_inst fuel ctx inst s = OK s' /\
-    is_alloca_op inst.inst_opcode /\
-    inst.inst_opcode <> INVOKE ==>
-    s'.vs_memory = s.vs_memory
-Proof
-  rpt strip_tac >>
-  `inst.inst_opcode = ALLOCA` by
-    (Cases_on `inst.inst_opcode` >> gvs[is_alloca_op_def]) >>
-  `step_inst_base inst s = OK s'` by gvs[step_inst_non_invoke] >>
-  pop_assum mp_tac >>
-  simp[step_inst_base_def] >>
-  Cases_on `inst.inst_operands` >- simp[exec_alloca_def] >>
-  Cases_on `t` >> simp[] >>
-  Cases_on `h` >> simp[] >>
-  metis_tac[exec_alloca_preserves_memory]
-QED
-
 (* step_inst preserves memory for any opcode when Eff_MEMORY not in write_effects.
    Unifies alloca and non-alloca cases. *)
 Theorem step_inst_mem_preserved:
@@ -4885,22 +4828,6 @@ Proof
   Cases_on `is_alloca_op inst.inst_opcode`
   >- metis_tac[step_inst_alloca_preserves_memory]
   >> metis_tac[cj 13 step_inst_preserves_all]
-QED
-
-(* step_inst alloca_next is monotone for non-terminator/ext_call/invoke opcodes *)
-Theorem step_inst_alloca_next_mono:
-  !fuel ctx inst s s'.
-    step_inst fuel ctx inst s = OK s' /\
-    ~is_terminator inst.inst_opcode /\
-    ~is_ext_call_op inst.inst_opcode /\
-    inst.inst_opcode <> INVOKE ==>
-    s.vs_alloca_next <= s'.vs_alloca_next
-Proof
-  rpt strip_tac >>
-  Cases_on `is_alloca_op inst.inst_opcode`
-  >- metis_tac[step_inst_alloca_alloca_next_mono]
-  >> `s'.vs_alloca_next = s.vs_alloca_next` suffices_by simp[] >>
-     metis_tac[step_inst_preserves_alloca_state]
 QED
 
 (* HD(m2v_promote_inst) inherits Eff_MEMORY exclusion for non-terminators *)
