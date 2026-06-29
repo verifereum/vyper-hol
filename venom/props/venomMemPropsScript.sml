@@ -36,6 +36,8 @@
  *   eval_operand_write_memory_with_expansion — memory writes preserve operand evaluation
  *   write_memory_with_expansion_vs_allocas — memory writes preserve alloca map
  *   write_memory_with_expansion_vs_alloca_next — memory writes preserve next alloca offset
+ *   write_memory_with_expansion_identity — memory write is identity when bytes already match
+ *   write_memory_with_expansion_read_self — reading back the just-written bytes
  *   write_memory_with_expansion_disjoint_read — disjoint write/read independence
  *   write_memory_with_expansion_regions_disjoint_read — regions_disjoint variant
  *   mstore_eq_write_mem               — MSTORE as write_memory_with_expansion
@@ -369,6 +371,51 @@ Theorem write_memory_with_expansion_vs_alloca_next[simp]:
     (write_memory_with_expansion off bytes s).vs_alloca_next = s.vs_alloca_next
 Proof
   simp[write_memory_with_expansion_def, LET_THM]
+QED
+
+Theorem write_memory_with_expansion_identity:
+  ∀dst data s.
+    dst + LENGTH data ≤ LENGTH s.vs_memory ∧
+    TAKE (LENGTH data) (DROP dst s.vs_memory) = data ⇒
+    write_memory_with_expansion dst data s = s
+Proof
+  rw[write_memory_with_expansion_def, LET_THM] >>
+  `¬(dst + LENGTH data - LENGTH s.vs_memory > 0)` by simp[] >>
+  simp[] >>
+  `TAKE dst s.vs_memory ++ data ++ DROP (dst + LENGTH data) s.vs_memory = s.vs_memory`
+    suffices_by (strip_tac >> simp[venom_state_component_equality]) >>
+  `DROP dst s.vs_memory = TAKE (LENGTH data) (DROP dst s.vs_memory) ++
+     DROP (LENGTH data) (DROP dst s.vs_memory)` by simp[TAKE_DROP] >>
+  `DROP (LENGTH data) (DROP dst s.vs_memory) = DROP (dst + LENGTH data) s.vs_memory`
+    by simp[rich_listTheory.DROP_DROP_T, arithmeticTheory.ADD_COMM] >>
+  metis_tac[TAKE_DROP, APPEND_ASSOC]
+QED
+
+Triviality take_drop_splice[local]:
+  ∀m (Y:'a list) X Z.
+    m ≤ LENGTH X ⇒
+    TAKE (LENGTH Y) (DROP m (TAKE m X ++ Y ++ Z)) = Y
+Proof
+  rpt strip_tac >>
+  `TAKE m X ++ Y ++ Z = TAKE m X ++ (Y ++ Z)` by simp[] >>
+  pop_assum SUBST1_TAC >>
+  `DROP m (TAKE m X ++ (Y ++ Z)) = DROP m (TAKE m X) ++ (Y ++ Z)` by
+    (irule DROP_APPEND1 >> simp[LENGTH_TAKE]) >>
+  pop_assum SUBST1_TAC >>
+  simp[rich_listTheory.DROP_TAKE_EQ_NIL, rich_listTheory.TAKE_LENGTH_APPEND]
+QED
+
+Theorem write_memory_with_expansion_read_self:
+  ∀offset (bytes:word8 list) s.
+    TAKE (LENGTH bytes)
+      (DROP offset (write_memory_with_expansion offset bytes s).vs_memory) =
+    bytes
+Proof
+  rw[write_memory_with_expansion_def, LET_THM] >>
+  qmatch_goalsub_abbrev_tac `TAKE offset expanded` >>
+  `offset ≤ LENGTH expanded` by
+    (simp[Abbr `expanded`] >> IF_CASES_TAC >> simp[]) >>
+  simp[take_drop_splice]
 QED
 
 Theorem write_memory_with_expansion_disjoint_read:

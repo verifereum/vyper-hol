@@ -632,24 +632,6 @@ Proof
   Cases >> simp[is_copy_opcode_def]
 QED
 
-(* write_memory_with_expansion is identity when bytes already match *)
-Theorem write_mem_identity[local]:
-  !dst data s. dst + LENGTH data <= LENGTH s.vs_memory /\
-    TAKE (LENGTH data) (DROP dst s.vs_memory) = data ==>
-    write_memory_with_expansion dst data s = s
-Proof
-  rw[write_memory_with_expansion_def, LET_THM] >>
-  `~(dst + LENGTH data - LENGTH s.vs_memory > 0)` by simp[] >>
-  simp[] >>
-  `TAKE dst s.vs_memory ++ data ++ DROP (dst + LENGTH data) s.vs_memory = s.vs_memory`
-    suffices_by (strip_tac >> simp[venom_state_component_equality]) >>
-  `DROP dst s.vs_memory = TAKE (LENGTH data) (DROP dst s.vs_memory) ++
-     DROP (LENGTH data) (DROP dst s.vs_memory)` by simp[TAKE_DROP] >>
-  `DROP (LENGTH data) (DROP dst s.vs_memory) = DROP (dst + LENGTH data) s.vs_memory`
-    by simp[rich_listTheory.DROP_DROP_T, arithmeticTheory.ADD_COMM] >>
-  metis_tac[TAKE_DROP, APPEND_ASSOC]
-QED
-
 (* mcopy is identity when destination bytes already equal source bytes *)
 Theorem mcopy_identity[local]:
   !dst src sz s.
@@ -663,7 +645,7 @@ Proof
   `TAKE sz (DROP src s.vs_memory ++ REPLICATE sz 0w) = TAKE sz (DROP src s.vs_memory)` by
     simp[TAKE_APPEND1] >>
   simp[] >>
-  match_mp_tac write_mem_identity >> simp[]
+  match_mp_tac write_memory_with_expansion_identity >> simp[]
 QED
 
 (* run_insts of singleton = step_inst *)
@@ -1034,7 +1016,7 @@ Resume cei_step_sim[nop]:
      So mcopy writes bytes_eq_RHS to dst, but dst already has those bytes -> identity *)
   `mcopy addr (w2n src_val) (w2n n) s = s` by (
     simp[mcopy_def] >>
-    irule write_mem_identity >> simp[LENGTH_TAKE_EQ]) >>
+    irule write_memory_with_expansion_identity >> simp[LENGTH_TAKE_EQ]) >>
   simp[state_equiv_refl]
 QED
 
@@ -1505,20 +1487,6 @@ Proof
     (irule DROP_APPEND1 >> simp[LENGTH_TAKE]) >>
   pop_assum SUBST1_TAC >>
   simp[rich_listTheory.DROP_TAKE_EQ_NIL, rich_listTheory.TAKE_LENGTH_APPEND]
-QED
-
-(* Reading back the just-written region: unconditionally true *)
-Triviality wmwe_read_self[local]:
-  !offset (bytes:word8 list) s.
-    TAKE (LENGTH bytes)
-      (DROP offset (write_memory_with_expansion offset bytes s).vs_memory) =
-    bytes
-Proof
-  rw[write_memory_with_expansion_def, LET_THM] >>
-  qmatch_goalsub_abbrev_tac `TAKE offset expanded` >>
-  `offset <= LENGTH expanded` by
-    (simp[Abbr `expanded`] >> IF_CASES_TAC >> simp[]) >>
-  simp[take_drop_splice]
 QED
 
 (* write_memory_with_expansion only changes vs_memory. *)
@@ -2361,7 +2329,7 @@ Resume copy_fact_transfer_sound_thm[redundant]:
      (TAKE (w2n sz_val)
         (DROP (w2n src_val) s.vs_memory ++ REPLICATE (w2n sz_val) 0w))
      s = s` by (
-    irule write_mem_identity >>
+    irule write_memory_with_expansion_identity >>
     simp[LENGTH_TAKE_EQ, rich_listTheory.LENGTH_REPLICATE]) >>
   gvs[] >>
   (* v = SOME cfl (since FLOOKUP found something) *)
@@ -2596,7 +2564,7 @@ Resume copy_fact_transfer_sound_thm[nm_bytes]:
      (cf_source_data inst.inst_opcode s) ++ REPLICATE (w2n sz_val) 0w)` >>
   `LENGTH bytes = w2n sz_val` by
     simp[Abbr `bytes`, LENGTH_TAKE_EQ, rich_listTheory.LENGTH_REPLICATE] >>
-  metis_tac[wmwe_read_self, cf_source_data_wmwe]
+  metis_tac[write_memory_with_expansion_read_self, cf_source_data_wmwe]
 QED
 
 Resume copy_fact_transfer_sound_thm[case_mcopy_nofwd]:
@@ -2632,10 +2600,10 @@ Resume copy_fact_transfer_sound_thm[nofwd_bytes]:
      REPLICATE (w2n sz_val) 0w)` >>
   `LENGTH bytes = w2n sz_val` by
     simp[Abbr `bytes`, LENGTH_TAKE_EQ, rich_listTheory.LENGTH_REPLICATE] >>
-  (* LHS = bytes by wmwe_read_self *)
+  (* LHS = bytes by write_memory_with_expansion_read_self *)
   `TAKE (w2n sz_val) (DROP (w2n dst_val)
      (write_memory_with_expansion (w2n dst_val) bytes s).vs_memory) = bytes` by
-    metis_tac[wmwe_read_self] >>
+    metis_tac[write_memory_with_expansion_read_self] >>
   (* RHS: need source disjoint from dest to show old bytes = new bytes *)
   `memloc_within_alloca (ce_memloc_from_ops ctx.ce_bp final_src sz) s` by
     metis_tac[bp_ptrs_bounded_mcopy_read_loc] >>
@@ -2715,16 +2683,16 @@ Resume copy_fact_transfer_sound_thm[fwd_rest2]:
   suspend "fwd_bytes_setup"
 QED
 
-(* Abbreviate bytes, establish wmwe_read_self, reduce to old entry *)
+(* Abbreviate bytes, establish write_memory_with_expansion_read_self, reduce to old entry *)
 Resume copy_fact_transfer_sound_thm[fwd_bytes_setup]:
   qabbrev_tac `bytes = TAKE (w2n sz_val) (DROP (w2n src_val)
      (cf_source_data MCOPY s) ++ REPLICATE (w2n sz_val) 0w)` >>
   `LENGTH bytes = w2n sz_val` by
     simp[Abbr `bytes`, LENGTH_TAKE_EQ, rich_listTheory.LENGTH_REPLICATE] >>
-  (* LHS = bytes by wmwe_read_self *)
+  (* LHS = bytes by write_memory_with_expansion_read_self *)
   `TAKE (w2n sz_val) (DROP (w2n dst_val)
      (write_memory_with_expansion (w2n dst_val) bytes s).vs_memory) = bytes` by
-    metis_tac[wmwe_read_self] >>
+    metis_tac[write_memory_with_expansion_read_self] >>
   (* bytes = TAKE sz (DROP src s.mem) since padding unnecessary *)
   `bytes = TAKE (w2n sz_val) (DROP (w2n src_val) s.vs_memory)` by
     (simp[Abbr `bytes`, cf_source_data_def, TAKE_APPEND1]) >>
