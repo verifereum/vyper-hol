@@ -1309,20 +1309,6 @@ Proof
   CCONTR_TAC >> gvs[invoke_has_mem_effect]
 QED
 
-Triviality step_plain_preserves_memory[local]:
-  !fuel ctx inst s s'.
-    step_inst fuel ctx inst s = OK s' /\
-    Eff_MEMORY NOTIN write_effects inst.inst_opcode /\
-    ~is_alloca_op inst.inst_opcode /\
-    ~is_ext_call_op inst.inst_opcode /\
-    ~is_terminator inst.inst_opcode ==>
-    s'.vs_memory = s.vs_memory
-Proof
-  rpt strip_tac >>
-  drule not_invoke_if_no_mem_effect >> strip_tac >>
-  drule_all step_inst_preserves_all >> simp[]
-QED
-
 (* Variables not in inst_defs (= inst_outputs) preserved by any instruction *)
 Triviality step_preserves_unkilled_vars[local]:
   !fuel ctx inst s s' v.
@@ -1395,7 +1381,8 @@ Proof
   `s'.vs_memory = s.vs_memory` by (
     Cases_on `is_terminator inst.inst_opcode`
     >- metis_tac[step_terminator_preserves_fields]
-    >> metis_tac[step_plain_preserves_memory]) >>
+    >> metis_tac[step_inst_no_memory_write_preserves_memory,
+                 not_invoke_if_no_mem_effect]) >>
   `inst.inst_opcode <> INVOKE` by metis_tac[not_invoke_if_no_mem_effect] >>
   `s'.vs_allocas = s.vs_allocas` by metis_tac[step_inst_non_alloca_preserves_allocas] >>
   `s'.vs_labels = s.vs_labels` by (
