@@ -11,7 +11,7 @@ Ancestors
   dfgDefs dfgCorrectnessProof
   basePtrDefs basePtrProofs
   pointerConfinedDefs memLocDefs
-  venomEffects venomMemDefs venomMemProofs
+  venomEffects venomMemDefs venomMemProps venomMemProofs
   finite_map list rich_list pred_set pair
 Libs
   HolKernel boolLib bossLib BasicProvers dep_rewrite markerLib

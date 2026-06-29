@@ -1,12 +1,12 @@
 (*
- * Lattice Standard Constructions — Correctness (Statements Only)
+ * Lattice Standard Constructions — Properties
  *
- * Re-exports from proofs/latticeProofsScript.sml via ACCEPT_TAC.
+ * Public algebraic facts about lattice definitions.
  *)
 
 Theory latticeProps
 Ancestors
-  latticeProofs
+  latticeDefs arithmetic
 
 (* Composition of monotone functions is monotone. *)
 Theorem monotone_comp:
@@ -14,7 +14,7 @@ Theorem monotone_comp:
     monotone leq f /\ monotone leq g ==>
     monotone leq (f o g)
 Proof
-  ACCEPT_TAC monotone_comp_proof
+  rw[monotone_def]
 QED
 
 (* Inflationary f with bounded measure on domain S reaches a fixpoint
@@ -28,7 +28,30 @@ Theorem inflationary_bounded_fixpoint:
     bounded_measure S leq m b ==>
     ?n. f (FUNPOW f n x) = FUNPOW f n x
 Proof
-  ACCEPT_TAC inflationary_bounded_fixpoint_proof
+  rw[]
+  >> `!k. S' (FUNPOW f k x)` by (Induct >> fs[FUNPOW_SUC])
+  >> completeInduct_on `b - m x`
+  >> rw[]
+  >> Cases_on `f x = x`
+  >- (qexists_tac `0` >> fs[])
+  >> `leq x (f x)` by fs[inflationary_def]
+  >> `S' (f x)` by fs[]
+  >> `m x < m (f x)` by fs[bounded_measure_def]
+  >> `m (f x) <= b` by fs[bounded_measure_def]
+  >> `b - m (f x) < b - m x` by fs[]
+  >> qpat_x_assum `!m'. m' < _ ==> _`
+       (qspec_then `b - m (f x)` mp_tac)
+  >> impl_tac >- fs[]
+  >> disch_then (qspecl_then [`b`, `m`, `f x`] mp_tac)
+  >> impl_tac
+  >- (rw[FUNPOW_SUC]
+      >> first_x_assum (qspec_then `SUC k` mp_tac) >> fs[FUNPOW_SUC])
+  >> impl_tac >- fs[]
+  >> impl_tac >- fs[]
+  >> impl_tac
+  >- (rw[] >> qpat_x_assum `!k. S' (FUNPOW f k x)`
+        (qspec_then `SUC k` mp_tac) >> simp[FUNPOW])
+  >> rw[] >> qexists_tac `SUC n` >> fs[FUNPOW]
 QED
 
 (* Bounded measure is weakly monotone within domain S: leq x y implies m x ≤ m y. *)
@@ -37,5 +60,6 @@ Theorem bounded_measure_leq:
     bounded_measure S leq m b /\ S x /\ S y /\ leq x y ==>
     m x <= m y
 Proof
-  ACCEPT_TAC bounded_measure_leq_proof
+  rw[bounded_measure_def] >>
+  Cases_on `x = y` >> res_tac >> fs[]
 QED

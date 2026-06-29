@@ -1032,6 +1032,20 @@ QED
 Theorem step_inst_preserves_all =
   passSharedFieldTheory.step_inst_preserves_all
 
+Theorem step_inst_no_memory_write_preserves_memory:
+  ∀fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' ∧
+    Eff_MEMORY NOTIN write_effects inst.inst_opcode ∧
+    ¬is_terminator inst.inst_opcode ∧
+    ¬is_alloca_op inst.inst_opcode ∧
+    ¬is_ext_call_op inst.inst_opcode ∧
+    inst.inst_opcode ≠ INVOKE ⇒
+    s'.vs_memory = s.vs_memory
+Proof
+  rpt strip_tac >>
+  drule_all step_inst_preserves_all >> simp[]
+QED
+
 Theorem step_base_preserves_tracked =
   passSharedFieldTheory.step_base_preserves_tracked
 

@@ -832,45 +832,6 @@ Proof
   Induct_on `l` >> simp[FIND_thm] >> rw[] >> CASE_TAC >> simp[]
 QED
 
-(* Helper: step_inst_base preserves vs_allocas and vs_alloca_next
-   for non-alloca, non-terminator ops. *)
-Theorem step_inst_base_preserves_allocas:
-  !inst s s'.
-    step_inst_base inst s = OK s' /\
-    ~is_terminator inst.inst_opcode /\
-    ~is_alloca_op inst.inst_opcode ==>
-    s'.vs_allocas = s.vs_allocas /\
-    s'.vs_alloca_next = s.vs_alloca_next
-Proof
-  rpt gen_tac >> strip_tac >>
-  `inst.inst_opcode <> INVOKE` by (
-    CCONTR_TAC >> gvs[] >>
-    qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
-    ASM_REWRITE_TAC[step_inst_base_def] >> simp[]) >>
-  `inst.inst_opcode <> ALLOCA` by (CCONTR_TAC >> gvs[is_alloca_op_def]) >>
-  conj_tac
-  >- (qspecl_then [`inst`, `s`, `s'`] mp_tac
-        venomMemProofsTheory.step_inst_base_preserves_allocas >> simp[])
-  >- (qspecl_then [`inst`, `s`, `s'`] mp_tac
-        venomMemProofsTheory.step_inst_base_preserves_alloca_next >> simp[])
-QED
-
-(* Lift to step_inst *)
-Theorem step_inst_preserves_allocas:
-  !fuel ctx inst s s'.
-    step_inst fuel ctx inst s = OK s' /\
-    ~is_terminator inst.inst_opcode /\
-    ~is_alloca_op inst.inst_opcode /\
-    ~is_ext_call_op inst.inst_opcode /\
-    inst.inst_opcode <> INVOKE ==>
-    s'.vs_allocas = s.vs_allocas /\
-    s'.vs_alloca_next = s.vs_alloca_next
-Proof
-  rpt strip_tac >>
-  `step_inst_base inst s = OK s'` by gvs[step_inst_non_invoke] >>
-  metis_tac[step_inst_base_preserves_allocas]
-QED
-
 (* Write-effects exclusion: non-ext-call, non-terminator, non-invoke ops
    without MEMORY writes don't write RETURNDATA.
    STATICCALL (ext_call) writes RETURNDATA, but is excluded. *)
@@ -1051,7 +1012,7 @@ Theorem m2v_inv_noix_step_nonpromoted:
     m2v_inv_noix fn v1 v2
 Proof
   rpt strip_tac >>
-  imp_res_tac step_inst_preserves_allocas >>
+  imp_res_tac step_inst_preserves_alloca_state >>
   imp_res_tac step_inst_preserves_all >>
   imp_res_tac no_mem_write_excludes_others >>
   qpat_x_assum `step_inst _ _ inst s1 = _` assume_tac >>
@@ -4139,30 +4100,6 @@ Theorem nao_bounded_ext:
 Proof simp[arithmeticTheory.MAX_DEF] >> rpt (COND_CASES_TAC >> gvs[])
 QED
 
-(* General LENGTH for write_memory_with_expansion *)
-Theorem LENGTH_write_memory_with_expansion:
-  !offset bytes s.
-    LENGTH (write_memory_with_expansion offset bytes s).vs_memory =
-    MAX (LENGTH s.vs_memory) (offset + LENGTH bytes)
-Proof
-  rw[write_memory_with_expansion_def, LET_THM, arithmeticTheory.MAX_DEF]
-QED
-
-(* Exact length of memory after mstore — consequence of the above *)
-Theorem LENGTH_mstore_eq:
-  !off (v:bytes32) s.
-    LENGTH (mstore off v s).vs_memory = MAX (LENGTH s.vs_memory) (off + 32)
-Proof
-  rw[mstore_def, LET_THM, len_word_to_bytes_256, arithmeticTheory.MAX_DEF]
-QED
-
-Theorem LENGTH_mstore8_eq:
-  !off (v:bytes32) s.
-    LENGTH (mstore8 off v s).vs_memory = MAX (LENGTH s.vs_memory) (off + 1)
-Proof
-  rw[mstore8_def, LET_THM, arithmeticTheory.MAX_DEF]
-QED
-
 (* exec_block at terminal: wraps step_inst result *)
 Theorem exec_block_terminal_lift:
   !R inst inst2 bb bb2 s1 s2 fuel ctx.
@@ -4874,63 +4811,6 @@ Theorem nao_preserved_same_expansion:
 Proof simp[]
 QED
 
-(* exec_alloca doesn't decrease vs_alloca_next *)
-Theorem exec_alloca_alloca_next_mono:
-  !inst s sz s'. exec_alloca inst s sz = OK s' ==>
-    s.vs_alloca_next <= s'.vs_alloca_next
-Proof
-  simp[exec_alloca_def, AllCaseEqs(), update_var_def, LET_THM] >>
-  rpt strip_tac >> gvs[]
-QED
-
-(* step_inst for ALLOCA doesn't decrease vs_alloca_next *)
-Theorem step_inst_alloca_alloca_next_mono:
-  !fuel ctx inst s s'.
-    step_inst fuel ctx inst s = OK s' /\
-    is_alloca_op inst.inst_opcode /\
-    inst.inst_opcode <> INVOKE ==>
-    s.vs_alloca_next <= s'.vs_alloca_next
-Proof
-  rpt strip_tac >>
-  `inst.inst_opcode = ALLOCA` by
-    (Cases_on `inst.inst_opcode` >> gvs[is_alloca_op_def]) >>
-  `step_inst_base inst s = OK s'` by gvs[step_inst_non_invoke] >>
-  pop_assum mp_tac >> simp[step_inst_base_def] >>
-  Cases_on `inst.inst_operands` >- simp[exec_alloca_def] >>
-  Cases_on `t` >> simp[] >>
-  Cases_on `h` >> simp[] >>
-  metis_tac[exec_alloca_alloca_next_mono]
-QED
-
-(* exec_alloca doesn't change vs_memory *)
-Theorem exec_alloca_preserves_memory:
-  !inst s sz s'. exec_alloca inst s sz = OK s' ==>
-    s'.vs_memory = s.vs_memory
-Proof
-  simp[exec_alloca_def, AllCaseEqs(), update_var_def] >>
-  rpt strip_tac >> gvs[]
-QED
-
-(* step_inst for ALLOCA preserves vs_memory *)
-Theorem step_inst_alloca_preserves_memory:
-  !fuel ctx inst s s'.
-    step_inst fuel ctx inst s = OK s' /\
-    is_alloca_op inst.inst_opcode /\
-    inst.inst_opcode <> INVOKE ==>
-    s'.vs_memory = s.vs_memory
-Proof
-  rpt strip_tac >>
-  `inst.inst_opcode = ALLOCA` by
-    (Cases_on `inst.inst_opcode` >> gvs[is_alloca_op_def]) >>
-  `step_inst_base inst s = OK s'` by gvs[step_inst_non_invoke] >>
-  pop_assum mp_tac >>
-  simp[step_inst_base_def] >>
-  Cases_on `inst.inst_operands` >- simp[exec_alloca_def] >>
-  Cases_on `t` >> simp[] >>
-  Cases_on `h` >> simp[] >>
-  metis_tac[exec_alloca_preserves_memory]
-QED
-
 (* step_inst preserves memory for any opcode when Eff_MEMORY not in write_effects.
    Unifies alloca and non-alloca cases. *)
 Theorem step_inst_mem_preserved:
@@ -4948,22 +4828,6 @@ Proof
   Cases_on `is_alloca_op inst.inst_opcode`
   >- metis_tac[step_inst_alloca_preserves_memory]
   >> metis_tac[cj 13 step_inst_preserves_all]
-QED
-
-(* step_inst alloca_next is monotone for non-terminator/ext_call/invoke opcodes *)
-Theorem step_inst_alloca_next_mono:
-  !fuel ctx inst s s'.
-    step_inst fuel ctx inst s = OK s' /\
-    ~is_terminator inst.inst_opcode /\
-    ~is_ext_call_op inst.inst_opcode /\
-    inst.inst_opcode <> INVOKE ==>
-    s.vs_alloca_next <= s'.vs_alloca_next
-Proof
-  rpt strip_tac >>
-  Cases_on `is_alloca_op inst.inst_opcode`
-  >- metis_tac[step_inst_alloca_alloca_next_mono]
-  >> `s'.vs_alloca_next = s.vs_alloca_next` suffices_by simp[] >>
-     metis_tac[step_inst_preserves_allocas]
 QED
 
 (* HD(m2v_promote_inst) inherits Eff_MEMORY exclusion for non-terminators *)
