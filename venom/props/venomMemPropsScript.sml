@@ -32,6 +32,10 @@
  *   write_memory_with_expansion_nondecreasing — memory write does not shrink
  *   mstore_memory_nondecreasing       — MSTORE does not shrink memory
  *   mstore8_memory_nondecreasing      — MSTORE8 does not shrink memory
+ *   write_memory_with_expansion_disjoint_read — disjoint write/read independence
+ *   write_memory_with_expansion_regions_disjoint_read — regions_disjoint variant
+ *   mstore_eq_write_mem               — MSTORE as write_memory_with_expansion
+ *   mstore_disjoint_read              — disjoint MSTORE/read independence
  *   mload_mstore_disjoint             — disjoint 32-byte write/read independence
  *   mload_mstore8_disjoint            — disjoint 1-byte write / 32-byte read
  *   mload_mstore_same                 — same-offset 32-byte write/read
@@ -44,6 +48,7 @@
 Theory venomMemProps
 Ancestors
   venomMemDefs venomMemProofs venomExecSemantics venomState venomInst venomEffects divides
+  list rich_list
 Libs
   wordsLib
 
@@ -332,6 +337,58 @@ Theorem mstore8_memory_nondecreasing:
     LENGTH s.vs_memory ≤ LENGTH (mstore8 offset value s).vs_memory
 Proof
   rw[LENGTH_mstore8_eq, arithmeticTheory.MAX_DEF]
+QED
+
+Theorem write_memory_with_expansion_disjoint_read:
+  ∀off n d (bytes:word8 list) s.
+    off + n ≤ LENGTH s.vs_memory ∧
+    (off + n ≤ d ∨ d + LENGTH bytes ≤ off) ⇒
+    TAKE n (DROP off (write_memory_with_expansion d bytes s).vs_memory) =
+    TAKE n (DROP off s.vs_memory)
+Proof
+  rw[write_memory_with_expansion_def, LET_THM] >>
+  simp[LIST_EQ_REWRITE, LENGTH_TAKE, LENGTH_DROP] >>
+  rpt strip_tac >>
+  simp[EL_TAKE, EL_DROP, EL_APPEND_EQN, LENGTH_TAKE,
+       rich_listTheory.LENGTH_REPLICATE]
+QED
+
+Theorem write_memory_with_expansion_regions_disjoint_read:
+  ∀off n d (bytes:word8 list) s.
+    off + n ≤ LENGTH s.vs_memory ∧
+    regions_disjoint (off, n) (d, LENGTH bytes) ⇒
+    TAKE n (DROP off (write_memory_with_expansion d bytes s).vs_memory) =
+    TAKE n (DROP off s.vs_memory)
+Proof
+  rw[regions_disjoint_def]
+  >- simp[]
+  >- (rw[write_memory_with_expansion_def, LET_THM] >>
+      simp[LIST_EQ_REWRITE, LENGTH_TAKE, LENGTH_DROP] >>
+      rpt strip_tac >>
+      simp[EL_TAKE, EL_DROP, EL_APPEND_EQN, LENGTH_TAKE,
+           rich_listTheory.LENGTH_REPLICATE]) >>
+  irule write_memory_with_expansion_disjoint_read >> simp[]
+QED
+
+Theorem mstore_eq_write_mem:
+  ∀d (v:bytes32) s.
+    mstore d v s = write_memory_with_expansion d (word_to_bytes v T) s
+Proof
+  rw[mstore_def, write_memory_with_expansion_def, LET_THM]
+QED
+
+Theorem mstore_disjoint_read:
+  ∀off n addr_w (v:bytes32) s.
+    off + n ≤ LENGTH s.vs_memory ∧
+    regions_disjoint (off, n) (addr_w, 32) ⇒
+    TAKE n (DROP off (mstore addr_w v s).vs_memory) =
+    TAKE n (DROP off s.vs_memory)
+Proof
+  rpt strip_tac >> Cases_on `n = 0` >- simp[] >>
+  simp[mstore_eq_write_mem] >>
+  irule write_memory_with_expansion_disjoint_read >>
+  simp[byteTheory.LENGTH_word_to_bytes] >>
+  gvs[regions_disjoint_def]
 QED
 
 Theorem mload_mstore_disjoint:

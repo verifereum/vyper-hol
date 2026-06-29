@@ -1440,41 +1440,6 @@ QED
 (* Reading a disjoint region after write_memory_with_expansion is unchanged.
    Key property: if [off, off+n) doesn't overlap [d, d+len) and is within
    the original memory, then TAKE n (DROP off mem') = TAKE n (DROP off mem). *)
-Theorem write_mem_disjoint_read[local]:
-  !off n d (bytes:word8 list) s.
-    off + n <= LENGTH s.vs_memory /\
-    (off + n <= d \/ d + LENGTH bytes <= off) ==>
-    TAKE n (DROP off (write_memory_with_expansion d bytes s).vs_memory) =
-    TAKE n (DROP off s.vs_memory)
-Proof
-  rw[write_memory_with_expansion_def, LET_THM] >>
-  simp[LIST_EQ_REWRITE, LENGTH_TAKE, LENGTH_DROP] >>
-  rpt strip_tac >>
-  simp[EL_TAKE, EL_DROP, EL_APPEND_EQN, LENGTH_TAKE,
-       rich_listTheory.LENGTH_REPLICATE]
-QED
-
-(* regions_disjoint version of write_mem_disjoint_read *)
-Triviality wmwe_disjoint_read[local]:
-  !off n d (bytes:word8 list) s.
-    off + n <= LENGTH s.vs_memory /\
-    regions_disjoint (off, n) (d, LENGTH bytes) ==>
-    TAKE n (DROP off (write_memory_with_expansion d bytes s).vs_memory) =
-    TAKE n (DROP off s.vs_memory)
-Proof
-  rw[regions_disjoint_def]
-  >- simp[] (* n = 0 *)
-  >- (* LENGTH bytes = 0, i.e. bytes = [] *)
-     (rw[write_memory_with_expansion_def, LET_THM] >>
-      simp[LIST_EQ_REWRITE, LENGTH_TAKE, LENGTH_DROP] >>
-      rpt strip_tac >>
-      simp[EL_TAKE, EL_DROP, EL_APPEND_EQN, LENGTH_TAKE,
-           rich_listTheory.LENGTH_REPLICATE])
-  >> irule write_mem_disjoint_read >> simp[]
-QED
-
-
-
 (* Padded read as GENLIST of mem_byte_at *)
 Triviality take_drop_pad_as_genlist[local]:
   !mem:(word8 list) off n.
@@ -1512,7 +1477,7 @@ Proof
     `n <= LENGTH (DROP off (write_memory_with_expansion d bytes s).vs_memory)` by
       simp[LENGTH_DROP] >>
     simp[TAKE_APPEND1] >>
-    irule wmwe_disjoint_read >> simp[])
+    irule write_memory_with_expansion_regions_disjoint_read >> simp[])
   >>
   (* Case 2: OOB. Element-wise. *)
   suspend "oob"
@@ -1653,28 +1618,6 @@ Proof
   BasicProvers.every_case_tac >> gvs[]
 QED
 
-(* mstore = write_memory_with_expansion with word_to_bytes *)
-Triviality mstore_eq_write_mem[local]:
-  !d v s. mstore d v s = write_memory_with_expansion d (word_to_bytes v T) s
-Proof
-  rw[mstore_def, write_memory_with_expansion_def, LET_THM]
-QED
-
-(* Disjoint region of memory is preserved by mstore.
-   Combines mstore_eq_write_mem + write_mem_disjoint_read + word_to_bytes32_length. *)
-Triviality mstore_disjoint_read[local]:
-  !off n addr_w (v':bytes32) s.
-    off + n <= LENGTH s.vs_memory /\
-    regions_disjoint (off, n) (addr_w, 32) ==>
-    TAKE n (DROP off (mstore addr_w v' s).vs_memory) =
-    TAKE n (DROP off s.vs_memory)
-Proof
-  rpt strip_tac >> Cases_on `n = 0` >- simp[] >>
-  simp[mstore_eq_write_mem] >>
-  irule write_mem_disjoint_read >> simp[word_to_bytes32_length] >>
-  gvs[regions_disjoint_def]
-QED
-
 (* Memory doesn't shrink after mstore *)
 (* ===== MSTORE transfer case ===== *)
 
@@ -1806,7 +1749,7 @@ Resume cf_entry_sound_wmwe[bytes_eq]:
   `TAKE sz_ml (DROP addr_ml
      (write_memory_with_expansion write_off bytes s).vs_memory) =
    TAKE sz_ml (DROP addr_ml s.vs_memory)` by (
-    irule wmwe_disjoint_read >> simp[]) >>
+    irule write_memory_with_expansion_regions_disjoint_read >> simp[]) >>
   simp[] >>
   Cases_on `cf.cf_opcode = MCOPY`
   >- (gvs[cf_source_data_def] >>
