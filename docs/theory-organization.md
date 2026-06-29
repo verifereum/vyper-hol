@@ -107,6 +107,11 @@ Technical facts should continue to come from the relevant `*Proofs` theory.
 - Common bytes32 facts such as `dimindex_256` and
   `word_bytes_roundtrip_256` are consolidated in `venomMemProps`; several
   pass-local duplicates have been deleted.
+- `venomMemProps` now also owns reusable memory/allocation API facts promoted
+  from pass proofs, including alloca-state preservation, ALLOCA memory
+  preservation, memory-write length/non-shrinking facts, disjoint read/write
+  facts, write identity/readback facts, and simple field-preservation facts for
+  `write_memory_with_expansion`.
 - `venomMemProofs` still contains transitional `_proof` source theorems used to
   derive the public `venomMemProps` interface.  Future cleanup should move proof
   bodies or expose more precisely named technical helpers so these duplicate
@@ -119,6 +124,40 @@ facts and had no independent technical role:
 - `latticeProofs` was folded into `latticeProps`.
 - `dfIterateProps` now owns public iterate corollaries directly; the remaining
   `dfIterateProofs` facts are technical orbit/step lemmas used by other proofs.
+
+`passSharedProps` is the preferred home for reusable pass-simulation facts that
+are not specific to memory definitions but depend on pass-shared frame
+infrastructure.  For example, `step_inst_no_memory_write_preserves_memory` lives
+there rather than in `venomMemProps`, because its proof uses the shared
+`step_inst_preserves_all` frame theorem.
+
+## Cleanup roadmap
+
+The most useful future cleanup work should reduce friction for proving new pass
+correctness theorems, not just remove wrappers.  Good targets for a longer
+running proof agent are:
+
+1. **Complete the `venomMemProps` migration.**  Identify `_proof` theorem aliases
+   in `venomMemProofs` that are now used only to derive public `venomMemProps`
+   facts.  Move proof bodies or expose genuinely technical helpers, then delete
+   duplicate public `_proof` aliases.
+2. **Shrink pass-local memory scaffolding.**  Continue scanning `mem2var`,
+   `memory_copy_elision`, `memmerging`, and `dead_store_elim` for local lemmas
+   that are really general memory or pass-frame facts.  Promote them to
+   `venomMemProps` or `passSharedProps` only when the dependency direction is
+   natural.
+3. **Be cautious with analysis-specific dependencies.**  Facts involving
+   `memLocDefs`, alias analysis, copy facts, or copy-forward byte lemmas may
+   belong in `memLocProps`, pass-specific proof files, or a more focused theory;
+   do not pull analysis theories into `venomMemProps` just to delete a local
+   helper.
+4. **Prefer useful corollaries over very general hard-to-apply theorems.**  If a
+   large simulation theorem is difficult to apply directly, add small public
+   corollaries for common pass proof patterns instead of relying on broad
+   `metis_tac` searches.
+5. **Keep builds targeted.**  For memory API work, a typical check is:
+   `holbuild --tactic-timeout 30 venomMemPropsTheory <affected-pass-theory>`.
+   Do not use `--skip-goalfrag`.
 
 When a theorem looks more general than its current theory, first look for an
 existing owner before introducing a new common/shared theory.  Some generally
