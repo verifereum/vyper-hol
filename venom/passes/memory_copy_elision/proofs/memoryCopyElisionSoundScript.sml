@@ -1521,16 +1521,7 @@ Proof
   simp[take_drop_splice]
 QED
 
-(* write_memory_with_expansion only changes vs_memory: field-independence lemmas *)
-Triviality eval_operand_wmwe[local,simp]:
-  !op off bytes s.
-    eval_operand op (write_memory_with_expansion off bytes s) =
-    eval_operand op s
-Proof
-  Cases >> simp[eval_operand_def, lookup_var_def,
-                write_memory_with_expansion_def, LET_THM]
-QED
-
+(* write_memory_with_expansion only changes vs_memory. *)
 Triviality memloc_runtime_region_wmwe[local,simp]:
   !ml off bytes s.
     memloc_runtime_region ml (write_memory_with_expansion off bytes s) =
@@ -1538,14 +1529,6 @@ Triviality memloc_runtime_region_wmwe[local,simp]:
 Proof
   rw[memloc_runtime_region_def, write_memory_with_expansion_def, LET_THM]
 QED
-
-Triviality wmwe_vs_allocas[local,simp]:
-  !off bytes s.
-    (write_memory_with_expansion off bytes s).vs_allocas = s.vs_allocas
-Proof
-  simp[write_memory_with_expansion_def, LET_THM]
-QED
-
 
 (* ml_is_fixed forces sz = Lit n, and THE ml_size = w2n of evaluated sz *)
 Triviality ml_is_fixed_eval_size[local]:

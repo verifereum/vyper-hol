@@ -32,6 +32,10 @@
  *   write_memory_with_expansion_nondecreasing — memory write does not shrink
  *   mstore_memory_nondecreasing       — MSTORE does not shrink memory
  *   mstore8_memory_nondecreasing      — MSTORE8 does not shrink memory
+ *   lookup_var_write_memory_with_expansion — memory writes preserve variables
+ *   eval_operand_write_memory_with_expansion — memory writes preserve operand evaluation
+ *   write_memory_with_expansion_vs_allocas — memory writes preserve alloca map
+ *   write_memory_with_expansion_vs_alloca_next — memory writes preserve next alloca offset
  *   write_memory_with_expansion_disjoint_read — disjoint write/read independence
  *   write_memory_with_expansion_regions_disjoint_read — regions_disjoint variant
  *   mstore_eq_write_mem               — MSTORE as write_memory_with_expansion
@@ -337,6 +341,34 @@ Theorem mstore8_memory_nondecreasing:
     LENGTH s.vs_memory ≤ LENGTH (mstore8 offset value s).vs_memory
 Proof
   rw[LENGTH_mstore8_eq, arithmeticTheory.MAX_DEF]
+QED
+
+Theorem lookup_var_write_memory_with_expansion[simp]:
+  ∀v off bytes s.
+    lookup_var v (write_memory_with_expansion off bytes s) = lookup_var v s
+Proof
+  simp[lookup_var_def, write_memory_with_expansion_def, LET_THM]
+QED
+
+Theorem eval_operand_write_memory_with_expansion[simp]:
+  ∀op off bytes s.
+    eval_operand op (write_memory_with_expansion off bytes s) = eval_operand op s
+Proof
+  Cases >> simp[eval_operand_def, write_memory_with_expansion_def, LET_THM]
+QED
+
+Theorem write_memory_with_expansion_vs_allocas[simp]:
+  ∀off bytes s.
+    (write_memory_with_expansion off bytes s).vs_allocas = s.vs_allocas
+Proof
+  simp[write_memory_with_expansion_def, LET_THM]
+QED
+
+Theorem write_memory_with_expansion_vs_alloca_next[simp]:
+  ∀off bytes s.
+    (write_memory_with_expansion off bytes s).vs_alloca_next = s.vs_alloca_next
+Proof
+  simp[write_memory_with_expansion_def, LET_THM]
 QED
 
 Theorem write_memory_with_expansion_disjoint_read:
