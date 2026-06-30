@@ -221,9 +221,15 @@ Theorem push_scope_with_var_env_consistent:
   env_consistent (extend_local env nm typ F) cx
     (st with scopes updated_by CONS (FEMPTY |+ (nm, <| assignable := F; type := tyv; value := v |>)))
 Proof
-  rw[env_consistent_def, env_context_consistent_def, env_scopes_consistent_def, env_immutables_consistent_def, extend_local_def, FLOOKUP_UPDATE] >> rpt strip_tac >>
-  Cases_on `id = nm` >> gvs[lookup_scopes_def, FLOOKUP_UPDATE] >>
-  res_tac >> gvs[]
+  simp[env_consistent_def, env_context_consistent_def, env_scopes_consistent_def,
+       env_immutables_consistent_def, extend_local_def, FLOOKUP_UPDATE] >>
+  strip_tac >>
+  conj_tac >- ( rw[] >> res_tac >> gvs[]) >>
+  conj_tac >- (
+    rw[] >>
+    Cases_on`id = nm` >> gvs[lookup_scopes_def, FLOOKUP_UPDATE] >>
+    res_tac >> gvs[]) >>
+  rw[] >> res_tac >> gvs[]
 QED
 
 Theorem extend_local_env_consistent_weaken:

@@ -2,6 +2,10 @@
  *
  * Properties of Venom step_inst that are independent of codegen.
  * These are properties of the Venom semantics, useful across multiple proofs.
+ *
+ * STATUS: Currently unused by the active codegen proof chain. This is small,
+ * general Venom semantics infrastructure and may ultimately belong near the
+ * shared Venom semantics/proofs rather than under codegen/proofs.
  *)
 
 Theory venomStepProps

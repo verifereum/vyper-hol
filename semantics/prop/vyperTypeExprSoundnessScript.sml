@@ -1,6 +1,10 @@
 (*
- * Expression, iterator, and assignment-target type soundness skeleton for the
- * fresh executable Vyper type system.
+ * Expression, iterator, and assignment-target type soundness for the
+ * executable Vyper type system.
+ *
+ * This file contains the expression-level type-soundness development,
+ * including result-shape helpers, iterator facts, assignment-target cases, and
+ * the exported expression soundness theorems.
  *)
 
 Theory vyperTypeExprSoundness

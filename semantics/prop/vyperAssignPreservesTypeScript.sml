@@ -15,9 +15,7 @@
 
 Theory vyperAssignPreservesType
 Ancestors
-  vyperTyping vyperValueOperation vyperState
-Libs
-  sortingTheory alistTheory listTheory pairTheory
+  vyperTyping vyperValueOperation vyperState sorting alist list pair
 
 (* ===== insert_sarray helpers ===== *)
 

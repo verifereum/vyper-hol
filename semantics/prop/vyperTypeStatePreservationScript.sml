@@ -1035,18 +1035,6 @@ Definition assign_target_assignable_context_def:
 End
 
 
-Theorem lookup_scopes_find_containing_scope[local]:
-  !scopes id entry.
-    lookup_scopes id scopes = SOME entry ==>
-    ?pre env rest.
-      find_containing_scope id scopes = SOME (pre, env, entry, rest)
-Proof
-  Induct >> simp[lookup_scopes_def, find_containing_scope_def] >>
-  rpt gen_tac >> Cases_on `FLOOKUP h id` >> gvs[] >>
-  strip_tac >> first_x_assum drule >> strip_tac >>
-  qexists_tac `h::pre` >> qexists_tac `env` >> qexists_tac `rest` >> simp[]
-QED
-
 Theorem find_containing_scope_preserved_under_preserves_tv[local]:
   preserves_tv cx st st' ==>
   MAP FDOM st'.scopes = MAP FDOM st.scopes ==>
@@ -1892,8 +1880,9 @@ Theorem well_typed_update_binop_no_type_error:
   u = (case type_to_int_bound lhs_ty of NONE => Unsigned 0 | SOME u => u) ==>
   evaluate_binop u lhs_tv bop lhs rhs <> INR (TypeError msg)
 Proof
-  (* TODO: prove directly by binop-family inversion.  This is exactly the
-     assignment-shaped instance of the existing builtin no-TypeError theorem. *)
+  (* TODO(proof-cleanup): this could be proved directly by binop-family
+     inversion.  For now it is the assignment-shaped instance of the existing
+     builtin no-TypeError theorem. *)
   metis_tac[well_typed_binop_no_type_error]
 QED
 

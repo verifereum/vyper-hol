@@ -311,7 +311,8 @@ Definition evaluate_binop_def:
        | _ => INR (TypeError "binop"))
      | ShR => (case v1 of
          IntV i1 => (case v2 of IntV i2 =>
-           (* TODO: check type constraints on shifts *)
+           (* TODO(semantic-limitation): shift operand type constraints are
+              currently enforced by callers/type-system assumptions. *)
            (if i2 < 0 then INR (RuntimeError "ShR0")
             else INL $ IntV $ int_shift_right (Num i2) i1) | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
@@ -321,7 +322,9 @@ Definition evaluate_binop_def:
        | BoolV b1 => (case v2 of BoolV b2 =>
            INL $ BoolV (b1 ∧ b2) | _ => INR (TypeError "binop"))
        | FlagV n1 => (case v2 of FlagV n2 =>
-           INL $ FlagV (Num(int_and (&n1) (&n2))) (* TODO: bitwise nums *)
+           (* TODO(semantic-limitation): flag bitwise ops use integer bit
+              operations until native num bitwise support is factored out. *)
+           INL $ FlagV (Num(int_and (&n1) (&n2)))
            | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | Or => (case v1 of
@@ -330,7 +333,9 @@ Definition evaluate_binop_def:
        | BoolV b1 => (case v2 of BoolV b2 =>
            INL $ BoolV (b1 ∨ b2) | _ => INR (TypeError "binop"))
        | FlagV n1 => (case v2 of FlagV n2 =>
-           INL $ FlagV (Num(int_or (&n1) (&n2))) (* TODO: bitwise nums *)
+           (* TODO(semantic-limitation): flag bitwise ops use integer bit
+              operations until native num bitwise support is factored out. *)
+           INL $ FlagV (Num(int_or (&n1) (&n2)))
            | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | XOr => (case v1 of
@@ -339,12 +344,16 @@ Definition evaluate_binop_def:
        | BoolV b1 => (case v2 of BoolV b2 =>
            INL $ BoolV (b1 ≠ b2) | _ => INR (TypeError "binop"))
        | FlagV n1 => (case v2 of FlagV n2 =>
-           INL $ FlagV (Num(int_xor (&n1) (&n2))) (* TODO: bitwise nums *)
+           (* TODO(semantic-limitation): flag bitwise ops use integer bit
+              operations until native num bitwise support is factored out. *)
+           INL $ FlagV (Num(int_xor (&n1) (&n2)))
            | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | In => (case v2 of
          FlagV n2 => (case v1 of FlagV n1 =>
-           INL $ BoolV (int_and (&n1) (&n2) ≠ 0) (* TODO: use bitwise ∧ on nums *)
+           (* TODO(semantic-limitation): use native num bitwise conjunction
+              once available/factored. *)
+           INL $ BoolV (int_and (&n1) (&n2) ≠ 0)
            | _ => INR (TypeError "binop"))
        | ArrayV av => INL $ BoolV $ evaluate_in_array NoneTV v1 av
        | _ => INR (TypeError "binop"))
@@ -613,6 +622,10 @@ Definition evaluate_convert_def:
      if within_int_bound (Unsigned n) i
      then INL $ IntV i
      else INR (RuntimeError "convert flag uint bound")) ∧
+  evaluate_convert _ (FlagV m) (BaseT (BytesT bd)) =
+    (if bd = Fixed 32
+     then INL $ BytesV (word_to_bytes_be ((n2w m) : bytes32))
+     else INR (TypeError "convert")) ∧
   evaluate_convert tenv (IntV i) (FlagT nsid) =
     (case FLOOKUP tenv (type_key nsid) of SOME (FlagArgs m) =>
        if 0 ≤ i ∧ Num i < 2 ** m then INL $ FlagV (Num i)

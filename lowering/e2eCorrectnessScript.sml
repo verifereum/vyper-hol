@@ -19,6 +19,10 @@
  *
  * Definitions (return_data_encodes, log_entry_corresponds,
  * state_effects_match, etc.) are in e2eDefsTheory.
+ *
+ * STATUS: E2E composition is scaffolding until lowering, the concrete Venom
+ * pipeline instance, and codegen correctness are all closed with compatible
+ * assumptions. See docs/compiler-proof-roadmap.md.
  *)
 
 Theory e2eCorrectness

@@ -1,37 +1,79 @@
 (*
- * Venom Memory Properties
+ * Venom Memory Properties (public interface)
  *
- * General properties of memory operations and alloca layout.
- * Re-exports proven properties from venomMemProofs via ACCEPT_TAC.
- * Definitions are in venomMemDefs.
+ * Stable, generally useful properties of memory operations and alloca layout.
+ * Longer memory proof engineering lives in venomMemProofs; this theory owns the
+ * public theorem names below and derives them from the workhorse proofs.
  *
  * TOP-LEVEL:
  *   allocas_non_overlapping_empty     — base case (no allocas)
- *   alloca_inv_empty                   — alloca_inv for empty allocas
- *   alloca_inv_step_inst               — alloca_inv preserved by step_inst
- *   alloca_inv_exec_block              — alloca_inv preserved by exec_block
- *   alloca_inv_run_block               — alloca_inv preserved by run_block
- *   alloca_inv_run_blocks              — alloca_inv preserved by run_blocks
- *   alloca_inv_run_function            — alloca_inv preserved by run_function
- *   allocas_non_overlapping_step_inst  — preserved by step_inst (needs alloca_inv)
- *   allocas_non_overlapping_run_block  — preserved by run_block (needs alloca_inv)
+ *   alloca_inv_empty                  — alloca_inv for empty allocas
+ *   alloca_inv_step_inst              — alloca_inv preserved by step_inst
+ *   alloca_inv_exec_block             — alloca_inv preserved by exec_block
+ *   alloca_inv_run_block              — alloca_inv preserved by run_block
+ *   alloca_inv_run_blocks             — alloca_inv preserved by run_blocks
+ *   alloca_inv_run_function           — alloca_inv preserved by run_function
+ *   step_inst_base_preserves_allocas — step_inst_base preserves alloca map
+ *   step_inst_base_preserves_alloca_next — step_inst_base preserves next alloca offset
+ *   step_inst_base_preserves_alloca_state — step_inst_base preserves alloca map+next
+ *   step_inst_preserves_alloca_state — step_inst preserves alloca map+next
+ *   step_inst_non_alloca_preserves_allocas — non-ALLOCA step_inst preserves alloca map
+ *   exec_alloca_alloca_next_mono      — exec_alloca does not decrease next alloca offset
+ *   step_inst_alloca_alloca_next_mono — ALLOCA step_inst does not decrease next offset
+ *   exec_alloca_preserves_memory      — exec_alloca does not change memory
+ *   step_inst_alloca_preserves_memory — ALLOCA step_inst does not change memory
+ *   step_inst_alloca_next_mono        — non-ext-call step_inst does not decrease next offset
+ *   allocas_non_overlapping_step_inst — preserved by step_inst (needs alloca_inv)
+ *   allocas_non_overlapping_run_block — preserved by run_block (needs alloca_inv)
  *   allocas_non_overlapping_exec_block — preserved by exec_block
- *   mload_mstore_disjoint            — disjoint 32-byte write/read independence
- *   mload_mstore8_disjoint           — disjoint 1-byte write / 32-byte read
+ *   LENGTH_write_memory_with_expansion — exact length after memory write
+ *   LENGTH_mstore_eq                  — exact length after MSTORE
+ *   LENGTH_mstore8_eq                 — exact length after MSTORE8
+ *   write_memory_with_expansion_nondecreasing — memory write does not shrink
+ *   mstore_memory_nondecreasing       — MSTORE does not shrink memory
+ *   mstore8_memory_nondecreasing      — MSTORE8 does not shrink memory
+ *   lookup_var_write_memory_with_expansion — memory writes preserve variables
+ *   eval_operand_write_memory_with_expansion — memory writes preserve operand evaluation
+ *   write_memory_with_expansion_vs_allocas — memory writes preserve alloca map
+ *   write_memory_with_expansion_vs_alloca_next — memory writes preserve next alloca offset
+ *   write_memory_with_expansion_identity — memory write is identity when bytes already match
+ *   write_memory_with_expansion_read_self — reading back the just-written bytes
+ *   write_memory_with_expansion_disjoint_read — disjoint write/read independence
+ *   write_memory_with_expansion_regions_disjoint_read — regions_disjoint variant
+ *   mstore_eq_write_mem               — MSTORE as write_memory_with_expansion
+ *   mstore_disjoint_read              — disjoint MSTORE/read independence
+ *   mload_mstore_disjoint             — disjoint 32-byte write/read independence
+ *   mload_mstore8_disjoint            — disjoint 1-byte write / 32-byte read
+ *   mload_mstore_same                 — same-offset 32-byte write/read
+ *   word_bytes_roundtrip              — byte-list to word and back
+ *   word_to_bytes_be_w2w              — zero extension pads big-endian bytes
+ *   word_of_bytes_be_inj              — big-endian byte-to-word injectivity
+ *   w2w_word_of_bytes_be_pad_left     — corollary for word_of_bytes_be + w2w
  *)
 
 Theory venomMemProps
 Ancestors
-  venomMemDefs venomMemProofs venomExecSemantics
+  venomMemDefs venomMemProofs venomExecSemantics venomState venomInst venomEffects divides
+  list rich_list
+Libs
+  wordsLib
+
+Theorem dimindex_256[simp]:
+  dimindex (:256) = 256
+Proof
+  EVAL_TAC
+QED
 
 Theorem allocas_non_overlapping_empty:
   ∀s. s.vs_allocas = FEMPTY ⇒ allocas_non_overlapping s
-Proof ACCEPT_TAC venomMemProofsTheory.allocas_non_overlapping_empty_proof
+Proof
+  metis_tac[venomMemProofsTheory.allocas_non_overlapping_empty_proof]
 QED
 
 Theorem alloca_inv_empty:
   ∀s. s.vs_allocas = FEMPTY ⇒ alloca_inv s
-Proof ACCEPT_TAC venomMemProofsTheory.alloca_inv_empty_proof
+Proof
+  metis_tac[venomMemProofsTheory.alloca_inv_empty_proof]
 QED
 
 Theorem alloca_inv_step_inst:
@@ -39,7 +81,8 @@ Theorem alloca_inv_step_inst:
     step_inst fuel ctx inst s = OK s' ∧
     alloca_inv s ⇒
     alloca_inv s'
-Proof ACCEPT_TAC venomMemProofsTheory.alloca_inv_step_inst_proof
+Proof
+  metis_tac[venomMemProofsTheory.alloca_inv_step_inst_proof]
 QED
 
 Theorem alloca_inv_run_block:
@@ -47,7 +90,8 @@ Theorem alloca_inv_run_block:
     run_block fuel ctx bb s = OK s' ∧
     alloca_inv s ⇒
     alloca_inv s'
-Proof ACCEPT_TAC venomMemProofsTheory.alloca_inv_run_block_proof
+Proof
+  metis_tac[venomMemProofsTheory.alloca_inv_run_block_proof]
 QED
 
 Theorem alloca_inv_exec_block:
@@ -55,7 +99,8 @@ Theorem alloca_inv_exec_block:
     exec_block fuel ctx bb s = OK s' ∧
     alloca_inv s ⇒
     alloca_inv s'
-Proof ACCEPT_TAC venomMemProofsTheory.alloca_inv_exec_block_proof
+Proof
+  metis_tac[venomMemProofsTheory.alloca_inv_exec_block_proof]
 QED
 
 Theorem alloca_inv_run_blocks:
@@ -63,7 +108,8 @@ Theorem alloca_inv_run_blocks:
     run_blocks fuel ctx fn s = OK s' ∧
     alloca_inv s ⇒
     alloca_inv s'
-Proof ACCEPT_TAC venomMemProofsTheory.alloca_inv_run_blocks_proof
+Proof
+  metis_tac[venomMemProofsTheory.alloca_inv_run_blocks_proof]
 QED
 
 Theorem alloca_inv_run_function:
@@ -71,7 +117,8 @@ Theorem alloca_inv_run_function:
     run_function fuel ctx fn s = OK s' ∧
     alloca_inv s ⇒
     alloca_inv s'
-Proof ACCEPT_TAC venomMemProofsTheory.alloca_inv_run_function_proof
+Proof
+  metis_tac[venomMemProofsTheory.alloca_inv_run_function_proof]
 QED
 
 Theorem step_inst_base_preserves_allocas:
@@ -83,7 +130,148 @@ Theorem step_inst_base_preserves_allocas:
     inst.inst_opcode ≠ INVOKE ∧
     inst.inst_opcode ≠ ALLOCA ⇒
     s'.vs_allocas = s.vs_allocas
-Proof ACCEPT_TAC venomMemProofsTheory.step_inst_base_preserves_allocas
+Proof
+  metis_tac[venomMemProofsTheory.step_inst_base_preserves_allocas]
+QED
+
+Theorem step_inst_base_preserves_alloca_next:
+  ∀inst s s'.
+    (step_inst_base inst s = OK s' ∨
+     step_inst_base inst s = Halt s' ∨
+     (∃a. step_inst_base inst s = Abort a s') ∨
+     (∃v. step_inst_base inst s = IntRet v s')) ∧
+    inst.inst_opcode ≠ INVOKE ∧
+    inst.inst_opcode ≠ ALLOCA ⇒
+    s'.vs_alloca_next = s.vs_alloca_next
+Proof
+  metis_tac[venomMemProofsTheory.step_inst_base_preserves_alloca_next]
+QED
+
+Theorem step_inst_base_preserves_alloca_state:
+  ∀inst s s'.
+    step_inst_base inst s = OK s' ∧
+    ¬is_terminator inst.inst_opcode ∧
+    ¬is_alloca_op inst.inst_opcode ⇒
+    s'.vs_allocas = s.vs_allocas ∧
+    s'.vs_alloca_next = s.vs_alloca_next
+Proof
+  rpt gen_tac >> strip_tac >>
+  `inst.inst_opcode ≠ INVOKE` by (
+    CCONTR_TAC >> gvs[] >>
+    qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
+    ASM_REWRITE_TAC[step_inst_base_def] >> simp[]) >>
+  `inst.inst_opcode ≠ ALLOCA` by (CCONTR_TAC >> gvs[is_alloca_op_def]) >>
+  metis_tac[step_inst_base_preserves_allocas,
+            step_inst_base_preserves_alloca_next]
+QED
+
+Theorem step_inst_preserves_alloca_state:
+  ∀fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' ∧
+    ¬is_terminator inst.inst_opcode ∧
+    ¬is_alloca_op inst.inst_opcode ∧
+    ¬is_ext_call_op inst.inst_opcode ∧
+    inst.inst_opcode ≠ INVOKE ⇒
+    s'.vs_allocas = s.vs_allocas ∧
+    s'.vs_alloca_next = s.vs_alloca_next
+Proof
+  rpt strip_tac >>
+  `step_inst_base inst s = OK s'` by gvs[step_inst_non_invoke] >>
+  metis_tac[step_inst_base_preserves_alloca_state]
+QED
+
+Theorem step_inst_non_alloca_preserves_allocas:
+  ∀fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' ∧
+    ¬is_alloca_op inst.inst_opcode ∧
+    inst.inst_opcode ≠ INVOKE ⇒
+    s'.vs_allocas = s.vs_allocas
+Proof
+  rpt strip_tac >>
+  `inst.inst_opcode ≠ ALLOCA` by (Cases_on `inst.inst_opcode` >> fs[is_alloca_op_def]) >>
+  `step_inst_base inst s = OK s'` by metis_tac[step_inst_non_invoke] >>
+  metis_tac[step_inst_base_preserves_allocas]
+QED
+
+Theorem step_inst_non_alloca_non_term_preserves_allocas:
+  ∀fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' ∧
+    ¬is_alloca_op inst.inst_opcode ∧
+    ¬is_terminator inst.inst_opcode ∧
+    inst.inst_opcode ≠ INVOKE ⇒
+    s'.vs_allocas = s.vs_allocas
+Proof
+  metis_tac[step_inst_non_alloca_preserves_allocas]
+QED
+
+Theorem exec_alloca_alloca_next_mono:
+  ∀inst s sz s'.
+    exec_alloca inst s sz = OK s' ⇒
+    s.vs_alloca_next ≤ s'.vs_alloca_next
+Proof
+  simp[exec_alloca_def, AllCaseEqs(), update_var_def, LET_THM] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem step_inst_alloca_alloca_next_mono:
+  ∀fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' ∧
+    is_alloca_op inst.inst_opcode ∧
+    inst.inst_opcode ≠ INVOKE ⇒
+    s.vs_alloca_next ≤ s'.vs_alloca_next
+Proof
+  rpt strip_tac >>
+  `inst.inst_opcode = ALLOCA` by
+    (Cases_on `inst.inst_opcode` >> gvs[is_alloca_op_def]) >>
+  `step_inst_base inst s = OK s'` by gvs[step_inst_non_invoke] >>
+  pop_assum mp_tac >> simp[step_inst_base_def] >>
+  Cases_on `inst.inst_operands` >- simp[exec_alloca_def] >>
+  Cases_on `t` >> simp[] >>
+  Cases_on `h` >> simp[] >>
+  metis_tac[exec_alloca_alloca_next_mono]
+QED
+
+Theorem exec_alloca_preserves_memory:
+  ∀inst s sz s'.
+    exec_alloca inst s sz = OK s' ⇒
+    s'.vs_memory = s.vs_memory
+Proof
+  simp[exec_alloca_def, AllCaseEqs(), update_var_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem step_inst_alloca_preserves_memory:
+  ∀fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' ∧
+    is_alloca_op inst.inst_opcode ∧
+    inst.inst_opcode ≠ INVOKE ⇒
+    s'.vs_memory = s.vs_memory
+Proof
+  rpt strip_tac >>
+  `inst.inst_opcode = ALLOCA` by
+    (Cases_on `inst.inst_opcode` >> gvs[is_alloca_op_def]) >>
+  `step_inst_base inst s = OK s'` by gvs[step_inst_non_invoke] >>
+  pop_assum mp_tac >>
+  simp[step_inst_base_def] >>
+  Cases_on `inst.inst_operands` >- simp[exec_alloca_def] >>
+  Cases_on `t` >> simp[] >>
+  Cases_on `h` >> simp[] >>
+  metis_tac[exec_alloca_preserves_memory]
+QED
+
+Theorem step_inst_alloca_next_mono:
+  ∀fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' ∧
+    ¬is_terminator inst.inst_opcode ∧
+    ¬is_ext_call_op inst.inst_opcode ∧
+    inst.inst_opcode ≠ INVOKE ⇒
+    s.vs_alloca_next ≤ s'.vs_alloca_next
+Proof
+  rpt strip_tac >>
+  Cases_on `is_alloca_op inst.inst_opcode`
+  >- metis_tac[step_inst_alloca_alloca_next_mono] >>
+  `s'.vs_alloca_next = s.vs_alloca_next` suffices_by simp[] >>
+  metis_tac[step_inst_preserves_alloca_state]
 QED
 
 Theorem allocas_non_overlapping_step_inst:
@@ -91,7 +279,8 @@ Theorem allocas_non_overlapping_step_inst:
     step_inst fuel ctx inst s = OK s' ∧
     alloca_inv s ⇒
     allocas_non_overlapping s'
-Proof ACCEPT_TAC venomMemProofsTheory.allocas_non_overlapping_step_inst_proof
+Proof
+  metis_tac[venomMemProofsTheory.allocas_non_overlapping_step_inst_proof]
 QED
 
 Theorem allocas_non_overlapping_run_block:
@@ -99,7 +288,8 @@ Theorem allocas_non_overlapping_run_block:
     run_block fuel ctx bb s = OK s' ∧
     alloca_inv s ⇒
     allocas_non_overlapping s'
-Proof ACCEPT_TAC venomMemProofsTheory.allocas_non_overlapping_run_block_proof
+Proof
+  metis_tac[venomMemProofsTheory.allocas_non_overlapping_run_block_proof]
 QED
 
 Theorem allocas_non_overlapping_exec_block:
@@ -107,44 +297,221 @@ Theorem allocas_non_overlapping_exec_block:
     exec_block fuel ctx bb s = OK s' ∧
     alloca_inv s ⇒
     allocas_non_overlapping s'
-Proof ACCEPT_TAC venomMemProofsTheory.allocas_non_overlapping_exec_block_proof
+Proof
+  metis_tac[venomMemProofsTheory.allocas_non_overlapping_exec_block_proof]
+QED
+
+Theorem LENGTH_write_memory_with_expansion:
+  ∀offset bytes s.
+    LENGTH (write_memory_with_expansion offset bytes s).vs_memory =
+    MAX (LENGTH s.vs_memory) (offset + LENGTH bytes)
+Proof
+  rw[write_memory_with_expansion_def, LET_THM, arithmeticTheory.MAX_DEF]
+QED
+
+Theorem LENGTH_mstore_eq:
+  ∀off (v:bytes32) s.
+    LENGTH (mstore off v s).vs_memory = MAX (LENGTH s.vs_memory) (off + 32)
+Proof
+  rw[mstore_def, LET_THM, byteTheory.LENGTH_word_to_bytes,
+     arithmeticTheory.MAX_DEF]
+QED
+
+Theorem LENGTH_mstore8_eq:
+  ∀off (v:bytes32) s.
+    LENGTH (mstore8 off v s).vs_memory = MAX (LENGTH s.vs_memory) (off + 1)
+Proof
+  rw[mstore8_def, LET_THM, arithmeticTheory.MAX_DEF]
+QED
+
+Theorem write_memory_with_expansion_nondecreasing:
+  ∀offset bytes s.
+    LENGTH s.vs_memory ≤ LENGTH (write_memory_with_expansion offset bytes s).vs_memory
+Proof
+  rw[LENGTH_write_memory_with_expansion, arithmeticTheory.MAX_DEF]
+QED
+
+Theorem mstore_memory_nondecreasing:
+  ∀offset (value:bytes32) s.
+    LENGTH s.vs_memory ≤ LENGTH (mstore offset value s).vs_memory
+Proof
+  rw[LENGTH_mstore_eq, arithmeticTheory.MAX_DEF]
+QED
+
+Theorem mstore8_memory_nondecreasing:
+  ∀offset (value:bytes32) s.
+    LENGTH s.vs_memory ≤ LENGTH (mstore8 offset value s).vs_memory
+Proof
+  rw[LENGTH_mstore8_eq, arithmeticTheory.MAX_DEF]
+QED
+
+Theorem lookup_var_write_memory_with_expansion[simp]:
+  ∀v off bytes s.
+    lookup_var v (write_memory_with_expansion off bytes s) = lookup_var v s
+Proof
+  simp[lookup_var_def, write_memory_with_expansion_def, LET_THM]
+QED
+
+Theorem eval_operand_write_memory_with_expansion[simp]:
+  ∀op off bytes s.
+    eval_operand op (write_memory_with_expansion off bytes s) = eval_operand op s
+Proof
+  Cases >> simp[eval_operand_def, write_memory_with_expansion_def, LET_THM]
+QED
+
+Theorem write_memory_with_expansion_vs_allocas[simp]:
+  ∀off bytes s.
+    (write_memory_with_expansion off bytes s).vs_allocas = s.vs_allocas
+Proof
+  simp[write_memory_with_expansion_def, LET_THM]
+QED
+
+Theorem write_memory_with_expansion_vs_alloca_next[simp]:
+  ∀off bytes s.
+    (write_memory_with_expansion off bytes s).vs_alloca_next = s.vs_alloca_next
+Proof
+  simp[write_memory_with_expansion_def, LET_THM]
+QED
+
+Theorem write_memory_with_expansion_identity:
+  ∀dst data s.
+    dst + LENGTH data ≤ LENGTH s.vs_memory ∧
+    TAKE (LENGTH data) (DROP dst s.vs_memory) = data ⇒
+    write_memory_with_expansion dst data s = s
+Proof
+  rw[write_memory_with_expansion_def, LET_THM] >>
+  `¬(dst + LENGTH data - LENGTH s.vs_memory > 0)` by simp[] >>
+  simp[] >>
+  `TAKE dst s.vs_memory ++ data ++ DROP (dst + LENGTH data) s.vs_memory = s.vs_memory`
+    suffices_by (strip_tac >> simp[venom_state_component_equality]) >>
+  `DROP dst s.vs_memory = TAKE (LENGTH data) (DROP dst s.vs_memory) ++
+     DROP (LENGTH data) (DROP dst s.vs_memory)` by simp[TAKE_DROP] >>
+  `DROP (LENGTH data) (DROP dst s.vs_memory) = DROP (dst + LENGTH data) s.vs_memory`
+    by simp[rich_listTheory.DROP_DROP_T, arithmeticTheory.ADD_COMM] >>
+  metis_tac[TAKE_DROP, APPEND_ASSOC]
+QED
+
+Triviality take_drop_splice[local]:
+  ∀m (Y:'a list) X Z.
+    m ≤ LENGTH X ⇒
+    TAKE (LENGTH Y) (DROP m (TAKE m X ++ Y ++ Z)) = Y
+Proof
+  rpt strip_tac >>
+  `TAKE m X ++ Y ++ Z = TAKE m X ++ (Y ++ Z)` by simp[] >>
+  pop_assum SUBST1_TAC >>
+  `DROP m (TAKE m X ++ (Y ++ Z)) = DROP m (TAKE m X) ++ (Y ++ Z)` by
+    (irule DROP_APPEND1 >> simp[LENGTH_TAKE]) >>
+  pop_assum SUBST1_TAC >>
+  simp[rich_listTheory.DROP_TAKE_EQ_NIL, rich_listTheory.TAKE_LENGTH_APPEND]
+QED
+
+Theorem write_memory_with_expansion_read_self:
+  ∀offset (bytes:word8 list) s.
+    TAKE (LENGTH bytes)
+      (DROP offset (write_memory_with_expansion offset bytes s).vs_memory) =
+    bytes
+Proof
+  rw[write_memory_with_expansion_def, LET_THM] >>
+  qmatch_goalsub_abbrev_tac `TAKE offset expanded` >>
+  `offset ≤ LENGTH expanded` by
+    (simp[Abbr `expanded`] >> IF_CASES_TAC >> simp[]) >>
+  simp[take_drop_splice]
+QED
+
+Theorem write_memory_with_expansion_disjoint_read:
+  ∀off n d (bytes:word8 list) s.
+    off + n ≤ LENGTH s.vs_memory ∧
+    (off + n ≤ d ∨ d + LENGTH bytes ≤ off) ⇒
+    TAKE n (DROP off (write_memory_with_expansion d bytes s).vs_memory) =
+    TAKE n (DROP off s.vs_memory)
+Proof
+  rw[write_memory_with_expansion_def, LET_THM] >>
+  simp[LIST_EQ_REWRITE, LENGTH_TAKE, LENGTH_DROP] >>
+  rpt strip_tac >>
+  simp[EL_TAKE, EL_DROP, EL_APPEND_EQN, LENGTH_TAKE,
+       rich_listTheory.LENGTH_REPLICATE]
+QED
+
+Theorem write_memory_with_expansion_regions_disjoint_read:
+  ∀off n d (bytes:word8 list) s.
+    off + n ≤ LENGTH s.vs_memory ∧
+    regions_disjoint (off, n) (d, LENGTH bytes) ⇒
+    TAKE n (DROP off (write_memory_with_expansion d bytes s).vs_memory) =
+    TAKE n (DROP off s.vs_memory)
+Proof
+  rw[regions_disjoint_def]
+  >- simp[]
+  >- (rw[write_memory_with_expansion_def, LET_THM] >>
+      simp[LIST_EQ_REWRITE, LENGTH_TAKE, LENGTH_DROP] >>
+      rpt strip_tac >>
+      simp[EL_TAKE, EL_DROP, EL_APPEND_EQN, LENGTH_TAKE,
+           rich_listTheory.LENGTH_REPLICATE]) >>
+  irule write_memory_with_expansion_disjoint_read >> simp[]
+QED
+
+Theorem mstore_eq_write_mem:
+  ∀d (v:bytes32) s.
+    mstore d v s = write_memory_with_expansion d (word_to_bytes v T) s
+Proof
+  rw[mstore_def, write_memory_with_expansion_def, LET_THM]
+QED
+
+Theorem mstore_disjoint_read:
+  ∀off n addr_w (v:bytes32) s.
+    off + n ≤ LENGTH s.vs_memory ∧
+    regions_disjoint (off, n) (addr_w, 32) ⇒
+    TAKE n (DROP off (mstore addr_w v s).vs_memory) =
+    TAKE n (DROP off s.vs_memory)
+Proof
+  rpt strip_tac >> Cases_on `n = 0` >- simp[] >>
+  simp[mstore_eq_write_mem] >>
+  irule write_memory_with_expansion_disjoint_read >>
+  simp[byteTheory.LENGTH_word_to_bytes] >>
+  gvs[regions_disjoint_def]
 QED
 
 Theorem mload_mstore_disjoint:
   ∀off1 off2 val s.
     regions_disjoint (off1, 32) (off2, 32) ⇒
     mload off2 (mstore off1 val s) = mload off2 s
-Proof ACCEPT_TAC venomMemProofsTheory.mload_mstore_disjoint_proof
+Proof
+  metis_tac[venomMemProofsTheory.mload_mstore_disjoint_proof]
 QED
 
 Theorem mload_mstore8_disjoint:
   ∀off1 off2 val s.
     regions_disjoint (off1, 1) (off2, 32) ⇒
     mload off2 (mstore8 off1 val s) = mload off2 s
-Proof ACCEPT_TAC venomMemProofsTheory.mload_mstore8_disjoint_proof
+Proof
+  metis_tac[venomMemProofsTheory.mload_mstore8_disjoint_proof]
 QED
 
 Theorem mload_mstore_same:
   ∀off val s.
     mload off (mstore off val s) = val
 Proof
-  ACCEPT_TAC venomMemProofsTheory.mload_mstore_same_proof
+  metis_tac[venomMemProofsTheory.mload_mstore_same_proof]
 QED
 
-(* Key property: converting bytes to a word and back is identity.
-   Generalised from mmCopyEquivScript for wider reuse. *)
 Theorem word_bytes_roundtrip:
   ∀ (bytes : byte list).
     8 ≤ dimindex(:α) ∧ divides 8 (dimindex(:α)) ∧
     LENGTH bytes = dimindex(:α) DIV 8 ⇒
     word_to_bytes (word_of_bytes T (0w : α word) bytes) T = bytes
-Proof ACCEPT_TAC venomMemProofsTheory.word_bytes_roundtrip_proof
+Proof
+  metis_tac[venomMemProofsTheory.word_bytes_roundtrip_proof]
 QED
 
-(* word_of_bytes T 0w is injective on 32-byte lists *)
-(* TODO: upstream a more general lemma to byteTheory *)
-(* Big-endian word_to_bytes of w2w is PAD_LEFT of word_to_bytes.
-   Zero-extending a word pads with zero bytes on the left in big-endian. *)
+Theorem word_bytes_roundtrip_256:
+  ∀bytes.
+    LENGTH bytes = 32 ⇒
+    word_to_bytes (word_of_bytes T (0w : bytes32) bytes) T = bytes
+Proof
+  rpt strip_tac >>
+  irule word_bytes_roundtrip >>
+  simp[divides_def]
+QED
+
 Theorem word_to_bytes_be_w2w:
   ∀ (w : α word).
     8 ≤ dimindex(:α) ∧ 8 ≤ dimindex(:β) ∧
@@ -153,7 +520,8 @@ Theorem word_to_bytes_be_w2w:
     ⇒
     word_to_bytes (w2w w : β word) T =
     PAD_LEFT 0w (dimindex(:β) DIV 8) (word_to_bytes w T)
-Proof ACCEPT_TAC word_to_bytes_be_w2w_proof
+Proof
+  metis_tac[venomMemProofsTheory.word_to_bytes_be_w2w_proof]
 QED
 
 Theorem word_of_bytes_be_inj:
@@ -163,10 +531,10 @@ Theorem word_of_bytes_be_inj:
     LENGTH bs2 = dimindex(:α) DIV 8 ∧
     word_of_bytes T (0w : α word) bs1 = word_of_bytes T (0w : α word) bs2 ⇒
     bs1 = bs2
-Proof ACCEPT_TAC venomMemProofsTheory.word_of_bytes_be_inj_proof
+Proof
+  metis_tac[venomMemProofsTheory.word_of_bytes_be_inj_proof]
 QED
 
-(* Corollary: w2w of word_of_bytes_be = word_of_bytes_be of PAD_LEFT *)
 Theorem w2w_word_of_bytes_be_pad_left:
   ∀ (l : byte list).
     8 ≤ dimindex(:α) ∧ 8 ≤ dimindex(:β) ∧
@@ -176,5 +544,6 @@ Theorem w2w_word_of_bytes_be_pad_left:
     ⇒
     w2w (word_of_bytes_be l : α word) =
     (word_of_bytes_be (PAD_LEFT 0w (dimindex(:β) DIV 8) l) : β word)
-Proof ACCEPT_TAC w2w_word_of_bytes_be_pad_left_proof
+Proof
+  metis_tac[venomMemProofsTheory.w2w_word_of_bytes_be_pad_left_proof]
 QED

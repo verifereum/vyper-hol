@@ -1,7 +1,7 @@
 Theory mem2varProofs
 Ancestors
   mem2varDefs basePtrProps pointerConfinedDefs passSimulationProps
-  memLocDefs venomExecProofs venomInstProofs venomMemDefs
+  memLocDefs venomExecProofs venomInstProofs venomMemDefs venomMemProps
   basePtrDefs
   passSimulationDefs
   stateEquiv
@@ -1143,7 +1143,7 @@ Resume alloca_bridge_exec_block[step_cases]:
     (* Non-terminator case *)
     qpat_x_assum `alloca_inv _ ==> _` mp_tac >> simp[] >>
     strip_tac >> first_x_assum irule >> rpt conj_tac
-    >- metis_tac[venomMemProofsTheory.alloca_inv_step_inst_proof]
+    >- metis_tac[venomMemPropsTheory.alloca_inv_step_inst]
     >- (qpat_x_assum `!inst. _` (qspecl_then
           [`inst0`,`fuel`,`ctx`,`s`,`s_mid`] mp_tac) >> simp[])
     >> (mp_tac (Q.SPECL [`fn`,`fuel`,`ctx`,`inst0`,`s`,`s_mid`]

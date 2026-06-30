@@ -674,7 +674,8 @@ End
 val () = cv_auto_trans vyper_to_tx_params_def;
 
 (* Default gas limit for external calls - effectively infinite.
-   TODO: May need to be configurable or come from an oracle. *)
+   TODO(semantic-limitation): this may need to be configurable or supplied by
+   an oracle once external-call gas modelling is formalized. *)
 Definition default_call_gas_limit_def:
   default_call_gas_limit : num = 2 ** 64
 End
@@ -1001,7 +1002,8 @@ Definition evaluate_def:
        od)
   od ∧
   eval_stmt cx (Log id es) = do
-    (* TODO: check arguments length and types *)
+    (* TODO(semantic-limitation): event argument length/type checking is
+       currently delegated to frontend/type-system assumptions. *)
     vs <- eval_exprs cx es;
     push_log (id, vs)
   od ∧
@@ -1146,7 +1148,9 @@ Definition evaluate_def:
   od ∧
   eval_expr cx (Literal _ l) = return $ Value $ evaluate_literal l ∧
   eval_expr cx (StructLit _ (src_id_opt, id) kes) = do
-    (* TODO: type checking - validate fields against struct definition from src_id_opt *)
+    (* TODO(semantic-limitation): struct literals currently trust
+       frontend/type-system checks; validate fields against the src_id_opt
+       struct definition when full type checking is formalized. *)
     ks <<- MAP FST kes;
     vs <- eval_exprs cx (MAP SND kes);
     return $ Value $ StructV $ ZIP (ks, vs)
@@ -1789,6 +1793,7 @@ Definition load_contract_def:
                 with in_deploy := T in
        case call_external_function am cx nr mut ts mods args dflts tx.args body ret
          of (INR e, _) => INR e
-       (* TODO: update balances on return *)
+       (* TODO(semantic-limitation): deployment currently omits balance updates
+          on successful constructor return. *)
           | (_, am) => INL (am with sources updated_by CONS (addr, mods))
 End

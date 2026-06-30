@@ -1,7 +1,7 @@
 (*
- * Variable Definition Analysis — Properties (Statements Only)
+ * Variable Definition Analysis — Properties
  *
- * Re-exports from proofs/varDefProofsScript.sml via ACCEPT_TAC.
+ * Consumer-facing soundness theorems derived from varDefProofs.
  *
  * TOP-LEVEL:
  *   vardef_fixpoint    — analysis result is a fixpoint
@@ -26,7 +26,7 @@ Theorem vardef_fixpoint:
                     entry_val cfg fn.fn_blocks in
     is_fixpoint process cfg.cfg_dfs_pre (vardef_analyze fn)
 Proof
-  ACCEPT_TAC vardef_fixpoint_proof
+  metis_tac[vardef_fixpoint_proof]
 QED
 
 (* Every variable in any output set comes from fn_all_assignments. *)
@@ -36,7 +36,7 @@ Theorem vardef_out_bounded:
     MEM v (vardef_out_of fn lbl) ==>
     MEM v (fn_all_assignments fn)
 Proof
-  ACCEPT_TAC vardef_out_bounded_proof
+  metis_tac[vardef_out_bounded_proof]
 QED
 
 (* If v is in the defined set at block exit, then every block-level
@@ -52,5 +52,5 @@ Theorem vardef_sound:
     LAST path = lbl ==>
     ?lbl'. MEM lbl' path /\ var_assigned_in_block fn lbl' v
 Proof
-  ACCEPT_TAC vardef_sound_proof
+  metis_tac[vardef_sound_proof]
 QED

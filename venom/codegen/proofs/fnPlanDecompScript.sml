@@ -8,6 +8,10 @@
  *
  * These connect generate_fn_plan (flat stack_op list) to
  * gen_fn_sim_fuel (which needs per-block ps_fn and bops_fn).
+ *
+ * STATUS: Currently not imported by the active codegen correctness chain.
+ * Keep as plausible future infrastructure for closing gen_fn_simulation in
+ * venomToAsmPropsScript.sml, not dead code.
  *)
 
 
