@@ -1,6 +1,6 @@
 [holbuild]
 schema = 2
-minimum_version = "0.8.0"
+minimum_version = "0.8.1"
 
 [project]
 name = "vyper-hol"
