@@ -1,14 +1,5 @@
 # Agent Guide for vyper-hol workflow
 
-## Skills
-
-```
-skills/
-  venom-hol-review/SKILL.md  — Review checklist for HOL4 theory files
-```
-
-Use `skills/<name>/SKILL.md` when the task matches. Resolve relative paths against the skill directory.
-
 ## CRITICAL: Tool Usage
 
 Prefer using dedicated tools instead of bash operation:
@@ -157,6 +148,8 @@ For monadic/list preservation proofs and other branch-heavy HOL4 scripts, also r
 - run_block induction: `ho_match_mp_tac run_block_ind >> ...`
 
 ## Proof structure guidelines
+
+Theorem statements should have minimal preconditions, maximal useful conclusions, and accurate natural-language comments when present. Avoid catch-all theorem conclusions like `_ => T`/`_ => F` when enumerating constructors would make coverage clear.
 
 Avoid long proofs. If you encounter difficulties with a complex subgoal, formulate this exact subgoal as a helper lemma and prove it separately. Make sure you can use the formulated helper lemma in the original proof.
 

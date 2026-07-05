@@ -1,5 +1,8 @@
 # Proof Roadmap: Compiler Correctness
 
+> Historical roadmap archived during documentation cleanup. See
+> [`../compiler-proof-roadmap.md`](../compiler-proof-roadmap.md) for the current roadmap.
+
 ## Overview
 
 The compiler correctness theorem (`vyper_call_correct`) is proved but depends
