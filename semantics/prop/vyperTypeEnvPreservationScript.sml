@@ -564,7 +564,7 @@ Proof
 QED
 
 Theorem assign_target_immutable_preserves_assignable_lookup:
-  assign_target cx (BaseTargetV (ImmutableVar nm) sbs) ao st = (res, st') ==>
+  assign_target cx (BaseTargetV (ImmutableVar src_id_opt nm) sbs) ao st = (res, st') ==>
   preserves_assignable_lookup st st'
 Proof
   rpt strip_tac >>
@@ -575,7 +575,7 @@ Proof
        set_address_immutables_def, lift_option_def, lift_option_type_def,
        lift_sum_def, ignore_bind_def] >>
   Cases_on `ALOOKUP st.immutables cx.txn.target` >> simp[return_def, raise_def] >>
-  Cases_on `FLOOKUP (get_source_immutables (current_module cx) x) (string_to_num nm)` >>
+  Cases_on `FLOOKUP (get_source_immutables src_id_opt x) (string_to_num nm)` >>
   simp[return_def, raise_def] >>
   PairCases_on `x'` >> simp[] >>
   Cases_on `assign_subscripts x'0 x'1 (REVERSE sbs) ao` >> simp[return_def, raise_def] >>

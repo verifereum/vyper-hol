@@ -159,9 +159,12 @@ Proof
     (rpt strip_tac >> Cases_on `cx.txn.target = tgt` >> simp[alistTheory.ALOOKUP_ADELKEY]) >>
     simp[get_source_immutables_def, set_source_immutables_def,
          finite_mapTheory.FLOOKUP_UPDATE] >>
-    Cases_on `src_id_opt = current_module cx` >> gvs[] >>
-    rpt strip_tac >> Cases_on `string_to_num id = n` >> simp[] >>
-    gvs[get_source_immutables_def]) >-
+    Cases_on `src_id_opt = current_module cx` >>
+    gvs[get_source_immutables_def, finite_mapTheory.FLOOKUP_UPDATE,
+        alistTheory.ALOOKUP_ADELKEY] >>
+    rw[finite_mapTheory.FLOOKUP_UPDATE, optionTheory.IS_SOME_EXISTS,
+       alistTheory.ALOOKUP_ADELKEY] >>
+    gvs[]) >-
   (* TupleTargetV with TupleV - use helper lemma *)
   MATCH_ACCEPT_TAC assign_target_tuple_preserves_immutables_dom >-
   (* Other TupleTargetV cases - all vacuously true (raise) - 13 cases *)

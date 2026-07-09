@@ -183,14 +183,11 @@ Proof
     simp_tac(srw_ss())[Once well_typed_expr_def] >> rw[AllCaseEqs()] >>
     goal_assum drule >> simp[])
   >- (
-    qpat_x_assum `(case get_immutables _ _ _ of _ => _ | _ => _) = _` mp_tac >>
-    Cases_on `get_immutables cx (current_module cx) st0` >> Cases_on `q` >>
-    gvs[return_def, raise_def, bind_apply, type_check_def, assert_def,
-        lift_option_type_def, AllCaseEqs(), option_CASE_rator,
-        ignore_bind_apply])
-  >- (
     rename1`TopLevelNameTarget p` >>
-    Cases_on`p` >> gvs[evaluate_def,return_def] )
+    Cases_on`p` >>
+    gvs[Once evaluate_def, bind_apply, lift_option_type_def, return_def, raise_def] >>
+    Cases_on `get_module_code cx q` >> gvs[return_def, raise_def] >>
+    Cases_on `is_immutable_decl (string_to_num r) x` >> gvs[return_def])
   >- (
     gvs[bind_apply,AllCaseEqs(),bind_def] >>
     pairarg_tac >>

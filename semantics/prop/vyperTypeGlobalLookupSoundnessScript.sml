@@ -81,17 +81,12 @@ Theorem TopLevelName_missing_immutable_branch_characterisation:
     FLOOKUP env.bare_globals (src,string_to_num id) <> NONE /\ src <> env.current_src
 Proof
   rpt gen_tac >> strip_tac >>
-  `FLOOKUP env.toplevel_vtypes (src,string_to_num id) = SOME (Type ty)` by
-    gvs[well_typed_expr_def] >>
-  conj_tac
-  >- (Cases_on `FLOOKUP env.bare_globals (src,string_to_num id)` >>
-      gvs[] >>
-      drule_all TopLevelName_nonbare_find_NONE_contradiction >>
-      simp[]) >>
+  Cases_on `FLOOKUP env.bare_globals (src,string_to_num id)` >- (
+    `FLOOKUP env.toplevel_vtypes (src,string_to_num id) = SOME (Type ty)` by
+      gvs[well_typed_expr_def] >>
+    drule_all TopLevelName_nonbare_find_NONE_contradiction >> simp[]) >>
+  conj_tac >- simp[] >>
   strip_tac >> gvs[] >>
-  Cases_on `FLOOKUP env.bare_globals (env.current_src,string_to_num id)`
-  >- (gvs[] >> drule_all TopLevelName_nonbare_find_NONE_contradiction >> simp[]) >>
-  gvs[] >>
   drule_all TopLevelName_current_bare_global_immutable_exists >>
   simp[]
 QED

@@ -85,8 +85,10 @@ Theorem update_target_preserves_toplevel_name_targets:
 Proof
   simp[lookup_toplevel_name_target_def, lookup_base_target_def] >>
   rpt gen_tac >> Cases_on `n` >>
-  simp[Once evaluate_def, return_def] >>
-  simp[Once evaluate_def, return_def]
+  simp[Once evaluate_def, bind_def, lift_option_type_def, return_def, raise_def] >>
+  simp[Once evaluate_def, bind_def, lift_option_type_def, return_def, raise_def] >>
+  Cases_on `get_module_code cx q` >> simp[return_def, raise_def] >>
+  Cases_on `is_immutable_decl (string_to_num r) x` >> simp[return_def]
 QED
 
 Theorem update_target_preserves_name_targets:

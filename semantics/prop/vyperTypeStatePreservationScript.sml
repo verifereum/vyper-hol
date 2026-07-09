@@ -756,9 +756,9 @@ QED
 
 Theorem set_immutable_preserves_env_consistent:
   env_consistent env cx st /\
-  FLOOKUP env.bare_globals (env.current_src,n) = SOME ty /\
+  FLOOKUP env.bare_globals (src,n) = SOME ty /\
   evaluate_type (get_tenv cx) ty = SOME tv /\
-  set_immutable cx (current_module cx) n tv v st = (res, st') ==>
+  set_immutable cx src n tv v st = (res, st') ==>
   env_consistent env cx st'
 Proof
   rw[set_immutable_def, get_address_immutables_def, bind_def, lift_option_def,
@@ -768,8 +768,6 @@ Proof
   gvs[return_def, raise_def] >> strip_tac >> gvs[] >>
   qpat_x_assum `ALOOKUP _ _ = SOME _` assume_tac >>
   gvs[env_consistent_def] >>
-  `current_module cx = env.current_src` by gvs[env_context_consistent_def] >>
-  pop_assum SUBST_ALL_TAC >>
   conj_tac >- (gvs[env_scopes_consistent_def] >> metis_tac[] ) >>
   gvs[env_immutables_consistent_def, FLOOKUP_UPDATE] >>
   conj_tac >- (
@@ -920,20 +918,19 @@ Proof
     `entry'.type = entry.type` by gvs[] >>
     qexists_tac `Type var_ty` >> simp[])
   >- (
-    rename1 `FLOOKUP env.bare_globals (_,string_to_num s) = SOME imm_ty` >>
-    `env.current_src = current_module cx` by fs[env_context_consistent_def] >> gvs[] >>
-    `?pair. FLOOKUP (get_source_immutables (current_module cx)
+    rename1 `FLOOKUP env.bare_globals (src_id_opt,string_to_num s) = SOME imm_ty` >>
+    `?pair. FLOOKUP (get_source_immutables src_id_opt
         (case ALOOKUP st'.immutables cx.txn.target of NONE => [] | SOME m => m))
         (string_to_num s) = SOME pair` by metis_tac[IS_SOME_EXISTS] >>
     PairCases_on `pair` >>
     `env.type_defs = get_tenv cx` by fs[env_context_consistent_def] >>
     `evaluate_type (get_tenv cx) imm_ty = SOME pair0` by metis_tac[] >>
     qexists_tac `Type imm_ty` >> simp[] >>
-    qexists_tac `get_source_immutables (current_module cx)
+    qexists_tac `get_source_immutables src_id_opt
         (case ALOOKUP st'.immutables cx.txn.target of NONE => [] | SOME m => m)` >>
     qexists_tac `pair1` >>
     Cases_on `ALOOKUP st'.immutables cx.txn.target` >>
-    Cases_on `ALOOKUP x (current_module cx)` >>
+    Cases_on `ALOOKUP x src_id_opt` >>
     gvs[get_immutables_def, get_address_immutables_def, bind_def, return_def,
         lift_option_def, get_source_immutables_def, AllCaseEqs()]) >>
   metis_tac[] >>
@@ -1249,7 +1246,7 @@ QED
 
 Resume assign_target_preserves_state_well_typed_mutual[ImmutableVar]:
   rpt strip_tac >>
-  `?vt final_tv. location_runtime_typed env cx st (ImmutableVar id) vt /\
+  `?vt final_tv. location_runtime_typed env cx st (ImmutableVar src_id_opt id) vt /\
                  target_path_type env vt is (Type ty) /\
                  place_leaf_typed env vt is ty final_tv` by
     metis_tac[target_runtime_typed_place_leaf_typed] >>
@@ -1261,8 +1258,6 @@ Resume assign_target_preserves_state_well_typed_mutual[ImmutableVar]:
     gvs[get_immutables_def, bind_apply, return_def, AllCaseEqs()] >>
     gvs[get_address_immutables_def, AllCaseEqs(),
         option_CASE_rator, lift_option_def, raise_def, return_def] >>
-    sg `current_module cx = env.current_src` >- (
-      gvs[current_module_def, env_context_consistent_def] ) >>
     gvs[env_context_consistent_def] >> strip_tac >>
     drule_all state_well_typed_immutables_ALOOKUP >> strip_tac >>
     drule_all imms_well_typed_get_source_immutables >> simp[]
@@ -1287,7 +1282,7 @@ Resume assign_target_preserves_state_well_typed_mutual[ImmutableVar]:
   imp_res_tac assign_result_preserves_state >> gvs[] >>
   conj_tac >- (
     irule set_immutable_preserves_env_consistent >>
-    qexists_tac `string_to_num id` >> qexists_tac `INL ()` >>
+    qexists_tac `string_to_num id` >> qexists_tac `INL ()` >> qexists_tac `src_id_opt` >>
     qexists_tac `s''` >> qexists_tac `tv` >> qexists_tac `ty'` >>
     qexists_tac `a'` >>
     gvs[env_consistent_def, env_context_consistent_def] >>
@@ -1295,7 +1290,7 @@ Resume assign_target_preserves_state_well_typed_mutual[ImmutableVar]:
   >- (conj_tac >- (
         irule set_immutable_preserves_state_well_typed >>
         qexists_tac `cx` >> qexists_tac `string_to_num id` >>
-        qexists_tac `INL ()` >> qexists_tac `current_module cx` >>
+        qexists_tac `INL ()` >> qexists_tac `src_id_opt` >>
         qexists_tac `s''` >> qexists_tac `tv` >> qexists_tac `a'` >>
         simp[]) >>
       qpat_x_assum `set_immutable _ _ _ _ _ _ = _` mp_tac >>
@@ -1307,7 +1302,7 @@ Resume assign_target_preserves_state_well_typed_mutual[ImmutableVar]:
       Cases_on `ALOOKUP s''.immutables cx.txn.target` >>
       gvs[return_def, raise_def] >> strip_tac >> gvs[])
   >- (irule set_immutable_preserves_env_consistent >>
-      qexists_tac `string_to_num id` >> qexists_tac `INR e` >>
+      qexists_tac `string_to_num id` >> qexists_tac `INR e` >> qexists_tac `src_id_opt` >>
       qexists_tac `s''` >> qexists_tac `tv` >> qexists_tac `ty'` >>
       qexists_tac `a'` >>
       gvs[env_consistent_def, env_context_consistent_def] >>
@@ -3492,7 +3487,7 @@ Resume assign_target_sound_mutual[sound_ImmutableVar]:
   conj_tac >- (
     irule (cj 1 assign_target_preserves_state_well_typed_mutual) >>
     goal_assum drule_all >> simp[]) >>
-  rename1 `assign_target cx (BaseTargetV (ImmutableVar id) is) op st = (res, st')` >>
+  rename1 `assign_target cx (BaseTargetV (ImmutableVar src_id_opt id) is) op st = (res, st')` >>
   gvs[target_runtime_typed_def, assign_target_assignable_context_def,
       assign_target_assignable_def] >>
   drule_all target_runtime_typed_place_leaf_typed >> strip_tac >>
@@ -3505,8 +3500,6 @@ Resume assign_target_sound_mutual[sound_ImmutableVar]:
     gvs[get_immutables_def, bind_apply, return_def, AllCaseEqs()] >>
     gvs[get_address_immutables_def, AllCaseEqs(),
         option_CASE_rator, lift_option_def, raise_def, return_def] >>
-    `current_module cx = env.current_src` by
-      gvs[current_module_def, env_context_consistent_def] >>
     gvs[env_context_consistent_def] >>
     drule_all state_well_typed_immutables_ALOOKUP >> strip_tac >>
     drule_all imms_well_typed_get_source_immutables >> simp[]) >>
@@ -3655,7 +3648,7 @@ Proof
     disch_then irule >> simp[])
   >- (
     imp_res_tac get_immutables_state >> gvs[] >>
-    `?vt final_tv. location_runtime_typed env cx s'' (ImmutableVar s) vt /\
+    `?vt final_tv. location_runtime_typed env cx s'' (ImmutableVar o' s) vt /\
                    target_path_type env vt sbs (Type (ArrayT elem_ty (Dynamic n))) /\
                    place_leaf_typed env vt sbs (ArrayT elem_ty (Dynamic n)) final_tv` by
       metis_tac[target_runtime_typed_place_leaf_typed] >>

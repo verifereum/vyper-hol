@@ -49,7 +49,9 @@ Proof
        lift_option_def, lift_option_type_def, LET_THM] >>
   rpt strip_tac >>
   Cases_on `get_module_code cx q` >>
-  gvs[return_def, raise_def]
+  gvs[return_def, raise_def] >>
+  Cases_on `is_immutable_decl (string_to_num r) x` >>
+  gvs[return_def]
 QED
 
 Theorem eval_base_target_TopLevelNameTarget_immutable:
@@ -70,7 +72,8 @@ Theorem eval_base_target_TopLevelNameTarget_no_type_error:
 Proof
   rpt strip_tac >>
   qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, lift_option_type_def, return_def, raise_def]
+  simp[Once evaluate_def, bind_def, lift_option_type_def, return_def, raise_def] >>
+  Cases_on `is_immutable_decl (string_to_num id) ts` >> simp[return_def]
 QED
 
 (* ===== Binop Helper Lemmas ===== *)

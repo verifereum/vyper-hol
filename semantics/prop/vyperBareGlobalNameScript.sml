@@ -260,7 +260,7 @@ Theorem assign_target_immutable_subscripts_state:
   ∀cx st n sbs ao tv a a'.
     lookup_bare_global_name cx st n = SOME (tv, a) ∧
     assign_subscripts tv a (REVERSE sbs) ao = INL a' ⇒
-    SND (assign_target cx (BaseTargetV (ImmutableVar n) sbs) ao st) =
+    SND (assign_target cx (BaseTargetV (ImmutableVar (current_module cx) n) sbs) ao st) =
     update_bare_global_name cx st n a'
 Proof
   rpt gen_tac >> strip_tac >>
@@ -285,7 +285,7 @@ Theorem assign_target_immutable_subscripts_valid:
   ∀cx st n sbs ao tv a a'.
     lookup_bare_global_name cx st n = SOME (tv, a) ∧
     assign_subscripts tv a (REVERSE sbs) ao = INL a' ⇒
-    ISL (FST (assign_target cx (BaseTargetV (ImmutableVar n) sbs) ao st))
+    ISL (FST (assign_target cx (BaseTargetV (ImmutableVar (current_module cx) n) sbs) ao st))
 Proof
   rpt gen_tac >> strip_tac >>
   gvs[lookup_bare_global_name_def, lookup_immutable_def] >>
@@ -310,7 +310,7 @@ Theorem valid_target_immutable_subscripts:
   ∀cx st n sbs ao tv a a'.
     lookup_bare_global_name cx st n = SOME (tv, a) ∧
     assign_subscripts tv a (REVERSE sbs) ao = INL a' ⇒
-    valid_target cx st (BaseTargetV (ImmutableVar n) sbs) ao
+    valid_target cx st (BaseTargetV (ImmutableVar (current_module cx) n) sbs) ao
 Proof
   metis_tac[valid_target_def, assign_target_immutable_subscripts_valid]
 QED
@@ -319,7 +319,7 @@ Theorem update_target_immutable_subscripts:
   ∀cx st n sbs ao tv a a'.
     lookup_bare_global_name cx st n = SOME (tv, a) ∧
     assign_subscripts tv a (REVERSE sbs) ao = INL a' ⇒
-    update_target cx st (BaseTargetV (ImmutableVar n) sbs) ao =
+    update_target cx st (BaseTargetV (ImmutableVar (current_module cx) n) sbs) ao =
     update_bare_global_name cx st n a'
 Proof
   metis_tac[update_target_def, assign_target_immutable_subscripts_state]

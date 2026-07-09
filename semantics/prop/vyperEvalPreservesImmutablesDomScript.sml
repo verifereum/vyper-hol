@@ -209,8 +209,8 @@ Proof
 QED
 
 Theorem assign_target_imm_dom_ImmutableVar[local]:
-  ∀cx id is ao st res st'.
-    assign_target cx (BaseTargetV (ImmutableVar id) is) ao st = (res, st') ⇒
+  ∀cx src_id_opt id is ao st res st'.
+    assign_target cx (BaseTargetV (ImmutableVar src_id_opt id) is) ao st = (res, st') ⇒
     preserves_immutables_dom cx st st'
 Proof
   rpt strip_tac >>
@@ -221,14 +221,14 @@ Proof
   Cases_on `ALOOKUP st.immutables cx.txn.target` >>
   simp[return_def, raise_def] >-
   (strip_tac >> gvs[preserves_immutables_dom_refl]) >>
-  Cases_on `FLOOKUP (get_source_immutables (current_module cx) x) (string_to_num id)` >>
+  Cases_on `FLOOKUP (get_source_immutables src_id_opt x) (string_to_num id)` >>
   simp[return_def, raise_def] >-
   (strip_tac >> gvs[preserves_immutables_dom_refl]) >>
   PairCases_on `x'` >> simp[] >>
   Cases_on `assign_subscripts x'0 x'1 (REVERSE is) ao` >>
   simp[lift_sum_def, return_def, raise_def] >>
   strip_tac >> gvs[preserves_immutables_dom_refl] >>
-  Cases_on `set_immutable cx (current_module cx) (string_to_num id) x'0 x' st` >>
+  Cases_on `set_immutable cx src_id_opt (string_to_num id) x'0 x' st` >>
   Cases_on `q` >> gvs[] >-
   (imp_res_tac assign_result_state >> gvs[] >>
    gvs[set_immutable_def, bind_def, get_address_immutables_def, lift_option_def,
@@ -243,7 +243,7 @@ Proof
            finite_mapTheory.FLOOKUP_UPDATE] >>
       rpt gen_tac >>
       TRY (rename1 `IS_SOME (FLOOKUP (get_source_immutables src _) n)`) >>
-      TRY (Cases_on `src = current_module cx` >> gvs[]) >>
+      TRY (Cases_on `src = src_id_opt` >> gvs[]) >>
       Cases_on `n = string_to_num id` >>
       gvs[get_source_immutables_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
   gvs[set_immutable_def, bind_def, get_address_immutables_def, lift_option_def,
@@ -1543,24 +1543,18 @@ Proof
   gvs[return_def, raise_def]
 QED
 
-(* ----- Case: eval_base_target (BareGlobalNameTarget id) ----- *)
-Theorem case_BareGlobalNameTarget_imm_dom[local]:
-  ∀cx id.
+(* ----- Case: eval_base_target (TopLevelNameTarget id) ----- *)
+Theorem case_TopLevelNameTarget_imm_dom[local]:
+  ∀cx src_id_opt id.
     ∀st res st'.
-      eval_base_target cx (BareGlobalNameTarget id) st = (res, st') ⇒
+      eval_base_target cx (TopLevelNameTarget (src_id_opt,id)) st = (res, st') ⇒
       preserves_immutables_dom cx st st'
 Proof
   rpt strip_tac >> irule preserves_immutables_dom_eq >>
   qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def] >>
-  Cases_on `get_immutables cx (current_module cx) st` >>
-  Cases_on `q` >> simp[return_def, raise_def] >>
-  imp_res_tac get_immutables_state >> gvs[] >>
-  simp[lift_option_type_def, check_def, type_check_def, assert_def,
-       ignore_bind_def, return_def, raise_def] >>
-  strip_tac >>
-  Cases_on `get_module_code cx (current_module cx)` >>
-  gvs[return_def, raise_def, bind_def, assert_def, ignore_bind_def, AllCaseEqs()]
+  simp[Once evaluate_def, bind_def, lift_option_type_def, return_def, raise_def] >>
+  Cases_on `get_module_code cx src_id_opt` >> simp[return_def, raise_def] >>
+  Cases_on `is_immutable_decl (string_to_num id) x` >> simp[return_def]
 QED
 
 (* ----- Case: eval_base_target (AttributeTarget bt id) ----- *)
@@ -1593,23 +1587,6 @@ Proof
   rpt strip_tac >>
   Cases_on `lookup_scopes_val (string_to_num id) st.scopes` >>
   gvs[return_def, raise_def]
-QED
-
-(* ----- Case: eval_expr (BareGlobalName id) ----- *)
-Theorem case_BareGlobalName_imm_dom[local]:
-  ∀cx id.
-    ∀st res st'.
-      eval_expr cx (BareGlobalName _ id) st = (res, st') ⇒
-      preserves_immutables_dom cx st st'
-Proof
-  rpt strip_tac >> irule preserves_immutables_dom_eq >>
-  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def] >>
-  Cases_on `get_immutables cx (current_module cx) st` >>
-  Cases_on `q` >> simp[return_def, raise_def] >>
-  imp_res_tac get_immutables_state >> gvs[] >>
-  simp[lift_option_type_def, return_def, raise_def] >>
-  Cases_on `FLOOKUP x (string_to_num id)` >> simp[return_def, raise_def]
 QED
 
 (* ----- Case: eval_expr (Builtin bt es) ----- *)
@@ -3330,19 +3307,12 @@ Proof
   >- gvs[evaluate_def, return_def, preserves_immutables_dom_refl]
   >- (drule_all case_eval_targets_cons_imm_dom >> simp[])
   >- (drule_all case_NameTarget_imm_dom >> simp[])
-  >- (drule_all case_BareGlobalNameTarget_imm_dom >> simp[])
-  >- (qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
-       simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def,
-            get_scopes_def, LET_THM, get_immutables_def, get_address_immutables_def,
-            lift_option_def, lift_option_type_def, lift_sum_def] >>
-       rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
-       first_x_assum irule >> first_assum (irule_at Any))
+  >- (drule_all case_TopLevelNameTarget_imm_dom >> simp[])
   >- (drule_all case_AttributeTarget_imm_dom >> simp[])
   >- (drule_all case_SubscriptTarget_imm_dom >> simp[])
   >- gvs[evaluate_def, return_def, preserves_immutables_dom_refl]
   >- (drule_all case_eval_for_cons_imm_dom >> simp[])
   >- (drule_all case_Name_imm_dom >> simp[])
-  >- (drule_all case_BareGlobalName_imm_dom >> simp[])
   >- (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
        simp[Once evaluate_def] >> strip_tac >>
        imp_res_tac lookup_global_immutables >>
