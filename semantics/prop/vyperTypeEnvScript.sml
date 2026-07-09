@@ -75,17 +75,6 @@ Proof
   metis_tac[]
 QED
 
-Theorem type_place_target_BareGlobalNameTarget:
-  type_place_target env (BareGlobalNameTarget id) = SOME vt <=>
-  ?ty. vt = Type ty /\
-       FLOOKUP env.bare_global_assignable (env.current_src, string_to_num id) = SOME ty
-Proof
-  CONV_TAC(LAND_CONV(ONCE_REWRITE_CONV[well_typed_expr_def])) >>
-  simp[AllCaseEqs(), PULL_EXISTS] >>
-  metis_tac[]
-QED
-
-
 Theorem env_consistent_bare_global_ready_src:
   !env cx st src id ty.
     env_consistent env cx st /\
@@ -142,14 +131,15 @@ Proof
     drule >>
   rw[]
 QED
-Theorem type_place_target_TopLevelNameTarget_IS_SOME:
-  FLOOKUP env.bare_globals (src_id_opt,string_to_num id) = SOME x ==>
-  type_place_target env (TopLevelNameTarget (src_id_opt, id)) = NONE
+Theorem type_place_target_TopLevelNameTarget_ASSIGNABLE:
+  FLOOKUP env.bare_global_assignable (src_id_opt,string_to_num id) = SOME ty ==>
+  type_place_target env (TopLevelNameTarget (src_id_opt, id)) = SOME (Type ty)
 Proof
   simp[well_typed_expr_def]
 QED
 
 Theorem type_place_target_TopLevelNameTarget_NOT_BARE:
+  FLOOKUP env.bare_global_assignable (src_id_opt,string_to_num id) = NONE /\
   FLOOKUP env.bare_globals (src_id_opt,string_to_num id) = NONE ==>
   type_place_target env (TopLevelNameTarget (src_id_opt, id)) =
   FLOOKUP env.toplevel_vtypes (src_id_opt,string_to_num id)
@@ -159,12 +149,15 @@ QED
 
 Theorem type_place_target_TopLevelNameTarget:
   type_place_target env (TopLevelNameTarget (src_id_opt, id)) = SOME vt <=>
-  FLOOKUP env.bare_globals (src_id_opt, string_to_num id) = NONE /\
-  FLOOKUP env.toplevel_vtypes (src_id_opt, string_to_num id) = SOME vt
+  (?ty. vt = Type ty /\
+        FLOOKUP env.bare_global_assignable (src_id_opt, string_to_num id) = SOME ty) \/
+  (FLOOKUP env.bare_global_assignable (src_id_opt, string_to_num id) = NONE /\
+   FLOOKUP env.bare_globals (src_id_opt, string_to_num id) = NONE /\
+   FLOOKUP env.toplevel_vtypes (src_id_opt, string_to_num id) = SOME vt)
 Proof
-  Cases_on `FLOOKUP env.bare_globals (src_id_opt,string_to_num id)` >-
-  simp[type_place_target_TopLevelNameTarget_NOT_BARE] >>
-  simp[type_place_target_TopLevelNameTarget_IS_SOME]
+  CONV_TAC(LAND_CONV(ONCE_REWRITE_CONV[well_typed_expr_def])) >>
+  simp[LET_THM, AllCaseEqs(), PULL_EXISTS] >>
+  metis_tac[]
 QED
 
 Theorem type_place_target_AttributeTarget:
@@ -264,10 +257,11 @@ Proof
   >> simp[]
 QED
 
-Theorem bare_global_lookup_sound:
-  well_typed_expr env (BareGlobalName ty id) /\ env_consistent env cx st /\
-  state_well_typed st ==>
-  ?tv v. FLOOKUP (get_source_immutables env.current_src
+Theorem top_level_bare_global_lookup_sound:
+  well_typed_expr env (TopLevelName ty (src,id)) /\
+  FLOOKUP env.bare_globals (src,string_to_num id) = SOME ty /\
+  env_consistent env cx st /\ state_well_typed st ==>
+  ?tv v. FLOOKUP (get_source_immutables src
             (case ALOOKUP st.immutables cx.txn.target of SOME m => m | NONE => []))
             (string_to_num id) = SOME (tv,v) /\
          evaluate_type env.type_defs ty = SOME tv /\ value_has_type tv v
@@ -310,12 +304,6 @@ Proof
   >> simp[]
 QED
 
-Theorem bare_global_well_formed_type:
-  well_typed_expr env (BareGlobalName ty id) ==> well_formed_type env.type_defs ty
-Proof
-  rw[well_typed_expr_def]
-QED
-
 Theorem TopLevelName_well_formed_type:
   well_typed_expr env (TopLevelName ty nsid) ==> well_formed_type env.type_defs ty
 Proof
@@ -329,9 +317,10 @@ Proof
   Cases_on `nsid` >> rw[well_typed_expr_def, AllCaseEqs()]
 QED
 
-Theorem TopLevelName_expr_not_hashmap:
+Theorem TopLevelName_expr_source:
   well_typed_expr env (TopLevelName ty nsid) ==>
-  FLOOKUP env.toplevel_vtypes (FST nsid, string_to_num (SND nsid)) = SOME (Type ty)
+  FLOOKUP env.toplevel_vtypes (FST nsid, string_to_num (SND nsid)) = SOME (Type ty) \/
+  FLOOKUP env.bare_globals (FST nsid, string_to_num (SND nsid)) = SOME ty
 Proof
   Cases_on `nsid` >> rw[well_typed_expr_def]
 QED
