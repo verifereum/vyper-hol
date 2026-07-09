@@ -98,7 +98,6 @@ signature vyperASTSyntax = sig
   val AbiEncode_tm    : term
   val MethodId_tm     : term
   val Name_tm         : term
-  val BareGlobalName_tm   : term
   val TopLevelName_tm : term
   val IfExp_tm        : term
   val Literal_tm      : term
@@ -110,7 +109,6 @@ signature vyperASTSyntax = sig
   val Pop_tm          : term
   val AstCall_tm      : term
   val NameTarget_tm   : term
-  val BareGlobalNameTarget_tm : term
   val TopLevelNameTarget_tm : term
   val SubscriptTarget_tm    : term
   val AttributeTarget_tm    : term
@@ -181,7 +179,6 @@ signature vyperASTSyntax = sig
   val mk_Expr      : term -> term
   val mk_For       : term -> term -> term -> term -> term -> term
   val mk_Name      : string -> term
-  val mk_BareGlobalName : term * string -> term
   val mk_StructLit : term * term * term list -> term
   val mk_IfExp     : term * term * term * term -> term
   val mk_IntCall   : term -> term

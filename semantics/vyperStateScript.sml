@@ -811,8 +811,8 @@ QED
 Datatype:
   location
   = ScopedVar identifier
-  | ImmutableVar identifier
-  | TopLevelVar (num option) identifier  (* source_id (NONE=self), var_name *)
+  | ImmutableVar (num option) identifier  (* source_id, var_name *)
+  | TopLevelVar (num option) identifier   (* source_id, var_name *)
 End
 
 Datatype:
@@ -948,13 +948,12 @@ Definition assign_target_def:
           od
       od
   od ∧
-  assign_target cx (BaseTargetV (ImmutableVar id) is) ao = do
+  assign_target cx (BaseTargetV (ImmutableVar src_id_opt id) is) ao = do
     ni <<- string_to_num id;
-    src <<- current_module cx;
-    imms <- get_immutables cx src;
+    imms <- get_immutables cx src_id_opt;
     tva <- lift_option_type (FLOOKUP imms ni) "assign_target ImmutableVar";
     a' <- lift_sum $ assign_subscripts (FST tva) (SND tva) (REVERSE is) ao;
-    set_immutable cx src ni (FST tva) a';
+    set_immutable cx src_id_opt ni (FST tva) a';
     assign_result (FST tva) ao (SND tva) (REVERSE is)
   od ∧
   assign_target cx (TupleTargetV gvs) (Replace (ArrayV (TupleV vs))) = do
