@@ -495,20 +495,18 @@ Definition extract_module_flag_def:
 End
 
 
-(* ===== Constants/Immutables and Name Helpers ===== *)
+(* ===== Top-level names and name helpers ===== *)
 
-(* Collect immutable and constant variable names from module toplevels.
-   Both immutables (is_immutable = T) and constants (const_val = SOME _)
-   are stored in the immutables map at runtime, so both need BareGlobalName. *)
+(* The context carries names of constants and immutables declared in the
+   current module.  Bare references to those declarations are translated as
+   module-qualified top-level names; ordinary names remain local/scoped. *)
 Definition make_name_def:
   make_name ctx ty id =
-    if MEM id (SND ctx) then BareGlobalName ty id else Name ty id
+    if MEM id (SND (SND ctx)) then TopLevelName ty (FST (SND ctx), id) else Name ty id
 End
 
-(* Make NameTarget or BareGlobalNameTarget based on constants/immutables list *)
 Definition make_name_target_def:
-  make_name_target ctx id =
-    if MEM id (SND ctx) then BareGlobalNameTarget id else NameTarget id
+  make_name_target ctx id = NameTarget id
 End
 
 (* ===== Expression Translation ===== *)

@@ -25,7 +25,7 @@ Proof
 QED
 
 Theorem assign_target_assignable_context_ImmutableVar[simp]:
-  assign_target_assignable_context cx (BaseTargetV (ImmutableVar id) sbs) st = T
+  assign_target_assignable_context cx (BaseTargetV (ImmutableVar src id) sbs) st = T
 Proof
   simp[assign_target_assignable_context_def, assign_target_assignable_def]
 QED
@@ -51,7 +51,7 @@ Definition assignment_value_static_assignable_context_def:
                     sbs <> [] ∧
                     IS_SOME (lookup_var_slot_from_layout cx is_transient src (SND p)))) ∧
   (assignment_value_static_assignable_context cx (BaseTargetV (ScopedVar _) sbs) = T) ∧
-  (assignment_value_static_assignable_context cx (BaseTargetV (ImmutableVar _) sbs) = T) ∧
+  (assignment_value_static_assignable_context cx (BaseTargetV (ImmutableVar _ _) sbs) = T) ∧
   (assignment_value_static_assignable_context cx (TupleTargetV tgts) =
      EVERY (assignment_value_static_assignable_context cx) tgts)
 End
@@ -63,7 +63,7 @@ Proof
 QED
 
 Theorem assignment_value_static_assignable_context_ImmutableVar[simp]:
-  assignment_value_static_assignable_context cx (BaseTargetV (ImmutableVar id) sbs) = T
+  assignment_value_static_assignable_context cx (BaseTargetV (ImmutableVar src id) sbs) = T
 Proof
   simp[assignment_value_static_assignable_context_def]
 QED
@@ -164,12 +164,12 @@ Proof
   recInduct base_target_value_shape_ind >>
   rw[] >>
   gvs[base_target_value_shape_def]
-  >- (* TopLevelNameTarget case *)
-     fs[type_place_target_TopLevelNameTarget]
-  >- (* AttributeTarget case *)
-     metis_tac[type_place_target_AttributeTarget]
-  >- (* SubscriptTarget case *)
-     metis_tac[type_place_target_SubscriptTarget]
+  >- (* AttributeTarget case *) (
+     fs[type_place_target_AttributeTarget] >>
+     first_x_assum drule_all >> simp[])
+  >- (* SubscriptTarget case *) (
+     fs[type_place_target_SubscriptTarget] >>
+     first_x_assum drule_all >> simp[])
 QED
 
 (* Specialized corollary where loc is already TopLevelVar, avoiding

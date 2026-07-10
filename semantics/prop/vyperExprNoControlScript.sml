@@ -709,14 +709,12 @@ Proof
   conj_tac >- unfold_tac >>
   conj_tac >- unfold_tac >>
   conj_tac >- unfold_tac >>
-  conj_tac >- unfold_tac >>
   conj_tac >- (
     rename1`SubscriptTarget` >>
     unfold_tac >>
     PairCases_on`x` >>
     gvs[bind_def, return_def, AllCaseEqs()] >>
     resolve_tac) >>
-  conj_tac >- unfold_tac >>
   conj_tac >- unfold_tac >>
   conj_tac >- unfold_tac >>
   conj_tac >- unfold_tac >>

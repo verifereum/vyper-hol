@@ -14,7 +14,7 @@ Definition collect_consts_and_immutables_def:
 End
 
 
-(* Make Name or BareGlobalName based on constants/immutables list *)
+(* Names of constants/immutables are translated as top-level names. *)
 Definition build_import_map_def:
   build_import_map [] = [] ∧
   build_import_map (JImportInfo alias src_id _ :: rest) =
@@ -377,7 +377,7 @@ End
 Definition translate_module_def:
   translate_module all_import_maps (JModule main_src_id toplevels) =
     let import_map = build_import_map (collect_imports toplevels) in
-    let expr_ctx = (main_src_id, collect_consts_and_immutables toplevels) in
+    let expr_ctx = (main_src_id, (NONE, collect_consts_and_immutables toplevels)) in
     let type_ctx = (main_src_id, NONE, import_map) in
     filter_some (MAP (translate_toplevel all_import_maps expr_ctx type_ctx) toplevels)
 End
@@ -386,7 +386,7 @@ Definition translate_imported_module_def:
   translate_imported_module all_import_maps main_src_id (JImportedModule src_id path body) =
     let nsid = Num (src_id + &builtin_source_id_offset) in
     let import_map = build_import_map (collect_imports body) in
-    let expr_ctx = (main_src_id, collect_consts_and_immutables body) in
+    let expr_ctx = (main_src_id, (SOME nsid, collect_consts_and_immutables body)) in
     let type_ctx = (main_src_id, SOME nsid, import_map) in
     (SOME nsid, filter_some (MAP (translate_toplevel all_import_maps expr_ctx type_ctx) body))
 End

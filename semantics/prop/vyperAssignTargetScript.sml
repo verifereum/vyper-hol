@@ -146,7 +146,7 @@ Proof
     qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
     simp[Once assign_target_def, bind_def, get_immutables_def, get_address_immutables_def,
          lift_option_def, lift_option_type_def, LET_THM, return_def, raise_def] >>
-    Cases_on `FLOOKUP (get_source_immutables (current_module cx) x) (string_to_num id)` >>
+    Cases_on `FLOOKUP (get_source_immutables src_id_opt x) (string_to_num id)` >>
     simp[return_def, raise_def] >>
     PairCases_on `x'` >>
     simp[] >>
@@ -159,8 +159,12 @@ Proof
     (rpt strip_tac >> Cases_on `cx.txn.target = tgt` >> simp[alistTheory.ALOOKUP_ADELKEY]) >>
     simp[get_source_immutables_def, set_source_immutables_def,
          finite_mapTheory.FLOOKUP_UPDATE] >>
-    rpt strip_tac >> Cases_on `string_to_num id = n` >> simp[] >>
-    gvs[get_source_immutables_def]) >-
+    Cases_on `src_id_opt = current_module cx` >>
+    gvs[get_source_immutables_def, finite_mapTheory.FLOOKUP_UPDATE,
+        alistTheory.ALOOKUP_ADELKEY] >>
+    rw[finite_mapTheory.FLOOKUP_UPDATE, optionTheory.IS_SOME_EXISTS,
+       alistTheory.ALOOKUP_ADELKEY] >>
+    gvs[]) >-
   (* TupleTargetV with TupleV - use helper lemma *)
   MATCH_ACCEPT_TAC assign_target_tuple_preserves_immutables_dom >-
   (* Other TupleTargetV cases - all vacuously true (raise) - 13 cases *)

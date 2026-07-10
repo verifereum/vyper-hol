@@ -466,11 +466,9 @@ End
 Definition well_typed_expr_def:
   well_typed_expr env (Name ty id) =
     (FLOOKUP env.var_types (string_to_num id) = SOME ty) /\
-  well_typed_expr env (BareGlobalName ty id) =
-    (FLOOKUP env.bare_globals (env.current_src, string_to_num id) = SOME ty /\
-     well_formed_type env.type_defs ty /\ ty <> NoneT) /\
   well_typed_expr env (TopLevelName ty (src_id_opt, id)) =
-    (FLOOKUP env.toplevel_vtypes (src_id_opt, string_to_num id) = SOME (Type ty) /\
+    ((FLOOKUP env.toplevel_vtypes (src_id_opt, string_to_num id) = SOME (Type ty) \/
+      FLOOKUP env.bare_globals (src_id_opt, string_to_num id) = SOME ty) /\
      well_formed_type env.type_defs ty /\ ty <> NoneT) /\
   well_typed_expr env (FlagMember ty nsid mid) =
     (ty = FlagT nsid /\ well_formed_type env.type_defs ty /\
@@ -559,13 +557,13 @@ Definition well_typed_expr_def:
      case (FLOOKUP env.var_types n, FLOOKUP env.var_assignable n) of
      | (SOME ty, SOME T) => SOME (Type ty)
      | _ => NONE) /\
-  type_place_target env (BareGlobalNameTarget id) =
-    (case FLOOKUP env.bare_global_assignable (env.current_src, string_to_num id) of
-     | SOME ty => SOME (Type ty) | NONE => NONE) /\
   type_place_target env (TopLevelNameTarget (src_id_opt, id)) =
     (let n = string_to_num id in
-     if IS_SOME (FLOOKUP env.bare_globals (src_id_opt,n)) then NONE
-     else FLOOKUP env.toplevel_vtypes (src_id_opt,n)) /\
+     case FLOOKUP env.bare_global_assignable (src_id_opt,n) of
+     | SOME ty => SOME (Type ty)
+     | NONE =>
+         if IS_SOME (FLOOKUP env.bare_globals (src_id_opt,n)) then NONE
+         else FLOOKUP env.toplevel_vtypes (src_id_opt,n)) /\
   type_place_target env (SubscriptTarget tgt e) =
     (if well_typed_expr env e then
        case type_place_target env tgt of

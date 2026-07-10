@@ -205,11 +205,12 @@ Definition base_target_value_shape_def:
   base_target_value_shape env (NameTarget id) (ScopedVar id') sbs =
     (id = id' /\ sbs = []) /\
   base_target_value_shape env (NameTarget id) _ _ = F /\
-  base_target_value_shape env (BareGlobalNameTarget id) (ImmutableVar id') sbs =
-    (id = id' /\ sbs = []) /\
-  base_target_value_shape env (BareGlobalNameTarget id) _ _ = F /\
+  base_target_value_shape env (TopLevelNameTarget nsid) (ImmutableVar src id) sbs =
+    (nsid = (src,id) /\ sbs = [] /\
+     IS_SOME (FLOOKUP env.bare_global_assignable (src,string_to_num id))) /\
   base_target_value_shape env (TopLevelNameTarget nsid) (TopLevelVar src id) sbs =
-    (nsid = (src,id) /\ sbs = []) /\
+    (nsid = (src,id) /\ sbs = [] /\
+     FLOOKUP env.bare_globals (src,string_to_num id) = NONE) /\
   base_target_value_shape env (TopLevelNameTarget nsid) _ _ = F /\
   base_target_value_shape env (AttributeTarget tgt id) loc sbs =
     (?rest. sbs = AttrSubscript id :: rest /\
@@ -253,11 +254,11 @@ Definition location_runtime_typed_def:
                 lookup_scopes (string_to_num id) st.scopes = SOME entry /\
                 FLOOKUP env.var_types (string_to_num id) = SOME ty /\
                 evaluate_type env.type_defs ty = SOME entry.type)) /\
-  (location_runtime_typed env cx st (ImmutableVar id) vt <=>
+  (location_runtime_typed env cx st (ImmutableVar src id) vt <=>
     (?imms v ty tv. vt = Type ty /\
-                    get_immutables cx (current_module cx) st = (INL imms, st) /\
+                    get_immutables cx src st = (INL imms, st) /\
                     FLOOKUP imms (string_to_num id) = SOME (tv, v) /\
-                    FLOOKUP env.bare_globals (env.current_src, string_to_num id) = SOME ty /\
+                    FLOOKUP env.bare_globals (src, string_to_num id) = SOME ty /\
                     evaluate_type env.type_defs ty = SOME tv)) /\
   (location_runtime_typed env cx st (TopLevelVar src_id_opt id) vt <=>
     FLOOKUP env.toplevel_vtypes (src_id_opt, string_to_num id) = SOME vt)

@@ -259,7 +259,6 @@ Definition bound_def:
     1 + target_bound ts g
       + targets_bound ts gs ∧
   base_target_bound ts (NameTarget _) = 0 ∧
-  base_target_bound ts (BareGlobalNameTarget _) = 0 ∧
   base_target_bound ts (TopLevelNameTarget _) = 0 ∧
   base_target_bound ts (AttributeTarget bt _) =
     1 + base_target_bound ts bt ∧
@@ -267,7 +266,6 @@ Definition bound_def:
     1 + base_target_bound ts bt
       + expr_bound ts e ∧
   expr_bound ts (Name _ _) = 0 ∧
-  expr_bound ts (BareGlobalName _ _) = 0 ∧
   expr_bound ts (TopLevelName _ _) = 0 ∧
   expr_bound ts (FlagMember _ _ _) = 0 ∧
   expr_bound ts (IfExp _ e1 e2 e3) =
@@ -603,8 +601,8 @@ End
 val () = cv_auto_trans is_immutable_decl_def;
 
 Definition immutable_target_def:
-  immutable_target (imms: num |-> (type_value # value)) id n =
-  case FLOOKUP imms n of SOME _ => SOME $ ImmutableVar id
+  immutable_target (imms: num |-> (type_value # value)) src_id_opt id n =
+  case FLOOKUP imms n of SOME _ => SOME $ ImmutableVar src_id_opt id
      | _ => NONE
 End
 
@@ -1095,18 +1093,14 @@ Definition evaluate_def:
     type_check (IS_SOME (lookup_scopes n sc)) "NameTarget not in scope";
     return $ (ScopedVar id, [])
   od ∧
-  eval_base_target cx (BareGlobalNameTarget id) = do
-    imms <- get_immutables cx (current_module cx);
+  eval_base_target cx (TopLevelNameTarget (src_id_opt, id)) = do
     n <<- string_to_num id;
     ts <- lift_option_type
-            (get_module_code cx (current_module cx))
-            "BareGlobalNameTarget get_module_code";
-    type_check (is_immutable_decl n ts) "assign to constant";
-    type_check (IS_SOME (FLOOKUP imms n)) "BareGlobalNameTarget not found";
-    return $ (ImmutableVar id, [])
+            (get_module_code cx src_id_opt)
+            "TopLevelNameTarget get_module_code";
+    if is_immutable_decl n ts then return $ (ImmutableVar src_id_opt id, [])
+    else return $ (TopLevelVar src_id_opt id, [])
   od ∧
-  eval_base_target cx (TopLevelNameTarget (src_id_opt, id)) =
-    return $ (TopLevelVar src_id_opt id, []) ∧
   eval_base_target cx (AttributeTarget t id) = do
     (loc, sbs) <- eval_base_target cx t;
     return $ (loc, AttrSubscript id :: sbs)
@@ -1130,12 +1124,6 @@ Definition evaluate_def:
     n <<- string_to_num id;
     v <- lift_option_type (lookup_scopes_val n env) "Name not in scope";
     return $ Value v
-  od ∧
-  eval_expr cx (BareGlobalName _ id) = do
-    imms <- get_immutables cx (current_module cx);
-    n <<- string_to_num id;
-    tvv <- lift_option_type (FLOOKUP imms n) "BareGlobalName not found";
-    return $ Value (SND tvv)
   od ∧
   eval_expr cx (TopLevelName _ (src_id_opt, id)) =
     lookup_global cx src_id_opt (string_to_num id) ∧
@@ -1605,8 +1593,8 @@ val () = cv_auto_trans merge_constants_def;
 
 (* Evaluate constant expressions in a module's toplevels.
    Previously-evaluated constants are merged into am.immutables so that
-   BareGlobalName lookups find them (constants and immutables share the
-   same runtime storage). *)
+   top-level lookups find them (constants and immutables share the same
+   runtime storage). *)
 Definition constants_env_def:
   constants_env _ _ _ _ [] acc = SOME acc ∧
   constants_env cx am addr src_id_opt ((VariableDecl vis (Constant e) id typ _)::ts) acc =
@@ -1622,17 +1610,15 @@ Definition constants_env_def:
     constants_env cx am addr src_id_opt ts acc
 End
 
-(* Set current_module to a given src_id_opt so BareGlobalName lookups resolve
-   correctly when evaluating constant expressions. *)
+(* Set current_module to a given src_id_opt while evaluating constant
+   expressions. *)
 Definition set_current_module_def:
   set_current_module cx src_id_opt = cx with stk := [(src_id_opt, "")]
 End
 
 val () = cv_auto_trans set_current_module_def;
 
-(* Evaluate constants for all modules and merge into am.immutables.
-   Uses set_current_module so BareGlobalName lookups resolve correctly
-   when a constant expression references a previously-defined constant. *)
+(* Evaluate constants for all modules and merge into am.immutables. *)
 Definition evaluate_all_constants_def:
   evaluate_all_constants cx am addr [] = SOME am ∧
   evaluate_all_constants cx am addr ((src_id_opt, ts) :: rest) =

@@ -5,7 +5,6 @@ Ancestors
 (* Pure expressions: expressions that do not modify state. *)
 Definition pure_expr_def:
   pure_expr (Name _ _) = T ∧
-  pure_expr (BareGlobalName _ _) = T ∧
   pure_expr (TopLevelName _ _) = T ∧
   pure_expr (FlagMember _ _ _) = T ∧
   pure_expr (Literal _ _) = T ∧
@@ -38,17 +37,6 @@ Proof
        lift_option_def, lift_option_type_def] >>
   rpt strip_tac >>
   Cases_on `lookup_scopes_val (string_to_num id) st.scopes` >> gvs[return_def, raise_def]
-QED
-
-Theorem case_BareGlobalName[local]:
-  ∀cx ty id.
-    (∀st res st'.
-       eval_expr cx (BareGlobalName ty id) st = (res, st') ⇒
-       st = st')
-Proof
-  rpt strip_tac >>
-  gvs[evaluate_def, bind_def, AllCaseEqs(), return_def] >>
-  imp_res_tac get_immutables_state >> imp_res_tac lift_option_type_state >> gvs[]
 QED
 
 Theorem case_TopLevelName[local]:
@@ -315,7 +303,6 @@ Proof
        (pure_expr (Call _ _ _) = F makes conclusion vacuous) *)
     TRY (simp[pure_expr_def] >> NO_TAC) >-
     metis_tac[case_Name] >-
-    metis_tac[case_BareGlobalName] >-
     metis_tac[case_TopLevelName] >-
     metis_tac[case_FlagMember] >-
     ACCEPT_TAC case_IfExp >-

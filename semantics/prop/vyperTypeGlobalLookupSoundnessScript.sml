@@ -68,6 +68,20 @@ Proof
   metis_tac[env_consistent_bare_global_ready]
 QED
 
+Theorem TopLevelName_toplevel_vtypes_Type:
+  !env cx st src id ty.
+    well_typed_expr env (TopLevelName ty (src,id)) /\
+    env_consistent env cx st ==>
+    FLOOKUP env.toplevel_vtypes (src,string_to_num id) = SOME (Type ty)
+Proof
+  rpt strip_tac >>
+  Cases_on `FLOOKUP env.bare_globals (src,string_to_num id)` >-
+    gvs[well_typed_expr_def] >>
+  gvs[well_typed_expr_def] >>
+  drule_all env_consistent_bare_global_find_NONE >>
+  strip_tac >> gvs[]
+QED
+
 Theorem TopLevelName_missing_immutable_branch_characterisation:
   !env cx st src id ty ts.
     well_typed_expr env (TopLevelName ty (src,id)) /\
@@ -81,17 +95,12 @@ Theorem TopLevelName_missing_immutable_branch_characterisation:
     FLOOKUP env.bare_globals (src,string_to_num id) <> NONE /\ src <> env.current_src
 Proof
   rpt gen_tac >> strip_tac >>
-  `FLOOKUP env.toplevel_vtypes (src,string_to_num id) = SOME (Type ty)` by
-    gvs[well_typed_expr_def] >>
-  conj_tac
-  >- (Cases_on `FLOOKUP env.bare_globals (src,string_to_num id)` >>
-      gvs[] >>
-      drule_all TopLevelName_nonbare_find_NONE_contradiction >>
-      simp[]) >>
+  Cases_on `FLOOKUP env.bare_globals (src,string_to_num id)` >- (
+    `FLOOKUP env.toplevel_vtypes (src,string_to_num id) = SOME (Type ty)` by
+      gvs[well_typed_expr_def] >>
+    drule_all TopLevelName_nonbare_find_NONE_contradiction >> simp[]) >>
+  conj_tac >- simp[] >>
   strip_tac >> gvs[] >>
-  Cases_on `FLOOKUP env.bare_globals (env.current_src,string_to_num id)`
-  >- (gvs[] >> drule_all TopLevelName_nonbare_find_NONE_contradiction >> simp[]) >>
-  gvs[] >>
   drule_all TopLevelName_current_bare_global_immutable_exists >>
   simp[]
 QED
@@ -229,8 +238,11 @@ Theorem lookup_global_TopLevelName_find_NONE_success_typed:
     expr_result_typed env (TopLevelName ty (src,id)) tvl
 Proof
   rpt strip_tac >>
-  `FLOOKUP env.toplevel_vtypes (src,string_to_num id) = SOME (Type ty)` by
+  `FLOOKUP env.toplevel_vtypes (src,string_to_num id) = SOME (Type ty)` by (
+    Cases_on `FLOOKUP env.bare_globals (src,string_to_num id)` >-
+      gvs[well_typed_expr_def] >>
     gvs[well_typed_expr_def] >>
+    drule_all env_consistent_bare_global_find_NONE >> gvs[]) >>
   `env.type_defs = get_tenv cx` by
     gvs[env_consistent_def, env_context_consistent_def] >>
   qpat_x_assum `lookup_global _ _ _ _ = _` mp_tac >>
@@ -284,7 +296,7 @@ Theorem TopLevelName_nonbare_storage_decl_context:
 Proof
   rpt strip_tac >>
   `FLOOKUP env.toplevel_vtypes (src,string_to_num id) = SOME (Type ty)` by
-    gvs[well_typed_expr_def] >>
+    metis_tac[TopLevelName_toplevel_vtypes_Type] >>
   drule_all env_consistent_toplevel_storage_static >>
   strip_tac >> gvs[]
 QED
@@ -300,7 +312,7 @@ Theorem TopLevelName_storage_decl_type_eq:
 Proof
   rpt strip_tac >>
   `FLOOKUP env.toplevel_vtypes (src,string_to_num id) = SOME (Type ty)` by
-    gvs[well_typed_expr_def] >>
+    metis_tac[TopLevelName_toplevel_vtypes_Type] >>
   gvs[env_consistent_def, env_immutables_consistent_def] >>
   qpat_x_assum `!src id ty ts. _`
     (qspecl_then [`src`, `string_to_num id`, `ty`, `code`] mp_tac) >>
@@ -382,7 +394,7 @@ Theorem TopLevelName_Type_HashMapVarDecl_impossible:
 Proof
   rpt strip_tac >>
   `FLOOKUP env.toplevel_vtypes (src,string_to_num id) = SOME (Type ty)` by
-    gvs[well_typed_expr_def] >>
+    metis_tac[TopLevelName_toplevel_vtypes_Type] >>
   `runtime_consistent env cx st` by simp[runtime_consistent_def] >>
   metis_tac[top_level_Type_not_hashmap_decl]
 QED
@@ -413,7 +425,7 @@ Proof
   rpt strip_tac >>
   `typ = ty` by metis_tac[TopLevelName_storage_decl_type_eq] >> gvs[] >>
   `FLOOKUP env.toplevel_vtypes (src,string_to_num id) = SOME (Type ty)` by
-    gvs[well_typed_expr_def] >>
+    metis_tac[TopLevelName_toplevel_vtypes_Type] >>
   gvs[env_consistent_def, env_context_consistent_def,
       env_immutables_consistent_def, IS_SOME_EXISTS] >>
   qpat_x_assum `!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty ==> ?ts. _`
@@ -460,7 +472,7 @@ Theorem lookup_global_TopLevelName_no_type_error:
 Proof
   rpt strip_tac >>
   `FLOOKUP env.toplevel_vtypes (src,string_to_num id) = SOME (Type ty)` by
-    gvs[well_typed_expr_def] >>
+    metis_tac[TopLevelName_toplevel_vtypes_Type] >>
   `?code. get_module_code cx src = SOME code` by (
     Cases_on `FLOOKUP env.bare_globals (src,string_to_num id)` >>
     metis_tac[env_consistent_toplevel_storage_static, env_consistent_def,
@@ -489,7 +501,7 @@ Theorem lookup_global_TopLevelName_success_typed:
 Proof
   rpt strip_tac >>
   `FLOOKUP env.toplevel_vtypes (src,string_to_num id) = SOME (Type ty)` by
-    gvs[well_typed_expr_def] >>
+    metis_tac[TopLevelName_toplevel_vtypes_Type] >>
   `?code. get_module_code cx src = SOME code` by (
     Cases_on `FLOOKUP env.bare_globals (src,string_to_num id)` >>
     metis_tac[env_consistent_toplevel_storage_static, env_consistent_def,

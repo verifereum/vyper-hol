@@ -716,12 +716,10 @@ Proof
   >- metis_tac[eval_base_target_preserves_scopes_dom]
   >- metis_tac[eval_base_target_preserves_scopes_dom]
   >- metis_tac[eval_base_target_preserves_scopes_dom]
-  >- metis_tac[eval_base_target_preserves_scopes_dom]
   (* === eval_for cases === *)
   (* [] *) >- gvs[evaluate_def, return_def, preserves_scopes_dom_def]
   (* v::vs *) >- (drule case_eval_for_cons_dom >> metis_tac[])
   (* === Expression cases - use eval_expr_preserves_scopes_dom === *)
-  >- (drule eval_expr_preserves_scopes_dom >> gvs[])
   >- (drule eval_expr_preserves_scopes_dom >> gvs[])
   >- (drule eval_expr_preserves_scopes_dom >> gvs[])
   >- (drule eval_expr_preserves_scopes_dom >> gvs[])
@@ -1069,7 +1067,6 @@ Proof
   >> conj_tac >- simp[] (* targets []: T *)
   >> conj_tac >- simp[] (* targets g::gs: T *)
   >> conj_tac >- simp[] (* NameTarget: T *)
-  >> conj_tac >- simp[] (* BareGlobalNameTarget: T *)
   >> conj_tac >- simp[] (* TopLevelNameTarget: T *)
   >> conj_tac >- simp[] (* AttributeTarget: T *)
   >> conj_tac >- simp[] (* SubscriptTarget: T *)
@@ -1082,7 +1079,6 @@ Proof
        metis_tac[scopes_dom_mutual]) >>
     Cases_on `st.scopes` >> Cases_on `st'.scopes` >> gvs[])
   >> conj_tac >- simp[] (* Name: T *)
-  >> conj_tac >- simp[] (* BareGlobalName: T *)
   >> conj_tac >- simp[] (* TopLevelName: T *)
   >> conj_tac >- simp[] (* FlagMember: T *)
   >> conj_tac >- simp[] (* IfExp: T *)
@@ -1700,16 +1696,12 @@ Proof
     gvs[Once evaluate_def, bind_def, AllCaseEqs(), get_scopes_def,
        return_def, raise_def, type_check_def, assert_def,
        ignore_bind_def]) >>
-  (* BareGlobalNameTarget *)
+  (* TopLevelNameTarget *)
   conj_tac >- (
     rpt gen_tac >> strip_tac >>
-    gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def,
-       ignore_bind_def] >>
-    imp_res_tac get_immutables_state >>
-    imp_res_tac type_check_state >>
-    imp_res_tac lift_option_type_state >> gvs[]) >>
-  (* TopLevelNameTarget *)
-  conj_tac >- rw[Once evaluate_def, return_def] >>
+    gvs[Once evaluate_def, bind_def, lift_option_type_def, return_def, raise_def] >>
+    Cases_on `get_module_code cx src_id_opt` >> gvs[return_def, raise_def] >>
+    Cases_on `is_immutable_decl (string_to_num id) x` >> gvs[return_def]) >>
   (* AttributeTarget *)
   conj_tac >- (
     rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
@@ -1780,12 +1772,6 @@ Proof
     gvs[Once evaluate_def, bind_def, AllCaseEqs(),
          get_scopes_def, return_def, raise_def,
          lift_option_type_def, option_CASE_rator]) >>
-  (* BareGlobalName *)
-  conj_tac >- (
-    rpt gen_tac >> strip_tac >>
-    gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def] >>
-    imp_res_tac get_immutables_state >>
-    imp_res_tac lift_option_type_state >> gvs[]) >>
   (* TopLevelName *)
   conj_tac >- (
     rpt gen_tac >> strip_tac >>

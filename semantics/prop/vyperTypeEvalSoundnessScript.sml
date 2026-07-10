@@ -951,19 +951,18 @@ Proof
     `evaluate_type (get_tenv cx) var_ty = SOME entry'.type` by metis_tac[] >>
     `entry'.type = entry.type` by gvs[] >>
     qexists_tac `entry'` >> simp[]) >>
-  rename1 `FLOOKUP env.bare_globals (_,string_to_num s) = SOME imm_ty` >>
-  `env.current_src = current_module cx` by fs[env_context_consistent_def] >> gvs[] >>
-  `?pair. FLOOKUP (get_source_immutables (current_module cx)
+  rename1 `FLOOKUP env.bare_globals (src_id_opt,string_to_num s) = SOME imm_ty` >>
+  `?pair. FLOOKUP (get_source_immutables src_id_opt
       (case ALOOKUP st'.immutables cx.txn.target of NONE => [] | SOME m => m))
       (string_to_num s) = SOME pair` by metis_tac[IS_SOME_EXISTS] >>
   PairCases_on `pair` >>
   `env.type_defs = get_tenv cx` by fs[env_context_consistent_def] >>
   `evaluate_type (get_tenv cx) imm_ty = SOME pair0` by metis_tac[] >>
-  qexists_tac `get_source_immutables (current_module cx)
+  qexists_tac `get_source_immutables src_id_opt
       (case ALOOKUP st'.immutables cx.txn.target of NONE => [] | SOME m => m)` >>
   qexists_tac `pair1` >>
   Cases_on `ALOOKUP st'.immutables cx.txn.target` >>
-  Cases_on `ALOOKUP x (current_module cx)` >>
+  Cases_on `ALOOKUP x src_id_opt` >>
   gvs[get_immutables_def, get_address_immutables_def, bind_def, return_def,
       lift_option_def, get_source_immutables_def, AllCaseEqs()]
 QED
@@ -1744,12 +1743,10 @@ Proof
   TRY(rename1 `eval_targets _ []` >> suspend "Targets_nil") >>
   TRY(rename1 `eval_targets _ (_::_)` >> suspend "Targets_cons") >>
   TRY(rename1 `NameTarget` >> suspend "BaseTarget_Name") >>
-  TRY(rename1 `BareGlobalNameTarget` >> suspend "BaseTarget_BareGlobal") >>
   TRY(rename1 `TopLevelNameTarget` >> suspend "BaseTarget_TopLevel") >>
   TRY(rename1 `SubscriptTarget` >> suspend "BaseTarget_Subscript") >>
   TRY(rename1 `AttributeTarget` >> suspend "BaseTarget_Attribute") >>
   TRY(rename1 `Name` >> suspend "Expr_Name") >>
-  TRY(rename1 `BareGlobalName` >> suspend "Expr_BareGlobalName") >>
   TRY(rename1 `TopLevelName` >> suspend "Expr_TopLevelName") >>
   TRY(rename1 `FlagMember` >> suspend "Expr_FlagMember") >>
   TRY(rename1 `IfExp` >> suspend "Expr_IfExp") >>
@@ -3268,53 +3265,105 @@ Resume eval_all_type_sound_mutual[BaseTarget_Name]:
   simp[target_path_type_refl]
 QED
 
-Resume eval_all_type_sound_mutual[BaseTarget_BareGlobal]:
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `type_place_target _ (BareGlobalNameTarget _) = _` mp_tac >>
-  simp[type_place_target_BareGlobalNameTarget] >> strip_tac >> gvs[] >>
-  drule_all env_consistent_bare_global_assignable_ready >> strip_tac >>
-  drule eval_base_target_BareGlobalNameTarget_preserves_state >> strip_tac >> gvs[] >>
-  `!msg. res <> INR (Error (TypeError msg))` by
-    metis_tac[eval_base_target_BareGlobalNameTarget_no_type_error] >>
-  qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, get_immutables_def,
-       get_address_immutables_def, lift_option_def, lift_option_type_def,
-       type_check_def, assert_def, check_def, ignore_bind_def,
-       return_def, raise_def, LET_THM] >>
+Theorem is_immutable_decl_MEM_Immutable_exists[local]:
+  !n ts. is_immutable_decl n ts ==>
+  ?vis id ty init. MEM (VariableDecl vis Immutable id ty init) ts /\ string_to_num id = n
+Proof
+  Induct_on `ts` >> rw[is_immutable_decl_def] >>
+  Cases_on `h` >> gvs[is_immutable_decl_def] >>
+  Cases_on `v0` >> gvs[is_immutable_decl_def] >>
+  metis_tac[]
+QED
+
+Theorem nonbare_toplevel_not_immutable[local]:
+  env_consistent env cx st /\
+  FLOOKUP env.bare_globals (src,n) = NONE /\
+  get_module_code cx src = SOME ts /\
+  is_immutable_decl n ts ==>
+  F
+Proof
   rpt strip_tac >>
-  gvs[no_type_error_result_def, base_target_value_shape_def,
-      location_runtime_typed_def, target_path_type_refl,
-      get_source_immutables_def, AllCaseEqs()] >>
-  gvs[IS_SOME_EXISTS, get_immutables_def, get_address_immutables_def,
-      lift_option_def, return_def] >>
-  Cases_on `ALOOKUP s''.immutables cx.txn.target` >> gvs[return_def, raise_def] >>
-  PairCases_on `x` >> gvs[] >>
-  qexists_tac `Type ty` >> simp[target_path_type_refl] >>
-  qexists_tac `imms'` >> qexists_tac `x1` >> qexists_tac `x0` >>
-  gvs[env_consistent_def, env_context_consistent_def, env_immutables_consistent_def,
-      get_immutables_def, get_address_immutables_def, lift_option_def,
-      bind_def, return_def, get_source_immutables_def] >>
-  qpat_x_assum `!src id ty' tv v.
-      FLOOKUP env.bare_globals (src,id) = SOME ty' /\
-      FLOOKUP (case ALOOKUP imms src of NONE => FEMPTY | SOME imm => imm) id = SOME (tv,v) ==>
-      evaluate_type (get_tenv cx) ty' = SOME tv`
-    (qspecl_then [`current_module cx`, `string_to_num id`, `ty`, `x0`, `x1`] mp_tac) >>
-  simp[]
+  drule_all is_immutable_decl_MEM_Immutable_exists >> strip_tac >>
+  gvs[env_consistent_def, env_context_consistent_def,
+      bare_globals_complete_def] >>
+  qpat_x_assum `!src ts vis mut id ty init. _`
+    (qspecl_then [`src`, `ts`, `vis`, `Immutable`, `id`, `ty`, `init`] mp_tac) >>
+  gvs[]
+QED
+
+Theorem bare_global_immutable_value_and_type[local]:
+  (!src id ty. FLOOKUP bare_globals (src,id) = SOME ty ==>
+     ?tv v. FLOOKUP (get_source_immutables src imms) id = SOME (tv,v)) /\
+  (!src id ty tv v. FLOOKUP bare_globals (src,id) = SOME ty /\
+     FLOOKUP (get_source_immutables src imms) id = SOME (tv,v) ==>
+     evaluate_type tenv ty = SOME tv) /\
+  FLOOKUP bare_globals (src,n) = SOME ty ==>
+  ?tv v. FLOOKUP (get_source_immutables src imms) n = SOME (tv,v) /\
+         evaluate_type tenv ty = SOME tv
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `!src id ty. FLOOKUP bare_globals (src,id) = SOME ty ==> ?tv v. _`
+    (drule_then strip_assume_tac) >>
+  goal_assum drule >> simp[] >>
+  qpat_x_assum `!src id ty tv v. _` drule_all >> simp[]
 QED
 
 Resume eval_all_type_sound_mutual[BaseTarget_TopLevel]:
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, return_def] >>
-  strip_tac >> gvs[] >>
-  simp[no_type_error_result_def, base_target_value_shape_def] >>
-  simp[location_runtime_typed_def] >>
-  gvs[well_typed_expr_def, place_leaf_typed_def, leaf_type_def] >>
-  rw[] >> gvs[env_consistent_def] >>
-  gvs[env_context_consistent_def] >>
-  first_x_assum drule >>
-  rw[well_formed_vtype_def, well_formed_type_def] >>
-  gvs[IS_SOME_EXISTS, target_path_type_refl]
+  qpat_x_assum `type_place_target _ (TopLevelNameTarget _) = _` mp_tac >>
+  simp[type_place_target_TopLevelNameTarget] >> strip_tac >> gvs[] >>
+  TRY (drule eval_base_target_TopLevelNameTarget_preserves_state >> simp[]) >|
+  [
+    `FLOOKUP env.bare_globals (src_id_opt,string_to_num id) = SOME ty /\
+     ?ts. get_module_code cx src_id_opt = SOME ts /\
+          is_immutable_decl (string_to_num id) ts /\
+          IS_SOME (FLOOKUP (get_source_immutables src_id_opt
+            (case ALOOKUP st.immutables cx.txn.target of NONE => [] | SOME m => m))
+            (string_to_num id))` by (
+      gvs[env_consistent_def, env_context_consistent_def,
+          env_immutables_consistent_def] >>
+      qpat_x_assum `!src id ty. FLOOKUP env.bare_global_assignable (src,id) = SOME ty ==> _`
+        drule >> simp[] >> strip_tac >>
+      first_x_assum drule >> simp[]) >>
+    qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
+    simp[Once evaluate_def, bind_def, lift_option_type_def, return_def, raise_def] >>
+    strip_tac >> gvs[no_type_error_result_def, base_target_value_shape_def,
+                     location_runtime_typed_def, target_path_type_refl,
+                     optionTheory.IS_SOME_EXISTS] >>
+    gvs[IS_SOME_EXISTS, get_immutables_def, get_address_immutables_def,
+        lift_option_def, return_def, get_source_immutables_def, AllCaseEqs()] >>
+    Cases_on `ALOOKUP st.immutables cx.txn.target` >> gvs[return_def, raise_def] >>
+    PairCases_on `x` >> gvs[] >>
+    qexists_tac `Type ty` >> simp[target_path_type_refl] >>
+    qexists_tac `case ALOOKUP x' src_id_opt of NONE => FEMPTY | SOME imm => imm` >>
+    qexists_tac `x1` >> qexists_tac `x0` >>
+    gvs[env_consistent_def, env_context_consistent_def, env_immutables_consistent_def,
+        get_immutables_def, get_address_immutables_def, lift_option_def,
+        bind_def, return_def, get_source_immutables_def] >>
+    qpat_x_assum `!src id ty' tv v. _`
+      (qspecl_then [`src_id_opt`, `string_to_num id`, `ty`, `x0`, `x1`] mp_tac) >>
+    simp[base_target_value_shape_def, optionTheory.IS_SOME_EXISTS] >>
+    strip_tac >> gvs[],
+
+    `?code. get_module_code cx src_id_opt = SOME code` by (
+      gvs[env_consistent_def, env_context_consistent_def] >>
+      Cases_on `vt` >> gvs[] >> metis_tac[]) >>
+    qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
+    simp[Once evaluate_def, bind_def, lift_option_type_def, return_def, raise_def] >>
+    Cases_on `get_module_code cx src_id_opt` >> gvs[return_def, raise_def] >>
+    Cases_on `is_immutable_decl (string_to_num id) code` >- (
+      drule_all nonbare_toplevel_not_immutable >> simp[]) >>
+    gvs[return_def] >>
+    simp[no_type_error_result_def, base_target_value_shape_def] >>
+    simp[location_runtime_typed_def] >>
+    gvs[place_leaf_typed_def, leaf_type_def] >>
+    rw[] >> gvs[env_consistent_def] >>
+    gvs[env_context_consistent_def] >>
+    first_x_assum drule >>
+    rw[well_formed_vtype_def, well_formed_type_def] >>
+    gvs[IS_SOME_EXISTS, target_path_type_refl, base_target_value_shape_def] >>
+    TRY (qexists_tac `vt` >> simp[location_runtime_typed_def, target_path_type_refl])
+  ]
 QED
 
 Resume eval_all_type_sound_mutual[BaseTarget_Subscript]:
@@ -3394,30 +3443,6 @@ Resume eval_all_type_sound_mutual[Expr_Name]:
         simp[lookup_scopes_val_SOME] >>
       gvs[bind_def, return_def, expr_result_typed_def, expr_runtime_typed_def,
           well_typed_expr_def, expr_type_def, toplevel_value_typed_Value]) >>
-  rpt strip_tac >> gvs[well_typed_expr_def]
-QED
-
-Resume eval_all_type_sound_mutual[Expr_BareGlobalName]:
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, get_immutables_def, get_address_immutables_def,
-      lift_option_def, bind_def, lift_option_type_def,
-      return_def, raise_def, no_type_error_result_def] >>
-  strip_tac >> gvs[]
-  >- (strip_tac >>
-      drule_all bare_global_lookup_sound >> strip_tac >>
-      `env.current_src = current_module cx` by
-        gvs[env_consistent_def, env_context_consistent_def] >>
-      `?imms. ALOOKUP st.immutables cx.txn.target = SOME imms` by (
-        Cases_on `ALOOKUP st.immutables cx.txn.target` >>
-        gvs[get_source_immutables_def]) >>
-      `FLOOKUP (get_source_immutables (current_module cx) imms) (string_to_num id) = SOME (tv,v)` by
-        gvs[] >>
-      qpat_x_assum `(case _ of _ => _ | _ => _) = (res,st')` mp_tac >>
-      simp[return_def, raise_def] >> strip_tac >>
-      gvs[env_consistent_def, env_context_consistent_def, expr_result_typed_def,
-          expr_runtime_typed_def, expr_type_def, toplevel_value_typed_Value] >>
-      metis_tac[]) >>
   rpt strip_tac >> gvs[well_typed_expr_def]
 QED
 
@@ -4674,19 +4699,21 @@ Resume eval_all_type_sound_mutual[Expr_Subscript]:
     strip_tac >>
     qpat_x_assum `case INL x of INL tv => place_expr_result_typed env tv vt' | INR v1 => T` mp_tac >>
     simp_tac(srw_ss())[] >> strip_tac >>
-    `well_formed_type env.type_defs v9` by (
-      `well_formed_vtype env.type_defs vt'` by
-        metis_tac[type_place_expr_well_formed_vtype_stmt] >>
-      `well_formed_vtype env.type_defs vt` by
-        metis_tac[subscript_vtype_well_formed_stmt] >>
-      metis_tac[vtype_annotation_ok_well_formed_type_stmt]) >>
+    `well_formed_type env.type_defs v8`
+      by (
+        drule_at Any vtype_annotation_ok_well_formed_type_stmt >>
+        disch_then irule >>
+        irule subscript_vtype_well_formed_stmt >>
+        goal_assum $ drule_at Any >>
+        irule type_place_expr_well_formed_vtype_stmt >>
+        metis_tac[] ) >>
     qpat_x_assum `!s'' tv1 t. eval_expr cx e s'' = (INL tv1,t) ==> _`
       (qspecl_then [`st`,`x`,`st1`] mp_tac) >>
     (impl_tac >- simp[]) >> strip_tac >>
-    qspecl_then [`cx`,`env`,`e`,`e'`,`v9`,`vt'`,`vt`,`x`,`st1`,`res`,`st'`]
+    qspecl_then [`cx`,`env`,`e`,`e'`,`v8`,`vt'`,`vt`,`x`,`st1`,`res`,`st'`]
       mp_tac expr_subscript_place_projection_branch_sound_stmt >>
     (impl_tac >- (
-      rpt conj_tac >> TRY (first_assum ACCEPT_TAC))) >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> NO_TAC)) >>
     (disch_then irule >> first_assum ACCEPT_TAC))
   >- (
     qpat_x_assum `!vt. type_place_expr env e = SOME vt ==> state_well_typed st1 /\ _`
@@ -5089,6 +5116,7 @@ Resume eval_all_type_sound_mutual[Expr_Pop]:
       >- (gvs[no_type_error_result_def] >>
           PairCases_on `x` >>
           gvs[] >>
+          rename1 `type_place_target env bt = SOME (Type (ArrayT elem_ty (Dynamic n)))` >>
           strip_tac >>
           qpat_x_assum `do _ od st1 = (res,st')` mp_tac >>
           simp[bind_apply, bind_def, return_def, ignore_bind_apply] >>
@@ -5096,20 +5124,20 @@ Resume eval_all_type_sound_mutual[Expr_Pop]:
           rename1 `assign_target cx (BaseTargetV loc sbs) PopOp st1 = (assign_res, st2)` >>
           `runtime_consistent env cx st1` by simp[runtime_consistent_def] >>
           `target_runtime_typed env cx st1 (BaseTarget bt)
-             (ArrayT v11 (Dynamic n)) (BaseTargetV loc sbs)` by (
+             (ArrayT elem_ty (Dynamic n)) (BaseTargetV loc sbs)` by (
             simp[target_runtime_typed_def, target_value_shape_def,
                  well_typed_atarget_def, well_typed_target_def] >>
             qexists_tac `loc_vt` >> simp[]) >>
-          `?elem_tv. evaluate_type env.type_defs v11 = SOME elem_tv` by (
+          `?elem_tv. evaluate_type env.type_defs elem_ty = SOME elem_tv` by (
             `?vt final_tv.
                location_runtime_typed env cx st1 loc vt /\
-               target_path_type env vt sbs (Type (ArrayT v11 (Dynamic n))) /\
-               place_leaf_typed env vt sbs (ArrayT v11 (Dynamic n)) final_tv` by
+               target_path_type env vt sbs (Type (ArrayT elem_ty (Dynamic n))) /\
+               place_leaf_typed env vt sbs (ArrayT elem_ty (Dynamic n)) final_tv` by
               metis_tac[target_runtime_typed_place_leaf_typed] >>
-            `evaluate_type env.type_defs (ArrayT v11 (Dynamic n)) = SOME final_tv` by
+            `evaluate_type env.type_defs (ArrayT elem_ty (Dynamic n)) = SOME final_tv` by
               metis_tac[place_leaf_typed_evaluate_type] >>
-            Cases_on `evaluate_type env.type_defs v11` >> gvs[evaluate_type_def]) >>
-          `assign_operation_runtime_typed env (ArrayT v11 (Dynamic n)) PopOp` by
+            Cases_on `evaluate_type env.type_defs elem_ty` >> gvs[evaluate_type_def]) >>
+          `assign_operation_runtime_typed env (ArrayT elem_ty (Dynamic n)) PopOp` by
             metis_tac[stmt_assign_operation_runtime_typed_Pop_from_dynamic_array] >>
           `assign_operation_matches_target_shape (BaseTargetV loc sbs) PopOp` by
             simp[assign_operation_matches_target_shape_def] >>
@@ -5139,7 +5167,7 @@ Resume eval_all_type_sound_mutual[Expr_Pop_assign_inr]:
   gvs[runtime_consistent_def] >>
   qspecl_then [`cx`, `BaseTargetV loc sbs`, `PopOp`, `st1`,
                `INR y`, `st'`, `env`, `BaseTarget bt`,
-               `ArrayT v11 (Dynamic n)`] mp_tac assign_target_no_type_error >>
+               `ArrayT elem_ty (Dynamic n)`] mp_tac assign_target_no_type_error >>
   simp[no_type_error_result_def] >>
   impl_tac >- simp[runtime_consistent_def] >>
   simp[]

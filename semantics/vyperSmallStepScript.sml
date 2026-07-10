@@ -112,19 +112,15 @@ Definition eval_base_target_cps_def:
         type_check (IS_SOME (lookup_scopes n sc)) "NameTarget not in scope";
         return $ (ScopedVar id, []) od st in
      liftk cx ApplyBaseTarget r k) ∧
-  eval_base_target_cps cx (BareGlobalNameTarget id) st k =
+  eval_base_target_cps cx (TopLevelNameTarget (src_id_opt, id)) st k =
     (let r = do
-        imms <- get_immutables cx (current_module cx);
         n <<- string_to_num id;
         ts <- lift_option_type
-                (get_module_code cx (current_module cx))
-                "BareGlobalNameTarget get_module_code";
-        type_check (is_immutable_decl n ts) "assign to constant";
-        type_check (IS_SOME (FLOOKUP imms n)) "BareGlobalNameTarget not found";
-        return $ (ImmutableVar id, []) od st in
+                (get_module_code cx src_id_opt)
+                "TopLevelNameTarget get_module_code";
+        if is_immutable_decl n ts then return $ (ImmutableVar src_id_opt id, [])
+        else return $ (TopLevelVar src_id_opt id, []) od st in
      liftk cx ApplyBaseTarget r k) ∧
-  eval_base_target_cps cx (TopLevelNameTarget (src_id_opt, id)) st k =
-    AK cx (ApplyBaseTarget (TopLevelVar src_id_opt id, [])) st k ∧
   eval_base_target_cps cx (AttributeTarget t id) st k =
     eval_base_target_cps cx t st (AttributeTargetK id k) ∧
   eval_base_target_cps cx (SubscriptTarget t e) st k =
@@ -145,12 +141,6 @@ Definition eval_expr_cps_def:
           n <<- string_to_num id;
           v <- lift_option_type (lookup_scopes_val n env) "Name not in scope";
           return $ Value v od st) k ∧
-  eval_expr_cps cx1 (BareGlobalName _ id) st k =
-    liftk cx1 ApplyTv
-      (do imms <- get_immutables cx1 (current_module cx1);
-          n <<- string_to_num id;
-          tvv <- lift_option_type (FLOOKUP imms n) "BareGlobalName not found";
-          return $ Value (SND tvv) od st) k ∧
   eval_expr_cps cx2 (TopLevelName _ (src_id_opt, id)) st k =
     liftk cx2 ApplyTv (lookup_global cx2 src_id_opt (string_to_num id) st) k ∧
   eval_expr_cps cx2 (FlagMember _ nsid mid) st k =
@@ -1829,8 +1819,7 @@ Proof
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     >> rw[Once OWHILE_THM, stepk_def, apply_targets_def] )
   \\ conj_tac >- rw[eval_base_target_cps_def, evaluate_def, liftk1] (* eval_base_target (NameTarget id) *)
-  \\ conj_tac >- rw[eval_base_target_cps_def, evaluate_def, liftk1] (* eval_base_target (BareGlobalNameTarget id) *)
-  \\ conj_tac >- rw[eval_base_target_cps_def, evaluate_def, return_def] (* eval_base_target (TopLevelNameTarget ...) *)
+  \\ conj_tac >- rw[eval_base_target_cps_def, evaluate_def, liftk1] (* eval_base_target (TopLevelNameTarget ...) *)
   \\ conj_tac >- ( (* eval_base_target (AttributeTarget t id) *)
     rw[eval_base_target_cps_def, evaluate_def, bind_def, UNCURRY, return_def]
     \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
@@ -1881,7 +1870,6 @@ Proof
     \\ last_x_assum drule \\ rw[]
     \\ last_x_assum drule \\ rw[])
   \\ conj_tac >- rw[eval_expr_cps_def, evaluate_def, liftk1] (* eval_expr (Name id) *)
-  \\ conj_tac >- rw[eval_expr_cps_def, evaluate_def, liftk1] (* eval_expr (BareGlobalName id) *)
   \\ conj_tac >- rw[eval_expr_cps_def, evaluate_def, liftk1] (* eval_expr (TopLevelName ...) *)
   \\ conj_tac >- rw[eval_expr_cps_def, evaluate_def, liftk1] (* eval_expr (FlagMember ...) *)
   \\ conj_tac >- ( (* eval_expr (IfExp e1 e2 e3) *)

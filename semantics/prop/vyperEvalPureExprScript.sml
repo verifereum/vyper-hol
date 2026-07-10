@@ -20,11 +20,6 @@ Definition eval_pure_expr_def:
   eval_pure_expr cx st (Name _ id) =
     OPTION_MAP Value (lookup_name st id) ∧
 
-  eval_pure_expr cx st (BareGlobalName ty id) =
-    (case eval_expr cx (BareGlobalName ty id) st of
-     | (INL tv, _) => SOME tv
-     | _ => NONE) ∧
-
   eval_pure_expr cx st (TopLevelName ty nsid) =
     (case eval_expr cx (TopLevelName ty nsid) st of
      | (INL tv, _) => SOME tv
@@ -174,11 +169,6 @@ Proof
            vyperStateTheory.get_scopes_def, vyperStateTheory.return_def,
            vyperStateTheory.bind_def, vyperStateTheory.lift_option_type_def,
            vyperStateTheory.lift_option_def])
-  (* BareGlobalName *)
-  >- (fs[Once eval_pure_expr_def] >>
-      Cases_on `eval_expr cx (BareGlobalName ty id) st` >>
-      gvs[AllCaseEqs()] >>
-      drule_at Any eval_expr_preserves_state >> simp[pure_expr_def])
   (* TopLevelName *)
   >- (fs[Once eval_pure_expr_def] >>
       Cases_on `eval_expr cx (TopLevelName ty nsid) st` >>
@@ -305,11 +295,6 @@ Proof
       strip_tac >> gvs[AllCaseEqs()] >>
       Cases_on `lookup_scopes_val (string_to_num id) st.scopes` >>
       gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def])
-  (* BareGlobalName *)
-  >- (rpt gen_tac >> strip_tac >>
-      simp[Once eval_pure_expr_def] >>
-      Cases_on `eval_expr cx (BareGlobalName ty id) st` >>
-      gvs[AllCaseEqs()])
   (* TopLevelName *)
   >- (rpt gen_tac >> strip_tac >>
       simp[Once eval_pure_expr_def] >>

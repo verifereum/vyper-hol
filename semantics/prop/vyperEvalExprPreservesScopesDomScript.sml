@@ -77,32 +77,17 @@ Proof
   Cases_on `IS_SOME (lookup_scopes (string_to_num nm) st.scopes)` >> gvs[return_def, raise_def]
 QED
 
-(* Goal 1b: BareGlobalNameTarget (no IH) *)
-Theorem case_BareGlobalNameTarget_dom[local]:
-  ∀cx nm st res st'.
-    eval_base_target cx (BareGlobalNameTarget nm) st = (res, st') ⇒
-    MAP FDOM st.scopes = MAP FDOM st'.scopes
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `_ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def] >>
-  Cases_on `get_immutables cx (current_module cx) st` >>
-  Cases_on `q` >> simp[return_def, raise_def] >>
-  imp_res_tac get_immutables_state >> gvs[] >>
-  simp[lift_option_type_def, check_def, type_check_def, assert_def,
-       ignore_bind_def, return_def, raise_def] >>
-  strip_tac >>
-  Cases_on `get_module_code cx (current_module cx)` >>
-  gvs[return_def, raise_def, bind_def, assert_def, ignore_bind_def, AllCaseEqs()]
-QED
-
 (* Goal 2: TopLevelNameTarget (no IH) *)
 Theorem case_TopLevelNameTarget_dom[local]:
   ∀cx src_id_opt id st res st'.
     eval_base_target cx (TopLevelNameTarget (src_id_opt, id)) st = (res, st') ⇒
     MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
-  rpt strip_tac >> gvs[Once evaluate_def, return_def]
+  rpt strip_tac >>
+  qpat_x_assum `_ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, lift_option_type_def, return_def, raise_def] >>
+  Cases_on `get_module_code cx src_id_opt` >> simp[return_def, raise_def] >>
+  Cases_on `is_immutable_decl (string_to_num id) x` >> simp[return_def]
 QED
 
 (* Goal 3: AttributeTarget (unguarded IH for eval_base_target on t) *)
@@ -155,23 +140,6 @@ Proof
        lift_option_def, lift_option_type_def] >>
   rpt strip_tac >>
   Cases_on `lookup_scopes_val (string_to_num id) st.scopes` >> gvs[return_def, raise_def]
-QED
-
-(* Goal 5b: BareGlobalName (no IH) *)
-Theorem case_BareGlobalName_dom[local]:
-  ∀cx ty id st res st'.
-    eval_expr cx (BareGlobalName ty id) st = (res,st') ⇒
-    MAP FDOM st.scopes = MAP FDOM st'.scopes
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `_ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def] >>
-  Cases_on `get_immutables cx (current_module cx) st` >>
-  Cases_on `q` >> simp[return_def, raise_def] >>
-  simp[lift_option_def, lift_option_type_def, return_def, raise_def] >>
-  Cases_on `FLOOKUP x (string_to_num id)` >> simp[return_def, raise_def] >>
-  strip_tac >> gvs[] >>
-  imp_res_tac get_immutables_scopes >> gvs[]
 QED
 
 (* Goal 6: TopLevelName (no IH) *)
@@ -507,12 +475,10 @@ Proof
     rpt conj_tac >>
     TRY (simp[] >> NO_TAC) >-
     ACCEPT_TAC case_NameTarget_dom >-
-    ACCEPT_TAC case_BareGlobalNameTarget_dom >-
     ACCEPT_TAC case_TopLevelNameTarget_dom >-
     ACCEPT_TAC case_AttributeTarget_dom >-
     ACCEPT_TAC case_SubscriptTarget_dom >-
     ACCEPT_TAC case_Name_dom >-
-    ACCEPT_TAC case_BareGlobalName_dom >-
     ACCEPT_TAC case_TopLevelName_dom >-
     ACCEPT_TAC case_FlagMember_dom >-
     ACCEPT_TAC case_IfExp_dom >-

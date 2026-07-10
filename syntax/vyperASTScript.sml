@@ -228,8 +228,7 @@ End
 Datatype:
   expr
   = Name type identifier              (* local/scoped variable *)
-  | BareGlobalName type identifier    (* constant or immutable, looked up by bare name *)
-  | TopLevelName type nsid            (* module-qualified global: self.x, lib.x *)
+  | TopLevelName type nsid            (* top-level binding: self.x, module.x, constants/immutables *)
   | FlagMember type nsid identifier
   | IfExp type expr expr expr
   | Literal type literal
@@ -246,15 +245,13 @@ Datatype:
       (* expr option: default return value *)
 ; base_assignment_target
   = NameTarget identifier              (* local/scoped variable target *)
-  | BareGlobalNameTarget identifier    (* immutable target (assignment only during __init__) *)
-  | TopLevelNameTarget nsid            (* module-qualified global target *)
+  | TopLevelNameTarget nsid            (* top-level binding target *)
   | SubscriptTarget base_assignment_target expr
   | AttributeTarget base_assignment_target identifier
 End
 
 Definition expr_type_def:
   (expr_type (Name ty _) = ty) /\
-  (expr_type (BareGlobalName ty _) = ty) /\
   (expr_type (TopLevelName ty _) = ty) /\
   (expr_type (FlagMember ty _ _) = ty) /\
   (expr_type (IfExp ty _ _ _) = ty) /\
