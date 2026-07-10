@@ -33,8 +33,13 @@ Definition static_maps_transfer_env_def:
        FLOOKUP env2.bare_globals k = SOME ty) /\
     (!k ty. FLOOKUP env1.bare_global_assignable k = SOME ty ==>
        FLOOKUP env2.bare_global_assignable k = SOME ty) /\
+    (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt /\
+            FLOOKUP env1.bare_global_assignable k = NONE ==>
+       FLOOKUP env2.bare_global_assignable k = NONE) /\
     (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt ==>
        FLOOKUP env2.toplevel_vtypes k = SOME vt) /\
+    (!k ty. FLOOKUP env1.bare_globals k = SOME ty ==>
+       FLOOKUP env1.toplevel_vtypes k = SOME (Type ty)) /\
     (!k members. FLOOKUP env1.flag_members k = SOME members ==>
        FLOOKUP env2.flag_members k = SOME members) /\
     (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt /\
@@ -48,6 +53,7 @@ Theorem well_typed_defaults_static_maps_transfer[local]:
   (!k sig. FLOOKUP env1.fn_sigs k = SOME sig ==> FLOOKUP env2.fn_sigs k = SOME sig) /\
   (!k ty. FLOOKUP env1.bare_globals k = SOME ty ==> FLOOKUP env2.bare_globals k = SOME ty) /\
   (!k ty. FLOOKUP env1.bare_global_assignable k = SOME ty ==> FLOOKUP env2.bare_global_assignable k = SOME ty) /\
+  (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt /\ FLOOKUP env1.bare_global_assignable k = NONE ==> FLOOKUP env2.bare_global_assignable k = NONE) /\
   (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt ==> FLOOKUP env2.toplevel_vtypes k = SOME vt) /\
   (!k members. FLOOKUP env1.flag_members k = SOME members ==> FLOOKUP env2.flag_members k = SOME members) /\
   (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt /\ FLOOKUP env1.bare_globals k = NONE ==> FLOOKUP env2.bare_globals k = NONE) ==>
@@ -132,6 +138,9 @@ Proof
   TRY (rename1 `type_place_expr env1 e = SOME base_vt` >>
        `type_place_expr env2 e = SOME base_vt` by metis_tac[type_place_expr_static_maps_transfer_env] >>
        gvs[]) >>
+  TRY (rename1 `FLOOKUP env1.bare_globals (src,string_to_num id) = SOME ty` >>
+       qpat_x_assum `!k ty. FLOOKUP env1.bare_globals k = SOME ty ==> FLOOKUP env1.toplevel_vtypes k = SOME (Type ty)` drule >>
+       simp[vtype_annotation_ok_def] >> NO_TAC) >>
   metis_tac[]
 QED
 
@@ -281,6 +290,9 @@ Theorem function_entry_env_static_maps_transfer_initial[local]:
   fn_sigs_complete fn_sigs (initial_evaluation_context sources layouts tx src) /\
   bare_globals_complete bare_globals (initial_evaluation_context sources layouts tx src) /\
   bare_global_assignable_complete bare_global_assignable (initial_evaluation_context sources layouts tx src) /\
+  (!src' id ty. FLOOKUP bare_global_assignable (src',id) = SOME ty ==>
+     ?ts. get_module_code (initial_evaluation_context sources layouts tx src) src' = SOME ts /\
+          is_immutable_decl id ts) /\
   toplevel_vtypes_complete toplevel_vtypes (initial_evaluation_context sources layouts tx src) /\
   flag_members_complete flag_members (initial_evaluation_context sources layouts tx src) /\
   (!src' id ty. FLOOKUP bare_globals (src',id) = SOME ty ==>
@@ -311,7 +323,31 @@ Proof
   >- (simp[FOLDL_extend_local_args_static] >> metis_tac[artifact_fn_sigs_lookup_transfer_initial])
   >- (simp[FOLDL_extend_local_args_static] >> metis_tac[artifact_bare_globals_lookup_transfer_initial])
   >- (simp[FOLDL_extend_local_args_static] >> metis_tac[artifact_bare_global_assignable_lookup_transfer_initial])
+  >- (simp[FOLDL_extend_local_args_static] >>
+      PairCases_on `k` >>
+      irule artifact_bare_global_assignable_NONE_transfer_initial >>
+      qexistsl [`tx.target`, `args`, `art`, `src`, `entry_src`, `layouts`, `mods`, `sources`, `tx`, `vt`] >>
+      simp[] >>
+      conj_tac >- (
+        rpt strip_tac >>
+        first_x_assum drule >>
+        simp[get_module_code_def, initial_evaluation_context_def] >>
+        metis_tac[]) >>
+      irule check_contract_bare_global_assignable_complete_initial >>
+      qexistsl_tac [`tx.target`, `mods`] >> simp[])
   >- (simp[FOLDL_extend_local_args_static] >> metis_tac[artifact_toplevel_vtypes_lookup_transfer_initial])
+  >- (simp[FOLDL_extend_local_args_static] >>
+      PairCases_on `k` >>
+      `toplevel_vtypes_complete art.cta_toplevel_vtypes
+         (initial_evaluation_context sources layouts tx src)` by (
+        irule check_contract_toplevel_vtypes_complete_initial >>
+        qexistsl_tac [`tx.target`, `mods`] >> simp[]) >>
+      gvs[function_entry_env_def, artifact_env_def, FOLDL_extend_local_args_static,
+          toplevel_vtypes_complete_def, get_module_code_def,
+          initial_evaluation_context_def] >>
+      gvs[check_contract_def] >>
+      drule_all build_contract_type_artifact_bare_globals_sound >> strip_tac >>
+      gvs[] >> first_x_assum drule_all >> simp[])
   >- (simp[FOLDL_extend_local_args_static] >> metis_tac[artifact_flag_members_lookup_transfer_initial])
   >> (simp[FOLDL_extend_local_args_static] >>
       PairCases_on `k` >>
@@ -327,6 +363,9 @@ Theorem function_entry_env_static_maps_transfer_initial_explicit[local]:
   fn_sigs_complete fn_sigs (initial_evaluation_context sources layouts tx src) /\
   bare_globals_complete bare_globals (initial_evaluation_context sources layouts tx src) /\
   bare_global_assignable_complete bare_global_assignable (initial_evaluation_context sources layouts tx src) /\
+  (!src' id ty. FLOOKUP bare_global_assignable (src',id) = SOME ty ==>
+     ?ts. get_module_code (initial_evaluation_context sources layouts tx src) src' = SOME ts /\
+          is_immutable_decl id ts) /\
   toplevel_vtypes_complete toplevel_vtypes (initial_evaluation_context sources layouts tx src) /\
   flag_members_complete flag_members (initial_evaluation_context sources layouts tx src) /\
   (!src' id ty. FLOOKUP bare_globals (src',id) = SOME ty ==>
@@ -361,6 +400,9 @@ Theorem check_function_body_static_maps_transfer_initial[local]:
   fn_sigs_complete fn_sigs (initial_evaluation_context sources layouts tx src) /\
   bare_globals_complete bare_globals (initial_evaluation_context sources layouts tx src) /\
   bare_global_assignable_complete bare_global_assignable (initial_evaluation_context sources layouts tx src) /\
+  (!src' id ty. FLOOKUP bare_global_assignable (src',id) = SOME ty ==>
+     ?ts. get_module_code (initial_evaluation_context sources layouts tx src) src' = SOME ts /\
+          is_immutable_decl id ts) /\
   toplevel_vtypes_complete toplevel_vtypes (initial_evaluation_context sources layouts tx src) /\
   flag_members_complete flag_members (initial_evaluation_context sources layouts tx src) /\
   (!src' id ty. FLOOKUP bare_globals (src',id) = SOME ty ==>
@@ -475,6 +517,9 @@ Proof
      simp[] >>
      qexists `fn` >>
      gvs[initial_evaluation_context_def]) >>
+  `!src' id ty. FLOOKUP bare_global_assignable (src',id) = SOME ty ==>
+     ?ts. get_module_code (initial_evaluation_context sources layouts tx src) src' = SOME ts /\
+          is_immutable_decl id ts` by metis_tac[] >>
   drule_all check_function_body_static_maps_transfer_initial >>
   simp[]
 QED
@@ -512,6 +557,9 @@ Theorem checked_contract_static_maps_transfer_inputs_initial[local]:
   bare_global_assignable_complete art.cta_bare_global_assignable (initial_evaluation_context sources layouts tx src) /\
   toplevel_vtypes_complete art.cta_toplevel_vtypes (initial_evaluation_context sources layouts tx src) /\
   flag_members_complete art.cta_flag_members (initial_evaluation_context sources layouts tx src) /\
+  (!src' id ty. FLOOKUP art.cta_bare_global_assignable (src',id) = SOME ty ==>
+     ?ts. get_module_code (initial_evaluation_context sources layouts tx src) src' = SOME ts /\
+          is_immutable_decl id ts) /\
   (!src' id ty. FLOOKUP art.cta_bare_globals (src',id) = SOME ty ==>
      ?ts. get_module_code (initial_evaluation_context sources layouts tx src) src' = SOME ts /\
           FLOOKUP art.cta_toplevel_vtypes (src',id) = SOME (Type ty) /\
@@ -523,7 +571,12 @@ Proof
   >- (irule check_contract_bare_globals_complete_initial >> simp[])
   >- (irule check_contract_bare_global_assignable_complete_initial >> simp[])
   >- (irule check_contract_toplevel_vtypes_complete_initial >> simp[])
-  >- (irule check_contract_flag_members_complete_initial >> simp[]) >>
+  >- (irule check_contract_flag_members_complete_initial >> simp[])
+  >- (drule check_contract_bare_global_assignable_consistent_initial >>
+      simp[] >>
+      disch_then (qspecl_then [`tx`, `sources`, `src'`, `id`, `ty`] mp_tac) >>
+      simp[get_module_code_def, initial_evaluation_context_def] >>
+      metis_tac[]) >>
   drule check_contract_bare_globals_consistent_initial >>
   simp[] >>
   disch_then (qspecl_then [`tx`, `sources`, `src'`, `id`, `ty`] mp_tac) >>
@@ -560,12 +613,23 @@ Proof
    bare_global_assignable_complete art.cta_bare_global_assignable (initial_evaluation_context am.sources am.layouts tx src) /\
    toplevel_vtypes_complete art.cta_toplevel_vtypes (initial_evaluation_context am.sources am.layouts tx src) /\
    flag_members_complete art.cta_flag_members (initial_evaluation_context am.sources am.layouts tx src) /\
+   (!src' id ty. FLOOKUP art.cta_bare_global_assignable (src',id) = SOME ty ==>
+      ?ts'. get_module_code (initial_evaluation_context am.sources am.layouts tx src) src' = SOME ts' /\
+            is_immutable_decl id ts') /\
    (!src' id ty. FLOOKUP art.cta_bare_globals (src',id) = SOME ty ==>
       ?ts'. get_module_code (initial_evaluation_context am.sources am.layouts tx src) src' = SOME ts' /\
             FLOOKUP art.cta_toplevel_vtypes (src',id) = SOME (Type ty) /\
             is_bare_global_decl id ts' /\
             find_var_decl_by_num id ts' = NONE /\ ty <> NoneT)` by
     (irule checked_contract_static_maps_transfer_inputs_initial >> simp[]) >>
+  `!src' id ty. FLOOKUP art.cta_bare_global_assignable (src',id) = SOME ty ==>
+     ?ts'. get_module_code (initial_evaluation_context am.sources am.layouts tx src) src' = SOME ts' /\
+           is_immutable_decl id ts'` by (
+    rpt strip_tac >>
+    dxrule check_contract_bare_global_assignable_consistent_initial >>
+    simp[] >> strip_tac >>
+    first_x_assum (qspecl_then [`src'`, `id`, `ty`] mp_tac) >>
+    simp[get_module_code_def, initial_evaluation_context_def]) >>
   qspecl_then
     [`am.layouts`, `tx.target`, `mods`, `art`, `am.sources`, `tx`,
      `art.cta_fn_sigs`, `art.cta_bare_globals`,

@@ -417,6 +417,40 @@ Proof
   metis_tac[]
 QED
 
+Theorem is_immutable_decl_MEM_Immutable_exists[local]:
+  !n ts. is_immutable_decl n ts ==>
+  ?vis id ty init. MEM (VariableDecl vis Immutable id ty init) ts /\ string_to_num id = n
+Proof
+  Induct_on `ts` >> rw[is_immutable_decl_def] >>
+  Cases_on `h` >> gvs[is_immutable_decl_def] >>
+  Cases_on `v0` >> gvs[is_immutable_decl_def] >>
+  metis_tac[]
+QED
+
+Theorem artifact_bare_global_assignable_NONE_transfer_initial:
+  check_contract F layouts addr mods = SOME art /\
+  ALOOKUP sources addr = SOME mods /\ tx.target = addr /\
+  bare_global_assignable_complete art.cta_bare_global_assignable
+    (initial_evaluation_context sources layouts tx cx_src) /\
+  (!src' id ty ts. FLOOKUP bare_global_assignable (src',id) = SOME ty /\
+     ALOOKUP mods src' = SOME ts ==> is_immutable_decl id ts) /\
+  FLOOKUP (function_entry_env art mods entry_src args).toplevel_vtypes (src,id) = SOME vt /\
+  FLOOKUP (function_entry_env art mods entry_src args).bare_global_assignable (src,id) = NONE ==>
+  FLOOKUP bare_global_assignable (src,id) = NONE
+Proof
+  rw[function_entry_env_def, artifact_env_def, FOLDL_extend_local_args_static] >>
+  Cases_on `FLOOKUP bare_global_assignable (src,id)` >> simp[] >>
+  `?ts. ALOOKUP mods src = SOME ts` by (
+    gvs[check_contract_def] >>
+    drule_all build_contract_type_artifact_toplevel_vtypes_sound >> rw[] >>
+    metis_tac[]) >>
+  qpat_x_assum `!src' id ty ts. _` drule_all >> strip_tac >>
+  drule_all is_immutable_decl_MEM_Immutable_exists >> strip_tac >> gvs[] >>
+  gvs[bare_global_assignable_complete_def, get_module_code_def,
+      initial_evaluation_context_def] >>
+  first_x_assum drule_all >> gvs[]
+QED
+
 Theorem artifact_flag_members_lookup_transfer_initial:
   check_contract F layouts addr mods = SOME art /\
   ALOOKUP sources addr = SOME mods /\
@@ -495,6 +529,7 @@ Theorem well_typed_static_maps_transfer:
     (!k sig. FLOOKUP env1.fn_sigs k = SOME sig ==> FLOOKUP env2.fn_sigs k = SOME sig) /\
     (!k ty. FLOOKUP env1.bare_globals k = SOME ty ==> FLOOKUP env2.bare_globals k = SOME ty) /\
     (!k ty. FLOOKUP env1.bare_global_assignable k = SOME ty ==> FLOOKUP env2.bare_global_assignable k = SOME ty) /\
+    (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt /\ FLOOKUP env1.bare_global_assignable k = NONE ==> FLOOKUP env2.bare_global_assignable k = NONE) /\
     (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt ==> FLOOKUP env2.toplevel_vtypes k = SOME vt) /\
     (!k members. FLOOKUP env1.flag_members k = SOME members ==> FLOOKUP env2.flag_members k = SOME members) /\
     (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt /\ FLOOKUP env1.bare_globals k = NONE ==> FLOOKUP env2.bare_globals k = NONE) ==>
@@ -507,6 +542,7 @@ Theorem well_typed_static_maps_transfer:
     (!k sig. FLOOKUP env1.fn_sigs k = SOME sig ==> FLOOKUP env2.fn_sigs k = SOME sig) /\
     (!k ty. FLOOKUP env1.bare_globals k = SOME ty ==> FLOOKUP env2.bare_globals k = SOME ty) /\
     (!k ty. FLOOKUP env1.bare_global_assignable k = SOME ty ==> FLOOKUP env2.bare_global_assignable k = SOME ty) /\
+    (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt /\ FLOOKUP env1.bare_global_assignable k = NONE ==> FLOOKUP env2.bare_global_assignable k = NONE) /\
     (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt ==> FLOOKUP env2.toplevel_vtypes k = SOME vt) /\
     (!k members. FLOOKUP env1.flag_members k = SOME members ==> FLOOKUP env2.flag_members k = SOME members) /\
     (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt /\ FLOOKUP env1.bare_globals k = NONE ==> FLOOKUP env2.bare_globals k = NONE) ==>
@@ -519,6 +555,7 @@ Theorem well_typed_static_maps_transfer:
     (!k sig. FLOOKUP env1.fn_sigs k = SOME sig ==> FLOOKUP env2.fn_sigs k = SOME sig) /\
     (!k ty. FLOOKUP env1.bare_globals k = SOME ty ==> FLOOKUP env2.bare_globals k = SOME ty) /\
     (!k ty. FLOOKUP env1.bare_global_assignable k = SOME ty ==> FLOOKUP env2.bare_global_assignable k = SOME ty) /\
+    (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt /\ FLOOKUP env1.bare_global_assignable k = NONE ==> FLOOKUP env2.bare_global_assignable k = NONE) /\
     (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt ==> FLOOKUP env2.toplevel_vtypes k = SOME vt) /\
     (!k members. FLOOKUP env1.flag_members k = SOME members ==> FLOOKUP env2.flag_members k = SOME members) /\
     (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt /\ FLOOKUP env1.bare_globals k = NONE ==> FLOOKUP env2.bare_globals k = NONE) ==>
@@ -531,6 +568,7 @@ Theorem well_typed_static_maps_transfer:
     (!k sig. FLOOKUP env1.fn_sigs k = SOME sig ==> FLOOKUP env2.fn_sigs k = SOME sig) /\
     (!k ty. FLOOKUP env1.bare_globals k = SOME ty ==> FLOOKUP env2.bare_globals k = SOME ty) /\
     (!k ty. FLOOKUP env1.bare_global_assignable k = SOME ty ==> FLOOKUP env2.bare_global_assignable k = SOME ty) /\
+    (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt /\ FLOOKUP env1.bare_global_assignable k = NONE ==> FLOOKUP env2.bare_global_assignable k = NONE) /\
     (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt ==> FLOOKUP env2.toplevel_vtypes k = SOME vt) /\
     (!k members. FLOOKUP env1.flag_members k = SOME members ==> FLOOKUP env2.flag_members k = SOME members) /\
     (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt /\ FLOOKUP env1.bare_globals k = NONE ==> FLOOKUP env2.bare_globals k = NONE) ==>
@@ -543,6 +581,7 @@ Theorem well_typed_static_maps_transfer:
     (!k sig. FLOOKUP env1.fn_sigs k = SOME sig ==> FLOOKUP env2.fn_sigs k = SOME sig) /\
     (!k ty. FLOOKUP env1.bare_globals k = SOME ty ==> FLOOKUP env2.bare_globals k = SOME ty) /\
     (!k ty. FLOOKUP env1.bare_global_assignable k = SOME ty ==> FLOOKUP env2.bare_global_assignable k = SOME ty) /\
+    (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt /\ FLOOKUP env1.bare_global_assignable k = NONE ==> FLOOKUP env2.bare_global_assignable k = NONE) /\
     (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt ==> FLOOKUP env2.toplevel_vtypes k = SOME vt) /\
     (!k members. FLOOKUP env1.flag_members k = SOME members ==> FLOOKUP env2.flag_members k = SOME members) /\
     (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt /\ FLOOKUP env1.bare_globals k = NONE ==> FLOOKUP env2.bare_globals k = NONE) ==>
@@ -555,6 +594,7 @@ Theorem well_typed_static_maps_transfer:
     (!k sig. FLOOKUP env1.fn_sigs k = SOME sig ==> FLOOKUP env2.fn_sigs k = SOME sig) /\
     (!k ty. FLOOKUP env1.bare_globals k = SOME ty ==> FLOOKUP env2.bare_globals k = SOME ty) /\
     (!k ty. FLOOKUP env1.bare_global_assignable k = SOME ty ==> FLOOKUP env2.bare_global_assignable k = SOME ty) /\
+    (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt /\ FLOOKUP env1.bare_global_assignable k = NONE ==> FLOOKUP env2.bare_global_assignable k = NONE) /\
     (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt ==> FLOOKUP env2.toplevel_vtypes k = SOME vt) /\
     (!k members. FLOOKUP env1.flag_members k = SOME members ==> FLOOKUP env2.flag_members k = SOME members) /\
     (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt /\ FLOOKUP env1.bare_globals k = NONE ==> FLOOKUP env2.bare_globals k = NONE) ==>
@@ -563,5 +603,11 @@ Proof
   ho_match_mp_tac well_typed_expr_ind >>
   rw[well_typed_expr_def, AllCaseEqs()] >>
   gvs[] >>
+  TRY (qexists_tac `ls` >>
+       qpat_x_assum `!k members. FLOOKUP env1.flag_members k = SOME members ==> _` drule >>
+       simp[] >> NO_TAC) >>
+  TRY (qexists_tac `sig` >>
+       qpat_x_assum `!k sig. FLOOKUP env1.fn_sigs k = SOME sig ==> _` drule >>
+       simp[] >> NO_TAC) >>
   metis_tac[]
 QED
