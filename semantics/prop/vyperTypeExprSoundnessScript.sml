@@ -206,9 +206,11 @@ Definition base_target_value_shape_def:
     (id = id' /\ sbs = []) /\
   base_target_value_shape env (NameTarget id) _ _ = F /\
   base_target_value_shape env (TopLevelNameTarget nsid) (ImmutableVar src id) sbs =
-    (nsid = (src,id) /\ sbs = []) /\
+    (nsid = (src,id) /\ sbs = [] /\
+     IS_SOME (FLOOKUP env.bare_global_assignable (src,string_to_num id))) /\
   base_target_value_shape env (TopLevelNameTarget nsid) (TopLevelVar src id) sbs =
-    (nsid = (src,id) /\ sbs = []) /\
+    (nsid = (src,id) /\ sbs = [] /\
+     FLOOKUP env.bare_globals (src,string_to_num id) = NONE) /\
   base_target_value_shape env (TopLevelNameTarget nsid) _ _ = F /\
   base_target_value_shape env (AttributeTarget tgt id) loc sbs =
     (?rest. sbs = AttrSubscript id :: rest /\
