@@ -102,8 +102,7 @@ End
 (* Extract target name as string for metadata lookup *)
 Definition target_to_string_def:
   target_to_string (NameTarget id) = id ∧
-  target_to_string (BareGlobalNameTarget id) = id ∧
-  target_to_string (TopLevelNameTarget nsid) = SND nsid ∧
+  target_to_string (TopLevelNameTarget nsid) = nsid_to_string nsid ∧
   target_to_string (SubscriptTarget bt _) = target_to_string bt ∧
   target_to_string (AttributeTarget bt _) = target_to_string bt
 End
@@ -111,9 +110,8 @@ End
 (* Convert assignment target to expression for location inference *)
 Definition target_to_expr_def:
   target_to_expr (NameTarget id) = Name NoneT id ∧
-  target_to_expr (BareGlobalNameTarget id) = BareGlobalName NoneT id ∧
   target_to_expr (TopLevelNameTarget nsid) =
-    Attribute NoneT (Name NoneT "self") (SND nsid) ∧
+    TopLevelName NoneT nsid ∧
   target_to_expr (SubscriptTarget bt idx) =
     Subscript NoneT (target_to_expr bt) idx ∧
   target_to_expr (AttributeTarget bt fld) =
@@ -292,13 +290,7 @@ Definition compile_get_target_ptr_def:
      | SOME (ImmutableLoc offset) =>
          return (Lit (n2w offset), SOME LocCode, cenv.ce_var_type id)
      | _ => return (Lit 0w, NONE, NONE)) ∧
-  (* BareGlobalName: immutable in constructor *)
-  compile_get_target_ptr cenv (BareGlobalNameTarget id) =
-    (case FLOOKUP cenv.ce_vars id of
-       SOME (ImmutableLoc offset) =>
-         return (Lit (n2w offset), SOME LocCode, cenv.ce_var_type id)
-     | _ => return (Lit 0w, NONE, NONE)) ∧
-  (* TopLevelName: storage or transient variable *)
+  (* TopLevelName: storage, transient, or immutable variable *)
   compile_get_target_ptr cenv (TopLevelNameTarget nsid) =
     (let name = nsid_to_string nsid in
      case FLOOKUP cenv.ce_vars name of
@@ -306,6 +298,8 @@ Definition compile_get_target_ptr_def:
          return (Lit slot, SOME LocStorage, cenv.ce_var_type name)
      | SOME (TransientLoc slot) =>
          return (Lit slot, SOME LocTransient, cenv.ce_var_type name)
+     | SOME (ImmutableLoc offset) =>
+         return (Lit (n2w offset), SOME LocCode, cenv.ce_var_type name)
      | _ => return (Lit 0w, NONE, NONE)) ∧
   (* Subscript target: compute element pointer from base + index.
      Uses compile_array_subscript for location-aware access.

@@ -1220,15 +1220,12 @@ Definition compile_target_base_def:
     (case FLOOKUP cenv.ce_vars id of
        SOME (MemLoc offset _) => Lit (n2w offset)
      | _ => Lit 0w) ∧
-  compile_target_base cenv (BareGlobalNameTarget id) =
-    (case FLOOKUP cenv.ce_vars id of
-       SOME (ImmutableLoc offset) => Lit (n2w offset)
-     | _ => Lit 0w) ∧
   compile_target_base cenv (TopLevelNameTarget nsid) =
     (let name = nsid_to_string nsid in
      case FLOOKUP cenv.ce_vars name of
        SOME (StorageLoc slot) => Lit slot
      | SOME (TransientLoc slot) => Lit slot
+     | SOME (ImmutableLoc offset) => Lit (n2w offset)
      | _ => Lit 0w) ∧
   compile_target_base cenv (SubscriptTarget bt _) =
     compile_target_base cenv bt ∧
@@ -2276,14 +2273,6 @@ val compile_expr_defn = Defn.Hol_defn "compile_expr" `
        (let flag_name = nsid_to_string flag_nsid in
         let flag_id = cenv.ce_flag_member_id flag_name mem_name in
         (StackValue ret_ty (Lit (n2w (2 ** flag_id))), st))
-   | BareGlobalName _ id =>
-       (case FLOOKUP cenv.ce_vars id of
-          SOME (ImmutableLoc offset) =>
-            (LocatedValue ret_ty (mk_ptr (Lit (n2w offset)) LocCode), st)
-        | SOME (MemLoc offset _) =>
-            (LocatedValue ret_ty (mk_ptr (Lit (n2w offset)) LocMemory), st)
-        | _ => let (_, st') = emit_inst INVALID [] [] st in
-               (StackValue ret_ty (Lit 0w), st'))
    | TopLevelName _ nsid =>
        (let name = nsid_to_string nsid in
         case FLOOKUP cenv.ce_vars name of
@@ -2303,7 +2292,7 @@ val compile_expr_defn = Defn.Hol_defn "compile_expr" `
         let (loc, arr_name) = (case target of
             NameTarget id => (infer_array_location cenv (Name ARB id), id)
           | TopLevelNameTarget nsid =>
-              (infer_array_location cenv (Attribute ARB (Name ARB "self") (SND nsid)), SND nsid)
+              (infer_array_location cenv (TopLevelName ARB nsid), nsid_to_string nsid)
           | _ => (LocMemory, "")) in
         let ws = word_scale loc in
         let fty_opt = cenv.ce_var_type arr_name in
