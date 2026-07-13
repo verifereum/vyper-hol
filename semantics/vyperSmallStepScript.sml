@@ -586,7 +586,7 @@ Definition apply_vals_def:
   apply_vals cx vs st (ExprsK1 v k) =
     apply_vals cx (v::vs) st k ∧
   apply_vals cx vs st (ForK id tyv n body k) =
-    (case do check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long";
+    (case do type_check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long";
              return vs od st
      of (INR ex, st) => apply_exc cx ex st k
       | (INL vs, st) => eval_for_cps cx tyv (string_to_num id) body vs st k) ∧
@@ -615,20 +615,20 @@ Definition apply_vals_def:
     od st) k ∧
   apply_vals cx vs st (ExtCallK is_static func_name arg_types ret_type drv k) =
     (case do
-      check (vs ≠ []) "ExtCall no target";
+      type_check (vs ≠ []) "ExtCall no target";
       target_addr <- lift_option_type (dest_AddressV (HD vs)) "ExtCall target not address";
       (* Convention: staticcall (T) args = [target; arg1; ...]
                      extcall (F) args = [target; value; arg1; ...] *)
       (value_opt, arg_vals) <- if is_static then
         return (NONE, TL vs)
       else do
-        check (TL vs ≠ []) "ExtCall no value";
+        type_check (TL vs ≠ []) "ExtCall no value";
         v <- lift_option_type (dest_NumV (HD (TL vs))) "ExtCall value not int";
         return (SOME v, TL (TL vs))
       od;
       tenv <<- get_tenv cx;
-      calldata <- lift_option (build_ext_calldata tenv func_name arg_types arg_vals)
-                              "ExtCall build_calldata";
+      calldata <- lift_option_type (build_ext_calldata tenv func_name arg_types arg_vals)
+                                   "ExtCall build_calldata";
       accounts <- get_accounts;
       (* Vyper reverts if target has no code (EXTCODESIZE == 0) *)
       check (¬NULL (lookup_account target_addr accounts).code) "ExtCall target has no code";
@@ -683,12 +683,12 @@ Definition apply_vals_def:
   (* ===== Chain interaction builtins ===== *)
   apply_vals cx vs st (RawCallK ty flags k) =
     (case do
-      check (LENGTH vs = 3) "raw_call args";
+      type_check (LENGTH vs = 3) "raw_call args";
       target_addr <- lift_option_type (dest_AddressV (EL 0 vs)) "raw_call target";
       calldata <- lift_option_type (dest_BytesV (EL 1 vs)) "raw_call data";
       amount <- lift_option_type (dest_NumV (EL 2 vs)) "raw_call value";
       value_opt <<- if flags.rcf_is_static then NONE else SOME amount;
-      check (¬flags.rcf_is_delegate) "raw_call delegate unsupported";
+      type_check (¬flags.rcf_is_delegate) "raw_call delegate unsupported";
       accounts <- get_accounts;
       tStorage <- get_transient_storage;
       txParams <<- vyper_to_tx_params cx.txn;
@@ -712,12 +712,12 @@ Definition apply_vals_def:
      | (INL tv, st) => AK cx (ApplyTv tv) st k) ∧
   apply_vals cx vs st (RawLogK k) =
     (case do
-      check (LENGTH vs = 2) "raw_log args";
+      type_check (LENGTH vs = 2) "raw_log args";
       topics <- lift_option_type (dest_ArrayV (EL 0 vs)) "raw_log topics";
       data <- lift_option_type (dest_BytesV (EL 1 vs)) "raw_log data";
       topic_vals <<- (case topics of
          TupleV tvs => tvs | DynArrayV tvs => tvs | _ => []);
-      check (LENGTH topic_vals ≤ 4) "raw_log too many topics";
+      type_check (LENGTH topic_vals ≤ 4) "raw_log too many topics";
       push_log ((NONE,"raw_log"), topic_vals ++ [BytesV data]);
       return $ Value NoneV
     od st
@@ -725,14 +725,14 @@ Definition apply_vals_def:
      | (INL tv, st) => AK cx (ApplyTv tv) st k) ∧
   apply_vals cx vs st (RawRevertK k) =
     (case do
-      check (LENGTH vs = 1) "raw_revert args";
+      type_check (LENGTH vs = 1) "raw_revert args";
       raise $ Error $ RuntimeError "raw_revert"
     od st
     of (INR ex, st) => AK cx (ApplyExc ex) st k
      | (INL tv, st) => AK cx (ApplyTv tv) st k) ∧
   apply_vals cx vs st (SelfDestructK k) =
     (case do
-      check (LENGTH vs = 1) "selfdestruct args";
+      type_check (LENGTH vs = 1) "selfdestruct args";
       target_addr <- lift_option_type (dest_AddressV (EL 0 vs)) "selfdestruct target";
       accounts <- get_accounts;
       self_acct <<- lookup_account cx.txn.target accounts;
@@ -744,7 +744,7 @@ Definition apply_vals_def:
      | (INL tv, st) => AK cx (ApplyTv tv) st k) ∧
   apply_vals cx vs st (CreateK ty kind rof k) =
     (case do
-      check (vs ≠ []) "create no args";
+      type_check (vs ≠ []) "create no args";
       amount <- lift_option_type (dest_NumV (LAST vs)) "create value";
       target_addr <- lift_option_type (dest_AddressV (HD vs)) "create target";
       accounts <- get_accounts;
@@ -919,7 +919,7 @@ Triviality extcall_no_value_default_owhile_eq:
      NONE => raise (Error (TypeError "ExtCall target not address"))
    | SOME v => return v) r = (INL target_addr,s_addr) ∧
   (case build_ext_calldata (get_tenv cx) func_name arg_types (TL x) of
-     NONE => raise (Error (RuntimeError "ExtCall build_calldata"))
+     NONE => raise (Error (TypeError "ExtCall build_calldata"))
    | SOME v => return v) s_addr = (INL calldata,s_call) ∧
   ¬NULL (lookup_account target_addr s_call.accounts).code ∧
   (case
@@ -933,10 +933,10 @@ Triviality extcall_no_value_default_owhile_eq:
      s_get_acc accounts t_get_acc s_check_code t_check_code s_get_ts tStorage t_get_ts
      s_run t_run success accounts0 tStorage0 s_check_success t_check_success
      s_update_acc t_update_acc s_update_ts t_update_ts st0 k0.
-     check T "ExtCall no target" s_check = (INL (),t_check) ∧
+     type_check T "ExtCall no target" s_check = (INL (),t_check) ∧
      lift_option_type (dest_AddressV (HD x)) "ExtCall target not address" s_addr0 =
        (INL target_addr0,t_addr) ∧
-     lift_option (build_ext_calldata (get_tenv cx) func_name arg_types (TL x))
+     lift_option_type (build_ext_calldata (get_tenv cx) func_name arg_types (TL x))
        "ExtCall build_calldata" s_build = (INL calldata0,t_build) ∧
      get_accounts s_get_acc = (INL accounts,t_get_acc) ∧
      check (¬NULL (lookup_account target_addr0 accounts).code) "ExtCall target has no code"
@@ -973,7 +973,7 @@ Proof
       `call_st with <|accounts := accounts'; tStorage := tStorage'|>`,
       `call_st with <|accounts := accounts'; tStorage := tStorage'|>`,
       `k`] mp_tac) >>
-  simp[check_def, lift_option_def, lift_option_type_def,
+  simp[type_check_def, check_def, lift_option_def, lift_option_type_def,
        get_accounts_def, get_transient_storage_def,
        update_accounts_def, update_transient_def,
        return_def, raise_def] >>
@@ -1009,7 +1009,7 @@ Triviality extcall_value_full_default_owhile_eq:
      NONE => raise (Error (TypeError "ExtCall value not int"))
    | SOME v => return v) s_addr = (INL value_num,value_state) ∧
   (case build_ext_calldata (get_tenv cx) func_name arg_types (TL (TL x)) of
-     NONE => raise (Error (RuntimeError "ExtCall build_calldata"))
+     NONE => raise (Error (TypeError "ExtCall build_calldata"))
    | SOME v => return v) value_state = (INL calldata,build_st) ∧
   ¬NULL (lookup_account target_addr accounts).code ∧
   (case
@@ -1023,15 +1023,15 @@ Triviality extcall_value_full_default_owhile_eq:
      s_build calldata0 t_build s_get_acc accounts t_get_acc s_check_code t_check_code
      s_get_ts tStorage t_get_ts s_run t_run success accounts0 tStorage0
      s_check_success t_check_success s_update_acc t_update_acc s_update_ts t_update_ts st0 k0.
-     check T "ExtCall no target" s_check = (INL (),t_check) ∧
+     type_check T "ExtCall no target" s_check = (INL (),t_check) ∧
      lift_option_type (dest_AddressV (HD x)) "ExtCall target not address" s_addr0 =
        (INL target_addr0,t_addr) ∧
      do
-       check T "ExtCall no value";
+       type_check T "ExtCall no value";
        v <- lift_option_type (dest_NumV (HD (TL x))) "ExtCall value not int";
        return (SOME v,TL (TL x))
      od s_value = (INL (value_opt,arg_vals),t_value) ∧
-     lift_option (build_ext_calldata (get_tenv cx) func_name arg_types arg_vals)
+     lift_option_type (build_ext_calldata (get_tenv cx) func_name arg_types arg_vals)
        "ExtCall build_calldata" s_build = (INL calldata0,t_build) ∧
      get_accounts s_get_acc = (INL accounts,t_get_acc) ∧
      check (¬NULL (lookup_account target_addr0 accounts).code) "ExtCall target has no code"
@@ -1068,7 +1068,7 @@ Proof
       `call_st with <|accounts := accounts'; tStorage := tStorage'|>`,
       `call_st with <|accounts := accounts'; tStorage := tStorage'|>`,
       `k`] mp_tac) >>
-  simp[check_def, lift_option_def, lift_option_type_def,
+  simp[type_check_def, check_def, lift_option_def, lift_option_type_def,
        get_accounts_def, get_transient_storage_def,
        update_accounts_def, update_transient_def,
        bind_def, ignore_bind_def, assert_def, return_def, raise_def] >>
@@ -1090,7 +1090,7 @@ Triviality extcall_value_full_default_context_eq:
      NONE => raise (Error (TypeError "ExtCall value not int"))
    | SOME v => return v) s_addr = (INL value_num,value_state) ∧
   (case build_ext_calldata (get_tenv cx) func_name arg_types (SND (SOME value_num,TL (TL x))) of
-     NONE => raise (Error (RuntimeError "ExtCall build_calldata"))
+     NONE => raise (Error (TypeError "ExtCall build_calldata"))
    | SOME v => return v) value_state = (INL calldata,build_st) ∧
   return build_st.accounts build_st = (INL accounts,accounts_st) ∧
   return accounts_st.tStorage accounts_st = (INL tStorage,run_st) ∧
@@ -1106,15 +1106,15 @@ Triviality extcall_value_full_default_context_eq:
      s_build calldata0 t_build s_get_acc accounts t_get_acc s_check_code t_check_code
      s_get_ts tStorage t_get_ts s_run t_run success accounts0 tStorage0
      s_check_success t_check_success s_update_acc t_update_acc s_update_ts t_update_ts st0 k0.
-     check T "ExtCall no target" s_check = (INL (),t_check) ∧
+     type_check T "ExtCall no target" s_check = (INL (),t_check) ∧
      lift_option_type (dest_AddressV (HD x)) "ExtCall target not address" s_addr0 =
        (INL target_addr0,t_addr) ∧
      do
-       check T "ExtCall no value";
+       type_check T "ExtCall no value";
        v <- lift_option_type (dest_NumV (HD (TL x))) "ExtCall value not int";
        return (SOME v,TL (TL x))
      od s_value = (INL (value_opt,arg_vals),t_value) ∧
-     lift_option (build_ext_calldata (get_tenv cx) func_name arg_types arg_vals)
+     lift_option_type (build_ext_calldata (get_tenv cx) func_name arg_types arg_vals)
        "ExtCall build_calldata" s_build = (INL calldata0,t_build) ∧
      get_accounts s_get_acc = (INL accounts,t_get_acc) ∧
      check (¬NULL (lookup_account target_addr0 accounts).code) "ExtCall target has no code"
@@ -1147,7 +1147,7 @@ Triviality extcall_value_arg_premise:
    | SOME v => return v) s = (INL v,st) ∧
   TL (TL x) = arg_vals ⇒
   do
-    assert T (Error (RuntimeError "ExtCall no value"));
+    assert T (Error (TypeError "ExtCall no value"));
     v <-
       case dest_NumV (HD (TL x)) of
         NONE => raise (Error (TypeError "ExtCall value not int"))
@@ -1165,7 +1165,7 @@ Triviality extcall_value_arg_premise_refl:
      NONE => raise (Error (TypeError "ExtCall value not int"))
    | SOME v => return v) s = (INL v,st) ⇒
   do
-    assert T (Error (RuntimeError "ExtCall no value"));
+    assert T (Error (TypeError "ExtCall no value"));
     v <-
       case dest_NumV (HD (TL x)) of
         NONE => raise (Error (TypeError "ExtCall value not int"))
@@ -1184,7 +1184,7 @@ Triviality extcall_value_default_owhile_eq:
    | SOME v => return v) s = (INL v,st) ∧
   (∀t s0.
      do
-       assert T (Error (RuntimeError "ExtCall no value"));
+       assert T (Error (TypeError "ExtCall no value"));
        v <-
          case dest_NumV (HD (TL x)) of
            NONE => raise (Error (TypeError "ExtCall value not int"))
@@ -1215,7 +1215,7 @@ QED
 Triviality extcall_value_default_owhile_from_arg_eq:
   ∀cx e x v arg_st arg_res q r final_st k.
   (do
-     assert T (Error (RuntimeError "ExtCall no value"));
+     assert T (Error (TypeError "ExtCall no value"));
      v <-
        case dest_NumV (HD (TL x)) of
          NONE => raise (Error (TypeError "ExtCall value not int"))
@@ -1224,7 +1224,7 @@ Triviality extcall_value_default_owhile_from_arg_eq:
    od arg_st = (INL (SOME v,TL (TL x)),arg_res)) ∧
   (∀t s0.
      do
-       assert T (Error (RuntimeError "ExtCall no value"));
+       assert T (Error (TypeError "ExtCall no value"));
        v <-
          case dest_NumV (HD (TL x)) of
            NONE => raise (Error (TypeError "ExtCall value not int"))
@@ -1973,210 +1973,65 @@ Proof
     \\ rw[] )
   \\ conj_tac >- ( (* ExtCall *)
     rw[eval_expr_cps_def, evaluate_def, bind_def]
-    \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
+    >> CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     \\ simp[Once OWHILE_THM, stepk_def, apply_vals_def, liftk1]
     \\ qmatch_goalsub_abbrev_tac`pair_CASE cc1`
     \\ qmatch_goalsub_abbrev_tac`lhs = _`
     \\ qmatch_goalsub_abbrev_tac`pair_CASE cc2`
+    >> qmatch_asmsub_abbrev_tac`monad_bind (lift_option _ _) (λresult. gg result)`
     \\ qunabbrev_tac`lhs`
-    \\ Cases_on`cc1` \\ Cases_on`cc2` \\ gvs[]
-    \\ Cases_on`is_static'`
-    \\ simp[return_def]
-    \\ simp[bind_def, ignore_bind_def,CaseEq"prod",CaseEq"sum"]
-    \\ TRY pairarg_tac \\ simp[bind_def,CaseEq"prod",CaseEq"sum"]
-    \\ TRY pairarg_tac \\ simp[bind_def,CaseEq"prod",CaseEq"sum"]
-    \\ gvs[return_def, lift_sum_runtime_def, raise_def, AllCaseEqs()]
-    \\ TRY (Cases_on`x'` \\ fs[pairTheory.FST, pairTheory.SND])
-    \\ first_x_assum drule
-    \\ strip_tac
-    \\ qpat_x_assum `_ = (q,r')` mp_tac
-    \\ simp[bind_def, ignore_bind_def, return_def, raise_def,
-            lift_sum_runtime_def, check_def, assert_def,
-            lift_option_def, lift_option_type_def,
-            get_accounts_def, get_transient_storage_def,
-            update_accounts_def, update_transient_def, AllCaseEqs()]
-    \\ strip_tac
-    \\ qpat_x_assum `_ = (q',r'')` mp_tac
-    \\ simp[bind_def, ignore_bind_def, return_def, raise_def,
-            lift_sum_runtime_def, check_def, assert_def,
-            lift_option_def, lift_option_type_def,
-            get_accounts_def, get_transient_storage_def,
-            update_accounts_def, update_transient_def, AllCaseEqs()]
-    \\ strip_tac
-    \\ TRY (qpat_x_assum `_ = (q,r')` mp_tac)
-    \\ TRY (qpat_x_assum `_ = (q',r'')` mp_tac)
-    \\ PURE_REWRITE_TAC[pairTheory.ELIM_UNCURRY]
-    \\ simp[bind_def, return_def, raise_def, lift_sum_runtime_def,
-            assert_def, update_accounts_def, update_transient_def]
-    \\ TRY strip_tac
-    \\ TRY strip_tac
-    \\ reverse (Cases_on`FST (SND result) = [] /\ IS_SOME drv`)
-    >- (simp[GSYM cont_def]
-        \\ qmatch_asmsub_abbrev_tac`base_st with <|accounts := FST (SND (SND result)); tStorage := SND (SND (SND result))|>`
-        \\ irule extcall_nondefault_tail_cps_eq
-        \\ qexists_tac`drv`
-        \\ qexists_tac`base_st`
-        \\ qexists_tac`base_st with <|accounts := FST (SND (SND result)); tStorage := SND (SND (SND result))|>`
-        \\ qexists_tac`ret_type`
-        \\ qexists_tac`FST (SND result)`
-        \\ qexists_tac`FST result`
-        \\ Cases_on`FST (SND result) = []`
-        \\ Cases_on`drv`
-        \\ gvs[Abbr`base_st`])
-    \\ simp[GSYM cont_def]
-    \\ PairCases_on`result`
-    \\ fs[pairTheory.FST, pairTheory.SND]
-    \\ Cases_on`drv` \\ fs[]
-    \\ TRY (Cases_on`result0`)
-    \\ TRY (drule_all extcall_default_bigstep_eval_eq \\ strip_tac)
-    \\ TRY (qpat_x_assum `_ = (q,r')` mp_tac
-            \\ simp[return_def, raise_def]
-            \\ strip_tac)
-    \\ TRY (qpat_x_assum `_ = (q',r'')` mp_tac
-            \\ simp[bind_def, return_def, raise_def, lift_sum_runtime_def]
-            \\ strip_tac)
-    \\ TRY (drule_all extcall_default_bigstep_eval_eq \\ strip_tac)
-    \\ TRY (qpat_x_assum `eval_expr cx _ _ = (q',r'')` (fn th => assume_tac th))
-    \\ TRY (qpat_x_assum `INL (INL _) = q` (SUBST_ALL_TAC o SYM)
-            \\ qpat_x_assum `_ = r'` (SUBST_ALL_TAC o SYM)
-            \\ drule_all extcall_no_value_default_owhile_eq
-            \\ simp[])
-    \\ TRY (qmatch_asmsub_rename_tac`(case dest_NumV (HD (TL x)) of
-              NONE => raise (Error (TypeError "ExtCall value not int"))
-            | SOME v => return v) value_st = (INL value_num,value_state)`
-            \\ qpat_x_assum `INL (INL _) = q` (SUBST_ALL_TAC o SYM)
-            \\ qpat_x_assum `_ = r'` (SUBST_ALL_TAC o SYM)
-            \\ simp[cont_def]
-            \\ irule extcall_value_default_owhile_eq
-            \\ qexists_tac`x`
-            \\ qexists_tac`value_st`
-            \\ qexists_tac`value_num`
-            \\ qexists_tac`value_state`
-            \\ simp[])
-    \\ simp[]
-    \\ TRY (qpat_x_assum `INR _ = q` (SUBST_ALL_TAC o SYM))
-    \\ TRY (qpat_x_assum `INR _ = q'` (SUBST_ALL_TAC o SYM))
-    \\ TRY (qpat_x_assum `_ = r'` (SUBST_ALL_TAC o SYM))
-    \\ TRY (qpat_x_assum `_ = r''` (SUBST_ALL_TAC o SYM))
-    \\ simp[]
-    \\ qpat_x_assum `_ = (q,r')` mp_tac
-    \\ qpat_x_assum `_ = (q',r'')` mp_tac
-    \\ simp[bind_def, return_def, raise_def, lift_sum_runtime_def]
-    \\ TRY (MATCH_ACCEPT_TAC extcall_decoded_pair_cont_eq)
-    \\ TRY (strip_tac \\ strip_tac \\ drule_all extcall_decoded_pair_cont_eq \\ simp[])
-    \\ TRY (drule_all extcall_decoded_monad_owhile_eq \\ simp[])
-    \\ TRY (drule_all extcall_result_owhile_eq \\ simp[])
-    \\ TRY (drule_all extcall_decoded_pair_owhile_eq \\ simp[])
-    \\ BasicProvers.TOP_CASE_TAC \\ simp[bind_def, return_def, raise_def, lift_sum_runtime_def]
-    \\ BasicProvers.TOP_CASE_TAC \\ simp[bind_def, return_def, raise_def, lift_sum_runtime_def]
-    \\ BasicProvers.TOP_CASE_TAC \\ simp[bind_def, return_def, raise_def, lift_sum_runtime_def]
-    \\ BasicProvers.TOP_CASE_TAC \\ simp[bind_def, return_def, raise_def, lift_sum_runtime_def]
-    \\ BasicProvers.TOP_CASE_TAC \\ simp[bind_def, return_def, raise_def, lift_sum_runtime_def]
-    \\ BasicProvers.TOP_CASE_TAC \\ simp[bind_def, return_def, raise_def, lift_sum_runtime_def]
-    \\ BasicProvers.TOP_CASE_TAC \\ simp[bind_def, return_def, raise_def, lift_sum_runtime_def]
-    \\ BasicProvers.TOP_CASE_TAC \\ simp[bind_def, return_def, raise_def, lift_sum_runtime_def]
-    \\ BasicProvers.TOP_CASE_TAC \\ simp[bind_def, return_def, raise_def, lift_sum_runtime_def]
-    \\ BasicProvers.TOP_CASE_TAC \\ simp[bind_def, return_def, raise_def, lift_sum_runtime_def]
-    \\ BasicProvers.TOP_CASE_TAC \\ simp[bind_def, return_def, raise_def, lift_sum_runtime_def]
-    \\ strip_tac
-    \\ strip_tac
-    \\ TRY (qmatch_asmsub_rename_tac`case decoded of
-              INL ret_val => (INL (Value ret_val),_)
-            | INR e => (INR e,_)`
-            \\ Cases_on`decoded` \\ gvs[cont_def])
-    \\ TRY (drule_all extcall_decoded_tail_cont_eq \\ simp[])
-    \\ TRY (drule_all extcall_decoded_monad_owhile_eq \\ simp[cont_def])
-    \\ TRY (drule_all extcall_decoded_pair_owhile_eq \\ simp[cont_def])
-    \\ TRY (drule_all extcall_decoded_tail_owhile_eq \\ simp[cont_def])
-    \\ TRY (qpat_x_assum `INR _ = q'` (SUBST_ALL_TAC o SYM) \\ simp[])
-    \\ TRY (drule_all extcall_run_success_empty \\ strip_tac)
-    \\ TRY (irule extcall_value_full_default_owhile_eq \\ simp[])
-    \\ TRY (drule_all extcall_value_full_default_owhile_eq \\ simp[])
-    \\ TRY (simp[cont_def] \\ drule_all eval_expr_cps_owhile_result \\ simp[])
-    \\ simp[]
-    \\ TRY (qmatch_goalsub_abbrev_tac`eval_expr cx x'' final_st`
-            \\ `eval_expr cx x'' final_st = (q',r'')` by (
-                 qpat_x_assum `eval_expr cx x'' final_st = (q',r'')` ACCEPT_TAC)
-            \\ qunabbrev_tac`final_st`)
-    \\ TRY (drule_all extcall_result_owhile_eq \\ simp[])
-    \\ TRY (drule_all extcall_decoded_pair_owhile_eq \\ simp[])
-    \\ TRY (drule_all extcall_decoded_tail_owhile_eq \\ simp[])
-    \\ TRY (qpat_x_assum `INL (INL _) = q` (SUBST_ALL_TAC o SYM))
-    \\ TRY (qpat_x_assum `INL (INR _) = q` (SUBST_ALL_TAC o SYM))
-    \\ TRY (qpat_x_assum `INR _ = q` (SUBST_ALL_TAC o SYM))
-    \\ TRY (qpat_x_assum `INL _ = q'` (SUBST_ALL_TAC o SYM))
-    \\ TRY (qpat_x_assum `INR _ = q'` (SUBST_ALL_TAC o SYM))
-    \\ TRY (qpat_x_assum `_ = r'` (SUBST_ALL_TAC o SYM))
-    \\ TRY (qpat_x_assum `_ = r''` (SUBST_ALL_TAC o SYM))
-    \\ TRY (qpat_x_assum `_ = y'` (SUBST_ALL_TAC o SYM))
-    \\ simp[]
-    \\ TRY (qpat_x_assum `SOME _ = _` (SUBST_ALL_TAC o SYM))
-    \\ TRY (qpat_x_assum `(SOME _,_) = _` (SUBST_ALL_TAC o SYM))
-    \\ TRY (qpat_x_assum `get_accounts _ = _` mp_tac
-            \\ simp[get_accounts_def] \\ strip_tac)
-    \\ TRY (qpat_x_assum `get_transient_storage _ = _` mp_tac
-            \\ simp[get_transient_storage_def] \\ strip_tac)
-    \\ TRY (qpat_x_assum `(if ¬NULL _ then INL () else INR _) = INL _` mp_tac
-            \\ simp[] \\ strip_tac)
-    \\ TRY (drule_all extcall_value_arg_premise_refl \\ strip_tac)
-    \\ TRY (drule_all extcall_value_arg_premise \\ strip_tac)
-    \\ TRY (drule_all extcall_run_success_empty \\ strip_tac)
-    \\ TRY (drule_all extcall_value_full_default_context_eq \\ simp[])
-    \\ TRY (qmatch_asmsub_rename_tac`(case dest_AddressV (HD x) of
-              NONE => raise (Error (TypeError "ExtCall target not address"))
-            | SOME v => return v) addr_in = (INL target_addr,s_addr)`
-            \\ qmatch_asmsub_rename_tac`(case dest_NumV (HD (TL x)) of
-                  NONE => raise (Error (TypeError "ExtCall value not int"))
-                | SOME v => return v) s_addr = (INL value_num,value_state)`
-            \\ qmatch_asmsub_rename_tac`(case build_ext_calldata (get_tenv cx) fname atypes (SND (SOME value_num,TL (TL x))) of
-                  NONE => raise (Error (RuntimeError "ExtCall build_calldata"))
-                | SOME v => return v) value_state = (INL calldata,build_st)`
-            \\ qmatch_asmsub_rename_tac`return build_st.accounts build_st = (INL accounts,accounts_st)`
-            \\ qmatch_asmsub_rename_tac`return accounts_st.tStorage accounts_st = (INL tStorage,run_st)`
-            \\ irule extcall_value_full_default_owhile_eq
-            \\ simp[]
-            \\ qexists_tac`accounts`
-            \\ qexists_tac`atypes`
-            \\ qexists_tac`build_st`
-            \\ qexists_tac`calldata`
-            \\ qexists_tac`fname`
-            \\ qexists_tac`addr_in`
-            \\ qexists_tac`run_st`
-            \\ qexists_tac`s_addr`
-            \\ qexists_tac`tStorage`
-            \\ qexists_tac`target_addr`
-            \\ qexists_tac`value_num`
-            \\ qexists_tac`value_state`
-            \\ qexists_tac`x`
-            \\ simp[])
-    \\ TRY (irule extcall_value_full_default_owhile_eq \\ simp[])
-    \\ TRY (drule_all extcall_value_full_default_owhile_eq \\ simp[])
-    \\ TRY (qpat_x_assum `return _ _ = _` mp_tac
-            \\ simp[return_def] \\ strip_tac)
-    \\ TRY (qpat_x_assum `return _ _ = _` mp_tac
-            \\ simp[return_def] \\ strip_tac)
-    \\ TRY (qmatch_asmsub_rename_tac`FST (SND (T,ret_data,ret_accounts,ret_tStorage)) = []`
-            \\ `ret_data = []` by (first_x_assum mp_tac \\ simp[]))
-    \\ TRY (qpat_x_assum `_.accounts = _` (SUBST_ALL_TAC o SYM))
-    \\ TRY (qpat_x_assum `_.tStorage = _` (SUBST_ALL_TAC o SYM))
-    \\ simp[]
-    \\ TRY (qmatch_asmsub_rename_tac`(case dest_NumV (HD (TL x)) of
-              NONE => raise (Error (TypeError "ExtCall value not int"))
-            | SOME v => return v) value_st = (INL value_num,value_state)`
-            \\ simp[cont_def]
-            \\ irule extcall_value_default_owhile_eq
-            \\ qexists_tac`x`
-            \\ qexists_tac`value_st`
-            \\ qexists_tac`value_num`
-            \\ qexists_tac`value_state`
-            \\ simp[])
-    \\ TRY (drule_all extcall_value_default_owhile_eq \\ simp[])
-    \\ TRY (drule_all extcall_value_default_owhile_from_arg_eq \\ simp[])
-    \\ TRY (simp[cont_def]
-            \\ qpat_x_assum `∀cx k. OWHILE _ stepk _ = _`
-                 (qspecl_then[`cx`,`k`] ACCEPT_TAC))
-    \\ simp[] )
+    >> qmatch_asmsub_abbrev_tac`ignore_bind tc1 _`
+    >> Cases_on`tc1 r`
+    >> reverse(Cases_on`q`)
+    >- ( simp[Abbr`cc1`,Abbr`cc2`,ignore_bind_def,bind_def] )
+    >> first_x_assum drule
+    >> gvs[Abbr`tc1`]
+    >> disch_then drule
+    >> gvs[ignore_bind_def,bind_def]
+    >> qmatch_asmsub_abbrev_tac`pair_CASE lot`
+    >> Cases_on`lot` >> reverse(Cases_on`q`)
+    >- ( simp[Abbr`cc1`,Abbr`cc2`,ignore_bind_def,bind_def] )
+    >> gvs[]
+    >> disch_then drule
+    >> qmatch_asmsub_abbrev_tac`pair_CASE lot`
+    >> Cases_on`lot` >> reverse(Cases_on`q`)
+    >- ( simp[Abbr`cc1`,Abbr`cc2`,ignore_bind_def,bind_def] )
+    >> gvs[]
+    >> PairCases_on`x''`
+    >> disch_then drule
+    >> gvs[ignore_bind_def, bind_def]
+    >> ntac 4 (
+      qmatch_asmsub_abbrev_tac`pair_CASE lot`
+      >> Cases_on`lot` >> reverse(Cases_on`q`)
+      >- ( simp[Abbr`cc1`,Abbr`cc2`,ignore_bind_def,bind_def] )
+      >> gvs[]
+      >> disch_then drule )
+    >> qmatch_asmsub_abbrev_tac`pair_CASE lot`
+    >> Cases_on`lot` >> reverse(Cases_on`q`)
+    >- ( simp[Abbr`cc1`,Abbr`cc2`,ignore_bind_def,bind_def] )
+    >> gvs[]
+    >> qmatch_asmsub_rename_tac`_ = (INL pp,_)`
+    >> PairCases_on`pp`
+    >> reverse(Cases_on`pp1=[]`)
+    >- (
+      disch_then kall_tac >>
+      simp[Abbr`cc1`,Abbr`cc2`,Abbr`gg`,bind_def] >>
+      ntac 4 CASE_TAC >> simp[] >>
+      Cases_on`q` >> simp[] >>
+      Cases_on`q'` >> simp[] >>
+      Cases_on`q''` >> simp[] >>
+      Cases_on`q'''` >> simp[return_def])
+    >> gvs[bind_def,Abbr`gg`] >> disch_then drule
+    >> ntac 3 (
+      qmatch_asmsub_abbrev_tac`pair_CASE lot`
+      >> Cases_on`lot` >> reverse(Cases_on`q`)
+      >- ( simp[Abbr`cc1`,Abbr`cc2`,ignore_bind_def,bind_def] )
+      >> gvs[]
+      >> disch_then drule )
+    >> simp[Abbr`cc1`,Abbr`cc2`]
+    >> IF_CASES_TAC >> gvs[bind_def,return_def]
+    >> CASE_TAC >> CASE_TAC >> simp[] )
   \\ conj_tac >- ( (* IntCall *)
     rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def,
        no_recursion_def]
