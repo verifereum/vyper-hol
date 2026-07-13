@@ -113,6 +113,34 @@ val _ = List.app (fn tm => ignore (vyperASTSyntax.view_expr tm)) expr_samples;
 val base_target = vyperASTSyntax.mk_BaseTarget_tm
   (vyperASTSyntax.mk_NameTarget "x");
 val tuple_target = vyperASTSyntax.mk_TupleTarget [base_target];
+val base_target_samples =
+  [ vyperASTSyntax.mk_NameTarget "x"
+  , vyperASTSyntax.mk_TopLevelNameTarget_tm nsid
+  , vyperASTSyntax.mk_SubscriptTarget_tm
+      (vyperASTSyntax.mk_NameTarget "xs", lit_tm)
+  , vyperASTSyntax.mk_AttributeTarget
+      (vyperASTSyntax.mk_NameTarget "s", "field")
+  ];
+val _ = List.app
+  (fn tm => ignore (vyperASTSyntax.view_base_assignment_target tm))
+  base_target_samples;
+val _ = List.app
+  (fn tm => ignore (vyperASTSyntax.view_assignment_target tm))
+  [base_target, tuple_target];
+val _ = List.app
+  (fn tm => ignore (vyperASTSyntax.view_iterator tm))
+  [vyperASTSyntax.mk_Array_tm name_tm,
+   vyperASTSyntax.mk_Range_tm (lit_tm, name_tm)];
+val _ = List.app
+  (fn tm => ignore (vyperASTSyntax.view_assert_reason tm))
+  [vyperASTSyntax.AssertBare_tm,
+   vyperASTSyntax.AssertUnreachable_tm,
+   vyperASTSyntax.mk_AssertReason_tm name_tm];
+val _ = List.app
+  (fn tm => ignore (vyperASTSyntax.view_raise_reason tm))
+  [vyperASTSyntax.RaiseBare_tm,
+   vyperASTSyntax.RaiseUnreachable_tm,
+   vyperASTSyntax.mk_RaiseReason_tm name_tm];
 val stmt_samples =
   [ vyperASTSyntax.Continue_tm
   , vyperASTSyntax.Break_tm

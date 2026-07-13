@@ -473,6 +473,66 @@ val (EventDecl_tm, mk_EventDecl_tm, dest_EventDecl_tm, is_EventDecl) = syntax_fn
 val (FlagDecl_tm, mk_FlagDecl_tm, dest_FlagDecl_tm, is_FlagDecl) = syntax_fns2 "vyperAST" "FlagDecl"
 val (InterfaceDecl_tm, mk_InterfaceDecl_tm, dest_InterfaceDecl_tm, is_InterfaceDecl) = syntax_fns2 "vyperAST" "InterfaceDecl"
 
+datatype base_assignment_target_view =
+    VBNameTarget of string
+  | VBTopLevelNameTarget of term
+  | VBSubscriptTarget of term * term
+  | VBAttributeTarget of term * string
+
+fun view_base_assignment_target tm =
+  if is_NameTarget tm then VBNameTarget (dest_NameTarget tm)
+  else if is_TopLevelNameTarget tm then
+    VBTopLevelNameTarget (dest_TopLevelNameTarget_tm tm)
+  else if is_SubscriptTarget tm then
+    VBSubscriptTarget (dest_SubscriptTarget_tm tm)
+  else if is_AttributeTarget tm then
+    VBAttributeTarget (dest_AttributeTarget tm)
+  else raise ERR "view_base_assignment_target"
+    "not a vyperAST base_assignment_target constructor"
+
+datatype assignment_target_view =
+    VATBase of term
+  | VATTuple of term list
+
+fun view_assignment_target tm =
+  if is_BaseTarget tm then VATBase (dest_BaseTarget_tm tm)
+  else if is_TupleTarget tm then VATTuple (dest_TupleTarget tm)
+  else raise ERR "view_assignment_target"
+    "not a vyperAST assignment_target constructor"
+
+datatype iterator_view =
+    VIArray of term
+  | VIRange of term * term
+
+fun view_iterator tm =
+  if is_Array tm then VIArray (dest_Array_tm tm)
+  else if is_Range tm then VIRange (dest_Range_tm tm)
+  else raise ERR "view_iterator" "not a vyperAST iterator constructor"
+
+datatype assert_reason_view =
+    VAssertBareReason
+  | VAssertUnreachableReason
+  | VAssertReasonExpr of term
+
+fun view_assert_reason tm =
+  if is_AssertBare tm then VAssertBareReason
+  else if is_AssertUnreachable tm then VAssertUnreachableReason
+  else if is_AssertReason tm then VAssertReasonExpr (dest_AssertReason_tm tm)
+  else raise ERR "view_assert_reason"
+    "not a vyperAST assert_reason constructor"
+
+datatype raise_reason_view =
+    VRaiseBareReason
+  | VRaiseUnreachableReason
+  | VRaiseReasonExpr of term
+
+fun view_raise_reason tm =
+  if is_RaiseBare tm then VRaiseBareReason
+  else if is_RaiseUnreachable tm then VRaiseUnreachableReason
+  else if is_RaiseReason tm then VRaiseReasonExpr (dest_RaiseReason_tm tm)
+  else raise ERR "view_raise_reason"
+    "not a vyperAST raise_reason constructor"
+
 datatype expr_view =
     VName of term * string
   | VTopLevelName of term * term

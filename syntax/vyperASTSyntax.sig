@@ -558,6 +558,35 @@ signature vyperASTSyntax = sig
   val dest_InterfaceDecl_tm : term -> term * term
   val is_InterfaceDecl : term -> bool
 
+  datatype base_assignment_target_view =
+      VBNameTarget of string
+    | VBTopLevelNameTarget of term
+    | VBSubscriptTarget of term * term
+    | VBAttributeTarget of term * string
+  val view_base_assignment_target : term -> base_assignment_target_view
+
+  datatype assignment_target_view =
+      VATBase of term
+    | VATTuple of term list
+  val view_assignment_target : term -> assignment_target_view
+
+  datatype iterator_view =
+      VIArray of term
+    | VIRange of term * term
+  val view_iterator : term -> iterator_view
+
+  datatype assert_reason_view =
+      VAssertBareReason
+    | VAssertUnreachableReason
+    | VAssertReasonExpr of term
+  val view_assert_reason : term -> assert_reason_view
+
+  datatype raise_reason_view =
+      VRaiseBareReason
+    | VRaiseUnreachableReason
+    | VRaiseReasonExpr of term
+  val view_raise_reason : term -> raise_reason_view
+
   datatype expr_view =
       VName of term * string
     | VTopLevelName of term * term
