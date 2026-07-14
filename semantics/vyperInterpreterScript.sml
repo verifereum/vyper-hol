@@ -1197,20 +1197,20 @@ Definition evaluate_def:
   od ∧
   eval_expr cx (Call _ (ExtCall is_static (func_name, arg_types, ret_type)) es drv) = do
     vs <- eval_exprs cx es;
-    check (vs ≠ []) "ExtCall no target";
+    type_check (vs ≠ []) "ExtCall no target";
     target_addr <- lift_option_type (dest_AddressV (HD vs)) "ExtCall target not address";
     (* Convention: staticcall (T) args = [target; arg1; ...]
                    extcall (F) args = [target; value; arg1; ...] *)
     (value_opt, arg_vals) <- if is_static then
       return (NONE, TL vs)
     else do
-      check (TL vs ≠ []) "ExtCall no value";
+      type_check (TL vs ≠ []) "ExtCall no value";
       v <- lift_option_type (dest_NumV (HD (TL vs))) "ExtCall value not int";
       return (SOME v, TL (TL vs))
     od;
     tenv <<- get_tenv cx;
-    calldata <- lift_option (build_ext_calldata tenv func_name arg_types arg_vals)
-                            "ExtCall build_calldata";
+    calldata <- lift_option_type (build_ext_calldata tenv func_name arg_types arg_vals)
+                                 "ExtCall build_calldata";
     accounts <- get_accounts;
     (* Vyper reverts if target has no code (EXTCODESIZE == 0) *)
     check (¬NULL (lookup_account target_addr accounts).code) "ExtCall target has no code";
@@ -1283,13 +1283,13 @@ Definition evaluate_def:
      args = [to_addr; data_bytes; value] *)
   eval_expr cx (Call ty (RawCallTarget flags) es _) = do
     vs <- eval_exprs cx es;
-    check (LENGTH vs = 3) "raw_call args";
+    type_check (LENGTH vs = 3) "raw_call args";
     target_addr <- lift_option_type (dest_AddressV (EL 0 vs)) "raw_call target";
     calldata <- lift_option_type (dest_BytesV (EL 1 vs)) "raw_call data";
     amount <- lift_option_type (dest_NumV (EL 2 vs)) "raw_call value";
     value_opt <<- if flags.rcf_is_static then NONE else SOME amount;
     (* delegate_call not yet supported in semantics *)
-    check (¬flags.rcf_is_delegate) "raw_call delegate unsupported";
+    type_check (¬flags.rcf_is_delegate) "raw_call delegate unsupported";
     accounts <- get_accounts;
     tStorage <- get_transient_storage;
     txParams <<- vyper_to_tx_params cx.txn;
@@ -1313,12 +1313,12 @@ Definition evaluate_def:
      args = [topics_array; data_bytes] *)
   eval_expr cx (Call _ RawLog es _) = do
     vs <- eval_exprs cx es;
-    check (LENGTH vs = 2) "raw_log args";
+    type_check (LENGTH vs = 2) "raw_log args";
     topics <- lift_option_type (dest_ArrayV (EL 0 vs)) "raw_log topics";
     data <- lift_option_type (dest_BytesV (EL 1 vs)) "raw_log data";
     topic_vals <<- (case topics of
        TupleV vs => vs | DynArrayV vs => vs | _ => []);
-    check (LENGTH topic_vals ≤ 4) "raw_log too many topics";
+    type_check (LENGTH topic_vals ≤ 4) "raw_log too many topics";
     (* Store as raw log: nsid = (NONE,"raw_log"), values = topic bytes ++ [data] *)
     push_log ((NONE,"raw_log"), topic_vals ++ [BytesV data]);
     return $ Value NoneV
@@ -1326,13 +1326,13 @@ Definition evaluate_def:
   (* raw_revert(data) — terminus *)
   eval_expr cx (Call _ RawRevert es _) = do
     vs <- eval_exprs cx es;
-    check (LENGTH vs = 1) "raw_revert args";
+    type_check (LENGTH vs = 1) "raw_revert args";
     raise $ Error $ RuntimeError "raw_revert"
   od ∧
   (* selfdestruct(to) — terminus *)
   eval_expr cx (Call _ SelfDestructTarget es _) = do
     vs <- eval_exprs cx es;
-    check (LENGTH vs = 1) "selfdestruct args";
+    type_check (LENGTH vs = 1) "selfdestruct args";
     target_addr <- lift_option_type (dest_AddressV (EL 0 vs)) "selfdestruct target";
     accounts <- get_accounts;
     self_acct <<- lookup_account cx.txn.target accounts;
@@ -1352,7 +1352,7 @@ Definition evaluate_def:
      the initcode construction differences are codegen-level concerns. *)
   eval_expr cx (Call ty (CreateTarget kind rof) es _) = do
     vs <- eval_exprs cx es;
-    check (vs ≠ []) "create no args";
+    type_check (vs ≠ []) "create no args";
     (* Last arg is value *)
     amount <- lift_option_type (dest_NumV (LAST vs)) "create value";
     (* For now, model create as an opaque operation that transfers value

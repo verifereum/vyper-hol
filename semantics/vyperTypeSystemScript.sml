@@ -451,6 +451,11 @@ Definition type_builtin_result_ok_def:
   type_builtin_result_ok tenv (AbiDecode _) result_ty target_ty arg_tys = (result_ty = target_ty)
 End
 
+Definition bound_at_most_def[simp]:
+  bound_at_most (Fixed n) limit = (n ≤ limit) /\
+  bound_at_most (Dynamic n) limit = (n ≤ limit)
+End
+
 Definition raw_call_return_type_def:
   raw_call_return_type flags =
     if flags.rcf_revert_on_failure then
@@ -519,13 +524,14 @@ Definition well_typed_expr_def:
      HD (MAP expr_type args) = BaseT AddressT /\ EL 1 (MAP expr_type args) = BaseT (UintT 256)) /\
   well_typed_expr env (Call ty (RawCallTarget flags) args drv) =
     (well_typed_exprs env args /\ drv = NONE /\ ty = raw_call_return_type flags /\
-     flags.rcf_max_outsize < dimword(:256) /\ LENGTH args = 3 /\
+     flags.rcf_max_outsize < dimword(:256) /\ ¬flags.rcf_is_delegate /\ LENGTH args = 3 /\
      EL 0 (MAP expr_type args) = BaseT AddressT /\
      (?bd. EL 1 (MAP expr_type args) = BaseT (BytesT bd)) /\
      EL 2 (MAP expr_type args) = BaseT (UintT 256)) /\
   well_typed_expr env (Call ty RawLog args drv) =
     (well_typed_exprs env args /\ drv = NONE /\ ty = NoneT /\ LENGTH args = 2 /\
-     (?bd. EL 0 (MAP expr_type args) = ArrayT (BaseT (BytesT (Fixed 32))) bd) /\
+     (?bd. EL 0 (MAP expr_type args) = ArrayT (BaseT (BytesT (Fixed 32))) bd /\
+           bound_at_most bd 4) /\
      (?bd'. EL 1 (MAP expr_type args) = BaseT (BytesT bd'))) /\
   well_typed_expr env (Call ty RawRevert args drv) =
     (well_typed_exprs env args /\ drv = NONE /\ ty = NoneT /\ LENGTH args = 1 /\

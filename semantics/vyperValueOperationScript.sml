@@ -859,7 +859,7 @@ Definition array_set_index_def:
             ADELKEY j al
           else
             insert_sarray j v al
-        else INR (RuntimeError "array_set_index size")
+        else INR (TypeError "array_set_index size")
       | _ => INR (TypeError "array_set_index type"))
     | TupleV vs => INR (TypeError "array_set_index tuple")
   else INR (TypeError "array_set_index negative")
