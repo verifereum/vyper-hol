@@ -1188,6 +1188,53 @@ Proof
   simp[sparse_values_have_type_def] >> metis_tac[]
 QED
 
+(* Typed values are always representable by the ABI conversion functions. *)
+Theorem vyper_to_abi_total:
+  (!tenv typ v tv.
+     evaluate_type tenv typ = SOME tv /\
+     value_has_type tv v ==>
+     ?av. vyper_to_abi tenv typ v = SOME av) /\
+  (!tenv tys vs tvs.
+     LIST_REL (\ty tv. evaluate_type tenv ty = SOME tv) tys tvs /\
+     values_have_types tvs vs ==>
+     ?avs. vyper_to_abi_list tenv tys vs = SOME avs) /\
+  (!tenv typ vs tv.
+     evaluate_type tenv typ = SOME tv /\
+     all_have_type tv vs ==>
+     ?avs. vyper_to_abi_same tenv typ vs = SOME avs) /\
+  (!tenv typ tv n sparse.
+     evaluate_type tenv typ = SOME tv /\
+     sparse_values_have_type tv sparse ==>
+     ?avs. vyper_to_abi_sparse tenv typ tv n sparse = SOME avs)
+Proof
+  ho_match_mp_tac vyper_to_abi_ind >>
+  rpt conj_tac >> rpt gen_tac >>
+  simp[vyper_to_abi_def, evaluate_type_def, value_has_type_def,
+       AllCaseEqs(), PULL_EXISTS] >>
+  rpt strip_tac >> gvs[value_has_type_def, AllCaseEqs(), PULL_EXISTS] >>
+  TRY (Cases_on `v` >> gvs[value_has_type_def, vyper_to_abi_base_def] >> NO_TAC) >>
+  TRY (drule evaluate_types_LIST_REL >> strip_tac >>
+       qpat_x_assum `!tvs. LIST_REL _ _ tvs /\ _ ==> _` drule_all >>
+       simp[] >> NO_TAC) >>
+  TRY (`LENGTH tvs = LENGTH args` by
+         (qpat_x_assum `evaluate_types _ _ [] = SOME tvs` mp_tac >>
+          simp[evaluate_types_OPT_MMAP] >> strip_tac >>
+          imp_res_tac OPT_MMAP_LENGTH >> simp[LENGTH_MAP]) >>
+       `values_have_types tvs (MAP SND fields)` by
+         (drule_all struct_has_type_values_have_types >> simp[MAP_ZIP]) >>
+       drule evaluate_types_LIST_REL >> strip_tac >>
+       first_x_assum drule_all >> simp[] >> NO_TAC) >>
+  TRY (qmatch_asmsub_rename_tac
+         `value_has_type (ArrayTV elem_tv bd) (ArrayV (DynArrayV vs))` >>
+       Cases_on `bd` >> gvs[value_has_type_def] >> NO_TAC) >>
+  TRY (first_x_assum irule >>
+       drule sparse_has_type_values_have_type >> simp[] >> NO_TAC) >>
+  TRY (first_x_assum drule_all >> strip_tac >> gvs[] >> NO_TAC) >>
+  TRY (Cases_on `ALOOKUP sparse n` >> gvs[] >>
+       drule_all sparse_values_have_type_ALOOKUP >> strip_tac >>
+       first_x_assum drule_all >> strip_tac >> gvs[] >> NO_TAC)
+QED
+
 Theorem vyper_to_abi_bound_rel_strong[local]:
   (!tenv typ v av tv.
      vyper_to_abi tenv typ v = SOME av /\
@@ -1274,6 +1321,19 @@ Proof
   drule sparse_has_type_values_have_type >> strip_tac >>
   drule_all (cj 4 vyper_to_abi_bound_rel_strong) >> strip_tac >>
   irule abi_avs_fixed_array_bound >> simp[]
+QED
+
+Theorem build_ext_calldata_typed:
+  LIST_REL (\ty tv. evaluate_type tenv ty = SOME tv) arg_types tvs /\
+  values_have_types tvs arg_vals ==>
+  ?calldata.
+    build_ext_calldata tenv func_name arg_types arg_vals = SOME calldata
+Proof
+  rpt strip_tac >>
+  `LENGTH arg_vals = LENGTH arg_types` by
+    metis_tac[values_have_types_length, LIST_REL_LENGTH] >>
+  drule_all (cj 2 vyper_to_abi_total) >> strip_tac >>
+  simp[build_ext_calldata_def]
 QED
 
 (* TODO(semantic-limitation): AbiEncode result typing needs a static
