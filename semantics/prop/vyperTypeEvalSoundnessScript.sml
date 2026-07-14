@@ -9079,15 +9079,18 @@ Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_nonstatic_success]:
     drule_all run_ext_call_accounts_well_typed >>
     simp[]) >>
   `runtime_consistent env cx args_st` by simp[runtime_consistent_def] >>
-  `(do
-      assert T (Error (RuntimeError "ExtCall no value"));
-      v <- return amount;
-      return (SOME v, TL (TL x))
-    od) args_st = (INL (SOME amount, TL (TL x)), args_st)` by
-    EVAL_TAC >>
-  `(case build_ext_calldata (get_tenv cx) func_name arg_types (TL (TL x)) of
-      NONE => raise (Error (RuntimeError "ExtCall build_calldata"))
-    | SOME v => return v) args_st = (INL x', args_st)` by (
+  `!err.
+     (do
+        assert T err;
+        v <- return amount;
+        return (SOME v, TL (TL x))
+      od) args_st = (INL (SOME amount, TL (TL x)), args_st)` by
+    (gen_tac >> EVAL_TAC) >>
+  `!err.
+     (case build_ext_calldata (get_tenv cx) func_name arg_types (TL (TL x)) of
+        NONE => raise err
+      | SOME v => return v) args_st = (INL x', args_st)` by (
+    gen_tac >>
     qpat_assum `build_ext_calldata (get_tenv cx) func_name arg_types (TL (TL x)) = SOME x'` (fn th => rewrite_tac[th]) >>
     simp[return_def]) >>
   Cases_on `pr1 = [] /\ IS_SOME drv`
