@@ -933,7 +933,7 @@ Theorem case_For_imm_dom[local]:
        lift_option_type (evaluate_type tenv typ)
          "For evaluate_type" s'' = (INL tyv, t) ∧
        eval_iterator cx it s'³' = (INL vs, t') ∧
-       check (compatible_bound (Dynamic n) (LENGTH vs))
+       type_check (compatible_bound (Dynamic n) (LENGTH vs))
              "For too long" s'⁴' = (INL x, t'') ⇒
        ∀st res st'. eval_for cx tyv (string_to_num id) body vs st = (res,st') ⇒
          preserves_immutables_dom cx st st') ⇒
@@ -951,7 +951,7 @@ Proof
   `∀st res st'. eval_iterator cx it st = (res,st') ⇒
      preserves_immutables_dom cx st st'` by
     (first_x_assum match_mp_tac >> metis_tac[]) >>
-  imp_res_tac check_state >> gvs[preserves_immutables_dom_refl] >>
+  imp_res_tac type_check_state >> gvs[preserves_immutables_dom_refl] >>
   (* iterator error: IH directly *)
   TRY (first_x_assum drule >> simp[] >> NO_TAC) >>
   (* Success: chain through iterator then eval_for *)
@@ -3412,7 +3412,7 @@ Resume immutables_dom_mutual[ExtCall]:
   \\ last_x_assum drule \\ strip_tac
   \\ rewrite_tac[bind_def, ignore_bind_def]
   \\ BasicProvers.TOP_CASE_TAC
-  \\ drule check_same_state \\ strip_tac
+  \\ drule type_check_same_state \\ strip_tac
   \\ reverse BasicProvers.TOP_CASE_TAC
   >- (rw[] \\ rw[preserves_immutables_dom_refl])
   \\ BasicProvers.TOP_CASE_TAC
@@ -3429,17 +3429,18 @@ Resume immutables_dom_mutual[ExtCall]:
     last_x_assum(qspec_then`ARB`kall_tac)
     \\ gvs[CaseEq"bool", return_def, COND_RATOR, bind_def]
     \\ gvs[CaseEq"sum", CaseEq"prod"]
-    \\ imp_res_tac check_same_state
+    \\ imp_res_tac type_check_same_state
     \\ imp_res_tac lift_option_same_state
     \\ imp_res_tac lift_option_type_same_state
     \\ gvs[] )
   \\ reverse BasicProvers.TOP_CASE_TAC
   >- rw[preserves_immutables_dom_refl]
-  \\ pairarg_tac
+  >> qmatch_asmsub_rename_tac`_ = (INL p,_)`
+  \\ PairCases_on`p`
   \\ asm_simp_tac std_ss []
   \\ rewrite_tac[bind_def]
   \\ BasicProvers.TOP_CASE_TAC
-  \\ drule lift_option_same_state
+  \\ drule lift_option_type_same_state
   \\ strip_tac
   \\ reverse BasicProvers.TOP_CASE_TAC
   >- (
@@ -3476,7 +3477,9 @@ Resume immutables_dom_mutual[ExtCall]:
   >- (
     last_x_assum(qspec_then`ARB`kall_tac)
     \\ rw[] \\ gvs[preserves_immutables_dom_refl] )
-  \\ pairarg_tac \\ asm_simp_tac std_ss []
+  >> qmatch_goalsub_rename_tac`_ p _ = _`
+  >> PairCases_on`p`
+  \\ asm_simp_tac std_ss []
   \\ last_x_assum drule \\ strip_tac
   \\ strip_tac
   \\ irule extcall_inner_pipeline_imm_dom

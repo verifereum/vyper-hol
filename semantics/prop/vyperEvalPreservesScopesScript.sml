@@ -328,12 +328,12 @@ QED
 
 Theorem case_For_dom[local]:
   ∀cx id typ it n body.
-    (* IH for eval_for: conditional on lift_option_type, eval_iterator and check succeeding *)
+    (* IH for eval_for: conditional on lift_option_type, eval_iterator and type_check succeeding *)
     (∀tenv s'' tyv t s'³' vs t' s'⁴' x t''.
        tenv = get_tenv cx ∧
        lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' = (INL tyv, t) ∧
        eval_iterator cx it s'³' = (INL vs, t') ∧
-       check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'⁴' = (INL x, t'') ⇒
+       type_check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'⁴' = (INL x, t'') ⇒
        ∀st res st'. eval_for cx tyv (string_to_num id) body vs st = (res, st') ⇒
          preserves_scopes_dom st st') ∧
     (* IH for iterator: guarded by lift_option_type *)
@@ -959,15 +959,14 @@ Proof
     >- (
       qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
       simp[Once evaluate_def, bind_def, AllCaseEqs()] >>
-      rpt strip_tac >> gvs[] >>
-      TRY pairarg_tac >> gvs[bind_apply, return_def, AllCaseEqs(),
-                             ignore_bind_apply] >>
+      reverse strip_tac >> gvs[]
+      >- (imp_res_tac eval_base_target_preserves_scopes_dom >> gvs[]) >>
+      PairCases_on`x` >>
+      gvs[bind_apply, return_def, AllCaseEqs(), ignore_bind_apply] >>
       imp_res_tac eval_expr_preserves_scopes_dom >>
-      imp_res_tac eval_base_target_preserves_scopes_dom >>
+      imp_res_tac (cj 1 assign_target_preserves_scopes_dom) >>
       imp_res_tac materialise_scopes >>
-      imp_res_tac get_Value_scopes >>
-      imp_res_tac return_scopes >>
-      imp_res_tac (cj 1 assign_target_preserves_scopes_dom) >> gvs[]) >>
+      imp_res_tac eval_base_target_preserves_scopes_dom >> gvs[]) >>
     Cases_on `st.scopes` >> Cases_on `st'.scopes` >> gvs[])
   >> conj_tac >- ( (* Assign *)
     rpt strip_tac >>
@@ -1016,7 +1015,8 @@ Proof
       imp_res_tac lift_option_type_scopes >>
       imp_res_tac (cj 3 scopes_dom_mutual) >> (* eval_iterator *)
       imp_res_tac check_scopes >> imp_res_tac type_check_scopes >> gvs[] >>
-      gvs[ignore_bind_apply, check_def, AllCaseEqs(), assert_def] >>
+      gvs[ignore_bind_apply, check_def, type_check_def,
+          AllCaseEqs(), assert_def] >>
       irule eval_for_map_fdom >>
       goal_assum $ drule_at Any >>
       rpt strip_tac >> drule eval_stmts_preserves_scopes_dom >> simp[]) >>
@@ -1630,7 +1630,9 @@ Proof
     first_x_assum drule >> strip_tac >>
     reverse BasicProvers.TOP_CASE_TAC >- (rw[] >> rw[]) >>
     CASE_TAC >>
-    imp_res_tac check_state >> gvs[] >>
+    imp_res_tac check_state >>
+    imp_res_tac type_check_state >>
+    gvs[] >>
     reverse BasicProvers.TOP_CASE_TAC >- (rw[] >> rw[]) >>
     gvs[] >> strip_tac >>
     first_x_assum drule_all >>
@@ -1882,7 +1884,9 @@ Proof
     BasicProvers.TOP_CASE_TAC >> first_x_assum drule >> strip_tac >>
     reverse BasicProvers.TOP_CASE_TAC >- (rw[] >> rw[]) >>
     first_x_assum drule >> strip_tac >>
-    BasicProvers.TOP_CASE_TAC >> imp_res_tac check_state >>
+    BasicProvers.TOP_CASE_TAC >>
+    imp_res_tac check_state >>
+    imp_res_tac type_check_state >>
     BasicProvers.VAR_EQ_TAC >>
     reverse BasicProvers.TOP_CASE_TAC >- (rw[] >> rw[]) >>
     first_x_assum drule >> strip_tac >>
@@ -1898,6 +1902,7 @@ Proof
       gvs[COND_RATOR, AllCaseEqs(), return_def, ignore_bind_apply,
           bind_apply] >>
       imp_res_tac check_state >>
+      imp_res_tac type_check_state >>
       imp_res_tac lift_option_type_state >>
       rw[] >> gvs[] ) >>
     BasicProvers.VAR_EQ_TAC >>
@@ -1911,6 +1916,7 @@ Proof
     simp_tac std_ss [] >>
     strip_tac >>
     imp_res_tac lift_option_state >>
+    imp_res_tac lift_option_type_state >>
     BasicProvers.VAR_EQ_TAC >>
     reverse BasicProvers.TOP_CASE_TAC >- ( rw[] >> rw[] ) >>
     first_x_assum drule >> strip_tac >>
@@ -1933,11 +1939,12 @@ Proof
     first_x_assum drule >> strip_tac >>
     BasicProvers.TOP_CASE_TAC >>
     imp_res_tac lift_option_state >>
+    imp_res_tac lift_option_type_state >>
     BasicProvers.VAR_EQ_TAC >>
     reverse BasicProvers.TOP_CASE_TAC >- ( rw[] >> rw[] ) >>
     BasicProvers.VAR_EQ_TAC >>
-    pairarg_tac >>
-    BasicProvers.VAR_EQ_TAC >>
+    qmatch_goalsub_rename_tac`_ p _ = (_,_)` >>
+    PairCases_on`p` >>
     simp_tac std_ss [] >>
     simp[ignore_bind_apply] >>
     BasicProvers.TOP_CASE_TAC >>
@@ -1976,6 +1983,7 @@ Proof
     simp_tac std_ss [evaluate_def, bind_apply, ignore_bind_apply] >>
     (* check recursion *)
     BasicProvers.TOP_CASE_TAC >>
+    imp_res_tac type_check_state >>
     imp_res_tac check_state >> BasicProvers.VAR_EQ_TAC >>
     reverse BasicProvers.TOP_CASE_TAC >- (rw[] >> rw[]) >>
     (* lift_option_type get_module_code *)
@@ -2034,6 +2042,7 @@ Proof
     gvs[Once evaluate_def, bind_apply, ignore_bind_apply, AllCaseEqs(),
          return_def, COND_RATOR, LET_THM, pairTheory.UNCURRY] >>
     imp_res_tac check_state >>
+    imp_res_tac type_check_state >>
     imp_res_tac lift_option_type_state >>
     imp_res_tac lift_option_state >>
     imp_res_tac get_accounts_state >>
@@ -2050,6 +2059,7 @@ Proof
     gvs[Once evaluate_def, bind_apply, ignore_bind_apply, AllCaseEqs(),
          return_def] >>
     imp_res_tac check_state >>
+    imp_res_tac type_check_state >>
     imp_res_tac lift_option_type_state >>
     imp_res_tac push_log_scopes >>
     imp_res_tac push_log_immutables >> gvs[] >>
@@ -2060,6 +2070,7 @@ Proof
     rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
     gvs[Once evaluate_def, bind_apply, ignore_bind_apply, AllCaseEqs(),
          return_def, raise_def] >>
+    imp_res_tac type_check_state >>
     imp_res_tac check_state >> gvs[] >>
     first_x_assum drule >> rw[] >>
     gvs[preserves_tv_def]) >>
@@ -2069,6 +2080,7 @@ Proof
     gvs[Once evaluate_def, bind_apply, ignore_bind_apply, AllCaseEqs(),
          return_def] >>
     imp_res_tac check_state >>
+    imp_res_tac type_check_state >>
     imp_res_tac lift_option_type_state >>
     imp_res_tac get_accounts_state >>
     imp_res_tac transfer_value_scopes >>
@@ -2081,6 +2093,7 @@ Proof
     gvs[Once evaluate_def, bind_apply, ignore_bind_apply, AllCaseEqs(),
          return_def, COND_RATOR] >>
     imp_res_tac check_state >>
+    imp_res_tac type_check_state >>
     imp_res_tac lift_option_type_state >>
     imp_res_tac get_accounts_state >>
     imp_res_tac transfer_value_scopes >>

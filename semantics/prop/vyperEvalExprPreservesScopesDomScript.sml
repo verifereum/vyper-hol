@@ -565,7 +565,7 @@ Resume eval_mutual_preserves_scopes_dom[ExtCall]:
     imp_res_tac lift_option_scopes >>
     imp_res_tac lift_option_type_scopes >>
     gvs[COND_RATOR, AllCaseEqs(),return_def,bind_def,check_def,
-        assert_def,get_accounts_def] >>
+        type_check_def,assert_def,get_accounts_def] >>
     imp_res_tac lift_option_type_scopes >> gvs[] ) >>
   BasicProvers.TOP_CASE_TAC
   \\ reverse BasicProvers.TOP_CASE_TAC
