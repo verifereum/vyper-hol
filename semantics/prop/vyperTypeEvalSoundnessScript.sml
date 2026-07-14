@@ -9319,7 +9319,7 @@ Resume eval_all_type_sound_mutual[Expr_Call_SelfDestructTarget]:
       strip_tac >>
       qspecl_then [`env`, `cx`, `es`, `vs`, `args_st`, `res`, `st'`]
         mp_tac selfdestruct_tail_result_sound_simp >>
-      simp[runtime_consistent_def]) >>
+      simp[type_check_def, assert_def, runtime_consistent_def]) >>
     strip_tac >> gvs[]) >>
   rpt strip_tac >> gvs[Once well_typed_expr_def]
 QED
@@ -9347,7 +9347,7 @@ Resume eval_all_type_sound_mutual[Expr_Call_CreateTarget]:
       qspecl_then [`env`, `cx`, `es`, `vs`, `args_st`, `amount`, `target_addr`,
                    `res`, `st'`, `kind`, `rof`]
         mp_tac create_tail_result_sound_simp >>
-      simp[runtime_consistent_def]) >>
+      simp[type_check_def, assert_def, runtime_consistent_def]) >>
     strip_tac >> gvs[]) >>
   rpt strip_tac >> gvs[Once well_typed_expr_def]
 QED

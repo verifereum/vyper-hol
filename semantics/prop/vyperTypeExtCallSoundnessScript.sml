@@ -1398,7 +1398,8 @@ Theorem selfdestruct_args_runtime_typed_dest:
   exprs_runtime_typed env es vs /\
   LENGTH es = 1 /\
   HD (MAP expr_type es) = BaseT AddressT ==>
-  ?target_addr. dest_AddressV (HD vs) = SOME target_addr
+  ?target_addr. LENGTH vs = 1 /\
+                dest_AddressV (HD vs) = SOME target_addr
 Proof
   rw[exprs_runtime_typed_def] >>
   Cases_on `es` >> gvs[] >>
@@ -1412,7 +1413,8 @@ Theorem create_args_runtime_typed_dest:
   LENGTH es >= 2 /\
   HD (MAP expr_type es) = BaseT AddressT /\
   LAST (MAP expr_type es) = BaseT (UintT 256) ==>
-  ?target_addr amount. dest_AddressV (HD vs) = SOME target_addr /\
+  ?target_addr amount. vs <> [] /\
+                       dest_AddressV (HD vs) = SOME target_addr /\
                        dest_NumV (LAST vs) = SOME amount
 Proof
   rw[exprs_runtime_typed_def] >>
@@ -1576,7 +1578,7 @@ Theorem selfdestruct_tail_sound:
     HD (MAP expr_type es) = BaseT AddressT ==>
     runtime_consistent env cx
       (SND ((do
-               check (LENGTH vs = 1) "selfdestruct args";
+               type_check (LENGTH vs = 1) "selfdestruct args";
                target_addr <- lift_option_type (dest_AddressV (EL 0 vs)) "selfdestruct target";
                accounts <- get_accounts;
                self_acct <<- lookup_account cx.txn.target accounts;
@@ -1585,7 +1587,7 @@ Theorem selfdestruct_tail_sound:
                return (Value NoneV)
              od) st)) /\
     (!s. FST ((do
-                 check (LENGTH vs = 1) "selfdestruct args";
+                 type_check (LENGTH vs = 1) "selfdestruct args";
                  target_addr <- lift_option_type (dest_AddressV (EL 0 vs)) "selfdestruct target";
                  accounts <- get_accounts;
                  self_acct <<- lookup_account cx.txn.target accounts;
@@ -1596,8 +1598,8 @@ Theorem selfdestruct_tail_sound:
 Proof
   rpt strip_tac >>
   drule_all selfdestruct_args_runtime_typed_dest >> strip_tac >> gvs[] >>
-  rw[bind_def, ignore_bind_def, check_def, assert_def, raise_def, return_def,
-     lift_option_type_def, get_accounts_def]
+  rw[bind_def, ignore_bind_def, type_check_def, check_def, assert_def,
+     raise_def, return_def, lift_option_type_def, get_accounts_def]
   >- (Cases_on `transfer_value cx.txn.target target_addr
           (lookup_account cx.txn.target st.accounts).balance st` >>
       gvs[return_def] >> Cases_on `q` >> gvs[] >>
@@ -1605,8 +1607,8 @@ Proof
                    `(lookup_account cx.txn.target st.accounts).balance`, `st`]
         mp_tac transfer_value_runtime_consistent >> simp[])
   >- (qpat_x_assum `FST _ = INR (Error (TypeError s))` mp_tac >>
-      rw[bind_def, ignore_bind_def, check_def, assert_def, raise_def, return_def,
-         lift_option_type_def, get_accounts_def] >>
+      rw[bind_def, ignore_bind_def, type_check_def, check_def, assert_def,
+         raise_def, return_def, lift_option_type_def, get_accounts_def] >>
       Cases_on `transfer_value cx.txn.target target_addr
           (lookup_account cx.txn.target st.accounts).balance st` >> gvs[return_def] >>
       Cases_on `q` >> gvs[] >>
@@ -1621,7 +1623,7 @@ Theorem selfdestruct_tail_result_sound_simp:
     exprs_runtime_typed env es vs /\
     LENGTH es = 1 /\
     HD (MAP expr_type es) = BaseT AddressT /\
-    ((case check (LENGTH vs = 1) "selfdestruct args" st of
+    ((case type_check (LENGTH vs = 1) "selfdestruct args" st of
         (INL x,s'') =>
           (case
              (case dest_AddressV (HD vs) of
@@ -1648,10 +1650,11 @@ Proof
     mp_tac selfdestruct_tail_sound >>
   impl_tac >- simp[] >>
   strip_tac >>
-  qpat_x_assum `(case check _ _ _ of _ => _) = _` mp_tac >>
+  qpat_x_assum `(case type_check _ _ _ of _ => _) = _` mp_tac >>
   drule_all selfdestruct_args_runtime_typed_dest >> strip_tac >> gvs[] >>
-  rw[bind_def, ignore_bind_def, check_def, assert_def, raise_def, return_def,
-     lift_option_type_def, get_accounts_def, no_type_error_result_def,
+  rw[bind_def, ignore_bind_def, type_check_def, check_def, assert_def,
+     raise_def, return_def, lift_option_type_def, get_accounts_def,
+     no_type_error_result_def,
      expr_result_typed_def, expr_runtime_typed_def,
      expr_type_def, toplevel_value_typed_def, value_has_type_def,
      evaluate_type_def, is_HashMapRef_def] >>
@@ -1660,8 +1663,9 @@ Proof
       (lookup_account cx.txn.target st.accounts).balance st` >>
   Cases_on `q` >>
   rw[return_def] >>
-  gvs[bind_def, ignore_bind_def, check_def, assert_def, raise_def, return_def,
-      lift_option_type_def, get_accounts_def, runtime_consistent_def,
+  gvs[bind_def, ignore_bind_def, type_check_def, check_def, assert_def,
+      raise_def, return_def, lift_option_type_def, get_accounts_def,
+      runtime_consistent_def,
       toplevel_value_typed_def, value_has_type_def]
 QED
 
@@ -1674,7 +1678,7 @@ Theorem create_tail_sound:
     LAST (MAP expr_type es) = BaseT (UintT 256) ==>
     runtime_consistent env cx
       (SND ((do
-               check (vs <> []) "create no args";
+               type_check (vs <> []) "create no args";
                amount <- lift_option_type (dest_NumV (LAST vs)) "create value";
                target_addr <- lift_option_type (dest_AddressV (HD vs)) "create target";
                accounts <- get_accounts;
@@ -1689,7 +1693,7 @@ Theorem create_tail_sound:
                else return (Value (AddressV new_addr))
              od) st)) /\
     (!s. FST ((do
-                 check (vs <> []) "create no args";
+                 type_check (vs <> []) "create no args";
                  amount <- lift_option_type (dest_NumV (LAST vs)) "create value";
                  target_addr <- lift_option_type (dest_AddressV (HD vs)) "create target";
                  accounts <- get_accounts;
@@ -1706,8 +1710,9 @@ Theorem create_tail_sound:
 Proof
   rpt strip_tac >>
   drule_all create_args_runtime_typed_dest >> strip_tac >> gvs[] >>
-  rw[bind_def, ignore_bind_def, check_def, assert_def, raise_def, return_def,
-     lift_option_type_def, get_accounts_def, update_accounts_def]
+  rw[bind_def, ignore_bind_def, type_check_def, check_def, assert_def,
+     raise_def, return_def, lift_option_type_def, get_accounts_def,
+     update_accounts_def]
   >- (Cases_on `transfer_value cx.txn.target
           (vfmContext$address_for_create cx.txn.target
              (lookup_account cx.txn.target st.accounts).nonce) amount st` >>
@@ -1722,8 +1727,9 @@ Proof
   >- (qspecl_then [`env`, `cx`, `st`, `cx.txn.target`] mp_tac
         runtime_consistent_increment_nonce >> simp[update_accounts_def, return_def])
   >- (qpat_x_assum `FST _ = INR (Error (TypeError s))` mp_tac >>
-      rw[bind_def, ignore_bind_def, check_def, assert_def, raise_def, return_def,
-         lift_option_type_def, get_accounts_def, update_accounts_def] >>
+      rw[bind_def, ignore_bind_def, type_check_def, check_def, assert_def,
+         raise_def, return_def, lift_option_type_def, get_accounts_def,
+         update_accounts_def] >>
       Cases_on `amount > 0` >> gvs[return_def] >>
       Cases_on `transfer_value cx.txn.target
           (vfmContext$address_for_create cx.txn.target
@@ -1744,7 +1750,7 @@ Theorem create_tail_result_sound_simp:
     LAST (MAP expr_type es) = BaseT (UintT 256) /\
     dest_AddressV (HD vs) = SOME target_addr /\
     dest_NumV (LAST vs) = SOME amount /\
-    ((case check (vs <> []) "create no args" st of
+    ((case type_check (vs <> []) "create no args" st of
         (INL x,s'') =>
           (case return amount s'' of
              (INL amount',s'') =>
@@ -1785,27 +1791,31 @@ Proof
   strip_tac >>
   gvs[] >>
   `runtime_consistent env cx st'` by (
-    qpat_x_assum `(case check _ _ _ of _ => _) = _` mp_tac >>
+    qpat_x_assum `(case type_check _ _ _ of _ => _) = _` mp_tac >>
     qpat_x_assum `runtime_consistent _ _ (SND _)` mp_tac >>
-    rw[bind_def, ignore_bind_def, check_def, assert_def, raise_def, return_def,
+    rw[bind_def, ignore_bind_def, type_check_def, check_def, assert_def,
+       raise_def, return_def,
        lift_option_type_def, get_accounts_def, update_accounts_def] >>
     gvs[]) >>
   `!msg. res <> INR (Error (TypeError msg))` by (
     gen_tac >>
-    qpat_x_assum `(case check _ _ _ of _ => _) = _` mp_tac >>
+    qpat_x_assum `(case type_check _ _ _ of _ => _) = _` mp_tac >>
     qpat_x_assum `!s. FST _ <> INR (Error (TypeError s))` (qspec_then `msg` mp_tac) >>
-    rw[bind_def, ignore_bind_def, check_def, assert_def, raise_def, return_def,
+    rw[bind_def, ignore_bind_def, type_check_def, check_def, assert_def,
+       raise_def, return_def,
        lift_option_type_def, get_accounts_def, update_accounts_def] >>
     gvs[]) >>
   gvs[runtime_consistent_def] >>
-  qpat_x_assum `(case check _ _ _ of _ => _) = _` mp_tac >>
-  rw[bind_def, ignore_bind_def, check_def, assert_def, raise_def, return_def,
-     lift_option_type_def, get_accounts_def, update_accounts_def,
+  qpat_x_assum `(case type_check _ _ _ of _ => _) = _` mp_tac >>
+  rw[bind_def, ignore_bind_def, type_check_def, check_def, assert_def,
+     raise_def, return_def, lift_option_type_def, get_accounts_def,
+     update_accounts_def,
      no_type_error_result_def, expr_result_typed_def, expr_runtime_typed_def,
      expr_type_def, toplevel_value_typed_def, value_has_type_def,
      evaluate_type_def, is_HashMapRef_def] >>
-  qpat_x_assum `(case check _ _ _ of _ => _) = _` mp_tac >>
-  gvs[bind_def, ignore_bind_def, check_def, assert_def, raise_def, return_def,
+  qpat_x_assum `(case type_check _ _ _ of _ => _) = _` mp_tac >>
+  gvs[bind_def, ignore_bind_def, type_check_def, check_def, assert_def,
+      raise_def, return_def,
       lift_option_type_def, get_accounts_def, update_accounts_def,
       runtime_consistent_def, toplevel_value_typed_def, value_has_type_def] >>
   TRY (Cases_on `transfer_value cx.txn.target
