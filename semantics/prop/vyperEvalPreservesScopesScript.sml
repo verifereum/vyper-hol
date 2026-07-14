@@ -328,12 +328,12 @@ QED
 
 Theorem case_For_dom[local]:
   ∀cx id typ it n body.
-    (* IH for eval_for: conditional on lift_option_type, eval_iterator and type_check succeeding *)
+    (* IH for eval_for: conditional on lift_option_type, eval_iterator and check succeeding *)
     (∀tenv s'' tyv t s'³' vs t' s'⁴' x t''.
        tenv = get_tenv cx ∧
        lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' = (INL tyv, t) ∧
        eval_iterator cx it s'³' = (INL vs, t') ∧
-       type_check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'⁴' = (INL x, t'') ⇒
+       check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'⁴' = (INL x, t'') ⇒
        ∀st res st'. eval_for cx tyv (string_to_num id) body vs st = (res, st') ⇒
          preserves_scopes_dom st st') ∧
     (* IH for iterator: guarded by lift_option_type *)

@@ -1046,7 +1046,7 @@ Definition evaluate_def:
     tenv <<- get_tenv cx;
     tyv <- lift_option_type (evaluate_type tenv typ) "For evaluate_type";
     vs <- eval_iterator cx it;
-    type_check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long";
+    check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long";
     eval_for cx tyv (string_to_num id) body vs
   od ∧
   eval_stmt cx (Expr e) = do

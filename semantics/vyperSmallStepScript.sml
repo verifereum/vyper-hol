@@ -586,7 +586,7 @@ Definition apply_vals_def:
   apply_vals cx vs st (ExprsK1 v k) =
     apply_vals cx (v::vs) st k ∧
   apply_vals cx vs st (ForK id tyv n body k) =
-    (case do type_check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long";
+    (case do check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long";
              return vs od st
      of (INR ex, st) => apply_exc cx ex st k
       | (INL vs, st) => eval_for_cps cx tyv (string_to_num id) body vs st k) ∧

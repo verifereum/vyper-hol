@@ -933,7 +933,7 @@ Theorem case_For_imm_dom[local]:
        lift_option_type (evaluate_type tenv typ)
          "For evaluate_type" s'' = (INL tyv, t) ∧
        eval_iterator cx it s'³' = (INL vs, t') ∧
-       type_check (compatible_bound (Dynamic n) (LENGTH vs))
+       check (compatible_bound (Dynamic n) (LENGTH vs))
              "For too long" s'⁴' = (INL x, t'') ⇒
        ∀st res st'. eval_for cx tyv (string_to_num id) body vs st = (res,st') ⇒
          preserves_immutables_dom cx st st') ⇒
@@ -951,7 +951,7 @@ Proof
   `∀st res st'. eval_iterator cx it st = (res,st') ⇒
      preserves_immutables_dom cx st st'` by
     (first_x_assum match_mp_tac >> metis_tac[]) >>
-  imp_res_tac type_check_state >> gvs[preserves_immutables_dom_refl] >>
+  imp_res_tac check_state >> gvs[preserves_immutables_dom_refl] >>
   (* iterator error: IH directly *)
   TRY (first_x_assum drule >> simp[] >> NO_TAC) >>
   (* Success: chain through iterator then eval_for *)
