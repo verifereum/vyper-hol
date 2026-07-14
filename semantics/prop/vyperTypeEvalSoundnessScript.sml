@@ -9255,9 +9255,16 @@ Resume eval_all_type_sound_mutual[Expr_Call_RawLog]:
       rename1 `exprs_runtime_typed env es vs` >>
       mp_tac raw_log_args_runtime_typed_dest >> simp[] >> strip_tac >> gvs[] >>
       strip_tac >>
+      qpat_x_assum `LENGTH (case topics of _ => _) <= 4` $
+        mk_asm "topics_bound" >>
+      asm "topics_bound" (fn th =>
+        fs[th, type_check_def, bind_def, ignore_bind_def, assert_def,
+           return_def]) >>
       qspecl_then [`env`, `cx`, `es`, `vs`, `args_st`, `topics`, `data`, `res`, `st'`, `bd`, `bd'`]
         mp_tac raw_log_tail_result_sound_simp >>
-      simp[runtime_consistent_def]) >>
+      asm "topics_bound" (fn th =>
+        simp[th, type_check_def, bind_def, ignore_bind_def, assert_def,
+             return_def, runtime_consistent_def])) >>
     strip_tac >> gvs[]) >>
   rpt strip_tac >> gvs[Once well_typed_expr_def]
 QED
@@ -9280,11 +9287,13 @@ Resume eval_all_type_sound_mutual[Expr_Call_RawRevert]:
     Cases_on `args_res` >> gvs[no_type_error_result_def]
     >- (
       rename1 `exprs_runtime_typed env es vs` >>
+      `LENGTH vs = 1` by
+        (gvs[exprs_runtime_typed_def] >>
+         metis_tac[listTheory.LIST_REL_LENGTH]) >>
       qspecl_then [`env`, `cx`, `vs`, `args_st`] mp_tac raw_revert_tail_sound >>
-      simp[runtime_consistent_def] >> strip_tac >>
-      Cases_on `LENGTH vs = 1` >>
-      rw[bind_def, check_def, assert_def, raise_def, no_type_error_result_def,
-         runtime_consistent_def] >> metis_tac[]) >>
+      simp[type_check_def, bind_def, ignore_bind_def, assert_def, raise_def,
+           return_def, no_type_error_result_def, runtime_consistent_def] >>
+      strip_tac >> gvs[]) >>
     strip_tac >> gvs[]) >>
   rpt strip_tac >> gvs[Once well_typed_expr_def]
 QED

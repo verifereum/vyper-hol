@@ -1495,9 +1495,13 @@ Theorem raw_log_args_runtime_typed_dest:
   exprs_runtime_typed env es vs /\
   LENGTH es = 2 /\
   EL 0 (MAP expr_type es) = ArrayT (BaseT (BytesT (Fixed 32))) bd /\
-  EL 1 (MAP expr_type es) = BaseT (BytesT bd') ==>
-  ?topics data. dest_ArrayV (EL 0 vs) = SOME topics /\
-                dest_BytesV (EL 1 vs) = SOME data
+  EL 1 (MAP expr_type es) = BaseT (BytesT bd') /\
+  bound_at_most bd 4 ==>
+  ?topics data. LENGTH vs = 2 /\
+                dest_ArrayV (EL 0 vs) = SOME topics /\
+                dest_BytesV (EL 1 vs) = SOME data /\
+                LENGTH (case topics of
+                  TupleV vs => vs | DynArrayV vs => vs | _ => []) <= 4
 Proof
   rw[exprs_runtime_typed_def] >>
   Cases_on `es` >> gvs[] >>
@@ -1506,7 +1510,10 @@ Proof
   Cases_on `bd'` >> gvs[] >>
   rename1 `value_has_type (ArrayTV (BaseTV (BytesT (Fixed 32))) bd) v_topics` >>
   rename1 `value_has_type (BaseTV (BytesT bd_data)) v_data` >>
-  Cases_on `v_topics` >> gvs[value_has_type_def, dest_ArrayV_def] >>
+  Cases_on `v_topics` >>
+  gvs[value_has_type_def, dest_ArrayV_def] >>
+  Cases_on `a` >> Cases_on `bd` >>
+  gvs[value_has_type_def, bound_at_most_def, compatible_bound_def] >>
   Cases_on `v_data` >> gvs[value_has_type_def, dest_BytesV_def]
 QED
 
@@ -1812,18 +1819,19 @@ QED
 
 Theorem raw_revert_tail_sound:
   !env cx vs st.
-    runtime_consistent env cx st ==>
+    runtime_consistent env cx st /\ LENGTH vs = 1 ==>
     runtime_consistent env cx
       (SND ((do
-               check (LENGTH vs = 1) "raw_revert args";
+               type_check (LENGTH vs = 1) "raw_revert args";
                raise (Error (RuntimeError "raw_revert"))
              od) st)) /\
     (!s. FST ((do
-                 check (LENGTH vs = 1) "raw_revert args";
+                 type_check (LENGTH vs = 1) "raw_revert args";
                  raise (Error (RuntimeError "raw_revert"))
                od) st) <> INR (Error (TypeError s)))
 Proof
-  rw[bind_def, ignore_bind_def, check_def, assert_def, raise_def, return_def] >>
+  rw[bind_def, ignore_bind_def, type_check_def, check_def, assert_def,
+     raise_def, return_def] >>
   gvs[runtime_consistent_def]
 QED
 
@@ -1833,25 +1841,26 @@ Theorem raw_log_tail_sound:
     exprs_runtime_typed env es vs /\
     LENGTH es = 2 /\
     EL 0 (MAP expr_type es) = ArrayT (BaseT (BytesT (Fixed 32))) bd /\
-    EL 1 (MAP expr_type es) = BaseT (BytesT bd') ==>
+    EL 1 (MAP expr_type es) = BaseT (BytesT bd') /\
+    bound_at_most bd 4 ==>
     runtime_consistent env cx
       (SND ((do
-               check (LENGTH vs = 2) "raw_log args";
+               type_check (LENGTH vs = 2) "raw_log args";
                topics <- lift_option_type (dest_ArrayV (EL 0 vs)) "raw_log topics";
                data <- lift_option_type (dest_BytesV (EL 1 vs)) "raw_log data";
                topic_vals <<- (case topics of
                   TupleV vs => vs | DynArrayV vs => vs | _ => []);
-               check (LENGTH topic_vals <= 4) "raw_log too many topics";
+               type_check (LENGTH topic_vals <= 4) "raw_log too many topics";
                push_log ((NONE,"raw_log"), topic_vals ++ [BytesV data]);
                return (Value NoneV)
              od) st)) /\
     (!s. FST ((do
-                 check (LENGTH vs = 2) "raw_log args";
+                 type_check (LENGTH vs = 2) "raw_log args";
                  topics <- lift_option_type (dest_ArrayV (EL 0 vs)) "raw_log topics";
                  data <- lift_option_type (dest_BytesV (EL 1 vs)) "raw_log data";
                  topic_vals <<- (case topics of
                     TupleV vs => vs | DynArrayV vs => vs | _ => []);
-                 check (LENGTH topic_vals <= 4) "raw_log too many topics";
+                 type_check (LENGTH topic_vals <= 4) "raw_log too many topics";
                  push_log ((NONE,"raw_log"), topic_vals ++ [BytesV data]);
                  return (Value NoneV)
                od) st) <> INR (Error (TypeError s)))
@@ -1859,14 +1868,14 @@ Proof
   rpt strip_tac >>
   drule_all raw_log_args_runtime_typed_dest >> strip_tac >> gvs[] >>
   Cases_on `topics` >>
-  rw[bind_def, ignore_bind_def, check_def, assert_def, raise_def, return_def,
-     lift_option_type_def, push_log_def] >>
+  rw[bind_def, ignore_bind_def, type_check_def, check_def, assert_def,
+     raise_def, return_def, lift_option_type_def, push_log_def] >>
   TRY (qmatch_goalsub_rename_tac `runtime_consistent env cx (st with logs updated_by CONS log)` >>
        qspecl_then [`env`, `cx`, `st`] mp_tac runtime_consistent_logs_cons >>
        simp[]) >>
   qpat_x_assum `FST _ = INR (Error (TypeError s))` mp_tac >>
-  rw[bind_def, ignore_bind_def, check_def, assert_def, raise_def, return_def,
-     lift_option_type_def, push_log_def]
+  rw[bind_def, ignore_bind_def, type_check_def, check_def, assert_def,
+     raise_def, return_def, lift_option_type_def, push_log_def]
 QED
 
 Theorem raw_log_tail_result_sound:
@@ -1876,13 +1885,14 @@ Theorem raw_log_tail_result_sound:
     LENGTH es = 2 /\
     EL 0 (MAP expr_type es) = ArrayT (BaseT (BytesT (Fixed 32))) bd /\
     EL 1 (MAP expr_type es) = BaseT (BytesT bd') /\
+    bound_at_most bd 4 /\
     ((do
-        check (LENGTH vs = 2) "raw_log args";
+        type_check (LENGTH vs = 2) "raw_log args";
         topics <- lift_option_type (dest_ArrayV (EL 0 vs)) "raw_log topics";
         data <- lift_option_type (dest_BytesV (EL 1 vs)) "raw_log data";
         topic_vals <<- (case topics of
            TupleV vs => vs | DynArrayV vs => vs | _ => []);
-        check (LENGTH topic_vals <= 4) "raw_log too many topics";
+        type_check (LENGTH topic_vals <= 4) "raw_log too many topics";
         push_log ((NONE,"raw_log"), topic_vals ++ [BytesV data]);
         return (Value NoneV)
       od) st = (res, st')) ==>
@@ -1899,8 +1909,9 @@ Proof
   qpat_x_assum `(do _ od) _ = _` mp_tac >>
   drule_all raw_log_args_runtime_typed_dest >> strip_tac >> gvs[] >>
   Cases_on `topics` >>
-  rw[bind_def, ignore_bind_def, check_def, assert_def, raise_def, return_def,
-     lift_option_type_def, push_log_def, no_type_error_result_def,
+  rw[bind_def, ignore_bind_def, type_check_def, check_def, assert_def,
+     raise_def, return_def, lift_option_type_def, push_log_def,
+     no_type_error_result_def,
      expr_result_typed_def, expr_runtime_typed_def,
      expr_type_def, toplevel_value_typed_def, value_has_type_def,
      evaluate_type_def, is_HashMapRef_def] >>
@@ -1910,17 +1921,21 @@ QED
 Theorem raw_log_tail_result_sound_simp:
   !env cx es vs st topics data res st' bd bd'.
     runtime_consistent env cx st /\
+    exprs_runtime_typed env es vs /\
     LENGTH es = 2 /\
     EL 0 (MAP expr_type es) = ArrayT (BaseT (BytesT (Fixed 32))) bd /\
     EL 1 (MAP expr_type es) = BaseT (BytesT bd') /\
-    ((case check (LENGTH vs = 2) "raw_log args" st of
+    bound_at_most bd 4 /\
+    dest_ArrayV (EL 0 vs) = SOME topics /\
+    dest_BytesV (EL 1 vs) = SOME data /\
+    ((case type_check (LENGTH vs = 2) "raw_log args" st of
         (INL x,s'') =>
           (case return topics s'' of
              (INL topics',s'') =>
                (case return data s'' of
                   (INL data,s'') =>
                     do
-                      x <- check
+                      x <- type_check
                         (LENGTH
                            (case topics' of
                             | TupleV vs => vs
@@ -1944,13 +1959,17 @@ Theorem raw_log_tail_result_sound_simp:
      | INR _ => T)
 Proof
   rpt strip_tac >>
-  qpat_x_assum `(case check _ _ _ of _ => _) = _` mp_tac >>
+  qpat_x_assum `(case type_check _ _ _ of _ => _) = _` mp_tac >>
+  drule_all raw_log_args_runtime_typed_dest >> strip_tac >> gvs[] >>
   Cases_on `topics` >>
-  rw[bind_def, ignore_bind_def, check_def, assert_def, raise_def, return_def,
+  rw[bind_def, ignore_bind_def, type_check_def, check_def, assert_def,
+     raise_def, return_def,
      lift_option_type_def, push_log_def, no_type_error_result_def,
      expr_result_typed_def, expr_runtime_typed_def,
      expr_type_def, toplevel_value_typed_def, value_has_type_def,
      evaluate_type_def, is_HashMapRef_def] >>
+  fs[type_check_def, bind_def, ignore_bind_def, assert_def, return_def,
+     push_log_def] >>
   TRY (qmatch_goalsub_rename_tac `st with logs updated_by CONS log` >>
        qspecl_then [`env`, `cx`, `st`, `log`] mp_tac runtime_consistent_logs_cons >>
        simp[runtime_consistent_def]) >>
