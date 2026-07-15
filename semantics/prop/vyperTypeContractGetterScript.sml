@@ -1406,10 +1406,10 @@ QED
 Theorem checked_public_getter_body_typing_package:
   check_contract F
     (layouts:(address # (storage_layout # storage_layout)) list)
-    (addr:160 word) mods = SOME art /\
-  ALOOKUP mods src = SOME ts /\
-  MEM decl ts /\
-  is_public_getter_decl fn decl /\
+    (addr:160 word) mods = SOME art ==>
+  ALOOKUP mods src = SOME ts ==>
+  MEM decl ts ==>
+  is_public_getter_decl fn decl ==>
   external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,body) ==>
   ALL_DISTINCT (MAP (string_to_num o FST) args) /\
   (?env_after.
@@ -1428,7 +1428,7 @@ Proof
   simp[is_public_getter_decl_def, external_getter_tuple_def] >>
   Cases_on `v` >>
   simp[is_public_getter_decl_def, external_getter_tuple_def] >>
-  strip_tac
+  ntac 5 strip_tac
   >- (Cases_on `is_ArrayT t`
       >- (gvs[] >>
           `mut = View /\ nr = F /\ dflts = [] /\
