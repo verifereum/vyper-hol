@@ -55,19 +55,29 @@ val () = transfer_value_def
 * within a contract, including implicit functions associated with public
 * variables *)
 
+Definition getter_vtype_annotation_def:
+  getter_vtype_annotation (Type ty) = ty ∧
+  getter_vtype_annotation (HashMapT _ _) = NoneT
+End
+
+val () = cv_auto_trans getter_vtype_annotation_def;
+
 Definition build_getter_def:
   build_getter e kt (Type vt) n =
     (let vn = num_to_dec_string n in
       if is_ArrayT vt then
         (let (args, ret, exp) =
-           build_getter (Subscript NoneT e (Name NoneT vn))
+           build_getter
+             (Subscript vt e (Name kt vn))
              (BaseT (UintT 256)) (Type (ArrayT_type vt)) (SUC n) in
            ((vn, kt)::args, ret, exp))
-      else ([(vn, kt)], vt, Subscript NoneT e (Name NoneT vn))) ∧
+      else ([(vn, kt)], vt, Subscript vt e (Name kt vn))) ∧
   build_getter e kt (HashMapT typ vtyp) n =
     (let vn = num_to_dec_string n in
      let (args, ret, exp) =
-       build_getter (Subscript NoneT e (Name NoneT vn)) typ vtyp (SUC n) in
+       build_getter
+         (Subscript (getter_vtype_annotation (HashMapT typ vtyp)) e (Name kt vn))
+         typ vtyp (SUC n) in
      ((vn, kt)::args, ret, exp))
 Termination
   WF_REL_TAC ‘measure (value_type_size o FST o SND o SND)’
@@ -105,7 +115,7 @@ Definition lookup_function_def:
    else lookup_function src_id_opt name vis ts) ∧
   lookup_function src_id_opt name External (VariableDecl Public mut id typ _ :: ts) =
   (if id = name then
-    let ne = TopLevelName NoneT (src_id_opt, id) in
+    let ne = TopLevelName typ (src_id_opt, id) in
     if ¬is_ArrayT typ
     then SOME (View, F, [], [], typ, [Return (SOME ne)])
     else SOME $ getter ne (BaseT (UintT 256)) (Type (ArrayT_type typ))
@@ -1702,10 +1712,10 @@ Definition call_external_function_def:
             | (INL (), st) =>
               (let am_ret = abstract_machine_from_state srcs exps layouts st in
                case evaluate_type all_tenv ret
-               of NONE => (INR (Error (RuntimeError "eval ret")), am)
+               of NONE => (INR (Error (TypeError "eval ret")), am)
                 | SOME tv =>
                case safe_cast tv v
-               of NONE => (INR (Error (RuntimeError "ext cast ret")), am)
+               of NONE => (INR (Error (TypeError "ext cast ret")), am)
                 | SOME v => (INL v, am_ret))
             | (INR e, st) => (INR e, am))
        | (INR e, st) => (INR e, am)) in
