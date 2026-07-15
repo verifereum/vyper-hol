@@ -572,7 +572,7 @@ Theorem int_call_tail_no_control[local]:
     rtv <- lift_option_type (evaluate_type all_tenv ret) "IntCall eval ret";
     (if nr then
        case cx.nonreentrant_slot of
-       | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | NONE => raise (Error (TypeError "nonreentrant slot missing"))
        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
      else return ());
     cxf <- push_function (src_id_opt, fn) env cx;

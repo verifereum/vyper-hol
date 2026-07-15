@@ -789,7 +789,7 @@ Theorem intcall_lock_state_preserves_frame[local]:
   !cx nr is_view st lock_st.
     (if nr then
        case cx.nonreentrant_slot of
-         NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+         NONE => raise (Error (TypeError "nonreentrant slot missing"))
        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
      else return ()) st = (INL (),lock_st) ==>
     lock_st.scopes = st.scopes /\
@@ -815,7 +815,7 @@ Theorem intcall_pushed_body_preconditions_from_lock[local]:
     scope_well_typed call_env /\
     (if nr then
        case cx.nonreentrant_slot of
-         NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+         NONE => raise (Error (TypeError "nonreentrant slot missing"))
        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
      else return ()) dflt_st = (INL (),lock_st) ==>
     env_consistent env_body pushed_cx (lock_st with scopes := [call_env]) /\
@@ -843,7 +843,7 @@ Theorem intcall_pushed_body_preconditions_for_defaults_from_lock[local]:
     scope_well_typed call_env /\
     (if nr then
        case cx.nonreentrant_slot of
-         NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+         NONE => raise (Error (TypeError "nonreentrant slot missing"))
        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
      else return ()) dflt_st = (INL (),lock_st) ==>
     env_consistent env_body (cx with stk updated_by CONS (src_id_opt,fn))
@@ -879,7 +879,7 @@ Theorem intcall_pushed_body_preconditions_live_from_defaults[local]:
     scope_well_typed call_env /\
     (if nr then
        case cx.nonreentrant_slot of
-         NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+         NONE => raise (Error (TypeError "nonreentrant slot missing"))
        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
      else return ()) dflt_st = (INL (),lock_st) ==>
     env_consistent env_body (cx with stk updated_by CONS (src_id_opt,fn))
@@ -918,7 +918,7 @@ Theorem intcall_live_pushed_body_preconditions[local]:
     scope_well_typed call_env /\
     (if nr then
        case cx.nonreentrant_slot of
-         NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+         NONE => raise (Error (TypeError "nonreentrant slot missing"))
        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
      else return ()) dflt_st = (INL (),lock_st) ==>
     env_consistent env_body (cx with stk updated_by CONS (env_body.current_src,fn))
@@ -6391,7 +6391,7 @@ Theorem intcall_default_success_post_push_no_type_error[local]:
       (dflt_st with scopes := [call_env]) /\
     (if nr then
        case cx.nonreentrant_slot of
-       | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | NONE => raise (Error (TypeError "nonreentrant slot missing"))
        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
      else return ()) dflt_st = (INL (),lock_st) /\
     (do
@@ -6484,7 +6484,7 @@ Theorem intcall_default_success_post_push_sound[local]:
       (dflt_st with scopes := [call_env]) /\
     (if nr then
        case cx.nonreentrant_slot of
-       | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | NONE => raise (Error (TypeError "nonreentrant slot missing"))
        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
      else return ()) dflt_st = (INL (),lock_st) /\
     (do
@@ -6706,9 +6706,10 @@ QED
 
 Theorem intcall_lock_no_type_error_result[local]:
   !cx nr is_view st res st'.
+    (nr ==> cx.nonreentrant_slot <> NONE) /\
     (if nr then
        case cx.nonreentrant_slot of
-       | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | NONE => raise (Error (TypeError "nonreentrant slot missing"))
        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
      else return ()) st = (res,st') ==>
     no_type_error_result res
@@ -6729,9 +6730,10 @@ Theorem intcall_lock_attempt_sound_frame[local]:
   !env cx nr is_view dflt_st lock_res lock_st.
     env_consistent env cx dflt_st /\ state_well_typed dflt_st /\
     accounts_well_typed dflt_st.accounts /\
+    (nr ==> cx.nonreentrant_slot <> NONE) /\
     (if nr then
        case cx.nonreentrant_slot of
-       | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | NONE => raise (Error (TypeError "nonreentrant slot missing"))
        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
      else return ()) dflt_st = (lock_res,lock_st) ==>
     state_well_typed lock_st /\ accounts_well_typed lock_st.accounts /\
@@ -6740,7 +6742,7 @@ Theorem intcall_lock_attempt_sound_frame[local]:
 Proof
   rpt strip_tac >>
   `no_type_error_result lock_res` by
-    (irule intcall_lock_no_type_error_result >> goal_assum drule) >>
+    (irule intcall_lock_no_type_error_result >> goal_assum drule >> simp[]) >>
   Cases_on `lock_res`
   >- (Cases_on `x` >>
       drule intcall_lock_state_preserves_frame >>
@@ -6808,7 +6810,7 @@ Theorem intcall_generated_body_ih_live_consumer_premise[local]:
       (is_view0 <=> mut0 = View \/ mut0 = Pure) /\
       (if nr0 then
          case cx.nonreentrant_slot of
-         | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+         | NONE => raise (Error (TypeError "nonreentrant slot missing"))
          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view0
        else return ()) s11 = (INL x11,t11) /\
       push_function (src_id_opt,fn) env0 cx s12 = (INL cx0,t12) ==>
@@ -6843,7 +6845,7 @@ Theorem intcall_generated_body_ih_live_consumer_premise[local]:
          "IntCall eval ret" bind_st' = (INL ret_tv,ret_st') /\
        (if nr then
           case cx.nonreentrant_slot of
-          | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+          | NONE => raise (Error (TypeError "nonreentrant slot missing"))
           | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
         else return ()) ret_st' = (INL (),lock_st') /\
        push_function (env_body.current_src,fn) call_env' cx lock_st' =
@@ -7223,7 +7225,7 @@ Theorem intcall_generated_body_post_push_ih[local]:
       (is_view0 <=> mut0 = View \/ mut0 = Pure) /\
       (if nr0 then
          case cx.nonreentrant_slot of
-         | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+         | NONE => raise (Error (TypeError "nonreentrant slot missing"))
          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view0
        else return ()) s11 = (INL x11,t11) /\
       push_function (src_id_opt,fn) env0 cx s12 = (INL cx0,t12) ==>
@@ -7257,7 +7259,7 @@ Theorem intcall_generated_body_post_push_ih[local]:
     evaluate_type (get_tenv cx) ret = SOME ret_tv /\
     (if nr then
        case cx.nonreentrant_slot of
-       | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | NONE => raise (Error (TypeError "nonreentrant slot missing"))
        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
      else return ()) dflt_st = (INL (),lock_st) ==>
     !env1 ret_ty1 env2 st0 res0 st0'.
@@ -7286,7 +7288,7 @@ Proof
        "IntCall eval ret" bind_st' = (INL ret_tv,ret_st') /\
      (if nr then
         case cx.nonreentrant_slot of
-        | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+        | NONE => raise (Error (TypeError "nonreentrant slot missing"))
         | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
       else return ()) ret_st' = (INL (),lock_st') /\
      push_function (env_body.current_src,fn) call_env' cx lock_st' =
@@ -7365,7 +7367,7 @@ Theorem intcall_successful_defaults_lock_success_sound_from_body_ih[local]:
     env_scopes_consistent env_body cx (dflt_st with scopes := [call_env]) /\
     (if nr then
        case cx.nonreentrant_slot of
-       | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | NONE => raise (Error (TypeError "nonreentrant slot missing"))
        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
      else return ()) dflt_st = (INL (),lock_st) /\
     (do rv <- finally
@@ -7455,7 +7457,7 @@ Theorem intcall_successful_defaults_lock_success_sound_general[local]:
       (is_view0 <=> mut0 = View \/ mut0 = Pure) /\
       (if nr0 then
          case cx.nonreentrant_slot of
-           NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+           NONE => raise (Error (TypeError "nonreentrant slot missing"))
          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view0
        else return ()) s11 = (INL x11,t11) /\
       push_function (src_id_opt,fn) env0 cx s12 = (INL cx0,t12) ==>
@@ -7488,7 +7490,7 @@ Theorem intcall_successful_defaults_lock_success_sound_general[local]:
     evaluate_type (get_tenv cx) ret = SOME ret_tv /\
     (if nr then
        case cx.nonreentrant_slot of
-       | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | NONE => raise (Error (TypeError "nonreentrant slot missing"))
        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
      else return ()) dflt_st = (INL (),lock_st) /\
     well_typed_expr env (Call loc (IntCall (src_id_opt,fn)) es extra) /\
@@ -7631,7 +7633,7 @@ Theorem intcall_successful_defaults_continuation_lock_success_case[local]:
       (is_view0 <=> mut0 = View \/ mut0 = Pure) /\
       (if nr0 then
          case cx.nonreentrant_slot of
-           NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+           NONE => raise (Error (TypeError "nonreentrant slot missing"))
          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view0
        else return ()) s11 = (INL x11,t11) /\
       push_function (src_id_opt,fn) env0 cx s12 = (INL cx0,t12) ==>
@@ -7664,7 +7666,7 @@ Theorem intcall_successful_defaults_continuation_lock_success_case[local]:
     evaluate_type (get_tenv cx) ret = SOME ret_tv /\
     (if nr then
        case cx.nonreentrant_slot of
-       | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | NONE => raise (Error (TypeError "nonreentrant slot missing"))
        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
      else return ()) dflt_st = (lock_res,lock_st) /\
     lock_res = INL () /\
@@ -7789,7 +7791,7 @@ Theorem intcall_successful_defaults_continuation_sound_general[local]:
       (is_view0 <=> mut0 = View \/ mut0 = Pure) /\
       (if nr0 then
          case cx.nonreentrant_slot of
-           NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+           NONE => raise (Error (TypeError "nonreentrant slot missing"))
          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view0
        else return ()) s11 = (INL x11,t11) /\
       push_function (src_id_opt,fn) env0 cx s12 = (INL cx0,t12) ==>
@@ -7822,7 +7824,7 @@ Theorem intcall_successful_defaults_continuation_sound_general[local]:
     evaluate_type (get_tenv cx) ret = SOME ret_tv /\
     (if nr then
        case cx.nonreentrant_slot of
-       | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | NONE => raise (Error (TypeError "nonreentrant slot missing"))
        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
      else return ()) dflt_st = (lock_res,lock_st) /\
     well_typed_expr env (Call loc (IntCall (src_id_opt,fn)) es extra) /\
@@ -7919,6 +7921,13 @@ Proof
     first_assum ACCEPT_TAC)) >>
   qpat_x_assum `(case INR y of INL u => _ | INR e => _) = (res,st')` mp_tac >>
   rewrite_tac[sum_case_def] >> strip_tac >>
+  `nr ==> cx.nonreentrant_slot <> NONE` by (
+    `get_module_code cx src_id_opt = SOME ts` by
+      metis_tac[lift_option_type_INL_eq] >>
+    `lookup_callable_function cx.in_deploy fn ts =
+       SOME (fm,nr,args,dflts,ret,fn_body)` by
+      metis_tac[lift_option_type_INL_eq] >>
+    drule_all callable_body_typing_from_env_consistent >> simp[]) >>
   qspecl_then [`env`, `cx`, `nr`, `fm = View \/ fm = Pure`,
                `dflt_st`, `INR y`, `lock_st`] mp_tac intcall_lock_attempt_sound_frame >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
@@ -7994,7 +8003,7 @@ Theorem intcall_actual_args_success_default_success_branch[local]:
       (is_view0 <=> mut0 = View \/ mut0 = Pure) /\
       (if nr0 then
          case cx.nonreentrant_slot of
-           NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+           NONE => raise (Error (TypeError "nonreentrant slot missing"))
          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view0
        else return ()) s11 = (INL x11,t11) /\
       push_function (src_id_opt,fn) env0 cx s12 = (INL cx0,t12) ==>
@@ -8027,7 +8036,7 @@ Theorem intcall_actual_args_success_default_success_branch[local]:
     evaluate_type (get_tenv cx) ret = SOME ret_tv /\
     (if nr then
        case cx.nonreentrant_slot of
-       | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | NONE => raise (Error (TypeError "nonreentrant slot missing"))
        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
      else return ()) dflt_st = (lock_res,lock_st) /\
     well_typed_expr env (Call loc (IntCall (src_id_opt,fn)) es extra) /\
@@ -8116,7 +8125,7 @@ Theorem intcall_actual_args_success_default_success_branch_pair[local]:
       (is_view0 <=> mut0 = View \/ mut0 = Pure) /\
       (if nr0 then
          case cx.nonreentrant_slot of
-           NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+           NONE => raise (Error (TypeError "nonreentrant slot missing"))
          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view0
        else return ()) s11 = (INL x11,t11) /\
       push_function (src_id_opt,fn) env0 cx s12 = (INL cx0,t12) ==>
@@ -8149,7 +8158,7 @@ Theorem intcall_actual_args_success_default_success_branch_pair[local]:
     evaluate_type (get_tenv cx) ret = SOME ret_tv /\
     (if nr then
        case cx.nonreentrant_slot of
-       | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | NONE => raise (Error (TypeError "nonreentrant slot missing"))
        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
      else return ()) dflt_st = lock_pair /\
     well_typed_expr env (Call loc (IntCall (src_id_opt,fn)) es extra) /\
@@ -8270,7 +8279,7 @@ Theorem intcall_actual_args_success_sound_from_generated_ih_general[local]:
       (is_view0 <=> mut0 = View \/ mut0 = Pure) /\
       (if nr0 then
          case cx.nonreentrant_slot of
-         | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+         | NONE => raise (Error (TypeError "nonreentrant slot missing"))
          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view0
        else return ()) s11 = (INL x11,t11) /\
       push_function (src_id_opt,fn) env0 cx s12 = (INL cx0,t12) ==>
@@ -8335,7 +8344,7 @@ Theorem intcall_actual_args_success_sound_from_generated_ih_general[local]:
                | (INL ret_v,ret_st) =>
                    (case (if nr then
                             case cx.nonreentrant_slot of
-                            | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+                            | NONE => raise (Error (TypeError "nonreentrant slot missing"))
                             | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
                           else return ()) ret_st of
                     | (INL u,lock_st) =>
@@ -8389,7 +8398,7 @@ Proof
             | (INL ret_v,ret_st) =>
                 (case (if nr then
                          case cx.nonreentrant_slot of
-                         | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+                         | NONE => raise (Error (TypeError "nonreentrant slot missing"))
                          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
                        else return ()) ret_st of
                  | (INL u,lock_st) =>
@@ -8422,7 +8431,7 @@ Proof
     qabbrev_tac `lp =
       (if nr then
          case cx.nonreentrant_slot of
-         | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+         | NONE => raise (Error (TypeError "nonreentrant slot missing"))
          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
        else return ()) dflt_st` >>
     MATCH_MP_TAC (Q.SPECL [`cx`, `env`, `loc`, `res`, `st'`, `src_id_opt`, `fn`,
@@ -8556,7 +8565,7 @@ Theorem intcall_expr_sound_from_generated_ih[local]:
       (is_view0 <=> mut0 = View \/ mut0 = Pure) /\
       (if nr0 then
          case cx.nonreentrant_slot of
-           NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+           NONE => raise (Error (TypeError "nonreentrant slot missing"))
          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view0
        else return ()) s11 = (INL x11,t11) /\
       push_function (src_id_opt,fn) env0 cx s12 = (INL cx0,t12) ==>

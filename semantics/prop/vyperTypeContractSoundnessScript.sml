@@ -492,7 +492,7 @@ QED
 Theorem call_lock_action_preserves_tv[local]:
   (if nr then
      case cx.nonreentrant_slot of
-       NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       NONE => raise (Error (TypeError "nonreentrant slot missing"))
      | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
    else return ()) st = (res,st') ==>
   preserves_tv cx st st'
@@ -524,7 +524,7 @@ Theorem call_body_prefix_preserves_tv[local]:
   (do
      (if nr then
         case cx.nonreentrant_slot of
-          NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+          NONE => raise (Error (TypeError "nonreentrant slot missing"))
         | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
       else return ());
      send_call_value mut cx;
@@ -551,7 +551,7 @@ QED
 Theorem call_body_prefix_lock_preserves_tv[local]:
   (do
      (case cx.nonreentrant_slot of
-        NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+        NONE => raise (Error (TypeError "nonreentrant slot missing"))
       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view);
      send_call_value mut cx;
      eval_stmts cx body
@@ -611,7 +611,7 @@ Theorem call_external_function_deploy_normal_success_lookup_transport[local]:
   (do
      (if nr then
         case cx.nonreentrant_slot of
-          NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+          NONE => raise (Error (TypeError "nonreentrant slot missing"))
         | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
       else return ());
      send_call_value mut cx;
@@ -646,7 +646,7 @@ Theorem call_external_function_deploy_return_success_lookup_transport[local]:
   (do
      (if nr then
         case cx.nonreentrant_slot of
-          NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+          NONE => raise (Error (TypeError "nonreentrant slot missing"))
         | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
       else return ());
      send_call_value mut cx;
@@ -725,7 +725,7 @@ Theorem call_external_function_deploy_success_cases[local]:
         (do
            (if nr then
               case cx.nonreentrant_slot of
-                NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+                NONE => raise (Error (TypeError "nonreentrant slot missing"))
               | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
             else return ());
            send_call_value mut cx;
@@ -741,7 +741,7 @@ Theorem call_external_function_deploy_success_cases[local]:
         (do
            (if nr then
               case cx.nonreentrant_slot of
-                NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+                NONE => raise (Error (TypeError "nonreentrant slot missing"))
               | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
             else return ());
            send_call_value mut cx;
@@ -801,7 +801,7 @@ QED
 Theorem call_lock_action_preserves_immutables[local]:
   (if nr then
      case cx.nonreentrant_slot of
-       NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       NONE => raise (Error (TypeError "nonreentrant slot missing"))
      | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
    else return ()) st = (res,st') ==>
   st'.immutables = st.immutables
@@ -902,7 +902,7 @@ QED
 Theorem call_lock_action_preserves_accounts_c53[local]:
   (if nr then
      case cx.nonreentrant_slot of
-       NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       NONE => raise (Error (TypeError "nonreentrant slot missing"))
      | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
    else return ()) st = (res,st') ==>
   st'.accounts = st.accounts
@@ -919,7 +919,7 @@ QED
 Theorem call_lock_action_preserves_scopes_c53[local]:
   (if nr then
      case cx.nonreentrant_slot of
-       NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       NONE => raise (Error (TypeError "nonreentrant slot missing"))
      | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
    else return ()) st = (res,st') ==>
   st'.scopes = st.scopes
@@ -935,7 +935,7 @@ Theorem call_lock_send_prefix_body_state_ready_c53[local]:
   (do
      (if nr then
         case cx.nonreentrant_slot of
-          NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+          NONE => raise (Error (TypeError "nonreentrant slot missing"))
         | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
       else return ());
      send_call_value mut cx
@@ -954,10 +954,11 @@ Proof
 QED
 
 Theorem call_lock_action_no_type_error_c53[local]:
+  (nr ==> cx.nonreentrant_slot <> NONE) ==>
   no_type_error_eval
     ((if nr then
         case cx.nonreentrant_slot of
-          NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+          NONE => raise (Error (TypeError "nonreentrant slot missing"))
         | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
       else return ()) st)
 Proof
@@ -1002,7 +1003,7 @@ Theorem call_lock_send_eval_prefix_no_type_error_c53[local]:
     (do
        (if nr then
           case cx.nonreentrant_slot of
-            NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+            NONE => raise (Error (TypeError "nonreentrant slot missing"))
           | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
         else return ());
        send_call_value mut cx;
@@ -1028,7 +1029,7 @@ Proof
        bind_def, ignore_bind_def] >>
   Cases_on `(if nr then
                case (initial_evaluation_context am.sources am.layouts tx src).nonreentrant_slot of
-                 NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+                 NONE => raise (Error (TypeError "nonreentrant slot missing"))
                | SOME slot => acquire_nonreentrant_lock
                    (initial_evaluation_context am.sources am.layouts tx src).txn.target slot
                    (mut = View \/ mut = Pure)
@@ -1056,15 +1057,22 @@ Proof
          (send_call_value mut (initial_evaluation_context am.sources am.layouts tx src) r)` by
         simp[send_call_value_no_type_error_c53] >>
       gvs[vyperTypeExprSoundnessTheory.no_type_error_eval_def]) >>
+  `nr ==> (initial_evaluation_context am.sources am.layouts tx src).nonreentrant_slot <> NONE` by (
+    strip_tac >>
+    `check_function_body am.layouts tx.target mods art src mut nr args dflts ret body` by
+      metis_tac[check_contract_function_body_MEM] >>
+    gvs[check_function_body_def, initial_evaluation_context_def,
+        optionTheory.IS_SOME_EXISTS]) >>
   `no_type_error_eval
      ((if nr then
          case (initial_evaluation_context am.sources am.layouts tx src).nonreentrant_slot of
-           NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+           NONE => raise (Error (TypeError "nonreentrant slot missing"))
          | SOME slot => acquire_nonreentrant_lock
              (initial_evaluation_context am.sources am.layouts tx src).txn.target slot
              (mut = View \/ mut = Pure)
-       else return ()) (initial_state am [scope]))` by
-    simp[call_lock_action_no_type_error_c53] >>
+       else return ()) (initial_state am [scope]))` by (
+    irule call_lock_action_no_type_error_c53 >>
+    qpat_assum `nr ==> _` ACCEPT_TAC) >>
   gvs[vyperTypeExprSoundnessTheory.no_type_error_eval_def]
 QED
 
@@ -1086,7 +1094,7 @@ Proof
      (do
         (if nr then
            case (initial_evaluation_context am.sources am.layouts tx src).nonreentrant_slot of
-             NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+             NONE => raise (Error (TypeError "nonreentrant slot missing"))
            | SOME slot => acquire_nonreentrant_lock
                (initial_evaluation_context am.sources am.layouts tx src).txn.target slot
                (mut = View \/ mut = Pure)
@@ -1180,7 +1188,7 @@ Theorem call_body_prefix_preserves_immutables_dom[local]:
   (do
      (if nr then
         case cx.nonreentrant_slot of
-          NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+          NONE => raise (Error (TypeError "nonreentrant slot missing"))
         | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
       else return ());
      send_call_value mut cx;
@@ -4080,7 +4088,7 @@ QED
 Theorem call_lock_action_preserves_scopes[local]:
   (if nr then
      case cx.nonreentrant_slot of
-       NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       NONE => raise (Error (TypeError "nonreentrant slot missing"))
      | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
    else return ()) st = (res,st') ==>
   st'.scopes = st.scopes
@@ -4096,7 +4104,7 @@ Theorem call_lock_send_prefix_body_state_ready[local]:
   (do
      (if nr then
         case cx.nonreentrant_slot of
-          NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+          NONE => raise (Error (TypeError "nonreentrant slot missing"))
         | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
       else return ());
      send_call_value mut cx

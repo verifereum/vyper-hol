@@ -692,7 +692,7 @@ Theorem lock_acquire_cond_scopes_dom[local]:
   ∀nr slot_opt addr is_view st res st'.
     (if nr then
        case slot_opt of
-       | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | NONE => raise (Error (TypeError "nonreentrant slot missing"))
        | SOME slot => acquire_nonreentrant_lock addr slot is_view
      else return ()) st = (res,st') ⇒
     MAP FDOM st'.scopes = MAP FDOM st.scopes

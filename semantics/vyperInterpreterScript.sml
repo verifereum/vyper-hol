@@ -1261,7 +1261,7 @@ Definition evaluate_def:
        Lock operates only on transient storage, independent of scopes. *)
     (if nr then
        case cx.nonreentrant_slot of
-       | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | NONE => raise (Error (TypeError "nonreentrant slot missing"))
        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
      else return ());
     cxf <- push_function (src_id_opt, fn) env cx;
@@ -1682,7 +1682,7 @@ Definition call_external_function_def:
    let is_view = (mut = View ∨ mut = Pure) in
    let lock_action = if nr then
      case cx.nonreentrant_slot of
-     | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+     | NONE => raise (Error (TypeError "nonreentrant slot missing"))
      | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
      else return () in
    let unlock_action = if nr ∧ ¬is_view then

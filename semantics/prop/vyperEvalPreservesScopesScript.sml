@@ -1389,7 +1389,7 @@ Theorem lock_acquire_cond_scopes_immutables[local]:
   ∀nr slot_opt addr is_view s res s'.
     (if nr then
        case slot_opt of
-         NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+         NONE => raise (Error (TypeError "nonreentrant slot missing"))
        | SOME slot => acquire_nonreentrant_lock addr slot is_view
      else return ()) s = (res, s') ⇒
     s'.scopes = s.scopes ∧ s'.immutables = s.immutables
@@ -2149,7 +2149,7 @@ Theorem intcall_body_ih_pack[local]:
          "IntCall eval ret" s10 = (INL rtv,t8) /\
        (if nr then
           case cx.nonreentrant_slot of
-            NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+            NONE => raise (Error (TypeError "nonreentrant slot missing"))
           | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
         else return ()) s11 = (INL (),t9)) /\
       eval_stmts cxf body st = (res,st')) ==>
@@ -2164,7 +2164,7 @@ Theorem intcall_body_ih_pack[local]:
     (INL rtv0,r2 with scopes := r1.scopes) ==>
   (if nr then
      case cx.nonreentrant_slot of
-       NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       NONE => raise (Error (TypeError "nonreentrant slot missing"))
      | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
    else return ()) (r2 with scopes := r1.scopes) = (INL (),r_lock) ==>
   !st res st'. eval_stmts cxf body st = (res,st') ==> preserves_tv cxf st st'
@@ -2193,7 +2193,7 @@ Theorem intcall_body_ih_resume_pack[local]:
          "IntCall eval ret" s10 = (INL rtv,t8) /\
        (if nr then
           case cx.nonreentrant_slot of
-            NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+            NONE => raise (Error (TypeError "nonreentrant slot missing"))
           | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
         else return ()) s11 = (INL (),t9)) /\
       eval_stmts (cx with stk updated_by CONS (src_id_opt,fn)) body' st = (res,st')) ==>
@@ -2209,7 +2209,7 @@ Theorem intcall_body_ih_resume_pack[local]:
     (INL rtv0,r2 with scopes := r1.scopes) ==>
   (if nr then
      case cx.nonreentrant_slot of
-       NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       NONE => raise (Error (TypeError "nonreentrant slot missing"))
      | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
    else return ()) (r2 with scopes := r1.scopes) = (INL (),r_lock) ==>
   !st res st'.
@@ -2240,7 +2240,7 @@ Theorem intcall_body_ih_resume_point[local]:
          "IntCall eval ret" s10 = (INL rtv,t8) /\
        (if nr then
           case cx.nonreentrant_slot of
-            NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+            NONE => raise (Error (TypeError "nonreentrant slot missing"))
           | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
         else return ()) s11 = (INL (),t9)) /\
       eval_stmts (cx with stk updated_by CONS (src_id_opt,fn)) body' st = (res,st')) ==>
@@ -2256,7 +2256,7 @@ Theorem intcall_body_ih_resume_point[local]:
     (INL rtv0,r2 with scopes := r1.scopes) ==>
   (if nr then
      case cx.nonreentrant_slot of
-       NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       NONE => raise (Error (TypeError "nonreentrant slot missing"))
      | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
    else return ()) (r2 with scopes := r1.scopes) = (INL (),r_lock) ==>
   eval_stmts (cx with stk updated_by CONS (src_id_opt,fn)) body' st = (res,st') ==>

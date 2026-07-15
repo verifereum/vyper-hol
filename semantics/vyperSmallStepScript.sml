@@ -672,7 +672,7 @@ Definition apply_vals_def:
       (* Acquire lock BEFORE push_function so scopes are unmodified on failure *)
       (if nr then
          case cx.nonreentrant_slot of
-         | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+         | NONE => raise (Error (TypeError "nonreentrant slot missing"))
          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
        else return ());
       cxf <- push_function src_fn env (cx with stk updated_by TL);
