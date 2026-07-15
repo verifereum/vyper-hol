@@ -36,11 +36,11 @@ Proof
 QED
 
 Theorem get_immutables_error:
-  get_immutables x y z = (INR e, s) ==> (?m. e = Error (RuntimeError m))
+  get_immutables x y z = (INR e, s) ==> ?m. e = Error m
 Proof
   rw[get_immutables_def, bind_apply, AllCaseEqs(), return_def,
      get_address_immutables_def] >>
-  drule lift_option_error >> rw[]
+  drule lift_option_type_error >> rw[]
 QED
 
 Theorem set_storage_backend_no_error[simp]:

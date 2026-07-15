@@ -964,7 +964,8 @@ Proof
   Cases_on `ALOOKUP st'.immutables cx.txn.target` >>
   Cases_on `ALOOKUP x src_id_opt` >>
   gvs[get_immutables_def, get_address_immutables_def, bind_def, return_def,
-      lift_option_def, get_source_immutables_def, AllCaseEqs()]
+      lift_option_type_def, lift_option_def, get_source_immutables_def,
+      AllCaseEqs()]
 QED
 
 Theorem subscript_vtype_index_get_Value_no_type_error[local]:
@@ -3331,15 +3332,16 @@ Resume eval_all_type_sound_mutual[BaseTarget_TopLevel]:
                      location_runtime_typed_def, target_path_type_refl,
                      optionTheory.IS_SOME_EXISTS] >>
     gvs[IS_SOME_EXISTS, get_immutables_def, get_address_immutables_def,
-        lift_option_def, return_def, get_source_immutables_def, AllCaseEqs()] >>
+        lift_option_type_def, lift_option_def, return_def,
+        get_source_immutables_def, AllCaseEqs()] >>
     Cases_on `ALOOKUP st.immutables cx.txn.target` >> gvs[return_def, raise_def] >>
     PairCases_on `x` >> gvs[] >>
     qexists_tac `Type ty` >> simp[target_path_type_refl] >>
     qexists_tac `case ALOOKUP x' src_id_opt of NONE => FEMPTY | SOME imm => imm` >>
     qexists_tac `x1` >> qexists_tac `x0` >>
     gvs[env_consistent_def, env_context_consistent_def, env_immutables_consistent_def,
-        get_immutables_def, get_address_immutables_def, lift_option_def,
-        bind_def, return_def, get_source_immutables_def] >>
+        get_immutables_def, get_address_immutables_def, lift_option_type_def,
+        lift_option_def, bind_def, return_def, get_source_immutables_def] >>
     qpat_x_assum `!src id ty' tv v. _`
       (qspecl_then [`src_id_opt`, `string_to_num id`, `ty`, `x0`, `x1`] mp_tac) >>
     simp[base_target_value_shape_def, optionTheory.IS_SOME_EXISTS] >>
@@ -3349,7 +3351,8 @@ Resume eval_all_type_sound_mutual[BaseTarget_TopLevel]:
       gvs[env_consistent_def, env_context_consistent_def] >>
       Cases_on `vt` >> gvs[] >> metis_tac[]) >>
     qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
-    simp[Once evaluate_def, bind_def, lift_option_type_def, return_def, raise_def] >>
+    simp[Once evaluate_def, bind_def, lift_option_type_def, return_def, raise_def,
+         get_immutables_def, get_address_immutables_def] >>
     Cases_on `get_module_code cx src_id_opt` >> gvs[return_def, raise_def] >>
     Cases_on `is_immutable_decl (string_to_num id) code` >- (
       drule_all nonbare_toplevel_not_immutable >> simp[]) >>
@@ -3362,7 +3365,8 @@ Resume eval_all_type_sound_mutual[BaseTarget_TopLevel]:
     first_x_assum drule >>
     rw[well_formed_vtype_def, well_formed_type_def] >>
     gvs[IS_SOME_EXISTS, target_path_type_refl, base_target_value_shape_def] >>
-    TRY (qexists_tac `vt` >> simp[location_runtime_typed_def, target_path_type_refl])
+    TRY (qexists_tac `vt` >> simp[location_runtime_typed_def, target_path_type_refl]) >>
+    TRY (rw[lift_option_type_def, return_def])
   ]
 QED
 

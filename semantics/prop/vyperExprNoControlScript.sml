@@ -226,7 +226,7 @@ Proof
   >> simp[get_immutables_def, get_address_immutables_def,
           bind_def, get_accounts_def, return_def, prod_CASE_rator, sum_CASE_rator]
   >> strip_tac >> gvs[AllCaseEqs()]
-  >> imp_res_tac lift_option_no_control
+  >> imp_res_tac lift_option_type_no_control
 QED
 
 Theorem lookup_global_no_control:
@@ -326,7 +326,7 @@ Proof
     LET_THM, get_address_immutables_def, set_address_immutables_def,
     prod_CASE_rator, sum_CASE_rator, option_CASE_rator]
   >> strip_tac >> gvs[AllCaseEqs()]
-  >> imp_res_tac lift_option_no_control
+  >> imp_res_tac lift_option_type_no_control
 QED
 
 Theorem resolve_array_element_no_control:

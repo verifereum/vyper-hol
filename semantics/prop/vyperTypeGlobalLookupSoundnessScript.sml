@@ -24,16 +24,17 @@ Theorem get_immutables_success:
     st' = st
 Proof
   rw[get_immutables_def, get_address_immutables_def, bind_def, return_def,
-     lift_option_def, raise_def] >>
+     lift_option_type_def, lift_option_def, raise_def] >>
   Cases_on `ALOOKUP st.immutables cx.txn.target` >> gvs[return_def, raise_def]
 QED
-Theorem get_immutables_no_type_error:
-  !cx src st e st' msg.
+Theorem get_immutables_error:
+  !cx src st e st'.
     get_immutables cx src st = (INR e, st') ==>
-    e <> Error (TypeError msg)
+    ALOOKUP st.immutables cx.txn.target = NONE /\
+    e = Error (TypeError "get_address_immutables") /\ st' = st
 Proof
   rw[get_immutables_def, get_address_immutables_def, bind_def,
-     lift_option_def, return_def, raise_def] >>
+     lift_option_type_def, return_def, raise_def] >>
   Cases_on `ALOOKUP st.immutables cx.txn.target` >> gvs[return_def, raise_def]
 QED
 
@@ -105,17 +106,17 @@ Proof
   simp[]
 QED
 
-Theorem TopLevelName_missing_address_immutables_RuntimeError:
+Theorem TopLevelName_missing_address_immutables_TypeError:
   !cx st src id ty code.
     get_module_code cx src = SOME code /\
     find_var_decl_by_num (string_to_num id) code = NONE /\
     ALOOKUP st.immutables cx.txn.target = NONE ==>
     eval_expr cx (TopLevelName ty (src,id)) st =
-      (INR (Error (RuntimeError "get_address_immutables")), st)
+      (INR (Error (TypeError "get_address_immutables")), st)
 Proof
   simp[Once evaluate_def, Once lookup_global_def, bind_def,
        lift_option_type_def, get_immutables_def, get_address_immutables_def,
-       lift_option_def, return_def, raise_def]
+       return_def, raise_def]
 QED
 
 Theorem TopLevelName_missing_immutable_branch_TypeError:
@@ -223,8 +224,13 @@ Proof
           simp[]) >>
       strip_tac >> gvs[return_def, no_type_error_result_def]) >>
   simp[bind_def, return_def, raise_def] >>
-  strip_tac >> gvs[no_type_error_result_def] >>
-  metis_tac[get_immutables_no_type_error]
+  strip_tac >>
+  drule get_immutables_error >> strip_tac >> gvs[] >>
+  `F` by (
+    qspecl_then [`env`, `cx`, `r`, `src`, `id`, `ty`, `code`] mp_tac
+      TopLevelName_missing_immutable_impossible >>
+    simp[get_source_immutables_def]) >>
+  simp[]
 QED
 Theorem lookup_global_TopLevelName_find_NONE_success_typed:
   !env cx st src id ty code tvl st'.

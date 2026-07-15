@@ -273,7 +273,8 @@ Proof
   rpt gen_tac
   \\ simp[vyperStateTheory.get_immutables_def, vyperStateTheory.bind_def,
           vyperStateTheory.get_address_immutables_def,
-          vyperStateTheory.lift_option_def, vyperStateTheory.return_def, vyperStateTheory.raise_def, set_storage_immutables]
+          vyperStateTheory.lift_option_def, vyperStateTheory.lift_option_type_def,
+          vyperStateTheory.return_def, vyperStateTheory.raise_def, set_storage_immutables]
   \\ rpt CASE_TAC \\ gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def]
 QED
 

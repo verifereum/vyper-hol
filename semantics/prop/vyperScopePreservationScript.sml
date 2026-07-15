@@ -81,7 +81,7 @@ QED
 Theorem get_address_immutables_scopes:
   !cx st res st'. get_address_immutables cx st = (res, st') ==> st'.scopes = st.scopes
 Proof
-  rw[get_address_immutables_def, lift_option_def] >>
+  rw[get_address_immutables_def, lift_option_type_def, lift_option_def] >>
   Cases_on `ALOOKUP st.immutables cx.txn.target` >> fs[return_def, raise_def]
 QED
 
@@ -133,7 +133,8 @@ QED
 Theorem get_immutables_scopes:
   !cx src st res st'. get_immutables cx src st = (res, st') ==> st'.scopes = st.scopes
 Proof
-  rw[get_immutables_def, bind_def, return_def, get_address_immutables_def, lift_option_def] >>
+  rw[get_immutables_def, bind_def, return_def, get_address_immutables_def,
+     lift_option_type_def, lift_option_def] >>
   Cases_on `ALOOKUP st.immutables cx.txn.target` >> fs[return_def, raise_def]
 QED
 
@@ -176,7 +177,7 @@ Theorem set_immutable_scopes:
   !cx src n tv v st res st'. set_immutable cx src n tv v st = (res, st') ==> st'.scopes = st.scopes
 Proof
   rw[set_immutable_def, bind_def, return_def, get_address_immutables_def,
-     set_address_immutables_def, lift_option_def] >>
+     set_address_immutables_def, lift_option_type_def, lift_option_def] >>
   Cases_on `ALOOKUP st.immutables cx.txn.target` >> gvs[raise_def, return_def]
 QED
 

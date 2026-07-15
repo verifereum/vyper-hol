@@ -228,11 +228,16 @@ Proof
   Cases_on `assign_subscripts x'0 x'1 (REVERSE is) ao` >>
   simp[lift_sum_def, return_def, raise_def] >>
   strip_tac >> gvs[preserves_immutables_dom_refl] >>
+  TRY (qpat_x_assum `lift_option_type (SOME _) _ _ = (INR _,_)` mp_tac >>
+       simp[lift_option_type_def, return_def, raise_def] >> NO_TAC) >>
   Cases_on `set_immutable cx src_id_opt (string_to_num id) x'0 x' st` >>
-  Cases_on `q` >> gvs[] >-
-  (imp_res_tac assign_result_state >> gvs[] >>
-   gvs[set_immutable_def, bind_def, get_address_immutables_def, lift_option_def,
-       set_address_immutables_def, return_def, raise_def, LET_THM,
+  Cases_on `q` >> gvs[lift_option_type_def, return_def, raise_def] >-
+  (TRY (qpat_x_assum `lift_option_type (SOME x) _ _ = (INR _,_)` mp_tac >>
+        simp[lift_option_type_def, return_def, raise_def] >> NO_TAC) >>
+   imp_res_tac assign_result_state >> gvs[] >>
+   gvs[set_immutable_def, bind_def, get_address_immutables_def,
+       lift_option_type_def, lift_option_def, set_address_immutables_def,
+       return_def, raise_def, LET_THM,
        AllCaseEqs()] >>
    simp[preserves_immutables_dom_def] >> conj_tac
    >- (rpt strip_tac >>
@@ -246,8 +251,9 @@ Proof
       TRY (Cases_on `src = src_id_opt` >> gvs[]) >>
       Cases_on `n = string_to_num id` >>
       gvs[get_source_immutables_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
-  gvs[set_immutable_def, bind_def, get_address_immutables_def, lift_option_def,
-      set_address_immutables_def, return_def, raise_def, LET_THM,
+  gvs[set_immutable_def, bind_def, get_address_immutables_def,
+      lift_option_type_def, lift_option_def, set_address_immutables_def,
+      return_def, raise_def, LET_THM,
       AllCaseEqs(), preserves_immutables_dom_refl]
 QED
 
