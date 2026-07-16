@@ -12,7 +12,7 @@ Ancestors
   vyperTypeSystem vyperTypeContract vyperTypeInvariants vyperTypeValues vyperTypeBindArguments
   vyperTypeStmtSoundness vyperTypeInitialState vyperPureExpr vyperEvalPreservesScopes vyperEvalExprPreservesScopesDom
   vyperEvalPreservesImmutablesDom vyperScopePreservation vyperStatePreservation
-  vyperExprNoControl
+  vyperExprNoControl vyperTypeEvalSoundness
   vyperTypeContractStaticMaps vyperTypeContractContext
   vyperTypeContractFunction vyperTypeContractGetter
 Libs
@@ -978,6 +978,30 @@ Proof
   Cases_on `cx.nonreentrant_slot` >> gvs[raise_def, no_control_exc_def] >>
   strip_tac >> drule acquire_nonreentrant_lock_no_control >>
   simp[no_control_exc_def]
+QED
+
+Theorem call_lock_send_eval_no_loop_control_c53[local]:
+  stmts_no_control_escape body /\
+  (do
+     (if nr then
+        case cx.nonreentrant_slot of
+          NONE => raise (Error (TypeError "nonreentrant slot missing"))
+        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
+      else return ());
+     send_call_value mut cx;
+     eval_stmts cx body
+   od st) = (INR exc,st') ==>
+  exc <> BreakException /\ exc <> ContinueException
+Proof
+  rw[bind_def, ignore_bind_def] >>
+  gvs[AllCaseEqs()] >>
+  imp_res_tac call_lock_action_no_control_c53 >>
+  imp_res_tac send_call_value_no_control_c53 >>
+  imp_res_tac stmts_no_control_escape_eval_stmts_no_loop_control >>
+  gvs[no_control_exc_def] >>
+  Cases_on `cx.nonreentrant_slot` >> gvs[raise_def, no_control_exc_def] >>
+  imp_res_tac acquire_nonreentrant_lock_no_control >>
+  gvs[no_control_exc_def]
 QED
 
 Theorem call_lock_action_no_type_error_c53[local]:
