@@ -62,7 +62,7 @@ QED
 Theorem get_address_immutables_state:
   !cx st res st'. get_address_immutables cx st = (res, st') ==> st' = st
 Proof
-  rw[get_address_immutables_def, lift_option_def] >>
+  rw[get_address_immutables_def, lift_option_type_def] >>
   Cases_on `ALOOKUP st.immutables cx.txn.target` >> fs[return_def, raise_def]
 QED
 
@@ -84,7 +84,7 @@ QED
 Theorem get_immutables_state:
   !cx src st res st'. get_immutables cx src st = (res, st') ==> st' = st
 Proof
-  rw[get_immutables_def, bind_def, return_def, get_address_immutables_def, lift_option_def] >>
+  rw[get_immutables_def, bind_def, return_def, get_address_immutables_def, lift_option_type_def, lift_option_def] >>
   Cases_on `ALOOKUP st.immutables cx.txn.target` >> fs[return_def, raise_def]
 QED
 

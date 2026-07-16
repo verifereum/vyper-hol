@@ -254,15 +254,27 @@ val () = lift_option_type_def
   |> SRULE [FUN_EQ_THM, option_CASE_rator]
   |> cv_auto_trans;
 
+Theorem lift_option_type_SOME[simp]:
+  lift_option_type (SOME v) msg st = (INL v, st)
+Proof
+  simp[lift_option_type_def, return_def]
+QED
+
+Theorem lift_option_type_NONE[simp]:
+  lift_option_type NONE msg st = (INR (Error (TypeError msg)), st)
+Proof
+  simp[lift_option_type_def, raise_def]
+QED
+
 (* reading from the state *)
 
 Definition get_address_immutables_def:
   get_address_immutables cx st =
-    lift_option (ALOOKUP st.immutables cx.txn.target) "get_address_immutables" st
+    lift_option_type (ALOOKUP st.immutables cx.txn.target) "get_address_immutables" st
 End
 
 val () = get_address_immutables_def
-  |> SRULE [lift_option_def, option_CASE_rator]
+  |> SRULE [lift_option_type_def, option_CASE_rator]
   |> cv_auto_trans;
 
 (* Helper: get immutables for a source_id, or empty if not present *)
@@ -386,7 +398,7 @@ val () = read_storage_slot_def
 Definition write_storage_slot_def:
   write_storage_slot cx is_transient slot tv v = do
     storage <- get_storage_backend cx is_transient;
-    writes <- lift_option (encode_value tv v) "write_storage_slot encode";
+    writes <- lift_option_type (encode_value tv v) "write_storage_slot encode";
     storage' <<- apply_writes slot writes storage;
     set_storage_backend cx is_transient storage'
   od

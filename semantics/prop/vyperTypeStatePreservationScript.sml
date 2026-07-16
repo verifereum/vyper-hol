@@ -761,8 +761,9 @@ Theorem set_immutable_preserves_env_consistent:
   set_immutable cx src n tv v st = (res, st') ==>
   env_consistent env cx st'
 Proof
-  rw[set_immutable_def, get_address_immutables_def, bind_def, lift_option_def,
-     set_address_immutables_def, return_def, raise_def, AllCaseEqs(), LET_THM] >>
+  rw[set_immutable_def, get_address_immutables_def, bind_def,
+     lift_option_type_def, lift_option_def, set_address_immutables_def,
+     return_def, raise_def, AllCaseEqs(), LET_THM] >>
   qpat_x_assum `(case ALOOKUP _ _ of NONE => _ | SOME _ => _) _ = _` mp_tac >>
   Cases_on `ALOOKUP st.immutables cx.txn.target` >>
   gvs[return_def, raise_def] >> strip_tac >> gvs[] >>
@@ -796,8 +797,9 @@ Theorem set_immutable_preserves_state_well_typed:
   set_immutable cx src n tv v st = (res, st') ==>
   state_well_typed st'
 Proof
-  rw[set_immutable_def, get_address_immutables_def, bind_def, lift_option_def,
-     set_address_immutables_def, return_def, raise_def, AllCaseEqs(), LET_THM] >>
+  rw[set_immutable_def, get_address_immutables_def, bind_def,
+     lift_option_type_def, lift_option_def, set_address_immutables_def,
+     return_def, raise_def, AllCaseEqs(), LET_THM] >>
   qpat_x_assum `(case ALOOKUP _ _ of _ => _) _ = _` mp_tac >>
   Cases_on `ALOOKUP st.immutables cx.txn.target` >>
   gvs[return_def, raise_def] >> strip_tac >> gvs[] >>
@@ -932,7 +934,8 @@ Proof
     Cases_on `ALOOKUP st'.immutables cx.txn.target` >>
     Cases_on `ALOOKUP x src_id_opt` >>
     gvs[get_immutables_def, get_address_immutables_def, bind_def, return_def,
-        lift_option_def, get_source_immutables_def, AllCaseEqs()]) >>
+        lift_option_type_def, lift_option_def, get_source_immutables_def,
+        AllCaseEqs()]) >>
   metis_tac[] >>
   NO_TAC
 QED
@@ -1256,8 +1259,8 @@ Resume assign_target_preserves_state_well_typed_mutual[ImmutableVar]:
     gvs[env_consistent_def, env_immutables_consistent_def] >>
     first_x_assum drule >>
     gvs[get_immutables_def, bind_apply, return_def, AllCaseEqs()] >>
-    gvs[get_address_immutables_def, AllCaseEqs(),
-        option_CASE_rator, lift_option_def, raise_def, return_def] >>
+    gvs[get_address_immutables_def, AllCaseEqs(), option_CASE_rator,
+        lift_option_type_def, lift_option_def, raise_def, return_def] >>
     gvs[env_context_consistent_def] >> strip_tac >>
     drule_all state_well_typed_immutables_ALOOKUP >> strip_tac >>
     drule_all imms_well_typed_get_source_immutables >> simp[]
@@ -1295,7 +1298,8 @@ Resume assign_target_preserves_state_well_typed_mutual[ImmutableVar]:
         simp[]) >>
       qpat_x_assum `set_immutable _ _ _ _ _ _ = _` mp_tac >>
       simp[set_immutable_def, get_address_immutables_def, bind_def,
-           lift_option_def, set_address_immutables_def, return_def,
+           lift_option_type_def, lift_option_def, set_address_immutables_def,
+           return_def,
            raise_def, AllCaseEqs(), LET_THM] >>
       strip_tac >> gvs[] >>
       qpat_x_assum `(case ALOOKUP _ _ of NONE => _ | SOME _ => _) _ = _` mp_tac >>
@@ -1309,7 +1313,8 @@ Resume assign_target_preserves_state_well_typed_mutual[ImmutableVar]:
       rpt strip_tac >> first_x_assum drule_all >> simp[])
   >- (qpat_x_assum `set_immutable _ _ _ _ _ _ = _` mp_tac >>
       simp[set_immutable_def, get_address_immutables_def, bind_def,
-           lift_option_def, set_address_immutables_def, return_def,
+           lift_option_type_def, lift_option_def, set_address_immutables_def,
+           return_def,
            raise_def, AllCaseEqs(), LET_THM] >>
       Cases_on `ALOOKUP s''.immutables cx.txn.target` >>
       gvs[return_def, raise_def] >> strip_tac >> gvs[]) >>
@@ -3498,8 +3503,8 @@ Resume assign_target_sound_mutual[sound_ImmutableVar]:
     fs[runtime_consistent_def, env_consistent_def, env_immutables_consistent_def] >>
     first_x_assum drule >>
     gvs[get_immutables_def, bind_apply, return_def, AllCaseEqs()] >>
-    gvs[get_address_immutables_def, AllCaseEqs(),
-        option_CASE_rator, lift_option_def, raise_def, return_def] >>
+    gvs[get_address_immutables_def, AllCaseEqs(), option_CASE_rator,
+        lift_option_type_def, lift_option_def, raise_def, return_def] >>
     gvs[env_context_consistent_def] >>
     drule_all state_well_typed_immutables_ALOOKUP >> strip_tac >>
     drule_all imms_well_typed_get_source_immutables >> simp[]) >>
@@ -3658,8 +3663,8 @@ Proof
       gvs[env_consistent_def, env_immutables_consistent_def] >>
       first_x_assum drule >>
       gvs[get_immutables_def, bind_apply, return_def, AllCaseEqs()] >>
-      gvs[get_address_immutables_def, AllCaseEqs(),
-          option_CASE_rator, lift_option_def, raise_def, return_def] >>
+      gvs[get_address_immutables_def, AllCaseEqs(), option_CASE_rator,
+          lift_option_type_def, lift_option_def, raise_def, return_def] >>
       sg `current_module cx = env.current_src` >- (
         gvs[current_module_def, env_context_consistent_def]) >>
       gvs[env_context_consistent_def] >> strip_tac >>

@@ -226,7 +226,7 @@ Proof
   >> simp[get_immutables_def, get_address_immutables_def,
           bind_def, get_accounts_def, return_def, prod_CASE_rator, sum_CASE_rator]
   >> strip_tac >> gvs[AllCaseEqs()]
-  >> imp_res_tac lift_option_no_control
+  >> imp_res_tac lift_option_type_no_control
 QED
 
 Theorem lookup_global_no_control:
@@ -291,7 +291,7 @@ Proof
          get_accounts_def, get_transient_storage_def,
          update_accounts_def, update_transient_def,
          bind_def, return_def, prod_CASE_rator, sum_CASE_rator]
-  >> imp_res_tac lift_option_no_control
+  >> imp_res_tac lift_option_type_no_control
 QED
 
 Theorem assign_result_no_control:
@@ -326,7 +326,7 @@ Proof
     LET_THM, get_address_immutables_def, set_address_immutables_def,
     prod_CASE_rator, sum_CASE_rator, option_CASE_rator]
   >> strip_tac >> gvs[AllCaseEqs()]
-  >> imp_res_tac lift_option_no_control
+  >> imp_res_tac lift_option_type_no_control
 QED
 
 Theorem resolve_array_element_no_control:
@@ -572,7 +572,7 @@ Theorem int_call_tail_no_control[local]:
     rtv <- lift_option_type (evaluate_type all_tenv ret) "IntCall eval ret";
     (if nr then
        case cx.nonreentrant_slot of
-       | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | NONE => raise (Error (TypeError "nonreentrant slot missing"))
        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
      else return ());
     cxf <- push_function (src_id_opt, fn) env cx;

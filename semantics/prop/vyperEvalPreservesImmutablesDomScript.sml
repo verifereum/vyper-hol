@@ -228,11 +228,16 @@ Proof
   Cases_on `assign_subscripts x'0 x'1 (REVERSE is) ao` >>
   simp[lift_sum_def, return_def, raise_def] >>
   strip_tac >> gvs[preserves_immutables_dom_refl] >>
+  TRY (qpat_x_assum `lift_option_type (SOME _) _ _ = (INR _,_)` mp_tac >>
+       simp[lift_option_type_def, return_def, raise_def] >> NO_TAC) >>
   Cases_on `set_immutable cx src_id_opt (string_to_num id) x'0 x' st` >>
-  Cases_on `q` >> gvs[] >-
-  (imp_res_tac assign_result_state >> gvs[] >>
-   gvs[set_immutable_def, bind_def, get_address_immutables_def, lift_option_def,
-       set_address_immutables_def, return_def, raise_def, LET_THM,
+  Cases_on `q` >> gvs[lift_option_type_def, return_def, raise_def] >-
+  (TRY (qpat_x_assum `lift_option_type (SOME x) _ _ = (INR _,_)` mp_tac >>
+        simp[lift_option_type_def, return_def, raise_def] >> NO_TAC) >>
+   imp_res_tac assign_result_state >> gvs[] >>
+   gvs[set_immutable_def, bind_def, get_address_immutables_def,
+       lift_option_type_def, lift_option_def, set_address_immutables_def,
+       return_def, raise_def, LET_THM,
        AllCaseEqs()] >>
    simp[preserves_immutables_dom_def] >> conj_tac
    >- (rpt strip_tac >>
@@ -246,8 +251,9 @@ Proof
       TRY (Cases_on `src = src_id_opt` >> gvs[]) >>
       Cases_on `n = string_to_num id` >>
       gvs[get_source_immutables_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
-  gvs[set_immutable_def, bind_def, get_address_immutables_def, lift_option_def,
-      set_address_immutables_def, return_def, raise_def, LET_THM,
+  gvs[set_immutable_def, bind_def, get_address_immutables_def,
+      lift_option_type_def, lift_option_def, set_address_immutables_def,
+      return_def, raise_def, LET_THM,
       AllCaseEqs(), preserves_immutables_dom_refl]
 QED
 
@@ -346,7 +352,7 @@ Theorem lock_acquire_cond_immutables[local]:
   ∀nr slot_opt addr is_view s res s'.
     (if nr then
        case slot_opt of
-         NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+         NONE => raise (Error (TypeError "nonreentrant slot missing"))
        | SOME slot => acquire_nonreentrant_lock addr slot is_view
      else return ()) s = (res, s') ⇒
     s'.immutables = s.immutables
@@ -466,7 +472,7 @@ Definition post_default_intcall_tail_def:
        is_view <<- (mut = View ∨ mut = Pure);
        (if nr then
           case cx.nonreentrant_slot of
-          | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+          | NONE => raise (Error (TypeError "nonreentrant slot missing"))
           | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
         else return ());
        cxf <- push_function (src_id_opt,fn) env cx;
@@ -495,7 +501,7 @@ Theorem post_default_intcall_tail_unfold[local]:
        is_view <<- (mut = View ∨ mut = Pure);
        (if nr then
           case cx.nonreentrant_slot of
-          | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+          | NONE => raise (Error (TypeError "nonreentrant slot missing"))
           | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
         else return ());
        cxf <- push_function (src_id_opt,fn) env cx;
@@ -525,7 +531,7 @@ Definition intcall_tail_body_provider_def:
         "IntCall eval ret" s_bind = (INL rtv,s_eval) ∧
       (if nr then
          case cx.nonreentrant_slot of
-         | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+         | NONE => raise (Error (TypeError "nonreentrant slot missing"))
          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View ∨ mut = Pure)
        else return ()) s_eval = (INL lk,s_lock) ∧
       push_function (src_id_opt,fn) env cx s_lock = (INL cx',s_push) ⇒
@@ -542,7 +548,7 @@ Theorem intcall_tail_body_provider_unfold[local]:
         "IntCall eval ret" s_bind = (INL rtv,s_eval) ∧
       (if nr then
          case cx.nonreentrant_slot of
-         | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+         | NONE => raise (Error (TypeError "nonreentrant slot missing"))
          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View ∨ mut = Pure)
        else return ()) s_eval = (INL lk,s_lock) ∧
       push_function (src_id_opt,fn) env cx s_lock = (INL cx',s_push) ⇒
@@ -1882,7 +1888,7 @@ Theorem intcall_tail_body_provider_from_generated_ih[local]:
       (is_view ⇔ mut0 = View ∨ mut0 = Pure) ∧
       (if nr0 then
          case cx.nonreentrant_slot of
-         | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+         | NONE => raise (Error (TypeError "nonreentrant slot missing"))
          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
        else return ()) s9 = (INL lk,t9) ∧
       push_function (src_id_opt,fn) env cx s10 = (INL cx0,t10) ⇒
@@ -1990,7 +1996,7 @@ Theorem intcall_post_default_setup_from_generated_ih[local]:
       (is_view ⇔ mut0 = View ∨ mut0 = Pure) ∧
       (if nr0 then
          case cx.nonreentrant_slot of
-         | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+         | NONE => raise (Error (TypeError "nonreentrant slot missing"))
          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
        else return ()) s9 = (INL lk,t9) ∧
       push_function (src_id_opt,fn) env cx s10 = (INL cx0,t10) ⇒
@@ -2194,7 +2200,7 @@ Theorem intcall_live_post_default_setup_from_generated_ih[local]:
       (is_view ⇔ mut0 = View ∨ mut0 = Pure) ∧
       (if nr0 then
          case cx.nonreentrant_slot of
-         | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+         | NONE => raise (Error (TypeError "nonreentrant slot missing"))
          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
        else return ()) s9 = (INL lk,t9) ∧
       push_function (src_id_opt,fn) env cx s10 = (INL cx0,t10) ⇒
@@ -2345,7 +2351,7 @@ Theorem intcall_case_live_post_default_setup_from_generated_ih[local]:
       (INL rtv,t'⁸') ∧ (is_view ⇔ mut = View ∨ mut = Pure) ∧
       (if nr then
          case cx.nonreentrant_slot of
-         | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+         | NONE => raise (Error (TypeError "nonreentrant slot missing"))
          | SOME slot =>
            acquire_nonreentrant_lock cx.txn.target slot is_view
        else return ()) s'¹¹' = (INL lk,t'⁹') ∧
@@ -2584,7 +2590,7 @@ Theorem case_IntCall_imm_dom[local]:
     (INL rtv,t'⁸') ∧ (is_view ⇔ mut = View ∨ mut = Pure) ∧
     (if nr then
        case cx.nonreentrant_slot of
-       | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | NONE => raise (Error (TypeError "nonreentrant slot missing"))
        | SOME slot =>
          acquire_nonreentrant_lock cx.txn.target slot is_view
      else return ()) s'¹¹' = (INL lk,t'⁹') ∧
@@ -2839,7 +2845,7 @@ Theorem intcall_mutual_tail_body_provider_from_generated_ih[local]:
       (is_view ⇔ mut0 = View ∨ mut0 = Pure) ∧
       (if nr0 then
          case cx.nonreentrant_slot of
-         | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+         | NONE => raise (Error (TypeError "nonreentrant slot missing"))
          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
        else return ()) s'¹¹' = (INL lk,t'⁹') ∧
       push_function (src_id_opt,fn) env cx s'¹²' = (INL cx',t'¹⁰') ⇒
@@ -2987,7 +2993,7 @@ Theorem intcall_mutual_live_tail_body_provider[local]:
       lift_option_type (bind_arguments all_tenv args0 (vs0 ++ dflt_vs0)) "IntCall bind_arguments" s7 = (INL env,t7) ∧
       lift_option_type (evaluate_type all_tenv ret0) "IntCall eval ret" s8 = (INL rtv,t8) ∧
       (is_view ⇔ mut0 = View ∨ mut0 = Pure) ∧
-      (if nr0 then case cx.nonreentrant_slot of NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+      (if nr0 then case cx.nonreentrant_slot of NONE => raise (Error (TypeError "nonreentrant slot missing"))
                  | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
        else return ()) s9 = (INL lk,t9) ∧
       push_function (src_id_opt,fn) env cx s10 = (INL cx0,t10) ⇒
@@ -3088,7 +3094,7 @@ Theorem case_IntCall_imm_dom_from_mutual_ih[local]:
       lift_option_type (bind_arguments all_tenv args0 (vs0 ++ dflt_vs0)) "IntCall bind_arguments" s7 = (INL env,t7) ∧
       lift_option_type (evaluate_type all_tenv ret0) "IntCall eval ret" s8 = (INL rtv,t8) ∧
       (is_view ⇔ mut0 = View ∨ mut0 = Pure) ∧
-      (if nr0 then case cx.nonreentrant_slot of NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+      (if nr0 then case cx.nonreentrant_slot of NONE => raise (Error (TypeError "nonreentrant slot missing"))
                  | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
        else return ()) s9 = (INL lk,t9) ∧
       push_function (src_id_opt,fn) env cx s10 = (INL cx0,t10) ⇒

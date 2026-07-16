@@ -20,7 +20,7 @@ Theorem get_address_immutables_scopes_fst[local]:
 Proof
   rpt gen_tac >> simp[get_address_immutables_def] >>
   Cases_on `ALOOKUP st.immutables cx.txn.target` >>
-  simp[lift_option_def, return_def, raise_def]
+  simp[lift_option_type_def, return_def, raise_def]
 QED
 
 Theorem get_address_immutables_state[local]:
@@ -28,7 +28,7 @@ Theorem get_address_immutables_state[local]:
 Proof
   rpt gen_tac >> simp[get_address_immutables_def] >>
   Cases_on `ALOOKUP st.immutables cx.txn.target` >>
-  simp[lift_option_def, return_def, raise_def]
+  simp[lift_option_type_def, return_def, raise_def]
 QED
 
 Theorem get_immutables_scopes[local]:

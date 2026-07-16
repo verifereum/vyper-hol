@@ -13,7 +13,7 @@ Ancestors
   vyperTypeSystem vyperTypeContract vyperTypeInvariants vyperTypeValues vyperTypeBindArguments
   vyperTypeStmtSoundness vyperTypeInitialState vyperPureExpr vyperEvalPreservesScopes vyperEvalExprPreservesScopesDom
   vyperEvalPreservesImmutablesDom vyperScopePreservation vyperStatePreservation
-  vyperTypeContractStaticMaps
+  vyperTypeContractStaticMaps vyperTypeContractContext
 Libs
   wordsLib
 
@@ -28,9 +28,9 @@ End
 Definition external_getter_tuple_def:
   external_getter_tuple src (VariableDecl Public mut id typ init) =
     (if ~is_ArrayT typ then
-       SOME (View,F,[],[],typ,[Return (SOME (TopLevelName NoneT (src,id)))])
+       SOME (View,F,[],[],typ,[Return (SOME (TopLevelName typ (src,id)))])
      else
-       SOME (getter (TopLevelName NoneT (src,id)) (BaseT (UintT 256)) (Type (ArrayT_type typ)))) /\
+       SOME (getter (TopLevelName typ (src,id)) (BaseT (UintT 256)) (Type (ArrayT_type typ)))) /\
   external_getter_tuple src (HashMapDecl Public is_transient id kt vt init) =
     SOME (getter (TopLevelName NoneT (src,id)) kt vt) /\
   external_getter_tuple _ _ = NONE
@@ -727,11 +727,11 @@ Theorem array_public_getter_tuple_shape:
   external_getter_tuple src (VariableDecl Public mut id typ init) =
     SOME (gm,gnr,args,dflts,ret,body) ==>
   gm = View /\ gnr = F /\ dflts = [] /\
-  ?kt vt exp. build_getter (TopLevelName NoneT (src,id)) kt (Type vt) 0 =
+  ?kt vt exp. build_getter (TopLevelName typ (src,id)) kt (Type vt) 0 =
                  (args,ret,exp) /\ body = [Return (SOME exp)]
 Proof
   rw[external_getter_tuple_def, getter_def] >>
-  Cases_on `build_getter (TopLevelName NoneT (src,id)) (BaseT (UintT 256))
+  Cases_on `build_getter (TopLevelName typ (src,id)) (BaseT (UintT 256))
               (Type (ArrayT_type typ)) 0` >>
   Cases_on `r` >> gvs[] >> metis_tac[]
 QED
@@ -967,18 +967,551 @@ Proof
   first_x_assum irule >> simp[pure_expr_def]
 QED
 
-Theorem build_getter_exp_type_NoneTV[local]:
+Theorem build_getter_exp_type[local]:
   !e kt vt n args ret exp.
-    build_getter e kt vt n = (args,ret,exp) /\ evaluate_type tenv (expr_type e) = SOME NoneTV ==>
-    evaluate_type tenv (expr_type exp) = SOME NoneTV
+    build_getter e kt vt n = (args,ret,exp) ==> expr_type exp = ret
 Proof
   recInduct build_getter_ind >> rpt strip_tac >>
   qpat_x_assum `build_getter _ _ _ _ = _` mp_tac >>
-  simp[Once build_getter_def, expr_type_def, evaluate_type_def] >>
-  Cases_on `is_ArrayT vt` >> simp[expr_type_def, evaluate_type_def] >>
+  simp[Once build_getter_def, expr_type_def] >>
+  Cases_on `is_ArrayT vt` >> simp[expr_type_def] >>
   rpt (pairarg_tac >> gvs[]) >>
-  rpt strip_tac >> gvs[expr_type_def, evaluate_type_def] >>
-  first_x_assum irule >> simp[expr_type_def, evaluate_type_def]
+  rpt strip_tac >> gvs[expr_type_def] >>
+  first_x_assum irule >> simp[expr_type_def]
+QED
+
+Theorem getter_vtype_annotation_ok[local]:
+  !vt. vtype_annotation_ok vt (getter_vtype_annotation vt)
+Proof
+  Cases_on `vt` >> simp[getter_vtype_annotation_def, vtype_annotation_ok_def]
+QED
+
+Theorem check_value_type_subscript[local]:
+  !tenv vt kt child.
+    check_value_type tenv vt /\
+    subscript_vtype vt kt = SOME child ==>
+    check_value_type tenv child
+Proof
+  Cases_on `vt`
+  >- (Cases_on `t` >>
+      simp[subscript_vtype_def, check_value_type_def,
+           Once assignable_type_def]) >>
+  simp[subscript_vtype_def, check_value_type_def]
+QED
+
+Theorem generated_subscript_type_place[local]:
+  type_place_expr env e = SOME container_vt /\
+  subscript_vtype container_vt kt = SOME vt /\
+  FLOOKUP env.var_types (string_to_num id) = SOME kt ==>
+  type_place_expr env
+    (Subscript (getter_vtype_annotation vt) e (Name kt id)) = SOME vt
+Proof
+  simp[well_typed_expr_def, expr_type_def, getter_vtype_annotation_ok]
+QED
+
+Theorem generated_subscript_well_typed_Type[local]:
+  type_place_expr env e = SOME container_vt /\
+  subscript_vtype container_vt kt = SOME (Type ty) /\
+  check_value_type env.type_defs (Type ty) /\
+  FLOOKUP env.var_types (string_to_num id) = SOME kt ==>
+  well_typed_expr env (Subscript ty e (Name kt id)) /\
+  type_place_expr env (Subscript ty e (Name kt id)) = SOME (Type ty)
+Proof
+  rpt strip_tac >>
+  `well_formed_type env.type_defs ty` by
+    (qpat_x_assum `check_value_type _ (Type _)` mp_tac >>
+     simp[check_value_type_def] >>
+     metis_tac[assignable_type_well_formed]) >>
+  simp[well_typed_expr_def, expr_type_def, vtype_annotation_ok_def]
+QED
+
+
+Theorem generated_array_getter_transition[local]:
+  !env e container_vt kt vt id.
+    is_ArrayT vt /\
+    type_place_expr env e = SOME container_vt /\
+    subscript_vtype container_vt kt = SOME (Type vt) /\
+    check_value_type env.type_defs (Type vt) /\
+    FLOOKUP env.var_types (string_to_num id) = SOME kt ==>
+    type_place_expr env (Subscript vt e (Name kt id)) = SOME (Type vt) /\
+    subscript_vtype (Type vt) (BaseT (UintT 256)) =
+      SOME (Type (ArrayT_type vt)) /\
+    check_value_type env.type_defs (Type (ArrayT_type vt))
+Proof
+  rpt strip_tac >>
+  `type_place_expr env
+     (Subscript (getter_vtype_annotation (Type vt)) e (Name kt id)) =
+     SOME (Type vt)` by
+    (irule generated_subscript_type_place >> simp[]) >>
+  gvs[getter_vtype_annotation_def] >>
+  `subscript_vtype (Type vt) (BaseT (UintT 256)) =
+     SOME (Type (ArrayT_type vt))` by
+    (Cases_on `vt` >>
+     gvs[is_ArrayT_def, ArrayT_type_def, subscript_vtype_def]) >>
+  `check_value_type env.type_defs (Type (ArrayT_type vt))` by
+    metis_tac[check_value_type_subscript] >>
+  simp[]
+QED
+
+Theorem generated_hashmap_getter_transition[local]:
+  !env e container_vt kt typ vtyp id.
+    type_place_expr env e = SOME container_vt /\
+    subscript_vtype container_vt kt = SOME (HashMapT typ vtyp) /\
+    check_value_type env.type_defs (HashMapT typ vtyp) /\
+    FLOOKUP env.var_types (string_to_num id) = SOME kt ==>
+    type_place_expr env
+      (Subscript (getter_vtype_annotation (HashMapT typ vtyp)) e
+         (Name kt id)) = SOME (HashMapT typ vtyp) /\
+    subscript_vtype (HashMapT typ vtyp) typ = SOME vtyp /\
+    check_value_type env.type_defs vtyp
+Proof
+  rpt strip_tac >>
+  `type_place_expr env
+     (Subscript (getter_vtype_annotation (HashMapT typ vtyp)) e
+        (Name kt id)) = SOME (HashMapT typ vtyp)` by
+    (irule generated_subscript_type_place >> simp[]) >>
+  `hashmap_key_type typ /\ check_value_type env.type_defs vtyp` by
+    (qpat_x_assum `check_value_type _ (HashMapT _ _)` mp_tac >>
+     simp[check_value_type_def]) >>
+  simp[subscript_vtype_def]
+QED
+
+Theorem build_getter_result_exists[local]:
+  !e kt vt n. ?args ret exp. build_getter e kt vt n = (args,ret,exp)
+Proof
+  rpt gen_tac >>
+  Cases_on `build_getter e kt vt n` >>
+  Cases_on `r` >> simp[]
+QED
+
+Theorem build_getter_input_ind[local]:
+  !P.
+    (!e kt vt n.
+       (!vn. vn = num_to_dec_string n /\ is_ArrayT vt ==>
+         P (Subscript vt e (Name kt vn))
+           (BaseT (UintT 256)) (Type (ArrayT_type vt)) (SUC n)) ==>
+       P e kt (Type vt) n) /\
+    (!e kt typ vtyp n.
+       (!vn. vn = num_to_dec_string n ==>
+         P (Subscript (getter_vtype_annotation (HashMapT typ vtyp)) e
+              (Name kt vn)) typ vtyp (SUC n)) ==>
+       P e kt (HashMapT typ vtyp) n) ==>
+    !e kt vt n. P e kt vt n
+Proof
+  gen_tac >> strip_tac >>
+  recInduct build_getter_ind >>
+  metis_tac[build_getter_result_exists]
+QED
+
+
+Theorem build_getter_well_typed_Type_array_case[local]:
+  !e kt vt n.
+    is_ArrayT vt /\
+    (!args ret exp env container_vt.
+       build_getter
+         (Subscript vt e (Name kt (num_to_dec_string n)))
+         (BaseT (UintT 256)) (Type (ArrayT_type vt)) (SUC n) =
+         (args,ret,exp) /\
+       type_place_expr env
+         (Subscript vt e (Name kt (num_to_dec_string n))) =
+         SOME container_vt /\
+       subscript_vtype container_vt (BaseT (UintT 256)) =
+         SOME (Type (ArrayT_type vt)) /\
+       check_value_type env.type_defs (Type (ArrayT_type vt)) /\
+       (!id ty. MEM (id,ty) args ==>
+          FLOOKUP env.var_types (string_to_num id) = SOME ty) ==>
+       well_typed_expr env exp /\ expr_type exp = ret /\
+       type_place_expr env exp = SOME (Type ret)) ==>
+    !args ret exp env container_vt.
+      build_getter e kt (Type vt) n = (args,ret,exp) /\
+      type_place_expr env e = SOME container_vt /\
+      subscript_vtype container_vt kt = SOME (Type vt) /\
+      check_value_type env.type_defs (Type vt) /\
+      (!id ty. MEM (id,ty) args ==>
+         FLOOKUP env.var_types (string_to_num id) = SOME ty) ==>
+      well_typed_expr env exp /\ expr_type exp = ret /\
+      type_place_expr env exp = SOME (Type ret)
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `build_getter e kt (Type vt) n = _` mp_tac >>
+  simp[Once build_getter_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rpt strip_tac >> gvs[] >>
+  `FLOOKUP env.var_types (string_to_num (num_to_dec_string n)) = SOME kt` by
+    (qpat_assum `!id ty. (_ \/ MEM (id,ty) args') ==> _`
+       (qspecl_then [`num_to_dec_string n`,`kt`] mp_tac) >>
+     simp[]) >>
+  `!id ty. MEM (id,ty) args' ==>
+     FLOOKUP env.var_types (string_to_num id) = SOME ty` by
+    (rpt strip_tac >>
+     qpat_assum `!id ty. (_ \/ MEM (id,ty) args') ==> _`
+       (qspecl_then [`id`,`ty`] mp_tac) >>
+     simp[]) >>
+  `type_place_expr env (Subscript vt e (Name kt (num_to_dec_string n))) =
+       SOME (Type vt) /\
+   subscript_vtype (Type vt) (BaseT (UintT 256)) =
+       SOME (Type (ArrayT_type vt)) /\
+   check_value_type env.type_defs (Type (ArrayT_type vt))` by
+    (irule generated_array_getter_transition >> simp[]) >>
+  qpat_assum `!env' container_vt'. _ ==> _`
+    (qspecl_then [`env`,`Type vt`] mp_tac) >>
+  simp[]
+QED
+
+Theorem build_getter_well_typed_HashMap_case[local]:
+  !e kt typ vtyp n.
+    (!args ret exp env container_vt.
+       build_getter
+         (Subscript (getter_vtype_annotation (HashMapT typ vtyp)) e
+            (Name kt (num_to_dec_string n)))
+         typ vtyp (SUC n) = (args,ret,exp) /\
+       type_place_expr env
+         (Subscript (getter_vtype_annotation (HashMapT typ vtyp)) e
+            (Name kt (num_to_dec_string n))) = SOME container_vt /\
+       subscript_vtype container_vt typ = SOME vtyp /\
+       check_value_type env.type_defs vtyp /\
+       (!id ty. MEM (id,ty) args ==>
+          FLOOKUP env.var_types (string_to_num id) = SOME ty) ==>
+       well_typed_expr env exp /\ expr_type exp = ret /\
+       type_place_expr env exp = SOME (Type ret)) ==>
+    !args ret exp env container_vt.
+      build_getter e kt (HashMapT typ vtyp) n = (args,ret,exp) /\
+      type_place_expr env e = SOME container_vt /\
+      subscript_vtype container_vt kt = SOME (HashMapT typ vtyp) /\
+      check_value_type env.type_defs (HashMapT typ vtyp) /\
+      (!id ty. MEM (id,ty) args ==>
+         FLOOKUP env.var_types (string_to_num id) = SOME ty) ==>
+      well_typed_expr env exp /\ expr_type exp = ret /\
+      type_place_expr env exp = SOME (Type ret)
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `build_getter e kt (HashMapT typ vtyp) n = _` mp_tac >>
+  simp[Once build_getter_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rpt strip_tac >> gvs[] >>
+  `FLOOKUP env.var_types (string_to_num (num_to_dec_string n)) = SOME kt` by
+    (qpat_assum `!id ty. (_ \/ MEM (id,ty) args') ==> _`
+       (qspecl_then [`num_to_dec_string n`,`kt`] mp_tac) >>
+     simp[]) >>
+  `!id ty. MEM (id,ty) args' ==>
+     FLOOKUP env.var_types (string_to_num id) = SOME ty` by
+    (rpt strip_tac >>
+     qpat_assum `!id ty. (_ \/ MEM (id,ty) args') ==> _`
+       (qspecl_then [`id`,`ty`] mp_tac) >>
+     simp[]) >>
+  `type_place_expr env
+       (Subscript (getter_vtype_annotation (HashMapT typ vtyp)) e
+          (Name kt (num_to_dec_string n))) = SOME (HashMapT typ vtyp) /\
+   subscript_vtype (HashMapT typ vtyp) typ = SOME vtyp /\
+   check_value_type env.type_defs vtyp` by
+    (irule generated_hashmap_getter_transition >> simp[]) >>
+  qpat_assum `!env' container_vt'. _ ==> _`
+    (qspecl_then [`env`,`HashMapT typ vtyp`] mp_tac) >>
+  simp[]
+QED
+
+Theorem build_getter_well_typed_Type_scalar_case[local]:
+  !e kt vt n.
+    ~is_ArrayT vt ==>
+    !args ret exp env container_vt.
+      build_getter e kt (Type vt) n = (args,ret,exp) /\
+      type_place_expr env e = SOME container_vt /\
+      subscript_vtype container_vt kt = SOME (Type vt) /\
+      check_value_type env.type_defs (Type vt) /\
+      (!id ty. MEM (id,ty) args ==>
+         FLOOKUP env.var_types (string_to_num id) = SOME ty) ==>
+      well_typed_expr env exp /\ expr_type exp = ret /\
+      type_place_expr env exp = SOME (Type ret)
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `build_getter e kt (Type vt) n = _` mp_tac >>
+  simp[Once build_getter_def] >>
+  rpt strip_tac >> gvs[] >>
+  `well_typed_expr env
+     (Subscript ret e (Name kt (num_to_dec_string n))) /\
+   type_place_expr env
+     (Subscript ret e (Name kt (num_to_dec_string n))) = SOME (Type ret)` by
+    (irule generated_subscript_well_typed_Type >> simp[]) >>
+  simp[expr_type_def]
+QED
+(* KEY LEMMA: generated getter expressions retain exact place/result typing. *)
+Theorem build_getter_well_typed[local]:
+  !e kt vt n args ret exp env container_vt.
+    build_getter e kt vt n = (args,ret,exp) /\
+    type_place_expr env e = SOME container_vt /\
+    subscript_vtype container_vt kt = SOME vt /\
+    check_value_type env.type_defs vt /\
+    (!id ty. MEM (id,ty) args ==>
+       FLOOKUP env.var_types (string_to_num id) = SOME ty) ==>
+    well_typed_expr env exp /\ expr_type exp = ret /\
+    type_place_expr env exp = SOME (Type ret)
+Proof
+  ho_match_mp_tac build_getter_input_ind >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      Cases_on `is_ArrayT vt`
+      >- (qpat_x_assum `!vn. _`
+            (qspec_then `num_to_dec_string n` mp_tac) >>
+          simp[] >> disch_then assume_tac >>
+          ho_match_mp_tac build_getter_well_typed_Type_array_case >>
+          conj_tac >- first_assum ACCEPT_TAC >>
+          first_assum ACCEPT_TAC) >>
+      ho_match_mp_tac build_getter_well_typed_Type_scalar_case >>
+      first_assum ACCEPT_TAC) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!vn. _`
+    (qspec_then `num_to_dec_string n` mp_tac) >>
+  simp[] >> disch_then assume_tac >>
+  ho_match_mp_tac build_getter_well_typed_HashMap_case >>
+  first_assum ACCEPT_TAC
+QED
+
+Theorem array_public_getter_tuple_shape_exact[local]:
+  is_ArrayT typ /\
+  external_getter_tuple src (VariableDecl Public mut id typ init) =
+    SOME (gm,gnr,args,dflts,ret,body) ==>
+  gm = View /\ gnr = F /\ dflts = [] /\
+  ?exp. build_getter (TopLevelName typ (src,id)) (BaseT (UintT 256))
+          (Type (ArrayT_type typ)) 0 = (args,ret,exp) /\
+        body = [Return (SOME exp)]
+Proof
+  rw[external_getter_tuple_def, getter_def] >>
+  Cases_on `build_getter (TopLevelName typ (src,id)) (BaseT (UintT 256))
+              (Type (ArrayT_type typ)) 0` >>
+  Cases_on `r` >> gvs[] >> metis_tac[]
+QED
+
+Theorem build_getter_args_all_distinct[local]:
+  !e kt vt n args ret exp.
+    build_getter e kt vt n = (args,ret,exp) ==>
+    ALL_DISTINCT (MAP (string_to_num o FST) args)
+Proof
+  recInduct build_getter_ind >> rpt strip_tac >>
+  qpat_x_assum `build_getter _ _ _ _ = _` mp_tac >>
+  simp[Once build_getter_def] >>
+  Cases_on `is_ArrayT vt` >> simp[] >>
+  rpt (pairarg_tac >> gvs[]) >> rw[] >> gvs[MEM_MAP] >>
+  metis_tac[build_getter_args_no_current_num, string_to_num_eq_imp, PAIR]
+QED
+
+Theorem build_getter_ret_checked[local]:
+  !e kt vt n args ret exp tenv.
+    build_getter e kt vt n = (args,ret,exp) /\
+    check_value_type tenv vt ==>
+    check_value_type tenv (Type ret)
+Proof
+  recInduct build_getter_ind >> rpt strip_tac >>
+  qpat_x_assum `build_getter _ _ _ _ = _` mp_tac >>
+  simp[Once build_getter_def] >>
+  Cases_on `is_ArrayT vt` >> simp[] >>
+  rpt (pairarg_tac >> gvs[]) >> rw[] >> gvs[] >>
+  first_x_assum irule >>
+  gvs[check_value_type_def] >>
+  Cases_on `vt` >>
+  gvs[is_ArrayT_def, ArrayT_type_def, check_value_type_def,
+      assignable_type_def, well_formed_type_def]
+QED
+
+Theorem check_value_type_ArrayT_type[local]:
+  is_ArrayT typ /\
+  check_value_type tenv (Type typ) ==>
+  check_value_type tenv (Type (ArrayT_type typ))
+Proof
+  Cases_on `typ` >>
+  gvs[is_ArrayT_def, ArrayT_type_def, check_value_type_def,
+      assignable_type_def, well_formed_type_def]
+QED
+
+Theorem function_entry_env_args_lookup_package[local]:
+  ALL_DISTINCT (MAP (string_to_num o FST) args) ==>
+  (!id ty. MEM (id,ty) args ==>
+     FLOOKUP (function_entry_env art mods src args).var_types
+       (string_to_num id) = SOME ty /\
+     FLOOKUP (function_entry_env art mods src args).var_assignable
+       (string_to_num id) = SOME T) /\
+  (!n ty. FLOOKUP (function_entry_env art mods src args).var_types n = SOME ty ==>
+     ?id. MEM (id,ty) args /\ n = string_to_num id) /\
+  (!n b. FLOOKUP (function_entry_env art mods src args).var_assignable n = SOME b ==>
+     ?id ty. MEM (id,ty) args /\ n = string_to_num id /\ b = T)
+Proof
+  rw[function_entry_env_def]
+  >- metis_tac[FOLDL_extend_local_args_formal_lookup]
+  >- metis_tac[FOLDL_extend_local_args_formal_lookup]
+  >- (drule_all FOLDL_extend_local_args_var_types_range >>
+      simp[artifact_env_def])
+  >- (drule_all FOLDL_extend_local_args_var_assignable_range >>
+      simp[artifact_env_def])
+QED
+
+Theorem build_getter_function_entry_typing_package[local]:
+  build_getter e kt vt n = (args,ret,exp) ==>
+  type_place_expr (function_entry_env art mods src args) e = SOME container_vt ==>
+  subscript_vtype container_vt kt = SOME vt ==>
+  check_value_type (type_env_all_modules mods) vt ==>
+  ALL_DISTINCT (MAP (string_to_num o FST) args) /\
+  (?env_after.
+     type_stmts (function_entry_env art mods src args) ret
+       [Return (SOME exp)] = SOME env_after) /\
+  (!id ty. MEM (id,ty) args ==>
+     FLOOKUP (function_entry_env art mods src args).var_types
+       (string_to_num id) = SOME ty /\
+     FLOOKUP (function_entry_env art mods src args).var_assignable
+       (string_to_num id) = SOME T) /\
+  (!m ty. FLOOKUP (function_entry_env art mods src args).var_types m = SOME ty ==>
+     ?id. MEM (id,ty) args /\ m = string_to_num id) /\
+  (!m b. FLOOKUP (function_entry_env art mods src args).var_assignable m = SOME b ==>
+     ?id ty. MEM (id,ty) args /\ m = string_to_num id /\ b = T)
+Proof
+  rpt strip_tac >>
+  `ALL_DISTINCT (MAP (string_to_num o FST) args)` by
+    metis_tac[build_getter_args_all_distinct] >>
+  `(!id ty. MEM (id,ty) args ==>
+       FLOOKUP (function_entry_env art mods src args).var_types
+         (string_to_num id) = SOME ty /\
+       FLOOKUP (function_entry_env art mods src args).var_assignable
+         (string_to_num id) = SOME T) /\
+   (!m ty. FLOOKUP (function_entry_env art mods src args).var_types m = SOME ty ==>
+       ?id. MEM (id,ty) args /\ m = string_to_num id) /\
+   (!m b. FLOOKUP (function_entry_env art mods src args).var_assignable m = SOME b ==>
+       ?id ty. MEM (id,ty) args /\ m = string_to_num id /\ b = T)` by
+    metis_tac[function_entry_env_args_lookup_package] >>
+  `well_typed_expr (function_entry_env art mods src args) exp /\
+   expr_type exp = ret` by
+    (drule build_getter_well_typed >>
+     disch_then (qspecl_then
+       [`function_entry_env art mods src args`, `container_vt`] mp_tac) >>
+     simp[function_entry_env_def, artifact_env_def,
+          FOLDL_extend_local_args_static] >>
+     metis_tac[]) >>
+  `ret <> NoneT` by
+    (drule_all build_getter_ret_checked >>
+     simp[check_value_type_def] >>
+     metis_tac[assignable_type_not_NoneT]) >>
+  simp[type_stmt_def] >>
+  metis_tac[]
+QED
+
+Theorem check_contract_toplevel_vtypes_complete_modules[local]:
+  check_contract F layouts addr mods = SOME art ==>
+  ALOOKUP mods src = SOME ts ==>
+  toplevel_vtypes_complete art.cta_toplevel_vtypes
+    (initial_evaluation_context [(addr,mods)] layouts
+      (empty_call_txn with target := addr) src)
+Proof
+  rpt strip_tac >>
+  irule check_contract_toplevel_vtypes_complete_initial >>
+  simp[]
+QED
+
+Theorem checked_public_getter_body_typing_package:
+  check_contract F
+    (layouts:(address # (storage_layout # storage_layout)) list)
+    (addr:160 word) mods = SOME art ==>
+  ALOOKUP mods src = SOME ts ==>
+  MEM decl ts ==>
+  is_public_getter_decl fn decl ==>
+  external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,body) ==>
+  ALL_DISTINCT (MAP (string_to_num o FST) args) /\
+  (?env_after.
+     type_stmts (function_entry_env art mods src args) ret body = SOME env_after) /\
+  (!id ty. MEM (id,ty) args ==>
+     FLOOKUP (function_entry_env art mods src args).var_types
+       (string_to_num id) = SOME ty /\
+     FLOOKUP (function_entry_env art mods src args).var_assignable
+       (string_to_num id) = SOME T) /\
+  (!n ty. FLOOKUP (function_entry_env art mods src args).var_types n = SOME ty ==>
+     ?id. MEM (id,ty) args /\ n = string_to_num id) /\
+  (!n b. FLOOKUP (function_entry_env art mods src args).var_assignable n = SOME b ==>
+     ?id ty. MEM (id,ty) args /\ n = string_to_num id /\ b = T)
+Proof
+  Cases_on `decl` >>
+  simp[is_public_getter_decl_def, external_getter_tuple_def] >>
+  Cases_on `v` >>
+  simp[is_public_getter_decl_def, external_getter_tuple_def] >>
+  ntac 5 strip_tac
+  >- (Cases_on `is_ArrayT t`
+      >- (gvs[] >>
+          `mut = View /\ nr = F /\ dflts = [] /\
+           ?exp. build_getter (TopLevelName t (src,fn))
+                   (BaseT (UintT 256)) (Type (ArrayT_type t)) 0 =
+                   (args,ret,exp) /\ body = [Return (SOME exp)]` by
+            (irule array_public_getter_tuple_shape_exact >> simp[] >>
+             qexistsl [`o'`, `v0`] >>
+             simp[external_getter_tuple_def]) >>
+          gvs[] >>
+          `toplevel_vtypes_complete art.cta_toplevel_vtypes
+             (initial_evaluation_context [((addr:160 word),mods)] layouts
+               (empty_call_txn with target := addr) src)` by
+            (irule check_contract_toplevel_vtypes_complete_modules >> simp[]) >>
+          `FLOOKUP art.cta_toplevel_vtypes (src,string_to_num fn) =
+             SOME (Type t)` by
+            (gvs[toplevel_vtypes_complete_def, get_module_code_def,
+                 initial_evaluation_context_def] >>
+             metis_tac[]) >>
+          `check_toplevel_decl layouts addr mods art src
+             (VariableDecl Public v0 fn t o')` by
+            metis_tac[check_contract_toplevel_decl_MEM] >>
+          `check_value_type (type_env_all_modules mods) (Type t)` by
+            (Cases_on `v0` >>
+             gvs[check_toplevel_decl_def, check_value_type_def]) >>
+          `check_value_type (type_env_all_modules mods)
+             (Type (ArrayT_type t))` by
+            metis_tac[check_value_type_ArrayT_type] >>
+          irule (SRULE [] build_getter_function_entry_typing_package) >>
+          qexistsl [`Type t`, `TopLevelName t (src,fn)`,
+                    `BaseT (UintT 256)`, `0`, `Type (ArrayT_type t)`] >>
+          simp[function_entry_env_def, artifact_env_def,
+               FOLDL_extend_local_args_static, well_typed_expr_def] >>
+          Cases_on `t` >>
+          gvs[is_ArrayT_def, ArrayT_type_def, subscript_vtype_def,
+              vtype_annotation_ok_def]) >>
+      gvs[] >>
+      `FLOOKUP art.cta_toplevel_vtypes (src,string_to_num fn) =
+         SOME (Type ret)` by
+        (`toplevel_vtypes_complete art.cta_toplevel_vtypes
+             (initial_evaluation_context [((addr:160 word),mods)] layouts
+               (empty_call_txn with target := addr) src)` by
+           (irule check_contract_toplevel_vtypes_complete_modules >> simp[]) >>
+         gvs[toplevel_vtypes_complete_def, get_module_code_def,
+             initial_evaluation_context_def] >>
+         metis_tac[]) >>
+      `check_toplevel_decl layouts addr mods art src
+         (VariableDecl Public v0 fn ret o')` by
+        metis_tac[check_contract_toplevel_decl_MEM] >>
+      `well_formed_type (type_env_all_modules mods) ret /\ ret <> NoneT` by
+        (Cases_on `v0` >>
+         gvs[check_toplevel_decl_def] >>
+         metis_tac[assignable_type_well_formed,
+                   assignable_type_not_NoneT]) >>
+      simp[function_entry_env_def, artifact_env_def, type_stmt_def,
+           well_typed_expr_def, vtype_annotation_ok_def, expr_type_def]) >>
+  `external_getter_tuple src (HashMapDecl Public b s t v0 o') =
+     SOME (mut,nr,args,dflts,ret,body)` by
+    simp[external_getter_tuple_def] >>
+  drule hashmap_public_getter_tuple_shape >>
+  strip_tac >>
+  gvs[] >>
+  `toplevel_vtypes_complete art.cta_toplevel_vtypes
+     (initial_evaluation_context [((addr:160 word),mods)] layouts
+       (empty_call_txn with target := addr) src)` by
+    (irule check_contract_toplevel_vtypes_complete_modules >> simp[]) >>
+  `FLOOKUP art.cta_toplevel_vtypes (src,string_to_num fn) =
+     SOME (HashMapT t v0)` by
+    (gvs[toplevel_vtypes_complete_def, get_module_code_def,
+         initial_evaluation_context_def] >>
+     metis_tac[]) >>
+  `check_toplevel_decl layouts addr mods art src
+     (HashMapDecl Public b fn t v0 o')` by
+    metis_tac[check_contract_toplevel_decl_MEM] >>
+  `check_value_type (type_env_all_modules mods) v0` by
+    gvs[check_toplevel_decl_def] >>
+  `hashmap_key_type t` by
+    gvs[check_toplevel_decl_def] >>
+  irule (SRULE [] build_getter_function_entry_typing_package) >>
+  qexistsl [`HashMapT t v0`, `TopLevelName NoneT (src,fn)`, `t`, `0`, `v0`] >>
+  simp[function_entry_env_def, artifact_env_def,
+       FOLDL_extend_local_args_static, well_typed_expr_def,
+       subscript_vtype_def, vtype_annotation_ok_def]
 QED
 
 Theorem generated_hashmap_subscript_step_no_type_error:

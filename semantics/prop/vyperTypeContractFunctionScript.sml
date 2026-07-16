@@ -640,6 +640,51 @@ Proof
   qexistsl [`env_body`, `env_after`] >> simp[] >> metis_tac[]
 QED
 
+Theorem checked_explicit_external_post_prefix_body_return_typed_selected:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  ALOOKUP am.sources tx.target = SOME mods /\
+  ALOOKUP mods src = SOME ts /\
+  MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
+  cx = initial_evaluation_context am.sources am.layouts tx src /\
+  context_well_typed cx /\ machine_well_typed am /\
+  immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes cx am.immutables /\
+  bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
+  st.scopes = [scope] /\ st.immutables = am.immutables /\
+  state_well_typed st /\ accounts_well_typed st.accounts /\
+  eval_stmts cx body st = (INR (ReturnException v),st') ==>
+  ?ret_tv. evaluate_type (type_env_all_modules mods) ret = SOME ret_tv /\
+           value_has_type ret_tv v
+Proof
+  strip_tac >> gvs[] >>
+  drule_all checked_explicit_external_body_typing_package >>
+  strip_tac >>
+  `functions_well_typed (initial_evaluation_context am.sources am.layouts tx src)` by
+    (irule check_contract_functions_well_typed_initial >> simp[]) >>
+  `env_consistent env_body
+     (initial_evaluation_context am.sources am.layouts tx src) st` by (
+    rw[env_consistent_def]
+    >- (irule env_context_consistent_same_static_maps >>
+        qexists `artifact_env art mods env_body.current_src` >>
+        rpt (conj_tac >-
+          simp[artifact_env_def, get_tenv_def, initial_evaluation_context_def]) >>
+        irule check_contract_env_context_consistent_initial_src >> simp[])
+    >- (`(st with scopes := [scope]) = st` by
+          gvs[evaluation_state_component_equality] >>
+        pop_assum (fn th => SUBST1_TAC (GSYM th)) >>
+        irule bind_arguments_env_scopes_consistent >>
+        qexistsl [`args`, `type_env_all_modules mods`, `vals`] >>
+        gvs[get_tenv_def, initial_evaluation_context_def] >> metis_tac[])
+    >- (gvs[env_immutables_consistent_def] >> rw[] >>
+        qpat_x_assum `immutables_ready _ _ _ _` mp_tac >>
+        simp[immutables_ready_def] >> strip_tac >>
+        first_x_assum drule_all >> simp[])) >>
+  drule_all eval_stmts_type_preservation_exception >>
+  simp[vyperTypeStmtResultTheory.stmt_error_ok_def,
+       vyperTypeStmtResultTheory.return_exception_typed_def,
+       vyperTypeExprSoundnessTheory.value_runtime_typed_def,
+       get_tenv_def, initial_evaluation_context_def]
+QED
+
 Theorem checked_explicit_external_entry_establishes_type_soundness_preconditions[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\
