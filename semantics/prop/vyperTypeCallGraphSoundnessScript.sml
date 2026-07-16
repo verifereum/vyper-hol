@@ -235,3 +235,12 @@ Proof
   drule contract_call_edge_nodes >>
   simp[]
 QED
+
+Theorem checked_contract_call_graph_irreflexive:
+  check_contract in_deploy layouts addr mods = SOME art ==>
+  irreflexive (TC (call_edge_rel (contract_call_edges mods)))
+Proof
+  strip_tac >>
+  drule check_contract_call_graph_acyclic >>
+  simp[contract_call_graph_acyclic_correct]
+QED
