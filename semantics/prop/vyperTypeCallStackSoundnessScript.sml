@@ -4,7 +4,7 @@
 
 Theory vyperTypeCallStackSoundness
 Ancestors
-  list relation
+  list rich_list relation vyperTypeCallGraphSoundness
 
 (* ===== Generic stack-path and relation closure infrastructure ===== *)
 
@@ -57,4 +57,40 @@ Proof
   drule_all RTC_then_R_TC >>
   disch_then assume_tac >>
   gvs[irreflexive_def]
+QED
+
+(* ===== Ownership of extracted internal calls ===== *)
+
+Definition calls_follow_call_graph_def:
+  calls_follow_call_graph edges owner calls <=>
+    EVERY (call_edge_rel edges owner) calls
+End
+
+Theorem calls_follow_call_graph_nil[simp]:
+  calls_follow_call_graph edges owner []
+Proof
+  simp[calls_follow_call_graph_def]
+QED
+
+Theorem calls_follow_call_graph_cons[simp]:
+  calls_follow_call_graph edges owner (callee::calls) <=>
+  call_edge_rel edges owner callee /\
+  calls_follow_call_graph edges owner calls
+Proof
+  simp[calls_follow_call_graph_def]
+QED
+
+Theorem calls_follow_call_graph_append[simp]:
+  calls_follow_call_graph edges owner (xs ++ ys) <=>
+  calls_follow_call_graph edges owner xs /\
+  calls_follow_call_graph edges owner ys
+Proof
+  simp[calls_follow_call_graph_def, EVERY_APPEND]
+QED
+
+Theorem calls_follow_call_graph_DROP:
+  calls_follow_call_graph edges owner xs ==>
+  calls_follow_call_graph edges owner (DROP n xs)
+Proof
+  simp[calls_follow_call_graph_def, EVERY_DROP]
 QED
