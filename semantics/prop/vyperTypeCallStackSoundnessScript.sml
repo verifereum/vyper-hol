@@ -4,7 +4,8 @@
 
 Theory vyperTypeCallStackSoundness
 Ancestors
-  list rich_list relation vyperTypeCallGraph vyperTypeCallGraphSoundness
+  alist list rich_list relation vyperInterpreter vyperTypeCallGraph
+  vyperTypeCallGraphSoundness
 
 (* ===== Generic stack-path and relation closure infrastructure ===== *)
 
@@ -243,4 +244,26 @@ Proof
   Induct_on `n` >>
   Cases >>
   simp[]
+QED
+
+(* ===== Callable lookup ownership boundary ===== *)
+
+Theorem module_fns_ALOOKUP_SOME_decompose:
+  ALOOKUP (module_fns src ts) (src,fn) = SOME (dflts,body) ==>
+  ?vis mut nr raw args ret.
+    (vis = Internal \/ vis = Deploy) /\
+    MEM (FunctionDecl vis mut nr raw fn args dflts ret body) ts
+Proof
+  strip_tac >>
+  drule ALOOKUP_MEM >>
+  simp[module_fns_def, MEM_MAP, MEM_APPEND, MEM_FLAT, PULL_EXISTS] >>
+  strip_tac
+  >- (rename1 `MEM entry ts` >>
+      Cases_on `entry` >> gvs[dest_Internal_Fn_def] >>
+      rename1 `MEM (FunctionDecl vis mut nr raw name args defaults ret stmts) ts` >>
+      Cases_on `vis` >> gvs[dest_Internal_Fn_def] >> metis_tac[]) >>
+  rename1 `MEM entry ts` >>
+  Cases_on `entry` >> gvs[dest_Deploy_Fn_def] >>
+  rename1 `MEM (FunctionDecl vis mut nr raw name args defaults ret stmts) ts` >>
+  Cases_on `vis` >> gvs[dest_Deploy_Fn_def] >> metis_tac[]
 QED
