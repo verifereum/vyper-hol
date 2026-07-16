@@ -2729,6 +2729,24 @@ Proof
   gvs[check_function_body_def]
 QED
 
+Theorem checked_public_getter_body_no_control_escape_selected[local]:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  ALOOKUP mods src = SOME ts /\
+  MEM decl ts /\
+  is_public_getter_decl tx.function_name decl /\
+  external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,body) ==>
+  stmts_no_control_escape body
+Proof
+  rpt strip_tac >>
+  `getter_context_equiv
+     (initial_evaluation_context am.sources am.layouts tx src)
+     (initial_evaluation_context am.sources am.layouts tx src)` by
+    simp[getter_context_equiv_def] >>
+  drule_all selected_public_getter_body_eval_context_equiv >>
+  strip_tac >>
+  gvs[stmt_no_control_escape_def]
+QED
+
 
 Theorem lookup_exported_function_checked_cases_current[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
