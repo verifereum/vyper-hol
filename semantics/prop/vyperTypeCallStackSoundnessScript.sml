@@ -4,8 +4,8 @@
 
 Theory vyperTypeCallStackSoundness
 Ancestors
-  alist list rich_list relation vyperInterpreter vyperTypeCallGraph
-  vyperTypeCallGraphSoundness
+  alist list rich_list relation vyperContext vyperInterpreter
+  vyperTypeCallGraph vyperTypeCallGraphSoundness
 
 (* ===== Generic stack-path and relation closure infrastructure ===== *)
 
@@ -285,4 +285,32 @@ Proof
   first_x_assum (qspec_then `ARB` assume_tac) >>
   drule module_fns_ALOOKUP_SOME_decompose >>
   metis_tac[]
+QED
+
+(* ===== Callable graph ownership and stack irrelevance ===== *)
+
+Definition functions_follow_call_graph_def:
+  functions_follow_call_graph edges cx <=>
+    !src fn ts mut nr args dflts ret body.
+      get_module_code cx src = SOME ts /\
+      lookup_callable_function cx.in_deploy fn ts =
+        SOME (mut,nr,args,dflts,ret,body) ==>
+      EVERY
+        (call_edge_rel edges (src,fn))
+        (function_int_calls dflts body)
+End
+
+Theorem functions_follow_call_graph_stk:
+  functions_follow_call_graph edges (cx with stk updated_by f) <=>
+  functions_follow_call_graph edges cx
+Proof
+  simp[functions_follow_call_graph_def, get_module_code_def]
+QED
+
+Theorem functions_follow_call_graph_push_stk:
+  functions_follow_call_graph edges
+    (cx with stk updated_by CONS callee) <=>
+  functions_follow_call_graph edges cx
+Proof
+  simp[functions_follow_call_graph_stk]
 QED
