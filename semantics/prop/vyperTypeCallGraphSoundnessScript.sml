@@ -224,3 +224,14 @@ Proof
   rw[contract_call_nodes_def, MEM_nub] >>
   metis_tac[MEM_MAP]
 QED
+
+Theorem contract_call_graph_acyclic_correct:
+  contract_call_graph_acyclic mods <=>
+  irreflexive (TC (call_edge_rel (contract_call_edges mods)))
+Proof
+  simp[contract_call_graph_acyclic_def] >>
+  irule call_graph_acyclic_correct >>
+  rpt strip_tac >>
+  drule contract_call_edge_nodes >>
+  simp[]
+QED
