@@ -140,6 +140,38 @@ Proof
   qexists_tac `ls'` >>
   simp[]
 QED
+Theorem call_graph_acyclic_correct:
+  (!caller callee.
+     MEM (caller,callee) edges ==>
+     MEM caller nodes /\ MEM callee nodes) ==>
+  (call_graph_acyclic nodes edges <=>
+   irreflexive (TC (call_edge_rel edges)))
+Proof
+  strip_tac >>
+  simp[call_graph_acyclic_def, relationTheory.irreflexive_def] >>
+  eq_tac
+  >- (strip_tac >> gen_tac >> strip_tac >>
+      `!a b. call_edge_rel edges a b ==>
+             MEM a nodes /\ MEM b nodes` by
+        metis_tac[call_edge_rel_def] >>
+      `MEM x nodes` by
+        (drule relationTheory.TC_CASES1_E >>
+         strip_tac >> metis_tac[]) >>
+      drule_all finite_TC_self_NRC_bound >>
+      strip_tac >>
+      `MEM x (reachable_nodes edges (LENGTH nodes) x)` by
+        (simp[MEM_reachable_nodes_NRC] >>
+         qexists_tac `n` >> simp[] >> decide_tac) >>
+      fs[EVERY_MEM] >> metis_tac[]) >>
+  strip_tac >>
+  simp[EVERY_MEM] >>
+  rpt strip_tac >>
+  spose_not_then assume_tac >>
+  fs[MEM_reachable_nodes_NRC] >>
+  Cases_on `n` >>
+  gvs[TC_eq_NRC]
+QED
+
 
 
 (* ===== Checker consequence ===== *)
