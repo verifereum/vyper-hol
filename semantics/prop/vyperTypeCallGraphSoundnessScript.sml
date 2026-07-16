@@ -8,8 +8,60 @@
 
 Theory vyperTypeCallGraphSoundness
 Ancestors
-  list vyperTypeCallGraph vyperTypeContract
+  arithmetic list vyperTypeCallGraph vyperTypeContract
 
+(* ===== Generic executable/declarative reachability boundary ===== *)
+
+Definition call_edge_rel_def:
+  call_edge_rel edges caller callee <=> MEM (caller,callee) edges
+End
+
+Theorem MEM_direct_callees:
+  MEM callee (direct_callees edges caller) <=>
+  call_edge_rel edges caller callee
+Proof
+  simp[direct_callees_def, call_edge_rel_def, MEM_MAP, MEM_FILTER] >>
+  eq_tac
+  >- (strip_tac >> PairCases_on `y` >> gvs[]) >>
+  strip_tac >>
+  qexists_tac `(caller,callee)` >>
+  simp[]
+QED
+
+Theorem MEM_reachable_nodes_NRC:
+  MEM callee (reachable_nodes edges fuel caller) <=>
+  ?n. 0 < n /\ n <= SUC fuel /\
+      NRC (call_edge_rel edges) n caller callee
+Proof
+  qid_spec_tac `callee` >>
+  Induct_on `fuel`
+  >- (gen_tac >>
+      simp[reachable_nodes_def, MEM_direct_callees] >>
+      eq_tac
+      >- (strip_tac >> qexists_tac `1` >> simp[]) >>
+      strip_tac >>
+      `n = 1` by decide_tac >>
+      gvs[]) >>
+  gen_tac >>
+  simp[reachable_nodes_def, MEM_nub, MEM_FLAT, MEM_MAP,
+       MEM_direct_callees, PULL_EXISTS] >>
+  eq_tac
+  >- (strip_tac
+      >- (qexists_tac `n` >> simp[] >> decide_tac) >>
+      qexists_tac `SUC n` >>
+      simp[NRC_SUC_RECURSE_LEFT] >>
+      qexists_tac `y` >>
+      simp[] >> decide_tac) >>
+  strip_tac >>
+  Cases_on `n <= SUC fuel`
+  >- (disj1_tac >> qexists_tac `n` >> simp[]) >>
+  `n = SUC (SUC fuel)` by decide_tac >>
+  gvs[NRC_SUC_RECURSE_LEFT] >>
+  disj2_tac >>
+  qexistsl_tac [`z`, `SUC fuel`] >>
+  simp[NRC_SUC_RECURSE_LEFT] >>
+  metis_tac[]
+QED
 (* ===== Checker consequence ===== *)
 
 Theorem check_contract_call_graph_acyclic:
