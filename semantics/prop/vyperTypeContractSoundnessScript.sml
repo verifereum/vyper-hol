@@ -1040,6 +1040,75 @@ Proof
   gvs[AllCaseEqs(), return_def, raise_def, no_control_exc_def]
 QED
 
+Theorem call_external_function_no_loop_control_c53[local]:
+  stmts_no_control_escape body /\
+  call_external_function am cx nr mut ts mods args dflts vals body ret =
+    (INR exc,am') ==>
+  exc <> BreakException /\ exc <> ContinueException
+Proof
+  strip_tac >>
+  qpat_x_assum
+    `call_external_function am cx nr mut ts mods args dflts vals body ret =
+       (INR exc,am')` mp_tac >>
+  rewrite_tac[call_external_function_def] >>
+  strip_tac >>
+  Cases_on `LENGTH vals > LENGTH args \/
+            LENGTH args > LENGTH dflts + LENGTH vals` >>
+  gvs[] >>
+  Cases_on `evaluate_defaults cx am
+    (DROP (LENGTH dflts + LENGTH vals - LENGTH args) dflts)` >>
+  gvs[] >>
+  Cases_on `bind_arguments (type_env_all_modules mods) args (vals ++ x)` >>
+  gvs[] >>
+  Cases_on
+    `if cx.in_deploy then
+       evaluate_all_constants cx am cx.txn.target mods
+     else SOME am` >>
+  gvs[] >>
+  Cases_on
+    `(do
+        (if nr then
+           case cx.nonreentrant_slot of
+             NONE => raise (Error (TypeError "nonreentrant slot missing"))
+           | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
+                            (mut = View \/ mut = Pure)
+         else return ());
+        send_call_value mut cx;
+        eval_stmts cx body
+      od (initial_state x'' [x']))` >>
+  Cases_on `q`
+  >- (gvs[] >>
+      Cases_on
+        `(if nr /\ mut <> View /\ mut <> Pure then
+            case cx.nonreentrant_slot of
+              NONE => return ()
+            | SOME slot => release_nonreentrant_lock cx.txn.target slot
+          else return ()) r` >>
+      Cases_on `q` >>
+      gvs[] >>
+      imp_res_tac unlock_action_no_control_c53 >>
+      gvs[no_control_exc_def]) >>
+  gvs[] >>
+  imp_res_tac call_lock_send_eval_no_loop_control_c53 >>
+  Cases_on `y` >>
+  gvs[] >>
+  Cases_on
+    `(if nr /\ mut <> View /\ mut <> Pure then
+        case cx.nonreentrant_slot of
+          NONE => return ()
+        | SOME slot => release_nonreentrant_lock cx.txn.target slot
+      else return ()) r` >>
+  Cases_on `q` >>
+  gvs[] >>
+  imp_res_tac unlock_action_no_control_c53 >>
+  gvs[no_control_exc_def] >>
+  Cases_on `evaluate_type (type_env_all_modules mods) ret` >>
+  gvs[] >>
+  rename1 `evaluate_type (type_env_all_modules mods) ret = SOME tv` >>
+  Cases_on `safe_cast tv v` >>
+  gvs[]
+QED
+
 
 
 
