@@ -2717,6 +2717,18 @@ Proof
   simp[]
 QED
 
+Theorem checked_explicit_external_body_no_control_escape_selected[local]:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  ALOOKUP mods src = SOME ts /\
+  MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts ==>
+  stmts_no_control_escape body
+Proof
+  rpt strip_tac >>
+  `check_function_body am.layouts tx.target mods art src mut nr args dflts ret body` by
+    metis_tac[check_contract_function_body_MEM] >>
+  gvs[check_function_body_def]
+QED
+
 
 Theorem lookup_exported_function_checked_cases_current[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
