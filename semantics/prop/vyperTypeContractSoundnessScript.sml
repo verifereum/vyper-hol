@@ -999,6 +999,23 @@ Proof
   gvs[AllCaseEqs(), return_def, raise_def]
 QED
 
+Theorem unlock_action_no_control_c53[local]:
+  (if nr /\ mut <> View /\ mut <> Pure then
+     case cx.nonreentrant_slot of
+       NONE => return ()
+     | SOME slot => release_nonreentrant_lock cx.txn.target slot
+   else return ()) st = (INR exc,st') ==>
+  no_control_exc exc
+Proof
+  rw[] >> gvs[return_def, no_control_exc_def] >>
+  Cases_on `cx.nonreentrant_slot` >> gvs[return_def, no_control_exc_def] >>
+  qpat_x_assum `release_nonreentrant_lock _ _ _ = _` mp_tac >>
+  rw[release_nonreentrant_lock_def, bind_def, ignore_bind_def,
+     get_transient_storage_def, update_transient_def,
+     return_def, raise_def, assert_def, check_def] >>
+  gvs[AllCaseEqs(), return_def, raise_def, no_control_exc_def]
+QED
+
 Theorem unlock_action_no_type_error_c53[local]:
 
   no_type_error_eval
