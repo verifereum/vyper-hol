@@ -1067,12 +1067,13 @@ Proof
     rw[eval_stmt_cps_def, evaluate_def, bind_def]
     \\ CASE_TAC \\ rw[cont_def] \\ reverse CASE_TAC
     \\ gvs[lift_option_type_def, raise_def, return_def, cont_def]
-    \\ CASE_TAC \\ reverse CASE_TAC
-    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-    >> rw[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
-    \\ reverse CASE_TAC \\ reverse CASE_TAC
-    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-    >> rw[Once OWHILE_THM, stepk_def, liftk1, apply_val_def] )
+    \\ Cases_on `eval_expr cx e st` \\ Cases_on `q` \\ gvs[]
+    >- (rename1 `eval_expr cx e st = (INL tv,st1)`
+        \\ rw[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
+        \\ Cases_on `materialise cx tv st1` \\ Cases_on `q` \\ gvs[]
+        >- rw[Once OWHILE_THM, stepk_def, liftk1, apply_val_def]
+        \\ rw[Once OWHILE_THM, stepk_def, apply_exc_def])
+    \\ rw[Once OWHILE_THM, stepk_def, apply_exc_def] )
   \\ conj_tac >- ( (* Append t e *)
     rw[eval_stmt_cps_def, evaluate_def, bind_def, UNCURRY, ignore_bind_def]
     \\ CASE_TAC \\ gs[cont_def] \\ reverse CASE_TAC
