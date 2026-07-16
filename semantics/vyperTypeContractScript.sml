@@ -14,7 +14,7 @@ Theory vyperTypeContract
 Ancestors
   list rich_list arithmetic finite_map option pair
   vyperAST vyperValue vyperMisc vyperContext vyperState vyperInterpreter
-  vyperTypeSystem
+  vyperTypeSystem vyperTypeCallGraph
 Libs
   wordsLib
 
@@ -247,6 +247,7 @@ Definition check_contract_def:
   check_contract in_deploy layouts addr mods =
     let art = build_contract_type_artifact in_deploy mods in
       if contract_namespaces_ok in_deploy mods /\
+         contract_call_graph_acyclic mods /\
          EVERY (check_module layouts addr mods art) mods
       then SOME art else NONE
 End
