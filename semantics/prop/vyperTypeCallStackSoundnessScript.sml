@@ -267,3 +267,22 @@ Proof
   rename1 `MEM (FunctionDecl vis mut nr raw name args defaults ret stmts) ts` >>
   Cases_on `vis` >> gvs[dest_Deploy_Fn_def] >> metis_tac[]
 QED
+
+Theorem lookup_callable_function_SOME_decompose:
+  lookup_callable_function in_deploy fn ts =
+    SOME (mut,nr,args,dflts,ret,body) ==>
+  (dflts = [] /\ body = []) \/
+  ?vis mut' nr' raw args' ret'.
+    (vis = Internal \/ vis = Deploy) /\
+    MEM (FunctionDecl vis mut' nr' raw fn args' dflts ret' body) ts
+Proof
+  strip_tac >>
+  Cases_on `(dflts,body) = ([],[])`
+  >- gvs[] >>
+  disj2_tac >>
+  drule_all lookup_callable_function_eq_ALOOKUP_module_fns >>
+  strip_tac >>
+  first_x_assum (qspec_then `ARB` assume_tac) >>
+  drule module_fns_ALOOKUP_SOME_decompose >>
+  metis_tac[]
+QED
