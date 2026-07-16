@@ -1087,6 +1087,39 @@ Proof
   gvs[]
 QED
 
+Theorem call_external_result_wrapper_no_loop_control_elim_c53[local]:
+  (case prefix_result of
+   | (INL (),st) =>
+       (case unlock_action st of
+        | (INL (),st') =>
+            (INL NoneV,
+             abstract_machine_from_state
+               am_c.sources am_c.exports am_c.layouts st')
+        | (INR e,st') => (INR e,am))
+   | (INR (ReturnException v),st) =>
+       (case unlock_action st of
+        | (INL (),st') =>
+            (let am_ret =
+               abstract_machine_from_state
+                 am_c.sources am_c.exports am_c.layouts st'
+             in
+               case evaluate_type all_tenv ret of
+               | NONE => (INR (Error (TypeError "eval ret")),am)
+               | SOME tv =>
+                   (case safe_cast tv v of
+                    | NONE => (INR (Error (TypeError "ext cast ret")),am)
+                    | SOME v' => (INL v',am_ret)))
+        | (INR e,st') => (INR e,am))
+   | (INR e,st) => (INR e,am)) = (INR exc,am') ==>
+  (!e st. prefix_result = (INR e,st) ==>
+     e <> BreakException /\ e <> ContinueException) ==>
+  (!st e st'. unlock_action st = (INR e,st') ==> no_control_exc e) ==>
+  exc <> BreakException /\ exc <> ContinueException
+Proof
+  metis_tac[call_external_result_wrapper_no_loop_control_c53]
+QED
+
+
 Theorem unlock_action_no_type_error_c53[local]:
 
   no_type_error_eval
