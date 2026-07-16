@@ -8,7 +8,7 @@
 
 Theory vyperTypeCallGraphSoundness
 Ancestors
-  arithmetic list vyperTypeCallGraph vyperTypeContract
+  arithmetic list pred_set vyperTypeCallGraph vyperTypeContract
 
 (* ===== Generic executable/declarative reachability boundary ===== *)
 
@@ -62,6 +62,86 @@ Proof
   simp[NRC_SUC_RECURSE_LEFT] >>
   metis_tac[]
 QED
+
+Theorem LRC_APPEND:
+  LRC R (l1 ++ l2) x z <=>
+  ?y. LRC R l1 x y /\ LRC R l2 y z
+Proof
+  qid_spec_tac `x` >>
+  Induct_on `l1` >>
+  simp[LRC_def] >>
+  metis_tac[]
+QED
+
+Theorem not_ALL_DISTINCT_split:
+  ~ALL_DISTINCT ls ==>
+  ?p q r e. ls = p ++ e::q ++ e::r
+Proof
+  Induct_on `ls`
+  >- simp[] >>
+  gen_tac >> disch_tac >>
+  Cases_on `MEM h ls`
+  >- (fs[MEM_SPLIT] >>
+      qexistsl_tac [`[]`, `l1`, `l2`, `h`] >>
+      simp[]) >>
+  gvs[] >>
+  qexistsl_tac [`h::p`, `q`, `r`, `e`] >>
+  simp[]
+QED
+
+Theorem LRC_not_ALL_DISTINCT_shorten:
+  LRC R ls x x /\ ~ALL_DISTINCT ls ==>
+  ?m. 0 < m /\ m < LENGTH ls /\ NRC R m x x
+Proof
+  strip_tac >>
+  drule not_ALL_DISTINCT_split >>
+  strip_tac >>
+  gvs[LRC_APPEND, LRC_def] >>
+  qexists_tac `LENGTH (p ++ e::r)` >>
+  simp[NRC_LRC] >>
+  qexists_tac `p ++ e::r` >>
+  simp[LRC_APPEND, LRC_def] >>
+  metis_tac[]
+QED
+
+Theorem finite_TC_self_NRC_bound:
+  (!x y. R x y ==> MEM x nodes /\ MEM y nodes) ==>
+  TC R x x ==>
+  ?n. 0 < n /\ n <= LENGTH nodes /\ NRC R n x x
+Proof
+  rpt strip_tac >>
+  `?n. 0 < n /\ NRC R n x x` by
+    (gvs[TC_eq_NRC] >>
+     qexists_tac `SUC n` >> simp[]) >>
+  qspec_then `\m. 0 < m /\ NRC R m x x` mp_tac WOP >>
+  (impl_tac
+   >- (qexists_tac `n` >> simp[])) >>
+  strip_tac >>
+  fs[NRC_LRC] >>
+  `ALL_DISTINCT ls'` by
+    (spose_not_then assume_tac >>
+     drule_all LRC_not_ALL_DISTINCT_shorten >>
+     fs[NRC_LRC] >>
+     metis_tac[]) >>
+  `set ls' SUBSET set nodes` by
+    (rw[SUBSET_DEF] >>
+     drule_all LRC_MEM >>
+     metis_tac[]) >>
+  qexists_tac `n'` >>
+  simp[] >>
+  `CARD (set ls') <= CARD (set nodes)` by
+    metis_tac[CARD_SUBSET, FINITE_LIST_TO_SET] >>
+  `CARD (set nodes) <= LENGTH nodes` by
+    simp[CARD_LIST_TO_SET] >>
+  conj_tac
+  >- (`CARD (set ls') = LENGTH ls'` by
+        simp[ALL_DISTINCT_CARD_LIST_TO_SET] >>
+      decide_tac) >>
+  qexists_tac `ls'` >>
+  simp[]
+QED
+
+
 (* ===== Checker consequence ===== *)
 
 Theorem check_contract_call_graph_acyclic:
