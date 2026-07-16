@@ -291,7 +291,7 @@ Proof
          get_accounts_def, get_transient_storage_def,
          update_accounts_def, update_transient_def,
          bind_def, return_def, prod_CASE_rator, sum_CASE_rator]
-  >> imp_res_tac lift_option_no_control
+  >> imp_res_tac lift_option_type_no_control
 QED
 
 Theorem assign_result_no_control:

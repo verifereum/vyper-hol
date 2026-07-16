@@ -398,7 +398,7 @@ val () = read_storage_slot_def
 Definition write_storage_slot_def:
   write_storage_slot cx is_transient slot tv v = do
     storage <- get_storage_backend cx is_transient;
-    writes <- lift_option (encode_value tv v) "write_storage_slot encode";
+    writes <- lift_option_type (encode_value tv v) "write_storage_slot encode";
     storage' <<- apply_writes slot writes storage;
     set_storage_backend cx is_transient storage'
   od
