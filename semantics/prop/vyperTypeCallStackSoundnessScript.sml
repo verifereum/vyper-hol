@@ -4,7 +4,7 @@
 
 Theory vyperTypeCallStackSoundness
 Ancestors
-  list rich_list relation vyperTypeCallGraphSoundness
+  list rich_list relation vyperTypeCallGraph vyperTypeCallGraphSoundness
 
 (* ===== Generic stack-path and relation closure infrastructure ===== *)
 
@@ -93,4 +93,154 @@ Theorem calls_follow_call_graph_DROP:
   calls_follow_call_graph edges owner (DROP n xs)
 Proof
   simp[calls_follow_call_graph_def, EVERY_DROP]
+QED
+
+(* ===== Syntax extraction decomposition ===== *)
+
+Theorem calls_follow_int_calls_IntCall[simp]:
+  calls_follow_call_graph edges owner
+    (int_calls_expr (Call ty (IntCall callee) args default_ret)) <=>
+  call_edge_rel edges owner callee /\
+  calls_follow_call_graph edges owner (int_calls_exprs args)
+Proof
+  simp[int_calls_expr_def]
+QED
+
+Theorem calls_follow_int_calls_exprs_nil[simp]:
+  calls_follow_call_graph edges owner (int_calls_exprs [])
+Proof
+  simp[int_calls_expr_def]
+QED
+
+Theorem calls_follow_int_calls_exprs_cons[simp]:
+  calls_follow_call_graph edges owner (int_calls_exprs (e::es)) <=>
+  calls_follow_call_graph edges owner (int_calls_expr e) /\
+  calls_follow_call_graph edges owner (int_calls_exprs es)
+Proof
+  simp[int_calls_expr_def]
+QED
+
+Theorem calls_follow_int_calls_opt_NONE[simp]:
+  calls_follow_call_graph edges owner (int_calls_opt NONE)
+Proof
+  simp[int_calls_expr_def]
+QED
+
+Theorem calls_follow_int_calls_opt_SOME[simp]:
+  calls_follow_call_graph edges owner (int_calls_opt (SOME e)) <=>
+  calls_follow_call_graph edges owner (int_calls_expr e)
+Proof
+  simp[int_calls_expr_def]
+QED
+
+Theorem calls_follow_int_calls_target_Subscript[simp]:
+  calls_follow_call_graph edges owner
+    (int_calls_target (SubscriptTarget tgt e)) <=>
+  calls_follow_call_graph edges owner (int_calls_target tgt) /\
+  calls_follow_call_graph edges owner (int_calls_expr e)
+Proof
+  simp[int_calls_expr_def]
+QED
+
+Theorem calls_follow_int_calls_atarget_Tuple[simp]:
+  calls_follow_call_graph edges owner
+    (int_calls_atarget (TupleTarget tgts)) <=>
+  calls_follow_call_graph edges owner (int_calls_atargets tgts)
+Proof
+  simp[int_calls_atarget_def]
+QED
+
+Theorem calls_follow_int_calls_atargets_cons[simp]:
+  calls_follow_call_graph edges owner (int_calls_atargets (t::ts)) <=>
+  calls_follow_call_graph edges owner (int_calls_atarget t) /\
+  calls_follow_call_graph edges owner (int_calls_atargets ts)
+Proof
+  simp[int_calls_atarget_def]
+QED
+
+Theorem calls_follow_int_calls_iterator_Range[simp]:
+  calls_follow_call_graph edges owner (int_calls_iterator (Range x y)) <=>
+  calls_follow_call_graph edges owner (int_calls_expr x) /\
+  calls_follow_call_graph edges owner (int_calls_expr y)
+Proof
+  simp[int_calls_iterator_def]
+QED
+
+Theorem calls_follow_int_calls_stmt_For[simp]:
+  calls_follow_call_graph edges owner
+    (int_calls_stmt (For vars anns iter invs body)) <=>
+  calls_follow_call_graph edges owner (int_calls_iterator iter) /\
+  calls_follow_call_graph edges owner (int_calls_stmts body)
+Proof
+  simp[int_calls_stmt_def]
+QED
+
+Theorem calls_follow_int_calls_stmt_If[simp]:
+  calls_follow_call_graph edges owner (int_calls_stmt (If e yes no)) <=>
+  calls_follow_call_graph edges owner (int_calls_expr e) /\
+  calls_follow_call_graph edges owner (int_calls_stmts yes) /\
+  calls_follow_call_graph edges owner (int_calls_stmts no)
+Proof
+  simp[int_calls_stmt_def, CONJ_ASSOC]
+QED
+
+Theorem calls_follow_int_calls_stmts_cons[simp]:
+  calls_follow_call_graph edges owner (int_calls_stmts (s::ss)) <=>
+  calls_follow_call_graph edges owner (int_calls_stmt s) /\
+  calls_follow_call_graph edges owner (int_calls_stmts ss)
+Proof
+  simp[int_calls_stmt_def]
+QED
+
+Theorem calls_follow_function_int_calls[simp]:
+  calls_follow_call_graph edges owner (function_int_calls dflts body) <=>
+  calls_follow_call_graph edges owner (int_calls_exprs dflts) /\
+  calls_follow_call_graph edges owner (int_calls_stmts body)
+Proof
+  simp[function_int_calls_def]
+QED
+
+Theorem calls_follow_int_calls_atarget_Base[simp]:
+  calls_follow_call_graph edges owner
+    (int_calls_atarget (BaseTarget tgt)) <=>
+  calls_follow_call_graph edges owner (int_calls_target tgt)
+Proof
+  simp[int_calls_atarget_def]
+QED
+
+Theorem calls_follow_int_calls_atargets_nil[simp]:
+  calls_follow_call_graph edges owner (int_calls_atargets [])
+Proof
+  simp[int_calls_atarget_def]
+QED
+
+Theorem calls_follow_int_calls_iterator_Array[simp]:
+  calls_follow_call_graph edges owner (int_calls_iterator (Array e)) <=>
+  calls_follow_call_graph edges owner (int_calls_expr e)
+Proof
+  simp[int_calls_iterator_def]
+QED
+
+Theorem calls_follow_int_calls_stmt_Assign[simp]:
+  calls_follow_call_graph edges owner (int_calls_stmt (Assign tgt e)) <=>
+  calls_follow_call_graph edges owner (int_calls_atarget tgt) /\
+  calls_follow_call_graph edges owner (int_calls_expr e)
+Proof
+  simp[int_calls_stmt_def]
+QED
+
+Theorem calls_follow_int_calls_stmts_nil[simp]:
+  calls_follow_call_graph edges owner (int_calls_stmts [])
+Proof
+  simp[int_calls_stmt_def]
+QED
+
+Theorem calls_follow_int_calls_exprs_DROP:
+  calls_follow_call_graph edges owner (int_calls_exprs dflts) ==>
+  calls_follow_call_graph edges owner (int_calls_exprs (DROP n dflts))
+Proof
+  qid_spec_tac `dflts` >>
+  Induct_on `n` >>
+  Cases >>
+  simp[]
 QED
