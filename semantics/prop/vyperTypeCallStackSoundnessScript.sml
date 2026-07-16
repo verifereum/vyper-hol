@@ -314,3 +314,20 @@ Theorem functions_follow_call_graph_push_stk:
 Proof
   simp[functions_follow_call_graph_stk]
 QED
+
+Theorem checked_contract_functions_follow_call_graph:
+  check_contract cx.in_deploy layouts cx.txn.target mods = SOME art /\
+  ALOOKUP cx.sources cx.txn.target = SOME mods ==>
+  functions_follow_call_graph (contract_call_edges mods) cx
+Proof
+  rw[functions_follow_call_graph_def] >>
+  gvs[get_module_code_def] >>
+  drule ALOOKUP_MEM >>
+  disch_then assume_tac >>
+  drule lookup_callable_function_SOME_decompose >>
+  strip_tac
+  >- simp[function_int_calls_def, int_calls_expr_def, int_calls_stmt_def] >>
+  rw[EVERY_MEM, call_edge_rel_def] >>
+  irule contract_call_edges_function >>
+  metis_tac[]
+QED
