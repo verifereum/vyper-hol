@@ -3108,3 +3108,43 @@ QED
 
 
 
+
+(* ===== Checked external call no escaping loop control ===== *)
+
+Theorem checked_call_external_no_loop_control:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  checked_contract_runtime_ready art mods am tx /\
+  machine_well_typed am /\
+  call_tx_well_typed tx /\
+  call_external am tx = (INR exc,am') ==>
+  exc <> BreakException /\ exc <> ContinueException
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `call_external am tx = (INR exc,am')` mp_tac >>
+  simp[Once call_external_def] >>
+  gvs[AllCaseEqs()] >>
+  strip_tac >>
+  gvs[checked_contract_runtime_ready_def, get_self_code_def] >>
+  TRY (Cases_on `exc` >> gvs[] >> NO_TAC) >>
+  `(?raw.
+      MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body') ts) \/
+   (?decl.
+      MEM decl ts /\
+      is_public_getter_decl tx.function_name decl /\
+      external_getter_tuple (find_function_module am tx.target tx.function_name) decl =
+        SOME (mut,nr,args,dflts,ret,body'))` by
+    (irule lookup_exported_function_checked_cases_current >> simp[] >> metis_tac[]) >>
+  gvs[]
+  >- (gvs[get_module_code_def, initial_evaluation_context_def] >>
+      metis_tac[call_external_function_no_loop_control_c53,
+                checked_explicit_external_body_no_control_escape_selected])
+  >- (gvs[get_module_code_def, initial_evaluation_context_def] >>
+      metis_tac[call_external_function_no_loop_control_c53,
+                checked_public_getter_body_no_control_escape_selected])
+  >- (gvs[get_module_code_def, initial_evaluation_context_def] >>
+      metis_tac[call_external_function_no_loop_control_c53,
+                checked_explicit_external_body_no_control_escape_selected]) >>
+  gvs[get_module_code_def, initial_evaluation_context_def] >>
+  metis_tac[call_external_function_no_loop_control_c53,
+            checked_public_getter_body_no_control_escape_selected]
+QED
