@@ -1242,7 +1242,7 @@ Definition evaluate_def:
     od
   od ∧
   eval_expr cx (Call _ (IntCall (src_id_opt, fn)) es _) = do
-    check (¬MEM (src_id_opt, fn) cx.stk) "recursion";
+    type_check (¬MEM (src_id_opt, fn) cx.stk) "recursion";
     ts <- lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code";
     tup <- lift_option_type (lookup_callable_function cx.in_deploy fn ts) "IntCall lookup_function";
     (* tup = (mut, nr, args, dflts, ret, body) *)
