@@ -331,3 +331,160 @@ Proof
   irule contract_call_edges_function >>
   metis_tac[]
 QED
+
+(* ===== Safety of calls in the syntax currently being evaluated ===== *)
+
+Definition call_evaluation_safe_def:
+  call_evaluation_safe cx calls <=>
+    ?edges owner ancestors.
+      cx.stk = owner::ancestors /\
+      call_stack_follows (call_edge_rel edges) cx.stk /\
+      irreflexive (TC (call_edge_rel edges)) /\
+      functions_follow_call_graph edges cx /\
+      calls_follow_call_graph edges owner calls
+End
+
+Theorem call_evaluation_safe_mono:
+  call_evaluation_safe cx calls /\
+  (!callee. MEM callee subcalls ==> MEM callee calls) ==>
+  call_evaluation_safe cx subcalls
+Proof
+  rw[call_evaluation_safe_def] >>
+  qexistsl_tac [`edges`, `owner`, `ancestors`] >> simp[] >>
+  gvs[calls_follow_call_graph_def, EVERY_MEM]
+QED
+
+Theorem call_evaluation_safe_append_left:
+  call_evaluation_safe cx (xs ++ ys) ==>
+  call_evaluation_safe cx xs
+Proof
+  strip_tac >> irule call_evaluation_safe_mono >>
+  qexists_tac `xs ++ ys` >> simp[]
+QED
+
+Theorem call_evaluation_safe_append_right:
+  call_evaluation_safe cx (xs ++ ys) ==>
+  call_evaluation_safe cx ys
+Proof
+  strip_tac >> irule call_evaluation_safe_mono >>
+  qexists_tac `xs ++ ys` >> simp[]
+QED
+
+Theorem call_evaluation_safe_DROP:
+  call_evaluation_safe cx calls ==>
+  call_evaluation_safe cx (DROP n calls)
+Proof
+  qid_spec_tac `calls` >> Induct_on `n`
+  >- simp[] >>
+  Cases >> simp[] >> strip_tac >>
+  first_x_assum irule >>
+  irule call_evaluation_safe_mono >>
+  qexists_tac `h::t` >> simp[]
+QED
+
+Theorem call_evaluation_safe_target_not_mem:
+  call_evaluation_safe cx (callee::calls) ==>
+  ~MEM callee cx.stk
+Proof
+  rw[call_evaluation_safe_def] >>
+  qpat_x_assum `cx.stk = owner::ancestors` SUBST_ALL_TAC >>
+  strip_tac >>
+  drule_all call_stack_member_reaches_head >> strip_tac >>
+  drule_all RTC_then_R_TC >>
+  gvs[irreflexive_def]
+QED
+
+Theorem call_evaluation_safe_push_callable:
+  call_evaluation_safe cx (callee::calls) /\
+  callee = (src,fn) /\
+  get_module_code cx src = SOME ts /\
+  lookup_callable_function cx.in_deploy fn ts =
+    SOME (mut,nr,args,dflts,ret,body) ==>
+  call_evaluation_safe
+    (cx with stk updated_by CONS callee)
+    (function_int_calls dflts body)
+Proof
+  rw[call_evaluation_safe_def] >>
+  qexists_tac `edges` >>
+  simp[functions_follow_call_graph_stk] >>
+  conj_tac
+  >- (qpat_x_assum `cx.stk = owner::ancestors` SUBST_ALL_TAC >>
+      irule call_stack_follows_push >> simp[]) >>
+  gvs[functions_follow_call_graph_def, calls_follow_call_graph_def] >>
+  first_x_assum drule_all >>
+  simp[function_int_calls_def, EVERY_APPEND]
+QED
+
+Theorem call_evaluation_safe_push_defaults:
+  call_evaluation_safe cx (callee::calls) /\
+  callee = (src,fn) /\
+  get_module_code cx src = SOME ts /\
+  lookup_callable_function cx.in_deploy fn ts =
+    SOME (mut,nr,args,dflts,ret,body) ==>
+  call_evaluation_safe
+    (cx with stk updated_by CONS callee)
+    (int_calls_exprs dflts)
+Proof
+  strip_tac >>
+  drule_all call_evaluation_safe_push_callable >>
+  simp[function_int_calls_def] >>
+  metis_tac[call_evaluation_safe_append_left]
+QED
+
+Theorem call_evaluation_safe_push_needed_defaults:
+  call_evaluation_safe cx (callee::calls) /\
+  callee = (src,fn) /\
+  get_module_code cx src = SOME ts /\
+  lookup_callable_function cx.in_deploy fn ts =
+    SOME (mut,nr,args,dflts,ret,body) ==>
+  call_evaluation_safe
+    (cx with stk updated_by CONS callee)
+    (int_calls_exprs (DROP n dflts))
+Proof
+  strip_tac >>
+  drule_all call_evaluation_safe_push_defaults >>
+  rw[call_evaluation_safe_def] >>
+  qexists_tac `edges` >> simp[] >>
+  irule calls_follow_int_calls_exprs_DROP >> simp[]
+QED
+
+Theorem call_evaluation_safe_push_body:
+  call_evaluation_safe cx (callee::calls) /\
+  callee = (src,fn) /\
+  get_module_code cx src = SOME ts /\
+  lookup_callable_function cx.in_deploy fn ts =
+    SOME (mut,nr,args,dflts,ret,body) ==>
+  call_evaluation_safe
+    (cx with stk updated_by CONS callee)
+    (int_calls_stmts body)
+Proof
+  strip_tac >>
+  drule_all call_evaluation_safe_push_callable >>
+  simp[function_int_calls_def] >>
+  metis_tac[call_evaluation_safe_append_right]
+QED
+
+Theorem call_evaluation_safe_singleton:
+  irreflexive (TC (call_edge_rel edges)) /\
+  functions_follow_call_graph edges cx /\
+  calls_follow_call_graph edges owner calls ==>
+  call_evaluation_safe (cx with stk := [owner]) calls
+Proof
+  rw[call_evaluation_safe_def] >>
+  qexists_tac `edges` >>
+  simp[call_stack_follows_def, functions_follow_call_graph_stk]
+QED
+
+Theorem checked_contract_call_evaluation_safe_singleton:
+  check_contract cx.in_deploy layouts cx.txn.target mods = SOME art /\
+  ALOOKUP cx.sources cx.txn.target = SOME mods /\
+  calls_follow_call_graph (contract_call_edges mods) owner calls ==>
+  call_evaluation_safe (cx with stk := [owner]) calls
+Proof
+  rw[call_evaluation_safe_def] >>
+  qexists_tac `contract_call_edges mods` >>
+  simp[call_stack_follows_def, functions_follow_call_graph_stk] >>
+  conj_tac
+  >- (drule checked_contract_call_graph_irreflexive >> simp[]) >>
+  drule_all checked_contract_functions_follow_call_graph >> simp[]
+QED
