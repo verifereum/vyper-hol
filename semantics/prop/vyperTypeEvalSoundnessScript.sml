@@ -5584,7 +5584,7 @@ Theorem intcall_default_exprs_sound_from_generated_ih[local]:
     env_body.
     (!s'' x t s3 ts0 t1 s4 tup0 t2 mut stup nr stup2 args sstup dflts
         sstup2 ret body s5 x5 t5 s6 vs0 t6 es0 cx0 s7 prev0 t7 s8 x8 t8.
-      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) /\
+      type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) /\
       lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s3 =
         (INL ts0,t1) /\
       lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
@@ -5609,7 +5609,7 @@ Theorem intcall_default_exprs_sound_from_generated_ih[local]:
         state_well_typed st0' /\ env_consistent env0 cx0 st0' /\
         accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
         case res0 of INL vs1 => exprs_runtime_typed env0 es0 vs1 | INR _ => T) /\
-    check (~MEM (src_id_opt,fn) cx.stk) "recursion" ih_check_s = (INL xrec,srec) /\
+    type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" ih_check_s = (INL xrec,srec) /\
     lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" ih_mod_s =
       (INL ts,smod) /\
     lift_option_type (lookup_callable_function cx.in_deploy fn ts)
@@ -5737,7 +5737,7 @@ Theorem intcall_default_exprs_frame_sound_from_generated_ih[local]:
     env_body.
     (!s'' x t s3 ts0 t1 s4 tup0 t2 mut stup nr stup2 args sstup dflts
         sstup2 ret body s5 x5 t5 s6 vs0 t6 es0 cx0 s7 prev0 t7 s8 x8 t8.
-      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) /\
+      type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) /\
       lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s3 =
         (INL ts0,t1) /\
       lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
@@ -5762,7 +5762,7 @@ Theorem intcall_default_exprs_frame_sound_from_generated_ih[local]:
         state_well_typed st0' /\ env_consistent env0 cx0 st0' /\
         accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
         case res0 of INL vs1 => exprs_runtime_typed env0 es0 vs1 | INR _ => T) /\
-    check (~MEM (src_id_opt,fn) cx.stk) "recursion" ih_check_s = (INL xrec,srec) /\
+    type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" ih_check_s = (INL xrec,srec) /\
     lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" ih_mod_s =
       (INL ts,smod) /\
     lift_option_type (lookup_callable_function cx.in_deploy fn ts)
@@ -7168,7 +7168,7 @@ Theorem intcall_generated_body_ih_live_consumer_premise[local]:
         sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 needed0 cxd0
         s7 dflt_vs0 t7 all_tenv0 s8 env0 t8 s9 prev0 t9 s10 rtv0 t10
         is_view0 s11 x11 t11 s12 cx0 t12.
-      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
       lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
         (INL ts0,t1) /\
       lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
@@ -7211,7 +7211,7 @@ Theorem intcall_generated_body_ih_live_consumer_premise[local]:
         | INR exn => ?env_exn.
             env_extends env1 env_exn /\ env_consistent env_exn cx0 st0' /\
             return_exception_typed env_exn ret_ty1 exn) /\
-    check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
+    type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
     lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" r =
       (INL ts,r) /\
     lift_option_type (lookup_callable_function cx.in_deploy fn ts)
@@ -7289,7 +7289,7 @@ Theorem intcall_defaults_result_package_from_generated_ih_general[local]:
     (!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
         sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 es0 cx0
         s7 prev0 t7 s8 x8 t8.
-      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
       lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
         (INL ts0,t1) /\
       lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
@@ -7314,7 +7314,7 @@ Theorem intcall_defaults_result_package_from_generated_ih_general[local]:
         state_well_typed st0' /\ env_consistent env0 cx0 st0' /\
         accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
         case res0 of INL vs => exprs_runtime_typed env0 es0 vs | INR _ => T) /\
-    check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
+    type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
     lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" r =
       (INL ts,r) /\
     lift_option_type (lookup_callable_function cx.in_deploy fn ts)
@@ -7461,7 +7461,7 @@ Theorem intcall_defaults_result_frame_package_from_generated_ih_general[local]:
     (!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
         sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 es0 cx0
         s7 prev0 t7 s8 x8 t8.
-      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
       lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
         (INL ts0,t1) /\
       lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
@@ -7486,7 +7486,7 @@ Theorem intcall_defaults_result_frame_package_from_generated_ih_general[local]:
         state_well_typed st0' /\ env_consistent env0 cx0 st0' /\
         accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
         case res0 of INL vs => exprs_runtime_typed env0 es0 vs | INR _ => T) /\
-    check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
+    type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
     lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" r =
       (INL ts,r) /\
     lift_option_type (lookup_callable_function cx.in_deploy fn ts)
@@ -7597,7 +7597,7 @@ Theorem intcall_generated_body_post_push_ih[local]:
         sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 needed0 cxd0
         s7 dflt_vs0 t7 all_tenv0 s8 env0 t8 s9 prev0 t9 s10 rtv0 t10
         is_view0 s11 x11 t11 s12 cx0 t12.
-      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
       lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
         (INL ts0,t1) /\
       lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
@@ -7642,7 +7642,7 @@ Theorem intcall_generated_body_post_push_ih[local]:
               env_extends env1 env_exn /\ env_consistent env_exn cx0 st0' /\
               return_exception_typed env_exn ret_ty1 exn) /\
     env_body.current_src = src_id_opt /\
-    check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
+    type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
     lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" r =
       (INL ts,r) /\
     lift_option_type (lookup_callable_function cx.in_deploy fn ts)
@@ -7845,7 +7845,7 @@ Theorem intcall_successful_defaults_lock_success_sound_general[local]:
         sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 needed0 cxd0
         s7 dflt_vs0 t7 all_tenv0 s8 env0 t8 s9 prev0 t9 s10 rtv0 t10
         is_view0 s11 x11 t11 s12 cx0 t12.
-      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
       lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
         (INL ts0,t1) /\
       lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
@@ -7889,7 +7889,7 @@ Theorem intcall_successful_defaults_lock_success_sound_general[local]:
             ?env_exn.
               env_extends env1 env_exn /\ env_consistent env_exn cx0 st0' /\
               return_exception_typed env_exn ret_ty1 exn) /\
-    check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
+    type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
     lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" r =
       (INL ts,r) /\
     lift_option_type (lookup_callable_function cx.in_deploy fn ts)
@@ -7978,7 +7978,7 @@ Proof
       intcall_generated_body_post_push_ih) >>
     (CONJ_TAC THEN1 (qhdtm_x_assum `bool$!` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `env_body.current_src = src_id_opt` ACCEPT_TAC)) >>
-    (CONJ_TAC THEN1 (qpat_assum `check _ "recursion" r = _` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `type_check _ "recursion" r = _` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `lift_option_type (get_module_code _ _) _ r = _` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `lift_option_type (lookup_callable_function _ _ _) _ r = _` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `type_check _ "IntCall args length" r = _` ACCEPT_TAC)) >>
@@ -8033,7 +8033,7 @@ Theorem intcall_successful_defaults_continuation_lock_success_case[local]:
         sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 needed0 cxd0
         s7 dflt_vs0 t7 all_tenv0 s8 env0 t8 s9 prev0 t9 s10 rtv0 t10
         is_view0 s11 x11 t11 s12 cx0 t12.
-      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
       lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
         (INL ts0,t1) /\
       lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
@@ -8077,7 +8077,7 @@ Theorem intcall_successful_defaults_continuation_lock_success_case[local]:
             ?env_exn.
               env_extends env1 env_exn /\ env_consistent env_exn cx0 st0' /\
               return_exception_typed env_exn ret_ty1 exn) /\
-    check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
+    type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
     lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" r =
       (INL ts,r) /\
     lift_option_type (lookup_callable_function cx.in_deploy fn ts)
@@ -8154,7 +8154,7 @@ Proof
                          `dflt_vs`, `dflt_st`, `call_env`, `lock_st`]
     intcall_successful_defaults_lock_success_sound_general) >>
   (CONJ_TAC THEN1 (qhdtm_x_assum `bool$!` ACCEPT_TAC)) >>
-  (CONJ_TAC THEN1 (qpat_assum `check _ "recursion" r = _` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `type_check _ "recursion" r = _` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (qpat_assum `lift_option_type (get_module_code _ _) _ r = _` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (qpat_assum `lift_option_type (lookup_callable_function _ _ _) _ r = _` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (qpat_assum `type_check _ "IntCall args length" r = _` ACCEPT_TAC)) >>
@@ -8200,7 +8200,7 @@ Theorem intcall_successful_defaults_continuation_sound_general[local]:
         sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 needed0 cxd0
         s7 dflt_vs0 t7 all_tenv0 s8 env0 t8 s9 prev0 t9 s10 rtv0 t10
         is_view0 s11 x11 t11 s12 cx0 t12.
-      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
       lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
         (INL ts0,t1) /\
       lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
@@ -8244,7 +8244,7 @@ Theorem intcall_successful_defaults_continuation_sound_general[local]:
             ?env_exn.
               env_extends env1 env_exn /\ env_consistent env_exn cx0 st0' /\
               return_exception_typed env_exn ret_ty1 exn) /\
-    check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
+    type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
     lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" r =
       (INL ts,r) /\
     lift_option_type (lookup_callable_function cx.in_deploy fn ts)
@@ -8325,7 +8325,7 @@ Proof
                            `dflt_vs`, `dflt_st`, `call_env`, `INL ()`, `lock_st`]
       intcall_successful_defaults_continuation_lock_success_case) >>
     (CONJ_TAC THEN1 (qhdtm_x_assum `bool$!` ACCEPT_TAC)) >>
-    (CONJ_TAC THEN1 (qpat_assum `check _ "recursion" r = _` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `type_check _ "recursion" r = _` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `lift_option_type (get_module_code _ _) _ r = _` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `lift_option_type (lookup_callable_function _ _ _) _ r = _` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `type_check _ "IntCall args length" r = _` ACCEPT_TAC)) >>
@@ -8421,7 +8421,7 @@ Theorem intcall_actual_args_success_default_success_branch[local]:
         sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 needed0 cxd0
         s7 dflt_vs0 t7 all_tenv0 s8 env0 t8 s9 prev0 t9 s10 rtv0 t10
         is_view0 s11 x11 t11 s12 cx0 t12.
-      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
       lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
         (INL ts0,t1) /\
       lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
@@ -8465,7 +8465,7 @@ Theorem intcall_actual_args_success_default_success_branch[local]:
             ?env_exn.
               env_extends env1 env_exn /\ env_consistent env_exn cx0 st0' /\
               return_exception_typed env_exn ret_ty1 exn) /\
-    check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
+    type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
     lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" r =
       (INL ts,r) /\
     lift_option_type (lookup_callable_function cx.in_deploy fn ts)
@@ -8548,7 +8548,7 @@ Theorem intcall_actual_args_success_default_success_branch_pair[local]:
         sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 needed0 cxd0
         s7 dflt_vs0 t7 all_tenv0 s8 env0 t8 s9 prev0 t9 s10 rtv0 t10
         is_view0 s11 x11 t11 s12 cx0 t12.
-      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
       lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
         (INL ts0,t1) /\
       lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
@@ -8592,7 +8592,7 @@ Theorem intcall_actual_args_success_default_success_branch_pair[local]:
             ?env_exn.
               env_extends env1 env_exn /\ env_consistent env_exn cx0 st0' /\
               return_exception_typed env_exn ret_ty1 exn) /\
-    check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
+    type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
     lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" r =
       (INL ts,r) /\
     lift_option_type (lookup_callable_function cx.in_deploy fn ts)
@@ -8686,7 +8686,7 @@ Theorem intcall_actual_args_success_sound_from_generated_ih_general[local]:
     (!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
         sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 es0 cx0
         s7 prev0 t7 s8 x8 t8.
-      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
       lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
         (INL ts0,t1) /\
       lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
@@ -8715,7 +8715,7 @@ Theorem intcall_actual_args_success_sound_from_generated_ih_general[local]:
         sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 needed0 cxd0
         s7 dflt_vs0 t7 all_tenv0 s8 env0 t8 s9 prev0 t9 s10 rtv0 t10
         is_view0 s11 x11 t11 s12 cx0 t12.
-      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
       lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
         (INL ts0,t1) /\
       lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
@@ -8759,7 +8759,7 @@ Theorem intcall_actual_args_success_sound_from_generated_ih_general[local]:
             ?env_exn.
               env_extends env1 env_exn /\ env_consistent env_exn cx0 st0' /\
               return_exception_typed env_exn ret_ty1 exn) /\
-    check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
+    type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
     lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" r =
       (INL ts,r) /\
     lift_option_type (lookup_callable_function cx.in_deploy fn ts)
@@ -8956,7 +8956,7 @@ Theorem intcall_expr_sound_from_generated_ih[local]:
   !cx env st res st' loc src_id_opt fn es extra.
     (!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
         sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5.
-      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
       lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
         (INL ts0,t1) /\
       lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
@@ -8979,7 +8979,7 @@ Theorem intcall_expr_sound_from_generated_ih[local]:
     (!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
         sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 es0 cx0
         s7 prev0 t7 s8 x8 t8.
-      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
       lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
         (INL ts0,t1) /\
       lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
@@ -9008,7 +9008,7 @@ Theorem intcall_expr_sound_from_generated_ih[local]:
         sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 needed0 cxd0
         s7 dflt_vs0 t7 all_tenv0 s8 env0 t8 s9 prev0 t9 s10 rtv0 t10
         is_view0 s11 x11 t11 s12 cx0 t12.
-      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
       lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
         (INL ts0,t1) /\
       lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
@@ -9111,9 +9111,9 @@ Proof
   rewrite_tac[Once evaluate_def] >>
   simp_tac(srw_ss())[bind_apply, ignore_bind_apply, LET_THM] >>
   BasicProvers.TOP_CASE_TAC >>
-  imp_res_tac check_state >> BasicProvers.VAR_EQ_TAC >>
+  imp_res_tac type_check_state >> BasicProvers.VAR_EQ_TAC >>
   reverse BasicProvers.TOP_CASE_TAC >- (strip_tac >>
-      gvs[L "recursion_guard", check_def, assert_def]) >>
+      gvs[L "recursion_guard", type_check_def, assert_def]) >>
   BasicProvers.TOP_CASE_TAC >>
   imp_res_tac lift_option_type_state >> BasicProvers.VAR_EQ_TAC >>
   reverse BasicProvers.TOP_CASE_TAC >- (strip_tac >>
@@ -9208,7 +9208,7 @@ Proof
       intcall_actual_args_success_sound_from_generated_ih_general) >>
     (CONJ_TAC THEN1 (asm "default_ih" (fn th => MATCH_ACCEPT_TAC th))) >>
     (CONJ_TAC THEN1 (asm "body_ih" (fn th => MATCH_ACCEPT_TAC th))) >>
-    (CONJ_TAC THEN1 (qpat_assum `check _ _ r = (INL (),r)` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `type_check _ _ r = (INL (),r)` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 simp[lift_option_type_def, return_def]) >>
     (CONJ_TAC THEN1 simp[lift_option_type_def, return_def]) >>
     (CONJ_TAC THEN1 (
