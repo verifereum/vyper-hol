@@ -1036,6 +1036,12 @@ Proof
       is_int_type_inv, is_numeric_type_inv, is_bool_type_inv,
       is_flag_type_inv, is_comparable_type_inv,
       evaluate_type_def, type_to_int_bound_def, AllCaseEqs()] >>
+  (* Signed Add: route the successful bounded operation through its inversion lemma. *)
+  TRY (
+    qpat_x_assum `evaluate_binop (Signed n) (BaseTV (IntT n)) Add
+                    (IntV i) (IntV i') = INL v` mp_tac >>
+    simp[Once evaluate_binop_def] >> strip_tac >>
+    imp_res_tac bounded_int_op_INL >> gvs[] >> NO_TAC) >>
   (* NotIn/NotEq: unfold once to binop_negate, result is BoolV *)
   TRY (
     simp[Once evaluate_binop_def, binop_negate_def] >> NO_TAC) >>
