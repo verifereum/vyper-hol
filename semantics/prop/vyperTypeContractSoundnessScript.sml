@@ -2716,6 +2716,32 @@ Proof
   strip_tac >>
   drule_all checked_public_getter_post_prefix_body_setup_selected >>
   strip_tac >>
+  `call_evaluation_safe
+     (initial_evaluation_context am.sources am.layouts
+       (empty_call_txn with target := tx.target) src)
+     (int_calls_stmts body)` by (
+    `int_calls_stmts body = []` by
+      metis_tac[selected_public_getter_body_int_calls_empty] >>
+    pop_assum SUBST1_TAC >>
+    `ALOOKUP am.sources tx.target = SOME mods` by
+      gvs[checked_contract_runtime_ready_def] >>
+    `irreflexive (TC (call_edge_rel (contract_call_edges mods)))` by (
+      drule checked_contract_call_graph_irreflexive >> simp[]) >>
+    `functions_follow_call_graph (contract_call_edges mods)
+       (initial_evaluation_context am.sources am.layouts
+         (empty_call_txn with target := tx.target) src)` by (
+      irule checked_contract_initial_context_functions_follow_call_graph >>
+      simp[empty_call_txn_def]) >>
+    `(initial_evaluation_context am.sources am.layouts
+        (empty_call_txn with target := tx.target) src) =
+     ((initial_evaluation_context am.sources am.layouts
+        (empty_call_txn with target := tx.target) src) with
+       stk := [(src,"")])` by
+      simp[initial_evaluation_context_def, empty_call_txn_def] >>
+    pop_assum SUBST1_TAC >>
+    irule call_evaluation_safe_singleton >>
+    qexists `contract_call_edges mods` >>
+    simp[calls_follow_call_graph_def]) >>
   `no_type_error_eval
      (eval_stmts
        (initial_evaluation_context am.sources am.layouts
@@ -3082,6 +3108,11 @@ Proof
   strip_tac >>
   drule_all checked_explicit_external_body_setup >>
   strip_tac >>
+  `call_evaluation_safe cx (int_calls_stmts body)` by
+    (qpat_x_assum `cx = _` SUBST1_TAC >>
+     gvs[checked_contract_runtime_ready_def] >>
+     drule_all checked_explicit_external_body_call_evaluation_safe >>
+     simp[]) >>
   drule_all eval_stmts_no_type_error >>
   rw[vyperTypeExprSoundnessTheory.no_type_error_eval_def]
 QED

@@ -9066,6 +9066,9 @@ Theorem intcall_expr_sound_from_generated_ih[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   qhdtm_x_assum `call_evaluation_safe` (mk_asm "call_safe") >>
+  asm "call_safe" (fn th =>
+    assume_tac (MATCH_MP intcall_call_evaluation_safe_target_not_mem th)) >>
+  pop_assum $ mk_asm "recursion_guard" >>
   qpat_x_assum `well_typed_expr env (Call _ (IntCall _) _ _)` mp_tac >>
   rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
   qpat_x_assum
@@ -9110,7 +9113,7 @@ Proof
   BasicProvers.TOP_CASE_TAC >>
   imp_res_tac check_state >> BasicProvers.VAR_EQ_TAC >>
   reverse BasicProvers.TOP_CASE_TAC >- (strip_tac >>
-      gvs[check_def, type_check_def, assert_def, no_type_error_result_def]) >>
+      gvs[L "recursion_guard", check_def, assert_def]) >>
   BasicProvers.TOP_CASE_TAC >>
   imp_res_tac lift_option_type_state >> BasicProvers.VAR_EQ_TAC >>
   reverse BasicProvers.TOP_CASE_TAC >- (strip_tac >>
