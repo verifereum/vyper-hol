@@ -102,7 +102,8 @@ QED
 Theorem internal_call_no_type_error:
   well_typed_expr env (Call ty (IntCall (src,fn)) args drv) /\
   env_consistent env cx st /\ state_well_typed st /\
-  context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx ==>
+  context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
+  call_evaluation_safe cx (int_calls_expr (Call ty (IntCall (src,fn)) args drv)) ==>
   no_type_error_eval (eval_expr cx (Call ty (IntCall (src,fn)) args drv) st)
 Proof
   strip_tac >>
@@ -117,6 +118,7 @@ Theorem internal_call_type_preservation:
   well_typed_expr env (Call ty (IntCall (src,fn)) args drv) /\
   env_consistent env cx st /\ state_well_typed st /\
   context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
+  call_evaluation_safe cx (int_calls_expr (Call ty (IntCall (src,fn)) args drv)) /\
   eval_expr cx (Call ty (IntCall (src,fn)) args drv) st = (INL tvl, st') ==>
   state_well_typed st' /\ expr_runtime_typed env (Call ty (IntCall (src,fn)) args drv) tvl
 Proof
@@ -129,7 +131,8 @@ QED
 Theorem external_call_no_type_error:
   well_typed_expr env (Call ty (ExtCall stat fsig) args drv) /\
   env_consistent env cx st /\ state_well_typed st /\
-  context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx ==>
+  context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
+  call_evaluation_safe cx (int_calls_expr (Call ty (ExtCall stat fsig) args drv)) ==>
   no_type_error_eval (eval_expr cx (Call ty (ExtCall stat fsig) args drv) st)
 Proof
   strip_tac >>
@@ -144,7 +147,8 @@ Theorem special_call_no_type_error:
   well_typed_expr env (Call ty target args drv) /\
   target <> IntCall (src,fn) /\ (!stat fsig. target <> ExtCall stat fsig) /\
   env_consistent env cx st /\ state_well_typed st /\
-  context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx ==>
+  context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
+  call_evaluation_safe cx (int_calls_expr (Call ty target args drv)) ==>
   no_type_error_eval (eval_expr cx (Call ty target args drv) st)
 Proof
   strip_tac >>

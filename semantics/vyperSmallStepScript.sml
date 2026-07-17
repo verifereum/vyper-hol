@@ -186,7 +186,7 @@ Definition eval_expr_cps_def:
     eval_exprs_cps cx10 es st (CreateK ty kind rof k) ∧
   eval_expr_cps cx10 (Call _ (IntCall (ns, fn)) es _) st k =
     (case do
-      check (no_recursion (ns, fn) cx10.stk) "recursion";
+      type_check (no_recursion (ns, fn) cx10.stk) "recursion";
       ts <- lift_option_type (get_module_code cx10 ns) "IntCall get_module_code";
       tup <- lift_option_type (lookup_callable_function cx10.in_deploy fn ts) "IntCall lookup_function";
       (* tup = (mut, nr, args, dflts, ret, body) *)

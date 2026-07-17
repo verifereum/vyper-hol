@@ -651,6 +651,7 @@ Theorem checked_explicit_external_post_prefix_body_return_typed_selected:
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
   st.scopes = [scope] /\ st.immutables = am.immutables /\
   state_well_typed st /\ accounts_well_typed st.accounts /\
+  call_evaluation_safe cx (int_calls_stmts body) /\
   eval_stmts cx body st = (INR (ReturnException v),st') ==>
   ?ret_tv. evaluate_type (type_env_all_modules mods) ret = SOME ret_tv /\
            value_has_type ret_tv v
@@ -746,7 +747,10 @@ Theorem check_contract_explicit_external_entry_no_type_error:
     ((initial_evaluation_context am.sources am.layouts tx src) with stk := [(src,fn)])
     am.immutables /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
-  args_values_typed (type_env_all_modules mods) args vals ==>
+  args_values_typed (type_env_all_modules mods) args vals /\
+  call_evaluation_safe
+    ((initial_evaluation_context am.sources am.layouts tx src) with stk := [(src,fn)])
+    (int_calls_stmts body) ==>
   no_type_error_eval
     (eval_stmts
       ((initial_evaluation_context am.sources am.layouts tx src) with stk := [(src,fn)])
@@ -768,7 +772,8 @@ Theorem checked_explicit_external_post_prefix_body_no_type_error_selected:
   immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes cx am.immutables /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
   st.scopes = [scope] /\ st.immutables = am.immutables /\
-  state_well_typed st /\ accounts_well_typed st.accounts ==>
+  state_well_typed st /\ accounts_well_typed st.accounts /\
+  call_evaluation_safe cx (int_calls_stmts body) ==>
   no_type_error_eval (eval_stmts cx body st)
 Proof
   strip_tac >> gvs[] >>

@@ -608,7 +608,7 @@ Theorem int_call_no_control[local]:
   ∀cx v16 src_id_opt fn es v17.
   (∀s'' x t s'3 ts t' s'4 tup t'' s'5 x' t'3 s'6 vs t'4
       s'7 prev t'5 s'8 x'' t'6.
-     check (¬MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) ∧
+     type_check (¬MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) ∧
      lift_option_type (get_module_code cx src_id_opt)
        "IntCall get_module_code" s'3 = (INL ts,t') ∧
      lift_option_type (lookup_callable_function cx.in_deploy fn ts)
@@ -629,7 +629,7 @@ Theorem int_call_no_control[local]:
             (FST (SND (SND (SND tup))))) s = (INR exc,st') ⇒
        no_control_exc exc) ∧
   (∀s'' x t s'3 ts t' s'4 tup t'' s'5 x' t'3.
-     check (¬MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) ∧
+     type_check (¬MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) ∧
      lift_option_type (get_module_code cx src_id_opt)
        "IntCall get_module_code" s'3 = (INL ts,t') ∧
      lift_option_type (lookup_callable_function cx.in_deploy fn ts)

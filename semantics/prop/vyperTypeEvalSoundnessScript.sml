@@ -19,6 +19,7 @@ Ancestors
   vyperTypeExtCallSoundness vyperTypeGlobalLookupSoundness vyperTypeAssignContext vyperTypeBuiltins vyperTypeExprSoundness vyperTypeAssignSoundness
   vyperAssignTarget vyperExprNoControl vyperScopePreservation vyperEvalPreservesScopes
   vyperEvalMisc vyperStatePreservation vyperAssignPreservesType vyperTypeStatePreservation
+  vyperTypeCallGraph vyperTypeCallStackSoundness
 Libs
   wordsLib markerLib intLib
 
@@ -73,6 +74,160 @@ Proof
   gvs[]
 QED
 
+Theorem intcall_call_evaluation_safe_target_not_mem[local]:
+  call_evaluation_safe cx
+    (int_calls_expr (Call loc (IntCall (src_id_opt,fn)) es extra)) ==>
+  ~MEM (src_id_opt,fn) cx.stk
+Proof
+  simp[int_calls_expr_def] >> strip_tac >>
+  irule call_evaluation_safe_target_not_mem >>
+  qexists_tac `int_calls_exprs es` >> simp[]
+QED
+
+Theorem intcall_call_evaluation_safe_args[local]:
+  call_evaluation_safe cx
+    (int_calls_expr (Call loc (IntCall callee) es extra)) ==>
+  call_evaluation_safe cx (int_calls_exprs es)
+Proof
+  strip_tac >> irule call_evaluation_safe_mono >>
+  qexists_tac `int_calls_expr (Call loc (IntCall callee) es extra)` >>
+  simp[int_calls_expr_def]
+QED
+
+Theorem intcall_call_evaluation_safe_needed_defaults[local]:
+  call_evaluation_safe cx
+    (int_calls_expr (Call loc (IntCall (src_id_opt,fn)) es extra)) /\
+  get_module_code cx src_id_opt = SOME ts /\
+  lookup_callable_function cx.in_deploy fn ts =
+    SOME (mut,nr,args,dflts,ret,fn_body) ==>
+  call_evaluation_safe
+    (cx with stk updated_by CONS (src_id_opt,fn))
+    (int_calls_exprs (DROP n dflts))
+Proof
+  rpt strip_tac >> gvs[int_calls_expr_def] >>
+  irule call_evaluation_safe_push_needed_defaults >>
+  conj_tac
+  >- (qexistsl_tac [`args`, `fn_body`, `fn`, `mut`, `nr`, `ret`,
+                    `src_id_opt`, `ts`] >> simp[]) >>
+  qexists_tac `int_calls_exprs es` >> simp[int_calls_expr_def]
+QED
+
+Theorem intcall_call_evaluation_safe_body[local]:
+  call_evaluation_safe cx
+    (int_calls_expr (Call loc (IntCall (src_id_opt,fn)) es extra)) /\
+  get_module_code cx src_id_opt = SOME ts /\
+  lookup_callable_function cx.in_deploy fn ts =
+    SOME (mut,nr,args,dflts,ret,fn_body) ==>
+  call_evaluation_safe
+    (cx with stk updated_by CONS (src_id_opt,fn))
+    (int_calls_stmts fn_body)
+Proof
+  rpt strip_tac >> gvs[int_calls_expr_def] >>
+  irule call_evaluation_safe_push_body >>
+  conj_tac
+  >- (qexistsl_tac [`args`, `dflts`, `fn`, `mut`, `nr`, `ret`,
+                    `src_id_opt`, `ts`] >> simp[]) >>
+  qexists_tac `int_calls_exprs es` >> simp[int_calls_expr_def]
+QED
+
+
+
+Theorem int_calls_exprs_MAP_SND[local]:
+  !kes. int_calls_exprs (MAP SND kes) = int_calls_named_exprs kes
+Proof
+  Induct >> simp[int_calls_expr_def] >> gen_tac >> PairCases_on `h` >>
+  simp[int_calls_expr_def]
+QED
+
+Theorem call_evaluation_safe_int_calls_exprs_HD[local]:
+  es <> [] /\ call_evaluation_safe cx (int_calls_exprs es) ==>
+  call_evaluation_safe cx (int_calls_expr (HD es))
+Proof
+  Cases_on `es` >> simp[int_calls_expr_def] >>
+  metis_tac[call_evaluation_safe_append_left]
+QED
+
+Theorem extcall_call_evaluation_safe_args[local]:
+  call_evaluation_safe cx
+    (int_calls_expr
+      (Call loc (ExtCall is_static' (func_name,arg_types,ret_type)) es drv)) ==>
+  call_evaluation_safe cx (int_calls_exprs es)
+Proof
+  simp[int_calls_expr_def] >>
+  metis_tac[call_evaluation_safe_append_left]
+QED
+
+Theorem extcall_call_evaluation_safe_driver[local]:
+  call_evaluation_safe cx
+    (int_calls_expr
+      (Call loc (ExtCall is_static' (func_name,arg_types,ret_type)) es
+        (SOME drv))) ==>
+  call_evaluation_safe cx (int_calls_expr drv)
+Proof
+  simp[int_calls_expr_def] >>
+  metis_tac[call_evaluation_safe_append_right]
+QED
+
+Theorem send_call_evaluation_safe_args[local]:
+  call_evaluation_safe cx (int_calls_expr (Call loc Send es extra)) ==>
+  call_evaluation_safe cx (int_calls_exprs es)
+Proof
+  simp[int_calls_expr_def]
+QED
+
+Theorem rawcall_call_evaluation_safe_args[local]:
+  call_evaluation_safe cx
+    (int_calls_expr (Call loc (RawCallTarget flags) es extra)) ==>
+  call_evaluation_safe cx (int_calls_exprs es)
+Proof
+  simp[int_calls_expr_def]
+QED
+
+Theorem rawlog_call_evaluation_safe_args[local]:
+  call_evaluation_safe cx (int_calls_expr (Call loc RawLog es extra)) ==>
+  call_evaluation_safe cx (int_calls_exprs es)
+Proof
+  simp[int_calls_expr_def]
+QED
+
+Theorem rawrevert_call_evaluation_safe_args[local]:
+  call_evaluation_safe cx (int_calls_expr (Call loc RawRevert es extra)) ==>
+  call_evaluation_safe cx (int_calls_exprs es)
+Proof
+  simp[int_calls_expr_def]
+QED
+
+Theorem selfdestruct_call_evaluation_safe_args[local]:
+  call_evaluation_safe cx
+    (int_calls_expr (Call loc SelfDestructTarget es extra)) ==>
+  call_evaluation_safe cx (int_calls_exprs es)
+Proof
+  simp[int_calls_expr_def]
+QED
+
+Theorem create_call_evaluation_safe_args[local]:
+  call_evaluation_safe cx
+    (int_calls_expr (Call loc (CreateTarget kind rof) es extra)) ==>
+  call_evaluation_safe cx (int_calls_exprs es)
+Proof
+  simp[int_calls_expr_def]
+QED
+
+Theorem exprs_cons_call_evaluation_safe_head[local]:
+  call_evaluation_safe cx (int_calls_exprs (e::es)) ==>
+  call_evaluation_safe cx (int_calls_expr e)
+Proof
+  simp[int_calls_expr_def] >>
+  metis_tac[call_evaluation_safe_append_left]
+QED
+
+Theorem exprs_cons_call_evaluation_safe_tail[local]:
+  call_evaluation_safe cx (int_calls_exprs (e::es)) ==>
+  call_evaluation_safe cx (int_calls_exprs es)
+Proof
+  simp[int_calls_expr_def] >>
+  metis_tac[call_evaluation_safe_append_right]
+QED
 
 Theorem well_typed_exprs_DROP[local]:
   !env es n. well_typed_exprs env es ==> well_typed_exprs env (DROP n es)
@@ -1620,6 +1775,7 @@ Theorem eval_all_type_sound_mutual:
   (!cx s. !env ret_ty env' st res st'.
     type_stmt env ret_ty s = SOME env' /\ env_consistent env cx st /\ state_well_typed st /\
     context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
+    call_evaluation_safe cx (int_calls_stmt s) /\
     eval_stmt cx s st = (res, st') ==>
     state_well_typed st' /\ accounts_well_typed st'.accounts /\ no_type_error_result res /\
     case res of
@@ -1628,6 +1784,7 @@ Theorem eval_all_type_sound_mutual:
   (!cx ss. !env ret_ty env' st res st'.
     type_stmts env ret_ty ss = SOME env' /\ env_consistent env cx st /\ state_well_typed st /\
     context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
+    call_evaluation_safe cx (int_calls_stmts ss) /\
     eval_stmts cx ss st = (res, st') ==>
     state_well_typed st' /\ accounts_well_typed st'.accounts /\ no_type_error_result res /\
     case res of
@@ -1637,6 +1794,7 @@ Theorem eval_all_type_sound_mutual:
   (!cx it. !env ty st res st'.
     well_typed_iterator env ty it /\ env_consistent env cx st /\ state_well_typed st /\
     context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
+    call_evaluation_safe cx (int_calls_iterator it) /\
     eval_iterator cx it st = (res, st') ==>
     state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
     no_type_error_result res /\
@@ -1646,6 +1804,7 @@ Theorem eval_all_type_sound_mutual:
   (!cx tgt. !env ty st res st'.
     well_typed_atarget env tgt ty /\ env_consistent env cx st /\ state_well_typed st /\
     context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
+    call_evaluation_safe cx (int_calls_atarget tgt) /\
     eval_target cx tgt st = (res, st') ==>
     state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
     no_type_error_result res /\
@@ -1656,6 +1815,7 @@ Theorem eval_all_type_sound_mutual:
     LIST_REL (\t ty. well_typed_atarget env t ty) tgts tys /\
     env_consistent env cx st /\ state_well_typed st /\
     context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
+    call_evaluation_safe cx (int_calls_atargets tgts) /\
     eval_targets cx tgts st = (res, st') ==>
     state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
     no_type_error_result res /\
@@ -1665,6 +1825,7 @@ Theorem eval_all_type_sound_mutual:
   (!cx bt. !env vt st res st'.
     type_place_target env bt = SOME vt /\ env_consistent env cx st /\ state_well_typed st /\
     context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
+    call_evaluation_safe cx (int_calls_target bt) /\
     eval_base_target cx bt st = (res, st') ==>
     state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
     no_type_error_result res /\
@@ -1680,6 +1841,7 @@ Theorem eval_all_type_sound_mutual:
     type_stmts (extend_local env id ty F) ret_ty body = SOME env_after /\
     env_consistent env cx st /\ state_well_typed st /\
     context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
+    call_evaluation_safe cx (int_calls_stmts body) /\
     eval_for cx tyv id body vs st = (res, st') ==>
     state_well_typed st' /\ accounts_well_typed st'.accounts /\ env_consistent env cx st' /\
     no_type_error_result res /\
@@ -1689,6 +1851,7 @@ Theorem eval_all_type_sound_mutual:
   (!cx e. !env st res st'.
     env_consistent env cx st /\ state_well_typed st /\
     context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
+    call_evaluation_safe cx (int_calls_expr e) /\
     eval_expr cx e st = (res, st') ==>
     ((well_typed_expr env e ==>
       state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
@@ -1705,6 +1868,7 @@ Theorem eval_all_type_sound_mutual:
   (!cx es. !env st res st'.
     well_typed_exprs env es /\ env_consistent env cx st /\ state_well_typed st /\
     context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
+    call_evaluation_safe cx (int_calls_exprs es) /\
     eval_exprs cx es st = (res, st') ==>
     state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
     no_type_error_result res /\
@@ -1805,6 +1969,8 @@ Resume eval_all_type_sound_mutual[Return_SOME]:
   simp_tac(srw_ss())[Once evaluate_def, bind_apply] >>
   Cases_on `eval_expr cx e st` >>
   rename1 `eval_expr cx e st = (er,s1)` >>
+  qpat_x_assum `call_evaluation_safe cx (int_calls_stmt (Return (SOME e)))` mp_tac >>
+  pure_rewrite_tac[int_calls_stmt_def, int_calls_expr_def] >> strip_tac >>
   first_x_assum drule_all >> strip_tac >>
   Cases_on `er` >> gvs[no_type_error_result_def]
   >- (
@@ -1844,6 +2010,8 @@ QED
 
 Resume eval_all_type_sound_mutual[RaiseReason]:
   rpt gen_tac >> strip_tac >>
+  qpat_x_assum `call_evaluation_safe cx (int_calls_stmt (Raise (RaiseReason e)))` mp_tac >>
+  pure_rewrite_tac[int_calls_stmt_def, int_calls_raise_reason_def] >> strip_tac >>
   qhdtm_x_assum `eval_stmt` mp_tac >>
   simp_tac(srw_ss())[evaluate_def, bind_def, return_def, raise_def,
        AllCaseEqs(), PULL_EXISTS] >>
@@ -1868,6 +2036,8 @@ QED
 
 Resume eval_all_type_sound_mutual[AssertBare]:
   rpt gen_tac >> strip_tac >>
+  qpat_x_assum `call_evaluation_safe cx (int_calls_stmt (Assert e AssertBare))` mp_tac >>
+  pure_rewrite_tac[int_calls_stmt_def, int_calls_assert_reason_def, APPEND_NIL] >> strip_tac >>
   qhdtm_x_assum `type_stmt` mp_tac >>
   simp_tac(srw_ss())[type_stmt_def] >>
   strip_tac >> BasicProvers.VAR_EQ_TAC >>
@@ -1892,6 +2062,8 @@ QED
 
 Resume eval_all_type_sound_mutual[AssertUnreachable]:
   rpt gen_tac >> strip_tac >>
+  qpat_x_assum `call_evaluation_safe cx (int_calls_stmt (Assert e AssertUnreachable))` mp_tac >>
+  pure_rewrite_tac[int_calls_stmt_def, int_calls_assert_reason_def, APPEND_NIL] >> strip_tac >>
   qhdtm_x_assum `type_stmt` mp_tac >>
   simp_tac(srw_ss())[type_stmt_def] >>
   strip_tac >> BasicProvers.VAR_EQ_TAC >>
@@ -1916,6 +2088,14 @@ QED
 
 Resume eval_all_type_sound_mutual[AssertReason]:
   rpt gen_tac >> strip_tac >>
+  qpat_x_assum `call_evaluation_safe cx (int_calls_stmt (Assert e (AssertReason e')))` mp_tac >>
+  pure_rewrite_tac[int_calls_stmt_def, int_calls_assert_reason_def] >> strip_tac >>
+  `call_evaluation_safe cx (int_calls_expr e)` by
+    (irule call_evaluation_safe_append_left >>
+     qexists_tac `int_calls_expr e'` >> simp[]) >>
+  `call_evaluation_safe cx (int_calls_expr e')` by
+    (irule call_evaluation_safe_append_right >>
+     qexists_tac `int_calls_expr e` >> simp[]) >>
   qhdtm_x_assum `type_stmt` mp_tac >>
   simp_tac(srw_ss())[type_stmt_def] >>
   strip_tac >> BasicProvers.VAR_EQ_TAC >>
@@ -1970,6 +2150,8 @@ QED
 
 Resume eval_all_type_sound_mutual[Log]:
   rpt gen_tac >> strip_tac >>
+  qpat_x_assum `call_evaluation_safe cx (int_calls_stmt (Log id es))` mp_tac >>
+  pure_rewrite_tac[int_calls_stmt_def] >> strip_tac >>
   qhdtm_x_assum `type_stmt` mp_tac >>
   simp_tac(srw_ss())[type_stmt_def] >> strip_tac >> BasicProvers.VAR_EQ_TAC >>
   qhdtm_x_assum `eval_stmt` mp_tac >>
@@ -1989,6 +2171,8 @@ QED
 
 Resume eval_all_type_sound_mutual[AnnAssign]:
   rpt gen_tac >> strip_tac >>
+  qpat_x_assum `call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e))` mp_tac >>
+  pure_rewrite_tac[int_calls_stmt_def] >> strip_tac >>
   qpat_x_assum `type_stmt _ _ _ = _` mp_tac >>
   simp_tac(srw_ss())[Once type_stmt_def] >> strip_tac >>
   BasicProvers.VAR_EQ_TAC >>
@@ -2018,6 +2202,14 @@ QED
 
 Resume eval_all_type_sound_mutual[Append]:
   rpt gen_tac >> strip_tac >>
+  qpat_x_assum `call_evaluation_safe cx (int_calls_stmt (Append bt e))` mp_tac >>
+  pure_rewrite_tac[int_calls_stmt_def] >> strip_tac >>
+  `call_evaluation_safe cx (int_calls_target bt)` by
+    (irule call_evaluation_safe_append_left >>
+     qexists_tac `int_calls_expr e` >> simp[]) >>
+  `call_evaluation_safe cx (int_calls_expr e)` by
+    (irule call_evaluation_safe_append_right >>
+     qexists_tac `int_calls_target bt` >> simp[]) >>
   qpat_x_assum `type_stmt _ _ _ = _` mp_tac >>
   simp_tac(srw_ss())[Once type_stmt_def] >>
   Cases_on `type_place_target env bt` >- simp[NoAsms] >>
@@ -2140,6 +2332,14 @@ QED
 
 Resume eval_all_type_sound_mutual[Assign]:
   rpt gen_tac >> strip_tac >>
+  qpat_x_assum `call_evaluation_safe cx (int_calls_stmt (Assign tgt e))` mp_tac >>
+  pure_rewrite_tac[int_calls_stmt_def] >> strip_tac >>
+  `call_evaluation_safe cx (int_calls_atarget tgt)` by
+    (irule call_evaluation_safe_append_left >>
+     qexists_tac `int_calls_expr e` >> simp[]) >>
+  `call_evaluation_safe cx (int_calls_expr e)` by
+    (irule call_evaluation_safe_append_right >>
+     qexists_tac `int_calls_atarget tgt` >> simp[]) >>
   qpat_x_assum `type_stmt _ _ _ = _` mp_tac >>
   simp_tac(srw_ss())[Once type_stmt_def] >> strip_tac >>
   BasicProvers.VAR_EQ_TAC >>
@@ -2280,6 +2480,14 @@ QED
 
 Resume eval_all_type_sound_mutual[AugAssign]:
   rpt gen_tac >> strip_tac >>
+  qpat_x_assum `call_evaluation_safe cx (int_calls_stmt (AugAssign ty bt bop e))` mp_tac >>
+  pure_rewrite_tac[int_calls_stmt_def] >> strip_tac >>
+  `call_evaluation_safe cx (int_calls_target bt)` by
+    (irule call_evaluation_safe_append_left >>
+     qexists_tac `int_calls_expr e` >> simp[]) >>
+  `call_evaluation_safe cx (int_calls_expr e)` by
+    (irule call_evaluation_safe_append_right >>
+     qexists_tac `int_calls_target bt` >> simp[]) >>
   qpat_x_assum `type_stmt _ _ _ = _` mp_tac >>
   simp_tac(srw_ss())[Once type_stmt_def] >> strip_tac >>
   BasicProvers.VAR_EQ_TAC >>
@@ -2289,7 +2497,7 @@ Resume eval_all_type_sound_mutual[AugAssign]:
   rename1 `eval_base_target cx bt st = (target_res, st1)` >>
   (* Apply base-target IH *)
   `type_place_target env bt = SOME (Type ty)` by fs[well_typed_target_def] >>
-  qpat_x_assum `!env vt st res st'. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ eval_base_target _ _ _ = _ ==> _`
+  qpat_x_assum `!env vt st res st'. _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ _ /\ eval_base_target _ _ _ = _ ==> _`
     (qspecl_then [`env`, `Type ty`, `st`, `target_res`, `st1`] mp_tac) >>
   impl_tac >- simp[] >> strip_tac >>
   Cases_on `target_res`
@@ -2444,6 +2652,17 @@ QED
 
 Resume eval_all_type_sound_mutual[If]:
   rpt gen_tac >> strip_tac >>
+  qpat_x_assum `call_evaluation_safe cx (int_calls_stmt (If e ss ss'))` mp_tac >>
+  pure_rewrite_tac[int_calls_stmt_def] >> strip_tac >>
+  `call_evaluation_safe cx (int_calls_expr e)` by
+    (irule call_evaluation_safe_mono >>
+     qexists_tac `int_calls_expr e ++ int_calls_stmts ss ++ int_calls_stmts ss'` >> simp[]) >>
+  `call_evaluation_safe cx (int_calls_stmts ss)` by
+    (irule call_evaluation_safe_mono >>
+     qexists_tac `int_calls_expr e ++ int_calls_stmts ss ++ int_calls_stmts ss'` >> simp[]) >>
+  `call_evaluation_safe cx (int_calls_stmts ss')` by
+    (irule call_evaluation_safe_mono >>
+     qexists_tac `int_calls_expr e ++ int_calls_stmts ss ++ int_calls_stmts ss'` >> simp[]) >>
   qpat_x_assum `type_stmt _ _ _ = _` mp_tac >>
   simp_tac(srw_ss())[Once type_stmt_def] >> strip_tac >>
   BasicProvers.VAR_EQ_TAC >>
@@ -2716,6 +2935,8 @@ QED
 
 Resume eval_all_type_sound_mutual[Expr]:
   rpt gen_tac >> strip_tac >>
+  qpat_x_assum `call_evaluation_safe cx (int_calls_stmt (Expr e))` mp_tac >>
+  pure_rewrite_tac[int_calls_stmt_def] >> strip_tac >>
   qpat_x_assum `type_stmt _ _ _ = _` mp_tac >>
   simp_tac(srw_ss())[Once type_stmt_def] >> strip_tac >>
   BasicProvers.VAR_EQ_TAC >>
@@ -2740,6 +2961,14 @@ QED
 
 Resume eval_all_type_sound_mutual[Stmts_cons]:
   rpt gen_tac >> strip_tac >>
+  qpat_x_assum `call_evaluation_safe cx (int_calls_stmts (s::ss))` mp_tac >>
+  pure_rewrite_tac[int_calls_stmt_def] >> strip_tac >>
+  `call_evaluation_safe cx (int_calls_stmt s)` by
+    (irule call_evaluation_safe_append_left >>
+     qexists_tac `int_calls_stmts ss` >> simp[]) >>
+  `call_evaluation_safe cx (int_calls_stmts ss)` by
+    (irule call_evaluation_safe_append_right >>
+     qexists_tac `int_calls_stmt s` >> simp[]) >>
   qpat_x_assum `type_stmts _ _ _ = _` mp_tac >>
   simp_tac(srw_ss())[Once type_stmt_def, AllCaseEqs()] >> strip_tac >>
   qpat_x_assum `eval_stmts _ _ _ = _` mp_tac >>
@@ -2768,6 +2997,14 @@ QED
 
 Resume eval_all_type_sound_mutual[For]:
   rpt gen_tac >> strip_tac >>
+  qpat_x_assum `call_evaluation_safe cx (int_calls_stmt (For id typ it n body'))` mp_tac >>
+  pure_rewrite_tac[int_calls_stmt_def] >> strip_tac >>
+  `call_evaluation_safe cx (int_calls_iterator it)` by
+    (irule call_evaluation_safe_append_left >>
+     qexists_tac `int_calls_stmts body'` >> simp[]) >>
+  `call_evaluation_safe cx (int_calls_stmts body')` by
+    (irule call_evaluation_safe_append_right >>
+     qexists_tac `int_calls_iterator it` >> simp[]) >>
   qpat_x_assum `type_stmt _ _ _ = _` mp_tac >>
   simp_tac(srw_ss())[Once type_stmt_def] >> strip_tac >>
   BasicProvers.VAR_EQ_TAC >>
@@ -3028,6 +3265,8 @@ QED
 
 Resume eval_all_type_sound_mutual[Iterator_Array]:
   rpt gen_tac >> strip_tac >>
+  qpat_x_assum `call_evaluation_safe cx (int_calls_iterator (Array e))` mp_tac >>
+  pure_rewrite_tac[int_calls_iterator_def] >> strip_tac >>
   qpat_x_assum `well_typed_iterator _ _ _`
     (strip_assume_tac o SIMP_RULE (srw_ss()) [well_typed_iterator_def]) >>
   qpat_x_assum `eval_iterator _ _ _ = _` mp_tac >>
@@ -3083,6 +3322,14 @@ QED
 
 Resume eval_all_type_sound_mutual[Iterator_Range]:
   rpt gen_tac >> strip_tac >>
+  qpat_x_assum `call_evaluation_safe cx (int_calls_iterator (Range e e'))` mp_tac >>
+  pure_rewrite_tac[int_calls_iterator_def] >> strip_tac >>
+  `call_evaluation_safe cx (int_calls_expr e)` by
+    (irule call_evaluation_safe_append_left >>
+     qexists_tac `int_calls_expr e'` >> simp[]) >>
+  `call_evaluation_safe cx (int_calls_expr e')` by
+    (irule call_evaluation_safe_append_right >>
+     qexists_tac `int_calls_expr e` >> simp[]) >>
   qpat_x_assum `well_typed_iterator _ _ _`
     (strip_assume_tac o SIMP_RULE (srw_ss()) [well_typed_iterator_def]) >>
   qpat_x_assum `eval_iterator _ _ _ = _` mp_tac >>
@@ -3184,6 +3431,8 @@ QED
 
 Resume eval_all_type_sound_mutual[Target_Base]:
   rpt gen_tac >> strip_tac >>
+  qpat_x_assum `call_evaluation_safe cx (int_calls_atarget (BaseTarget bt))` mp_tac >>
+  pure_rewrite_tac[int_calls_atarget_def] >> strip_tac >>
   qpat_x_assum `eval_target _ _ _ = _` mp_tac >>
   simp_tac(srw_ss())[Once evaluate_def, bind_def] >>
   gvs[well_typed_atarget_def, well_typed_target_def] >>
@@ -3199,6 +3448,8 @@ QED
 
 Resume eval_all_type_sound_mutual[Target_Tuple]:
   rpt gen_tac >> strip_tac >>
+  qpat_x_assum `call_evaluation_safe cx (int_calls_atarget (TupleTarget tgts))` mp_tac >>
+  pure_rewrite_tac[int_calls_atarget_def] >> strip_tac >>
   qpat_x_assum `eval_target _ _ _ = _` mp_tac >>
   simp_tac(srw_ss())[Once evaluate_def, bind_def] >>
   gvs[well_typed_atarget_def] >>
@@ -3223,6 +3474,14 @@ QED
 
 Resume eval_all_type_sound_mutual[Targets_cons]:
   rpt gen_tac >> strip_tac >>
+  qpat_x_assum `call_evaluation_safe cx (int_calls_atargets (tgt::tgts))` mp_tac >>
+  pure_rewrite_tac[int_calls_atarget_def] >> strip_tac >>
+  `call_evaluation_safe cx (int_calls_atarget tgt)` by
+    (irule call_evaluation_safe_append_left >>
+     qexists_tac `int_calls_atargets tgts` >> simp[]) >>
+  `call_evaluation_safe cx (int_calls_atargets tgts)` by
+    (irule call_evaluation_safe_append_right >>
+     qexists_tac `int_calls_atarget tgt` >> simp[]) >>
   qpat_x_assum `eval_targets _ _ _ = _` mp_tac >>
   simp_tac(srw_ss())[Once evaluate_def, bind_def] >>
   Cases_on `tys` >- fs[] >>
@@ -3372,6 +3631,14 @@ QED
 
 Resume eval_all_type_sound_mutual[BaseTarget_Subscript]:
   rpt gen_tac >> strip_tac >>
+  qpat_x_assum `call_evaluation_safe cx (int_calls_target (SubscriptTarget bt e))` mp_tac >>
+  pure_rewrite_tac[int_calls_expr_def] >> strip_tac >>
+  `call_evaluation_safe cx (int_calls_target bt)` by
+    (irule call_evaluation_safe_append_left >>
+     qexists_tac `int_calls_expr e` >> simp[]) >>
+  `call_evaluation_safe cx (int_calls_expr e)` by
+    (irule call_evaluation_safe_append_right >>
+     qexists_tac `int_calls_target bt` >> simp[]) >>
   qpat_x_assum `type_place_target _ (SubscriptTarget _ _) = _` mp_tac >>
   rewrite_tac[type_place_target_SubscriptTarget] >> strip_tac >>
   qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
@@ -3414,6 +3681,8 @@ QED
 
 Resume eval_all_type_sound_mutual[BaseTarget_Attribute]:
   rpt gen_tac >> strip_tac >>
+  qpat_x_assum `call_evaluation_safe cx (int_calls_target (AttributeTarget bt id))` mp_tac >>
+  pure_rewrite_tac[int_calls_expr_def] >> strip_tac >>
   qpat_x_assum `type_place_target _ (AttributeTarget _ _) = _` mp_tac >>
   CONV_TAC(LAND_CONV(LAND_CONV(ONCE_REWRITE_CONV[well_typed_expr_def]))) >>
   simp[AllCaseEqs(), PULL_EXISTS] >>
@@ -3633,6 +3902,17 @@ QED
 
 Resume eval_all_type_sound_mutual[Expr_IfExp]:
   rpt gen_tac >> strip_tac >>
+  qpat_x_assum `call_evaluation_safe cx (int_calls_expr (IfExp ty e e' e''))` mp_tac >>
+  pure_rewrite_tac[int_calls_expr_def] >> strip_tac >>
+  `call_evaluation_safe cx (int_calls_expr e)` by
+    (irule call_evaluation_safe_mono >>
+     qexists_tac `int_calls_expr e ++ int_calls_expr e' ++ int_calls_expr e''` >> simp[]) >>
+  `call_evaluation_safe cx (int_calls_expr e')` by
+    (irule call_evaluation_safe_mono >>
+     qexists_tac `int_calls_expr e ++ int_calls_expr e' ++ int_calls_expr e''` >> simp[]) >>
+  `call_evaluation_safe cx (int_calls_expr e'')` by
+    (irule call_evaluation_safe_mono >>
+     qexists_tac `int_calls_expr e ++ int_calls_expr e' ++ int_calls_expr e''` >> simp[]) >>
   reverse conj_tac >- (
     rpt strip_tac >>
     qpat_x_assum `type_place_expr _ (IfExp _ _ _ _) = SOME _` mp_tac >>
@@ -3643,7 +3923,7 @@ Resume eval_all_type_sound_mutual[Expr_IfExp]:
       simp_tac(srw_ss())[Once evaluate_def, bind_def] >>
       Cases_on `eval_expr cx e st` >>
       rename1 `eval_expr cx e st = (cond_res, st1)` >>
-      qpat_x_assum `!env st res st'. env_consistent env cx st /\ state_well_typed st /\ context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\ eval_expr cx e st = (res,st') ==> _`
+      qpat_x_assum `!env st res st'. env_consistent env cx st /\ state_well_typed st /\ context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\ call_evaluation_safe cx (int_calls_expr e) /\ eval_expr cx e st = (res,st') ==> _`
         (qspecl_then [`env`,`st`,`cond_res`,`st1`] mp_tac) >>
       impl_tac >- simp[] >>
       strip_tac >>
@@ -3668,7 +3948,7 @@ Resume eval_all_type_sound_mutual[Expr_IfExp]:
         irule ifexp_switch_from_branch_ihs >>
         conj_tac >- (
           rpt strip_tac >>
-          qpat_x_assum `!s'' tv t. eval_expr cx e s'' = (INL tv,t) ==> !env st res st'. env_consistent env cx st /\ state_well_typed st /\ context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\ eval_expr cx e'' st = (res,st') ==> _`
+          qpat_x_assum `!s'' tv t. eval_expr cx e s'' = (INL tv,t) ==> !env st res st'. env_consistent env cx st /\ state_well_typed st /\ context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\ call_evaluation_safe cx (int_calls_expr e'') /\ eval_expr cx e'' st = (res,st') ==> _`
             (qspecl_then [`s0`,`tv0`,`t0`] mp_tac) >>
           (impl_tac >- asm_rewrite_tac[]) >>
           strip_tac >>
@@ -3679,7 +3959,7 @@ Resume eval_all_type_sound_mutual[Expr_IfExp]:
           metis_tac[]) >>
         conj_tac >- (
           rpt strip_tac >>
-          qpat_x_assum `!s'' tv t. eval_expr cx e s'' = (INL tv,t) ==> !env st res st'. env_consistent env cx st /\ state_well_typed st /\ context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\ eval_expr cx e' st = (res,st') ==> _`
+          qpat_x_assum `!s'' tv t. eval_expr cx e s'' = (INL tv,t) ==> !env st res st'. env_consistent env cx st /\ state_well_typed st /\ context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\ call_evaluation_safe cx (int_calls_expr e') /\ eval_expr cx e' st = (res,st') ==> _`
             (qspecl_then [`s0`,`tv0`,`t0`] mp_tac) >>
           (impl_tac >- asm_rewrite_tac[]) >>
           strip_tac >>
@@ -3799,6 +4079,8 @@ QED
 
 Resume eval_all_type_sound_mutual[Expr_StructLit]:
   rpt gen_tac >> strip_tac >>
+  qpat_x_assum `call_evaluation_safe cx (int_calls_expr (StructLit ty callee kes))` mp_tac >>
+  pure_rewrite_tac[int_calls_expr_def, GSYM int_calls_exprs_MAP_SND] >> strip_tac >>
   reverse conj_tac >- (
     rpt strip_tac >>
     qpat_x_assum `type_place_expr _ (StructLit _ _ _) = SOME _` mp_tac >>
@@ -4470,6 +4752,7 @@ Theorem expr_subscript_ordinary_static_branch_sound_stmt[local]:
   !cx env e e' v9 st res st'.
     env_consistent env cx st /\ state_well_typed st /\ context_well_typed cx /\
     accounts_well_typed st.accounts /\ functions_well_typed cx /\
+    call_evaluation_safe cx (int_calls_expr (Subscript v9 e e')) /\
     well_typed_expr env e /\ well_typed_expr env e' /\
     well_formed_type env.type_defs v9 /\
     subscript_type_ok (expr_type e) (expr_type e') v9 /\
@@ -4477,6 +4760,7 @@ Theorem expr_subscript_ordinary_static_branch_sound_stmt[local]:
     (!env0 st0 res0 st0'.
       env_consistent env0 cx st0 /\ state_well_typed st0 /\ context_well_typed cx /\
       accounts_well_typed st0.accounts /\ functions_well_typed cx /\
+      call_evaluation_safe cx (int_calls_expr e) /\
       eval_expr cx e st0 = (res0,st0') ==>
       (well_typed_expr env0 e ==>
        state_well_typed st0' /\ env_consistent env0 cx st0' /\
@@ -4492,6 +4776,7 @@ Theorem expr_subscript_ordinary_static_branch_sound_stmt[local]:
       !env0 st0 res0 st0'.
         env_consistent env0 cx st0 /\ state_well_typed st0 /\ context_well_typed cx /\
         accounts_well_typed st0.accounts /\ functions_well_typed cx /\
+        call_evaluation_safe cx (int_calls_expr e') /\
         eval_expr cx e' st0 = (res0,st0') ==>
         (well_typed_expr env0 e' ==>
          state_well_typed st0' /\ env_consistent env0 cx st0' /\
@@ -4507,11 +4792,20 @@ Theorem expr_subscript_ordinary_static_branch_sound_stmt[local]:
     case res of INL tv => expr_result_typed env (Subscript v9 e e') tv | INR v1 => T
 Proof
   rpt gen_tac >> strip_tac >>
+  `call_evaluation_safe cx (int_calls_expr e)` by (
+    qpat_assum `call_evaluation_safe cx (int_calls_expr (Subscript v9 e e'))` mp_tac >>
+    pure_rewrite_tac[int_calls_expr_def] >>
+    metis_tac[call_evaluation_safe_append_left]) >>
+  `call_evaluation_safe cx (int_calls_expr e')` by (
+    qpat_assum `call_evaluation_safe cx (int_calls_expr (Subscript v9 e e'))` mp_tac >>
+    pure_rewrite_tac[int_calls_expr_def] >>
+    metis_tac[call_evaluation_safe_append_right]) >>
   Cases_on `eval_expr cx e st` >>
   rename1 `eval_expr cx e st = (base_res,st1)` >>
   qpat_x_assum `!env0 st0 res0 st0'.
     env_consistent env0 cx st0 /\ state_well_typed st0 /\ context_well_typed cx /\
     accounts_well_typed st0.accounts /\ functions_well_typed cx /\
+    call_evaluation_safe cx (int_calls_expr e) /\
     eval_expr cx e st0 = (res0,st0') ==> _`
     (qspecl_then [`env`,`st`,`base_res`,`st1`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
@@ -4528,7 +4822,17 @@ Proof
     qspecl_then [`cx`,`env`,`e`,`e'`,`v9`,`base_tv`,`st`,`st1`,`res`,`st'`]
       mp_tac expr_subscript_ordinary_base_success_sound_stmt >>
     disch_then irule >>
-    rpt conj_tac >> first_assum ACCEPT_TAC)
+    rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+    rpt gen_tac >> strip_tac >>
+    qpat_assum `!env0 st0 res0 st0'.
+      env_consistent env0 cx st0 /\ state_well_typed st0 /\ context_well_typed cx /\
+      accounts_well_typed st0.accounts /\ functions_well_typed cx /\
+      call_evaluation_safe cx (int_calls_expr e') /\
+      eval_expr cx e' st0 = (res0,st0') ==> _` irule >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >>
+    qexists `st0` >> rpt conj_tac >> first_assum ACCEPT_TAC)
   >- (
     qpat_x_assum `eval_expr cx (Subscript v9 e e') st = (res,st')` mp_tac >>
     simp_tac(srw_ss())[Once evaluate_def, bind_def, return_def, raise_def] >>
@@ -4551,6 +4855,7 @@ Theorem expr_subscript_place_as_ordinary_branch_sound_stmt[local]:
   !cx env e e' v9 base_vt st res st'.
     env_consistent env cx st /\ state_well_typed st /\ context_well_typed cx /\
     accounts_well_typed st.accounts /\ functions_well_typed cx /\
+    call_evaluation_safe cx (int_calls_expr (Subscript v9 e e')) /\
     well_typed_expr env e' /\
     type_place_expr env e = SOME base_vt /\
     subscript_vtype base_vt (expr_type e') = SOME (Type v9) /\
@@ -4558,6 +4863,7 @@ Theorem expr_subscript_place_as_ordinary_branch_sound_stmt[local]:
     (!env0 st0 res0 st0'.
       env_consistent env0 cx st0 /\ state_well_typed st0 /\ context_well_typed cx /\
       accounts_well_typed st0.accounts /\ functions_well_typed cx /\
+      call_evaluation_safe cx (int_calls_expr e) /\
       eval_expr cx e st0 = (res0,st0') ==>
       (well_typed_expr env0 e ==>
        state_well_typed st0' /\ env_consistent env0 cx st0' /\
@@ -4573,6 +4879,7 @@ Theorem expr_subscript_place_as_ordinary_branch_sound_stmt[local]:
       !env0 st0 res0 st0'.
         env_consistent env0 cx st0 /\ state_well_typed st0 /\ context_well_typed cx /\
         accounts_well_typed st0.accounts /\ functions_well_typed cx /\
+        call_evaluation_safe cx (int_calls_expr e') /\
         eval_expr cx e' st0 = (res0,st0') ==>
         (well_typed_expr env0 e' ==>
          state_well_typed st0' /\ env_consistent env0 cx st0' /\
@@ -4588,11 +4895,20 @@ Theorem expr_subscript_place_as_ordinary_branch_sound_stmt[local]:
     case res of INL tv => expr_result_typed env (Subscript v9 e e') tv | INR v1 => T
 Proof
   rpt gen_tac >> strip_tac >>
+  `call_evaluation_safe cx (int_calls_expr e)` by (
+    qpat_assum `call_evaluation_safe cx (int_calls_expr (Subscript v9 e e'))` mp_tac >>
+    pure_rewrite_tac[int_calls_expr_def] >>
+    metis_tac[call_evaluation_safe_append_left]) >>
+  `call_evaluation_safe cx (int_calls_expr e')` by (
+    qpat_assum `call_evaluation_safe cx (int_calls_expr (Subscript v9 e e'))` mp_tac >>
+    pure_rewrite_tac[int_calls_expr_def] >>
+    metis_tac[call_evaluation_safe_append_right]) >>
   Cases_on `eval_expr cx e st` >>
   rename1 `eval_expr cx e st = (base_res,st1)` >>
   qpat_x_assum `!env0 st0 res0 st0'.
     env_consistent env0 cx st0 /\ state_well_typed st0 /\ context_well_typed cx /\
     accounts_well_typed st0.accounts /\ functions_well_typed cx /\
+    call_evaluation_safe cx (int_calls_expr e) /\
     eval_expr cx e st0 = (res0,st0') ==> _`
     (qspecl_then [`env`,`st`,`base_res`,`st1`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
@@ -4629,7 +4945,16 @@ Proof
       >- first_assum ACCEPT_TAC
       >- simp[vtype_annotation_ok_def]
       >- first_assum ACCEPT_TAC
-      >> first_assum ACCEPT_TAC)) >>
+      >> (rpt gen_tac >> strip_tac >>
+          qpat_assum `!env0 st0 res0 st0'.
+            env_consistent env0 cx st0 /\ state_well_typed st0 /\ context_well_typed cx /\
+            accounts_well_typed st0.accounts /\ functions_well_typed cx /\
+            call_evaluation_safe cx (int_calls_expr e') /\
+            eval_expr cx e' st0 = (res0,st0') ==> _` irule >>
+          conj_tac >- first_assum ACCEPT_TAC >>
+          conj_tac >- first_assum ACCEPT_TAC >>
+          conj_tac >- first_assum ACCEPT_TAC >>
+          qexists `st0` >> rpt conj_tac >> first_assum ACCEPT_TAC))) >>
     strip_tac >>
     `state_well_typed st' /\ env_consistent env cx st' /\
      accounts_well_typed st'.accounts /\ no_type_error_result res /\
@@ -4668,6 +4993,14 @@ Resume eval_all_type_sound_mutual[Expr_Subscript]:
   (* C2.1.1.13.4 splits the ordinary Subscript static alternatives at this
      boundary and discharges them through the two proved local adapters above. *)
   rpt gen_tac >> strip_tac >>
+  `call_evaluation_safe cx (int_calls_expr e)` by (
+    qpat_assum `call_evaluation_safe cx (int_calls_expr (Subscript v9 e e'))` mp_tac >>
+    pure_rewrite_tac[int_calls_expr_def] >>
+    metis_tac[call_evaluation_safe_append_left]) >>
+  `call_evaluation_safe cx (int_calls_expr e')` by (
+    qpat_assum `call_evaluation_safe cx (int_calls_expr (Subscript v9 e e'))` mp_tac >>
+    pure_rewrite_tac[int_calls_expr_def] >>
+    metis_tac[call_evaluation_safe_append_right]) >>
   conj_tac
   >- (
     strip_tac >>
@@ -4692,6 +5025,7 @@ Resume eval_all_type_sound_mutual[Expr_Subscript]:
   qpat_x_assum `!env0 st0 res0 st0'.
     env_consistent env0 cx st0 /\ state_well_typed st0 /\ context_well_typed cx /\
     accounts_well_typed st0.accounts /\ functions_well_typed cx /\
+    call_evaluation_safe cx (int_calls_expr e) /\
     eval_expr cx e st0 = (res0,st0') ==> _`
     (qspecl_then [`env`,`st`,`base_res`,`st1`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
@@ -4717,7 +5051,17 @@ Resume eval_all_type_sound_mutual[Expr_Subscript]:
     qspecl_then [`cx`,`env`,`e`,`e'`,`v8`,`vt'`,`vt`,`x`,`st1`,`res`,`st'`]
       mp_tac expr_subscript_place_projection_branch_sound_stmt >>
     (impl_tac >- (
-      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> NO_TAC)) >>
+      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      rpt gen_tac >> strip_tac >>
+      qpat_assum `!env0 st0 res0 st0'.
+        env_consistent env0 cx st0 /\ state_well_typed st0 /\ context_well_typed cx /\
+        accounts_well_typed st0.accounts /\ functions_well_typed cx /\
+        call_evaluation_safe cx (int_calls_expr e') /\
+        eval_expr cx e' st0 = (res0,st0') ==> _` irule >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      qexists `st0` >> rpt conj_tac >> first_assum ACCEPT_TAC)) >>
     (disch_then irule >> first_assum ACCEPT_TAC))
   >- (
     qpat_x_assum `!vt. type_place_expr env e = SOME vt ==> state_well_typed st1 /\ _`
@@ -4802,6 +5146,10 @@ QED
 
 Resume eval_all_type_sound_mutual[Expr_Attribute]:
   rpt gen_tac >> strip_tac >>
+  `call_evaluation_safe cx (int_calls_expr e)` by (
+    qpat_assum `call_evaluation_safe cx (int_calls_expr (Attribute ty e id))` mp_tac >>
+    pure_rewrite_tac[int_calls_expr_def] >>
+    strip_tac >> first_assum ACCEPT_TAC) >>
   conj_tac
   >- (
     strip_tac >>
@@ -4814,6 +5162,7 @@ Resume eval_all_type_sound_mutual[Expr_Attribute]:
     qpat_x_assum `!env0 st0 res0 st0'.
       env_consistent env0 cx st0 /\ state_well_typed st0 /\ context_well_typed cx /\
       accounts_well_typed st0.accounts /\ functions_well_typed cx /\
+      call_evaluation_safe cx (int_calls_expr e) /\
       eval_expr cx e st0 = (res0,st0') ==> _`
       (qspecl_then [`env`,`st`,`base_res`,`st1`] mp_tac) >>
     (impl_tac >- simp[]) >> strip_tac >>
@@ -4940,6 +5289,10 @@ QED
 
 Resume eval_all_type_sound_mutual[Expr_Builtin]:
   rpt gen_tac >> strip_tac >>
+  `call_evaluation_safe cx (int_calls_exprs es)` by (
+    qpat_assum `call_evaluation_safe cx (int_calls_expr (Builtin ty bt es))` mp_tac >>
+    pure_rewrite_tac[int_calls_expr_def] >>
+    strip_tac >> first_assum ACCEPT_TAC) >>
   reverse conj_tac
   >- (rpt strip_tac >>
       qpat_x_assum `type_place_expr _ (Builtin _ _ _) = SOME _` mp_tac >>
@@ -4954,7 +5307,14 @@ Resume eval_all_type_sound_mutual[Expr_Builtin]:
   simp_tac(srw_ss())[Once evaluate_def, bind_def, return_def, raise_def,
                        type_check_def, assert_def] >>
   Cases_on `bt = Len`
-  >- (qpat_assum `builtin_args_length_ok bt (LENGTH es)` (fn th => rewrite_tac[th]) >>
+  >- (`es <> []` by (
+        Cases_on `es` >> simp[] >>
+        qpat_x_assum `well_typed_builtin_app ty bt (MAP expr_type [])` mp_tac >>
+        qpat_x_assum `bt = Len` (fn th => rewrite_tac[th]) >>
+        simp[well_typed_builtin_app_def]) >>
+      `call_evaluation_safe cx (int_calls_expr (HD es))` by
+        metis_tac[call_evaluation_safe_int_calls_exprs_HD] >>
+      qpat_assum `builtin_args_length_ok bt (LENGTH es)` (fn th => rewrite_tac[th]) >>
       qpat_assum `bt = Len` (fn th => rewrite_tac[th]) >>
       simp_tac(srw_ss())[bind_def, ignore_bind_def, return_def, raise_def,
                          type_check_def, assert_def] >>
@@ -5059,6 +5419,11 @@ QED
 
 Resume eval_all_type_sound_mutual[Expr_TypeBuiltin]:
   rpt gen_tac >> strip_tac >>
+  `call_evaluation_safe cx (int_calls_exprs es)` by (
+    qpat_assum `call_evaluation_safe cx
+      (int_calls_expr (TypeBuiltin result_ty tb target_ty es))` mp_tac >>
+    pure_rewrite_tac[int_calls_expr_def] >>
+    strip_tac >> first_assum ACCEPT_TAC) >>
   reverse conj_tac
   >- (rpt strip_tac >>
       qpat_x_assum `type_place_expr _ (TypeBuiltin _ _ _ _) = SOME _` mp_tac >>
@@ -5106,6 +5471,10 @@ QED
 
 Resume eval_all_type_sound_mutual[Expr_Pop]:
   rpt gen_tac >> strip_tac >>
+  `call_evaluation_safe cx (int_calls_target bt)` by (
+    qpat_assum `call_evaluation_safe cx (int_calls_expr (Pop v11 bt))` mp_tac >>
+    pure_rewrite_tac[int_calls_expr_def] >>
+    strip_tac >> first_assum ACCEPT_TAC) >>
   (reverse conj_tac
    >- (gen_tac >> strip_tac >>
        gvs[Once well_typed_expr_def]) >>
@@ -5215,7 +5584,7 @@ Theorem intcall_default_exprs_sound_from_generated_ih[local]:
     env_body.
     (!s'' x t s3 ts0 t1 s4 tup0 t2 mut stup nr stup2 args sstup dflts
         sstup2 ret body s5 x5 t5 s6 vs0 t6 es0 cx0 s7 prev0 t7 s8 x8 t8.
-      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) /\
+      type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) /\
       lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s3 =
         (INL ts0,t1) /\
       lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
@@ -5235,11 +5604,12 @@ Theorem intcall_default_exprs_sound_from_generated_ih[local]:
         well_typed_exprs env0 es0 /\ env_consistent env0 cx0 st0 /\
         state_well_typed st0 /\ context_well_typed cx0 /\
         accounts_well_typed st0.accounts /\ functions_well_typed cx0 /\
+        call_evaluation_safe cx0 (int_calls_exprs es0) /\
         eval_exprs cx0 es0 st0 = (res0,st0') ==>
         state_well_typed st0' /\ env_consistent env0 cx0 st0' /\
         accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
         case res0 of INL vs1 => exprs_runtime_typed env0 es0 vs1 | INR _ => T) /\
-    check (~MEM (src_id_opt,fn) cx.stk) "recursion" ih_check_s = (INL xrec,srec) /\
+    type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" ih_check_s = (INL xrec,srec) /\
     lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" ih_mod_s =
       (INL ts,smod) /\
     lift_option_type (lookup_callable_function cx.in_deploy fn ts)
@@ -5263,6 +5633,7 @@ Theorem intcall_default_exprs_sound_from_generated_ih[local]:
     context_well_typed cxd /\
     accounts_well_typed sevl.accounts /\
     functions_well_typed cxd /\
+    call_evaluation_safe cxd (int_calls_exprs needed_dflts) /\
     finally
       (do
          set_scopes [FEMPTY];
@@ -5366,7 +5737,7 @@ Theorem intcall_default_exprs_frame_sound_from_generated_ih[local]:
     env_body.
     (!s'' x t s3 ts0 t1 s4 tup0 t2 mut stup nr stup2 args sstup dflts
         sstup2 ret body s5 x5 t5 s6 vs0 t6 es0 cx0 s7 prev0 t7 s8 x8 t8.
-      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) /\
+      type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) /\
       lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s3 =
         (INL ts0,t1) /\
       lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
@@ -5386,11 +5757,12 @@ Theorem intcall_default_exprs_frame_sound_from_generated_ih[local]:
         well_typed_exprs env0 es0 /\ env_consistent env0 cx0 st0 /\
         state_well_typed st0 /\ context_well_typed cx0 /\
         accounts_well_typed st0.accounts /\ functions_well_typed cx0 /\
+        call_evaluation_safe cx0 (int_calls_exprs es0) /\
         eval_exprs cx0 es0 st0 = (res0,st0') ==>
         state_well_typed st0' /\ env_consistent env0 cx0 st0' /\
         accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
         case res0 of INL vs1 => exprs_runtime_typed env0 es0 vs1 | INR _ => T) /\
-    check (~MEM (src_id_opt,fn) cx.stk) "recursion" ih_check_s = (INL xrec,srec) /\
+    type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" ih_check_s = (INL xrec,srec) /\
     lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" ih_mod_s =
       (INL ts,smod) /\
     lift_option_type (lookup_callable_function cx.in_deploy fn ts)
@@ -5422,6 +5794,7 @@ Theorem intcall_default_exprs_frame_sound_from_generated_ih[local]:
     context_well_typed cxd /\
     accounts_well_typed sevl.accounts /\
     functions_well_typed cxd /\
+    call_evaluation_safe cxd (int_calls_exprs needed_dflts) /\
     finally
       (do
          set_scopes [FEMPTY];
@@ -6452,6 +6825,9 @@ Theorem intcall_default_success_post_push_sound[local]:
        context_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
        accounts_well_typed st0.accounts /\
        functions_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+       call_evaluation_safe
+         (cx with stk updated_by CONS (env_body.current_src,fn))
+         (int_calls_stmts body) /\
        eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) body st0 = (res0,st0') ==>
        state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
        no_type_error_result res0 /\
@@ -6471,7 +6847,10 @@ Theorem intcall_default_success_post_push_sound[local]:
     env_consistent env cx args_st /\ state_well_typed args_st /\
     state_well_typed dflt_st /\
     context_well_typed cx /\ accounts_well_typed dflt_st.accounts /\
-    functions_well_typed cx /\ env_body.type_defs = get_tenv cx /\
+    functions_well_typed cx /\
+    call_evaluation_safe
+      (cx with stk updated_by CONS (env_body.current_src,fn))
+      (int_calls_stmts body) /\ env_body.type_defs = get_tenv cx /\
     env_body.fn_sigs = env.fn_sigs /\ env_body.bare_globals = env.bare_globals /\
     env_body.bare_global_assignable = env.bare_global_assignable /\
     env_body.toplevel_vtypes = env.toplevel_vtypes /\
@@ -6516,7 +6895,11 @@ Proof
                   `env_after`, `env_body`, `fm`, `fn`, `lock_st`, `nr`,
                   `ret`, `rtv`, `st'`] >>
     simp[] >>
-    rpt conj_tac >> first_assum ACCEPT_TAC) >>
+    rpt strip_tac >>
+    qhdtm_assum `bool$!`
+      (qspecl_then [`env1`, `ret_ty1`, `env2`, `st0`, `res0`, `st0'`] mp_tac) >>
+    impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+    simp[]) >>
   gvs[bind_apply] >>
   Cases_on
     `finally
@@ -6785,7 +7168,7 @@ Theorem intcall_generated_body_ih_live_consumer_premise[local]:
         sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 needed0 cxd0
         s7 dflt_vs0 t7 all_tenv0 s8 env0 t8 s9 prev0 t9 s10 rtv0 t10
         is_view0 s11 x11 t11 s12 cx0 t12.
-      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
       lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
         (INL ts0,t1) /\
       lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
@@ -6818,7 +7201,9 @@ Theorem intcall_generated_body_ih_live_consumer_premise[local]:
         type_stmts env1 ret_ty1 body0 = SOME env2 /\
         env_consistent env1 cx0 st0 /\ state_well_typed st0 /\
         context_well_typed cx0 /\ accounts_well_typed st0.accounts /\
-        functions_well_typed cx0 /\ eval_stmts cx0 body0 st0 = (res0,st0') ==>
+        functions_well_typed cx0 /\
+        call_evaluation_safe cx0 (int_calls_stmts body0) /\
+        eval_stmts cx0 body0 st0 = (res0,st0') ==>
         state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
         no_type_error_result res0 /\
         case res0 of
@@ -6826,7 +7211,7 @@ Theorem intcall_generated_body_ih_live_consumer_premise[local]:
         | INR exn => ?env_exn.
             env_extends env1 env_exn /\ env_consistent env_exn cx0 st0' /\
             return_exception_typed env_exn ret_ty1 exn) /\
-    check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
+    type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
     lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" r =
       (INL ts,r) /\
     lift_option_type (lookup_callable_function cx.in_deploy fn ts)
@@ -6854,7 +7239,9 @@ Theorem intcall_generated_body_ih_live_consumer_premise[local]:
          type_stmts env1 ret_ty1 fn_body = SOME env2 /\
          env_consistent env1 cxf' st0 /\ state_well_typed st0 /\
          context_well_typed cxf' /\ accounts_well_typed st0.accounts /\
-         functions_well_typed cxf' /\ eval_stmts cxf' fn_body st0 = (res0,st0') ==>
+         functions_well_typed cxf' /\
+         call_evaluation_safe cxf' (int_calls_stmts fn_body) /\
+         eval_stmts cxf' fn_body st0 = (res0,st0') ==>
          state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
          no_type_error_result res0 /\
          case res0 of
@@ -6902,7 +7289,7 @@ Theorem intcall_defaults_result_package_from_generated_ih_general[local]:
     (!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
         sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 es0 cx0
         s7 prev0 t7 s8 x8 t8.
-      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
       lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
         (INL ts0,t1) /\
       lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
@@ -6922,11 +7309,12 @@ Theorem intcall_defaults_result_package_from_generated_ih_general[local]:
         well_typed_exprs env0 es0 /\ env_consistent env0 cx0 st0 /\
         state_well_typed st0 /\ context_well_typed cx0 /\
         accounts_well_typed st0.accounts /\ functions_well_typed cx0 /\
+        call_evaluation_safe cx0 (int_calls_exprs es0) /\
         eval_exprs cx0 es0 st0 = (res0,st0') ==>
         state_well_typed st0' /\ env_consistent env0 cx0 st0' /\
         accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
         case res0 of INL vs => exprs_runtime_typed env0 es0 vs | INR _ => T) /\
-    check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
+    type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
     lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" r =
       (INL ts,r) /\
     lift_option_type (lookup_callable_function cx.in_deploy fn ts)
@@ -6936,7 +7324,11 @@ Theorem intcall_defaults_result_package_from_generated_ih_general[local]:
     eval_exprs cx es r = (INL actual_vs,args_st) /\
     env_consistent env cx args_st /\ state_well_typed args_st /\
     context_well_typed cx /\ accounts_well_typed args_st.accounts /\
-    functions_well_typed cx /\ exprs_runtime_typed env es actual_vs /\
+    functions_well_typed cx /\
+    call_evaluation_safe (cx with stk updated_by CONS (src_id_opt,fn))
+      (int_calls_exprs
+        (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)) /\
+    exprs_runtime_typed env es actual_vs /\
     MAP expr_type es = TAKE (LENGTH es) (MAP SND args) /\
     env_body.current_src = src_id_opt /\
     env_body.type_defs = get_tenv cx /\
@@ -7069,7 +7461,7 @@ Theorem intcall_defaults_result_frame_package_from_generated_ih_general[local]:
     (!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
         sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 es0 cx0
         s7 prev0 t7 s8 x8 t8.
-      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
       lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
         (INL ts0,t1) /\
       lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
@@ -7089,11 +7481,12 @@ Theorem intcall_defaults_result_frame_package_from_generated_ih_general[local]:
         well_typed_exprs env0 es0 /\ env_consistent env0 cx0 st0 /\
         state_well_typed st0 /\ context_well_typed cx0 /\
         accounts_well_typed st0.accounts /\ functions_well_typed cx0 /\
+        call_evaluation_safe cx0 (int_calls_exprs es0) /\
         eval_exprs cx0 es0 st0 = (res0,st0') ==>
         state_well_typed st0' /\ env_consistent env0 cx0 st0' /\
         accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
         case res0 of INL vs => exprs_runtime_typed env0 es0 vs | INR _ => T) /\
-    check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
+    type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
     lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" r =
       (INL ts,r) /\
     lift_option_type (lookup_callable_function cx.in_deploy fn ts)
@@ -7103,7 +7496,11 @@ Theorem intcall_defaults_result_frame_package_from_generated_ih_general[local]:
     eval_exprs cx es r = (INL actual_vs,args_st) /\
     env_consistent env cx args_st /\ state_well_typed args_st /\
     context_well_typed cx /\ accounts_well_typed args_st.accounts /\
-    functions_well_typed cx /\ exprs_runtime_typed env es actual_vs /\
+    functions_well_typed cx /\
+    call_evaluation_safe (cx with stk updated_by CONS (src_id_opt,fn))
+      (int_calls_exprs
+        (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)) /\
+    exprs_runtime_typed env es actual_vs /\
     MAP expr_type es = TAKE (LENGTH es) (MAP SND args) /\
     env_body.current_src = src_id_opt /\
     env_body.type_defs = get_tenv cx /\
@@ -7200,7 +7597,7 @@ Theorem intcall_generated_body_post_push_ih[local]:
         sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 needed0 cxd0
         s7 dflt_vs0 t7 all_tenv0 s8 env0 t8 s9 prev0 t9 s10 rtv0 t10
         is_view0 s11 x11 t11 s12 cx0 t12.
-      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
       lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
         (INL ts0,t1) /\
       lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
@@ -7233,7 +7630,9 @@ Theorem intcall_generated_body_post_push_ih[local]:
         type_stmts env1 ret_ty1 body0 = SOME env2 /\
         env_consistent env1 cx0 st0 /\ state_well_typed st0 /\
         context_well_typed cx0 /\ accounts_well_typed st0.accounts /\
-        functions_well_typed cx0 /\ eval_stmts cx0 body0 st0 = (res0,st0') ==>
+        functions_well_typed cx0 /\
+        call_evaluation_safe cx0 (int_calls_stmts body0) /\
+        eval_stmts cx0 body0 st0 = (res0,st0') ==>
         state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
         no_type_error_result res0 /\
         case res0 of
@@ -7243,7 +7642,7 @@ Theorem intcall_generated_body_post_push_ih[local]:
               env_extends env1 env_exn /\ env_consistent env_exn cx0 st0' /\
               return_exception_typed env_exn ret_ty1 exn) /\
     env_body.current_src = src_id_opt /\
-    check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
+    type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
     lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" r =
       (INL ts,r) /\
     lift_option_type (lookup_callable_function cx.in_deploy fn ts)
@@ -7269,6 +7668,8 @@ Theorem intcall_generated_body_post_push_ih[local]:
       context_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
       accounts_well_typed st0.accounts /\
       functions_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+      call_evaluation_safe (cx with stk updated_by CONS (env_body.current_src,fn))
+        (int_calls_stmts fn_body) /\
       eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) fn_body st0 = (res0,st0') ==>
       state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
       no_type_error_result res0 /\
@@ -7297,7 +7698,9 @@ Proof
        type_stmts env1 ret_ty1 fn_body = SOME env2 /\
        env_consistent env1 cxf' st0 /\ state_well_typed st0 /\
        context_well_typed cxf' /\ accounts_well_typed st0.accounts /\
-       functions_well_typed cxf' /\ eval_stmts cxf' fn_body st0 = (res0,st0') ==>
+       functions_well_typed cxf' /\
+       call_evaluation_safe cxf' (int_calls_stmts fn_body) /\
+       eval_stmts cxf' fn_body st0 = (res0,st0') ==>
        state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
        no_type_error_result res0 /\
        case res0 of
@@ -7336,6 +7739,9 @@ Theorem intcall_successful_defaults_lock_success_sound_from_body_ih[local]:
        context_well_typed (cx with stk updated_by CONS (env_body.current_src,fn_name)) /\
        accounts_well_typed st0.accounts /\
        functions_well_typed (cx with stk updated_by CONS (env_body.current_src,fn_name)) /\
+       call_evaluation_safe
+         (cx with stk updated_by CONS (env_body.current_src,fn_name))
+         (int_calls_stmts body) /\
        eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn_name)) body st0 =
          (res0,st0') ==>
        state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
@@ -7356,7 +7762,10 @@ Theorem intcall_successful_defaults_lock_success_sound_from_body_ih[local]:
     env_consistent env cx args_st /\ state_well_typed args_st /\
     state_well_typed dflt_st /\
     context_well_typed cx /\ accounts_well_typed dflt_st.accounts /\
-    functions_well_typed cx /\ env_body.type_defs = get_tenv cx /\
+    functions_well_typed cx /\
+    call_evaluation_safe
+      (cx with stk updated_by CONS (env_body.current_src,fn_name))
+      (int_calls_stmts body) /\ env_body.type_defs = get_tenv cx /\
     env_body.fn_sigs = env.fn_sigs /\ env_body.bare_globals = env.bare_globals /\
     env_body.bare_global_assignable = env.bare_global_assignable /\
     env_body.toplevel_vtypes = env.toplevel_vtypes /\
@@ -7408,6 +7817,10 @@ Proof
   (CONJ_TAC THEN1 (qpat_assum `context_well_typed cx` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (qpat_assum `accounts_well_typed dflt_st.accounts` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (qpat_assum `functions_well_typed cx` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1
+    (qpat_assum `call_evaluation_safe
+      (cx with stk updated_by CONS (env_body.current_src,fn_name))
+      (int_calls_stmts body')` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (qpat_assum `env_body.type_defs = get_tenv cx` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (qpat_assum `env_body.fn_sigs = env.fn_sigs` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (qpat_assum `env_body.bare_globals = env.bare_globals` ACCEPT_TAC)) >>
@@ -7432,7 +7845,7 @@ Theorem intcall_successful_defaults_lock_success_sound_general[local]:
         sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 needed0 cxd0
         s7 dflt_vs0 t7 all_tenv0 s8 env0 t8 s9 prev0 t9 s10 rtv0 t10
         is_view0 s11 x11 t11 s12 cx0 t12.
-      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
       lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
         (INL ts0,t1) /\
       lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
@@ -7465,7 +7878,9 @@ Theorem intcall_successful_defaults_lock_success_sound_general[local]:
         type_stmts env1 ret_ty1 body0 = SOME env2 /\
         env_consistent env1 cx0 st0 /\ state_well_typed st0 /\
         context_well_typed cx0 /\ accounts_well_typed st0.accounts /\
-        functions_well_typed cx0 /\ eval_stmts cx0 body0 st0 = (res0,st0') ==>
+        functions_well_typed cx0 /\
+        call_evaluation_safe cx0 (int_calls_stmts body0) /\
+        eval_stmts cx0 body0 st0 = (res0,st0') ==>
         state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
         no_type_error_result res0 /\
         case res0 of
@@ -7474,7 +7889,7 @@ Theorem intcall_successful_defaults_lock_success_sound_general[local]:
             ?env_exn.
               env_extends env1 env_exn /\ env_consistent env_exn cx0 st0' /\
               return_exception_typed env_exn ret_ty1 exn) /\
-    check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
+    type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
     lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" r =
       (INL ts,r) /\
     lift_option_type (lookup_callable_function cx.in_deploy fn ts)
@@ -7504,6 +7919,9 @@ Theorem intcall_successful_defaults_lock_success_sound_general[local]:
     context_well_typed cx /\
     accounts_well_typed dflt_st.accounts /\
     functions_well_typed cx /\
+    call_evaluation_safe
+      (cx with stk updated_by CONS (env_body.current_src,fn))
+      (int_calls_stmts fn_body) /\
     env_body.current_src = src_id_opt /\
     env_body.type_defs = get_tenv cx /\
     env_body.fn_sigs = env.fn_sigs /\
@@ -7540,6 +7958,9 @@ Proof
      context_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
      accounts_well_typed st0.accounts /\
      functions_well_typed (cx with stk updated_by CONS (env_body.current_src,fn)) /\
+     call_evaluation_safe
+       (cx with stk updated_by CONS (env_body.current_src,fn))
+       (int_calls_stmts fn_body) /\
      eval_stmts (cx with stk updated_by CONS (env_body.current_src,fn)) fn_body st0 = (res0,st0') ==>
      state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
      no_type_error_result res0 /\
@@ -7557,7 +7978,7 @@ Proof
       intcall_generated_body_post_push_ih) >>
     (CONJ_TAC THEN1 (qhdtm_x_assum `bool$!` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `env_body.current_src = src_id_opt` ACCEPT_TAC)) >>
-    (CONJ_TAC THEN1 (qpat_assum `check _ "recursion" r = _` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `type_check _ "recursion" r = _` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `lift_option_type (get_module_code _ _) _ r = _` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `lift_option_type (lookup_callable_function _ _ _) _ r = _` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `type_check _ "IntCall args length" r = _` ACCEPT_TAC)) >>
@@ -7584,6 +8005,10 @@ Proof
   (CONJ_TAC THEN1 (qpat_assum `context_well_typed cx` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (qpat_assum `accounts_well_typed dflt_st.accounts` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (qpat_assum `functions_well_typed cx` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1
+    (qpat_assum `call_evaluation_safe
+      (cx with stk updated_by CONS (env_body.current_src,fn))
+      (int_calls_stmts fn_body)` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (qpat_assum `env_body.type_defs = get_tenv cx` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (qpat_assum `env_body.fn_sigs = env.fn_sigs` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (qpat_assum `env_body.bare_globals = env.bare_globals` ACCEPT_TAC)) >>
@@ -7608,7 +8033,7 @@ Theorem intcall_successful_defaults_continuation_lock_success_case[local]:
         sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 needed0 cxd0
         s7 dflt_vs0 t7 all_tenv0 s8 env0 t8 s9 prev0 t9 s10 rtv0 t10
         is_view0 s11 x11 t11 s12 cx0 t12.
-      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
       lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
         (INL ts0,t1) /\
       lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
@@ -7641,7 +8066,9 @@ Theorem intcall_successful_defaults_continuation_lock_success_case[local]:
         type_stmts env1 ret_ty1 body0 = SOME env2 /\
         env_consistent env1 cx0 st0 /\ state_well_typed st0 /\
         context_well_typed cx0 /\ accounts_well_typed st0.accounts /\
-        functions_well_typed cx0 /\ eval_stmts cx0 body0 st0 = (res0,st0') ==>
+        functions_well_typed cx0 /\
+        call_evaluation_safe cx0 (int_calls_stmts body0) /\
+        eval_stmts cx0 body0 st0 = (res0,st0') ==>
         state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
         no_type_error_result res0 /\
         case res0 of
@@ -7650,7 +8077,7 @@ Theorem intcall_successful_defaults_continuation_lock_success_case[local]:
             ?env_exn.
               env_extends env1 env_exn /\ env_consistent env_exn cx0 st0' /\
               return_exception_typed env_exn ret_ty1 exn) /\
-    check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
+    type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
     lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" r =
       (INL ts,r) /\
     lift_option_type (lookup_callable_function cx.in_deploy fn ts)
@@ -7682,6 +8109,9 @@ Theorem intcall_successful_defaults_continuation_lock_success_case[local]:
     context_well_typed cx /\
     accounts_well_typed dflt_st.accounts /\
     functions_well_typed cx /\
+    call_evaluation_safe
+      (cx with stk updated_by CONS (env_body.current_src,fn))
+      (int_calls_stmts fn_body) /\
     env_body.current_src = src_id_opt /\
     env_body.type_defs = get_tenv cx /\
     env_body.fn_sigs = env.fn_sigs /\
@@ -7724,7 +8154,7 @@ Proof
                          `dflt_vs`, `dflt_st`, `call_env`, `lock_st`]
     intcall_successful_defaults_lock_success_sound_general) >>
   (CONJ_TAC THEN1 (qhdtm_x_assum `bool$!` ACCEPT_TAC)) >>
-  (CONJ_TAC THEN1 (qpat_assum `check _ "recursion" r = _` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1 (qpat_assum `type_check _ "recursion" r = _` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (qpat_assum `lift_option_type (get_module_code _ _) _ r = _` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (qpat_assum `lift_option_type (lookup_callable_function _ _ _) _ r = _` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (qpat_assum `type_check _ "IntCall args length" r = _` ACCEPT_TAC)) >>
@@ -7744,6 +8174,10 @@ Proof
   (CONJ_TAC THEN1 (qpat_assum `context_well_typed cx` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (qpat_assum `accounts_well_typed dflt_st.accounts` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (qpat_assum `functions_well_typed cx` ACCEPT_TAC)) >>
+  (CONJ_TAC THEN1
+    (qpat_assum `call_evaluation_safe
+      (cx with stk updated_by CONS (env_body.current_src,fn))
+      (int_calls_stmts fn_body)` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (qpat_assum `env_body.current_src = src_id_opt` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (qpat_assum `env_body.type_defs = get_tenv cx` ACCEPT_TAC)) >>
   (CONJ_TAC THEN1 (qpat_assum `env_body.fn_sigs = env.fn_sigs` ACCEPT_TAC)) >>
@@ -7766,7 +8200,7 @@ Theorem intcall_successful_defaults_continuation_sound_general[local]:
         sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 needed0 cxd0
         s7 dflt_vs0 t7 all_tenv0 s8 env0 t8 s9 prev0 t9 s10 rtv0 t10
         is_view0 s11 x11 t11 s12 cx0 t12.
-      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
       lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
         (INL ts0,t1) /\
       lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
@@ -7799,7 +8233,9 @@ Theorem intcall_successful_defaults_continuation_sound_general[local]:
         type_stmts env1 ret_ty1 body0 = SOME env2 /\
         env_consistent env1 cx0 st0 /\ state_well_typed st0 /\
         context_well_typed cx0 /\ accounts_well_typed st0.accounts /\
-        functions_well_typed cx0 /\ eval_stmts cx0 body0 st0 = (res0,st0') ==>
+        functions_well_typed cx0 /\
+        call_evaluation_safe cx0 (int_calls_stmts body0) /\
+        eval_stmts cx0 body0 st0 = (res0,st0') ==>
         state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
         no_type_error_result res0 /\
         case res0 of
@@ -7808,7 +8244,7 @@ Theorem intcall_successful_defaults_continuation_sound_general[local]:
             ?env_exn.
               env_extends env1 env_exn /\ env_consistent env_exn cx0 st0' /\
               return_exception_typed env_exn ret_ty1 exn) /\
-    check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
+    type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
     lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" r =
       (INL ts,r) /\
     lift_option_type (lookup_callable_function cx.in_deploy fn ts)
@@ -7839,6 +8275,9 @@ Theorem intcall_successful_defaults_continuation_sound_general[local]:
     context_well_typed cx /\
     accounts_well_typed dflt_st.accounts /\
     functions_well_typed cx /\
+    call_evaluation_safe
+      (cx with stk updated_by CONS (env_body.current_src,fn))
+      (int_calls_stmts fn_body) /\
     env_body.current_src = src_id_opt /\
     env_body.type_defs = get_tenv cx /\
     env_body.fn_sigs = env.fn_sigs /\
@@ -7886,7 +8325,7 @@ Proof
                            `dflt_vs`, `dflt_st`, `call_env`, `INL ()`, `lock_st`]
       intcall_successful_defaults_continuation_lock_success_case) >>
     (CONJ_TAC THEN1 (qhdtm_x_assum `bool$!` ACCEPT_TAC)) >>
-    (CONJ_TAC THEN1 (qpat_assum `check _ "recursion" r = _` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `type_check _ "recursion" r = _` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `lift_option_type (get_module_code _ _) _ r = _` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `lift_option_type (lookup_callable_function _ _ _) _ r = _` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `type_check _ "IntCall args length" r = _` ACCEPT_TAC)) >>
@@ -7908,6 +8347,10 @@ Proof
     (CONJ_TAC THEN1 (qpat_assum `context_well_typed cx` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `accounts_well_typed dflt_st.accounts` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `functions_well_typed cx` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1
+      (qpat_assum `call_evaluation_safe
+        (cx with stk updated_by CONS (env_body.current_src,fn))
+        (int_calls_stmts fn_body)` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `env_body.current_src = src_id_opt` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `env_body.type_defs = get_tenv cx` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `env_body.fn_sigs = env.fn_sigs` ACCEPT_TAC)) >>
@@ -7978,7 +8421,7 @@ Theorem intcall_actual_args_success_default_success_branch[local]:
         sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 needed0 cxd0
         s7 dflt_vs0 t7 all_tenv0 s8 env0 t8 s9 prev0 t9 s10 rtv0 t10
         is_view0 s11 x11 t11 s12 cx0 t12.
-      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
       lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
         (INL ts0,t1) /\
       lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
@@ -8011,7 +8454,9 @@ Theorem intcall_actual_args_success_default_success_branch[local]:
         type_stmts env1 ret_ty1 body0 = SOME env2 /\
         env_consistent env1 cx0 st0 /\ state_well_typed st0 /\
         context_well_typed cx0 /\ accounts_well_typed st0.accounts /\
-        functions_well_typed cx0 /\ eval_stmts cx0 body0 st0 = (res0,st0') ==>
+        functions_well_typed cx0 /\
+        call_evaluation_safe cx0 (int_calls_stmts body0) /\
+        eval_stmts cx0 body0 st0 = (res0,st0') ==>
         state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
         no_type_error_result res0 /\
         case res0 of
@@ -8020,7 +8465,7 @@ Theorem intcall_actual_args_success_default_success_branch[local]:
             ?env_exn.
               env_extends env1 env_exn /\ env_consistent env_exn cx0 st0' /\
               return_exception_typed env_exn ret_ty1 exn) /\
-    check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
+    type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
     lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" r =
       (INL ts,r) /\
     lift_option_type (lookup_callable_function cx.in_deploy fn ts)
@@ -8051,6 +8496,9 @@ Theorem intcall_actual_args_success_default_success_branch[local]:
     context_well_typed cx /\
     accounts_well_typed dflt_st.accounts /\
     functions_well_typed cx /\
+    call_evaluation_safe
+      (cx with stk updated_by CONS (env_body.current_src,fn))
+      (int_calls_stmts fn_body) /\
     env_body.current_src = src_id_opt /\
     env_body.type_defs = get_tenv cx /\
     env_body.fn_sigs = env.fn_sigs /\
@@ -8100,7 +8548,7 @@ Theorem intcall_actual_args_success_default_success_branch_pair[local]:
         sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 needed0 cxd0
         s7 dflt_vs0 t7 all_tenv0 s8 env0 t8 s9 prev0 t9 s10 rtv0 t10
         is_view0 s11 x11 t11 s12 cx0 t12.
-      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
       lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
         (INL ts0,t1) /\
       lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
@@ -8133,7 +8581,9 @@ Theorem intcall_actual_args_success_default_success_branch_pair[local]:
         type_stmts env1 ret_ty1 body0 = SOME env2 /\
         env_consistent env1 cx0 st0 /\ state_well_typed st0 /\
         context_well_typed cx0 /\ accounts_well_typed st0.accounts /\
-        functions_well_typed cx0 /\ eval_stmts cx0 body0 st0 = (res0,st0') ==>
+        functions_well_typed cx0 /\
+        call_evaluation_safe cx0 (int_calls_stmts body0) /\
+        eval_stmts cx0 body0 st0 = (res0,st0') ==>
         state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
         no_type_error_result res0 /\
         case res0 of
@@ -8142,7 +8592,7 @@ Theorem intcall_actual_args_success_default_success_branch_pair[local]:
             ?env_exn.
               env_extends env1 env_exn /\ env_consistent env_exn cx0 st0' /\
               return_exception_typed env_exn ret_ty1 exn) /\
-    check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
+    type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
     lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" r =
       (INL ts,r) /\
     lift_option_type (lookup_callable_function cx.in_deploy fn ts)
@@ -8173,6 +8623,9 @@ Theorem intcall_actual_args_success_default_success_branch_pair[local]:
     context_well_typed cx /\
     accounts_well_typed dflt_st.accounts /\
     functions_well_typed cx /\
+    call_evaluation_safe
+      (cx with stk updated_by CONS (env_body.current_src,fn))
+      (int_calls_stmts fn_body) /\
     env_body.current_src = src_id_opt /\
     env_body.type_defs = get_tenv cx /\
     env_body.fn_sigs = env.fn_sigs /\
@@ -8219,6 +8672,13 @@ Proof
    simp[])
 QED
 
+Theorem intcall_lift_evaluate_type_success[local]:
+  evaluate_type tenv ret = SOME ret_tv ==>
+  lift_option_type (evaluate_type tenv ret) msg st = (INL ret_tv,st)
+Proof
+  simp[lift_option_type_def, return_def]
+QED
+
 
 Theorem intcall_actual_args_success_sound_from_generated_ih_general[local]:
   !cx env loc res st' src_id_opt fn es extra r ts tc_ok actual_vs args_st
@@ -8226,7 +8686,7 @@ Theorem intcall_actual_args_success_sound_from_generated_ih_general[local]:
     (!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
         sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 es0 cx0
         s7 prev0 t7 s8 x8 t8.
-      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
       lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
         (INL ts0,t1) /\
       lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
@@ -8246,6 +8706,7 @@ Theorem intcall_actual_args_success_sound_from_generated_ih_general[local]:
         well_typed_exprs env0 es0 /\ env_consistent env0 cx0 st0 /\
         state_well_typed st0 /\ context_well_typed cx0 /\
         accounts_well_typed st0.accounts /\ functions_well_typed cx0 /\
+        call_evaluation_safe cx0 (int_calls_exprs es0) /\
         eval_exprs cx0 es0 st0 = (res0,st0') ==>
         state_well_typed st0' /\ env_consistent env0 cx0 st0' /\
         accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
@@ -8254,7 +8715,7 @@ Theorem intcall_actual_args_success_sound_from_generated_ih_general[local]:
         sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 needed0 cxd0
         s7 dflt_vs0 t7 all_tenv0 s8 env0 t8 s9 prev0 t9 s10 rtv0 t10
         is_view0 s11 x11 t11 s12 cx0 t12.
-      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
       lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
         (INL ts0,t1) /\
       lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
@@ -8287,7 +8748,9 @@ Theorem intcall_actual_args_success_sound_from_generated_ih_general[local]:
         type_stmts env1 ret_ty1 body0 = SOME env2 /\
         env_consistent env1 cx0 st0 /\ state_well_typed st0 /\
         context_well_typed cx0 /\ accounts_well_typed st0.accounts /\
-        functions_well_typed cx0 /\ eval_stmts cx0 body0 st0 = (res0,st0') ==>
+        functions_well_typed cx0 /\
+        call_evaluation_safe cx0 (int_calls_stmts body0) /\
+        eval_stmts cx0 body0 st0 = (res0,st0') ==>
         state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
         no_type_error_result res0 /\
         case res0 of
@@ -8296,7 +8759,7 @@ Theorem intcall_actual_args_success_sound_from_generated_ih_general[local]:
             ?env_exn.
               env_extends env1 env_exn /\ env_consistent env_exn cx0 st0' /\
               return_exception_typed env_exn ret_ty1 exn) /\
-    check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
+    type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" r = (INL (),r) /\
     lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" r =
       (INL ts,r) /\
     lift_option_type (lookup_callable_function cx.in_deploy fn ts)
@@ -8306,7 +8769,14 @@ Theorem intcall_actual_args_success_sound_from_generated_ih_general[local]:
     eval_exprs cx es r = (INL actual_vs,args_st) /\
     env_consistent env cx args_st /\ state_well_typed args_st /\
     context_well_typed cx /\ accounts_well_typed args_st.accounts /\
-    functions_well_typed cx /\ exprs_runtime_typed env es actual_vs /\
+    functions_well_typed cx /\
+    call_evaluation_safe (cx with stk updated_by CONS (src_id_opt,fn))
+      (int_calls_exprs
+        (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)) /\
+    call_evaluation_safe
+      (cx with stk updated_by CONS (env_body.current_src,fn))
+      (int_calls_stmts fn_body) /\
+    exprs_runtime_typed env es actual_vs /\
     MAP expr_type es = TAKE (LENGTH es) (MAP SND args) /\
     env_body.current_src = src_id_opt /\
     env_body.type_defs = get_tenv cx /\
@@ -8339,30 +8809,26 @@ Theorem intcall_actual_args_success_sound_from_generated_ih_general[local]:
          (case lift_option_type (bind_arguments (get_tenv cx) args (actual_vs ++ dflt_vs))
                  "IntCall bind_arguments" dflt_st of
           | (INL call_env,bind_st) =>
-              (case lift_option_type (evaluate_type (get_tenv cx) ret)
-                      "IntCall eval ret" bind_st of
-               | (INL ret_v,ret_st) =>
-                   (case (if nr then
-                            case cx.nonreentrant_slot of
-                            | NONE => raise (Error (TypeError "nonreentrant slot missing"))
-                            | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
-                          else return ()) ret_st of
-                    | (INL u,lock_st) =>
-                        (case push_function (src_id_opt,fn) call_env cx lock_st of
-                         | (INL cxf,pushed_st) =>
-                             (do rv <- finally
-                                   (try (do eval_stmts cxf fn_body; return NoneV od) handle_function)
-                                   (do pop_function args_st.scopes;
-                                       if nr /\ ~(fm = View \/ fm = Pure) then
-                                         case cx.nonreentrant_slot of
-                                         | NONE => return ()
-                                         | SOME slot => release_nonreentrant_lock cx.txn.target slot
-                                       else return () od);
-                                 crv <- lift_option_type (safe_cast ret_v rv) "IntCall cast ret";
-                                 return (Value crv) od) pushed_st
-                         | (INR e,push_st) => (INR e,push_st))
-                    | (INR e,lock_st) => (INR e,lock_st))
-               | (INR e,ret_st) => (INR e,ret_st))
+              (case (if nr then
+                       case cx.nonreentrant_slot of
+                       | NONE => raise (Error (TypeError "nonreentrant slot missing"))
+                       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+                     else return ()) bind_st of
+               | (INL u,lock_st) =>
+                   (case push_function (src_id_opt,fn) call_env cx lock_st of
+                    | (INL cxf,pushed_st) =>
+                        (do rv <- finally
+                              (try (do eval_stmts cxf fn_body; return NoneV od) handle_function)
+                              (do pop_function args_st.scopes;
+                                  if nr /\ fm <> View /\ fm <> Pure then
+                                    case cx.nonreentrant_slot of
+                                    | NONE => return ()
+                                    | SOME slot => release_nonreentrant_lock cx.txn.target slot
+                                  else return () od);
+                            crv <- lift_option_type (safe_cast ret_tv rv) "IntCall cast ret";
+                            return (Value crv) od) pushed_st
+                    | (INR e,push_st) => (INR e,push_st))
+               | (INR e,lock_st) => (INR e,lock_st))
           | (INR e,bind_st) => (INR e,bind_st))
      | INR e => (INR e,dflt_st)) = (res,st') ==>
     state_well_typed st' /\ env_consistent env cx st' /\
@@ -8393,30 +8859,26 @@ Proof
       (case lift_option_type (bind_arguments (get_tenv cx) args (actual_vs ++ dflt_vs))
               "IntCall bind_arguments" dflt_st of
        | (INL call_env,bind_st) =>
-           (case lift_option_type (evaluate_type (get_tenv cx) ret)
-                   "IntCall eval ret" bind_st of
-            | (INL ret_v,ret_st) =>
-                (case (if nr then
-                         case cx.nonreentrant_slot of
-                         | NONE => raise (Error (TypeError "nonreentrant slot missing"))
-                         | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
-                       else return ()) ret_st of
-                 | (INL u,lock_st) =>
-                     (case push_function (src_id_opt,fn) call_env cx lock_st of
-                      | (INL cxf,pushed_st) =>
-                          (do rv <- finally
-                                (try (do eval_stmts cxf fn_body; return NoneV od) handle_function)
-                                (do pop_function args_st.scopes;
-                                    if nr /\ ~(fm = View \/ fm = Pure) then
-                                      case cx.nonreentrant_slot of
-                                      | NONE => return ()
-                                      | SOME slot => release_nonreentrant_lock cx.txn.target slot
-                                    else return () od);
-                              crv <- lift_option_type (safe_cast ret_v rv) "IntCall cast ret";
-                              return (Value crv) od) pushed_st
-                      | (INR e,push_st) => (INR e,push_st))
-                 | (INR e,lock_st) => (INR e,lock_st))
-            | (INR e,ret_st) => (INR e,ret_st))
+           (case (if nr then
+                    case cx.nonreentrant_slot of
+                    | NONE => raise (Error (TypeError "nonreentrant slot missing"))
+                    | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (fm = View \/ fm = Pure)
+                  else return ()) bind_st of
+            | (INL u,lock_st) =>
+                (case push_function (src_id_opt,fn) call_env cx lock_st of
+                 | (INL cxf,pushed_st) =>
+                     (do rv <- finally
+                           (try (do eval_stmts cxf fn_body; return NoneV od) handle_function)
+                           (do pop_function args_st.scopes;
+                               if nr /\ fm <> View /\ fm <> Pure then
+                                 case cx.nonreentrant_slot of
+                                 | NONE => return ()
+                                 | SOME slot => release_nonreentrant_lock cx.txn.target slot
+                               else return () od);
+                         crv <- lift_option_type (safe_cast ret_tv rv) "IntCall cast ret";
+                         return (Value crv) od) pushed_st
+                 | (INR e,push_st) => (INR e,push_st))
+            | (INR e,lock_st) => (INR e,lock_st))
        | (INR e,bind_st) => (INR e,bind_st)))` >>
     (CONJ_TAC THEN1 (qpat_assum `state_well_typed dflt_st` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `env_consistent env cx dflt_st` ACCEPT_TAC)) >>
@@ -8468,6 +8930,10 @@ Proof
     (CONJ_TAC THEN1 (qpat_assum `context_well_typed cx` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `accounts_well_typed dflt_st.accounts` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `functions_well_typed cx` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1
+      (qpat_assum `call_evaluation_safe
+        (cx with stk updated_by CONS (env_body.current_src,fn))
+        (int_calls_stmts fn_body)` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `env_body.current_src = src_id_opt` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `env_body.type_defs = get_tenv cx` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `env_body.fn_sigs = env.fn_sigs` ACCEPT_TAC)) >>
@@ -8490,7 +8956,7 @@ Theorem intcall_expr_sound_from_generated_ih[local]:
   !cx env st res st' loc src_id_opt fn es extra.
     (!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
         sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5.
-      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
       lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
         (INL ts0,t1) /\
       lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
@@ -8505,6 +8971,7 @@ Theorem intcall_expr_sound_from_generated_ih[local]:
         well_typed_exprs env0 es /\ env_consistent env0 cx st0 /\
         state_well_typed st0 /\ context_well_typed cx /\
         accounts_well_typed st0.accounts /\ functions_well_typed cx /\
+        call_evaluation_safe cx (int_calls_exprs es) /\
         eval_exprs cx es st0 = (res0,st0') ==>
         state_well_typed st0' /\ env_consistent env0 cx st0' /\
         accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
@@ -8512,7 +8979,7 @@ Theorem intcall_expr_sound_from_generated_ih[local]:
     (!s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0
         sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 es0 cx0
         s7 prev0 t7 s8 x8 t8.
-      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
       lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
         (INL ts0,t1) /\
       lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
@@ -8532,6 +8999,7 @@ Theorem intcall_expr_sound_from_generated_ih[local]:
         well_typed_exprs env0 es0 /\ env_consistent env0 cx0 st0 /\
         state_well_typed st0 /\ context_well_typed cx0 /\
         accounts_well_typed st0.accounts /\ functions_well_typed cx0 /\
+        call_evaluation_safe cx0 (int_calls_exprs es0) /\
         eval_exprs cx0 es0 st0 = (res0,st0') ==>
         state_well_typed st0' /\ env_consistent env0 cx0 st0' /\
         accounts_well_typed st0'.accounts /\ no_type_error_result res0 /\
@@ -8540,7 +9008,7 @@ Theorem intcall_expr_sound_from_generated_ih[local]:
         sstup0 dflts0 sstup20 ret0 body0 s5 x5 t5 s6 vs0 t6 needed0 cxd0
         s7 dflt_vs0 t7 all_tenv0 s8 env0 t8 s9 prev0 t9 s10 rtv0 t10
         is_view0 s11 x11 t11 s12 cx0 t12.
-      check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
+      type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) /\
       lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
         (INL ts0,t1) /\
       lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
@@ -8573,7 +9041,9 @@ Theorem intcall_expr_sound_from_generated_ih[local]:
         type_stmts env1 ret_ty1 body0 = SOME env2 /\
         env_consistent env1 cx0 st0 /\ state_well_typed st0 /\
         context_well_typed cx0 /\ accounts_well_typed st0.accounts /\
-        functions_well_typed cx0 /\ eval_stmts cx0 body0 st0 = (res0,st0') ==>
+        functions_well_typed cx0 /\
+        call_evaluation_safe cx0 (int_calls_stmts body0) /\
+        eval_stmts cx0 body0 st0 = (res0,st0') ==>
         state_well_typed st0' /\ accounts_well_typed st0'.accounts /\
         no_type_error_result res0 /\
         case res0 of
@@ -8584,6 +9054,8 @@ Theorem intcall_expr_sound_from_generated_ih[local]:
               return_exception_typed env_exn ret_ty1 exn) /\
     env_consistent env cx st /\ state_well_typed st /\ context_well_typed cx /\
     accounts_well_typed st.accounts /\ functions_well_typed cx /\
+    call_evaluation_safe cx
+      (int_calls_expr (Call loc (IntCall (src_id_opt,fn)) es extra)) /\
     eval_expr cx (Call loc (IntCall (src_id_opt,fn)) es extra) st = (res,st') /\
     well_typed_expr env (Call loc (IntCall (src_id_opt,fn)) es extra) ==>
     state_well_typed st' /\ env_consistent env cx st' /\
@@ -8593,6 +9065,10 @@ Theorem intcall_expr_sound_from_generated_ih[local]:
     | INR _ => T
 Proof
   rpt gen_tac >> strip_tac >>
+  qhdtm_x_assum `call_evaluation_safe` (mk_asm "call_safe") >>
+  asm "call_safe" (fn th =>
+    assume_tac (MATCH_MP intcall_call_evaluation_safe_target_not_mem th)) >>
+  pop_assum $ mk_asm "recursion_guard" >>
   qpat_x_assum `well_typed_expr env (Call _ (IntCall _) _ _)` mp_tac >>
   rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
   qpat_x_assum
@@ -8603,6 +9079,7 @@ Proof
           well_typed_exprs env0 es /\ env_consistent env0 cx st0 /\
           state_well_typed st0 /\ context_well_typed cx /\
           accounts_well_typed st0.accounts /\ functions_well_typed cx /\
+          call_evaluation_safe cx (int_calls_exprs es) /\
           eval_exprs cx es st0 = (res0,st0') ==> _`
     (mk_asm "actual_ih") >>
   qpat_x_assum
@@ -8613,6 +9090,7 @@ Proof
           well_typed_exprs env0 es0 /\ env_consistent env0 cx0 st0 /\
           state_well_typed st0 /\ context_well_typed cx0 /\
           accounts_well_typed st0.accounts /\ functions_well_typed cx0 /\
+          call_evaluation_safe cx0 (int_calls_exprs es0) /\
           eval_exprs cx0 es0 st0 = (res0,st0') ==> _`
     (mk_asm "default_ih") >>
   qpat_x_assum
@@ -8625,15 +9103,17 @@ Proof
           type_stmts env1 ret_ty1 body0 = SOME env2 /\
           env_consistent env1 cx0 st0 /\ state_well_typed st0 /\
           context_well_typed cx0 /\ accounts_well_typed st0.accounts /\
-          functions_well_typed cx0 /\ eval_stmts cx0 body0 st0 = (res0,st0') ==> _`
+          functions_well_typed cx0 /\
+        call_evaluation_safe cx0 (int_calls_stmts body0) /\
+        eval_stmts cx0 body0 st0 = (res0,st0') ==> _`
     (mk_asm "body_ih") >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   rewrite_tac[Once evaluate_def] >>
   simp_tac(srw_ss())[bind_apply, ignore_bind_apply, LET_THM] >>
   BasicProvers.TOP_CASE_TAC >>
-  imp_res_tac check_state >> BasicProvers.VAR_EQ_TAC >>
+  imp_res_tac type_check_state >> BasicProvers.VAR_EQ_TAC >>
   reverse BasicProvers.TOP_CASE_TAC >- (strip_tac >>
-      gvs[check_def, type_check_def, assert_def, no_type_error_result_def]) >>
+      gvs[L "recursion_guard", type_check_def, assert_def]) >>
   BasicProvers.TOP_CASE_TAC >>
   imp_res_tac lift_option_type_state >> BasicProvers.VAR_EQ_TAC >>
   reverse BasicProvers.TOP_CASE_TAC >- (strip_tac >>
@@ -8669,6 +9149,9 @@ Proof
   BasicProvers.TOP_CASE_TAC >>
   qmatch_asmsub_rename_tac `eval_exprs cx es r = (args_res,args_st)` >>
   qmatch_asmsub_rename_tac `type_check _ _ r = (INL tc_ok,r)` >>
+  `call_evaluation_safe cx (int_calls_exprs es)` by
+    asm "call_safe" (fn th =>
+      ACCEPT_TAC (MATCH_MP intcall_call_evaluation_safe_args th)) >>
   asm_x "actual_ih" mp_tac >> simp[] >>
   disch_then (qspecl_then [`r`, `r`, `r`, `x'`, `r`, `r`, `x''`, `r''`, `r`, `r`] mp_tac) >>
   simp[] >> strip_tac >>
@@ -8682,6 +9165,11 @@ Proof
       (fn th => mp_tac (MATCH_MP (iffLR lift_option_type_INL_eq) th)) >>
     strip_tac >>
     PairCases_on `x''` >> gvs[] >>
+    qpat_assum `get_module_code cx src_id_opt = SOME x'`
+      (mk_asm "module_ok") >>
+    qpat_assum `lookup_callable_function cx.in_deploy fn x' =
+                  SOME (x''0,x''1,x''2,x''3,x''4,x''5)`
+      (mk_asm "lookup_ok") >>
     mp_tac (Q.INST [`st` |-> `args_st`, `ts` |-> `x'`,
                     `fm` |-> `x''0`, `nr` |-> `x''1`,
                     `args` |-> `x''2`, `dflts` |-> `x''3`,
@@ -8699,15 +9187,28 @@ Proof
     BasicProvers.TOP_CASE_TAC >>
     qmatch_asmsub_rename_tac `finally _ _ args_st = (dflt_res,dflt_st)` >>
     qmatch_asmsub_rename_tac `eval_exprs cx es r = (INL actual_vs,args_st)` >>
+    asm "call_safe" (fn call_th =>
+      asm "module_ok" (fn module_th =>
+        asm "lookup_ok" (fn lookup_th =>
+          assume_tac (Q.INST
+            [`n` |-> `LENGTH x''3 - (LENGTH x''2 - LENGTH es)`]
+            (MATCH_MP intcall_call_evaluation_safe_needed_defaults
+              (LIST_CONJ [call_th, module_th, lookup_th])))))) >>
+    asm "call_safe" (fn call_th =>
+      asm "module_ok" (fn module_th =>
+        asm "lookup_ok" (fn lookup_th =>
+          assume_tac (MATCH_MP
+            intcall_call_evaluation_safe_body
+            (LIST_CONJ [call_th, module_th, lookup_th]))))) >>
     strip_tac >>
     MATCH_MP_TAC (Q.SPECL [`cx`, `env`, `sig.ret_ty`, `res`, `st'`, `src_id_opt`, `fn`,
-                           `es`, `v17`, `r`, `x'`, `tc_ok`, `actual_vs`, `args_st`,
+                           `es`, `extra`, `r`, `x'`, `tc_ok`, `actual_vs`, `args_st`,
                            `x''0`, `x''1`, `x''2`, `x''3`, `x''4`, `x''5`,
                            `env_body`, `ret_tv`, `env_after`, `dflt_res`, `dflt_st`]
       intcall_actual_args_success_sound_from_generated_ih_general) >>
     (CONJ_TAC THEN1 (asm "default_ih" (fn th => MATCH_ACCEPT_TAC th))) >>
     (CONJ_TAC THEN1 (asm "body_ih" (fn th => MATCH_ACCEPT_TAC th))) >>
-    (CONJ_TAC THEN1 (qpat_assum `check _ _ r = (INL (),r)` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (qpat_assum `type_check _ _ r = (INL (),r)` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 simp[lift_option_type_def, return_def]) >>
     (CONJ_TAC THEN1 simp[lift_option_type_def, return_def]) >>
     (CONJ_TAC THEN1 (
@@ -8720,6 +9221,18 @@ Proof
     (CONJ_TAC THEN1 (qpat_assum `context_well_typed cx` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `accounts_well_typed args_st.accounts` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `functions_well_typed cx` ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (
+      qpat_assum `call_evaluation_safe
+        (cx with stk updated_by CONS (src_id_opt,fn))
+        (int_calls_exprs
+          (DROP (LENGTH x''3 - (LENGTH x''2 - LENGTH es)) x''3))`
+        MATCH_ACCEPT_TAC)) >>
+    (CONJ_TAC THEN1 (
+      qpat_assum `env_body.current_src = src_id_opt`
+        (fn th => rewrite_tac[th]) >>
+      qpat_assum `call_evaluation_safe
+        (cx with stk updated_by CONS (src_id_opt,fn))
+        (int_calls_stmts x''5)` MATCH_ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 (qpat_assum `exprs_runtime_typed env es actual_vs` ACCEPT_TAC)) >>
     (CONJ_TAC THEN1 simp[]) >>
     (CONJ_TAC THEN1 (qpat_assum `env_body.current_src = src_id_opt` ACCEPT_TAC)) >>
@@ -8778,6 +9291,7 @@ Resume eval_all_type_sound_mutual[Expr_Call_IntCall]:
           well_typed_exprs env0 es /\ env_consistent env0 cx st0 /\
           state_well_typed st0 /\ context_well_typed cx /\
           accounts_well_typed st0.accounts /\ functions_well_typed cx /\
+          call_evaluation_safe cx (int_calls_exprs es) /\
           eval_exprs cx es st0 = (res0,st0') ==> _`
     (mk_asm "actual_ih") >>
   qpat_x_assum
@@ -8788,6 +9302,7 @@ Resume eval_all_type_sound_mutual[Expr_Call_IntCall]:
           well_typed_exprs env0 es0 /\ env_consistent env0 cx0 st0 /\
           state_well_typed st0 /\ context_well_typed cx0 /\
           accounts_well_typed st0.accounts /\ functions_well_typed cx0 /\
+          call_evaluation_safe cx0 (int_calls_exprs es0) /\
           eval_exprs cx0 es0 st0 = (res0,st0') ==> _`
     (mk_asm "default_ih") >>
   qpat_x_assum
@@ -8800,7 +9315,9 @@ Resume eval_all_type_sound_mutual[Expr_Call_IntCall]:
           type_stmts env1 ret_ty1 body0 = SOME env2 /\
           env_consistent env1 cx0 st0 /\ state_well_typed st0 /\
           context_well_typed cx0 /\ accounts_well_typed st0.accounts /\
-          functions_well_typed cx0 /\ eval_stmts cx0 body0 st0 = (res0,st0') ==> _`
+          functions_well_typed cx0 /\
+          call_evaluation_safe cx0 (int_calls_stmts body0) /\
+          eval_stmts cx0 body0 st0 = (res0,st0') ==> _`
     (mk_asm "body_ih") >>
   MATCH_MP_TAC (Q.SPECL [`cx`, `env`, `st`, `res`, `st'`, `v16`,
                          `src_id_opt`, `fn`, `es`, `v17`]
@@ -8816,11 +9333,13 @@ QED
 
 Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result]:
   rpt gen_tac >> strip_tac >>
+  drule extcall_call_evaluation_safe_args >> strip_tac >>
   qpat_x_assum `well_typed_expr env (Call _ (ExtCall _ _) _ _)` mp_tac >>
   rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
   Cases_on `eval_exprs cx es st` >>
   rename1 `eval_exprs cx es st = (args_res,args_st)` >>
-  first_x_assum drule_all >> strip_tac >>
+  qpat_x_assum `!env0 st0 res0 st0'.
+    well_typed_exprs env0 es /\ _ ==> _` drule_all >> strip_tac >>
   Cases_on `args_res`
   >- (
     qpat_x_assum `case INL x of INL vs => exprs_runtime_typed env es vs | INR v1 => T` mp_tac >>
@@ -8915,6 +9434,10 @@ Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result_static]:
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- (
     rpt strip_tac >>
+    `call_evaluation_safe cx (int_calls_expr (THE drv))` by
+      (qpat_x_assum `IS_SOME drv` mp_tac >>
+       Cases_on `drv` >> simp[] >>
+       drule extcall_call_evaluation_safe_driver >> simp[]) >>
     qpat_x_assum `!env' st'' res' st'''. _`
       (qspecl_then [`env0`, `st0`, `res0`, `st0'`] mp_tac) >>
     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
@@ -9114,6 +9637,10 @@ Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_nonstatic_success]:
     qpat_assum `IS_SOME drv` (fn th => rewrite_tac[th]) >>
     rewrite_tac[boolTheory.COND_CLAUSES] >> strip_tac >>
     `well_typed_expr env (THE drv)` by metis_tac[well_typed_opt_THE] >>
+    `call_evaluation_safe cx (int_calls_expr (THE drv))` by
+      (qpat_x_assum `IS_SOME drv` mp_tac >>
+       Cases_on `drv` >> simp[] >>
+       drule extcall_call_evaluation_safe_driver >> simp[]) >>
     qpat_x_assum `!s1 t1 s2 value_opt arg_vals t2 s3 calldata t3 s4 s5 s6 t4 accounts tStorage env0 st0 res0 st1. _`
       (qspecl_then [`args_st`, `args_st`, `args_st`, `SOME amount`,
                     `TL (TL x)`, `args_st`, `args_st`, `x'`, `args_st`,
@@ -9153,6 +9680,7 @@ Resume eval_all_type_sound_mutual[Expr_Call_Send]:
   conj_tac
   >- (
     strip_tac >>
+    drule send_call_evaluation_safe_args >> strip_tac >>
     qpat_x_assum `well_typed_expr env (Call _ Send _ _)` mp_tac >>
     rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
     qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
@@ -9202,6 +9730,7 @@ Resume eval_all_type_sound_mutual[Expr_Call_RawCallTarget]:
   conj_tac
   >- (
     strip_tac >>
+    drule rawcall_call_evaluation_safe_args >> strip_tac >>
     qpat_x_assum `well_typed_expr env (Call _ (RawCallTarget _) _ _)` mp_tac >>
     rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
     qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
@@ -9256,6 +9785,7 @@ Resume eval_all_type_sound_mutual[Expr_Call_RawLog]:
   conj_tac
   >- (
     strip_tac >>
+    drule rawlog_call_evaluation_safe_args >> strip_tac >>
     qpat_x_assum `well_typed_expr env (Call _ RawLog _ _)` mp_tac >>
     rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
     qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
@@ -9290,6 +9820,7 @@ Resume eval_all_type_sound_mutual[Expr_Call_RawRevert]:
   conj_tac
   >- (
     strip_tac >>
+    drule rawrevert_call_evaluation_safe_args >> strip_tac >>
     qpat_x_assum `well_typed_expr env (Call _ RawRevert _ _)` mp_tac >>
     rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
     qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
@@ -9319,6 +9850,7 @@ Resume eval_all_type_sound_mutual[Expr_Call_SelfDestructTarget]:
   conj_tac
   >- (
     strip_tac >>
+    drule selfdestruct_call_evaluation_safe_args >> strip_tac >>
     qpat_x_assum `well_typed_expr env (Call _ SelfDestructTarget _ _)` mp_tac >>
     rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
     qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
@@ -9345,6 +9877,7 @@ Resume eval_all_type_sound_mutual[Expr_Call_CreateTarget]:
   conj_tac
   >- (
     strip_tac >>
+    drule create_call_evaluation_safe_args >> strip_tac >>
     qpat_x_assum `well_typed_expr env (Call _ (CreateTarget _ _) _ _)` mp_tac >>
     rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
     qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
@@ -9378,6 +9911,8 @@ QED
 
 Resume eval_all_type_sound_mutual[Exprs_cons]:
   rpt gen_tac >> strip_tac >>
+  drule exprs_cons_call_evaluation_safe_head >> strip_tac >>
+  drule exprs_cons_call_evaluation_safe_tail >> strip_tac >>
   qpat_x_assum `well_typed_exprs env (e::es)` mp_tac >>
   rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
   qpat_x_assum `eval_exprs _ _ _ = _` mp_tac >>

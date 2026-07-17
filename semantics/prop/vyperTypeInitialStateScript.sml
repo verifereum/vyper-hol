@@ -928,6 +928,7 @@ QED
  * the existing preconditions, the already-proved statement theorem gives no
  * runtime TypeError for executing the body from the entry state. *)
 Theorem callable_entry_no_type_error:
+  call_evaluation_safe cx (int_calls_stmts body) /\
   functions_well_typed cx /\
   context_well_typed cx /\
   machine_well_typed am /\
