@@ -123,21 +123,15 @@ Proof
               `External`] >>
     simp[function_int_calls_def] >>
     metis_tac[ALOOKUP_MEM]) >>
-  `irreflexive (TC (call_edge_rel (contract_call_edges mods)))` by (
-    drule checked_contract_call_graph_irreflexive >>
-    simp[]) >>
-  `functions_follow_call_graph (contract_call_edges mods)
-     (initial_evaluation_context am.sources am.layouts tx src)` by (
-    irule checked_contract_initial_context_functions_follow_call_graph >>
-    simp[]) >>
   `(initial_evaluation_context am.sources am.layouts tx src) =
    ((initial_evaluation_context am.sources am.layouts tx src) with
       stk := [(src,tx.function_name)])` by
     simp[initial_evaluation_context_def] >>
   pop_assum SUBST1_TAC >>
-  irule call_evaluation_safe_singleton >>
-  qexists `contract_call_edges mods` >>
-  simp[]
+  irule (INST_TYPE [``:'a`` |-> ``:num``]
+    checked_contract_call_evaluation_safe_singleton) >>
+  qexistsl [`art`, `am.layouts`, `mods`] >>
+  simp[initial_evaluation_context_def]
 QED
 
 (* checked_call_external_no_type_error is proved near the end of this file,
@@ -2725,13 +2719,6 @@ Proof
     pop_assum SUBST1_TAC >>
     `ALOOKUP am.sources tx.target = SOME mods` by
       gvs[checked_contract_runtime_ready_def] >>
-    `irreflexive (TC (call_edge_rel (contract_call_edges mods)))` by (
-      drule checked_contract_call_graph_irreflexive >> simp[]) >>
-    `functions_follow_call_graph (contract_call_edges mods)
-       (initial_evaluation_context am.sources am.layouts
-         (empty_call_txn with target := tx.target) src)` by (
-      irule checked_contract_initial_context_functions_follow_call_graph >>
-      simp[empty_call_txn_def]) >>
     `(initial_evaluation_context am.sources am.layouts
         (empty_call_txn with target := tx.target) src) =
      ((initial_evaluation_context am.sources am.layouts
@@ -2739,9 +2726,11 @@ Proof
        stk := [(src,"")])` by
       simp[initial_evaluation_context_def, empty_call_txn_def] >>
     pop_assum SUBST1_TAC >>
-    irule call_evaluation_safe_singleton >>
-    qexists `contract_call_edges mods` >>
-    simp[calls_follow_call_graph_def]) >>
+    irule (INST_TYPE [``:'a`` |-> ``:num``]
+      checked_contract_call_evaluation_safe_singleton) >>
+    qexistsl [`art`, `am.layouts`, `mods`] >>
+    simp[initial_evaluation_context_def, empty_call_txn_def,
+         calls_follow_call_graph_def]) >>
   `no_type_error_eval
      (eval_stmts
        (initial_evaluation_context am.sources am.layouts
