@@ -12,7 +12,8 @@ Ancestors
   vyperTypeSystem vyperTypeContract vyperTypeInvariants vyperTypeValues vyperTypeBindArguments
   vyperTypeStmtSoundness vyperTypeInitialState vyperPureExpr vyperEvalPreservesScopes vyperEvalExprPreservesScopesDom
   vyperEvalPreservesImmutablesDom vyperScopePreservation vyperStatePreservation
-  vyperExprNoControl vyperTypeEvalSoundness
+  vyperExprNoControl vyperTypeEvalSoundness vyperTypeCallGraph
+  vyperTypeCallGraphSoundness vyperTypeCallStackSoundness
   vyperTypeContractStaticMaps vyperTypeContractContext
   vyperTypeContractFunction vyperTypeContractGetter
 Libs
@@ -85,6 +86,59 @@ Definition checked_contract_runtime_ready_def:
       (initial_evaluation_context am.sources am.layouts tx NONE)
       am.immutables
 End
+
+Theorem checked_contract_initial_context_functions_follow_call_graph[local]:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  ALOOKUP am.sources tx.target = SOME mods ==>
+  functions_follow_call_graph (contract_call_edges mods)
+    (initial_evaluation_context am.sources am.layouts tx src)
+Proof
+  rw[functions_follow_call_graph_def, initial_evaluation_context_def] >>
+  gvs[get_module_code_def] >>
+  drule ALOOKUP_MEM >>
+  disch_then assume_tac >>
+  drule lookup_callable_function_SOME_decompose >>
+  strip_tac
+  >- simp[function_int_calls_def, int_calls_expr_def, int_calls_stmt_def] >>
+  rw[EVERY_MEM, call_edge_rel_def] >>
+  irule contract_call_edges_function >>
+  metis_tac[]
+QED
+
+Theorem checked_explicit_external_body_call_evaluation_safe[local]:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  ALOOKUP am.sources tx.target = SOME mods /\
+  ALOOKUP mods src = SOME ts /\
+  MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts ==>
+  call_evaluation_safe
+    (initial_evaluation_context am.sources am.layouts tx src)
+    (int_calls_stmts body)
+Proof
+  rpt strip_tac >>
+  `calls_follow_call_graph (contract_call_edges mods) (src,tx.function_name)
+     (int_calls_stmts body)` by (
+    rw[calls_follow_call_graph_def, EVERY_MEM, call_edge_rel_def] >>
+    irule contract_call_edges_function >>
+    qexistsl [`args`, `body`, `dflts`, `mut`, `nr`, `raw`, `ret`, `ts`,
+              `External`] >>
+    simp[function_int_calls_def] >>
+    metis_tac[ALOOKUP_MEM]) >>
+  `irreflexive (TC (call_edge_rel (contract_call_edges mods)))` by (
+    drule checked_contract_call_graph_irreflexive >>
+    simp[]) >>
+  `functions_follow_call_graph (contract_call_edges mods)
+     (initial_evaluation_context am.sources am.layouts tx src)` by (
+    irule checked_contract_initial_context_functions_follow_call_graph >>
+    simp[]) >>
+  `(initial_evaluation_context am.sources am.layouts tx src) =
+   ((initial_evaluation_context am.sources am.layouts tx src) with
+      stk := [(src,tx.function_name)])` by
+    simp[initial_evaluation_context_def] >>
+  pop_assum SUBST1_TAC >>
+  irule call_evaluation_safe_singleton >>
+  qexists `contract_call_edges mods` >>
+  simp[]
+QED
 
 (* checked_call_external_no_type_error is proved near the end of this file,
    after its explicit-function and public-getter branch helpers. *)
@@ -1190,6 +1244,8 @@ Proof
           simp[GSYM vyperTypeExprSoundnessTheory.no_type_error_eval_def] >>
           irule checked_explicit_external_post_prefix_body_no_type_error_selected >>
           simp[] >>
+          conj_tac
+          >- metis_tac[checked_explicit_external_body_call_evaluation_safe] >>
           qexistsl [`am`, `args`, `art`, `dflts`, `mods`, `mut`, `nr`, `raw`,
                     `ret`, `src`, `ts`, `tx`, `vals`] >>
           simp[]) >>
@@ -1281,6 +1337,10 @@ Proof
             gvs[initial_state_accounts_well_typed] >>
           `accounts_well_typed r''.accounts` by (
             imp_res_tac send_call_value_accounts_well_typed_c53 >> gvs[]) >>
+          `call_evaluation_safe
+             (initial_evaluation_context am.sources am.layouts tx src)
+             (int_calls_stmts body)` by
+            metis_tac[checked_explicit_external_body_call_evaluation_safe] >>
           irule checked_explicit_external_post_prefix_body_return_typed_selected >>
           simp[] >> metis_tac[])
       >- (strip_tac >> drule send_call_value_no_control_c53 >>
@@ -2277,6 +2337,63 @@ Proof
   sym_tac >> once_rewrite_tac[evaluate_def] >> sym_tac >>
   simp[Ntimes evaluate_def 2, bind_def]
 QED
+Theorem build_getter_int_calls_empty[local]:
+  !e kt vt n args ret exp.
+    int_calls_expr e = [] /\
+    build_getter e kt vt n = (args,ret,exp) ==>
+    int_calls_expr exp = []
+Proof
+  recInduct build_getter_ind >> rpt strip_tac
+  >- (Cases_on `is_ArrayT vt`
+      >- (qpat_x_assum `build_getter e kt (Type vt) n = _` mp_tac >>
+          simp[Once build_getter_def] >>
+          Cases_on `build_getter (Subscript vt e (Name kt (toString n)))
+                      (BaseT (UintT 256)) (Type (ArrayT_type vt)) (SUC n)` >>
+          Cases_on `r` >> gvs[] >>
+          rpt strip_tac >> gvs[] >>
+          qpat_x_assum `int_calls_expr _ = [] ==> int_calls_expr _ = []` irule >>
+          simp[int_calls_expr_def]) >>
+      qpat_x_assum `build_getter e kt (Type vt) n = _` mp_tac >>
+      simp[Once build_getter_def, int_calls_expr_def] >>
+      rpt strip_tac >> gvs[int_calls_expr_def]) >>
+  qpat_x_assum `build_getter e kt (HashMapT typ vtyp) n = _` mp_tac >>
+  simp[Once build_getter_def] >>
+  Cases_on `build_getter
+    (Subscript (getter_vtype_annotation (HashMapT typ vtyp)) e
+      (Name kt (toString n))) typ vtyp (SUC n)` >>
+  Cases_on `r` >> gvs[] >>
+  rpt strip_tac >> gvs[] >>
+  qpat_x_assum `int_calls_expr _ = [] ==> int_calls_expr _ = []` irule >>
+  simp[int_calls_expr_def]
+QED
+
+Theorem selected_public_getter_body_int_calls_empty[local]:
+  is_public_getter_decl fn decl /\
+  external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,body) ==>
+  int_calls_stmts body = []
+Proof
+  rpt strip_tac >>
+  Cases_on `decl` >>
+  gvs[is_public_getter_decl_def, external_getter_tuple_def]
+  >- (Cases_on `v` >> gvs[] >>
+      Cases_on `is_ArrayT t` >> gvs[]
+      >- (drule_all array_public_getter_tuple_shape >> strip_tac >> gvs[] >>
+          `int_calls_expr (TopLevelName t (src,s)) = []` by
+            simp[int_calls_expr_def] >>
+          `int_calls_expr exp = []` by
+            metis_tac[build_getter_int_calls_empty] >>
+          simp[int_calls_stmt_def, int_calls_expr_def]) >>
+      gvs[external_getter_tuple_def, getter_def] >>
+      simp[int_calls_expr_def, int_calls_stmt_def]) >>
+  Cases_on `v` >> gvs[is_public_getter_decl_def] >>
+  drule_all hashmap_public_getter_tuple_shape >> strip_tac >> gvs[] >>
+  `int_calls_expr (TopLevelName NoneT (src,fn)) = []` by
+    simp[int_calls_expr_def] >>
+  `int_calls_expr exp = []` by
+    metis_tac[build_getter_int_calls_empty] >>
+  simp[int_calls_expr_def, int_calls_stmt_def]
+QED
+
 Theorem selected_public_getter_body_eval_context_equiv[local]:
   is_public_getter_decl fn decl /\
   external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,body) /\

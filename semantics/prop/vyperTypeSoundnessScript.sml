@@ -24,6 +24,7 @@ Libs
 Theorem typed_stmts_no_type_error:
   functions_well_typed cx /\ context_well_typed cx /\ accounts_well_typed st.accounts /\
   state_well_typed st /\ env_consistent env cx st /\
+  call_evaluation_safe cx (int_calls_stmts ss) /\
   type_stmts env ret_ty ss = SOME env_after ==>
   no_type_error_eval (eval_stmts cx ss st)
 Proof
@@ -33,6 +34,7 @@ QED
 Theorem typed_stmts_success_preserves_state_env:
   functions_well_typed cx /\ context_well_typed cx /\ accounts_well_typed st.accounts /\
   state_well_typed st /\ env_consistent env cx st /\
+  call_evaluation_safe cx (int_calls_stmts ss) /\
   type_stmts env ret_ty ss = SOME env_after /\
   eval_stmts cx ss st = (INL u, st') ==>
   state_well_typed st' /\ env_consistent env_after cx st'
@@ -43,6 +45,7 @@ QED
 Theorem typed_stmts_exception_preserves_state_and_return_type:
   functions_well_typed cx /\ context_well_typed cx /\ accounts_well_typed st.accounts /\
   state_well_typed st /\ env_consistent env cx st /\
+  call_evaluation_safe cx (int_calls_stmts ss) /\
   type_stmts env ret_ty ss = SOME env_after /\
   eval_stmts cx ss st = (INR exn, st') ==>
   state_well_typed st' /\ stmt_error_ok env ret_ty (INR exn)
@@ -54,7 +57,8 @@ QED
 
 Theorem typed_expr_no_type_error:
   well_typed_expr env e /\ env_consistent env cx st /\ state_well_typed st /\
-  context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx ==>
+  context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
+  call_evaluation_safe cx (int_calls_expr e) ==>
   no_type_error_eval (eval_expr cx e st)
 Proof
   strip_tac >>
@@ -68,6 +72,7 @@ QED
 Theorem typed_expr_success_preserves_type:
   well_typed_expr env e /\ env_consistent env cx st /\ state_well_typed st /\
   context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
+  call_evaluation_safe cx (int_calls_expr e) /\
   eval_expr cx e st = (INL tvl, st') ==>
   state_well_typed st' /\ expr_runtime_typed env e tvl
 Proof
@@ -84,6 +89,7 @@ Theorem typed_callable_body_no_type_error:
   state_well_typed st /\ env_consistent env_body cx st /\
   get_module_code cx src = SOME ts /\
   lookup_callable_function cx.in_deploy fn ts = SOME (fm,nr,args,dflts,ret,fn_body) /\
+  call_evaluation_safe cx (int_calls_stmts fn_body) /\
   type_stmts env_body ret fn_body = SOME env_after ==>
   no_type_error_eval (eval_stmts cx fn_body st)
 Proof
