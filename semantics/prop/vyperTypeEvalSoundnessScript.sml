@@ -19,6 +19,7 @@ Ancestors
   vyperTypeExtCallSoundness vyperTypeGlobalLookupSoundness vyperTypeAssignContext vyperTypeBuiltins vyperTypeExprSoundness vyperTypeAssignSoundness
   vyperAssignTarget vyperExprNoControl vyperScopePreservation vyperEvalPreservesScopes
   vyperEvalMisc vyperStatePreservation vyperAssignPreservesType vyperTypeStatePreservation
+  vyperTypeCallGraph vyperTypeCallStackSoundness
 Libs
   wordsLib markerLib intLib
 
@@ -71,6 +72,62 @@ Proof
   qpat_x_assum `lift_option_type (lookup_callable_function cx.in_deploy fn ts) _ _ = _`
     (fn th => assume_tac (MATCH_MP (iffLR lift_option_type_INL_eq) th)) >>
   gvs[]
+QED
+
+Theorem intcall_call_evaluation_safe_target_not_mem[local]:
+  call_evaluation_safe cx
+    (int_calls_expr (Call loc (IntCall (src_id_opt,fn)) es extra)) ==>
+  ~MEM (src_id_opt,fn) cx.stk
+Proof
+  simp[int_calls_expr_def] >> strip_tac >>
+  irule call_evaluation_safe_target_not_mem >>
+  qexists_tac `int_calls_exprs es` >> simp[]
+QED
+
+Theorem intcall_call_evaluation_safe_args[local]:
+  call_evaluation_safe cx
+    (int_calls_expr (Call loc (IntCall callee) es extra)) ==>
+  call_evaluation_safe cx (int_calls_exprs es)
+Proof
+  strip_tac >> irule call_evaluation_safe_mono >>
+  qexists_tac `int_calls_expr (Call loc (IntCall callee) es extra)` >>
+  simp[int_calls_expr_def]
+QED
+
+Theorem intcall_call_evaluation_safe_needed_defaults[local]:
+  call_evaluation_safe cx
+    (int_calls_expr (Call loc (IntCall (src_id_opt,fn)) es extra)) /\
+  get_module_code cx src_id_opt = SOME ts /\
+  lookup_callable_function cx.in_deploy fn ts =
+    SOME (mut,nr,args,dflts,ret,fn_body) ==>
+  call_evaluation_safe
+    (cx with stk updated_by CONS (src_id_opt,fn))
+    (int_calls_exprs (DROP n dflts))
+Proof
+  rpt strip_tac >> gvs[int_calls_expr_def] >>
+  irule call_evaluation_safe_push_needed_defaults >>
+  conj_tac
+  >- (qexistsl_tac [`args`, `fn_body`, `fn`, `mut`, `nr`, `ret`,
+                    `src_id_opt`, `ts`] >> simp[]) >>
+  qexists_tac `int_calls_exprs es` >> simp[int_calls_expr_def]
+QED
+
+Theorem intcall_call_evaluation_safe_body[local]:
+  call_evaluation_safe cx
+    (int_calls_expr (Call loc (IntCall (src_id_opt,fn)) es extra)) /\
+  get_module_code cx src_id_opt = SOME ts /\
+  lookup_callable_function cx.in_deploy fn ts =
+    SOME (mut,nr,args,dflts,ret,fn_body) ==>
+  call_evaluation_safe
+    (cx with stk updated_by CONS (src_id_opt,fn))
+    (int_calls_stmts fn_body)
+Proof
+  rpt strip_tac >> gvs[int_calls_expr_def] >>
+  irule call_evaluation_safe_push_body >>
+  conj_tac
+  >- (qexistsl_tac [`args`, `dflts`, `fn`, `mut`, `nr`, `ret`,
+                    `src_id_opt`, `ts`] >> simp[]) >>
+  qexists_tac `int_calls_exprs es` >> simp[int_calls_expr_def]
 QED
 
 
