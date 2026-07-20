@@ -1,14 +1,13 @@
 [holbuild]
-schema = 2
-minimum_version = "0.10.0"
+minimum_version = "0.10.2"
 
 [project]
 name = "vyper-hol"
-version = "0.2.2"
+version = "0.2.3"
 
 [build]
 roots = ["vyperHolScript.sml"]
 
 [dependencies.verifereum]
 git = "https://github.com/verifereum/verifereum.git"
-rev = "8107a3218250cf559b44e325218b228ab1bc695e"
+rev = "188bd6dc8286c8571823af1b44b6fd2935b3fcf1"
