@@ -88,7 +88,7 @@ Next steps include formalising the front-end (parsing and full type-checking), p
 
 This work is developed in the [HOL4 theorem prover](https://hol-theorem-prover.org), and makes use of the Ethereum Virtual Machine (EVM) formalisation in the [Verifereum](https://verifereum.org) project, and the test suite for the [Vyper language](https://vyperlang.org) from [its repository](https://github.com/vyperlang/vyper).
 
-The project is built with [`holbuild`](https://github.com/charles-cooper/holbuild). The repository's `holproject.toml` is the source of truth for the project configuration and pinned HOL dependencies, including the compatible [Verifereum](https://github.com/verifereum/verifereum) revision. The CI workflow (`.github/workflows/holbuild.yml`) is the recommended reference for the exact automated build.
+The project is built with [`holbuild`](https://github.com/charles-cooper/holbuild). The repository's `holproject.toml` is the source of truth for the project configuration and pinned HOL dependencies, including the compatible [Verifereum](https://github.com/verifereum/verifereum) revision. Vyper functional tests are generated from the upstream commit pinned in [`VYPER_PIN`](VYPER_PIN). The CI workflow (`.github/workflows/holbuild.yml`) is the recommended reference for the exact automated build.
 
 For a local build, install `holbuild` v0.10.0 or newer and run:
 

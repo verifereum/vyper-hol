@@ -295,6 +295,8 @@ val excluded_test_names = [
      annotated_ast: null. The deployment decoder cannot handle null ASTs.
      Fix: add a RawDeployment trace type that only carries address +
      runtime bytecode + ABI, skipping source compilation entirely. *)
+  "test_abi_arg_wrapped_complex_member_head",
+  "test_abi_arg_wrapped_dynarray_head",
   "test_abi_decode_child_head_points_to_parent",
   "test_abi_decode_complex_arithmetic_overflow",
   "test_abi_decode_complex_empty_dynarray",

@@ -18,7 +18,8 @@ runs:
       id: vyper-rev
       shell: bash
       run: |
-        sha=$(git ls-remote https://github.com/vyperlang/vyper.git HEAD | cut -f1)
+        sha=$(tr -d '[:space:]' < VYPER_PIN)
+        echo "sha=$sha" >> "$GITHUB_OUTPUT"
         echo "cache-key=vyper-tests-${{ runner.os }}-$sha" >> "$GITHUB_OUTPUT"
 
     - name: Cache exported Vyper tests
@@ -35,5 +36,6 @@ runs:
         git clone --depth 1 https://github.com/vyperlang/vyper.git vyper-src
         cd vyper-src
         git fetch --unshallow --tags
+        git checkout --detach ${{ steps.vyper-rev.outputs.sha }}
         pip install . --group test
         pytest -s -n0 --export ../tests/vyper-test-exports -m "not fuzzing" tests/functional
