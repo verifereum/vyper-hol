@@ -610,6 +610,21 @@ Proof
   simp[] >> qexists_tac `sz1` >> gvs[]
 QED
 
+Theorem encode_implies_slots_in_range:
+  ∀tv v writes (base : num) storage.
+    value_has_type tv v ∧
+    well_formed_type_value tv ∧
+    encode_value tv v = SOME writes ⇒
+    slots_in_range (apply_writes (n2w base) writes storage) base tv
+Proof
+  rpt strip_tac >>
+  `encode_decode_roundtrip_ok tv v` by
+    (irule encode_decode_roundtrip_all >> simp[]) >>
+  irule (CONJUNCT1 decode_value_typed_slots_in_range) >>
+  qpat_x_assum `encode_decode_roundtrip_ok _ _` mp_tac >>
+  simp[encode_decode_roundtrip_ok_def]
+QED
+
 Theorem storage_var_in_range_from_typed_lookup:
   ∀cx st mid n v tv.
     well_formed_type_value tv ∧
