@@ -994,6 +994,82 @@ Proof
   \\ ntac 8 (BasicProvers.PURE_CASE_TAC >> simp[return_def, raise_def])
 QED
 
+Theorem update_toplevel_name_preserves_well_formed_storage:
+  well_formed_storage cx st ∧
+  well_formed_layout cx ∧
+  storable_value cx mid n v ∧
+  var_in_storage cx mid n ⇒
+  well_formed_storage cx (update_toplevel_name cx st mid n v)
+Proof
+  strip_tac >>
+  `∃b1 off1 tv1.
+     storage_var_info cx mid n = SOME (b1, off1, tv1) ∧
+     well_formed_type_value tv1`
+    by metis_tac[var_in_storage_storage_var_info] >>
+  `off1 + type_slot_size tv1 ≤ dimword(:256)` by
+    (fs[well_formed_layout_def] >> res_tac) >>
+  `value_has_type tv1 v` by
+    (fs[storable_value_def] >> first_x_assum irule >>
+     simp[storage_type_of_def]) >>
+  `IS_SOME (encode_value tv1 v)` by gvs[value_has_type_equiv] >>
+  Cases_on `encode_value tv1 v` >> gvs[] >>
+  rename1 `encode_value tv1 v = SOME writes` >>
+  `∃storage0. get_storage_backend cx b1 st = (INL storage0, st)` by
+    metis_tac[get_storage_backend_INL] >>
+  `update_toplevel_name cx st mid n v =
+     SND (set_storage_backend cx b1
+       (apply_writes (n2w off1) writes storage0) st)` by (
+    qpat_x_assum `storage_var_info cx mid n = _` mp_tac >>
+    simp[storage_var_info_def, AllCaseEqs()] >> strip_tac >>
+    simp[update_toplevel_name_def, Once set_global_def,
+         write_storage_slot_def, bind_def, lift_option_type_def,
+         lift_option_def, return_def, LET_THM, raise_def] >>
+    qpat_x_assum `get_storage_backend cx b1 st = _` (fn th => simp[th])) >>
+  simp[well_formed_storage_def] >>
+  qx_gen_tac `mid2` >> qx_gen_tac `n2` >>
+  simp[storage_var_in_range_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `b1 = is_transient`
+  >- (
+    pop_assum SUBST_ALL_TAC >>
+    qpat_x_assum `get_storage_backend cx is_transient (SND _) = _` mp_tac >>
+    simp[get_after_set_storage_backend] >> strip_tac >> gvs[] >>
+    Cases_on `(mid,n) = (mid2,n2)`
+    >- (
+      gvs[] >>
+      irule encode_implies_slots_in_range >>
+      simp[] >> qexists_tac `v` >> simp[]
+    ) >>
+    `off + type_slot_size tv ≤ dimword(:256)` by
+      (fs[well_formed_layout_def] >> res_tac) >>
+    `off1 + type_slot_size tv1 ≤ off ∨
+     off + type_slot_size tv ≤ off1` by (
+      fs[well_formed_layout_def] >>
+      first_x_assum drule_all >> simp[]) >>
+    `slots_in_range storage0 off tv` by (
+      qpat_x_assum `well_formed_storage cx st` mp_tac >>
+      simp[well_formed_storage_def, storage_var_in_range_def] >>
+      metis_tac[]) >>
+    irule slots_in_range_disjoint_apply_writes >>
+    simp[] >> qexists_tac `type_slot_size tv1` >> simp[] >>
+    rpt strip_tac >>
+    drule_all (CONJUNCT1 encode_writes_bounded) >> simp[]
+  ) >>
+  `∃storage2. get_storage_backend cx is_transient st = (INL storage2, st)` by
+    metis_tac[get_storage_backend_INL] >>
+  `storage2 = storage` by (
+    `FST (get_storage_backend cx is_transient
+       (SND (set_storage_backend cx b1
+         (apply_writes (n2w off1) writes storage0) st))) =
+     FST (get_storage_backend cx is_transient st)` by
+      (irule get_after_set_other_backend >> simp[]) >>
+    gvs[]) >>
+  gvs[] >>
+  qpat_x_assum `well_formed_storage cx st` mp_tac >>
+  simp[well_formed_storage_def, storage_var_in_range_def] >>
+  metis_tac[]
+QED
+
 (* ============================================================
    storable_value transfer: prove storable_value for a new value
    from a lookup of an old value of the same type.
