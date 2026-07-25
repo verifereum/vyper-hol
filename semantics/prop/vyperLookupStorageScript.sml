@@ -416,6 +416,20 @@ Proof
   gvs[]
 QED
 
+(* apply_writes leaves storage lookups outside its write set unchanged. *)
+Theorem apply_writes_lookup_other[local]:
+  ∀writes (base : bytes32) storage (addr : bytes32).
+    (∀off. MEM off (MAP FST writes) ⇒ n2w (w2n base + off) ≠ addr) ⇒
+    lookup_storage addr (apply_writes base writes storage) =
+    lookup_storage addr storage
+Proof
+  Induct >> simp[apply_writes_def] >>
+  Cases >> simp[apply_writes_def] >>
+  rpt strip_tac >>
+  simp[vfmStateTheory.lookup_storage_def, vfmStateTheory.update_storage_def,
+       combinTheory.APPLY_UPDATE_THM]
+QED
+
 Theorem storage_var_in_range_from_typed_lookup:
   ∀cx st mid n v tv.
     well_formed_type_value tv ∧
