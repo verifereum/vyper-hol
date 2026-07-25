@@ -142,4 +142,102 @@ Proof
   simp[] >> gvs[vyperValueTheory.type_slot_size_def]
 QED
 
+
+Theorem static_slots_in_range_index:
+  static_slots_in_range storage off tv n /\ i < n ==>
+  slots_in_range storage (off + i * type_slot_size tv) tv
+Proof
+  qid_spec_tac `i` >> qid_spec_tac `off` >> Induct_on `n` >>
+  simp[slots_in_range_def] >>
+  rpt strip_tac >> Cases_on `i` >> gvs[] >>
+  first_x_assum
+    (qspecl_then [`off + type_slot_size tv`, `n'`] assume_tac) >>
+  gvs[] >>
+  `off + SUC n' * type_slot_size tv =
+   off + type_slot_size tv + n' * type_slot_size tv` by
+    (once_rewrite_tac [arithmeticTheory.MULT_CLAUSES] >> decide_tac) >>
+  gvs[]
+QED
+
+Theorem dyn_slots_in_range_index:
+  dyn_slots_in_range storage off tv n /\ i < n ==>
+  slots_in_range storage (off + i * type_slot_size tv) tv
+Proof
+  qid_spec_tac `i` >> qid_spec_tac `off` >> Induct_on `n` >>
+  simp[slots_in_range_def] >>
+  rpt strip_tac >> Cases_on `i` >> gvs[] >>
+  first_x_assum
+    (qspecl_then [`off + type_slot_size tv`, `n'`] assume_tac) >>
+  gvs[] >>
+  `off + SUC n' * type_slot_size tv =
+   off + type_slot_size tv + n' * type_slot_size tv` by
+    (once_rewrite_tac [arithmeticTheory.MULT_CLAUSES] >> decide_tac) >>
+  gvs[]
+QED
+
+Theorem static_slots_in_range_reconstruct:
+  (!j. j < n ==>
+       slots_in_range storage (off + j * type_slot_size tv) tv) ==>
+  static_slots_in_range storage off tv n
+Proof
+  qid_spec_tac `off` >> Induct_on `n` >>
+  simp[slots_in_range_def] >> rpt strip_tac >>
+  `slots_in_range storage off tv` by
+    (qpat_x_assum `!x. _ ==> static_slots_in_range _ _ _ _` kall_tac >>
+     first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  simp[] >>
+  first_x_assum irule >> rpt strip_tac >>
+  qpat_x_assum
+    `!k. k < SUC n ==>
+         slots_in_range storage (off + k * type_slot_size tv) tv`
+    (qspec_then `SUC j` mp_tac) >> simp[] >>
+  `off + SUC j * type_slot_size tv =
+   off + type_slot_size tv + j * type_slot_size tv` by
+    (once_rewrite_tac [arithmeticTheory.MULT_CLAUSES] >> decide_tac) >>
+  gvs[]
+QED
+
+Theorem dyn_slots_in_range_reconstruct:
+  (!j. j < n ==>
+       slots_in_range storage (off + j * type_slot_size tv) tv) ==>
+  dyn_slots_in_range storage off tv n
+Proof
+  qid_spec_tac `off` >> Induct_on `n` >>
+  simp[slots_in_range_def] >> rpt strip_tac >>
+  `slots_in_range storage off tv` by
+    (qpat_x_assum `!x. _ ==> dyn_slots_in_range _ _ _ _` kall_tac >>
+     first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  simp[] >>
+  first_x_assum irule >> rpt strip_tac >>
+  qpat_x_assum
+    `!k. k < SUC n ==>
+         slots_in_range storage (off + k * type_slot_size tv) tv`
+    (qspec_then `SUC j` mp_tac) >> simp[] >>
+  `off + SUC j * type_slot_size tv =
+   off + type_slot_size tv + j * type_slot_size tv` by
+    (once_rewrite_tac [arithmeticTheory.MULT_CLAUSES] >> decide_tac) >>
+  gvs[]
+QED
+
+Theorem static_slots_in_range_reconstruct_selected:
+  i < n /\
+  slots_in_range storage (off + i * type_slot_size tv) tv /\
+  (!j. j < n /\ j <> i ==>
+       slots_in_range storage (off + j * type_slot_size tv) tv) ==>
+  static_slots_in_range storage off tv n
+Proof
+  rpt strip_tac >> irule static_slots_in_range_reconstruct >>
+  rpt strip_tac >> Cases_on `j = i` >> gvs[]
+QED
+
+Theorem dyn_slots_in_range_reconstruct_selected:
+  i < n /\
+  slots_in_range storage (off + i * type_slot_size tv) tv /\
+  (!j. j < n /\ j <> i ==>
+       slots_in_range storage (off + j * type_slot_size tv) tv) ==>
+  dyn_slots_in_range storage off tv n
+Proof
+  rpt strip_tac >> irule dyn_slots_in_range_reconstruct >>
+  rpt strip_tac >> Cases_on `j = i` >> gvs[]
+QED
 val _ = export_theory();
