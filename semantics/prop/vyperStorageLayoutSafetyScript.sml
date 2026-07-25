@@ -134,4 +134,87 @@ Proof
   rpt strip_tac >> gvs[] >> metis_tac[]
 QED
 
+
+(* Storage decodability for every declared region.  The first conjunct keeps
+   the established ordinary-variable invariant unchanged; the second adds the
+   complete-key hashmap regions computed by declared_storage_region. *)
+Definition contract_storage_well_formed_def:
+  contract_storage_well_formed cx st <=>
+    well_formed_storage cx st /\
+    !mid n subs b slot tv storage st'.
+      declared_storage_region cx mid n subs = SOME (b,slot,tv) /\
+      get_storage_backend cx b st = (INL storage,st') ==>
+      slots_in_range storage (w2n slot) tv
+End
+
+(* Layout safety is stated directly over semantic declared regions.  Each
+   region fits in the word-addressed storage space, and two different logical
+   regions on one backend are disjoint.  Equality of logical region names is
+   the sole aliasing case; no cryptographic injectivity is inferred. *)
+Definition storage_layout_safe_def:
+  storage_layout_safe cx <=>
+    well_formed_layout cx /\
+    (!mid n subs b slot tv.
+       declared_storage_region cx mid n subs = SOME (b,slot,tv) ==>
+       w2n slot + type_slot_size tv <= dimword(:256)) /\
+    (!mid1 n1 subs1 mid2 n2 subs2 b slot1 tv1 slot2 tv2.
+       declared_storage_region cx mid1 n1 subs1 = SOME (b,slot1,tv1) /\
+       declared_storage_region cx mid2 n2 subs2 = SOME (b,slot2,tv2) ==>
+       (mid1,n1,subs1) = (mid2,n2,subs2) \/
+       ranges_disjoint (w2n slot1) (type_slot_size tv1)
+                       (w2n slot2) (type_slot_size tv2))
+End
+
+Theorem contract_storage_well_formed_storage:
+  contract_storage_well_formed cx st ==> well_formed_storage cx st
+Proof
+  simp[contract_storage_well_formed_def]
+QED
+
+Theorem contract_storage_well_formed_region:
+  contract_storage_well_formed cx st /\
+  declared_storage_region cx mid n subs = SOME (b,slot,tv) /\
+  get_storage_backend cx b st = (INL storage,st') ==>
+  slots_in_range storage (w2n slot) tv
+Proof
+  simp[contract_storage_well_formed_def] >> metis_tac[]
+QED
+
+Theorem storage_layout_safe_layout:
+  storage_layout_safe cx ==> well_formed_layout cx
+Proof
+  simp[storage_layout_safe_def]
+QED
+
+Theorem storage_layout_safe_region_nonoverflow:
+  storage_layout_safe cx /\
+  declared_storage_region cx mid n subs = SOME (b,slot,tv) ==>
+  w2n slot + type_slot_size tv <= dimword(:256)
+Proof
+  simp[storage_layout_safe_def] >> metis_tac[]
+QED
+
+Theorem storage_layout_safe_region_separation:
+  storage_layout_safe cx /\
+  declared_storage_region cx mid1 n1 subs1 = SOME (b,slot1,tv1) /\
+  declared_storage_region cx mid2 n2 subs2 = SOME (b,slot2,tv2) /\
+  (mid1,n1,subs1) <> (mid2,n2,subs2) ==>
+  ranges_disjoint (w2n slot1) (type_slot_size tv1)
+                  (w2n slot2) (type_slot_size tv2)
+Proof
+  simp[storage_layout_safe_def] >> metis_tac[]
+QED
+
+(* Any state transformation that leaves both protected backends unchanged
+   preserves the complete storage-decoding invariant. *)
+Theorem contract_storage_well_formed_storage_frame:
+  contract_storage_well_formed cx st /\
+  (!b. get_storage cx st' b = get_storage cx st b) ==>
+  contract_storage_well_formed cx st'
+Proof
+  simp[contract_storage_well_formed_def, well_formed_storage_def,
+       storage_var_in_range_def,
+       vyperStorageBackendTheory.get_storage_backend_eq] >>
+  metis_tac[]
+QED
 val _ = export_theory();

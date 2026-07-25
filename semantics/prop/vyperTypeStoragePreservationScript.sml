@@ -96,9 +96,47 @@
 Theory vyperTypeStoragePreservation
 Ancestors
   vyperTypeStatePreservation vyperHashMapPreservation vyperStorageFrame
+  vyperStorageLayoutSafety
 Libs
   wordsLib markerLib
 
+
+(* Additive combined invariant: the established runtime invariant is unchanged,
+   and storage decodability/layout safety are carried as explicit conjuncts. *)
+Definition runtime_storage_consistent_def:
+  runtime_storage_consistent env cx st <=>
+    runtime_consistent env cx st /\
+    contract_storage_well_formed cx st /\
+    storage_layout_safe cx
+End
+
+Theorem runtime_storage_consistent_runtime:
+  runtime_storage_consistent env cx st ==> runtime_consistent env cx st
+Proof
+  simp[runtime_storage_consistent_def]
+QED
+
+Theorem runtime_storage_consistent_storage:
+  runtime_storage_consistent env cx st ==>
+  contract_storage_well_formed cx st
+Proof
+  simp[runtime_storage_consistent_def]
+QED
+
+Theorem runtime_storage_consistent_layout:
+  runtime_storage_consistent env cx st ==> storage_layout_safe cx
+Proof
+  simp[runtime_storage_consistent_def]
+QED
+
+Theorem runtime_storage_consistent_intro:
+  runtime_consistent env cx st /\
+  contract_storage_well_formed cx st /\
+  storage_layout_safe cx ==>
+  runtime_storage_consistent env cx st
+Proof
+  simp[runtime_storage_consistent_def]
+QED
 (* Definitions and proofs follow in the invariant components. *)
 
 val _ = export_theory();
