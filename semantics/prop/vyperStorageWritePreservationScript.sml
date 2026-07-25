@@ -3,7 +3,7 @@
 Theory vyperStorageWritePreservation
 Ancestors
   vyperStorageLayoutSafety vyperStorageFrame vyperLookupStorage
-  vyperState vyperStorageBackend
+  vyperTyping vyperState vyperStorageBackend
 Libs
   wordsLib dep_rewrite
 
@@ -240,4 +240,102 @@ Proof
   rpt strip_tac >> irule dyn_slots_in_range_reconstruct >>
   rpt strip_tac >> Cases_on `j = i` >> gvs[]
 QED
+
+Theorem evaluate_type_ArrayTV_inv[local]:
+  evaluate_type tenv ty = SOME (ArrayTV tv bd) ==>
+  ?elem_ty.
+    ty = ArrayT elem_ty bd /\
+    evaluate_type tenv elem_ty = SOME tv /\
+    0 < type_slot_size tv /\
+    type_slot_size (ArrayTV tv bd) < dimword(:256)
+Proof
+  Cases_on `ty` >>
+  simp[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem resolve_array_element_leaf_type:
+  !cx b base tv subs st slot final_tv rsubs st'.
+    resolve_array_element cx b base tv subs st =
+      (INL (slot, final_tv, rsubs), st') ==>
+    leaf_type tv subs = leaf_type final_tv rsubs
+Proof
+  ho_match_mp_tac resolve_array_element_ind >> rw[] >>
+  qpat_x_assum `resolve_array_element _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once resolve_array_element_def, bind_def, return_def, raise_def] >>
+  rpt (CASE_TAC >>
+       gvs[return_def, raise_def, bind_def, check_def, type_check_def,
+           assert_def, AllCaseEqs()]) >>
+  rpt strip_tac >> gvs[] >>
+  gvs[assert_def, bind_def, ignore_bind_def, return_def, raise_def,
+      AllCaseEqs()] >>
+  imp_res_tac get_storage_backend_state >> gvs[leaf_type_def] >>
+  FIRST
+    [first_x_assum (qspec_then `0` mp_tac) >>
+     simp[] >> disch_then drule >> simp[],
+     first_x_assum (qspec_then `1` mp_tac) >>
+     simp[] >> disch_then drule >> simp[]]
+QED
+
+Theorem resolve_array_element_region_bounds:
+  !cx is_transient base tv subs st.
+    !slot final_tv rsubs st' tenv ty.
+    evaluate_type tenv ty = SOME tv /\
+    w2n (base:bytes32) + type_slot_size tv <= dimword(:256) /\
+    resolve_array_element cx is_transient base tv subs st =
+      (INL (slot, final_tv, rsubs), st') ==>
+    w2n base <= w2n slot /\
+    w2n slot + type_slot_size final_tv <=
+      w2n base + type_slot_size tv /\
+    w2n slot + type_slot_size final_tv <= dimword(:256)
+Proof
+  ho_match_mp_tac resolve_array_element_ind >> rw[] >>
+  qpat_x_assum `resolve_array_element _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once resolve_array_element_def, bind_def, return_def, raise_def] >>
+  rpt (CASE_TAC >>
+       gvs[return_def, raise_def, bind_def, check_def, type_check_def,
+           assert_def, AllCaseEqs()]) >>
+  rpt strip_tac >> gvs[] >>
+  gvs[assert_def, bind_def, ignore_bind_def, return_def, raise_def,
+      AllCaseEqs()] >>
+  imp_res_tac evaluate_type_ArrayTV_inv >>
+  rpt
+    (FIRST
+      [qpat_assum `evaluate_type _ _ = SOME (ArrayTV _ (Fixed _))`
+         (K all_tac) >>
+       `w2n (base' + n2w (Num idx * type_slot_size tv)) =
+          w2n base' + Num idx * type_slot_size tv /\
+        w2n base' <= w2n (base' + n2w (Num idx * type_slot_size tv)) /\
+        w2n (base' + n2w (Num idx * type_slot_size tv)) +
+          type_slot_size tv <=
+          w2n base' + type_slot_size (ArrayTV tv (Fixed n)) /\
+        w2n (base' + n2w (Num idx * type_slot_size tv)) +
+          type_slot_size tv <= dimword(:256)` by
+         (irule fixed_array_child_region_bounds >> simp[]) >>
+       qpat_x_assum
+         `!elem_offset st slot final_tv rsubs st' tenv ty. _`
+         (qspecl_then
+            [`0`, `s''`, `slot`, `final_tv`, `rsubs`, `st'`, `tenv`, `elem_ty`]
+            mp_tac) >>
+       simp[] >> strip_tac >> decide_tac,
+       qpat_assum `evaluate_type _ _ = SOME (ArrayTV _ (Dynamic _))`
+         (K all_tac) >>
+       `w2n (base' + n2w (1 + Num idx * type_slot_size tv)) =
+          w2n base' + 1 + Num idx * type_slot_size tv /\
+        w2n base' <=
+          w2n (base' + n2w (1 + Num idx * type_slot_size tv)) /\
+        w2n (base' + n2w (1 + Num idx * type_slot_size tv)) +
+          type_slot_size tv <=
+          w2n base' + type_slot_size (ArrayTV tv (Dynamic n)) /\
+        w2n (base' + n2w (1 + Num idx * type_slot_size tv)) +
+          type_slot_size tv <= dimword(:256)` by
+         (irule dynamic_array_child_region_bounds >> simp[]) >>
+       qpat_x_assum
+         `!elem_offset st slot final_tv rsubs st' tenv ty. _`
+         (qspecl_then
+            [`1`, `s''`, `slot`, `final_tv`, `rsubs`, `st'`, `tenv`, `elem_ty`]
+            mp_tac) >>
+       simp[] >> strip_tac >> decide_tac])
+QED
+
 val _ = export_theory();
