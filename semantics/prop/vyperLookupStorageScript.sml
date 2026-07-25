@@ -430,6 +430,186 @@ Proof
        combinTheory.APPLY_UPDATE_THM]
 QED
 
+
+Theorem nwn_eq_apply_writes[local]:
+  ∀(base : num) (k : num).
+    n2w (w2n (n2w base : bytes32) + k) = n2w (base + k) : bytes32
+Proof
+  REWRITE_TAC [GSYM wordsTheory.word_add_n2w, wordsTheory.n2w_w2n]
+QED
+Theorem read_slot_disjoint_apply_writes[local]:
+  (∀wr_off. MEM wr_off (MAP FST writes) ⇒ wr_off < sz1) ∧
+  off1 + sz1 ≤ dimword(:256) ∧
+  read_off < dimword(:256) ∧
+  (off1 + sz1 ≤ read_off ∨ read_off < off1) ⇒
+  read_slot (apply_writes (n2w off1) writes storage) read_off =
+  read_slot storage read_off
+Proof
+  rpt strip_tac >>
+  simp[read_slot_def] >>
+  irule apply_writes_lookup_other >>
+  REWRITE_TAC [nwn_eq_apply_writes] >>
+  rpt strip_tac >>
+  `off < sz1` by res_tac >>
+  gvs[wordsTheory.n2w_11]
+QED
+
+
+Theorem slots_in_range_disjoint_apply_writes_mutual[local]:
+  (∀storage off2 tv2.
+    slots_in_range storage off2 tv2 ⇒
+    ∀off1 sz1 writes.
+      (∀wr_off. MEM wr_off (MAP FST writes) ⇒ wr_off < sz1) ∧
+      off1 + sz1 ≤ dimword(:256) ∧
+      off2 + type_slot_size tv2 ≤ dimword(:256) ∧
+      (off1 + sz1 ≤ off2 ∨ off2 + type_slot_size tv2 ≤ off1) ⇒
+      slots_in_range (apply_writes (n2w off1) writes storage) off2 tv2) ∧
+  (∀storage off2 tvs.
+    tuple_slots_in_range storage off2 tvs ⇒
+    ∀off1 sz1 writes.
+      (∀wr_off. MEM wr_off (MAP FST writes) ⇒ wr_off < sz1) ∧
+      off1 + sz1 ≤ dimword(:256) ∧
+      off2 + type_slot_size_list tvs ≤ dimword(:256) ∧
+      (off1 + sz1 ≤ off2 ∨ off2 + type_slot_size_list tvs ≤ off1) ⇒
+      tuple_slots_in_range (apply_writes (n2w off1) writes storage) off2 tvs) ∧
+  (∀storage off2 tv n.
+    static_slots_in_range storage off2 tv n ⇒
+    ∀off1 sz1 writes.
+      (∀wr_off. MEM wr_off (MAP FST writes) ⇒ wr_off < sz1) ∧
+      off1 + sz1 ≤ dimword(:256) ∧
+      off2 + n * type_slot_size tv ≤ dimword(:256) ∧
+      (off1 + sz1 ≤ off2 ∨ off2 + n * type_slot_size tv ≤ off1) ⇒
+      static_slots_in_range (apply_writes (n2w off1) writes storage) off2 tv n) ∧
+  (∀storage off2 tv n.
+    dyn_slots_in_range storage off2 tv n ⇒
+    ∀off1 sz1 writes.
+      (∀wr_off. MEM wr_off (MAP FST writes) ⇒ wr_off < sz1) ∧
+      off1 + sz1 ≤ dimword(:256) ∧
+      off2 + n * type_slot_size tv ≤ dimword(:256) ∧
+      (off1 + sz1 ≤ off2 ∨ off2 + n * type_slot_size tv ≤ off1) ⇒
+      dyn_slots_in_range (apply_writes (n2w off1) writes storage) off2 tv n) ∧
+  (∀storage off2 ftypes.
+    struct_slots_in_range storage off2 ftypes ⇒
+    ∀off1 sz1 writes.
+      (∀wr_off. MEM wr_off (MAP FST writes) ⇒ wr_off < sz1) ∧
+      off1 + sz1 ≤ dimword(:256) ∧
+      off2 + type_slot_size_fields ftypes ≤ dimword(:256) ∧
+      (off1 + sz1 ≤ off2 ∨ off2 + type_slot_size_fields ftypes ≤ off1) ⇒
+      struct_slots_in_range (apply_writes (n2w off1) writes storage) off2 ftypes)
+Proof
+  ho_match_mp_tac slots_in_range_ind >>
+  rpt conj_tac >> rpt gen_tac >>
+  DISCH_TAC >> rpt gen_tac >> strip_tac >>
+  PURE_ONCE_REWRITE_TAC [slots_in_range_def] >>
+  simp_tac (srw_ss()) [LET_THM, type_slot_size_def]
+  >- (`read_slot (apply_writes (n2w off1) writes storage) off2 =
+       read_slot storage off2` by
+        (irule read_slot_disjoint_apply_writes >>
+         conj_tac >- gvs[type_slot_size_def] >>
+         qexists_tac `sz1` >> simp[]) >>
+      gvs[slots_in_range_def])
+  >- (`read_slot (apply_writes (n2w off1) writes storage) off2 =
+       read_slot storage off2` by
+        (irule read_slot_disjoint_apply_writes >>
+         conj_tac >- gvs[type_slot_size_def] >>
+         qexists_tac `sz1` >> gvs[type_slot_size_def]) >>
+      gvs[slots_in_range_def])
+  >- (`read_slot (apply_writes (n2w off1) writes storage) off2 =
+       read_slot storage off2` by
+        (irule read_slot_disjoint_apply_writes >>
+         conj_tac >- gvs[type_slot_size_def] >>
+         qexists_tac `sz1` >> simp[]) >>
+      gvs[slots_in_range_def])
+  >- (`read_slot (apply_writes (n2w off1) writes storage) off2 =
+       read_slot storage off2` by
+        (irule read_slot_disjoint_apply_writes >>
+         conj_tac >- gvs[type_slot_size_def] >>
+         qexists_tac `sz1` >> gvs[type_slot_size_def]) >>
+      gvs[slots_in_range_def])
+  >- (rpt strip_tac >> gvs[slots_in_range_def] >>
+      first_x_assum (qspecl_then [`off1`, `sz1`, `writes`] mp_tac) >> simp[])
+  >- (rpt strip_tac >> gvs[slots_in_range_def] >>
+      first_x_assum (qspecl_then [`off1`, `sz1`, `writes`] mp_tac) >> simp[])
+  >- (rpt strip_tac >>
+      `read_slot (apply_writes (n2w off1) writes storage) off2 =
+       read_slot storage off2` by
+        (irule read_slot_disjoint_apply_writes >>
+         conj_tac >- gvs[type_slot_size_def] >>
+         qexists_tac `sz1` >> gvs[type_slot_size_def]) >>
+      gvs[slots_in_range_def]
+      >- (`MIN (w2n (read_slot storage off2)) max * type_slot_size tv ≤
+           max * type_slot_size tv` by
+            (irule arithmeticTheory.LESS_MONO_MULT >> simp[]) >>
+          first_x_assum (qspecl_then [`off1`, `sz1`, `writes`] mp_tac) >>
+          simp[arithmeticTheory.MIN_DEF, arithmeticTheory.MULT_COMM] >>
+          disch_then irule >>
+          irule arithmeticTheory.LESS_EQ_TRANS >>
+          qexists_tac `off2 + (max * type_slot_size tv + 1)` >>
+          conj_tac
+          >- (simp[] >>
+              CONV_TAC (LAND_CONV (REWR_CONV arithmeticTheory.MULT_COMM)) >>
+              irule arithmeticTheory.LESS_MONO_MULT >>
+              simp[arithmeticTheory.MIN_DEF]) >>
+          first_assum ACCEPT_TAC)
+      >> `MIN (w2n (read_slot storage off2)) max * type_slot_size tv ≤
+           max * type_slot_size tv` by
+            (irule arithmeticTheory.LESS_MONO_MULT >> simp[]) >>
+      first_x_assum (qspecl_then [`off1`, `sz1`, `writes`] mp_tac) >>
+      simp[arithmeticTheory.MIN_DEF, arithmeticTheory.MULT_COMM] >>
+      disch_then irule >>
+      conj_tac
+      >- (irule arithmeticTheory.LESS_EQ_TRANS >>
+          qexists_tac `off2 + (max * type_slot_size tv + 1)` >>
+          conj_tac
+          >- (simp[] >>
+              CONV_TAC (LAND_CONV (REWR_CONV arithmeticTheory.MULT_COMM)) >>
+              irule arithmeticTheory.LESS_MONO_MULT >>
+              simp[arithmeticTheory.MIN_DEF]) >>
+          gvs[])
+      >> disj2_tac >>
+      irule arithmeticTheory.LESS_EQ_TRANS >>
+      qexists_tac `off2 + (max * type_slot_size tv + 1)` >>
+      conj_tac
+      >- (simp[] >>
+          CONV_TAC (LAND_CONV (REWR_CONV arithmeticTheory.MULT_COMM)) >>
+          irule arithmeticTheory.LESS_MONO_MULT >>
+          simp[arithmeticTheory.MIN_DEF]) >>
+      first_assum ACCEPT_TAC)
+
+  >- (rpt strip_tac >> gvs[slots_in_range_def] >>
+      first_x_assum (qspecl_then [`off1`, `sz1`, `writes`] mp_tac) >> simp[])
+  >- (rpt strip_tac >> gvs[slots_in_range_def] >>
+      first_assum irule >>
+      TRY (conj_tac >- gvs[arithmeticTheory.MULT]) >>
+      qexists_tac `sz1` >> gvs[arithmeticTheory.MULT])
+  >- (rpt strip_tac >> gvs[slots_in_range_def] >>
+      first_assum irule >>
+      TRY (conj_tac >- gvs[arithmeticTheory.MULT]) >>
+      qexists_tac `sz1` >> gvs[arithmeticTheory.MULT])
+  >- (rpt strip_tac >> gvs[slots_in_range_def] >>
+      first_assum irule >>
+      TRY (conj_tac >- gvs[arithmeticTheory.MULT]) >>
+      qexists_tac `sz1` >> gvs[arithmeticTheory.MULT])
+  >> (rpt strip_tac >> gvs[slots_in_range_def] >>
+
+      first_assum irule >>
+      TRY (conj_tac >- gvs[arithmeticTheory.MULT]) >>
+      qexists_tac `sz1` >> gvs[arithmeticTheory.MULT])
+QED
+
+Theorem slots_in_range_disjoint_apply_writes:
+  slots_in_range storage off2 tv2 ∧
+  (∀wr_off. MEM wr_off (MAP FST writes) ⇒ wr_off < sz1) ∧
+  off1 + sz1 ≤ dimword(:256) ∧
+  off2 + type_slot_size tv2 ≤ dimword(:256) ∧
+  (off1 + sz1 ≤ off2 ∨ off2 + type_slot_size tv2 ≤ off1) ⇒
+  slots_in_range (apply_writes (n2w off1) writes storage) off2 tv2
+Proof
+  rpt strip_tac >>
+  irule (CONJUNCT1 slots_in_range_disjoint_apply_writes_mutual) >>
+  simp[] >> qexists_tac `sz1` >> gvs[]
+QED
+
 Theorem storage_var_in_range_from_typed_lookup:
   ∀cx st mid n v tv.
     well_formed_type_value tv ∧
