@@ -11,6 +11,121 @@ Ancestors
 Libs
   wordsLib markerLib
 
+(* Primitive nonreentrant-lock boundary facts.  These expose the exact
+   transient write before the evaluator proof uses layout separation. *)
+Theorem acquire_nonreentrant_lock_eq:
+  acquire_nonreentrant_lock addr slot is_view st =
+    if lookup_storage (n2w slot)
+         (lookup_transient_storage addr st.tStorage) = 1w then
+      (INR (Error (RuntimeError "nonreentrant lock")),st)
+    else if is_view then (INL (),st)
+    else
+      (INL (),
+       st with tStorage updated_by
+         update_transient_storage addr
+           (update_storage (n2w slot) 1w
+             (lookup_transient_storage addr st.tStorage)))
+Proof
+  Cases_on `lookup_storage (n2w slot)
+    (lookup_transient_storage addr st.tStorage) = 1w` >>
+  Cases_on `is_view` >>
+  simp[acquire_nonreentrant_lock_def, bind_def, get_transient_storage_def,
+       update_transient_def, return_def, raise_def]
+QED
+
+Theorem release_nonreentrant_lock_eq:
+  release_nonreentrant_lock addr slot st =
+    (INL (),
+     st with tStorage updated_by
+       update_transient_storage addr
+         (update_storage (n2w slot) 0w
+           (lookup_transient_storage addr st.tStorage)))
+Proof
+  simp[release_nonreentrant_lock_def, bind_def, get_transient_storage_def,
+       update_transient_def, return_def]
+QED
+
+Theorem acquire_nonreentrant_lock_frame:
+  acquire_nonreentrant_lock addr slot is_view st = (res,st') ==>
+  st'.accounts = st.accounts /\
+  (!read_addr read_slot.
+     read_addr <> addr \/ read_slot <> n2w slot ==>
+     lookup_storage read_slot
+       (lookup_transient_storage read_addr st'.tStorage) =
+     lookup_storage read_slot
+       (lookup_transient_storage read_addr st.tStorage))
+Proof
+  Cases_on `lookup_storage (n2w slot)
+    (lookup_transient_storage addr st.tStorage) = 1w` >>
+  Cases_on `is_view` >>
+  simp[acquire_nonreentrant_lock_eq,
+       vfmExecutionTheory.lookup_transient_storage_def,
+       vfmExecutionTheory.update_transient_storage_def,
+       vfmStateTheory.lookup_storage_def, vfmStateTheory.update_storage_def,
+       combinTheory.APPLY_UPDATE_THM] >>
+  rpt strip_tac >> Cases_on `addr = read_addr` >>
+  gvs[vfmExecutionTheory.update_transient_storage_def,
+      vfmStateTheory.update_storage_def, combinTheory.APPLY_UPDATE_THM]
+QED
+
+Theorem release_nonreentrant_lock_frame:
+  release_nonreentrant_lock addr slot st = (res,st') ==>
+  st'.accounts = st.accounts /\
+  (!read_addr read_slot.
+     read_addr <> addr \/ read_slot <> n2w slot ==>
+     lookup_storage read_slot
+       (lookup_transient_storage read_addr st'.tStorage) =
+     lookup_storage read_slot
+       (lookup_transient_storage read_addr st.tStorage))
+Proof
+  simp[release_nonreentrant_lock_eq,
+       vfmExecutionTheory.lookup_transient_storage_def,
+       vfmExecutionTheory.update_transient_storage_def,
+       vfmStateTheory.lookup_storage_def, vfmStateTheory.update_storage_def,
+       combinTheory.APPLY_UPDATE_THM] >>
+  rpt strip_tac >> Cases_on `addr = read_addr` >>
+  gvs[vfmExecutionTheory.update_transient_storage_def,
+      vfmStateTheory.update_storage_def, combinTheory.APPLY_UPDATE_THM]
+QED
+
+Theorem acquire_nonreentrant_lock_result:
+  acquire_nonreentrant_lock addr slot is_view st = (res,st') ==>
+  ((?err. res = INR err) ==>
+     res = INR (Error (RuntimeError "nonreentrant lock")) /\ st' = st) /\
+  (res = INL () /\ is_view ==> st' = st) /\
+  (res = INL () /\ ~is_view ==>
+     lookup_storage (n2w slot)
+       (lookup_transient_storage addr st'.tStorage) = 1w)
+Proof
+  Cases_on `lookup_storage (n2w slot)
+    (lookup_transient_storage addr st.tStorage) = 1w` >>
+  Cases_on `is_view` >>
+  simp[acquire_nonreentrant_lock_eq,
+       vfmExecutionTheory.lookup_transient_storage_def,
+       vfmExecutionTheory.update_transient_storage_def,
+       vfmStateTheory.lookup_storage_def, vfmStateTheory.update_storage_def,
+       combinTheory.APPLY_UPDATE_THM] >>
+  rpt strip_tac >>
+  gvs[vfmExecutionTheory.update_transient_storage_def,
+      vfmStateTheory.update_storage_def, combinTheory.APPLY_UPDATE_THM]
+QED
+
+Theorem release_nonreentrant_lock_result:
+  release_nonreentrant_lock addr slot st = (res,st') ==>
+  res = INL () /\
+  lookup_storage (n2w slot)
+    (lookup_transient_storage addr st'.tStorage) = 0w
+Proof
+  simp[release_nonreentrant_lock_eq,
+       vfmExecutionTheory.lookup_transient_storage_def,
+       vfmExecutionTheory.update_transient_storage_def,
+       vfmStateTheory.lookup_storage_def, vfmStateTheory.update_storage_def,
+       combinTheory.APPLY_UPDATE_THM] >>
+  rpt strip_tac >>
+  gvs[vfmExecutionTheory.update_transient_storage_def,
+      vfmStateTheory.update_storage_def, combinTheory.APPLY_UPDATE_THM]
+QED
+
 Theorem eval_target_preserves_runtime_consistent[local]:
   well_typed_atarget env tgt ty /\
   runtime_consistent env cx st /\
