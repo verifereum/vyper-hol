@@ -914,6 +914,538 @@ Proof
   simp[]
 QED
 
+Theorem uint256_header_write_read_exact[local]:
+  len < dimword(:256) /\
+  write_storage_slot cx b (n2w off) (BaseTV (UintT 256)) (IntV (&len)) st =
+    (INL (), st') ==>
+  read_slot (get_storage cx st' b) off = n2w len
+Proof
+  rpt strip_tac >>
+  gvs[vyperStorageBackendTheory.write_storage_slot_eq,
+      vyperStorageTheory.encode_value_def,
+      vyperStorageTheory.encode_base_to_slot_def] >>
+  simp[vyperStorageBackendTheory.get_storage_after_set,
+       vyperStorageTheory.read_slot_def, vyperStorageTheory.apply_writes_def,
+       vfmStateTheory.lookup_storage_def, vfmStateTheory.update_storage_def,
+       combinTheory.APPLY_UPDATE_THM, integer_wordTheory.i2w_pos]
+QED
+
+Theorem dynamic_array_append_element_write_prefix[local]:
+  slots_in_range (get_storage cx st b) off (ArrayTV tv (Dynamic max)) /\
+  w2n (read_slot (get_storage cx st b) off) = len /\
+  len < max /\
+  0 < type_slot_size tv /\
+  well_formed_type_value tv /\
+  off + type_slot_size (ArrayTV tv (Dynamic max)) <= dimword(:256) /\
+  value_has_type tv v /\
+  write_storage_slot cx b
+    (n2w (off + 1 + len * type_slot_size tv)) tv v st = (INL (), st') ==>
+  slots_in_range (get_storage cx st' b) off (ArrayTV tv (Dynamic max)) /\
+  slots_in_range (get_storage cx st' b)
+    (off + 1 + len * type_slot_size tv) tv /\
+  read_slot (get_storage cx st' b) off =
+    read_slot (get_storage cx st b) off
+Proof
+  rpt gen_tac >> strip_tac >>
+  `len <= max` by decide_tac >>
+  `MIN len max = len` by simp[arithmeticTheory.MIN_DEF] >>
+  `dyn_slots_in_range (get_storage cx st b) (off + 1) tv len` by
+    (qpat_x_assum `slots_in_range _ off (ArrayTV tv (Dynamic max))` mp_tac >>
+     simp[slots_in_range_def]) >>
+  `len * type_slot_size tv + type_slot_size tv <=
+   max * type_slot_size tv` by
+    (irule array_index_element_end_bound >> simp[]) >>
+  `off + 1 + len * type_slot_size tv + type_slot_size tv <= dimword(:256)` by
+    (gvs[vyperValueTheory.type_slot_size_def] >> decide_tac) >>
+  `off + 1 + len * type_slot_size tv < dimword(:256)` by decide_tac >>
+  `off + (type_slot_size tv + (len * type_slot_size tv + 1)) =
+   off + 1 + len * type_slot_size tv + type_slot_size tv` by decide_tac >>
+  `w2n (n2w (off + 1 + len * type_slot_size tv) : bytes32) =
+   off + 1 + len * type_slot_size tv` by simp[] >>
+  `read_slot (get_storage cx st' b) off =
+   read_slot (get_storage cx st b) off` by
+    (drule typed_write_storage_slot_preserves_disjoint_read_slot >>
+     disch_then drule >> disch_then irule >>
+     qpat_assum
+       `w2n (n2w (off + 1 + len * type_slot_size tv) : bytes32) = _`
+       (fn th => rewrite_tac [th]) >>
+     rewrite_tac[ranges_disjoint_def] >>
+     conj_tac
+     >- (qpat_assum
+           `off + (type_slot_size tv + (len * type_slot_size tv + 1)) = _`
+           (fn th => once_rewrite_tac [th]) >>
+         first_assum ACCEPT_TAC) >>
+     conj_tac >- decide_tac >>
+     disj2_tac >> decide_tac) >>
+  `!j. j < len ==>
+       slots_in_range (get_storage cx st' b)
+         (off + 1 + j * type_slot_size tv) tv` by
+    (rpt strip_tac >>
+     `slots_in_range (get_storage cx st b)
+        (off + 1 + j * type_slot_size tv) tv` by
+       (irule dyn_slots_in_range_index >> qexists `len` >> simp[]) >>
+     `j * type_slot_size tv + type_slot_size tv <=
+      max * type_slot_size tv` by
+       (irule array_index_element_end_bound >> decide_tac) >>
+     `off + 1 + j * type_slot_size tv + type_slot_size tv <=
+      dimword(:256)` by
+       (gvs[vyperValueTheory.type_slot_size_def] >> decide_tac) >>
+     `off + 1 + j * type_slot_size tv < dimword(:256)` by decide_tac >>
+     `off + (type_slot_size tv + (j * type_slot_size tv + 1)) =
+      off + 1 + j * type_slot_size tv + type_slot_size tv` by decide_tac >>
+     drule typed_write_storage_slot_preserves_disjoint_num_region >>
+     disch_then drule >> disch_then drule >>
+     disch_then drule >> disch_then irule >>
+     disj2_tac >>
+     qpat_assum
+       `w2n (n2w (off + 1 + len * type_slot_size tv) : bytes32) = _`
+       (fn th => rewrite_tac [th]) >>
+     rewrite_tac[ranges_disjoint_def] >>
+     conj_tac
+     >- (qpat_assum
+           `off + (type_slot_size tv + (len * type_slot_size tv + 1)) = _`
+           (fn th => once_rewrite_tac [th]) >>
+         first_assum ACCEPT_TAC) >>
+     conj_tac
+     >- (qpat_assum
+           `off + (type_slot_size tv + (j * type_slot_size tv + 1)) = _`
+           (fn th => once_rewrite_tac [th]) >>
+         first_assum ACCEPT_TAC) >>
+     disj2_tac >>
+     `j * type_slot_size tv + type_slot_size tv <=
+      len * type_slot_size tv` by
+       (irule array_index_element_end_bound >> simp[]) >>
+     decide_tac) >>
+  conj_tac
+  >- (simp[slots_in_range_def] >>
+      irule dyn_slots_in_range_reconstruct >> simp[]) >>
+  conj_tac
+  >- (drule typed_write_storage_slot_establishes_region_forward >> simp[]) >>
+  first_assum ACCEPT_TAC
+QED
+
+Theorem dynamic_array_append_header_write_reconstruct_forward[local]:
+  write_storage_slot cx b (n2w off) (BaseTV (UintT 256))
+    (IntV (&(len + 1))) st = (INL (), st') ==>
+  slots_in_range (get_storage cx st b) off (ArrayTV tv (Dynamic max)) ==>
+  w2n (read_slot (get_storage cx st b) off) = len ==>
+  len < max ==>
+  0 < type_slot_size tv ==>
+  off + type_slot_size (ArrayTV tv (Dynamic max)) <= dimword(:256) ==>
+  slots_in_range (get_storage cx st b)
+    (off + 1 + len * type_slot_size tv) tv ==>
+  value_has_type (BaseTV (UintT 256)) (IntV (&(len + 1))) ==>
+  slots_in_range (get_storage cx st' b) off (ArrayTV tv (Dynamic max))
+Proof
+  rpt strip_tac >>
+  `len + 1 <= max` by decide_tac >>
+  `MIN len max = len` by simp[arithmeticTheory.MIN_DEF] >>
+  `len + 1 < dimword(:256)` by
+    (qpat_x_assum `value_has_type _ _` mp_tac >>
+     simp[value_has_type_def, integerTheory.NUM_OF_INT,
+          integerTheory.INT_POS]) >>
+  `off < dimword(:256)` by
+    (gvs[vyperValueTheory.type_slot_size_def] >> decide_tac) >>
+  `w2n (n2w off : bytes32) = off` by simp[] >>
+  `read_slot (get_storage cx st' b) off = n2w (len + 1)` by
+    (drule_at (Pat `write_storage_slot`) uint256_header_write_read_exact >> simp[]) >>
+  `!j. j < len + 1 ==>
+       slots_in_range (get_storage cx st' b)
+         (off + 1 + j * type_slot_size tv) tv` by
+    (rpt strip_tac >>
+     `slots_in_range (get_storage cx st b)
+        (off + 1 + j * type_slot_size tv) tv` by
+       (Cases_on `j = len` >- gvs[] >>
+        irule dyn_slots_in_range_index >> qexists `len` >>
+        qpat_x_assum
+          `slots_in_range _ off (ArrayTV tv (Dynamic max))` mp_tac >>
+        simp[slots_in_range_def] >> decide_tac) >>
+     `j < max` by decide_tac >>
+     `j * type_slot_size tv + type_slot_size tv <=
+      max * type_slot_size tv` by
+       (irule array_index_element_end_bound >> simp[]) >>
+     `off + 1 + j * type_slot_size tv + type_slot_size tv <=
+      dimword(:256)` by
+       (gvs[vyperValueTheory.type_slot_size_def] >> decide_tac) >>
+     `off + 1 + j * type_slot_size tv < dimword(:256)` by decide_tac >>
+     drule typed_write_storage_slot_preserves_disjoint_num_region >>
+     disch_then drule >> disch_then drule >>
+     disch_then drule >> disch_then irule >>
+     simp[vyperValueTheory.type_slot_size_def] >>
+     rewrite_tac[ranges_disjoint_def] >> decide_tac) >>
+  simp[slots_in_range_def] >>
+  `w2n (n2w (len + 1) : bytes32) = len + 1` by simp[] >>
+  gvs[arithmeticTheory.MIN_DEF] >>
+  irule dyn_slots_in_range_reconstruct >> simp[]
+QED
+
+
+
+Theorem dynamic_array_append_two_writes_preserve_v2:
+  slots_in_range (get_storage cx st b) off (ArrayTV tv (Dynamic max)) /\
+  w2n (read_slot (get_storage cx st b) off) = len /\
+  len < max /\
+  max < dimword(:256) /\
+  0 < type_slot_size tv /\
+  well_formed_type_value tv /\
+  off + type_slot_size (ArrayTV tv (Dynamic max)) <= dimword(:256) /\
+  value_has_type tv v /\
+  write_storage_slot cx b
+    (n2w (off + 1 + len * type_slot_size tv)) tv v st = (INL (), st1) /\
+  write_storage_slot cx b (n2w off) (BaseTV (UintT 256))
+    (IntV (&(len + 1))) st1 = (INL (), st2) ==>
+  slots_in_range (get_storage cx st2 b) off (ArrayTV tv (Dynamic max))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `slots_in_range (get_storage cx st1 b) off
+       (ArrayTV tv (Dynamic max)) /\
+   slots_in_range (get_storage cx st1 b)
+       (off + 1 + len * type_slot_size tv) tv /\
+   read_slot (get_storage cx st1 b) off =
+       read_slot (get_storage cx st b) off` by
+    (irule dynamic_array_append_element_write_prefix >> simp[] >>
+     qexists `v` >> simp[] >>
+     `n2w (off + (len * type_slot_size tv + 1)) : bytes32 =
+      n2w (off + 1 + len * type_slot_size tv)` by
+       (AP_TERM_TAC >> decide_tac) >>
+     pop_assum (fn th => once_rewrite_tac [th]) >>
+     first_assum ACCEPT_TAC) >>
+  `len + 1 <= max` by decide_tac >>
+  `len + 1 < dimword(:256)` by decide_tac >>
+  `value_has_type (BaseTV (UintT 256)) (IntV (&(len + 1)))` by
+    (simp[value_has_type_def, integerTheory.NUM_OF_INT,
+          integerTheory.INT_POS] >>
+     qpat_x_assum `len + 1 < dimword(:256)` mp_tac >> simp[]) >>
+  qpat_x_assum
+    `write_storage_slot cx b (n2w off) (BaseTV (UintT 256)) _ st1 = _`
+    mp_tac >>
+  qpat_x_assum
+    `read_slot (get_storage cx st1 b) off = _`
+    mp_tac >>
+  simp[] >> rpt strip_tac >>
+  drule_at (Pat `write_storage_slot`)
+    dynamic_array_append_header_write_reconstruct_forward >>
+  disch_then (qspecl_then [`tv`, `max`] irule) >>
+  simp[] >>
+  qpat_x_assum
+    `slots_in_range (get_storage cx st1 b)
+       (off + 1 + len * type_slot_size tv) tv` mp_tac >>
+  AP_TERM_TAC >> AP_TERM_TAC >> decide_tac
+QED
+
+
+Theorem dynamic_array_pop_element_write_prefix[local]:
+  slots_in_range (get_storage cx st b) off (ArrayTV tv (Dynamic max)) /\
+  w2n (read_slot (get_storage cx st b) off) = len /\
+  0 < len /\
+  0 < type_slot_size tv /\
+  well_formed_type_value tv /\
+  off + type_slot_size (ArrayTV tv (Dynamic max)) <= dimword(:256) /\
+  value_has_type tv v /\
+  write_storage_slot cx b
+    (n2w (off + 1 + (len - 1) * type_slot_size tv)) tv v st =
+      (INL (), st') ==>
+  slots_in_range (get_storage cx st' b) off (ArrayTV tv (Dynamic max)) /\
+  read_slot (get_storage cx st' b) off =
+    read_slot (get_storage cx st b) off
+Proof
+  rpt gen_tac >> strip_tac >>
+  `len <= max` by
+    (qpat_x_assum `slots_in_range _ off (ArrayTV tv (Dynamic max))` mp_tac >>
+     simp[slots_in_range_def]) >>
+  `len - 1 < max` by decide_tac >>
+  `(len - 1) * type_slot_size tv + type_slot_size tv <=
+   max * type_slot_size tv` by
+    (irule array_index_element_end_bound >> simp[]) >>
+  `off + 1 + (len - 1) * type_slot_size tv + type_slot_size tv <=
+   dimword(:256)` by
+    (gvs[vyperValueTheory.type_slot_size_def] >> decide_tac) >>
+  `off + 1 + (len - 1) * type_slot_size tv < dimword(:256)` by decide_tac >>
+  `w2n (n2w (off + 1 + (len - 1) * type_slot_size tv) : bytes32) =
+   off + 1 + (len - 1) * type_slot_size tv` by simp[] >>
+  `slots_in_range (get_storage cx st' b)
+     (off + 1 + (len - 1) * type_slot_size tv) tv` by
+    (drule typed_write_storage_slot_establishes_region_forward >> simp[]) >>
+  conj_tac
+  >- (drule dynamic_array_typed_leaf_write_reconstruct_curried >>
+      disch_then irule >> simp[] >>
+      qexistsl [`tv`, `len - 1`,
+        `n2w (off + 1 + (len - 1) * type_slot_size tv)`, `v`] >>
+      simp[] >>
+      `off + (type_slot_size tv * (len - 1) + 1) =
+       off + 1 + (len - 1) * type_slot_size tv` by
+        (once_rewrite_tac [arithmeticTheory.MULT_COMM] >> decide_tac) >>
+      pop_assum (fn th => once_rewrite_tac [th]) >>
+      first_assum ACCEPT_TAC) >>
+  drule typed_write_storage_slot_preserves_disjoint_read_slot >>
+  disch_then drule >> disch_then irule >>
+  qpat_assum
+    `w2n (n2w (off + 1 + (len - 1) * type_slot_size tv) : bytes32) = _`
+    (fn th => rewrite_tac [th]) >>
+  rewrite_tac[ranges_disjoint_def] >>
+  decide_tac
+QED
+
+Theorem dynamic_array_shrink_header_write_reconstruct_forward[local]:
+  write_storage_slot cx b (n2w off) (BaseTV (UintT 256))
+    (IntV (&new_len)) st = (INL (), st') ==>
+  slots_in_range (get_storage cx st b) off (ArrayTV tv (Dynamic max)) ==>
+  w2n (read_slot (get_storage cx st b) off) = old_len ==>
+  new_len <= old_len ==>
+  old_len <= max ==>
+  0 < type_slot_size tv ==>
+  off + type_slot_size (ArrayTV tv (Dynamic max)) <= dimword(:256) ==>
+  value_has_type (BaseTV (UintT 256)) (IntV (&new_len)) ==>
+  slots_in_range (get_storage cx st' b) off (ArrayTV tv (Dynamic max))
+Proof
+  rpt strip_tac >>
+  `new_len <= max` by decide_tac >>
+  `new_len < dimword(:256)` by
+    (qpat_x_assum `value_has_type _ _` mp_tac >>
+     simp[value_has_type_def, integerTheory.NUM_OF_INT,
+          integerTheory.INT_POS]) >>
+  `off < dimword(:256)` by
+    (gvs[vyperValueTheory.type_slot_size_def] >> decide_tac) >>
+  `w2n (n2w off : bytes32) = off` by simp[] >>
+  `MIN old_len max = old_len` by
+    (simp[arithmeticTheory.MIN_DEF] >> decide_tac) >>
+  `dyn_slots_in_range (get_storage cx st b) (off + 1) tv old_len` by
+    (qpat_x_assum `slots_in_range _ off (ArrayTV tv (Dynamic max))` mp_tac >>
+     simp[slots_in_range_def]) >>
+  `read_slot (get_storage cx st' b) off = n2w new_len` by
+    (drule_at (Pat `write_storage_slot`) uint256_header_write_read_exact >>
+     simp[]) >>
+  `!j. j < new_len ==>
+       slots_in_range (get_storage cx st' b)
+         (off + 1 + j * type_slot_size tv) tv` by
+    (rpt strip_tac >>
+     `slots_in_range (get_storage cx st b)
+        (off + 1 + j * type_slot_size tv) tv` by
+       (irule dyn_slots_in_range_index >> qexists `old_len` >> simp[]) >>
+     `j < max` by decide_tac >>
+     `j * type_slot_size tv + type_slot_size tv <=
+      max * type_slot_size tv` by
+       (irule array_index_element_end_bound >> simp[]) >>
+     `off + 1 + j * type_slot_size tv + type_slot_size tv <=
+      dimword(:256)` by
+       (gvs[vyperValueTheory.type_slot_size_def] >> decide_tac) >>
+     `off + 1 + j * type_slot_size tv < dimword(:256)` by decide_tac >>
+     drule typed_write_storage_slot_preserves_disjoint_num_region >>
+     disch_then drule >> disch_then drule >>
+     disch_then drule >> disch_then irule >>
+     simp[vyperValueTheory.type_slot_size_def] >>
+     rewrite_tac[ranges_disjoint_def] >> decide_tac) >>
+  simp[slots_in_range_def] >>
+  `w2n (n2w new_len : bytes32) = new_len` by simp[] >>
+  gvs[arithmeticTheory.MIN_DEF] >>
+  irule dyn_slots_in_range_reconstruct >> simp[]
+QED
+
+
+
+
+Theorem dynamic_array_pop_two_writes_preserve:
+  slots_in_range (get_storage cx st b) off (ArrayTV tv (Dynamic max)) /\
+  w2n (read_slot (get_storage cx st b) off) = len /\
+  0 < len /\
+  0 < type_slot_size tv /\
+  well_formed_type_value tv /\
+  off + type_slot_size (ArrayTV tv (Dynamic max)) <= dimword(:256) /\
+  value_has_type tv default /\
+  write_storage_slot cx b
+    (n2w (off + 1 + (len - 1) * type_slot_size tv)) tv default st =
+      (INL (), st1) /\
+  write_storage_slot cx b (n2w off) (BaseTV (UintT 256))
+    (IntV (&(len - 1))) st1 = (INL (), st2) ==>
+  slots_in_range (get_storage cx st2 b) off (ArrayTV tv (Dynamic max))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `slots_in_range (get_storage cx st1 b) off
+       (ArrayTV tv (Dynamic max)) /\
+   read_slot (get_storage cx st1 b) off =
+       read_slot (get_storage cx st b) off` by
+    (irule dynamic_array_pop_element_write_prefix >> simp[] >>
+     qexists `default` >> simp[] >>
+     `n2w (off + (type_slot_size tv * (len - 1) + 1)) : bytes32 =
+      n2w (off + 1 + (len - 1) * type_slot_size tv)` by
+       (AP_TERM_TAC >>
+        once_rewrite_tac [arithmeticTheory.MULT_COMM] >> decide_tac) >>
+     pop_assum (fn th => once_rewrite_tac [th]) >>
+     first_assum ACCEPT_TAC) >>
+  `len <= max` by
+    (qpat_x_assum `slots_in_range _ off (ArrayTV tv (Dynamic max))` mp_tac >>
+     simp[slots_in_range_def]) >>
+  `len < dimword(:256)` by
+    (qpat_x_assum `w2n (read_slot _ off) = len` (fn th => once_rewrite_tac [GSYM th]) >>
+     MATCH_ACCEPT_TAC wordsTheory.w2n_lt) >>
+  `len - 1 < dimword(:256)` by decide_tac >>
+  `value_has_type (BaseTV (UintT 256)) (IntV (&(len - 1)))` by
+    (simp[value_has_type_def, integerTheory.NUM_OF_INT,
+          integerTheory.INT_POS] >>
+     qpat_x_assum `len - 1 < dimword(:256)` mp_tac >> simp[]) >>
+  qpat_x_assum
+    `write_storage_slot cx b (n2w off) (BaseTV (UintT 256)) _ st1 = _`
+    mp_tac >>
+  qpat_x_assum
+    `read_slot (get_storage cx st1 b) off = _`
+    mp_tac >>
+  simp[] >> rpt strip_tac >>
+  drule_at (Pat `write_storage_slot`)
+    dynamic_array_shrink_header_write_reconstruct_forward >>
+  disch_then (qspecl_then [`tv`, `max`] irule) >>
+  simp[]
+QED
+
+
+Theorem zero_slot_size_slots_in_range[local]:
+  (!tv storage off.
+     type_slot_size tv = 0 ==> slots_in_range storage off tv) /\
+  (!fields storage off.
+     type_slot_size_fields fields = 0 ==>
+     struct_slots_in_range storage off fields) /\
+  (!(p:string # type_value) storage off.
+     type_slot_size (SND p) = 0 ==>
+     slots_in_range storage off (SND p)) /\
+  (!tvs storage off.
+     type_slot_size_list tvs = 0 ==>
+     tuple_slots_in_range storage off tvs)
+Proof
+  ho_match_mp_tac (TypeBase.induction_of ``:type_value``) >>
+  simp[vyperValueTheory.type_slot_size_def, slots_in_range_def] >>
+  rpt conj_tac >> rpt strip_tac >> simp[] >>
+  TRY (rename1 `slots_in_range storage off (BaseTV b)` >>
+       Cases_on `b` >>
+       simp[vyperValueTheory.type_slot_size_def, slots_in_range_def]) >>
+  TRY (rename1 `slots_in_range storage off (BaseTV (BytesT bd))` >>
+       Cases_on `bd` >>
+       simp[vyperValueTheory.type_slot_size_def, slots_in_range_def]) >>
+  TRY (rename1 `slots_in_range storage off (ArrayTV elem bd)` >>
+       Cases_on `bd` >>
+       gvs[vyperValueTheory.type_slot_size_def, slots_in_range_def] >>
+       Induct_on `n` >> simp[slots_in_range_def]) >>
+  TRY (qpat_x_assum
+         `type_slot_size (BaseTV (StringT n)) = 0` mp_tac >>
+       simp[vyperValueTheory.type_slot_size_def]) >>
+  TRY (qpat_x_assum
+         `type_slot_size (BaseTV (BytesT (Dynamic n))) = 0` mp_tac >>
+       simp[vyperValueTheory.type_slot_size_def]) >>
+  TRY (rename1 `struct_slots_in_range storage off (p::fields)` >>
+       PairCases_on `p` >>
+       gvs[vyperValueTheory.type_slot_size_def, slots_in_range_def] >>
+       metis_tac[]) >>
+  metis_tac[]
+QED
+
+
+(* A successful typed write to a semantically declared hashmap leaf preserves
+   every declared region.  The same logical leaf is re-established by encoding;
+   every other leaf and every ordinary declaration is framed by the explicit
+   semantic-region separation conjunct of storage_layout_safe.  This stronger
+   region-shaped statement also covers nested hashmap key paths and residual
+   structural updates, because assign_target writes the reconstructed whole
+   final leaf value. *)
+Theorem declared_hashmap_leaf_write_preserves_contract_storage_well_formed:
+  contract_storage_well_formed cx st /\
+  storage_layout_safe cx /\
+  declared_storage_region cx mid n key_subs = SOME (b,slot,tv) /\
+  value_has_type tv v /\
+  well_formed_type_value tv /\
+  write_storage_slot cx b slot tv v st = (INL (),st') ==>
+  contract_storage_well_formed cx st'
+Proof
+  rpt strip_tac >>
+  `!mid' n' subs' b' slot' tv' storage st''.
+     declared_storage_region cx mid' n' subs' = SOME (b',slot',tv') /\
+     get_storage_backend cx b' st' = (INL storage,st'') ==>
+     slots_in_range storage (w2n slot') tv'` by
+    (rpt gen_tac >> strip_tac >>
+     gvs[vyperStorageBackendTheory.get_storage_backend_eq] >>
+     `slots_in_range (get_storage cx st b') (w2n slot') tv'` by
+       (qpat_x_assum `contract_storage_well_formed cx st` mp_tac >>
+        simp[contract_storage_well_formed_def,
+             vyperStorageBackendTheory.get_storage_backend_eq] >>
+        metis_tac[]) >>
+     Cases_on `(mid,n,key_subs) = (mid',n',subs')`
+     >- (gvs[] >>
+         drule_at (Pat `write_storage_slot`)
+           typed_write_storage_slot_establishes_region_forward >>
+         simp[]) >>
+     `b <> b' \/
+      ranges_disjoint (w2n slot) (type_slot_size tv)
+                      (w2n slot') (type_slot_size tv')` by
+       (Cases_on `b = b'`
+        >- (gvs[] >>
+            qpat_x_assum `storage_layout_safe cx` mp_tac >>
+            simp[storage_layout_safe_def] >> strip_tac >>
+            qpat_x_assum
+              `!mid1 n1 subs1 mid2 n2 subs2 b slot1 tv1 slot2 tv2. _`
+              (qspecl_then
+                 [`mid`, `n`, `key_subs`, `mid'`, `n'`, `subs'`, `b`,
+                  `slot`, `tv`, `slot'`, `tv'`] mp_tac) >>
+            metis_tac[]) >>
+        simp[]) >>
+     drule typed_write_storage_slot_preserves_disjoint_num_region >>
+     disch_then drule >>
+     disch_then drule >>
+     disch_then irule >>
+     (conj_tac >- MATCH_ACCEPT_TAC wordsTheory.w2n_lt) >>
+     Cases_on `b` >> Cases_on `b'` >>
+     gvs[Excl "ranges_disjoint_def"]) >>
+  simp[contract_storage_well_formed_def] >>
+  conj_tac
+  >- (simp[well_formed_storage_def, storage_var_in_range_def] >>
+      rpt gen_tac >> strip_tac >>
+      `declared_storage_region cx mid' n' [] =
+         SOME (is_transient,n2w off,tv')` by
+        (irule declared_storage_region_ordinary >> simp[]) >>
+      Cases_on `off < dimword(:256)`
+      >- (qpat_assum
+            `!m name subs bb sl ty stor s. _`
+            (qspecl_then
+               [`mid'`, `n'`, `[]`, `is_transient`, `n2w off`, `tv'`,
+                `storage`, `st''`] mp_tac) >>
+          simp[vyperStorageBackendTheory.get_storage_backend_eq,
+               wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD]) >>
+      `off + type_slot_size tv' <= dimword(:256)` by
+        (qpat_x_assum `storage_layout_safe cx` mp_tac >>
+         simp[storage_layout_safe_def, well_formed_layout_def] >>
+         metis_tac[]) >>
+      `off = dimword(:256) /\ type_slot_size tv' = 0` by decide_tac >>
+      irule (CONJUNCT1 zero_slot_size_slots_in_range) >> simp[]) >>
+  metis_tac[]
+QED
+
+
+(* Exact HashMapRef branch adapter.  The interpreter's split/hash/evaluate
+   computation identifies the same semantic declared leaf; any residual
+   array/struct subscripts have already reconstructed a value of final_tv
+   before this one whole-leaf write. *)
+Theorem hashmapref_leaf_write_preserves_contract_storage_well_formed:
+  contract_storage_well_formed cx st /\
+  storage_layout_safe cx /\
+  get_module_code cx mid = SOME code /\
+  find_var_decl_by_num (string_to_num n) code =
+    SOME (HashMapVarDecl b kt vt,id) /\
+  lookup_var_slot_from_layout cx b mid id = SOME off /\
+  split_hashmap_subscripts vt rest_subs = SOME (final_type,kts,[]) /\
+  compute_hashmap_slot (n2w off) (kt::kts) (first_sub::rest_subs) =
+    SOME final_slot /\
+  evaluate_type (get_tenv cx) final_type = SOME final_tv /\
+  value_has_type final_tv v /\
+  write_storage_slot cx b final_slot final_tv v st = (INL (),st') ==>
+  contract_storage_well_formed cx st'
+Proof
+  rpt strip_tac >>
+  irule declared_hashmap_leaf_write_preserves_contract_storage_well_formed >>
+  conj_tac >- simp[] >>
+  qexistsl [`b`, `first_sub::rest_subs`, `mid`, `n`, `final_slot`, `st`,
+            `final_tv`, `v`] >>
+  simp[] >>
+  conj_tac
+  >- metis_tac[CONJUNCT1 vyperTypingTheory.evaluate_type_well_formed] >>
+  irule declared_hashmap_leaf_agrees_assign_target >> simp[]
+QED
+
 
 (* Whole-variable replacement is the corresponding successful typed primitive
    write.  This consumer-shaped form keeps monadic unfolding out of the
