@@ -541,6 +541,22 @@ Proof
   metis_tac[new_variable_storage_frame]
 QED
 
+Theorem finally_preserves_state_predicate[local]:
+  (!r s. f st = (r,s) ==> P s) /\
+  (!s r s'. P s /\ g s = (r,s') ==> P s') /\
+  finally f g st = (res,st') ==>
+  P st'
+Proof
+  rpt strip_tac >>
+  Cases_on `f st` >> rename1 `f st = (main_res,main_st)` >>
+  Cases_on `main_res` >>
+  Cases_on `g main_st` >>
+  rename1 `g main_st = (cleanup_res,cleanup_st)` >>
+  Cases_on `cleanup_res` >>
+  gvs[finally_def, ignore_bind_apply, return_def, raise_def] >>
+  metis_tac[]
+QED
+
 Theorem eval_all_storage_preservation_mutual:
   (!cx s. !env ret_ty env' st res st'.
     type_stmt env ret_ty s = SOME env' /\
