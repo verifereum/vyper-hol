@@ -1178,6 +1178,58 @@ Proof
             `st`, `new_v`, `vt`] >>
   gvs[runtime_storage_consistent_def]
 QED
+
+(* Constructor-free TopLevelVar boundary: lookup dispatch is the only remaining
+   case split.  Each successful constructor is handled by its reviewed adapter;
+   lookup failure propagates before any storage mutation. *)
+Theorem assign_target_TopLevelVar_preserves_contract_storage_well_formed:
+  runtime_storage_consistent env cx st /\
+  target_runtime_typed env cx st tgt ty
+    (BaseTargetV (TopLevelVar src id) sbs) /\
+  assignable_type env.type_defs ty /\
+  assign_operation_runtime_typed env ty op /\
+  assign_target_assignable_context cx
+    (BaseTargetV (TopLevelVar src id) sbs) st /\
+  assign_target cx (BaseTargetV (TopLevelVar src id) sbs) op st =
+    (res,st') ==>
+  contract_storage_well_formed cx st'
+Proof
+  rpt strip_tac >>
+  Cases_on `lookup_global cx src (string_to_num id) st` >>
+  Cases_on `q` >>
+  imp_res_tac vyperStatePreservationTheory.lookup_global_state >>
+  pop_assum SUBST_ALL_TAC
+  >- (Cases_on `x`
+      >- metis_tac[vyperStatePreservationTheory.lookup_global_state,
+                    assign_target_toplevel_value_preserves_contract_storage_well_formed]
+      >- metis_tac[vyperStatePreservationTheory.lookup_global_state,
+                    assign_target_HashMapRef_preserves_contract_storage_well_formed]
+      >> (Cases_on `resolve_array_element cx b c (ArrayTV t b0)
+            (REVERSE sbs) st` >>
+          Cases_on `q` >>
+          imp_res_tac vyperStatePreservationTheory.resolve_array_element_state >>
+          pop_assum SUBST_ALL_TAC
+          >- (PairCases_on `x` >>
+              metis_tac[vyperStatePreservationTheory.lookup_global_state,
+                        vyperStatePreservationTheory.resolve_array_element_state,
+                        assign_target_ArrayRef_preserves_contract_storage_well_formed]) >>
+          `lookup_global cx src (string_to_num id) st =
+             (INL (ArrayRef b c t b0),st)` by
+            metis_tac[vyperStatePreservationTheory.lookup_global_state] >>
+          `resolve_array_element cx b c (ArrayTV t b0) (REVERSE sbs) st =
+             (INR y,st)` by
+            metis_tac[vyperStatePreservationTheory.resolve_array_element_state] >>
+          imp_res_tac assignable_context_ArrayRef_metadata >>
+          qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
+          simp[Once assign_target_def, bind_def, ignore_bind_def, return_def,
+               raise_def, LET_THM, pairTheory.PAIR] >>
+          strip_tac >> gvs[runtime_storage_consistent_def])) >>
+  imp_res_tac vyperStatePreservationTheory.lookup_global_state >> gvs[] >>
+  qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
+  simp[Once assign_target_def, bind_def, return_def, LET_THM,
+       pairTheory.PAIR] >>
+  strip_tac >> gvs[runtime_storage_consistent_def]
+QED
 Theorem runtime_storage_consistent_declared_region_read_typed:
   runtime_storage_consistent env cx st /\
   declared_storage_region cx mid n subs = SOME (b,slot,tv) ==>
