@@ -648,6 +648,143 @@ Proof
         release_nonreentrant_lock_preserves_contract_storage_well_formed]) >>
   irule contract_storage_well_formed_scopes >> simp[]
 QED
+
+Theorem intcall_post_defaults_preserves_contract_storage_well_formed[local]:
+  !cx src_id_opt fn args vs dflt_vs ret mut nr fn_stmts prev st res st'.
+  contract_storage_well_formed cx st /\
+  storage_layout_safe cx /\
+  (!cxf s r s'.
+     contract_storage_well_formed cx s /\
+     eval_stmts cxf fn_stmts s = (r,s') ==>
+     contract_storage_well_formed cx s') /\
+  (do
+     env <- lift_option_type
+       (bind_arguments (get_tenv cx) args (vs ++ dflt_vs))
+       "IntCall bind_arguments";
+     rtv <- lift_option_type (evaluate_type (get_tenv cx) ret)
+       "IntCall eval ret";
+     is_view <<- (mut = View \/ mut = Pure);
+     (if nr then
+        case cx.nonreentrant_slot of
+          NONE => raise (Error (TypeError "nonreentrant slot missing"))
+        | SOME slot =>
+            acquire_nonreentrant_lock cx.txn.target slot is_view
+      else return ());
+     cxf <- push_function (src_id_opt,fn) env cx;
+     rv <- finally
+       (try (do eval_stmts cxf fn_stmts; return NoneV od) handle_function)
+       (do
+          pop_function prev;
+          if nr /\ ~is_view then
+            case cx.nonreentrant_slot of
+              NONE => return ()
+            | SOME slot =>
+                release_nonreentrant_lock cx.txn.target slot
+          else return ()
+        od);
+     crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
+     return (Value crv)
+   od) st = (res,st') ==>
+  contract_storage_well_formed cx st'
+Proof
+  rpt strip_tac >>
+  Cases_on `bind_arguments (get_tenv cx) args (vs ++ dflt_vs)` >>
+  gvs[lift_option_type_def, bind_apply, return_def, raise_def] >>
+  rename1 `bind_arguments (get_tenv cx) args (vs ++ dflt_vs) = SOME env` >>
+  Cases_on `evaluate_type (get_tenv cx) ret` >>
+  gvs[lift_option_type_def, bind_apply, return_def, raise_def] >>
+  rename1 `evaluate_type (get_tenv cx) ret = SOME rtv` >>
+  `!lock_res lock_st.
+     (if nr then
+        case cx.nonreentrant_slot of
+          NONE => raise (Error (TypeError "nonreentrant slot missing"))
+        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
+            (mut = View \/ mut = Pure)
+      else return ()) st = (lock_res,lock_st) ==>
+     contract_storage_well_formed cx lock_st` by (
+    rpt strip_tac >>
+    Cases_on `nr` >> gvs[return_def, raise_def] >>
+    Cases_on `cx.nonreentrant_slot` >> gvs[raise_def] >>
+    metis_tac[
+      acquire_nonreentrant_lock_preserves_contract_storage_well_formed]) >>
+  Cases_on
+    `(if nr then
+        case cx.nonreentrant_slot of
+          NONE => raise (Error (TypeError "nonreentrant slot missing"))
+        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
+            (mut = View \/ mut = Pure)
+      else return ()) st` >>
+  rename1 `_ st = (lock_res,lock_st)` >>
+  `contract_storage_well_formed cx lock_st` by metis_tac[] >>
+  Cases_on `lock_res` >>
+  gvs[ignore_bind_apply, bind_apply, push_function_def, return_def, raise_def] >>
+  `contract_storage_well_formed cx (lock_st with scopes := [env])` by
+    metis_tac[contract_storage_well_formed_scopes] >>
+  Cases_on
+    `finally
+       (try
+          (do
+             eval_stmts (cx with stk updated_by CONS (src_id_opt,fn)) fn_stmts;
+             return NoneV
+           od)
+          handle_function)
+       (do
+          pop_function prev;
+          if nr /\ ~(mut = View \/ mut = Pure) then
+            case cx.nonreentrant_slot of
+              NONE => return ()
+            | SOME slot =>
+                release_nonreentrant_lock cx.txn.target slot
+          else return ()
+        od)
+       (lock_st with scopes := [env])` >>
+  rename1 `_ = (body_final_res,body_final_st)` >>
+  `!r s.
+     try
+       (do
+          eval_stmts (cx with stk updated_by CONS (src_id_opt,fn)) fn_stmts;
+          return NoneV
+        od)
+       handle_function (lock_st with scopes := [env]) = (r,s) ==>
+     contract_storage_well_formed cx s` by
+    metis_tac[
+      try_eval_stmts_handle_function_preserves_contract_storage_well_formed] >>
+  `!s r s'.
+     contract_storage_well_formed cx s /\
+     (do
+        pop_function prev;
+        if nr /\ ~(mut = View \/ mut = Pure) then
+          case cx.nonreentrant_slot of
+            NONE => return ()
+          | SOME slot => release_nonreentrant_lock cx.txn.target slot
+        else return ()
+      od) s = (r,s') ==>
+     contract_storage_well_formed cx s'` by
+    metis_tac[intcall_cleanup_preserves_contract_storage_well_formed] >>
+  `contract_storage_well_formed cx body_final_st` by (
+    qspecl_then
+      [`contract_storage_well_formed cx`,
+       `try
+          (ignore_bind
+             (eval_stmts (cx with stk updated_by CONS (src_id_opt,fn)) fn_stmts)
+             (return NoneV))
+          handle_function`,
+       `ignore_bind (pop_function prev)
+          (if nr /\ ~(mut = View \/ mut = Pure) then
+             case cx.nonreentrant_slot of
+               NONE => return ()
+             | SOME slot => release_nonreentrant_lock cx.txn.target slot
+           else return ())`,
+       `lock_st with scopes := [env]`, `body_final_res`, `body_final_st`]
+      mp_tac finally_preserves_state_predicate >>
+    simp[] >> metis_tac[]) >>
+  Cases_on `body_final_res` >>
+  gvs[] >>
+  rename1 `safe_cast rtv rv` >>
+  Cases_on `safe_cast rtv rv` >>
+  gvs[lift_option_type_def, return_def, raise_def]
+QED
+
 Theorem eval_all_storage_preservation_mutual:
   (!cx s. !env ret_ty env' st res st'.
     type_stmt env ret_ty s = SOME env' /\
