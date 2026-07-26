@@ -126,6 +126,137 @@ Proof
       vfmStateTheory.update_storage_def, combinTheory.APPLY_UPDATE_THM]
 QED
 
+Theorem storage_layout_safe_storage_var_nonoverflow[local]:
+  storage_layout_safe cx /\
+  storage_var_info cx mid n = SOME (b,off,tv) ==>
+  off + type_slot_size tv <= dimword(:256)
+Proof
+  rpt strip_tac >>
+  drule storage_layout_safe_layout >>
+  simp[vyperLookupStorageTheory.well_formed_layout_def] >>
+  metis_tac[]
+QED
+
+Theorem reserved_transient_write_preserves_contract_storage_well_formed:
+  contract_storage_well_formed cx st /\
+  storage_layout_safe cx /\
+  cx.nonreentrant_slot = SOME lock ==>
+  contract_storage_well_formed cx
+    (st with tStorage updated_by
+       update_transient_storage cx.txn.target
+         (update_storage (n2w lock) value
+           (lookup_transient_storage cx.txn.target st.tStorage)))
+Proof
+  rpt strip_tac >>
+  simp[contract_storage_well_formed_def] >> conj_tac
+  >- (simp[vyperLookupStorageTheory.well_formed_storage_def,
+           vyperLookupStorageTheory.storage_var_in_range_def] >>
+      rpt strip_tac >>
+      `declared_storage_region cx mid n [] =
+         SOME (is_transient,n2w off,tv)` by
+        metis_tac[declared_storage_region_ordinary] >>
+      `slots_in_range (get_storage cx st is_transient) off tv` by
+        metis_tac[contract_storage_well_formed_storage,
+                  vyperLookupStorageTheory.well_formed_storage_def,
+                  vyperLookupStorageTheory.storage_var_in_range_def,
+                  vyperStorageBackendTheory.get_storage_backend_eq] >>
+      Cases_on `is_transient` >>
+      gvs[vyperStorageBackendTheory.get_storage_backend_eq,
+          vyperStorageBackendTheory.get_storage_def,
+          vfmExecutionTheory.lookup_transient_storage_def,
+          vfmExecutionTheory.update_transient_storage_def,
+          combinTheory.APPLY_UPDATE_THM] >>
+      `lock + 1 <= dimword(:256)` by
+        metis_tac[storage_layout_safe_nonreentrant_slot_nonoverflow] >>
+      `lock < dimword(:256)` by decide_tac >>
+      `off + type_slot_size tv <= dimword(:256)` by (
+        drule storage_layout_safe_layout >>
+        simp[vyperLookupStorageTheory.well_formed_layout_def] >>
+        metis_tac[]) >>
+      Cases_on `off < dimword(:256)`
+      >- (`ranges_disjoint lock 1 off (type_slot_size tv)` by (
+            drule_all storage_layout_safe_nonreentrant_slot_separation >>
+            simp[wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD]) >>
+          `update_storage (n2w lock) value (st.tStorage cx.txn.target) =
+           apply_writes (n2w lock) [(0,value)] (st.tStorage cx.txn.target)` by
+            simp[vyperStorageTheory.apply_writes_def,
+                 arithmeticTheory.MOD_LESS] >>
+          pop_assum SUBST1_TAC >>
+          irule vyperLookupStorageTheory.slots_in_range_disjoint_apply_writes >>
+          simp[] >>
+          qexists `1` >> simp[] >>
+          conj_tac
+          >- (qpat_assum `lock + 1 <= dimword(:256)` mp_tac >> EVAL_TAC) >>
+          qpat_x_assum `ranges_disjoint lock 1 off (type_slot_size tv)` mp_tac >>
+          simp[vyperStorageFrameTheory.ranges_disjoint_def]) >>
+      `off = dimword(:256) /\ type_slot_size tv = 0` by decide_tac >>
+      irule (CONJUNCT1
+        vyperStorageWritePreservationTheory.zero_slot_size_slots_in_range) >>
+      simp[]) >>
+  qpat_x_assum `contract_storage_well_formed cx st` mp_tac >>
+  simp[contract_storage_well_formed_def] >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  `slots_in_range (get_storage cx st b) (w2n slot) tv` by (
+    qpat_assum `!mid n subs b slot tv storage st'. _`
+      (qspecl_then
+        [`mid`, `n`, `subs`, `b`, `slot`, `tv`, `get_storage cx st b`, `st`]
+        mp_tac) >>
+    simp[vyperStorageBackendTheory.get_storage_backend_eq]) >>
+  Cases_on `b` >>
+  gvs[vyperStorageBackendTheory.get_storage_backend_eq,
+      vyperStorageBackendTheory.get_storage_def,
+      vfmExecutionTheory.lookup_transient_storage_def,
+      vfmExecutionTheory.update_transient_storage_def,
+      combinTheory.APPLY_UPDATE_THM] >>
+  `lock + 1 <= dimword(:256)` by
+    metis_tac[storage_layout_safe_nonreentrant_slot_nonoverflow] >>
+  `lock < dimword(:256)` by decide_tac >>
+  `ranges_disjoint lock 1 (w2n slot) (type_slot_size tv)` by
+    metis_tac[storage_layout_safe_nonreentrant_slot_separation] >>
+  `update_storage (n2w lock) value (st.tStorage cx.txn.target) =
+   apply_writes (n2w lock) [(0,value)] (st.tStorage cx.txn.target)` by
+    simp[vyperStorageTheory.apply_writes_def, arithmeticTheory.MOD_LESS] >>
+  pop_assum SUBST1_TAC >>
+  irule vyperLookupStorageTheory.slots_in_range_disjoint_apply_writes >>
+  simp[] >>
+  conj_tac
+  >- (drule_all storage_layout_safe_region_nonoverflow >>
+      simp[arithmeticTheory.ADD_COMM]) >>
+  qexists `1` >> simp[] >>
+  conj_tac
+  >- (qpat_assum `lock + 1 <= dimword(:256)` mp_tac >> EVAL_TAC) >>
+  qpat_x_assum
+    `ranges_disjoint lock 1 (w2n slot) (type_slot_size tv)` mp_tac >>
+  simp[vyperStorageFrameTheory.ranges_disjoint_def]
+QED
+
+Theorem acquire_nonreentrant_lock_preserves_contract_storage_well_formed:
+  contract_storage_well_formed cx st /\
+  storage_layout_safe cx /\
+  cx.nonreentrant_slot = SOME lock /\
+  acquire_nonreentrant_lock cx.txn.target lock is_view st = (res,st') ==>
+  contract_storage_well_formed cx st'
+Proof
+  rpt strip_tac >>
+  Cases_on `lookup_storage (n2w lock)
+    (lookup_transient_storage cx.txn.target st.tStorage) = 1w` >>
+  Cases_on `is_view` >>
+  gvs[acquire_nonreentrant_lock_eq] >>
+  metis_tac[reserved_transient_write_preserves_contract_storage_well_formed]
+QED
+
+Theorem release_nonreentrant_lock_preserves_contract_storage_well_formed:
+  contract_storage_well_formed cx st /\
+  storage_layout_safe cx /\
+  cx.nonreentrant_slot = SOME lock /\
+  release_nonreentrant_lock cx.txn.target lock st = (res,st') ==>
+  contract_storage_well_formed cx st'
+Proof
+  rpt strip_tac >>
+  gvs[release_nonreentrant_lock_eq] >>
+  metis_tac[reserved_transient_write_preserves_contract_storage_well_formed]
+QED
+
 Theorem eval_target_preserves_runtime_consistent[local]:
   well_typed_atarget env tgt ty /\
   runtime_consistent env cx st /\

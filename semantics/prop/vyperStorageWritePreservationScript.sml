@@ -2233,7 +2233,7 @@ Proof
   decide_tac
 QED
 
-Theorem zero_slot_size_slots_in_range[local]:
+Theorem zero_slot_size_slots_in_range:
   (!tv storage off.
      type_slot_size tv = 0 ==> slots_in_range storage off tv) /\
   (!fields storage off.
