@@ -933,6 +933,62 @@ Proof
             runtime_storage_consistent_def]
 QED
 
+Theorem assign_target_ArrayRef_preserves_contract_storage_well_formed:
+  runtime_storage_consistent env cx st /\
+  target_runtime_typed env cx st tgt ty
+    (BaseTargetV (TopLevelVar src id) sbs) /\
+  assign_operation_runtime_typed env ty op /\
+  assign_target_assignable_context cx
+    (BaseTargetV (TopLevelVar src id) sbs) st /\
+  lookup_global cx src (string_to_num id) st =
+    (INL (ArrayRef b root_slot root_elem_tv root_bd),st) /\
+  resolve_array_element cx b root_slot (ArrayTV root_elem_tv root_bd)
+    (REVERSE sbs) st = (INL (slot,final_tv,remaining),st) /\
+  assign_target cx (BaseTargetV (TopLevelVar src id) sbs) op st =
+    (res,st') ==>
+  contract_storage_well_formed cx st'
+Proof
+  rpt strip_tac >>
+  imp_res_tac assignable_context_ArrayRef_metadata >>
+  `runtime_consistent env cx st` by
+    gvs[runtime_storage_consistent_def] >>
+  `evaluate_type env.type_defs ty =
+     SOME (leaf_type (ArrayTV root_elem_tv root_bd) (REVERSE sbs))` by
+    metis_tac[top_level_storage_value_leaf_evaluate_type] >>
+  `leaf_type (ArrayTV root_elem_tv root_bd) (REVERSE sbs) =
+     leaf_type final_tv remaining` by
+    metis_tac[vyperStorageWritePreservationTheory.resolve_array_element_leaf_type] >>
+  `evaluate_type env.type_defs ty = SOME (leaf_type final_tv remaining)` by
+    metis_tac[] >>
+  Cases_on `op`
+  >- (drule assign_target_ArrayRef_ordinary_preserves_contract_storage_well_formed >>
+      disch_then drule >> disch_then drule >> disch_then drule >>
+      disch_then drule >> disch_then drule >>
+      disch_then (qspecl_then [`st'`, `res`] irule) >> simp[])
+  >- (drule assign_target_ArrayRef_ordinary_preserves_contract_storage_well_formed >>
+      disch_then drule >> disch_then drule >> disch_then drule >>
+      disch_then drule >> disch_then drule >>
+      disch_then (qspecl_then [`st'`, `res`] irule) >> simp[])
+  >- (Cases_on `?et n. final_tv = ArrayTV et (Dynamic n)`
+      >- (pop_assum strip_assume_tac >>
+          `remaining = []` by
+            metis_tac[resolve_array_element_ArrayTV_empty_rsubs_sc] >>
+          gvs[vyperTypingTheory.leaf_type_def] >>
+          irule assign_target_ArrayRef_dynamic_append_preserves_contract_storage_well_formed >>
+          simp[] >> metis_tac[])
+      >> irule assign_target_ArrayRef_ordinary_preserves_contract_storage_well_formed >>
+      simp[] >> metis_tac[])
+  >> Cases_on `?et n. final_tv = ArrayTV et (Dynamic n)`
+  >- (pop_assum strip_assume_tac >>
+      `remaining = []` by
+        metis_tac[resolve_array_element_ArrayTV_empty_rsubs_sc] >>
+      gvs[vyperTypingTheory.leaf_type_def] >>
+      irule assign_target_ArrayRef_dynamic_pop_preserves_contract_storage_well_formed >>
+      simp[] >> metis_tac[])
+  >> irule assign_target_ArrayRef_ordinary_preserves_contract_storage_well_formed >>
+  simp[] >> metis_tac[]
+QED
+
 
 
 Theorem runtime_storage_consistent_declared_region_read_typed:
