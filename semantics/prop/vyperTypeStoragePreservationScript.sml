@@ -1572,4 +1572,86 @@ Proof
             assign_targets_preserves_runtime_storage_consistent_result]
 QED
 
+
+
+(* This is independent of call_evaluation_safe: it constrains the exact
+   external transition returned to the protected transaction target. *)
+Definition protected_storage_calls_preserve_def:
+  protected_storage_calls_preserve cx <=>
+    !callee calldata value_opt st txp success returndata accounts' tStorage'.
+      run_ext_call cx.txn.target callee calldata value_opt
+        st.accounts st.tStorage txp =
+        SOME (success,returndata,accounts',tStorage') /\
+      contract_storage_well_formed cx st ==>
+      contract_storage_well_formed cx
+        (st with <| accounts := accounts'; tStorage := tStorage' |>)
+End
+
+Theorem protected_storage_calls_preserve_run_ext_call:
+  protected_storage_calls_preserve cx /\
+  run_ext_call cx.txn.target callee calldata value_opt
+    st.accounts st.tStorage txp =
+    SOME (success,returndata,accounts',tStorage') /\
+  contract_storage_well_formed cx st ==>
+  contract_storage_well_formed cx
+    (st with <| accounts := accounts'; tStorage := tStorage' |>)
+Proof
+  simp[protected_storage_calls_preserve_def] >> metis_tac[]
+QED
+
+Theorem protected_storage_calls_preserve_success:
+  protected_storage_calls_preserve cx /\
+  run_ext_call cx.txn.target callee calldata value_opt
+    st.accounts st.tStorage txp =
+    SOME (T,returndata,accounts',tStorage') /\
+  contract_storage_well_formed cx st ==>
+  contract_storage_well_formed cx
+    (st with <| accounts := accounts'; tStorage := tStorage' |>)
+Proof
+  metis_tac[protected_storage_calls_preserve_run_ext_call]
+QED
+
+Theorem protected_storage_calls_preserve_revert:
+  protected_storage_calls_preserve cx /\
+  run_ext_call cx.txn.target callee calldata value_opt
+    st.accounts st.tStorage txp =
+    SOME (F,returndata,accounts',tStorage') /\
+  contract_storage_well_formed cx st ==>
+  contract_storage_well_formed cx
+    (st with <| accounts := accounts'; tStorage := tStorage' |>)
+Proof
+  metis_tac[protected_storage_calls_preserve_run_ext_call]
+QED
+
+Theorem protected_storage_call_output_persistent_region:
+  protected_storage_calls_preserve cx /\
+  run_ext_call cx.txn.target callee calldata value_opt
+    st.accounts st.tStorage txp =
+    SOME (success,returndata,accounts',tStorage') /\
+  contract_storage_well_formed cx st /\
+  declared_storage_region cx mid n subs = SOME (F,slot,tv) /\
+  get_storage_backend cx F
+    (st with <| accounts := accounts'; tStorage := tStorage' |>) =
+    (INL storage,st'') ==>
+  slots_in_range storage (w2n slot) tv
+Proof
+  metis_tac[protected_storage_calls_preserve_run_ext_call,
+            contract_storage_well_formed_region]
+QED
+
+Theorem protected_storage_call_output_transient_region:
+  protected_storage_calls_preserve cx /\
+  run_ext_call cx.txn.target callee calldata value_opt
+    st.accounts st.tStorage txp =
+    SOME (success,returndata,accounts',tStorage') /\
+  contract_storage_well_formed cx st /\
+  declared_storage_region cx mid n subs = SOME (T,slot,tv) /\
+  get_storage_backend cx T
+    (st with <| accounts := accounts'; tStorage := tStorage' |>) =
+    (INL storage,st'') ==>
+  slots_in_range storage (w2n slot) tv
+Proof
+  metis_tac[protected_storage_calls_preserve_run_ext_call,
+            contract_storage_well_formed_region]
+QED
 val _ = export_theory();
