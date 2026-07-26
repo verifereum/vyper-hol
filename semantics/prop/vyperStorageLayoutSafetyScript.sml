@@ -147,10 +147,24 @@ Definition contract_storage_well_formed_def:
       slots_in_range storage (w2n slot) tv
 End
 
+(* The nonreentrant lock occupies reserved transient metadata rather than a
+   declared Vyper region.  When present, its single slot must be disjoint from
+   every declared transient region. *)
+Definition nonreentrant_slot_separated_def:
+  nonreentrant_slot_separated cx <=>
+    case cx.nonreentrant_slot of
+    | NONE => T
+    | SOME lock =>
+        !mid n subs slot tv.
+          declared_storage_region cx mid n subs = SOME (T,slot,tv) ==>
+          ranges_disjoint lock 1 (w2n slot) (type_slot_size tv)
+End
+
 (* Layout safety is stated directly over semantic declared regions.  Each
    region fits in the word-addressed storage space, and two different logical
    regions on one backend are disjoint.  Equality of logical region names is
-   the sole aliasing case; no cryptographic injectivity is inferred. *)
+   the sole aliasing case; no cryptographic injectivity is inferred.  The final
+   conjunct reserves the transient nonreentrant metadata slot. *)
 Definition storage_layout_safe_def:
   storage_layout_safe cx <=>
     well_formed_layout cx /\
@@ -162,8 +176,75 @@ Definition storage_layout_safe_def:
        declared_storage_region cx mid2 n2 subs2 = SOME (b,slot2,tv2) ==>
        (mid1,n1,subs1) = (mid2,n2,subs2) \/
        ranges_disjoint (w2n slot1) (type_slot_size tv1)
-                       (w2n slot2) (type_slot_size tv2))
+                       (w2n slot2) (type_slot_size tv2)) /\
+    nonreentrant_slot_separated cx
 End
+
+Theorem declared_storage_region_stk[simp]:
+  declared_storage_region (cx with stk updated_by f) mid n subs =
+  declared_storage_region cx mid n subs
+Proof
+  simp[declared_storage_region_def, vyperContextTheory.get_module_code_def,
+       vyperContextTheory.get_tenv_def,
+       vyperStateTheory.lookup_var_slot_from_layout_def]
+QED
+
+Theorem storage_var_info_stk[simp]:
+  storage_var_info (cx with stk updated_by f) mid n =
+  storage_var_info cx mid n
+Proof
+  simp[storage_var_info_def, vyperContextTheory.get_module_code_def,
+       vyperContextTheory.get_tenv_def,
+       vyperStateTheory.lookup_var_slot_from_layout_def]
+QED
+
+Theorem well_formed_layout_stk[simp]:
+  well_formed_layout (cx with stk updated_by f) <=> well_formed_layout cx
+Proof
+  simp[well_formed_layout_def]
+QED
+
+Theorem nonreentrant_slot_separated_stk[simp]:
+  nonreentrant_slot_separated (cx with stk updated_by f) <=>
+  nonreentrant_slot_separated cx
+Proof
+  Cases_on `cx.nonreentrant_slot` >>
+  simp[nonreentrant_slot_separated_def]
+QED
+
+Theorem storage_layout_safe_stk[simp]:
+  storage_layout_safe (cx with stk updated_by f) <=> storage_layout_safe cx
+Proof
+  simp[storage_layout_safe_def]
+QED
+
+Theorem storage_layout_safe_push_context:
+  storage_layout_safe cx ==>
+  storage_layout_safe (cx with stk updated_by CONS src_fn)
+Proof
+  simp[]
+QED
+
+Theorem push_function_preserves_storage_layout_safe:
+  storage_layout_safe cx /\
+  push_function src_fn sc cx st = (INL cx',st') ==>
+  storage_layout_safe cx'
+Proof
+  simp[vyperInterpreterTheory.push_function_def,
+       vyperStateTheory.return_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem storage_layout_safe_nonreentrant_slot_separation:
+  storage_layout_safe cx /\
+  cx.nonreentrant_slot = SOME lock /\
+  declared_storage_region cx mid n subs = SOME (T,slot,tv) ==>
+  ranges_disjoint lock 1 (w2n slot) (type_slot_size tv)
+Proof
+  Cases_on `cx.nonreentrant_slot` >>
+  gvs[storage_layout_safe_def, nonreentrant_slot_separated_def] >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
+QED
 
 Theorem contract_storage_well_formed_storage:
   contract_storage_well_formed cx st ==> well_formed_storage cx st
