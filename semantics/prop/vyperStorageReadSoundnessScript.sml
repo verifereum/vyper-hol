@@ -383,4 +383,3 @@ Theorem current_arrayref_resolved_leaf_write_value_typed:
 Proof
   metis_tac[resolve_array_element_leaf_type, vyperTypingTheory.leaf_type_def]
 QED
-val _ = export_theory();

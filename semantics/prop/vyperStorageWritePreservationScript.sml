@@ -3013,4 +3013,3 @@ Proof
   irule update_toplevel_name_preserves_contract_storage_well_formed >>
   simp[]
 QED
-val _ = export_theory();

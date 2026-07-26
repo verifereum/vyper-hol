@@ -1661,4 +1661,3 @@ Proof
   metis_tac[protected_storage_calls_preserve_run_ext_call,
             contract_storage_well_formed_region]
 QED
-val _ = export_theory();

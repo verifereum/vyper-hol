@@ -309,4 +309,3 @@ Proof
        vyperStorageBackendTheory.get_storage_backend_eq] >>
   metis_tac[]
 QED
-val _ = export_theory();
