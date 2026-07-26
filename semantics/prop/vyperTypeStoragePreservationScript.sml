@@ -226,6 +226,139 @@ Proof
   qexists `st` >> simp[] >>
   metis_tac[assign_target_immutable_storage_frame]
 QED
+
+(* A typed zero-width encoding cannot change either storage backend. *)
+Theorem zero_slot_write_storage_frame:
+  value_has_type tv v /\
+  type_slot_size tv = 0 /\
+  write_storage_slot cx b slot tv v st = (res,st') ==>
+  !b'. get_storage cx st' b' = get_storage cx st b'
+Proof
+  rpt strip_tac >>
+  drule (CONJUNCT1 vyperTypingTheory.value_has_type_equiv) >> strip_tac >>
+  Cases_on `encode_value tv v` >> gvs[] >>
+  `x = []` by
+    (Cases_on `x` >> simp[] >>
+     qpat_x_assum `encode_value _ _ = SOME _` mp_tac >>
+     simp[] >> strip_tac >>
+     drule (CONJUNCT1 vyperEncodeDecodeTheory.encode_writes_bounded) >>
+     simp[] >> metis_tac[]) >>
+  gvs[vyperStorageBackendTheory.write_storage_slot_eq,
+      vyperStorageTheory.apply_writes_def] >>
+  Cases_on `b = b'` >> gvs[]
+  >- simp[vyperStorageBackendTheory.get_storage_after_set] >>
+  simp[vyperStorageBackendTheory.get_storage_after_set_other]
+QED
+
+(* Whole-value TopLevelVar writes reach exactly the existing top-level update
+   endpoint; all pre-write errors have the same second projection. *)
+Theorem set_global_preserves_contract_storage_well_formed:
+  contract_storage_well_formed cx st /\
+  storage_layout_safe cx /\
+  storable_value cx src id v /\
+  var_in_storage cx src id /\
+  set_global cx src (string_to_num id) v st = (res,st') ==>
+  contract_storage_well_formed cx st'
+Proof
+  rpt strip_tac >>
+  `st' = update_toplevel_name cx st src id v` by
+    (simp[vyperLookupStorageTheory.update_toplevel_name_def] >>
+     qpat_x_assum `set_global _ _ _ _ _ = _` (fn th => simp[th])) >>
+  gvs[] >>
+  irule vyperStorageWritePreservationTheory.update_toplevel_name_preserves_contract_storage_well_formed >>
+  simp[]
+QED
+
+Theorem storage_var_info_lt_var_in_storage:
+  storage_var_info cx mid n = SOME (b,off,tv) /\
+  well_formed_type_value tv /\
+  off < dimword(:256) ==>
+  var_in_storage cx mid n
+Proof
+  simp[vyperLookupStorageTheory.storage_var_info_def,
+       vyperLookupStorageTheory.var_in_storage_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[]
+QED
+Theorem set_global_typed_result_success:
+  get_module_code cx src = SOME code /\
+  find_var_decl_by_num n code = SOME (StorageVarDecl b typ,id) /\
+  lookup_var_slot_from_layout cx b src id = SOME off /\
+  evaluate_type (get_tenv cx) typ = SOME tv /\
+  value_has_type tv v ==>
+  ?st'. set_global cx src n v st = (INL (),st')
+Proof
+  rpt strip_tac >>
+  drule (CONJUNCT1 vyperTypingTheory.value_has_type_equiv) >> strip_tac >>
+  Cases_on `encode_value tv v` >> gvs[] >>
+  qexists `set_storage cx st b
+    (apply_writes (n2w off) x (get_storage cx st b))` >>
+  simp[Once set_global_def, bind_def, lift_option_type_def, return_def, raise_def,
+       vyperStorageBackendTheory.write_storage_slot_eq, AllCaseEqs()]
+QED
+
+
+Theorem assign_target_toplevel_value_preserves_contract_storage_well_formed:
+  runtime_storage_consistent env cx st /\
+  target_runtime_typed env cx st tgt ty
+    (BaseTargetV (TopLevelVar src id) sbs) /\
+  assign_operation_runtime_typed env ty op /\
+  assign_target_assignable_context cx
+    (BaseTargetV (TopLevelVar src id) sbs) st /\
+  lookup_global cx src (string_to_num id) st = (INL (Value old_v),st) /\
+  assign_target cx (BaseTargetV (TopLevelVar src id) sbs) op st = (res,st') ==>
+  contract_storage_well_formed cx st'
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
+  simp[Once assign_target_def, bind_def, ignore_bind_def, return_def, raise_def,
+       lift_option_def, lift_option_type_def, lift_sum_def, AllCaseEqs()] >>
+  rpt (CASE_TAC >> gvs[return_def, raise_def, bind_def, AllCaseEqs()]) >>
+  rpt strip_tac >>
+  gvs[runtime_storage_consistent_def] >>
+  imp_res_tac assign_result_preserves_state >> gvs[] >>
+  qpat_x_assum `assign_target_assignable_context _ _ _` mp_tac >>
+  simp[assign_target_assignable_context_def, assign_target_assignable_def,
+       AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  PairCases_on `p` >> gvs[] >>
+  Cases_on `lookup_var_slot_from_layout cx v5 src p1` >> gvs[] >>
+  `storage_var_info cx src id = SOME (v5,x'³',x')` by
+    simp[vyperLookupStorageTheory.storage_var_info_def, AllCaseEqs()] >>
+  `well_formed_type_value x'` by
+    metis_tac[vyperTypeValuesTheory.evaluate_type_well_formed_type_value] >>
+  `value_has_type x' old_v` by
+    metis_tac[lookup_global_storage_Value_typed] >>
+  `evaluate_type env.type_defs ty = SOME (leaf_type x' (REVERSE sbs))` by
+    metis_tac[top_level_storage_value_leaf_evaluate_type] >>
+  `value_has_type x' x''` by
+    metis_tac[assign_subscripts_preserves_type_runtime_typed] >>
+  `?sg. set_global cx src (string_to_num id) x'' st = (INL (),sg)` by
+    metis_tac[set_global_typed_result_success] >>
+  gvs[] >>
+  `x'³' + type_slot_size x' <= dimword(:256)` by
+    (qpat_x_assum `storage_layout_safe cx` mp_tac >>
+     simp[storage_layout_safe_def,
+          vyperLookupStorageTheory.well_formed_layout_def] >>
+     metis_tac[]) >>
+  Cases_on `x'³' < dimword(:256)`
+  >- (qpat_x_assum `x'³' < dimword(:256)` mp_tac >> simp[] >> strip_tac >>
+      `var_in_storage cx src id` by
+        (rw[vyperLookupStorageTheory.var_in_storage_def] >> metis_tac[]) >>
+      `storable_value cx src id x''` by
+        simp[vyperLookupStorageTheory.storable_value_def,
+             vyperLookupStorageTheory.storage_type_of_def] >>
+      metis_tac[set_global_preserves_contract_storage_well_formed]) >>
+  `type_slot_size x' = 0` by decide_tac >>
+  `write_storage_slot cx v5 (n2w x'³') x' x'' st = (INL (),s'³')` by
+    (qpat_x_assum `set_global _ _ _ _ _ = _` mp_tac >>
+     simp[Once set_global_def, bind_def, lift_option_type_def, return_def,
+          raise_def, AllCaseEqs()]) >>
+  `!b'. get_storage cx s'³' b' = get_storage cx st b'` by
+    metis_tac[zero_slot_write_storage_frame] >>
+  irule contract_storage_well_formed_storage_frame >>
+  qexists `st` >> simp[]
+QED
+
 (* Storage-aware read adapters carry the combined invariant directly. *)
 Theorem runtime_storage_consistent_declared_region_read_typed:
   runtime_storage_consistent env cx st /\
