@@ -97,7 +97,8 @@
 Theory vyperTypeStoragePreservation
 Ancestors
   vyperTypeStatePreservation vyperHashMapPreservation vyperStorageFrame
-  vyperStorageLayoutSafety vyperStorageReadSoundness
+  vyperStorageLayoutSafety vyperStorageReadSoundness vyperState
+  vyperStorageBackend
 Libs
   wordsLib markerLib
 
@@ -139,6 +140,48 @@ Proof
   simp[runtime_storage_consistent_def]
 QED
 
+
+(* Scope updates are transparent to both protected storage backends. *)
+Theorem set_scopes_storage_frame:
+  set_scopes scopes st = (res,st') ==>
+  !b. get_storage cx st' b = get_storage cx st b
+Proof
+  rw[set_scopes_def, return_def] >>
+  simp[get_storage_scopes]
+QED
+
+Theorem assign_target_scoped_storage_frame:
+  assign_target cx (BaseTargetV (ScopedVar id) sbs) op st = (res,st') ==>
+  !b. get_storage cx st' b = get_storage cx st b
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
+  simp[Once assign_target_def, bind_def, get_scopes_def, return_def,
+       lift_option_def, lift_sum_def, type_check_def, assert_def,
+       ignore_bind_def, set_scopes_def, AllCaseEqs()] >>
+  Cases_on `find_containing_scope (string_to_num id) st.scopes` >>
+  simp[return_def, raise_def] >>
+  PairCases_on `x` >> simp[] >>
+  Cases_on `assign_subscripts x2.type x2.value (REVERSE sbs) op` >>
+  simp[return_def, raise_def] >>
+  Cases_on `x2.assignable` >>
+  simp[return_def, raise_def, bind_def, assert_def, set_scopes_def,
+       AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac assign_result_preserves_state >> gvs[] >>
+  simp[get_storage_scopes]
+QED
+
+Theorem assign_target_scoped_preserves_contract_storage_well_formed:
+  contract_storage_well_formed cx st /\
+  assign_target cx (BaseTargetV (ScopedVar id) sbs) op st = (res,st') ==>
+  contract_storage_well_formed cx st'
+Proof
+  rpt strip_tac >>
+  irule contract_storage_well_formed_storage_frame >>
+  qexists `st` >> simp[] >>
+  metis_tac[assign_target_scoped_storage_frame]
+QED
 (* Storage-aware read adapters carry the combined invariant directly. *)
 Theorem runtime_storage_consistent_declared_region_read_typed:
   runtime_storage_consistent env cx st /\
