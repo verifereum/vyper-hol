@@ -4142,3 +4142,54 @@ Resume eval_all_storage_preservation_mutual[intcall_storage]:
      simp[])) >>
   strip_tac >> gvs[] >> first_assum ACCEPT_TAC
 QED
+
+
+Finalise eval_all_storage_preservation_mutual
+
+Theorem eval_stmt_preserves_contract_storage_well_formed:
+  type_stmt env ret_ty s = SOME env' /\
+  runtime_storage_consistent env cx st /\
+  functions_well_typed cx /\
+  call_evaluation_safe cx (int_calls_stmt s) /\
+  protected_storage_calls_preserve cx /\
+  eval_stmt cx s st = (res,st') ==>
+  contract_storage_well_formed cx st'
+Proof
+  metis_tac[cj 1 eval_all_storage_preservation_mutual]
+QED
+
+Theorem eval_stmts_preserves_contract_storage_well_formed:
+  type_stmts env ret_ty ss = SOME env' /\
+  runtime_storage_consistent env cx st /\
+  functions_well_typed cx /\
+  call_evaluation_safe cx (int_calls_stmts ss) /\
+  protected_storage_calls_preserve cx /\
+  eval_stmts cx ss st = (res,st') ==>
+  contract_storage_well_formed cx st'
+Proof
+  metis_tac[cj 2 eval_all_storage_preservation_mutual]
+QED
+
+Theorem eval_expr_preserves_contract_storage_well_formed:
+  well_typed_expr env e /\
+  runtime_storage_consistent env cx st /\
+  functions_well_typed cx /\
+  call_evaluation_safe cx (int_calls_expr e) /\
+  protected_storage_calls_preserve cx /\
+  eval_expr cx e st = (res,st') ==>
+  contract_storage_well_formed cx st'
+Proof
+  metis_tac[cj 8 eval_all_storage_preservation_mutual]
+QED
+
+Theorem eval_exprs_preserves_contract_storage_well_formed:
+  well_typed_exprs env es /\
+  runtime_storage_consistent env cx st /\
+  functions_well_typed cx /\
+  call_evaluation_safe cx (int_calls_exprs es) /\
+  protected_storage_calls_preserve cx /\
+  eval_exprs cx es st = (res,st') ==>
+  contract_storage_well_formed cx st'
+Proof
+  metis_tac[cj 9 eval_all_storage_preservation_mutual]
+QED
