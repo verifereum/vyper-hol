@@ -73,6 +73,11 @@
  * range interface.  No cryptographic injectivity is inferred.
  *
  * Constructor/call audit:
+ * Internal nonreentrant calls are not storage frames: lock acquire writes 1 and
+ * lock release writes 0 at cx.nonreentrant_slot in the protected caller's
+ * transient storage.  Layout safety must therefore reserve that slot away from
+ * every declared transient region; ordinary IntCall setup/cleanup framing alone
+ * is insufficient.
  * load_contract does not allocate fresh storage.  Constructor entry uses
  * initial_state am_c [env], hence inherits the target account's persistent storage
  * and the machine's transaction-wide transient storage.  Fresh-state introduction
