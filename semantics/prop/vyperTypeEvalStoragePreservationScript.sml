@@ -542,6 +542,7 @@ Proof
 QED
 
 Theorem finally_preserves_state_predicate[local]:
+  !P f g st res st'.
   (!r s. f st = (r,s) ==> P s) /\
   (!s r s'. P s /\ g s = (r,s') ==> P s') /\
   finally f g st = (res,st') ==>
@@ -555,6 +556,52 @@ Proof
   Cases_on `cleanup_res` >>
   gvs[finally_def, ignore_bind_apply, return_def, raise_def] >>
   metis_tac[]
+QED
+
+Theorem default_scope_finally_preserves_contract_storage_well_formed[local]:
+  contract_storage_well_formed cx st /\
+  (!r s.
+     m (st with scopes := [FEMPTY]) = (r,s) ==>
+     contract_storage_well_formed cx s) /\
+  finally (do set_scopes [FEMPTY]; m od) (set_scopes prev) st =
+    (res,st') ==>
+  contract_storage_well_formed cx st'
+Proof
+  rpt strip_tac >>
+  `!r s.
+     (do set_scopes [FEMPTY]; m od) st = (r,s) ==>
+     contract_storage_well_formed cx s` by (
+    rpt strip_tac >>
+    qpat_x_assum `(do set_scopes [FEMPTY]; m od) st = _` mp_tac >>
+    simp[ignore_bind_apply, set_scopes_def, return_def] >>
+    metis_tac[]) >>
+  `!s r s'.
+     contract_storage_well_formed cx s /\
+     set_scopes prev s = (r,s') ==>
+     contract_storage_well_formed cx s'` by (
+    rpt strip_tac >>
+    qpat_x_assum `set_scopes prev _ = _` mp_tac >>
+    simp[set_scopes_def, return_def] >>
+    rpt strip_tac >> gvs[] >>
+    irule contract_storage_well_formed_scopes >> simp[]) >>
+  qspecl_then
+    [`contract_storage_well_formed cx`,
+     `ignore_bind (set_scopes [FEMPTY]) m`, `set_scopes prev`,
+     `st`, `res`, `st'`] mp_tac finally_preserves_state_predicate >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem default_eval_exprs_finally_preserves_contract_storage_well_formed[local]:
+  contract_storage_well_formed cx st /\
+  (!r s.
+     eval_exprs cxd needed (st with scopes := [FEMPTY]) = (r,s) ==>
+     contract_storage_well_formed cx s) /\
+  finally
+    (do set_scopes [FEMPTY]; eval_exprs cxd needed od)
+    (set_scopes prev) st = (res,st') ==>
+  contract_storage_well_formed cx st'
+Proof
+  metis_tac[default_scope_finally_preserves_contract_storage_well_formed]
 QED
 
 Theorem eval_all_storage_preservation_mutual:
