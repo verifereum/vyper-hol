@@ -182,6 +182,50 @@ Proof
   qexists `st` >> simp[] >>
   metis_tac[assign_target_scoped_storage_frame]
 QED
+
+(* Immutable-map updates change neither protected storage backend. *)
+Theorem set_immutable_storage_frame:
+  set_immutable cx src_id n tv v st = (res,st') ==>
+  !b. get_storage cx st' b = get_storage cx st b
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `set_immutable _ _ _ _ _ _ = _` mp_tac >>
+  simp[set_immutable_def, bind_def, get_address_immutables_def,
+       lift_option_type_def, set_address_immutables_def, return_def, raise_def,
+       AllCaseEqs()] >>
+  Cases_on `ALOOKUP st.immutables cx.txn.target` >>
+  gvs[return_def, raise_def] >>
+  rpt strip_tac >> gvs[] >> Cases_on `b` >> simp[get_storage_def]
+QED
+
+Theorem assign_target_immutable_storage_frame:
+  assign_target cx (BaseTargetV (ImmutableVar src_id id) sbs) op st =
+    (res,st') ==>
+  !b. get_storage cx st' b = get_storage cx st b
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
+  simp[Once assign_target_def, bind_def, ignore_bind_def, return_def, raise_def,
+       lift_option_def, lift_option_type_def, lift_sum_def, get_immutables_def,
+       get_address_immutables_def, AllCaseEqs()] >>
+  rpt (CASE_TAC >> gvs[return_def, raise_def, bind_def, AllCaseEqs()]) >>
+  rpt strip_tac >>
+  imp_res_tac set_immutable_storage_frame >>
+  imp_res_tac assign_result_preserves_state >>
+  gvs[]
+QED
+
+Theorem assign_target_immutable_preserves_contract_storage_well_formed:
+  contract_storage_well_formed cx st /\
+  assign_target cx (BaseTargetV (ImmutableVar src_id id) sbs) op st =
+    (res,st') ==>
+  contract_storage_well_formed cx st'
+Proof
+  rpt strip_tac >>
+  irule contract_storage_well_formed_storage_frame >>
+  qexists `st` >> simp[] >>
+  metis_tac[assign_target_immutable_storage_frame]
+QED
 (* Storage-aware read adapters carry the combined invariant directly. *)
 Theorem runtime_storage_consistent_declared_region_read_typed:
   runtime_storage_consistent env cx st /\
