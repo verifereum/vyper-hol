@@ -97,7 +97,7 @@
 Theory vyperTypeStoragePreservation
 Ancestors
   vyperTypeStatePreservation vyperHashMapPreservation vyperStorageFrame
-  vyperStorageLayoutSafety
+  vyperStorageLayoutSafety vyperStorageReadSoundness
 Libs
   wordsLib markerLib
 
@@ -137,6 +137,46 @@ Theorem runtime_storage_consistent_intro:
   runtime_storage_consistent env cx st
 Proof
   simp[runtime_storage_consistent_def]
+QED
+
+(* Storage-aware read adapters carry the combined invariant directly. *)
+Theorem runtime_storage_consistent_declared_region_read_typed:
+  runtime_storage_consistent env cx st /\
+  declared_storage_region cx mid n subs = SOME (b,slot,tv) ==>
+  ?v. read_storage_slot cx b slot tv st = (INL v,st) /\
+      value_has_type tv v
+Proof
+  simp[runtime_storage_consistent_def] >>
+  metis_tac[current_declared_storage_region_read_typed]
+QED
+
+Theorem runtime_storage_consistent_hashmap_leaf_read_typed:
+  runtime_storage_consistent env cx st /\
+  get_module_code cx mid = SOME code /\
+  find_var_decl_by_num (string_to_num n) code =
+    SOME (HashMapVarDecl b kt vt,id) /\
+  lookup_var_slot_from_layout cx b mid id = SOME off /\
+  split_hashmap_subscripts vt rest_subs = SOME (final_type,kts,[]) /\
+  compute_hashmap_slot (n2w off) (kt::kts) (first_sub::rest_subs) =
+    SOME final_slot /\
+  evaluate_type (get_tenv cx) final_type = SOME final_tv ==>
+  ?v. read_storage_slot cx b final_slot final_tv st = (INL v,st) /\
+      value_has_type final_tv v
+Proof
+  simp[runtime_storage_consistent_def] >>
+  metis_tac[current_hashmap_leaf_read_typed]
+QED
+
+Theorem runtime_storage_consistent_declared_leaf_read_hashmap_typed:
+  runtime_storage_consistent env cx st /\
+  declared_storage_region cx mid n [ValueSubscript kv] =
+    SOME (b,hashmap_slot_for root_slot kt kv,tv) /\
+  evaluate_type (get_tenv cx) typ = SOME tv ==>
+  ?v. read_hashmap cx st (HashMapRef b root_slot kt (Type typ)) kv = SOME v /\
+      value_has_type tv v
+Proof
+  simp[runtime_storage_consistent_def] >>
+  metis_tac[current_declared_leaf_read_hashmap_typed]
 QED
 (* Definitions and proofs follow in the invariant components. *)
 

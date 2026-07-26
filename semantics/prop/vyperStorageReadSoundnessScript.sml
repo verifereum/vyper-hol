@@ -121,6 +121,98 @@ Proof
   >- (irule current_storage_non_array_materialise_typed >> simp[])
 QED
 
+(* Successful semantic region resolution always returns an evaluated, hence
+   well-formed, storage type.  This covers ordinary declarations and complete
+   nested-hashmap key paths uniformly. *)
+Theorem resolve_hashmap_leaf_well_formed_type:
+  !tenv root_slot vt subs slot tv.
+    resolve_hashmap_leaf tenv root_slot vt subs = SOME (slot,tv) ==>
+    well_formed_type_value tv
+Proof
+  gen_tac >> qx_gen_tac `root_slot` >> qx_gen_tac `vt` >>
+  qid_spec_tac `root_slot` >> Induct_on `vt` >> Cases_on `subs` >>
+  simp[resolve_hashmap_leaf_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  metis_tac[evaluate_type_well_formed_type_value]
+QED
+
+Theorem declared_storage_region_well_formed_type:
+  declared_storage_region cx mid n subs = SOME (b,slot,tv) ==>
+  well_formed_type_value tv
+Proof
+  simp[declared_storage_region_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  metis_tac[evaluate_type_well_formed_type_value,
+            resolve_hashmap_leaf_well_formed_type]
+QED
+
+(* Current typed read for any semantically declared ordinary or hashmap region. *)
+Theorem current_declared_storage_region_read_typed:
+  contract_storage_well_formed cx st /\
+  declared_storage_region cx mid n subs = SOME (b,slot,tv) ==>
+  ?v. read_storage_slot cx b slot tv st = (INL v,st) /\
+      value_has_type tv v
+Proof
+  rpt strip_tac >>
+  `get_storage_backend cx b st =
+     (INL (get_storage cx st b),st)` by simp[get_storage_backend_eq] >>
+  `slots_in_range (get_storage cx st b) (w2n slot) tv` by
+    metis_tac[contract_storage_well_formed_region] >>
+  `well_formed_type_value tv` by
+    metis_tac[declared_storage_region_well_formed_type] >>
+  `?v. decode_value (get_storage cx st b) (w2n slot) tv = SOME v /\
+       value_has_type tv v` by
+    metis_tac[decode_value_from_slots_in_range] >>
+  qexists_tac `v` >>
+  gvs[read_storage_slot_def, bind_def, lift_option_def, return_def,
+      get_storage_backend_eq]
+QED
+
+(* Assign-target-facing nested hashmap leaf read.  The split/hash/evaluate
+   premises are the interpreter's exact key-path computation, not an opaque
+   key certificate. *)
+Theorem current_hashmap_leaf_read_typed:
+  contract_storage_well_formed cx st /\
+  get_module_code cx mid = SOME code /\
+  find_var_decl_by_num (string_to_num n) code =
+    SOME (HashMapVarDecl b kt vt,id) /\
+  lookup_var_slot_from_layout cx b mid id = SOME off /\
+  split_hashmap_subscripts vt rest_subs = SOME (final_type,kts,[]) /\
+  compute_hashmap_slot (n2w off) (kt::kts) (first_sub::rest_subs) =
+    SOME final_slot /\
+  evaluate_type (get_tenv cx) final_type = SOME final_tv ==>
+  ?v. read_storage_slot cx b final_slot final_tv st = (INL v,st) /\
+      value_has_type final_tv v
+Proof
+  rpt strip_tac >>
+  irule current_declared_storage_region_read_typed >>
+  conj_tac
+  >- (qexistsl [`mid`, `n`, `first_sub::rest_subs`] >>
+      irule declared_hashmap_leaf_agrees_assign_target >> simp[]) >>
+  simp[]
+QED
+
+(* Ref-level leaf-map adapter.  The declared-region equation explicitly ties
+   the reference/key hash slot to the protected contract declaration. *)
+Theorem current_declared_leaf_read_hashmap_typed:
+  contract_storage_well_formed cx st /\
+  declared_storage_region cx mid n [ValueSubscript kv] =
+    SOME (b,hashmap_slot_for root_slot kt kv,tv) /\
+  evaluate_type (get_tenv cx) typ = SOME tv ==>
+  ?v. read_hashmap cx st (HashMapRef b root_slot kt (Type typ)) kv = SOME v /\
+      value_has_type tv v
+Proof
+  rpt strip_tac >>
+  `?v. read_storage_slot cx b (hashmap_slot_for root_slot kt kv) tv st =
+         (INL v,st) /\ value_has_type tv v` by
+    metis_tac[current_declared_storage_region_read_typed] >>
+  Cases_on `decode_value (get_storage cx st b)
+              (w2n (hashmap_slot_for root_slot kt kv)) tv` >>
+  gvs[read_storage_slot_def, bind_def, lift_option_def, return_def, raise_def,
+      get_storage_backend_eq, vyperHashMapTheory.read_hashmap_def,
+      vyperHashMapStorageTheory.hashmap_read_def]
+QED
+
 (* A successful resolver walk stays inside the current encoded root. *)
 Theorem resolve_array_element_current_region:
   !cx b base tv subs st tenv ty slot final_tv rsubs st'.
