@@ -241,7 +241,7 @@ Proof
   rpt strip_tac >> Cases_on `j = i` >> gvs[]
 QED
 
-Theorem evaluate_type_ArrayTV_inv[local]:
+Theorem evaluate_type_ArrayTV_inv:
   evaluate_type tenv ty = SOME (ArrayTV tv bd) ==>
   ?elem_ty.
     ty = ArrayT elem_ty bd /\
