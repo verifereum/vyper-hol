@@ -257,6 +257,51 @@ Proof
   metis_tac[reserved_transient_write_preserves_contract_storage_well_formed]
 QED
 
+Theorem get_storage_stk_scopes[local]:
+  get_storage (cx with stk updated_by f) (st with scopes := scopes) b =
+  get_storage cx st b
+Proof
+  Cases_on `b` >> simp[vyperStorageBackendTheory.get_storage_def]
+QED
+
+Theorem contract_storage_well_formed_stk_scopes[local]:
+  contract_storage_well_formed
+    (cx with stk updated_by f) (st with scopes := scopes) <=>
+  contract_storage_well_formed cx st
+Proof
+  simp[contract_storage_well_formed_def,
+       vyperLookupStorageTheory.well_formed_storage_def,
+       vyperLookupStorageTheory.storage_var_in_range_def,
+       vyperStorageBackendTheory.get_storage_backend_eq,
+       vyperStorageBackendTheory.get_storage_def,
+       get_storage_stk_scopes]
+QED
+
+Theorem push_function_preserves_storage_context:
+  push_function src_fn sc cx st = (INL cx',st') ==>
+  cx'.txn.target = cx.txn.target /\
+  cx'.nonreentrant_slot = cx.nonreentrant_slot /\
+  (storage_layout_safe cx' <=> storage_layout_safe cx) /\
+  (contract_storage_well_formed cx' st' <=>
+   contract_storage_well_formed cx st)
+Proof
+  simp[push_function_def, return_def] >>
+  rpt strip_tac >> gvs[] >>
+  simp[contract_storage_well_formed_stk_scopes]
+QED
+
+Theorem push_function_preserves_runtime_storage_boundaries:
+  storage_layout_safe cx /\
+  contract_storage_well_formed cx st /\
+  push_function src_fn sc cx st = (INL cx',st') ==>
+  storage_layout_safe cx' /\
+  contract_storage_well_formed cx' st' /\
+  cx'.txn.target = cx.txn.target /\
+  cx'.nonreentrant_slot = cx.nonreentrant_slot
+Proof
+  metis_tac[push_function_preserves_storage_context]
+QED
+
 Theorem eval_target_preserves_runtime_consistent[local]:
   well_typed_atarget env tgt ty /\
   runtime_consistent env cx st /\
