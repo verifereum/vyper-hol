@@ -689,6 +689,22 @@ Proof
   metis_tac[]
 QED
 
+(* Public decoder boundary: current in-range slots decode to a current,
+   well-typed value.  Consumers need not unfold the mutually recursive
+   decoder or retain a witness from an earlier state. *)
+Theorem decode_value_from_slots_in_range:
+  well_formed_type_value tv /\
+  slots_in_range storage offset tv ==>
+  ?v. decode_value storage offset tv = SOME v /\
+      value_has_type tv v
+Proof
+  rpt strip_tac >>
+  `?v. decode_value storage offset tv = SOME v` by
+    metis_tac[CONJUNCT1 decode_value_total] >>
+  qexists_tac `v` >> simp[] >>
+  metis_tac[CONJUNCT1 decode_value_storable]
+QED
+
 (* ===== Inverse: storage_var_in_range implies typed lookup succeeds ===== *)
 
 Theorem typed_lookup_from_storage_var_in_range_non_array:
