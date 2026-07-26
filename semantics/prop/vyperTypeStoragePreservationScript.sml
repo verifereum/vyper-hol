@@ -50,8 +50,9 @@
  * Typing sources checked against vyperTypeStatePreservationTheory:
  * - target_runtime_typed_place_leaf_typed and
  *   top_level_storage_value_leaf_evaluate_type identify the declared leaf type;
- * - resolve_array_element_leaf_type_sc (currently local there) proves that array
- *   resolution preserves that leaf; a public boundary version is required here;
+ * - resolve_array_element_leaf_type and
+ *   resolve_array_element_preserves_well_formed_type are the public array
+ *   resolver boundaries; resolve_array_element_region_bounds supplies containment;
  * - target_path_type_HashMapT_split_leaf_runtime supplies the evaluated hashmap
  *   leaf and residual-path type;
  * - assign_subscripts_preserves_type_runtime_typed types reconstructed values;
