@@ -1494,4 +1494,82 @@ Proof
             assign_targets_preserves_contract_storage_well_formed,
             runtime_storage_consistent_def]
 QED
+
+
+(* Constructor entry inherits both storage backends from the abstract machine.
+   These lemmas therefore require the exact semantic freshness condition: every
+   slot read from the target account and target transient backend is zero. *)
+Theorem zero_read_slots_in_range_mutual[local]:
+  (!storage off tv.
+     (!n. read_slot storage n = 0w) ==>
+     slots_in_range storage off tv) /\
+  (!storage off tvs.
+     (!n. read_slot storage n = 0w) ==>
+     tuple_slots_in_range storage off tvs) /\
+  (!storage off tv n.
+     (!m. read_slot storage m = 0w) ==>
+     static_slots_in_range storage off tv n) /\
+  (!storage off tv n.
+     (!m. read_slot storage m = 0w) ==>
+     dyn_slots_in_range storage off tv n) /\
+  (!storage off fields.
+     (!n. read_slot storage n = 0w) ==>
+     struct_slots_in_range storage off fields)
+Proof
+  ho_match_mp_tac vyperLookupStorageTheory.slots_in_range_ind >>
+  rpt conj_tac >> rpt gen_tac >> strip_tac >>
+  PURE_ONCE_REWRITE_TAC[vyperLookupStorageTheory.slots_in_range_def] >>
+  gvs[] >>
+  metis_tac[]
+QED
+
+Theorem zero_read_storage_contract_storage_well_formed:
+  (!b n. read_slot (get_storage cx st b) n = 0w) ==>
+  contract_storage_well_formed cx st
+Proof
+  simp[contract_storage_well_formed_def,
+       vyperLookupStorageTheory.well_formed_storage_def,
+       vyperLookupStorageTheory.storage_var_in_range_def,
+       vyperStorageBackendTheory.get_storage_backend_eq] >>
+  metis_tac[zero_read_slots_in_range_mutual]
+QED
+
+Theorem constructor_entry_contract_storage_well_formed:
+  (!n. read_slot (am.tStorage cx.txn.target) n = 0w) /\
+  (!n. read_slot ((am.accounts cx.txn.target).storage) n = 0w) ==>
+  contract_storage_well_formed cx (initial_state am [scope])
+Proof
+  strip_tac >> irule zero_read_storage_contract_storage_well_formed >>
+  Cases >>
+  gvs[vyperStorageBackendTheory.get_storage_def,
+      vyperInterpreterTheory.initial_state_def]
+QED
+
+Theorem constructor_entry_runtime_storage_consistent:
+  (!n. read_slot (am.tStorage cx.txn.target) n = 0w) /\
+  (!n. read_slot ((am.accounts cx.txn.target).storage) n = 0w) /\
+  storage_layout_safe cx /\
+  runtime_consistent env cx (initial_state am [scope]) ==>
+  runtime_storage_consistent env cx (initial_state am [scope])
+Proof
+  simp[runtime_storage_consistent_def] >>
+  metis_tac[constructor_entry_contract_storage_well_formed]
+QED
+
+Theorem constructor_assign_targets_preserves_runtime_storage_consistent_result:
+  (!n. read_slot (am.tStorage cx.txn.target) n = 0w) /\
+  (!n. read_slot ((am.accounts cx.txn.target).storage) n = 0w) /\
+  storage_layout_safe cx /\
+  runtime_consistent env cx (initial_state am [scope]) /\
+  target_assignment_values_assignable env cx (initial_state am [scope])
+    tgts gvs vs /\
+  EVERY (\gv. assign_target_assignable_context cx gv
+    (initial_state am [scope])) gvs /\
+  assign_targets cx gvs vs (initial_state am [scope]) = (res,st') ==>
+  runtime_storage_consistent env cx st' /\ no_type_error_result res
+Proof
+  metis_tac[constructor_entry_runtime_storage_consistent,
+            assign_targets_preserves_runtime_storage_consistent_result]
+QED
+
 val _ = export_theory();
