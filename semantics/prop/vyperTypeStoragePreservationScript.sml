@@ -905,6 +905,34 @@ Proof
   >- metis_tac[assign_target_ArrayRef_append_ordinary_transition_cases]
   >> metis_tac[assign_target_ArrayRef_pop_ordinary_transition_cases]
 QED
+Theorem assign_target_ArrayRef_ordinary_preserves_contract_storage_well_formed:
+  runtime_storage_consistent env cx st /\
+  lookup_global cx src (string_to_num id) st =
+    (INL (ArrayRef b root_slot root_elem_tv root_bd),st) /\
+  resolve_array_element cx b root_slot (ArrayTV root_elem_tv root_bd)
+    (REVERSE sbs) st = (INL (slot,final_tv,remaining),st) /\
+  evaluate_type env.type_defs ty = SOME (leaf_type final_tv remaining) /\
+  assign_operation_runtime_typed env ty op /\
+  assign_target_assignable_context cx
+    (BaseTargetV (TopLevelVar src id) sbs) st /\
+  ~(?v et n. op = AppendOp v /\ final_tv = ArrayTV et (Dynamic n)) /\
+  ~(?et n. op = PopOp /\ final_tv = ArrayTV et (Dynamic n)) /\
+  assign_target cx (BaseTargetV (TopLevelVar src id) sbs) op st =
+    (res,st') ==>
+  contract_storage_well_formed cx st'
+Proof
+  rpt strip_tac >>
+  imp_res_tac assignable_context_ArrayRef_metadata >>
+  `st' = st \/
+   ?current_v new_v.
+     read_storage_slot cx b slot final_tv st = (INL current_v,st) /\
+     assign_subscripts final_tv current_v remaining op = INL new_v /\
+     write_storage_slot cx b slot final_tv new_v st = (INL (),st')` by
+    metis_tac[assign_target_ArrayRef_ordinary_transition_cases] >>
+  metis_tac[array_ref_ordinary_write_endpoint_preserves_contract_storage_well_formed,
+            runtime_storage_consistent_def]
+QED
+
 
 
 Theorem runtime_storage_consistent_declared_region_read_typed:
