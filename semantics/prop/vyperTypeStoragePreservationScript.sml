@@ -1268,6 +1268,203 @@ Proof
   simp[runtime_storage_consistent_def] >>
   metis_tac[current_declared_leaf_read_hashmap_typed]
 QED
+
+
+Theorem assign_target_preserves_contract_storage_well_formed_mutual:
+  (!cx gv op st res st'.
+    assign_target cx gv op st = (res,st') ==>
+    !env tgt ty.
+      runtime_storage_consistent env cx st /\
+      target_runtime_typed env cx st tgt ty gv /\
+      assignable_type env.type_defs ty /\
+      assign_operation_runtime_typed env ty op /\
+      assign_operation_matches_target_shape gv op /\
+      assign_target_assignable_context cx gv st ==>
+      contract_storage_well_formed cx st') /\
+  (!cx gvs vs st res st'.
+    assign_targets cx gvs vs st = (res,st') ==>
+    !env tgts.
+      runtime_storage_consistent env cx st /\
+      target_assignment_values_assignable env cx st tgts gvs vs /\
+      EVERY (\gv. assign_target_assignable_context cx gv st) gvs ==>
+      contract_storage_well_formed cx st')
+Proof
+  ho_match_mp_tac assign_target_ind >>
+  conj_tac >- suspend "storage_ScopedVar" >>
+  conj_tac >- suspend "storage_TopLevelVar" >>
+  conj_tac >- suspend "storage_ImmutableVar" >>
+  conj_tac >- suspend "storage_TupleTargetV" >>
+  rpt (conj_tac >-
+    (rpt strip_tac >>
+     gvs[Once assign_target_def, raise_def,
+         runtime_storage_consistent_def])) >>
+  conj_tac >-
+    (rpt strip_tac >>
+     gvs[Once assign_target_def, return_def,
+         runtime_storage_consistent_def]) >>
+  conj_tac >- suspend "storage_assign_targets_cons" >>
+  rpt strip_tac >>
+  gvs[Once assign_target_def, raise_def,
+      target_assignment_values_assignable_def, LIST_REL3_def,
+      runtime_storage_consistent_def]
+QED
 (* Definitions and proofs follow in the invariant components. *)
+
+Resume assign_target_preserves_contract_storage_well_formed_mutual[storage_ScopedVar]:
+  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  metis_tac[assign_target_scoped_preserves_contract_storage_well_formed,
+            runtime_storage_consistent_def]
+QED
+
+Resume assign_target_preserves_contract_storage_well_formed_mutual[storage_TopLevelVar]:
+  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  metis_tac[assign_target_TopLevelVar_preserves_contract_storage_well_formed]
+QED
+
+Resume assign_target_preserves_contract_storage_well_formed_mutual[storage_ImmutableVar]:
+  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  metis_tac[assign_target_immutable_preserves_contract_storage_well_formed,
+            runtime_storage_consistent_def]
+QED
+
+Resume assign_target_preserves_contract_storage_well_formed_mutual[storage_TupleTargetV]:
+  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  rename1 `assign_target cx (TupleTargetV gvs)
+    (Replace (ArrayV (TupleV vs))) st = (res,st')` >>
+  gvs[assign_target_assignable_context_def] >>
+  gvs[Once assign_target_def, bind_def, ignore_bind_def, return_def, raise_def,
+      lift_option_def, lift_option_type_def, lift_sum_def, type_check_def,
+      assert_def, check_def, AllCaseEqs(),
+      assign_operation_matches_target_shape_def] >>
+  Cases_on `tgt` >>
+  gvs[vyperTypeExprSoundnessTheory.target_runtime_typed_def,
+      vyperTypeExprSoundnessTheory.target_value_shape_def,
+      vyperTypeSystemTheory.well_typed_atarget_def] >>
+  first_x_assum drule >> simp[] >> strip_tac >>
+  first_x_assum (drule_at Any) >> simp[] >> strip_tac >>
+  qpat_assum `!tgts. target_assignment_values_assignable env cx st
+                 tgts gvs vs ==> _`
+    (qspec_then `l` mp_tac) >>
+  (impl_tac >-
+    (simp[target_assignment_values_assignable_def] >>
+     gvs[vyperTypeExprSoundnessTheory.assign_operation_runtime_typed_def,
+         vyperTypeExprSoundnessTheory.value_runtime_typed_def] >>
+     drule vyperTypeValuesTheory.evaluate_type_TupleT_cases >>
+     strip_tac >> gvs[] >>
+     gvs[vyperTypingTheory.value_has_type_def,
+         vyperTypeDefaultsTheory.values_have_types_LIST_REL] >>
+     irule LIST_REL3_from_LIST_REL2 >> simp[] >>
+     gvs[listTheory.LIST_REL_EL_EQN] >> rw[] >>
+     simp[listTheory.EL_ZIP] >>
+     first_x_assum drule >> strip_tac >>
+     first_x_assum drule >> strip_tac >> gvs[] >>
+     qexists_tac `EL n tys` >>
+     qexists_tac `EL n tvs` >>
+     simp[] >>
+     gvs[target_values_runtime_typed_LIST_REL3] >>
+     drule LIST_REL3_EL >> simp[] >>
+     gvs[vyperTypeSystemTheory.assignable_type_def, listTheory.EVERY_EL] >>
+     first_x_assum drule >> simp[])) >>
+  simp[]
+QED
+
+Theorem assign_target_assignable_context_rebuild_EVERY_storage[local]:
+  !cx st st' gvs.
+    preserves_tv cx st st' ==>
+    MAP FDOM st'.scopes = MAP FDOM st.scopes ==>
+    EVERY (\gv. assign_target_assignable_context cx gv st) gvs ==>
+    EVERY (\gv. assign_target_assignable_context cx gv st') gvs
+Proof
+  rpt strip_tac >> Induct_on `gvs` >> simp[] >>
+  rpt strip_tac >>
+  drule_all assign_target_assignable_context_rebuild >> simp[]
+QED
+
+Resume assign_target_preserves_contract_storage_well_formed_mutual[storage_assign_targets_cons]:
+  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  gvs[target_assignment_values_assignable_def] >>
+  Cases_on `tgts` >> gvs[LIST_REL3_def] >>
+  `target_assignment_values_assignable env cx st t gvs vs` by
+    simp[target_assignment_values_assignable_def] >>
+  Cases_on `assign_target cx gv (Replace v) st` >>
+  Cases_on `q`
+  >- (rename1 `assign_target cx gv (Replace v) st = (INL ar,s1)` >>
+      `runtime_consistent env cx s1` by
+        metis_tac[assign_target_preserves_runtime_consistent_result,
+                  assign_operation_runtime_typed_Replace_from_value_has_type,
+                  assign_operation_matches_target_shape_Replace_from_typed,
+                  runtime_storage_consistent_def] >>
+      `contract_storage_well_formed cx s1` by
+        (qpat_assum `!st res st'. assign_target cx gv (Replace v) st =
+                       (res,st') ==> _`
+           (qspecl_then [`st`, `INL ar`, `s1`] mp_tac) >>
+         simp[] >>
+         disch_then (qspecl_then [`env`, `h`, `ty`] mp_tac) >>
+         metis_tac[assign_operation_runtime_typed_Replace_from_value_has_type,
+                   assign_operation_matches_target_shape_Replace_from_typed]) >>
+      `runtime_storage_consistent env cx s1` by
+        gvs[runtime_storage_consistent_def] >>
+      `target_assignment_values_assignable env cx s1 t gvs vs` by
+        metis_tac[target_assignment_values_assignable_rebuild] >>
+      `preserves_tv cx st s1 /\
+       MAP FDOM s1.scopes = MAP FDOM st.scopes` by
+        metis_tac[vyperEvalPreservesScopesTheory.assign_target_preserves_tv,
+                  vyperScopePreservationTheory.assign_target_preserves_scopes_dom] >>
+      `EVERY (\gv. assign_target_assignable_context cx gv s1) gvs` by
+        metis_tac[assign_target_assignable_context_rebuild_EVERY_storage] >>
+      gvs[Once assign_target_def, bind_def, ignore_bind_def, return_def,
+          raise_def, lift_option_def, lift_option_type_def, lift_sum_def,
+          AllCaseEqs()] >>
+      qpat_x_assum `!a b c. assign_target _ _ _ _ = _ ==> _` kall_tac >>
+      first_x_assum drule >>
+      disch_tac >>
+      pop_assum (qspecl_then [`env`, `t`] mp_tac) >>
+      metis_tac[target_assignment_values_assignable_def]) >>
+  rename1 `assign_target cx gv (Replace v) st = (INR exc,s1)` >>
+  qpat_x_assum `!a b c. assign_targets _ _ _ _ = _ ==> _` kall_tac >>
+  `contract_storage_well_formed cx s1` by
+    (qpat_assum `!st res st'. assign_target cx gv (Replace v) st =
+                    (res,st') ==> _`
+       (qspecl_then [`st`, `INR exc`, `s1`] mp_tac) >>
+     simp[] >>
+     disch_then (qspecl_then [`env`, `h`, `ty`] mp_tac) >>
+     metis_tac[assign_operation_runtime_typed_Replace_from_value_has_type,
+               assign_operation_matches_target_shape_Replace_from_typed]) >>
+  gvs[Once assign_target_def, bind_def, ignore_bind_def, return_def,
+      raise_def, lift_option_def, lift_option_type_def, lift_sum_def,
+      AllCaseEqs()]
+QED
+
+Finalise assign_target_preserves_contract_storage_well_formed_mutual
+
+Theorem assign_target_preserves_contract_storage_well_formed:
+  assign_target cx gv op st = (res,st') /\
+  runtime_storage_consistent env cx st /\
+  target_runtime_typed env cx st tgt ty gv /\
+  assignable_type env.type_defs ty /\
+  assign_operation_runtime_typed env ty op /\
+  assign_operation_matches_target_shape gv op /\
+  assign_target_assignable_context cx gv st ==>
+  contract_storage_well_formed cx st'
+Proof
+  metis_tac[assign_target_preserves_contract_storage_well_formed_mutual]
+QED
+
+Theorem assign_targets_preserves_contract_storage_well_formed:
+  assign_targets cx gvs vs st = (res,st') /\
+  runtime_storage_consistent env cx st /\
+  target_assignment_values_assignable env cx st tgts gvs vs /\
+  EVERY (\gv. assign_target_assignable_context cx gv st) gvs ==>
+  contract_storage_well_formed cx st'
+Proof
+  metis_tac[assign_target_preserves_contract_storage_well_formed_mutual]
+QED
 
 val _ = export_theory();
