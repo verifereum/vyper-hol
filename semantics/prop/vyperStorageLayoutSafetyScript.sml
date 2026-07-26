@@ -148,13 +148,15 @@ Definition contract_storage_well_formed_def:
 End
 
 (* The nonreentrant lock occupies reserved transient metadata rather than a
-   declared Vyper region.  When present, its single slot must be disjoint from
-   every declared transient region. *)
+   declared Vyper region.  Acquire/release address it physically by n2w lock,
+   so its singleton range must not wrap the 256-bit address space as well as
+   being disjoint from every declared transient region. *)
 Definition nonreentrant_slot_separated_def:
   nonreentrant_slot_separated cx <=>
     case cx.nonreentrant_slot of
     | NONE => T
     | SOME lock =>
+        lock + 1 <= dimword(:256) /\
         !mid n subs slot tv.
           declared_storage_region cx mid n subs = SOME (T,slot,tv) ==>
           ranges_disjoint lock 1 (w2n slot) (type_slot_size tv)
@@ -245,6 +247,15 @@ Proof
   gvs[storage_layout_safe_def, nonreentrant_slot_separated_def] >>
   rpt strip_tac >> gvs[] >> metis_tac[]
 QED
+Theorem storage_layout_safe_nonreentrant_slot_nonoverflow:
+  storage_layout_safe cx /\
+  cx.nonreentrant_slot = SOME lock ==>
+  lock + 1 <= dimword(:256)
+Proof
+  Cases_on `cx.nonreentrant_slot` >>
+  gvs[storage_layout_safe_def, nonreentrant_slot_separated_def]
+QED
+
 
 Theorem contract_storage_well_formed_storage:
   contract_storage_well_formed cx st ==> well_formed_storage cx st

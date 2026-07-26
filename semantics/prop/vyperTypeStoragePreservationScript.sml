@@ -75,9 +75,11 @@
  * Constructor/call audit:
  * Internal nonreentrant calls are not storage frames: lock acquire writes 1 and
  * lock release writes 0 at cx.nonreentrant_slot in the protected caller's
- * transient storage.  Layout safety must therefore reserve that slot away from
- * every declared transient region; ordinary IntCall setup/cleanup framing alone
- * is insufficient.
+ * transient storage at the physical key n2w lock.  Layout safety must therefore
+ * require lock + 1 <= dimword(:256) as well as reserve that singleton range away
+ * from every declared transient region: without nonoverflow, n2w can wrap onto a
+ * declared slot despite numeric range separation.  Ordinary IntCall
+ * setup/cleanup framing alone is insufficient.
  * load_contract does not allocate fresh storage.  Constructor entry uses
  * initial_state am_c [env], hence inherits the target account's persistent storage
  * and the machine's transaction-wide transient storage.  Fresh-state introduction
