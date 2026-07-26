@@ -785,6 +785,87 @@ Proof
   gvs[lift_option_type_def, return_def, raise_def]
 QED
 
+Theorem intcall_storage_preservation_from_direct_residuals[local]:
+  !cx loc src_id_opt fn es extra st res st'.
+  contract_storage_well_formed cx st /\
+  storage_layout_safe cx /\
+  (!r s.
+     eval_exprs cx es st = (r,s) ==>
+     contract_storage_well_formed cx s) /\
+  (!cxd needed s r s'.
+     contract_storage_well_formed cx s /\
+     eval_exprs cxd needed (s with scopes := [FEMPTY]) = (r,s') ==>
+     contract_storage_well_formed cx s') /\
+  (!cxf fn_stmts s r s'.
+     contract_storage_well_formed cx s /\
+     eval_stmts cxf fn_stmts s = (r,s') ==>
+     contract_storage_well_formed cx s') /\
+  eval_expr cx (Call loc (IntCall (src_id_opt,fn)) es extra) st = (res,st') ==>
+  contract_storage_well_formed cx st'
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp_tac std_ss [evaluate_def, bind_apply, ignore_bind_apply] >>
+  BasicProvers.TOP_CASE_TAC >>
+  imp_res_tac type_check_state >>
+  imp_res_tac check_state >> BasicProvers.VAR_EQ_TAC >>
+  reverse BasicProvers.TOP_CASE_TAC >- (rw[] >> rw[]) >>
+  BasicProvers.TOP_CASE_TAC >>
+  imp_res_tac lift_option_type_state >> BasicProvers.VAR_EQ_TAC >>
+  reverse BasicProvers.TOP_CASE_TAC >- (rw[] >> rw[]) >>
+  BasicProvers.TOP_CASE_TAC >>
+  imp_res_tac lift_option_type_state >> BasicProvers.VAR_EQ_TAC >>
+  reverse BasicProvers.TOP_CASE_TAC >- (rw[] >> rw[]) >>
+  BasicProvers.LET_ELIM_TAC >> BasicProvers.VAR_EQ_TAC >>
+  qpat_x_assum `_ = (_ ,_)` mp_tac >>
+  simp_tac std_ss [ignore_bind_apply] >>
+  BasicProvers.TOP_CASE_TAC >>
+  imp_res_tac type_check_state >> BasicProvers.VAR_EQ_TAC >>
+  reverse BasicProvers.TOP_CASE_TAC >- (rw[] >> rw[]) >>
+  simp_tac std_ss [bind_apply] >>
+  BasicProvers.TOP_CASE_TAC >>
+  rename1 `eval_exprs cx es r = (actual_res,args_st)` >>
+  `contract_storage_well_formed cx args_st` by metis_tac[] >>
+  reverse (Cases_on `actual_res`) >- (rpt strip_tac >> gvs[]) >>
+  rename1 `eval_exprs cx es r = (INL vs,args_st)` >>
+  gvs[] >>
+  strip_tac >>
+  qpat_x_assum `_ = (res,st')` mp_tac >>
+  simp_tac std_ss [bind_apply, get_scopes_def, return_def] >>
+  BasicProvers.TOP_CASE_TAC >>
+  gvs[] >>
+  Cases_on
+    `finally
+       (do
+          set_scopes [FEMPTY];
+          eval_exprs (cx with stk updated_by CONS (src_id_opt,fn))
+            (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
+        od)
+       (set_scopes args_st.scopes) args_st` >>
+  rename1 `_ = (default_res,default_st)` >>
+  `contract_storage_well_formed cx default_st` by (
+    drule_at
+      (Pat `contract_storage_well_formed cx args_st`)
+      default_eval_exprs_finally_preserves_contract_storage_well_formed >>
+    simp[] >> strip_tac >>
+    first_x_assum (qspecl_then
+      [`default_st`, `default_res`, `args_st.scopes`,
+       `DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts`,
+       `cx with stk updated_by CONS (src_id_opt,fn)`] mp_tac) >>
+    simp[] >> metis_tac[]) >>
+  reverse (Cases_on `default_res`) >- (rpt strip_tac >> gvs[]) >>
+  rename1 `_ = (INL dflt_vs,default_st)` >>
+  gvs[] >> strip_tac >>
+  qspecl_then
+    [`cx`, `src_id_opt`, `fn`, `args`, `vs`, `dflt_vs`, `ret`, `mut`,
+     `nr`, `body'`, `args_st.scopes`, `default_st`, `res`, `st'`]
+    mp_tac intcall_post_defaults_preserves_contract_storage_well_formed >>
+  simp[] >> disch_then irule >>
+  conj_tac >- metis_tac[] >>
+  qpat_x_assum `(case _ of _ => _) = (res,st')` mp_tac >>
+  simp[bind_apply]
+QED
+
 Theorem eval_all_storage_preservation_mutual:
   (!cx s. !env ret_ty env' st res st'.
     type_stmt env ret_ty s = SOME env' /\
