@@ -622,6 +622,32 @@ Proof
   Cases_on `y` >>
   gvs[handle_function_def, return_def, raise_def]
 QED
+
+Theorem intcall_cleanup_preserves_contract_storage_well_formed[local]:
+  !cx prev nr is_view st res st'.
+  contract_storage_well_formed cx st /\
+  storage_layout_safe cx /\
+  (do
+     pop_function prev;
+     if nr /\ ~is_view then
+       case cx.nonreentrant_slot of
+         NONE => return ()
+       | SOME slot => release_nonreentrant_lock cx.txn.target slot
+     else return ()
+   od) st = (res,st') ==>
+  contract_storage_well_formed cx st'
+Proof
+  rpt strip_tac >>
+  Cases_on `nr /\ ~is_view` >>
+  gvs[pop_function_def, ignore_bind_apply, set_scopes_def, return_def]
+  >- (Cases_on `cx.nonreentrant_slot` >> gvs[return_def]
+      >- (irule contract_storage_well_formed_scopes >> simp[]) >>
+      `contract_storage_well_formed cx (st with scopes := prev)` by
+        metis_tac[contract_storage_well_formed_scopes] >>
+      metis_tac[
+        release_nonreentrant_lock_preserves_contract_storage_well_formed]) >>
+  irule contract_storage_well_formed_scopes >> simp[]
+QED
 Theorem eval_all_storage_preservation_mutual:
   (!cx s. !env ret_ty env' st res st'.
     type_stmt env ret_ty s = SOME env' /\
