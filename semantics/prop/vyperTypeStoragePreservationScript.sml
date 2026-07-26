@@ -1467,4 +1467,31 @@ Proof
   metis_tac[assign_target_preserves_contract_storage_well_formed_mutual]
 QED
 
+
+Theorem assign_target_preserves_runtime_storage_consistent_result:
+  runtime_storage_consistent env cx st /\
+  target_runtime_typed env cx st tgt ty gv /\
+  assignable_type env.type_defs ty /\
+  assign_operation_runtime_typed env ty op /\
+  assign_operation_matches_target_shape gv op /\
+  assign_target_assignable_context cx gv st /\
+  assign_target cx gv op st = (res,st') ==>
+  runtime_storage_consistent env cx st' /\ no_type_error_result res
+Proof
+  metis_tac[assign_target_sound_mutual,
+            assign_target_preserves_contract_storage_well_formed,
+            runtime_storage_consistent_def]
+QED
+
+Theorem assign_targets_preserves_runtime_storage_consistent_result:
+  runtime_storage_consistent env cx st /\
+  target_assignment_values_assignable env cx st tgts gvs vs /\
+  EVERY (\gv. assign_target_assignable_context cx gv st) gvs /\
+  assign_targets cx gvs vs st = (res,st') ==>
+  runtime_storage_consistent env cx st' /\ no_type_error_result res
+Proof
+  metis_tac[assign_target_sound_mutual,
+            assign_targets_preserves_contract_storage_well_formed,
+            runtime_storage_consistent_def]
+QED
 val _ = export_theory();
