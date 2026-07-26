@@ -914,4 +914,116 @@ Proof
   simp[]
 QED
 
+
+(* Whole-variable replacement is the corresponding successful typed primitive
+   write.  This consumer-shaped form keeps monadic unfolding out of the
+   contract-level framing proof below. *)
+Theorem update_toplevel_name_typed_write[local]:
+  storage_var_info cx mid n = SOME (b,off,tv) /\
+  value_has_type tv v ==>
+  write_storage_slot cx b (n2w off) tv v st =
+    (INL (),update_toplevel_name cx st mid n v)
+Proof
+  rpt strip_tac >>
+  drule vyperStorageFrameTheory.update_toplevel_name_eq_write >>
+  disch_then (qspecl_then [`st`, `v`] assume_tac) >>
+  drule (CONJUNCT1 vyperTypingTheory.value_has_type_equiv) >> strip_tac >>
+  Cases_on `encode_value tv v` >>
+  gvs[vyperStorageBackendTheory.write_storage_slot_eq]
+QED
+
+(* Whole top-level replacement preserves both ordinary declared ranges and all
+   semantically declared hashmap leaves.  The latter are framed by the exact
+   semantic-region separation conjunct of storage_layout_safe. *)
+Theorem update_toplevel_name_preserves_contract_storage_well_formed:
+  contract_storage_well_formed cx st /\
+  storage_layout_safe cx /\
+  storable_value cx mid n v /\
+  var_in_storage cx mid n ==>
+  contract_storage_well_formed cx (update_toplevel_name cx st mid n v)
+Proof
+  rpt strip_tac >>
+  `well_formed_storage cx (update_toplevel_name cx st mid n v)` by
+    (irule update_toplevel_name_preserves_well_formed_storage >>
+     simp[contract_storage_well_formed_storage,
+          storage_layout_safe_layout]) >>
+  simp[contract_storage_well_formed_def] >>
+  rpt gen_tac >> strip_tac >>
+  gvs[vyperStorageBackendTheory.get_storage_backend_eq] >>
+  drule var_in_storage_storage_var_info >> strip_tac >>
+  rename1 `storage_var_info cx mid n = SOME (b1,off1,tv1)` >>
+  `value_has_type tv1 v` by
+    (qpat_x_assum `storable_value cx mid n v` mp_tac >>
+     simp[storable_value_def, storage_type_of_def]) >>
+  `declared_storage_region cx mid n [] = SOME (b1,n2w off1,tv1)` by
+    (irule declared_storage_region_ordinary >> simp[]) >>
+  `write_storage_slot cx b1 (n2w off1) tv1 v st =
+     (INL (),update_toplevel_name cx st mid n v)` by
+    (irule update_toplevel_name_typed_write >> simp[]) >>
+  `slots_in_range (get_storage cx st b) (w2n slot) tv` by
+    (qpat_x_assum `contract_storage_well_formed cx st` mp_tac >>
+     simp[contract_storage_well_formed_def,
+          vyperStorageBackendTheory.get_storage_backend_eq] >>
+     metis_tac[]) >>
+  Cases_on `(mid,n,[]) = (mid',n',subs)`
+  >- (gvs[] >>
+      drule_at (Pat `write_storage_slot`)
+        typed_write_storage_slot_establishes_region_forward >>
+      simp[]) >>
+  `b1 <> b \/
+   ranges_disjoint (w2n (n2w off1 : bytes32)) (type_slot_size tv1)
+                   (w2n slot) (type_slot_size tv)` by
+    (Cases_on `b1 = b` >> gvs[] >>
+     qpat_x_assum `storage_layout_safe cx` mp_tac >>
+     simp[storage_layout_safe_def] >> strip_tac >>
+     qpat_x_assum
+       `!mid1 n1 subs1 mid2 n2 subs2 b slot1 tv1 slot2 tv2. _`
+       (qspecl_then [`mid`, `n`, `[]`, `mid'`, `n'`, `subs`, `b`,
+                    `n2w off1`, `tv1`, `slot`, `tv`] mp_tac) >>
+     strip_tac >> gvs[]) >>
+  drule_at (Pat `slots_in_range`)
+    typed_write_storage_slot_preserves_disjoint_num_region >>
+  disch_then
+    (qspecl_then [`v`, `tv1`, `update_toplevel_name cx st mid n v`,
+                  `n2w off1`, `b1`] mp_tac) >>
+  (impl_tac >- simp[wordsTheory.w2n_lt]) >> simp[]
+QED
+
+
+(* Explicit two-write closure for sequential whole-variable replacement.  The
+   second premise is checked in the state produced by the first write; no
+   atomicity or abstract preservation relation is assumed. *)
+Theorem update_toplevel_name_twice_preserves_contract_storage_well_formed:
+  contract_storage_well_formed cx st /\
+  storage_layout_safe cx /\
+  storable_value cx mid1 n1 v1 /\ var_in_storage cx mid1 n1 /\
+  storable_value cx mid2 n2 v2 /\ var_in_storage cx mid2 n2 ==>
+  contract_storage_well_formed cx
+    (update_toplevel_name cx
+       (update_toplevel_name cx st mid1 n1 v1) mid2 n2 v2)
+Proof
+  rpt strip_tac >>
+  irule update_toplevel_name_preserves_contract_storage_well_formed >>
+  simp[] >>
+  irule update_toplevel_name_preserves_contract_storage_well_formed >>
+  simp[]
+QED
+
+(* Consumer-shaped cons rule: after the explicit head replacement establishes
+   the invariant, any already-proved tail preservation implication composes
+   without hiding the tail operation behind a new predicate. *)
+Theorem update_toplevel_name_contract_storage_cons:
+  contract_storage_well_formed cx st /\
+  storage_layout_safe cx /\
+  storable_value cx mid n v /\
+  var_in_storage cx mid n /\
+  (contract_storage_well_formed cx
+     (update_toplevel_name cx st mid n v) ==>
+   contract_storage_well_formed cx st') ==>
+  contract_storage_well_formed cx st'
+Proof
+  rpt strip_tac >> first_x_assum irule >>
+  irule update_toplevel_name_preserves_contract_storage_well_formed >>
+  simp[]
+QED
 val _ = export_theory();
