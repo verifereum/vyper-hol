@@ -578,6 +578,34 @@ Proof
   drule lookup_global_ArrayRef_not_HashMapVarDecl >>
   disch_then drule >> disch_then drule >> simp[]
 QED
+
+Theorem assignable_context_HashMapRef_metadata:
+  assign_target_assignable_context cx
+    (BaseTargetV (TopLevelVar src id) sbs) st /\
+  lookup_global cx src (string_to_num id) st =
+    (INL (HashMapRef b root_slot kt vt),st) ==>
+  ?code decl_id off.
+    get_module_code cx src = SOME code /\
+    find_var_decl_by_num (string_to_num id) code =
+      SOME (HashMapVarDecl b kt vt,decl_id) /\
+    lookup_var_slot_from_layout cx b src decl_id = SOME off /\
+    root_slot = n2w off
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `assign_target_assignable_context _ _ _` mp_tac >>
+  simp[assign_target_assignable_context_def, assign_target_assignable_def,
+       AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  PairCases_on `p` >> gvs[] >>
+  Cases_on `p0` >> gvs[]
+  >- (drule lookup_global_HashMapRef_not_StorageVarDecl >>
+      disch_then drule >> disch_then drule >> simp[]) >>
+  qpat_x_assum `lookup_global _ _ _ _ = _` mp_tac >>
+  simp[lookup_global_def, bind_def, lift_option_type_def, return_def,
+       raise_def, AllCaseEqs()] >>
+  rpt (CASE_TAC >> gvs[return_def, raise_def, bind_def, AllCaseEqs()]) >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
+QED
 Theorem assign_target_ArrayRef_dynamic_append_preserves_contract_storage_well_formed:
   runtime_storage_consistent env cx st /\
   lookup_global cx src (string_to_num id) st =
@@ -991,6 +1019,165 @@ QED
 
 
 
+Theorem split_hashmap_subscripts_consumed_prefix[local]:
+  !vt subs final_type kts remaining.
+    split_hashmap_subscripts vt subs = SOME (final_type,kts,remaining) ==>
+    split_hashmap_subscripts vt
+      (TAKE (LENGTH subs - LENGTH remaining) subs) =
+      SOME (final_type,kts,[])
+Proof
+  Induct_on `vt`
+  >- simp[split_hashmap_subscripts_def] >>
+  Cases_on `subs` >> simp[split_hashmap_subscripts_def] >>
+  rpt gen_tac >>
+  Cases_on `split_hashmap_subscripts vt t` >> simp[] >>
+  PairCases_on `x` >> simp[] >> strip_tac >> gvs[] >>
+  drule split_hashmap_subscripts_some_imp >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  `LENGTH t - LENGTH remaining = LENGTH x1` by decide_tac >>
+  `SUC (LENGTH t) - (LENGTH remaining + 1) = LENGTH x1` by decide_tac >>
+  `TAKE (SUC (LENGTH t) - (LENGTH remaining + 1)) t =
+   TAKE (LENGTH x1) t` by simp[] >>
+  gvs[split_hashmap_subscripts_def]
+QED
+
+Theorem assign_target_HashMapRef_transition_cases:
+  lookup_global cx src (string_to_num id) st =
+    (INL (HashMapRef b root_slot kt vt),st) /\
+  REVERSE sbs = first_sub :: rest_subs /\
+  split_hashmap_subscripts vt rest_subs =
+    SOME (final_type,kts,remaining) /\
+  compute_hashmap_slot root_slot (kt::kts)
+    (first_sub :: TAKE (LENGTH rest_subs - LENGTH remaining) rest_subs) =
+    SOME final_slot /\
+  evaluate_type (get_tenv cx) final_type = SOME final_tv /\
+  assign_target cx (BaseTargetV (TopLevelVar src id) sbs) op st =
+    (res,st') ==>
+  st' = st \/
+  ?current_v new_v.
+    read_storage_slot cx b final_slot final_tv st = (INL current_v,st) /\
+    assign_subscripts final_tv current_v remaining op = INL new_v /\
+    write_storage_slot cx b final_slot final_tv new_v st = (INL (),st')
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
+  simp[Once assign_target_def, bind_def, ignore_bind_def, return_def, raise_def,
+       lift_option_def, lift_option_type_def, type_check_def,
+       assert_def, check_def, pairTheory.PAIR, AllCaseEqs()] >>
+  rpt (CASE_TAC >> gvs[return_def, raise_def, bind_def, type_check_def,
+                       assert_def, check_def, AllCaseEqs()]) >>
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac vyperStatePreservationTheory.read_storage_slot_state >> gvs[] >>
+  imp_res_tac vyperStatePreservationTheory.lift_sum_state >> gvs[] >>
+  imp_res_tac assign_result_preserves_state >> gvs[] >>
+  imp_res_tac write_storage_slot_error_state >> gvs[] >>
+  qpat_x_assum `lift_sum _ _ = (INL _,_)` mp_tac >>
+  simp[lift_sum_def, return_def, raise_def, AllCaseEqs()] >>
+  CASE_TAC >> simp[return_def, raise_def] >> strip_tac >> gvs[] >>
+  metis_tac[]
+QED
+
+
+Theorem target_runtime_typed_HashMapRef_path[local]:
+  runtime_consistent env cx st /\
+  target_runtime_typed env cx st tgt ty
+    (BaseTargetV (TopLevelVar src id) sbs) /\
+  get_module_code cx src = SOME code /\
+  find_var_decl_by_num (string_to_num id) code =
+    SOME (HashMapVarDecl b kt vt,decl_id) ==>
+  well_formed_vtype env.type_defs (HashMapT kt vt) /\
+  target_path_type env (HashMapT kt vt) sbs (Type ty)
+Proof
+  rpt strip_tac >>
+  Cases_on `tgt` >>
+  gvs[vyperTypeExprSoundnessTheory.target_runtime_typed_def,
+      vyperTypeExprSoundnessTheory.location_runtime_typed_def] >>
+  `vt' = HashMapT kt vt` by
+    (Cases_on `vt'`
+     >- (metis_tac[top_level_Type_not_hashmap_decl])
+     >- (drule_all top_level_HashMap_decl >> strip_tac >>
+         gvs[optionTheory.SOME_11, pairTheory.PAIR_EQ, var_decl_info_11])) >>
+  gvs[] >>
+  metis_tac[top_level_vtype_well_formed]
+QED
+
+Theorem assign_target_HashMapRef_preserves_contract_storage_well_formed:
+  runtime_storage_consistent env cx st /\
+  target_runtime_typed env cx st tgt ty
+    (BaseTargetV (TopLevelVar src id) sbs) /\
+  assignable_type env.type_defs ty /\
+  assign_operation_runtime_typed env ty op /\
+  assign_target_assignable_context cx
+    (BaseTargetV (TopLevelVar src id) sbs) st /\
+  lookup_global cx src (string_to_num id) st =
+    (INL (HashMapRef b root_slot kt vt),st) /\
+  assign_target cx (BaseTargetV (TopLevelVar src id) sbs) op st =
+    (res,st') ==>
+  contract_storage_well_formed cx st'
+Proof
+  rpt strip_tac >>
+  imp_res_tac assignable_context_HashMapRef_metadata >>
+  `runtime_consistent env cx st` by
+    gvs[runtime_storage_consistent_def] >>
+  `env.type_defs = get_tenv cx` by
+    fs[vyperTypeExprSoundnessTheory.runtime_consistent_def,
+       vyperTypeInvariantsTheory.env_consistent_def,
+       vyperTypeInvariantsTheory.env_context_consistent_def] >>
+  `well_formed_vtype env.type_defs (HashMapT kt vt) /\
+   target_path_type env (HashMapT kt vt) sbs (Type ty)` by
+    metis_tac[target_runtime_typed_HashMapRef_path] >>
+  `well_formed_vtype (get_tenv cx) (HashMapT kt vt)` by metis_tac[] >>
+  drule_all target_path_type_HashMapT_assign_target_decomp >> strip_tac >>
+  qpat_x_assum `first_sub = LAST sbs` SUBST_ALL_TAC >>
+  qpat_x_assum `rest_subs = TL (REVERSE sbs)` SUBST_ALL_TAC >>
+  `split_hashmap_subscripts vt
+      (TAKE (LENGTH (TL (REVERSE sbs)) - LENGTH remaining)
+            (TL (REVERSE sbs))) =
+    SOME (final_type,kts,[])` by
+    metis_tac[split_hashmap_subscripts_consumed_prefix] >>
+  `assignable_type (get_tenv cx) ty` by metis_tac[] >>
+  qspecl_then [`env`, `cx`, `st`, `kt`, `vt`, `sbs`, `ty`,
+               `TL (REVERSE sbs)`, `final_type`, `kts`, `remaining`]
+    mp_tac target_path_type_HashMapT_split_leaf_runtime >>
+  impl_tac >- first_assum ACCEPT_TAC >>
+  impl_tac >- first_assum ACCEPT_TAC >>
+  impl_tac >- first_assum ACCEPT_TAC >>
+  impl_tac >- simp[] >>
+  impl_tac >- first_assum ACCEPT_TAC >>
+  impl_tac >- first_assum ACCEPT_TAC >>
+  strip_tac >>
+  `compute_hashmap_slot root_slot (kt::kts)
+      (LAST sbs :: TAKE (LENGTH (TL (REVERSE sbs)) - LENGTH remaining)
+                         (TL (REVERSE sbs))) <> NONE` by
+    metis_tac[compute_hashmap_slot_prefix_some] >>
+  (Cases_on `compute_hashmap_slot root_slot (kt::kts)
+     (LAST sbs :: TAKE (LENGTH (TL (REVERSE sbs)) - LENGTH remaining)
+                        (TL (REVERSE sbs)))`
+   >- (gvs[])) >>
+  rename1 `compute_hashmap_slot root_slot (kt::kts) _ = SOME final_slot` >>
+  `st' = st \/
+   ?current_v new_v.
+     read_storage_slot cx b final_slot final_tv st = (INL current_v,st) /\
+     assign_subscripts final_tv current_v remaining op = INL new_v /\
+     write_storage_slot cx b final_slot final_tv new_v st = (INL (),st')` by
+    (irule assign_target_HashMapRef_transition_cases >>
+     qexistsl [`final_type`, `LAST sbs`, `id`, `kt`, `kts`, `res`,
+               `TL (REVERSE sbs)`, `root_slot`, `sbs`, `src`, `vt`] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  pop_assum strip_assume_tac
+  >- (gvs[runtime_storage_consistent_def]) >>
+  `value_has_type final_tv current_v` by
+    metis_tac[read_storage_slot_success_type] >>
+  `value_has_type final_tv new_v` by
+    metis_tac[assign_subscripts_preserves_type_runtime_typed] >>
+  irule vyperStorageWritePreservationTheory.hashmapref_leaf_write_preserves_contract_storage_well_formed >>
+  conj_tac >- gvs[runtime_storage_consistent_def] >>
+  qexistsl [`b`, `code`, `final_slot`, `final_tv`, `final_type`, `LAST sbs`,
+            `decl_id`, `kt`, `kts`, `src`, `id`, `off`,
+            `TAKE (LENGTH sbs - (LENGTH remaining + 1)) (TL (REVERSE sbs))`,
+            `st`, `new_v`, `vt`] >>
+  gvs[runtime_storage_consistent_def]
+QED
 Theorem runtime_storage_consistent_declared_region_read_typed:
   runtime_storage_consistent env cx st /\
   declared_storage_region cx mid n subs = SOME (b,slot,tv) ==>
