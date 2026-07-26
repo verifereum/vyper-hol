@@ -1017,13 +1017,13 @@ Proof
 QED
 
 Theorem resolve_array_element_typed_write_preserves_root_core[local]:
-  !cx b base tv subs st slot final_tv st_res v st'.
+  !cx b base tv subs st slot final_tv remaining st_res v st'.
     resolver_array_children_positive tv subs /\
     well_formed_type_value tv /\
     w2n (base:bytes32) + type_slot_size tv <= dimword(:256) /\
     slots_in_range (get_storage cx st b) (w2n base) tv /\
     resolve_array_element cx b base tv subs st =
-      (INL (slot, final_tv, []), st_res) /\
+      (INL (slot, final_tv, remaining), st_res) /\
     value_has_type final_tv v /\
     write_storage_slot cx b slot final_tv v st_res = (INL (), st') ==>
     slots_in_range (get_storage cx st' b) (w2n base) tv
@@ -1055,9 +1055,9 @@ Proof
         (w2n base' + Num idx * type_slot_size tv) tv` by
        (irule static_slots_in_range_index >> qexists `n` >>
         gvs[slots_in_range_def]) >>
-     qpat_assum `!elem_offset st slot' final_tv' st_res' v' st''. _`
+     qpat_assum `!elem_offset st slot' final_tv' remaining' st_res' v' st''. _`
        (qspecl_then
-          [`0`, `s''`, `slot`, `final_tv`, `s''`, `v`, `st'`] mp_tac) >>
+          [`0`, `s''`, `slot`, `final_tv`, `remaining`, `s''`, `v`, `st'`] mp_tac) >>
      simp[] >> strip_tac >>
      drule resolve_array_element_region_bounds_positive >>
      disch_then drule >> disch_then drule >> disch_then drule >> strip_tac >>
@@ -1103,9 +1103,9 @@ Proof
         base' + n2w (Num idx * type_slot_size tv + 1)`
        (fn th => once_rewrite_tac [GSYM th]) >>
      strip_tac >>
-     qpat_assum `!elem_offset st slot' final_tv' st_res' v' st''. _`
+     qpat_assum `!elem_offset st slot' final_tv' remaining' st_res' v' st''. _`
        (qspecl_then
-          [`1`, `s''`, `slot`, `final_tv`, `s''`, `v`, `st'`] mp_tac) >>
+          [`1`, `s''`, `slot`, `final_tv`, `remaining`, `s''`, `v`, `st'`] mp_tac) >>
      simp[] >> strip_tac >>
      drule resolve_array_element_region_bounds_positive >>
      disch_then drule >> disch_then drule >> disch_then drule >> strip_tac >>
@@ -1124,13 +1124,13 @@ QED
 
 
 Theorem resolve_array_element_contained_write_preserves_root_core[local]:
-  !cx b base tv subs st slot final_tv st_res wr_slot wr_tv wr_v st'.
+  !cx b base tv subs st slot final_tv remaining st_res wr_slot wr_tv wr_v st'.
     resolver_array_children_positive tv subs /\
     well_formed_type_value tv /\
     w2n (base:bytes32) + type_slot_size tv <= dimword(:256) /\
     slots_in_range (get_storage cx st b) (w2n base) tv /\
     resolve_array_element cx b base tv subs st =
-      (INL (slot, final_tv, []), st_res) /\
+      (INL (slot, final_tv, remaining), st_res) /\
     value_has_type wr_tv wr_v /\
     write_storage_slot cx b wr_slot wr_tv wr_v st_res = (INL (), st') /\
     w2n slot <= w2n wr_slot /\
@@ -1167,9 +1167,9 @@ Proof
        (irule static_slots_in_range_index >> qexists `n` >>
         gvs[slots_in_range_def]) >>
      qpat_assum
-       `!elem_offset st slot' final_tv' st_res' wr_slot' wr_tv' wr_v' st''. _`
+       `!elem_offset st slot' final_tv' remaining' st_res' wr_slot' wr_tv' wr_v' st''. _`
        (qspecl_then
-          [`0`, `s''`, `slot`, `final_tv`, `s''`, `wr_slot`, `wr_tv`,
+          [`0`, `s''`, `slot`, `final_tv`, `remaining`, `s''`, `wr_slot`, `wr_tv`,
            `wr_v`, `st'`] mp_tac) >>
      simp[] >> strip_tac >>
      drule resolve_array_element_region_bounds_positive >>
@@ -1220,9 +1220,9 @@ Proof
        (fn th => once_rewrite_tac [GSYM th]) >>
      strip_tac >>
      qpat_assum
-       `!elem_offset st slot' final_tv' st_res' wr_slot' wr_tv' wr_v' st''. _`
+       `!elem_offset st slot' final_tv' remaining' st_res' wr_slot' wr_tv' wr_v' st''. _`
        (qspecl_then
-          [`1`, `s''`, `slot`, `final_tv`, `s''`, `wr_slot`, `wr_tv`,
+          [`1`, `s''`, `slot`, `final_tv`, `remaining`, `s''`, `wr_slot`, `wr_tv`,
            `wr_v`, `st'`] mp_tac) >>
      simp[] >> strip_tac >>
      drule resolve_array_element_region_bounds_positive >>
@@ -1264,8 +1264,35 @@ Proof
   strip_tac >>
   irule resolve_array_element_contained_write_preserves_root_core >>
   simp[] >>
-  qexistsl [`final_tv`, `slot`, `st`, `st_res`, `subs`, `wr_slot`, `wr_tv`,
+  qexistsl [`final_tv`, `[]`, `slot`, `st`, `st_res`, `subs`, `wr_slot`, `wr_tv`,
              `wr_v`] >>
+  simp[]
+QED
+
+Theorem resolve_array_element_contained_write_preserves_root_residual:
+  !cx b base tv subs st slot final_tv remaining st_res
+   wr_slot wr_tv wr_v st' tenv ty.
+    evaluate_type tenv ty = SOME tv /\
+    well_formed_type_value tv /\
+    w2n (base:bytes32) + type_slot_size tv <= dimword(:256) /\
+    slots_in_range (get_storage cx st b) (w2n base) tv /\
+    resolve_array_element cx b base tv subs st =
+      (INL (slot, final_tv, remaining), st_res) /\
+    value_has_type wr_tv wr_v /\
+    write_storage_slot cx b wr_slot wr_tv wr_v st_res = (INL (), st') /\
+    w2n slot <= w2n wr_slot /\
+    w2n wr_slot + type_slot_size wr_tv <=
+      w2n slot + type_slot_size final_tv /\
+    slots_in_range (get_storage cx st' b) (w2n slot) final_tv ==>
+    slots_in_range (get_storage cx st' b) (w2n base) tv
+Proof
+  rpt strip_tac >>
+  qspec_then `subs` drule evaluate_type_resolver_array_children_positive >>
+  strip_tac >>
+  irule resolve_array_element_contained_write_preserves_root_core >>
+  simp[] >>
+  qexistsl [`final_tv`, `remaining`, `slot`, `st`, `st_res`, `subs`,
+             `wr_slot`, `wr_tv`, `wr_v`] >>
   simp[]
 QED
 
@@ -1457,6 +1484,31 @@ Theorem resolve_array_element_typed_write_preserves_root:
     slots_in_range (get_storage cx st b) (w2n base) tv /\
     resolve_array_element cx b base tv subs st =
       (INL (slot, final_tv, []), st_res) /\
+    value_has_type final_tv v /\
+    write_storage_slot cx b slot final_tv v st_res = (INL (), st') ==>
+    slots_in_range (get_storage cx st' b) (w2n base) tv
+Proof
+  rpt strip_tac >>
+  qspec_then `subs` drule evaluate_type_resolver_array_children_positive >>
+  strip_tac >>
+  drule_at (Pat `resolve_array_element`)
+    resolve_array_element_typed_write_preserves_root_core >>
+  disch_then (qspecl_then [`v`, `st'`] irule) >>
+  conj_tac >- simp[] >>
+  conj_tac >- simp[] >>
+  conj_tac >- simp[] >>
+  conj_tac >- (qexists `v` >> simp[]) >>
+  simp[]
+QED
+
+Theorem resolve_array_element_typed_write_preserves_root_residual:
+  !cx b base tv subs st slot final_tv remaining st_res v st' tenv ty.
+    evaluate_type tenv ty = SOME tv /\
+    well_formed_type_value tv /\
+    w2n (base:bytes32) + type_slot_size tv <= dimword(:256) /\
+    slots_in_range (get_storage cx st b) (w2n base) tv /\
+    resolve_array_element cx b base tv subs st =
+      (INL (slot, final_tv, remaining), st_res) /\
     value_has_type final_tv v /\
     write_storage_slot cx b slot final_tv v st_res = (INL (), st') ==>
     slots_in_range (get_storage cx st' b) (w2n base) tv
