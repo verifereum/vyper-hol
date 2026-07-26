@@ -604,6 +604,24 @@ Proof
   metis_tac[default_scope_finally_preserves_contract_storage_well_formed]
 QED
 
+Theorem try_eval_stmts_handle_function_preserves_contract_storage_well_formed[local]:
+  !cx cxf stmts st res st'.
+  (!r s.
+     eval_stmts cxf stmts st = (r,s) ==>
+     contract_storage_well_formed cx s) /\
+  try (do eval_stmts cxf stmts; return NoneV od) handle_function st =
+    (res,st') ==>
+  contract_storage_well_formed cx st'
+Proof
+  rpt strip_tac >>
+  Cases_on `eval_stmts cxf stmts st` >>
+  rename1 `eval_stmts cxf stmts st = (body_res,body_st)` >>
+  `contract_storage_well_formed cx body_st` by metis_tac[] >>
+  Cases_on `body_res` >>
+  gvs[try_def, ignore_bind_apply, return_def, raise_def] >>
+  Cases_on `y` >>
+  gvs[handle_function_def, return_def, raise_def]
+QED
 Theorem eval_all_storage_preservation_mutual:
   (!cx s. !env ret_ty env' st res st'.
     type_stmt env ret_ty s = SOME env' /\
