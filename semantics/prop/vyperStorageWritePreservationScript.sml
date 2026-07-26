@@ -1994,6 +1994,158 @@ Proof
   simp[]
 QED
 
+Theorem resolve_array_element_dynamic_pop_element_write_preserves_root:
+  !cx b base tv subs st slot elem_tv max st_res len v st1 tenv ty.
+    evaluate_type tenv ty = SOME tv /\
+    well_formed_type_value tv /\
+    well_formed_type_value elem_tv /\
+    0 < type_slot_size elem_tv /\
+    w2n (base:bytes32) + type_slot_size tv <= dimword(:256) /\
+    slots_in_range (get_storage cx st b) (w2n base) tv /\
+    resolve_array_element cx b base tv subs st =
+      (INL (slot, ArrayTV elem_tv (Dynamic max), []), st_res) /\
+    w2n slot + type_slot_size (ArrayTV elem_tv (Dynamic max)) <=
+      dimword(:256) /\
+    slots_in_range (get_storage cx st_res b) (w2n slot)
+      (ArrayTV elem_tv (Dynamic max)) /\
+    w2n (read_slot (get_storage cx st_res b) (w2n slot)) = len /\
+    0 < len /\
+    value_has_type elem_tv v /\
+    write_storage_slot cx b
+      (n2w (w2n slot + 1 + (len - 1) * type_slot_size elem_tv))
+      elem_tv v st_res = (INL (), st1) ==>
+    slots_in_range (get_storage cx st1 b) (w2n base) tv
+Proof
+  rpt strip_tac >>
+  `slots_in_range (get_storage cx st1 b) (w2n slot)
+       (ArrayTV elem_tv (Dynamic max)) /\
+   read_slot (get_storage cx st1 b) (w2n slot) =
+       read_slot (get_storage cx st_res b) (w2n slot)` by
+    (irule dynamic_array_pop_element_write_prefix >> simp[] >>
+     qexists `v` >> simp[] >>
+     `n2w (w2n slot + (type_slot_size elem_tv * (len - 1) + 1)) : bytes32 =
+      n2w (w2n slot + 1 + (len - 1) * type_slot_size elem_tv)` by
+       (AP_TERM_TAC >>
+        once_rewrite_tac [arithmeticTheory.MULT_COMM] >> decide_tac) >>
+     pop_assum (fn th => once_rewrite_tac [th]) >>
+     first_assum ACCEPT_TAC) >>
+  `len <= max` by
+    (qpat_x_assum
+       `slots_in_range _ (w2n slot) (ArrayTV elem_tv (Dynamic max))` mp_tac >>
+     simp[slots_in_range_def]) >>
+  `(len - 1) * type_slot_size elem_tv + type_slot_size elem_tv <=
+   max * type_slot_size elem_tv` by
+    (irule array_index_element_end_bound >> decide_tac) >>
+  `w2n slot + 1 + (len - 1) * type_slot_size elem_tv < dimword(:256)` by
+    (gvs[vyperValueTheory.type_slot_size_def] >> decide_tac) >>
+  `w2n (n2w (w2n slot + 1 + (len - 1) * type_slot_size elem_tv) : bytes32) =
+   w2n slot + 1 + (len - 1) * type_slot_size elem_tv` by simp[] >>
+  `w2n slot <=
+   w2n (n2w (w2n slot + 1 + (len - 1) * type_slot_size elem_tv) : bytes32)` by
+    decide_tac >>
+  `w2n (n2w (w2n slot + 1 + (len - 1) * type_slot_size elem_tv) : bytes32) +
+     type_slot_size elem_tv <=
+   w2n slot + type_slot_size (ArrayTV elem_tv (Dynamic max))` by
+    (gvs[vyperValueTheory.type_slot_size_def] >> decide_tac) >>
+  irule resolve_array_element_contained_write_preserves_root >>
+  simp[] >>
+  conj_tac
+  >- (qexistsl [`tenv`, `ty`] >> simp[]) >>
+  qexistsl [`ArrayTV elem_tv (Dynamic max)`, `slot`, `st`, `st_res`, `subs`,
+             `n2w (w2n slot + 1 + (len - 1) * type_slot_size elem_tv)`,
+             `elem_tv`, `v`] >>
+  simp[]
+QED
+
+
+Theorem resolve_array_element_dynamic_pop_two_writes_preserve_root:
+  !cx b base tv subs st slot elem_tv max st_res len v st1 st2 tenv ty.
+    evaluate_type tenv ty = SOME tv /\
+    well_formed_type_value tv /\
+    well_formed_type_value elem_tv /\
+    0 < type_slot_size elem_tv /\
+    w2n (base:bytes32) + type_slot_size tv <= dimword(:256) /\
+    slots_in_range (get_storage cx st b) (w2n base) tv /\
+    resolve_array_element cx b base tv subs st =
+      (INL (slot, ArrayTV elem_tv (Dynamic max), []), st_res) /\
+    w2n slot + type_slot_size (ArrayTV elem_tv (Dynamic max)) <=
+      dimword(:256) /\
+    slots_in_range (get_storage cx st_res b) (w2n slot)
+      (ArrayTV elem_tv (Dynamic max)) /\
+    w2n (read_slot (get_storage cx st_res b) (w2n slot)) = len /\
+    0 < len /\
+    value_has_type elem_tv v /\
+    write_storage_slot cx b
+      (n2w (w2n slot + 1 + (len - 1) * type_slot_size elem_tv))
+      elem_tv v st_res = (INL (), st1) /\
+    write_storage_slot cx b (n2w (w2n slot)) (BaseTV (UintT 256))
+      (IntV (&(len - 1))) st1 = (INL (), st2) ==>
+    slots_in_range (get_storage cx st2 b) (w2n base) tv
+Proof
+  rpt strip_tac >>
+  `slots_in_range (get_storage cx st2 b) (w2n slot)
+     (ArrayTV elem_tv (Dynamic max))` by
+    (irule dynamic_array_pop_two_writes_preserve >> simp[] >>
+     qexistsl [`v`, `st_res`, `st1`] >> simp[] >>
+     `n2w (w2n slot + (type_slot_size elem_tv * (len - 1) + 1)) : bytes32 =
+      n2w (w2n slot + 1 + (len - 1) * type_slot_size elem_tv)` by
+       (AP_TERM_TAC >>
+        once_rewrite_tac [arithmeticTheory.MULT_COMM] >> decide_tac) >>
+     pop_assum (fn th => once_rewrite_tac [th]) >>
+     `n2w (w2n slot) : bytes32 = slot` by simp[] >>
+     qpat_assum `n2w (w2n slot) : bytes32 = slot`
+       (fn th => once_rewrite_tac [GSYM th]) >>
+     `w2n (n2w (w2n slot) : bytes32) = w2n slot` by simp[] >>
+     qpat_assum `w2n (n2w (w2n slot) : bytes32) = w2n slot`
+       (fn th => once_rewrite_tac [th]) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     first_assum ACCEPT_TAC) >>
+  `len <= max` by
+    (qpat_x_assum
+       `slots_in_range (get_storage cx st_res b) (w2n slot)
+          (ArrayTV elem_tv (Dynamic max))` mp_tac >>
+     simp[slots_in_range_def]) >>
+  `len < dimword(:256)` by
+    (qpat_x_assum `w2n (read_slot _ (w2n slot)) = len`
+       (fn th => once_rewrite_tac [GSYM th]) >>
+     MATCH_ACCEPT_TAC wordsTheory.w2n_lt) >>
+  `len - 1 < dimword(:256)` by decide_tac >>
+  `value_has_type (BaseTV (UintT 256)) (IntV (&(len - 1)))` by
+    (simp[value_has_type_def, integerTheory.NUM_OF_INT,
+          integerTheory.INT_POS] >>
+     qpat_x_assum `len - 1 < dimword(:256)` mp_tac >> simp[]) >>
+  `(len - 1) * type_slot_size elem_tv + type_slot_size elem_tv <=
+   max * type_slot_size elem_tv` by
+    (irule array_index_element_end_bound >> decide_tac) >>
+  `w2n slot + 1 + (len - 1) * type_slot_size elem_tv < dimword(:256)` by
+    (gvs[vyperValueTheory.type_slot_size_def] >> decide_tac) >>
+  `w2n (n2w (w2n slot + 1 + (len - 1) * type_slot_size elem_tv) : bytes32) =
+   w2n slot + 1 + (len - 1) * type_slot_size elem_tv` by simp[] >>
+  `w2n slot <=
+   w2n (n2w (w2n slot + 1 + (len - 1) * type_slot_size elem_tv) : bytes32)` by
+    decide_tac >>
+  `w2n (n2w (w2n slot + 1 + (len - 1) * type_slot_size elem_tv) : bytes32) +
+     type_slot_size elem_tv <=
+   w2n slot + type_slot_size (ArrayTV elem_tv (Dynamic max))` by
+    (gvs[vyperValueTheory.type_slot_size_def] >> decide_tac) >>
+  `w2n slot <= w2n (n2w (w2n slot) : bytes32)` by
+    simp[wordsTheory.w2n_lt] >>
+  `w2n (n2w (w2n slot) : bytes32) +
+     type_slot_size (BaseTV (UintT 256)) <=
+   w2n slot + type_slot_size (ArrayTV elem_tv (Dynamic max))` by
+    simp[vyperValueTheory.type_slot_size_def, wordsTheory.w2n_lt] >>
+  irule resolve_array_element_two_contained_writes_preserve_root >>
+  simp[] >>
+  conj_tac
+  >- (qexistsl [`tenv`, `ty`] >> simp[]) >>
+  qexistsl [`ArrayTV elem_tv (Dynamic max)`, `slot`, `st`, `st1`, `st_res`,
+             `subs`,
+             `n2w (w2n slot + 1 + (len - 1) * type_slot_size elem_tv)`,
+             `n2w (w2n slot)`, `elem_tv`, `BaseTV (UintT 256)`,
+             `v`, `IntV (&(len - 1))`] >>
+  simp[wordsTheory.w2n_lt] >>
+  decide_tac
+QED
 
 Theorem zero_slot_size_slots_in_range[local]:
   (!tv storage off.
@@ -2004,6 +2156,7 @@ Theorem zero_slot_size_slots_in_range[local]:
   (!(p:string # type_value) storage off.
      type_slot_size (SND p) = 0 ==>
      slots_in_range storage off (SND p)) /\
+
   (!tvs storage off.
      type_slot_size_list tvs = 0 ==>
      tuple_slots_in_range storage off tvs)
