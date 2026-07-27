@@ -229,7 +229,7 @@ Proof
   metis_tac[call_evaluation_safe_append_right]
 QED
 
-Theorem well_typed_exprs_DROP[local]:
+Theorem well_typed_exprs_DROP:
   !env es n. well_typed_exprs env es ==> well_typed_exprs env (DROP n es)
 Proof
   gen_tac >> Induct >> simp[well_typed_expr_def] >>
@@ -514,7 +514,7 @@ Proof
   drule eval_expr_exception_return_typed >> rw[]
 QED
 
-Theorem callable_body_typing_from_env_consistent[local]:
+Theorem callable_body_typing_from_env_consistent:
   functions_well_typed cx /\
   env_consistent env cx st /\
   get_module_code cx src_id_opt = SOME ts /\
@@ -650,7 +650,7 @@ Proof
       first_x_assum drule_all >> simp[])
 QED
 
-Theorem intcall_default_env_side_conditions[local]:
+Theorem intcall_default_env_side_conditions:
   !env env_body cx st src_id_opt fn.
     env_consistent env cx st /\
     state_well_typed st /\
@@ -1054,7 +1054,7 @@ Proof
   simp[]
 QED
 
-Theorem intcall_live_pushed_body_preconditions[local]:
+Theorem intcall_live_pushed_body_preconditions:
   !env env_body cx args_st dflt_st lock_st call_env fn nr is_view.
     env_consistent env cx args_st /\
     env_body.type_defs = get_tenv cx /\
@@ -5549,7 +5549,7 @@ QED
 
 (* ===== Internal call helpers and Resume block ===== *)
 
-Theorem defaults_env_empty_frame_consistent[local]:
+Theorem defaults_env_empty_frame_consistent:
   !env_body cx st.
     env_context_consistent env_body cx /\
     env_immutables_consistent env_body cx st ==>

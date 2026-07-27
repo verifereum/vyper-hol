@@ -2710,7 +2710,7 @@ Proof
   metis_tac[resolve_array_element_leaf_type_sc]
 QED
 
-Theorem resolve_array_element_ArrayTV_empty_rsubs_sc[local]:
+Theorem resolve_array_element_ArrayTV_empty_rsubs_sc:
   !cx b base tv subs st.
     !slot final_tv rsubs st'.
     resolve_array_element cx b base tv subs st = (INL (slot, final_tv, rsubs), st') ==>
@@ -2779,7 +2779,7 @@ Proof
   asm_rewrite_tac[]
 QED
 
-Theorem storage_array_pop_len_value_has_type[local]:
+Theorem storage_array_pop_len_value_has_type:
   !stored_len.
     0 < stored_len ==>
     stored_len < 2 ** 256 ==>
