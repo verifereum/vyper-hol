@@ -250,7 +250,7 @@ val (Epsilon_tm, is_Epsilon) = syntax0 "Epsilon"
 val (Convert_tm, is_Convert) = syntax0 "Convert"
 val (Extract32_tm, is_Extract32) = syntax0 "Extract32"
 val (AbiDecode_tm, mk_AbiDecode_tm, dest_AbiDecode_tm, is_AbiDecode) = syntax_fns1 "vyperAST" "AbiDecode"
-val (AbiEncode_tm, mk_AbiEncode_tm, dest_AbiEncode_tm, is_AbiEncode) = syntax_fns1 "vyperAST" "AbiEncode"
+val (AbiEncode_tm, mk_AbiEncode_tm, dest_AbiEncode_tm, is_AbiEncode) = syntax_fns2 "vyperAST" "AbiEncode"
 
 fun dest_string_pair_expr tm =
   let val (s, e) = dest_pair tm in (dest_string s, e) end

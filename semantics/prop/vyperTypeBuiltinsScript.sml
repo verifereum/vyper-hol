@@ -3523,7 +3523,7 @@ QED
 (* Probe: with the repaired definition, n=1 is correctly REJECTED for uint256 encoding
    because vyper_abi_size_bound FEMPTY (TupleT [BaseT (UintT 256)]) = 32 > 1 *)
 Theorem abi_encode_probe_result_ok_rejects_small_bound:
-  ¬type_builtin_result_ok FEMPTY (AbiEncode T) (BaseT (BytesT (Dynamic 1)))
+  ¬type_builtin_result_ok FEMPTY (AbiEncode T NONE) (BaseT (BytesT (Dynamic 1)))
     (TupleT [BaseT (UintT 256)]) [BaseT (UintT 256)]
 Proof
   simp[type_builtin_result_ok_def, abi_encode_size_ok_def] >> EVAL_TAC >> decide_tac
@@ -3531,7 +3531,7 @@ QED
 
 (* Probe: with n=32, the result_ok predicate is satisfied *)
 Theorem abi_encode_probe_result_ok_accepts_correct_bound:
-  type_builtin_result_ok FEMPTY (AbiEncode T) (BaseT (BytesT (Dynamic 32)))
+  type_builtin_result_ok FEMPTY (AbiEncode T NONE) (BaseT (BytesT (Dynamic 32)))
     (TupleT [BaseT (UintT 256)]) [BaseT (UintT 256)]
 Proof
   simp[type_builtin_result_ok_def, abi_encode_size_ok_def] >> EVAL_TAC >> decide_tac

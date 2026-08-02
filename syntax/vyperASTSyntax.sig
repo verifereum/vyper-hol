@@ -492,8 +492,8 @@ signature vyperASTSyntax = sig
   val dest_AbiDecode_tm : term -> term
   val is_AbiDecode : term -> bool
   val AbiEncode_tm : term
-  val mk_AbiEncode_tm : term -> term
-  val dest_AbiEncode_tm : term -> term
+  val mk_AbiEncode_tm : term * term -> term
+  val dest_AbiEncode_tm : term -> term * term
   val is_AbiEncode : term -> bool
 
   val CreateMinimalProxy_tm : term val is_CreateMinimalProxy : term -> bool
