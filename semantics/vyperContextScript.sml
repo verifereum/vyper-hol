@@ -276,19 +276,16 @@ Definition evaluate_type_builtin_def:
   evaluate_type_builtin cx (AbiEncode ensure method_id) typ vs =
     (let tenv = get_tenv cx in
      let unwrap = (¬ensure ∧ needs_external_call_wrap typ) in
-     (case (if unwrap then
-              (case (typ, vs) of
-                 (TupleT [t], [v]) => evaluate_abi_encode tenv t v
-               | _ => INR "abi_encode unwrap")
-            else evaluate_abi_encode tenv typ (ArrayV (TupleV vs))) of
-        INL (BytesV bs) =>
-          (case method_id of
-             NONE => INL (BytesV bs)
-           | SOME mid =>
-               if LENGTH mid = 4 then INL (BytesV (mid ++ bs))
-               else INR (TypeError "abi_encode method_id"))
-      | INL _ => INR (TypeError "abi_encode result")
-      | INR str => INR (RuntimeError str))) ∧
+     let encoded =
+       if unwrap then
+         case (typ, vs) of
+           (TupleT [t], [v]) => evaluate_abi_encode_bytes tenv t v
+         | _ => INR "abi_encode unwrap"
+       else evaluate_abi_encode_bytes tenv typ (ArrayV (TupleV vs)) in
+     case encoded of
+       INL bs =>
+         INL (BytesV (abi_encode_method_id_bytes method_id ++ bs))
+     | INR str => INR (RuntimeError str)) ∧
   evaluate_type_builtin _ _ _ _ =
     INR (TypeError "evaluate_type_builtin")
 End

@@ -225,6 +225,13 @@ Datatype:
   | AbiEncode bool (word8 list option) (* ensure_tuple, optional 4-byte method ID *)
 End
 
+Definition abi_encode_method_id_bytes_def:
+  abi_encode_method_id_bytes NONE = [] /\
+  abi_encode_method_id_bytes (SOME bs) = bs
+End
+
+val () = cv_auto_trans abi_encode_method_id_bytes_def;
+
 Datatype:
   expr
   = Name type identifier              (* local/scoped variable *)

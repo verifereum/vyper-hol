@@ -437,8 +437,8 @@ Definition well_typed_type_builtin_args_def:
 End
 
 Definition abi_encode_method_id_size_def:
-  abi_encode_method_id_size NONE = 0 /\
-  abi_encode_method_id_size (SOME bs) = LENGTH bs
+  abi_encode_method_id_size method_id =
+    LENGTH (abi_encode_method_id_bytes method_id)
 End
 
 Definition abi_encode_size_ok_def:
