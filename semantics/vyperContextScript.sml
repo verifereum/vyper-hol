@@ -273,15 +273,19 @@ Definition evaluate_type_builtin_def:
        | INR str => INR (RuntimeError str)) ∧
   evaluate_type_builtin _ (AbiDecode _) _ _ =
     INR (TypeError "abi_decode args") ∧
-  evaluate_type_builtin cx (AbiEncode ensure) typ vs =
+  evaluate_type_builtin cx (AbiEncode ensure method_id) typ vs =
     (let tenv = get_tenv cx in
      let unwrap = (¬ensure ∧ needs_external_call_wrap typ) in
-     (case (if unwrap then
-              (case (typ, vs) of
-                 (TupleT [t], [v]) => evaluate_abi_encode tenv t v
-               | _ => INR "abi_encode unwrap")
-            else evaluate_abi_encode tenv typ (ArrayV (TupleV vs))) of
-        INL v => INL v | INR str => INR (RuntimeError str))) ∧
+     let encoded =
+       if unwrap then
+         case (typ, vs) of
+           (TupleT [t], [v]) => evaluate_abi_encode_bytes tenv t v
+         | _ => INR "abi_encode unwrap"
+       else evaluate_abi_encode_bytes tenv typ (ArrayV (TupleV vs)) in
+     case encoded of
+       INL bs =>
+         INL (BytesV (abi_encode_method_id_bytes method_id ++ bs))
+     | INR str => INR (RuntimeError str)) ∧
   evaluate_type_builtin _ _ _ _ =
     INR (TypeError "evaluate_type_builtin")
 End
@@ -480,7 +484,7 @@ Definition type_builtin_args_length_ok_def:
   type_builtin_args_length_ok Extract32 n = (n = 2) ∧
   type_builtin_args_length_ok Convert n = (n = 1) ∧
   type_builtin_args_length_ok (AbiDecode _) n = (n = 1) ∧
-  type_builtin_args_length_ok (AbiEncode _) n = (n >= 1)
+  type_builtin_args_length_ok (AbiEncode _ _) n = (n >= 1)
 End
 
 val () = cv_auto_trans type_builtin_args_length_ok_def;

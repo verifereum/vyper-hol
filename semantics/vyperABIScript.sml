@@ -1077,12 +1077,21 @@ QED
 
 (* ===== ABI Encoding ===== *)
 
-Definition evaluate_abi_encode_def:
-  evaluate_abi_encode tenv typ v =
+Definition evaluate_abi_encode_bytes_def:
+  evaluate_abi_encode_bytes tenv typ v =
     let abiTy = vyper_to_abi_type tenv typ in
     case vyper_to_abi tenv typ v of
-      SOME av => INL $ BytesV (enc abiTy av)
+      SOME av => INL (enc abiTy av)
     | NONE => INR "abi_encode conversion"
+End
+
+val () = cv_auto_trans evaluate_abi_encode_bytes_def;
+
+Definition evaluate_abi_encode_def:
+  evaluate_abi_encode tenv typ v =
+    case evaluate_abi_encode_bytes tenv typ v of
+      INL bs => INL (BytesV bs)
+    | INR err => INR err
 End
 
 val () = cv_auto_trans evaluate_abi_encode_def;

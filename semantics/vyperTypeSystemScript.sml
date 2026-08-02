@@ -431,17 +431,26 @@ Definition well_typed_type_builtin_args_def:
      (?bt. target_ty = BaseT bt /\ extract32_result_base_ok bt)) /\
   well_typed_type_builtin_args (AbiDecode _) target_ty ts =
     (LENGTH ts = 1 /\ ?bd. HD ts = BaseT (BytesT bd)) /\
-  well_typed_type_builtin_args (AbiEncode _) target_ty ts =
-    (ts <> [] /\ target_ty = TupleT ts)
+  well_typed_type_builtin_args (AbiEncode _ method_id) target_ty ts =
+    (ts <> [] /\ target_ty = TupleT ts /\
+     case method_id of NONE => T | SOME bs => LENGTH bs = 4)
+End
+
+Definition abi_encode_method_id_size_def:
+  abi_encode_method_id_size method_id =
+    LENGTH (abi_encode_method_id_bytes method_id)
 End
 
 Definition abi_encode_size_ok_def:
-  abi_encode_size_ok tenv target_ty n = (vyper_abi_size_bound tenv target_ty <= n)
+  abi_encode_size_ok tenv target_ty method_id n =
+    (vyper_abi_size_bound tenv target_ty +
+     abi_encode_method_id_size method_id <= n)
 End
 
 Definition type_builtin_result_ok_def:
-  type_builtin_result_ok tenv (AbiEncode _) result_ty target_ty arg_tys =
-    (?n. result_ty = BaseT (BytesT (Dynamic n)) ∧ target_ty = TupleT arg_tys ∧ abi_encode_size_ok tenv target_ty n) ∧
+  type_builtin_result_ok tenv (AbiEncode _ method_id) result_ty target_ty arg_tys =
+    (?n. result_ty = BaseT (BytesT (Dynamic n)) ∧ target_ty = TupleT arg_tys ∧
+         abi_encode_size_ok tenv target_ty method_id n) ∧
   type_builtin_result_ok tenv Empty result_ty target_ty arg_tys = (result_ty = target_ty) ∧
   type_builtin_result_ok tenv MaxValue result_ty target_ty arg_tys = (result_ty = target_ty) ∧
   type_builtin_result_ok tenv MinValue result_ty target_ty arg_tys = (result_ty = target_ty) ∧
