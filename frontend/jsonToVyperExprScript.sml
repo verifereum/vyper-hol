@@ -583,8 +583,9 @@ Definition translate_expr_def:
   (* attr_src_id_opt is from variable_reads on the outer Attribute (for self.x storage access) *)
   (* base_type_name is the type name of the base expression (e.g., "address" for addr.code) *)
   (* base_typeclass is the typeclass of the base expression (e.g., "interface" for interface.address) *)
-  (translate_expr ctx (JE_Attribute (JE_Name obj tc src_id_opt _) attr result_tc base_type_name base_typeclass attr_src_id_opt ret_ty) =
+  (translate_expr ctx (JE_Attribute (JE_Name obj tc src_id_opt base_ret_ty) attr result_tc base_type_name base_typeclass attr_src_id_opt ret_ty) =
     let ty = translate_type (FST ctx) ret_ty in
+    let base_ty = translate_type (FST ctx) base_ret_ty in
     (* Same-module flag member: Action.BUY where tc = SOME "flag" *)
     if tc = SOME "flag" /\ result_tc = SOME "flag" then FlagMember ty (source_id_to_nsid (FST ctx) src_id_opt, obj) attr
     else if obj = "msg" /\ attr = "sender" then Builtin (BaseT AddressT) (Env Sender) []
@@ -603,14 +604,14 @@ Definition translate_expr_def:
     else if obj = "self" then TopLevelName ty (source_id_to_nsid (FST ctx) attr_src_id_opt, attr)
     (* Module variable access (lib1.x): use src_id_opt from module type *)
     else if tc = SOME "module" then TopLevelName ty (source_id_to_nsid (FST ctx) src_id_opt, attr)
-    else if attr = "balance" /\ base_type_name = SOME "address" then Builtin (BaseT (UintT 256)) (Acc Balance) [make_name ctx ty obj]
-    else if attr = "address" /\ base_type_name = SOME "address" then Builtin (BaseT AddressT) (Acc Address) [make_name ctx ty obj]
-    else if attr = "address" /\ base_typeclass = SOME "interface" then make_name ctx ty obj (* interface.address = interface (identity) *)
-    else if attr = "is_contract" /\ base_type_name = SOME "address" then Builtin (BaseT BoolT) (Acc IsContract) [make_name ctx ty obj]
-    else if attr = "codesize" /\ base_type_name = SOME "address" then Builtin (BaseT (UintT 256)) (Acc Codesize) [make_name ctx ty obj]
-    else if attr = "codehash" /\ base_type_name = SOME "address" then Builtin (BaseT (BytesT (Fixed 32))) (Acc Codehash) [make_name ctx ty obj]
-    else if attr = "code" /\ base_type_name = SOME "address" then Builtin (BaseT (BytesT (Dynamic 24576))) (Acc Code) [make_name ctx ty obj]
-    else Attribute ty (make_name ctx ty obj) attr) /\
+    else if attr = "balance" /\ base_type_name = SOME "address" then Builtin (BaseT (UintT 256)) (Acc Balance) [make_name ctx base_ty obj]
+    else if attr = "address" /\ base_type_name = SOME "address" then Builtin (BaseT AddressT) (Acc Address) [make_name ctx base_ty obj]
+    else if attr = "address" /\ base_typeclass = SOME "interface" then make_name ctx base_ty obj (* interface.address = interface (identity) *)
+    else if attr = "is_contract" /\ base_type_name = SOME "address" then Builtin (BaseT BoolT) (Acc IsContract) [make_name ctx base_ty obj]
+    else if attr = "codesize" /\ base_type_name = SOME "address" then Builtin (BaseT (UintT 256)) (Acc Codesize) [make_name ctx base_ty obj]
+    else if attr = "codehash" /\ base_type_name = SOME "address" then Builtin (BaseT (BytesT (Fixed 32))) (Acc Codehash) [make_name ctx base_ty obj]
+    else if attr = "code" /\ base_type_name = SOME "address" then Builtin (BaseT (BytesT (Dynamic 24576))) (Acc Code) [make_name ctx base_ty obj]
+    else Attribute ty (make_name ctx base_ty obj) attr) /\
 
   (* General attribute - handles nested and simple cases *)
   (* Check for cross-module flag access: lib1.Action.BUY *)
