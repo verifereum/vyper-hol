@@ -276,19 +276,13 @@ Proof layers:
 - asm/EVM: `asmToBytecodePropsScript.sml`, `asmBytecodeSimScript.sml`, `evmStepSimScript.sml`
 - final: `codegenCorrectnessScript.sml`
 
-## Suggested next planning questions
+## Current planning documents
 
-1. Should formal compiler definitions be updated to match current Python compiler behavior before attempting major proof repair?
-2. Which target should be the next proof milestone?
-   - lowering expression/statement correctness,
-   - ABI correctness,
-   - concrete pipeline O2 correctness,
-   - codegen simulation,
-   - or a smaller executable/regression story?
-3. Should the repo be reorganized to separate:
-   - definitions,
-   - active proof statements,
-   - completed proof libraries,
-   - incomplete/unwired proof work,
-   - executable regression fixtures?
-4. Should `docs/compiler-proof-status.md` become the central status tracker, updated whenever cheats are closed or theorem statements change?
+The next proof effort is organized by:
+
+- [`compiler-proof-roadmap.md`](compiler-proof-roadmap.md) — phased work plan and milestones;
+- [`compiler-definition-parity.md`](compiler-definition-parity.md) — parity with the repository-wide `VYPER_PIN`;
+- [`compiler-correctness-specification.md`](compiler-correctness-specification.md) — intended theorem boundary and scope;
+- [`compiler-proof-dependencies.md`](compiler-proof-dependencies.md) — cross-stage invariants and theorem dependencies.
+
+The first target is an end-to-end theorem using a named minimal mandatory pipeline. Optional O2/O3/Os certification should not block it. Major proof repair should follow parity and theorem-statement stabilization.

@@ -1,115 +1,162 @@
-# Compiler definition parity checklist
+# Compiler definition parity
 
-This document tracks whether the HOL compiler definitions match the intended upstream Python/Vyper compiler implementation.
+This document tracks whether the HOL compiler definitions correspond to the Python compiler pinned for the whole repository.
 
-## Target upstream version
+## Authoritative upstream revision
 
-**Target commit:** TBD
+The sole source of truth is [`../VYPER_PIN`](../VYPER_PIN). At the time of this update it contains:
 
-Candidate targets observed during cleanup:
+```text
+1d81b8731a1f4d0fff953212deba5941c89602eb
+```
 
-- `v0.5.0a3` — latest tag visible in `~/vyper` at audit time.
-- `751931ff6` — `upstream/master` / local `master` at audit time, with local branch reported as ahead of `origin/master` by 26 commits.
+The same pin is to be used for:
 
-Recommended policy: pin an exact upstream commit before major proof repair. Avoid targeting a moving branch name such as `master` without recording the commit hash.
+- compiler-definition parity;
+- Vyper language-test exports;
+- generated AST JSON and compiler metadata;
+- bytecode and other compiler fixtures;
+- downstream tools which consume Python Vyper output.
 
-## Current upstream anchors recorded in HOL files
+Do not introduce independent component pins. Source-file annotations may identify a historical port commit for provenance, but parity claims must always be made against `VYPER_PIN`. New or updated annotations should normally name the relevant Python source path and symbol instead of repeating a commit hash.
 
-The current formalization appears to have been ported from multiple upstream commits, not a single uniform target.
+## Formal compiler boundary
 
-| HOL area/file | Recorded upstream anchor | Notes |
+The current expected boundary is an elaborated HOL AST plus metadata ordinarily produced by Python frontend and semantic-analysis phases. Parsing raw source is not part of the first compiler-correctness theorem.
+
+The parity audit must determine, for every item of metadata, whether it is:
+
+1. formally computed in HOL;
+2. supplied under a proved relation to elaborated frontend output; or
+3. trusted as an explicit theorem input.
+
+Important boundary items include module/import resolution, type information, storage and immutable layouts, selectors, entry-point information, function IDs and reachability, dispatch metadata, compiler settings, and EVM version.
+
+See [`compiler-correctness-specification.md`](compiler-correctness-specification.md) for the intended theorem boundary.
+
+## Status vocabulary
+
+- **unknown** — not yet audited against `VYPER_PIN`.
+- **matches** — audited and behaviorally matches the pinned Python definition.
+- **representation-equivalent** — differs structurally but has a stated correspondence preserving relevant behavior.
+- **intentional abstraction** — intentionally differs; the abstraction and its proof boundary are documented.
+- **needs update** — HOL behavior differs and should be changed.
+- **missing in HOL** — pinned compiler functionality has no formal counterpart on the selected path.
+- **HOL-only proof adaptation** — formal-only machinery with no direct Python counterpart.
+- **out of theorem scope** — deliberately outside the stated compiler theorem boundary.
+- **blocked** — cannot classify until a boundary or semantic decision is made.
+
+## Historical anchors currently recorded
+
+These are provenance notes, not target revisions.
+
+| HOL area/file | Recorded historical anchor | Parity status |
 |---|---|---|
-| `lowering/defs/exprLoweringScript.sml` | `vyperlang/vyper@6a3248028` | remove `fix_memlocs` pass, #4896 |
-| `lowering/defs/contextScript.sml` | `vyperlang/vyper@e1dead045` | sunset GEP, #4895 |
-| `lowering/defs/vyperCompilerScript.sml` | `vyperlang/vyper@a7f7bf133` | split algebraic/affine passes |
-| `lowering/defs/selectorDispatchScript.sml` | `vyperlang/vyper@a7f7bf133` | selector dispatch definitions |
-| `lowering/vyperLoweringCorrectScript.sml` | `vyperlang/vyper@a7f7bf133` | top-level lowering correctness statement |
-| `venom/compiler/venomPipelineScript.sml` | `vyperlang/vyper@a7f7bf133` | optimization pipeline definition |
-| `venom/codegen/defs/*` | mostly `vyperlang/vyper@e1dead045` | codegen/asm/stack-plan definitions |
+| `lowering/defs/exprLoweringScript.sml` | `6a3248028` | unknown |
+| `lowering/defs/contextScript.sml` | `e1dead045` | unknown |
+| `lowering/defs/vyperCompilerScript.sml` | `a7f7bf133` | unknown |
+| `lowering/defs/selectorDispatchScript.sml` | `a7f7bf133` | unknown |
+| `lowering/vyperLoweringCorrectScript.sml` | `a7f7bf133` | unknown |
+| `venom/compiler/venomPipelineScript.sml` | `a7f7bf133` | unknown |
+| `venom/codegen/defs/*` | mostly `e1dead045` | unknown |
 
-## Recent upstream commits likely relevant to parity
+The pinned compiler has evolved materially since these anchors. In particular, the pinned O2 pipeline includes additional or changed memory/FMP passes and pass ordering. No historical anchor should be treated as evidence of current parity.
 
-Recent `~/vyper` history at audit time included Venom/compiler fixes such as:
+## Correspondence matrix
 
-| Commit | Summary |
-|---|---|
-| `751931ff6` | `fix[ux]: panic explicitly in safe_pow() for two-variable case (#5134)` |
-| `0744d5d03` | `fix[venom]: apply write effects of multi-output instructions in CSE (#5096)` |
-| `a2d8170b5` | `perf[venom]: fast path for empty dynarray assignment (#5097)` |
-| `ca838362b` | `fix[venom]: do not coalesce gas reads in CSE (#5083)` |
-| `16763a911` | `fix[venom]: reject abi_encode with no arguments (#5092)` |
-| `f3209160b` | `fix[venom]: do not elide self-overlapping mcopy (#5087)` |
+The matrix should eventually identify exact Python modules, classes, and functions rather than broad source areas. All entries on the first end-to-end path must be classified before the parity milestone closes.
 
-These should be checked against the formal lowering/pass/codegen definitions if the chosen target commit includes them.
+### Frontend/compiler boundary
 
-## Parity checklist
-
-Status vocabulary:
-
-- **unknown** — not audited against target commit yet.
-- **matches target** — audited and matches target Python behavior.
-- **needs update** — HOL definition differs and should be changed.
-- **intentional difference** — HOL intentionally abstracts or differs; document why.
-- **blocked** — cannot audit until target commit or upstream behavior is clarified.
+| Input or phase | HOL representation | Status | Audit question |
+|---|---|---|---|
+| Parsed and elaborated AST | `vyperAST` and JSON frontend | unknown | Which elaboration facts are assumed? |
+| Type metadata | AST/type-related fields and environments | unknown | Is Python semantic-analysis output represented completely? |
+| Module/import resolution | module/source-id structures | unknown | Formal computation or trusted input? |
+| Storage layout | compile environment/module inputs | unknown | How is it related to Python layout generation? |
+| Immutable layout | compile environment/module inputs | unknown | Formal computation or supplied metadata? |
+| Function IDs/reachability | module-lowering inputs | unknown | Python computes these from analysed module metadata. |
+| Selectors/entry metadata | selector and entry inputs | unknown | Current HOL top-level lowering accepts pre-extracted data. |
+| Compiler settings/EVM version | pipeline/codegen parameters | unknown | Must be fixed explicitly in theorem inputs. |
 
 ### Lowering definitions
 
-| HOL file | Likely Python source area | Current anchor | Target status | Notes |
-|---|---|---|---|---|
-| `lowering/defs/compileEnvScript.sml` | compiler/codegen environment setup | not recorded in header | unknown | Check env/state fields against current lowering implementation. |
-| `lowering/defs/contextScript.sml` | `codegen_venom/context`-like helpers | `e1dead045` | unknown | Memory/storage/context helper parity. |
-| `lowering/defs/emitHelperScript.sml` | Venom builder/emission helpers | not recorded in header | unknown | Check fresh ids, labels, block emission conventions. |
-| `lowering/defs/exprLoweringScript.sml` | expression lowering | `6a3248028` | unknown | High priority; expression semantics proofs depend on this. |
-| `lowering/defs/stmtLoweringScript.sml` | statement lowering | header references Python stmt.py but no commit | unknown | High priority; if/for/return/assert lowering may drift. |
-| `lowering/defs/moduleLoweringScript.sml` | module/function/dispatch lowering | not recorded in visible header | unknown | Selector dispatch, constructor/deploy code, args/kwargs. |
-| `lowering/defs/abiEncoderScript.sml` | ABI encode/decode helpers | not recorded in visible header | unknown | Check recent `abi_encode` behavior, including empty-argument rejection. |
-| `lowering/defs/builtin*.sml` | builtin lowering modules | varied/no explicit commit | unknown | raw calls, create, hashing, math, bytes, system, misc, ABI builtins. |
-| `lowering/defs/vyperCompilerScript.sml` | top-level lowering/compiler wrapper | `a7f7bf133` | unknown | Check pipeline selection and bytecode assembly path. |
+| HOL file/area | Pinned Python source area | Status | Notes |
+|---|---|---|---|
+| `lowering/defs/compileEnvScript.sml` | `vyper/codegen_venom/context.py`, related compiler metadata | unknown | Environment/state fields and layout inputs. |
+| `lowering/defs/contextScript.sml` | `vyper/codegen_venom/context.py`, `buffer.py`, `value.py` | unknown | Memory/storage/context and pointer behavior. |
+| `lowering/defs/emitHelperScript.sml` | Venom builder/emission APIs | unknown | Fresh IDs, labels, blocks, and emission conventions. |
+| `lowering/defs/exprLoweringScript.sml` | `vyper/codegen_venom/expr.py`, `arithmetic.py` | unknown | High priority; includes evaluation and calling conventions. |
+| `lowering/defs/stmtLoweringScript.sml` | `vyper/codegen_venom/stmt.py` | unknown | Assignment order, control flow, return/assert/loop behavior. |
+| `lowering/defs/abiEncoderScript.sml` | `vyper/codegen_venom/abi/*` | unknown | Static/dynamic encode/decode and buffer management. |
+| `lowering/defs/builtin*.sml` | `vyper/codegen_venom/builtins/*` | unknown | Calls, create, conversion, ABI, bytes, math, and system builtins. |
+| `lowering/defs/selectorDispatchScript.sml` | `vyper/codegen_venom/module.py`, jump-table helpers | unknown | Linear/sparse dispatch and default arguments. |
+| `lowering/defs/moduleLoweringScript.sml` | `vyper/codegen_venom/module.py` | unknown | Reachability, runtime/deploy generation, metadata, and data sections. |
+| `lowering/defs/vyperCompilerScript.sml` | public Venom compiler entry path | blocked | HOL currently accepts metadata rather than deriving it from a module. Boundary decision required. |
 
-### Venom pipeline/pass definitions
+### Venom IR and semantics
 
-| HOL file/area | Likely Python source area | Current anchor | Target status | Notes |
-|---|---|---|---|---|
-| `venom/compiler/venomPipelineScript.sml` | optimization levels / pass pipeline | `a7f7bf133` | unknown | Check O2/O3/Os pass lists and pass ordering. |
-| `venom/passes/*/defs/*` | individual Venom optimization passes | varies | unknown | Several upstream Venom fixes likely affect pass definitions. |
-| `venom/passes/common/shared defs` | shared pass utilities | varies | unknown | Check SSA/WF assumptions and utility behavior. |
-| CSE definitions | CSE pass | unknown | unknown | Must check `apply write effects of multi-output instructions in CSE` and `do not coalesce gas reads`. |
-| memory copy elision definitions | MCE pass | unknown | unknown | Must check `do not elide self-overlapping mcopy`. |
+| HOL file/area | Pinned Python source area | Status | Notes |
+|---|---|---|---|
+| Venom instructions/operands | `vyper/venom/basicblock.py` | unknown | Check opcodes, operand order, outputs, labels, and effects. |
+| Functions and contexts | `vyper/venom/function.py`, `context.py` | unknown | Entry, parameters, internal calls, and data. |
+| Builder conventions | `vyper/venom/builder.py` | unknown | Freshness and block construction. |
+| Memory/allocation model | `vyper/venom/memory_allocator.py`, `memory_location.py` | unknown | Relate Python compile-time locations to HOL runtime allocation semantics. |
+| CFG analysis | `vyper/venom/analysis/cfg.py` | partially reviewed | See [`cfg_analysis_parity.md`](cfg_analysis_parity.md); revalidate against pin. |
+| Other analyses | `vyper/venom/analysis/*` | unknown | Audit those used by the mandatory pipeline first. |
+
+### Pipeline and pass definitions
+
+| HOL file/area | Pinned Python source area | Status | Notes |
+|---|---|---|---|
+| `venom/compiler/venomPipelineScript.sml` | `vyper/venom/optimization_levels/*`, compiler pipeline entry | needs update | Existing comments explicitly omit `mem_merge`; pinned pipelines include additional memory/FMP passes and changed ordering. |
+| Minimal mandatory pipeline | compiler/codegen entry path | missing in HOL | Must be identified and named independently of O2/O3/Os. |
+| Individual pass definitions | `vyper/venom/passes/*` | unknown | Audit mandatory passes first. |
+| O2 configuration | `vyper/venom/optimization_levels/O2.py` | needs update | Current pinned pass list differs from existing HOL O2 definition. |
+| O3 configuration | `vyper/venom/optimization_levels/O3.py` | unknown | Optional for first e2e theorem. |
+| Os configuration | `vyper/venom/optimization_levels/Os.py` | unknown | Optional for first e2e theorem. |
+| Pass-order constraints | pass classes and `pass_order.py` | missing/unknown | Determine whether constraints need formal counterparts or only pipeline evidence. |
 
 ### Codegen definitions
 
-| HOL file | Likely Python source area | Current anchor | Target status | Notes |
-|---|---|---|---|---|
-| `venom/codegen/defs/stackModelScript.sml` | stack model | `e1dead045` | unknown | Check stack order conventions carefully. |
-| `venom/codegen/defs/stackPlanTypesScript.sml` | stack plan state/types | `e1dead045` | unknown | Spill allocator and labels. |
-| `venom/codegen/defs/stackPlanOpsScript.sml` | stack reorder/spill/dup/swap ops | `e1dead045` | unknown | Historical operand-order issue was documented in archived counterexamples. |
-| `venom/codegen/defs/stackPlanGenScript.sml` | Venom-to-assembly plan generation | `e1dead045` | unknown | High priority for codegen proof repair. |
-| `venom/codegen/defs/planExecScript.sml` | stack-op-to-asm lowering | `e1dead045` | unknown | Check opcode emission. |
-| `venom/codegen/defs/asmIRScript.sml` | assembly IR | `e1dead045` | unknown | Data sections, labels, opcode names. |
-| `venom/codegen/defs/asmSemScript.sml` | asm interpreter model | `e1dead045` | unknown | May intentionally differ from Python; document abstraction. |
-| `venom/codegen/defs/symbolResolveScript.sml` | assembly/symbol resolution | `e1dead045` | unknown | Check symbol size and label offset behavior. |
-| `venom/codegen/defs/codegenScript.sml` | top-level codegen composition | `e1dead045` | unknown | Check data-section and bytecode output path. |
-
-### Evaluation fixtures
-
-| HOL file | Purpose | Target status | Notes |
+| HOL file | Pinned Python source area | Status | Notes |
 |---|---|---|---|
-| `lowering/defs/evalCompilerScript.sml` | executable compile smoke tests | unknown | Should be regenerated/updated after parity changes. |
-| `lowering/defs/evalCompilerBytecodeScript.sml` | compare output against bytecode fixtures | unknown | Bytecode fixtures may change after parity update. |
+| `venom/codegen/defs/stackModelScript.sml` | Venom stack model/code generation | unknown | Stack order and value conventions. |
+| `venom/codegen/defs/stackPlanTypesScript.sml` | stack-plan state/types | unknown | Spill allocator, function frames, labels. |
+| `venom/codegen/defs/stackPlanOpsScript.sml` | reorder/spill/dup/swap logic | unknown | Recheck historical operand-order issue. |
+| `venom/codegen/defs/stackPlanGenScript.sml` | Venom-to-assembly generation | unknown | Parameters, PHIs, calls, returns, stack depth. |
+| `venom/codegen/defs/planExecScript.sml` | stack operation to assembly emission | unknown | Opcode emission and pseudo-operations. |
+| `venom/codegen/defs/asmIRScript.sml` | Python assembly representation | unknown | Labels, data sections, calls, and metadata. |
+| `venom/codegen/defs/asmSemScript.sml` | no necessarily exact Python counterpart | blocked | Decide intended abstraction, especially for nested calls. |
+| `venom/codegen/defs/symbolResolveScript.sml` | assembly/symbol resolution | unknown | Label sizes, offsets, data addressing. |
+| `venom/codegen/defs/codegenScript.sml` | top-level assembly/bytecode path | unknown | Runtime/deploy data and metadata behavior. |
 
-## Suggested parity workflow
+### Fixtures
 
-1. Choose target upstream commit.
-2. Record exact commit here and in relevant source headers when files are updated.
-3. For each HOL definition file, compare against Python source at the target commit.
-4. Update HOL definitions where needed.
-5. Mark intentional abstractions explicitly in file headers and this checklist.
-6. Re-run executable compiler/evaluation fixtures and update bytecode fixtures if appropriate.
-7. Only then prioritize proving or repairing correctness theorems.
+| HOL file/area | Purpose | Status | Notes |
+|---|---|---|---|
+| `lowering/defs/evalCompilerScript.sml` | compiler smoke fixtures | unknown | Regenerate only after parity updates are understood. |
+| `lowering/defs/evalCompilerBytecodeScript.sml` | bytecode fixture comparison | unknown | Record compiler flags, EVM version, and metadata policy. |
+| `tests/vyper-test-exports` and generators | language-test AST/metadata export | uses repository pin by policy | Keep aligned with `VYPER_PIN`. |
 
-## Open questions
+## Audit workflow
 
-- Should the formalization target a release tag such as `v0.5.0a3`, or a newer exact upstream commit?
-- Should all compiler definition files be normalized to a single target commit in their headers?
-- Which upstream Venom bug fixes affect theorem statements vs only definitions?
-- Are any HOL definitions intentionally simplified compared with Python for proof tractability?
+1. Read the target revision from `VYPER_PIN` and verify the comparison checkout corresponds to it.
+2. Fix the formal boundary and compiler settings for the first theorem.
+3. For each matrix entry, compare the HOL definition with the exact pinned Python symbol.
+4. Record representational correspondences and intentional abstractions explicitly.
+5. Mark behavioral differences as definition updates rather than attempting to prove stale definitions correct.
+6. Identify theorem statements invalidated by each update.
+7. Determine the minimal mandatory pre-codegen pipeline.
+8. Update executable fixtures after definition changes, without treating fixture agreement as a proof.
+9. Close all entries on the first e2e path before declaring parity complete.
+
+## Open parity decisions
+
+- What precise elaborated metadata belongs to the trusted compiler-input boundary?
+- Should HOL compute module reachability, selectors, and dispatch data or relate supplied values to frontend output?
+- What pinned compiler setting gives the smallest valid pre-codegen pipeline?
+- Which passes are mandatory even when optional optimization is disabled?
+- How should assembly semantics represent or abstract nested EVM calls?
+- What bytecode metadata policy is part of the first deployment theorem?
+- Which HOL simplifications are intentional abstractions rather than missing compiler functionality?
