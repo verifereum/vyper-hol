@@ -517,7 +517,10 @@ Definition make_name_def:
 End
 
 Definition make_name_target_def:
-  make_name_target ctx id = NameTarget id
+  make_name_target ctx id =
+    if MEM id (SND (SND ctx))
+    then TopLevelNameTarget (FST (SND ctx), id)
+    else NameTarget id
 End
 
 (* ===== Expression Translation ===== *)
