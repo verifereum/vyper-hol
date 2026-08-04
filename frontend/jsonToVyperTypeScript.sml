@@ -48,6 +48,7 @@ Definition translate_type_def:
      if name = "bool" then BaseT BoolT
      else if name = "address" ∨ name = "self" then BaseT AddressT
      else if name = "decimal" then BaseT DecimalT
+     else if name = "(void)" then NoneT
      else StructT (source_id_opt_to_nsid main_src_id src_id_opt name)) /\
   (translate_type_list main_src_id [] = []) /\
   (translate_type_list main_src_id (t::ts) = translate_type main_src_id t :: translate_type_list main_src_id ts)
@@ -76,6 +77,7 @@ Definition translate_type_ctx_def:
      if name = "bool" then BaseT BoolT
      else if name = "address" ∨ name = "self" then BaseT AddressT
      else if name = "decimal" then BaseT DecimalT
+     else if name = "(void)" then NoneT
      else StructT (tctx_current_nsid ctx, name)) ∧
   (translate_type_ctx ctx (JT_Qualified path name) = translate_type (FST ctx) (JT_Qualified path name)) ∧
   (translate_type_ctx ctx ty = translate_type (FST ctx) ty)

@@ -670,7 +670,9 @@ Definition translate_expr_def:
 
   (* Tuple *)
   (translate_expr ctx (JE_Tuple es) =
-    Builtin (TupleT []) (MakeArray NONE (Fixed (LENGTH es))) (translate_expr_list ctx es)) /\
+    let es' = translate_expr_list ctx es in
+    Builtin (TupleT (MAP expr_type es'))
+      (MakeArray NONE (Fixed (LENGTH es'))) es') /\
 
   (* List - array literal *)
   (translate_expr ctx (JE_List es ty) =
