@@ -2958,7 +2958,9 @@ Proof
        Cases_on `v'` >> gvs[value_has_type_def] >>
        Cases_on `v''` >> gvs[value_has_type_def] >>
        simp[evaluate_builtin_def] >> NO_TAC) >>
-  all_tac
+  (* Abs *)
+  gvs[evaluate_type_def] >>
+  rw[evaluate_builtin_def, type_to_int_bound_def]
 QED
 
 (* Builtin success-type theorem: well-typed inputs produce well-typed outputs *)
@@ -3120,9 +3122,13 @@ Proof
   TRY (rename1 `evaluate_builtin _ _ (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECMul vs = INL v` >>
        metis_tac[ecmul_success_type] >> NO_TAC) >>
   (* Flag bitwise not: use w2n_and_low_mask_lt *)
-  TRY (gvs[w2n_and_low_mask_lt] >> NO_TAC) >>
+  TRY (gvs[w2n_and_low_mask_lt] >> NO_TAC)
+  (* Abs *)
+  >>~ [`evaluate_builtin _ _ _ Abs _`] >- (
+    gvs[evaluate_builtin_def, type_to_int_bound_def,
+        bounded_int_op_def] ) >>
   (* Arithmetic cleanup *)
-  TRY (intLib.ARITH_TAC)
+  intLib.ARITH_TAC
 QED
 
 Theorem return_INL_value[local]:
