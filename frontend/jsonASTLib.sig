@@ -126,7 +126,7 @@ signature jsonASTLib = sig
   val mk_JE_Str : term * string -> term
   val mk_JE_GenericStr : string -> term
   val mk_JE_Bytes : term * string -> term
-  val mk_JE_Hex : string -> term
+  val mk_JE_Hex : string * term -> term
   val mk_JE_Bool : bool -> term
   val mk_JE_Name : string * string option * term * term -> term
   val mk_JE_Attribute : term * string * string option * string option * string option * term * term -> term

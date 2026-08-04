@@ -73,7 +73,7 @@ Datatype:
   | JE_Str num string                                  (* length, value *)
   | JE_GenericStr string                               (* generic string, no length *)
   | JE_Bytes num string                                (* length, hex value *)
-  | JE_Hex string                                      (* hex value for fixed bytes *)
+  | JE_Hex string json_type                            (* hex value and compiler type *)
   | JE_Bool bool                                       (* True/False *)
 
   (* Variables and access *)
