@@ -218,7 +218,8 @@ Definition well_typed_builtin_app_def:
      EL 1 ts = BaseT (UintT 256)) /\
   well_typed_builtin_app ty PowMod256 ts =
     (ts = [BaseT (UintT 256); BaseT (UintT 256)] /\ ty = BaseT (UintT 256)) /\
-  well_typed_builtin_app ty Abs ts = F
+  well_typed_builtin_app ty Abs ts =
+    (ty = BaseT (IntT 256) /\ ts = [BaseT (IntT 256)])
 End
 
 Definition well_formed_type_def:
