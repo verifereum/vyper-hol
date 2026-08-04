@@ -3109,7 +3109,11 @@ Proof
        metis_tac[acc_builtin_success_type] >> NO_TAC) >>
   (* MethodId returns fixed bytes4. *)
   TRY (rename1 `evaluate_builtin _ _ (BaseT (BytesT (Fixed 4))) MethodId [arg] = INL v` >>
-       metis_tac[methodid_success_type] >> NO_TAC) >>
+       metis_tac[methodid_success_type] >> NO_TAC) >>~
+  (* MethodId returns dynamic Bytes[4]. *)
+  [`evaluate_builtin _ _ (BaseT (BytesT (Dynamic 4))) MethodId [arg] = INL v`]
+  >- (Cases_on `arg` >> gvs[evaluate_builtin_def, LENGTH_TAKE_EQ])
+  >- (Cases_on `arg` >> gvs[evaluate_builtin_def, LENGTH_TAKE_EQ]) >>
   (* ECRecover returns an address on success. *)
   TRY (rename1 `evaluate_builtin _ _ (BaseT AddressT) ECRecover vs = INL v` >>
        `value_has_type (BaseTV AddressT) v` by metis_tac[ecrecover_success_type] >>

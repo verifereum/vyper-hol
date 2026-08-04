@@ -207,7 +207,9 @@ Definition well_typed_builtin_app_def:
   well_typed_builtin_app ty (Acc item) ts =
     (LENGTH ts = 1 /\ HD ts = BaseT AddressT /\ ty = account_item_type item) /\
   well_typed_builtin_app ty MethodId ts =
-    (LENGTH ts = 1 /\ ty = BaseT (BytesT (Fixed 4)) /\ is_bytes_or_string_type (HD ts)) /\
+    (LENGTH ts = 1 /\
+     (ty = BaseT (BytesT (Dynamic 4)) \/ ty = BaseT (BytesT (Fixed 4))) /\
+     is_bytes_or_string_type (HD ts)) /\
   well_typed_builtin_app ty ECRecover ts =
     (LENGTH ts = 4 /\ ty = BaseT AddressT /\ HD ts = BaseT (BytesT (Fixed 32)) /\
      EVERY (\t. t = BaseT (UintT 256) \/ t = BaseT (BytesT (Fixed 32))) (TL ts)) /\
