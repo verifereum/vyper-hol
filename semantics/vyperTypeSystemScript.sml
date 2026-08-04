@@ -80,6 +80,8 @@ Definition well_typed_literal_def:
     within_int_bound (Signed 168) n /\
   well_typed_literal (BaseT (StringT n)) (StringL s) =
     (LENGTH s <= n) /\
+  well_typed_literal (BaseT AddressT) (BytesL bs) =
+    (LENGTH bs = 20) /\
   well_typed_literal (BaseT (BytesT bd)) (BytesL bs) =
     compatible_bound bd (LENGTH bs) /\
   well_typed_literal _ _ = F

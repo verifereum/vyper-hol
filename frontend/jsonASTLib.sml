@@ -155,7 +155,7 @@ fun mk_JE_Decimal s = mk_comb(JE_Decimal_tm, fromMLstring s)
 fun mk_JE_Str (len, v) = list_mk_comb(JE_Str_tm, [len, fromMLstring v])
 fun mk_JE_GenericStr v = mk_comb(JE_GenericStr_tm, fromMLstring v)
 fun mk_JE_Bytes (len, v) = list_mk_comb(JE_Bytes_tm, [len, fromMLstring v])
-fun mk_JE_Hex s = mk_comb(JE_Hex_tm, fromMLstring s)
+fun mk_JE_Hex (s, ty) = list_mk_comb(JE_Hex_tm, [fromMLstring s, ty])
 fun mk_JE_Bool b = mk_comb(JE_Bool_tm, mk_bool b)
 fun mk_JE_Name (s, tc_opt, src_id_opt, ty) =
   list_mk_comb(JE_Name_tm, [fromMLstring s,
@@ -619,9 +619,11 @@ fun d_json_expr () : term decoder = achoose "expr" [
                           field "length" numtm),
             field "value" string),
 
-  (* Hex literal (fixed bytes) *)
+  (* Hex literal: preserve the compiler type, including address. *)
   check_ast_type "Hex" $
-    JSONDecode.map mk_JE_Hex (field "value" string),
+    JSONDecode.map mk_JE_Hex $
+    tuple2 (field "value" string,
+            orElse (field "type" json_type, succeed JT_None_tm)),
 
   (* Bool literal (NameConstant) *)
   check_ast_type "NameConstant" $

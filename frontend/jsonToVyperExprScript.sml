@@ -523,6 +523,12 @@ Definition make_name_target_def:
     else NameTarget id
 End
 
+Definition interface_constructor_result_def:
+  interface_constructor_result ty [Literal _ (BytesL bs)] =
+    Literal ty (BytesL bs) /\
+  interface_constructor_result _ args = HD args
+End
+
 (* ===== Expression Translation ===== *)
 
 (* Find a keyword by name in a keyword list, returns the json_expr if found *)
@@ -572,9 +578,12 @@ Definition translate_expr_def:
   (translate_expr ctx (JE_Bytes len hex) =
     Literal (BaseT (BytesT (Dynamic len))) (BytesL (hex_string_to_bytes (FILTER isHexDigit (strip_0x hex))))) /\
 
-  (translate_expr ctx (JE_Hex hex) =
+  (translate_expr ctx (JE_Hex hex typ) =
     let bytes = hex_string_to_bytes (FILTER isHexDigit (strip_0x hex)) in
-    Literal (BaseT (BytesT (Fixed (LENGTH bytes)))) (BytesL bytes)) /\
+    let ty = case typ of
+               JT_None => BaseT (BytesT (Fixed (LENGTH bytes)))
+             | _ => translate_type (FST ctx) typ in
+    Literal ty (BytesL bytes)) /\
 
   (translate_expr ctx (JE_Bool b) = Literal (BaseT BoolT) (BoolL b)) /\
 
@@ -692,11 +701,14 @@ Definition translate_expr_def:
     let kwargs' = translate_kwargs ctx kwargs in
     let rty = translate_type (FST ctx) ret_ty in
     case func of
-    | JE_Name name (SOME "interface") _ _ => HD args'
+    | JE_Name name (SOME "interface") _ _ =>
+        interface_constructor_result rty args'
     | JE_Name name _ _ _ => make_builtin_call (FST ctx) name args' kwargs' ret_ty
     (* lib.__at__(addr) / lib.__interface__(addr) - interface instantiation, just returns the address *)
-    | JE_Attribute _ "__at__" _ _ _ _ _ => HD args'
-    | JE_Attribute _ "__interface__" _ _ _ _ _ => HD args'
+    | JE_Attribute _ "__at__" _ _ _ _ _ =>
+        interface_constructor_result rty args'
+    | JE_Attribute _ "__interface__" _ _ _ _ _ =>
+        interface_constructor_result rty args'
     | JE_Attribute base "pop" _ _ _ _ _ =>
         (case base of
          | JE_Name id _ _ _ => Pop rty (make_name_target ctx id)
@@ -711,7 +723,8 @@ Definition translate_expr_def:
     (* self.func(args) - internal call *)
     | JE_Attribute (JE_Name "self" _ _ _) fname _ _ _ _ _ => Call rty (IntCall (source_id_to_nsid (FST ctx) src_id_opt, fname)) args' NONE
     (* Module struct constructor, interface constructor, or module function call *)
-    | _ => if is_interface_constructor func then HD args'
+    | _ => if is_interface_constructor func then
+             interface_constructor_result rty args'
            else let nsid = source_id_to_nsid (FST ctx) src_id_opt;
                fname = extract_func_name func in
            (case ret_ty of
