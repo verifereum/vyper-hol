@@ -65,11 +65,34 @@ Definition translate_type_def:
            NONE => tctx_current_nsid ctx
          | SOME src_id => source_id_to_nsid (tctx_main_src_id ctx) src_id),
         name)) ∧
-  (translate_type ctx (JT_Qualified _ name) = StructT (NONE, name)) ∧
   (translate_type ctx (JT_HashMap _ _) = NoneT) ∧
   (translate_type ctx JT_None = NoneT)
 Termination
   WF_REL_TAC `measure (λ(_,ty). json_type_size ty)` >> simp[]
+End
+
+Definition translate_annotation_def:
+  (translate_annotation ctx (JTA_Integer bits T) = BaseT (IntT bits)) ∧
+  (translate_annotation ctx (JTA_Integer bits F) = BaseT (UintT bits)) ∧
+  (translate_annotation ctx (JTA_BytesM m) = BaseT (BytesT (Fixed m))) ∧
+  (translate_annotation ctx (JTA_String n) = BaseT (StringT n)) ∧
+  (translate_annotation ctx (JTA_Bytes n) = BaseT (BytesT (Dynamic n))) ∧
+  (translate_annotation ctx (JTA_StaticArray ty len) =
+    ArrayT (translate_annotation ctx ty) (Fixed len)) ∧
+  (translate_annotation ctx (JTA_DynArray ty len) =
+    ArrayT (translate_annotation ctx ty) (Dynamic len)) ∧
+  (translate_annotation ctx (JTA_Tuple tys) =
+    TupleT (MAP (translate_annotation ctx) tys)) ∧
+  (translate_annotation ctx (JTA_Named name) =
+    if name = "bool" then BaseT BoolT
+    else if name = "address" ∨ name = "self" then BaseT AddressT
+    else if name = "decimal" then BaseT DecimalT
+    else if name = "(void)" then NoneT
+    else StructT (tctx_current_nsid ctx, name)) ∧
+  (translate_annotation ctx (JTA_Qualified _ name) = StructT (NONE, name)) ∧
+  (translate_annotation ctx JTA_None = NoneT)
+Termination
+  WF_REL_TAC `measure (λ(_,ann). json_type_annotation_size ann)` >> simp[]
 End
 
 (* Qualified syntactic annotations are resolved locally using the current
@@ -120,7 +143,7 @@ End
 Definition translate_type_with_annotation_def:
   translate_type_with_annotation all_import_maps ctx inferred ann =
     case ann of
-    | JT_Qualified path attr =>
+    | JTA_Qualified path attr =>
         translate_qualified_annotation all_import_maps ctx inferred path attr
     | _ => translate_type ctx inferred
 End

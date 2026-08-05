@@ -950,7 +950,7 @@ Definition translate_stmt_def:
         (get_iter_bound iter) (MAP (translate_stmt ctx) body)) /\
   (translate_stmt ctx (JS_Assign tgt val) =
     Assign (translate_target ctx tgt) (translate_expr ctx val)) /\
-  (translate_stmt ctx (JS_AnnAssign var ty val) =
+  (translate_stmt ctx (JS_AnnAssign var ty ann val) =
     AnnAssign var (translate_type (expr_type_ctx ctx) ty) (translate_expr ctx val)) /\
   (translate_stmt ctx (JS_AugAssign tgt op val) =
     AugAssign (expr_type (translate_expr ctx val))

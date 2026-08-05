@@ -36,10 +36,25 @@ Datatype:
   | JT_Struct (int option) string             (* optional declaration source_id, name *)
   | JT_Flag (int option) string               (* optional declaration source_id, name *)
   | JT_Interface (int option) string          (* optional declaration source_id, name *)
-  | JT_Qualified (string list) string         (* qualified annotation: path.name *)
   | JT_Tuple (json_type list)                 (* member_types *)
   | JT_HashMap json_type json_type            (* key_type, value_type *)
   | JT_None                                   (* null type *)
+End
+
+(* Syntactic type annotations are kept distinct from compiler-inferred type
+   metadata. Names and qualified paths are resolved only by jsonToVyper. *)
+Datatype:
+  json_type_annotation
+  = JTA_Named string
+  | JTA_Integer num bool
+  | JTA_BytesM num
+  | JTA_String num
+  | JTA_Bytes num
+  | JTA_StaticArray json_type_annotation num
+  | JTA_DynArray json_type_annotation num
+  | JTA_Qualified (string list) string
+  | JTA_Tuple (json_type_annotation list)
+  | JTA_None
 End
 
 (* ===== Binary/Unary Operators ===== *)
@@ -128,7 +143,8 @@ Datatype:
   | JS_If json_expr (json_stmt list) (json_stmt list)  (* test, body, orelse *)
   | JS_For string json_type json_iter (json_stmt list) (* var, var_type, iter, body *)
   | JS_Assign json_target json_expr                    (* target, value *)
-  | JS_AnnAssign string json_type json_expr            (* var name, type, value *)
+  | JS_AnnAssign string json_type json_type_annotation json_expr
+      (* var name, inferred type, syntactic annotation, value *)
   | JS_AugAssign json_base_target json_binop json_expr (* target, op, value *)
   | JS_Append json_base_target json_expr               (* target, value *)
 ;
@@ -157,7 +173,7 @@ Datatype:
 End
 
 Datatype:
-  json_arg = JArg string json_type                     (* arg name, type *)
+  json_arg = JArg string json_type_annotation          (* arg name, syntactic annotation *)
 End
 
 Datatype:
@@ -181,15 +197,15 @@ End
 
 Datatype:
   json_interface_func
-  = JInterfaceFunc string (json_arg list) json_type (string list)
+  = JInterfaceFunc string (json_arg list) json_type_annotation (string list)
     (* name, args, return_type, decorators (mutability) *)
 End
 
 Datatype:
   json_toplevel
-  = JTL_FunctionDef string (string list) (json_arg list) (json_expr list) json_func_type json_type (json_stmt list)
+  = JTL_FunctionDef string (string list) (json_arg list) (json_expr list) json_func_type json_type_annotation (json_stmt list)
       (* name, decorators, args, defaults, func_type, syntactic return annotation, body *)
-  | JTL_VariableDecl string json_type json_type bool bool bool (json_expr option)
+  | JTL_VariableDecl string json_type json_type_annotation bool bool bool (json_expr option)
       (* name, inferred type, syntactic annotation, is_public, is_immutable, is_transient, value (for constants) *)
   | JTL_HashMapDecl string json_type json_value_type bool bool
       (* name, key_type, value_type, is_public, is_transient *)

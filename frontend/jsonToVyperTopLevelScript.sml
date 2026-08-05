@@ -22,14 +22,15 @@ End
 
 
 Definition translate_arg_def:
-  translate_arg ctx (JArg name ty) = (name, translate_type ctx ty)
+  translate_arg ctx (JArg name ann) =
+    (name, translate_annotation ctx ann)
 End
 
 Definition translate_interface_func_def:
   translate_interface_func ctx (JInterfaceFunc name args ret_ty decs) =
     (name,
      MAP (translate_arg ctx) args,
-     translate_type ctx ret_ty,
+     translate_annotation ctx ret_ty,
      translate_mutability decs) : interface_func
 End
 
