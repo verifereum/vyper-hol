@@ -354,12 +354,12 @@ fun mk_JTL_ExportsDecl ann = mk_comb(JTL_ExportsDecl_tm, ann)
 fun mk_JTL_InitializesDecl ann = mk_comb(JTL_InitializesDecl_tm, ann)
 fun mk_JTL_UsesDecl ann = mk_comb(JTL_UsesDecl_tm, ann)
 fun mk_JTL_ImplementsDecl ann = mk_comb(JTL_ImplementsDecl_tm, ann)
-fun mk_JModule (src_id, tls) =
-  list_mk_comb(JModule_tm, [src_id, mk_list(tls, json_toplevel_ty)])
-fun mk_JImportedModule (src_id_tm, path, body) =
+fun mk_JModule (src_id, nr_default, tls) =
+  list_mk_comb(JModule_tm,
+    [src_id, mk_bool nr_default, mk_list(tls, json_toplevel_ty)])
+fun mk_JImportedModule (src_id_tm, path, nr_default, body) =
   list_mk_comb(JImportedModule_tm,
-    [src_id_tm,
-     fromMLstring path,
+    [src_id_tm, fromMLstring path, mk_bool nr_default,
      mk_list(body, json_toplevel_ty)])
 fun mk_JAnnotatedAST (main_ast, imports) =
   list_mk_comb(JAnnotatedAST_tm,
@@ -1259,53 +1259,29 @@ val json_toplevel : term decoder = achoose "toplevel" [
     field "children" $ sub 0 json_expr
 ]
 
-(* ===== Nonreentrancy Pragma ===== *)
-(* If settings.nonreentrancy_by_default is true, inject "nonreentrant"
-   into the decorator list of external functions that don't already have it. *)
-
-val nonreentrancy_by_default : bool decoder =
-  orElse (field "settings" $ field "nonreentrancy_by_default" bool, succeed false)
-
-fun inject_nonreentrant_decs tl_tm =
-  let val (f, args) = strip_comb tl_tm in
-    if same_const f JTL_FunctionDef_tm then
-      let val [name, decs, fargs, defaults, func_type, ret_ann, body] = args
-          val dec_strs = fst (listSyntax.dest_list decs)
-          val dec_mls = List.map stringSyntax.fromHOLstring dec_strs
-      in
-        if List.exists (fn s => s = "external") dec_mls
-           andalso not (List.exists (fn s => s = "nonreentrant") dec_mls)
-           andalso not (List.exists (fn s => s = "reentrant") dec_mls)
-        then
-          let val new_decs = mk_list(dec_strs @ [fromMLstring "nonreentrant"], string_ty)
-          in list_mk_comb(JTL_FunctionDef_tm, [name, new_decs, fargs, defaults, func_type, ret_ann, body])
-          end
-        else tl_tm
-      end
-    else tl_tm
-  end
-
-fun apply_nonreentrancy_pragma nr_default tls =
-  if nr_default then List.map inject_nonreentrant_decs tls else tls
-
 (* ===== Module Decoder ===== *)
 
+val nonreentrancy_by_default : bool decoder =
+  orElse (field "settings" $ field "nonreentrancy_by_default" bool,
+          succeed false)
+
 val json_module : term decoder =
-  JSONDecode.map (fn ((src_id, body), nr) => mk_JModule(src_id, apply_nonreentrancy_pragma nr body)) $
-  tuple2 (tuple2 (orElse (field "source_id" inttm,
-                          succeed (intSyntax.term_of_int (Arbint.fromInt ~1))),
-                  field "body" (array json_toplevel)),
-          nonreentrancy_by_default)
+  JSONDecode.map (fn (src_id, nr, body) => mk_JModule(src_id, nr, body)) $
+  tuple3 (orElse (field "source_id" inttm,
+                  succeed (intSyntax.term_of_int (Arbint.fromInt ~1))),
+          nonreentrancy_by_default,
+          field "body" (array json_toplevel))
 
 (* ===== Imported Module Decoder ===== *)
 (* Decoder for imported modules from the imports array *)
 
 val json_imported_module : term decoder =
-  JSONDecode.map (fn ((src_id, path, body), nr) => mk_JImportedModule(src_id, path, apply_nonreentrancy_pragma nr body)) $
-  tuple2 (tuple3 (field "source_id" inttm,
-                  field "path" string,
-                  field "body" (array json_toplevel)),
-          nonreentrancy_by_default)
+  JSONDecode.map (fn (src_id, path, nr, body) =>
+    mk_JImportedModule(src_id, path, nr, body)) $
+  tuple4 (field "source_id" inttm,
+          field "path" string,
+          nonreentrancy_by_default,
+          field "body" (array json_toplevel))
 
 (* Parse raw Vyper `-f annotated_ast` output. *)
 (* Returns JAnnotatedAST with main module and list of imported modules. *)

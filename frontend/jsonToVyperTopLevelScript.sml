@@ -63,9 +63,17 @@ Definition translate_var_mutability_def:
     else Storage
 End
 
+Definition effective_decorators_def:
+  effective_decorators nr_default decs =
+    if nr_default ∧ MEM "external" decs ∧
+       ¬MEM "nonreentrant" decs ∧ ¬MEM "reentrant" decs
+    then decs ++ ["nonreentrant"]
+    else decs
+End
 
 Definition translate_toplevel_def:
-  (translate_toplevel all_import_maps expr_ctx type_ctx (JTL_FunctionDef name decs args defaults (JFuncType arg_tys ret_ty) ret_ann body) =
+  (translate_toplevel all_import_maps expr_ctx type_ctx nr_default (JTL_FunctionDef name decs args defaults (JFuncType arg_tys ret_ty) ret_ann body) =
+    let decs = effective_decorators nr_default decs in
     SOME (FunctionDecl
       (translate_visibility decs)
       (translate_mutability decs)
@@ -77,7 +85,7 @@ Definition translate_toplevel_def:
       (translate_type_with_annotation all_import_maps type_ctx ret_ty ret_ann)
       (MAP (translate_stmt expr_ctx) body))) /\
 
-  (translate_toplevel all_import_maps expr_ctx type_ctx (JTL_VariableDecl name ty ann_ty is_public is_immutable is_transient const_val) =
+  (translate_toplevel all_import_maps expr_ctx type_ctx nr_default (JTL_VariableDecl name ty ann_ty is_public is_immutable is_transient const_val) =
     SOME (VariableDecl
       (if is_public then Public else Private)
       (translate_var_mutability expr_ctx is_immutable is_transient
@@ -86,7 +94,7 @@ Definition translate_toplevel_def:
       (translate_type_with_annotation all_import_maps type_ctx ty ann_ty)
       NONE)) /\
 
-  (translate_toplevel all_import_maps expr_ctx type_ctx (JTL_HashMapDecl name key_ty val_ty is_public is_transient) =
+  (translate_toplevel all_import_maps expr_ctx type_ctx nr_default (JTL_HashMapDecl name key_ty val_ty is_public is_transient) =
     SOME (HashMapDecl
       (if is_public then Public else Private)
       is_transient
@@ -95,24 +103,24 @@ Definition translate_toplevel_def:
       (translate_value_type type_ctx val_ty)
       NONE)) /\
 
-  (translate_toplevel all_import_maps expr_ctx type_ctx (JTL_EventDef name args) =
+  (translate_toplevel all_import_maps expr_ctx type_ctx nr_default (JTL_EventDef name args) =
     SOME (EventDecl name (MAP (λ(a,idx). (translate_arg type_ctx a, idx)) args))) /\
 
-  (translate_toplevel all_import_maps expr_ctx type_ctx (JTL_StructDef name args) =
+  (translate_toplevel all_import_maps expr_ctx type_ctx nr_default (JTL_StructDef name args) =
     SOME (StructDecl name (MAP (translate_arg type_ctx) args))) /\
 
-  (translate_toplevel all_import_maps expr_ctx type_ctx (JTL_FlagDef name members) =
+  (translate_toplevel all_import_maps expr_ctx type_ctx nr_default (JTL_FlagDef name members) =
     SOME (FlagDecl name members)) /\
 
-  (translate_toplevel all_import_maps expr_ctx type_ctx (JTL_InterfaceDef name funcs) =
+  (translate_toplevel all_import_maps expr_ctx type_ctx nr_default (JTL_InterfaceDef name funcs) =
     SOME (InterfaceDecl name (MAP (translate_interface_func type_ctx) funcs))) /\
 
   (* Module declarations are compiled away - the imported content is already inlined *)
-  (translate_toplevel all_import_maps expr_ctx type_ctx (JTL_Import _) = NONE) /\
-  (translate_toplevel all_import_maps expr_ctx type_ctx (JTL_ExportsDecl _) = NONE) /\
-  (translate_toplevel all_import_maps expr_ctx type_ctx (JTL_InitializesDecl _) = NONE) /\
-  (translate_toplevel all_import_maps expr_ctx type_ctx (JTL_UsesDecl _) = NONE) /\
-  (translate_toplevel all_import_maps expr_ctx type_ctx (JTL_ImplementsDecl _) = NONE)
+  (translate_toplevel all_import_maps expr_ctx type_ctx nr_default (JTL_Import _) = NONE) /\
+  (translate_toplevel all_import_maps expr_ctx type_ctx nr_default (JTL_ExportsDecl _) = NONE) /\
+  (translate_toplevel all_import_maps expr_ctx type_ctx nr_default (JTL_InitializesDecl _) = NONE) /\
+  (translate_toplevel all_import_maps expr_ctx type_ctx nr_default (JTL_UsesDecl _) = NONE) /\
+  (translate_toplevel all_import_maps expr_ctx type_ctx nr_default (JTL_ImplementsDecl _) = NONE)
 End
 
 

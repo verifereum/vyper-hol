@@ -226,7 +226,8 @@ End
 (* ===== Module ===== *)
 
 Datatype:
-  json_module = JModule int (json_toplevel list)
+  json_module = JModule int bool (json_toplevel list)
+    (* source_id, nonreentrancy_by_default, body *)
 End
 
 (* ===== Imported Module ===== *)
@@ -234,7 +235,8 @@ End
 
 Datatype:
   json_imported_module
-  = JImportedModule int string (json_toplevel list)  (* source_id, path, body *)
+  = JImportedModule int string bool (json_toplevel list)
+    (* source_id, path, nonreentrancy_by_default, body *)
 End
 
 (* ===== Annotated AST ===== *)
