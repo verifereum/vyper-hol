@@ -18,7 +18,7 @@ End
 Definition build_import_map_def:
   build_import_map [] = [] ∧
   build_import_map (JImportInfo alias src_id _ :: rest) =
-    (alias, Num (src_id + &builtin_source_id_offset)) :: build_import_map rest
+    (alias, source_id_to_module_id src_id) :: build_import_map rest
 End
 
 
@@ -48,7 +48,7 @@ End
    Returns T if sorted, F otherwise. *)
 Definition imports_topsorted_def:
   imports_topsorted seen [] = T ∧
-  imports_topsorted seen (JImportedModule src_id _ body :: rest) =
+  imports_topsorted seen (JImportedModule src_id _ _ body :: rest) =
     let deps = get_module_deps body in
     if EVERY (λd. MEM d seen) deps
     then imports_topsorted (src_id :: seen) rest
@@ -119,15 +119,15 @@ End
 (* Find module body by raw source_id in imports list *)
 Definition find_module_body_def:
   find_module_body src_id [] = [] ∧
-  find_module_body src_id (JImportedModule sid _ body :: rest) =
+  find_module_body src_id (JImportedModule sid _ _ body :: rest) =
     if src_id = sid then body else find_module_body src_id rest
 End
 
 (* Find module body by offset source_id (num) in imports list *)
 Definition find_module_body_nsid_def:
   find_module_body_nsid nsid [] = [] ∧
-  find_module_body_nsid nsid (JImportedModule sid _ body :: rest) =
-    if nsid = Num (sid + &builtin_source_id_offset) then body
+  find_module_body_nsid nsid (JImportedModule sid _ _ body :: rest) =
+    if nsid = source_id_to_module_id sid then body
     else find_module_body_nsid nsid rest
 End
 
@@ -153,8 +153,8 @@ End
 (* Build a map from source_id to import_map for all imported modules *)
 Definition build_all_import_maps_def:
   build_all_import_maps [] = [] ∧
-  build_all_import_maps (JImportedModule src_id _ body :: rest) =
-    let nsid = Num (src_id + &builtin_source_id_offset) in
+  build_all_import_maps (JImportedModule src_id _ _ body :: rest) =
+    let nsid = source_id_to_module_id src_id in
     (nsid, build_import_map (collect_imports body)) ::
     build_all_import_maps rest
 End
@@ -196,8 +196,8 @@ End
 
 Definition build_all_inline_interface_maps_def:
   build_all_inline_interface_maps [] = [] ∧
-  build_all_inline_interface_maps (JImportedModule src_id _ body :: rest) =
-    let nsid = Num (src_id + &builtin_source_id_offset) in
+  build_all_inline_interface_maps (JImportedModule src_id _ _ body :: rest) =
+    let nsid = source_id_to_module_id src_id in
     (nsid, collect_inline_interfaces body) :: build_all_inline_interface_maps rest
 End
 
@@ -299,17 +299,13 @@ End
 
 Definition build_import_compact_indexes_def:
   build_import_compact_indexes [] = [] ∧
-  build_import_compact_indexes (JImportedModule src_id _ body :: rest) =
-    module_compact_index (Num (src_id + &builtin_source_id_offset)) body ::
+  build_import_compact_indexes (JImportedModule src_id _ _ body :: rest) =
+    module_compact_index (source_id_to_module_id src_id) body ::
     build_import_compact_indexes rest
 End
 
 Definition compact_index_import_map_def:
   compact_index_import_map (src_id, import_map, ext_names, inline_map, export_anns) = import_map
-End
-
-Definition compact_index_ext_names_def:
-  compact_index_ext_names (src_id, import_map, ext_names, inline_map, export_anns) = ext_names
 End
 
 Definition compact_index_export_anns_def:
@@ -351,20 +347,6 @@ Definition extract_exports_with_indexes_def:
       (compact_index_export_anns main_index)
 End
 
-Definition extract_exports_with_import_maps_def:
-  extract_exports_with_import_maps all_import_maps (JModule main_src_id toplevels) imports =
-    let import_indexes = build_import_compact_indexes imports in
-    let all_inline_maps = build_inline_maps_from_indexes import_indexes in
-    let exports_map = build_exports_map_from_indexes all_import_maps all_inline_maps [] import_indexes in
-    let main_index = module_compact_index 0 toplevels in
-    extract_exports_with_indexes all_import_maps all_inline_maps exports_map main_index
-End
-
-Definition extract_exports_def:
-  extract_exports main imports =
-    extract_exports_with_import_maps (build_all_import_maps imports) main imports
-End
-
 (* ===== Module Translation ===== *)
 
 Definition filter_some_def:
@@ -375,22 +357,25 @@ End
 
 
 Definition translate_module_def:
-  translate_module all_import_maps (JModule main_src_id toplevels) =
+  translate_module all_import_maps (JModule main_src_id nr_default toplevels) =
     let import_map = build_import_map (collect_imports toplevels) in
     let expr_ctx =
       (main_src_id, (NONE, (import_map, collect_consts_and_immutables toplevels))) in
     let type_ctx = (main_src_id, NONE, import_map) in
-    filter_some (MAP (translate_toplevel all_import_maps expr_ctx type_ctx) toplevels)
+    filter_some
+      (MAP (translate_toplevel all_import_maps expr_ctx type_ctx nr_default)
+        toplevels)
 End
 
 Definition translate_imported_module_def:
-  translate_imported_module all_import_maps main_src_id (JImportedModule src_id path body) =
-    let nsid = Num (src_id + &builtin_source_id_offset) in
+  translate_imported_module all_import_maps main_src_id (JImportedModule src_id path nr_default body) =
+    let nsid = source_id_to_module_id src_id in
     let import_map = build_import_map (collect_imports body) in
     let expr_ctx =
       (main_src_id, (SOME nsid, (import_map, collect_consts_and_immutables body))) in
     let type_ctx = (main_src_id, SOME nsid, import_map) in
-    (SOME nsid, filter_some (MAP (translate_toplevel all_import_maps expr_ctx type_ctx) body))
+    (SOME nsid, filter_some
+      (MAP (translate_toplevel all_import_maps expr_ctx type_ctx nr_default) body))
 End
 
 Definition translate_imported_modules_def:
@@ -399,12 +384,6 @@ Definition translate_imported_modules_def:
     translate_imported_module all_import_maps main_src_id imp ::
     translate_imported_modules all_import_maps main_src_id imports
 End
-
-(* Extract toplevels from a JModule (needed to get import infos) *)
-Definition main_toplevels_def:
-  main_toplevels (JModule _ toplevels) = toplevels
-End
-
 
 (* ===== Annotate Storage Slots ===== *)
 
@@ -442,9 +421,10 @@ End
    - import_map: alias -> source_id (for storage layout key transformation)
    Returns NONE if imports are not topologically sorted. *)
 Definition translate_annotated_ast_def:
-  translate_annotated_ast (JAnnotatedAST (JModule main_src_id toplevels) imports) =
+  translate_annotated_ast
+      (JAnnotatedAST (JModule main_src_id nr_default toplevels) imports) =
     if ¬imports_topsorted [] imports then NONE else
-    let main = JModule main_src_id toplevels in
+    let main = JModule main_src_id nr_default toplevels in
     let import_indexes = build_import_compact_indexes imports in
     let all_import_maps = build_import_maps_from_indexes import_indexes in
     let all_inline_maps = build_inline_maps_from_indexes import_indexes in

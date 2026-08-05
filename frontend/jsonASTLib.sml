@@ -22,43 +22,16 @@ fun mk_nsid (src_id_opt, name) =
 
 (* ===== Types ===== *)
 
-val json_typeclass_ty = jasty "json_typeclass"
 val json_type_ty = jasty "json_type"
-val json_binop_ty = jasty "json_binop"
-val json_unaryop_ty = jasty "json_unaryop"
-val json_boolop_ty = jasty "json_boolop"
+val json_type_annotation_ty = jasty "json_type_annotation"
 val json_expr_ty = jasty "json_expr"
 val json_keyword_ty = jasty "json_keyword"
 val json_stmt_ty = jasty "json_stmt"
-val json_iter_ty = jasty "json_iter"
-val json_base_target_ty = jasty "json_base_target"
 val json_target_ty = jasty "json_target"
-val json_decorator_ty = jasty "json_decorator"
 val json_arg_ty = jasty "json_arg"
-val json_func_type_ty = jasty "json_func_type"
-val json_value_type_ty = jasty "json_value_type"
 val json_interface_func_ty = jasty "json_interface_func"
 val json_import_info_ty = jasty "json_import_info"
 val json_toplevel_ty = jasty "json_toplevel"
-val json_module_ty = jasty "json_module"
-
-(* ===== Typeclass Constructors ===== *)
-
-val TC_integer_tm = jastk "TC_integer"
-val TC_bytes_m_tm = jastk "TC_bytes_m"
-val TC_static_array_tm = jastk "TC_static_array"
-val TC_dynamic_array_tm = jastk "TC_dynamic_array"
-val TC_struct_tm = jastk "TC_struct"
-val TC_flag_tm = jastk "TC_flag"
-val TC_tuple_tm = jastk "TC_tuple"
-val TC_hashmap_tm = jastk "TC_hashmap"
-val TC_interface_tm = jastk "TC_interface"
-val TC_contract_function_tm = jastk "TC_contract_function"
-val TC_builtin_function_tm = jastk "TC_builtin_function"
-val TC_module_tm = jastk "TC_module"
-val TC_other_tm = jastk "TC_other"
-
-fun mk_TC_other s = mk_comb(TC_other_tm, fromMLstring s)
 
 (* ===== Type Constructors ===== *)
 
@@ -71,7 +44,7 @@ val JT_StaticArray_tm = jastk "JT_StaticArray"
 val JT_DynArray_tm = jastk "JT_DynArray"
 val JT_Struct_tm = jastk "JT_Struct"
 val JT_Flag_tm = jastk "JT_Flag"
-val JT_Qualified_tm = jastk "JT_Qualified"
+val JT_Interface_tm = jastk "JT_Interface"
 val JT_Tuple_tm = jastk "JT_Tuple"
 val JT_HashMap_tm = jastk "JT_HashMap"
 val JT_None_tm = jastk "JT_None"
@@ -86,10 +59,37 @@ fun mk_JT_StaticArray (vt, len) = list_mk_comb(JT_StaticArray_tm, [vt, len])
 fun mk_JT_DynArray (vt, len) = list_mk_comb(JT_DynArray_tm, [vt, len])
 fun mk_JT_Struct (sid_opt, s) = list_mk_comb(JT_Struct_tm, [sid_opt, fromMLstring s])
 fun mk_JT_Flag (sid_opt, s) = list_mk_comb(JT_Flag_tm, [sid_opt, fromMLstring s])
-fun mk_JT_Qualified (path, name) =
-  list_mk_comb(JT_Qualified_tm, [mk_list(List.map fromMLstring path, string_ty), fromMLstring name])
+fun mk_JT_Interface (sid_opt, s) =
+  list_mk_comb(JT_Interface_tm, [sid_opt, fromMLstring s])
 fun mk_JT_Tuple ts = mk_comb(JT_Tuple_tm, mk_list(ts, json_type_ty))
 fun mk_JT_HashMap (kt, vt) = list_mk_comb(JT_HashMap_tm, [kt, vt])
+
+(* ===== Type Annotation Constructors ===== *)
+
+val JTA_Named_tm = jastk "JTA_Named"
+val JTA_Integer_tm = jastk "JTA_Integer"
+val JTA_BytesM_tm = jastk "JTA_BytesM"
+val JTA_String_tm = jastk "JTA_String"
+val JTA_Bytes_tm = jastk "JTA_Bytes"
+val JTA_StaticArray_tm = jastk "JTA_StaticArray"
+val JTA_DynArray_tm = jastk "JTA_DynArray"
+val JTA_Qualified_tm = jastk "JTA_Qualified"
+val JTA_Tuple_tm = jastk "JTA_Tuple"
+val JTA_None_tm = jastk "JTA_None"
+
+fun mk_JTA_Named s = mk_comb(JTA_Named_tm, fromMLstring s)
+fun mk_JTA_Integer (bits, is_signed) =
+  list_mk_comb(JTA_Integer_tm, [bits, mk_bool is_signed])
+fun mk_JTA_BytesM m = mk_comb(JTA_BytesM_tm, m)
+fun mk_JTA_String len = mk_comb(JTA_String_tm, len)
+fun mk_JTA_Bytes len = mk_comb(JTA_Bytes_tm, len)
+fun mk_JTA_StaticArray (vt, len) = list_mk_comb(JTA_StaticArray_tm, [vt, len])
+fun mk_JTA_DynArray (vt, len) = list_mk_comb(JTA_DynArray_tm, [vt, len])
+fun mk_JTA_Qualified (path, name) =
+  list_mk_comb(JTA_Qualified_tm,
+    [mk_list(List.map fromMLstring path, string_ty), fromMLstring name])
+fun mk_JTA_Tuple ts =
+  mk_comb(JTA_Tuple_tm, mk_list(ts, json_type_annotation_ty))
 
 (* ===== Operator Constructors ===== *)
 
@@ -132,11 +132,14 @@ val JE_GenericStr_tm = jastk "JE_GenericStr"
 val JE_Bytes_tm = jastk "JE_Bytes"
 val JE_Hex_tm = jastk "JE_Hex"
 val JE_Bool_tm = jastk "JE_Bool"
+val JE_Ellipsis_tm = jastk "JE_Ellipsis"
 val JE_Name_tm = jastk "JE_Name"
+val JE_Folded_tm = jastk "JE_Folded"
 val JE_Attribute_tm = jastk "JE_Attribute"
 val JE_Subscript_tm = jastk "JE_Subscript"
 val JE_NamedExpr_tm = jastk "JE_NamedExpr"
 val JE_BinOp_tm = jastk "JE_BinOp"
+val JE_Compare_tm = jastk "JE_Compare"
 val JE_BoolOp_tm = jastk "JE_BoolOp"
 val JE_UnaryOp_tm = jastk "JE_UnaryOp"
 val JE_IfExp_tm = jastk "JE_IfExp"
@@ -159,6 +162,8 @@ fun mk_JE_Name (s, tc_opt, src_id_opt, ty) =
   list_mk_comb(JE_Name_tm, [fromMLstring s,
                            lift_option (mk_option string_ty) fromMLstring tc_opt,
                            src_id_opt, ty])
+fun mk_JE_Folded (original, folded) =
+  list_mk_comb(JE_Folded_tm, [original, folded])
 fun mk_JE_Attribute (e, attr, tc_opt, base_ty_name_opt, base_tc_opt, src_id_opt, ty) =
   list_mk_comb(JE_Attribute_tm, [e, fromMLstring attr,
                                  lift_option (mk_option string_ty) fromMLstring tc_opt,
@@ -168,6 +173,8 @@ fun mk_JE_Attribute (e, attr, tc_opt, base_ty_name_opt, base_tc_opt, src_id_opt,
 fun mk_JE_Subscript (e1, e2, ty) = list_mk_comb(JE_Subscript_tm, [e1, e2, ty])
 fun mk_JE_NamedExpr (e1, e2) = list_mk_comb(JE_NamedExpr_tm, [e1, e2])
 fun mk_JE_BinOp (l, op_tm, r, ty) = list_mk_comb(JE_BinOp_tm, [l, op_tm, r, ty])
+fun mk_JE_Compare (l, op_tm, r) =
+  list_mk_comb(JE_Compare_tm, [l, op_tm, r])
 fun mk_JE_BoolOp (op_tm, es) = list_mk_comb(JE_BoolOp_tm, [op_tm, mk_list(es, json_expr_ty)])
 fun mk_JE_UnaryOp (op_tm, e, ty) = list_mk_comb(JE_UnaryOp_tm, [op_tm, e, ty])
 fun mk_JE_IfExp (test, body, els, ty) = list_mk_comb(JE_IfExp_tm, [test, body, els, ty])
@@ -176,15 +183,15 @@ fun mk_JE_List (es, ty) = list_mk_comb(JE_List_tm, [mk_list(es, json_expr_ty), t
 fun mk_JE_Call (func, args, kwargs, ty, src_id_opt_tm) =
   list_mk_comb(JE_Call_tm, [func, mk_list(args, json_expr_ty),
                             mk_list(kwargs, json_keyword_ty), ty, src_id_opt_tm])
-fun mk_JE_ExtCall (func_name, arg_types, ret_ty, args, keywords) =
+fun mk_JE_ExtCall (func_name, arg_types, ret_ty, target, args, keywords) =
   list_mk_comb(JE_ExtCall_tm, [fromMLstring func_name,
                                mk_list(arg_types, json_type_ty),
-                               ret_ty, mk_list(args, json_expr_ty),
+                               ret_ty, target, mk_list(args, json_expr_ty),
                                mk_list(keywords, json_keyword_ty)])
-fun mk_JE_StaticCall (func_name, arg_types, ret_ty, args) =
+fun mk_JE_StaticCall (func_name, arg_types, ret_ty, target, args) =
   list_mk_comb(JE_StaticCall_tm, [fromMLstring func_name,
                                   mk_list(arg_types, json_type_ty),
-                                  ret_ty, mk_list(args, json_expr_ty)])
+                                  ret_ty, target, mk_list(args, json_expr_ty)])
 fun mk_JKeyword (arg, v) = list_mk_comb(JKeyword_tm, [fromMLstring arg, v])
 
 (* ===== Statement Constructors ===== *)
@@ -213,11 +220,12 @@ fun mk_JS_Log (nsid, args) =
   list_mk_comb(JS_Log_tm, [nsid, mk_list(args, json_expr_ty)])
 fun mk_JS_If (test, body, els) =
   list_mk_comb(JS_If_tm, [test, mk_list(body, json_stmt_ty), mk_list(els, json_stmt_ty)])
-fun mk_JS_For (var, ty, iter, body) =
-  list_mk_comb(JS_For_tm, [fromMLstring var, ty, iter, mk_list(body, json_stmt_ty)])
+fun mk_JS_For (var, ty, ann, iter, body) =
+  list_mk_comb(JS_For_tm,
+    [fromMLstring var, ty, ann, iter, mk_list(body, json_stmt_ty)])
 fun mk_JS_Assign (tgt, v) = list_mk_comb(JS_Assign_tm, [tgt, v])
-fun mk_JS_AnnAssign (var, ty, v) =
-  list_mk_comb(JS_AnnAssign_tm, [fromMLstring var, ty, v])
+fun mk_JS_AnnAssign (var, ty, ann, v) =
+  list_mk_comb(JS_AnnAssign_tm, [fromMLstring var, ty, ann, v])
 fun mk_JS_AugAssign (tgt, op_tm, v) = list_mk_comb(JS_AugAssign_tm, [tgt, op_tm, v])
 fun mk_JS_Append (tgt, v) = list_mk_comb(JS_Append_tm, [tgt, v])
 
@@ -250,7 +258,6 @@ fun mk_JTgt_Tuple ts = mk_comb(JTgt_Tuple_tm, mk_list(ts, json_target_ty))
 
 (* ===== Top-level Constructors ===== *)
 
-val JDec_tm = jastk "JDec"
 val JArg_tm = jastk "JArg"
 val JFuncType_tm = jastk "JFuncType"
 val JVT_Type_tm = jastk "JVT_Type"
@@ -273,8 +280,8 @@ val JModule_tm = jastk "JModule"
 val JImportedModule_tm = jastk "JImportedModule"
 val JAnnotatedAST_tm = jastk "JAnnotatedAST"
 
-fun mk_JDec s = mk_comb(JDec_tm, fromMLstring s)
-fun mk_JArg (name, ty) = list_mk_comb(JArg_tm, [fromMLstring name, ty])
+fun mk_JArg (name, ty, ann) =
+  list_mk_comb(JArg_tm, [fromMLstring name, ty, ann])
 fun mk_JFuncType (argtys, retty) =
   list_mk_comb(JFuncType_tm, [mk_list(argtys, json_type_ty), retty])
 fun mk_JVT_Type ty = mk_comb(JVT_Type_tm, ty)
@@ -321,12 +328,12 @@ fun mk_JTL_ExportsDecl ann = mk_comb(JTL_ExportsDecl_tm, ann)
 fun mk_JTL_InitializesDecl ann = mk_comb(JTL_InitializesDecl_tm, ann)
 fun mk_JTL_UsesDecl ann = mk_comb(JTL_UsesDecl_tm, ann)
 fun mk_JTL_ImplementsDecl ann = mk_comb(JTL_ImplementsDecl_tm, ann)
-fun mk_JModule (src_id, tls) =
-  list_mk_comb(JModule_tm, [src_id, mk_list(tls, json_toplevel_ty)])
-fun mk_JImportedModule (src_id_tm, path, body) =
+fun mk_JModule (src_id, nr_default, tls) =
+  list_mk_comb(JModule_tm,
+    [src_id, mk_bool nr_default, mk_list(tls, json_toplevel_ty)])
+fun mk_JImportedModule (src_id_tm, path, nr_default, body) =
   list_mk_comb(JImportedModule_tm,
-    [src_id_tm,
-     fromMLstring path,
+    [src_id_tm, fromMLstring path, mk_bool nr_default,
      mk_list(body, json_toplevel_ty)])
 fun mk_JAnnotatedAST (main_ast, imports) =
   list_mk_comb(JAnnotatedAST_tm,
@@ -356,44 +363,16 @@ val numtm : term decoder = JSONDecode.map mk_num_from_largeint intInf
 val inttm : term decoder =
   JSONDecode.map (intSyntax.term_of_int o Arbint.fromLargeInt) intInf
 
-(* Expression declaration references distinguish current, builtin, and real
-   sources instead of passing Vyper's negative sentinels through as IDs. *)
-val JSource_tm = jastk "JSource"
-val JCurrent_tm = jastk "JCurrent"
-val JBuiltin_tm = jastk "JBuiltin"
-
-fun mk_source_ref i =
-  if i = ~2 then JBuiltin_tm
-  else mk_comb (JSource_tm, intSyntax.term_of_int (Arbint.fromLargeInt i))
+(* Preserve whether declaration-source metadata was absent or explicitly
+   supplied. Source ID interpretation belongs to jsonToVyper. *)
+val JMissingSource_tm = jastk "JMissingSource"
+val JExplicitSource_tm = jastk "JExplicitSource"
 
 val source_ref_tm : term decoder =
-  andThen intInf (fn i =>
-    if i < ~2 then fail "unknown negative source_id sentinel"
-    else succeed (mk_source_ref i))
-val stringtm : term decoder = JSONDecode.map fromMLstring string
-val booltm : bool decoder = bool
-
+  JSONDecode.map (fn src_id => mk_comb (JExplicitSource_tm, src_id)) inttm
 (* ===== Type Decoders ===== *)
 
 (* Decode typeclass string to constructor *)
-fun typeclass_of_string s =
-  if s = "integer" then TC_integer_tm
-  else if s = "bytes_m" then TC_bytes_m_tm
-  else if s = "static_array" orelse s = "$SArray" then TC_static_array_tm
-  else if s = "dynamic_array" orelse s = "DynArray" then TC_dynamic_array_tm
-  else if s = "struct" then TC_struct_tm
-  else if s = "flag" then TC_flag_tm
-  else if s = "tuple" then TC_tuple_tm
-  else if s = "hashmap" then TC_hashmap_tm
-  else if s = "interface" then TC_interface_tm
-  else if s = "contract_function" then TC_contract_function_tm
-  else if s = "builtin_function" then TC_builtin_function_tm
-  else if s = "module" then TC_module_tm
-  else mk_TC_other s
-
-val json_typeclass : term decoder =
-  JSONDecode.map typeclass_of_string (field "typeclass" string)
-
 (* Main type decoder - handles all json_type cases *)
 fun d_json_type () : term decoder = achoose "json_type" [
   (* Integer: has typeclass "integer", bits and is_signed fields *)
@@ -450,9 +429,13 @@ fun d_json_type () : term decoder = achoose "json_type" [
     JSONDecode.map (fn (kt, vt) => mk_JT_HashMap(kt, vt)) $
     tuple2 (field "key_type" (delay d_json_type), field "value_type" (delay d_json_type)),
 
-  (* Interface - treat as named type *)
+  (* Interface *)
   check (field "typeclass" string) (fn s => s = "interface") "not interface" $
-    succeed (mk_JT_Named (mk_none intSyntax.int_ty, "address")),
+    JSONDecode.map mk_JT_Interface $
+    tuple2 (orElse (JSONDecode.map mk_some
+                      (field "type_decl_node" $ field "source_id" inttm),
+                    succeed (mk_none intSyntax.int_ty)),
+            field "name" string),
 
   (* Named types (bool, address, decimal, etc) - preserve type declaration source if present *)
   JSONDecode.map mk_JT_Named $
@@ -485,22 +468,22 @@ fun d_ast_type () : term decoder = achoose "ast_type" [
     check (field "id" string) (String.isPrefix "uint") "not uint" $
       JSONDecode.map (fn s =>
         let val bits = Option.valOf (Int.fromString (String.extract(s, 4, NONE)))
-        in mk_JT_Integer(mk_num_from_int bits, false) end) $
+        in mk_JTA_Integer(mk_num_from_int bits, false) end) $
       field "id" string,
     (* intN *)
     check (field "id" string) (String.isPrefix "int") "not int" $
       JSONDecode.map (fn s =>
         let val bits = Option.valOf (Int.fromString (String.extract(s, 3, NONE)))
-        in mk_JT_Integer(mk_num_from_int bits, true) end) $
+        in mk_JTA_Integer(mk_num_from_int bits, true) end) $
       field "id" string,
     (* bytesN (fixed) *)
     check (field "id" string) (String.isPrefix "bytes") "not bytes" $
       JSONDecode.map (fn s =>
         let val m = Option.valOf (Int.fromString (String.extract(s, 5, NONE)))
-        in mk_JT_BytesM(mk_num_from_int m) end) $
+        in mk_JTA_BytesM(mk_num_from_int m) end) $
       field "id" string,
     (* Named types *)
-    JSONDecode.map (fn s => mk_JT_Named (mk_none intSyntax.int_ty, s)) (field "id" string)
+    JSONDecode.map (fn s => mk_JTA_Named s) (field "id" string)
   ],
 
   (* Subscript node - for String[N], Bytes[N], DynArray[T, N], etc. *)
@@ -509,19 +492,19 @@ fun d_ast_type () : term decoder = achoose "ast_type" [
     (* String[N] *)
     check (field "value" (check_ast_type "Name" $ field "id" string))
           (fn s => s = "String") "not String" $
-    JSONDecode.map mk_JT_String $
+    JSONDecode.map mk_JTA_String $
       field "slice" $ check_ast_type "Int" $ field "value" numtm,
 
     (* Bytes[N] *)
     check (field "value" (check_ast_type "Name" $ field "id" string))
           (fn s => s = "Bytes") "not Bytes" $
-    JSONDecode.map mk_JT_Bytes $
+    JSONDecode.map mk_JTA_Bytes $
       field "slice" $ check_ast_type "Int" $ field "value" numtm,
 
     (* DynArray[T, N] *)
     check (field "value" (check_ast_type "Name" $ field "id" string))
           (fn s => s = "DynArray") "not DynArray" $
-    JSONDecode.map (fn (vt, len) => mk_JT_DynArray(vt, len)) $
+    JSONDecode.map (fn (vt, len) => mk_JTA_DynArray(vt, len)) $
     field "slice" $ check_ast_type "Tuple" $ field "elements" $
       tuple2 (sub 0 (delay d_ast_type),
               sub 1 $ achoose "DynArray len" [
@@ -530,7 +513,7 @@ fun d_ast_type () : term decoder = achoose "ast_type" [
               ]),
 
     (* Static array T[N] *)
-    JSONDecode.map (fn (vt, len) => mk_JT_StaticArray(vt, len)) $
+    JSONDecode.map (fn (vt, len) => mk_JTA_StaticArray(vt, len)) $
     tuple2 (field "value" (delay d_ast_type),
             field "slice" $ achoose "array len" [
               check_ast_type "Int" $ field "value" numtm,
@@ -540,7 +523,7 @@ fun d_ast_type () : term decoder = achoose "ast_type" [
 
   (* Tuple type *)
   check_ast_type "Tuple" $
-    JSONDecode.map mk_JT_Tuple $
+    JSONDecode.map mk_JTA_Tuple $
     field "elements" (array (delay d_ast_type)),
 
   (* indexed(...) call - unwrap the inner type *)
@@ -550,11 +533,11 @@ fun d_ast_type () : term decoder = achoose "ast_type" [
     field "args" $ sub 0 (delay d_ast_type),
 
   (* Attribute node - syntactic qualified type reference: library.SomeStruct, lib1.Roles *)
-  JSONDecode.map (fn (path, name) => mk_JT_Qualified(path, name)) $
+  JSONDecode.map (fn (path, name) => mk_JTA_Qualified(path, name)) $
     d_qualified_type_path (),
 
   (* null type *)
-  null JT_None_tm
+  null JTA_None_tm
 ]
 
 val ast_type = delay d_ast_type
@@ -639,31 +622,35 @@ fun d_json_expr () : term decoder = achoose "expr" [
     JSONDecode.map mk_JE_Bool (field "value" bool),
 
   (* Ellipsis - appears in .vyi interface stub function bodies *)
-  check_ast_type "Ellipsis" $ succeed (mk_JE_Bool true),
+  check_ast_type "Ellipsis" $ succeed JE_Ellipsis_tm,
 
-  (* Name - extract typeclass, source_id, and type for module references *)
-  (* source_id < 0 means main module (NONE), >= 0 means imported module *)
-  (* If folded_value is present (compile-time constant), use that instead *)
+  (* Name - preserve the original reference alongside any compiler-provided
+     folded value. jsonToVyper decides which expression to lower. *)
   check_ast_type "Name" $
-    achoose "Name or folded constant" [
-      (* folded_value with NameConstant (bool) *)
-      field "folded_value" $ check_ast_type "NameConstant" $
-        JSONDecode.map mk_JE_Bool (field "value" bool),
-      (* folded_value with Int *)
-      field "folded_value" $ check_ast_type "Int" $
-        JSONDecode.map (fn (v, ty) => mk_JE_Int(v, ty)) $
-        tuple2 (field "value" inttm,
-                orElse(field "type" json_type, succeed JT_None_tm)),
-      (* Normal Name without folded_value *)
-      JSONDecode.map (fn ((id, (tc, src_id_opt)), ty) => mk_JE_Name(id, tc, src_id_opt, ty)) $
+    JSONDecode.map
+      (fn (original, folded_opt) =>
+        case folded_opt of
+          NONE => original
+        | SOME folded => mk_JE_Folded (original, folded)) $
+    tuple2 (
+      JSONDecode.map
+        (fn ((id, (tc, src_id_opt)), ty) =>
+          mk_JE_Name(id, tc, src_id_opt, ty)) $
       tuple2 (tuple2 (field "id" string,
               tuple2 (try (orElse (field "type" $ field "typeclass" string,
                                   field "type" $ field "type_t" $ field "typeclass" string)),
                       orElse (field "type" $ field "type_decl_node" $ field "source_id" source_ref_tm,
                               orElse (field "type" $ field "type_t" $ field "type_decl_node" $ field "source_id" source_ref_tm,
-                              succeed JCurrent_tm)))),
-              orElse(field "type" json_type, succeed JT_None_tm))
-    ],
+                              succeed JMissingSource_tm)))),
+              orElse(field "type" json_type, succeed JT_None_tm)),
+      try (field "folded_value" $ achoose "folded Name value" [
+        check_ast_type "NameConstant" $
+          JSONDecode.map mk_JE_Bool (field "value" bool),
+        check_ast_type "Int" $
+          JSONDecode.map (fn (v, ty) => mk_JE_Int(v, ty)) $
+          tuple2 (field "value" inttm,
+                  orElse(field "type" json_type, succeed JT_None_tm))
+      ])),
 
   (* Attribute - extract result typeclass, base_type_name, base_typeclass, source_id, and type *)
   (* source_id comes from variable_reads[0].decl_node.source_id OR type.type_decl_node.source_id *)
@@ -679,7 +666,7 @@ fun d_json_expr () : term decoder = achoose "expr" [
             orElse (field "variable_reads" $ sub 0 $
                               field "decl_node" $ field "source_id" source_ref_tm,
                     orElse (field "type" $ field "type_decl_node" $ field "source_id" source_ref_tm,
-                            succeed JCurrent_tm))),
+                            succeed JMissingSource_tm))),
             orElse(field "type" json_type, succeed JT_None_tm)),
 
   (* Subscript *)
@@ -701,9 +688,9 @@ fun d_json_expr () : term decoder = achoose "expr" [
             field "right" (delay d_json_expr)),
             orElse(field "type" json_type, succeed JT_None_tm)),
 
-  (* Compare (treated like BinOp) - result type is always bool *)
+  (* Compare *)
   check_ast_type "Compare" $
-    JSONDecode.map (fn (l, op_tm, r) => mk_JE_BinOp(l, op_tm, r, mk_JT_Named (mk_none intSyntax.int_ty, "bool"))) $
+    JSONDecode.map (fn (l, op_tm, r) => mk_JE_Compare(l, op_tm, r)) $
     tuple3 (field "left" (delay d_json_expr),
             field "op" json_binop,
             field "right" (delay d_json_expr)),
@@ -739,9 +726,8 @@ fun d_json_expr () : term decoder = achoose "expr" [
     tuple2 (field "elements" (array (delay d_json_expr)),
             field "type" json_type),
 
-  (* Call - also extract source_id from func.type.type_decl_node for module calls *)
-  (* Vyper convention: -1 = main module, -2 = builtin, >= 0 = imported module *)
-  (* We map negative source_ids to NONE (main module) *)
+  (* Call - preserve any explicit declaration source ID from the function
+     metadata; jsonToVyper interprets source IDs. *)
   check_ast_type "Call" $
     JSONDecode.map (fn ((func, args, kwargs), (ty, src_id_opt)) => mk_JE_Call(func, args, kwargs, ty, src_id_opt)) $
     tuple2 (tuple3 (field "func" (delay d_json_expr),
@@ -750,14 +736,13 @@ fun d_json_expr () : term decoder = achoose "expr" [
             tuple2 ((* type field may be missing or null *)
                     orElse (field "type" json_type, succeed JT_None_tm),
                     orElse (field "func" $ field "type" $ field "type_decl_node" $ field "source_id" source_ref_tm,
-                            succeed JCurrent_tm))),
+                            succeed JMissingSource_tm))),
 
-  (* ExtCall - wraps a Call node; func is Attribute with target and method name *)
-  (* Convention: target is prepended to args *)
+  (* ExtCall - preserve target separately from ordinary arguments. *)
   (* Signature extracted from func.type: argument_types, return_type *)
   check_ast_type "ExtCall" $
     JSONDecode.map (fn (((func_name, arg_types), (ret_ty, (target, args))), keywords) =>
-      mk_JE_ExtCall(func_name, arg_types, ret_ty, target :: args, keywords)) $
+      mk_JE_ExtCall(func_name, arg_types, ret_ty, target, args, keywords)) $
     tuple2 (tuple2 (tuple2 (field "value" $ field "func" $ field "attr" string,
                             field "value" $ field "func" $ field "type" $
                               orElse (field "argument_types" (array json_type), succeed [])),
@@ -767,10 +752,10 @@ fun d_json_expr () : term decoder = achoose "expr" [
                                     field "value" $ field "args" (array (delay d_json_expr))))),
             field "value" $ orElse (field "keywords" (array (delay d_json_keyword)), succeed [])),
 
-  (* StaticCall - same structure as ExtCall *)
+  (* StaticCall - same structure as ExtCall. *)
   check_ast_type "StaticCall" $
     JSONDecode.map (fn ((func_name, arg_types), (ret_ty, (target, args))) =>
-      mk_JE_StaticCall(func_name, arg_types, ret_ty, target :: args)) $
+      mk_JE_StaticCall(func_name, arg_types, ret_ty, target, args)) $
     tuple2 (tuple2 (field "value" $ field "func" $ field "attr" string,
                     field "value" $ field "func" $ field "type" $
                       orElse (field "argument_types" (array json_type), succeed [])),
@@ -799,7 +784,7 @@ fun d_json_base_target () : term decoder = achoose "base_target" [
                          field "decl_node" $ field "source_id" source_ref_tm,
                        orElse (field "variable_reads" $ sub 0 $
                                  field "decl_node" $ field "source_id" source_ref_tm,
-                               succeed JCurrent_tm)))),
+                               succeed JMissingSource_tm)))),
 
   (* module.x (lib1.counter) -> TopLevelName with source_id from type.type_decl_node *)
   check_ast_type "Attribute" $
@@ -809,7 +794,7 @@ fun d_json_base_target () : term decoder = achoose "base_target" [
       (tuple2 (field "attr" string,
                orElse (field "value" $ field "type" $
                          field "type_decl_node" $ field "source_id" source_ref_tm,
-                       succeed JCurrent_tm))),
+                       succeed JMissingSource_tm))),
 
   (* Name *)
   check_ast_type "Name" $
@@ -924,13 +909,13 @@ fun d_json_stmt () : term decoder = achoose "stmt" [
               check_ast_type "Name" $
               tuple2 (field "id" string,
                       orElse (field "type" $ field "type_decl_node" $ field "source_id" source_ref_tm,
-                              succeed JCurrent_tm)),
+                              succeed JMissingSource_tm)),
               (* Cross-module event: log lib1.MyEvent(...) *)
               check_ast_type "Attribute" $
               tuple2 (field "attr" string,
                       orElse (field "value" $ field "type" $
                                 field "type_decl_node" $ field "source_id" source_ref_tm,
-                              succeed JCurrent_tm))],
+                              succeed JMissingSource_tm))],
             achoose "log args" [
               field "keywords" (array (field "value" json_expr)),
               field "args" (array json_expr)
@@ -945,13 +930,15 @@ fun d_json_stmt () : term decoder = achoose "stmt" [
 
   (* For *)
   check_ast_type "For" $
-    JSONDecode.map (fn ((var, varty), iter_parsed, body) =>
-      mk_JS_For(var, varty, iter_parse_to_term iter_parsed, body)) $
+    JSONDecode.map (fn ((var, (varty, ann)), iter_parsed, body) =>
+      mk_JS_For(var, varty, ann, iter_parse_to_term iter_parsed, body)) $
     tuple3 (field "target" $ check_ast_type "AnnAssign" $
               tuple2 (field "target" $ check_ast_type "Name" $ field "id" string,
-                      (* Type can be in target.type or in annotation field *)
-                      orElse (field "target" $ field "type" json_type,
-                              field "annotation" ast_type)),
+                      tuple2 (
+                        orElse (field "target" $ field "type" json_type,
+                                succeed JT_None_tm),
+                        orElse (field "annotation" ast_type,
+                                succeed JTA_None_tm))),
             field "iter" json_iter_internal,
             field "body" (array (delay d_json_stmt))),
 
@@ -964,11 +951,12 @@ fun d_json_stmt () : term decoder = achoose "stmt" [
 
   (* AnnAssign *)
   check_ast_type "AnnAssign" $
-    JSONDecode.map (fn (var, ty, v) => mk_JS_AnnAssign(var, ty, v)) $
-    tuple3 (field "target" $ check_ast_type "Name" $ field "id" string,
-            (* Type can be in target.type or in annotation field *)
+    JSONDecode.map (fn (var, ty, ann, v) =>
+      mk_JS_AnnAssign(var, ty, ann, v)) $
+    tuple4 (field "target" $ check_ast_type "Name" $ field "id" string,
             orElse (field "target" $ field "type" json_type,
-                    field "annotation" ast_type),
+                    succeed JT_None_tm),
+            orElse (field "annotation" ast_type, succeed JTA_None_tm),
             field "value" json_expr),
 
   (* Assign *)
@@ -996,15 +984,19 @@ val json_value_type = delay d_json_value_type
 (* ===== Top-level Decoder ===== *)
 
 val json_arg : term decoder = achoose "json_arg" [
-  (* New format: ast_type = "arg" with "arg" field for name and "annotation" for type *)
+  (* New format: ast_type = "arg". *)
   check_ast_type "arg" $
-    JSONDecode.map (fn (name, ty) => mk_JArg(name, ty)) $
-    tuple2 (field "arg" string, field "annotation" ast_type),
-  (* Old format: ast_type = "AnnAssign" with nested target *)
+    JSONDecode.map (fn (name, ty, ann) => mk_JArg(name, ty, ann)) $
+    tuple3 (field "arg" string,
+            orElse (field "type" json_type, succeed JT_None_tm),
+            orElse (field "annotation" ast_type, succeed JTA_None_tm)),
+  (* Old format: ast_type = "AnnAssign" with nested target. *)
   check_ast_type "AnnAssign" $
-    JSONDecode.map (fn (name, ty) => mk_JArg(name, ty)) $
-    field "target" $
-      tuple2 (check_ast_type "Name" $ field "id" string, field "type" json_type)
+    JSONDecode.map (fn (name, ty, ann) => mk_JArg(name, ty, ann)) $
+    tuple3 (field "target" $ check_ast_type "Name" $ field "id" string,
+            orElse (field "target" $ field "type" json_type,
+                    succeed JT_None_tm),
+            orElse (field "annotation" ast_type, succeed JTA_None_tm))
 ]
 
 val json_func_type : term decoder =
@@ -1032,8 +1024,8 @@ val json_interface_func : term decoder =
     field "name" string,
     field "args" $ check_ast_type "arguments" $
       field "args" (array json_arg),
-    (* returns can be null, default to JT_None *)
-    orElse(field "returns" ast_type, succeed JT_None_tm),
+    (* returns can be null *)
+    orElse(field "returns" ast_type, succeed JTA_None_tm),
     (* decorators from decorator_list and/or body *)
     tuple2 (
       orElse(field "decorator_list" (array decorator_name), succeed []),
@@ -1045,29 +1037,6 @@ val json_interface_func : term decoder =
         field "id" string)), succeed [])
     )
   )
-
-(* Parser for export annotations that preserves Attribute structure,
-   so exports: lib1.CONST keeps the JE_Attribute form. *)
-fun d_export_annotation_expr () : term decoder = achoose "export_annotation" [
-  (* Tuple of export expressions *)
-  check_ast_type "Tuple" $
-    JSONDecode.map mk_JE_Tuple (field "elements" (array (delay d_export_annotation_expr))),
-
-  (* Attribute - always parse as JE_Attribute, never fold *)
-  check_ast_type "Attribute" $
-    JSONDecode.map (fn ((((((e, attr), tc_opt), base_ty_name_opt), base_tc_opt), src_id_opt), ty) => mk_JE_Attribute(e, attr, tc_opt, base_ty_name_opt, base_tc_opt, src_id_opt, ty)) $
-    tuple2 (tuple2 (tuple2 (tuple2 (tuple2 (tuple2 (field "value" (delay d_json_expr), field "attr" string),
-                    try (field "type" $ field "typeclass" string)),
-            try (field "value" $ field "type" $ field "name" string)),
-            try (field "value" $ field "type" $ field "typeclass" string)),
-            orElse (field "type" $ field "type_decl_node" $ field "source_id" source_ref_tm,
-                    orElse (field "variable_reads" $ sub 0 $
-                              field "decl_node" $ field "source_id" source_ref_tm,
-                            succeed JCurrent_tm))),
-            orElse(field "type" json_type, succeed JT_None_tm))
-]
-
-val export_annotation_expr : term decoder = d_export_annotation_expr ()
 
 val json_toplevel : term decoder = achoose "toplevel" [
   (* FunctionDef *)
@@ -1081,7 +1050,7 @@ val json_toplevel : term decoder = achoose "toplevel" [
                         tuple2 (field "args" (array json_arg),
                                 orElse(field "defaults" (array json_expr), succeed [])),
                       field "func_type" json_func_type),
-              orElse(field "returns" ast_type, succeed JT_None_tm)),
+              orElse(field "returns" ast_type, succeed JTA_None_tm)),
       field "body" (array json_stmt)
     ),
 
@@ -1110,7 +1079,7 @@ val json_toplevel : term decoder = achoose "toplevel" [
         field "target" $ check_ast_type "Name" $ field "id" string,
         field "target" $ field "type" json_type
       ),
-      orElse(field "annotation" ast_type, succeed JT_None_tm),
+      orElse(field "annotation" ast_type, succeed JTA_None_tm),
       tuple2 (field "is_public" bool, field "is_immutable" bool),
       tuple2 (
         field "is_transient" bool,
@@ -1131,9 +1100,10 @@ val json_toplevel : term decoder = achoose "toplevel" [
       check_ast_type "arg" $
         orElse(
           (* indexed: annotation is Call to "indexed" *)
-          JSONDecode.map (fn (name, ty) =>
-            pairSyntax.mk_pair(mk_JArg(name, ty), boolSyntax.T)) $
-          tuple2 (field "arg" string,
+          JSONDecode.map (fn (name, ty, ann) =>
+            pairSyntax.mk_pair(mk_JArg(name, ty, ann), boolSyntax.T)) $
+          tuple3 (field "arg" string,
+                  orElse (field "type" json_type, succeed JT_None_tm),
                   field "annotation" $
                     check_ast_type "Call" $
                       andThen (field "func" $ check_ast_type "Name" $
@@ -1142,30 +1112,34 @@ val json_toplevel : term decoder = achoose "toplevel" [
                                  then field "args" $ sub 0 ast_type
                                  else fail "not indexed")),
           (* non-indexed: bare annotation *)
-          JSONDecode.map (fn (name, ty) =>
-            pairSyntax.mk_pair(mk_JArg(name, ty), boolSyntax.F)) $
-          tuple2 (field "arg" string, field "annotation" ast_type)),
+          JSONDecode.map (fn (name, ty, ann) =>
+            pairSyntax.mk_pair(mk_JArg(name, ty, ann), boolSyntax.F)) $
+          tuple3 (field "arg" string,
+                  orElse (field "type" json_type, succeed JT_None_tm),
+                  field "annotation" ast_type)),
       (* Old format: ast_type = "AnnAssign" *)
       check_ast_type "AnnAssign" $
         orElse(
           (* indexed *)
-          JSONDecode.map (fn (name, ty) =>
-            pairSyntax.mk_pair(mk_JArg(name, ty), boolSyntax.T)) $
-          field "target" $
-            tuple2 (check_ast_type "Name" $ field "id" string,
-                    field "type" $
-                      check_ast_type "Call" $
-                        andThen (field "func" $ check_ast_type "Name" $
-                                 field "id" string)
-                          (fn f => if f = "indexed"
-                                   then field "args" $ sub 0 json_type
-                                   else fail "not indexed")),
+          JSONDecode.map (fn (name, ty, ann) =>
+            pairSyntax.mk_pair(mk_JArg(name, ty, ann), boolSyntax.T)) $
+          tuple3 (field "target" $ check_ast_type "Name" $ field "id" string,
+                  orElse (field "target" $ field "type" json_type,
+                          succeed JT_None_tm),
+                  field "annotation" $
+                    check_ast_type "Call" $
+                      andThen (field "func" $ check_ast_type "Name" $
+                               field "id" string)
+                        (fn f => if f = "indexed"
+                                 then field "args" $ sub 0 ast_type
+                                 else fail "not indexed")),
           (* non-indexed *)
-          JSONDecode.map (fn (name, ty) =>
-            pairSyntax.mk_pair(mk_JArg(name, ty), boolSyntax.F)) $
-          field "target" $
-            tuple2 (check_ast_type "Name" $ field "id" string,
-                    field "type" json_type))
+          JSONDecode.map (fn (name, ty, ann) =>
+            pairSyntax.mk_pair(mk_JArg(name, ty, ann), boolSyntax.F)) $
+          tuple3 (field "target" $ check_ast_type "Name" $ field "id" string,
+                  orElse (field "target" $ field "type" json_type,
+                          succeed JT_None_tm),
+                  field "annotation" ast_type))
     ]
   in
   check_ast_type "EventDef" $
@@ -1216,11 +1190,9 @@ val json_toplevel : term decoder = achoose "toplevel" [
               field "qualified_module_name" string),
 
   (* ExportsDecl - exports declaration *)
-  (* Use a dedicated parser that doesn't fold constants, so that
-     exports: lib1.CONST keeps the Attribute structure *)
   check_ast_type "ExportsDecl" $
     JSONDecode.map mk_JTL_ExportsDecl $
-    field "annotation" export_annotation_expr,
+    field "annotation" json_expr,
 
   (* InitializesDecl - initializes declaration *)
   check_ast_type "InitializesDecl" $
@@ -1238,53 +1210,29 @@ val json_toplevel : term decoder = achoose "toplevel" [
     field "children" $ sub 0 json_expr
 ]
 
-(* ===== Nonreentrancy Pragma ===== *)
-(* If settings.nonreentrancy_by_default is true, inject "nonreentrant"
-   into the decorator list of external functions that don't already have it. *)
-
-val nonreentrancy_by_default : bool decoder =
-  orElse (field "settings" $ field "nonreentrancy_by_default" bool, succeed false)
-
-fun inject_nonreentrant_decs tl_tm =
-  let val (f, args) = strip_comb tl_tm in
-    if same_const f JTL_FunctionDef_tm then
-      let val [name, decs, fargs, defaults, func_type, ret_ann, body] = args
-          val dec_strs = fst (listSyntax.dest_list decs)
-          val dec_mls = List.map stringSyntax.fromHOLstring dec_strs
-      in
-        if List.exists (fn s => s = "external") dec_mls
-           andalso not (List.exists (fn s => s = "nonreentrant") dec_mls)
-           andalso not (List.exists (fn s => s = "reentrant") dec_mls)
-        then
-          let val new_decs = mk_list(dec_strs @ [fromMLstring "nonreentrant"], string_ty)
-          in list_mk_comb(JTL_FunctionDef_tm, [name, new_decs, fargs, defaults, func_type, ret_ann, body])
-          end
-        else tl_tm
-      end
-    else tl_tm
-  end
-
-fun apply_nonreentrancy_pragma nr_default tls =
-  if nr_default then List.map inject_nonreentrant_decs tls else tls
-
 (* ===== Module Decoder ===== *)
 
+val nonreentrancy_by_default : bool decoder =
+  orElse (field "settings" $ field "nonreentrancy_by_default" bool,
+          succeed false)
+
 val json_module : term decoder =
-  JSONDecode.map (fn ((src_id, body), nr) => mk_JModule(src_id, apply_nonreentrancy_pragma nr body)) $
-  tuple2 (tuple2 (orElse (field "source_id" inttm,
-                          succeed (intSyntax.term_of_int (Arbint.fromInt ~1))),
-                  field "body" (array json_toplevel)),
-          nonreentrancy_by_default)
+  JSONDecode.map (fn (src_id, nr, body) => mk_JModule(src_id, nr, body)) $
+  tuple3 (orElse (field "source_id" inttm,
+                  succeed (intSyntax.term_of_int (Arbint.fromInt ~1))),
+          nonreentrancy_by_default,
+          field "body" (array json_toplevel))
 
 (* ===== Imported Module Decoder ===== *)
 (* Decoder for imported modules from the imports array *)
 
 val json_imported_module : term decoder =
-  JSONDecode.map (fn ((src_id, path, body), nr) => mk_JImportedModule(src_id, path, apply_nonreentrancy_pragma nr body)) $
-  tuple2 (tuple3 (field "source_id" inttm,
-                  field "path" string,
-                  field "body" (array json_toplevel)),
-          nonreentrancy_by_default)
+  JSONDecode.map (fn (src_id, path, nr, body) =>
+    mk_JImportedModule(src_id, path, nr, body)) $
+  tuple4 (field "source_id" inttm,
+          field "path" string,
+          nonreentrancy_by_default,
+          field "body" (array json_toplevel))
 
 (* Parse raw Vyper `-f annotated_ast` output. *)
 (* Returns JAnnotatedAST with main module and list of imported modules. *)
