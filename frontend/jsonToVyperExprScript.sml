@@ -514,7 +514,8 @@ Definition resolve_source_ref_def:
   (resolve_source_ref ctx (JSource src_id) =
     source_id_to_nsid (FST ctx) src_id) /\
   (resolve_source_ref ctx JCurrent = FST (SND ctx)) /\
-  (resolve_source_ref ctx JBuiltin = NONE)
+  (resolve_source_ref ctx JBuiltin =
+    source_id_to_nsid (FST ctx) (-2))
 End
 
 (* Bare references to constants and immutables are translated as
@@ -539,11 +540,19 @@ Definition interface_constructor_result_def:
   interface_constructor_result _ args = HD args
 End
 
+(* Cross-module flag result metadata may omit its declaration source. Recover
+   that source from the module expression, then use it for both the result type
+   and member lookup identity. *)
+Definition extract_module_flag_def:
+  (extract_module_flag ctx (JE_Attribute inner flag_name _ _ _ _ _) =
+    case extract_innermost_module_src inner of
+      SOME src => SOME (resolve_source_ref ctx src, flag_name)
+    | NONE => NONE) /\
+  (extract_module_flag ctx _ = NONE)
+End
+
 Definition make_flag_member_def:
-  make_flag_member ty base attr =
-    case ty of
-      FlagT nsid => FlagMember ty nsid attr
-    | _ => Attribute ty base attr
+  make_flag_member nsid attr = FlagMember (FlagT nsid) nsid attr
 End
 
 (* ===== Expression Translation ===== *)
@@ -617,7 +626,7 @@ Definition translate_expr_def:
     let base_ty = translate_type_ctx (expr_type_ctx ctx) base_ret_ty in
     (* Same-module flag member: Action.BUY where tc = SOME "flag" *)
     if tc = SOME "flag" /\ result_tc = SOME "flag" then
-      make_flag_member ty (make_name ctx base_ty obj) attr
+      make_flag_member (FST (SND ctx), obj) attr
     else if obj = "msg" /\ attr = "sender" then Builtin (BaseT AddressT) (Env Sender) []
     else if obj = "msg" /\ attr = "value" then Builtin (BaseT (UintT 256)) (Env ValueSent) []
     else if obj = "block" /\ attr = "timestamp" then Builtin (BaseT (UintT 256)) (Env TimeStamp) []
@@ -650,7 +659,9 @@ Definition translate_expr_def:
   (translate_expr ctx (JE_Attribute e attr result_tc base_type_name base_typeclass attr_src_id_opt ret_ty) =
     let ty = translate_type_ctx (expr_type_ctx ctx) ret_ty in
     if result_tc = SOME "flag" then
-      make_flag_member ty (translate_expr ctx e) attr
+      case extract_module_flag ctx e of
+        SOME nsid => make_flag_member nsid attr
+      | NONE => Attribute ty (translate_expr ctx e) attr
     (* Nested module access: mod3.mod2.mod1.X — use variable_reads source_id *)
     else if is_module_expr e then
       TopLevelName ty (resolve_source_ref ctx attr_src_id_opt, attr)
