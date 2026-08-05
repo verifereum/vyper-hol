@@ -491,21 +491,6 @@ Definition is_module_expr_def:
 End
 
 
-(* Detect cross-module flag member pattern: lib1.Action.BUY or lib1.lib2.Roles3.NOBODY *)
-(* Returns SOME (src_id_opt, flag_name) if it matches, NONE otherwise *)
-(* e is the expression immediately under the flag member attribute (i.e., the flag type expression) *)
-(* For lib1.Roles.ADMIN: e = JE_Attribute (JE_Name "lib1"...) "Roles" _ _ *)
-(* For lib1.lib2.Roles3.NOBODY: e = JE_Attribute (JE_Attribute ... "lib2" (SOME "module") (SOME 1)) "Roles3" _ _ *)
-Definition extract_module_flag_def:
-  (* Attribute expression for the flag type - look inside for the module *)
-  (extract_module_flag main_src_id (JE_Attribute inner flag_name _ _ _ _ _) =
-    case extract_innermost_module_src inner of
-    | SOME src_id => SOME (source_id_to_nsid main_src_id src_id, flag_name)
-    | NONE => NONE) /\
-  (extract_module_flag main_src_id _ = NONE)
-End
-
-
 (* ===== Top-level names and name helpers ===== *)
 
 (* The context carries names of constants and immutables declared in the
@@ -527,6 +512,16 @@ Definition interface_constructor_result_def:
   interface_constructor_result ty [Literal _ (BytesL bs)] =
     Literal ty (BytesL bs) /\
   interface_constructor_result _ args = HD args
+End
+
+(* A flag member's result type is the authoritative source of its declaration
+   identity. This avoids reconstructing a different identity from incomplete
+   source metadata on the base expression. *)
+Definition make_flag_member_def:
+  make_flag_member ty base attr =
+    case ty of
+      FlagT nsid => FlagMember ty nsid attr
+    | _ => Attribute ty base attr
 End
 
 (* ===== Expression Translation ===== *)
@@ -599,7 +594,8 @@ Definition translate_expr_def:
     let ty = translate_type (FST ctx) ret_ty in
     let base_ty = translate_type (FST ctx) base_ret_ty in
     (* Same-module flag member: Action.BUY where tc = SOME "flag" *)
-    if tc = SOME "flag" /\ result_tc = SOME "flag" then FlagMember ty (source_id_to_nsid (FST ctx) src_id_opt, obj) attr
+    if tc = SOME "flag" /\ result_tc = SOME "flag" then
+      make_flag_member ty (make_name ctx base_ty obj) attr
     else if obj = "msg" /\ attr = "sender" then Builtin (BaseT AddressT) (Env Sender) []
     else if obj = "msg" /\ attr = "value" then Builtin (BaseT (UintT 256)) (Env ValueSent) []
     else if obj = "block" /\ attr = "timestamp" then Builtin (BaseT (UintT 256)) (Env TimeStamp) []
@@ -632,9 +628,7 @@ Definition translate_expr_def:
   (translate_expr ctx (JE_Attribute e attr result_tc base_type_name base_typeclass attr_src_id_opt ret_ty) =
     let ty = translate_type (FST ctx) ret_ty in
     if result_tc = SOME "flag" then
-      case extract_module_flag (FST ctx) e of
-      | SOME (src_id_opt, flag_name) => FlagMember ty (src_id_opt, flag_name) attr
-      | NONE => Attribute ty (translate_expr ctx e) attr
+      make_flag_member ty (translate_expr ctx e) attr
     (* Nested module access: mod3.mod2.mod1.X — use variable_reads source_id *)
     else if is_module_expr e then
       TopLevelName ty (source_id_to_nsid (FST ctx) attr_src_id_opt, attr)
