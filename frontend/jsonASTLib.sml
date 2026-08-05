@@ -363,8 +363,7 @@ val JCurrent_tm = jastk "JCurrent"
 val JBuiltin_tm = jastk "JBuiltin"
 
 fun mk_source_ref i =
-  if i = ~1 then JCurrent_tm
-  else if i = ~2 then JBuiltin_tm
+  if i = ~2 then JBuiltin_tm
   else mk_comb (JSource_tm, intSyntax.term_of_int (Arbint.fromLargeInt i))
 
 val source_ref_tm : term decoder =
