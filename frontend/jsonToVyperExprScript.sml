@@ -506,19 +506,33 @@ Definition extract_module_flag_def:
 End
 
 
-(* ===== Top-level names and name helpers ===== *)
+(* ===== Expression translation context and name helpers ===== *)
 
-(* The context carries names of constants and immutables declared in the
-   current module.  Bare references to those declarations are translated as
+(* Expression translation carries the root source ID, current module
+   namespace, current module import map, and names of constants/immutables.
+   Keep access to the embedded type context centralized so expression types
+   can use contextual translation in a follow-up. *)
+Definition expr_type_ctx_def:
+  expr_type_ctx ctx =
+    (FST ctx, FST (SND ctx), FST (SND (SND ctx)))
+End
+
+Definition expr_const_names_def:
+  expr_const_names ctx = SND (SND (SND ctx))
+End
+
+(* Bare references to constants and immutables are translated as
    module-qualified top-level names; ordinary names remain local/scoped. *)
 Definition make_name_def:
   make_name ctx ty id =
-    if MEM id (SND (SND ctx)) then TopLevelName ty (FST (SND ctx), id) else Name ty id
+    if MEM id (expr_const_names ctx)
+    then TopLevelName ty (FST (SND ctx), id)
+    else Name ty id
 End
 
 Definition make_name_target_def:
   make_name_target ctx id =
-    if MEM id (SND (SND ctx))
+    if MEM id (expr_const_names ctx)
     then TopLevelNameTarget (FST (SND ctx), id)
     else NameTarget id
 End
