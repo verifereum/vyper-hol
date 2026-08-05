@@ -71,6 +71,7 @@ val JT_StaticArray_tm = jastk "JT_StaticArray"
 val JT_DynArray_tm = jastk "JT_DynArray"
 val JT_Struct_tm = jastk "JT_Struct"
 val JT_Flag_tm = jastk "JT_Flag"
+val JT_Interface_tm = jastk "JT_Interface"
 val JT_Qualified_tm = jastk "JT_Qualified"
 val JT_Tuple_tm = jastk "JT_Tuple"
 val JT_HashMap_tm = jastk "JT_HashMap"
@@ -86,6 +87,8 @@ fun mk_JT_StaticArray (vt, len) = list_mk_comb(JT_StaticArray_tm, [vt, len])
 fun mk_JT_DynArray (vt, len) = list_mk_comb(JT_DynArray_tm, [vt, len])
 fun mk_JT_Struct (sid_opt, s) = list_mk_comb(JT_Struct_tm, [sid_opt, fromMLstring s])
 fun mk_JT_Flag (sid_opt, s) = list_mk_comb(JT_Flag_tm, [sid_opt, fromMLstring s])
+fun mk_JT_Interface (sid_opt, s) =
+  list_mk_comb(JT_Interface_tm, [sid_opt, fromMLstring s])
 fun mk_JT_Qualified (path, name) =
   list_mk_comb(JT_Qualified_tm, [mk_list(List.map fromMLstring path, string_ty), fromMLstring name])
 fun mk_JT_Tuple ts = mk_comb(JT_Tuple_tm, mk_list(ts, json_type_ty))
@@ -443,9 +446,13 @@ fun d_json_type () : term decoder = achoose "json_type" [
     JSONDecode.map (fn (kt, vt) => mk_JT_HashMap(kt, vt)) $
     tuple2 (field "key_type" (delay d_json_type), field "value_type" (delay d_json_type)),
 
-  (* Interface - treat as named type *)
+  (* Interface *)
   check (field "typeclass" string) (fn s => s = "interface") "not interface" $
-    succeed (mk_JT_Named (mk_none intSyntax.int_ty, "address")),
+    JSONDecode.map mk_JT_Interface $
+    tuple2 (orElse (JSONDecode.map mk_some
+                      (field "type_decl_node" $ field "source_id" inttm),
+                    succeed (mk_none intSyntax.int_ty)),
+            field "name" string),
 
   (* Named types (bool, address, decimal, etc) - preserve type declaration source if present *)
   JSONDecode.map mk_JT_Named $

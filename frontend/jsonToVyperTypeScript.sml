@@ -54,6 +54,7 @@ Definition translate_type_def:
     FlagT (tctx_current_nsid ctx, name)) ∧
   (translate_type ctx (JT_Flag (SOME src_id) name) =
     FlagT (source_id_to_nsid (tctx_main_src_id ctx) src_id, name)) ∧
+  (translate_type ctx (JT_Interface _ _) = BaseT AddressT) ∧
   (translate_type ctx (JT_Named src_id_opt name) =
      if name = "bool" then BaseT BoolT
      else if name = "address" ∨ name = "self" then BaseT AddressT

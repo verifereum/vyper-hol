@@ -35,6 +35,7 @@ Datatype:
   | JT_DynArray json_type num                 (* value_type, length *)
   | JT_Struct (int option) string             (* optional declaration source_id, name *)
   | JT_Flag (int option) string               (* optional declaration source_id, name *)
+  | JT_Interface (int option) string          (* optional declaration source_id, name *)
   | JT_Qualified (string list) string         (* qualified annotation: path.name *)
   | JT_Tuple (json_type list)                 (* member_types *)
   | JT_HashMap json_type json_type            (* key_type, value_type *)
