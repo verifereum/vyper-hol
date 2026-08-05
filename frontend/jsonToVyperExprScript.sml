@@ -590,7 +590,7 @@ QED
 
 Definition translate_expr_def:
   (translate_expr ctx (JE_Int v ty) =
-    Literal (translate_type_ctx (expr_type_ctx ctx) ty) (IntL v)) /\
+    Literal (translate_type (expr_type_ctx ctx) ty) (IntL v)) /\
 
   (translate_expr ctx (JE_Decimal s) =
     Literal (BaseT DecimalT) (DecimalL (decimal_string_to_int s))) /\
@@ -608,13 +608,13 @@ Definition translate_expr_def:
     let bytes = hex_string_to_bytes (FILTER isHexDigit (strip_0x hex)) in
     let ty = case typ of
                JT_None => BaseT (BytesT (Fixed (LENGTH bytes)))
-             | _ => translate_type_ctx (expr_type_ctx ctx) typ in
+             | _ => translate_type (expr_type_ctx ctx) typ in
     Literal ty (BytesL bytes)) /\
 
   (translate_expr ctx (JE_Bool b) = Literal (BaseT BoolT) (BoolL b)) /\
 
   (translate_expr ctx (JE_Name id tc src_id_opt ret_ty) =
-    let ty = translate_type_ctx (expr_type_ctx ctx) ret_ty in
+    let ty = translate_type (expr_type_ctx ctx) ret_ty in
     if id = "self" then Builtin (BaseT AddressT) (Env SelfAddr) [] else make_name ctx ty id) /\
 
   (* Special attributes: msg.*, block.*, tx.*, self.*, module.*, flag members *)
@@ -622,8 +622,8 @@ Definition translate_expr_def:
   (* base_type_name is the type name of the base expression (e.g., "address" for addr.code) *)
   (* base_typeclass is the typeclass of the base expression (e.g., "interface" for interface.address) *)
   (translate_expr ctx (JE_Attribute (JE_Name obj tc src_id_opt base_ret_ty) attr result_tc base_type_name base_typeclass attr_src_id_opt ret_ty) =
-    let ty = translate_type_ctx (expr_type_ctx ctx) ret_ty in
-    let base_ty = translate_type_ctx (expr_type_ctx ctx) base_ret_ty in
+    let ty = translate_type (expr_type_ctx ctx) ret_ty in
+    let base_ty = translate_type (expr_type_ctx ctx) base_ret_ty in
     (* Same-module flag member: Action.BUY where tc = SOME "flag" *)
     if tc = SOME "flag" /\ result_tc = SOME "flag" then
       make_flag_member (FST (SND ctx), obj) attr
@@ -657,7 +657,7 @@ Definition translate_expr_def:
   (* base_type_name is the type name of the base expression (e.g., "address" for addr.code) *)
   (* base_typeclass is the typeclass of the base expression (e.g., "interface" for interface.address) *)
   (translate_expr ctx (JE_Attribute e attr result_tc base_type_name base_typeclass attr_src_id_opt ret_ty) =
-    let ty = translate_type_ctx (expr_type_ctx ctx) ret_ty in
+    let ty = translate_type (expr_type_ctx ctx) ret_ty in
     if result_tc = SOME "flag" then
       case extract_module_flag ctx e of
         SOME nsid => make_flag_member nsid attr
@@ -676,7 +676,7 @@ Definition translate_expr_def:
 
   (* Subscript *)
   (translate_expr ctx (JE_Subscript arr idx ret_ty) =
-    Subscript (translate_type_ctx (expr_type_ctx ctx) ret_ty) (translate_expr ctx arr) (translate_expr ctx idx)) /\
+    Subscript (translate_type (expr_type_ctx ctx) ret_ty) (translate_expr ctx arr) (translate_expr ctx idx)) /\
 
   (* NamedExpr - only appears in initializes:/uses: annotations, not in executable code *)
   (translate_expr ctx (JE_NamedExpr target value) =
@@ -684,7 +684,7 @@ Definition translate_expr_def:
 
   (* BinOp *)
   (translate_expr ctx (JE_BinOp l op r ret_ty) =
-    Builtin (translate_type_ctx (expr_type_ctx ctx) ret_ty) (Bop (translate_binop op)) [translate_expr ctx l; translate_expr ctx r]) /\
+    Builtin (translate_type (expr_type_ctx ctx) ret_ty) (Bop (translate_binop op)) [translate_expr ctx l; translate_expr ctx r]) /\
 
   (* BoolOp - convert to nested IfExp *)
   (translate_expr ctx (JE_BoolOp JBoolop_And es) =
@@ -694,15 +694,15 @@ Definition translate_expr_def:
 
   (* UnaryOp *)
   (translate_expr ctx (JE_UnaryOp JUop_USub e ret_ty) =
-    Builtin (translate_type_ctx (expr_type_ctx ctx) ret_ty) Neg [translate_expr ctx e]) /\
+    Builtin (translate_type (expr_type_ctx ctx) ret_ty) Neg [translate_expr ctx e]) /\
   (translate_expr ctx (JE_UnaryOp JUop_Not e ret_ty) =
     Builtin (BaseT BoolT) Not [translate_expr ctx e]) /\
   (translate_expr ctx (JE_UnaryOp JUop_Invert e ret_ty) =
-    Builtin (translate_type_ctx (expr_type_ctx ctx) ret_ty) Not [translate_expr ctx e]) /\
+    Builtin (translate_type (expr_type_ctx ctx) ret_ty) Not [translate_expr ctx e]) /\
 
   (* IfExp (ternary) *)
   (translate_expr ctx (JE_IfExp test body orelse ret_ty) =
-    IfExp (translate_type_ctx (expr_type_ctx ctx) ret_ty) (translate_expr ctx test) (translate_expr ctx body) (translate_expr ctx orelse)) /\
+    IfExp (translate_type (expr_type_ctx ctx) ret_ty) (translate_expr ctx test) (translate_expr ctx body) (translate_expr ctx orelse)) /\
 
   (* Tuple *)
   (translate_expr ctx (JE_Tuple es) =
@@ -712,12 +712,12 @@ Definition translate_expr_def:
 
   (* List - array literal *)
   (translate_expr ctx (JE_List es ty) =
-    let ty' = translate_type_ctx (expr_type_ctx ctx) ty in
+    let ty' = translate_type (expr_type_ctx ctx) ty in
     case ty of
     | JT_StaticArray vt len =>
-        Builtin ty' (MakeArray (SOME (translate_type_ctx (expr_type_ctx ctx) vt)) (Fixed len)) (translate_expr_list ctx es)
+        Builtin ty' (MakeArray (SOME (translate_type (expr_type_ctx ctx) vt)) (Fixed len)) (translate_expr_list ctx es)
     | JT_DynArray vt len =>
-        Builtin ty' (MakeArray (SOME (translate_type_ctx (expr_type_ctx ctx) vt)) (Dynamic len)) (translate_expr_list ctx es)
+        Builtin ty' (MakeArray (SOME (translate_type (expr_type_ctx ctx) vt)) (Dynamic len)) (translate_expr_list ctx es)
     | _ =>
         Builtin ty' (MakeArray NONE (Fixed (LENGTH es))) (translate_expr_list ctx es)) /\
 
@@ -726,7 +726,7 @@ Definition translate_expr_def:
   (translate_expr ctx (JE_Call func args kwargs ret_ty src_id_opt) =
     let args' = translate_expr_list ctx args in
     let kwargs' = translate_kwargs ctx kwargs in
-    let rty = translate_type_ctx (expr_type_ctx ctx) ret_ty in
+    let rty = translate_type (expr_type_ctx ctx) ret_ty in
     case func of
     | JE_Name name (SOME "interface") _ _ =>
         interface_constructor_result rty args'
@@ -782,8 +782,8 @@ Definition translate_expr_def:
                      | SOME v => translate_expr ctx v
                      | NONE => Literal (BaseT (UintT 256)) (IntL 0) in
     let translated_args = translate_expr_list ctx args in
-    let ret_ty' = translate_type_ctx (expr_type_ctx ctx) ret_ty in
-    Call ret_ty' (ExtCall F (func_name, MAP (translate_type_ctx (expr_type_ctx ctx)) arg_types, ret_ty'))
+    let ret_ty' = translate_type (expr_type_ctx ctx) ret_ty in
+    Call ret_ty' (ExtCall F (func_name, MAP (translate_type (expr_type_ctx ctx)) arg_types, ret_ty'))
          (case translated_args of
           | (target :: rest) => target :: value_expr :: rest
           | [] => [])
@@ -792,8 +792,8 @@ Definition translate_expr_def:
   (* StaticCall - read-only external call (is_static = T) *)
   (* Convention: args = [target; arg1; arg2; ...] (no value) *)
   (translate_expr ctx (JE_StaticCall func_name arg_types ret_ty args) =
-    let ret_ty' = translate_type_ctx (expr_type_ctx ctx) ret_ty in
-    Call ret_ty' (ExtCall T (func_name, MAP (translate_type_ctx (expr_type_ctx ctx)) arg_types, ret_ty'))
+    let ret_ty' = translate_type (expr_type_ctx ctx) ret_ty in
+    Call ret_ty' (ExtCall T (func_name, MAP (translate_type (expr_type_ctx ctx)) arg_types, ret_ty'))
          (translate_expr_list ctx args)
          NONE) /\
 
@@ -902,10 +902,10 @@ End
 
 Definition translate_iter_def:
   (translate_iter ctx var_ty (JIter_Range [] _ _) =
-    Range (Literal (translate_type_ctx (expr_type_ctx ctx) var_ty) (IntL (integer$int_of_num 0)))
-          (Literal (translate_type_ctx (expr_type_ctx ctx) var_ty) (IntL (integer$int_of_num 0)))) /\
+    Range (Literal (translate_type (expr_type_ctx ctx) var_ty) (IntL (integer$int_of_num 0)))
+          (Literal (translate_type (expr_type_ctx ctx) var_ty) (IntL (integer$int_of_num 0)))) /\
   (translate_iter ctx var_ty (JIter_Range [e] _ _) =
-    Range (Literal (translate_type_ctx (expr_type_ctx ctx) var_ty) (IntL (integer$int_of_num 0)))
+    Range (Literal (translate_type (expr_type_ctx ctx) var_ty) (IntL (integer$int_of_num 0)))
           (translate_expr ctx e)) /\
   (translate_iter ctx var_ty (JIter_Range (s::e::_) _ _) =
     Range (translate_expr ctx s) (translate_expr ctx e)) /\
@@ -936,12 +936,12 @@ Definition translate_stmt_def:
        (MAP (translate_stmt ctx) body)
        (MAP (translate_stmt ctx) orelse)) /\
   (translate_stmt ctx (JS_For var ty iter body) =
-    For var (translate_type_ctx (expr_type_ctx ctx) ty) (translate_iter ctx ty iter)
+    For var (translate_type (expr_type_ctx ctx) ty) (translate_iter ctx ty iter)
         (get_iter_bound iter) (MAP (translate_stmt ctx) body)) /\
   (translate_stmt ctx (JS_Assign tgt val) =
     Assign (translate_target ctx tgt) (translate_expr ctx val)) /\
   (translate_stmt ctx (JS_AnnAssign var ty val) =
-    AnnAssign var (translate_type_ctx (expr_type_ctx ctx) ty) (translate_expr ctx val)) /\
+    AnnAssign var (translate_type (expr_type_ctx ctx) ty) (translate_expr ctx val)) /\
   (translate_stmt ctx (JS_AugAssign tgt op val) =
     AugAssign (expr_type (translate_expr ctx val))
       (translate_base_target ctx tgt) (translate_binop op) (translate_expr ctx val)) /\
