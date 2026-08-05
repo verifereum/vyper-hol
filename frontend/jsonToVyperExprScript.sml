@@ -404,10 +404,15 @@ Definition make_builtin_call_def:
       Builtin ty MethodId args
     (* Struct constructor, cast, or regular call *)
     else (case ret_ty of
-          | JT_Struct src_id_opt sname => StructLit ty (source_id_opt_to_nsid main_src_id src_id_opt sname) kwargs
+          | JT_Struct _ sname =>
+              (case ty of
+                 StructT nsid => StructLit ty nsid kwargs
+               | _ => StructLit ty (NONE, sname) kwargs)
           | JT_Named _ _ =>
               if kwargs <> [] /\ ~is_builtin_cast_name name then
-                StructLit ty (NONE, name) kwargs
+                (case ty of
+                   StructT nsid => StructLit ty nsid kwargs
+                 | _ => StructLit ty (NONE, name) kwargs)
               else
                 if is_cast_name name then
                     if is_builtin_cast_name name then
