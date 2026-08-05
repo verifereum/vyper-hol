@@ -131,12 +131,14 @@ val JE_GenericStr_tm = jastk "JE_GenericStr"
 val JE_Bytes_tm = jastk "JE_Bytes"
 val JE_Hex_tm = jastk "JE_Hex"
 val JE_Bool_tm = jastk "JE_Bool"
+val JE_Ellipsis_tm = jastk "JE_Ellipsis"
 val JE_Name_tm = jastk "JE_Name"
 val JE_Folded_tm = jastk "JE_Folded"
 val JE_Attribute_tm = jastk "JE_Attribute"
 val JE_Subscript_tm = jastk "JE_Subscript"
 val JE_NamedExpr_tm = jastk "JE_NamedExpr"
 val JE_BinOp_tm = jastk "JE_BinOp"
+val JE_Compare_tm = jastk "JE_Compare"
 val JE_BoolOp_tm = jastk "JE_BoolOp"
 val JE_UnaryOp_tm = jastk "JE_UnaryOp"
 val JE_IfExp_tm = jastk "JE_IfExp"
@@ -170,6 +172,8 @@ fun mk_JE_Attribute (e, attr, tc_opt, base_ty_name_opt, base_tc_opt, src_id_opt,
 fun mk_JE_Subscript (e1, e2, ty) = list_mk_comb(JE_Subscript_tm, [e1, e2, ty])
 fun mk_JE_NamedExpr (e1, e2) = list_mk_comb(JE_NamedExpr_tm, [e1, e2])
 fun mk_JE_BinOp (l, op_tm, r, ty) = list_mk_comb(JE_BinOp_tm, [l, op_tm, r, ty])
+fun mk_JE_Compare (l, op_tm, r) =
+  list_mk_comb(JE_Compare_tm, [l, op_tm, r])
 fun mk_JE_BoolOp (op_tm, es) = list_mk_comb(JE_BoolOp_tm, [op_tm, mk_list(es, json_expr_ty)])
 fun mk_JE_UnaryOp (op_tm, e, ty) = list_mk_comb(JE_UnaryOp_tm, [op_tm, e, ty])
 fun mk_JE_IfExp (test, body, els, ty) = list_mk_comb(JE_IfExp_tm, [test, body, els, ty])
@@ -178,15 +182,15 @@ fun mk_JE_List (es, ty) = list_mk_comb(JE_List_tm, [mk_list(es, json_expr_ty), t
 fun mk_JE_Call (func, args, kwargs, ty, src_id_opt_tm) =
   list_mk_comb(JE_Call_tm, [func, mk_list(args, json_expr_ty),
                             mk_list(kwargs, json_keyword_ty), ty, src_id_opt_tm])
-fun mk_JE_ExtCall (func_name, arg_types, ret_ty, args, keywords) =
+fun mk_JE_ExtCall (func_name, arg_types, ret_ty, target, args, keywords) =
   list_mk_comb(JE_ExtCall_tm, [fromMLstring func_name,
                                mk_list(arg_types, json_type_ty),
-                               ret_ty, mk_list(args, json_expr_ty),
+                               ret_ty, target, mk_list(args, json_expr_ty),
                                mk_list(keywords, json_keyword_ty)])
-fun mk_JE_StaticCall (func_name, arg_types, ret_ty, args) =
+fun mk_JE_StaticCall (func_name, arg_types, ret_ty, target, args) =
   list_mk_comb(JE_StaticCall_tm, [fromMLstring func_name,
                                   mk_list(arg_types, json_type_ty),
-                                  ret_ty, mk_list(args, json_expr_ty)])
+                                  ret_ty, target, mk_list(args, json_expr_ty)])
 fun mk_JKeyword (arg, v) = list_mk_comb(JKeyword_tm, [fromMLstring arg, v])
 
 (* ===== Statement Constructors ===== *)
@@ -617,7 +621,7 @@ fun d_json_expr () : term decoder = achoose "expr" [
     JSONDecode.map mk_JE_Bool (field "value" bool),
 
   (* Ellipsis - appears in .vyi interface stub function bodies *)
-  check_ast_type "Ellipsis" $ succeed (mk_JE_Bool true),
+  check_ast_type "Ellipsis" $ succeed JE_Ellipsis_tm,
 
   (* Name - preserve the original reference alongside any compiler-provided
      folded value. jsonToVyper decides which expression to lower. *)
@@ -683,9 +687,9 @@ fun d_json_expr () : term decoder = achoose "expr" [
             field "right" (delay d_json_expr)),
             orElse(field "type" json_type, succeed JT_None_tm)),
 
-  (* Compare (treated like BinOp) - result type is always bool *)
+  (* Compare *)
   check_ast_type "Compare" $
-    JSONDecode.map (fn (l, op_tm, r) => mk_JE_BinOp(l, op_tm, r, mk_JT_Named (mk_none intSyntax.int_ty, "bool"))) $
+    JSONDecode.map (fn (l, op_tm, r) => mk_JE_Compare(l, op_tm, r)) $
     tuple3 (field "left" (delay d_json_expr),
             field "op" json_binop,
             field "right" (delay d_json_expr)),
@@ -721,9 +725,8 @@ fun d_json_expr () : term decoder = achoose "expr" [
     tuple2 (field "elements" (array (delay d_json_expr)),
             field "type" json_type),
 
-  (* Call - also extract source_id from func.type.type_decl_node for module calls *)
-  (* Vyper convention: -1 = main module, -2 = builtin, >= 0 = imported module *)
-  (* We map negative source_ids to NONE (main module) *)
+  (* Call - preserve any explicit declaration source ID from the function
+     metadata; jsonToVyper interprets source IDs. *)
   check_ast_type "Call" $
     JSONDecode.map (fn ((func, args, kwargs), (ty, src_id_opt)) => mk_JE_Call(func, args, kwargs, ty, src_id_opt)) $
     tuple2 (tuple3 (field "func" (delay d_json_expr),
@@ -734,12 +737,11 @@ fun d_json_expr () : term decoder = achoose "expr" [
                     orElse (field "func" $ field "type" $ field "type_decl_node" $ field "source_id" source_ref_tm,
                             succeed JMissingSource_tm))),
 
-  (* ExtCall - wraps a Call node; func is Attribute with target and method name *)
-  (* Convention: target is prepended to args *)
+  (* ExtCall - preserve target separately from ordinary arguments. *)
   (* Signature extracted from func.type: argument_types, return_type *)
   check_ast_type "ExtCall" $
     JSONDecode.map (fn (((func_name, arg_types), (ret_ty, (target, args))), keywords) =>
-      mk_JE_ExtCall(func_name, arg_types, ret_ty, target :: args, keywords)) $
+      mk_JE_ExtCall(func_name, arg_types, ret_ty, target, args, keywords)) $
     tuple2 (tuple2 (tuple2 (field "value" $ field "func" $ field "attr" string,
                             field "value" $ field "func" $ field "type" $
                               orElse (field "argument_types" (array json_type), succeed [])),
@@ -749,10 +751,10 @@ fun d_json_expr () : term decoder = achoose "expr" [
                                     field "value" $ field "args" (array (delay d_json_expr))))),
             field "value" $ orElse (field "keywords" (array (delay d_json_keyword)), succeed [])),
 
-  (* StaticCall - same structure as ExtCall *)
+  (* StaticCall - same structure as ExtCall. *)
   check_ast_type "StaticCall" $
     JSONDecode.map (fn ((func_name, arg_types), (ret_ty, (target, args))) =>
-      mk_JE_StaticCall(func_name, arg_types, ret_ty, target :: args)) $
+      mk_JE_StaticCall(func_name, arg_types, ret_ty, target, args)) $
     tuple2 (tuple2 (field "value" $ field "func" $ field "attr" string,
                     field "value" $ field "func" $ field "type" $
                       orElse (field "argument_types" (array json_type), succeed [])),

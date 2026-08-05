@@ -82,6 +82,7 @@ Datatype:
   | JE_Bytes num string                                (* length, hex value *)
   | JE_Hex string json_type                            (* hex value and compiler type *)
   | JE_Bool bool                                       (* True/False *)
+  | JE_Ellipsis                                        (* interface stub body *)
 
   (* Variables and access *)
   | JE_Name string (string option) json_source_ref json_type         (* id, typeclass, declaration source, type *)
@@ -92,6 +93,7 @@ Datatype:
 
   (* Operators *)
   | JE_BinOp json_expr json_binop json_expr json_type  (* left, op, right, type *)
+  | JE_Compare json_expr json_binop json_expr           (* left, op, right *)
   | JE_BoolOp json_boolop (json_expr list)             (* op, values *)
   | JE_UnaryOp json_unaryop json_expr json_type        (* op, operand, type *)
   | JE_IfExp json_expr json_expr json_expr json_type   (* test, body, orelse, type *)
@@ -104,9 +106,10 @@ Datatype:
   (* Last field is source_id for module calls, extracted from func.type.type_decl_node *)
   | JE_Call json_expr (json_expr list) (json_keyword list) json_type json_source_ref
 
-  (* External calls - func_name, arg_types, return_type, args (first is target), keywords *)
-  | JE_ExtCall string (json_type list) json_type (json_expr list) (json_keyword list)
-  | JE_StaticCall string (json_type list) json_type (json_expr list)
+  (* External calls preserve target and ordinary arguments separately. *)
+  | JE_ExtCall string (json_type list) json_type json_expr
+      (json_expr list) (json_keyword list)
+  | JE_StaticCall string (json_type list) json_type json_expr (json_expr list)
 ;
   json_keyword = JKeyword string json_expr             (* arg, value *)
 End

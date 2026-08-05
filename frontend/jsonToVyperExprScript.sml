@@ -615,6 +615,8 @@ Definition translate_expr_def:
 
   (translate_expr ctx (JE_Bool b) = Literal (BaseT BoolT) (BoolL b)) /\
 
+  (translate_expr ctx JE_Ellipsis = Literal (BaseT BoolT) (BoolL T)) /\
+
   (translate_expr ctx (JE_Folded original folded) = translate_expr ctx folded) /\
 
   (translate_expr ctx (JE_Name id tc src_id_opt ret_ty) =
@@ -689,6 +691,10 @@ Definition translate_expr_def:
   (* BinOp *)
   (translate_expr ctx (JE_BinOp l op r ret_ty) =
     Builtin (translate_type (expr_type_ctx ctx) ret_ty) (Bop (translate_binop op)) [translate_expr ctx l; translate_expr ctx r]) /\
+
+  (translate_expr ctx (JE_Compare l op r) =
+    Builtin (BaseT BoolT) (Bop (translate_binop op))
+      [translate_expr ctx l; translate_expr ctx r]) /\
 
   (* BoolOp - convert to nested IfExp *)
   (translate_expr ctx (JE_BoolOp JBoolop_And es) =
@@ -780,26 +786,28 @@ Definition translate_expr_def:
               Call rty (IntCall (nsid, fname)) args' NONE)) /\
 
   (* ExtCall - mutating external call (is_static = F) *)
-  (* Convention: args = [target; value; arg1; arg2; ...] *)
-  (translate_expr ctx (JE_ExtCall func_name arg_types ret_ty args keywords) =
+  (translate_expr ctx
+      (JE_ExtCall func_name arg_types ret_ty target args keywords) =
     let value_expr = case find_keyword "value" keywords of
                      | SOME v => translate_expr ctx v
                      | NONE => Literal (BaseT (UintT 256)) (IntL 0) in
-    let translated_args = translate_expr_list ctx args in
     let ret_ty' = translate_type (expr_type_ctx ctx) ret_ty in
-    Call ret_ty' (ExtCall F (func_name, MAP (translate_type (expr_type_ctx ctx)) arg_types, ret_ty'))
-         (case translated_args of
-          | (target :: rest) => target :: value_expr :: rest
-          | [] => [])
-         (OPTION_MAP (translate_expr ctx) (find_keyword "default_return_value" keywords))) /\
+    Call ret_ty'
+      (ExtCall F
+        (func_name, MAP (translate_type (expr_type_ctx ctx)) arg_types, ret_ty'))
+      (translate_expr ctx target :: value_expr :: translate_expr_list ctx args)
+      (OPTION_MAP (translate_expr ctx)
+        (find_keyword "default_return_value" keywords))) /\
 
   (* StaticCall - read-only external call (is_static = T) *)
-  (* Convention: args = [target; arg1; arg2; ...] (no value) *)
-  (translate_expr ctx (JE_StaticCall func_name arg_types ret_ty args) =
+  (translate_expr ctx
+      (JE_StaticCall func_name arg_types ret_ty target args) =
     let ret_ty' = translate_type (expr_type_ctx ctx) ret_ty in
-    Call ret_ty' (ExtCall T (func_name, MAP (translate_type (expr_type_ctx ctx)) arg_types, ret_ty'))
-         (translate_expr_list ctx args)
-         NONE) /\
+    Call ret_ty'
+      (ExtCall T
+        (func_name, MAP (translate_type (expr_type_ctx ctx)) arg_types, ret_ty'))
+      (translate_expr ctx target :: translate_expr_list ctx args)
+      NONE) /\
 
   (* Helper for translating expression lists *)
   (translate_expr_list ctx [] = []) /\
