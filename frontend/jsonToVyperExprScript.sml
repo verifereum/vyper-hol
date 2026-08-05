@@ -621,6 +621,8 @@ Definition translate_expr_def:
 
   (translate_expr ctx (JE_Bool b) = Literal (BaseT BoolT) (BoolL b)) /\
 
+  (translate_expr ctx (JE_Folded original folded) = translate_expr ctx folded) /\
+
   (translate_expr ctx (JE_Name id tc src_id_opt ret_ty) =
     let ty = translate_type (expr_type_ctx ctx) ret_ty in
     if id = "self" then Builtin (BaseT AddressT) (Env SelfAddr) [] else make_name ctx ty id) /\

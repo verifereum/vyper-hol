@@ -136,6 +136,7 @@ val JE_Bytes_tm = jastk "JE_Bytes"
 val JE_Hex_tm = jastk "JE_Hex"
 val JE_Bool_tm = jastk "JE_Bool"
 val JE_Name_tm = jastk "JE_Name"
+val JE_Folded_tm = jastk "JE_Folded"
 val JE_Attribute_tm = jastk "JE_Attribute"
 val JE_Subscript_tm = jastk "JE_Subscript"
 val JE_NamedExpr_tm = jastk "JE_NamedExpr"
@@ -162,6 +163,8 @@ fun mk_JE_Name (s, tc_opt, src_id_opt, ty) =
   list_mk_comb(JE_Name_tm, [fromMLstring s,
                            lift_option (mk_option string_ty) fromMLstring tc_opt,
                            src_id_opt, ty])
+fun mk_JE_Folded (original, folded) =
+  list_mk_comb(JE_Folded_tm, [original, folded])
 fun mk_JE_Attribute (e, attr, tc_opt, base_ty_name_opt, base_tc_opt, src_id_opt, ty) =
   list_mk_comb(JE_Attribute_tm, [e, fromMLstring attr,
                                  lift_option (mk_option string_ty) fromMLstring tc_opt,
@@ -641,29 +644,33 @@ fun d_json_expr () : term decoder = achoose "expr" [
   (* Ellipsis - appears in .vyi interface stub function bodies *)
   check_ast_type "Ellipsis" $ succeed (mk_JE_Bool true),
 
-  (* Name - extract typeclass, source_id, and type for module references *)
-  (* source_id < 0 means main module (NONE), >= 0 means imported module *)
-  (* If folded_value is present (compile-time constant), use that instead *)
+  (* Name - preserve the original reference alongside any compiler-provided
+     folded value. jsonToVyper decides which expression to lower. *)
   check_ast_type "Name" $
-    achoose "Name or folded constant" [
-      (* folded_value with NameConstant (bool) *)
-      field "folded_value" $ check_ast_type "NameConstant" $
-        JSONDecode.map mk_JE_Bool (field "value" bool),
-      (* folded_value with Int *)
-      field "folded_value" $ check_ast_type "Int" $
-        JSONDecode.map (fn (v, ty) => mk_JE_Int(v, ty)) $
-        tuple2 (field "value" inttm,
-                orElse(field "type" json_type, succeed JT_None_tm)),
-      (* Normal Name without folded_value *)
-      JSONDecode.map (fn ((id, (tc, src_id_opt)), ty) => mk_JE_Name(id, tc, src_id_opt, ty)) $
+    JSONDecode.map
+      (fn (original, folded_opt) =>
+        case folded_opt of
+          NONE => original
+        | SOME folded => mk_JE_Folded (original, folded)) $
+    tuple2 (
+      JSONDecode.map
+        (fn ((id, (tc, src_id_opt)), ty) =>
+          mk_JE_Name(id, tc, src_id_opt, ty)) $
       tuple2 (tuple2 (field "id" string,
               tuple2 (try (orElse (field "type" $ field "typeclass" string,
                                   field "type" $ field "type_t" $ field "typeclass" string)),
                       orElse (field "type" $ field "type_decl_node" $ field "source_id" source_ref_tm,
                               orElse (field "type" $ field "type_t" $ field "type_decl_node" $ field "source_id" source_ref_tm,
                               succeed JMissingSource_tm)))),
-              orElse(field "type" json_type, succeed JT_None_tm))
-    ],
+              orElse(field "type" json_type, succeed JT_None_tm)),
+      try (field "folded_value" $ achoose "folded Name value" [
+        check_ast_type "NameConstant" $
+          JSONDecode.map mk_JE_Bool (field "value" bool),
+        check_ast_type "Int" $
+          JSONDecode.map (fn (v, ty) => mk_JE_Int(v, ty)) $
+          tuple2 (field "value" inttm,
+                  orElse(field "type" json_type, succeed JT_None_tm))
+      ])),
 
   (* Attribute - extract result typeclass, base_type_name, base_typeclass, source_id, and type *)
   (* source_id comes from variable_reads[0].decl_node.source_id OR type.type_decl_node.source_id *)
@@ -1046,29 +1053,6 @@ val json_interface_func : term decoder =
     )
   )
 
-(* Parser for export annotations that preserves Attribute structure,
-   so exports: lib1.CONST keeps the JE_Attribute form. *)
-fun d_export_annotation_expr () : term decoder = achoose "export_annotation" [
-  (* Tuple of export expressions *)
-  check_ast_type "Tuple" $
-    JSONDecode.map mk_JE_Tuple (field "elements" (array (delay d_export_annotation_expr))),
-
-  (* Attribute - always parse as JE_Attribute, never fold *)
-  check_ast_type "Attribute" $
-    JSONDecode.map (fn ((((((e, attr), tc_opt), base_ty_name_opt), base_tc_opt), src_id_opt), ty) => mk_JE_Attribute(e, attr, tc_opt, base_ty_name_opt, base_tc_opt, src_id_opt, ty)) $
-    tuple2 (tuple2 (tuple2 (tuple2 (tuple2 (tuple2 (field "value" (delay d_json_expr), field "attr" string),
-                    try (field "type" $ field "typeclass" string)),
-            try (field "value" $ field "type" $ field "name" string)),
-            try (field "value" $ field "type" $ field "typeclass" string)),
-            orElse (field "type" $ field "type_decl_node" $ field "source_id" source_ref_tm,
-                    orElse (field "variable_reads" $ sub 0 $
-                              field "decl_node" $ field "source_id" source_ref_tm,
-                            succeed JMissingSource_tm))),
-            orElse(field "type" json_type, succeed JT_None_tm))
-]
-
-val export_annotation_expr : term decoder = d_export_annotation_expr ()
-
 val json_toplevel : term decoder = achoose "toplevel" [
   (* FunctionDef *)
   check_ast_type "FunctionDef" $
@@ -1216,11 +1200,9 @@ val json_toplevel : term decoder = achoose "toplevel" [
               field "qualified_module_name" string),
 
   (* ExportsDecl - exports declaration *)
-  (* Use a dedicated parser that doesn't fold constants, so that
-     exports: lib1.CONST keeps the Attribute structure *)
   check_ast_type "ExportsDecl" $
     JSONDecode.map mk_JTL_ExportsDecl $
-    field "annotation" export_annotation_expr,
+    field "annotation" json_expr,
 
   (* InitializesDecl - initializes declaration *)
   check_ast_type "InitializesDecl" $

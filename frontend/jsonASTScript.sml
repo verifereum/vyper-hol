@@ -87,6 +87,7 @@ Datatype:
 
   (* Variables and access *)
   | JE_Name string (string option) json_source_ref json_type         (* id, typeclass, declaration source, type *)
+  | JE_Folded json_expr json_expr                       (* original expression, compiler-provided folded expression *)
   | JE_Attribute json_expr string (string option) (string option) (string option) json_source_ref json_type  (* value, attr, result_typeclass, base_type_name, base_typeclass, declaration source, type *)
   | JE_Subscript json_expr json_expr json_type         (* value, slice, type *)
   | JE_NamedExpr json_expr json_expr                   (* target, value - dependency binding in initializes: lib[dep := dep] *)
