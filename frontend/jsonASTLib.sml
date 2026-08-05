@@ -22,44 +22,15 @@ fun mk_nsid (src_id_opt, name) =
 
 (* ===== Types ===== *)
 
-val json_typeclass_ty = jasty "json_typeclass"
 val json_type_ty = jasty "json_type"
 val json_type_annotation_ty = jasty "json_type_annotation"
-val json_binop_ty = jasty "json_binop"
-val json_unaryop_ty = jasty "json_unaryop"
-val json_boolop_ty = jasty "json_boolop"
 val json_expr_ty = jasty "json_expr"
 val json_keyword_ty = jasty "json_keyword"
 val json_stmt_ty = jasty "json_stmt"
-val json_iter_ty = jasty "json_iter"
-val json_base_target_ty = jasty "json_base_target"
-val json_target_ty = jasty "json_target"
-val json_decorator_ty = jasty "json_decorator"
 val json_arg_ty = jasty "json_arg"
-val json_func_type_ty = jasty "json_func_type"
-val json_value_type_ty = jasty "json_value_type"
 val json_interface_func_ty = jasty "json_interface_func"
 val json_import_info_ty = jasty "json_import_info"
 val json_toplevel_ty = jasty "json_toplevel"
-val json_module_ty = jasty "json_module"
-
-(* ===== Typeclass Constructors ===== *)
-
-val TC_integer_tm = jastk "TC_integer"
-val TC_bytes_m_tm = jastk "TC_bytes_m"
-val TC_static_array_tm = jastk "TC_static_array"
-val TC_dynamic_array_tm = jastk "TC_dynamic_array"
-val TC_struct_tm = jastk "TC_struct"
-val TC_flag_tm = jastk "TC_flag"
-val TC_tuple_tm = jastk "TC_tuple"
-val TC_hashmap_tm = jastk "TC_hashmap"
-val TC_interface_tm = jastk "TC_interface"
-val TC_contract_function_tm = jastk "TC_contract_function"
-val TC_builtin_function_tm = jastk "TC_builtin_function"
-val TC_module_tm = jastk "TC_module"
-val TC_other_tm = jastk "TC_other"
-
-fun mk_TC_other s = mk_comb(TC_other_tm, fromMLstring s)
 
 (* ===== Type Constructors ===== *)
 
@@ -282,7 +253,6 @@ fun mk_JTgt_Tuple ts = mk_comb(JTgt_Tuple_tm, mk_list(ts, json_target_ty))
 
 (* ===== Top-level Constructors ===== *)
 
-val JDec_tm = jastk "JDec"
 val JArg_tm = jastk "JArg"
 val JFuncType_tm = jastk "JFuncType"
 val JVT_Type_tm = jastk "JVT_Type"
@@ -305,7 +275,6 @@ val JModule_tm = jastk "JModule"
 val JImportedModule_tm = jastk "JImportedModule"
 val JAnnotatedAST_tm = jastk "JAnnotatedAST"
 
-fun mk_JDec s = mk_comb(JDec_tm, fromMLstring s)
 fun mk_JArg (name, ty, ann) =
   list_mk_comb(JArg_tm, [fromMLstring name, ty, ann])
 fun mk_JFuncType (argtys, retty) =
@@ -396,30 +365,9 @@ val JExplicitSource_tm = jastk "JExplicitSource"
 
 val source_ref_tm : term decoder =
   JSONDecode.map (fn src_id => mk_comb (JExplicitSource_tm, src_id)) inttm
-val stringtm : term decoder = JSONDecode.map fromMLstring string
-val booltm : bool decoder = bool
-
 (* ===== Type Decoders ===== *)
 
 (* Decode typeclass string to constructor *)
-fun typeclass_of_string s =
-  if s = "integer" then TC_integer_tm
-  else if s = "bytes_m" then TC_bytes_m_tm
-  else if s = "static_array" orelse s = "$SArray" then TC_static_array_tm
-  else if s = "dynamic_array" orelse s = "DynArray" then TC_dynamic_array_tm
-  else if s = "struct" then TC_struct_tm
-  else if s = "flag" then TC_flag_tm
-  else if s = "tuple" then TC_tuple_tm
-  else if s = "hashmap" then TC_hashmap_tm
-  else if s = "interface" then TC_interface_tm
-  else if s = "contract_function" then TC_contract_function_tm
-  else if s = "builtin_function" then TC_builtin_function_tm
-  else if s = "module" then TC_module_tm
-  else mk_TC_other s
-
-val json_typeclass : term decoder =
-  JSONDecode.map typeclass_of_string (field "typeclass" string)
-
 (* Main type decoder - handles all json_type cases *)
 fun d_json_type () : term decoder = achoose "json_type" [
   (* Integer: has typeclass "integer", bits and is_signed fields *)

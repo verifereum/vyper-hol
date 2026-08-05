@@ -8,23 +8,6 @@ Libs
 (* Mirrors the "type" field in JSON *)
 
 Datatype:
-  json_typeclass
-  = TC_integer
-  | TC_bytes_m
-  | TC_static_array
-  | TC_dynamic_array
-  | TC_struct
-  | TC_flag
-  | TC_tuple
-  | TC_hashmap
-  | TC_interface
-  | TC_contract_function
-  | TC_builtin_function
-  | TC_module
-  | TC_other string  (* catch-all *)
-End
-
-Datatype:
   json_type
   = JT_Named (int option) string              (* optional declaration source_id, name *)
   | JT_Integer num bool                       (* bits, is_signed *)
@@ -168,10 +151,6 @@ Datatype:
 End
 
 (* ===== Top-level Declarations ===== *)
-
-Datatype:
-  json_decorator = JDec string                         (* decorator name: external, internal, view, etc *)
-End
 
 Datatype:
   json_arg = JArg string json_type json_type_annotation

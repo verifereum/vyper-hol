@@ -292,12 +292,6 @@ Definition kwarg_expr_def:
 End
 
 
-(* Check if kwarg is present *)
-Definition has_kwarg_def:
-  has_kwarg key (kwargs : (identifier # expr) list) =
-    IS_SOME (ALOOKUP kwargs key)
-End
-
 
 (* Extract a compiler-validated four-byte method_id literal. *)
 Definition kwarg_method_id_def:

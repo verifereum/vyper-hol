@@ -308,10 +308,6 @@ Definition compact_index_import_map_def:
   compact_index_import_map (src_id, import_map, ext_names, inline_map, export_anns) = import_map
 End
 
-Definition compact_index_ext_names_def:
-  compact_index_ext_names (src_id, import_map, ext_names, inline_map, export_anns) = ext_names
-End
-
 Definition compact_index_export_anns_def:
   compact_index_export_anns (src_id, import_map, ext_names, inline_map, export_anns) = export_anns
 End
@@ -351,20 +347,6 @@ Definition extract_exports_with_indexes_def:
       (compact_index_export_anns main_index)
 End
 
-Definition extract_exports_with_import_maps_def:
-  extract_exports_with_import_maps all_import_maps (JModule main_src_id _ toplevels) imports =
-    let import_indexes = build_import_compact_indexes imports in
-    let all_inline_maps = build_inline_maps_from_indexes import_indexes in
-    let exports_map = build_exports_map_from_indexes all_import_maps all_inline_maps [] import_indexes in
-    let main_index = module_compact_index 0 toplevels in
-    extract_exports_with_indexes all_import_maps all_inline_maps exports_map main_index
-End
-
-Definition extract_exports_def:
-  extract_exports main imports =
-    extract_exports_with_import_maps (build_all_import_maps imports) main imports
-End
-
 (* ===== Module Translation ===== *)
 
 Definition filter_some_def:
@@ -402,12 +384,6 @@ Definition translate_imported_modules_def:
     translate_imported_module all_import_maps main_src_id imp ::
     translate_imported_modules all_import_maps main_src_id imports
 End
-
-(* Extract toplevels from a JModule (needed to get import infos) *)
-Definition main_toplevels_def:
-  main_toplevels (JModule _ _ toplevels) = toplevels
-End
-
 
 (* ===== Annotate Storage Slots ===== *)
 
