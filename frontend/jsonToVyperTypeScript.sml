@@ -95,6 +95,13 @@ Termination
   WF_REL_TAC `measure (λ(_,ann). json_type_annotation_size ann)` >> simp[]
 End
 
+Definition translate_decl_type_def:
+  translate_decl_type ctx inferred ann =
+    case inferred of
+      JT_None => translate_annotation ctx ann
+    | _ => translate_type ctx inferred
+End
+
 (* Qualified syntactic annotations are resolved locally using the current
    module import map.  We only use them as namespace hints; the inferred
    type supplies the kind (flag/struct/named). *)

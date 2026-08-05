@@ -244,8 +244,9 @@ fun mk_JS_Log (nsid, args) =
   list_mk_comb(JS_Log_tm, [nsid, mk_list(args, json_expr_ty)])
 fun mk_JS_If (test, body, els) =
   list_mk_comb(JS_If_tm, [test, mk_list(body, json_stmt_ty), mk_list(els, json_stmt_ty)])
-fun mk_JS_For (var, ty, iter, body) =
-  list_mk_comb(JS_For_tm, [fromMLstring var, ty, iter, mk_list(body, json_stmt_ty)])
+fun mk_JS_For (var, ty, ann, iter, body) =
+  list_mk_comb(JS_For_tm,
+    [fromMLstring var, ty, ann, iter, mk_list(body, json_stmt_ty)])
 fun mk_JS_Assign (tgt, v) = list_mk_comb(JS_Assign_tm, [tgt, v])
 fun mk_JS_AnnAssign (var, ty, ann, v) =
   list_mk_comb(JS_AnnAssign_tm, [fromMLstring var, ty, ann, v])
@@ -977,13 +978,15 @@ fun d_json_stmt () : term decoder = achoose "stmt" [
 
   (* For *)
   check_ast_type "For" $
-    JSONDecode.map (fn ((var, varty), iter_parsed, body) =>
-      mk_JS_For(var, varty, iter_parse_to_term iter_parsed, body)) $
+    JSONDecode.map (fn ((var, (varty, ann)), iter_parsed, body) =>
+      mk_JS_For(var, varty, ann, iter_parse_to_term iter_parsed, body)) $
     tuple3 (field "target" $ check_ast_type "AnnAssign" $
               tuple2 (field "target" $ check_ast_type "Name" $ field "id" string,
-                      (* Type can be in target.type or in annotation field *)
-                      orElse (field "target" $ field "type" json_type,
-                              field "annotation" ast_type)),
+                      tuple2 (
+                        orElse (field "target" $ field "type" json_type,
+                                succeed JT_None_tm),
+                        orElse (field "annotation" ast_type,
+                                succeed JTA_None_tm))),
             field "iter" json_iter_internal,
             field "body" (array (delay d_json_stmt))),
 

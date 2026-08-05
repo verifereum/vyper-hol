@@ -141,7 +141,8 @@ Datatype:
   | JS_Assert json_expr (json_expr option)             (* test, msg *)
   | JS_Log (json_source_ref # string) (json_expr list) (* declaration source, event name, args *)
   | JS_If json_expr (json_stmt list) (json_stmt list)  (* test, body, orelse *)
-  | JS_For string json_type json_iter (json_stmt list) (* var, var_type, iter, body *)
+  | JS_For string json_type json_type_annotation json_iter (json_stmt list)
+      (* var, inferred type, syntactic annotation, iter, body *)
   | JS_Assign json_target json_expr                    (* target, value *)
   | JS_AnnAssign string json_type json_type_annotation json_expr
       (* var name, inferred type, syntactic annotation, value *)

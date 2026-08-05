@@ -912,10 +912,10 @@ End
 
 Definition translate_iter_def:
   (translate_iter ctx var_ty (JIter_Range [] _ _) =
-    Range (Literal (translate_type (expr_type_ctx ctx) var_ty) (IntL (integer$int_of_num 0)))
-          (Literal (translate_type (expr_type_ctx ctx) var_ty) (IntL (integer$int_of_num 0)))) /\
+    Range (Literal var_ty (IntL (integer$int_of_num 0)))
+          (Literal var_ty (IntL (integer$int_of_num 0)))) /\
   (translate_iter ctx var_ty (JIter_Range [e] _ _) =
-    Range (Literal (translate_type (expr_type_ctx ctx) var_ty) (IntL (integer$int_of_num 0)))
+    Range (Literal var_ty (IntL (integer$int_of_num 0)))
           (translate_expr ctx e)) /\
   (translate_iter ctx var_ty (JIter_Range (s::e::_) _ _) =
     Range (translate_expr ctx s) (translate_expr ctx e)) /\
@@ -945,13 +945,15 @@ Definition translate_stmt_def:
     If (translate_expr ctx test)
        (MAP (translate_stmt ctx) body)
        (MAP (translate_stmt ctx) orelse)) /\
-  (translate_stmt ctx (JS_For var ty iter body) =
-    For var (translate_type (expr_type_ctx ctx) ty) (translate_iter ctx ty iter)
+  (translate_stmt ctx (JS_For var ty ann iter body) =
+    let var_ty = translate_decl_type (expr_type_ctx ctx) ty ann in
+    For var var_ty (translate_iter ctx var_ty iter)
         (get_iter_bound iter) (MAP (translate_stmt ctx) body)) /\
   (translate_stmt ctx (JS_Assign tgt val) =
     Assign (translate_target ctx tgt) (translate_expr ctx val)) /\
   (translate_stmt ctx (JS_AnnAssign var ty ann val) =
-    AnnAssign var (translate_type (expr_type_ctx ctx) ty) (translate_expr ctx val)) /\
+    AnnAssign var (translate_decl_type (expr_type_ctx ctx) ty ann)
+      (translate_expr ctx val)) /\
   (translate_stmt ctx (JS_AugAssign tgt op val) =
     AugAssign (expr_type (translate_expr ctx val))
       (translate_base_target ctx tgt) (translate_binop op) (translate_expr ctx val)) /\
