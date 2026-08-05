@@ -20,8 +20,6 @@ fun jasty s = mk_thy_type{Thy="jsonAST",Tyop=s,Args=[]};
 fun mk_nsid (src_id_opt, name) =
   mk_pair(src_id_opt, fromMLstring name);
 
-fun mk_nsid_none name = mk_nsid(intSyntax.term_of_int (Arbint.fromInt ~1), name);
-
 (* ===== Types ===== *)
 
 val json_typeclass_ty = jasty "json_typeclass"
@@ -369,7 +367,10 @@ fun mk_source_ref i =
   else if i = ~2 then JBuiltin_tm
   else mk_comb (JSource_tm, intSyntax.term_of_int (Arbint.fromLargeInt i))
 
-val source_ref_tm : term decoder = JSONDecode.map mk_source_ref intInf
+val source_ref_tm : term decoder =
+  andThen intInf (fn i =>
+    if i < ~2 then fail "unknown negative source_id sentinel"
+    else succeed (mk_source_ref i))
 val stringtm : term decoder = JSONDecode.map fromMLstring string
 val booltm : bool decoder = bool
 
