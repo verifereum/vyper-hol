@@ -358,9 +358,8 @@ val numtm : term decoder = JSONDecode.map mk_num_from_largeint intInf
 val inttm : term decoder =
   JSONDecode.map (intSyntax.term_of_int o Arbint.fromLargeInt) intInf
 
-(* Raw source IDs are retained for module/type declarations. Expression
-   declaration references distinguish current, builtin, and real sources. *)
-val source_id_tm : term decoder = inttm
+(* Expression declaration references distinguish current, builtin, and real
+   sources instead of passing Vyper's negative sentinels through as IDs. *)
 val JSource_tm = jastk "JSource"
 val JCurrent_tm = jastk "JCurrent"
 val JBuiltin_tm = jastk "JBuiltin"
@@ -797,10 +796,10 @@ fun d_json_base_target () : term decoder = achoose "base_target" [
     JSONDecode.map (fn (attr, src_id_opt) => mk_JBT_TopLevelName (mk_nsid (src_id_opt, attr)))
       (tuple2 (field "attr" string,
                orElse (field "variable_writes" $ sub 0 $
-                         field "decl_node" $ field "source_id" source_id_tm,
+                         field "decl_node" $ field "source_id" source_ref_tm,
                        orElse (field "variable_reads" $ sub 0 $
-                                 field "decl_node" $ field "source_id" source_id_tm,
-                               succeed (intSyntax.term_of_int (Arbint.fromInt ~1)))))),
+                                 field "decl_node" $ field "source_id" source_ref_tm,
+                               succeed JCurrent_tm)))),
 
   (* module.x (lib1.counter) -> TopLevelName with source_id from type.type_decl_node *)
   check_ast_type "Attribute" $
@@ -809,8 +808,8 @@ fun d_json_base_target () : term decoder = achoose "base_target" [
     JSONDecode.map (fn (attr, src_id_opt) => mk_JBT_TopLevelName (mk_nsid (src_id_opt, attr)))
       (tuple2 (field "attr" string,
                orElse (field "value" $ field "type" $
-                         field "type_decl_node" $ field "source_id" source_id_tm,
-                       succeed (intSyntax.term_of_int (Arbint.fromInt ~1))))),
+                         field "type_decl_node" $ field "source_id" source_ref_tm,
+                       succeed JCurrent_tm))),
 
   (* Name *)
   check_ast_type "Name" $
@@ -924,14 +923,14 @@ fun d_json_stmt () : term decoder = achoose "stmt" [
               (* Same-module event: log MyEvent(...) *)
               check_ast_type "Name" $
               tuple2 (field "id" string,
-                      orElse (field "type" $ field "type_decl_node" $ field "source_id" source_id_tm,
-                              succeed (intSyntax.term_of_int (Arbint.fromInt ~1)))),
+                      orElse (field "type" $ field "type_decl_node" $ field "source_id" source_ref_tm,
+                              succeed JCurrent_tm)),
               (* Cross-module event: log lib1.MyEvent(...) *)
               check_ast_type "Attribute" $
               tuple2 (field "attr" string,
                       orElse (field "value" $ field "type" $
-                                field "type_decl_node" $ field "source_id" source_id_tm,
-                              succeed (intSyntax.term_of_int (Arbint.fromInt ~1))))],
+                                field "type_decl_node" $ field "source_id" source_ref_tm,
+                              succeed JCurrent_tm))],
             achoose "log args" [
               field "keywords" (array (field "value" json_expr)),
               field "args" (array json_expr)
@@ -1061,10 +1060,10 @@ fun d_export_annotation_expr () : term decoder = achoose "export_annotation" [
                     try (field "type" $ field "typeclass" string)),
             try (field "value" $ field "type" $ field "name" string)),
             try (field "value" $ field "type" $ field "typeclass" string)),
-            orElse (field "type" $ field "type_decl_node" $ field "source_id" source_id_tm,
+            orElse (field "type" $ field "type_decl_node" $ field "source_id" source_ref_tm,
                     orElse (field "variable_reads" $ sub 0 $
-                              field "decl_node" $ field "source_id" source_id_tm,
-                            succeed (intSyntax.term_of_int (Arbint.fromInt ~1))))),
+                              field "decl_node" $ field "source_id" source_ref_tm,
+                            succeed JCurrent_tm))),
             orElse(field "type" json_type, succeed JT_None_tm))
 ]
 

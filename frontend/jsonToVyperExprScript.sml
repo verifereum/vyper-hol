@@ -804,8 +804,9 @@ End
 
 Definition translate_base_target_def:
   (translate_base_target ctx (JBT_Name id) = make_name_target ctx id) /\
-  (* JBT_TopLevelName is (source_id, name) for self.x and module.x *)
-  (translate_base_target ctx (JBT_TopLevelName nsid) = TopLevelNameTarget (json_nsid_to_nsid (FST ctx) nsid)) /\
+  (* Top-level targets retain whether their declaration is current or imported. *)
+  (translate_base_target ctx (JBT_TopLevelName (src, name)) =
+    TopLevelNameTarget (resolve_source_ref ctx src, name)) /\
   (translate_base_target ctx (JBT_Subscript tgt idx) =
     SubscriptTarget (translate_base_target ctx tgt) (translate_expr ctx idx)) /\
   (translate_base_target ctx (JBT_Attribute tgt attr) =
@@ -912,8 +913,8 @@ Definition translate_stmt_def:
     Assert (translate_expr ctx test) AssertBare) /\
   (translate_stmt ctx (JS_Assert test (SOME msg)) =
     Assert (translate_expr ctx test) (AssertReason (translate_expr ctx msg))) /\
-  (translate_stmt ctx (JS_Log event args) =
-    Log (json_nsid_to_nsid (FST ctx) event) (MAP (translate_expr ctx) args)) /\
+  (translate_stmt ctx (JS_Log (src, name) args) =
+    Log (resolve_source_ref ctx src, name) (MAP (translate_expr ctx) args)) /\
   (translate_stmt ctx (JS_If test body orelse) =
     If (translate_expr ctx test)
        (MAP (translate_stmt ctx) body)

@@ -121,7 +121,7 @@ Datatype:
   | JS_Return (json_expr option)
   | JS_Raise (json_expr option)
   | JS_Assert json_expr (json_expr option)             (* test, msg *)
-  | JS_Log (int # string) (json_expr list)      (* (source_id, event name), args *)
+  | JS_Log (json_source_ref # string) (json_expr list) (* declaration source, event name, args *)
   | JS_If json_expr (json_stmt list) (json_stmt list)  (* test, body, orelse *)
   | JS_For string json_type json_iter (json_stmt list) (* var, var_type, iter, body *)
   | JS_Assign json_target json_expr                    (* target, value *)
@@ -138,7 +138,7 @@ Datatype:
   (* Assignment targets *)
   json_base_target
   = JBT_Name string
-  | JBT_TopLevelName (int # string)             (* (source_id, name) - for self.x and module.x *)
+  | JBT_TopLevelName (json_source_ref # string) (* declaration source and name *)
   | JBT_Subscript json_base_target json_expr
   | JBT_Attribute json_base_target string
 ;
