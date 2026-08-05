@@ -18,7 +18,7 @@ End
 Definition build_import_map_def:
   build_import_map [] = [] ∧
   build_import_map (JImportInfo alias src_id _ :: rest) =
-    (alias, Num (src_id + &builtin_source_id_offset)) :: build_import_map rest
+    (alias, source_id_to_module_id src_id) :: build_import_map rest
 End
 
 
@@ -127,7 +127,7 @@ End
 Definition find_module_body_nsid_def:
   find_module_body_nsid nsid [] = [] ∧
   find_module_body_nsid nsid (JImportedModule sid _ body :: rest) =
-    if nsid = Num (sid + &builtin_source_id_offset) then body
+    if nsid = source_id_to_module_id sid then body
     else find_module_body_nsid nsid rest
 End
 
@@ -154,7 +154,7 @@ End
 Definition build_all_import_maps_def:
   build_all_import_maps [] = [] ∧
   build_all_import_maps (JImportedModule src_id _ body :: rest) =
-    let nsid = Num (src_id + &builtin_source_id_offset) in
+    let nsid = source_id_to_module_id src_id in
     (nsid, build_import_map (collect_imports body)) ::
     build_all_import_maps rest
 End
@@ -197,7 +197,7 @@ End
 Definition build_all_inline_interface_maps_def:
   build_all_inline_interface_maps [] = [] ∧
   build_all_inline_interface_maps (JImportedModule src_id _ body :: rest) =
-    let nsid = Num (src_id + &builtin_source_id_offset) in
+    let nsid = source_id_to_module_id src_id in
     (nsid, collect_inline_interfaces body) :: build_all_inline_interface_maps rest
 End
 
@@ -300,7 +300,7 @@ End
 Definition build_import_compact_indexes_def:
   build_import_compact_indexes [] = [] ∧
   build_import_compact_indexes (JImportedModule src_id _ body :: rest) =
-    module_compact_index (Num (src_id + &builtin_source_id_offset)) body ::
+    module_compact_index (source_id_to_module_id src_id) body ::
     build_import_compact_indexes rest
 End
 
@@ -385,7 +385,7 @@ End
 
 Definition translate_imported_module_def:
   translate_imported_module all_import_maps main_src_id (JImportedModule src_id path body) =
-    let nsid = Num (src_id + &builtin_source_id_offset) in
+    let nsid = source_id_to_module_id src_id in
     let import_map = build_import_map (collect_imports body) in
     let expr_ctx =
       (main_src_id, (SOME nsid, (import_map, collect_consts_and_immutables body))) in

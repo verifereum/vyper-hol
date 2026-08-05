@@ -10,13 +10,22 @@ End
 
 (* Convert a JSON source_id (int) to a vyperAST source_id (num option).
    main_src_id maps to NONE (main module), others are offset to be non-negative. *)
+Definition source_id_to_module_id_def:
+  source_id_to_module_id (src_id:int) =
+    Num (src_id + &builtin_source_id_offset)
+End
+
 Definition source_id_to_nsid_def:
   source_id_to_nsid (main_src_id:int) (src_id:int) =
     if src_id = main_src_id then NONE
-    else SOME (Num (src_id + &builtin_source_id_offset))
+    else SOME (source_id_to_module_id src_id)
 End
 
 (* ===== Type Translation ===== *)
+
+Definition tctx_main_src_id_def:
+  tctx_main_src_id tctx = FST tctx
+End
 
 Definition tctx_current_nsid_def:
   tctx_current_nsid tctx = FST (SND tctx)
@@ -40,11 +49,11 @@ Definition translate_type_def:
   (translate_type ctx (JT_Struct NONE name) =
     StructT (tctx_current_nsid ctx, name)) ∧
   (translate_type ctx (JT_Struct (SOME src_id) name) =
-    StructT (source_id_to_nsid (FST ctx) src_id, name)) ∧
+    StructT (source_id_to_nsid (tctx_main_src_id ctx) src_id, name)) ∧
   (translate_type ctx (JT_Flag NONE name) =
     FlagT (tctx_current_nsid ctx, name)) ∧
   (translate_type ctx (JT_Flag (SOME src_id) name) =
-    FlagT (source_id_to_nsid (FST ctx) src_id, name)) ∧
+    FlagT (source_id_to_nsid (tctx_main_src_id ctx) src_id, name)) ∧
   (translate_type ctx (JT_Named src_id_opt name) =
      if name = "bool" then BaseT BoolT
      else if name = "address" ∨ name = "self" then BaseT AddressT
@@ -53,7 +62,7 @@ Definition translate_type_def:
      else StructT
        (case src_id_opt of
           NONE => tctx_current_nsid ctx
-        | SOME src_id => source_id_to_nsid (FST ctx) src_id,
+        | SOME src_id => source_id_to_nsid (tctx_main_src_id ctx) src_id,
         name)) ∧
   (translate_type ctx (JT_Qualified _ name) = StructT (NONE, name)) ∧
   (translate_type ctx (JT_HashMap _ _) = NoneT) ∧
@@ -77,7 +86,8 @@ Definition resolve_qualified_type_path_def:
         | NONE => NONE
         | SOME parent_import_map =>
             resolve_qualified_type_path all_import_maps
-              (FST ctx, SOME parent_src_id, parent_import_map) (next::rest))
+              (tctx_main_src_id ctx, SOME parent_src_id, parent_import_map)
+              (next::rest))
 Termination
   WF_REL_TAC `measure (λ(_,_,path). LENGTH path)` >> simp[]
 End

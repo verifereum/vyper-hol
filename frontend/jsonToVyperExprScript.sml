@@ -498,24 +498,34 @@ End
 (* ===== Expression translation context and name helpers ===== *)
 
 (* Expression translation carries the root source ID, current module
-   namespace, current module import map, and names of constants/immutables.
-   Keep access to the embedded type context centralized so expression types
-   can use contextual translation in a follow-up. *)
-Definition expr_type_ctx_def:
-  expr_type_ctx ctx =
-    (FST ctx, FST (SND ctx), FST (SND (SND ctx)))
+   namespace, current module import map, and names of constants/immutables. *)
+Definition expr_main_src_id_def:
+  expr_main_src_id ctx = FST ctx
+End
+
+Definition expr_current_nsid_def:
+  expr_current_nsid ctx = FST (SND ctx)
+End
+
+Definition expr_import_map_def:
+  expr_import_map ctx = FST (SND (SND ctx))
 End
 
 Definition expr_const_names_def:
   expr_const_names ctx = SND (SND (SND ctx))
 End
 
+Definition expr_type_ctx_def:
+  expr_type_ctx ctx =
+    (expr_main_src_id ctx, expr_current_nsid ctx, expr_import_map ctx)
+End
+
 Definition resolve_source_ref_def:
   (resolve_source_ref ctx (JSource src_id) =
-    source_id_to_nsid (FST ctx) src_id) /\
-  (resolve_source_ref ctx JCurrent = FST (SND ctx)) /\
+    source_id_to_nsid (expr_main_src_id ctx) src_id) /\
+  (resolve_source_ref ctx JCurrent = expr_current_nsid ctx) /\
   (resolve_source_ref ctx JBuiltin =
-    source_id_to_nsid (FST ctx) (-2))
+    source_id_to_nsid (expr_main_src_id ctx) (-2))
 End
 
 (* Bare references to constants and immutables are translated as
@@ -523,14 +533,14 @@ End
 Definition make_name_def:
   make_name ctx ty id =
     if MEM id (expr_const_names ctx)
-    then TopLevelName ty (FST (SND ctx), id)
+    then TopLevelName ty (expr_current_nsid ctx, id)
     else Name ty id
 End
 
 Definition make_name_target_def:
   make_name_target ctx id =
     if MEM id (expr_const_names ctx)
-    then TopLevelNameTarget (FST (SND ctx), id)
+    then TopLevelNameTarget (expr_current_nsid ctx, id)
     else NameTarget id
 End
 
@@ -626,7 +636,7 @@ Definition translate_expr_def:
     let base_ty = translate_type (expr_type_ctx ctx) base_ret_ty in
     (* Same-module flag member: Action.BUY where tc = SOME "flag" *)
     if tc = SOME "flag" /\ result_tc = SOME "flag" then
-      make_flag_member (FST (SND ctx), obj) attr
+      make_flag_member (expr_current_nsid ctx, obj) attr
     else if obj = "msg" /\ attr = "sender" then Builtin (BaseT AddressT) (Env Sender) []
     else if obj = "msg" /\ attr = "value" then Builtin (BaseT (UintT 256)) (Env ValueSent) []
     else if obj = "block" /\ attr = "timestamp" then Builtin (BaseT (UintT 256)) (Env TimeStamp) []
@@ -759,7 +769,7 @@ Definition translate_expr_def:
                 if fname = sname then
                   (* Struct constructor: library.SomeStruct(x=2) *)
                   let mod_nsid = case src_id_opt of
-                      SOME sid => source_id_to_nsid (FST ctx) sid
+                      SOME sid => source_id_to_nsid (expr_main_src_id ctx) sid
                     | NONE =>
                       case func of
                         JE_Attribute base _ _ _ _ _ _ =>
