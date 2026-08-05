@@ -66,6 +66,13 @@ End
 (* Only keep type info where needed for translation *)
 
 Datatype:
+  json_source_ref
+  = JSource int
+  | JCurrent
+  | JBuiltin
+End
+
+Datatype:
   json_expr
   (* Literals - need type for int bounds, string/bytes length *)
   = JE_Int int json_type                               (* value, type for bounds *)
@@ -77,8 +84,8 @@ Datatype:
   | JE_Bool bool                                       (* True/False *)
 
   (* Variables and access *)
-  | JE_Name string (string option) int json_type         (* id, typeclass, source_id, type *)
-  | JE_Attribute json_expr string (string option) (string option) (string option) int json_type  (* value, attr, result_typeclass, base_type_name, base_typeclass, source_id, type *)
+  | JE_Name string (string option) json_source_ref json_type         (* id, typeclass, declaration source, type *)
+  | JE_Attribute json_expr string (string option) (string option) (string option) json_source_ref json_type  (* value, attr, result_typeclass, base_type_name, base_typeclass, declaration source, type *)
   | JE_Subscript json_expr json_expr json_type         (* value, slice, type *)
   | JE_NamedExpr json_expr json_expr                   (* target, value - dependency binding in initializes: lib[dep := dep] *)
 
@@ -94,7 +101,7 @@ Datatype:
 
   (* Calls - need type for builtins like concat/slice that embed return length *)
   (* Last field is source_id for module calls, extracted from func.type.type_decl_node *)
-  | JE_Call json_expr (json_expr list) (json_keyword list) json_type int
+  | JE_Call json_expr (json_expr list) (json_keyword list) json_type json_source_ref
 
   (* External calls - func_name, arg_types, return_type, args (first is target), keywords *)
   | JE_ExtCall string (json_type list) json_type (json_expr list) (json_keyword list)
@@ -114,7 +121,7 @@ Datatype:
   | JS_Return (json_expr option)
   | JS_Raise (json_expr option)
   | JS_Assert json_expr (json_expr option)             (* test, msg *)
-  | JS_Log (int # string) (json_expr list)      (* (source_id, event name), args *)
+  | JS_Log (json_source_ref # string) (json_expr list) (* declaration source, event name, args *)
   | JS_If json_expr (json_stmt list) (json_stmt list)  (* test, body, orelse *)
   | JS_For string json_type json_iter (json_stmt list) (* var, var_type, iter, body *)
   | JS_Assign json_target json_expr                    (* target, value *)
@@ -131,7 +138,7 @@ Datatype:
   (* Assignment targets *)
   json_base_target
   = JBT_Name string
-  | JBT_TopLevelName (int # string)             (* (source_id, name) - for self.x and module.x *)
+  | JBT_TopLevelName (json_source_ref # string) (* declaration source and name *)
   | JBT_Subscript json_base_target json_expr
   | JBT_Attribute json_base_target string
 ;

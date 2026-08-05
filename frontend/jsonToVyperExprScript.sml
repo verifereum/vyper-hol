@@ -310,8 +310,7 @@ End
 
 
 Definition make_builtin_call_def:
-  make_builtin_call main_src_id name args kwargs ret_ty =
-    let ty = translate_type main_src_id ret_ty in
+  make_builtin_call ty name args kwargs ret_ty =
     if name = "len" then Builtin ty Len args
     else if name = "concat" then
       (case ret_ty of JT_String n => Builtin ty (Concat n) args
@@ -392,23 +391,28 @@ Definition make_builtin_call_def:
                     | _ => Builtin ty (Uint2Str 0) args)
     else if name = "abi_decode" ∨ name = "_abi_decode" then
       let unwrap = kwarg_bool "unwrap_tuple" kwargs T in
-      (case args of (arg::_) => TypeBuiltin ty (AbiDecode unwrap) (translate_type main_src_id ret_ty) [arg]
-                  | _ => TypeBuiltin ty (AbiDecode unwrap) (translate_type main_src_id ret_ty) [])
+      (case args of (arg::_) => TypeBuiltin ty (AbiDecode unwrap) ty [arg]
+                  | _ => TypeBuiltin ty (AbiDecode unwrap) ty [])
     else if name = "abi_encode" ∨ name = "_abi_encode" then
       let ensure = kwarg_bool "ensure_tuple" kwargs T in
       let method_id = kwarg_method_id "method_id" kwargs in
       let arg_types = TupleT (MAP expr_type args) in
       TypeBuiltin ty (AbiEncode ensure method_id) arg_types args
     else if name = "extract32" then
-      TypeBuiltin ty Extract32 (translate_type main_src_id ret_ty) args
+      TypeBuiltin ty Extract32 ty args
     else if name = "method_id" then
       Builtin ty MethodId args
     (* Struct constructor, cast, or regular call *)
     else (case ret_ty of
-          | JT_Struct src_id_opt sname => StructLit ty (source_id_opt_to_nsid main_src_id src_id_opt sname) kwargs
+          | JT_Struct _ sname =>
+              (case ty of
+                 StructT nsid => StructLit ty nsid kwargs
+               | _ => StructLit ty (NONE, sname) kwargs)
           | JT_Named _ _ =>
               if kwargs <> [] /\ ~is_builtin_cast_name name then
-                StructLit ty (NONE, name) kwargs
+                (case ty of
+                   StructT nsid => StructLit ty nsid kwargs
+                 | _ => StructLit ty (NONE, name) kwargs)
               else
                 if is_cast_name name then
                     if is_builtin_cast_name name then
@@ -491,34 +495,41 @@ Definition is_module_expr_def:
 End
 
 
-(* Detect cross-module flag member pattern: lib1.Action.BUY or lib1.lib2.Roles3.NOBODY *)
-(* Returns SOME (src_id_opt, flag_name) if it matches, NONE otherwise *)
-(* e is the expression immediately under the flag member attribute (i.e., the flag type expression) *)
-(* For lib1.Roles.ADMIN: e = JE_Attribute (JE_Name "lib1"...) "Roles" _ _ *)
-(* For lib1.lib2.Roles3.NOBODY: e = JE_Attribute (JE_Attribute ... "lib2" (SOME "module") (SOME 1)) "Roles3" _ _ *)
-Definition extract_module_flag_def:
-  (* Attribute expression for the flag type - look inside for the module *)
-  (extract_module_flag main_src_id (JE_Attribute inner flag_name _ _ _ _ _) =
-    case extract_innermost_module_src inner of
-    | SOME src_id => SOME (source_id_to_nsid main_src_id src_id, flag_name)
-    | NONE => NONE) /\
-  (extract_module_flag main_src_id _ = NONE)
+(* ===== Expression translation context and name helpers ===== *)
+
+(* Expression translation carries the root source ID, current module
+   namespace, current module import map, and names of constants/immutables.
+   Keep access to the embedded type context centralized so expression types
+   can use contextual translation in a follow-up. *)
+Definition expr_type_ctx_def:
+  expr_type_ctx ctx =
+    (FST ctx, FST (SND ctx), FST (SND (SND ctx)))
 End
 
+Definition expr_const_names_def:
+  expr_const_names ctx = SND (SND (SND ctx))
+End
 
-(* ===== Top-level names and name helpers ===== *)
+Definition resolve_source_ref_def:
+  (resolve_source_ref ctx (JSource src_id) =
+    source_id_to_nsid (FST ctx) src_id) /\
+  (resolve_source_ref ctx JCurrent = FST (SND ctx)) /\
+  (resolve_source_ref ctx JBuiltin =
+    source_id_to_nsid (FST ctx) (-2))
+End
 
-(* The context carries names of constants and immutables declared in the
-   current module.  Bare references to those declarations are translated as
+(* Bare references to constants and immutables are translated as
    module-qualified top-level names; ordinary names remain local/scoped. *)
 Definition make_name_def:
   make_name ctx ty id =
-    if MEM id (SND (SND ctx)) then TopLevelName ty (FST (SND ctx), id) else Name ty id
+    if MEM id (expr_const_names ctx)
+    then TopLevelName ty (FST (SND ctx), id)
+    else Name ty id
 End
 
 Definition make_name_target_def:
   make_name_target ctx id =
-    if MEM id (SND (SND ctx))
+    if MEM id (expr_const_names ctx)
     then TopLevelNameTarget (FST (SND ctx), id)
     else NameTarget id
 End
@@ -527,6 +538,21 @@ Definition interface_constructor_result_def:
   interface_constructor_result ty [Literal _ (BytesL bs)] =
     Literal ty (BytesL bs) /\
   interface_constructor_result _ args = HD args
+End
+
+(* Cross-module flag result metadata may omit its declaration source. Recover
+   that source from the module expression, then use it for both the result type
+   and member lookup identity. *)
+Definition extract_module_flag_def:
+  (extract_module_flag ctx (JE_Attribute inner flag_name _ _ _ _ _) =
+    case extract_innermost_module_src inner of
+      SOME src => SOME (resolve_source_ref ctx src, flag_name)
+    | NONE => NONE) /\
+  (extract_module_flag ctx _ = NONE)
+End
+
+Definition make_flag_member_def:
+  make_flag_member nsid attr = FlagMember (FlagT nsid) nsid attr
 End
 
 (* ===== Expression Translation ===== *)
@@ -564,7 +590,7 @@ QED
 
 Definition translate_expr_def:
   (translate_expr ctx (JE_Int v ty) =
-    Literal (translate_type (FST ctx) ty) (IntL v)) /\
+    Literal (translate_type_ctx (expr_type_ctx ctx) ty) (IntL v)) /\
 
   (translate_expr ctx (JE_Decimal s) =
     Literal (BaseT DecimalT) (DecimalL (decimal_string_to_int s))) /\
@@ -582,13 +608,13 @@ Definition translate_expr_def:
     let bytes = hex_string_to_bytes (FILTER isHexDigit (strip_0x hex)) in
     let ty = case typ of
                JT_None => BaseT (BytesT (Fixed (LENGTH bytes)))
-             | _ => translate_type (FST ctx) typ in
+             | _ => translate_type_ctx (expr_type_ctx ctx) typ in
     Literal ty (BytesL bytes)) /\
 
   (translate_expr ctx (JE_Bool b) = Literal (BaseT BoolT) (BoolL b)) /\
 
   (translate_expr ctx (JE_Name id tc src_id_opt ret_ty) =
-    let ty = translate_type (FST ctx) ret_ty in
+    let ty = translate_type_ctx (expr_type_ctx ctx) ret_ty in
     if id = "self" then Builtin (BaseT AddressT) (Env SelfAddr) [] else make_name ctx ty id) /\
 
   (* Special attributes: msg.*, block.*, tx.*, self.*, module.*, flag members *)
@@ -596,10 +622,11 @@ Definition translate_expr_def:
   (* base_type_name is the type name of the base expression (e.g., "address" for addr.code) *)
   (* base_typeclass is the typeclass of the base expression (e.g., "interface" for interface.address) *)
   (translate_expr ctx (JE_Attribute (JE_Name obj tc src_id_opt base_ret_ty) attr result_tc base_type_name base_typeclass attr_src_id_opt ret_ty) =
-    let ty = translate_type (FST ctx) ret_ty in
-    let base_ty = translate_type (FST ctx) base_ret_ty in
+    let ty = translate_type_ctx (expr_type_ctx ctx) ret_ty in
+    let base_ty = translate_type_ctx (expr_type_ctx ctx) base_ret_ty in
     (* Same-module flag member: Action.BUY where tc = SOME "flag" *)
-    if tc = SOME "flag" /\ result_tc = SOME "flag" then FlagMember ty (source_id_to_nsid (FST ctx) src_id_opt, obj) attr
+    if tc = SOME "flag" /\ result_tc = SOME "flag" then
+      make_flag_member (FST (SND ctx), obj) attr
     else if obj = "msg" /\ attr = "sender" then Builtin (BaseT AddressT) (Env Sender) []
     else if obj = "msg" /\ attr = "value" then Builtin (BaseT (UintT 256)) (Env ValueSent) []
     else if obj = "block" /\ attr = "timestamp" then Builtin (BaseT (UintT 256)) (Env TimeStamp) []
@@ -613,9 +640,9 @@ Definition translate_expr_def:
     else if obj = "self" /\ attr = "code" then
       Builtin (BaseT (BytesT (Dynamic 24576))) (Acc Code) [Builtin (BaseT AddressT) (Env SelfAddr) []]
     (* self.x: use attr_src_id_opt from variable_reads for cross-module storage access *)
-    else if obj = "self" then TopLevelName ty (source_id_to_nsid (FST ctx) attr_src_id_opt, attr)
-    (* Module variable access (lib1.x): use src_id_opt from module type *)
-    else if tc = SOME "module" then TopLevelName ty (source_id_to_nsid (FST ctx) src_id_opt, attr)
+    else if obj = "self" then TopLevelName ty (resolve_source_ref ctx attr_src_id_opt, attr)
+    (* Module variable access (lib1.x): use the declaration source from its module type. *)
+    else if tc = SOME "module" then TopLevelName ty (resolve_source_ref ctx src_id_opt, attr)
     else if attr = "balance" /\ base_type_name = SOME "address" then Builtin (BaseT (UintT 256)) (Acc Balance) [make_name ctx base_ty obj]
     else if attr = "address" /\ base_type_name = SOME "address" then Builtin (BaseT AddressT) (Acc Address) [make_name ctx base_ty obj]
     else if attr = "address" /\ base_typeclass = SOME "interface" then make_name ctx base_ty obj (* interface.address = interface (identity) *)
@@ -630,14 +657,14 @@ Definition translate_expr_def:
   (* base_type_name is the type name of the base expression (e.g., "address" for addr.code) *)
   (* base_typeclass is the typeclass of the base expression (e.g., "interface" for interface.address) *)
   (translate_expr ctx (JE_Attribute e attr result_tc base_type_name base_typeclass attr_src_id_opt ret_ty) =
-    let ty = translate_type (FST ctx) ret_ty in
+    let ty = translate_type_ctx (expr_type_ctx ctx) ret_ty in
     if result_tc = SOME "flag" then
-      case extract_module_flag (FST ctx) e of
-      | SOME (src_id_opt, flag_name) => FlagMember ty (src_id_opt, flag_name) attr
+      case extract_module_flag ctx e of
+        SOME nsid => make_flag_member nsid attr
       | NONE => Attribute ty (translate_expr ctx e) attr
     (* Nested module access: mod3.mod2.mod1.X — use variable_reads source_id *)
     else if is_module_expr e then
-      TopLevelName ty (source_id_to_nsid (FST ctx) attr_src_id_opt, attr)
+      TopLevelName ty (resolve_source_ref ctx attr_src_id_opt, attr)
     else if attr = "balance" /\ base_type_name = SOME "address" then Builtin (BaseT (UintT 256)) (Acc Balance) [translate_expr ctx e]
     else if attr = "address" /\ base_type_name = SOME "address" then Builtin (BaseT AddressT) (Acc Address) [translate_expr ctx e]
     else if attr = "address" /\ base_typeclass = SOME "interface" then translate_expr ctx e (* interface.address = interface (identity) *)
@@ -649,7 +676,7 @@ Definition translate_expr_def:
 
   (* Subscript *)
   (translate_expr ctx (JE_Subscript arr idx ret_ty) =
-    Subscript (translate_type (FST ctx) ret_ty) (translate_expr ctx arr) (translate_expr ctx idx)) /\
+    Subscript (translate_type_ctx (expr_type_ctx ctx) ret_ty) (translate_expr ctx arr) (translate_expr ctx idx)) /\
 
   (* NamedExpr - only appears in initializes:/uses: annotations, not in executable code *)
   (translate_expr ctx (JE_NamedExpr target value) =
@@ -657,7 +684,7 @@ Definition translate_expr_def:
 
   (* BinOp *)
   (translate_expr ctx (JE_BinOp l op r ret_ty) =
-    Builtin (translate_type (FST ctx) ret_ty) (Bop (translate_binop op)) [translate_expr ctx l; translate_expr ctx r]) /\
+    Builtin (translate_type_ctx (expr_type_ctx ctx) ret_ty) (Bop (translate_binop op)) [translate_expr ctx l; translate_expr ctx r]) /\
 
   (* BoolOp - convert to nested IfExp *)
   (translate_expr ctx (JE_BoolOp JBoolop_And es) =
@@ -667,15 +694,15 @@ Definition translate_expr_def:
 
   (* UnaryOp *)
   (translate_expr ctx (JE_UnaryOp JUop_USub e ret_ty) =
-    Builtin (translate_type (FST ctx) ret_ty) Neg [translate_expr ctx e]) /\
+    Builtin (translate_type_ctx (expr_type_ctx ctx) ret_ty) Neg [translate_expr ctx e]) /\
   (translate_expr ctx (JE_UnaryOp JUop_Not e ret_ty) =
     Builtin (BaseT BoolT) Not [translate_expr ctx e]) /\
   (translate_expr ctx (JE_UnaryOp JUop_Invert e ret_ty) =
-    Builtin (translate_type (FST ctx) ret_ty) Not [translate_expr ctx e]) /\
+    Builtin (translate_type_ctx (expr_type_ctx ctx) ret_ty) Not [translate_expr ctx e]) /\
 
   (* IfExp (ternary) *)
   (translate_expr ctx (JE_IfExp test body orelse ret_ty) =
-    IfExp (translate_type (FST ctx) ret_ty) (translate_expr ctx test) (translate_expr ctx body) (translate_expr ctx orelse)) /\
+    IfExp (translate_type_ctx (expr_type_ctx ctx) ret_ty) (translate_expr ctx test) (translate_expr ctx body) (translate_expr ctx orelse)) /\
 
   (* Tuple *)
   (translate_expr ctx (JE_Tuple es) =
@@ -685,12 +712,12 @@ Definition translate_expr_def:
 
   (* List - array literal *)
   (translate_expr ctx (JE_List es ty) =
-    let ty' = translate_type (FST ctx) ty in
+    let ty' = translate_type_ctx (expr_type_ctx ctx) ty in
     case ty of
     | JT_StaticArray vt len =>
-        Builtin ty' (MakeArray (SOME (translate_type (FST ctx) vt)) (Fixed len)) (translate_expr_list ctx es)
+        Builtin ty' (MakeArray (SOME (translate_type_ctx (expr_type_ctx ctx) vt)) (Fixed len)) (translate_expr_list ctx es)
     | JT_DynArray vt len =>
-        Builtin ty' (MakeArray (SOME (translate_type (FST ctx) vt)) (Dynamic len)) (translate_expr_list ctx es)
+        Builtin ty' (MakeArray (SOME (translate_type_ctx (expr_type_ctx ctx) vt)) (Dynamic len)) (translate_expr_list ctx es)
     | _ =>
         Builtin ty' (MakeArray NONE (Fixed (LENGTH es))) (translate_expr_list ctx es)) /\
 
@@ -699,11 +726,11 @@ Definition translate_expr_def:
   (translate_expr ctx (JE_Call func args kwargs ret_ty src_id_opt) =
     let args' = translate_expr_list ctx args in
     let kwargs' = translate_kwargs ctx kwargs in
-    let rty = translate_type (FST ctx) ret_ty in
+    let rty = translate_type_ctx (expr_type_ctx ctx) ret_ty in
     case func of
     | JE_Name name (SOME "interface") _ _ =>
         interface_constructor_result rty args'
-    | JE_Name name _ _ _ => make_builtin_call (FST ctx) name args' kwargs' ret_ty
+    | JE_Name name _ _ _ => make_builtin_call rty name args' kwargs' ret_ty
     (* lib.__at__(addr) / lib.__interface__(addr) - interface instantiation, just returns the address *)
     | JE_Attribute _ "__at__" _ _ _ _ _ =>
         interface_constructor_result rty args'
@@ -714,18 +741,18 @@ Definition translate_expr_def:
          | JE_Name id _ _ _ => Pop rty (make_name_target ctx id)
          | JE_Attribute (JE_Name "self" _ _ _) attr _ _ _ _ _ => Pop rty (TopLevelNameTarget (NONE, attr))
          | JE_Attribute (JE_Name id (SOME "module") src_id_opt _) attr _ _ _ _ _ =>
-             Pop rty (TopLevelNameTarget (source_id_to_nsid (FST ctx) src_id_opt, attr))
+             Pop rty (TopLevelNameTarget (resolve_source_ref ctx src_id_opt, attr))
          | JE_Attribute (JE_Name id _ _ _) attr _ _ _ _ _ =>
              Pop rty (AttributeTarget (make_name_target ctx id) attr)
          | JE_Subscript (JE_Name id _ _ _) idx _ =>
              Pop rty (SubscriptTarget (make_name_target ctx id) (translate_expr ctx idx))
          | _ => Call rty (IntCall (NONE, "pop")) args' NONE)
     (* self.func(args) - internal call *)
-    | JE_Attribute (JE_Name "self" _ _ _) fname _ _ _ _ _ => Call rty (IntCall (source_id_to_nsid (FST ctx) src_id_opt, fname)) args' NONE
+    | JE_Attribute (JE_Name "self" _ _ _) fname _ _ _ _ _ => Call rty (IntCall (resolve_source_ref ctx src_id_opt, fname)) args' NONE
     (* Module struct constructor, interface constructor, or module function call *)
     | _ => if is_interface_constructor func then
              interface_constructor_result rty args'
-           else let nsid = source_id_to_nsid (FST ctx) src_id_opt;
+           else let nsid = resolve_source_ref ctx src_id_opt;
                fname = extract_func_name func in
            (case ret_ty of
               JT_Struct src_id_opt sname =>
@@ -737,7 +764,7 @@ Definition translate_expr_def:
                       case func of
                         JE_Attribute base _ _ _ _ _ _ =>
                           (case extract_innermost_module_src base of
-                             SOME sid => source_id_to_nsid (FST ctx) sid
+                             SOME src => resolve_source_ref ctx src
                            | NONE => nsid)
                       | _ => nsid in
                   StructLit rty (mod_nsid, fname) kwargs'
@@ -755,7 +782,8 @@ Definition translate_expr_def:
                      | SOME v => translate_expr ctx v
                      | NONE => Literal (BaseT (UintT 256)) (IntL 0) in
     let translated_args = translate_expr_list ctx args in
-    Call (translate_type (FST ctx) ret_ty) (ExtCall F (func_name, translate_type_list (FST ctx) arg_types, translate_type (FST ctx) ret_ty))
+    let ret_ty' = translate_type_ctx (expr_type_ctx ctx) ret_ty in
+    Call ret_ty' (ExtCall F (func_name, MAP (translate_type_ctx (expr_type_ctx ctx)) arg_types, ret_ty'))
          (case translated_args of
           | (target :: rest) => target :: value_expr :: rest
           | [] => [])
@@ -764,7 +792,8 @@ Definition translate_expr_def:
   (* StaticCall - read-only external call (is_static = T) *)
   (* Convention: args = [target; arg1; arg2; ...] (no value) *)
   (translate_expr ctx (JE_StaticCall func_name arg_types ret_ty args) =
-    Call (translate_type (FST ctx) ret_ty) (ExtCall T (func_name, translate_type_list (FST ctx) arg_types, translate_type (FST ctx) ret_ty))
+    let ret_ty' = translate_type_ctx (expr_type_ctx ctx) ret_ty in
+    Call ret_ty' (ExtCall T (func_name, MAP (translate_type_ctx (expr_type_ctx ctx)) arg_types, ret_ty'))
          (translate_expr_list ctx args)
          NONE) /\
 
@@ -791,8 +820,9 @@ End
 
 Definition translate_base_target_def:
   (translate_base_target ctx (JBT_Name id) = make_name_target ctx id) /\
-  (* JBT_TopLevelName is (source_id, name) for self.x and module.x *)
-  (translate_base_target ctx (JBT_TopLevelName nsid) = TopLevelNameTarget (json_nsid_to_nsid (FST ctx) nsid)) /\
+  (* Top-level targets retain whether their declaration is current or imported. *)
+  (translate_base_target ctx (JBT_TopLevelName (src, name)) =
+    TopLevelNameTarget (resolve_source_ref ctx src, name)) /\
   (translate_base_target ctx (JBT_Subscript tgt idx) =
     SubscriptTarget (translate_base_target ctx tgt) (translate_expr ctx idx)) /\
   (translate_base_target ctx (JBT_Attribute tgt attr) =
@@ -872,10 +902,10 @@ End
 
 Definition translate_iter_def:
   (translate_iter ctx var_ty (JIter_Range [] _ _) =
-    Range (Literal (translate_type (FST ctx) var_ty) (IntL (integer$int_of_num 0)))
-          (Literal (translate_type (FST ctx) var_ty) (IntL (integer$int_of_num 0)))) /\
+    Range (Literal (translate_type_ctx (expr_type_ctx ctx) var_ty) (IntL (integer$int_of_num 0)))
+          (Literal (translate_type_ctx (expr_type_ctx ctx) var_ty) (IntL (integer$int_of_num 0)))) /\
   (translate_iter ctx var_ty (JIter_Range [e] _ _) =
-    Range (Literal (translate_type (FST ctx) var_ty) (IntL (integer$int_of_num 0)))
+    Range (Literal (translate_type_ctx (expr_type_ctx ctx) var_ty) (IntL (integer$int_of_num 0)))
           (translate_expr ctx e)) /\
   (translate_iter ctx var_ty (JIter_Range (s::e::_) _ _) =
     Range (translate_expr ctx s) (translate_expr ctx e)) /\
@@ -899,19 +929,19 @@ Definition translate_stmt_def:
     Assert (translate_expr ctx test) AssertBare) /\
   (translate_stmt ctx (JS_Assert test (SOME msg)) =
     Assert (translate_expr ctx test) (AssertReason (translate_expr ctx msg))) /\
-  (translate_stmt ctx (JS_Log event args) =
-    Log (json_nsid_to_nsid (FST ctx) event) (MAP (translate_expr ctx) args)) /\
+  (translate_stmt ctx (JS_Log (src, name) args) =
+    Log (resolve_source_ref ctx src, name) (MAP (translate_expr ctx) args)) /\
   (translate_stmt ctx (JS_If test body orelse) =
     If (translate_expr ctx test)
        (MAP (translate_stmt ctx) body)
        (MAP (translate_stmt ctx) orelse)) /\
   (translate_stmt ctx (JS_For var ty iter body) =
-    For var (translate_type (FST ctx) ty) (translate_iter ctx ty iter)
+    For var (translate_type_ctx (expr_type_ctx ctx) ty) (translate_iter ctx ty iter)
         (get_iter_bound iter) (MAP (translate_stmt ctx) body)) /\
   (translate_stmt ctx (JS_Assign tgt val) =
     Assign (translate_target ctx tgt) (translate_expr ctx val)) /\
   (translate_stmt ctx (JS_AnnAssign var ty val) =
-    AnnAssign var (translate_type (FST ctx) ty) (translate_expr ctx val)) /\
+    AnnAssign var (translate_type_ctx (expr_type_ctx ctx) ty) (translate_expr ctx val)) /\
   (translate_stmt ctx (JS_AugAssign tgt op val) =
     AugAssign (expr_type (translate_expr ctx val))
       (translate_base_target ctx tgt) (translate_binop op) (translate_expr ctx val)) /\
