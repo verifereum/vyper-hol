@@ -521,11 +521,9 @@ Definition expr_type_ctx_def:
 End
 
 Definition resolve_source_ref_def:
-  (resolve_source_ref ctx (JSource src_id) =
-    source_id_to_nsid (expr_main_src_id ctx) src_id) /\
-  (resolve_source_ref ctx JCurrent = expr_current_nsid ctx) /\
-  (resolve_source_ref ctx JBuiltin =
-    source_id_to_nsid (expr_main_src_id ctx) (-2))
+  (resolve_source_ref ctx JMissingSource = expr_current_nsid ctx) /\
+  (resolve_source_ref ctx (JExplicitSource src_id) =
+    source_id_to_nsid (expr_main_src_id ctx) src_id)
 End
 
 (* Bare references to constants and immutables are translated as

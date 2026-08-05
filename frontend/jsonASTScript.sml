@@ -65,11 +65,12 @@ End
 (* ===== Expressions ===== *)
 (* Only keep type info where needed for translation *)
 
+(* Raw declaration-source metadata: missing field versus an explicit compiler
+   source ID. Interpretation belongs to jsonToVyper. *)
 Datatype:
   json_source_ref
-  = JSource int
-  | JCurrent
-  | JBuiltin
+  = JMissingSource
+  | JExplicitSource int
 End
 
 Datatype:

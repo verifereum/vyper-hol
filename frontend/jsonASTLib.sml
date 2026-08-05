@@ -356,20 +356,13 @@ val numtm : term decoder = JSONDecode.map mk_num_from_largeint intInf
 val inttm : term decoder =
   JSONDecode.map (intSyntax.term_of_int o Arbint.fromLargeInt) intInf
 
-(* Expression declaration references distinguish current, builtin, and real
-   sources instead of passing Vyper's negative sentinels through as IDs. *)
-val JSource_tm = jastk "JSource"
-val JCurrent_tm = jastk "JCurrent"
-val JBuiltin_tm = jastk "JBuiltin"
-
-fun mk_source_ref i =
-  if i = ~2 then JBuiltin_tm
-  else mk_comb (JSource_tm, intSyntax.term_of_int (Arbint.fromLargeInt i))
+(* Preserve whether declaration-source metadata was absent or explicitly
+   supplied. Source ID interpretation belongs to jsonToVyper. *)
+val JMissingSource_tm = jastk "JMissingSource"
+val JExplicitSource_tm = jastk "JExplicitSource"
 
 val source_ref_tm : term decoder =
-  andThen intInf (fn i =>
-    if i < ~2 then fail "unknown negative source_id sentinel"
-    else succeed (mk_source_ref i))
+  JSONDecode.map (fn src_id => mk_comb (JExplicitSource_tm, src_id)) inttm
 val stringtm : term decoder = JSONDecode.map fromMLstring string
 val booltm : bool decoder = bool
 
@@ -661,7 +654,7 @@ fun d_json_expr () : term decoder = achoose "expr" [
                                   field "type" $ field "type_t" $ field "typeclass" string)),
                       orElse (field "type" $ field "type_decl_node" $ field "source_id" source_ref_tm,
                               orElse (field "type" $ field "type_t" $ field "type_decl_node" $ field "source_id" source_ref_tm,
-                              succeed JCurrent_tm)))),
+                              succeed JMissingSource_tm)))),
               orElse(field "type" json_type, succeed JT_None_tm))
     ],
 
@@ -679,7 +672,7 @@ fun d_json_expr () : term decoder = achoose "expr" [
             orElse (field "variable_reads" $ sub 0 $
                               field "decl_node" $ field "source_id" source_ref_tm,
                     orElse (field "type" $ field "type_decl_node" $ field "source_id" source_ref_tm,
-                            succeed JCurrent_tm))),
+                            succeed JMissingSource_tm))),
             orElse(field "type" json_type, succeed JT_None_tm)),
 
   (* Subscript *)
@@ -750,7 +743,7 @@ fun d_json_expr () : term decoder = achoose "expr" [
             tuple2 ((* type field may be missing or null *)
                     orElse (field "type" json_type, succeed JT_None_tm),
                     orElse (field "func" $ field "type" $ field "type_decl_node" $ field "source_id" source_ref_tm,
-                            succeed JCurrent_tm))),
+                            succeed JMissingSource_tm))),
 
   (* ExtCall - wraps a Call node; func is Attribute with target and method name *)
   (* Convention: target is prepended to args *)
@@ -799,7 +792,7 @@ fun d_json_base_target () : term decoder = achoose "base_target" [
                          field "decl_node" $ field "source_id" source_ref_tm,
                        orElse (field "variable_reads" $ sub 0 $
                                  field "decl_node" $ field "source_id" source_ref_tm,
-                               succeed JCurrent_tm)))),
+                               succeed JMissingSource_tm)))),
 
   (* module.x (lib1.counter) -> TopLevelName with source_id from type.type_decl_node *)
   check_ast_type "Attribute" $
@@ -809,7 +802,7 @@ fun d_json_base_target () : term decoder = achoose "base_target" [
       (tuple2 (field "attr" string,
                orElse (field "value" $ field "type" $
                          field "type_decl_node" $ field "source_id" source_ref_tm,
-                       succeed JCurrent_tm))),
+                       succeed JMissingSource_tm))),
 
   (* Name *)
   check_ast_type "Name" $
@@ -924,13 +917,13 @@ fun d_json_stmt () : term decoder = achoose "stmt" [
               check_ast_type "Name" $
               tuple2 (field "id" string,
                       orElse (field "type" $ field "type_decl_node" $ field "source_id" source_ref_tm,
-                              succeed JCurrent_tm)),
+                              succeed JMissingSource_tm)),
               (* Cross-module event: log lib1.MyEvent(...) *)
               check_ast_type "Attribute" $
               tuple2 (field "attr" string,
                       orElse (field "value" $ field "type" $
                                 field "type_decl_node" $ field "source_id" source_ref_tm,
-                              succeed JCurrent_tm))],
+                              succeed JMissingSource_tm))],
             achoose "log args" [
               field "keywords" (array (field "value" json_expr)),
               field "args" (array json_expr)
@@ -1063,7 +1056,7 @@ fun d_export_annotation_expr () : term decoder = achoose "export_annotation" [
             orElse (field "type" $ field "type_decl_node" $ field "source_id" source_ref_tm,
                     orElse (field "variable_reads" $ sub 0 $
                               field "decl_node" $ field "source_id" source_ref_tm,
-                            succeed JCurrent_tm))),
+                            succeed JMissingSource_tm))),
             orElse(field "type" json_type, succeed JT_None_tm))
 ]
 
