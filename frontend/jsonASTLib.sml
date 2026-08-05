@@ -358,9 +358,19 @@ val numtm : term decoder = JSONDecode.map mk_num_from_largeint intInf
 val inttm : term decoder =
   JSONDecode.map (intSyntax.term_of_int o Arbint.fromLargeInt) intInf
 
-(* Decode source_id as raw int, faithfully mirroring JSON. *)
-(* Conversion to vyperAST nsid (num option) is done in jsonToVyper. *)
+(* Raw source IDs are retained for module/type declarations. Expression
+   declaration references distinguish current, builtin, and real sources. *)
 val source_id_tm : term decoder = inttm
+val JSource_tm = jastk "JSource"
+val JCurrent_tm = jastk "JCurrent"
+val JBuiltin_tm = jastk "JBuiltin"
+
+fun mk_source_ref i =
+  if i = ~1 then JCurrent_tm
+  else if i = ~2 then JBuiltin_tm
+  else mk_comb (JSource_tm, intSyntax.term_of_int (Arbint.fromLargeInt i))
+
+val source_ref_tm : term decoder = JSONDecode.map mk_source_ref intInf
 val stringtm : term decoder = JSONDecode.map fromMLstring string
 val booltm : bool decoder = bool
 
@@ -650,9 +660,9 @@ fun d_json_expr () : term decoder = achoose "expr" [
       tuple2 (tuple2 (field "id" string,
               tuple2 (try (orElse (field "type" $ field "typeclass" string,
                                   field "type" $ field "type_t" $ field "typeclass" string)),
-                      orElse (field "type" $ field "type_decl_node" $ field "source_id" source_id_tm,
-                              orElse (field "type" $ field "type_t" $ field "type_decl_node" $ field "source_id" source_id_tm,
-                              succeed (intSyntax.term_of_int (Arbint.fromInt ~1)))))),
+                      orElse (field "type" $ field "type_decl_node" $ field "source_id" source_ref_tm,
+                              orElse (field "type" $ field "type_t" $ field "type_decl_node" $ field "source_id" source_ref_tm,
+                              succeed JCurrent_tm)))),
               orElse(field "type" json_type, succeed JT_None_tm))
     ],
 
@@ -668,9 +678,9 @@ fun d_json_expr () : term decoder = achoose "expr" [
             try (field "value" $ field "type" $ field "name" string)),
             try (field "value" $ field "type" $ field "typeclass" string)),
             orElse (field "variable_reads" $ sub 0 $
-                              field "decl_node" $ field "source_id" source_id_tm,
-                    orElse (field "type" $ field "type_decl_node" $ field "source_id" source_id_tm,
-                            succeed (intSyntax.term_of_int (Arbint.fromInt ~1))))),
+                              field "decl_node" $ field "source_id" source_ref_tm,
+                    orElse (field "type" $ field "type_decl_node" $ field "source_id" source_ref_tm,
+                            succeed JCurrent_tm))),
             orElse(field "type" json_type, succeed JT_None_tm)),
 
   (* Subscript *)
@@ -740,8 +750,8 @@ fun d_json_expr () : term decoder = achoose "expr" [
                     orElse(field "keywords" (array (delay d_json_keyword)), succeed [])),
             tuple2 ((* type field may be missing or null *)
                     orElse (field "type" json_type, succeed JT_None_tm),
-                    orElse (field "func" $ field "type" $ field "type_decl_node" $ field "source_id" source_id_tm,
-                            succeed (intSyntax.term_of_int (Arbint.fromInt ~1))))),
+                    orElse (field "func" $ field "type" $ field "type_decl_node" $ field "source_id" source_ref_tm,
+                            succeed JCurrent_tm))),
 
   (* ExtCall - wraps a Call node; func is Attribute with target and method name *)
   (* Convention: target is prepended to args *)

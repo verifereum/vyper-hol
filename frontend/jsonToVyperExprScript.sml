@@ -505,6 +505,13 @@ Definition expr_const_names_def:
   expr_const_names ctx = SND (SND (SND ctx))
 End
 
+Definition resolve_source_ref_def:
+  (resolve_source_ref ctx (JSource src_id) =
+    source_id_to_nsid (FST ctx) src_id) /\
+  (resolve_source_ref ctx JCurrent = FST (SND ctx)) /\
+  (resolve_source_ref ctx JBuiltin = NONE)
+End
+
 (* Bare references to constants and immutables are translated as
    module-qualified top-level names; ordinary names remain local/scoped. *)
 Definition make_name_def:
@@ -619,9 +626,9 @@ Definition translate_expr_def:
     else if obj = "self" /\ attr = "code" then
       Builtin (BaseT (BytesT (Dynamic 24576))) (Acc Code) [Builtin (BaseT AddressT) (Env SelfAddr) []]
     (* self.x: use attr_src_id_opt from variable_reads for cross-module storage access *)
-    else if obj = "self" then TopLevelName ty (source_id_to_nsid (FST ctx) attr_src_id_opt, attr)
-    (* Module variable access (lib1.x): use src_id_opt from module type *)
-    else if tc = SOME "module" then TopLevelName ty (source_id_to_nsid (FST ctx) src_id_opt, attr)
+    else if obj = "self" then TopLevelName ty (resolve_source_ref ctx attr_src_id_opt, attr)
+    (* Module variable access (lib1.x): use the declaration source from its module type. *)
+    else if tc = SOME "module" then TopLevelName ty (resolve_source_ref ctx src_id_opt, attr)
     else if attr = "balance" /\ base_type_name = SOME "address" then Builtin (BaseT (UintT 256)) (Acc Balance) [make_name ctx base_ty obj]
     else if attr = "address" /\ base_type_name = SOME "address" then Builtin (BaseT AddressT) (Acc Address) [make_name ctx base_ty obj]
     else if attr = "address" /\ base_typeclass = SOME "interface" then make_name ctx base_ty obj (* interface.address = interface (identity) *)
@@ -641,7 +648,7 @@ Definition translate_expr_def:
       make_flag_member ty (translate_expr ctx e) attr
     (* Nested module access: mod3.mod2.mod1.X — use variable_reads source_id *)
     else if is_module_expr e then
-      TopLevelName ty (source_id_to_nsid (FST ctx) attr_src_id_opt, attr)
+      TopLevelName ty (resolve_source_ref ctx attr_src_id_opt, attr)
     else if attr = "balance" /\ base_type_name = SOME "address" then Builtin (BaseT (UintT 256)) (Acc Balance) [translate_expr ctx e]
     else if attr = "address" /\ base_type_name = SOME "address" then Builtin (BaseT AddressT) (Acc Address) [translate_expr ctx e]
     else if attr = "address" /\ base_typeclass = SOME "interface" then translate_expr ctx e (* interface.address = interface (identity) *)
@@ -718,18 +725,18 @@ Definition translate_expr_def:
          | JE_Name id _ _ _ => Pop rty (make_name_target ctx id)
          | JE_Attribute (JE_Name "self" _ _ _) attr _ _ _ _ _ => Pop rty (TopLevelNameTarget (NONE, attr))
          | JE_Attribute (JE_Name id (SOME "module") src_id_opt _) attr _ _ _ _ _ =>
-             Pop rty (TopLevelNameTarget (source_id_to_nsid (FST ctx) src_id_opt, attr))
+             Pop rty (TopLevelNameTarget (resolve_source_ref ctx src_id_opt, attr))
          | JE_Attribute (JE_Name id _ _ _) attr _ _ _ _ _ =>
              Pop rty (AttributeTarget (make_name_target ctx id) attr)
          | JE_Subscript (JE_Name id _ _ _) idx _ =>
              Pop rty (SubscriptTarget (make_name_target ctx id) (translate_expr ctx idx))
          | _ => Call rty (IntCall (NONE, "pop")) args' NONE)
     (* self.func(args) - internal call *)
-    | JE_Attribute (JE_Name "self" _ _ _) fname _ _ _ _ _ => Call rty (IntCall (source_id_to_nsid (FST ctx) src_id_opt, fname)) args' NONE
+    | JE_Attribute (JE_Name "self" _ _ _) fname _ _ _ _ _ => Call rty (IntCall (resolve_source_ref ctx src_id_opt, fname)) args' NONE
     (* Module struct constructor, interface constructor, or module function call *)
     | _ => if is_interface_constructor func then
              interface_constructor_result rty args'
-           else let nsid = source_id_to_nsid (FST ctx) src_id_opt;
+           else let nsid = resolve_source_ref ctx src_id_opt;
                fname = extract_func_name func in
            (case ret_ty of
               JT_Struct src_id_opt sname =>
@@ -741,7 +748,7 @@ Definition translate_expr_def:
                       case func of
                         JE_Attribute base _ _ _ _ _ _ =>
                           (case extract_innermost_module_src base of
-                             SOME sid => source_id_to_nsid (FST ctx) sid
+                             SOME src => resolve_source_ref ctx src
                            | NONE => nsid)
                       | _ => nsid in
                   StructLit rty (mod_nsid, fname) kwargs'
