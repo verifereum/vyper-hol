@@ -174,7 +174,8 @@ Datatype:
 End
 
 Datatype:
-  json_arg = JArg string json_type_annotation          (* arg name, syntactic annotation *)
+  json_arg = JArg string json_type json_type_annotation
+    (* arg name, compiler-inferred type, syntactic annotation *)
 End
 
 Datatype:

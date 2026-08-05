@@ -306,7 +306,8 @@ val JImportedModule_tm = jastk "JImportedModule"
 val JAnnotatedAST_tm = jastk "JAnnotatedAST"
 
 fun mk_JDec s = mk_comb(JDec_tm, fromMLstring s)
-fun mk_JArg (name, ty) = list_mk_comb(JArg_tm, [fromMLstring name, ty])
+fun mk_JArg (name, ty, ann) =
+  list_mk_comb(JArg_tm, [fromMLstring name, ty, ann])
 fun mk_JFuncType (argtys, retty) =
   list_mk_comb(JFuncType_tm, [mk_list(argtys, json_type_ty), retty])
 fun mk_JVT_Type ty = mk_comb(JVT_Type_tm, ty)
@@ -1032,15 +1033,19 @@ val json_value_type = delay d_json_value_type
 (* ===== Top-level Decoder ===== *)
 
 val json_arg : term decoder = achoose "json_arg" [
-  (* New format: ast_type = "arg" with "arg" field for name and "annotation" for type *)
+  (* New format: ast_type = "arg". *)
   check_ast_type "arg" $
-    JSONDecode.map (fn (name, ty) => mk_JArg(name, ty)) $
-    tuple2 (field "arg" string, field "annotation" ast_type),
-  (* Old format: ast_type = "AnnAssign" with nested target *)
+    JSONDecode.map (fn (name, ty, ann) => mk_JArg(name, ty, ann)) $
+    tuple3 (field "arg" string,
+            orElse (field "type" json_type, succeed JT_None_tm),
+            orElse (field "annotation" ast_type, succeed JTA_None_tm)),
+  (* Old format: ast_type = "AnnAssign" with nested target. *)
   check_ast_type "AnnAssign" $
-    JSONDecode.map (fn (name, ty) => mk_JArg(name, ty)) $
-    tuple2 (field "target" $ check_ast_type "Name" $ field "id" string,
-            field "annotation" ast_type)
+    JSONDecode.map (fn (name, ty, ann) => mk_JArg(name, ty, ann)) $
+    tuple3 (field "target" $ check_ast_type "Name" $ field "id" string,
+            orElse (field "target" $ field "type" json_type,
+                    succeed JT_None_tm),
+            orElse (field "annotation" ast_type, succeed JTA_None_tm))
 ]
 
 val json_func_type : term decoder =
@@ -1144,9 +1149,10 @@ val json_toplevel : term decoder = achoose "toplevel" [
       check_ast_type "arg" $
         orElse(
           (* indexed: annotation is Call to "indexed" *)
-          JSONDecode.map (fn (name, ty) =>
-            pairSyntax.mk_pair(mk_JArg(name, ty), boolSyntax.T)) $
-          tuple2 (field "arg" string,
+          JSONDecode.map (fn (name, ty, ann) =>
+            pairSyntax.mk_pair(mk_JArg(name, ty, ann), boolSyntax.T)) $
+          tuple3 (field "arg" string,
+                  orElse (field "type" json_type, succeed JT_None_tm),
                   field "annotation" $
                     check_ast_type "Call" $
                       andThen (field "func" $ check_ast_type "Name" $
@@ -1155,16 +1161,20 @@ val json_toplevel : term decoder = achoose "toplevel" [
                                  then field "args" $ sub 0 ast_type
                                  else fail "not indexed")),
           (* non-indexed: bare annotation *)
-          JSONDecode.map (fn (name, ty) =>
-            pairSyntax.mk_pair(mk_JArg(name, ty), boolSyntax.F)) $
-          tuple2 (field "arg" string, field "annotation" ast_type)),
+          JSONDecode.map (fn (name, ty, ann) =>
+            pairSyntax.mk_pair(mk_JArg(name, ty, ann), boolSyntax.F)) $
+          tuple3 (field "arg" string,
+                  orElse (field "type" json_type, succeed JT_None_tm),
+                  field "annotation" ast_type)),
       (* Old format: ast_type = "AnnAssign" *)
       check_ast_type "AnnAssign" $
         orElse(
           (* indexed *)
-          JSONDecode.map (fn (name, ty) =>
-            pairSyntax.mk_pair(mk_JArg(name, ty), boolSyntax.T)) $
-          tuple2 (field "target" $ check_ast_type "Name" $ field "id" string,
+          JSONDecode.map (fn (name, ty, ann) =>
+            pairSyntax.mk_pair(mk_JArg(name, ty, ann), boolSyntax.T)) $
+          tuple3 (field "target" $ check_ast_type "Name" $ field "id" string,
+                  orElse (field "target" $ field "type" json_type,
+                          succeed JT_None_tm),
                   field "annotation" $
                     check_ast_type "Call" $
                       andThen (field "func" $ check_ast_type "Name" $
@@ -1173,9 +1183,11 @@ val json_toplevel : term decoder = achoose "toplevel" [
                                  then field "args" $ sub 0 ast_type
                                  else fail "not indexed")),
           (* non-indexed *)
-          JSONDecode.map (fn (name, ty) =>
-            pairSyntax.mk_pair(mk_JArg(name, ty), boolSyntax.F)) $
-          tuple2 (field "target" $ check_ast_type "Name" $ field "id" string,
+          JSONDecode.map (fn (name, ty, ann) =>
+            pairSyntax.mk_pair(mk_JArg(name, ty, ann), boolSyntax.F)) $
+          tuple3 (field "target" $ check_ast_type "Name" $ field "id" string,
+                  orElse (field "target" $ field "type" json_type,
+                          succeed JT_None_tm),
                   field "annotation" ast_type))
     ]
   in

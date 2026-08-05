@@ -22,8 +22,8 @@ End
 
 
 Definition translate_arg_def:
-  translate_arg ctx (JArg name ann) =
-    (name, translate_annotation ctx ann)
+  translate_arg ctx (JArg name ty ann) =
+    (name, translate_decl_type ctx ty ann)
 End
 
 Definition translate_interface_func_def:
@@ -38,7 +38,7 @@ Definition translate_args_with_types_def:
   translate_args_with_types all_import_maps ctx args tys =
     case (args, tys) of
       ([], []) => []
-    | (JArg name ann :: args', ty :: tys') =>
+    | (JArg name _ ann :: args', ty :: tys') =>
         (name, translate_type_with_annotation all_import_maps ctx ty ann) ::
         translate_args_with_types all_import_maps ctx args' tys'
     | _ => MAP (translate_arg ctx) args
