@@ -60,9 +60,9 @@ Definition translate_type_def:
      else if name = "decimal" then BaseT DecimalT
      else if name = "(void)" then NoneT
      else StructT
-       (case src_id_opt of
-          NONE => tctx_current_nsid ctx
-        | SOME src_id => source_id_to_nsid (tctx_main_src_id ctx) src_id,
+       ((case src_id_opt of
+           NONE => tctx_current_nsid ctx
+         | SOME src_id => source_id_to_nsid (tctx_main_src_id ctx) src_id),
         name)) ∧
   (translate_type ctx (JT_Qualified _ name) = StructT (NONE, name)) ∧
   (translate_type ctx (JT_HashMap _ _) = NoneT) ∧
