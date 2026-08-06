@@ -23,6 +23,17 @@ End
 
 (* ===== Type Translation ===== *)
 
+(* Nominal kinds come from declarations, not compiler-inferred type metadata. *)
+Datatype:
+  nominal_kind = StructKind | FlagKind | InterfaceKind
+End
+
+Definition nominal_type_def:
+  nominal_type StructKind nsid = StructT nsid ∧
+  nominal_type FlagKind nsid = FlagT nsid ∧
+  nominal_type InterfaceKind nsid = BaseT AddressT
+End
+
 Definition tctx_main_src_id_def:
   tctx_main_src_id tctx = FST tctx
 End
@@ -121,6 +132,165 @@ Definition resolve_qualified_type_path_def:
               (next::rest))
 Termination
   WF_REL_TAC `measure (λ(_,_,path). LENGTH path)` >> simp[]
+End
+
+(* Resolve an annotation name to its declaration identity. Unqualified names
+   first denote local declarations, then directly imported declarations. *)
+Definition resolve_annotation_name_def:
+  resolve_annotation_name nominal_index ctx name =
+    case ALOOKUP nominal_index (tctx_current_nsid ctx, name) of
+    | SOME kind => SOME (kind, (tctx_current_nsid ctx, name))
+    | NONE =>
+        case ALOOKUP (tctx_import_map ctx) name of
+        | NONE => NONE
+        | SOME src_id =>
+            case ALOOKUP nominal_index (SOME src_id, name) of
+            | SOME kind => SOME (kind, (SOME src_id, name))
+            | NONE => NONE
+End
+
+Definition resolve_qualified_annotation_def:
+  resolve_qualified_annotation nominal_index all_import_maps ctx path name =
+    case resolve_qualified_type_path all_import_maps ctx path of
+    | NONE => NONE
+    | SOME src_id =>
+        case ALOOKUP nominal_index (SOME src_id, name) of
+        | SOME kind => SOME (kind, (SOME src_id, name))
+        | NONE => NONE
+End
+
+Definition annotation_resolved_def:
+  (annotation_resolved nominal_index all_import_maps ctx (JTA_Named name) =
+    if name = "bool" ∨ name = "address" ∨ name = "self" ∨
+       name = "decimal" ∨ name = "(void)"
+    then T
+    else IS_SOME (resolve_annotation_name nominal_index ctx name)) ∧
+  (annotation_resolved nominal_index all_import_maps ctx
+      (JTA_StaticArray ty _) =
+    annotation_resolved nominal_index all_import_maps ctx ty) ∧
+  (annotation_resolved nominal_index all_import_maps ctx
+      (JTA_DynArray ty _) =
+    annotation_resolved nominal_index all_import_maps ctx ty) ∧
+  (annotation_resolved nominal_index all_import_maps ctx
+      (JTA_Tuple tys) =
+    EVERY (annotation_resolved nominal_index all_import_maps ctx) tys) ∧
+  (annotation_resolved nominal_index all_import_maps ctx
+      (JTA_Qualified path name) =
+    if name = "__interface__"
+    then IS_SOME (resolve_qualified_type_path all_import_maps ctx path)
+    else IS_SOME (resolve_qualified_annotation nominal_index all_import_maps ctx path name)) ∧
+  (annotation_resolved nominal_index all_import_maps ctx _ = T)
+Termination
+  WF_REL_TAC `measure (λ(_,_,_,ann). json_type_annotation_size ann)` >> simp[]
+End
+
+(* Elaborate declaration annotations from syntax and the declaration index.
+   This function is used only after annotation_resolved has succeeded. *)
+Definition elaborate_annotation_def:
+  (elaborate_annotation nominal_index all_import_maps ctx
+      (JTA_Integer bits T) = BaseT (IntT bits)) ∧
+  (elaborate_annotation nominal_index all_import_maps ctx
+      (JTA_Integer bits F) = BaseT (UintT bits)) ∧
+  (elaborate_annotation nominal_index all_import_maps ctx
+      (JTA_BytesM m) = BaseT (BytesT (Fixed m))) ∧
+  (elaborate_annotation nominal_index all_import_maps ctx
+      (JTA_String n) = BaseT (StringT n)) ∧
+  (elaborate_annotation nominal_index all_import_maps ctx
+      (JTA_Bytes n) = BaseT (BytesT (Dynamic n))) ∧
+  (elaborate_annotation nominal_index all_import_maps ctx
+      (JTA_StaticArray ty len) =
+    ArrayT (elaborate_annotation nominal_index all_import_maps ctx ty)
+      (Fixed len)) ∧
+  (elaborate_annotation nominal_index all_import_maps ctx
+      (JTA_DynArray ty len) =
+    ArrayT (elaborate_annotation nominal_index all_import_maps ctx ty)
+      (Dynamic len)) ∧
+  (elaborate_annotation nominal_index all_import_maps ctx
+      (JTA_Tuple tys) =
+    TupleT (MAP (elaborate_annotation nominal_index all_import_maps ctx) tys)) ∧
+  (elaborate_annotation nominal_index all_import_maps ctx
+      (JTA_Named name) =
+    if name = "bool" then BaseT BoolT
+    else if name = "address" ∨ name = "self" then BaseT AddressT
+    else if name = "decimal" then BaseT DecimalT
+    else if name = "(void)" then NoneT
+    else case resolve_annotation_name nominal_index ctx name of
+         | SOME (kind, nsid) => nominal_type kind nsid
+         | NONE => NoneT) ∧
+  (elaborate_annotation nominal_index all_import_maps ctx
+      (JTA_Qualified path name) =
+    if name = "__interface__" then BaseT AddressT
+    else case resolve_qualified_annotation nominal_index all_import_maps ctx path name of
+         | SOME (kind, nsid) => nominal_type kind nsid
+         | NONE => NoneT) ∧
+  (elaborate_annotation nominal_index all_import_maps ctx JTA_None = NoneT)
+Termination
+  WF_REL_TAC `measure (λ(_,_,_,ann). json_type_annotation_size ann)` >> simp[]
+End
+
+Definition inferred_source_matches_def:
+  inferred_source_matches ctx expected NONE = T ∧
+  inferred_source_matches ctx expected (SOME src_id) =
+    (expected = source_id_to_nsid (tctx_main_src_id ctx) src_id)
+End
+
+(* Check every compiler claim that is present. A missing nominal source is no
+   claim; an explicit conflicting source or structural mismatch is rejected. *)
+Definition inferred_type_consistent_def:
+  (inferred_type_consistent ctx (BaseT (IntT bits))
+      (JT_Integer bits' T) = (bits = bits')) ∧
+  (inferred_type_consistent ctx (BaseT (UintT bits))
+      (JT_Integer bits' F) = (bits = bits')) ∧
+  (inferred_type_consistent ctx (BaseT (BytesT (Fixed n)))
+      (JT_BytesM n') = (n = n')) ∧
+  (inferred_type_consistent ctx (BaseT (StringT n))
+      (JT_String n') = (n = n')) ∧
+  (inferred_type_consistent ctx (BaseT (BytesT (Dynamic n)))
+      (JT_Bytes n') = (n = n')) ∧
+  (inferred_type_consistent ctx (ArrayT ty (Fixed n))
+      (JT_StaticArray inferred n') =
+    (n = n' ∧ inferred_type_consistent ctx ty inferred)) ∧
+  (inferred_type_consistent ctx (ArrayT ty (Dynamic n))
+      (JT_DynArray inferred n') =
+    (n = n' ∧ inferred_type_consistent ctx ty inferred)) ∧
+  (inferred_type_consistent ctx (TupleT tys) (JT_Tuple inferred) =
+    LIST_REL (inferred_type_consistent ctx) tys inferred) ∧
+  (inferred_type_consistent ctx (StructT (ns, name))
+      (JT_Struct src name') =
+    (name = name' ∧ inferred_source_matches ctx ns src)) ∧
+  (inferred_type_consistent ctx (StructT (ns, name))
+      (JT_Named src name') =
+    (name = name' ∧ inferred_source_matches ctx ns src)) ∧
+  (inferred_type_consistent ctx (FlagT (ns, name))
+      (JT_Flag src name') =
+    (name = name' ∧ inferred_source_matches ctx ns src)) ∧
+  (inferred_type_consistent ctx (BaseT BoolT)
+      (JT_Named _ name) = (name = "bool")) ∧
+  (inferred_type_consistent ctx (BaseT AddressT)
+      (JT_Named _ name) = (name = "address" ∨ name = "self")) ∧
+  (inferred_type_consistent ctx (BaseT DecimalT)
+      (JT_Named _ name) = (name = "decimal")) ∧
+  (inferred_type_consistent ctx NoneT
+      (JT_Named _ name) = (name = "(void)")) ∧
+  (inferred_type_consistent ctx (BaseT AddressT)
+      (JT_Interface _ _) = T) ∧
+  (inferred_type_consistent ctx ty JT_None = T) ∧
+  (inferred_type_consistent ctx _ _ = F)
+Termination
+  WF_REL_TAC `measure (λ(_,_,inferred). json_type_size inferred)` >> simp[]
+End
+
+Definition declaration_type_valid_def:
+  declaration_type_valid nominal_index all_import_maps ctx inferred ann =
+    (annotation_resolved nominal_index all_import_maps ctx ann ∧
+     (ann = JTA_None ∨ inferred_type_consistent ctx
+       (elaborate_annotation nominal_index all_import_maps ctx ann) inferred))
+End
+
+Definition canonical_decl_type_def:
+  canonical_decl_type nominal_index all_import_maps ctx inferred ann =
+    if ann = JTA_None then translate_type ctx inferred
+    else elaborate_annotation nominal_index all_import_maps ctx ann
 End
 
 Definition translate_qualified_annotation_def:

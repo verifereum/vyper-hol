@@ -506,7 +506,37 @@ Definition expr_import_map_def:
 End
 
 Definition expr_const_names_def:
-  expr_const_names ctx = SND (SND (SND ctx))
+  expr_const_names ctx = FST (SND (SND (SND ctx)))
+End
+
+Definition expr_local_types_def:
+  expr_local_types ctx = FST (SND (SND (SND (SND ctx))))
+End
+
+Definition expr_toplevel_types_def:
+  expr_toplevel_types ctx = SND (SND (SND (SND (SND ctx))))
+End
+
+Definition expr_with_local_types_def:
+  expr_with_local_types ctx local_types =
+    (expr_main_src_id ctx,
+     (expr_current_nsid ctx,
+      (expr_import_map ctx,
+       (expr_const_names ctx, (local_types, expr_toplevel_types ctx)))))
+End
+
+Definition lookup_local_type_def:
+  lookup_local_type ctx name fallback =
+    case ALOOKUP (expr_local_types ctx) name of
+    | SOME ty => ty
+    | NONE => fallback
+End
+
+Definition lookup_toplevel_type_def:
+  lookup_toplevel_type ctx nsid fallback =
+    case ALOOKUP (expr_toplevel_types ctx) nsid of
+    | SOME ty => ty
+    | NONE => fallback
 End
 
 Definition expr_type_ctx_def:
@@ -525,8 +555,9 @@ End
 Definition make_name_def:
   make_name ctx ty id =
     if MEM id (expr_const_names ctx)
-    then TopLevelName ty (expr_current_nsid ctx, id)
-    else Name ty id
+    then let nsid = (expr_current_nsid ctx, id) in
+         TopLevelName (lookup_toplevel_type ctx nsid ty) nsid
+    else Name (lookup_local_type ctx id ty) id
 End
 
 Definition make_name_target_def:
@@ -645,10 +676,14 @@ Definition translate_expr_def:
       Builtin (BaseT (UintT 256)) (Acc Balance) [Builtin (BaseT AddressT) (Env SelfAddr) []]
     else if obj = "self" /\ attr = "code" then
       Builtin (BaseT (BytesT (Dynamic 24576))) (Acc Code) [Builtin (BaseT AddressT) (Env SelfAddr) []]
-    (* self.x: use attr_src_id_opt from variable_reads for cross-module storage access *)
-    else if obj = "self" then TopLevelName ty (resolve_source_ref ctx attr_src_id_opt, attr)
-    (* Module variable access (lib1.x): use the declaration source from its module type. *)
-    else if tc = SOME "module" then TopLevelName ty (resolve_source_ref ctx src_id_opt, attr)
+    (* self.x: declaration types override incomplete compiler expression metadata. *)
+    else if obj = "self" then
+      let nsid = (resolve_source_ref ctx attr_src_id_opt, attr) in
+      TopLevelName (lookup_toplevel_type ctx nsid ty) nsid
+    (* Module variable access (lib1.x): use its canonical declaration type. *)
+    else if tc = SOME "module" then
+      let nsid = (resolve_source_ref ctx src_id_opt, attr) in
+      TopLevelName (lookup_toplevel_type ctx nsid ty) nsid
     else if attr = "balance" /\ base_type_name = SOME "address" then Builtin (BaseT (UintT 256)) (Acc Balance) [make_name ctx base_ty obj]
     else if attr = "address" /\ base_type_name = SOME "address" then Builtin (BaseT AddressT) (Acc Address) [make_name ctx base_ty obj]
     else if attr = "address" /\ base_typeclass = SOME "interface" then make_name ctx base_ty obj (* interface.address = interface (identity) *)
@@ -670,7 +705,8 @@ Definition translate_expr_def:
       | NONE => Attribute ty (translate_expr ctx e) attr
     (* Nested module access: mod3.mod2.mod1.X — use variable_reads source_id *)
     else if is_module_expr e then
-      TopLevelName ty (resolve_source_ref ctx attr_src_id_opt, attr)
+      let nsid = (resolve_source_ref ctx attr_src_id_opt, attr) in
+      TopLevelName (lookup_toplevel_type ctx nsid ty) nsid
     else if attr = "balance" /\ base_type_name = SOME "address" then Builtin (BaseT (UintT 256)) (Acc Balance) [translate_expr ctx e]
     else if attr = "address" /\ base_type_name = SOME "address" then Builtin (BaseT AddressT) (Acc Address) [translate_expr ctx e]
     else if attr = "address" /\ base_typeclass = SOME "interface" then translate_expr ctx e (* interface.address = interface (identity) *)
@@ -948,13 +984,16 @@ Definition translate_stmt_def:
        (MAP (translate_stmt ctx) body)
        (MAP (translate_stmt ctx) orelse)) /\
   (translate_stmt ctx (JS_For var ty ann iter body) =
-    let var_ty = translate_decl_type (expr_type_ctx ctx) ty ann in
+    let fallback_ty = translate_decl_type (expr_type_ctx ctx) ty ann in
+    let var_ty = lookup_local_type ctx var fallback_ty in
     For var var_ty (translate_iter ctx var_ty iter)
         (get_iter_bound iter) (MAP (translate_stmt ctx) body)) /\
   (translate_stmt ctx (JS_Assign tgt val) =
     Assign (translate_target ctx tgt) (translate_expr ctx val)) /\
   (translate_stmt ctx (JS_AnnAssign var ty ann val) =
-    AnnAssign var (translate_decl_type (expr_type_ctx ctx) ty ann)
+    AnnAssign var
+      (lookup_local_type ctx var
+        (translate_decl_type (expr_type_ctx ctx) ty ann))
       (translate_expr ctx val)) /\
   (translate_stmt ctx (JS_AugAssign tgt op val) =
     AugAssign (expr_type (translate_expr ctx val))
