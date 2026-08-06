@@ -261,6 +261,14 @@ Definition inferred_type_consistent_def:
   (inferred_type_consistent ctx (FlagT (ns, name))
       (JT_Flag src name') =
     (name = name' ∧ inferred_source_matches ctx ns src)) ∧
+  (inferred_type_consistent ctx (BaseT BoolT)
+      (JT_Named _ name) = (name = "bool")) ∧
+  (inferred_type_consistent ctx (BaseT AddressT)
+      (JT_Named _ name) = (name = "address" ∨ name = "self")) ∧
+  (inferred_type_consistent ctx (BaseT DecimalT)
+      (JT_Named _ name) = (name = "decimal")) ∧
+  (inferred_type_consistent ctx NoneT
+      (JT_Named _ name) = (name = "(void)")) ∧
   (inferred_type_consistent ctx (BaseT AddressT)
       (JT_Interface _ _) = T) ∧
   (inferred_type_consistent ctx ty JT_None = T) ∧
