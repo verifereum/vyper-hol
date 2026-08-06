@@ -369,10 +369,75 @@ Definition collect_imported_nominal_decls_def:
     collect_imported_nominal_decls rest
 End
 
+Definition list_prefix_def:
+  list_prefix [] ys = T ∧
+  list_prefix (x::xs) [] = F ∧
+  list_prefix (x::xs) (y::ys) = (x = y ∧ list_prefix xs ys)
+End
+
+Definition is_interface_path_def:
+  is_interface_path path = list_prefix (REVERSE ".vyi") (REVERSE path)
+End
+
+Definition interface_path_name_def:
+  interface_path_name path =
+    let without_ext = TAKE (LENGTH path - 4) path in
+    REVERSE (TAKEWHILE (λc. c ≠ #"/") (REVERSE without_ext))
+End
+
+(* Builtin imports may share a source ID, so retain the interface basename as
+   well as its source instead of classifying every import from that source. *)
+Definition collect_interface_refs_def:
+  collect_interface_refs [] = [] ∧
+  collect_interface_refs (JImportedModule src_id path _ _ :: rest) =
+    if is_interface_path path
+    then (source_id_to_module_id src_id, interface_path_name path) ::
+      collect_interface_refs rest
+    else collect_interface_refs rest
+End
+
+Definition is_interface_import_def:
+  is_interface_import interface_refs src_id qualified_name =
+    EXISTS (λ(src,name).
+      src = source_id_to_module_id src_id ∧
+      list_prefix (REVERSE name) (REVERSE qualified_name)) interface_refs
+End
+
+Definition collect_interface_alias_infos_def:
+  collect_interface_alias_infos interface_refs nsid [] = [] ∧
+  collect_interface_alias_infos interface_refs nsid
+      (JImportInfo alias src_id qualified_name :: rest) =
+    if is_interface_import interface_refs src_id qualified_name
+    then ((nsid, alias), InterfaceKind) ::
+      collect_interface_alias_infos interface_refs nsid rest
+    else collect_interface_alias_infos interface_refs nsid rest
+End
+
+Definition collect_interface_aliases_def:
+  collect_interface_aliases interface_refs nsid [] = [] ∧
+  collect_interface_aliases interface_refs nsid (JTL_Import infos :: rest) =
+    collect_interface_alias_infos interface_refs nsid infos ++
+    collect_interface_aliases interface_refs nsid rest ∧
+  collect_interface_aliases interface_refs nsid (_ :: rest) =
+    collect_interface_aliases interface_refs nsid rest
+End
+
+Definition collect_imported_interface_aliases_def:
+  collect_imported_interface_aliases interface_refs [] = [] ∧
+  collect_imported_interface_aliases interface_refs
+      (JImportedModule src_id _ _ body :: rest) =
+    collect_interface_aliases interface_refs
+      (SOME (source_id_to_module_id src_id)) body ++
+    collect_imported_interface_aliases interface_refs rest
+End
+
 Definition build_nominal_index_def:
   build_nominal_index toplevels imports =
+    let interface_refs = collect_interface_refs imports in
     collect_nominal_decls NONE toplevels ++
-    collect_imported_nominal_decls imports
+    collect_imported_nominal_decls imports ++
+    collect_interface_aliases interface_refs NONE toplevels ++
+    collect_imported_interface_aliases interface_refs imports
 End
 
 (* Validate syntax-derived declaration types against every compiler type claim
