@@ -396,11 +396,17 @@ Definition collect_interface_refs_def:
     else collect_interface_refs rest
 End
 
+Definition qualified_interface_name_def:
+  qualified_interface_name name qualified_name =
+    (qualified_name = name ∨
+     list_prefix (REVERSE ("." ++ name)) (REVERSE qualified_name))
+End
+
 Definition is_interface_import_def:
   is_interface_import interface_refs src_id qualified_name =
     EXISTS (λ(src,name).
       src = source_id_to_module_id src_id ∧
-      list_prefix (REVERSE name) (REVERSE qualified_name)) interface_refs
+      qualified_interface_name name qualified_name) interface_refs
 End
 
 Definition collect_interface_alias_infos_def:
