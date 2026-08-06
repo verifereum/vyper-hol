@@ -386,18 +386,18 @@ Definition stmt_decl_types_valid_def:
   stmt_decl_types_valid nominal_index all_import_maps type_ctx [] = T ∧
   stmt_decl_types_valid nominal_index all_import_maps type_ctx
       (JS_AnnAssign _ inferred ann _ :: rest) =
-    declaration_type_valid nominal_index all_import_maps type_ctx inferred ann ∧
-    stmt_decl_types_valid nominal_index all_import_maps type_ctx rest ∧
+    (declaration_type_valid nominal_index all_import_maps type_ctx inferred ann ∧
+     stmt_decl_types_valid nominal_index all_import_maps type_ctx rest) ∧
   stmt_decl_types_valid nominal_index all_import_maps type_ctx
       (JS_For _ inferred ann _ body :: rest) =
-    declaration_type_valid nominal_index all_import_maps type_ctx inferred ann ∧
-    stmt_decl_types_valid nominal_index all_import_maps type_ctx body ∧
-    stmt_decl_types_valid nominal_index all_import_maps type_ctx rest ∧
+    (declaration_type_valid nominal_index all_import_maps type_ctx inferred ann ∧
+     stmt_decl_types_valid nominal_index all_import_maps type_ctx body ∧
+     stmt_decl_types_valid nominal_index all_import_maps type_ctx rest) ∧
   stmt_decl_types_valid nominal_index all_import_maps type_ctx
       (JS_If _ body orelse :: rest) =
-    stmt_decl_types_valid nominal_index all_import_maps type_ctx body ∧
-    stmt_decl_types_valid nominal_index all_import_maps type_ctx orelse ∧
-    stmt_decl_types_valid nominal_index all_import_maps type_ctx rest ∧
+    (stmt_decl_types_valid nominal_index all_import_maps type_ctx body ∧
+     stmt_decl_types_valid nominal_index all_import_maps type_ctx orelse ∧
+     stmt_decl_types_valid nominal_index all_import_maps type_ctx rest) ∧
   stmt_decl_types_valid nominal_index all_import_maps type_ctx (_ :: rest) =
     stmt_decl_types_valid nominal_index all_import_maps type_ctx rest
 Termination
@@ -407,19 +407,19 @@ End
 Definition interface_func_types_valid_def:
   interface_func_types_valid nominal_index all_import_maps type_ctx
       (JInterfaceFunc _ args ret_ann _) =
-    EVERY (arg_type_valid nominal_index all_import_maps type_ctx) args ∧
-    annotation_resolved nominal_index all_import_maps type_ctx ret_ann
+    (EVERY (arg_type_valid nominal_index all_import_maps type_ctx) args ∧
+     annotation_resolved nominal_index all_import_maps type_ctx ret_ann)
 End
 
 Definition function_arg_types_valid_def:
   function_arg_types_valid nominal_index all_import_maps type_ctx [] [] = T ∧
   function_arg_types_valid nominal_index all_import_maps type_ctx
       (JArg _ inferred ann :: args) (func_inferred :: tys) =
-    declaration_type_valid nominal_index all_import_maps type_ctx inferred ann ∧
-    inferred_type_consistent type_ctx
-      (canonical_decl_type nominal_index all_import_maps type_ctx inferred ann)
-      func_inferred ∧
-    function_arg_types_valid nominal_index all_import_maps type_ctx args tys ∧
+    (declaration_type_valid nominal_index all_import_maps type_ctx inferred ann ∧
+     inferred_type_consistent type_ctx
+       (canonical_decl_type nominal_index all_import_maps type_ctx inferred ann)
+       func_inferred ∧
+     function_arg_types_valid nominal_index all_import_maps type_ctx args tys) ∧
   function_arg_types_valid nominal_index all_import_maps type_ctx _ _ = F
 End
 
@@ -458,19 +458,19 @@ Definition imported_decl_types_valid_def:
   imported_decl_types_valid nominal_index all_import_maps main_src_id [] = T ∧
   imported_decl_types_valid nominal_index all_import_maps main_src_id
       (JImportedModule src_id _ _ body :: rest) =
-    let nsid = source_id_to_module_id src_id in
-    let import_map = build_import_map (collect_imports body) in
-    let type_ctx = (main_src_id, SOME nsid, import_map) in
-    module_decl_types_valid nominal_index all_import_maps type_ctx body ∧
-    imported_decl_types_valid nominal_index all_import_maps main_src_id rest
+    (let nsid = source_id_to_module_id src_id in
+     let import_map = build_import_map (collect_imports body) in
+     let type_ctx = (main_src_id, SOME nsid, import_map) in
+     module_decl_types_valid nominal_index all_import_maps type_ctx body ∧
+     imported_decl_types_valid nominal_index all_import_maps main_src_id rest)
 End
 
 Definition all_decl_types_valid_def:
   all_decl_types_valid nominal_index all_import_maps main_src_id toplevels imports =
-    let import_map = build_import_map (collect_imports toplevels) in
-    let type_ctx = (main_src_id, NONE, import_map) in
-    module_decl_types_valid nominal_index all_import_maps type_ctx toplevels ∧
-    imported_decl_types_valid nominal_index all_import_maps main_src_id imports
+    (let import_map = build_import_map (collect_imports toplevels) in
+     let type_ctx = (main_src_id, NONE, import_map) in
+     module_decl_types_valid nominal_index all_import_maps type_ctx toplevels ∧
+     imported_decl_types_valid nominal_index all_import_maps main_src_id imports)
 End
 
 (* Canonical top-level value types are computed before expression bodies. *)

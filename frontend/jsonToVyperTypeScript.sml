@@ -279,9 +279,9 @@ End
 
 Definition declaration_type_valid_def:
   declaration_type_valid nominal_index all_import_maps ctx inferred ann =
-    annotation_resolved nominal_index all_import_maps ctx ann ∧
-    (ann = JTA_None ∨ inferred_type_consistent ctx
-      (elaborate_annotation nominal_index all_import_maps ctx ann) inferred)
+    (annotation_resolved nominal_index all_import_maps ctx ann ∧
+     (ann = JTA_None ∨ inferred_type_consistent ctx
+       (elaborate_annotation nominal_index all_import_maps ctx ann) inferred))
 End
 
 Definition canonical_decl_type_def:
