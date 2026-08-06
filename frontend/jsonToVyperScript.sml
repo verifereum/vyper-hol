@@ -411,11 +411,26 @@ Definition interface_func_types_valid_def:
     annotation_resolved nominal_index all_import_maps type_ctx ret_ann
 End
 
+Definition function_arg_types_valid_def:
+  function_arg_types_valid nominal_index all_import_maps type_ctx [] [] = T ∧
+  function_arg_types_valid nominal_index all_import_maps type_ctx
+      (JArg _ inferred ann :: args) (func_inferred :: tys) =
+    declaration_type_valid nominal_index all_import_maps type_ctx inferred ann ∧
+    inferred_type_consistent type_ctx
+      (canonical_decl_type nominal_index all_import_maps type_ctx inferred ann)
+      func_inferred ∧
+    function_arg_types_valid nominal_index all_import_maps type_ctx args tys ∧
+  function_arg_types_valid nominal_index all_import_maps type_ctx _ _ = F
+End
+
 Definition toplevel_decl_types_valid_def:
   (toplevel_decl_types_valid nominal_index all_import_maps type_ctx
-      (JTL_FunctionDef _ _ args _ _ ret_ann body) =
-    EVERY (arg_type_valid nominal_index all_import_maps type_ctx) args ∧
+      (JTL_FunctionDef _ _ args _ (JFuncType arg_tys ret_ty) ret_ann body) =
+    function_arg_types_valid nominal_index all_import_maps type_ctx args arg_tys ∧
     annotation_resolved nominal_index all_import_maps type_ctx ret_ann ∧
+    (ret_ann = JTA_None ∨ inferred_type_consistent type_ctx
+      (elaborate_annotation nominal_index all_import_maps type_ctx ret_ann)
+      ret_ty) ∧
     stmt_decl_types_valid nominal_index all_import_maps type_ctx body) ∧
   (toplevel_decl_types_valid nominal_index all_import_maps type_ctx
       (JTL_VariableDecl _ inferred ann _ _ _ _) =
