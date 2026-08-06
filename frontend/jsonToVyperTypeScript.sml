@@ -176,7 +176,9 @@ Definition annotation_resolved_def:
     EVERY (annotation_resolved nominal_index all_import_maps ctx) tys) ∧
   (annotation_resolved nominal_index all_import_maps ctx
       (JTA_Qualified path name) =
-    IS_SOME (resolve_qualified_annotation nominal_index all_import_maps ctx path name)) ∧
+    if name = "__interface__"
+    then IS_SOME (resolve_qualified_type_path all_import_maps ctx path)
+    else IS_SOME (resolve_qualified_annotation nominal_index all_import_maps ctx path name)) ∧
   (annotation_resolved nominal_index all_import_maps ctx _ = T)
 Termination
   WF_REL_TAC `measure (λ(_,_,_,ann). json_type_annotation_size ann)` >> simp[]
@@ -217,9 +219,10 @@ Definition elaborate_annotation_def:
          | NONE => NoneT) ∧
   (elaborate_annotation nominal_index all_import_maps ctx
       (JTA_Qualified path name) =
-    case resolve_qualified_annotation nominal_index all_import_maps ctx path name of
-    | SOME (kind, nsid) => nominal_type kind nsid
-    | NONE => NoneT) ∧
+    if name = "__interface__" then BaseT AddressT
+    else case resolve_qualified_annotation nominal_index all_import_maps ctx path name of
+         | SOME (kind, nsid) => nominal_type kind nsid
+         | NONE => NoneT) ∧
   (elaborate_annotation nominal_index all_import_maps ctx JTA_None = NoneT)
 Termination
   WF_REL_TAC `measure (λ(_,_,_,ann). json_type_annotation_size ann)` >> simp[]
