@@ -349,6 +349,63 @@ End
 
 (* ===== Module Translation ===== *)
 
+(* Build exact nominal identities directly from syntax declarations. *)
+Definition collect_nominal_decls_def:
+  collect_nominal_decls nsid [] = [] ∧
+  collect_nominal_decls nsid (JTL_StructDef name _ :: rest) =
+    ((nsid, name), StructKind) :: collect_nominal_decls nsid rest ∧
+  collect_nominal_decls nsid (JTL_FlagDef name _ :: rest) =
+    ((nsid, name), FlagKind) :: collect_nominal_decls nsid rest ∧
+  collect_nominal_decls nsid (JTL_InterfaceDef name _ :: rest) =
+    ((nsid, name), InterfaceKind) :: collect_nominal_decls nsid rest ∧
+  collect_nominal_decls nsid (_ :: rest) = collect_nominal_decls nsid rest
+End
+
+Definition collect_imported_nominal_decls_def:
+  collect_imported_nominal_decls [] = [] ∧
+  collect_imported_nominal_decls
+      (JImportedModule src_id _ _ body :: rest) =
+    collect_nominal_decls (SOME (source_id_to_module_id src_id)) body ++
+    collect_imported_nominal_decls rest
+End
+
+Definition build_nominal_index_def:
+  build_nominal_index toplevels imports =
+    collect_nominal_decls NONE toplevels ++
+    collect_imported_nominal_decls imports
+End
+
+(* Canonical top-level value types are computed before expression bodies. *)
+Definition collect_toplevel_types_def:
+  collect_toplevel_types nominal_index all_import_maps type_ctx [] = [] ∧
+  collect_toplevel_types nominal_index all_import_maps type_ctx
+      (JTL_VariableDecl name inferred ann _ _ _ _ :: rest) =
+    (((tctx_current_nsid type_ctx, name),
+       canonical_decl_type nominal_index all_import_maps type_ctx inferred ann) ::
+     collect_toplevel_types nominal_index all_import_maps type_ctx rest) ∧
+  collect_toplevel_types nominal_index all_import_maps type_ctx (_ :: rest) =
+    collect_toplevel_types nominal_index all_import_maps type_ctx rest
+End
+
+Definition collect_imported_toplevel_types_def:
+  collect_imported_toplevel_types nominal_index all_import_maps main_src_id [] = [] ∧
+  collect_imported_toplevel_types nominal_index all_import_maps main_src_id
+      (JImportedModule src_id _ _ body :: rest) =
+    let nsid = source_id_to_module_id src_id in
+    let import_map = build_import_map (collect_imports body) in
+    let type_ctx = (main_src_id, SOME nsid, import_map) in
+    collect_toplevel_types nominal_index all_import_maps type_ctx body ++
+    collect_imported_toplevel_types nominal_index all_import_maps main_src_id rest
+End
+
+Definition build_all_toplevel_types_def:
+  build_all_toplevel_types nominal_index all_import_maps main_src_id toplevels imports =
+    let import_map = build_import_map (collect_imports toplevels) in
+    let type_ctx = (main_src_id, NONE, import_map) in
+    collect_toplevel_types nominal_index all_import_maps type_ctx toplevels ++
+    collect_imported_toplevel_types nominal_index all_import_maps main_src_id imports
+End
+
 Definition filter_some_def:
   (filter_some [] = []) /\
   (filter_some (NONE :: rest) = filter_some rest) /\
@@ -357,32 +414,44 @@ End
 
 
 Definition translate_module_def:
-  translate_module all_import_maps (JModule main_src_id nr_default toplevels) =
+  translate_module nominal_index all_import_maps all_toplevel_types
+      (JModule main_src_id nr_default toplevels) =
     let import_map = build_import_map (collect_imports toplevels) in
     let expr_ctx =
-      (main_src_id, (NONE, (import_map, collect_consts_and_immutables toplevels))) in
+      (main_src_id,
+       (NONE,
+        (import_map,
+         (collect_consts_and_immutables toplevels, ([], all_toplevel_types))))) in
     let type_ctx = (main_src_id, NONE, import_map) in
     filter_some
-      (MAP (translate_toplevel all_import_maps expr_ctx type_ctx nr_default)
+      (MAP (translate_toplevel nominal_index all_import_maps expr_ctx type_ctx nr_default)
         toplevels)
 End
 
 Definition translate_imported_module_def:
-  translate_imported_module all_import_maps main_src_id (JImportedModule src_id path nr_default body) =
+  translate_imported_module nominal_index all_import_maps all_toplevel_types
+      main_src_id (JImportedModule src_id path nr_default body) =
     let nsid = source_id_to_module_id src_id in
     let import_map = build_import_map (collect_imports body) in
     let expr_ctx =
-      (main_src_id, (SOME nsid, (import_map, collect_consts_and_immutables body))) in
+      (main_src_id,
+       (SOME nsid,
+        (import_map,
+         (collect_consts_and_immutables body, ([], all_toplevel_types))))) in
     let type_ctx = (main_src_id, SOME nsid, import_map) in
     (SOME nsid, filter_some
-      (MAP (translate_toplevel all_import_maps expr_ctx type_ctx nr_default) body))
+      (MAP (translate_toplevel nominal_index all_import_maps expr_ctx type_ctx nr_default) body))
 End
 
 Definition translate_imported_modules_def:
-  translate_imported_modules all_import_maps main_src_id [] = [] ∧
-  translate_imported_modules all_import_maps main_src_id (imp::imports) =
-    translate_imported_module all_import_maps main_src_id imp ::
-    translate_imported_modules all_import_maps main_src_id imports
+  translate_imported_modules nominal_index all_import_maps all_toplevel_types
+      main_src_id [] = [] ∧
+  translate_imported_modules nominal_index all_import_maps all_toplevel_types
+      main_src_id (imp::imports) =
+    translate_imported_module nominal_index all_import_maps all_toplevel_types
+      main_src_id imp ::
+    translate_imported_modules nominal_index all_import_maps all_toplevel_types
+      main_src_id imports
 End
 
 (* ===== Annotate Storage Slots ===== *)
@@ -431,7 +500,13 @@ Definition translate_annotated_ast_def:
     let exports_map = build_exports_map_from_indexes all_import_maps all_inline_maps [] import_indexes in
     let main_index = module_compact_index 0 toplevels in
     let import_map = compact_index_import_map main_index in
-    let sources = (NONE, translate_module all_import_maps main) :: translate_imported_modules all_import_maps main_src_id imports in
+    let nominal_index = build_nominal_index toplevels imports in
+    let all_toplevel_types = build_all_toplevel_types nominal_index
+      all_import_maps main_src_id toplevels imports in
+    let sources =
+      (NONE, translate_module nominal_index all_import_maps all_toplevel_types main) ::
+      translate_imported_modules nominal_index all_import_maps
+        all_toplevel_types main_src_id imports in
     let exports = extract_exports_with_indexes all_import_maps all_inline_maps exports_map main_index in
     SOME (sources, exports, import_map)
 End

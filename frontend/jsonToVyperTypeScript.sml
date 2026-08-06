@@ -276,6 +276,12 @@ Definition declaration_type_valid_def:
       (elaborate_annotation nominal_index all_import_maps ctx ann) inferred)
 End
 
+Definition canonical_decl_type_def:
+  canonical_decl_type nominal_index all_import_maps ctx inferred ann =
+    if ann = JTA_None then translate_type ctx inferred
+    else elaborate_annotation nominal_index all_import_maps ctx ann
+End
+
 Definition translate_qualified_annotation_def:
   translate_qualified_annotation all_import_maps ctx inferred path attr =
     case inferred of
