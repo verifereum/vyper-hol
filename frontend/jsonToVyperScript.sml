@@ -426,12 +426,12 @@ End
 Definition toplevel_decl_types_valid_def:
   (toplevel_decl_types_valid nominal_index all_import_maps type_ctx
       (JTL_FunctionDef _ _ args _ (JFuncType arg_tys ret_ty) ret_ann body) =
-    function_arg_types_valid nominal_index all_import_maps type_ctx args arg_tys ∧
-    annotation_resolved nominal_index all_import_maps type_ctx ret_ann ∧
-    (ret_ann = JTA_None ∨ inferred_type_consistent type_ctx
-      (elaborate_annotation nominal_index all_import_maps type_ctx ret_ann)
-      ret_ty) ∧
-    stmt_decl_types_valid nominal_index all_import_maps type_ctx body) ∧
+    (function_arg_types_valid nominal_index all_import_maps type_ctx args arg_tys ∧
+     annotation_resolved nominal_index all_import_maps type_ctx ret_ann ∧
+     (ret_ann = JTA_None ∨ inferred_type_consistent type_ctx
+       (elaborate_annotation nominal_index all_import_maps type_ctx ret_ann)
+       ret_ty) ∧
+     stmt_decl_types_valid nominal_index all_import_maps type_ctx body)) ∧
   (toplevel_decl_types_valid nominal_index all_import_maps type_ctx
       (JTL_VariableDecl _ inferred ann _ _ _ _) =
     declaration_type_valid nominal_index all_import_maps type_ctx inferred ann) ∧
