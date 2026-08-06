@@ -1,6 +1,6 @@
 Theory jsonToVyper
 Ancestors
-  integer alist jsonAST vyperAST jsonToVyperType jsonToVyperTopLevel
+  integer alist rich_list jsonAST vyperAST jsonToVyperType jsonToVyperTopLevel
 Libs
   intLib
 
@@ -382,7 +382,7 @@ End
 Definition interface_path_name_def:
   interface_path_name path =
     let without_ext = TAKE (LENGTH path - 4) path in
-    REVERSE (TAKEWHILE (λc. c ≠ #"/") (REVERSE without_ext))
+    REVERSE (PREFIX (λc. c ≠ #"/") (REVERSE without_ext))
 End
 
 (* Builtin imports may share a source ID, so retain the interface basename as
