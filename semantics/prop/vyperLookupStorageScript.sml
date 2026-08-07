@@ -1161,19 +1161,19 @@ Proof
   simp[]
 QED
 
-Theorem get_module_code_stk[local]:
+Theorem get_module_code_stk:
   ∀cx s mid. get_module_code (cx with stk := s) mid = get_module_code cx mid
 Proof
   simp[get_module_code_def]
 QED
 
-Theorem get_tenv_stk[local]:
+Theorem get_tenv_stk:
   ∀cx s. get_tenv (cx with stk := s) = get_tenv cx
 Proof
   simp[get_tenv_def]
 QED
 
-Theorem lookup_var_slot_from_layout_stk[local]:
+Theorem lookup_var_slot_from_layout_stk:
   ∀cx s is_transient mid id.
     lookup_var_slot_from_layout (cx with stk := s) is_transient mid id =
     lookup_var_slot_from_layout cx is_transient mid id
@@ -1181,14 +1181,14 @@ Proof
   simp[lookup_var_slot_from_layout_def]
 QED
 
-Theorem get_address_immutables_stk[local]:
+Theorem get_address_immutables_stk:
   ∀cx s st.
     get_address_immutables (cx with stk := s) st = get_address_immutables cx st
 Proof
   simp[get_address_immutables_def]
 QED
 
-Theorem get_immutables_stk[local]:
+Theorem get_immutables_stk:
   ∀cx s mid st. get_immutables (cx with stk := s) mid st = get_immutables cx mid st
 Proof
   simp[get_immutables_def, bind_def, get_address_immutables_stk]
@@ -1200,7 +1200,7 @@ Proof
   simp[FUN_EQ_THM, get_immutables_stk]
 QED
 
-Theorem get_storage_backend_stk[local]:
+Theorem get_storage_backend_stk:
   ∀cx s is_transient st.
     get_storage_backend (cx with stk := s) is_transient st =
     get_storage_backend cx is_transient st
@@ -1208,7 +1208,7 @@ Proof
   Cases_on `is_transient` >> simp[get_storage_backend_def]
 QED
 
-Theorem read_storage_slot_stk[local]:
+Theorem read_storage_slot_stk:
   ∀cx s is_transient slot tv st.
     read_storage_slot (cx with stk := s) is_transient slot tv st =
     read_storage_slot cx is_transient slot tv st
@@ -1224,7 +1224,7 @@ Proof
   simp[FUN_EQ_THM, read_storage_slot_stk]
 QED
 
-Theorem lookup_global_stk[local]:
+Theorem lookup_global_stk:
   ∀cx s mid id st.
     lookup_global (cx with stk := s) mid id st =
     lookup_global cx mid id st

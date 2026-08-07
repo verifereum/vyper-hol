@@ -13,7 +13,7 @@ Ancestors
   vyperTypeSystem vyperTypeContract vyperTypeInvariants vyperTypeValues vyperTypeBindArguments
   vyperTypeStmtSoundness vyperTypeInitialState vyperPureExpr vyperEvalPreservesScopes vyperEvalExprPreservesScopesDom
   vyperEvalPreservesImmutablesDom vyperScopePreservation vyperStatePreservation
-  vyperTypeContractStaticMaps
+  vyperLookupStorage vyperTypeContractStaticMaps
 Libs
   wordsLib
 
@@ -59,26 +59,6 @@ Proof
       simp[] >> strip_tac >>
       first_x_assum (qspecl_then [`tx`,`sources`,`src`,`fid`,`ls`] mp_tac) >>
       simp[get_module_code_def, get_tenv_def, initial_evaluation_context_def])
-QED
-
-Theorem get_tenv_stk[local]:
-  !cx stk. get_tenv (cx with stk := stk) = get_tenv cx
-Proof
-  simp[get_tenv_def]
-QED
-
-Theorem get_module_code_stk[local]:
-  !cx stk src. get_module_code (cx with stk := stk) src = get_module_code cx src
-Proof
-  simp[get_module_code_def]
-QED
-
-Theorem lookup_var_slot_from_layout_stk[local]:
-  !cx stk is_transient src id.
-    lookup_var_slot_from_layout (cx with stk := stk) is_transient src id =
-    lookup_var_slot_from_layout cx is_transient src id
-Proof
-  simp[lookup_var_slot_from_layout_def]
 QED
 
 Theorem fn_sigs_consistent_stk[local]:

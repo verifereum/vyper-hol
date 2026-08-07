@@ -1,7 +1,8 @@
 Theory vyperLookupStorageScopes
 
 Ancestors
-  vyperLookup vyperLookupStorage vyperScopePreservation vyperState vyperInterpreter
+  vyperLookup vyperLookupStorage vyperScopePreservation vyperState
+  vyperStatePreservation vyperInterpreter
 
 (* ============================================================
    Cross-domain independence: lookup_toplevel_name vs scopes
@@ -14,7 +15,7 @@ Ancestors
 
 (* --- Local helpers for monadic scope independence --- *)
 
-Theorem get_address_immutables_scopes_fst[local]:
+Theorem get_address_immutables_scopes:
   ∀cx st s. get_address_immutables cx (st with scopes := s) =
     (FST (get_address_immutables cx st), st with scopes := s)
 Proof
@@ -31,12 +32,12 @@ Proof
   simp[lift_option_type_def, return_def, raise_def]
 QED
 
-Theorem get_immutables_scopes[local]:
+Theorem get_immutables_scopes:
   ∀cx mid st s. get_immutables cx mid (st with scopes := s) =
     (FST (get_immutables cx mid st), st with scopes := s)
 Proof
   rpt gen_tac >>
-  simp[get_immutables_def, bind_def, get_address_immutables_scopes_fst] >>
+  simp[get_immutables_def, bind_def, get_address_immutables_scopes] >>
   Cases_on `get_address_immutables cx st` >>
   `r = st` by (
     mp_tac (SPECL [``cx:evaluation_context``, ``st:evaluation_state``]
@@ -57,7 +58,7 @@ Proof
   Cases_on `q` >> simp[return_def, raise_def]
 QED
 
-Theorem read_storage_slot_scopes[local]:
+Theorem read_storage_slot_scopes:
   ∀cx is_t slot tv st s.
     read_storage_slot cx is_t slot tv (st with scopes := s) =
     (FST (read_storage_slot cx is_t slot tv st), st with scopes := s)
@@ -87,7 +88,7 @@ Proof
 QED
 
 (* lookup_global result value is independent of scopes *)
-Theorem lookup_global_scopes_fst[local]:
+Theorem lookup_global_scopes_fst:
   ∀cx mid id st s.
     FST (lookup_global cx mid id (st with scopes := s)) =
     FST (lookup_global cx mid id st)
@@ -122,6 +123,28 @@ Proof
   ) >>
   Cases_on `lookup_var_slot_from_layout cx b mid found1` >>
   simp[return_def, raise_def]
+QED
+
+Theorem lookup_global_with_scopes:
+  ∀cx mid id st s.
+    lookup_global cx mid id (st with scopes := s) =
+    case lookup_global cx mid id st of
+      (res, st') => (res, st' with scopes := s)
+Proof
+  rpt gen_tac >>
+  Cases_on `lookup_global cx mid id (st with scopes := s)` >>
+  rename1 `lookup_global cx mid id (st with scopes := s) =
+    (framed_res, framed_st)` >>
+  Cases_on `lookup_global cx mid id st` >>
+  rename1 `lookup_global cx mid id st = (original_res, original_st)` >>
+  simp[] >>
+  `framed_st = st with scopes := s` by
+    metis_tac[lookup_global_state] >>
+  `original_st = st` by metis_tac[lookup_global_state] >>
+  `framed_res = original_res` by (
+    qspecl_then [`cx`, `mid`, `id`, `st`, `s`] mp_tac
+      lookup_global_scopes_fst >> simp[]) >>
+  simp[]
 QED
 
 (* --- Exported cross-domain independence theorems --- *)
