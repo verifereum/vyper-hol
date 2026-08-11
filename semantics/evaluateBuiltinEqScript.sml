@@ -112,15 +112,16 @@ Theorem evaluate_builtin_old_eq_evaluate_builtin:
 !cx acc ty bt vs.
 evaluate_builtin_old cx acc ty bt vs = evaluate_builtin cx acc ty bt vs
 Proof
-Cases_on `bt` >> Cases_on `vs` >> (rw[ evaluate_builtin_old_def, evaluate_builtin_def] )
->- (Cases_on `t` >> Cases_on `h` >> rw[ evaluate_builtin_old_def, evaluate_builtin_def])
->- (Cases_on `t` >> Cases_on `h` >> rw[ evaluate_builtin_old_def, evaluate_builtin_def])
->- (Cases_on `t` >> Cases_on `h` >> rw[ evaluate_builtin_old_def, evaluate_builtin_def])
->- (Cases_on `t` >> Cases_on `h` >> rw[ evaluate_builtin_old_def, evaluate_builtin_def])
->- (Cases_on `t` >> Cases_on `h` >> rw[ evaluate_builtin_old_def, evaluate_builtin_def])
->- (CASE_TAC >>  TRY CASE_TAC >>  rw[evaluate_builtin_old_def, evaluate_builtin_def] >> CASE_TAC >> rw[evaluate_builtin_old_def, evaluate_builtin_def])
->- (Cases_on `t` >> Cases_on `h` >> rw[ evaluate_builtin_old_def, evaluate_builtin_def])
->- (Cases_on `t` >> Cases_on `h` >> rw[ evaluate_builtin_old_def, evaluate_builtin_def])
->- (Cases_on `t` >> Cases_on `h` >> rw[ evaluate_builtin_old_def, evaluate_builtin_def])
+  Cases_on `bt` >> Cases_on `vs`
+  >> rw[evaluate_builtin_old_def, evaluate_builtin_def]
+  (* Residual goals: vs is schematic (free h/t-tail variables at the
+     sensitive positions of some clause), so rewrite alone cannot match.
+     Case-split the list variables introduced by the case analyses, up to
+     depth 4 (the deepest residual clause shape is [v1;v2;v3;v4]++rest),
+     re-rewriting after each split so already-matching cases are pruned. *)
+  >> rpt (FIRST [Cases_on `e`, Cases_on `item`,
+                 Cases_on `h`, Cases_on `h'`, Cases_on `h''`, Cases_on `h'''`,
+                 Cases_on `t`, Cases_on `t'`, Cases_on `t''`, Cases_on `t'''`]
+          >> fs[evaluate_builtin_old_def, evaluate_builtin_def])
 QED
 
