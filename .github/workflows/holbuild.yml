@@ -19,7 +19,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     outputs:
-      holbuild-cache-key: ${{ steps.cache-key.outputs.build-key }}
+      holbuild-cache-key: ${{ steps.cache-key.outputs.snapshot-key }}
     steps:
       - uses: actions/checkout@v7
 
@@ -43,25 +43,51 @@ jobs:
         with:
           holbuild-ref: ${{ steps.holbuild-version.outputs.ref }}
 
+      - name: Report selected holbuild version
+        run: holbuild --version
+
       - name: Configure holbuild cache
         run: echo "HOLBUILD_CACHE=$HOME/.cache/holbuild" >> "$GITHUB_ENV"
 
       - name: Compute holbuild cache keys
         id: cache-key
         run: |
-          toolchain_base="holbuild-v2-toolchain-${{ runner.os }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.holbuild.outputs.holbuild-rev }}"
-          build_base="holbuild-v2-build-${{ runner.os }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.holbuild.outputs.holbuild-rev }}-${{ hashFiles('holproject.toml') }}"
-          echo "toolchain-key=${toolchain_base}" >> "$GITHUB_OUTPUT"
-          echo "build-key=${build_base}" >> "$GITHUB_OUTPUT"
+          toolchain_key="holbuild-v3-toolchain-${{ runner.os }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.holbuild.outputs.holbuild-rev }}"
+          compatibility_hash="${{ hashFiles('holproject.toml', 'VYPER_PIN') }}"
+          build_prefix="holbuild-v3-build-${{ runner.os }}-${{ steps.polyml.outputs.polyml-rev }}-${{ steps.holbuild.outputs.holbuild-rev }}-${compatibility_hash}"
+          snapshot_key="${build_prefix}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}"
+          echo "toolchain-key=${toolchain_key}" >> "$GITHUB_OUTPUT"
+          echo "build-prefix=${build_prefix}" >> "$GITHUB_OUTPUT"
+          echo "snapshot-key=${snapshot_key}" >> "$GITHUB_OUTPUT"
 
-      - name: Restore holbuild global cache
-        id: cache-holbuild-global
+      - name: Restore latest compatible project snapshot
+        id: cache-holbuild-project
         uses: actions/cache/restore@v6
         with:
           path: ~/.cache/holbuild
-          key: ${{ steps.cache-key.outputs.build-key }}
+          key: ${{ steps.cache-key.outputs.snapshot-key }}
           restore-keys: |
-            ${{ steps.cache-key.outputs.toolchain-key }}
+            ${{ steps.cache-key.outputs.build-prefix }}-
+
+      - name: Restore holbuild toolchain cache on project snapshot miss
+        id: cache-holbuild-toolchain
+        if: ${{ steps.cache-holbuild-project.outputs.cache-matched-key == '' }}
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.cache/holbuild
+          key: ${{ steps.cache-key.outputs.toolchain-key }}
+
+      - name: Report restored holbuild cache
+        env:
+          PROJECT_CACHE_HIT: ${{ steps.cache-holbuild-project.outputs.cache-hit }}
+          PROJECT_CACHE_KEY: ${{ steps.cache-holbuild-project.outputs.cache-matched-key }}
+          TOOLCHAIN_CACHE_HIT: ${{ steps.cache-holbuild-toolchain.outputs.cache-hit }}
+          TOOLCHAIN_CACHE_KEY: ${{ steps.cache-holbuild-toolchain.outputs.cache-matched-key }}
+        run: |
+          echo "project cache hit: ${PROJECT_CACHE_HIT:-false}"
+          echo "project cache key: ${PROJECT_CACHE_KEY:-<none>}"
+          echo "toolchain cache hit: ${TOOLCHAIN_CACHE_HIT:-false}"
+          echo "toolchain cache key: ${TOOLCHAIN_CACHE_KEY:-<none>}"
 
       - name: Build schema-2 HOL toolchain
         run: holbuild buildhol
@@ -79,12 +105,11 @@ jobs:
         run: |
           holbuild --verbose -j"$(nproc)" build --skip-checkpoints --skip-proof-steps
 
-      - name: Save holbuild global cache after build
-        if: steps.cache-holbuild-global.outputs.cache-hit != 'true'
+      - name: Save holbuild project snapshot
         uses: actions/cache/save@v6
         with:
           path: ~/.cache/holbuild
-          key: ${{ steps.cache-key.outputs.build-key }}
+          key: ${{ steps.cache-key.outputs.snapshot-key }}
 
       - name: Verify no successful-build checkpoints remain
         run: |
@@ -200,8 +225,8 @@ jobs:
   holbuild-success:
     if: always()
     runs-on: ubuntu-latest
-    needs: [build, vyper-tests]
+    needs: [build, export-vyper-tests, vyper-tests]
     steps:
       - name: Check all jobs succeeded
-        if: ${{ contains(needs.*.result, 'failure') }}
+        if: ${{ needs.build.result != 'success' || needs.export-vyper-tests.result != 'success' || needs.vyper-tests.result != 'success' }}
         run: exit 1
