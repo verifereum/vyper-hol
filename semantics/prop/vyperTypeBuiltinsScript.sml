@@ -2983,37 +2983,28 @@ Proof
       is_bytes_or_string_type_inv] >>
   (* Phase 2: resolve type values *)
   gvs[evaluate_type_def] >>
-  (* Not: handle focused success-typing cases before the generic evaluator expansion. *)
-  TRY (rename1 `evaluate_builtin _ _ _ Not [_] = INL _` >>
+    TRY (rename1 `evaluate_builtin _ _ (BaseT BoolT) Not [BoolV b] = INL v` >>
+       gvs[evaluate_builtin_def, value_has_type_def] >>
+       qexists_tac `¬b` >> gvs[] >> NO_TAC) >>
+  TRY (rename1 `evaluate_builtin _ _ (BaseT (UintT n)) Not [IntV i] = INL v` >>
        gvs[evaluate_builtin_def, type_to_int_bound_def, is_Unsigned_def,
-           value_has_type_def,
-           wordsTheory.WORD_NEG_1, GSYM wordsTheory.WORD_NOT_0,
-           w2n_and_low_mask_lt] >>
-       TRY (irule uint_not_result_bound >> simp[]) >> NO_TAC) >>
+           int_bound_bits_def] >>
+       gvs[] >> fs [evaluate_builtin_def] >>EVAL_TAC  >> gvs [bounded_int_op_def, type_to_int_bound_def,within_int_bound_def ] >> rw [type_to_int_bound_def,uint_not_result_bound,within_int_bound_def,bounded_int_op_def] >>   NO_TAC) >>
+  
   TRY (rename1 `evaluate_builtin _ _ (FlagT fid) Not [_] = INL _` >>
        Cases_on `FLOOKUP (get_tenv cx) (type_key fid)` >> gvs[] >>
        Cases_on `x` >> gvs[] >>
        gvs[value_has_type_def, evaluate_builtin_def, evaluate_type_def] >>
        rewrite_tac[wordsTheory.WORD_NEG_1, GSYM wordsTheory.WORD_NOT_0] >>
        simp[w2n_and_low_mask_lt] >> NO_TAC)
-  >>~[`Neg`] >-
-  (* Neg: INL from bounded_int_op/decimal op carries the result bounds. *)
-  (rename1 `evaluate_builtin _ _ _ Neg [_] = INL _` >>
-   gvs[evaluate_builtin_def, type_to_int_bound_def] >>
-   pop_assum mp_tac >> rw[] >>
-   imp_res_tac bounded_int_op_INL >> gvs[within_int_bound_def] >> NO_TAC)
-  >- (rename1 `evaluate_builtin _ _ _ Neg [_] = INL _` >>
+    >> TRY (rename1 `evaluate_builtin _ _ _ Neg [_] = INL _` >>
    gvs[evaluate_builtin_def, type_to_int_bound_def] >>
    pop_assum mp_tac >> rw[] >>
    imp_res_tac bounded_decimal_op_INL >> gvs[] >>
    imp_res_tac bounded_int_op_INL >> gvs[within_int_bound_def] >> NO_TAC)
-  >- (rename1 `evaluate_builtin _ _ _ Neg [_] = INL _` >>
-   gvs[evaluate_builtin_def, type_to_int_bound_def] >>
-   pop_assum mp_tac >> rw[] >>
-   imp_res_tac bounded_decimal_op_INL >> gvs[] >>
-   imp_res_tac bounded_int_op_INL >> gvs[within_int_bound_def] >> NO_TAC) >>
+  
   (* Hash builtins return fixed 32-byte values. *)
-  TRY (rename1 `evaluate_builtin _ _ _ Keccak256 [arg] = INL _` >>
+  >> TRY (rename1 `evaluate_builtin _ _ _ Keccak256 [arg] = INL _` >>
        Cases_on `arg` >>
        gvs[evaluate_builtin_def, value_has_type_def, LENGTH_Keccak_256_w64] >>
        NO_TAC) >>
