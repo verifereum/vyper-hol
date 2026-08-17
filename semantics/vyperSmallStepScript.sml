@@ -1642,9 +1642,11 @@ Proof
 QED
 
 Definition fromk_def[simp]:
-  fromk (SOME (AK cx Apply st DoneK)) = (INL (), st) ∧
-  fromk (SOME (AK cx (ApplyExc ex) st DoneK)) = (INR ex, st) ∧
-  fromk _ = (INR $ Error (TypeError "fromk"), empty_state)
+    fromk x  =
+    case x of 
+  (SOME (AK cx Apply st DoneK)) => (INL (), st) 
+  | (SOME (AK cx (ApplyExc ex) st DoneK)) => (INR ex, st)  
+  | _ => (INR $ Error (TypeError "fromk"), empty_state)
 End
 
 val () = cv_trans fromk_def;
@@ -1704,10 +1706,12 @@ Proof
 QED
 
 Definition fromtvk_def:
-  fromtvk (SOME (AK cx (ApplyTv tv) st DoneK)) = (INL tv, st) ∧
-  fromtvk (SOME (AK cx (ApplyExc ex) st DoneK)) = (INR ex, st) ∧
-  fromtvk _ = (INR $ Error (TypeError "fromtvk"), empty_state)
-End
+  fromtvk x = 
+  case  x of 
+     (SOME (AK cx (ApplyTv tv) st DoneK)) => (INL tv, st) 
+    |  (SOME (AK cx (ApplyExc ex) st DoneK)) => (INR ex, st) 
+    | _ => (INR $ Error (TypeError "fromtvk"), empty_state)
+End 
 
 val () = cv_auto_trans fromtvk_def;
 
