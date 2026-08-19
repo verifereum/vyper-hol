@@ -189,6 +189,52 @@ Theorem initial_target_immutables_lookup:
 Proof
   simp[]
 QED
+
+Theorem update_immutable_imms_well_typed[local]:
+  imms_well_typed imms /\
+  value_has_type tv v /\ well_formed_type_value tv ==>
+  imms_well_typed (update_immutable src key tv v imms)
+Proof
+  rw[imms_well_typed_def, update_immutable_def,
+     set_source_immutables_def] >>
+  Cases_on `ALOOKUP imms src` >>
+  gvs[alistTheory.ALOOKUP_ADELKEY, get_source_immutables_def,
+      finite_mapTheory.FLOOKUP_UPDATE, AllCaseEqs()] >>
+  metis_tac[]
+QED
+
+Theorem initial_immutables_module_imms_well_typed:
+  imms_well_typed acc /\
+  initial_immutables_module tenv src ts acc = SOME imms ==>
+  imms_well_typed imms
+Proof
+  qid_spec_tac `acc` >>
+  Induct_on `ts`
+  >- simp[initial_immutables_module_def] >>
+  rpt gen_tac >>
+  Cases_on `h` >>
+  gvs[initial_immutables_module_def, AllCaseEqs()] >>
+  TRY (Cases_on `v0` >>
+       gvs[initial_immutables_module_def, AllCaseEqs()]) >>
+  metis_tac[update_immutable_imms_well_typed,
+            vyperTypingTheory.default_value_well_typed,
+            vyperTypeValuesTheory.evaluate_type_well_formed_type_value]
+QED
+
+Theorem initial_immutables_imms_well_typed:
+  initial_immutables tenv mods = SOME imms ==>
+  imms_well_typed imms
+Proof
+  qid_spec_tac `imms` >>
+  Induct_on `mods`
+  >- simp[initial_immutables_def, empty_immutables_def, imms_well_typed_def] >>
+  rpt gen_tac >>
+  PairCases_on `h` >>
+  rw[initial_immutables_def] >>
+  gvs[AllCaseEqs()] >>
+  metis_tac[initial_immutables_module_imms_well_typed]
+QED
+
 (* ===== Runtime immutable setup ===== *)
 
 Theorem initial_immutables_module_preserves_lookup:
