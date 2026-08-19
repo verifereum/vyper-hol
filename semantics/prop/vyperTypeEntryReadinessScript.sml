@@ -24,6 +24,7 @@ Ancestors
  * its evaluated declared type and a value of that type. *)
 Definition deployment_constants_output_typed_def:
   deployment_constants_output_typed tenv addr mods (am:abstract_machine) <=>
+    EVERY (\(stored_addr, imms). imms_well_typed imms) am.immutables /\
     !src ts vis e id ty init.
       MEM (src,ts) mods /\
       MEM (VariableDecl vis (Constant e) id ty init) ts ==>
@@ -49,6 +50,17 @@ Definition checked_deployment_constants_ready_def:
       deployment_constants_output_typed (get_tenv cx) addr mods am_c
 End
 
+Theorem evaluate_all_constants_preserves_accounts:
+  evaluate_all_constants cx am addr mods = SOME am_c ==>
+  am_c.accounts = am.accounts
+Proof
+  qid_spec_tac `am_c` >> qid_spec_tac `am` >> Induct_on `mods`
+  >- rw[evaluate_all_constants_def] >>
+  rpt gen_tac >> PairCases_on `h` >> rw[evaluate_all_constants_def] >>
+  gvs[AllCaseEqs()] >>
+  first_x_assum drule >> simp[merge_constants_def]
+QED
+
 Theorem checked_deployment_constants_ready_setup:
   checked_deployment_constants_ready cx am addr mods ==>
   ?am_c.
@@ -57,6 +69,23 @@ Theorem checked_deployment_constants_ready_setup:
 Proof
   rw[checked_deployment_constants_ready_def, IS_SOME_EXISTS] >>
   metis_tac[]
+QED
+
+Theorem checked_deployment_constants_establish_machine_well_typed:
+  machine_well_typed am /\
+  checked_deployment_constants_ready cx am addr mods ==>
+  ?am_c.
+    evaluate_all_constants cx am addr mods = SOME am_c /\
+    machine_well_typed am_c /\
+    deployment_constants_output_typed (get_tenv cx) addr mods am_c
+Proof
+  strip_tac >>
+  drule checked_deployment_constants_ready_setup >> strip_tac >>
+  qexists_tac `am_c` >> simp[] >>
+  rw[machine_well_typed_def] >-
+    metis_tac[machine_well_typed_accounts,
+              evaluate_all_constants_preserves_accounts] >>
+  fs[deployment_constants_output_typed_def]
 QED
 
 (* ===== Default and Argument Readiness ===== *)
