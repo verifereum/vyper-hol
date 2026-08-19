@@ -15,7 +15,7 @@ Ancestors
   vyperExprNoControl vyperTypeEvalSoundness vyperTypeCallGraph
   vyperTypeCallGraphSoundness vyperTypeCallStackSoundness
   vyperTypeContractStaticMaps vyperTypeContractContext
-  vyperTypeContractFunction vyperTypeContractGetter
+  vyperTypeContractFunction vyperTypeContractGetter vyperTypeEntryReadiness
 Libs
   wordsLib
 
