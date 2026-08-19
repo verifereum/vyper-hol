@@ -57,6 +57,14 @@ Proof
   simp[machine_well_typed_def]
 QED
 
+Theorem machine_well_typed_cons_immutables:
+  machine_well_typed am /\ imms_well_typed imms ==>
+  machine_well_typed
+    (am with immutables updated_by CONS (addr,imms))
+Proof
+  simp[machine_well_typed_def]
+QED
+
 (* The values supplied at function entry have the parameter types expected by
  * the Vyper function signature.  This is the semantic counterpart of successful
  * ABI decoding / test-runner argument construction, but is kept abstract here. *)
