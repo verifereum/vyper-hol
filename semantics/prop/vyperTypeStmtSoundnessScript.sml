@@ -145,6 +145,19 @@ Proof
       value_runtime_typed_def]
 QED
 
+Theorem eval_stmts_preserves_state_and_accounts_well_typed:
+  type_stmts env ret_ty ss = SOME env' /\ env_consistent env cx st /\
+  state_well_typed st /\ context_well_typed cx /\
+  accounts_well_typed st.accounts /\ functions_well_typed cx /\
+  call_evaluation_safe cx (int_calls_stmts ss) /\
+  eval_stmts cx ss st = (res,st') ==>
+  state_well_typed st' /\ accounts_well_typed st'.accounts
+Proof
+  strip_tac >>
+  drule_all (cj 2 eval_all_type_sound_mutual) >>
+  simp[]
+QED
+
 (* ===== Top-level theorem shape ===== *)
 
 Theorem function_body_type_sound:

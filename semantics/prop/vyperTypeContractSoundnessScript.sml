@@ -2762,6 +2762,56 @@ Proof
   simp[]
 QED
 
+Theorem checked_public_getter_body_preserves_machine_components[local]:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  checked_contract_runtime_ready art mods am tx /\
+  machine_well_typed am /\
+  ALOOKUP mods src = SOME ts /\ MEM decl ts /\
+  is_public_getter_decl tx.function_name decl /\
+  external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,body) /\
+  bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
+  cx = initial_evaluation_context am.sources am.layouts tx src /\
+  st.scopes = [scope] /\ st.immutables = am.immutables /\
+  state_well_typed st /\ accounts_well_typed st.accounts /\
+  eval_stmts cx body st = (res,st') ==>
+  state_well_typed st' /\ accounts_well_typed st'.accounts
+Proof
+  strip_tac >>
+  drule_all checked_public_getter_post_prefix_body_setup_selected >>
+  strip_tac >>
+  `int_calls_stmts body = []` by
+    metis_tac[selected_public_getter_body_int_calls_empty] >>
+  `eval_stmts
+      (initial_evaluation_context am.sources am.layouts
+        (empty_call_txn with target := tx.target) src) body st = (res,st')` by
+    metis_tac[] >>
+  `call_evaluation_safe
+      (initial_evaluation_context am.sources am.layouts
+        (empty_call_txn with target := tx.target) src) []` by (
+    `ALOOKUP am.sources tx.target = SOME mods` by
+      gvs[checked_contract_runtime_ready_def] >>
+    `(initial_evaluation_context am.sources am.layouts
+        (empty_call_txn with target := tx.target) src) =
+     ((initial_evaluation_context am.sources am.layouts
+        (empty_call_txn with target := tx.target) src) with
+       stk := [(src,"")])` by
+      simp[initial_evaluation_context_def, empty_call_txn_def] >>
+    pop_assum SUBST1_TAC >>
+    irule (INST_TYPE [``:'a`` |-> ``:num``]
+      checked_contract_call_evaluation_safe_singleton) >>
+    qexistsl [`art`, `am.layouts`, `mods`] >>
+    simp[initial_evaluation_context_def, empty_call_txn_def,
+         calls_follow_call_graph_def]) >>
+  irule eval_stmts_preserves_state_and_accounts_well_typed >>
+  qexistsl
+    [`initial_evaluation_context am.sources am.layouts
+        (empty_call_txn with target := tx.target) src`,
+     `function_entry_env art mods src args`, `env_after`, `res`, `ret`,
+     `body`, `st`] >>
+  simp[]
+QED
+
+
 Theorem checked_public_getter_post_prefix_body_return_typed_selected[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\
@@ -3106,6 +3156,34 @@ Proof
   rw[vyperTypeExprSoundnessTheory.no_type_error_eval_def]
 QED
 
+
+
+Theorem checked_explicit_external_body_preserves_machine_components[local]:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  checked_contract_runtime_ready art mods am tx /\
+  machine_well_typed am /\ call_tx_well_typed tx /\
+  ALOOKUP mods src = SOME ts /\
+  MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
+  cx = initial_evaluation_context am.sources am.layouts tx src /\
+  bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
+  ALL_DISTINCT (MAP (string_to_num o FST) args) /\
+  st.scopes = [scope] /\ st.immutables = am.immutables /\
+  state_well_typed st /\ accounts_well_typed st.accounts /\
+  eval_stmts cx body st = (res,st') ==>
+  state_well_typed st' /\ accounts_well_typed st'.accounts
+Proof
+  strip_tac >>
+  drule_all checked_explicit_external_body_setup >>
+  strip_tac >>
+  `call_evaluation_safe cx (int_calls_stmts body)` by
+    (qpat_x_assum `cx = _` SUBST1_TAC >>
+     gvs[checked_contract_runtime_ready_def] >>
+     drule_all checked_explicit_external_body_call_evaluation_safe >>
+     simp[]) >>
+  irule eval_stmts_preserves_state_and_accounts_well_typed >>
+  qexistsl [`cx`, `env_body`, `env_after`, `res`, `ret`, `body`, `st`] >>
+  simp[]
+QED
 
 
 Theorem call_external_function_selected_explicit_raw_args_no_type_error_c53[local]:

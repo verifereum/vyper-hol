@@ -27,6 +27,36 @@ Definition machine_well_typed_def:
     EVERY (\(addr, imms). imms_well_typed imms) am.immutables
 End
 
+Theorem machine_well_typed_accounts:
+  machine_well_typed am ==> accounts_well_typed am.accounts
+Proof
+  simp[machine_well_typed_def]
+QED
+
+Theorem machine_well_typed_immutables:
+  machine_well_typed am ==>
+  EVERY (\(addr, imms). imms_well_typed imms) am.immutables
+Proof
+  simp[machine_well_typed_def]
+QED
+
+Theorem abstract_machine_from_state_well_typed:
+  state_well_typed st /\ accounts_well_typed st.accounts ==>
+  machine_well_typed (abstract_machine_from_state srcs exps layouts st)
+Proof
+  simp[machine_well_typed_def, state_well_typed_def,
+       abstract_machine_from_state_def]
+QED
+
+Theorem machine_well_typed_metadata_update:
+  machine_well_typed am ==>
+  machine_well_typed
+    (am with <| sources updated_by sf; exports updated_by ef;
+                layouts updated_by lf |>)
+Proof
+  simp[machine_well_typed_def]
+QED
+
 (* The values supplied at function entry have the parameter types expected by
  * the Vyper function signature.  This is the semantic counterpart of successful
  * ABI decoding / test-runner argument construction, but is kept abstract here. *)
