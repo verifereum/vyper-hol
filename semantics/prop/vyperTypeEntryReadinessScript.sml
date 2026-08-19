@@ -16,6 +16,7 @@ Ancestors
   vyperAST vyperValue vyperTyping vyperState vyperInterpreter vyperContext
   vyperTypeSystem vyperTypeInvariants vyperTypeExprSoundness
   vyperTypeInitialState vyperTypeEvalSoundness vyperTypeExprResult vyperTypeValues
+  vyperTypeBindArguments
 
 (* ===== Deployment Constant Readiness ===== *)
 
@@ -154,6 +155,93 @@ Proof
    LENGTH vals + LENGTH dflts - LENGTH args` by decide_tac >>
   gvs[] >>
   drule_all evaluate_defaults_success_values_typed >> simp[]
+QED
+
+Theorem provided_args_defaults_bind_arguments:
+  provided_args_typed tenv params vals /\
+  (!arg. MEM arg params ==>
+    ?tv. evaluate_type tenv (SND arg) = SOME tv) /\
+  LIST_REL
+    (\v e. ?tv. evaluate_type tenv (expr_type e) = SOME tv /\
+                  value_has_type tv v)
+    dflt_vs needed_dflts /\
+  MAP expr_type needed_dflts = MAP SND (DROP (LENGTH vals) params) /\
+  LENGTH vals + LENGTH needed_dflts = LENGTH params ==>
+  ?scope.
+    bind_arguments tenv params (vals ++ dflt_vs) = SOME scope /\
+    args_values_typed tenv params (vals ++ dflt_vs)
+Proof
+  strip_tac >>
+  `LENGTH dflt_vs = LENGTH needed_dflts` by
+    metis_tac[LIST_REL_LENGTH] >>
+  `LENGTH (vals ++ dflt_vs) = LENGTH params` by simp[] >>
+  `!i. i < LENGTH params ==>
+     ?tv. evaluate_type tenv (SND (EL i params)) = SOME tv /\
+          value_has_type tv (EL i (vals ++ dflt_vs))` by (
+    gen_tac >> strip_tac >> Cases_on `i < LENGTH vals`
+    >- (qpat_x_assum `provided_args_typed _ _ _` mp_tac >>
+        simp[provided_args_typed_def, args_values_typed_def] >> strip_tac >>
+        `MEM (EL i params) params` by
+          (simp[listTheory.MEM_EL] >> qexists_tac `i` >> simp[]) >>
+        qpat_x_assum `!arg. MEM arg params ==> _` drule >> strip_tac >>
+        qexists_tac `tv` >> simp[rich_listTheory.EL_APPEND1] >>
+        first_x_assum irule >> simp[rich_listTheory.EL_TAKE]) >>
+    qpat_x_assum `LIST_REL _ dflt_vs needed_dflts` mp_tac >>
+    simp[listTheory.LIST_REL_EL_EQN] >> strip_tac >>
+    first_x_assum (qspec_then `i - LENGTH vals` mp_tac) >>
+    impl_tac >- decide_tac >> strip_tac >>
+    `expr_type (EL (i - LENGTH vals) needed_dflts) = SND (EL i params)` by (
+      qpat_x_assum `MAP expr_type needed_dflts = _` mp_tac >>
+      simp[listTheory.LIST_EQ_REWRITE, listTheory.EL_MAP, listTheory.EL_DROP] >>
+      metis_tac[]) >>
+    qexists_tac `tv` >>
+    gvs[rich_listTheory.EL_APPEND2]) >>
+  `?scope. bind_arguments tenv params (vals ++ dflt_vs) = SOME scope` by
+    metis_tac[bind_arguments_succeeds_stmt] >>
+  qexists_tac `scope` >> simp[args_values_typed_def] >>
+  rpt strip_tac >> first_x_assum drule >> strip_tac >> gvs[]
+QED
+
+Theorem checked_call_inputs_ready_bind_arguments:
+  checked_call_inputs_ready tenv cx am params dflts vals /\
+  env.type_defs = tenv /\
+  well_typed_exprs env
+    (DROP (LENGTH dflts - (LENGTH params - LENGTH vals)) dflts) /\
+  env_consistent env cx (initial_state am []) /\
+  state_well_typed (initial_state am []) /\
+  context_well_typed cx /\
+  accounts_well_typed am.accounts /\
+  functions_well_typed cx /\
+  (!e. MEM e (DROP (LENGTH dflts - (LENGTH params - LENGTH vals)) dflts) ==>
+       call_evaluation_safe cx (int_calls_expr e)) /\
+  (!arg. MEM arg params ==> ?tv. evaluate_type tenv (SND arg) = SOME tv) /\
+  MAP expr_type dflts =
+    MAP SND (DROP (LENGTH params - LENGTH dflts) params) ==>
+  ?dflt_vs scope.
+    evaluate_defaults cx am
+      (DROP (LENGTH dflts - (LENGTH params - LENGTH vals)) dflts) =
+      SOME dflt_vs /\
+    bind_arguments tenv params (vals ++ dflt_vs) = SOME scope /\
+    args_values_typed tenv params (vals ++ dflt_vs)
+Proof
+  strip_tac >>
+  gvs[checked_call_inputs_ready_def] >>
+  drule_all checked_defaults_ready_values_typed >> strip_tac >>
+  qabbrev_tac `needed = DROP (LENGTH dflts - (LENGTH params - LENGTH vals)) dflts` >>
+  `LENGTH vals <= LENGTH params /\
+   LENGTH params - LENGTH vals <= LENGTH dflts` by
+    fs[checked_defaults_ready_def] >>
+  `LENGTH dflts <= LENGTH params` by
+    metis_tac[intcall_defaults_map_param_types_length_le] >>
+  `MAP expr_type needed = MAP SND (DROP (LENGTH vals) params)` by (
+    simp[Abbr`needed`, listTheory.MAP_DROP, rich_listTheory.DROP_DROP_T] >>
+    `LENGTH params - LENGTH dflts +
+       (LENGTH dflts - (LENGTH params - LENGTH vals)) = LENGTH vals` by
+      decide_tac >> simp[]) >>
+  `LENGTH vals + LENGTH needed = LENGTH params` by
+    (simp[Abbr`needed`, listTheory.LENGTH_DROP] >> decide_tac) >>
+  drule_all provided_args_defaults_bind_arguments >> strip_tac >>
+  qexistsl [`dflt_vs`, `scope`] >> simp[Abbr`needed`]
 QED
 
 Theorem checked_call_inputs_ready_components:
