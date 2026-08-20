@@ -583,11 +583,11 @@ Proof
   simp[get_module_code_def, initial_evaluation_context_def]
 QED
 
-Theorem checked_explicit_external_body_typing_package:
+Theorem checked_function_body_typing_package:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\
   ALOOKUP mods src = SOME ts /\
-  MEM (FunctionDecl External mut nr raw fn args dflts ret body) ts ==>
+  MEM (FunctionDecl vis mut nr raw fn args dflts ret body) ts ==>
   ?env_body env_after.
     env_body.current_src = src /\
     env_body.type_defs = get_tenv (initial_evaluation_context am.sources am.layouts tx src) /\
@@ -639,6 +639,9 @@ Proof
   simp[] >> rw[] >>
   qexistsl [`env_body`, `env_after`] >> simp[] >> metis_tac[]
 QED
+
+val checked_explicit_external_body_typing_package =
+  checked_function_body_typing_package;
 
 Theorem checked_explicit_external_post_prefix_body_return_typed_selected:
   check_contract F am.layouts tx.target mods = SOME art /\

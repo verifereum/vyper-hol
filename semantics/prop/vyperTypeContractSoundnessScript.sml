@@ -3105,7 +3105,7 @@ Proof
     (irule check_contract_functions_well_typed_initial >> simp[]) >>
   `context_well_typed (initial_evaluation_context am.sources am.layouts tx src)` by
     metis_tac[call_tx_well_typed_initial_context] >>
-  drule_all checked_explicit_external_body_typing_package >>
+  drule_all checked_function_body_typing_package >>
   strip_tac >>
   qexistsl [`env_body`, `env_after`] >> simp[] >>
   rw[env_consistent_def]
