@@ -14,7 +14,7 @@ Ancestors
   vyperMisc vyperContext vyperState vyperInterpreter
   vyperTypeInvariants vyperTypeBindArguments vyperTypeInitialState
   vyperTypeEntryReadiness vyperTypeContract vyperTypeContractContext
-  vyperTypeContractFunction
+  vyperTypeContractFunction vyperTypeContractGetter
   vyperTypeContractSoundness vyperExprNoControl
   vyperStatePreservation vyperScopePreservation
 Libs
@@ -144,6 +144,64 @@ Proof
      qexistsl [`cx`, `lock_st`, `mut`, `nr`] >> simp[]) >>
   irule checked_public_getter_body_preserves_machine_components >>
   simp[] >> metis_tac[]
+QED
+
+Theorem checked_getter_send_eval_success_components:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  checked_contract_runtime_ready art mods am tx /\ machine_well_typed am /\
+  ALOOKUP mods src = SOME ts /\ MEM decl ts /\
+  is_public_getter_decl tx.function_name decl /\
+  external_getter_tuple src decl = SOME (View,F,args,[],ret,body) /\
+  cx = initial_evaluation_context am.sources am.layouts tx src /\
+  bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
+  (do send_call_value View cx; eval_stmts cx body
+   od (initial_state am [scope]) = (res,st')) /\
+  (res = INL () \/ ?v. res = INR (ReturnException v)) ==>
+  state_well_typed st' /\ accounts_well_typed st'.accounts
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `do _; _ od _ = _` mp_tac >>
+  simp[bind_def, ignore_bind_def] >>
+  Cases_on `send_call_value View
+    (initial_evaluation_context am.sources am.layouts tx src)
+    (initial_state am [scope])` >>
+  Cases_on `q` >> gvs[]
+  >- (rpt strip_tac >>
+      metis_tac[checked_getter_body_from_states_preserves_components,
+                return_def])
+  >- (rpt strip_tac >>
+      metis_tac[checked_getter_body_from_states_preserves_components,
+                return_def])
+  >- (rpt strip_tac >>
+      FIRST
+        [drule_at(Pat`send_call_value`) send_call_value_no_control_c53 >>
+         simp[no_control_exc_def],
+         `return () (initial_state am [scope]) =
+          (INL (),initial_state am [scope])` by simp[return_def] >>
+         funpow 6 drule_then drule
+           checked_getter_body_from_states_preserves_components >>
+         simp[] >> disch_then (drule_then drule) >> gvs[]])
+  >- (rpt strip_tac >>
+      FIRST
+        [drule_at(Pat`send_call_value`) send_call_value_no_control_c53 >>
+         simp[no_control_exc_def],
+         `return () (initial_state am [scope]) =
+          (INL (),initial_state am [scope])` by simp[return_def] >>
+         funpow 6 drule_then drule
+           checked_getter_body_from_states_preserves_components >>
+         simp[] >> disch_then (drule_then drule) >> gvs[]])
+  >- (rpt strip_tac >>
+      FIRST
+        [drule_at(Pat`send_call_value`) send_call_value_no_control_c53 >>
+         simp[no_control_exc_def],
+         `return () (initial_state am [scope]) =
+          (INL (),initial_state am [scope])` by simp[return_def] >>
+         funpow 6 drule_then drule
+           checked_getter_body_from_states_preserves_components >>
+         simp[] >> disch_then (drule_then drule) >> gvs[]])
+  >- (strip_tac >>
+      drule_at(Pat`send_call_value`) send_call_value_no_control_c53 >>
+      simp[no_control_exc_def])
 QED
 
 Theorem checked_explicit_call_run_success_components:
@@ -381,5 +439,65 @@ Proof
   gvs[machine_well_typed_def, abstract_machine_from_state_def,
       state_well_typed_def, AllCaseEqs()]
 QED
+
+(* WIP: selected getter composition is complete through body-state typing;
+ * final branch-specific result instantiation remains.
+Theorem call_external_function_selected_getter_success_machine_well_typed[local]:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  checked_contract_runtime_ready art mods am tx /\ machine_well_typed am /\
+  ALOOKUP mods src = SOME ts /\ MEM decl ts /\
+  is_public_getter_decl tx.function_name decl /\
+  external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,body) /\
+  cx = initial_evaluation_context am.sources am.layouts tx src /\
+  LENGTH vals <= LENGTH args /\ LENGTH args - LENGTH vals <= LENGTH dflts /\
+  evaluate_defaults cx am
+    (DROP (LENGTH dflts - (LENGTH args - LENGTH vals)) dflts) = SOME dflt_vs /\
+  bind_arguments (type_env_all_modules mods) args (vals ++ dflt_vs) = SOME scope /\
+  call_external_function am cx nr mut ts mods args dflts vals body ret =
+    (INL v,am') ==>
+  machine_well_typed am'
+Proof
+  rpt strip_tac >>
+  `nr = F /\ mut = View /\ dflts = [] /\ ?exp. body = [Return (SOME exp)]` by
+    (Cases_on `decl` >> gvs[is_public_getter_decl_def, external_getter_tuple_def]
+     >- (rename1 `is_public_getter_decl _
+           (VariableDecl vis storage id ty init)` >>
+         Cases_on `vis` >> gvs[is_public_getter_decl_def] >>
+         Cases_on `storage` >> gvs[] >>
+         Cases_on `is_ArrayT ty` >> gvs[] >>
+         FIRST
+           [drule_all array_public_getter_tuple_shape >> metis_tac[],
+            gvs[external_getter_tuple_def]]) >>
+     rename1 `is_public_getter_decl _
+       (HashMapDecl vis transient id kt vt init)` >>
+     Cases_on `vis` >> gvs[is_public_getter_decl_def] >>
+     drule_all hashmap_public_getter_tuple_shape >> metis_tac[]) >>
+  gvs[] >>
+  qabbrev_tac `getter_run =
+    do send_call_value View
+         (initial_evaluation_context am.sources am.layouts tx src);
+       eval_stmts (initial_evaluation_context am.sources am.layouts tx src)
+         [Return (SOME exp)]
+    od (initial_state am [scope])` >>
+  qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once call_external_function_def] >>
+  gvs[AllCaseEqs(), initial_evaluation_context_def] >> strip_tac >>
+  gvs[bind_def, ignore_bind_def, return_def] >>
+  qabbrev_tac `getter_res = FST getter_run` >>
+  PairCases_on `getter_run` >> Cases_on `getter_run0` >>
+  gvs[AllCaseEqs()] >> TRY (Cases_on `y` >> gvs[]) >>
+  `state_well_typed getter_run1 /\
+   accounts_well_typed getter_run1.accounts` by (
+    funpow 6 drule_then drule checked_getter_send_eval_success_components >>
+    simp[Abbr`getter_res`, initial_evaluation_context_def] >>
+    disch_then (qspecl_then
+      [`vals ++ dflt_vs`, `getter_run1`, `scope`, `getter_res`] mp_tac) >>
+    simp[Abbr`getter_res`, bind_def, ignore_bind_def]) >>
+  Cases_on `evaluate_type (type_env_all_modules mods) ret` >> gvs[] >>
+  Cases_on `safe_cast x v'` >> gvs[] >>
+  gvs[machine_well_typed_def, abstract_machine_from_state_def,
+      state_well_typed_def]
+QED
+*)
 
 val _ = export_theory();
