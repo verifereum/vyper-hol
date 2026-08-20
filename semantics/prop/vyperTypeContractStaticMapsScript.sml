@@ -76,6 +76,35 @@ Proof
   gvs[lookup_function_def]
 QED
 
+Theorem module_fn_sig_key_MEM_T_Deploy[local]:
+  MEM (FunctionDecl Deploy fm nr raw fn args dflts ret body) ts ==>
+  MEM (src,fn) (FLAT (MAP (fn_sig_keys_toplevel T src) ts))
+Proof
+  rw[MEM_FLAT, MEM_MAP] >>
+  qexists `fn_sig_keys_toplevel T src
+    (FunctionDecl Deploy fm nr raw fn args dflts ret body)` >>
+  simp[fn_sig_keys_toplevel_def, include_fn_sig_def] >>
+  qexists `FunctionDecl Deploy fm nr raw fn args dflts ret body` >>
+  simp[fn_sig_keys_toplevel_def, include_fn_sig_def]
+QED
+
+Theorem lookup_function_Deploy_MEM[local]:
+  ALL_DISTINCT (FLAT (MAP (fn_sig_keys_toplevel T src) ts)) /\
+  MEM (FunctionDecl Deploy fm nr raw fn args dflts ret body) ts ==>
+  lookup_function NONE fn Deploy ts = SOME (fm,nr,args,dflts,ret,body)
+Proof
+  Induct_on `ts` >- rw[lookup_function_def] >>
+  rpt gen_tac >> strip_tac >> Cases_on `h` >>
+  gvs[lookup_function_def, fn_sig_keys_toplevel_def, include_fn_sig_def] >>
+  TRY (Cases_on `f`) >> TRY (Cases_on `v`) >> TRY (Cases_on `v0`) >>
+  TRY (Cases_on `s = fn`) >>
+  gvs[lookup_function_def, include_fn_sig_def] >>
+  FIRST
+    [qpat_x_assum `ALL_DISTINCT _ ==> lookup_function _ _ Deploy ts = _` irule >> simp[],
+     drule module_fn_sig_key_MEM_T_Deploy >>
+     disch_then (qspec_then `src` assume_tac) >> gvs[]]
+QED
+
 Theorem lookup_function_Internal_SOME_MEM:
   lookup_function src fn Internal ts = SOME (fm,nr,args,dflts,ret,body) ==>
   ?raw. MEM (FunctionDecl Internal fm nr raw fn args dflts ret body) ts
@@ -83,6 +112,46 @@ Proof
   Induct_on `ts` >- rw[lookup_function_def] >>
   gen_tac >> Cases_on `h` >> rw[lookup_function_def] >>
   TRY (Cases_on `v`) >> gvs[lookup_function_def] >> metis_tac[]
+QED
+
+Theorem lookup_function_Internal_NONE_not_key_T[local]:
+  ~MEM (src,fn) (FLAT (MAP (fn_sig_keys_toplevel T src) ts)) ==>
+  lookup_function NONE fn Internal ts = NONE
+Proof
+  Induct_on `ts` >- rw[lookup_function_def] >>
+  gen_tac >> Cases_on `h` >>
+  gvs[lookup_function_def, fn_sig_keys_toplevel_def, include_fn_sig_def] >>
+  TRY (Cases_on `f`) >> TRY (Cases_on `v`) >> TRY (Cases_on `v0`) >>
+  gvs[lookup_function_def, fn_sig_keys_toplevel_def, include_fn_sig_def]
+QED
+
+Theorem lookup_function_Internal_NONE_for_Deploy_MEM[local]:
+  ALL_DISTINCT (FLAT (MAP (fn_sig_keys_toplevel T src) ts)) /\
+  MEM (FunctionDecl Deploy fm nr raw fn args dflts ret body) ts ==>
+  lookup_function NONE fn Internal ts = NONE
+Proof
+  Induct_on `ts` >- rw[lookup_function_def] >>
+  rpt gen_tac >> strip_tac >> Cases_on `h` >>
+  gvs[lookup_function_def, fn_sig_keys_toplevel_def, include_fn_sig_def] >>
+  TRY (Cases_on `f`) >> TRY (Cases_on `v`) >> TRY (Cases_on `v0`) >>
+  TRY (Cases_on `s = fn`) >>
+  gvs[lookup_function_def, include_fn_sig_def] >>
+  FIRST
+    [metis_tac[lookup_function_Internal_NONE_not_key_T],
+     qpat_x_assum `ALL_DISTINCT _ ==> lookup_function _ _ Internal ts = _` irule >> simp[],
+     drule module_fn_sig_key_MEM_T_Deploy >>
+     disch_then (qspec_then `src` assume_tac) >> gvs[]]
+QED
+
+Theorem lookup_callable_function_Deploy_MEM:
+  ALL_DISTINCT (FLAT (MAP (fn_sig_keys_toplevel T src) ts)) /\
+  MEM (FunctionDecl Deploy fm nr raw fn args dflts ret body) ts ==>
+  lookup_callable_function T fn ts = SOME (fm,nr,args,dflts,ret,body)
+Proof
+  strip_tac >>
+  drule_all lookup_function_Internal_NONE_for_Deploy_MEM >>
+  drule_all lookup_function_Deploy_MEM >>
+  simp[lookup_callable_function_def]
 QED
 
 Theorem lookup_function_Deploy_SOME_cases:
