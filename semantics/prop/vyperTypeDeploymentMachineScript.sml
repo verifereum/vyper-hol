@@ -11,9 +11,30 @@
 
 Theory vyperTypeDeploymentMachine
 Ancestors
-  vyperTypeEntryReadiness vyperTypeContractSoundness
+  vyperTypeInitialState vyperTypeEntryReadiness vyperTypeContractSoundness
   vyperTypeExternalCallMachine
 
 val _ = Parse.hide "body";
+
+(* ===== Deployment machine setup ===== *)
+
+Theorem deployment_initial_machine_well_typed:
+  machine_well_typed am /\
+  initial_immutables (type_env_all_modules mods) mods = SOME imms ==>
+  machine_well_typed
+    (am with <| immutables updated_by CONS (addr,imms);
+                exports updated_by CONS (addr,exps) |>)
+Proof
+  strip_tac >>
+  gvs[machine_well_typed_def] >>
+  metis_tac[initial_immutables_imms_well_typed]
+QED
+
+Theorem deployment_source_install_preserves_machine_well_typed:
+  machine_well_typed am ==>
+  machine_well_typed (am with sources updated_by CONS (addr,mods))
+Proof
+  simp[machine_well_typed_def]
+QED
 
 val _ = export_theory();
