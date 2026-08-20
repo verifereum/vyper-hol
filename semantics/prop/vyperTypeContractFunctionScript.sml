@@ -534,9 +534,6 @@ Proof
   qexistsl [`body`, `fm`, `nr`, `ts`] >> simp[]
 QED
 
-(* WIP: deployment-mode functions_well_typed. Internal and synthetic default
- * constructor cases close; the declared Deploy branch has the complete
- * static-transfer package but its final implication remains to discharge.
 Theorem check_contract_functions_well_typed_deploy:
   check_contract F layouts addr mods = SOME art /\
   ALOOKUP sources addr = SOME mods /\
@@ -568,10 +565,13 @@ Proof
          `bare_globals`, `bare_global_assignable`, `toplevel_vtypes`,
          `flag_members`, `src_id_opt`, `fm`, `nr`, `args`, `dflts`, `ret`, `body`]
         mp_tac check_function_body_static_maps_transfer_initial >>
-      simp[initial_evaluation_context_def] >>
-      TRY (strip_tac >> pop_assum ACCEPT_TAC))
+      simp[initial_evaluation_context_def, get_tenv_def] >>
+      disch_then irule >> rpt conj_tac >>
+      gvs[bare_globals_complete_def, bare_global_assignable_complete_def,
+          toplevel_vtypes_complete_def, flag_members_complete_def,
+          get_module_code_def, get_tenv_def, initial_evaluation_context_def] >>
+      rpt strip_tac >> first_x_assum drule >> metis_tac[])
   >- (gvs[initial_evaluation_context_def] >>
-      conj_tac >- simp[] >>
       qexistsl
         [`<|current_src := src_id_opt; var_types := FEMPTY;
              var_assignable := FEMPTY; bare_globals := bare_globals;
@@ -579,14 +579,14 @@ Proof
              toplevel_vtypes := toplevel_vtypes;
              type_defs := type_env_all_modules mods; fn_sigs := fn_sigs;
              flag_members := flag_members|>`,
-         `NoneTV`,
          `<|current_src := src_id_opt; var_types := FEMPTY;
              var_assignable := FEMPTY; bare_globals := bare_globals;
              bare_global_assignable := bare_global_assignable;
              toplevel_vtypes := toplevel_vtypes;
              type_defs := type_env_all_modules mods; fn_sigs := fn_sigs;
              flag_members := flag_members|>`] >>
-      simp[]) >>
+      simp[get_tenv_def, Once type_stmt_def,
+           Once well_typed_expr_def, Once stmt_no_control_escape_def]) >>
   `check_function_body layouts tx.target mods art src_id_opt fm nr
      args dflts ret body` by
     (drule_all check_contract_function_body_MEM >> metis_tac[]) >>
@@ -606,10 +606,13 @@ Proof
      `bare_globals`, `bare_global_assignable`, `toplevel_vtypes`,
      `flag_members`, `src_id_opt`, `fm`, `nr`, `args`, `dflts`, `ret`, `body`]
     mp_tac check_function_body_static_maps_transfer_initial >>
-  simp[initial_evaluation_context_def] >>
-  TRY (strip_tac >> pop_assum ACCEPT_TAC)
+  simp[initial_evaluation_context_def, get_tenv_def] >>
+  disch_then irule >> rpt conj_tac >>
+  gvs[bare_globals_complete_def, bare_global_assignable_complete_def,
+      toplevel_vtypes_complete_def, flag_members_complete_def,
+      get_module_code_def, get_tenv_def, initial_evaluation_context_def] >>
+  rpt strip_tac >> first_x_assum drule >> metis_tac[]
 QED
-*)
 
 (* ===== Explicit external entry no-TypeError bridge for checked contracts ===== *)
 
