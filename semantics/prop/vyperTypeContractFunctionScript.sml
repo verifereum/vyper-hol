@@ -524,6 +524,38 @@ Proof
   simp[]
 QED
 
+(* WIP: deployment-mode functions_well_typed.  The checked Deploy-body case
+ * is established; the default empty-constructor branch still needs its
+ * explicit function-entry typing environment witnesses.
+Theorem check_contract_functions_well_typed_deploy:
+  check_contract F layouts addr mods = SOME art /\
+  ALOOKUP sources addr = SOME mods /\
+  tx.target = addr ==>
+  functions_well_typed
+    ((initial_evaluation_context sources layouts tx src) with in_deploy := T)
+Proof
+  simp[functions_well_typed_def] >> strip_tac >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  `ALOOKUP mods src_id_opt = SOME ts` by
+    gvs[get_module_code_def, initial_evaluation_context_def] >>
+  drule lookup_callable_function_T_SOME_cases >> strip_tac
+  >- (`check_function_body layouts addr mods art src_id_opt fm nr
+         args dflts ret body` by
+        (drule_all check_contract_function_body_MEM >> simp[]) >>
+      gvs[initial_evaluation_context_def, check_function_body_def] >>
+      Cases_on `lookup_nonreentrant_slot layouts tx.target` >> gvs[] >>
+      qexists `fn` >> simp[])
+  >- gvs[initial_evaluation_context_def, function_entry_env_def,
+         artifact_env_def] >>
+  `check_function_body layouts addr mods art src_id_opt fm nr
+     args dflts ret body` by
+    (drule_all check_contract_function_body_MEM >> simp[]) >>
+  gvs[initial_evaluation_context_def, check_function_body_def] >>
+  Cases_on `lookup_nonreentrant_slot layouts tx.target` >> gvs[] >>
+  qexists `fn` >> simp[]
+QED
+*)
+
 (* ===== Explicit external entry no-TypeError bridge for checked contracts ===== *)
 
 Theorem functions_well_typed_stk_irrelevant[local]:
