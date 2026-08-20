@@ -912,7 +912,7 @@ Proof
   first_x_assum (qspec_then `addr` mp_tac) >> decide_tac
 QED
 
-Theorem send_call_value_no_control_c53[local]:
+Theorem send_call_value_no_control_c53:
   send_call_value mut cx st = (INR exc,st') ==> no_control_exc exc
 Proof
   rw[send_call_value_def, bind_def, ignore_bind_def, check_def,
@@ -1014,7 +1014,7 @@ Proof
   gvs[initial_state_def, state_well_typed_def, machine_well_typed_def]
 QED
 
-Theorem call_lock_action_no_control_c53[local]:
+Theorem call_lock_action_no_control_c53:
   (if nr then
      case cx.nonreentrant_slot of
        NONE => raise (Error (TypeError "nonreentrant slot missing"))

@@ -15,7 +15,7 @@ Ancestors
   vyperTypeInvariants vyperTypeBindArguments vyperTypeInitialState
   vyperTypeEntryReadiness vyperTypeContract vyperTypeContractContext
   vyperTypeContractFunction
-  vyperTypeContractSoundness
+  vyperTypeContractSoundness vyperExprNoControl
   vyperStatePreservation vyperScopePreservation
 Libs
   wordsLib
@@ -117,8 +117,6 @@ Proof
   simp[]
 QED
 
-(* WIP: the semantic monad expansion needs a stable named intermediate-state
- * helper before this composition proof can avoid generated variable names.
 Theorem checked_explicit_call_run_success_components:
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\
@@ -141,7 +139,6 @@ Theorem checked_explicit_call_run_success_components:
   state_well_typed st' /\ accounts_well_typed st'.accounts
 Proof
   rpt strip_tac >>
-  qpat_x_assum `cx = _` SUBST_ALL_TAC >>
   `scope_well_typed scope` by
     metis_tac[bind_arguments_scope_well_typed_from_success] >>
   qpat_x_assum `do _; _; _ od _ = _` mp_tac >>
@@ -153,25 +150,58 @@ Proof
                                 (mut = View \/ mut = Pure)
              else return ()) (initial_state am [scope])` >>
   Cases_on `q` >> gvs[]
-  >- (Cases_on `send_call_value mut cx r` >> Cases_on `q` >> gvs[] >>
-      strip_tac >>
-      rename1 `send_call_value mut cx r = (INL (),body_st)` >>
-      `body_st.scopes = [scope] /\ body_st.immutables = am.immutables /\
-       state_well_typed body_st` by
-        (irule call_lock_send_prefix_body_state_ready_c53 >> simp[] >>
-         qexistsl [`cx`, `mut`, `nr`] >> simp[bind_def, ignore_bind_def]) >>
-      `accounts_well_typed lock_st.accounts` by
-        (imp_res_tac call_lock_action_preserves_accounts_c53 >>
-         gvs[initial_state_accounts_well_typed]) >>
-      `accounts_well_typed body_st.accounts` by
-        metis_tac[send_call_value_accounts_well_typed_c53] >>
-      irule checked_explicit_external_body_preserves_machine_components >>
-      qexistsl [`am`, `args`, `art`, `dflts`, `mods`, `mut`, `nr`, `raw`,
-                `ret`, `scope`, `src`, `ts`, `tx`, `vals`, `cx`, `body`, `body_st`] >>
-      simp[])
-  >- (Cases_on `res` >> gvs[] >> Cases_on `e` >> gvs[return_def, raise_def])
+  >- (Cases_on `send_call_value mut
+        (initial_evaluation_context am.sources am.layouts tx src) r` >>
+      Cases_on `q` >> gvs[] >> rpt strip_tac >>
+      `initial_evaluation_context am.sources am.layouts tx src =
+       initial_evaluation_context am.sources am.layouts tx src` by simp[] >>
+      drule_all_then strip_assume_tac
+        checked_explicit_body_from_states_preserves_components >> simp[])
+  >- (Cases_on `send_call_value mut
+        (initial_evaluation_context am.sources am.layouts tx src) r` >>
+      Cases_on `q` >> gvs[] >> rpt strip_tac >>
+      `initial_evaluation_context am.sources am.layouts tx src =
+       initial_evaluation_context am.sources am.layouts tx src` by simp[] >>
+      drule_all_then strip_assume_tac
+        checked_explicit_body_from_states_preserves_components >> simp[])
+  >- (Cases_on `send_call_value mut
+        (initial_evaluation_context am.sources am.layouts tx src) r` >>
+      Cases_on `q` >> gvs[] >> rpt strip_tac >>
+      FIRST
+        [drule_at(Pat`send_call_value`) send_call_value_no_control_c53 >>
+         simp[no_control_exc_def],
+         `initial_evaluation_context am.sources am.layouts tx src =
+          initial_evaluation_context am.sources am.layouts tx src` by simp[] >>
+         funpow 5 drule_then drule
+           checked_explicit_body_from_states_preserves_components >>
+         simp[] >> disch_then (drule_then drule) >> gvs[]])
+  >- (Cases_on `send_call_value mut
+        (initial_evaluation_context am.sources am.layouts tx src) r` >>
+      Cases_on `q` >> gvs[] >> rpt strip_tac >>
+      FIRST
+        [drule call_lock_action_no_control_c53 >> simp[no_control_exc_def],
+         drule_at(Pat`send_call_value`) send_call_value_no_control_c53 >>
+         simp[no_control_exc_def],
+         `initial_evaluation_context am.sources am.layouts tx src =
+          initial_evaluation_context am.sources am.layouts tx src` by simp[] >>
+         funpow 5 drule_then drule
+           checked_explicit_body_from_states_preserves_components >>
+         simp[] >> disch_then (drule_then drule) >> gvs[]])
+  >- (Cases_on `send_call_value mut
+        (initial_evaluation_context am.sources am.layouts tx src) r` >>
+      Cases_on `q` >> gvs[] >> rpt strip_tac >>
+      FIRST
+        [drule call_lock_action_no_control_c53 >> simp[no_control_exc_def],
+         drule_at(Pat`send_call_value`) send_call_value_no_control_c53 >>
+         simp[no_control_exc_def],
+         `initial_evaluation_context am.sources am.layouts tx src =
+          initial_evaluation_context am.sources am.layouts tx src` by simp[] >>
+         funpow 5 drule_then drule
+           checked_explicit_body_from_states_preserves_components >>
+         simp[] >> disch_then (drule_then drule) >> gvs[]])
+  >- (strip_tac >> drule call_lock_action_no_control_c53 >>
+      simp[no_control_exc_def])
 QED
-*)
 
 (* ===== Failure rollback ===== *)
 
