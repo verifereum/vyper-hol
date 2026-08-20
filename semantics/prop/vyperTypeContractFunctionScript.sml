@@ -524,9 +524,19 @@ Proof
   simp[]
 QED
 
-(* WIP: deployment-mode functions_well_typed.  The checked Deploy-body case
- * is established; the default empty-constructor branch still needs its
- * explicit function-entry typing environment witnesses.
+Theorem fn_sigs_complete_deploy_implies_nondeploy[local]:
+  fn_sigs_complete fs (cx with in_deploy := T) ==>
+  fn_sigs_complete fs (cx with in_deploy := F)
+Proof
+  rw[fn_sigs_complete_def] >>
+  first_x_assum irule >>
+  gvs[lookup_callable_function_def, get_module_code_def, AllCaseEqs()] >>
+  qexistsl [`body`, `fm`, `nr`, `ts`] >> simp[]
+QED
+
+(* WIP: deployment-mode functions_well_typed. Internal and synthetic default
+ * constructor cases close; the declared Deploy branch has the complete
+ * static-transfer package but its final implication remains to discharge.
 Theorem check_contract_functions_well_typed_deploy:
   check_contract F layouts addr mods = SOME art /\
   ALOOKUP sources addr = SOME mods /\
@@ -538,21 +548,66 @@ Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   `ALOOKUP mods src_id_opt = SOME ts` by
     gvs[get_module_code_def, initial_evaluation_context_def] >>
-  drule lookup_callable_function_T_SOME_cases >> strip_tac
-  >- (`check_function_body layouts addr mods art src_id_opt fm nr
+  drule lookup_callable_function_T_SOME_cases >> strip_tac >> gvs[]
+  >- (`check_function_body layouts tx.target mods art src_id_opt fm nr
          args dflts ret body` by
-        (drule_all check_contract_function_body_MEM >> simp[]) >>
-      gvs[initial_evaluation_context_def, check_function_body_def] >>
-      Cases_on `lookup_nonreentrant_slot layouts tx.target` >> gvs[] >>
-      qexists `fn` >> simp[])
-  >- gvs[initial_evaluation_context_def, function_entry_env_def,
-         artifact_env_def] >>
-  `check_function_body layouts addr mods art src_id_opt fm nr
+        (drule_all check_contract_function_body_MEM >> metis_tac[]) >>
+      conj_tac
+      >- (gvs[initial_evaluation_context_def, check_function_body_def] >>
+          Cases_on `lookup_nonreentrant_slot layouts tx.target` >> gvs[] >>
+          qexists `fn` >> simp[]) >>
+      `fn_sigs_complete fn_sigs
+         (initial_evaluation_context sources layouts tx src)` by (
+        drule fn_sigs_complete_deploy_implies_nondeploy >>
+        simp[initial_evaluation_context_def]) >>
+      fs[bare_globals_complete_def, bare_global_assignable_complete_def,
+         toplevel_vtypes_complete_def, flag_members_complete_def,
+         get_module_code_def, get_tenv_def, initial_evaluation_context_def] >>
+      qspecl_then
+        [`layouts`, `tx.target`, `mods`, `art`, `sources`, `tx`, `fn_sigs`,
+         `bare_globals`, `bare_global_assignable`, `toplevel_vtypes`,
+         `flag_members`, `src_id_opt`, `fm`, `nr`, `args`, `dflts`, `ret`, `body`]
+        mp_tac check_function_body_static_maps_transfer_initial >>
+      simp[initial_evaluation_context_def] >>
+      TRY (strip_tac >> pop_assum ACCEPT_TAC))
+  >- (gvs[initial_evaluation_context_def] >>
+      conj_tac >- simp[] >>
+      qexistsl
+        [`<|current_src := src_id_opt; var_types := FEMPTY;
+             var_assignable := FEMPTY; bare_globals := bare_globals;
+             bare_global_assignable := bare_global_assignable;
+             toplevel_vtypes := toplevel_vtypes;
+             type_defs := type_env_all_modules mods; fn_sigs := fn_sigs;
+             flag_members := flag_members|>`,
+         `NoneTV`,
+         `<|current_src := src_id_opt; var_types := FEMPTY;
+             var_assignable := FEMPTY; bare_globals := bare_globals;
+             bare_global_assignable := bare_global_assignable;
+             toplevel_vtypes := toplevel_vtypes;
+             type_defs := type_env_all_modules mods; fn_sigs := fn_sigs;
+             flag_members := flag_members|>`] >>
+      simp[]) >>
+  `check_function_body layouts tx.target mods art src_id_opt fm nr
      args dflts ret body` by
-    (drule_all check_contract_function_body_MEM >> simp[]) >>
-  gvs[initial_evaluation_context_def, check_function_body_def] >>
-  Cases_on `lookup_nonreentrant_slot layouts tx.target` >> gvs[] >>
-  qexists `fn` >> simp[]
+    (drule_all check_contract_function_body_MEM >> metis_tac[]) >>
+  conj_tac
+  >- (gvs[initial_evaluation_context_def, check_function_body_def] >>
+      Cases_on `lookup_nonreentrant_slot layouts tx.target` >> gvs[] >>
+      qexists `fn` >> simp[]) >>
+  `fn_sigs_complete fn_sigs
+     (initial_evaluation_context sources layouts tx src)` by (
+    drule fn_sigs_complete_deploy_implies_nondeploy >>
+    simp[initial_evaluation_context_def]) >>
+  fs[bare_globals_complete_def, bare_global_assignable_complete_def,
+     toplevel_vtypes_complete_def, flag_members_complete_def,
+     get_module_code_def, get_tenv_def, initial_evaluation_context_def] >>
+  qspecl_then
+    [`layouts`, `tx.target`, `mods`, `art`, `sources`, `tx`, `fn_sigs`,
+     `bare_globals`, `bare_global_assignable`, `toplevel_vtypes`,
+     `flag_members`, `src_id_opt`, `fm`, `nr`, `args`, `dflts`, `ret`, `body`]
+    mp_tac check_function_body_static_maps_transfer_initial >>
+  simp[initial_evaluation_context_def] >>
+  TRY (strip_tac >> pop_assum ACCEPT_TAC)
 QED
 *)
 
