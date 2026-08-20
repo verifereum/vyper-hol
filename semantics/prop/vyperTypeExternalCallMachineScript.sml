@@ -506,4 +506,80 @@ Proof
       state_well_typed_def]
 QED
 
+Theorem checked_call_external_success_preserves_machine_well_typed:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  checked_contract_runtime_ready art mods am tx /\
+  machine_well_typed am /\ call_tx_well_typed tx /\
+  checked_external_call_inputs_ready am tx /\
+  call_external am tx = (INL v,am') ==>
+  machine_well_typed am'
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `call_external am tx = _` mp_tac >>
+  simp[Once call_external_def] >>
+  gvs[AllCaseEqs()] >> strip_tac >>
+  gvs[checked_contract_runtime_ready_def, get_self_code_def] >>
+  `checked_call_inputs_ready
+     (type_env_all_modules all_mods)
+     (initial_evaluation_context am.sources am.layouts tx
+       (find_function_module am tx.target tx.function_name))
+     am args dflts tx.args` by (
+    irule checked_external_call_inputs_ready_selected >>
+    simp[] >> metis_tac[]) >>
+  `(?raw.
+      MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body') ts) \/
+   (?decl.
+      MEM decl ts /\
+      is_public_getter_decl tx.function_name decl /\
+      external_getter_tuple (find_function_module am tx.target tx.function_name) decl =
+        SOME (mut,nr,args,dflts,ret,body'))` by
+    (irule lookup_exported_function_checked_cases_current >> simp[] >> metis_tac[]) >>
+  `?dflt_vs scope.
+     evaluate_defaults
+       (initial_evaluation_context am.sources am.layouts tx
+         (find_function_module am tx.target tx.function_name)) am
+       (DROP (LENGTH dflts - (LENGTH args - LENGTH tx.args)) dflts) =
+       SOME dflt_vs /\
+     bind_arguments (type_env_all_modules all_mods) args
+       (tx.args ++ dflt_vs) = SOME scope` by (
+    qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+    simp[Once call_external_function_def] >>
+    gvs[AllCaseEqs()] >> metis_tac[]) >>
+  gvs[] >>
+  (FIRST
+      [qpat_x_assum `MEM (FunctionDecl External _ _ _ _ _ _ _ _) _` mp_tac >>
+       strip_tac >>
+       irule call_external_function_selected_explicit_success_machine_well_typed >>
+       qexistsl [`am`, `args`, `art`, `body'`,
+                 `initial_evaluation_context am.sources am.layouts tx
+                    (find_function_module am tx.target tx.function_name)`,
+                 `dflt_vs`, `dflts`, `all_mods`, `mut`, `nr`, `raw`, `ret`, `scope`,
+                 `find_function_module am tx.target tx.function_name`, `ts`, `tx`,
+                 `v`, `tx.args`],
+       qpat_x_assum `is_public_getter_decl _ _` mp_tac >> strip_tac >>
+       irule call_external_function_selected_getter_success_machine_well_typed >>
+       qexistsl [`am`, `args`, `art`, `body'`,
+                 `initial_evaluation_context am.sources am.layouts tx
+                    (find_function_module am tx.target tx.function_name)`,
+                 `decl`, `dflt_vs`, `dflts`, `all_mods`, `mut`, `nr`, `ret`, `scope`,
+                 `find_function_module am tx.target tx.function_name`, `ts`, `tx`,
+                 `v`, `tx.args`]] >>
+    gvs[get_module_code_def, initial_evaluation_context_def,
+        checked_call_inputs_ready_def, checked_defaults_ready_def,
+        checked_contract_runtime_ready_def])
+QED
+
+Theorem checked_call_external_preserves_machine_well_typed:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  checked_contract_runtime_ready art mods am tx /\
+  machine_well_typed am /\ call_tx_well_typed tx /\
+  checked_external_call_inputs_ready am tx /\
+  call_external am tx = (res,am') ==>
+  machine_well_typed am'
+Proof
+  Cases_on `res` >> strip_tac
+  >- metis_tac[checked_call_external_success_preserves_machine_well_typed] >>
+  metis_tac[checked_call_external_failure_preserves_machine_well_typed]
+QED
+
 val _ = export_theory();

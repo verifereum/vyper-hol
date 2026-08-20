@@ -3002,7 +3002,7 @@ Proof
 QED
 
 
-Theorem lookup_exported_function_checked_cases_current[local]:
+Theorem lookup_exported_function_checked_cases_current:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\
   src = find_function_module am tx.target tx.function_name /\
