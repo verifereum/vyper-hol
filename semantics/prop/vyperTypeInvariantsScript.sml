@@ -62,6 +62,46 @@ Definition fn_sigs_complete_def:
                 ret_ty := ret |>
 End
 
+(* Signature completeness over declaration-backed callable results.  Unlike
+ * fn_sigs_complete, this deliberately excludes lookup_function's synthetic
+ * deployment fallback while still covering a real constructor with the same
+ * tuple shape. *)
+Definition fn_sigs_declared_complete_def:
+  fn_sigs_declared_complete fn_sigs cx <=>
+    !src fn ts vis fm nr raw args dflts ret body.
+      get_module_code cx src = SOME ts /\
+      MEM (FunctionDecl vis fm nr raw fn args dflts ret body) ts /\
+      lookup_callable_function cx.in_deploy fn ts =
+        SOME (fm,nr,args,dflts,ret,body) ==>
+      FLOOKUP fn_sigs (src,fn) =
+        SOME <| param_types := MAP SND args;
+                num_defaults := LENGTH dflts;
+                ret_ty := ret |>
+End
+
+Theorem lookup_callable_function_F_SOME_MEM_local[local]:
+  lookup_callable_function F fn ts = SOME (fm,nr,args,dflts,ret,body) ==>
+  ?raw. MEM (FunctionDecl Internal fm nr raw fn args dflts ret body) ts
+Proof
+  Induct_on `ts` >-
+    rw[lookup_callable_function_def, lookup_function_def] >>
+  gen_tac >> Cases_on `h` >>
+  rw[lookup_callable_function_def, lookup_function_def] >>
+  TRY (Cases_on `v`) >>
+  gvs[lookup_callable_function_def, lookup_function_def] >> metis_tac[]
+QED
+
+Theorem fn_sigs_declared_complete_nondeploy:
+  ~cx.in_deploy ==>
+  (fn_sigs_declared_complete fn_sigs cx <=> fn_sigs_complete fn_sigs cx)
+Proof
+  rw[fn_sigs_declared_complete_def, fn_sigs_complete_def] >> gvs[] >>
+  eq_tac >> strip_tac >> rpt gen_tac >> strip_tac
+  >- (drule lookup_callable_function_F_SOME_MEM_local >> strip_tac >>
+      first_x_assum drule_all >> simp[])
+  >- (first_x_assum drule_all >> simp[])
+QED
+
 Definition toplevel_vtypes_complete_def:
   toplevel_vtypes_complete toplevel_vtypes cx <=>
     (!src ts vis mut id ty init.
@@ -123,7 +163,7 @@ Definition env_context_consistent_def:
     env.type_defs = get_tenv cx /\
     env.current_src = current_module cx /\
     fn_sigs_consistent env.fn_sigs cx /\
-    fn_sigs_complete env.fn_sigs cx /\
+    fn_sigs_declared_complete env.fn_sigs cx /\
     toplevel_vtypes_complete env.toplevel_vtypes cx /\
     bare_globals_complete env.bare_globals cx /\
     bare_global_assignable_complete env.bare_global_assignable cx /\
@@ -274,7 +314,7 @@ Definition functions_well_typed_def:
   functions_well_typed cx <=>
     !fn_sigs bare_globals bare_global_assignable toplevel_vtypes flag_members.
       fn_sigs_consistent fn_sigs cx /\
-      fn_sigs_complete fn_sigs cx /\
+      fn_sigs_declared_complete fn_sigs cx /\
       toplevel_vtypes_complete toplevel_vtypes cx /\
       bare_globals_complete bare_globals cx /\
       bare_global_assignable_complete bare_global_assignable cx /\
