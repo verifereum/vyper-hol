@@ -203,6 +203,21 @@ Proof
       simp[no_control_exc_def])
 QED
 
+Theorem release_action_success_machine_well_typed:
+  state_well_typed st /\ accounts_well_typed st.accounts /\
+  (if nr /\ ~is_view then
+     case cx.nonreentrant_slot of
+       NONE => return ()
+     | SOME slot => release_nonreentrant_lock cx.txn.target slot
+   else return ()) st = (INL (),st') ==>
+  machine_well_typed (abstract_machine_from_state srcs exps layouts st')
+Proof
+  strip_tac >>
+  drule release_action_preserves_machine_components >> strip_tac >>
+  irule abstract_machine_from_state_well_typed >>
+  gvs[state_well_typed_def]
+QED
+
 (* ===== Failure rollback ===== *)
 
 (* The direct proof is retained from the initial composition attempt.  The
@@ -220,8 +235,6 @@ QED
 
 (* ===== Successful selected entries ===== *)
 
-(* Migrated from vyperTypeContractSoundnessScript.sml.  It is intentionally
- * preserved here while the lock/send/body result helper is factored.
 Theorem call_external_function_selected_explicit_success_machine_well_typed[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\
@@ -238,10 +251,61 @@ Theorem call_external_function_selected_explicit_success_machine_well_typed[loca
   machine_well_typed am'
 Proof
   rpt strip_tac >>
+  qabbrev_tac `call_run =
+    do
+      (if nr then
+         case cx.nonreentrant_slot of
+           NONE => raise (Error (TypeError "nonreentrant slot missing"))
+         | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
+                          (mut = View \/ mut = Pure)
+       else return ());
+      send_call_value mut cx;
+      eval_stmts cx body
+    od (initial_state am [scope])` >>
   qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[Once call_external_function_def] >>
-  gvs[AllCaseEqs(), initial_evaluation_context_def]
+  gvs[AllCaseEqs(), initial_evaluation_context_def] >> strip_tac >>
+  qabbrev_tac `call_res = FST call_run` >>
+  PairCases_on `call_run` >> Cases_on `call_run0` >>
+  gvs[AllCaseEqs()] >>
+  Cases_on `(if nr /\ mut <> View /\ mut <> Pure then
+               case lookup_nonreentrant_slot am.layouts tx.target of
+                 NONE => return ()
+               | SOME slot => release_nonreentrant_lock tx.target slot
+             else return ()) call_run1` >>
+  Cases_on `q` >> gvs[] >>
+  TRY (Cases_on `y` >> gvs[]) >> TRY (Cases_on `y'` >> gvs[]) >>
+  `initial_evaluation_context am.sources am.layouts tx src =
+   initial_evaluation_context am.sources am.layouts tx src` by simp[] >>
+  `state_well_typed call_run1 /\
+   accounts_well_typed call_run1.accounts` by (
+    irule checked_explicit_call_run_success_components >>
+    qexistsl [`am`, `args`, `art`, `body`,
+              `initial_evaluation_context am.sources am.layouts tx src`,
+              `dflts`, `mods`, `mut`, `nr`,
+              `raw`, `call_res`, `ret`, `scope`, `src`, `ts`, `tx`,
+              `vals ++ dflt_vs`] >>
+    simp[Abbr`call_res`, initial_evaluation_context_def]) >>
+  gvs[Abbr`call_res`] >>
+  `(if nr /\ ~(mut = View \/ mut = Pure) then
+      case (initial_evaluation_context am.sources am.layouts tx src).nonreentrant_slot of
+        NONE => return ()
+      | SOME slot => release_nonreentrant_lock tx.target slot
+    else return ()) call_run1 = (INL (),r)` by
+    gvs[initial_evaluation_context_def] >>
+  `r.scopes = call_run1.scopes /\
+   r.immutables = call_run1.immutables /\
+   r.accounts = call_run1.accounts` by (
+    Cases_on `nr` >> gvs[return_def] >>
+    Cases_on `mut = View` >> gvs[return_def] >>
+    Cases_on `mut = Pure` >> gvs[return_def] >>
+    Cases_on `lookup_nonreentrant_slot am.layouts tx.target` >>
+    gvs[return_def] >>
+    metis_tac[release_nonreentrant_lock_machine_components]) >>
+  Cases_on `evaluate_type (type_env_all_modules mods) ret` >> gvs[] >>
+  Cases_on `safe_cast x v'` >> gvs[] >>
+  gvs[machine_well_typed_def, abstract_machine_from_state_def,
+      state_well_typed_def, AllCaseEqs()]
 QED
-*)
 
 val _ = export_theory();
