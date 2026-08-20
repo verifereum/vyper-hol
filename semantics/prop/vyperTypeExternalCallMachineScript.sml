@@ -249,18 +249,63 @@ QED
 
 (* ===== Failure rollback ===== *)
 
-(* The direct proof is retained from the initial composition attempt.  The
- * execution-result case split will be discharged after the prefix/body helper
- * below is in place.
+Theorem call_external_function_nondeploy_failure_rolls_back:
+  ~cx.in_deploy /\
+  call_external_function am cx nr mut ts mods args dflts vals body ret =
+    (INR exc,am') ==>
+  am' = am
+Proof
+  strip_tac >>
+  qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once call_external_function_def] >>
+  gvs[AllCaseEqs()] >> strip_tac >>
+  Cases_on `do
+    (if nr then
+       case cx.nonreentrant_slot of
+         NONE => raise (Error (TypeError "nonreentrant slot missing"))
+       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
+                        (mut = View \/ mut = Pure)
+     else return ());
+    send_call_value mut cx;
+    eval_stmts cx body
+  od (initial_state am [env])` >>
+  Cases_on `q` >> gvs[AllCaseEqs()] >>
+  Cases_on `(if nr /\ mut <> View /\ mut <> Pure then
+               case cx.nonreentrant_slot of
+                 NONE => return ()
+               | SOME slot => release_nonreentrant_lock cx.txn.target slot
+             else return ()) r` >>
+  Cases_on `q` >> gvs[AllCaseEqs()] >>
+  TRY (Cases_on `y` >> gvs[AllCaseEqs()]) >>
+  TRY (Cases_on `evaluate_type (type_env_all_modules mods) ret` >> gvs[]) >>
+  TRY (Cases_on `safe_cast x v` >> gvs[])
+QED
+
+Theorem call_external_function_initial_failure_rolls_back:
+  call_external_function am
+    (initial_evaluation_context am.sources am.layouts tx src)
+    nr mut ts mods args dflts vals body ret = (INR exc,am') ==>
+  am' = am
+Proof
+  strip_tac >>
+  `~(initial_evaluation_context am.sources am.layouts tx src).in_deploy` by
+    simp[initial_evaluation_context_def] >>
+  drule_all call_external_function_nondeploy_failure_rolls_back >> simp[]
+QED
+
 Theorem call_external_failure_rolls_back:
   call_external am tx = (INR exc,am') ==> am' = am
 Proof
   rw[call_external_def] >> gvs[AllCaseEqs()] >>
-  qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[Once call_external_function_def, initial_evaluation_context_def] >>
-  strip_tac >> gvs[AllCaseEqs(), initial_evaluation_context_def]
+  metis_tac[call_external_function_initial_failure_rolls_back]
 QED
-*)
+
+Theorem checked_call_external_failure_preserves_machine_well_typed:
+  machine_well_typed am /\ call_external am tx = (INR exc,am') ==>
+  machine_well_typed am'
+Proof
+  metis_tac[call_external_failure_rolls_back]
+QED
 
 (* ===== Successful selected entries ===== *)
 
