@@ -946,7 +946,7 @@ Proof
   imp_res_tac transfer_value_scopes >> gvs[]
 QED
 
-Theorem send_call_value_accounts_well_typed_c53[local]:
+Theorem send_call_value_accounts_well_typed_c53:
   accounts_well_typed st.accounts /\
   send_call_value mut cx st = (res,st') ==>
   accounts_well_typed st'.accounts
@@ -960,7 +960,7 @@ Proof
   gvs[]
 QED
 
-Theorem call_lock_action_preserves_accounts_c53[local]:
+Theorem call_lock_action_preserves_accounts_c53:
   (if nr then
      case cx.nonreentrant_slot of
        NONE => raise (Error (TypeError "nonreentrant slot missing"))
@@ -990,7 +990,7 @@ Proof
   imp_res_tac acquire_nonreentrant_lock_scopes >> gvs[]
 QED
 
-Theorem call_lock_send_prefix_body_state_ready_c53[local]:
+Theorem call_lock_send_prefix_body_state_ready_c53:
   machine_well_typed am /\
   scope_well_typed env /\
   (do
@@ -2762,7 +2762,7 @@ Proof
   simp[]
 QED
 
-Theorem checked_public_getter_body_preserves_machine_components[local]:
+Theorem checked_public_getter_body_preserves_machine_components:
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\
   machine_well_typed am /\
@@ -3158,7 +3158,7 @@ QED
 
 
 
-Theorem checked_explicit_external_body_preserves_machine_components[local]:
+Theorem checked_explicit_external_body_preserves_machine_components:
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\
   machine_well_typed am /\ call_tx_well_typed tx /\
