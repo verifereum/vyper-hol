@@ -117,6 +117,35 @@ Proof
   simp[]
 QED
 
+Theorem checked_getter_body_from_states_preserves_components:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  checked_contract_runtime_ready art mods am tx /\ machine_well_typed am /\
+  ALOOKUP mods src = SOME ts /\ MEM decl ts /\
+  is_public_getter_decl tx.function_name decl /\
+  external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,body) /\
+  cx = initial_evaluation_context am.sources am.layouts tx src /\
+  bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
+  (if nr then
+     case cx.nonreentrant_slot of
+       NONE => raise (Error (TypeError "nonreentrant slot missing"))
+     | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
+                      (mut = View \/ mut = Pure)
+   else return ()) (initial_state am [scope]) = (INL (),lock_st) /\
+  send_call_value mut cx lock_st = (INL (),body_st) /\
+  eval_stmts cx body body_st = (res,st') ==>
+  state_well_typed st' /\ accounts_well_typed st'.accounts
+Proof
+  strip_tac >>
+  `scope_well_typed scope` by
+    metis_tac[bind_arguments_scope_well_typed_from_success] >>
+  `body_st.scopes = [scope] /\ body_st.immutables = am.immutables /\
+   state_well_typed body_st /\ accounts_well_typed body_st.accounts` by
+    (irule call_lock_send_success_components >> simp[] >>
+     qexistsl [`cx`, `lock_st`, `mut`, `nr`] >> simp[]) >>
+  irule checked_public_getter_body_preserves_machine_components >>
+  simp[] >> metis_tac[]
+QED
+
 Theorem checked_explicit_call_run_success_components:
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\
