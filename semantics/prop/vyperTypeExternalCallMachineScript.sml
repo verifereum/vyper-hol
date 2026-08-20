@@ -440,8 +440,6 @@ Proof
       state_well_typed_def, AllCaseEqs()]
 QED
 
-(* WIP: selected getter composition is complete through body-state typing;
- * final branch-specific result instantiation remains.
 Theorem call_external_function_selected_getter_success_machine_well_typed[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\ machine_well_typed am /\
@@ -490,14 +488,22 @@ Proof
    accounts_well_typed getter_run1.accounts` by (
     funpow 6 drule_then drule checked_getter_send_eval_success_components >>
     simp[Abbr`getter_res`, initial_evaluation_context_def] >>
-    disch_then (qspecl_then
-      [`vals ++ dflt_vs`, `getter_run1`, `scope`, `getter_res`] mp_tac) >>
-    simp[Abbr`getter_res`, bind_def, ignore_bind_def]) >>
+    strip_tac >>
+    first_x_assum irule >>
+    qexistsl
+      [`FST
+         (do send_call_value View
+               (initial_evaluation_context am.sources am.layouts tx src);
+             eval_stmts
+               (initial_evaluation_context am.sources am.layouts tx src)
+               [Return (SOME exp)]
+          od (initial_state am [scope]))`,
+       `scope`, `vals ++ dflt_vs`] >>
+    simp[bind_def, ignore_bind_def, initial_evaluation_context_def]) >>
   Cases_on `evaluate_type (type_env_all_modules mods) ret` >> gvs[] >>
   Cases_on `safe_cast x v'` >> gvs[] >>
   gvs[machine_well_typed_def, abstract_machine_from_state_def,
       state_well_typed_def]
 QED
-*)
 
 val _ = export_theory();
