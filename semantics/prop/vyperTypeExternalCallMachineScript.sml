@@ -12,8 +12,10 @@ Theory vyperTypeExternalCallMachine
 Ancestors
   list rich_list finite_map option pair
   vyperMisc vyperContext vyperState vyperInterpreter
-  vyperTypeInvariants vyperTypeInitialState
-  vyperTypeEntryReadiness vyperTypeContractSoundness
+  vyperTypeInvariants vyperTypeBindArguments vyperTypeInitialState
+  vyperTypeEntryReadiness vyperTypeContract vyperTypeContractContext
+  vyperTypeContractFunction
+  vyperTypeContractSoundness
   vyperStatePreservation vyperScopePreservation
 Libs
   wordsLib
@@ -48,6 +50,128 @@ Proof
   Cases_on `cx.nonreentrant_slot` >> gvs[return_def] >>
   metis_tac[release_nonreentrant_lock_machine_components]
 QED
+
+(* ===== Checked body execution ===== *)
+
+Theorem call_lock_send_success_components:
+  machine_well_typed am /\ scope_well_typed scope /\
+  (if nr then
+     case cx.nonreentrant_slot of
+       NONE => raise (Error (TypeError "nonreentrant slot missing"))
+     | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
+                      (mut = View \/ mut = Pure)
+   else return ()) (initial_state am [scope]) = (INL (),lock_st) /\
+  send_call_value mut cx lock_st = (INL (),body_st) ==>
+  body_st.scopes = [scope] /\
+  body_st.immutables = am.immutables /\
+  state_well_typed body_st /\
+  accounts_well_typed body_st.accounts
+Proof
+  strip_tac >>
+  `body_st.scopes = [scope] /\ body_st.immutables = am.immutables /\
+   state_well_typed body_st` by
+    (irule call_lock_send_prefix_body_state_ready_c53 >> simp[] >>
+     qexistsl [`cx`, `mut`, `nr`] >> simp[bind_def, ignore_bind_def]) >>
+  `lock_st.accounts = (initial_state am [scope]).accounts` by
+    metis_tac[call_lock_action_preserves_accounts_c53] >>
+  `accounts_well_typed lock_st.accounts` by
+    gvs[initial_state_accounts_well_typed] >>
+  `accounts_well_typed body_st.accounts` by
+    metis_tac[send_call_value_accounts_well_typed_c53] >>
+  simp[]
+QED
+
+Theorem checked_explicit_body_from_states_preserves_components:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  checked_contract_runtime_ready art mods am tx /\
+  machine_well_typed am /\ call_tx_well_typed tx /\
+  ALOOKUP mods src = SOME ts /\
+  MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
+  cx = initial_evaluation_context am.sources am.layouts tx src /\
+  bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
+  (if nr then
+     case cx.nonreentrant_slot of
+       NONE => raise (Error (TypeError "nonreentrant slot missing"))
+     | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
+                      (mut = View \/ mut = Pure)
+   else return ()) (initial_state am [scope]) = (INL (),lock_st) /\
+  send_call_value mut cx lock_st = (INL (),body_st) /\
+  eval_stmts cx body body_st = (res,st') ==>
+  state_well_typed st' /\ accounts_well_typed st'.accounts
+Proof
+  strip_tac >>
+  `scope_well_typed scope` by
+    metis_tac[bind_arguments_scope_well_typed_from_success] >>
+  `body_st.scopes = [scope] /\ body_st.immutables = am.immutables /\
+   state_well_typed body_st /\ accounts_well_typed body_st.accounts` by
+    (irule call_lock_send_success_components >> simp[] >>
+     qexistsl [`cx`, `lock_st`, `mut`, `nr`] >> simp[]) >>
+  `ALL_DISTINCT (MAP (string_to_num o FST) args)` by
+    (`check_function_body am.layouts tx.target mods art src mut nr
+       args dflts ret body` by
+       metis_tac[check_contract_function_body_MEM] >>
+     gvs[check_function_body_def, params_ok_def]) >>
+  irule checked_explicit_external_body_preserves_machine_components >>
+  qexistsl [`am`, `args`, `art`, `body`, `cx`, `dflts`, `mods`, `mut`, `nr`,
+            `raw`, `res`, `ret`, `scope`, `src`, `body_st`, `ts`, `tx`, `vals`] >>
+  simp[]
+QED
+
+(* WIP: the semantic monad expansion needs a stable named intermediate-state
+ * helper before this composition proof can avoid generated variable names.
+Theorem checked_explicit_call_run_success_components:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  checked_contract_runtime_ready art mods am tx /\
+  machine_well_typed am /\ call_tx_well_typed tx /\
+  ALOOKUP mods src = SOME ts /\
+  MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
+  cx = initial_evaluation_context am.sources am.layouts tx src /\
+  bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
+  (do
+     (if nr then
+        case cx.nonreentrant_slot of
+          NONE => raise (Error (TypeError "nonreentrant slot missing"))
+        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
+                         (mut = View \/ mut = Pure)
+      else return ());
+     send_call_value mut cx;
+     eval_stmts cx body
+   od (initial_state am [scope]) = (res,st')) /\
+  (res = INL () \/ ?v. res = INR (ReturnException v)) ==>
+  state_well_typed st' /\ accounts_well_typed st'.accounts
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `cx = _` SUBST_ALL_TAC >>
+  `scope_well_typed scope` by
+    metis_tac[bind_arguments_scope_well_typed_from_success] >>
+  qpat_x_assum `do _; _; _ od _ = _` mp_tac >>
+  simp[bind_def, ignore_bind_def] >>
+  Cases_on `(if nr then
+               case cx.nonreentrant_slot of
+                 NONE => raise (Error (TypeError "nonreentrant slot missing"))
+               | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
+                                (mut = View \/ mut = Pure)
+             else return ()) (initial_state am [scope])` >>
+  Cases_on `q` >> gvs[]
+  >- (Cases_on `send_call_value mut cx r` >> Cases_on `q` >> gvs[] >>
+      strip_tac >>
+      rename1 `send_call_value mut cx r = (INL (),body_st)` >>
+      `body_st.scopes = [scope] /\ body_st.immutables = am.immutables /\
+       state_well_typed body_st` by
+        (irule call_lock_send_prefix_body_state_ready_c53 >> simp[] >>
+         qexistsl [`cx`, `mut`, `nr`] >> simp[bind_def, ignore_bind_def]) >>
+      `accounts_well_typed lock_st.accounts` by
+        (imp_res_tac call_lock_action_preserves_accounts_c53 >>
+         gvs[initial_state_accounts_well_typed]) >>
+      `accounts_well_typed body_st.accounts` by
+        metis_tac[send_call_value_accounts_well_typed_c53] >>
+      irule checked_explicit_external_body_preserves_machine_components >>
+      qexistsl [`am`, `args`, `art`, `dflts`, `mods`, `mut`, `nr`, `raw`,
+                `ret`, `scope`, `src`, `ts`, `tx`, `vals`, `cx`, `body`, `body_st`] >>
+      simp[])
+  >- (Cases_on `res` >> gvs[] >> Cases_on `e` >> gvs[return_def, raise_def])
+QED
+*)
 
 (* ===== Failure rollback ===== *)
 
