@@ -206,14 +206,14 @@ QED
 (* ===== Static-map transfer helpers ===== *)
 
 Theorem check_contract_toplevel_body_MEM[local]:
-  check_contract F layouts addr mods = SOME art /\
+  check_contract in_deploy layouts addr mods = SOME art /\
   ALOOKUP mods src = SOME ts /\
   MEM tl ts ==>
   check_toplevel_body layouts addr mods art src tl
 Proof
   rw[check_contract_def] >> gvs[] >>
   `MEM (src,ts) mods` by metis_tac[ALOOKUP_MEM] >>
-  `check_module layouts addr mods (build_contract_type_artifact F mods) (src,ts)` by
+  `check_module layouts addr mods (build_contract_type_artifact in_deploy mods) (src,ts)` by
     metis_tac[EVERY_MEM] >>
   pop_assum mp_tac >>
   simp[check_module_def, EVERY_MEM] >>
@@ -221,7 +221,7 @@ Proof
 QED
 
 Theorem check_contract_function_body_MEM:
-  check_contract F layouts addr mods = SOME art /\
+  check_contract in_deploy layouts addr mods = SOME art /\
   ALOOKUP mods src = SOME ts /\
   MEM (FunctionDecl vis mut nr raw fn args dflts ret body) ts ==>
   check_function_body layouts addr mods art src mut nr args dflts ret body
