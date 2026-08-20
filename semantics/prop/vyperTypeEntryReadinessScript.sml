@@ -7,6 +7,7 @@
  * - provided_args_typed
  * - checked_defaults_ready
  * - checked_call_inputs_ready
+ * - checked_external_call_inputs_ready
  * - checked_deployment_constants_ready_setup
  *)
 
@@ -113,6 +114,24 @@ Definition checked_call_inputs_ready_def:
   checked_call_inputs_ready tenv cx am args dflts vals <=>
     provided_args_typed tenv args vals /\
     checked_defaults_ready cx am args dflts vals
+End
+
+(* Public-call wrapper: resolve the selected external entry exactly as
+ * call_external does, then require readiness for that entry's parameters and
+ * defaults. Lookup failures need no input readiness because they return the
+ * original machine without executing a body. *)
+Definition checked_external_call_inputs_ready_def:
+  checked_external_call_inputs_ready (am:abstract_machine) (tx:call_txn) <=>
+    let src = find_function_module am tx.target tx.function_name in
+    let cx = initial_evaluation_context am.sources am.layouts tx src in
+    case ALOOKUP am.sources tx.target of
+    | NONE => T
+    | SOME mods =>
+        !mut nr params dflts ret stmts.
+          lookup_exported_function cx am tx.function_name =
+            SOME (mut,nr,params,dflts,ret,stmts) ==>
+          checked_call_inputs_ready
+            (type_env_all_modules mods) cx am params dflts tx.args
 End
 
 (* Successful evaluation of a well-typed default list returns values of the
@@ -229,6 +248,19 @@ Proof
     metis_tac[bind_arguments_succeeds_stmt] >>
   qexists_tac `scope` >> simp[args_values_typed_def] >>
   rpt strip_tac >> first_x_assum drule >> strip_tac >> gvs[]
+QED
+
+Theorem checked_external_call_inputs_ready_selected:
+  checked_external_call_inputs_ready am tx /\
+  ALOOKUP am.sources tx.target = SOME mods /\
+  src = find_function_module am tx.target tx.function_name /\
+  cx = initial_evaluation_context am.sources am.layouts tx src /\
+  lookup_exported_function cx am tx.function_name =
+    SOME (mut,nr,params,dflts,ret,stmts) ==>
+  checked_call_inputs_ready
+    (type_env_all_modules mods) cx am params dflts tx.args
+Proof
+  rw[checked_external_call_inputs_ready_def] >> gvs[]
 QED
 
 Theorem checked_call_inputs_ready_bind_arguments:
