@@ -247,6 +247,18 @@ Proof
   qexistsl [`cx`,`mut = View \/ mut = Pure`,`nr`,`body_st'`] >> simp[]
 QED
 
+Theorem evaluate_all_constants_preserves_machine_static_components:
+  evaluate_all_constants cx am addr mods = SOME am_c ==>
+  am_c.sources = am.sources /\ am_c.exports = am.exports /\
+  am_c.layouts = am.layouts
+Proof
+  qid_spec_tac `am_c` >> qid_spec_tac `am` >> Induct_on `mods`
+  >- rw[evaluate_all_constants_def] >>
+  rpt gen_tac >> PairCases_on `h` >> rw[evaluate_all_constants_def] >>
+  gvs[AllCaseEqs()] >> first_x_assum drule >>
+  simp[merge_constants_def]
+QED
+
 Theorem deployment_initial_machine_well_typed:
   machine_well_typed am /\
   initial_immutables (type_env_all_modules mods) mods = SOME imms ==>
