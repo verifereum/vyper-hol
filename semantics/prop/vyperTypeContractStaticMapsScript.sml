@@ -727,6 +727,90 @@ Proof
 QED
 
 
+(* The deployment flag only changes function signatures. *)
+Theorem add_toplevel_static_maps_nonsig_mode_rel[local]:
+  art1.cta_bare_globals = art2.cta_bare_globals /\
+  art1.cta_bare_global_assignable = art2.cta_bare_global_assignable /\
+  art1.cta_toplevel_vtypes = art2.cta_toplevel_vtypes /\
+  art1.cta_flag_members = art2.cta_flag_members ==>
+  (add_toplevel_static_maps T src tl art1).cta_bare_globals =
+    (add_toplevel_static_maps F src tl art2).cta_bare_globals /\
+  (add_toplevel_static_maps T src tl art1).cta_bare_global_assignable =
+    (add_toplevel_static_maps F src tl art2).cta_bare_global_assignable /\
+  (add_toplevel_static_maps T src tl art1).cta_toplevel_vtypes =
+    (add_toplevel_static_maps F src tl art2).cta_toplevel_vtypes /\
+  (add_toplevel_static_maps T src tl art1).cta_flag_members =
+    (add_toplevel_static_maps F src tl art2).cta_flag_members
+Proof
+  Cases_on `tl` >>
+  simp[add_toplevel_static_maps_def, include_fn_sig_def] >>
+  TRY (Cases_on `f`) >> TRY (Cases_on `v0`) >>
+  simp[add_toplevel_static_maps_def, include_fn_sig_def]
+QED
+
+Theorem add_module_static_maps_nonsig_mode_rel[local]:
+  art1.cta_bare_globals = art2.cta_bare_globals /\
+  art1.cta_bare_global_assignable = art2.cta_bare_global_assignable /\
+  art1.cta_toplevel_vtypes = art2.cta_toplevel_vtypes /\
+  art1.cta_flag_members = art2.cta_flag_members ==>
+  (add_module_static_maps T src tls art1).cta_bare_globals =
+    (add_module_static_maps F src tls art2).cta_bare_globals /\
+  (add_module_static_maps T src tls art1).cta_bare_global_assignable =
+    (add_module_static_maps F src tls art2).cta_bare_global_assignable /\
+  (add_module_static_maps T src tls art1).cta_toplevel_vtypes =
+    (add_module_static_maps F src tls art2).cta_toplevel_vtypes /\
+  (add_module_static_maps T src tls art1).cta_flag_members =
+    (add_module_static_maps F src tls art2).cta_flag_members
+Proof
+  qid_spec_tac `art2` >> qid_spec_tac `art1` >>
+  Induct_on `tls` >- simp[add_module_static_maps_def] >>
+  rpt gen_tac >> strip_tac >> simp[add_module_static_maps_def] >>
+  simp[GSYM add_module_static_maps_def] >> first_x_assum irule >>
+  drule_all add_toplevel_static_maps_nonsig_mode_rel >> metis_tac[]
+QED
+
+Theorem add_contract_static_maps_nonsig_mode_rel[local]:
+  art1.cta_bare_globals = art2.cta_bare_globals /\
+  art1.cta_bare_global_assignable = art2.cta_bare_global_assignable /\
+  art1.cta_toplevel_vtypes = art2.cta_toplevel_vtypes /\
+  art1.cta_flag_members = art2.cta_flag_members ==>
+  (FOLDL (\art (src,tls). add_module_static_maps T src tls art) art1 mods).
+      cta_bare_globals =
+    (FOLDL (\art (src,tls). add_module_static_maps F src tls art) art2 mods).
+      cta_bare_globals /\
+  (FOLDL (\art (src,tls). add_module_static_maps T src tls art) art1 mods).
+      cta_bare_global_assignable =
+    (FOLDL (\art (src,tls). add_module_static_maps F src tls art) art2 mods).
+      cta_bare_global_assignable /\
+  (FOLDL (\art (src,tls). add_module_static_maps T src tls art) art1 mods).
+      cta_toplevel_vtypes =
+    (FOLDL (\art (src,tls). add_module_static_maps F src tls art) art2 mods).
+      cta_toplevel_vtypes /\
+  (FOLDL (\art (src,tls). add_module_static_maps T src tls art) art1 mods).
+      cta_flag_members =
+    (FOLDL (\art (src,tls). add_module_static_maps F src tls art) art2 mods).
+      cta_flag_members
+Proof
+  qid_spec_tac `art2` >> qid_spec_tac `art1` >> Induct_on `mods` >- simp[] >>
+  gen_tac >> PairCases_on `h` >> rpt gen_tac >> strip_tac >> simp[] >>
+  first_x_assum irule >>
+  drule_all add_module_static_maps_nonsig_mode_rel >> metis_tac[]
+QED
+
+Theorem build_contract_type_artifact_nonsig_mode_irrelevant:
+  (build_contract_type_artifact T mods).cta_bare_globals =
+    (build_contract_type_artifact F mods).cta_bare_globals /\
+  (build_contract_type_artifact T mods).cta_bare_global_assignable =
+    (build_contract_type_artifact F mods).cta_bare_global_assignable /\
+  (build_contract_type_artifact T mods).cta_toplevel_vtypes =
+    (build_contract_type_artifact F mods).cta_toplevel_vtypes /\
+  (build_contract_type_artifact T mods).cta_flag_members =
+    (build_contract_type_artifact F mods).cta_flag_members
+Proof
+  simp[build_contract_type_artifact_def] >>
+  irule add_contract_static_maps_nonsig_mode_rel >> simp[]
+QED
+
 (* ===== Static-map soundness bridges for contract artifacts ===== *)
 
 Theorem add_toplevel_static_maps_toplevel_vtypes_sound:
