@@ -11,9 +11,10 @@
 
 Theory vyperTypeDeploymentMachine
 Ancestors
-  vyperContext vyperState vyperInterpreter vyperTypeInvariants
+  vyperContext vyperState vyperInterpreter vyperTypeSystem vyperTypeInvariants
   vyperTypeInitialState vyperTypeEntryReadiness vyperTypeContract
-  vyperTypeContractStaticMaps vyperTypeContractContext vyperTypeContractSoundness
+  vyperTypeContractStaticMaps vyperTypeContractContext vyperTypeContractFunction
+  vyperTypeBindArguments vyperTypeContractSoundness
   vyperTypeExternalCallMachine
 
 val _ = Parse.hide "body";
@@ -64,6 +65,88 @@ Proof
       toplevel_vtypes_complete_def, bare_globals_complete_def,
       bare_global_assignable_complete_def, flag_members_complete_def] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem checked_constructor_body_typing_package[local]:
+  check_contract T layouts addr mods = SOME art /\
+  ALOOKUP mods NONE = SOME ts /\
+  lookup_function NONE fn Deploy ts = SOME (mut,nr,args,dflts,ret,body) ==>
+  ?env_body env_after.
+    env_body.current_src = NONE /\
+    env_body.type_defs = type_env_all_modules mods /\
+    env_body.fn_sigs = art.cta_fn_sigs /\
+    env_body.bare_globals = art.cta_bare_globals /\
+    env_body.bare_global_assignable = art.cta_bare_global_assignable /\
+    env_body.toplevel_vtypes = art.cta_toplevel_vtypes /\
+    env_body.flag_members = art.cta_flag_members /\
+    type_stmts env_body ret body = SOME env_after /\
+    (!id typ. MEM (id,typ) args ==>
+       FLOOKUP env_body.var_types (string_to_num id) = SOME typ /\
+       FLOOKUP env_body.var_assignable (string_to_num id) = SOME T) /\
+    (!n ty. FLOOKUP env_body.var_types n = SOME ty ==>
+       ?id. MEM (id,ty) args /\ n = string_to_num id) /\
+    (!n b. FLOOKUP env_body.var_assignable n = SOME b ==>
+       ?id typ. MEM (id,typ) args /\ n = string_to_num id /\ b = T)
+Proof
+  strip_tac >>
+  drule lookup_function_Deploy_SOME_cases >> strip_tac >> gvs[]
+  >- (qexistsl [`artifact_env art mods NONE`, `artifact_env art mods NONE`] >>
+      simp[artifact_env_def, Once type_stmt_def]) >>
+  `check_function_body layouts addr mods art NONE mut nr args dflts ret body` by
+    (irule check_contract_function_body_MEM >> metis_tac[]) >>
+  gvs[check_function_body_def, optionTheory.IS_SOME_EXISTS] >>
+  qexistsl [`function_entry_env art mods NONE args`, `x'`] >>
+  gvs[function_entry_env_def, artifact_env_def,
+      FOLDL_extend_local_args_static, params_ok_def] >>
+  rpt conj_tac >>
+  FIRST
+    [rpt strip_tac >>
+       drule_all FOLDL_extend_local_args_formal_lookup >> simp[],
+     rpt strip_tac >>
+       drule_all FOLDL_extend_local_args_var_types_range >> rw[] >> gvs[],
+     rpt strip_tac >>
+       drule_all FOLDL_extend_local_args_var_assignable_range >> rw[] >> gvs[]]
+QED
+
+Theorem checked_constructor_body_setup:
+  check_contract T am.layouts tx.target mods = SOME deploy_art /\
+  check_contract F am.layouts tx.target mods = SOME runtime_art /\
+  ALOOKUP am.sources tx.target = SOME mods /\
+  ALOOKUP mods NONE = SOME ts /\
+  lookup_function NONE tx.function_name Deploy ts =
+    SOME (mut,nr,args,dflts,ret,body) /\
+  cx = (initial_evaluation_context am.sources am.layouts tx NONE
+          with in_deploy := T) /\
+  bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
+  ALL_DISTINCT (MAP (string_to_num o FST) args) /\
+  st.scopes = [scope] /\ state_well_typed st /\
+  env_immutables_consistent (artifact_env deploy_art mods NONE) cx st /\
+  context_well_typed cx ==>
+  ?env_body env_after.
+    type_stmts env_body ret body = SOME env_after /\
+    env_consistent env_body cx st /\
+    context_well_typed cx /\ functions_well_typed cx /\
+    state_well_typed st
+Proof
+  strip_tac >>
+  `env_context_consistent (artifact_env deploy_art mods NONE) cx` by
+    (gvs[] >> irule checked_deployment_env_context_consistent >> simp[]) >>
+  `functions_well_typed cx` by
+    (gvs[] >> irule check_contract_functions_well_typed_deploy >> simp[]) >>
+  drule_all checked_constructor_body_typing_package >> strip_tac >>
+  qexistsl [`env_body`,`env_after`] >> simp[] >>
+  rw[env_consistent_def]
+  >- (irule env_context_consistent_same_static_maps >>
+      qexists `artifact_env deploy_art mods NONE` >>
+      gvs[artifact_env_def, get_tenv_def, initial_evaluation_context_def])
+  >- (`(st with scopes := [scope]) = st` by
+        gvs[evaluation_state_component_equality] >>
+      pop_assum (fn th => SUBST1_TAC (GSYM th)) >>
+      irule bind_arguments_env_scopes_consistent >>
+      qexistsl [`args`,`type_env_all_modules mods`,`vals`] >>
+      gvs[get_tenv_def, initial_evaluation_context_def] >> metis_tac[])
+  >- (gvs[env_immutables_consistent_def, artifact_env_def] >>
+      rpt conj_tac >> first_assum ACCEPT_TAC)
 QED
 
 Theorem deployment_initial_machine_well_typed:
