@@ -32,7 +32,7 @@ Proof
   >- simp[get_tenv_def, initial_evaluation_context_def]
   >- simp[current_module_def, initial_evaluation_context_def]
   >- (irule check_contract_fn_sigs_consistent_initial >> simp[])
-  >- (irule check_contract_fn_sigs_complete_initial >> simp[])
+  >- (irule check_contract_fn_sigs_declared_complete_initial >> simp[])
   >- (irule check_contract_toplevel_vtypes_complete_initial >> simp[])
   >- (irule check_contract_bare_globals_complete_initial >> simp[])
   >- (irule check_contract_bare_global_assignable_complete_initial >> simp[])
@@ -68,11 +68,12 @@ Proof
   simp[fn_sigs_consistent_def, get_module_code_stk]
 QED
 
-Theorem fn_sigs_complete_stk[local]:
+Theorem fn_sigs_declared_complete_stk[local]:
   !sigs cx stk.
-    fn_sigs_complete sigs (cx with stk := stk) <=> fn_sigs_complete sigs cx
+    fn_sigs_declared_complete sigs (cx with stk := stk) <=>
+    fn_sigs_declared_complete sigs cx
 Proof
-  simp[fn_sigs_complete_def, get_module_code_stk]
+  simp[fn_sigs_declared_complete_def, get_module_code_stk]
 QED
 
 Theorem toplevel_vtypes_complete_stk[local]:
@@ -116,7 +117,7 @@ Proof
   >- simp[get_tenv_def, initial_evaluation_context_def]
   >- simp[current_module_def, initial_evaluation_context_def]
   >- (irule check_contract_fn_sigs_consistent_initial >> simp[])
-  >- (irule check_contract_fn_sigs_complete_initial >> simp[])
+  >- (irule check_contract_fn_sigs_declared_complete_initial >> simp[])
   >- (irule check_contract_toplevel_vtypes_complete_initial >> simp[])
   >- (irule check_contract_bare_globals_complete_initial >> simp[])
   >- (irule check_contract_bare_global_assignable_complete_initial >> simp[])
@@ -162,8 +163,8 @@ Proof
   >- simp[current_module_def]
   >- (simp[fn_sigs_consistent_stk] >>
       irule check_contract_fn_sigs_consistent_initial >> simp[])
-  >- (simp[fn_sigs_complete_stk] >>
-      irule check_contract_fn_sigs_complete_initial >> simp[])
+  >- (simp[fn_sigs_declared_complete_stk] >>
+      irule check_contract_fn_sigs_declared_complete_initial >> simp[])
   >- (simp[toplevel_vtypes_complete_stk] >>
       irule check_contract_toplevel_vtypes_complete_initial >> simp[])
   >- (simp[bare_globals_complete_stk] >>
@@ -206,14 +207,14 @@ QED
 (* ===== Static-map transfer helpers ===== *)
 
 Theorem check_contract_toplevel_body_MEM[local]:
-  check_contract F layouts addr mods = SOME art /\
+  check_contract in_deploy layouts addr mods = SOME art /\
   ALOOKUP mods src = SOME ts /\
   MEM tl ts ==>
   check_toplevel_body layouts addr mods art src tl
 Proof
   rw[check_contract_def] >> gvs[] >>
   `MEM (src,ts) mods` by metis_tac[ALOOKUP_MEM] >>
-  `check_module layouts addr mods (build_contract_type_artifact F mods) (src,ts)` by
+  `check_module layouts addr mods (build_contract_type_artifact in_deploy mods) (src,ts)` by
     metis_tac[EVERY_MEM] >>
   pop_assum mp_tac >>
   simp[check_module_def, EVERY_MEM] >>
@@ -221,7 +222,7 @@ Proof
 QED
 
 Theorem check_contract_function_body_MEM:
-  check_contract F layouts addr mods = SOME art /\
+  check_contract in_deploy layouts addr mods = SOME art /\
   ALOOKUP mods src = SOME ts /\
   MEM (FunctionDecl vis mut nr raw fn args dflts ret body) ts ==>
   check_function_body layouts addr mods art src mut nr args dflts ret body
@@ -340,12 +341,19 @@ Theorem artifact_fn_sigs_lookup_transfer_initial:
   check_contract F layouts addr mods = SOME art /\
   ALOOKUP sources addr = SOME mods /\
   tx.target = addr /\
-  fn_sigs_complete fn_sigs (initial_evaluation_context sources layouts tx src) /\
+  fn_sigs_declared_complete fn_sigs
+    (initial_evaluation_context sources layouts tx src) /\
   FLOOKUP (function_entry_env art mods entry_src args).fn_sigs k = SOME sig ==>
   FLOOKUP fn_sigs k = SOME sig
 Proof
-  PairCases_on `k` >>
-  rw[function_entry_env_def, artifact_env_def, check_contract_def, FOLDL_extend_local_args_static] >> gvs[] >>
+  PairCases_on `k` >> strip_tac >>
+  `~(initial_evaluation_context sources layouts tx src).in_deploy` by
+    simp[initial_evaluation_context_def] >>
+  drule fn_sigs_declared_complete_nondeploy >> strip_tac >>
+  `fn_sigs_complete fn_sigs
+     (initial_evaluation_context sources layouts tx src)` by metis_tac[] >>
+  gvs[function_entry_env_def, artifact_env_def, check_contract_def,
+      FOLDL_extend_local_args_static] >>
   drule_all build_contract_type_artifact_fn_sigs_sound >> rw[] >>
   Cases_on `sig` >>
   gvs[fn_sigs_complete_def, get_module_code_def, initial_evaluation_context_def] >>

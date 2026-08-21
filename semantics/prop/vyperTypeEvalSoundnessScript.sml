@@ -255,11 +255,11 @@ Proof
   simp[fn_sigs_consistent_def, get_module_code_def]
 QED
 
-Theorem fn_sigs_complete_stk_irrelevant[local]:
-  !sigs cx f. fn_sigs_complete sigs (cx with stk updated_by f) <=>
-              fn_sigs_complete sigs cx
+Theorem fn_sigs_declared_complete_stk_irrelevant[local]:
+  !sigs cx f. fn_sigs_declared_complete sigs (cx with stk updated_by f) <=>
+              fn_sigs_declared_complete sigs cx
 Proof
-  simp[fn_sigs_complete_def, get_module_code_def]
+  simp[fn_sigs_declared_complete_def, get_module_code_def]
 QED
 
 Theorem toplevel_vtypes_complete_stk_irrelevant[local]:
@@ -300,7 +300,7 @@ Theorem functions_well_typed_stk_irrelevant[local]:
 Proof
   simp[functions_well_typed_def, get_module_code_def,
        get_tenv_stk_irrelevant, fn_sigs_consistent_stk_irrelevant,
-       fn_sigs_complete_stk_irrelevant,
+       fn_sigs_declared_complete_stk_irrelevant,
        toplevel_vtypes_complete_stk_irrelevant,
        bare_globals_complete_stk_irrelevant,
        bare_global_assignable_complete_stk_irrelevant,
@@ -637,7 +637,8 @@ Proof
   rw[env_consistent_def]
   >- (gvs[env_context_consistent_def] >>
       rw[env_context_consistent_def, get_tenv_stk_irrelevant,
-         fn_sigs_consistent_stk_irrelevant, fn_sigs_complete_stk_irrelevant,
+         fn_sigs_consistent_stk_irrelevant,
+         fn_sigs_declared_complete_stk_irrelevant,
          toplevel_vtypes_complete_stk_irrelevant,
          bare_globals_complete_stk_irrelevant,
          bare_global_assignable_complete_stk_irrelevant,
