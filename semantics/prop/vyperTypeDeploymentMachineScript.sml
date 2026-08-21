@@ -11,10 +11,12 @@
 
 Theory vyperTypeDeploymentMachine
 Ancestors
-  vyperContext vyperState vyperInterpreter vyperTypeSystem vyperTypeInvariants
+  alist list rich_list vyperContext vyperState vyperInterpreter vyperTypeSystem vyperTypeInvariants
   vyperTypeInitialState vyperTypeEntryReadiness vyperTypeContract
   vyperTypeContractStaticMaps vyperTypeContractContext vyperTypeContractFunction
-  vyperTypeBindArguments vyperTypeContractSoundness
+  vyperTypeBindArguments vyperTypeStmtSoundness
+  vyperTypeCallGraph vyperTypeCallGraphSoundness
+  vyperTypeCallStackSoundness vyperTypeContractSoundness
   vyperTypeExternalCallMachine
 
 val _ = Parse.hide "body";
@@ -147,6 +149,71 @@ Proof
       gvs[get_tenv_def, initial_evaluation_context_def] >> metis_tac[])
   >- (gvs[env_immutables_consistent_def, artifact_env_def] >>
       rpt conj_tac >> first_assum ACCEPT_TAC)
+QED
+
+Theorem checked_constructor_body_call_evaluation_safe[local]:
+  check_contract T am.layouts tx.target mods = SOME art /\
+  ALOOKUP am.sources tx.target = SOME mods /\
+  ALOOKUP mods NONE = SOME ts /\
+  MEM (FunctionDecl Deploy mut nr raw tx.function_name args dflts ret body) ts ==>
+  call_evaluation_safe
+    (initial_evaluation_context am.sources am.layouts tx NONE with in_deploy := T)
+    (int_calls_stmts body)
+Proof
+  rpt strip_tac >>
+  `calls_follow_call_graph (contract_call_edges mods) (NONE,tx.function_name)
+     (int_calls_stmts body)` by
+    (rw[calls_follow_call_graph_def, EVERY_MEM, call_edge_rel_def] >>
+     irule contract_call_edges_function >>
+     qexistsl [`args`,`body`,`dflts`,`mut`,`nr`,`raw`,`ret`,`ts`,`Deploy`] >>
+     simp[function_int_calls_def] >> metis_tac[ALOOKUP_MEM]) >>
+  `(initial_evaluation_context am.sources am.layouts tx NONE with in_deploy := T) =
+   ((initial_evaluation_context am.sources am.layouts tx NONE with in_deploy := T)
+      with stk := [(NONE,tx.function_name)])` by
+    simp[initial_evaluation_context_def] >>
+  pop_assum SUBST1_TAC >>
+  irule (INST_TYPE [``:'a`` |-> ``:num``]
+    checked_contract_call_evaluation_safe_singleton) >>
+  qexistsl [`art`,`am.layouts`,`mods`] >> simp[initial_evaluation_context_def]
+QED
+
+Theorem checked_constructor_body_preserves_components:
+  check_contract T am.layouts tx.target mods = SOME deploy_art /\
+  check_contract F am.layouts tx.target mods = SOME runtime_art /\
+  ALOOKUP am.sources tx.target = SOME mods /\
+  ALOOKUP mods NONE = SOME ts /\
+  lookup_function NONE tx.function_name Deploy ts =
+    SOME (mut,nr,args,dflts,ret,body) /\
+  cx = (initial_evaluation_context am.sources am.layouts tx NONE
+          with in_deploy := T) /\
+  bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
+  ALL_DISTINCT (MAP (string_to_num o FST) args) /\
+  st.scopes = [scope] /\ state_well_typed st /\
+  accounts_well_typed st.accounts /\
+  env_immutables_consistent (artifact_env deploy_art mods NONE) cx st /\
+  context_well_typed cx /\ eval_stmts cx body st = (res,st') ==>
+  state_well_typed st' /\ accounts_well_typed st'.accounts
+Proof
+  strip_tac >>
+  drule_all checked_constructor_body_setup >> strip_tac >>
+  `call_evaluation_safe cx (int_calls_stmts body)` by
+    (drule lookup_function_Deploy_SOME_cases >> strip_tac >> gvs[]
+     >- (`(initial_evaluation_context am.sources am.layouts tx NONE
+              with in_deploy := T) =
+            ((initial_evaluation_context am.sources am.layouts tx NONE
+                with in_deploy := T)
+               with stk := [(NONE,tx.function_name)])` by
+            simp[initial_evaluation_context_def] >>
+         pop_assum SUBST1_TAC >>
+         irule (INST_TYPE [``:'a`` |-> ``:num``]
+           checked_contract_call_evaluation_safe_singleton) >>
+         qexistsl [`deploy_art`,`am.layouts`,`mods`] >>
+         simp[initial_evaluation_context_def, calls_follow_call_graph_def]) >>
+     gvs[] >> irule checked_constructor_body_call_evaluation_safe >>
+     qexistsl [`args`,`deploy_art`,`dflts`,`mods`,`mut`,`nr`,`raw`,`ret`,`ts`] >>
+     simp[]) >>
+  irule eval_stmts_preserves_state_and_accounts_well_typed >>
+  qexistsl [`cx`,`env_body`,`env_after`,`res`,`ret`,`body`,`st`] >> simp[]
 QED
 
 Theorem deployment_initial_machine_well_typed:
