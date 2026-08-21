@@ -945,6 +945,14 @@ Proof
   rw[env_context_consistent_def] >> gvs[] >> metis_tac[]
 QED
 
+Theorem env_immutables_consistent_immutables_cong:
+  st1.immutables = st2.immutables ==>
+  (env_immutables_consistent env cx st1 <=>
+   env_immutables_consistent env cx st2)
+Proof
+  simp[env_immutables_consistent_def]
+QED
+
 Theorem immutables_ready_env_immutables_consistent:
   env.bare_globals = env_base.bare_globals /\
   env.bare_global_assignable = env_base.bare_global_assignable /\

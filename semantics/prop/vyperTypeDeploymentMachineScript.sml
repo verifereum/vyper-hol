@@ -369,6 +369,68 @@ Proof
   qexistsl [`am`,`imms`,`layouts`,`mods`,`sources`,`tx.target`,`tx`] >> simp[]
 QED
 
+Theorem checked_constructor_prefix_run_preserves_machine_well_typed:
+  check_contract T layouts target mods = SOME deploy_art /\
+  check_contract F layouts target mods = SOME runtime_art /\
+  ALOOKUP sources target = SOME mods /\ tx.target = target /\
+  cx = (initial_evaluation_context sources layouts tx NONE with in_deploy := T) /\
+  ALOOKUP mods NONE = SOME ts /\
+  lookup_function NONE tx.function_name Deploy ts =
+    SOME (mut,nr,args,dflts,ret,body) /\
+  initial_immutables (type_env_all_modules mods) mods = SOME imms /\
+  installed_am = (am with immutables updated_by CONS (target,imms)) /\
+  machine_well_typed installed_am /\ context_well_typed cx /\
+  checked_deployment_constants_ready cx installed_am target mods /\
+  evaluate_all_constants cx installed_am target mods = SOME am_c /\
+  bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
+  (if nr then
+     case cx.nonreentrant_slot of
+       NONE => raise (Error (TypeError "nonreentrant slot missing"))
+     | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
+                      (mut = View \/ mut = Pure)
+   else return ()) (initial_state am_c [scope]) = (INL (),lock_st) /\
+  send_call_value mut cx lock_st = (INL (),body_st) /\
+  eval_stmts cx body body_st = (res,body_st') /\
+  (if nr /\ ~(mut = View \/ mut = Pure) then
+     case cx.nonreentrant_slot of
+       NONE => return ()
+     | SOME slot => release_nonreentrant_lock cx.txn.target slot
+   else return ()) body_st' = (INL (),final_st) ==>
+  machine_well_typed
+    (abstract_machine_from_state am_c.sources am_c.exports am_c.layouts final_st)
+Proof
+  strip_tac >>
+  `machine_well_typed am_c` by
+    (gvs[checked_deployment_constants_ready_def] >>
+     drule_all evaluate_all_constants_preserves_accounts >>
+     gvs[machine_well_typed_def, deployment_constants_output_typed_def]) >>
+  `scope_well_typed scope` by
+    metis_tac[bind_arguments_scope_well_typed_from_success] >>
+  `body_st.scopes = [scope] /\ body_st.immutables = am_c.immutables /\
+   state_well_typed body_st /\ accounts_well_typed body_st.accounts` by
+    (irule call_lock_send_success_components >> simp[] >>
+     qexistsl [`cx`,`lock_st`,`mut`,`nr`] >> simp[]) >>
+  `env_immutables_consistent (artifact_env deploy_art mods NONE) cx
+     (initial_state am_c [scope])` by
+    (irule checked_deployment_constants_establish_initial_env_immutables_consistent >>
+     qexistsl [`am`,`imms`,`layouts`,`runtime_art`,`sources`,`target`,`tx`] >> gvs[]) >>
+  `env_immutables_consistent (artifact_env deploy_art mods NONE) cx body_st` by
+    (irule (iffLR env_immutables_consistent_immutables_cong) >>
+     qexists `initial_state am_c [scope]` >> simp[initial_state_def]) >>
+  `ALL_DISTINCT (MAP (string_to_num o FST) args)` by
+    (drule lookup_function_Deploy_SOME_cases >> strip_tac >> gvs[] >>
+     `check_function_body layouts tx.target mods deploy_art NONE mut nr
+        args dflts ret body` by
+       (irule check_contract_function_body_MEM >> simp[] >>
+        conj_tac >- (qexists `T` >> simp[]) >>
+        qexistsl [`tx.function_name`,`raw`,`Deploy`] >> simp[]) >>
+     gvs[check_function_body_def, params_ok_def]) >>
+  irule checked_constructor_run_from_states_preserves_machine_well_typed >>
+  qexistsl [`args`,`body`,`body_st`,`body_st'`,`cx`,`deploy_art`,`dflts`,`layouts`,
+    `mods`,`mut`,`nr`,`res`,`ret`,`runtime_art`,`scope`,`sources`,`ts`,`tx`,`vals`] >>
+  simp[]
+QED
+
 Theorem evaluate_all_constants_preserves_machine_static_components:
   evaluate_all_constants cx am addr mods = SOME am_c ==>
   am_c.sources = am.sources /\ am_c.exports = am.exports /\
