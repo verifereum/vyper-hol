@@ -762,7 +762,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem call_external_function_deploy_success_cases[local]:
+Theorem call_external_function_deploy_success_cases:
   cx.in_deploy /\
   call_external_function am cx nr mut ts all_mods args dflts vals body ret =
     (INL v, am_out) /\
