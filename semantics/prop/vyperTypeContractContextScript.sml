@@ -32,7 +32,7 @@ Proof
   >- simp[get_tenv_def, initial_evaluation_context_def]
   >- simp[current_module_def, initial_evaluation_context_def]
   >- (irule check_contract_fn_sigs_consistent_initial >> simp[])
-  >- (irule check_contract_fn_sigs_complete_initial >> simp[])
+  >- (irule check_contract_fn_sigs_declared_complete_initial >> simp[])
   >- (irule check_contract_toplevel_vtypes_complete_initial >> simp[])
   >- (irule check_contract_bare_globals_complete_initial >> simp[])
   >- (irule check_contract_bare_global_assignable_complete_initial >> simp[])
@@ -68,11 +68,12 @@ Proof
   simp[fn_sigs_consistent_def, get_module_code_stk]
 QED
 
-Theorem fn_sigs_complete_stk[local]:
+Theorem fn_sigs_declared_complete_stk[local]:
   !sigs cx stk.
-    fn_sigs_complete sigs (cx with stk := stk) <=> fn_sigs_complete sigs cx
+    fn_sigs_declared_complete sigs (cx with stk := stk) <=>
+    fn_sigs_declared_complete sigs cx
 Proof
-  simp[fn_sigs_complete_def, get_module_code_stk]
+  simp[fn_sigs_declared_complete_def, get_module_code_stk]
 QED
 
 Theorem toplevel_vtypes_complete_stk[local]:
@@ -116,7 +117,7 @@ Proof
   >- simp[get_tenv_def, initial_evaluation_context_def]
   >- simp[current_module_def, initial_evaluation_context_def]
   >- (irule check_contract_fn_sigs_consistent_initial >> simp[])
-  >- (irule check_contract_fn_sigs_complete_initial >> simp[])
+  >- (irule check_contract_fn_sigs_declared_complete_initial >> simp[])
   >- (irule check_contract_toplevel_vtypes_complete_initial >> simp[])
   >- (irule check_contract_bare_globals_complete_initial >> simp[])
   >- (irule check_contract_bare_global_assignable_complete_initial >> simp[])
@@ -162,8 +163,8 @@ Proof
   >- simp[current_module_def]
   >- (simp[fn_sigs_consistent_stk] >>
       irule check_contract_fn_sigs_consistent_initial >> simp[])
-  >- (simp[fn_sigs_complete_stk] >>
-      irule check_contract_fn_sigs_complete_initial >> simp[])
+  >- (simp[fn_sigs_declared_complete_stk] >>
+      irule check_contract_fn_sigs_declared_complete_initial >> simp[])
   >- (simp[toplevel_vtypes_complete_stk] >>
       irule check_contract_toplevel_vtypes_complete_initial >> simp[])
   >- (simp[bare_globals_complete_stk] >>

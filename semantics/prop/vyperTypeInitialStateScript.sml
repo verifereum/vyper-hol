@@ -818,7 +818,7 @@ Theorem env_context_consistent_empty_static_maps:
   env.toplevel_vtypes = FEMPTY /\
   env.flag_members = FEMPTY /\
   fn_sigs_consistent fn_sigs cx /\
-  fn_sigs_complete fn_sigs cx /\
+  fn_sigs_declared_complete fn_sigs cx /\
   toplevel_vtypes_complete FEMPTY cx /\
   bare_globals_complete FEMPTY cx /\
   bare_global_assignable_complete FEMPTY cx /\
@@ -1071,7 +1071,8 @@ Proof
        toplevel_vtypes_complete_def, bare_globals_complete_def,
        bare_global_assignable_complete_def, flag_members_complete_def,
        env_scopes_consistent_def, env_immutables_consistent_def,
-       fn_sigs_consistent_def, fn_sigs_complete_def, state_well_typed_def,
+       fn_sigs_consistent_def, fn_sigs_declared_complete_def,
+       state_well_typed_def,
        scope_well_typed_def, vyperStateTheory.lookup_scopes_def,
        accounts_well_typed_def, account_well_typed_def, machine_well_typed_def,
        vfmStateTheory.lookup_account_def, vfmStateTheory.empty_accounts_def,

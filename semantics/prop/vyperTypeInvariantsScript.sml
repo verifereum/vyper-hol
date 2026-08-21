@@ -71,6 +71,7 @@ Definition fn_sigs_declared_complete_def:
     !src fn ts vis fm nr raw args dflts ret body.
       get_module_code cx src = SOME ts /\
       MEM (FunctionDecl vis fm nr raw fn args dflts ret body) ts /\
+      (vis = Internal \/ (cx.in_deploy /\ vis = Deploy)) /\
       lookup_callable_function cx.in_deploy fn ts =
         SOME (fm,nr,args,dflts,ret,body) ==>
       FLOOKUP fn_sigs (src,fn) =

@@ -441,6 +441,129 @@ Proof
   metis_tac[contract_fn_sig_key_MEM]
 QED
 
+Theorem add_toplevel_static_maps_fn_sigs_preserve_deploy[local]:
+  FLOOKUP art.cta_fn_sigs k = SOME sig /\
+  ~MEM k (fn_sig_keys_toplevel T src tl) ==>
+  FLOOKUP (add_toplevel_static_maps T src tl art).cta_fn_sigs k = SOME sig
+Proof
+  Cases_on `tl` >>
+  rw[add_toplevel_static_maps_def, fn_sig_keys_toplevel_def,
+     include_fn_sig_def, FLOOKUP_UPDATE] >>
+  TRY (Cases_on `f`) >> TRY (Cases_on `v0`) >>
+  gvs[add_toplevel_static_maps_def, fn_sig_keys_toplevel_def,
+      include_fn_sig_def, FLOOKUP_UPDATE]
+QED
+
+Theorem add_module_static_maps_fn_sigs_preserve_deploy[local]:
+  FLOOKUP art.cta_fn_sigs k = SOME sig /\
+  ~MEM k (FLAT (MAP (fn_sig_keys_toplevel T src) tls)) ==>
+  FLOOKUP (add_module_static_maps T src tls art).cta_fn_sigs k = SOME sig
+Proof
+  qid_spec_tac `art` >> Induct_on `tls` >-
+    rw[add_module_static_maps_def] >>
+  rw[add_module_static_maps_def] >> simp[GSYM add_module_static_maps_def] >>
+  first_x_assum (qspec_then `add_toplevel_static_maps T src h art` irule) >>
+  simp[] >> irule add_toplevel_static_maps_fn_sigs_preserve_deploy >> simp[]
+QED
+
+Theorem add_module_static_maps_fn_sigs_complete_deploy[local]:
+  ALL_DISTINCT (FLAT (MAP (fn_sig_keys_toplevel T src) tls)) /\
+  MEM (FunctionDecl vis fm nr raw fn args dflts ret body) tls /\
+  (vis = Internal \/ vis = Deploy) ==>
+  FLOOKUP (add_module_static_maps T src tls art).cta_fn_sigs (src,fn) =
+    SOME (fn_sig_of args dflts ret)
+Proof
+  qid_spec_tac `art` >> Induct_on `tls` >-
+    rw[add_module_static_maps_def] >>
+  gen_tac >> rw[add_module_static_maps_def] >> gvs[]
+  >- (simp[GSYM add_module_static_maps_def] >>
+      irule add_module_static_maps_fn_sigs_preserve_deploy >>
+      simp[add_toplevel_static_maps_def, include_fn_sig_def, FLOOKUP_UPDATE] >>
+      gvs[ALL_DISTINCT_APPEND, fn_sig_keys_toplevel_def, include_fn_sig_def])
+  >- (simp[GSYM add_module_static_maps_def] >>
+      irule add_module_static_maps_fn_sigs_preserve_deploy >>
+      simp[add_toplevel_static_maps_def, include_fn_sig_def, FLOOKUP_UPDATE] >>
+      gvs[ALL_DISTINCT_APPEND, fn_sig_keys_toplevel_def, include_fn_sig_def])
+  >- (gvs[ALL_DISTINCT_APPEND] >>
+      first_x_assum
+        (qspec_then `add_toplevel_static_maps T src h art` mp_tac) >>
+      simp[add_module_static_maps_def] >> strip_tac >>
+      irule add_toplevel_static_maps_fn_sigs_preserve_deploy >> simp[] >>
+      gvs[MEM_FLAT, MEM_MAP] >>
+      metis_tac[module_fn_sig_key_MEM_T_Internal,
+                 module_fn_sig_key_MEM_T_Deploy])
+  >- (gvs[ALL_DISTINCT_APPEND] >>
+      first_x_assum
+        (qspec_then `add_toplevel_static_maps T src h art` mp_tac) >>
+      simp[add_module_static_maps_def] >> strip_tac >>
+      irule add_toplevel_static_maps_fn_sigs_preserve_deploy >> simp[] >>
+      gvs[MEM_FLAT, MEM_MAP] >>
+      metis_tac[module_fn_sig_key_MEM_T_Internal,
+                 module_fn_sig_key_MEM_T_Deploy])
+QED
+
+Theorem add_contract_static_maps_fn_sigs_preserve_deploy[local]:
+  FLOOKUP art.cta_fn_sigs k = SOME sig /\
+  ~MEM k (contract_keys (fn_sig_keys_toplevel T) mods) ==>
+  FLOOKUP
+    (FOLDL (\art (src,tls). add_module_static_maps T src tls art) art mods).cta_fn_sigs k =
+    SOME sig
+Proof
+  qid_spec_tac `art` >> Induct_on `mods` >- rw[] >>
+  gen_tac >> PairCases_on `h` >> rw[contract_keys_def] >>
+  first_x_assum (qspec_then `add_module_static_maps T h0 h1 art` irule) >>
+  conj_tac >- simp[contract_keys_def] >>
+  irule add_module_static_maps_fn_sigs_preserve_deploy >> simp[]
+QED
+
+Theorem add_contract_static_maps_fn_sigs_complete_MEM_deploy[local]:
+  contract_namespaces_ok T mods /\ MEM (src,tls) mods /\
+  MEM (FunctionDecl vis fm nr raw fn args dflts ret body) tls /\
+  (vis = Internal \/ vis = Deploy) ==>
+  FLOOKUP
+    (FOLDL (\art (src,tls). add_module_static_maps T src tls art) art mods).cta_fn_sigs
+      (src,fn) = SOME (fn_sig_of args dflts ret)
+Proof
+  qid_spec_tac `art` >> Induct_on `mods` >- rw[] >>
+  gen_tac >> PairCases_on `h` >> rw[] >> gvs[]
+  >- (irule add_contract_static_maps_fn_sigs_preserve_deploy >>
+      conj_tac >-
+        (gvs[contract_namespaces_ok_def, contract_keys_def,
+             ALL_DISTINCT_APPEND] >>
+         metis_tac[module_fn_sig_key_MEM_T_Internal,
+                    module_fn_sig_key_MEM_T_Deploy]) >>
+      irule add_module_static_maps_fn_sigs_complete_deploy >>
+      gvs[contract_namespaces_ok_def, contract_keys_def,
+          ALL_DISTINCT_APPEND] >> metis_tac[])
+  >- (irule add_contract_static_maps_fn_sigs_preserve_deploy >>
+      conj_tac >-
+        (gvs[contract_namespaces_ok_def, contract_keys_def,
+             ALL_DISTINCT_APPEND] >>
+         metis_tac[module_fn_sig_key_MEM_T_Internal,
+                    module_fn_sig_key_MEM_T_Deploy]) >>
+      irule add_module_static_maps_fn_sigs_complete_deploy >>
+      gvs[contract_namespaces_ok_def, contract_keys_def,
+          ALL_DISTINCT_APPEND] >> metis_tac[])
+  >- (first_x_assum
+        (qspec_then `add_module_static_maps T h0 h1 art` mp_tac) >>
+      impl_tac >-
+        (gvs[contract_namespaces_ok_def, contract_keys_def,
+             ALL_DISTINCT_APPEND]) >>
+      strip_tac >> irule add_module_static_maps_fn_sigs_preserve_deploy >>
+      simp[contract_keys_def] >>
+      gvs[contract_namespaces_ok_def, contract_keys_def,
+          ALL_DISTINCT_APPEND] >> metis_tac[])
+  >- (first_x_assum
+        (qspec_then `add_module_static_maps T h0 h1 art` mp_tac) >>
+      impl_tac >-
+        (gvs[contract_namespaces_ok_def, contract_keys_def,
+             ALL_DISTINCT_APPEND]) >>
+      strip_tac >> irule add_module_static_maps_fn_sigs_preserve_deploy >>
+      simp[contract_keys_def] >>
+      gvs[contract_namespaces_ok_def, contract_keys_def,
+          ALL_DISTINCT_APPEND] >> metis_tac[])
+QED
+
 Theorem contract_namespaces_ok_module_fn_sig_keys_deploy[local]:
   contract_namespaces_ok T mods /\ MEM (src,tls) mods ==>
   ALL_DISTINCT (FLAT (MAP (fn_sig_keys_toplevel T src) tls))
@@ -485,6 +608,22 @@ Proof
       gvs[fn_sig_of_def] >>
       irule ALOOKUP_ALL_DISTINCT_MEM >>
       gvs[contract_namespaces_ok_def])
+QED
+
+Theorem build_contract_type_artifact_fn_sigs_declared_complete_deploy:
+  contract_namespaces_ok T mods /\ ALOOKUP sources addr = SOME mods ==>
+  fn_sigs_declared_complete
+    (build_contract_type_artifact T mods).cta_fn_sigs
+    (initial_evaluation_context sources layouts
+       (tx with target := addr) src with in_deploy := T)
+Proof
+  rw[fn_sigs_declared_complete_def] >> gvs[] >>
+  gvs[get_module_code_def, initial_evaluation_context_def] >>
+  rw[build_contract_type_artifact_def] >>
+  `MEM (src',ts) mods` by metis_tac[ALOOKUP_MEM] >>
+  simp[GSYM fn_sig_of_def] >>
+  irule add_contract_static_maps_fn_sigs_complete_MEM_deploy >>
+  gvs[] >> metis_tac[]
 QED
 
 Theorem build_contract_type_artifact_fn_sigs_sound:
@@ -558,6 +697,33 @@ Proof
   gvs[get_module_code_def, initial_evaluation_context_def] >>
   irule build_contract_type_artifact_fn_sigs_complete >>
   simp[]
+QED
+
+Theorem check_contract_fn_sigs_declared_complete_deploy:
+  check_contract T layouts addr mods = SOME art /\
+  ALOOKUP sources addr = SOME mods ==>
+  fn_sigs_declared_complete art.cta_fn_sigs
+    (initial_evaluation_context sources layouts
+       (tx with target := addr) src with in_deploy := T)
+Proof
+  rw[check_contract_def] >> gvs[] >>
+  irule build_contract_type_artifact_fn_sigs_declared_complete_deploy >> simp[]
+QED
+
+Theorem check_contract_fn_sigs_declared_complete_initial:
+  check_contract F layouts addr mods = SOME art /\
+  ALOOKUP sources addr = SOME mods /\
+  tx.target = addr ==>
+  fn_sigs_declared_complete art.cta_fn_sigs
+    (initial_evaluation_context sources layouts tx src)
+Proof
+  strip_tac >>
+  `fn_sigs_complete art.cta_fn_sigs
+     (initial_evaluation_context sources layouts tx src)` by
+    (irule check_contract_fn_sigs_complete_initial >> simp[]) >>
+  `~(initial_evaluation_context sources layouts tx src).in_deploy` by
+    simp[initial_evaluation_context_def] >>
+  drule fn_sigs_declared_complete_nondeploy >> simp[]
 QED
 
 
