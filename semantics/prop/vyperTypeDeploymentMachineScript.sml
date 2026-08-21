@@ -111,13 +111,13 @@ Proof
 QED
 
 Theorem checked_constructor_body_setup:
-  check_contract T am.layouts tx.target mods = SOME deploy_art /\
-  check_contract F am.layouts tx.target mods = SOME runtime_art /\
-  ALOOKUP am.sources tx.target = SOME mods /\
+  check_contract T layouts tx.target mods = SOME deploy_art /\
+  check_contract F layouts tx.target mods = SOME runtime_art /\
+  ALOOKUP sources tx.target = SOME mods /\
   ALOOKUP mods NONE = SOME ts /\
   lookup_function NONE tx.function_name Deploy ts =
     SOME (mut,nr,args,dflts,ret,body) /\
-  cx = (initial_evaluation_context am.sources am.layouts tx NONE
+  cx = (initial_evaluation_context sources layouts tx NONE
           with in_deploy := T) /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
   ALL_DISTINCT (MAP (string_to_num o FST) args) /\
@@ -152,12 +152,12 @@ Proof
 QED
 
 Theorem checked_constructor_body_call_evaluation_safe[local]:
-  check_contract T am.layouts tx.target mods = SOME art /\
-  ALOOKUP am.sources tx.target = SOME mods /\
+  check_contract T layouts tx.target mods = SOME art /\
+  ALOOKUP sources tx.target = SOME mods /\
   ALOOKUP mods NONE = SOME ts /\
   MEM (FunctionDecl Deploy mut nr raw tx.function_name args dflts ret body) ts ==>
   call_evaluation_safe
-    (initial_evaluation_context am.sources am.layouts tx NONE with in_deploy := T)
+    (initial_evaluation_context sources layouts tx NONE with in_deploy := T)
     (int_calls_stmts body)
 Proof
   rpt strip_tac >>
@@ -167,24 +167,24 @@ Proof
      irule contract_call_edges_function >>
      qexistsl [`args`,`body`,`dflts`,`mut`,`nr`,`raw`,`ret`,`ts`,`Deploy`] >>
      simp[function_int_calls_def] >> metis_tac[ALOOKUP_MEM]) >>
-  `(initial_evaluation_context am.sources am.layouts tx NONE with in_deploy := T) =
-   ((initial_evaluation_context am.sources am.layouts tx NONE with in_deploy := T)
+  `(initial_evaluation_context sources layouts tx NONE with in_deploy := T) =
+   ((initial_evaluation_context sources layouts tx NONE with in_deploy := T)
       with stk := [(NONE,tx.function_name)])` by
     simp[initial_evaluation_context_def] >>
   pop_assum SUBST1_TAC >>
   irule (INST_TYPE [``:'a`` |-> ``:num``]
     checked_contract_call_evaluation_safe_singleton) >>
-  qexistsl [`art`,`am.layouts`,`mods`] >> simp[initial_evaluation_context_def]
+  qexistsl [`art`,`layouts`,`mods`] >> simp[initial_evaluation_context_def]
 QED
 
 Theorem checked_constructor_body_preserves_components:
-  check_contract T am.layouts tx.target mods = SOME deploy_art /\
-  check_contract F am.layouts tx.target mods = SOME runtime_art /\
-  ALOOKUP am.sources tx.target = SOME mods /\
+  check_contract T layouts tx.target mods = SOME deploy_art /\
+  check_contract F layouts tx.target mods = SOME runtime_art /\
+  ALOOKUP sources tx.target = SOME mods /\
   ALOOKUP mods NONE = SOME ts /\
   lookup_function NONE tx.function_name Deploy ts =
     SOME (mut,nr,args,dflts,ret,body) /\
-  cx = (initial_evaluation_context am.sources am.layouts tx NONE
+  cx = (initial_evaluation_context sources layouts tx NONE
           with in_deploy := T) /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
   ALL_DISTINCT (MAP (string_to_num o FST) args) /\
@@ -198,16 +198,16 @@ Proof
   drule_all checked_constructor_body_setup >> strip_tac >>
   `call_evaluation_safe cx (int_calls_stmts body)` by
     (drule lookup_function_Deploy_SOME_cases >> strip_tac >> gvs[]
-     >- (`(initial_evaluation_context am.sources am.layouts tx NONE
+     >- (`(initial_evaluation_context sources layouts tx NONE
               with in_deploy := T) =
-            ((initial_evaluation_context am.sources am.layouts tx NONE
+            ((initial_evaluation_context sources layouts tx NONE
                 with in_deploy := T)
                with stk := [(NONE,tx.function_name)])` by
             simp[initial_evaluation_context_def] >>
          pop_assum SUBST1_TAC >>
          irule (INST_TYPE [``:'a`` |-> ``:num``]
            checked_contract_call_evaluation_safe_singleton) >>
-         qexistsl [`deploy_art`,`am.layouts`,`mods`] >>
+         qexistsl [`deploy_art`,`layouts`,`mods`] >>
          simp[initial_evaluation_context_def, calls_follow_call_graph_def]) >>
      gvs[] >> irule checked_constructor_body_call_evaluation_safe >>
      qexistsl [`args`,`deploy_art`,`dflts`,`mods`,`mut`,`nr`,`raw`,`ret`,`ts`] >>
@@ -217,12 +217,12 @@ Proof
 QED
 
 Theorem checked_constructor_run_from_states_preserves_machine_well_typed:
-  check_contract T am_c.layouts tx.target mods = SOME deploy_art /\
-  check_contract F am_c.layouts tx.target mods = SOME runtime_art /\
-  ALOOKUP am_c.sources tx.target = SOME mods /\ ALOOKUP mods NONE = SOME ts /\
+  check_contract T layouts tx.target mods = SOME deploy_art /\
+  check_contract F layouts tx.target mods = SOME runtime_art /\
+  ALOOKUP sources tx.target = SOME mods /\ ALOOKUP mods NONE = SOME ts /\
   lookup_function NONE tx.function_name Deploy ts =
     SOME (mut,nr,args,dflts,ret,body) /\
-  cx = (initial_evaluation_context am_c.sources am_c.layouts tx NONE
+  cx = (initial_evaluation_context sources layouts tx NONE
           with in_deploy := T) /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
   ALL_DISTINCT (MAP (string_to_num o FST) args) /\
@@ -241,8 +241,9 @@ Proof
   strip_tac >>
   `state_well_typed body_st' /\ accounts_well_typed body_st'.accounts` by
     (irule checked_constructor_body_preserves_components >>
-     qexistsl [`am_c`,`args`,`body`,`cx`,`deploy_art`,`dflts`,`mods`,`mut`,`nr`,
-       `res`,`ret`,`runtime_art`,`scope`,`body_st`,`ts`,`tx`,`vals`] >> simp[]) >>
+     qexistsl [`args`,`body`,`cx`,`deploy_art`,`dflts`,`layouts`,`mods`,`mut`,`nr`,
+       `res`,`ret`,`runtime_art`,`scope`,`sources`,`body_st`,`ts`,`tx`,`vals`] >>
+     simp[]) >>
   irule release_action_success_machine_well_typed >>
   qexistsl [`cx`,`mut = View \/ mut = Pure`,`nr`,`body_st'`] >> simp[]
 QED
