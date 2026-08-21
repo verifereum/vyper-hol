@@ -343,6 +343,31 @@ Proof
        (qspecl_then [`src`,`id`,`bare_ty`,`tv`,`v`] mp_tac) >> simp[]
 QED
 
+Theorem checked_deployment_constants_establish_initial_env_immutables_consistent:
+  check_contract T layouts target mods = SOME deploy_art /\
+  check_contract F layouts target mods = SOME runtime_art /\
+  ALOOKUP sources target = SOME mods /\ tx.target = target /\
+  cx = (initial_evaluation_context sources layouts tx NONE
+          with in_deploy := T) /\
+  initial_immutables (type_env_all_modules mods) mods = SOME imms /\
+  evaluate_all_constants cx
+    (am with immutables updated_by CONS (target,imms)) target mods = SOME am_c ==>
+  env_immutables_consistent (artifact_env deploy_art mods NONE) cx
+    (initial_state am_c [scope])
+Proof
+  strip_tac >>
+  `deploy_art.cta_bare_globals = runtime_art.cta_bare_globals /\
+   deploy_art.cta_bare_global_assignable = runtime_art.cta_bare_global_assignable /\
+   deploy_art.cta_toplevel_vtypes = runtime_art.cta_toplevel_vtypes` by
+    (gvs[check_contract_def] >>
+     metis_tac[build_contract_type_artifact_nonsig_mode_irrelevant]) >>
+  irule immutables_ready_env_immutables_consistent >>
+  qexists `artifact_env runtime_art mods NONE` >>
+  gvs[artifact_env_def] >>
+  irule checked_deployment_constants_establish_immutables_ready >>
+  qexistsl [`am`,`imms`,`layouts`,`mods`,`sources`,`tx.target`,`tx`] >> simp[]
+QED
+
 Theorem evaluate_all_constants_preserves_machine_static_components:
   evaluate_all_constants cx am addr mods = SOME am_c ==>
   am_c.sources = am.sources /\ am_c.exports = am.exports /\
