@@ -32,6 +32,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.release.tag_name || inputs.release_tag }}
+          persist-credentials: false
 
       - name: Resolve release ref
         run: |
