@@ -425,7 +425,7 @@ Proof
   simp[]
 QED
 
-Theorem deploy_constants_setup_bare_globals_ready[local]:
+Theorem deploy_constants_setup_bare_globals_ready:
   check_contract F layouts target mods = SOME call_art /\
   ALOOKUP sources target = SOME mods /\
   tx.target = target /\
