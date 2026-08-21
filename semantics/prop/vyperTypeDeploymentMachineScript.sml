@@ -216,6 +216,37 @@ Proof
   qexistsl [`cx`,`env_body`,`env_after`,`res`,`ret`,`body`,`st`] >> simp[]
 QED
 
+Theorem checked_constructor_run_from_states_preserves_machine_well_typed:
+  check_contract T am_c.layouts tx.target mods = SOME deploy_art /\
+  check_contract F am_c.layouts tx.target mods = SOME runtime_art /\
+  ALOOKUP am_c.sources tx.target = SOME mods /\ ALOOKUP mods NONE = SOME ts /\
+  lookup_function NONE tx.function_name Deploy ts =
+    SOME (mut,nr,args,dflts,ret,body) /\
+  cx = (initial_evaluation_context am_c.sources am_c.layouts tx NONE
+          with in_deploy := T) /\
+  bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
+  ALL_DISTINCT (MAP (string_to_num o FST) args) /\
+  body_st.scopes = [scope] /\ state_well_typed body_st /\
+  accounts_well_typed body_st.accounts /\
+  env_immutables_consistent (artifact_env deploy_art mods NONE) cx body_st /\
+  context_well_typed cx /\ eval_stmts cx body body_st = (res,body_st') /\
+  (if nr /\ ~(mut = View \/ mut = Pure) then
+     case cx.nonreentrant_slot of
+       NONE => return ()
+     | SOME slot => release_nonreentrant_lock cx.txn.target slot
+   else return ()) body_st' = (INL (),final_st) ==>
+  machine_well_typed
+    (abstract_machine_from_state am_c.sources am_c.exports am_c.layouts final_st)
+Proof
+  strip_tac >>
+  `state_well_typed body_st' /\ accounts_well_typed body_st'.accounts` by
+    (irule checked_constructor_body_preserves_components >>
+     qexistsl [`am_c`,`args`,`body`,`cx`,`deploy_art`,`dflts`,`mods`,`mut`,`nr`,
+       `res`,`ret`,`runtime_art`,`scope`,`body_st`,`ts`,`tx`,`vals`] >> simp[]) >>
+  irule release_action_success_machine_well_typed >>
+  qexistsl [`cx`,`mut = View \/ mut = Pure`,`nr`,`body_st'`] >> simp[]
+QED
+
 Theorem deployment_initial_machine_well_typed:
   machine_well_typed am /\
   initial_immutables (type_env_all_modules mods) mods = SOME imms ==>
