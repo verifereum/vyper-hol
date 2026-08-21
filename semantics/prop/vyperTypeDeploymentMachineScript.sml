@@ -541,4 +541,45 @@ Proof
   simp[machine_well_typed_def]
 QED
 
+Theorem load_contract_establishes_machine_well_typed:
+  machine_well_typed am /\
+  check_contract T am.layouts tx.target mods = SOME deploy_art /\
+  check_contract F am.layouts tx.target mods = SOME runtime_art /\
+  ALOOKUP mods NONE = SOME ts /\
+  context_well_typed
+    (initial_evaluation_context ((tx.target,mods)::am.sources)
+       am.layouts tx NONE with in_deploy := T) /\
+  (!imms.
+     initial_immutables (type_env_all_modules mods) mods = SOME imms ==>
+     checked_deployment_constants_ready
+       (initial_evaluation_context ((tx.target,mods)::am.sources)
+          am.layouts tx NONE with in_deploy := T)
+       (am with <|immutables updated_by CONS (tx.target,imms);
+                  exports updated_by CONS (tx.target,exps)|>)
+       tx.target mods) /\
+  load_contract am tx mods exps = INL am_deployed ==>
+  machine_well_typed am_deployed
+Proof
+  strip_tac >>
+  drule load_contract_success_cases >> strip_tac >> gvs[] >>
+  `machine_well_typed
+     (am with <|immutables updated_by CONS (tx.target,imms);
+                exports updated_by CONS (tx.target,exps)|>)` by
+    (irule deployment_initial_machine_well_typed >> simp[] >>
+     qexists `mods` >> simp[]) >>
+  `machine_well_typed am_ctor` by
+    (irule checked_constructor_call_success_preserves_machine_well_typed >>
+     qexistsl
+       [`am with exports updated_by CONS (tx.target,exps)`,`args`,`body`,
+        `initial_evaluation_context ((tx.target,mods)::am.sources)
+           am.layouts tx NONE with in_deploy := T`,
+        `deploy_art`,`dflts`,`imms`,
+        `am with <|immutables updated_by CONS (tx.target,imms);
+                   exports updated_by CONS (tx.target,exps)|>`,
+        `am.layouts`,`mods`,`mut`,`nr`,`ret`,`runtime_art`,
+        `(tx.target,mods)::am.sources`,`tx.target`,`ts`,`tx`,`v`,`tx.args`] >>
+     gvs[]) >>
+  irule deployment_source_install_preserves_machine_well_typed >> simp[]
+QED
+
 val _ = export_theory();

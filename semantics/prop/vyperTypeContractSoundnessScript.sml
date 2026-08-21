@@ -139,7 +139,7 @@ QED
 
 (* ===== Deployment establishes runtime immutable readiness ===== *)
 
-Theorem load_contract_success_cases[local]:
+Theorem load_contract_success_cases:
   load_contract am tx mods exps = INL am_deployed ==>
   ?imms ts mut nr args dflts ret body v am_ctor.
     initial_immutables (type_env_all_modules mods) mods = SOME imms /\
