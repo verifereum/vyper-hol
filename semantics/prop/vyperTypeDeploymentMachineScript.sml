@@ -22,7 +22,7 @@ val _ = Parse.hide "body";
 Theorem env_context_consistent_enter_deploy[local]:
   env_context_consistent env cx /\
   fn_sigs_consistent env.fn_sigs (cx with in_deploy := T) /\
-  fn_sigs_complete env.fn_sigs (cx with in_deploy := T) ==>
+  fn_sigs_declared_complete env.fn_sigs (cx with in_deploy := T) ==>
   env_context_consistent env (cx with in_deploy := T)
 Proof
   rw[env_context_consistent_def] >>

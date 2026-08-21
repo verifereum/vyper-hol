@@ -2422,12 +2422,13 @@ Proof
   simp[fn_sigs_consistent_def]
 QED
 
-Theorem fn_sigs_complete_context_cong[local]:
+Theorem fn_sigs_declared_complete_context_cong[local]:
   (!src. get_module_code cx1 src = get_module_code cx2 src) /\
   cx1.in_deploy = cx2.in_deploy ==>
-  (fn_sigs_complete sigs cx1 <=> fn_sigs_complete sigs cx2)
+  (fn_sigs_declared_complete sigs cx1 <=>
+   fn_sigs_declared_complete sigs cx2)
 Proof
-  simp[fn_sigs_complete_def]
+  simp[fn_sigs_declared_complete_def]
 QED
 
 Theorem toplevel_vtypes_complete_context_cong[local]:
@@ -2475,9 +2476,9 @@ Proof
   `fn_sigs_consistent env.fn_sigs cx1 <=>
    fn_sigs_consistent env.fn_sigs cx2` by
     (irule fn_sigs_consistent_context_cong >> simp[]) >>
-  `fn_sigs_complete env.fn_sigs cx1 <=>
-   fn_sigs_complete env.fn_sigs cx2` by
-    (irule fn_sigs_complete_context_cong >> simp[]) >>
+  `fn_sigs_declared_complete env.fn_sigs cx1 <=>
+   fn_sigs_declared_complete env.fn_sigs cx2` by
+    (irule fn_sigs_declared_complete_context_cong >> simp[]) >>
   `toplevel_vtypes_complete env.toplevel_vtypes cx1 <=>
    toplevel_vtypes_complete env.toplevel_vtypes cx2` by
     (irule toplevel_vtypes_complete_context_cong >> simp[]) >>
