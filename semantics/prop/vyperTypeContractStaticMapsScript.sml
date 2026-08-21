@@ -564,6 +564,68 @@ Proof
           ALL_DISTINCT_APPEND] >> metis_tac[])
 QED
 
+Theorem fn_sig_keys_module_runtime_MEM_deploy[local]:
+  MEM k (FLAT (MAP (fn_sig_keys_toplevel F src) tls)) ==>
+  MEM k (FLAT (MAP (fn_sig_keys_toplevel T src) tls))
+Proof
+  rw[MEM_FLAT, MEM_MAP] >>
+  qexists `fn_sig_keys_toplevel T src y` >> conj_tac >-
+    (qexists `y` >> simp[]) >>
+  Cases_on `y` >>
+  gvs[fn_sig_keys_toplevel_def, include_fn_sig_def] >>
+  TRY (Cases_on `f`) >> TRY (Cases_on `v0`) >>
+  gvs[fn_sig_keys_toplevel_def, include_fn_sig_def]
+QED
+
+Theorem fn_sig_keys_module_deploy_implies_runtime_distinct[local]:
+  ALL_DISTINCT (FLAT (MAP (fn_sig_keys_toplevel T src) tls)) ==>
+  ALL_DISTINCT (FLAT (MAP (fn_sig_keys_toplevel F src) tls))
+Proof
+  Induct_on `tls` >- simp[] >> Cases_on `h` >>
+  simp[fn_sig_keys_toplevel_def, include_fn_sig_def, ALL_DISTINCT_APPEND] >>
+  TRY (Cases_on `f`) >> TRY (Cases_on `v0`) >>
+  gvs[fn_sig_keys_toplevel_def, include_fn_sig_def, ALL_DISTINCT_APPEND] >>
+  metis_tac[fn_sig_keys_module_runtime_MEM_deploy]
+QED
+
+Theorem contract_fn_keys_runtime_MEM_deploy[local]:
+  MEM k
+    (FLAT (MAP (\(src,tls). FLAT (MAP (fn_sig_keys_toplevel F src) tls)) mods)) ==>
+  MEM k
+    (FLAT (MAP (\(src,tls). FLAT (MAP (fn_sig_keys_toplevel T src) tls)) mods))
+Proof
+  rw[MEM_FLAT, MEM_MAP] >> PairCases_on `y` >>
+  qexists `FLAT (MAP (fn_sig_keys_toplevel T y0) y1)` >> conj_tac >-
+    (qexists `(y0,y1)` >> simp[]) >>
+  gvs[] >> metis_tac[fn_sig_keys_module_runtime_MEM_deploy]
+QED
+
+Theorem contract_fn_keys_deploy_implies_runtime_distinct[local]:
+  ALL_DISTINCT
+    (FLAT (MAP (\(src,tls). FLAT (MAP (fn_sig_keys_toplevel T src) tls)) mods)) ==>
+  ALL_DISTINCT
+    (FLAT (MAP (\(src,tls). FLAT (MAP (fn_sig_keys_toplevel F src) tls)) mods))
+Proof
+  Induct_on `mods` >- simp[] >> gen_tac >> PairCases_on `h` >>
+  simp[ALL_DISTINCT_APPEND] >> strip_tac >>
+  drule fn_sig_keys_module_deploy_implies_runtime_distinct >> strip_tac >>
+  first_x_assum drule >> strip_tac >> simp[] >>
+  rpt strip_tac >>
+  `MEM e (FLAT (MAP (fn_sig_keys_toplevel T h0) h1))` by
+    metis_tac[fn_sig_keys_module_runtime_MEM_deploy] >>
+  `MEM e
+     (FLAT (MAP (\(src,tls). FLAT (MAP (fn_sig_keys_toplevel T src) tls)) mods))` by
+    metis_tac[contract_fn_keys_runtime_MEM_deploy] >>
+  metis_tac[]
+QED
+
+Theorem contract_namespaces_ok_deploy_implies_runtime:
+  contract_namespaces_ok T mods ==> contract_namespaces_ok F mods
+Proof
+  rw[contract_namespaces_ok_def, contract_keys_def] >>
+  drule contract_fn_keys_deploy_implies_runtime_distinct >> simp[]
+QED
+
 Theorem contract_namespaces_ok_module_fn_sig_keys_deploy[local]:
   contract_namespaces_ok T mods /\ MEM (src,tls) mods ==>
   ALL_DISTINCT (FLAT (MAP (fn_sig_keys_toplevel T src) tls))
@@ -699,15 +761,32 @@ Proof
   simp[]
 QED
 
+Theorem check_contract_fn_sigs_consistent_deploy:
+  check_contract T layouts addr mods = SOME art /\
+  ALOOKUP sources addr = SOME mods /\ tx.target = addr ==>
+  fn_sigs_consistent art.cta_fn_sigs
+    (initial_evaluation_context sources layouts tx src with in_deploy := T)
+Proof
+  rw[check_contract_def, fn_sigs_consistent_def] >> gvs[] >>
+  drule build_contract_type_artifact_fn_sigs_sound_deploy >>
+  disch_then drule >> rw[] >>
+  qexistsl [`ts`,`fm`,`nr`,`params`,`dflts`,`body`] >>
+  simp[get_module_code_def, initial_evaluation_context_def]
+QED
+
 Theorem check_contract_fn_sigs_declared_complete_deploy:
   check_contract T layouts addr mods = SOME art /\
-  ALOOKUP sources addr = SOME mods ==>
+  ALOOKUP sources addr = SOME mods /\ tx.target = addr ==>
   fn_sigs_declared_complete art.cta_fn_sigs
-    (initial_evaluation_context sources layouts
-       (tx with target := addr) src with in_deploy := T)
+    (initial_evaluation_context sources layouts tx src with in_deploy := T)
 Proof
-  rw[check_contract_def] >> gvs[] >>
-  irule build_contract_type_artifact_fn_sigs_declared_complete_deploy >> simp[]
+  rw[check_contract_def, fn_sigs_declared_complete_def] >> gvs[] >>
+  gvs[get_module_code_def, initial_evaluation_context_def] >>
+  rw[build_contract_type_artifact_def] >>
+  `MEM (src',ts) mods` by metis_tac[ALOOKUP_MEM] >>
+  simp[GSYM fn_sig_of_def] >>
+  irule add_contract_static_maps_fn_sigs_complete_MEM_deploy >>
+  gvs[] >> metis_tac[]
 QED
 
 Theorem check_contract_fn_sigs_declared_complete_initial:
@@ -2062,6 +2141,41 @@ Proof
   simp[] >> metis_tac[]
 QED
 
+Theorem check_contract_nonsig_maps_complete_deploy:
+  check_contract T layouts addr mods = SOME art /\
+  ALOOKUP sources addr = SOME mods /\ tx.target = addr ==>
+  toplevel_vtypes_complete art.cta_toplevel_vtypes
+    (initial_evaluation_context sources layouts tx src) /\
+  bare_globals_complete art.cta_bare_globals
+    (initial_evaluation_context sources layouts tx src) /\
+  bare_global_assignable_complete art.cta_bare_global_assignable
+    (initial_evaluation_context sources layouts tx src) /\
+  flag_members_complete art.cta_flag_members
+    (initial_evaluation_context sources layouts tx src)
+Proof
+  rw[check_contract_def] >> gvs[] >>
+  `contract_namespaces_ok F mods` by
+    metis_tac[contract_namespaces_ok_deploy_implies_runtime] >>
+  mp_tac build_contract_type_artifact_nonsig_mode_irrelevant >>
+  strip_tac >> rpt conj_tac
+  >- (rw[toplevel_vtypes_complete_def] >>
+      gvs[get_module_code_def, initial_evaluation_context_def] >>
+      irule build_contract_type_artifact_toplevel_vtypes_complete >>
+      simp[] >> metis_tac[])
+  >- (rw[bare_globals_complete_def] >>
+      gvs[get_module_code_def, initial_evaluation_context_def] >>
+      irule build_contract_type_artifact_bare_globals_complete >>
+      simp[] >> metis_tac[])
+  >- (rw[bare_global_assignable_complete_def] >>
+      gvs[get_module_code_def, initial_evaluation_context_def] >>
+      irule build_contract_type_artifact_bare_global_assignable_complete >>
+      simp[] >> metis_tac[])
+  >- (rw[flag_members_complete_def] >>
+      gvs[get_module_code_def, initial_evaluation_context_def] >>
+      drule lookup_flag_SOME_MEM_FlagDecl >> strip_tac >>
+      irule build_contract_type_artifact_flag_members_complete >>
+      simp[] >> metis_tac[])
+QED
 
 
 Theorem check_contract_toplevel_decl_MEM:
