@@ -459,6 +459,13 @@ fun d_qualified_type_path () : (string list * string) decoder =
               ],
               field "attr" string)
 
+(* Array-like annotation bounds may be literal Int nodes or constant
+   expressions carrying a compiler-provided folded Int value. *)
+val annotation_bound : term decoder = achoose "annotation bound" [
+  check_ast_type "Int" $ field "value" numtm,
+  field "folded_value" $ check_ast_type "Int" $ field "value" numtm
+]
+
 (* Type from AST node (for subscript/name patterns) *)
 fun d_ast_type () : term decoder = achoose "ast_type" [
   (* Name node - check id for primitive types *)
@@ -493,13 +500,13 @@ fun d_ast_type () : term decoder = achoose "ast_type" [
     check (field "value" (check_ast_type "Name" $ field "id" string))
           (fn s => s = "String") "not String" $
     JSONDecode.map mk_JTA_String $
-      field "slice" $ check_ast_type "Int" $ field "value" numtm,
+      field "slice" annotation_bound,
 
     (* Bytes[N] *)
     check (field "value" (check_ast_type "Name" $ field "id" string))
           (fn s => s = "Bytes") "not Bytes" $
     JSONDecode.map mk_JTA_Bytes $
-      field "slice" $ check_ast_type "Int" $ field "value" numtm,
+      field "slice" annotation_bound,
 
     (* DynArray[T, N] *)
     check (field "value" (check_ast_type "Name" $ field "id" string))
@@ -507,18 +514,12 @@ fun d_ast_type () : term decoder = achoose "ast_type" [
     JSONDecode.map (fn (vt, len) => mk_JTA_DynArray(vt, len)) $
     field "slice" $ check_ast_type "Tuple" $ field "elements" $
       tuple2 (sub 0 (delay d_ast_type),
-              sub 1 $ achoose "DynArray len" [
-                check_ast_type "Int" $ field "value" numtm,
-                field "folded_value" $ check_ast_type "Int" $ field "value" numtm
-              ]),
+              sub 1 annotation_bound),
 
     (* Static array T[N] *)
     JSONDecode.map (fn (vt, len) => mk_JTA_StaticArray(vt, len)) $
     tuple2 (field "value" (delay d_ast_type),
-            field "slice" $ achoose "array len" [
-              check_ast_type "Int" $ field "value" numtm,
-              field "folded_value" $ check_ast_type "Int" $ field "value" numtm
-            ])
+            field "slice" annotation_bound)
   ],
 
   (* Tuple type *)
