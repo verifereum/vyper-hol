@@ -1734,9 +1734,9 @@ QED
 
 Definition fromk_def[simp]:
     fromk x  =
-    case x of 
-  (SOME (AK cx Apply st DoneK)) => (INL (), st) 
-  | (SOME (AK cx (ApplyExc ex) st DoneK)) => (INR ex, st)  
+    case x of
+  (SOME (AK cx Apply st DoneK)) => (INL (), st)
+  | (SOME (AK cx (ApplyExc ex) st DoneK)) => (INR ex, st)
   | _ => (INR $ Error (TypeError "fromk"), empty_state)
 End
 
@@ -1803,12 +1803,12 @@ QED
 
 
 Definition fromtvk_def:
-  fromtvk x = 
-  case  x of 
-     (SOME (AK cx (ApplyTv tv) st DoneK)) => (INL tv, st) 
-    |  (SOME (AK cx (ApplyExc ex) st DoneK)) => (INR ex, st) 
+  fromtvk x =
+  case  x of
+     (SOME (AK cx (ApplyTv tv) st DoneK)) => (INL tv, st)
+    |  (SOME (AK cx (ApplyExc ex) st DoneK)) => (INR ex, st)
     | _ => (INR $ Error (TypeError "fromtvk"), empty_state)
-End 
+End
 
 val () = cv_auto_trans fromtvk_def;
 
