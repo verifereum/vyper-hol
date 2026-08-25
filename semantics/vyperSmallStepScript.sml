@@ -521,12 +521,10 @@ Definition apply_val_array_def:
            (lift_option_type (extract_elements arr_tv v) "For not ArrayV" st) k
      | NONE => AK cx (ApplyExc (Error (TypeError "For array type"))) st k)
 End
-
 val () = apply_val_array_def
   |> SRULE [liftk1, prod_CASE_rator, sum_CASE_rator, option_CASE_rator,
             lift_option_type_def]
   |> cv_auto_trans;
-
 Definition apply_val_range2_def:
   apply_val_range2 cx v1 v2 st k =
     (case do rl <- lift_sum $ get_range_limits v1 v2;
@@ -536,12 +534,10 @@ Definition apply_val_range2_def:
        of (INR ex, st) => apply_exc cx ex st k
         | (INL vs, st) => AK cx (ApplyVals vs) st k)
 End
-
 val () = apply_val_range2_def
   |> SRULE [liftk1, prod_CASE_rator, sum_CASE_rator, option_CASE_rator,
             LET_RATOR, lift_sum_def, bind_def, ignore_bind_def]
   |> cv_auto_trans;
-
 Definition apply_val_subscript_def:
   apply_val_subscript cx arr_typ tv1 v2 st k =
     liftk cx ApplyTv (do
@@ -556,12 +552,10 @@ Definition apply_val_subscript_def:
        od
     od st) k
 End
-
 val () = apply_val_subscript_def
   |> SRULE [liftk1, prod_CASE_rator, sum_CASE_rator, option_CASE_rator,
             LET_RATOR, lift_option_type_def, lift_sum_def, bind_def, ignore_bind_def]
   |> cv_auto_trans;
-
 Definition apply_val_def:
   apply_val cx v st (ReturnK k) = apply_exc cx (ReturnException v) st k ∧
   apply_val cx v st (AssertK r k) =
@@ -1704,11 +1698,11 @@ Proof
 QED
 
 Definition fromk_def[simp]:
-    fromk x  =
+  fromk x =
     case x of
-  (SOME (AK cx Apply st DoneK)) => (INL (), st)
-  | (SOME (AK cx (ApplyExc ex) st DoneK)) => (INR ex, st)
-  | _ => (INR $ Error (TypeError "fromk"), empty_state)
+      (SOME (AK cx Apply st DoneK)) => (INL (), st)
+    | (SOME (AK cx (ApplyExc ex) st DoneK)) => (INR ex, st)
+    | _ => (INR $ Error (TypeError "fromk"), empty_state)
 End
 
 val () = cv_trans fromk_def;
@@ -1769,9 +1763,9 @@ QED
 
 Definition fromtvk_def:
   fromtvk x =
-  case  x of
-     (SOME (AK cx (ApplyTv tv) st DoneK)) => (INL tv, st)
-    |  (SOME (AK cx (ApplyExc ex) st DoneK)) => (INR ex, st)
+    case x of
+      (SOME (AK cx (ApplyTv tv) st DoneK)) => (INL tv, st)
+    | (SOME (AK cx (ApplyExc ex) st DoneK)) => (INR ex, st)
     | _ => (INR $ Error (TypeError "fromtvk"), empty_state)
 End
 
