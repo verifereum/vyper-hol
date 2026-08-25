@@ -9,7 +9,7 @@ Theory vyperTypeExtCallSoundness
 Ancestors
   list rich_list pred_set prim_rec arithmetic finite_map option pair sum
   vyperAST vyperValue vyperValueOperation vyperMisc vyperABI
-  vyperInterpreter vyperState vyperContext vyperStorage vyperTyping
+  vyperCreate vyperInterpreter vyperState vyperContext vyperStorage vyperTyping
   vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeInvariants vyperTypeValues
   vyperTypeEnv vyperTypeEnvExtension vyperTypeEnvPreservation vyperTypeScopePop
   vyperTypeABI vyperTypeBindArguments vyperTypeExprResult
@@ -1669,162 +1669,287 @@ Proof
       toplevel_value_typed_def, value_has_type_def]
 QED
 
-Theorem create_tail_sound:
-  !env cx es vs st kind rof ty.
-    runtime_consistent env cx st /\
-    exprs_runtime_typed env es vs /\
-    LENGTH es >= 2 /\
-    HD (MAP expr_type es) = BaseT AddressT /\
-    LAST (MAP expr_type es) = BaseT (UintT 256) ==>
-    runtime_consistent env cx
-      (SND ((do
-               type_check (vs <> []) "create no args";
-               amount <- lift_option_type (dest_NumV (LAST vs)) "create value";
-               target_addr <- lift_option_type (dest_AddressV (HD vs)) "create target";
-               accounts <- get_accounts;
-               self_acct <<- lookup_account cx.txn.target accounts;
-               check (amount <= self_acct.balance) "create insufficient balance";
-               new_addr <<- vfmContext$address_for_create cx.txn.target self_acct.nonce;
-               existing <<- lookup_account new_addr accounts;
-               check (~vfmExecution$account_already_created existing) "address collision";
-               (if amount > 0 then transfer_value cx.txn.target new_addr amount else return ());
-               update_accounts (vfmExecution$increment_nonce cx.txn.target);
-               if rof then return (Value (AddressV new_addr))
-               else return (Value (AddressV new_addr))
-             od) st)) /\
-    (!s. FST ((do
-                 type_check (vs <> []) "create no args";
-                 amount <- lift_option_type (dest_NumV (LAST vs)) "create value";
-                 target_addr <- lift_option_type (dest_AddressV (HD vs)) "create target";
-                 accounts <- get_accounts;
-                 self_acct <<- lookup_account cx.txn.target accounts;
-                 check (amount <= self_acct.balance) "create insufficient balance";
-                 new_addr <<- vfmContext$address_for_create cx.txn.target self_acct.nonce;
-                 existing <<- lookup_account new_addr accounts;
-                 check (~vfmExecution$account_already_created existing) "address collision";
-                 (if amount > 0 then transfer_value cx.txn.target new_addr amount else return ());
-                 update_accounts (vfmExecution$increment_nonce cx.txn.target);
-                 if rof then return (Value (AddressV new_addr))
-                 else return (Value (AddressV new_addr))
-               od) st) <> INR (Error (TypeError s)))
+(* ===== Shared creation helper soundness ===== *)
+
+Theorem LIST_REL_source_value_compose[local]:
+  !tys tvs.
+    LIST_REL (\ty tv. evaluate_type tenv ty = SOME tv) tys tvs ==>
+    !vs. LIST_REL value_has_type tvs vs ==>
+      LIST_REL
+        (\ty v. ?tv. evaluate_type tenv ty = SOME tv /\ value_has_type tv v)
+        tys vs
+Proof
+  Induct >> Cases_on `tvs` >> simp[] >> rpt strip_tac >>
+  Cases_on `vs` >> gvs[] >> metis_tac[]
+QED
+
+Theorem LIST_REL_APPEND_SINGLETON[local]:
+  LIST_REL R (xs ++ [x]) ys ==>
+  ?y ys'. ys = ys' ++ [y] /\ LIST_REL R xs ys' /\ R x y
+Proof
+  simp[GSYM SNOC_APPEND, LIST_REL_SNOC]
+QED
+
+Theorem exprs_runtime_typed_LIST_REL_source_value[local]:
+  exprs_runtime_typed env es vs ==>
+  LIST_REL
+    (\ty v. ?tv. evaluate_type env.type_defs ty = SOME tv /\
+                   value_has_type tv v)
+    (MAP expr_type es) vs
+Proof
+  rw[exprs_runtime_typed_def, values_have_types_LIST_REL_extcall] >>
+  drule LIST_REL_evaluate_expr_types >> strip_tac >>
+  drule_all LIST_REL_source_value_compose >> simp[]
+QED
+
+Theorem source_value_LIST_REL_runtime_types[local]:
+  !tys vs.
+    LIST_REL
+      (\ty v. ?tv. evaluate_type tenv ty = SOME tv /\ value_has_type tv v)
+      tys vs ==>
+    ?tvs.
+      LIST_REL (\ty tv. evaluate_type tenv ty = SOME tv) tys tvs /\
+      values_have_types tvs vs
+Proof
+  Induct_on `tys` >> Cases_on `vs` >>
+  simp[values_have_types_LIST_REL_extcall, PULL_EXISTS] >>
+  rpt strip_tac >> first_x_assum drule >> strip_tac >>
+  qexists_tac `tvs` >> gvs[values_have_types_LIST_REL_extcall]
+QED
+
+Theorem value_has_type_Address_dest[local]:
+  value_has_type (BaseTV AddressT) v ==>
+  ?a. dest_AddressV v = SOME a
+Proof
+  strip_tac >> Cases_on `v` >> gvs[value_has_type_def, dest_AddressV_def]
+QED
+
+Theorem value_has_type_Uint256_dest[local]:
+  value_has_type (BaseTV (UintT 256)) v ==>
+  ?n. dest_NumV v = SOME n
+Proof
+  strip_tac >> Cases_on `v` >> gvs[value_has_type_def, dest_NumV_def] >>
+  rename1 `0 <= i` >>
+  `~(i < 0:int)` by intLib.ARITH_TAC >>
+  qexists_tac `Num i` >> simp[]
+QED
+
+Theorem value_has_type_Bytes_dest[local]:
+  value_has_type (BaseTV (BytesT bd)) v ==>
+  ?bs. dest_BytesV v = SOME bs
+Proof
+  strip_tac >> Cases_on `v` >> gvs[value_has_type_def, dest_BytesV_def]
+QED
+
+Theorem value_has_type_Bytes32_dest[local]:
+  value_has_type (BaseTV (BytesT (Fixed 32))) v ==>
+  ?bs. dest_BytesV v = SOME bs /\ LENGTH bs = 32
+Proof
+  strip_tac >> Cases_on `v` >> gvs[value_has_type_def, dest_BytesV_def]
+QED
+
+Theorem create_args_runtime_typed_decode:
+  create_arg_types_ok kind has_salt tys /\
+  LIST_REL
+    (\ty v. ?tv. evaluate_type tenv ty = SOME tv /\ value_has_type tv v)
+    tys vs ==>
+  ?ops ctor_tys.
+    dest_create_args kind has_salt vs = SOME ops /\
+    create_arg_ctor_types kind has_salt tys = SOME ctor_tys /\
+    LIST_REL
+      (\ty v. ?tv. evaluate_type tenv ty = SOME tv /\ value_has_type tv v)
+      ctor_tys ops.co_ctor_args
 Proof
   rpt strip_tac >>
-  drule_all create_args_runtime_typed_dest >> strip_tac >> gvs[] >>
-  rw[bind_def, ignore_bind_def, type_check_def, check_def, assert_def,
-     raise_def, return_def, lift_option_type_def, get_accounts_def,
-     update_accounts_def]
-  >- (Cases_on `transfer_value cx.txn.target
-          (vfmContext$address_for_create cx.txn.target
-             (lookup_account cx.txn.target st.accounts).nonce) amount st` >>
-      gvs[return_def] >> Cases_on `q` >> gvs[] >>
-      qspecl_then [`env`, `cx`, `cx.txn.target`,
-                   `vfmContext$address_for_create cx.txn.target
-                      (lookup_account cx.txn.target st.accounts).nonce`,
-                   `amount`, `st`] mp_tac transfer_value_runtime_consistent >>
-      simp[] >> strip_tac >>
-      qspecl_then [`env`, `cx`, `r`, `cx.txn.target`] mp_tac
-        runtime_consistent_increment_nonce >> simp[update_accounts_def, return_def])
-  >- (qspecl_then [`env`, `cx`, `st`, `cx.txn.target`] mp_tac
-        runtime_consistent_increment_nonce >> simp[update_accounts_def, return_def])
-  >- (qpat_x_assum `FST _ = INR (Error (TypeError s))` mp_tac >>
-      rw[bind_def, ignore_bind_def, type_check_def, check_def, assert_def,
-         raise_def, return_def, lift_option_type_def, get_accounts_def,
-         update_accounts_def] >>
-      Cases_on `amount > 0` >> gvs[return_def] >>
-      Cases_on `transfer_value cx.txn.target
-          (vfmContext$address_for_create cx.txn.target
-             (lookup_account cx.txn.target st.accounts).nonce) amount st` >>
-      gvs[return_def] >> Cases_on `q` >> gvs[] >>
-      qspecl_then [`cx.txn.target`,
-                   `vfmContext$address_for_create cx.txn.target
-                      (lookup_account cx.txn.target st.accounts).nonce`,
-                   `amount`, `st`, `s`] mp_tac transfer_value_no_type_error >> simp[])
+  Cases_on `kind` >> Cases_on `has_salt` >>
+  gvs[create_arg_types_ok_def, dest_create_args_def,
+      create_arg_ctor_types_def, make_create_operands_def,
+      dest_optional_num_def, dest_optional_salt_def, dest_create_salt_def,
+      evaluate_type_def, value_has_type_def, AllCaseEqs()] >>
+  TRY (imp_res_tac value_has_type_Address_dest) >>
+  TRY (imp_res_tac value_has_type_Uint256_dest) >>
+  TRY (imp_res_tac value_has_type_Bytes32_dest) >>
+  TRY (imp_res_tac value_has_type_Bytes_dest) >>
+  gvs[dest_create_args_def, create_arg_ctor_types_def,
+      make_create_operands_def, dest_optional_num_def,
+      dest_optional_salt_def, dest_create_salt_def, AllCaseEqs()] >>
+  imp_res_tac LIST_REL_APPEND_SINGLETON >>
+  gvs[evaluate_type_def] >>
+  qpat_x_assum `value_has_type (BaseTV (BytesT (Fixed 32))) y`
+    (strip_assume_tac o MATCH_MP value_has_type_Bytes32_dest) >>
+  TRY (imp_res_tac value_has_type_Bytes_dest) >>
+  gvs[dest_create_args_def, create_arg_ctor_types_def,
+      make_create_operands_def, dest_optional_num_def,
+      dest_optional_salt_def, dest_create_salt_def,
+      evaluate_type_def, value_has_type_def, GSYM SNOC_APPEND,
+      AllCaseEqs()]
+QED
+
+Theorem encode_create_ctor_args_total:
+  LIST_REL
+    (\ty v. ?tv. evaluate_type tenv ty = SOME tv /\ value_has_type tv v)
+    tys vs ==>
+  ?bytes. encode_create_ctor_args tenv tys vs = SOME bytes
+Proof
+  strip_tac >> drule source_value_LIST_REL_runtime_types >> strip_tac >>
+  drule_all (cj 2 vyper_to_abi_total) >> strip_tac >>
+  simp[encode_create_ctor_args_def]
+QED
+
+Theorem build_create_code_total:
+  create_arg_types_ok kind has_salt tys /\
+  dest_create_args kind has_salt vs = SOME ops /\
+  create_arg_ctor_types kind has_salt tys = SOME ctor_tys /\
+  LIST_REL
+    (\ty v. ?tv. evaluate_type tenv ty = SOME tv /\ value_has_type tv v)
+    ctor_tys ops.co_ctor_args ==>
+  ?code_info. build_create_code tenv kind ops accounts ctor_tys = SOME code_info
+Proof
+  rpt strip_tac >>
+  drule encode_create_ctor_args_total >> strip_tac >>
+  Cases_on `kind` >> Cases_on `has_salt` >>
+  gvs[create_arg_types_ok_def, dest_create_args_def,
+      create_arg_ctor_types_def, make_create_operands_def,
+      dest_optional_num_def, dest_optional_salt_def, dest_create_salt_def,
+      build_create_code_def, encode_create_ctor_args_def,
+      evaluate_type_def, value_has_type_def, AllCaseEqs(), LET_THM] >>
+  Cases_on `b` >>
+  gvs[build_create_code_def, encode_create_ctor_args_def,
+      evaluate_type_def, value_has_type_def, AllCaseEqs(), LET_THM] >>
+  Cases_on `v` >> gvs[value_has_type_def]
+QED
+
+Theorem build_create_code_runtime_code_bound:
+  accounts_well_typed accounts /\
+  build_create_code tenv kind ops accounts ctor_tys = SOME code_info ==>
+  !code. code_info.cc_runtime_code = SOME code ==>
+         LENGTH code <= max_code_size
+Proof
+  rpt strip_tac >>
+  Cases_on `kind` >>
+  gvs[build_create_code_def, AllCaseEqs(), LET_THM,
+      accounts_well_typed_def, account_well_typed_def,
+      vfmConstantsTheory.max_code_size_def] >>
+  first_x_assum (qspec_then `a` mp_tac) >> simp[]
+QED
+
+Theorem install_created_code_accounts_well_typed:
+  accounts_well_typed accounts /\
+  (!code. runtime_code = SOME code ==> LENGTH code <= max_code_size) ==>
+  accounts_well_typed
+    (install_created_code address runtime_code accounts)
+Proof
+  Cases_on `runtime_code` >>
+  gvs[install_created_code_def, accounts_well_typed_def,
+      account_well_typed_def, vfmConstantsTheory.max_code_size_def,
+      vfmStateTheory.lookup_account_def, vfmStateTheory.update_account_def,
+      combinTheory.APPLY_UPDATE_THM] >>
+  rpt strip_tac >> Cases_on `addr = address` >> gvs[]
+QED
+
+Theorem lookup_account_increment_nonce_balance[simp]:
+  (lookup_account a (vfmExecution$increment_nonce b accounts)).balance =
+  (lookup_account a accounts).balance
+Proof
+  simp[vfmExecutionTheory.increment_nonce_def,
+       vfmStateTheory.lookup_account_def, vfmStateTheory.update_account_def,
+       combinTheory.APPLY_UPDATE_THM] >>
+  Cases_on `a = b` >> simp[]
+QED
+
+Theorem proceed_create_accounts_well_typed:
+  accounts_well_typed accounts /\
+  amount <= (lookup_account sender accounts).balance /\
+  (lookup_account address accounts).balance + amount < 2 ** 256 /\
+  (!code. runtime_code = SOME code ==> LENGTH code <= max_code_size) ==>
+  accounts_well_typed
+    (proceed_create_accounts sender address amount runtime_code accounts)
+Proof
+  rpt strip_tac >>
+  simp[proceed_create_accounts_def] >>
+  irule install_created_code_accounts_well_typed >>
+  simp[] >>
+  irule vfm_transfer_value_accounts_well_typed >>
+  simp[accounts_well_typed_increment_nonce] >>
+  qpat_x_assum `(lookup_account address accounts).balance + amount < 2 ** 256`
+    mp_tac >> simp[ADD_COMM]
+QED
+
+Theorem eval_create_accounts_well_typed:
+  accounts_well_typed st.accounts /\
+  dest_create_args kind has_salt vs = SOME ops /\
+  create_arg_ctor_types kind has_salt arg_tys = SOME ctor_tys /\
+  build_create_code (get_tenv cx) kind ops st.accounts ctor_tys = SOME code_info /\
+  eval_create cx kind has_salt rof arg_tys vs st = (res, st') ==>
+  accounts_well_typed st'.accounts
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `eval_create _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[eval_create_def, bind_def, ignore_bind_def, lift_option_type_def,
+       get_accounts_def, update_accounts_def, check_def, assert_def,
+       create_soft_failure_def, return_def, raise_def] >>
+  rpt (IF_CASES_TAC >>
+       gvs[bind_def, ignore_bind_def, update_accounts_def,
+           check_def, assert_def, create_soft_failure_def,
+           return_def, raise_def]) >>
+  rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  simp[update_accounts_def] >>
+  FIRST
+    [FIRST_ASSUM ACCEPT_TAC,
+     irule accounts_well_typed_increment_nonce >> FIRST_ASSUM ACCEPT_TAC,
+     irule proceed_create_accounts_well_typed >>
+     simp[] >>
+     rpt strip_tac >>
+     imp_res_tac build_create_code_runtime_code_bound]
 QED
 
 Theorem create_tail_result_sound_simp:
-  !env cx es vs st amount target_addr res st' kind rof.
+  !env cx es vs st res st' kind has_salt rof.
     runtime_consistent env cx st /\
     exprs_runtime_typed env es vs /\
-    LENGTH es >= 2 /\
-    HD (MAP expr_type es) = BaseT AddressT /\
-    LAST (MAP expr_type es) = BaseT (UintT 256) /\
-    dest_AddressV (HD vs) = SOME target_addr /\
-    dest_NumV (LAST vs) = SOME amount /\
-    ((case type_check (vs <> []) "create no args" st of
-        (INL x,s'') =>
-          (case return amount s'' of
-             (INL amount',s'') =>
-               (case return target_addr s'' of
-                  (INL target_addr',s'') =>
-                    do
-                      x <- check (amount' <= (lookup_account cx.txn.target s''.accounts).balance)
-                        "create insufficient balance";
-                      x <- check
-                        (~vfmExecution$account_already_created
-                           (lookup_account
-                              (vfmContext$address_for_create cx.txn.target
-                                 (lookup_account cx.txn.target s''.accounts).nonce)
-                              s''.accounts)) "address collision";
-                      x <- if amount' > 0 then
-                             transfer_value cx.txn.target
-                               (vfmContext$address_for_create cx.txn.target
-                                  (lookup_account cx.txn.target s''.accounts).nonce) amount'
-                           else return ();
-                      x <- update_accounts (vfmExecution$increment_nonce cx.txn.target);
-                      return (Value (AddressV
-                        (vfmContext$address_for_create cx.txn.target
-                           (lookup_account cx.txn.target s''.accounts).nonce)))
-                    od s''
-                | (INR e,s'') => (INR e,s''))
-           | (INR e,s'') => (INR e,s''))
-      | (INR e,s'') => (INR e,s'')) = (res,st')) ==>
-    state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
+    create_arg_types_ok kind has_salt (MAP expr_type es) /\
+    eval_create cx kind has_salt rof (MAP expr_type es) vs st = (res,st') ==>
+    state_well_typed st' /\ env_consistent env cx st' /\
+    accounts_well_typed st'.accounts /\
     (!msg. res <> INR (Error (TypeError msg))) /\
     (case res of
-     | INL tv => expr_result_typed env (Call (BaseT AddressT) (CreateTarget kind rof) es NONE) tv
+     | INL tv => expr_result_typed env
+         (Call (BaseT AddressT) (CreateTarget kind has_salt rof) es NONE) tv
      | INR _ => T)
 Proof
   rpt gen_tac >> strip_tac >>
-  qspecl_then [`env`, `cx`, `es`, `vs`, `st`, `kind`, `rof`, `BaseT AddressT`]
-    mp_tac create_tail_sound >>
-  impl_tac >- simp[] >>
-  strip_tac >>
-  gvs[] >>
+  `get_tenv cx = env.type_defs` by metis_tac[runtime_consistent_get_tenv] >>
+  drule exprs_runtime_typed_LIST_REL_source_value >> strip_tac >>
+  drule_all create_args_runtime_typed_decode >> strip_tac >>
+  `?code_info.
+      build_create_code (get_tenv cx) kind ops st.accounts ctor_tys =
+        SOME code_info` by (
+    qpat_x_assum `get_tenv cx = env.type_defs` (fn th => rewrite_tac[th]) >>
+    irule build_create_code_total >> metis_tac[]) >>
+  pop_assum strip_assume_tac >>
+  `accounts_well_typed st'.accounts` by (
+    irule eval_create_accounts_well_typed >>
+    metis_tac[runtime_consistent_def]) >>
+  drule eval_create_preserves_non_accounts >> strip_tac >>
   `runtime_consistent env cx st'` by (
-    qpat_x_assum `(case type_check _ _ _ of _ => _) = _` mp_tac >>
-    qpat_x_assum `runtime_consistent _ _ (SND _)` mp_tac >>
-    rw[bind_def, ignore_bind_def, type_check_def, check_def, assert_def,
-       raise_def, return_def,
-       lift_option_type_def, get_accounts_def, update_accounts_def] >>
-    gvs[]) >>
-  `!msg. res <> INR (Error (TypeError msg))` by (
-    gen_tac >>
-    qpat_x_assum `(case type_check _ _ _ of _ => _) = _` mp_tac >>
-    qpat_x_assum `!s. FST _ <> INR (Error (TypeError s))` (qspec_then `msg` mp_tac) >>
-    rw[bind_def, ignore_bind_def, type_check_def, check_def, assert_def,
-       raise_def, return_def,
-       lift_option_type_def, get_accounts_def, update_accounts_def] >>
-    gvs[]) >>
+    gvs[runtime_consistent_def, state_well_typed_def, env_consistent_def,
+        env_scopes_consistent_def, env_immutables_consistent_def] >>
+    rpt conj_tac >> FIRST_ASSUM ACCEPT_TAC) >>
   gvs[runtime_consistent_def] >>
-  qpat_x_assum `(case type_check _ _ _ of _ => _) = _` mp_tac >>
-  rw[bind_def, ignore_bind_def, type_check_def, check_def, assert_def,
-     raise_def, return_def, lift_option_type_def, get_accounts_def,
-     update_accounts_def,
-     no_type_error_result_def, expr_result_typed_def, expr_runtime_typed_def,
-     expr_type_def, toplevel_value_typed_def, value_has_type_def,
-     evaluate_type_def, is_HashMapRef_def] >>
-  qpat_x_assum `(case type_check _ _ _ of _ => _) = _` mp_tac >>
-  gvs[bind_def, ignore_bind_def, type_check_def, check_def, assert_def,
-      raise_def, return_def,
-      lift_option_type_def, get_accounts_def, update_accounts_def,
-      runtime_consistent_def, toplevel_value_typed_def, value_has_type_def] >>
-  TRY (Cases_on `transfer_value cx.txn.target
-          (vfmContext$address_for_create cx.txn.target
-             (lookup_account cx.txn.target st.accounts).nonce) amount st` >>
-       Cases_on `q` >> gvs[return_def]) >>
-  strip_tac >> gvs[toplevel_value_typed_def, value_has_type_def,
-                   expr_result_typed_def, expr_runtime_typed_def,
-                   expr_type_def, is_HashMapRef_def]
+  qpat_x_assum `eval_create _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[eval_create_def, bind_def, ignore_bind_def, lift_option_type_def,
+       get_accounts_def, update_accounts_def, check_def, assert_def,
+       create_soft_failure_def, return_def, raise_def] >>
+  rpt (IF_CASES_TAC >>
+       gvs[bind_def, ignore_bind_def, update_accounts_def,
+           check_def, assert_def, create_soft_failure_def,
+           return_def, raise_def, expr_result_typed_def,
+           expr_runtime_typed_def, expr_type_def, evaluate_type_def,
+           toplevel_value_typed_def, value_has_type_def, is_HashMapRef_def]) >>
+  rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+  gvs[expr_result_typed_def, expr_runtime_typed_def, expr_type_def,
+      evaluate_type_def, toplevel_value_typed_def, value_has_type_def,
+      is_HashMapRef_def]
 QED
 
 Theorem raw_revert_tail_sound:

@@ -2136,7 +2136,7 @@ Definition compile_call_def:
   compile_call cfn cenv ret_ty ty SelfDestructTarget args default_ret st =
     (let (_, st') = emit_inst INVALID [] [] st in
      (StackValue ret_ty (Lit 0w), st')) ∧
-  compile_call cfn cenv ret_ty ty (CreateTarget ck rof) args default_ret st =
+  compile_call cfn cenv ret_ty ty (CreateTarget ck has_salt rof) args default_ret st =
     (let (_, st') = emit_inst INVALID [] [] st in
      (StackValue ret_ty (Lit 0w), st'))
 End

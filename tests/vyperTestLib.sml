@@ -316,27 +316,32 @@ val excluded_test_names = [
   "test_checkable_raw_call",
   "test_nonreentrant_decorator_for_default",
 
-  (* raw_create semantics: first arg is bytecode, not address.
-     The CreateTarget handler assumes HD args is an address for all
-     create kinds, but raw_create passes bytecode as first arg.
-     TODO: fix CreateTarget to handle RawCreate differently *)
-  "test_raw_create*",
+  (* RawCreate now preserves bytecode, constructor args, value, and salt.
+     Its eval-order and CREATE2 salt tests are enabled. Running initcode and
+     installing the resulting runtime code remains out of scope (#379), so
+     tests that inspect or call the deployed contract remain excluded. *)
+  "test_raw_create",
+  "test_raw_create_change_*",
+  "test_raw_create_dynamic_arg",
+  "test_raw_create_double_eval",
+  "test_raw_create_memory_overlap",
+  "test_raw_create_revert_value_kws*",
   "test_bubble_revert_data_raw_create",
 
   (* create_from_blueprint / create_copy_of / create_minimal_proxy_to tests:
-     opaque create model doesn't run initcode or load sources for created
-     contracts, so calls to created contracts fail.
-     TODO: run initcode for create builtins *)
+     opaque create model doesn't run blueprint/raw initcode or register newly
+     created contracts as callable, so calls to created contracts fail.
+     TODO(#379): run initcode and register created contracts. *)
   "test_create_from_blueprint*",
   "test_blueprint_evals_once_side_effects",
   "test_bubble_revert_data_blueprint",
-  (* create_copy_of / create_minimal_proxy_to tests: opaque create
-     model computes addresses via address_for_create but doesn't run
-     actual initcode, so created addresses and contract state don't
-     match the real EVM. TODO: run initcode for create builtins *)
+  (* Proxy/copy semantics install statically derivable runtime code, and the
+     salted proxy CREATE2 address tests are enabled. Registration as a
+     callable Vyper contract and constructor effects remain out of scope
+     (#379), so tests that call or inspect created contract state stay out. *)
   "test_create_copy_of*",
-  "test_create_copy_salt_eval_order_regression",
-  "test_create_minimal_proxy_to*",
+  "test_create_minimal_proxy_to_call",
+  "test_create_minimal_proxy_to_create",
   "test_minimal_proxy_exception",
   (* Tests using shift() builtin which is not yet translated.
      TODO: add shift builtin support *)

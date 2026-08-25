@@ -2,7 +2,7 @@
 
 Theory vyperTypeEvalStoragePreservation
 Ancestors
-  pair vyperInterpreter vyperState vyperStorageBackend vyperStorageLayoutSafety
+  pair vyperCreate vyperInterpreter vyperState vyperStorageBackend vyperStorageLayoutSafety
   vyperTypeSystem vyperTypeEnv vyperTypeInvariants vyperTypeValues vyperTypeCallGraph
   vyperEvalMisc vyperStatePreservation vyperScopePreservation
   vyperTypeCallStackSoundness vyperValue
@@ -2635,72 +2635,25 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_CreateTarget]:
     strip_tac >>
     `call_evaluation_safe cx (int_calls_exprs es)` by
       (qpat_x_assum `call_evaluation_safe cx
-          (int_calls_expr (Call _ (CreateTarget _ _) es _))` mp_tac >>
+          (int_calls_expr (Call _ (CreateTarget _ _ _) es _))` mp_tac >>
        simp[int_calls_expr_def]) >>
-    qpat_x_assum `well_typed_expr env (Call _ (CreateTarget _ _) _ _)` mp_tac >>
+    qpat_x_assum `well_typed_expr env
+        (Call _ (CreateTarget _ _ _) es _)` mp_tac >>
     rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
     qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-    simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
-                         type_check_def, check_def, assert_def,
-                         return_def, raise_def, lift_option_type_def,
-                         get_accounts_def] >>
-    simp[] >>
+    simp[Once evaluate_def, bind_def] >>
     Cases_on `eval_exprs cx es st` >>
     rename1 `eval_exprs cx es st = (args_res,args_st)` >>
     first_x_assum drule_all >> strip_tac >>
-    Cases_on `args_res` >> gvs[]
-    >- (
-      Cases_on `x = []` >> gvs[type_check_def, assert_def, return_def, raise_def]
-      >- (rpt strip_tac >> gvs[]) >>
-      Cases_on `dest_NumV (LAST x)` >> gvs[return_def, raise_def]
-      >- (rpt strip_tac >> gvs[]) >>
-      Cases_on `dest_AddressV (HD x)` >> gvs[return_def, raise_def]
-      >- (rpt strip_tac >> gvs[]) >>
-      rename [`dest_NumV (LAST x) = SOME amount`,
-              `dest_AddressV (HD x) = SOME target_addr`] >>
-      Cases_on `amount <= (lookup_account cx.txn.target args_st.accounts).balance` >>
-      gvs[bind_apply, ignore_bind_apply, assert_def, return_def, raise_def] >>
-      Cases_on `~vfmExecution$account_already_created
-          (lookup_account
-             (vfmContext$address_for_create cx.txn.target
-                (lookup_account cx.txn.target args_st.accounts).nonce)
-             args_st.accounts)` >>
-      gvs[bind_apply, ignore_bind_apply, assert_def, return_def, raise_def] >>
-      Cases_on `amount > 0`
-      >- (
-        Cases_on `transfer_value cx.txn.target
-            (vfmContext$address_for_create cx.txn.target
-               (lookup_account cx.txn.target args_st.accounts).nonce)
-            amount args_st` >>
-        rename1 `transfer_value cx.txn.target
-            (vfmContext$address_for_create cx.txn.target
-               (lookup_account cx.txn.target args_st.accounts).nonce)
-            amount args_st = (transfer_res,transfer_st)` >>
-        drule_all transfer_value_preserves_contract_storage_well_formed >>
-        Cases_on `transfer_res` >>
-        gvs[bind_apply, ignore_bind_apply, return_def, raise_def]
-        >- (
-          strip_tac >>
-          Cases_on `update_accounts
-              (vfmExecution$increment_nonce cx.txn.target) transfer_st` >>
-          rename1 `update_accounts
-              (vfmExecution$increment_nonce cx.txn.target) transfer_st =
-              (nonce_res,nonce_st)` >>
-          drule_all increment_nonce_preserves_contract_storage_well_formed >>
-          Cases_on `nonce_res` >>
-          gvs[bind_apply, ignore_bind_apply, return_def, raise_def] >>
-          rpt strip_tac >> gvs[]) >>
-        rpt strip_tac >> gvs[]) >>
-      Cases_on `update_accounts
-          (vfmExecution$increment_nonce cx.txn.target) args_st` >>
-      rename1 `update_accounts
-          (vfmExecution$increment_nonce cx.txn.target) args_st =
-          (nonce_res,nonce_st)` >>
-      drule_all increment_nonce_preserves_contract_storage_well_formed >>
-      Cases_on `nonce_res` >>
-      gvs[bind_apply, ignore_bind_apply, return_def, raise_def] >>
-      rpt strip_tac >> gvs[]) >>
-    rpt strip_tac >> gvs[]) >>
+    Cases_on `args_res` >> gvs[] >> strip_tac >>
+    imp_res_tac eval_create_preserves_non_accounts >>
+    imp_res_tac eval_create_preserves_storage >>
+    irule contract_storage_well_formed_storage_frame >>
+    qexists_tac `args_st` >> simp[] >>
+    Cases_on `b` >>
+    simp[vyperStorageBackendTheory.get_storage_def] >>
+    qpat_x_assum `!address. _` (qspec_then `cx.txn.target` mp_tac) >>
+    simp[vfmStateTheory.lookup_account_def]) >>
   rpt strip_tac >> gvs[Once well_typed_expr_def]
 QED
 

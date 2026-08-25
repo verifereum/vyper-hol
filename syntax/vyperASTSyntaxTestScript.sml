@@ -181,11 +181,24 @@ val call_target_samples =
   , vyperASTSyntax.RawRevert_tm
   , vyperASTSyntax.SelfDestructTarget_tm
   , vyperASTSyntax.mk_CreateTarget_tm
-      (vyperASTSyntax.CreateMinimalProxy_tm, boolSyntax.T)
+      (vyperASTSyntax.CreateMinimalProxy_tm, boolSyntax.F, boolSyntax.T)
   ];
 val _ = List.app
   (fn tm => ignore (vyperASTSyntax.view_call_target tm))
   call_target_samples;
+val _ =
+  case vyperASTSyntax.view_call_target (List.last call_target_samples) of
+    vyperASTSyntax.VCreateTarget (kind, has_salt, rof) =>
+      if same_term kind vyperASTSyntax.CreateMinimalProxy_tm andalso
+         same_term has_salt boolSyntax.F andalso same_term rof boolSyntax.T
+      then () else raise Fail "CreateTarget field order"
+  | _ => raise Fail "CreateTarget view";
+val _ =
+  if same_term
+       (vyperASTSyntax.dest_CreateFromBlueprint_tm
+          (vyperASTSyntax.mk_CreateFromBlueprint_tm boolSyntax.T))
+       boolSyntax.T
+  then () else raise Fail "CreateFromBlueprint raw_args";
 val _ =
   if vyperASTSyntax.is_raw_call_flags flags then
     let val decoded = vyperASTSyntax.dest_raw_call_flags flags in

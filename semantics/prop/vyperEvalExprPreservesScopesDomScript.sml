@@ -1,6 +1,6 @@
 Theory vyperEvalExprPreservesScopesDom
 Ancestors
-  vyperMisc vyperContext vyperState vyperInterpreter vyperLookup
+  vyperMisc vyperContext vyperState vyperCreate vyperInterpreter vyperLookup
   vyperScopePreservation vyperStatePreservation
 
 (* ========================================================================
@@ -407,18 +407,18 @@ QED
 
 (* CreateTarget *)
 Theorem case_CreateTarget_dom[local]:
-  ∀cx ty kind rof es v0.
+  ∀cx ty kind has_salt rof es v0.
     (∀st res st'. eval_exprs cx es st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
     ∀st res st'.
-      eval_expr cx (Call ty (CreateTarget kind rof) es v0) st = (res,st') ⇒
+      eval_expr cx (Call ty (CreateTarget kind has_salt rof) es v0) st = (res,st') ⇒
       MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
   rpt strip_tac >> qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def,
-       check_def, type_check_def, assert_def, lift_option_def, lift_option_type_def,
-       get_accounts_def, update_accounts_def, option_CASE_rator, COND_RATOR] >>
-  strip_tac >> gvs[AllCaseEqs(), return_def, raise_def] >>
-  imp_res_tac transfer_value_scopes >> gvs[]
+  simp[Once evaluate_def, bind_def] >>
+  Cases_on `eval_exprs cx es st` >> Cases_on `q` >> simp[] >>
+  strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  drule eval_create_preserves_non_accounts >> strip_tac >> gvs[]
 QED
 
 (* Goal 17: ExtCall (exact evaluate_ind shape) *)

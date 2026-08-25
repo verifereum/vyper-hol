@@ -356,21 +356,34 @@ Definition make_builtin_call_def:
     else if name = "create_minimal_proxy_to" ∨ name = "create_forwarder_to" then
       let rof = kwarg_bool "revert_on_failure" kwargs T in
       let value_e = kwarg_expr "value" kwargs (Literal (BaseT (UintT 256)) (IntL 0)) in
-      Call ty (CreateTarget CreateMinimalProxy rof) (args ++ [value_e]) NONE
+      let salt_opt = ALOOKUP kwargs "salt" in
+      let salt_es = case salt_opt of NONE => [] | SOME salt_e => [salt_e] in
+      Call ty (CreateTarget CreateMinimalProxy (IS_SOME salt_opt) rof)
+        (TAKE 1 args ++ [value_e] ++ salt_es) NONE
     else if name = "create_copy_of" then
       let rof = kwarg_bool "revert_on_failure" kwargs T in
       let value_e = kwarg_expr "value" kwargs (Literal (BaseT (UintT 256)) (IntL 0)) in
-      Call ty (CreateTarget CreateCopyOf rof) (args ++ [value_e]) NONE
+      let salt_opt = ALOOKUP kwargs "salt" in
+      let salt_es = case salt_opt of NONE => [] | SOME salt_e => [salt_e] in
+      Call ty (CreateTarget CreateCopyOf (IS_SOME salt_opt) rof)
+        (TAKE 1 args ++ [value_e] ++ salt_es) NONE
     else if name = "create_from_blueprint" then
       let rof = kwarg_bool "revert_on_failure" kwargs T in
-      let code_offset = kwarg_num "code_offset" kwargs 3 in
       let raw_args_flag = kwarg_bool "raw_args" kwargs F in
       let value_e = kwarg_expr "value" kwargs (Literal (BaseT (UintT 256)) (IntL 0)) in
-      Call ty (CreateTarget (CreateFromBlueprint code_offset raw_args_flag) rof) (args ++ [value_e]) NONE
+      let salt_opt = ALOOKUP kwargs "salt" in
+      let salt_es = case salt_opt of NONE => [] | SOME salt_e => [salt_e] in
+      let code_offset_e = kwarg_expr "code_offset" kwargs
+        (Literal (BaseT (UintT 256)) (IntL 3)) in
+      Call ty (CreateTarget (CreateFromBlueprint raw_args_flag) (IS_SOME salt_opt) rof)
+        (TAKE 1 args ++ [value_e] ++ salt_es ++ [code_offset_e] ++ DROP 1 args) NONE
     else if name = "raw_create" then
       let rof = kwarg_bool "revert_on_failure" kwargs T in
       let value_e = kwarg_expr "value" kwargs (Literal (BaseT (UintT 256)) (IntL 0)) in
-      Call ty (CreateTarget RawCreate rof) (args ++ [value_e]) NONE
+      let salt_opt = ALOOKUP kwargs "salt" in
+      let salt_es = case salt_opt of NONE => [] | SOME salt_e => [salt_e] in
+      Call ty (CreateTarget RawCreate (IS_SOME salt_opt) rof)
+        (TAKE 1 args ++ [value_e] ++ DROP 1 args ++ salt_es) NONE
     else if name = "abs" then Builtin ty Abs args
     else if name = "as_wei_value" then
       (case args of

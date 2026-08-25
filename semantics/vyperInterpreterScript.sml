@@ -4,6 +4,7 @@ Ancestors
   rich_list cv cv_std vfmState vfmContext vfmCompute[ignore_grammar]
   vfmExecution[ignore_grammar] vyperAST vyperABI
   vyperMisc vyperValue vyperValueOperation vyperStorage vyperContext vyperState
+  vyperCreate
 Libs
   cv_transLib wordsLib monadsyntax
 
@@ -1354,40 +1355,12 @@ Definition evaluate_def:
        unless in same transaction as creation. We model the simple case. *)
     return $ Value NoneV
   od ∧
-  (* create_*(target, *ctor_args, value=0, ...)
-     At the semantic level, we model CREATE as an oracle: given initcode + value,
-     it returns a new address. We use Verifereum's run_create infrastructure.
-     args = [target_or_bytecode; ctor_arg1; ...; ctor_argN; value]
-     For simplicity, we model all create variants identically:
-     the initcode construction differences are codegen-level concerns. *)
-  eval_expr cx (Call ty (CreateTarget kind rof) es _) = do
+  (* Creation operands use the kind-specific runtime layouts documented on
+     CreateTarget.  eval_exprs preserves their evaluation order and the shared
+     helper performs decoding, initcode/address derivation and account effects. *)
+  eval_expr cx (Call ty (CreateTarget kind has_salt rof) es _) = do
     vs <- eval_exprs cx es;
-    type_check (vs ≠ []) "create no args";
-    (* Last arg is value *)
-    amount <- lift_option_type (dest_NumV (LAST vs)) "create value";
-    (* For now, model create as an opaque operation that transfers value
-       and returns a fresh address. The actual initcode construction
-       (minimal proxy bytecode, extcodecopy, blueprint extraction)
-       happens at the codegen/Venom level. *)
-    target_addr <- lift_option_type (dest_AddressV (HD vs)) "create target";
-    accounts <- get_accounts;
-    self_acct <<- lookup_account cx.txn.target accounts;
-    check (amount ≤ self_acct.balance) "create insufficient balance";
-    (* Use Verifereum's address_for_create with sender's nonce *)
-    new_addr <<- vfmContext$address_for_create cx.txn.target self_acct.nonce;
-    (* Check for address collision (EIP-684) *)
-    existing <<- lookup_account new_addr accounts;
-    check (¬vfmExecution$account_already_created existing) "address collision";
-    (* Transfer value from self to new contract *)
-    if amount > 0 then
-      transfer_value cx.txn.target new_addr amount
-    else return ();
-    (* Increment sender nonce *)
-    update_accounts (vfmExecution$increment_nonce cx.txn.target);
-    if rof then
-      return $ Value $ AddressV new_addr
-    else
-      return $ Value $ AddressV new_addr
+    eval_create cx kind has_salt rof (MAP expr_type es) vs
   od ∧
   eval_exprs cx [] = return [] ∧
   eval_exprs cx (e::es) = do

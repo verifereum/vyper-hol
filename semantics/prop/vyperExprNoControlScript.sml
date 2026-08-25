@@ -1,7 +1,7 @@
 Theory vyperExprNoControl
 
 Ancestors
-  vyperInterpreter vyperAST vyperState vyperMisc
+  vyperCreate vyperInterpreter vyperAST vyperState vyperMisc
 Libs
   pairLib
 
@@ -479,7 +479,15 @@ val mono = [bind_def, ignore_bind_def, return_def, raise_def,
             get_scopes_def, get_accounts_def, get_transient_storage_def,
             update_accounts_def, update_transient_def];
 
-val helpers = [check_no_control, type_check_no_control,
+Theorem eval_create_no_control[local]:
+  eval_create cx kind has_salt rof arg_tys vs st = (INR ex, st') ==>
+  no_control_exc ex
+Proof
+  strip_tac >> drule eval_create_exception_is_error >> simp[no_control_exc_def]
+QED
+
+val helpers = [eval_create_no_control,
+               check_no_control, type_check_no_control,
                lift_option_no_control, lift_option_type_no_control,
                lift_sum_no_control, lift_sum_runtime_no_control,
                get_Value_no_control, read_storage_slot_no_control,
