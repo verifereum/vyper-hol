@@ -240,7 +240,7 @@ val (PowMod256_tm, is_PowMod256) = syntax0 "PowMod256"
 
 val (CreateMinimalProxy_tm, is_CreateMinimalProxy) = syntax0 "CreateMinimalProxy"
 val (CreateCopyOf_tm, is_CreateCopyOf) = syntax0 "CreateCopyOf"
-val (CreateFromBlueprint_tm, mk_CreateFromBlueprint_tm, dest_CreateFromBlueprint_tm, is_CreateFromBlueprint) = syntax_fns2 "vyperAST" "CreateFromBlueprint"
+val (CreateFromBlueprint_tm, mk_CreateFromBlueprint_tm, dest_CreateFromBlueprint_tm, is_CreateFromBlueprint) = syntax_fns1 "vyperAST" "CreateFromBlueprint"
 val (RawCreate_tm, is_RawCreate) = syntax0 "RawCreate"
 
 val (Empty_tm, is_Empty) = syntax0 "Empty"
@@ -412,7 +412,7 @@ val (RawLog_tm, is_RawLog) = syntax0 "RawLog"
 val (RawRevert_tm, is_RawRevert) = syntax0 "RawRevert"
 val (SelfDestructTarget_tm, is_SelfDestructTarget) = syntax0 "SelfDestructTarget"
 val (CreateTarget_tm, mk_CreateTarget_tm, dest_CreateTarget_tm, is_CreateTarget) =
-  syntax_fns2 "vyperAST" "CreateTarget"
+  syntax_fns3 "vyperAST" "CreateTarget"
 
 val (AssertBare_tm, is_AssertBare) = syntax0 "AssertBare"
 val (AssertUnreachable_tm, is_AssertUnreachable) = syntax0 "AssertUnreachable"
@@ -603,7 +603,7 @@ datatype call_target_view =
   | VRawLog
   | VRawRevert
   | VSelfDestructTarget
-  | VCreateTarget of term * term
+  | VCreateTarget of term * term * term
 
 fun view_call_target tm =
   if is_IntCall tm then VIntCall (dest_IntCall_tm tm)

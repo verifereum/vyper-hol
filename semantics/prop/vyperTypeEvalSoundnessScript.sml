@@ -207,7 +207,7 @@ QED
 
 Theorem create_call_evaluation_safe_args[local]:
   call_evaluation_safe cx
-    (int_calls_expr (Call loc (CreateTarget kind rof) es extra)) ==>
+    (int_calls_expr (Call loc (CreateTarget kind has_salt rof) es extra)) ==>
   call_evaluation_safe cx (int_calls_exprs es)
 Proof
   simp[int_calls_expr_def]
@@ -9904,7 +9904,7 @@ Resume eval_all_type_sound_mutual[Expr_Call_CreateTarget]:
   >- (
     strip_tac >>
     drule create_call_evaluation_safe_args >> strip_tac >>
-    qpat_x_assum `well_typed_expr env (Call _ (CreateTarget _ _) _ _)` mp_tac >>
+    qpat_x_assum `well_typed_expr env (Call _ (CreateTarget _ _ _) _ _)` mp_tac >>
     rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
     qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
     simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
@@ -9917,12 +9917,11 @@ Resume eval_all_type_sound_mutual[Expr_Call_CreateTarget]:
     Cases_on `args_res` >> gvs[no_type_error_result_def]
     >- (
       rename1 `exprs_runtime_typed env es vs` >>
-      drule_all create_args_runtime_typed_dest >> strip_tac >> gvs[] >>
       strip_tac >>
-      qspecl_then [`env`, `cx`, `es`, `vs`, `args_st`, `amount`, `target_addr`,
-                   `res`, `st'`, `kind`, `rof`]
+      qspecl_then [`env`, `cx`, `es`, `vs`, `args_st`, `res`, `st'`,
+                   `kind`, `has_salt`, `rof`]
         mp_tac create_tail_result_sound_simp >>
-      simp[type_check_def, assert_def, runtime_consistent_def]) >>
+      simp[runtime_consistent_def]) >>
     strip_tac >> gvs[]) >>
   rpt strip_tac >> gvs[Once well_typed_expr_def]
 QED

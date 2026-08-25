@@ -1,6 +1,6 @@
 Theory vyperEvalPreservesImmutablesDom
 Ancestors
-  vyperMisc vyperAST vyperValue vyperContext vyperState vyperStorageBackend vyperInterpreter
+  vyperMisc vyperAST vyperValue vyperContext vyperState vyperStorageBackend vyperCreate vyperInterpreter
   vyperLookup vyperScopePreservation vyperStatePreservation
   vyperAssignTarget vyperEvalExprPreservesScopesDom
   vyperImmutablesPreservation
@@ -2033,41 +2033,19 @@ Proof
   rpt gen_tac \\
   strip_tac \\
   conj_tac
-  >- (qspecl_then
+  >- (match_mp_tac (Q.SPECL
         [`cx`, `src_id_opt`, `fn`, `es`,
          `ih_check_s`, `ih_mod_s`, `ih_fun_s`, `ih_len_s`, `ih_args_s`,
          `xrec`, `srec`, `ts`, `smod`, `tup`, `sfun`, `xlen`, `slen`,
          `vs`, `sevl`, `needed_dflts`, `cxd`, `prev`, `INL dflt_vs`, `sdfl`]
-        mp_tac intcall_default_frame_imm_dom_from_generated_ih \\
+        intcall_default_frame_imm_dom_from_generated_ih) \\
+      conj_tac >- FIRST_ASSUM ACCEPT_TAC \\
+      qpat_x_assum
+        `∀s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20
+            args0 sstup0 dflts0 sstup20 ret0 body0 s3 x1 t3 s4 vs0 t4
+            needed_dflts0 cxd0. _` kall_tac \\
       simp[] \\
-      disch_then irule \\
-      simp[] \\
-      conj_tac
-      >- (rpt strip_tac \\
-          qpat_assum `∀s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20
-                         args0 sstup0 dflts0 sstup20 ret0 body0 s3 x1 t3 s4
-                         vs0 t4 needed_dflts0 cxd0.
-                         _ ⇒ ∀st0 res0 st1.
-                           eval_exprs cxd0 needed_dflts0 st0 = (res0,st1) ⇒
-                           preserves_immutables_dom cxd0 st0 st1`
-            (qspecl_then
-              [`s0`, `()`, `t0`, `s1`, `ts0`, `t1`, `s2`, `tup0`, `t2`,
-               `FST tup0`, `SND tup0`, `FST (SND tup0)`, `SND (SND tup0)`,
-               `FST (SND (SND tup0))`, `SND (SND (SND tup0))`,
-               `FST (SND (SND (SND tup0)))`, `SND (SND (SND (SND tup0)))`,
-               `FST (SND (SND (SND (SND tup0))))`,
-               `SND (SND (SND (SND (SND tup0))))`, `s3`, `()`, `t3`,
-               `s4`, `vs0`, `t4`,
-               `DROP
-                  (LENGTH (FST (SND (SND (SND tup0)))) −
-                   (LENGTH (FST (SND (SND tup0))) − LENGTH es))
-                  (FST (SND (SND (SND tup0))))`,
-               `cx with stk updated_by CONS (src_id_opt,fn)`] mp_tac) \\
-          simp[] \\
-          disch_then irule \\
-          simp[] \\
-          gvs[type_check_def, assert_def] \\
-          decide_tac) \\
+      gvs[type_check_def, assert_def] \\
       qhdtm_x_assum`type_check`mp_tac >>
       simp_tac(srw_ss())[type_check_def, assert_def] >>
       strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
@@ -3397,15 +3375,11 @@ Proof
       irule preserves_immutables_dom_eq >> gvs[])
   (* CreateTarget *)
   >- (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-      simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def,
-           check_def, type_check_def, assert_def, lift_option_def, lift_option_type_def,
-           get_accounts_def, update_accounts_def, option_CASE_rator, COND_RATOR] >>
-      rpt strip_tac >> gvs[AllCaseEqs(), return_def, raise_def] >>
+      simp[Once evaluate_def, bind_def] >>
+      Cases_on `eval_exprs cx es st` >> Cases_on `q` >> simp[] >>
+      strip_tac >>
       first_x_assum drule >> strip_tac >>
-      TRY (gvs[] >> NO_TAC) >>
-      TRY (imp_res_tac transfer_value_immutables >>
-           irule preserves_immutables_dom_trans >> first_assum (irule_at Any) >>
-           irule preserves_immutables_dom_eq >> gvs[] >> NO_TAC) >>
+      drule eval_create_preserves_non_accounts >> strip_tac >>
       irule preserves_immutables_dom_trans >> first_assum (irule_at Any) >>
       irule preserves_immutables_dom_eq >> gvs[])
   >- gvs[evaluate_def, return_def, preserves_immutables_dom_refl]

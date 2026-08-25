@@ -1,7 +1,7 @@
 Theory vyperSmallStep
 Ancestors
   arithmetic combin pair list While
-  vyperMisc vyperValue vyperContext vyperState vyperInterpreter vyperABI
+  vyperMisc vyperValue vyperContext vyperState vyperCreate vyperInterpreter vyperABI
 Libs
   cv_transLib
 
@@ -64,7 +64,7 @@ Datatype:
   | RawLogK eval_continuation
   | RawRevertK eval_continuation
   | SelfDestructK eval_continuation
-  | CreateK type create_kind bool eval_continuation
+  | CreateK (type list) create_kind bool bool eval_continuation
   | IntCallK (num |-> type_args) (num option # identifier) ((identifier # type) list) (expr list) type (stmt list) bool function_mutability eval_continuation
   | IntCallK1 (num |-> type_args) (num option # identifier) ((identifier # type) list) (value list) (scope list) type (stmt list) bool function_mutability eval_continuation
   | IntCallK2 (scope list) type_value bool bool eval_continuation
@@ -182,8 +182,8 @@ Definition eval_expr_cps_def:
     eval_exprs_cps cx10 es st (RawRevertK k) ∧
   eval_expr_cps cx10 (Call _ SelfDestructTarget es _) st k =
     eval_exprs_cps cx10 es st (SelfDestructK k) ∧
-  eval_expr_cps cx10 (Call ty (CreateTarget kind rof) es _) st k =
-    eval_exprs_cps cx10 es st (CreateK ty kind rof k) ∧
+  eval_expr_cps cx10 (Call ty (CreateTarget kind has_salt rof) es _) st k =
+    eval_exprs_cps cx10 es st (CreateK (MAP expr_type es) kind has_salt rof k) ∧
   eval_expr_cps cx10 (Call _ (IntCall (ns, fn)) es _) st k =
     (case do
       type_check (no_recursion (ns, fn) cx10.stk) "recursion";
@@ -398,7 +398,7 @@ Definition apply_exc_def:
   apply_exc cx ex st (RawLogK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (RawRevertK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (SelfDestructK k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (CreateK _ _ _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (CreateK _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (IntCallK _ _ _ _ _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (IntCallK1 _ _ _ _ prev _ _ _ _ k) =
     liftk (cx with stk updated_by TL) (K (ApplyExc ex)) (set_scopes prev st) k ∧
@@ -742,24 +742,9 @@ Definition apply_vals_def:
     od st
     of (INR ex, st) => AK cx (ApplyExc ex) st k
      | (INL tv, st) => AK cx (ApplyTv tv) st k) ∧
-  apply_vals cx vs st (CreateK ty kind rof k) =
-    (case do
-      type_check (vs ≠ []) "create no args";
-      amount <- lift_option_type (dest_NumV (LAST vs)) "create value";
-      target_addr <- lift_option_type (dest_AddressV (HD vs)) "create target";
-      accounts <- get_accounts;
-      self_acct <<- lookup_account cx.txn.target accounts;
-      check (amount ≤ self_acct.balance) "create insufficient balance";
-      new_addr <<- vfmContext$address_for_create cx.txn.target self_acct.nonce;
-      existing <<- lookup_account new_addr accounts;
-      check (¬vfmExecution$account_already_created existing) "address collision";
-      if amount > 0 then
-        transfer_value cx.txn.target new_addr amount
-      else return ();
-      update_accounts (vfmExecution$increment_nonce cx.txn.target);
-      return $ Value $ AddressV new_addr
-    od st
-    of (INR ex, st) => AK cx (ApplyExc ex) st k
+  apply_vals cx vs st (CreateK arg_tys kind has_salt rof k) =
+    (case eval_create cx kind has_salt rof arg_tys vs st of
+       (INR ex, st) => AK cx (ApplyExc ex) st k
      | (INL tv, st) => AK cx (ApplyTv tv) st k) ∧
   apply_vals cx vs st DoneK = AK cx (ApplyVals vs) st DoneK ∧
   apply_vals cx vs st _ =

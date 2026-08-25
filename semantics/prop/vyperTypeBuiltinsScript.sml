@@ -1279,7 +1279,7 @@ Theorem well_typed_builtin_app_length:
   well_typed_builtin_app ty blt ts ==> builtin_args_length_ok blt (LENGTH ts)
 Proof
   simp[oneline well_typed_builtin_app_def] >>
-  CASE_TAC >> rw[builtin_args_length_ok_def] >>
+  Cases_on `blt` >> rw[builtin_args_length_ok_def] >>
   pop_assum mp_tac >> CASE_TAC >> rw[]
 QED
 

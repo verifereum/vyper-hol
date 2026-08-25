@@ -1,7 +1,7 @@
 Theory vyperEvalPreservesScopes
 Ancestors
   vyperTypeInvariants
-  vyperState vyperInterpreter vyperLookup
+  vyperState vyperCreate vyperInterpreter vyperLookup
   vyperEvalExprPreservesScopesDom vyperScopePreservation
   vyperMisc vyperImmutablesPreservation vyperStatePreservation
 
@@ -2090,17 +2090,13 @@ Proof
   (* CreateTarget *)
   conj_tac >- (
     rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-    gvs[Once evaluate_def, bind_apply, ignore_bind_apply, AllCaseEqs(),
-         return_def, COND_RATOR] >>
-    imp_res_tac check_state >>
-    imp_res_tac type_check_state >>
-    imp_res_tac lift_option_type_state >>
-    imp_res_tac get_accounts_state >>
-    imp_res_tac transfer_value_scopes >>
-    imp_res_tac transfer_value_immutables >>
-    imp_res_tac update_accounts_scopes >>
-    imp_res_tac update_accounts_immutables >> gvs[] >>
-    first_x_assum drule >> rw[] >>
+    qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+    simp[Once evaluate_def, bind_def] >>
+    Cases_on `eval_exprs cx es st` >> Cases_on `q` >> simp[] >>
+    strip_tac >>
+    first_x_assum drule >> strip_tac >>
+    drule eval_create_preserves_non_accounts >> strip_tac >>
+    irule preserves_tv_trans >> first_assum (irule_at Any) >>
     gvs[preserves_tv_def]) >>
   (* eval_exprs [] *)
   conj_tac >- rw[evaluate_def, return_def] >>
