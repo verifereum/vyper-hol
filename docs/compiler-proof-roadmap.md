@@ -1,171 +1,334 @@
-# Compiler proof roadmap
+# Compiler correctness roadmap
 
-This is a high-level roadmap for continued work on compiler correctness. For detailed current cheat/status information, see [`compiler-proof-status.md`](compiler-proof-status.md). For notes about stale draft theories and historical counterexamples, see [`compiler-proof-drafts-and-counterexamples.md`](compiler-proof-drafts-and-counterexamples.md).
+This document describes the planned work, dependencies, milestones, and parallel work packages for the compiler correctness proof. It deliberately does not estimate calendar time.
 
-## Intended correctness architecture
+Related documents:
+
+- [`compiler-proof-status.md`](compiler-proof-status.md) — current proof status and cheat inventory
+- [`compiler-definition-parity.md`](compiler-definition-parity.md) — parity with the pinned Python compiler
+- [`compiler-correctness-specification.md`](compiler-correctness-specification.md) — compiler boundary and intended theorem family
+- [`compiler-proof-dependencies.md`](compiler-proof-dependencies.md) — proof and invariant dependency structure
+- [`compiler-proof-drafts-and-counterexamples.md`](compiler-proof-drafts-and-counterexamples.md) — known false statements and historical lessons
+
+## Goal and initial scope
+
+The intended correctness architecture is:
 
 ```text
-Vyper AST/source semantics
+Elaborated Vyper AST and metadata
   -- lowering correctness -->
-Venom IR semantics
-  -- Venom optimization pipeline correctness -->
-Optimized Venom IR semantics
+Venom IR
+  -- mandatory pipeline correctness -->
+Codegen-ready Venom IR
   -- codegen correctness -->
-EVM bytecode semantics
+EVM bytecode
+  -- execution correspondence -->
+Source-level observable behavior
 ```
 
-There are three main proof legs plus a top-level composition/glue layer:
+The first end-to-end target should cover the full compiler functionality represented at the chosen formal boundary, including deployment, runtime execution, calls, and nested EVM contexts. It should use only the transformations mandatory for code generation. Optional O2/O3/Os optimization certification should be layered on later.
 
-1. **Lowering:** Vyper AST/source semantics to Venom IR execution.
-2. **Pipeline:** semantics-preserving Venom-to-Venom transformations.
-3. **Codegen:** optimized Venom IR to EVM bytecode execution.
-4. **E2E composition:** reconcile the theorem statements, preconditions, ABI interface, observable-result relations, gas/call-frame assumptions, and pipeline configuration.
+`VYPER_PIN` is the sole authoritative upstream compiler revision. Per-file source annotations should identify Python paths and symbols, but must not establish independent revision pins.
 
-## Current high-level status
+## Phase 0 — Fix the target and theorem boundary
 
-The architecture is present, but end-to-end compiler correctness is not closed.
+### 0.1 Use the repository-wide Vyper pin
 
-- **Lowering** is a major open area. Definitions and theorem statements exist, but core expression, statement, ABI, module dispatch, builtin, and top-level lowering correctness theorems remain cheated.
-- **Pipeline/pass correctness** has the most mature reusable framework. Generic simulation/composition infrastructure exists, and several passes have proof work, but the concrete optimization-level instance used by the e2e compiler story is not fully discharged.
-- **Codegen** has substantial low-level infrastructure, especially around stack plans, asm execution, and asm/EVM stepping, but the central Venom-to-Asm, Asm-to-EVM, and final codegen correctness theorems remain cheated.
-- **Top-level e2e** is best viewed as scaffolding until the three legs provide closed theorems with compatible assumptions.
+- Read the target revision from `VYPER_PIN`.
+- Use that revision for compiler definitions, language-test exports, generated AST JSON, bytecode fixtures, and downstream tooling.
+- Replace or qualify stale per-file commit annotations so they cannot be mistaken for separate targets.
 
-## Before major proof repair: compiler-definition parity
+### 0.2 Define the trusted front-end boundary
 
-Before investing heavily in proof repair, audit and update the formal compiler definitions against the intended Python compiler version. Some HOL files record different upstream source anchors, and recent upstream Vyper commits include Venom/compiler bug fixes.
+Specify which compiler inputs are formal and which are trusted or supplied by the elaborated frontend. In particular, decide how the proof treats:
 
-See [`compiler-definition-parity.md`](compiler-definition-parity.md).
+- parsing and JSON import;
+- type checking and semantic analysis;
+- module and import resolution;
+- storage and immutable layouts;
+- function metadata and reachability;
+- selectors and entry-point metadata;
+- compiler settings and EVM version.
 
-A productive workflow is likely:
+The initial theorem is expected to begin with an elaborated HOL AST plus explicit metadata assumptions, rather than raw Vyper source text.
 
-1. Choose/pin an exact upstream Vyper commit.
-2. Audit the formal lowering, pipeline, and codegen definitions against that commit.
-3. Update definitions and executable fixtures as needed.
-4. Only then prioritize closing proof gaps.
+### 0.3 Define the initial pipeline configuration
 
-## Suggested work order
+- Identify the smallest pinned-compiler pipeline accepted by codegen.
+- Include mandatory normalization or lowering passes.
+- Exclude optional optimizations from the first theorem.
+- Give this pipeline a dedicated formal name rather than treating it as an accidental subset of O2.
 
-### 1. Pin and audit compiler definitions
+### 0.4 Confirm execution scope
 
-This should probably precede large proof work. It answers: “Which compiler are we proving correct?”
+The theorem family should include:
 
-Key outputs:
+- runtime and deployment bytecode;
+- internal and external calls;
+- nested EVM contexts;
+- success, halt, return, and revert behavior;
+- externally visible state effects.
 
-- chosen target upstream commit,
-- per-component parity checklist,
-- list of intentional HOL/Python differences,
-- executable fixture updates if outputs change.
+## Phase 1 — Compiler-definition parity
 
-### 2. Stabilize theorem statements and assumptions
+This phase answers which pinned Python compiler is represented by the HOL definitions.
 
-Before proving large results, make sure statement shapes are true and composable.
+### 1.1 Build the parity inventory
 
-Key areas:
+For each relevant definition, record:
 
-- `vyper_to_venom_correct` interface and state/result relation,
-- `gen_inst_simulation`, `gen_block_simulation`, `gen_fn_simulation`,
-- `asm_bytecode_sim` preconditions around calls/context depth,
-- `codegen_correct` gas/call-frame assumptions,
-- e2e observable result relation.
+- Python source path and symbol;
+- HOL theory and definition;
+- parity status;
+- intentional abstraction, if any;
+- required update;
+- effect on theorem statements and existing proofs.
 
-### 3. Lowering proof milestones
+Use the statuses defined in [`compiler-definition-parity.md`](compiler-definition-parity.md).
 
-Likely milestones:
+### 1.2 Audit the formal compiler boundary
 
-- compile-state/label hygiene in `emitHelperProps`,
-- expression lowering core cases,
-- statement lowering core cases,
-- ABI encode/decode correctness,
-- module dispatch/runtime generation,
-- top-level `vyper_to_venom_correct`.
+Compare Python's module-driven compiler API with the parameterized HOL lowering API. Classify every supplied item—selectors, entry information, function lists, dispatch tables, layouts, IDs, reachability, and data sections—as:
 
-### 4. Codegen proof milestones
+1. formally computed;
+2. supplied under an explicit relation to frontend output; or
+3. trusted at the theorem boundary.
 
-Likely milestones:
+Package these conditions in a coherent compiler-input validity predicate rather than scattering them across top-level theorems.
 
-- close remaining local cases in `genBlockSim`,
-- use/wire future function-plan infrastructure such as `fnPlanDecomp`,
-- strengthen/fix top-level Venom-to-Asm statements,
-- strengthen/fix Asm-to-EVM statement preconditions,
-- close `codegen_fn_correct` and `codegen_correct`.
+### 1.3 Audit lowering
 
-### 5. Pipeline instantiation milestones
+Audit:
 
-The generic framework is useful, but final compiler correctness needs the actual configured pipeline theorem.
+- compile environment and emission;
+- values, pointers, and locations;
+- expressions and arithmetic;
+- assignments and evaluation order;
+- statements and control flow;
+- internal and external calling conventions;
+- builtins and type conversions;
+- ABI encoding and decoding;
+- selector dispatch and kwargs;
+- module/function reachability;
+- runtime and deployment generation;
+- data sections and metadata.
 
-Likely work:
+### 1.4 Audit Venom IR semantics
 
-- identify the target optimization level(s),
-- prove or assume explicitly each pass-correctness obligation,
-- close `o2_pipeline_ctx_pass_correct` or replace it with a better named/configured theorem,
-- track SSA/WF preservation obligations separately from semantic simulation obligations.
+Check instructions and operand order, labels and entry semantics, parameters and returns, internal invocation, allocations, effects, exceptional behavior, calls, and well-formedness assumptions.
 
-## Navigation guide
+### 1.5 Audit the mandatory pipeline
 
-### Lowering
+For every pass needed before codegen:
 
-Definitions:
+- compare HOL and Python definitions;
+- specify required and produced invariants;
+- identify semantic-correctness coverage;
+- decide whether it belongs conceptually to lowering, the pipeline, or codegen preparation.
 
-- `lowering/defs/compileEnvScript.sml`
-- `lowering/defs/contextScript.sml`
-- `lowering/defs/emitHelperScript.sml`
-- `lowering/defs/exprLoweringScript.sml`
-- `lowering/defs/stmtLoweringScript.sml`
-- `lowering/defs/moduleLoweringScript.sml`
-- `lowering/defs/vyperCompilerScript.sml`
+Inventory optional O2/O3/Os passes separately; they do not block the first end-to-end theorem.
 
-Proof/property layers:
+### 1.6 Audit codegen
 
-- `lowering/emitHelperPropsScript.sml`
-- `lowering/exprLoweringPropsScript.sml`
-- `lowering/stmtLoweringPropsScript.sml`
-- `lowering/abiEncoderPropsScript.sml`
-- `lowering/builtinPropsScript.sml`
-- `lowering/builtinTypeConvertPropsScript.sml`
-- `lowering/moduleLoweringPropsScript.sml`
-- `lowering/vyperLoweringCorrectScript.sml`
-- `lowering/e2eCorrectnessScript.sml`
+Audit stack planning, parameter preparation, PHI handling, spills, calls and returns, instruction lowering, labels and symbols, data sections, deploy/runtime assembly, fork assumptions, and bytecode metadata.
 
-Side efforts/fixtures:
+### 1.7 Parity milestone exit criteria
 
-- `lowering/loweringMemSafetyPropsScript.sml`
-- `lowering/proofs/loweringMemSafetyProofsScript.sml`
-- `lowering/defs/evalCompilerScript.sml`
-- `lowering/defs/evalCompilerBytecodeScript.sml`
+- One authoritative pinned revision.
+- A complete correspondence matrix for the first e2e path.
+- No unresolved `unknown` entries on that path.
+- All intentional abstractions documented.
+- A definition-update backlog with proof impact noted.
+- A specified formal compiler boundary.
+- A specified minimal mandatory pipeline.
 
-### Pipeline
+## Phase 2 — Stabilize semantics and theorem statements
 
-- `venom/compiler/venomPipelineScript.sml`
-- `venom/compiler/venomPipelineCorrectScript.sml`
-- individual pass definitions/proofs under `venom/passes/`
+No major proof repair should precede confidence that the principal statements are true and composable.
 
-### Codegen
+### 2.1 Define observations
 
-Definitions:
+Specify source and EVM observations, including result status, return/revert data, persistent and transient storage, balances/account state, logs, created contracts, and other externally visible effects.
 
-- `venom/codegen/defs/stackModelScript.sml`
-- `venom/codegen/defs/stackPlanTypesScript.sml`
-- `venom/codegen/defs/stackPlanOpsScript.sml`
-- `venom/codegen/defs/stackPlanGenScript.sml`
-- `venom/codegen/defs/planExecScript.sml`
-- `venom/codegen/defs/asmIRScript.sml`
-- `venom/codegen/defs/asmSemScript.sml`
-- `venom/codegen/defs/symbolResolveScript.sml`
-- `venom/codegen/defs/codegenScript.sml`
+### 2.2 Align simulation relations
 
-Proofs/statements:
+Stabilize the relations between:
 
-- `venom/codegen/proofs/genBlockSimScript.sml`
-- `venom/codegen/proofs/fnPlanDecompScript.sml`
-- `venom/codegen/venomToAsmPropsScript.sml`
-- `venom/codegen/asmToBytecodePropsScript.sml`
-- `venom/codegen/codegenCorrectnessScript.sml`
+- Vyper and Venom states/results;
+- Venom and assembly states/results;
+- assembly and EVM states/results;
+- EVM execution and source-level call results.
 
-## Organization principles for future cleanup
+### 2.3 Stabilize invariant families
 
-Prefer making intent explicit before moving many files:
+Expected families include:
 
-- Mark active proof chain vs side/unwired work.
-- Keep dated status documents for historical accuracy.
-- Use stable index docs for discoverability.
-- Avoid large proof-file splits until theorem statements and compiler-definition parity are stable.
+- compile-state freshness and label uniqueness;
+- Venom well-formedness;
+- SSA and PHI correctness;
+- function parameter and return conventions;
+- stack-plan validity and stack-depth bounds;
+- operand bounds and spill-region separation;
+- label resolution and codegen readiness;
+- call-layout correctness;
+- memory/allocation correspondence.
+
+### 2.4 Resolve known statement defects
+
+Explicitly account for the documented issues involving `PARAM`, operand order, asm calls, nested EVM contexts, and ALLOCA/pointer correspondence. Do not retain a local theorem shape if the needed invariant only exists at block or function scope.
+
+### 2.5 Statement-stability exit criteria
+
+Produce the dependency structure described in [`compiler-proof-dependencies.md`](compiler-proof-dependencies.md), with each important hypothesis classified as:
+
+- produced by an earlier compiler stage;
+- preserved by a transformation;
+- consumed by a later stage; or
+- an environmental assumption.
+
+## Phase 3 — Implement parity corrections
+
+Apply definition updates before repairing proofs tied to stale definitions. Suggested order:
+
+1. shared Venom syntax and semantics;
+2. lowering environment and calling conventions;
+3. expression and statement lowering;
+4. ABI and builtins;
+5. module/runtime/deploy lowering;
+6. mandatory pipeline;
+7. stack planning and codegen;
+8. fixtures and documentation.
+
+For every update, record the pinned Python source mapping and classify invalidated theorems. Avoid preserving obsolete definitions solely to minimize proof churn.
+
+## Phase 4 — Lowering correctness
+
+### 4.1 Compilation infrastructure
+
+Prove freshness, uniqueness, label-space monotonicity, block creation, initial-state validity, and preservation by emission operations.
+
+### 4.2 Value and state correspondence
+
+Establish reusable correspondence for source values, words and buffers, locals, storage, transient storage, immutables, memory pointers/allocations, and transaction/environment fields.
+
+### 4.3 Expression correctness
+
+Develop feature-specific results for literals/names, arithmetic, comparisons, conversions, attributes/subscripts, compound values, builtins, and calls. Assemble `compile_expr_correct` from these results.
+
+### 4.4 Statement correctness
+
+Develop results for declarations, assignments, assertions, reverts, returns, conditionals, loops, logs/events, mutation, and internal-call control flow. Assemble the statement-list theorem from these cases.
+
+### 4.5 ABI and call boundaries
+
+Prove calldata decoding, argument layout, kwargs/defaults, return encoding, revert payloads, ABI builtins, and external-call result decoding.
+
+### 4.6 Module correctness
+
+Prove selector dispatch, fallback behavior, reachability assumptions, runtime generation, deployment generation, and data-section correctness.
+
+### 4.7 Lowering milestone
+
+Close `vyper_to_venom_correct` for the pinned and parity-audited lowering definition.
+
+## Phase 5 — Mandatory pipeline correctness
+
+### 5.1 Specify the pipeline
+
+Define the named minimal pipeline and its required analyses/configuration.
+
+### 5.2 Certify mandatory transformations
+
+For each transformation, separate:
+
+- semantic preservation;
+- well-formedness preservation;
+- production or preservation of codegen-readiness invariants.
+
+### 5.3 Compose the pipeline
+
+Instantiate the generic pipeline framework to obtain a concrete minimal-pipeline theorem.
+
+### 5.4 Add optional pipelines
+
+After the first e2e result, certify O2, O3, Os, and useful custom pass configurations as interchangeable pipeline theorems.
+
+## Phase 6 — Codegen correctness
+
+### 6.1 Stack-plan foundations
+
+Prove stack-operation semantics, variable/value correspondence, reorder/dup/swap/poke correctness, spill correctness, and stack-depth bounds.
+
+### 6.2 Instruction simulation
+
+Handle pure operations, memory/storage, control flow, environment operations, calls/creation, halting/reverting, and parameters/internal returns. Treat `PARAM` at the block or function boundary if that is where its invariant is available.
+
+### 6.3 Block simulation
+
+Close local `genBlockSim` cases and establish entry-stack, successor-transfer, PHI/parameter, and terminator invariants.
+
+### 6.4 Function and context simulation
+
+Prove function entry, internal calls/returns, stack-frame layout, context dispatch, and nested execution, using or replacing `fnPlanDecomp` as appropriate.
+
+### 6.5 Assembly-to-EVM simulation
+
+The requested scope includes calls and nested contexts. Either extend assembly semantics to model them or use a justified atomic call relation. Prove opcode, program-counter, label, call-frame, return/revert, and data-section correspondence.
+
+### 6.6 Codegen milestone
+
+Close corrected forms of:
+
+- `gen_inst_simulation`;
+- `gen_block_simulation`;
+- `gen_fn_simulation`;
+- `asm_bytecode_sim`;
+- `codegen_fn_correct`;
+- `codegen_correct`.
+
+## Phase 7 — Discharge memory-safety obligations
+
+Do not require the existing broad memory-safety theorem merely because it exists. Instead:
+
+1. enumerate the exact memory hypotheses consumed by codegen;
+2. prove lowering establishes them;
+3. prove mandatory passes preserve them;
+4. package them as part of codegen readiness.
+
+Likely obligations concern ALLOCA sizes and bases, pointer bounds, spill/program-memory separation, and ABI/temporary-buffer regions. Derive a broader `lowering_memory_safe` theorem only if useful.
+
+## Phase 8 — End-to-end composition
+
+### 8.1 Runtime correctness
+
+Compose lowering, mandatory pipeline, codegen, and EVM/source-result correspondence.
+
+### 8.2 Deployment correctness
+
+Cover constructor execution, runtime-bytecode embedding, immutables, deployed-code return, and deployment failure.
+
+### 8.3 Nested-call correctness
+
+Support calls between compiled contracts, calls to externally specified EVM contracts, and reentrant calls under explicit assumptions.
+
+### 8.4 Final theorem family
+
+Prefer precise composable theorems:
+
+- runtime external-call correctness;
+- deployment correctness;
+- minimal-pipeline compiler correctness;
+- optional-pipeline corollaries;
+- multi-contract/system corollaries where feasible.
+
+## Parallel work packages
+
+After phases 0–2 stabilize shared interfaces, work can divide into:
+
+- **Track A:** lowering, ABI, and module correctness;
+- **Track B:** mandatory and optional pipeline certification;
+- **Track C:** stack planning and Venom-to-assembly simulation;
+- **Track D:** assembly-to-EVM simulation, calls, and nested contexts;
+- **Track E:** shared invariants and end-to-end integration.
+
+For a single expert, use the phase ordering above, but periodically develop a narrow vertical slice to test whether assumptions genuinely compose.
