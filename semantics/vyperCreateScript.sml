@@ -495,5 +495,3 @@ Proof
   rpt (IF_CASES_TAC >>
        gvs[bind_def, update_accounts_def, return_def, raise_def, assert_def])
 QED
-
-val _ = export_theory();
