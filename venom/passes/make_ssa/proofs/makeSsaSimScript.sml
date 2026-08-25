@@ -471,7 +471,9 @@ Proof
   `!i. i < LENGTH bb.bb_instructions - 1 ==>
        ~is_terminator (EL i bb.bb_instructions).inst_opcode` by (
     rpt strip_tac >> spose_not_then strip_assume_tac >>
-    gvs[bb_well_formed_def] >> res_tac >> DECIDE_TAC) >>
+    qpat_x_assum `bb_well_formed bb`
+      (STRIP_ASSUME_TAC o REWRITE_RULE [bb_well_formed_def]) >>
+    res_tac >> DECIDE_TAC) >>
   `MEM v.vs_current_bb (bb_succs bb)` by (
     mp_tac run_block_current_bb_in_succs >>
     disch_then (qspecl_then [`fuel`, `ctx`, `bb`, `s1`, `v`] mp_tac) >>
@@ -1971,6 +1973,7 @@ Proof
       qexists_tac `rs0` >>
       PURE_REWRITE_TAC [GSYM (!func'_eq_ref)] >>
       rpt conj_tac >>
+      TRY (first_assum ACCEPT_TAC) >>
       gvs[] >>
       TRY (`~(v1:venom_state).vs_halted` by metis_tac[run_block_OK_not_halted] >>
            `~(v2:venom_state).vs_halted` by metis_tac[run_block_OK_not_halted] >>
@@ -1981,7 +1984,10 @@ Proof
     `~v2.vs_halted` by metis_tac[run_block_OK_not_halted] >>
     ASM_REWRITE_TAC[] >>
     first_assum ACCEPT_TAC) >>
-  gvs[ssa_result_equiv_def, result_equiv_def]
+  TRY (first_assum ACCEPT_TAC) >>
+  qpat_x_assum `ssa_result_equiv _ _` mp_tac >>
+  PURE_REWRITE_TAC[ssa_result_equiv_def] >>
+  simp_tac std_ss [exec_result_case_def, result_equiv_def]
 QED
 
 

@@ -1814,10 +1814,6 @@ Triviality exec_alloca_init[local]:
         lookup_var out v = SOME (n2w 0)
 Proof
   rpt strip_tac >>
-  Cases_on `inst.inst_opcode` >> gvs[] >>
-  gvs[step_inst_base_def, exec_alloca_def, init_venom_state_def,
-       update_var_def, lookup_var_def, FLOOKUP_UPDATE,
-       venom_state_component_equality] >>
   qexists `<| vs_memory := []; vs_transient := empty_transient_storage;
     vs_vars := FEMPTY |+ (out,0w); vs_prev_bb := NONE;
     vs_current_bb := ""; vs_inst_idx := 0; vs_returndata := [];
@@ -1828,7 +1824,12 @@ Proof
     vs_code := []; vs_params := []; vs_prev_hashes := [];
     vs_allocas := FEMPTY |+ (inst.inst_id,(0,w2n alloc_size));
     vs_alloca_next := w2n alloc_size |>` >>
-  simp[FLOOKUP_UPDATE]
+  ONCE_REWRITE_TAC[step_inst_base_def] >>
+  qpat_x_assum `inst.inst_opcode = ALLOCA`
+    (fn th => PURE_REWRITE_TAC[th]) >>
+  simp[exec_alloca_def] >>
+  simp[init_venom_state_def, update_var_def, lookup_var_def] >>
+  simp[FLOOKUP_UPDATE, venom_state_component_equality]
 QED
 
 (* alloca_step_breaks_safety was TRUE under the old alloca_safe_access

@@ -305,8 +305,7 @@ Triviality effects_independent_invoke_empty:
   !op. effects_independent INVOKE op ==>
        write_effects op = {} /\ read_effects op = {} /\ op <> INVOKE
 Proof
-  Cases >> simp[effects_independent_def, write_effects_def,
-                read_effects_def, all_effects_def] >> EVAL_TAC
+  Cases >> EVAL_TAC
 QED
 
 (* Given effects_independent between INVOKE and op, derive all useful facts:
@@ -1140,6 +1139,9 @@ val comm_lemmas =
    wordsTheory.WORD_XOR_COMM,
    arithmeticTheory.GREATER_DEF, wordsTheory.WORD_GREATER];
 
+fun flip_commutative_finish_tac () =
+  simp[] >> irule exec_pure2_swap >> rw comm_lemmas >> rw[EQ_SYM_EQ]
+
 (*
  * flip_operands preserves step_inst_base.
  * For commutative ops: operands swapped, opcode same -> exec_pure2_swap.
@@ -1154,9 +1156,10 @@ Proof
   drule commutative_cases >> drule commutative_not_comparator >>
   strip_tac >> strip_tac >> gvs[] >>
   ASM_REWRITE_TAC[flip_operands_def] >>
-  ASM_REWRITE_TAC[step_inst_base_def] >>
-  simp[] >>
-  irule exec_pure2_swap >> rw comm_lemmas >> rw[EQ_SYM_EQ]
+  ASM_REWRITE_TAC[step_inst_base_def] >|
+  [flip_commutative_finish_tac (), flip_commutative_finish_tac (),
+   flip_commutative_finish_tac (), flip_commutative_finish_tac (),
+   flip_commutative_finish_tac (), flip_commutative_finish_tac ()]
 QED
 
 Triviality flip_comparator:
@@ -1168,9 +1171,13 @@ Proof
   drule comparator_cases >> strip_tac >> gvs[] >>
   ASM_REWRITE_TAC[flip_operands_def, is_comparator_def,
                   flip_comparison_opcode_def] >>
+  simp[LET_THM] >>
   ASM_REWRITE_TAC[step_inst_base_def] >>
-  (* exec_pure2_opcode_irrel strips the opcode update *)
-  simp[] >>
+  PURE_REWRITE_TAC[venomInstTheory.instruction_accfupds,
+                   combinTheory.K_THM] >>
+  BETA_TAC >> ASM_REWRITE_TAC[] >>
+  PURE_REWRITE_TAC[venomInstTheory.opcode_case_def,
+                   exec_pure2_opcode_irrel] >>
   irule exec_pure2_swap >> rw comm_lemmas
 QED
 

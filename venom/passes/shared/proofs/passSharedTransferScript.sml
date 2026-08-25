@@ -175,7 +175,7 @@ val transfer_determined_finish_tac =
   ASM_REWRITE_TAC[opcode_case_def] >>
   simp[exec_pure1_def, exec_pure2_def, exec_pure3_def,
        exec_read0_def, exec_read1_def, exec_write2_def] >>
-  rpt strip_tac >>
+  ntac 2 strip_tac >>
   gvs[AllCaseEqs()] >>
   rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
   transfer_close_tac;
@@ -469,6 +469,26 @@ Proof
   >- transfer_determined_finish_tac
   >- transfer_determined_finish_tac
   >- transfer_determined_finish_tac
+  >- (qpat_x_assum `step_inst_base _ s1 = _` mp_tac >>
+      qpat_x_assum `step_inst_base _ s2 = _` mp_tac >>
+      PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+      ASM_REWRITE_TAC[opcode_case_def] >>
+      simp[exec_pure1_def, exec_pure2_def, exec_pure3_def,
+           exec_read0_def, exec_read1_def, exec_write2_def] >>
+      ntac 2 strip_tac >>
+      gvs[AllCaseEqs()] >>
+      rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
+      transfer_close_tac)
+  >- (qpat_x_assum `step_inst_base _ s1 = _` mp_tac >>
+      qpat_x_assum `step_inst_base _ s2 = _` mp_tac >>
+      PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+      ASM_REWRITE_TAC[opcode_case_def] >>
+      simp[exec_pure1_def, exec_pure2_def, exec_pure3_def,
+           exec_read0_def, exec_read1_def, exec_write2_def] >>
+      ntac 2 strip_tac >>
+      gvs[AllCaseEqs()] >>
+      rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
+      transfer_close_tac)
   >- transfer_determined_finish_tac
   >- transfer_determined_finish_tac
   >- transfer_determined_finish_tac
@@ -533,9 +553,16 @@ Proof
   >- transfer_determined_finish_tac
   >- transfer_determined_finish_tac
   >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
-  >- transfer_determined_finish_tac
+  >- (qpat_x_assum `step_inst_base _ s1 = _` mp_tac >>
+      qpat_x_assum `step_inst_base _ s2 = _` mp_tac >>
+      PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+      ASM_REWRITE_TAC[opcode_case_def] >>
+      simp[exec_pure1_def, exec_pure2_def, exec_pure3_def,
+           exec_read0_def, exec_read1_def, exec_write2_def] >>
+      ntac 2 strip_tac >>
+      gvs[AllCaseEqs()] >>
+      rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
+      transfer_close_tac)
   >- transfer_determined_finish_tac
 QED
 
@@ -709,8 +736,66 @@ Proof
   Cases_on `inst.inst_opcode` >>
   gvs[is_effect_free_op_def, is_terminator_def,
       read_effects_def, write_effects_def,
-      all_effects_def, empty_effects_def] >>
-  transfer_determined_finish_tac
+      all_effects_def, empty_effects_def]
+  >- transfer_determined_finish_tac  (* ADD *)
+  >- transfer_determined_finish_tac  (* SUB *)
+  >- transfer_determined_finish_tac  (* MUL *)
+  >- transfer_determined_finish_tac  (* Div *)
+  >- transfer_determined_finish_tac  (* SDIV *)
+  >- transfer_determined_finish_tac  (* Mod *)
+  >- transfer_determined_finish_tac  (* SMOD *)
+  >- transfer_determined_finish_tac  (* Exp *)
+  >- transfer_determined_finish_tac  (* ADDMOD *)
+  >- transfer_determined_finish_tac  (* MULMOD *)
+  >- transfer_determined_finish_tac  (* EQ *)
+  >- transfer_determined_finish_tac  (* LT *)
+  >- transfer_determined_finish_tac  (* GT *)
+  >- transfer_determined_finish_tac  (* SLT *)
+  >- transfer_determined_finish_tac  (* SGT *)
+  >- transfer_determined_finish_tac  (* ISZERO *)
+  >- transfer_determined_finish_tac  (* AND *)
+  >- transfer_determined_finish_tac  (* OR *)
+  >- transfer_determined_finish_tac  (* XOR *)
+  >- transfer_determined_finish_tac  (* NOT *)
+  >- transfer_determined_finish_tac  (* SHL *)
+  >- transfer_determined_finish_tac  (* SHR *)
+  >- transfer_determined_finish_tac  (* SAR *)
+  >- transfer_determined_finish_tac  (* SIGNEXTEND *)
+  >- transfer_determined_finish_tac  (* BYTE *)
+  >- transfer_determined_finish_tac  (* MLOAD *)
+  >- transfer_determined_finish_tac  (* SLOAD *)
+  >- transfer_determined_finish_tac  (* TLOAD *)
+  >- transfer_determined_finish_tac  (* ILOAD *)
+  >- transfer_determined_finish_tac  (* DLOAD *)
+  >- transfer_determined_finish_tac  (* MEMTOP *)
+  >- transfer_determined_finish_tac  (* SHA3 *)
+  >- transfer_determined_finish_tac  (* CALLER *)
+  >- transfer_determined_finish_tac  (* ADDRESS *)
+  >- transfer_determined_finish_tac  (* CALLVALUE *)
+  >- transfer_determined_finish_tac  (* GAS *)
+  >- transfer_determined_finish_tac  (* ORIGIN *)
+  >- transfer_determined_finish_tac  (* GASPRICE *)
+  >- transfer_determined_finish_tac  (* CHAINID *)
+  >- transfer_determined_finish_tac  (* COINBASE *)
+  >- transfer_determined_finish_tac  (* TIMESTAMP *)
+  >- transfer_determined_finish_tac  (* NUMBER *)
+  >- transfer_determined_finish_tac  (* PREVRANDAO *)
+  >- transfer_determined_finish_tac  (* GASLIMIT *)
+  >- transfer_determined_finish_tac  (* BASEFEE *)
+  >- transfer_determined_finish_tac  (* BLOBBASEFEE *)
+  >- transfer_determined_finish_tac  (* BLOCKHASH *)
+  >- transfer_determined_finish_tac  (* BLOBHASH *)
+  >- transfer_determined_finish_tac  (* BALANCE *)
+  >- transfer_determined_finish_tac  (* SELFBALANCE *)
+  >- transfer_determined_finish_tac  (* CALLDATASIZE *)
+  >- transfer_determined_finish_tac  (* CALLDATALOAD *)
+  >- transfer_determined_finish_tac  (* RETURNDATASIZE *)
+  >- transfer_determined_finish_tac  (* CODESIZE *)
+  >- transfer_determined_finish_tac  (* EXTCODESIZE *)
+  >- transfer_determined_finish_tac  (* EXTCODEHASH *)
+  >- transfer_determined_finish_tac  (* ASSIGN *)
+  >- transfer_determined_finish_tac  (* PARAM *)
+  >- transfer_determined_finish_tac  (* OFFSET *)
 QED
 
 

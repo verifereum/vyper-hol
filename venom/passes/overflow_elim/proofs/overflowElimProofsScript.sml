@@ -111,9 +111,13 @@ Triviality step_assign_output_in_fdom[local]:
     out IN FDOM s'.vs_vars
 Proof
   rpt strip_tac >>
-  Cases_on `inst.inst_operands` >> gvs[step_inst_base_def] >>
-  Cases_on `t` >> gvs[step_inst_base_def] >>
-  Cases_on `eval_operand h s` >> gvs[update_var_def, FDOM_FUPDATE]
+  qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
+  ASM_REWRITE_TAC[step_inst_base_def] >>
+  Cases_on `inst.inst_operands` >> simp[] >>
+  Cases_on `t` >> simp[] >>
+  Cases_on `eval_operand h s` >>
+  simp[update_var_def, FDOM_FUPDATE] >> strip_tac >>
+  gvs[FDOM_FUPDATE]
 QED
 
 Triviality step_iszero_output_in_fdom[local]:
@@ -130,11 +134,15 @@ Proof
 QED
 
 val tracked_pure2_output_finish_tac =
-  Cases_on `inst.inst_operands` >> gvs[step_inst_base_def, exec_pure2_def] >>
-  Cases_on `t` >> gvs[step_inst_base_def, exec_pure2_def] >>
-  Cases_on `t'` >> gvs[step_inst_base_def, exec_pure2_def] >>
-  Cases_on `eval_operand h s` >> gvs[step_inst_base_def, exec_pure2_def] >>
-  Cases_on `eval_operand h' s` >> gvs[update_var_def, FDOM_FUPDATE];
+  qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
+  ASM_REWRITE_TAC[step_inst_base_def] >>
+  Cases_on `inst.inst_operands` >> simp[exec_pure2_def] >>
+  Cases_on `t` >> simp[exec_pure2_def] >>
+  Cases_on `t'` >> simp[exec_pure2_def] >>
+  Cases_on `eval_operand h s` >> simp[exec_pure2_def] >>
+  Cases_on `eval_operand h' s` >>
+  simp[update_var_def, FDOM_FUPDATE] >> strip_tac >>
+  gvs[FDOM_FUPDATE];
 
 Triviality step_pure2_output_in_fdom[local]:
   !inst s s' out.

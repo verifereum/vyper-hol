@@ -850,9 +850,8 @@ Theorem af_rewrite_inst_not_phi[local]:
     af_rewrite_inst dfg vi inst = SOME result ==>
     result.inst_opcode <> PHI
 Proof
-  simp[af_rewrite_inst_def, vi_base_def, vi_offset_def,
-       af_extract_val_lit_def, af_extract_sub_val_lit_def] >>
-  rpt gen_tac >> rpt (BasicProvers.PURE_CASE_TAC >> gvs[]) >> rw[] >> gvs[]
+  rpt strip_tac >>
+  drule af_rewrite_inst_cases >> strip_tac >> gvs[]
 QED
 
 Theorem af_transform_inst_not_phi[local]:

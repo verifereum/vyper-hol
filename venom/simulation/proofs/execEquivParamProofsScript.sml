@@ -329,7 +329,10 @@ Proof
   rpt gen_tac >> strip_tac >>
   `s1.vs_prev_bb = s2.vs_prev_bb` by (drule vsr_R_ok_prev_bb >> simp[]) >>
   `EVERY (λinst. inst.inst_opcode = PHI ⇒ ∀x. MEM (Var x) inst.inst_operands ⇒ lookup_var x s1 = lookup_var x s2) bb.bb_instructions` by
-    (irule (Q.SPECL [`R_ok`,`R_term`,`fn`] operand_agreement_EVERY) >> metis_tac[]) >>
+    (mp_tac (Q.SPECL [`R_ok`, `R_term`, `fn`, `bb`, `s1`, `s2`]
+       operand_agreement_EVERY) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     simp[]) >>
   ONCE_REWRITE_TAC[run_block_def] >> qspec_then `s1` assume_tac eval_phis_ok_or_error_defs >> qspec_then `s2` assume_tac eval_phis_ok_or_error_defs >>
   DISJ_CASES_TAC (Q.SPECL [`s1`,`bb.bb_instructions`] eval_phis_ok_or_error_defs) >-
     (DISJ_CASES_TAC (Q.SPECL [`s2`,`bb.bb_instructions`] eval_phis_ok_or_error_defs) >-

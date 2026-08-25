@@ -55,10 +55,10 @@ Theorem step_inst_base_preserves_account_memory_fields:
      s'.vs_memory = s.vs_memory)
 Proof
   rpt gen_tac >> strip_tac >>
-  gvs[step_inst_base_def, AllCaseEqs(),
-      is_terminator_def, is_alloca_op_def,
-      write_effects_def, empty_effects_def,
-      update_var_def] >>
+  RULE_ASSUM_TAC (SIMP_RULE std_ss [Once step_inst_base_def]) >>
+  Cases_on `inst.inst_opcode` >>
+  gvs[is_terminator_def, is_alloca_op_def,
+      write_effects_def, empty_effects_def] >>
   imp_res_tac exec_pure1_static_preserves >>
   imp_res_tac exec_read0_static_preserves >>
   imp_res_tac exec_read1_static_preserves >>
@@ -75,8 +75,9 @@ Proof
       mcopy_def, mstore_def, mstore8_def,
       write_memory_with_expansion_def,
       sstore_def, tstore_def, all_effects_def,
-      update_var_def] >> gvs[] >>
-  Cases_on `result` >> gvs[] >>
+      update_var_def] >> gvs[]
+  >- (drule exec_ext_call_static_preserves >> simp[])
+  >> Cases_on `result` >> gvs[] >>
   Cases_on `y` >> gvs[]
 QED
 

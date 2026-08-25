@@ -1008,7 +1008,17 @@ Proof
            else return ())`,
        `lock_st with scopes := [env]`, `body_final_res`, `body_final_st`]
       mp_tac finally_preserves_state_predicate >>
-    simp[] >> metis_tac[]) >>
+    simp[] >> strip_tac >>
+    qpat_x_assum `_ ==> contract_storage_well_formed cx body_final_st` irule >>
+    rpt gen_tac >> strip_tac >>
+    qpat_x_assum
+      `!s r s'. contract_storage_well_formed cx s /\
+         do pop_function prev; _ od s = (r,s') ==>
+         contract_storage_well_formed cx s'`
+      (qspecl_then [`s`, `r`, `s'`] mp_tac) >>
+    ASM_REWRITE_TAC[] >> strip_tac >>
+    qpat_x_assum `_ ==> contract_storage_well_formed cx s'` irule >>
+    simp[]) >>
   Cases_on `body_final_res` >>
   gvs[] >>
   rename1 `safe_cast rtv rv` >>
@@ -1446,8 +1456,6 @@ Resume eval_all_storage_preservation_mutual[Targets_cons]:
     Cases_on `q` >> gvs[bind_def] >> rpt strip_tac >> gvs[]) >>
   rpt strip_tac >> gvs[]
 QED
-
-val _ = export_theory();
 
 Resume eval_all_storage_preservation_mutual[RaiseReason]:
   rpt gen_tac >> strip_tac >>
@@ -3166,8 +3174,11 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_ExtCall]:
               rewrite_tac[return_def, raise_def] >>
               Cases_on `NULL (lookup_account target_addr args_st.accounts).code` >>
               rewrite_tac[return_def, raise_def]
-              >- (strip_tac >> gvs[assert_def, bind_def, return_def, raise_def,
-                                    get_accounts_def, get_transient_storage_def] >>
+              >- (strip_tac >>
+                  qpat_x_assum `_ args_st = (res,st')` mp_tac >>
+                  simp[assert_def, bind_def, return_def, raise_def,
+                       get_accounts_def, get_transient_storage_def] >>
+                  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
                   metis_tac[runtime_storage_consistent_storage]) >>
               simp_tac(srw_ss())[return_def, get_accounts_def, assert_def,
                                  get_transient_storage_def, raise_def, bind_def] >>

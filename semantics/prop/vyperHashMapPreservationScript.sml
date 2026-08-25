@@ -275,7 +275,12 @@ Proof
           vyperStateTheory.get_address_immutables_def,
           vyperStateTheory.lift_option_def, vyperStateTheory.lift_option_type_def,
           vyperStateTheory.return_def, vyperStateTheory.raise_def, set_storage_immutables]
-  \\ rpt CASE_TAC \\ gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def]
+  \\ TRY CASE_TAC \\ gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def]
+  \\ TRY CASE_TAC \\ gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def]
+  \\ TRY CASE_TAC \\ gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def]
+  \\ TRY CASE_TAC \\ gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def]
+  \\ TRY CASE_TAC \\ gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def]
+  \\ TRY CASE_TAC \\ gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def]
 QED
 
 (* Helper: read_storage_slot FST preserved by set_storage under disjointness *)

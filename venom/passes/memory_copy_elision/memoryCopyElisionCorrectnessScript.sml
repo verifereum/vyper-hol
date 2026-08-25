@@ -339,7 +339,15 @@ Proof
     qspecl_then [`aliases`,`bp`,`uc`,`bb`,`i`] mp_tac
       (REWRITE_RULE [LET_THM] lse_block_trace) >>
     simp[Abbr `bb'`, lse_block_length] >> strip_tac >>
-    gvs[bb_well_formed_def, is_terminator_def])
+    `is_terminator bb.bb_instructions❲i❳.inst_opcode` by (
+      qpat_x_assum
+        `is_terminator (load_store_elim_block aliases bp uc bb).bb_instructions❲i❳.inst_opcode`
+        mp_tac >>
+      ASM_REWRITE_TAC[is_terminator_def]) >>
+    qpat_x_assum `bb_well_formed bb`
+      (STRIP_ASSUME_TAC o REWRITE_RULE [bb_well_formed_def]) >>
+    qpat_x_assum `!k. _ ==> k = PRE (LENGTH bb.bb_instructions)`
+      (qspec_then `i` mp_tac) >> simp[])
   (* PHI ordering: bb'[j] = PHI /\ i<j => bb'[i] = PHI *)
   >> (
     rpt strip_tac >>

@@ -1095,7 +1095,7 @@ Theorem step_inst_update_phi_other[local]:
     step_inst fuel ctx inst s
 Proof
   rw[step_inst_def, is_terminator_def] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> simp[] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> ASM_REWRITE_TAC[] >>
   simp[resolve_phi_update_phi_ops_other]
 QED
 
@@ -1884,8 +1884,10 @@ Triviality step_inst_base_ok_terminator_jump:
     inst.inst_opcode = DJMP
 Proof
   rpt strip_tac >>
-  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
-  term_ok_jump_tac
+  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def]
+  >- term_ok_jump_tac >- term_ok_jump_tac >- term_ok_jump_tac
+  >- term_ok_jump_tac >- term_ok_jump_tac >- term_ok_jump_tac
+  >- term_ok_jump_tac
 QED
 
 (* Unified helper: step_inst_base on a non-PHI instruction with
@@ -5861,10 +5863,17 @@ Proof
   `EVERY inst_wf target_bb.bb_instructions` by
     (simp[listTheory.EVERY_MEM] >>
      fs[venomWfTheory.fn_inst_wf_def] >> metis_tac[]) >>
-  `target_bb.bb_instructions <> []` by fs[venomWfTheory.bb_well_formed_def] >>
+  `target_bb.bb_instructions <> []` by
+    (qpat_x_assum `bb_well_formed target_bb` mp_tac >>
+     simp[venomWfTheory.bb_well_formed_def]) >>
   `!i. i < LENGTH target_bb.bb_instructions - 1 ==>
      ~is_terminator (EL i target_bb.bb_instructions).inst_opcode` by
-    (fs[venomWfTheory.bb_well_formed_def] >> rpt strip_tac >> res_tac >> fs[]) >>
+    (qpat_x_assum `bb_well_formed target_bb` mp_tac >>
+     PURE_REWRITE_TAC[venomWfTheory.bb_well_formed_def] >>
+     strip_tac >> rpt strip_tac >> CCONTR_TAC >>
+     qpat_x_assum `!j. j < LENGTH target_bb.bb_instructions /\ _ ==> _`
+       (qspec_then `i` mp_tac) >>
+     impl_tac >- simp[] >> simp[]) >>
   (* v_after1.vs_current_bb is in bb_succs (hence in fn_labels, hence <> split_lbl) *)
   `MEM v_after1.vs_current_bb (bb_succs target_bb)` by
     (mp_tac (Q.SPECL [`m`, `ctx`, `target_bb`, `v1`, `v_after1`]

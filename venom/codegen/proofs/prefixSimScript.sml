@@ -97,8 +97,16 @@ Theorem prefix_mstore_preserves[local]:
     asm_step lo o2pc (AsmOp "MSTORE") st = AsmOK st' ==> ^side_fields
 Proof
   rpt strip_tac \\
-  fs(all_handler_defs) \\
-  every_case_tac \\ gvs[]
+  qpat_x_assum `asm_step _ _ _ _ = AsmOK _` mp_tac \\
+  PURE_ONCE_REWRITE_TAC[asm_step_def] \\
+  simp_tac std_ss [] \\
+  PURE_ONCE_REWRITE_TAC[asm_step_op_def] \\
+  simp[asm_step_arith_def] \\
+  simp[asm_step_compare_def] \\
+  simp[asm_step_bitwise_def] \\
+  simp[asm_step_memory_def] \\
+  simp[asm_mstore_def, LET_THM, asm_next_def] \\
+  every_case_tac \\ rpt strip_tac \\ gvs[]
 QED
 
 Theorem prefix_mload_preserves[local]:

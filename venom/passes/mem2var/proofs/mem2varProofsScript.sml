@@ -750,6 +750,14 @@ Theorem step_inst_base_ok_preserves_allocas:
     s'.vs_allocas = s.vs_allocas
 Proof
   rpt strip_tac >>
+  mp_tac (Q.SPECL [`inst`, `s`, `s'`]
+    venomMemPropsTheory.step_inst_base_preserves_allocas) >>
+  ASM_REWRITE_TAC[] >> simp[]
+QED
+
+(* Legacy direct proof retained below is unnecessary now that the shared
+   memory-frame theorem is available. *)
+(*
   fs[step_inst_base_def, AllCaseEqs()] >>
   gvs[AllCaseEqs(),
       exec_pure1_def, exec_pure2_def, exec_pure3_def,
@@ -763,6 +771,7 @@ Proof
       revert_state_def, eval_operands_def, jump_to_def,
       lookup_var_def, FLOOKUP_UPDATE, halt_state_def, set_returndata_def]
 QED
+*)
 
 (* Alloca bridge: relates lookup_var of alloca outputs to vs_allocas.
    Two clauses:

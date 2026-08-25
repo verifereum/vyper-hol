@@ -34,7 +34,7 @@
 Theory removeUnusedProofs
 Ancestors
   removeUnusedDefs passSimulationProps analysisSimProps venomInstProps venomWf
-  execEquivProps livenessProofs passSharedDefs passSharedProps venomInst
+  opcodeClass execEquivProps livenessProofs passSharedDefs passSharedProps venomInst
   stateEquiv stateEquivProofs venomExecProofs venomExecProps
   venomState venomExecSemantics indexedLists cfgTransform cfgAnalysisProps pointerConfinedDefs
 Libs
@@ -444,7 +444,9 @@ Theorem step_inst_base_no_abort[local]:
     inst.inst_opcode = ASSERT_UNREACHABLE \/
     inst.inst_opcode = RETURNDATACOPY
 Proof
-  step_base_result_tac
+  rpt strip_tac >>
+  drule opcodeClassTheory.step_inst_base_abort_opcodes >>
+  strip_tac >> gvs[is_terminator_def]
 QED
 
 (* Effect-free non-INVOKE step_inst can only return OK or Error. *)

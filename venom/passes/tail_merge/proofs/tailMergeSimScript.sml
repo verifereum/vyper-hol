@@ -171,12 +171,22 @@ Proof
   Cases_on `op1` >> Cases_on `op2` >>
   simp[canon_operand_def, LET_THM, eval_operand_def] >>
   rpt strip_tac >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[]) >>
+  TRY (BasicProvers.FULL_CASE_TAC >> gvs[]) >>
+  TRY (BasicProvers.FULL_CASE_TAC >> gvs[]) >>
+  TRY (BasicProvers.FULL_CASE_TAC >> gvs[]) >>
+  TRY (BasicProvers.FULL_CASE_TAC >> gvs[]) >>
   gvs[var_corr_def, lookup_var_def, var_map_wf_def,
       alistTheory.ALOOKUP_def] >>
-  rpt strip_tac >> rpt (CASE_TAC >> gvs[]) >>
+  rpt strip_tac >>
+  TRY (CASE_TAC >> gvs[]) >>
+  TRY (CASE_TAC >> gvs[]) >>
+  TRY (CASE_TAC >> gvs[]) >>
+  TRY (CASE_TAC >> gvs[]) >>
   TRY (res_tac >> fs[] >> NO_TAC) >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[]) >>
+  TRY (BasicProvers.FULL_CASE_TAC >> gvs[]) >>
+  TRY (BasicProvers.FULL_CASE_TAC >> gvs[]) >>
+  TRY (BasicProvers.FULL_CASE_TAC >> gvs[]) >>
+  TRY (BasicProvers.FULL_CASE_TAC >> gvs[]) >>
   TRY (res_tac >> fs[] >> NO_TAC)
 QED
 

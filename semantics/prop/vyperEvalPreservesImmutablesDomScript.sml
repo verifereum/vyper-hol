@@ -1481,8 +1481,10 @@ Proof
   RULE_ASSUM_TAC (REWRITE_RULE [check_def, type_check_def, assert_def, return_def]) >>
   gvs[] >>
   (* Resolve case expressions on dest_AddressV/dest_NumV *)
-  rpt (BasicProvers.FULL_CASE_TAC >>
-       gvs[return_def, raise_def]) >>
+  TRY BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def] >>
+  TRY BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def] >>
+  TRY BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def] >>
+  TRY BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def] >>
   imp_res_tac transfer_value_immutables >> gvs[] >>
   first_x_assum drule >>
   metis_tac[preserves_immutables_dom_trans, preserves_immutables_dom_eq]
@@ -3037,11 +3039,13 @@ Proof
      `FST (SND (SND (SND (SND fn_tup))))`,
      `SND (SND (SND (SND (SND fn_tup))))`]
     mp_tac intcall_mutual_tail_body_provider_from_generated_ih \\
-  simp[get_scopes_def, return_def] \\
+  simp[get_scopes_def] \\
+  PURE_REWRITE_TAC[return_def] \\
   (impl_tac >-
-     (qpat_assum `∀s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0 sstup0 dflts0 sstup20 ret0 ss0 s3 x1 t3 s4 vs0 t4 needed_dflts0 cxd0 s5 prev0 t5 s6 dflt_vs0 t6 all_tenv s7 env t7 s8 rtv t8 is_view s9 lk t9 s10 cx0 t10. _ ⇒ ∀st0 res0 st1. eval_stmts cx0 ss0 st0 = (res0,st1) ⇒ preserves_immutables_dom cx0 st0 st1`
+     (qpat_x_assum `∀s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0 sstup0 dflts0 sstup20 ret0 ss0 s3 x1 t3 s4 vs0 t4 needed_dflts0 cxd0 s5 prev0 t5 s6 dflt_vs0 t6 all_tenv s7 env t7 s8 rtv t8 is_view s9 lk t9 s10 cx0 t10. _ ⇒ ∀st0 res0 st1. eval_stmts cx0 ss0 st0 = (res0,st1) ⇒ preserves_immutables_dom cx0 st0 st1`
         mp_tac \\
-      simp[get_scopes_def, return_def])) \\
+      PURE_REWRITE_TAC[get_scopes_def, return_def] \\
+      simp[])) \\
   simp[]
 QED
 
@@ -3140,7 +3144,8 @@ Proof
   \\ simp[bind_def]
   \\ BasicProvers.TOP_CASE_TAC
   \\ reverse BasicProvers.TOP_CASE_TAC
-  >- (rpt strip_tac \\ gvs[] \\
+  >- (rpt strip_tac \\
+      rpt (qpat_x_assum `_ = st` SUBST_ALL_TAC) \\
       irule intcall_default_frame_to_caller_imm_dom \\
       qexists_tac `fn` \\
       qexists_tac `r'⁴'` \\
@@ -3148,8 +3153,8 @@ Proof
       simp[] \\
       qspecl_then
         [`cx`, `src_id_opt`, `fn`, `es`,
-         `r`, `r`, `r`, `r`, `r`,
-         `()`, `r`, `x'`, `r`, `x''`, `r`, `()`, `r`, `x'⁴'`, `r'⁴'`,
+         `st`, `st`, `st`, `st`, `st`,
+         `()`, `st`, `x'`, `st`, `x''`, `st`, `()`, `st`, `x'⁴'`, `r'⁴'`,
          `DROP (LENGTH (FST (SND (SND (SND x'')))) -
                 (LENGTH (FST (SND (SND x''))) - LENGTH es))
                (FST (SND (SND (SND x''))))`,
@@ -3157,7 +3162,9 @@ Proof
          `INR y`, `r'⁵'`]
         mp_tac intcall_mutual_default_frame_imm_dom_from_generated_ih \\
       (impl_tac >-
-         (conj_tac >- (qpat_assum `∀s0 t0 s1 ts0 t1 s2 tup0 t2 s3 t3 s4 vs0 t4 s5 prev0 t5 s6 t6. _ ⇒ ∀st0 res0 st1. eval_exprs (cx with stk updated_by CONS (src_id_opt,fn)) _ st0 = (res0,st1) ⇒ preserves_immutables_dom (cx with stk updated_by CONS (src_id_opt,fn)) st0 st1` mp_tac \\ simp[]) \\
+         (conj_tac >- (qpat_x_assum `∀s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0 sstup0 dflts0 sstup20 ret0 body0 s3 x1 t3 s4 vs0 t4 es0 cxd0 s5 prev0 t5 s6 x2 t6. _ ⇒ ∀st0 res0 st1. eval_exprs cxd0 es0 st0 = (res0,st1) ⇒ preserves_immutables_dom cxd0 st0 st1` mp_tac \\ simp[]) \\
+          TRY (qpat_x_assum `∀s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0 sstup0 dflts0 sstup20 ret0 body0 s3 x1 t3 s4 vs0 t4 es0 cxd0 s5 prev0 t5 s6 x2 t6. _` kall_tac) \\
+          TRY (qpat_x_assum `∀s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0 sstup0 dflts0 sstup20 ret0 ss0 s3 x1 t3 s4 vs0 t4 needed_dflts0 cxd0 s5 prev0 t5 s6 dflt_vs0 t6 all_tenv s7 env t7 s8 rtv t8 is_view s9 lk t9 s10 cx0 t10. _` kall_tac) \\
           rpt conj_tac \\ simp[get_scopes_def, set_scopes_def, return_def,
                                 type_check_def, assert_def, ignore_bind_def] \\
           TRY decide_tac)) \\
@@ -3434,7 +3441,15 @@ Resume immutables_dom_mutual[ExtCall]:
   >- (
     last_x_assum(qspec_then`ARB`kall_tac)
     \\ gvs[CaseEq"bool", return_def, COND_RATOR, bind_def]
-    \\ gvs[CaseEq"sum", CaseEq"prod"]
+    \\ gvs[CaseEq"sum"]
+    \\ gvs[CaseEq"prod"]
+    \\ Cases_on `v` \\ gvs[]
+    \\ TRY BasicProvers.FULL_CASE_TAC \\ gvs[]
+    \\ TRY BasicProvers.FULL_CASE_TAC \\ gvs[]
+    \\ TRY BasicProvers.TOP_CASE_TAC \\ gvs[]
+    \\ TRY BasicProvers.TOP_CASE_TAC \\ gvs[]
+    \\ TRY BasicProvers.TOP_CASE_TAC \\ gvs[]
+    \\ TRY BasicProvers.TOP_CASE_TAC \\ gvs[]
     \\ imp_res_tac type_check_same_state
     \\ imp_res_tac lift_option_same_state
     \\ imp_res_tac lift_option_type_same_state

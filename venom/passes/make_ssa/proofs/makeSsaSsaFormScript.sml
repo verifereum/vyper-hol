@@ -37,7 +37,9 @@ Proof
   first_x_assum drule >> strip_tac >>
   rpt gen_tac >> strip_tac >> gvs[]
   (* Case 1: x = version_var h ver (the newly produced output) *)
-  >- (imp_res_tac version_var_inj >> gvs[] >>
+  >- (imp_res_tac version_var_inj >>
+      qpat_x_assum `v = h` SUBST_ALL_TAC >>
+      qpat_x_assum `n = ver` SUBST_ALL_TAC >>
       imp_res_tac push_version_counter >>
       imp_res_tac rename_outputs_counter_mono >>
       first_x_assum (qspec_then `h` mp_tac) >>

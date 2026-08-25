@@ -16,6 +16,54 @@ Proof
   rw[bounded_decimal_op_def]
 QED
 
+Triviality uint_value_is_int[local]:
+  !m v. value_has_type (BaseTV (UintT m)) v ==> ?i. v = IntV i
+Proof
+  Cases_on `v` >> simp[value_has_type_def]
+QED
+
+Triviality sint_value_is_int[local]:
+  !m v. value_has_type (BaseTV (IntT m)) v ==> ?i. v = IntV i
+Proof
+  Cases_on `v` >> simp[value_has_type_def]
+QED
+
+Triviality bool_value_is_bool[local]:
+  !v. value_has_type (BaseTV BoolT) v ==> ?b. v = BoolV b
+Proof
+  Cases_on `v` >> simp[value_has_type_def]
+QED
+
+Triviality decimal_value_is_decimal[local]:
+  !v. value_has_type (BaseTV DecimalT) v ==> ?d. v = DecimalV d
+Proof
+  Cases_on `v` >> simp[value_has_type_def]
+QED
+
+Triviality bytes_value_is_bytes[local]:
+  !bd v. value_has_type (BaseTV (BytesT bd)) v ==> ?bs. v = BytesV bs
+Proof
+  Cases_on `bd` >> Cases_on `v` >> simp[value_has_type_def]
+QED
+
+Triviality address_value_is_bytes[local]:
+  !v. value_has_type (BaseTV AddressT) v ==> ?bs. v = BytesV bs
+Proof
+  Cases_on `v` >> simp[value_has_type_def]
+QED
+
+Triviality string_value_is_string[local]:
+  !n v. value_has_type (BaseTV (StringT n)) v ==> ?s. v = StringV s
+Proof
+  Cases_on `v` >> simp[value_has_type_def]
+QED
+
+Triviality flag_value_is_flag[local]:
+  !m v. value_has_type (FlagTV m) v ==> ?k. v = FlagV k
+Proof
+  Cases_on `v` >> simp[value_has_type_def]
+QED
+
 Theorem valid_conversion_no_type_error:
   valid_conversion from_ty to_ty /\
   evaluate_type (get_tenv cx) from_ty = SOME from_tv /\
@@ -27,12 +75,15 @@ Proof
   gvs[evaluate_type_builtin_def] >>
   Cases_on`from_ty` >> Cases_on`to_ty` >>
   gvs[valid_conversion_def, evaluate_type_def, AllCaseEqs()] >>
-  gvs[oneline value_has_type_def, evaluate_convert_def] >>
-  reverse(Cases_on`∃i. v = IntV i`)
-  >- (Cases_on`v` >> gvs[])
-  >> gvs[evaluate_convert_def]
-  >> Cases_on`v` >> gvs[]
-  >> gvs[evaluate_convert_def]
+  TRY (drule_all uint_value_is_int >> strip_tac >> gvs[]) >>
+  TRY (drule_all sint_value_is_int >> strip_tac >> gvs[]) >>
+  TRY (drule_all bool_value_is_bool >> strip_tac >> gvs[]) >>
+  TRY (drule_all decimal_value_is_decimal >> strip_tac >> gvs[]) >>
+  TRY (drule_all bytes_value_is_bytes >> strip_tac >> gvs[]) >>
+  TRY (drule_all address_value_is_bytes >> strip_tac >> gvs[]) >>
+  TRY (drule_all string_value_is_string >> strip_tac >> gvs[]) >>
+  TRY (drule_all flag_value_is_flag >> strip_tac >> gvs[]) >>
+  gvs[oneline value_has_type_def, evaluate_convert_def]
 QED
 
 Theorem evaluate_max_value_well_typed:

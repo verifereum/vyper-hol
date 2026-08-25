@@ -673,7 +673,14 @@ Proof
     qexists `inst` >> simp[] >>
     Cases_on `inst.inst_opcode` >> gvs[] >> NO_TAC) >>
   rpt (IF_CASES_TAC >> fs[mk_nop_inst_def, is_terminator_def]) >>
-  rpt (CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def]) >>
+  TRY CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def] >>
+  TRY CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def] >>
+  TRY CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def] >>
+  TRY CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def] >>
+  TRY CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def] >>
+  TRY CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def] >>
+  TRY CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def] >>
+  TRY CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def] >>
   imp_res_tac copy_opcode_not_term >> imp_res_tac copy_opcode_not_invoke >>
   imp_res_tac copy_opcode_not_phi >>
   fs[]

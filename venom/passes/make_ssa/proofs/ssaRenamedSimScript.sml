@@ -58,8 +58,15 @@ Triviality exec_pure2_renamed:
                   s1' s2'
 Proof
   rw[exec_pure2_def] >>
-  BasicProvers.every_case_tac >> gvs[] >>
+  Cases_on `inst1.inst_operands` >> gvs[] >>
+  Cases_on `t` >> gvs[] >>
+  Cases_on `t'` >> gvs[] >>
+  Cases_on `eval_operand h s1` >> gvs[] >>
+  Cases_on `eval_operand h' s1` >> gvs[] >>
   imp_res_tac eval_operand_renamed >> gvs[] >>
+  Cases_on `inst1.inst_outputs` >> gvs[] >>
+  Cases_on `t` >> gvs[] >>
+  Cases_on `inst2.inst_outputs` >> gvs[] >>
   irule ssa_sim_update_var >> gvs[]
 QED
 
@@ -127,6 +134,26 @@ Proof
   BasicProvers.every_case_tac >> gvs[] >>
   imp_res_tac eval_operand_renamed >> gvs[] >>
   irule ssa_sim_update_var >> gvs[]
+QED
+
+Triviality exec_mload_renamed:
+  !inst1 inst2 sigma s1 s2 s1'.
+    ssa_sim sigma s1 s2 /\
+    inst2.inst_operands = MAP (renamed_operand sigma) inst1.inst_operands /\
+    LENGTH inst2.inst_outputs = LENGTH inst1.inst_outputs /\
+    (inst1.inst_outputs <> [] ==>
+     !x. ~MEM x inst1.inst_outputs /\ lookup_var x s1 <> NONE ==>
+         sigma x <> HD inst2.inst_outputs) /\
+    exec_read1 (\addr s. mload (w2n addr) s) inst1 s1 = OK s1' ==>
+    ?s2'. exec_read1 (\addr s. mload (w2n addr) s) inst2 s2 = OK s2' /\
+          ssa_sim ((HD inst1.inst_outputs =+ HD inst2.inst_outputs) sigma)
+                  s1' s2'
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule exec_read1_renamed >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexists_tac `s1` >> gvs[ssa_sim_def, mload_def]
 QED
 
 (* exec_write2: no output variable, modifies state *)
@@ -373,7 +400,16 @@ Proof
   rpt gen_tac >> strip_tac >>
   gvs[inst_renamed_def, output_fresh_def] >>
   Cases_on `inst1.inst_opcode` >> gvs[is_terminator_def] >>
-  gvs step_base_reduces >>
+  gvs (List.take (step_base_reduces, 10)) >>
+  gvs (List.take (List.drop (step_base_reduces, 10), 10)) >>
+  gvs (List.take (List.drop (step_base_reduces, 20), 10)) >>
+  gvs (List.take (List.drop (step_base_reduces, 30), 10)) >>
+  gvs (List.take (List.drop (step_base_reduces, 40), 10)) >>
+  gvs (List.take (List.drop (step_base_reduces, 50), 10)) >>
+  gvs (List.take (List.drop (step_base_reduces, 60), 10)) >>
+  gvs (List.take (List.drop (step_base_reduces, 70), 10)) >>
+  gvs (List.take (List.drop (step_base_reduces, 80), 10)) >>
+  gvs (List.drop (step_base_reduces, 90)) >>
   (* Phase 1: pure opcodes — closed by drule_all + simp[opcode_has_output_def] *)
   TRY (drule_all exec_pure2_renamed >>
        simp[opcode_has_output_def] >> NO_TAC) >>
@@ -384,8 +420,31 @@ Proof
   (* Phase 2: remaining goals — get field equalities, unfold defs *)
   imp_res_tac ssa_sim_fields >>
   imp_res_tac vs_alloca_next_ssa_sim >>
-  gvs[exec_read0_def, exec_read1_def, exec_write2_def,
-      exec_alloca_def, LET_THM, AllCaseEqs(), renamed_operand_def] >>
+  TRY (simp[opcode_has_output_def] >>
+       irule exec_read0_renamed >>
+       conj_tac >- first_assum ACCEPT_TAC >>
+       qexists_tac `s1` >> gvs[] >> NO_TAC) >>
+  TRY (simp[opcode_has_output_def] >>
+       irule exec_read1_renamed >>
+       conj_tac >- first_assum ACCEPT_TAC >>
+       conj_tac >- first_assum ACCEPT_TAC >>
+       qexists_tac `s1` >>
+       gvs[mload_def, sload_def, tload_def,
+           contract_storage_def, contract_transient_def] >> NO_TAC) >>
+  TRY (simp[opcode_has_output_def] >>
+       irule exec_write2_renamed >>
+       conj_tac >- first_assum ACCEPT_TAC >>
+       qexists_tac `s1` >>
+       gvs[mstore_def, mstore8_def, sstore_def, tstore_def,
+           contract_storage_def, contract_transient_def,
+           ssa_sim_def] >> NO_TAC) >>
+  gvs[exec_read0_def] >>
+  gvs[exec_read1_def] >>
+  gvs[exec_write2_def] >>
+  gvs[exec_alloca_def] >>
+  gvs[LET_THM] >>
+  gvs[AllCaseEqs()] >>
+  gvs[renamed_operand_def] >>
   TRY (imp_res_tac eval_operand_renamed >> gvs[]) >>
   TRY (imp_res_tac eval_operands_renamed >> gvs[]) >>
   (* Phase 3: ext calls — drule_all + simp[opcode_has_output_def] *)
@@ -411,11 +470,13 @@ Proof
   (* Phase 7: LOG needs Cases_on rest to simplify HD (MAP f rest) *)
   TRY (Cases_on `rest` >> gvs[]) >>
   (* Phase 8: state-modifying / trivial — sigma unchanged (opcode_has_output = F) *)
-  gvs[mcopy_def, write_memory_with_expansion_def,
-      mload_def, mstore_def, mstore8_def, sload_def, sstore_def, tload_def, tstore_def,
-      contract_storage_def, contract_transient_def,
-      ssa_sim_def, update_var_def, lookup_var_def,
-      GSYM MAP_APPEND, rich_listTheory.MAP_HD] >>
+  gvs[mcopy_def, write_memory_with_expansion_def] >>
+  gvs[mload_def, mstore_def, mstore8_def] >>
+  gvs[sload_def, sstore_def, contract_storage_def] >>
+  gvs[tload_def, tstore_def, contract_transient_def] >>
+  gvs[ssa_sim_def] >>
+  gvs[update_var_def, lookup_var_def] >>
+  gvs[GSYM MAP_APPEND, rich_listTheory.MAP_HD] >>
   qmatch_goalsub_abbrev_tac `s2.vs_logs ++ [log_entry] = _` >>
   qexists_tac `s2 with vs_logs := s2.vs_logs ++ [log_entry]` >>
   simp[Abbr`log_entry`] >>
@@ -464,17 +525,38 @@ val term_setup_tac =
    then uses gvs to simplify and eliminate Error/contradiction branches.
    The ssa_result_equiv_def + renamed_operand_def in gvs ensure that after
    both sides resolve to constructors, the result matches. *)
-val term_resolve_tac =
-  gvs[renamed_operand_def, extract_labels_renamed] >>
-  rpt (BasicProvers.TOP_CASE_TAC >>
-       gvs[ssa_result_equiv_def, renamed_operand_def, extract_labels_renamed,
-           execution_equiv_UNIV, halt_state_def, set_returndata_def,
-           revert_state_def]) >>
+val term_resolve_pre_tac =
+  gvs[renamed_operand_def, extract_labels_renamed];
+
+val term_resolve_case_tac =
+  TRY BasicProvers.TOP_CASE_TAC >>
+  gvs[ssa_result_equiv_def, renamed_operand_def, extract_labels_renamed,
+      execution_equiv_UNIV, halt_state_def, set_returndata_def,
+      revert_state_def] >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  gvs[ssa_result_equiv_def, renamed_operand_def, extract_labels_renamed,
+      execution_equiv_UNIV, halt_state_def, set_returndata_def,
+      revert_state_def] >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  gvs[ssa_result_equiv_def, renamed_operand_def, extract_labels_renamed,
+      execution_equiv_UNIV, halt_state_def, set_returndata_def,
+      revert_state_def] >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  gvs[ssa_result_equiv_def, renamed_operand_def, extract_labels_renamed,
+      execution_equiv_UNIV, halt_state_def, set_returndata_def,
+      revert_state_def];
+
+val term_resolve_post_tac =
   TRY (imp_res_tac eval_operand_renamed >> gvs[]) >>
   TRY (imp_res_tac eval_operands_renamed >> gvs[execution_equiv_UNIV]) >>
   TRY (qexists_tac `sigma` >> irule jump_to_ssa_sim >> simp[]) >>
   gvs[ssa_result_equiv_def, execution_equiv_UNIV, halt_state_def,
       set_returndata_def, revert_state_def];
+
+val term_resolve_tac =
+  term_resolve_pre_tac >>
+  term_resolve_case_tac >> term_resolve_case_tac >>
+  term_resolve_case_tac >> term_resolve_case_tac >> term_resolve_post_tac;
 
 (* Split into per-terminator trivialities to avoid every_case_tac on 7+ goals *)
 Triviality step_term_jmp:
@@ -484,7 +566,9 @@ Triviality step_term_jmp:
     (!e. step_inst_base inst1 s1 <> Error e) ==>
     ssa_result_equiv (step_inst_base inst1 s1) (step_inst_base inst2 s2)
 Proof
-  term_setup_tac >> gvs step_base_reduces >> term_resolve_tac
+  term_setup_tac >> gvs step_base_reduces >> term_resolve_pre_tac >>
+  term_resolve_case_tac >> term_resolve_case_tac >>
+  term_resolve_case_tac >> term_resolve_case_tac >> term_resolve_post_tac
 QED
 
 Triviality step_term_jnz:
@@ -494,7 +578,9 @@ Triviality step_term_jnz:
     (!e. step_inst_base inst1 s1 <> Error e) ==>
     ssa_result_equiv (step_inst_base inst1 s1) (step_inst_base inst2 s2)
 Proof
-  term_setup_tac >> gvs step_base_reduces >> term_resolve_tac
+  term_setup_tac >> gvs step_base_reduces >> term_resolve_pre_tac >>
+  term_resolve_case_tac >> term_resolve_case_tac >>
+  term_resolve_case_tac >> term_resolve_case_tac >> term_resolve_post_tac
 QED
 
 Triviality step_term_djmp:

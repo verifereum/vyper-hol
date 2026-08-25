@@ -200,7 +200,20 @@ Triviality exec_pure3_pos[local]:
          eval_operand (EL i inst.inst_operands) st) ==>
     exec_pure3 f (inst with inst_operands := new_ops) st = exec_pure3 f inst st
 Proof
-  exec_pos_prove exec_pure3_def
+  rpt strip_tac >>
+  `eval_operands new_ops st = eval_operands inst.inst_operands st` by
+    (irule eval_operands_positional >> simp[]) >>
+  simp[exec_pure3_def] >>
+  pop_assum mp_tac >> simp[eval_operands_def] >>
+  Cases_on `new_ops` >> Cases_on `inst.inst_operands` >>
+  gvs[eval_operands_def] >>
+  TRY (Cases_on `t` >> Cases_on `t'` >> gvs[eval_operands_def]) >>
+  TRY (Cases_on `t''` >> Cases_on `t` >> gvs[eval_operands_def] >>
+       TRY (Cases_on `t'` >> Cases_on `t''` >> gvs[eval_operands_def])) >>
+  TRY (Cases_on `t` >> Cases_on `t''` >> gvs[eval_operands_def] >>
+       TRY (Cases_on `t'` >> Cases_on `t` >> gvs[eval_operands_def])) >>
+  rpt strip_tac >> gvs[] >>
+  rpt (BasicProvers.EVERY_CASE_TAC >> gvs[])
 QED
 
 Triviality exec_read0_pos[local]:
@@ -298,7 +311,9 @@ Proof
   CONV_TAC (LHS_CONV (ONCE_REWRITE_CONV [step_inst_base_def])) >>
   simp (exec_map_thms @ exec_inst_operands_thms @ [eval_operands_map_thm]) >>
   CONV_TAC (RHS_CONV (ONCE_REWRITE_CONV [step_inst_base_def])) >>
-  Cases_on `inst.inst_operands` >> simp[] >>
+  Cases_on `inst.inst_operands`
+  >- simp[]
+  >> simp[] >>
   TRY (Cases_on `t` >> simp[]) >>
   TRY (FIRST [Cases_on `t'`, Cases_on `t`] >> simp[]) >>
   TRY (FIRST [Cases_on `t`, Cases_on `t'`, Cases_on `t''`] >> simp[]) >>
@@ -667,11 +682,10 @@ Triviality step_inst_base_pos_safe_long[local]:
     step_inst_base inst st
 Proof
   rpt gen_tac >> strip_tac >>
+  qpat_x_assum `inst_wf inst`
+    (fn th => ASSUME_TAC (REWRITE_RULE [inst_wf_def] th)) >>
   Cases_on `inst.inst_opcode` >>
-  gvs[is_alloca_op_def] >>
-  qpat_x_assum `inst_wf inst` mp_tac >>
-  simp[inst_wf_def] >>
-  strip_tac >> gvs[]
+  gvs[is_alloca_op_def]
   >- long_safe_finish_tac
   >- long_safe_finish_tac
   >- long_safe_finish_tac

@@ -720,27 +720,27 @@ Proof
   (* [] *) >- gvs[evaluate_def, return_def, preserves_scopes_dom_def]
   (* v::vs *) >- (drule case_eval_for_cons_dom >> metis_tac[])
   (* === Expression cases - use eval_expr_preserves_scopes_dom === *)
-  >- (drule eval_expr_preserves_scopes_dom >> gvs[])
-  >- (drule eval_expr_preserves_scopes_dom >> gvs[])
-  >- (drule eval_expr_preserves_scopes_dom >> gvs[])
-  >- (drule eval_expr_preserves_scopes_dom >> gvs[])
-  >- (drule eval_expr_preserves_scopes_dom >> gvs[])
-  >- (drule eval_expr_preserves_scopes_dom >> gvs[])
-  >- (drule eval_expr_preserves_scopes_dom >> gvs[])
-  >- (drule eval_expr_preserves_scopes_dom >> gvs[])
-  >- (drule eval_expr_preserves_scopes_dom >> gvs[])
-  >- (drule eval_expr_preserves_scopes_dom >> gvs[])
-  >- (drule eval_expr_preserves_scopes_dom >> gvs[])
-  >- (drule eval_expr_preserves_scopes_dom >> gvs[])
-  >- (drule eval_expr_preserves_scopes_dom >> gvs[])
-  >- (drule eval_expr_preserves_scopes_dom >> gvs[])
+  >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
+  >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
+  >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
+  >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
+  >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
+  >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
+  >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
+  >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
+  >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
+  >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
+  >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
+  >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
+  >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
+  >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
   (* chain interaction builtins *)
-  >- (drule eval_expr_preserves_scopes_dom >> gvs[])
-  >- (drule eval_expr_preserves_scopes_dom >> gvs[])
-  >- (drule eval_expr_preserves_scopes_dom >> gvs[])
-  >- (drule eval_expr_preserves_scopes_dom >> gvs[])
-  >- (drule eval_expr_preserves_scopes_dom >> gvs[])
-  >- (drule eval_exprs_preserves_scopes_dom >> gvs[])
+  >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
+  >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
+  >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
+  >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
+  >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
+  >- drule_all_then ACCEPT_TAC eval_exprs_preserves_scopes_dom
   >- (drule eval_exprs_preserves_scopes_dom >> gvs[])
 QED
 

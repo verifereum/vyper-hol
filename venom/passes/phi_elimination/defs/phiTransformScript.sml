@@ -479,9 +479,11 @@ Proof
       >- (rpt strip_tac >> Cases_on `inst.inst_opcode` >> fs[is_pseudo_def]) >>
       rpt strip_tac >> metis_tac[terminator_opcode_not_phi]) >>
   gvs[APPEND_ASSOC] >>
-  qspecl_then [`\inst. inst.inst_opcode = PHI`, `phis`, `params ++ regulars ++ terms`]
+  qspecl_then [`\inst. inst.inst_opcode = PHI`, `phis`,
+               `params ++ regulars ++ terms`]
     mp_tac append_pred_prefix >>
-  simp[combinTheory.o_DEF] >>
+  simp_tac std_ss [combinTheory.o_DEF] >>
+  asm_simp_tac std_ss [EVERY_APPEND] >>
   disch_then (qspecl_then [`i`, `j`] mp_tac) >> simp[]
 QED
 

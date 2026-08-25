@@ -657,8 +657,9 @@ Proof
   Induct_on `n` >> rpt strip_tac
   >- ( (* n=0: lift_result composition *)
     gvs[resolves_to_def] >>
-    Cases_on `r1` >> Cases_on `r2` >> Cases_on `r3` >>
-    gvs[lift_result_def] >> metis_tac[])
+    irule lift_result_trans_proof >>
+    rpt conj_tac >> TRY (FIRST_ASSUM ACCEPT_TAC) >>
+    qexists_tac `r2` >> simp[])
   >>
   qpat_x_assum `resolves_to _ _ _ _ (SUC _) _ _` mp_tac >>
   simp[Once resolves_to_def] >> strip_tac >> gvs[] >|

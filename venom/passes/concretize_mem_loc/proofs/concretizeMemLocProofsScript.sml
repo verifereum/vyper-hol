@@ -1782,10 +1782,15 @@ QED
 (* Clause 5: allocas_non_overlapping *)
 Resume step_alloca_fresh_goal[c5]:
   rpt strip_tac >>
-  Cases_on `inst.inst_id = a1` >> Cases_on `inst.inst_id = a2` >>
-  gvs[] >>
-  TRY (drule_all nao_ge_alloca_end >> simp[] >> NO_TAC) >>
-  metis_tac[]
+  Cases_on `inst.inst_id = a1`
+  >- (Cases_on `inst.inst_id = a2`
+      >- metis_tac[]
+      >- (gvs[] >>
+          drule_all nao_ge_alloca_end >> simp[]))
+  >- (Cases_on `inst.inst_id = a2`
+      >- (gvs[] >>
+          drule_all nao_ge_alloca_end >> simp[])
+      >- (gvs[] >> metis_tac[]))
 QED
 
 Finalise step_alloca_fresh_goal
@@ -2179,9 +2184,17 @@ Proof
   rw[concretize_rel_def, LET_THM] >> res_tac >> gvs[]
 QED
 
-val pp_empty_outputs_tac =
-  simp[step_inst_base_def, exec_pure2_def] >>
-  rpt CASE_TAC >> gvs[];
+Triviality exec_pure2_empty_outputs_error:
+  !f inst s. inst.inst_outputs = [] ==>
+    ?e. exec_pure2 f inst s = Error e
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_operands` >> simp[exec_pure2_def] >>
+  Cases_on `t` >> simp[exec_pure2_def] >>
+  Cases_on `t'` >> simp[exec_pure2_def] >>
+  Cases_on `eval_operand h s` >> simp[exec_pure2_def] >>
+  Cases_on `eval_operand h' s` >> simp[exec_pure2_def]
+QED
 
 Triviality pp_empty_outputs_error:
   !inst s. is_pointer_preserving_op inst.inst_opcode /\
@@ -2189,11 +2202,15 @@ Triviality pp_empty_outputs_error:
            ?e. step_inst_base inst s = Error e
 Proof
   rpt strip_tac >>
-  Cases_on `inst.inst_opcode` >> fs[is_pointer_preserving_op_def]
-  >- pp_empty_outputs_tac
-  >- pp_empty_outputs_tac
-  >- pp_empty_outputs_tac
-  >- pp_empty_outputs_tac
+  Cases_on `inst.inst_opcode` >> fs[is_pointer_preserving_op_def] >>
+  simp[step_inst_base_def] >>
+  qpat_x_assum `inst.inst_outputs = []`
+    (fn th => PURE_REWRITE_TAC[exec_pure2_def, th]) >>
+  Cases_on `inst.inst_operands` >> simp[] >>
+  Cases_on `t` >> simp[] >>
+  Cases_on `t'` >> simp[] >>
+  Cases_on `eval_operand h s` >> simp[] >>
+  Cases_on `eval_operand h' s` >> simp[]
 QED
 
 (* Helper: binary pv op, Case 1: first operand is pv Var *)
@@ -2699,7 +2716,12 @@ Proof
   (* Expand step_inst_base and case split operands *)
   asm_rewrite_tac[step_inst_base_def] >>
   simp[exec_write2_def, lift_result_def] >>
-  rpt (BasicProvers.TOP_CASE_TAC >> gvs[lift_result_def]) >>
+  TRY BasicProvers.TOP_CASE_TAC >> gvs[lift_result_def] >>
+  TRY BasicProvers.TOP_CASE_TAC >> gvs[lift_result_def] >>
+  TRY BasicProvers.TOP_CASE_TAC >> gvs[lift_result_def] >>
+  TRY BasicProvers.TOP_CASE_TAC >> gvs[lift_result_def] >>
+  TRY BasicProvers.TOP_CASE_TAC >> gvs[lift_result_def] >>
+  TRY BasicProvers.TOP_CASE_TAC >> gvs[lift_result_def] >>
   (* Frame lemma closes all remaining goals *)
   simp[sstore_def, tstore_def, contract_storage_def, contract_transient_def,
        halt_state_def, set_returndata_def, revert_state_def,
@@ -2750,7 +2772,14 @@ Proof
           eval_operand op s1 = eval_operand op s2` by
       metis_tac[cr_non_mem_eval_operand_agree] >>
     ASM_REWRITE_TAC[step_inst_base_def] >> gvs[] >>
-    rpt (BasicProvers.TOP_CASE_TAC >> gvs[lift_result_def]) >>
+    TRY BasicProvers.TOP_CASE_TAC >> gvs[lift_result_def] >>
+    TRY BasicProvers.TOP_CASE_TAC >> gvs[lift_result_def] >>
+    TRY BasicProvers.TOP_CASE_TAC >> gvs[lift_result_def] >>
+    TRY BasicProvers.TOP_CASE_TAC >> gvs[lift_result_def] >>
+    TRY BasicProvers.TOP_CASE_TAC >> gvs[lift_result_def] >>
+    TRY BasicProvers.TOP_CASE_TAC >> gvs[lift_result_def] >>
+    TRY BasicProvers.TOP_CASE_TAC >> gvs[lift_result_def] >>
+    TRY BasicProvers.TOP_CASE_TAC >> gvs[lift_result_def] >>
     irule concretize_rel_jump_to >> metis_tac[]
   )
 QED
@@ -5016,14 +5045,18 @@ Proof
       qpat_x_assum `concretize_rel _ _ _ _ _ _` mp_tac >>
       ONCE_REWRITE_TAC[concretize_rel_def] >> simp[LET_THM] >>
       strip_tac >> first_x_assum (qspec_then `v_dst` mp_tac) >> simp[]) >>
-    simp[step_inst_base_def, eval_operand_def,
-         lookup_var_def, lift_result_def]) >>
+    ONCE_REWRITE_TAC[step_inst_base_def] >>
+    qpat_x_assum `inst.inst_opcode = RETURNDATACOPY`
+      (fn th => assume_tac th >> PURE_REWRITE_TAC[th]) >>
+    simp[eval_operand_def, lookup_var_def, lift_result_def]) >>
   rename1 `lookup_var v_dst s1 = SOME w1` >>
   `lookup_var v_dst s1 <> NONE` by simp[] >>
   drule_all cr_pv_var_displacement >> strip_tac >>
   gvs[] >>
   (* Unfold step_inst_base for RETURNDATACOPY *)
   ONCE_REWRITE_TAC[step_inst_base_def] >>
+  qpat_x_assum `inst.inst_opcode = RETURNDATACOPY`
+    (fn th => assume_tac th >> PURE_REWRITE_TAC[th]) >>
   simp[eval_operand_def, lookup_var_def] >>
   (* Substitute s2 evals with s1 evals *)
   qpat_x_assum `eval_operand op_src s1 = eval_operand op_src s2`
@@ -6411,6 +6444,12 @@ Proof
   rw[alloca_overflow_safe_def, fn_remaining_alloca_size_def] >> metis_tac[]
 QED
 
+val terminator_alloca_frame_tac =
+  gvs[step_inst_base_def, LET_THM] >>
+  rpt (BasicProvers.PURE_FULL_CASE_TAC >>
+       gvs[jump_to_def, halt_state_def, revert_state_def,
+           set_returndata_def]);
+
 Triviality step_terminator_ok_preserves_alloca_overflow_safe:
   !fuel ctx inst s s' fn amap.
     step_inst fuel ctx inst s = OK s' /\
@@ -6425,11 +6464,17 @@ Proof
   irule alloca_overflow_safe_state_eq >>
   qexists_tac `s` >> simp[] >>
   qpat_x_assum `is_terminator _` mp_tac >>
-  Cases_on `inst.inst_opcode` >> simp[is_terminator_def] >>
-  gvs[step_inst_base_def, LET_THM] >>
-  rpt (BasicProvers.PURE_FULL_CASE_TAC >>
-       gvs[jump_to_def, halt_state_def, revert_state_def,
-           set_returndata_def])
+  Cases_on `inst.inst_opcode` >> simp[is_terminator_def]
+  >- terminator_alloca_frame_tac
+  >- terminator_alloca_frame_tac
+  >- terminator_alloca_frame_tac
+  >- terminator_alloca_frame_tac
+  >- terminator_alloca_frame_tac
+  >- terminator_alloca_frame_tac
+  >- terminator_alloca_frame_tac
+  >- terminator_alloca_frame_tac
+  >- terminator_alloca_frame_tac
+  >- terminator_alloca_frame_tac
 QED
 
 Triviality alloca_overflow_safe_exec_block:
@@ -6726,11 +6771,31 @@ Proof
             (s2_phi with vs_inst_idx := p))` by (
         irule exec_block_bmt_sim >> simp[Abbr `p`] >> metis_tac[]) >>
       pop_assum strip_assume_tac >>
-      Cases_on `exec_block fuel ctx bb (s1_phi with vs_inst_idx := p)` >>
-      Cases_on `exec_block fuel ctx (block_map_transform (concretize_inst amap) bb)
-            (s2_phi with vs_inst_idx := p)` >>
-      gvs[lift_result_def] >>
-      TRY (qexists `init'` >> simp[lift_result_def] >> NO_TAC) >>
+      qpat_x_assum
+        `lift_result (concretize_rel amap fn livesets init')
+           (concretize_rel amap fn livesets init')
+           (concretize_rel amap fn livesets init')
+           (exec_block fuel ctx bb (s1_phi with vs_inst_idx := p))
+           (exec_block fuel ctx
+             (block_map_transform (concretize_inst amap) bb)
+             (s2_phi with vs_inst_idx := p))` mp_tac >>
+      (Cases_on `exec_block fuel ctx bb (s1_phi with vs_inst_idx := p)` THEN_LT
+       TRYALL (Cases_on
+         `exec_block fuel ctx (block_map_transform (concretize_inst amap) bb)
+            (s2_phi with vs_inst_idx := p)`)) >>
+      PURE_REWRITE_TAC[lift_result_def] >> simp_tac std_ss [] >> TRY strip_tac >>
+      (ALL_TAC THEN_LT TRYALL
+        (qpat_x_assum
+           `exec_block fuel ctx bb (s1_phi with vs_inst_idx := p) = r1`
+           (fn th => assume_tac th >> PURE_REWRITE_TAC[th]) >>
+         qpat_x_assum
+           `exec_block fuel ctx (block_map_transform (concretize_inst amap) bb)
+              (s2_phi with vs_inst_idx := p) = r2`
+           (fn th => assume_tac th >> PURE_REWRITE_TAC[th]))) >>
+      (ALL_TAC THEN_LT TRYALL
+        (qexists `init'` >> simp[lift_result_def] >>
+         TRY (first_assum ACCEPT_TAC) >> NO_TAC)) >>
+      simp_tac bool_ss [venomExecSemanticsTheory.exec_result_case_def] >>
       imp_res_tac concretize_rel_fields >>
       IF_CASES_TAC >> gvs[]
       >- (qexists `init'` >> simp[lift_result_def]) >>
@@ -6773,7 +6838,8 @@ Proof
         simp[Abbr `p`] >> metis_tac[]) >>
       last_x_assum
         (qspecl_then [`amap`, `fn`, `livesets`, `init'`, `ctx`, `v`, `v'`] mp_tac) >>
-      simp[function_map_transform_def] >>
+      PURE_REWRITE_TAC[function_map_transform_def] >>
+      simp_tac std_ss [] >>
       impl_tac >- (rpt conj_tac >> simp[] >> metis_tac[]) >>
       disch_then (qx_choose_then `init''` assume_tac) >>
       qexists `init''` >> simp[function_map_transform_def]) >>
