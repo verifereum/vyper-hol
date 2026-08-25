@@ -117,8 +117,13 @@ Proof
   rpt strip_tac >>
   drule terminator_opcode_cases >> strip_tac >> gvs[] >>
   qpat_x_assum `step_inst_base inst vs = Halt vs'` mp_tac >>
-  ASM_REWRITE_TAC[step_inst_base_def] >>
-  gvs[AllCaseEqs()]
+  ASM_REWRITE_TAC[step_inst_base_def]
+  >- gvs[AllCaseEqs()]
+  >- gvs[AllCaseEqs()]
+  >- gvs[AllCaseEqs()]
+  >- gvs[AllCaseEqs()]
+  >- gvs[AllCaseEqs()]
+  >- gvs[AllCaseEqs()]
 QED
 
 Triviality step_inst_base_abort_terminator_opcodes[local]:

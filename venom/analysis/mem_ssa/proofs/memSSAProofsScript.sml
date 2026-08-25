@@ -4184,7 +4184,10 @@ Proof
   pop_assum mp_tac >> pop_assum mp_tac >> pop_assum mp_tac >>
   pop_assum mp_tac >> pop_assum mp_tac >>
   simp[mem_ssa_reaching_in_block_def] >>
-  rpt CASE_TAC >> simp[] >>
+  CASE_TAC >> simp[] >>
+  CASE_TAC >> simp[] >>
+  CASE_TAC >> simp[] >>
+  CASE_TAC >> simp[] >>
   rpt strip_tac >> gvs[] >>
   (* Resolve phi contradiction cases *)
   TRY (fs[block_maps_correct_def] >> res_tac >> gvs[] >> NO_TAC) >>
@@ -6066,7 +6069,13 @@ Proof
   pairarg_tac >> gvs[] >>
   `MEM x visited1` by (Cases_on `result` >> gvs[] >> res_tac) >>
   Cases_on `result` >> gvs[] >>
-  metis_tac[]
+  rename1 `mem_ssa_collect_phi_clobbers walker visited1 ops =
+             (next_clobbers, visited')` >>
+  qpat_x_assum `!walker visited clobbers visited'. _`
+    (qspecl_then [`walker`, `visited1`, `next_clobbers`, `visited'`]
+       mp_tac) >>
+  ASM_REWRITE_TAC[] >>
+  strip_tac >> res_tac
 QED
 
 (* Visited monotonicity for walk_clobber *)
@@ -7058,22 +7067,16 @@ Proof
   Cases_on `mem_ssa_collect_phi_clobbers walker wr_vis ops` >>
   rename1 `_ = (cr_res, cr_vis)` >>
   simp[] >> disch_tac >>
-  (* Extract everything from the conjunction, then kill the original *)
-  `?rd0 pred0. MEM (rd0, pred0) ((op_rd,op_pred)::ops) /\
-    (!vis vis'. ~MEM def_id vis /\ walker vis rd0 = (NONE, vis') ==>
-       MEM def_id vis')` by (fs[] >> metis_tac[]) >>
-  `~MEM def_id visited` by fs[] >>
-  `!v rd r v'. walker v rd = (r,v') ==> !x. MEM x v ==> MEM x v'`
-    by fs[] >>
+  (* Split the conjunction before simplifying its individual facts. *)
+  qpat_x_assum `(case _ of NONE => _ | SOME _ => _) = _ /\ _`
+    strip_assume_tac >>
   `wr_res = NONE /\ cr_res = [] /\ cr_vis = visited'` by (
-    `(case wr_res of NONE => (cr_res,cr_vis)
-       | SOME c => (c::cr_res,cr_vis)) = ([],visited')` by fs[] >>
-    Cases_on `wr_res` >> fs[]) >>
-  (* Kill the original big conjunction — we've extracted everything *)
-  qpat_x_assum `(case _ of NONE => _ | SOME _ => _) = _ /\ _` kall_tac >>
-  (* Case-split on whether rd0 is in head or tail BEFORE gvs *)
-  `rd0 = op_rd \/ MEM (rd0, pred0) ops` by fs[MEM] >>
-  qpat_x_assum `MEM _ (_::_)` kall_tac
+    Cases_on `wr_res`
+    >- (qpat_x_assum `(case _ of NONE => _ | SOME _ => _) = _`
+          mp_tac >> simp[])
+    >- (qpat_x_assum `(case _ of NONE => _ | SOME _ => _) = _`
+          mp_tac >> simp[]))
+  (* strip_assume_tac has already split MEM on the head and tail. *)
   (* Head case: rd0 = op_rd *)
   >- (
     qpat_x_assum `!w v1 v2 v3. mem_ssa_collect_phi_clobbers _ _ _ = _ /\ _ ==> _` kall_tac >>
@@ -7087,7 +7090,9 @@ Proof
     disch_then drule >> disch_then (qspec_then `def_id` mp_tac) >> simp[])
   (* Tail case: MEM (rd0, pred0) ops *)
   >> (
-    gvs[] >>
+    qpat_x_assum `wr_res = NONE` SUBST_ALL_TAC >>
+    qpat_x_assum `cr_res = []` SUBST_ALL_TAC >>
+    qpat_x_assum `cr_vis = visited'` SUBST_ALL_TAC >>
     Cases_on `MEM def_id wr_vis`
     >- (
       qpat_x_assum `mem_ssa_collect_phi_clobbers _ _ _ = _`
@@ -7095,7 +7100,7 @@ Proof
           |> REWRITE_RULE [GSYM AND_IMP_INTRO])) >>
       disch_then drule >> disch_then (qspec_then `def_id` mp_tac) >> simp[])
     >> (
-      first_x_assum (qspecl_then [`walker`, `wr_vis`, `cr_vis`, `def_id`] mp_tac) >>
+      first_x_assum (qspecl_then [`walker`, `wr_vis`, `visited'`, `def_id`] mp_tac) >>
       simp[] >> disch_then irule >>
       conj_tac >| [
         first_assum ACCEPT_TAC,
@@ -7894,7 +7899,10 @@ Triviality node_succ_in_mono:
     node_succ_in ms y v2
 Proof
   rw[node_succ_in_def] >>
-  rpt CASE_TAC >> gvs[] >>
+  Cases_on `FLOOKUP ms.ms_nodes y` >> gvs[] >>
+  rename1 `FLOOKUP ms.ms_nodes y = SOME node` >>
+  Cases_on `node` >> gvs[] >>
+  CASE_TAC >> gvs[] >>
   TRY (metis_tac[]) >>
   gvs[EVERY_MEM, FORALL_PROD] >> metis_tac[]
 QED
@@ -7955,17 +7963,36 @@ Proof
   >> Cases_on `h`
   >> PURE_REWRITE_TAC [mem_ssa_collect_phi_clobbers_def, LET_THM]
   >> BETA_TAC
-  >> pairarg_tac >> simp[Excl "CARD_DIFF_EQN", Excl "CARD_DIFF"]
-  >> pairarg_tac >> simp[Excl "CARD_DIFF_EQN", Excl "CARD_DIFF"]
+  >> pairarg_tac >> ASM_REWRITE_TAC[] >> BETA_TAC
+  >> pairarg_tac >> ASM_REWRITE_TAC[] >> BETA_TAC
   >> strip_tac
   >> reverse (Cases_on `result`)
-  >- fs[Excl "CARD_DIFF_EQN", Excl "CARD_DIFF"]
-  >> fs[Excl "CARD_DIFF_EQN", Excl "CARD_DIFF"]
+  >- (qpat_x_assum `(SOME x,visited1) = (result',visited1')` mp_tac >>
+      PURE_REWRITE_TAC[pairTheory.PAIR_EQ] >> strip_tac >>
+      qpat_x_assum `SOME x = result'` (assume_tac o SYM) >>
+      qpat_x_assum `visited1 = visited1'` (assume_tac o SYM) >>
+      strip_tac >>
+      `F` by (
+        qpat_x_assum `_ = ([],visited'')` mp_tac >> BETA_TAC >>
+        ASM_REWRITE_TAC[] >>
+        Cases_on `mem_ssa_collect_phi_clobbers
+          (λv rd. mem_ssa_walk_clobber ms fuel v rd qloc) visited1 ops` >>
+        simp[]) >>
+      qpat_x_assum `F` mp_tac >> simp[])
+  >> qpat_x_assum `(NONE,visited1) = (result',visited1')` mp_tac
+  >> PURE_REWRITE_TAC[pairTheory.PAIR_EQ] >> strip_tac
+  >> qpat_x_assum `NONE = result'` (assume_tac o SYM)
+  >> qpat_x_assum `visited1 = visited1'` (assume_tac o SYM)
+  >> qpat_x_assum `_ = ([],visited'')` mp_tac
+  >> ASM_REWRITE_TAC[pairTheory.UNCURRY, optionTheory.option_case_def]
+  >> BETA_TAC >> ASM_REWRITE_TAC[optionTheory.option_case_def]
+  >> strip_tac
   >> sg `fuel >= CARD (FDOM ms.ms_nodes DIFF set visited1)`
-  >- (mp_tac (Q.SPECL [`FDOM ms.ms_nodes`, `visited`, `visited1`, `fuel`]
+  >- (irule (Q.SPECL [`FDOM ms.ms_nodes`, `visited`, `visited1`, `fuel`]
         fuel_diff_mono) >>
-      simp[Excl "CARD_DIFF_EQN", Excl "CARD_DIFF"] >>
-      metis_tac[walk_clobber_visited_mono])
+      rpt conj_tac
+      >- simp[]
+      >- metis_tac[walk_clobber_visited_mono])
   >> first_x_assum (qspecl_then [`ms`, `fuel`, `qloc`, `visited1`, `visited''`]
        mp_tac)
   >> (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC))
@@ -7989,26 +8016,36 @@ Proof
          (qspec_then `y` mp_tac) >> simp[])
   (* Part 2: each (rd,pred) in ops has rd in visited'' *)
   >> rpt strip_tac
+  >> Cases_on `(rd,pred) = (q,r)`
   (* Case: rd = q (head element) *)
   >- (
     gvs[Excl "CARD_DIFF_EQN", Excl "CARD_DIFF"] >>
-    sg `fuel >= 1`
-    >- (irule fuel_positive_lemma >>
-        qexists_tac `FDOM ms.ms_nodes DIFF set visited` >>
-        qexists_tac `q` >>
-        simp[Excl "CARD_DIFF_EQN", Excl "CARD_DIFF"]) >>
-    sg `MEM q visited1`
-    >- (Cases_on `fuel` >- gvs[] >>
-        drule walk_clobber_visits_current >>
-        simp[Excl "CARD_DIFF_EQN", Excl "CARD_DIFF"]) >>
-    drule collect_phi_walk_visited_mono >> metis_tac[])
+    `fuel >= 1` by
+      (irule fuel_positive_lemma >>
+       qexists_tac `FDOM ms.ms_nodes DIFF set visited` >>
+       qexists_tac `q` >>
+       simp[Excl "CARD_DIFF_EQN", Excl "CARD_DIFF"]) >>
+    `MEM q visited1` by
+      (Cases_on `fuel` >- gvs[] >>
+       drule walk_clobber_visits_current >>
+       simp[Excl "CARD_DIFF_EQN", Excl "CARD_DIFF"]) >>
+    mp_tac (Q.SPECL [`ops`, `ms`, `fuel`, `qloc`, `visited1`, `[]`,
+      `visited''`] collect_phi_walk_visited_mono) >>
+    ASM_REWRITE_TAC[] >> strip_tac >>
+    qpat_x_assum `!x. MEM x visited1 ==> MEM x visited''`
+      (qspec_then `q` mp_tac) >> ASM_REWRITE_TAC[])
   (* Case: MEM (rd,pred) ops *)
-  >> Cases_on `MEM rd visited1`
-  >- (drule collect_phi_walk_visited_mono >> metis_tac[])
-  >> qpat_x_assum `!rd' pred'. MEM (rd',pred') ops /\ _ ==> _`
-       (qspecl_then [`rd`, `pred`] mp_tac) >>
-  simp[Excl "CARD_DIFF_EQN", Excl "CARD_DIFF"] >>
-  metis_tac[walk_clobber_visited_mono]
+  >> `MEM (rd,pred) ops` by
+       (qpat_x_assum `MEM (rd,pred) ((q,r)::ops)` mp_tac >> simp[]) >>
+  Cases_on `MEM rd visited1`
+  >- (mp_tac (Q.SPECL [`ops`, `ms`, `fuel`, `qloc`, `visited1`, `[]`,
+        `visited''`] collect_phi_walk_visited_mono) >>
+      ASM_REWRITE_TAC[] >> strip_tac >>
+      qpat_x_assum `!x. MEM x visited1 ==> MEM x visited''`
+        (qspec_then `rd` mp_tac) >> ASM_REWRITE_TAC[]) >>
+  qpat_x_assum `!rd' pred'. MEM (rd',pred') ops /\ _ ==> _`
+    (qspecl_then [`rd`, `pred`] mp_tac) >>
+  ASM_REWRITE_TAC[]
 QED
 
 (* Key lemma: new nodes in NONE walk output have node_succ_in.

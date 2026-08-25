@@ -119,7 +119,12 @@ Proof
   `inst.inst_opcode <> INVOKE` by simp[] >>
   `step_inst fuel ctx inst s = step_inst_base inst s`
     by metis_tac[step_inst_non_invoke] >>
-  simp[step_inst_base_def] >>
+  qpat_x_assum `step_inst fuel ctx inst s = step_inst_base inst s`
+    (fn th => PURE_REWRITE_TAC[th]) >>
+  ONCE_REWRITE_TAC[step_inst_base_def] >>
+  qpat_x_assum `inst.inst_opcode = ASSIGN`
+    (fn th => PURE_REWRITE_TAC[th]) >>
+  simp[] >>
   Cases_on `inst.inst_operands` >> simp[] >>
   Cases_on `t` >> simp[] >>
   Cases_on `inst.inst_outputs` >> simp[] >>

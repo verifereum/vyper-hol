@@ -362,6 +362,14 @@ val opcode_idx_tac =
   EVERY_CASE_TAC >>
   simp(idx_rw @ [venom_state_component_equality]);
 
+(* Isolate the expensive opcode dispatch once for the MUL branch. *)
+Theorem step_inst_base_MUL[local]:
+  !inst s. inst.inst_opcode = MUL ==>
+    step_inst_base inst s = exec_pure2 $* inst s
+Proof
+  simp[step_inst_base_def]
+QED
+
 (* ================================================================
    THE MAIN THEOREM — exported
    ================================================================ *)
@@ -375,7 +383,7 @@ Proof
   simp[is_terminator_def]
   >- opcode_idx_tac  (* ADD *)
   >- opcode_idx_tac  (* SUB *)
-  >- opcode_idx_tac  (* MUL *)
+  >- (asm_simp_tac std_ss [step_inst_base_MUL, exec_pure2_idx])  (* MUL *)
   >- opcode_idx_tac  (* Div *)
   >- opcode_idx_tac  (* SDIV *)
   >- opcode_idx_tac  (* Mod *)

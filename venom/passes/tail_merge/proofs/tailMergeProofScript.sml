@@ -2194,7 +2194,9 @@ Proof
     by simp[subst_block_labels_inst_def, is_block_label_opcode_def,
             is_terminator_def, subst_label_map_inst_def] >>
   pop_assum SUBST1_TAC >>
-  simp[step_inst_base_def, subst_label_map_op_def, is_terminator_def] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  PURE_REWRITE_TAC[instruction_accfupds] >>
+  ASM_REWRITE_TAC[opcode_case_def] >>
   Cases_on `inst.inst_operands` >> simp[subst_label_map_op_def] >>
   Cases_on `t` >> simp[subst_label_map_op_def] >>
   Cases_on `h` >> simp[subst_label_map_op_def] >>
@@ -2348,6 +2350,7 @@ Proof
   Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
   qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
   ASM_REWRITE_TAC[step_inst_base_def] >>
+  PURE_REWRITE_TAC[opcode_case_def] >>
   gvs[AllCaseEqs()]
 QED
 

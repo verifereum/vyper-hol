@@ -349,10 +349,13 @@ Proof
   rpt strip_tac >>
   gvs[step_inst_non_invoke] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  simp[step_inst_base_def] >>
   Cases_on `inst.inst_opcode` >>
   gvs[is_effect_free_op_def, is_terminator_def,
       is_alloca_op_def, is_ext_call_op_def] >>
+  ONCE_REWRITE_TAC[step_inst_base_def] >>
+  qpat_x_assum `inst.inst_opcode = op`
+    (fn th => PURE_REWRITE_TAC[th]) >>
+  simp[] >>
   simp[exec_write2_def] >>
   rpt strip_tac >> gvs[AllCaseEqs()] >>
   simp[side_effect_lookup_var, lookup_var_def]
@@ -469,7 +472,16 @@ Proof
       (* No account-reading effects: generic theorem applies *)
       `inst_a.inst_opcode <> PHI` by
         (Cases_on `inst_a.inst_opcode` >> simp[] >>
-         gvs[step_inst_non_invoke, step_inst_base_def]) >>
+         qpat_x_assum `inst_a.inst_opcode = PHI`
+           (fn op_th =>
+             qpat_x_assum `step_inst_base inst_a ss = OK va`
+               (fn ok_th =>
+                 mp_tac ok_th >>
+                 mp_tac (MATCH_MP
+                   (Q.SPECL [`inst_a`, `ss`]
+                     venomExecProofsTheory.step_inst_base_phi_error)
+                   op_th))) >>
+         simp[]) >>
       irule step_inst_base_effect_free_output_determined_vars >>
       qexistsl_tac [`inst_a`, `ss`, `vb`] >>
       rpt conj_tac >> gvs[] >>
@@ -608,6 +620,16 @@ Proof
   rw[exec_read1_def] >> gvs[AllCaseEqs()] >> metis_tac[]
 QED
 
+fun pure_step_finish_tac () =
+  gvs[inst_wf_def] >>
+  FIRST [
+    drule exec_pure1_structure >> strip_tac >> gvs[] >> metis_tac[],
+    drule exec_pure2_structure >> strip_tac >> gvs[] >> metis_tac[],
+    drule exec_pure3_structure >> strip_tac >> gvs[] >> metis_tac[],
+    drule exec_read0_structure >> strip_tac >> gvs[] >> metis_tac[],
+    drule exec_read1_structure >> strip_tac >> gvs[] >> metis_tac[],
+    gvs[AllCaseEqs()] >> metis_tac[]]
+
 (* A pure (empty read/write effects), eligible step_inst_base either
    produces no outputs (NOP) and returns the state unchanged, or produces
    exactly one output via update_var. *)
@@ -630,15 +652,24 @@ Proof
       write_effects_def, read_effects_def] >>
   qpat_x_assum `step_inst_base inst ss = OK v2` mp_tac >>
   ASM_REWRITE_TAC[step_inst_base_def] >>
-  strip_tac >>
-  gvs[inst_wf_def] >>
-  FIRST [
-    drule exec_pure1_structure >> strip_tac >> gvs[] >> metis_tac[],
-    drule exec_pure2_structure >> strip_tac >> gvs[] >> metis_tac[],
-    drule exec_pure3_structure >> strip_tac >> gvs[] >> metis_tac[],
-    drule exec_read0_structure >> strip_tac >> gvs[] >> metis_tac[],
-    drule exec_read1_structure >> strip_tac >> gvs[] >> metis_tac[],
-    gvs[AllCaseEqs()] >> metis_tac[]]
+  strip_tac >|
+  [pure_step_finish_tac (), pure_step_finish_tac (), pure_step_finish_tac (),
+   pure_step_finish_tac (), pure_step_finish_tac (), pure_step_finish_tac (),
+   pure_step_finish_tac (), pure_step_finish_tac (), pure_step_finish_tac (),
+   pure_step_finish_tac (), pure_step_finish_tac (), pure_step_finish_tac (),
+   pure_step_finish_tac (), pure_step_finish_tac (), pure_step_finish_tac (),
+   pure_step_finish_tac (), pure_step_finish_tac (), pure_step_finish_tac (),
+   pure_step_finish_tac (), pure_step_finish_tac (), pure_step_finish_tac (),
+   pure_step_finish_tac (), pure_step_finish_tac (), pure_step_finish_tac (),
+   pure_step_finish_tac (), pure_step_finish_tac (), pure_step_finish_tac (),
+   pure_step_finish_tac (), pure_step_finish_tac (), pure_step_finish_tac (),
+   pure_step_finish_tac (), pure_step_finish_tac (), pure_step_finish_tac (),
+   pure_step_finish_tac (), pure_step_finish_tac (), pure_step_finish_tac (),
+   pure_step_finish_tac (), pure_step_finish_tac (), pure_step_finish_tac (),
+   pure_step_finish_tac (), pure_step_finish_tac (), pure_step_finish_tac (),
+   pure_step_finish_tac (), pure_step_finish_tac (), pure_step_finish_tac (),
+   pure_step_finish_tac (), pure_step_finish_tac (), pure_step_finish_tac (),
+   pure_step_finish_tac (), pure_step_finish_tac (), pure_step_finish_tac ()]
 QED
 
 Triviality empty_effect_non_effect_free_opcode_cases[local]:
@@ -1033,7 +1064,11 @@ Triviality effect_free_output_determined[local]:
 Proof
   rpt strip_tac >>
   imp_res_tac effect_free_step_eq_base >> gvs[] >>
-  `inst.inst_opcode <> PHI` by (CCONTR_TAC >> gvs[step_inst_base_def]) >>
+  `inst.inst_opcode <> PHI` by
+    (CCONTR_TAC >>
+     qpat_x_assum `~(inst.inst_opcode <> PHI)` mp_tac >> simp[] >> strip_tac >>
+     qpat_x_assum `step_inst_base inst s1 = OK r1` mp_tac >>
+     ASM_REWRITE_TAC[step_inst_base_def] >> simp[]) >>
   qspecl_then [`inst`, `s1`, `s2`, `r1`, `r2`] mp_tac
     step_inst_base_effect_free_output_determined_vars >>
   impl_tac >- (

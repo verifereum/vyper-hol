@@ -62,7 +62,8 @@ Theorem step_inst_base_ADD_single[local]:
       (SOME v1, SOME v2) => OK (update_var out (word_add v1 v2) s)
     | _ => Error "undefined operand"
 Proof
-  rw[step_inst_base_def, exec_pure2_def]
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  simp[] >> rw[exec_pure2_def]
 QED
 
 Theorem step_inst_base_CODECOPY3[local]:
@@ -78,7 +79,7 @@ Theorem step_inst_base_CODECOPY3[local]:
           OK (write_memory_with_expansion (w2n dst) bytes s)
     | _ => Error "undefined operand"
 Proof
-  rw[step_inst_base_def]
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> simp[]
 QED
 
 (* DLOADBYTES Error -> expansion also errors.
@@ -433,8 +434,14 @@ Proof
   simp[EVERY_APPEND] >>
   rename1 `lower_dload_inst h` >>
   simp[lower_dload_inst_def] >>
-  rpt (CASE_TAC >> gvs[]) >>
-  simp[is_terminator_def, EVERY_DEF]
+  CASE_TAC >> gvs[is_terminator_def, EVERY_DEF] >>
+  CASE_TAC >> gvs[is_terminator_def, EVERY_DEF] >>
+  CASE_TAC >> gvs[is_terminator_def, EVERY_DEF] >>
+  CASE_TAC >> gvs[is_terminator_def, EVERY_DEF] >>
+  CASE_TAC >> gvs[is_terminator_def, EVERY_DEF] >>
+  CASE_TAC >> gvs[is_terminator_def, EVERY_DEF] >>
+  CASE_TAC >> gvs[is_terminator_def, EVERY_DEF] >>
+  CASE_TAC >> gvs[is_terminator_def, EVERY_DEF]
 QED
 
 (* Shared inductive prefix for exec_block prefix factoring lemmas.

@@ -295,12 +295,26 @@ Proof
         assign_operation_CASE_rator, bound_CASE_rator,
         AllCaseEqs(), PULL_EXISTS] >>
    rpt strip_tac >>
-   gvs[pairTheory.ELIM_UNCURRY, bind_def, return_def, raise_def,
-       ignore_bind_def, lift_option_def, lift_option_type_def, lift_sum_def,
-       check_def, assert_def,
-       option_CASE_rator, prod_CASE_rator, sum_CASE_rator,
-       type_value_CASE_rator, assign_operation_CASE_rator, bound_CASE_rator,
-       AllCaseEqs(), PULL_EXISTS] >>
+   gvs[pairTheory.ELIM_UNCURRY] >>
+   gvs[bind_def, ignore_bind_def] >>
+   gvs[return_def, raise_def] >>
+   gvs[lift_option_def, lift_option_type_def, lift_sum_def] >>
+   gvs[check_def, assert_def] >>
+   gvs[option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
+   gvs[type_value_CASE_rator, assign_operation_CASE_rator,
+       bound_CASE_rator] >>
+   gvs[AllCaseEqs()] >>
+   gvs[PULL_EXISTS] >>
+   gvs[return_def, raise_def] >>
+   gvs[bind_def, ignore_bind_def] >>
+   gvs[lift_option_def, lift_option_type_def, lift_sum_def] >>
+   gvs[option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
+   gvs[type_value_CASE_rator, assign_operation_CASE_rator,
+       bound_CASE_rator] >>
+   gvs[check_def, assert_def] >>
+   gvs[AllCaseEqs()] >>
+   gvs[PULL_EXISTS] >>
+   gvs[return_def, raise_def] >>
    MAP_EVERY (fn th => TRY (imp_res_tac th >> gvs[]))
      [assign_result_state, set_global_immutables,
       resolve_array_element_state,

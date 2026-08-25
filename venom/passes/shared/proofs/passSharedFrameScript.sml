@@ -436,7 +436,12 @@ Theorem effects_independent_ext_call_empty[local]:
   !op1 op2. is_ext_call_op op1 /\ effects_independent op1 op2 ==>
             write_effects op2 = {}
 Proof
-  Cases >> Cases >> EVAL_TAC
+  Cases_on `op1` >> gvs[is_ext_call_op_def]
+  >- (Cases_on `op2` >> EVAL_TAC)
+  >- (Cases_on `op2` >> EVAL_TAC)
+  >- (Cases_on `op2` >> EVAL_TAC)
+  >- (Cases_on `op2` >> EVAL_TAC)
+  >- (Cases_on `op2` >> EVAL_TAC)
 QED
 
 (* Non-terminator non-INVOKE step_inst_base can only Abort from
@@ -546,7 +551,7 @@ QED
 (* If a non-terminator aborts, it must be ASSERT/ASSERT_UNREACHABLE/RETURNDATACOPY.
    These only read operand values (+ returndata for RETURNDATACOPY).
    If those agree, the same Abort is produced on any state. *)
-Theorem step_inst_base_abort_input_equiv[local]:
+Theorem step_inst_base_abort_input_equiv:
   !inst s1 s2 a s1'.
     step_inst_base inst s1 = Abort a s1' /\
     ~is_terminator inst.inst_opcode /\

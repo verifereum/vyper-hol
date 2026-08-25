@@ -599,8 +599,8 @@ Proof
 QED
 
 val base_frame_tac =
-  ASM_REWRITE_TAC[step_inst_base_def] >>
-  simp[] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  ASM_REWRITE_TAC[opcode_case_def] >>
   gvs all_rwts2 >>
   TRY (gvs(all_rwts2 @ custom_defs) >>
        rpt (CHANGED_TAC (BasicProvers.TOP_CASE_TAC >>
@@ -696,11 +696,26 @@ Proof
   >- base_frame_tac (* BLOBHASH *)
   >- base_frame_tac (* BLOBBASEFEE *)
   >- base_frame_tac (* SHA3 *)
-  >- base_frame_tac (* CALL *)
-  >- base_frame_tac (* STATICCALL *)
-  >- base_frame_tac (* DELEGATECALL *)
-  >- base_frame_tac (* CREATE *)
-  >- base_frame_tac (* CREATE2 *)
+  >- (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+      ASM_REWRITE_TAC[opcode_case_def] >>
+      gvs all_rwts2 >>
+      rpt (CHANGED_TAC (BasicProvers.TOP_CASE_TAC >> gvs all_rwts2)))
+  >- (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+      ASM_REWRITE_TAC[opcode_case_def] >>
+      gvs all_rwts2 >>
+      rpt (CHANGED_TAC (BasicProvers.TOP_CASE_TAC >> gvs all_rwts2)))
+  >- (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+      ASM_REWRITE_TAC[opcode_case_def] >>
+      gvs all_rwts2 >>
+      rpt (CHANGED_TAC (BasicProvers.TOP_CASE_TAC >> gvs all_rwts2)))
+  >- (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+      ASM_REWRITE_TAC[opcode_case_def] >>
+      gvs all_rwts2 >>
+      rpt (CHANGED_TAC (BasicProvers.TOP_CASE_TAC >> gvs all_rwts2)))
+  >- (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+      ASM_REWRITE_TAC[opcode_case_def] >>
+      gvs all_rwts2 >>
+      rpt (CHANGED_TAC (BasicProvers.TOP_CASE_TAC >> gvs all_rwts2)))
   >- base_frame_tac (* LOG *)
   >- base_frame_tac (* SELFDESTRUCT *)
   >- base_frame_tac (* INVALID *)

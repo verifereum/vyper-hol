@@ -278,8 +278,31 @@ Proof
   >- (fs[df_fold_backward_def, LET_THM] >> rw[] >>
       Cases_on `k = (lbl,idx)` >> fs[FLOOKUP_UPDATE] >> metis_tac[])
   (* Step: h::instrs *)
-  >> fs[df_fold_backward_def, LET_THM] >>
-     pairarg_tac >> fs[] >> rw[]
+  >> qpat_x_assum
+       `df_fold_backward transfer lbl (h::instrs) idx acc inst_map = (fv,im)`
+       mp_tac >>
+     CONV_TAC (LAND_CONV (LHS_CONV
+       (ONCE_REWRITE_CONV [df_fold_backward_def]))) >>
+     strip_tac >> pop_assum mp_tac >>
+     PURE_ONCE_REWRITE_TAC [LET_THM] >> strip_tac >>
+     pairarg_tac >>
+     qpat_x_assum
+       `df_fold_backward transfer lbl instrs (idx + 1) acc inst_map =
+        (acc',inst_map')`
+       (fn fold_eq =>
+         qpat_x_assum
+           `_ (df_fold_backward transfer lbl instrs (idx + 1) acc inst_map) =
+            (fv,im)`
+           (fn result_eq =>
+             ASSUME_TAC fold_eq >>
+             STRIP_ASSUME_TAC (SIMP_RULE std_ss
+               [fold_eq, LET_THM, pairTheory.PAIR_EQ] result_eq))) >>
+     qpat_x_assum `transfer h acc' = fv`
+       (fn th => ONCE_REWRITE_TAC [GSYM th]) >>
+     qpat_x_assum
+       `inst_map' |+ ((lbl,idx),transfer h acc') = im`
+       (fn th => ONCE_REWRITE_TAC [GSYM th]) >>
+     conj_tac
      (* P (transfer h acc') *)
      >- (qpat_x_assum `!transfer lbl idx acc inst_map fv im P. _`
            (qspecl_then [`transfer`, `lbl`, `idx+1`, `acc`, `inst_map`,

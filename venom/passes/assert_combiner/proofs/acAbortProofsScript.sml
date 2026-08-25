@@ -591,6 +591,27 @@ Proof
     metis_tac[] >> metis_tac[optionTheory.IS_SOME_DEF]
 QED
 
+Triviality cand_preds_eval_transfer[local]:
+  !cands mp dfg insts s_t V mc mc_h h s_iz.
+    ac_sim_precond cands mp dfg insts s_t V /\
+    MEM mc cands /\ MEM mc_h cands /\
+    mc_h.mc_second_id = h.inst_id /\
+    (!opr. (!x. opr = Var x ==>
+       x <> ac_or_var h.inst_id /\ x <> ac_iz_var h.inst_id) ==>
+       eval_operand opr s_iz = eval_operand opr s_t) ==>
+    IS_SOME (eval_operand mc.mc_second_pred s_iz) /\
+    IS_SOME (eval_operand mc.mc_first_pred s_iz)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`cands`, `mp`, `dfg`, `insts`, `s_t`, `V`, `mc`, `mc_h`]
+    mp_tac ac_sim_precond_cand_eval_fresh >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  strip_tac >>
+  conj_tac >> irule eval_transfer_is_some >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  rpt strip_tac >> metis_tac[]
+QED
+
 Triviality alookup_extended_mp_or_iz_fresh[local]:
   !h insts cands mp dfg s V id x mc i.
     ac_sim_precond cands mp dfg (h::insts) s V /\
@@ -671,7 +692,14 @@ Proof
       >- ((`MEM i (h::insts)` by metis_tac[MEM]) >>
           metis_tac[ac_sim_precond_def]))
   (* G2: pred_op output freshness *)
-  >- (simp_tac (srw_ss()) [operand_11] >> metis_tac[MEM, ac_sim_precond_def])
+  >- (simp_tac (srw_ss()) [operand_11] >> rpt strip_tac >>
+      `MEM i (h::insts)` by simp[] >>
+      qspecl_then
+        [`cands`, `mp`, `dfg`, `h::insts`, `s_t`, `V`, `i`,
+         `ac_or_var h.inst_id`, `mc_h`] mp_tac
+        ac_sim_precond_outputs_fresh_for_cands >>
+      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      simp[])
   (* G3: operand eval transfer *)
   >- (rpt strip_tac >>
       (`MEM i (h::insts)` by metis_tac[MEM]) >>
@@ -687,7 +715,8 @@ Proof
       metis_tac[ac_sim_precond_def, ac_cands_ordered_def, MEM])
   (* G6: cand pred eval transfer *)
   >- (rpt strip_tac >>
-      metis_tac[eval_transfer_is_some, ac_sim_precond_def])
+      drule_all_then strip_assume_tac cand_preds_eval_transfer >>
+      first_assum ACCEPT_TAC)
   (* G7: ALOOKUP mp_new or/iz freshness *)
   >- metis_tac[alookup_extended_mp_or_iz_fresh]
   (* G8: ALOOKUP mp_new eval *)

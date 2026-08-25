@@ -406,22 +406,31 @@ Proof
   rpt gen_tac >>
   ONCE_REWRITE_TAC[step_inst_base_def] >>
   Cases_on `inst.inst_opcode` >>
-  rw[] >>
+  PURE_REWRITE_TAC[venomInstTheory.opcode_case_def] >>
   (* Uniform handler for all exec_* helpers + direct cases *)
-  gvs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-      exec_read0_def, exec_read1_def, exec_write2_def,
-      exec_alloca_def, exec_ext_call_def, exec_delegatecall_def,
-      exec_create_def, extract_venom_result_def,
-      AllCaseEqs(), LET_THM,
-      update_var_def, FDOM_FUPDATE,
-      jump_to_def, mcopy_def, mstore_def, mstore8_def, sstore_def, tstore_def,
-      halt_state_def, revert_state_def, set_returndata_def] >>
+  gvs[exec_pure1_def] >>
+  gvs[exec_pure2_def] >>
+  gvs[exec_pure3_def] >>
+  gvs[exec_read0_def, exec_read1_def] >>
+  gvs[exec_write2_def, exec_alloca_def] >>
+  gvs[exec_ext_call_def] >>
+  gvs[exec_delegatecall_def] >>
+  gvs[exec_create_def] >>
+  gvs[extract_venom_result_def] >>
+  gvs[AllCaseEqs(), LET_THM] >>
+  gvs[update_var_def, FDOM_FUPDATE] >>
+  gvs[jump_to_def, mcopy_def, mstore_def, mstore8_def] >>
+  gvs[sstore_def, tstore_def] >>
+  gvs[halt_state_def, revert_state_def, set_returndata_def] >>
   rpt strip_tac >> gvs[SUBSET_DEF, IN_INSERT, IN_UNION] >>
   (* Remaining: ext_call/staticcall/delegatecall/create/create2 lambda pairs,
      DLOADBYTES, CODECOPY write_memory_with_expansion *)
   TRY (gvs[write_memory_with_expansion_def, LET_THM] >> NO_TAC) >>
   TRY (pairarg_tac >> gvs[update_var_def, FDOM_FUPDATE] >>
-       gvs[SUBSET_DEF, IN_INSERT, IN_UNION] >> NO_TAC)
+       gvs[SUBSET_DEF, IN_INSERT, IN_UNION] >> NO_TAC) >>
+  TRY (Cases_on `result` >> gvs[AllCaseEqs()]) >>
+  TRY (Cases_on `y` >> gvs[AllCaseEqs()]) >>
+  rpt gen_tac >> strip_tac >> gvs[]
 QED
 
 (* FOLDL update_var adds output names to vs_vars *)
@@ -500,13 +509,21 @@ Proof
   rpt gen_tac >>
   ONCE_REWRITE_TAC[step_inst_base_def] >>
   Cases_on `inst.inst_opcode` >>
-  rw[is_terminator_def, opcode_has_output_def] >>
-  gvs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-      exec_read0_def, exec_read1_def, exec_write2_def,
-      exec_alloca_def, exec_ext_call_def, exec_delegatecall_def,
-      exec_create_def, extract_venom_result_def,
-      AllCaseEqs(), LET_THM,
-      update_var_def, FDOM_FUPDATE]
+  PURE_REWRITE_TAC[venomInstTheory.opcode_case_def] >>
+  gvs[is_terminator_def] >>
+  gvs[opcode_has_output_def] >>
+  gvs[exec_pure1_def] >>
+  gvs[exec_pure2_def] >>
+  gvs[exec_pure3_def] >>
+  gvs[exec_read0_def, exec_read1_def] >>
+  gvs[exec_write2_def, exec_alloca_def] >>
+  gvs[exec_ext_call_def] >>
+  gvs[exec_delegatecall_def] >>
+  gvs[exec_create_def] >>
+  gvs[extract_venom_result_def] >>
+  gvs[AllCaseEqs(), LET_THM] >>
+  gvs[update_var_def, FDOM_FUPDATE] >>
+  rpt strip_tac >> gvs[FDOM_FUPDATE]
 QED
 
 (* Non-terminator step_inst: outputs end up in FDOM (incl. INVOKE) *)
@@ -542,19 +559,28 @@ Proof
   rpt gen_tac >>
   ONCE_REWRITE_TAC[step_inst_base_def] >>
   Cases_on `inst.inst_opcode` >>
-  rw[] >>
-  gvs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-      exec_read0_def, exec_read1_def, exec_write2_def,
-      exec_alloca_def, exec_ext_call_def, exec_delegatecall_def,
-      exec_create_def, extract_venom_result_def,
-      AllCaseEqs(), LET_THM,
-      update_var_def, FDOM_FUPDATE,
-      jump_to_def, mcopy_def, mstore_def, mstore8_def, sstore_def, tstore_def,
-      halt_state_def, revert_state_def, set_returndata_def] >>
+  PURE_REWRITE_TAC[venomInstTheory.opcode_case_def] >>
+  gvs[exec_pure1_def] >>
+  gvs[exec_pure2_def] >>
+  gvs[exec_pure3_def] >>
+  gvs[exec_read0_def, exec_read1_def] >>
+  gvs[exec_write2_def, exec_alloca_def] >>
+  gvs[exec_ext_call_def] >>
+  gvs[exec_delegatecall_def] >>
+  gvs[exec_create_def] >>
+  gvs[extract_venom_result_def] >>
+  gvs[AllCaseEqs(), LET_THM] >>
+  gvs[update_var_def, FDOM_FUPDATE] >>
+  gvs[jump_to_def, mcopy_def, mstore_def, mstore8_def] >>
+  gvs[sstore_def, tstore_def] >>
+  gvs[halt_state_def, revert_state_def, set_returndata_def] >>
   rpt strip_tac >> gvs[SUBSET_DEF, IN_INSERT, IN_UNION] >>
   TRY (gvs[write_memory_with_expansion_def, LET_THM] >> NO_TAC) >>
   TRY (pairarg_tac >> gvs[update_var_def, FDOM_FUPDATE] >>
-       gvs[SUBSET_DEF, IN_INSERT, IN_UNION] >> NO_TAC)
+       gvs[SUBSET_DEF, IN_INSERT, IN_UNION] >> NO_TAC) >>
+  TRY (Cases_on `result` >> gvs[AllCaseEqs()]) >>
+  TRY (Cases_on `y` >> gvs[AllCaseEqs()]) >>
+  rpt gen_tac >> strip_tac >> gvs[]
 QED
 
 (* bind_outputs adds exactly the output variables *)
@@ -778,18 +804,27 @@ Proof
   rpt gen_tac >>
   ONCE_REWRITE_TAC[step_inst_base_def] >>
   Cases_on `inst.inst_opcode` >>
-  rw[] >>
-  gvs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-      exec_read0_def, exec_read1_def, exec_write2_def,
-      exec_alloca_def, exec_ext_call_def, exec_delegatecall_def,
-      exec_create_def, extract_venom_result_def,
-      AllCaseEqs(), LET_THM,
-      update_var_def, lookup_var_def, FLOOKUP_UPDATE,
-      jump_to_def, mcopy_def, mstore_def, mstore8_def, sstore_def, tstore_def,
-      halt_state_def, revert_state_def, set_returndata_def] >>
+  PURE_REWRITE_TAC[venomInstTheory.opcode_case_def] >>
+  gvs[exec_pure1_def] >>
+  gvs[exec_pure2_def] >>
+  gvs[exec_pure3_def] >>
+  gvs[exec_read0_def, exec_read1_def] >>
+  gvs[exec_write2_def, exec_alloca_def] >>
+  gvs[exec_ext_call_def] >>
+  gvs[exec_delegatecall_def] >>
+  gvs[exec_create_def] >>
+  gvs[extract_venom_result_def] >>
+  gvs[AllCaseEqs(), LET_THM] >>
+  gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  gvs[jump_to_def, mcopy_def, mstore_def, mstore8_def] >>
+  gvs[sstore_def, tstore_def] >>
+  gvs[halt_state_def, revert_state_def, set_returndata_def] >>
   rpt strip_tac >> gvs[FLOOKUP_UPDATE] >>
   TRY (gvs[write_memory_with_expansion_def, LET_THM] >> NO_TAC) >>
-  TRY (pairarg_tac >> gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >> NO_TAC)
+  TRY (pairarg_tac >> gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >> NO_TAC) >>
+  TRY (Cases_on `result` >> gvs[AllCaseEqs()]) >>
+  TRY (Cases_on `y` >> gvs[AllCaseEqs()]) >>
+  gvs[lookup_var_def]
 QED
 
 (* vars_colon_free preservation through step_inst_base *)
@@ -2798,11 +2833,61 @@ Proof
   pop_assum (ASSUME_TAC o ONCE_REWRITE_RULE [step_inst_base_def]) >>
   pop_assum mp_tac >>
   Cases_on `inst.inst_opcode` >> simp[is_terminator_def] >>
-  simp[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-       exec_read0_def, exec_read1_def, exec_write2_def,
-       exec_alloca_def, exec_ext_call_def, exec_delegatecall_def,
-       exec_create_def, extract_venom_result_def,
-       AllCaseEqs(), LET_THM] >>
+  PURE_REWRITE_TAC[exec_pure1_def] >>
+  PURE_REWRITE_TAC[exec_pure2_def] >>
+  PURE_REWRITE_TAC[exec_pure3_def] >>
+  PURE_REWRITE_TAC[exec_read0_def, exec_read1_def] >>
+  PURE_REWRITE_TAC[exec_write2_def, exec_alloca_def] >>
+  PURE_REWRITE_TAC[exec_ext_call_def] >>
+  PURE_REWRITE_TAC[exec_delegatecall_def] >>
+  PURE_REWRITE_TAC[exec_create_def] >>
+  PURE_REWRITE_TAC[extract_venom_result_def] >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >> TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >> TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >> TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >> TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >> TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >> TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >> TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >> TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >> TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.TOP_CASE_TAC >> TRY BasicProvers.TOP_CASE_TAC >>
+  TRY BasicProvers.FULL_CASE_TAC >> gvs[] >>
+  TRY BasicProvers.FULL_CASE_TAC >> gvs[] >>
+  TRY BasicProvers.FULL_CASE_TAC >> gvs[] >>
+  TRY BasicProvers.FULL_CASE_TAC >> gvs[] >>
+  TRY BasicProvers.FULL_CASE_TAC >> gvs[] >>
+  TRY BasicProvers.FULL_CASE_TAC >> gvs[] >>
+  TRY BasicProvers.FULL_CASE_TAC >> gvs[] >>
+  TRY BasicProvers.FULL_CASE_TAC >> gvs[] >>
   rpt strip_tac >> gvs[is_terminator_def]
 QED
 

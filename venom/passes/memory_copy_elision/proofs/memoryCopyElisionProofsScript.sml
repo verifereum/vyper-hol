@@ -20,7 +20,7 @@ Ancestors
   basePtrDefs basePtrProps basePtrProofs
   venomWf venomInst venomInstProps venomEffects venomExecSemantics venomExecProps
   venomState venomMemDefs venomMemProps
-  dfgAnalysisProps dfgCorrectnessProof dfgDefs dfAnalyzeDefs
+  dfgAnalysisProps dfgCorrectnessProof dfgSoundStep dfgDefs dfAnalyzeDefs
   dfIterateProps dfIterateProofs
   memAliasDefs memAliasProofs memLocDefs
   cfgDefs cfgHelpers cfgAnalysisProps
@@ -103,7 +103,14 @@ Proof
     qexists `inst` >> simp[] >>
     Cases_on `inst.inst_opcode` >> gvs[] >> NO_TAC) >>
   rpt (IF_CASES_TAC >> fs[mk_nop_inst_def, is_terminator_def]) >>
-  rpt (CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def]) >>
+  TRY CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def] >>
+  TRY CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def] >>
+  TRY CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def] >>
+  TRY CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def] >>
+  TRY CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def] >>
+  TRY CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def] >>
+  TRY CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def] >>
+  TRY CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def] >>
   imp_res_tac copy_opcode_not_term >> imp_res_tac copy_opcode_not_invoke >>
   imp_res_tac copy_opcode_not_phi >>
   fs[]
@@ -908,7 +915,7 @@ Triviality phi_filter_fwd_inst_wf_for_bp_fdom[local]:
 Proof
   rpt strip_tac >>
   rw[phi_filter_fwd_def] >>
-  Cases_on `inst.inst_opcode` >> gvs[is_ptr_opcode_def, inst_wf_def] >>
+  gvs[inst_wf_def] >>
   simp[phi_well_formed_flat_phi_pairs]
 QED
 
@@ -1132,7 +1139,9 @@ Proof
   Cases_on `t` >> gvs[] >>
   (* 2+ outputs, but non-INVOKE inst_wf constrains to 0 or 1 outputs *)
   rename1 `inst.inst_outputs = out1 :: out2 :: rest` >>
-  Cases_on `inst.inst_opcode` >> gvs[inst_wf_def]
+  `LENGTH inst.inst_outputs <= 1` by
+    metis_tac[inst_wf_noninvoke_outputs_at_most_one] >>
+  gvs[]
 QED
 
 (* Output of instruction is not in its own uses (from block-level self-use
@@ -1222,7 +1231,53 @@ Proof
   >> rpt strip_tac >> gvs[bp_get_ptrs_def, FLOOKUP_UPDATE] >>
   gvs[inst_uses_def, venomInstTheory.operand_vars_def,
        venomInstTheory.operand_var_def] >>
-  BasicProvers.EVERY_CASE_TAC >>
+  Cases_on `inst.inst_operands` >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  Cases_on `t` >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY (Cases_on `t'`) >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY (Cases_on `h`) >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY (Cases_on `h'`) >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY BasicProvers.TOP_CASE_TAC >>
   gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
   (* Remaining: ADD/SUB Var-Var with out as operand (contradiction),
      and PHI operand ptrs agreement *)
@@ -1234,13 +1289,17 @@ Proof
        (MAP SND (phi_pairs inst.inst_operands)) =
    MAP (bp_get_ptrs bp) (MAP SND (phi_pairs inst.inst_operands))` by (
     irule MAP_CONG >> simp[] >> rpt strip_tac >>
+    qmatch_goalsub_rename_tac
+      `bp_get_ptrs (DRESTRICT bp (COMPL {out})) phi_v = _` >>
     simp[bp_get_ptrs_def, FLOOKUP_DRESTRICT] >>
-    `x <> out` by (
+    `phi_v <> out` by (
       CCONTR_TAC >> gvs[] >>
       imp_res_tac phi_pairs_mem_operand_vars >>
-      metis_tac[]) >>
+      gvs[EVERY_MEM, venomInstTheory.operand_vars_def,
+          venomInstTheory.operand_var_def]) >>
     simp[]) >>
-  gvs[]
+  BasicProvers.EVERY_CASE_TAC >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT]
 QED
 
 (* Per-instruction bp_ptr_sound preservation at the fixpoint.
@@ -3308,11 +3367,14 @@ Proof
    | Error e => Error e` by (
     CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
     simp[get_instruction_def, Abbr `inst`, Abbr `idx`]) >>
-  pop_assum (fn th => FULL_SIMP_TAC std_ss [th]) >>
+  qpat_x_assum `exec_block fuel run_ctx bb st = OK v` (fn ok_th =>
+    qpat_x_assum `exec_block fuel run_ctx bb st = _` (fn unfold_th =>
+      assume_tac (REWRITE_RULE [unfold_th] ok_th))) >>
   Cases_on `step_inst fuel run_ctx inst st`
   >- (
     rename1 `step_inst _ _ _ _ = OK st'` >>
-    FULL_SIMP_TAC std_ss [exec_result_case_def] >>
+    qpat_x_assum `_ = OK v` (fn th =>
+      assume_tac (SIMP_RULE std_ss [exec_result_case_def] th)) >>
     `dfg_assigns_sound dfg (st' with vs_inst_idx := 0) /\
      bp_ptr_sound bp (st' with vs_inst_idx := 0) /\
      allocas_non_overlapping (st' with vs_inst_idx := 0) /\
@@ -3338,6 +3400,7 @@ Proof
     qpat_x_assum `~is_terminator inst.inst_opcode` (fn nonterm_th =>
       qpat_x_assum `(if is_terminator inst.inst_opcode then if st'.vs_halted then Halt st' else OK st' else run_block_non_phis fuel run_ctx bb (st' with vs_inst_idx := SUC idx)) = OK v`
         (fn eq_th => assume_tac (REWRITE_RULE [nonterm_th] eq_th))) >>
+    qpat_x_assum `n = LENGTH bb.bb_instructions - idx` SUBST_ALL_TAC >>
     qpat_x_assum `!m. m < LENGTH bb.bb_instructions - idx ==> _`
       (qspec_then `LENGTH bb.bb_instructions - SUC idx` mp_tac) >>
     impl_tac >- simp[Abbr `idx`] >>
@@ -5660,8 +5723,12 @@ Proof
     (mp_tac load_bp_get_read_bridge >> simp[]) >>
   (* Case split on the 3 load opcodes; all use exec_read1 *)
   Cases_on `inst.inst_opcode` >> gvs[is_load_fact_opcode_def] >>
-  gvs[step_inst_def, is_terminator_def, step_inst_base_def,
-      exec_read1_def] >>
+  gvs[step_inst_def, is_terminator_def] >>
+  qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
+  ONCE_REWRITE_TAC[step_inst_base_def] >>
+  ASM_REWRITE_TAC[venomInstTheory.opcode_case_def] >>
+  strip_tac >>
+  gvs[exec_read1_def] >>
   (* From OK result: eval_operand ops.iao_ofst s = SOME v *)
   Cases_on `eval_operand ops.iao_ofst s` >> gvs[] >>
   rename1 `eval_operand _ s = SOME v` >>
@@ -5859,8 +5926,14 @@ Proof
   rpt gen_tac >> reverse IF_CASES_TAC >> gvs[] >- metis_tac[] >>
   simp[load_store_step_def, LET_THM] >> rpt COND_CASES_TAC >>
   gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, invalidate_loads_def] >>
-  rpt (CASE_TAC >>
-       gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT]) >>
+  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
   rpt strip_tac >> gvs[] >> res_tac
 QED
 
@@ -6738,7 +6811,17 @@ Triviality lf_at_opcode_inv[local]:
 Proof
   Induct_on `i` >> simp[lf_at_def, FLOOKUP_EMPTY] >>
   rpt gen_tac >> reverse IF_CASES_TAC >> gvs[] >- metis_tac[] >>
-  simp[load_store_step_def, LET_THM] >> rpt COND_CASES_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, invalidate_loads_def] >> rpt (CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT]) >> rpt strip_tac >> gvs[] >> res_tac
+  simp[load_store_step_def, LET_THM] >> rpt COND_CASES_TAC >>
+  gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, invalidate_loads_def] >>
+  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  rpt strip_tac >> gvs[] >> res_tac
 QED
 
 (* ALL_DISTINCT flat-map disjointness at different indices *)

@@ -139,9 +139,10 @@ Proof
   rpt strip_tac >>
   `k MOD dimword(:256) = k` by
     (irule arithmeticTheory.LESS_MOD >>
-     simp[wordsTheory.dimword_def] >>
+     PURE_REWRITE_TAC[wordsTheory.dimword_def, dimindex_256] >>
      irule arithmeticTheory.LESS_LESS_EQ_TRANS >>
-     qexists_tac `2 ** n` >> simp[]) >>
+     qexists_tac `2 ** n` >> conj_tac >- FIRST_ASSUM ACCEPT_TAC >>
+     irule bitTheory.TWOEXP_MONO2 >> FIRST_ASSUM ACCEPT_TAC) >>
   simp[]
 QED
 

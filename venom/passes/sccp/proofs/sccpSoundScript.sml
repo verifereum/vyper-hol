@@ -205,8 +205,10 @@ Proof
   rpt strip_tac >>
   IF_CASES_TAC >> gvs[] >> (
     simp[step_inst_non_invoke] >>
-    simp[Once step_inst_base_def, eval_operand_def] >>
-    simp[Once step_inst_base_def, eval_operand_def])
+    simp[Once step_inst_base_def] >>
+    simp[eval_operand_def] >>
+    simp[Once step_inst_base_def] >>
+    simp[eval_operand_def])
 QED
 
 (* Main theorem: sccp_inst with sound lattice = original instruction *)
@@ -279,14 +281,29 @@ Proof
      (mk_nop_inst inst).inst_opcode <> INVOKE /\
      (mk_nop_inst inst).inst_opcode <> PHI` by EVAL_TAC >>
     fs[] >> NO_TAC) >>
-  rpt (CASE_TAC >> gvs[is_terminator_def]) >>
-  rpt (IF_CASES_TAC >> gvs[is_terminator_def]) >>
+  TRY CASE_TAC >> gvs[is_terminator_def] >>
+  TRY CASE_TAC >> gvs[is_terminator_def] >>
+  TRY CASE_TAC >> gvs[is_terminator_def] >>
+  TRY CASE_TAC >> gvs[is_terminator_def] >>
+  TRY CASE_TAC >> gvs[is_terminator_def] >>
+  TRY CASE_TAC >> gvs[is_terminator_def] >>
+  TRY CASE_TAC >> gvs[is_terminator_def] >>
+  TRY CASE_TAC >> gvs[is_terminator_def] >>
+  TRY CASE_TAC >> gvs[is_terminator_def] >>
+  TRY CASE_TAC >> gvs[is_terminator_def] >>
+  TRY IF_CASES_TAC >> gvs[is_terminator_def] >>
+  TRY IF_CASES_TAC >> gvs[is_terminator_def] >>
   TRY (qpat_x_assum `is_terminator _` mp_tac) >>
   TRY (qpat_x_assum `_ = INVOKE` mp_tac) >>
   TRY (qpat_x_assum `_ = PHI` mp_tac) >>
   simp_tac (srw_ss()) [] >>
   CASE_TAC >> gvs[is_terminator_def] >>
-  rpt (CASE_TAC >> gvs[is_terminator_def])
+  TRY CASE_TAC >> gvs[is_terminator_def] >>
+  TRY CASE_TAC >> gvs[is_terminator_def] >>
+  TRY CASE_TAC >> gvs[is_terminator_def] >>
+  TRY CASE_TAC >> gvs[is_terminator_def] >>
+  TRY CASE_TAC >> gvs[is_terminator_def] >>
+  TRY CASE_TAC >> gvs[is_terminator_def]
 QED
 
 Theorem sccp_inst_simulates:

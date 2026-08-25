@@ -390,7 +390,8 @@ Theorem asm_step_context_pc[local]:
 Proof
   rw[asm_step_context_def, asm_push_val_def, asm_state_unop_def,
      asm_next_def, LET_THM] >>
-  asm_next_pc_tac
+  simp[] >>
+  every_case_tac >> gvs[]
 QED
 
 Theorem asm_dup_pc[local]:

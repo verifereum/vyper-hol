@@ -614,7 +614,9 @@ Proof
   (* Step 1: R_ok bridge: run_block bb s1 ~ run_block bb s2 *)
   `lift_result R_ok R_term R_term (run_block fuel run_ctx bb s1)
     (run_block fuel run_ctx bb s2)` by
-    (irule run_block_preserves_R_helper >> metis_tac[]) >>
+    (irule run_block_preserves_R_helper >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     qexists_tac `fn` >> conj_tac >> first_assum ACCEPT_TAC) >>
   (* Block-level facts for block simulation *)
   `(!idx. SUC idx <= LENGTH bb.bb_instructions ==>
      df_at bottom result bb.bb_label (SUC idx) =
@@ -722,36 +724,70 @@ Proof
     qpat_x_assum `lift_result R_ok R_term R_term (run_block fuel run_ctx bb s1) (run_block fuel run_ctx bb s2)` (fn th => ALL_TAC) >>
   qpat_x_assum `lift_result R_ok R_term R_term (run_block fuel run_ctx bb s2) (run_block fuel run_ctx (analysis_block_transform bottom result f bb) s2)` (fn th => ALL_TAC) >>
   qpat_x_assum `lift_result R_ok R_term R_term (run_block fuel run_ctx bb s2) (run_block fuel run_ctx (analysis_block_transform_prepend bottom result prepend f bb) s2)` (fn th => ALL_TAC) >>
-  (* Case split on run_block results for IH *)
-  Cases_on `run_block fuel run_ctx bb s1` >>
-  Cases_on `run_block fuel run_ctx
-    (analysis_block_transform_prepend bottom result prepend f bb) s2` >>
-  gvs[lift_result_def]
-  >- (
-    rename1 `R_ok v1 v2` >>
-    `~v1.vs_halted` by metis_tac[run_block_OK_not_halted] >>
-    `~v2.vs_halted` by metis_tac[vsr_R_ok_fields] >>
-    simp[lift_result_def] >>
-    imp_res_tac run_block_OK_inst_idx_0 >>
-    `v1.vs_current_bb = v2.vs_current_bb` by metis_tac[vsr_R_ok_fields] >>
-    `MEM v1.vs_current_bb cfg.cfg_dfs_pre /\
-     sound (df_at bottom result v1.vs_current_bb 0) v1` by metis_tac[] >>
-    REWRITE_TAC [GSYM function_map_transform_def] >>
-    first_x_assum irule >> simp[] >>
-    rpt conj_tac >> first_assum ACCEPT_TAC)
-  >> (
-    Cases_on `run_block fuel run_ctx bb s2` >> gvs[lift_result_def] >>
-    Cases_on `run_block fuel run_ctx
-      (analysis_block_transform_prepend bottom result prepend f bb) s2` >> gvs[lift_result_def] >>
-    rename1 `R_ok v1 v2` >>
-    `~v1.vs_halted` by metis_tac[run_block_OK_not_halted] >>
-    `~v2.vs_halted` by metis_tac[run_block_OK_not_halted] >>
-    simp[lift_result_def] >>
-    imp_res_tac run_block_OK_inst_idx_0 >>
-    `v1.vs_current_bb = v2.vs_current_bb` by metis_tac[vsr_R_ok_fields] >>
-    `MEM v1.vs_current_bb cfg.cfg_dfs_pre /\
-     sound (df_at bottom result v1.vs_current_bb 0) v1` by metis_tac[] >>
-    REWRITE_TAC [GSYM function_map_transform_def] >>
-    first_x_assum irule >> simp[] >>
-    rpt conj_tac >> first_assum ACCEPT_TAC)
+  (* Isolate the composed relation before splitting result constructors. *)
+  qpat_x_assum
+    `lift_result R_ok R_term R_term (run_block fuel run_ctx bb s1)
+       (run_block fuel run_ctx
+          (analysis_block_transform_prepend bottom result prepend f bb) s2)`
+    mp_tac >>
+  (Cases_on `run_block fuel run_ctx bb s1` THEN_LT
+   TRYALL (Cases_on `run_block fuel run_ctx
+     (analysis_block_transform_prepend bottom result prepend f bb) s2`)) >>
+  PURE_REWRITE_TAC[lift_result_def] >>
+  simp_tac std_ss [] >> TRY strip_tac >>
+  (ALL_TAC THEN_LT TRYALL
+    (SIMP_TAC bool_ss
+       [venomExecSemanticsTheory.exec_result_case_def,
+        lift_result_def, venomExecSemanticsTheory.exec_result_distinct] >>
+     TRY (first_assum ACCEPT_TAC))) >>
+  (ALL_TAC THEN_LT TRYALL (rename1 `R_ok v1 v2`)) >>
+  (ALL_TAC THEN_LT TRYALL
+    (qpat_x_assum `run_block fuel run_ctx bb s1 = OK v1`
+       (fn th => assume_tac th >> PURE_REWRITE_TAC[th]) >>
+     qpat_x_assum
+       `run_block fuel run_ctx
+          (analysis_block_transform_prepend bottom result prepend f bb) s2 = OK v2`
+       (fn th => assume_tac th >> PURE_REWRITE_TAC[th]))) >>
+  (ALL_TAC THEN_LT TRYALL (simp[lift_result_def])) >>
+  (ALL_TAC THEN_LT TRYALL (imp_res_tac run_block_OK_inst_idx_0)) >>
+  (ALL_TAC THEN_LT TRYALL
+    (`v1.vs_current_bb = v2.vs_current_bb` by
+       metis_tac[vsr_R_ok_fields])) >>
+  (ALL_TAC THEN_LT TRYALL
+    (`MEM v1.vs_current_bb cfg.cfg_dfs_pre /\
+      sound (df_at bottom result v1.vs_current_bb 0) v1` by metis_tac[])) >>
+  (ALL_TAC THEN_LT TRYALL
+    (qpat_x_assum `run_block fuel run_ctx bb s2 = Error e`
+       (fn err_th =>
+         qpat_x_assum `~?e. run_block fuel run_ctx bb s2 = Error e`
+           mp_tac >>
+         PURE_REWRITE_TAC[err_th] >> simp[]))) >>
+  (ALL_TAC THEN_LT TRYALL
+    (qpat_x_assum `?e. run_block fuel run_ctx bb s2 = Error e`
+       strip_assume_tac >>
+     qpat_x_assum
+       `lift_result R_ok R_term R_term
+          (run_block fuel run_ctx bb s2) (OK v2)` mp_tac >>
+     qpat_x_assum `run_block fuel run_ctx bb s2 = Error e`
+       (fn err_th => PURE_REWRITE_TAC[err_th]) >>
+     simp[lift_result_def])) >>
+  (ALL_TAC THEN_LT TRYALL
+    (qpat_x_assum `run_block fuel run_ctx bb s1 = OK v1`
+       (fn th => assume_tac
+         (MATCH_MP
+           (Q.SPECL [`fuel`, `run_ctx`, `bb`, `s1`, `v1`]
+             analysisSimProofsTheory.run_block_OK_not_halted) th)) >>
+     qpat_x_assum
+       `run_block fuel run_ctx
+          (analysis_block_transform_prepend bottom result prepend f bb) s2 = OK v2`
+       (fn th => assume_tac
+         (MATCH_MP
+           (Q.SPECL [`fuel`, `run_ctx`,
+             `analysis_block_transform_prepend bottom result prepend f bb`,
+             `s2`, `v2`] analysisSimProofsTheory.run_block_OK_not_halted) th)) >>
+     simp[])) >>
+  (ALL_TAC THEN_LT TRYALL
+    (REWRITE_TAC [GSYM function_map_transform_def] >>
+     first_x_assum irule >> simp[] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC))
 QED

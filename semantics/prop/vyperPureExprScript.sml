@@ -175,8 +175,13 @@ Theorem case_Builtin[local]:
        pure_expr (Builtin ty bt es) ⇒ st = st')
 Proof
   rpt strip_tac >>
-  gvs[evaluate_def, bind_def, AllCaseEqs(), pure_expr_def, ignore_bind_def,
-      check_def, type_check_def, assert_def, return_def, raise_def, get_accounts_def, lift_sum_def] >>
+  gvs[evaluate_def] >>
+  gvs[pure_expr_def] >>
+  gvs[bind_def, ignore_bind_def] >>
+  gvs[check_def, type_check_def, assert_def] >>
+  gvs[return_def, raise_def] >>
+  gvs[get_accounts_def, lift_sum_def] >>
+  gvs[AllCaseEqs()] >>
   Cases_on `bt = Len` >> gvs[bind_def, AllCaseEqs(), return_def, raise_def]
   (* Len case: eval_expr (HD es) + toplevel_array_length *)
   (* Len case *)

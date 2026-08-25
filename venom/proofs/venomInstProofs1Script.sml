@@ -154,7 +154,10 @@ Theorem step_assert_unreachable_identity:
     inst.inst_opcode = ASSERT_UNREACHABLE ==>
     s' = s
 Proof
-  rw[Once step_inst_def, step_inst_base_def] >> gvs[AllCaseEqs()]
+  simp[Once step_inst_def] >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  qhdtm_x_assum `step_inst_base` mp_tac >>
+  simp[Once step_inst_base_def] >> gvs[AllCaseEqs()] >> metis_tac[]
 QED
 
 (* ===================================================================== *)

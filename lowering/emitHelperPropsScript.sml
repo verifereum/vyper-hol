@@ -154,7 +154,9 @@ Theorem step_GT:
     step_inst_base (mk_inst id GT [op1; op2] [out]) ss =
       OK (update_var out (bool_to_word (w2n v1 > w2n v2)) ss)
 Proof
-  rw[step_inst_base_def] >> irule exec_pure2_ok >> rw[]
+  rw[] >> ASM_REWRITE_TAC[step_inst_base_def, mk_inst_opcode,
+                           opcode_case_def] >>
+  irule exec_pure2_ok >> rw[]
 QED
 
 Theorem step_LT:

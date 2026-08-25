@@ -1615,13 +1615,36 @@ Proof
      Pattern: unfold both sides, use IH for eval_exprs, match continuation bodies. *)
   (* Chain interaction builtins: all use same tactic.
      CPS evals exprs then calls apply_vals which matches big-step body. *)
-  \\ rpt (conj_tac >- (
+  \\ conj_tac >- (
     rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def]
     \\ gvs[prod_CASE_rator, sum_CASE_rator, cont_def]
-    \\ CASE_TAC \\ gvs[]
-    \\ CASE_TAC \\ gvs[]
+    \\ CASE_TAC \\ gvs[] \\ CASE_TAC \\ gvs[]
     \\ rw[Once OWHILE_THM, nextk_def, stepk_def,
-          apply_exc_def, apply_vals_def, ignore_bind_def, bind_def]))
+          apply_exc_def, apply_vals_def, ignore_bind_def, bind_def])
+  \\ conj_tac >- (
+    rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def]
+    \\ gvs[prod_CASE_rator, sum_CASE_rator, cont_def]
+    \\ CASE_TAC \\ gvs[] \\ CASE_TAC \\ gvs[]
+    \\ rw[Once OWHILE_THM, nextk_def, stepk_def,
+          apply_exc_def, apply_vals_def, ignore_bind_def, bind_def])
+  \\ conj_tac >- (
+    rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def]
+    \\ gvs[prod_CASE_rator, sum_CASE_rator, cont_def]
+    \\ CASE_TAC \\ gvs[] \\ CASE_TAC \\ gvs[]
+    \\ rw[Once OWHILE_THM, nextk_def, stepk_def,
+          apply_exc_def, apply_vals_def, ignore_bind_def, bind_def])
+  \\ conj_tac >- (
+    rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def]
+    \\ gvs[prod_CASE_rator, sum_CASE_rator, cont_def]
+    \\ CASE_TAC \\ gvs[] \\ CASE_TAC \\ gvs[]
+    \\ rw[Once OWHILE_THM, nextk_def, stepk_def,
+          apply_exc_def, apply_vals_def, ignore_bind_def, bind_def])
+  \\ conj_tac >- (
+    rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def]
+    \\ gvs[prod_CASE_rator, sum_CASE_rator, cont_def]
+    \\ CASE_TAC \\ gvs[] \\ CASE_TAC \\ gvs[]
+    \\ rw[Once OWHILE_THM, nextk_def, stepk_def,
+          apply_exc_def, apply_vals_def, ignore_bind_def, bind_def])
   \\ conj_tac >- rw[eval_expr_cps_def, evaluate_def, return_def] (* eval_exprs [] *)
   (* eval_exprs (e::es) *)
   \\ rw[eval_expr_cps_def, evaluate_def, bind_def]

@@ -152,18 +152,12 @@ Triviality step_inst_base_preserves_prev_bb:
     s'.vs_prev_bb = s.vs_prev_bb
 Proof
   rpt strip_tac >>
-  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  simp[step_inst_base_def] >>
-  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
-  simp[exec_pure2_def, exec_pure1_def, exec_pure3_def,
-       exec_read0_def, exec_read1_def, exec_write2_def,
-       exec_ext_call_def, exec_delegatecall_def,
-       exec_create_def, exec_alloca_def,
-       extract_venom_result_def] >>
-  strip_tac >> gvs[AllCaseEqs()] >>
-  rpt (pairarg_tac >> gvs[AllCaseEqs()]) >>
-  gvs[update_var_def, mstore_def, mstore8_def, sstore_def, tstore_def,
-      write_memory_with_expansion_def, mcopy_def, revert_state_def]
+  drule step_inst_base_OK_not_INVOKE >> strip_tac >>
+  `step_inst 0 ARB inst s = step_inst_base inst s` by
+    (irule step_inst_non_invoke >> simp[]) >>
+  mp_tac (Q.SPECL [`0`, `ARB`, `inst`, `s`, `s'`]
+    step_inst_preserves_prev_bb) >>
+  ASM_REWRITE_TAC[]
 QED
 
 Theorem block_step_preserves_prev_bb:
@@ -730,7 +724,8 @@ Proof
   `FILTER (\inst. is_pseudo inst.inst_opcode) insts =
    FILTER (\inst. inst.inst_opcode = PARAM) insts` by
     (irule filter_pseudo_no_phi_param >> simp[]) >>
-  Cases_on `h.inst_opcode` >> fs[is_pseudo_def]
+  Cases_on `h.inst_opcode` >> EVAL_TAC >> ASM_REWRITE_TAC[] >>
+  PURE_REWRITE_TAC[APPEND] >> REFL_TAC
 QED
 
 Triviality phi_prefix_length_filter_phi:

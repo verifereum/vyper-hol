@@ -519,8 +519,10 @@ Proof
   (* Only ASSERT, ASSERT_UNREACHABLE, RETURNDATACOPY remain *)
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
   ONCE_REWRITE_TAC[step_inst_base_def] >>
-  simp[AllCaseEqs(), revert_state_def, halt_state_def,
-       set_returndata_def, LET_THM] >>
+  ASM_REWRITE_TAC[venomInstTheory.opcode_case_def] >>
+  simp[AllCaseEqs()] >>
+  simp[revert_state_def, halt_state_def] >>
+  simp[set_returndata_def, LET_THM] >>
   rpt strip_tac >> gvs[]
 QED
 
@@ -548,11 +550,15 @@ Proof
      ONCE_REWRITE_TAC[step_inst_base_def] unfolds once with known opcode. *)
   qpat_x_assum `step_inst_base _ s = _` mp_tac >>
   ONCE_REWRITE_TAC [step_inst_base_def] >>
-  simp[AllCaseEqs(), revert_state_def, halt_state_def,
-       set_returndata_def, LET_THM] >>
+  ASM_REWRITE_TAC[venomInstTheory.opcode_case_def] >>
+  simp[AllCaseEqs()] >>
+  simp[revert_state_def, halt_state_def] >>
+  simp[set_returndata_def, LET_THM] >>
   strip_tac >> gvs[] >>
   ONCE_REWRITE_TAC [step_inst_base_def] >>
-  simp[revert_state_def, halt_state_def, set_returndata_def, LET_THM] >>
+  ASM_REWRITE_TAC[venomInstTheory.opcode_case_def] >>
+  simp[revert_state_def, halt_state_def] >>
+  simp[set_returndata_def, LET_THM] >>
   (* RETURNDATACOPY: also needs sx.vs_returndata = s.vs_returndata *)
   metis_tac[write_effects_sound_returndata,
             eff_ind_returndatacopy_no_write_rd]
@@ -6641,7 +6647,9 @@ Proof
   (* Now replay the executable pseudo opcode.  PHI is impossible under
      final semantics because step_inst_base PHI is Error. *)
   fs[step_inst_non_invoke] >>
-  Cases_on `a.inst_opcode` >> gvs[is_pseudo_def, Once step_inst_base_def, AllCaseEqs()] >>
+  Cases_on `a.inst_opcode` >> gvs[is_pseudo_def]
+  >- gvs[Once step_inst_base_def, AllCaseEqs()] >>
+  gvs[Once step_inst_base_def, AllCaseEqs()] >>
   `EL (w2n idx) s.vs_params = val` by
     (fs[update_var_def, venom_state_component_equality] >>
      metis_tac[FUPD11_SAME_KEY_AND_BASE]) >>

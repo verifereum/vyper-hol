@@ -3987,7 +3987,8 @@ Proof
         metis_tac[preds_of_unreachable]) >>
       (* Show dom_joined fn st lbl = fn_labels fn *)
       `dom_joined fn st lbl = fn_labels fn` by (
-        simp[dom_joined_def, dfAnalyzeDefsTheory.df_joined_val_def, LET_THM] >>
+        simp_tac std_ss
+          [dom_joined_def, dfAnalyzeDefsTheory.df_joined_val_def, LET_THM] >>
         `MAP (\nbr. dom_edge_transfer () nbr lbl
                       (df_boundary (fn_labels fn) st nbr))
              (cfg_preds_of (cfg_analyze fn) lbl) =
