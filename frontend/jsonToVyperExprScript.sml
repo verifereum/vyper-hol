@@ -828,9 +828,14 @@ Definition translate_expr_def:
                      | SOME v => translate_expr ctx v
                      | NONE => Literal (BaseT (UintT 256)) (IntL 0) in
     let ret_ty' = translate_type (expr_type_ctx ctx) ret_ty in
+    (* Vyper records the full declared parameter list in argument_types, even
+       when trailing defaulted parameters are omitted.  ExtCall carries the
+       effective ABI signature selected at this call site. *)
     Call ret_ty'
       (ExtCall F
-        (func_name, MAP (translate_type (expr_type_ctx ctx)) arg_types, ret_ty'))
+        (func_name,
+         TAKE (LENGTH args) (MAP (translate_type (expr_type_ctx ctx)) arg_types),
+         ret_ty'))
       (translate_expr ctx target :: value_expr :: translate_expr_list ctx args)
       (OPTION_MAP (translate_expr ctx)
         (find_keyword "default_return_value" keywords))) /\
@@ -839,9 +844,12 @@ Definition translate_expr_def:
   (translate_expr ctx
       (JE_StaticCall func_name arg_types ret_ty target args) =
     let ret_ty' = translate_type (expr_type_ctx ctx) ret_ty in
+    (* See ExtCall above: retain only the effective ABI argument types. *)
     Call ret_ty'
       (ExtCall T
-        (func_name, MAP (translate_type (expr_type_ctx ctx)) arg_types, ret_ty'))
+        (func_name,
+         TAKE (LENGTH args) (MAP (translate_type (expr_type_ctx ctx)) arg_types),
+         ret_ty'))
       (translate_expr ctx target :: translate_expr_list ctx args)
       NONE) /\
 
