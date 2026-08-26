@@ -173,7 +173,8 @@ End
 
 Datatype:
   json_import_info
-  = JImportInfo string int string                      (* alias, source_id, qualified_module_name *)
+  = JImportInfo string int string string
+    (* alias, source_id, qualified_module_name, resolved_path *)
 End
 
 (* ===== Interface Function Signature ===== *)
@@ -217,8 +218,8 @@ End
 
 Datatype:
   json_imported_module
-  = JImportedModule int string bool (json_toplevel list)
-    (* source_id, path, nonreentrancy_by_default, body *)
+  = JImportedModule int string string bool (json_toplevel list)
+    (* source_id, path, resolved_path, nonreentrancy_by_default, body *)
 End
 
 (* ===== Annotated AST ===== *)

@@ -319,9 +319,10 @@ fun mk_JInterfaceFunc (name, args, ret_ty, decorators) =
 fun mk_JTL_InterfaceDef (name, funcs) =
   list_mk_comb(JTL_InterfaceDef_tm,
     [fromMLstring name, mk_list(funcs, json_interface_func_ty)])
-fun mk_JImportInfo (alias, src_id, qual_name) =
+fun mk_JImportInfo (alias, src_id, qual_name, resolved_path) =
   list_mk_comb(JImportInfo_tm,
-    [fromMLstring alias, src_id, fromMLstring qual_name])
+    [fromMLstring alias, src_id, fromMLstring qual_name,
+     fromMLstring resolved_path])
 fun mk_JTL_Import infos =
   mk_comb(JTL_Import_tm, mk_list(infos, json_import_info_ty))
 fun mk_JTL_ExportsDecl ann = mk_comb(JTL_ExportsDecl_tm, ann)
@@ -331,10 +332,10 @@ fun mk_JTL_ImplementsDecl ann = mk_comb(JTL_ImplementsDecl_tm, ann)
 fun mk_JModule (src_id, nr_default, tls) =
   list_mk_comb(JModule_tm,
     [src_id, mk_bool nr_default, mk_list(tls, json_toplevel_ty)])
-fun mk_JImportedModule (src_id_tm, path, nr_default, body) =
+fun mk_JImportedModule (src_id_tm, path, resolved_path, nr_default, body) =
   list_mk_comb(JImportedModule_tm,
-    [src_id_tm, fromMLstring path, mk_bool nr_default,
-     mk_list(body, json_toplevel_ty)])
+    [src_id_tm, fromMLstring path, fromMLstring resolved_path,
+     mk_bool nr_default, mk_list(body, json_toplevel_ty)])
 fun mk_JAnnotatedAST (main_ast, imports) =
   list_mk_comb(JAnnotatedAST_tm,
     [main_ast,
@@ -1177,18 +1178,20 @@ val json_toplevel : term decoder = achoose "toplevel" [
     JSONDecode.map mk_JTL_Import $
     field "import_infos" $ array $
       JSONDecode.map mk_JImportInfo $
-      tuple3 (field "alias" string,
+      tuple4 (field "alias" string,
               field "source_id" inttm,
-              field "qualified_module_name" string),
+              field "qualified_module_name" string,
+              field "resolved_path" string),
 
   (* ImportFrom - from X import Y statement *)
   check_ast_type "ImportFrom" $
     JSONDecode.map mk_JTL_Import $
     field "import_infos" $ array $
       JSONDecode.map mk_JImportInfo $
-      tuple3 (field "alias" string,
+      tuple4 (field "alias" string,
               field "source_id" inttm,
-              field "qualified_module_name" string),
+              field "qualified_module_name" string,
+              field "resolved_path" string),
 
   (* ExportsDecl - exports declaration *)
   check_ast_type "ExportsDecl" $
@@ -1228,11 +1231,12 @@ val json_module : term decoder =
 (* Decoder for imported modules from the imports array *)
 
 val json_imported_module : term decoder =
-  JSONDecode.map (fn (src_id, path, nr, body) =>
-    mk_JImportedModule(src_id, path, nr, body)) $
-  tuple4 (field "source_id" inttm,
-          field "path" string,
-          nonreentrancy_by_default,
+  JSONDecode.map (fn ((src_id, path, resolved_path, nr), body) =>
+    mk_JImportedModule(src_id, path, resolved_path, nr, body)) $
+  tuple2 (tuple4 (field "source_id" inttm,
+                  field "path" string,
+                  field "resolved_path" string,
+                  nonreentrancy_by_default),
           field "body" (array json_toplevel))
 
 (* Parse raw Vyper `-f annotated_ast` output. *)
