@@ -661,8 +661,14 @@ Theorem step_inst_assign_ok_or_error[local]:
     (?st'. step_inst fuel ctx inst st = OK st') \/
     (?e. step_inst fuel ctx inst st = Error e)
 Proof
-  rw[venomExecSemanticsTheory.step_inst_def,
-     venomExecSemanticsTheory.step_inst_base_def] >>
+  rpt strip_tac >>
+  ONCE_REWRITE_TAC[venomExecSemanticsTheory.step_inst_def] >>
+  qpat_x_assum `inst.inst_opcode = ASSIGN`
+    (fn th => assume_tac th >> PURE_REWRITE_TAC[th]) >>
+  simp[is_terminator_def] >>
+  ONCE_REWRITE_TAC[venomExecSemanticsTheory.step_inst_base_def] >>
+  qpat_x_assum `inst.inst_opcode = ASSIGN`
+    (fn th => PURE_REWRITE_TAC[th]) >> simp[] >>
   Cases_on `inst.inst_operands` >> gvs[] >>
   Cases_on `inst.inst_outputs` >> gvs[] >>
   Cases_on `t` >> gvs[] >>

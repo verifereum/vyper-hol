@@ -30,6 +30,8 @@ Ancestors
   stateEquivProps execEquivProps stateEquiv venomInst venomExecSemantics
   venomExecProofs venomWf list indexedLists
 
+fun lift_result_case_tac () = gvs[lift_result_def]
+
 Theorem lookup_block_MEM[local]:
   !lbl bbs bb. lookup_block lbl bbs = SOME bb ==> MEM bb bbs
 Proof
@@ -136,8 +138,13 @@ Theorem run_block_same_code_R_ok[local]:
                              (run_block fuel ctx bb s2)
 Proof
   rpt gen_tac >> strip_tac >>
-  mp_tac (Q.SPECL [`R_ok`,`R_term`,`fn`] run_block_preserves_R_helper) >>
-  simp[] >> metis_tac[]
+  mp_tac (Q.SPECL [`R_ok`, `R_term`, `fn`]
+    run_block_preserves_R_helper) >>
+  simp[] >> strip_tac >>
+  qpat_x_assum `(_ ==> !fuel ctx bb s1 s2. _)` mp_tac >>
+  impl_tac >- (rpt conj_tac >> FIRST_ASSUM ACCEPT_TAC) >>
+  disch_then (qspecl_then [`fuel`, `ctx`, `bb`, `s1`, `s2`] mp_tac) >>
+  simp[]
 QED
 
 
@@ -1022,7 +1029,7 @@ Proof
   `MEM (bt bb) fn'.fn_blocks` by
     (simp[Abbr `fn'`, function_map_transform_def, MEM_MAP] >>
      metis_tac[]) >>
-  (* Triangle: per-block + same-code *)
+  (* RBPR triangle: per-block + same-code *)
   `lift_result R_ok R_term R_term (run_block fuel ctx bb s1)
                             (run_block fuel ctx (bt bb) s1)` by metis_tac[] >>
   `lift_result R_ok R_term R_term (run_block fuel ctx (bt bb) s1)
@@ -1034,8 +1041,20 @@ Proof
       qexists_tac `run_block fuel ctx (bt bb) s1` >>
       simp[]) >>
   Cases_on `run_block fuel ctx bb s1` >>
-  Cases_on `run_block fuel ctx (bt bb) s2` >>
-  gvs[lift_result_def]
+  Cases_on `run_block fuel ctx (bt bb) s2` >|
+  [lift_result_case_tac (), lift_result_case_tac (),
+   lift_result_case_tac (), lift_result_case_tac (),
+   lift_result_case_tac (), lift_result_case_tac (),
+   lift_result_case_tac (), lift_result_case_tac (),
+   lift_result_case_tac (), lift_result_case_tac (),
+   lift_result_case_tac (), lift_result_case_tac (),
+   lift_result_case_tac (), lift_result_case_tac (),
+   lift_result_case_tac (), lift_result_case_tac (),
+   lift_result_case_tac (), lift_result_case_tac (),
+   lift_result_case_tac (), lift_result_case_tac (),
+   lift_result_case_tac (), lift_result_case_tac (),
+   lift_result_case_tac (), lift_result_case_tac (),
+   lift_result_case_tac ()]
   >- (
     (* Both OK, not halted: recurse via IH *)
     `v'.vs_halted <=> v.vs_halted` by metis_tac[] >>
@@ -1187,8 +1206,15 @@ Proof
      MEM bb fn.fn_blocks /\ R_ok s1' s2' ==>
      lift_result R_ok R_term R_term (run_block fuel ctx bb s1')
                               (run_block fuel ctx bb s2')` by
-    (mp_tac (Q.SPECL [`R_ok`,`R_term`,`fn`] run_block_preserves_R_helper) >>
-     simp[] >> metis_tac[]) >>
+    (rpt gen_tac >> strip_tac >>
+     mp_tac (Q.SPECL [`R_ok`, `R_term`, `fn`]
+       run_block_preserves_R_helper) >>
+     simp[] >> strip_tac >>
+     qpat_x_assum `(_ ==> !fuel ctx bb s1 s2. _)` mp_tac >>
+     impl_tac >- (rpt conj_tac >> FIRST_ASSUM ACCEPT_TAC) >>
+     disch_then (qspecl_then [`fuel`, `ctx`, `bb`, `s1'`, `s2'`]
+       mp_tac) >>
+     simp[]) >>
   qsuff_tac
     `!fuel ctx s1 s2.
        R_ok s1 s2 /\ s1.vs_inst_idx = 0 /\ block_inv s1 ==>

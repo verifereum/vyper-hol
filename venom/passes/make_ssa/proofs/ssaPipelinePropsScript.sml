@@ -4109,7 +4109,11 @@ Resume phi_coverage[case_eq_phi]:
   ) >>
   conj_tac >- (
     `phi_extends func.fn_blocks (add_phi_nodes dom_frontiers pred_map live_in func.fn_blocks defs)` by simp[add_phi_nodes_phi_extends] >>
-    fs[phi_extends_def]
+    qpat_x_assum
+      `LENGTH (add_phi_nodes dom_frontiers pred_map live_in func.fn_blocks defs) =
+       LENGTH func.fn_blocks`
+      (fn th => PURE_REWRITE_TAC [GSYM th]) >>
+    first_assum ACCEPT_TAC
   ) >>
   qexistsl [`lbl_a`, `lbl_b`, `j_a`] >>
   simp[] >>

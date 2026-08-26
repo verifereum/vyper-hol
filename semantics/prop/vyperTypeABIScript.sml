@@ -1209,8 +1209,10 @@ Theorem vyper_to_abi_total:
 Proof
   ho_match_mp_tac vyper_to_abi_ind >>
   rpt conj_tac >> rpt gen_tac >>
-  simp[vyper_to_abi_def, evaluate_type_def, value_has_type_def,
-       AllCaseEqs(), PULL_EXISTS] >>
+  simp[vyper_to_abi_def] >>
+  simp[evaluate_type_def] >>
+  simp[value_has_type_def] >>
+  simp[AllCaseEqs(), PULL_EXISTS] >>
   rpt strip_tac >> gvs[value_has_type_def, AllCaseEqs(), PULL_EXISTS] >>
   TRY (Cases_on `v` >> gvs[value_has_type_def, vyper_to_abi_base_def] >> NO_TAC) >>
   TRY (drule evaluate_types_LIST_REL >> strip_tac >>
@@ -1232,7 +1234,8 @@ Proof
   TRY (first_x_assum drule_all >> strip_tac >> gvs[] >> NO_TAC) >>
   TRY (Cases_on `ALOOKUP sparse n` >> gvs[] >>
        drule_all sparse_values_have_type_ALOOKUP >> strip_tac >>
-       first_x_assum drule_all >> strip_tac >> gvs[] >> NO_TAC)
+       first_x_assum drule_all >> strip_tac >> gvs[] >> NO_TAC) >>
+  Cases_on `tvs` >> gvs[value_has_type_def]
 QED
 
 Theorem vyper_to_abi_bound_rel_strong[local]:

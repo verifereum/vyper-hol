@@ -416,8 +416,14 @@ Resume compile_entry_checks_correct[nonpayable_abort]:
   (* abort assumption *)
   >- first_assum ACCEPT_TAC
   (* inst_extends st cs' from payable emit chain *)
-  >- metis_tac[inst_extends_emit_op, inst_extends_emit_void,
-               inst_extends_trans]
+  >- (qmatch_asmsub_rename_tac
+        `emit_op CALLVALUE [] st = (cv, pay_st1)` >>
+      qmatch_asmsub_rename_tac
+        `emit_op ISZERO [cv] pay_st1 = (no_value, pay_st2)` >>
+      imp_res_tac inst_extends_emit_op >>
+      imp_res_tac inst_extends_emit_void >>
+      irule inst_extends_trans >> qexists_tac `pay_st1` >> simp[] >>
+      irule inst_extends_trans >> qexists_tac `pay_st2` >> simp[])
   (* inst_extends cs' st' from CDS conditional *)
   >> (qpat_x_assum `emit_op CALLVALUE _ _ = _` kall_tac >>
       qpat_x_assum `emit_op ISZERO [cv] _ = _` kall_tac >>

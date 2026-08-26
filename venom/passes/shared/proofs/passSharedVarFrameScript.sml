@@ -12,6 +12,7 @@
 Theory passSharedVarFrame
 Ancestors
   passSharedDefs venomExecSemantics venomState venomInst venomEffects venomInstProps
+  opcodeClass
 
 (* ===================================================================== *)
 (* ===== Variable/State Helpers ======================================== *)
@@ -141,7 +142,9 @@ Theorem step_inst_base_no_halt[local]:
     step_inst_base inst s = Halt s' ==>
     is_terminator inst.inst_opcode
 Proof
-  step_base_result_tac
+  rpt strip_tac >>
+  drule step_inst_base_halt_opcodes >>
+  strip_tac >> gvs[is_terminator_def]
 QED
 
 Theorem step_inst_base_no_intret[local]:

@@ -10,9 +10,12 @@ Theory evalCompilerBytecode
 Ancestors evalCompiler compileVyper concretizeMemLocDefs alist byte integer_word option
 Libs evalCompilerBytecodeLib finite_mapLib computeLib wordsLib
 
-val () = the_compset := add_finite_map_compset(!the_compset)
-val () = the_compset := computeLib.add_thms [fmap_to_alist_FEMPTY] (!the_compset)
-val () = the_compset := computeLib.add_thms [i2w_pos] (!the_compset)
+fun holbuild_extra_deps (_ : string list) = ()
+val () = holbuild_extra_deps ["bytecode"]
+
+val () = computeLib.upd_compset add_finite_map_compset
+val () = computeLib.upd_compset (computeLib.add_thms [fmap_to_alist_FEMPTY])
+val () = computeLib.upd_compset (computeLib.add_thms [i2w_pos])
 
 val () = Globals.max_print_depth := 20
 

@@ -207,7 +207,7 @@ QED
 
 Theorem create_call_evaluation_safe_args[local]:
   call_evaluation_safe cx
-    (int_calls_expr (Call loc (CreateTarget kind rof) es extra)) ==>
+    (int_calls_expr (Call loc (CreateTarget kind has_salt rof) es extra)) ==>
   call_evaluation_safe cx (int_calls_exprs es)
 Proof
   simp[int_calls_expr_def]
@@ -255,11 +255,11 @@ Proof
   simp[fn_sigs_consistent_def, get_module_code_def]
 QED
 
-Theorem fn_sigs_complete_stk_irrelevant[local]:
-  !sigs cx f. fn_sigs_complete sigs (cx with stk updated_by f) <=>
-              fn_sigs_complete sigs cx
+Theorem fn_sigs_declared_complete_stk_irrelevant[local]:
+  !sigs cx f. fn_sigs_declared_complete sigs (cx with stk updated_by f) <=>
+              fn_sigs_declared_complete sigs cx
 Proof
-  simp[fn_sigs_complete_def, get_module_code_def]
+  simp[fn_sigs_declared_complete_def, get_module_code_def]
 QED
 
 Theorem toplevel_vtypes_complete_stk_irrelevant[local]:
@@ -300,7 +300,7 @@ Theorem functions_well_typed_stk_irrelevant[local]:
 Proof
   simp[functions_well_typed_def, get_module_code_def,
        get_tenv_stk_irrelevant, fn_sigs_consistent_stk_irrelevant,
-       fn_sigs_complete_stk_irrelevant,
+       fn_sigs_declared_complete_stk_irrelevant,
        toplevel_vtypes_complete_stk_irrelevant,
        bare_globals_complete_stk_irrelevant,
        bare_global_assignable_complete_stk_irrelevant,
@@ -637,7 +637,8 @@ Proof
   rw[env_consistent_def]
   >- (gvs[env_context_consistent_def] >>
       rw[env_context_consistent_def, get_tenv_stk_irrelevant,
-         fn_sigs_consistent_stk_irrelevant, fn_sigs_complete_stk_irrelevant,
+         fn_sigs_consistent_stk_irrelevant,
+         fn_sigs_declared_complete_stk_irrelevant,
          toplevel_vtypes_complete_stk_irrelevant,
          bare_globals_complete_stk_irrelevant,
          bare_global_assignable_complete_stk_irrelevant,
@@ -2685,18 +2686,30 @@ Resume eval_all_type_sound_mutual[If]:
   simp_tac(srw_ss())[ignore_bind_def, bind_def] >>
   CASE_TAC >>
   reverse CASE_TAC >- (
-    strip_tac >> gvs[] >>
-    pop_assum mp_tac >>
+    strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+    qpat_x_assum `push_scope st1 = (INR _,_)` mp_tac >>
     simp_tac(srw_ss())[push_scope_def,return_def]
   ) >>
   rename1 `eval_expr cx e st = (INL tv, st1)` >>
-  gvs[expr_result_typed_def, expr_runtime_typed_def, evaluate_type_def] >>
+  qpat_x_assum `well_typed_expr env e ==> _` mp_tac >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  pure_rewrite_tac[sumTheory.sum_case_def] >> BETA_TAC >> strip_tac >>
+  qpat_x_assum `expr_result_typed env e tv`
+    (strip_assume_tac o
+     REWRITE_RULE [expr_result_typed_def, expr_runtime_typed_def,
+                   evaluate_type_def]) >>
+  qpat_x_assum `evaluate_type env.type_defs (expr_type e) = SOME tv'` mp_tac >>
+  ASM_REWRITE_TAC[evaluate_type_def, vyperASTTheory.base_type_case_def] >> strip_tac >>
+  qpat_x_assum `SOME (BaseTV BoolT) = SOME tv'` mp_tac >>
+  disch_then (assume_tac o REWRITE_RULE [optionTheory.SOME_11]) >>
+  BasicProvers.VAR_EQ_TAC >>
   drule toplevel_value_typed_BoolTV >> strip_tac >>
   BasicProvers.VAR_EQ_TAC >>
   strip_tac >>
-  qpat_x_assum `IS_SOME (type_stmts env ret_ty ss)` mp_tac >>
-  qpat_x_assum `IS_SOME (type_stmts env ret_ty ss')` mp_tac >>
-  simp[optionTheory.IS_SOME_EXISTS] >> ntac 2 strip_tac >>
+  qpat_x_assum `IS_SOME (type_stmts env ret_ty ss)`
+    (strip_assume_tac o REWRITE_RULE [optionTheory.IS_SOME_EXISTS]) >>
+  qpat_x_assum `IS_SOME (type_stmts env ret_ty ss')`
+    (strip_assume_tac o REWRITE_RULE [optionTheory.IS_SOME_EXISTS]) >>
   irule scope_bracket_post >>
   conj_asm1_tac >- (
     irule env_consistent_env_maps_wf >> simp[] >>
@@ -2704,12 +2717,19 @@ Resume eval_all_type_sound_mutual[If]:
   ) >>
   qmatch_asmsub_abbrev_tac`finally body_fun pop_scope sf` >>
   qexistsl_tac[`body_fun`,`st1`] >>
-  simp[bind_def, ignore_bind_def] >>
+  PURE_REWRITE_TAC[bind_def, ignore_bind_def] >>
+  ASM_REWRITE_TAC[] >>
   first_x_assum (drule_then drule) >> strip_tac >>
   last_x_assum (drule_then drule) >> strip_tac >>
-  gvs[push_scope_def, return_def, finally_def] >>
+  qpat_x_assum `push_scope st1 = (INL x',sf)`
+    (strip_assume_tac o
+     SIMP_RULE (srw_ss()) [push_scope_def, return_def]) >>
+  rpt BasicProvers.VAR_EQ_TAC >>
+  pure_rewrite_tac[pairTheory.pair_case_def, sumTheory.sum_case_def] >>
+  BETA_TAC >> ASM_REWRITE_TAC[] >>
   qmatch_goalsub_abbrev_tac`body_fun st2` >>
-  Cases_on`body_fun st2` >> gvs[] >>
+  Cases_on`body_fun st2` >>
+  simp_tac std_ss [pairTheory.PAIR_EQ, sumTheory.sum_case_def] >>
   qmatch_assum_rename_tac`body_fun st2 = (rf,sf)` >>
   qho_match_abbrev_tac`P rf sf` >>
   irule switch_BoolV_post >>
@@ -2720,8 +2740,11 @@ Resume eval_all_type_sound_mutual[If]:
   `env_consistent env cx st2` by (simp[Abbr`st2`] >> irule push_scope_env_consistent >> simp[]) >>
   conj_tac >- (
     rpt gen_tac >> strip_tac >>
-    simp[Abbr`P`] >>
-    `state_well_typed st2` by gvs[Abbr`st2`, state_well_typed_def, scope_well_typed_def] >>
+    qunabbrev_tac`P` >> BETA_TAC >>
+    `state_well_typed st2` by (
+      irule push_scope_preserves_state_well_typed >>
+      qexists_tac `st1` >> qexists_tac `()` >>
+      simp[push_scope_def, return_def, Abbr`st2`]) >>
     first_x_assum drule_all >> strip_tac >>
     simp[] >>
     `st2 = st1 with scopes := FEMPTY::st1.scopes`
@@ -2747,7 +2770,7 @@ Resume eval_all_type_sound_mutual[If]:
         qpat_x_assum`env_consistent _ _ st1`mp_tac >>
         simp[env_consistent_def, env_scopes_consistent_def, IS_SOME_EXISTS]) >>
       conj_tac >- (
-        qexists_tac `x` >>
+        qexists_tac `x''` >>
         qexists_tac `ret_ty` >>
         qexists_tac `ss'` >> simp[] >>
         rpt strip_tac >> fs[] >>
@@ -2828,8 +2851,11 @@ Resume eval_all_type_sound_mutual[If]:
     irule env_extends_return_exception_typed >>
     qexists_tac `env_exn` >> simp[]) >>
   rpt gen_tac >> strip_tac >>
-  simp[Abbr`P`] >>
-  `state_well_typed st2` by gvs[Abbr`st2`, state_well_typed_def, scope_well_typed_def] >>
+  qunabbrev_tac`P` >> BETA_TAC >>
+  `state_well_typed st2` by (
+    irule push_scope_preserves_state_well_typed >>
+    qexists_tac `st1` >> qexists_tac `()` >>
+    simp[push_scope_def, return_def, Abbr`st2`]) >>
   first_x_assum drule_all >> strip_tac >>
   simp[] >>
   `st2 = st1 with scopes := FEMPTY::st1.scopes`
@@ -2855,7 +2881,7 @@ Resume eval_all_type_sound_mutual[If]:
       qpat_x_assum`env_consistent _ _ st1`mp_tac >>
       simp[env_consistent_def, env_scopes_consistent_def, IS_SOME_EXISTS]) >>
     conj_tac >- (
-      qexists_tac `x'` >>
+      qexists_tac `x` >>
       qexists_tac `ret_ty` >>
       qexists_tac `ss` >> simp[] >>
       rpt strip_tac >> fs[] >>
@@ -2870,7 +2896,7 @@ Resume eval_all_type_sound_mutual[If]:
       qpat_x_assum `!id entry. lookup_scopes id st1.scopes = SOME entry ==> _`
         (qspec_then `id` mp_tac) >> simp[] >> metis_tac[]) >>
     qexists_tac `st1` >> simp[] >>
-    qspecl_then [`cx`, `ss`, `FEMPTY`, `st1`, `INL x''`, `st1'`]
+    qspecl_then [`cx`, `ss`, `FEMPTY`, `st1`, `INL ()`, `st1'`]
       mp_tac (GEN_ALL eval_stmts_scope_bracket_gen_preserves_tv) >>
     simp[] >>
     disch_then irule >>
@@ -2878,7 +2904,7 @@ Resume eval_all_type_sound_mutual[If]:
     `stp = st1 with scopes updated_by CONS FEMPTY` by simp[Abbr`stp`] >>
     pop_assum SUBST1_TAC >>
     irule(CONJUNCT1(CONJUNCT2 eval_preserves_tv)) >>
-    qexists_tac `INL x''` >> qexists_tac `ss` >> simp[] >>
+    qexists_tac `INL ()` >> qexists_tac `ss` >> simp[] >>
     gvs[Abbr`stp`]) >>
   Cases_on `st1'.scopes` >> gvs[]
   >- (drule eval_stmts_preserves_scopes_len >> simp[]) >>
@@ -9878,7 +9904,7 @@ Resume eval_all_type_sound_mutual[Expr_Call_CreateTarget]:
   >- (
     strip_tac >>
     drule create_call_evaluation_safe_args >> strip_tac >>
-    qpat_x_assum `well_typed_expr env (Call _ (CreateTarget _ _) _ _)` mp_tac >>
+    qpat_x_assum `well_typed_expr env (Call _ (CreateTarget _ _ _) _ _)` mp_tac >>
     rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
     qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
     simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
@@ -9891,12 +9917,11 @@ Resume eval_all_type_sound_mutual[Expr_Call_CreateTarget]:
     Cases_on `args_res` >> gvs[no_type_error_result_def]
     >- (
       rename1 `exprs_runtime_typed env es vs` >>
-      drule_all create_args_runtime_typed_dest >> strip_tac >> gvs[] >>
       strip_tac >>
-      qspecl_then [`env`, `cx`, `es`, `vs`, `args_st`, `amount`, `target_addr`,
-                   `res`, `st'`, `kind`, `rof`]
+      qspecl_then [`env`, `cx`, `es`, `vs`, `args_st`, `res`, `st'`,
+                   `kind`, `has_salt`, `rof`]
         mp_tac create_tail_result_sound_simp >>
-      simp[type_check_def, assert_def, runtime_consistent_def]) >>
+      simp[runtime_consistent_def]) >>
     strip_tac >> gvs[]) >>
   rpt strip_tac >> gvs[Once well_typed_expr_def]
 QED

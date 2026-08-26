@@ -735,6 +735,23 @@ Proof
   )
 QED
 
+(* Shared helper tactic for the non-output cases of ac_dfg_inv_step_ssa. *)
+fun ac_ssa_case2_tac op_name =
+  (Q.SUBGOAL_THEN `lookup_var v s' = lookup_var v s` ASSUME_TAC >-
+    metis_tac[step_preserves_non_output_vars]) >>
+  (Q.SUBGOAL_THEN `IS_SOME (lookup_var v s)` ASSUME_TAC >- gvs[]) >>
+  (Q.SUBGOAL_THEN `!op'. MEM op' inst.inst_operands ==>
+     eval_operand op' s' = eval_operand op' s` ASSUME_TAC >-
+    (rpt strip_tac >>
+     first_x_assum (qspecl_then [`v`, `inst`, `op'`] mp_tac) >>
+     simp[])) >>
+  qpat_x_assum `ac_dfg_inv dfg s` mp_tac >>
+  simp[ac_dfg_inv_def] >> strip_tac >>
+  first_x_assum (qspecl_then [`v`, `inst`, op_name] mp_tac) >>
+  simp[] >> strip_tac >>
+  first_x_assum (qspecl_then [op_name] mp_tac) >>
+  simp[MEM] >> strip_tac >> gvs[]
+
 (* SSA-friendly variant: replaces no-redefine with a weaker condition
    that DFG-tracked operand variables are not among h's outputs.
    This is derivable from SSA ordering (def_dominates_uses). *)
@@ -773,24 +790,6 @@ Proof
       >- metis_tac[step_preserves_non_output_vars]
       >- metis_tac[step_preserves_labels, ac_is_safe_between_def,
                    venomInstPropsTheory.step_preserves_labels])) >>
-  (* Shared helper tactic for Case 2: v not in h's outputs *)
-  let val case2_tac = fn op_name =>
-    (Q.SUBGOAL_THEN `lookup_var v s' = lookup_var v s` ASSUME_TAC >-
-      metis_tac[step_preserves_non_output_vars]) >>
-    (Q.SUBGOAL_THEN `IS_SOME (lookup_var v s)` ASSUME_TAC >- gvs[]) >>
-    (Q.SUBGOAL_THEN `!op'. MEM op' inst.inst_operands ==>
-       eval_operand op' s' = eval_operand op' s` ASSUME_TAC >-
-      (rpt strip_tac >>
-       first_x_assum (qspecl_then [`v`, `inst`, `op'`] mp_tac) >>
-       simp[])) >>
-    qpat_x_assum `ac_dfg_inv dfg s` mp_tac >>
-    simp[ac_dfg_inv_def] >> strip_tac >>
-    first_x_assum (qspecl_then [`v`, `inst`, op_name] mp_tac) >>
-    simp[] >> strip_tac >>
-    first_x_assum (qspecl_then [op_name] mp_tac) >>
-    simp[MEM] >> strip_tac >>
-    gvs[]
-  in
   simp[ac_dfg_inv_def] >> rpt conj_tac
   >- (
     (* ISZERO conjunct *)
@@ -810,7 +809,7 @@ Proof
       imp_res_tac step_iszero_con >>
       gvs[update_var_def, lookup_var_def,
           finite_mapTheory.FLOOKUP_UPDATE])
-    >- case2_tac `input_op`)
+    >- ac_ssa_case2_tac `input_op`)
   >- (
     (* ASSIGN conjunct *)
     rpt gen_tac >> strip_tac >>
@@ -829,8 +828,7 @@ Proof
       imp_res_tac step_assign_con >>
       gvs[update_var_def, lookup_var_def, eval_operand_def,
           finite_mapTheory.FLOOKUP_UPDATE])
-    >- case2_tac `src_op`)
-  end
+    >- ac_ssa_case2_tac `src_op`)
 QED
 
 
@@ -1638,7 +1636,23 @@ Proof
   rpt gen_tac >> strip_tac >>
   `!dfg' p'. ALL_DISTINCT (MAP (\mc. mc.mc_second_id)
      (ac_scan_block dfg' insts p'))` by metis_tac[] >>
-  rpt (CASE_TAC >> gvs[LET_THM, ALL_DISTINCT, MAP, MEM_MAP]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >>
+       gvs[LET_THM, ALL_DISTINCT, MAP, MEM_MAP]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >>
+       gvs[LET_THM, ALL_DISTINCT, MAP, MEM_MAP]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >>
+       gvs[LET_THM, ALL_DISTINCT, MAP, MEM_MAP]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >>
+       gvs[LET_THM, ALL_DISTINCT, MAP, MEM_MAP]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >>
+       gvs[LET_THM, ALL_DISTINCT, MAP, MEM_MAP]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >>
+       gvs[LET_THM, ALL_DISTINCT, MAP, MEM_MAP]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >>
+       gvs[LET_THM, ALL_DISTINCT, MAP, MEM_MAP]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >>
+       gvs[LET_THM, ALL_DISTINCT, MAP, MEM_MAP]) >>
+  gvs[LET_THM, ALL_DISTINCT, MAP, MEM_MAP] >>
   spose_not_then strip_assume_tac >>
   drule ac_scan_second_id_mem >> strip_tac >>
   gvs[ALL_DISTINCT, MEM_MAP]

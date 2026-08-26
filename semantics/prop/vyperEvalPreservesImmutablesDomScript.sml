@@ -1,6 +1,6 @@
 Theory vyperEvalPreservesImmutablesDom
 Ancestors
-  vyperMisc vyperAST vyperValue vyperContext vyperState vyperStorageBackend vyperInterpreter
+  vyperMisc vyperAST vyperValue vyperContext vyperState vyperStorageBackend vyperCreate vyperInterpreter
   vyperLookup vyperScopePreservation vyperStatePreservation
   vyperAssignTarget vyperEvalExprPreservesScopesDom
   vyperImmutablesPreservation
@@ -1481,8 +1481,10 @@ Proof
   RULE_ASSUM_TAC (REWRITE_RULE [check_def, type_check_def, assert_def, return_def]) >>
   gvs[] >>
   (* Resolve case expressions on dest_AddressV/dest_NumV *)
-  rpt (BasicProvers.FULL_CASE_TAC >>
-       gvs[return_def, raise_def]) >>
+  TRY BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def] >>
+  TRY BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def] >>
+  TRY BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def] >>
+  TRY BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def] >>
   imp_res_tac transfer_value_immutables >> gvs[] >>
   first_x_assum drule >>
   metis_tac[preserves_immutables_dom_trans, preserves_immutables_dom_eq]
@@ -2031,41 +2033,19 @@ Proof
   rpt gen_tac \\
   strip_tac \\
   conj_tac
-  >- (qspecl_then
+  >- (match_mp_tac (Q.SPECL
         [`cx`, `src_id_opt`, `fn`, `es`,
          `ih_check_s`, `ih_mod_s`, `ih_fun_s`, `ih_len_s`, `ih_args_s`,
          `xrec`, `srec`, `ts`, `smod`, `tup`, `sfun`, `xlen`, `slen`,
          `vs`, `sevl`, `needed_dflts`, `cxd`, `prev`, `INL dflt_vs`, `sdfl`]
-        mp_tac intcall_default_frame_imm_dom_from_generated_ih \\
+        intcall_default_frame_imm_dom_from_generated_ih) \\
+      conj_tac >- FIRST_ASSUM ACCEPT_TAC \\
+      qpat_x_assum
+        `∀s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20
+            args0 sstup0 dflts0 sstup20 ret0 body0 s3 x1 t3 s4 vs0 t4
+            needed_dflts0 cxd0. _` kall_tac \\
       simp[] \\
-      disch_then irule \\
-      simp[] \\
-      conj_tac
-      >- (rpt strip_tac \\
-          qpat_assum `∀s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20
-                         args0 sstup0 dflts0 sstup20 ret0 body0 s3 x1 t3 s4
-                         vs0 t4 needed_dflts0 cxd0.
-                         _ ⇒ ∀st0 res0 st1.
-                           eval_exprs cxd0 needed_dflts0 st0 = (res0,st1) ⇒
-                           preserves_immutables_dom cxd0 st0 st1`
-            (qspecl_then
-              [`s0`, `()`, `t0`, `s1`, `ts0`, `t1`, `s2`, `tup0`, `t2`,
-               `FST tup0`, `SND tup0`, `FST (SND tup0)`, `SND (SND tup0)`,
-               `FST (SND (SND tup0))`, `SND (SND (SND tup0))`,
-               `FST (SND (SND (SND tup0)))`, `SND (SND (SND (SND tup0)))`,
-               `FST (SND (SND (SND (SND tup0))))`,
-               `SND (SND (SND (SND (SND tup0))))`, `s3`, `()`, `t3`,
-               `s4`, `vs0`, `t4`,
-               `DROP
-                  (LENGTH (FST (SND (SND (SND tup0)))) −
-                   (LENGTH (FST (SND (SND tup0))) − LENGTH es))
-                  (FST (SND (SND (SND tup0))))`,
-               `cx with stk updated_by CONS (src_id_opt,fn)`] mp_tac) \\
-          simp[] \\
-          disch_then irule \\
-          simp[] \\
-          gvs[type_check_def, assert_def] \\
-          decide_tac) \\
+      gvs[type_check_def, assert_def] \\
       qhdtm_x_assum`type_check`mp_tac >>
       simp_tac(srw_ss())[type_check_def, assert_def] >>
       strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
@@ -3037,11 +3017,13 @@ Proof
      `FST (SND (SND (SND (SND fn_tup))))`,
      `SND (SND (SND (SND (SND fn_tup))))`]
     mp_tac intcall_mutual_tail_body_provider_from_generated_ih \\
-  simp[get_scopes_def, return_def] \\
+  simp[get_scopes_def] \\
+  PURE_REWRITE_TAC[return_def] \\
   (impl_tac >-
-     (qpat_assum `∀s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0 sstup0 dflts0 sstup20 ret0 ss0 s3 x1 t3 s4 vs0 t4 needed_dflts0 cxd0 s5 prev0 t5 s6 dflt_vs0 t6 all_tenv s7 env t7 s8 rtv t8 is_view s9 lk t9 s10 cx0 t10. _ ⇒ ∀st0 res0 st1. eval_stmts cx0 ss0 st0 = (res0,st1) ⇒ preserves_immutables_dom cx0 st0 st1`
+     (qpat_x_assum `∀s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0 sstup0 dflts0 sstup20 ret0 ss0 s3 x1 t3 s4 vs0 t4 needed_dflts0 cxd0 s5 prev0 t5 s6 dflt_vs0 t6 all_tenv s7 env t7 s8 rtv t8 is_view s9 lk t9 s10 cx0 t10. _ ⇒ ∀st0 res0 st1. eval_stmts cx0 ss0 st0 = (res0,st1) ⇒ preserves_immutables_dom cx0 st0 st1`
         mp_tac \\
-      simp[get_scopes_def, return_def])) \\
+      PURE_REWRITE_TAC[get_scopes_def, return_def] \\
+      simp[])) \\
   simp[]
 QED
 
@@ -3140,7 +3122,8 @@ Proof
   \\ simp[bind_def]
   \\ BasicProvers.TOP_CASE_TAC
   \\ reverse BasicProvers.TOP_CASE_TAC
-  >- (rpt strip_tac \\ gvs[] \\
+  >- (rpt strip_tac \\
+      rpt (qpat_x_assum `_ = st` SUBST_ALL_TAC) \\
       irule intcall_default_frame_to_caller_imm_dom \\
       qexists_tac `fn` \\
       qexists_tac `r'⁴'` \\
@@ -3148,8 +3131,8 @@ Proof
       simp[] \\
       qspecl_then
         [`cx`, `src_id_opt`, `fn`, `es`,
-         `r`, `r`, `r`, `r`, `r`,
-         `()`, `r`, `x'`, `r`, `x''`, `r`, `()`, `r`, `x'⁴'`, `r'⁴'`,
+         `st`, `st`, `st`, `st`, `st`,
+         `()`, `st`, `x'`, `st`, `x''`, `st`, `()`, `st`, `x'⁴'`, `r'⁴'`,
          `DROP (LENGTH (FST (SND (SND (SND x'')))) -
                 (LENGTH (FST (SND (SND x''))) - LENGTH es))
                (FST (SND (SND (SND x''))))`,
@@ -3157,7 +3140,9 @@ Proof
          `INR y`, `r'⁵'`]
         mp_tac intcall_mutual_default_frame_imm_dom_from_generated_ih \\
       (impl_tac >-
-         (conj_tac >- (qpat_assum `∀s0 t0 s1 ts0 t1 s2 tup0 t2 s3 t3 s4 vs0 t4 s5 prev0 t5 s6 t6. _ ⇒ ∀st0 res0 st1. eval_exprs (cx with stk updated_by CONS (src_id_opt,fn)) _ st0 = (res0,st1) ⇒ preserves_immutables_dom (cx with stk updated_by CONS (src_id_opt,fn)) st0 st1` mp_tac \\ simp[]) \\
+         (conj_tac >- (qpat_x_assum `∀s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0 sstup0 dflts0 sstup20 ret0 body0 s3 x1 t3 s4 vs0 t4 es0 cxd0 s5 prev0 t5 s6 x2 t6. _ ⇒ ∀st0 res0 st1. eval_exprs cxd0 es0 st0 = (res0,st1) ⇒ preserves_immutables_dom cxd0 st0 st1` mp_tac \\ simp[]) \\
+          TRY (qpat_x_assum `∀s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0 sstup0 dflts0 sstup20 ret0 body0 s3 x1 t3 s4 vs0 t4 es0 cxd0 s5 prev0 t5 s6 x2 t6. _` kall_tac) \\
+          TRY (qpat_x_assum `∀s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0 sstup0 dflts0 sstup20 ret0 ss0 s3 x1 t3 s4 vs0 t4 needed_dflts0 cxd0 s5 prev0 t5 s6 dflt_vs0 t6 all_tenv s7 env t7 s8 rtv t8 is_view s9 lk t9 s10 cx0 t10. _` kall_tac) \\
           rpt conj_tac \\ simp[get_scopes_def, set_scopes_def, return_def,
                                 type_check_def, assert_def, ignore_bind_def] \\
           TRY decide_tac)) \\
@@ -3390,15 +3375,11 @@ Proof
       irule preserves_immutables_dom_eq >> gvs[])
   (* CreateTarget *)
   >- (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-      simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def,
-           check_def, type_check_def, assert_def, lift_option_def, lift_option_type_def,
-           get_accounts_def, update_accounts_def, option_CASE_rator, COND_RATOR] >>
-      rpt strip_tac >> gvs[AllCaseEqs(), return_def, raise_def] >>
+      simp[Once evaluate_def, bind_def] >>
+      Cases_on `eval_exprs cx es st` >> Cases_on `q` >> simp[] >>
+      strip_tac >>
       first_x_assum drule >> strip_tac >>
-      TRY (gvs[] >> NO_TAC) >>
-      TRY (imp_res_tac transfer_value_immutables >>
-           irule preserves_immutables_dom_trans >> first_assum (irule_at Any) >>
-           irule preserves_immutables_dom_eq >> gvs[] >> NO_TAC) >>
+      drule eval_create_preserves_non_accounts >> strip_tac >>
       irule preserves_immutables_dom_trans >> first_assum (irule_at Any) >>
       irule preserves_immutables_dom_eq >> gvs[])
   >- gvs[evaluate_def, return_def, preserves_immutables_dom_refl]
@@ -3434,7 +3415,15 @@ Resume immutables_dom_mutual[ExtCall]:
   >- (
     last_x_assum(qspec_then`ARB`kall_tac)
     \\ gvs[CaseEq"bool", return_def, COND_RATOR, bind_def]
-    \\ gvs[CaseEq"sum", CaseEq"prod"]
+    \\ gvs[CaseEq"sum"]
+    \\ gvs[CaseEq"prod"]
+    \\ Cases_on `v` \\ gvs[]
+    \\ TRY BasicProvers.FULL_CASE_TAC \\ gvs[]
+    \\ TRY BasicProvers.FULL_CASE_TAC \\ gvs[]
+    \\ TRY BasicProvers.TOP_CASE_TAC \\ gvs[]
+    \\ TRY BasicProvers.TOP_CASE_TAC \\ gvs[]
+    \\ TRY BasicProvers.TOP_CASE_TAC \\ gvs[]
+    \\ TRY BasicProvers.TOP_CASE_TAC \\ gvs[]
     \\ imp_res_tac type_check_same_state
     \\ imp_res_tac lift_option_same_state
     \\ imp_res_tac lift_option_type_same_state

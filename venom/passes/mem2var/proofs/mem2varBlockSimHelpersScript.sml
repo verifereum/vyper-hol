@@ -1,6 +1,6 @@
 Theory mem2varBlockSimHelpers
 Ancestors
-  mem2varProofs passSharedTransfer passSharedField instIdxIndep
+  mem2varProofs passSharedFrame passSharedTransfer passSharedField instIdxIndep
   venomMemProps venomMemProofs venomExecProofs venomInstProofs
   mem2varDefs
   venomExecSemantics venomState venomWf
@@ -104,7 +104,19 @@ Proof
   CASE_TAC >> simp[] >>
   PairCases_on `x` >> simp[] >>
   simp[m2v_promote_inst_def] >>
-  rpt (CASE_TAC >> gvs[is_terminator_def])
+  TRY (BasicProvers.TOP_CASE_TAC >> gvs[is_terminator_def]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> gvs[is_terminator_def]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> gvs[is_terminator_def]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> gvs[is_terminator_def]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> gvs[is_terminator_def]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> gvs[is_terminator_def]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> gvs[is_terminator_def]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> gvs[is_terminator_def]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> gvs[is_terminator_def]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> gvs[is_terminator_def]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> gvs[is_terminator_def]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> gvs[is_terminator_def]) >>
+  gvs[is_terminator_def]
 QED
 
 (* FRONT of a well-formed block's instructions are non-terminators *)
@@ -2067,9 +2079,15 @@ Theorem m2v_step_promoted_mload:
          m2v_inv_noix fn v1 v2
 Proof
   rpt strip_tac >>
-  gvs[step_inst_non_invoke, step_inst_base_def, exec_read1_def,
-      eval_operand_def, AllCaseEqs()] >>
-  suspend "main"
+  gvs[step_inst_non_invoke] >> suspend "base"
+QED
+
+Resume m2v_step_promoted_mload[base]:
+  gvs[step_inst_base_def] >> suspend "exec"
+QED
+
+Resume m2v_step_promoted_mload[exec]:
+  gvs[exec_read1_def, eval_operand_def, AllCaseEqs()] >> suspend "main"
 QED
 
 Resume m2v_step_promoted_mload[main]:
@@ -2761,12 +2779,15 @@ Proof
 QED
 
 (* step_inst_base wrapper: dispatch all 5 ext_call opcodes *)
-val ext_call_step_tac =
+val ext_call_source_unfold_tac =
   qpat_x_assum `step_inst_base _ s1 = _` mp_tac >>
-  ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >>
-  every_case_tac >> gvs[] >>
-  ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >>
-  every_case_tac >> gvs[];
+  ASM_REWRITE_TAC[step_inst_base_def];
+
+val ext_call_source_cases_tac = gvs[AllCaseEqs()];
+
+val ext_call_target_tac =
+  ASM_REWRITE_TAC[step_inst_base_def] >>
+  gvs[AllCaseEqs()];
 
 Triviality m2v_step_ext_call:
   m2v_inv_noix fn s1 s2 /\ m2v_non32_ok fn s1 s2 /\
@@ -2786,11 +2807,51 @@ Triviality m2v_step_ext_call:
 Proof
   rpt strip_tac >>
   (Cases_on `inst.inst_opcode` >> gvs[is_ext_call_op_def])
-  >- (ext_call_step_tac >> suspend "call")
-  >- (ext_call_step_tac >> suspend "static")
-  >- (ext_call_step_tac >> suspend "deleg")
-  >- (ext_call_step_tac >> suspend "create") >>
-  ext_call_step_tac >> suspend "create2"
+  >- (ext_call_source_unfold_tac >> suspend "call_unfold")
+  >- (ext_call_source_unfold_tac >> suspend "static_unfold")
+  >- (ext_call_source_unfold_tac >> suspend "deleg_unfold")
+  >- (ext_call_source_unfold_tac >> suspend "create_unfold") >>
+  ext_call_source_unfold_tac >> suspend "create2_unfold"
+QED
+
+Resume m2v_step_ext_call[call_unfold]:
+  ext_call_source_cases_tac >> suspend "call_source"
+QED
+
+Resume m2v_step_ext_call[static_unfold]:
+  ext_call_source_cases_tac >> suspend "static_source"
+QED
+
+Resume m2v_step_ext_call[deleg_unfold]:
+  ext_call_source_cases_tac >> suspend "deleg_source"
+QED
+
+Resume m2v_step_ext_call[create_unfold]:
+  ext_call_source_cases_tac >> suspend "create_source"
+QED
+
+Resume m2v_step_ext_call[create2_unfold]:
+  ext_call_source_cases_tac >> suspend "create2_source"
+QED
+
+Resume m2v_step_ext_call[call_source]:
+  ext_call_target_tac >> suspend "call"
+QED
+
+Resume m2v_step_ext_call[static_source]:
+  ext_call_target_tac >> suspend "static"
+QED
+
+Resume m2v_step_ext_call[deleg_source]:
+  ext_call_target_tac >> suspend "deleg"
+QED
+
+Resume m2v_step_ext_call[create_source]:
+  ext_call_target_tac >> suspend "create"
+QED
+
+Resume m2v_step_ext_call[create2_source]:
+  ext_call_target_tac >> suspend "create2"
 QED
 
 (* Shared tactic for all 5 ext_call Resume blocks:
@@ -2800,7 +2861,7 @@ fun m2v_inv_call_ctx th =
   List.nth (CONJUNCTS (REWRITE_RULE [m2v_inv_noix_def] th), 7);
 
 val m2v_ext_call_tac =
-  strip_tac >>
+  strip_tac >> gvs[] >>
   FIRST [match_mp_tac exec_ext_call_m2v_inv,
          match_mp_tac exec_delegatecall_m2v_inv,
          match_mp_tac exec_create_m2v_inv] >>
@@ -3585,8 +3646,19 @@ QED
 Resume m2v_nonpromoted_mem_dispatch[mstore]:
   ho_match_mp_tac m2v_step_nonpromoted_mstore >>
   qpat_x_assum `step_inst _ _ _ s1 = _` mp_tac >>
-  simp[step_inst_non_invoke, step_inst_base_def, exec_write2_def,
-       AllCaseEqs()] >>
+  simp[step_inst_non_invoke] >> suspend "mstore_base"
+QED
+
+Resume m2v_nonpromoted_mem_dispatch[mstore_base]:
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> ASM_REWRITE_TAC[] >>
+  suspend "mstore_exec"
+QED
+
+Resume m2v_nonpromoted_mem_dispatch[mstore_exec]:
+  simp[exec_write2_def, AllCaseEqs()] >> suspend "mstore_done"
+QED
+
+Resume m2v_nonpromoted_mem_dispatch[mstore_done]:
   strip_tac >> gvs[] >>
   rename1 `eval_operand _ s2 = SOME data_v` >>
   `eval_operand op1 s1 = SOME addr` by gvs[] >>
@@ -3611,7 +3683,8 @@ QED
 Resume m2v_nonpromoted_mem_dispatch[mload]:
   ho_match_mp_tac m2v_step_nonpromoted_read1 >>
   qexistsl [`\addr s. mload (w2n addr) s`, `s1`] >>
-  gvs[step_inst_non_invoke, step_inst_base_def] >>
+  ASM_REWRITE_TAC[step_inst_non_invoke, step_inst_base_def,
+                  is_alloca_op_def] >> gvs[] >>
   rpt strip_tac >>
   irule mload_mem_byte_eq >> rpt strip_tac >>
   qpat_x_assum `m2v_inv_noix _ _ _` mp_tac >>
@@ -3620,7 +3693,11 @@ Resume m2v_nonpromoted_mem_dispatch[mload]:
   mp_tac (Q.SPECL [`fn`, `s1`, `bb`, `inst`] nas_read_range_disjoint) >>
   simp[mem_read_ops_def, is_immutable_op_def, eval_operand_def] >>
   disch_then irule >>
-  qpat_x_assum `exec_read1 _ _ _ = OK _` mp_tac >>
+  `step_inst fuel ctx inst s1 = step_inst_base inst s1` by
+    (irule step_inst_non_invoke >> simp[]) >>
+  qpat_x_assum `step_inst fuel ctx inst s1 = OK v1` mp_tac >>
+  ASM_REWRITE_TAC[] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> ASM_REWRITE_TAC[] >>
   simp[exec_read1_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
   simp[eval_operand_def, lt_32_dimword_256, arithmeticTheory.LESS_MOD]
 QED
@@ -4444,16 +4521,7 @@ Theorem step_inst_base_abort_input_equiv:
     s1.vs_labels = s2.vs_labels ==>
     ?s2'. step_inst_base inst s2 = Abort a s2'
 Proof
-  rpt strip_tac >>
-  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  step_base_result_tac >>
-  rpt (first_x_assum (fn th =>
-    mp_tac (REWRITE_RULE [eval_operand_def] th))) >>
-  rpt (CHANGED_TAC (
-    TRY (Cases_on `cond_op` >> gvs[eval_operand_def]) >>
-    TRY (Cases_on `op_destOffset` >> gvs[eval_operand_def]) >>
-    TRY (Cases_on `op_offset` >> gvs[eval_operand_def]) >>
-    TRY (Cases_on `op_size` >> gvs[eval_operand_def])))
+  ACCEPT_TAC passSharedFrameTheory.step_inst_base_abort_input_equiv
 QED
 
 (* Characterize abort state form for non-terminal step_inst_base *)
@@ -4631,12 +4699,33 @@ Resume m2v_pvars_set_after_dispatch[mstore_cond]:
   (* ao=fao since both are first operand; uniqueness gives pvar=fpvar, 32=fsz *)
   mp_tac (Q.SPECL [`fn`,`ao`,`pvar`,`32`,`fpvar`,`fsz`]
     m2v_promo_list_ao_unique) >> simp[] >> strip_tac >> gvs[] >>
-  (* MSTORE+sz=32: promote_inst produces ASSIGN to pvar *)
-  gvs[m2v_promote_inst_def] >>
-  (* step_inst on ASSIGN: exec_read1 writes to output *)
-  gvs[step_inst_non_invoke, is_terminator_def,
-      step_inst_base_def, exec_read1_def, AllCaseEqs(),
-      lookup_var_update]
+  (* MSTORE+sz=32: promote_inst produces ASSIGN to pvar.  Keep the two
+     operand-shape branches in separate suspended goals. *)
+  gvs[m2v_promote_inst_def]
+  >- (gvs[step_inst_non_invoke, is_terminator_def] >>
+      suspend "mstore_cond_a_base")
+  >- (gvs[step_inst_non_invoke, is_terminator_def] >>
+      suspend "mstore_cond_b_base")
+QED
+
+Resume m2v_pvars_set_after_dispatch[mstore_cond_a_base]:
+  gvs[step_inst_base_def] >> suspend "mstore_cond_a_exec"
+QED
+
+Resume m2v_pvars_set_after_dispatch[mstore_cond_b_base]:
+  gvs[step_inst_base_def] >> suspend "mstore_cond_b_exec"
+QED
+
+Resume m2v_pvars_set_after_dispatch[mstore_cond_a_exec]:
+  gvs[exec_read1_def, AllCaseEqs(), lookup_var_update] >>
+  rpt strip_tac >>
+  gvs[update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Resume m2v_pvars_set_after_dispatch[mstore_cond_b_exec]:
+  gvs[exec_read1_def, AllCaseEqs(), lookup_var_update] >>
+  rpt strip_tac >>
+  gvs[update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
 (* Preservation condition: IS_SOME preserved across step *)

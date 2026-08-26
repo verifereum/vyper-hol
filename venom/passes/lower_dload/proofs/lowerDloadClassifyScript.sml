@@ -225,8 +225,10 @@ end;
 val ld_classify_one_tac =
   rpt strip_tac >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> simp[] >> strip_tac >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> simp[] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  ASM_REWRITE_TAC[opcode_case_def] >> strip_tac >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  ASM_REWRITE_TAC[opcode_case_def] >>
   (* Fast path: exec_pure helpers (ADD, SUB, MUL, ...) ~45 opcodes *)
   TRY (
     (drule_all exec_pure1_ld_ok ORELSE

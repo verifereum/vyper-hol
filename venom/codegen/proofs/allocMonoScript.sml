@@ -842,8 +842,7 @@ Proof
   (* JMP reorder *)
   `ps2.ps_alloc.sa_fn_eom = ps1.ps_alloc.sa_fn_eom` by
     (qpat_x_assum `(if _ then _ else _) = (join_ops,ps2)` mp_tac >>
-     IF_CASES_TAC >> gvs[] >> strip_tac >> gvs[] >>
-     every_case_tac >> gvs[] >> metis_tac[reorder_plan_fn_eom]) >>
+     simp[AllCaseEqs()] >> metis_tac[reorder_plan_fn_eom]) >>
   `ps3 = ps2` by
     (qpat_x_assum `(if _ then _ else _) = (operands',ps3)` mp_tac >>
      rpt IF_CASES_TAC >> gvs[] >> strip_tac >> gvs[]) >>
@@ -885,8 +884,8 @@ Proof
   (* JMP reorder *)
   `ps1.ps_alloc.sa_next_offset <= ps2.ps_alloc.sa_next_offset` by
     (qpat_x_assum `(if _ then _ else _) = (join_ops,ps2)` mp_tac >>
-     IF_CASES_TAC >> gvs[] >> strip_tac >> gvs[] >>
-     every_case_tac >> gvs[] >> metis_tac[reorder_plan_next_offset]) >>
+     simp[AllCaseEqs()] >> strip_tac >> gvs[] >>
+     metis_tac[reorder_plan_next_offset]) >>
   `ps3 = ps2` by
     (qpat_x_assum `(if _ then _ else _) = (operands',ps3)` mp_tac >>
      rpt IF_CASES_TAC >> gvs[] >> strip_tac >> gvs[]) >>

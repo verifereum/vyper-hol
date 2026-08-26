@@ -62,7 +62,7 @@ Theorem vsr_step_inst_pure3:
     (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) ==>
     lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rpt strip_tac >> gvs[step_inst_base_def] >>
+  rw[] >> ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >>
   vsr_irule vsr_exec_pure3 >> simp[]
 QED
 
@@ -103,7 +103,7 @@ Theorem vsr_step_inst_extcodehash:
     (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) ==>
     lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rpt strip_tac >> gvs[step_inst_base_def] >>
+  rw[] >> ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >>
   vsr_irule vsr_exec_read1 >> simp[] >> rw[] >>
   imp_res_tac vsr_R_ok_fields >> gvs[]
 QED

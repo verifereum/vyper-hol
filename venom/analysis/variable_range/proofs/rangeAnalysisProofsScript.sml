@@ -1592,8 +1592,14 @@ Proof
     fs[listTheory.DROP_LENGTH_NIL,
        dfAnalyzeDefsTheory.df_fold_forward_def]
     \\ qpat_x_assum `exec_block _ _ _ _ = OK _` mp_tac
-    \\ asm_simp_tac std_ss [Once exec_block_def, get_instruction_def]
-    \\ simp[]
+    \\ PURE_ONCE_REWRITE_TAC[exec_block_def]
+    \\ ASM_REWRITE_TAC[get_instruction_def]
+    \\ IF_CASES_TAC
+    >- (qpat_x_assum `LENGTH bb.bb_instructions <
+          LENGTH bb.bb_instructions` mp_tac \\ simp[])
+    \\ PURE_ONCE_REWRITE_TAC[optionTheory.option_case_def]
+    \\ strip_tac
+    \\ qpat_x_assum `Error _ = OK _` mp_tac \\ simp[]
   )
   \\ `idx < LENGTH bb.bb_instructions` by DECIDE_TAC
   \\ `DROP idx bb.bb_instructions =
@@ -1601,7 +1607,8 @@ Proof
        imp_res_tac rich_listTheory.DROP_CONS_EL \\ fs[])
   \\ asm_simp_tac std_ss [dfAnalyzeDefsTheory.df_fold_forward_def, LET_THM]
   \\ qpat_x_assum `exec_block _ _ _ _ = OK _` mp_tac
-  \\ asm_simp_tac std_ss [Once exec_block_def, get_instruction_def]
+  \\ PURE_ONCE_REWRITE_TAC[exec_block_def]
+  \\ ASM_REWRITE_TAC[get_instruction_def]
   \\ Cases_on `step_inst fuel ctx (EL idx bb.bb_instructions) s`
   \\ simp[] \\ rename [`step_inst _ _ _ _ = OK step_st`]
   \\ reverse (Cases_on `is_terminator (EL idx bb.bb_instructions).inst_opcode`)
@@ -2488,6 +2495,20 @@ End
 
 (* ===== range_apply_condition_sound ===== *)
 
+Triviality dfg_eq_literal_constraints[local]:
+  !env lhs rhs.
+    (!u wu wl. lhs = Var u /\ rhs = Lit wl /\
+               FLOOKUP env u = SOME wu ==> wu = wl) /\
+    (!u wu wl. rhs = Var u /\ lhs = Lit wl /\
+               FLOOKUP env u = SOME wu ==> wu = wl) ==>
+    !v literal. (lhs = Var v /\ rhs = Lit literal \/
+                 rhs = Var v /\ lhs = Lit literal) ==>
+      !actual. FLOOKUP env v = SOME actual ==> actual = literal
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >> gvs[]
+QED
+
 (* Soundness of range_apply_condition: if the DFG accurately reflects
    the execution state, and the condition operand's truth value matches
    is_true, then applying the condition refinement preserves in_range_state. *)
@@ -2533,9 +2554,16 @@ Proof
       irule range_apply_eq_sound >> simp[] >>
       strip_tac >>
       `dfg_eq_sound dfg env` by fs[dfg_sound_def] >>
-      pop_assum mp_tac >> simp[dfg_eq_sound_def] >>
-      disch_then drule >> simp[] >> strip_tac >>
-      rpt conj_tac >> rpt strip_tac >> gvs[] >> res_tac >> gvs[])
+      pop_assum mp_tac >> PURE_REWRITE_TAC[dfg_eq_sound_def] >>
+      disch_then (qspecl_then [`s`, `x`, `h`, `h'`] mp_tac) >>
+      impl_tac >- simp[] >>
+      disch_then (qspec_then `w` mp_tac) >> simp[] >> strip_tac >>
+      rpt conj_tac
+      >- (rpt strip_tac >> gvs[] >> res_tac >> gvs[])
+      >- (qspecl_then [`env`, `h`, `h'`] mp_tac
+            dfg_eq_literal_constraints >>
+          impl_tac >- (conj_tac >> FIRST_ASSUM ACCEPT_TAC) >>
+          simp[]))
   \\ IF_CASES_TAC
   (* COMPARE: LT/GT/SLT/SGT *)
   >- (gvs[] >>

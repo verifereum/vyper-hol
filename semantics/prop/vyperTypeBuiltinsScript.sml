@@ -1017,6 +1017,33 @@ Proof
 QED
 
 
+Theorem negated_flag_membership_INL[local]:
+  binop_negate (evaluate_binop u tv In (FlagV k) (FlagV k')) = INL v ==>
+  ?b. v = BoolV b
+Proof
+  simp[Once evaluate_binop_def, binop_negate_def] >> strip_tac >>
+  qexists_tac `int_and (&k) (&k') = 0` >> gvs[]
+QED
+
+Theorem negated_array_membership_INL[local]:
+  value_has_type (ArrayTV tv bd) v2 /\
+  binop_negate (evaluate_binop u result_tv In v1 v2) = INL v ==>
+  ?b. v = BoolV b
+Proof
+  Cases_on `v2` >> gvs[value_has_type_def] >>
+  simp[Once evaluate_binop_def, binop_negate_def] >>
+  metis_tac[]
+QED
+
+Theorem negated_equality_INL[local]:
+  binop_negate (evaluate_binop u tv Eq v1 v2) = INL v ==>
+  ?b. v = BoolV b
+Proof
+  Cases_on `v1` >> Cases_on `v2` >>
+  simp[Once evaluate_binop_def, binop_negate_def] >>
+  metis_tac[]
+QED
+
 Theorem well_typed_binop_success_type:
   well_typed_binop ty bop t1 t2 ∧
   evaluate_type tenv ty = SOME result_tv ∧
@@ -1029,11 +1056,14 @@ Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `bop` >>
   gvs[well_typed_binop_def,
-      Excl "is_int_type_def", Excl "is_numeric_type_def", Excl "is_bool_type_def",
-      Excl "is_flag_type_def", Excl "is_comparable_type_def",
-      is_int_type_inv, is_numeric_type_inv, is_bool_type_inv,
-      is_flag_type_inv, is_comparable_type_inv,
-      evaluate_type_def, type_to_int_bound_def, AllCaseEqs()] >>
+      Excl "is_int_type_def", Excl "is_numeric_type_def",
+      Excl "is_bool_type_def", Excl "is_flag_type_def",
+      Excl "is_comparable_type_def"] >>
+  gvs[is_int_type_inv, is_numeric_type_inv] >>
+  gvs[is_bool_type_inv, is_flag_type_inv, is_comparable_type_inv] >>
+  gvs[evaluate_type_def] >>
+  gvs[type_to_int_bound_def] >>
+  gvs[AllCaseEqs()] >>
   (* Signed Add: route the successful bounded operation through its inversion lemma. *)
   TRY (
     qpat_x_assum `evaluate_binop (Signed n) (BaseTV (IntT n)) Add
@@ -1059,10 +1089,13 @@ Proof
     gvs[value_has_type_def, w2n_and_low_mask_lt] >> NO_TAC) >>
   (* All remaining: expand evaluate_binop but keep bounded/wrapped ops opaque.
      Use INL inversion lemmas to extract within_int_bound. *)
-  gvs[evaluate_binop_def, AllCaseEqs(), value_has_type_def,
-      Excl "bounded_int_op_def", Excl "bounded_decimal_op_def", Excl "wrapped_int_op_def",
-      Excl "within_int_bound_def",
-      LET_THM] >>
+  qpat_x_assum `evaluate_binop _ _ _ _ _ = INL v` mp_tac >>
+  PURE_ONCE_REWRITE_TAC[evaluate_binop_def] >>
+  PURE_REWRITE_TAC[vyperASTTheory.binop_case_def,
+                   vyperValueTheory.value_case_def] >>
+  simp_tac std_ss [LET_THM] >> strip_tac >>
+  gvs[AllCaseEqs()] >>
+  gvs[value_has_type_def, Excl "within_int_bound_def"] >>
   (* Re-abstract within_int_bound that got expanded by value_has_type_def *)
   TRY (simp[GSYM within_int_bound_def] >> NO_TAC) >>
   (* Bounded int ops: INL gives within_int_bound *)
@@ -1115,6 +1148,14 @@ Proof
   (* Max: choose the larger value *)
   TRY (
     irule within_int_bound_max >> simp[] >> NO_TAC) >>
+  (* Negated flag membership has a boolean result. *)
+  TRY (drule_all_then ACCEPT_TAC negated_flag_membership_INL >> NO_TAC) >>
+  TRY (drule_all_then ACCEPT_TAC negated_array_membership_INL >> NO_TAC) >>
+  TRY (drule_all_then ACCEPT_TAC negated_equality_INL >> NO_TAC) >>
+  (* Negated membership/equality: expose the inner boolean result. *)
+  TRY (
+    qpat_x_assum `binop_negate _ = INL v` mp_tac >>
+    simp[Once evaluate_binop_def, binop_negate_def] >> NO_TAC) >>
   (* Catch-all for simple remaining cases *)
   TRY (gvs[within_int_bound_def] >> NO_TAC) >>
   TRY (intLib.ARITH_TAC >> NO_TAC) >>
@@ -1238,7 +1279,7 @@ Theorem well_typed_builtin_app_length:
   well_typed_builtin_app ty blt ts ==> builtin_args_length_ok blt (LENGTH ts)
 Proof
   simp[oneline well_typed_builtin_app_def] >>
-  CASE_TAC >> rw[builtin_args_length_ok_def] >>
+  Cases_on `blt` >> rw[builtin_args_length_ok_def] >>
   pop_assum mp_tac >> CASE_TAC >> rw[]
 QED
 

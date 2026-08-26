@@ -1048,7 +1048,12 @@ Theorem cfg_norm_inv_inj:
     split_block_name p1 t1 = split_block_name p2 t2 ==>
     p1 = p2 /\ t1 = t2
 Proof
-  inv_tac
+  rpt strip_tac >>
+  qpat_x_assum `cfg_norm_inv func0 func` mp_tac >>
+  PURE_REWRITE_TAC[cfg_norm_inv_def] >> strip_tac >>
+  qpat_x_assum `!p1 t1 p2 t2. _`
+    (qspecl_then [`p1`, `t1`, `p2`, `t2`] mp_tac) >>
+  simp[]
 QED
 
 Theorem cfg_norm_inv_split_fresh:

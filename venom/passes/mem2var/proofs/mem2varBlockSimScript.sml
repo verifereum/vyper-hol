@@ -89,7 +89,17 @@ QED
 Resume m2v_per_block_sim_at[terminal]:
   (* idx = last index *)
   SUBGOAL_THEN ``idx = PRE (LENGTH bb.bb_instructions)`` assume_tac
-  >- gvs[bb_well_formed_def, Abbr `inst`] >>
+  >- (qpat_x_assum `bb_well_formed bb` mp_tac >>
+      PURE_REWRITE_TAC[bb_well_formed_def] >> strip_tac >>
+      qpat_x_assum `!i. i < LENGTH bb.bb_instructions /\ _ ==> _`
+        (qspec_then `idx` mp_tac) >>
+      impl_tac
+      >- (conj_tac >- FIRST_ASSUM ACCEPT_TAC >>
+          qpat_x_assum `Abbrev (inst = bb.bb_instructions❲idx❳)`
+            (fn th => SUBST1_TAC
+              (GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th))) >>
+          FIRST_ASSUM ACCEPT_TAC) >>
+      simp[]) >>
   (* inst = LAST bb.bb_instructions *)
   SUBGOAL_THEN ``inst = LAST bb.bb_instructions`` assume_tac
   >- (gvs[Abbr `inst`] >>
@@ -311,11 +321,33 @@ Resume m2v_per_block_sim_at[nonterminal]:
     `HD (m2v_rewrite_inst fn (EL idx bb.bb_instructions))`,
     `bb`, `m2v_bt fn bb`, `fuel`, `ctx`, `s1`, `s2`]
     m2v_exec_block_step_chain) >>
-  simp[Abbr `inst`] >>
   (impl_tac >- (
     rpt conj_tac
+    (* source index is in range *)
+    >- (qpat_x_assum `Abbrev (idx = s1.vs_inst_idx)`
+          (fn th => SUBST1_TAC
+            (GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th))) >>
+        FIRST_ASSUM ACCEPT_TAC)
+    (* target and source indices agree *)
+    >- (qpat_x_assum `Abbrev (idx = s1.vs_inst_idx)`
+          (fn th => SUBST1_TAC
+            (GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th))) >>
+        FIRST_ASSUM ACCEPT_TAC)
+    (* selected source instruction *)
+    >- (qpat_x_assum `Abbrev (idx = s1.vs_inst_idx)`
+          (fn th => SUBST1_TAC
+            (GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th))) >>
+        REFL_TAC)
     (* get_instruction on transformed block *)
-    >- (irule m2v_bt_get_inst_nonterm >> simp[])
+    >- (qpat_x_assum `Abbrev (idx = s1.vs_inst_idx)`
+          (fn th => SUBST1_TAC
+            (GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th))) >>
+        irule m2v_bt_get_inst_nonterm >> simp[])
+    (* source instruction is non-terminal *)
+    >- (qpat_x_assum `Abbrev (inst = bb.bb_instructions❲idx❳)`
+          (fn th => SUBST1_TAC
+            (GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th))) >>
+        FIRST_ASSUM ACCEPT_TAC)
     (* inst2 is non-terminal *)
     >- (irule m2v_rewrite_nonterm >> simp[])
     (* Step-level simulation: Error ∨ lift_result *)
@@ -325,10 +357,16 @@ Resume m2v_per_block_sim_at[nonterminal]:
   simp[]
 QED
 Resume m2v_per_block_sim_at[step_sim]:
-  qabbrev_tac `inst = EL idx bb.bb_instructions` >>
   (* Derive no-invoke for this instruction *)
   SUBGOAL_THEN ``inst.inst_opcode <> INVOKE`` assume_tac
-  >- (gvs[EVERY_EL, Abbr `inst`]) >>
+  >- (qpat_x_assum `Abbrev (inst = bb.bb_instructions❲idx❳)`
+        (fn th => SUBST1_TAC
+          (REWRITE_RULE [markerTheory.Abbrev_def] th)) >>
+      qpat_x_assum `EVERY (λi. i.inst_opcode <> INVOKE) bb.bb_instructions`
+        (fn th => irule
+          (SIMP_RULE (srw_ss()) []
+            (Q.SPEC `idx` (REWRITE_RULE [EVERY_EL] th)))) >>
+      FIRST_ASSUM ACCEPT_TAC) >>
   Cases_on `step_inst fuel ctx inst s1`
   (* OK: dispatch handles all opcodes + non32_ok preservation *)
   >- suspend "ok_case"
@@ -407,6 +445,14 @@ Resume m2v_per_block_sim_at[abort_non32]:
 QED
 Resume m2v_per_block_sim_at[ih_cont]:
   rpt strip_tac >>
+  qpat_x_assum `(λs1 s2. _) s1' s2'`
+    (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
+  SUBGOAL_THEN
+    ``~is_terminator (EL idx bb.bb_instructions).inst_opcode`` assume_tac
+  >- (qpat_x_assum `Abbrev (inst = bb.bb_instructions❲idx❳)`
+        (fn th => SUBST1_TAC
+          (GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th))) >>
+      FIRST_ASSUM ACCEPT_TAC) >>
   SUBGOAL_THEN ``MEM (EL idx bb.bb_instructions) (fn_insts fn)``
     assume_tac
   >- (irule MEM_fn_insts >> qexists `bb` >> simp[MEM_EL] >>
@@ -451,13 +497,15 @@ Resume m2v_per_block_sim_at[ih_cont]:
       simp[]) >>
   (impl_tac >- (
     simp[vs_inst_idx_update_transparent_export] >>
-    rpt conj_tac
-    >> TRY (first_assum ACCEPT_TAC)
-    >> TRY (irule m2v_inv_noix_update_idx >> simp[] >> NO_TAC)
-    >> TRY (MATCH_MP_TAC m2v_non32_ok_update_idx >> simp[] >> NO_TAC)
-    >> TRY (irule m2v_ao_undef_sync_update_idx >> simp[] >> NO_TAC)
-    >> TRY (irule m2v_pvars_set_update_idx >> simp[] >> NO_TAC)
-    >> (irule nao_dispatch_preserved >> metis_tac[]))) >>
+    rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+    FIRST
+      [(irule m2v_inv_noix_update_idx >> simp[]),
+       (MATCH_MP_TAC m2v_non32_ok_update_idx >> simp[]),
+       (irule m2v_ao_undef_sync_update_idx >> simp[]),
+       (irule m2v_pvars_set_update_idx >> simp[]),
+       (irule (Q.SPECL [`fn`, `bb`, `idx`, `fuel`, `ctx`, `s1`, `s2`,
+                         `s1'`, `s2'`] nao_dispatch_preserved) >>
+        rpt conj_tac >> FIRST_ASSUM ACCEPT_TAC)])) >>
   simp[]
 QED
 Finalise m2v_per_block_sim_at

@@ -287,7 +287,8 @@ Theorem function_entry_env_static_maps_transfer_initial[local]:
   check_contract F layouts addr mods = SOME art /\
   ALOOKUP sources addr = SOME mods /\
   tx.target = addr /\
-  fn_sigs_complete fn_sigs (initial_evaluation_context sources layouts tx src) /\
+  fn_sigs_declared_complete fn_sigs
+    (initial_evaluation_context sources layouts tx src) /\
   bare_globals_complete bare_globals (initial_evaluation_context sources layouts tx src) /\
   bare_global_assignable_complete bare_global_assignable (initial_evaluation_context sources layouts tx src) /\
   (!src' id ty. FLOOKUP bare_global_assignable (src',id) = SOME ty ==>
@@ -360,7 +361,8 @@ Theorem function_entry_env_static_maps_transfer_initial_explicit[local]:
   check_contract F layouts addr mods = SOME art /\
   ALOOKUP sources addr = SOME mods /\
   tx.target = addr /\
-  fn_sigs_complete fn_sigs (initial_evaluation_context sources layouts tx src) /\
+  fn_sigs_declared_complete fn_sigs
+    (initial_evaluation_context sources layouts tx src) /\
   bare_globals_complete bare_globals (initial_evaluation_context sources layouts tx src) /\
   bare_global_assignable_complete bare_global_assignable (initial_evaluation_context sources layouts tx src) /\
   (!src' id ty. FLOOKUP bare_global_assignable (src',id) = SOME ty ==>
@@ -397,7 +399,8 @@ Theorem check_function_body_static_maps_transfer_initial[local]:
   check_contract F layouts addr mods = SOME art /\
   ALOOKUP sources addr = SOME mods /\
   tx.target = addr /\
-  fn_sigs_complete fn_sigs (initial_evaluation_context sources layouts tx src) /\
+  fn_sigs_declared_complete fn_sigs
+    (initial_evaluation_context sources layouts tx src) /\
   bare_globals_complete bare_globals (initial_evaluation_context sources layouts tx src) /\
   bare_global_assignable_complete bare_global_assignable (initial_evaluation_context sources layouts tx src) /\
   (!src' id ty. FLOOKUP bare_global_assignable (src',id) = SOME ty ==>
@@ -524,6 +527,106 @@ Proof
   simp[]
 QED
 
+Theorem fn_sigs_complete_deploy_implies_nondeploy[local]:
+  fn_sigs_complete fs (cx with in_deploy := T) ==>
+  fn_sigs_complete fs (cx with in_deploy := F)
+Proof
+  rw[fn_sigs_complete_def] >>
+  first_x_assum irule >>
+  gvs[lookup_callable_function_def, get_module_code_def, AllCaseEqs()] >>
+  qexistsl [`body`, `fm`, `nr`, `ts`] >> simp[]
+QED
+
+Theorem fn_sigs_declared_complete_deploy_implies_nondeploy[local]:
+  fn_sigs_declared_complete fs (cx with in_deploy := T) ==>
+  fn_sigs_declared_complete fs (cx with in_deploy := F)
+Proof
+  rw[fn_sigs_declared_complete_def] >>
+  first_x_assum irule >> gvs[get_module_code_def] >>
+  qexistsl [`body`,`fm`,`nr`,`raw`,`Internal`] >>
+  gvs[lookup_callable_function_def, AllCaseEqs()]
+QED
+
+Theorem check_contract_functions_well_typed_deploy:
+  check_contract F layouts addr mods = SOME art /\
+  ALOOKUP sources addr = SOME mods /\
+  tx.target = addr ==>
+  functions_well_typed
+    ((initial_evaluation_context sources layouts tx src) with in_deploy := T)
+Proof
+  simp[functions_well_typed_def] >> strip_tac >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  `ALOOKUP mods src_id_opt = SOME ts` by
+    gvs[get_module_code_def, initial_evaluation_context_def] >>
+  drule lookup_callable_function_T_SOME_cases >> strip_tac >> gvs[]
+  >- (`check_function_body layouts tx.target mods art src_id_opt fm nr
+         args dflts ret body` by
+        (drule_all check_contract_function_body_MEM >> metis_tac[]) >>
+      conj_tac
+      >- (gvs[initial_evaluation_context_def, check_function_body_def] >>
+          Cases_on `lookup_nonreentrant_slot layouts tx.target` >> gvs[] >>
+          qexists `fn` >> simp[]) >>
+      `fn_sigs_declared_complete fn_sigs
+         (initial_evaluation_context sources layouts tx src)` by (
+        drule fn_sigs_declared_complete_deploy_implies_nondeploy >>
+        simp[initial_evaluation_context_def]) >>
+      fs[bare_globals_complete_def, bare_global_assignable_complete_def,
+         toplevel_vtypes_complete_def, flag_members_complete_def,
+         get_module_code_def, get_tenv_def, initial_evaluation_context_def] >>
+      qspecl_then
+        [`layouts`, `tx.target`, `mods`, `art`, `sources`, `tx`, `fn_sigs`,
+         `bare_globals`, `bare_global_assignable`, `toplevel_vtypes`,
+         `flag_members`, `src_id_opt`, `fm`, `nr`, `args`, `dflts`, `ret`, `body`]
+        mp_tac check_function_body_static_maps_transfer_initial >>
+      simp[initial_evaluation_context_def, get_tenv_def] >>
+      disch_then irule >> rpt conj_tac >>
+      gvs[bare_globals_complete_def, bare_global_assignable_complete_def,
+          toplevel_vtypes_complete_def, flag_members_complete_def,
+          get_module_code_def, get_tenv_def, initial_evaluation_context_def] >>
+      rpt strip_tac >> first_x_assum drule >> metis_tac[])
+  >- (gvs[initial_evaluation_context_def] >>
+      qexistsl
+        [`<|current_src := src_id_opt; var_types := FEMPTY;
+             var_assignable := FEMPTY; bare_globals := bare_globals;
+             bare_global_assignable := bare_global_assignable;
+             toplevel_vtypes := toplevel_vtypes;
+             type_defs := type_env_all_modules mods; fn_sigs := fn_sigs;
+             flag_members := flag_members|>`,
+         `<|current_src := src_id_opt; var_types := FEMPTY;
+             var_assignable := FEMPTY; bare_globals := bare_globals;
+             bare_global_assignable := bare_global_assignable;
+             toplevel_vtypes := toplevel_vtypes;
+             type_defs := type_env_all_modules mods; fn_sigs := fn_sigs;
+             flag_members := flag_members|>`] >>
+      simp[get_tenv_def, Once type_stmt_def,
+           Once well_typed_expr_def, Once stmt_no_control_escape_def]) >>
+  `check_function_body layouts tx.target mods art src_id_opt fm nr
+     args dflts ret body` by
+    (drule_all check_contract_function_body_MEM >> metis_tac[]) >>
+  conj_tac
+  >- (gvs[initial_evaluation_context_def, check_function_body_def] >>
+      Cases_on `lookup_nonreentrant_slot layouts tx.target` >> gvs[] >>
+      qexists `fn` >> simp[]) >>
+  `fn_sigs_declared_complete fn_sigs
+     (initial_evaluation_context sources layouts tx src)` by (
+    drule fn_sigs_declared_complete_deploy_implies_nondeploy >>
+    simp[initial_evaluation_context_def]) >>
+  fs[bare_globals_complete_def, bare_global_assignable_complete_def,
+     toplevel_vtypes_complete_def, flag_members_complete_def,
+     get_module_code_def, get_tenv_def, initial_evaluation_context_def] >>
+  qspecl_then
+    [`layouts`, `tx.target`, `mods`, `art`, `sources`, `tx`, `fn_sigs`,
+     `bare_globals`, `bare_global_assignable`, `toplevel_vtypes`,
+     `flag_members`, `src_id_opt`, `fm`, `nr`, `args`, `dflts`, `ret`, `body`]
+    mp_tac check_function_body_static_maps_transfer_initial >>
+  simp[initial_evaluation_context_def, get_tenv_def] >>
+  disch_then irule >> rpt conj_tac >>
+  gvs[bare_globals_complete_def, bare_global_assignable_complete_def,
+      toplevel_vtypes_complete_def, flag_members_complete_def,
+      get_module_code_def, get_tenv_def, initial_evaluation_context_def] >>
+  rpt strip_tac >> first_x_assum drule >> metis_tac[]
+QED
+
 (* ===== Explicit external entry no-TypeError bridge for checked contracts ===== *)
 
 Theorem functions_well_typed_stk_irrelevant[local]:
@@ -531,7 +634,7 @@ Theorem functions_well_typed_stk_irrelevant[local]:
            functions_well_typed cx
 Proof
   simp[functions_well_typed_def, get_module_code_def, get_tenv_def,
-       fn_sigs_consistent_def, fn_sigs_complete_def,
+       fn_sigs_consistent_def, fn_sigs_declared_complete_def,
        toplevel_vtypes_complete_def, bare_globals_complete_def,
        bare_global_assignable_complete_def, flag_members_complete_def,
        well_formed_type_def]
@@ -552,7 +655,8 @@ Theorem checked_contract_static_maps_transfer_inputs_initial[local]:
   check_contract F layouts addr mods = SOME art /\
   ALOOKUP sources addr = SOME mods /\
   tx.target = addr ==>
-  fn_sigs_complete art.cta_fn_sigs (initial_evaluation_context sources layouts tx src) /\
+  fn_sigs_declared_complete art.cta_fn_sigs
+    (initial_evaluation_context sources layouts tx src) /\
   bare_globals_complete art.cta_bare_globals (initial_evaluation_context sources layouts tx src) /\
   bare_global_assignable_complete art.cta_bare_global_assignable (initial_evaluation_context sources layouts tx src) /\
   toplevel_vtypes_complete art.cta_toplevel_vtypes (initial_evaluation_context sources layouts tx src) /\
@@ -567,7 +671,7 @@ Theorem checked_contract_static_maps_transfer_inputs_initial[local]:
           find_var_decl_by_num id ts = NONE /\ ty <> NoneT)
 Proof
   rw[] >> rpt conj_tac
-  >- (irule check_contract_fn_sigs_complete_initial >> simp[])
+  >- (irule check_contract_fn_sigs_declared_complete_initial >> simp[])
   >- (irule check_contract_bare_globals_complete_initial >> simp[])
   >- (irule check_contract_bare_global_assignable_complete_initial >> simp[])
   >- (irule check_contract_toplevel_vtypes_complete_initial >> simp[])
@@ -583,11 +687,11 @@ Proof
   simp[get_module_code_def, initial_evaluation_context_def]
 QED
 
-Theorem checked_explicit_external_body_typing_package:
+Theorem checked_function_body_typing_package:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\
   ALOOKUP mods src = SOME ts /\
-  MEM (FunctionDecl External mut nr raw fn args dflts ret body) ts ==>
+  MEM (FunctionDecl vis mut nr raw fn args dflts ret body) ts ==>
   ?env_body env_after.
     env_body.current_src = src /\
     env_body.type_defs = get_tenv (initial_evaluation_context am.sources am.layouts tx src) /\
@@ -608,7 +712,8 @@ Proof
   rw[] >>
   `check_function_body am.layouts tx.target mods art src mut nr args dflts ret body` by
     metis_tac[check_contract_function_body_MEM] >>
-  `fn_sigs_complete art.cta_fn_sigs (initial_evaluation_context am.sources am.layouts tx src) /\
+  `fn_sigs_declared_complete art.cta_fn_sigs
+     (initial_evaluation_context am.sources am.layouts tx src) /\
    bare_globals_complete art.cta_bare_globals (initial_evaluation_context am.sources am.layouts tx src) /\
    bare_global_assignable_complete art.cta_bare_global_assignable (initial_evaluation_context am.sources am.layouts tx src) /\
    toplevel_vtypes_complete art.cta_toplevel_vtypes (initial_evaluation_context am.sources am.layouts tx src) /\
@@ -639,6 +744,9 @@ Proof
   simp[] >> rw[] >>
   qexistsl [`env_body`, `env_after`] >> simp[] >> metis_tac[]
 QED
+
+val checked_explicit_external_body_typing_package =
+  checked_function_body_typing_package;
 
 Theorem checked_explicit_external_post_prefix_body_return_typed_selected:
   check_contract F am.layouts tx.target mods = SOME art /\

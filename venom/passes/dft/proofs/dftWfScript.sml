@@ -1067,7 +1067,7 @@ QED
 
 Resume add_deps_on_barrier_foldl_backward[barrier]:
   (* Barrier case: acc unchanged, last_bar becomes SOME h *)
-  simp[] >>
+  asm_simp_tac std_ss [] >>
   first_x_assum (qspecl_then [`prefix ++ [h]`, `prefix ++ h :: suffix'`,
                               `SOME h`, `acc`] mp_tac) >>
   rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
@@ -1080,7 +1080,7 @@ Resume add_deps_on_barrier_foldl_backward[barrier]:
 QED
 
 Resume add_deps_on_barrier_foldl_backward[non_barrier]:
-  simp[] >>
+  asm_simp_tac std_ss [] >>
   qmatch_goalsub_abbrev_tac `FOLDL _ (new_acc, last_bar) suffix'` >>
   first_x_assum (qspecl_then [`prefix ++ [h]`, `prefix ++ h :: suffix'`,
                               `last_bar`, `new_acc`] mp_tac) >>
@@ -1168,7 +1168,7 @@ Proof
   >> rename1 `h :: to_process`
   >> Cases_on `is_barrier h`
   (* Barrier case *)
-  >- (simp[Once FOLDL, LET_THM] >>
+  >- (asm_simp_tac std_ss [Once FOLDL, LET_THM] >>
       qmatch_goalsub_abbrev_tac `FOLDL _ (new_acc, new_prev) to_process` >>
       first_x_assum (qspecl_then
            [`prefix ++ [h]`, `nps`, `new_prev`, `new_acc`] mp_tac) >>
@@ -1176,7 +1176,7 @@ Proof
       (impl_tac >- suspend "barrier_step") >>
       simp[])
   (* Non-barrier case *)
-  >> (simp[Once FOLDL, LET_THM] >>
+  >> (asm_simp_tac std_ss [Once FOLDL, LET_THM] >>
       qmatch_goalsub_abbrev_tac `FOLDL _ (new_acc, new_prev) to_process` >>
       first_x_assum (qspecl_then
            [`prefix ++ [h]`, `nps`, `new_prev`, `new_acc`] mp_tac) >>

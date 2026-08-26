@@ -185,7 +185,7 @@ Datatype:
   create_kind
   = CreateMinimalProxy  (* create_minimal_proxy_to(target) *)
   | CreateCopyOf        (* create_copy_of(target) *)
-  | CreateFromBlueprint num bool (* code_offset, raw_args *)
+  | CreateFromBlueprint bool (* raw_args; code_offset is an evaluated operand *)
                         (* create_from_blueprint(target, *args) *)
   | RawCreate           (* raw_create(bytecode, *args) *)
 End
@@ -213,10 +213,12 @@ Datatype:
   (* selfdestruct(to) — terminus
      args = [to_addr] *)
   | SelfDestructTarget
-  (* create_*(target, *ctor_args, value=0, salt=NONE, revert_on_failure=T)
-     args = [target_or_bytecode; ctor_arg1; ...; value]
-     salt: NONE = CREATE, SOME s = CREATE2 with salt s *)
-  | CreateTarget create_kind bool (* revert_on_failure *)
+  (* Creation operands are stored in their runtime evaluation order:
+     - minimal proxy/copy: [target; value] ++ [salt]?
+     - blueprint: [target; value] ++ [salt]? ++ [code_offset] ++ ctor_args
+     - raw_create: [bytecode; value] ++ ctor_args ++ [salt]?
+     The first bool records salt presence; the second is revert_on_failure. *)
+  | CreateTarget create_kind bool (* has_salt *) bool (* revert_on_failure *)
 End
 
 Datatype:

@@ -183,13 +183,13 @@ fun mk_JE_List (es, ty) = list_mk_comb(JE_List_tm, [mk_list(es, json_expr_ty), t
 fun mk_JE_Call (func, args, kwargs, ty, src_id_opt_tm) =
   list_mk_comb(JE_Call_tm, [func, mk_list(args, json_expr_ty),
                             mk_list(kwargs, json_keyword_ty), ty, src_id_opt_tm])
-fun mk_JE_ExtCall (func_name, arg_types, ret_ty, target, args, keywords) =
-  list_mk_comb(JE_ExtCall_tm, [fromMLstring func_name,
+fun mk_JE_ExtCall (func_name, func_src, arg_types, ret_ty, target, args, keywords) =
+  list_mk_comb(JE_ExtCall_tm, [fromMLstring func_name, func_src,
                                mk_list(arg_types, json_type_ty),
                                ret_ty, target, mk_list(args, json_expr_ty),
                                mk_list(keywords, json_keyword_ty)])
-fun mk_JE_StaticCall (func_name, arg_types, ret_ty, target, args) =
-  list_mk_comb(JE_StaticCall_tm, [fromMLstring func_name,
+fun mk_JE_StaticCall (func_name, func_src, arg_types, ret_ty, target, args) =
+  list_mk_comb(JE_StaticCall_tm, [fromMLstring func_name, func_src,
                                   mk_list(arg_types, json_type_ty),
                                   ret_ty, target, mk_list(args, json_expr_ty)])
 fun mk_JKeyword (arg, v) = list_mk_comb(JKeyword_tm, [fromMLstring arg, v])
@@ -459,6 +459,13 @@ fun d_qualified_type_path () : (string list * string) decoder =
               ],
               field "attr" string)
 
+(* Array-like annotation bounds may be literal Int nodes or constant
+   expressions carrying a compiler-provided folded Int value. *)
+val annotation_bound : term decoder = achoose "annotation bound" [
+  check_ast_type "Int" $ field "value" numtm,
+  field "folded_value" $ check_ast_type "Int" $ field "value" numtm
+]
+
 (* Type from AST node (for subscript/name patterns) *)
 fun d_ast_type () : term decoder = achoose "ast_type" [
   (* Name node - check id for primitive types *)
@@ -493,13 +500,13 @@ fun d_ast_type () : term decoder = achoose "ast_type" [
     check (field "value" (check_ast_type "Name" $ field "id" string))
           (fn s => s = "String") "not String" $
     JSONDecode.map mk_JTA_String $
-      field "slice" $ check_ast_type "Int" $ field "value" numtm,
+      field "slice" annotation_bound,
 
     (* Bytes[N] *)
     check (field "value" (check_ast_type "Name" $ field "id" string))
           (fn s => s = "Bytes") "not Bytes" $
     JSONDecode.map mk_JTA_Bytes $
-      field "slice" $ check_ast_type "Int" $ field "value" numtm,
+      field "slice" annotation_bound,
 
     (* DynArray[T, N] *)
     check (field "value" (check_ast_type "Name" $ field "id" string))
@@ -507,18 +514,12 @@ fun d_ast_type () : term decoder = achoose "ast_type" [
     JSONDecode.map (fn (vt, len) => mk_JTA_DynArray(vt, len)) $
     field "slice" $ check_ast_type "Tuple" $ field "elements" $
       tuple2 (sub 0 (delay d_ast_type),
-              sub 1 $ achoose "DynArray len" [
-                check_ast_type "Int" $ field "value" numtm,
-                field "folded_value" $ check_ast_type "Int" $ field "value" numtm
-              ]),
+              sub 1 annotation_bound),
 
     (* Static array T[N] *)
     JSONDecode.map (fn (vt, len) => mk_JTA_StaticArray(vt, len)) $
     tuple2 (field "value" (delay d_ast_type),
-            field "slice" $ achoose "array len" [
-              check_ast_type "Int" $ field "value" numtm,
-              field "folded_value" $ check_ast_type "Int" $ field "value" numtm
-            ])
+            field "slice" annotation_bound)
   ],
 
   (* Tuple type *)
@@ -741,9 +742,12 @@ fun d_json_expr () : term decoder = achoose "expr" [
   (* ExtCall - preserve target separately from ordinary arguments. *)
   (* Signature extracted from func.type: argument_types, return_type *)
   check_ast_type "ExtCall" $
-    JSONDecode.map (fn (((func_name, arg_types), (ret_ty, (target, args))), keywords) =>
-      mk_JE_ExtCall(func_name, arg_types, ret_ty, target, args, keywords)) $
-    tuple2 (tuple2 (tuple2 (field "value" $ field "func" $ field "attr" string,
+    JSONDecode.map (fn ((((func_name, func_src), arg_types), (ret_ty, (target, args))), keywords) =>
+      mk_JE_ExtCall(func_name, func_src, arg_types, ret_ty, target, args, keywords)) $
+    tuple2 (tuple2 (tuple2 (tuple2 (field "value" $ field "func" $ field "attr" string,
+                                    orElse (field "value" $ field "func" $ field "type" $
+                                      field "type_decl_node" $ field "source_id" source_ref_tm,
+                                      succeed JMissingSource_tm)),
                             field "value" $ field "func" $ field "type" $
                               orElse (field "argument_types" (array json_type), succeed [])),
                     tuple2 (field "value" $ field "func" $ field "type" $
@@ -754,9 +758,12 @@ fun d_json_expr () : term decoder = achoose "expr" [
 
   (* StaticCall - same structure as ExtCall. *)
   check_ast_type "StaticCall" $
-    JSONDecode.map (fn ((func_name, arg_types), (ret_ty, (target, args))) =>
-      mk_JE_StaticCall(func_name, arg_types, ret_ty, target, args)) $
-    tuple2 (tuple2 (field "value" $ field "func" $ field "attr" string,
+    JSONDecode.map (fn (((func_name, func_src), arg_types), (ret_ty, (target, args))) =>
+      mk_JE_StaticCall(func_name, func_src, arg_types, ret_ty, target, args)) $
+    tuple2 (tuple2 (tuple2 (field "value" $ field "func" $ field "attr" string,
+                            orElse (field "value" $ field "func" $ field "type" $
+                              field "type_decl_node" $ field "source_id" source_ref_tm,
+                              succeed JMissingSource_tm)),
                     field "value" $ field "func" $ field "type" $
                       orElse (field "argument_types" (array json_type), succeed [])),
             tuple2 (field "value" $ field "func" $ field "type" $

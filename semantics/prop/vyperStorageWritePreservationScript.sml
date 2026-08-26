@@ -355,8 +355,13 @@ Proof
        gvs[return_def, raise_def, bind_def, check_def, type_check_def,
            assert_def, AllCaseEqs()]) >>
   rpt strip_tac >> gvs[] >>
-  gvs[assert_def, bind_def, ignore_bind_def, return_def, raise_def,
-      AllCaseEqs()] >>
+  qpat_x_assum `_ = (INL elem_offset,s'')` mp_tac >>
+  simp[assert_def, bind_def, ignore_bind_def, return_def, raise_def,
+       AllCaseEqs()] >>
+  strip_tac >>
+  TRY (qpat_x_assum `elem_offset = _` SUBST_ALL_TAC) >>
+  TRY (qpat_x_assum `st = s''` SUBST_ALL_TAC) >>
+  TRY (qpat_x_assum `ty = _` SUBST_ALL_TAC) >>
   imp_res_tac evaluate_type_ArrayTV_inv >>
   rpt
     (FIRST

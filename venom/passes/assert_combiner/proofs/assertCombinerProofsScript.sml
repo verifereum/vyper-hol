@@ -1522,7 +1522,11 @@ Triviality ac_apply_merge_step_no_phi:
 Proof
   Cases_on `st` >>
   rw[ac_apply_merge_step_def, LET_THM] >>
-  rpt (CASE_TAC >> gvs[EVERY_APPEND])
+  TRY CASE_TAC >> gvs[EVERY_APPEND] >>
+  TRY CASE_TAC >> gvs[EVERY_APPEND] >>
+  TRY CASE_TAC >> gvs[EVERY_APPEND] >>
+  TRY CASE_TAC >> gvs[EVERY_APPEND] >>
+  TRY CASE_TAC >> gvs[EVERY_APPEND]
 QED
 
 Triviality ac_apply_merge_fold_no_phi:

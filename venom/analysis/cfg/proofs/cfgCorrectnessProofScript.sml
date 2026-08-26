@@ -435,12 +435,16 @@ Theorem ce_preorder_order_false:
   INDEX_OF "b" (cfg_dfs_pre (cfg_analyze ce_fn3)) = SOME 2 /\
   ~(3 < 2)
 Proof
-  simp[ce_fn3_def] >> cfg_eval_tac >>
-  (* Need to show ~RTC ... "b" "a". Since succs "b" = [], only RTC refl.
-     "b" ≠ "a", so not reachable. *)
-  rpt strip_tac >>
-  qpat_x_assum `(λa b. _)^* "b" "a"` mp_tac >>
-  simp[Once relationTheory.RTC_CASES1]
+  simp[ce_fn3_def] >> rpt conj_tac
+  >- cfg_eval_tac
+  >- cfg_eval_tac
+  >- (cfg_eval_tac >>
+      (* Since succs "b" = [], RTC only permits the reflexive case. *)
+      rpt strip_tac >>
+      qpat_x_assum `(λa b. _)^* "b" "a"` mp_tac >>
+      simp[Once relationTheory.RTC_CASES1])
+  >- cfg_eval_tac
+  >- cfg_eval_tac
 QED
 
 (* ==========================================================================

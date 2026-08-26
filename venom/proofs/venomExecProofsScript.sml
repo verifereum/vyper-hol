@@ -103,7 +103,9 @@ Theorem step_jnz_behavior:
     if cond <> 0w then OK (jump_to if_nonzero s)
     else OK (jump_to if_zero s)
 Proof
-  rw[step_inst_base_def]
+  rpt strip_tac >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  simp[opcode_case_def]
 QED
 
 (* ==========================================================================
@@ -1326,9 +1328,10 @@ Triviality step_inst_base_operands_none[local]:
 Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode` >> gvs[MEM] >>
-  metis_tac[step_inst_base_operands_none_uniform,
-            step_inst_base_operands_none_custom,
-            step_inst_base_operands_none_log, MEM]
+  FIRST
+    [irule step_inst_base_operands_none_uniform >> simp[MEM] >> NO_TAC,
+     irule step_inst_base_operands_none_custom >> simp[MEM] >> NO_TAC,
+     irule step_inst_base_operands_none_log >> simp[]]
 QED
 
 Theorem step_inst_base_nonerr_var_fdom:

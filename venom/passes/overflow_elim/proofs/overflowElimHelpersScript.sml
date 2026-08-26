@@ -270,12 +270,21 @@ Proof
   `step_inst_base inst s = OK s'` by (fs[step_inst_def] >> gvs[]) >>
   Cases_on `?out. out NOTIN FDOM s.vs_vars /\ out IN FDOM s'.vs_vars`
   >- (fs[] >>
+      `inst_wf inst` by metis_tac[fn_insts_inst_wf] >>
       `inst.inst_outputs = [out]` by
-        metis_tac[step_inst_base_new_var_singleton] >>
+        (mp_tac (Q.SPECL [`inst`, `s`, `s'`, `out`]
+           step_inst_base_new_var_singleton) >>
+         impl_tac >- (
+           rpt conj_tac >>
+           TRY (qpat_x_assum `step_inst_base inst s = OK s'` ACCEPT_TAC) >>
+           TRY (qpat_x_assum `inst_wf inst` ACCEPT_TAC) >>
+           TRY (qpat_x_assum `~is_terminator inst.inst_opcode` ACCEPT_TAC) >>
+           TRY (qpat_x_assum `out NOTIN FDOM s.vs_vars` ACCEPT_TAC) >>
+           TRY (qpat_x_assum `out IN FDOM s'.vs_vars` ACCEPT_TAC)) >>
+         DISCH_THEN ACCEPT_TAC) >>
       `s'.vs_vars = s.vs_vars |+ (out, THE (FLOOKUP s'.vs_vars out))` by
         metis_tac[step_inst_base_vars_fupdate] >>
       qabbrev_tac `nv = THE (FLOOKUP s'.vs_vars out)` >>
-      `inst_wf inst` by metis_tac[fn_insts_inst_wf] >>
       `!d. dfg_get_def (dfg_build_function fn) out = SOME d ==>
            d = inst` by
         (rpt strip_tac >> imp_res_tac dfg_build_function_correct >>
@@ -302,12 +311,23 @@ Proof
                        (if di.inst_opcode = LT
                         then w2n w1 < w2n w2
                         else w2n w1 > w2n w2))` by
-        (rpt strip_tac >> `di = inst` by metis_tac[] >>
-         pop_assum SUBST_ALL_TAC >>
-         metis_tac[step_inst_base_arith_condition,
-                   step_inst_base_compare_condition]) >>
+        (conj_tac
+         >- (rpt strip_tac >> `di = inst` by metis_tac[] >>
+             pop_assum SUBST_ALL_TAC >>
+             mp_tac (Q.SPECL [`inst`, `s`, `s'`, `out`, `nv`,
+               `op1'`, `op2'`] step_inst_base_arith_condition) >>
+             impl_tac >- simp[] >> simp[])
+         >- (rpt strip_tac >> `di = inst` by metis_tac[] >>
+             pop_assum SUBST_ALL_TAC >>
+             mp_tac (Q.SPECL [`inst`, `s`, `s'`, `out`, `nv`,
+               `op1'`, `op2'`] step_inst_base_compare_condition) >>
+             impl_tac >- simp[] >> simp[])) >>
       fs[] >>
-      metis_tac[dfg_arith_sound_fupdate, dfg_compare_full_sound_fupdate])
+      conj_tac
+      >- (irule dfg_arith_sound_fupdate >> simp[] >>
+          rpt strip_tac >> `dinst = inst` by metis_tac[] >> gvs[])
+      >- (irule dfg_compare_full_sound_fupdate >> simp[] >>
+          rpt strip_tac >> `dinst = inst` by metis_tac[] >> gvs[]))
   >- (`s'.vs_vars = s.vs_vars` by metis_tac[step_inst_vars_unchanged] >>
       ASM_REWRITE_TAC[])
 QED
@@ -773,7 +793,15 @@ Proof
   (* Extract chain components from try_elim_add_overflow_v.
      Keep in assumptions, decompose via fs + FULL_CASE_TAC *)
   fs[try_elim_add_overflow_v_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[]) >>
+  TRY BasicProvers.FULL_CASE_TAC >> gvs[] >>
+  TRY BasicProvers.FULL_CASE_TAC >> gvs[] >>
+  TRY BasicProvers.FULL_CASE_TAC >> gvs[] >>
+  TRY BasicProvers.FULL_CASE_TAC >> gvs[] >>
+  TRY BasicProvers.FULL_CASE_TAC >> gvs[] >>
+  TRY BasicProvers.FULL_CASE_TAC >> gvs[] >>
+  TRY BasicProvers.FULL_CASE_TAC >> gvs[] >>
+  TRY BasicProvers.FULL_CASE_TAC >> gvs[] >>
+  TRY BasicProvers.FULL_CASE_TAC >> gvs[] >>
   (* Extract res_v, get compare and arith semantics *)
   rename1 `get_producer dfg res_op = SOME add_inst` >>
   rename1 `cmp_inst.inst_operands = [res_op; x_op]` >>

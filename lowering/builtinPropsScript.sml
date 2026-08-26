@@ -132,10 +132,12 @@ Theorem step_SHA3[local]:
       step_inst_base (mk_inst id SHA3 [op1; op2] [out]) ss =
         OK (update_var out hash ss)
 Proof
-  rw[step_inst_base_def, mk_inst_def] >>
+  rpt gen_tac >> strip_tac >>
   qexists `word_of_bytes T 0w
     (Keccak_256_w64
       (TAKE (w2n v2) (DROP (w2n v1) ss.vs_memory ++ REPLICATE (w2n v2) 0w)))` >>
+  PURE_REWRITE_TAC[mk_inst_def] >>
+  ONCE_REWRITE_TAC[step_inst_base_def] >>
   simp[]
 QED
 

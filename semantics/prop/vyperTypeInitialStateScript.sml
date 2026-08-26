@@ -27,6 +27,44 @@ Definition machine_well_typed_def:
     EVERY (\(addr, imms). imms_well_typed imms) am.immutables
 End
 
+Theorem machine_well_typed_accounts:
+  machine_well_typed am ==> accounts_well_typed am.accounts
+Proof
+  simp[machine_well_typed_def]
+QED
+
+Theorem machine_well_typed_immutables:
+  machine_well_typed am ==>
+  EVERY (\(addr, imms). imms_well_typed imms) am.immutables
+Proof
+  simp[machine_well_typed_def]
+QED
+
+Theorem abstract_machine_from_state_well_typed:
+  state_well_typed st /\ accounts_well_typed st.accounts ==>
+  machine_well_typed (abstract_machine_from_state srcs exps layouts st)
+Proof
+  simp[machine_well_typed_def, state_well_typed_def,
+       abstract_machine_from_state_def]
+QED
+
+Theorem machine_well_typed_metadata_update:
+  machine_well_typed am ==>
+  machine_well_typed
+    (am with <| sources updated_by sf; exports updated_by ef;
+                layouts updated_by lf |>)
+Proof
+  simp[machine_well_typed_def]
+QED
+
+Theorem machine_well_typed_cons_immutables:
+  machine_well_typed am /\ imms_well_typed imms ==>
+  machine_well_typed
+    (am with immutables updated_by CONS (addr,imms))
+Proof
+  simp[machine_well_typed_def]
+QED
+
 (* The values supplied at function entry have the parameter types expected by
  * the Vyper function signature.  This is the semantic counterpart of successful
  * ABI decoding / test-runner argument construction, but is kept abstract here. *)
@@ -159,6 +197,52 @@ Theorem initial_target_immutables_lookup:
 Proof
   simp[]
 QED
+
+Theorem update_immutable_imms_well_typed[local]:
+  imms_well_typed imms /\
+  value_has_type tv v /\ well_formed_type_value tv ==>
+  imms_well_typed (update_immutable src key tv v imms)
+Proof
+  rw[imms_well_typed_def, update_immutable_def,
+     set_source_immutables_def] >>
+  Cases_on `ALOOKUP imms src` >>
+  gvs[alistTheory.ALOOKUP_ADELKEY, get_source_immutables_def,
+      finite_mapTheory.FLOOKUP_UPDATE, AllCaseEqs()] >>
+  metis_tac[]
+QED
+
+Theorem initial_immutables_module_imms_well_typed:
+  imms_well_typed acc /\
+  initial_immutables_module tenv src ts acc = SOME imms ==>
+  imms_well_typed imms
+Proof
+  qid_spec_tac `acc` >>
+  Induct_on `ts`
+  >- simp[initial_immutables_module_def] >>
+  rpt gen_tac >>
+  Cases_on `h` >>
+  gvs[initial_immutables_module_def, AllCaseEqs()] >>
+  TRY (Cases_on `v0` >>
+       gvs[initial_immutables_module_def, AllCaseEqs()]) >>
+  metis_tac[update_immutable_imms_well_typed,
+            vyperTypingTheory.default_value_well_typed,
+            vyperTypeValuesTheory.evaluate_type_well_formed_type_value]
+QED
+
+Theorem initial_immutables_imms_well_typed:
+  initial_immutables tenv mods = SOME imms ==>
+  imms_well_typed imms
+Proof
+  qid_spec_tac `imms` >>
+  Induct_on `mods`
+  >- simp[initial_immutables_def, empty_immutables_def, imms_well_typed_def] >>
+  rpt gen_tac >>
+  PairCases_on `h` >>
+  rw[initial_immutables_def] >>
+  gvs[AllCaseEqs()] >>
+  metis_tac[initial_immutables_module_imms_well_typed]
+QED
+
 (* ===== Runtime immutable setup ===== *)
 
 Theorem initial_immutables_module_preserves_lookup:
@@ -734,7 +818,7 @@ Theorem env_context_consistent_empty_static_maps:
   env.toplevel_vtypes = FEMPTY /\
   env.flag_members = FEMPTY /\
   fn_sigs_consistent fn_sigs cx /\
-  fn_sigs_complete fn_sigs cx /\
+  fn_sigs_declared_complete fn_sigs cx /\
   toplevel_vtypes_complete FEMPTY cx /\
   bare_globals_complete FEMPTY cx /\
   bare_global_assignable_complete FEMPTY cx /\
@@ -859,6 +943,14 @@ Theorem env_context_consistent_same_static_maps:
   env_context_consistent env cx
 Proof
   rw[env_context_consistent_def] >> gvs[] >> metis_tac[]
+QED
+
+Theorem env_immutables_consistent_immutables_cong:
+  st1.immutables = st2.immutables ==>
+  (env_immutables_consistent env cx st1 <=>
+   env_immutables_consistent env cx st2)
+Proof
+  simp[env_immutables_consistent_def]
 QED
 
 Theorem immutables_ready_env_immutables_consistent:
@@ -987,7 +1079,8 @@ Proof
        toplevel_vtypes_complete_def, bare_globals_complete_def,
        bare_global_assignable_complete_def, flag_members_complete_def,
        env_scopes_consistent_def, env_immutables_consistent_def,
-       fn_sigs_consistent_def, fn_sigs_complete_def, state_well_typed_def,
+       fn_sigs_consistent_def, fn_sigs_declared_complete_def,
+       state_well_typed_def,
        scope_well_typed_def, vyperStateTheory.lookup_scopes_def,
        accounts_well_typed_def, account_well_typed_def, machine_well_typed_def,
        vfmStateTheory.lookup_account_def, vfmStateTheory.empty_accounts_def,

@@ -397,6 +397,7 @@ Definition valid_conversion_def:
   valid_conversion (BaseT (UintT _)) (BaseT (IntT _)) = T /\
   valid_conversion (BaseT (IntT _)) (BaseT (UintT _)) = T /\
   valid_conversion (BaseT (IntT _)) (BaseT (IntT _)) = T /\
+  valid_conversion (BaseT AddressT) (BaseT (UintT _)) = T /\
   valid_conversion (BaseT (UintT _)) (BaseT AddressT) = T /\
   valid_conversion (BaseT (IntT _)) (BaseT AddressT) = T /\
   valid_conversion (FlagT _) (BaseT (IntT _)) = T /\
@@ -482,6 +483,26 @@ End
 
 (* ===== Expressions, places, and targets ===== *)
 
+(* Positional type contract for creation builtin operands. *)
+Definition create_arg_types_ok_def:
+  create_arg_types_ok CreateMinimalProxy has_salt tys =
+    (tys = [BaseT AddressT; BaseT (UintT 256)] ++
+       if has_salt then [BaseT (BytesT (Fixed 32))] else []) /\
+  create_arg_types_ok CreateCopyOf has_salt tys =
+    (tys = [BaseT AddressT; BaseT (UintT 256)] ++
+       if has_salt then [BaseT (BytesT (Fixed 32))] else []) /\
+  create_arg_types_ok (CreateFromBlueprint raw_args) has_salt tys =
+    (?ctor_tys.
+       tys = [BaseT AddressT; BaseT (UintT 256)] ++
+         (if has_salt then [BaseT (BytesT (Fixed 32))] else []) ++
+         [BaseT (UintT 256)] ++ ctor_tys /\
+       (raw_args ==> ?bd. ctor_tys = [BaseT (BytesT bd)])) /\
+  create_arg_types_ok RawCreate has_salt tys =
+    (?bd ctor_tys.
+       tys = [BaseT (BytesT bd); BaseT (UintT 256)] ++ ctor_tys ++
+         if has_salt then [BaseT (BytesT (Fixed 32))] else [])
+End
+
 Definition well_typed_expr_def:
   well_typed_expr env (Name ty id) =
     (FLOOKUP env.var_types (string_to_num id) = SOME ty) /\
@@ -553,9 +574,9 @@ Definition well_typed_expr_def:
   well_typed_expr env (Call ty SelfDestructTarget args drv) =
     (well_typed_exprs env args /\ drv = NONE /\ ty = NoneT /\ LENGTH args = 1 /\
      HD (MAP expr_type args) = BaseT AddressT) /\
-  well_typed_expr env (Call ty (CreateTarget kind rof) args drv) =
-    (well_typed_exprs env args /\ drv = NONE /\ ty = BaseT AddressT /\ LENGTH args >= 2 /\
-     HD (MAP expr_type args) = BaseT AddressT /\ LAST (MAP expr_type args) = BaseT (UintT 256)) /\
+  well_typed_expr env (Call ty (CreateTarget kind has_salt rof) args drv) =
+    (well_typed_exprs env args /\ drv = NONE /\ ty = BaseT AddressT /\
+     create_arg_types_ok kind has_salt (MAP expr_type args)) /\
 
   type_place_expr env (TopLevelName ty (src_id_opt, id)) =
     (case FLOOKUP env.toplevel_vtypes (src_id_opt, string_to_num id) of

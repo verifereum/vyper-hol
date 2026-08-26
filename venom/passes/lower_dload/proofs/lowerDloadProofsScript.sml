@@ -80,7 +80,9 @@ Theorem step_jmp_ok_preserves_layout:
 Proof
   rpt strip_tac >>
   qpat_x_assum `step_inst fuel ctx inst s = OK s'` mp_tac >>
-  simp[Once step_inst_def, step_inst_base_def, jump_to_def] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_def] >> ASM_REWRITE_TAC[] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  ASM_REWRITE_TAC[opcode_case_def] >> simp[jump_to_def] >>
   gvs[AllCaseEqs(), PULL_EXISTS] >> rw[] >> gvs[]
 QED
 
@@ -94,7 +96,9 @@ Theorem step_jnz_ok_preserves_layout[local]:
 Proof
   rpt strip_tac >>
   qpat_x_assum `step_inst fuel ctx inst s = OK s'` mp_tac >>
-  simp[Once step_inst_def, step_inst_base_def, jump_to_def] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_def] >> ASM_REWRITE_TAC[] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  ASM_REWRITE_TAC[opcode_case_def] >> simp[jump_to_def] >>
   gvs[AllCaseEqs(), PULL_EXISTS] >> rw[] >> gvs[]
 QED
 
@@ -108,14 +112,17 @@ Theorem step_djmp_ok_preserves_layout[local]:
 Proof
   rpt strip_tac >>
   qpat_x_assum `step_inst fuel ctx inst s = OK s'` mp_tac >>
-  simp[Once step_inst_def, step_inst_base_def, jump_to_def] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_def] >> ASM_REWRITE_TAC[] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  ASM_REWRITE_TAC[opcode_case_def] >> simp[jump_to_def] >>
   gvs[AllCaseEqs(), PULL_EXISTS] >> rw[] >> gvs[]
 QED
 
 val term_ok_jump_tac =
   qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
-  simp[step_inst_base_def, eval_operands_def, eval_operand_def,
-       AllCaseEqs()] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  ASM_REWRITE_TAC[opcode_case_def] >>
+  simp[eval_operands_def, eval_operand_def, AllCaseEqs()] >>
   rpt CASE_TAC >> gvs[];
 
 Theorem step_inst_base_ok_terminator_jump[local]:
@@ -126,8 +133,14 @@ Theorem step_inst_base_ok_terminator_jump[local]:
     inst.inst_opcode = DJMP
 Proof
   rpt strip_tac >>
-  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
-  term_ok_jump_tac
+  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def]
+  >- term_ok_jump_tac
+  >- term_ok_jump_tac
+  >- term_ok_jump_tac
+  >- term_ok_jump_tac
+  >- term_ok_jump_tac
+  >- term_ok_jump_tac
+  >- term_ok_jump_tac
 QED
 
 Theorem step_non_ok_terminator[local]:
@@ -489,8 +502,22 @@ Proof
   rpt strip_tac >>
   ld_derive_agree_tac >> ld_derive_fields_tac >>
   simp[step_inst_base_def, LET_THM] >>
-  rpt (BasicProvers.PURE_FULL_CASE_TAC >>
-       gvs[] >> TRY (res_tac >> gvs[])) >>
+  BasicProvers.PURE_FULL_CASE_TAC >> gvs[lift_result_def] >>
+  TRY (res_tac >> gvs[]) >>
+  BasicProvers.PURE_FULL_CASE_TAC >> gvs[lift_result_def] >>
+  TRY (res_tac >> gvs[]) >>
+  BasicProvers.PURE_FULL_CASE_TAC >> gvs[lift_result_def] >>
+  TRY (res_tac >> gvs[]) >>
+  BasicProvers.PURE_FULL_CASE_TAC >> gvs[lift_result_def] >>
+  TRY (res_tac >> gvs[]) >>
+  BasicProvers.PURE_FULL_CASE_TAC >> gvs[lift_result_def] >>
+  TRY (res_tac >> gvs[]) >>
+  BasicProvers.PURE_FULL_CASE_TAC >> gvs[lift_result_def] >>
+  TRY (res_tac >> gvs[]) >>
+  BasicProvers.PURE_FULL_CASE_TAC >> gvs[lift_result_def] >>
+  TRY (res_tac >> gvs[]) >>
+  BasicProvers.PURE_FULL_CASE_TAC >> gvs[lift_result_def] >>
+  TRY (res_tac >> gvs[]) >>
   gvs[lift_result_def] >> ld_close_tac
 QED
 
@@ -728,21 +755,33 @@ Proof
     fs[code_layout_valid_def] >>
   (* Step through all 4 instructions with dimword and var distinctness *)
   ONCE_REWRITE_TAC[run_insts_def] >>
-  simp[step_inst_non_invoke, step_inst_base_def, LET_THM,
-       exec_alloca_def, eval_operand_def] >>
+  simp[step_inst_non_invoke] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  ASM_REWRITE_TAC[opcode_case_def] >>
+  simp[LET_THM, exec_alloca_def, eval_operand_def] >>
   BasicProvers.EVERY_CASE_TAC >> gvs[] >>
   ONCE_REWRITE_TAC[run_insts_def] >>
-  simp[step_inst_non_invoke, step_inst_base_def, LET_THM,
-       exec_pure2_def, eval_operand_def, lookup_var_def, update_var_def,
-       FLOOKUP_UPDATE] >>
+  simp[step_inst_non_invoke] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  ASM_REWRITE_TAC[opcode_case_def] >>
+  simp[] >>
+  simp[LET_THM, exec_pure2_def, eval_operand_def, lookup_var_def,
+       update_var_def, FLOOKUP_UPDATE] >>
   ONCE_REWRITE_TAC[run_insts_def] >>
-  simp[step_inst_non_invoke, step_inst_base_def, LET_THM,
-       eval_operand_def, lookup_var_def, update_var_def,
-       FLOOKUP_UPDATE] >>
+  simp[step_inst_non_invoke] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  ASM_REWRITE_TAC[opcode_case_def] >>
+  simp[LET_THM, eval_operand_def, lookup_var_def,
+       update_var_def, FLOOKUP_UPDATE] >>
   ONCE_REWRITE_TAC[run_insts_def] >>
-  simp[step_inst_non_invoke, step_inst_base_def, LET_THM,
-       exec_read1_def, eval_operand_def, lookup_var_def, update_var_def,
-       FLOOKUP_UPDATE, run_insts_def] >>
+  qmatch_goalsub_abbrev_tac `step_inst fuel ctx _ mload_state` >>
+  simp[step_inst_non_invoke] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  ASM_REWRITE_TAC[opcode_case_def] >>
+  simp[] >>
+  simp[LET_THM, exec_read1_def, eval_operand_def, run_insts_def] >>
+  qunabbrev_tac `mload_state` >>
+  simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
   simp[FLOOKUP_UPDATE] >>
   (* Step 1: Simplify 32 MOD dimword(:256) -> 32 *)
   simp_tac (srw_ss() ++ dimword_256_ss) [] >>

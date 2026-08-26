@@ -323,6 +323,30 @@ Proof
   >> metis_tac[]
 QED
 
+(* Branch-local solver for lookup obligations introduced by mp extension. *)
+fun ac_extend_mp_lookup_tac () =
+  rpt strip_tac >>
+  qmatch_asmsub_rename_tac `if id = key then SOME pred else ALOOKUP mp key` >>
+  Cases_on `id = key`
+  >- (gvs[] >> metis_tac[])
+  >- (gvs[] >> metis_tac[])
+
+fun ac_extend_mp_candidate_tac () =
+  rpt gen_tac >> strip_tac >>
+  qmatch_asmsub_rename_tac `if id = key then SOME pred else ALOOKUP mp key` >>
+  Cases_on `id = key`
+  >- (qpat_x_assum `(if id = key then SOME pred else ALOOKUP mp key) = _`
+        mp_tac >> ASM_REWRITE_TAC[] >> simp[] >> strip_tac >>
+      qpat_x_assum `!mc x. MEM mc cands /\ pred = Var x /\ _ ==> _`
+        (qspecl_then [`mc`, `x`] mp_tac) >>
+      impl_tac
+      >- (rpt conj_tac
+          >- FIRST_ASSUM ACCEPT_TAC
+          >- ASM_REWRITE_TAC[]
+          >- (qexists_tac `i` >> ASM_REWRITE_TAC[])) >>
+      ASM_REWRITE_TAC[] >> simp[])
+  >- (gvs[] >> metis_tac[])
+
 (* mp extension without head drop *)
 Triviality ac_sim_precond_extend_mp[local]:
   !cands mp id pred dfg insts s V.
@@ -338,19 +362,9 @@ Proof
   rpt strip_tac >>
   qpat_x_assum `ac_sim_precond _ _ _ _ _ _` mp_tac >>
   simp[ac_sim_precond_def] >> strip_tac >>
-  rpt conj_tac >> TRY (metis_tac[])
-  >- (rpt strip_tac >>
-      qmatch_asmsub_rename_tac `if id = key then SOME pred else ALOOKUP mp key` >>
-      Cases_on `id = key` >> gvs[] >> metis_tac[])
-  >- (rpt strip_tac >>
-      qmatch_asmsub_rename_tac `if id = key then SOME pred else ALOOKUP mp key` >>
-      Cases_on `id = key` >> gvs[] >> metis_tac[])
-  >- (rpt strip_tac >>
-      qmatch_asmsub_rename_tac `if id = key then SOME pred else ALOOKUP mp key` >>
-      Cases_on `id = key` >> gvs[] >> metis_tac[])
-  >- (rpt strip_tac >>
-      qmatch_asmsub_rename_tac `if id = key then SOME pred else ALOOKUP mp key` >>
-      Cases_on `id = key` >> gvs[] >> metis_tac[])
+  rpt conj_tac >> TRY (metis_tac[]) >|
+  [ac_extend_mp_lookup_tac (), ac_extend_mp_candidate_tac (),
+   ac_extend_mp_lookup_tac (), ac_extend_mp_lookup_tac ()]
 QED
 
 (* Head-drop + mp extension: compose transfer_same + extend_mp *)
@@ -414,6 +428,29 @@ Theorem ac_sim_precond_outputs_notin_V:
   !cands mp dfg insts s V.
     ac_sim_precond cands mp dfg insts s V ==>
     (!i x. MEM i insts /\ MEM x i.inst_outputs ==> x NOTIN V)
+Proof
+  simp[ac_sim_precond_def] >> metis_tac[]
+QED
+
+Theorem ac_sim_precond_outputs_fresh_for_cands:
+  !cands mp dfg insts s V i x mc.
+    ac_sim_precond cands mp dfg insts s V /\
+    MEM i insts /\ MEM x i.inst_outputs /\ MEM mc cands ==>
+    x <> ac_or_var mc.mc_second_id /\
+    x <> ac_iz_var mc.mc_second_id
+Proof
+  simp[ac_sim_precond_def] >> metis_tac[]
+QED
+
+Theorem ac_sim_precond_cand_eval_fresh:
+  !cands mp dfg insts s V mc mc'.
+    ac_sim_precond cands mp dfg insts s V /\
+    MEM mc cands /\ MEM mc' cands ==>
+    IS_SOME (eval_operand mc.mc_second_pred s) /\
+    IS_SOME (eval_operand mc.mc_first_pred s) /\
+    (!x. (mc.mc_second_pred = Var x \/ mc.mc_first_pred = Var x) ==>
+      x <> ac_or_var mc'.mc_second_id /\
+      x <> ac_iz_var mc'.mc_second_id)
 Proof
   simp[ac_sim_precond_def] >> metis_tac[]
 QED

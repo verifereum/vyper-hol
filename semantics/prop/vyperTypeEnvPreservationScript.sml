@@ -227,8 +227,18 @@ Proof
   conj_tac >- ( rw[] >> res_tac >> gvs[]) >>
   conj_tac >- (
     rw[] >>
-    Cases_on`id = nm` >> gvs[lookup_scopes_def, FLOOKUP_UPDATE] >>
-    res_tac >> gvs[]) >>
+    Cases_on`id = nm` >>
+    ASM_SIMP_TAC std_ss [lookup_scopes_def, FLOOKUP_UPDATE] >>
+    FULL_SIMP_TAC std_ss [lookup_scopes_def, FLOOKUP_UPDATE, FLOOKUP_DEF,
+                          FDOM_FEMPTY, NOT_IN_EMPTY] >>
+    TRY (qpat_x_assum
+           `<|assignable := F; type := tyv; value := v|> = entry`
+           (SUBST_ALL_TAC o SYM) >> simp[]) >>
+    res_tac >>
+    TRY (qpat_x_assum `env.var_types ' id = ty`
+           (fn th => PURE_REWRITE_TAC [GSYM th]) >>
+         first_assum ACCEPT_TAC) >>
+    ASM_REWRITE_TAC[]) >>
   rw[] >> res_tac >> gvs[]
 QED
 

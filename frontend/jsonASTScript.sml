@@ -107,9 +107,10 @@ Datatype:
   | JE_Call json_expr (json_expr list) (json_keyword list) json_type json_source_ref
 
   (* External calls preserve target and ordinary arguments separately. *)
-  | JE_ExtCall string (json_type list) json_type json_expr
+  | JE_ExtCall string json_source_ref (json_type list) json_type json_expr
       (json_expr list) (json_keyword list)
-  | JE_StaticCall string (json_type list) json_type json_expr (json_expr list)
+  | JE_StaticCall string json_source_ref (json_type list) json_type json_expr
+      (json_expr list)
 ;
   json_keyword = JKeyword string json_expr             (* arg, value *)
 End

@@ -41,7 +41,7 @@ QED
 
 Theorem functions_well_typed_body:
   functions_well_typed cx /\ fn_sigs_consistent fn_sigs cx /\
-  fn_sigs_complete fn_sigs cx /\
+  fn_sigs_declared_complete fn_sigs cx /\
   toplevel_vtypes_complete toplevel_vtypes cx /\
   bare_globals_complete bare_globals cx /\
   bare_global_assignable_complete bare_global_assignable cx /\

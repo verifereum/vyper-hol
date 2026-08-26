@@ -498,10 +498,13 @@ Proof
 QED
 
 val trans_frame_finish_tac =
-  fs[step_inst_base_def] >>
-  fs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def,
-     exec_alloca_def, extract_venom_result_def] >>
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  ASM_REWRITE_TAC[opcode_case_def] >>
+  simp[exec_pure1_def, exec_pure2_def, exec_pure3_def,
+       exec_read0_def, exec_read1_def, exec_write2_def,
+       exec_alloca_def, extract_venom_result_def] >>
+  strip_tac >>
   gvs[AllCaseEqs()] >>
   rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
   fs[update_var_def, vfmStateTheory.lookup_account_def,

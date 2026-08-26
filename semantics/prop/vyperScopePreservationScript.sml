@@ -151,7 +151,11 @@ Proof
   PairCases_on `x'` >> gvs[] >>
   Cases_on `x'0` >> gvs[bind_def, return_def, raise_def] >>
   qpat_x_assum `_ = (res, st')` mp_tac >>
-  rpt (CASE_TAC >> gvs[return_def, raise_def, bind_def]) >>
+  CASE_TAC >> gvs[return_def, raise_def, bind_def] >>
+  CASE_TAC >> gvs[return_def, raise_def, bind_def] >>
+  CASE_TAC >> gvs[return_def, raise_def, bind_def] >>
+  CASE_TAC >> gvs[return_def, raise_def, bind_def] >>
+  CASE_TAC >> gvs[return_def, raise_def, bind_def] >>
   rpt strip_tac >> gvs[] >>
   drule read_storage_slot_scopes >> simp[]
 QED

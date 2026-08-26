@@ -410,10 +410,12 @@ Theorem iszero_bool_correct:
     step_inst_base (mk_inst inst_id ISZERO [op] [out_var]) ss =
       OK (update_var out_var (val_to_w256 (BoolV (¬b))) ss)
 Proof
-  Cases_on `b`
-  >> simp[step_inst_base_def, exec_pure1_def, eval_operand_def,
-          val_to_w256_def, update_var_def, venomInstTheory.mk_inst_def,
-          venomExecSemanticsTheory.bool_to_word_def, comp_return_def, comp_bind_def, comp_ignore_bind_def]
+  Cases_on `b` >> rpt strip_tac >>
+  PURE_REWRITE_TAC[venomInstTheory.mk_inst_def] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> simp[] >>
+  simp[exec_pure1_def, eval_operand_def, val_to_w256_def,
+       update_var_def, venomExecSemanticsTheory.bool_to_word_def,
+       comp_return_def, comp_bind_def, comp_ignore_bind_def]
 QED
 
 (* ASSERT instruction: non-zero → OK (no-op), zero → Abort *)

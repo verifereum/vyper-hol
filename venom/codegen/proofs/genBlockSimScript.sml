@@ -703,7 +703,9 @@ Proof
   qpat_x_assum `step_inst _ _ _ _ = Halt _` mp_tac >>
   simp[Once step_inst_def] >>
   Cases_on `is_terminator RETURN` >> simp[] >>
-  simp[step_inst_base_def] >>
+  ONCE_REWRITE_TAC[step_inst_base_def] >>
+  qpat_x_assum `inst.inst_opcode = RETURN`
+    (fn th => PURE_REWRITE_TAC[th]) >>
   every_case_tac >> gvs[halt_state_def, set_returndata_def]
 QED
 
@@ -725,7 +727,9 @@ Proof
   qpat_x_assum `step_inst _ _ _ _ = Abort _ _` mp_tac >>
   simp[Once step_inst_def] >>
   Cases_on `is_terminator REVERT` >> simp[] >>
-  simp[step_inst_base_def] >>
+  ONCE_REWRITE_TAC[step_inst_base_def] >>
+  qpat_x_assum `inst.inst_opcode = REVERT`
+    (fn th => PURE_REWRITE_TAC[th]) >>
   every_case_tac >> gvs[revert_state_def, set_returndata_def]
 QED
 
@@ -753,7 +757,9 @@ Proof
   qpat_x_assum `step_inst _ _ _ _ = Halt _` mp_tac >>
   simp[Once step_inst_def] >>
   Cases_on `is_terminator SELFDESTRUCT` >> simp[] >>
-  simp[step_inst_base_def] >>
+  ONCE_REWRITE_TAC[step_inst_base_def] >>
+  qpat_x_assum `inst.inst_opcode = SELFDESTRUCT`
+    (fn th => PURE_REWRITE_TAC[th]) >>
   every_case_tac >> gvs[halt_state_def, LET_THM]
 QED
 
@@ -775,8 +781,11 @@ Proof
   qpat_x_assum `step_inst _ _ _ _ = Abort _ _` mp_tac >>
   simp[Once step_inst_def] >>
   Cases_on `is_terminator RETURNDATACOPY` >> simp[] >>
-  simp[step_inst_base_def] >>
-  every_case_tac >> gvs[halt_state_def, set_returndata_def]
+  ONCE_REWRITE_TAC[step_inst_base_def] >>
+  qpat_x_assum `inst.inst_opcode = RETURNDATACOPY`
+    (fn th => PURE_REWRITE_TAC[th]) >>
+  every_case_tac >> gvs[halt_state_def, set_returndata_def] >>
+  IF_CASES_TAC >> gvs[halt_state_def, set_returndata_def]
 QED
 
 (* What step_inst ASSERT_UNREACHABLE abort produces *)
@@ -794,7 +803,9 @@ Proof
   qpat_x_assum `step_inst _ _ _ _ = Abort _ _` mp_tac >>
   simp[Once step_inst_def] >>
   Cases_on `is_terminator ASSERT_UNREACHABLE` >> simp[] >>
-  simp[step_inst_base_def] >>
+  ONCE_REWRITE_TAC[step_inst_base_def] >>
+  qpat_x_assum `inst.inst_opcode = ASSERT_UNREACHABLE`
+    (fn th => PURE_REWRITE_TAC[th]) >>
   every_case_tac
 QED
 
@@ -1535,9 +1546,13 @@ Resume gen_inst_abort_sim[invalid]:
    vs' = vs with <| vs_returndata := []; vs_halted := T |>` by
     (qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
      simp[Once step_inst_def] >>
-     Cases_on `is_terminator inst.inst_opcode` >> simp[] >>
-     simp[step_inst_base_def] >>
-     Cases_on `inst.inst_opcode` >> gvs[halt_state_def, set_returndata_def]) >>
+     qpat_x_assum `inst.inst_opcode = INVALID`
+       (fn th => assume_tac th >> PURE_REWRITE_TAC[th]) >>
+     simp[is_terminator_def] >>
+     ONCE_REWRITE_TAC[step_inst_base_def] >>
+     qpat_x_assum `inst.inst_opcode = INVALID`
+       (fn th => PURE_REWRITE_TAC[th]) >>
+     simp[halt_state_def, set_returndata_def]) >>
   gvs[] >>
   (* Use gen_inst_terminal_setup to get AsmOK intermediate *)
   qspecl_then [`fuel`, `ctx`, `label_offsets`, `offset_to_pc`, `prog`,
@@ -2286,7 +2301,13 @@ Proof
   (* step_inst for PARAM: vs' = update_var out val vs *)
   qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
   simp[step_inst_def, step_inst_base_def] >>
-  rpt (CASE_TAC >> simp[]) >> strip_tac >> gvs[] >>
+  TRY CASE_TAC >> simp[] >>
+  TRY CASE_TAC >> simp[] >>
+  TRY CASE_TAC >> simp[] >>
+  TRY CASE_TAC >> simp[] >>
+  TRY CASE_TAC >> simp[] >>
+  TRY CASE_TAC >> simp[] >>
+  strip_tac >> gvs[] >>
   (* venom_asm_rel preserved: out is fresh *)
   irule venom_asm_rel_update_var >>
   simp[] >> conj_tac

@@ -14,7 +14,7 @@
 Theory basePtrProofs
 Ancestors
   basePtrDefs venomExecSemantics venomWf memLocDefs venomInstProofs
-  venomMemProps finite_map list pred_set venomInst
+  venomExecProofs venomMemProps finite_map list pred_set venomInst
 
 (* Transfer function only modifies the output variable's pointer set. *)
 Theorem bp_handle_inst_other_var_proof:
@@ -67,8 +67,7 @@ Theorem terminator_no_outputs[local]:
   ∀inst. inst_wf inst ∧ is_terminator inst.inst_opcode ⇒
     inst.inst_outputs = []
 Proof
-  rpt strip_tac >> Cases_on `inst.inst_opcode` >>
-  gvs[venomInstTheory.is_terminator_def, venomWfTheory.inst_wf_def]
+  ACCEPT_TAC venomExecProofsTheory.terminator_no_outputs
 QED
 
 (* FOLDL update_var preserves lookup for vars not in output list *)
