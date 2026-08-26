@@ -560,7 +560,25 @@ End
 Definition resolve_source_ref_def:
   (resolve_source_ref ctx JMissingSource = expr_current_nsid ctx) /\
   (resolve_source_ref ctx (JExplicitSource src_id) =
-    source_id_to_nsid (expr_main_src_id ctx) src_id)
+    if src_id = -2 then expr_current_nsid ctx
+    else source_id_to_nsid (expr_main_src_id ctx) src_id)
+End
+
+(* Module syntax carries the import alias that disambiguates Vyper's shared
+   builtin source ID.  Prefer that canonical alias mapping to raw metadata. *)
+Definition resolve_module_alias_def:
+  resolve_module_alias ctx alias fallback =
+    case ALOOKUP (expr_import_map ctx) alias of
+    | SOME src_id => SOME src_id
+    | NONE => resolve_source_ref ctx fallback
+End
+
+Definition resolve_func_module_ref_def:
+  resolve_func_module_ref ctx
+      (JE_Attribute (JE_Name alias (SOME "module") src _)
+        _ _ _ _ _ _) fallback =
+    resolve_module_alias ctx alias src ∧
+  resolve_func_module_ref ctx _ fallback = resolve_source_ref ctx fallback
 End
 
 (* External signature metadata omits source IDs on nested nominal types.  Use
@@ -702,7 +720,7 @@ Definition translate_expr_def:
       TopLevelName (lookup_toplevel_type ctx nsid ty) nsid
     (* Module variable access (lib1.x): use its canonical declaration type. *)
     else if tc = SOME "module" then
-      let nsid = (resolve_source_ref ctx src_id_opt, attr) in
+      let nsid = (resolve_module_alias ctx obj src_id_opt, attr) in
       TopLevelName (lookup_toplevel_type ctx nsid ty) nsid
     else if attr = "balance" /\ base_type_name = SOME "address" then Builtin (BaseT (UintT 256)) (Acc Balance) [make_name ctx base_ty obj]
     else if attr = "address" /\ base_type_name = SOME "address" then Builtin (BaseT AddressT) (Acc Address) [make_name ctx base_ty obj]
@@ -818,7 +836,7 @@ Definition translate_expr_def:
     (* Module struct constructor, interface constructor, or module function call *)
     | _ => if is_interface_constructor func then
              interface_constructor_result rty args'
-           else let nsid = resolve_source_ref ctx src_id_opt;
+           else let nsid = resolve_func_module_ref ctx func src_id_opt;
                fname = extract_func_name func in
            (case ret_ty of
               JT_Struct src_id_opt sname =>
