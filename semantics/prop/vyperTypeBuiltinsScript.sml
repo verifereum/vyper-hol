@@ -3391,7 +3391,8 @@ Proof
       rewrite_tac[is_int_type_inv] >> strip_tac >>
       gvs[evaluate_type_def, evaluate_min_value_def])
   >- simp[evaluate_min_value_def]
-  >- (drule_all evaluate_convert_no_type_error >> simp[])
+  >- simp[evaluate_type_builtin_def]
+  >- (drule_all evaluate_convert_no_type_error >> gvs[evaluate_type_builtin_def])
   >- suspend"extract32"
   >- suspend"abi_decode"
 QED
@@ -3518,19 +3519,24 @@ Proof
   >- metis_tac[evaluate_min_value_well_typed]
   >- gvs[evaluate_type_def, evaluate_type_builtin_def,
          within_int_bound_def, value_has_type_def]
-  >- (gvs[LENGTH_EQ_NUM_compute] >>
+  >- (gvs[evaluate_type_builtin_def, LENGTH_EQ_NUM_compute] >>
       drule_all well_typed_convert_success >> simp[])
-  >- (drule_all evaluate_extract32_well_typed >> simp[])
+  >- (gvs[LENGTH_EQ_NUM_compute] >>
+      Cases_on `tvs` >> gvs[] >>
+      drule_all typed_bytes_value_is_BytesV >> strip_tac >> gvs[] >>
+      drule_all typed_int_value_is_IntV >> strip_tac >> gvs[] >>
+      gvs[evaluate_type_builtin_def, AllCaseEqs()] >>
+      drule_all evaluate_extract32_well_typed >> simp[])
   >- (`evaluate_type (get_tenv cx) (TupleT [result_ty]) =
         SOME (TupleTV [result_tv])` by
        (simp[evaluate_type_def, type_slot_size_def] >>
         drule evaluate_type_well_formed_type_value >> strip_tac >>
         drule well_formed_type_value_slot_size >> simp[]) >>
+      drule_all typed_bytes_value_is_BytesV >> strip_tac >> gvs[] >>
+      gvs[evaluate_type_builtin_def, AllCaseEqs(), LET_THM] >>
       drule_all evaluate_abi_decode_well_typed >>
       simp[evaluate_type_def, value_has_type_def])
-  >| [ (drule_all evaluate_abi_decode_well_typed >> simp[])
-     , (drule_all evaluate_abi_decode_well_typed >> simp[])
-     , (`abi_encode_method_id_size o' +
+  >| [ (`abi_encode_method_id_size o' +
          vyper_abi_size_bound (get_tenv cx) t <= n` by
           (gvs[abi_encode_size_ok_def, vyper_abi_size_bound_def] >>
            Cases_on `vyper_is_dynamic (get_tenv cx) t` >> gvs[] >> decide_tac) >>
