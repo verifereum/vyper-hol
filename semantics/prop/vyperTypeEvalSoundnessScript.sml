@@ -681,7 +681,7 @@ Proof
   strip_tac >>
   simp[context_well_typed_stk_irrelevant, functions_well_typed_stk_irrelevant]
 QED
-Theorem no_fallthrough_eval_no_success[local]:
+Theorem no_fallthrough_eval_no_success:
   (!s cx st st'.
       stmt_no_fallthrough s ==>
       eval_stmt cx s st <> (INL (), st')) /\
