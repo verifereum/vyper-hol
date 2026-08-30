@@ -679,6 +679,13 @@ Definition translate_module_def:
         toplevels)
 End
 
+Definition is_function_toplevel_def:
+  is_function_toplevel (JTL_FunctionDef _ _ _ _ _ _ _) = T ∧
+  is_function_toplevel _ = F
+End
+
+(* Imported interfaces contribute declarations and nominal identities, but their
+   ellipsis-bodied function stubs are not executable module implementations. *)
 Definition translate_imported_module_def:
   translate_imported_module nominal_index all_import_maps all_toplevel_types
       main_src_id (JImportedModule src_id path _ nr_default body) =
@@ -690,8 +697,12 @@ Definition translate_imported_module_def:
         (import_map,
          (collect_consts_and_immutables body, ([], all_toplevel_types))))) in
     let type_ctx = (main_src_id, SOME nsid, import_map) in
+    let declaration_only = is_interface_path path in
     (SOME nsid, filter_some
-      (MAP (translate_toplevel nominal_index all_import_maps expr_ctx type_ctx nr_default) body))
+      (MAP (λtop.
+        if declaration_only ∧ is_function_toplevel top then NONE
+        else translate_toplevel nominal_index all_import_maps expr_ctx type_ctx
+          nr_default top) body))
 End
 
 Definition translate_imported_modules_def:
