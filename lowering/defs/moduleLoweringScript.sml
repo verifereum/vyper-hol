@@ -2,6 +2,8 @@
  * Module-Level Lowering: selector dispatch, external/internal functions,
  * constructor, deploy code
  *
+ * Upstream: vyperlang/vyper@e3cfa84a5 (module-level Venom IR generation, call convention refactor)
+ *
  * TOP-LEVEL:
  *   compile_selector_dispatch_linear — O(n) linear selector matching
  *   compile_selector_dispatch_sparse — O(1) binary search on selectors
@@ -14,8 +16,6 @@
  *   compile_decode_args             — unified arg decode (calldata / data section)
  *   compile_register_positional_args — wrapper: calldata positional args
  *   compile_register_constructor_args — wrapper: data section constructor args
- *
- * Mirrors Python: ~/vyper/vyper/codegen_venom/module.py
  *)
 
 Theory moduleLowering
@@ -151,9 +151,14 @@ Definition compile_selector_dispatch_sparse_def:
                                        Lit (n2w sz_bucket_header)];
             base_addr <- emit_op OFFSET [Lit 0w; Label "BUCKET_HEADERS"];
             hdr_loc <- emit_op ADD [base_addr; hdr_offset];
-            emit_void CODECOPY [Lit 30w; hdr_loc;
+            header_buf_alloc <- compile_alloc_buffer 32;
+            header_buf <- return header_buf_alloc.buf_operand;
+            emit_void MSTORE [header_buf; Lit 0w];
+            header_dst <- emit_op ADD [header_buf;
+                                       Lit (n2w (32 - sz_bucket_header))];
+            emit_void CODECOPY [header_dst; hdr_loc;
                                 Lit (n2w sz_bucket_header)];
-            jumpdest <- emit_op MLOAD [Lit 0w];
+            jumpdest <- emit_op MLOAD [header_buf];
             emit_inst DJMP
               (jumpdest :: MAP (λl. Label l) full_target_list) [];
             (* Data section: BUCKET_HEADERS with 2-byte label refs *)
@@ -223,8 +228,13 @@ Definition compile_selector_dispatch_dense_def:
        hdr_offset <- emit_op MUL [bucket_id; Lit (n2w sz_bucket_header)];
        base_addr <- emit_op OFFSET [Lit 0w; Label "BUCKET_HEADERS"];
        hdr_loc <- emit_op ADD [base_addr; hdr_offset];
-       emit_void CODECOPY [Lit 27w; hdr_loc; Lit (n2w sz_bucket_header)];
-       hdr_info <- emit_op MLOAD [Lit 0w];
+       header_buf_alloc <- compile_alloc_buffer 32;
+       header_buf <- return header_buf_alloc.buf_operand;
+       emit_void MSTORE [header_buf; Lit 0w];
+       header_dst <- emit_op ADD [header_buf;
+                                  Lit (n2w (32 - sz_bucket_header))];
+       emit_void CODECOPY [header_dst; hdr_loc; Lit (n2w sz_bucket_header)];
+       hdr_info <- emit_op MLOAD [header_buf];
        (* Extract header fields *)
        shifted_for_loc <- emit_op SHR [Lit 8w; hdr_info];
        bucket_location <- emit_op AND [Lit 0xFFFFw; shifted_for_loc];
@@ -237,9 +247,12 @@ Definition compile_selector_dispatch_dense_def:
        (* Step 4: load function info via CODECOPY *)
        fi_offset <- emit_op MUL [func_id; Lit (n2w func_info_size)];
        fi_location <- emit_op ADD [bucket_location; fi_offset];
-       emit_void CODECOPY [Lit (n2w (32 - func_info_size));
-                           fi_location; Lit (n2w func_info_size)];
-       func_info <- emit_op MLOAD [Lit 0w];
+       func_buf_alloc <- compile_alloc_buffer 32;
+       func_buf <- return func_buf_alloc.buf_operand;
+       emit_void MSTORE [func_buf; Lit 0w];
+       func_dst <- emit_op ADD [func_buf; Lit (n2w (32 - func_info_size))];
+       emit_void CODECOPY [func_dst; fi_location; Lit (n2w func_info_size)];
+       func_info <- emit_op MLOAD [func_buf];
        (* Step 5: extract and verify fields *)
        is_nonpayable <- emit_op AND [Lit 1w; func_info];
        expected_calldatasize <- emit_op AND [Lit calldatasize_mask; func_info];
