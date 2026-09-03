@@ -14,7 +14,12 @@ Definition push_log_def:
   push_log log st = return () $ st with logs := st.logs ++ [log]
 End
 
+Definition append_logs_def:
+  append_logs logs st = return () $ st with logs := st.logs ++ logs
+End
+
 val () = cv_auto_trans push_log_def;
+val () = cv_auto_trans append_logs_def;
 
 (* manipulating (internal call) function stack *)
 
@@ -731,9 +736,9 @@ Definition extract_call_result_def:
          | INR NONE =>  (* success - no exception *)
              SOME (T, ctxt.returnData,
                    final_state.rollback.accounts,
-                   final_state.rollback.tStorage)
-         | INR (SOME Reverted) =>  (* revert - return original state *)
-             SOME (F, ctxt.returnData, orig_accounts, orig_tStorage)
+                   final_state.rollback.tStorage, ctxt.logs)
+         | INR (SOME Reverted) =>  (* revert - discard callee effects *)
+             SOME (F, ctxt.returnData, orig_accounts, orig_tStorage, [])
          | _ => NONE)  (* other exception or still running *)
     | _ => NONE  (* shouldn't happen for single-context call *)
 End
@@ -877,7 +882,8 @@ End
    - tStorage: current transient storage
    - txParams: transaction parameters (preserves tx.origin, block info)
 
-   Returns SOME (success, returnData, accounts', tStorage') or NONE on error. *)
+   Returns SOME (success, returnData, accounts', tStorage', emitted_logs)
+   or NONE on error. Reverted calls return an empty emitted-log list. *)
 Definition run_ext_call_def:
   run_ext_call caller callee calldata value_opt
                accounts tStorage txParams =
@@ -1234,10 +1240,11 @@ Definition evaluate_def:
     result <- lift_option
       (run_ext_call caller target_addr calldata value_opt accounts tStorage txParams)
       "ExtCall run failed";
-    (success, returnData, accounts', tStorage') <<- result;
+    (success, returnData, accounts', tStorage', emitted_logs) <<- result;
     check success "ExtCall reverted";
     update_accounts (K accounts');
     update_transient (K tStorage');
+    append_logs emitted_logs;
     if returnData = [] ∧ IS_SOME drv then
       eval_expr cx (THE drv)
     else do
@@ -1311,9 +1318,10 @@ Definition evaluate_def:
     result <- lift_option
       (run_ext_call caller target_addr calldata value_opt accounts tStorage txParams)
       "raw_call run failed";
-    (success, returnData, accounts', tStorage') <<- result;
+    (success, returnData, accounts', tStorage', emitted_logs) <<- result;
     update_accounts (K accounts');
     update_transient (K tStorage');
+    append_logs emitted_logs;
     if flags.rcf_revert_on_failure then do
       check success "raw_call reverted";
       if flags.rcf_max_outsize = 0 then return $ Value NoneV

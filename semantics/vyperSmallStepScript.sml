@@ -669,10 +669,11 @@ Definition apply_vals_def:
       result <- lift_option
         (run_ext_call caller target_addr calldata value_opt accounts tStorage txParams)
         "ExtCall run failed";
-      (success, returnData, accounts', tStorage') <<- result;
+      (success, returnData, accounts', tStorage', emitted_logs) <<- result;
       check success "ExtCall reverted";
       update_accounts (K accounts');
       update_transient (K tStorage');
+      append_logs emitted_logs;
       if returnData = [] ∧ IS_SOME drv then
         return (INL (THE drv))
       else do
@@ -727,9 +728,10 @@ Definition apply_vals_def:
       result <- lift_option
         (run_ext_call caller target_addr calldata value_opt accounts tStorage txParams)
         "raw_call run failed";
-      (success, returnData, accounts', tStorage') <<- result;
+      (success, returnData, accounts', tStorage', emitted_logs) <<- result;
       update_accounts (K accounts');
       update_transient (K tStorage');
+      append_logs emitted_logs;
       if flags.rcf_revert_on_failure then do
         check success "raw_call reverted";
         if flags.rcf_max_outsize = 0 then return $ Value NoneV
@@ -1479,13 +1481,14 @@ Proof
     >- (
       disch_then kall_tac >>
       simp[Abbr`cc1`,Abbr`cc2`,Abbr`gg`,bind_def] >>
-      ntac 4 CASE_TAC >> simp[] >>
+      ntac 5 CASE_TAC >> simp[] >>
       Cases_on`q` >> simp[] >>
       Cases_on`q'` >> simp[] >>
       Cases_on`q''` >> simp[] >>
-      Cases_on`q'''` >> simp[return_def])
+      Cases_on`q'''` >> simp[] >>
+      Cases_on`q''''` >> simp[return_def])
     >> gvs[bind_def,Abbr`gg`] >> disch_then drule
-    >> ntac 3 (
+    >> ntac 4 (
       qmatch_asmsub_abbrev_tac`pair_CASE lot`
       >> Cases_on`lot` >> reverse(Cases_on`q`)
       >- ( simp[Abbr`cc1`,Abbr`cc2`,ignore_bind_def,bind_def] )

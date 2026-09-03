@@ -356,8 +356,8 @@ Proof
        check_def, type_check_def, assert_def, lift_option_def, lift_option_type_def,
        get_accounts_def, get_transient_storage_def, option_CASE_rator] >>
   strip_tac >> gvs[AllCaseEqs(), return_def, raise_def] >>
-  pairarg_tac >> gvs[update_accounts_def, update_transient_def, bind_def,
-       ignore_bind_def, return_def, raise_def, AllCaseEqs(), assert_def,
+  pairarg_tac >> gvs[update_accounts_def, update_transient_def, append_logs_def,
+       bind_def, ignore_bind_def, return_def, raise_def, AllCaseEqs(), assert_def,
        COND_RATOR, CaseEq"bool"]
 QED
 
