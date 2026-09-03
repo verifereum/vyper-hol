@@ -26,6 +26,7 @@ Ancestors
   selectorDispatch
   jumptableUtils
   vyperContext
+  vyperEvent
   compileEnv
   vyperAST
   byte
@@ -130,15 +131,8 @@ End
 
 (* ===== Event Info ===== *)
 
-Definition event_hash_def:
-  event_hash tenv ename (arg_types : type list) =
-    let abi_types = vyper_to_abi_types tenv arg_types in
-    let sig_str = function_signature ename abi_types in
-    let hash_bytes = Keccak_256_w64 (MAP (n2w o ORD) sig_str) in
-    num_of_bytes (be_bytes 32 [] hash_bytes)
-End
-
-(* is_bytestring_type is in compileEnvTheory *)
+(* event_hash is shared with the source semantics in vyperEventTheory.
+   is_bytestring_type is in compileEnvTheory. *)
 
 Definition build_event_info_def:
   build_event_info tenv ([] : toplevel list) eim = eim ∧

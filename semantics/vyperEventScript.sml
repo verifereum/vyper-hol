@@ -2,9 +2,12 @@
  * Concrete EVM event encoding for the Vyper semantics.
  *
  * TOP-LEVEL:
- *   event_info       -- checked metadata needed to encode declared events
- *   encode_vyper_event -- encode a declared Vyper event as an EVM event
- *   encode_raw_event -- construct an EVM event for raw_log
+ *   event_metadata             -- resolved declaration encoding information
+ *   lookup_event_metadata      -- resolve an event directly from loaded sources
+ *   encode_vyper_event_metadata -- encode already-resolved metadata
+ *   encode_vyper_event         -- compatibility wrapper for lookup functions
+ *   encode_source_event        -- resolve and encode from authoritative sources
+ *   encode_raw_event           -- construct an EVM event for raw_log
  *)
 
 Theory vyperEvent
@@ -14,7 +17,38 @@ Ancestors
 Libs
   cv_transLib
 
-Type event_info = “:string -> (num # type list # bool list) option”
+Type event_metadata = “:num # type list # bool list”
+Type event_info = “:string -> event_metadata option”
+
+Definition event_hash_def:
+  event_hash tenv ename (arg_types : type list) =
+    let abi_types = vyper_to_abi_types tenv arg_types in
+    let sig_str = function_signature ename abi_types in
+    let hash_bytes = Keccak_256_w64 (MAP (n2w o ORD) sig_str) in
+    num_of_bytes (be_bytes 32 [] hash_bytes)
+End
+
+Definition lookup_event_metadata_in_def:
+  lookup_event_metadata_in _ _ [] = NONE ∧
+  lookup_event_metadata_in tenv ename (EventDecl name args_indexed :: rest) =
+    (if name = ename then
+       let arg_types = MAP (SND o FST) args_indexed in
+       let indexed_flags = MAP SND args_indexed in
+         SOME (event_hash tenv name arg_types, arg_types, indexed_flags)
+     else lookup_event_metadata_in tenv ename rest) ∧
+  lookup_event_metadata_in tenv ename (_ :: rest) =
+    lookup_event_metadata_in tenv ename rest
+End
+
+Definition lookup_event_metadata_def:
+  lookup_event_metadata tenv sources target (src_id_opt, ename) =
+    case ALOOKUP sources target of
+    | NONE => NONE
+    | SOME mods =>
+        case ALOOKUP mods src_id_opt of
+        | NONE => NONE
+        | SOME tops => lookup_event_metadata_in tenv ename tops
+End
 
 Definition is_event_bytestring_type_def:
   is_event_bytestring_type (BaseT (BytesT (Dynamic _))) = T ∧
@@ -64,26 +98,39 @@ Definition non_indexed_event_args_def:
   non_indexed_event_args _ _ _ = NONE
 End
 
+Definition encode_vyper_event_metadata_def:
+  encode_vyper_event_metadata tenv (logger : address)
+                              (event_hash, arg_types, indexed_flags) vals =
+    case encode_indexed_event_topics indexed_flags arg_types vals of
+    | NONE => NONE
+    | SOME indexed_topics =>
+        case non_indexed_event_args indexed_flags arg_types vals of
+        | NONE => NONE
+        | SOME typed_vals =>
+            case vyper_to_abi_list tenv (MAP FST typed_vals)
+                                        (MAP SND typed_vals) of
+            | NONE => NONE
+            | SOME abi_vals =>
+                SOME <| logger := logger;
+                        topics := n2w event_hash :: indexed_topics;
+                        data := enc (Tuple (vyper_to_abi_types tenv
+                                            (MAP FST typed_vals)))
+                                    (ListV abi_vals) |>
+End
+
+(* Compatibility wrapper for compiler environments and other lookup maps. *)
 Definition encode_vyper_event_def:
-  encode_vyper_event event_info tenv (logger : address) event_name vals =
+  encode_vyper_event event_info tenv logger event_name vals =
     case event_info event_name of
     | NONE => NONE
-    | SOME (event_hash, arg_types, indexed_flags) =>
-        case encode_indexed_event_topics indexed_flags arg_types vals of
-        | NONE => NONE
-        | SOME indexed_topics =>
-            case non_indexed_event_args indexed_flags arg_types vals of
-            | NONE => NONE
-            | SOME typed_vals =>
-                case vyper_to_abi_list tenv (MAP FST typed_vals)
-                                            (MAP SND typed_vals) of
-                | NONE => NONE
-                | SOME abi_vals =>
-                    SOME <| logger := logger;
-                            topics := n2w event_hash :: indexed_topics;
-                            data := enc (Tuple (vyper_to_abi_types tenv
-                                                (MAP FST typed_vals)))
-                                        (ListV abi_vals) |>
+    | SOME metadata => encode_vyper_event_metadata tenv logger metadata vals
+End
+
+Definition encode_source_event_def:
+  encode_source_event tenv sources target event_id vals =
+    case lookup_event_metadata tenv sources target event_id of
+    | NONE => NONE
+    | SOME metadata => encode_vyper_event_metadata tenv target metadata vals
 End
 
 Definition encode_raw_event_def:

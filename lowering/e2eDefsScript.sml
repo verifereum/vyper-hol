@@ -163,7 +163,8 @@ Proof
   Cases_on `cenv.ce_event_info (nsid_to_string eid)`
   >- simp[log_entry_equiv_def, encode_vyper_event_def]
   >> PairCases_on `x` >>
-  simp[log_entry_equiv_def, encode_vyper_event_def] >>
+  simp[log_entry_equiv_def, encode_vyper_event_def,
+       encode_vyper_event_metadata_def] >>
   eq_tac
   >- (strip_tac >>
       `encode_indexed_event_topics x2 x1 vals = SOME topic_tail` by
