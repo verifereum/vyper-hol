@@ -27,9 +27,9 @@ Definition extcall_call_def:
     case run_ext_call cx.txn.target target_addr calldata value_opt
                       accounts tStorage (vyper_to_tx_params cx.txn) of
     | NONE => NONE
-    | SOME (success, returnData, accounts', tStorage') =>
+    | SOME (success, returnData, accounts', tStorage', emitted_logs) =>
       if ¬success then NONE
-      else SOME (returnData, accounts', tStorage')
+      else SOME (returnData, accounts', tStorage', emitted_logs)
 End
 
 Definition extcall_result_def:
@@ -38,11 +38,11 @@ Definition extcall_result_def:
     case extcall_call cx is_static (func_name, arg_types, ret_type) vs
                       accounts tStorage of
     | NONE => NONE
-    | SOME (returnData, accounts', tStorage') =>
+    | SOME (returnData, accounts', tStorage', emitted_logs) =>
       case evaluate_abi_decode_return (get_tenv cx) ret_type returnData of
       | INR _ => NONE
       | INL ret_val =>
-        SOME (ret_val, accounts', tStorage')
+        SOME (ret_val, accounts', tStorage', emitted_logs)
 End
 
 Theorem eval_expr_intcall_drv:
