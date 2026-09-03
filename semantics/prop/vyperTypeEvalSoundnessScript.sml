@@ -813,6 +813,7 @@ Proof
   TRY (imp_res_tac no_control_exc_no_loop_control >> NO_TAC) >>
   TRY (imp_res_tac check_no_control >> gvs[no_control_exc_def] >> NO_TAC) >>
   TRY (imp_res_tac type_check_no_control >> gvs[no_control_exc_def] >> NO_TAC) >>
+  TRY (imp_res_tac lift_option_no_control >> gvs[no_control_exc_def] >> NO_TAC) >>
   TRY (imp_res_tac lift_option_type_no_control >> gvs[no_control_exc_def] >> NO_TAC) >>
   TRY (imp_res_tac lift_sum_no_control >> gvs[no_control_exc_def] >> NO_TAC) >>
   TRY (imp_res_tac push_scope_no_control >> gvs[no_control_exc_def] >> NO_TAC) >>
@@ -2164,8 +2165,10 @@ Resume eval_all_type_sound_mutual[Log]:
   Cases_on `exprs_res` >> gvs[no_type_error_result_def]
   >- (
     strip_tac >> gvs[state_well_typed_def, accounts_well_typed_def] >>
-    irule env_consistent_preserved_by_frame >>
-    qexists_tac `st1` >> simp[preserves_tv_eq]) >>
+    Cases_on `encode_source_event (get_tenv cx) cx.sources cx.txn.target id x` >>
+    gvs[lift_option_def, return_def, raise_def] >>
+    drule_all env_consistent_logs_append >>
+    simp[return_exception_typed_def]) >>
   strip_tac >> gvs[] >>
   drule eval_exprs_exception_return_typed >> simp[]
 QED

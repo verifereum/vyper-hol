@@ -793,28 +793,7 @@ Definition log_non_indexed_types_def:
 End
 
 Definition log_entry_equiv_def:
-  log_entry_equiv cenv (addr:address) ((event_nsid, args) : log) (ev : event) ⇔
-    let event_name = nsid_to_string event_nsid in
-    case cenv.ce_event_info event_name of
-      NONE => F
-    | SOME (event_hash, arg_types, indexed_flags) =>
-        let idx_vals = indexed_values indexed_flags args in
-        let idx_bs = indexed_topic_flags indexed_flags (MAP is_bytestring_type arg_types) in
-        let nidx_vals = log_non_indexed_values indexed_flags args in
-        let nidx_types = log_non_indexed_types indexed_flags arg_types in
-          LENGTH indexed_flags = LENGTH args ∧
-          LENGTH arg_types = LENGTH args ∧
-          ev.logger = addr ∧
-          (* First topic is the event selector hash. Static indexed args match
-             val_to_w256; indexed bytes/string args match keccak256(raw bytes). *)
-          (∃topic_tail.
-             ev.topics = n2w event_hash :: topic_tail ∧
-             log_indexed_topics_equiv idx_bs idx_vals topic_tail) ∧
-          (* Non-indexed args are ABI-encoded into LOG data. *)
-          (?abi_vals.
-             vyper_to_abi_list cenv.ce_type_env nidx_types nidx_vals = SOME abi_vals ∧
-             ev.data = enc (Tuple (vyper_to_abi_types cenv.ce_type_env nidx_types))
-                           (ListV abi_vals))
+  log_entry_equiv _ _ (source_event : log) (ev : event) ⇔ source_event = ev
 End
 
 (* Logs relation: pairwise equivalence *)

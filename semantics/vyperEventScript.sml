@@ -8,6 +8,7 @@
  *   encode_vyper_event         -- compatibility wrapper for lookup functions
  *   encode_source_event        -- resolve and encode from authoritative sources
  *   encode_raw_event           -- construct an EVM event for raw_log
+ *   encode_raw_event_values    -- construct raw_log output from Vyper values
  *)
 
 Theory vyperEvent
@@ -98,6 +99,27 @@ Definition non_indexed_event_args_def:
   non_indexed_event_args _ _ _ = NONE
 End
 
+val encode_indexed_event_topics_pre_def =
+  cv_auto_trans_pre "encode_indexed_event_topics_pre"
+                    encode_indexed_event_topics_def;
+
+Theorem encode_indexed_event_topics_pre[cv_pre]:
+  ∀flags tys vals. encode_indexed_event_topics_pre flags tys vals
+Proof
+  ho_match_mp_tac encode_indexed_event_topics_ind >> rw[] >>
+  rw[Once encode_indexed_event_topics_pre_def]
+QED
+
+val non_indexed_event_args_pre_def =
+  cv_auto_trans_pre "non_indexed_event_args_pre" non_indexed_event_args_def;
+
+Theorem non_indexed_event_args_pre[cv_pre]:
+  ∀flags tys vals. non_indexed_event_args_pre flags tys vals
+Proof
+  ho_match_mp_tac non_indexed_event_args_ind >> rw[] >>
+  rw[Once non_indexed_event_args_pre_def]
+QED
+
 Definition encode_vyper_event_metadata_def:
   encode_vyper_event_metadata tenv (logger : address)
                               (event_hash, arg_types, indexed_flags) vals =
@@ -136,4 +158,9 @@ End
 Definition encode_raw_event_def:
   encode_raw_event (logger : address) topics data : event =
     <| logger := logger; topics := topics; data := data |>
+End
+
+Definition encode_raw_event_values_def:
+  encode_raw_event_values logger topic_vals data =
+    encode_raw_event logger (MAP event_value_to_word topic_vals) data
 End

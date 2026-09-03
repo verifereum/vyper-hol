@@ -1544,6 +1544,8 @@ Resume eval_all_storage_preservation_mutual[Log]:
   rename1 `eval_exprs cx es st = (exprs_res,st1)` >>
   first_x_assum drule_all >> strip_tac >>
   Cases_on `exprs_res` >> gvs[bind_def, return_def, push_log_def] >>
+  Cases_on `encode_source_event (get_tenv cx) cx.sources cx.txn.target id x` >>
+  gvs[lift_option_def, raise_def, return_def, push_log_def] >>
   rpt strip_tac >>
   pop_assum (SUBST1_TAC o SYM) >>
   metis_tac[contract_storage_well_formed_logs]

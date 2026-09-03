@@ -135,6 +135,7 @@ Theorem case_Log_dom[local]:
 Proof
   rpt strip_tac >> irule map_fdom_eq_preserves_dom >>
   gvs[evaluate_def, bind_def, AllCaseEqs()] >>
+  imp_res_tac lift_option_scopes >>
   imp_res_tac push_log_scopes >> gvs[]
 QED
 
@@ -928,6 +929,7 @@ Proof
       simp[Once evaluate_def, bind_def, AllCaseEqs()] >>
       rpt strip_tac >>
       imp_res_tac eval_exprs_preserves_scopes_dom >>
+      imp_res_tac lift_option_scopes >>
       imp_res_tac push_log_scopes >> gvs[]) >>
     Cases_on`st.scopes` >> Cases_on`st'.scopes` >> gvs[])
   >> conj_tac >- ( (* AnnAssign *)
@@ -1559,6 +1561,7 @@ Proof
     metis_tac[preserves_tv_trans] ) >>
   conj_tac >- (
     rw[evaluate_def, bind_apply, AllCaseEqs(), push_log_def, return_def] >>
+    imp_res_tac lift_option_state >> gvs[] >>
     first_x_assum drule >>
     gvs[preserves_tv_def] ) >>
   conj_tac >- (

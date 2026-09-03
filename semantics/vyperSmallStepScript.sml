@@ -630,7 +630,12 @@ Definition apply_vals_def:
       return $ Value v
     od st) k ∧
   apply_vals cx vs st (LogK id k) =
-    liftk cx (K Apply) (push_log (id, vs) st) k ∧
+    liftk cx (K Apply) (do
+      event <- lift_option
+        (encode_source_event (get_tenv cx) cx.sources cx.txn.target id vs)
+        "Log encode event";
+      push_log event
+    od st) k ∧
   apply_vals cx vs st (CallSendK k) =
     liftk cx ApplyTv (do
       type_check (LENGTH vs = 2) "CallSendK nargs";
@@ -744,7 +749,7 @@ Definition apply_vals_def:
       topic_vals <<- (case topics of
          TupleV tvs => tvs | DynArrayV tvs => tvs | _ => []);
       type_check (LENGTH topic_vals ≤ 4) "raw_log too many topics";
-      push_log ((NONE,"raw_log"), topic_vals ++ [BytesV data]);
+      push_log (encode_raw_event_values cx.txn.target topic_vals data);
       return $ Value NoneV
     od st
     of (INR ex, st) => AK cx (ApplyExc ex) st k
@@ -1073,7 +1078,7 @@ Proof
     rw[eval_stmt_cps_def, evaluate_def, bind_def]
     \\ CASE_TAC \\ rw[cont_def] \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-    \\ rw[Once OWHILE_THM, stepk_def, apply_vals_def, liftk1])
+    \\ rw[Once OWHILE_THM, stepk_def, apply_vals_def, bind_def, liftk1])
   \\ conj_tac >- ( (* AnnAssign id typ e *)
     rw[eval_stmt_cps_def, evaluate_def, bind_def]
     \\ CASE_TAC \\ rw[cont_def] \\ reverse CASE_TAC

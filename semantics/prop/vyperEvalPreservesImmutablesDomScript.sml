@@ -734,7 +734,8 @@ Proof
   qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def,
        ignore_bind_def, push_log_def] >>
-  rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
+  rpt strip_tac >> imp_res_tac lift_option_state >>
+  gvs[preserves_immutables_dom_refl] >>
   irule preserves_immutables_dom_trans >> qexists_tac `s''` >>
   gvs[preserves_immutables_dom_eq]
 QED

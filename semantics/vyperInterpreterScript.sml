@@ -4,14 +4,14 @@ Ancestors
   rich_list cv cv_std vfmState vfmContext vfmCompute[ignore_grammar]
   vfmExecution[ignore_grammar] vyperAST vyperABI
   vyperMisc vyperValue vyperValueOperation vyperStorage vyperContext vyperState
-  vyperCreate
+  vyperEvent vyperCreate
 Libs
   cv_transLib wordsLib monadsyntax
 
 (* writing logs *)
 
 Definition push_log_def:
-  push_log log st = return () $ st with logs updated_by CONS log
+  push_log log st = return () $ st with logs := st.logs ++ [log]
 End
 
 val () = cv_auto_trans push_log_def;
@@ -1011,10 +1011,13 @@ Definition evaluate_def:
        od)
   od ∧
   eval_stmt cx (Log id es) = do
-    (* TODO(semantic-limitation): event argument length/type checking is
-       currently delegated to frontend/type-system assumptions. *)
+    (* Checked programs guarantee that the declaration exists and that its
+       evaluated arguments can be encoded using the declared types. *)
     vs <- eval_exprs cx es;
-    push_log (id, vs)
+    event <- lift_option
+      (encode_source_event (get_tenv cx) cx.sources cx.txn.target id vs)
+      "Log encode event";
+    push_log event
   od ∧
   eval_stmt cx (AnnAssign id typ e) = do
     tenv <<- get_tenv cx;
@@ -1330,8 +1333,7 @@ Definition evaluate_def:
     topic_vals <<- (case topics of
        TupleV vs => vs | DynArrayV vs => vs | _ => []);
     type_check (LENGTH topic_vals ≤ 4) "raw_log too many topics";
-    (* Store as raw log: nsid = (NONE,"raw_log"), values = topic bytes ++ [data] *)
-    push_log ((NONE,"raw_log"), topic_vals ++ [BytesV data]);
+    push_log (encode_raw_event_values cx.txn.target topic_vals data);
     return $ Value NoneV
   od ∧
   (* raw_revert(data) — terminus *)
@@ -1535,7 +1537,7 @@ Definition initial_state_def:
   initial_state (am: abstract_machine) scs : evaluation_state =
   <| accounts := am.accounts
    ; immutables := am.immutables
-   ; logs := []
+   ; logs := am.logs
    ; scopes := scs
    ; tStorage := am.tStorage
    |>

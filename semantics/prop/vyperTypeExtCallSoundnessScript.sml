@@ -1561,6 +1561,32 @@ Proof
      env_immutables_consistent_def, state_well_typed_def] >>
   metis_tac[]
 QED
+Theorem state_well_typed_logs_append:
+  !st ls. state_well_typed st ==>
+          state_well_typed (st with logs := st.logs ++ ls)
+Proof
+  simp[state_well_typed_def]
+QED
+
+Theorem env_consistent_logs_append:
+  !env cx st ls. env_consistent env cx st ==>
+                 env_consistent env cx (st with logs := st.logs ++ ls)
+Proof
+  rw[env_consistent_def, env_scopes_consistent_def,
+     env_immutables_consistent_def] >>
+  metis_tac[]
+QED
+
+Theorem runtime_consistent_logs_append:
+  !env cx st ls.
+    runtime_consistent env cx st ==>
+    runtime_consistent env cx (st with logs := st.logs ++ ls)
+Proof
+  rw[runtime_consistent_def, env_consistent_def, env_scopes_consistent_def,
+     env_immutables_consistent_def, state_well_typed_def] >>
+  metis_tac[]
+QED
+
 Theorem push_log_runtime_consistent:
   !env cx l st.
     runtime_consistent env cx st ==>
@@ -1986,7 +2012,7 @@ Theorem raw_log_tail_sound:
                topic_vals <<- (case topics of
                   TupleV vs => vs | DynArrayV vs => vs | _ => []);
                type_check (LENGTH topic_vals <= 4) "raw_log too many topics";
-               push_log ((NONE,"raw_log"), topic_vals ++ [BytesV data]);
+               push_log (encode_raw_event_values cx.txn.target topic_vals data);
                return (Value NoneV)
              od) st)) /\
     (!s. FST ((do
@@ -1996,7 +2022,7 @@ Theorem raw_log_tail_sound:
                  topic_vals <<- (case topics of
                     TupleV vs => vs | DynArrayV vs => vs | _ => []);
                  type_check (LENGTH topic_vals <= 4) "raw_log too many topics";
-                 push_log ((NONE,"raw_log"), topic_vals ++ [BytesV data]);
+                 push_log (encode_raw_event_values cx.txn.target topic_vals data);
                  return (Value NoneV)
                od) st) <> INR (Error (TypeError s)))
 Proof
@@ -2005,9 +2031,7 @@ Proof
   Cases_on `topics` >>
   rw[bind_def, ignore_bind_def, type_check_def, check_def, assert_def,
      raise_def, return_def, lift_option_type_def, push_log_def] >>
-  TRY (qmatch_goalsub_rename_tac `runtime_consistent env cx (st with logs updated_by CONS log)` >>
-       qspecl_then [`env`, `cx`, `st`] mp_tac runtime_consistent_logs_cons >>
-       simp[]) >>
+  TRY (irule runtime_consistent_logs_append >> simp[]) >>
   qpat_x_assum `FST _ = INR (Error (TypeError s))` mp_tac >>
   rw[bind_def, ignore_bind_def, type_check_def, check_def, assert_def,
      raise_def, return_def, lift_option_type_def, push_log_def]
@@ -2028,7 +2052,7 @@ Theorem raw_log_tail_result_sound:
         topic_vals <<- (case topics of
            TupleV vs => vs | DynArrayV vs => vs | _ => []);
         type_check (LENGTH topic_vals <= 4) "raw_log too many topics";
-        push_log ((NONE,"raw_log"), topic_vals ++ [BytesV data]);
+        push_log (encode_raw_event_values cx.txn.target topic_vals data);
         return (Value NoneV)
       od) st = (res, st')) ==>
     state_well_typed st' /\ env_consistent env cx st' /\ accounts_well_typed st'.accounts /\
@@ -2077,11 +2101,11 @@ Theorem raw_log_tail_result_sound_simp:
                             | DynArrayV vs' => vs'
                             | _ => []) <= 4) "raw_log too many topics";
                       x <- push_log
-                        ((NONE,"raw_log"),
-                         (case topics' of
-                          | TupleV vs => vs
-                          | DynArrayV vs' => vs'
-                          | _ => []) ++ [BytesV data]);
+                        (encode_raw_event_values cx.txn.target
+                          (case topics' of
+                           | TupleV vs => vs
+                           | DynArrayV vs' => vs'
+                           | _ => []) data);
                       return (Value NoneV)
                     od s''
                 | (INR e,s'') => (INR e,s''))
@@ -2105,9 +2129,9 @@ Proof
      evaluate_type_def, is_HashMapRef_def] >>
   fs[type_check_def, bind_def, ignore_bind_def, assert_def, return_def,
      push_log_def] >>
-  TRY (qmatch_goalsub_rename_tac `st with logs updated_by CONS log` >>
-       qspecl_then [`env`, `cx`, `st`, `log`] mp_tac runtime_consistent_logs_cons >>
-       simp[runtime_consistent_def]) >>
+  TRY (irule runtime_consistent_logs_append >> simp[]) >>
+  TRY (irule state_well_typed_logs_append >> simp[]) >>
+  TRY (irule env_consistent_logs_append >> simp[]) >>
   gvs[runtime_consistent_def] >>
   qpat_x_assum `(case check _ _ _ of _ => _) = _` mp_tac >>
   rw[bind_def, ignore_bind_def, check_def, assert_def, raise_def, return_def,

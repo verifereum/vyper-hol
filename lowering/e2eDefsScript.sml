@@ -43,23 +43,11 @@ End
 
 (* ===== Log Correspondence ===== *)
 
-(* Single log entry correspondence. Relates a Vyper log (nsid, values)
-   to an EVM event, given:
-   - event_info: maps event name to SOME (hash, arg_types, indexed_flags)
-   - tenv: type environment for ABI encoding
-   - addr: contract address (logger)
-
-   EVM event structure:
-   - ev.logger = contract address
-   - ev.topics = event hash followed by indexed topics
-   - ev.data = ABI-encode of non-indexed values as tuple
-
-   Static indexed args are encoded as val_to_w256. Indexed bytes/string
-   args are encoded as keccak256(raw bytes), matching compileEnv$logs_rel. *)
+(* Source execution now records the concrete EVM event directly. The metadata
+   parameters remain temporarily for compatibility with the e2e API. *)
 Definition log_entry_corresponds_def:
-  log_entry_corresponds event_info tenv (addr : address)
-    ((eid, vals) : log) (ev : event) <=>
-    encode_vyper_event event_info tenv addr (nsid_to_string eid) vals = SOME ev
+  log_entry_corresponds _ _ _ (source_event : log) (ev : event) <=>
+    source_event = ev
 End
 
 (* Compatibility lemmas between the executable semantics encoder and the
@@ -155,6 +143,8 @@ Proof
 QED
 
 
+(* OBSOLETE after source logs became concrete events. Preserved until the
+   surrounding legacy compatibility package is removed deliberately.
 Theorem log_entry_equiv_encode_vyper_event:
   log_entry_equiv cenv addr (eid, vals) ev <=>
   encode_vyper_event cenv.ce_event_info cenv.ce_type_env addr
@@ -191,6 +181,20 @@ QED
 Theorem log_entry_corresponds_encode:
   log_entry_corresponds event_info tenv addr (eid, vals) ev <=>
   encode_vyper_event event_info tenv addr (nsid_to_string eid) vals = SOME ev
+Proof
+  simp[log_entry_corresponds_def]
+QED
+*)
+
+Theorem log_entry_equiv_concrete_event:
+  log_entry_equiv cenv addr source_event ev <=> source_event = ev
+Proof
+  simp[log_entry_equiv_def]
+QED
+
+Theorem log_entry_corresponds_concrete_event:
+  log_entry_corresponds event_info tenv addr source_event ev <=>
+  source_event = ev
 Proof
   simp[log_entry_corresponds_def]
 QED
