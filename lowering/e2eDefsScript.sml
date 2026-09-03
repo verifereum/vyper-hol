@@ -62,6 +62,131 @@ Definition log_entry_corresponds_def:
     encode_vyper_event event_info tenv addr (nsid_to_string eid) vals = SOME ev
 End
 
+(* Compatibility lemmas between the executable semantics encoder and the
+   pre-existing relational log specification in compileEnv. *)
+Theorem event_value_to_word_eq_val_to_w256:
+  event_value_to_word v = val_to_w256 v
+Proof
+  Cases_on `v` >>
+  simp[event_value_to_word_def, valueEncodingTheory.val_to_w256_def]
+QED
+
+Theorem encode_event_topic_eq_log_topic_equiv:
+  encode_event_topic is_bytestring v = SOME topic <=>
+  log_topic_equiv is_bytestring v topic
+Proof
+  Cases_on `is_bytestring` >> Cases_on `v` >>
+  simp[encode_event_topic_def, log_topic_equiv_def,
+       log_bytestring_topic_def, event_value_to_word_eq_val_to_w256,
+       byteTheory.word_of_bytes_be_def] >>
+  metis_tac[]
+QED
+
+Theorem encode_indexed_event_topics_characterization:
+  encode_indexed_event_topics flags tys vals = SOME topics <=>
+  LENGTH flags = LENGTH tys /\
+  LENGTH flags = LENGTH vals /\
+  log_indexed_topics_equiv
+    (indexed_topic_flags flags (MAP is_bytestring_type tys))
+    (indexed_values flags vals) topics
+Proof
+  `!ty. is_event_bytestring_type ty = is_bytestring_type ty` by
+    (gen_tac >> Cases_on `ty` >> simp[is_event_bytestring_type_def,
+                                      is_bytestring_type_def] >>
+     Cases_on `b` >> simp[is_event_bytestring_type_def,
+                          is_bytestring_type_def] >>
+     Cases_on `b'` >> simp[is_event_bytestring_type_def,
+                           is_bytestring_type_def]) >>
+  qid_spec_tac `topics` >> qid_spec_tac `vals` >> qid_spec_tac `tys` >>
+  Induct_on `flags`
+  >- (Cases_on `tys` >> Cases_on `vals` >> Cases_on `topics` >>
+      simp[encode_indexed_event_topics_def, indexed_topic_flags_def,
+           indexed_values_def, log_indexed_topics_equiv_def])
+  >> qx_gen_tac `flag` >> qx_gen_tac `tys` >>
+  qx_gen_tac `vals` >> qx_gen_tac `topics` >>
+  Cases_on `tys` >> Cases_on `vals` >> Cases_on `flag` >>
+  Cases_on `topics` >>
+  gvs[encode_indexed_event_topics_def, indexed_topic_flags_def,
+      indexed_values_def, log_indexed_topics_equiv_def,
+      is_event_bytestring_type_def, is_bytestring_type_def,
+      encode_event_topic_eq_log_topic_equiv, AllCaseEqs()] >>
+  metis_tac[]
+QED
+
+Theorem non_indexed_event_args_characterization:
+  non_indexed_event_args flags tys vals = SOME typed_vals <=>
+  LENGTH flags = LENGTH tys /\
+  LENGTH flags = LENGTH vals /\
+  MAP FST typed_vals = log_non_indexed_types flags tys /\
+  MAP SND typed_vals = log_non_indexed_values flags vals
+Proof
+  qid_spec_tac `typed_vals` >> qid_spec_tac `vals` >>
+  qid_spec_tac `tys` >> Induct_on `flags`
+  >- (Cases_on `tys` >> Cases_on `vals` >> Cases_on `typed_vals` >>
+      simp[non_indexed_event_args_def, log_non_indexed_types_def,
+           log_non_indexed_values_def])
+  >> qx_gen_tac `flag` >> qx_gen_tac `tys` >>
+  qx_gen_tac `vals` >> qx_gen_tac `typed_vals` >>
+  Cases_on `tys` >> Cases_on `vals` >> Cases_on `flag` >>
+  Cases_on `typed_vals` >>
+  gvs[non_indexed_event_args_def, log_non_indexed_types_def,
+      log_non_indexed_values_def, AllCaseEqs()] >>
+  PairCases_on `h''` >> gvs[] >>
+  simp[AC CONJ_ASSOC CONJ_COMM]
+QED
+Theorem non_indexed_event_args_exists:
+  LENGTH flags = LENGTH tys /\
+  LENGTH flags = LENGTH vals ==>
+  ?typed_vals.
+    non_indexed_event_args flags tys vals = SOME typed_vals /\
+    MAP FST typed_vals = log_non_indexed_types flags tys /\
+    MAP SND typed_vals = log_non_indexed_values flags vals
+Proof
+  qid_spec_tac `vals` >> qid_spec_tac `tys` >> Induct_on `flags`
+  >- (Cases_on `tys` >> Cases_on `vals` >>
+      simp[non_indexed_event_args_def, log_non_indexed_types_def,
+           log_non_indexed_values_def])
+  >> qx_gen_tac `flag` >> qx_gen_tac `tys` >> qx_gen_tac `vals` >>
+  Cases_on `tys` >> Cases_on `vals` >> Cases_on `flag` >>
+  gvs[non_indexed_event_args_def, log_non_indexed_types_def,
+      log_non_indexed_values_def] >>
+  strip_tac >> first_x_assum drule >> disch_then drule >> strip_tac >>
+  qexists `(h,h')::typed_vals` >> simp[]
+QED
+
+
+Theorem log_entry_equiv_encode_vyper_event:
+  log_entry_equiv cenv addr (eid, vals) ev <=>
+  encode_vyper_event cenv.ce_event_info cenv.ce_type_env addr
+    (nsid_to_string eid) vals = SOME ev
+Proof
+  Cases_on `cenv.ce_event_info (nsid_to_string eid)`
+  >- simp[log_entry_equiv_def, encode_vyper_event_def]
+  >> PairCases_on `x` >>
+  simp[log_entry_equiv_def, encode_vyper_event_def] >>
+  eq_tac
+  >- (strip_tac >>
+      `encode_indexed_event_topics x2 x1 vals = SOME topic_tail` by
+        (simp[encode_indexed_event_topics_characterization] >> metis_tac[]) >>
+      `?typed_vals.
+         non_indexed_event_args x2 x1 vals = SOME typed_vals /\
+         MAP FST typed_vals = log_non_indexed_types x2 x1 /\
+         MAP SND typed_vals = log_non_indexed_values x2 vals` by
+        (irule non_indexed_event_args_exists >> metis_tac[]) >>
+      Cases_on `ev` >> gvs[vfmTypesTheory.event_component_equality])
+  >> Cases_on `encode_indexed_event_topics x2 x1 vals`
+  >- simp[]
+  >> Cases_on `non_indexed_event_args x2 x1 vals`
+  >- simp[]
+  >> Cases_on `vyper_to_abi_list cenv.ce_type_env (MAP FST x') (MAP SND x')`
+  >- simp[]
+  >> simp[] >> strip_tac >>
+  gvs[encode_indexed_event_topics_characterization,
+      non_indexed_event_args_characterization,
+      vfmTypesTheory.event_component_equality] >>
+  qexists `x` >> simp[]
+QED
+
 Theorem log_entry_corresponds_encode:
   log_entry_corresponds event_info tenv addr (eid, vals) ev <=>
   encode_vyper_event event_info tenv addr (nsid_to_string eid) vals = SOME ev
