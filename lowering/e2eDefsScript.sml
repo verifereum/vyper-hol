@@ -21,6 +21,7 @@ Theory e2eDefs
 Ancestors
   vfmExecution
   vyperABI
+  vyperEvent
   vyperInterpreter
   compileEnv
   selectorDispatch
@@ -58,25 +59,15 @@ End
 Definition log_entry_corresponds_def:
   log_entry_corresponds event_info tenv (addr : address)
     ((eid, vals) : log) (ev : event) <=>
-    let event_name = nsid_to_string eid in
-    case event_info event_name of
-      NONE => F
-    | SOME (event_hash, arg_types, indexed_flags) =>
-        let idx_vals = indexed_values indexed_flags vals in
-        let idx_bs = indexed_topic_flags indexed_flags (MAP is_bytestring_type arg_types) in
-        let nidx_vals = log_non_indexed_values indexed_flags vals in
-        let nidx_types = log_non_indexed_types indexed_flags arg_types in
-          LENGTH indexed_flags = LENGTH vals /\
-          LENGTH arg_types = LENGTH vals /\
-          ev.logger = addr /\
-          (?topic_tail.
-             ev.topics = n2w event_hash :: topic_tail /\
-             log_indexed_topics_equiv idx_bs idx_vals topic_tail) /\
-          (?abi_vals.
-             vyper_to_abi_list tenv nidx_types nidx_vals = SOME abi_vals /\
-             ev.data = enc (Tuple (vyper_to_abi_types tenv nidx_types))
-                           (ListV abi_vals))
+    encode_vyper_event event_info tenv addr (nsid_to_string eid) vals = SOME ev
 End
+
+Theorem log_entry_corresponds_encode:
+  log_entry_corresponds event_info tenv addr (eid, vals) ev <=>
+  encode_vyper_event event_info tenv addr (nsid_to_string eid) vals = SOME ev
+Proof
+  simp[log_entry_corresponds_def]
+QED
 
 (* Vyper logs correspond to EVM events (ordered, same-length).
    event_info maps event name -> SOME (hash, arg_types, indexed_flags)
