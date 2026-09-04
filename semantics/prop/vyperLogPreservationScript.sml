@@ -1511,6 +1511,62 @@ Proof
   simp[log_extends_def]
 QED
 
+
+Theorem intcall_defaults_exact_log_extends[local]:
+  finally (do x <- set_scopes [FEMPTY];
+              eval_exprs cxd needed_dflts
+           od)
+          (set_scopes prev) st = (res,st') ==>
+  (!s0 r s1. eval_exprs cxd needed_dflts s0 = (r,s1) ==>
+     log_extends s0 s1) ==>
+  log_extends st st'
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `finally _ _ _ = _` mp_tac >>
+  simp[vyperStateTheory.finally_def, vyperStateTheory.ignore_bind_def,
+       vyperStateTheory.bind_def, vyperStateTheory.set_scopes_def,
+       vyperStateTheory.return_def, vyperStateTheory.raise_def,
+       AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  first_x_assum drule >> strip_tac >>
+  qpat_x_assum `log_extends (st with scopes := [FEMPTY]) s''` mp_tac >>
+  simp[log_extends_def]
+QED
+Theorem intcall_scoped_defaults_bind_log_extends[local]:
+  (do prev <- get_scopes;
+      dflt_vs <- finally
+        (do set_scopes [FEMPTY]; eval_exprs cxd needed_dflts od)
+        (set_scopes prev);
+      k prev dflt_vs
+   od) st = (res,st') ==>
+  (!s0 r s1. eval_exprs cxd needed_dflts s0 = (r,s1) ==>
+             log_extends s0 s1) ==>
+  (!prev dflt_vs s0 r s1. k prev dflt_vs s0 = (r,s1) ==>
+                          log_extends s0 s1) ==>
+  log_extends st st'
+Proof
+  rpt strip_tac >>
+  drule bind_log_extends_forward >> disch_then irule >>
+  conj_tac >-
+    (rpt strip_tac >> gvs[] >>
+     drule bind_log_extends_forward >> disch_then irule >>
+     conj_tac >-
+       (rpt strip_tac >> gvs[] >> metis_tac[]) >>
+     rpt strip_tac >>
+     drule intcall_defaults_log_extends >> simp[]) >>
+  rpt strip_tac >>
+  irule log_extends_eq_logs >>
+  gvs[vyperStateTheory.get_scopes_def, vyperStateTheory.return_def]
+QED
+
+Theorem sum_result_case_log_extends[local]:
+  (case q of INL x => k x st | INR e => (INR e,st)) = (res,st') ==>
+  (!x res st'. k x st = (res,st') ==> log_extends st st') ==>
+  log_extends st st'
+Proof
+  Cases_on `q` >> simp[log_extends_refl] >> metis_tac[]
+QED
+
 Theorem intcall_body_finally_log_extends[local]:
   finally (try (do eval_stmts cxf body; return NoneV od) handle_function)
     (do pop_function prev;
@@ -1530,6 +1586,270 @@ Proof
   rpt strip_tac >>
   drule intcall_try_body_log_extends >> disch_then irule >>
   first_assum MATCH_ACCEPT_TAC
+QED
+
+Theorem intcall_cleanup_exact_log_extends[local]:
+  (do x <- pop_function prev;
+      if nr /\ mut <> View /\ mut <> Pure then
+        case cx.nonreentrant_slot of
+          NONE => return ()
+        | SOME slot => release_nonreentrant_lock cx.txn.target slot
+      else return ()
+   od) st = (res,st') ==>
+  log_extends st st'
+Proof
+  Cases_on `nr` >> Cases_on `mut` >> Cases_on `cx.nonreentrant_slot` >>
+  simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+       vyperInterpreterTheory.pop_function_def, AllCaseEqs()] >>
+  rpt strip_tac >>
+  imp_res_tac set_scopes_log_extends >>
+  imp_res_tac release_nonreentrant_lock_log_extends >>
+  imp_res_tac return_state >> gvs[log_extends_refl] >>
+  TRY (first_assum MATCH_ACCEPT_TAC >> NO_TAC) >>
+  irule log_extends_trans >> goal_assum drule >>
+  first_assum MATCH_ACCEPT_TAC
+QED
+
+
+Theorem intcall_try_body_exact_log_extends[local]:
+  (try (do x <- eval_stmts cxf body; return NoneV od) handle_function) st =
+    (res,st') ==>
+  (!s0 r s1. eval_stmts cxf body s0 = (r,s1) ==> log_extends s0 s1) ==>
+  log_extends st st'
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `(try _ _) _ = _` mp_tac >>
+  simp[vyperStateTheory.try_def, vyperStateTheory.bind_def,
+       vyperStateTheory.return_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac handle_function_log_extends >>
+  first_x_assum drule >> strip_tac >>
+  irule log_extends_trans >> goal_assum drule >>
+  first_assum MATCH_ACCEPT_TAC
+QED
+Theorem intcall_body_finally_exact_log_extends[local]:
+  finally (try (do x <- eval_stmts cxf body; return NoneV od) handle_function)
+    (do x <- pop_function prev;
+        if nr /\ mut <> View /\ mut <> Pure then
+          case cx.nonreentrant_slot of
+            NONE => return ()
+          | SOME slot => release_nonreentrant_lock cx.txn.target slot
+        else return ()
+     od) st = (res,st') ==>
+  (!s0 r s1. eval_stmts cxf body s0 = (r,s1) ==> log_extends s0 s1) ==>
+  log_extends st st'
+Proof
+  rpt strip_tac >>
+  drule finally_log_extends >> disch_then irule >>
+  conj_tac >-
+    (rpt strip_tac >> drule intcall_cleanup_exact_log_extends >> simp[]) >>
+  rpt strip_tac >>
+  drule intcall_try_body_exact_log_extends >> disch_then irule >>
+  first_assum MATCH_ACCEPT_TAC
+QED
+Theorem intcall_needed_dflts_index[local]:
+  e <= a /\ a <= e + d ==> d - (a - e) = e + d - a
+Proof
+  decide_tac
+QED
+
+Theorem push_function_logs[local]:
+  push_function src_fn sc cx st = (res,st') ==>
+  st'.logs = st.logs
+Proof
+  simp[vyperInterpreterTheory.push_function_def,
+       vyperStateTheory.return_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+
+Theorem intcall_post_defaults_log_extends[local]:
+  (do env <- lift_option_type
+               (bind_arguments (get_tenv cx) args (vs ++ dflt_vs))
+               "IntCall bind_arguments";
+      rtv <- lift_option_type (evaluate_type (get_tenv cx) ret)
+               "IntCall eval ret";
+      x <- if nr then
+             case cx.nonreentrant_slot of
+               NONE => raise (Error (TypeError "nonreentrant slot missing"))
+             | SOME slot =>
+                 acquire_nonreentrant_lock cx.txn.target slot
+                   (mut = View \/ mut = Pure)
+           else return ();
+      cxf <- push_function (src_id_opt,fn) env cx;
+      rv <- finally
+              (try (do x <- eval_stmts cxf body; return NoneV od)
+                   handle_function)
+              (do x <- pop_function prev;
+                  if nr /\ mut <> View /\ mut <> Pure then
+                    case cx.nonreentrant_slot of
+                      NONE => return ()
+                    | SOME slot =>
+                        release_nonreentrant_lock cx.txn.target slot
+                  else return ()
+               od);
+      crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
+      return (Value crv)
+   od) st = (res,st') ==>
+  (!s0 r s1.
+     eval_stmts (cx with stk updated_by CONS (src_id_opt,fn)) body s0 =
+       (r,s1) ==> log_extends s0 s1) ==>
+  log_extends st st'
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `(do _ od) _ = _` mp_tac >>
+  simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+       vyperInterpreterTheory.push_function_def,
+       vyperStateTheory.return_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[log_extends_refl] >>
+  imp_res_tac lift_option_type_state >>
+  gvs[log_extends_refl] >>
+  `log_extends s'' s'⁴'` by
+    (qpat_x_assum `(if nr then _ else _) _ = _` mp_tac >>
+     Cases_on `nr` >> Cases_on `cx.nonreentrant_slot` >>
+     simp[vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
+     rpt strip_tac >>
+     imp_res_tac acquire_nonreentrant_lock_log_extends >>
+     gvs[log_extends_refl]) >>
+  `log_extends (s'⁴' with scopes := [env]) s'⁵'` by
+    (qpat_x_assum `finally _ _ _ = _` mp_tac >>
+     strip_tac >>
+     drule intcall_body_finally_exact_log_extends >>
+     simp[]) >>
+  irule log_extends_trans >>
+  qexists `s'⁴'` >> simp[] >>
+  irule log_extends_trans >>
+  qexists `s'⁴' with scopes := [env]` >>
+  simp[log_extends_eq_logs]
+QED
+
+Theorem intcall_post_defaults_guarded_log_extends[local]:
+  (do env <- lift_option_type
+               (bind_arguments (get_tenv cx) args (vs ++ dflt_vs))
+               "IntCall bind_arguments";
+      rtv <- lift_option_type (evaluate_type (get_tenv cx) ret)
+               "IntCall eval ret";
+      x <- if nr then
+             case cx.nonreentrant_slot of
+               NONE => raise (Error (TypeError "nonreentrant slot missing"))
+             | SOME slot =>
+                 acquire_nonreentrant_lock cx.txn.target slot
+                   (mut = View \/ mut = Pure)
+           else return ();
+      cxf <- push_function (src_id_opt,fn) env cx;
+      rv <- finally
+              (try (do x <- eval_stmts cxf body; return NoneV od)
+                   handle_function)
+              (do x <- pop_function prev;
+                  if nr /\ mut <> View /\ mut <> Pure then
+                    case cx.nonreentrant_slot of
+                      NONE => return ()
+                    | SOME slot =>
+                        release_nonreentrant_lock cx.txn.target slot
+                  else return ()
+               od);
+      crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
+      return (Value crv)
+   od) sg2 = (res,st') ==>
+  (!env sg3 rtv sg4 sg5 cxf sg6.
+     lift_option_type
+       (bind_arguments (get_tenv cx) args (vs ++ dflt_vs))
+       "IntCall bind_arguments" sg2 = (INL env,sg3) ==>
+     lift_option_type (evaluate_type (get_tenv cx) ret)
+       "IntCall eval ret" sg3 = (INL rtv,sg4) ==>
+     (if nr then
+        case cx.nonreentrant_slot of
+          NONE => raise (Error (TypeError "nonreentrant slot missing"))
+        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
+                         (mut = View \/ mut = Pure)
+      else return ()) sg4 = (INL (),sg5) ==>
+     push_function (src_id_opt,fn) env cx sg5 = (INL cxf,sg6) ==>
+     !s0 r s1. eval_stmts cxf body s0 = (r,s1) ==>
+                log_extends s0 s1) ==>
+  log_extends sg2 st'
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `(do _ od) _ = _` mp_tac >>
+  simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+       vyperStateTheory.return_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[log_extends_refl] >>
+  imp_res_tac lift_option_type_state >>
+  gvs[log_extends_refl] >>
+  `log_extends s'' s'⁴'` by
+    (qpat_x_assum `(if nr then _ else _) _ = _` mp_tac >>
+     Cases_on `nr` >> Cases_on `cx.nonreentrant_slot` >>
+     simp[vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
+     rpt strip_tac >>
+     imp_res_tac acquire_nonreentrant_lock_log_extends >>
+     gvs[log_extends_refl]) >>
+  `log_extends s'⁴' s'⁵'` by
+    (irule log_extends_eq_logs >>
+     imp_res_tac push_function_logs >> sym_tac >>
+     first_assum MATCH_ACCEPT_TAC) >>
+  TRY (irule log_extends_trans >> goal_assum drule >>
+       first_assum MATCH_ACCEPT_TAC >> NO_TAC) >>
+  `log_extends s'⁵' s'⁶'` by
+    (qpat_x_assum `finally _ _ _ = _` mp_tac >>
+     strip_tac >>
+     drule intcall_body_finally_exact_log_extends >> simp[]) >>
+  metis_tac[log_extends_trans]
+QED
+
+Theorem intcall_success_continuation_log_extends[local]:
+  (do prev <- get_scopes;
+      dflt_vs <- finally
+        (do x <- set_scopes [FEMPTY];
+            eval_exprs (cx with stk updated_by CONS (src_id_opt,fn))
+              (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
+         od) (set_scopes prev);
+      env <- lift_option_type
+               (bind_arguments (get_tenv cx) args (vs ++ dflt_vs))
+               "IntCall bind_arguments";
+      rtv <- lift_option_type (evaluate_type (get_tenv cx) ret)
+               "IntCall eval ret";
+      x <- if nr then
+             case cx.nonreentrant_slot of
+               NONE => raise (Error (TypeError "nonreentrant slot missing"))
+             | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
+                                (mut = View \/ mut = Pure)
+           else return ();
+      cxf <- push_function (src_id_opt,fn) env cx;
+      rv <- finally
+              (try (do x <- eval_stmts cxf body; return NoneV od)
+                   handle_function)
+              (do x <- pop_function prev;
+                  if nr /\ mut <> View /\ mut <> Pure then
+                    case cx.nonreentrant_slot of
+                      NONE => return ()
+                    | SOME slot =>
+                        release_nonreentrant_lock cx.txn.target slot
+                  else return ()
+               od);
+      crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
+      return (Value crv)
+   od) st = (res,st') ==>
+  (!s0 r s1.
+     eval_exprs (cx with stk updated_by CONS (src_id_opt,fn))
+       (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts) s0 =
+       (r,s1) ==> log_extends s0 s1) ==>
+  (!s0 r s1.
+     eval_stmts (cx with stk updated_by CONS (src_id_opt,fn)) body s0 =
+       (r,s1) ==> log_extends s0 s1) ==>
+  log_extends st st'
+Proof
+  rpt strip_tac >>
+  drule bind_log_extends_forward >> disch_then irule >>
+  conj_tac >-
+    (rpt strip_tac >> gvs[] >>
+     drule bind_log_extends_forward >> disch_then irule >>
+     conj_tac >-
+       (rpt strip_tac >> gvs[] >>
+        drule intcall_post_defaults_log_extends >> simp[]) >>
+     rpt strip_tac >>
+     drule intcall_defaults_exact_log_extends >> simp[]) >>
+  rpt strip_tac >>
+  irule log_extends_eq_logs >>
+  gvs[vyperStateTheory.get_scopes_def, vyperStateTheory.return_def]
 QED
 
 
@@ -2088,6 +2408,110 @@ Proof
   first_assum MATCH_ACCEPT_TAC
 QED
 
+Theorem eval_mutual_log_extends[local]:
+  (!cx s st res st'. eval_stmt cx s st = (res,st') ==> log_extends st st') /\
+  (!cx ss st res st'. eval_stmts cx ss st = (res,st') ==> log_extends st st') /\
+  (!cx bt st res st'. eval_base_target cx bt st = (res,st') ==>
+     log_extends st st') /\
+  (!cx e st res st'. eval_expr cx e st = (res,st') ==> log_extends st st') /\
+  (!cx es st res st'. eval_exprs cx es st = (res,st') ==> log_extends st st')
+Proof
+  MP_TAC (CONV_RULE (DEPTH_CONV BETA_CONV)
+    (SPECL
+      [``\cx s. !st res st'. eval_stmt cx s st = (res,st') ==>
+           log_extends st st'``,
+       ``\cx ss. !st res st'. eval_stmts cx ss st = (res,st') ==>
+           log_extends st st'``,
+       ``\(cx:evaluation_context) (it:iterator). T``,
+       ``\(cx:evaluation_context) (g:assignment_target). T``,
+       ``\(cx:evaluation_context) (gs:assignment_target list). T``,
+       ``\cx bt. !st res st'. eval_base_target cx bt st = (res,st') ==>
+           log_extends st st'``,
+       ``\(cx:evaluation_context) (tyv:type_value) (nm:num)
+           (body:stmt list) (vs:value list). T``,
+       ``\cx e. !st res st'. eval_expr cx e st = (res,st') ==>
+           log_extends st st'``,
+       ``\cx es. !st res st'. eval_exprs cx es st = (res,st') ==>
+           log_extends st st'``]
+      vyperInterpreterTheory.evaluate_ind)) >>
+  impl_tac >- (
+    rpt conj_tac >> TRY (simp[] >> NO_TAC) >~
+      [`_ ==> !st res st'.
+          eval_expr _ (Call _ (IntCall _) _ _) st = (res,st') ==>
+          log_extends st st'`] >-
+      suspend "IntCall" >>
+    suspend "rest") >>
+  simp[]
+QED
 
+local
+  fun last_imp_ante tm =
+    let
+      val (_,body) = boolSyntax.strip_forall tm
+      val (ante,conseq) = boolSyntax.dest_imp body
+      val (_,next) = boolSyntax.strip_forall conseq
+    in
+      if boolSyntax.is_imp next then
+        let val (depth,last) = last_imp_ante conseq in (depth + 1,last) end
+      else (1,ante)
+    end
+
+  fun is_guarded_eval_ih name tm =
+    let
+      val (depth,ante) = last_imp_ante tm
+      val (lhs,_) = boolSyntax.dest_eq ante
+      val (head,_) = boolSyntax.dest_strip_comb lhs
+    in
+      depth > 1 andalso head = name
+    end handle _ => false
+in
+  val is_guarded_eval_exprs_ih =
+    is_guarded_eval_ih "vyperInterpreter$eval_exprs"
+  val is_guarded_eval_stmts_ih =
+    is_guarded_eval_ih "vyperInterpreter$eval_stmts"
+  fun TOP_CASE_IF_PRESENT_TAC g =
+    ((BasicProvers.TOP_CASE_TAC ORELSE ALL_TAC) g)
+end
+
+Resume eval_mutual_log_extends[IntCall]:
+  rpt gen_tac >> strip_tac >>
+  rewrite_tac[Once vyperInterpreterTheory.evaluate_def] >>
+  rewrite_tac[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def] >>
+  rpt gen_tac >>
+  BasicProvers.TOP_CASE_TAC >>
+  reverse BasicProvers.TOP_CASE_TAC >-
+    (rpt strip_tac >> imp_res_tac type_check_state >> gvs[log_extends_refl]) >>
+  rewrite_tac[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def] >>
+  BasicProvers.TOP_CASE_TAC >>
+  reverse BasicProvers.TOP_CASE_TAC >-
+    (rpt strip_tac >> imp_res_tac type_check_state >>
+     imp_res_tac lift_option_type_state >> gvs[log_extends_refl]) >>
+  rewrite_tac[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def] >>
+  BasicProvers.TOP_CASE_TAC >>
+  reverse BasicProvers.TOP_CASE_TAC >-
+    (rpt strip_tac >> imp_res_tac type_check_state >>
+     imp_res_tac lift_option_type_state >> gvs[log_extends_refl]) >>
+  BasicProvers.LET_ELIM_TAC >>
+  qpat_x_assum `_ = _` mp_tac >>
+  rewrite_tac[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def] >>
+  BasicProvers.TOP_CASE_TAC >>
+  reverse BasicProvers.TOP_CASE_TAC >-
+    (rpt strip_tac >> imp_res_tac type_check_state >>
+     imp_res_tac lift_option_type_state >> gvs[log_extends_refl]) >>
+  pop_assum mp_tac >>
+  first_x_assum $ funpow 2 drule_then drule >>
+  simp[] >> ntac 2 strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  pop_assum $ mk_asm "args_ext" >>
+  BasicProvers.TOP_CASE_TAC >>
+  TRY (rename1 `eval_exprs cx es _ = (INR _,_)` >>
+       asm "args_ext" drule >> simp[] >> NO_TAC) >>
+  asm "args_ext" drule >> strip_tac >>
+  pop_assum $ mk_asm "explicit_ext" >>
+  PRED_ASSUM is_guarded_eval_exprs_ih (mk_asm "defaults_guarded") >>
+  PRED_ASSUM is_guarded_eval_stmts_ih (mk_asm "body_guarded") >>
+  all_tac
+QED
+Finalise eval_mutual_log_extends
 
 val _ = export_theory();
