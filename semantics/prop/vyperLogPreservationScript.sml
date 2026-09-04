@@ -3225,6 +3225,13 @@ Proof
   strip_tac >> rpt conj_tac >> first_assum MATCH_ACCEPT_TAC
 QED
 
+Theorem eval_stmt_log_extends:
+  !cx s st res st'.
+    eval_stmt cx s st = (res,st') ==> log_extends st st'
+Proof
+  metis_tac[eval_mutual_log_extends]
+QED
+
 Theorem eval_expr_log_extends:
   !cx e st res st'.
     eval_expr cx e st = (res,st') ==> log_extends st st'
