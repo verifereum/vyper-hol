@@ -2504,10 +2504,12 @@ Theorem transfer_value_storage_frame[local]:
 Proof
   rpt strip_tac >>
   qpat_x_assum `transfer_value _ _ _ _ = _` mp_tac >>
+  Cases_on `amount = 0 ∨ fromAddr = toAddr`
+  >- gvs[transfer_value_def, return_def] >>
   simp[transfer_value_def, bind_apply, ignore_bind_apply,
        get_accounts_def, check_def, assert_def, update_accounts_def,
        return_def, raise_def] >>
-  rpt IF_CASES_TAC >> gvs[] >> rpt strip_tac >> gvs[] >>
+  rpt IF_CASES_TAC >> gvs[return_def] >> rpt strip_tac >> gvs[] >>
   Cases_on `b` >>
   simp[vyperStorageBackendTheory.get_storage_def,
        vfmStateTheory.update_account_def, vfmStateTheory.lookup_account_def,
