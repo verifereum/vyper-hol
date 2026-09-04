@@ -2544,7 +2544,14 @@ local
     in
       depth > 1 andalso head = name
     end handle _ => false
+
+  fun specialize_guard_then 0 ttac th = ttac th
+    | specialize_guard_then n ttac th =
+        first_assum (fn ath =>
+          specialize_guard_then (n - 1) ttac
+            (MATCH_MP (PURE_REWRITE_RULE [GSYM AND_IMP_INTRO] th) ath))
 in
+  val specialize_guard_then = specialize_guard_then
   val is_guarded_eval_exprs_ih =
     is_guarded_eval_ih "vyperInterpreter$eval_exprs"
   val is_guarded_eval_stmts_ih =
@@ -2553,6 +2560,16 @@ in
     ((BasicProvers.TOP_CASE_TAC ORELSE ALL_TAC) g)
 end
 
+
+Theorem conjunction_guard_specialize_probe[local]:
+  (!x y. f x = a /\ g y = b ==> P x y) ==>
+  f u = a ==>
+  g v = b ==>
+  P u v
+Proof
+  rpt strip_tac >>
+  first_x_assum (specialize_guard_then 2 MATCH_ACCEPT_TAC)
+QED
 Resume eval_mutual_log_extends[IntCall]:
   rpt gen_tac >> strip_tac >>
   rewrite_tac[Once vyperInterpreterTheory.evaluate_def] >>
