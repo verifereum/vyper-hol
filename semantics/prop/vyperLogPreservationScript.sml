@@ -451,6 +451,34 @@ Proof
   imp_res_tac read_storage_slot_state >> imp_res_tac return_state >> gvs[]
 QED
 
+
+Theorem subscript_after_e1_logs[local]:
+  (!s0 r s1. eval_expr cx e2 s0 = (r,s1) ==> log_extends s0 s1) /\
+  (do tv2 <- eval_expr cx e2;
+      v2 <- get_Value tv2;
+      tenv <<- get_tenv cx;
+      arr_tv <- lift_option_type (evaluate_type tenv (expr_type e1))
+                   "Subscript array type";
+      check_array_bounds cx tv1 v2;
+      r <- lift_sum (evaluate_subscript tenv arr_tv tv1 v2);
+      case r of
+        INL v => return v
+      | INR (is_transient,slot,tv) => do
+          v <- read_storage_slot cx is_transient slot tv;
+          return (Value v)
+        od
+   od) st = (res,st') ==>
+  log_extends st st'
+Proof
+  rpt strip_tac >>
+  drule bind_log_extends_forward >>
+  disch_then irule >>
+  conj_tac >- metis_tac[] >>
+  rpt strip_tac >> gvs[] >>
+  irule log_extends_eq_logs >>
+  imp_res_tac subscript_terminal_normalized_logs >>
+  sym_tac >> first_assum ACCEPT_TAC
+QED
 Theorem new_variable_logs[local]:
   new_variable id tv v st = (res,st') ==> st'.logs = st.logs
 Proof
