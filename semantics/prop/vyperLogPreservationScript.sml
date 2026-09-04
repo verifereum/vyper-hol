@@ -421,6 +421,36 @@ Proof
   imp_res_tac read_storage_slot_state >> imp_res_tac return_state >> gvs[]
 QED
 
+Theorem subscript_terminal_normalized_logs[local]:
+  (do v2 <- get_Value tv2;
+      arr_tv <- lift_option_type
+        (evaluate_type (get_tenv cx) (expr_type e1))
+        "Subscript array type";
+      check_array_bounds cx tv1 v2;
+      r <- lift_sum
+        (evaluate_subscript (get_tenv cx) arr_tv tv1 v2);
+      case r of
+        INL v => return v
+      | INR (is_transient,slot,tv) => do
+          v <- read_storage_slot cx is_transient slot tv;
+          return (Value v)
+        od
+   od) st = (res,st') ==> st'.logs = st.logs
+Proof
+  rpt strip_tac >> pop_assum mp_tac >>
+  simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+       AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac get_Value_state >> imp_res_tac lift_option_type_state >>
+  imp_res_tac check_array_bounds_state >> imp_res_tac lift_sum_state >> gvs[] >>
+  Cases_on `r` >>
+  gvs[vyperStateTheory.bind_def, vyperStateTheory.return_def, AllCaseEqs()] >>
+  PairCases_on `y` >>
+  gvs[vyperStateTheory.bind_def, vyperStateTheory.return_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac read_storage_slot_state >> imp_res_tac return_state >> gvs[]
+QED
+
 Theorem new_variable_logs[local]:
   new_variable id tv v st = (res,st') ==> st'.logs = st.logs
 Proof
