@@ -3246,4 +3246,53 @@ Proof
   metis_tac[eval_mutual_log_extends]
 QED
 
+
+Definition machine_log_extends_def:
+  machine_log_extends (am:abstract_machine) (am':abstract_machine) <=>
+    isPREFIX am.logs am'.logs
+End
+
+Theorem machine_log_extends_refl:
+  machine_log_extends am am
+Proof
+  simp[machine_log_extends_def, rich_listTheory.IS_PREFIX_REFL]
+QED
+
+Theorem machine_log_extends_trans:
+  machine_log_extends am am1 /\ machine_log_extends am1 am2 ==>
+  machine_log_extends am am2
+Proof
+  simp[machine_log_extends_def] >>
+  metis_tac[rich_listTheory.IS_PREFIX_TRANS]
+QED
+
+Theorem machine_log_extends_eq_logs:
+  am.logs = am'.logs ==> machine_log_extends am am'
+Proof
+  simp[machine_log_extends_def, rich_listTheory.IS_PREFIX_REFL]
+QED
+
+Theorem abstract_machine_from_state_logs[simp]:
+  (abstract_machine_from_state srcs exps layouts st).logs = st.logs
+Proof
+  simp[vyperInterpreterTheory.abstract_machine_from_state_def]
+QED
+
+Theorem merge_constants_logs[local]:
+  (merge_constants addr src_id_opt cenv am).logs = am.logs
+Proof
+  simp[vyperInterpreterTheory.merge_constants_def]
+QED
+
+Theorem evaluate_all_constants_logs:
+  evaluate_all_constants cx am addr mods = SOME am' ==> am'.logs = am.logs
+Proof
+  qid_spec_tac `am` >> Induct_on `mods` >-
+    simp[vyperInterpreterTheory.evaluate_all_constants_def] >>
+  gen_tac >> PairCases_on `h` >> gen_tac >>
+  simp[vyperInterpreterTheory.evaluate_all_constants_def, AllCaseEqs()] >>
+  rpt strip_tac >>
+  first_x_assum drule >>
+  simp[merge_constants_logs]
+QED
 val _ = export_theory();
