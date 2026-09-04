@@ -1324,6 +1324,72 @@ Proof
   rpt strip_tac >> gvs[] >> first_x_assum drule >> simp[]
 QED
 
+Theorem transfer_value_logs[local]:
+  transfer_value fromAddr toAddr amount st = (res,st') ==>
+  st'.logs = st.logs
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `transfer_value _ _ _ _ = _` mp_tac >>
+  simp[vyperInterpreterTheory.transfer_value_def, vyperStateTheory.bind_def,
+       vyperStateTheory.ignore_bind_def, vyperStateTheory.get_accounts_def,
+       vyperStateTheory.update_accounts_def, vyperStateTheory.check_def,
+       vyperStateTheory.type_check_def, vyperStateTheory.assert_def,
+       vyperStateTheory.return_def, vyperStateTheory.raise_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem case_expr_send_logs[local]:
+  (!s0 r s1. eval_exprs cx es s0 = (r,s1) ==> log_extends s0 s1) ==>
+  !st res st'. eval_expr cx (Call ty Send es drv) st = (res,st') ==>
+    log_extends st st'
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def,
+       vyperStateTheory.ignore_bind_def, vyperStateTheory.return_def,
+       vyperStateTheory.raise_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[log_extends_refl] >>
+  imp_res_tac type_check_state >> imp_res_tac lift_option_type_state >>
+  imp_res_tac transfer_value_logs >> gvs[] >>
+  metis_tac[log_extends_trans, log_extends_eq_logs]
+QED
+
+Theorem case_expr_selfdestruct_logs[local]:
+  (!s0 r s1. eval_exprs cx es s0 = (r,s1) ==> log_extends s0 s1) ==>
+  !st res st'. eval_expr cx (Call ty SelfDestructTarget es drv) st = (res,st') ==>
+    log_extends st st'
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def,
+       vyperStateTheory.ignore_bind_def, vyperStateTheory.return_def,
+       vyperStateTheory.raise_def, vyperStateTheory.get_accounts_def,
+       AllCaseEqs()] >>
+  rpt strip_tac >> gvs[log_extends_refl] >>
+  imp_res_tac type_check_state >> imp_res_tac lift_option_type_state >>
+  imp_res_tac transfer_value_logs >> gvs[] >>
+  first_x_assum drule >> strip_tac >>
+  irule log_extends_trans >> goal_assum drule >>
+  irule log_extends_eq_logs >> gvs[]
+QED
+
+Theorem case_expr_create_logs[local]:
+  (!s0 r s1. eval_exprs cx es s0 = (r,s1) ==> log_extends s0 s1) ==>
+  !st res st'.
+    eval_expr cx (Call ty (CreateTarget kind has_salt rof) es drv) st =
+      (res,st') ==> log_extends st st'
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def,
+       AllCaseEqs()] >>
+  rpt strip_tac >> gvs[log_extends_refl] >>
+  imp_res_tac vyperCreateTheory.eval_create_preserves_non_accounts >> gvs[] >>
+  first_x_assum drule >> strip_tac >>
+  irule log_extends_trans >> goal_assum drule >>
+  irule log_extends_eq_logs >> gvs[]
+QED
+
 Theorem ext_call_tail_log_extends[local]:
   (do x <- assert success (Error (RuntimeError "ExtCall reverted"));
       x <- update_accounts (K accounts');
