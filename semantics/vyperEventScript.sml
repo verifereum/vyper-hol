@@ -41,6 +41,26 @@ Definition lookup_event_metadata_in_def:
     lookup_event_metadata_in tenv ename rest
 End
 
+Theorem lookup_event_metadata_in_some:
+  lookup_event_metadata_in tenv ename tops = SOME metadata ⇒
+  ∃args.
+    MEM (EventDecl ename args) tops ∧
+    metadata =
+      (event_hash tenv ename (MAP (SND o FST) args),
+       MAP (SND o FST) args,
+       MAP SND args)
+Proof
+  Induct_on `tops`
+  >- simp[lookup_event_metadata_in_def]
+  >> Cases_on `h`
+  >> gvs[lookup_event_metadata_in_def]
+  >> Cases_on `s = ename`
+  >> gvs[]
+  >> strip_tac
+  >> qexists `l`
+  >> simp[]
+QED
+
 Definition lookup_event_metadata_def:
   lookup_event_metadata tenv sources target (src_id_opt, ename) =
     case ALOOKUP sources target of
@@ -49,6 +69,15 @@ Definition lookup_event_metadata_def:
         case ALOOKUP mods src_id_opt of
         | NONE => NONE
         | SOME tops => lookup_event_metadata_in tenv ename tops
+End
+
+(* A name resolves to at most one event declaration shape in a module. *)
+Definition event_decl_unique_def:
+  event_decl_unique ename tops ⇔
+    ∀args args'.
+      MEM (EventDecl ename args) tops ∧
+      MEM (EventDecl ename args') tops ⇒
+      args = args'
 End
 
 Definition is_event_bytestring_type_def:
