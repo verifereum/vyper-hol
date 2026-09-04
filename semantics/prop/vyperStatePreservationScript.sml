@@ -212,7 +212,7 @@ Proof
   rw[transfer_value_def, bind_def, get_accounts_def, return_def,
      check_def, raise_def, update_accounts_def, ignore_bind_def,
      assert_def] >>
-  rpt (CASE_TAC >> gvs[return_def, raise_def]) >> gvs[]
+  gvs[AllCaseEqs(), return_def, raise_def]
 QED
 
 Theorem push_log_immutables:

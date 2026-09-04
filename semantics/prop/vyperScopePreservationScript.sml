@@ -196,7 +196,7 @@ Theorem transfer_value_scopes:
   !f t a st res st'. transfer_value f t a st = (res, st') ==> st'.scopes = st.scopes
 Proof
   rw[transfer_value_def, bind_def, ignore_bind_def, get_accounts_def, return_def, check_def, type_check_def, assert_def, update_accounts_def] >>
-  gvs[raise_def]
+  gvs[AllCaseEqs(), raise_def]
 QED
 
 Theorem lookup_flag_mem_scopes:
