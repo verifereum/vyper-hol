@@ -66,8 +66,9 @@ Theorem transfer_value_immutables[local]:
   ∀f t a st res st'.
     transfer_value f t a st = (res, st') ⇒ st'.immutables = st.immutables
 Proof
-  rw[transfer_value_def, bind_def, ignore_bind_def, get_accounts_def, return_def,
-     check_def, type_check_def, assert_def, update_accounts_def] >> gvs[raise_def]
+  rpt strip_tac >>
+  drule vyperStatePreservationTheory.transfer_value_immutables >>
+  simp[]
 QED
 
 Theorem lookup_flag_mem_immutables[local]:
