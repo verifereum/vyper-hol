@@ -147,6 +147,41 @@ Definition build_event_info_def:
     | _ => build_event_info tenv rest eim
 End
 
+Theorem build_event_info_lookup_event_metadata_in:
+  ∀tops.
+    event_decl_unique ename tops ⇒
+    ∀eim.
+      build_event_info tenv tops eim ename =
+      case lookup_event_metadata_in tenv ename tops of
+      | NONE => eim ename
+      | SOME metadata => SOME metadata
+Proof
+  Induct_on `tops` >>
+  simp[build_event_info_def, lookup_event_metadata_in_def] >>
+  Cases_on `h` >>
+  gvs[build_event_info_def, lookup_event_metadata_in_def,
+      event_decl_unique_def] >>
+  Cases_on `s = ename` >> gvs[] >>
+  Cases_on `lookup_event_metadata_in tenv ename tops`
+  >- simp[] >>
+  drule lookup_event_metadata_in_some >>
+  strip_tac >>
+  strip_tac >>
+  qpat_x_assum `∀args args'. _`
+    (qspecl_then [`l`, `args`] mp_tac) >>
+  simp[]
+QED
+
+Theorem build_event_info_empty_lookup_event_metadata_in:
+  event_decl_unique ename tops ⇒
+  build_event_info tenv tops (K NONE) ename =
+  lookup_event_metadata_in tenv ename tops
+Proof
+  strip_tac >>
+  drule build_event_info_lookup_event_metadata_in >>
+  Cases_on `lookup_event_metadata_in tenv ename tops` >> simp[]
+QED
+
 (* ===== Nonreentrant Keys ===== *)
 
 Definition assign_nkeys_def:
