@@ -3443,4 +3443,54 @@ Proof
   imp_res_tac evaluate_all_constants_logs >>
   gvs[machine_log_extends_def, log_extends_def]
 QED
+
+Theorem call_external_success_log_extends:
+  call_external am tx = (INL v,am') ==> machine_log_extends am am'
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `call_external _ _ = _` mp_tac >>
+  simp[Once vyperInterpreterTheory.call_external_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac call_external_function_success_log_extends
+QED
+
+Theorem call_external_function_error_logs_rollback:
+  call_external_function am cx nr mut ts all_mods args dflts vals body ret =
+    (INR e,am') ==>
+  am'.logs = am.logs
+Proof
+  strip_tac >> imp_res_tac call_external_function_error_rollback >> gvs[]
+QED
+
+Theorem call_external_error_logs_rollback:
+  call_external am tx = (INR e,am') ==> am'.logs = am.logs
+Proof
+  strip_tac >> imp_res_tac call_external_error_rollback >> gvs[]
+QED
+
+Theorem call_external_log_extends:
+  call_external am tx = (res,am') ==> machine_log_extends am am'
+Proof
+  Cases_on `res` >> strip_tac >-
+    (imp_res_tac call_external_success_log_extends) >>
+  imp_res_tac call_external_error_logs_rollback >>
+  simp[machine_log_extends_eq_logs]
+QED
+
+Theorem call_external_transaction_log_extends_empty:
+  call_external_transaction am tx = (res,am') ==>
+  isPREFIX [] am'.logs
+Proof
+  simp[]
+QED
+
+Theorem call_external_transaction_success_fresh:
+  call_external_transaction am tx = (INL v,am') ==>
+  call_external (clear_machine_logs am) tx = (INL v,am') /\
+  machine_log_extends (clear_machine_logs am) am'
+Proof
+  simp[vyperInterpreterTheory.call_external_transaction_def] >>
+  metis_tac[call_external_log_extends]
+QED
+
 val _ = export_theory();
