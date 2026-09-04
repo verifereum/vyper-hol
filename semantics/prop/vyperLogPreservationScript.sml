@@ -426,6 +426,22 @@ Proof
       vyperStateTheory.raise_def]
 QED
 
+Theorem storage_assignment_tail_logs[local]:
+  (do current_val <- read_storage_slot cx tr slot tv;
+      new_val <- lift_sum (assign_subscripts tv current_val subs ao);
+      write_storage_slot cx tr slot tv new_val;
+      assign_result tv ao current_val subs
+   od) st = (res,st') ==> st'.logs = st.logs
+Proof
+  rpt strip_tac >> pop_assum mp_tac >>
+  simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+       AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac read_storage_slot_state >> imp_res_tac lift_sum_state >> gvs[] >>
+  imp_res_tac write_storage_slot_logs >>
+  imp_res_tac assign_result_state >> gvs[]
+QED
+
 Theorem case_stmt_return_some_logs[local]:
   (!s0 r s1. eval_expr cx e s0 = (r,s1) ==> log_extends s0 s1) ==>
   !st res st'. eval_stmt cx (Return (SOME e)) st = (res,st') ==>
