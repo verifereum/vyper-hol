@@ -35,7 +35,8 @@ val () = cv_auto_trans pop_function_def;
 (* helper for sending ether between accounts *)
 
 Definition transfer_value_def:
-  transfer_value fromAddr toAddr amount = do
+  transfer_value fromAddr toAddr amount =
+  if amount = 0 ∨ fromAddr = toAddr then return () else do
     acc <- get_accounts;
     sender <<- lookup_account fromAddr acc;
     check (amount <= sender.balance) "transfer_value amount";
@@ -49,7 +50,7 @@ End
 
 val () = transfer_value_def
   |> SRULE [FUN_EQ_THM, bind_def, ignore_bind_def,
-            LET_RATOR, update_accounts_def, o_DEF, C_DEF]
+            LET_RATOR, COND_RATOR, update_accounts_def, o_DEF, C_DEF]
   |> cv_auto_trans;
 
 (* machinery for calls to functions in a Vyper contract, and for internal calls

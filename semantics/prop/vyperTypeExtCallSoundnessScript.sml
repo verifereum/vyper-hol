@@ -19,6 +19,18 @@ Ancestors
 Libs
   wordsLib markerLib intLib
 
+Theorem transfer_value_zero[simp]:
+  transfer_value from to 0 st = (INL (), st)
+Proof
+  simp[transfer_value_def, return_def]
+QED
+
+Theorem transfer_value_same_address[simp]:
+  transfer_value addr addr amount st = (INL (), st)
+Proof
+  simp[transfer_value_def, return_def]
+QED
+
 Theorem transfer_value_recipient_overflow_regression:
   let from = (0w:address) in
   let to = (1w:address) in
