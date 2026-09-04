@@ -1795,6 +1795,86 @@ Proof
   metis_tac[log_extends_trans]
 QED
 
+
+Theorem intcall_success_continuation_guarded_log_extends[local]:
+  (do prev <- get_scopes;
+      dflt_vs <- finally
+        (do x <- set_scopes [FEMPTY];
+            eval_exprs (cx with stk updated_by CONS (src_id_opt,fn))
+              (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
+         od) (set_scopes prev);
+      env <- lift_option_type
+               (bind_arguments (get_tenv cx) args (vs ++ dflt_vs))
+               "IntCall bind_arguments";
+      rtv <- lift_option_type (evaluate_type (get_tenv cx) ret)
+               "IntCall eval ret";
+      x <- if nr then
+             case cx.nonreentrant_slot of
+               NONE => raise (Error (TypeError "nonreentrant slot missing"))
+             | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
+                                (mut = View \/ mut = Pure)
+           else return ();
+      cxf <- push_function (src_id_opt,fn) env cx;
+      rv <- finally
+              (try (do x <- eval_stmts cxf body; return NoneV od)
+                   handle_function)
+              (do x <- pop_function prev;
+                  if nr /\ mut <> View /\ mut <> Pure then
+                    case cx.nonreentrant_slot of
+                      NONE => return ()
+                    | SOME slot =>
+                        release_nonreentrant_lock cx.txn.target slot
+                  else return ()
+               od);
+      crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
+      return (Value crv)
+   od) st = (res,st') ==>
+  (!s0 r s1.
+     eval_exprs (cx with stk updated_by CONS (src_id_opt,fn))
+       (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts) s0 =
+       (r,s1) ==> log_extends s0 s1) ==>
+  (!sg prev sg1 dflt_vs sg2 env sg3 rtv sg4 sg5 cxf sg6.
+     get_scopes sg = (INL prev,sg1) ==>
+     finally
+       (do x <- set_scopes [FEMPTY];
+           eval_exprs (cx with stk updated_by CONS (src_id_opt,fn))
+             (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
+        od) (set_scopes prev) sg1 = (INL dflt_vs,sg2) ==>
+     lift_option_type
+       (bind_arguments (get_tenv cx) args (vs ++ dflt_vs))
+       "IntCall bind_arguments" sg2 = (INL env,sg3) ==>
+     lift_option_type (evaluate_type (get_tenv cx) ret)
+       "IntCall eval ret" sg3 = (INL rtv,sg4) ==>
+     (if nr then
+        case cx.nonreentrant_slot of
+          NONE => raise (Error (TypeError "nonreentrant slot missing"))
+        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
+                         (mut = View \/ mut = Pure)
+      else return ()) sg4 = (INL (),sg5) ==>
+     push_function (src_id_opt,fn) env cx sg5 = (INL cxf,sg6) ==>
+     !s0 r s1. eval_stmts cxf body s0 = (r,s1) ==>
+                log_extends s0 s1) ==>
+  log_extends st st'
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `!sg prev sg1 dflt_vs sg2 env sg3 rtv sg4 sg5 cxf sg6. _`
+    (mk_asm "guarded") >>
+  drule bind_log_extends_forward >> disch_then irule >>
+  conj_tac >-
+    (rpt strip_tac >> gvs[] >>
+     drule bind_log_extends_forward >> disch_then irule >>
+     conj_tac >-
+       (rpt strip_tac >> gvs[] >>
+        asm "guarded" drule >> disch_then drule >>
+        disch_then assume_tac >>
+        drule intcall_post_defaults_guarded_log_extends >> simp[]) >>
+     rpt strip_tac >>
+     drule intcall_defaults_exact_log_extends >> simp[]) >>
+  rpt strip_tac >>
+  irule log_extends_eq_logs >>
+  gvs[vyperStateTheory.get_scopes_def, vyperStateTheory.return_def]
+QED
+
 Theorem intcall_success_continuation_log_extends[local]:
   (do prev <- get_scopes;
       dflt_vs <- finally
