@@ -1838,5 +1838,7 @@ Proof
 QED
 
 val () = cv_auto_trans call_external_def;
+val () = cv_auto_trans clear_machine_logs_def;
+val () = cv_auto_trans call_external_transaction_def;
 
 val () = cv_auto_trans load_contract_def;

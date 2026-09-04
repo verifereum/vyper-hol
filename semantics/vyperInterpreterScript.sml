@@ -1755,6 +1755,17 @@ Definition call_external_def:
        call_external_function am cx nr mut ts all_mods args dflts tx.args body ret
 End
 
+(* Explicit transaction boundary. Ordinary function entry preserves accumulated
+   logs so that nested and sequential calls can share one transaction trace;
+   callers use this wrapper when starting a fresh top-level transaction. *)
+Definition clear_machine_logs_def:
+  clear_machine_logs (am: abstract_machine) = am with logs := []
+End
+
+Definition call_external_transaction_def:
+  call_external_transaction am tx = call_external (clear_machine_logs am) tx
+End
+
 Definition load_contract_def:
   load_contract am tx mods exps =
   let addr = tx.target in

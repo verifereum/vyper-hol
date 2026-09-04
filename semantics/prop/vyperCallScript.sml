@@ -71,6 +71,38 @@ Proof
   strip_tac >> res_tac
 QED
 
+(* ===== Log Lifecycle Boundaries (issue #439) ===== *)
+
+Theorem initial_state_logs[simp]:
+  (initial_state am scopes).logs = am.logs
+Proof
+  simp[initial_state_def]
+QED
+
+Theorem clear_machine_logs_logs[simp]:
+  (clear_machine_logs am).logs = []
+Proof
+  simp[clear_machine_logs_def]
+QED
+
+Theorem clear_machine_logs_preserves_machine:
+  (clear_machine_logs am).sources = am.sources ∧
+  (clear_machine_logs am).exports = am.exports ∧
+  (clear_machine_logs am).immutables = am.immutables ∧
+  (clear_machine_logs am).accounts = am.accounts ∧
+  (clear_machine_logs am).layouts = am.layouts ∧
+  (clear_machine_logs am).tStorage = am.tStorage
+Proof
+  simp[clear_machine_logs_def]
+QED
+
+Theorem call_external_transaction_clears_input_logs:
+  call_external_transaction (am with logs := logs) tx =
+  call_external_transaction am tx
+Proof
+  simp[call_external_transaction_def, clear_machine_logs_def]
+QED
+
 (* ===== Error Rollback Properties (issue #180) ===== *)
 
 Theorem call_external_function_error_rollback:
@@ -87,6 +119,14 @@ Theorem call_external_error_rollback:
   am' = am
 Proof
   simp[Once call_external_def] >> strip_tac >> gvs[AllCaseEqs()] >> imp_res_tac call_external_function_error_rollback
+QED
+
+Theorem call_external_transaction_error_logs_empty:
+  call_external_transaction am tx = (INR e, am') ⇒ am'.logs = []
+Proof
+  rw[call_external_transaction_def] >>
+  drule call_external_error_rollback >>
+  simp[]
 QED
 
 Theorem call_external_error_no_state_change:
