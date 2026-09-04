@@ -71,6 +71,17 @@ Proof
   metis_tac[log_extends_trans]
 QED
 
+Theorem bind_log_extends_forward[local]:
+  bind f g st = (res,st') ==>
+  (!r st1. f st = (r,st1) ==> log_extends st st1) ==>
+  (!x st1 r st2.
+     f st = (INL x,st1) /\ g x st1 = (r,st2) ==>
+     log_extends st1 st2) ==>
+  log_extends st st'
+Proof
+  metis_tac[bind_log_extends]
+QED
+
 Theorem case_eval_stmts_nil_logs[local]:
   eval_stmts cx [] st = (res,st') ==> log_extends st st'
 Proof
