@@ -1390,6 +1390,150 @@ Proof
   irule log_extends_eq_logs >> gvs[]
 QED
 
+Theorem finally_log_extends[local]:
+  finally f g st = (res,st') ==>
+  (!r s1. f st = (r,s1) ==> log_extends st s1) ==>
+  (!s0 r s1. g s0 = (r,s1) ==> log_extends s0 s1) ==>
+  log_extends st st'
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `finally _ _ _ = _` mp_tac >>
+  simp[vyperStateTheory.finally_def, vyperStateTheory.ignore_bind_def,
+       vyperStateTheory.bind_def, vyperStateTheory.return_def,
+       vyperStateTheory.raise_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  metis_tac[log_extends_trans]
+QED
+
+Theorem set_scopes_log_extends[local]:
+  set_scopes scopes st = (res,st') ==> log_extends st st'
+Proof
+  simp[vyperStateTheory.set_scopes_def, vyperStateTheory.return_def] >>
+  rpt strip_tac >> gvs[] >>
+  irule log_extends_eq_logs >> simp[]
+QED
+
+Theorem acquire_nonreentrant_lock_log_extends[local]:
+  acquire_nonreentrant_lock addr slot is_view st = (res,st') ==>
+  log_extends st st'
+Proof
+  Cases_on
+    `lookup_storage (n2w slot)
+       (vfmExecution$lookup_transient_storage addr st.tStorage) = 1w` >>
+  Cases_on `is_view` >>
+  simp[vyperInterpreterTheory.acquire_nonreentrant_lock_def,
+       vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+       vyperStateTheory.get_transient_storage_def,
+       vyperStateTheory.update_transient_def, vyperStateTheory.return_def,
+       vyperStateTheory.raise_def] >>
+  rpt strip_tac >> gvs[] >>
+  irule log_extends_eq_logs >> simp[]
+QED
+
+Theorem release_nonreentrant_lock_log_extends[local]:
+  release_nonreentrant_lock addr slot st = (res,st') ==>
+  log_extends st st'
+Proof
+  simp[vyperInterpreterTheory.release_nonreentrant_lock_def,
+       vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+       vyperStateTheory.get_transient_storage_def,
+       vyperStateTheory.update_transient_def, vyperStateTheory.return_def] >>
+  rpt strip_tac >> gvs[] >>
+  irule log_extends_eq_logs >> simp[]
+QED
+
+Theorem intcall_cleanup_log_extends[local]:
+  (do pop_function prev;
+      if nr /\ ~is_view then
+        case cx.nonreentrant_slot of
+          NONE => return ()
+        | SOME slot => release_nonreentrant_lock cx.txn.target slot
+      else return ()
+   od) st = (res,st') ==>
+  log_extends st st'
+Proof
+  Cases_on `nr` >> Cases_on `is_view` >> Cases_on `cx.nonreentrant_slot` >>
+  simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+       vyperInterpreterTheory.pop_function_def, AllCaseEqs()] >>
+  rpt strip_tac >>
+  imp_res_tac set_scopes_log_extends >>
+  imp_res_tac release_nonreentrant_lock_log_extends >>
+  imp_res_tac return_state >> gvs[] >>
+  TRY (first_assum MATCH_ACCEPT_TAC >> NO_TAC) >>
+  irule log_extends_trans >> goal_assum drule >>
+  first_assum MATCH_ACCEPT_TAC
+QED
+
+
+Theorem handle_function_log_extends[local]:
+  handle_function ex st = (res,st') ==> log_extends st st'
+Proof
+  Cases_on `ex` >>
+  simp[oneline vyperInterpreterTheory.handle_function_def,
+       vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
+  rpt strip_tac >> gvs[log_extends_refl]
+QED
+
+Theorem intcall_try_body_log_extends[local]:
+  (try (do eval_stmts cxf body; return NoneV od) handle_function) st =
+    (res,st') ==>
+  (!s0 r s1. eval_stmts cxf body s0 = (r,s1) ==> log_extends s0 s1) ==>
+  log_extends st st'
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `(try _ _) _ = _` mp_tac >>
+  simp[vyperStateTheory.try_def, vyperStateTheory.bind_def,
+       vyperStateTheory.ignore_bind_def, vyperStateTheory.return_def,
+       AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac handle_function_log_extends >>
+  first_x_assum drule >> strip_tac >>
+  irule log_extends_trans >> goal_assum drule >>
+  first_assum MATCH_ACCEPT_TAC
+QED
+
+Theorem intcall_defaults_log_extends[local]:
+  finally (do set_scopes [FEMPTY]; eval_exprs cxd needed_dflts od)
+          (set_scopes prev) st = (res,st') ==>
+  (!s0 r s1. eval_exprs cxd needed_dflts s0 = (r,s1) ==>
+     log_extends s0 s1) ==>
+  log_extends st st'
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `finally _ _ _ = _` mp_tac >>
+  simp[vyperStateTheory.finally_def, vyperStateTheory.ignore_bind_def,
+       vyperStateTheory.bind_def, vyperStateTheory.set_scopes_def,
+       vyperStateTheory.return_def, vyperStateTheory.raise_def,
+       AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  first_x_assum drule >> strip_tac >>
+  qpat_x_assum `log_extends (st with scopes := [FEMPTY]) s''` mp_tac >>
+  simp[log_extends_def]
+QED
+
+Theorem intcall_body_finally_log_extends[local]:
+  finally (try (do eval_stmts cxf body; return NoneV od) handle_function)
+    (do pop_function prev;
+        if nr /\ ~is_view then
+          case cx.nonreentrant_slot of
+            NONE => return ()
+          | SOME slot => release_nonreentrant_lock cx.txn.target slot
+        else return ()
+     od) st = (res,st') ==>
+  (!s0 r s1. eval_stmts cxf body s0 = (r,s1) ==> log_extends s0 s1) ==>
+  log_extends st st'
+Proof
+  rpt strip_tac >>
+  drule finally_log_extends >> disch_then irule >>
+  conj_tac >-
+    (rpt strip_tac >> drule intcall_cleanup_log_extends >> simp[]) >>
+  rpt strip_tac >>
+  drule intcall_try_body_log_extends >> disch_then irule >>
+  first_assum MATCH_ACCEPT_TAC
+QED
+
+
+
 Theorem ext_call_tail_log_extends[local]:
   (do x <- assert success (Error (RuntimeError "ExtCall reverted"));
       x <- update_accounts (K accounts');
@@ -1943,6 +2087,7 @@ Proof
   irule log_extends_trans >> goal_assum drule >>
   first_assum MATCH_ACCEPT_TAC
 QED
+
 
 
 val _ = export_theory();
