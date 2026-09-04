@@ -442,6 +442,49 @@ Proof
   imp_res_tac assign_result_state >> gvs[]
 QED
 
+
+Theorem array_pop_tail_logs[local]:
+  (do storage <- get_storage_backend cx is_transient;
+      stored_len <<- w2n (lookup_storage elem_slot storage);
+      check (stored_len > 0) "pop empty storage array";
+      last_idx <<- stored_len - 1;
+      last_slot <<- elem_slot + n2w (1 + last_idx * type_slot_size pop_elem_tv);
+      popped <- read_storage_slot cx is_transient last_slot pop_elem_tv;
+      write_storage_slot cx is_transient last_slot pop_elem_tv
+        (default_value pop_elem_tv);
+      write_storage_slot cx is_transient elem_slot (BaseTV (UintT 256))
+        (IntV &last_idx);
+      return (SOME popped)
+   od) st = (res,st') ==> st'.logs = st.logs
+Proof
+  rpt strip_tac >> pop_assum mp_tac >>
+  simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+       AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac vyperStorageBackendTheory.get_storage_backend_state >>
+  imp_res_tac check_state >> imp_res_tac read_storage_slot_state >> gvs[] >>
+  imp_res_tac write_storage_slot_logs >> imp_res_tac return_state >> gvs[]
+QED
+
+Theorem array_append_tail_logs[local]:
+  (do storage <- get_storage_backend cx is_transient;
+      stored_len <<- w2n (lookup_storage elem_slot storage);
+      check (stored_len < n) "append full storage array";
+      new_slot <<- elem_slot + n2w (1 + stored_len * type_slot_size app_elem_tv);
+      write_storage_slot cx is_transient new_slot app_elem_tv v;
+      write_storage_slot cx is_transient elem_slot (BaseTV (UintT 256))
+        (IntV &(stored_len + 1));
+      return NONE
+   od) st = (res,st') ==> st'.logs = st.logs
+Proof
+  rpt strip_tac >> pop_assum mp_tac >>
+  simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+       AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac vyperStorageBackendTheory.get_storage_backend_state >>
+  imp_res_tac check_state >> imp_res_tac write_storage_slot_logs >>
+  imp_res_tac return_state >> gvs[]
+QED
 Theorem case_stmt_return_some_logs[local]:
   (!s0 r s1. eval_expr cx e s0 = (r,s1) ==> log_extends s0 s1) ==>
   !st res st'. eval_stmt cx (Return (SOME e)) st = (res,st') ==>
