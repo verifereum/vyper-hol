@@ -182,6 +182,17 @@ Proof
   Cases_on `lookup_event_metadata_in tenv ename tops` >> simp[]
 QED
 
+Theorem build_event_info_empty_lookup_event_metadata:
+  ALOOKUP sources target = SOME mods ⇒
+  ALOOKUP mods NONE = SOME tops ⇒
+  event_decl_unique ename tops ⇒
+  build_event_info tenv tops (K NONE) ename =
+  lookup_event_metadata tenv sources target (NONE, ename)
+Proof
+  simp[lookup_event_metadata_def,
+       build_event_info_empty_lookup_event_metadata_in]
+QED
+
 (* ===== Nonreentrant Keys ===== *)
 
 Definition assign_nkeys_def:
