@@ -941,6 +941,73 @@ Proof
   irule log_extends_eq_logs >> gvs[]
 QED
 
+
+Theorem case_expr_pop_logs[local]:
+  (!st res st'. eval_base_target cx bt st = (res,st') ==>
+     log_extends st st') ==>
+  !st res st'. eval_expr cx (Pop ty bt) st = (res,st') ==>
+    log_extends st st'
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once vyperInterpreterTheory.evaluate_def] >>
+  simp[vyperStateTheory.bind_def, vyperStateTheory.return_def,
+       vyperStateTheory.raise_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[log_extends_refl] >>
+  qpat_x_assum `!st res st'. eval_base_target _ _ _ = _ ==> _` drule >>
+  strip_tac >>
+  rpt (pairarg_tac >> gvs[]) >>
+  gvs[vyperStateTheory.bind_def, vyperStateTheory.return_def,
+      vyperStateTheory.raise_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[log_extends_refl] >>
+  imp_res_tac assign_target_logs >> imp_res_tac lift_option_type_state >>
+  imp_res_tac return_state >> gvs[] >>
+  irule log_extends_trans >> goal_assum drule >>
+  irule log_extends_eq_logs >> gvs[]
+QED
+
+Theorem case_expr_builtin_logs[local]:
+  (!s0 x s1.
+     type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s0 =
+       (INL x,s1) /\ bt <> Len ==>
+     !st res st'. eval_exprs cx es st = (res,st') ==> log_extends st st') /\
+  (!s0 x s1.
+     type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s0 =
+       (INL x,s1) /\ bt = Len ==>
+     !st res st'. eval_expr cx (HD es) st = (res,st') ==> log_extends st st') ==>
+  !st res st'. eval_expr cx (Builtin ty bt es) st = (res,st') ==>
+    log_extends st st'
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once vyperInterpreterTheory.evaluate_def] >>
+  pure_rewrite_tac[vyperStateTheory.ignore_bind_def] >>
+  simp[vyperStateTheory.bind_def, vyperStateTheory.return_def,
+       vyperStateTheory.raise_def, vyperStateTheory.check_def,
+       vyperStateTheory.type_check_def, vyperStateTheory.assert_def,
+       vyperStateTheory.get_accounts_def, vyperStateTheory.lift_sum_def,
+       AllCaseEqs()] >>
+  rpt strip_tac >> gvs[log_extends_refl] >>
+  Cases_on `bt = Len` >> gvs[] >>
+  TRY (gvs[vyperStateTheory.bind_def, vyperStateTheory.return_def,
+           vyperStateTheory.raise_def, AllCaseEqs()] >>
+       imp_res_tac toplevel_array_length_state >> gvs[] >>
+       first_x_assum (qspec_then `st` mp_tac) >>
+       simp[vyperStateTheory.check_def, vyperStateTheory.type_check_def,
+            vyperStateTheory.assert_def, vyperStateTheory.return_def] >> NO_TAC)
+  >> `!st res st'. eval_exprs cx es st = (res,st') ==>
+        log_extends st st'` by
+       (first_x_assum (qspec_then `st` mp_tac) >>
+        simp[vyperStateTheory.check_def, vyperStateTheory.type_check_def,
+             vyperStateTheory.assert_def, vyperStateTheory.return_def])
+  >> gvs[vyperStateTheory.bind_def, vyperStateTheory.return_def,
+         vyperStateTheory.raise_def, vyperStateTheory.get_accounts_def,
+         AllCaseEqs()]
+  >> BasicProvers.FULL_CASE_TAC
+  >> gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def]
+  >> first_x_assum drule >> simp[]
+QED
+
 Theorem case_stmt_return_some_logs[local]:
   (!s0 r s1. eval_expr cx e s0 = (r,s1) ==> log_extends s0 s1) ==>
   !st res st'. eval_stmt cx (Return (SOME e)) st = (res,st') ==>
@@ -1255,6 +1322,470 @@ Proof
   simp[vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def,
        vyperStateTheory.return_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >> first_x_assum drule >> simp[]
+QED
+
+Theorem ext_call_tail_log_extends[local]:
+  (do x <- assert success (Error (RuntimeError "ExtCall reverted"));
+      x <- update_accounts (K accounts');
+      x <- update_transient (K tStorage');
+      x <- append_logs emitted_logs;
+      if returnData = [] /\ IS_SOME drv then eval_expr cx (THE drv)
+      else do
+        ret_val <- lift_sum_runtime
+          (evaluate_abi_decode_return tenv ret_type returnData);
+        return (Value ret_val)
+      od
+   od) st = (res,st') ==>
+  (!e. drv = SOME e ==>
+     !s0 r s1. eval_expr cx e s0 = (r,s1) ==> log_extends s0 s1) ==>
+  log_extends st st'
+Proof
+  Cases_on `success` >> Cases_on `drv` >>
+  simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+       vyperStateTheory.update_accounts_def, vyperStateTheory.update_transient_def,
+       vyperInterpreterTheory.append_logs_def, vyperStateTheory.check_def,
+       vyperStateTheory.type_check_def, vyperStateTheory.assert_def,
+       vyperStateTheory.return_def, vyperStateTheory.raise_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[log_extends_append] >>
+  Cases_on `returnData = []` >>
+  gvs[vyperStateTheory.bind_def, vyperStateTheory.return_def, AllCaseEqs()] >>
+  TRY (imp_res_tac lift_sum_runtime_state >> gvs[] >>
+       simp[log_extends_def, rich_listTheory.IS_PREFIX_APPEND] >> NO_TAC) >>
+  qpat_x_assum `!s0 r s1. eval_expr cx x s0 = (r,s1) ==> _`
+    (qspecl_then [`st with <|logs := st.logs ++ emitted_logs;
+                    accounts := accounts'; tStorage := tStorage'|>`,
+                  `res`, `st'`] mp_tac) >>
+  simp[] >> strip_tac >>
+  irule log_extends_trans >> qexists_tac `st with <|logs := st.logs ++ emitted_logs;
+    accounts := accounts'; tStorage := tStorage'|>` >>
+  simp[log_extends_def, rich_listTheory.IS_PREFIX_APPEND]
+QED
+Theorem ext_call_result_tail_log_extends[local]:
+  (!e. drv = SOME e ==>
+     !s0 r s1. eval_expr cx e s0 = (r,s1) ==> log_extends s0 s1) /\
+  (if returnData = [] /\ IS_SOME drv then eval_expr cx (THE drv)
+   else do
+     ret_val <- lift_sum_runtime
+       (evaluate_abi_decode_return tenv ret_type returnData);
+     return (Value ret_val)
+   od)
+    (st with <|logs := st.logs ++ emitted_logs;
+               accounts := accounts'; tStorage := tStorage'|>) = (res,st') ==>
+  log_extends st st'
+Proof
+  Cases_on `drv` >>
+  simp[vyperStateTheory.bind_def, vyperStateTheory.return_def, AllCaseEqs()] >>
+  rpt strip_tac >>
+  Cases_on `returnData = []` >>
+  gvs[vyperStateTheory.bind_def, vyperStateTheory.return_def, AllCaseEqs()] >>
+  TRY (imp_res_tac lift_sum_runtime_state >> gvs[] >>
+       simp[log_extends_def, rich_listTheory.IS_PREFIX_APPEND] >> NO_TAC) >>
+  qpat_x_assum `!s0 r s1. eval_expr cx x s0 = (r,s1) ==> _`
+    (qspecl_then [`st with <|logs := st.logs ++ emitted_logs;
+                    accounts := accounts'; tStorage := tStorage'|>`,
+                  `res`, `st'`] mp_tac) >>
+  simp[] >> strip_tac >>
+  irule log_extends_trans >>
+  qexists_tac `st with <|logs := st.logs ++ emitted_logs;
+    accounts := accounts'; tStorage := tStorage'|>` >>
+  simp[log_extends_def, rich_listTheory.IS_PREFIX_APPEND]
+QED
+
+Definition ext_call_finish_def:
+  ext_call_finish cx drv ret_type tenv result =
+    (\(success,returnData,accounts',tStorage',emitted_logs).
+      do
+        x <- assert success (Error (RuntimeError "ExtCall reverted"));
+        x <- update_accounts (K accounts');
+        x <- update_transient (K tStorage');
+        x <- append_logs emitted_logs;
+        if returnData = [] /\ IS_SOME drv then eval_expr cx (THE drv)
+        else do
+          ret_val <- lift_sum_runtime
+            (evaluate_abi_decode_return tenv ret_type returnData);
+          return (Value ret_val)
+        od
+      od) result
+End
+
+Theorem ext_call_finish_fold[local]:
+  (\(success,returnData,accounts',tStorage',emitted_logs).
+    do
+      x <- assert success (Error (RuntimeError "ExtCall reverted"));
+      x <- update_accounts (K accounts');
+      x <- update_transient (K tStorage');
+      x <- append_logs emitted_logs;
+      if returnData = [] /\ IS_SOME drv then eval_expr cx (THE drv)
+      else do
+        ret_val <- lift_sum_runtime
+          (evaluate_abi_decode_return tenv ret_type returnData);
+        return (Value ret_val)
+      od
+    od) result = ext_call_finish cx drv ret_type tenv result
+Proof
+  PairCases_on `result` >> simp[ext_call_finish_def]
+QED
+
+Theorem ext_call_finish_check_fold[local]:
+  (\(success,returnData,accounts',tStorage',emitted_logs).
+    do
+      check success "ExtCall reverted";
+      update_accounts (K accounts');
+      update_transient (K tStorage');
+      append_logs emitted_logs;
+      if returnData = [] /\ IS_SOME drv then eval_expr cx (THE drv)
+      else do
+        ret_val <- lift_sum_runtime
+          (evaluate_abi_decode_return tenv ret_type returnData);
+        return (Value ret_val)
+      od
+    od) result = ext_call_finish cx drv ret_type tenv result
+Proof
+  PairCases_on `result` >>
+  simp[ext_call_finish_def, vyperStateTheory.check_def,
+       vyperStateTheory.ignore_bind_def]
+QED
+
+Theorem ext_call_finish_log_extends[local]:
+  ext_call_finish cx drv ret_type tenv result st = (res,st') ==>
+  (!e. drv = SOME e ==>
+     !s0 r s1. eval_expr cx e s0 = (r,s1) ==> log_extends s0 s1) ==>
+  log_extends st st'
+Proof
+  PairCases_on `result` >> simp[ext_call_finish_def] >>
+  metis_tac[ext_call_tail_log_extends]
+QED
+
+Theorem ext_call_result_log_extends[local]:
+  ((\(success,returnData,accounts',tStorage',emitted_logs).
+      do
+        x <- assert success (Error (RuntimeError "ExtCall reverted"));
+        x <- update_accounts (K accounts');
+        x <- update_transient (K tStorage');
+        x <- append_logs emitted_logs;
+        if returnData = [] /\ IS_SOME drv then eval_expr cx (THE drv)
+        else do
+          ret_val <- lift_sum_runtime
+            (evaluate_abi_decode_return tenv ret_type returnData);
+          return (Value ret_val)
+        od
+      od) result st = (res,st')) ==>
+  (!e. drv = SOME e ==>
+     !s0 r s1. eval_expr cx e s0 = (r,s1) ==> log_extends s0 s1) ==>
+  log_extends st st'
+Proof
+  rewrite_tac[ext_call_finish_fold] >>
+  metis_tac[ext_call_finish_log_extends]
+QED
+
+Theorem run_ext_call_lift_option_state[local]:
+  lift_option
+    (run_ext_call caller target calldata value_opt accounts tStorage params)
+    msg st = (res,st') ==>
+  st' = st
+Proof
+  metis_tac[lift_option_state]
+QED
+
+Theorem bind_state_preserving_log_extends[local]:
+  (!out s1. m st = (out,s1) ==> s1 = st) /\
+  (!x r s1. k x st = (r,s1) ==> log_extends st s1) /\
+  (do x <- m; k x od) st = (res,st') ==>
+  log_extends st st'
+Proof
+  rpt strip_tac >>
+  Cases_on `m st` >>
+  gvs[vyperStateTheory.bind_def] >>
+  Cases_on `q` >> gvs[log_extends_refl] >>
+  metis_tac[]
+QED
+
+Definition ext_call_prepare_def:
+  ext_call_prepare cx isc func_name arg_types vs =
+    do
+      type_check (vs <> []) "ExtCall no target";
+      target_addr <- lift_option_type (dest_AddressV (HD vs))
+                       "ExtCall target not address";
+      (value_opt,arg_vals) <- if (isc:bool) then return (NONE,TL vs)
+        else do
+          type_check (TL vs <> []) "ExtCall no value";
+          v <- lift_option_type (dest_NumV (HD (TL vs)))
+                 "ExtCall value not int";
+          return (SOME v,TL (TL vs))
+        od;
+      tenv <<- get_tenv cx;
+      calldata <- lift_option_type
+        (build_ext_calldata tenv func_name arg_types arg_vals)
+        "ExtCall build_calldata";
+      accounts <- get_accounts;
+      check (~NULL (lookup_account target_addr accounts).code)
+        "ExtCall target has no code";
+      tStorage <- get_transient_storage;
+      result <- lift_option
+        (run_ext_call cx.txn.target target_addr calldata value_opt accounts
+           tStorage (vyper_to_tx_params cx.txn)) "ExtCall run failed";
+      return (tenv,result)
+    od
+End
+
+Theorem ext_call_prepare_state[local]:
+  ext_call_prepare cx isc func_name arg_types vs st = (out,st') ==>
+  st' = st
+Proof
+  Cases_on `isc` >>
+  simp[ext_call_prepare_def, vyperStateTheory.bind_def,
+       vyperStateTheory.ignore_bind_def, vyperStateTheory.return_def,
+       vyperStateTheory.raise_def, vyperStateTheory.check_def,
+       vyperStateTheory.type_check_def, vyperStateTheory.get_accounts_def,
+       vyperStateTheory.get_transient_storage_def, AllCaseEqs()] >>
+  rpt strip_tac >>
+  gvs[vyperStateTheory.assert_def, vyperStateTheory.check_def,
+      vyperStateTheory.type_check_def, vyperStateTheory.raise_def,
+      vyperStateTheory.return_def] >>
+  imp_res_tac lift_option_type_state >>
+  imp_res_tac run_ext_call_lift_option_state >>
+  gvs[] >>
+  qpat_x_assum `(do _ od) _ = _` mp_tac >>
+  simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+       vyperStateTheory.return_def, vyperStateTheory.raise_def,
+       vyperStateTheory.check_def, vyperStateTheory.assert_def,
+       vyperStateTheory.get_accounts_def,
+       vyperStateTheory.get_transient_storage_def, AllCaseEqs()] >>
+  rpt strip_tac >>
+  gvs[vyperStateTheory.assert_def, vyperStateTheory.check_def,
+      vyperStateTheory.raise_def, vyperStateTheory.return_def] >>
+  imp_res_tac lift_option_type_state >>
+  imp_res_tac run_ext_call_lift_option_state >>
+  gvs[]
+QED
+
+
+Definition ext_call_after_args_with_def:
+  ext_call_after_args_with cx isc func_name arg_types vs k =
+    do
+      type_check (vs <> []) "ExtCall no target";
+      target_addr <- lift_option_type (dest_AddressV (HD vs))
+                       "ExtCall target not address";
+      (value_opt,arg_vals) <- if (isc:bool) then return (NONE,TL vs)
+        else do
+          type_check (TL vs <> []) "ExtCall no value";
+          v <- lift_option_type (dest_NumV (HD (TL vs)))
+                 "ExtCall value not int";
+          return (SOME v,TL (TL vs))
+        od;
+      tenv <<- get_tenv cx;
+      calldata <- lift_option_type
+        (build_ext_calldata tenv func_name arg_types arg_vals)
+        "ExtCall build_calldata";
+      accounts <- get_accounts;
+      check (~NULL (lookup_account target_addr accounts).code)
+        "ExtCall target has no code";
+      tStorage <- get_transient_storage;
+      result <- lift_option
+        (run_ext_call cx.txn.target target_addr calldata value_opt accounts
+           tStorage (vyper_to_tx_params cx.txn)) "ExtCall run failed";
+      k tenv result
+    od
+End
+
+Theorem ext_call_after_args_with_log_extends_snd[local]:
+  (!tenv result s0.
+     log_extends s0 (SND (k tenv result s0))) ==>
+  !st. log_extends st
+    (SND (ext_call_after_args_with cx isc func_name arg_types vs k st))
+Proof
+  Cases_on `isc` >> rpt strip_tac >>
+  simp[ext_call_after_args_with_def, vyperStateTheory.bind_def,
+       vyperStateTheory.ignore_bind_def, vyperStateTheory.return_def,
+       vyperStateTheory.raise_def, vyperStateTheory.check_def,
+       vyperStateTheory.type_check_def, vyperStateTheory.assert_def,
+       vyperStateTheory.get_accounts_def,
+       vyperStateTheory.get_transient_storage_def, AllCaseEqs()] >>
+  rpt (CASE_TAC >> gvs[log_extends_refl]) >>
+  simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+       vyperStateTheory.return_def, vyperStateTheory.raise_def,
+       vyperStateTheory.check_def, vyperStateTheory.assert_def,
+       vyperStateTheory.get_accounts_def,
+       vyperStateTheory.get_transient_storage_def, AllCaseEqs()] >>
+  rpt (CASE_TAC >> gvs[log_extends_refl]) >>
+  imp_res_tac lift_option_type_state >>
+  imp_res_tac run_ext_call_lift_option_state >>
+  gvs[log_extends_refl]
+QED
+
+Theorem ext_call_after_args_fold[local]:
+  (do type_check (vs <> []) "ExtCall no target";
+      target_addr <- lift_option_type (dest_AddressV (HD vs))
+                       "ExtCall target not address";
+      (value_opt,arg_vals) <- if (isc:bool) then return (NONE,TL vs)
+        else do
+          type_check (TL vs <> []) "ExtCall no value";
+          v <- lift_option_type (dest_NumV (HD (TL vs)))
+                 "ExtCall value not int";
+          return (SOME v,TL (TL vs))
+        od;
+      calldata <- lift_option_type
+        (build_ext_calldata (get_tenv cx) func_name arg_types arg_vals)
+        "ExtCall build_calldata";
+      accounts <- get_accounts;
+      check (~NULL (lookup_account target_addr accounts).code)
+        "ExtCall target has no code";
+      tStorage <- get_transient_storage;
+      result <- lift_option
+        (run_ext_call cx.txn.target target_addr calldata value_opt accounts
+           tStorage (vyper_to_tx_params cx.txn)) "ExtCall run failed";
+      (\(success,returnData,accounts',tStorage',emitted_logs).
+        do
+          check success "ExtCall reverted";
+          update_accounts (K accounts');
+          update_transient (K tStorage');
+          append_logs emitted_logs;
+          if returnData = [] /\ IS_SOME drv then eval_expr cx (THE drv)
+          else do
+            ret_val <- lift_sum_runtime
+              (evaluate_abi_decode_return (get_tenv cx) ret_type returnData);
+            return (Value ret_val)
+          od
+        od) result
+   od) =
+  ext_call_after_args_with cx isc func_name arg_types vs
+    (\tenv result. ext_call_finish cx drv ret_type tenv result)
+Proof
+  simp[ext_call_after_args_with_def, ext_call_finish_def,
+       vyperStateTheory.check_def, vyperStateTheory.ignore_bind_def]
+QED
+
+Theorem ext_call_after_args_log_extends[local]:
+  (do type_check (vs <> []) "ExtCall no target";
+      target_addr <- lift_option_type (dest_AddressV (HD vs))
+                       "ExtCall target not address";
+      (value_opt,arg_vals) <- if (isc:bool) then return (NONE,TL vs)
+        else do
+          type_check (TL vs <> []) "ExtCall no value";
+          v <- lift_option_type (dest_NumV (HD (TL vs)))
+                 "ExtCall value not int";
+          return (SOME v,TL (TL vs))
+        od;
+      calldata <- lift_option_type
+        (build_ext_calldata (get_tenv cx) func_name arg_types arg_vals)
+        "ExtCall build_calldata";
+      accounts <- get_accounts;
+      check (~NULL (lookup_account target_addr accounts).code)
+        "ExtCall target has no code";
+      tStorage <- get_transient_storage;
+      result <- lift_option
+        (run_ext_call cx.txn.target target_addr calldata value_opt accounts
+           tStorage (vyper_to_tx_params cx.txn)) "ExtCall run failed";
+      (\(success,returnData,accounts',tStorage',emitted_logs).
+        do
+          check success "ExtCall reverted";
+          update_accounts (K accounts');
+          update_transient (K tStorage');
+          append_logs emitted_logs;
+          if returnData = [] /\ IS_SOME drv then eval_expr cx (THE drv)
+          else do
+            ret_val <- lift_sum_runtime
+              (evaluate_abi_decode_return (get_tenv cx) ret_type returnData);
+            return (Value ret_val)
+          od
+        od) result
+   od) st = (res,st') ==>
+  (!e. drv = SOME e ==>
+     !s0 r s1. eval_expr cx e s0 = (r,s1) ==> log_extends s0 s1) ==>
+  log_extends st st'
+Proof
+  rpt strip_tac >>
+  `!tenv result s0.
+     log_extends s0
+       (SND (ext_call_finish cx drv ret_type tenv result s0))` by
+    (rpt gen_tac >>
+     Cases_on `ext_call_finish cx drv ret_type tenv result s0` >>
+     simp[] >>
+     drule ext_call_finish_log_extends >>
+     disch_then irule >>
+     first_assum ACCEPT_TAC) >>
+  qpat_x_assum `(do _ od) _ = _` mp_tac >>
+  pure_rewrite_tac[ext_call_finish_check_fold, ext_call_after_args_fold] >>
+  strip_tac >>
+  `log_extends st
+     (SND (ext_call_after_args_with cx isc func_name arg_types vs
+       (\tenv result. ext_call_finish cx drv ret_type tenv result) st))` by
+    (irule ext_call_after_args_with_log_extends_snd >> simp[]) >>
+  gvs[]
+QED
+
+
+Theorem case_expr_ext_call_logs[local]:
+  (!s0 r s1. eval_exprs cx es s0 = (r,s1) ==> log_extends s0 s1) /\
+  (!e. drv = SOME e ==>
+     !s0 r s1. eval_expr cx e s0 = (r,s1) ==> log_extends s0 s1) ==>
+  !st res st'.
+    eval_expr cx (Call ty (ExtCall static (func_name,arg_types,ret_type))
+                         es drv) st = (res,st') ==>
+    log_extends st st'
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once vyperInterpreterTheory.evaluate_def,
+       vyperStateTheory.bind_def, vyperStateTheory.return_def,
+       vyperStateTheory.raise_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[log_extends_refl] >>
+  first_x_assum drule >> strip_tac >>
+  irule log_extends_trans >> goal_assum drule >>
+  drule ext_call_after_args_log_extends >>
+  disch_then drule >>
+  simp[]
+QED
+
+Theorem raw_call_tail_log_extends[local]:
+  (do x <- update_accounts (K accounts');
+      x <- update_transient (K tStorage');
+      x <- append_logs emitted_logs;
+      if flags.rcf_revert_on_failure then do
+        x <- check success "raw_call reverted";
+        if flags.rcf_max_outsize = 0 then return (Value NoneV)
+        else return (Value (BytesV (TAKE flags.rcf_max_outsize returnData)))
+      od else if flags.rcf_max_outsize = 0 then return (Value (BoolV success))
+      else return (Value (ArrayV (TupleV
+        [BoolV success; BytesV (TAKE flags.rcf_max_outsize returnData)])))
+   od) st = (res,st') ==> log_extends st st'
+Proof
+  Cases_on `flags.rcf_revert_on_failure` >> Cases_on `success` >>
+  Cases_on `flags.rcf_max_outsize = 0` >>
+  simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+       vyperStateTheory.update_accounts_def, vyperStateTheory.update_transient_def,
+       vyperInterpreterTheory.append_logs_def, vyperStateTheory.check_def,
+       vyperStateTheory.type_check_def, vyperStateTheory.assert_def,
+       vyperStateTheory.return_def, vyperStateTheory.raise_def,
+       log_extends_def, rich_listTheory.IS_PREFIX_APPEND] >>
+  rpt strip_tac >> gvs[rich_listTheory.IS_PREFIX_APPEND]
+QED
+
+Theorem case_expr_raw_call_logs[local]:
+  (!s0 r s1. eval_exprs cx es s0 = (r,s1) ==> log_extends s0 s1) ==>
+  !st res st'. eval_expr cx (Call ty (RawCallTarget flags) es drv) st =
+    (res,st') ==> log_extends st st'
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once vyperInterpreterTheory.evaluate_def] >>
+  pure_rewrite_tac[vyperStateTheory.ignore_bind_def] >>
+  simp[vyperStateTheory.bind_def, vyperStateTheory.return_def,
+       vyperStateTheory.raise_def, vyperStateTheory.check_def,
+       vyperStateTheory.type_check_def, vyperStateTheory.assert_def,
+       vyperStateTheory.get_accounts_def,
+       vyperStateTheory.get_transient_storage_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[log_extends_refl] >>
+  imp_res_tac lift_option_type_state >> imp_res_tac lift_option_state >> gvs[] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  imp_res_tac raw_call_tail_log_extends >>
+  first_x_assum drule >> strip_tac >>
+  irule log_extends_trans >> goal_assum drule >>
+  irule raw_call_tail_log_extends >>
+  simp[vyperStateTheory.check_def] >>
+  qexistsl [`accounts'`, `emitted_logs`, `flags`, `res`, `returnData`,
+            `success`, `tStorage'`] >>
+  first_assum ACCEPT_TAC
 QED
 
 Theorem case_expr_raw_log_logs[local]:
