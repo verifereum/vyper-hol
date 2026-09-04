@@ -479,6 +479,58 @@ Proof
   imp_res_tac subscript_terminal_normalized_logs >>
   sym_tac >> first_assum ACCEPT_TAC
 QED
+
+Theorem subscript_after_e1_logs_forward[local]:
+  (do tv2 <- eval_expr cx e2;
+      v2 <- get_Value tv2;
+      arr_tv <- lift_option_type
+        (evaluate_type (get_tenv cx) (expr_type e1))
+        "Subscript array type";
+      check_array_bounds cx tv1 v2;
+      r <- lift_sum
+        (evaluate_subscript (get_tenv cx) arr_tv tv1 v2);
+      case r of
+        INL v => return v
+      | INR (is_transient,slot,tv) => do
+          v <- read_storage_slot cx is_transient slot tv;
+          return (Value v)
+        od
+   od) st = (res,st') ==>
+  (!s0 r s1. eval_expr cx e2 s0 = (r,s1) ==> log_extends s0 s1) ==>
+  log_extends st st'
+Proof
+  rpt strip_tac >>
+  drule bind_log_extends_forward >>
+  disch_then irule >>
+  conj_tac >- metis_tac[] >>
+  rpt strip_tac >> gvs[] >>
+  irule log_extends_eq_logs >>
+  imp_res_tac subscript_terminal_normalized_logs >>
+  sym_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem case_expr_subscript_logs[local]:
+  (!s0 tv1 s1. eval_expr cx e1 s0 = (INL tv1,s1) ==>
+     !s2 r s3. eval_expr cx e2 s2 = (r,s3) ==> log_extends s2 s3) /\
+  (!s0 r s1. eval_expr cx e1 s0 = (r,s1) ==> log_extends s0 s1) ==>
+  !st res st'.
+    eval_expr cx (Subscript ty e1 e2) st = (res,st') ==>
+    log_extends st st'
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `eval_expr _ (Subscript _ _ _) _ = _` mp_tac >>
+  simp[Once vyperInterpreterTheory.evaluate_def] >>
+  strip_tac >>
+  drule bind_log_extends_forward >>
+  disch_then irule >>
+  conj_tac
+  >- metis_tac[] >>
+  rpt strip_tac >> gvs[] >>
+  drule subscript_after_e1_logs_forward >>
+  disch_then irule >>
+  qpat_x_assum `!s0 tv1 s1. eval_expr _ e1 s0 = (INL tv1,s1) ==> _` drule >>
+  simp[]
+QED
 Theorem new_variable_logs[local]:
   new_variable id tv v st = (res,st') ==> st'.logs = st.logs
 Proof
@@ -614,6 +666,164 @@ Proof
   imp_res_tac vyperStorageBackendTheory.get_storage_backend_state >>
   imp_res_tac check_state >> imp_res_tac read_storage_slot_state >> gvs[] >>
   imp_res_tac write_storage_slot_logs >> imp_res_tac return_state >> gvs[]
+QED
+
+Theorem assign_target_toplevel_logs[local]:
+  assign_target cx (BaseTargetV (TopLevelVar src id) subs) ao st = (res,st') ==>
+  st'.logs = st.logs
+Proof
+  rpt strip_tac >>
+  Cases_on `lookup_global cx src (string_to_num id) st` >>
+  Cases_on `q` >>
+  imp_res_tac lookup_global_state >>
+  pop_assum SUBST_ALL_TAC
+  >- (Cases_on `x`
+      >- (qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
+          simp[Once vyperStateTheory.assign_target_def,
+               vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+               vyperStateTheory.return_def, vyperStateTheory.raise_def,
+               LET_THM, pairTheory.PAIR, AllCaseEqs()] >>
+          rpt strip_tac >> gvs[] >>
+          imp_res_tac lift_option_type_state >> imp_res_tac lift_sum_state >>
+          imp_res_tac set_global_logs >> imp_res_tac assign_result_state >> gvs[])
+      >- (qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
+          simp[Once vyperStateTheory.assign_target_def,
+               vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+               vyperStateTheory.return_def, vyperStateTheory.raise_def,
+               LET_THM, pairTheory.PAIR, AllCaseEqs()] >>
+          rpt strip_tac >> gvs[] >>
+          rpt (pairarg_tac >> gvs[]) >>
+          pop_assum mp_tac >>
+          simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+               AllCaseEqs()] >>
+          rpt strip_tac >> gvs[] >> rpt (pairarg_tac >> gvs[]) >>
+          pop_assum mp_tac >>
+          simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+               AllCaseEqs()] >>
+          rpt strip_tac >> gvs[] >>
+          imp_res_tac lift_option_type_state >>
+          imp_res_tac read_storage_slot_state >> imp_res_tac lift_sum_state >>
+          imp_res_tac write_storage_slot_logs >>
+          imp_res_tac assign_result_state >> gvs[])
+      >> (Cases_on `lift_option_type (get_module_code cx src)
+                       "assign_target get_module_code" st` >>
+          Cases_on `q` >>
+          imp_res_tac lift_option_type_state >>
+          pop_assum SUBST_ALL_TAC
+          >- (Cases_on `resolve_array_element cx b c (ArrayTV t b0)
+                         (REVERSE subs) st` >>
+              Cases_on `q` >>
+              imp_res_tac resolve_array_element_state >>
+              pop_assum SUBST_ALL_TAC
+              >- (PairCases_on `x'` >> Cases_on `x'1` >>
+                  TRY (Cases_on `b'` >> Cases_on `ao`) >>
+                  qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
+                  simp[Once vyperStateTheory.assign_target_def,
+                       vyperStateTheory.bind_def,
+                       vyperStateTheory.ignore_bind_def,
+                       vyperStateTheory.return_def,
+                       vyperStateTheory.raise_def,
+                       LET_THM, pairTheory.PAIR, AllCaseEqs()] >>
+                  rpt strip_tac >> gvs[] >>
+                  imp_res_tac storage_assignment_tail_logs >>
+                  imp_res_tac array_pop_tail_logs >>
+                  imp_res_tac array_append_tail_logs >>
+                  imp_res_tac vyperStorageBackendTheory.get_storage_backend_state >>
+                  imp_res_tac check_state >>
+                  imp_res_tac read_storage_slot_state >>
+                  imp_res_tac lift_sum_state >>
+                  imp_res_tac write_storage_slot_logs >>
+                  imp_res_tac assign_result_state >>
+                  imp_res_tac return_state >> gvs[])
+              >> (qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
+                  simp[Once vyperStateTheory.assign_target_def,
+                       vyperStateTheory.bind_def,
+                       vyperStateTheory.ignore_bind_def,
+                       vyperStateTheory.return_def,
+                       vyperStateTheory.raise_def,
+                       LET_THM, pairTheory.PAIR] >>
+                  strip_tac >> gvs[]))
+          >> (qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
+              simp[Once vyperStateTheory.assign_target_def,
+                   vyperStateTheory.bind_def, vyperStateTheory.return_def,
+                   vyperStateTheory.raise_def, LET_THM, pairTheory.PAIR] >>
+              strip_tac >> gvs[])))
+  >> (qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
+      simp[Once vyperStateTheory.assign_target_def,
+           vyperStateTheory.bind_def, vyperStateTheory.return_def,
+           vyperStateTheory.raise_def, LET_THM, pairTheory.PAIR] >>
+      strip_tac >> gvs[])
+QED
+
+Theorem assign_target_logs_mutual[local]:
+  (!cx gv ao st res st'.
+     assign_target cx gv ao st = (res,st') ==> st'.logs = st.logs) /\
+  (!cx gvs vs st res st'.
+     assign_targets cx gvs vs st = (res,st') ==> st'.logs = st.logs)
+Proof
+  ho_match_mp_tac vyperStateTheory.assign_target_ind >> rpt conj_tac >> rpt gen_tac
+  (* ScopedVar *)
+  >- (rpt strip_tac >>
+      gvs[vyperStateTheory.assign_target_def, vyperStateTheory.bind_def,
+          vyperStateTheory.get_scopes_def, vyperStateTheory.return_def,
+          vyperStateTheory.lift_option_def] >>
+      Cases_on `find_containing_scope (string_to_num id) st.scopes` >>
+      gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
+      PairCases_on `x` >>
+      Cases_on `assign_subscripts x2.type x2.value (REVERSE is) ao` >>
+      gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
+      gvs[vyperStateTheory.assign_target_def, vyperStateTheory.bind_def,
+          vyperStateTheory.ignore_bind_def, vyperStateTheory.return_def,
+          vyperStateTheory.raise_def, vyperStateTheory.lift_option_def,
+          vyperStateTheory.type_check_def, vyperStateTheory.assert_def,
+          vyperStateTheory.lift_sum_def, vyperStateTheory.set_scopes_def,
+          AllCaseEqs()] >>
+      imp_res_tac lift_sum_state >> imp_res_tac assign_result_state >> gvs[])
+  (* TopLevelVar *)
+  >- (rpt strip_tac >> imp_res_tac assign_target_toplevel_logs)
+  (* ImmutableVar *)
+  >- (rpt strip_tac >>
+      qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
+      simp[Once vyperStateTheory.assign_target_def,
+           vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+           vyperStateTheory.return_def, vyperStateTheory.raise_def,
+           AllCaseEqs()] >>
+      rpt strip_tac >> gvs[] >>
+      imp_res_tac get_immutables_state >> imp_res_tac lift_option_type_state >>
+      imp_res_tac lift_sum_state >> gvs[] >>
+      imp_res_tac set_immutable_logs >> imp_res_tac assign_result_state >> gvs[])
+  (* TupleTargetV success *)
+  >- (rpt strip_tac >>
+      qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
+      simp[Once vyperStateTheory.assign_target_def,
+           vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+           vyperStateTheory.return_def, vyperStateTheory.raise_def,
+           AllCaseEqs()] >>
+      rpt strip_tac >> gvs[] >>
+      imp_res_tac type_check_state >> gvs[] >>
+      first_x_assum drule >> imp_res_tac return_state >> gvs[])
+  (* Constructor mismatch, base, cons, and fallback cases. *)
+  >> rpt strip_tac
+  >> pop_assum mp_tac
+  >> simp[Once vyperStateTheory.assign_target_def,
+          vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+          vyperStateTheory.return_def, vyperStateTheory.raise_def,
+          AllCaseEqs()]
+  >> rpt strip_tac >> gvs[]
+  >> TRY (first_x_assum drule >> gvs[] >> NO_TAC)
+  >> imp_res_tac return_state >> gvs[]
+QED
+
+Theorem assign_target_logs[local]:
+  assign_target cx gv ao st = (res,st') ==> st'.logs = st.logs
+Proof
+  metis_tac[cj 1 assign_target_logs_mutual]
+QED
+
+Theorem assign_targets_logs[local]:
+  assign_targets cx gvs vs st = (res,st') ==> st'.logs = st.logs
+Proof
+  metis_tac[cj 2 assign_target_logs_mutual]
 QED
 Theorem case_stmt_return_some_logs[local]:
   (!s0 r s1. eval_expr cx e s0 = (r,s1) ==> log_extends s0 s1) ==>
