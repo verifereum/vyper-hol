@@ -485,6 +485,67 @@ Proof
   imp_res_tac check_state >> imp_res_tac write_storage_slot_logs >>
   imp_res_tac return_state >> gvs[]
 QED
+
+Theorem arrayref_assignment_suffix_logs[local]:
+  (do (elem_slot,final_tv,remaining_subs) <-
+        resolve_array_element cx is_transient base_slot (ArrayTV elem_tv bd) subs;
+      case (ao,final_tv) of
+        (PopOp,ArrayTV pop_elem_tv (Dynamic n)) => do
+          storage <- get_storage_backend cx is_transient;
+          stored_len <<- w2n (lookup_storage elem_slot storage);
+          check (stored_len > 0) "pop empty storage array";
+          last_idx <<- stored_len - 1;
+          last_slot <<- elem_slot + n2w (1 + last_idx * type_slot_size pop_elem_tv);
+          popped <- read_storage_slot cx is_transient last_slot pop_elem_tv;
+          write_storage_slot cx is_transient last_slot pop_elem_tv
+            (default_value pop_elem_tv);
+          write_storage_slot cx is_transient elem_slot (BaseTV (UintT 256))
+            (IntV &last_idx);
+          return (SOME popped)
+        od
+      | (AppendOp v,ArrayTV app_elem_tv (Dynamic n)) => do
+          storage <- get_storage_backend cx is_transient;
+          stored_len <<- w2n (lookup_storage elem_slot storage);
+          check (stored_len < n) "append full storage array";
+          new_slot <<- elem_slot + n2w (1 + stored_len * type_slot_size app_elem_tv);
+          write_storage_slot cx is_transient new_slot app_elem_tv v;
+          write_storage_slot cx is_transient elem_slot (BaseTV (UintT 256))
+            (IntV &(stored_len + 1));
+          return NONE
+        od
+      | _ => do
+          current_val <- read_storage_slot cx is_transient elem_slot final_tv;
+          new_val <- lift_sum (assign_subscripts final_tv current_val remaining_subs ao);
+          write_storage_slot cx is_transient elem_slot final_tv new_val;
+          assign_result final_tv ao current_val remaining_subs
+        od
+   od) st = (res,st') ==> st'.logs = st.logs
+Proof
+  rpt strip_tac >> pop_assum mp_tac >>
+  once_rewrite_tac [vyperStateTheory.bind_def] >>
+  qabbrev_tac `rr = resolve_array_element cx is_transient base_slot
+                    (ArrayTV elem_tv bd) subs st` >>
+  PairCases_on `rr` >> Cases_on `rr0` >>
+  qpat_x_assum `Abbrev _` mp_tac >>
+  simp[markerTheory.Abbrev_def] >> strip_tac >> gvs[] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  qpat_x_assum `(_,_) = resolve_array_element _ _ _ _ _ _`
+    (assume_tac o SYM) >>
+  imp_res_tac resolve_array_element_state >> gvs[] >>
+  Cases_on `final_tv` >> gvs[] >>
+  TRY (Cases_on `b` >> gvs[]) >>
+  Cases_on `ao` >> gvs[] >>
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac storage_assignment_tail_logs >>
+  imp_res_tac array_pop_tail_logs >>
+  imp_res_tac array_append_tail_logs >>
+  pop_assum mp_tac >>
+  simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+       AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  imp_res_tac vyperStorageBackendTheory.get_storage_backend_state >>
+  imp_res_tac check_state >> imp_res_tac read_storage_slot_state >> gvs[] >>
+  imp_res_tac write_storage_slot_logs >> imp_res_tac return_state >> gvs[]
+QED
 Theorem case_stmt_return_some_logs[local]:
   (!s0 r s1. eval_expr cx e s0 = (r,s1) ==> log_extends s0 s1) ==>
   !st res st'. eval_stmt cx (Return (SOME e)) st = (res,st') ==>
