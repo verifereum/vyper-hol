@@ -1745,6 +1745,13 @@ Definition call_external_def:
        call_external_function am cx nr mut ts all_mods args dflts tx.args body ret
 End
 
+(* Vyper-level deployment abstraction.  The target address is supplied by the
+   transaction rather than derived using EVM CREATE/CREATE2 rules, and successful
+   deployment installs Vyper sources and exports rather than init/runtime
+   bytecode.  Creator/created-account nonce updates and bytecode installation
+   therefore belong to the future correspondence with Verifereum's EVM creation
+   semantics.  Constructor value transfer, however, is performed by
+   call_external_function and retained on success (or rolled back on failure). *)
 Definition load_contract_def:
   load_contract am tx mods exps =
   let addr = tx.target in
@@ -1762,7 +1769,5 @@ Definition load_contract_def:
                 with in_deploy := T in
        case call_external_function am cx nr mut ts mods args dflts tx.args body ret
          of (INR e, _) => INR e
-       (* TODO(semantic-limitation): deployment currently omits balance updates
-          on successful constructor return. *)
           | (_, am) => INL (am with sources updated_by CONS (addr, mods))
 End
