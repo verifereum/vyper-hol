@@ -73,6 +73,36 @@ QED
 
 (* ===== Log Lifecycle Boundaries (issue #439) ===== *)
 
+Theorem push_log_logs[simp]:
+  push_log ev st = (INL (), st with logs := st.logs ++ [ev])
+Proof
+  simp[push_log_def, vyperStateTheory.return_def]
+QED
+
+Theorem append_logs_logs[simp]:
+  append_logs events st = (INL (), st with logs := st.logs ++ events)
+Proof
+  simp[append_logs_def, vyperStateTheory.return_def]
+QED
+
+Theorem extract_call_result_success_logs:
+  final_state.contexts = [(ctxt, rollback)] ⇒
+  extract_call_result orig_accounts orig_tStorage (INR NONE, final_state) =
+    SOME (T, ctxt.returnData, final_state.rollback.accounts,
+          final_state.rollback.tStorage, ctxt.logs)
+Proof
+  simp[extract_call_result_def]
+QED
+
+Theorem extract_call_result_reverted_logs:
+  final_state.contexts = [(ctxt, rollback)] ⇒
+  extract_call_result orig_accounts orig_tStorage
+    (INR (SOME Reverted), final_state) =
+    SOME (F, ctxt.returnData, orig_accounts, orig_tStorage, [])
+Proof
+  simp[extract_call_result_def]
+QED
+
 Theorem initial_state_logs[simp]:
   (initial_state am scopes).logs = am.logs
 Proof
