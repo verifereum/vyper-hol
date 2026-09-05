@@ -3,7 +3,7 @@ Ancestors
   arithmetic combin pair list While
   vyperMisc vyperValue vyperContext vyperState vyperCreate vyperInterpreter vyperABI
 Libs
-  cv_transLib
+  cv_transLib wordsLib
 
 (*
   plan for cps version:

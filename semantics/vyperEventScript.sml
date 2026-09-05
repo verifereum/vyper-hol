@@ -14,9 +14,9 @@
 Theory vyperEvent
 Ancestors
   cv cv_std vyperABI vyperValue contractABI vfmTypes
-  byte keccak
+  byte keccak words
 Libs
-  cv_transLib
+  cv_transLib wordsLib
 
 Type event_metadata = “:num # type list # bool list”
 Type event_info = “:string -> event_metadata option”
