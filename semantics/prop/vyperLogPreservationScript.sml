@@ -1509,14 +1509,13 @@ Theorem transfer_value_logs[local]:
   transfer_value fromAddr toAddr amount st = (res,st') ==>
   st'.logs = st.logs
 Proof
-  rpt strip_tac >>
-  qpat_x_assum `transfer_value _ _ _ _ = _` mp_tac >>
-  simp[vyperInterpreterTheory.transfer_value_def, vyperStateTheory.bind_def,
-       vyperStateTheory.ignore_bind_def, vyperStateTheory.get_accounts_def,
-       vyperStateTheory.update_accounts_def, vyperStateTheory.check_def,
-       vyperStateTheory.type_check_def, vyperStateTheory.assert_def,
-       vyperStateTheory.return_def, vyperStateTheory.raise_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[]
+  rw[vyperInterpreterTheory.transfer_value_def, vyperStateTheory.bind_def,
+     vyperStateTheory.ignore_bind_def, vyperStateTheory.get_accounts_def,
+     vyperStateTheory.update_accounts_def, vyperStateTheory.check_def,
+     vyperStateTheory.type_check_def, vyperStateTheory.assert_def,
+     vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
+  gvs[AllCaseEqs(), vyperStateTheory.return_def,
+      vyperStateTheory.raise_def]
 QED
 
 Theorem case_expr_send_logs[local]:
