@@ -19,6 +19,20 @@ Ancestors
 Libs
   wordsLib markerLib intLib
 
+val _ = Parse.hide "from"
+
+Theorem transfer_value_zero[simp]:
+  transfer_value from to 0 st = (INL (), st)
+Proof
+  simp[transfer_value_def, return_def]
+QED
+
+Theorem transfer_value_same_address[simp]:
+  transfer_value addr addr amount st = (INL (), st)
+Proof
+  simp[transfer_value_def, return_def]
+QED
+
 Theorem transfer_value_recipient_overflow_regression:
   let from = (0w:address) in
   let to = (1w:address) in
@@ -211,7 +225,9 @@ Proof
       combinTheory.APPLY_UPDATE_THM] >>
   rpt strip_tac >> gvs[] >>
   rpt (IF_CASES_TAC >> gvs[]) >>
-  first_x_assum (qspec_then `addr` mp_tac) >> decide_tac
+  first_x_assum (qspec_then `addr` mp_tac) >>
+  simp[vfmStateTheory.update_account_def, combinTheory.APPLY_UPDATE_THM] >>
+  rpt (IF_CASES_TAC >> gvs[]) >> decide_tac
 QED
 
 Theorem transfer_value_runtime_consistent:

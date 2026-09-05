@@ -40,7 +40,8 @@ val () = cv_auto_trans pop_function_def;
 (* helper for sending ether between accounts *)
 
 Definition transfer_value_def:
-  transfer_value fromAddr toAddr amount = do
+  transfer_value fromAddr toAddr amount =
+  if amount = 0 ∨ fromAddr = toAddr then return () else do
     acc <- get_accounts;
     sender <<- lookup_account fromAddr acc;
     check (amount <= sender.balance) "transfer_value amount";
@@ -54,7 +55,7 @@ End
 
 val () = transfer_value_def
   |> SRULE [FUN_EQ_THM, bind_def, ignore_bind_def,
-            LET_RATOR, update_accounts_def, o_DEF, C_DEF]
+            LET_RATOR, COND_RATOR, update_accounts_def, o_DEF, C_DEF]
   |> cv_auto_trans;
 
 (* machinery for calls to functions in a Vyper contract, and for internal calls
@@ -1766,6 +1767,13 @@ Definition call_external_transaction_def:
   call_external_transaction am tx = call_external (clear_machine_logs am) tx
 End
 
+(* Vyper-level deployment abstraction.  The target address is supplied by the
+   transaction rather than derived using EVM CREATE/CREATE2 rules, and successful
+   deployment installs Vyper sources and exports rather than init/runtime
+   bytecode.  Creator/created-account nonce updates and bytecode installation
+   therefore belong to the future correspondence with Verifereum's EVM creation
+   semantics.  Constructor value transfer, however, is performed by
+   call_external_function and retained on success (or rolled back on failure). *)
 Definition load_contract_def:
   load_contract am tx mods exps =
   let addr = tx.target in
@@ -1783,7 +1791,5 @@ Definition load_contract_def:
                 with in_deploy := T in
        case call_external_function am cx nr mut ts mods args dflts tx.args body ret
          of (INR e, _) => INR e
-       (* TODO(semantic-limitation): deployment currently omits balance updates
-          on successful constructor return. *)
           | (_, am) => INL (am with sources updated_by CONS (addr, mods))
 End

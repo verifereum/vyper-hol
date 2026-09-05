@@ -1880,14 +1880,9 @@ Proof
          return_def] >>
     imp_res_tac type_check_state >>
     imp_res_tac lift_option_type_state >>
-    imp_res_tac transfer_value_scopes >> gvs[] >>
-    TRY (
-      qmatch_assum_rename_tac`ss1.scopes = ss2.scopes` >>
-      `ss1.immutables = ss2.immutables` by (
-        gvs[transfer_value_def, bind_apply, ignore_bind_apply,
-            check_def, assert_def, update_accounts_def,
-            get_accounts_def, return_def, AllCaseEqs()] ) ) >>
-    gvs[] >> first_x_assum drule_all >> rw[] >>
+    imp_res_tac transfer_value_scopes >>
+    imp_res_tac transfer_value_immutables >> gvs[] >>
+    first_x_assum drule_all >> rw[] >>
     gvs[preserves_tv_def] ) >>
   (* ExtCall *)
   conj_tac >- (

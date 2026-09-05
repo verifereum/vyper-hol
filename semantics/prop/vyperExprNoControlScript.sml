@@ -212,7 +212,11 @@ Theorem transfer_value_no_control:
   ∀from to amt s exc s'.
   transfer_value from to amt s = (INR exc, s') ⇒ no_control_exc exc
 Proof
-  rpt gen_tac >> simp[transfer_value_def, bind_def, ignore_bind_def,
+  rpt gen_tac >>
+  rename1 `transfer_value fromAddr toAddr amount st = (INR exc, st') ⇒ no_control_exc exc` >>
+  Cases_on `amount = 0 ∨ fromAddr = toAddr`
+  >- simp[transfer_value_def, return_def]
+  >> simp[transfer_value_def, bind_def, ignore_bind_def,
     get_accounts_def, return_def, update_accounts_def]
   >> strip_tac >> gvs[AllCaseEqs(), return_def]
   >> imp_res_tac check_no_control

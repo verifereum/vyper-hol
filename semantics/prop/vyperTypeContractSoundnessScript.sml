@@ -909,7 +909,9 @@ Proof
       combinTheory.APPLY_UPDATE_THM] >>
   rpt strip_tac >> gvs[] >>
   rpt (IF_CASES_TAC >> gvs[]) >>
-  first_x_assum (qspec_then `addr` mp_tac) >> decide_tac
+  first_x_assum (qspec_then `addr` mp_tac) >>
+  simp[vfmStateTheory.update_account_def, combinTheory.APPLY_UPDATE_THM] >>
+  rpt (IF_CASES_TAC >> gvs[]) >> decide_tac
 QED
 
 Theorem send_call_value_no_control_c53:
