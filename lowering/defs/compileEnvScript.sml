@@ -724,17 +724,13 @@ Definition is_bytestring_type_def:
 End
 
 (* ===== Log Equivalence ===== *)
-(* Single log entry equivalence.
-   Interpreter log: (nsid, value list) where nsid = (num option, string).
-   Venom event: <| logger; topics : bytes32 list; data : byte list |>.
-   The lowering (compile_stmt Log) computes:
-   - event_hash from ce_event_info → first topic
-   - indexed static args → ABI word topics
-   - indexed bytes/string args → keccak256(raw bytes) topics
-   - non-indexed args → ABI-encoded data buffer
-   logger = contract address (cc_address).
-
-   The relation uses ce_event_info to determine which args are indexed. *)
+(* Both the source interpreter and Venom state carry concrete EVM events:
+   <| logger; topics : bytes32 list; data : byte list |>.
+   Event declarations are encoded by the source semantics when Log executes,
+   using the same signature hash, indexed-topic encoding, and ABI data encoding
+   as compile_stmt. Consequently the authoritative state relation below is
+   concrete event equality. The extraction helpers in this section characterize
+   the shared encoder and remain useful to lowering compatibility proofs. *)
 (* Extract indexed values from args based on flags *)
 Definition indexed_values_def:
   indexed_values [] [] = ([] : value list) ∧
