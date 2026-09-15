@@ -8,8 +8,9 @@
 .hol_init.sml
 .hol_cmd.sml
 
-# (symlink to) generated Vyper tests
+# Generated Vyper test inputs and coverage report
 tests/vyper-test-exports
+tests/vyper-coverage-report.txt
 
 .alan/
 

@@ -680,6 +680,7 @@ in
 end
 
 fun holbuild_extra_deps (_ : string list) = ()
+fun holbuild_extra_outputs (_ : string list) = ()
 
 fun print_file_coverage json_path report = let
   val tests = #selected report
@@ -772,8 +773,9 @@ in
    malformed = malformed}
 end
 
-fun print_raw_coverage json_path report = let
-  val () = TextIO.print (String.concat
+fun print_raw_coverage output json_path report = let
+  fun emit text = TextIO.output(output,text)
+  val () = emit (String.concat
     ["[vyper-coverage] file=", json_path,
      " items=", Int.toString (#total_items report),
      " fixtures=", Int.toString (#fixtures report),
@@ -783,26 +785,26 @@ fun print_raw_coverage json_path report = let
      " excluded_name=", Int.toString (List.length (#name_skips report)),
      " excluded_source=", Int.toString (List.length (#source_skips report)),
      " malformed_items=", Int.toString (List.length (#malformed report)), "\n"])
-  val () = List.app (fn name => TextIO.print (String.concat
+  val () = List.app (fn name => emit (String.concat
     ["[vyper-coverage] excluded file=", json_path,
      " test=", name, " reason=excluded test name\n"]))
     (List.rev (#name_skips report))
-  val () = List.app (fn (name,reason) => TextIO.print (String.concat
+  val () = List.app (fn (name,reason) => emit (String.concat
     ["[vyper-coverage] excluded file=", json_path,
      " test=", name, " reason=", reason, "\n"]))
     (List.rev (#source_skips report))
-  val () = List.app (fn name => TextIO.print (String.concat
+  val () = List.app (fn name => emit (String.concat
     ["[vyper-coverage] malformed file=", json_path,
      " item=", name, " reason=missing item_type\n"]))
     (List.rev (#malformed report))
 in
-  if #selected report = 0 then TextIO.print (String.concat
+  if #selected report = 0 then emit (String.concat
     ["[vyper-coverage] warning file=", json_path,
      " has no selected tests\n"])
   else ()
 end
 
-fun report_coverage () = let
+fun write_coverage_report output_path = let
   val files = test_files ()
   val reports = List.map (fn (_,path) => (path,read_coverage_json path)) files
   fun sum field = List.foldl (fn ((_,report),n) => field report + n) 0 reports
@@ -815,22 +817,29 @@ fun report_coverage () = let
   val excluded_source = sum (List.length o #source_skips)
   val malformed = sum (List.length o #malformed)
   val zero_selected = sum (fn report => if #selected report = 0 then 1 else 0)
-  val () = TextIO.print (String.concat
-    ["[vyper-coverage] admitted_files=", Int.toString (List.length files), "\n"])
-  val () = List.app (fn (json_path,report) =>
-    print_raw_coverage json_path report) reports
+  val output = TextIO.openOut output_path
+  fun emit text = TextIO.output(output,text)
+  fun write () = let
+    val () = emit (String.concat
+      ["[vyper-coverage] admitted_files=", Int.toString (List.length files), "\n"])
+    val () = List.app (fn (json_path,report) =>
+      print_raw_coverage output json_path report) reports
+  in
+    emit (String.concat
+      ["[vyper-coverage] summary admitted_files=", Int.toString (List.length files),
+       " items=", Int.toString total_items,
+       " fixtures=", Int.toString fixtures,
+       " non_tests=", Int.toString non_tests,
+       " selected=", Int.toString selected,
+       " exported_traces=", Int.toString exported_traces,
+       " excluded_name=", Int.toString excluded_name,
+       " excluded_source=", Int.toString excluded_source,
+       " malformed_items=", Int.toString malformed,
+       " zero_selected_files=", Int.toString zero_selected, "\n"])
+  end
 in
-  TextIO.print (String.concat
-    ["[vyper-coverage] summary admitted_files=", Int.toString (List.length files),
-     " items=", Int.toString total_items,
-     " fixtures=", Int.toString fixtures,
-     " non_tests=", Int.toString non_tests,
-     " selected=", Int.toString selected,
-     " exported_traces=", Int.toString exported_traces,
-     " excluded_name=", Int.toString excluded_name,
-     " excluded_source=", Int.toString excluded_source,
-     " malformed_items=", Int.toString malformed,
-     " zero_selected_files=", Int.toString zero_selected, "\n"])
+  (write () before TextIO.closeOut output)
+  handle e => (TextIO.closeOut output; raise e)
 end
 
 fun make_definitions_for_file (id, json_path) = let
