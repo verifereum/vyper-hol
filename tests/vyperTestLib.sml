@@ -729,47 +729,114 @@ fun raw_array_length_field key (JSON.OBJECT fields) =
        | _ => NONE)
   | raw_array_length_field _ _ = NONE
 
+fun raw_string_array_field key (JSON.OBJECT fields) =
+      (case List.find (fn (name,_) => name = key) fields of
+         SOME (_,JSON.ARRAY values) =>
+           SOME (List.mapPartial
+             (fn JSON.STRING value => SOME value | _ => NONE) values)
+       | _ => NONE)
+  | raw_string_array_field _ _ = NONE
+
 fun read_coverage_json json_path = let
   val items = decodeFile rawObject json_path
+  val fixtures = List.mapPartial (fn (name,json) =>
+    if raw_string_field "item_type" json = SOME "fixture"
+    then SOME (name,json) else NONE) items
+  fun deps json = Option.getOpt (raw_string_array_field "deps" json,[])
+  fun fixture_for dep =
+    List.find (fn (name,_) => name = fixture_name_of_dep dep) fixtures
+  fun fixture_trace_count dep =
+    case fixture_for dep of
+      NONE => 0
+    | SOME (_,json) => Option.getOpt (raw_array_length_field "traces" json,0)
+  fun fixture_has_source dep =
+    case fixture_for dep of
+      NONE => false
+    | SOME (_,json) => not (List.null (source_codes_json json))
+  val referenced_fixtures =
+    List.concat (List.map (fn (_,json) => deps json) items)
+  val unreferenced_traced_fixtures = List.mapPartial (fn (name,json) =>
+    if Option.getOpt (raw_array_length_field "traces" json,0) > 0 andalso
+       not (List.exists (fn dep => fixture_name_of_dep dep = name)
+         referenced_fixtures)
+    then SOME name else NONE) fixtures
   fun classify ((name,json),
-      (fixtures,non_tests,selected,traces,name_skips,source_skips,malformed)) =
+      (non_tests,selected,direct_traces,expanded_traces,name_skips,
+       pattern_skips,no_traces,fixture_source,missing_source,blank_source,
+       malformed)) =
     case raw_string_field "item_type" json of
       SOME "fixture" =>
-        (fixtures + 1,non_tests,selected,traces,
-         name_skips,source_skips,malformed)
-    | SOME "test" =>
+        (non_tests,selected,direct_traces,expanded_traces,name_skips,
+         pattern_skips,no_traces,fixture_source,missing_source,blank_source,
+         malformed)
+    | SOME "test" => let
+        val direct = Option.getOpt (raw_array_length_field "traces" json,0)
+        val item_deps = deps json
+        val expanded = direct + List.foldl
+          (fn (dep,n) => fixture_trace_count dep + n) 0 item_deps
+        fun keep_selected () =
+          (non_tests,selected + 1,direct + direct_traces,
+           expanded + expanded_traces,name_skips,pattern_skips,no_traces,
+           fixture_source,missing_source,blank_source,malformed)
+      in
         if List.exists (fn pat => glob_match pat name) excluded_test_names
-        then (fixtures,non_tests,selected,traces,name::name_skips,
-              source_skips,malformed)
+        then (non_tests,selected,direct_traces,expanded_traces,
+              name::name_skips,pattern_skips,no_traces,fixture_source,
+              missing_source,blank_source,malformed)
         else if List.exists (equal name) allowed_test_names
-        then (fixtures,non_tests,selected + 1,
-              Option.getOpt (raw_array_length_field "traces" json,0) + traces,
-              name_skips,source_skips,malformed)
+        then keep_selected ()
         else
-          (case unsupported_source_reason json of
-             SOME reason =>
-               (fixtures,non_tests,selected,traces,name_skips,
-                (name,reason)::source_skips,malformed)
-           | NONE =>
-               (fixtures,non_tests,selected + 1,
-                Option.getOpt (raw_array_length_field "traces" json,0) + traces,
-                name_skips,source_skips,malformed))
+          case unsupported_source_reason json of
+            NONE => keep_selected ()
+          | SOME reason =>
+              if expanded = 0 then
+                (non_tests,selected,direct_traces,expanded_traces,name_skips,
+                 pattern_skips,name::no_traces,fixture_source,missing_source,
+                 blank_source,malformed)
+              else if reason = "missing source_code" andalso
+                      List.exists fixture_has_source item_deps then
+                (non_tests,selected,direct_traces,expanded_traces,name_skips,
+                 pattern_skips,no_traces,name::fixture_source,missing_source,
+                 blank_source,malformed)
+              else if reason = "missing source_code" then
+                (non_tests,selected,direct_traces,expanded_traces,name_skips,
+                 pattern_skips,no_traces,fixture_source,name::missing_source,
+                 blank_source,malformed)
+              else if reason = "blank source_code" then
+                (non_tests,selected,direct_traces,expanded_traces,name_skips,
+                 pattern_skips,no_traces,fixture_source,missing_source,
+                 name::blank_source,malformed)
+              else
+                (non_tests,selected,direct_traces,expanded_traces,name_skips,
+                 (name,reason)::pattern_skips,no_traces,fixture_source,
+                 missing_source,blank_source,malformed)
+      end
     | SOME _ =>
-        (fixtures,non_tests + 1,selected,traces,
-         name_skips,source_skips,malformed)
+        (non_tests + 1,selected,direct_traces,expanded_traces,name_skips,
+         pattern_skips,no_traces,fixture_source,missing_source,blank_source,
+         malformed)
     | NONE =>
-        (fixtures,non_tests,selected,traces,
-         name_skips,source_skips,name::malformed)
-  val (fixtures,non_tests,selected,traces,name_skips,source_skips,malformed) =
-    List.foldl classify (0,0,0,0,[],[],[]) items
+        (non_tests,selected,direct_traces,expanded_traces,name_skips,
+         pattern_skips,no_traces,fixture_source,missing_source,blank_source,
+         name::malformed)
+  val (non_tests,selected,direct_traces,expanded_traces,name_skips,
+       pattern_skips,no_traces,fixture_source,missing_source,blank_source,
+       malformed) =
+    List.foldl classify (0,0,0,0,[],[],[],[],[],[],[]) items
 in
   {total_items = List.length items,
-   fixtures = fixtures,
+   fixtures = List.length fixtures,
    non_tests = non_tests,
    selected = selected,
-   exported_traces = traces,
+   direct_traces = direct_traces,
+   expanded_traces = expanded_traces,
    name_skips = name_skips,
-   source_skips = source_skips,
+   pattern_skips = pattern_skips,
+   no_traces = no_traces,
+   fixture_source = fixture_source,
+   missing_source = missing_source,
+   blank_source = blank_source,
+   unreferenced_traced_fixtures = unreferenced_traced_fixtures,
    malformed = malformed}
 end
 
@@ -781,9 +848,14 @@ fun print_raw_coverage output json_path report = let
      " fixtures=", Int.toString (#fixtures report),
      " non_tests=", Int.toString (#non_tests report),
      " selected=", Int.toString (#selected report),
-     " exported_traces=", Int.toString (#exported_traces report),
+     " direct_traces=", Int.toString (#direct_traces report),
+     " expanded_traces=", Int.toString (#expanded_traces report),
      " excluded_name=", Int.toString (List.length (#name_skips report)),
-     " excluded_source=", Int.toString (List.length (#source_skips report)),
+     " excluded_pattern=", Int.toString (List.length (#pattern_skips report)),
+     " no_exported_traces=", Int.toString (List.length (#no_traces report)),
+     " source_from_fixture=", Int.toString (List.length (#fixture_source report)),
+     " missing_source=", Int.toString (List.length (#missing_source report)),
+     " blank_source=", Int.toString (List.length (#blank_source report)),
      " malformed_items=", Int.toString (List.length (#malformed report)), "\n"])
   val () = List.app (fn name => emit (String.concat
     ["[vyper-coverage] excluded file=", json_path,
@@ -792,7 +864,18 @@ fun print_raw_coverage output json_path report = let
   val () = List.app (fn (name,reason) => emit (String.concat
     ["[vyper-coverage] excluded file=", json_path,
      " test=", name, " reason=", reason, "\n"]))
-    (List.rev (#source_skips report))
+    (List.rev (#pattern_skips report))
+  fun emit_named reason names = List.app (fn name => emit (String.concat
+    ["[vyper-coverage] excluded file=", json_path,
+     " test=", name, " reason=", reason, "\n"])) (List.rev names)
+  val () = emit_named "no exported traces" (#no_traces report)
+  val () = emit_named "source supplied only by fixture" (#fixture_source report)
+  val () = emit_named "missing source_code in traceful item" (#missing_source report)
+  val () = emit_named "blank source_code" (#blank_source report)
+  val () = List.app (fn name => emit (String.concat
+    ["[vyper-coverage] fixture file=", json_path,
+     " name=", name, " reason=unreferenced fixture with traces\n"]))
+    (List.rev (#unreferenced_traced_fixtures report))
   val () = List.app (fn name => emit (String.concat
     ["[vyper-coverage] malformed file=", json_path,
      " item=", name, " reason=missing item_type\n"]))
@@ -812,9 +895,16 @@ fun write_coverage_report output_path = let
   val fixtures = sum #fixtures
   val non_tests = sum #non_tests
   val selected = sum #selected
-  val exported_traces = sum #exported_traces
+  val direct_traces = sum #direct_traces
+  val expanded_traces = sum #expanded_traces
   val excluded_name = sum (List.length o #name_skips)
-  val excluded_source = sum (List.length o #source_skips)
+  val excluded_pattern = sum (List.length o #pattern_skips)
+  val no_traces = sum (List.length o #no_traces)
+  val fixture_source = sum (List.length o #fixture_source)
+  val missing_source = sum (List.length o #missing_source)
+  val blank_source = sum (List.length o #blank_source)
+  val unreferenced_fixtures = sum
+    (List.length o #unreferenced_traced_fixtures)
   val malformed = sum (List.length o #malformed)
   val zero_selected = sum (fn report => if #selected report = 0 then 1 else 0)
   val output = TextIO.openOut output_path
@@ -831,9 +921,15 @@ fun write_coverage_report output_path = let
        " fixtures=", Int.toString fixtures,
        " non_tests=", Int.toString non_tests,
        " selected=", Int.toString selected,
-       " exported_traces=", Int.toString exported_traces,
+       " direct_traces=", Int.toString direct_traces,
+       " expanded_traces=", Int.toString expanded_traces,
        " excluded_name=", Int.toString excluded_name,
-       " excluded_source=", Int.toString excluded_source,
+       " excluded_pattern=", Int.toString excluded_pattern,
+       " no_exported_traces=", Int.toString no_traces,
+       " source_from_fixture=", Int.toString fixture_source,
+       " missing_source=", Int.toString missing_source,
+       " blank_source=", Int.toString blank_source,
+       " unreferenced_traced_fixtures=", Int.toString unreferenced_fixtures,
        " malformed_items=", Int.toString malformed,
        " zero_selected_files=", Int.toString zero_selected, "\n"])
   end
