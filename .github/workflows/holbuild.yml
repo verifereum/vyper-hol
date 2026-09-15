@@ -223,6 +223,11 @@ jobs:
           key: ${{ needs.export-vyper-tests.outputs.export-cache-key }}
           fail-on-cache-miss: true
 
+      - name: Report Vyper test coverage baseline
+        if: matrix.group == 0
+        working-directory: tests
+        run: holbuild run reportVyperCoverage.sml
+
       - name: Run Vyper test group ${{ matrix.group }}
         env:
           TMPDIR: ${{ runner.temp }}

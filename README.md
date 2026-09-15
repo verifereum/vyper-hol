@@ -129,3 +129,5 @@ holbuild -j"$(nproc)" build vyperTest_functional_builtins_codegen_test_abi_decod
 ```
 
 The CI workflow runs the generated tests in parallel groups; see `.github/workflows/holbuild.yml` for that full setup.
+
+When a generated definitions theory reads its exported JSON file, the decoder emits machine-readable `[vyper-coverage]` lines. The per-file summary reports exported items, fixtures and other non-test items, selected tests, decoded traces, name exclusions, source-pattern exclusions, and decode failures. Individual exclusion lines record the test name and selection reason, and an admitted file with no selected tests produces a warning. These messages are reporting only: existing selection rules and decode-failure enforcement are unchanged.
