@@ -225,7 +225,7 @@ jobs:
 
       - name: Build Vyper test coverage baseline
         if: matrix.group == 0
-        run: holbuild build vyperTestCoverageReportTheory
+        run: holbuild build --skip-checkpoints --skip-proof-steps vyperTestCoverageReportTheory
 
       - name: Report Vyper test coverage baseline
         if: matrix.group == 0
