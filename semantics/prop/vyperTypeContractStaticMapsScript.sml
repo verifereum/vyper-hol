@@ -183,6 +183,26 @@ Proof
   simp[lookup_callable_function_def]
 QED
 
+(* Deploy lookup is total on finite declaration lists: absence of a matching
+   declaration is represented by the synthetic empty payable constructor. *)
+Theorem lookup_function_Deploy_IS_SOME:
+  IS_SOME (lookup_function src fn Deploy ts)
+Proof
+  Induct_on `ts` >- simp[lookup_function_def] >>
+  gen_tac >> Cases_on `h` >> rw[lookup_function_def] >>
+  TRY (Cases_on `v`) >> gvs[lookup_function_def]
+QED
+
+Theorem lookup_function_Deploy_no_decl:
+  ~(?fm nr raw args dflts ret body.
+      MEM (FunctionDecl Deploy fm nr raw fn args dflts ret body) ts) ==>
+  lookup_function src fn Deploy ts = SOME (Payable,F,[],[],NoneT,[])
+Proof
+  Induct_on `ts` >- rw[lookup_function_def] >>
+  gen_tac >> Cases_on `h` >> rw[lookup_function_def] >>
+  TRY (Cases_on `v`) >> gvs[lookup_function_def] >> metis_tac[]
+QED
+
 Theorem lookup_function_Deploy_SOME_cases:
   lookup_function src fn Deploy ts = SOME (fm,nr,args,dflts,ret,body) ==>
   (fm = Payable /\ nr = F /\ args = [] /\ dflts = [] /\ ret = NoneT /\ body = []) \/
