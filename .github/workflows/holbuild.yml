@@ -225,8 +225,7 @@ jobs:
 
       - name: Report Vyper test coverage baseline
         if: matrix.group == 0
-        working-directory: tests
-        run: holbuild run reportVyperCoverage.sml
+        run: holbuild run tests/reportVyperCoverage.sml
 
       - name: Run Vyper test group ${{ matrix.group }}
         env:
