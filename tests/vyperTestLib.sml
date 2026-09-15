@@ -245,13 +245,25 @@ fun source_codes_json j =
     gather j
   end
 
-fun has_unsupported_source_json j =
+fun first_some [] = NONE
+  | first_some (NONE::xs) = first_some xs
+  | first_some (SOME x::_) = SOME x
+
+fun unsupported_source_reason j =
   case source_codes_json j of
-    [] => true
+    [] => SOME "missing source_code"
   | srcs =>
-      List.exists (fn src =>
-        String.size src = 0 orelse is_blank src orelse
-        has_unsupported_patterns src) srcs
+      if List.exists (fn src => String.size src = 0 orelse is_blank src) srcs
+      then SOME "blank source_code"
+      else first_some
+        (List.map (fn pat =>
+           if List.exists (String.isSubstring pat) srcs
+           then SOME ("unsupported source pattern: " ^ pat)
+           else NONE)
+         unsupported_patterns)
+
+fun has_unsupported_source_json j =
+  Option.isSome (unsupported_source_reason j)
 
 fun has_unsupported_source_code (name, (err, j)) =
   has_unsupported_source_json j
@@ -563,14 +575,16 @@ fun collect_fixture ((name, json), acc) =
   end
   else acc
 
-(* Pass 2: decode test items, resolving deps by prepending fixture traces. *)
-fun trydecode_with_fixtures fixtures ((name,json),(s,f)) =
+(* Pass 2: decode test items, resolving deps by prepending fixture traces.
+   The extra accumulator fields are reporting only; selection behavior is kept
+   identical to the pre-reporting implementation. *)
+fun trydecode_with_fixtures fixtures
+      ((name,json),(selected,failures,name_skips,source_skips,non_tests)) =
   if decode (field "item_type" string) json <> "test"
-  then (s,f)  (* skip non-test entries *)
+  then (selected,failures,name_skips,source_skips,non_tests + 1)
   else if List.exists (fn pat => glob_match pat name) excluded_test_names
-  then (s,f)
+  then (selected,failures,name::name_skips,source_skips,non_tests)
   else if List.exists (equal name) allowed_test_names
-     orelse not (has_unsupported_source_json json)
   then let
     val (dep_names, test_traces) = decode test_with_deps_decoder json
     val fixture_traces = List.concat (
@@ -579,21 +593,48 @@ fun trydecode_with_fixtures fixtures ((name,json),(s,f)) =
           NONE => []
         | SOME (_, trs) => trs)
         dep_names)
-    val all_traces = fixture_traces @ test_traces
   in
-    ((name, all_traces) :: s, f)
+    ((name, fixture_traces @ test_traces) :: selected,
+     failures,name_skips,source_skips,non_tests)
   end
-  handle JSONError e => (s, (name, JSONError e)::f)
-       | e => (s, (name, JSONError (e, JSON.OBJECT [("source_code", JSON.STRING "")]))::f)
-  else (s,f)
+  else
+    case unsupported_source_reason json of
+      SOME reason =>
+        (selected,failures,name_skips,(name,reason)::source_skips,non_tests)
+    | NONE => let
+        val (dep_names, test_traces) = decode test_with_deps_decoder json
+        val fixture_traces = List.concat (
+          List.map (fn dn =>
+            case List.find (fn (fn_, _) => fn_ = fixture_name_of_dep dn) fixtures of
+              NONE => []
+            | SOME (_, trs) => trs)
+            dep_names)
+      in
+        ((name, fixture_traces @ test_traces) :: selected,
+         failures,name_skips,source_skips,non_tests)
+      end
+  handle JSONError e =>
+           (selected,(name,JSONError e)::failures,
+            name_skips,source_skips,non_tests)
+       | e =>
+           (selected,
+            (name,JSONError (e,JSON.OBJECT [("source_code",JSON.STRING "")]))
+              ::failures,
+            name_skips,source_skips,non_tests)
 
 fun read_test_json json_path = let
   val test_jsons = decodeFile rawObject json_path
-  (* Pass 1: collect fixtures *)
   val fixtures = List.foldl collect_fixture [] test_jsons
-  (* Pass 2: decode tests with deps resolved *)
+  val (selected,failures,name_skips,source_skips,non_tests) =
+    List.foldl (trydecode_with_fixtures fixtures) ([],[],[],[],0) test_jsons
 in
-  List.foldl (trydecode_with_fixtures fixtures) ([],[]) test_jsons
+  {selected = selected,
+   failures = failures,
+   name_skips = name_skips,
+   source_skips = source_skips,
+   total_items = List.length test_jsons,
+   fixtures = List.length fixtures,
+   non_tests = non_tests}
 end
 
 val trace_ty = mk_thy_type{Thy="vyperTestRunner",Tyop="trace",Args=[]}
@@ -639,9 +680,269 @@ in
 end
 
 fun holbuild_extra_deps (_ : string list) = ()
+fun holbuild_extra_outputs (_ : string list) = ()
+
+fun print_file_coverage json_path report = let
+  val tests = #selected report
+  val decode_fails = #failures report
+  val trace_count =
+    List.foldl (fn ((_,traces),n) => List.length traces + n) 0 tests
+  val () = TextIO.print (String.concat
+    ["[vyper-coverage] file=", json_path,
+     " items=", Int.toString (#total_items report),
+     " fixtures=", Int.toString (#fixtures report),
+     " non_tests=", Int.toString (#non_tests report),
+     " selected=", Int.toString (List.length tests),
+     " traces=", Int.toString trace_count,
+     " excluded_name=", Int.toString (List.length (#name_skips report)),
+     " excluded_source=", Int.toString (List.length (#source_skips report)),
+     " decode_failures=", Int.toString (List.length decode_fails), "\n"])
+  val () = List.app (fn name => TextIO.print (String.concat
+    ["[vyper-coverage] excluded file=", json_path,
+     " test=", name, " reason=excluded test name\n"]))
+    (List.rev (#name_skips report))
+  val () = List.app (fn (name,reason) => TextIO.print (String.concat
+    ["[vyper-coverage] excluded file=", json_path,
+     " test=", name, " reason=", reason, "\n"]))
+    (List.rev (#source_skips report))
+  val () =
+    if List.null tests then TextIO.print (String.concat
+      ["[vyper-coverage] warning file=", json_path,
+       " has no selected tests\n"])
+    else ()
+in
+  ()
+end
+
+(* Raw JSON inventory for standalone reporting.  Unlike read_test_json, this
+   deliberately does not decode traces into HOL terms (byte decoding creates
+   cached HOL definitions and therefore requires an active theory). *)
+fun raw_string_field key (JSON.OBJECT fields) =
+      (case List.find (fn (name,_) => name = key) fields of
+         SOME (_,JSON.STRING value) => SOME value
+       | _ => NONE)
+  | raw_string_field _ _ = NONE
+
+fun raw_array_length_field key (JSON.OBJECT fields) =
+      (case List.find (fn (name,_) => name = key) fields of
+         SOME (_,JSON.ARRAY values) => SOME (List.length values)
+       | _ => NONE)
+  | raw_array_length_field _ _ = NONE
+
+fun raw_string_array_field key (JSON.OBJECT fields) =
+      (case List.find (fn (name,_) => name = key) fields of
+         SOME (_,JSON.ARRAY values) =>
+           SOME (List.mapPartial
+             (fn JSON.STRING value => SOME value | _ => NONE) values)
+       | _ => NONE)
+  | raw_string_array_field _ _ = NONE
+
+fun read_coverage_json json_path = let
+  val items = decodeFile rawObject json_path
+  val fixtures = List.mapPartial (fn (name,json) =>
+    if raw_string_field "item_type" json = SOME "fixture"
+    then SOME (name,json) else NONE) items
+  fun deps json = Option.getOpt (raw_string_array_field "deps" json,[])
+  fun fixture_for dep =
+    List.find (fn (name,_) => name = fixture_name_of_dep dep) fixtures
+  fun fixture_trace_count dep =
+    case fixture_for dep of
+      NONE => 0
+    | SOME (_,json) => Option.getOpt (raw_array_length_field "traces" json,0)
+  fun fixture_has_source dep =
+    case fixture_for dep of
+      NONE => false
+    | SOME (_,json) => not (List.null (source_codes_json json))
+  val referenced_fixtures =
+    List.concat (List.map (fn (_,json) => deps json) items)
+  val unreferenced_traced_fixtures = List.mapPartial (fn (name,json) =>
+    if Option.getOpt (raw_array_length_field "traces" json,0) > 0 andalso
+       not (List.exists (fn dep => fixture_name_of_dep dep = name)
+         referenced_fixtures)
+    then SOME name else NONE) fixtures
+  fun classify ((name,json),
+      (non_tests,selected,direct_traces,expanded_traces,name_skips,
+       pattern_skips,no_traces,fixture_source,missing_source,blank_source,
+       malformed)) =
+    case raw_string_field "item_type" json of
+      SOME "fixture" =>
+        (non_tests,selected,direct_traces,expanded_traces,name_skips,
+         pattern_skips,no_traces,fixture_source,missing_source,blank_source,
+         malformed)
+    | SOME "test" => let
+        val direct = Option.getOpt (raw_array_length_field "traces" json,0)
+        val item_deps = deps json
+        val expanded = direct + List.foldl
+          (fn (dep,n) => fixture_trace_count dep + n) 0 item_deps
+        fun keep_selected () =
+          (non_tests,selected + 1,direct + direct_traces,
+           expanded + expanded_traces,name_skips,pattern_skips,no_traces,
+           fixture_source,missing_source,blank_source,malformed)
+      in
+        if List.exists (fn pat => glob_match pat name) excluded_test_names
+        then (non_tests,selected,direct_traces,expanded_traces,
+              name::name_skips,pattern_skips,no_traces,fixture_source,
+              missing_source,blank_source,malformed)
+        else if List.exists (equal name) allowed_test_names
+        then keep_selected ()
+        else
+          case unsupported_source_reason json of
+            NONE => keep_selected ()
+          | SOME reason =>
+              if expanded = 0 then
+                (non_tests,selected,direct_traces,expanded_traces,name_skips,
+                 pattern_skips,name::no_traces,fixture_source,missing_source,
+                 blank_source,malformed)
+              else if reason = "missing source_code" andalso
+                      List.exists fixture_has_source item_deps then
+                (non_tests,selected,direct_traces,expanded_traces,name_skips,
+                 pattern_skips,no_traces,name::fixture_source,missing_source,
+                 blank_source,malformed)
+              else if reason = "missing source_code" then
+                (non_tests,selected,direct_traces,expanded_traces,name_skips,
+                 pattern_skips,no_traces,fixture_source,name::missing_source,
+                 blank_source,malformed)
+              else if reason = "blank source_code" then
+                (non_tests,selected,direct_traces,expanded_traces,name_skips,
+                 pattern_skips,no_traces,fixture_source,missing_source,
+                 name::blank_source,malformed)
+              else
+                (non_tests,selected,direct_traces,expanded_traces,name_skips,
+                 (name,reason)::pattern_skips,no_traces,fixture_source,
+                 missing_source,blank_source,malformed)
+      end
+    | SOME _ =>
+        (non_tests + 1,selected,direct_traces,expanded_traces,name_skips,
+         pattern_skips,no_traces,fixture_source,missing_source,blank_source,
+         malformed)
+    | NONE =>
+        (non_tests,selected,direct_traces,expanded_traces,name_skips,
+         pattern_skips,no_traces,fixture_source,missing_source,blank_source,
+         name::malformed)
+  val (non_tests,selected,direct_traces,expanded_traces,name_skips,
+       pattern_skips,no_traces,fixture_source,missing_source,blank_source,
+       malformed) =
+    List.foldl classify (0,0,0,0,[],[],[],[],[],[],[]) items
+in
+  {total_items = List.length items,
+   fixtures = List.length fixtures,
+   non_tests = non_tests,
+   selected = selected,
+   direct_traces = direct_traces,
+   expanded_traces = expanded_traces,
+   name_skips = name_skips,
+   pattern_skips = pattern_skips,
+   no_traces = no_traces,
+   fixture_source = fixture_source,
+   missing_source = missing_source,
+   blank_source = blank_source,
+   unreferenced_traced_fixtures = unreferenced_traced_fixtures,
+   malformed = malformed}
+end
+
+fun print_raw_coverage output json_path report = let
+  fun emit text = TextIO.output(output,text)
+  val () = emit (String.concat
+    ["[vyper-coverage] file=", json_path,
+     " items=", Int.toString (#total_items report),
+     " fixtures=", Int.toString (#fixtures report),
+     " non_tests=", Int.toString (#non_tests report),
+     " selected=", Int.toString (#selected report),
+     " direct_traces=", Int.toString (#direct_traces report),
+     " expanded_traces=", Int.toString (#expanded_traces report),
+     " excluded_name=", Int.toString (List.length (#name_skips report)),
+     " excluded_pattern=", Int.toString (List.length (#pattern_skips report)),
+     " no_exported_traces=", Int.toString (List.length (#no_traces report)),
+     " source_from_fixture=", Int.toString (List.length (#fixture_source report)),
+     " missing_source=", Int.toString (List.length (#missing_source report)),
+     " blank_source=", Int.toString (List.length (#blank_source report)),
+     " malformed_items=", Int.toString (List.length (#malformed report)), "\n"])
+  val () = List.app (fn name => emit (String.concat
+    ["[vyper-coverage] excluded file=", json_path,
+     " test=", name, " reason=excluded test name\n"]))
+    (List.rev (#name_skips report))
+  val () = List.app (fn (name,reason) => emit (String.concat
+    ["[vyper-coverage] excluded file=", json_path,
+     " test=", name, " reason=", reason, "\n"]))
+    (List.rev (#pattern_skips report))
+  fun emit_named reason names = List.app (fn name => emit (String.concat
+    ["[vyper-coverage] excluded file=", json_path,
+     " test=", name, " reason=", reason, "\n"])) (List.rev names)
+  val () = emit_named "no exported traces" (#no_traces report)
+  val () = emit_named "source supplied only by fixture" (#fixture_source report)
+  val () = emit_named "missing source_code in traceful item" (#missing_source report)
+  val () = emit_named "blank source_code" (#blank_source report)
+  val () = List.app (fn name => emit (String.concat
+    ["[vyper-coverage] fixture file=", json_path,
+     " name=", name, " reason=unreferenced fixture with traces\n"]))
+    (List.rev (#unreferenced_traced_fixtures report))
+  val () = List.app (fn name => emit (String.concat
+    ["[vyper-coverage] malformed file=", json_path,
+     " item=", name, " reason=missing item_type\n"]))
+    (List.rev (#malformed report))
+in
+  if #selected report = 0 then emit (String.concat
+    ["[vyper-coverage] warning file=", json_path,
+     " has no selected tests\n"])
+  else ()
+end
+
+fun write_coverage_report output_path = let
+  val files = test_files ()
+  val reports = List.map (fn (_,path) => (path,read_coverage_json path)) files
+  fun sum field = List.foldl (fn ((_,report),n) => field report + n) 0 reports
+  val total_items = sum #total_items
+  val fixtures = sum #fixtures
+  val non_tests = sum #non_tests
+  val selected = sum #selected
+  val direct_traces = sum #direct_traces
+  val expanded_traces = sum #expanded_traces
+  val excluded_name = sum (List.length o #name_skips)
+  val excluded_pattern = sum (List.length o #pattern_skips)
+  val no_traces = sum (List.length o #no_traces)
+  val fixture_source = sum (List.length o #fixture_source)
+  val missing_source = sum (List.length o #missing_source)
+  val blank_source = sum (List.length o #blank_source)
+  val unreferenced_fixtures = sum
+    (List.length o #unreferenced_traced_fixtures)
+  val malformed = sum (List.length o #malformed)
+  val zero_selected = sum (fn report => if #selected report = 0 then 1 else 0)
+  val output = TextIO.openOut output_path
+  fun emit text = TextIO.output(output,text)
+  fun write () = let
+    val () = emit (String.concat
+      ["[vyper-coverage] admitted_files=", Int.toString (List.length files), "\n"])
+    val () = List.app (fn (json_path,report) =>
+      print_raw_coverage output json_path report) reports
+  in
+    emit (String.concat
+      ["[vyper-coverage] summary admitted_files=", Int.toString (List.length files),
+       " items=", Int.toString total_items,
+       " fixtures=", Int.toString fixtures,
+       " non_tests=", Int.toString non_tests,
+       " selected=", Int.toString selected,
+       " direct_traces=", Int.toString direct_traces,
+       " expanded_traces=", Int.toString expanded_traces,
+       " excluded_name=", Int.toString excluded_name,
+       " excluded_pattern=", Int.toString excluded_pattern,
+       " no_exported_traces=", Int.toString no_traces,
+       " source_from_fixture=", Int.toString fixture_source,
+       " missing_source=", Int.toString missing_source,
+       " blank_source=", Int.toString blank_source,
+       " unreferenced_traced_fixtures=", Int.toString unreferenced_fixtures,
+       " malformed_items=", Int.toString malformed,
+       " zero_selected_files=", Int.toString zero_selected, "\n"])
+  end
+in
+  (write () before TextIO.closeOut output)
+  handle e => (TextIO.closeOut output; raise e)
+end
 
 fun make_definitions_for_file (id, json_path) = let
-  val (tests, decode_fails) = read_test_json json_path
+  val report = read_test_json json_path
+  val tests = #selected report
+  val decode_fails = #failures report
+  val () = print_file_coverage json_path report
   val () =
     case decode_fails of
         [] => ()
