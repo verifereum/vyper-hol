@@ -586,7 +586,7 @@ fun trydecode_with_fixtures fixtures
   else if List.exists (fn pat => glob_match pat name) excluded_test_names
   then (selected,failures,name::name_skips,source_skips,non_tests)
   else let
-    val (dep_names, test_traces) = decode test_with_deps_decoder json
+    val dep_names = decode (field "deps" (array string)) json
     fun resolve dn =
       case List.find
         (fn (fixture_name, _, _) => fixture_name = fixture_name_of_dep dn)
@@ -596,19 +596,21 @@ fun trydecode_with_fixtures fixtures
     val resolved = List.map resolve dep_names
     val fixture_jsons =
       List.map (fn (_, fixture_json, _) => fixture_json) resolved
-    val fixture_traces =
-      List.concat (List.map (fn (_, _, traces) => traces) resolved)
     val source_reason = unsupported_source_reason_for (fixture_jsons @ [json])
-  in
-    if List.exists (equal name) allowed_test_names then
+    fun select () = let
+      val (_, test_traces) = decode test_with_deps_decoder json
+      val fixture_traces =
+        List.concat (List.map (fn (_, _, traces) => traces) resolved)
+    in
       ((name, fixture_traces @ test_traces) :: selected,
        failures,name_skips,source_skips,non_tests)
+    end
+  in
+    if List.exists (equal name) allowed_test_names then select ()
     else case source_reason of
       SOME reason =>
         (selected,failures,name_skips,(name,reason)::source_skips,non_tests)
-    | NONE =>
-        ((name, fixture_traces @ test_traces) :: selected,
-         failures,name_skips,source_skips,non_tests)
+    | NONE => select ()
   end
   handle JSONError e =>
            (selected,(name,JSONError e)::failures,
