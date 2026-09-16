@@ -770,8 +770,8 @@ fun read_coverage_json json_path = let
              NONE => NONE
            | SOME (_,fixture_json) => SOME fixture_json) item_deps
         val unresolved = List.mapPartial
-          (fn dep => if Option.isNone (fixture_for dep)
-                     then SOME (name,dep) else NONE) item_deps
+          (fn dep => if Option.isSome (fixture_for dep)
+                     then NONE else SOME (name,dep)) item_deps
         val unresolved_deps = unresolved @ unresolved_deps
         val expanded = direct + List.foldl
           (fn (dep,n) => fixture_trace_count dep + n) 0 item_deps
