@@ -216,8 +216,14 @@ fun mk_JS_Return eopt = mk_comb(JS_Return_tm, lift_option (mk_option json_expr_t
 fun mk_JS_Raise eopt = mk_comb(JS_Raise_tm, lift_option (mk_option json_expr_ty) I eopt)
 fun mk_JS_Assert (test, msgopt) =
   list_mk_comb(JS_Assert_tm, [test, lift_option (mk_option json_expr_ty) I msgopt])
-fun mk_JS_Log (nsid, args) =
-  list_mk_comb(JS_Log_tm, [nsid, mk_list(args, json_expr_ty)])
+fun mk_JS_Log ((alias_opt, src, name), args) =
+  let
+    val event_ref =
+      mk_pair(lift_option (mk_option string_ty) fromMLstring alias_opt,
+              mk_nsid(src, name))
+  in
+    list_mk_comb(JS_Log_tm, [event_ref, mk_list(args, json_expr_ty)])
+  end
 fun mk_JS_If (test, body, els) =
   list_mk_comb(JS_If_tm, [test, mk_list(body, json_stmt_ty), mk_list(els, json_stmt_ty)])
 fun mk_JS_For (var, ty, ann, iter, body) =
@@ -912,21 +918,28 @@ fun d_json_stmt () : term decoder = achoose "stmt" [
     field "value" $
     check_ast_type "Call" $
     JSONDecode.map
-      (fn ((name, src_id_opt), (keywords, args)) =>
-        mk_JS_Log(mk_nsid(src_id_opt, name),
+      (fn (event_ref, (keywords, args)) =>
+        mk_JS_Log(event_ref,
                   if List.null keywords then args else keywords)) $
     tuple2 (field "func" $ achoose "log func" [
               (* Same-module event: log MyEvent(...) *)
               check_ast_type "Name" $
+              JSONDecode.map (fn (name, src) => (NONE, src, name)) $
               tuple2 (field "id" string,
-                      orElse (field "type" $ field "type_decl_node" $ field "source_id" source_ref_tm,
+                      orElse (field "type" $ field "type_decl_node" $
+                                field "source_id" source_ref_tm,
                               succeed JMissingSource_tm)),
-              (* Cross-module event: log lib1.MyEvent(...) *)
+              (* Cross-module event: log lib1.MyEvent(...). Preserve the alias
+                 because builtin modules share Vyper's source ID -2. *)
               check_ast_type "Attribute" $
-              tuple2 (field "attr" string,
-                      orElse (field "value" $ field "type" $
-                                field "type_decl_node" $ field "source_id" source_ref_tm,
-                              succeed JMissingSource_tm))],
+              JSONDecode.map
+                (fn (alias, (name, src)) => (SOME alias, src, name)) $
+              tuple2 (field "value" $ field "id" string,
+                      tuple2 (field "attr" string,
+                        orElse (field "value" $ field "type" $
+                                  field "type_decl_node" $
+                                  field "source_id" source_ref_tm,
+                                succeed JMissingSource_tm)))],
             tuple2
               (field "keywords" (array (field "value" json_expr)),
                field "args" (array json_expr))),
