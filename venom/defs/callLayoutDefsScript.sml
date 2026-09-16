@@ -503,6 +503,18 @@ Definition fn_memory_return_buffer_param_def:
     else NONE
 End
 
+Definition invoke_memory_return_buffer_operand_def:
+  invoke_memory_return_buffer_operand callee inst =
+    if inst.inst_opcode <> INVOKE \/
+       callee.fn_call_abi.ica_has_memory_return_buffer <> SOME T then NONE
+    else
+      case inst.inst_operands of
+        Label name::buf::args =>
+          if LENGTH (buf::args) = LENGTH (fn_user_param_insts callee)
+          then SOME buf else NONE
+      | _ => NONE
+End
+
 Definition fn_return_abi_matches_def:
   fn_return_abi_matches fn <=>
     case fn_unique_return_arity fn of
@@ -597,6 +609,18 @@ Definition invoke_input_arity_ok_def:
         LENGTH args = LENGTH (fn_user_param_insts callee) +
           (if sig.fms_has_fmp_param then 1 else 0)
     | _ => F
+End
+
+(* Checked raw frontier before FMP augmentation.  The optional buffer stays at
+ * position zero in [args]; FMP lowering may only append at the far end. *)
+Definition invoke_raw_input_layout_ok_def:
+  invoke_raw_input_layout_ok callee inst <=>
+    inst.inst_opcode = INVOKE /\
+    (case inst.inst_operands of
+       Label name::args => LENGTH args = LENGTH (fn_user_param_insts callee)
+     | _ => F) /\
+    (callee.fn_call_abi.ica_has_memory_return_buffer = SOME T ==>
+     IS_SOME (invoke_memory_return_buffer_operand callee inst))
 End
 
 Definition invoke_output_arity_ok_def:

@@ -25,17 +25,72 @@ Type alloc_map = ``:(string, 256 word) fmap``
 
 (* ===== Sorted list comparators for allocation and inst_addr ===== *)
 
-Definition alloc_cmp_def:
+Definition alloc_cmp_def[nocompute]:
   alloc_cmp (Allocation m) (Allocation n) = apto numto m n
 End
 
-Definition alloc_to_def:
+Definition alloc_to_def[nocompute]:
   alloc_to = TO alloc_cmp
 End
 
-Definition inst_addr_to_def:
+Definition inst_addr_to_def[nocompute]:
   inst_addr_to = stringto lextoto numto
 End
+
+(* EVAL support.  A toto is built with TO, and apto (TO c) only reduces given
+   TotOrd c, so with the definitions above in the compset every enumeral
+   comparison (smerge, sinter, sdiff, incr_ssort) gets stuck.  The definitions
+   are therefore kept out of the compset and the comparisons are evaluated
+   through the rewrites below. *)
+
+Definition char_list_cmp_def:
+  char_list_cmp [] [] = EQUAL /\
+  char_list_cmp [] (b::y) = LESS /\
+  char_list_cmp (a::x) [] = GREATER /\
+  char_list_cmp (a::x) (b::y) =
+    case charOrd a b of
+      LESS => LESS
+    | EQUAL => char_list_cmp x y
+    | GREATER => GREATER
+End
+
+Theorem alloc_cmp_compute[compute]:
+  alloc_cmp (Allocation m) (Allocation n) = numOrd m n
+Proof
+  simp[alloc_cmp_def, apnumto_thm]
+QED
+
+Theorem TotOrd_alloc_cmp:
+  TotOrd alloc_cmp
+Proof
+  assume_tac TO_numOrd >> fs[TotOrd] >> rpt conj_tac >>
+  rpt Cases >> simp[alloc_cmp_def, apnumto_thm] >> metis_tac[]
+QED
+
+Theorem apto_alloc_to_compute[compute]:
+  apto alloc_to x y = alloc_cmp x y
+Proof
+  simp[alloc_to_def, TO_apto_TO_IMP, TotOrd_alloc_cmp]
+QED
+
+Theorem apto_stringto_char_list_cmp:
+  !x y. apto stringto x y = char_list_cmp x y
+Proof
+  rewrite_tac[stringto] >>
+  ho_match_mp_tac listTheory.list_induction >> rpt strip_tac >>
+  Cases_on `y` >> simp[aplistoto, apcharto_thm, char_list_cmp_def]
+QED
+
+Theorem apto_inst_addr_to_compute[compute]:
+  apto inst_addr_to x y =
+    case char_list_cmp (FST x) (FST y) of
+      LESS => LESS
+    | EQUAL => numOrd (SND x) (SND y)
+    | GREATER => GREATER
+Proof
+  Cases_on `x` >> Cases_on `y` >>
+  simp[inst_addr_to_def, aplextoto, apnumto_thm, apto_stringto_char_list_cmp]
+QED
 
 (* =========================================================================
    Helpers: memory read/write queries for MemLiveness
@@ -503,7 +558,11 @@ End
 
 (* Validate all preserved intervals before any hole is filled.  Empty ALLOCAs
    are admissible and occupy no interval, but their address must be in range.
-   Source-item recursion also avoids evaluator-hostile fmap_to_alist. *)
+   Candidate intervals are checked against immutable global reservations, not
+   against one another: liveness analysis may intentionally let disjoint-live
+   allocations share an address.  We still accumulate every nonempty candidate
+   so later missing allocations avoid all preserved space.  Source-item
+   recursion also avoids evaluator-hostile fmap_to_alist. *)
 Definition checked_preserved_intervals_aux_def:
   checked_preserved_intervals_aux [] positions reserved occupied =
     SOME occupied /\
@@ -516,8 +575,7 @@ Definition checked_preserved_intervals_aux_def:
         if pos + sz < dimword (:256) then
           if sz = 0 then
             checked_preserved_intervals_aux rest positions reserved occupied
-          else if EVERY (reserved_intervals_disjoint (pos,sz))
-                        (reserved ++ occupied) then
+          else if EVERY (reserved_intervals_disjoint (pos,sz)) reserved then
             checked_preserved_intervals_aux rest positions reserved
               ((pos,sz)::occupied)
           else NONE
@@ -589,24 +647,31 @@ Definition complete_alloc_positions_aux_def:
     else complete_alloc_positions_aux insts positions occupied
 End
 
+Definition complete_alloc_positions_with_items_def:
+  complete_alloc_positions_with_items items
+      (forced : (num,num) fmap) reserved fn
+      (positions : (allocation,num) fmap) =
+    let allocs = MAP FST items in
+      if ~forced_alloc_keys_valid allocs forced \/
+         ~candidate_alloc_keys_valid allocs positions then NONE
+      else
+        case merge_forced_positions items forced positions of
+          NONE => NONE
+        | SOME merged =>
+            case checked_preserved_intervals items merged reserved of
+              NONE => NONE
+            | SOME occupied =>
+                complete_alloc_positions_aux (fn_insts fn) merged
+                  (reserved ++ occupied)
+End
+
 Definition complete_alloc_positions_def:
   complete_alloc_positions (forced : (num,num) fmap) reserved fn
       (positions : (allocation,num) fmap) =
     case static_alloca_items fn of
       NONE => NONE
     | SOME items =>
-        let allocs = MAP FST items in
-          if ~forced_alloc_keys_valid allocs forced \/
-             ~candidate_alloc_keys_valid allocs positions then NONE
-          else
-            case merge_forced_positions items forced positions of
-              NONE => NONE
-            | SOME merged =>
-                case checked_preserved_intervals items merged reserved of
-                  NONE => NONE
-                | SOME occupied =>
-                    complete_alloc_positions_aux (fn_insts fn) merged
-                      (reserved ++ occupied)
+        complete_alloc_positions_with_items items forced reserved fn positions
 End
 
 (* Liveness-aware allocation loop.
@@ -654,12 +719,14 @@ End
 
 Definition alloc_liveset_items_def:
   alloc_liveset_items fn ls =
-    MAP
-      (\inst.
-         let alloc = Allocation inst.inst_id in
-         let live = case FLOOKUP ls alloc of SOME s => s | NONE => [] in
-         (alloc, live))
-      (FILTER (\inst. is_alloca_op inst.inst_opcode) (fn_insts fn))
+    MAP THE (FILTER IS_SOME
+      (MAP
+        (\inst.
+           let alloc = Allocation inst.inst_id in
+           case FLOOKUP ls alloc of
+             SOME live => SOME (alloc, live)
+           | NONE => NONE)
+        (FILTER (\inst. is_alloca_op inst.inst_opcode) (fn_insts fn))))
 End
 
 Definition compute_alloc_map_fuel_def:
@@ -780,8 +847,8 @@ Definition forced_candidate_positions_def:
         forced_candidate_positions items forced (result |+ (alloc,pos))
 End
 
-Definition compute_function_layout_fuel_def:
-  compute_function_layout_fuel fuel reserved fn =
+Definition compute_function_layout_fuel_reference_def:
+  compute_function_layout_fuel_reference fuel reserved fn =
     case static_alloca_items fn of
       NONE => NONE
     | SOME items =>
@@ -797,6 +864,36 @@ Definition compute_function_layout_fuel_def:
             NONE => NONE
           | SOME completed => mk_concretize_layout reserved completed fn
 End
+
+(* The source ALLOCA validation above already produced [items].  Reuse it in
+   checked completion rather than traversing every instruction a second time. *)
+Definition compute_function_layout_fuel_def:
+  compute_function_layout_fuel fuel reserved fn =
+    case static_alloca_items fn of
+      NONE => NONE
+    | SOME items =>
+        let seed = forced_candidate_positions items
+          fn.fn_forced_alloc_positions FEMPTY in
+        let cfg = cfg_analyze fn in
+        let bpr = bp_analyze_fuel fuel cfg fn in
+        let candidate =
+          compute_alloc_map_fuel fuel fn bpr (K ([] : allocation list))
+            ([] : allocation list) cfg seed reserved in
+          case complete_alloc_positions_with_items items
+                 fn.fn_forced_alloc_positions reserved fn candidate of
+            NONE => NONE
+          | SOME completed => mk_concretize_layout reserved completed fn
+End
+
+Theorem compute_function_layout_fuel_eq_reference:
+  compute_function_layout_fuel fuel reserved fn =
+  compute_function_layout_fuel_reference fuel reserved fn
+Proof
+  simp[compute_function_layout_fuel_def,
+       compute_function_layout_fuel_reference_def,
+       complete_alloc_positions_def] >>
+  Cases_on `static_alloca_items fn` >> simp[]
+QED
 
 Definition compute_function_layout_eval_def:
   compute_function_layout_eval reserved fn =
@@ -841,13 +938,42 @@ Definition apply_concretize_layout_def:
          fn_eom := SOME layout.cl_eom |>
 End
 
+Definition concretize_memloc_fuel_def:
+  concretize_memloc_fuel fn =
+    4 * (LENGTH (fn_insts fn) + LENGTH fn.fn_blocks + 1)
+End
+
+Definition insts_have_multiple_allocas_def:
+  insts_have_multiple_allocas ([] : instruction list) = F /\
+  insts_have_multiple_allocas (inst::insts) =
+    if is_alloca_op inst.inst_opcode then
+      EXISTS (\other. is_alloca_op other.inst_opcode) insts
+    else insts_have_multiple_allocas insts
+End
+
+Definition fn_needs_liveness_allocation_def:
+  fn_needs_liveness_allocation fn =
+    insts_have_multiple_allocas (fn_insts fn)
+End
+
+(* Liveness can affect placement only when there is more than one allocation.
+   With zero or one ALLOCA, Python's allocation loop has no earlier local
+   interval whose liveset can conflict, so checked first-fit completion computes
+   the same layout without running both dataflow analyses to a fixpoint. *)
+Definition compute_function_layout_checked_def:
+  compute_function_layout_checked fuel reserved fn =
+    if fn_needs_liveness_allocation fn then
+      compute_function_layout_fuel fuel reserved fn
+    else compute_function_layout_eval reserved fn
+End
+
 Definition concretize_function_fuel_def:
   concretize_function_fuel fuel reserved fn =
     if fn_has_static_layout fn then
       if ~fn_has_alloca fn /\ fn.fn_forced_alloc_positions = FEMPTY
       then SOME fn else NONE
     else
-      case compute_function_layout_fuel fuel reserved fn of
+      case compute_function_layout_checked fuel reserved fn of
         NONE => NONE
       | SOME layout => SOME (apply_concretize_layout layout fn)
 End

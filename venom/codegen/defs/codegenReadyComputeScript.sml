@@ -190,6 +190,48 @@ QED
 
 (* ===== Finite def-dominates-uses checker ===== *)
 
+Definition def_available_at_exec_def:
+  def_available_at_exec cfg dom fn target_bb use_inst_opt v <=>
+    EXISTS
+      (λdef_bb.
+        EXISTS
+          (λdef_inst.
+            MEM v def_inst.inst_outputs /\
+            cfg_reachable_of cfg target_bb.bb_label /\
+            dominates dom def_bb.bb_label target_bb.bb_label /\
+            (def_bb = target_bb ==>
+             case use_inst_opt of
+               NONE => T
+             | SOME use_inst =>
+                 EXISTS
+                   (λi. EXISTS
+                     (λj. i < j /\
+                          EL i target_bb.bb_instructions = def_inst /\
+                          EL j target_bb.bb_instructions = use_inst)
+                     (GENLIST I (LENGTH target_bb.bb_instructions)))
+                   (GENLIST I (LENGTH target_bb.bb_instructions))))
+          def_bb.bb_instructions)
+      fn.fn_blocks
+End
+(* Computed PHI contract: exact pair shape and predecessor coverage precede
+   the edge-availability checks, matching check_venom._handle_var_definition. *)
+Definition phi_edge_uses_wf_exec_def:
+  phi_edge_uses_wf_exec cfg dom fn bb inst <=>
+    let pairs = phi_pairs inst.inst_operands in
+      phi_well_formed inst.inst_operands /\
+      ALL_DISTINCT (MAP FST pairs) /\
+      EVERY (λpred. EXISTS (λp. FST p = pred) pairs)
+        (cfg_preds_of cfg bb.bb_label) /\
+      EVERY
+        (λp.
+          MEM (FST p) (cfg_preds_of cfg bb.bb_label) /\
+          EXISTS
+            (λpred_bb.
+              pred_bb.bb_label = FST p /\
+              def_available_at_exec cfg dom fn pred_bb NONE (SND p))
+            fn.fn_blocks)
+        pairs
+End
 Definition def_dominates_uses_exec_def:
   def_dominates_uses_exec fn <=>
     let cfg = cfg_analyze fn in
@@ -198,70 +240,88 @@ Definition def_dominates_uses_exec_def:
         (λbb.
           EVERY
             (λinst.
-              EVERY
-                (λop.
-                  case op of
-                    Var v =>
-                      EXISTS
-                        (λdef_bb.
-                          EXISTS
-                            (λdef_inst.
-                              MEM v def_inst.inst_outputs /\
-                              cfg_reachable_of cfg bb.bb_label /\
-                              dominates dom def_bb.bb_label bb.bb_label /\
-                              (def_bb = bb ==>
-                               EXISTS
-                                 (λi.
-                                   EXISTS
-                                     (λj. i < j /\
-                                          EL i bb.bb_instructions = def_inst /\
-                                          EL j bb.bb_instructions = inst)
-                                     (GENLIST I (LENGTH bb.bb_instructions)))
-                                 (GENLIST I (LENGTH bb.bb_instructions))))
-                            def_bb.bb_instructions)
-                        fn.fn_blocks
-                  | _ => T)
-                inst.inst_operands)
+              if inst.inst_opcode = PHI then
+                phi_edge_uses_wf_exec cfg dom fn bb inst
+              else
+                EVERY
+                  (λop. case op of
+                         Var v => def_available_at_exec cfg dom fn bb
+                                    (SOME inst) v
+                       | _ => T)
+                  inst.inst_operands)
             bb.bb_instructions)
         fn.fn_blocks
 End
-
+Theorem def_available_at_exec_correct:
+  wf_function fn ==>
+  (def_available_at fn target_bb use_inst_opt v <=>
+   def_available_at_exec (cfg_analyze fn)
+     (dom_analyze (cfg_analyze fn) fn) fn target_bb use_inst_opt v)
+Proof
+  strip_tac >>
+  simp[def_available_at_def, def_available_at_exec_def,
+       listTheory.EXISTS_MEM, listTheory.EXISTS_GENLIST] >>
+  eq_tac >> rpt strip_tac
+  >- (qexists_tac `def_bb` >> simp[] >>
+      qexists_tac `def_inst` >> simp[] >>
+      conj_tac >- metis_tac[fn_dominates_cfg_analyze] >>
+      conj_tac >- metis_tac[fn_dominates_cfg_analyze] >>
+      strip_tac >> Cases_on `use_inst_opt` >> gvs[] >>
+      qexists_tac `i` >> simp[] >> qexists_tac `j` >> simp[])
+  >- (qexists_tac `def_bb` >> simp[] >>
+      qexists_tac `def_inst` >> simp[] >>
+      conj_tac >- metis_tac[fn_dominates_cfg_analyze] >>
+      strip_tac >> Cases_on `use_inst_opt` >> gvs[] >>
+      qexistsl_tac [`i`, `i'`] >> simp[])
+QED
+Theorem phi_edge_uses_wf_exec_correct:
+  wf_function fn /\ MEM bb fn.fn_blocks ==>
+  (phi_edge_uses_wf fn bb inst <=>
+   phi_edge_uses_wf_exec (cfg_analyze fn)
+     (dom_analyze (cfg_analyze fn) fn) fn bb inst)
+Proof
+  rpt strip_tac >>
+  simp[phi_edge_uses_wf_def, phi_edge_uses_wf_exec_def,
+       listTheory.EVERY_MEM, listTheory.EXISTS_MEM] >>
+  simp[fn_cfg_edge_cfg_analyze,
+       cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond,
+       def_available_at_exec_correct] >>
+  eq_tac >> rpt strip_tac >> TRY (first_assum ACCEPT_TAC) >|
+    [qpat_x_assum `!pred. _ <=> _` (qspec_then `pred` assume_tac) >>
+       gvs[] >> qexists_tac `p` >> simp[],
+     PairCases_on `p` >>
+       qpat_x_assum `!pred. _ <=> _` (qspec_then `p0` assume_tac) >>
+       gvs[] >> qexists_tac `(p0,p1)` >> simp[],
+     PairCases_on `p` >>
+       qpat_x_assum `!pred v. _` (qspecl_then [`p0`, `p1`] mp_tac) >>
+       impl_tac >- simp[] >> simp[] >> strip_tac >> gvs[] >>
+       qexists_tac `pred_bb` >> simp[],
+     eq_tac >> strip_tac
+       >- (qpat_x_assum `!pred. _ ==> _`
+             (qspec_then `pred` mp_tac) >> simp[])
+       >- (qpat_x_assum `!p. _` (qspec_then `p` mp_tac) >> simp[]),
+     qpat_x_assum `!p. _` (qspec_then `(pred,v)` mp_tac) >> simp[]]
+QED
 Theorem def_dominates_uses_exec_correct:
   wf_function fn ==>
   (def_dominates_uses fn <=> def_dominates_uses_exec fn)
 Proof
   strip_tac >>
   simp[def_dominates_uses_def, def_dominates_uses_exec_def,
-       listTheory.EVERY_MEM, listTheory.EXISTS_MEM,
-       listTheory.EXISTS_GENLIST] >>
-  eq_tac
-  >- (rpt strip_tac >> Cases_on `op` >> simp[] >>
-      qpat_x_assum `!bb inst v. _`
-        (qspecl_then [`bb`, `inst`, `s`] mp_tac) >>
-      simp[] >> strip_tac >>
-      qexists_tac `def_bb` >> simp[] >>
-      qexists_tac `def_inst` >> simp[] >>
-      rpt conj_tac
-      >- metis_tac[fn_dominates_cfg_analyze]
-      >- metis_tac[fn_dominates_cfg_analyze]
-      >- (strip_tac >>
-          qpat_x_assum `def_bb = bb ==> _` mp_tac >> simp[] >>
-          strip_tac >>
-          qexists_tac `i` >> conj_tac >- decide_tac >>
-          qexists_tac `j` >> simp[]))
-  >- (rpt strip_tac >>
-      qpat_x_assum `!bb. _` (qspec_then `bb` mp_tac) >> simp[] >>
-      disch_then (qspec_then `inst` mp_tac) >> simp[] >>
-      disch_then (qspec_then `Var v` mp_tac) >> simp[] >>
-      strip_tac >>
-      qexists_tac `def_bb` >> simp[] >>
-      qexists_tac `def_inst` >> simp[] >>
-      conj_tac
-      >- metis_tac[fn_dominates_cfg_analyze] >>
-      strip_tac >>
-      qpat_x_assum `def_bb = bb ==> _` mp_tac >> simp[] >>
-      strip_tac >>
-      qexistsl_tac [`i`, `i'`] >> simp[])
+       listTheory.EVERY_MEM] >>
+  eq_tac >> rpt strip_tac
+  >- (first_x_assum drule_all >>
+      Cases_on `inst.inst_opcode = PHI` >> gvs[]
+      >- metis_tac[phi_edge_uses_wf_exec_correct]
+      >- (strip_tac >> gen_tac >> strip_tac >> Cases_on `op` >> gvs[] >>
+          qpat_x_assum `!v. _` (qspec_then `s` mp_tac) >> simp[] >>
+          metis_tac[def_available_at_exec_correct]))
+  >- (first_x_assum drule_all >>
+      Cases_on `inst.inst_opcode = PHI` >> gvs[]
+      >- metis_tac[phi_edge_uses_wf_exec_correct]
+      >- (rpt strip_tac >>
+          first_x_assum (qspec_then `Var v` mp_tac) >> simp[] >>
+          metis_tac[def_available_at_exec_correct]))
 QED
 
 (* The malformed fallback is deliberately the original specification.  This
@@ -272,20 +332,14 @@ Theorem def_dominates_uses_compute[compute]:
     if wf_function fn then
       def_dominates_uses_exec fn
     else
-      !bb inst v.
+      !bb inst.
         MEM bb fn.fn_blocks /\
-        MEM inst bb.bb_instructions /\
-        MEM (Var v) inst.inst_operands ==>
-        ?def_bb def_inst.
-          MEM def_bb fn.fn_blocks /\
-          MEM def_inst def_bb.bb_instructions /\
-          MEM v def_inst.inst_outputs /\
-          fn_dominates fn def_bb.bb_label bb.bb_label /\
-          (def_bb = bb ==>
-           ?i j.
-             i < j /\ j < LENGTH bb.bb_instructions /\
-             EL i bb.bb_instructions = def_inst /\
-             EL j bb.bb_instructions = inst)
+        MEM inst bb.bb_instructions ==>
+        if inst.inst_opcode = PHI then
+          phi_edge_uses_wf fn bb inst
+        else
+          !v. MEM (Var v) inst.inst_operands ==>
+              def_available_at fn bb (SOME inst) v
 Proof
   Cases_on `wf_function fn`
   >- simp[def_dominates_uses_exec_correct]

@@ -450,10 +450,22 @@ Proof
       (LENGTH pred_bb.bb_instructions)` >>
     qabbrev_tac `to_pop = FILTER (\v. ~MEM v inputs) layout` >>
     strip_tac >>
+    Cases_on `bb_is_halting bb /\ NULL inputs`
+    >- (
+      `clean_ops = [] /\ ps2 = ps` by (
+        qpat_x_assum `(if _ then _ else _) = (clean_ops,ps2)` mp_tac >>
+        simp[]) >>
+      gvs[] >>
+      qexistsl_tac [`0`, `as`] >>
+      simp[asm_steps_def, execute_plan_def]
+    ) >>
+    `popmany_plan (MAP Var to_pop) ps = (clean_ops,ps2)` by (
+      qpat_x_assum `(if _ then _ else _) = (clean_ops,ps2)` mp_tac >>
+      simp[]) >>
     Cases_on `MAP Var to_pop = ([] : operand list)`
     >- (
       `clean_ops = [] /\ ps2 = ps` by
-        (qpat_x_assum `popmany_plan _ _ = _` mp_tac >>
+        (qpat_x_assum `popmany_plan _ _ = (clean_ops,ps2)` mp_tac >>
          simp[popmany_plan_def]) >>
       gvs[] >>
       qexistsl_tac [`0`, `as`] >>

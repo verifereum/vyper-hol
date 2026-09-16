@@ -234,7 +234,9 @@ Definition compute_operands_def:
     else if opc = LOG then
       TL inst.inst_operands
     else
-      inst.inst_operands
+      (* Venom stores semantic operand order; Python's stack planner consumes
+         ordinary EVM operands in stack order. *)
+      python_stack_operands inst.inst_opcode inst.inst_operands
 End
 
 (* =========================================================================
@@ -487,7 +489,8 @@ Definition clean_stack_plan_def:
               let layout = live_vars_at liveness pred_lbl
                 (LENGTH pred_bb.bb_instructions) in
               let to_pop = FILTER (λv. ¬ MEM v inputs) layout in
-              popmany_plan (MAP Var to_pop) ps)
+              if bb_is_halting bb ∧ NULL inputs then ([], ps)
+              else popmany_plan (MAP Var to_pop) ps)
     | _ => ([], ps)
 End
 

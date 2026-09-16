@@ -334,6 +334,7 @@ Theorem operand_vars_in_fdom:
     MEM bb f.fn_blocks /\
     bb.bb_label = s.vs_current_bb /\
     idx < LENGTH bb.bb_instructions /\
+    (EL idx bb.bb_instructions).inst_opcode <> PHI /\
     strict_dom_vars_defined f s /\
     (!j v. j < idx /\ MEM v (EL j bb.bb_instructions).inst_outputs ==>
            v IN FDOM s.vs_vars) ==>
@@ -345,9 +346,11 @@ Proof
   `MEM (EL idx bb.bb_instructions) bb.bb_instructions` by
     metis_tac[MEM_EL] >>
   fs[def_dominates_uses_def] >>
-  first_x_assum (qspecl_then [`bb`, `EL idx bb.bb_instructions`, `v`]
-    mp_tac) >>
-  simp[] >> strip_tac >>
+  `def_available_at f bb (SOME (EL idx bb.bb_instructions)) v` by (
+    first_x_assum (qspecl_then [`bb`, `EL idx bb.bb_instructions`] mp_tac) >>
+    simp[] >> disch_then (qspec_then `v` mp_tac) >> simp[]) >>
+  qpat_x_assum `def_available_at f bb _ v`
+    (strip_assume_tac o REWRITE_RULE[def_available_at_def]) >>
   Cases_on `def_bb.bb_label = bb.bb_label`
   >- (
     (* Same block: def_bb = bb by label uniqueness *)
@@ -769,8 +772,9 @@ Theorem sccp_step_eq_nophi:
     lookup_block bb.bb_label f.fn_blocks = SOME bb /\
     s.vs_inst_idx < LENGTH bb.bb_instructions /\
     inst_wf (EL s.vs_inst_idx bb.bb_instructions) /\
-    (!v. MEM (Var v) (EL s.vs_inst_idx bb.bb_instructions).inst_operands ==>
-         v IN FDOM s.vs_vars) /\
+    ((EL s.vs_inst_idx bb.bb_instructions).inst_opcode <> PHI ==>
+      !v. MEM (Var v) (EL s.vs_inst_idx bb.bb_instructions).inst_operands ==>
+          v IN FDOM s.vs_vars) /\
     (!x c. FLOOKUP (df_at sccp_bottom (sccp_df_analyze f)
               bb.bb_label s.vs_inst_idx).sl_vals x
               = SOME (CL_Const c) /\
@@ -850,8 +854,10 @@ Proof
     (drule_all wf_function_bb_well_formed >> simp[]) >>
   `inst_wf (EL s.vs_inst_idx bb.bb_instructions)` by
     (fs[fn_inst_wf_def] >> metis_tac[MEM_EL]) >>
-  `!v. MEM (Var v) (EL s.vs_inst_idx bb.bb_instructions).inst_operands ==>
+  `(EL s.vs_inst_idx bb.bb_instructions).inst_opcode <> PHI ==>
+   !v. MEM (Var v) (EL s.vs_inst_idx bb.bb_instructions).inst_operands ==>
        v IN FDOM s.vs_vars` by (
+    strip_tac >>
     mp_tac (Q.SPECL [`f`, `bb`, `s.vs_inst_idx`, `s`] operand_vars_in_fdom) >>
     simp[] >> metis_tac[]) >>
   `LENGTH abt_bb.bb_instructions = LENGTH bb.bb_instructions` by

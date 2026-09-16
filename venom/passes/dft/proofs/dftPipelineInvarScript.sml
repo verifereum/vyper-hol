@@ -231,7 +231,8 @@ Triviality deps_list_inj:
   !insts order inst.
     ALL_DISTINCT (MAP (\i. i.inst_id) insts) ==>
     let var_deps = MAP THE (FILTER IS_SOME
-      (MAP (operand_producer insts) inst.inst_operands)) in
+      (MAP (operand_producer insts)
+        (python_stack_operands inst.inst_opcode inst.inst_operands))) in
     let order_deps =
       if is_terminator inst.inst_opcode
       then FILTER (\d. d.inst_id <> inst.inst_id)

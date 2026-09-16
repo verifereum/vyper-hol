@@ -164,7 +164,7 @@ Definition execute_configured_fn_pass_def:
   execute_configured_fn_pass rpolicy (CFP_Simple tag) unit s fn =
     case tag of
       VP_ConcretizeMemLoc =>
-        (case concretize_function_eval
+        (case concretize_function_fuel (concretize_memloc_fuel fn)
                 unit.cu_context.ctx_global_reserved fn of
            NONE => NONE
          | SOME fn' => SOME <| fpo_function := fn';
@@ -216,7 +216,8 @@ End
 Theorem execute_configured_fn_pass_concretize[simp]:
   execute_configured_fn_pass rpolicy
     (CFP_Simple VP_ConcretizeMemLoc) unit s fn =
-  case concretize_function_eval unit.cu_context.ctx_global_reserved fn of
+  case concretize_function_fuel (concretize_memloc_fuel fn)
+         unit.cu_context.ctx_global_reserved fn of
     NONE => NONE
   | SOME fn' => SOME <| fpo_function := fn'; fpo_label_map := [];
                         fpo_supply := s |>

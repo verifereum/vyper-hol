@@ -87,8 +87,9 @@ Definition compile_log_store_data_def:
     (let v = FST x in let arg_ty = SND x in
      let mem_size = type_memory_bytes cenv arg_ty in
      let is_prim = is_word_type arg_ty in
-     do dst <- (if offset = 0 then return buf_op
-                else emit_op ADD [buf_op; Lit (n2w offset)]);
+     do (* Python's tuple-data lowering keeps the explicit base-plus-offset
+           operation even for offset zero; retain it for identical IR shape. *)
+        dst <- emit_op ADD [buf_op; Lit (n2w offset)];
         (if is_prim then emit_void MSTORE [dst; v]
          else if is_bytestring_type arg_ty then
            compile_store_bytestring v dst
@@ -821,6 +822,38 @@ End
 
 (* NOTE: is_word_type deleted — unified with is_word_type in compileEnv *)
 
+(* Emit the allocation at the lexical declaration point.  Pointer output names
+   were reserved before body lowering so later statements can use them through
+   the immutable compile environment. *)
+Definition emit_local_alloca_def:
+  emit_local_alloca (cenv : compile_env) id =
+    case FLOOKUP cenv.ce_vars id of
+      SOME (PtrVar (Var ptr_name) mem_size) =>
+        emit_inst ALLOCA [Lit (n2w mem_size)] [ptr_name]
+    | _ => return ()
+End
+
+Definition compile_internal_return_from_env_def:
+  compile_internal_return_from_env cenv ty src_ty val_op rpc =
+    do ret_buf <-
+         (case FLOOKUP cenv.ce_vars "__return_buf__" of
+            SOME (MemLoc rbuf_off _) =>
+              do buf_ptr <- emit_op MLOAD [Lit (n2w rbuf_off)];
+                 return (SOME buf_ptr)
+              od
+          | SOME (PtrVar buf_ptr _) => return (SOME buf_ptr)
+          | _ => return NONE);
+       elem_types <- return (case ty of
+           TupleT tys => tys
+         | StructT nsid =>
+             MAP (FST o SND) (get_struct_fields cenv.ce_struct_fields
+                                (nsid_to_string nsid))
+         | _ => []);
+       compile_internal_return cenv (SOME val_op) rpc
+         cenv.ce_returns_count ty src_ty elem_types ret_buf
+    od
+End
+
 Definition compile_stmt_def:
   (* Pass: no-op *)
   compile_stmt cenv lctx ty (Pass : stmt) = return () ∧
@@ -840,7 +873,8 @@ Definition compile_stmt_def:
      Mirrors Python: vyper/codegen_venom/stmt.py:lower_AnnAssign → _assign_value *)
   compile_stmt cenv lctx ty (AnnAssign id vtyp e) =
     (let src_ty = expr_type e in
-     do vlwl_result <- lower_value_with_loc compile_expr cenv vtyp e;
+     do emit_local_alloca cenv id;
+        vlwl_result <- lower_value_with_loc compile_expr cenv vtyp e;
         val_op <- return (FST vlwl_result);
         src_loc <- return (SND vlwl_result);
         (case FLOOKUP cenv.ce_vars id of
@@ -853,6 +887,16 @@ Definition compile_stmt_def:
                   SOME ((ems + 31) DIV 32, ems)
               | _ => NONE) in
              compile_assign_value cenv (Lit (n2w offset)) LocMemory val_op
+                                  is_prim src_loc vtyp src_ty da_info mem_size
+         | SOME (PtrVar ptr_op _) =>
+             let is_prim = is_word_type vtyp in
+             let mem_size = type_memory_bytes cenv vtyp in
+             let da_info = (case vtyp of
+                ArrayT elem_ty (Dynamic _) =>
+                  let ems = type_memory_bytes cenv elem_ty in
+                  SOME ((ems + 31) DIV 32, ems)
+              | _ => NONE) in
+             compile_assign_value cenv ptr_op LocMemory val_op
                                   is_prim src_loc vtyp src_ty da_info mem_size
          | _ =>
              (* Unsupported: AnnAssign without its preallocated memory binding. *)
@@ -981,8 +1025,10 @@ Definition compile_stmt_def:
             all_topics <- return (Lit (n2w event_hash) :: topic_ops);
             n_topics <- return (LENGTH all_topics);
             if NULL data_ops then
+              (* Python builder.log stores LOG operands in physical stack
+                 order: topic_count, reversed topics, size, offset. *)
               emit_inst (LOG : opcode)
-                (Lit (n2w n_topics) :: Lit 0w :: Lit 0w :: all_topics) []
+                (Lit (n2w n_topics) :: REVERSE all_topics ++ [Lit 0w; Lit 0w]) []
             else
               let data_types = MAP SND data_ops in
               let data_tuple_t = TupleT data_types in
@@ -997,7 +1043,8 @@ Definition compile_stmt_def:
                  encoded_len <-
                    compile_abi_encode_to_buf abi_buf data_buf data_enc_info;
                  emit_inst (LOG : opcode)
-                   (Lit (n2w n_topics) :: abi_buf :: encoded_len :: all_topics) []
+                   (Lit (n2w n_topics) :: REVERSE all_topics ++
+                      [encoded_len; abi_buf]) []
               od
          od) ∧
 
@@ -1026,6 +1073,7 @@ Definition compile_stmt_def:
          do rpc <- emit_op MLOAD [Lit (n2w rpc_off)];
             emit_inst RET [rpc] []
          od
+     | SOME (PtrVar rpc _) => emit_inst RET [rpc] []
      | _ =>
          (* External: nonreentrant unlock + STOP *)
          let (is_nonreentrant, nkey, use_transient, is_view) =
@@ -1044,31 +1092,12 @@ Definition compile_stmt_def:
     do val_op <- lower_value compile_expr cenv ty e;
        (case FLOOKUP cenv.ce_vars "__return_pc__" of
           SOME (MemLoc rpc_off _) =>
-            (* Internal return: dispatch via compile_internal_return.
-               Handles single-value, tuple, and memory return paths. *)
             do rpc <- emit_op MLOAD [Lit (n2w rpc_off)];
-               (* Load return buffer pointer from __return_buf__ local.
-                  The PARAM for the caller's buffer is stored there at function entry.
-                  compile_internal_return dispatches MCOPY for complex types. *)
-               ret_buf <-
-                 (case FLOOKUP cenv.ce_vars "__return_buf__" of
-                    SOME (MemLoc rbuf_off _) =>
-                      do buf_ptr <- emit_op MLOAD [Lit (n2w rbuf_off)];
-                         return (SOME buf_ptr)
-                      od
-                  | _ => return NONE);
-               (* elem_types: for tuple/struct returns, use element types.
-                  Python: hasattr(ret_typ, "tuple_items") matches TupleT + StructT.
-                  Mirrors Python: vyper/codegen_venom/stmt.py:_lower_internal_return *)
-               elem_types <- return (case ty of
-                   TupleT tys => tys
-                 | StructT nsid =>
-                     MAP (FST o SND) (get_struct_fields cenv.ce_struct_fields (nsid_to_string nsid))
-                 | _ => []);
-               src_ty <- return (expr_type e);
-               compile_internal_return cenv (SOME val_op) rpc
-                 cenv.ce_returns_count ty src_ty elem_types ret_buf
+               compile_internal_return_from_env cenv ty (expr_type e)
+                 val_op rpc
             od
+        | SOME (PtrVar rpc _) =>
+            compile_internal_return_from_env cenv ty (expr_type e) val_op rpc
         | _ =>
             (* External return: ABI encoding + nonreentrant unlock.
                Mirrors Python: vyper/codegen_venom/stmt.py:_lower_external_return which unlocks
@@ -1205,7 +1234,8 @@ Definition compile_stmt_def:
      Mirrors Python: vyper/codegen_venom/stmt.py:_lower_range_loop *)
   compile_stmt cenv lctx ty (For id fty (Range start_e end_e) bound body) =
     (let is_signed = is_signed_type fty in
-     do start_op <- lower_value compile_expr cenv fty start_e;
+     do emit_local_alloca cenv id;
+        start_op <- lower_value compile_expr cenv fty start_e;
         end_op <- lower_value compile_expr cenv fty end_e;
         entry_lbl <- fresh_label "for_entry";
         cond_lbl <- fresh_label "for_cond";
@@ -1218,18 +1248,20 @@ Definition compile_stmt_def:
         new_block entry_lbl;
         counter_var <- fresh_var;
         emit_inst ASSIGN [start_op] [counter_var];
-        (* Compute rounds and end_val.
-           If bound > 0, this is a dynamic range: rounds = end - start.
-           Otherwise static: end_val = end_op directly. *)
-        end_val <-
-          (if bound > 0 then
-             do rounds <- emit_op SUB [end_op; start_op];
-                compile_range_bound_checks start_op end_op rounds
-                                            bound is_signed;
-                emit_op ADD [start_op; rounds]
-             od
+        (* Python always materializes end_val as start + rounds.  For a
+           statically bounded range the front end has provided literal ends,
+           so fold only the subtraction which computes rounds; retain the ADD
+           in Venom IR for identical stack planning. *)
+        rounds <-
+          (if bound > 0 then emit_op SUB [end_op; start_op]
            else
-             return end_op);
+             case (start_op,end_op) of
+               (Lit start_w,Lit end_w) => return (Lit (end_w - start_w))
+             | _ => emit_op SUB [end_op; start_op]);
+        (if bound > 0 then
+           compile_range_bound_checks start_op end_op rounds bound is_signed
+         else return ());
+        end_val <- emit_op ADD [start_op; rounds];
         emit_inst JMP [Label cond_lbl] [];
         (* Cond: check counter != end *)
         new_block cond_lbl;
@@ -1240,6 +1272,8 @@ Definition compile_stmt_def:
         (case FLOOKUP cenv.ce_vars id of
            SOME (MemLoc offset _) =>
              emit_void MSTORE [Lit (n2w offset); Var counter_var]
+         | SOME (PtrVar ptr_op _) =>
+             emit_void MSTORE [ptr_op; Var counter_var]
          | _ =>
              (* Unsupported: a range loop variable requires a memory binding. *)
              emit_void INVALID []);
@@ -1279,7 +1313,8 @@ Definition compile_stmt_def:
      let ws = word_scale loc in
      let elem_size = elem_size_in_location cenv loc fty in
      let load_opc = load_opc_for loc in
-     do arr_vv <- compile_expr cenv (expr_type arr_e) arr_e;
+     do emit_local_alloca cenv id;
+        arr_vv <- compile_expr cenv (expr_type arr_e) arr_e;
         arr_op <- return (vv_operand arr_vv);
         (* Load array length *)
         len_op <-
@@ -1329,6 +1364,9 @@ Definition compile_stmt_def:
         (case FLOOKUP cenv.ce_vars id of
            SOME (MemLoc off _) =>
              compile_iter_elem_copy cenv elem_ptr (Lit (n2w off)) elem_size
+                                    loc slot_addr fty arr_elem_ty
+         | SOME (PtrVar ptr_op _) =>
+             compile_iter_elem_copy cenv elem_ptr ptr_op elem_size
                                     loc slot_addr fty arr_elem_ty
          | _ =>
              (* Unsupported: an iteration variable requires a memory binding. *)

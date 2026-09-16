@@ -150,7 +150,7 @@
   "hol_source_correspondence": {
     "file": "lowering/defs/evalCompilerScript.sml",
     "note": "Audit anchor only; HOL is not an input to Python compilation.",
-    "sha256": "8ed31f8a664aaeadc1d898b9b56900264e1258c5165de887a308b98fd5070da5"
+    "sha256": "896f0696891c57239fd0fdb9afbfeea163d66ff3f237bdd45d68c87bc7df94b2"
   },
   "producer": "pinned Python Vyper",
   "python_version": "3.11.11",

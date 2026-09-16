@@ -296,6 +296,20 @@ Definition operand_vars_def:
     | SOME v => v :: operand_vars ops
 End
 
+
+Theorem operand_vars_APPEND[simp]:
+  operand_vars (xs ++ ys) = operand_vars xs ++ operand_vars ys
+Proof
+  Induct_on `xs` >> simp[operand_vars_def] >>
+  Cases_on `operand_var h` >> simp[]
+QED
+
+Theorem MEM_operand_vars_REVERSE[simp]:
+  MEM v (operand_vars (REVERSE ops)) <=> MEM v (operand_vars ops)
+Proof
+  Induct_on `ops` >> simp[operand_vars_def] >>
+  Cases_on `operand_var h` >> simp[operand_vars_def] >> metis_tac[]
+QED
 (* Variables used (read) by an instruction. *)
 Definition inst_uses_def:
   inst_uses inst = operand_vars inst.inst_operands
@@ -367,6 +381,53 @@ Definition is_pseudo_def:
   is_pseudo BUMP = F /\
   is_pseudo _ = F
 End
+
+(* Python's VenomBuilder _emit/_emit1 helpers retain declared operand order;
+   _emit_evm/_emit1_evm reverse semantic operands into EVM stack order.
+   HOL IR deliberately keeps semantic order, so ordered Python algorithms use
+   this representation adapter. *)
+Definition ir_specific_operand_order_def:
+  ir_specific_operand_order ISTORE = T /\
+  ir_specific_operand_order PHI = T /\
+  ir_specific_operand_order PARAM = T /\
+  ir_specific_operand_order ASSIGN = T /\
+  ir_specific_operand_order NOP = T /\
+  ir_specific_operand_order JMP = T /\
+  ir_specific_operand_order JNZ = T /\
+  ir_specific_operand_order DJMP = T /\
+  ir_specific_operand_order DALLOCA = T /\
+  ir_specific_operand_order DRET = T /\
+  ir_specific_operand_order GETFMP = T /\
+  ir_specific_operand_order SETFMP = T /\
+  ir_specific_operand_order RETFMP = T /\
+  ir_specific_operand_order INITIAL_FMP = T /\
+  ir_specific_operand_order BUMP = T /\
+  ir_specific_operand_order INVOKE = T /\
+  ir_specific_operand_order FMP_PARAM = T /\
+  ir_specific_operand_order RETPC_PARAM = T /\
+  ir_specific_operand_order RET = T /\
+  ir_specific_operand_order LOG = T /\
+  ir_specific_operand_order ASSERT = T /\
+  ir_specific_operand_order ASSERT_UNREACHABLE = T /\
+  ir_specific_operand_order ALLOCA = T /\
+  ir_specific_operand_order OFFSET = T /\
+  ir_specific_operand_order SINK = T /\
+  ir_specific_operand_order DLOAD = T /\
+  ir_specific_operand_order ILOAD = T /\
+  ir_specific_operand_order _ = F
+End
+
+Definition python_stack_operands_def:
+  python_stack_operands opc ops =
+    if LENGTH ops < 2 \/ ir_specific_operand_order opc then ops
+    else REVERSE ops
+End
+
+Theorem MEM_python_stack_operands[simp]:
+  MEM x (python_stack_operands opc ops) <=> MEM x ops
+Proof
+  rw[python_stack_operands_def] >> simp[]
+QED
 
 (* Volatile instructions must not be removed even if their outputs
    are unused — they have observable side effects or control flow.

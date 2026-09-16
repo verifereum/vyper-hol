@@ -15,8 +15,8 @@
  *   inst_all_deps          — combined DDA + EDA dependencies
  *   entry_instructions     — dependency DAG roots
  *   schedule_from_entries  — DFS schedule of a block's non-phi instructions
- *   dft_block              — transform a single block
- *   dft_fn                 — transform all blocks in a function
+ *   dft_block              — pinned Python block transform
+ *   dft_fn                 — pinned Python function transform
  *   dft_ctx                — transform all functions in a context
  *)
 
@@ -58,8 +58,12 @@ End
 
 Definition inst_data_deps_def:
   inst_data_deps block_insts order inst =
+    (* Python's ordered DDA traverses Venom's internal stack-order operands.
+       HOL stores semantic-order operands, so cross the representation boundary
+       before preserving that insertion order. *)
+    let ordered_ops = python_stack_operands inst.inst_opcode inst.inst_operands in
     let var_deps = MAP THE (FILTER IS_SOME
-      (MAP (operand_producer block_insts) inst.inst_operands)) in
+      (MAP (operand_producer block_insts) ordered_ops)) in
     let order_deps =
       if is_terminator inst.inst_opcode
       then FILTER (\d. d.inst_id <> inst.inst_id)
@@ -338,15 +342,15 @@ Definition dft_cost_def:
       else 1
     else
       (* Data dep: find operand index *)
-      (* REVERSE: HOL4 stores operands in EVM semantic order but Python
-         iterates in stack-push order (reversed). REVERSE aligns indices
-         so index 0 = deepest on stack = lowest cost. *)
+      (* Cross HOL semantic order to Python's stack order, so index 0 is
+         deepest on stack and receives the lowest cost. *)
       let op_idxs = MAP THE (FILTER IS_SOME
         (MAPi (\i op.
           case operand_producer block_insts op of
             SOME prod => if prod.inst_id = child.inst_id then SOME i
                          else NONE
-          | NONE => NONE) (REVERSE parent.inst_operands))) in
+          | NONE => NONE)
+          (python_stack_operands parent.inst_opcode parent.inst_operands))) in
       (* Python cost = idx + len(order); shifted +1 for num: idx + len(order) + 1 *)
       case op_idxs of
         idx :: _ => idx + LENGTH order + 1
@@ -359,7 +363,8 @@ Definition dft_cost_def:
             case op of
               Var v => if MEM v child.inst_outputs then SOME i else NONE
             | Lit _ => NONE
-            | Label _ => NONE) (REVERSE parent.inst_operands))) in
+            | Label _ => NONE)
+            (python_stack_operands parent.inst_opcode parent.inst_operands))) in
         case output_idxs of
           idx :: _ => idx + LENGTH order + 1
         | [] =>
@@ -383,7 +388,7 @@ Definition sort_children_def:
     let sorted = QSORT (\(i1,c1) (i2,c2).
       let cost1 = dft_cost block_insts order eda offspring_map parent c1 in
       let cost2 = dft_cost block_insts order eda offspring_map parent c2 in
-      cost1 < cost2 \/ (cost1 = cost2 /\ i1 <= i2)) indexed in
+      cost1 < cost2 \/ (cost1 = cost2 /\ i1 < i2)) indexed in
     MAP SND sorted
 End
 
@@ -449,14 +454,13 @@ End
 Definition dft_block_def:
   dft_block order bb =
     let phis = FILTER (λi. is_pseudo i.inst_opcode) bb.bb_instructions in
-    let eda = build_full_eda bb.bb_instructions in
+    let eda = build_eda bb.bb_instructions in
     let offspring_map = build_offspring_map bb.bb_instructions order in
     let entries = entry_instructions bb.bb_instructions order eda in
     let scheduled = schedule_from_entries bb.bb_instructions order
                       eda offspring_map entries in
     bb with bb_instructions := phis ++ scheduled
 End
-
 
 (* ===== Function-Level Transform with StackOrder Convergence ===== *)
 
