@@ -1025,8 +1025,13 @@ Definition translate_stmt_def:
     Assert (translate_expr ctx test) AssertBare) /\
   (translate_stmt ctx (JS_Assert test (SOME msg)) =
     Assert (translate_expr ctx test) (AssertReason (translate_expr ctx msg))) /\
-  (translate_stmt ctx (JS_Log (src, name) args) =
-    Log (resolve_source_ref ctx src, name) (MAP (translate_expr ctx) args)) /\
+  (translate_stmt ctx (JS_Log (alias_opt, src, name) args) =
+    let nsid =
+      case alias_opt of
+        NONE => resolve_source_ref ctx src
+      | SOME alias => resolve_module_alias ctx alias src
+    in
+      Log (nsid, name) (MAP (translate_expr ctx) args)) /\
   (translate_stmt ctx (JS_If test body orelse) =
     If (translate_expr ctx test)
        (MAP (translate_stmt ctx) body)
