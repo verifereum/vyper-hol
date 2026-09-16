@@ -292,12 +292,21 @@ val allowed_test_patterns = [
   "vyper-test-exports/functional/builtins/codegen/test_blobhash.json"
 ]
 
-val excluded_test_patterns = [
-  "*/functional/codegen/abstract/*", (* @override semantics not implemented *)
+(* Path exclusions carry reportable reasons and tracking issues. *)
+val excluded_test_file_rules = [
+  ("*/functional/codegen/abstract/*",
+   "abstract and override semantics",
+   "https://github.com/verifereum/vyper-hol/issues/487"),
   (* The clean export contains a top-level ErrorDef, for which
      frontend/jsonASTLib.sml's json_toplevel decoder has no branch. *)
-  "vyper-test-exports/functional/codegen/features/test_custom_errors.json"
+  ("vyper-test-exports/functional/codegen/features/test_custom_errors.json",
+   "custom errors",
+   "https://github.com/verifereum/vyper-hol/issues/488")
 ]
+
+val outside_admitted_suites_reason = "outside currently admitted test suites"
+val outside_admitted_suites_issue =
+  "https://github.com/verifereum/vyper-hol/issues/36"
 
 (* Individual test names that bypass unsupported pattern checks *)
 val allowed_test_names = [
@@ -408,17 +417,26 @@ fun glob_match pat str =
     step (String.explode pat) (String.explode str)
   end
 
+datatype test_file_disposition =
+    AdmittedTestFile
+  | ExcludedTestFile of string * string (* reason, issue URL *)
+
+fun test_file_disposition path =
+  case List.find (fn (pat,_,_) => glob_match pat path)
+                 excluded_test_file_rules of
+    SOME (_,reason,issue) => ExcludedTestFile (reason,issue)
+  | NONE =>
+      if List.exists (fn prefix => String.isPrefix prefix path)
+           allowed_test_prefixes orelse
+         List.exists (fn pat => glob_match pat path) allowed_test_patterns
+      then AdmittedTestFile
+      else ExcludedTestFile
+        (outside_admitted_suites_reason,outside_admitted_suites_issue)
+
 fun is_supported_test_file path =
-  let
-    val allowed =
-      List.exists (fn prefix => String.isPrefix prefix path)
-        allowed_test_prefixes orelse
-      List.exists (fn pat => glob_match pat path) allowed_test_patterns
-    val excluded =
-      List.exists (fn pat => glob_match pat path) excluded_test_patterns
-  in
-    allowed andalso not excluded
-  end
+  case test_file_disposition path of
+    AdmittedTestFile => true
+  | ExcludedTestFile _ => false
 
 fun list_json_files dir = let
   val d = OS.FileSys.openDir dir
@@ -736,6 +754,41 @@ fun raw_string_array_field key (JSON.OBJECT fields) =
        | _ => NONE)
   | raw_string_array_field _ _ = NONE
 
+(* Lightweight inventory for files excluded before executable-test selection. *)
+fun read_raw_file_inventory json_path = let
+  val items = decodeFile rawObject json_path
+  fun count ((_,json),(tests,fixtures,other_items,direct_traces)) =
+    let
+      val traces = Option.getOpt (raw_array_length_field "traces" json,0)
+    in
+      case raw_string_field "item_type" json of
+        SOME "test" => (tests + 1,fixtures,other_items,
+                        direct_traces + traces)
+      | SOME "fixture" => (tests,fixtures + 1,other_items,
+                           direct_traces + traces)
+      | _ => (tests,fixtures,other_items + 1,direct_traces + traces)
+    end
+  val (tests,fixtures,other_items,direct_traces) =
+    List.foldl count (0,0,0,0) items
+in
+  {items = List.length items,
+   tests = tests,
+   fixtures = fixtures,
+   other_items = other_items,
+   direct_traces = direct_traces}
+end
+
+fun test_file_suite path =
+  case String.fields (fn c => c = #"/" orelse c = #"\\")
+         (strip_exports_prefix path) of
+    "functional"::"builtins"::third::_ =>
+      "functional/builtins/" ^ third
+  | "functional"::"codegen"::third::_ =>
+      "functional/codegen/" ^ third
+  | first::second::_ => first ^ "/" ^ second
+  | [first] => first
+  | [] => "unknown"
+
 fun read_coverage_json json_path = let
   val items = decodeFile rawObject json_path
   val fixtures = List.mapPartial (fn (name,json) =>
@@ -901,8 +954,20 @@ in
 end
 
 fun write_coverage_report output_path = let
-  val files = test_files ()
+  val discovered =
+    list_json_files test_exports_root
+    |> List.map strip_tests_prefix
+    |> Lib.sort lexless
+  val admitted_paths = List.filter is_supported_test_file discovered
+  val files = List.map (fn path => (json_path_to_id path,path)) admitted_paths
   val reports = List.map (fn (_,path) => (path,read_coverage_json path)) files
+  val excluded_files = List.mapPartial (fn path =>
+    case test_file_disposition path of
+      AdmittedTestFile => NONE
+    | ExcludedTestFile (reason,issue) =>
+        SOME (path,reason,issue,test_file_suite path,
+              read_raw_file_inventory path)) discovered
+
   fun sum field = List.foldl (fn ((_,report),n) => field report + n) 0 reports
   val total_items = sum #total_items
   val fixtures = sum #fixtures
@@ -921,22 +986,91 @@ fun write_coverage_report output_path = let
     (List.length o #unreferenced_traced_fixtures)
   val malformed = sum (List.length o #malformed)
   val zero_selected = sum (fn report => if #selected report = 0 then 1 else 0)
+  val excluded_test_items = excluded_name + excluded_pattern + no_traces +
+                            missing_source + blank_source
+
+  fun excluded_sum field =
+    List.foldl (fn ((_,_,_,_,inventory),n) => field inventory + n)
+      0 excluded_files
+  val path_excluded_items = excluded_sum #items
+  val path_excluded_tests = excluded_sum #tests
+  val path_excluded_fixtures = excluded_sum #fixtures
+  val path_excluded_other = excluded_sum #other_items
+  val path_excluded_traces = excluded_sum #direct_traces
+
+  fun add_exclusion_group
+      ((_,reason,issue,suite,inventory),[]) =
+        [(reason,issue,suite,1,#items inventory,#tests inventory,
+          #fixtures inventory,#other_items inventory,#direct_traces inventory)]
+    | add_exclusion_group
+      (entry as (_,reason,issue,suite,inventory),
+       (group as (reason',issue',suite',files,items,tests,fixtures,
+                  other_items,traces))::rest) =
+        if reason = reason' andalso issue = issue' andalso suite = suite'
+        then (reason',issue',suite',files + 1,items + #items inventory,
+              tests + #tests inventory,fixtures + #fixtures inventory,
+              other_items + #other_items inventory,
+              traces + #direct_traces inventory)::rest
+        else group :: add_exclusion_group (entry,rest)
+  val exclusion_groups = List.foldl add_exclusion_group [] excluded_files
+
   val output = TextIO.openOut output_path
   fun emit text = TextIO.output(output,text)
+  fun print_excluded_file (path,reason,issue,suite,inventory) =
+    emit (String.concat
+      ["[vyper-coverage] path_excluded file=", path,
+       " suite=", suite,
+       " reason=", reason,
+       " issue=", issue,
+       " items=", Int.toString (#items inventory),
+       " tests=", Int.toString (#tests inventory),
+       " fixtures=", Int.toString (#fixtures inventory),
+       " other_items=", Int.toString (#other_items inventory),
+       " direct_traces=", Int.toString (#direct_traces inventory), "\n"])
+  fun print_exclusion_group
+      (reason,issue,suite,files,items,tests,fixtures,other_items,traces) =
+    emit (String.concat
+      ["[vyper-coverage] path_exclusion_summary suite=", suite,
+       " reason=", reason,
+       " issue=", issue,
+       " files=", Int.toString files,
+       " items=", Int.toString items,
+       " tests=", Int.toString tests,
+       " fixtures=", Int.toString fixtures,
+       " other_items=", Int.toString other_items,
+       " direct_traces=", Int.toString traces, "\n"])
   fun write () = let
     val () = emit (String.concat
-      ["[vyper-coverage] admitted_files=", Int.toString (List.length files), "\n"])
+      ["[vyper-coverage] funnel discovered_files=",
+       Int.toString (List.length discovered),
+       " admitted_files=", Int.toString (List.length files),
+       " path_excluded_files=", Int.toString (List.length excluded_files),
+       " discovered_items=", Int.toString (total_items + path_excluded_items),
+       " admitted_items=", Int.toString total_items,
+       " path_excluded_items=", Int.toString path_excluded_items, "\n"])
+    val () = List.app print_excluded_file excluded_files
+    val () = List.app print_exclusion_group exclusion_groups
     val () = List.app (fn (json_path,report) =>
       print_raw_coverage output json_path report) reports
   in
     emit (String.concat
-      ["[vyper-coverage] summary admitted_files=", Int.toString (List.length files),
-       " items=", Int.toString total_items,
+      ["[vyper-coverage] summary discovered_files=",
+       Int.toString (List.length discovered),
+       " admitted_files=", Int.toString (List.length files),
+       " path_excluded_files=", Int.toString (List.length excluded_files),
+       " discovered_items=", Int.toString (total_items + path_excluded_items),
+       " admitted_items=", Int.toString total_items,
+       " path_excluded_items=", Int.toString path_excluded_items,
+       " path_excluded_tests=", Int.toString path_excluded_tests,
+       " path_excluded_fixtures=", Int.toString path_excluded_fixtures,
+       " path_excluded_other_items=", Int.toString path_excluded_other,
+       " path_excluded_direct_traces=", Int.toString path_excluded_traces,
        " fixtures=", Int.toString fixtures,
        " non_tests=", Int.toString non_tests,
        " selected=", Int.toString selected,
        " direct_traces=", Int.toString direct_traces,
        " expanded_traces=", Int.toString expanded_traces,
+       " excluded_test_items=", Int.toString excluded_test_items,
        " excluded_name=", Int.toString excluded_name,
        " excluded_pattern=", Int.toString excluded_pattern,
        " no_exported_traces=", Int.toString no_traces,
