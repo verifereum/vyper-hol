@@ -497,7 +497,7 @@ Resume compile_constructor_epilogue_correct[imm_pos]:
   disch_then (qspecl_then [`v'`, `n2w immutables_len`] mp_tac) >>
   (impl_tac >- gvs[eval_operand_lit]) >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts cs2 cs3) ss2 = OK ss3` >>
-  (* Step 4: OFFSET — Lit 0w always evaluable, Label "runtime_begin" preserved *)
+  (* Step 4: CODECOPY — the runtime label is used directly. *)
   `eval_operand (Label "runtime_begin") ss3 = SOME v`
     by (gvs[eval_operand_def] >>
         `FLOOKUP ss1.vs_labels "runtime_begin" = SOME v`
@@ -508,21 +508,15 @@ Resume compile_constructor_epilogue_correct[imm_pos]:
               first_x_assum (qspecl_then [`Label "runtime_begin"`, `v`] mp_tac) >>
               simp[eval_operand_def]) >>
         gvs[mcopy_def, write_memory_with_expansion_def, LET_THM]) >>
-  `eval_operand (Lit 0w) ss3 = SOME 0w` by simp[eval_operand_def] >>
-  drule_all emit_op_OFFSET_correct >> strip_tac >>
-  rename1 `run_inst_seq (emitted_insts cs3 cs4) ss3 = OK ss4` >>
-  (* Step 5: CODECOPY — deploy_buf preserved, rt_begin from OFFSET, Lit *)
-  `eval_operand deploy_buf ss4 = SOME (n2w offset)` by metis_tac[] >>
-  `eval_operand rt_begin ss4 = SOME (0w + v)` by first_assum ACCEPT_TAC >>
-  `eval_operand (Lit (n2w runtime_size)) ss4 = SOME (n2w runtime_size)`
+  `eval_operand deploy_buf ss3 = SOME (n2w offset)` by metis_tac[] >>
+  `eval_operand (Lit (n2w runtime_size)) ss3 = SOME (n2w runtime_size)`
     by simp[eval_operand_def] >>
   drule_all emit_void_CODECOPY_correct >> strip_tac >>
-  rename1 `run_inst_seq (emitted_insts cs4 cs5) ss4 = OK ss5` >>
-  (* Step 6: RETURN → Halt *)
+  rename1 `run_inst_seq (emitted_insts cs3 cs4) ss3 = OK ss4` >>
   imp_res_tac inst_extends_emit_op >>
   imp_res_tac inst_extends_emit_void >>
   imp_res_tac inst_extends_emit_inst >>
-  (* Compose all OK segments: st→cs1→cs2→cs3→cs4→cs5 *)
+  (* Compose all OK segments: st→cs1→cs2→cs3→cs4. *)
   `run_inst_seq (emitted_insts st cs2) ss = OK ss2`
     by (imp_res_tac run_inst_seq_emit_extend >> gvs[]) >>
   `inst_extends st cs2` by metis_tac[inst_extends_trans] >>
@@ -532,16 +526,13 @@ Resume compile_constructor_epilogue_correct[imm_pos]:
   `run_inst_seq (emitted_insts st cs4) ss = OK ss4`
     by (imp_res_tac run_inst_seq_emit_extend >> gvs[]) >>
   `inst_extends st cs4` by metis_tac[inst_extends_trans] >>
-  `run_inst_seq (emitted_insts st cs5) ss = OK ss5`
-    by (imp_res_tac run_inst_seq_emit_extend >> gvs[]) >>
-  `inst_extends st cs5` by metis_tac[inst_extends_trans] >>
   (* Final: RETURN → Halt *)
-  `eval_operand deploy_buf ss5 = SOME (n2w offset)` by metis_tac[] >>
-  `eval_operand (Lit (n2w (immutables_len + runtime_size))) ss5 =
+  `eval_operand deploy_buf ss4 = SOME (n2w offset)` by metis_tac[] >>
+  `eval_operand (Lit (n2w (immutables_len + runtime_size))) ss4 =
      SOME (n2w (immutables_len + runtime_size))`
     by simp[eval_operand_def] >>
   drule_all emit_inst_RETURN_halt >> strip_tac >>
-  `inst_extends cs5 st'` by metis_tac[inst_extends_emit_inst] >>
+  `inst_extends cs4 st'` by metis_tac[inst_extends_emit_inst] >>
   drule_all run_inst_seq_emit_extend >> gvs[]
 QED
 
@@ -552,22 +543,16 @@ Resume compile_constructor_epilogue_correct[imm_zero]:
   (* Step 1: ALLOCA *)
   drule_all emit_op_ALLOCA_correct >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st cs1) ss = OK ss1` >>
-  (* Step 2: OFFSET — Label "runtime_begin" evaluable in ss1 *)
+  (* Step 2: CODECOPY — the runtime label is used directly. *)
   `eval_operand (Label "runtime_begin") ss1 = SOME v`
-    by (gvs[eval_operand_def]) >>
-  `eval_operand (Lit 0w) ss1 = SOME 0w` by simp[eval_operand_def] >>
-  drule_all emit_op_OFFSET_correct >> strip_tac >>
-  rename1 `run_inst_seq (emitted_insts cs1 cs2) ss1 = OK ss2` >>
-  (* Step 3: CODECOPY *)
-  `eval_operand op ss2 = SOME (n2w offset)` by metis_tac[] >>
-  `eval_operand rt_begin ss2 = SOME (0w + v)` by first_assum ACCEPT_TAC >>
-  `eval_operand (Lit (n2w runtime_size)) ss2 = SOME (n2w runtime_size)`
+    by gvs[eval_operand_def] >>
+  `eval_operand (Lit (n2w runtime_size)) ss1 = SOME (n2w runtime_size)`
     by simp[eval_operand_def] >>
   drule_all emit_void_CODECOPY_correct >> strip_tac >>
-  rename1 `run_inst_seq (emitted_insts cs2 cs3) ss2 = OK ss3` >>
-  (* Step 4: RETURN → Halt *)
-  `eval_operand op ss3 = SOME (n2w offset)` by metis_tac[] >>
-  `eval_operand (Lit (n2w runtime_size)) ss3 = SOME (n2w runtime_size)`
+  rename1 `run_inst_seq (emitted_insts cs1 cs2) ss1 = OK ss2` >>
+  (* Step 3: RETURN → Halt *)
+  `eval_operand op ss2 = SOME (n2w offset)` by metis_tac[] >>
+  `eval_operand (Lit (n2w runtime_size)) ss2 = SOME (n2w runtime_size)`
     by simp[eval_operand_def] >>
   drule_all emit_inst_RETURN_halt >> strip_tac >>
   (* Compose *)
@@ -577,10 +562,7 @@ Resume compile_constructor_epilogue_correct[imm_zero]:
   `run_inst_seq (emitted_insts st cs2) ss = OK ss2`
     by (imp_res_tac run_inst_seq_emit_extend >> gvs[]) >>
   `inst_extends st cs2` by metis_tac[inst_extends_trans] >>
-  `run_inst_seq (emitted_insts st cs3) ss = OK ss3`
-    by (imp_res_tac run_inst_seq_emit_extend >> gvs[]) >>
-  `inst_extends st cs3` by metis_tac[inst_extends_trans] >>
-  `inst_extends cs3 st'` by metis_tac[inst_extends_emit_inst] >>
+  `inst_extends cs2 st'` by metis_tac[inst_extends_emit_inst] >>
   drule_all run_inst_seq_emit_extend >> gvs[]
 QED
 

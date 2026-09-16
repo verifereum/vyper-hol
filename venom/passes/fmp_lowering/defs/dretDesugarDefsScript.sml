@@ -166,6 +166,17 @@ Definition dret_desugar_blocks_def:
             SOME ((bb with bb_instructions := insts)::tail,s2)
 End
 
+(* Python's _after_params_index places the GETFMP after the final physical
+   entry parameter.  This also preserves HOL's canonical parameter prefix. *)
+Definition insert_after_last_param_def:
+  insert_after_last_param new [] = [new] /\
+  insert_after_last_param new (inst::insts) =
+    if EXISTS (\i. is_param_opcode i.inst_opcode) insts then
+      inst :: insert_after_last_param new insts
+    else if is_param_opcode inst.inst_opcode then inst::new::insts
+    else new::inst::insts
+End
+
 Definition dret_desugar_function_def:
   dret_desugar_function target s fn =
     if no_dret fn then SOME (fn,s)
@@ -185,8 +196,9 @@ Definition dret_desugar_function_def:
                    SOME
                      (fn with fn_blocks :=
                        (first' with bb_instructions :=
-                         mk_inst getfmp_id GETFMP [] [entry_v] ::
-                         first'.bb_instructions)::rest',
+                         insert_after_last_param
+                           (mk_inst getfmp_id GETFMP [] [entry_v])
+                           first'.bb_instructions)::rest',
                       s3))
 End
 

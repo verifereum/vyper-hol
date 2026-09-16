@@ -23,10 +23,10 @@ while [ "$#" -gt 0 ]; do
 done
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-repo_dir=$(CDPATH= cd -- "$script_dir/../.." && pwd)
+repo_dir=$(CDPATH= cd -- "$script_dir/../../.." && pwd)
 pin=$(tr -d '[:space:]' < "$repo_dir/VYPER_PIN")
-sources=$script_dir/bytecode/python-o1-no-asm-opt-sources
-oracle=$script_dir/bytecode/python-o1-no-asm-opt
+sources=$script_dir/python-o1-no-asm-opt-sources
+oracle=$script_dir/python-o1-no-asm-opt
 
 [ -n "$vyper_repo" ] || {
   echo "set VYPER_REPO or pass --vyper-repo PATH" >&2
@@ -75,7 +75,7 @@ env -u PYTHONPATH -u PYTHONHOME -u PYTHONSTARTUP \
   "$venv/bin/python" -I "$script_dir/python_o1_bytecode_oracle.py" \
   --expected-commit "$pin" --expected-python 3.11.11 --generator-uv 0.10.11 \
   --expected-install-root "$venv" --sources "$sources" \
-  --hol-programs "$script_dir/evalCompilerScript.sml" --output "$generated"
+  --hol-programs "$script_dir/../evalCompilerScript.sml" --output "$generated"
 
 count=$(find "$generated" -type f -name '*.hex' | wc -l | tr -d ' ')
 total=$(find "$generated" -type f | wc -l | tr -d ' ')
@@ -140,7 +140,8 @@ case "$mode" in
     ;;
   compare)
     echo "Python oracle reproduced; running fresh HOL bytecode parity evaluation"
-    (cd "$repo_dir" && holbuild --tactic-timeout "${HOL_PARITY_TACTIC_TIMEOUT:-600}" \
+    (cd "$repo_dir" && holbuild --maxheap "${HOL_PARITY_MAXHEAP:-12000}" \
+      build --tactic-timeout "${HOL_PARITY_TACTIC_TIMEOUT:-600}" \
       evalCompilerBytecodeTheory)
     echo "all 23 HOL evaluations match the pinned Python O1/no-assembly-opt oracle"
     ;;

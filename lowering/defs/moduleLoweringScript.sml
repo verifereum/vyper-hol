@@ -287,44 +287,69 @@ Definition compile_selector_dispatch_dense_def:
 End
 
 (* ===== Argument Decoding (unified) ===== *)
+(* Convert either representation of a memory-backed variable to the operand
+   consumed by ABI decoding.  Other variable locations are not decode buffers. *)
+Definition var_location_decode_operand_def:
+  var_location_decode_operand (MemLoc offset _) = SOME (Lit (n2w offset)) ∧
+  var_location_decode_operand (PtrVar ptr_op _) = SOME ptr_op ∧
+  var_location_decode_operand _ = NONE
+End
+
+Definition var_location_memory_size_def:
+  var_location_memory_size (MemLoc _ size) = SOME size ∧
+  var_location_memory_size (PtrVar _ size) = SOME size ∧
+  var_location_memory_size _ = NONE
+End
+
 Definition compile_decode_args_def:
   compile_decode_args cenv [] _ _ _ _ = return () ∧
   compile_decode_args cenv ((name, is_prim, is_dynamic, abi_size, dec_info)::rest)
                       offset load_opc hi_op base_adj =
     if is_prim then
       let clamp_info = (case dec_info of DecPrimWord c => c | _ => NoClamp) in
-      do val_op <- emit_op load_opc [Lit (n2w offset)];
+      do src <- if base_adj = 0 then return (Lit (n2w offset))
+                else emit_op ADD
+                  [Lit (n2w base_adj); Lit (n2w (offset - base_adj))];
+         val_op <- emit_op load_opc [src];
          compile_abi_clamp_basetype val_op clamp_info;
          (case FLOOKUP cenv.ce_vars name of
-            SOME (MemLoc mem_offset _) =>
-              emit_void MSTORE [Lit (n2w mem_offset); val_op]
-          | _ => return ());
+            SOME loc =>
+              (case var_location_decode_operand loc of
+                 SOME dst => emit_void MSTORE [dst; val_op]
+               | NONE => return ())
+          | NONE => return ());
          compile_decode_args cenv rest (offset + abi_size) load_opc hi_op base_adj
       od
     else if is_dynamic then
       (case FLOOKUP cenv.ce_vars name of
-         SOME (MemLoc mem_offset _) =>
-           let dst = Lit (n2w mem_offset) in
-           do offset_val <- emit_op load_opc [Lit (n2w offset)];
-              actual_src <- emit_op ADD [Lit (n2w base_adj); offset_val];
-              compile_abi_decode_to_buf dst actual_src
-                load_opc hi_op dec_info;
-              compile_decode_args cenv rest (offset + abi_size)
-                load_opc hi_op base_adj
-           od
-       | _ => compile_decode_args cenv rest (offset + abi_size)
-                load_opc hi_op base_adj)
+         SOME loc =>
+           (case var_location_decode_operand loc of
+              SOME dst =>
+                do offset_val <- emit_op load_opc [Lit (n2w offset)];
+                   actual_src <- emit_op ADD [Lit (n2w base_adj); offset_val];
+                   compile_abi_decode_to_buf dst actual_src
+                     load_opc hi_op dec_info;
+                   compile_decode_args cenv rest (offset + abi_size)
+                     load_opc hi_op base_adj
+                od
+            | NONE => compile_decode_args cenv rest (offset + abi_size)
+                        load_opc hi_op base_adj)
+       | NONE => compile_decode_args cenv rest (offset + abi_size)
+                   load_opc hi_op base_adj)
     else
       (case FLOOKUP cenv.ce_vars name of
-         SOME (MemLoc mem_offset _) =>
-           let src = Lit (n2w (base_adj + offset)) in
-           let dst = Lit (n2w mem_offset) in
-           do compile_abi_decode_to_buf dst src load_opc hi_op dec_info;
-              compile_decode_args cenv rest (offset + abi_size)
-                load_opc hi_op base_adj
-           od
-       | _ => compile_decode_args cenv rest (offset + abi_size)
-                load_opc hi_op base_adj)
+         SOME loc =>
+           (case var_location_decode_operand loc of
+              SOME dst =>
+                let src = Lit (n2w (base_adj + offset)) in
+                do compile_abi_decode_to_buf dst src load_opc hi_op dec_info;
+                   compile_decode_args cenv rest (offset + abi_size)
+                     load_opc hi_op base_adj
+                od
+            | NONE => compile_decode_args cenv rest (offset + abi_size)
+                        load_opc hi_op base_adj)
+       | NONE => compile_decode_args cenv rest (offset + abi_size)
+                   load_opc hi_op base_adj)
 End
 
 (* ===== Internal Function ===== *)
@@ -367,12 +392,15 @@ Definition materialize_internal_params_def:
   materialize_internal_params cenv [] = return cenv /\
   materialize_internal_params cenv ((name, is_stack, param_op)::rest) =
     if is_stack then
-      do (case FLOOKUP cenv.ce_vars name of
-            SOME (MemLoc offset _) =>
-              emit_void MSTORE [Lit (n2w offset); param_op]
-          | _ => return ());
-         materialize_internal_params cenv rest
-      od
+      (case FLOOKUP cenv.ce_vars name of
+         SOME (MemLoc _ mem_size) =>
+           do ptr <- emit_op ALLOCA [Lit (n2w mem_size)];
+              emit_void MSTORE [ptr; param_op];
+              materialize_internal_params
+                (cenv with ce_vars updated_by
+                   (λvars. vars |+ (name, PtrVar ptr mem_size))) rest
+           od
+       | _ => materialize_internal_params cenv rest)
     else
       let mem_size = (case FLOOKUP cenv.ce_vars name of
                         SOME (MemLoc _ sz) => sz | _ => 0) in
@@ -391,15 +419,15 @@ Definition compile_constructor_epilogue_def:
          imm_dst <- emit_op ADD [deploy_buf; rt_size_op];
          emit_void MCOPY [imm_dst; immutables_buf;
                           Lit (n2w immutables_len)];
-         rt_begin <- emit_op OFFSET [Lit 0w; Label "runtime_begin"];
-         emit_void CODECOPY [deploy_buf; rt_begin; rt_size_op];
+         emit_void CODECOPY
+           [deploy_buf; Label "runtime_begin"; rt_size_op];
          emit_inst RETURN [deploy_buf; Lit (n2w total_size)] []
       od
     else
       do buf_alloc <- compile_alloc_buffer runtime_size;
          buf <- return buf_alloc.buf_operand;
-         rt_begin <- emit_op OFFSET [Lit 0w; Label "runtime_begin"];
-         emit_void CODECOPY [buf; rt_begin; Lit (n2w runtime_size)];
+         emit_void CODECOPY
+           [buf; Label "runtime_begin"; Lit (n2w runtime_size)];
          emit_inst RETURN [buf; Lit (n2w runtime_size)] []
       od
 End
@@ -410,8 +438,8 @@ Definition compile_simple_deploy_def:
     let total_size = runtime_size + immutables_len in
     do buf_alloc <- compile_alloc_buffer total_size;
        buf <- return buf_alloc.buf_operand;
-       rt_begin <- emit_op OFFSET [Lit 0w; Label "runtime_begin"];
-       emit_void CODECOPY [buf; rt_begin; Lit (n2w total_size)];
+       emit_void CODECOPY
+         [buf; Label "runtime_begin"; Lit (n2w total_size)];
        emit_inst RETURN [buf; Lit (n2w total_size)] []
     od
 End
@@ -500,10 +528,26 @@ End
 (* ===== Calldata / Data-Section Arg Wrappers ===== *)
 
 Definition compile_register_positional_args_def:
-  compile_register_positional_args cenv args calldata_offset =
-    do hi_op <- emit_op CALLDATASIZE [];
-       compile_decode_args cenv args calldata_offset CALLDATALOAD hi_op 4
-    od
+  compile_register_positional_args cenv [] _ = return cenv ∧
+  compile_register_positional_args cenv
+      ((name, is_prim, is_dynamic, abi_size, dec_info)::rest) calldata_offset =
+    (case FLOOKUP cenv.ce_vars name of
+       SOME loc =>
+         (case var_location_memory_size loc of
+            SOME mem_size =>
+              do buf <- compile_alloc_buffer mem_size;
+                 cenv' <- return (cenv with ce_vars updated_by
+                   (\m. m |+ (name, PtrVar buf.buf_operand mem_size)));
+                 compile_decode_args cenv'
+                   [(name, is_prim, is_dynamic, abi_size, dec_info)]
+                   calldata_offset CALLDATALOAD (Lit 0w) 4;
+                 compile_register_positional_args cenv' rest
+                   (calldata_offset + abi_size)
+              od
+          | NONE => compile_register_positional_args cenv rest
+                      (calldata_offset + abi_size))
+     | NONE => compile_register_positional_args cenv rest
+                 (calldata_offset + abi_size))
 End
 
 Definition compile_register_constructor_args_def:
@@ -511,14 +555,50 @@ Definition compile_register_constructor_args_def:
     compile_decode_args cenv args data_offset DLOAD (Lit (n2w data_size)) 0
 End
 
+(* ===== Local Variable Materialization ===== *)
+
+(* Collect lexical memory locals in source order.  build_compile_env uses the
+   same list to assign abstract MemLoc regions; function lowering turns those
+   regions into ALLOCA operands, matching Python Context.new_variable. *)
+Definition collect_locals_def:
+  collect_locals ([] : stmt list) = ([] : (string # type) list) /\
+  collect_locals (AnnAssign id ty _ :: rest) =
+    (id, ty) :: collect_locals rest /\
+  collect_locals (If _ then_stmts else_stmts :: rest) =
+    collect_locals then_stmts ++
+    collect_locals else_stmts ++
+    collect_locals rest /\
+  collect_locals (For id ty _ _ for_body :: rest) =
+    (id, ty) :: collect_locals for_body ++ collect_locals rest /\
+  collect_locals (_ :: rest) = collect_locals rest
+End
+
+(* Reserve output variables up front so the immutable compile environment can
+   refer to local pointers throughout the body.  The ALLOCA instruction itself
+   is emitted at the source declaration/loop, matching Python's sequencing. *)
+Definition reserve_local_ptrs_def:
+  reserve_local_ptrs (cenv : compile_env)
+      ([] : (string # type) list) = return cenv /\
+  reserve_local_ptrs (cenv : compile_env) ((name,ty)::locals) =
+    case FLOOKUP cenv.ce_vars name of
+      SOME (MemLoc _ mem_size) =>
+        do ptr <- fresh_var;
+           reserve_local_ptrs
+             (cenv with ce_vars :=
+                cenv.ce_vars |+ (name,PtrVar (Var ptr) mem_size)) locals
+        od
+    | _ => reserve_local_ptrs cenv locals
+End
+
 (* ===== Guarded Body ===== *)
 Definition compile_guarded_body_def:
   compile_guarded_body cenv is_nonreentrant nkey use_transient
                        is_view body ret_type =
-    do (if is_nonreentrant then
+    do cenv' <- reserve_local_ptrs cenv (collect_locals body);
+       (if is_nonreentrant then
           compile_nonreentrant_lock nkey use_transient is_view
         else return ());
-       compile_stmts cenv NoLoop
+       compile_stmts cenv' NoLoop
          (case ret_type of SOME t => t | NONE => BaseT BoolT) body;
        cs <- comp_get;
        if block_is_terminated cs then return ()
@@ -538,9 +618,9 @@ Definition compile_external_function_body_def:
   compile_external_function_body cenv positional_args
                                  is_nonreentrant nkey use_transient
                                  is_view body ret_type =
-    do compile_register_positional_args cenv positional_args 4;
-       compile_guarded_body cenv is_nonreentrant nkey use_transient
-                            is_view body ret_type
+    do cenv' <- compile_register_positional_args cenv positional_args 4;
+       compile_guarded_body cenv' is_nonreentrant nkey use_transient
+                             is_view body ret_type
     od
 End
 
@@ -577,7 +657,37 @@ Definition compile_internal_function_def:
        params_result <- compile_internal_param_decls params param_idx_start;
        captured_params <- return (FST params_result);
        next_idx <- return (SND params_result);
-       return_pc <- emit_op PARAM [Lit (n2w next_idx)];
+       (* The return PC is a physical entry slot but not a user argument.
+          Match VenomBuilder.retpc_param by naming it with the dedicated
+          opcode while retaining HOL's explicit physical index. *)
+       return_pc <- emit_op RETPC_PARAM [Lit (n2w next_idx)];
+       (* Return-buffer and return-PC parameters are already stack operands;
+          Python records them directly instead of round-tripping through the
+          abstract memory slots used while constructing the compile env. *)
+       cenv1 <- return
+         (cenv with ce_vars updated_by (λvars.
+            let vars1 = case return_buf_var of
+                  SOME param_op =>
+                    (case FLOOKUP vars "__return_buf__" of
+                       SOME (MemLoc _ sz) =>
+                         vars |+ ("__return_buf__", PtrVar param_op sz)
+                     | _ => vars)
+                | NONE => vars in
+            vars1 |+ ("__return_pc__", PtrVar return_pc 0)));
+       (* Stack-passed user parameters are materialized before the temporary
+          stack-return region, matching Context.new_variable ordering. *)
+       cenv2 <- materialize_internal_params cenv1 captured_params;
+       (* Python allocates a temporary return-value region even when stack
+          returns make that region dead.  Keep the ALLOCA at this exact point;
+          concretization and code generation preserve its observable shape. *)
+       (case ret_type of
+          SOME ret_ty =>
+            if cenv.ce_returns_count > 0 then
+              do compile_alloc_buffer (type_memory_bytes cenv ret_ty);
+                 return ()
+              od
+            else return ()
+        | NONE => return ());
        (* Reserve immutables only after the canonical parameter prefix. *)
        forced_alloc_id <-
          (if is_ctor_context ∧ immutables_len > 0 then
@@ -588,18 +698,6 @@ Definition compile_internal_function_def:
                return (SOME (FST alloc_result))
             od
           else return NONE);
-       (case return_buf_var of
-          SOME param_op =>
-            (case FLOOKUP cenv.ce_vars "__return_buf__" of
-               SOME (MemLoc rbuf_off _) =>
-                 emit_void MSTORE [Lit (n2w rbuf_off); param_op]
-             | _ => return ())
-        | NONE => return ());
-       cenv2 <- materialize_internal_params cenv captured_params;
-       (case FLOOKUP cenv2.ce_vars "__return_pc__" of
-          SOME (MemLoc rpc_off _) =>
-            emit_void MSTORE [Lit (n2w rpc_off); return_pc]
-        | _ => return ());
        (* Nonreentrant lock *)
        (if is_nonreentrant then
           compile_nonreentrant_lock nkey use_transient is_view
@@ -781,8 +879,8 @@ Definition compile_common_function_body_def:
                                 is_nonreentrant nkey use_transient
                                 is_view body ret_type =
     let cenv1 = compile_register_kwarg_vars cenv kwarg_vars in
-    do compile_register_positional_args cenv positional_args 4;
-       compile_guarded_body cenv1 is_nonreentrant nkey use_transient
+    do cenv2 <- compile_register_positional_args cenv1 positional_args 4;
+       compile_guarded_body cenv2 is_nonreentrant nkey use_transient
                             is_view body ret_type
     od
 End

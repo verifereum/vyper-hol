@@ -641,18 +641,26 @@ Resume compile_abi_encode_to_buf_correct[prim]:
     >- (
       Cases_on`b` \\ gvs[exprLoweringTheory.type_to_abi_enc_info_def] >>
       Cases_on`b'` \\ gvs[exprLoweringTheory.type_to_abi_enc_info_def] )
-    >- (
-      Cases_on`b` \\ gvs[exprLoweringTheory.type_to_abi_enc_info_def] ) >>
-    Cases_on`v1` >> gvs[] >>
-    first_x_assum drule >>
-    rw[] >> rw[] ) >>
+    >- (BasicProvers.EVERY_CASE_TAC >>
+        gvs[exprLoweringTheory.type_to_abi_enc_info_def]) >>
+    FIRST
+      [Cases_on`b` >> gvs[exprLoweringTheory.type_to_abi_enc_info_def] >>
+       BasicProvers.EVERY_CASE_TAC >>
+       gvs[exprLoweringTheory.type_to_abi_enc_info_def],
+       Cases_on`v1` >> gvs[] >>
+       first_x_assum drule >>
+       rw[] >> rw[]] ) >>
   drule_all $ cj 1 enc_has_static_length >> strip_tac >>
   `∀tys. ty ≠ TupleT tys` by (
-    rpt strip_tac >> gvs[exprLoweringTheory.type_to_abi_enc_info_def]) >>
-  `∀a b. ty ≠ ArrayT a b` by (
-    strip_tac >>
-    Cases >> rpt strip_tac >>
+    rpt strip_tac >>
+    Cases_on `is_abi_dynamic cenv.ce_struct_fields (TupleT tys)` >>
     gvs[exprLoweringTheory.type_to_abi_enc_info_def]) >>
+  `∀a b. ty ≠ ArrayT a b` by (
+    strip_tac >> Cases >> rpt strip_tac >>
+    FIRST
+      [Cases_on `is_abi_dynamic cenv.ce_struct_fields (ArrayT a (Fixed n))` >>
+       gvs[exprLoweringTheory.type_to_abi_enc_info_def],
+       gvs[exprLoweringTheory.type_to_abi_enc_info_def]]) >>
   `ty ≠ NoneT` by (
       strip_tac >> gvs[exprLoweringTheory.type_to_abi_enc_info_def]) >>
   `static_length aty = 32` by (
@@ -669,8 +677,10 @@ Resume compile_abi_encode_to_buf_correct[prim]:
     strip_tac >>
     reverse CASE_TAC >> simp[]
     >- (
-      CASE_TAC >> simp[] >>
-      res_tac >> gs[vyperValueTheory.evaluate_type_def] ) >>
+      CASE_TAC >> simp[]
+      >- gvs[vyperValueTheory.evaluate_type_def]
+      >- (Cases_on `x` >> gvs[vyperValueTheory.evaluate_type_def] >>
+          res_tac >> gvs[]) ) >>
     gvs[vyperValueTheory.evaluate_type_def] ) >>
   simp[eval_operand_def] >>
   reverse conj_tac >- first_x_assum MATCH_ACCEPT_TAC >>

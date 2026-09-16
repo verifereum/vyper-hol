@@ -174,6 +174,25 @@ Proof
   Induct_on `blocks` >> simp[venomInstTheory.fn_insts_blocks_def]
 QED
 
+Theorem insert_after_last_param_every[local]:
+  EVERY p insts /\ p new ==>
+  EVERY p (insert_after_last_param new insts)
+Proof
+  Induct_on `insts` >> simp[insert_after_last_param_def] >>
+  rpt strip_tac >> Cases_on `EXISTS (\i. is_param_opcode i.inst_opcode) insts` >>
+  Cases_on `is_param_opcode h.inst_opcode` >> simp[]
+QED
+
+Theorem insert_after_last_param_flat_map[local]:
+  f new = [] ==>
+  FLAT (MAP f (insert_after_last_param new insts)) = FLAT (MAP f insts)
+Proof
+  map_every qid_spec_tac [`new`,`insts`] >> Induct_on `insts` >>
+  simp[insert_after_last_param_def] >> rpt strip_tac >>
+  Cases_on `EXISTS (\i. is_param_opcode i.inst_opcode) insts` >>
+  Cases_on `is_param_opcode h.inst_opcode` >> simp[]
+QED
+
 Theorem dret_desugar_function_no_dret:
   dret_desugar_function target supply fn = SOME (fn',supply') ==>
   no_dret fn'
@@ -186,8 +205,10 @@ Proof
   drule dret_desugar_blocks_no_dret >> strip_tac >>
   `EVERY (\bb. EVERY (\i. i.inst_opcode <> DRET) bb.bb_instructions)
      ((first' with bb_instructions :=
-        mk_inst getfmp_id GETFMP [] [entry_v]::first'.bb_instructions)::rest')` by
-    gvs[venomInstTheory.mk_inst_def] >>
+        insert_after_last_param (mk_inst getfmp_id GETFMP [] [entry_v])
+          first'.bb_instructions)::rest')` by
+    (gvs[venomInstTheory.mk_inst_def] >>
+     irule insert_after_last_param_every >> simp[]) >>
   drule fn_insts_blocks_every >> disch_then assume_tac >> gvs[EVERY_MEM]
 QED
 
@@ -562,6 +583,13 @@ Proof
   `FLAT (MAP block_ir_labels (first'::rest')) =
    FLAT (MAP block_ir_labels (first::rest))` by
     metis_tac[dret_desugar_blocks_labels, dret_value_operand_simps] >>
+  `FLAT (MAP inst_ir_labels
+      (insert_after_last_param (mk_inst getfmp_id GETFMP [] [entry_v])
+        first'.bb_instructions)) =
+    FLAT (MAP inst_ir_labels first'.bb_instructions)` by
+    (irule insert_after_last_param_flat_map >>
+     simp[venomInstTheory.mk_inst_def, inst_ir_labels_def,
+          operand_ir_labels_def]) >>
   gvs[fn_ir_labels_def, block_ir_labels_def, venomInstTheory.mk_inst_def,
       inst_ir_labels_def, operand_ir_labels_def]
 QED
@@ -691,6 +719,28 @@ Proof
   >> simp[get_invoke_targets_def]
 QED
 
+Theorem insert_after_last_param_invoke_targets[local]:
+  new.inst_opcode <> INVOKE ==>
+  get_invoke_targets (insert_after_last_param new insts) =
+  get_invoke_targets insts
+Proof
+  map_every qid_spec_tac [`new`,`insts`] >> Induct_on `insts`
+  >- simp[insert_after_last_param_def, get_invoke_targets_def]
+  >> rpt strip_tac
+  >> Cases_on `EXISTS (\i. is_param_opcode i.inst_opcode) insts`
+  >> Cases_on `is_param_opcode h.inst_opcode`
+  >> Cases_on `h.inst_opcode = INVOKE`
+  >> gvs[insert_after_last_param_def, get_invoke_targets_def,
+         venomInstTheory.is_param_opcode_def]
+  >> Cases_on `h.inst_operands` >> gvs[get_invoke_targets_def]
+  >> rename1 `op::ops`
+  >> Cases_on `op` >>
+  gvs[get_invoke_targets_def, listTheory.EVERY_MEM, listTheory.EXISTS_MEM] >>
+  `~(?i. MEM i insts /\ is_param_opcode i.inst_opcode)` by
+    (strip_tac >> first_x_assum (qspec_then `i` mp_tac) >> simp[]) >>
+  simp[get_invoke_targets_def]
+QED
+
 Theorem expand_dret_pairs_no_invoke[local]:
   !s cursor pairs body dsts final_cursor s'.
     expand_dret_pairs s cursor pairs =
@@ -758,8 +808,15 @@ Proof
   simp[dret_desugar_function_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
   imp_res_tac dret_desugar_blocks_invoke_targets >>
-  gvs[fcg_scan_function_def, venomInstTheory.fn_insts_def, venomInstTheory.fn_insts_blocks_def,
-      get_invoke_targets_def, venomInstTheory.mk_inst_def]
+  `get_invoke_targets
+      (insert_after_last_param (mk_inst getfmp_id GETFMP [] [entry_v])
+        first'.bb_instructions) =
+    get_invoke_targets first'.bb_instructions` by
+    (irule insert_after_last_param_invoke_targets >>
+     simp[venomInstTheory.mk_inst_def]) >>
+  gvs[fcg_scan_function_def, venomInstTheory.fn_insts_def,
+      venomInstTheory.fn_insts_blocks_def, get_invoke_targets_def,
+      dret_get_invoke_targets_append, venomInstTheory.mk_inst_def]
 QED
 
 val _ = export_theory();

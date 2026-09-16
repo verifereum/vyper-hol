@@ -157,11 +157,9 @@ Proof
   EVAL_TAC
 QED
 
-(* make_ssa gives these loops header PHIs with loop-body back-edge inputs.
- * def_dominates_uses currently checks those inputs as uses in the header, so
- * their loop-body definitions fail the requirement to dominate that header.
- * The checked O1 pipeline consequently returns NONE before bytecode emission;
- * PHI edge-use dominance is intentionally outside this evaluation-only change. *)
+(* The checked O1 loop smokes now reach bytecode.  These independent pinned-
+ * Python equalities remain exact integration gates; they are not replaced by
+ * the successful-compilation expectations in evalCompilerTheory. *)
 Theorem for_pass_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy prague_capabilities)
     for_pass_program =
@@ -194,11 +192,8 @@ Proof
   EVAL_TAC
 QED
 
-(* compile_internal_function emits its hidden return PC as PARAM.  The checked
- * call-layout code counts PARAM instructions as user inputs, so
- * invoke_input_arity_ok expects one extra argument and the final
- * fmp_lowered_context_wf guard rejects both internal-call programs.  Emitting
- * RETPC_PARAM instead is a separate lowering-semantics change. *)
+(* The scalar entry layout names the hidden return PC with RETPC_PARAM, so
+ * checked compilation reaches bytecode. *)
 Theorem internal_call_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy prague_capabilities)
     internal_call_program =

@@ -269,21 +269,6 @@ Definition add_module_var_locations_def:
     add_module_var_locations rest vars'
 End
 
-(* ===== Local Variable Collection ===== *)
-
-Definition collect_locals_def:
-  collect_locals ([] : stmt list) = ([] : (string # type) list) ∧
-  collect_locals (AnnAssign id ty _ :: rest) =
-    (id, ty) :: collect_locals rest ∧
-  collect_locals (If _ then_stmts else_stmts :: rest) =
-    collect_locals then_stmts ++
-    collect_locals else_stmts ++
-    collect_locals rest ∧
-  collect_locals (For id ty _ _ for_body :: rest) =
-    (id, ty) :: collect_locals for_body ++ collect_locals rest ∧
-  collect_locals (_ :: rest) = collect_locals rest
-End
-
 (* ===== Dynamic Array Capacity ===== *)
 
 Definition dynarray_capacity_of_type_def:
@@ -316,10 +301,15 @@ Definition build_method_id_map_def:
     let rest_map = build_method_id_map tenv rest in
     case top of
       FunctionDecl External _ _ _ fname fargs _ _ _ =>
-        let abi_types = vyper_to_abi_types tenv (MAP SND fargs) in
-        let sel_bytes = function_selector fname abi_types in
-        let sel_num = w2n (calldata_method_id sel_bytes) in
-        (λs. if s = fname then sel_num else rest_map s)
+        (* Keep selector hashing inside the matching lookup branch.  The map is
+           stored in every compile environment but most functions never query
+           it; eagerly hashing all declarations changes no result and makes
+           logical evaluation repeat the dispatcher's selector work. *)
+        (λs. if s = fname then
+               let abi_types = vyper_to_abi_types tenv (MAP SND fargs) in
+               let sel_bytes = function_selector fname abi_types in
+               w2n (calldata_method_id sel_bytes)
+             else rest_map s)
     | _ => rest_map
 End
 
@@ -626,7 +616,7 @@ Definition package_external_fn_def:
     let is_view = (mut = View) in
     (entry_lbl, cenv_final, pos_args, min_cds,
      is_payable, nr, nkey, use_trans, is_view,
-     body, SOME ret)
+     body, if ret = NoneT then NONE else SOME ret)
 End
 
 (* Package an internal function for compilation.
@@ -656,7 +646,7 @@ Definition package_internal_fn_def:
     (fn_lbl, cenv_final, params, has_ret_buf,
      nr, nkey, use_trans, is_view,
      is_ctor_context, (if is_ctor_context then immutables_len else 0n),
-     body, SOME ret)
+     body, if ret = NoneT then NONE else SOME ret)
 End
 
 Theorem package_internal_fn_call_label:

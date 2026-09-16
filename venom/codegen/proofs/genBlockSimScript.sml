@@ -1382,13 +1382,12 @@ Theorem gen_inst_halt_sim:
     (* Provable from generate_inst_plan output (needs new lemma) *)
     prefix_spill_wf initial_fmp label_offsets (FRONT ops) ps /\
     (* After prefix execution, operand values are on the asm stack.
-       Dischargeable from reorder correctness + venom_asm_rel stack tracking.
-       NOTE: currently blocked by reorder_one_def operand order bug. *)
+       Plan stacks are bottom-first while assembly stacks are top-first. *)
     (!st_mid. venom_asm_rel label_offsets
         (apply_prefix_ops initial_fmp label_offsets (FRONT ops) ps) vs st_mid ==>
       LENGTH (compute_operands inst) <= LENGTH st_mid.as_stack /\
       !i. i < LENGTH (compute_operands inst) ==>
-        eval_operand (EL i (compute_operands inst)) vs =
+        eval_operand (EL i (REVERSE (compute_operands inst))) vs =
           SOME (EL i st_mid.as_stack)) /\
     (* RETURN/REVERT: read range below fn_eom (outside spill region).
        Dischargeable: Vyper memory allocator keeps user data below fn_eom. *)
@@ -1486,7 +1485,8 @@ Resume gen_inst_halt_sim[return]:
     ``?rest_stk. (st':asm_state).as_stack = off_val :: sz_val :: rest_stk``
     STRIP_ASSUME_TAC
   THENL [
-    Cases_on `st'.as_stack` >> gvs[] >>
+    Cases_on `st'.as_stack` >>
+    gvs[python_stack_operands_def, ir_specific_operand_order_def] >>
     Cases_on `t` >> gvs[] >>
     qpat_x_assum `!i. i < 2 ==> _`
       (fn th => mp_tac (Q.SPEC `0` th) >> mp_tac (Q.SPEC `1` th)) >>
@@ -1542,7 +1542,8 @@ Resume gen_inst_halt_sim[selfdestruct]:
   simp[rich_listTheory.FRONT_APPEND] >>
   disch_then (qspec_then `st'` mp_tac) >>
   (impl_tac >- ASM_REWRITE_TAC[]) >>
-  simp[compute_operands_def] >>
+  simp[compute_operands_def, python_stack_operands_def,
+       ir_specific_operand_order_def] >>
   strip_tac >>
   SUBGOAL_THEN
     ``?rest_stk. (st':asm_state).as_stack = addr_val :: rest_stk``
@@ -1617,13 +1618,12 @@ Theorem gen_inst_abort_sim:
        FLOOKUP ps.ps_spilled op2 = SOME off2 /\
        op1 <> op2 ==> off1 + 32 <= off2 \/ off2 + 32 <= off1) /\
     (* After prefix execution, operand values are on the asm stack.
-       Dischargeable from reorder correctness + venom_asm_rel stack tracking.
-       NOTE: currently blocked by reorder_one_def operand order bug. *)
+       Plan stacks are bottom-first while assembly stacks are top-first. *)
     (!st_mid. venom_asm_rel label_offsets
         (apply_prefix_ops initial_fmp label_offsets (FRONT ops) ps) vs st_mid ==>
       LENGTH (compute_operands inst) <= LENGTH st_mid.as_stack /\
       !i. i < LENGTH (compute_operands inst) ==>
-        eval_operand (EL i (compute_operands inst)) vs =
+        eval_operand (EL i (REVERSE (compute_operands inst))) vs =
           SOME (EL i st_mid.as_stack)) /\
     (* Label operands have consistent values between eval_operand
        and operand_val (the plan-stack-based evaluation).
@@ -1733,7 +1733,8 @@ Resume gen_inst_abort_sim[revert]:
   simp[rich_listTheory.FRONT_APPEND] >>
   disch_then (qspec_then `st'` mp_tac) >>
   (impl_tac >- ASM_REWRITE_TAC[]) >>
-  simp[compute_operands_def] >>
+  simp[compute_operands_def, python_stack_operands_def,
+       ir_specific_operand_order_def] >>
   strip_tac >>
   (* Derive stack shape off_val :: sz_val :: rest *)
   SUBGOAL_THEN
@@ -1840,7 +1841,8 @@ Resume gen_inst_abort_sim[returndatacopy]:
   simp[rich_listTheory.FRONT_APPEND] >>
   disch_then (qspec_then `st'` mp_tac) >>
   (impl_tac >- ASM_REWRITE_TAC[]) >>
-  simp[compute_operands_def] >>
+  simp[compute_operands_def, python_stack_operands_def,
+       ir_specific_operand_order_def] >>
   strip_tac >>
   (* Derive stack shape dest :: src :: sz :: rest *)
   SUBGOAL_THEN
@@ -1928,7 +1930,9 @@ Resume gen_inst_abort_sim[assert_unreachable]:
   (* inst.inst_outputs = [], compute_operands *)
   `inst.inst_outputs = ([] : string list)` by
     (fs[inst_wf_def] >> Cases_on `inst.inst_opcode` >> fs[]) >>
-  `compute_operands inst = [cond_op]` by simp[compute_operands_def] >>
+  `compute_operands inst = [cond_op]` by
+    simp[compute_operands_def, python_stack_operands_def,
+         ir_specific_operand_order_def] >>
   (* Unfold generate_inst_plan *)
   qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[generate_inst_plan_def, generate_regular_inst_plan_def,
@@ -2859,23 +2863,6 @@ Proof
       fs[EVERY_MEM] >> metis_tac[])
 QED
 
-
-(* ===== Operand count bound ===== *)
-
-(* For SOME-name non-INVOKE opcodes, compute_operands = inst.inst_operands
-   (because JMP/DJMP/JNZ/INVOKE/LOG all have venom_to_evm_name = NONE). *)
-Theorem compute_operands_eq_operands[local]:
-  !inst name.
-    venom_to_evm_name inst.inst_opcode = SOME name /\
-    inst.inst_opcode <> INVOKE ==>
-    compute_operands inst = inst.inst_operands
-Proof
-  rpt gen_tac >> strip_tac >>
-  simp[compute_operands_def] >>
-  Cases_on `inst.inst_opcode` >>
-  gvs[venom_to_evm_name_def]
-QED
-
 (* ===== SSA freshness propagation through prefix ops ===== *)
 
 (* A single prefix op cannot introduce a Var y into the plan stack
@@ -3669,7 +3656,9 @@ Resume gen_inst_ok_sim[initial_fmp]:
   simp[step_inst_non_invoke, step_inst_base_def] >>
   qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[generate_regular_inst_plan_def, compute_operands_def,
-       is_commutative_def, generate_emit_ops_def] >>
+       python_stack_operands_def,
+       ir_specific_operand_order_def, is_commutative_def,
+       generate_emit_ops_def] >>
   `?out. inst.inst_outputs = [out]` by (
     Cases_on `inst.inst_outputs` >> fs[] >> Cases_on `t` >> fs[]) >>
   gvs[] >> rpt strip_tac >>
@@ -4750,13 +4739,16 @@ Resume gen_inst_ok_sim[bump]:
   simp[step_inst_non_invoke, step_inst_base_def] >>
   qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[generate_regular_inst_plan_def, compute_operands_def,
-       is_commutative_def, generate_emit_ops_def, bump_emit_ops_def] >>
+       is_commutative_def, generate_emit_ops_def,
+       bump_emit_ops_def] >>
   Cases_on `inst.inst_operands` >> gvs[] >> Cases_on `t` >> gvs[] >>
   Cases_on `inst.inst_outputs` >> gvs[] >> Cases_on `t` >> gvs[] >>
   rpt strip_tac >>
   rpt (pairarg_tac >> gvs[]) >>
   `compute_operands inst = [h;h']` by
-    simp[compute_operands_def] >>
+    simp[compute_operands_def, python_stack_operands_def,
+         ir_specific_operand_order_def] >>
+  fs[python_stack_operands_def, ir_specific_operand_order_def] >>
   `(is_var_operand h ==>
       (?d. stack_get_depth h ps.ps_stack = SOME d /\ d <= 15) \/
       IS_SOME (FLOOKUP ps.ps_spilled h)) /\
@@ -4764,9 +4756,9 @@ Resume gen_inst_ok_sim[bump]:
       (?d. stack_get_depth h' ps.ps_stack = SOME d /\ d <= 15) \/
       IS_SOME (FLOOKUP ps.ps_spilled h'))` by
     (conj_tac
-     >- (qpat_assum `!op. MEM op (compute_operands inst) /\ is_var_operand op ==> _`
+     >- (qpat_assum `!op. (op = h \/ op = h') /\ is_var_operand op ==> _`
            (qspec_then `h` mp_tac) >> simp[])
-     >> qpat_assum `!op. MEM op (compute_operands inst) /\ is_var_operand op ==> _`
+     >> qpat_assum `!op. (op = h \/ op = h') /\ is_var_operand op ==> _`
           (qspec_then `h'` mp_tac) >> simp[]) >>
   `prefix_wf lo (LENGTH ps.ps_stack) input_ops /\
    prefix_end_len lo (LENGTH ps.ps_stack) input_ops = LENGTH ps1.ps_stack /\
@@ -4776,10 +4768,9 @@ Resume gen_inst_ok_sim[bump]:
        mp_tac emit_input_plan_wf_len >>
      (impl_tac >- simp[]) >>
      (impl_tac >- (rpt strip_tac >>
-       qpat_assum `!l. MEM (Label l) _ ==> _`
-         (qspec_then `l` mp_tac) >>
-       qpat_assum `compute_operands inst = [h;h']`
-         (fn th => rewrite_tac[th]) >> simp[])) >> strip_tac >>
+       qpat_assum `!l. Label l = h \/ Label l = h' ==> _`
+         (qspec_then `l` match_mp_tac) >>
+       gvs[])) >> strip_tac >>
      qspecl_then [`dfg`, `[h;h']`, `ps1`, `lo`] mp_tac
        (CONV_RULE (DEPTH_CONV pairLib.GEN_BETA_CONV)
           (REWRITE_RULE [LET_THM] reorder_plan_wf_len)) >>
@@ -4794,15 +4785,10 @@ Resume gen_inst_ok_sim[bump]:
     (rpt strip_tac >> gvs[] >> metis_tac[]) >>
   `!l. MEM (Label l) [h;h'] ==> IS_SOME (FLOOKUP lo l)` by
     (rpt strip_tac >>
-     qpat_assum `!l. MEM (Label l) (compute_operands inst) ==> _`
-       (qspec_then `l` mp_tac) >>
-     qpat_assum `compute_operands inst = [h;h']`
-       (fn th => rewrite_tac[th]) >> simp[]) >>
-  `2 <= LENGTH ps1.ps_stack` by
-    (qpat_x_assum `LENGTH (compute_operands inst) <=
-       LENGTH (SND (emit_input_plan BUMP (compute_operands inst)
-         next_liveness ps)).ps_stack` mp_tac >>
-     ASM_REWRITE_TAC[] >> simp[]) >>
+     qpat_assum `!l. Label l = h \/ Label l = h' ==> _`
+       (qspec_then `l` match_mp_tac) >>
+     gvs[]) >>
+  `2 <= LENGTH ps1.ps_stack` by first_assum ACCEPT_TAC >>
   `prefix_spill_wf initial_fmp lo (input_ops ++ reorder_ops) ps` by
     (qspecl_then [`input_ops ++ reorder_ops`,
        `[SOPush (Lit 31w); SOEmit "ADD"; SOPush (Lit 5w); SOEmit "SHR";
@@ -5182,15 +5168,23 @@ Resume gen_inst_ok_sim[istore]:
   strip_tac >> gvs[] >>
   qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[generate_regular_inst_plan_def, compute_operands_def,
-       generate_emit_ops_def, is_commutative_def, venom_to_evm_name_def] >>
+       generate_emit_ops_def, is_commutative_def,
+       venom_to_evm_name_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  fs[python_stack_operands_def, ir_specific_operand_order_def] >>
+  `!op. MEM op [h;h'] /\ is_var_operand op ==>
+      (?d. stack_get_depth op ps.ps_stack = SOME d /\ d <= 15) \/
+      IS_SOME (FLOOKUP ps.ps_spilled op)` by (
+    rpt strip_tac >>
+    `MEM op (compute_operands inst)` by
+      gvs[compute_operands_def, python_stack_operands_def,
+          ir_specific_operand_order_def] >>
+    qpat_assum `!x. MEM x (compute_operands inst) /\ is_var_operand x ==> _`
+      (qspec_then `op` mp_tac) >> simp[]) >>
   `exact_two_planner_ready base' h h' ps1` by
     (irule istore_input_ownership_ready_probe >>
      qexistsl [`input_ops`, `next_liveness`, `ps`] >>
-     ASM_REWRITE_TAC[] >> rpt strip_tac >>
-     qpat_assum `!x. MEM x (compute_operands inst) /\ is_var_operand x ==> _`
-       (qspec_then `op` mp_tac) >>
-     (impl_tac >- gvs[compute_operands_def]) >> simp[]) >>
+     ASM_REWRITE_TAC[]) >>
   `emit_input_plan BUMP [h;h'] next_liveness ps = (input_ops,ps1)` by
     (qpat_x_assum `emit_input_plan ISTORE _ _ _ = _` mp_tac >>
      simp[emit_input_plan_def, emit_one_input_def]) >>
@@ -5203,19 +5197,17 @@ Resume gen_inst_ok_sim[istore]:
      (execute_plan initial_fmp (input_ops ++ reorder_ops))` by
     (qpat_x_assum `asm_block_at prog as.as_pc (execute_plan initial_fmp _)` mp_tac >>
      simp[execute_plan_append, asm_block_at_append]) >>
+  `!l. MEM (Label l) [h;h'] ==> IS_SOME (FLOOKUP lo l)` by (
+    rpt strip_tac >>
+    qpat_assum `!l. MEM (Label l) (compute_operands inst) ==> _`
+      (qspec_then `l` mp_tac) >>
+    (impl_tac >-
+      gvs[compute_operands_def, python_stack_operands_def,
+          ir_specific_operand_order_def]) >> simp[]) >>
   qspecl_then [`base'`, `h`, `h'`, `next_liveness`, `ps`, `input_ops`, `ps1`,
     `dfg`, `reorder_ops`, `ps4`, `initial_fmp`, `lo`, `o2pc`, `prog`, `vs`,
     `as`] mp_tac bump_input_reorder_venom_asm_rel >>
-  (impl_tac >- (ASM_REWRITE_TAC[] >>
-    rpt conj_tac
-    >- (rpt strip_tac >>
-        qpat_assum `!x. MEM x (compute_operands inst) /\ is_var_operand x ==> _`
-          (qspec_then `op` mp_tac) >>
-        (impl_tac >- gvs[compute_operands_def]) >> simp[])
-    >- (rpt strip_tac >>
-        qpat_assum `!l. MEM (Label l) (compute_operands inst) ==> _`
-          (qspec_then `l` mp_tac) >> gvs[compute_operands_def])
-    >- fs[exact_two_planner_ready_def])) >>
+  (impl_tac >- (ASM_REWRITE_TAC[] >> fs[exact_two_planner_ready_def])) >>
   strip_tac >>
   `ps4.ps_stack = stack_pop 2 ps4.ps_stack ++ [h;h'] /\
    generated_plan_state_wf base'
@@ -5227,9 +5219,13 @@ Resume gen_inst_ok_sim[istore]:
   `operand_val vs lo h = SOME x /\ operand_val vs lo h' = SOME x'` by
     (conj_tac
      >- (qpat_assum `!op. MEM op (compute_operands inst) ==> _`
-           (qspec_then `h` mp_tac) >> gvs[compute_operands_def])
+           (qspec_then `h` mp_tac) >>
+         gvs[compute_operands_def, python_stack_operands_def,
+             ir_specific_operand_order_def])
      >> qpat_assum `!op. MEM op (compute_operands inst) ==> _`
-          (qspec_then `h'` mp_tac) >> gvs[compute_operands_def]) >>
+          (qspec_then `h'` mp_tac) >>
+        gvs[compute_operands_def, python_stack_operands_def,
+            ir_specific_operand_order_def]) >>
   `2 <= LENGTH ps4.ps_stack` by
     (qpat_assum `ps4.ps_stack = stack_pop 2 ps4.ps_stack ++ [h;h']`
        (mp_tac o AP_TERM ``LENGTH : operand list -> num``) >>
@@ -5428,7 +5424,8 @@ Resume gen_inst_ok_sim[assign]:
   Cases_on `eval_operand h vs` >> gvs[] >>
   qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[generate_regular_inst_plan_def, compute_operands_def,
-       is_commutative_def, venom_to_evm_name_def, generate_emit_ops_def] >>
+       is_commutative_def, venom_to_evm_name_def,
+       generate_emit_ops_def] >>
   pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
   pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
   strip_tac >> gvs[] >>
@@ -5445,7 +5442,8 @@ Resume gen_inst_ok_sim[assign_live_nohalt]:
 QED
 
 Resume gen_inst_ok_sim[assign_dead_nohalt]:
-  gvs[compute_operands_def] >>
+  gvs[compute_operands_def, python_stack_operands_def,
+      ir_specific_operand_order_def] >>
   cheat
 QED
 
@@ -5454,7 +5452,8 @@ Resume gen_inst_ok_sim[assign_live_halt]:
 QED
 
 Resume gen_inst_ok_sim[assign_dead_halt]:
-  gvs[compute_operands_def] >>
+  gvs[compute_operands_def, python_stack_operands_def,
+      ir_specific_operand_order_def] >>
   (* pop_ops = [SOPop 1], ps8 = ... *)
   qpat_x_assum `popmany_plan _ _ = _` mp_tac >>
   simp[popmany_plan_def, LET_THM, stack_get_depth_def, stack_push_def,

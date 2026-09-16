@@ -165,7 +165,8 @@ Theorem compute_function_layout_fuel_static_items[local]:
   compute_function_layout_fuel fuel reserved fn = SOME layout ==>
   ?items. static_alloca_items fn = SOME items
 Proof
-  simp[compute_function_layout_fuel_def] >>
+  simp[compute_function_layout_fuel_eq_reference,
+       compute_function_layout_fuel_reference_def] >>
   Cases_on `static_alloca_items fn` >> gvs[]
 QED
 
@@ -223,6 +224,25 @@ Proof
   gvs[] >> simp[static_position_wf_def]
 QED
 
+Theorem compute_function_layout_checked_static_items[local]:
+  compute_function_layout_checked fuel reserved fn = SOME layout ==>
+  ?items. static_alloca_items fn = SOME items
+Proof
+  strip_tac >> Cases_on `fn_needs_liveness_allocation fn` >>
+  gvs[compute_function_layout_checked_def]
+  >- (drule compute_function_layout_fuel_static_items >> simp[])
+  >> drule compute_function_layout_eval_static_items >> simp[]
+QED
+
+Theorem compute_function_layout_checked_wf:
+  compute_function_layout_checked fuel reserved fn = SOME layout ==>
+  concretize_layout_wf reserved fn layout
+Proof
+  strip_tac >> Cases_on `fn_needs_liveness_allocation fn` >>
+  gvs[compute_function_layout_checked_def]
+  >- (drule compute_function_layout_fuel_wf >> simp[])
+  >> drule compute_function_layout_eval_wf >> simp[]
+QED
 
 Theorem compute_function_layout_eval_global_bound:
   compute_function_layout_eval reserved fn = SOME layout /\
@@ -262,7 +282,9 @@ Proof
     (gvs[fn_has_alloca_def, EXISTS_MEM, is_alloca_op_eq_alloca] >>
      metis_tac[]) >>
   `complete_alloc_positions FEMPTY reserved fn FEMPTY = SOME FEMPTY` by
-    (simp[complete_alloc_positions_def, forced_alloc_keys_valid_def,
+    (simp[complete_alloc_positions_def,
+          complete_alloc_positions_with_items_def,
+          forced_alloc_keys_valid_def,
           candidate_alloc_keys_valid_def, merge_forced_positions_def,
           checked_preserved_intervals_def,
           checked_preserved_intervals_aux_def] >>
@@ -279,12 +301,12 @@ Proof
   simp[concretize_function_fuel_def] >>
   Cases_on `fn_has_static_layout fn`
   >- (rpt strip_tac >> gvs[]) >>
-  Cases_on `compute_function_layout_fuel fuel reserved fn`
+  Cases_on `compute_function_layout_checked fuel reserved fn`
   >- gvs[] >>
   gvs[] >>
-  drule compute_function_layout_fuel_static_items >> strip_tac >>
+  drule compute_function_layout_checked_static_items >> strip_tac >>
   `concretize_layout_wf reserved fn x` by
-    metis_tac[compute_function_layout_fuel_wf] >>
+    metis_tac[compute_function_layout_checked_wf] >>
   `~fn_has_alloca
       (concretize_function_with_positions x.cl_positions fn)` by
     (irule concretize_function_with_positions_removes_alloca >>
@@ -336,7 +358,7 @@ Proof
   Cases_on `fn_has_static_layout fn`
   >- (rpt strip_tac >> gvs[fn_identity_metadata_eq_def,
                             fn_fmp_convention_eq_def]) >>
-  Cases_on `compute_function_layout_fuel fuel reserved fn`
+  Cases_on `compute_function_layout_checked fuel reserved fn`
   >- gvs[] >>
   rpt strip_tac >> gvs[apply_concretize_layout_metadata_transition]
 QED
@@ -363,7 +385,7 @@ Proof
   simp[concretize_function_fuel_def] >>
   Cases_on `fn_has_static_layout fn`
   >- (rpt strip_tac >> gvs[fn_has_static_layout_def]) >>
-  Cases_on `compute_function_layout_fuel fuel reserved fn`
+  Cases_on `compute_function_layout_checked fuel reserved fn`
   >- gvs[] >>
   rpt strip_tac >> gvs[apply_concretize_layout_metadata_transition]
 QED
@@ -663,6 +685,18 @@ Proof
   rewrite_tac[concretize_clear_nops_invoke_targets] >>
   simp[function_map_transform_def, fn_insts_def,
        concretize_mapped_blocks_invoke_targets]
+QED
+
+Theorem concretize_function_fuel_invoke_targets:
+  concretize_function_fuel fuel reserved fn = SOME fn' ==>
+  MAP FST (fcg_scan_function fn') = MAP FST (fcg_scan_function fn)
+Proof
+  simp[concretize_function_fuel_def, apply_concretize_layout_def,
+       AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  simp[fcg_scan_function_def, fn_insts_def] >>
+  rewrite_tac[GSYM fn_insts_def, GSYM fcg_scan_function_def] >>
+  simp[concretize_function_with_positions_invoke_targets]
 QED
 
 Theorem concretize_function_eval_invoke_targets:

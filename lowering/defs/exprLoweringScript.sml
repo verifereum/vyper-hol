@@ -859,8 +859,8 @@ End
 
 (* Convert a Vyper type to ABI encoding info.
    Mirrors Python: construction of abi_type from VyperType, then dispatch.
-   KNOWN LIMITATION: StructT uses AbiCopy fallback (no field type info).
-   To encode structs properly, need ce_struct_field_types. *)
+   Python uses its MCOPY fast path whenever ABI encoding matches Vyper's
+   all-static memory layout; AbiCopy records that case. *)
 Definition type_to_abi_enc_info_def:
   type_to_abi_enc_info sfields cenv (BaseT (BytesT (Dynamic n))) = AbiBytestring n ∧
   type_to_abi_enc_info sfields cenv (BaseT (StringT n)) = AbiBytestring n ∧
@@ -869,28 +869,38 @@ Definition type_to_abi_enc_info_def:
       (abi_embedded_static_size cenv.ce_struct_fields elem) (type_memory_bytes cenv elem)
       (is_abi_dynamic cenv.ce_struct_fields elem) ∧
   type_to_abi_enc_info sfields cenv (ArrayT elem (Fixed n)) =
-    AbiComplex (GENLIST (K (type_to_abi_enc_info sfields cenv elem,
-                              abi_embedded_static_size cenv.ce_struct_fields elem,
-                              type_memory_bytes cenv elem,
-                              is_abi_dynamic cenv.ce_struct_fields elem)) n) ∧
+    (if ¬is_abi_dynamic cenv.ce_struct_fields (ArrayT elem (Fixed n)) then
+       AbiCopy (type_memory_bytes cenv (ArrayT elem (Fixed n)))
+     else
+       AbiComplex (GENLIST (K (type_to_abi_enc_info sfields cenv elem,
+                                abi_embedded_static_size cenv.ce_struct_fields elem,
+                                type_memory_bytes cenv elem,
+                                is_abi_dynamic cenv.ce_struct_fields elem)) n)) ∧
   type_to_abi_enc_info sfields cenv (TupleT tys) =
-    AbiComplex (MAP (λt. (type_to_abi_enc_info sfields cenv t,
-                          abi_embedded_static_size cenv.ce_struct_fields t,
-                          type_memory_bytes cenv t,
-                          is_abi_dynamic cenv.ce_struct_fields t)) tys) ∧
+    (if ¬is_abi_dynamic cenv.ce_struct_fields (TupleT tys) then
+       AbiCopy (type_memory_bytes cenv (TupleT tys))
+     else
+       AbiComplex (MAP (λt. (type_to_abi_enc_info sfields cenv t,
+                            abi_embedded_static_size cenv.ce_struct_fields t,
+                            type_memory_bytes cenv t,
+                            is_abi_dynamic cenv.ce_struct_fields t)) tys)) ∧
   type_to_abi_enc_info sfields cenv (StructT nsid) =
-    (let name = nsid_to_string nsid in
-     case FLOOKUP sfields name of
-       NONE => AbiPrimWord
-     | SOME fields =>
-         AbiComplex (MAP (λ(fn, fty, sz).
-                            (type_to_abi_enc_info (sfields \\ name) cenv fty,
-                             abi_embedded_static_size cenv.ce_struct_fields fty,
-                             type_memory_bytes cenv fty,
-                             is_abi_dynamic cenv.ce_struct_fields fty))
-                         fields)) ∧
+    (if ¬is_abi_dynamic cenv.ce_struct_fields (StructT nsid) then
+       AbiCopy (type_memory_bytes cenv (StructT nsid))
+     else
+       let name = nsid_to_string nsid in
+       case FLOOKUP sfields name of
+         NONE => AbiPrimWord
+       | SOME fields =>
+           AbiComplex (MAP (λ(fn, fty, sz).
+                              (type_to_abi_enc_info (sfields \\ name) cenv fty,
+                               abi_embedded_static_size cenv.ce_struct_fields fty,
+                               type_memory_bytes cenv fty,
+                               is_abi_dynamic cenv.ce_struct_fields fty))
+                           fields)) ∧
   type_to_abi_enc_info sfields cenv NoneT = AbiComplex [] ∧
-  type_to_abi_enc_info sfields cenv _ = AbiPrimWord
+  type_to_abi_enc_info sfields cenv ty =
+    AbiCopy (type_memory_bytes cenv ty)
 Termination
   WF_REL_TAC `inv_image ($< LEX $<) (λ(sfields, cenv, ty).
     (CARD (FDOM sfields), type_size ty))`
@@ -1006,8 +1016,7 @@ End
 Definition store_multi_results_def:
   store_multi_results buf_op [] (offset:num) = return () ∧
   store_multi_results buf_op (op::ops) offset =
-    do dst <- (if offset = 0 then return buf_op
-               else emit_op ADD [buf_op; Lit (n2w offset)]);
+    do dst <- emit_op ADD [buf_op; Lit (n2w offset)];
        emit_void MSTORE [dst; op];
        store_multi_results buf_op ops (offset + 32)
     od
@@ -1219,6 +1228,7 @@ Definition compile_target_base_def:
   compile_target_base cenv (NameTarget id) =
     (case FLOOKUP cenv.ce_vars id of
        SOME (MemLoc offset _) => Lit (n2w offset)
+     | SOME (PtrVar ptr_op _) => ptr_op
      | _ => Lit 0w) ∧
   compile_target_base cenv (TopLevelNameTarget nsid) =
     (let name = nsid_to_string nsid in
@@ -2031,7 +2041,7 @@ Definition compile_call_def:
     let arg_types = MAP expr_type args in
     let (arg_vals, st1) = compile_multi_exprs cfn cenv args st in
     let (return_buf, st2) =
-      (if returns_count > 0 /\ (1 < returns_count \/ args <> []) then
+      (if returns_count > 0 then
          let (rbuf, st_b) = compile_alloc_buffer (32 * returns_count) st1 in
          (SOME rbuf, st_b)
        else if return_buf_size > 0 then

@@ -62,4 +62,18 @@ Definition finalize_codegen_def:
             else NONE
 End
 
+(* The fixture profile uses the identity finalizer.  codegen_assembly has
+   already checked target safety, so do not traverse the complete assembly a
+   second time merely to rediscover the same fact during CBV evaluation. *)
+Theorem finalize_codegen_identity[compute]:
+  finalize_codegen (K SOME) rpolicy unit =
+    OPTION_MAP assemble (codegen_assembly rpolicy unit)
+Proof
+  Cases_on `codegen_assembly rpolicy unit` >> simp[finalize_codegen_def] >>
+  `assembly_target_safe rpolicy.rpol_target x` by
+    (qpat_x_assum `codegen_assembly rpolicy unit = SOME x` mp_tac >>
+     simp[codegen_assembly_def, AllCaseEqs()] >> strip_tac >> gvs[]) >>
+  simp[]
+QED
+
 val _ = export_theory ();
