@@ -326,6 +326,7 @@ Definition make_builtin_call_def:
     else if name = "empty" then TypeBuiltin ty Empty ty []
     else if name = "max_value" then TypeBuiltin ty MaxValue ty []
     else if name = "min_value" then TypeBuiltin ty MinValue ty []
+    else if name = "epsilon" then TypeBuiltin ty Epsilon ty []
     else if name = "convert" then
       (case args of (arg::_) => TypeBuiltin ty Convert ty [arg]
                   | _ => TypeBuiltin ty Convert ty [])
