@@ -285,7 +285,8 @@ fun check_generate_dirs () = (
 (* Directory-level allowlist plus small explicit allowlist. *)
 val allowed_test_prefixes = [
   "vyper-test-exports/functional/codegen/",
-  "vyper-test-exports/functional/builtins/codegen/"
+  "vyper-test-exports/functional/builtins/codegen/",
+  "vyper-test-exports/functional/builtins/folding/"
 ]
 
 val allowed_test_patterns = [
