@@ -1306,8 +1306,7 @@ Proof
     Cases_on `offsets` >> fs[] >>
     SUBGOAL_THEN ``ps with <| ps_stack := ps.ps_stack;
       ps_spilled := ps.ps_spilled |> = ps``
-      (fn th => rewrite_tac [th])
-    >- simp[plan_state_component_equality] >>
+      (fn th => rewrite_tac [th]) >>
     fs[],
     (* Step case: h::items *)
     Cases_on `offsets` >> fs[] >>
