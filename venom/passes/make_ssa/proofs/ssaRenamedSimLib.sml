@@ -32,8 +32,8 @@ fun mk_cond_step_base_thm opc_tm =
       mk_comb(mk_comb(``instruction_inst_opcode_fupd``,
                        mk_abs(mk_var("_", ``:opcode``), opc_tm)), inst_var),
       inst_var)
-    val identity = prove(mk_imp(opc_eq, update_eq),
-                         rw[instruction_component_equality])
+    val identity = EQT_ELIM (SIMP_CONV (srw_ss())
+      [instruction_component_equality] (mk_imp(opc_eq, update_eq)))
     (* Build unconditional: step_inst_base (inst with inst_opcode := OPC) s = ... *)
     val inst_tm = mk_comb(
       mk_comb(``instruction_inst_opcode_fupd``,
