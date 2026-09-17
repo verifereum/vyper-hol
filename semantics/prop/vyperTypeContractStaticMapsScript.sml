@@ -8,7 +8,7 @@
 
 Theory vyperTypeContractStaticMaps
 Ancestors
-  list rich_list arithmetic finite_map alist option pair patricia_casts
+  list rich_list arithmetic finite_map alist option pair
   vyperAST vyperValue vyperMisc vyperContext vyperState vyperInterpreter
   vyperTypeSystem vyperTypeContract vyperTypeInvariants vyperTypeValues vyperTypeBindArguments
   vyperTypeStmtSoundness vyperTypeInitialState vyperPureExpr vyperEvalPreservesScopes vyperEvalExprPreservesScopesDom
