@@ -412,54 +412,45 @@ Proof
 QED
 
 Theorem artifact_bare_globals_lookup_transfer_initial:
-  check_contract in_deploy layouts addr mods = SOME art /\
+  check_contract F layouts addr mods = SOME art /\
   ALOOKUP sources addr = SOME mods /\
   tx.target = addr /\
   bare_globals_complete bare_globals (initial_evaluation_context sources layouts tx src) /\
   FLOOKUP (function_entry_env art mods entry_src args).bare_globals k = SOME ty ==>
   FLOOKUP bare_globals k = SOME ty
 Proof
-  PairCases_on `k` >> Cases_on `in_deploy` >>
-  rw[function_entry_env_def, artifact_env_def, check_contract_def,
-     FOLDL_extend_local_args_static] >> gvs[] >>
-  imp_res_tac contract_namespaces_ok_deploy_implies_runtime >>
-  gvs[build_contract_type_artifact_nonsig_mode_irrelevant] >>
+  PairCases_on `k` >>
+  rw[function_entry_env_def, artifact_env_def, check_contract_def, FOLDL_extend_local_args_static] >> gvs[] >>
   drule_all build_contract_type_artifact_bare_globals_sound >> rw[] >>
   gvs[bare_globals_complete_def, get_module_code_def, initial_evaluation_context_def] >>
   metis_tac[]
 QED
 
 Theorem artifact_bare_global_assignable_lookup_transfer_initial:
-  check_contract in_deploy layouts addr mods = SOME art /\
+  check_contract F layouts addr mods = SOME art /\
   ALOOKUP sources addr = SOME mods /\
   tx.target = addr /\
   bare_global_assignable_complete bare_global_assignable (initial_evaluation_context sources layouts tx src) /\
   FLOOKUP (function_entry_env art mods entry_src args).bare_global_assignable k = SOME ty ==>
   FLOOKUP bare_global_assignable k = SOME ty
 Proof
-  PairCases_on `k` >> Cases_on `in_deploy` >>
-  rw[function_entry_env_def, artifact_env_def, check_contract_def,
-     FOLDL_extend_local_args_static] >> gvs[] >>
-  imp_res_tac contract_namespaces_ok_deploy_implies_runtime >>
-  gvs[build_contract_type_artifact_nonsig_mode_irrelevant] >>
+  PairCases_on `k` >>
+  rw[function_entry_env_def, artifact_env_def, check_contract_def, FOLDL_extend_local_args_static] >> gvs[] >>
   drule_all build_contract_type_artifact_bare_global_assignable_sound >> rw[] >>
   gvs[bare_global_assignable_complete_def, get_module_code_def, initial_evaluation_context_def] >>
   metis_tac[]
 QED
 
 Theorem artifact_toplevel_vtypes_lookup_transfer_initial:
-  check_contract in_deploy layouts addr mods = SOME art /\
+  check_contract F layouts addr mods = SOME art /\
   ALOOKUP sources addr = SOME mods /\
   tx.target = addr /\
   toplevel_vtypes_complete toplevel_vtypes (initial_evaluation_context sources layouts tx src) /\
   FLOOKUP (function_entry_env art mods entry_src args).toplevel_vtypes k = SOME vt ==>
   FLOOKUP toplevel_vtypes k = SOME vt
 Proof
-  PairCases_on `k` >> Cases_on `in_deploy` >>
-  rw[function_entry_env_def, artifact_env_def, check_contract_def,
-     FOLDL_extend_local_args_static] >> gvs[] >>
-  imp_res_tac contract_namespaces_ok_deploy_implies_runtime >>
-  gvs[build_contract_type_artifact_nonsig_mode_irrelevant] >>
+  PairCases_on `k` >>
+  rw[function_entry_env_def, artifact_env_def, check_contract_def, FOLDL_extend_local_args_static] >> gvs[] >>
   drule_all build_contract_type_artifact_toplevel_vtypes_sound >> rw[] >>
   gvs[toplevel_vtypes_complete_def, get_module_code_def, initial_evaluation_context_def] >>
   metis_tac[]
@@ -476,7 +467,7 @@ Proof
 QED
 
 Theorem artifact_bare_global_assignable_NONE_transfer_initial:
-  check_contract in_deploy layouts addr mods = SOME art /\
+  check_contract F layouts addr mods = SOME art /\
   ALOOKUP sources addr = SOME mods /\ tx.target = addr /\
   bare_global_assignable_complete art.cta_bare_global_assignable
     (initial_evaluation_context sources layouts tx cx_src) /\
@@ -486,13 +477,10 @@ Theorem artifact_bare_global_assignable_NONE_transfer_initial:
   FLOOKUP (function_entry_env art mods entry_src args).bare_global_assignable (src,id) = NONE ==>
   FLOOKUP bare_global_assignable (src,id) = NONE
 Proof
-  Cases_on `in_deploy` >>
   rw[function_entry_env_def, artifact_env_def, FOLDL_extend_local_args_static] >>
   Cases_on `FLOOKUP bare_global_assignable (src,id)` >> simp[] >>
   `?ts. ALOOKUP mods src = SOME ts` by (
     gvs[check_contract_def] >>
-    imp_res_tac contract_namespaces_ok_deploy_implies_runtime >>
-    gvs[build_contract_type_artifact_nonsig_mode_irrelevant] >>
     drule_all build_contract_type_artifact_toplevel_vtypes_sound >> rw[] >>
     metis_tac[]) >>
   qpat_x_assum `!src' id ty ts. _` drule_all >> strip_tac >>
@@ -503,25 +491,22 @@ Proof
 QED
 
 Theorem artifact_flag_members_lookup_transfer_initial:
-  check_contract in_deploy layouts addr mods = SOME art /\
+  check_contract F layouts addr mods = SOME art /\
   ALOOKUP sources addr = SOME mods /\
   tx.target = addr /\
   flag_members_complete flag_members (initial_evaluation_context sources layouts tx src) /\
   FLOOKUP (function_entry_env art mods entry_src args).flag_members k = SOME members ==>
   FLOOKUP flag_members k = SOME members
 Proof
-  PairCases_on `k` >> Cases_on `in_deploy` >>
-  rw[function_entry_env_def, artifact_env_def, check_contract_def,
-     FOLDL_extend_local_args_static] >> gvs[] >>
-  imp_res_tac contract_namespaces_ok_deploy_implies_runtime >>
-  gvs[build_contract_type_artifact_nonsig_mode_irrelevant] >>
+  PairCases_on `k` >>
+  rw[function_entry_env_def, artifact_env_def, check_contract_def, FOLDL_extend_local_args_static] >> gvs[] >>
   drule_all build_contract_type_artifact_flag_members_sound >> rw[] >>
   gvs[flag_members_complete_def, get_module_code_def, initial_evaluation_context_def] >>
   metis_tac[lookup_flag_MEM_FlagDecl, contract_namespaces_ok_module_flag_member_keys, ALOOKUP_MEM]
 QED
 
 Theorem artifact_toplevel_non_bare_globals_NONE_transfer_initial:
-  check_contract in_deploy layouts addr mods = SOME art /\
+  check_contract F layouts addr mods = SOME art /\
   ALOOKUP sources addr = SOME mods /\ tx.target = addr /\
   (!src' id ty. FLOOKUP bare_globals (src',id) = SOME ty ==>
      ?ts. get_module_code (initial_evaluation_context sources layouts tx cx_src) src' = SOME ts /\
@@ -532,7 +517,6 @@ Theorem artifact_toplevel_non_bare_globals_NONE_transfer_initial:
   FLOOKUP (function_entry_env art mods entry_src args).bare_globals (src,id) = NONE ==>
   FLOOKUP bare_globals (src,id) = NONE
 Proof
-  Cases_on `in_deploy` >>
   rw[function_entry_env_def, artifact_env_def, FOLDL_extend_local_args_static] >>
   Cases_on `FLOOKUP bare_globals (src,id)` >> simp[] >>
   rename1 `FLOOKUP bare_globals (src,id) = SOME bare_ty` >>
@@ -540,8 +524,6 @@ Proof
   simp[get_module_code_def, initial_evaluation_context_def] >>
   strip_tac >> gvs[] >>
   gvs[check_contract_def] >>
-  imp_res_tac contract_namespaces_ok_deploy_implies_runtime >>
-  gvs[build_contract_type_artifact_nonsig_mode_irrelevant] >>
   drule_all build_contract_type_artifact_toplevel_vtypes_sound >>
   strip_tac >> gvs[] >-
    (Cases_on `mut` >> gvs[] >-
