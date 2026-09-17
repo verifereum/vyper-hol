@@ -17,6 +17,7 @@ val checker_defs =
   [check_contract_def,
    check_module_def,
    check_toplevel_body_def,
+   check_function_body_in_mode_def,
    check_function_body_def,
    check_toplevel_decl_def,
    check_value_type_def,
