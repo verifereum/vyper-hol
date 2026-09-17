@@ -730,7 +730,8 @@ Theorem checked_function_body_typing_package:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\
   ALOOKUP mods src = SOME ts /\
-  MEM (FunctionDecl vis mut nr raw fn args dflts ret body) ts ==>
+  MEM (FunctionDecl vis mut nr raw fn args dflts ret body) ts /\
+  vis <> Deploy ==>
   ?env_body env_after.
     env_body.current_src = src /\
     env_body.type_defs = get_tenv (initial_evaluation_context am.sources am.layouts tx src) /\
@@ -750,7 +751,7 @@ Theorem checked_function_body_typing_package:
 Proof
   rw[] >>
   `check_function_body am.layouts tx.target mods art src mut nr args dflts ret body` by
-    metis_tac[check_contract_function_body_MEM] >>
+    metis_tac[check_contract_runtime_function_body_MEM] >>
   `fn_sigs_declared_complete art.cta_fn_sigs
      (initial_evaluation_context am.sources am.layouts tx src) /\
    bare_globals_complete art.cta_bare_globals (initial_evaluation_context am.sources am.layouts tx src) /\
