@@ -1234,7 +1234,8 @@ Proof
     metis_tac[bind_arguments_scope_well_typed_from_success] >>
   `ALL_DISTINCT (MAP (string_to_num o FST) args)` by
     (`check_function_body am.layouts tx.target mods art src mut nr args dflts ret body` by
-       metis_tac[check_contract_function_body_MEM] >>
+       (irule check_contract_runtime_function_body_MEM >> simp[] >>
+        qexistsl [`tx.function_name`, `raw`, `External`] >> simp[]) >>
      gvs[check_function_body_def, params_ok_def]) >>
   `context_well_typed (initial_evaluation_context am.sources am.layouts tx src)` by
     metis_tac[call_tx_well_typed_initial_context] >>
@@ -1280,8 +1281,9 @@ Proof
       gvs[vyperTypeExprSoundnessTheory.no_type_error_eval_def]) >>
   `nr ==> (initial_evaluation_context am.sources am.layouts tx src).nonreentrant_slot <> NONE` by (
     strip_tac >>
+    `External <> Deploy` by simp[] >>
     `check_function_body am.layouts tx.target mods art src mut nr args dflts ret body` by
-      metis_tac[check_contract_function_body_MEM] >>
+      metis_tac[check_contract_runtime_function_body_MEM] >>
     gvs[check_function_body_def, initial_evaluation_context_def,
         optionTheory.IS_SOME_EXISTS]) >>
   `no_type_error_eval
@@ -1420,9 +1422,10 @@ Proof
   rpt strip_tac >>
   `scope_well_typed scope` by
     metis_tac[bind_arguments_scope_well_typed_from_success] >>
+  `External <> Deploy` by simp[] >>
   `?ret_tv. evaluate_type (type_env_all_modules mods) ret = SOME ret_tv` by (
     `check_function_body am.layouts tx.target mods art src mut nr args dflts ret body` by
-      metis_tac[check_contract_function_body_MEM] >>
+      metis_tac[check_contract_runtime_function_body_MEM] >>
     gvs[check_function_body_def, optionTheory.IS_SOME_EXISTS]) >>
   `no_type_error_eval
      (do
@@ -3011,7 +3014,8 @@ Theorem checked_explicit_external_body_no_control_escape_selected:
 Proof
   rpt strip_tac >>
   `check_function_body am.layouts tx.target mods art src mut nr args dflts ret body` by
-    metis_tac[check_contract_function_body_MEM] >>
+    (irule check_contract_runtime_function_body_MEM >> simp[] >>
+     qexistsl [`tx.function_name`, `raw`, `External`] >> simp[]) >>
   gvs[check_function_body_def]
 QED
 
@@ -3137,6 +3141,7 @@ Proof
     (irule check_contract_functions_well_typed_initial >> simp[]) >>
   `context_well_typed (initial_evaluation_context am.sources am.layouts tx src)` by
     metis_tac[call_tx_well_typed_initial_context] >>
+  `External <> Deploy` by simp[] >>
   drule_all checked_function_body_typing_package >>
   strip_tac >>
   qexistsl [`env_body`, `env_after`] >> simp[] >>

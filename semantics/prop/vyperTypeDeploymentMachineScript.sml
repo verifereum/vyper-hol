@@ -95,7 +95,7 @@ Proof
   >- (qexistsl [`artifact_env art mods NONE`, `artifact_env art mods NONE`] >>
       simp[artifact_env_def, Once type_stmt_def]) >>
   `check_function_body layouts addr mods art NONE mut nr args dflts ret body` by
-    (irule check_contract_function_body_MEM >> metis_tac[]) >>
+    (irule check_contract_deploy_function_body_MEM >> metis_tac[]) >>
   gvs[check_function_body_def, optionTheory.IS_SOME_EXISTS] >>
   qexistsl [`function_entry_env art mods NONE args`, `x'`] >>
   gvs[function_entry_env_def, artifact_env_def,
@@ -444,8 +444,7 @@ Proof
     (drule lookup_function_Deploy_SOME_cases >> strip_tac >> gvs[] >>
      `check_function_body layouts tx.target mods deploy_art NONE mut nr
         args dflts ret body` by
-       (irule check_contract_function_body_MEM >> simp[] >>
-        conj_tac >- (qexists `T` >> simp[]) >>
+       (irule check_contract_deploy_function_body_MEM >> simp[] >>
         qexistsl [`tx.function_name`,`raw`,`Deploy`] >> simp[]) >>
      gvs[check_function_body_def, params_ok_def]) >>
   irule checked_constructor_run_from_states_preserves_machine_well_typed >>

@@ -229,18 +229,24 @@ Definition check_function_body_def:
       MAP expr_type dflts = MAP SND (DROP (LENGTH args - LENGTH dflts) args)
 End
 
+Definition check_function_body_in_mode_def:
+  check_function_body_in_mode in_deploy vis <=>
+    vis <> Deploy \/ in_deploy
+End
+
 Definition check_toplevel_body_def:
-  check_toplevel_body layouts addr mods art src tl =
+  check_toplevel_body in_deploy layouts addr mods art src tl =
     case tl of
-    | FunctionDecl _ mut nr _ _ args dflts ret body =>
+    | FunctionDecl vis mut nr _ _ args dflts ret body =>
+        check_function_body_in_mode in_deploy vis ==>
         check_function_body layouts addr mods art src mut nr args dflts ret body
     | _ => T
 End
 
 Definition check_module_def:
-  check_module layouts addr mods art (src,tls) =
+  check_module in_deploy layouts addr mods art (src,tls) =
     (EVERY (check_toplevel_decl layouts addr mods art src) tls /\
-     EVERY (check_toplevel_body layouts addr mods art src) tls)
+     EVERY (check_toplevel_body in_deploy layouts addr mods art src) tls)
 End
 
 Definition check_contract_def:
@@ -248,6 +254,6 @@ Definition check_contract_def:
     let art = build_contract_type_artifact in_deploy mods in
       if contract_namespaces_ok in_deploy mods /\
          contract_call_graph_acyclic mods /\
-         EVERY (check_module layouts addr mods art) mods
+         EVERY (check_module in_deploy layouts addr mods art) mods
       then SOME art else NONE
 End
