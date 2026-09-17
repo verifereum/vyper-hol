@@ -393,6 +393,42 @@ Proof
             `layouts`, `sources`, `src`, `toplevel_vtypes`, `tx`] >>
   simp[]
 QED
+
+(* Deployment artifacts add Deploy signatures, but all other static maps are
+ * identical to the runtime artifact.  Reuse the mature runtime transfer for
+ * those maps and discharge only the larger signature map separately. *)
+Theorem function_entry_env_static_maps_transfer_deploy[local]:
+  check_contract T layouts addr mods = SOME deploy_art /\
+  check_contract F layouts addr mods = SOME runtime_art /\
+  ALOOKUP sources addr = SOME mods /\
+  tx.target = addr /\
+  fn_sigs_declared_complete env.fn_sigs
+    (initial_evaluation_context sources layouts tx src with in_deploy := T) /\
+  static_maps_transfer_env
+    (function_entry_env runtime_art mods entry_src args) env ==>
+  static_maps_transfer_env
+    (function_entry_env deploy_art mods entry_src args) env
+Proof
+  strip_tac >>
+  `deploy_art = build_contract_type_artifact T mods /\
+   runtime_art = build_contract_type_artifact F mods` by
+    gvs[check_contract_def] >>
+  mp_tac build_contract_type_artifact_nonsig_mode_irrelevant >>
+  strip_tac >>
+  gvs[static_maps_transfer_env_def, function_entry_env_def, artifact_env_def,
+      FOLDL_extend_local_args_static] >>
+  conj_tac
+  >- (irule (cj 1 FOLDL_extend_local_args_empty_locals) >> simp[]) >>
+  conj_tac
+  >- (irule (cj 2 FOLDL_extend_local_args_empty_locals) >> simp[]) >>
+  rpt strip_tac >>
+  irule artifact_fn_sigs_lookup_transfer_mode >>
+  qexistsl [`tx.target`, `args`, `build_contract_type_artifact T mods`, `env.current_src`,
+            `T`, `layouts`, `mods`, `sources`, `src`, `tx`] >>
+  simp[function_entry_env_def, artifact_env_def,
+       FOLDL_extend_local_args_static]
+QED
+
 Theorem check_function_body_static_maps_transfer_initial[local]:
   !layouts addr mods art sources tx fn_sigs bare_globals bare_global_assignable
    toplevel_vtypes flag_members entry_src mut nr args dflts ret body.
