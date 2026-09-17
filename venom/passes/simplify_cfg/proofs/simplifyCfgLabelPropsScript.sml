@@ -1712,7 +1712,7 @@ Proof
    MEM callee
       (simplify_cfg_fn_invoke_labels
         (func with fn_blocks := func.fn_blocks))` by
-    (simp[Abbr `bbs0`] >>
+    (qunabbrev_tac `bbs0` >>
      irule fn_remove_block_invoke_labels_preserve >>
      simp[GSYM venomInstTheory.fn_labels_def]) >>
   `MEM callee

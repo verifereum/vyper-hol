@@ -2716,7 +2716,28 @@ Proof
       CaseEq "list"] >>
   rpt (pairarg_tac >> gvs[]) >>
   gvs[CaseEq "sum", CaseEq "option"] >>
-  simp[m2v_inv_noix_ext_update, LENGTH_TAKE_EQ]
+  simp[LENGTH_TAKE_EQ] >>
+  FIRST
+    [irule m2v_inv_noix_ext_update >> simp[LENGTH_TAKE_EQ],
+     `m2v_inv_noix fn
+        (s1 with
+          <|vs_memory :=
+              (write_memory_with_expansion retOff
+                 (TAKE retSz ctxt.returnData) s1).vs_memory;
+            vs_transient := s2.vs_transient;
+            vs_returndata := ctxt.returnData;
+            vs_accounts := s1.vs_accounts;
+            vs_logs := s2.vs_logs|>)
+        (s2 with
+          <|vs_memory :=
+              (write_memory_with_expansion retOff
+                 (TAKE retSz ctxt.returnData) s2).vs_memory;
+            vs_transient := s2.vs_transient;
+            vs_returndata := ctxt.returnData;
+            vs_accounts := s1.vs_accounts;
+            vs_logs := s2.vs_logs|>)` by
+       (irule m2v_inv_noix_ext_update >> simp[LENGTH_TAKE_EQ]) >>
+     gvs[]]
 QED
 
 (* ================================================================
