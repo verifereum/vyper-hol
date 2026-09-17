@@ -109,7 +109,8 @@ Proof
   `ALL_DISTINCT (MAP (string_to_num o FST) args)` by
     (`check_function_body am.layouts tx.target mods art src mut nr
        args dflts ret body` by
-       metis_tac[check_contract_function_body_MEM] >>
+       (irule check_contract_runtime_function_body_MEM >> simp[] >>
+        qexistsl [`tx.function_name`, `raw`, `External`] >> simp[]) >>
      gvs[check_function_body_def, params_ok_def]) >>
   irule checked_explicit_external_body_preserves_machine_components >>
   qexistsl [`am`, `args`, `art`, `body`, `cx`, `dflts`, `mods`, `mut`, `nr`,
