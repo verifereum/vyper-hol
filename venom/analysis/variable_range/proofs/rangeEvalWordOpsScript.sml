@@ -1,27 +1,17 @@
 (*
- * rangeEvalProofsLib.sml
+ * Bridge lemmas for signed integer word quotient and remainder operations.
  *
- * Bridge lemmas for signed integer word operations (quot).
- * Proved as SML vals to avoid Theory format issues with
- * nested >- and ARITH_TAC on nonlinear terms.
- *
- * Exported: w2i_word_quot, abs_lt_neg_min_gives_range
+ * TOP-LEVEL:
+ *   w2i_word_quot, w2i_word_rem, abs_lt_neg_min_gives_range,
+ *   sdiv_overflow, quot_sign_abs, quot_mono_pos_denom,
+ *   neg_quot_eq, nonneg_quot_eq
  *)
-structure rangeEvalProofsLib :> sig
-  val w2i_word_quot : Thm.thm
-  val w2i_word_rem : Thm.thm
-  val abs_lt_neg_min_gives_range : Thm.thm
-  val sdiv_overflow : Thm.thm
-  val quot_sign_abs : Thm.thm
-  val quot_mono_pos_denom : Thm.thm
-  val neg_quot_eq : Thm.thm
-  val nonneg_quot_eq : Thm.thm
-end = struct
 
-open HolKernel boolLib bossLib;
-open integerTheory integer_wordTheory wordsTheory;
-open intLib fcpLib;
-open valueRangeDefsTheory;
+Theory rangeEvalWordOps
+Ancestors
+  valueRangeDefs integer integer_word words
+Libs
+  intLib fcpLib
 
 val dim256 = fcpLib.INDEX_CONV ``dimindex(:256)``;
 
@@ -349,4 +339,11 @@ val sdiv_overflow = prove(
   REWRITE_TAC[GSYM wordsTheory.word_L_def] >>
   REWRITE_TAC[INST_TYPE [alpha |-> ``:256``] w2i_INT_MINw, check]);
 
-end (* struct *)
+val _ = save_thm("w2i_word_quot", w2i_word_quot);
+val _ = save_thm("w2i_word_rem", w2i_word_rem);
+val _ = save_thm("abs_lt_neg_min_gives_range", abs_lt_neg_min_gives_range);
+val _ = save_thm("sdiv_overflow", sdiv_overflow);
+val _ = save_thm("quot_sign_abs", quot_sign_abs);
+val _ = save_thm("quot_mono_pos_denom", quot_mono_pos_denom);
+val _ = save_thm("neg_quot_eq", neg_quot_eq);
+val _ = save_thm("nonneg_quot_eq", nonneg_quot_eq);
