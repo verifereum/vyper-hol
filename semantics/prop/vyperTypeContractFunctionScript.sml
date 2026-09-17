@@ -491,7 +491,9 @@ Theorem check_contract_lookup_callable_function_F_body[local]:
 Proof
   rw[] >>
   drule lookup_callable_function_F_SOME_MEM >> strip_tac >>
-  drule_all check_contract_function_body_MEM >> simp[]
+  irule check_contract_function_body_MEM >>
+  qexistsl [`fn`, `F`, `raw`, `ts`, `Internal`] >>
+  simp[check_function_body_in_mode_def]
 QED
 
 Theorem check_contract_functions_well_typed_initial:

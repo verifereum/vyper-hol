@@ -692,6 +692,62 @@ Proof
       gvs[contract_namespaces_ok_def])
 QED
 
+(* Every signature stored in the artifact comes from an included declaration.
+ * Retaining the declaration witness is essential in deployment mode because
+ * lookup_callable_function T also has a synthetic empty-constructor fallback,
+ * while artifact signatures are produced only from actual declarations. *)
+Theorem build_contract_type_artifact_fn_sigs_declared_sound:
+  contract_namespaces_ok in_deploy mods /\
+  FLOOKUP (build_contract_type_artifact in_deploy mods).cta_fn_sigs
+    (src,fn) = SOME sig ==>
+  ?ts vis fm nr raw params dflts body.
+    ALOOKUP mods src = SOME ts /\
+    MEM (FunctionDecl vis fm nr raw fn params dflts sig.ret_ty body) ts /\
+    include_fn_sig in_deploy vis /\
+    lookup_callable_function in_deploy fn ts =
+      SOME (fm,nr,params,dflts,sig.ret_ty,body) /\
+    sig.param_types = MAP SND params /\
+    sig.num_defaults = LENGTH dflts
+Proof
+  Cases_on `in_deploy`
+  >- (rw[build_contract_type_artifact_def] >>
+      drule add_contract_static_maps_fn_sigs_sound_deploy >> rw[] >> gvs[] >>
+      gvs[empty_contract_type_artifact_def] >>
+      drule contract_namespaces_ok_module_fn_sig_keys_deploy >>
+      disch_then drule >> strip_tac
+      >- (`lookup_callable_function T fn tls =
+             SOME (fm,nr,args,dflts,ret,body)` by
+            (irule (INST_TYPE [``:'a`` |-> ``:num option``]
+               lookup_callable_function_Internal_MEM_deploy) >>
+             conj_tac >- (qexists_tac `(src:num option)` >> simp[]) >>
+             qexists_tac `raw` >> simp[]) >>
+          qexistsl [`tls`,`Internal`,`fm`,`nr`,`raw`,`args`,`dflts`,`body`] >>
+          gvs[fn_sig_of_def, include_fn_sig_def] >>
+          irule ALOOKUP_ALL_DISTINCT_MEM >>
+          gvs[contract_namespaces_ok_def])
+      >- (`lookup_callable_function T fn tls =
+             SOME (fm,nr,args,dflts,ret,body)` by
+            (irule (INST_TYPE [``:'a`` |-> ``:num option``]
+               lookup_callable_function_Deploy_MEM) >>
+             conj_tac >- (qexists_tac `(src:num option)` >> simp[]) >>
+             qexists_tac `raw` >> simp[]) >>
+          qexistsl [`tls`,`Deploy`,`fm`,`nr`,`raw`,`args`,`dflts`,`body`] >>
+          gvs[fn_sig_of_def, include_fn_sig_def] >>
+          irule ALOOKUP_ALL_DISTINCT_MEM >>
+          gvs[contract_namespaces_ok_def])) >>
+  rw[build_contract_type_artifact_def] >>
+  drule add_contract_static_maps_fn_sigs_sound >> rw[] >> gvs[] >>
+  gvs[empty_contract_type_artifact_def] >>
+  drule contract_namespaces_ok_module_fn_sig_keys >>
+  disch_then drule >> strip_tac >>
+  drule lookup_function_Internal_MEM >>
+  disch_then drule >> strip_tac >>
+  qexistsl [`tls`,`Internal`,`fm`,`nr`,`raw`,`args`,`dflts`,`body`] >>
+  gvs[fn_sig_of_def, include_fn_sig_def] >>
+  irule ALOOKUP_ALL_DISTINCT_MEM >>
+  gvs[contract_namespaces_ok_def]
+QED
+
 Theorem build_contract_type_artifact_fn_sigs_declared_complete_deploy:
   contract_namespaces_ok T mods /\ ALOOKUP sources addr = SOME mods ==>
   fn_sigs_declared_complete
@@ -2206,7 +2262,7 @@ Theorem check_contract_toplevel_decl_MEM:
 Proof
   rw[check_contract_def] >> gvs[] >>
   `MEM (src,ts) mods` by metis_tac[ALOOKUP_MEM] >>
-  `check_module layouts addr mods (build_contract_type_artifact F mods) (src,ts)` by
+  `check_module F layouts addr mods (build_contract_type_artifact F mods) (src,ts)` by
     metis_tac[EVERY_MEM] >>
   pop_assum mp_tac >>
   simp[check_module_def, EVERY_MEM] >>
