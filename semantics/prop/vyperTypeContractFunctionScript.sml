@@ -586,7 +586,8 @@ Proof
 QED
 
 Theorem check_contract_functions_well_typed_deploy:
-  check_contract F layouts addr mods = SOME art /\
+  check_contract T layouts addr mods = SOME deploy_art /\
+  check_contract F layouts addr mods = SOME runtime_art /\
   ALOOKUP sources addr = SOME mods /\
   tx.target = addr ==>
   functions_well_typed
@@ -597,9 +598,9 @@ Proof
   `ALOOKUP mods src_id_opt = SOME ts` by
     gvs[get_module_code_def, initial_evaluation_context_def] >>
   drule lookup_callable_function_T_SOME_cases >> strip_tac >> gvs[]
-  >- (`check_function_body layouts tx.target mods art src_id_opt fm nr
+  >- (`check_function_body layouts tx.target mods deploy_art src_id_opt fm nr
          args dflts ret body` by
-        (drule_all check_contract_function_body_MEM >> metis_tac[]) >>
+        (drule_all check_contract_deploy_function_body_MEM >> metis_tac[]) >>
       conj_tac
       >- (gvs[initial_evaluation_context_def, check_function_body_def] >>
           Cases_on `lookup_nonreentrant_slot layouts tx.target` >> gvs[] >>
@@ -612,7 +613,7 @@ Proof
          toplevel_vtypes_complete_def, flag_members_complete_def,
          get_module_code_def, get_tenv_def, initial_evaluation_context_def] >>
       qspecl_then
-        [`layouts`, `tx.target`, `mods`, `art`, `sources`, `tx`, `fn_sigs`,
+        [`layouts`, `tx.target`, `mods`, `deploy_art`, `sources`, `tx`, `fn_sigs`,
          `bare_globals`, `bare_global_assignable`, `toplevel_vtypes`,
          `flag_members`, `src_id_opt`, `fm`, `nr`, `args`, `dflts`, `ret`, `body`]
         mp_tac check_function_body_static_maps_transfer_initial >>
@@ -638,9 +639,9 @@ Proof
              flag_members := flag_members|>`] >>
       simp[get_tenv_def, Once type_stmt_def,
            Once well_typed_expr_def, Once stmt_no_control_escape_def]) >>
-  `check_function_body layouts tx.target mods art src_id_opt fm nr
+  `check_function_body layouts tx.target mods deploy_art src_id_opt fm nr
      args dflts ret body` by
-    (drule_all check_contract_function_body_MEM >> metis_tac[]) >>
+    (drule_all check_contract_deploy_function_body_MEM >> metis_tac[]) >>
   conj_tac
   >- (gvs[initial_evaluation_context_def, check_function_body_def] >>
       Cases_on `lookup_nonreentrant_slot layouts tx.target` >> gvs[] >>
@@ -653,7 +654,7 @@ Proof
      toplevel_vtypes_complete_def, flag_members_complete_def,
      get_module_code_def, get_tenv_def, initial_evaluation_context_def] >>
   qspecl_then
-    [`layouts`, `tx.target`, `mods`, `art`, `sources`, `tx`, `fn_sigs`,
+    [`layouts`, `tx.target`, `mods`, `deploy_art`, `sources`, `tx`, `fn_sigs`,
      `bare_globals`, `bare_global_assignable`, `toplevel_vtypes`,
      `flag_members`, `src_id_opt`, `fm`, `nr`, `args`, `dflts`, `ret`, `body`]
     mp_tac check_function_body_static_maps_transfer_initial >>
