@@ -691,6 +691,82 @@ Definition translate_unary_def:
 End
 
 
+Definition call_pop_index_def:
+  call_pop_index (JE_Attribute base attr _ _ _ _ _) =
+    (if attr = "pop" then
+       case base of
+       | JE_Subscript (JE_Name _ _ _ _) idx _ => SOME idx
+       | _ => NONE
+     else NONE) /\
+  call_pop_index _ = NONE
+End
+
+
+Theorem call_pop_index_size:
+  call_pop_index func = SOME idx ⇒ json_expr_size idx < json_expr_size func
+Proof
+  Cases_on `func` >> gvs[call_pop_index_def, AllCaseEqs(), json_expr_size_def] >>
+  Cases_on `j` >> gvs[call_pop_index_def, AllCaseEqs(), json_expr_size_def] >>
+  Cases_on `j'` >> gvs[call_pop_index_def, AllCaseEqs(), json_expr_size_def]
+QED
+
+
+Definition translate_call_def:
+  translate_call ctx func args' kwargs' ret_ty src_id_opt translated_pop_index =
+    let rty = translate_type (signature_type_ctx ctx src_id_opt) ret_ty in
+    case func of
+    | JE_Name name (SOME "interface") _ _ =>
+        interface_constructor_result rty args'
+    | JE_Name name _ _ _ => make_builtin_call rty name args' kwargs' ret_ty
+    (* lib.__at__(addr) / lib.__interface__(addr) - interface instantiation, just returns the address *)
+    | JE_Attribute _ "__at__" _ _ _ _ _ =>
+        interface_constructor_result rty args'
+    | JE_Attribute _ "__interface__" _ _ _ _ _ =>
+        interface_constructor_result rty args'
+    | JE_Attribute base "pop" _ _ _ _ _ =>
+        (case base of
+         | JE_Name id _ _ _ => Pop rty (make_name_target ctx id)
+         | JE_Attribute (JE_Name "self" _ _ _) attr _ _ _ _ _ => Pop rty (TopLevelNameTarget (NONE, attr))
+         | JE_Attribute (JE_Name id (SOME "module") src_id_opt _) attr _ _ _ _ _ =>
+             Pop rty (TopLevelNameTarget (resolve_source_ref ctx src_id_opt, attr))
+         | JE_Attribute (JE_Name id _ _ _) attr _ _ _ _ _ =>
+             Pop rty (AttributeTarget (make_name_target ctx id) attr)
+         | JE_Subscript (JE_Name id _ _ _) idx _ =>
+             Pop rty (SubscriptTarget (make_name_target ctx id)
+               (case translated_pop_index of
+                | SOME e => e
+                | NONE => Literal (BaseT BoolT) (BoolL T)))
+         | _ => Call rty (IntCall (NONE, "pop")) args' NONE)
+    (* self.func(args) - internal call *)
+    | JE_Attribute (JE_Name "self" _ _ _) fname _ _ _ _ _ => Call rty (IntCall (resolve_source_ref ctx src_id_opt, fname)) args' NONE
+    (* Module struct constructor, interface constructor, or module function call *)
+    | _ => if is_interface_constructor func then
+             interface_constructor_result rty args'
+           else let nsid = resolve_func_module_ref ctx func src_id_opt;
+               fname = extract_func_name func in
+           (case ret_ty of
+              JT_Struct src_id_opt sname =>
+                if fname = sname then
+                  (* Struct constructor: library.SomeStruct(x=2) *)
+                  let mod_nsid = case src_id_opt of
+                      SOME sid => source_id_to_nsid (expr_main_src_id ctx) sid
+                    | NONE =>
+                      case func of
+                        JE_Attribute base _ _ _ _ _ _ =>
+                          (case extract_innermost_module_src base of
+                             SOME src => resolve_source_ref ctx src
+                           | NONE => nsid)
+                      | _ => nsid in
+                  StructLit (StructT (mod_nsid, fname)) (mod_nsid, fname) kwargs'
+                else
+                  (* Function call that returns a struct: library.foo() *)
+                  Call rty (IntCall (nsid, fname)) args' NONE
+            | _ =>
+              (* Module call: use source_id from type_decl_node *)
+              Call rty (IntCall (nsid, fname)) args' NONE)
+End
+
+
 Definition translate_expr_def:
   (translate_expr ctx (JE_Int v ty) =
     Literal (translate_type (expr_type_ctx ctx) ty) (IntL v)) /\
@@ -777,54 +853,10 @@ Definition translate_expr_def:
   (translate_expr ctx (JE_Call func args kwargs ret_ty src_id_opt) =
     let args' = translate_expr_list ctx args in
     let kwargs' = translate_kwargs ctx kwargs in
-    let rty = translate_type (signature_type_ctx ctx src_id_opt) ret_ty in
-    case func of
-    | JE_Name name (SOME "interface") _ _ =>
-        interface_constructor_result rty args'
-    | JE_Name name _ _ _ => make_builtin_call rty name args' kwargs' ret_ty
-    (* lib.__at__(addr) / lib.__interface__(addr) - interface instantiation, just returns the address *)
-    | JE_Attribute _ "__at__" _ _ _ _ _ =>
-        interface_constructor_result rty args'
-    | JE_Attribute _ "__interface__" _ _ _ _ _ =>
-        interface_constructor_result rty args'
-    | JE_Attribute base "pop" _ _ _ _ _ =>
-        (case base of
-         | JE_Name id _ _ _ => Pop rty (make_name_target ctx id)
-         | JE_Attribute (JE_Name "self" _ _ _) attr _ _ _ _ _ => Pop rty (TopLevelNameTarget (NONE, attr))
-         | JE_Attribute (JE_Name id (SOME "module") src_id_opt _) attr _ _ _ _ _ =>
-             Pop rty (TopLevelNameTarget (resolve_source_ref ctx src_id_opt, attr))
-         | JE_Attribute (JE_Name id _ _ _) attr _ _ _ _ _ =>
-             Pop rty (AttributeTarget (make_name_target ctx id) attr)
-         | JE_Subscript (JE_Name id _ _ _) idx _ =>
-             Pop rty (SubscriptTarget (make_name_target ctx id) (translate_expr ctx idx))
-         | _ => Call rty (IntCall (NONE, "pop")) args' NONE)
-    (* self.func(args) - internal call *)
-    | JE_Attribute (JE_Name "self" _ _ _) fname _ _ _ _ _ => Call rty (IntCall (resolve_source_ref ctx src_id_opt, fname)) args' NONE
-    (* Module struct constructor, interface constructor, or module function call *)
-    | _ => if is_interface_constructor func then
-             interface_constructor_result rty args'
-           else let nsid = resolve_func_module_ref ctx func src_id_opt;
-               fname = extract_func_name func in
-           (case ret_ty of
-              JT_Struct src_id_opt sname =>
-                if fname = sname then
-                  (* Struct constructor: library.SomeStruct(x=2) *)
-                  let mod_nsid = case src_id_opt of
-                      SOME sid => source_id_to_nsid (expr_main_src_id ctx) sid
-                    | NONE =>
-                      case func of
-                        JE_Attribute base _ _ _ _ _ _ =>
-                          (case extract_innermost_module_src base of
-                             SOME src => resolve_source_ref ctx src
-                           | NONE => nsid)
-                      | _ => nsid in
-                  StructLit (StructT (mod_nsid, fname)) (mod_nsid, fname) kwargs'
-                else
-                  (* Function call that returns a struct: library.foo() *)
-                  Call rty (IntCall (nsid, fname)) args' NONE
-            | _ =>
-              (* Module call: use source_id from type_decl_node *)
-              Call rty (IntCall (nsid, fname)) args' NONE)) /\
+    let translated_pop_index =
+      OPTION_MAP (translate_expr ctx) (call_pop_index func) in
+    translate_call ctx func args' kwargs' ret_ty src_id_opt
+      translated_pop_index) /\
 
   (* ExtCall - mutating external call (is_static = F) *)
   (translate_expr ctx
@@ -874,6 +906,7 @@ Termination
     | INR (INR (_, kws)) => list_size json_keyword_size kws)`
   >> rw[]
   >> imp_res_tac find_keyword_size
+  >> imp_res_tac call_pop_index_size
   >> gvs[]
 End
 
