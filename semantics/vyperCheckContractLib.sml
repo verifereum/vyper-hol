@@ -126,14 +126,34 @@ val checker_defs =
    listTheory.LIST_REL_def,
    numposrepTheory.l2n_def]
 
-(* Work around HOL issue #2055. Install empty-set membership before the list
-   rules so ALL_DISTINCT does not retain the problematic prior IN treatment. *)
+(* This mirrors listSimps.list_rws, except that LIST_TO_SET_THM is replaced
+   by structural MEM computation. Installing LIST_TO_SET_THM makes definitions
+   such as nub compile membership through finite sets, with pathological
+   proof-producing performance. Keep this local copy until the upstream issue
+   is resolved: https://github.com/HOL-Theorem-Prover/HOL/issues/2055 *)
+local open listTheory in
+val checker_list_rws =
+  [ALL_DISTINCT, APPEND, APPEND_NIL, CONS_11, DROP_compute, EL_restricted,
+   EL_simp_restricted, EVERY_DEF, EXISTS_DEF, FILTER, FIND_def, FLAT, FOLDL,
+   FOLDR, FRONT_DEF, GENLIST_AUX_compute, GENLIST_NUMERALS, HD, INDEX_FIND_def,
+   INDEX_OF_def, LAST_compute, LENGTH, LEN_DEF, LIST_APPLY_def, LIST_BIND_def,
+   LIST_IGNORE_BIND_def, LIST_LIFT2_def, MEM, LLEX_def, LRC_def,
+   LUPDATE_compute, MAP, MAP2, NOT_CONS_NIL, NOT_NIL_CONS, NULL_DEF, oEL_def,
+   oHD_def, PAD_LEFT, PAD_RIGHT, REVERSE_REV, REV_DEF, SHORTLEX_def, SNOC,
+   SUM_ACC_DEF, SUM_SUM_ACC, TAKE_compute, TL, UNZIP, ZIP,
+   computeLib.lazyfy_thm list_case_compute, dropWhile_def, isPREFIX,
+   list_size_def, nub_def, splitAtPki_def]
+end
+
+(* Install empty-set membership before the list rules so ALL_DISTINCT does not
+   retain a problematic prior IN treatment, then restore general predicate-set
+   computation after installing the structural list fragment. *)
 fun add_list_compset cs =
   cs
   |> pred_setLib.add_pred_set_compset
   |> (fn cs' => computeLib.scrub_const cs' ``bool$IN``)
   |> computeLib.add_thms [in_empty_eq]
-  |> listSimps.list_rws
+  |> computeLib.add_thms checker_list_rws
   |> pred_setLib.add_pred_set_compset
 
 (* This is deliberately fixed rather than derived from the global TypeBase. *)
