@@ -1,6 +1,6 @@
 Theory jsonToVyperExpr
 Ancestors
-  integer alist jsonAST vyperAST jsonToVyperType
+  ASCIInumbers integer alist jsonAST vyperAST jsonToVyperType
 Libs
   intLib
 
@@ -32,29 +32,8 @@ End
 
 (* ===== Hex String to Word8 List Conversion ===== *)
 
-Definition hex_digit_to_num_def:
-  hex_digit_to_num c =
-    if c = #"0" then 0n else
-    if c = #"1" then 1 else
-    if c = #"2" then 2 else
-    if c = #"3" then 3 else
-    if c = #"4" then 4 else
-    if c = #"5" then 5 else
-    if c = #"6" then 6 else
-    if c = #"7" then 7 else
-    if c = #"8" then 8 else
-    if c = #"9" then 9 else
-    if c = #"a" \/ c = #"A" then 10 else
-    if c = #"b" \/ c = #"B" then 11 else
-    if c = #"c" \/ c = #"C" then 12 else
-    if c = #"d" \/ c = #"D" then 13 else
-    if c = #"e" \/ c = #"E" then 14 else
-    if c = #"f" \/ c = #"F" then 15 else 0
-End
-
-
 Definition hex_pair_to_word8_def:
-  hex_pair_to_word8 hi lo = n2w (hex_digit_to_num hi * 16 + hex_digit_to_num lo) : word8
+  hex_pair_to_word8 hi lo = n2w (UNHEX hi * 16 + UNHEX lo) : word8
 End
 
 
@@ -79,53 +58,12 @@ End
 
 (* ===== Decimal String Parsing ===== *)
 
-Definition is_digit_def:
-  is_digit c =
-    (c = #"0" \/ c = #"1" \/ c = #"2" \/ c = #"3" \/ c = #"4" \/
-     c = #"5" \/ c = #"6" \/ c = #"7" \/ c = #"8" \/ c = #"9")
-End
-
-
-Definition digit_to_num_def:
-  digit_to_num c =
-    if c = #"0" then 0n else
-    if c = #"1" then 1 else
-    if c = #"2" then 2 else
-    if c = #"3" then 3 else
-    if c = #"4" then 4 else
-    if c = #"5" then 5 else
-    if c = #"6" then 6 else
-    if c = #"7" then 7 else
-    if c = #"8" then 8 else
-    if c = #"9" then 9 else 0
-End
-
-
-Definition num_of_digits_acc_def:
-  (num_of_digits_acc acc [] = acc) /\
-  (num_of_digits_acc acc (c::cs) =
-     num_of_digits_acc (acc * 10 + digit_to_num c) cs)
-End
-
-
-Definition num_of_digits_def:
-  num_of_digits cs = num_of_digits_acc 0 cs
-End
-
-
 Definition strip_sign_def:
   (strip_sign [] = (F, [])) /\
   (strip_sign (c::cs) =
      if c = #"-" then (T, cs)
      else if c = #"+" then (F, cs)
      else (F, c::cs))
-End
-
-
-Definition drop_nondigit_def:
-  (drop_nondigit [] = []) /\
-  (drop_nondigit (c::cs) =
-     if is_digit c then (c::cs) else drop_nondigit cs)
 End
 
 
@@ -155,19 +93,19 @@ Definition decimal_string_to_int_def:
   decimal_string_to_int s =
     let (base, exp) = split_at_e s in
     let (neg_exp, exp_rest) = strip_sign exp in
-    let exp_digits = FILTER is_digit exp_rest in
-    let exp_num = num_of_digits exp_digits in
+    let exp_digits = FILTER isDigit exp_rest in
+    let exp_num = num_from_dec_string exp_digits in
     let exp_int = if neg_exp then &0 - &exp_num else &exp_num in
     let (bd, ad) = split_at_dot base in
-    let ad = FILTER is_digit ad in
+    let ad = FILTER isDigit ad in
     let target = &10 + exp_int in
     let pad_len =
       if target <= & (LENGTH ad) then LENGTH ad else Num target in
     let ad' = pad_right_zeros pad_len ad in
     let ds = bd ++ ad' in
     let (neg, ds_rest) = strip_sign ds in
-    let digits = FILTER is_digit ds_rest in
-    let n = num_of_digits digits in
+    let digits = FILTER isDigit ds_rest in
+    let n = num_from_dec_string digits in
       if neg then &0 - &n else &n
 End
 
