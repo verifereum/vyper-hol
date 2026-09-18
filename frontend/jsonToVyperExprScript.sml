@@ -662,6 +662,20 @@ Definition translate_attribute_def:
 End
 
 
+Definition translate_list_def:
+  translate_list ctx ty es =
+    let ty' = translate_type (expr_type_ctx ctx) ty in
+    case ty of
+    | JT_StaticArray vt len =>
+        Builtin ty'
+          (MakeArray (SOME (translate_type (expr_type_ctx ctx) vt)) (Fixed len)) es
+    | JT_DynArray vt len =>
+        Builtin ty'
+          (MakeArray (SOME (translate_type (expr_type_ctx ctx) vt)) (Dynamic len)) es
+    | _ => Builtin ty' (MakeArray NONE (Fixed (LENGTH es))) es
+End
+
+
 Definition translate_expr_def:
   (translate_expr ctx (JE_Int v ty) =
     Literal (translate_type (expr_type_ctx ctx) ty) (IntL v)) /\
@@ -748,14 +762,7 @@ Definition translate_expr_def:
 
   (* List - array literal *)
   (translate_expr ctx (JE_List es ty) =
-    let ty' = translate_type (expr_type_ctx ctx) ty in
-    case ty of
-    | JT_StaticArray vt len =>
-        Builtin ty' (MakeArray (SOME (translate_type (expr_type_ctx ctx) vt)) (Fixed len)) (translate_expr_list ctx es)
-    | JT_DynArray vt len =>
-        Builtin ty' (MakeArray (SOME (translate_type (expr_type_ctx ctx) vt)) (Dynamic len)) (translate_expr_list ctx es)
-    | _ =>
-        Builtin ty' (MakeArray NONE (Fixed (LENGTH es))) (translate_expr_list ctx es)) /\
+    translate_list ctx ty (translate_expr_list ctx es)) /\
 
   (* Call - single case with internal dispatch to avoid pattern completion issues *)
   (* JE_Call now includes source_id for module calls *)
