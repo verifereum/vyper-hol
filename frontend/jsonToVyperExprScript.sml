@@ -598,44 +598,9 @@ Proof
   res_tac >> gvs[]
 QED
 
-Definition translate_expr_def:
-  (translate_expr ctx (JE_Int v ty) =
-    Literal (translate_type (expr_type_ctx ctx) ty) (IntL v)) /\
-
-  (translate_expr ctx (JE_Decimal s) =
-    Literal (BaseT DecimalT) (DecimalL (decimal_string_to_int s))) /\
-
-  (translate_expr ctx (JE_Str len s) =
-    Literal (BaseT (StringT len)) (StringL s)) /\
-
-  (translate_expr ctx (JE_GenericStr s) =
-    Literal (BaseT (StringT (STRLEN s))) (StringL s)) /\
-
-  (translate_expr ctx (JE_Bytes len hex) =
-    Literal (BaseT (BytesT (Dynamic len))) (BytesL (hex_string_to_bytes (FILTER isHexDigit (strip_0x hex))))) /\
-
-  (translate_expr ctx (JE_Hex hex typ) =
-    let bytes = hex_string_to_bytes (FILTER isHexDigit (strip_0x hex)) in
-    let ty = case typ of
-               JT_None => BaseT (BytesT (Fixed (LENGTH bytes)))
-             | _ => translate_type (expr_type_ctx ctx) typ in
-    Literal ty (BytesL bytes)) /\
-
-  (translate_expr ctx (JE_Bool b) = Literal (BaseT BoolT) (BoolL b)) /\
-
-  (translate_expr ctx JE_Ellipsis = Literal (BaseT BoolT) (BoolL T)) /\
-
-  (translate_expr ctx (JE_Folded original folded) = translate_expr ctx folded) /\
-
-  (translate_expr ctx (JE_Name id tc src_id_opt ret_ty) =
-    let ty = translate_type (expr_type_ctx ctx) ret_ty in
-    if id = "self" then Builtin (BaseT AddressT) (Env SelfAddr) [] else make_name ctx ty id) /\
-
-  (* Special attributes: msg.*, block.*, tx.*, self.*, module.*, flag members *)
-  (* attr_src_id_opt is from variable_reads on the outer Attribute (for self.x storage access) *)
-  (* base_type_name is the type name of the base expression (e.g., "address" for addr.code) *)
-  (* base_typeclass is the typeclass of the base expression (e.g., "interface" for interface.address) *)
-  (translate_expr ctx (JE_Attribute e attr result_tc base_type_name base_typeclass attr_src_id_opt ret_ty) =
+Definition translate_attribute_def:
+  translate_attribute ctx e translated_base attr result_tc base_type_name
+      base_typeclass attr_src_id_opt ret_ty =
     case e of
     | JE_Name obj tc src_id_opt base_ret_ty =>
     let ty = translate_type (expr_type_ctx ctx) ret_ty in
@@ -681,19 +646,64 @@ Definition translate_expr_def:
     if result_tc = SOME "flag" then
       case extract_module_flag ctx e of
         SOME nsid => make_flag_member nsid attr
-      | NONE => Attribute ty (translate_expr ctx e) attr
+      | NONE => Attribute ty translated_base attr
     (* Nested module access: mod3.mod2.mod1.X — use variable_reads source_id *)
     else if is_module_expr e then
       let nsid = (resolve_source_ref ctx attr_src_id_opt, attr) in
       TopLevelName (lookup_toplevel_type ctx nsid ty) nsid
-    else if attr = "balance" /\ base_type_name = SOME "address" then Builtin (BaseT (UintT 256)) (Acc Balance) [translate_expr ctx e]
-    else if attr = "address" /\ base_type_name = SOME "address" then Builtin (BaseT AddressT) (Acc Address) [translate_expr ctx e]
-    else if attr = "address" /\ base_typeclass = SOME "interface" then translate_expr ctx e (* interface.address = interface (identity) *)
-    else if attr = "is_contract" /\ base_type_name = SOME "address" then Builtin (BaseT BoolT) (Acc IsContract) [translate_expr ctx e]
-    else if attr = "codesize" /\ base_type_name = SOME "address" then Builtin (BaseT (UintT 256)) (Acc Codesize) [translate_expr ctx e]
-    else if attr = "codehash" /\ base_type_name = SOME "address" then Builtin (BaseT (BytesT (Fixed 32))) (Acc Codehash) [translate_expr ctx e]
-    else if attr = "code" /\ base_type_name = SOME "address" then Builtin (BaseT (BytesT (Dynamic 24576))) (Acc Code) [translate_expr ctx e]
-    else Attribute ty (translate_expr ctx e) attr) /\
+    else if attr = "balance" /\ base_type_name = SOME "address" then Builtin (BaseT (UintT 256)) (Acc Balance) [translated_base]
+    else if attr = "address" /\ base_type_name = SOME "address" then Builtin (BaseT AddressT) (Acc Address) [translated_base]
+    else if attr = "address" /\ base_typeclass = SOME "interface" then translated_base (* interface.address = interface (identity) *)
+    else if attr = "is_contract" /\ base_type_name = SOME "address" then Builtin (BaseT BoolT) (Acc IsContract) [translated_base]
+    else if attr = "codesize" /\ base_type_name = SOME "address" then Builtin (BaseT (UintT 256)) (Acc Codesize) [translated_base]
+    else if attr = "codehash" /\ base_type_name = SOME "address" then Builtin (BaseT (BytesT (Fixed 32))) (Acc Codehash) [translated_base]
+    else if attr = "code" /\ base_type_name = SOME "address" then Builtin (BaseT (BytesT (Dynamic 24576))) (Acc Code) [translated_base]
+    else Attribute ty translated_base attr
+End
+
+
+Definition translate_expr_def:
+  (translate_expr ctx (JE_Int v ty) =
+    Literal (translate_type (expr_type_ctx ctx) ty) (IntL v)) /\
+
+  (translate_expr ctx (JE_Decimal s) =
+    Literal (BaseT DecimalT) (DecimalL (decimal_string_to_int s))) /\
+
+  (translate_expr ctx (JE_Str len s) =
+    Literal (BaseT (StringT len)) (StringL s)) /\
+
+  (translate_expr ctx (JE_GenericStr s) =
+    Literal (BaseT (StringT (STRLEN s))) (StringL s)) /\
+
+  (translate_expr ctx (JE_Bytes len hex) =
+    Literal (BaseT (BytesT (Dynamic len))) (BytesL (hex_string_to_bytes (FILTER isHexDigit (strip_0x hex))))) /\
+
+  (translate_expr ctx (JE_Hex hex typ) =
+    let bytes = hex_string_to_bytes (FILTER isHexDigit (strip_0x hex)) in
+    let ty = case typ of
+               JT_None => BaseT (BytesT (Fixed (LENGTH bytes)))
+             | _ => translate_type (expr_type_ctx ctx) typ in
+    Literal ty (BytesL bytes)) /\
+
+  (translate_expr ctx (JE_Bool b) = Literal (BaseT BoolT) (BoolL b)) /\
+
+  (translate_expr ctx JE_Ellipsis = Literal (BaseT BoolT) (BoolL T)) /\
+
+  (translate_expr ctx (JE_Folded original folded) = translate_expr ctx folded) /\
+
+  (translate_expr ctx (JE_Name id tc src_id_opt ret_ty) =
+    let ty = translate_type (expr_type_ctx ctx) ret_ty in
+    if id = "self" then Builtin (BaseT AddressT) (Env SelfAddr) [] else make_name ctx ty id) /\
+
+  (* Special attributes: msg.*, block.*, tx.*, self.*, module.*, flag members *)
+  (* attr_src_id_opt is from variable_reads on the outer Attribute (for self.x storage access) *)
+  (* base_type_name is the type name of the base expression (e.g., "address" for addr.code) *)
+  (* base_typeclass is the typeclass of the base expression (e.g., "interface" for interface.address) *)
+  (translate_expr ctx
+      (JE_Attribute e attr result_tc base_type_name base_typeclass
+        attr_src_id_opt ret_ty) =
+    translate_attribute ctx e (translate_expr ctx e) attr result_tc
+      base_type_name base_typeclass attr_src_id_opt ret_ty) /\
 
   (* Subscript *)
   (translate_expr ctx (JE_Subscript arr idx ret_ty) =
