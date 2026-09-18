@@ -676,6 +676,21 @@ Definition translate_list_def:
 End
 
 
+Definition translate_boolop_def:
+  (translate_boolop JBoolop_And es = boolop_and es) /\
+  (translate_boolop JBoolop_Or es = boolop_or es)
+End
+
+
+Definition translate_unary_def:
+  (translate_unary ctx JUop_USub e ret_ty =
+    Builtin (translate_type (expr_type_ctx ctx) ret_ty) Neg [e]) /\
+  (translate_unary ctx JUop_Not e ret_ty = Builtin (BaseT BoolT) Not [e]) /\
+  (translate_unary ctx JUop_Invert e ret_ty =
+    Builtin (translate_type (expr_type_ctx ctx) ret_ty) Not [e])
+End
+
+
 Definition translate_expr_def:
   (translate_expr ctx (JE_Int v ty) =
     Literal (translate_type (expr_type_ctx ctx) ty) (IntL v)) /\
@@ -737,18 +752,11 @@ Definition translate_expr_def:
 
   (* BoolOp - convert to nested IfExp *)
   (translate_expr ctx (JE_BoolOp op es) =
-    case op of
-    | JBoolop_And => boolop_and (translate_expr_list ctx es)
-    | JBoolop_Or => boolop_or (translate_expr_list ctx es)) /\
+    translate_boolop op (translate_expr_list ctx es)) /\
 
   (* UnaryOp *)
   (translate_expr ctx (JE_UnaryOp op e ret_ty) =
-    case op of
-    | JUop_USub =>
-        Builtin (translate_type (expr_type_ctx ctx) ret_ty) Neg [translate_expr ctx e]
-    | JUop_Not => Builtin (BaseT BoolT) Not [translate_expr ctx e]
-    | JUop_Invert =>
-        Builtin (translate_type (expr_type_ctx ctx) ret_ty) Not [translate_expr ctx e]) /\
+    translate_unary ctx op (translate_expr ctx e) ret_ty) /\
 
   (* IfExp (ternary) *)
   (translate_expr ctx (JE_IfExp test body orelse ret_ty) =
