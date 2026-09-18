@@ -2,7 +2,8 @@ structure vyperCheckContractLib :> vyperCheckContractLib = struct
 
 open HolKernel boolLib bossLib
 open vyperASTTheory vyperContextTheory vyperInterpreterTheory
-open vyperTypeCallGraphTheory vyperTypeContractTheory vyperTypeSystemTheory
+open vyperTypeCallGraphTheory vyperTypeCallGraphSoundnessTheory
+open vyperTypeContractTheory vyperTypeSystemTheory
 
  type check_input =
   {in_deploy : bool,
@@ -47,6 +48,10 @@ val checker_defs =
    flag_member_keys_toplevel_def,
    type_def_keys_toplevel_def,
    contract_call_graph_acyclic_def,
+   rank_lt_def,
+   edges_respect_rank_def,
+   call_path_def,
+   call_graph_cycle_def,
    call_graph_acyclic_def,
    contract_call_nodes_def,
    contract_call_edges_def,
@@ -189,6 +194,18 @@ fun build_checker_base () =
   |> computeLib.extend_compset [computeLib.Tys checker_datatypes]
   |> computeLib.add_thms checker_defs
 
+fun inst_apply function argument = let
+  val (domain_ty, _) = dom_rng (type_of function)
+  val instantiated = Term.inst
+    (Type.match_type domain_ty (type_of argument)) function
+in
+  mk_comb (instantiated, argument)
+end
+
+fun apply function arguments =
+  foldl (fn (argument, applied) => inst_apply applied argument)
+    function arguments
+
 fun eta_expand_quantifier_predicate tm = let
   val (quantifier, predicate) = dest_comb tm
   val (domain_ty, _) = dom_rng (type_of predicate)
@@ -199,9 +216,111 @@ in
 end
 
 val check_contract_compset = let
-  (* This inner compset has no quantifier hooks, avoiding recursive invocation
-     of the outer hook while a closed predicate body is normalized. *)
+  (* These inner conversions have no call-graph or quantifier hooks, avoiding
+     recursive invocation while certificates and quantified bodies compute. *)
+  val call_graph_base_conv = computeLib.CBV_CONV (build_checker_base ())
   val quantifier_body_conv = computeLib.CBV_CONV (build_checker_base ())
+  val call_graph_const = prim_mk_const
+    {Thy = "vyperTypeCallGraph", Name = "contract_call_graph_acyclic"}
+  val call_edges_const = prim_mk_const
+    {Thy = "vyperTypeCallGraph", Name = "contract_call_edges"}
+  val rank_check_const = prim_mk_const
+    {Thy = "vyperTypeCallGraph", Name = "edges_respect_rank"}
+  val cycle_check_const = prim_mk_const
+    {Thy = "vyperTypeCallGraph", Name = "call_graph_cycle"}
+  val node_ty = ``:num option # string``
+  val rank_entry_ty = ``:(num option # string) # num``
+
+  fun term_mem tm = List.exists (fn other => aconv tm other)
+  fun term_insert tm terms = if term_mem tm terms then terms else tm::terms
+  fun endpoints edge = pairSyntax.dest_pair edge
+
+  (* This ML search is untrusted: both outcomes are rechecked by closed HOL
+     predicates, and only their soundness theorems produce the final result. *)
+  datatype graph_search = Ranked of term list | Cycle of term list
+  exception CyclicCallGraph of term list
+
+  fun topological_order edges = let
+    val raw_nodes = List.concat (map (fn edge => let
+      val (caller, callee) = endpoints edge
+    in [caller, callee] end) edges)
+    val nodes = rev
+      (foldl (fn (tm, terms) => term_insert tm terms) [] raw_nodes)
+    val temporary = ref ([] : term list)
+    val permanent = ref ([] : term list)
+    val postorder = ref ([] : term list)
+    fun successors node = map (snd o endpoints)
+      (List.filter
+        (fn edge => aconv (fst (endpoints edge)) node) edges)
+    fun path_from target [] =
+          raise Fail "call-graph DFS lost its active target"
+      | path_from target (node::rest) =
+          if aconv node target then [node]
+          else node :: path_from target rest
+    fun visit node =
+      if term_mem node (!permanent) then ()
+      else if term_mem node (!temporary) then
+        raise CyclicCallGraph (rev (path_from node (!temporary)))
+      else let
+        val () = temporary := node :: !temporary
+        val () = List.app visit (successors node)
+        val () = temporary :=
+          List.filter (fn other => not (aconv other node)) (!temporary)
+        val () = permanent := node :: !permanent
+        val () = postorder := node :: !postorder
+      in () end
+    val () = List.app visit nodes
+  in
+    !postorder
+  end
+
+  fun rank_certificate nodes =
+    listSyntax.mk_list
+      (ListPair.mapEq
+        (fn (node, index) =>
+          pairSyntax.mk_pair (node, numSyntax.term_of_int index))
+        (nodes, List.tabulate (length nodes, fn index => index)),
+       rank_entry_ty)
+
+  fun call_graph_conv tm = let
+    val (head, arguments) = strip_comb tm
+    val () = if aconv head call_graph_const andalso length arguments = 1
+      then () else raise UNCHANGED
+    val mods = hd arguments
+    val () = if null (free_vars mods) then () else raise UNCHANGED
+    val edges_tm = apply call_edges_const [mods]
+    val edges_thm = call_graph_base_conv edges_tm
+    val (actual_edges_tm, edges) = dest_eq (concl edges_thm)
+    val () = if aconv actual_edges_tm edges_tm then ()
+      else raise Fail "call-graph edge conversion changed its left-hand side"
+    val (edge_terms, _) = listSyntax.dest_list edges
+  in
+    case (Ranked (topological_order edge_terms)
+          handle CyclicCallGraph path => Cycle path) of
+      Cycle path => let
+        val path_tm = listSyntax.mk_list (path, node_ty)
+        val certificate_tm = apply cycle_check_const [edges_tm, path_tm]
+        val certificate_thm = call_graph_base_conv certificate_tm
+        val certificate = EQT_ELIM certificate_thm
+        val cyclic = MATCH_MP contract_call_graph_cycle certificate
+        val () = if aconv (dest_neg (concl cyclic)) tm then ()
+          else raise Fail "cycle certificate proved an unexpected proposition"
+      in
+        EQF_INTRO cyclic
+      end
+    | Ranked ordered_nodes => let
+        val ranks = rank_certificate ordered_nodes
+        val certificate_tm = apply rank_check_const [ranks, edges_tm]
+        val certificate_thm = call_graph_base_conv certificate_tm
+        val certificate = EQT_ELIM certificate_thm
+        val acyclic = MATCH_MP contract_edges_respect_rank certificate
+        val () = if aconv (concl acyclic) tm then ()
+          else raise Fail "rank certificate proved an unexpected proposition"
+      in
+        EQT_INTRO acyclic
+      end
+  end
+
   val normalize_quantifier_predicate =
     SIMP_CONV bool_ss [vyperASTTheory.type_distinct]
   fun determined_quantifier_conv tm =
@@ -216,6 +335,8 @@ val check_contract_compset = let
      SIMP_CONV bool_ss [vyperASTTheory.type_distinct]) tm
 in
   build_checker_base ()
+  |> (fn cs => computeLib.scrub_const cs call_graph_const)
+  |> computeLib.add_conv (call_graph_const, 1, call_graph_conv)
   |> computeLib.add_conv
        (boolSyntax.existential, 1, determined_quantifier_conv)
   |> computeLib.add_conv
@@ -225,14 +346,6 @@ end
 
 fun check_contract_conv tm =
   computeLib.CBV_CONV check_contract_compset tm
-
-fun inst_apply function argument = let
-  val (domain_ty, _) = dom_rng (type_of function)
-  val instantiated = Term.inst
-    (Type.match_type domain_ty (type_of argument)) function
-in
-  mk_comb (instantiated, argument)
-end
 
 fun mk_check_contract {in_deploy, layouts, address, modules} =
   let

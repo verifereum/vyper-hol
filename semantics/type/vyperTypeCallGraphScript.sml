@@ -6,6 +6,7 @@
  * - contract_call_edges: whole-contract call graph
  * - contract_call_graph_acyclic: bounded executable cycle check
  * - edges_respect_rank: topological-rank certificate checker
+ * - call_graph_cycle: concrete cycle certificate checker
  *)
 
 Theory vyperTypeCallGraph
@@ -193,5 +194,19 @@ End
 Definition edges_respect_rank_def:
   edges_respect_rank ranks edges =
     EVERY (\(caller,callee). rank_lt ranks caller callee) edges
+End
+
+Definition call_path_def:
+  call_path edges [] = T /\
+  call_path edges [node] = T /\
+  call_path edges (caller::callee::rest) =
+    (MEM (caller,callee) edges /\ call_path edges (callee::rest))
+End
+
+Definition call_graph_cycle_def:
+  call_graph_cycle edges [] = F /\
+  call_graph_cycle edges (first::rest) =
+    (call_path edges (first::rest) /\
+     MEM (LAST (first::rest),first) edges)
 End
 
