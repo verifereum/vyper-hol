@@ -635,7 +635,9 @@ Definition translate_expr_def:
   (* attr_src_id_opt is from variable_reads on the outer Attribute (for self.x storage access) *)
   (* base_type_name is the type name of the base expression (e.g., "address" for addr.code) *)
   (* base_typeclass is the typeclass of the base expression (e.g., "interface" for interface.address) *)
-  (translate_expr ctx (JE_Attribute (JE_Name obj tc src_id_opt base_ret_ty) attr result_tc base_type_name base_typeclass attr_src_id_opt ret_ty) =
+  (translate_expr ctx (JE_Attribute e attr result_tc base_type_name base_typeclass attr_src_id_opt ret_ty) =
+    case e of
+    | JE_Name obj tc src_id_opt base_ret_ty =>
     let ty = translate_type (expr_type_ctx ctx) ret_ty in
     let base_ty = translate_type (expr_type_ctx ctx) base_ret_ty in
     (* Same-module flag member: Action.BUY where tc = SOME "flag" *)
@@ -668,13 +670,13 @@ Definition translate_expr_def:
     else if attr = "codesize" /\ base_type_name = SOME "address" then Builtin (BaseT (UintT 256)) (Acc Codesize) [make_name ctx base_ty obj]
     else if attr = "codehash" /\ base_type_name = SOME "address" then Builtin (BaseT (BytesT (Fixed 32))) (Acc Codehash) [make_name ctx base_ty obj]
     else if attr = "code" /\ base_type_name = SOME "address" then Builtin (BaseT (BytesT (Dynamic 24576))) (Acc Code) [make_name ctx base_ty obj]
-    else Attribute ty (make_name ctx base_ty obj) attr) /\
+    else Attribute ty (make_name ctx base_ty obj) attr
 
   (* General attribute - handles nested and simple cases *)
   (* Check for cross-module flag access: lib1.Action.BUY *)
   (* base_type_name is the type name of the base expression (e.g., "address" for addr.code) *)
   (* base_typeclass is the typeclass of the base expression (e.g., "interface" for interface.address) *)
-  (translate_expr ctx (JE_Attribute e attr result_tc base_type_name base_typeclass attr_src_id_opt ret_ty) =
+    | _ =>
     let ty = translate_type (expr_type_ctx ctx) ret_ty in
     if result_tc = SOME "flag" then
       case extract_module_flag ctx e of
@@ -710,18 +712,19 @@ Definition translate_expr_def:
       [translate_expr ctx l; translate_expr ctx r]) /\
 
   (* BoolOp - convert to nested IfExp *)
-  (translate_expr ctx (JE_BoolOp JBoolop_And es) =
-    boolop_and (translate_expr_list ctx es)) /\
-  (translate_expr ctx (JE_BoolOp JBoolop_Or es) =
-    boolop_or (translate_expr_list ctx es)) /\
+  (translate_expr ctx (JE_BoolOp op es) =
+    case op of
+    | JBoolop_And => boolop_and (translate_expr_list ctx es)
+    | JBoolop_Or => boolop_or (translate_expr_list ctx es)) /\
 
   (* UnaryOp *)
-  (translate_expr ctx (JE_UnaryOp JUop_USub e ret_ty) =
-    Builtin (translate_type (expr_type_ctx ctx) ret_ty) Neg [translate_expr ctx e]) /\
-  (translate_expr ctx (JE_UnaryOp JUop_Not e ret_ty) =
-    Builtin (BaseT BoolT) Not [translate_expr ctx e]) /\
-  (translate_expr ctx (JE_UnaryOp JUop_Invert e ret_ty) =
-    Builtin (translate_type (expr_type_ctx ctx) ret_ty) Not [translate_expr ctx e]) /\
+  (translate_expr ctx (JE_UnaryOp op e ret_ty) =
+    case op of
+    | JUop_USub =>
+        Builtin (translate_type (expr_type_ctx ctx) ret_ty) Neg [translate_expr ctx e]
+    | JUop_Not => Builtin (BaseT BoolT) Not [translate_expr ctx e]
+    | JUop_Invert =>
+        Builtin (translate_type (expr_type_ctx ctx) ret_ty) Not [translate_expr ctx e]) /\
 
   (* IfExp (ternary) *)
   (translate_expr ctx (JE_IfExp test body orelse ret_ty) =
