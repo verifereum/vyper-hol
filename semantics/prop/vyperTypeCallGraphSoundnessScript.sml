@@ -4,6 +4,7 @@
  * TOP-LEVEL:
  * - check_contract_call_graph_acyclic
  * - contract_call_edges_function
+ * - contract_edges_respect_rank
  *)
 
 Theory vyperTypeCallGraphSoundness
@@ -172,7 +173,52 @@ Proof
   gvs[TC_eq_NRC]
 QED
 
+(* ===== Topological-rank certificate soundness ===== *)
 
+Theorem edges_respect_rank_edge:
+  edges_respect_rank ranks edges /\ call_edge_rel edges caller callee ==>
+  rank_lt ranks caller callee
+Proof
+  rw[edges_respect_rank_def, EVERY_MEM, call_edge_rel_def] >>
+  first_x_assum (qspec_then `(caller,callee)` mp_tac) >>
+  simp[]
+QED
+
+Theorem rank_lt_transitive:
+  transitive (rank_lt ranks)
+Proof
+  rw[relationTheory.transitive_def] >>
+  Cases_on `ALOOKUP ranks x` >>
+  Cases_on `ALOOKUP ranks y` >>
+  Cases_on `ALOOKUP ranks z` >>
+  gvs[rank_lt_def] >>
+  match_mp_tac (DECIDE ``!a b c:num. a < b /\ b < c ==> a < c``) >>
+  simp[]
+QED
+
+Theorem edges_respect_rank_TC:
+  edges_respect_rank ranks edges /\
+  TC (call_edge_rel edges) caller callee ==>
+  rank_lt ranks caller callee
+Proof
+  strip_tac >>
+  qpat_x_assum `TC _ _ _` mp_tac >>
+  qid_spec_tac `callee` >> qid_spec_tac `caller` >>
+  ho_match_mp_tac relationTheory.TC_INDUCT >>
+  metis_tac[edges_respect_rank_edge, rank_lt_transitive,
+            relationTheory.transitive_def]
+QED
+
+Theorem edges_respect_rank_irreflexive:
+  edges_respect_rank ranks edges ==>
+  irreflexive (TC (call_edge_rel edges))
+Proof
+  rw[relationTheory.irreflexive_def] >>
+  strip_tac >>
+  drule_all edges_respect_rank_TC >>
+  Cases_on `ALOOKUP ranks x` >>
+  gvs[rank_lt_def]
+QED
 
 (* ===== Checker consequence ===== *)
 
@@ -234,6 +280,15 @@ Proof
   rpt strip_tac >>
   drule contract_call_edge_nodes >>
   simp[]
+QED
+
+Theorem contract_edges_respect_rank:
+  edges_respect_rank ranks (contract_call_edges mods) ==>
+  contract_call_graph_acyclic mods
+Proof
+  strip_tac >>
+  simp[contract_call_graph_acyclic_correct] >>
+  metis_tac[edges_respect_rank_irreflexive]
 QED
 
 Theorem checked_contract_call_graph_irreflexive:

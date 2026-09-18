@@ -5,11 +5,12 @@
  * - int_calls_expr / int_calls_stmt: syntactic internal-call extraction
  * - contract_call_edges: whole-contract call graph
  * - contract_call_graph_acyclic: bounded executable cycle check
+ * - edges_respect_rank: topological-rank certificate checker
  *)
 
 Theory vyperTypeCallGraph
 Ancestors
-  list rich_list vyperAST
+  alist list rich_list vyperAST
 Libs
   cv_transLib
 
@@ -178,5 +179,19 @@ End
 Definition contract_call_graph_acyclic_def:
   contract_call_graph_acyclic mods <=>
     call_graph_acyclic (contract_call_nodes mods) (contract_call_edges mods)
+End
+
+(* ===== Topological-rank certificates ===== *)
+
+Definition rank_lt_def:
+  rank_lt (ranks : ((num option # string) # num) list) caller callee =
+    case (ALOOKUP ranks caller, ALOOKUP ranks callee) of
+    | (SOME caller_rank, SOME callee_rank) => caller_rank < callee_rank
+    | _ => F
+End
+
+Definition edges_respect_rank_def:
+  edges_respect_rank ranks edges =
+    EVERY (\(caller,callee). rank_lt ranks caller callee) edges
 End
 
