@@ -1,6 +1,7 @@
 Theory vyperTestRunner
 Ancestors
   contractABI vyperABI vyperSmallStep jsonAST jsonToVyper
+  vfmContext vfmExecution vfmTransaction
 Libs
   cv_transLib wordsLib
 
@@ -43,6 +44,26 @@ Datatype:
   ; runtimeBytecode: byte list
   ; storageLayout: json_storage_layout
   ; isBlueprint: bool
+  |>
+End
+
+Datatype:
+  raw_deployment_trace = <|
+    deployer: address
+  ; expectedAddress: address
+  ; expectedSuccess: bool
+  ; value: num
+  ; timeStamp: num
+  ; blockNumber: num
+  ; blockHashes: bytes32 list
+  ; blobHashes: bytes32 list
+  ; blobBaseFee: num
+  ; gasLimit: num
+  ; gasPrice: num
+  ; chainId: num
+  ; initcode: byte list
+  ; callData: byte list
+  ; expectedRuntimeBytecode: byte list option
   |>
 End
 
@@ -102,6 +123,7 @@ End
 Datatype:
   trace
   = Deployment deployment_trace
+  | RawDeployment raw_deployment_trace
   | Call call_trace
   | SetBalance address num
   | ClearTransientStorage
@@ -172,6 +194,30 @@ End
 
 val () = cv_auto_trans run_deployment_def;
 
+Definition call_trace_txn_def:
+  call_trace_txn ct =
+    <| sender := ct.sender
+     ; target := ct.target
+     ; function_name := ""
+     ; args := []
+     ; value := ct.value
+     ; time_stamp := ct.timeStamp
+     ; block_number := ct.blockNumber
+     ; block_hashes := ct.blockHashes
+     ; blob_hashes := ct.blobHashes
+     ; blob_base_fee := ct.blobBaseFee
+     ; gas_price := ct.gasPrice
+     ; chain_id := ct.chainId
+     ; is_creation := F
+     ; coinbase := 0w
+     ; gas_limit := ct.gasLimit
+     ; base_fee := 0
+     ; prev_randao := 0
+     ; origin := ct.sender |>
+End
+
+val () = cv_auto_trans call_trace_txn_def;
+
 Definition run_call_def:
   run_call sns am ct = let
     sel = TAKE 4 ct.callData;
@@ -221,6 +267,23 @@ End
 
 val () = cv_auto_trans run_call_def;
 
+Definition raw_call_evm_def:
+  raw_call_evm am ct =
+    let value_opt = if ct.static then NONE else SOME ct.value in
+    let txParams = vyper_to_tx_params (call_trace_txn ct) in
+    case run_ext_call ct.sender ct.target ct.callData value_opt
+                      am.accounts am.tStorage txParams of
+    | NONE => (INR (Error $ RuntimeError "raw_call_evm"), am)
+    | SOME (success, returnData, accounts, tStorage, emitted_logs) =>
+        let am' = am with <| accounts := accounts;
+                            tStorage := tStorage;
+                            logs updated_by (λls. ls ++ emitted_logs) |> in
+        if success then (INL returnData, am')
+        else (INR (Error $ RuntimeError "raw_call_evm reverted"), am')
+End
+
+val () = cv_auto_trans raw_call_evm_def;
+
 Definition is_transfer_def:
   is_transfer ct ⇔
   NULL ct.callData ∧ ¬ct.static ∧
@@ -255,6 +318,90 @@ val () = do_transfer_def
   |> SRULE [combinTheory.o_DEF, combinTheory.C_DEF]
   |> cv_auto_trans;
 
+Definition increment_account_nonce_def:
+  increment_account_nonce addr am =
+    am with accounts updated_by
+      (update_account addr
+        ((lookup_account addr am.accounts) with nonce updated_by SUC))
+End
+
+val () = increment_account_nonce_def
+  |> SRULE [combinTheory.o_DEF, combinTheory.C_DEF]
+  |> cv_auto_trans;
+
+Definition make_create_tx_def:
+  make_create_tx sender nonce value data gas_limit gas_price : transaction =
+    <| from := sender
+     ; to := NONE
+     ; data := data
+     ; nonce := nonce
+     ; value := value
+     ; gasLimit := MIN gas_limit (2 ** 24)
+     ; gasPrice := gas_price
+     ; accessList := []
+     ; blobVersionedHashes := []
+     ; maxFeePerBlobGas := NONE
+     ; maxFeePerGas := NONE
+     ; authorizationList := []
+     |>
+End
+
+val () = cv_auto_trans make_create_tx_def;
+
+Definition make_create_block_def:
+  make_create_block (dt: raw_deployment_trace) =
+    <| baseFeePerGas := 0
+     ; excessBlobGas := dt.blobBaseFee
+     ; gasUsed := 0
+     ; blobGasUsed := 0
+     ; number := dt.blockNumber
+     ; timeStamp := dt.timeStamp
+     ; coinBase := 0w
+     ; gasLimit := dt.gasLimit
+     ; prevRandao := 0w
+     ; hash := 0w
+     ; parentBeaconBlockRoot := 0w
+     ; requestsHash := 0w
+     ; stateRoot := 0w
+     ; withdrawalsRoot := 0w
+     ; transactions := []
+     ; withdrawals := []
+     |>
+End
+
+val () = cv_auto_trans make_create_block_def;
+
+Definition run_raw_deployment_def:
+  run_raw_deployment am (dt: raw_deployment_trace) =
+    let sender = lookup_account dt.deployer am.accounts in
+    let tx = make_create_tx dt.deployer sender.nonce dt.value
+                            (dt.initcode ++ dt.callData)
+                            dt.gasLimit dt.gasPrice in
+    let expected = callee_from_tx_to dt.deployer sender.nonce NONE in
+    let blk = make_create_block dt in
+    if expected <> dt.expectedAddress then
+      INR (Error $ RuntimeError "raw deployment address mismatch")
+    else
+      case vfmExecution$run_transaction (Collect empty_domain) F dt.chainId
+                                        dt.blockHashes blk am.accounts tx of
+      | NONE => INR (Error $ RuntimeError "raw deployment run failed")
+      | SOME (tr, accounts) =>
+          let success = IS_NONE tr.result in
+          if success <> dt.expectedSuccess then
+            INR (Error $ RuntimeError "raw deployment success mismatch")
+          else if success then
+            let code = (lookup_account dt.expectedAddress accounts).code in
+            if case dt.expectedRuntimeBytecode of
+               | NONE => F
+               | SOME bc => code <> bc
+            then INR (Error $ RuntimeError "raw deployment bytecode mismatch")
+            else INL (am with <| accounts := accounts;
+                                 logs updated_by (λls. ls ++ tr.logs) |>)
+          else INL (increment_account_nonce dt.deployer am)
+End
+
+val () = cv_auto_trans run_raw_deployment_def;
+
 Definition run_trace_def:
   run_trace snss am tr =
   case tr
@@ -265,7 +412,7 @@ Definition run_trace_def:
             (update_account dt.deployedAddress
               ((lookup_account dt.deployedAddress am.accounts)
                 with code := dt.runtimeBytecode)) in
-      ((dt.deployedAddress,[])::snss, INL am')
+      ((dt.deployedAddress,[])::snss, INL (increment_account_nonce dt.deployer am'))
     else let
       (s_layout, t_layout) = extract_storage_layout dt.importMap dt.storageLayout;
       am_with_layout = am with layouts updated_by CONS (dt.deployedAddress, (s_layout, t_layout));
@@ -282,9 +429,14 @@ Definition run_trace_def:
               | err => err
             else if ISR res then INL am
             else INR (Error $ RuntimeError "deployment success");
+      res = case res of
+              INL am' => INL (increment_account_nonce dt.deployer am')
+            | INR e => INR e;
       snss = (dt.deployedAddress,sns)::snss;
     in
       (snss, res)
+   | RawDeployment dt =>
+     (snss, run_raw_deployment am dt)
    | ClearTransientStorage => (snss,
        INL (am with tStorage := empty_transient_storage))
    | SetBalance addr bal => (snss,
@@ -295,6 +447,18 @@ Definition run_trace_def:
    | Call ct => (snss,
      case ALOOKUP snss ct.target
      of NONE => if is_transfer ct then do_transfer ct am
+                else if ¬NULL (lookup_account ct.target am.accounts).code then
+                  let rr = raw_call_evm am ct in
+                  let res = FST rr; am' = SND rr in
+                  case res of
+                  | INR ex => if IS_NONE ct.expectedOutput then INL am'
+                              else INR ex
+                  | INL out =>
+                      (case ct.expectedOutput of
+                       | NONE => INR (Error $ RuntimeError "error expected")
+                       | SOME expected =>
+                           if out = expected then INL am'
+                           else INR (Error $ RuntimeError "output mismatch"))
                 else if IS_NONE ct.expectedOutput then INL am
                 else INR (Error $ TypeError "sns not found")
       | SOME sns => let
