@@ -649,6 +649,29 @@ Proof
   simp[lookup_scopes_def]
 QED
 
+Theorem checked_observable_immutable_initializer_probe[local]:
+  ?art.
+    check_contract F [] (0w:address)
+      [(NONE,
+        [VariableDecl Private Immutable "x" (BaseT BoolT) NONE;
+         VariableDecl Private
+           (Constant (TopLevelName (BaseT BoolT) (NONE,"x")))
+           "y" (BaseT BoolT) NONE])] = SOME art /\
+    find_var_decl_by_num (string_to_num "x")
+      [VariableDecl Private Immutable "x" (BaseT BoolT) NONE;
+       VariableDecl Private
+         (Constant (TopLevelName (BaseT BoolT) (NONE,"x")))
+         "y" (BaseT BoolT) NONE] = NONE
+Proof
+  qexists `build_contract_type_artifact F
+    [(NONE,
+      [VariableDecl Private Immutable "x" (BaseT BoolT) NONE;
+       VariableDecl Private
+         (Constant (TopLevelName (BaseT BoolT) (NONE,"x")))
+         "y" (BaseT BoolT) NONE])]` >>
+  EVAL_TAC
+QED
+
 Theorem artifact_env_singleton_empty_scopes_consistent[local]:
   env_scopes_consistent (artifact_env art mods src) cx
     (initial_state am [FEMPTY])
