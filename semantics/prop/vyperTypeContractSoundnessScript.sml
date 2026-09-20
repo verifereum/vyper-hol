@@ -718,6 +718,25 @@ Proof
   gvs[FLOOKUP_UPDATE, vyperTypingTheory.value_has_type_def,
       vyperTypingTheory.well_formed_type_value_def]
 QED
+Definition bad_tag_probe_am_c_def[local]:
+  bad_tag_probe_am_c =
+    THE (evaluate_all_constants bad_tag_probe_cx bad_tag_probe_am
+      (0w:address) bad_tag_probe_mods)
+End
+
+Theorem bad_tag_evaluate_all_constants_probe[local]:
+  evaluate_all_constants bad_tag_probe_cx bad_tag_probe_am
+    (0w:address) bad_tag_probe_mods = SOME bad_tag_probe_am_c /\
+  FLOOKUP
+    (get_source_immutables NONE
+      (case ALOOKUP bad_tag_probe_am_c.immutables (0w:address) of
+       | SOME imms => imms
+       | NONE => []))
+    (string_to_num "y") = SOME (BaseTV BoolT,IntV 0)
+Proof
+  EVAL_TAC >> simp[FLOOKUP_FUNION, FLOOKUP_UPDATE, return_def, raise_def]
+QED
+
 
 
 Theorem artifact_env_singleton_empty_scopes_consistent[local]:
