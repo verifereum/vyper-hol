@@ -671,6 +671,54 @@ Proof
          "y" (BaseT BoolT) NONE])]` >>
   EVAL_TAC
 QED
+Definition bad_tag_probe_ts_def[local]:
+  bad_tag_probe_ts =
+    [VariableDecl Private Immutable "x" (BaseT BoolT) NONE;
+     VariableDecl Private
+       (Constant (TopLevelName (BaseT BoolT) (NONE,"x")))
+       "y" (BaseT BoolT) NONE]
+End
+
+Definition bad_tag_probe_mods_def[local]:
+  bad_tag_probe_mods = [(NONE,bad_tag_probe_ts)]
+End
+
+Definition bad_tag_probe_imms_def[local]:
+  bad_tag_probe_imms =
+    [(NONE,FEMPTY |+ (string_to_num "x",(BaseTV (UintT 256),IntV 0)))]
+End
+
+Definition bad_tag_probe_am_def[local]:
+  bad_tag_probe_am =
+    initial_machine_state with immutables := [(0w,bad_tag_probe_imms)]
+End
+
+Definition bad_tag_probe_cx_def[local]:
+  bad_tag_probe_cx =
+    initial_evaluation_context [(0w,bad_tag_probe_mods)] [] empty_call_txn NONE
+End
+
+Theorem bad_tag_context_machine_probe[local]:
+  bad_tag_probe_cx.in_deploy = F /\
+  bad_tag_probe_cx.layouts = [] /\
+  bad_tag_probe_cx.nonreentrant_slot =
+    lookup_nonreentrant_slot [] (0w:address) /\
+  get_tenv bad_tag_probe_cx = type_env_all_modules bad_tag_probe_mods /\
+  machine_well_typed bad_tag_probe_am /\
+  context_well_typed bad_tag_probe_cx /\
+  ALOOKUP bad_tag_probe_cx.sources (0w:address) = SOME bad_tag_probe_mods /\
+  bad_tag_probe_cx.txn.target = (0w:address) /\
+  FLOOKUP (get_source_immutables NONE bad_tag_probe_imms)
+    (string_to_num "x") = SOME (BaseTV (UintT 256),IntV 0) /\
+  value_has_type (BaseTV (UintT 256)) (IntV 0) /\
+  ~value_has_type (BaseTV BoolT) (IntV 0)
+Proof
+  EVAL_TAC >> rpt strip_tac >>
+  Cases_on `id = string_to_num "x"` >>
+  gvs[FLOOKUP_UPDATE, vyperTypingTheory.value_has_type_def,
+      vyperTypingTheory.well_formed_type_value_def]
+QED
+
 
 Theorem artifact_env_singleton_empty_scopes_consistent[local]:
   env_scopes_consistent (artifact_env art mods src) cx
