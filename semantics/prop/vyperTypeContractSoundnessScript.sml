@@ -737,7 +737,54 @@ Proof
   EVAL_TAC >> simp[FLOOKUP_FUNION, FLOOKUP_UPDATE, return_def, raise_def]
 QED
 
+Theorem bad_tag_deployment_output_not_typed[local]:
+  ~deployment_constants_output_typed
+    (type_env_all_modules bad_tag_probe_mods) (0w:address)
+    bad_tag_probe_mods bad_tag_probe_am_c
+Proof
+  strip_tac >>
+  fs[deployment_constants_output_typed_def] >>
+  qpat_x_assum `!src ts vis e id ty init. _`
+    (qspecl_then
+      [`NONE`, `bad_tag_probe_ts`, `Private`,
+       `TopLevelName (BaseT BoolT) (NONE,"x")`, `"y"`,
+       `BaseT BoolT`, `NONE`] mp_tac) >>
+  simp[bad_tag_probe_mods_def, bad_tag_probe_ts_def,
+       bad_tag_evaluate_all_constants_probe,
+       vyperTypingTheory.value_has_type_def]
+QED
 
+
+
+Theorem checked_constant_output_typed_counterexample[local]:
+  ?artifact.
+    check_contract F [] (0w:address) bad_tag_probe_mods = SOME artifact /\
+    (bad_tag_probe_cx.in_deploy ==>
+      ?deploy_art.
+        check_contract T [] (0w:address) bad_tag_probe_mods = SOME deploy_art) /\
+    bad_tag_probe_cx.layouts = [] /\
+    bad_tag_probe_cx.nonreentrant_slot =
+      lookup_nonreentrant_slot [] (0w:address) /\
+    get_tenv bad_tag_probe_cx = type_env_all_modules bad_tag_probe_mods /\
+    machine_well_typed bad_tag_probe_am /\
+    context_well_typed bad_tag_probe_cx /\
+    ALOOKUP bad_tag_probe_cx.sources (0w:address) =
+      SOME bad_tag_probe_mods /\
+    bad_tag_probe_cx.txn.target = (0w:address) /\
+    evaluate_all_constants bad_tag_probe_cx bad_tag_probe_am
+      (0w:address) bad_tag_probe_mods = SOME bad_tag_probe_am_c /\
+    ~deployment_constants_output_typed
+      (type_env_all_modules bad_tag_probe_mods) (0w:address)
+      bad_tag_probe_mods bad_tag_probe_am_c
+Proof
+  strip_assume_tac checked_observable_immutable_initializer_probe >>
+  qexists `art` >>
+  simp[bad_tag_probe_mods_def, bad_tag_probe_ts_def,
+       bad_tag_context_machine_probe,
+       bad_tag_evaluate_all_constants_probe,
+       bad_tag_deployment_output_not_typed] >>
+  metis_tac[bad_tag_context_machine_probe]
+QED
 
 Theorem artifact_env_singleton_empty_scopes_consistent[local]:
   env_scopes_consistent (artifact_env art mods src) cx
