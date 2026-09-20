@@ -570,6 +570,64 @@ Proof
   simp[check_toplevel_decl_def]
 QED
 
+Definition constant_success_scopes_consistent_def[local]:
+  constant_success_scopes_consistent env cx (st:evaluation_state) <=>
+    (!id ty. FLOOKUP env.var_types id = SOME ty ==>
+       IS_SOME (lookup_scopes id st.scopes)) /\
+    (!id entry. lookup_scopes id st.scopes = SOME entry ==>
+       IS_SOME (FLOOKUP env.var_types id)) /\
+    (!id ty entry.
+       FLOOKUP env.var_types id = SOME ty /\
+       lookup_scopes id st.scopes = SOME entry ==>
+       evaluate_type (get_tenv cx) ty = SOME entry.type) /\
+    (!id. FLOOKUP env.var_assignable id = SOME T ==>
+       IS_SOME (FLOOKUP env.var_types id)) /\
+    (!id. FLOOKUP env.var_assignable id = SOME T ==>
+       ?entry. lookup_scopes id st.scopes = SOME entry /\ entry.assignable)
+End
+
+Definition constant_success_invariant_def[local]:
+  constant_success_invariant env cx (st:evaluation_state) <=>
+    env_context_consistent env cx /\
+    constant_success_scopes_consistent env cx st /\
+    state_well_typed st /\
+    accounts_well_typed st.accounts
+End
+
+Theorem constant_success_invariant_initial_closed[local]:
+  env_context_consistent env cx /\
+  env.var_types = FEMPTY /\ env.var_assignable = FEMPTY /\
+  machine_well_typed am ==>
+  constant_success_invariant env cx (initial_state am [])
+Proof
+  simp[constant_success_invariant_def,
+       constant_success_scopes_consistent_def, initial_state_def,
+       state_well_typed_def, machine_well_typed_def, lookup_scopes_def]
+QED
+
+Theorem constant_success_invariant_state_well_typed[local]:
+  constant_success_invariant env cx st ==> state_well_typed st
+Proof
+  simp[constant_success_invariant_def]
+QED
+
+Theorem constant_success_invariant_accounts_well_typed[local]:
+  constant_success_invariant env cx st ==> accounts_well_typed st.accounts
+Proof
+  simp[constant_success_invariant_def]
+QED
+
+Theorem constant_success_invariant_scope_lookup[local]:
+  constant_success_invariant env cx st /\
+  lookup_scopes id st.scopes = SOME entry ==>
+  ?ty. FLOOKUP env.var_types id = SOME ty /\
+       evaluate_type (get_tenv cx) ty = SOME entry.type
+Proof
+  simp[constant_success_invariant_def,
+       constant_success_scopes_consistent_def, IS_SOME_EXISTS] >>
+  metis_tac[]
+QED
+
 Theorem check_toplevel_decl_accepts_intcall_constant_probe[local]:
   ?art.
     check_toplevel_decl [] 0 [] art NONE
@@ -2738,6 +2796,33 @@ Proof
    flag_members_complete env.flag_members cx2` by
     (irule flag_members_complete_context_cong >> simp[]) >>
   simp[env_context_consistent_def]
+QED
+
+Theorem checked_constant_success_invariant_initial[local]:
+  check_contract F layouts target mods = SOME art /\
+  cx.layouts = layouts /\
+  ALOOKUP cx.sources target = SOME mods /\
+  cx.txn.target = target /\
+  ~cx.in_deploy /\
+  machine_well_typed am ==>
+  constant_success_invariant (artifact_env art mods src)
+    (set_current_module cx src) (initial_state am [])
+Proof
+  rpt strip_tac >>
+  irule constant_success_invariant_initial_closed >>
+  simp[artifact_env_def] >>
+  `env_context_consistent (artifact_env art mods src)
+     (initial_evaluation_context cx.sources layouts cx.txn src)` by
+    (irule check_contract_env_context_consistent_initial_src >> simp[]) >>
+  `env_context_consistent (artifact_env art mods src) (set_current_module cx src) <=>
+   env_context_consistent (artifact_env art mods src)
+     (initial_evaluation_context cx.sources layouts cx.txn src)` by
+    (irule env_context_consistent_context_cong >>
+     simp[set_current_module_def, initial_evaluation_context_def,
+          get_tenv_def, current_module_def, get_module_code_def,
+          lookup_var_slot_from_layout_def]) >>
+  qpat_x_assum `env_context_consistent _ _ <=> env_context_consistent _ _` mp_tac >>
+  simp[artifact_env_def]
 QED
 
 Theorem initial_env_context_consistent_empty_tx[local]:
