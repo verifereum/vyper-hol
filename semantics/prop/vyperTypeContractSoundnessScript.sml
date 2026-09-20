@@ -909,22 +909,42 @@ Proof
 QED
 
 
+(* TOP-LEVEL: The ordinary freshly initialized immutable table satisfies the
+ * pre-constant declaration/tag agreement boundary.
+ *
+ * WHY THIS IS TRUE:
+ * initial_immutables stores evaluated declaration tags for immutables and no
+ * constant values.  Checker namespace uniqueness prevents an immutable entry
+ * from masquerading as a distinct constant declaration at the same source key.
+ * Replacing the target entry discards arbitrary pre-existing target values. *)
+Theorem checked_initial_immutables_constants_input_tags_agree:
+  check_contract F layouts target mods = SOME artifact /\
+  initial_immutables (type_env_all_modules mods) mods = SOME imms ==>
+  deployment_constants_input_tags_agree
+    (type_env_all_modules mods) target mods
+    (am with immutables updated_by CONS (target,imms))
+Proof
+  cheat
+QED
+
 (* TOP-LEVEL: Successful checked whole-contract constant evaluation produces
  * exactly the typed constant environment required by deployment entry.
  *
  * WHY THIS IS TRUE:
  * Successful check_contract supplies namespace uniqueness and types every
- * constant initializer against the artifact environment.  Induction through
- * constants_env uses expression type soundness to strengthen each successful
- * INL (Value v) result from its stored runtime tag to value_has_type.  The
- * induction invariant also says that merging the typed accumulator preserves
- * machine well-typedness, which supplies the evaluator invariant for later
- * constants.  A second induction over evaluate_all_constants transports each
- * module result across the remaining distinct sources.  Runtime contexts need
- * the F checker result; deployment-mode contexts additionally need the T
+ * constant initializer against the artifact environment.  The input-tag
+ * agreement premise and machine well-typedness together type any pre-existing
+ * bare global at its checked annotation, excluding mismatched-tag machines.
+ * Induction through constants_env uses expression type soundness to strengthen
+ * each successful INL (Value v) result from its stored runtime tag to
+ * value_has_type.  The induction invariant also says that merging the typed
+ * accumulator preserves machine well-typedness and input-tag agreement for
+ * later constants.  A second induction over evaluate_all_constants transports
+ * each module result across the remaining distinct sources.  Runtime contexts
+ * need the F checker result; deployment-mode contexts additionally need the T
  * checker result because functions_well_typed follows the context mode.
  * cx.layouts and cx.nonreentrant_slot connect the arbitrary evaluation context
- * to the checker/layout authority used by internal-call soundness. *)
+ * to checker/layout authority used by internal-call soundness. *)
 Theorem checked_evaluate_all_constants_output_typed:
   check_contract F layouts target mods = SOME artifact /\
   (cx.in_deploy ==>
@@ -933,6 +953,8 @@ Theorem checked_evaluate_all_constants_output_typed:
   cx.nonreentrant_slot = lookup_nonreentrant_slot layouts target /\
   get_tenv cx = type_env_all_modules mods /\
   machine_well_typed am /\
+  deployment_constants_input_tags_agree
+    (type_env_all_modules mods) target mods am /\
   context_well_typed cx /\
   ALOOKUP cx.sources target = SOME mods /\
   cx.txn.target = target /\
@@ -953,6 +975,8 @@ Theorem checked_deployment_constants_ready_from_success:
   cx.nonreentrant_slot = lookup_nonreentrant_slot layouts target /\
   get_tenv cx = type_env_all_modules mods /\
   machine_well_typed am /\
+  deployment_constants_input_tags_agree
+    (type_env_all_modules mods) target mods am /\
   context_well_typed cx /\
   ALOOKUP cx.sources target = SOME mods /\
   cx.txn.target = target /\
