@@ -714,59 +714,6 @@ Proof
 QED
 
 
-Definition scope_frame_result_def[local]:
-  scope_frame_result padded (r,s) (r',s') <=>
-    r' = r /\ scope_frame padded s s'
-End
-
-Definition scope_frame_action_def[local]:
-  scope_frame_action padded f <=>
-    !st st'.
-      scope_frame padded st st' ==>
-      scope_frame_result padded (f st) (f st')
-End
-
-Theorem scope_frame_action_return[local]:
-  scope_frame_action padded (return x)
-Proof
-  simp[scope_frame_action_def, scope_frame_result_def, return_def]
-QED
-
-Theorem scope_frame_action_raise[local]:
-  scope_frame_action padded (raise e)
-Proof
-  simp[scope_frame_action_def, scope_frame_result_def, raise_def]
-QED
-
-Theorem scope_frame_action_bind[local]:
-  scope_frame_action padded f /\
-  (!x. scope_frame_action padded (g x)) ==>
-  scope_frame_action padded (bind f g)
-Proof
-  simp[scope_frame_action_def] >>
-  rpt strip_tac >>
-  qpat_x_assum
-    `!s s'. scope_frame padded s s' ==>
-       scope_frame_result padded (f s) (f s')`
-    (qspecl_then [`st`,`st'`] mp_tac) >>
-  simp[] >> strip_tac >>
-  Cases_on `f st` >> Cases_on `f st'` >>
-  gvs[scope_frame_result_def, bind_def] >>
-  Cases_on `q` >> gvs[scope_frame_result_def]
-QED
-
-Theorem eval_base_target_AttributeTarget_scope_frame_action[local]:
-  scope_frame_action padded (eval_base_target cx t) ==>
-  scope_frame_action padded
-    (eval_base_target cx (AttributeTarget t id))
-Proof
-  strip_tac >>
-  simp[Once evaluate_def] >>
-  irule scope_frame_action_bind >>
-  simp[scope_frame_action_return] >>
-  gen_tac >> PairCases_on `x` >> simp[scope_frame_action_return]
-QED
-
 (* TOP-LEVEL: Successful checked whole-contract constant evaluation produces
  * exactly the typed constant environment required by deployment entry.
  *
