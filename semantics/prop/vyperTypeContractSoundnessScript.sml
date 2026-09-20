@@ -909,6 +909,58 @@ Proof
 QED
 
 
+
+Theorem initial_immutables_module_lookup_origin[local]:
+  !tenv init_src ts acc imms query_src id tv v.
+  initial_immutables_module tenv init_src ts acc = SOME imms /\
+  FLOOKUP (get_source_immutables query_src imms) id = SOME (tv,v) ==>
+  FLOOKUP (get_source_immutables query_src acc) id = SOME (tv,v) \/
+  init_src = query_src /\
+  ?vis id_str ty init.
+    MEM (VariableDecl vis Immutable id_str ty init) ts /\
+    string_to_num id_str = id /\
+    evaluate_type tenv ty = SOME tv
+Proof
+  recInduct initial_immutables_module_ind >>
+  rw[initial_immutables_module_def] >>
+  gvs[AllCaseEqs()] >>
+  first_x_assum drule_all >>
+  strip_tac >>
+  gvs[] >>
+  Cases_on `src_id_opt = query_src` >>
+  gvs[update_immutable_def, get_source_immutables_set_same,
+      get_source_immutables_set_other, FLOOKUP_UPDATE] >>
+  Cases_on `string_to_num id = id'` >>
+  gvs[update_immutable_def, get_source_immutables_set_same,
+      FLOOKUP_UPDATE] >>
+  metis_tac[]
+QED
+
+
+Theorem initial_immutables_lookup_origin[local]:
+  !tenv mods imms src id tv v.
+  initial_immutables tenv mods = SOME imms /\
+  FLOOKUP (get_source_immutables src imms) id = SOME (tv,v) ==>
+  ?ts vis id_str ty init.
+    MEM (src,ts) mods /\
+    MEM (VariableDecl vis Immutable id_str ty init) ts /\
+    string_to_num id_str = id /\
+    evaluate_type tenv ty = SOME tv
+Proof
+  gen_tac >> Induct_on `mods`
+  >- simp[initial_immutables_def, empty_immutables_def,
+          get_source_immutables_def] >>
+  rpt gen_tac >> PairCases_on `h` >>
+  rw[initial_immutables_def] >>
+  gvs[AllCaseEqs()] >>
+  drule initial_immutables_module_lookup_origin >>
+  disch_then drule >>
+  strip_tac
+  >- (first_x_assum drule_all >> strip_tac >>
+      qexistsl [`ts`,`vis`,`id_str`,`ty`,`init`] >> simp[]) >>
+  qexistsl [`h1`,`vis`,`id_str`,`ty`,`init`] >> simp[]
+QED
+
 (* TOP-LEVEL: The ordinary freshly initialized immutable table satisfies the
  * pre-constant declaration/tag agreement boundary.
  *
@@ -924,7 +976,34 @@ Theorem checked_initial_immutables_constants_input_tags_agree:
     (type_env_all_modules mods) target mods
     (am with immutables updated_by CONS (target,imms))
 Proof
-  cheat
+  rw[deployment_constants_input_tags_agree_def,
+     initial_target_immutables_lookup] >>
+  qpat_x_assum `check_contract F layouts target mods = SOME artifact` mp_tac >>
+  rw[check_contract_def] >>
+  gvs[] >>
+  drule initial_immutables_lookup_origin >>
+  disch_then drule >>
+  strip_tac
+  >- (`ALOOKUP mods src = SOME ts` by
+        (irule alistTheory.ALOOKUP_ALL_DISTINCT_MEM >>
+         gvs[contract_namespaces_ok_def]) >>
+      `ALOOKUP mods src = SOME ts'` by
+        (irule alistTheory.ALOOKUP_ALL_DISTINCT_MEM >>
+         gvs[contract_namespaces_ok_def]) >>
+      gvs[] >>
+      `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))` by
+        metis_tac[contract_namespaces_ok_module_toplevel_vtype_keys] >>
+      metis_tac[module_immutable_string_num_type_unique]) >>
+  `ALOOKUP mods src = SOME ts` by
+    (irule alistTheory.ALOOKUP_ALL_DISTINCT_MEM >>
+     gvs[contract_namespaces_ok_def]) >>
+  `ALOOKUP mods src = SOME ts'` by
+    (irule alistTheory.ALOOKUP_ALL_DISTINCT_MEM >>
+     gvs[contract_namespaces_ok_def]) >>
+  gvs[] >>
+  `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))` by
+    metis_tac[contract_namespaces_ok_module_toplevel_vtype_keys] >>
+  metis_tac[module_immutable_constant_string_nums_distinct]
 QED
 
 (* TOP-LEVEL: Successful checked whole-contract constant evaluation produces
