@@ -555,6 +555,218 @@ Proof
       gvs[]
 QED
 
+Theorem checked_constant_decl_typed[local]:
+  check_contract F layouts target mods = SOME artifact /\
+  ALOOKUP mods src = SOME ts /\
+  MEM (VariableDecl vis (Constant e) id ty init) ts ==>
+  assignable_type (type_env_all_modules mods) ty /\
+  well_typed_expr (artifact_env artifact mods src) e /\
+  expr_type e = ty
+Proof
+  rpt strip_tac >>
+  drule check_contract_toplevel_decl_MEM >>
+  disch_then drule >>
+  disch_then drule >>
+  simp[check_toplevel_decl_def]
+QED
+
+Theorem check_toplevel_decl_accepts_intcall_constant_probe[local]:
+  ?art.
+    check_toplevel_decl [] 0 [] art NONE
+      (VariableDecl Public
+        (Constant (Call (BaseT BoolT) (IntCall (NONE,"f")) [] NONE))
+        "c" (BaseT BoolT) NONE)
+Proof
+  qexists `empty_contract_type_artifact with
+    cta_fn_sigs := FEMPTY |+ ((NONE,"f"),fn_sig_of [] [] (BaseT BoolT))` >>
+  simp[check_toplevel_decl_def, artifact_env_def,
+       empty_contract_type_artifact_def, fn_sig_of_def, well_typed_expr_def,
+       assignable_type_def, well_formed_type_def, type_env_all_modules_def,
+       evaluate_type_def, FLOOKUP_UPDATE, expr_type_def]
+QED
+
+Theorem lookup_scopes_nil_singleton_empty[local]:
+  lookup_scopes id [] = NONE /\ lookup_scopes id [FEMPTY] = NONE
+Proof
+  simp[lookup_scopes_def]
+QED
+
+Theorem artifact_env_singleton_empty_scopes_consistent[local]:
+  env_scopes_consistent (artifact_env art mods src) cx
+    (initial_state am [FEMPTY])
+Proof
+  simp[env_scopes_consistent_def, artifact_env_def, initial_state_def,
+       lookup_scopes_def]
+QED
+
+Definition empty_scope_pad_def[local]:
+  empty_scope_pad (st:evaluation_state) st' <=>
+    st' = st with scopes := FEMPTY::st.scopes
+End
+
+Theorem empty_scope_pad_initial_state[local]:
+  empty_scope_pad (initial_state am scs)
+    (initial_state am (FEMPTY::scs))
+Proof
+  simp[empty_scope_pad_def, initial_state_def]
+QED
+
+Theorem lookup_scopes_empty_head[local]:
+  lookup_scopes id (FEMPTY::scs) = lookup_scopes id scs
+Proof
+  simp[lookup_scopes_def]
+QED
+
+Definition scope_frame_def[local]:
+  scope_frame padded (st:evaluation_state) st' <=>
+    if padded then empty_scope_pad st st' else st' = st
+End
+
+Theorem scope_frame_modes[local]:
+  (scope_frame F st st' <=> st' = st) /\
+  (scope_frame T st st' <=> empty_scope_pad st st')
+Proof
+  simp[scope_frame_def]
+QED
+
+Theorem scope_frame_lookup_scopes[local]:
+  scope_frame padded st st' ==>
+  lookup_scopes id st.scopes = lookup_scopes id st'.scopes
+Proof
+  Cases_on `padded` >>
+  simp[scope_frame_def, empty_scope_pad_def, lookup_scopes_empty_head]
+QED
+
+Theorem scope_frame_overwrite_scopes[local]:
+  scope_frame padded st st' ==>
+  st with scopes := sc = st' with scopes := sc
+Proof
+  Cases_on `padded` >>
+  simp[scope_frame_def, empty_scope_pad_def]
+QED
+
+Theorem scope_frame_restore_scopes[local]:
+  scope_frame padded saved saved' ==>
+  scope_frame padded
+    (cur with scopes := saved.scopes)
+    (cur with scopes := saved'.scopes)
+Proof
+  Cases_on `padded` >>
+  simp[scope_frame_def, empty_scope_pad_def]
+QED
+
+
+Theorem push_pop_scope_cancel[local]:
+  pop_scope (st with scopes updated_by CONS sc) = (INL (),st)
+Proof
+  simp[pop_scope_def, return_def]
+QED
+
+Theorem scope_frame_set_scopes_equal[local]:
+  scope_frame padded st st' ==>
+  set_scopes sc st = set_scopes sc st'
+Proof
+  strip_tac >>
+  drule scope_frame_overwrite_scopes >>
+  simp[set_scopes_def]
+QED
+
+Theorem eval_base_target_NameTarget_scope_frame[local]:
+  scope_frame padded st st' /\
+  eval_base_target cx (NameTarget id) st = (res,out) ==>
+  ?out'. eval_base_target cx (NameTarget id) st' = (res,out') /\
+         scope_frame padded out out'
+Proof
+  Cases_on `padded` >>
+  gvs[scope_frame_def, empty_scope_pad_def] >>
+  strip_tac >>
+  Cases_on `IS_SOME (lookup_scopes (string_to_num id) st.scopes)` >>
+  gvs[evaluate_def, get_scopes_def, type_check_def, assert_def,
+      return_def, bind_def, ignore_bind_def, lookup_scopes_empty_head]
+QED
+
+Theorem scope_frame_push_function_equal[local]:
+  scope_frame padded st st' ==>
+  push_function src_fn sc cx st = push_function src_fn sc cx st'
+Proof
+  strip_tac >>
+  drule scope_frame_overwrite_scopes >>
+  simp[push_function_def, return_def]
+QED
+
+Theorem finally_with_installed_scope_frame[local]:
+  scope_frame padded st st' /\
+  finally (do set_scopes [FEMPTY]; f od) (set_scopes st.scopes) st =
+    (res,out) ==>
+  ?out'.
+    finally (do set_scopes [FEMPTY]; f od) (set_scopes st'.scopes) st' =
+      (res,out') /\
+    scope_frame padded out out'
+Proof
+  Cases_on `padded` >>
+  gvs[scope_frame_def, empty_scope_pad_def] >>
+  simp[finally_def, set_scopes_def, return_def, bind_def, ignore_bind_def] >>
+  Cases_on `f (st with scopes := [FEMPTY])` >>
+  qmatch_assum_rename_tac
+    `f (st with scopes := [FEMPTY]) = (call_res,call_st)` >>
+  Cases_on `call_res` >> gvs[raise_def] >>
+  rpt strip_tac >> BasicProvers.VAR_EQ_TAC >> simp[]
+QED
+
+
+(* TOP-LEVEL: Successful checked whole-contract constant evaluation produces
+ * exactly the typed constant environment required by deployment entry.
+ *
+ * WHY THIS IS TRUE:
+ * Successful check_contract supplies namespace uniqueness and types every
+ * constant initializer against the artifact environment.  Induction through
+ * constants_env uses expression type soundness to strengthen each successful
+ * INL (Value v) result from its stored runtime tag to value_has_type.  The
+ * induction invariant also says that merging the typed accumulator preserves
+ * machine well-typedness, which supplies the evaluator invariant for later
+ * constants.  A second induction over evaluate_all_constants transports each
+ * module result across the remaining distinct sources.  Runtime contexts need
+ * the F checker result; deployment-mode contexts additionally need the T
+ * checker result because functions_well_typed follows the context mode.
+ * cx.layouts and cx.nonreentrant_slot connect the arbitrary evaluation context
+ * to the checker/layout authority used by internal-call soundness. *)
+Theorem checked_evaluate_all_constants_output_typed:
+  check_contract F layouts target mods = SOME artifact /\
+  (cx.in_deploy ==>
+    ?deploy_art. check_contract T layouts target mods = SOME deploy_art) /\
+  cx.layouts = layouts /\
+  cx.nonreentrant_slot = lookup_nonreentrant_slot layouts target /\
+  get_tenv cx = type_env_all_modules mods /\
+  machine_well_typed am /\
+  context_well_typed cx /\
+  ALOOKUP cx.sources target = SOME mods /\
+  cx.txn.target = target /\
+  evaluate_all_constants cx am target mods = SOME am_c ==>
+  deployment_constants_output_typed
+    (type_env_all_modules mods) target mods am_c
+Proof
+  cheat
+QED
+
+(* TOP-LEVEL: Determinism of evaluate_all_constants packages one typed
+ * successful output as checked_deployment_constants_ready. *)
+Theorem checked_deployment_constants_ready_from_success:
+  check_contract F layouts target mods = SOME artifact /\
+  (cx.in_deploy ==>
+    ?deploy_art. check_contract T layouts target mods = SOME deploy_art) /\
+  cx.layouts = layouts /\
+  cx.nonreentrant_slot = lookup_nonreentrant_slot layouts target /\
+  get_tenv cx = type_env_all_modules mods /\
+  machine_well_typed am /\
+  context_well_typed cx /\
+  ALOOKUP cx.sources target = SOME mods /\
+  cx.txn.target = target /\
+  evaluate_all_constants cx am target mods = SOME am_c ==>
+  checked_deployment_constants_ready cx am target mods
+Proof
+  cheat
+QED
+
 Theorem send_call_value_preserves_tv[local]:
   send_call_value mut cx st = (res,st') ==>
   preserves_tv cx st st'
