@@ -1375,6 +1375,61 @@ Proof
   metis_tac[LENGTH_MAP]
 QED
 
+Theorem constant_subscript_base_well_typed_local[local]:
+  check_contract F layouts target mods = SOME artifact /\
+  ALOOKUP cx.sources target = SOME mods /\
+  cx.txn.target = target /\ cx.layouts = layouts /\
+  get_tenv cx = type_env_all_modules mods /\
+  constant_expr mods e1 /\
+  well_typed_expr (artifact_env artifact mods current_src)
+    (Subscript ty e1 e2) ==>
+  well_typed_expr (artifact_env artifact mods current_src) e1
+Proof
+  rpt strip_tac >>
+  `!e vt. constant_expr mods e /\
+      type_place_expr (artifact_env artifact mods current_src) e = SOME vt ==>
+      ?ety. vt = Type ety /\
+        well_typed_expr (artifact_env artifact mods current_src) e /\
+        well_formed_type (type_env_all_modules mods) ety` by
+    (Induct_on `e` >>
+     rw[constant_expr_def, Once well_typed_expr_def]
+     >- (PairCases_on `p` >>
+         gvs[constant_expr_def, declared_constant_def] >>
+         `contract_namespaces_ok F mods` by
+           (qpat_x_assum `check_contract F _ _ _ = _` mp_tac >>
+            rw[check_contract_def] >> gvs[]) >>
+         `ALOOKUP mods p0 = SOME tls` by
+           (irule alistTheory.ALOOKUP_ALL_DISTINCT_MEM >>
+            gvs[contract_namespaces_ok_def]) >>
+         `assignable_type (type_env_all_modules mods) ty'` by
+           metis_tac[checked_constant_decl_typed] >>
+         `FLOOKUP artifact.cta_toplevel_vtypes
+             (p0,string_to_num p1) = SOME (Type ty')` by
+           (`toplevel_vtypes_complete artifact.cta_toplevel_vtypes
+               (initial_evaluation_context cx.sources cx.layouts cx.txn p0)` by
+              (irule check_contract_toplevel_vtypes_complete_initial >> simp[]) >>
+            gvs[toplevel_vtypes_complete_def] >>
+            qpat_x_assum `!src ts vis mut id ty init. _` irule >>
+            simp[get_module_code_def, initial_evaluation_context_def] >>
+            metis_tac[]) >>
+         gvs[artifact_env_def, vtype_annotation_ok_def,
+             well_typed_expr_def] >>
+         Cases_on `t` >> gvs[assignable_type_def] >>
+         Cases_on `FLOOKUP (type_env_all_modules mods) (type_key p)` >>
+         gvs[] >> Cases_on `x` >> gvs[])
+     >- (Cases_on
+           `type_place_expr (artifact_env artifact mods current_src) e` >>
+         gvs[] >>
+         Cases_on `ety` >>
+         gvs[subscript_vtype_def, vtype_annotation_ok_def,
+             well_typed_expr_def, subscript_type_ok_def,
+             well_formed_type_def, evaluate_type_def, AllCaseEqs()] >>
+         Cases_on `evaluate_type (type_env_all_modules mods) t` >>
+         gvs[artifact_env_def])) >>
+  qpat_x_assum `well_typed_expr _ (Subscript _ _ _)` mp_tac >>
+  simp[Once well_typed_expr_def] >> metis_tac[]
+QED
+
 (* TOP-LEVEL: Successful checked whole-contract constant evaluation produces
  * exactly the typed constant environment required by deployment entry.
  *
