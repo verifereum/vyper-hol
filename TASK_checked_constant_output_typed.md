@@ -1,24 +1,47 @@
 # TASK: Prove checked constant-evaluation output typing authority
 
 ## Meta
-Status: planned
+Status: ready for focused proof work after constant-initializer restriction
 Priority: P1
 Created: 2026-09-20
 Location: `semantics/prop`
 
-## Theorem Statements (FROZEN)
+## Current repository state
+
+The checker boundary has now been narrowed to match Vyper's compile-time
+constant restriction. `check_toplevel_decl` requires `constant_expr mods e`
+for every `Constant e`. The following checker-backed bridge theorems are
+already proved in `vyperTypeContractSoundness`:
 
 ```sml
-Theorem checked_initial_immutables_constants_input_tags_agree:
-  check_contract F layouts target mods = SOME artifact /\
-  initial_immutables (type_env_all_modules mods) mods = SOME imms ==>
-  deployment_constants_input_tags_agree
-    (type_env_all_modules mods) target mods
-    (am with immutables updated_by CONS (target,imms))
-Proof
-  cheat
-QED
+constant_expr_pure:
+  !mods e. constant_expr mods e ==> pure_expr e
 
+checked_constant_initializer_pure:
+  check_contract F layouts addr mods = SOME art /\
+  ALOOKUP mods src = SOME tls /\
+  MEM (VariableDecl vis (Constant e) id ty init) tls ==>
+  pure_expr e
+
+checked_constant_initializer_eval_pure:
+  check_contract F layouts addr mods = SOME art /\
+  ALOOKUP mods src = SOME tls /\
+  MEM (VariableDecl vis (Constant e) id ty init) tls /\
+  eval_expr cx e st = (INL v,st') ==>
+  eval_pure_expr cx st e = SOME v
+```
+
+`checked_initial_immutables_constants_input_tags_agree` is also already proved.
+Do not redo or generalize these results.
+
+The former mode-indexed/present-only whole-evaluator development was archived
+and removed from this branch. Do not recreate it. Checker-approved constant
+initializers are now pure, so the remaining proof must use this smaller
+boundary.
+
+## Remaining Theorem Statements (FROZEN)
+
+```sml
 Theorem checked_evaluate_all_constants_output_typed:
   check_contract F layouts target mods = SOME artifact /\
   (cx.in_deploy ==>
@@ -109,12 +132,13 @@ End
 ## Completion Criteria
 
 1. `holbuild vyperTypeContractSoundnessTheory` from the repository root passes with zero CHEAT warnings and zero FAILs.
-2. Add only focused helper lemmas needed by these proofs, preferably in the existing target theory; do not create new libraries or theories.
-3. Prove that the ordinary `initial_immutables` setup establishes the new input tag-agreement condition.
+2. Remove the cheats only from the two remaining frozen theorems.
+3. Add only focused helper lemmas needed by these proofs, preferably in existing theories; do not create new libraries or theories.
 4. The stored value for every checked constant is proved with `value_has_type`, not only runtime type-tag equality.
-5. Do not make further interpreter changes; `constants_env` has already been aligned with `evaluate_defaults` by using `[FEMPTY]`.
-6. Existing namespace, source-order, and source-identity authority is reused rather than duplicated in consumers.
-7. The convenience theorem is derived from successful output typing and evaluator determinism.
+5. Do not make further interpreter or checker changes.
+6. Reuse `constant_expr_pure`, `checked_constant_initializer_pure`, `checked_constant_initializer_eval_pure`, and the existing pure-evaluator correspondence rather than reproving evaluator behavior.
+7. Existing namespace, source-order, and source-identity authority is reused rather than duplicated in consumers.
+8. Derive the convenience theorem from successful output typing and evaluator determinism.
 
 **If any theorem is false as stated:**
 - Produce a HOL4 counterexample where practical.
@@ -134,13 +158,23 @@ Issue #504 requests a public checker-backed bridge from successful whole-contrac
 
 The original frozen theorem was formally counterexampled: `machine_well_typed` relates values only to their stored tags, so it permits a pre-existing bare-global entry whose tag disagrees with its checked declaration. The corrected theorem adds `deployment_constants_input_tags_agree`, which supplies exactly that missing cross-layer agreement without requiring unevaluated constants to be present. Do not retry or generalize from the obsolete counterexampled statement.
 
-`constants_env` now evaluates initializers from `initial_state ... [FEMPTY]`, following the `evaluate_defaults` resolution in issue #473. This removes the former empty-scope obstruction to applying expression soundness.
+The earlier proof attempt then expanded into a second, mode-indexed version of the full evaluator soundness stack. That work was intentionally removed from this issue branch. It solved a more general problem than Vyper requires because the checker formerly accepted arbitrary well-typed expressions as constant initializers.
 
-The source file contains comments immediately above the frozen theorems explaining why the corrected statements should hold and the intended mathematical invariant.
+The checker now requires `constant_expr`, which implies `pure_expr`. `constants_env` evaluates initializers from `initial_state ... [FEMPTY]`. The intended proof route is therefore:
+
+1. obtain `pure_expr e` from the successful contract check;
+2. use the existing `eval_expr`/`eval_pure_expr` correspondence;
+3. prove or reuse a focused typing lemma for successful `eval_pure_expr` evaluation under the partial constant environment;
+4. induct over `constants_env` and then `evaluate_all_constants`, maintaining only the facts needed for previously evaluated constants and existing tagged inputs;
+5. conclude `deployment_constants_output_typed` and derive readiness.
+
+If step 3 needs a new lemma, keep it specific to pure expressions and the partial constant environment. Do not weaken `env_consistent` globally and do not introduce evaluator modes, immutable completion relations, lookup-refinement frameworks, or general assignment/account-preservation results.
 
 ## Domain Constraints
 
-- Do not make further changes to `constants_env`, `evaluate_all_constants`, or other interpreter semantics.
+- Do not make further changes to `constants_env`, `evaluate_all_constants`, checker definitions, or other interpreter semantics.
+- Do not restore the archived mode-indexed/present-only evaluator development.
+- Do not add general immutable-completion, lookup-refinement, evaluator-mode, or assignment/account-preservation infrastructure.
 - Never replace or delete an existing proof in favor of `cheat`.
 - Final proofs must contain no cheats and produce no CHEAT warnings.
 - Use `holbuild` for proof feedback; do not use interactive `g()`, `e()`, or `p()` workflows.
@@ -155,7 +189,9 @@ The source file contains comments immediately above the frozen theorems explaini
 | Target source | `semantics/prop/vyperTypeContractSoundnessScript.sml` | Frozen theorems, existing constant-presence/type-tag lemmas, and checker authority |
 | Readiness definitions | `semantics/prop/vyperTypeEntryReadinessScript.sml` | `deployment_constants_output_typed`, `checked_deployment_constants_ready`, and setup lemmas |
 | Interpreter semantics | `semantics/vyperInterpreterScript.sml` | `constants_env`, `merge_constants`, `set_current_module`, and `evaluate_all_constants` |
-| Expression soundness | `semantics/prop/vyperTypeEvalSoundnessScript.sml` | `eval_all_type_sound_mutual`; conjunct 8 gives successful expression result typing |
+| Pure-expression boundary | `semantics/prop/vyperEvalPureExprScript.sml` | `eval_expr_to_eval_pure_expr_some` and the pure evaluator definition |
+| Constant checker bridge | `semantics/prop/vyperTypeContractSoundnessScript.sml` | `constant_expr_pure`, `checked_constant_initializer_pure`, and `checked_constant_initializer_eval_pure` |
+| Expression soundness | `semantics/prop/vyperTypeEvalSoundnessScript.sml` | Reuse only if a focused existing result applies; do not extend the whole evaluator soundness stack |
 | Expression result predicates | `semantics/prop/vyperTypeExprSoundnessScript.sml` | `expr_result_typed`, `value_runtime_typed`, and `value_has_type` bridge definitions |
 | Runtime invariants | `semantics/prop/vyperTypeInvariantsScript.sml` | `imms_well_typed`, `state_well_typed`, `env_consistent`, `functions_well_typed`, and `context_well_typed` |
 | Initial-state machinery | `semantics/prop/vyperTypeInitialStateScript.sml` | `machine_well_typed`, initial-state typing, immutable readiness and preservation lemmas |

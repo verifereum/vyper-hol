@@ -10,7 +10,8 @@ Ancestors
   list rich_list arithmetic finite_map alist option pair
   vyperAST vyperValue vyperMisc vyperContext vyperState vyperInterpreter
   vyperTypeSystem vyperTypeContract vyperTypeInvariants vyperTypeValues vyperTypeBindArguments
-  vyperTypeStmtSoundness vyperTypeInitialState vyperPureExpr vyperEvalPreservesScopes vyperEvalExprPreservesScopesDom
+  vyperTypeStmtSoundness vyperTypeInitialState vyperPureExpr vyperEvalPureExpr
+  vyperEvalPreservesScopes vyperEvalExprPreservesScopesDom
   vyperEvalPreservesImmutablesDom vyperScopePreservation vyperStatePreservation
   vyperExprNoControl vyperTypeEvalSoundness vyperTypeCallGraph
   vyperTypeCallGraphSoundness vyperTypeCallStackSoundness
@@ -35,6 +36,40 @@ Definition call_tx_well_typed_def:
     tx.base_fee < 2 ** 256 /\
     tx.prev_randao < 2 ** 256
 End
+
+(* ===== Checked constant initializers ===== *)
+
+Theorem constant_expr_pure:
+  !mods e. constant_expr mods e ==> pure_expr e
+Proof
+  ho_match_mp_tac constant_expr_ind >>
+  rw[constant_expr_def, pure_expr_def] >>
+  gvs[listTheory.EVERY_MEM, listTheory.MEM_MAP, EXISTS_PROD] >>
+  metis_tac[]
+QED
+
+Theorem checked_constant_initializer_pure:
+  check_contract F layouts addr mods = SOME art /\
+  ALOOKUP mods src = SOME tls /\
+  MEM (VariableDecl vis (Constant e) id ty init) tls ==>
+  pure_expr e
+Proof
+  strip_tac >>
+  drule_all check_contract_toplevel_decl_MEM >>
+  simp[check_toplevel_decl_def] >>
+  metis_tac[constant_expr_pure]
+QED
+
+Theorem checked_constant_initializer_eval_pure:
+  check_contract F layouts addr mods = SOME art /\
+  ALOOKUP mods src = SOME tls /\
+  MEM (VariableDecl vis (Constant e) id ty init) tls /\
+  eval_expr cx e st = (INL v,st') ==>
+  eval_pure_expr cx st e = SOME v
+Proof
+  metis_tac[checked_constant_initializer_pure,
+            eval_expr_to_eval_pure_expr_some]
+QED
 
 Theorem call_tx_well_typed_empty_zero_witness:
   ?tx. tx.args = [] /\ tx.value = 0 /\ call_tx_well_typed tx
@@ -628,6 +663,10 @@ Proof
   metis_tac[]
 QED
 
+(* Historical counterexample probes for the former checker, which admitted
+   function calls and immutable reads in constant initializers.  The
+   constant_expr check intentionally makes these examples ill-checked.
+
 Theorem check_toplevel_decl_accepts_intcall_constant_probe[local]:
   ?art.
     check_toplevel_decl [] 0 [] art NONE
@@ -785,6 +824,7 @@ Proof
        bad_tag_deployment_output_not_typed] >>
   metis_tac[bad_tag_context_machine_probe]
 QED
+*)
 
 Theorem artifact_env_singleton_empty_scopes_consistent[local]:
   env_scopes_consistent (artifact_env art mods src) cx
