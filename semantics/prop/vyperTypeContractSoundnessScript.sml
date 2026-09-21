@@ -1464,6 +1464,44 @@ Proof
       simp[] >> metis_tac[])
 QED
 
+Theorem constant_subscript_value_success_typed_local[local]:
+  state_well_typed st /\
+  well_typed_expr env (Subscript ty e1 e2) /\ well_typed_expr env e1 /\
+  eval_pure_expr cx st e1 = SOME (Value v1) /\
+  eval_pure_expr cx st e2 = SOME (Value v2) /\
+  expr_result_typed env e1 (Value v1) /\
+  expr_result_typed env e2 (Value v2) /\ env.type_defs = get_tenv cx /\
+  eval_pure_expr cx st (Subscript ty e1 e2) = SOME tvl ==>
+  expr_result_typed env (Subscript ty e1 e2) tvl /\ ?v. tvl = Value v
+Proof
+  rpt strip_tac >>
+  `?arr_tv. evaluate_type env.type_defs (expr_type e1) = SOME arr_tv /\
+            value_has_type arr_tv v1` by
+    (gvs[vyperTypeExprResultTheory.expr_result_typed_def,
+         vyperTypeExprSoundnessTheory.expr_runtime_typed_def,
+         toplevel_value_typed_def]) >>
+  `subscript_type_ok (expr_type e1) (expr_type e2) ty` by
+    (qpat_x_assum `well_typed_expr env (Subscript _ _ _)` mp_tac >>
+     simp[Once well_typed_expr_def] >> strip_tac >>
+     `vtype_annotation_ok vt (expr_type e1)` by
+       (Cases_on `e1` >> simp[expr_type_def] >> rpt strip_tac >>
+        TRY (PairCases_on `p`) >>
+        qpat_x_assum `type_place_expr _ _ = SOME _` mp_tac >>
+        simp[Once well_typed_expr_def, vtype_annotation_ok_def,
+             AllCaseEqs()] >> metis_tac[]) >>
+     Cases_on `vt`
+     >- (Cases_on `expr_type e1` >>
+         gvs[vtype_annotation_ok_def, subscript_vtype_def,
+             subscript_type_ok_def]) >>
+     metis_tac[vyperTypeExprResultTheory.well_typed_expr_not_hashmap_place]) >>
+  qpat_x_assum `eval_pure_expr _ _ (Subscript _ _ _) = _` mp_tac >>
+  simp[Once eval_pure_expr_def] >> gvs[AllCaseEqs()] >> strip_tac >>
+  drule_all evaluate_subscript_value_selected_typed_local >>
+  strip_tac >> gvs[vyperTypeExprResultTheory.expr_result_typed_def,
+                   vyperTypeExprSoundnessTheory.expr_runtime_typed_def,
+                   toplevel_value_typed_def, expr_type_def]
+QED
+
 (* TOP-LEVEL: Successful checked whole-contract constant evaluation produces
  * exactly the typed constant environment required by deployment entry.
  *
