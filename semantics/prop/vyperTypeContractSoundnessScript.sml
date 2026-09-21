@@ -1046,6 +1046,58 @@ Proof
   metis_tac[module_immutable_constant_string_nums_distinct]
 QED
 
+Definition deployment_constant_cells_typed_def[local]:
+  deployment_constant_cells_typed tenv addr mods (am:abstract_machine) <=>
+    !src ts vis e id ty init tv v.
+      MEM (src,ts) mods /\
+      MEM (VariableDecl vis (Constant e) id ty init) ts /\
+      FLOOKUP
+        (get_source_immutables src
+          (case ALOOKUP am.immutables addr of
+           | SOME imms => imms
+           | NONE => []))
+        (string_to_num id) = SOME (tv,v) ==>
+      evaluate_type tenv ty = SOME tv /\ value_has_type tv v
+End
+
+Theorem deployment_constant_cells_typed_initial[local]:
+  machine_well_typed am /\
+  deployment_constants_input_tags_agree tenv addr mods am ==>
+  deployment_constant_cells_typed tenv addr mods am
+Proof
+  rw[deployment_constant_cells_typed_def]
+  >- (gvs[deployment_constants_input_tags_agree_def] >>
+      qpat_x_assum `!src ts vis mut id ty init tv v. _`
+        (qspecl_then [`src`,`ts`,`vis`,`Constant e`,`id`,`ty`,`init`,`tv`,`v`]
+          mp_tac) >>
+      simp[]) >>
+  Cases_on `ALOOKUP am.immutables addr` >>
+  gvs[get_source_immutables_def] >>
+  `MEM (addr,x) am.immutables` by metis_tac[alistTheory.ALOOKUP_MEM] >>
+  `imms_well_typed x` by
+    (gvs[machine_well_typed_def, listTheory.EVERY_MEM] >>
+     qpat_x_assum `!z. MEM z am.immutables ==> _`
+       (qspec_then `(addr,x)` mp_tac) >> simp[]) >>
+  Cases_on `ALOOKUP x src` >> gvs[get_source_immutables_def] >>
+  gvs[imms_well_typed_def] >>
+  first_x_assum drule_all >> simp[]
+QED
+
+Theorem deployment_constant_cells_typed_lookup[local]:
+  deployment_constant_cells_typed tenv addr mods am /\
+  MEM (src,ts) mods /\
+  MEM (VariableDecl vis (Constant e) id ty init) ts /\
+  FLOOKUP
+    (get_source_immutables src
+      (case ALOOKUP am.immutables addr of
+       | SOME imms => imms
+       | NONE => []))
+    (string_to_num id) = SOME (tv,v) ==>
+  evaluate_type tenv ty = SOME tv /\ value_has_type tv v
+Proof
+  metis_tac[deployment_constant_cells_typed_def]
+QED
+
 (* TOP-LEVEL: Successful checked whole-contract constant evaluation produces
  * exactly the typed constant environment required by deployment entry.
  *
