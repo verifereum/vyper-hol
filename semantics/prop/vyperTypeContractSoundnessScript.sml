@@ -1502,6 +1502,64 @@ Proof
                    toplevel_value_typed_def, expr_type_def]
 QED
 
+Theorem evaluate_attribute_value_typed_local[local]:
+  !sv id ftypes field_tv.
+    value_has_type (StructTV ftypes) sv /\
+    ALOOKUP ftypes id = SOME field_tv ==>
+    ?field_v. evaluate_attribute sv id = INL field_v /\
+              value_has_type field_tv field_v
+Proof
+  `!ftypes fields id field_tv.
+      struct_has_type ftypes fields /\
+      ALOOKUP ftypes id = SOME field_tv ==>
+      ?field_v. ALOOKUP fields id = SOME field_v /\
+                value_has_type field_tv field_v` by
+    (Induct >> Cases_on `fields` >>
+     simp[Once vyperTypingTheory.value_has_type_def] >>
+     Cases >> Cases_on `h` >>
+     simp[Once vyperTypingTheory.value_has_type_def] >>
+     rw[] >> gvs[] >> Cases_on `id = q` >> gvs[] >>
+     first_x_assum drule_all >> simp[]) >>
+  Cases >> simp[vyperValueOperationTheory.evaluate_attribute_def,
+                vyperTypingTheory.value_has_type_def] >>
+  rpt strip_tac >> first_x_assum drule_all >> strip_tac >>
+  qexists_tac `field_v` >> simp[]
+QED
+
+Theorem constant_attribute_value_success_typed_local[local]:
+  well_typed_expr env (Attribute ty e id) /\
+  eval_pure_expr cx st e = SOME (Value sv) /\
+  expr_result_typed env e (Value sv) /\ env.type_defs = get_tenv cx /\
+  eval_pure_expr cx st (Attribute ty e id) = SOME tvl ==>
+  expr_result_typed env (Attribute ty e id) tvl /\ ?v. tvl = Value v
+Proof
+  rpt strip_tac >>
+  `attribute_type env.type_defs (expr_type e) id = SOME ty` by
+    (qpat_x_assum `well_typed_expr env (Attribute _ _ _)` mp_tac >>
+     simp[Once well_typed_expr_def, attribute_type_ok_def] >>
+     metis_tac[]) >>
+  qhdtm_x_assum `expr_result_typed` mp_tac >>
+  simp[vyperTypeExprResultTheory.expr_result_typed_def,
+       vyperTypeExprSoundnessTheory.expr_runtime_typed_def] >>
+  strip_tac >>
+  Cases_on `expr_type e` >>
+  gvs[attribute_type_def, evaluate_type_def, AllCaseEqs(),
+      toplevel_value_typed_def] >>
+  `?field_tv. evaluate_type env.type_defs ty = SOME field_tv /\
+              ALOOKUP (ZIP (MAP FST fields,tvs)) id = SOME field_tv` by
+    (qspecl_then [`env.type_defs`,`StructT p`,`id`,`ty`,
+                  `ZIP (MAP FST fields,tvs)`] mp_tac
+       vyperTypeExprSoundnessTheory.attribute_type_evaluates >>
+     simp[attribute_type_def, evaluate_type_def]) >>
+  drule_all evaluate_attribute_value_typed_local >> strip_tac >>
+  qpat_x_assum `eval_pure_expr _ _ (Attribute _ _ _) = _` mp_tac >>
+  simp[Once eval_pure_expr_def] >> gvs[AllCaseEqs()] >>
+  simp[vyperTypeExprResultTheory.expr_result_typed_def,
+       vyperTypeExprSoundnessTheory.expr_runtime_typed_def,
+       toplevel_value_typed_def, expr_type_def] >>
+  strip_tac >> gvs[toplevel_value_typed_def]
+QED
+
 (* TOP-LEVEL: Successful checked whole-contract constant evaluation produces
  * exactly the typed constant environment required by deployment entry.
  *
