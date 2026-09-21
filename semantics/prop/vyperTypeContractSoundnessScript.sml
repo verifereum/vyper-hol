@@ -1099,20 +1099,18 @@ Proof
 QED
 
 Theorem constant_top_level_name_pure_typed[local]:
-  check_contract F layouts target mods = SOME artifact /\
-  ALOOKUP cx.sources target = SOME mods /\
-  cx.txn.target = target /\
-  cx.layouts = layouts /\
+  check_contract F cx.layouts cx.txn.target mods = SOME artifact /\
+  ALOOKUP cx.sources cx.txn.target = SOME mods /\
   get_tenv cx = type_env_all_modules mods /\
   well_typed_expr (artifact_env artifact mods current_src)
     (TopLevelName ann (src,id)) /\
   constant_expr mods (TopLevelName ann (src,id)) /\
   deployment_constant_cells_typed
-    (type_env_all_modules mods) target mods am /\
+    (type_env_all_modules mods) cx.txn.target mods am /\
   eval_pure_expr cx (initial_state am [FEMPTY])
     (TopLevelName ann (src,id)) = SOME tvl ==>
   expr_result_typed (artifact_env artifact mods current_src)
-    (TopLevelName ann (src,id)) tvl
+    (TopLevelName ann (src,id)) tvl /\ ?v. tvl = Value v
 Proof
   rw[constant_expr_def, declared_constant_def] >>
   `contract_namespaces_ok F mods` by
@@ -1559,7 +1557,6 @@ Proof
        toplevel_value_typed_def, expr_type_def] >>
   strip_tac >> gvs[toplevel_value_typed_def]
 QED
-
 (* TOP-LEVEL: Successful checked whole-contract constant evaluation produces
  * exactly the typed constant environment required by deployment entry.
  *
