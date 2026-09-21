@@ -1098,6 +1098,140 @@ Proof
   metis_tac[deployment_constant_cells_typed_def]
 QED
 
+Theorem constant_top_level_name_pure_typed[local]:
+  check_contract F layouts target mods = SOME artifact /\
+  ALOOKUP cx.sources target = SOME mods /\
+  cx.txn.target = target /\
+  cx.layouts = layouts /\
+  get_tenv cx = type_env_all_modules mods /\
+  well_typed_expr (artifact_env artifact mods current_src)
+    (TopLevelName ann (src,id)) /\
+  constant_expr mods (TopLevelName ann (src,id)) /\
+  deployment_constant_cells_typed
+    (type_env_all_modules mods) target mods am /\
+  eval_pure_expr cx (initial_state am [FEMPTY])
+    (TopLevelName ann (src,id)) = SOME tvl ==>
+  expr_result_typed (artifact_env artifact mods current_src)
+    (TopLevelName ann (src,id)) tvl
+Proof
+  rw[constant_expr_def, declared_constant_def] >>
+  `contract_namespaces_ok F mods` by
+    (qpat_x_assum `check_contract F _ _ _ = _` mp_tac >>
+     rw[check_contract_def] >> gvs[]) >>
+  `ALOOKUP mods src = SOME tls` by
+    (irule alistTheory.ALOOKUP_ALL_DISTINCT_MEM >>
+     gvs[contract_namespaces_ok_def]) >>
+  `get_module_code cx src = SOME tls` by
+    simp[get_module_code_def] >>
+  `find_var_decl_by_num (string_to_num id) tls = NONE` by
+    (irule find_var_decl_by_num_NONE_Constant >> simp[] >>
+     metis_tac[contract_namespaces_ok_module_toplevel_vtype_keys]) >>
+  `eval_expr cx (TopLevelName ann (src,id)) (initial_state am [FEMPTY]) =
+     (INL tvl, initial_state am [FEMPTY])` by
+    metis_tac[eval_pure_expr_to_eval_expr_some] >>
+  `lookup_global cx src (string_to_num id) (initial_state am [FEMPTY]) =
+     (INL tvl, initial_state am [FEMPTY])` by
+    (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+     simp[Once evaluate_def]) >>
+  `?stored_tv v.
+      FLOOKUP
+        (get_source_immutables src
+          (case ALOOKUP am.immutables cx.txn.target of
+           | NONE => [] | SOME imms => imms))
+        (string_to_num id) = SOME (stored_tv,v) /\
+      tvl = Value v` by
+    (qpat_x_assum `lookup_global _ _ _ _ = _` mp_tac >>
+     simp[lookup_global_def, bind_def, lift_option_type_def,
+          return_def, raise_def] >>
+     Cases_on `get_immutables cx src (initial_state am [FEMPTY])` >>
+     Cases_on `q` >> gvs[bind_def, return_def, raise_def] >>
+     Cases_on `FLOOKUP x (string_to_num id)`
+     >- gvs[raise_def] >>
+     gvs[return_def] >> PairCases_on `x'` >> gvs[] >>
+     qpat_x_assum `get_immutables _ _ _ = _` mp_tac >>
+     simp[get_immutables_def, get_address_immutables_def, bind_def,
+          lift_option_type_def, initial_state_def, return_def, raise_def] >>
+     rpt strip_tac >>
+     Cases_on `ALOOKUP am.immutables cx.txn.target` >>
+     gvs[return_def, raise_def, AllCaseEqs()]) >>
+  `evaluate_type (type_env_all_modules mods) ty = SOME stored_tv /\
+   value_has_type stored_tv v` by
+    metis_tac[deployment_constant_cells_typed_lookup] >>
+  `FLOOKUP artifact.cta_toplevel_vtypes (src,string_to_num id) =
+     SOME (Type ty)` by
+    (`toplevel_vtypes_complete artifact.cta_toplevel_vtypes
+        (initial_evaluation_context cx.sources cx.layouts cx.txn src)` by
+       (irule check_contract_toplevel_vtypes_complete_initial >> simp[]) >>
+     gvs[toplevel_vtypes_complete_def] >>
+     qpat_x_assum `!src ts vis mut id ty init. _` irule >>
+     simp[get_module_code_def, initial_evaluation_context_def] >>
+     metis_tac[]) >>
+  `ann = ty` by
+    (qpat_x_assum `well_typed_expr _ _` mp_tac >>
+     simp[well_typed_expr_def, artifact_env_def] >>
+     strip_tac >> gvs[] >>
+     drule check_contract_bare_globals_consistent_initial >>
+     disch_then drule >>
+     disch_then (qspec_then `cx.txn` mp_tac) >>
+     disch_then (qspec_then `src` mp_tac) >>
+     disch_then (qspec_then `string_to_num id` mp_tac) >>
+     disch_then (qspec_then `ann` mp_tac) >>
+     simp[] >> strip_tac >> gvs[]) >>
+  gvs[vyperTypeExprResultTheory.expr_result_typed_def,
+      vyperTypeExprSoundnessTheory.expr_runtime_typed_def, expr_type_def,
+      toplevel_value_typed_Value, artifact_env_def]
+QED
+Theorem constant_literal_pure_typed[local]:
+  well_typed_expr env (Literal ty lit) /\
+  eval_pure_expr cx st (Literal ty lit) = SOME tvl ==>
+  expr_result_typed env (Literal ty lit) tvl
+Proof
+  rw[well_typed_expr_def, Once eval_pure_expr_def] >>
+  gvs[well_formed_type_def, IS_SOME_EXISTS,
+      vyperTypeExprResultTheory.expr_result_typed_def,
+      vyperTypeExprSoundnessTheory.expr_runtime_typed_def, expr_type_def] >>
+  metis_tac[literal_toplevel_value_typed]
+QED
+
+Theorem constant_flag_member_pure_typed[local]:
+  check_contract F layouts target mods = SOME artifact /\
+  ALOOKUP cx.sources target = SOME mods /\
+  cx.txn.target = target /\
+  cx.layouts = layouts /\
+  get_tenv cx = type_env_all_modules mods /\
+  well_typed_expr (artifact_env artifact mods current_src)
+    (FlagMember ty nsid mid) /\
+  eval_pure_expr cx st (FlagMember ty nsid mid) = SOME tvl ==>
+  expr_result_typed (artifact_env artifact mods current_src)
+    (FlagMember ty nsid mid) tvl
+Proof
+  PairCases_on `nsid` >>
+  rw[Once eval_pure_expr_def, well_typed_expr_def, artifact_env_def] >>
+  drule check_contract_flag_members_consistent_initial >>
+  disch_then drule >>
+  disch_then (qspec_then `cx.txn` mp_tac) >>
+  disch_then (qspec_then `nsid0` mp_tac) >>
+  disch_then (qspec_then `nsid1` mp_tac) >>
+  disch_then (qspec_then `ls` mp_tac) >>
+  simp[get_module_code_def, initial_evaluation_context_def] >>
+  strip_tac >>
+  qpat_x_assum `lookup_flag_member _ _ _ = _` mp_tac >>
+  simp[vyperLookupTheory.lookup_flag_member_def] >>
+  Cases_on `INDEX_OF mid ls`
+  >- gvs[get_module_code_def] >>
+  gvs[get_module_code_def] >>
+  `LENGTH ls <= 256` by
+    (gvs[well_formed_type_def, evaluate_type_def, AllCaseEqs()] >> decide_tac) >>
+  gvs[vyperTypeExprResultTheory.expr_result_typed_def,
+      vyperTypeExprSoundnessTheory.expr_runtime_typed_def, expr_type_def,
+      toplevel_value_typed_Value, evaluate_type_def,
+      vyperTypingTheory.value_has_type_def, INDEX_OF_eq_SOME,
+      artifact_env_def] >>
+  strip_tac >> gvs[] >>
+  simp[toplevel_value_typed_def, vyperTypingTheory.value_has_type_def] >>
+  irule bitTheory.TWOEXP_MONO >> simp[]
+QED
+
 (* TOP-LEVEL: Successful checked whole-contract constant evaluation produces
  * exactly the typed constant environment required by deployment entry.
  *
