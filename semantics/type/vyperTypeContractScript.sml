@@ -170,6 +170,31 @@ End
    expression class.  This is deliberately narrower than pure_expr: in
    particular, runtime environment/account reads and all function calls are
    excluded, and top-level reads must name another declared constant. *)
+Definition constant_binop_def:
+  constant_binop Add = T /\
+  constant_binop Sub = T /\
+  constant_binop Mul = T /\
+  constant_binop Div = T /\
+  constant_binop Mod = T /\
+  constant_binop Exp = T /\
+  constant_binop And = T /\
+  constant_binop Or = T /\
+  constant_binop XOr = T /\
+  constant_binop ShL = T /\
+  constant_binop ShR = T /\
+  constant_binop In = T /\
+  constant_binop NotIn = T /\
+  constant_binop Eq = T /\
+  constant_binop NotEq = T /\
+  constant_binop Lt = T /\
+  constant_binop LtE = T /\
+  constant_binop Gt = T /\
+  constant_binop GtE = T /\
+  constant_binop Min = T /\
+  constant_binop Max = T /\
+  constant_binop _ = F
+End
+
 Definition constant_builtin_def:
   constant_builtin Len = T /\
   constant_builtin Not = T /\
@@ -178,19 +203,14 @@ Definition constant_builtin_def:
   constant_builtin Keccak256 = T /\
   constant_builtin Sha256 = T /\
   constant_builtin (AsWeiValue _) = T /\
-  constant_builtin (Concat _) = T /\
-  constant_builtin (Slice _) = T /\
   constant_builtin (Uint2Str _) = T /\
   constant_builtin (MakeArray _ _) = T /\
   constant_builtin Ceil = T /\
   constant_builtin Floor = T /\
   constant_builtin AddMod = T /\
   constant_builtin MulMod = T /\
-  constant_builtin (Bop _) = T /\
+  constant_builtin (Bop op) = constant_binop op /\
   constant_builtin MethodId = T /\
-  constant_builtin ECRecover = T /\
-  constant_builtin ECAdd = T /\
-  constant_builtin ECMul = T /\
   constant_builtin PowMod256 = T /\
   constant_builtin _ = F
 End
@@ -200,8 +220,6 @@ Definition constant_type_builtin_def:
   constant_type_builtin MaxValue = T /\
   constant_type_builtin MinValue = T /\
   constant_type_builtin Epsilon = T /\
-  constant_type_builtin Convert = T /\
-  constant_type_builtin Extract32 = T /\
   constant_type_builtin _ = F
 End
 
@@ -214,10 +232,7 @@ End
 
 Definition constant_expr_def:
   constant_expr mods (TopLevelName _ (src,id)) = declared_constant mods src id /\
-  constant_expr mods (FlagMember _ _ _) = T /\
   constant_expr mods (Literal _ _) = T /\
-  constant_expr mods (IfExp _ e1 e2 e3) =
-    (constant_expr mods e1 /\ constant_expr mods e2 /\ constant_expr mods e3) /\
   constant_expr mods (StructLit _ _ kes) =
     EVERY (constant_expr mods) (MAP SND kes) /\
   constant_expr mods (Subscript _ e1 e2) =
