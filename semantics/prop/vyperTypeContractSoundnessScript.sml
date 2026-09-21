@@ -1257,6 +1257,61 @@ Proof
   metis_tac[]
 QED
 
+
+Theorem eval_pure_named_exprs_success_typed[local]:
+  !kes env cx st vs.
+    eval_pure_exprs cx st (MAP SND kes) = SOME vs ==>
+    state_well_typed st ==>
+    well_typed_named_exprs env kes ==>
+    (!e tvl. MEM e (MAP SND kes) /\
+       eval_pure_expr cx st e = SOME tvl ==>
+       expr_result_typed env e tvl) ==>
+    exprs_runtime_typed env (MAP SND kes) vs
+Proof
+  Induct >- simp[vyperTypeExprSoundnessTheory.exprs_runtime_typed_def,
+                  Once eval_pure_expr_def] >>
+  gen_tac >> PairCases_on `h` >>
+  rw[vyperTypeExprSoundnessTheory.exprs_runtime_typed_def,
+     Once eval_pure_expr_def, Once well_typed_expr_def, AllCaseEqs()] >>
+  `expr_result_typed env h1 tv` by metis_tac[] >>
+  `?htv. evaluate_type env.type_defs (expr_type h1) = SOME htv /\
+         value_has_type htv v` by
+    (gvs[vyperTypeExprResultTheory.expr_result_typed_def,
+         vyperTypeExprSoundnessTheory.expr_runtime_typed_def] >>
+     metis_tac[materialise_preserves_value_type,
+               evaluate_type_well_formed_type_value]) >>
+  `exprs_runtime_typed env (MAP SND kes) vs'` by
+    (first_x_assum irule >> simp[] >> metis_tac[]) >>
+  gvs[vyperTypeExprSoundnessTheory.exprs_runtime_typed_def] >>
+  metis_tac[]
+QED
+
+Theorem OPT_MMAP_expr_types_from_LIST_REL_local[local]:
+  !tenv kes tvs.
+    LIST_REL (\e tv. evaluate_type tenv (expr_type e) = SOME tv)
+      (MAP SND kes) tvs ==>
+    OPT_MMAP (evaluate_type tenv)
+      (MAP (expr_type o SND) kes) = SOME tvs
+Proof
+  gen_tac >> Induct >> Cases_on `tvs` >>
+  simp[OPT_MMAP_def] >>
+  PairCases_on `h` >> simp[OPT_MMAP_def]
+QED
+
+Theorem OPT_MMAP_evaluate_type_mono_local[local]:
+  !types tenv nid tvs.
+    OPT_MMAP (evaluate_type (tenv \\ nid)) types = SOME tvs ==>
+    OPT_MMAP (evaluate_type tenv) types = SOME tvs
+Proof
+  Induct >> simp[OPT_MMAP_def] >>
+  rpt gen_tac >>
+  Cases_on `evaluate_type (tenv \\ nid) h` >> simp[] >>
+  Cases_on `OPT_MMAP (evaluate_type (tenv \\ nid)) types` >> simp[] >>
+  strip_tac >> gvs[] >>
+  imp_res_tac vyperTypeExprSoundnessTheory.evaluate_type_mono >> simp[] >>
+  first_x_assum (qspecl_then [`tenv`, `nid`] mp_tac) >> simp[]
+QED
+
 (* TOP-LEVEL: Successful checked whole-contract constant evaluation produces
  * exactly the typed constant environment required by deployment entry.
  *
