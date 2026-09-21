@@ -1557,6 +1557,213 @@ Proof
        toplevel_value_typed_def, expr_type_def] >>
   strip_tac >> gvs[toplevel_value_typed_def]
 QED
+
+Theorem constant_pure_eval_success_typed_gen_local[local]:
+  !mods e. constant_expr mods e ==>
+    !artifact cx current_src am.
+      check_contract F cx.layouts cx.txn.target mods = SOME artifact /\
+      ALOOKUP cx.sources cx.txn.target = SOME mods /\
+      get_tenv cx = type_env_all_modules mods /\
+      context_well_typed cx /\ machine_well_typed am /\
+      deployment_constant_cells_typed
+        (type_env_all_modules mods) cx.txn.target mods am ==>
+      !tvl.
+        well_typed_expr (artifact_env artifact mods current_src) e /\
+        eval_pure_expr cx (initial_state am [FEMPTY]) e = SOME tvl ==>
+        expr_result_typed (artifact_env artifact mods current_src) e tvl /\
+        ?v. tvl = Value v
+Proof
+  ho_match_mp_tac constant_expr_ind >>
+  rpt gen_tac >> strip_tac >>
+  gvs[constant_expr_def]
+  >- (rpt strip_tac >>
+      `constant_expr mods (TopLevelName v0 (src,id))` by
+        simp[constant_expr_def] >>
+      drule_all constant_top_level_name_pure_typed >> simp[])
+  >> rpt conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `eval_pure_expr _ _ (Literal _ _) = _` mp_tac >>
+      simp[Once eval_pure_expr_def] >> strip_tac >> gvs[] >>
+      irule constant_literal_pure_typed >>
+      simp[Once eval_pure_expr_def])
+  >- (rpt strip_tac >>
+      `?vs. eval_pure_exprs cx (initial_state am [FEMPTY])
+               (MAP SND kes) = SOME vs /\
+             tvl = Value (StructV (ZIP (MAP FST kes,vs)))` by
+        (qpat_x_assum `eval_pure_expr _ _ (StructLit _ _ _) = _` mp_tac >>
+         simp[Once eval_pure_expr_def] >> gvs[AllCaseEqs()] >> metis_tac[]) >>
+      qpat_x_assum `well_typed_expr _ (StructLit _ _ _)` mp_tac >>
+      simp[Once well_typed_expr_def] >> strip_tac >>
+      `state_well_typed (initial_state am [FEMPTY])` by
+        (irule initial_state_single_scope_well_typed >>
+         simp[scope_well_typed_def]) >>
+      `!e. MEM e (MAP SND kes) ==>
+           well_typed_expr (artifact_env artifact mods current_src) e` by
+        (qpat_x_assum `well_typed_named_exprs _ kes` mp_tac >>
+         POP_ASSUM_LIST (K all_tac) >>
+         Induct_on `kes` >> simp[Once well_typed_expr_def] >>
+         gen_tac >> PairCases_on `h` >>
+         simp[Once well_typed_expr_def] >> metis_tac[]) >>
+      `exprs_runtime_typed (artifact_env artifact mods current_src)
+         (MAP SND kes) vs` by
+        (drule eval_pure_named_exprs_success_typed >>
+         disch_then drule >> disch_then drule >> disch_then irule >>
+         rpt strip_tac >>
+         `constant_expr mods e` by gvs[listTheory.EVERY_MEM] >>
+         `well_typed_expr (artifact_env artifact mods current_src) e` by
+           metis_tac[] >>
+         qpat_assum `!e. MEM e (MAP SND kes) ==> _`
+           (qspec_then `e` (fn ih => metis_tac[ih]))) >>
+      gvs[] >> irule struct_lit_expr_result_typed_local >>
+      simp[] >> metis_tac[])
+  >- (rpt strip_tac >>
+      `well_typed_expr (artifact_env artifact mods current_src) e` by
+        (irule constant_subscript_base_well_typed_local >> simp[] >>
+         metis_tac[]) >>
+      `well_typed_expr (artifact_env artifact mods current_src) e'` by
+        (qpat_x_assum `well_typed_expr _ (Subscript _ _ _)` mp_tac >>
+         simp[Once well_typed_expr_def] >> metis_tac[]) >>
+      `state_well_typed (initial_state am [FEMPTY])` by
+        (irule initial_state_single_scope_well_typed >>
+         simp[scope_well_typed_def]) >>
+      `?tv1 v2.
+         eval_pure_expr cx (initial_state am [FEMPTY]) e = SOME tv1 /\
+         eval_pure_expr cx (initial_state am [FEMPTY]) e' =
+           SOME (Value v2)` by
+        (Cases_on `eval_pure_expr cx (initial_state am [FEMPTY]) e` >>
+         gvs[Once eval_pure_expr_def, AllCaseEqs()] >>
+         Cases_on `eval_pure_expr cx (initial_state am [FEMPTY]) e'` >>
+         gvs[Once eval_pure_expr_def, AllCaseEqs()]) >>
+      `expr_result_typed (artifact_env artifact mods current_src) e tv1 /\
+       ?v1. tv1 = Value v1` by metis_tac[] >>
+      `expr_result_typed (artifact_env artifact mods current_src) e'
+         (Value v2)` by metis_tac[] >>
+      gvs[] >>
+      `(artifact_env artifact mods current_src).type_defs = get_tenv cx` by
+        simp[artifact_env_def] >>
+      drule_all constant_subscript_value_success_typed_local >>
+      metis_tac[])
+  >- (rpt strip_tac >>
+      `?sv. eval_pure_expr cx (initial_state am [FEMPTY]) e =
+            SOME (Value sv)` by
+        (Cases_on `eval_pure_expr cx (initial_state am [FEMPTY]) e` >>
+         gvs[Once eval_pure_expr_def, AllCaseEqs()]) >>
+      `well_typed_expr (artifact_env artifact mods current_src) e` by
+        (qpat_x_assum `well_typed_expr _ (Attribute _ _ _)` mp_tac >>
+         simp[Once well_typed_expr_def]) >>
+      `expr_result_typed (artifact_env artifact mods current_src) e
+         (Value sv)` by metis_tac[] >>
+      `(artifact_env artifact mods current_src).type_defs = get_tenv cx` by
+        simp[artifact_env_def] >>
+      drule_all constant_attribute_value_success_typed_local >> metis_tac[])
+  >- (rpt strip_tac >>
+      qpat_x_assum
+        `!e. MEM e es ==> constant_expr mods e ==>
+             !artifact cx current_src am. _`
+        (fn args_ih =>
+          sg `!e tvl. MEM e es /\
+                well_typed_expr (artifact_env artifact mods current_src) e /\
+                eval_pure_expr cx (initial_state am [FEMPTY]) e = SOME tvl ==>
+                expr_result_typed (artifact_env artifact mods current_src) e tvl`
+          >- (rpt strip_tac >>
+              `constant_expr mods e` by gvs[listTheory.EVERY_MEM] >>
+              drule_all args_ih >> simp[])) >>
+      qpat_x_assum `well_typed_expr _ (Builtin _ _ _)` mp_tac >>
+      simp[Once well_typed_expr_def] >> strip_tac >>
+      Cases_on `bt = Len`
+      >- (gvs[] >>
+          qpat_x_assum `eval_pure_expr _ _ (Builtin _ _ _) = _` mp_tac >>
+          simp[Once eval_pure_expr_def] >> gvs[AllCaseEqs()] >>
+          strip_tac >> gvs[] >>
+          `well_typed_expr (artifact_env artifact mods current_src) e` by
+            (qpat_x_assum `well_typed_exprs _ [e]` mp_tac >>
+             simp[Once well_typed_expr_def]) >>
+          `expr_result_typed (artifact_env artifact mods current_src) e tv` by
+            metis_tac[] >>
+          `?arg_tv. evaluate_type
+               (artifact_env artifact mods current_src).type_defs (expr_type e) =
+               SOME arg_tv /\ toplevel_value_typed tv arg_tv` by
+            gvs[vyperTypeExprResultTheory.expr_result_typed_def,
+                vyperTypeExprSoundnessTheory.expr_runtime_typed_def] >>
+          `?ret_tv. evaluate_type
+               (artifact_env artifact mods current_src).type_defs v8 = SOME ret_tv` by
+            gvs[well_formed_type_def, IS_SOME_EXISTS] >>
+          simp[vyperTypeExprResultTheory.expr_result_typed_def,
+               vyperTypeExprSoundnessTheory.expr_runtime_typed_def,
+               expr_type_def, toplevel_value_typed_def] >>
+          metis_tac[vyperTypeBuiltinsTheory.Len_builtin_sound])
+      >- (`?vs v. eval_pure_exprs cx (initial_state am [FEMPTY]) es = SOME vs /\
+             evaluate_builtin cx (initial_state am [FEMPTY]).accounts v8 bt vs = INL v /\
+             tvl = Value v` by
+           (qpat_x_assum `eval_pure_expr _ _ (Builtin _ _ _) = _` mp_tac >>
+            simp[Once eval_pure_expr_def] >> gvs[AllCaseEqs()] >>
+            strip_tac >> gvs[]) >>
+      `state_well_typed (initial_state am [FEMPTY])` by
+        (irule initial_state_single_scope_well_typed >> simp[scope_well_typed_def]) >>
+      `!e. MEM e es ==>
+         well_typed_expr (artifact_env artifact mods current_src) e` by
+        (qpat_x_assum `well_typed_exprs _ es` mp_tac >>
+         POP_ASSUM_LIST (K all_tac) >>
+         Induct_on `es` >> simp[Once well_typed_expr_def] >> metis_tac[]) >>
+      `!e tvl. MEM e es /\ eval_pure_expr cx (initial_state am [FEMPTY]) e = SOME tvl ==>
+         expr_result_typed (artifact_env artifact mods current_src) e tvl` by
+        metis_tac[] >>
+      `exprs_runtime_typed (artifact_env artifact mods current_src) es vs` by
+        metis_tac[eval_pure_exprs_success_typed] >>
+      `(artifact_env artifact mods current_src).type_defs = get_tenv cx` by
+        simp[artifact_env_def] >>
+      gvs[vyperTypeExprSoundnessTheory.exprs_runtime_typed_def] >>
+      `MAP (evaluate_type (get_tenv cx)) (MAP expr_type es) = MAP SOME tvs` by
+        gvs[LIST_REL_EL_EQN, LIST_EQ_REWRITE, EL_MAP] >>
+      `?ret_tv. evaluate_type (get_tenv cx) v8 = SOME ret_tv` by
+        gvs[well_formed_type_def, IS_SOME_EXISTS] >>
+      simp[vyperTypeExprResultTheory.expr_result_typed_def,
+           vyperTypeExprSoundnessTheory.expr_runtime_typed_def,
+           expr_type_def, toplevel_value_typed_def] >>
+      `accounts_well_typed (initial_state am [FEMPTY]).accounts` by
+        (simp[initial_state_def] >> metis_tac[machine_well_typed_accounts]) >>
+      qexists_tac `ret_tv` >> conj_tac >- metis_tac[] >>
+      irule vyperTypeBuiltinsTheory.well_typed_builtin_app_success_type >>
+      simp[] >> metis_tac[])
+  >- (rpt strip_tac >> gvs[] >>
+      qpat_x_assum `eval_pure_expr _ _ (Builtin _ _ _) = _` mp_tac >>
+      simp[Once eval_pure_expr_def] >>
+      Cases_on `es` >> gvs[AllCaseEqs()] >>
+      Cases_on `t` >> gvs[AllCaseEqs()] >> metis_tac[])
+  >- (rpt strip_tac >>
+      qpat_x_assum `eval_pure_expr _ _ (Builtin _ _ _) = _` mp_tac >>
+      simp[Once eval_pure_expr_def] >> gvs[AllCaseEqs()] >> metis_tac[]))
+  >> (rpt gen_tac >> strip_tac >>
+      Cases_on `tb` >> gvs[constant_type_builtin_def] >>
+      rpt strip_tac >>
+      qpat_x_assum `well_typed_expr _ (TypeBuiltin _ _ _ _)` mp_tac >>
+      simp[Once well_typed_expr_def, well_typed_type_builtin_args_def] >>
+      strip_tac >>
+      qpat_x_assum `eval_pure_expr _ _ (TypeBuiltin _ _ _ _) = _` mp_tac >>
+      simp[Once eval_pure_expr_def] >> gvs[AllCaseEqs()] >>
+      strip_tac >> gvs[Once eval_pure_expr_def] >>
+      `(artifact_env artifact mods current_src).type_defs = get_tenv cx` by
+        simp[artifact_env_def] >>
+      `?ret_tv. evaluate_type (get_tenv cx) v9 = SOME ret_tv` by
+        gvs[well_formed_type_def, IS_SOME_EXISTS] >>
+      simp[vyperTypeExprResultTheory.expr_result_typed_def,
+           vyperTypeExprSoundnessTheory.expr_runtime_typed_def,
+           expr_type_def, toplevel_value_typed_def] >>
+      qexists_tac `ret_tv` >> conj_tac >- metis_tac[] >>
+      gvs[type_builtin_result_ok_def, evaluate_type_builtin_def,
+          AllCaseEqs()]
+      >- (drule vyperTypeDefaultsTheory.default_value_has_type_thm >> simp[])
+      >- (`evaluate_max_value v10 = INL v` by metis_tac[] >>
+          drule_all vyperTypeConversionsTheory.evaluate_max_value_well_typed >> simp[])
+      >- (`evaluate_max_value (BaseT DecimalT) = INL v` by metis_tac[] >>
+          drule_all vyperTypeConversionsTheory.evaluate_max_value_well_typed >> simp[])
+      >- (`evaluate_min_value v10 = INL v` by metis_tac[] >>
+          drule_all vyperTypeConversionsTheory.evaluate_min_value_well_typed >> simp[])
+      >- (`evaluate_min_value (BaseT DecimalT) = INL v` by metis_tac[] >>
+          drule_all vyperTypeConversionsTheory.evaluate_min_value_well_typed >> simp[])
+      >- gvs[evaluate_type_def, vyperTypingTheory.value_has_type_def,
+              within_int_bound_def])
+QED
 (* TOP-LEVEL: Successful checked whole-contract constant evaluation produces
  * exactly the typed constant environment required by deployment entry.
  *
