@@ -1764,6 +1764,255 @@ Proof
       >- gvs[evaluate_type_def, vyperTypingTheory.value_has_type_def,
               within_int_bound_def])
 QED
+Definition constant_fmap_well_typed_def[local]:
+  constant_fmap_well_typed (m : (num, type_value # value) fmap) <=>
+    !id tv v. FLOOKUP m id = SOME (tv,v) ==>
+      value_has_type tv v /\ well_formed_type_value tv
+End
+
+Theorem merge_constants_machine_well_typed[local]:
+  machine_well_typed am /\ constant_fmap_well_typed cenv ==>
+  machine_well_typed (merge_constants addr src cenv am)
+Proof
+  strip_tac >>
+  qabbrev_tac `old = case ALOOKUP am.immutables addr of
+                     | NONE => empty_immutables | SOME m => m` >>
+  `imms_well_typed old` by
+    (Cases_on `ALOOKUP am.immutables addr` >>
+     gvs[Abbr `old`, empty_immutables_def, imms_well_typed_def] >>
+     `MEM (addr,x) am.immutables` by metis_tac[alistTheory.ALOOKUP_MEM] >>
+     gvs[machine_well_typed_def, listTheory.EVERY_MEM] >>
+     first_x_assum drule >> simp[imms_well_typed_def]) >>
+  `imms_well_typed
+     (set_source_immutables src
+       (cenv ⊌ get_source_immutables src old) old)` by
+    (simp[imms_well_typed_def, set_source_immutables_def,
+          get_source_immutables_def, alistTheory.ALOOKUP_ADELKEY] >>
+     rpt gen_tac >> strip_tac >>
+     Cases_on `src_id_opt = src` >> gvs[FLOOKUP_FUNION]
+     >- (Cases_on `FLOOKUP cenv id`
+         >- (gvs[] >> Cases_on `ALOOKUP old src` >>
+             gvs[imms_well_typed_def, get_source_immutables_def] >>
+             metis_tac[])
+         >- (gvs[constant_fmap_well_typed_def] >> metis_tac[])) >>
+     gvs[imms_well_typed_def] >> metis_tac[]) >>
+  rw[machine_well_typed_def, merge_constants_def, Abbr `old`] >>
+  gvs[machine_well_typed_def, listTheory.EVERY_MEM] >>
+  rw[] >> PairCases_on `e` >> gvs[alistTheory.MEM_ADELKEY] >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem module_constant_string_num_type_unique[local]:
+  !src ts visI eI idI tyI initI visJ eJ idJ tyJ initJ.
+    ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts)) /\
+    MEM (VariableDecl visI (Constant eI) idI tyI initI) ts /\
+    MEM (VariableDecl visJ (Constant eJ) idJ tyJ initJ) ts /\
+    string_to_num idJ = string_to_num idI ==>
+    tyJ = tyI
+Proof
+  gen_tac >> Induct_on `ts` >- rw[] >> rpt gen_tac >>
+  Cases_on `h` >>
+  rw[toplevel_vtype_keys_toplevel_def, ALL_DISTINCT_APPEND] >>
+  gvs[toplevel_vtype_keys_toplevel_def] >>
+  TRY (first_x_assum irule >> metis_tac[]) >>
+  metis_tac[module_toplevel_vtype_key_MEM_Variable_any]
+QED
+
+Definition constant_fmap_declared_typed_def[local]:
+  constant_fmap_declared_typed tenv ts
+      (m : (num, type_value # value) fmap) <=>
+    !id tv v. FLOOKUP m id = SOME (tv,v) ==>
+      ?vis e id_str ty init.
+        MEM (VariableDecl vis (Constant e) id_str ty init) ts /\
+        string_to_num id_str = id /\
+        evaluate_type tenv ty = SOME tv /\ value_has_type tv v
+End
+
+Theorem constant_fmap_declared_typed_lookup[local]:
+  constant_fmap_declared_typed tenv ts m /\
+  FLOOKUP m id = SOME (tv,v) ==>
+  ?vis e id_str ty init.
+    MEM (VariableDecl vis (Constant e) id_str ty init) ts /\
+    string_to_num id_str = id /\
+    evaluate_type tenv ty = SOME tv /\ value_has_type tv v
+Proof
+  metis_tac[constant_fmap_declared_typed_def]
+QED
+
+Theorem merge_constants_preserves_constant_cells_typed[local]:
+  contract_namespaces_ok F mods /\ ALOOKUP mods src = SOME ts /\
+  deployment_constant_cells_typed tenv addr mods am /\
+  constant_fmap_declared_typed tenv ts cenv ==>
+  deployment_constant_cells_typed tenv addr mods
+    (merge_constants addr src cenv am)
+Proof
+  strip_tac >>
+  qpat_assum `deployment_constant_cells_typed tenv addr mods am`
+    (fn th => assume_tac th) >>
+  simp[deployment_constant_cells_typed_def, merge_constants_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `src' = src` >>
+  gvs[get_source_immutables_set_same, get_source_immutables_set_other,
+      FLOOKUP_FUNION]
+  >- (Cases_on `FLOOKUP cenv (string_to_num id)` >> gvs[]
+      >- (gvs[empty_immutables_def] >>
+          drule_all deployment_constant_cells_typed_lookup >> simp[]) >>
+      drule_all constant_fmap_declared_typed_lookup >> strip_tac >>
+      `ts' = ts` by
+        (`MEM (src,ts') mods` by metis_tac[] >>
+         `ALOOKUP mods src = SOME ts'` by
+           (irule alistTheory.ALOOKUP_ALL_DISTINCT_MEM >>
+            gvs[contract_namespaces_ok_def]) >>
+         gvs[]) >>
+      `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))` by
+        metis_tac[contract_namespaces_ok_module_toplevel_vtype_keys] >>
+      `ty' = ty` by
+        (gvs[] >> qspecl_then
+           [`src`,`ts`,`vis`,`e`,`id`,`ty`,`init`,
+            `vis'`,`e'`,`id_str`,`ty'`,`init'`] mp_tac
+           module_constant_string_num_type_unique >> simp[]) >>
+      gvs[]) >>
+  gvs[empty_immutables_def] >>
+  qpat_x_assum `deployment_constant_cells_typed tenv addr mods am` mp_tac >>
+  simp[deployment_constant_cells_typed_def] >> strip_tac >>
+  last_x_assum
+    (qspecl_then [`src'`,`ts'`,`vis`,`e`,`id`,`ty`,`init`,`tv`,`v`] mp_tac) >>
+  simp[]
+QED
+
+Theorem checked_constants_env_output_invariants[local]:
+  !work acc cenv.
+    check_contract F cx.layouts cx.txn.target mods = SOME artifact /\
+    ALOOKUP cx.sources cx.txn.target = SOME mods /\
+    ALOOKUP mods src = SOME tls /\
+    get_tenv cx = type_env_all_modules mods /\
+    context_well_typed cx /\ machine_well_typed am /\
+    deployment_constant_cells_typed
+      (type_env_all_modules mods) cx.txn.target mods am /\
+    contract_namespaces_ok F mods /\ EVERY (λtl. MEM tl tls) work /\
+    constant_fmap_well_typed acc /\
+    constant_fmap_declared_typed (type_env_all_modules mods) tls acc /\
+    constants_env (set_current_module cx src) am cx.txn.target src
+      work acc = SOME cenv ==>
+    constant_fmap_well_typed cenv /\
+    constant_fmap_declared_typed (type_env_all_modules mods) tls cenv
+Proof
+  Induct_on `work`
+  >- simp[constants_env_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `h` >> gvs[constants_env_def]
+  >- (first_x_assum (qspecl_then [`acc`,`cenv`] mp_tac) >> simp[])
+  >- (Cases_on `v0` >> gvs[constants_env_def]
+      >- (fs[set_current_module_def, get_tenv_def] >>
+          Cases_on `evaluate_type (type_env_all_modules mods) t` >>
+      gvs[AllCaseEqs()] >>
+      qmatch_asmsub_rename_tac
+        `FST (eval_expr _ e _) = INL (Value eval_v)` >>
+      qmatch_asmsub_rename_tac
+        `evaluate_type (type_env_all_modules mods) t = SOME eval_tv` >>
+      `?st'. eval_expr (set_current_module cx src) e
+          (initial_state (merge_constants cx.txn.target src acc am) [FEMPTY]) =
+          (INL (Value eval_v),st')` by
+        (Cases_on `eval_expr (set_current_module cx src) e
+          (initial_state (merge_constants cx.txn.target src acc am) [FEMPTY])` >>
+         gvs[set_current_module_def]) >>
+      `machine_well_typed
+         (merge_constants cx.txn.target src acc am)` by
+        metis_tac[merge_constants_machine_well_typed] >>
+      `deployment_constant_cells_typed
+         (type_env_all_modules mods) cx.txn.target mods
+         (merge_constants cx.txn.target src acc am)` by
+        (irule merge_constants_preserves_constant_cells_typed >> simp[] >>
+         metis_tac[]) >>
+      `check_toplevel_decl cx.layouts cx.txn.target mods artifact src
+         (VariableDecl v (Constant e) s t o')` by
+        metis_tac[check_contract_toplevel_decl_MEM] >>
+      gvs[check_toplevel_decl_def] >>
+      `eval_pure_expr (set_current_module cx src)
+         (initial_state (merge_constants cx.txn.target src acc am) [FEMPTY]) e =
+         SOME (Value eval_v)` by
+        metis_tac[checked_constant_initializer_eval_pure] >>
+      `expr_result_typed (artifact_env artifact mods src) e (Value eval_v)` by
+        (qspecl_then [`mods`,`e`] mp_tac
+           constant_pure_eval_success_typed_gen_local >>
+         strip_tac >>
+         qpat_x_assum `constant_expr mods e ==> _` mp_tac >> simp[] >> strip_tac >>
+         qpat_x_assum `∀artifact cx current_src am. _` mp_tac >> strip_tac >>
+         pop_assum
+           (qspecl_then
+             [`artifact`,`set_current_module cx src`,`src`,
+              `merge_constants cx.txn.target src acc am`] mp_tac) >>
+         simp[set_current_module_def, context_well_typed_def,
+              get_tenv_def] >>
+         strip_tac >> gvs[context_well_typed_def]) >>
+      `value_has_type eval_tv eval_v` by
+        (gvs[vyperTypeExprResultTheory.expr_result_typed_def,
+             vyperTypeExprSoundnessTheory.expr_runtime_typed_def,
+             artifact_env_def, toplevel_value_typed_def] >> metis_tac[]) >>
+      `well_formed_type_value eval_tv` by
+        metis_tac[vyperTypeValuesTheory.evaluate_type_well_formed_type_value] >>
+      first_x_assum (qspecl_then
+        [`acc |+ (string_to_num s,(eval_tv,eval_v))`,`cenv`] mp_tac) >>
+      simp[] >> impl_tac
+      >- (conj_tac
+          >- (rw[constant_fmap_well_typed_def, FLOOKUP_UPDATE] >>
+          Cases_on `id = string_to_num s` >> gvs[] >>
+              metis_tac[constant_fmap_well_typed_def]) >>
+          rw[constant_fmap_declared_typed_def, FLOOKUP_UPDATE] >>
+          Cases_on `id = string_to_num s` >> gvs[]
+          >- (qexistsl [`v`,`e`,`s`,`expr_type e`,`o'`] >> gvs[]) >>
+          metis_tac[constant_fmap_declared_typed_def]) >>
+      simp[])
+      >- (first_x_assum (qspecl_then [`acc`,`cenv`] mp_tac) >> simp[])
+      >- (first_x_assum (qspecl_then [`acc`,`cenv`] mp_tac) >> simp[])
+      >- (first_x_assum (qspecl_then [`acc`,`cenv`] mp_tac) >> simp[]))
+  >- (first_x_assum (qspecl_then [`acc`,`cenv`] mp_tac) >> simp[])
+  >- (first_x_assum (qspecl_then [`acc`,`cenv`] mp_tac) >> simp[])
+  >- (first_x_assum (qspecl_then [`acc`,`cenv`] mp_tac) >> simp[])
+  >- (first_x_assum (qspecl_then [`acc`,`cenv`] mp_tac) >> simp[])
+  >- (first_x_assum (qspecl_then [`acc`,`cenv`] mp_tac) >> simp[])
+QED
+
+Theorem checked_evaluate_all_constants_preserves_invariants[local]:
+  !work am am_c.
+    check_contract F cx.layouts cx.txn.target mods = SOME artifact /\
+    ALOOKUP cx.sources cx.txn.target = SOME mods /\
+    get_tenv cx = type_env_all_modules mods /\ context_well_typed cx /\
+    contract_namespaces_ok F mods /\ EVERY (λm. MEM m mods) work /\
+    machine_well_typed am /\
+    deployment_constant_cells_typed
+      (type_env_all_modules mods) cx.txn.target mods am /\
+    evaluate_all_constants cx am cx.txn.target work = SOME am_c ==>
+    machine_well_typed am_c /\
+    deployment_constant_cells_typed
+      (type_env_all_modules mods) cx.txn.target mods am_c
+Proof
+  Induct_on `work`
+  >- simp[evaluate_all_constants_def] >>
+  rpt gen_tac >> PairCases_on `h` >> strip_tac >>
+  gvs[evaluate_all_constants_def, AllCaseEqs()] >>
+  `ALOOKUP mods h0 = SOME h1` by
+    (irule alistTheory.ALOOKUP_ALL_DISTINCT_MEM >>
+     gvs[contract_namespaces_ok_def]) >>
+  `constant_fmap_well_typed cenv /\
+   constant_fmap_declared_typed (type_env_all_modules mods) h1 cenv` by
+    (irule checked_constants_env_output_invariants >>
+     simp[constant_fmap_well_typed_def,
+          constant_fmap_declared_typed_def] >>
+     qexistsl [`FEMPTY`,`am`,`artifact`,`cx`,`h0`,`h1`] >>
+     simp[listTheory.EVERY_MEM]) >>
+  `machine_well_typed
+     (merge_constants cx.txn.target h0 cenv am)` by
+    metis_tac[merge_constants_machine_well_typed] >>
+  `deployment_constant_cells_typed
+     (type_env_all_modules mods) cx.txn.target mods
+     (merge_constants cx.txn.target h0 cenv am)` by
+    (irule merge_constants_preserves_constant_cells_typed >> simp[] >>
+     metis_tac[]) >>
+  first_x_assum (qspecl_then
+    [`merge_constants cx.txn.target h0 cenv am`,`am_c`] mp_tac) >> simp[]
+QED
+
 (* TOP-LEVEL: Successful checked whole-contract constant evaluation produces
  * exactly the typed constant environment required by deployment entry.
  *
@@ -1799,7 +2048,41 @@ Theorem checked_evaluate_all_constants_output_typed:
   deployment_constants_output_typed
     (type_env_all_modules mods) target mods am_c
 Proof
-  cheat
+  strip_tac >>
+  `contract_namespaces_ok F mods` by
+    (qpat_x_assum `check_contract F layouts target mods = SOME artifact` mp_tac >>
+     simp[check_contract_def] >> metis_tac[]) >>
+  `deployment_constant_cells_typed
+     (type_env_all_modules mods) target mods am` by
+    metis_tac[deployment_constant_cells_typed_initial] >>
+  `machine_well_typed am_c /\
+   deployment_constant_cells_typed
+     (type_env_all_modules mods) target mods am_c` by
+    (gvs[] >> irule checked_evaluate_all_constants_preserves_invariants >>
+     simp[listTheory.EVERY_MEM] >>
+     qexistsl [`am`,`mods`] >> simp[listTheory.EVERY_MEM]) >>
+  rw[deployment_constants_output_typed_def]
+  >- gvs[machine_well_typed_def] >>
+  `ALOOKUP mods src = SOME ts` by
+    (irule alistTheory.ALOOKUP_ALL_DISTINCT_MEM >>
+     gvs[contract_namespaces_ok_def]) >>
+  `?tv v. FLOOKUP
+       (get_source_immutables src
+         (case ALOOKUP am_c.immutables cx.txn.target of
+          | SOME m => m | NONE => []))
+       (string_to_num id) = SOME (tv,v) /\
+     evaluate_type (get_tenv cx) ty = SOME tv` by
+    (irule evaluate_all_constants_contains_constant_type >>
+     qexistsl [`am`,`e`,`init`,`mods`,`ts`,`vis`] >>
+     simp[] >> metis_tac[]) >>
+  qexistsl [`tv`,`v`] >> simp[] >>
+  Cases_on `ALOOKUP am_c.immutables cx.txn.target` >>
+  gvs[get_source_immutables_def] >>
+  `MEM (cx.txn.target,x) am_c.immutables` by metis_tac[alistTheory.ALOOKUP_MEM] >>
+  `imms_well_typed x` by
+    (gvs[machine_well_typed_def, listTheory.EVERY_MEM] >>
+     first_x_assum drule >> simp[]) >>
+  Cases_on `ALOOKUP x src` >> gvs[imms_well_typed_def] >> metis_tac[]
 QED
 
 (* TOP-LEVEL: Determinism of evaluate_all_constants packages one typed
@@ -1820,7 +2103,12 @@ Theorem checked_deployment_constants_ready_from_success:
   evaluate_all_constants cx am target mods = SOME am_c ==>
   checked_deployment_constants_ready cx am target mods
 Proof
-  cheat
+  strip_tac >>
+  `deployment_constants_output_typed
+     (type_env_all_modules mods) target mods am_c` by
+    (drule_all checked_evaluate_all_constants_output_typed >> simp[]) >>
+  rw[checked_deployment_constants_ready_def] >>
+  metis_tac[]
 QED
 
 Theorem send_call_value_preserves_tv[local]:
