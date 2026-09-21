@@ -1232,6 +1232,31 @@ Proof
   irule bitTheory.TWOEXP_MONO >> simp[]
 QED
 
+Theorem eval_pure_exprs_success_typed[local]:
+  !es env cx st vs.
+    state_well_typed st /\
+    well_typed_exprs env es /\
+    (!e tvl. MEM e es /\ eval_pure_expr cx st e = SOME tvl ==>
+       expr_result_typed env e tvl) /\
+    eval_pure_exprs cx st es = SOME vs ==>
+    exprs_runtime_typed env es vs
+Proof
+  Induct >>
+  rw[vyperTypeExprSoundnessTheory.exprs_runtime_typed_def,
+     Once eval_pure_expr_def, Once well_typed_expr_def, AllCaseEqs()] >>
+  `expr_result_typed env h tv` by metis_tac[] >>
+  `?htv. evaluate_type env.type_defs (expr_type h) = SOME htv /\
+         value_has_type htv v` by
+    (gvs[vyperTypeExprResultTheory.expr_result_typed_def,
+         vyperTypeExprSoundnessTheory.expr_runtime_typed_def] >>
+     metis_tac[materialise_preserves_value_type,
+               evaluate_type_well_formed_type_value]) >>
+  `exprs_runtime_typed env es vs'` by
+    (first_x_assum irule >> simp[] >> metis_tac[]) >>
+  gvs[vyperTypeExprSoundnessTheory.exprs_runtime_typed_def] >>
+  metis_tac[]
+QED
+
 (* TOP-LEVEL: Successful checked whole-contract constant evaluation produces
  * exactly the typed constant environment required by deployment entry.
  *
