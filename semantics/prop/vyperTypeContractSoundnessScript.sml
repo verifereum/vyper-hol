@@ -1430,6 +1430,40 @@ Proof
   simp[Once well_typed_expr_def] >> metis_tac[]
 QED
 
+Theorem evaluate_subscript_value_selected_typed_local[local]:
+  !tenv arr_tv v1 v2 out ct it ty.
+    evaluate_subscript tenv arr_tv (Value v1) v2 = INL out /\
+    value_has_type arr_tv v1 /\
+    subscript_type_ok ct it ty /\
+    evaluate_type tenv ct = SOME arr_tv ==>
+    ?rtv v. evaluate_type tenv ty = SOME rtv /\
+             out = INL (Value v) /\ value_has_type rtv v
+Proof
+  rpt gen_tac >> Cases_on `ct` >> simp[subscript_type_ok_def] >>
+  rpt strip_tac >> gvs[] >> Cases_on `v1` >> Cases_on `v2` >>
+  gvs[evaluate_subscript_def, AllCaseEqs()]
+  >- (gvs[Once evaluate_type_def, AllCaseEqs(),
+           evaluate_types_OPT_MMAP, OPT_MMAP_SOME_IFF] >>
+      Cases_on `a` >>
+      gvs[vyperTypingTheory.value_has_type_inv,
+          vyperValueOperationTheory.array_index_def, AllCaseEqs()] >>
+      gvs[oEL_EQ_EL] >>
+      gvs[vyperTypeDefaultsTheory.values_have_types_LIST_REL,
+          LIST_REL_EL_EQN] >>
+      first_x_assum (qspec_then `Num i` mp_tac) >> simp[EL_MAP] >>
+      `EL (Num i) l = ty` by (gvs[EVERY_EL] >> res_tac) >>
+      strip_tac >>
+      `IS_SOME (evaluate_type tenv (EL (Num i) l))` by
+        (qpat_x_assum `EVERY IS_SOME (MAP _ l)` mp_tac >>
+         simp[EVERY_EL] >>
+         disch_then (qspec_then `Num i` mp_tac) >> simp[EL_MAP]) >>
+      Cases_on `evaluate_type tenv (EL (Num i) l)` >> gvs[])
+  >> (gvs[Once evaluate_type_def, AllCaseEqs()] >>
+      imp_res_tac (cj 1 vyperTypingTheory.evaluate_type_well_formed) >>
+      irule vyperAssignPreservesTypeTheory.array_index_has_type >>
+      simp[] >> metis_tac[])
+QED
+
 (* TOP-LEVEL: Successful checked whole-contract constant evaluation produces
  * exactly the typed constant environment required by deployment entry.
  *
