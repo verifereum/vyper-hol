@@ -1312,6 +1312,69 @@ Proof
   first_x_assum (qspecl_then [`tenv`, `nid`] mp_tac) >> simp[]
 QED
 
+Theorem struct_lit_ZIP_length_local[local]:
+  !tenv kes args tvs vs.
+    MAP FST kes = MAP FST args /\
+    LIST_REL (\e tv. evaluate_type tenv (expr_type e) = SOME tv)
+      (MAP SND kes) tvs /\
+    LIST_REL value_has_type tvs vs ==>
+    LENGTH args = LENGTH vs
+Proof
+  rpt strip_tac >>
+  `LENGTH (MAP SND kes) = LENGTH tvs` by
+    metis_tac[listTheory.LIST_REL_LENGTH] >>
+  `LENGTH tvs = LENGTH vs` by
+    metis_tac[listTheory.LIST_REL_LENGTH] >>
+  `LENGTH (MAP FST kes) = LENGTH (MAP FST args)` by metis_tac[] >>
+  gvs[LENGTH_MAP]
+QED
+
+Theorem struct_has_type_ZIP_same_names_local[local]:
+  !names tvs vs.
+    LENGTH names = LENGTH tvs /\
+    LENGTH tvs = LENGTH vs /\
+    LIST_REL value_has_type tvs vs ==>
+    struct_has_type (ZIP (names,tvs)) (ZIP (names,vs))
+Proof
+  Induct >> simp[Once vyperTypingTheory.value_has_type_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `tvs` >> Cases_on `vs` >>
+  gvs[Once vyperTypingTheory.value_has_type_def]
+QED
+
+Theorem struct_lit_expr_result_typed_local[local]:
+  well_formed_type env.type_defs (StructT sid) /\
+  FLOOKUP env.type_defs (type_key sid) = SOME (StructArgs args) /\
+  MAP FST kes = MAP FST args /\
+  MAP (expr_type o SND) kes = MAP SND args /\
+  exprs_runtime_typed env (MAP SND kes) vs ==>
+  expr_result_typed env (StructLit (StructT sid) sid kes)
+    (Value (StructV (ZIP (MAP FST args,vs))))
+Proof
+  rw[vyperTypeExprSoundnessTheory.exprs_runtime_typed_def,
+     vyperTypeExprResultTheory.expr_result_typed_def,
+     vyperTypeExprSoundnessTheory.expr_runtime_typed_def,
+     expr_type_def, toplevel_value_typed_def] >>
+  qexists_tac `StructTV (ZIP (MAP FST args,tvs))` >>
+  gvs[well_formed_type_def, IS_SOME_EXISTS] >>
+  qpat_x_assum `evaluate_type _ (StructT _) = SOME _` mp_tac >>
+  simp[Once evaluate_type_def, AllCaseEqs(), evaluate_types_OPT_MMAP] >>
+  strip_tac >> gvs[vyperTypingTheory.value_has_type_def] >>
+  qpat_x_assum `MAP (expr_type o SND) kes = MAP SND args`
+    (assume_tac o GSYM) >>
+  gvs[] >>
+  `OPT_MMAP (evaluate_type env.type_defs)
+      (MAP (expr_type o SND) kes) = SOME tvs` by
+    (irule OPT_MMAP_expr_types_from_LIST_REL_local >> simp[]) >>
+  `OPT_MMAP (evaluate_type env.type_defs)
+      (MAP (expr_type o SND) kes) = SOME tvs'` by
+    metis_tac[OPT_MMAP_evaluate_type_mono_local] >>
+  gvs[] >>
+  irule struct_has_type_ZIP_same_names_local >>
+  imp_res_tac listTheory.LIST_REL_LENGTH >> gvs[LENGTH_MAP] >>
+  metis_tac[LENGTH_MAP]
+QED
+
 (* TOP-LEVEL: Successful checked whole-contract constant evaluation produces
  * exactly the typed constant environment required by deployment entry.
  *
