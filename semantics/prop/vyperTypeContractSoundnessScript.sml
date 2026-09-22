@@ -605,64 +605,6 @@ Proof
   simp[check_toplevel_decl_def]
 QED
 
-Definition constant_success_scopes_consistent_def[local]:
-  constant_success_scopes_consistent env cx (st:evaluation_state) <=>
-    (!id ty. FLOOKUP env.var_types id = SOME ty ==>
-       IS_SOME (lookup_scopes id st.scopes)) /\
-    (!id entry. lookup_scopes id st.scopes = SOME entry ==>
-       IS_SOME (FLOOKUP env.var_types id)) /\
-    (!id ty entry.
-       FLOOKUP env.var_types id = SOME ty /\
-       lookup_scopes id st.scopes = SOME entry ==>
-       evaluate_type (get_tenv cx) ty = SOME entry.type) /\
-    (!id. FLOOKUP env.var_assignable id = SOME T ==>
-       IS_SOME (FLOOKUP env.var_types id)) /\
-    (!id. FLOOKUP env.var_assignable id = SOME T ==>
-       ?entry. lookup_scopes id st.scopes = SOME entry /\ entry.assignable)
-End
-
-Definition constant_success_invariant_def[local]:
-  constant_success_invariant env cx (st:evaluation_state) <=>
-    env_context_consistent env cx /\
-    constant_success_scopes_consistent env cx st /\
-    state_well_typed st /\
-    accounts_well_typed st.accounts
-End
-
-Theorem constant_success_invariant_initial_closed[local]:
-  env_context_consistent env cx /\
-  env.var_types = FEMPTY /\ env.var_assignable = FEMPTY /\
-  machine_well_typed am ==>
-  constant_success_invariant env cx (initial_state am [])
-Proof
-  simp[constant_success_invariant_def,
-       constant_success_scopes_consistent_def, initial_state_def,
-       state_well_typed_def, machine_well_typed_def, lookup_scopes_def]
-QED
-
-Theorem constant_success_invariant_state_well_typed[local]:
-  constant_success_invariant env cx st ==> state_well_typed st
-Proof
-  simp[constant_success_invariant_def]
-QED
-
-Theorem constant_success_invariant_accounts_well_typed[local]:
-  constant_success_invariant env cx st ==> accounts_well_typed st.accounts
-Proof
-  simp[constant_success_invariant_def]
-QED
-
-Theorem constant_success_invariant_scope_lookup[local]:
-  constant_success_invariant env cx st /\
-  lookup_scopes id st.scopes = SOME entry ==>
-  ?ty. FLOOKUP env.var_types id = SOME ty /\
-       evaluate_type (get_tenv cx) ty = SOME entry.type
-Proof
-  simp[constant_success_invariant_def,
-       constant_success_scopes_consistent_def, IS_SOME_EXISTS] >>
-  metis_tac[]
-QED
-
 (* Historical counterexample probes for the former checker, which admitted
    function calls and immutable reads in constant initializers.  The
    constant_expr check intentionally makes these examples ill-checked.
@@ -825,130 +767,6 @@ Proof
   metis_tac[bad_tag_context_machine_probe]
 QED
 *)
-
-Theorem artifact_env_singleton_empty_scopes_consistent[local]:
-  env_scopes_consistent (artifact_env art mods src) cx
-    (initial_state am [FEMPTY])
-Proof
-  simp[env_scopes_consistent_def, artifact_env_def, initial_state_def,
-       lookup_scopes_def]
-QED
-
-Definition empty_scope_pad_def[local]:
-  empty_scope_pad (st:evaluation_state) st' <=>
-    st' = st with scopes := FEMPTY::st.scopes
-End
-
-Theorem empty_scope_pad_initial_state[local]:
-  empty_scope_pad (initial_state am scs)
-    (initial_state am (FEMPTY::scs))
-Proof
-  simp[empty_scope_pad_def, initial_state_def]
-QED
-
-Theorem lookup_scopes_empty_head[local]:
-  lookup_scopes id (FEMPTY::scs) = lookup_scopes id scs
-Proof
-  simp[lookup_scopes_def]
-QED
-
-Definition scope_frame_def[local]:
-  scope_frame padded (st:evaluation_state) st' <=>
-    if padded then empty_scope_pad st st' else st' = st
-End
-
-Theorem scope_frame_modes[local]:
-  (scope_frame F st st' <=> st' = st) /\
-  (scope_frame T st st' <=> empty_scope_pad st st')
-Proof
-  simp[scope_frame_def]
-QED
-
-Theorem scope_frame_lookup_scopes[local]:
-  scope_frame padded st st' ==>
-  lookup_scopes id st.scopes = lookup_scopes id st'.scopes
-Proof
-  Cases_on `padded` >>
-  simp[scope_frame_def, empty_scope_pad_def, lookup_scopes_empty_head]
-QED
-
-Theorem scope_frame_overwrite_scopes[local]:
-  scope_frame padded st st' ==>
-  st with scopes := sc = st' with scopes := sc
-Proof
-  Cases_on `padded` >>
-  simp[scope_frame_def, empty_scope_pad_def]
-QED
-
-Theorem scope_frame_restore_scopes[local]:
-  scope_frame padded saved saved' ==>
-  scope_frame padded
-    (cur with scopes := saved.scopes)
-    (cur with scopes := saved'.scopes)
-Proof
-  Cases_on `padded` >>
-  simp[scope_frame_def, empty_scope_pad_def]
-QED
-
-
-Theorem push_pop_scope_cancel[local]:
-  pop_scope (st with scopes updated_by CONS sc) = (INL (),st)
-Proof
-  simp[pop_scope_def, return_def]
-QED
-
-Theorem scope_frame_set_scopes_equal[local]:
-  scope_frame padded st st' ==>
-  set_scopes sc st = set_scopes sc st'
-Proof
-  strip_tac >>
-  drule scope_frame_overwrite_scopes >>
-  simp[set_scopes_def]
-QED
-
-Theorem eval_base_target_NameTarget_scope_frame[local]:
-  scope_frame padded st st' /\
-  eval_base_target cx (NameTarget id) st = (res,out) ==>
-  ?out'. eval_base_target cx (NameTarget id) st' = (res,out') /\
-         scope_frame padded out out'
-Proof
-  Cases_on `padded` >>
-  gvs[scope_frame_def, empty_scope_pad_def] >>
-  strip_tac >>
-  Cases_on `IS_SOME (lookup_scopes (string_to_num id) st.scopes)` >>
-  gvs[evaluate_def, get_scopes_def, type_check_def, assert_def,
-      return_def, bind_def, ignore_bind_def, lookup_scopes_empty_head]
-QED
-
-Theorem scope_frame_push_function_equal[local]:
-  scope_frame padded st st' ==>
-  push_function src_fn sc cx st = push_function src_fn sc cx st'
-Proof
-  strip_tac >>
-  drule scope_frame_overwrite_scopes >>
-  simp[push_function_def, return_def]
-QED
-
-Theorem finally_with_installed_scope_frame[local]:
-  scope_frame padded st st' /\
-  finally (do set_scopes [FEMPTY]; f od) (set_scopes st.scopes) st =
-    (res,out) ==>
-  ?out'.
-    finally (do set_scopes [FEMPTY]; f od) (set_scopes st'.scopes) st' =
-      (res,out') /\
-    scope_frame padded out out'
-Proof
-  Cases_on `padded` >>
-  gvs[scope_frame_def, empty_scope_pad_def] >>
-  simp[finally_def, set_scopes_def, return_def, bind_def, ignore_bind_def] >>
-  Cases_on `f (st with scopes := [FEMPTY])` >>
-  qmatch_assum_rename_tac
-    `f (st with scopes := [FEMPTY]) = (call_res,call_st)` >>
-  Cases_on `call_res` >> gvs[raise_def] >>
-  rpt strip_tac >> BasicProvers.VAR_EQ_TAC >> simp[]
-QED
-
-
 
 Theorem initial_immutables_module_lookup_origin[local]:
   !tenv init_src ts acc imms query_src id tv v.
@@ -1189,45 +1007,6 @@ Proof
       vyperTypeExprResultTheory.expr_result_typed_def,
       vyperTypeExprSoundnessTheory.expr_runtime_typed_def, expr_type_def] >>
   metis_tac[literal_toplevel_value_typed]
-QED
-
-Theorem constant_flag_member_pure_typed[local]:
-  check_contract F layouts target mods = SOME artifact /\
-  ALOOKUP cx.sources target = SOME mods /\
-  cx.txn.target = target /\
-  cx.layouts = layouts /\
-  get_tenv cx = type_env_all_modules mods /\
-  well_typed_expr (artifact_env artifact mods current_src)
-    (FlagMember ty nsid mid) /\
-  eval_pure_expr cx st (FlagMember ty nsid mid) = SOME tvl ==>
-  expr_result_typed (artifact_env artifact mods current_src)
-    (FlagMember ty nsid mid) tvl
-Proof
-  PairCases_on `nsid` >>
-  rw[Once eval_pure_expr_def, well_typed_expr_def, artifact_env_def] >>
-  drule check_contract_flag_members_consistent_initial >>
-  disch_then drule >>
-  disch_then (qspec_then `cx.txn` mp_tac) >>
-  disch_then (qspec_then `nsid0` mp_tac) >>
-  disch_then (qspec_then `nsid1` mp_tac) >>
-  disch_then (qspec_then `ls` mp_tac) >>
-  simp[get_module_code_def, initial_evaluation_context_def] >>
-  strip_tac >>
-  qpat_x_assum `lookup_flag_member _ _ _ = _` mp_tac >>
-  simp[vyperLookupTheory.lookup_flag_member_def] >>
-  Cases_on `INDEX_OF mid ls`
-  >- gvs[get_module_code_def] >>
-  gvs[get_module_code_def] >>
-  `LENGTH ls <= 256` by
-    (gvs[well_formed_type_def, evaluate_type_def, AllCaseEqs()] >> decide_tac) >>
-  gvs[vyperTypeExprResultTheory.expr_result_typed_def,
-      vyperTypeExprSoundnessTheory.expr_runtime_typed_def, expr_type_def,
-      toplevel_value_typed_Value, evaluate_type_def,
-      vyperTypingTheory.value_has_type_def, INDEX_OF_eq_SOME,
-      artifact_env_def] >>
-  strip_tac >> gvs[] >>
-  simp[toplevel_value_typed_def, vyperTypingTheory.value_has_type_def] >>
-  irule bitTheory.TWOEXP_MONO >> simp[]
 QED
 
 Theorem eval_pure_exprs_success_typed[local]:
@@ -4082,33 +3861,6 @@ Proof
    flag_members_complete env.flag_members cx2` by
     (irule flag_members_complete_context_cong >> simp[]) >>
   simp[env_context_consistent_def]
-QED
-
-Theorem checked_constant_success_invariant_initial[local]:
-  check_contract F layouts target mods = SOME art /\
-  cx.layouts = layouts /\
-  ALOOKUP cx.sources target = SOME mods /\
-  cx.txn.target = target /\
-  ~cx.in_deploy /\
-  machine_well_typed am ==>
-  constant_success_invariant (artifact_env art mods src)
-    (set_current_module cx src) (initial_state am [])
-Proof
-  rpt strip_tac >>
-  irule constant_success_invariant_initial_closed >>
-  simp[artifact_env_def] >>
-  `env_context_consistent (artifact_env art mods src)
-     (initial_evaluation_context cx.sources layouts cx.txn src)` by
-    (irule check_contract_env_context_consistent_initial_src >> simp[]) >>
-  `env_context_consistent (artifact_env art mods src) (set_current_module cx src) <=>
-   env_context_consistent (artifact_env art mods src)
-     (initial_evaluation_context cx.sources layouts cx.txn src)` by
-    (irule env_context_consistent_context_cong >>
-     simp[set_current_module_def, initial_evaluation_context_def,
-          get_tenv_def, current_module_def, get_module_code_def,
-          lookup_var_slot_from_layout_def]) >>
-  qpat_x_assum `env_context_consistent _ _ <=> env_context_consistent _ _` mp_tac >>
-  simp[artifact_env_def]
 QED
 
 Theorem initial_env_context_consistent_empty_tx[local]:
