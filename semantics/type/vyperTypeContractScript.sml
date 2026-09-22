@@ -166,6 +166,91 @@ End
 
 (* ===== Declaration checks ===== *)
 
+(* Vyper accepts constant initializers only from its compile-time-constant
+   expression class.  This is deliberately narrower than pure_expr: in
+   particular, runtime environment/account reads and all function calls are
+   excluded, and top-level reads must name another declared constant. *)
+Definition constant_binop_def:
+  constant_binop Add = T /\
+  constant_binop Sub = T /\
+  constant_binop Mul = T /\
+  constant_binop Div = T /\
+  constant_binop Mod = T /\
+  constant_binop Exp = T /\
+  constant_binop And = T /\
+  constant_binop Or = T /\
+  constant_binop XOr = T /\
+  constant_binop ShL = T /\
+  constant_binop ShR = T /\
+  constant_binop In = T /\
+  constant_binop NotIn = T /\
+  constant_binop Eq = T /\
+  constant_binop NotEq = T /\
+  constant_binop Lt = T /\
+  constant_binop LtE = T /\
+  constant_binop Gt = T /\
+  constant_binop GtE = T /\
+  constant_binop Min = T /\
+  constant_binop Max = T /\
+  constant_binop _ = F
+End
+
+Definition constant_builtin_def:
+  constant_builtin Len = T /\
+  constant_builtin Not = T /\
+  constant_builtin Neg = T /\
+  constant_builtin Abs = T /\
+  constant_builtin Keccak256 = T /\
+  constant_builtin Sha256 = T /\
+  constant_builtin (AsWeiValue _) = T /\
+  constant_builtin (Uint2Str _) = T /\
+  constant_builtin (MakeArray _ _) = T /\
+  constant_builtin Ceil = T /\
+  constant_builtin Floor = T /\
+  constant_builtin AddMod = T /\
+  constant_builtin MulMod = T /\
+  constant_builtin (Bop op) = constant_binop op /\
+  constant_builtin MethodId = T /\
+  constant_builtin PowMod256 = T /\
+  constant_builtin _ = F
+End
+
+Definition constant_type_builtin_def:
+  constant_type_builtin Empty = T /\
+  constant_type_builtin MaxValue = T /\
+  constant_type_builtin MinValue = T /\
+  constant_type_builtin Epsilon = T /\
+  constant_type_builtin _ = F
+End
+
+Definition declared_constant_def:
+  declared_constant mods src id <=>
+    ?tls vis e ty init.
+      MEM (src,tls) mods /\
+      MEM (VariableDecl vis (Constant e) id ty init) tls
+End
+
+Definition constant_expr_def:
+  constant_expr mods (TopLevelName _ (src,id)) = declared_constant mods src id /\
+  constant_expr mods (Literal _ _) = T /\
+  constant_expr mods (StructLit _ _ kes) =
+    EVERY (constant_expr mods) (MAP SND kes) /\
+  constant_expr mods (Subscript _ e1 e2) =
+    (constant_expr mods e1 /\ constant_expr mods e2) /\
+  constant_expr mods (Attribute _ e _) = constant_expr mods e /\
+  constant_expr mods (Builtin _ bt es) =
+    (constant_builtin bt /\ EVERY (constant_expr mods) es) /\
+  constant_expr mods (TypeBuiltin _ tb _ es) =
+    (constant_type_builtin tb /\ EVERY (constant_expr mods) es) /\
+  constant_expr mods _ = F
+Termination
+  WF_REL_TAC `measure (\(_,e). expr_size e)` >>
+  rw[] >>
+  Induct_on `kes` >> rw[] >>
+  PairCases_on `h` >> rw[] >>
+  res_tac >> simp[]
+End
+
 Definition lookup_var_slot_in_layouts_def:
   lookup_var_slot_in_layouts layouts addr is_transient src var_name =
     case ALOOKUP layouts addr of
@@ -197,7 +282,8 @@ Definition check_toplevel_decl_def:
     | VariableDecl _ Immutable id typ _ =>
         assignable_type tenv typ
     | VariableDecl _ (Constant e) id typ _ =>
-        assignable_type tenv typ /\ well_typed_expr env e /\ expr_type e = typ
+        assignable_type tenv typ /\ well_typed_expr env e /\ expr_type e = typ /\
+        constant_expr mods e
     | HashMapDecl _ is_transient id kt vt _ =>
         well_formed_type tenv kt /\ hashmap_key_type kt /\ check_value_type tenv vt /\
         IS_SOME (lookup_var_slot_in_layouts layouts addr is_transient src id)
