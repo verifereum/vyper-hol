@@ -865,6 +865,27 @@ Proof
   gvs[] >> metis_tac[]
 QED
 
+Theorem check_contract_deploy_lookup_from_MEM:
+  check_contract T layouts address modules = SOME artifact /\
+  ALOOKUP modules NONE = SOME declarations /\
+  MEM
+    (FunctionDecl Deploy mutability nonreentrant raw_return function_name
+      arguments defaults return_type body)
+    declarations ==>
+  lookup_function NONE function_name Deploy declarations =
+    SOME
+      (mutability,nonreentrant,arguments,defaults,return_type,body)
+Proof
+  rw[check_contract_def] >> gvs[] >>
+  irule (INST_TYPE [``:'a`` |-> ``:num option``]
+    lookup_function_Deploy_MEM) >>
+  conj_tac >-
+    (qexists_tac `(NONE : num option)` >>
+     irule contract_namespaces_ok_module_fn_sig_keys_deploy >>
+     metis_tac[ALOOKUP_MEM]) >>
+  qexists_tac `raw_return` >> simp[]
+QED
+
 Theorem check_contract_fn_sigs_declared_complete_initial:
   check_contract F layouts addr mods = SOME art /\
   ALOOKUP sources addr = SOME mods /\
