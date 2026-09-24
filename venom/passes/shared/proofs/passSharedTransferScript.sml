@@ -20,7 +20,7 @@
 Theory passSharedTransfer
 Ancestors
   passSharedDefs venomExecSemantics venomEffects venomState venomInst
-  venomInstProps
+  venomInstProps list rich_list
 
 (* Helper: eval_operands agreement from pointwise eval_operand agreement *)
 Theorem eval_operands_agree_lem[local]:
@@ -51,6 +51,33 @@ Proof
   Induct >> rw[] >> Cases_on `l` >> gvs[] >> res_tac >> gvs[]
 QED
 
+Theorem log_reversed_operands_agree[local]:
+  !rest s1 s2.
+    2 <= LENGTH rest /\
+    (!op. MEM op rest ==>
+          eval_operand op s1 = eval_operand op s2) ==>
+    eval_operands (DROP 2 (REVERSE rest)) s1 =
+      eval_operands (DROP 2 (REVERSE rest)) s2 /\
+    eval_operand (HD (REVERSE rest)) s1 =
+      eval_operand (HD (REVERSE rest)) s2 /\
+    eval_operand (EL 1 (REVERSE rest)) s1 =
+      eval_operand (EL 1 (REVERSE rest)) s2
+Proof
+  rpt strip_tac >>
+  `!op. MEM op (REVERSE rest) ==>
+        eval_operand op s1 = eval_operand op s2` by
+    metis_tac[MEM_REVERSE] >>
+  `eval_operands (DROP 2 (REVERSE rest)) s1 =
+   eval_operands (DROP 2 (REVERSE rest)) s2` by
+    (irule eval_operands_agree_lem >>
+     metis_tac[mem_drop_subset]) >>
+  `MEM (HD (REVERSE rest)) (REVERSE rest)` by
+    (Cases_on `REVERSE rest` >> fs[]) >>
+  `MEM (EL 1 (REVERSE rest)) (REVERSE rest)` by
+    (irule EL_MEM >> simp[]) >>
+  metis_tac[]
+QED
+
 (* State-accessing function defs used by step_inst_base helpers.
    Needed so gvs can rewrite through field equalities (e.g.
    s1.vs_memory = s2.vs_memory ==> mload x s1 = mload x s2). *)
@@ -72,16 +99,10 @@ val transfer_close_tac =
             finite_mapTheory.FLOOKUP_UPDATE :: state_fn_defs) >>
        res_tac >> gvs[] >> NO_TAC) >>
   TRY (
-    `eval_operands (DROP 2 rest) s1 = eval_operands (DROP 2 rest) s2` by (
-      irule eval_operands_agree_lem >> rpt strip_tac >>
-      first_x_assum irule >>
-      imp_res_tac mem_drop_subset >> gvs[]) >>
-    `eval_operand (HD rest) s1 = eval_operand (HD rest) s2` by (
-      first_x_assum irule >> Cases_on `rest` >> gvs[]) >>
-    `eval_operand (EL 1 rest) s1 = eval_operand (EL 1 rest) s2` by (
-      first_x_assum irule >>
-      Cases_on `rest` >> gvs[] >>
-      Cases_on `t` >> gvs[]) >>
+    `2 <= LENGTH rest` by simp[] >>
+    `!op. MEM op rest ==>
+          eval_operand op s1 = eval_operand op s2` by metis_tac[] >>
+    drule_all log_reversed_operands_agree >> strip_tac >>
     gvs[] >> NO_TAC) >>
   rpt strip_tac >>
   res_tac >> gvs (update_var_def :: lookup_var_def ::
@@ -157,16 +178,10 @@ val ok_transfer_finish_tac =
   rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
   TRY (imp_res_tac resolve_phi_mem >> res_tac >> gvs[] >> NO_TAC) >>
   TRY (res_tac >> gvs[] >> NO_TAC) >>
-  `eval_operands (DROP 2 rest) s' = eval_operands (DROP 2 rest) s` by (
-    irule eval_operands_agree_lem >> rpt strip_tac >>
-    first_x_assum irule >>
-    imp_res_tac mem_drop_subset >> gvs[]) >>
-  `eval_operand (HD rest) s' = eval_operand (HD rest) s` by (
-    first_x_assum irule >> Cases_on `rest` >> gvs[]) >>
-  `eval_operand (EL 1 rest) s' = eval_operand (EL 1 rest) s` by (
-    first_x_assum irule >>
-    Cases_on `rest` >> gvs[] >>
-    Cases_on `t` >> gvs[]) >>
+  `2 <= LENGTH rest` by simp[] >>
+  `!op. MEM op rest ==>
+        eval_operand op s' = eval_operand op s` by metis_tac[] >>
+  drule_all log_reversed_operands_agree >> strip_tac >>
   gvs[];
 
 val transfer_determined_finish_tac =
@@ -198,16 +213,10 @@ val output_vars_finish_tac =
             finite_mapTheory.FLOOKUP_UPDATE :: state_fn_defs) >>
        NO_TAC) >>
   TRY (
-    `eval_operands (DROP 2 rest) s1 = eval_operands (DROP 2 rest) s2` by (
-      irule eval_operands_agree_lem >> rpt strip_tac >>
-      first_x_assum irule >>
-      imp_res_tac mem_drop_subset >> gvs[]) >>
-    `eval_operand (HD rest) s1 = eval_operand (HD rest) s2` by (
-      first_x_assum irule >> Cases_on `rest` >> gvs[]) >>
-    `eval_operand (EL 1 rest) s1 = eval_operand (EL 1 rest) s2` by (
-      first_x_assum irule >>
-      Cases_on `rest` >> gvs[] >>
-      Cases_on `t` >> gvs[]) >>
+    `2 <= LENGTH rest` by simp[] >>
+    `!op. MEM op rest ==>
+          eval_operand op s1 = eval_operand op s2` by metis_tac[] >>
+    drule_all log_reversed_operands_agree >> strip_tac >>
     gvs[] >> NO_TAC) >>
   res_tac >> gvs (update_var_def :: lookup_var_def ::
                   finite_mapTheory.FLOOKUP_UPDATE :: state_fn_defs);

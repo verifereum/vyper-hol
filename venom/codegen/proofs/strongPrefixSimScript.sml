@@ -443,8 +443,7 @@ Proof
   imp_res_tac plan_stack_rel_el >>
   first_x_assum (qspec_then `dist - 1` mp_tac) >>
   simp[] >> strip_tac >>
-  qpat_x_assum `operand_val _ _ (EL _ (REVERSE _)) = _` mp_tac >>
-  simp[EL_REVERSE, arithmeticTheory.PRE_SUB1]
+  gvs[EL_REVERSE, arithmeticTheory.PRE_SUB1]
 QED
 
 (* SOLabel *)
@@ -486,7 +485,8 @@ Proof
   Cases_on `op` >>
   gvs[is_simple_stack_op_def] >>
   TRY (Cases_on `o'` >> gvs[is_simple_stack_op_def]) >>
-  gvs[stack_op_wf_def, exec_stack_op_def, apply_simple_op_def] >>
+  gvs[stack_op_wf_def, exec_stack_op_def, apply_simple_op_def,
+      GSYM asmIRTheory.encode_num_bytes_w2n_compute] >>
   metis_tac[simple_op_push_lit, simple_op_push_label, simple_op_pop,
             simple_op_swap, simple_op_dup, simple_op_label]
 QED

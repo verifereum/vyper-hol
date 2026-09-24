@@ -2753,6 +2753,7 @@ Theorem plan_stack_rel_top_n_occurrence[local]:
     plan_stack_rel lo vs ps_stk as_stk /\
     items = top_n n ps_stk /\
     n <= LENGTH ps_stk /\ k < n ==>
+    EL k (REVERSE items) = dead_stack_marker \/
     operand_val vs lo (EL k (REVERSE items)) = SOME (EL k as_stk)
 Proof
   rpt strip_tac >>
@@ -2784,6 +2785,7 @@ Theorem raw_spill_venom_occurrence_sim[local]:
           as_memory := final_mem;
           as_pc := st.as_pc + 2 * LENGTH offsets |>) /\
       (!k. k < LENGTH offsets ==>
+        EL k (REVERSE items) = dead_stack_marker \/
         operand_val vs lo (EL k (REVERSE items)) = SOME
           (word_of_bytes T (0w:bytes32)
             (TAKE 32 (DROP (EL k offsets) final_mem)))) /\
@@ -4081,6 +4083,7 @@ Theorem plan_stack_rel_deep_swap_raw[local]:
     desired = [dist] ++ GENLIST (\i. i + 1) (dist - 1) ++ [0] /\
     vals = TAKE (dist + 1) as_stk /\
     (!k. k < dist + 1 ==>
+      EL k (REVERSE items) = dead_stack_marker \/
       operand_val vs lo (EL k (REVERSE items)) = SOME (EL k vals)) ==>
     plan_stack_rel lo vs
       (TAKE (LENGTH ps_stk - (dist + 1)) ps_stk ++
@@ -4220,6 +4223,7 @@ Proof
      metis_tac[]) >>
   `asm_steps lo o2pc prog (2 * LENGTH offsets) st = AsmOK spill_st /\
    (!k. k < LENGTH offsets ==>
+      EL k (REVERSE items) = dead_stack_marker \/
       operand_val vs lo (EL k (REVERSE items)) = SOME
         (word_of_bytes T (0w:bytes32)
           (TAKE 32 (DROP (EL k offsets) spill_mem)))) /\

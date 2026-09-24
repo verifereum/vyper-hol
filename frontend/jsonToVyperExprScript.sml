@@ -708,7 +708,12 @@ Definition translate_expr_def:
     else if obj = "block" /\ attr = "number" then Builtin (BaseT (UintT 256)) (Env BlockNumber) []
     else if obj = "block" /\ attr = "prevhash" then Builtin (BaseT (BytesT (Fixed 32))) (Env PrevHash) []
     else if obj = "block" /\ attr = "blobbasefee" then Builtin (BaseT (UintT 256)) (Env BlobBaseFee) []
+    else if obj = "block" /\ attr = "coinbase" then Builtin (BaseT AddressT) (Env Coinbase) []
+    else if obj = "block" /\ attr = "gaslimit" then Builtin (BaseT (UintT 256)) (Env GasLimit) []
+    else if obj = "block" /\ attr = "basefee" then Builtin (BaseT (UintT 256)) (Env BaseFee) []
+    else if obj = "block" /\ attr = "difficulty" then Builtin (BaseT (UintT 256)) (Env PrevRandao) []
     else if obj = "tx" /\ attr = "gasprice" then Builtin (BaseT (UintT 256)) (Env GasPrice) []
+    else if obj = "tx" /\ attr = "origin" then Builtin (BaseT AddressT) (Env TxOrigin) []
     else if obj = "chain" /\ attr = "id" then Builtin (BaseT (UintT 256)) (Env ChainId) []
     else if obj = "self" /\ attr = "balance" then
       Builtin (BaseT (UintT 256)) (Acc Balance) [Builtin (BaseT AddressT) (Env SelfAddr) []]
@@ -724,7 +729,8 @@ Definition translate_expr_def:
       TopLevelName (lookup_toplevel_type ctx nsid ty) nsid
     else if attr = "balance" /\ base_type_name = SOME "address" then Builtin (BaseT (UintT 256)) (Acc Balance) [make_name ctx base_ty obj]
     else if attr = "address" /\ base_type_name = SOME "address" then Builtin (BaseT AddressT) (Acc Address) [make_name ctx base_ty obj]
-    else if attr = "address" /\ base_typeclass = SOME "interface" then make_name ctx base_ty obj (* interface.address = interface (identity) *)
+    else if attr = "address" /\ base_typeclass = SOME "interface" then
+      Builtin (BaseT AddressT) (Acc Address) [make_name ctx base_ty obj]
     else if attr = "is_contract" /\ base_type_name = SOME "address" then Builtin (BaseT BoolT) (Acc IsContract) [make_name ctx base_ty obj]
     else if attr = "codesize" /\ base_type_name = SOME "address" then Builtin (BaseT (UintT 256)) (Acc Codesize) [make_name ctx base_ty obj]
     else if attr = "codehash" /\ base_type_name = SOME "address" then Builtin (BaseT (BytesT (Fixed 32))) (Acc Codehash) [make_name ctx base_ty obj]

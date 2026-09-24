@@ -436,6 +436,37 @@ Definition dfs_step_def:
                         ds_visited := visited' |>
 End
 
+(* Stop the bounded evaluator as soon as its work stack is empty.  The
+   normative FUNPOW below is intentionally retained for proof APIs, while this
+   equivalent runner avoids replaying tens of thousands of identity steps on
+   large ABI-generated blocks. *)
+Definition dfs_run_fuel_def:
+  dfs_run_fuel step 0 state = state /\
+  dfs_run_fuel step (SUC fuel) state =
+    if state.ds_stack = [] then state
+    else dfs_run_fuel step fuel (step state)
+End
+
+Theorem dfs_run_fuel_empty[simp]:
+  state.ds_stack = [] ==> dfs_run_fuel step fuel state = state
+Proof
+  Cases_on `fuel` >> simp[dfs_run_fuel_def]
+QED
+
+Theorem dfs_run_fuel_eq_FUNPOW:
+  !fuel state.
+    dfs_run_fuel (dfs_step block_insts order eda offspring_map do_flip)
+      fuel state =
+    FUNPOW (dfs_step block_insts order eda offspring_map do_flip)
+      fuel state
+Proof
+  Induct >- simp[dfs_run_fuel_def] >>
+  gen_tac >> Cases_on `state.ds_stack`
+  >- (simp[dfs_run_fuel_def, dfs_step_def, arithmeticTheory.FUNPOW] >>
+      first_x_assum (qspec_then `state` mp_tac) >> simp[])
+  >- simp[dfs_run_fuel_def, arithmeticTheory.FUNPOW]
+QED
+
 (* Bound: N process steps + N emit steps + ≤ N² skip steps + ≤ N initial
    entries = N² + 2N total steps. Use (N+1)² for clean expression. *)
 Definition schedule_from_entries_def:
@@ -448,6 +479,20 @@ Definition schedule_from_entries_def:
                        ((n + 1) * (n + 1)) init in
     final.ds_output
 End
+
+Theorem schedule_from_entries_compute[compute]:
+  schedule_from_entries block_insts order eda offspring_map entries =
+    let n = LENGTH block_insts in
+    let init = <| ds_stack := MAP DfsProcess entries;
+                  ds_output := [];
+                  ds_visited := [] |> in
+    let final = dfs_run_fuel
+      (dfs_step block_insts order eda offspring_map T)
+      ((n + 1) * (n + 1)) init in
+    final.ds_output
+Proof
+  simp[schedule_from_entries_def, dfs_run_fuel_eq_FUNPOW]
+QED
 
 (* ===== Block-Level Transform ===== *)
 
@@ -531,6 +576,41 @@ Definition dft_loop_step_def:
         else (st', rest ++ preds, F)
 End
 
+(* As above, stop evaluating once the Python worklist loop has set done. *)
+Definition dft_loop_run_fuel_def:
+  dft_loop_run_fuel step 0 state = state /\
+  dft_loop_run_fuel step (SUC fuel) state =
+    if SND (SND state) then state
+    else dft_loop_run_fuel step fuel (step state)
+End
+
+Theorem dft_loop_step_done[simp]:
+  SND (SND state) ==>
+  dft_loop_step cfg lr fn state = state
+Proof
+  Cases_on `state` >> Cases_on `r` >> simp[dft_loop_step_def]
+QED
+
+Theorem dft_loop_run_fuel_done[simp]:
+  SND (SND state) ==>
+  dft_loop_run_fuel step fuel state = state
+Proof
+  Cases_on `fuel` >> simp[dft_loop_run_fuel_def]
+QED
+
+Theorem dft_loop_run_fuel_eq_FUNPOW:
+  !fuel state.
+    dft_loop_run_fuel (dft_loop_step cfg lr fn) fuel state =
+    FUNPOW (dft_loop_step cfg lr fn) fuel state
+Proof
+  Induct >- simp[dft_loop_run_fuel_def] >>
+  gen_tac >> Cases_on `SND (SND state)`
+  >- (simp[dft_loop_run_fuel_def, dft_loop_step_def,
+           arithmeticTheory.FUNPOW] >>
+      first_x_assum (qspec_then `state` mp_tac) >> simp[])
+  >- simp[dft_loop_run_fuel_def, arithmeticTheory.FUNPOW]
+QED
+
 (* Full function transform: build CFG, compute liveness, run convergence loop.
    Python: run_pass.
    Structural termination: FUNPOW applies a fixed number of steps
@@ -551,6 +631,25 @@ Definition dft_fn_def:
       FUNPOW (dft_loop_step cfg lr fn) (n * n) (init_st, worklist, F) in
     fn with fn_blocks := final_st.dls_blocks
 End
+
+Theorem dft_fn_compute[compute]:
+  dft_fn fn =
+    let cfg = cfg_analyze fn in
+    let lr = liveness_analyze fn in
+    let worklist = cfg.cfg_dfs_post in
+    let init_st = <|
+      dls_blocks := fn.fn_blocks;
+      dls_from_to := FEMPTY;
+      dls_last_order := FEMPTY
+    |> in
+    let n = LENGTH fn.fn_blocks in
+    let (final_st, _, _) =
+      dft_loop_run_fuel (dft_loop_step cfg lr fn) (n * n)
+        (init_st, worklist, F) in
+    fn with fn_blocks := final_st.dls_blocks
+Proof
+  simp[dft_fn_def, dft_loop_run_fuel_eq_FUNPOW]
+QED
 
 Definition dft_ctx_def:
   dft_ctx ctx =

@@ -363,6 +363,23 @@ Proof
   rpt strip_tac >> gvs[apply_concretize_layout_metadata_transition]
 QED
 
+Theorem concretize_function_fuel_in_context_metadata_transition:
+  concretize_function_fuel_in_context fuel ctx reserved fn = SOME fn' ==>
+  fn_identity_metadata_eq fn' fn /\
+  fn_fmp_convention_eq fn' fn /\
+  fn'.fn_forced_alloc_positions = FEMPTY
+Proof
+  simp[concretize_function_fuel_in_context_def] >>
+  Cases_on `fn_has_static_layout fn`
+  >- (rpt strip_tac >> gvs[fn_identity_metadata_eq_def,
+                            fn_fmp_convention_eq_def]) >>
+  Cases_on `if fn_needs_liveness_allocation fn then
+              compute_function_layout_fuel_in_context fuel ctx reserved fn
+            else compute_function_layout_eval reserved fn`
+  >- gvs[] >>
+  rpt strip_tac >> gvs[apply_concretize_layout_metadata_transition]
+QED
+
 Theorem concretize_function_eval_metadata_transition:
   concretize_function_eval reserved fn = SOME fn' ==>
   fn_identity_metadata_eq fn' fn /\
@@ -386,6 +403,20 @@ Proof
   Cases_on `fn_has_static_layout fn`
   >- (rpt strip_tac >> gvs[fn_has_static_layout_def]) >>
   Cases_on `compute_function_layout_checked fuel reserved fn`
+  >- gvs[] >>
+  rpt strip_tac >> gvs[apply_concretize_layout_metadata_transition]
+QED
+
+Theorem concretize_function_fuel_in_context_sets_eom:
+  concretize_function_fuel_in_context fuel ctx reserved fn = SOME fn' ==>
+  IS_SOME fn'.fn_eom
+Proof
+  simp[concretize_function_fuel_in_context_def] >>
+  Cases_on `fn_has_static_layout fn`
+  >- (rpt strip_tac >> gvs[fn_has_static_layout_def]) >>
+  Cases_on `if fn_needs_liveness_allocation fn then
+              compute_function_layout_fuel_in_context fuel ctx reserved fn
+            else compute_function_layout_eval reserved fn`
   >- gvs[] >>
   rpt strip_tac >> gvs[apply_concretize_layout_metadata_transition]
 QED
@@ -692,6 +723,18 @@ Theorem concretize_function_fuel_invoke_targets:
   MAP FST (fcg_scan_function fn') = MAP FST (fcg_scan_function fn)
 Proof
   simp[concretize_function_fuel_def, apply_concretize_layout_def,
+       AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  simp[fcg_scan_function_def, fn_insts_def] >>
+  rewrite_tac[GSYM fn_insts_def, GSYM fcg_scan_function_def] >>
+  simp[concretize_function_with_positions_invoke_targets]
+QED
+
+Theorem concretize_function_fuel_in_context_invoke_targets:
+  concretize_function_fuel_in_context fuel ctx reserved fn = SOME fn' ==>
+  MAP FST (fcg_scan_function fn') = MAP FST (fcg_scan_function fn)
+Proof
+  simp[concretize_function_fuel_in_context_def, apply_concretize_layout_def,
        AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
   simp[fcg_scan_function_def, fn_insts_def] >>

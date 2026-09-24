@@ -22,7 +22,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--generator-uv", required=True)
     parser.add_argument("--expected-install-root", type=Path, required=True)
     parser.add_argument("--sources", type=Path, required=True)
-    parser.add_argument("--hol-programs", type=Path, required=True)
+    parser.add_argument("--hol-programs", type=Path, nargs="+", required=True)
+    parser.add_argument(
+        "--fixture-manifest",
+        type=Path,
+        default=Path(__file__).with_name("supported-fixtures.txt"),
+    )
     parser.add_argument("--output", type=Path, required=True)
     return parser.parse_args()
 
@@ -53,14 +58,14 @@ def main() -> None:
             f"imported Vyper from {imported_from}, outside isolated environment {install_root}"
         )
 
-    expected_stems = {
-        "add_arg", "deploy_storage", "empty", "event_log", "for_accum",
-        "for_break", "for_continue", "for_pass", "hashmap_read",
-        "hashmap_write", "if_bool", "if_join", "indexed_event_log",
-        "internal_call", "internal_call_arg", "local_uint", "mixed_event_log",
-        "noop", "return_arg", "return_uint", "storage_read", "storage_write",
-        "two_external",
-    }
+    manifest_stems = [
+        line.strip()
+        for line in args.fixture_manifest.read_text().splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    if len(manifest_stems) != len(set(manifest_stems)):
+        raise RuntimeError("fixture manifest contains duplicate stems")
+    expected_stems = set(manifest_stems)
     sources = sorted(args.sources.glob("*.vy"))
     actual_stems = {source.stem for source in sources}
     if actual_stems != expected_stems:
@@ -122,9 +127,11 @@ def main() -> None:
         "uv_version": args.generator_uv,
         "dependencies": dependencies,
         "hol_source_correspondence": {
-            "file": "lowering/defs/evalCompilerScript.sml",
-            "sha256": hashlib.sha256(args.hol_programs.read_bytes()).hexdigest(),
-            "note": "Audit anchor only; HOL is not an input to Python compilation.",
+            "files": {
+                str(path): hashlib.sha256(path.read_bytes()).hexdigest()
+                for path in args.hol_programs
+            },
+            "note": "Audit anchors only; HOL is not an input to Python compilation.",
         },
         "settings": {
             "experimental_codegen": True,

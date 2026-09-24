@@ -1,10 +1,13 @@
 # O1 bytecode parity fixtures
 
-This directory contains the independent Python oracle for the 23 checked HOL
-compiler fixtures.
+This directory contains the independent Python oracle for the frozen 101-fixture
+HOL-supported-subset corpus. It includes the original 23-fixture milestone and
+78 retained subset/interaction fixtures. The resource-prohibitive `spill_join`
+stress case is retired and is not part of the corpus.
 
 - `python-o1-no-asm-opt-sources/` contains Vyper source counterparts to the HOL
-  programs in `../evalCompilerScript.sml`.
+  programs in `eval/evalCompilerScript.sml` and the `eval/evalCompilerSubset*`
+  theories.
 - `python-o1-no-asm-opt/` contains the pinned Python Vyper deployment/runtime
   bytecode and its provenance record.
 - `python_o1_bytecode_oracle.py` generates the oracle.
@@ -34,8 +37,8 @@ lowering/defs/bytecode/python-o1-bytecode-fixtures --update \
 
 ## HOL comparison
 
-`evalCompilerBytecodeLib.sml` reads the independent oracle directly. Every
-fixture theorem in `evalCompilerBytecodeScript.sml` evaluates
+`eval/evalCompilerBytecodeLib.sml` reads the independent oracle directly. The
+parity theories under `eval/` evaluate
 
 ```sml
 compile_vyper (K SOME) (o1_policy prague_capabilities) <program>
@@ -50,8 +53,22 @@ lowering/defs/bytecode/python-o1-bytecode-fixtures --compare-hol \
   --vyper-repo /path/to/vyper
 ```
 
-Any byte difference or checked-compiler `NONE` result fails. No HOL-generated
-expected output or implementation-derived fallback is used.
+All 101 retained fixtures have an exact checked theorem; together they check 202
+byte lists (deployment and runtime). Any byte difference or checked-compiler
+`NONE` result fails. No HOL-generated expected output or implementation-derived
+fallback is used. Existing upstream admitted dependencies can tag these concrete
+comparison theorems `CHEAT`; matching byte evaluations are not yet a cheat-free
+proof acceptance.
+
+## Supported-subset boundary
+
+The machine-readable authority is
+`.agent-files/tasks/evidence/TASK_089.ledger.json`, derived from the ten declared
+HOL source files. At the accepted revision it contains 1,485 rows: 506 supported,
+795 partial (with explicit supported/unsupported boundaries), and 184
+unsupported. All 1,301 code-producing rows have a retained fixture witness and
+all 101 fixtures enter through checked `compile_vyper`. Unsupported domains are
+not promoted merely to enlarge the fixture corpus.
 
 ## Fixture format
 

@@ -310,6 +310,13 @@ Definition build_method_id_map_def:
                let sel_bytes = function_selector fname abi_types in
                w2n (calldata_method_id sel_bytes)
              else rest_map s)
+    | InterfaceDecl _ methods =>
+        (λs. case ALOOKUP methods s of
+               SOME (fargs, _, _) =>
+                 let abi_types = vyper_to_abi_types tenv (MAP SND fargs) in
+                 let sel_bytes = function_selector s abi_types in
+                 w2n (calldata_method_id sel_bytes)
+             | NONE => rest_map s)
     | _ => rest_map
 End
 
@@ -526,13 +533,32 @@ Proof
 QED
 
 
+Definition external_return_needs_wrap_def:
+  external_return_needs_wrap (TupleT (_::_::_)) = F /\
+  external_return_needs_wrap _ = T
+End
+
 Definition update_cenv_ret_abi_def:
   update_cenv_ret_abi cenv ret_type =
-    let enc_info = type_to_abi_enc_info cenv.ce_struct_fields cenv ret_type in
-    let dec_info = type_to_abi_dec_info cenv.ce_struct_fields cenv ret_type in
-    let max_ret = abi_size_bound cenv.ce_struct_fields ret_type in
+    let child_enc = type_to_abi_enc_info cenv.ce_struct_fields cenv ret_type in
+    let child_dec = type_to_abi_dec_info cenv.ce_struct_fields cenv ret_type in
+    let child_bound = abi_size_bound cenv.ce_struct_fields ret_type in
+    let child_dynamic = is_abi_dynamic cenv.ce_struct_fields ret_type in
+    let needs_wrap = external_return_needs_wrap ret_type in
+    (* Python's calculate_type_for_external_return wraps every single return
+       value (including one-tuples and structs) in an ABI tuple.  Dynamic
+       children therefore gain a 32-byte offset head. *)
+    let enc_info =
+      if needs_wrap /\ child_dynamic then
+        AbiComplex [(child_enc,
+                     abi_embedded_static_size cenv.ce_struct_fields ret_type,
+                     type_memory_bytes cenv ret_type,
+                     T)]
+      else child_enc in
+    let max_ret =
+      if needs_wrap /\ child_dynamic then 32 + child_bound else child_bound in
     cenv with <| ce_ret_enc_info := enc_info;
-                 ce_ret_dec_info := dec_info;
+                 ce_ret_dec_info := child_dec;
                  ce_max_return_size := max_ret |>
 End
 

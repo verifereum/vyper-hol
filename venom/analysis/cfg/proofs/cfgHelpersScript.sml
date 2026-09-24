@@ -65,6 +65,12 @@ Proof
   rw[EXTENSION, mem_set_insert] >> metis_tac[]
 QED
 
+Theorem mem_ordered_set_insert:
+  !x y xs. MEM x (ordered_set_insert y xs) <=> x = y \/ MEM x xs
+Proof
+  rw[ordered_set_insert_def] >> metis_tac[]
+QED
+
 Theorem fmap_lookup_list_update:
   !m k v k'.
     fmap_lookup_list (m |+ (k, v)) k' =
@@ -262,12 +268,12 @@ QED
 Theorem foldr_preds_mem[local]:
   !succs_list (lbl:string) (m:(string,string list) fmap) k x.
     MEM x (fmap_lookup_list
-      (FOLDR (λsucc m2. m2 |+ (succ, set_insert lbl (fmap_lookup_list m2 succ))) m succs_list)
+      (FOLDR (λsucc m2. m2 |+ (succ, ordered_set_insert lbl (fmap_lookup_list m2 succ))) m succs_list)
       k) <=>
     (MEM k succs_list /\ x = lbl) \/ MEM x (fmap_lookup_list m k)
 Proof
-  Induct >> simp[fmap_lookup_list_update, mem_set_insert] >>
-  rpt gen_tac >> Cases_on `k = h` >> gvs[mem_set_insert] >> metis_tac[]
+  Induct >> simp[fmap_lookup_list_update, mem_ordered_set_insert] >>
+  rpt gen_tac >> Cases_on `k = h` >> gvs[mem_ordered_set_insert] >> metis_tac[]
 QED
 
 (* Outer FOLDL with generalized accumulator *)
@@ -276,7 +282,7 @@ Theorem foldl_preds_mem[local]:
    (acc : (string, string list) fmap) lbl pred.
     MEM pred
       (fmap_lookup_list
-        (FOLDL (λm bb. FOLDR (λsucc m2. m2 |+ (succ, set_insert bb.bb_label (fmap_lookup_list m2 succ)))
+        (FOLDL (λm bb. FOLDR (λsucc m2. m2 |+ (succ, ordered_set_insert bb.bb_label (fmap_lookup_list m2 succ)))
                               m (fmap_lookup_list succs bb.bb_label))
                acc bbs)
         lbl) <=>
@@ -286,7 +292,7 @@ Theorem foldl_preds_mem[local]:
 Proof
   Induct >> simp[] >> rpt strip_tac >>
   first_x_assum (qspecl_then [`succs`,
-    `FOLDR (λsucc m2. m2 |+ (succ, set_insert h.bb_label (fmap_lookup_list m2 succ)))
+    `FOLDR (λsucc m2. m2 |+ (succ, ordered_set_insert h.bb_label (fmap_lookup_list m2 succ)))
            acc (fmap_lookup_list succs h.bb_label)`,
     `lbl`, `pred`] mp_tac) >> simp[] >>
   simp[foldr_preds_mem] >> metis_tac[]
@@ -319,7 +325,7 @@ QED
 (* FOLDR only grows FDOM *)
 Theorem foldr_fdom_mono[local]:
   !succs_list (lbl:string) (m:(string,string list) fmap).
-    FDOM m ⊆ FDOM (FOLDR (λsucc m2. m2 |+ (succ, set_insert lbl (fmap_lookup_list m2 succ))) m succs_list)
+    FDOM m ⊆ FDOM (FOLDR (λsucc m2. m2 |+ (succ, ordered_set_insert lbl (fmap_lookup_list m2 succ))) m succs_list)
 Proof
   Induct >> simp[SUBSET_DEF, FDOM_FUPDATE] >> rpt strip_tac >>
   disj2_tac >> first_x_assum (qspecl_then [`lbl`, `m`] mp_tac) >>
@@ -330,13 +336,13 @@ QED
 Theorem foldl_preds_fdom_mono[local]:
   !(bbs : basic_block list) (succs : (string, string list) fmap)
    (acc : (string, string list) fmap).
-    FDOM acc ⊆ FDOM (FOLDL (λm bb. FOLDR (λsucc m2. m2 |+ (succ, set_insert bb.bb_label (fmap_lookup_list m2 succ)))
+    FDOM acc ⊆ FDOM (FOLDL (λm bb. FOLDR (λsucc m2. m2 |+ (succ, ordered_set_insert bb.bb_label (fmap_lookup_list m2 succ)))
                                           m (fmap_lookup_list succs bb.bb_label))
                             acc bbs)
 Proof
   Induct >> simp[SUBSET_DEF] >> rpt strip_tac >>
   first_x_assum (qspecl_then [`succs`,
-    `FOLDR (λsucc m2. m2 |+ (succ, set_insert h.bb_label (fmap_lookup_list m2 succ)))
+    `FOLDR (λsucc m2. m2 |+ (succ, ordered_set_insert h.bb_label (fmap_lookup_list m2 succ)))
            acc (fmap_lookup_list succs h.bb_label)`] mp_tac) >>
   simp[SUBSET_DEF] >> disch_then irule >>
   mp_tac (Q.SPECL [`fmap_lookup_list succs h.bb_label`, `h.bb_label`, `acc`] foldr_fdom_mono) >>

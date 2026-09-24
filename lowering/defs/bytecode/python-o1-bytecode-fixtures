@@ -75,12 +75,26 @@ env -u PYTHONPATH -u PYTHONHOME -u PYTHONSTARTUP \
   "$venv/bin/python" -I "$script_dir/python_o1_bytecode_oracle.py" \
   --expected-commit "$pin" --expected-python 3.11.11 --generator-uv 0.10.11 \
   --expected-install-root "$venv" --sources "$sources" \
-  --hol-programs "$script_dir/../evalCompilerScript.sml" --output "$generated"
+  --hol-programs \
+    "$script_dir/eval/evalCompilerScript.sml" \
+    "$script_dir/eval/evalCompilerSubsetStateScript.sml" \
+    "$script_dir/eval/evalCompilerSubsetAbiExternalScript.sml" \
+    "$script_dir/eval/evalCompilerSubsetAbiEventsScript.sml" \
+    "$script_dir/eval/evalCompilerSubsetAbiInternalCallsScript.sml" \
+    "$script_dir/eval/evalCompilerSubsetAbiExternalCallsScript.sml" \
+    "$script_dir/eval/evalCompilerSubsetAbiBuiltinsScript.sml" \
+    "$script_dir/eval/evalCompilerSubsetControlDeployScript.sml" \
+    "$script_dir/eval/evalCompilerSubsetScalarsScript.sml" \
+    "$script_dir/eval/evalCompilerSubsetBuiltinsScript.sml" \
+  --output "$generated"
 
+source_count=$(find "$sources" -maxdepth 1 -type f -name '*.vy' | wc -l | tr -d ' ')
+expected_total=$((source_count + 1))
 count=$(find "$generated" -type f -name '*.hex' | wc -l | tr -d ' ')
 total=$(find "$generated" -type f | wc -l | tr -d ' ')
-[ "$count" = 23 ] && [ "$total" = 24 ] && [ -f "$generated/provenance.json" ] || {
-  echo "generator produced $count fixtures and $total files, expected 23 and 24" >&2
+[ "$count" = "$source_count" ] && [ "$total" = "$expected_total" ] && \
+  [ -f "$generated/provenance.json" ] || {
+  echo "generator produced $count fixtures and $total files, expected $source_count and $expected_total" >&2
   exit 1
 }
 
@@ -97,8 +111,9 @@ else
   fi
   oracle_count=$(find "$oracle" -type f -name '*.hex' 2>/dev/null | wc -l | tr -d ' ')
   oracle_total=$(find "$oracle" -type f 2>/dev/null | wc -l | tr -d ' ')
-  if [ "$oracle_count" != 23 ] || [ "$oracle_total" != 24 ]; then
-    echo "committed Python oracle has $oracle_count fixtures and $oracle_total files; expected 23 and 24" >&2
+  if [ "$oracle_count" != "$source_count" ] || \
+     [ "$oracle_total" != "$expected_total" ]; then
+    echo "committed Python oracle has $oracle_count fixtures and $oracle_total files; expected $source_count and $expected_total" >&2
     mismatches=$((mismatches + 1))
   fi
 fi
@@ -133,16 +148,49 @@ fi
 }
 case "$mode" in
   update)
-    echo "updated 23 independent Python O1/no-assembly-opt oracle fixtures"
+    echo "updated $source_count independent Python O1/no-assembly-opt oracle fixtures"
     ;;
   check)
-    echo "all 23 Python O1/no-assembly-opt oracle fixtures reproduce from VYPER_PIN"
+    echo "all $source_count Python O1/no-assembly-opt oracle fixtures reproduce from VYPER_PIN"
     ;;
   compare)
     echo "Python oracle reproduced; running fresh HOL bytecode parity evaluation"
-    (cd "$repo_dir" && holbuild --maxheap "${HOL_PARITY_MAXHEAP:-12000}" \
-      build --tactic-timeout "${HOL_PARITY_TACTIC_TIMEOUT:-600}" \
-      evalCompilerBytecodeTheory)
-    echo "all 23 HOL evaluations match the pinned Python O1/no-assembly-opt oracle"
+    for target in evalCompilerBytecodeTheory \
+                  evalCompilerBytecodeControlTheory \
+                  evalCompilerBytecodeStateTheory \
+                  evalCompilerBytecodeAbiExternalStaticTheory \
+                  evalCompilerBytecodeAbiExternalArraysTheory \
+                  evalCompilerBytecodeAbiExternalDynamicTheory \
+                  evalCompilerBytecodeAbiEventsTheory \
+                  evalCompilerBytecodeAbiInternalCallsTheory \
+                  evalCompilerBytecodeAbiExternalCallsTheory \
+                  evalCompilerBytecodeAbiStaticTheory \
+                  evalCompilerBytecodeAbiDynamicTheory \
+                  evalCompilerBytecodeFunctionModesTheory \
+                  evalCompilerBytecodeAssertRaiseTheory \
+                  evalCompilerBytecodeAssertReasonTheory \
+                  evalCompilerBytecodeRaiseBareTheory \
+                  evalCompilerBytecodeRaiseReasonTheory \
+                  evalCompilerBytecodeLoopsTheory \
+                  evalCompilerBytecodeScalarWidthsTheory \
+                  evalCompilerBytecodeScalarLiteralsTheory \
+                  evalCompilerBytecodeScalarLiteralsBytesTheory \
+                  evalCompilerBytecodeScalarArithmeticTheory \
+                  evalCompilerBytecodeScalarIntegerMinTheory \
+                  evalCompilerBytecodeScalarDecimalMinPipelineTheory \
+                  evalCompilerBytecodeScalarConvertDecimalTheory \
+                  evalCompilerBytecodeScalarConvertIntToDecimalTheory \
+                  evalCompilerBytecodeScalarConvertBytes32ToDecimalTheory \
+                  evalCompilerBytecodeScalarOperatorsTheory \
+                  evalCompilerBytecodeScalarTypeBuiltinsTheory \
+                  evalCompilerBytecodeScalarWeiModularTheory \
+                  evalCompilerBytecodeBuiltinsEnvCoreTheory \
+                  evalCompilerBytecodeBuiltinsEnvBlockTheory \
+                  evalCompilerBytecodeBuiltinsAccountHashTheory \
+                  evalCompilerBytecodeBuiltinsEcTheory; do
+      (cd "$repo_dir" && holbuild --maxheap "${HOL_PARITY_MAXHEAP:-12000}" \
+        build --tactic-timeout "${HOL_PARITY_TACTIC_TIMEOUT:-600}" "$target")
+    done
+    echo "all $source_count HOL evaluations match the pinned Python O1/no-assembly-opt oracle"
     ;;
 esac

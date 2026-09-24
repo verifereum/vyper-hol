@@ -164,7 +164,8 @@ Definition execute_configured_fn_pass_def:
   execute_configured_fn_pass rpolicy (CFP_Simple tag) unit s fn =
     case tag of
       VP_ConcretizeMemLoc =>
-        (case concretize_function_fuel (concretize_memloc_fuel fn)
+        (case concretize_function_fuel_in_context
+                (concretize_memloc_fuel fn) unit.cu_context
                 unit.cu_context.ctx_global_reserved fn of
            NONE => NONE
          | SOME fn' => SOME <| fpo_function := fn';
@@ -193,9 +194,18 @@ Definition execute_configured_fn_pass_def:
                                   fpo_supply := s' |>)
     | VP_LowerDload =>
         (case lower_dload_function_supply s fn of
-           (fn',s') => SOME <| fpo_function := fn';
-                              fpo_label_map := [];
-                              fpo_supply := s' |>)
+           (fn',s') =>
+             (* DLOAD lowering emits Python's canonical code_end symbol.  It
+                is an assembler-owned label rather than a unit data label, so
+                reserve it in the threaded supply at the pass boundary. *)
+             let s'' =
+               if MEM "code_end" s'.irs_used_labels then s'
+               else s' with irs_used_labels :=
+                      "code_end" :: s'.irs_used_labels
+             in
+               SOME <| fpo_function := fn';
+                       fpo_label_map := [];
+                       fpo_supply := s'' |>)
     | VP_MakeSSA =>
         (case make_ssa_current_fn s fn of
            (fn',s') => SOME <| fpo_function := fn';
@@ -216,8 +226,8 @@ End
 Theorem execute_configured_fn_pass_concretize[simp]:
   execute_configured_fn_pass rpolicy
     (CFP_Simple VP_ConcretizeMemLoc) unit s fn =
-  case concretize_function_fuel (concretize_memloc_fuel fn)
-         unit.cu_context.ctx_global_reserved fn of
+  case concretize_function_fuel_in_context (concretize_memloc_fuel fn)
+         unit.cu_context unit.cu_context.ctx_global_reserved fn of
     NONE => NONE
   | SOME fn' => SOME <| fpo_function := fn'; fpo_label_map := [];
                         fpo_supply := s |>
@@ -269,8 +279,13 @@ Theorem execute_configured_fn_pass_lower_dload[simp]:
   execute_configured_fn_pass rpolicy
     (CFP_Simple VP_LowerDload) unit s fn =
   case lower_dload_function_supply s fn of
-    (fn',s') => SOME <| fpo_function := fn'; fpo_label_map := [];
-                       fpo_supply := s' |>
+    (fn',s') =>
+      let s'' =
+        if MEM "code_end" s'.irs_used_labels then s'
+        else s' with irs_used_labels := "code_end" :: s'.irs_used_labels
+      in
+        SOME <| fpo_function := fn'; fpo_label_map := [];
+                fpo_supply := s'' |>
 Proof
   simp[execute_configured_fn_pass_def]
 QED

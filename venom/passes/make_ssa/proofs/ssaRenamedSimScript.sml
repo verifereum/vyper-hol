@@ -554,7 +554,12 @@ Proof
           [renamed_operand sigma h; renamed_operand sigma h'] =
         MAP (renamed_operand sigma) (l1 ++ [h; h'])` by simp[] >>
        ASM_REWRITE_TAC[] >>
-       simp[rich_listTheory.MAP_HD, ssa_sim_def, lookup_var_def] >> NO_TAC)
+       `REVERSE (MAP (renamed_operand sigma) (l1 ++ [h; h'])) =
+        MAP (renamed_operand sigma) (REVERSE (l1 ++ [h; h']))` by
+         (once_rewrite_tac[GSYM listTheory.MAP_REVERSE] >> REFL_TAC) >>
+       ASM_REWRITE_TAC[] >>
+       simp[GSYM listTheory.MAP_DROP, listTheory.EL_MAP,
+            rich_listTheory.MAP_HD, ssa_sim_def, lookup_var_def] >> NO_TAC)
 QED
 
 (* ==========================================================================

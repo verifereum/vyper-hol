@@ -132,10 +132,26 @@ The matrix should eventually identify exact Python modules, classes, and functio
 
 | HOL file/area | Purpose | Status | Notes |
 |---|---|---|---|
-| `lowering/defs/evalCompilerScript.sml` | checked compiler fixture programs | reviewed for the 23 parity fixtures | Program definitions correspond to the tracked Vyper sources; exact outputs are checked separately. |
-| `lowering/defs/evalCompilerBytecodeScript.sml` | fresh HOL-to-Python bytecode parity test | exact for the 23 supported fixtures | Each plain-`EVAL_TAC` theorem checks both deployment and runtime bytes produced by checked `compile_vyper`. |
-| `lowering/defs/bytecode/python-o1-bytecode-fixtures`, `python_o1_bytecode_oracle.py`, and `python-o1-no-asm-opt*/` | independently generated pinned-Python O1 bytecode oracle and comparison entrypoint | reproducible from pin | The generator verifies a clean checkout against `VYPER_PIN` and uses pinned `PASSES_O1`, Prague, disabled metadata, and disabled final assembly optimization. Fixture evaluation is opt-in through `--compare-hol`. |
+| `lowering/defs/bytecode/eval/evalCompilerScript.sml` and `evalCompilerSubset*` | checked compiler fixture programs | reviewed for the frozen 101-fixture supported-subset corpus | Program definitions correspond to the tracked Vyper sources; the original 23 fixtures remain the first milestone. |
+| `lowering/defs/bytecode/eval/evalCompilerBytecode*Script.sml` | HOL-to-Python bytecode parity tests | exact for all 101 retained fixtures | The checked theories compare both deployment and runtime bytes produced by `compile_vyper`; staged evaluator theorems are used only to make concrete evaluation tractable. |
+| `lowering/defs/bytecode/python-o1-bytecode-fixtures`, `python_o1_bytecode_oracle.py`, and `python-o1-no-asm-opt*/` | independently generated pinned-Python O1 bytecode oracle and comparison entrypoint | reproducible from pin | The generator verifies a clean checkout against `VYPER_PIN` and uses pinned `PASSES_O1`, Prague, disabled metadata, and disabled final assembly optimization. `--compare-hol` covers every retained endpoint theory. |
 | `tests/vyper-test-exports` and generators | language-test AST/metadata export | uses repository pin by policy | Keep aligned with `VYPER_PIN`. |
+
+### Finite supported-subset acceptance
+
+The exact boundary is the generated TASK_089 ledger under
+`.agent-files/tasks/evidence/`. At the accepted revision it contains 1,485 rows:
+506 supported, 795 partial with explicit shape/type boundaries, and 184
+unsupported. Every one of the 1,301 code-producing rows has a retained fixture
+witness. The frozen corpus has 101 physical source/oracle pairs and checks 202
+exact byte lists. The retired `spill_join` stress fixture is intentionally absent.
+
+This is finite differential evidence for the declared HOL-supported subset, not
+a universal equivalence theorem and not a claim that partial or unsupported
+ledger domains are implemented. The cached comparison reproduces the bytes,
+but some parity theorems are tagged `CHEAT` by inherited compiler dependencies
+(e.g. the pre-existing `collapse_dfs` termination admission). Consequently
+this is not yet a cheat-free theorem-level acceptance.
 
 ### Checked O1 fixture-path correspondences
 

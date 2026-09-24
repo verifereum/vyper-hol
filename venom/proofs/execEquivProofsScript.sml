@@ -19,7 +19,7 @@
 
 Theory execEquivProofs
 Ancestors
-  stateEquivProofs stateEquiv venomExecSemantics venomExecProofs venomState venomInst venomWf
+  stateEquivProofs stateEquiv venomExecSemantics venomExecProofs venomState venomInst venomWf list
   rich_list finite_map
 
 (* ==========================================================================
@@ -732,17 +732,23 @@ Proof
   `!op. MEM op rest ==> eval_operand op s1 = eval_operand op s2`
     by (rw[] >> first_x_assum irule >> simp[]) >>
   Cases_on `LENGTH rest = w2n tc + 2` >> simp[result_equiv_def, revert_equiv_def] >>
-  `eval_operand (EL 0 rest) s1 = eval_operand (EL 0 rest) s2`
-    by (first_x_assum irule >> irule EL_MEM >> simp[]) >>
-  `eval_operand (EL 1 rest) s1 = eval_operand (EL 1 rest) s2`
-    by (first_x_assum irule >> irule EL_MEM >> simp[]) >>
-  sg `eval_operands (DROP 2 rest) s1 =
-      eval_operands (DROP 2 rest) s2`
+  `eval_operand (EL 0 (REVERSE rest)) s1 =
+   eval_operand (EL 0 (REVERSE rest)) s2`
+    by (first_x_assum irule >>
+        once_rewrite_tac[GSYM MEM_REVERSE] >>
+        Cases_on `REVERSE rest` >> gvs[]) >>
+  `eval_operand (EL 1 (REVERSE rest)) s1 =
+   eval_operand (EL 1 (REVERSE rest)) s2`
+    by (first_x_assum irule >>
+        once_rewrite_tac[GSYM MEM_REVERSE] >>
+        irule EL_MEM >> simp[]) >>
+  sg `eval_operands (DROP 2 (REVERSE rest)) s1 =
+      eval_operands (DROP 2 (REVERSE rest)) s2`
   >- (qsuff_tac `!ops. (!op. MEM op ops ==>
         eval_operand op s1 = eval_operand op s2) ==>
         eval_operands ops s1 = eval_operands ops s2`
       >- (disch_then irule >> rw[] >> first_x_assum irule >>
-          imp_res_tac MEM_DROP_IMP >> simp[])
+          metis_tac[MEM_DROP_IMP, MEM_REVERSE])
       >> Induct >> rw[eval_operands_def]) >>
   simp[] >>
   rpt CASE_TAC >> gvs[result_equiv_def, revert_equiv_def, state_equiv_def,

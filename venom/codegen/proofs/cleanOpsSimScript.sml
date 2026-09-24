@@ -405,6 +405,7 @@ Proof
   gvs[apply_simple_ops_def, apply_simple_op_def, stack_pop_def,
       TAKE_APPEND1, TAKE_APPEND2]
 QED
+(* RETIRED: pre-dead-marker proof retained for reference.
 Theorem clean_ops_sim:
   !label_offsets offset_to_pc prog liveness cfg fn bb ps ps2 clean_ops vs as.
     venom_asm_rel label_offsets ps vs as /\
@@ -544,4 +545,150 @@ Resume clean_ops_sim[noncontig]:
 QED
 
 Finalise clean_ops_sim;
+*)
+
+Theorem plan_stack_rel_mark_dead_stack[local]:
+  !lo vs retained ps_stk as_stk.
+    plan_stack_rel lo vs ps_stk as_stk ==>
+    plan_stack_rel lo vs (mark_dead_stack retained ps_stk) as_stk
+Proof
+  rpt strip_tac >>
+  fs[plan_stack_rel_def] >>
+  simp[plan_stack_rel_def, mark_dead_stack_def, GSYM MAP_REVERSE] >>
+  rpt strip_tac >>
+  first_x_assum (qspec_then `i` mp_tac) >> simp[] >>
+  Cases_on `MEM (EL i (REVERSE ps_stk)) retained` >>
+  gvs[GSYM MAP_REVERSE, EL_MAP]
+QED
+
+Theorem venom_asm_rel_mark_dead_stack[local]:
+  !lo vs retained ps as.
+    venom_asm_rel lo ps vs as ==>
+    venom_asm_rel lo
+      (ps with ps_stack := mark_dead_stack retained ps.ps_stack) vs as
+Proof
+  rw[venom_asm_rel_def] >>
+  irule plan_stack_rel_mark_dead_stack >> simp[]
+QED
+
+Theorem venom_asm_rel_mark_all_dead[local]:
+  !lo vs ps as.
+    venom_asm_rel lo ps vs as ==>
+    venom_asm_rel lo
+      (ps with ps_stack := MAP (K dead_stack_marker) ps.ps_stack) vs as
+Proof
+  rpt strip_tac >>
+  `MAP (K dead_stack_marker) ps.ps_stack =
+   mark_dead_stack ps.ps_stack ps.ps_stack` by
+    (simp[mark_dead_stack_def, MAP_EQ_f] >> metis_tac[MEM_EL]) >>
+  simp[] >> irule venom_asm_rel_mark_dead_stack >> simp[]
+QED
+
+Theorem popmany_plan_noncontig_new[local]:
+  !ops ps ops2 ps2.
+    ops <> [] /\
+    ~(EVERY IS_SOME (MAP (\v. stack_get_depth v ps.ps_stack) ops) /\
+      is_contiguous_top (MAP THE
+        (MAP (\v. stack_get_depth v ps.ps_stack) ops))) /\
+    popmany_plan ops ps = (ops2, ps2) ==>
+    popmany_individual ops ps = (ops2, ps2)
+Proof
+  Cases_on `ops`
+  >- (rpt strip_tac >> fs[]) >>
+  rpt strip_tac >>
+  qpat_x_assum `popmany_plan _ _ = _` mp_tac >>
+  PURE_REWRITE_TAC[popmany_plan_def, LET_THM] >> BETA_TAC >>
+  IF_CASES_TAC
+  >- (IF_CASES_TAC
+      >- (qpat_x_assum `~_` mp_tac >> ASM_REWRITE_TAC[])
+      >- simp[]) >>
+  simp[]
+QED
+
+Theorem popmany_plan_sim_under17[local]:
+  !to_pop ps clean_ops ps2 lo o2pc prog vs as.
+    popmany_plan to_pop ps = (clean_ops, ps2) /\
+    LENGTH ps.ps_stack <= 17 /\
+    venom_asm_rel lo ps vs as /\
+    asm_block_at prog as.as_pc (execute_plan initial_fmp clean_ops) ==>
+    ?n as'.
+      asm_steps lo o2pc prog n as = AsmOK as' /\
+      venom_asm_rel lo ps2 vs as' /\
+      as'.as_pc = as.as_pc + LENGTH (execute_plan initial_fmp clean_ops)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `to_pop = []`
+  >- (gvs[popmany_plan_def] >>
+      qexistsl_tac [`0`, `as`] >>
+      simp[asm_steps_def, execute_plan_def]) >>
+  qabbrev_tac `depths_opt =
+    MAP (\v. stack_get_depth v ps.ps_stack) to_pop` >>
+  Cases_on `EVERY IS_SOME depths_opt /\
+            is_contiguous_top (MAP THE depths_opt)`
+  >- (`LENGTH to_pop < LENGTH ps.ps_stack` by
+        (irule contiguous_top_stack_bound >>
+         ASM_REWRITE_TAC[] >> simp[Abbr `depths_opt`]) >>
+      `LENGTH to_pop <= 16` by
+        fs[Abbr `depths_opt`, is_contiguous_top_def, LET_THM] >>
+      qexists_tac `LENGTH (execute_plan initial_fmp clean_ops)` >>
+      irule popmany_plan_contiguous_sim >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      qexistsl_tac [`ps`, `to_pop`] >>
+      ASM_REWRITE_TAC[] >> simp[Abbr `depths_opt`]) >>
+  qpat_x_assum `Abbrev (depths_opt = _)`
+    (assume_tac o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  qpat_x_assum `depths_opt = _` SUBST_ALL_TAC >>
+  `popmany_individual to_pop ps = (clean_ops, ps2)` by
+    (irule popmany_plan_noncontig_new >> ASM_REWRITE_TAC[]) >>
+  drule_all popmany_individual_sim >> metis_tac[ADD_COMM]
+QED
+
+Theorem clean_ops_sim:
+  !label_offsets offset_to_pc prog liveness cfg fn bb ps ps2 clean_ops vs as.
+    venom_asm_rel label_offsets ps vs as /\
+    LENGTH ps.ps_stack <= 17 /\
+    clean_stack_plan liveness cfg fn bb ps = (clean_ops, ps2) /\
+    asm_block_at prog as.as_pc (execute_plan initial_fmp clean_ops) ==>
+    ?n as'.
+      asm_steps label_offsets offset_to_pc prog n as = AsmOK as' /\
+      venom_asm_rel label_offsets ps2 vs as' /\
+      as'.as_pc = as.as_pc + LENGTH (execute_plan initial_fmp clean_ops)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `clean_stack_plan _ _ _ _ _ = _` mp_tac >>
+  simp[clean_stack_plan_def, LET_THM] >>
+  Cases_on `cfg_preds_of cfg bb.bb_label` >> gvs[]
+  >- (strip_tac >> gvs[] >> qexistsl_tac [`0`, `as`] >>
+      simp[asm_steps_def, execute_plan_def]) >>
+  Cases_on `t` >> gvs[]
+  >- (rename1 `cfg_preds_of _ _ = [pred_lbl]` >>
+      Cases_on `LENGTH (cfg_succs_of cfg pred_lbl) <= 1` >> gvs[]
+      >- (strip_tac >> gvs[] >> qexistsl_tac [`0`, `as`] >>
+          simp[asm_steps_def, execute_plan_def]) >>
+      Cases_on `lookup_block pred_lbl fn.fn_blocks` >> gvs[]
+      >- (strip_tac >> gvs[] >> qexistsl_tac [`0`, `as`] >>
+          simp[asm_steps_def, execute_plan_def]) >>
+      rename1 `lookup_block _ _ = SOME pred_bb` >>
+      qabbrev_tac `inputs = input_vars_from pred_lbl
+        bb.bb_instructions (live_vars_at liveness bb.bb_label 0)` >>
+      Cases_on `cleanup_elision_safe cfg fn bb`
+      >- (Cases_on `NULL inputs`
+          >- (simp[] >> strip_tac >> gvs[] >>
+              qexistsl_tac [`0`, `as`] >>
+              simp[asm_steps_def, execute_plan_def] >>
+              irule venom_asm_rel_mark_all_dead >> simp[]) >>
+          simp[] >> rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+          drule_all_then
+            (qspec_then `offset_to_pc` strip_assume_tac)
+            popmany_plan_sim_under17 >>
+          qexistsl_tac [`n`, `as'`] >> simp[] >>
+          irule venom_asm_rel_mark_dead_stack >> simp[]) >>
+      simp[] >> strip_tac >>
+      drule_all_then
+        (qspec_then `offset_to_pc` strip_assume_tac)
+        popmany_plan_sim_under17 >>
+      qexistsl_tac [`n`, `as'`] >> simp[]) >>
+  strip_tac >> gvs[] >> qexistsl_tac [`0`, `as`] >>
+  simp[asm_steps_def, execute_plan_def]
+QED
 

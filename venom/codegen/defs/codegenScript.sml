@@ -22,7 +22,8 @@ Definition codegen_assembly_def:
       | SOME plan =>
           let asm =
             execute_plan plan.cp_initial_fmp (context_plan_ops plan) ++
-            data_segment_asm unit.cu_data_segment
+            data_segment_asm unit.cu_data_segment ++
+            [AsmDataHeader "code_end"]
           in
             if assembly_target_safe rpolicy.rpol_target asm
             then SOME asm
@@ -40,7 +41,8 @@ Definition codegen_assembly_fuel_def:
       | SOME plan =>
           let asm =
             execute_plan plan.cp_initial_fmp (context_plan_ops plan) ++
-            data_segment_asm unit.cu_data_segment
+            data_segment_asm unit.cu_data_segment ++
+            [AsmDataHeader "code_end"]
           in
             if assembly_target_safe rpolicy.rpol_target asm
             then SOME asm

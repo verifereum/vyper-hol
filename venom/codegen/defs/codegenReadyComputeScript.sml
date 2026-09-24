@@ -190,6 +190,27 @@ QED
 
 (* ===== Finite def-dominates-uses checker ===== *)
 
+(* Helper: well-formed functions have at most one block with a given label. *)
+Theorem wf_function_blocks_same_label:
+  wf_function fn /\
+  MEM bb1 fn.fn_blocks /\ MEM bb2 fn.fn_blocks /\
+  bb1.bb_label = bb2.bb_label ==>
+  bb1 = bb2
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks)` by
+    gvs[wf_function_def, fn_labels_def] >>
+  `?i. i < LENGTH fn.fn_blocks /\ EL i fn.fn_blocks = bb1` by
+    metis_tac[listTheory.MEM_EL] >>
+  `?j. j < LENGTH fn.fn_blocks /\ EL j fn.fn_blocks = bb2` by
+    metis_tac[listTheory.MEM_EL] >>
+  `i = j` by
+    (qspecl_then [`MAP (λbb. bb.bb_label) fn.fn_blocks`, `i`, `j`]
+       mp_tac listTheory.ALL_DISTINCT_EL_IMP >>
+     simp[listTheory.EL_MAP]) >>
+  gvs[]
+QED
+
 Definition def_available_at_exec_def:
   def_available_at_exec cfg dom fn target_bb use_inst_opt v <=>
     EXISTS
@@ -199,7 +220,7 @@ Definition def_available_at_exec_def:
             MEM v def_inst.inst_outputs /\
             cfg_reachable_of cfg target_bb.bb_label /\
             dominates dom def_bb.bb_label target_bb.bb_label /\
-            (def_bb = target_bb ==>
+            (def_bb.bb_label = target_bb.bb_label ==>
              case use_inst_opt of
                NONE => T
              | SOME use_inst =>
@@ -254,11 +275,12 @@ Definition def_dominates_uses_exec_def:
 End
 Theorem def_available_at_exec_correct:
   wf_function fn ==>
+  MEM target_bb fn.fn_blocks ==>
   (def_available_at fn target_bb use_inst_opt v <=>
    def_available_at_exec (cfg_analyze fn)
      (dom_analyze (cfg_analyze fn) fn) fn target_bb use_inst_opt v)
 Proof
-  strip_tac >>
+  rpt strip_tac >>
   simp[def_available_at_def, def_available_at_exec_def,
        listTheory.EXISTS_MEM, listTheory.EXISTS_GENLIST] >>
   eq_tac >> rpt strip_tac
@@ -266,7 +288,10 @@ Proof
       qexists_tac `def_inst` >> simp[] >>
       conj_tac >- metis_tac[fn_dominates_cfg_analyze] >>
       conj_tac >- metis_tac[fn_dominates_cfg_analyze] >>
-      strip_tac >> Cases_on `use_inst_opt` >> gvs[] >>
+      strip_tac >>
+      `def_bb = target_bb` by
+        metis_tac[wf_function_blocks_same_label] >>
+      Cases_on `use_inst_opt` >> gvs[] >>
       qexists_tac `i` >> simp[] >> qexists_tac `j` >> simp[])
   >- (qexists_tac `def_bb` >> simp[] >>
       qexists_tac `def_inst` >> simp[] >>
@@ -295,12 +320,15 @@ Proof
      PairCases_on `p` >>
        qpat_x_assum `!pred v. _` (qspecl_then [`p0`, `p1`] mp_tac) >>
        impl_tac >- simp[] >> simp[] >> strip_tac >> gvs[] >>
-       qexists_tac `pred_bb` >> simp[],
+       qexists_tac `pred_bb` >> simp[] >>
+       metis_tac[def_available_at_exec_correct],
      eq_tac >> strip_tac
        >- (qpat_x_assum `!pred. _ ==> _`
              (qspec_then `pred` mp_tac) >> simp[])
        >- (qpat_x_assum `!p. _` (qspec_then `p` mp_tac) >> simp[]),
-     qpat_x_assum `!p. _` (qspec_then `(pred,v)` mp_tac) >> simp[]]
+     qpat_x_assum `!p. _` (qspec_then `(pred,v)` mp_tac) >> simp[] >>
+       strip_tac >> qexists_tac `pred_bb` >> simp[] >>
+       metis_tac[def_available_at_exec_correct]]
 QED
 Theorem def_dominates_uses_exec_correct:
   wf_function fn ==>

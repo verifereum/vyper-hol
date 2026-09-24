@@ -307,9 +307,10 @@ Definition compile_decode_args_def:
                       offset load_opc hi_op base_adj =
     if is_prim then
       let clamp_info = (case dec_info of DecPrimWord c => c | _ => NoClamp) in
-      do src <- if base_adj = 0 then return (Lit (n2w offset))
-                else emit_op ADD
-                  [Lit (n2w base_adj); Lit (n2w (offset - base_adj))];
+      do (* _getelemptr_abi always materializes parent + static_offset,
+            including a zero parent and zero static offset. *)
+         src <- emit_op ADD
+           [Lit (n2w base_adj); Lit (n2w (offset - base_adj))];
          val_op <- emit_op load_opc [src];
          compile_abi_clamp_basetype val_op clamp_info;
          (case FLOOKUP cenv.ce_vars name of
@@ -325,10 +326,13 @@ Definition compile_decode_args_def:
          SOME loc =>
            (case var_location_decode_operand loc of
               SOME dst =>
-                do offset_val <- emit_op load_opc [Lit (n2w offset)];
+                do static_src <- emit_op ADD
+                     [Lit (n2w base_adj); Lit (n2w (offset - base_adj))];
+                   offset_val <- emit_op load_opc [static_src];
                    actual_src <- emit_op ADD [Lit (n2w base_adj); offset_val];
-                   compile_abi_decode_to_buf dst actual_src
-                     load_opc hi_op dec_info;
+                   compile_abi_decode_to_buf dst actual_src load_opc
+                     (if load_opc = CALLDATALOAD then Lit 0w else hi_op)
+                     dec_info;
                    compile_decode_args cenv rest (offset + abi_size)
                      load_opc hi_op base_adj
                 od
@@ -341,8 +345,15 @@ Definition compile_decode_args_def:
          SOME loc =>
            (case var_location_decode_operand loc of
               SOME dst =>
-                let src = Lit (n2w (base_adj + offset)) in
-                do compile_abi_decode_to_buf dst src load_opc hi_op dec_info;
+                (* offset is already absolute for external calldata.  Rebuild
+                   it from the tuple base exactly as pinned Vyper's
+                   _getelemptr_abi does, without adding base_adj twice. *)
+                do src <- emit_op ADD
+                          [Lit (n2w base_adj);
+                           Lit (n2w (offset - base_adj))];
+                   compile_abi_decode_to_buf dst src load_opc
+                     (if load_opc = CALLDATALOAD then Lit 0w else hi_op)
+                     dec_info;
                    compile_decode_args cenv rest (offset + abi_size)
                      load_opc hi_op base_adj
                 od
@@ -551,8 +562,29 @@ Definition compile_register_positional_args_def:
 End
 
 Definition compile_register_constructor_args_def:
-  compile_register_constructor_args cenv args data_offset data_size =
-    compile_decode_args cenv args data_offset DLOAD (Lit (n2w data_size)) 0
+  compile_register_constructor_args cenv [] _ _ = return cenv ∧
+  compile_register_constructor_args cenv
+      ((name, is_prim, is_dynamic, abi_size, dec_info)::rest)
+      data_offset data_size =
+    (case FLOOKUP cenv.ce_vars name of
+       SOME loc =>
+         (case var_location_memory_size loc of
+            SOME mem_size =>
+              do (* Python's constructor registration calls new_variable for
+                    each argument, so retain the ALLOCA identity in the body. *)
+                 buf <- compile_alloc_buffer mem_size;
+                 cenv' <- return (cenv with ce_vars updated_by
+                   (\m. m |+ (name, PtrVar buf.buf_operand mem_size)));
+                 compile_decode_args cenv'
+                   [(name, is_prim, is_dynamic, abi_size, dec_info)]
+                   data_offset DLOAD (Lit (n2w data_size)) 0;
+                 compile_register_constructor_args cenv' rest
+                   (data_offset + abi_size) data_size
+              od
+          | NONE => compile_register_constructor_args cenv rest
+                      (data_offset + abi_size) data_size)
+     | NONE => compile_register_constructor_args cenv rest
+                 (data_offset + abi_size) data_size)
 End
 
 (* ===== Local Variable Materialization ===== *)
@@ -846,14 +878,15 @@ Definition compile_generate_deploy_def:
             else return (Lit 0w, []));
          imm_alloca <- return (FST imm_result);
          entry_forced <- return (SND imm_result);
-         (* Register constructor args from DATA section *)
-         compile_register_constructor_args cenv constructor_args 0 data_size;
+         (* Register constructor args from DATA section. *)
+         cenv' <- compile_register_constructor_args
+           cenv constructor_args 0 data_size;
          (* Nonreentrant lock *)
          (if is_nonreentrant then
             compile_nonreentrant_lock nkey use_transient F
           else return ());
          (* Constructor body *)
-         compile_stmts cenv NoLoop (BaseT BoolT) body;
+         compile_stmts cenv' NoLoop (BaseT BoolT) body;
          cs <- comp_get;
          (if block_is_terminated cs then return ()
           else

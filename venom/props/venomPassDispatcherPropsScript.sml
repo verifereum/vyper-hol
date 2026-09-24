@@ -68,7 +68,9 @@ Proof
       fn_pass_abi_effect_def, AllCaseEqs()] >>
   strip_tac >> gvs[] >>
   imp_res_tac concretize_function_fuel_metadata_transition >>
+  imp_res_tac concretize_function_fuel_in_context_metadata_transition >>
   imp_res_tac concretize_function_fuel_sets_eom >>
+  imp_res_tac concretize_function_fuel_in_context_sets_eom >>
   imp_res_tac dft_fn_metadata >>
   imp_res_tac cfg_norm_function_supply_metadata >>
   imp_res_tac dret_desugar_function_metadata >>
@@ -108,6 +110,7 @@ Proof
       AllCaseEqs()] >>
   strip_tac >> gvs[] >>
   imp_res_tac concretize_function_fuel_invoke_targets >>
+  imp_res_tac concretize_function_fuel_in_context_invoke_targets >>
   imp_res_tac cfg_norm_function_supply_invoke_labels_subset >>
   imp_res_tac dft_fn_invoke_subset >>
   imp_res_tac dret_desugar_function_invoke_targets >>

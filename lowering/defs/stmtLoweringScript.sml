@@ -138,31 +138,67 @@ End
    msg_enc_info: ABI encoding info for the message type. *)
 Definition compile_revert_with_reason_def:
   compile_revert_with_reason cenv msg_op msg_type msg_mem_size =
-    (* Wrap message type as tuple: (msg_type,) for ABI encoding.
-       Mirrors Python: wrapped_typ = TupleT((msg_typ,)) *)
-    let wrapped_type = TupleT [msg_type] in
-    let wrapped_enc_info = type_to_abi_enc_info cenv.ce_struct_fields cenv wrapped_type in
-    let wrapped_abi_size = abi_size_bound cenv.ce_struct_fields wrapped_type in
-    (* Allocate buffer: 32 (selector word) + encoded payload *)
-    let buf_size = 32 + wrapped_abi_size in
-    do buf_op_alloc <- compile_alloc_buffer buf_size;
-       buf_op <- return buf_op_alloc.buf_operand;
-       (* Store Error(string) selector at buf: 0x08c379a0 *)
-       emit_void MSTORE [buf_op; Lit (0x08c379a0w : bytes32)];
-       (* Payload starts at buf + 32 *)
-       payload_buf <- emit_op ADD [buf_op; Lit 32w];
-       (* Store message pointer into a tuple buffer (single-element tuple) *)
-       tuple_buf_alloc <- compile_alloc_buffer msg_mem_size;
-       tuple_buf <- return tuple_buf_alloc.buf_operand;
-       compile_copy_memory tuple_buf msg_op msg_mem_size;
-       (* ABI encode the wrapped tuple to payload buffer *)
-       encoded_len <-
-         compile_abi_encode_to_buf payload_buf tuple_buf wrapped_enc_info;
-       (* Revert from buf+28 (selector at bytes 0-3) with length 4 + encoded_len *)
-       revert_offset <- emit_op ADD [buf_op; Lit 28w];
-       revert_len <- emit_op ADD [Lit 4w; encoded_len];
-       emit_inst REVERT [revert_offset; revert_len] []
+    (* Vyper restricts reasons to strings.  Spell out the pinned encoder's
+       singleton-dynamic-tuple path instead of evaluating the full recursive
+       ABI encoder: Error(string) is selector || abi_encode((message,)). *)
+    let buf_size = 64 + msg_mem_size in
+    do buf_alloc <- compile_alloc_buffer buf_size;
+       let buf_op = buf_alloc.buf_operand in
+       do emit_void MSTORE [buf_op; Lit (0x08c379a0w : bytes32)];
+          payload_buf <- emit_op ADD [buf_op; Lit 32w];
+          tuple_alloc <- compile_alloc_buffer msg_mem_size;
+          let tuple_buf = tuple_alloc.buf_operand in
+          do msg_copy_len <- emit_op MLOAD [msg_op];
+             msg_copy_rounded0 <- emit_op ADD [msg_copy_len; Lit 31w];
+             msg_copy_rounded <- emit_op AND
+               [msg_copy_rounded0;
+                Lit (0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0w : bytes32)];
+             msg_copy_size <- emit_op ADD [Lit 32w; msg_copy_rounded];
+             emit_void MCOPY [tuple_buf; msg_op; msg_copy_size];
+             size_alloc <- compile_alloc_buffer 32;
+             let size_ref = size_alloc.buf_operand in
+             do emit_void MSTORE [size_ref; Lit 32w];
+                src_ptr <- emit_op ADD [tuple_buf; Lit 0w];
+                head_ptr <- emit_op ADD [payload_buf; Lit 0w];
+                dynamic_offset <- emit_op MLOAD [size_ref];
+                tail_ptr <- emit_op ADD [payload_buf; dynamic_offset];
+                msg_len <- emit_op MLOAD [src_ptr];
+                rounded0 <- emit_op ADD [msg_len; Lit 31w];
+                rounded <- emit_op AND
+                  [rounded0;
+                   Lit (0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0w : bytes32)];
+                tail_end <- emit_op ADD [tail_ptr; rounded];
+                emit_void MSTORE [tail_end; Lit 0w];
+                copy_len <- emit_op ADD [Lit 32w; msg_len];
+                emit_void MCOPY [tail_ptr; src_ptr; copy_len];
+                rounded1 <- emit_op ADD [msg_len; Lit 31w];
+                rounded2 <- emit_op AND
+                  [rounded1;
+                   Lit (0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0w : bytes32)];
+                encoded_item_len <- emit_op ADD [Lit 32w; rounded2];
+                emit_void MSTORE [head_ptr; dynamic_offset];
+                new_size <- emit_op ADD [dynamic_offset; encoded_item_len];
+                emit_void MSTORE [size_ref; new_size];
+                encoded_len <- emit_op MLOAD [size_ref];
+                revert_offset <- emit_op ADD [buf_op; Lit 28w];
+                revert_len <- emit_op ADD [Lit 4w; encoded_len];
+                emit_inst REVERT [revert_offset; revert_len] []
+             od
+          od
+       od
     od
+End
+
+(* Reasons are syntactically restricted to string literals by Vyper.  Taking
+   that path directly avoids invoking the general expression recursor while
+   emitting the same bytelike-literal IR as Expr.lower. *)
+Definition compile_reason_message_def:
+  compile_reason_message cenv (Literal (BaseT (StringT max_len)) (StringL s)) =
+    do buf <- compile_bytelike_literal (MAP (n2w o ORD) s) max_len;
+       return (buf.buf_operand : operand)
+    od /\
+  compile_reason_message cenv reason_e =
+    lower_value compile_expr cenv (expr_type reason_e) reason_e
 End
 
 (* ===== Internal Return ===== *)
@@ -194,9 +230,7 @@ Definition compile_load_tuple_elements_def:
   compile_load_tuple_elements cenv base_op [] offset = return [] ∧
   compile_load_tuple_elements cenv base_op (ty :: tys) offset =
     (let elem_size = type_memory_bytes cenv ty in
-     do elem_ptr <-
-          (if offset = 0 then return base_op
-           else emit_op ADD [base_op; Lit (n2w offset)]);
+     do elem_ptr <- emit_op ADD [base_op; Lit (n2w offset)];
         val_op <- emit_op MLOAD [elem_ptr];
         rest <- compile_load_tuple_elements cenv base_op tys
                   (offset + elem_size);
@@ -284,35 +318,22 @@ Definition compile_internal_return_def:
                           elem_types 0;
                emit_inst RET (elems ++ [return_pc]) []
             od
-    else if is_abi_dynamic cenv.ce_struct_fields ret_type then
-      (* At this boundary only a top-level bytes/string has one directly
-         representable dynamic source range.  Nested dynamic layouts are
-         rejected rather than being emitted with a malformed envelope. *)
-      case (return_buf, ret_val) of
-        (SOME buf_op, SOME val_op) =>
-          if is_bytestring_type ret_type /\
-             is_bytestring_type src_type then
-            (* The guard surrounds the complete size/DRET computation, so an
-               unsupported target emits INVALID before any MCOPY-dependent
-               raw behavior. *)
-            compile_mcopy_guard cenv
-              (do copy_len <- compile_bytestring_copy_len val_op;
-                  (case mk_dret_operands [] [(val_op, copy_len)] return_pc of
-                     SOME ops => emit_inst DRET ops []
-                   | NONE => emit_inst INVALID [] [])
-               od)
-          else emit_inst INVALID [] []
-      | _ => emit_inst INVALID [] []
     else
+      (* Memory return: copy into the caller-provided buffer, then return only
+         to the saved PC.  This includes bytes/string values, whose typed copy
+         uses their runtime length, matching Python Context.store_memory. *)
       case return_buf of
         SOME buf_op =>
           (case ret_val of
              NONE => emit_inst RET [return_pc] []
            | SOME val_op =>
-               (* Fixed-size memory return: retain the ordinary buffered RET
-                  path. *)
-               do compile_store_memory_typed cenv buf_op ret_type
-                                             val_op src_type;
+               do (if ret_type = src_type /\
+                       ¬is_bytestring_type ret_type then
+                     compile_copy_memory buf_op val_op
+                       (type_memory_bytes cenv ret_type)
+                   else
+                     compile_store_memory_typed cenv buf_op ret_type
+                                                   val_op src_type);
                   emit_inst RET [return_pc] []
                od)
       | NONE => emit_inst RET [return_pc] []
@@ -466,11 +487,9 @@ Definition compile_get_target_ptr_def:
           else struct_field_offset fields field);
        field_type <- return (case ALOOKUP fields field of
                                SOME (fty, _) => SOME fty | NONE => NONE);
-       if field_offset = 0 then return (base_op, loc_opt, field_type)
-       else
-         do ptr <- emit_op ADD [base_op; Lit (n2w field_offset)];
-            return (ptr, loc_opt, field_type)
-         od
+       do ptr <- emit_op ADD [base_op; Lit (n2w field_offset)];
+          return (ptr, loc_opt, field_type)
+       od
     od
 End
 
@@ -958,7 +977,8 @@ Definition compile_stmt_def:
                                      | _ => MSTORE);
                cur_op <- emit_op load_opc [dst_op];
                rhs_op <- lower_value compile_expr cenv target_ty e;
-               res_op <- compile_binop bop cur_op rhs_op target_ty;
+               res_op <- compile_binop bop cur_op rhs_op target_ty NONE
+                           (if bop = Exp then expr_int_literal e else NONE);
                emit_void store_opc [dst_op; res_op]
             od)
     od ∧
@@ -997,7 +1017,7 @@ Definition compile_stmt_def:
        new_block fail_lbl;
        reason_ty <- return (expr_type reason_e);
        msg_mem_size <- return (type_memory_bytes cenv reason_ty);
-       msg_op <- lower_value compile_expr cenv reason_ty reason_e;
+       msg_op <- compile_reason_message cenv reason_e;
        compile_revert_with_reason cenv msg_op reason_ty msg_mem_size;
        new_block ok_lbl;
        return ()
@@ -1060,7 +1080,7 @@ Definition compile_stmt_def:
   compile_stmt cenv lctx ty (Raise (RaiseReason reason_e)) =
     (let reason_ty = expr_type reason_e in
      let msg_mem_size = type_memory_bytes cenv reason_ty in
-     do msg_op <- lower_value compile_expr cenv reason_ty reason_e;
+     do msg_op <- compile_reason_message cenv reason_e;
         compile_revert_with_reason cenv msg_op reason_ty msg_mem_size
      od) ∧
 

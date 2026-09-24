@@ -203,12 +203,14 @@ Definition ml_liveat_inst_def:
          | _ => live1)
       else live1 in
     let la' = la |+ ((bb_label, idx), live2) in
-    (* Complete-overwrite kill *)
-    let live3 = case inst_write_size inst of
-      NONE => live2
-    | SOME wsz =>
-        FOLDL (ml_kill_write alloca_sizes read_allocas wsz)
-              live2 write_allocas in
+    (* Base-pointer analysis is a may-analysis.  Match Python: a complete
+       write can kill liveness only when it has exactly one possible base
+       allocation.  With zero or multiple candidates the write is not a
+       must-write, so retain the full live set. *)
+    let live3 = case (inst_write_size inst, write_allocas) of
+      (SOME wsz, [alloc]) =>
+        ml_kill_write alloca_sizes read_allocas wsz live2 alloc
+    | _ => live2 in
     (live3, la')
 End
 
@@ -717,6 +719,10 @@ Definition compute_alloc_map_def:
       sorted_info pre_allocated
 End
 
+(* Python populates the liveset dictionary during its backward liveness walk.
+   Its stable size sort therefore breaks equal-size ties in reverse physical
+   instruction order, not ALLOCA source order.  Preserve that observable order
+   before applying the same stable sort below. *)
 Definition alloc_liveset_items_def:
   alloc_liveset_items fn ls =
     MAP THE (FILTER IS_SOME
@@ -726,7 +732,24 @@ Definition alloc_liveset_items_def:
            case FLOOKUP ls alloc of
              SOME live => SOME (alloc, live)
            | NONE => NONE)
-        (FILTER (\inst. is_alloca_op inst.inst_opcode) (fn_insts fn))))
+        (REVERSE
+          (FILTER (\inst. is_alloca_op inst.inst_opcode) (fn_insts fn)))))
+End
+
+(* Python's list.sort is stable.  HOL's generic QSORT does not expose that
+   contract, so use a small stable insertion sort for the observable
+   equal-liveset tie order. *)
+Definition insert_alloc_liveset_item_def:
+  insert_alloc_liveset_item item [] = [item] /\
+  insert_alloc_liveset_item item (x::xs) =
+    if LENGTH (SND item) <= LENGTH (SND x) then item::x::xs
+    else x::insert_alloc_liveset_item item xs
+End
+
+Definition sort_alloc_liveset_items_def:
+  sort_alloc_liveset_items [] = [] /\
+  sort_alloc_liveset_items (x::xs) =
+    insert_alloc_liveset_item x (sort_alloc_liveset_items xs)
 End
 
 Definition compute_alloc_map_fuel_def:
@@ -740,10 +763,9 @@ Definition compute_alloc_map_fuel_def:
                live_pallocas cfg fn in
     let items = alloc_liveset_items fn ls in
     let pre_allocated_dom = FDOM pre_allocated in
-    let (already, to_alloc) =
-      PARTITION (\(alloc, _). alloc IN pre_allocated_dom) items in
-    let sorted = QSORT (\(_, s1) (_, s2). LENGTH s1 <= LENGTH s2)
-                   to_alloc in
+    let already = FILTER (\(alloc, _). alloc IN pre_allocated_dom) items in
+    let to_alloc = FILTER (\(alloc, _). alloc NOTIN pre_allocated_dom) items in
+    let sorted = sort_alloc_liveset_items to_alloc in
     let already_info = MAP (\(alloc, live).
       let pos = case FLOOKUP pre_allocated alloc of
                   SOME p => p | NONE => 0 in
@@ -755,6 +777,75 @@ Definition compute_alloc_map_fuel_def:
 End
 
 (* Convert allocation-keyed result to variable-keyed alloc_map *)
+(* An INVOKE keeps every static allocation of its callee live.  Once a callee
+   has been concretized, [fn_eom] is the compact frame occupied by that set;
+   reserving [0,eom) at an invoke is therefore the executable counterpart of
+   Python's persistent allocator state. *)
+Definition call_frame_at_addr_def:
+  call_frame_at_addr ctx fn (lbl,idx) =
+    case lookup_block lbl fn.fn_blocks of
+      NONE => []
+    | SOME bb =>
+        if idx < LENGTH bb.bb_instructions then
+          let inst = EL idx bb.bb_instructions in
+          if inst.inst_opcode = INVOKE then
+            case inst.inst_operands of
+              Label callee :: _ =>
+                (case lookup_function callee ctx.ctx_functions of
+                   SOME callee_fn =>
+                     (case callee_fn.fn_eom of
+                        SOME eom => if eom = 0 then [] else [((0:num),eom)]
+                      | NONE => [])
+                 | NONE => [])
+            | _ => []
+          else []
+        else []
+End
+
+Definition call_frame_reservations_def:
+  call_frame_reservations ctx fn live_insts =
+    FLAT (MAP (call_frame_at_addr ctx fn) live_insts)
+End
+
+Definition allocate_with_livesets_in_context_def:
+  allocate_with_livesets_in_context ctx fn global_reserved already [] result =
+    result /\
+  allocate_with_livesets_in_context ctx fn global_reserved already
+    ((alloc, live_insts, sz) :: rest) result =
+    let reserved = global_reserved ++ call_frame_reservations ctx fn live_insts ++
+      MAP (\(_, _, pos, asz). (pos, asz))
+        (FILTER (\(_, other_live, _, _).
+           sinter inst_addr_to other_live live_insts <> []) already) in
+    let (pos, _) = allocate_one reserved sz in
+    allocate_with_livesets_in_context ctx fn global_reserved
+      (already ++ [(alloc, live_insts, pos, sz)])
+      rest (result |+ (alloc, pos))
+End
+
+Definition compute_alloc_map_fuel_in_context_def:
+  compute_alloc_map_fuel_in_context fuel ctx fn bpr cfg
+                         (pre_allocated : (allocation, num) fmap)
+                         (global_reserved : (num # num) list) =
+    let alloca_sz = get_alloca_size fn in
+    let alloca_sz_opt = \a. let sz = alloca_sz a in
+                            if sz = 0 then NONE else SOME sz in
+    let ls = mem_liveness_analyze_fuel fuel bpr (K ([] : allocation list))
+               alloca_sz_opt ([] : allocation list) cfg fn in
+    let items = alloc_liveset_items fn ls in
+    let pre_allocated_dom = FDOM pre_allocated in
+    let already = FILTER (\(alloc, _). alloc IN pre_allocated_dom) items in
+    let to_alloc = FILTER (\(alloc, _). alloc NOTIN pre_allocated_dom) items in
+    let sorted = sort_alloc_liveset_items to_alloc in
+    let already_info = MAP (\(alloc, live).
+      let pos = case FLOOKUP pre_allocated alloc of
+                  SOME p => p | NONE => 0 in
+      (alloc, live, pos, alloca_sz alloc)) already in
+    let sorted_info = MAP (\(alloc, live).
+      (alloc, live, alloca_sz alloc)) sorted in
+    allocate_with_livesets_in_context ctx fn global_reserved already_info
+      sorted_info pre_allocated
+End
+
 Definition alloc_result_to_map_def:
   alloc_result_to_map fn (result : (allocation, num) fmap) : alloc_map =
     FOLDL (\amap bb.
@@ -885,6 +976,23 @@ Definition compute_function_layout_fuel_def:
           | SOME completed => mk_concretize_layout reserved completed fn
 End
 
+Definition compute_function_layout_fuel_in_context_def:
+  compute_function_layout_fuel_in_context fuel ctx reserved fn =
+    case static_alloca_items fn of
+      NONE => NONE
+    | SOME items =>
+        let seed = forced_candidate_positions items
+          fn.fn_forced_alloc_positions FEMPTY in
+        let cfg = cfg_analyze fn in
+        let bpr = bp_analyze_fuel fuel cfg fn in
+        let candidate =
+          compute_alloc_map_fuel_in_context fuel ctx fn bpr cfg seed reserved in
+          case complete_alloc_positions_with_items items
+                 fn.fn_forced_alloc_positions reserved fn candidate of
+            NONE => NONE
+          | SOME completed => mk_concretize_layout reserved completed fn
+End
+
 Theorem compute_function_layout_fuel_eq_reference:
   compute_function_layout_fuel fuel reserved fn =
   compute_function_layout_fuel_reference fuel reserved fn
@@ -974,6 +1082,19 @@ Definition concretize_function_fuel_def:
       then SOME fn else NONE
     else
       case compute_function_layout_checked fuel reserved fn of
+        NONE => NONE
+      | SOME layout => SOME (apply_concretize_layout layout fn)
+End
+
+Definition concretize_function_fuel_in_context_def:
+  concretize_function_fuel_in_context fuel ctx reserved fn =
+    if fn_has_static_layout fn then
+      if ~fn_has_alloca fn /\ fn.fn_forced_alloc_positions = FEMPTY
+      then SOME fn else NONE
+    else
+      case (if fn_needs_liveness_allocation fn then
+              compute_function_layout_fuel_in_context fuel ctx reserved fn
+            else compute_function_layout_eval reserved fn) of
         NONE => NONE
       | SOME layout => SOME (apply_concretize_layout layout fn)
 End

@@ -49,7 +49,8 @@ fun fixture_line line =
 fun resolve_bytecode_fixture filename =
   let
     val candidates =
-      [OS.Path.concat ("bytecode/python-o1-no-asm-opt", filename),
+      [OS.Path.concat ("../python-o1-no-asm-opt", filename),
+       OS.Path.concat ("bytecode/python-o1-no-asm-opt", filename),
        OS.Path.concat ("lowering/defs/bytecode/python-o1-no-asm-opt", filename)]
   in
     case List.find
