@@ -100,26 +100,47 @@ constructor-kind census, **not** a count of lowering branches executed.
 | All other variant datatypes (`bound`, `base_type`, `literal`, `iterator`, `stmt`, `function_visibility`, `function_mutability`) | 37 / 37 | None |
 | **Total** | **148 / 187** | **39** |
 
-For example, `storage_mapping_program` constructs `HashMapDecl`, but not the
-`HashMapT` *value-type* constructor. None of the fixture functions supplies a
-nonempty list of optional-argument defaults; `function_modes` includes a
-`__default__` *fallback function*, which is a different feature. A
-source-level constructor occurrence establishes an input shape; it does not
-establish that a particular lowering arm was taken.
+A separate read-only check compared **each AST row's assigned fixture names**
+with the constructor kinds actually present in those named program terms:
+
+| AST constructor rows | Directly checked result |
+|---|---|
+| 87 | Constructor occurs in at least one assigned fixture term. |
+| 61 | Constructor occurs in the corpus, **but not in its assigned fixture(s)**. |
+| 21 | Constructor is absent from the corpus **despite an assigned fixture name**. |
+| 18 | Constructor is absent and has no assigned fixture. |
+| 1 | The separate unsupported `raw_call_flags` record is absent and has no fixture. |
+
+Thus **82 AST-row fixture assignments are demonstrably wrong**, not just
+uncertain. For example, `BoolL` occurs in `scalar_literals_bool` and
+`assert_reason`, not in its assigned `scalar_literals_int_small`; `Lt` occurs
+in the ordering fixtures, not its assigned `scalar_compare_eq`. Conversely,
+`storage_mapping_program` constructs `HashMapDecl`, but not the `HashMapT`
+*value-type* constructor. None of the fixture functions supplies a nonempty
+list of optional-argument defaults; `function_modes` includes a `__default__`
+*fallback function*, which is a different feature. A source-level constructor
+occurrence establishes an input shape; it does not establish that a particular
+lowering arm was taken.
 
 ## Lowering-arm audit and exclusions
 
 The ledger contains 1,301 code-producing rows. Its fixture-label checker
 confirms that 1,295 rows have existing fixture **names**, not that their
-branches ran. Inspecting the checked compiler call path and the named HOL
-programs disproved **at least 55 of these assignments**, in disjoint groups:
+branches ran. The 82 falsified AST-row witnesses above are disjoint from
+**at least 102 more falsified lowering-arm assignments** established by
+source inspection. Thus at least **184 of the 1,295 labeled code-producing
+rows** lack the claimed witness. The following groups are disjoint:
 
-| Falsified assignments | Source-level reason |
+| Falsified lowering-arm assignments | Source-level reason |
 |---:|---|
-| 46 | `compileEnvScript.sml` invariant/state/result/log-relation definitions in lines 561–900 are not calls on the checked `compile_vyper` lowering path; assigning scalar fixture names does not make them executed compiler arms. |
-| 2 | The two real `is_bytestring_type` lowering-predicate arms in that file were assigned `scalar_compare_eq`, which has only integer comparison functions and no bytestring input. |
-| 6 | Sparse/dense selector-dispatch arms in `moduleLoweringScript.sml` cannot run: `resolve_o1_policy` sets dispatch to `Linear`, and `run_lowering` checks that policy before calling `compile_generate_runtime`. |
-| 1 | A `SOME` fallback arm was assigned `transient_scalar`, whose HOL program has no `__default__` fallback; `function_modes` tests a fallback separately. |
+| 46 | `compileEnvScript.sml` invariant/state/result/log-relation definitions at lines 561–900 are not calls on the checked `compile_vyper` lowering path. |
+| 2 | The two `is_bytestring_type` predicates in that file name `scalar_compare_eq`, which has only integer comparison functions. |
+| 6 | Sparse/dense selector-dispatch arms in `moduleLoweringScript.sml` cannot run: `resolve_o1_policy` sets dispatch to `Linear`, and `run_lowering` checks that policy. |
+| 1 | A `SOME` fallback arm names `transient_scalar`, whose program has no `__default__` fallback; `function_modes` tests a fallback separately. |
+| 14 | External-kwargs allocation/initialization/entry-point/common-body helper arms in `moduleLoweringScript.sml` have no caller on the checked path, which calls `compile_external_fn_bodies` instead. |
+| 1 | The immutable-variable arm of `compute_immutables_len` names `deploy_storage`, whose declaration is `Storage`, not `Immutable`. |
+| 14 | Specialized type/struct/flag/dynamic-array/transient-layout arms in `compileVyperScript.sml` name `scalar_compare_eq`, a two-function scalar program without those input shapes. The generic or empty-list arms are **not** included in this count. |
+| 18 | Testing-only bounded-pipeline and separate O1-wrapper arms, a proof-side internal-descriptor helper, and legacy internal-parameter arms have no caller on the checked `compile_vyper` path. |
 
 Earlier, 22 denomination rows were assigned to `scalar_minmax_int` or
 `scalar_compare_eq`; 16 names were corrected to the actual `scalar_wei_small`

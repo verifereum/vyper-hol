@@ -149,9 +149,11 @@ physical source/oracle pairs and checks 202 exact byte lists; `spill_join` is
 retired. A read-only audit found 148 of 187 variant HOL AST constructor
 kinds in the fixture input terms and 39 absent; none builds the separate
 `raw_call_flags` record. The mechanical ledger checker assigns fixture
-*names* to 1,295 code-producing rows, but at least 55 assignments demonstrably
-do not witness their named lowering arm. Six more HOL code-producing rows
-(`MEther`, `GEther`, `TEther` constructors and multiplier arms) are explicitly
+*names* to 1,295 code-producing rows. A term-level audit refutes 82 AST-row
+witnesses, and a separate source-level audit refutes at least 102
+lowering-arm witnesses: **at least 184 labeled rows have the wrong fixture**.
+Six more HOL code-producing rows (`MEther`, `GEther`, `TEther` constructors
+and multiplier arms) are explicitly
 outside the pinned-Python elaborated-input differential target: Python's
 `AsWeiValue` rejects those units, while HOL's semantics and classification
 remain unchanged. No complete lowering-arm execution census is claimed.

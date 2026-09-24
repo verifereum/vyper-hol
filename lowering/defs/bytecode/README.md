@@ -72,8 +72,10 @@ explicit supported/unsupported boundaries), and 184 unsupported. All 101
 retained fixtures enter through checked `compile_vyper`. A read-only audit
 of their HOL input terms found 148 of 187 variant AST constructor kinds
 present, 39 absent, and no `raw_call_flags` record. Of 1,301 HOL
-code-producing rows, 1,295 have assigned fixture **names**; at least 55
-assignments were shown not to witness their named lowering arm. Six rows
+code-producing rows, 1,295 have assigned fixture **names**; 82 AST-row
+assignments fail the term-presence check and at least 102 additional
+lowering-arm assignments fail source-level scrutiny (at least 184 false
+witnesses in all). Six rows
 (constructors and multiplier arms for `MEther`, `GEther`, `TEther`) are
 explicitly outside the differential target because pinned Python rejects
 those denominations. Their HOL definitions remain unchanged. See the linked
