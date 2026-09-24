@@ -161,7 +161,13 @@ Python-domain exclusions below. **No remaining fixture-name count is an
 execution-coverage count.** The saved byte-equality theorems record final
 results, not intermediate lowering-branch traces. This audit makes no claim
 about the other assigned arms; a complete per-arm execution census cannot be
-reconstructed from those saved results alone.
+reconstructed from those saved results alone. Of the off-path groups above,
+**at least 32 rows are classified supported** (20 relation/invariant rows,
+7 kwargs-helper rows, 5 testing-only/proof-side/legacy-helper rows). No
+additional input to checked `compile_vyper` can execute those helpers through
+that entry point. Consequently TASK_090's literal every-supported-row fixture
+acceptance cannot be satisfied by adding fixture names or programs without a
+separate decision about the frozen ledger's reachability scope.
 
 ## What the fixtures do **not** establish
 
