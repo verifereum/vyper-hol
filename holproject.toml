@@ -6,7 +6,6 @@ name = "vyper-hol"
 version = "0.2.3"
 
 [build]
-tactic_timeout = 2.5
 roots = ["vyperHolScript.sml",
          "semantics/type/vyperCheckContractLibTestScript.sml",
          "frontend/vyperCheckContractFrontendLibTestScript.sml",
