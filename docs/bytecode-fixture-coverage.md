@@ -142,6 +142,18 @@ rows** lack the claimed witness. The following groups are disjoint:
 | 14 | Specialized type/struct/flag/dynamic-array/transient-layout arms in `compileVyperScript.sml` name `scalar_compare_eq`, a two-function scalar program without those input shapes. The generic or empty-list arms are **not** included in this count. |
 | 18 | Testing-only bounded-pipeline and separate O1-wrapper arms, a proof-side internal-descriptor helper, and legacy internal-parameter arms have no caller on the checked `compile_vyper` path. |
 
+Some **specific lowering routes** can nevertheless be established from the
+checked `compile_vyper` call chain and the inspected program terms (rather
+than from a fixture name alone):
+
+| Route selected | Concrete input and source path |
+|---|---|
+| `compile_generate_runtime` → `Linear` selector dispatch | The successful checked O1 compilations call `run_lowering` with a resolved `Linear` policy (`compileVyperScript.sml`, `vyperCompilerScript.sml`, `moduleLoweringScript.sml`). This says nothing about individual selector comparisons. |
+| `build_struct_fields_map` → `StructDecl` | `storage_struct_program` contains `StructDecl "Pair"`; `build_compile_env` calls `make_struct_fields_map` on those tops (`compileVyperScript.sml`). |
+| `build_is_hashmap` → `HashMapDecl` | `storage_mapping_program` contains `HashMapDecl "balances"`; `build_compile_env` calls `build_is_hashmap` on those tops (`compileVyperScript.sml`). This is distinct from the absent `HashMapT` value type. |
+| `compile_generate_runtime` → `SOME` fallback | `function_modes_program` has a `FunctionDecl` named `__default__`, classified and packaged as a fallback (`compileVyperScript.sml`, `moduleLoweringScript.sml`); `transient_scalar` does not. |
+| `compile_call` → `AsWeiValue` → `denomination_multiplier` | `scalar_wei_small_program` and `scalar_wei_large_program` each provide four `AsWeiValue` functions with the eight accepted denominations (`exprLoweringScript.sml`). This does not exercise the three Python-excluded denominations. |
+
 Earlier, 22 denomination rows were assigned to `scalar_minmax_int` or
 `scalar_compare_eq`; 16 names were corrected to the actual `scalar_wei_small`
 and `scalar_wei_large` programs, and the remaining six are the explicit
