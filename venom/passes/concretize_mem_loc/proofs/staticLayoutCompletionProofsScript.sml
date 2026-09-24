@@ -805,5 +805,3 @@ Proof
   >> gvs[]
   >> simp[static_position_wf_def]
 QED
-
-val _ = export_theory();

@@ -154,5 +154,3 @@ Proof
     metis_tac[cfg_norm_function_supply_no_raw_fmp_ops] >>
   gvs[]
 QED
-
-val _ = export_theory ();

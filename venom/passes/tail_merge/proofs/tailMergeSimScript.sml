@@ -806,5 +806,3 @@ Proof
   imp_res_tac canon_operands_orig >>
   metis_tac[]
 QED
-
-val _ = export_theory();

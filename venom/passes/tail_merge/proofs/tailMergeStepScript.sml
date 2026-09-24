@@ -1353,5 +1353,3 @@ Proof
   fs[is_terminator_def, is_output_opcode_def] >>
   output_match_dispatch_tac
 QED
-
-val _ = export_theory();

@@ -5517,5 +5517,3 @@ Proof
   simp[arithmeticTheory.MAX_DEF]
 QED
 
-val _ = export_theory();
-

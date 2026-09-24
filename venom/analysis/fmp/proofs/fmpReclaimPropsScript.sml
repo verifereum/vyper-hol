@@ -70,5 +70,3 @@ Theorem analyze_fmp_reclaims_deterministic:
 Proof
   rpt strip_tac >> gvs[]
 QED
-
-val _ = export_theory();

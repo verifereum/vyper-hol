@@ -348,4 +348,3 @@ Theorem fmp_invalid_seal_rejected:
 Proof
   simp[fmp_lower_function_def, fmp_lower_function_with_info_def]
 QED
-val _ = export_theory();

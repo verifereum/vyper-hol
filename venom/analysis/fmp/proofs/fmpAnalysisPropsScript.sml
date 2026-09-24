@@ -1461,4 +1461,3 @@ Proof
   >- metis_tac[analyze_fmp_context_sealed_lookup]
   >> metis_tac[analyze_fmp_context_unsealed_join]
 QED
-val _ = export_theory();

@@ -1849,5 +1849,3 @@ val internal_tuple_call_lower_runtime_eval = save_thm
       pairTheory.UNCURRY_DEF, pairTheory.pair_case_def]
      ``lower_vyper_runtime_unit ^internal_tuple_call_tops
          ^internal_tuple_call_rpolicy``)
-
-val _ = export_theory()

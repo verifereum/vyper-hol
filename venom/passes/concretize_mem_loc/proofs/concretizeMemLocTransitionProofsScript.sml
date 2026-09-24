@@ -753,5 +753,3 @@ Proof
   rewrite_tac[GSYM fn_insts_def, GSYM fcg_scan_function_def] >>
   simp[concretize_function_with_positions_invoke_targets]
 QED
-
-val _ = export_theory();

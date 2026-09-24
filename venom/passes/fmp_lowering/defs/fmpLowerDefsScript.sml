@@ -497,5 +497,3 @@ Proof
   >> Cases_on `(fmp_seal ctx fn info blocks).fn_fmp_signature` >> simp[]
   >> metis_tac[]
 QED
-
-val _ = export_theory();

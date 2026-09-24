@@ -751,4 +751,3 @@ Proof
   >> irule lowered_return_inst_layout_wf_length
   >> first_x_assum irule >> simp[]
 QED
-val _ = export_theory();

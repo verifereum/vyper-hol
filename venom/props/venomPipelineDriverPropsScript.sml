@@ -66,5 +66,3 @@ Theorem o1_pipeline_no_level_control_flow:
 Proof
   simp [o1_pipeline_def, o1_policy_def]
 QED
-
-val _ = export_theory ();

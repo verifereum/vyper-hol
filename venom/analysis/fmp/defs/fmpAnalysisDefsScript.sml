@@ -249,5 +249,3 @@ Proof
          (qspec_then `fn` mp_tac)) >>
   simp[] >> res_tac >> gvs[]
 QED
-
-val _ = export_theory();

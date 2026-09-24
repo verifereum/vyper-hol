@@ -2755,5 +2755,3 @@ Proof
       venomInstTheory.no_raw_fmp_ops_def,
       venomInstTheory.fn_insts_def]
 QED
-
-val _ = export_theory();

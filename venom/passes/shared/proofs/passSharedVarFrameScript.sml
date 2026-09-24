@@ -582,5 +582,3 @@ Proof
   >> (drule_all step_inst_base_var_frame_full >>
       simp[step_inst_non_invoke])
 QED
-
-val _ = export_theory();

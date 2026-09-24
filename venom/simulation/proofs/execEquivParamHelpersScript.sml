@@ -445,5 +445,3 @@ Proof
   rpt (CASE_TAC >> gvs[lift_result_def]) >>
   vsr_irule vsr_logs_R_ok >> simp[]
 QED
-
-val _ = export_theory()

@@ -641,5 +641,3 @@ Proof
   imp_res_tac lower_dload_blocks_supply_invoke_targets >>
   gvs[fcg_scan_function_def, fn_insts_def]
 QED
-
-val _ = export_theory();

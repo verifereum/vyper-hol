@@ -53,5 +53,3 @@ val internal_tuple_call_runtime_pipeline_eval = save_thm
   ("internal_tuple_call_runtime_pipeline_eval",
    TRANS internal_tuple_call_runtime_pipeline_step0
      internal_tuple_call_runtime_pipeline_step1)
-
-val _ = export_theory()

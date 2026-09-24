@@ -218,5 +218,3 @@ Definition dret_desugar_configured_def:
   dret_desugar_configured target unit =
     OPTION_MAP FST (dret_desugar_configured_with_supply target unit)
 End
-
-val _ = export_theory();

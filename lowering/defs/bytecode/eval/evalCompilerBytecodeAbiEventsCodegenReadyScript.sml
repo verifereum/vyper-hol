@@ -258,5 +258,3 @@ val mixed_event_types_final_codegen_ready_eval = save_thm
   ("mixed_event_types_final_codegen_ready_eval",
    EQ_MP (SYM mixed_event_types_codegen_shell)
      mixed_event_types_actual_fn_ready)
-
-val _ = export_theory()

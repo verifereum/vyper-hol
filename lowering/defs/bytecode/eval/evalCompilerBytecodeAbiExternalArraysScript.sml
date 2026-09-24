@@ -23,5 +23,3 @@ val external_arrays_oracle_eq = EQT_ELIM (EVAL (mk_eq
 val external_arrays_matches_python_oracle = save_thm
   ("external_arrays_matches_python_oracle",
    TRANS external_arrays_compile_eval external_arrays_oracle_eq)
-
-val _ = export_theory()

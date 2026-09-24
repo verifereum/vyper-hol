@@ -1174,5 +1174,3 @@ Proof
   >- acct_frame_finish_tac
   >- acct_frame_finish_tac
 QED
-
-val _ = export_theory();

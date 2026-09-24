@@ -835,5 +835,3 @@ Theorem current_dom_postorder_eq:
 Proof
   simp[current_dom_postorder_def]
 QED
-
-val _ = export_theory();

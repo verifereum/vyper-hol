@@ -105,5 +105,3 @@ Proof
   Cases_on `fn_entry_label fn` >>
   simp[remove_unreachable_blocks_def, filter_reachable_cfg_analyze]
 QED
-
-val _ = export_theory();

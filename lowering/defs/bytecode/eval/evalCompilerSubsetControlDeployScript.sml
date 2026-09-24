@@ -120,5 +120,3 @@ Definition loops_program_def:
              (Name (BaseT (UintT 256)) "i")];
         Return (SOME (Name (BaseT (UintT 256)) "total"))]]
 End
-
-val _ = export_theory ();

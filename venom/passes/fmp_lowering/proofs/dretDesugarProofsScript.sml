@@ -818,5 +818,3 @@ Proof
       venomInstTheory.fn_insts_blocks_def, get_invoke_targets_def,
       dret_get_invoke_targets_append, venomInstTheory.mk_inst_def]
 QED
-
-val _ = export_theory();

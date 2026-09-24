@@ -77,5 +77,3 @@ Proof
      simp[codegen_assembly_def, AllCaseEqs()] >> strip_tac >> gvs[]) >>
   simp[]
 QED
-
-val _ = export_theory ();

@@ -319,5 +319,3 @@ Theorem execute_configured_fn_pass_sue[simp]:
 Proof
   simp[execute_configured_fn_pass_def]
 QED
-
-val _ = export_theory ();

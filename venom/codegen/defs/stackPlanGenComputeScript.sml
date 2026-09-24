@@ -146,5 +146,3 @@ Proof
        (drule_all_then assume_tac)) >>
      gvs[]
 QED
-
-val _ = export_theory()

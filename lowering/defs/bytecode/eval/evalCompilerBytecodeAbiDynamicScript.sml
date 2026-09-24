@@ -646,5 +646,3 @@ val () = List.app Theory.delete_binding
    "abi_dynamic_finalize_eval", "abi_dynamic_lower_deploy_eval",
    "abi_dynamic_deploy_pipeline_eval", "abi_dynamic_finalize_deploy_eval",
    "abi_dynamic_compile_eval", "abi_dynamic_compile_computed"]
-
-val _ = export_theory()

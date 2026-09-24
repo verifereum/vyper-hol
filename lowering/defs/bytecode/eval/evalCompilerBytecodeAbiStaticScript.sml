@@ -468,5 +468,3 @@ val abi_static_oracle_eq = EQT_ELIM (EVAL (mk_eq
 val abi_static_matches_python_oracle = save_thm
   ("abi_static_matches_python_oracle",
    TRANS abi_static_compile_eval abi_static_oracle_eq)
-
-val _ = export_theory()

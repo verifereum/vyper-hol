@@ -1185,5 +1185,3 @@ Proof
   imp_res_tac (cj 1 fn_plan_aux_fuel_alloc_mono) >>
   gvs[init_plan_state_def, init_spill_alloc_def]
 QED
-
-val _ = export_theory();

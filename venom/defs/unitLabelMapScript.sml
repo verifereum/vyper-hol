@@ -197,5 +197,3 @@ Proof
   gvs[unit_labels_wf_def] >>
   irule apply_resolved_unit_label_map_data_consistent >> simp[]
 QED
-
-val _ = export_theory ();

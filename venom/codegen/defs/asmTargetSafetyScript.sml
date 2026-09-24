@@ -28,5 +28,3 @@ End
 Definition assembly_target_safe_def:
   assembly_target_safe caps asm <=> EVERY (asm_inst_target_safe caps) asm
 End
-
-val _ = export_theory ();

@@ -2361,5 +2361,3 @@ Proof
   rw[dfAnalyzeWidenDefsTheory.df_widen_boundary_def,
      finite_mapTheory.FLOOKUP_UPDATE]
 QED
-
-val _ = export_theory();
