@@ -144,9 +144,10 @@ The exact boundary is the generated TASK_089 ledger under
 506 supported, 795 partial with explicit shape/type boundaries, and 184
 unsupported. The frozen corpus has 101 physical source/oracle pairs and checks
 202 exact byte lists. The retired `spill_join` stress fixture is intentionally
-absent. Coverage labels are not yet verified exercise witnesses: three
-code-producing HOL denomination constructors (`MEther`, `GEther`, `TEther`)
-remain without a fixture because pinned Python rejects these denominations.
+absent. Coverage labels are not yet verified exercise witnesses: at least six
+code-producing HOL denomination rows (constructors and multiplier arms for
+`MEther`, `GEther`, `TEther`) lack fixtures because pinned Python rejects these
+denominations.
 Further row-by-row witness validation is required before claiming subset closure.
 
 This is finite differential evidence for the 101 tested programs, not

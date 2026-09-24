@@ -68,9 +68,9 @@ HOL source files. At the accepted revision it contains 1,485 rows: 506 supported
 795 partial (with explicit supported/unsupported boundaries), and 184
 unsupported. The 101 retained fixtures enter through checked `compile_vyper`,
 but the ledger's mechanically assigned witness names require an exercise audit:
-three supported denomination constructors (`MEther`, `GEther`, `TEther`) have
-no fixture, and pinned Python's `AsWeiValue.wei_denoms` does not accept their
-10^24/10^27/10^30 denominations. Do not interpret the raw 1,301-row label count
+at least six supported denomination rows (constructors and multiplier arms
+for `MEther`, `GEther`, `TEther`) have no fixture, and pinned Python's
+`AsWeiValue.wei_denoms` does not accept their 10^24/10^27/10^30 denominations. Do not interpret the raw 1,301-row label count
 as verified exercise coverage until this boundary is resolved.
 
 ## Fixture format
