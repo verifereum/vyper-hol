@@ -1378,5 +1378,3 @@ Proof
   gvs[sue_expand_function_supply_def, no_raw_fmp_ops_def,
       fn_insts_def, GSYM sue_blocks_no_raw_iff]
 QED
-
-val _ = export_theory();

@@ -78,5 +78,3 @@ Definition mk_concretize_layout_def:
           NONE => NONE
         | SOME eom => SOME <| cl_positions := positions; cl_eom := eom |>
 End
-
-val _ = export_theory();

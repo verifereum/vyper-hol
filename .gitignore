@@ -12,6 +12,10 @@
 tests/vyper-test-exports
 tests/vyper-coverage-report.txt
 
+# Python bytecode caches
+__pycache__/
+*.py[cod]
+
 .alan/
 
 .claude/

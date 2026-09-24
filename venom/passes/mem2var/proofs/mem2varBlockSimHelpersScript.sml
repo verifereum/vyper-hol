@@ -3622,17 +3622,20 @@ Proof
   `!op. MEM op rest ==> eval_operand op s1 = eval_operand op s2`
     by (rpt strip_tac >> first_x_assum irule >> simp[]) >>
   (* eval_operands for topics agrees *)
-  `eval_operands (DROP 2 rest) s1 = eval_operands (DROP 2 rest) s2`
+  `eval_operands (DROP 2 (REVERSE rest)) s1 =
+   eval_operands (DROP 2 (REVERSE rest)) s2`
     by (irule eval_operands_agree >> rpt strip_tac >>
-        first_x_assum irule >> metis_tac[MEM_DROP_IMP]) >>
+        first_x_assum irule >> metis_tac[MEM_DROP_IMP, MEM_REVERSE]) >>
   (* Memory read range is outside promoted regions *)
   `!addr. w2n off <= addr /\ addr < w2n off + w2n sz ==>
           ~in_promoted_region fn s1 addr`
     by (ho_match_mp_tac nas_read_range_disjoint >>
         qexistsl [`bb`, `inst`] >>
-        `LENGTH rest >= 2` by simp[] >>
+        `LENGTH (REVERSE rest) >= 2` by simp[] >>
         simp[mem_read_ops_def, is_immutable_op_def] >>
-        Cases_on `rest` >> gvs[] >> Cases_on `t` >> gvs[]) >>
+        Cases_on `REVERSE rest` >> gvs[] >>
+        Cases_on `t` >> gvs[REVERSE_REVERSE] >>
+        Cases_on `t'` >> gvs[]) >>
   (* Memory data for event agrees *)
   `TAKE (w2n sz) (DROP (w2n off) s1.vs_memory ++ REPLICATE (w2n sz) 0w) =
    TAKE (w2n sz) (DROP (w2n off) s2.vs_memory ++ REPLICATE (w2n sz) 0w)`
@@ -3640,13 +3643,18 @@ Proof
         qpat_x_assum `!i. ~in_promoted_region _ _ _ ==> _` irule >>
         first_x_assum irule >> simp[]) >>
   (* Operands agree on s2 side *)
-  `eval_operand (HD rest) s2 = SOME off`
-    by (first_x_assum (qspec_then `HD rest` mp_tac) >>
-        impl_tac >- (Cases_on `rest` >> gvs[]) >> simp[]) >>
-  `eval_operand (EL 1 rest) s2 = SOME sz`
-    by (first_x_assum (qspec_then `EL 1 rest` mp_tac) >>
-        impl_tac >- (Cases_on `rest` >> gvs[] >>
-          Cases_on `t` >> gvs[]) >> simp[]) >>
+  `eval_operand (HD (REVERSE rest)) s2 = SOME off`
+    by (qpat_x_assum `!op. op = Lit tc \/ MEM op rest ==> _`
+          (qspec_then `HD (REVERSE rest)` mp_tac) >>
+        impl_tac >- (disj2_tac >>
+          once_rewrite_tac[GSYM MEM_REVERSE] >>
+          Cases_on `REVERSE rest` >> gvs[]) >> simp[]) >>
+  `eval_operand (EL 1 (REVERSE rest)) s2 = SOME sz`
+    by (qpat_x_assum `!op. op = Lit tc \/ MEM op rest ==> _`
+          (qspec_then `EL 1 (REVERSE rest)` mp_tac) >>
+        impl_tac >- (disj2_tac >>
+          once_rewrite_tac[GSYM MEM_REVERSE] >>
+          irule EL_MEM >> simp[]) >> simp[]) >>
   gvs[] >>
   simp[m2v_inv_noix_def] >>
   gvs[m2v_inv_noix_def, in_promoted_region_def, mem_byte_def,
@@ -5508,6 +5516,4 @@ Proof
     gvs[alloca_inv_def, alloca_next_valid_def] >> res_tac) >>
   simp[arithmeticTheory.MAX_DEF]
 QED
-
-val _ = export_theory();
 

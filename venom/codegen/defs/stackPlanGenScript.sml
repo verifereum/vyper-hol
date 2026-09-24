@@ -234,7 +234,9 @@ Definition compute_operands_def:
     else if opc = LOG then
       TL inst.inst_operands
     else
-      inst.inst_operands
+      (* Venom stores semantic operand order; Python's stack planner consumes
+         ordinary EVM operands in stack order. *)
+      python_stack_operands inst.inst_opcode inst.inst_operands
 End
 
 (* =========================================================================
@@ -272,26 +274,24 @@ Definition generate_regular_inst_plan_def:
         | _ => ([], ps1))
       else ([], ps1) in
 
-    (* Commutative optimization *)
-    let (operands', ps3) =
+    (* Commutative optimization.  Reuse the selected dry-run result rather
+       than running the chosen reorder a second time. *)
+    let (reorder_ops, ps4) =
       if is_commutative opc ∧ LENGTH operands ≥ 2 then
-        let (ops_a, _) = reorder_plan dfg operands ps2 in
+        let (ops_a, ps_a) = reorder_plan dfg operands ps2 in
         let cost_a = reorder_cost ops_a in
         let n = LENGTH operands in
         let swapped = TAKE (n - 2) operands ++
           [EL (n - 1) operands; EL (n - 2) operands] in
-        let (ops_b, _) = reorder_plan dfg swapped ps2 in
+        let (ops_b, ps_b) = reorder_plan dfg swapped ps2 in
         let cost_b = reorder_cost ops_b in
-        if cost_a < cost_b then (operands, ps2)
-        else (swapped, ps2)
-      else (operands, ps2) in
-
-    (* Final reorder *)
-    let (reorder_ops, ps4) = reorder_plan dfg operands' ps3 in
+        if cost_a < cost_b then (ops_a, ps_a)
+        else (ops_b, ps_b)
+      else reorder_plan dfg operands ps2 in
 
     (* Pop consumed, push outputs *)
     let ps5 = ps4 with ps_stack :=
-      stack_pop (LENGTH operands') ps4.ps_stack in
+      stack_pop (LENGTH operands) ps4.ps_stack in
     let outputs = inst.inst_outputs in
     let ps6 = FOLDL (λps' out.
       ps' with ps_stack := stack_push (Var out) ps'.ps_stack)
@@ -470,6 +470,74 @@ End
    Port of clean_stack_from_cfg_in
    ========================================================================= *)
 
+(* Python's MustHaltAnalysis is a least fixed point over DFS postorder.  In
+   particular, back edges are not admitted merely because a loop has a
+   halting exit. *)
+Definition must_halt_step_def:
+  must_halt_step cfg fn labels lbl =
+    case lookup_block lbl fn.fn_blocks of
+      NONE => labels
+    | SOME bb =>
+        let succs = cfg_succs_of cfg lbl in
+        if bb_is_halting bb \/
+           (succs <> [] /\ EVERY (λs. MEM s labels) succs)
+        then if MEM lbl labels then labels else SNOC lbl labels
+        else labels
+End
+
+Definition must_halt_labels_def:
+  must_halt_labels cfg fn =
+    FOLDL (must_halt_step cfg fn)
+      (MAP (λbb. bb.bb_label) (FILTER bb_is_halting fn.fn_blocks))
+      cfg.cfg_dfs_post
+End
+
+(* A conservative version of Python's frame-growth check.  An external entry
+   has no PARAM pseudo-instructions, so its caller height is zero.  Counting
+   every SSA variable in the function is at least as large as the reachable
+   regional count used by Python. *)
+Definition cleanup_frame_vars_def:
+  cleanup_frame_vars fn = nub (FLAT (MAP (λbb. FLAT (MAP (λinst.
+    operand_vars inst.inst_operands ++ inst.inst_outputs)
+    bb.bb_instructions)) fn.fn_blocks))
+End
+
+Definition cleanup_max_transient_def:
+  cleanup_max_transient fn = FOLDL MAX 0 (FLAT (MAP (λbb.
+    MAP (λinst. LENGTH inst.inst_operands + 2) bb.bb_instructions)
+    fn.fn_blocks))
+End
+
+Definition cleanup_elision_safe_def:
+  cleanup_elision_safe cfg fn bb <=>
+    ~EXISTS (λinst. is_param_opcode inst.inst_opcode)
+       (FLAT (MAP (λb. b.bb_instructions) fn.fn_blocks)) /\
+    MEM bb.bb_label (must_halt_labels cfg fn) /\
+    LENGTH (cleanup_frame_vars fn) + cleanup_max_transient fn ≤ 1024
+End
+
+(* There is no runtime operation for Python's _DeadStackItem.  Label operands
+   are never looked up on the existing stack, so this private marker gives the
+   plan model the same non-aliasing behaviour without emitting bytecode. *)
+Definition dead_stack_marker_def:
+  dead_stack_marker = Label ""
+End
+
+Definition below_all_live_def:
+  below_all_live op inputs stk =
+    case stack_get_depth op stk of
+      NONE => F
+    | SOME d => EVERY (λv.
+        case stack_get_depth (Var v) stk of
+          NONE => T
+        | SOME live_d => live_d < d) inputs
+End
+
+Definition mark_dead_stack_def:
+  mark_dead_stack retained stk =
+    MAP (λop. if MEM op retained then dead_stack_marker else op) stk
+End
+
 Definition clean_stack_plan_def:
   clean_stack_plan liveness cfg fn bb ps =
     let preds = cfg_preds_of cfg bb.bb_label in
@@ -487,7 +555,23 @@ Definition clean_stack_plan_def:
               let layout = live_vars_at liveness pred_lbl
                 (LENGTH pred_bb.bb_instructions) in
               let to_pop = FILTER (λv. ¬ MEM v inputs) layout in
-              popmany_plan (MAP Var to_pop) ps)
+              (* Even a halting block with no live inputs must mark retained
+                 physical slots dead.  Python keeps the slots but replaces
+                 their logical identities before planning REVERT/RETURN. *)
+              if NULL inputs ∧ cleanup_elision_safe cfg fn bb then
+                ([], ps with ps_stack :=
+                  MAP (K dead_stack_marker) ps.ps_stack)
+              else if cleanup_elision_safe cfg fn bb then
+                let physical = FILTER (λop.
+                      IS_SOME (stack_get_depth op ps.ps_stack))
+                      (MAP Var to_pop) in
+                let retained = FILTER (λop.
+                      below_all_live op inputs ps.ps_stack) physical in
+                let to_cleanup = FILTER (λop. ¬MEM op retained) physical in
+                let (ops, ps') = popmany_plan to_cleanup ps in
+                (ops, ps' with ps_stack :=
+                  mark_dead_stack retained ps'.ps_stack)
+              else popmany_plan (MAP Var to_pop) ps)
     | _ => ([], ps)
 End
 
@@ -504,6 +588,31 @@ End
    Per-Block Plan Generation
    ========================================================================= *)
 
+(* Process the instruction suffix directly.  Besides avoiding MAPi, this keeps
+   LENGTH/EL off the hot path and prepends each emitted chunk only once. *)
+Definition generate_block_insts_plan_def:
+  generate_block_insts_plan liveness dfg cfg fn bb_label is_halting
+      n_params block_len i [] ps =
+    SOME ([] : stack_op list, ps) ∧
+  generate_block_insts_plan liveness dfg cfg fn bb_label is_halting
+      n_params block_len i (inst :: rest) ps =
+    let next_live =
+      if rest = [] then live_vars_at liveness bb_label block_len
+      else live_vars_at liveness bb_label (i + n_params + 1) in
+    let next_is_term =
+      case rest of
+        [] => F
+      | next_i :: _ => is_terminator next_i.inst_opcode in
+    case generate_inst_plan liveness dfg cfg fn inst
+           next_live is_halting next_is_term bb_label ps of
+      NONE => NONE
+    | SOME (step_ops, ps') =>
+        case generate_block_insts_plan liveness dfg cfg fn bb_label
+               is_halting n_params block_len (i + 1) rest ps' of
+          NONE => NONE
+        | SOME (rest_ops, ps'') => SOME (step_ops ++ rest_ops, ps'')
+End
+
 Definition generate_block_plan_def:
   generate_block_plan liveness dfg cfg fn bb ps =
     let label_op = [SOLabel bb.bb_label] in
@@ -519,28 +628,8 @@ Definition generate_block_plan_def:
     let is_halting = bb_is_halting bb in
     let n_params = LENGTH (get_params bb.bb_instructions) in
     let result =
-      FOLDL (λacc (i, inst).
-        case acc of
-          NONE => NONE
-        | SOME (ops, ps) =>
-            let next_live =
-              if i + 1 < LENGTH insts then
-                live_vars_at liveness bb.bb_label (i + n_params + 1)
-              else
-                live_vars_at liveness bb.bb_label
-                  (LENGTH bb.bb_instructions) in
-            (* Python: _optimistic_swap skips if next inst is terminator *)
-            let next_is_term =
-              if i + 1 < LENGTH insts then
-                is_terminator (EL (i + 1) insts).inst_opcode
-              else F in
-            case generate_inst_plan liveness dfg cfg fn inst
-                   next_live is_halting next_is_term bb.bb_label ps of
-              NONE => NONE
-            | SOME (step_ops, ps') =>
-                SOME (ops ++ step_ops, ps'))
-      (SOME ([] : stack_op list, ps2))
-      (MAPi (λi inst. (i, inst)) insts) in
+      generate_block_insts_plan liveness dfg cfg fn bb.bb_label
+        is_halting n_params (LENGTH bb.bb_instructions) 0 insts ps2 in
     case result of
       NONE => NONE
     | SOME (inst_ops, ps3) =>
@@ -999,13 +1088,11 @@ End
    Top-Level Entry Points
    ========================================================================= *)
 
-Definition generate_fn_plan_def:
-  generate_fn_plan fn spill_base (lbl_ctr : num) =
+Definition generate_fn_plan_analyzed_def:
+  generate_fn_plan_analyzed liveness dfg cfg fn spill_base
+      (lbl_ctr : num) =
     if ¬canonical_param_prefix fn then NONE
     else
-      let liveness = liveness_analyze fn in
-      let dfg = dfg_build_function fn in
-      let cfg = cfg_analyze fn in
       let ps = (init_plan_state spill_base) with ps_label_counter := lbl_ctr in
       case fn_entry_label fn of
         NONE => SOME ([] : stack_op list, ps)
@@ -1013,6 +1100,12 @@ Definition generate_fn_plan_def:
           case generate_fn_plan_aux liveness dfg cfg fn [lbl] [] ps of
             NONE => NONE
           | SOME (ops, _, ps') => SOME (ops, ps')
+End
+
+Definition generate_fn_plan_def:
+  generate_fn_plan fn spill_base (lbl_ctr : num) =
+    generate_fn_plan_analyzed (liveness_analyze fn)
+      (dfg_build_function fn) (cfg_analyze fn) fn spill_base lbl_ctr
 End
 
 Definition generate_fn_plan_fuel_def:

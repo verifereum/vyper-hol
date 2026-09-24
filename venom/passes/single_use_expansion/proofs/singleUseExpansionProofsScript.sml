@@ -745,6 +745,21 @@ Proof
       res_tac >> gvs[])
 QED
 
+Theorem eval_operands_reverse_none[local]:
+  !ops st. eval_operands ops st = NONE ==>
+    eval_operands (REVERSE ops) st = NONE
+Proof
+  rpt strip_tac >>
+  drule eval_operands_none_exists >> strip_tac >>
+  `MEM (EL k ops) ops` by (irule listTheory.EL_MEM >> simp[]) >>
+  `MEM (EL k ops) (REVERSE ops)` by simp[listTheory.MEM_REVERSE] >>
+  `?j. j < LENGTH (REVERSE ops) /\
+       EL j (REVERSE ops) = EL k ops` by
+    metis_tac[listTheory.MEM_EL] >>
+  irule eval_operand_none_implies_operands_none >>
+  qexists_tac `j` >> simp[]
+QED
+
 (* Helper: running a single ASSIGN [op] [out] preserves eval of
    operands whose var names differ from out. *)
 Theorem single_assign_preserves_eval[local]:
@@ -970,11 +985,13 @@ local
     `eval_operands rest st = NONE` by
       (fs[eval_operands_def, eval_operand_def] >>
        Cases_on `eval_operands rest st` >> fs[]) >>
-    Cases_on `eval_operand (HD rest) st` >> simp[] >>
-    Cases_on `eval_operand (EL 1 rest) st` >> simp[] >>
-    Cases_on `eval_operands (DROP 2 rest) st` >> simp[] >>
-    `LENGTH rest >= 2` by simp[] >>
-    Cases_on `rest` >> fs[eval_operands_def] >>
+    `eval_operands (REVERSE rest) st = NONE` by
+      metis_tac[eval_operands_reverse_none] >>
+    Cases_on `eval_operand (HD (REVERSE rest)) st` >> simp[] >>
+    Cases_on `eval_operand (EL 1 (REVERSE rest)) st` >> simp[] >>
+    Cases_on `eval_operands (DROP 2 (REVERSE rest)) st` >> simp[] >>
+    `LENGTH (REVERSE rest) >= 2` by simp[] >>
+    Cases_on `REVERSE rest` >> fs[eval_operands_def] >>
     Cases_on `t` >> fs[eval_operands_def]);
 
   (* INVOKE needs special handling: step_inst handles INVOKE directly,

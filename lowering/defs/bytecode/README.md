@@ -1,112 +1,94 @@
-# O1 bytecode fixtures
+# O1 bytecode parity fixtures
 
-This directory contains the independent Python oracle. No HOL-generated
-expected bytecode is retained alongside it.
+This directory contains the independent Python oracle for the frozen 101-fixture
+HOL-supported-subset corpus. It includes the original 23-fixture milestone and
+78 subset/interaction fixtures.
 
-## Independent oracle
+- `python-o1-no-asm-opt-sources/` contains Vyper source counterparts to the HOL
+  programs in `eval/evalCompilerScript.sml` and the `eval/evalCompilerSubset*`
+  theories.
+- `python-o1-no-asm-opt/` contains the pinned Python Vyper deployment/runtime
+  bytecode and its provenance record.
+- `python_o1_bytecode_oracle.py` generates the oracle.
+- `python-o1-bytecode-fixtures` reproduces it and optionally runs the HOL parity
+  theorems.
 
-`python-o1-no-asm-opt-sources/` contains 23 Vyper source counterparts to the
-HOL AST programs in `../evalCompilerScript.sml`. `python-o1-no-asm-opt/`
-contains bytecode produced from those sources by pinned Python Vyper commit
-`cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c`, read from `../../../VYPER_PIN`.
-These files are the independent parity oracle. Its generated `provenance.json`
-records the full compiler revision, relevant tool/runtime/dependency versions,
-settings, SHA-256 hashes of
-every source and bytecode payload, and an audit-anchor hash of the HOL program
-definitions. The HOL file is hashed only to detect correspondence drift; it is
-not an input to Python compilation.
+The generated provenance records the pinned Python compiler, its dependencies,
+the Vyper fixture source hashes, compilation settings, and output hashes. It
+does not hash HOL scripts: they are not Python compiler inputs, and their
+bytecode parity is checked separately by the HOL theorems.
 
-The oracle profile exactly matches the current HOL fixture boundary:
+For a public summary of what the fixtures test and what remains unverified,
+see [`docs/bytecode-fixture-coverage.md`](../../../docs/bytecode-fixture-coverage.md).
 
-```text
-experimental codegen:       enabled
-Venom IR pipeline:           O1 lowering-only passes
-final assembly optimization: disabled (matching HOL finalizer K SOME)
-EVM version:                 prague
-bytecode metadata:           disabled
-outputs:                     bytecode, bytecode_runtime
-```
+The oracle is generated with the exact revision in `../../../VYPER_PIN`, Python
+3.11.11, Prague, experimental codegen, `OptimizationLevel.NONE` (which uses the
+same `PASSES_O1` Venom passes at this revision), no final assembly optimization,
+and no bytecode metadata. The generator requires a clean Vyper checkout, clones
+only committed objects, and installs them in an isolated environment using
+`python-o1-oracle-constraints.txt`.
 
-At the pinned revision, Python Vyper's `OptimizationLevel.NONE` and
-`OptimizationLevel.O1` are explicitly mapped to the same `PASSES_O1` Venom
-pipeline; `NONE` alone disables the final assembly optimizer. The generator
-checks that those pass lists are equal before compiling. Thus differences from
-HOL are not caused merely by comparing HOL's identity finalizer with Python's
-assembly optimizer.
-
-No HOL definition, evaluator, or `.hex` output participates in oracle bytecode
-generation. The generator checks the Vyper checkout's full Git revision,
-requires a clean checkout, clones only its committed objects into a temporary
-directory, and installs that clone into an isolated uv-managed Python 3.11.11
-environment using the dependency versions in
-`../python-o1-oracle-constraints.txt`. A fixed setuptools-scm version string
-makes package construction independent of local Git tags. Python isolated mode
-and a cleared Python environment prevent module-path shadowing; the helper also
-checks the imported compiler's location and reported commit before invoking it.
-Generation requires `uv 0.10.11`, the version pinned in CI.
-
-Given a clean Vyper checkout, reproduce the committed oracle without modifying
-it:
+Reproduce the committed oracle:
 
 ```sh
-sh lowering/defs/python-o1-bytecode-fixtures --check \
+lowering/defs/bytecode/python-o1-bytecode-fixtures --check \
   --vyper-repo /path/to/vyper
 ```
 
-Update the oracle only from that independently verified compiler:
+Regenerate it only from that verified compiler:
 
 ```sh
-sh lowering/defs/python-o1-bytecode-fixtures --update \
+lowering/defs/bytecode/python-o1-bytecode-fixtures --update \
   --vyper-repo /path/to/vyper
-```
-
-The underlying compiler settings are implemented explicitly in
-`../python_o1_bytecode_oracle.py` and correspond to this pinned CLI invocation:
-
-```sh
-vyper -f bytecode,bytecode_runtime \
-  --experimental-codegen --disable-optimize --evm-version prague \
-  --disable-bytecode-metadata <source.vy>
 ```
 
 ## HOL comparison
 
-No HOL-generated `.hex` files are committed. `evalCompilerBytecodeLib.sml`
-reads the independent Python oracle directly, and every theorem in
-`evalCompilerBytecodeScript.sml` requires fresh evaluation of
+`eval/evalCompilerBytecodeLib.sml` reads the independent oracle directly. The
+parity theories under `eval/` evaluate
 
 ```sml
 compile_vyper (K SOME) (o1_policy prague_capabilities) <program>
 ```
 
-to equal the corresponding Python deploy/runtime pair. `K SOME` is an identity
-finalizer. The independent Python profile uses the same O1 Venom pass list while
-disabling final assembly optimization, so the comparison is like-for-like at
-this compiler boundary.
-
-Run the complete comparison with:
+and requires exact deployment and runtime byte equality. The expensive fixture
+evaluation is opt-in and does not raise the normal project's 2.5-second tactic
+timeout:
 
 ```sh
-sh lowering/defs/python-o1-bytecode-fixtures --compare-hol \
+lowering/defs/bytecode/python-o1-bytecode-fixtures --compare-hol \
   --vyper-repo /path/to/vyper
 ```
 
-This first reproduces the Python oracle from `VYPER_PIN`, then runs `holbuild`
-with `evalCompilerBytecodeTheory` as an explicit target. The known-failing
-parity theory is deliberately not a default project root, so it does not break
-the main build while the documented compiler discrepancies remain. Any
-bytecode difference or HOL `NONE` result still fails `--compare-hol`. There is
-no implementation-derived fallback expected output.
+All 101 retained fixtures have an exact checked theorem; together they check 202
+byte lists (deployment and runtime). Any byte difference or checked-compiler
+`NONE` result fails. No HOL-generated expected output or implementation-derived
+fallback is used. The current cached comparison and parity-theory build logs
+contain no `Saved CHEAT` tags. This is finite fixture evidence, not a universal
+compiler-equivalence theorem or a claim about unrelated existing proof debt.
 
-The parity test currently fails: 17 HOL bytecode pairs differ from Python, and
-four loop plus two internal-call programs return `NONE` while Python emits
-bytecode. The theory comments identify the precise checked guards responsible
-for the six `NONE` results. These failures must be fixed in the implementation,
-not accepted by regenerating expected output from HOL.
+## Supported-subset boundary
+
+The machine-readable authority is
+`.agent-files/tasks/evidence/TASK_089.ledger.json`, derived from the ten declared
+HOL source files. It contains 1,485 rows: 506 supported, 795 partial (with
+explicit supported/unsupported boundaries), and 184 unsupported. All 101
+retained fixtures enter through checked `compile_vyper`. The strict
+per-fixture input-term audit confirms 148 of 187 variant AST constructor
+kinds present, 39 absent, and no `raw_call_flags` record. The corrected
+ledger assigns each present AST constructor only to fixtures containing it;
+22 lowering-arm rows have separate source-justified checked-path witnesses.
+The remaining 1,107 code-producing lowering-arm rows have **no witness
+claim**; an empty list does not prove non-execution. Six rows
+(constructors and multiplier arms for `MEther`, `GEther`, `TEther`) are
+explicitly outside the differential target because pinned Python rejects
+those denominations. Their HOL definitions remain unchanged. See the linked
+coverage document for the complete constructor census and precise distinction
+between fixture inputs and lowering-arm execution.
 
 ## Fixture format
 
-Oracle files use canonical lowercase, even-length hexadecimal:
+Each `.hex` file contains canonical lowercase, even-length hexadecimal:
 
 ```text
 deploy=<hex bytes>
@@ -114,4 +96,4 @@ runtime=<hex bytes>
 ```
 
 There is no `0x` prefix. Blank lines and `#` comments are accepted by the HOL
-oracle fixture reader.
+fixture reader.

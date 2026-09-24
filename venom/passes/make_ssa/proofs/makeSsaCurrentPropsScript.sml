@@ -1119,6 +1119,121 @@ Definition block_invoke_labels_def:
     MAP FST (get_invoke_targets bb.bb_instructions)
 End
 
+Theorem simplify_current_phi_raw_invoke:
+  inst.inst_opcode = INVOKE ==>
+  simplify_current_phi_raw inst = inst
+Proof
+  simp[simplify_current_phi_raw_def]
+QED
+
+Theorem simplify_current_phi_raw_not_invoke:
+  inst.inst_opcode <> INVOKE ==>
+  (simplify_current_phi_raw inst).inst_opcode <> INVOKE
+Proof
+  simp[simplify_current_phi_raw_def] >> rpt CASE_TAC >> gvs[]
+QED
+
+Theorem simplify_current_phi_invoke:
+  inst.inst_opcode = INVOKE ==>
+  simplify_current_phi inst = inst
+Proof
+  strip_tac >> drule simplify_current_phi_raw_invoke >> strip_tac >>
+  simp[simplify_current_phi_def, keep_current_phi_vars_def]
+QED
+
+Theorem simplify_current_phi_not_invoke:
+  inst.inst_opcode <> INVOKE ==>
+  (simplify_current_phi inst).inst_opcode <> INVOKE
+Proof
+  strip_tac >> drule simplify_current_phi_raw_not_invoke >> strip_tac >>
+  simp[simplify_current_phi_def, keep_current_phi_vars_def] >>
+  CASE_TAC >> simp[]
+QED
+
+Theorem simplify_current_phi_invoke_labels[simp]:
+  MAP FST (get_invoke_targets [simplify_current_phi inst]) =
+  MAP FST (get_invoke_targets [inst])
+Proof
+  Cases_on `inst.inst_opcode = INVOKE`
+  >- (drule simplify_current_phi_invoke >> simp[]) >>
+  drule simplify_current_phi_not_invoke >>
+  simp[get_invoke_targets_def]
+QED
+
+Theorem make_ssa_get_invoke_targets_append:
+  !xs ys.
+    get_invoke_targets (xs ++ ys) =
+    get_invoke_targets xs ++ get_invoke_targets ys
+Proof
+  Induct >> simp[get_invoke_targets_def] >> rpt gen_tac >>
+  Cases_on `h.inst_opcode = INVOKE` >> gvs[] >>
+  Cases_on `h.inst_operands` >> gvs[] >>
+  Cases_on `HD h.inst_operands` >> gvs[]
+QED
+
+Theorem get_invoke_targets_reassign_current_inst_ids:
+  !ids insts.
+    MAP FST (get_invoke_targets (reassign_current_inst_ids ids insts)) =
+    MAP FST (get_invoke_targets insts)
+Proof
+  Induct_on `ids` >- simp[reassign_current_inst_ids_def] >>
+  gen_tac >> Cases_on `insts` >- simp[reassign_current_inst_ids_def] >>
+  simp[reassign_current_inst_ids_def, get_invoke_targets_def] >>
+  Cases_on `h'.inst_opcode = INVOKE` >> gvs[] >>
+  Cases_on `h'.inst_operands` >> gvs[] >>
+  Cases_on `HD h'.inst_operands` >> gvs[]
+QED
+
+Theorem get_invoke_targets_simplify_current_phi_prefix_parts:
+  !insts phis ordinary.
+    simplify_current_phi_prefix_parts insts = (phis,ordinary) ==>
+    MAP FST (get_invoke_targets (phis ++ ordinary)) =
+    MAP FST (get_invoke_targets insts)
+Proof
+  Induct >- simp[simplify_current_phi_prefix_parts_def] >>
+  rpt gen_tac >> Cases_on `h.inst_opcode <> PHI`
+  >- (simp[simplify_current_phi_prefix_parts_def] >> strip_tac >> gvs[]) >>
+  simp[simplify_current_phi_prefix_parts_def] >> pairarg_tac >> gvs[] >>
+  CASE_TAC >> strip_tac >> gvs[make_ssa_get_invoke_targets_append] >>
+  `((simplify_current_phi h).inst_opcode <> INVOKE)` by
+    (irule simplify_current_phi_not_invoke >> gvs[]) >>
+  gvs[get_invoke_targets_def, make_ssa_get_invoke_targets_append]
+QED
+
+Theorem get_invoke_targets_simplify_current_phi_prefix:
+  !insts.
+    MAP FST (get_invoke_targets (simplify_current_phi_prefix insts)) =
+    MAP FST (get_invoke_targets insts)
+Proof
+  gen_tac >> simp[simplify_current_phi_prefix_def] >> pairarg_tac >> gvs[] >>
+  rewrite_tac[get_invoke_targets_reassign_current_inst_ids] >>
+  irule get_invoke_targets_simplify_current_phi_prefix_parts >> simp[]
+QED
+
+Theorem block_invoke_labels_simplify_current_phi[simp]:
+  block_invoke_labels (simplify_current_phi_block bb) =
+  block_invoke_labels bb
+Proof
+  simp[simplify_current_phi_block_def] >> rpt CASE_TAC >>
+  gvs[block_invoke_labels_def,
+      get_invoke_targets_simplify_current_phi_prefix]
+QED
+
+Theorem MAP_simplify_current_phis_invoke_labels[simp]:
+  MAP block_invoke_labels (simplify_current_phis bbs) =
+  MAP block_invoke_labels bbs
+Proof
+  Cases_on `blocks_have_leading_phi bbs` >>
+  simp[simplify_current_phis_def, MAP_MAP_o] >>
+  irule MAP_CONG >> simp[]
+QED
+
+Theorem MAP_simplify_current_phis_if_invoke_labels[simp]:
+  MAP block_invoke_labels (simplify_current_phis_if enabled bbs) =
+  MAP block_invoke_labels bbs
+Proof
+  Cases_on `enabled` >> simp[simplify_current_phis_if_def]
+QED
 
 Theorem MAP_if_not_mem:
   !xs p (y:'a).
@@ -1873,7 +1988,8 @@ Proof
       (conj_tac
        >- (irule ssa_supply_extends_trans >> qexists `s1` >> simp[])) >>
       gvs[ssa_supply_extends_def, listTheory.EVERY_MEM]) >>
-  gvs[fn_ir_vars_def]
+  gvs[fn_ir_vars_def, ssa_vars_covered_def, listTheory.EVERY_MEM] >>
+  metis_tac[simplify_current_phis_if_vars_subset]
 QED
 
 
@@ -2041,11 +2157,11 @@ Theorem make_ssa_current_fn_second_call_current_analysis:
         let cfg = cfg_analyze fn1 in
         let dom = dom_analyze cfg fn1 in
         let live = liveness_analyze fn1 in
+        let had_phis = blocks_have_leading_phi fn1.fn_blocks in
         let pred_map = current_query_map (fn_labels fn1) (cfg_preds_of cfg) in
         let succ_map = current_query_map (fn_labels fn1) (cfg_succs_of cfg) in
         let frontiers = current_query_map (fn_labels fn1) (frontier_of dom) in
-        let live_in = current_query_map (fn_labels fn1)
-                                        (\l. live_vars_at live l 0) in
+        let live_in = select_current_live_in had_phis live fn1 in
         let dtree = current_dom_tree_aux dom (LENGTH (fn_labels fn1)) entry in
         let postorder = dom_tree_postorder dtree in
         let ordered_bbs = MAP THE (FILTER IS_SOME
@@ -2055,7 +2171,8 @@ Theorem make_ssa_current_fn_second_call_current_analysis:
                                              fn1.fn_blocks defs in
         let rs0 = init_current_rename_state defs in
         let (_,s3,bbs2) = rename_current_blocks s2 rs0 bbs1 succ_map dtree in
-          (fn1 with fn_blocks := bbs2,s3)
+        let bbs3 = simplify_current_phis_if had_phis bbs2 in
+          (fn1 with fn_blocks := bbs3,s3)
 Proof
   strip_tac >> simp[make_ssa_current_fn_current_analysis_eq]
 QED
@@ -2347,6 +2464,91 @@ Definition ssa_blocks_no_raw_def[local]:
                        bb.bb_instructions) bbs
 End
 
+Theorem simplify_current_phi_raw_no_raw[local]:
+  ~is_raw_fmp_opcode inst.inst_opcode ==>
+  ~is_raw_fmp_opcode (simplify_current_phi_raw inst).inst_opcode
+Proof
+  simp[simplify_current_phi_raw_def] >> rpt CASE_TAC >>
+  gvs[venomInstTheory.is_raw_fmp_opcode_def]
+QED
+
+Theorem simplify_current_phi_no_raw[local]:
+  ~is_raw_fmp_opcode inst.inst_opcode ==>
+  ~is_raw_fmp_opcode (simplify_current_phi inst).inst_opcode
+Proof
+  strip_tac >> drule simplify_current_phi_raw_no_raw >> strip_tac >>
+  simp[simplify_current_phi_def, keep_current_phi_vars_def] >>
+  CASE_TAC >> simp[]
+QED
+
+Theorem reassign_current_inst_ids_no_raw[local]:
+  !ids insts.
+    EVERY (\inst. ~is_raw_fmp_opcode inst.inst_opcode)
+      (reassign_current_inst_ids ids insts) =
+    EVERY (\inst. ~is_raw_fmp_opcode inst.inst_opcode) insts
+Proof
+  Induct >> Cases_on `insts` >>
+  simp[reassign_current_inst_ids_def]
+QED
+
+Theorem simplify_current_phi_prefix_parts_no_raw[local]:
+  !insts phis ordinary.
+    simplify_current_phi_prefix_parts insts = (phis,ordinary) /\
+    EVERY (\inst. ~is_raw_fmp_opcode inst.inst_opcode) insts ==>
+    EVERY (\inst. ~is_raw_fmp_opcode inst.inst_opcode) phis /\
+    EVERY (\inst. ~is_raw_fmp_opcode inst.inst_opcode) ordinary
+Proof
+  Induct >- simp[simplify_current_phi_prefix_parts_def] >>
+  rpt gen_tac >> Cases_on `h.inst_opcode <> PHI`
+  >- (simp[simplify_current_phi_prefix_parts_def] >> strip_tac >> gvs[]) >>
+  simp[simplify_current_phi_prefix_parts_def] >> pairarg_tac >> gvs[] >>
+  CASE_TAC >> strip_tac >> gvs[] >>
+  metis_tac[simplify_current_phi_no_raw]
+QED
+
+Theorem simplify_current_phi_prefix_no_raw[local]:
+  EVERY (\inst. ~is_raw_fmp_opcode inst.inst_opcode) insts ==>
+  EVERY (\inst. ~is_raw_fmp_opcode inst.inst_opcode)
+        (simplify_current_phi_prefix insts)
+Proof
+  simp[simplify_current_phi_prefix_def] >> pairarg_tac >> gvs[] >>
+  rewrite_tac[reassign_current_inst_ids_no_raw, listTheory.EVERY_APPEND] >>
+  strip_tac >> drule_all simplify_current_phi_prefix_parts_no_raw >> simp[]
+QED
+
+Theorem simplify_current_phi_block_no_raw[local]:
+  EVERY (\inst. ~is_raw_fmp_opcode inst.inst_opcode) bb.bb_instructions ==>
+  EVERY (\inst. ~is_raw_fmp_opcode inst.inst_opcode)
+        (simplify_current_phi_block bb).bb_instructions
+Proof
+  simp[simplify_current_phi_block_def] >> rpt CASE_TAC >> gvs[] >>
+  strip_tac >> irule simplify_current_phi_prefix_no_raw >> simp[]
+QED
+
+Theorem ssa_blocks_no_raw_simplify_current_phis[local]:
+  ssa_blocks_no_raw bbs ==>
+  ssa_blocks_no_raw (simplify_current_phis bbs)
+Proof
+  Cases_on `blocks_have_leading_phi bbs` >>
+  gvs[ssa_blocks_no_raw_def, simplify_current_phis_def,
+      listTheory.EVERY_MAP, listTheory.EVERY_MEM] >>
+  rpt strip_tac >> gvs[listTheory.MEM_MAP, listTheory.EVERY_MEM] >>
+  `EVERY (\i. ~is_raw_fmp_opcode i.inst_opcode) y.bb_instructions` by
+    (simp[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  drule simplify_current_phi_block_no_raw >> strip_tac >>
+  fs[listTheory.EVERY_MEM] >>
+  qpat_x_assum `!i. MEM i (simplify_current_phi_block y).bb_instructions ==> _`
+    (qspec_then `inst` mp_tac) >> simp[]
+QED
+
+Theorem ssa_blocks_no_raw_simplify_current_phis_if[local]:
+  ssa_blocks_no_raw bbs ==>
+  ssa_blocks_no_raw (simplify_current_phis_if enabled bbs)
+Proof
+  Cases_on `enabled` >> simp[simplify_current_phis_if_def] >>
+  metis_tac[ssa_blocks_no_raw_simplify_current_phis]
+QED
+
 Theorem ssa_blocks_no_raw_fn_insts[local]:
   ssa_blocks_no_raw bbs <=>
   !inst. MEM inst (fn_insts_blocks bbs) ==>
@@ -2546,9 +2748,10 @@ Proof
   `ssa_blocks_no_raw bbs2` by
     (drule (CONJUNCT1 rename_current_blocks_no_raw) >>
      disch_then drule >> simp[]) >>
+  `ssa_blocks_no_raw
+     (simplify_current_phis_if (blocks_have_leading_phi fn.fn_blocks) bbs2)` by
+    (irule ssa_blocks_no_raw_simplify_current_phis_if >> simp[]) >>
   gvs[ssa_blocks_no_raw_fn_insts,
       venomInstTheory.no_raw_fmp_ops_def,
       venomInstTheory.fn_insts_def]
 QED
-
-val _ = export_theory();

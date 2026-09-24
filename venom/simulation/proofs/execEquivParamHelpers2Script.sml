@@ -347,5 +347,3 @@ Proof
     (vsr_irule vsr_fmp_R_ok >> simp[]) >>
   imp_res_tac vsr_R_ok_R_term
 QED
-
-val _ = export_theory()

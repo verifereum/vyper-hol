@@ -1,0 +1,14 @@
+@external
+@pure
+def address_literal() -> address:
+    return 0x0000000000000000000000000000000000000001
+
+@external
+@pure
+def bytes1_literal() -> bytes1:
+    return 0xab
+
+@external
+@pure
+def bytes32_literal() -> bytes32:
+    return 0x000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f

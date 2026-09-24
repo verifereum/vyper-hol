@@ -98,6 +98,64 @@ Definition compile_ecmul_def:
     od
 End
 
+(* Pointer-based EC helpers mirror pinned Vyper's _lower_ec_arith order:
+   evaluate arguments first, then interleave each point load with its store into
+   the precompile input buffer.  Explicit +0 pointer construction is retained
+   because it is present in the pinned Venom before optimization. *)
+Definition compile_ecadd_points_def:
+  compile_ecadd_points p1 p2 =
+    do in_buf_alloc <- compile_alloc_buffer 128;
+       in_buf <- return in_buf_alloc.buf_operand;
+       x1_ptr <- emit_op ADD [p1; Lit 0w];
+       x1 <- emit_op MLOAD [x1_ptr];
+       i0 <- emit_op ADD [in_buf; Lit 0w];
+       emit_void MSTORE [i0; x1];
+       y1_ptr <- emit_op ADD [p1; Lit 32w];
+       y1 <- emit_op MLOAD [y1_ptr];
+       i1 <- emit_op ADD [in_buf; Lit 32w];
+       emit_void MSTORE [i1; y1];
+       x2_ptr <- emit_op ADD [p2; Lit 0w];
+       x2 <- emit_op MLOAD [x2_ptr];
+       i2 <- emit_op ADD [in_buf; Lit 64w];
+       emit_void MSTORE [i2; x2];
+       y2_ptr <- emit_op ADD [p2; Lit 32w];
+       y2 <- emit_op MLOAD [y2_ptr];
+       i3 <- emit_op ADD [in_buf; Lit 96w];
+       emit_void MSTORE [i3; y2];
+       out_buf_alloc <- compile_alloc_buffer 64;
+       out_buf <- return out_buf_alloc.buf_operand;
+       gas_op <- emit_op GAS [];
+       success <- emit_op STATICCALL
+         [gas_op; Lit 6w; in_buf; Lit 128w; out_buf; Lit 64w];
+       emit_void ASSERT [success];
+       return out_buf
+    od
+End
+
+Definition compile_ecmul_point_def:
+  compile_ecmul_point p scalar =
+    do in_buf_alloc <- compile_alloc_buffer 96;
+       in_buf <- return in_buf_alloc.buf_operand;
+       x_ptr <- emit_op ADD [p; Lit 0w];
+       x <- emit_op MLOAD [x_ptr];
+       i0 <- emit_op ADD [in_buf; Lit 0w];
+       emit_void MSTORE [i0; x];
+       y_ptr <- emit_op ADD [p; Lit 32w];
+       y <- emit_op MLOAD [y_ptr];
+       i1 <- emit_op ADD [in_buf; Lit 32w];
+       emit_void MSTORE [i1; y];
+       i2 <- emit_op ADD [in_buf; Lit 64w];
+       emit_void MSTORE [i2; scalar];
+       out_buf_alloc <- compile_alloc_buffer 64;
+       out_buf <- return out_buf_alloc.buf_operand;
+       gas_op <- emit_op GAS [];
+       success <- emit_op STATICCALL
+         [gas_op; Lit 7w; in_buf; Lit 96w; out_buf; Lit 64w];
+       emit_void ASSERT [success];
+       return out_buf
+    od
+End
+
 (* ===== Block/Blob Hash ===== *)
 (* Mirrors Python: misc.py lower_blockhash
    Validates block_num is in [block.number - 256, block.number).

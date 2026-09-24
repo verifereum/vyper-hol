@@ -87,7 +87,7 @@ The matrix should eventually identify exact Python modules, classes, and functio
 | `lowering/defs/abiEncoderScript.sml` | `vyper/codegen_venom/abi/*` | unknown | Static/dynamic encode/decode and buffer management. |
 | `lowering/defs/builtin*.sml` | `vyper/codegen_venom/builtins/*` | unknown | Calls, create, conversion, ABI, bytes, math, and system builtins. |
 | `lowering/defs/selectorDispatchScript.sml` | `vyper/codegen_venom/module.py`, jump-table helpers | unknown | Linear/sparse dispatch and default arguments. |
-| `lowering/defs/moduleLoweringScript.sml` | `vyper/codegen_venom/module.py` | unknown | Reachability, runtime/deploy generation, metadata, and data sections. |
+| `lowering/defs/moduleLoweringScript.sml` | `vyper/codegen_venom/module.py` | partially reviewed | Void fallthrough, scalar internal-call layout, lexical allocation, and constructor code-copy ordering are aligned; broader reachability, metadata, and data ordering remain unaudited. |
 | `lowering/defs/vyperCompilerScript.sml` | public Venom compiler entry path | blocked | HOL currently accepts metadata rather than deriving it from a module. Boundary decision required. |
 
 ### Venom IR and semantics
@@ -132,10 +132,60 @@ The matrix should eventually identify exact Python modules, classes, and functio
 
 | HOL file/area | Purpose | Status | Notes |
 |---|---|---|---|
-| `lowering/defs/evalCompilerScript.sml` | compiler smoke fixtures | unknown | Regenerate only after parity updates are understood. |
-| `lowering/defs/evalCompilerBytecodeScript.sml` | fresh HOL-to-Python bytecode parity test | failing: 17 bytecode mismatches, 6 checked-guard rejections | Every EVAL theorem requires exact equality with the independent Python oracle. No HOL-generated `.hex` outputs are committed. The four loops fail the current PHI-dominance guard, and two internal calls fail FMP input arity because their return PC is still lowered as `PARAM`. |
-| `lowering/defs/python-o1-bytecode-fixtures`, `python_o1_bytecode_oracle.py`, and `bytecode/python-o1-no-asm-opt*/` | independently generated pinned-Python O1 bytecode oracle and comparison entrypoint | reproducible from pin | The generator verifies the clean checkout against `VYPER_PIN` and compiles tracked sources in a locked, isolated environment with the pinned `PASSES_O1` lowering pipeline, Prague, metadata disabled, and final assembly optimization disabled to match HOL's identity finalizer. CI reproduces the Python oracle with `--check`; `--compare-hol` performs fresh HOL evaluation against it and exits nonzero on the current discrepancies. |
+| `lowering/defs/bytecode/eval/evalCompilerScript.sml` and `evalCompilerSubset*` | checked compiler fixture programs | reviewed for the frozen 101-fixture supported-subset corpus | Program definitions correspond to the tracked Vyper sources; the original 23 fixtures remain the first milestone. |
+| `lowering/defs/bytecode/eval/evalCompilerBytecode*Script.sml` | HOL-to-Python bytecode parity tests | exact for all 101 retained fixtures | The checked theories compare both deployment and runtime bytes produced by `compile_vyper`; staged evaluator theorems are used only to make concrete evaluation tractable. |
+| `lowering/defs/bytecode/python-o1-bytecode-fixtures`, `python_o1_bytecode_oracle.py`, and `python-o1-no-asm-opt*/` | independently generated pinned-Python O1 bytecode oracle and comparison entrypoint | reproducible from pin | The generator verifies a clean checkout against `VYPER_PIN` and uses pinned `PASSES_O1`, Prague, disabled metadata, and disabled final assembly optimization. `--compare-hol` covers every retained endpoint theory. |
 | `tests/vyper-test-exports` and generators | language-test AST/metadata export | uses repository pin by policy | Keep aligned with `VYPER_PIN`. |
+
+### Finite supported-subset acceptance
+
+For a concise tested-versus-untested summary, see
+[bytecode-fixture-coverage.md](bytecode-fixture-coverage.md).
+
+The HOL classification is the generated TASK_089 ledger under
+`.agent-files/tasks/evidence/`: 1,485 rows (506 supported, 795 partial with
+explicit shape/type boundaries, 184 unsupported). The frozen corpus has 101
+physical source/oracle pairs and checks 202 exact byte lists. A strict
+source-term audit verifies that 148 of 187 variant HOL
+AST constructors occur in fixture inputs, and 39 do not; none constructs
+the separate `raw_call_flags` record. The ledger now gives each AST row
+exactly its matching fixture inputs and assigns **22 lowering-arm rows**
+only to explicitly source-justified checked-path routes. The other 1,107
+code-producing lowering-arm rows carry no witness claim; this is not a
+branch-execution census. Six HOL code-producing rows (`MEther`, `GEther`,
+`TEther` constructors and multiplier arms) are explicitly
+outside the pinned-Python elaborated-input differential target: Python's
+`AsWeiValue` rejects those units, while HOL's semantics and classification
+remain unchanged. No complete lowering-arm execution census is claimed.
+
+This is finite differential evidence for the 101 tested programs, not
+a universal equivalence theorem or a claim that every HOL-supported row is
+already exercised. The cached comparison reproduces all 202 byte
+lists; the rebuilt parity theories and the proved `collapse_dfs` definition
+have no `Saved CHEAT` tags. This does not assert that unrelated pre-existing
+admissions elsewhere in the repository have been removed. TASK_091's separate
+fresh, uncached final acceptance gate has not been run.
+
+### Checked O1 fixture-path correspondences
+
+These reviewed correspondences are limited to Prague, `OptimizationLevel.NONE`
+/ `PASSES_O1`, disabled metadata and final assembly optimization, and the
+currently supported HOL input subset.
+
+| Boundary | HOL definitions | Pinned Python definitions |
+|---|---|---|
+| selectors | fixed-width Keccak helpers in `selectorDispatchScript.sml` | `vyper.utils.method_id` / Keccak-256 |
+| locals and loops | `reserve_local_ptrs`, `emit_local_alloca`, `compile_stmt` | `Context.new_variable`, statement range/iteration lowering |
+| event encoding | `compile_log_store_data`, `Log` lowering | `abi_encoder.py`, `VenomBuilder.log` |
+| PHI liveness | `build_phi_maps`, `input_vars_from`, `liveness_analyze` | `LivenessAnalysis.input_vars_from` |
+| repeated SSA | `select_current_live_in`, `simplify_current_phi*` | `MakeSSA.run_pass`, `_remove_degenerate_phis` |
+| unused-variable removal | current-PHI input protection and fixed-point cleanup | `RemoveUnusedVariablesPass` and DFG maintenance |
+| DFT scheduling | `dft_block`, `dft_fn`, `dft_schedule_safe` | `DFTPass` plain effect-dependency graph |
+| stack operands | `python_stack_operands`, `compute_operands` | EVM-builder operand reversal and `VenomCompiler._emit_input_operands` |
+| halting cleanup | `clean_stack_plan` | `VenomCompiler.clean_stack_from_cfg_in` |
+| internal calls | call/return-buffer lowering and `RETPC_PARAM` entry layout | internal-call expression and function lowering |
+| memory layout | liveness candidate placement and missing-allocation completion | `ConcretizeMemLocPass`, `MemoryAllocator` |
+| constructor assembly | constructor epilogue and symbolic `CODECOPY` order | deploy assembly generation and symbol resolution |
 
 ## Audit workflow
 

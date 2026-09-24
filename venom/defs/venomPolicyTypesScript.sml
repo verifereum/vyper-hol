@@ -40,5 +40,3 @@ Theorem prague_capabilities_wf:
 Proof
   simp [target_capabilities_wf_def, prague_capabilities_def]
 QED
-
-val _ = export_theory ();

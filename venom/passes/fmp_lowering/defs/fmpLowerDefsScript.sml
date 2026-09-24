@@ -62,7 +62,7 @@ Definition fmp_resolve_invoke_def:
                  (SOME info,SOME sig) =>
                    if info <> fmp_info_of_signature sig \/
                       ~fmp_seal_layout_matches_fn callee sig \/
-                      LENGTH args <> LENGTH (fn_user_param_insts callee)
+                      ~invoke_raw_input_layout_ok callee inst
                    then NONE
                    else
                      (case fmp_expected_user_return_arity sig callee of
@@ -469,11 +469,13 @@ Theorem fmp_resolve_invoke_some:
     FLOOKUP infos name = SOME info /\
     info = fmp_info_of_signature sig /\
     fmp_seal_layout_matches_fn callee sig /\
+    invoke_raw_input_layout_ok callee inst /\
     LENGTH args = LENGTH (fn_user_param_insts callee) /\
     fmp_expected_user_return_arity sig callee = SOME n /\
     LENGTH inst.inst_outputs = n
 Proof
-  simp[fmp_resolve_invoke_def]
+  simp[fmp_resolve_invoke_def,
+       callLayoutDefsTheory.invoke_raw_input_layout_ok_def]
   >> Cases_on `inst.inst_opcode = INVOKE` >> simp[]
   >> Cases_on `inst.inst_operands` >> simp[]
   >> Cases_on `h` >> simp[]
@@ -481,7 +483,8 @@ Proof
   >> Cases_on `FLOOKUP infos s` >> simp[]
   >> Cases_on `x.fn_fmp_signature` >> simp[]
   >> Cases_on `fmp_expected_user_return_arity x'' x` >> simp[]
-  >> metis_tac[]
+  >> Cases_on `invoke_memory_return_buffer_operand x inst` >> gvs[]
+  >> strip_tac >> qexists_tac `x''` >> gvs[]
 QED
 
 Theorem fmp_checked_seal_some:
@@ -494,5 +497,3 @@ Proof
   >> Cases_on `(fmp_seal ctx fn info blocks).fn_fmp_signature` >> simp[]
   >> metis_tac[]
 QED
-
-val _ = export_theory();

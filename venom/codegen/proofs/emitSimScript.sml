@@ -60,7 +60,7 @@ Proof
       first_x_assum (qspec_then `i` mp_tac) >>
       Cases_on `i` >>
       simp[REVERSE_SNOC, operand_val_def, lookup_var_def,
-           finite_mapTheory.FLOOKUP_UPDATE])
+           dead_stack_marker_def, finite_mapTheory.FLOOKUP_UPDATE])
   >- (`plan_spill_rel lo (update_var out vs.vs_initial_fmp vs)
           ps.ps_spilled st'.as_memory` by
         (irule plan_spill_rel_update_var >>
@@ -187,6 +187,9 @@ Proof
     (irule arithmeticTheory.LESS_MOD >> simp[wordsTheory.dimword_def]) >>
   `5 MOD dimword (:256) = 5` by
     (irule arithmeticTheory.LESS_MOD >> simp[wordsTheory.dimword_def]) >>
+  `encode_num_bytes_fuel 32 31 = encode_num_bytes 31 /\
+   encode_num_bytes_fuel 32 5 = encode_num_bytes 5` by
+    simp[asmIRTheory.encode_num_bytes_fuel_eq] >>
   `8 = SUC 7` by decide_tac >> pop_assum SUBST1_TAC >>
   simp[Once asm_steps_def, asm_step_def, asm_next_def,
        word_of_bytes_encode_num_bytes_256] >>
@@ -397,6 +400,12 @@ Proof
   >- simp[asm_next_def]
 QED
 
+Theorem non_label_not_dead_marker[local]:
+  !op. ~is_label_operand op ==> op <> dead_stack_marker
+Proof
+  Cases >> simp[is_label_operand_def, dead_stack_marker_def]
+QED
+
 (* =========================================================================
    Stack top extraction from plan_stack_rel
 
@@ -407,7 +416,8 @@ QED
 Theorem asm_stack_top1_from_plan:
   !lo vs ps_stack as_stack op1 base.
     plan_stack_rel lo vs ps_stack as_stack /\
-    ps_stack = base ++ [op1] ==>
+    ps_stack = base ++ [op1] /\
+    op1 <> dead_stack_marker ==>
     ?v1 rest.
       as_stack = v1 :: rest /\
       operand_val vs lo op1 = SOME v1
@@ -421,7 +431,8 @@ QED
 Theorem asm_stack_top2_from_plan:
   !lo vs ps_stack as_stack op1 op2 base.
     plan_stack_rel lo vs ps_stack as_stack /\
-    ps_stack = base ++ [op2; op1] ==>
+    ps_stack = base ++ [op2; op1] /\
+    op1 <> dead_stack_marker /\ op2 <> dead_stack_marker ==>
     ?v1 v2 rest.
       as_stack = v1 :: v2 :: rest /\
       operand_val vs lo op1 = SOME v1 /\
@@ -444,7 +455,9 @@ QED
 Theorem asm_stack_top3_from_plan:
   !lo vs ps_stack as_stack op1 op2 op3 base.
     plan_stack_rel lo vs ps_stack as_stack /\
-    ps_stack = base ++ [op3; op2; op1] ==>
+    ps_stack = base ++ [op3; op2; op1] /\
+    op1 <> dead_stack_marker /\ op2 <> dead_stack_marker /\
+    op3 <> dead_stack_marker ==>
     ?v1 v2 v3 rest.
       as_stack = v1 :: v2 :: v3 :: rest /\
       operand_val vs lo op1 = SOME v1 /\
@@ -596,6 +609,7 @@ Theorem bump_emit_sim:
     ps.ps_stack = stk ++ [base_op; size_op] /\
     operand_val vs lo base_op = SOME base_val /\
     operand_val vs lo size_op = SOME sz /\
+    base_op <> dead_stack_marker /\ size_op <> dead_stack_marker /\
     ptr_out <> next_out /\
     EVERY (\op. case op of Var x => x <> ptr_out /\ x <> next_out | _ => T)
       ps.ps_stack /\
@@ -666,7 +680,7 @@ Proof
     operand_val vs lo op2 = SOME b` by (
     irule asm_stack_top2_from_plan >>
     fs[venom_asm_rel_def] >>
-    metis_tac[]
+    metis_tac[non_label_not_dead_marker]
   ) >>
   (* Bridge operand_val to eval_operand *)
   `a = v1` by metis_tac[operand_eval_agree] >>
@@ -713,7 +727,7 @@ Proof
     operand_val vs lo op1 = SOME a` by (
     irule asm_stack_top1_from_plan >>
     fs[venom_asm_rel_def] >>
-    metis_tac[]
+    metis_tac[non_label_not_dead_marker]
   ) >>
   `a = v1` by metis_tac[operand_eval_agree] >>
   rpt BasicProvers.VAR_EQ_TAC >>
@@ -759,7 +773,7 @@ Proof
     operand_val vs lo op3 = SOME c` by (
     irule asm_stack_top3_from_plan >>
     fs[venom_asm_rel_def] >>
-    metis_tac[]
+    metis_tac[non_label_not_dead_marker]
   ) >>
   `a = v1` by metis_tac[operand_eval_agree] >>
   `b = v2` by metis_tac[operand_eval_agree] >>

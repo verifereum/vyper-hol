@@ -34,10 +34,22 @@ Definition live_update_def:
     live' ++ FILTER (λv. ¬MEM v live') uses
 End
 
+Definition ordered_inst_uses_def:
+  ordered_inst_uses inst =
+    operand_vars (python_stack_operands inst.inst_opcode inst.inst_operands)
+End
+
+
+Theorem MEM_ordered_inst_uses[simp]:
+  MEM v (ordered_inst_uses inst) <=> MEM v (inst_uses inst)
+Proof
+  rw[ordered_inst_uses_def, inst_uses_def, python_stack_operands_def] >>
+  simp[]
+QED
 Definition liveness_transfer_def:
   liveness_transfer (bbs : basic_block list) (inst : instruction)
                     (live : string list) =
-    live_update (inst_defs inst) (inst_uses inst) live
+    live_update (inst_defs inst) (ordered_inst_uses inst) live
 End
 
 (* ==========================================================================
@@ -52,15 +64,14 @@ Definition collect_phis_def:
     else []
 End
 
-(* Build output→phi_index map from a list of PHIs.
- * Each PHI output variable maps to its phi's index.
- * Also record the matching operand from src_label for each phi. *)
+(* Pinned Python maps every incoming PHI operand to the PHI's positional
+   index, then selects the operand associated with the traversed source edge. *)
 Definition build_phi_maps_def:
   build_phi_maps src_label phis =
     let indexed = MAPi (λi phi. (i, phi)) phis in
     FOLDL (λ(op_map, matching) (i, phi).
       let pairs = phi_pairs phi.inst_operands in
-      let op_map' = FOLDL (λm v. m |+ (v, i)) op_map phi.inst_outputs in
+      let op_map' = FOLDL (λm (l,v). m |+ (v, i)) op_map pairs in
       let src_var = FIND (λ(l,v). l = src_label) pairs in
       let matching' = case src_var of
                         SOME (_, v) => matching |+ (i, v)
@@ -69,9 +80,6 @@ Definition build_phi_maps_def:
     (FEMPTY : (string, num) fmap, FEMPTY : (num, string) fmap) indexed
 End
 
-(* Positional substitution: walk liveness, replace phi-related entries
- * with the source-matching operand (deduplicated by phi index).
- * Matches Python d21ee3ba9 fix. *)
 Definition input_vars_from_def:
   input_vars_from src_label target_instrs base_liveness =
     let phis = collect_phis target_instrs in
@@ -198,7 +206,8 @@ Theorem fmp_hidden_param_liveness_transfer:
      (mk_inst id RETPC_PARAM [Lit (n2w k)] [v]) live =
    FILTER (\x. x <> v) live)
 Proof
-  simp[liveness_transfer_def, live_update_def, mk_inst_def,
+  simp[liveness_transfer_def, live_update_def, ordered_inst_uses_def,
+       python_stack_operands_def, ir_specific_operand_order_def, mk_inst_def,
        inst_uses_def, inst_defs_def, operand_vars_def, operand_var_def]
 QED
 

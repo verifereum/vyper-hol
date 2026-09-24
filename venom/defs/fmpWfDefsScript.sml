@@ -591,5 +591,3 @@ Proof
   simp[fmp_lowered_context_wf_def, listTheory.EVERY_MEM] >>
   metis_tac[]
 QED
-
-val _ = export_theory();

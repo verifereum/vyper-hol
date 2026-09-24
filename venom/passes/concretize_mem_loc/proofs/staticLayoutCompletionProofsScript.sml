@@ -31,10 +31,8 @@ QED
 
 Theorem checked_preserved_intervals_aux_invariant:
   !items positions reserved occupied result.
-    reserved_intervals_wf (reserved ++ occupied) /\
     checked_preserved_intervals_aux items positions reserved occupied =
       SOME result ==>
-    reserved_intervals_wf (reserved ++ result) /\
     (!r. MEM r occupied ==> MEM r result) /\
     (!alloc sz pos.
        MEM (alloc,sz) items /\ FLOOKUP positions alloc = SOME pos ==>
@@ -43,48 +41,38 @@ Theorem checked_preserved_intervals_aux_invariant:
 Proof
   Induct_on `items`
   >- simp[checked_preserved_intervals_aux_def]
-  >> gen_tac >> PairCases_on `h` >> rpt gen_tac >> strip_tac >>
-  Cases_on `FLOOKUP positions h0`
-  >- (gvs[checked_preserved_intervals_aux_def] >>
-      first_x_assum
-        (qspecl_then [`positions`,`reserved`,`occupied`,`result`] mp_tac) >>
-      simp[] >> strip_tac >>
-      rpt gen_tac >> strip_tac >> gvs[] >>
-      qpat_x_assum `!alloc sz pos. _`
-        (qspecl_then [`alloc`,`sz`,`pos`] mp_tac) >> simp[])
+  >> gen_tac >> PairCases_on `h` >> rpt gen_tac
+  >> Cases_on `FLOOKUP positions h0`
+  >- (gvs[checked_preserved_intervals_aux_def] >> strip_tac
+      >> first_x_assum drule >> strip_tac
+      >> conj_tac >- metis_tac[]
+      >> rpt gen_tac >> strip_tac >> gvs[]
+      >> qpat_x_assum `!alloc sz pos. _`
+           (qspecl_then [`alloc`,`sz`,`pos`] mp_tac) >> simp[])
   >> Cases_on `x + h1 < dimword (:256)`
   >- (Cases_on `h1 = 0`
-      >- (gvs[checked_preserved_intervals_aux_def] >>
-          first_x_assum
-            (qspecl_then [`positions`,`reserved`,`occupied`,`result`] mp_tac) >>
-          simp[] >> strip_tac >>
-          rpt gen_tac >> strip_tac >> gvs[] >>
-          qpat_x_assum `!alloc sz pos. _`
-            (qspecl_then [`alloc`,`sz`,`pos`] mp_tac) >> simp[])
-      >> Cases_on
-           `EVERY (reserved_intervals_disjoint (x,h1))
-                  (reserved ++ occupied)`
-      >- (gvs[checked_preserved_intervals_aux_def] >>
-          `reserved_intervals_wf
-             (reserved ++ (x,h1)::occupied)` by
-            (irule reserved_intervals_wf_insert_after >>
-             simp[reserved_interval_wf_def]) >>
-          first_x_assum
-            (qspecl_then
-              [`positions`,`reserved`,`(x,h1)::occupied`,`result`] mp_tac) >>
-          simp[] >> strip_tac >>
-          rpt gen_tac >> strip_tac >> gvs[]
+      >- (gvs[checked_preserved_intervals_aux_def] >> strip_tac
+          >> first_x_assum drule >> strip_tac
+          >> conj_tac >- metis_tac[]
+          >> rpt gen_tac >> strip_tac >> gvs[]
+          >> qpat_x_assum `!alloc sz pos. _`
+               (qspecl_then [`alloc`,`sz`,`pos`] mp_tac) >> simp[])
+      >> Cases_on `EVERY (reserved_intervals_disjoint (x,h1)) reserved`
+      >- (gvs[checked_preserved_intervals_aux_def] >> strip_tac
+          >> first_x_assum drule >> strip_tac
+          >> conj_tac
+          >- (rpt strip_tac >> first_x_assum irule >> simp[])
+          >> rpt gen_tac >> strip_tac >> gvs[]
           >- (qpat_x_assum `!alloc sz pos. _`
                 (qspecl_then [`alloc`,`sz`,`pos`] mp_tac) >> simp[])
-          >> simp[ADD_COMM] >>
-             qpat_x_assum `!r. _` (qspec_then `(x,h1)` mp_tac) >> simp[])
-      >> gvs[checked_preserved_intervals_aux_def, EVERY_MEM, EXISTS_MEM])
+          >> qpat_x_assum `!r. _` (qspec_then `(x,h1)` mp_tac) >> simp[])
+      >> gvs[checked_preserved_intervals_aux_def, EVERY_MEM, EXISTS_MEM]
+      >> strip_tac >> metis_tac[])
   >> gvs[checked_preserved_intervals_aux_def]
 QED
 
 Theorem checked_preserved_intervals_invariant:
   checked_preserved_intervals items positions reserved = SOME occupied ==>
-  reserved_intervals_wf (reserved ++ occupied) /\
   (!alloc sz pos.
      MEM (alloc,sz) items /\ FLOOKUP positions alloc = SOME pos ==>
      pos + sz < dimword (:256) /\
@@ -92,25 +80,7 @@ Theorem checked_preserved_intervals_invariant:
 Proof
   simp[checked_preserved_intervals_def] >> strip_tac >>
   qspecl_then [`items`,`positions`,`reserved`,`[]`,`occupied`] mp_tac
-    checked_preserved_intervals_aux_invariant >> simp[] >> strip_tac >> simp[]
-QED
-
-Theorem reserved_intervals_wf_MEM_wf[local]:
-  !rs r.
-    reserved_intervals_wf rs /\ MEM r rs ==>
-    reserved_interval_wf r
-Proof
-  Induct_on `rs` >> simp[reserved_intervals_wf_def] >> metis_tac[]
-QED
-
-Theorem reserved_intervals_wf_MEM_disjoint[local]:
-  !rs r1 r2.
-    reserved_intervals_wf rs /\ MEM r1 rs /\ MEM r2 rs /\ r1 <> r2 ==>
-    reserved_intervals_disjoint r1 r2
-Proof
-  Induct_on `rs` >> simp[reserved_intervals_wf_def] >>
-  rpt strip_tac >> gvs[] >>
-  metis_tac[reserved_intervals_disjoint_sym_completion, EVERY_MEM]
+    checked_preserved_intervals_aux_invariant >> simp[]
 QED
 
 Theorem checked_preserved_intervals_item:
@@ -171,14 +141,9 @@ Theorem checked_preserved_intervals_aux_relational[local]:
   !items positions reserved occupied result.
     checked_preserved_intervals_aux items positions reserved occupied =
       SOME result ==>
-    (!item i r.
-      positive_preserved_item items positions item i /\
-      MEM r (reserved ++ occupied) ==>
-      reserved_intervals_disjoint i r) /\
-    (!item1 i1 item2 i2.
-      positive_preserved_item items positions item1 i1 /\
-      positive_preserved_item items positions item2 i2 /\ item1 <> item2 ==>
-      reserved_intervals_disjoint i1 i2)
+    !item i r.
+      positive_preserved_item items positions item i /\ MEM r reserved ==>
+      reserved_intervals_disjoint i r
 Proof
   Induct
   >- simp[positive_preserved_item_def]
@@ -186,83 +151,27 @@ Proof
   >> Cases_on `FLOOKUP positions q`
   >- (gvs[checked_preserved_intervals_aux_def,
           positive_preserved_item_def] >> strip_tac
-      >> first_x_assum drule >> strip_tac
-      >> conj_tac
-      >- (rpt strip_tac >> gvs[] >> metis_tac[])
-      >> rpt strip_tac >> gvs[]
-      >> qpat_x_assum `!item1 i1 item2 i2. _`
-           (qspecl_then [`(alloc,sz)`,`(pos,sz)`,
-                         `(alloc',sz')`,`(pos',sz')`] mp_tac)
-      >> simp[] >> metis_tac[])
+      >> first_x_assum drule >> rpt strip_tac >> gvs[] >> metis_tac[])
   >> Cases_on `x + r < dimword (:256)`
   >- (Cases_on `r = 0`
       >- (gvs[checked_preserved_intervals_aux_def,
               positive_preserved_item_def] >> strip_tac
-          >> first_x_assum drule >> strip_tac
-          >> conj_tac
-          >- (rpt strip_tac >> gvs[] >> metis_tac[])
-          >> rpt strip_tac >> gvs[]
-          >> qpat_x_assum `!item1 i1 item2 i2. _`
-               (qspecl_then [`(alloc,sz)`,`(pos,sz)`,
-                             `(alloc',sz')`,`(pos',sz')`] mp_tac)
-          >> simp[] >> metis_tac[])
-      >> Cases_on
-           `EVERY (reserved_intervals_disjoint (x,r))
-                  (reserved ++ occupied)`
+          >> first_x_assum drule >> rpt strip_tac >> gvs[] >> metis_tac[])
+      >> Cases_on `EVERY (reserved_intervals_disjoint (x,r)) reserved`
       >- (gvs[checked_preserved_intervals_aux_def,
               positive_preserved_item_def, EVERY_MEM] >> strip_tac
-          >> first_x_assum drule >> strip_tac
-          >> conj_tac
-          >- (rpt strip_tac >> gvs[] >>
-              metis_tac[reserved_intervals_disjoint_sym_completion])
-          >> rpt strip_tac >> gvs[]
-          >- (qpat_assum `!item i r''. _`
-                (qspecl_then [`(alloc',sz')`,`(pos',sz')`,`(pos,r)`] mp_tac) >>
-              simp[] >>
-              metis_tac[reserved_intervals_disjoint_sym_completion])
-          >- (qpat_assum `!item i r''. _`
-                (qspecl_then [`(alloc,sz)`,`(pos,sz)`,`(pos',r)`] mp_tac) >>
-              simp[] >> metis_tac[])
-          >> qpat_assum `!item1 i1 item2 i2. _`
-               (qspecl_then [`(alloc,sz)`,`(pos,sz)`,
-                             `(alloc',sz')`,`(pos',sz')`] mp_tac)
-          >> simp[] >> metis_tac[])
+          >> first_x_assum drule >> rpt strip_tac >> gvs[] >> metis_tac[])
       >> gvs[checked_preserved_intervals_aux_def, EVERY_MEM, EXISTS_MEM]
       >> strip_tac >> metis_tac[])
   >> gvs[checked_preserved_intervals_aux_def]
 QED
 
-Theorem checked_preserved_intervals_pairwise:
-  checked_preserved_intervals items positions reserved = SOME occupied /\
-  MEM (alloc1,sz1) items /\ MEM (alloc2,sz2) items /\
-  FLOOKUP positions alloc1 = SOME pos1 /\
-  FLOOKUP positions alloc2 = SOME pos2 /\
-  0 < sz1 /\ 0 < sz2 /\ (alloc1,sz1) <> (alloc2,sz2) ==>
-  reserved_intervals_disjoint (pos1,sz1) (pos2,sz2)
-Proof
-  simp[checked_preserved_intervals_def] >> strip_tac
-  >> qspecl_then [`items`,`positions`,`reserved`,`[]`,`occupied`] mp_tac
-       checked_preserved_intervals_aux_relational
-  >> simp[] >> disch_then strip_assume_tac
-  >> qpat_x_assum `!item1 i1 item2 i2. _` irule
-  >> qexistsl [`(alloc1,sz1)`,`(alloc2,sz2)`]
-  >> simp[positive_preserved_item_intro] >> metis_tac[]
-QED
-
-
 Definition completion_state_inv_def[local]:
   completion_state_inv items positions occupied <=>
-    reserved_intervals_wf occupied /\
     (!alloc sz pos.
       MEM (alloc,sz) items /\ FLOOKUP positions alloc = SOME pos ==>
       pos + sz < dimword (:256) /\
-      (0 < sz ==> MEM (pos,sz) occupied)) /\
-    (!alloc1 sz1 pos1 alloc2 sz2 pos2.
-      MEM (alloc1,sz1) items /\ MEM (alloc2,sz2) items /\
-      FLOOKUP positions alloc1 = SOME pos1 /\
-      FLOOKUP positions alloc2 = SOME pos2 /\
-      0 < sz1 /\ 0 < sz2 /\ (alloc1,sz1) <> (alloc2,sz2) ==>
-      reserved_intervals_disjoint (pos1,sz1) (pos2,sz2))
+      (0 < sz ==> MEM (pos,sz) occupied))
 End
 
 Theorem item_key_MEM_MAP[local]:
@@ -295,34 +204,14 @@ Proof
   >> qpat_x_assum `checked_first_fit occupied sz = SOME pos`
        (fn th => assume_tac (MATCH_MP checked_first_fit_SOME th))
   >> gvs[completion_state_inv_def]
-  >> conj_tac
-  >- (Cases_on `sz = 0` >> gvs[])
-  >> conj_tac
-  >- (rpt gen_tac >> strip_tac >> Cases_on `alloc' = alloc`
-      >- (`sz' = sz` by metis_tac[all_distinct_item_key_unique] >>
-          gvs[FLOOKUP_UPDATE])
-      >> gvs[FLOOKUP_UPDATE]
-      >> qpat_assum
-           `!a s p. MEM (a,s) items /\ FLOOKUP positions a = SOME p ==> _`
-           (qspecl_then [`alloc'`,`sz'`,`pos'`] mp_tac)
-      >> simp[] >> strip_tac >> Cases_on `sz = 0` >> gvs[])
-  >> rpt gen_tac >> strip_tac
-  >> Cases_on `alloc1 = alloc`
-  >- (Cases_on `alloc2 = alloc`
-      >- (`sz1 = sz` by metis_tac[all_distinct_item_key_unique] >>
-          `sz2 = sz` by metis_tac[all_distinct_item_key_unique] >>
-          gvs[FLOOKUP_UPDATE])
-      >> `sz1 = sz` by metis_tac[all_distinct_item_key_unique]
-      >> gvs[EVERY_MEM, FLOOKUP_UPDATE]
-      >> metis_tac[])
-  >> Cases_on `alloc2 = alloc`
-  >- (`sz2 = sz` by metis_tac[all_distinct_item_key_unique]
-      >> gvs[EVERY_MEM, FLOOKUP_UPDATE]
-      >> metis_tac[reserved_intervals_disjoint_sym_completion])
+  >> rpt gen_tac >> strip_tac >> Cases_on `alloc' = alloc`
+  >- (`sz' = sz` by metis_tac[all_distinct_item_key_unique] >>
+      gvs[FLOOKUP_UPDATE])
   >> gvs[FLOOKUP_UPDATE]
-  >> qpat_x_assum `!a1 s1 p1 a2 s2 p2. _`
-       (qspecl_then [`alloc1`,`sz1`,`pos1`,`alloc2`,`sz2`,`pos2`] mp_tac)
-  >> simp[]
+  >> qpat_x_assum
+       `!a s p. MEM (a,s) items /\ FLOOKUP positions a = SOME p ==> _`
+       (qspecl_then [`alloc'`,`sz'`,`pos'`] mp_tac)
+  >> simp[] >> strip_tac >> Cases_on `sz = 0` >> gvs[]
 QED
 
 Theorem complete_alloc_positions_aux_invariant[local]:
@@ -548,62 +437,35 @@ Theorem complete_alloc_positions_aux_success:
   ALL_DISTINCT (MAP FST items) /\
   (!inst item. MEM inst insts /\ exact_static_alloca inst = SOME item ==>
      MEM item items) /\
-  reserved_intervals_wf occupied /\
   (!alloc sz pos.
     MEM (alloc,sz) items /\ FLOOKUP positions alloc = SOME pos ==>
     pos + sz < dimword (:256) /\
     (0 < sz ==> MEM (pos,sz) occupied)) /\
-  (!alloc1 sz1 pos1 alloc2 sz2 pos2.
-    MEM (alloc1,sz1) items /\ MEM (alloc2,sz2) items /\
-    FLOOKUP positions alloc1 = SOME pos1 /\
-    FLOOKUP positions alloc2 = SOME pos2 /\
-    0 < sz1 /\ 0 < sz2 /\ (alloc1,sz1) <> (alloc2,sz2) ==>
-    reserved_intervals_disjoint (pos1,sz1) (pos2,sz2)) /\
   complete_alloc_positions_aux insts positions occupied = SOME completed ==>
   (!alloc pos. FLOOKUP positions alloc = SOME pos ==>
      FLOOKUP completed alloc = SOME pos) /\
   (!inst alloc sz. MEM inst insts /\
      exact_static_alloca inst = SOME (alloc,sz) ==>
      ?pos. FLOOKUP completed alloc = SOME pos /\
-           pos + sz < dimword (:256)) /\
-  (!alloc1 sz1 pos1 alloc2 sz2 pos2.
-    MEM (alloc1,sz1) items /\ MEM (alloc2,sz2) items /\
-    FLOOKUP completed alloc1 = SOME pos1 /\
-    FLOOKUP completed alloc2 = SOME pos2 /\
-    0 < sz1 /\ 0 < sz2 /\ (alloc1,sz1) <> (alloc2,sz2) ==>
-    reserved_intervals_disjoint (pos1,sz1) (pos2,sz2))
+           pos + sz < dimword (:256))
 Proof
   strip_tac
   >> `completion_state_inv items positions occupied` by
-       (simp[completion_state_inv_def] >> conj_tac
-        >- (rpt gen_tac >> strip_tac >>
-            qpat_assum
-              `!a s p. MEM (a,s) items /\ FLOOKUP positions a = SOME p ==> _`
-              (qspecl_then [`alloc`,`sz`,`pos`] mp_tac) >> simp[])
-        >> rpt gen_tac >> strip_tac
-        >> qpat_x_assum `!alloc1 sz1 pos1 alloc2 sz2 pos2. _`
-             (qspecl_then
-               [`alloc1`,`sz1`,`pos1`,`alloc2`,`sz2`,`pos2`] mp_tac)
-        >> simp[] >> metis_tac[])
+       (simp[completion_state_inv_def] >> first_assum ACCEPT_TAC)
   >> qspecl_then [`insts`,`items`,`positions`,`occupied`,`completed`] mp_tac
        complete_alloc_positions_aux_invariant
   >> simp[] >> (impl_tac >- metis_tac[])
   >> disch_then (qx_choose_then `final_occupied` strip_assume_tac)
   >> qpat_x_assum `completion_state_inv items completed final_occupied` mp_tac
   >> simp[completion_state_inv_def] >> strip_tac
-  >> conj_tac
-  >- (rpt gen_tac >> strip_tac
-      >> qpat_x_assum `!inst alloc sz. _`
-           (qspecl_then [`inst`,`alloc`,`sz`] mp_tac)
-      >> simp[] >> disch_then (qx_choose_then `pos` assume_tac)
-      >> qexists `pos` >> simp[]
-      >> qpat_x_assum `!alloc sz pos. _`
-           (qspecl_then [`alloc`,`sz`,`pos`] mp_tac)
-      >> simp[] >> metis_tac[])
   >> rpt gen_tac >> strip_tac
-  >> qpat_x_assum `!alloc1 sz1 pos1 alloc2 sz2 pos2. _`
-
-       (qspecl_then [`alloc1`,`sz1`,`pos1`,`alloc2`,`sz2`,`pos2`] mp_tac)
+  >> qpat_x_assum `!inst alloc sz. _`
+       (qspecl_then [`inst`,`alloc`,`sz`] mp_tac)
+  >> simp[] >> disch_then (qx_choose_then `pos` assume_tac)
+  >> `MEM (alloc,sz) items` by metis_tac[]
+  >> qexists `pos` >> simp[]
+  >> qpat_x_assum `!alloc sz pos. _`
+       (qspecl_then [`alloc`,`sz`,`pos`] mp_tac)
   >> simp[]
 QED
 
@@ -653,35 +515,21 @@ Theorem prepared_aux_completion_certificate[local]:
    (!inst alloc sz. MEM inst (fn_insts fn) /\
       exact_static_alloca inst = SOME (alloc,sz) ==>
       ?pos. FLOOKUP completed alloc = SOME pos /\
-            pos + sz < dimword (:256)) /\
-   (!alloc1 sz1 pos1 alloc2 sz2 pos2.
-      MEM (alloc1,sz1) items /\ MEM (alloc2,sz2) items /\
-      FLOOKUP completed alloc1 = SOME pos1 /\
-      FLOOKUP completed alloc2 = SOME pos2 /\
-      0 < sz1 /\ 0 < sz2 /\ (alloc1,sz1) <> (alloc2,sz2) ==>
-      reserved_intervals_disjoint (pos1,sz1) (pos2,sz2))) /\
+            pos + sz < dimword (:256))) /\
   candidate_alloc_keys_valid (MAP FST items) completed
 Proof
   strip_tac
-  >> `reserved_intervals_wf (reserved ++ added) /\
-       (!alloc sz pos. MEM (alloc,sz) items /\
-          FLOOKUP merged alloc = SOME pos ==>
-          pos + sz < dimword (:256) /\
-          (0 < sz ==> MEM (pos,sz) added))` by
+  >> `!alloc sz pos. MEM (alloc,sz) items /\
+         FLOOKUP merged alloc = SOME pos ==>
+         pos + sz < dimword (:256) /\
+         (0 < sz ==> MEM (pos,sz) added)` by
        metis_tac[checked_preserved_intervals_invariant]
   >> conj_tac
-  >- (irule complete_alloc_positions_aux_success
-      >> conj_tac
-      >- (rpt gen_tac >> strip_tac
-          >> irule checked_preserved_intervals_pairwise
-          >> simp[]
-          >> qexistsl [`alloc1`,`alloc2`,`items`,`added`,`merged`,`reserved`]
-          >> simp[] >> metis_tac[])
-      >> conj_tac
-      >- metis_tac[static_alloca_items_exact_MEM]
-      >> conj_tac >- (first_assum ACCEPT_TAC)
-      >> qexists `reserved ++ added`
-      >> simp[] >> rpt gen_tac >> strip_tac
+  >- (drule complete_alloc_positions_aux_success
+      >> simp[] >> disch_then irule
+      >> conj_tac >- metis_tac[static_alloca_items_exact_MEM]
+      >> qexists `reserved ++ added` >> simp[]
+      >> rpt gen_tac >> strip_tac
       >> qpat_x_assum `!alloc sz pos. _`
            (qspecl_then [`alloc`,`sz`,`pos`] mp_tac)
       >> simp[] >> metis_tac[])
@@ -752,33 +600,6 @@ Proof
   >> simp[]
 QED
 
-Theorem source_allocas_pairwise[local]:
-  static_alloca_items fn = SOME items /\
-  (!alloc1 sz1 pos1 alloc2 sz2 pos2.
-     MEM (alloc1,sz1) items /\ MEM (alloc2,sz2) items /\
-     FLOOKUP completed alloc1 = SOME pos1 /\
-     FLOOKUP completed alloc2 = SOME pos2 /\
-     0 < sz1 /\ 0 < sz2 /\ (alloc1,sz1) <> (alloc2,sz2) ==>
-     reserved_intervals_disjoint (pos1,sz1) (pos2,sz2)) ==>
-  !inst1 inst2 alloc1 sz1 pos1 alloc2 sz2 pos2.
-    MEM inst1 (fn_insts fn) /\
-    exact_static_alloca inst1 = SOME (alloc1,sz1) /\
-    MEM inst2 (fn_insts fn) /\
-    exact_static_alloca inst2 = SOME (alloc2,sz2) /\
-    FLOOKUP completed alloc1 = SOME pos1 /\
-    FLOOKUP completed alloc2 = SOME pos2 /\
-    0 < sz1 /\ 0 < sz2 /\ (alloc1,sz1) <> (alloc2,sz2) ==>
-    reserved_intervals_disjoint (pos1,sz1) (pos2,sz2)
-Proof
-  strip_tac >> rpt gen_tac >> strip_tac
-  >> `MEM (alloc1,sz1) items` by
-       metis_tac[static_alloca_items_exact_MEM]
-  >> `MEM (alloc2,sz2) items` by
-       metis_tac[static_alloca_items_exact_MEM]
-  >> qpat_x_assum `!alloc1 sz1 pos1 alloc2 sz2 pos2. _`
-       (qspecl_then [`alloc1`,`sz1`,`pos1`,`alloc2`,`sz2`,`pos2`] mp_tac)
-  >> simp[] >> metis_tac[]
-QED
 
 Theorem completed_static_fn_positions_wf[local]:
   (!alloc pos. FLOOKUP completed alloc = SOME pos ==>
@@ -811,12 +632,6 @@ Theorem complete_alloc_positions_package[local]:
      exact_static_alloca inst = SOME (alloc,sz) ==>
      ?pos. FLOOKUP completed alloc = SOME pos /\
            pos + sz < dimword (:256)) /\
-  (!alloc1 sz1 pos1 alloc2 sz2 pos2.
-     MEM (alloc1,sz1) items /\ MEM (alloc2,sz2) items /\
-     FLOOKUP completed alloc1 = SOME pos1 /\
-     FLOOKUP completed alloc2 = SOME pos2 /\
-     0 < sz1 /\ 0 < sz2 /\ (alloc1 = alloc2 ==> sz1 <> sz2) ==>
-     reserved_intervals_disjoint (pos1,sz1) (pos2,sz2)) /\
   (!a sz p r. MEM (a,sz) items /\ FLOOKUP completed a = SOME p /\
      0 < sz /\ MEM r reserved ==>
      reserved_intervals_disjoint (p,sz) r) ==>
@@ -831,15 +646,6 @@ Theorem complete_alloc_positions_package[local]:
        exact_static_alloca inst = SOME (alloc,sz) /\
        pos + sz < dimword (:256) /\
        (0 < sz ==> EVERY (reserved_intervals_disjoint (pos,sz)) reserved)) /\
-  (!inst1 inst2 alloc1 sz1 pos1 alloc2 sz2 pos2.
-     MEM inst1 (fn_insts fn) /\
-     exact_static_alloca inst1 = SOME (alloc1,sz1) /\
-     MEM inst2 (fn_insts fn) /\
-     exact_static_alloca inst2 = SOME (alloc2,sz2) /\
-     FLOOKUP completed alloc1 = SOME pos1 /\
-     FLOOKUP completed alloc2 = SOME pos2 /\
-     0 < sz1 /\ 0 < sz2 /\ (alloc1 = alloc2 ==> sz1 <> sz2) ==>
-     reserved_intervals_disjoint (pos1,sz1) (pos2,sz2)) /\
   static_fn_positions_wf reserved completed fn
 Proof
   strip_tac
@@ -865,25 +671,6 @@ Proof
       >> simp[] >> disch_then drule >> simp[])
   >> conj_tac >- (first_assum ACCEPT_TAC)
   >> conj_asm1_tac >- (first_assum ACCEPT_TAC)
-  >> conj_tac
-  >- (drule source_allocas_pairwise
-      >> disch_then (qspec_then `completed` assume_tac)
-      >> rpt gen_tac >> strip_tac
-      >> qpat_x_assum
-           `!inst1 inst2 alloc1 sz1 pos1 alloc2 sz2 pos2. (_ /\ MEM inst1 _ /\ _ ==> _)`
-           (qspecl_then
-             [`inst1`,`inst2`,`alloc1`,`sz1`,`pos1`,`alloc2`,`sz2`,`pos2`]
-             mp_tac)
-      >> simp[] >> disch_then irule
-      >> qpat_x_assum
-           `!a s p b t q.
-              MEM (a,s) items /\ MEM (b,t) items /\
-              FLOOKUP completed a = SOME p /\
-              FLOOKUP completed b = SOME q /\
-              0 < s /\ 0 < t /\ (a = b ==> s <> t) ==>
-              reserved_intervals_disjoint (p,s) (q,t)`
-           mp_tac
-      >> simp[])
   >> irule completed_static_fn_positions_wf >> simp[]
 QED
 
@@ -901,18 +688,9 @@ Theorem complete_alloc_positions_success:
        pos + sz < dimword (:256) /\
        (0 < sz ==>
         EVERY (reserved_intervals_disjoint (pos,sz)) reserved)) /\
-  (!inst1 inst2 alloc1 sz1 pos1 alloc2 sz2 pos2.
-     MEM inst1 (fn_insts fn) /\
-     exact_static_alloca inst1 = SOME (alloc1,sz1) /\
-     MEM inst2 (fn_insts fn) /\
-     exact_static_alloca inst2 = SOME (alloc2,sz2) /\
-     FLOOKUP completed alloc1 = SOME pos1 /\
-     FLOOKUP completed alloc2 = SOME pos2 /\
-     0 < sz1 /\ 0 < sz2 /\ (alloc1,sz1) <> (alloc2,sz2) ==>
-     reserved_intervals_disjoint (pos1,sz1) (pos2,sz2)) /\
   static_fn_positions_wf reserved completed fn
 Proof
-  simp[complete_alloc_positions_def]
+  simp[complete_alloc_positions_def, complete_alloc_positions_with_items_def]
   >> Cases_on `static_alloca_items fn` >> gvs[]
   >> Cases_on `forced_alloc_keys_valid (MAP FST x) forced` >> gvs[]
   >> Cases_on `candidate_alloc_keys_valid (MAP FST x) positions` >> gvs[]
@@ -941,7 +719,6 @@ Proof
   >> disch_then irule
   >> simp[pairTheory.PAIR_EQ]
   >> conj_tac >- (first_assum ACCEPT_TAC)
-  >> conj_tac >- (first_assum ACCEPT_TAC)
   >> first_assum ACCEPT_TAC
 QED
 
@@ -952,7 +729,7 @@ Theorem complete_alloc_positions_forced:
   MEM (Allocation aid) (MAP FST items) ==>
   FLOOKUP completed (Allocation aid) = SOME pos
 Proof
-  simp[complete_alloc_positions_def]
+  simp[complete_alloc_positions_def, complete_alloc_positions_with_items_def]
   >> Cases_on `static_alloca_items fn` >> gvs[]
   >> Cases_on `forced_alloc_keys_valid (MAP FST x) forced` >> gvs[]
   >> Cases_on `candidate_alloc_keys_valid (MAP FST x) positions` >> gvs[]
@@ -980,7 +757,8 @@ Theorem compute_function_layout_fuel_wf:
   compute_function_layout_fuel fuel reserved fn = SOME layout ==>
   concretize_layout_wf reserved fn layout
 Proof
-  simp[compute_function_layout_fuel_def]
+  simp[compute_function_layout_fuel_eq_reference,
+       compute_function_layout_fuel_reference_def]
   >> Cases_on `static_alloca_items fn` >> gvs[]
   >> Cases_on `complete_alloc_positions fn.fn_forced_alloc_positions
                  reserved fn
@@ -1027,5 +805,3 @@ Proof
   >> gvs[]
   >> simp[static_position_wf_def]
 QED
-
-val _ = export_theory();

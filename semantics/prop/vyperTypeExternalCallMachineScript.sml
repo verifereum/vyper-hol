@@ -582,5 +582,3 @@ Proof
   >- metis_tac[checked_call_external_success_preserves_machine_well_typed] >>
   metis_tac[checked_call_external_failure_preserves_machine_well_typed]
 QED
-
-val _ = export_theory();

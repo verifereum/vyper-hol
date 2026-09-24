@@ -32,5 +32,3 @@ Definition context_target_safe_def:
   context_target_safe caps ctx <=>
     EVERY (function_target_safe caps) ctx.ctx_functions
 End
-
-val _ = export_theory ();

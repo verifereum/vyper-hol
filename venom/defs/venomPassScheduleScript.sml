@@ -179,5 +179,3 @@ Proof
   simp [build_fn_pass_pipeline_def, o1_fn_pass_order_valid,
         o1_fn_passes_def, configured_fn_pass_wf_def]
 QED
-
-val _ = export_theory ();

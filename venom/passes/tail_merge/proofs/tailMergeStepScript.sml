@@ -9,7 +9,7 @@
 
 Theory tailMergeStep
 Ancestors
-  stateEquiv venomExecSemantics execEquivProofs
+  stateEquiv venomExecSemantics execEquivProofs list rich_list
 Libs
   stateEquivTheory stateEquivProofsTheory
   venomExecSemanticsTheory venomInstTheory venomStateTheory
@@ -56,6 +56,22 @@ Proof
   drule listTheory.EL_DROP >> disch_then (fn th => simp[th]) >>
   `i + n < LENGTH ops2` by DECIDE_TAC >>
   drule listTheory.EL_DROP >> disch_then (fn th => simp[th])
+QED
+
+Theorem eval_operands_reverse_pointwise:
+  !ops1 ops2 s1 s2.
+    LENGTH ops1 = LENGTH ops2 /\
+    (!i. i < LENGTH ops1 ==>
+         eval_operand (EL i ops1) s1 = eval_operand (EL i ops2) s2) ==>
+    !i. i < LENGTH ops1 ==>
+        eval_operand (EL i (REVERSE ops1)) s1 =
+        eval_operand (EL i (REVERSE ops2)) s2
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `!j. j < LENGTH ops1 ==> _`
+    (qspec_then `PRE (LENGTH ops1 - i)` mp_tac) >>
+  (impl_tac >- DECIDE_TAC) >>
+  simp[EL_REVERSE]
 QED
 
 (* ================================================================
@@ -824,28 +840,35 @@ Proof
     Cases_on `LENGTH t' <> w2n c + 2`
     >- (fs[] >> gvs[step_sim_def])
     >> gvs[] >>
-    (* Both cr equations now have same structure. Extract concrete eval equalities
-       from the indexed quantifier, rewrite, then close via step_sim_def. *)
-    qpat_x_assum `!i. i < _ ==> (eval_operand (EL i _) _ = eval_operand (EL i _) _)`
-      (fn eval_th => let
-        fun spec_fwd n = let
-          val sp = SPEC (numSyntax.term_of_int n) eval_th
-          val (guard, _) = dest_imp (concl sp)
-          in MP sp (DECIDE guard) end
-        val e1 = SIMP_RULE (srw_ss()) [] (spec_fwd 1)
-        val e2 = SIMP_RULE (srw_ss()) [] (spec_fwd 2)
-        in ASSUME_TAC e1 >> ASSUME_TAC e2 >> ASSUME_TAC eval_th end) >>
-    `eval_operands (DROP 2 t) s1 = eval_operands (DROP 2 t') s2` by (
-      match_mp_tac eval_operands_DROP >> conj_tac >- simp[] >>
+    (* Match each operand by its original index, then reverse the indexed
+       agreement to obtain Python's physical LOG stack order. *)
+    `!i. i < LENGTH t ==>
+      eval_operand (EL i t) s1 = eval_operand (EL i t') s2` by (
       rpt strip_tac >>
-      first_x_assum (qspec_then `SUC i` mp_tac) >> simp[]) >>
-    (* Now fs[] rewrites eval_operand (HD t') s2 => eval_operand (HD t) s1 etc.
-       in the inst2 cr equation, unifying both case scrutinees. *)
-    fs[] >>
-    simp[step_sim_def] >>
-    Cases_on `eval_operand (HD t') s2` >> gvs[] >>
-    Cases_on `eval_operand (EL 1 t') s2` >> gvs[] >>
-    Cases_on `eval_operands (DROP 2 t') s2` >> gvs[execution_equiv_def])
+      qpat_x_assum `!j. j < _ ==>
+        eval_operand (EL j (Lit c::t)) s1 = _`
+        (qspec_then `SUC i` mp_tac) >> simp[]) >>
+    `!i. i < LENGTH t ==>
+      eval_operand (EL i (REVERSE t)) s1 =
+      eval_operand (EL i (REVERSE t')) s2` by
+      (qspecl_then [`t`, `t'`, `s1`, `s2`] mp_tac
+         eval_operands_reverse_pointwise >> simp[]) >>
+    `eval_operand (HD (REVERSE t)) s1 =
+     eval_operand (HD (REVERSE t')) s2` by
+      (qpat_x_assum `!i. i < LENGTH t ==> _`
+        (qspec_then `0` mp_tac) >> simp[]) >>
+    `eval_operand (EL 1 (REVERSE t)) s1 =
+     eval_operand (EL 1 (REVERSE t')) s2` by
+      (qpat_x_assum `!i. i < LENGTH t ==> _`
+        (qspec_then `1` mp_tac) >> simp[]) >>
+    `eval_operands (DROP 2 (REVERSE t)) s1 =
+     eval_operands (DROP 2 (REVERSE t')) s2` by
+      (irule eval_operands_DROP >> simp[]) >>
+    fs[] >> simp[step_sim_def] >>
+    Cases_on `eval_operand (HD (REVERSE t')) s2` >> gvs[] >>
+    Cases_on `eval_operand (EL 1 (REVERSE t')) s2` >> gvs[] >>
+    Cases_on `eval_operands (DROP 2 (REVERSE t')) s2` >>
+    gvs[execution_equiv_def])
   >- (Cases_on `h'` >> gvs[step_sim_def])
   >> Cases_on `h'` >> gvs[step_sim_def]
 QED
@@ -1330,5 +1353,3 @@ Proof
   fs[is_terminator_def, is_output_opcode_def] >>
   output_match_dispatch_tac
 QED
-
-val _ = export_theory();

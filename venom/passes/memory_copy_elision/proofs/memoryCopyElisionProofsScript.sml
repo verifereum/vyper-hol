@@ -4247,7 +4247,7 @@ Triviality ssa_no_self_use[local]:
   !fn bb inst out.
     ssa_form fn /\ def_dominates_uses fn /\ wf_function fn /\
     MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
-    inst_output inst = SOME out ==>
+    inst.inst_opcode <> PHI /\ inst_output inst = SOME out ==>
     ~MEM out (inst_uses inst)
 Proof
   rpt strip_tac >>
@@ -4259,9 +4259,11 @@ Proof
     Cases_on `t` >> gvs[]) >>
   qpat_x_assum `def_dominates_uses _`
     (fn th => assume_tac (REWRITE_RULE[def_dominates_uses_def] th)) >>
-  first_x_assum (qspecl_then [`bb`, `inst`, `out`] mp_tac) >>
-  (impl_tac >- simp[]) >>
-  strip_tac >>
+  `def_available_at fn bb (SOME inst) out` by (
+    first_x_assum (qspecl_then [`bb`, `inst`] mp_tac) >>
+    simp[] >> disch_then (qspec_then `out` mp_tac) >> simp[]) >>
+  qpat_x_assum `def_available_at fn bb _ out`
+    (strip_assume_tac o REWRITE_RULE[def_available_at_def]) >>
   `MEM def_inst (fn_insts fn)` by
     (simp[fn_insts_def] >> metis_tac[mem_block_mem_fn_insts]) >>
   `MEM inst (fn_insts fn)` by

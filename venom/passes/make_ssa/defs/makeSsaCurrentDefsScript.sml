@@ -37,7 +37,7 @@ End
 Definition current_live_in_def:
   current_live_in fn =
     let live = liveness_analyze fn in
-      current_query_map (fn_labels fn) (\l. live_vars_at live l 0)
+      current_query_map (fn_labels fn) (df_boundary [] live)
 End
 
 (* Build the dominator tree from the canonical dominated-children query.
@@ -193,6 +193,13 @@ Proof
 QED
 
 
+Definition frontier_work_needed_def:
+  frontier_work_needed dom_frontiers has_phi d =
+    case ALOOKUP dom_frontiers d of
+      NONE => F
+    | SOME fs => EXISTS (\f. ~MEM f has_phi) fs
+End
+
 Definition insert_phis_for_var_supply_def:
   insert_phis_for_var_supply s var dom_frontiers pred_map live_in bbs [] has_phi =
     (bbs,s) /\
@@ -203,8 +210,9 @@ Definition insert_phis_for_var_supply_def:
     let (bbs',rest',has_phi',s') =
       process_frontiers_supply s var pred_map live_in bbs rest has_phi
                                frontiers in
+    let work = FILTER (frontier_work_needed dom_frontiers has_phi') rest' in
       insert_phis_for_var_supply s' var dom_frontiers pred_map live_in
-                                 bbs' rest' has_phi'
+                                 bbs' work has_phi'
 Termination
   WF_REL_TAC `measure (\(s,var,df,pm,li,bbs,wl,hp).
     LENGTH (FILTER (\x. ~MEM x hp)
@@ -237,6 +245,8 @@ Termination
   `LENGTH (FILTER (\x. ~MEM x has_phi') U) + LENGTH rest' <=
    LENGTH (FILTER (\x. ~MEM x has_phi) U) + LENGTH rest` by
     metis_tac[process_frontiers_supply_measure] >>
+  `LENGTH (FILTER (frontier_work_needed dom_frontiers has_phi') rest') <=
+   LENGTH rest'` by simp[rich_listTheory.LENGTH_FILTER_LEQ] >>
   DECIDE_TAC
 End
 
@@ -365,6 +375,313 @@ Definition rename_current_blocks_def:
       rename_current_children s' ctrs' stacks bbs' succ_map rest)
 End
 
+(* Python's liveness_in_vars deliberately skips leading PHIs.  MakeSSA uses
+   the liveness immediately before the first ordinary instruction when
+   deciding whether another PHI is needed on a repeated SSA run. *)
+(* Build the finite liveness map directly from blocks.  In particular, the
+   common first-SSA case with no leading PHI reduces immediately to the old
+   index-zero query without repeatedly looking the block up in the function. *)
+Definition current_live_in_after_phis_def:
+  current_live_in_after_phis live [] = [] /\
+  current_live_in_after_phis live (bb::bbs) =
+    (bb.bb_label,
+     case bb.bb_instructions of
+       [] => ([] : string list)
+     | inst::rest =>
+         if inst.inst_opcode = PHI then
+           live_vars_at live bb.bb_label
+             (LENGTH (collect_phis bb.bb_instructions))
+         else live_vars_at live bb.bb_label 0) ::
+    current_live_in_after_phis live bbs
+End
+
+Definition blocks_have_leading_phi_def:
+  blocks_have_leading_phi [] = F /\
+  blocks_have_leading_phi (bb::bbs) =
+    (case bb.bb_instructions of
+       [] => blocks_have_leading_phi bbs
+     | inst::_ => inst.inst_opcode = PHI \/ blocks_have_leading_phi bbs)
+End
+
+Definition select_current_live_in_def:
+  select_current_live_in F live fn =
+    current_query_map (fn_labels fn) (df_boundary [] live) /\
+  select_current_live_in T live fn =
+    current_live_in_after_phis live fn.fn_blocks
+End
+
+(* Mirror Python's degenerate-PHI cleanup while preserving definitions and
+   instruction IDs: self edges are discarded and equal inputs collapse. *)
+Definition current_phi_output_def:
+  current_phi_output [out] = SOME out /\
+  current_phi_output _ = NONE
+End
+
+Definition remove_current_phi_self_def:
+  remove_current_phi_self out [] = [] /\
+  remove_current_phi_self out [x] = [x] /\
+  remove_current_phi_self out (Label l::Var v::rest) =
+    (if v = out then remove_current_phi_self out rest
+     else Label l::Var v::remove_current_phi_self out rest) /\
+  remove_current_phi_self out (x::y::rest) =
+    x::y::remove_current_phi_self out rest
+End
+
+Definition current_phi_values_def:
+  current_phi_values [] = SOME ([] : string list) /\
+  current_phi_values (Label l::Var v::rest) =
+    (case current_phi_values rest of
+       NONE => NONE
+     | SOME vs => SOME (v::vs)) /\
+  current_phi_values _ = NONE
+End
+
+Definition simplify_current_phi_raw_def:
+  simplify_current_phi_raw inst =
+    if inst.inst_opcode <> PHI then inst
+    else case current_phi_output inst.inst_outputs of
+      NONE => inst
+    | SOME out =>
+        let cleaned = remove_current_phi_self out inst.inst_operands in
+        case current_phi_values cleaned of
+          NONE => inst
+        | SOME [] =>
+            inst with <| inst_opcode := NOP; inst_operands := [];
+                         inst_outputs := [] |>
+        | SOME (v::vs) =>
+            if EVERY (\w. w = v) vs then
+              inst with <| inst_opcode := ASSIGN;
+                           inst_operands := [Var v] |>
+            else inst with inst_operands := cleaned
+End
+
+Definition keep_current_phi_vars_def:
+  keep_current_phi_vars original candidate =
+    if EVERY (\v. MEM v (inst_ir_vars original))
+             (inst_ir_vars candidate)
+    then candidate
+    else original
+End
+
+Definition simplify_current_phi_def:
+  simplify_current_phi inst =
+    keep_current_phi_vars inst (simplify_current_phi_raw inst)
+End
+
+Definition simplify_current_phi_prefix_parts_def:
+  simplify_current_phi_prefix_parts [] = ([],[]) /\
+  simplify_current_phi_prefix_parts (inst::rest) =
+    if inst.inst_opcode <> PHI then ([],inst::rest)
+    else
+      let inst' = simplify_current_phi inst in
+      let (phis,ordinary) = simplify_current_phi_prefix_parts rest in
+        if inst'.inst_opcode = PHI then (inst'::phis,ordinary)
+        else (phis,inst'::ordinary)
+End
+
+Definition reassign_current_inst_ids_def:
+  reassign_current_inst_ids [] insts = insts /\
+  reassign_current_inst_ids ids [] = [] /\
+  reassign_current_inst_ids (id::ids) (inst::insts) =
+    (inst with inst_id := id)::reassign_current_inst_ids ids insts
+End
+
+Definition simplify_current_phi_prefix_def:
+  simplify_current_phi_prefix insts =
+    let (phis,ordinary) = simplify_current_phi_prefix_parts insts in
+      reassign_current_inst_ids (MAP (\inst. inst.inst_id) insts)
+        (phis ++ ordinary)
+End
+
+Definition simplify_current_phi_block_def:
+  simplify_current_phi_block bb =
+    case bb.bb_instructions of
+      [] => bb
+    | inst::rest =>
+        if inst.inst_opcode = PHI then
+          bb with bb_instructions :=
+            simplify_current_phi_prefix bb.bb_instructions
+        else bb
+End
+
+Definition simplify_current_phis_def:
+  simplify_current_phis bbs =
+    if blocks_have_leading_phi bbs then
+      MAP simplify_current_phi_block bbs
+    else bbs
+End
+
+Definition simplify_current_phis_if_def:
+  simplify_current_phis_if enabled bbs =
+    if enabled then simplify_current_phis bbs else bbs
+End
+
+Theorem simplify_current_phi_raw_id[simp]:
+  (simplify_current_phi_raw inst).inst_id = inst.inst_id
+Proof
+  simp[simplify_current_phi_raw_def] >> rpt CASE_TAC >> gvs[]
+QED
+
+Theorem simplify_current_phi_id[simp]:
+  (simplify_current_phi inst).inst_id = inst.inst_id
+Proof
+  simp[simplify_current_phi_def, keep_current_phi_vars_def] >>
+  CASE_TAC >> simp[]
+QED
+
+Theorem simplify_current_phi_vars:
+  MEM v (inst_ir_vars (simplify_current_phi inst)) ==>
+  MEM v (inst_ir_vars inst)
+Proof
+  Cases_on `EVERY (\v. MEM v (inst_ir_vars inst))
+                  (inst_ir_vars (simplify_current_phi_raw inst))`
+  >- (simp[simplify_current_phi_def, keep_current_phi_vars_def] >>
+      fs[listTheory.EVERY_MEM]) >>
+  simp[simplify_current_phi_def, keep_current_phi_vars_def]
+QED
+
+Theorem simplify_current_phi_prefix_parts_length:
+  !insts phis ordinary.
+    simplify_current_phi_prefix_parts insts = (phis,ordinary) ==>
+    LENGTH phis + LENGTH ordinary = LENGTH insts
+Proof
+  Induct >- simp[simplify_current_phi_prefix_parts_def] >>
+  rpt gen_tac >> Cases_on `h.inst_opcode <> PHI`
+  >- (simp[simplify_current_phi_prefix_parts_def] >> strip_tac >> gvs[]) >>
+  simp[simplify_current_phi_prefix_parts_def] >>
+  pairarg_tac >> gvs[] >> CASE_TAC >> strip_tac >> gvs[]
+QED
+
+Theorem reassign_current_inst_ids_ids:
+  !ids insts.
+    LENGTH ids = LENGTH insts ==>
+    MAP (\inst. inst.inst_id) (reassign_current_inst_ids ids insts) = ids
+Proof
+  Induct >> Cases_on `insts` >>
+  simp[reassign_current_inst_ids_def]
+QED
+
+Theorem MAP_simplify_current_phi_prefix_ids[simp]:
+  MAP (\inst. inst.inst_id) (simplify_current_phi_prefix insts) =
+  MAP (\inst. inst.inst_id) insts
+Proof
+  simp[simplify_current_phi_prefix_def] >> pairarg_tac >> gvs[] >>
+  irule reassign_current_inst_ids_ids >>
+  drule simplify_current_phi_prefix_parts_length >> simp[]
+QED
+
+Theorem simplify_current_phi_block_label[simp]:
+  (simplify_current_phi_block bb).bb_label = bb.bb_label
+Proof
+  simp[simplify_current_phi_block_def] >> rpt CASE_TAC >> gvs[]
+QED
+
+Theorem MAP_simplify_current_phis_labels[simp]:
+  MAP (\bb. bb.bb_label) (simplify_current_phis bbs) =
+  MAP (\bb. bb.bb_label) bbs
+Proof
+  Cases_on `blocks_have_leading_phi bbs` >>
+  simp[simplify_current_phis_def, MAP_MAP_o] >>
+  irule MAP_CONG >> simp[]
+QED
+
+Theorem simplify_current_phi_block_ids[simp]:
+  block_ir_inst_ids (simplify_current_phi_block bb) =
+  block_ir_inst_ids bb
+Proof
+  simp[simplify_current_phi_block_def] >> rpt CASE_TAC >>
+  gvs[block_ir_inst_ids_def]
+QED
+
+Theorem MAP_simplify_current_phis_inst_ids[simp]:
+  MAP block_ir_inst_ids (simplify_current_phis bbs) =
+  MAP block_ir_inst_ids bbs
+Proof
+  Cases_on `blocks_have_leading_phi bbs` >>
+  simp[simplify_current_phis_def, MAP_MAP_o] >>
+  irule MAP_CONG >> simp[]
+QED
+
+Theorem MAP_simplify_current_phis_if_labels[simp]:
+  MAP (\bb. bb.bb_label) (simplify_current_phis_if enabled bbs) =
+  MAP (\bb. bb.bb_label) bbs
+Proof
+  Cases_on `enabled` >> simp[simplify_current_phis_if_def]
+QED
+
+Theorem MAP_simplify_current_phis_if_inst_ids[simp]:
+  MAP block_ir_inst_ids (simplify_current_phis_if enabled bbs) =
+  MAP block_ir_inst_ids bbs
+Proof
+  Cases_on `enabled` >> simp[simplify_current_phis_if_def]
+QED
+
+Theorem reassign_current_inst_ids_vars:
+  !ids insts.
+    LENGTH ids = LENGTH insts ==>
+    MAP inst_ir_vars (reassign_current_inst_ids ids insts) =
+    MAP inst_ir_vars insts
+Proof
+  Induct >> Cases_on `insts` >>
+  simp[reassign_current_inst_ids_def, inst_ir_vars_def,
+       venomInstTheory.inst_uses_def]
+QED
+
+Theorem simplify_current_phi_prefix_parts_vars:
+  !insts phis ordinary v.
+    simplify_current_phi_prefix_parts insts = (phis,ordinary) /\
+    MEM v (FLAT (MAP inst_ir_vars (phis ++ ordinary))) ==>
+    MEM v (FLAT (MAP inst_ir_vars insts))
+Proof
+  Induct >- simp[simplify_current_phi_prefix_parts_def] >>
+  rpt gen_tac >> Cases_on `h.inst_opcode <> PHI`
+  >- (simp[simplify_current_phi_prefix_parts_def] >> strip_tac >> gvs[]) >>
+  simp[simplify_current_phi_prefix_parts_def] >>
+  pairarg_tac >> gvs[] >> CASE_TAC >> strip_tac >> gvs[] >>
+  metis_tac[simplify_current_phi_vars]
+QED
+
+Theorem simplify_current_phi_prefix_vars:
+  MEM v (FLAT (MAP inst_ir_vars (simplify_current_phi_prefix insts))) ==>
+  MEM v (FLAT (MAP inst_ir_vars insts))
+Proof
+  simp[simplify_current_phi_prefix_def] >> pairarg_tac >> gvs[] >>
+  rename [`simplify_current_phi_prefix_parts insts = (phis,ordinary)`] >>
+  `LENGTH (MAP (\inst. inst.inst_id) insts) =
+   LENGTH (phis ++ ordinary)` by
+    (drule simplify_current_phi_prefix_parts_length >> simp[]) >>
+  drule_all reassign_current_inst_ids_vars >> strip_tac >> gvs[] >>
+  strip_tac >>
+  mp_tac (Q.SPECL [`insts`,`phis`,`ordinary`,`v`]
+    simplify_current_phi_prefix_parts_vars) >> simp[]
+QED
+
+Theorem simplify_current_phi_block_vars:
+  MEM v (block_ir_vars (simplify_current_phi_block bb)) ==>
+  MEM v (block_ir_vars bb)
+Proof
+  simp[simplify_current_phi_block_def] >> rpt CASE_TAC >>
+  gvs[block_ir_vars_def] >> strip_tac >>
+  drule simplify_current_phi_prefix_vars >> simp[]
+QED
+
+Theorem simplify_current_phis_vars_subset:
+  MEM v (FLAT (MAP block_ir_vars (simplify_current_phis bbs))) ==>
+  MEM v (FLAT (MAP block_ir_vars bbs))
+Proof
+  Cases_on `blocks_have_leading_phi bbs` >>
+  gvs[simplify_current_phis_def, MEM_FLAT, MEM_MAP] >>
+  metis_tac[simplify_current_phi_block_vars]
+QED
+
+Theorem simplify_current_phis_if_vars_subset:
+  MEM v (FLAT (MAP block_ir_vars (simplify_current_phis_if enabled bbs))) ==>
+  MEM v (FLAT (MAP block_ir_vars bbs))
+Proof
+  Cases_on `enabled` >> gvs[simplify_current_phis_if_def] >>
+  metis_tac[simplify_current_phis_vars_subset]
+QED
+
 (* This boundary intentionally binds every analysis from this very fn. *)
 Definition make_ssa_current_fn_def:
   make_ssa_current_fn s fn =
@@ -374,11 +691,11 @@ Definition make_ssa_current_fn_def:
         let cfg = cfg_analyze fn in
         let dom = dom_analyze cfg fn in
         let live = liveness_analyze fn in
+        let had_phis = blocks_have_leading_phi fn.fn_blocks in
         let pred_map = current_query_map (fn_labels fn) (cfg_preds_of cfg) in
         let succ_map = current_query_map (fn_labels fn) (cfg_succs_of cfg) in
         let frontiers = current_query_map (fn_labels fn) (frontier_of dom) in
-        let live_in = current_query_map (fn_labels fn)
-                                        (\l. live_vars_at live l 0) in
+        let live_in = select_current_live_in had_phis live fn in
         let dtree = current_dom_tree_aux dom (LENGTH (fn_labels fn)) entry in
         let postorder = dom_tree_postorder dtree in
         let ordered_bbs = MAP THE (FILTER IS_SOME
@@ -388,7 +705,8 @@ Definition make_ssa_current_fn_def:
                                              fn.fn_blocks defs in
         let rs0 = init_current_rename_state defs in
         let (_,s2,bbs2) = rename_current_blocks s1 rs0 bbs1 succ_map dtree in
-          (fn with fn_blocks := bbs2,s2)
+        let bbs3 = simplify_current_phis_if had_phis bbs2 in
+          (fn with fn_blocks := bbs3,s2)
 End
 
 Definition make_ssa_functions_supply_def:
@@ -441,11 +759,11 @@ Theorem make_ssa_current_fn_current_analysis_eq:
         let cfg = cfg_analyze fn in
         let dom = dom_analyze cfg fn in
         let live = liveness_analyze fn in
+        let had_phis = blocks_have_leading_phi fn.fn_blocks in
         let pred_map = current_query_map (fn_labels fn) (cfg_preds_of cfg) in
         let succ_map = current_query_map (fn_labels fn) (cfg_succs_of cfg) in
         let frontiers = current_query_map (fn_labels fn) (frontier_of dom) in
-        let live_in = current_query_map (fn_labels fn)
-                                        (\l. live_vars_at live l 0) in
+        let live_in = select_current_live_in had_phis live fn in
         let dtree = current_dom_tree_aux dom (LENGTH (fn_labels fn)) entry in
         let postorder = dom_tree_postorder dtree in
         let ordered_bbs = MAP THE (FILTER IS_SOME
@@ -455,7 +773,8 @@ Theorem make_ssa_current_fn_current_analysis_eq:
                                              fn.fn_blocks defs in
         let rs0 = init_current_rename_state defs in
         let (_,s2,bbs2) = rename_current_blocks s1 rs0 bbs1 succ_map dtree in
-          (fn with fn_blocks := bbs2,s2)
+        let bbs3 = simplify_current_phis_if had_phis bbs2 in
+          (fn with fn_blocks := bbs3,s2)
 Proof
   simp[make_ssa_current_fn_def]
 QED
@@ -495,7 +814,7 @@ QED
 Theorem ALOOKUP_current_live_in:
   MEM l (fn_labels fn) ==>
   ALOOKUP (current_live_in fn) l =
-    SOME (live_vars_at (liveness_analyze fn) l 0)
+    SOME (df_boundary [] (liveness_analyze fn) l)
 Proof
   simp[current_live_in_def, ALOOKUP_current_query_map]
 QED
@@ -516,5 +835,3 @@ Theorem current_dom_postorder_eq:
 Proof
   simp[current_dom_postorder_def]
 QED
-
-val _ = export_theory();

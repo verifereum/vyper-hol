@@ -9,5 +9,3 @@ Ancestors
 
 Type assembly_finalizer =
   ``:resolved_compiler_policy -> asm_inst list -> asm_inst list option``
-
-val _ = export_theory ();

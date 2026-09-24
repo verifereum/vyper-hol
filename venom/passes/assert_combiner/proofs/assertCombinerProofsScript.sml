@@ -473,7 +473,8 @@ QED
 Triviality ssa_no_self_reference[local]:
   !fn bb i x.
     wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
-    MEM i bb.bb_instructions /\ MEM x i.inst_outputs /\
+    MEM i bb.bb_instructions /\ i.inst_opcode <> PHI /\
+    MEM x i.inst_outputs /\
     MEM (Var x) i.inst_operands ==> F
 Proof
   rpt strip_tac >>
@@ -487,7 +488,7 @@ Proof
         ?di dj. di < dj /\ dj < LENGTH bb.bb_instructions /\
                 EL di bb.bb_instructions = def_inst /\
                 EL dj bb.bb_instructions = i)` by
-    (fs[def_dominates_uses_def] >> metis_tac[]) >>
+    (fs[def_dominates_uses_def, def_available_at_def] >> metis_tac[]) >>
   (* Both i and def_inst are in fn_insts fn and have x in outputs.
      By all_distinct_flat_map_unique on fn_insts fn: def_inst = i *)
   (Q.SUBGOAL_THEN
@@ -1332,6 +1333,12 @@ Proof
         venomWfTheory.wf_ssa_def, ssa_form_def])
   (* 12: no self-reference *)
   >- (rpt strip_tac >>
+      `i.inst_opcode <> PHI` by (
+        qpat_x_assum `!bb' i'. _ ==> ac_is_safe_between i' \/ _`
+          (qspecl_then [`bb`, `i`] mp_tac) >>
+        simp[] >> strip_tac >>
+        gvs[ac_is_safe_between_def, venomInstTheory.is_terminator_def] >>
+        strip_tac >> gvs[venomInstTheory.is_terminator_def]) >>
       metis_tac[ssa_no_self_reference, MEM_FRONT_NOT_NIL,
         venomWfTheory.wf_function_def, bb_well_formed_def])
   (* 13: fresh vars not in DFG *)

@@ -846,9 +846,6 @@ Proof
   `ps2.ps_alloc.sa_spill_base = ps1.ps_alloc.sa_spill_base` by
     (qpat_x_assum `(if _ then _ else _) = (join_ops,ps2)` mp_tac >>
      simp[AllCaseEqs()] >> metis_tac[reorder_plan_spill_base]) >>
-  `ps3 = ps2` by
-    (qpat_x_assum `(if _ then _ else _) = (operands',ps3)` mp_tac >>
-     rpt IF_CASES_TAC >> gvs[] >> strip_tac >> gvs[]) >>
   rpt BasicProvers.VAR_EQ_TAC >>
   (* operands reorder *)
   `ps4.ps_alloc.sa_spill_base = ps2.ps_alloc.sa_spill_base` by
@@ -889,9 +886,6 @@ Proof
     (qpat_x_assum `(if _ then _ else _) = (join_ops,ps2)` mp_tac >>
      simp[AllCaseEqs()] >> strip_tac >> gvs[] >>
      metis_tac[reorder_plan_next_offset]) >>
-  `ps3 = ps2` by
-    (qpat_x_assum `(if _ then _ else _) = (operands',ps3)` mp_tac >>
-     rpt IF_CASES_TAC >> gvs[] >> strip_tac >> gvs[]) >>
   rpt BasicProvers.VAR_EQ_TAC >>
   (* operands reorder *)
   `ps2.ps_alloc.sa_next_offset <= ps4.ps_alloc.sa_next_offset` by
@@ -1009,7 +1003,9 @@ Theorem clean_stack_plan_spill_base:
 Proof
   rpt gen_tac >> simp[clean_stack_plan_def] >>
   every_case_tac >> gvs[] >> strip_tac >> gvs[] >>
-  metis_tac[popmany_plan_spill_base]
+  qmatch_asmsub_abbrev_tac `popmany_plan cleanup ps` >>
+  Cases_on `popmany_plan cleanup ps` >> gvs[] >>
+  drule popmany_plan_spill_base >> simp[]
 QED
 
 Theorem clean_stack_plan_next_offset:
@@ -1019,94 +1015,51 @@ Theorem clean_stack_plan_next_offset:
 Proof
   rpt gen_tac >> simp[clean_stack_plan_def] >>
   every_case_tac >> gvs[] >> strip_tac >> gvs[] >>
-  metis_tac[popmany_plan_next_offset]
+  qmatch_asmsub_abbrev_tac `popmany_plan cleanup ps` >>
+  Cases_on `popmany_plan cleanup ps` >> gvs[] >>
+  drule popmany_plan_next_offset >> simp[]
 QED
 
-(* ========== generate_block_plan (FOLDL of generate_inst_plan) ========== *)
+(* ========== generate_block_plan (recursive instruction suffix) ========== *)
 
-(* Generic option-FOLDL: FOLDL f NONE stays NONE. *)
-Theorem foldl_none_stays_none[local]:
-  !(f : 'a option -> 'b -> 'a option) items.
-    (!item. f NONE item = NONE) ==>
-    FOLDL f NONE items = NONE
+Theorem generate_block_insts_plan_spill_base[local]:
+  !insts liveness dfg cfg fn bb_label is_halting n_params block_len i
+   ps ops ps'.
+    generate_block_insts_plan liveness dfg cfg fn bb_label is_halting
+      n_params block_len i insts ps = SOME (ops, ps') ==>
+    ps'.ps_alloc.sa_spill_base = ps.ps_alloc.sa_spill_base
 Proof
-  gen_tac >> Induct >> simp[FOLDL]
-QED
-
-(* Generic option-FOLDL invariant: works for ANY step function f.
-   If P holds for x0, is preserved by each step, and f NONE = NONE,
-   then P holds for the final result. *)
-Theorem option_foldl_generic_invariant[local]:
-  !(f : 'a option -> 'b -> 'a option)
-   (P : 'a -> bool) items x0 res.
-    P x0 ==>
-    (!acc item y. P acc ==> f (SOME acc) item = SOME y ==> P y) ==>
-    (!item. f NONE item = NONE) ==>
-    FOLDL f (SOME x0) items = SOME res ==>
-    P res
-Proof
-  ntac 2 gen_tac >> Induct >> simp[FOLDL] >>
-  rpt gen_tac >> ntac 3 strip_tac >>
-  Cases_on `f (SOME x0) h`
-  >- (imp_res_tac foldl_none_stays_none >> simp[]) >>
-  rename1 `SOME v` >> strip_tac >>
-  qpat_assum `!acc item y. _` (qspecl_then [`x0`, `h`, `v`] mp_tac) >>
-  simp[] >> strip_tac >>
-  qpat_x_assum `!x0 res. _ ==> _ ==> _ ==> FOLDL _ _ _ = _ ==> _`
-    (qspecl_then [`v`, `res`] mp_tac) >>
-  metis_tac[]
-QED
-
-(* ML function: specialize option_foldl_generic_invariant for a given
-   predicate on pair-accumulator (stack_op list # plan_state).
-   Result: drule-ready theorem with FOLDL equation as first antecedent. *)
-fun mk_block_foldl_inv pred_term =
-  option_foldl_generic_invariant
-  |> Q.ISPECL [`f : (stack_op list # plan_state) option ->
-                    (num # instruction) ->
-                    (stack_op list # plan_state) option`,
-               pred_term]
-  |> SIMP_RULE (srw_ss()) [pairTheory.UNCURRY]
-  |> Q.SPECL [`items`, `(ops0, ps_init)`, `(ops_final, ps_final)`]
-  |> SIMP_RULE (srw_ss()) []
-  |> Q.GEN `ps_final` |> Q.GEN `ops_final`
-  |> Q.GEN `items` |> Q.GEN `ps_init` |> Q.GEN `ops0`
-  |> Q.GEN `f` |> Q.GEN `ps0`
-  |> REWRITE_RULE [AND_IMP_INTRO]
-  |> ONCE_REWRITE_RULE [CONJ_COMM]
-  |> REWRITE_RULE [GSYM AND_IMP_INTRO];
-
-val block_foldl_spill_base = mk_block_foldl_inv
-  `\(ops1 : stack_op list, ps1 : plan_state).
-     ps1.ps_alloc.sa_spill_base = ps0.ps_alloc.sa_spill_base`;
-
-val block_foldl_next_offset = mk_block_foldl_inv
-  `\(ops1 : stack_op list, ps1 : plan_state).
-     ps0.ps_alloc.sa_next_offset <= ps1.ps_alloc.sa_next_offset`;
-
-(* Shared tactic for generate_block_plan_spill_base / _next_offset:
-   unfold, decompose pipeline, apply FOLDL invariant via drule. *)
-fun gen_block_plan_tac foldl_thm inst_thm extra_tac =
-  rpt gen_tac >> simp[generate_block_plan_def] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  every_case_tac >> gvs[] >> strip_tac >> gvs[] >>
-  TRY (imp_res_tac prepare_params_plan_spill_base) >>
-  TRY (imp_res_tac prepare_params_plan_next_offset) >>
-  TRY (imp_res_tac clean_stack_plan_spill_base) >>
-  TRY (imp_res_tac clean_stack_plan_next_offset) >>
-  gvs[] >>
-  drule foldl_thm >>
-  simp[] >> disch_then irule >> rpt conj_tac >>
-  rpt gen_tac >> simp[UNCURRY] >> rpt strip_tac >>
+  Induct_on `insts` >> rpt gen_tac >>
+  simp[Once generate_block_insts_plan_def] >>
   every_case_tac >> gvs[] >>
-  imp_res_tac inst_thm >> gvs[] >> extra_tac;
+  metis_tac[generate_inst_plan_spill_base]
+QED
+
+Theorem generate_block_insts_plan_next_offset[local]:
+  !insts liveness dfg cfg fn bb_label is_halting n_params block_len i
+   ps ops ps'.
+    generate_block_insts_plan liveness dfg cfg fn bb_label is_halting
+      n_params block_len i insts ps = SOME (ops, ps') ==>
+    ps.ps_alloc.sa_next_offset <= ps'.ps_alloc.sa_next_offset
+Proof
+  Induct_on `insts` >> rpt gen_tac >>
+  simp[Once generate_block_insts_plan_def] >>
+  every_case_tac >> gvs[] >>
+  metis_tac[generate_inst_plan_next_offset, LESS_EQ_TRANS]
+QED
 
 Theorem generate_block_plan_spill_base:
   !liveness dfg cfg fn bb ps ops ps'.
     generate_block_plan liveness dfg cfg fn bb ps = SOME (ops, ps') ==>
     ps'.ps_alloc.sa_spill_base = ps.ps_alloc.sa_spill_base
 Proof
-  gen_block_plan_tac block_foldl_spill_base generate_inst_plan_spill_base all_tac
+  rpt gen_tac >> simp[generate_block_plan_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  every_case_tac >> gvs[] >> strip_tac >> gvs[] >>
+  imp_res_tac prepare_params_plan_spill_base >>
+  imp_res_tac clean_stack_plan_spill_base >>
+  imp_res_tac generate_block_insts_plan_spill_base >>
+  gvs[]
 QED
 
 Theorem generate_block_plan_next_offset:
@@ -1114,8 +1067,13 @@ Theorem generate_block_plan_next_offset:
     generate_block_plan liveness dfg cfg fn bb ps = SOME (ops, ps') ==>
     ps.ps_alloc.sa_next_offset <= ps'.ps_alloc.sa_next_offset
 Proof
-  gen_block_plan_tac block_foldl_next_offset generate_inst_plan_next_offset
-    (TRY decide_tac)
+  rpt gen_tac >> simp[generate_block_plan_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  every_case_tac >> gvs[] >> strip_tac >> gvs[] >>
+  imp_res_tac prepare_params_plan_next_offset >>
+  imp_res_tac clean_stack_plan_next_offset >>
+  imp_res_tac generate_block_insts_plan_next_offset >>
+  decide_tac
 QED
 
 (* Combined for convenience *)
@@ -1187,12 +1145,8 @@ Theorem generate_fn_plan_alloc_mono:
     spill_base <= ps_final.ps_alloc.sa_next_offset
 Proof
   rpt gen_tac >>
-  Cases_on `fn_entry_label fn`
-  >- (simp[generate_fn_plan_def, init_plan_state_def, init_spill_alloc_def] >>
-      rpt strip_tac >> gvs[])
-  >> simp[generate_fn_plan_def] >>
-  every_case_tac >> gvs[] >>
-  strip_tac >> gvs[] >>
+  simp[generate_fn_plan_def, generate_fn_plan_analyzed_def] >>
+  every_case_tac >> gvs[] >> strip_tac >> gvs[] >>
   imp_res_tac (cj 1 fn_plan_aux_alloc_mono) >>
   gvs[init_plan_state_def, init_spill_alloc_def]
 QED
@@ -1231,5 +1185,3 @@ Proof
   imp_res_tac (cj 1 fn_plan_aux_fuel_alloc_mono) >>
   gvs[init_plan_state_def, init_spill_alloc_def]
 QED
-
-val _ = export_theory();

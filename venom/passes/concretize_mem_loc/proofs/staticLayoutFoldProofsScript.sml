@@ -150,4 +150,3 @@ Proof
   >> simp[allocation_eom_fold_def]
   >> metis_tac[]
 QED
-val _ = export_theory();

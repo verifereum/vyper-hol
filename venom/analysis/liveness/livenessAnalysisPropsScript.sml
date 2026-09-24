@@ -115,8 +115,8 @@ QED
    4) Cross-block liveness transfer
    ========================================================================== *)
 
-(* If v is live at entry of successor and v is not a PHI output there,
-   then v is live at exit of predecessor *)
+(* If v is live at entry of a successor and is not an incoming PHI operand
+   there, then v is live at the predecessor exit. *)
 Theorem live_vars_at_cross_block:
   ∀fn pred_lbl pred_bb succ_lbl succ_bb v.
     wf_function fn ⇒
@@ -129,7 +129,7 @@ Theorem live_vars_at_cross_block:
     lookup_block succ_lbl fn.fn_blocks = SOME succ_bb ∧
     MEM v (live_vars_at lr succ_lbl 0) ∧
     (∀inst. MEM inst (collect_phis succ_bb.bb_instructions) ⇒
-            ¬MEM v inst.inst_outputs) ⇒
+            ¬MEM v (MAP SND (phi_pairs inst.inst_operands))) ⇒
     MEM v (live_vars_at lr pred_lbl (LENGTH pred_bb.bb_instructions))
 Proof
   ACCEPT_TAC livenessProofsTheory.live_vars_at_cross_block
@@ -155,8 +155,8 @@ Proof
   ACCEPT_TAC livenessProofsTheory.not_live_forward_in_block
 QED
 
-(* If v is not live at exit of predecessor and no PHI output for v in
-   successor, then v is not live at entry of successor *)
+(* If v is not live at a predecessor exit and is not an incoming PHI
+   operand in its successor, then it is not live at the successor entry. *)
 Theorem not_live_cross_block:
   ∀fn pred_lbl pred_bb succ_lbl succ_bb v.
     wf_function fn ⇒
@@ -169,7 +169,7 @@ Theorem not_live_cross_block:
     lookup_block succ_lbl fn.fn_blocks = SOME succ_bb ∧
     ¬MEM v (live_vars_at lr pred_lbl (LENGTH pred_bb.bb_instructions)) ∧
     (∀inst. MEM inst (collect_phis succ_bb.bb_instructions) ⇒
-            ¬MEM v inst.inst_outputs) ⇒
+            ¬MEM v (MAP SND (phi_pairs inst.inst_operands))) ⇒
     ¬MEM v (live_vars_at lr succ_lbl 0)
 Proof
   ACCEPT_TAC livenessProofsTheory.not_live_cross_block

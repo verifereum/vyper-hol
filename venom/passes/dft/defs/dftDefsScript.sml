@@ -15,8 +15,8 @@
  *   inst_all_deps          — combined DDA + EDA dependencies
  *   entry_instructions     — dependency DAG roots
  *   schedule_from_entries  — DFS schedule of a block's non-phi instructions
- *   dft_block              — transform a single block
- *   dft_fn                 — transform all blocks in a function
+ *   dft_block              — pinned Python block transform
+ *   dft_fn                 — pinned Python function transform
  *   dft_ctx                — transform all functions in a context
  *)
 
@@ -58,8 +58,12 @@ End
 
 Definition inst_data_deps_def:
   inst_data_deps block_insts order inst =
+    (* Python's ordered DDA traverses Venom's internal stack-order operands.
+       HOL stores semantic-order operands, so cross the representation boundary
+       before preserving that insertion order. *)
+    let ordered_ops = python_stack_operands inst.inst_opcode inst.inst_operands in
     let var_deps = MAP THE (FILTER IS_SOME
-      (MAP (operand_producer block_insts) inst.inst_operands)) in
+      (MAP (operand_producer block_insts) ordered_ops)) in
     let order_deps =
       if is_terminator inst.inst_opcode
       then FILTER (\d. d.inst_id <> inst.inst_id)
@@ -338,15 +342,15 @@ Definition dft_cost_def:
       else 1
     else
       (* Data dep: find operand index *)
-      (* REVERSE: HOL4 stores operands in EVM semantic order but Python
-         iterates in stack-push order (reversed). REVERSE aligns indices
-         so index 0 = deepest on stack = lowest cost. *)
+      (* Cross HOL semantic order to Python's stack order, so index 0 is
+         deepest on stack and receives the lowest cost. *)
       let op_idxs = MAP THE (FILTER IS_SOME
         (MAPi (\i op.
           case operand_producer block_insts op of
             SOME prod => if prod.inst_id = child.inst_id then SOME i
                          else NONE
-          | NONE => NONE) (REVERSE parent.inst_operands))) in
+          | NONE => NONE)
+          (python_stack_operands parent.inst_opcode parent.inst_operands))) in
       (* Python cost = idx + len(order); shifted +1 for num: idx + len(order) + 1 *)
       case op_idxs of
         idx :: _ => idx + LENGTH order + 1
@@ -359,7 +363,8 @@ Definition dft_cost_def:
             case op of
               Var v => if MEM v child.inst_outputs then SOME i else NONE
             | Lit _ => NONE
-            | Label _ => NONE) (REVERSE parent.inst_operands))) in
+            | Label _ => NONE)
+            (python_stack_operands parent.inst_opcode parent.inst_operands))) in
         case output_idxs of
           idx :: _ => idx + LENGTH order + 1
         | [] =>
@@ -383,7 +388,7 @@ Definition sort_children_def:
     let sorted = QSORT (\(i1,c1) (i2,c2).
       let cost1 = dft_cost block_insts order eda offspring_map parent c1 in
       let cost2 = dft_cost block_insts order eda offspring_map parent c2 in
-      cost1 < cost2 \/ (cost1 = cost2 /\ i1 <= i2)) indexed in
+      cost1 < cost2 \/ (cost1 = cost2 /\ i1 < i2)) indexed in
     MAP SND sorted
 End
 
@@ -431,6 +436,37 @@ Definition dfs_step_def:
                         ds_visited := visited' |>
 End
 
+(* Stop the bounded evaluator as soon as its work stack is empty.  The
+   normative FUNPOW below is intentionally retained for proof APIs, while this
+   equivalent runner avoids replaying tens of thousands of identity steps on
+   large ABI-generated blocks. *)
+Definition dfs_run_fuel_def:
+  dfs_run_fuel step 0 state = state /\
+  dfs_run_fuel step (SUC fuel) state =
+    if state.ds_stack = [] then state
+    else dfs_run_fuel step fuel (step state)
+End
+
+Theorem dfs_run_fuel_empty[simp]:
+  state.ds_stack = [] ==> dfs_run_fuel step fuel state = state
+Proof
+  Cases_on `fuel` >> simp[dfs_run_fuel_def]
+QED
+
+Theorem dfs_run_fuel_eq_FUNPOW:
+  !fuel state.
+    dfs_run_fuel (dfs_step block_insts order eda offspring_map do_flip)
+      fuel state =
+    FUNPOW (dfs_step block_insts order eda offspring_map do_flip)
+      fuel state
+Proof
+  Induct >- simp[dfs_run_fuel_def] >>
+  gen_tac >> Cases_on `state.ds_stack`
+  >- (simp[dfs_run_fuel_def, dfs_step_def, arithmeticTheory.FUNPOW] >>
+      first_x_assum (qspec_then `state` mp_tac) >> simp[])
+  >- simp[dfs_run_fuel_def, arithmeticTheory.FUNPOW]
+QED
+
 (* Bound: N process steps + N emit steps + ≤ N² skip steps + ≤ N initial
    entries = N² + 2N total steps. Use (N+1)² for clean expression. *)
 Definition schedule_from_entries_def:
@@ -444,19 +480,32 @@ Definition schedule_from_entries_def:
     final.ds_output
 End
 
+Theorem schedule_from_entries_compute[compute]:
+  schedule_from_entries block_insts order eda offspring_map entries =
+    let n = LENGTH block_insts in
+    let init = <| ds_stack := MAP DfsProcess entries;
+                  ds_output := [];
+                  ds_visited := [] |> in
+    let final = dfs_run_fuel
+      (dfs_step block_insts order eda offspring_map T)
+      ((n + 1) * (n + 1)) init in
+    final.ds_output
+Proof
+  simp[schedule_from_entries_def, dfs_run_fuel_eq_FUNPOW]
+QED
+
 (* ===== Block-Level Transform ===== *)
 
 Definition dft_block_def:
   dft_block order bb =
     let phis = FILTER (λi. is_pseudo i.inst_opcode) bb.bb_instructions in
-    let eda = build_full_eda bb.bb_instructions in
+    let eda = build_eda bb.bb_instructions in
     let offspring_map = build_offspring_map bb.bb_instructions order in
     let entries = entry_instructions bb.bb_instructions order eda in
     let scheduled = schedule_from_entries bb.bb_instructions order
                       eda offspring_map entries in
     bb with bb_instructions := phis ++ scheduled
 End
-
 
 (* ===== Function-Level Transform with StackOrder Convergence ===== *)
 
@@ -527,6 +576,41 @@ Definition dft_loop_step_def:
         else (st', rest ++ preds, F)
 End
 
+(* As above, stop evaluating once the Python worklist loop has set done. *)
+Definition dft_loop_run_fuel_def:
+  dft_loop_run_fuel step 0 state = state /\
+  dft_loop_run_fuel step (SUC fuel) state =
+    if SND (SND state) then state
+    else dft_loop_run_fuel step fuel (step state)
+End
+
+Theorem dft_loop_step_done[simp]:
+  SND (SND state) ==>
+  dft_loop_step cfg lr fn state = state
+Proof
+  Cases_on `state` >> Cases_on `r` >> simp[dft_loop_step_def]
+QED
+
+Theorem dft_loop_run_fuel_done[simp]:
+  SND (SND state) ==>
+  dft_loop_run_fuel step fuel state = state
+Proof
+  Cases_on `fuel` >> simp[dft_loop_run_fuel_def]
+QED
+
+Theorem dft_loop_run_fuel_eq_FUNPOW:
+  !fuel state.
+    dft_loop_run_fuel (dft_loop_step cfg lr fn) fuel state =
+    FUNPOW (dft_loop_step cfg lr fn) fuel state
+Proof
+  Induct >- simp[dft_loop_run_fuel_def] >>
+  gen_tac >> Cases_on `SND (SND state)`
+  >- (simp[dft_loop_run_fuel_def, dft_loop_step_def,
+           arithmeticTheory.FUNPOW] >>
+      first_x_assum (qspec_then `state` mp_tac) >> simp[])
+  >- simp[dft_loop_run_fuel_def, arithmeticTheory.FUNPOW]
+QED
+
 (* Full function transform: build CFG, compute liveness, run convergence loop.
    Python: run_pass.
    Structural termination: FUNPOW applies a fixed number of steps
@@ -547,6 +631,25 @@ Definition dft_fn_def:
       FUNPOW (dft_loop_step cfg lr fn) (n * n) (init_st, worklist, F) in
     fn with fn_blocks := final_st.dls_blocks
 End
+
+Theorem dft_fn_compute[compute]:
+  dft_fn fn =
+    let cfg = cfg_analyze fn in
+    let lr = liveness_analyze fn in
+    let worklist = cfg.cfg_dfs_post in
+    let init_st = <|
+      dls_blocks := fn.fn_blocks;
+      dls_from_to := FEMPTY;
+      dls_last_order := FEMPTY
+    |> in
+    let n = LENGTH fn.fn_blocks in
+    let (final_st, _, _) =
+      dft_loop_run_fuel (dft_loop_step cfg lr fn) (n * n)
+        (init_st, worklist, F) in
+    fn with fn_blocks := final_st.dls_blocks
+Proof
+  simp[dft_fn_def, dft_loop_run_fuel_eq_FUNPOW]
+QED
 
 Definition dft_ctx_def:
   dft_ctx ctx =
