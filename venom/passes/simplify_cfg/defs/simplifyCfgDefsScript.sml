@@ -23,7 +23,7 @@
 
 Theory simplifyCfgDefs
 Ancestors
-  cfgTransform venomWf venomExecSemantics
+  cfgTransform venomWf venomExecSemantics rich_list
 
 (* ===== Unreachable Block Removal ===== *)
 
@@ -238,6 +238,95 @@ Definition try_bypass_def:
         else try_bypass func label_map bb rest
     | NONE => try_bypass func label_map bb rest)
 End
+
+(* Helper: a successful lookup supplies both membership and the key label. *)
+Theorem lookup_block_member_label:
+  lookup_block lbl bbs = SOME bb ==>
+  MEM bb bbs /\ bb.bb_label = lbl
+Proof
+  Induct_on `bbs` >> simp[venomInstTheory.lookup_block_def,
+                         listTheory.FIND_thm] >>
+  rpt gen_tac >> Cases_on `h.bb_label = lbl` >>
+  gvs[venomInstTheory.lookup_block_def]
+QED
+
+(* A failed bypass leaves the function and accumulated label map unchanged. *)
+Theorem try_bypass_failed_unchanged:
+  !succs func label_map bb func' label_map'.
+    try_bypass func label_map bb succs = (func',label_map',F) ==>
+    func' = func /\ label_map' = label_map
+Proof
+  Induct_on `succs` >> simp[try_bypass_def] >>
+  rpt gen_tac >> simp[Once try_bypass_def] >>
+  rpt (CASE_TAC >> gvs[]) >> metis_tac[]
+QED
+
+Theorem remove_block_length_less:
+  MEM lbl (MAP (λbb. bb.bb_label) bbs) ==>
+  LENGTH (remove_block lbl bbs) < LENGTH bbs
+Proof
+  strip_tac >> simp[remove_block_def] >>
+  irule rich_listTheory.LENGTH_FILTER_LESS >>
+  fs[listTheory.EXISTS_MEM, listTheory.MEM_MAP] >>
+  metis_tac[]
+QED
+
+Theorem unvisited_blocks_shrink:
+  lookup_block lbl bbs = SOME bb /\ ~MEM lbl visited ==>
+  LENGTH (FILTER (λb. ~MEM b.bb_label (lbl::visited)) bbs) <
+  LENGTH (FILTER (λb. ~MEM b.bb_label visited) bbs)
+Proof
+  strip_tac >> drule lookup_block_member_label >> strip_tac >>
+  `MEM bb (FILTER (λb. ~MEM b.bb_label visited) bbs)`
+    by simp[listTheory.MEM_FILTER] >>
+  `FILTER (λb. b.bb_label ≠ lbl /\ ¬MEM b.bb_label visited) bbs =
+   FILTER (λb. b.bb_label ≠ lbl)
+     (FILTER (λb. ¬MEM b.bb_label visited) bbs)`
+    by simp[rich_listTheory.FILTER_FILTER] >>
+  simp[] >>
+  irule rich_listTheory.LENGTH_FILTER_LESS >>
+  simp[listTheory.EXISTS_MEM] >>
+  qexists_tac `bb` >> simp[]
+QED
+
+Theorem update_succ_phi_labels_length:
+  !bbs succs.
+    LENGTH (update_succ_phi_labels old_lbl new_lbl bbs succs) = LENGTH bbs
+Proof
+  Induct_on `succs` >>
+  simp[update_succ_phi_labels_def, listTheory.FOLDL] >>
+  rpt gen_tac >> CASE_TAC >>
+  fs[update_succ_phi_labels_def,
+     cfgTransformTheory.replace_block_def]
+QED
+
+Theorem do_merge_jump_shrinks:
+  lookup_block b.bb_label func.fn_blocks = SOME b /\
+  do_merge_jump func a b label_map = SOME (func',label_map') ==>
+  LENGTH func'.fn_blocks < LENGTH func.fn_blocks
+Proof
+  strip_tac >>
+  drule lookup_block_member_label >> strip_tac >>
+  `LENGTH (remove_block b.bb_label func.fn_blocks) < LENGTH func.fn_blocks`
+    by (irule remove_block_length_less >> simp[listTheory.MEM_MAP] >>
+        metis_tac[]) >>
+  qpat_x_assum `do_merge_jump _ _ _ _ = _` mp_tac >>
+  simp[do_merge_jump_def] >>
+  rpt (CASE_TAC >> gvs[update_succ_phi_labels_length,
+                       cfgTransformTheory.replace_block_def]) >>
+  strip_tac >> gvs[]
+QED
+
+Theorem try_bypass_success_shrinks:
+  !succs func label_map bb func' label_map'.
+    try_bypass func label_map bb succs = (func',label_map',T) ==>
+    LENGTH func'.fn_blocks < LENGTH func.fn_blocks
+Proof
+  Induct_on `succs` >> simp[try_bypass_def] >>
+  rpt gen_tac >> simp[Once try_bypass_def] >>
+  rpt (CASE_TAC >> gvs[]) >>
+  metis_tac[do_merge_jump_shrinks, lookup_block_member_label]
+QED
 
 (* DFS collapse from a block. After a successful merge/bypass, re-process
    the same block (Python recurses on bb after merge). Tracks visited set.
