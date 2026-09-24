@@ -69,13 +69,16 @@ The machine-readable authority is
 `.agent-files/tasks/evidence/TASK_089.ledger.json`, derived from the ten declared
 HOL source files. It contains 1,485 rows: 506 supported, 795 partial (with
 explicit supported/unsupported boundaries), and 184 unsupported. All 101
-retained fixtures enter through checked `compile_vyper`. Of 1,301 HOL
-code-producing rows, 1,295 have assigned fixture **names**, not verified
-execution witnesses. Six rows (constructors and multiplier arms for `MEther`,
-`GEther`, `TEther`) are explicitly outside the differential target because
-pinned Python rejects those denominations. Their HOL definitions remain
-unchanged. No full row-by-row exercise audit was performed; do not claim
-complete supported-row coverage from the fixture-name count.
+retained fixtures enter through checked `compile_vyper`. A read-only audit
+of their HOL input terms found 148 of 187 variant AST constructor kinds
+present, 39 absent, and no `raw_call_flags` record. Of 1,301 HOL
+code-producing rows, 1,295 have assigned fixture **names**; at least 55
+assignments were shown not to witness their named lowering arm. Six rows
+(constructors and multiplier arms for `MEther`, `GEther`, `TEther`) are
+explicitly outside the differential target because pinned Python rejects
+those denominations. Their HOL definitions remain unchanged. See the linked
+coverage document for the complete constructor census and precise distinction
+between fixture inputs and lowering-arm execution.
 
 ## Fixture format
 

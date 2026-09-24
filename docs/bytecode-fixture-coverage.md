@@ -67,16 +67,71 @@ HOL definitions and classifications remain frozen and unchanged. A Python
 frontend rejection must not be used to silently reclassify a HOL code-producing
 row as unsupported.
 
+## Verified fixture-input constructor census
+
+A read-only source audit started from the 100 named HOL program terms used in
+the bytecode comparison theories plus the inline `empty` program. It expanded
+their 109 reachable fixture/helper definitions (none unused), stripped SML
+comments and string literals, and checked constructor tokens against the
+`vyperAST` datatype declarations. The `TAKE`/`DROP` partitions of the shared
+assert/raise program were checked separately. This measures **constructor
+kinds in fixture input terms**: **148 of 187 variant constructors occur; 39
+are absent**. The additional `raw_call_flags` datatype is a record, not a
+variant constructor, and no fixture builds one. This is the complete
+constructor-kind census, **not** a count of lowering branches executed.
+
+| HOL datatype | Present / total variant constructors | Absent from fixture terms |
+|---|---:|---|
+| `type` | 5 / 6 | `FlagT` |
+| `int_bound` | 0 / 2 | `Signed`, `Unsigned` |
+| `binop` | 23 / 26 | `ExpMod`, `In`, `NotIn` |
+| `env_item` | 14 / 15 | `MsgGas` |
+| `account_item` | 5 / 6 | `Code` |
+| `denomination` | 8 / 11 | `MEther`, `GEther`, `TEther` |
+| `builtin` | 16 / 25 | `Len`, `Keccak256`, `Sha256`, `Concat`, `Slice`, `Uint2Str`, `Ceil`, `Floor`, `MethodId` |
+| `create_kind` | 0 / 4 | `CreateMinimalProxy`, `CreateCopyOf`, `CreateFromBlueprint`, `RawCreate` |
+| `call_target` | 3 / 8 | `RawCallTarget`, `RawLog`, `RawRevert`, `SelfDestructTarget`, `CreateTarget` |
+| `type_builtin` | 7 / 8 | `Extract32` |
+| `expr` | 15 / 16 | `FlagMember` |
+| `assignment_target` | 1 / 2 | `TupleTarget` |
+| `assert_reason` / `raise_reason` | 2 / 3 each | `AssertUnreachable` / `RaiseUnreachable` |
+| `variable_visibility` / `variable_mutability` | 1 / 2; 2 / 4 | `Public`; `Constant`, `Immutable` |
+| `value_type` / `toplevel` | 1 / 2; 6 / 7 | `HashMapT`; `FlagDecl` |
+| All other variant datatypes (`bound`, `base_type`, `literal`, `iterator`, `stmt`, `function_visibility`, `function_mutability`) | 37 / 37 | None |
+| **Total** | **148 / 187** | **39** |
+
+For example, `storage_mapping_program` constructs `HashMapDecl`, but not the
+`HashMapT` *value-type* constructor. None of the fixture functions supplies a
+nonempty list of optional-argument defaults; `function_modes` includes a
+`__default__` *fallback function*, which is a different feature. A
+source-level constructor occurrence establishes an input shape; it does not
+establish that a particular lowering arm was taken.
+
+## Lowering-arm audit and exclusions
+
+The ledger contains 1,301 code-producing rows. Its fixture-label checker
+confirms that 1,295 rows have existing fixture **names**, not that their
+branches ran. Inspecting the checked compiler call path and the named HOL
+programs disproved **at least 55 of these assignments**, in disjoint groups:
+
+| Falsified assignments | Source-level reason |
+|---:|---|
+| 46 | `compileEnvScript.sml` invariant/state/result/log-relation definitions in lines 561–900 are not calls on the checked `compile_vyper` lowering path; assigning scalar fixture names does not make them executed compiler arms. |
+| 2 | The two real `is_bytestring_type` lowering-predicate arms in that file were assigned `scalar_compare_eq`, which has only integer comparison functions and no bytestring input. |
+| 6 | Sparse/dense selector-dispatch arms in `moduleLoweringScript.sml` cannot run: `resolve_o1_policy` sets dispatch to `Linear`, and `run_lowering` checks that policy before calling `compile_generate_runtime`. |
+| 1 | A `SOME` fallback arm was assigned `transient_scalar`, whose HOL program has no `__default__` fallback; `function_modes` tests a fallback separately. |
+
+Earlier, 22 denomination rows were assigned to `scalar_minmax_int` or
+`scalar_compare_eq`; 16 names were corrected to the actual `scalar_wei_small`
+and `scalar_wei_large` programs, and the remaining six are the explicit
+Python-domain exclusions below. **No remaining fixture-name count is an
+execution-coverage count.** The saved byte-equality theorems record final
+results, not intermediate lowering-branch traces. This audit makes no claim
+about the other assigned arms; a complete per-arm execution census cannot be
+reconstructed from those saved results alone.
+
 ## What the fixtures do **not** establish
 
-- **Complete lowering-arm coverage is unverified.** Of the 1,301 HOL
-  code-producing rows, 1,295 have assigned fixture **names**. Those names
-  were partly assigned by symbol-name heuristics; the check verifies that
-  the names exist, **not** that a program executes its named row. They must
-  not be reported as 1,295 verified execution witnesses. For example,
-  `scalar_minmax_int` was originally assigned to denomination rows despite
-  containing no `as_wei_value` call; the genuine Wei–KEther cases are in
-  `scalar_wei_small` and `scalar_wei_large`.
 - **Six known rows have no fixture and are outside the pinned-Python
   elaborated-input differential target:** HOL AST constructors `MEther`,
   `GEther`, and `TEther`, and their three `denomination_multiplier` lowering
