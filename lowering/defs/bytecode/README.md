@@ -2,8 +2,7 @@
 
 This directory contains the independent Python oracle for the frozen 101-fixture
 HOL-supported-subset corpus. It includes the original 23-fixture milestone and
-78 retained subset/interaction fixtures. The resource-prohibitive `spill_join`
-stress case is retired and is not part of the corpus.
+78 subset/interaction fixtures.
 
 - `python-o1-no-asm-opt-sources/` contains Vyper source counterparts to the HOL
   programs in `eval/evalCompilerScript.sml` and the `eval/evalCompilerSubset*`
@@ -69,13 +68,13 @@ The machine-readable authority is
 `.agent-files/tasks/evidence/TASK_089.ledger.json`, derived from the ten declared
 HOL source files. It contains 1,485 rows: 506 supported, 795 partial (with
 explicit supported/unsupported boundaries), and 184 unsupported. All 101
-retained fixtures enter through checked `compile_vyper`. A read-only audit
-of their HOL input terms found 148 of 187 variant AST constructor kinds
-present, 39 absent, and no `raw_call_flags` record. Of 1,301 HOL
-code-producing rows, 1,295 have assigned fixture **names**; 82 AST-row
-assignments fail the term-presence check and at least 102 additional
-lowering-arm assignments fail source-level scrutiny (at least 184 false
-witnesses in all). Six rows
+retained fixtures enter through checked `compile_vyper`. The strict
+per-fixture input-term audit confirms 148 of 187 variant AST constructor
+kinds present, 39 absent, and no `raw_call_flags` record. The corrected
+ledger assigns each present AST constructor only to fixtures containing it;
+22 lowering-arm rows have separate source-justified checked-path witnesses.
+The remaining 1,107 code-producing lowering-arm rows have **no witness
+claim**; an empty list does not prove non-execution. Six rows
 (constructors and multiplier arms for `MEther`, `GEther`, `TEther`) are
 explicitly outside the differential target because pinned Python rejects
 those denominations. Their HOL definitions remain unchanged. See the linked

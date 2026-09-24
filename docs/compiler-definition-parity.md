@@ -145,15 +145,15 @@ For a concise tested-versus-untested summary, see
 The HOL classification is the generated TASK_089 ledger under
 `.agent-files/tasks/evidence/`: 1,485 rows (506 supported, 795 partial with
 explicit shape/type boundaries, 184 unsupported). The frozen corpus has 101
-physical source/oracle pairs and checks 202 exact byte lists; `spill_join` is
-retired. A read-only audit found 148 of 187 variant HOL AST constructor
-kinds in the fixture input terms and 39 absent; none builds the separate
-`raw_call_flags` record. The mechanical ledger checker assigns fixture
-*names* to 1,295 code-producing rows. A term-level audit refutes 82 AST-row
-witnesses, and a separate source-level audit refutes at least 102
-lowering-arm witnesses: **at least 184 labeled rows have the wrong fixture**.
-Six more HOL code-producing rows (`MEther`, `GEther`, `TEther` constructors
-and multiplier arms) are explicitly
+physical source/oracle pairs and checks 202 exact byte lists. A strict
+source-term audit verifies that 148 of 187 variant HOL
+AST constructors occur in fixture inputs, and 39 do not; none constructs
+the separate `raw_call_flags` record. The ledger now gives each AST row
+exactly its matching fixture inputs and assigns **22 lowering-arm rows**
+only to explicitly source-justified checked-path routes. The other 1,107
+code-producing lowering-arm rows carry no witness claim; this is not a
+branch-execution census. Six HOL code-producing rows (`MEther`, `GEther`,
+`TEther` constructors and multiplier arms) are explicitly
 outside the pinned-Python elaborated-input differential target: Python's
 `AsWeiValue` rejects those units, while HOL's semantics and classification
 remain unchanged. No complete lowering-arm execution census is claimed.
