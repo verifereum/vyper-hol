@@ -74,7 +74,7 @@ UV_PYTHON_INSTALL_DIR="$stage/python" \
 env -u PYTHONPATH -u PYTHONHOME -u PYTHONSTARTUP \
   "$venv/bin/python" -I "$script_dir/python_o1_bytecode_oracle.py" \
   --expected-commit "$pin" --expected-python 3.11.11 --generator-uv 0.10.11 \
-  --expected-install-root "$venv" --sources "$sources" \
+  --expected-install-root "$venv" --repo-root "$repo_dir" --sources "$sources" \
   --hol-programs \
     "$script_dir/eval/evalCompilerScript.sml" \
     "$script_dir/eval/evalCompilerSubsetStateScript.sml" \

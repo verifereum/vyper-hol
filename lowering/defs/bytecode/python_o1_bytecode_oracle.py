@@ -21,6 +21,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--expected-python", required=True)
     parser.add_argument("--generator-uv", required=True)
     parser.add_argument("--expected-install-root", type=Path, required=True)
+    parser.add_argument("--repo-root", type=Path, required=True)
     parser.add_argument("--sources", type=Path, required=True)
     parser.add_argument("--hol-programs", type=Path, nargs="+", required=True)
     parser.add_argument(
@@ -52,6 +53,7 @@ def main() -> None:
             f"imported Vyper commit {actual_commit!r}, expected {args.expected_commit!r}"
         )
     install_root = args.expected_install_root.resolve()
+    repo_root = args.repo_root.resolve()
     imported_from = Path(vyper.__file__).resolve()
     if install_root not in imported_from.parents:
         raise RuntimeError(
@@ -128,7 +130,9 @@ def main() -> None:
         "dependencies": dependencies,
         "hol_source_correspondence": {
             "files": {
-                str(path): hashlib.sha256(path.read_bytes()).hexdigest()
+                path.resolve().relative_to(repo_root).as_posix(): hashlib.sha256(
+                    path.read_bytes()
+                ).hexdigest()
                 for path in args.hol_programs
             },
             "note": "Audit anchors only; HOL is not an input to Python compilation.",
