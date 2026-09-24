@@ -139,16 +139,17 @@ The matrix should eventually identify exact Python modules, classes, and functio
 
 ### Finite supported-subset acceptance
 
-The exact boundary is the generated TASK_089 ledger under
-`.agent-files/tasks/evidence/`. At the accepted revision it contains 1,485 rows:
-506 supported, 795 partial with explicit shape/type boundaries, and 184
-unsupported. The frozen corpus has 101 physical source/oracle pairs and checks
-202 exact byte lists. The retired `spill_join` stress fixture is intentionally
-absent. Coverage labels are not yet verified exercise witnesses: at least six
-code-producing HOL denomination rows (constructors and multiplier arms for
-`MEther`, `GEther`, `TEther`) lack fixtures because pinned Python rejects these
-denominations.
-Further row-by-row witness validation is required before claiming subset closure.
+The HOL classification is the generated TASK_089 ledger under
+`.agent-files/tasks/evidence/`: 1,485 rows (506 supported, 795 partial with
+explicit shape/type boundaries, 184 unsupported). The frozen corpus has 101
+physical source/oracle pairs and checks 202 exact byte lists; `spill_join` is
+retired. The mechanical coverage checker reports 1,295 code-producing rows
+with assigned fixture *names*, not verified execution witnesses. Six HOL
+code-producing rows (constructors and multiplier arms for `MEther`, `GEther`,
+`TEther`) are explicitly excluded from the pinned-Python elaborated-input
+parity target: Python's `AsWeiValue` rejects those units, while HOL's
+semantics and classification remain unchanged. Further row-by-row exercise
+audit would be needed to claim complete coverage; that claim is not made here.
 
 This is finite differential evidence for the 101 tested programs, not
 a universal equivalence theorem or a claim that every HOL-supported row is

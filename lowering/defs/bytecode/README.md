@@ -64,14 +64,15 @@ compiler-equivalence theorem or a claim about unrelated existing proof debt.
 
 The machine-readable authority is
 `.agent-files/tasks/evidence/TASK_089.ledger.json`, derived from the ten declared
-HOL source files. At the accepted revision it contains 1,485 rows: 506 supported,
-795 partial (with explicit supported/unsupported boundaries), and 184
-unsupported. The 101 retained fixtures enter through checked `compile_vyper`,
-but the ledger's mechanically assigned witness names require an exercise audit:
-at least six supported denomination rows (constructors and multiplier arms
-for `MEther`, `GEther`, `TEther`) have no fixture, and pinned Python's
-`AsWeiValue.wei_denoms` does not accept their 10^24/10^27/10^30 denominations. Do not interpret the raw 1,301-row label count
-as verified exercise coverage until this boundary is resolved.
+HOL source files. It contains 1,485 rows: 506 supported, 795 partial (with
+explicit supported/unsupported boundaries), and 184 unsupported. All 101
+retained fixtures enter through checked `compile_vyper`. Of 1,301 HOL
+code-producing rows, 1,295 have assigned fixture **names**, not verified
+execution witnesses. Six rows (constructors and multiplier arms for `MEther`,
+`GEther`, `TEther`) are explicitly outside the differential target because
+pinned Python rejects those denominations. Their HOL definitions remain
+unchanged. No full row-by-row exercise audit was performed; do not claim
+complete supported-row coverage from the fixture-name count.
 
 ## Fixture format
 
