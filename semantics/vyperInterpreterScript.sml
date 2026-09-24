@@ -1600,7 +1600,7 @@ Definition constants_env_def:
      | NONE => NONE
      | SOME tv =>
        case FST $ eval_expr cx e
-         (initial_state (merge_constants addr src_id_opt acc am) []) of
+         (initial_state (merge_constants addr src_id_opt acc am) [FEMPTY]) of
        | INL (Value v) => constants_env cx am addr src_id_opt ts $
                           acc |+ (string_to_num id, (tv, v))
        | _ => NONE) ∧

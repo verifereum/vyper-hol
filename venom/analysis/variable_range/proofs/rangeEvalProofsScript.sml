@@ -7,9 +7,9 @@
 
 Theory rangeEvalProofs
 Ancestors
-  valueRangeDefs rangeEvalDefs valueRangeProofs integer_word
+  valueRangeDefs rangeEvalDefs valueRangeProofs integer_word rangeEvalWordOps
 Libs
-  integerTheory integer_wordTheory intLib fcpLib rangeEvalProofsLib
+  integerTheory integer_wordTheory intLib fcpLib
 
 (* ===== Shared toolkit ===== *)
 
@@ -875,8 +875,7 @@ Proof
   intLib.ARITH_TAC
 QED
 
-(* Bridge lemmas abs_quot_le, w2i_abs_bound, abs_lt_neg_min_gives_range,
-   abs_quot_lt_neg_min, w2i_word_quot are in rangeEvalProofsLib.sml *)
+(* Quotient/remainder bridge lemmas are in rangeEvalWordOpsTheory. *)
 
 
 (* ===== Unsigned DIV soundness ===== *)

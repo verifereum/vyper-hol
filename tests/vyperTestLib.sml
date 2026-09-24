@@ -202,6 +202,9 @@ val abiEntry : term decoder = achoose "abiEntry" [
 val Deployment_tm = prim_mk_const{Thy="vyperTestRunner",Name="Deployment"}
 val deployment_trace_ty = #1 $ dom_rng $ type_of Deployment_tm
 
+val RawDeployment_tm = prim_mk_const{Thy="vyperTestRunner",Name="RawDeployment"}
+val raw_deployment_trace_ty = #1 $ dom_rng $ type_of RawDeployment_tm
+
 val SetBalance_tm = prim_mk_const{Thy="vyperTestRunner",Name="SetBalance"}
 val ClearTransientStorage_tm =
   prim_mk_const{Thy="vyperTestRunner",Name="ClearTransientStorage"}
@@ -285,7 +288,8 @@ fun check_generate_dirs () = (
 (* Directory-level allowlist plus small explicit allowlist. *)
 val allowed_test_prefixes = [
   "vyper-test-exports/functional/codegen/",
-  "vyper-test-exports/functional/builtins/codegen/"
+  "vyper-test-exports/functional/builtins/codegen/",
+  "vyper-test-exports/functional/builtins/folding/"
 ]
 
 val allowed_test_patterns = [
@@ -317,10 +321,9 @@ val allowed_test_names = [
 
 (* Tests excluded by name - require architectural changes *)
 val excluded_test_names = [
-  (* These tests have a helper contract deployed via raw_bytecode with
-     annotated_ast: null. The deployment decoder cannot handle null ASTs.
-     Fix: add a RawDeployment trace type that only carries address +
-     runtime bytecode + ABI, skipping source compilation entirely. *)
+  (* Null-AST raw deployments now decode and execute, but these ABI-decode
+     cases still hit independent ABI argument/strictness limitations in the
+     source contract call path before or around the raw helper interaction. *)
   "test_abi_arg_wrapped_complex_member_head",
   "test_abi_arg_wrapped_dynarray_head",
   "test_abi_decode_child_head_points_to_parent",
@@ -334,13 +337,10 @@ val excluded_test_names = [
   "test_abi_decode_merge_head_and_length",
   "test_abi_decode_nonstrict_head",
   "test_abi_decode_nonstrict_head_oob",
+  (* Raw bytecode blueprint creation remains coordinated with #379. *)
   "test_create_from_blueprint_bad_code_offset",
-  "test_immutables_initialized2",
-  "test_revert_reason_typed",
-  "test_revert_reason_typed_no_variable",
-  "test_side_effects_evaluation",
+  (* Independent semantic mismatch in the currently admitted raw_call tests. *)
   "test_checkable_raw_call",
-  "test_nonreentrant_decorator_for_default",
 
   (* RawCreate now preserves bytecode, constructor args, value, and salt.
      Its eval-order and CREATE2 salt tests are enabled. Running initcode and
@@ -498,6 +498,49 @@ in
   if String.size collapsed = 0 then "empty" else collapsed
 end
 
+val raw_deployment : term decoder =
+  check_trace_type "deployment" $
+  check (field "deployment_type" string)
+        (fn s => s = "raw_bytecode" orelse s = "ir")
+        "deployment_type not raw" $
+  JSONDecode.map (fn (((i,d,(s,m,a,g),(gl,bn,bf,v)),(h,bh)),(e,bc)) =>
+    TypeBase.mk_record (raw_deployment_trace_ty, [
+      ("deployer", s),
+      ("expectedAddress", a),
+      ("expectedSuccess", e),
+      ("value", v),
+      ("timeStamp", m),
+      ("blockNumber", bn),
+      ("blockHashes", h),
+      ("blobHashes", bh),
+      ("blobBaseFee", bf),
+      ("gasLimit", gl),
+      ("gasPrice", g),
+      ("chainId", numSyntax.term_of_int 1),
+      ("initcode", i),
+      ("callData", d),
+      ("expectedRuntimeBytecode", bc)
+    ])) $
+  tuple2 (
+    tuple2 (
+      tuple4 (field "initcode" bytes,
+              field "calldata" $
+                JSONDecode.map (cached_bytes_from_hex o theoptstring)
+                  (nullable string),
+              tuple4 (field "env" $ field "tx" $ field "origin" address,
+                      field "env" $ field "block" $ field "timestamp" numtm,
+                      field "deployed_address" address,
+                      field "env" $ field "tx" $ field "gas_price" numtm),
+              tuple4 (field "env" $ field "tx" $ field "gas" numtm,
+                      field "env" $ field "block" $ field "number" numtm,
+                      field "env" $ field "block" $ field "blob_basefee" numtm,
+                      field "value" numtm)),
+      tuple2 (field "env" $ field "block" $ field "block_hashes" blockHashes,
+              field "env" $ field "tx" $ field "blob_hashes" blobHashes)),
+    tuple2 (field "deployment_succeeded" booltm,
+            field "runtime_bytecode"
+              (JSONDecode.map (from_term_option bytes_ty) $ nullable bytes)))
+
 val deployment : term decoder =
   check_trace_type "deployment" $
   JSONDecode.map (fn (((((srcs_exps_imap,(i,h,bh),(s,m,a,g),(d,bn,bf,v)),e),bc),sl),bp) =>
@@ -552,6 +595,7 @@ val trace : term decoder =
   achoose "trace" [
     JSONDecode.map (curry mk_comb Call_tm) call,
     JSONDecode.map (curry mk_comb Deployment_tm) deployment,
+    JSONDecode.map (curry mk_comb RawDeployment_tm) raw_deployment,
     check_trace_type "clear_transient_storage" $
       succeed ClearTransientStorage_tm,
     JSONDecode.map (fn (a,b) => list_mk_comb(SetBalance_tm, [a,b])) $

@@ -2,6 +2,7 @@
  * Reusable input/setup readiness predicates for checked external entry.
  *
  * TOP-LEVEL:
+ * - deployment_constants_input_tags_agree
  * - deployment_constants_output_typed
  * - checked_deployment_constants_ready
  * - provided_args_typed
@@ -20,6 +21,27 @@ Ancestors
   vyperTypeBindArguments
 
 (* ===== Deployment Constant Readiness ===== *)
+
+(* Every already-present immutable or constant entry has the runtime type tag
+ * obtained from its checked source annotation.  Unlike full immutable
+ * readiness, this pre-constant boundary does not require unevaluated constants
+ * to be present.  Machine well-typedness separately says that each value has
+ * its stored tag. *)
+Definition deployment_constants_input_tags_agree_def:
+  deployment_constants_input_tags_agree tenv addr mods
+      (am:abstract_machine) <=>
+    !src ts vis mut id ty init tv v.
+      MEM (src,ts) mods /\
+      MEM (VariableDecl vis mut id ty init) ts /\
+      (mut = Immutable \/ ?e. mut = Constant e) /\
+      FLOOKUP
+        (get_source_immutables src
+          (case ALOOKUP am.immutables addr of
+           | SOME imms => imms
+           | NONE => []))
+        (string_to_num id) = SOME (tv,v) ==>
+      evaluate_type tenv ty = SOME tv
+End
 
 (* Every declared deployment constant is present in the resulting machine with
  * its evaluated declared type and a value of that type. *)

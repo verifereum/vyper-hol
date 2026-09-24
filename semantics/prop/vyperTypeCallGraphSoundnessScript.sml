@@ -4,6 +4,8 @@
  * TOP-LEVEL:
  * - check_contract_call_graph_acyclic
  * - contract_call_edges_function
+ * - contract_edges_respect_rank
+ * - contract_call_graph_cycle
  *)
 
 Theory vyperTypeCallGraphSoundness
@@ -172,7 +174,87 @@ Proof
   gvs[TC_eq_NRC]
 QED
 
+(* ===== Topological-rank certificate soundness ===== *)
 
+Theorem edges_respect_rank_edge:
+  edges_respect_rank ranks edges /\ call_edge_rel edges caller callee ==>
+  rank_lt ranks caller callee
+Proof
+  rw[edges_respect_rank_def, EVERY_MEM, call_edge_rel_def] >>
+  first_x_assum (qspec_then `(caller,callee)` mp_tac) >>
+  simp[]
+QED
+
+Theorem rank_lt_transitive:
+  transitive (rank_lt ranks)
+Proof
+  rw[relationTheory.transitive_def] >>
+  Cases_on `ALOOKUP ranks x` >>
+  Cases_on `ALOOKUP ranks y` >>
+  Cases_on `ALOOKUP ranks z` >>
+  gvs[rank_lt_def] >>
+  match_mp_tac (DECIDE ``!a b c:num. a < b /\ b < c ==> a < c``) >>
+  simp[]
+QED
+
+Theorem edges_respect_rank_TC:
+  edges_respect_rank ranks edges /\
+  TC (call_edge_rel edges) caller callee ==>
+  rank_lt ranks caller callee
+Proof
+  strip_tac >>
+  qpat_x_assum `TC _ _ _` mp_tac >>
+  qid_spec_tac `callee` >> qid_spec_tac `caller` >>
+  ho_match_mp_tac relationTheory.TC_INDUCT >>
+  metis_tac[edges_respect_rank_edge, rank_lt_transitive,
+            relationTheory.transitive_def]
+QED
+
+Theorem edges_respect_rank_irreflexive:
+  edges_respect_rank ranks edges ==>
+  irreflexive (TC (call_edge_rel edges))
+Proof
+  rw[relationTheory.irreflexive_def] >>
+  strip_tac >>
+  drule_all edges_respect_rank_TC >>
+  Cases_on `ALOOKUP ranks x` >>
+  gvs[rank_lt_def]
+QED
+
+(* ===== Concrete cycle certificate soundness ===== *)
+
+Theorem RTC_then_R_TC_call_graph[local]:
+  RTC R x y /\ R y z ==> TC R x z
+Proof
+  metis_tac[relationTheory.RTC_CASES_TC, relationTheory.TC_RULES]
+QED
+
+Theorem call_path_RTC:
+  call_path edges path /\ path <> [] ==>
+  RTC (call_edge_rel edges) (HD path) (LAST path)
+Proof
+  Induct_on `path` >> simp[call_path_def] >>
+  rpt strip_tac >> Cases_on `path` >> gvs[call_path_def] >>
+  irule (CONJUNCT2 (SPEC_ALL relationTheory.RTC_RULES)) >>
+  qexists_tac `h'` >>
+  simp[call_edge_rel_def]
+QED
+
+Theorem call_graph_cycle_not_irreflexive:
+  call_graph_cycle edges path ==>
+  ~irreflexive (TC (call_edge_rel edges))
+Proof
+  Cases_on `path` >> simp[call_graph_cycle_def] >>
+  strip_tac >>
+  `RTC (call_edge_rel edges) (HD (h::t)) (LAST (h::t))` by
+    (irule call_path_RTC >> simp[]) >>
+  fs[] >>
+  rw[relationTheory.irreflexive_def] >>
+  qexists_tac `h` >>
+  irule RTC_then_R_TC_call_graph >>
+  qexists_tac `LAST (h::t)` >>
+  simp[call_edge_rel_def]
+QED
 
 (* ===== Checker consequence ===== *)
 
@@ -234,6 +316,24 @@ Proof
   rpt strip_tac >>
   drule contract_call_edge_nodes >>
   simp[]
+QED
+
+Theorem contract_edges_respect_rank:
+  edges_respect_rank ranks (contract_call_edges mods) ==>
+  contract_call_graph_acyclic mods
+Proof
+  strip_tac >>
+  simp[contract_call_graph_acyclic_correct] >>
+  metis_tac[edges_respect_rank_irreflexive]
+QED
+
+Theorem contract_call_graph_cycle:
+  call_graph_cycle (contract_call_edges mods) path ==>
+  ~contract_call_graph_acyclic mods
+Proof
+  strip_tac >>
+  simp[contract_call_graph_acyclic_correct] >>
+  metis_tac[call_graph_cycle_not_irreflexive]
 QED
 
 Theorem checked_contract_call_graph_irreflexive:

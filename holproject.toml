@@ -1,5 +1,5 @@
 [holbuild]
-minimum_version = "0.11.2"
+minimum_version = "0.11.3"
 
 [project]
 name = "vyper-hol"
@@ -8,10 +8,16 @@ version = "0.2.3"
 [build]
 tactic_timeout = 2.5
 roots = ["vyperHolScript.sml",
-         "semantics/vyperCheckContractLibTestScript.sml",
+         "semantics/type/vyperCheckContractLibTestScript.sml",
          "frontend/vyperCheckContractFrontendLibTestScript.sml",
          "tests/vyperCheckContractTraceLibTestScript.sml"]
 
+[build.theory_tactic_timeouts]
+"semantics/vyperInterpreterScript.sml" = 5
+"semantics/prop/vyperLogPreservationScript.sml" = 5
+"venom/defs/venomExecSemanticsScript.sml" = 5
+"venom/proofs/execEquivProofsScript.sml" = 5
+
 [dependencies.verifereum]
 git = "https://github.com/verifereum/verifereum.git"
-rev = "0fa9a9129e1efb146f3020a39faf40d14867c6b4"
+rev = "b116b3c46c17381e968d25b81cd81b6ab2b76ab2"

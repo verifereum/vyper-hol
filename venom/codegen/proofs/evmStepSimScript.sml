@@ -1546,7 +1546,7 @@ Resume asm_evm_step_memory_dispatch[sha3_zero]:
       simp[inc_pc_or_jump_def, LET_THM, opcode_def,
            bind_def, get_current_context_def, return_def,
            set_current_context_def, is_call_def] >>
-      irule asm_evm_rel_next_stack_memory >> simp[asm_inst_size_def])
+      irule asm_evm_rel_next_stack >> simp[asm_inst_size_def])
   >> DISJ1_TAC >>
   match_mp_tac (Q.SPEC `OutOfGas` handle_step_single_context |>
     SIMP_RULE (srw_ss()) [vfm_abort_def, exception_distinct]) >>
