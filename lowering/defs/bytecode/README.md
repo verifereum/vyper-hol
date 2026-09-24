@@ -66,9 +66,12 @@ The machine-readable authority is
 `.agent-files/tasks/evidence/TASK_089.ledger.json`, derived from the ten declared
 HOL source files. At the accepted revision it contains 1,485 rows: 506 supported,
 795 partial (with explicit supported/unsupported boundaries), and 184
-unsupported. All 1,301 code-producing rows have a retained fixture witness and
-all 101 fixtures enter through checked `compile_vyper`. Unsupported domains are
-not promoted merely to enlarge the fixture corpus.
+unsupported. The 101 retained fixtures enter through checked `compile_vyper`,
+but the ledger's mechanically assigned witness names require an exercise audit:
+three supported denomination constructors (`MEther`, `GEther`, `TEther`) have
+no fixture, and pinned Python's `AsWeiValue.wei_denoms` does not accept their
+10^24/10^27/10^30 denominations. Do not interpret the raw 1,301-row label count
+as verified exercise coverage until this boundary is resolved.
 
 ## Fixture format
 

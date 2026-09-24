@@ -142,13 +142,16 @@ The matrix should eventually identify exact Python modules, classes, and functio
 The exact boundary is the generated TASK_089 ledger under
 `.agent-files/tasks/evidence/`. At the accepted revision it contains 1,485 rows:
 506 supported, 795 partial with explicit shape/type boundaries, and 184
-unsupported. Every one of the 1,301 code-producing rows has a retained fixture
-witness. The frozen corpus has 101 physical source/oracle pairs and checks 202
-exact byte lists. The retired `spill_join` stress fixture is intentionally absent.
+unsupported. The frozen corpus has 101 physical source/oracle pairs and checks
+202 exact byte lists. The retired `spill_join` stress fixture is intentionally
+absent. Coverage labels are not yet verified exercise witnesses: three
+code-producing HOL denomination constructors (`MEther`, `GEther`, `TEther`)
+remain without a fixture because pinned Python rejects these denominations.
+Further row-by-row witness validation is required before claiming subset closure.
 
-This is finite differential evidence for the declared HOL-supported subset, not
-a universal equivalence theorem and not a claim that partial or unsupported
-ledger domains are implemented. The cached comparison reproduces all 202 byte
+This is finite differential evidence for the 101 tested programs, not
+a universal equivalence theorem or a claim that every HOL-supported row is
+already exercised. The cached comparison reproduces all 202 byte
 lists; the rebuilt parity theories and the proved `collapse_dfs` definition
 have no `Saved CHEAT` tags. This does not assert that unrelated pre-existing
 admissions elsewhere in the repository have been removed. TASK_091's separate
