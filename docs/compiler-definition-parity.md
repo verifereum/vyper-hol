@@ -148,10 +148,11 @@ exact byte lists. The retired `spill_join` stress fixture is intentionally absen
 
 This is finite differential evidence for the declared HOL-supported subset, not
 a universal equivalence theorem and not a claim that partial or unsupported
-ledger domains are implemented. The cached comparison reproduces the bytes,
-but some parity theorems are tagged `CHEAT` by inherited compiler dependencies
-(e.g. the pre-existing `collapse_dfs` termination admission). Consequently
-this is not yet a cheat-free theorem-level acceptance.
+ledger domains are implemented. The cached comparison reproduces all 202 byte
+lists; the rebuilt parity theories and the proved `collapse_dfs` definition
+have no `Saved CHEAT` tags. This does not assert that unrelated pre-existing
+admissions elsewhere in the repository have been removed. TASK_091's separate
+fresh, uncached final acceptance gate has not been run.
 
 ### Checked O1 fixture-path correspondences
 

@@ -23,7 +23,9 @@
 
 Theory simplifyCfgDefs
 Ancestors
-  cfgTransform venomWf venomExecSemantics rich_list
+  cfgTransform venomWf venomExecSemantics rich_list list relation pred_set arithmetic
+Libs
+  Defn TotalDefn pairLib
 
 (* ===== Unreachable Block Removal ===== *)
 
@@ -289,6 +291,15 @@ Proof
   qexists_tac `bb` >> simp[]
 QED
 
+Theorem unvisited_blocks_mono:
+  set old_visited SUBSET set new_visited ==>
+  LENGTH (FILTER (λbb. ¬MEM bb.bb_label new_visited) bbs) <=
+  LENGTH (FILTER (λbb. ¬MEM bb.bb_label old_visited) bbs)
+Proof
+  strip_tac >> irule listTheory.LENGTH_FILTER_LEQ_MONO >>
+  fs[pred_setTheory.SUBSET_DEF] >> metis_tac[]
+QED
+
 Theorem update_succ_phi_labels_length:
   !bbs succs.
     LENGTH (update_succ_phi_labels old_lbl new_lbl bbs succs) = LENGTH bbs
@@ -298,6 +309,20 @@ Proof
   rpt gen_tac >> CASE_TAC >>
   fs[update_succ_phi_labels_def,
      cfgTransformTheory.replace_block_def]
+QED
+
+Theorem chain_merge_shrinks:
+  lookup_block next_lbl func.fn_blocks = SOME next_bb ==>
+  LENGTH (update_succ_phi_labels next_lbl lbl
+    (replace_block lbl (merge_blocks bb next_bb)
+      (remove_block next_lbl func.fn_blocks))
+    (bb_succs (merge_blocks bb next_bb))) < LENGTH func.fn_blocks
+Proof
+  strip_tac >> drule lookup_block_member_label >> strip_tac >>
+  simp[update_succ_phi_labels_length,
+       cfgTransformTheory.replace_block_def] >>
+  irule remove_block_length_less >> simp[listTheory.MEM_MAP] >>
+  metis_tac[]
 QED
 
 Theorem do_merge_jump_shrinks:
@@ -328,17 +353,56 @@ Proof
   metis_tac[do_merge_jump_shrinks, lookup_block_member_label]
 QED
 
+(* Result invariant for the threaded DFS: with no removed blocks the list of
+   blocks is unchanged, and every return retains the caller's visited set. *)
+Definition collapse_progress_def:
+  collapse_progress func visited func' visited' <=>
+    set visited SUBSET set visited' /\
+    LENGTH func'.fn_blocks <= LENGTH func.fn_blocks /\
+    (LENGTH func'.fn_blocks = LENGTH func.fn_blocks ==>
+      func'.fn_blocks = func.fn_blocks)
+End
+
+Theorem collapse_progress_refl:
+  collapse_progress func visited func visited
+Proof
+  simp[collapse_progress_def]
+QED
+
+Theorem collapse_progress_trans:
+  collapse_progress func visited middle middle_visited /\
+  collapse_progress middle middle_visited result result_visited ==>
+  collapse_progress func visited result result_visited
+Proof
+  simp[collapse_progress_def] >>
+  rpt strip_tac >>
+  metis_tac[pred_setTheory.SUBSET_TRANS,
+            arithmeticTheory.LESS_EQ_TRANS, arithmeticTheory.LESS_EQUAL_ANTISYM]
+QED
+
+Theorem collapse_progress_visit:
+  collapse_progress func visited func (lbl::visited)
+Proof
+  simp[collapse_progress_def, pred_setTheory.SUBSET_DEF]
+QED
+
+Theorem collapse_progress_shrink:
+  LENGTH func'.fn_blocks < LENGTH func.fn_blocks ==>
+  collapse_progress func visited func' visited
+Proof
+  simp[collapse_progress_def]
+QED
+
 (* DFS collapse from a block. After a successful merge/bypass, re-process
    the same block (Python recurses on bb after merge). Tracks visited set.
    Returns (updated_fn, updated_label_map, updated_visited).
    collapse_dfs: process a single block
    collapse_dfs_succs: DFS into a list of successor blocks *)
-Definition collapse_dfs_def:
+val collapse_defn = Hol_defn "collapse_dfs" `
   (collapse_dfs func label_map visited lbl =
     case lookup_block lbl func.fn_blocks of
       NONE => (func, label_map, visited)
     | SOME bb =>
-        (* Try chain merge: single successor with single predecessor *)
         case bb_succs bb of
           [next_lbl] =>
             (case lookup_block next_lbl func.fn_blocks of
@@ -347,59 +411,251 @@ Definition collapse_dfs_def:
                    let merged = merge_blocks bb next_bb in
                    let bbs' = replace_block lbl merged
                        (remove_block next_lbl func.fn_blocks) in
-                   (* Immediate successor PHI update: next_lbl → lbl *)
                    let bbs'' = update_succ_phi_labels
                        next_lbl lbl bbs' (bb_succs merged) in
                    let func' = func with fn_blocks := bbs'' in
                    let label_map' = (next_bb.bb_label, lbl) :: label_map in
-                   (* TERMINATION: merge removes next_lbl block,
-                      fn_blocks count decreases *)
                    collapse_dfs func' label_map' visited lbl
                  else
-                   (* No merge — mark visited, DFS into successor *)
                    if MEM lbl visited then (func, label_map, visited)
                    else
                      let visited' = lbl :: visited in
-                     (* TERMINATION: lbl added to visited,
-                        unvisited count decreases *)
                      collapse_dfs func label_map visited' next_lbl
              | NONE =>
                  if MEM lbl visited then (func, label_map, visited)
                  else (func, label_map, lbl :: visited))
         | succs =>
-            (* Try bypass for 2-successor case *)
             let (func', lm', bypassed) =
               try_bypass func label_map bb succs in
             if bypassed then
-              (* TERMINATION: bypass removes a block,
-                 fn_blocks count decreases *)
               collapse_dfs func' lm' visited lbl
             else if MEM lbl visited then (func', lm', visited)
             else
               let visited' = lbl :: visited in
-              (* TERMINATION: lbl added to visited,
-                 unvisited count decreases *)
-              collapse_dfs_succs func' lm' visited' succs) ∧
+              collapse_dfs_succs func' lm' visited' succs) /\
   (collapse_dfs_succs func label_map visited [] =
-    (func, label_map, visited)) ∧
+    (func, label_map, visited)) /\
   (collapse_dfs_succs func label_map visited (s::rest) =
     let (func', lm', vis') = collapse_dfs func label_map visited s in
-    (* TERMINATION: fn_blocks non-increasing, visited non-shrinking,
-       succ list strictly shorter *)
-    collapse_dfs_succs func' lm' vis' rest)
-Termination
-  WF_REL_TAC `inv_image ($< LEX $< LEX $<)
-    (λx. case x of
-       INL (func, lm, vis, lbl) =>
-         (LENGTH func.fn_blocks,
-          LENGTH (FILTER (λbb. ¬MEM bb.bb_label vis) func.fn_blocks),
-          0)
-     | INR (func, lm, vis, succs) =>
-         (LENGTH func.fn_blocks,
-          LENGTH (FILTER (λbb. ¬MEM bb.bb_label vis) func.fn_blocks),
-          LENGTH succs))`
-  >> cheat
-End
+    collapse_dfs_succs func' lm' vis' rest)`;
+
+val collapse_aux_def = DB.fetch "-" "collapse_dfs_UNION_AUX_def";
+val collapse_M = collapse_aux_def |> SPEC_ALL |> concl |> rhs |> rand;
+val sum_ty = collapse_M |> type_of |> dom_rng |> #1 |> dom_rng |> #1;
+val result_ty = collapse_M |> type_of |> dom_rng |> #1 |> dom_rng |> #2;
+val collapse_R = ``inv_image ($< LEX $< LEX ($< : num -> num -> bool))
+  (\(x : ^(ty_antiq sum_ty)).
+    case x of
+      INL (func, lm, vis, lbl) =>
+        (LENGTH func.fn_blocks,
+         LENGTH (FILTER (\bb. ~MEM bb.bb_label vis) func.fn_blocks), 0n)
+    | INR (func, lm, vis, succs) =>
+        (LENGTH func.fn_blocks,
+         LENGTH (FILTER (\bb. ~MEM bb.bb_label vis) func.fn_blocks),
+         SUC (LENGTH succs)))``;
+val collapse_P = ``\(x : ^(ty_antiq sum_ty)) (result : ^(ty_antiq result_ty)).
+  case x of
+    INL (func, _, vis, _) =>
+      collapse_progress func vis (FST result) (SND (SND result))
+  | INR (func, _, vis, _) =>
+      collapse_progress func vis (FST result) (SND (SND result))``;
+Theorem collapse_wf:
+  WF ^collapse_R
+Proof
+  MATCH_MP_TAC WF_inv_image >> MATCH_MP_TAC pairTheory.WF_LEX >> simp[] >>
+  MATCH_MP_TAC pairTheory.WF_LEX >> simp[]
+QED
+
+Theorem progress_filter_mono:
+  collapse_progress func visited result vis' ==>
+  LENGTH (FILTER (\bb. ~MEM bb.bb_label vis') result.fn_blocks) <=
+  LENGTH (FILTER (\bb. ~MEM bb.bb_label visited) func.fn_blocks) \/
+  LENGTH result.fn_blocks < LENGTH func.fn_blocks
+Proof
+  simp[collapse_progress_def] >> strip_tac >>
+  Cases_on `LENGTH result.fn_blocks = LENGTH func.fn_blocks` >>
+  gvs[unvisited_blocks_mono] >> simp[]
+QED
+
+Theorem unvisited_shrink_normalized:
+  lookup_block lbl bbs = SOME bb /\ ~MEM lbl vis ==>
+  LENGTH (FILTER (\b. b.bb_label <> lbl /\ ~MEM b.bb_label vis) bbs) <
+  LENGTH (FILTER (\b. ~MEM b.bb_label vis) bbs)
+Proof
+  strip_tac >>
+  `FILTER (\b. b.bb_label <> lbl /\ ~MEM b.bb_label vis) bbs =
+   FILTER (\b. ~MEM b.bb_label (lbl::vis)) bbs` by simp[] >>
+  pop_assum (fn th => REWRITE_TAC [th]) >>
+  match_mp_tac unvisited_blocks_shrink >> simp[]
+QED
+
+Theorem unvisited_shrink_lookup:
+  lookup_block lbl bbs <> NONE /\ ~MEM lbl vis ==>
+  LENGTH (FILTER (\b. b.bb_label <> lbl /\ ~MEM b.bb_label vis) bbs) <
+  LENGTH (FILTER (\b. ~MEM b.bb_label vis) bbs)
+Proof
+  Cases_on `lookup_block lbl bbs` >>
+  simp[unvisited_shrink_normalized]
+QED
+
+Theorem progress_weaken_visit:
+  collapse_progress func (lbl::visited) result vis' ==>
+  collapse_progress func visited result vis'
+Proof
+  strip_tac >> irule collapse_progress_trans >>
+  qexists_tac `func` >> qexists_tac `lbl::visited` >>
+  simp[collapse_progress_visit]
+QED
+
+Theorem progress_after_shrink:
+  LENGTH middle.fn_blocks < LENGTH func.fn_blocks /\
+  collapse_progress middle visited result vis' ==>
+  collapse_progress func visited result vis'
+Proof
+  strip_tac >> irule collapse_progress_trans >>
+  qexists_tac `middle` >> qexists_tac `visited` >>
+  simp[collapse_progress_shrink]
+QED
+
+Theorem merged_function_shrinks:
+  lookup_block next_lbl func.fn_blocks = SOME next_bb ==>
+  LENGTH ((func with fn_blocks :=
+    update_succ_phi_labels next_lbl lbl
+      (replace_block lbl (merge_blocks bb next_bb)
+        (remove_block next_lbl func.fn_blocks))
+      (bb_succs (merge_blocks bb next_bb))).fn_blocks) <
+  LENGTH func.fn_blocks
+Proof
+  simp[chain_merge_shrinks]
+QED
+
+Theorem collapse_inv:
+  INDUCTIVE_INVARIANT ^collapse_R ^collapse_P ^collapse_M
+Proof
+  simp[INDUCTIVE_INVARIANT_DEF, inv_image_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `x` >> simp[]
+  >| [PairCases_on `x'` >> simp[] >>
+        Cases_on `lookup_block x'3 x'0.fn_blocks` >>
+        simp[collapse_progress_refl] >>
+        Cases_on `bb_succs x` >> simp[]
+        >- (simp[try_bypass_def] >>
+            Cases_on `MEM x'3 x'2` >> simp[collapse_progress_refl] >>
+            first_x_assum
+              (qspec_then `INR (x'0,x'1,x'3::x'2,[])` mp_tac) >>
+            impl_tac >> simp[inv_image_def, pairTheory.LEX_DEF] >>
+            TRY (match_mp_tac unvisited_shrink_lookup >> simp[]) >>
+            TRY (metis_tac[progress_weaken_visit])) >>
+        Cases_on `t` >> simp[collapse_progress_visit]
+        >- (Cases_on `lookup_block h x'0.fn_blocks` >>
+            simp[collapse_progress_refl, collapse_progress_visit]
+            >- (Cases_on `MEM x'3 x'2` >>
+                simp[collapse_progress_refl, collapse_progress_visit]) >>
+            Cases_on `can_merge_blocks x'0 x x'` >>
+            simp[collapse_progress_refl]
+            >- (qmatch_goalsub_abbrev_tac
+                  `collapse_dfs_UNION' (INL (middle,_,_,_))` >>
+                `LENGTH middle.fn_blocks < LENGTH x'0.fn_blocks` by
+                  simp[Abbr`middle`, merged_function_shrinks] >>
+                first_x_assum (qspec_then
+                  `INL (middle,(x'.bb_label,x'3)::x'1,x'2,x'3)` mp_tac) >>
+                impl_tac >> simp[inv_image_def, pairTheory.LEX_DEF] >>
+                strip_tac >> match_mp_tac progress_after_shrink >>
+                simp[]) >>
+            Cases_on `MEM x'3 x'2` >> simp[collapse_progress_refl] >>
+            first_x_assum (qspec_then
+              `INL (x'0,x'1,x'3::x'2,h)` mp_tac) >>
+            impl_tac >> simp[inv_image_def, pairTheory.LEX_DEF] >>
+            TRY (match_mp_tac unvisited_shrink_lookup >> simp[]) >>
+            TRY (metis_tac[progress_weaken_visit])) >>
+        Cases_on `try_bypass x'0 x'1 x (h::h'::t')` >>
+        PairCases_on `r` >> simp[] >>
+        Cases_on `r1` >> simp[]
+        >- (`LENGTH q.fn_blocks < LENGTH x'0.fn_blocks` by
+              (drule_all try_bypass_success_shrinks >> simp[]) >>
+            first_x_assum (qspec_then `INL (q,r0,x'2,x'3)` mp_tac) >>
+            (impl_tac >- (simp[inv_image_def, pairTheory.LEX_DEF])) >>
+            simp[] >> strip_tac >> irule collapse_progress_trans >>
+            qexists_tac `q` >> qexists_tac `x'2` >>
+            simp[collapse_progress_shrink]) >>
+        drule_all try_bypass_failed_unchanged >> strip_tac >> gvs[] >>
+        Cases_on `MEM x'3 x'2` >> simp[collapse_progress_refl] >>
+        first_x_assum
+          (qspec_then `INR (q,r0,x'3::x'2,h::h'::t')` mp_tac) >>
+        impl_tac >> simp[inv_image_def, pairTheory.LEX_DEF] >>
+        TRY (match_mp_tac unvisited_shrink_lookup >> simp[]) >>
+        TRY (metis_tac[progress_weaken_visit]),
+      PairCases_on `y` >> simp[] >>
+        Cases_on `y3` >> simp[collapse_progress_refl] >>
+        Cases_on `collapse_dfs_UNION' (INL (y0,y1,y2,h))` >>
+        PairCases_on `r` >> simp[] >>
+        first_assum (qspec_then `INL (y0,y1,y2,h)` mp_tac) >>
+        (impl_tac >- simp[inv_image_def, pairTheory.LEX_DEF]) >>
+        simp[] >> strip_tac >>
+        first_x_assum (qspec_then `INR (q,r0,r1,t)` mp_tac) >>
+        (impl_tac >- (drule progress_filter_mono >>
+          simp[inv_image_def, pairTheory.LEX_DEF] >>
+          strip_tac >> fs[collapse_progress_def] >> decide_tac)) >>
+        simp[] >> strip_tac >>
+        irule collapse_progress_trans >>
+        qexists_tac `q` >> qexists_tac `r1` >> simp[]]
+QED
+
+val collapse_mono = SIMP_RULE (srw_ss()) []
+  (REWRITE_RULE [GSYM collapse_aux_def]
+    (MATCH_MP INDUCTIVE_INVARIANT_WFREC
+      (CONJ collapse_wf collapse_inv)));
+
+Theorem collapse_mono_inl:
+  !func lm vis lbl result lm' vis'.
+    (result,lm',vis') =
+      collapse_dfs_UNION_aux ^collapse_R (INL (func,lm,vis,lbl)) ==>
+    collapse_progress func vis result vis'
+Proof
+  rpt strip_tac >>
+  mp_tac (Q.SPEC `INL (func,lm,vis,lbl)` collapse_mono) >>
+  pop_assum (fn th => REWRITE_TAC [GSYM th]) >> simp[]
+QED
+
+val (collapse_eqs, collapse_ind) =
+  Defn.tprove(collapse_defn,
+    EXISTS_TAC collapse_R >> conj_tac >- ACCEPT_TAC collapse_wf >>
+    rpt conj_tac
+    >- (rpt strip_tac >>
+        `collapse_progress func visited func' vis'` by
+          (mp_tac (Q.SPECL [`func`, `label_map`, `visited`, `s`,
+              `func'`, `lm'`, `vis'`] collapse_mono_inl) >>
+           simp[]) >>
+        drule progress_filter_mono >>
+        simp[inv_image_def, pairTheory.LEX_DEF] >>
+        strip_tac >> fs[collapse_progress_def] >> decide_tac)
+    >- (rpt strip_tac >> gvs[] >>
+        simp[inv_image_def, pairTheory.LEX_DEF] >>
+        match_mp_tac unvisited_shrink_lookup >> simp[])
+    >- (rpt strip_tac >> gvs[try_bypass_def] >>
+        simp[inv_image_def, pairTheory.LEX_DEF] >>
+        match_mp_tac unvisited_shrink_lookup >> simp[])
+    >- (rpt strip_tac >> gvs[try_bypass_def])
+    >- (rpt strip_tac >> gvs[] >>
+        drule_all merged_function_shrinks >>
+        simp[inv_image_def, pairTheory.LEX_DEF])
+    >- (rpt strip_tac >> gvs[] >>
+        qpat_x_assum `(_,_,F) = try_bypass _ _ _ _`
+          (fn th => assume_tac (SYM th)) >>
+        drule_all try_bypass_failed_unchanged >> strip_tac >> gvs[] >>
+        simp[inv_image_def, pairTheory.LEX_DEF] >>
+        match_mp_tac unvisited_shrink_lookup >> simp[])
+    >- (rpt strip_tac >> gvs[] >>
+        qpat_x_assum `(_,_,T) = try_bypass _ _ _ _`
+          (fn th => assume_tac (SYM th)) >>
+        drule_all try_bypass_success_shrinks >>
+        simp[inv_image_def, pairTheory.LEX_DEF])
+    >> rpt strip_tac >>
+       simp[inv_image_def, pairTheory.LEX_DEF] >>
+       match_mp_tac unvisited_shrink_lookup >> simp[]);
+
+Theorem collapse_dfs_def[compute] = collapse_eqs
+Theorem collapse_dfs_ind = collapse_ind
 
 (* ===== Full Pass ===== *)
 

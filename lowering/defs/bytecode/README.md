@@ -56,9 +56,9 @@ lowering/defs/bytecode/python-o1-bytecode-fixtures --compare-hol \
 All 101 retained fixtures have an exact checked theorem; together they check 202
 byte lists (deployment and runtime). Any byte difference or checked-compiler
 `NONE` result fails. No HOL-generated expected output or implementation-derived
-fallback is used. Existing upstream admitted dependencies can tag these concrete
-comparison theorems `CHEAT`; matching byte evaluations are not yet a cheat-free
-proof acceptance.
+fallback is used. The current cached comparison and parity-theory build logs
+contain no `Saved CHEAT` tags. This is finite fixture evidence, not a universal
+compiler-equivalence theorem or a claim about unrelated existing proof debt.
 
 ## Supported-subset boundary
 
