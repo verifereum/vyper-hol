@@ -74,18 +74,7 @@ UV_PYTHON_INSTALL_DIR="$stage/python" \
 env -u PYTHONPATH -u PYTHONHOME -u PYTHONSTARTUP \
   "$venv/bin/python" -I "$script_dir/python_o1_bytecode_oracle.py" \
   --expected-commit "$pin" --expected-python 3.11.11 --generator-uv 0.10.11 \
-  --expected-install-root "$venv" --repo-root "$repo_dir" --sources "$sources" \
-  --hol-programs \
-    "$script_dir/eval/evalCompilerScript.sml" \
-    "$script_dir/eval/evalCompilerSubsetStateScript.sml" \
-    "$script_dir/eval/evalCompilerSubsetAbiExternalScript.sml" \
-    "$script_dir/eval/evalCompilerSubsetAbiEventsScript.sml" \
-    "$script_dir/eval/evalCompilerSubsetAbiInternalCallsScript.sml" \
-    "$script_dir/eval/evalCompilerSubsetAbiExternalCallsScript.sml" \
-    "$script_dir/eval/evalCompilerSubsetAbiBuiltinsScript.sml" \
-    "$script_dir/eval/evalCompilerSubsetControlDeployScript.sml" \
-    "$script_dir/eval/evalCompilerSubsetScalarsScript.sml" \
-    "$script_dir/eval/evalCompilerSubsetBuiltinsScript.sml" \
+  --expected-install-root "$venv" --sources "$sources" \
   --output "$generated"
 
 source_count=$(find "$sources" -maxdepth 1 -type f -name '*.vy' | wc -l | tr -d ' ')

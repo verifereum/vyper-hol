@@ -615,24 +615,9 @@
       "source_sha256": "7f8b199457c0b36a94e23cbb68e502abbf38591b02dbcf2ea7b6b01bf6cc2f48"
     }
   },
-  "hol_source_correspondence": {
-    "files": {
-      "lowering/defs/bytecode/eval/evalCompilerScript.sml": "896f0696891c57239fd0fdb9afbfeea163d66ff3f237bdd45d68c87bc7df94b2",
-      "lowering/defs/bytecode/eval/evalCompilerSubsetAbiBuiltinsScript.sml": "a6ddaa92e50679e919c73a2534f46ecbc9044622b23d06584d9b82a69c6f1058",
-      "lowering/defs/bytecode/eval/evalCompilerSubsetAbiEventsScript.sml": "afffab8e459c536b94baad1262246b03ddf37b49649381b02db7da8003c4a42f",
-      "lowering/defs/bytecode/eval/evalCompilerSubsetAbiExternalCallsScript.sml": "7ac718f2d2133806288d4eb83faa1cd9a1be790f8a1894b509ce07a312ed7623",
-      "lowering/defs/bytecode/eval/evalCompilerSubsetAbiExternalScript.sml": "cf98d620d6aeba4762966285073af30ced3eaca8e95f699b8758f161d53c2c51",
-      "lowering/defs/bytecode/eval/evalCompilerSubsetAbiInternalCallsScript.sml": "40aca0a7ab7c852349ff31d6feaf124ddda2f7022981491b4f52e512ca1498e0",
-      "lowering/defs/bytecode/eval/evalCompilerSubsetBuiltinsScript.sml": "09277198ff6c1f902b0f8baf3605f4f8ed9f90551f263cee651f1effa3a5dc34",
-      "lowering/defs/bytecode/eval/evalCompilerSubsetControlDeployScript.sml": "01128558b5c9a8baf6f2323b7f6bc676e1d481686bd16b33addcb2d421b45b85",
-      "lowering/defs/bytecode/eval/evalCompilerSubsetScalarsScript.sml": "462ea68a59c6016ca0b516dd6866829c5797d184f4fdadb448985cd8008651bb",
-      "lowering/defs/bytecode/eval/evalCompilerSubsetStateScript.sml": "d34fb8ab4c75721ac9b69e4fce90871aa708eaae10c2694de0f5ebcda06b9dc6"
-    },
-    "note": "Audit anchors only; HOL is not an input to Python compilation."
-  },
   "producer": "pinned Python Vyper",
   "python_version": "3.11.11",
-  "schema_version": 1,
+  "schema_version": 2,
   "settings": {
     "bytecode_metadata": false,
     "evm_version": "prague",

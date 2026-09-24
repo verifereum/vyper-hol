@@ -13,6 +13,11 @@ HOL-supported-subset corpus. It includes the original 23-fixture milestone and
 - `python-o1-bytecode-fixtures` reproduces it and optionally runs the HOL parity
   theorems.
 
+The generated provenance records the pinned Python compiler, its dependencies,
+the Vyper fixture source hashes, compilation settings, and output hashes. It
+does not hash HOL scripts: they are not Python compiler inputs, and their
+bytecode parity is checked separately by the HOL theorems.
+
 For a public summary of what the fixtures test and what remains unverified,
 see [`docs/bytecode-fixture-coverage.md`](../../../docs/bytecode-fixture-coverage.md).
 
