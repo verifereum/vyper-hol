@@ -14,6 +14,9 @@ stress case is retired and is not part of the corpus.
 - `python-o1-bytecode-fixtures` reproduces it and optionally runs the HOL parity
   theorems.
 
+For a public summary of what the fixtures test and what remains unverified,
+see [`docs/bytecode-fixture-coverage.md`](../../../docs/bytecode-fixture-coverage.md).
+
 The oracle is generated with the exact revision in `../../../VYPER_PIN`, Python
 3.11.11, Prague, experimental codegen, `OptimizationLevel.NONE` (which uses the
 same `PASSES_O1` Venom passes at this revision), no final assembly optimization,

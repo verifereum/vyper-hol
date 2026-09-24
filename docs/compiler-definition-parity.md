@@ -139,6 +139,9 @@ The matrix should eventually identify exact Python modules, classes, and functio
 
 ### Finite supported-subset acceptance
 
+For a concise tested-versus-untested summary, see
+[bytecode-fixture-coverage.md](bytecode-fixture-coverage.md).
+
 The HOL classification is the generated TASK_089 ledger under
 `.agent-files/tasks/evidence/`: 1,485 rows (506 supported, 795 partial with
 explicit shape/type boundaries, 184 unsupported). The frozen corpus has 101
