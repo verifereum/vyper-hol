@@ -79,7 +79,7 @@ val () = computeLib.upd_compset
 
 Definition assert_reason_runtime_pipeline_def:
   assert_reason_runtime_pipeline tops =
-    case resolve_o1_policy (o1_policy prague_capabilities) of
+    case resolve_o1_policy (o1_policy all_capabilities) of
       NONE => NONE
     | SOME rpolicy =>
         case lower_vyper_runtime_unit tops rpolicy of
@@ -101,7 +101,7 @@ End
 
 Definition assert_reason_deploy_compile_def:
   assert_reason_deploy_compile tops runtime =
-    case resolve_o1_policy (o1_policy prague_capabilities) of
+    case resolve_o1_policy (o1_policy all_capabilities) of
       NONE => NONE
     | SOME rpolicy =>
         case lower_vyper_deploy_unit tops rpolicy runtime of
@@ -336,7 +336,7 @@ Proof
 QED
 
 Theorem assert_reason_compile_staged:
-  compile_vyper (K SOME) (o1_policy prague_capabilities) tops =
+  compile_vyper (K SOME) (o1_policy all_capabilities) tops =
     case assert_reason_runtime_compile tops of
       NONE => NONE
     | SOME runtime =>
@@ -352,7 +352,7 @@ Proof
 QED
 
 Theorem assert_reason_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     assert_reason_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "assert_reason.hex")
 Proof

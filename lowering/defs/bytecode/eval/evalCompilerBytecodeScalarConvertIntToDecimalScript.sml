@@ -43,7 +43,7 @@ val () = Globals.max_print_depth := 20
 
 Definition scalar_convert_int_to_decimal_runtime_pipeline_def:
   scalar_convert_int_to_decimal_runtime_pipeline tops =
-    case resolve_o1_policy (o1_policy prague_capabilities) of
+    case resolve_o1_policy (o1_policy all_capabilities) of
       NONE => NONE
     | SOME rpolicy =>
         case lower_vyper_runtime_unit tops rpolicy of
@@ -56,7 +56,7 @@ End
 
 val scalar_convert_int_to_decimal_policy_eval = save_thm
   ("scalar_convert_int_to_decimal_policy_eval",
-   EVAL ``resolve_o1_policy (o1_policy prague_capabilities)``)
+   EVAL ``resolve_o1_policy (o1_policy all_capabilities)``)
 Theorem scalar_convert_int_to_decimal_policy_computed: T
 Proof
   simp[]
@@ -909,7 +909,7 @@ QED
 
 Definition scalar_convert_int_to_decimal_deploy_compile_def:
   scalar_convert_int_to_decimal_deploy_compile tops runtime =
-    case resolve_o1_policy (o1_policy prague_capabilities) of
+    case resolve_o1_policy (o1_policy all_capabilities) of
       NONE => NONE
     | SOME rpolicy =>
         case lower_vyper_deploy_unit tops rpolicy runtime of
@@ -933,7 +933,7 @@ Proof
 QED
 
 Theorem scalar_convert_int_to_decimal_compile_staged:
-  compile_vyper (K SOME) (o1_policy prague_capabilities) tops =
+  compile_vyper (K SOME) (o1_policy all_capabilities) tops =
     case scalar_convert_int_to_decimal_runtime_compile tops of
       NONE => NONE
     | SOME runtime =>
@@ -949,7 +949,7 @@ Proof
 QED
 
 Theorem scalar_convert_int_to_decimal_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_convert_int_to_decimal_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes
       "scalar_convert_int_to_decimal.hex")

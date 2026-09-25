@@ -15,7 +15,7 @@ val () = Globals.max_print_depth := 20
 
 val external_arrays_compile_eval = save_thm
   ("external_arrays_compile_eval",
-   EVAL ``compile_vyper (K SOME) (o1_policy prague_capabilities)
+   EVAL ``compile_vyper (K SOME) (o1_policy all_capabilities)
       task090_external_arrays_program``)
 val external_arrays_oracle_eq = EQT_ELIM (EVAL (mk_eq
   (rhs (concl external_arrays_compile_eval),

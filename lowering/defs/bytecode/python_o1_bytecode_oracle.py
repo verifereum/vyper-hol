@@ -12,7 +12,14 @@ from pathlib import Path
 
 import vyper
 from vyper.compiler.settings import OptimizationLevel, Settings
+from vyper.evm.opcodes import EVM_VERSIONS
 from vyper.venom import OPTIMIZATION_PASSES
+
+# Newest EVM version the pinned Vyper accepts. HOL's EVM semantics
+# (Verifereum) model Osaka, but the compiled code uses no Osaka-only opcode
+# or precompile, so Prague-compiled bytes are the oracle until Vyper supports
+# Osaka.
+ORACLE_EVM_VERSION = "prague"
 
 
 def parse_args() -> argparse.Namespace:
@@ -80,13 +87,19 @@ def main() -> None:
     ):
         raise RuntimeError("pinned Vyper NONE and O1 Venom pipelines differ")
 
+    if max(EVM_VERSIONS, key=EVM_VERSIONS.__getitem__) != ORACLE_EVM_VERSION:
+        raise RuntimeError(
+            f"pinned Vyper supports EVM versions newer than {ORACLE_EVM_VERSION!r}; "
+            "switch ORACLE_EVM_VERSION (Osaka once available) and regenerate"
+        )
+
     args.output.mkdir(parents=True, exist_ok=True)
     settings = Settings(
         # At the pinned revision NONE and O1 run the same PASSES_O1 Venom
         # pipeline; NONE alone disables the final assembly optimizer. This
         # matches HOL's o1_policy combined with identity finalizer K SOME.
         optimize=OptimizationLevel.NONE,
-        evm_version="prague",
+        evm_version=ORACLE_EVM_VERSION,
         experimental_codegen=True,
     )
     fixtures = {}
@@ -130,7 +143,7 @@ def main() -> None:
             "optimization_level": "NONE",
             "venom_ir_pipeline": "O1",
             "final_assembly_optimization": False,
-            "evm_version": "prague",
+            "evm_version": ORACLE_EVM_VERSION,
             "bytecode_metadata": False,
             "outputs": ["bytecode", "bytecode_runtime"],
         },

@@ -12,7 +12,7 @@ val () = computeLib.upd_compset (computeLib.add_thms [i2w_pos])
 val () = Globals.max_print_depth := 20
 
 Theorem assert_bare_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     assert_bare_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "assert_bare.hex")
 Proof

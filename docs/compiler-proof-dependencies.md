@@ -67,6 +67,12 @@ Expected boundary facts include:
 - function reachability/ID consistency;
 - compiler settings and EVM-version validity.
 
+The target semantics are Verifereum's EVM, which models Osaka; the compiler
+target is `all_capabilities`. Under Osaka (EIP-7825) a transaction's gas
+limit is at most 2^24, so the end-to-end theorem's `gasLimit >= gas_needed`
+hypothesis cannot hold when `gas_needed` exceeds that cap. The theorem stays
+sound but says nothing about such calls.
+
 **Producer:** formal frontend work or theorem caller.
 
 **Consumers:** lowering correctness and top-level e2e theorem.

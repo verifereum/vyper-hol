@@ -3,7 +3,8 @@
  *
  * This theory keeps the generic compiler and semantic obligations explicit,
  * while exposing the two successful phases of compile_vyper_with and the
- * Prague O1 specialization of the generic end-to-end theorem.
+ * O1 specialization (all target capabilities) of the generic end-to-end
+ * theorem.
  *)
 
 Theory configuredE2ECorrectness
@@ -62,12 +63,12 @@ Proof
   >> first_x_assum irule >> simp[]
 QED
 
-(* Prague O1 is obtained solely by instantiating the generic end-to-end
-   correctness theorem; all semantic obligations remain explicit. *)
+(* The O1 specialization is obtained solely by instantiating the generic
+   end-to-end correctness theorem; all semantic obligations remain explicit. *)
 Theorem e2e_vyper_to_evm_O1:
   !tops finalizer rpolicy unit out prog deploy_bc runtime_bc
    cp name i r fn off Inv cenv am tx tenv ret ctxt rb rest es vs R_ok R_term.
-    resolve_o1_policy (o1_policy prague_capabilities) = SOME rpolicy /\
+    resolve_o1_policy (o1_policy all_capabilities) = SOME rpolicy /\
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     (\rpolicy unit.
        run_venom_pipeline (K T) (K T) (K T)
@@ -80,7 +81,7 @@ Theorem e2e_vyper_to_evm_O1:
       (\rpolicy unit.
          run_venom_pipeline (K T) (K T) (K T)
            rpolicy o1_pipeline_spec unit)
-      finalizer (o1_policy prague_capabilities) tops =
+      finalizer (o1_policy all_capabilities) tops =
         SOME (deploy_bc, runtime_bc) /\
     source_deployment_rel tops am tx cenv /\
     source_unit_execution_correct tenv cenv am tx ret unit vs /\

@@ -12,7 +12,7 @@ val () = computeLib.upd_compset (computeLib.add_thms [i2w_pos])
 val () = Globals.max_print_depth := 20
 
 Theorem scalar_widths_uint_low_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_widths_uint_low_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "scalar_widths_uint_low.hex")
 Proof
@@ -20,7 +20,7 @@ Proof
 QED
 
 Theorem scalar_widths_uint_high_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_widths_uint_high_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "scalar_widths_uint_high.hex")
 Proof
@@ -28,7 +28,7 @@ Proof
 QED
 
 Theorem scalar_widths_int_low_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_widths_int_low_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "scalar_widths_int_low.hex")
 Proof
@@ -36,7 +36,7 @@ Proof
 QED
 
 Theorem scalar_widths_int_high_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_widths_int_high_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "scalar_widths_int_high.hex")
 Proof
