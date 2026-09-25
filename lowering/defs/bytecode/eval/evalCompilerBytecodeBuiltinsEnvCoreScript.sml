@@ -14,7 +14,7 @@ val () = computeLib.upd_compset (computeLib.add_thms [i2w_pos])
 val () = Globals.max_print_depth := 20
 
 Theorem env_message_core_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     env_message_core_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "env_message_core.hex")
 Proof
@@ -22,7 +22,7 @@ Proof
 QED
 
 Theorem env_tx_chain_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     env_tx_chain_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "env_tx_chain.hex")
 Proof

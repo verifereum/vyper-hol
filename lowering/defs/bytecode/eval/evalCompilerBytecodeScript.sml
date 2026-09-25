@@ -22,7 +22,7 @@ val () = computeLib.upd_compset (computeLib.add_thms [i2w_pos])
 val () = Globals.max_print_depth := 20
 
 Theorem empty_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     ([] : toplevel list) =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "empty.hex")
 Proof
@@ -30,7 +30,7 @@ Proof
 QED
 
 Theorem noop_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     noop_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "noop.hex")
 Proof
@@ -38,7 +38,7 @@ Proof
 QED
 
 Theorem return_uint_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     return_uint_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "return_uint.hex")
 Proof
@@ -46,7 +46,7 @@ Proof
 QED
 
 Theorem return_arg_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     return_arg_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "return_arg.hex")
 Proof
@@ -54,7 +54,7 @@ Proof
 QED
 
 Theorem local_uint_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     local_uint_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "local_uint.hex")
 Proof
@@ -62,7 +62,7 @@ Proof
 QED
 
 Theorem add_arg_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     add_arg_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "add_arg.hex")
 Proof
@@ -70,7 +70,7 @@ Proof
 QED
 
 Theorem two_external_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     two_external_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "two_external.hex")
 Proof
@@ -78,7 +78,7 @@ Proof
 QED
 
 Theorem storage_read_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     storage_read_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "storage_read.hex")
 Proof
@@ -86,7 +86,7 @@ Proof
 QED
 
 Theorem storage_write_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     storage_write_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "storage_write.hex")
 Proof
@@ -94,7 +94,7 @@ Proof
 QED
 
 Theorem deploy_storage_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     deploy_storage_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "deploy_storage.hex")
 Proof
@@ -102,7 +102,7 @@ Proof
 QED
 
 Theorem event_log_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     event_log_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "event_log.hex")
 Proof
@@ -110,7 +110,7 @@ Proof
 QED
 
 Theorem indexed_event_log_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     indexed_event_log_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "indexed_event_log.hex")
 Proof

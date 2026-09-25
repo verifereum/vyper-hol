@@ -79,7 +79,7 @@ val () = computeLib.upd_compset
 
 Definition external_dynamic_runtime_pipeline_def:
   external_dynamic_runtime_pipeline tops =
-    case resolve_o1_policy (o1_policy prague_capabilities) of
+    case resolve_o1_policy (o1_policy all_capabilities) of
       NONE => NONE
     | SOME rpolicy =>
         case lower_vyper_runtime_unit tops rpolicy of
@@ -101,7 +101,7 @@ End
 
 Definition external_dynamic_deploy_compile_def:
   external_dynamic_deploy_compile tops runtime =
-    case resolve_o1_policy (o1_policy prague_capabilities) of
+    case resolve_o1_policy (o1_policy all_capabilities) of
       NONE => NONE
     | SOME rpolicy =>
         case lower_vyper_deploy_unit tops rpolicy runtime of

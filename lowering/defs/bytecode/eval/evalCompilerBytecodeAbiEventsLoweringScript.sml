@@ -76,7 +76,7 @@ val () = computeLib.upd_compset
 
 val mixed_event_types_policy_eval = save_thm
   ("mixed_event_types_policy_eval",
-   EVAL ``resolve_o1_policy (o1_policy prague_capabilities)``)
+   EVAL ``resolve_o1_policy (o1_policy all_capabilities)``)
 val mixed_event_types_rpolicy = optionSyntax.dest_some
   (rhs (concl mixed_event_types_policy_eval))
 val mixed_event_types_runtime_unit_eval = save_thm

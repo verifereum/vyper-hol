@@ -23,7 +23,7 @@ val () = computeLib.upd_compset
 val () = Globals.max_print_depth := 20
 
 val internal_tuple_call_compile_term =
-  ``compile_vyper (K SOME) (o1_policy prague_capabilities)
+  ``compile_vyper (K SOME) (o1_policy all_capabilities)
       task090_internal_tuple_call_program``
 val internal_tuple_call_compile_step0 = SIMP_CONV pure_ss
   [compileVyperTheory.compile_vyper_def,
@@ -52,7 +52,7 @@ val internal_tuple_call_matches_python_oracle = save_thm
      internal_tuple_call_oracle_eq)
 
 Theorem internal_struct_call_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     task090_internal_struct_call_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "internal_struct_call.hex")
 Proof
@@ -172,7 +172,7 @@ val internal_bytes_call_finalize_deploy_eval = save_thm
    EVAL ``finalize_codegen (K SOME) ^internal_bytes_call_rpolicy
        ^internal_bytes_call_final_deploy_unit``)
 val internal_bytes_call_compile_term =
-  ``compile_vyper (K SOME) (o1_policy prague_capabilities)
+  ``compile_vyper (K SOME) (o1_policy all_capabilities)
       task090_internal_bytes_call_program``
 val internal_bytes_call_compile_step0 = SIMP_CONV pure_ss
   [compileVyperTheory.compile_vyper_def,

@@ -13,7 +13,7 @@ val () = Globals.max_print_depth := 20
 
 val internal_tuple_call_policy_eval = save_thm
   ("internal_tuple_call_policy_eval",
-   EVAL ``resolve_o1_policy (o1_policy prague_capabilities)``)
+   EVAL ``resolve_o1_policy (o1_policy all_capabilities)``)
 val internal_tuple_call_rpolicy = optionSyntax.dest_some
   (rhs (concl internal_tuple_call_policy_eval))
 val internal_tuple_call_tops = ``task090_internal_tuple_call_program``

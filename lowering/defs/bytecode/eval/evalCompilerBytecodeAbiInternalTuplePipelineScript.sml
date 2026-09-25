@@ -13,7 +13,7 @@ val () = Globals.max_print_depth := 20
 
 Definition internal_tuple_call_runtime_pipeline_def:
   internal_tuple_call_runtime_pipeline tops =
-    case resolve_o1_policy (o1_policy prague_capabilities) of
+    case resolve_o1_policy (o1_policy all_capabilities) of
       NONE => NONE
     | SOME rpolicy =>
         case lower_vyper_runtime_unit tops rpolicy of

@@ -23,8 +23,12 @@ Definition target_capabilities_wf_def:
     (caps CapBlobOps ==> caps CapPush0)
 End
 
-Definition prague_capabilities_def:
-  prague_capabilities = (K T : target_capabilities)
+(* Every capability enabled. All four capabilities are Cancun-era features,
+   so this target is fork-neutral from Cancun onward. The EVM semantics used
+   by the correctness proofs (Verifereum) model Osaka; Osaka's only new opcode
+   (CLZ) is not in Venom or the assembler table and has no capability yet. *)
+Definition all_capabilities_def:
+  all_capabilities = (K T : target_capabilities)
 End
 
 Datatype:
@@ -35,8 +39,8 @@ Datatype:
   compiler_policy = <| cpol_target : target_capabilities |>
 End
 
-Theorem prague_capabilities_wf:
-  target_capabilities_wf prague_capabilities
+Theorem all_capabilities_wf:
+  target_capabilities_wf all_capabilities
 Proof
-  simp [target_capabilities_wf_def, prague_capabilities_def]
+  simp [target_capabilities_wf_def, all_capabilities_def]
 QED

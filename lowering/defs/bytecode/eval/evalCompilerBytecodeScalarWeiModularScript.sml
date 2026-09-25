@@ -12,7 +12,7 @@ val () = computeLib.upd_compset (computeLib.add_thms [i2w_pos])
 val () = Globals.max_print_depth := 20
 
 Theorem scalar_wei_small_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_wei_small_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "scalar_wei_small.hex")
 Proof
@@ -20,7 +20,7 @@ Proof
 QED
 
 Theorem scalar_wei_large_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_wei_large_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "scalar_wei_large.hex")
 Proof
@@ -29,7 +29,7 @@ QED
 
 val scalar_modular_policy_eval = save_thm
   ("scalar_modular_policy_eval",
-   EVAL ``resolve_o1_policy (o1_policy prague_capabilities)``)
+   EVAL ``resolve_o1_policy (o1_policy all_capabilities)``)
 val scalar_modular_rpolicy = optionSyntax.dest_some
   (rhs (concl scalar_modular_policy_eval))
 
@@ -569,7 +569,7 @@ val scalar_modular_compile_step0 = SIMP_CONV pure_ss
    scalar_modular_lower_deploy_eval, scalar_modular_deploy_pipeline_eval,
    scalar_modular_finalize_deploy_eval, LET_THM, pairTheory.FST,
    pairTheory.SND, pairTheory.UNCURRY_DEF, pairTheory.pair_case_def]
-  ``compile_vyper (K SOME) (o1_policy prague_capabilities)
+  ``compile_vyper (K SOME) (o1_policy all_capabilities)
       scalar_modular_program``
 val scalar_modular_compile_eval = TRANS scalar_modular_compile_step0
   (EVAL (rhs (concl scalar_modular_compile_step0)))

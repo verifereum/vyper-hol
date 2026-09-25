@@ -12,21 +12,21 @@ val () = computeLib.upd_compset (computeLib.add_thms [i2w_pos])
 val () = Globals.max_print_depth := 20
 
 Theorem scalar_bits_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities) scalar_bits_program =
+  compile_vyper (K SOME) (o1_policy all_capabilities) scalar_bits_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "scalar_bits.hex")
 Proof
   EVAL_TAC
 QED
 
 Theorem scalar_shifts_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities) scalar_shifts_program =
+  compile_vyper (K SOME) (o1_policy all_capabilities) scalar_shifts_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "scalar_shifts.hex")
 Proof
   EVAL_TAC
 QED
 
 Theorem scalar_compare_eq_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_compare_eq_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "scalar_compare_eq.hex")
 Proof
@@ -34,7 +34,7 @@ Proof
 QED
 
 Theorem scalar_compare_order_uint_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_compare_order_uint_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "scalar_compare_order_uint.hex")
 Proof
@@ -42,7 +42,7 @@ Proof
 QED
 
 Theorem scalar_compare_order_int_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_compare_order_int_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "scalar_compare_order_int.hex")
 Proof
@@ -50,7 +50,7 @@ Proof
 QED
 
 Theorem scalar_minmax_uint_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_minmax_uint_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "scalar_minmax_uint.hex")
 Proof
@@ -58,7 +58,7 @@ Proof
 QED
 
 Theorem scalar_minmax_int_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_minmax_int_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "scalar_minmax_int.hex")
 Proof
@@ -73,7 +73,7 @@ QED
 val () = computeLib.upd_compset
   (computeLib.add_thms [scalar_unary_i2w_neg_num])
 val scalar_unary_policy_eval = EVAL
-  ``resolve_o1_policy (o1_policy prague_capabilities)``
+  ``resolve_o1_policy (o1_policy all_capabilities)``
 val scalar_unary_rpolicy = optionSyntax.dest_some
   (rhs (concl scalar_unary_policy_eval))
 val scalar_unary_lower_runtime_eval = save_thm
@@ -132,7 +132,7 @@ val scalar_unary_compile_step0 = SIMP_CONV pure_ss
    scalar_unary_lower_deploy_eval, scalar_unary_deploy_pipeline_eval,
    scalar_unary_finalize_deploy_eval, LET_THM, pairTheory.FST,
    pairTheory.SND, pairTheory.UNCURRY_DEF, pairTheory.pair_case_def]
-  ``compile_vyper (K SOME) (o1_policy prague_capabilities)
+  ``compile_vyper (K SOME) (o1_policy all_capabilities)
       scalar_unary_program``
 val scalar_unary_compile_eval = TRANS scalar_unary_compile_step0
   (EVAL (rhs (concl scalar_unary_compile_step0)))

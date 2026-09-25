@@ -322,7 +322,7 @@ Proof
 QED
 
 Theorem scalar_literals_bytes_compile_staged:
-  compile_vyper (K SOME) (o1_policy prague_capabilities) tops =
+  compile_vyper (K SOME) (o1_policy all_capabilities) tops =
     case scalar_literals_bytes_runtime_compile tops of
       NONE => NONE
     | SOME runtime =>
@@ -338,7 +338,7 @@ Proof
 QED
 
 Theorem scalar_literals_bytes_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_literals_bytes_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "scalar_literals_bytes.hex")
 Proof

@@ -30,7 +30,7 @@ val () = computeLib.upd_compset
   (computeLib.add_thms [word_of_bytes_be_bytes32])
 
 Theorem scalar_literals_bool_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_literals_bool_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "scalar_literals_bool.hex")
 Proof
@@ -38,7 +38,7 @@ Proof
 QED
 
 Theorem scalar_literals_int_small_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_literals_int_small_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "scalar_literals_int_small.hex")
 Proof
@@ -46,7 +46,7 @@ Proof
 QED
 
 Theorem scalar_literals_int_wide_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_literals_int_wide_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "scalar_literals_int_wide.hex")
 Proof
@@ -54,7 +54,7 @@ Proof
 QED
 
 Theorem scalar_literal_decimal_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_literal_decimal_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "scalar_literal_decimal.hex")
 Proof

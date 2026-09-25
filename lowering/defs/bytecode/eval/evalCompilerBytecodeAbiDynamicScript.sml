@@ -70,7 +70,7 @@ val () = computeLib.upd_compset (computeLib.add_thms
 
 val abi_dynamic_policy_eval = save_thm
   ("abi_dynamic_policy_eval",
-   EVAL ``resolve_o1_policy (o1_policy prague_capabilities)``)
+   EVAL ``resolve_o1_policy (o1_policy all_capabilities)``)
 val abi_dynamic_rpolicy = optionSyntax.dest_some
   (rhs (concl abi_dynamic_policy_eval))
 val abi_dynamic_lower_runtime_eval = save_thm
@@ -592,7 +592,7 @@ val abi_dynamic_finalize_deploy_eval = save_thm
        ^abi_dynamic_final_deploy_unit``)
 
 val abi_dynamic_compile_term =
-  ``compile_vyper (K SOME) (o1_policy prague_capabilities)
+  ``compile_vyper (K SOME) (o1_policy all_capabilities)
       task090_abi_dynamic_program``
 val abi_dynamic_compile_step0 = SIMP_CONV pure_ss
   [compileVyperTheory.compile_vyper_def,

@@ -22,11 +22,20 @@ For a public summary of what the fixtures test and what remains unverified,
 see [`docs/bytecode-fixture-coverage.md`](../../../docs/bytecode-fixture-coverage.md).
 
 The oracle is generated with the exact revision in `../../../VYPER_PIN`, Python
-3.11.11, Prague, experimental codegen, `OptimizationLevel.NONE` (which uses the
+3.11.11, `evm_version="prague"`, experimental codegen, `OptimizationLevel.NONE` (which uses the
 same `PASSES_O1` Venom passes at this revision), no final assembly optimization,
 and no bytecode metadata. The generator requires a clean Vyper checkout, clones
 only committed objects, and installs them in an isolated environment using
 `python-o1-oracle-constraints.txt`.
+
+HOL's EVM semantics (Verifereum) model Osaka, while the oracle is compiled with
+`evm_version="prague"` (`ORACLE_EVM_VERSION`), the newest version the pinned
+Vyper accepts. HOL's compile target is fork-neutral (`all_capabilities`: PUSH0,
+MCOPY, transient storage and blob opcodes, all available since Cancun). The
+compiled code never uses Osaka's only new opcode (CLZ) or its new precompile
+(P256VERIFY), and never calls MODEXP, so the emitted bytes mean the same on
+Prague and Osaka. The generator fails if the pinned Vyper supports a newer EVM
+version, so a pin bump that adds Osaka forces regeneration with it.
 
 Reproduce the committed oracle:
 
@@ -48,7 +57,7 @@ lowering/defs/bytecode/python-o1-bytecode-fixtures --update \
 parity theories under `eval/` evaluate
 
 ```sml
-compile_vyper (K SOME) (o1_policy prague_capabilities) <program>
+compile_vyper (K SOME) (o1_policy all_capabilities) <program>
 ```
 
 and requires exact deployment and runtime byte equality. The expensive fixture

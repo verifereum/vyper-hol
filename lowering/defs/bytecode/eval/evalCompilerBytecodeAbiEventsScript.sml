@@ -296,7 +296,7 @@ Proof
 QED
 
 Theorem mixed_event_types_compile_staged:
-  compile_vyper (K SOME) (o1_policy prague_capabilities) tops =
+  compile_vyper (K SOME) (o1_policy all_capabilities) tops =
     case mixed_event_types_runtime_compile tops of
       NONE => NONE
     | SOME runtime =>
@@ -312,7 +312,7 @@ Proof
 QED
 
 Theorem mixed_event_types_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     task090_mixed_event_types_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "mixed_event_types.hex")
 Proof

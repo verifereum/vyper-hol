@@ -296,7 +296,7 @@ Proof
 QED
 
 Theorem external_dynamic_compile_staged:
-  compile_vyper (K SOME) (o1_policy prague_capabilities) tops =
+  compile_vyper (K SOME) (o1_policy all_capabilities) tops =
     case external_dynamic_runtime_compile tops of
       NONE => NONE
     | SOME runtime =>
@@ -312,7 +312,7 @@ Proof
 QED
 
 Theorem external_dynamic_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     task090_external_dynamic_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "external_dynamic.hex")
 Proof

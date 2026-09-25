@@ -439,7 +439,7 @@ Definition build_compile_env_def:
           case ALOOKUP (REVERSE (args ++ locals)) n of
             SOME ty => SOME ty
           | NONE => var_type_map n) in
-    <| ce_target := prague_capabilities;
+    <| ce_target := all_capabilities;
        ce_vars := all_vars;
        ce_storage_layout := storage_layout;
        (* TODO: NONE = main module. For multi-module (imports), should
@@ -472,7 +472,7 @@ End
 Theorem build_compile_env_ce_target[simp]:
   !tops vis mut func_name args ret_type (body : stmt list) use_trans.
     (build_compile_env tops vis mut func_name args ret_type body use_trans).
-      ce_target = prague_capabilities
+      ce_target = all_capabilities
 Proof
   rpt strip_tac
   >> simp[build_compile_env_def]
@@ -863,8 +863,8 @@ Proof
   simp[set_internal_package_target_def] >> strip_tac >> gvs[]
 QED
 
-Theorem set_external_package_target_prague[simp]:
-  set_external_package_target prague_capabilities
+Theorem set_external_package_target_all_capabilities[simp]:
+  set_external_package_target all_capabilities
     (package_external_fn tops use_trans nkey_map source) =
   package_external_fn tops use_trans nkey_map source
 Proof
@@ -873,8 +873,8 @@ Proof
   irule compile_env_target_update_id >> IF_CASES_TAC >> simp[]
 QED
 
-Theorem set_internal_package_target_prague[simp]:
-  set_internal_package_target prague_capabilities
+Theorem set_internal_package_target_all_capabilities[simp]:
+  set_internal_package_target all_capabilities
     (package_internal_fn tops use_trans nkey_map is_ctor immutables_len source) =
   package_internal_fn tops use_trans nkey_map is_ctor immutables_len source
 Proof
@@ -883,8 +883,8 @@ Proof
   irule compile_env_target_update_id >> simp[]
 QED
 
-Theorem set_fallback_package_target_prague[simp]:
-  set_fallback_package_target prague_capabilities
+Theorem set_fallback_package_target_all_capabilities[simp]:
+  set_fallback_package_target all_capabilities
     (package_fallback_fn tops use_trans nkey_map source) =
   package_fallback_fn tops use_trans nkey_map source
 Proof
@@ -895,8 +895,8 @@ Proof
   irule compile_env_target_update_id >> simp[]
 QED
 
-Theorem set_constructor_package_target_prague[simp]:
-  set_constructor_package_target prague_capabilities
+Theorem set_constructor_package_target_all_capabilities[simp]:
+  set_constructor_package_target all_capabilities
     (package_constructor tops use_trans nkey_map source) =
   package_constructor tops use_trans nkey_map source
 Proof
@@ -910,7 +910,7 @@ Theorem set_external_package_target_all[simp]:
     (package_external_fn tops use_trans nkey_map source) =
   package_external_fn tops use_trans nkey_map source
 Proof
-  rw[GSYM venomPolicyTypesTheory.prague_capabilities_def]
+  rw[GSYM venomPolicyTypesTheory.all_capabilities_def]
 QED
 
 Theorem set_internal_package_target_all[simp]:
@@ -918,7 +918,7 @@ Theorem set_internal_package_target_all[simp]:
     (package_internal_fn tops use_trans nkey_map is_ctor immutables_len source) =
   package_internal_fn tops use_trans nkey_map is_ctor immutables_len source
 Proof
-  rw[GSYM venomPolicyTypesTheory.prague_capabilities_def]
+  rw[GSYM venomPolicyTypesTheory.all_capabilities_def]
 QED
 
 Theorem set_fallback_package_target_all[simp]:
@@ -926,7 +926,7 @@ Theorem set_fallback_package_target_all[simp]:
     (package_fallback_fn tops use_trans nkey_map source) =
   package_fallback_fn tops use_trans nkey_map source
 Proof
-  rw[GSYM venomPolicyTypesTheory.prague_capabilities_def]
+  rw[GSYM venomPolicyTypesTheory.all_capabilities_def]
 QED
 
 Theorem set_constructor_package_target_all[simp]:
@@ -934,7 +934,7 @@ Theorem set_constructor_package_target_all[simp]:
     (package_constructor tops use_trans nkey_map source) =
   package_constructor tops use_trans nkey_map source
 Proof
-  rw[GSYM venomPolicyTypesTheory.prague_capabilities_def]
+  rw[GSYM venomPolicyTypesTheory.all_capabilities_def]
 QED
 
 
@@ -1111,9 +1111,9 @@ Definition compile_vyper_def:
       finalizer policy tops
 End
 
-(* Prague is only the exact O1 target specialization. *)
+(* The exact O1 specialization, targeting all capabilities. *)
 Definition compile_vyper_o1_def:
   compile_vyper_o1 (finalizer : assembly_finalizer)
                    (tops : toplevel list) =
-    compile_vyper finalizer (o1_policy prague_capabilities) tops
+    compile_vyper finalizer (o1_policy all_capabilities) tops
 End

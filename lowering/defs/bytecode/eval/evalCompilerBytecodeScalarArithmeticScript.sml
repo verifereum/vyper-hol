@@ -42,7 +42,7 @@ val () = computeLib.upd_compset
      w2n_scalar_decimal_hi_word_eval])
 
 Theorem scalar_arith_uint_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_arith_uint_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "scalar_arith_uint.hex")
 Proof
@@ -50,7 +50,7 @@ Proof
 QED
 
 Theorem scalar_arith_pow_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_arith_pow_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "scalar_arith_pow.hex")
 Proof
@@ -58,7 +58,7 @@ Proof
 QED
 
 Theorem scalar_arith_pow_base_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_arith_pow_base_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "scalar_arith_pow_base.hex")
 Proof
@@ -66,7 +66,7 @@ Proof
 QED
 
 Theorem scalar_arith_int_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_arith_int_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "scalar_arith_int.hex")
 Proof
@@ -74,7 +74,7 @@ Proof
 QED
 
 Theorem scalar_arith_decimal_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_arith_decimal_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "scalar_arith_decimal.hex")
 Proof
@@ -82,7 +82,7 @@ Proof
 QED
 
 Theorem scalar_arith_decimal_sub_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_arith_decimal_sub_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "scalar_arith_decimal_sub.hex")
 Proof
@@ -90,7 +90,7 @@ Proof
 QED
 
 Theorem scalar_arith_decimal_mul_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_arith_decimal_mul_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "scalar_arith_decimal_mul.hex")
 Proof
@@ -98,7 +98,7 @@ Proof
 QED
 
 Theorem scalar_arith_decimal_div_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_arith_decimal_div_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "scalar_arith_decimal_div.hex")
 Proof
@@ -106,7 +106,7 @@ Proof
 QED
 
 Theorem scalar_arith_unsafe_uint_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_arith_unsafe_uint_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "scalar_arith_unsafe_uint.hex")
 Proof
@@ -114,7 +114,7 @@ Proof
 QED
 
 Theorem scalar_arith_unsafe_int_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_arith_unsafe_int_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "scalar_arith_unsafe_int.hex")
 Proof

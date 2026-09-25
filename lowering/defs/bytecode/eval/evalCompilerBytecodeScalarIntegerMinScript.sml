@@ -22,7 +22,7 @@ val () = Globals.max_print_depth := 20
 
 Definition scalar_integer_min_int256_runtime_pipeline_def:
   scalar_integer_min_int256_runtime_pipeline tops =
-    case resolve_o1_policy (o1_policy prague_capabilities) of
+    case resolve_o1_policy (o1_policy all_capabilities) of
       NONE => NONE
     | SOME rpolicy =>
         case lower_vyper_runtime_unit tops rpolicy of
@@ -232,7 +232,7 @@ QED
 
 Definition scalar_integer_min_int256_deploy_compile_def:
   scalar_integer_min_int256_deploy_compile tops runtime =
-    case resolve_o1_policy (o1_policy prague_capabilities) of
+    case resolve_o1_policy (o1_policy all_capabilities) of
       NONE => NONE
     | SOME rpolicy =>
         case lower_vyper_deploy_unit tops rpolicy runtime of
@@ -256,7 +256,7 @@ Proof
 QED
 
 Theorem scalar_integer_min_int256_compile_staged:
-  compile_vyper (K SOME) (o1_policy prague_capabilities) tops =
+  compile_vyper (K SOME) (o1_policy all_capabilities) tops =
     case scalar_integer_min_int256_runtime_compile tops of
       NONE => NONE
     | SOME runtime =>
@@ -272,7 +272,7 @@ Proof
 QED
 
 Theorem scalar_integer_min_int256_matches_python_oracle:
-  compile_vyper (K SOME) (o1_policy prague_capabilities)
+  compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_integer_min_int256_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes
       "scalar_integer_min_int256.hex")
