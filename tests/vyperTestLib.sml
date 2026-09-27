@@ -326,9 +326,9 @@ val excluded_test_names = [
      source contract call path before or around the raw helper interaction. *)
   "test_abi_arg_wrapped_complex_member_head",
   "test_abi_arg_wrapped_dynarray_head",
-  "test_abi_decode_child_head_points_to_parent",
+  (*"test_abi_decode_child_head_points_to_parent",*)
   "test_abi_decode_complex_arithmetic_overflow",
-  "test_abi_decode_complex_empty_dynarray",
+  (*"test_abi_decode_complex_empty_dynarray",
   "test_abi_decode_empty_toplevel_dynarray",
   "test_abi_decode_extcall_complex_empty_dynarray",
   "test_abi_decode_extcall_empty_array",
@@ -336,7 +336,7 @@ val excluded_test_names = [
   "test_abi_decode_invalid_toplevel_dynarray_head",
   "test_abi_decode_merge_head_and_length",
   "test_abi_decode_nonstrict_head",
-  "test_abi_decode_nonstrict_head_oob",
+  "test_abi_decode_nonstrict_head_oob",*)
   (* Raw bytecode blueprint creation remains coordinated with #379. *)
   "test_create_from_blueprint_bad_code_offset",
   (* Independent semantic mismatch in the currently admitted raw_call tests. *)
