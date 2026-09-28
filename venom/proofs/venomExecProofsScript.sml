@@ -1121,6 +1121,15 @@ QED
 
 
 
+Triviality eval_operands_none_mem[local]:
+  !ops s. eval_operands ops s = NONE ==>
+    ?op. MEM op ops /\ eval_operand op s = NONE
+Proof
+  Induct >> simp[eval_operands_def] >> rpt gen_tac >>
+  Cases_on `eval_operand h s` >> simp[] >>
+  Cases_on `eval_operands ops s` >> simp[] >> metis_tac[]
+QED
+
 (* General: if eval_operands returns NONE for the full operand list,
    step_inst_base returns Error for non-excluded opcodes.
    Note: DJMP/OFFSET excluded because they don't eval all operands via
@@ -1325,11 +1334,15 @@ Proof
   gvs[inst_wf_def] >>
   (* Now: inst.inst_operands = Lit tc :: rest, LENGTH rest = w2n tc + 2,
      eval_operands (Lit tc :: rest) s = NONE *)
-  (* Lit tc always evaluates, so eval_operands rest s = NONE *)
+  (* Lit tc always evaluates, so eval_operands rest s = NONE. *)
   gvs[eval_operands_def, eval_operand_def] >>
-  (* rest has length >= 2, so destructure it *)
-  `?h1 h2 tl. rest = h1 :: h2 :: tl` by
-    (Cases_on `rest` >> gvs[] >>
+  Cases_on `eval_operands rest s` >> gvs[] >>
+  `eval_operands (REVERSE rest) s = NONE` by
+    (drule eval_operands_none_mem >> strip_tac >>
+     irule eval_operands_mem_none >>
+     qexists_tac `op` >> simp[MEM_REVERSE]) >>
+  `?h1 h2 tl. REVERSE rest = h1 :: h2 :: tl` by
+    (Cases_on `REVERSE rest` >> gvs[] >>
      Cases_on `t` >> gvs[]) >>
   gvs[step_inst_base_def, eval_operands_def] >>
   BasicProvers.every_case_tac >> gvs[]

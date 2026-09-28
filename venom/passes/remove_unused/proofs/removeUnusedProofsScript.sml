@@ -762,7 +762,8 @@ QED
 (* All NOP'd outputs across all blocks in one pass *)
 Definition single_pass_nop_outputs_def:
   single_pass_nop_outputs fn =
-    let lr = liveness_analyze fn in
+    let lr = protect_liveness fn (remove_unused_phi_vars fn)
+               (liveness_analyze fn) in
     BIGUNION (set (MAP (\bb.
       block_nop_outputs lr bb)
       fn.fn_blocks))
@@ -779,7 +780,8 @@ QED
 Theorem block_nop_outputs_subset_single_pass[local]:
   !fn bb.
     MEM bb fn.fn_blocks ==>
-    let lr = liveness_analyze fn in
+    let lr = protect_liveness fn (remove_unused_phi_vars fn)
+               (liveness_analyze fn) in
     let cfg = cfg_analyze fn in
     block_nop_outputs lr bb SUBSET single_pass_nop_outputs fn
 Proof
@@ -1577,6 +1579,69 @@ QED
 
 (* ===== Operand condition from wf_ssa ===== *)
 
+Theorem protected_liveness_points_value[local]:
+  !fn protected lr point live.
+    MEM (point,live) (protected_liveness_points fn protected lr) ==>
+    live = protected ++ live_vars_at lr (FST point) (SND point)
+Proof
+  rw[protected_liveness_points_def, listTheory.MEM_FLAT,
+     listTheory.MEM_MAP] >>
+  gvs[PULL_EXISTS, listTheory.MEM_GENLIST] >> PairCases_on `point` >> gvs[]
+QED
+
+Theorem protected_liveness_points_key[local]:
+  !fn protected lr bb idx.
+    MEM bb fn.fn_blocks /\ idx <= LENGTH bb.bb_instructions ==>
+    MEM (bb.bb_label,idx)
+      (MAP FST (protected_liveness_points fn protected lr))
+Proof
+  rw[protected_liveness_points_def, listTheory.MEM_MAP,
+     listTheory.MEM_FLAT] >>
+  qexists_tac `((bb.bb_label,idx),
+    protected ++ live_vars_at lr bb.bb_label idx)` >> simp[] >>
+  qexists_tac `GENLIST
+    (\i. ((bb.bb_label,i),protected ++ live_vars_at lr bb.bb_label i))
+    (SUC (LENGTH bb.bb_instructions))` >> conj_tac
+  >- (qexists_tac `bb` >> simp[])
+  >- (simp[listTheory.MEM_GENLIST] >> qexists_tac `idx` >> simp[])
+QED
+
+Theorem live_vars_at_protect_liveness[local]:
+  !fn protected lr bb idx.
+    MEM bb fn.fn_blocks /\ idx <= LENGTH bb.bb_instructions ==>
+    live_vars_at (protect_liveness fn protected lr) bb.bb_label idx =
+    protected ++ live_vars_at lr bb.bb_label idx
+Proof
+  rpt strip_tac >>
+  qspecl_then [`fn`, `protected`, `lr`, `bb`, `idx`]
+    mp_tac protected_liveness_points_key >>
+  impl_tac >- simp[] >> strip_tac >>
+  rw[livenessDefsTheory.live_vars_at_def, protect_liveness_def,
+     dfAnalyzeDefsTheory.df_at_def, alistTheory.FLOOKUP_FUPDATE_LIST] >>
+  Cases_on `ALOOKUP
+    (REVERSE (protected_liveness_points fn protected lr))
+    (bb.bb_label,idx)`
+  >- (gvs[alistTheory.ALOOKUP_NONE, listTheory.MEM_MAP] >> metis_tac[]) >>
+  drule alistTheory.ALOOKUP_MEM >> strip_tac >>
+  `MEM ((bb.bb_label,idx),x)
+     (protected_liveness_points fn protected lr)` by gvs[] >>
+  drule protected_liveness_points_value >> strip_tac >>
+  gvs[livenessDefsTheory.live_vars_at_def, dfAnalyzeDefsTheory.df_at_def]
+QED
+
+Theorem live_after_protect_liveness:
+  !fn protected lr bb idx.
+    MEM bb fn.fn_blocks /\ idx < LENGTH bb.bb_instructions ==>
+    live_after_at (protect_liveness fn protected lr) bb.bb_label idx
+      (LENGTH bb.bb_instructions) =
+    protected ++ live_after_at lr bb.bb_label idx
+      (LENGTH bb.bb_instructions)
+Proof
+  rw[live_after_at_def] >>
+  BasicProvers.EVERY_CASE_TAC >> gvs[] >>
+  irule live_vars_at_protect_liveness >> simp[]
+QED
+
 (* Extract definition info from single_pass_nop_outputs membership *)
 Theorem nop_output_has_def[local]:
   !fn v.
@@ -1587,7 +1652,8 @@ Theorem nop_output_has_def[local]:
       MEM v (EL def_idx def_bb.bb_instructions).inst_outputs /\
       is_removable (EL def_idx def_bb.bb_instructions) /\
       ~MEM v (live_after_at (liveness_analyze fn) def_bb.bb_label def_idx
-                (LENGTH def_bb.bb_instructions))
+                (LENGTH def_bb.bb_instructions)) /\
+      ~MEM v (remove_unused_phi_vars fn)
 Proof
   rpt strip_tac >>
   gvs[single_pass_nop_outputs_def, LET_THM, block_nop_outputs_def] >>
@@ -1598,7 +1664,11 @@ Proof
   pop_assum mp_tac >> BasicProvers.EVERY_CASE_TAC >> gvs[] >>
   strip_tac >>
   qexistsl_tac [`def_bb`, `n`] >>
-  gvs[listTheory.EVERY_MEM]
+  gvs[listTheory.EVERY_MEM] >>
+  `~MEM v (live_after_at
+      (protect_liveness fn (remove_unused_phi_vars fn) (liveness_analyze fn))
+      def_bb.bb_label n (LENGTH def_bb.bb_instructions))` by metis_tac[] >>
+  drule_all live_after_protect_liveness >> strip_tac >> gvs[]
 QED
 
 (* Helper: v ∉ live_after_at implies v ∉ live_vars_at at SUC idx *)
@@ -2183,7 +2253,8 @@ Theorem remove_unused_phase1_correct[local]:
        MEM inst bb.bb_instructions /\
        MEM (Var v) inst.inst_operands ==>
        v NOTIN single_pass_nop_outputs fn) ==>
-    let lr = liveness_analyze fn in
+    let lr = protect_liveness fn (remove_unused_phi_vars fn)
+               (liveness_analyze fn) in
     let cfg = cfg_analyze fn in
     let bt = \bb. remove_unused_block lr bb in
     let elim = single_pass_nop_outputs fn in
@@ -2549,8 +2620,9 @@ Proof
      pred_setTheory.SUBSET_DEF] >>
   gvs[pred_setTheory.IN_BIGUNION, listTheory.MEM_MAP] >>
   rename1 `MEM bb fn.fn_blocks` >>
-  mp_tac (Q.SPECL [`liveness_analyze fn`, `bb`]
-    block_nop_outputs_subset_block_outputs) >>
+  mp_tac (Q.SPECL
+    [`protect_liveness fn (remove_unused_phi_vars fn) (liveness_analyze fn)`,
+     `bb`] block_nop_outputs_subset_block_outputs) >>
   rw[pred_setTheory.SUBSET_DEF] >>
   first_x_assum drule >> strip_tac >>
   gvs[listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
@@ -2687,13 +2759,15 @@ Proof
   (* Step 4: Outputs of transformed inst are either original or [].
      Since v ∈ outputs, must be original. *)
   `(remove_unused_inst
-      (live_after_at (liveness_analyze fn) bb'.bb_label m
-         (LENGTH bb'.bb_instructions))
+      (live_after_at
+         (protect_liveness fn (remove_unused_phi_vars fn) (liveness_analyze fn))
+         bb'.bb_label m (LENGTH bb'.bb_instructions))
       (EL m bb'.bb_instructions)).inst_outputs =
     (EL m bb'.bb_instructions).inst_outputs` by (
     mp_tac (Q.SPECL [
-      `live_after_at (liveness_analyze fn) bb'.bb_label m
-         (LENGTH bb'.bb_instructions)`,
+      `live_after_at
+         (protect_liveness fn (remove_unused_phi_vars fn) (liveness_analyze fn))
+         bb'.bb_label m (LENGTH bb'.bb_instructions)`,
       `EL m bb'.bb_instructions`] remove_unused_inst_outputs) >>
     strip_tac >> gvs[]) >>
   (* So v ∈ (EL m bb'.bb_instructions).inst_outputs *)

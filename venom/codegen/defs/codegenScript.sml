@@ -22,7 +22,8 @@ Definition codegen_assembly_def:
       | SOME plan =>
           let asm =
             execute_plan plan.cp_initial_fmp (context_plan_ops plan) ++
-            data_segment_asm unit.cu_data_segment
+            data_segment_asm unit.cu_data_segment ++
+            [AsmDataHeader "code_end"]
           in
             if assembly_target_safe rpolicy.rpol_target asm
             then SOME asm
@@ -40,7 +41,8 @@ Definition codegen_assembly_fuel_def:
       | SOME plan =>
           let asm =
             execute_plan plan.cp_initial_fmp (context_plan_ops plan) ++
-            data_segment_asm unit.cu_data_segment
+            data_segment_asm unit.cu_data_segment ++
+            [AsmDataHeader "code_end"]
           in
             if assembly_target_safe rpolicy.rpol_target asm
             then SOME asm
@@ -62,4 +64,16 @@ Definition finalize_codegen_def:
             else NONE
 End
 
-val _ = export_theory ();
+(* The fixture profile uses the identity finalizer.  codegen_assembly has
+   already checked target safety, so do not traverse the complete assembly a
+   second time merely to rediscover the same fact during CBV evaluation. *)
+Theorem finalize_codegen_identity[compute]:
+  finalize_codegen (K SOME) rpolicy unit =
+    OPTION_MAP assemble (codegen_assembly rpolicy unit)
+Proof
+  Cases_on `codegen_assembly rpolicy unit` >> simp[finalize_codegen_def] >>
+  `assembly_target_safe rpolicy.rpol_target x` by
+    (qpat_x_assum `codegen_assembly rpolicy unit = SOME x` mp_tac >>
+     simp[codegen_assembly_def, AllCaseEqs()] >> strip_tac >> gvs[]) >>
+  simp[]
+QED

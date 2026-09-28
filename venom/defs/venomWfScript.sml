@@ -18,10 +18,9 @@ Ancestors
 
 Definition phi_well_formed_def:
   phi_well_formed [] = T /\
-  phi_well_formed [_] = T /\
+  phi_well_formed [_] = F /\
   phi_well_formed (Label lbl :: Var v :: rest) = phi_well_formed rest /\
-  phi_well_formed (Label lbl :: _ :: rest) = F /\
-  phi_well_formed (_ :: _ :: rest) = phi_well_formed rest
+  phi_well_formed (_ :: _ :: rest) = F
 End
 
 (* ==========================================================================
@@ -510,32 +509,61 @@ Definition fn_dominates_def:
            MEM d path
 End
 
-(* Every variable use is dominated by its definition.
-   Standard SSA property: if instruction inst in block bb uses Var v,
-   then v is defined by some instruction in some block def_bb, and
-   def_bb dominates bb.  When def and use are in the same block, the
-   def must appear at a strictly earlier index (intra-block ordering).
-   This is the standard formulation: "every def reaches its use." *)
+(* A definition available at a block endpoint.  NONE denotes the outgoing
+   edge after the whole target block; SOME use_inst denotes the point just
+   before an ordinary instruction.  This one helper is shared by PHI edge
+   uses and ordinary uses, so the two rules cannot drift apart. *)
+Definition def_available_at_def:
+  def_available_at fn target_bb use_inst_opt v <=>
+    ?def_bb def_inst.
+      MEM def_bb fn.fn_blocks /\
+      MEM def_inst def_bb.bb_instructions /\
+      MEM v def_inst.inst_outputs /\
+      fn_dominates fn def_bb.bb_label target_bb.bb_label /\
+      (def_bb = target_bb ==>
+        case use_inst_opt of
+          NONE => T
+        | SOME use_inst =>
+            ?i j. i < j /\ j < LENGTH target_bb.bb_instructions /\
+                  EL i target_bb.bb_instructions = def_inst /\
+                  EL j target_bb.bb_instructions = use_inst)
+End
+(* PHI uses occur on named predecessor edges, unlike ordinary uses which
+   occur at the instruction.  Every incoming value, including a loop-carried
+   self input, must be available at its edge endpoint.  Besides availability,
+   reject malformed pair shapes, duplicate edge names, and missing or extra
+   predecessors. *)
+Definition phi_edge_uses_wf_def:
+  phi_edge_uses_wf fn bb inst <=>
+    phi_well_formed inst.inst_operands /\
+    ALL_DISTINCT (MAP FST (phi_pairs inst.inst_operands)) /\
+    (!pred.
+       fn_cfg_edge fn pred bb.bb_label <=>
+       ?p. MEM p (phi_pairs inst.inst_operands) /\ FST p = pred) /\
+    (!pred v.
+       MEM (pred,v) (phi_pairs inst.inst_operands) ==>
+       ?pred_bb.
+         MEM pred_bb fn.fn_blocks /\
+         pred_bb.bb_label = pred /\
+         fn_cfg_edge fn pred bb.bb_label /\
+         def_available_at fn pred_bb NONE v)
+End
+(* Every ordinary use is available immediately before its instruction; every
+   PHI incoming value is available at the end of its named predecessor. *)
 Definition def_dominates_uses_def:
   def_dominates_uses fn <=>
-    !bb inst v.
+    !bb inst.
       MEM bb fn.fn_blocks /\
-      MEM inst bb.bb_instructions /\
-      MEM (Var v) inst.inst_operands ==>
-      ?def_bb def_inst.
-        MEM def_bb fn.fn_blocks /\
-        MEM def_inst def_bb.bb_instructions /\
-        MEM v def_inst.inst_outputs /\
-        fn_dominates fn def_bb.bb_label bb.bb_label /\
-        (def_bb = bb ==>
-          ?i j. i < j /\ j < LENGTH bb.bb_instructions /\
-                EL i bb.bb_instructions = def_inst /\
-                EL j bb.bb_instructions = inst)
+      MEM inst bb.bb_instructions ==>
+      if inst.inst_opcode = PHI then
+        phi_edge_uses_wf fn bb inst
+      else
+        !v. MEM (Var v) inst.inst_operands ==>
+            def_available_at fn bb (SOME inst) v
 End
-
 (* Well-formed SSA: unique definitions AND definitions dominate uses.
-   Within-block ordering follows from def_dominates_uses + fn_inst_ids_distinct
-   (part of wf_function). *)
+   PHI definitions are checked on predecessor edges; ordinary same-block uses
+   retain strict instruction ordering. *)
 Definition wf_ssa_def:
   wf_ssa fn <=> ssa_form fn /\ def_dominates_uses fn
 End

@@ -22,7 +22,8 @@ Definition plan_stack_sem_eq_def:
   plan_stack_sem_eq lo vs (s1 : operand list) s2 <=>
     LENGTH s1 = LENGTH s2 /\
     !i. i < LENGTH s1 ==>
-      operand_val vs lo (EL i s1) = operand_val vs lo (EL i s2)
+      operand_val vs lo (EL i s1) = operand_val vs lo (EL i s2) /\
+      (EL i s1 = dead_stack_marker ==> EL i s2 = dead_stack_marker)
 End
 
 Theorem plan_stack_sem_eq_refl[simp]:
@@ -58,16 +59,15 @@ Theorem plan_stack_rel_sem_eq:
 Proof
   rw[plan_stack_rel_def, plan_stack_sem_eq_def] >>
   qpat_assum `!j. j < LENGTH s1 ==>
-    operand_val vs lo (EL j s1) = operand_val vs lo (EL j s2)`
-    (qspec_then `PRE (LENGTH s2 - i)` mp_tac) >>
-  (impl_tac >- decide_tac) >>
-  strip_tac >>
-  qpat_assum `!j. j < LENGTH s1 ==>
-    operand_val vs lo (EL j (REVERSE s1)) = SOME (EL j astk)`
+    EL j (REVERSE s1) = dead_stack_marker \/ _`
     (qspec_then `i` mp_tac) >>
   (impl_tac >- decide_tac) >>
-  strip_tac >>
-  gvs[EL_REVERSE]
+  disch_tac >>
+  qpat_assum `!j. j < LENGTH s1 ==> _`
+    (qspec_then `PRE (LENGTH s2 - i)` mp_tac) >>
+  (impl_tac >- decide_tac) >>
+  disch_tac >>
+  fs[EL_REVERSE] >> metis_tac[]
 QED
 
 Theorem venom_asm_rel_sem_stack_transport:
@@ -111,14 +111,22 @@ QED
 Theorem plan_stack_sem_eq_poke:
   !lo vs s1 s2 d op1 op2.
     plan_stack_sem_eq lo vs s1 s2 /\
-    operand_val vs lo op1 = operand_val vs lo op2 ==>
+    operand_val vs lo op1 = operand_val vs lo op2 /\
+    (op1 = dead_stack_marker ==> op2 = dead_stack_marker) ==>
     plan_stack_sem_eq lo vs
       (stack_poke d op1 s1) (stack_poke d op2 s2)
 Proof
   rw[plan_stack_sem_eq_def, stack_poke_def] >>
   simp[listTheory.LUPDATE_SEM] >>
   rpt strip_tac >>
-  Cases_on `i = LENGTH s1 - 1 - d` >> simp[]
+  Cases_on `d < LENGTH s1` >>
+  Cases_on `i = LENGTH s1 - 1 - d` >>
+  simp[] >>
+  `LENGTH s2 - (d + 1) = LENGTH s1 - 1 - d` by decide_tac >>
+  fs[EL_LUPDATE] >>
+  `LENGTH s2 < d + (LENGTH s1 + 1) /\ 0 < LENGTH s1` by
+    decide_tac >>
+  fs[] >> metis_tac[]
 QED
 
 
@@ -1931,6 +1939,8 @@ Theorem reorder_single_op_val_on_tos:
     plan_stack_rel lo vs
       (apply_prefix_ops initial_fmp lo rops ps).ps_stack as_stk /\
     as_stk <> [] /\
+    op <> dead_stack_marker /\
+    (!at. operand_equiv dfg op at ==> at <> dead_stack_marker) /\
     (!at. operand_equiv dfg op at ==>
           operand_val vs lo op = operand_val vs lo at) ==>
     operand_val vs lo op = SOME (HD as_stk)
@@ -1975,9 +1985,9 @@ Proof
     qspecl_then [`lo`,`vs`,`ps.ps_stack`,`as_stk`] mp_tac plan_stack_rel_hd >>
     ASM_REWRITE_TAC[] >> strip_tac >>
     (* Rewrite stack_peek 0 to LAST *)
-    `stack_peek 0 ps.ps_stack = LAST ps.ps_stack` by (
-      simp[stack_peek_def, LAST_EL] >>
-      Cases_on `ps.ps_stack` >> fs[]) >>
+    `stack_peek 0 ps.ps_stack = LAST ps.ps_stack` by
+      (Cases_on `ps.ps_stack` >>
+       fs[stack_peek_def, LAST_EL]) >>
     gvs[]
   ) >>
   (* no operand_equiv: do_swap d0, do_swap 0 *)
@@ -3012,6 +3022,8 @@ Theorem reorder_one_shallow_sem_align:
       (LENGTH target_ops) ps.ps_stack = SOME d /\
     d <= 16 /\
     reorder_one dfg target_ops idx op ps = (ops, ps') /\
+    op <> dead_stack_marker /\
+    (!at. operand_equiv dfg op at ==> at <> dead_stack_marker) /\
     (!op1 at. operand_equiv dfg op1 at ==>
               operand_val vs lo op1 = operand_val vs lo at) ==>
     let via = apply_prefix_ops initial_fmp lo ops ps in
@@ -3075,10 +3087,13 @@ Proof
                  ps.ps_stack`] mp_tac stack_poke_peek >>
              simp[stack_poke_def]) >>
           gvs[]) >>
+      `stack_peek (LENGTH target_ops - (idx + 1)) ps.ps_stack <>
+       dead_stack_marker` by metis_tac[] >>
       irule plan_stack_sem_eq_poke >> simp[] >>
-      first_x_assum (qspecl_then
-        [`op`, `stack_peek (LENGTH target_ops - (idx + 1)) ps.ps_stack`]
-        mp_tac) >> simp[]) >>
+      qpat_x_assum `!op1 at. operand_equiv dfg op1 at ==> _`
+        (qspecl_then
+          [`op`, `stack_peek (LENGTH target_ops - (idx + 1)) ps.ps_stack`]
+          mp_tac) >> simp[]) >>
   Cases_on `do_swap d ps` >> simp[] >>
   rename1 `do_swap d ps = (swap1_ops,ps3)` >>
   Cases_on `do_swap (LENGTH target_ops - (idx + 1)) ps3` >> simp[] >>
@@ -3111,6 +3126,8 @@ Theorem reorder_place_phase_sem_align:
        ALL_DISTINCT (top_n (dist + 1) ps.ps_stack) /\
        DISJOINT (set (top_n (dist + 1) ps.ps_stack))
                 (FDOM ps.ps_spilled)) /\
+    op <> dead_stack_marker /\
+    (!at. operand_equiv dfg op at ==> at <> dead_stack_marker) /\
     (!op1 at. operand_equiv dfg op1 at ==>
               operand_val vs lo op1 = operand_val vs lo at) ==>
     let (ops,ps') =
@@ -3139,11 +3156,20 @@ Proof
   >- (gvs[apply_prefix_ops_def] >>
       `plan_stack_sem_eq lo vs ps.ps_stack
          (stack_poke dist (stack_peek final_dist ps.ps_stack) ps.ps_stack)` by
-        (rw[plan_stack_sem_eq_def, stack_poke_def] >>
-         simp[listTheory.LUPDATE_SEM] >>
-         rpt strip_tac >>
-         Cases_on `i = LENGTH ps.ps_stack - 1 - dist` >> simp[] >>
-         first_x_assum irule >> gvs[stack_peek_def]) >>
+        (qsuff_tac `plan_stack_sem_eq lo vs
+           (stack_poke dist (stack_peek dist ps.ps_stack) ps.ps_stack)
+           (stack_poke dist (stack_peek final_dist ps.ps_stack)
+             ps.ps_stack)`
+         >- (strip_tac >>
+             `stack_poke dist (stack_peek dist ps.ps_stack) ps.ps_stack =
+              ps.ps_stack` by (irule stack_poke_peek >> simp[]) >>
+             gvs[]) >>
+         irule plan_stack_sem_eq_poke >> simp[] >>
+         `stack_peek final_dist ps.ps_stack <> dead_stack_marker` by
+           metis_tac[] >>
+         qpat_x_assum `!op1 at. operand_equiv dfg op1 at ==> _`
+           (qspecl_then [`op`, `stack_peek final_dist ps.ps_stack`]
+             mp_tac) >> simp[]) >>
       `stack_peek final_dist
          (stack_poke dist (stack_peek final_dist ps.ps_stack) ps.ps_stack) =
        stack_peek final_dist ps.ps_stack` by
@@ -3163,10 +3189,13 @@ Proof
                `stack_poke dist (stack_peek final_dist ps.ps_stack) ps.ps_stack`]
                mp_tac stack_poke_peek >> simp[stack_poke_def]) >>
           gvs[]) >>
+      `stack_peek final_dist ps.ps_stack <> dead_stack_marker` by
+        metis_tac[] >>
       irule plan_stack_sem_eq_poke >> simp[] >>
-      first_x_assum (qspecl_then
-        [`stack_peek dist ps.ps_stack`,
-         `stack_peek final_dist ps.ps_stack`] mp_tac) >> simp[]) >>
+      qpat_x_assum `!op1 at. operand_equiv dfg op1 at ==> _`
+        (qspecl_then [`stack_peek dist ps.ps_stack`,
+                      `stack_peek final_dist ps.ps_stack`] mp_tac) >>
+      simp[]) >>
   pairarg_tac >> simp[] >>
   qpat_x_assum `_ = (ops,ps')` mp_tac >>
   pairarg_tac >> simp[] >>
@@ -3205,6 +3234,8 @@ Theorem reorder_one_sem_align:
     LENGTH target_ops <= LENGTH ps.ps_stack /\
     LENGTH target_ops <= 16 /\
     reorder_one dfg target_ops idx op ps = (ops, ps') /\
+    op <> dead_stack_marker /\
+    (!at. operand_equiv dfg op at ==> at <> dead_stack_marker) /\
     (!op1 at. operand_equiv dfg op1 at ==>
               operand_val vs lo op1 = operand_val vs lo at) ==>
     plan_stack_sem_eq lo vs
@@ -3305,8 +3336,17 @@ Proof
           `dist'`, `op`,
           `stack_peek (LENGTH target_ops - (idx + 1)) ps2.ps_stack`]
           mp_tac plan_stack_sem_eq_poke >>
-        (impl_tac >- (simp[] >> first_x_assum irule >> simp[])) >>
+        (impl_tac >- (
+          `stack_peek (LENGTH target_ops - (idx + 1)) ps2.ps_stack <>
+           dead_stack_marker` by metis_tac[] >>
+          simp[] >>
+          qpat_x_assum `!op1 at. operand_equiv dfg op1 at ==> _`
+            (qspecl_then
+              [`op`, `stack_peek (LENGTH target_ops - (idx + 1)) ps2.ps_stack`]
+              mp_tac) >> simp[])) >>
         simp[stack_poke_peek]) >>
+      `stack_peek (LENGTH target_ops - (idx + 1)) ps2.ps_stack <>
+       dead_stack_marker` by metis_tac[] >>
       qspecl_then [`lo`, `vs`, `ps2.ps_stack`,
         `stack_poke dist'
           (stack_peek (LENGTH target_ops - (idx + 1)) ps2.ps_stack)
@@ -4125,6 +4165,8 @@ Theorem reorder_single_op_val_on_tos_deep:
     plan_stack_rel lo vs
       (apply_prefix_ops initial_fmp lo rops ps).ps_stack as_stk /\
     as_stk <> [] /\
+    op <> dead_stack_marker /\
+    (!at. operand_equiv dfg op at ==> at <> dead_stack_marker) /\
     (!at. operand_equiv dfg op at ==>
           operand_val vs lo op = operand_val vs lo at) /\
     (* Spill conditions for deep swap (dist > 16) *)
@@ -4147,8 +4189,7 @@ Proof
     (* d <= 16: delegate to existing theorem *)
     qspecl_then [`dfg`, `op`, `ps`, `rops`, `ps'`, `lo`, `vs`, `as_stk`]
       mp_tac reorder_single_op_val_on_tos >>
-    simp[] >> disch_then irule >>
-    Q.EXISTS_TAC `d0` >> simp[])
+    simp[] >> disch_then irule >> metis_tac[])
   >> (* d > 16 *)
   (* Unfold reorder_plan for [op] *)
   qpat_x_assum `reorder_plan _ _ _ = _` mp_tac >>
@@ -4229,8 +4270,10 @@ Resume reorder_single_op_val_on_tos_deep[poke]:
   first_x_assum (qspec_then `stack_peek 0 ps2.ps_stack` mp_tac) >>
   simp[] >>
   (* stack_peek 0 stk = LAST stk when stk <> [] *)
-  rewrite_tac[stack_peek_def, GSYM PRE_SUB1] >>
-  simp[GSYM LAST_EL]
+  `stack_peek 0 ps2.ps_stack = LAST ps2.ps_stack` by
+    (Cases_on `ps2.ps_stack` >> fs[stack_peek_def, LAST_EL]) >>
+  `LAST ps2.ps_stack <> dead_stack_marker` by metis_tac[] >>
+  simp[]
 QED
 
 Resume reorder_single_op_val_on_tos_deep[swap_le16]:
@@ -4423,6 +4466,8 @@ Theorem reorder_one_venom_asm_rel_residual:
   !dfg pending idx op ps ops ps' base lo o2pc prog vs st.
     residual_budget_wf base pending ps /\
     pending_inventory_wf pending ps /\
+    (!at. operand_equiv dfg op at ==> at <> dead_stack_marker) /\
+    op <> dead_stack_marker /\
     idx < LENGTH pending /\ MEM op pending /\
     LENGTH pending <= LENGTH ps.ps_stack /\ LENGTH pending <= 16 /\
     reorder_one dfg pending idx op ps = (ops,ps') /\
@@ -4574,7 +4619,7 @@ Proof
           `stack_peek (LENGTH pending - (idx + 1)) ps2.ps_stack`]
           mp_tac plan_stack_sem_eq_poke >>
         (impl_tac >-
-          simp[plan_stack_sem_eq_def]) >>
+          (simp[plan_stack_sem_eq_def] >> metis_tac[])) >>
         simp[stack_poke_peek]) >>
       `stack_peek (LENGTH pending - (idx + 1))
          (stack_poke x'
@@ -4610,7 +4655,7 @@ Proof
              (stack_peek (LENGTH pending - (idx + 1)) ps2.ps_stack)
              ps2.ps_stack))` by (
         irule plan_stack_sem_eq_poke >>
-        simp[plan_stack_sem_eq_def]) >>
+        simp[plan_stack_sem_eq_def] >> metis_tac[]) >>
       `plan_stack_sem_eq lo vs
          (stack_poke x'
            (stack_peek (LENGTH pending - (idx + 1)) ps2.ps_stack)
@@ -6030,6 +6075,8 @@ QED
 Theorem plan_steps_reorder_venom_asm_rel_residual[local]:
   !items dfg pending ps ops ps' base lo o2pc prog vs st.
     EVERY (\(idx,op). idx < LENGTH pending /\ MEM op pending) items /\
+    EVERY (\op. op <> dead_stack_marker /\
+      !at. operand_equiv dfg op at ==> at <> dead_stack_marker) pending /\
     residual_budget_wf base pending ps /\
     pending_inventory_wf pending ps /\
     LENGTH pending <= LENGTH ps.ps_stack /\ LENGTH pending <= 16 /\
@@ -6065,6 +6112,9 @@ Proof
     (qpat_x_assum `asm_block_at prog st.as_pc
        (execute_plan initial_fmp (step_ops ++ rest_ops))` mp_tac >>
      simp[execute_plan_append, asm_block_at_append]) >>
+  `h1 <> dead_stack_marker /\
+   (!at. operand_equiv dfg h1 at ==> at <> dead_stack_marker)` by
+    (fs[EVERY_MEM] >> metis_tac[]) >>
   `?st1.
       asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp step_ops)) st =
         AsmOK st1 /\
@@ -6099,6 +6149,8 @@ Theorem reorder_plan_venom_asm_rel_residual:
   !dfg target_ops ps ops ps' base lo o2pc prog vs st.
     residual_budget_wf base target_ops ps /\
     pending_inventory_wf target_ops ps /\
+    EVERY (\op. op <> dead_stack_marker /\
+      !at. operand_equiv dfg op at ==> at <> dead_stack_marker) target_ops /\
     LENGTH target_ops <= LENGTH ps.ps_stack /\ LENGTH target_ops <= 16 /\
     reorder_steps_spill_ready initial_fmp dfg target_ops lo
       (MAPi (\i op. (i,op)) target_ops) ps /\
@@ -6135,6 +6187,8 @@ QED
 Theorem reorder_plan_exact_two_venom_asm_rel:
   !base dfg h h' ps ops ps' lo o2pc prog vs st.
     exact_two_planner_ready base h h' ps /\
+    EVERY (\op. op <> dead_stack_marker /\
+      !at. operand_equiv dfg op at ==> at <> dead_stack_marker) [h;h'] /\
     reorder_plan dfg [h;h'] ps = (ops,ps') /\
     (!op1 at. operand_equiv dfg op1 at ==>
               operand_val vs lo op1 = operand_val vs lo at) /\

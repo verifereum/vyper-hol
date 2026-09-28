@@ -40,17 +40,18 @@ Definition fmp_info_of_signature_def:
   |>
 End
 
-(* Raw operations which consume the incoming/current FMP.  SETFMP adopts a
- * supplied value, so it can publish without requiring an incoming value. *)
+(* Every raw virtual-register operation touches the current FMP and therefore
+ * requires the runner threaded by FmpLowering. *)
 Definition fmp_opcode_needs_fmp_def:
   fmp_opcode_needs_fmp op <=>
-    op = DALLOCA \/ op = DRET \/ op = GETFMP \/ op = RETFMP
+    op = DALLOCA \/ op = DRET \/ op = GETFMP \/ op = SETFMP \/ op = RETFMP
 End
 
-(* Operations which can advance, adopt, or explicitly return the current FMP. *)
+(* Publication is a return convention, not merely an FMP write.  Only the
+ * publishing terminators make the caller adopt a hidden output. *)
 Definition fmp_opcode_publishes_fmp_def:
   fmp_opcode_publishes_fmp op <=>
-    op = DALLOCA \/ op = DRET \/ op = SETFMP \/ op = RETFMP
+    op = DRET \/ op = RETFMP
 End
 
 Definition fmp_scan_insts_def:
@@ -133,13 +134,18 @@ Definition seed_fmp_context_def:
   seed_fmp_context ctx = fmp_seed_functions ctx ctx.ctx_functions FEMPTY
 End
 
+(* Calls propagate only the need to carry an FMP.  Whether a function
+ * publishes is local to its own DRET/RETFMP terminator. *)
 Definition fmp_join_target_info_def:
   fmp_join_target_info infos [] acc = SOME acc /\
   fmp_join_target_info infos (name::rest) acc =
     case FLOOKUP infos name of
       NONE => NONE
     | SOME info =>
-        fmp_join_target_info infos rest (fmp_info_join acc info)
+        fmp_join_target_info infos rest
+          (fmp_info_join acc
+            <| fi_needs_fmp := info.fi_needs_fmp;
+               fi_publishes_fmp := F |>)
 End
 
 (* Compute a function's next entry entirely from the old map. *)
@@ -186,8 +192,9 @@ Definition analyze_fmp_context_def:
 End
 
 (* Stable consumer contract.  Coverage and exact sealed entries are stated
- * directly; every unsealed entry is the direct seed joined with all current
- * resolved callees, and malformed/dangling invokes are impossible. *)
+ * directly; every unsealed entry is the direct seed with callee FMP needs
+ * joined in (publication stays local), and malformed/dangling invokes are
+ * impossible. *)
 Definition fmp_info_valid_def:
   fmp_info_valid (ctx:venom_context) (infos:fmp_info_map) <=>
     ctx_distinct_fn_names ctx /\
@@ -242,5 +249,3 @@ Proof
          (qspec_then `fn` mp_tac)) >>
   simp[] >> res_tac >> gvs[]
 QED
-
-val _ = export_theory();

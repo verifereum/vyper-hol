@@ -187,5 +187,3 @@ Theorem static_position_wf_zero:
 Proof
   simp[static_position_wf_def]
 QED
-
-val _ = export_theory();

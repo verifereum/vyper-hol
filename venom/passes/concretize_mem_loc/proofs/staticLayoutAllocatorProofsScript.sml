@@ -383,5 +383,3 @@ Proof
   strip_tac >> rpt gen_tac >> strip_tac >>
   drule merge_forced_positions_forced >> simp[allocation_id_def]
 QED
-
-val _ = export_theory();

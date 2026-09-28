@@ -9,5 +9,3 @@ Libs
    shared frontend preparation tests. *)
 val prepare_trace = vyperCheckContractTraceLib.prepare_deployment_trace;
 val check_trace = vyperCheckContractTraceLib.check_deployment_trace;
-
-val _ = export_theory ();

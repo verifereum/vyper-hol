@@ -46,8 +46,8 @@ End
 Definition exec_stack_op_def:
   exec_stack_op initial_fmp (SOPush (Lit v)) =
     (* Python: PUSH(wrap256(value)) → minimal big-endian byte list.
-       0 → PUSH0, 42 → PUSH1 42, etc. encode_num_bytes gives minimal. *)
-    ([AsmPush (encode_num_bytes (w2n v))] : asm_inst list) ∧
+       0 → PUSH0, 42 → PUSH1 42, etc. *)
+    ([AsmPush (encode_num_bytes_fuel 32 (w2n v))] : asm_inst list) ∧
   exec_stack_op initial_fmp (SOPush (Var _)) = [] ∧
   exec_stack_op initial_fmp (SOPush (Label l)) = [AsmPushLabel l] ∧
   exec_stack_op initial_fmp (SOPop n) = REPLICATE n (AsmOp "POP") ∧

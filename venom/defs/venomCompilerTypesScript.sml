@@ -50,5 +50,3 @@ Proof
   strip_tac >>
   gvs []
 QED
-
-val _ = export_theory ();

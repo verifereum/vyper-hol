@@ -359,5 +359,3 @@ Definition analyze_fmp_reclaims_def:
           let plan = fmp_candidate_plan infos ctx fn states in
           if fmp_reclaim_plan_ok infos ctx fn plan then SOME plan else NONE
 End
-
-val _ = export_theory();

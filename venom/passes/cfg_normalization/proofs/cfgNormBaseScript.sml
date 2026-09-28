@@ -7449,5 +7449,3 @@ Proof
   simp[] >>
   disch_then (qspecl_then [`ctx'`, `s'`] mp_tac) >> simp[]
 QED
-
-val _ = export_theory();

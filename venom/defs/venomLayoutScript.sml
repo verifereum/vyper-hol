@@ -46,5 +46,3 @@ Proof
   `32 - n MOD 32 <= 31` by decide_tac >>
   decide_tac
 QED
-
-val _ = export_theory();

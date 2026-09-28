@@ -68,5 +68,3 @@ val _ =
    handle Fail message =>
      if String.isSubstring "check_contract returned NONE" message then ()
      else raise Fail message);
-
-val _ = export_theory ();

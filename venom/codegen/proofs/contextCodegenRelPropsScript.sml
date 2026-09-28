@@ -186,5 +186,3 @@ Proof
   first_x_assum drule >>
   PairCases_on `e` >> simp[] >> metis_tac[]
 QED
-
-val _ = export_theory();

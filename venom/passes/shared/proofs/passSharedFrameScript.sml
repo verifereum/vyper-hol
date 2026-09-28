@@ -1837,5 +1837,3 @@ Proof
               commute_base_case) >>
       simp[]))
 QED
-
-val _ = export_theory();

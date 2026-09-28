@@ -594,7 +594,3 @@ Proof
   simp[generate_context_plan_fuel_def] >>
   metis_tac[generate_context_plan_with_access_bounded]
 QED
-
-
-
-val _ = export_theory();

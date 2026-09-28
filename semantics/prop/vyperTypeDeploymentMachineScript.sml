@@ -580,5 +580,3 @@ Proof
      gvs[]) >>
   irule deployment_source_install_preserves_machine_well_typed >> simp[]
 QED
-
-val _ = export_theory();

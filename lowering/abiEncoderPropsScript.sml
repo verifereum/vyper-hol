@@ -7,7 +7,7 @@
  *   compile_abi_encode_static_correct — static type writes word to dst
  *   compile_abi_decode_static_correct — static type reads + clamps
  *   compile_abi_encode_to_buf_correct — recursive ABI encode correctness (single-block)
- *   compile_get_element_ptr_zero       — get_element_ptr at offset 0 is identity
+ *   compile_get_element_ptr_zero       — zero-offset pointer ADD preserves value
  *   compile_get_element_ptr_correct   — get_element_ptr adds offset to parent pointer
  *   val_in_memory_prim_enc            — primitive val_in_memory matches ABI encoding
  *   val_in_memory_flag_enc            — flag val_in_memory matches ABI encoding
@@ -574,25 +574,14 @@ Resume compile_abi_encode_to_buf_correct[child]:
   qpat_x_assum `!d. ~ ~ is_dyn ==> _` kall_tac >>
   gvs[compile_abi_encode_child_def, comp_bind_def, comp_return_def] >>
   pairarg_tac >> gvs[] >>
-  reverse (Cases_on `static_ofst = 0`) >> gvs[]
-  >- (
-    (* static_ofst ≠ 0: emit_op ADD first *)
-    drule emit_op_ADD_correct >>
-    disch_then drule >>
-    simp[eval_operand_def] >>
-    simp[Once wordsTheory.word_add_n2w] >>
-    strip_tac >>
-    suspend"childADD") >>
-  (* static_ofst = 0: child_dst = dst, directly apply IH *)
-  gvs[comp_return_def] >>
-  first_x_assum $ drule_then (drule_at Any) >>
-  rpt(disch_then $ drule_at Any) >>
-  disch_then(qspecl_then[`cenv`]mp_tac) >>
-  impl_tac >- rw[] >>
+  (* Pinned Python computes every child head pointer with ADD, including
+     zero offsets, so establish the emitted ADD before applying the child IH. *)
+  drule emit_op_ADD_correct >>
+  disch_then drule >>
+  simp[eval_operand_def] >>
+  simp[Once wordsTheory.word_add_n2w] >>
   strip_tac >>
-  goal_assum drule >> gvs[] >>
-  rpt strip_tac >>
-  first_x_assum irule >> gvs[]
+  suspend"childADD"
 QED
 
 Resume compile_abi_encode_to_buf_correct[childADD]:
@@ -641,18 +630,26 @@ Resume compile_abi_encode_to_buf_correct[prim]:
     >- (
       Cases_on`b` \\ gvs[exprLoweringTheory.type_to_abi_enc_info_def] >>
       Cases_on`b'` \\ gvs[exprLoweringTheory.type_to_abi_enc_info_def] )
-    >- (
-      Cases_on`b` \\ gvs[exprLoweringTheory.type_to_abi_enc_info_def] ) >>
-    Cases_on`v1` >> gvs[] >>
-    first_x_assum drule >>
-    rw[] >> rw[] ) >>
+    >- (BasicProvers.EVERY_CASE_TAC >>
+        gvs[exprLoweringTheory.type_to_abi_enc_info_def]) >>
+    FIRST
+      [Cases_on`b` >> gvs[exprLoweringTheory.type_to_abi_enc_info_def] >>
+       BasicProvers.EVERY_CASE_TAC >>
+       gvs[exprLoweringTheory.type_to_abi_enc_info_def],
+       Cases_on`v1` >> gvs[] >>
+       first_x_assum drule >>
+       rw[] >> rw[]] ) >>
   drule_all $ cj 1 enc_has_static_length >> strip_tac >>
   `∀tys. ty ≠ TupleT tys` by (
-    rpt strip_tac >> gvs[exprLoweringTheory.type_to_abi_enc_info_def]) >>
-  `∀a b. ty ≠ ArrayT a b` by (
-    strip_tac >>
-    Cases >> rpt strip_tac >>
+    rpt strip_tac >>
+    Cases_on `is_abi_dynamic cenv.ce_struct_fields (TupleT tys)` >>
     gvs[exprLoweringTheory.type_to_abi_enc_info_def]) >>
+  `∀a b. ty ≠ ArrayT a b` by (
+    strip_tac >> Cases >> rpt strip_tac >>
+    FIRST
+      [Cases_on `is_abi_dynamic cenv.ce_struct_fields (ArrayT a (Fixed n))` >>
+       gvs[exprLoweringTheory.type_to_abi_enc_info_def],
+       gvs[exprLoweringTheory.type_to_abi_enc_info_def]]) >>
   `ty ≠ NoneT` by (
       strip_tac >> gvs[exprLoweringTheory.type_to_abi_enc_info_def]) >>
   `static_length aty = 32` by (
@@ -669,8 +666,10 @@ Resume compile_abi_encode_to_buf_correct[prim]:
     strip_tac >>
     reverse CASE_TAC >> simp[]
     >- (
-      CASE_TAC >> simp[] >>
-      res_tac >> gs[vyperValueTheory.evaluate_type_def] ) >>
+      CASE_TAC >> simp[]
+      >- gvs[vyperValueTheory.evaluate_type_def]
+      >- (Cases_on `x` >> gvs[vyperValueTheory.evaluate_type_def] >>
+          res_tac >> gvs[]) ) >>
     gvs[vyperValueTheory.evaluate_type_def] ) >>
   simp[eval_operand_def] >>
   reverse conj_tac >- first_x_assum MATCH_ACCEPT_TAC >>
@@ -742,12 +741,24 @@ Finalise compile_abi_encode_to_buf_correct
 
 (* ===== Element Pointer ===== *)
 
-(* get_element_ptr at offset 0 returns parent *)
+(* Pinned Python emits ADD even at offset zero; the fresh result operand has
+   the same evaluated pointer value as its parent. *)
 Theorem compile_get_element_ptr_zero:
-  ∀ parent_ptr st.
-    compile_get_element_ptr parent_ptr 0 st = (parent_ptr, st)
+  ∀ parent_ptr ss st op st'.
+    compile_get_element_ptr parent_ptr 0 st = (op, st') ∧
+    eval_operand parent_ptr ss = SOME base_w
+    ⇒
+    ∃ ss'.
+      run_inst_seq (emitted_insts st st') ss = OK ss' ∧
+      eval_operand op ss' = SOME base_w
 Proof
-  simp[compile_get_element_ptr_def, comp_return_def, comp_bind_def, comp_ignore_bind_def]
+  rpt gen_tac >> strip_tac >> gvs[compile_get_element_ptr_def] >>
+  drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
+  qexists `update_var (STRING #"%" (toString st.cs_next_var)) (base_w + 0w) ss` >>
+  conj_tac >- (
+    irule run_inst_seq_sing_ok >>
+    simp[step_ADD, eval_operand_lit]) >>
+  simp[eval_operand_update_var]
 QED
 
 (* get_element_ptr at non-zero offset adds offset *)

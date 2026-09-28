@@ -655,9 +655,11 @@ Proof
     simp[Once step_inst_base_def] >>
     simp[GSYM listTheory.MAP_DROP, listTheory.EL_MAP,
          rich_listTheory.MAP_HD] >>
-    `eval_operands (MAP (subst_op_map subs) (DROP 2 rest)) s =
-     eval_operands (DROP 2 rest) s` by
-      (irule eval_operands_map_thm >> metis_tac[]) >> simp[])
+    `eval_operands (MAP (subst_op_map subs) (DROP 2 (REVERSE rest))) s =
+     eval_operands (DROP 2 (REVERSE rest)) s` by
+      (irule eval_operands_map_thm >> metis_tac[]) >>
+    simp[GSYM listTheory.MAP_REVERSE, GSYM listTheory.MAP_DROP,
+         listTheory.EL_MAP, rich_listTheory.MAP_HD])
   >- ((* JNZ *)
     simp[step_inst_non_invoke] >>
     simp[Once step_inst_base_def] >>
@@ -958,6 +960,21 @@ QED
  *   - excluded: PHI (not executable), ALLOCA/PALLOCA/CALLOCA (need Lit),
  *     PARAM (needs Lit)
  *)
+Triviality log_reverse_operand_agreement:
+  !xs ys st.
+    LENGTH xs = LENGTH ys /\
+    (!i. i < LENGTH xs ==>
+      eval_operand (EL i xs) st = eval_operand (EL i ys) st) ==>
+    !i. i < LENGTH xs ==>
+      eval_operand (EL i (REVERSE xs)) st =
+      eval_operand (EL i (REVERSE ys)) st
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `!j. j < LENGTH xs ==> _`
+    (qspec_then `PRE (LENGTH xs - i)` mp_tac) >>
+  (impl_tac >- DECIDE_TAC) >> simp[EL_REVERSE]
+QED
+
 Theorem step_inst_operands_equiv:
   !fuel ctx inst new_ops st.
     inst_wf inst /\
@@ -1003,21 +1020,35 @@ Proof
   gvs[] >> gvs[inst_wf_def]
   >- ( (* LOG: Lit tc :: rest *)
       Cases_on `new_ops` >> gvs[] >>
-      `eval_operand (HD t) st = eval_operand (HD rest) st` by (
-        qpat_x_assum `!i. _ ==> eval_operand _ _ = _`
-          (qspec_then `1` mp_tac) >> simp[] >>
-        Cases_on `t` >> Cases_on `rest` >> gvs[]) >>
-      `eval_operand (EL 1 t) st = eval_operand (EL 1 rest) st` by (
-        qpat_x_assum `!i. _ ==> eval_operand _ _ = _`
-          (qspec_then `2` mp_tac) >> simp[]) >>
-      `eval_operands (DROP 2 t) st = eval_operands (DROP 2 rest) st` by (
+      `!i. i < LENGTH t ==>
+        eval_operand (EL i t) st = eval_operand (EL i rest) st` by (
+        rpt strip_tac >>
+        qpat_x_assum `!j. _ ==> eval_operand (EL j (Lit tc::t)) st = _`
+          (qspec_then `SUC i` mp_tac) >> simp[]) >>
+      `!i. i < LENGTH t ==>
+        eval_operand (EL i (REVERSE t)) st =
+        eval_operand (EL i (REVERSE rest)) st` by
+        (qspecl_then [`t`, `rest`, `st`] mp_tac
+           log_reverse_operand_agreement >> simp[]) >>
+      `eval_operand (HD (REVERSE t)) st =
+       eval_operand (HD (REVERSE rest)) st` by
+        (qpat_x_assum `!i. i < LENGTH t ==> _`
+          (qspec_then `0` mp_tac) >> simp[]) >>
+      `eval_operand (EL 1 (REVERSE t)) st =
+       eval_operand (EL 1 (REVERSE rest)) st` by
+        (qpat_x_assum `!i. i < LENGTH t ==> _`
+          (qspec_then `1` mp_tac) >> simp[]) >>
+      `eval_operands (DROP 2 (REVERSE t)) st =
+       eval_operands (DROP 2 (REVERSE rest)) st` by (
         irule eval_operands_positional >> simp[LENGTH_DROP] >>
         rpt strip_tac >>
-        `EL i (DROP 2 t) = EL (i + 2) t` by (irule EL_DROP >> simp[]) >>
-        `EL i (DROP 2 rest) = EL (i + 2) rest` by (irule EL_DROP >> simp[]) >>
+        `EL i (DROP 2 (REVERSE t)) = EL (i + 2) (REVERSE t)` by
+          (irule EL_DROP >> simp[]) >>
+        `EL i (DROP 2 (REVERSE rest)) = EL (i + 2) (REVERSE rest)` by
+          (irule EL_DROP >> simp[]) >>
         simp[] >>
-        qpat_x_assum `!i. _ ==> eval_operand _ _ = _`
-          (qspec_then `SUC (i + 2)` mp_tac) >> simp[]) >>
+        qpat_x_assum `!j. j < LENGTH t ==> _`
+          (qspec_then `i + 2` mp_tac) >> simp[]) >>
       simp[Once step_inst_base_def, SimpLHS] >>
       simp[Once step_inst_base_def, SimpRHS])
   >- ( (* JMP: [Label lbl] *)

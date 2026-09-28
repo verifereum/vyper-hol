@@ -159,7 +159,7 @@ Theorem orig_data_dep_contra_filtered:
     fl = FILTER (\q. ~is_pseudo q.inst_opcode) bi /\
     i < j /\ j < LENGTH fl /\
     ALL_DISTINCT (MAP (\q. q.inst_id) bi) /\
-    defs_before_uses bi /\
+    np_defs_before_uses bi /\
     ALL_DISTINCT (FLAT (MAP (\q. q.inst_outputs) bi)) /\
     MEM (Var v) (EL i fl).inst_operands /\ MEM v (EL j fl).inst_outputs ==>
     F
@@ -175,7 +175,10 @@ Proof
   `?p. p < n /\ EL p bi = EL m bi` by (
     `MEM (Var v) (EL n bi).inst_operands` by metis_tac[] >>
     `n < LENGTH bi` by decide_tac >>
-    fs[defs_before_uses_def] >>
+    `~is_pseudo (EL n bi).inst_opcode` by (
+      `MEM (EL i fl) fl` by (irule EL_MEM >> decide_tac) >>
+      gvs[MEM_FILTER]) >>
+    fs[np_defs_before_uses_def] >>
     metis_tac[]) >>
   `p = m` by (
     `p < LENGTH bi` by decide_tac >>

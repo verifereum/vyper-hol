@@ -47,5 +47,3 @@ Proof
      first_x_assum (qspec_then `SUC (current_dom_trees_size ts)` mp_tac) >>
      simp[]
 QED
-
-val _ = export_theory();

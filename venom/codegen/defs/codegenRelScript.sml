@@ -51,6 +51,7 @@ Definition plan_stack_rel_def:
     ∀i. i < LENGTH ps_stack ⇒
       let op = EL i (REVERSE ps_stack) in
       let val = EL i asm_stack in
+      op = dead_stack_marker \/
       operand_val vs label_offsets op = SOME val
 End
 
@@ -63,6 +64,7 @@ Definition plan_spill_rel_def:
   plan_spill_rel label_offsets vs ps_spilled asm_memory ⇔
     ∀op off.
       FLOOKUP ps_spilled op = SOME off ⇒
+      op = dead_stack_marker \/
       ∃v. operand_val vs label_offsets op = SOME v ∧
           word_of_bytes T (0w:bytes32)
             (TAKE 32 (DROP off asm_memory)) = v

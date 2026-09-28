@@ -3498,5 +3498,3 @@ Proof
   simp[vyperInterpreterTheory.call_external_transaction_def] >>
   metis_tac[call_external_log_extends]
 QED
-
-val _ = export_theory();

@@ -224,5 +224,3 @@ Proof
   simp[fmp_runner_rooted_wf_def, listTheory.EVERY_MEM,
        fmp_runner_inst_wf_def, fmp_return_consumer_wf_def]
 QED
-
-val _ = export_theory();

@@ -159,4 +159,3 @@ Proof
   >> gvs[fmp_inst_invokes_def]
   >> metis_tac[]
 QED
-val _ = export_theory();

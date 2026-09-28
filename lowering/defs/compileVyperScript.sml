@@ -269,21 +269,6 @@ Definition add_module_var_locations_def:
     add_module_var_locations rest vars'
 End
 
-(* ===== Local Variable Collection ===== *)
-
-Definition collect_locals_def:
-  collect_locals ([] : stmt list) = ([] : (string # type) list) ∧
-  collect_locals (AnnAssign id ty _ :: rest) =
-    (id, ty) :: collect_locals rest ∧
-  collect_locals (If _ then_stmts else_stmts :: rest) =
-    collect_locals then_stmts ++
-    collect_locals else_stmts ++
-    collect_locals rest ∧
-  collect_locals (For id ty _ _ for_body :: rest) =
-    (id, ty) :: collect_locals for_body ++ collect_locals rest ∧
-  collect_locals (_ :: rest) = collect_locals rest
-End
-
 (* ===== Dynamic Array Capacity ===== *)
 
 Definition dynarray_capacity_of_type_def:
@@ -316,10 +301,22 @@ Definition build_method_id_map_def:
     let rest_map = build_method_id_map tenv rest in
     case top of
       FunctionDecl External _ _ _ fname fargs _ _ _ =>
-        let abi_types = vyper_to_abi_types tenv (MAP SND fargs) in
-        let sel_bytes = function_selector fname abi_types in
-        let sel_num = w2n (calldata_method_id sel_bytes) in
-        (λs. if s = fname then sel_num else rest_map s)
+        (* Keep selector hashing inside the matching lookup branch.  The map is
+           stored in every compile environment but most functions never query
+           it; eagerly hashing all declarations changes no result and makes
+           logical evaluation repeat the dispatcher's selector work. *)
+        (λs. if s = fname then
+               let abi_types = vyper_to_abi_types tenv (MAP SND fargs) in
+               let sel_bytes = function_selector fname abi_types in
+               w2n (calldata_method_id sel_bytes)
+             else rest_map s)
+    | InterfaceDecl _ methods =>
+        (λs. case ALOOKUP methods s of
+               SOME (fargs, _, _) =>
+                 let abi_types = vyper_to_abi_types tenv (MAP SND fargs) in
+                 let sel_bytes = function_selector s abi_types in
+                 w2n (calldata_method_id sel_bytes)
+             | NONE => rest_map s)
     | _ => rest_map
 End
 
@@ -442,7 +439,7 @@ Definition build_compile_env_def:
           case ALOOKUP (REVERSE (args ++ locals)) n of
             SOME ty => SOME ty
           | NONE => var_type_map n) in
-    <| ce_target := prague_capabilities;
+    <| ce_target := all_capabilities;
        ce_vars := all_vars;
        ce_storage_layout := storage_layout;
        (* TODO: NONE = main module. For multi-module (imports), should
@@ -475,7 +472,7 @@ End
 Theorem build_compile_env_ce_target[simp]:
   !tops vis mut func_name args ret_type (body : stmt list) use_trans.
     (build_compile_env tops vis mut func_name args ret_type body use_trans).
-      ce_target = prague_capabilities
+      ce_target = all_capabilities
 Proof
   rpt strip_tac
   >> simp[build_compile_env_def]
@@ -536,13 +533,32 @@ Proof
 QED
 
 
+Definition external_return_needs_wrap_def:
+  external_return_needs_wrap (TupleT (_::_::_)) = F /\
+  external_return_needs_wrap _ = T
+End
+
 Definition update_cenv_ret_abi_def:
   update_cenv_ret_abi cenv ret_type =
-    let enc_info = type_to_abi_enc_info cenv.ce_struct_fields cenv ret_type in
-    let dec_info = type_to_abi_dec_info cenv.ce_struct_fields cenv ret_type in
-    let max_ret = abi_size_bound cenv.ce_struct_fields ret_type in
+    let child_enc = type_to_abi_enc_info cenv.ce_struct_fields cenv ret_type in
+    let child_dec = type_to_abi_dec_info cenv.ce_struct_fields cenv ret_type in
+    let child_bound = abi_size_bound cenv.ce_struct_fields ret_type in
+    let child_dynamic = is_abi_dynamic cenv.ce_struct_fields ret_type in
+    let needs_wrap = external_return_needs_wrap ret_type in
+    (* Python's calculate_type_for_external_return wraps every single return
+       value (including one-tuples and structs) in an ABI tuple.  Dynamic
+       children therefore gain a 32-byte offset head. *)
+    let enc_info =
+      if needs_wrap /\ child_dynamic then
+        AbiComplex [(child_enc,
+                     abi_embedded_static_size cenv.ce_struct_fields ret_type,
+                     type_memory_bytes cenv ret_type,
+                     T)]
+      else child_enc in
+    let max_ret =
+      if needs_wrap /\ child_dynamic then 32 + child_bound else child_bound in
     cenv with <| ce_ret_enc_info := enc_info;
-                 ce_ret_dec_info := dec_info;
+                 ce_ret_dec_info := child_dec;
                  ce_max_return_size := max_ret |>
 End
 
@@ -626,7 +642,7 @@ Definition package_external_fn_def:
     let is_view = (mut = View) in
     (entry_lbl, cenv_final, pos_args, min_cds,
      is_payable, nr, nkey, use_trans, is_view,
-     body, SOME ret)
+     body, if ret = NoneT then NONE else SOME ret)
 End
 
 (* Package an internal function for compilation.
@@ -656,7 +672,7 @@ Definition package_internal_fn_def:
     (fn_lbl, cenv_final, params, has_ret_buf,
      nr, nkey, use_trans, is_view,
      is_ctor_context, (if is_ctor_context then immutables_len else 0n),
-     body, SOME ret)
+     body, if ret = NoneT then NONE else SOME ret)
 End
 
 Theorem package_internal_fn_call_label:
@@ -847,8 +863,8 @@ Proof
   simp[set_internal_package_target_def] >> strip_tac >> gvs[]
 QED
 
-Theorem set_external_package_target_prague[simp]:
-  set_external_package_target prague_capabilities
+Theorem set_external_package_target_all_capabilities[simp]:
+  set_external_package_target all_capabilities
     (package_external_fn tops use_trans nkey_map source) =
   package_external_fn tops use_trans nkey_map source
 Proof
@@ -857,8 +873,8 @@ Proof
   irule compile_env_target_update_id >> IF_CASES_TAC >> simp[]
 QED
 
-Theorem set_internal_package_target_prague[simp]:
-  set_internal_package_target prague_capabilities
+Theorem set_internal_package_target_all_capabilities[simp]:
+  set_internal_package_target all_capabilities
     (package_internal_fn tops use_trans nkey_map is_ctor immutables_len source) =
   package_internal_fn tops use_trans nkey_map is_ctor immutables_len source
 Proof
@@ -867,8 +883,8 @@ Proof
   irule compile_env_target_update_id >> simp[]
 QED
 
-Theorem set_fallback_package_target_prague[simp]:
-  set_fallback_package_target prague_capabilities
+Theorem set_fallback_package_target_all_capabilities[simp]:
+  set_fallback_package_target all_capabilities
     (package_fallback_fn tops use_trans nkey_map source) =
   package_fallback_fn tops use_trans nkey_map source
 Proof
@@ -879,8 +895,8 @@ Proof
   irule compile_env_target_update_id >> simp[]
 QED
 
-Theorem set_constructor_package_target_prague[simp]:
-  set_constructor_package_target prague_capabilities
+Theorem set_constructor_package_target_all_capabilities[simp]:
+  set_constructor_package_target all_capabilities
     (package_constructor tops use_trans nkey_map source) =
   package_constructor tops use_trans nkey_map source
 Proof
@@ -894,7 +910,7 @@ Theorem set_external_package_target_all[simp]:
     (package_external_fn tops use_trans nkey_map source) =
   package_external_fn tops use_trans nkey_map source
 Proof
-  rw[GSYM venomPolicyTypesTheory.prague_capabilities_def]
+  rw[GSYM venomPolicyTypesTheory.all_capabilities_def]
 QED
 
 Theorem set_internal_package_target_all[simp]:
@@ -902,7 +918,7 @@ Theorem set_internal_package_target_all[simp]:
     (package_internal_fn tops use_trans nkey_map is_ctor immutables_len source) =
   package_internal_fn tops use_trans nkey_map is_ctor immutables_len source
 Proof
-  rw[GSYM venomPolicyTypesTheory.prague_capabilities_def]
+  rw[GSYM venomPolicyTypesTheory.all_capabilities_def]
 QED
 
 Theorem set_fallback_package_target_all[simp]:
@@ -910,7 +926,7 @@ Theorem set_fallback_package_target_all[simp]:
     (package_fallback_fn tops use_trans nkey_map source) =
   package_fallback_fn tops use_trans nkey_map source
 Proof
-  rw[GSYM venomPolicyTypesTheory.prague_capabilities_def]
+  rw[GSYM venomPolicyTypesTheory.all_capabilities_def]
 QED
 
 Theorem set_constructor_package_target_all[simp]:
@@ -918,7 +934,7 @@ Theorem set_constructor_package_target_all[simp]:
     (package_constructor tops use_trans nkey_map source) =
   package_constructor tops use_trans nkey_map source
 Proof
-  rw[GSYM venomPolicyTypesTheory.prague_capabilities_def]
+  rw[GSYM venomPolicyTypesTheory.all_capabilities_def]
 QED
 
 
@@ -1095,9 +1111,9 @@ Definition compile_vyper_def:
       finalizer policy tops
 End
 
-(* Prague is only the exact O1 target specialization. *)
+(* The exact O1 specialization, targeting all capabilities. *)
 Definition compile_vyper_o1_def:
   compile_vyper_o1 (finalizer : assembly_finalizer)
                    (tops : toplevel list) =
-    compile_vyper finalizer (o1_policy prague_capabilities) tops
+    compile_vyper finalizer (o1_policy all_capabilities) tops
 End

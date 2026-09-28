@@ -424,18 +424,24 @@ Proof
     (rw[] >> first_x_assum (qspec_then `op` mp_tac) >> simp[]) >>
   IF_CASES_TAC >> simp[lift_result_def] >>
   `2 <= LENGTH rest` by simp[] >>
-  `MEM (HD rest) rest` by (Cases_on `rest` >> fs[]) >>
-  `MEM (EL 1 rest) rest` by (irule rich_listTheory.EL_MEM >> simp[]) >>
-  `eval_operand (HD rest) s1 = eval_operand (HD rest) s2` by res_tac >>
-  `eval_operand (EL 1 rest) s1 = eval_operand (EL 1 rest) s2` by res_tac >>
-  `eval_operands (DROP 2 rest) s1 = eval_operands (DROP 2 rest) s2` by (
+  `MEM (HD (REVERSE rest)) rest` by
+    (once_rewrite_tac[GSYM MEM_REVERSE] >>
+     Cases_on `REVERSE rest` >> fs[]) >>
+  `MEM (EL 1 (REVERSE rest)) rest` by
+    (once_rewrite_tac[GSYM MEM_REVERSE] >>
+     irule rich_listTheory.EL_MEM >> simp[]) >>
+  `eval_operand (HD (REVERSE rest)) s1 =
+   eval_operand (HD (REVERSE rest)) s2` by res_tac >>
+  `eval_operand (EL 1 (REVERSE rest)) s1 =
+   eval_operand (EL 1 (REVERSE rest)) s2` by res_tac >>
+  `eval_operands (DROP 2 (REVERSE rest)) s1 =
+   eval_operands (DROP 2 (REVERSE rest)) s2` by (
     qsuff_tac `!ops. (!op. MEM op ops ==> eval_operand op s1 = eval_operand op s2) ==>
                eval_operands ops s1 = eval_operands ops s2`
-    >- (disch_then irule >> rw[] >> res_tac >> metis_tac[MEM_DROP_IMP])
+    >- (disch_then irule >> rw[] >> res_tac >>
+        metis_tac[MEM_DROP_IMP, MEM_REVERSE])
     >> Induct >> rw[eval_operands_def]) >>
   simp[] >>
   rpt (CASE_TAC >> gvs[lift_result_def]) >>
   vsr_irule vsr_logs_R_ok >> simp[]
 QED
-
-val _ = export_theory()

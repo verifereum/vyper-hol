@@ -1634,7 +1634,9 @@ Proof
     pairarg_tac >> gvs[] >>
     pairarg_tac >> gvs[] >>
     pairarg_tac >> gvs[] >>
-    qpat_x_assum `(if _ then _ else _) = _` mp_tac >>
+    qpat_x_assum
+      `(if _ then (ops_a,ps_a) else (ops_b,ps_b)) = (reorder_ops,ps4)`
+      mp_tac >>
     IF_CASES_TAC >> strip_tac >> gvs[]
     >- suspend "comm_lt"
     >> suspend "comm_ge"
@@ -1663,16 +1665,15 @@ Resume regular_plan_prefix_wf_gen[comm_lt]:
   (* outputs <> []: decompose nested lambdas *)
   IF_CASES_TAC >> simp[]
   >- (
-    pairarg_tac >> simp[] >>
-    IF_CASES_TAC >> simp[]
-    >- (strip_tac >> gvs[] >>
-        `prefix = input_ops ++ ops_a /\ postfix = pop_ops` by (
+    pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+    Cases_on `FILTER (λout. MEM out next_liveness) inst.inst_outputs = []` >>
+    gvs[]
+    >- (`prefix = input_ops ++ ops_a /\ postfix = pop_ops` by (
           qspecl_then [`input_ops ++ ops_a`, `SOEmit name`, `pop_ops`,
                        `prefix`, `postfix`] mp_tac append_mid_split_unique >>
           simp[EVERY_APPEND, is_prefix_op_def] >>
           impl_tac >- metis_tac[popmany_plan_prefix_op] >> simp[]) >>
         gvs[EVERY_APPEND] >> metis_tac[prefix_wf_append]) >>
-    pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
     `EVERY is_prefix_op pop_ops` by metis_tac[popmany_plan_prefix_op] >>
     `EVERY is_prefix_op opt_ops` by metis_tac[optimistic_swap_plan_prefix_op] >>
     `prefix = input_ops ++ ops_a /\ postfix = pop_ops ++ opt_ops` by (
@@ -1681,14 +1682,15 @@ Resume regular_plan_prefix_wf_gen[comm_lt]:
       simp[EVERY_APPEND, is_prefix_op_def]) >>
     gvs[EVERY_APPEND] >> metis_tac[prefix_wf_append]
   ) >>
-  IF_CASES_TAC >> simp[]
-  >- (strip_tac >> gvs[] >>
-      `prefix = input_ops ++ ops_a /\ postfix = []` by (
+  strip_tac >> gvs[] >>
+  Cases_on `FILTER (λout. MEM out next_liveness) inst.inst_outputs = []` >>
+  gvs[]
+  >- (`prefix = input_ops ++ ops_a /\ postfix = []` by (
         qspecl_then [`input_ops ++ ops_a`, `SOEmit name`, `[]`,
                      `prefix`, `postfix`] mp_tac append_mid_split_unique >>
         simp[EVERY_APPEND, is_prefix_op_def]) >>
       gvs[EVERY_APPEND] >> metis_tac[prefix_wf_append]) >>
-  pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >>
   `EVERY is_prefix_op opt_ops` by metis_tac[optimistic_swap_plan_prefix_op] >>
   `prefix = input_ops ++ ops_a /\ postfix = opt_ops` by (
     qspecl_then [`input_ops ++ ops_a`, `SOEmit name`, `opt_ops`,
@@ -1725,16 +1727,15 @@ Resume regular_plan_prefix_wf_gen[comm_ge]:
   ) >>
   IF_CASES_TAC >> simp[]
   >- (
-    pairarg_tac >> simp[] >>
-    IF_CASES_TAC >> simp[]
-    >- (strip_tac >> gvs[] >>
-        `prefix = input_ops ++ ops_b /\ postfix = pop_ops` by (
+    pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+    Cases_on `FILTER (λout. MEM out next_liveness) inst.inst_outputs = []` >>
+    gvs[]
+    >- (`prefix = input_ops ++ ops_b /\ postfix = pop_ops` by (
           qspecl_then [`input_ops ++ ops_b`, `SOEmit name`, `pop_ops`,
                        `prefix`, `postfix`] mp_tac append_mid_split_unique >>
           simp[EVERY_APPEND, is_prefix_op_def] >>
           impl_tac >- metis_tac[popmany_plan_prefix_op] >> simp[]) >>
         gvs[EVERY_APPEND] >> metis_tac[prefix_wf_append]) >>
-    pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
     `EVERY is_prefix_op pop_ops` by metis_tac[popmany_plan_prefix_op] >>
     `EVERY is_prefix_op opt_ops` by metis_tac[optimistic_swap_plan_prefix_op] >>
     `prefix = input_ops ++ ops_b /\ postfix = pop_ops ++ opt_ops` by (
@@ -1743,14 +1744,15 @@ Resume regular_plan_prefix_wf_gen[comm_ge]:
       simp[EVERY_APPEND, is_prefix_op_def]) >>
     gvs[EVERY_APPEND] >> metis_tac[prefix_wf_append]
   ) >>
-  IF_CASES_TAC >> simp[]
-  >- (strip_tac >> gvs[] >>
-      `prefix = input_ops ++ ops_b /\ postfix = []` by (
+  strip_tac >> gvs[] >>
+  Cases_on `FILTER (λout. MEM out next_liveness) inst.inst_outputs = []` >>
+  gvs[]
+  >- (`prefix = input_ops ++ ops_b /\ postfix = []` by (
         qspecl_then [`input_ops ++ ops_b`, `SOEmit name`, `[]`,
                      `prefix`, `postfix`] mp_tac append_mid_split_unique >>
         simp[EVERY_APPEND, is_prefix_op_def]) >>
       gvs[EVERY_APPEND] >> metis_tac[prefix_wf_append]) >>
-  pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >>
   `EVERY is_prefix_op opt_ops` by metis_tac[optimistic_swap_plan_prefix_op] >>
   `prefix = input_ops ++ ops_b /\ postfix = opt_ops` by (
     qspecl_then [`input_ops ++ ops_b`, `SOEmit name`, `opt_ops`,
@@ -1780,17 +1782,17 @@ Resume regular_plan_prefix_wf_gen[noncomm]:
   ) >>
   IF_CASES_TAC >> simp[]
   >- (
-    pairarg_tac >> simp[] >>
-    IF_CASES_TAC >> simp[]
-    >- (strip_tac >> gvs[] >>
-        `prefix = input_ops ++ reorder_ops /\ postfix = pop_ops` by (
+    pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+    Cases_on `FILTER (λout. MEM out next_liveness) inst.inst_outputs = []` >>
+    gvs[]
+    >- (`prefix = input_ops ++ reorder_ops /\ postfix = pop_ops` by (
           qspecl_then [`input_ops ++ reorder_ops`, `SOEmit name`, `pop_ops`,
                        `prefix`, `postfix`] mp_tac append_mid_split_unique >>
           simp[EVERY_APPEND, is_prefix_op_def] >>
           impl_tac >- metis_tac[popmany_plan_prefix_op] >> simp[]) >>
         gvs[EVERY_APPEND] >> metis_tac[prefix_wf_append]) >>
-    pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
     `EVERY is_prefix_op pop_ops` by metis_tac[popmany_plan_prefix_op] >>
+    pairarg_tac >> gvs[] >>
     `EVERY is_prefix_op opt_ops` by metis_tac[optimistic_swap_plan_prefix_op] >>
     `prefix = input_ops ++ reorder_ops /\ postfix = pop_ops ++ opt_ops` by (
       qspecl_then [`input_ops ++ reorder_ops`, `SOEmit name`,
@@ -1799,14 +1801,15 @@ Resume regular_plan_prefix_wf_gen[noncomm]:
       simp[EVERY_APPEND, is_prefix_op_def]) >>
     gvs[EVERY_APPEND] >> metis_tac[prefix_wf_append]
   ) >>
-  IF_CASES_TAC >> simp[]
-  >- (strip_tac >> gvs[] >>
-      `prefix = input_ops ++ reorder_ops /\ postfix = []` by (
+  strip_tac >> gvs[] >>
+  Cases_on `FILTER (λout. MEM out next_liveness) inst.inst_outputs = []` >>
+  gvs[]
+  >- (`prefix = input_ops ++ reorder_ops /\ postfix = []` by (
         qspecl_then [`input_ops ++ reorder_ops`, `SOEmit name`, `[]`,
                      `prefix`, `postfix`] mp_tac append_mid_split_unique >>
         simp[EVERY_APPEND, is_prefix_op_def]) >>
       gvs[EVERY_APPEND] >> metis_tac[prefix_wf_append]) >>
-  pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >>
   `EVERY is_prefix_op opt_ops` by metis_tac[optimistic_swap_plan_prefix_op] >>
   `prefix = input_ops ++ reorder_ops /\ postfix = opt_ops` by (
     qspecl_then [`input_ops ++ reorder_ops`, `SOEmit name`, `opt_ops`,

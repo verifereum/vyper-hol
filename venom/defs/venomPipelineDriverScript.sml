@@ -160,5 +160,3 @@ Proof
   gvs [] >>
   EVAL_TAC
 QED
-
-val _ = export_theory ();

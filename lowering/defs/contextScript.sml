@@ -150,8 +150,8 @@ End
    Mirrors Python: context.py copy_memory *)
 Definition compile_copy_memory_def:
   compile_copy_memory dst src 0 = return () ∧
-  compile_copy_memory dst src size =
-    emit_void MCOPY [dst; src; Lit (n2w size)]
+  compile_copy_memory dst src (SUC size) =
+    emit_void MCOPY [dst; src; Lit (n2w (SUC size))]
 End
 
 (* Parameterized word-copy loop between two address spaces.

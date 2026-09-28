@@ -109,5 +109,3 @@ Theorem unit_wf_unit_global_inst_ids_distinct:
 Proof
   simp[unit_wf_def, unit_global_inst_ids_distinct_def, venom_wf_def]
 QED
-
-val _ = export_theory ();

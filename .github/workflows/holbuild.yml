@@ -160,7 +160,7 @@ jobs:
           pin=$(tr -d '[:space:]' < VYPER_PIN)
           git clone https://github.com/vyperlang/vyper.git vyper-src
           git -C vyper-src checkout --detach "$pin"
-          sh lowering/defs/python-o1-bytecode-fixtures --check \
+          sh lowering/defs/bytecode/python-o1-bytecode-fixtures --check \
             --vyper-repo vyper-src
 
   export-vyper-tests:

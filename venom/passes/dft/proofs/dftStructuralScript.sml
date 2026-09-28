@@ -602,7 +602,7 @@ Proof
   (* pseudo case: contradicts ~is_pseudo *)
   >- gvs[listTheory.MEM_FILTER]
   (* scheduled case *)
-  >> metis_tac[schedule_output_from_block, build_full_eda_wf, entry_instructions_mem]
+  >> metis_tac[schedule_output_from_block, build_eda_wf, entry_instructions_mem]
 QED
 
 (* ===== Phis are preserved by dft_block ===== *)
@@ -617,15 +617,14 @@ Proof
   simp[rich_listTheory.FILTER_FILTER] >>
   `FILTER (\i. is_pseudo i.inst_opcode)
     (schedule_from_entries bb.bb_instructions order
-      (build_full_eda bb.bb_instructions)
+      (build_eda bb.bb_instructions)
       (build_offspring_map bb.bb_instructions order)
       (entry_instructions bb.bb_instructions order
-        (build_full_eda bb.bb_instructions))) = []` suffices_by simp[] >>
+        (build_eda bb.bb_instructions))) = []` suffices_by simp[] >>
   simp[listTheory.FILTER_EQ_NIL, listTheory.EVERY_MEM] >>
   rpt strip_tac >>
-  metis_tac[schedule_output_from_block, build_full_eda_wf, entry_instructions_mem]
+  metis_tac[schedule_output_from_block, build_eda_wf, entry_instructions_mem]
 QED
-
 
 
 Definition dft_inst_invokes_target_def:
@@ -832,7 +831,6 @@ Proof
      gvs[]) >>
   gvs[dft_invoke_subset_def, dft_invoke_targets_def]
 QED
-
 
 (* ===== Raw FMP opcode preservation ===== *)
 Theorem dft_flip_no_raw[local]:

@@ -651,5 +651,3 @@ Proof
   simp[] >>
   metis_tac[fcgPruningTheory.MEM_prune_unit_fcg_unreachable_functions]
 QED
-
-val _ = export_theory ();

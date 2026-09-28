@@ -22,11 +22,16 @@ Libs
 (* Parse method_id kwarg to word32.
    Handles int literal, bytes literal, hex literal.
    Mirrors Python: builtins/abi.py _parse_method_id *)
+Definition bytes_method_id_word_def:
+  bytes_method_id_word bs : bytes32 =
+    n2w (num_of_bytes (REVERSE bs))
+End
+
 Definition parse_method_id_def:
   parse_method_id (IntL n) = SOME (i2w n : bytes32) ∧
   parse_method_id (BytesL bs) =
     (if LENGTH bs >= 4 then
-       SOME (word_of_bytes T 0w (TAKE 4 bs) : bytes32)
+       SOME (bytes_method_id_word (TAKE 4 bs))
      else NONE) ∧
   parse_method_id _ = NONE
 End
@@ -97,13 +102,20 @@ Definition lower_abi_decode_def:
        data_len <- emit_op MLOAD [data_op];
        (* Data starts after length word *)
        data_ptr <- emit_op ADD [data_op; Lit 32w];
-       (* Validate: min <= len <= max *)
-       lt_min <- emit_op LT [data_len; Lit (n2w abi_min_size)];
-       ge_min <- emit_op ISZERO [lt_min];
-       gt_max <- emit_op GT [data_len; Lit (n2w abi_max_size)];
-       le_max <- emit_op ISZERO [gt_max];
-       valid <- emit_op AND [ge_min; le_max];
-       emit_void ASSERT [valid];
+       (* Python specializes an exact-size interval to one equality. *)
+       (if abi_min_size = abi_max_size then
+          do valid <- emit_op EQ [data_len; Lit (n2w abi_min_size)];
+             emit_void ASSERT [valid]
+          od
+        else
+          do (* Validate: min <= len <= max *)
+             lt_min <- emit_op LT [data_len; Lit (n2w abi_min_size)];
+             ge_min <- emit_op ISZERO [lt_min];
+             gt_max <- emit_op GT [data_len; Lit (n2w abi_max_size)];
+             le_max <- emit_op ISZERO [gt_max];
+             valid <- emit_op AND [ge_min; le_max];
+             emit_void ASSERT [valid]
+          od);
        (* Allocate output buffer *)
        out_buf_alloc <- compile_alloc_buffer output_size;
        out_buf <- return out_buf_alloc.buf_operand;

@@ -285,6 +285,7 @@ Theorem venom_asm_rel_poke_update_var:
   !lo ps vs as out v dist.
     venom_asm_rel lo ps vs as /\
     dist < LENGTH ps.ps_stack /\
+    stack_peek dist ps.ps_stack <> dead_stack_marker /\
     operand_val vs lo (stack_peek dist ps.ps_stack) = SOME v /\
     EVERY (\op. case op of Var x => x <> out | _ => T) ps.ps_stack /\
     (!op. op IN FDOM ps.ps_spilled ==>
@@ -309,6 +310,8 @@ Proof
 QED
 
 Resume venom_asm_rel_poke_update_var[v_eq]:
+  `EL dist (REVERSE ps.ps_stack) <> dead_stack_marker` by
+    gvs[stack_peek_el_reverse] >>
   qpat_x_assum `operand_val _ _ _ = SOME v` mp_tac
   >> simp[stack_peek_el_reverse]
   >> qpat_x_assum `plan_stack_rel _ _ _ _` mp_tac

@@ -351,5 +351,3 @@ Theorem source_memory_read_byte_INVOKE[simp]:
 Proof
   simp[source_memory_read_byte_def]
 QED
-
-val _ = export_theory();

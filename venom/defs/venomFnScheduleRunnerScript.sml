@@ -128,5 +128,3 @@ Definition run_fn_schedule_def:
     run_configured_fn_passes execute_configured_fn_pass rpolicy passes name
       unit (init_ir_supply unit)
 End
-
-val _ = export_theory ();

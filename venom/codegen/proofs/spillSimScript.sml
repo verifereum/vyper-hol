@@ -402,16 +402,34 @@ QED
 Theorem plan_spill_rel_add_entry:
   !lo vs spilled am off (v:bytes32) op.
     plan_spill_rel lo vs spilled am /\
-    operand_val vs lo op = SOME v /\
+    (op <> dead_stack_marker ==> operand_val vs lo op = SOME v) /\
     (!op2 off2. FLOOKUP spilled op2 = SOME off2 ==>
                 off2 + 32 <= off \/ off + 32 <= off2) ==>
     plan_spill_rel lo vs (spilled |+ (op, off)) (mem_write32 off v am)
 Proof
-  rw[plan_spill_rel_def] >> rpt strip_tac >>
-  gvs[finite_mapTheory.FLOOKUP_UPDATE] >>
-  Cases_on `op' = op` >> gvs[]
-  >- simp[mem_write32_read_same]
-  >- (res_tac >> simp[] >> metis_tac[mem_write32_read32_disjoint])
+  rpt strip_tac >>
+  qpat_x_assum `plan_spill_rel _ _ spilled am` mp_tac >>
+  simp[plan_spill_rel_def] >> strip_tac >>
+  simp[plan_spill_rel_def] >> rpt gen_tac >> strip_tac >>
+  Cases_on `op' = op` >|
+  [ (* updated key: either it is dead or the write stores its value *)
+    gvs[finite_mapTheory.FLOOKUP_UPDATE] >>
+    Cases_on `op = dead_stack_marker` >>
+    gvs[mem_write32_read_same],
+    (* distinct key: preserve the old slot through the disjoint write *)
+    gvs[finite_mapTheory.FLOOKUP_UPDATE] >>
+    qpat_x_assum `!key key_off. FLOOKUP spilled key = SOME key_off ==> _`
+      (qspecl_then [`op'`, `off'`] mp_tac) >>
+    impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+    Cases_on `op' = dead_stack_marker`
+    >- simp[] >>
+    gvs[] >>
+    qpat_x_assum `!op2 off2. FLOOKUP spilled op2 = SOME off2 ==> _`
+      (qspecl_then [`op'`, `off'`] mp_tac) >>
+    impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+    once_rewrite_tac[EQ_SYM_EQ] >>
+    match_mp_tac mem_write32_read32_disjoint >> simp[]
+  ]
 QED
 
 (* Removing a spill entry preserves plan_spill_rel *)
@@ -614,7 +632,8 @@ Proof
   `0 < LENGTH ps.ps_stack` by decide_tac >>
   (* Get TOS operand_val from plan_stack_rel *)
   qspecl_then [`lo`, `vs`, `ps.ps_stack`, `st.as_stack`, `0`]
-    mp_tac plan_stack_rel_el >> (impl_tac >- simp[]) >> strip_tac >>
+    mp_tac plan_stack_rel_el >> (impl_tac >- simp[]) >>
+  disch_then assume_tac >>
   (* Normalize: EL 0 (REVERSE stk) = stack_peek 0 stk, EL 0 l = HD l *)
   `EL 0 (REVERSE ps.ps_stack) = stack_peek 0 ps.ps_stack` by
     (fs[stack_peek_def, EL_REVERSE, arithmeticTheory.PRE_SUB1]) >>
@@ -628,11 +647,11 @@ Proof
   PURE_REWRITE_TAC[venom_asm_rel_def] >>
   (* Normalize stack_pop and TL to TAKE/DROP forms *)
   PURE_REWRITE_TAC[stack_pop_def] >>
-  SUBGOAL_THEN ``TL (st.as_stack : bytes32 list) = DROP 1 st.as_stack``
-    (fn th => REWRITE_TAC[th])
-  >- (Cases_on `st.as_stack` >> gvs[]) >>
   rpt conj_tac
-  >- (irule plan_stack_rel_pop >> simp[])
+  >- (qspecl_then [`lo`, `vs`, `ps.ps_stack`, `st.as_stack`, `1`]
+        mp_tac plan_stack_rel_pop >>
+      impl_tac >- simp[] >>
+      Cases_on `st.as_stack` >> gvs[])
   >- (irule plan_spill_rel_add_entry >> gvs[] >> metis_tac[])
   >- (
     (* memory_rel with widened exclusion range *)
@@ -678,8 +697,9 @@ Proof
   qexists_tac `st'` >> simp[] >>
   fs[venom_asm_rel_def] >>
   (* Get the value at the spill offset *)
-  SUBGOAL_THEN ``operand_val vs lo op = SOME
-    (word_of_bytes T 0w (TAKE 32 (DROP off st.as_memory)))``
+  SUBGOAL_THEN ``op = dead_stack_marker \/
+    operand_val vs lo op = SOME
+      (word_of_bytes T 0w (TAKE 32 (DROP off st.as_memory)))``
     ASSUME_TAC
   >- (fs[plan_spill_rel_def] >> res_tac) >>
   simp[venom_asm_rel_def, stack_push_def] >>

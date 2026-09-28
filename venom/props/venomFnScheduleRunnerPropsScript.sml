@@ -253,5 +253,3 @@ Proof
   simp[run_fn_schedule_def, run_configured_fn_passes_def] >>
   strip_tac >> gvs[AllCaseEqs()]
 QED
-
-val _ = export_theory ();

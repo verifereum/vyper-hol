@@ -983,19 +983,20 @@ Definition step_inst_base_def:
        Operand order matches Python builder: offset(operand, label). *)
     | OFFSET => exec_pure2 word_add inst s
 
-    (* Logging - variable operand count.
-       Semantic order: log topic_count, offset, size, topic_0, ..., topic_{n-1}
-       First operand is Lit topic_count (metadata), then offset, size, topics. *)
+    (* Logging - variable operand count.  The metadata topic count comes
+       first; the remaining operands are in Python's physical stack order:
+       topics, size, offset (rightmost operand at the top of the stack). *)
     | LOG =>
         (case inst.inst_operands of
           Lit tc :: rest =>
             let n = w2n tc in
-            (* rest should be: offset, size, n topics *)
+            (* The reversed tail gives offset, size, then EVM topic order. *)
             if LENGTH rest <> n + 2 then Error "log: wrong operand count"
             else
-              let offset_op = EL 0 rest in
-              let size_op = EL 1 rest in
-              let topic_ops = DROP 2 rest in
+              let rev = REVERSE rest in
+              let offset_op = EL 0 rev in
+              let size_op = EL 1 rev in
+              let topic_ops = DROP 2 rev in
               (case (eval_operand offset_op s,
                      eval_operand size_op s,
                      eval_operands topic_ops s) of

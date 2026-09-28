@@ -47,5 +47,3 @@ Definition run_callee_first_def:
     run_named_fn_schedules execute_configured_fn_pass rpolicy passes
       frozen_names unit supply
 End
-
-val _ = export_theory ();

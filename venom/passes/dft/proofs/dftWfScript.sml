@@ -501,23 +501,27 @@ Proof
   drule_all all_distinct_flat_map_el >> simp[]
 QED
 
-(* wf_ssa implies defs_before_uses for each block *)
+(* wf_ssa orders ordinary uses within a block.  PHI operands are edge uses,
+   and is_pseudo excludes them from the local scheduling invariant. *)
 Theorem wf_ssa_defs_before_uses:
   !fn bb.
     wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks ==>
-    defs_before_uses bb.bb_instructions
+    np_defs_before_uses bb.bb_instructions
 Proof
-  rw[wf_ssa_def, wf_function_def, defs_before_uses_def] >>
+  rw[wf_ssa_def, wf_function_def, np_defs_before_uses_def] >>
   rpt strip_tac >>
   rename1 `producing_inst _ var = SOME prod` >>
   (* Step 1: prod defines var in bb *)
   drule_all producing_inst_unique >> strip_tac >>
-  (* Step 2: def_dominates_uses gives def_bb, def_inst *)
+  (* Step 2: ordinary-use dominance gives def_bb, def_inst. *)
+  `bb.bb_instructions❲j❳.inst_opcode <> PHI` by
+    (strip_tac >> gvs[is_pseudo_def]) >>
   qpat_x_assum `def_dominates_uses _` mp_tac >>
   simp[def_dominates_uses_def] >>
-  disch_then (qspecl_then [`bb`, `EL j bb.bb_instructions`, `var`] mp_tac) >>
-  (impl_tac >- simp[EL_MEM]) >>
-  strip_tac >>
+  disch_then (qspecl_then [`bb`, `EL j bb.bb_instructions`] mp_tac) >>
+  (impl_tac >- simp[EL_MEM]) >> simp[] >>
+  disch_then (qspec_then `var` mp_tac) >> simp[] >>
+  simp[def_available_at_def] >> strip_tac >>
   (* Step 3: SSA uniqueness: prod = def_inst *)
   `MEM prod (fn_insts fn)` by
     (simp[fn_insts_def] >> irule mem_fn_insts_blocks >> metis_tac[]) >>
@@ -1365,6 +1369,35 @@ Proof
   qexistsl [`i'`, `j'`] >> simp[]
 QED
 
+(* The plain Python EDA also points strictly backward in block order. *)
+Theorem eda_deps_backward_plain:
+  !bi inst dep deps.
+    ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\
+    MEM inst bi /\ ~is_pseudo inst.inst_opcode /\
+    FLOOKUP (build_eda bi) inst.inst_id = SOME deps /\
+    MEM dep deps /\ ~is_pseudo dep.inst_opcode ==>
+    ?i j. i < j /\ j < LENGTH bi /\ i < LENGTH bi /\
+          EL i bi = dep /\ EL j bi = inst
+Proof
+  rpt strip_tac >>
+  qabbrev_tac `nps = FILTER (\i. ~is_pseudo i.inst_opcode) bi` >>
+  `MEM inst nps` by simp[Abbr `nps`, MEM_FILTER] >>
+  `?j_nps. j_nps < LENGTH nps /\ EL j_nps nps = inst` by
+    metis_tac[MEM_EL] >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) nps)` by
+    (simp[Abbr `nps`] >> irule all_distinct_map_filter >> simp[]) >>
+  mp_tac (SRULE [LET_THM] build_eda_backward) >>
+  disch_then (qspec_then `bi` mp_tac) >>
+  simp[Abbr `nps`] >> strip_tac >>
+  first_x_assum (qspecl_then [`j_nps`, `deps`, `dep`] mp_tac) >>
+  simp[] >> strip_tac >>
+  rename1 `i_nps < j_nps` >>
+  qspecl_then [`\i. ~is_pseudo i.inst_opcode`, `bi`, `i_nps`, `j_nps`]
+    mp_tac filter_el_mono >>
+  simp[] >> strip_tac >>
+  qexistsl_tac [`i'`, `j'`] >> simp[]
+QED
+
 (* Generalized: eda_topo_compatible from block properties alone.
    No dependency on fn or MEM bb fn.fn_blocks. *)
 Theorem eda_topo_compatible_gen:
@@ -1490,6 +1523,50 @@ Proof
       irule eda_deps_backward >> metis_tac[])
 QED
 
+(* Python-parity EDA compatibility, using the plain effect graph. *)
+Theorem eda_topo_compatible_gen_weak_plain:
+  !bi order.
+    bi <> [] /\
+    is_terminator (LAST bi).inst_opcode /\
+    (!k. k < LENGTH bi /\ is_terminator (EL k bi).inst_opcode ==>
+         k = PRE (LENGTH bi)) /\
+    ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\
+    np_defs_before_uses bi ==>
+    eda_topo_compatible bi (build_eda bi) order
+Proof
+  rpt strip_tac >>
+  simp[eda_topo_compatible_def, inst_all_deps_def, LET_THM] >>
+  rpt strip_tac >>
+  gvs[MEM_nub, MEM_APPEND]
+  >- (fs[inst_data_deps_def, LET_THM, MEM_nub] >>
+      gvs[MEM_APPEND, MEM_MAP, MEM_FILTER]
+      >- (rename1 `MEM op inst.inst_operands` >>
+          Cases_on `op` >> gvs[operand_producer_def] >>
+          rename1 `producing_inst bi v` >>
+          Cases_on `producing_inst bi v` >> gvs[] >>
+          irule operand_dep_backward_weak >>
+          metis_tac[])
+      >>
+      Cases_on `is_terminator inst.inst_opcode` >> gvs[MEM_FILTER, MEM_MAP] >>
+      rename1 `IS_SOME (producing_inst bi w)` >>
+      Cases_on `producing_inst bi w` >> gvs[] >>
+      rename1 `producing_inst bi w = SOME dep` >>
+      `~is_terminator dep.inst_opcode` by (
+        spose_not_then assume_tac >>
+        drule_all producing_inst_unique >> strip_tac >>
+        `?k. k < LENGTH bi /\ EL k bi = dep` by metis_tac[MEM_EL] >>
+        `k = PRE (LENGTH bi)` by metis_tac[] >>
+        `?j. j < LENGTH bi /\ EL j bi = inst` by metis_tac[MEM_EL] >>
+        `j = PRE (LENGTH bi)` by metis_tac[] >>
+        gvs[]) >>
+      drule_all producing_inst_before_terminator >> strip_tac >>
+      `?j. j < LENGTH bi /\ EL j bi = inst` by metis_tac[MEM_EL] >>
+      `j = PRE (LENGTH bi)` by metis_tac[] >>
+      qexistsl_tac [`i`, `j`] >> simp[])
+  >> (Cases_on `FLOOKUP (build_eda bi) inst.inst_id` >> gvs[] >>
+      irule eda_deps_backward_plain >> metis_tac[])
+QED
+
 (* Combined: eda_topo_compatible for original block — corollary of gen *)
 Theorem eda_topo_compatible_original:
   !fn bb order.
@@ -1498,7 +1575,7 @@ Theorem eda_topo_compatible_original:
       (build_full_eda bb.bb_instructions) order
 Proof
   rpt strip_tac >>
-  irule eda_topo_compatible_gen >>
+  irule eda_topo_compatible_gen_weak >>
   `bb_well_formed bb` by (gvs[wf_function_def, EVERY_MEM]) >>
   gvs[bb_well_formed_def] >>
   conj_tac >- (irule wf_fn_block_inst_ids_distinct >> metis_tac[]) >>

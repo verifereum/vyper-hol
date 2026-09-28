@@ -541,5 +541,3 @@ Proof
     (mp_tac o MATCH_MP fresh_ir_label_contract) >> strip_tac >>
   metis_tac[]
 QED
-
-val _ = export_theory ();

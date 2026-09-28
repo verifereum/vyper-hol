@@ -109,7 +109,7 @@ QED
 Theorem plan_stack_rel_push:
   !lo vs ps_stk as_stk op v.
     plan_stack_rel lo vs ps_stk as_stk /\
-    operand_val vs lo op = SOME v ==>
+    (op = dead_stack_marker \/ operand_val vs lo op = SOME v) ==>
     plan_stack_rel lo vs (SNOC op ps_stk) (v :: as_stk)
 Proof
   rpt strip_tac >>
@@ -160,6 +160,7 @@ Theorem plan_stack_rel_el:
   !lo vs ps_stk as_stk i.
     plan_stack_rel lo vs ps_stk as_stk /\
     i < LENGTH ps_stk ==>
+    EL i (REVERSE ps_stk) = dead_stack_marker \/
     operand_val vs lo (EL i (REVERSE ps_stk)) = SOME (EL i as_stk)
 Proof
   rw[plan_stack_rel_def] >> res_tac
@@ -178,6 +179,7 @@ QED
 Theorem plan_stack_rel_hd:
   !lo vs ps_stk as_stk.
     plan_stack_rel lo vs ps_stk as_stk /\ ps_stk <> [] ==>
+    LAST ps_stk = dead_stack_marker \/
     operand_val vs lo (LAST ps_stk) = SOME (HD as_stk)
 Proof
   rpt strip_tac >>
@@ -185,7 +187,6 @@ Proof
   imp_res_tac plan_stack_rel_length >>
   `0 < LENGTH as_stk` by decide_tac >>
   qspecl_then [`lo`,`vs`,`ps_stk`,`as_stk`,`0`] mp_tac plan_stack_rel_el >>
-  simp[] >> disch_then (fn th => REWRITE_TAC[GSYM th]) >>
   simp[HD_REVERSE]
 QED
 

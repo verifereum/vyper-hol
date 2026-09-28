@@ -71,6 +71,36 @@ End
 
 (* ===== Function-level transform ===== *)
 
+(* Python's DFG worklist keeps every input of a surviving PHI live.  Canonical
+   operand-keyed edge liveness alone does not express that global use relation:
+   different incoming variables may share one positional PHI slot.  Protect
+   the current pass's PHI inputs; once a dead PHI is removed, the next pass no
+   longer protects its inputs, matching the worklist fixpoint. *)
+Definition remove_unused_phi_vars_def:
+  remove_unused_phi_vars fn =
+    FLAT (MAP (\bb.
+      FLAT (MAP (\inst.
+        if inst.inst_opcode = PHI then phi_value_vars inst.inst_operands
+        else [])
+        bb.bb_instructions))
+      fn.fn_blocks)
+End
+
+Definition protected_liveness_points_def:
+  protected_liveness_points fn protected (lr : string list df_state) =
+    FLAT (MAP (\bb.
+      GENLIST (\idx. ((bb.bb_label,idx),
+                      protected ++ live_vars_at lr bb.bb_label idx))
+              (SUC (LENGTH bb.bb_instructions)))
+      fn.fn_blocks)
+End
+
+Definition protect_liveness_def:
+  protect_liveness fn protected (lr : string list df_state) =
+    lr with ds_inst :=
+      lr.ds_inst |++ protected_liveness_points fn protected lr
+End
+
 Definition remove_unused_block_def:
   remove_unused_block lr bb =
     let n = LENGTH bb.bb_instructions in
@@ -83,7 +113,8 @@ End
 (* Single pass: transform + clear NOPs *)
 Definition remove_unused_single_pass_def:
   remove_unused_single_pass fn =
-    let lr = liveness_analyze fn in
+    let lr = protect_liveness fn (remove_unused_phi_vars fn)
+              (liveness_analyze fn) in
     clear_nops_function
       (function_map_transform
         (\bb. remove_unused_block lr bb)
