@@ -132,7 +132,17 @@ Theorem evaluate_abi_decode_well_typed:
   evaluate_type tenv typ = SOME tv ==>
   value_has_type tv v
 Proof
-  rw[evaluate_abi_decode_def, AllCaseEqs(), LET_THM] >>
+  rw[evaluate_abi_decode_def, decode_abi_value_def, AllCaseEqs(), LET_THM] >>
+  drule_all (cj 1 abi_to_vyper_well_typed) >> simp[]
+QED
+
+Theorem evaluate_abi_decode_returndata_well_typed:
+  evaluate_abi_decode_returndata tenv typ bs = INL v /\
+  evaluate_type tenv typ = SOME tv ==>
+  value_has_type tv v
+Proof
+  rw[evaluate_abi_decode_returndata_def, decode_abi_value_def,
+     AllCaseEqs(), LET_THM] >>
   drule_all (cj 1 abi_to_vyper_well_typed) >> simp[]
 QED
 

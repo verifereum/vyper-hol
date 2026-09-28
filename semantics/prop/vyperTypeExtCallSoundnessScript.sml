@@ -257,13 +257,13 @@ Theorem evaluate_abi_decode_return_well_typed:
 Proof
   rpt strip_tac >>
   gvs[evaluate_abi_decode_return_def, AllCaseEqs(), LET_THM] >>
-  TRY (metis_tac[evaluate_abi_decode_well_typed]) >>
+  TRY (metis_tac[evaluate_abi_decode_returndata_well_typed]) >>
   `evaluate_type tenv (TupleT [ret_type]) = SOME (TupleTV [tv])` by (
     imp_res_tac (cj 1 evaluate_type_well_formed) >>
     imp_res_tac well_formed_type_value_slot_size >>
     gvs[evaluate_type_def, OPT_MMAP_def, type_slot_size_def,
         wordsTheory.dimword_def]) >>
-  drule_all evaluate_abi_decode_well_typed >> strip_tac >>
+  drule_all evaluate_abi_decode_returndata_well_typed >> strip_tac >>
   gvs[value_has_type_inv, value_has_type_def]
 QED
 
