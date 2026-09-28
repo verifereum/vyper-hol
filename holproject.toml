@@ -12,6 +12,7 @@ roots = ["vyperHolScript.sml",
          "tests/vyperCheckContractTraceLibTestScript.sml"]
 
 [build.theory_tactic_timeouts]
+"semantics/vyperSmallStepScript.sml" = 10
 "semantics/vyperInterpreterScript.sml" = 5
 "semantics/prop/vyperLogPreservationScript.sml" = 5
 "venom/defs/venomExecSemanticsScript.sml" = 5
