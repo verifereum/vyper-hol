@@ -3,7 +3,8 @@
 This document is the plan for closing the end-to-end compiler correctness proof.
 It is ordered by dependency, not calendar time. It was revised on 2026-09-28,
 after the O1 pipeline, the bytecode-parity work and the Osaka migration landed.
-The previous version is in git history.
+The previous version is archived as
+[`archive/compiler-proof-roadmap-2026-09-25.md`](archive/compiler-proof-roadmap-2026-09-25.md).
 
 Related documents:
 
