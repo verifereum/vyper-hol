@@ -106,8 +106,8 @@ The matrix should eventually identify exact Python modules, classes, and functio
 
 | HOL file/area | Pinned Python source area | Status | Notes |
 |---|---|---|---|
-| `venom/compiler/venomPipelineScript.sml` | `vyper/venom/optimization_levels/*`, compiler pipeline entry | needs update | Existing comments explicitly omit `mem_merge`; pinned pipelines include additional memory/FMP passes and changed ordering. |
-| Minimal mandatory pipeline | compiler/codegen entry path | missing in HOL | Must be identified and named independently of O2/O3/Os. |
+| `venom/compiler/venomPipelineScript.sml` | `vyper/venom/optimization_levels/*`, compiler pipeline entry | needs update | Legacy uniform `venom_pipeline`; not used by `compile_vyper`. Existing comments explicitly omit `mem_merge`; pinned pipelines include additional memory/FMP passes and changed ordering. |
+| Minimal mandatory pipeline | `PASSES_O1` / `OptimizationLevel.NONE` | matches on the fixture corpus | `o1_pipeline_spec` (`venom/defs/venomPassScheduleScript.sml`) run by `run_venom_pipeline`; exact bytecode agreement on the 101-fixture corpus. |
 | Individual pass definitions | `vyper/venom/passes/*` | unknown | Audit mandatory passes first. |
 | O2 configuration | `vyper/venom/optimization_levels/O2.py` | needs update | Current pinned pass list differs from existing HOL O2 definition. |
 | O3 configuration | `vyper/venom/optimization_levels/O3.py` | unknown | Optional for first e2e theorem. |

@@ -77,14 +77,20 @@ The exact observation type/relation is a phase-2 deliverable. It should support 
 
 ## Calls and nested contexts
 
-Calls and nested EVM contexts are in scope. A theorem restricted to `LENGTH es.contexts = 1` or to programs without calls is not the final codegen theorem.
+A compiled contract can call other contracts, and those calls can call back into it. The theorem must cover such programs. A theorem restricted to programs without calls, or to a single EVM execution context (`LENGTH es.contexts = 1`), is not the final codegen theorem.
 
-The Asm-to-EVM proof must therefore adopt one of two justified designs:
+A *call frame* is one EVM execution context: the code being run, its stack, memory and program counter. A contract call pushes a new frame onto Verifereum's context list (`es.contexts`), and returning pops it.
 
-1. assembly semantics explicitly models nested call frames; or
-2. assembly call steps correspond atomically to a nested EVM execution relation.
+**How the proof treats calls** (decided 2026-09-29, following the discussion on [#98](https://github.com/verifereum/vyper-hol/issues/98); roadmap Milestone 1.1 has the details):
 
-Whichever design is chosen must cover return data, reverts, state rollback/commit behavior, gas assumptions, and reentrancy at the required abstraction level.
+- **One frame.** The theorem covers one frame running the compiled contract. Any frames below it, belonging to the callers, are arbitrary. It is stated with Verifereum's `run_call`, which runs the EVM until the current frame returns and then stops. So the theorem describes one call into the contract, whether it is the top-level transaction or a call from another contract.
+- **A call is a single step.** When the contract calls another contract, the source semantics and the compiled code both leave the entire callee execution to Verifereum, including any further calls it makes, even calls back into our contract. The assembly-to-EVM proof treats a call instruction, together with everything the callee does, as one step of our frame.
+- **Calls back into the contract.** For those, the theorem is applied again, separately, at the point where the inner call starts. The theorem therefore never needs to assume its own correctness for inner calls.
+- **Gas.** Gas amounts the source program reads, like `msg.gas` or the gas given to a call, come from a list of values supplied from outside the source semantics. The theorem requires these values to equal the ones the compiled code actually sees during its EVM execution.
+
+The rejected alternative was to give the assembly semantics its own model of the frame stack, so that the proof would follow execution into and out of every callee. That would need a source semantics that also runs callee contracts, and a correctness argument that holds for calls back into the contract being proved.
+
+The design must still cover return data, reverts, undoing or keeping state changes when a call fails or succeeds, gas, and calls back into the contract.
 
 ## Pipeline configurations
 
