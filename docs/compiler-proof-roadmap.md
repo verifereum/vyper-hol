@@ -61,9 +61,10 @@ Related documents:
   `unit_wf`, `codegen_ready` and `reachable_fcg_acyclic`. Use those checks
   instead of proving structural preservation, unless a later semantic proof
   needs the fact at an intermediate stage.
-- **Close restricted results early.** First close one stage for a
-  restricted class of programs, then a whole path from source to bytecode,
-  before generalizing (see Milestone 2).
+- **Close general statements early.** State each theorem in its final,
+  general form, and close it early with only named, narrowly scoped cheats
+  for the cases not yet covered (see Milestone 2). Do not prove results
+  restricted to a class of programs.
 - **Keep the inventory honest.** Delete DEAD and FALSE cheats rather than
   leaving them as apparent progress. Record hidden gaps (missing theorems)
   next to cheats.
@@ -291,109 +292,101 @@ status audit with a producer and a classification.
 
 ## Milestone 2: First closed results
 
-Goal: theorems with no cheats as early as possible, for restricted classes of
-programs, before any stage is generalized. There are two steps. 2.1 is
-small and closes one stage. 2.2 then closes a whole path from source to
-bytecode.
+Goal: close the final, general theorem statements early, leaving only a few
+named cheats for the cases not yet covered. There are two steps. 2.1 closes
+the codegen stage. 2.2 closes the whole path from source to bytecode.
 
-### 2.1 First closed stage: codegen for one function without calls
+**The rule for both steps.**
 
-Prove the restated `codegen_correct` (1.2), with no cheats, for Venom
-contexts that satisfy all of the following:
+- **No restrictions on the input.** Each theorem is the full statement from
+  Milestone 1. It has no extra hypotheses limiting which programs it applies
+  to. A result that holds only for a restricted class of programs may not
+  extend to the full theorem. A general statement with a few missing cases
+  does extend, because proving those cases later changes nothing else.
+- **Only scoped cheats.** A *scoped cheat* is a separate, named lemma whose
+  statement is exactly the proof obligation of one missing case, as it
+  arises inside the general proof. The main proof uses the lemma and
+  contains no `cheat` of its own. Proving the lemma later then closes that
+  case without touching the main proof.
+- **Proof sketches.** Each scoped cheat has an informal proof sketch in a
+  comment above the lemma. The sketch says which invariants the proof needs
+  and where they come from.
+- **Checked by the dependency tool.** At the end of the step,
+  `tools/cheat_audit.py deps` on the top theorem lists exactly the scoped
+  cheats and nothing else.
 
-- **One function, no `INVOKE`.** `INVOKE` is the Venom instruction that
-  calls another Venom function. Lowering emits it only for a call to an
-  internal Vyper function (`compile_call`, `exprLoweringScript.sml`).
-  External function bodies are compiled into the single entry function, and
-  O1 removes functions that nothing calls (`ps_prune_unreachable`). So any
-  source program without internal calls compiles to a context of this kind.
-- **No calls to other contracts:** no `CALL`, `STATICCALL`,
-  `DELEGATECALL` or `CREATE`.
-- **No `GAS` instruction.** This keeps gas values out of the program's
-  results.
-- **Only opcodes whose emission lemmas are proved.** An *emission lemma*
+### 2.1 Codegen, closed except for three cases
+
+Prove the restated `codegen_correct` (1.2) for every Venom context, with
+only the following scoped cheats:
+
+- **`INVOKE`.** `INVOKE` is the Venom instruction that calls another Venom
+  function. The cheat is the single step for one `INVOKE`, given the
+  induction hypothesis for the callee. For this to extend, the main proof
+  must already use the function-level induction of the restated
+  `gen_fn_simulation` (4.2). Only the `INVOKE` step is cheated, not the
+  induction.
+- **Calls to other contracts.** The cheat is the single step for one
+  `CALL`, `STATICCALL`, `DELEGATECALL` or `CREATE`, together with the whole
+  callee execution it starts (1.1). The main proof must already be stated
+  over `run_call` with any caller frames below our frame.
+- **`GAS`.** The cheat is the single step for one `GAS` instruction: it
+  returns the next gas-oracle value (1.1).
+
+Everything else is proved here:
+
+- every other single-instruction case of `gen_inst_ok_sim`,
+  `gen_inst_halt_sim` and `gen_inst_abort_sim` (4.1). This includes the
+  emission lemma for every EVM-opcode instruction. An *emission lemma*
   says that the assembly generated for one Venom instruction does what the
-  instruction does. Start from the opcodes that the fixtures `storage_read`,
-  `storage_write`, `if_join` and `assert_reason` use, and grow the list.
+  instruction does. This is the largest item.
+- the function-level induction itself (4.2), apart from its `INVOKE` step.
+- lifting `asm_evm_step`/`asm_bytecode_sim_aux` from "exactly one frame
+  and no calls" to "our frame, with any caller frames below it". For steps
+  that stay inside our frame, this should follow from Verifereum's
+  `run_within_frame` results.
+- the gas bound. The theorem says that some amount of gas is enough, which
+  needs a new argument: EVM execution with more gas gives the same result,
+  apart from running out, and apart from what `GAS` and calls observe.
+  This is not a single case but a property every instruction contributes
+  to, so a cheat for it would not be scoped. Nothing for it exists yet;
+  check first what Verifereum already proves about gas.
 
-State the class as a predicate on the Venom context. This is a stage
-theorem, and the Venom context is its input.
-
-**Why this step first.** It is small, and it also carries the most risk,
-because it is the first place the proof meets the real EVM:
-
-- **Gas.** The theorem says that some amount of gas is enough. That needs
-  a new argument: in this class of programs, EVM execution with more gas
-  gives the same result, apart from running out. Nothing for this exists
-  yet. Check first what Verifereum already proves about gas.
-- **Layout.** It exercises the stack layout, memory layout and jump
-  destinations that codegen produces.
-- **Statement.** It tests the restated `codegen_correct` statement, the
-  `run_call`-based result relation (1.1) and the derivable hypotheses
-  (1.5).
-
-It does not need:
-
-- the function-level induction over `INVOKE` (4.2);
-- the call lemma or the gas oracle (1.1);
-- any work on lowering or the pipeline.
-
-**Work:**
-
-- the remaining single-instruction cases of `gen_inst_ok_sim` in
-  `genBlockSim`: jumps (`jmp`/`jnz`/`djmp`), the `assign` cases, `log`,
-  and the two `assert` cases;
-- the `ASSERT` failure case of `gen_inst_abort_sim`;
-- emission lemmas for the opcodes in the class;
-- the gas argument above;
-- lifting `asm_evm_step`/`asm_bytecode_sim_aux` from "exactly one frame"
-  to "our frame, with any caller frames below it". For a frame that makes
-  no calls, this should follow from Verifereum's `run_within_frame`
-  results. If it turns out to be costly, first prove the case with no
-  caller frames.
+**Why codegen first.** Codegen is where the proof meets the real EVM: the
+gas bound, and the stack layout, memory layout and jump destinations that
+codegen produces. None of this has been tried yet. It also tests the
+restated `codegen_correct`, the `run_call`-based result relation (1.1) and
+the derivable hypotheses (1.5). It needs no work on lowering or the
+pipeline.
 
 **Smaller first task.** Close the single-instruction cases of
 `gen_inst_ok_sim` other than `INVOKE`. It closes no theorem by itself, but
 it can start before the restated statements of Milestone 1 are agreed.
 
-**Afterwards,** codegen grows in two steps (Milestone 4): add `INVOKE`
-(4.2), then calls to other contracts and `GAS` (4.3), which completes
-`codegen_correct`.
+**Afterwards,** Milestone 4 proves the three scoped cheats: `INVOKE` (4.2),
+then calls to other contracts and `GAS` (4.3).
 
-### 2.2 A closed path from source to bytecode
+### 2.2 The whole path, closed except for scoped cases
 
-Goal: the first end-to-end theorem with no cheats, for a small class of
-source programs. It checks that the statements from Milestone 1 compose
-across all stages. It builds on 2.1 for the codegen part.
+Prove the end-to-end theorem from Milestone 1, with no restriction on the
+source program, following the same rule. Codegen comes from 2.1. The
+remaining scoped cheats in lowering and the pipeline should be for cases
+of the same kind:
 
-Suggested class of programs:
+- internal function calls;
+- calls to other contracts and contract creation;
+- gas values;
+- ABI values of variable size.
 
-- external functions only, with no internal calls (so no `INVOKE`, as in
-  2.1);
-- no calls to other contracts and no contract creation;
-- ABI arguments and return values of fixed size only;
-- storage reads and writes, arithmetic, `if`, `assert`/`raise`;
-- runtime code only, no deployment.
+Deployment stays out of this step.
 
-Fixtures such as `storage_read`, `storage_write`, `if_join` and
-`assert_reason` are representative.
-
-This class avoids:
-
-- the function-level `INVOKE` induction;
-- the lemma relating a source external call to a compiled one (1.1);
-- ABI values of variable size;
-- the parts of pipeline composition that involve more than one function.
-
-It still exercises every stage:
+This step checks that the statements from Milestone 1 compose across all
+stages. It exercises:
 
 - the new lowering state relation;
 - the per-function pass theorems;
 - the label-map and pruning lemmas;
-- codegen, from 2.1.
-
-State the class as a predicate on `tops`, the source program, not on the
-compiled output, so the theorem remains a claim about source programs.
+- the codegen result from 2.1.
 
 ## Milestone 3: Pipeline leg (O1)
 
@@ -541,5 +534,4 @@ After Milestone 1, the work splits cleanly:
 | E: Invariants | Milestone 5 | memory and reachability invariant definitions |
 
 Milestone 2.1 comes from track C and part of track D. Milestone 2.2
-draws on every track, and should be closed before any track generalizes
-to the full supported subset.
+draws on every track.
