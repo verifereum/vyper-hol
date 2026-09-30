@@ -342,17 +342,70 @@ val () = cv_auto_trans_rec vyper_abi_size_bound_def (
   \\ Cases_on`1 - SUC n MOD 2` \\ gvs[]
 );
 
+(* ===== Vyper's stricter ABI decode validation =====
+   See vyperABIValidScript. *)
+
+Definition abi_head_word_def:
+  abi_head_word (bs:byte list) = dest_NumV (dec_number (Uint 256) (TAKE 32 bs))
+End
+
+val () = cv_auto_trans abi_head_word_def;
+
+Definition vyper_strict_enc_def:
+  vyper_strict_enc env t bs =
+    (static_length (vyper_to_abi_type env t) ≤ LENGTH bs ∧
+     LENGTH bs ≤ vyper_abi_size_bound env t)
+End
+
+val () = cv_auto_trans vyper_strict_enc_def;
+
+(* strengthen valid_enc  *)
+Definition vyper_valid_enc_def:
+  vyper_valid_enc env t bs ⇔
+    (valid_enc (vyper_to_abi_type env t) bs ∧ vyper_strict_enc env t bs)
+End
+
+val () = cv_auto_trans vyper_valid_enc_def;
+
+(* TOP-LEVEL: shared decode step, after the buffer has been validated. *)
+Definition decode_abi_value_def:
+  decode_abi_value tenv typ bs =
+    case abi_to_vyper tenv typ (dec (vyper_to_abi_type tenv typ) bs) of
+      SOME v => INL v
+    | NONE => INR "abi_decode conversion"
+End
+
+val () = cv_auto_trans decode_abi_value_def;
+
+(* TOP-LEVEL: decode a validated buffer (_abi_decode path). *)
 Definition evaluate_abi_decode_def:
   evaluate_abi_decode tenv typ bs =
-    let abiTy = vyper_to_abi_type tenv typ in
-    if valid_enc abiTy bs then
-      case abi_to_vyper tenv typ (dec abiTy bs) of
-        SOME v => INL v
-      | NONE => INR "abi_decode conversion"
+    if vyper_valid_enc tenv typ bs then
+      decode_abi_value tenv typ bs
     else INR "abi_decode invalid"
 End
 
 val () = cv_auto_trans evaluate_abi_decode_def;
+
+(* TOP-LEVEL: returndata gate, without the upper bound the cap enforces. *)
+Definition vyper_valid_enc_returndata_def:
+  vyper_valid_enc_returndata env t bs ⇔
+    (valid_enc (vyper_to_abi_type env t) bs ∧
+     static_length (vyper_to_abi_type env t) ≤ LENGTH bs)
+End
+
+val () = cv_auto_trans vyper_valid_enc_returndata_def;
+
+(* TOP-LEVEL: decode extcall returndata, over the size-capped buffer. *)
+Definition evaluate_abi_decode_returndata_def:
+  evaluate_abi_decode_returndata tenv typ bs =
+    let bs = TAKE (vyper_abi_size_bound tenv typ) bs in
+    if vyper_valid_enc_returndata tenv typ bs then
+      decode_abi_value tenv typ bs
+    else INR "abi_decode invalid"
+End
+
+val () = cv_auto_trans evaluate_abi_decode_returndata_def;
 
 (* Per Vyper ABI spec: wrap return type in tuple unless it's already
    a multi-element tuple (length > 1). See vyper/codegen/core.py *)
@@ -368,12 +421,12 @@ val () = cv_auto_trans needs_external_call_wrap_def;
 Definition evaluate_abi_decode_return_def:
   evaluate_abi_decode_return tenv ret_type bs =
     if needs_external_call_wrap ret_type then
-      case evaluate_abi_decode tenv (TupleT [ret_type]) bs of
+      case evaluate_abi_decode_returndata tenv (TupleT [ret_type]) bs of
       | INL (ArrayV (TupleV [v])) => INL v
       | INL _ => INR "decode return unwrap"
       | INR e => INR e
     else
-      evaluate_abi_decode tenv ret_type bs
+      evaluate_abi_decode_returndata tenv ret_type bs
 End
 
 val () = cv_auto_trans evaluate_abi_decode_return_def;

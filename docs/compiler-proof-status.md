@@ -2,10 +2,11 @@
 
 Latest audit:
 
-- [compiler-proof-status-2026-06-24.md](compiler-proof-status-2026-06-24.md)
+- [compiler-proof-status-2026-09-28.md](compiler-proof-status-2026-09-28.md)
 
 Historical snapshots:
 
+- [archive/compiler-proof-status-2026-06-24.md](archive/compiler-proof-status-2026-06-24.md)
 - [archive/compiler-proof-progress-2026-04-07.md](archive/compiler-proof-progress-2026-04-07.md)
 - [archive/compiler-proof-progress-2026-04-16.md](archive/compiler-proof-progress-2026-04-16.md)
 

@@ -336,9 +336,9 @@ val excluded_test_names = [
      source contract call path before or around the raw helper interaction. *)
   "test_abi_arg_wrapped_complex_member_head",
   "test_abi_arg_wrapped_dynarray_head",
-  "test_abi_decode_child_head_points_to_parent",
+  (*"test_abi_decode_child_head_points_to_parent",*)
   "test_abi_decode_complex_arithmetic_overflow",
-  "test_abi_decode_complex_empty_dynarray",
+  (*"test_abi_decode_complex_empty_dynarray",
   "test_abi_decode_empty_toplevel_dynarray",
   "test_abi_decode_extcall_complex_empty_dynarray",
   "test_abi_decode_extcall_empty_array",
@@ -346,7 +346,7 @@ val excluded_test_names = [
   "test_abi_decode_invalid_toplevel_dynarray_head",
   "test_abi_decode_merge_head_and_length",
   "test_abi_decode_nonstrict_head",
-  "test_abi_decode_nonstrict_head_oob",
+  "test_abi_decode_nonstrict_head_oob",*)
   (* Raw bytecode blueprint creation remains coordinated with #379. *)
   "test_create_from_blueprint_bad_code_offset",
   (* Independent semantic mismatch in the currently admitted raw_call tests. *)
@@ -387,31 +387,7 @@ val excluded_test_names = [
      TODO: add skip_contract_check flag to ExtCall AST *)
   "test_skip_contract_check",
   (* Out-of-gas test - we don't model gas *)
-  "test_ecrecover_oog_handling",
-  (* ABI decode strictness tests - Vyper's decoder is stricter than standard
-     ABI, rejecting OOB heads, truncated data, etc. TODO: add Vyper-specific
-     ABI decode validation on top of contractABI's standard valid_enc *)
-  "test_abi_decode_extcall_array_oob*",
-  "test_abi_decode_extcall_complex_empty_dynarray2",
-  "test_abi_decode_extcall_invalid_head",
-  "test_abi_decode_extcall_oob",
-  "test_abi_decode_extcall_return_nodata",
-  "test_abi_decode_extcall_runtimesz_oob",
-  "test_abi_decode_extcall_truncate_returndata*",
-  "test_abi_decode_dynarray_complex_insufficient_data",
-  "test_abi_decode_nonstrict_head_oob2",
-  "test_abi_decode_runtimesz_oob*",
-  "test_abi_decode_top_level_head_oob",
-  "test_nested_invalid_dynarray_head",
-  "test_static_outer_type_invalid_heads",
-  "test_abi_decode_arithmetic_overflow",
-  "test_abi_decode_bytearray_clamp",
-  "test_abi_decode_dynarray_complex2",
-  "test_abi_decode_head_pointing_outside_buffer",
-  "test_abi_decode_head_roundtrip",
-  "test_abi_decode_max_size",
-  "test_clamper*",
-  "test_returndatasize_check"
+  "test_ecrecover_oog_handling"
 ]
 
 fun glob_match pat str =
