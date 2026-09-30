@@ -210,7 +210,6 @@ val ClearTransientStorage_tm =
   prim_mk_const{Thy="vyperTestRunner",Name="ClearTransientStorage"}
 
 val unsupported_code = [
-  "@raw_return\n" (* TODO: add *)
 ]
 
 val unsupported_patterns = unsupported_code @ [
@@ -311,6 +310,17 @@ val excluded_test_file_rules = [
 val outside_admitted_suites_reason = "outside currently admitted test suites"
 val outside_admitted_suites_issue =
   "https://github.com/verifereum/vyper-hol/issues/36"
+
+(* Items with no exported traces are negative tests: they assert a
+   compile-time diagnostic (rejected source, interface/implementation rules)
+   and therefore record no deployment and no call, so there is no execution to
+   replay.  They are deliberately kept in their own bucket instead of being
+   counted as a semantic exclusion, and they are tracked as frontend and
+   elaboration work rather than as semantics work: the frontend/elaboration
+   checks these contracts would need live behind the missing formal front end
+   (issues/46) and the partial type checker (issues/47). *)
+val no_traces_reason = "no exported traces (negative test, frontend diagnostics)"
+val no_traces_issue = "https://github.com/verifereum/vyper-hol/issues/46"
 
 (* Individual test names that bypass unsupported pattern checks *)
 val allowed_test_names = [
@@ -971,7 +981,8 @@ fun print_raw_coverage output json_path report = let
   fun emit_named reason names = List.app (fn name => emit (String.concat
     ["[vyper-coverage] excluded file=", json_path,
      " test=", name, " reason=", reason, "\n"])) (List.rev names)
-  val () = emit_named "no exported traces" (#no_traces report)
+  val () = emit_named (String.concat [no_traces_reason, "; issue=", no_traces_issue])
+               (#no_traces report)
   val () = List.app (fn name => emit (String.concat
     ["[vyper-coverage] selected file=", json_path,
      " test=", name, " reason=source supplied by fixture\n"]))
@@ -1118,6 +1129,8 @@ fun write_coverage_report output_path = let
        " excluded_name=", Int.toString excluded_name,
        " excluded_pattern=", Int.toString excluded_pattern,
        " no_exported_traces=", Int.toString no_traces,
+       " no_exported_traces_reason=", no_traces_reason,
+       " no_exported_traces_issue=", no_traces_issue,
        " source_from_fixture=", Int.toString fixture_source,
        " missing_source=", Int.toString missing_source,
        " blank_source=", Int.toString blank_source,

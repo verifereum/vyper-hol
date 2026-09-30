@@ -148,7 +148,8 @@ Theorem call_external_error_rollback:
   call_external am tx = (INR e, am') ⇒
   am' = am
 Proof
-  simp[Once call_external_def] >> strip_tac >> gvs[AllCaseEqs()] >> imp_res_tac call_external_function_error_rollback
+  simp[Once call_external_def, call_external_module_code_def] >> strip_tac >>
+  gvs[AllCaseEqs()] >> imp_res_tac call_external_function_error_rollback
 QED
 
 Theorem call_external_transaction_error_logs_empty:

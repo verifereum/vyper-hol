@@ -150,6 +150,101 @@ End
 
 val () = cv_auto_trans lookup_callable_function_def;
 
+(* ===== @raw_return declarations ===== *)
+
+(* TOP-LEVEL: matches_fn
+   Does tl declare a function named name with visibility vis?  Only
+   FunctionDecl entries can, so generated getters never match. *)
+Definition matches_fn_def:
+  matches_fn name vis (FunctionDecl fv _ _ _ id _ _ _ _) = (id = name ∧ vis = fv) ∧
+  matches_fn name vis _ = F
+End
+
+(* TOP-LEVEL: lookup_raw_return
+   The @raw_return flag of the function declaration selected for (name, vis):
+   the flag of the first FunctionDecl in ts with matching name and
+   visibility, and NONE when ts declares no such function.  The selection
+   order is the same as lookup_function's FunctionDecl case, so the two
+   lookups always consider the same declaration first; see
+   lookup_raw_return_of_lookup_function. *)
+Definition lookup_raw_return_def:
+  lookup_raw_return src_id_opt name vis [] = NONE ∧
+  lookup_raw_return src_id_opt name vis
+    (FunctionDecl fv fm nr rr id args dflts ret body :: ts) =
+  (if id = name ∧ vis = fv then SOME rr
+   else lookup_raw_return src_id_opt name vis ts) ∧
+  lookup_raw_return src_id_opt name vis (_ :: ts) =
+    lookup_raw_return src_id_opt name vis ts
+End
+
+val () = cv_auto_trans lookup_raw_return_def;
+
+(* TOP-LEVEL: lookup_raw_return_or_F
+   lookup_raw_return with the "no such function" case folded into F.  A
+   missing function is not @raw_return. *)
+Definition lookup_raw_return_or_F_def:
+  lookup_raw_return_or_F src_id_opt name vis ts =
+    case lookup_raw_return src_id_opt name vis ts of
+      SOME rr => rr
+    | NONE => F
+End
+
+val () = cv_auto_trans lookup_raw_return_or_F_def;
+
+Theorem lookup_raw_return_head:
+  lookup_raw_return src name vis
+    (FunctionDecl fv fm nr rr id args dflts ret body :: ts) =
+  (if id = name ∧ vis = fv then SOME rr
+   else lookup_raw_return src name vis ts)
+Proof
+  simp[lookup_raw_return_def]
+QED
+
+(* KEY LEMMA: a reported flag always comes from a declaration of that name
+   and visibility, so a positive answer is justified. *)
+Theorem lookup_raw_return_MEM:
+  ∀src name vis ts rr.
+    lookup_raw_return src name vis ts = SOME rr ==>
+    ∃fv fm nr id args dflts ret body.
+      MEM (FunctionDecl fv fm nr rr id args dflts ret body) ts ∧
+      id = name ∧ vis = fv
+Proof
+  Induct_on `ts` >> TRY (Cases_on `h`) >> TRY (Cases_on `h`)
+  >> rw[lookup_raw_return_def, AllCaseEqs()] >> metis_tac[]
+QED
+
+(* KEY LEMMA: the reported flag is the flag of the *first* matching
+   declaration; entries before it never contribute. *)
+Theorem lookup_raw_return_of_first:
+  ∀src name vis fv fm nr rr id args dflts ret body rest pre.
+    id = name ∧ vis = fv ∧
+    (∀tl. MEM tl pre ⇒ ¬matches_fn name vis tl) ==>
+    lookup_raw_return src name vis
+      (pre ++ (FunctionDecl fv fm nr rr id args dflts ret body :: rest)) = SOME rr
+Proof
+  Induct_on `pre` >> rw[]
+  \\ TRY (Cases_on `h`) >> TRY (Cases_on `h`)
+  \\ fs[lookup_raw_return_def, matches_fn_def]
+  \\ metis_tac[matches_fn_def]
+QED
+
+(* KEY LEMMA: the reported flag is that of the *first* matching declaration,
+   so it describes exactly the declaration a caller reaches first.  Combined
+   with lookup_raw_return_MEM this pins lookup_raw_return to "the @raw_return
+   flag of the first external function declaration named name".  A generated
+   public getter never matches (matches_fn), and Vyper forbids a getter or a
+   second function from reusing a contract-level name, so for the name of a
+   resolved external function this is that function's own decorator. *)
+Theorem lookup_raw_return_or_F_of_first:
+  ∀src name vis fv fm nr rr id args dflts ret body rest pre.
+    id = name ∧ vis = fv ∧
+    (∀tl. MEM tl pre ⇒ ¬matches_fn name vis tl) ==>
+    lookup_raw_return_or_F src name vis
+      (pre ++ (FunctionDecl fv fm nr rr id args dflts ret body :: rest)) = rr
+Proof
+  rw[lookup_raw_return_of_first, lookup_raw_return_or_F_def]
+QED
+
 Definition bind_arguments_def:
   bind_arguments tenv ([]: argument list) [] = SOME (FEMPTY: scope) ∧
   bind_arguments tenv ((id, typ)::params) (v::vs) =
@@ -1740,6 +1835,85 @@ Definition find_function_module_def:
         ALOOKUP export_map func_name  (* Returns SOME src_id if exported *)
 End
 
+(* TOP-LEVEL: call_external_module_code
+   The module code (toplevel declarations) that call_external uses for tx.
+   Shared with call_external, so the @raw_return resolution built on it
+   describes exactly the declaration call_external executes.  It takes the
+   already-resolved module and context, so sharing it costs call_external
+   nothing. *)
+Definition call_external_module_code_def:
+  call_external_module_code src_id_opt (cx:evaluation_context) =
+    get_module_code cx src_id_opt
+End
+
+val () = cv_auto_trans call_external_module_code_def;
+
+(* TOP-LEVEL: call_external_raw_return
+   The @raw_return flag of the external function call_external runs for tx,
+   and F otherwise.  The module code is resolved by the very definition
+   call_external uses (call_external_module_code), so the flag always describes
+   the declaration that is executed; a missing declaration (the implicit
+   default entry) reports F. *)
+Definition call_external_raw_return_def:
+  call_external_raw_return am tx =
+  let src_id_opt = find_function_module am tx.target tx.function_name in
+  let cx = initial_evaluation_context am.sources am.layouts tx src_id_opt in
+  case call_external_module_code src_id_opt cx of
+    NONE => F
+  | SOME ts => lookup_raw_return_or_F src_id_opt tx.function_name External ts
+End
+
+val () = cv_auto_trans call_external_raw_return_def;
+
+(* KEY LEMMA: the flag is resolved from the same module code the call runs. *)
+Theorem call_external_raw_return_module_code:
+  ∀am tx ts rr src_id_opt.
+    find_function_module am tx.target tx.function_name = src_id_opt ∧
+    call_external_module_code src_id_opt
+      (initial_evaluation_context am.sources am.layouts tx src_id_opt) = SOME ts ∧
+    lookup_raw_return src_id_opt tx.function_name External ts = SOME rr ==>
+    call_external_raw_return am tx = rr
+Proof
+  rw[call_external_raw_return_def, lookup_raw_return_or_F_def] >> metis_tac[]
+QED
+
+(* TOP-LEVEL: call_external_return_type
+   The declared return type of the external function call_external runs for
+   tx, and NoneT when there is none.  Resolved through the same module code,
+   so it is the type the executed declaration declares. *)
+Definition call_external_return_type_def:
+  call_external_return_type am tx =
+  let src_id_opt = find_function_module am tx.target tx.function_name in
+  let cx = initial_evaluation_context am.sources am.layouts tx src_id_opt in
+  case call_external_module_code src_id_opt cx of
+    NONE => NoneT
+  | SOME ts =>
+    (case lookup_exported_function cx am tx.function_name of
+       SOME (_, _, _, _, ret, _) => ret
+     | NONE => NoneT)
+End
+
+val () = cv_auto_trans call_external_return_type_def;
+
+(* TOP-LEVEL: call_external_returndata
+   The EVM returndata of the external call tx produced value v for, together
+   with whether the callee is @raw_return.  An ordinary external function
+   returns the ABI encoding of v; a @raw_return function returns the raw
+   content bytes of its bytestring value (external_returndata).  The error
+   case of the encoding is the case v can reach only when the callee is
+   @raw_return but its result is not a bytestring - ruled out for a bytestring
+   return type by safe_cast_bytestring_raw_return_bytes. *)
+Definition call_external_returndata_def:
+  call_external_returndata am tx v =
+  let cx = initial_evaluation_context am.sources am.layouts tx
+            (find_function_module am tx.target tx.function_name) in
+  (call_external_raw_return am tx,
+   external_returndata (call_external_raw_return am tx)
+     (get_tenv cx) (call_external_return_type am tx) v)
+End
+
+val () = cv_auto_trans call_external_returndata_def;
+
 Definition call_external_def:
   call_external am tx =
   (* Determine which module to use for type environment *)
@@ -1749,9 +1923,9 @@ Definition call_external_def:
   case ALOOKUP am.sources tx.target of
     NONE => (INR $ Error (RuntimeError "call get sources"), am)
   | SOME all_mods =>
-  case (case src_id_opt of
-          NONE => get_self_code cx
-        | SOME src_id => get_module_code cx (SOME src_id))
+  (* Module code, via the same definition the @raw_return resolution uses, so
+     the two cannot drift apart *)
+  case call_external_module_code src_id_opt cx
   of NONE => (INR $ Error (RuntimeError "call get_self_code"), am)
    | SOME ts =>
   case lookup_exported_function cx am tx.function_name
@@ -1759,6 +1933,61 @@ Definition call_external_def:
    | SOME (mut, nr, args, dflts, ret, body) =>
        call_external_function am cx nr mut ts all_mods args dflts tx.args body ret
 End
+
+(* KEY LEMMA: a successful external call of a @raw_return function always
+   yields returndata, namely the raw content bytes of the returned value. *)
+Theorem call_external_returndata_raw:
+  ∀am tx v bs.
+    call_external_raw_return am tx = T ∧
+    call_external_returndata am tx v = (T, INL bs) ==>
+    raw_return_bytes v = SOME bs
+Proof
+  rw[call_external_returndata_def]
+  >> gvs[external_returndata_raw_SOME_iff] >> metis_tac[]
+QED
+
+(* KEY LEMMA (typing): a value that passed the cast to a bytestring type
+   always has a raw byte representation.  This is what makes the @raw_return
+   encoding of a well-typed return value total. *)
+Theorem safe_cast_bytestring_raw_return_bytes:
+  ∀tv v v'.
+    is_bytestring_tv tv ∧ safe_cast tv v = SOME v' ⇒
+    ∃bs. raw_return_bytes v' = SOME bs
+Proof
+  Cases_on `tv` >> fs[is_bytestring_tv_def, safe_cast_def]
+  >> TRY (Cases_on `b`) >> TRY (Cases_on `b'`)
+  >> fs[is_bytestring_tv_def, safe_cast_def]
+  >> TRY (Cases_on `v`) >> TRY (Cases_on `v'`)
+  >> fs[raw_return_bytes_def] >> metis_tac[]
+QED
+
+(* KEY LEMMA (preservation): a @raw_return return value that survived the cast
+   to its declared return type has a raw encoding, and external_returndata
+   returns exactly those bytes. *)
+Theorem external_returndata_raw_safe_cast:
+  ∀tenv typ tv v v'.
+    evaluate_type tenv typ = SOME tv ∧ is_bytestring_tv tv ∧
+    safe_cast tv v = SOME v' ⇒
+    ∃bs. external_returndata T tenv typ v' = INL bs
+Proof
+  metis_tac[external_returndata_raw_SOME_iff,
+            safe_cast_bytestring_raw_return_bytes]
+QED
+
+(* KEY LEMMA (preservation): call_external_function only reports a return
+   value that has passed the cast to the function's declared return type
+   (see call_external_function_def, the SOME v branch of the safe_cast
+   case), so the typing lemma above is exactly what licenses the @raw_return
+   encoding of a bytestring-returning external function. *)
+Theorem external_returndata_raw_of_safe_cast:
+  ∀tenv typ tv v v' bs.
+    evaluate_type tenv typ = SOME tv ∧ is_bytestring_tv tv ∧
+    safe_cast tv v = SOME v' ∧
+    external_returndata T tenv typ v' = INL bs ==>
+    raw_return_bytes v' = SOME bs
+Proof
+  rpt strip_tac >> metis_tac[external_returndata_raw_SOME_iff]
+QED
 
 (* Explicit transaction boundary. Ordinary function entry preserves accumulated
    logs so that nested and sequential calls can share one transaction trace;

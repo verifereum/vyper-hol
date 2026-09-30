@@ -4476,7 +4476,7 @@ Theorem checked_call_external_no_type_error:
 Proof
   rpt strip_tac >>
   qpat_x_assum `call_external am tx = (res,am')` mp_tac >>
-  simp[Once call_external_def,
+  simp[Once call_external_def, call_external_module_code_def,
        vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
   gvs[AllCaseEqs(),
       vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
@@ -4510,24 +4510,6 @@ Proof
                 `find_function_module am tx.target tx.function_name`, `ts`, `tx`] >>
       gvs[checked_contract_runtime_ready_def, get_module_code_def,
           initial_evaluation_context_def])
-  >- (simp[GSYM vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
-      irule call_external_function_selected_explicit_raw_args_no_type_error_c53 >>
-      qexistsl [`am`, `am'`, `args`, `art`, `body'`,
-                `initial_evaluation_context am.sources am.layouts tx
-                   (find_function_module am tx.target tx.function_name)`,
-                `dflts`, `all_mods`, `mut`, `nr`, `raw`, `ret`,
-                `find_function_module am tx.target tx.function_name`, `ts`, `tx`] >>
-      gvs[checked_contract_runtime_ready_def, get_module_code_def,
-          initial_evaluation_context_def]) >>
-  simp[GSYM vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
-  irule call_external_function_selected_getter_raw_args_no_type_error_c53 >>
-  qexistsl [`am`, `am'`, `args`, `art`, `body'`,
-            `initial_evaluation_context am.sources am.layouts tx
-               (find_function_module am tx.target tx.function_name)`,
-            `decl`, `dflts`, `all_mods`, `mut`, `nr`, `ret`,
-            `find_function_module am tx.target tx.function_name`, `ts`, `tx`] >>
-  gvs[checked_contract_runtime_ready_def, get_module_code_def,
-      initial_evaluation_context_def]
 QED
 
 
@@ -4547,7 +4529,7 @@ Theorem checked_call_external_no_loop_control:
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `call_external am tx = (INR exc,am')` mp_tac >>
-  simp[Once call_external_def] >>
+  simp[Once call_external_def, call_external_module_code_def] >>
   gvs[AllCaseEqs()] >>
   strip_tac >>
   gvs[checked_contract_runtime_ready_def, get_self_code_def] >>
@@ -4567,10 +4549,4 @@ Proof
   >- (gvs[get_module_code_def, initial_evaluation_context_def] >>
       metis_tac[call_external_function_no_loop_control_c53,
                 checked_public_getter_body_no_control_escape_selected])
-  >- (gvs[get_module_code_def, initial_evaluation_context_def] >>
-      metis_tac[call_external_function_no_loop_control_c53,
-                checked_explicit_external_body_no_control_escape_selected]) >>
-  gvs[get_module_code_def, initial_evaluation_context_def] >>
-  metis_tac[call_external_function_no_loop_control_c53,
-            checked_public_getter_body_no_control_escape_selected]
 QED

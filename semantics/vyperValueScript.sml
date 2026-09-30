@@ -401,3 +401,60 @@ Definition dest_ArrayV_def:
 End
 
 val () = cv_auto_trans dest_ArrayV_def;
+
+(* ===== @raw_return return values ===== *)
+
+(* Values of a bytestring type are exactly the two constructors with a raw
+   byte representation: BytesV carries its content directly, StringV carries
+   HOL4 chars. *)
+Definition is_bytestring_tv_def[simp]:
+  is_bytestring_tv (BaseTV (StringT _)) = T ∧
+  is_bytestring_tv (BaseTV (BytesT _)) = T ∧
+  is_bytestring_tv _ = F
+End
+
+(* TOP-LEVEL: raw_return_bytes
+   The EVM returndata of an external call to a @raw_return function.  Such a
+   function returns the runtime content of its bytestring return value
+   verbatim, bypassing ABI encoding, so the returndata is the value's own
+   bytes with no length word and no padding.
+
+   NONE means the value has no bytestring representation.  A return value that
+   survived the bytestring cast of its declared return type can never be in
+   that case; see safe_cast_bytestring_raw_return_bytes in vyperRawReturn. *)
+Definition raw_return_bytes_def:
+  raw_return_bytes (BytesV bs) = SOME bs ∧
+  raw_return_bytes (StringV s) = SOME (MAP ((n2w:num->word8) o ORD) s) ∧
+  raw_return_bytes _ = NONE
+End
+
+val () = cv_auto_trans raw_return_bytes_def;
+
+Theorem raw_return_bytes_BytesV[simp]:
+  raw_return_bytes (BytesV bs) = SOME bs
+Proof
+  simp[raw_return_bytes_def]
+QED
+
+Theorem raw_return_bytes_StringV[simp]:
+  raw_return_bytes (StringV s) = SOME (MAP ((n2w:num->word8) o ORD) s)
+Proof
+  simp[raw_return_bytes_def]
+QED
+
+(* KEY LEMMA: raw_return_bytes succeeds exactly on the bytestring values. *)
+Theorem raw_return_bytes_SOME_iff:
+  ∀v bs. raw_return_bytes v = SOME bs ⇔
+    (∃bs'. v = BytesV bs' ∧ bs' = bs) ∨
+    (∃s. v = StringV s ∧ MAP ((n2w:num->word8) o ORD) s = bs)
+Proof
+  Cases_on `v` >> simp[raw_return_bytes_def] >> metis_tac[]
+QED
+
+(* KEY LEMMA: bytestring values are exactly the values that have raw bytes. *)
+Theorem is_bytestring_v_raw_return_bytes:
+  ∀v. (∃bs. raw_return_bytes v = SOME bs) ⇔
+    (∃bs. v = BytesV bs) ∨ (∃s. v = StringV s)
+Proof
+  Cases_on `v` >> simp[raw_return_bytes_def] >> metis_tac[]
+QED

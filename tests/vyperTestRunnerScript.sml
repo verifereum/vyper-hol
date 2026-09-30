@@ -1,6 +1,6 @@
 Theory vyperTestRunner
 Ancestors
-  contractABI vyperABI vyperSmallStep jsonAST jsonToVyper
+  contractABI vyperABI vyperInterpreter vyperSmallStep jsonAST jsonToVyper
   vfmContext vfmExecution vfmTransaction
 Libs
   cv_transLib wordsLib
@@ -240,7 +240,7 @@ Definition run_call_def:
     retTypes = SND (SND ar);
   in
     case FST ar of NONE => ((INR (Error $ RuntimeError "run_call args"), am),
-                            (retTys, (retTypes, FEMPTY)))
+                            (retTys, (retTypes, (FEMPTY, F))))
   | SOME args => let
     tx = <| sender := ct.sender
           ; target := ct.target
@@ -262,7 +262,11 @@ Definition run_call_def:
           ; origin := ct.sender |>;
     (* TODO(test-semantics): set static-call context based on ct.static. *)
     (* TODO(test-semantics): thread additional environment data from the trace. *)
-  in (call_external am tx, (retTys, (retTypes, tenv)))
+    (* Whether the callee returns raw bytes or an ABI encoding, and hence how
+       its EVM returndata must be read back, is decided by the interpreter
+       (call_external_raw_return) from the declaration call_external runs. *)
+    is_raw = call_external_raw_return am tx
+  in (call_external am tx, (retTys, (retTypes, (tenv, is_raw))))
 End
 
 val () = cv_auto_trans run_call_def;
@@ -474,14 +478,12 @@ Definition run_trace_def:
          of NONE => INR (Error $ RuntimeError "error expected")
           | SOME out => let
               ar = SND (SND cr);
-              rawVyRetTy = FST ar; tenv = SND ar;
+              rawVyRetTy = FST ar; tenv = FST (SND ar);
+              is_raw = SND (SND ar);
             in
-              case evaluate_abi_decode_return tenv rawVyRetTy out of
-              | INR _ => INR (Error $ RuntimeError "output mismatch")
-              | INL decoded =>
-                  if decoded = v
-                  then INL am
-                  else INR (Error $ RuntimeError "output mismatch"))
+              if external_returndata_agrees is_raw tenv rawVyRetTy v out
+              then INL am
+              else INR (Error $ RuntimeError "output mismatch"))
 End
 
 val () = cv_auto_trans run_trace_def;
