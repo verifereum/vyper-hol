@@ -53,7 +53,7 @@ fun elim_lit n th =
    in the assumptions (from oldest to newest), apply it to all matching
    eval_operand facts and add the forwarded versions. Multiple passes
    ensure transitive forwarding through chains of states. *)
-fun forward_all_evals (asl, g) : goal list * validation =
+fun forward_all_evals (asl, g) : Context.t -> goal list * validation =
   let
     fun is_pres t =
       (let val (vs, body) = strip_forall t
@@ -111,15 +111,9 @@ fun chain_step th : tactic =
        drule_all run_inst_seq_chain >> strip_tac >>
        qpat_x_assum `run_inst_seq _ _ = run_inst_seq _ _` collapse_run);
 
-(* chain_assert: Final ASSERT step.
-   Uses assert_chain theorem (defined later — looked up at call time via ref).
-   ASSERT is a no-op (v≠0w) or reverts (v=0w).
-   After drule_all assert_chain + strip_assume_tac: 2 subgoals.
-   chain_assert_branch solves each by extracting the witness from the
-   run_inst_seq fact, choosing the right disjunct, and closing.
-   If assert_chain matched from an intermediate state (not st), chain_assert_solve_run
-   chains run facts via emitted_insts_append + run_inst_seq_chain. *)
-val assert_chain_ref : thm ref = ref TRUTH;
+(* Support for the final ASSERT step. ASSERT is a no-op (v≠0w) or
+   reverts (v=0w). The tactic itself is defined below assert_chain so it can
+   refer to the theorem directly, without mutable forward-reference state. *)
 (* chain_assert_solve_run: solve a run_inst_seq goal using assumptions.
    Tries direct assumption match first (fast), then targeted chaining.
    AVOIDS: asm_rewrite_tac[] (loops on APPEND), imp_res_tac emitted_insts_append (O(N²)). *)
@@ -194,7 +188,7 @@ fun compose_eval_pres (asl, gl) =
      fin.ci = pre.ci ++ ei pre fin
    by finding chain of ci facts in assumptions and composing via
    emitted_insts_append + APPEND associativity. O(N). *)
-fun solve_ci (asl, gl) : goal list * validation =
+fun solve_ci (asl, gl) : Context.t -> goal list * validation =
   let
     (* Parse goal: fin.ci = pre.ci ++ ei pre fin *)
     val (lhs_tm, rhs_tm) = dest_eq gl
@@ -254,7 +248,7 @@ fun solve_ci (asl, gl) : goal list * validation =
 
 (* solve_same_blocks: solve `same_blocks pre fin` by chaining
    step-wise same_blocks facts from assumptions. O(N). *)
-fun solve_same_blocks (asl, gl) : goal list * validation =
+fun solve_same_blocks (asl, gl) : Context.t -> goal list * validation =
   let
     val sb_def = same_blocks_def
     val (sb_fn, [pre_st, fin_st]) = strip_comb gl
@@ -295,7 +289,7 @@ fun solve_same_blocks (asl, gl) : goal list * validation =
 (* chain_assert_branch: solve one subgoal from assert_chain.
    Dispatches to OK or Abort handling based on assumptions.
    AVOIDS: res_tac (O(N²) on 60+ assumptions), gvs[] (loops on APPEND). *)
-fun chain_assert_branch (asl, gl) : goal list * validation =
+fun chain_assert_branch (asl, gl) : Context.t -> goal list * validation =
   let
     val ok_pat = ``run_inst_seq _ _ = OK s``
     val abort_pat = ``run_inst_seq _ _ = Abort _ s``
@@ -362,14 +356,6 @@ fun chain_assert_branch (asl, gl) : goal list * validation =
        | NONE => raise mk_HOL_ERR "chain_assert" "chain_assert_branch"
                        "no run_inst_seq fact found")
   end;
-
-fun chain_assert (g : goal) : goal list * validation =
-  (forward_all_evals >>
-   imp_res_tac emit_void_extends >>
-   drule_all_then strip_assume_tac (!assert_chain_ref) >>
-   chain_assert_branch) g;
-
-val chain_assert_eval = chain_assert;
 
 (* chain_last th: Like chain_step but for the final emit_op.
    Chains and closes the goal with gvs + metis_tac. *)
@@ -553,7 +539,7 @@ QED
    extends_trans. Solves goals of the form:
      st'.ci = st.ci ++ ei st st' ∧ same_blocks st st'
    where intermediate ci/same_blocks facts are in assumptions. O(N). *)
-fun chain_extends_tac (asl, gl) : goal list * validation =
+fun chain_extends_tac (asl, gl) : Context.t -> goal list * validation =
   let
     val (ci_goal, sb_goal) = dest_conj gl
     val (lhs_ci, _) = dest_eq ci_goal
@@ -713,7 +699,13 @@ QED
 
 Finalise assert_chain
 
-val _ = (assert_chain_ref := assert_chain);
+(* Final ASSERT tactic. Defined after assert_chain to avoid a mutable theorem
+   reference initialized with a placeholder. *)
+fun chain_assert_tac (g : goal) : Context.t -> goal list * validation =
+  (forward_all_evals >>
+   imp_res_tac emit_void_extends >>
+   drule_all_then strip_assume_tac assert_chain >>
+   chain_assert_branch) g;
 
 (* assert_chain_bridged: Like assert_chain but takes two prefix runs
    st0→mid and mid→cs, combining them internally.
@@ -802,7 +794,7 @@ Resume compile_clamp_correct_full[signed]:
   chain_step (elim_lit 2 emit_op_SGT_correct) >>
   chain_step emit_op_ISZERO_correct >>
   chain_step emit_op_AND_correct >>
-  chain_assert
+  chain_assert_tac
 QED
 
 Resume compile_clamp_correct_full[unsigned]:
@@ -810,7 +802,7 @@ Resume compile_clamp_correct_full[unsigned]:
   rpt (pairarg_tac >> gvs[]) >>
   chain_step (elim_lit 2 emit_op_GT_correct) >>
   chain_step emit_op_ISZERO_correct >>
-  chain_assert
+  chain_assert_tac
 QED
 
 Finalise compile_clamp_correct_full
@@ -1306,7 +1298,7 @@ Resume compile_safe_div_correct[signed]:
       qpat_x_assum `run_inst_seq _ _ = run_inst_seq _ _` mp_tac >>
       asm_rewrite_tac[] >> strip_tac >>
       (* ASSERT *)
-      chain_assert_eval)
+      chain_assert_tac)
   >> (* >256: just return *)
      gvs[comp_return_def] >>
      imp_res_tac emit_op_extends >>
@@ -1357,7 +1349,7 @@ Resume compile_safe_add_correct[signed_256]:
   chain_step (elim_lit 2 emit_op_SLT_correct) >>
   chain_step emit_op_SLT_correct >>
   chain_step emit_op_EQ_correct >>
-  chain_assert_eval
+  chain_assert_tac
 QED
 
 Resume compile_safe_add_correct[unsigned_256]:
@@ -1366,7 +1358,7 @@ Resume compile_safe_add_correct[unsigned_256]:
   rpt (pairarg_tac >> gvs[]) >>
   chain_step emit_op_LT_correct >>
   chain_step emit_op_ISZERO_correct >>
-  chain_assert_eval
+  chain_assert_tac
 QED
 
 Finalise compile_safe_add_correct
@@ -1695,7 +1687,7 @@ Resume compile_safe_sub_correct[signed_256]:
   chain_step (elim_lit 2 emit_op_SLT_correct) >>
   chain_step emit_op_SGT_correct >>
   chain_step emit_op_EQ_correct >>
-  chain_assert_eval
+  chain_assert_tac
 QED
 
 Resume compile_safe_sub_correct[unsigned_256]:
@@ -1704,7 +1696,7 @@ Resume compile_safe_sub_correct[unsigned_256]:
   rpt (pairarg_tac >> gvs[]) >>
   chain_step emit_op_GT_correct >>
   chain_step emit_op_ISZERO_correct >>
-  chain_assert_eval
+  chain_assert_tac
 QED
 
 Finalise compile_safe_sub_correct
@@ -1902,7 +1894,7 @@ Resume mul_overflow_check_ok_or_revert[no_special]:
       (* ASSERT + 5-conjunct close *)
       forward_all_evals >>
       imp_res_tac emit_void_extends >>
-      drule_all_then strip_assume_tac (!assert_chain_ref) >>
+      drule_all_then strip_assume_tac assert_chain >>
       suspend "sdiv_assert")
   >> (* Div case *)
      (drule_all emit_op_Div_correct >> strip_tac >>
@@ -1928,7 +1920,7 @@ Resume mul_overflow_check_ok_or_revert[no_special]:
       qpat_x_assum `run_inst_seq _ _ = run_inst_seq _ _` collapse_run >>
       forward_all_evals >>
       imp_res_tac emit_void_extends >>
-      drule_all_then strip_assume_tac (!assert_chain_ref) >>
+      drule_all_then strip_assume_tac assert_chain >>
       suspend "div_assert")
 QED
 
@@ -2017,7 +2009,7 @@ Resume mul_overflow_check_ok_or_revert[special_start]:
   (* ASSERT + 5-conjunct close *)
   forward_all_evals >>
   imp_res_tac emit_void_extends >>
-  drule_all_then strip_assume_tac (!assert_chain_ref) >>
+  drule_all_then strip_assume_tac assert_chain >>
   suspend "special_assert"
 QED
 
