@@ -13,3 +13,4 @@ Ancestors
   vyperStorageFrame
   vyperExprNoControl
   vyperABIValid
+  vyperTypeDeploymentMachine
