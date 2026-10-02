@@ -404,9 +404,8 @@ val () = cv_auto_trans dest_ArrayV_def;
 
 (* ===== @raw_return return values ===== *)
 
-(* Values of a bytestring type are exactly the two constructors with a raw
-   byte representation: BytesV carries its content directly, StringV carries
-   HOL4 chars. *)
+(* The two constructors with a raw byte representation: BytesV holds its bytes,
+   StringV holds HOL4 chars. *)
 Definition is_bytestring_tv_def[simp]:
   is_bytestring_tv (BaseTV (StringT _)) = T ∧
   is_bytestring_tv (BaseTV (BytesT _)) = T ∧
@@ -414,14 +413,10 @@ Definition is_bytestring_tv_def[simp]:
 End
 
 (* TOP-LEVEL: raw_return_bytes
-   The EVM returndata of an external call to a @raw_return function.  Such a
-   function returns the runtime content of its bytestring return value
-   verbatim, bypassing ABI encoding, so the returndata is the value's own
-   bytes with no length word and no padding.
-
-   NONE means the value has no bytestring representation.  A return value that
-   survived the bytestring cast of its declared return type can never be in
-   that case; see safe_cast_bytestring_raw_return_bytes in vyperRawReturn. *)
+   Returndata of a call to a @raw_return function: the value's own bytes, with no
+   length word and no padding, since ABI encoding is bypassed.  NONE when the
+   value has no bytestring representation, which a safe_cast to a bytestring
+   return type rules out; see safe_cast_bytestring_raw_return_bytes. *)
 Definition raw_return_bytes_def:
   raw_return_bytes (BytesV bs) = SOME bs ∧
   raw_return_bytes (StringV s) = SOME (MAP ((n2w:num->word8) o ORD) s) ∧
@@ -451,7 +446,7 @@ Proof
   Cases_on `v` >> simp[raw_return_bytes_def] >> metis_tac[]
 QED
 
-(* KEY LEMMA: bytestring values are exactly the values that have raw bytes. *)
+(* KEY LEMMA: bytestring values are exactly those that have raw bytes. *)
 Theorem is_bytestring_v_raw_return_bytes:
   ∀v. (∃bs. raw_return_bytes v = SOME bs) ⇔
     (∃bs. v = BytesV bs) ∨ (∃s. v = StringV s)

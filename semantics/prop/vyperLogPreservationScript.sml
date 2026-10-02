@@ -3455,8 +3455,7 @@ Theorem call_external_success_log_extends:
 Proof
   rpt strip_tac >>
   qpat_x_assum `call_external _ _ = _` mp_tac >>
-  simp[Once vyperInterpreterTheory.call_external_def,
-       vyperInterpreterTheory.call_external_module_code_def, AllCaseEqs()] >>
+  simp[Once vyperInterpreterTheory.call_external_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
   imp_res_tac call_external_function_success_log_extends
 QED

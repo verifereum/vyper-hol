@@ -355,7 +355,7 @@ QED
 Theorem call_external_failure_rolls_back:
   call_external am tx = (INR exc,am') ==> am' = am
 Proof
-  rw[call_external_def, call_external_module_code_def] >> gvs[AllCaseEqs()] >>
+  rw[call_external_def] >> gvs[AllCaseEqs()] >>
   metis_tac[call_external_function_initial_failure_rolls_back]
 QED
 
@@ -517,10 +517,9 @@ Theorem checked_call_external_success_preserves_machine_well_typed:
 Proof
   rpt strip_tac >>
   qpat_x_assum `call_external am tx = _` mp_tac >>
-  simp[Once call_external_def, call_external_module_code_def] >>
+  simp[Once call_external_def] >>
   gvs[AllCaseEqs()] >> strip_tac >>
-  gvs[checked_contract_runtime_ready_def, get_self_code_def,
-      call_external_module_code_def] >>
+  gvs[checked_contract_runtime_ready_def, get_self_code_def] >>
   `checked_call_inputs_ready
      (type_env_all_modules all_mods)
      (initial_evaluation_context am.sources am.layouts tx

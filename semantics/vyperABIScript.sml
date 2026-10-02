@@ -1175,18 +1175,14 @@ val () = cv_auto_trans build_ext_calldata_def;
 (* ===== External Return Encoding (incl. @raw_return) ===== *)
 
 (* TOP-LEVEL: external_returndata
-   The EVM returndata of an external call that produced value v for the
-   declared return type typ.
-
-   An ordinary external function returns the ABI encoding of v, as produced
-   by evaluate_abi_encode_bytes (the inverse of
-   evaluate_abi_decode_return, which the external-call sites apply to
-   observed returndata).  A @raw_return function bypasses ABI encoding and
-   returns the runtime content bytes of its bytestring value verbatim: no
-   length word, no 32-byte padding, and possibly empty.  A value with no
-   bytestring representation has no raw encoding; for a bytestring return
-   type the cast in call_external_function rules that out (see
-   safe_cast_bytestring_raw_return_bytes). *)
+   Returndata of an external call that produced value v for declared type typ.
+   An ordinary function returns the ABI encoding of v (evaluate_abi_encode_bytes,
+   inverse of the evaluate_abi_decode_return the call sites apply to observed
+   returndata).  A @raw_return function returns its bytestring value's content
+   bytes verbatim: no length word, no padding, possibly empty.  The error branch
+   is unreachable for a well-typed return value: call_external_function reports
+   only safe_casted values, and safe_cast_bytestring_raw_return_bytes gives such
+   a value raw bytes whenever typ is a Bytes/String type. *)
 Definition external_returndata_def:
   external_returndata raw_return tenv typ v =
     if raw_return then
@@ -1216,13 +1212,10 @@ Proof
 QED
 
 (* TOP-LEVEL: external_returndata_agrees
-   The EVM returndata observed for an external call agrees with the value the
-   Vyper semantics computed for it.
-
-   An ordinary external function ABI-encodes its return value, so the
-   returndata must decode back to that value.  A @raw_return function returns
-   the raw content bytes of its bytestring value instead, so the returndata
-   must be exactly those bytes - what external_returndata produces. *)
+   Whether observed returndata agrees with the value the semantics computed.
+   An ordinary function ABI-encodes, so returndata must decode back to v; a
+   @raw_return function returns raw content bytes, so returndata must be exactly
+   those, as external_returndata produces. *)
 Definition external_returndata_agrees_def:
   external_returndata_agrees is_raw tenv ret v out =
     if is_raw then

@@ -311,14 +311,11 @@ val outside_admitted_suites_reason = "outside currently admitted test suites"
 val outside_admitted_suites_issue =
   "https://github.com/verifereum/vyper-hol/issues/36"
 
-(* Items with no exported traces are negative tests: they assert a
-   compile-time diagnostic (rejected source, interface/implementation rules)
-   and therefore record no deployment and no call, so there is no execution to
-   replay.  They are deliberately kept in their own bucket instead of being
-   counted as a semantic exclusion, and they are tracked as frontend and
-   elaboration work rather than as semantics work: the frontend/elaboration
-   checks these contracts would need live behind the missing formal front end
-   (issues/46) and the partial type checker (issues/47). *)
+(* Negative tests assert a compile-time diagnostic, so they record no deployment
+   and no call and there is nothing to replay.  Kept in their own bucket rather
+   than counted as semantic exclusions: the checks they need are frontend and
+   elaboration work, behind the missing formal front end (issues/46) and the
+   partial type checker (issues/47). *)
 val no_traces_reason = "no exported traces (negative test, frontend diagnostics)"
 val no_traces_issue = "https://github.com/verifereum/vyper-hol/issues/46"
 
