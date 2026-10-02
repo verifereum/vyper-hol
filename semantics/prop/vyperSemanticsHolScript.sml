@@ -12,3 +12,4 @@ Ancestors
   vyperHashMap
   vyperStorageFrame
   vyperExprNoControl
+  vyperABIValid
