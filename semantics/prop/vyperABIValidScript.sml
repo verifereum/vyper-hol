@@ -145,7 +145,7 @@ Theorem evaluate_abi_decode_returndata_capped:
     vyper_valid_enc_returndata tenv typ (TAKE cap bs) ∧
     static_length (vyper_to_abi_type tenv typ) ≤ LENGTH (TAKE cap bs)
 Proof
-  rw[evaluate_abi_decode_returndata_vyper_valid_enc, vyper_valid_enc_returndata_def]
+  rw[Once evaluate_abi_decode_returndata_def  ,evaluate_abi_decode_returndata_vyper_valid_enc, vyper_valid_enc_returndata_def]
 QED
 
 (* ===== The window never rejects our own encodings ===== *)
