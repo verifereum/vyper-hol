@@ -234,6 +234,50 @@ Definition def_available_at_exec_def:
           def_bb.bb_instructions)
       fn.fn_blocks
 End
+(* Short-circuit the same-block order search before enumerating use indices.
+   The original pair search repeated EL i (and a full instruction comparison)
+   for every j, even when i was not a definition of the requested variable. *)
+Theorem exists_instruction_order_compute:
+  EXISTS
+    (λi. EXISTS (λj. i < j /\ EL i insts = def_inst /\
+                         EL j insts = use_inst)
+                (GENLIST I (LENGTH insts)))
+    (GENLIST I (LENGTH insts)) <=>
+  EXISTS
+    (λi. EL i insts = def_inst /\
+         EXISTS (λj. i < j /\ EL j insts = use_inst)
+                (GENLIST I (LENGTH insts)))
+    (GENLIST I (LENGTH insts))
+Proof
+  simp[listTheory.EXISTS_MEM] >> metis_tac[]
+QED
+
+Theorem def_available_at_exec_compute[compute]:
+  def_available_at_exec cfg dom fn target_bb use_inst_opt v <=>
+    EXISTS
+      (λdef_bb.
+        EXISTS
+          (λdef_inst.
+            MEM v def_inst.inst_outputs /\
+            cfg_reachable_of cfg target_bb.bb_label /\
+            dominates dom def_bb.bb_label target_bb.bb_label /\
+            (def_bb.bb_label = target_bb.bb_label ==>
+             case use_inst_opt of
+               NONE => T
+             | SOME use_inst =>
+                 EXISTS
+                   (λi. EL i target_bb.bb_instructions = def_inst /\
+                        EXISTS
+                          (λj. i < j /\
+                               EL j target_bb.bb_instructions = use_inst)
+                          (GENLIST I (LENGTH target_bb.bb_instructions)))
+                   (GENLIST I (LENGTH target_bb.bb_instructions))))
+          def_bb.bb_instructions)
+      fn.fn_blocks
+Proof
+  simp[def_available_at_exec_def, exists_instruction_order_compute]
+QED
+
 (* Computed PHI contract: exact pair shape and predecessor coverage precede
    the edge-availability checks, matching check_venom._handle_var_definition. *)
 Definition phi_edge_uses_wf_exec_def:
