@@ -239,18 +239,21 @@ Proof
   rpt (BasicProvers.FULL_CASE_TAC >> fs[]) >> gvs compile_defs >>
   TRY (gvs[emitted_insts_def, run_inst_seq_def, SF SFY_ss] >> NO_TAC) >>
   emitted_insts_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  weak_spec_step_tac >> weak_spec_step_tac >>
+  (* The original twelve weak_spec_step_tac stages ran on all four paths.
+     Move those same stages into each existing Resume to bound each leaf. *)
   ALL_TAC >| [suspend "path0", suspend "path1",
               suspend "path2", suspend "path3"]
 QED
 
 Resume compile_type_convert_14[path0]:
   markerLib.RESUME_TAC >>
+  (* Twelve stages moved unchanged from the shared prefix. *)
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
   weak_spec_step_tac >> weak_spec_step_tac >>
   weak_spec_step_tac >> weak_spec_step_tac >>
   weak_spec_step_tac >> weak_spec_step_tac >>
@@ -266,6 +269,13 @@ QED
 
 Resume compile_type_convert_14[path1]:
   markerLib.RESUME_TAC >>
+  (* Twelve stages moved unchanged from the shared prefix. *)
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
   weak_spec_step_tac >> weak_spec_step_tac >>
   weak_spec_step_tac >> weak_spec_step_tac >>
   weak_spec_step_tac >> weak_spec_step_tac >>
@@ -281,6 +291,13 @@ QED
 
 Resume compile_type_convert_14[path2]:
   markerLib.RESUME_TAC >>
+  (* Twelve stages moved unchanged from the shared prefix. *)
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
   weak_spec_step_tac >> weak_spec_step_tac >>
   weak_spec_step_tac >> weak_spec_step_tac >>
   weak_spec_step_tac >> weak_spec_step_tac >>
@@ -296,6 +313,13 @@ QED
 
 Resume compile_type_convert_14[path3]:
   markerLib.RESUME_TAC >>
+  (* Twelve stages moved unchanged from the shared prefix. *)
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
   weak_spec_step_tac >> weak_spec_step_tac >>
   weak_spec_step_tac >> weak_spec_step_tac >>
   weak_spec_step_tac >> weak_spec_step_tac >>
@@ -452,19 +476,28 @@ Proof
   pop_assum (qspecl_then [`v`, `w`] mp_tac) >>
   (impl_tac >- peel_alloca_impl_tac) >>
   rpt strip_tac >>
+  (* Original whole-chain simplifier exceeded the 10s tactic bound:
   simp[run_inst_seq_def, step_inst_base_def,
        exec_pure2_def, exec_pure1_def, exec_read1_def,
        exec_write2_def, mk_inst_def,
        eval_operand_lit, eval_operand_update_var_if] >>
+  *)
+  weak_spec_step_tac >> weak_spec_step_tac >> weak_spec_step_tac >>
+  simp[Once run_inst_seq_def] >>
   rpt (BasicProvers.FULL_CASE_TAC >>
        TRY (metis_tac[eval_operand_update_not_none,
                        eval_operand_mstore_not_none,
                        optionTheory.NOT_NONE_SOME])) >>
+  (* Original finish (preserved):
   gvs[eval_operand_update_var_if, eval_operand_mstore,
       ASCIInumbersTheory.toString_11] >>
   metis_tac[eval_operand_mstore, eval_operand_update_var_if,
             ASCIInumbersTheory.toString_11,
             arithmeticTheory.ADD1, numTheory.NOT_SUC]
+  *)
+  gvs[eval_operand_def, lookup_var_update_var, lookup_var_mstore,
+      fresh_var_name_eq, SF SFY_ss] >>
+  simp[EXISTS_OR_THM, lookup_var_update_var, fresh_var_name_eq]
 QED
 
 Theorem compile_type_convert_20:
