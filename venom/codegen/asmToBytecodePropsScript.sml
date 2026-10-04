@@ -36,7 +36,7 @@ Ancestors
 (* Weaker (IS_PREFIX) version of assemble_parse_exact *)
 Theorem assemble_parse_correct:
   !prog i.
-    asm_wf prog /\
+    asm_encoding_wf prog /\
     i < LENGTH prog /\
     (!j. j <= i ==> ~is_data_inst (EL j prog)) ==>
     ?op.

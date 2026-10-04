@@ -47,7 +47,7 @@ QED
 
 Theorem asm_bytecode_sim_aux:
   !n prog as es.
-    asm_wf prog /\
+    asm_encoding_wf prog /\
     asm_evm_rel prog as es /\
     LENGTH es.contexts = 1 /\
     no_asm_calls prog /\
@@ -56,8 +56,7 @@ Theorem asm_bytecode_sim_aux:
     (!m as2. asm_steps (SND (compute_label_offsets prog))
                        (build_offset_to_pc prog)
                        prog m as = AsmOK as2 ==>
-             LENGTH as2.as_stack < stack_limit) /\
-    (!i. i < LENGTH prog ==> 0 < asm_inst_size (EL i prog)) ==>
+             LENGTH as2.as_stack < stack_limit) ==>
     (?es' exc. run es = SOME (INR (SOME exc), es') /\
                exc <> StackOverflow) \/
     ((!as'. asm_steps (SND (compute_label_offsets prog))

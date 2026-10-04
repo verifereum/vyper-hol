@@ -241,7 +241,7 @@ QED
 (* AsmLabel: JUMPDEST — consume_gas 1, increment PC *)
 Theorem asm_evm_step_label:
   !prog as es lbl.
-    asm_wf prog /\
+    asm_encoding_wf prog /\
     asm_evm_rel prog as es /\
     LENGTH es.contexts = 1 /\
     as.as_pc < LENGTH prog /\
@@ -297,7 +297,7 @@ QED
    extract the EVM context, the parsed opcode, and key equalities. *)
 Theorem asm_evm_step_setup:
   !prog as es.
-    asm_wf prog /\
+    asm_encoding_wf prog /\
     asm_evm_rel prog as es /\
     LENGTH es.contexts = 1 /\
     as.as_pc < LENGTH prog /\
@@ -349,7 +349,7 @@ QED
    pushed value, asm_evm_rel is preserved. *)
 Theorem evm_push_step[local]:
   !prog as es op v gas_cost.
-    asm_wf prog /\
+    asm_encoding_wf prog /\
     asm_evm_rel prog as es /\
     LENGTH es.contexts = 1 /\
     as.as_pc < LENGTH prog /\
@@ -393,7 +393,7 @@ Proof
     ONCE_REWRITE_TAC[GSYM ADD1] >>
     simp[asm_pc_to_offset_suc] >>
     irule ewi_length >>
-    fs[asm_wf_def, asm_encoding_wf_def, LET_THM,
+    fs[asm_encoding_wf_def, LET_THM,
        encoding_wf_inst_def, pairTheory.UNCURRY] >>
     metis_tac[]
   )
@@ -928,7 +928,7 @@ val sstore_finish_tac : tactic =
 
 Theorem asm_evm_step_compare_dispatch[local]:
   !prog as es name r.
-    asm_wf prog /\ asm_evm_rel prog as es /\ LENGTH es.contexts = 1 /\
+    asm_encoding_wf prog /\ asm_evm_rel prog as es /\ LENGTH es.contexts = 1 /\
     as.as_pc < LENGTH prog /\ EL as.as_pc prog = AsmOp name /\
     (!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)) /\
     LENGTH as.as_stack < stack_limit /\
@@ -961,7 +961,7 @@ QED
 
 Theorem asm_evm_step_bitwise_dispatch[local]:
   !prog as es name r.
-    asm_wf prog /\ asm_evm_rel prog as es /\ LENGTH es.contexts = 1 /\
+    asm_encoding_wf prog /\ asm_evm_rel prog as es /\ LENGTH es.contexts = 1 /\
     as.as_pc < LENGTH prog /\ EL as.as_pc prog = AsmOp name /\
     (!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)) /\
     LENGTH as.as_stack < stack_limit /\
@@ -998,7 +998,7 @@ QED
 
 Theorem asm_evm_step_arith_dispatch[local]:
   !prog as es name r.
-    asm_wf prog /\ asm_evm_rel prog as es /\ LENGTH es.contexts = 1 /\
+    asm_encoding_wf prog /\ asm_evm_rel prog as es /\ LENGTH es.contexts = 1 /\
     as.as_pc < LENGTH prog /\ EL as.as_pc prog = AsmOp name /\
     (!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)) /\
     LENGTH as.as_stack < stack_limit /\
@@ -1208,7 +1208,7 @@ QED
 
 Theorem asm_evm_step_memory_dispatch[local]:
   !prog as es name r.
-    asm_wf prog /\ asm_evm_rel prog as es /\ LENGTH es.contexts = 1 /\
+    asm_encoding_wf prog /\ asm_evm_rel prog as es /\ LENGTH es.contexts = 1 /\
     as.as_pc < LENGTH prog /\ EL as.as_pc prog = AsmOp name /\
     (!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)) /\
     LENGTH as.as_stack < stack_limit /\
@@ -2096,11 +2096,10 @@ Finalise asm_evm_step_memory_dispatch
 
 Theorem asm_evm_step_control_dispatch[local]:
   !prog as es name r.
-    asm_wf prog /\ asm_evm_rel prog as es /\ LENGTH es.contexts = 1 /\
+    asm_encoding_wf prog /\ asm_evm_rel prog as es /\ LENGTH es.contexts = 1 /\
     as.as_pc < LENGTH prog /\ EL as.as_pc prog = AsmOp name /\
     (!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)) /\
     LENGTH as.as_stack < stack_limit /\
-    (!i. i < LENGTH prog ==> 0 < asm_inst_size (EL i prog)) /\
     asm_step_control (build_offset_to_pc prog) name as = SOME r ==>
     (?es1 exc. step es = (INR (SOME exc), es1) /\ exc <> StackOverflow) \/
     (case r of
@@ -2345,7 +2344,7 @@ QED
 
 Theorem asm_evm_step_extcall_dispatch[local]:
   !prog as es name r.
-    asm_wf prog /\ asm_evm_rel prog as es /\ LENGTH es.contexts = 1 /\
+    asm_encoding_wf prog /\ asm_evm_rel prog as es /\ LENGTH es.contexts = 1 /\
     as.as_pc < LENGTH prog /\ EL as.as_pc prog = AsmOp name /\
     (!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)) /\
     LENGTH as.as_stack < stack_limit /\
@@ -2443,7 +2442,7 @@ val extcodecopy_ok_tac : tactic =
 
 Theorem asm_evm_step_copy_dispatch[local]:
   !prog as es name r.
-    asm_wf prog /\ asm_evm_rel prog as es /\ LENGTH es.contexts = 1 /\
+    asm_encoding_wf prog /\ asm_evm_rel prog as es /\ LENGTH es.contexts = 1 /\
     as.as_pc < LENGTH prog /\ EL as.as_pc prog = AsmOp name /\
     (!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)) /\
     LENGTH as.as_stack < stack_limit /\
@@ -2876,7 +2875,7 @@ val context_state_finish_tac : tactic =
 
 Theorem asm_evm_step_context_dispatch[local]:
   !prog as es name r.
-    asm_wf prog /\ asm_evm_rel prog as es /\ LENGTH es.contexts = 1 /\
+    asm_encoding_wf prog /\ asm_evm_rel prog as es /\ LENGTH es.contexts = 1 /\
     as.as_pc < LENGTH prog /\ EL as.as_pc prog = AsmOp name /\
     (!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)) /\
     LENGTH as.as_stack < stack_limit /\
@@ -3226,7 +3225,7 @@ Finalise asm_evm_step_context_dispatch
 
 Theorem asm_evm_step_dup_dispatch[local]:
   !prog as es name n r.
-    asm_wf prog /\ asm_evm_rel prog as es /\ LENGTH es.contexts = 1 /\
+    asm_encoding_wf prog /\ asm_evm_rel prog as es /\ LENGTH es.contexts = 1 /\
     as.as_pc < LENGTH prog /\ EL as.as_pc prog = AsmOp name /\
     (!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)) /\
     LENGTH as.as_stack < stack_limit /\
@@ -3277,7 +3276,7 @@ QED
 
 Theorem asm_evm_step_swap_dispatch[local]:
   !prog as es name n r.
-    asm_wf prog /\ asm_evm_rel prog as es /\ LENGTH es.contexts = 1 /\
+    asm_encoding_wf prog /\ asm_evm_rel prog as es /\ LENGTH es.contexts = 1 /\
     as.as_pc < LENGTH prog /\ EL as.as_pc prog = AsmOp name /\
     (!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)) /\
     LENGTH as.as_stack < stack_limit /\
@@ -3343,7 +3342,7 @@ val log_finish_tac : tactic =
 
 Theorem asm_evm_step_log_dispatch[local]:
   !prog as es name n r.
-    asm_wf prog /\ asm_evm_rel prog as es /\ LENGTH es.contexts = 1 /\
+    asm_encoding_wf prog /\ asm_evm_rel prog as es /\ LENGTH es.contexts = 1 /\
     as.as_pc < LENGTH prog /\ EL as.as_pc prog = AsmOp name /\
     (!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)) /\
     LENGTH as.as_stack < stack_limit /\
@@ -3550,7 +3549,7 @@ Finalise asm_evm_step_log_dispatch
 (* AsmPush bytes: directly push word_of_bytes F 0w (REVERSE bytes) *)
 Theorem asm_evm_step_push[local]:
   !prog as es bytes.
-    asm_wf prog /\
+    asm_encoding_wf prog /\
     asm_evm_rel prog as es /\
     LENGTH es.contexts = 1 /\
     as.as_pc < LENGTH prog /\
@@ -3578,7 +3577,7 @@ Proof
   (* non-empty case: Push (SUC (LENGTH t)) (h::t) *)
   >> rename1 `AsmPush (h::t)` >>
      `encoding_wf_inst (EL as.as_pc prog) (SND (compute_label_offsets prog))`
-       by (irule asm_encoding_wf_el >> fs[asm_wf_def]) >>
+       by (irule asm_encoding_wf_el >> simp[]) >>
      gvs[encoding_wf_inst_def] >>
      mp_tac (Q.SPECL [`prog`, `as`, `es`,
        `Push (SUC (LENGTH t)) (h::t)`,
@@ -3594,7 +3593,7 @@ QED
 (* AsmPushLabel lbl: push n2w off where off = FLOOKUP offsets lbl *)
 Theorem asm_evm_step_pushlabel[local]:
   !prog as es lbl off.
-    asm_wf prog /\
+    asm_encoding_wf prog /\
     asm_evm_rel prog as es /\
     LENGTH es.contexts = 1 /\
     as.as_pc < LENGTH prog /\
@@ -3612,7 +3611,7 @@ Proof
   rpt strip_tac >>
   `~is_data_inst (EL as.as_pc prog)` by simp[is_data_inst_def] >>
   `encoding_wf_inst (EL as.as_pc prog) (SND (compute_label_offsets prog))`
-    by (irule asm_encoding_wf_el >> fs[asm_wf_def]) >>
+    by (irule asm_encoding_wf_el >> simp[]) >>
   `LENGTH (encode_num_bytes off) <= symbol_size` by
     (fs[encoding_wf_inst_def] >> res_tac >> simp[]) >>
   mp_tac (Q.SPECL [`prog`, `as`, `es`,
@@ -3635,7 +3634,7 @@ QED
 (* AsmPushOfst lbl delta: push n2w (off + delta) *)
 Theorem asm_evm_step_pushofst[local]:
   !prog as es lbl delta off.
-    asm_wf prog /\
+    asm_encoding_wf prog /\
     asm_evm_rel prog as es /\
     LENGTH es.contexts = 1 /\
     as.as_pc < LENGTH prog /\
@@ -3654,7 +3653,7 @@ Proof
   rpt strip_tac >>
   `~is_data_inst (EL as.as_pc prog)` by simp[is_data_inst_def] >>
   `encoding_wf_inst (EL as.as_pc prog) (SND (compute_label_offsets prog))`
-    by (irule asm_encoding_wf_el >> fs[asm_wf_def]) >>
+    by (irule asm_encoding_wf_el >> simp[]) >>
   `LENGTH (encode_num_bytes (off + delta)) <= symbol_size` by
     (fs[encoding_wf_inst_def] >> res_tac >> simp[]) >>
   mp_tac (Q.SPECL [`prog`, `as`, `es`,
@@ -3681,15 +3680,14 @@ QED
 
 Theorem asm_evm_step:
   !prog as es.
-    asm_wf prog /\
+    asm_encoding_wf prog /\
     asm_evm_rel prog as es /\
     LENGTH es.contexts = 1 /\
     as.as_pc < LENGTH prog /\
     ~is_data_inst (EL as.as_pc prog) /\
     (!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)) /\
     LENGTH as.as_stack < stack_limit /\
-    no_asm_calls prog /\
-    (!i. i < LENGTH prog ==> 0 < asm_inst_size (EL i prog)) ==>
+    no_asm_calls prog ==>
     (?es1 exc. step es = (INR (SOME exc), es1) /\
                exc <> StackOverflow) \/
     (case asm_step (SND (compute_label_offsets prog))
