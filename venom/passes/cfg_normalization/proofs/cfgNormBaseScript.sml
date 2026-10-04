@@ -151,7 +151,7 @@ Theorem cx_orig_stop[local]:
   !s. step_inst_base
       <| inst_id := 1; inst_opcode := STOP;
          inst_operands := []; inst_outputs := [] |> s =
-    Halt (halt_state s)
+    Halt (halt_state (s with vs_returndata := []))
 Proof
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> rw[]
 QED
@@ -283,7 +283,8 @@ Theorem cx2_orig_halt[local]:
   !s ctx. s.vs_current_bb = "B" /\ s.vs_prev_bb = SOME "P" /\
           s.vs_inst_idx = 0 /\ FLOOKUP s.vs_vars "x" = SOME 42w ==>
     run_blocks (SUC 0) ctx cx2_func s =
-    Halt (halt_state (update_var "y" 42w (s with vs_inst_idx := 1)))
+    Halt (halt_state
+      ((update_var "y" 42w (s with vs_inst_idx := 1)) with vs_returndata := []))
 Proof
   rpt strip_tac >>
   ONCE_REWRITE_TAC[run_blocks_def] >>

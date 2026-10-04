@@ -4140,8 +4140,7 @@ Theorem m2v_step_easy_terminator:
       (step_inst fuel ctx inst s1)
       (step_inst fuel ctx inst s2)
 Proof
-  rpt strip_tac >>
-  simp[step_inst_non_invoke] >>
+  rpt strip_tac >> simp[step_inst_non_invoke] >>
   SUBGOAL_THEN ``!op. MEM op inst.inst_operands ==>
     eval_operand op s1 = eval_operand op s2`` assume_tac
   >- (rpt strip_tac >>
@@ -4168,8 +4167,11 @@ Proof
        >- gvs[lift_result_def]) >>
       Cases_on `x` >> gvs[lift_result_def])
   >- (ASM_REWRITE_TAC[step_inst_base_def] >> simp[lift_result_def] >>
-      metis_tac[m2v_inv_noix_halt_state, m2v_non32_ok_halt_state,
-                m2v_ao_undef_sync_halt_state])
+      (* STOP now needs the setter helpers as well as the original halt helpers. *)
+      PURE_REWRITE_TAC[GSYM set_returndata_def] >>
+      simp[m2v_inv_noix_halt_state, m2v_non32_ok_halt_state,
+           m2v_ao_undef_sync_halt_state, m2v_inv_noix_set_returndata,
+           m2v_non32_ok_set_returndata, m2v_ao_undef_sync_set_returndata])
   >- (ASM_REWRITE_TAC[step_inst_base_def] >> simp[lift_result_def] >>
       metis_tac[m2v_inv_noix_halt_state, m2v_non32_ok_halt_state,
                 m2v_ao_undef_sync_halt_state])

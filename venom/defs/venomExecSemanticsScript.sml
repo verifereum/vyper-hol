@@ -743,7 +743,7 @@ Definition step_inst_base_def:
                              iret_adopt_fmp := SOME final_cursor |> s'')
 
     (* Termination *)
-    | STOP => Halt (halt_state s)
+    | STOP => Halt (halt_state (s with vs_returndata := []))
 
     | RETURN =>
         (case inst.inst_operands of

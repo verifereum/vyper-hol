@@ -508,7 +508,8 @@ Proof
   ASM_REWRITE_TAC[step_inst_base_def] >>
   simp[result_equiv_def] >>
   irule halt_state_ee_UNIV >>
-  ASM_REWRITE_TAC[]
+  PURE_REWRITE_TAC[GSYM set_returndata_def] >>
+  irule set_returndata_ee_UNIV >> ASM_REWRITE_TAC[]
 QED
 
 Theorem invalid_term_sim[local]:

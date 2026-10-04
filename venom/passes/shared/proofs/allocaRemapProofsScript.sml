@@ -39,7 +39,7 @@ Ancestors
   allocaRemapDefs pointerConfinedDefs memLocDefs
   venomExecSemantics venomEffects venomWf venomMemDefs
   venomInst venomState venomInstProps passSharedTransfer
-  allocaRemapSSA stateEquiv passSharedField
+  allocaRemapSSA stateEquiv passSharedField opcodeClass
   list rich_list byte arithmetic finite_map alist words pred_set
 
 (* Make is_immutable_op reduce automatically in simp/gvs/fs *)
@@ -4515,8 +4515,8 @@ Proof
         (irule return_operands_remap >> simp[] >>
          MAP_EVERY qexists_tac [`bb`,`fn`,`remap`,`roots`] >> simp[]) >>
       BasicProvers.every_case_tac >> gvs[lift_result_def])
-  (* STOP *)      >- (simp[halt_state_def] >>
-                      irule alloca_remap_rel_halted >> simp[])
+  (* STOP *)      >- (PURE_REWRITE_TAC[GSYM set_returndata_def] >>
+                      irule alloca_remap_rel_halt_returndata >> simp[])
   (* SINK *)      >- (simp[halt_state_def] >>
                       irule alloca_remap_rel_halted >> simp[])
   (* SELFDESTRUCT *)
@@ -5192,7 +5192,9 @@ Resume run_block_preserves_remap[ih_impl]:
 QED
 
 Resume run_block_preserves_remap[halt_case]:
-  (* step_inst_base never returns Halt for non-terminators *)
+  (* Use the shared result classification: splitting the full induction
+     context into 101 opcode cases exceeded the 10s tactic budget.
+     Original TASK061 proof preserved:
   qpat_x_assum `step_inst_base _ _ = Halt _` mp_tac >>
   simp[step_inst_base_def] >>
   Cases_on `inst'.inst_opcode` >>
@@ -5201,6 +5203,9 @@ Resume run_block_preserves_remap[halt_case]:
        exec_read0_def, exec_read1_def, exec_write2_def,
        exec_alloca_def, eval_operands_def] >>
   rpt strip_tac >> gvs[AllCaseEqs()]
+  *)
+  drule step_inst_base_halt_opcodes >> strip_tac >>
+  qpat_x_assum `~is_terminator _` mp_tac >> simp[is_terminator_def]
 QED
 
 Resume run_block_preserves_remap[abort_case]:
@@ -5213,7 +5218,8 @@ Resume run_block_preserves_remap[abort_case]:
 QED
 
 Resume run_block_preserves_remap[intret_case]:
-  (* step_inst_base never returns IntRet for non-terminators *)
+  (* Shared result classification avoids the same induction-context
+     explosion as halt_case. Original TASK061 proof preserved:
   qpat_x_assum `step_inst_base _ _ = IntRet _ _` mp_tac >>
   simp[step_inst_base_def] >>
   Cases_on `inst'.inst_opcode` >>
@@ -5222,6 +5228,9 @@ Resume run_block_preserves_remap[intret_case]:
        exec_read0_def, exec_read1_def, exec_write2_def,
        exec_alloca_def, eval_operands_def] >>
   rpt strip_tac >> gvs[AllCaseEqs()]
+  *)
+  drule step_inst_base_intret_opcodes >> strip_tac >>
+  qpat_x_assum `~is_terminator _` mp_tac >> simp[is_terminator_def]
 QED
 
 Resume run_block_preserves_remap[error_case]:

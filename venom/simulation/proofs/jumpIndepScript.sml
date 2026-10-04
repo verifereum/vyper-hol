@@ -175,7 +175,7 @@ QED
 val jmp_rw = [eval_op_jump, eval_ops_jump, update_var_jump,
               write_mem_jump, read_mem_jump,
               halt_state_jump, revert_state_jump, set_returndata_jump,
-              mstore_jump, mstore8_jump, sstore_jump, tstore_jump, mcopy_jump,
+              istore_def, mstore_jump, mstore8_jump, sstore_jump, tstore_jump, mcopy_jump,
               mload_jump, sload_jump, tload_jump,
               instIdxIndepTheory.exec_result_map_def];
 
@@ -454,16 +454,18 @@ Theorem step_inst_base_jump_indep:
                        vs_inst_idx := idx|>)
       (step_inst_base inst s)
 Proof
+  (* Keep the original case proof, but finish each opcode separately rather
+     than timing simplification of all 85 live branches as one tactic. *)
   rpt gen_tac >> Cases_on `inst.inst_opcode` >>
-  simp[is_pseudo_def, is_terminator_def] >>
-  simp[step_inst_base_def, exec_pure1_jump, exec_pure2_jump,
-       exec_pure3_jump, exec_alloca_jump] >>
-  TRY (irule exec_read0_jump >> simp jmp_rw >> NO_TAC) >>
-  TRY (irule exec_read1_jump >> simp jmp_rw >> NO_TAC) >>
-  TRY (irule exec_write2_jump >> simp jmp_rw >> NO_TAC) >>
-  simp[eval_op_jump, eval_ops_jump,
-       exec_ext_call_jump, exec_delegatecall_jump, exec_create_jump] >>
-  EVERY_CASE_TAC >>
-  simp(jmp_rw @ [venom_state_component_equality])
+  (simp[is_pseudo_def, is_terminator_def] >>
+   simp[step_inst_base_def, exec_pure1_jump, exec_pure2_jump,
+        exec_pure3_jump, exec_alloca_jump] >>
+   TRY (irule exec_read0_jump >> simp jmp_rw >> NO_TAC) >>
+   TRY (irule exec_read1_jump >> simp jmp_rw >> NO_TAC) >>
+   TRY (irule exec_write2_jump >> simp jmp_rw >> NO_TAC) >>
+   simp[eval_op_jump, eval_ops_jump,
+        exec_ext_call_jump, exec_delegatecall_jump, exec_create_jump] >>
+   EVERY_CASE_TAC >>
+   simp(jmp_rw @ [venom_state_component_equality]))
 QED
 

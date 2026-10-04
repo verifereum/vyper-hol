@@ -295,7 +295,7 @@ QED
 Theorem step_inst_stop_halt[local]:
   !fuel ctx inst vs.
     inst.inst_opcode = STOP ==>
-    step_inst fuel ctx inst vs = Halt (halt_state vs)
+    step_inst fuel ctx inst vs = Halt (halt_state (vs with vs_returndata := []))
 Proof
   rpt strip_tac >>
   `inst = inst with inst_opcode := STOP`
@@ -703,11 +703,10 @@ QED
 Theorem terminal_stop_step:
   !lo o2pc prog st vs.
     asm_block_at prog st.as_pc [AsmOp "STOP"] /\
-    venom_asm_terminal_rel vs st /\
-    vs.vs_returndata = [] ==>
+    venom_asm_terminal_rel vs st ==>
     ?st'.
       asm_steps lo o2pc prog 1 st = AsmHalt st' /\
-      venom_asm_terminal_rel (halt_state vs) st'
+      venom_asm_terminal_rel (halt_state (vs with vs_returndata := [])) st'
 Proof
   rpt strip_tac >>
   `1 = SUC 0` by simp[] >> pop_assum SUBST1_TAC >>
@@ -1403,8 +1402,6 @@ Theorem gen_inst_halt_sim:
       eval_operand (EL 0 inst.inst_operands) vs = SOME off_v /\
       eval_operand (EL 1 inst.inst_operands) vs = SOME sz_v ==>
       w2n off_v + w2n sz_v <= ps.ps_alloc.sa_spill_base) /\
-    (* STOP: returndata already empty (Vyper STOP at end of void fns) *)
-    (inst.inst_opcode = STOP ==> vs.vs_returndata = []) /\
     venom_asm_rel label_offsets ps vs as /\
     generate_inst_plan liveness dfg cfg fn inst
       next_liveness is_halting next_is_term bb_label ps =
@@ -1439,7 +1436,7 @@ Resume gen_inst_halt_sim[stop]:
      `~is_pre_codegen_opcode STOP` by EVAL_TAC >> simp[]) >>
   `inst.inst_outputs = []` by
     (fs[inst_wf_def] >> Cases_on `inst.inst_opcode` >> fs[]) >>
-  `vs' = halt_state vs` by
+  `vs' = halt_state (vs with vs_returndata := [])` by
     (imp_res_tac step_inst_stop_halt >> fs[]) >>
   gvs[] >>
   (* Use gen_inst_terminal_setup to get AsmOK intermediate *)

@@ -15,7 +15,7 @@ Ancestors
   dfgAnalysisProps dfgDefs
   venomInst venomState venomEffects pred_set finite_map
   list rich_list arithmetic words alist
-  mmCopy mmScan passSharedField passSharedDefs execEquivProps
+  mmCopy mmScan mmEntryProofs passSharedField passSharedDefs execEquivProps
 
 (* apply_groups_inst on non-terminators produces non-terminators/non-INVOKE *)
 Theorem apply_groups_inst_non_term[local]:
@@ -31,6 +31,33 @@ Proof
   simp[EVERY_DEF, mk_nop_from_def, mk_bulk_copy_inst_def,
        mk_load_inst_def, mk_mstore_from_load_def,
        is_terminator_def, mode_copy_opcode_def, mode_load_opcode_def]
+QED
+
+(* Generated merging instructions remain non-terminating, including when
+   the original opcode is INVOKE. Keep analysis contexts out of this proof. *)
+Theorem apply_groups_inst_non_terminator[local]:
+  !mode nop_set rep_map inst.
+    ~is_terminator inst.inst_opcode ==>
+    EVERY (\i. ~is_terminator i.inst_opcode)
+      (apply_groups_inst mode nop_set rep_map inst)
+Proof
+  rpt gen_tac >> strip_tac >>
+  rw[apply_groups_inst_def, LET_THM] >>
+  rpt IF_CASES_TAC >> simp[EVERY_DEF] >>
+  rpt CASE_TAC >> TRY (Cases_on `mode`) >>
+  simp[EVERY_DEF, mk_nop_from_def, mk_bulk_copy_inst_def,
+       mk_load_inst_def, mk_mstore_from_load_def,
+       is_terminator_def, mode_copy_opcode_def, mode_load_opcode_def]
+QED
+
+(* Project only the classification facts; unfolding the full mode predicate
+   in the block's analysis context exceeded the 10-second tactic limit. *)
+Theorem mode_inst_ok_non_term[local]:
+  !nop_set rep_map fresh inst.
+    mode_inst_ok nop_set rep_map fresh inst ==>
+    ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE
+Proof
+  simp[mode_inst_ok_def]
 QED
 
 (* Block sim for mode sub-pass.
@@ -75,10 +102,9 @@ Proof
      non_terms` by (
     irule EVERY_MONOTONIC >>
     qexists_tac `mode_inst_ok nop_set rep_map fresh` >>
-    conj_tac >- (
-      gen_tac >> PURE_REWRITE_TAC[mode_inst_ok_def] >>
-      strip_tac >> BETA_TAC >> ASM_REWRITE_TAC[]) >>
-    first_assum ACCEPT_TAC) >>
+    (* Original close: rw[mode_inst_ok_def]. Avoid expanding unrelated facts. *)
+    conj_tac >- (rpt strip_tac >> drule mode_inst_ok_non_term >> simp[]) >>
+    simp[]) >>
   `apply_groups_inst mode nop_set rep_map term = [term]` by (
     simp[Abbr `term`, Abbr `nop_set`, Abbr `rep_map`,
          apply_groups_inst_def]) >>
@@ -1331,15 +1357,8 @@ Proof
     simp[apply_groups_inst_nonempty],
     (* 2: terminator identity *)
     simp[apply_groups_inst_def],
-    (* 3: non-term preservation *)
-    rpt strip_tac >>
-    PURE_REWRITE_TAC[apply_groups_inst_def, LET_THM] >> BETA_TAC >>
-    rpt IF_CASES_TAC >> simp[EVERY_DEF] >>
-    rpt CASE_TAC >> simp[EVERY_DEF] >>
-    Cases_on `mode` >>
-    simp[is_terminator_def, mk_nop_from_def, mk_bulk_copy_inst_def,
-         mk_load_inst_def, mk_mstore_from_load_def,
-         mode_copy_opcode_def, mode_load_opcode_def]
+    (* 3: non-term preservation, through the small structural interface. *)
+    rpt strip_tac >> irule apply_groups_inst_non_terminator >> simp[]
   ]
 QED
 
@@ -1596,8 +1615,10 @@ Proof
   qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
   simp[Once step_inst_def] >>
   Cases_on `inst.inst_opcode` >> fs[is_terminator_def] >>
-  simp[step_inst_base_def, AllCaseEqs(), jump_to_def] >>
-  rpt strip_tac >> gvs[] >> pairarg_tac >> gvs[]
+  simp[Once step_inst_base_def, AllCaseEqs(), jump_to_def] >>
+  rpt strip_tac >> gvs[] >>
+  (* The opaque DRET packing result still returns IntRet, never OK. *)
+  pairarg_tac >> gvs[]
 QED
 
 (* exec_block preserves vs_call_ctx: every step_inst OK preserves it. *)
@@ -1628,6 +1649,18 @@ Proof
   simp[] >>
   disch_then (qspecl_then [`fuel`, `ctx`, `s'`] mp_tac) >>
   simp[]
+QED
+
+(* Block entry also evaluates PHIs, which only update variables. *)
+Theorem run_block_ok_preserves_call_ctx[local]:
+  !fuel ctx bb s s'.
+    run_block fuel ctx bb s = OK s' ==>
+    s'.vs_call_ctx = s.vs_call_ctx
+Proof
+  rpt strip_tac >> drule run_block_OK_decompose >> strip_tac >>
+  imp_res_tac exec_block_preserves_call_ctx >>
+  drule eval_phis_only_updates_vs_vars >>
+  disch_then (mp_tac o AP_TERM ``\st:venom_state. st.vs_call_ctx``) >> simp[]
 QED
 
 (* Derive LAST operand condition from block membership + per-inst condition *)
@@ -1870,22 +1903,20 @@ Proof
        mp_tac block_sim_function_with_pred
   \\ BETA_TAC
   \\ impl_tac
-  >- (conj_tac >- simp[state_equiv_refl] \\
-      conj_tac >- simp[state_equiv_implies_exec_equiv] \\
-      conj_tac >- (rpt strip_tac >> drule state_equiv_implies_control >> simp[]) \\
-      conj_tac >- simp[transform_block_label] \\
-      conj_tac
-      >- (rpt strip_tac >>
-          qpat_x_assum `run_block _ _ bb s1 = OK s1'`
-            (mp_tac o MATCH_MP run_block_preserves_call_ctx) >> simp[]) \\
-      rpt strip_tac \\
-      irule mm_run_block_from_exec_sim \\
-      conj_tac
-      >- (fs[wf_function_def] >> metis_tac[]) \\
-      res_tac \\ simp[] \\
-      irule mm_per_block_sim \\
-      simp[state_equiv_inst_idx] \\
-      metis_tac[])
+  >- (rpt conj_tac \\ rpt strip_tac
+      (* Original close:
+         metis_tac[state_equiv_refl, state_equiv_implies_exec_equiv,
+                   state_equiv_implies_control, transform_block_label,
+                   mm_p_preserved, mm_per_block_sim].
+         Its exec_block facts cannot discharge the block-entry obligation.
+         TASK_002's alternative mm_run_block_from_exec_sim bridge remains
+         proved in mmRunBlockHelpers; use the explicit entry case below. *)
+      \\ FIRST [MATCH_ACCEPT_TAC mmCorrectnessProofsTheory.state_equiv_refl,
+                drule_all state_equiv_implies_exec_equiv >> simp[] >> NO_TAC,
+                drule_all state_equiv_implies_control >> simp[] >> NO_TAC,
+                simp[transform_block_label] >> NO_TAC,
+                imp_res_tac run_block_ok_preserves_call_ctx >> fs[] >> NO_TAC,
+                suspend "block_entry"])
   \\ `?lbl. fn_entry_label fn = SOME lbl` by
        (fs[wf_function_def, fn_has_entry_def] >>
         Cases_on `fn.fn_blocks` >> gvs[entry_block_def, fn_entry_label_def])
@@ -1904,6 +1935,29 @@ Proof
   \\ simp[Once run_function_def]
   \\ simp[Once run_function_def]
 QED
+
+Resume mm_function_correct[block_entry]:
+  `bb_well_formed bb` by (fs[wf_function_def] >> res_tac) >>
+  Cases_on `bb.bb_instructions` >- fs[bb_well_formed_def] >>
+  rename1 `bb.bb_instructions = head::rest` >>
+  Cases_on `head.inst_opcode = PHI`
+  >- (`head.inst_operands = []` by
+        (qspecl_then [`fn`, `bb`, `head`] mp_tac memzero_after_dload_phi_empty >>
+         simp[]) >>
+      simp[run_block_def, eval_phis_def, eval_one_phi_empty_operands]) >>
+  `EVERY (\inst. inst.inst_opcode <> PHI) bb.bb_instructions` by
+    (irule well_formed_non_phi_head >> simp[]) >>
+  `EVERY (\inst. inst.inst_opcode <> PHI)
+    (transform_block (dfg_build_function fn) bb).bb_instructions` by
+    (irule transform_block_no_phis >> simp[]) >>
+  simp[run_block_no_phis_eq_exec_block] >>
+  irule mm_per_block_sim >> rpt conj_tac >>
+  TRY (first_assum ACCEPT_TAC) >>
+  TRY (fs[state_equiv_def, execution_equiv_def, lookup_var_def] >> NO_TAC) >>
+  res_tac >> fs[]
+QED
+
+Finalise mm_function_correct;
 
 (* ===== Pass correctness ===== *)
 
