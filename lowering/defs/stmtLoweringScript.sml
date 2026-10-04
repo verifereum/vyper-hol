@@ -1243,9 +1243,9 @@ Definition compile_stmt_def:
      Creates 5-block CFG: entry → cond → body → incr → exit
      In the Vyper AST: For id typ (Range start end) n body
      Handles both static and dynamic ranges, signed and unsigned.
-     For dynamic ranges (bound > 0): rounds = end - start, assert start <= end,
-     assert rounds <= bound.
-     For static ranges (bound = 0): no runtime checks — relies on type checker
+     For nonliteral endpoint operands: rounds = end - start, assert start <= end,
+     assert rounds <= bound (including when bound is zero).
+     For two literal endpoint operands: no runtime checks — relies on type checker
      having validated start <= end at compile time. Loop uses EQ termination
      (counter != end_val), matching Python exactly.
      PRECONDITION (static ranges): start <= end for unsigned, start <=_s end for
@@ -1273,14 +1273,12 @@ Definition compile_stmt_def:
            so fold only the subtraction which computes rounds; retain the ADD
            in Venom IR for identical stack planning. *)
         rounds <-
-          (if bound > 0 then emit_op SUB [end_op; start_op]
-           else
-             case (start_op,end_op) of
-               (Lit start_w,Lit end_w) => return (Lit (end_w - start_w))
-             | _ => emit_op SUB [end_op; start_op]);
-        (if bound > 0 then
-           compile_range_bound_checks start_op end_op rounds bound is_signed
-         else return ());
+          (case (start_op, end_op) of
+             (Lit start_w, Lit end_w) => return (Lit (end_w - start_w))
+           | _ => emit_op SUB [end_op; start_op]);
+        (case (start_op, end_op) of
+           (Lit _, Lit _) => return ()
+         | _ => compile_range_bound_checks start_op end_op rounds bound is_signed);
         end_val <- emit_op ADD [start_op; rounds];
         emit_inst JMP [Label cond_lbl] [];
         (* Cond: check counter != end *)
