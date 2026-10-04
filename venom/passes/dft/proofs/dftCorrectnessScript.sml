@@ -239,6 +239,32 @@ QED
 
 (* Non-terminator, non-INVOKE instructions never produce Halt or IntRet *)
 (* run_insts on non-term/non-INVOKE/non-ext-call list can only return OK, Abort, or Error *)
+(* Factor identical result-shape proofs before specializing the opcodes. *)
+Triviality dft_exec_helpers_result_shape:
+  (!f inst s v vals a.
+    exec_pure1 f inst s <> Halt v /\ exec_pure1 f inst s <> IntRet vals v /\
+    exec_pure1 f inst s <> Abort a v) /\
+  (!f inst s v vals a.
+    exec_pure2 f inst s <> Halt v /\ exec_pure2 f inst s <> IntRet vals v /\
+    exec_pure2 f inst s <> Abort a v) /\
+  (!f inst s v vals a.
+    exec_pure3 f inst s <> Halt v /\ exec_pure3 f inst s <> IntRet vals v /\
+    exec_pure3 f inst s <> Abort a v) /\
+  (!f inst s v vals a.
+    exec_read0 f inst s <> Halt v /\ exec_read0 f inst s <> IntRet vals v /\
+    exec_read0 f inst s <> Abort a v) /\
+  (!f inst s v vals a.
+    exec_read1 f inst s <> Halt v /\ exec_read1 f inst s <> IntRet vals v /\
+    exec_read1 f inst s <> Abort a v) /\
+  (!f inst s v vals a.
+    exec_write2 f inst s <> Halt v /\ exec_write2 f inst s <> IntRet vals v /\
+    exec_write2 f inst s <> Abort a v)
+Proof
+  rpt conj_tac >>
+  simp[exec_pure1_def, exec_pure2_def, exec_pure3_def,
+       exec_read0_def, exec_read1_def, exec_write2_def, AllCaseEqs()]
+QED
+
 (* Pre-compute: non-terminator non-INVOKE opcodes never produce Halt/IntRet.
    Uses same ML pre-computation pattern as dftPermSim.per_op_no_halt_abort. *)
 local
@@ -249,7 +275,8 @@ local
   ) (TypeBase.constructors_of ``:opcode``);
 
   val nt_ni_clauses = map (fn op_tm =>
-    SIMP_CONV (srw_ss()) [step_inst_base_def]
+    REWRITE_CONV [step_inst_base_def, instruction_accfupds,
+                  TypeBase.case_def_of ``:opcode``]
       (mk_comb(mk_comb(``step_inst_base``,
         ``inst with inst_opcode := ^op_tm``), ``st:venom_state``))
   ) nt_ni_ops;
@@ -269,7 +296,8 @@ local
       `inst with inst_opcode := ^op_tm = inst`
         by simp[instruction_component_equality] >>
       pop_assum (fn eq => ONCE_REWRITE_TAC [GSYM eq]) >>
-      ONCE_REWRITE_TAC [clause] >> simp exec_helper_defs)
+      ONCE_REWRITE_TAC [clause] >>
+      simp[dft_exec_helpers_result_shape] >> simp exec_helper_defs)
   ) (ListPair.zip(nt_ni_ops, nt_ni_clauses));
 in
   val step_inst_base_not_halt_intret_combined = LIST_CONJ per_op_not_halt_intret;
@@ -420,7 +448,8 @@ local
   val non_abort_ops = List.filter (fn op_tm =>
     not (List.exists (fn t => aconv t op_tm) abort_ops)) nt_ni_nec_na_ops;
   val nt_ni_clauses = map (fn op_tm =>
-    SIMP_CONV (srw_ss()) [step_inst_base_def]
+    REWRITE_CONV [step_inst_base_def, instruction_accfupds,
+                  TypeBase.case_def_of ``:opcode``]
       (mk_comb(mk_comb(``step_inst_base``,
         ``inst with inst_opcode := ^op_tm``), ``st:venom_state``))
   ) non_abort_ops;
@@ -437,7 +466,8 @@ local
       `inst with inst_opcode := ^op_tm = inst`
         by simp[instruction_component_equality] >>
       pop_assum (fn eq => ONCE_REWRITE_TAC [GSYM eq]) >>
-      ONCE_REWRITE_TAC [clause] >> simp exec_helper_defs)
+      ONCE_REWRITE_TAC [clause] >>
+      simp[dft_exec_helpers_result_shape] >> simp exec_helper_defs)
   ) (ListPair.zip(non_abort_ops, nt_ni_clauses));
 in
   val step_inst_base_no_abort_combined = LIST_CONJ per_op_no_abort;

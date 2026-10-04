@@ -216,6 +216,15 @@ Definition alloca_mem_agrees_def:
         mem_byte_at s2.vs_memory (new_off + i)
 End
 
+(* Memory-length agreement survives layout-changing writes only when the
+   accessed regions are already materialized. Allocation itself need not
+   materialize them, so this is a separate step/block precondition. *)
+Definition allocas_in_memory_def:
+  allocas_in_memory s <=>
+    !aid off sz. FLOOKUP s.vs_allocas aid = SOME (off, sz) ==>
+                 off + sz <= LENGTH s.vs_memory
+End
+
 (* ===== Full Remapping Relation ===== *)
 
 (* Two states are related under alloca remapping.
@@ -293,5 +302,11 @@ Definition alloca_remap_rel_def:
     s1.vs_prev_bb = s2.vs_prev_bb /\
     s1.vs_current_bb = s2.vs_current_bb /\
     s1.vs_inst_idx = s2.vs_inst_idx /\
-    s1.vs_prev_hashes = s2.vs_prev_hashes
+    s1.vs_prev_hashes = s2.vs_prev_hashes /\
+    (* Frame metadata is observable through GETFMP/INITIAL_FMP/RETPC_PARAM
+       and internal returns; unlike allocation offsets it is not remapped. *)
+    s1.vs_fmp = s2.vs_fmp /\
+    s1.vs_call_entry_fmp = s2.vs_call_entry_fmp /\
+    s1.vs_initial_fmp = s2.vs_initial_fmp /\
+    s1.vs_return_pc_token = s2.vs_return_pc_token
 End
