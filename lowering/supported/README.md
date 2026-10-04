@@ -1,10 +1,11 @@
-# Supported-subset foundations and expressions (TASK_019/020)
+# Supported-subset whitelist (TASK_019/020/021)
 
-Progress: **TASK_019 and TASK_020 complete**. Implements the type,
-body-independent declaration, name, and expression rows of PLAN §5.6.
-Statement/body traversal remains TASK_021. These theories do not define
-`supported_program`, accept function bodies, change the compiler/evaluator,
-or perform source typing (PLAN D10 keeps typing separate).
+Progress: **TASK_019, TASK_020 and TASK_021 complete**. Implements all
+PLAN §5.6 type, declaration, name, expression, statement and function-body
+rows. `supportedProgramTheory` assembles the total computable predicate
+`supported_program tops`. This is a syntactic boundary, not source typing
+(PLAN D10), a compiler/evaluator change, or a correctness theorem.
+The 101 individual fixture membership proofs remain TASK_022.
 
 ## Exported API
 
@@ -206,3 +207,76 @@ timeout 120s holbuild --max-heap 16384 -j1 --tactic-timeout 10 \
 Individual expression targets also pass with `timeout 30s` and the same flags.
 All TASK_020 additions are within this directory; existing theory source and
 all `.agent-files` inputs are untouched. Source/proof cheat delta: **zero**.
+
+## Statement/program API (TASK_021)
+
+- `supportedStmtTraverseTheory`: `supported_stmt_expr_exists` and its list,
+  assignment/tuple-target, iterator and reason variants traverse **all** AST
+  forms, not only admitted ones. They reuse TASK_020's expression traversal,
+  including defaults, Pop targets and nested unsupported expressions.
+- `supported_stmt_bindings locals stmt`, `supported_stmts_bindings locals ss`
+  retain declared `(name,type)` pairs and **duplicates** across all branches
+  and nesting. `locals=T` collects AnnAssign; `locals=F` collects For variables.
+  The append contract supports consumers without unfolding the traversal.
+- `supported_internal_stmt_shape`/list variant exclude AnnAssign and For
+  recursively. `supported_internal_shape_bindings` proves this is exactly
+  emptiness of both binding lists.
+- `supported_type_namespace` recursively checks **only** module components in
+  type annotations, independently of the W/value/storage classes. Together
+  with `expr_nonmain_type_root` and the statement traversal, this enforces the
+  global main-module requirement even in Name/Subscript annotations and loop
+  types; it does not invoke or reproduce source typing.
+- `supportedStmtsTheory`: `supported_stmt tops bindings`, `supported_stmts`
+  enumerate every constructor. The only E positions are Expr, Return,
+  AnnAssign, and a word-typed local Assign. Storage writes and indices,
+  augmentation, append arguments, conditions and event arguments must be P.
+  Tuple assignment and all other target shapes are rejected.
+- `supported_assignment`, `supported_aug_target`, `supported_append_target`
+  reuse TASK_020's storage-base lookups. Writes may use **any declared field**
+  of a full-word storage struct; the first-field restriction remains read-only.
+- `supported_iterator tops ty iter bound`: two IntL endpoints require integer
+  loop type, start <= end, and exact `Num(end-start)` (including zero); other
+  ranges require two P expressions and a positive bound; arrays require the
+  exact Name/Fixed element-type and bound shape. Nonliteral endpoint typing is
+  a separate source-typing check, not an added restriction here.
+- `supported_assert_reason`, `supported_raise_reason`: only bare,
+  UNREACHABLE or StringL. `supported_log` checks declared event existence,
+  module NONE, exact argument count/types and P arguments.
+- `supportedProgramTheory`: `supported_function_body` combines complete
+  binding/name checks, statement checks, annotation namespaces and the
+  Internal no-AnnAssign/no-For/no-IntCall restriction. Every For body excludes
+  IntCall through its entire recursive subtree. Send/ExtCall/Pop are **not**
+  prohibited merely because they are effects in an Internal/For body.
+- `supported_declaration_body` explicitly handles all declarations;
+  `supported_program` conjoins TASK_019 headers and actual selector/name
+  checks with all function bodies. Fallback arguments, defaults,
+  nonreentrancy, raw returns, immutables and module exclusions are enforced.
+- `occurs_abi_decode_target target tops` is the exact PLAN §5.5/D9 API:
+  some **function body** contains TypeBuiltin _ (AbiDecode _) target _.
+  It traverses targets/reasons/iterators/unsupported bodies and is independent
+  of admission, flags or dynamicity. Defaults/constants alone do not count.
+  Consumers can conjoin the source ABI dynamic-type test for the exemption;
+  no dependency on future e2e theories is introduced.
+
+Permanent plain-EVAL checks:
+
+| Boundary | Theory and checks |
+|---|---|
+| Every statement row, E root positions, targets, pure storage ordering, augmentation, append, reasons, exact logs | `supportedStmtProps`: `supported_simple_statement_rows`, `supported_all_effect_root_positions`, `supported_storage_statement_rows`, `supported_target_exclusions`, `supported_storage_effects_rejected`, `supported_augmented_statement_row`, `supported_control_reason_rows`, `supported_log_statement_row` |
+| Literal/checked ranges, fixed-array shape/type/bound | `supportedStmtProps`: `supported_literal_range_statement_row`, `supported_checked_range_statement_row`, `supported_fixed_array_iteration_row` |
+| Whole-program acceptance, Internal/loop restrictions, name/type environments, all header/name exclusions, fallback, annotations; typing separate | `supportedProgramProps`: all theorems |
+| Every statement/target occurrence position, exact/dynamic decode API, duplicate-preserving recursive binding collection | `supportedStmtTraverseProps`: all theorems |
+
+Build the new checks with the ordinary 10s tactic contract:
+
+```sh
+timeout 30s holbuild --max-heap 16384 -j1 --tactic-timeout 10 \
+  supportedStmtTraversePropsTheory supportedStmtPropsTheory supportedProgramPropsTheory
+```
+
+Cold dependency/heap loading is infrastructure and may use `timeout 600s`;
+no EVAL check is given a larger tactic limit. Existing actual bytecode-parity
+checks use their independent Python oracle, the prescribed 600s tactic limit
+and a 3600s outer timeout. No TASK_022 fixture membership proofs are added.
+All TASK_021 source changes stay here; `.agent-files` records are read-only.
+No cheats or axioms were added or substituted.
