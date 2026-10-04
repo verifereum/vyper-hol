@@ -2425,8 +2425,8 @@ Proof
   Cases_on `vs` >> simp[evaluate_ecadd_def] >>
   Cases_on `t` >> simp[evaluate_ecadd_def] >>
   Cases_on `t'` >> simp[evaluate_ecadd_def, AllCaseEqs(), LET_THM] >>
-  rpt strip_tac >> gvs[]
-  >- (irule mk_ec_result_well_typed >> simp[]) >>
+  (* The invalid-point branch is now an exception, so only SOME survives. *)
+  rpt strip_tac >> gvs[] >>
   gvs[vfmExecutionTheory.ecadd_def, AllCaseEqs()] >>
   irule mk_ec_result_well_typed >> simp[addAffine_bounded]
 QED
@@ -2440,8 +2440,8 @@ Proof
   Cases_on `t` >> simp[evaluate_ecmul_def] >>
   Cases_on `h'` >> simp[evaluate_ecmul_def] >>
   Cases_on `t'` >> simp[evaluate_ecmul_def, AllCaseEqs(), LET_THM] >>
-  rpt strip_tac >> gvs[]
-  >- (irule mk_ec_result_well_typed >> simp[]) >>
+  (* The invalid-point branch is now an exception, so only SOME survives. *)
+  rpt strip_tac >> gvs[] >>
   gvs[vfmExecutionTheory.ecmul_def, AllCaseEqs()] >>
   irule mk_ec_result_well_typed >>
   irule mulAffine_bounded >>
