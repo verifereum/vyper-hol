@@ -80,22 +80,3 @@ Theorem run_function_result_equiv:
 Proof
   ACCEPT_TAC execEquivProofsTheory.run_function_result_equiv
 QED
-
-(* Same as run_function_result_equiv but restricted to a safe set of blocks
-   closed under successors. Operand/well-formedness conditions only required
-   for blocks in safe. Used when patching is limited to reachable blocks. *)
-Theorem run_function_result_equiv_closed:
-  !fuel ctx vars fn s1 s2 safe.
-    state_equiv vars s1 s2 /\
-    (!lbl. fn_entry_label fn = SOME lbl ==> lbl IN safe) /\
-    (!lbl bb. lbl IN safe /\ lookup_block lbl fn.fn_blocks = SOME bb ==>
-      bb_well_formed bb /\
-      EVERY inst_wf bb.bb_instructions /\
-      EVERY (\inst. inst.inst_opcode <> INVOKE) bb.bb_instructions /\
-      (!inst x. MEM inst bb.bb_instructions /\
-               MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
-      (!s. MEM s (bb_succs bb) ==> s IN safe)) ==>
-    result_equiv vars (run_function fuel ctx fn s1) (run_function fuel ctx fn s2)
-Proof
-  ACCEPT_TAC execEquivProofsTheory.run_function_result_equiv_closed
-QED

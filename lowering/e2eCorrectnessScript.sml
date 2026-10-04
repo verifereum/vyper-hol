@@ -555,24 +555,6 @@ QED
  *                                  never escapes call_external
  *)
 
-(* ===== Concrete Pipeline Instances ===== *)
-
-(* The O2 pipeline preserves observable semantics.
-   Combines individual O2 pass correctness theorems into
-   a single ctx_pass_correct statement. Analysis functions
-   (make_ssa, ircf, ricf, dse, amap, live_at) are parameters. *)
-Theorem o2_pipeline_ctx_pass_correct[local]:
-  !ircf_global ricf_global threshold
-    make_ssa ircf ricf dse_analysis amap live_at ctx vs.
-    ctx_pass_correct
-      (venom_pipeline ircf_global ricf_global threshold
-        (o2_fn_passes make_ssa ircf ricf dse_analysis amap live_at))
-      observable_equiv observable_equiv ctx vs
-Proof
-  cheat
-QED
-
-
 (* ===== Deploy Phase ===== *)
 
 (* Deploy-phase correctness: the deploy bytecode, when executed on

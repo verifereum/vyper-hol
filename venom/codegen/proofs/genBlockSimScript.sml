@@ -1,5 +1,5 @@
 (*
- * gen_block_simulation helpers
+ * Block and instruction simulation helpers
  *
  * Connects generate_block_plan to block_insts_sim:
  *   - FOLDL ↔ block_foldl equivalence
@@ -1718,7 +1718,7 @@ Proof
        INVOKE abort requires proving that the callee's execution produces
        a corresponding abort in the generated assembly. This needs
        gen_fn_simulation as an inductive hypothesis (mutual recursion
-       between gen_inst_simulation and gen_fn_simulation). *)
+       between instruction-level simulation and gen_fn_simulation). *)
     cheat
   )
 QED
@@ -3080,7 +3080,7 @@ Proof
 QED
 
 (* Comprehensive local non-call per-instruction OK simulation.
-   Stronger than venomToAsmProps.gen_inst_simulation:
+   Explicit preconditions and guarantees:
    - excludes INVOKE, whose atomic source semantics require context-wide
      callee and return invariants absent from this local theorem
    - requires inst_wf, operand bound, label resolution, prefix_spill_wf

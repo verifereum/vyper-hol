@@ -8,9 +8,9 @@
 
 Theory mmBlockSimProofs
 Ancestors
-  mmCorrectnessProofs mmTransform mmCopyEquiv passSimulationDefs passSimulationProofs
+  mmCorrectnessProofs mmRunBlockHelpers mmTransform mmCopyEquiv passSimulationDefs passSimulationProofs
   crossBlockSimProofs crossBlockSimDefs passSimulationProps stateEquivProps
-  stateEquiv stateEquivProofs venomExecSemantics execEquivParamProofs
+  stateEquiv stateEquivProofs venomExecSemantics venomExecProofs execEquivProofs execEquivParamProofs
   analysisSimProofsBase analysisSimDefs venomInstProofs venomWf
   dfgAnalysisProps dfgDefs
   venomInst venomState venomEffects pred_set finite_map
@@ -75,7 +75,10 @@ Proof
      non_terms` by (
     irule EVERY_MONOTONIC >>
     qexists_tac `mode_inst_ok nop_set rep_map fresh` >>
-    rw[mode_inst_ok_def]) >>
+    conj_tac >- (
+      gen_tac >> PURE_REWRITE_TAC[mode_inst_ok_def] >>
+      strip_tac >> BETA_TAC >> ASM_REWRITE_TAC[]) >>
+    first_assum ACCEPT_TAC) >>
   `apply_groups_inst mode nop_set rep_map term = [term]` by (
     simp[Abbr `term`, Abbr `nop_set`, Abbr `rep_map`,
          apply_groups_inst_def]) >>
@@ -1325,14 +1328,12 @@ Proof
   match_mp_tac (SIMP_RULE (srw_ss()) [LET_THM] flat_map_term_structure) >>
   simp[] >> rpt conj_tac >| [
     (* 1: non-empty *)
-    rw[apply_groups_inst_def, LET_THM] >>
-    rpt IF_CASES_TAC >> simp[] >>
-    rpt CASE_TAC >> simp[],
+    simp[apply_groups_inst_nonempty],
     (* 2: terminator identity *)
     simp[apply_groups_inst_def],
     (* 3: non-term preservation *)
     rpt strip_tac >>
-    rw[apply_groups_inst_def, LET_THM] >>
+    PURE_REWRITE_TAC[apply_groups_inst_def, LET_THM] >> BETA_TAC >>
     rpt IF_CASES_TAC >> simp[EVERY_DEF] >>
     rpt CASE_TAC >> simp[EVERY_DEF] >>
     Cases_on `mode` >>
@@ -1596,7 +1597,7 @@ Proof
   simp[Once step_inst_def] >>
   Cases_on `inst.inst_opcode` >> fs[is_terminator_def] >>
   simp[step_inst_base_def, AllCaseEqs(), jump_to_def] >>
-  rpt strip_tac >> gvs[]
+  rpt strip_tac >> gvs[] >> pairarg_tac >> gvs[]
 QED
 
 (* exec_block preserves vs_call_ctx: every step_inst OK preserves it. *)
@@ -1783,6 +1784,20 @@ Proof
   qexists_tac `fn` >> fs[] >> metis_tac[]
 QED
 
+(* Atomic PHIs modify only variables, so they preserve the calldata bound. *)
+Theorem run_block_preserves_call_ctx[local]:
+  !fuel ctx bb s s'.
+    run_block fuel ctx bb s = OK s' ==>
+    s'.vs_call_ctx = s.vs_call_ctx
+Proof
+  rpt gen_tac >>
+  mp_tac (Q.SPECL [`s`, `bb.bb_instructions`] eval_phis_ok_or_error_defs) >>
+  strip_tac >> simp[run_block_def] >> strip_tac >>
+  drule exec_block_preserves_call_ctx >> simp[] >> strip_tac >>
+  drule eval_phis_only_updates_vs_vars >>
+  disch_then (mp_tac o AP_TERM ``\st. st.vs_call_ctx``) >> simp[]
+QED
+
 Theorem mm_p_preserved[local]:
   !bb fn fresh fuel ctx s1 s2 s1' s2'.
     MEM bb fn.fn_blocks /\
@@ -1855,10 +1870,22 @@ Proof
        mp_tac block_sim_function_with_pred
   \\ BETA_TAC
   \\ impl_tac
-  >- (rpt conj_tac \\ rpt strip_tac
-      \\ metis_tac[state_equiv_refl, state_equiv_implies_exec_equiv,
-                   state_equiv_implies_control, transform_block_label,
-                   mm_p_preserved, mm_per_block_sim])
+  >- (conj_tac >- simp[state_equiv_refl] \\
+      conj_tac >- simp[state_equiv_implies_exec_equiv] \\
+      conj_tac >- (rpt strip_tac >> drule state_equiv_implies_control >> simp[]) \\
+      conj_tac >- simp[transform_block_label] \\
+      conj_tac
+      >- (rpt strip_tac >>
+          qpat_x_assum `run_block _ _ bb s1 = OK s1'`
+            (mp_tac o MATCH_MP run_block_preserves_call_ctx) >> simp[]) \\
+      rpt strip_tac \\
+      irule mm_run_block_from_exec_sim \\
+      conj_tac
+      >- (fs[wf_function_def] >> metis_tac[]) \\
+      res_tac \\ simp[] \\
+      irule mm_per_block_sim \\
+      simp[state_equiv_inst_idx] \\
+      metis_tac[])
   \\ `?lbl. fn_entry_label fn = SOME lbl` by
        (fs[wf_function_def, fn_has_entry_def] >>
         Cases_on `fn.fn_blocks` >> gvs[entry_block_def, fn_entry_label_def])

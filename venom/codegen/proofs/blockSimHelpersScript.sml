@@ -1,14 +1,13 @@
 (*
  * Block Simulation Helpers
  *
- * Core lemmas for gen_block_simulation:
+ * Core lemmas for block-level simulation:
  *   - run_block_step: peeling one instruction from run_block
  *   - run_block_terminator: terminator classification
  *   - label_op_sim: SOLabel preserves venom_asm_rel
- *   - foldl_inst_sim: FOLDL composition of gen_inst_simulation
+ *   - foldl_inst_sim: FOLDL composition of per-instruction simulation
  *
- * These compose per-instruction simulation (gen_inst_simulation)
- * into block-level simulation (gen_block_simulation).
+ * These compose per-instruction simulation into block-level simulation.
  *)
 
 
@@ -410,7 +409,7 @@ QED
 
 (* ===== Block instruction simulation (inductive core) ===== *)
 
-(* This is the inductive heart of gen_block_simulation.
+(* This is the inductive core of block-level simulation.
    It says: if we have a per-instruction simulation property,
    and block_foldl generates a plan for the remaining instructions,
    then exec_block on those remaining instructions corresponds to

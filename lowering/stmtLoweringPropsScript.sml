@@ -4,7 +4,6 @@
  * TOP-LEVEL:
  *   compile_stmt_correct    — single statement lowering preserves state_rel
  *   compile_stmts_correct   — statement list lowering preserves state_rel
- *   compile_assign_name_correct — NameTarget assignment preserves state_rel
  *   compile_if_correct      — if/else preserves state_rel
  *   compile_for_correct     — for-range preserves state_rel
  *   compile_assert_correct  — assert: OK if true, Abort if false
@@ -171,23 +170,6 @@ Theorem compile_annassign_correct:
     state_rel cenv cx es ss ∧
     eval_stmt cx (AnnAssign id vtyp e) es = (INL (), es') ∧
     compile_stmt cenv lctx ty (AnnAssign id vtyp e) st = ((), st')
-    ⇒
-    ∃ ss'.
-      run_inst_seq (emitted_insts st st') ss = OK ss' ∧
-      state_rel cenv cx es' ss'
-Proof
-  cheat
-QED
-
-(* --- Assign: store to simple (Name) target --- *)
-(* Restricted to NameTarget which has no sub-expression evaluation.
-   SubscriptTarget and AttributeTarget evaluate index/field sub-expressions
-   which may change compile state, requiring a multi-block argument. *)
-Theorem compile_assign_name_correct:
-  ∀ cenv cx lctx ty id e es ss st st' v es'.
-    state_rel cenv cx es ss ∧
-    eval_expr cx e es = (INL (Value v), es') ∧
-    compile_stmt cenv lctx ty (Assign (BaseTarget (NameTarget id)) e) st = ((), st')
     ⇒
     ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = OK ss' ∧

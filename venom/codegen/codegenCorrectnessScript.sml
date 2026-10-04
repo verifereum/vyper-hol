@@ -7,10 +7,9 @@
  *
  * TOP-LEVEL:
  *   codegen_correct    — whole-context correctness (run_context vs run)
- *   codegen_fn_correct — per-function correctness (run_blocks vs run)
  *
- * STATUS: Final codegen correctness theorems are currently open/cheated and
- * depend on closing/stabilizing Venom→Asm and Asm→EVM simulation layers.
+ * STATUS: Whole-context codegen correctness is currently open/cheated and
+ * depends on closing/stabilizing Venom→Asm and Asm→EVM simulation layers.
  * See docs/compiler-proof-roadmap.md.
  *
  * MEMTOP Exclusion
@@ -314,49 +313,6 @@ Theorem run_context_never_ok[local]:
 Proof
   rpt gen_tac >> simp[Once run_context_def] >>
   every_case_tac >> simp[run_function_never_ok]
-QED
-
-(* ===== Per-Function Codegen Correctness ===== *)
-
-(* Conditional correctness for a selected function region in a complete
-   compilation unit.  The selected entry may occur at nonzero instruction
-   offset [off] in the emitted context program. *)
-Theorem codegen_fn_correct:
-  ∀fuel rpolicy unit cp prog i r fn off Inv vs.
-    generate_context_plan unit.cu_context = SOME cp ∧
-    codegen_assembly rpolicy unit = SOME prog ∧
-    i < LENGTH unit.cu_context.ctx_functions ∧
-    EL i unit.cu_context.ctx_functions = fn ∧
-    EL i cp.cp_regions = r ∧
-    ops_contain_at off
-      (execute_plan cp.cp_initial_fmp (context_plan_ops cp))
-      (execute_plan cp.cp_initial_fmp r.sr_plan) ∧
-    codegen_context_obligations Inv unit.cu_context cp ∧
-    codegen_reachability_package Inv unit.cu_context vs ⇒
-    ∃gas_needed.
-      ∀es. initial_state_rel cp prog off fn vs es ∧
-           (case es.contexts of
-              (ctxt, rb) :: _ =>
-                ctxt.msgParams.gasLimit ≥ gas_needed ∧
-                ctxt.msgParams.code = assemble prog ∧
-                ctxt.msgParams.parsed = parse_code 0 FEMPTY (assemble prog)
-            | [] => F) ⇒
-        (case run_blocks fuel unit.cu_context fn vs of
-           Halt vs' =>
-             ∃es'. run es = SOME (INR NONE, es') ∧
-                   final_state_rel vs' es'
-         | Abort Revert_abort vs' =>
-             ∃es'. run es = SOME (INR (SOME Reverted), es') ∧
-                   final_state_rel vs' es'
-         | Abort ExHalt_abort vs' =>
-             ∃es' exc. run es = SOME (INR (SOME exc), es') ∧
-                       exc ≠ Reverted ∧
-                       final_state_rel vs' es'
-         | OK _ => F
-         | IntRet _ _ => T
-         | Error _ => T)
-Proof
-  cheat
 QED
 
 (* ===== Whole-Context Codegen Correctness ===== *)

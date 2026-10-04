@@ -12,7 +12,6 @@
  *   - exec_block_state_equiv       : OK-case corollary of exec_block_result_equiv (state_equiv)
  *   - run_block_result_equiv        : run_block (eval_phis + exec_block) preserves result_equiv under same preconditions
  *   - run_function_result_equiv    : If state_equiv and all blocks have no INVOKE and no operand vars in exception set, run_function preserves result_equiv
- *   - run_function_result_equiv_closed : Variant with reachable-block set (safe) closed under successors
  *   - run_block_lift_result / run_block_lift_result_equiv : Lift exec_block results to run_block results
  *   - state_equiv_inst_idx         : Setting vs_inst_idx to same value on both sides preserves state_equiv
  *)
@@ -1961,25 +1960,4 @@ Proof
     rw[run_block_def] >>
     `eval_phis s bt_bb.bb_instructions = Error e` by fs[] >>
     simp[result_equiv_is_lift_result, lift_result_def])
-QED
-
-
-Theorem run_function_result_equiv_closed:
-  !fuel ctx vars fn s1 s2 safe.
-    state_equiv vars s1 s2 /\
-    (!lbl. fn_entry_label fn = SOME lbl ==> lbl IN safe) /\
-    (!lbl bb. lbl IN safe /\ lookup_block lbl fn.fn_blocks = SOME bb ==>
-      bb_well_formed bb /\
-      EVERY inst_wf bb.bb_instructions /\
-      EVERY (\inst. inst.inst_opcode <> INVOKE) bb.bb_instructions /\
-      (!inst x. MEM inst bb.bb_instructions /\
-               MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
-      (!s. MEM s (bb_succs bb) ==> s IN safe)) ==>
-    result_equiv vars (run_function fuel ctx fn s1) (run_function fuel ctx fn s2)
-Proof
-  rpt strip_tac >>
-  simp[run_function_def] >>
-  Cases_on `fn_entry_label fn` >> simp[result_equiv_def] >>
-  rename1 `fn_entry_label fn = SOME lbl` >>
-  cheat
 QED

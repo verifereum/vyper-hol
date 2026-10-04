@@ -1,7 +1,7 @@
 (*
  * EVM Step Simulation Infrastructure
  *
- * Core lemmas for asm_bytecode_sim:
+ * Core lemmas for asmBytecodeSimTheory.asm_bytecode_sim_aux:
  *   1. run_unfold: OWHILE unfolding for EVM run
  *   2. step_single_context_cases: what step returns in single-context mode
  *   3. Per-opcode correspondence helpers
