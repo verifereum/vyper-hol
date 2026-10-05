@@ -2297,7 +2297,7 @@ Proof
       |> SIMP_RULE (srw_ss()) []) >>
   impl_tac
   >- (simp[] >> rpt strip_tac >>
-      Q.RENAME_TAC [`ISL xx`] >> Cases_on `xx` >> gvs[Abbr`g`] >>
+      rename [`ISL xx`] >> Cases_on `xx` >> gvs[Abbr`g`] >>
       Cases_on `pointer_use_step_step fn x` >> simp[] >>
       gvs[pointer_use_step_step_def, LET_DEF] >> rw[] >> simp[MEM_APPEND]) >>
   disch_tac >>
@@ -4737,8 +4737,7 @@ Theorem step_inst_base_abort_form:
     (s' = halt_state (set_returndata [] s) /\ a = ExHalt_abort) \/
     (s' = revert_state (set_returndata [] s) /\ a = Revert_abort)
 Proof
-  rw[step_inst_base_def] >>
-  gvs[AllCaseEqs(), is_terminator_def]
+  step_base_result_tac
 QED
 
 (* m2v_non32_ok preserved under halt/revert state transform *)
@@ -5517,3 +5516,4 @@ Proof
     gvs[alloca_inv_def, alloca_next_valid_def] >> res_tac) >>
   simp[arithmeticTheory.MAX_DEF]
 QED
+

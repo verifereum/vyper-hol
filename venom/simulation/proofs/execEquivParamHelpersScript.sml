@@ -25,8 +25,7 @@ fun vsr_eval_ops_tac () =
     rw[] >> vsr_irule vsr_eval_operand >> simp[] >> metis_tac[])
 
 fun vsr_eval_rewrite_tac () =
-  imp_res_tac vsr_R_ok_fields >> vsr_eval_ops_tac () >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> ASM_REWRITE_TAC[] >> simp[]
+  imp_res_tac vsr_R_ok_fields >> vsr_eval_ops_tac () >> simp[step_inst_base_def]
 
 (* ==========================================================================
    step_inst_base-level helpers

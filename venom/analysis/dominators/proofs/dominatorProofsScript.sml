@@ -2361,7 +2361,7 @@ Proof
          LRC (\a b. MEM b (cfg_succs_of (cfg_analyze fn) a)) [x] mid c` by
     metis_tac[lrc_append, listTheory.SNOC_APPEND] >>
   fs[listTheory.LRC_def] >> gvs[] >>
-  Q.RENAME_TAC [`LRC _ ls bb.bb_label mid`, `MEM c (cfg_succs_of _ mid)`] >>
+  rename [`LRC _ ls bb.bb_label mid`, `MEM c (cfg_succs_of _ mid)`] >>
   `MEM mid (cfg_preds_of (cfg_analyze fn) c)` by
     metis_tac[cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond] >>
   Cases_on `d = c` >- simp[listTheory.MEM_SNOC] >>
@@ -2793,7 +2793,7 @@ Proof
     simp[] >> disch_then (qspec_then `b` mp_tac) >> simp[]) >>
   drule_all lrc_split_at >> strip_tac >>
   (* ls_p = l1 ++ b::l2 with LRC ... l1 bb.bb_label b and LRC ... (b::l2) b c *)
-  Q.RENAME_TAC [`ls_p = l1 ++ b::suffix`, `LRC _ (b::suffix) b c`] >>
+  rename [`ls_p = l1 ++ b::suffix`, `LRC _ (b::suffix) b c`] >>
   (* Now: induction on LENGTH suffix *)
   (* Key lemma: if we have a suffix from b to c of length n,
      we can find a shorter suffix → eventually length 0 → contradiction *)

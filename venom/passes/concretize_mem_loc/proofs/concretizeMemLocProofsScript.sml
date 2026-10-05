@@ -2694,16 +2694,14 @@ Proof
         eval_operand op s1 = eval_operand op s2` by
     metis_tac[cr_non_mem_eval_operand_agree] >>
   `s1.vs_fmp = s2.vs_fmp` by fs[concretize_rel_def, LET_THM] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  ASM_REWRITE_TAC[venomInstTheory.opcode_case_def] >>
-  Cases_on `inst.inst_operands` >> gvs[lift_result_def] >>
-  Cases_on `t` >> gvs[lift_result_def] >>
-  Cases_on `inst.inst_outputs` >> gvs[lift_result_def] >>
-  Cases_on `t` >> gvs[lift_result_def] >>
+  Cases_on `inst.inst_operands` >> gvs[step_inst_base_def, lift_result_def] >>
+  Cases_on `t` >> gvs[step_inst_base_def, lift_result_def] >>
+  Cases_on `inst.inst_outputs` >> gvs[step_inst_base_def, lift_result_def] >>
+  Cases_on `t` >> gvs[step_inst_base_def, lift_result_def] >>
   `h' NOTIN pointer_derived_vars fn (FDOM amap)` by
     metis_tac[non_alloca_non_pp_output_not_pv,
               is_pointer_preserving_op_def, is_alloca_op_def, MEM] >>
-  Cases_on `eval_operand h s1` >> gvs[lift_result_def] >>
+  Cases_on `eval_operand h s1` >> gvs[step_inst_base_def, lift_result_def] >>
   Cases_on `eval_operand h s2` >> gvs[lift_result_def] >>
   irule cr_update_var_non_pv >> simp[] >>
   irule concretize_rel_update_fmp_same >> simp[]

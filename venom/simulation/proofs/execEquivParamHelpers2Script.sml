@@ -252,24 +252,11 @@ Proof
       metis_tac[vsr_update_var_R_ok])
   >- (irule vsr_step_inst_bump >> simp[])
   >- (vsr_eval_rewrite_tac () >>
-      Cases_on `inst.inst_operands` >> simp[lift_result_def] >>
-      rename1 `inst.inst_operands = op::ops` >>
-      Cases_on `op` >> simp[lift_result_def] >>
-      Cases_on `ops` >> simp[lift_result_def] >>
-      Cases_on `inst.inst_outputs` >> simp[lift_result_def] >>
-      rename1 `inst.inst_outputs = out::outs` >>
-      Cases_on `outs` >> simp[lift_result_def] >>
-      IF_CASES_TAC >> simp[lift_result_def] >>
-      vsr_irule vsr_update_var_R_ok >> simp[])
+      rpt (CASE_TAC >> gvs[lift_result_def]) >>
+      metis_tac[vsr_update_var_R_ok])
   >- (vsr_eval_rewrite_tac () >>
-      Cases_on `inst.inst_operands` >> simp[lift_result_def] >>
-      rename1 `inst.inst_operands = op::ops` >>
-      Cases_on `op` >> simp[lift_result_def] >>
-      Cases_on `ops` >> simp[lift_result_def] >>
-      Cases_on `inst.inst_outputs` >> simp[lift_result_def] >>
-      rename1 `inst.inst_outputs = out::outs` >>
-      Cases_on `outs` >> simp[lift_result_def] >>
-      vsr_irule vsr_update_var_R_ok >> simp[])
+      rpt (CASE_TAC >> gvs[lift_result_def]) >>
+      metis_tac[vsr_update_var_R_ok])
 QED
 
 

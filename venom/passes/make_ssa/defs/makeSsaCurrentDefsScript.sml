@@ -646,7 +646,7 @@ Theorem simplify_current_phi_prefix_vars:
   MEM v (FLAT (MAP inst_ir_vars insts))
 Proof
   simp[simplify_current_phi_prefix_def] >> pairarg_tac >> gvs[] >>
-  Q.RENAME_TAC [`simplify_current_phi_prefix_parts insts = (phis,ordinary)`] >>
+  rename [`simplify_current_phi_prefix_parts insts = (phis,ordinary)`] >>
   `LENGTH (MAP (\inst. inst.inst_id) insts) =
    LENGTH (phis ++ ordinary)` by
     (drule simplify_current_phi_prefix_parts_length >> simp[]) >>

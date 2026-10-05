@@ -774,7 +774,7 @@ Resume filter_el_mono[case_suc]:
   first_x_assum (qspecl_then [`i'`, `j - 1`] mp_tac) >>
   (impl_tac >- simp[]) >>
   strip_tac >>
-  Q.RENAME_TAC [`i_t < j_t`, `j_t < LENGTH t`] >>
+  rename [`i_t < j_t`, `j_t < LENGTH t`] >>
   qexistsl [`i_t + 1`, `j_t + 1`] >>
   simp[] >> Cases_on `j` >> gvs[EL_CONS, PRE_SUB1]
 QED
@@ -782,7 +782,7 @@ QED
 Resume filter_el_mono[case_not_P]:
   first_x_assum (qspecl_then [`i`, `j`] mp_tac) >> simp[] >>
   strip_tac >>
-  Q.RENAME_TAC [`i_t < j_t`, `j_t < LENGTH t`] >>
+  rename [`i_t < j_t`, `j_t < LENGTH t`] >>
   qexistsl [`i_t + 1`, `j_t + 1`] >> simp[GSYM ADD1]
 QED
 
@@ -1581,4 +1581,5 @@ Proof
   conj_tac >- (irule wf_fn_block_inst_ids_distinct >> metis_tac[]) >>
   irule wf_ssa_defs_before_uses >> metis_tac[]
 QED
+
 

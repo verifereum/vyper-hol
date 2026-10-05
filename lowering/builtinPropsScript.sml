@@ -351,7 +351,7 @@ Proof
   gvs[compile_unsafe_binop_def, comp_return_def,
       comp_ignore_bind_def, comp_bind_def] >>
   pairarg_tac >> gvs[] >>
-  Q.RENAME_TAC [`emit_op opc [x; y] st = (result, cs')`] >>
+  rename [`emit_op opc [x; y] st = (result, cs')`] >>
   Cases_on `bits < 256` >> gvs[comp_return_def]
   >- ((* trunc case: bits < 256 *)
     Cases_on `is_signed` >> gvs[]
@@ -974,7 +974,7 @@ Proof
   rpt strip_tac >>
   gvs[compile_select_def, comp_bind_def] >>
   pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
-  Q.RENAME_TAC [`emit_op XOR [then_op; else_op] st = (diff_op, cs1)`,
+  rename [`emit_op XOR [then_op; else_op] st = (diff_op, cs1)`,
           `emit_op MUL [cond_op; diff_op] cs1 = (scaled_op, cs2)`,
           `emit_op XOR [else_op; scaled_op] cs2 = (op, st')`] >>
   (* Step 1: XOR(then, else) → diff *)
@@ -1110,7 +1110,7 @@ Proof
   gvs[compile_builtin_min_def, comp_bind_def] >>
   Cases_on `use_unsigned` >> gvs[] >>
   pairarg_tac >> gvs[] >>
-  Q.RENAME_TAC [`emit_op _ [a; b] st = (cmp_op, cs1)`]
+  rename [`emit_op _ [a; b] st = (cmp_op, cs1)`]
   >- suspend "unsigned"
   >> suspend "signed"
 QED
@@ -1170,7 +1170,7 @@ Proof
   gvs[compile_builtin_max_def, comp_bind_def] >>
   Cases_on `use_unsigned` >> gvs[] >>
   pairarg_tac >> gvs[] >>
-  Q.RENAME_TAC [`emit_op _ [a; b] st = (cmp_op, cs1)`]
+  rename [`emit_op _ [a; b] st = (cmp_op, cs1)`]
   >- ( (* unsigned: GT → if w2n a > w2n b then a else b *)
     `∀ id out s.
        eval_operand a s = SOME av ∧ eval_operand b s = SOME bv ⇒
@@ -1373,7 +1373,7 @@ Proof
   rpt strip_tac >>
   gvs[compile_builtin_abs_def, comp_bind_def, comp_ignore_bind_def] >>
   rpt (pairarg_tac >> gvs[]) >>
-  Q.RENAME_TAC [`emit_op SUB [Lit 0w; val_op] st = (neg_op, cs1)`,
+  rename [`emit_op SUB [Lit 0w; val_op] st = (neg_op, cs1)`,
           `emit_op SLT [val_op; Lit 0w] cs1 = (isneg_op, cs2)`,
           `emit_op EQ [val_op; neg_op] cs2 = (ismin_op, cs3)`,
           `emit_op AND [isneg_op; ismin_op] cs3 = (bad_op, cs4)`,
@@ -1838,7 +1838,7 @@ Proof
   rpt (pairarg_tac >> gvs[]) >>
   imp_res_tac emit_op_extends >>
   imp_res_tac compile_select_extends >>
-  Q.RENAME_TAC [`emit_op SLT [val_op; Lit 0w] st = (is_neg_op, cs1)`,
+  rename [`emit_op SLT [val_op; Lit 0w] st = (is_neg_op, cs1)`,
           `emit_op SUB [val_op; Lit (n2w (divisor - 1))] cs1 = (adj_op, cs2)`,
           `compile_select is_neg_op adj_op val_op cs2 = (input_op, cs3)`,
           `emit_op SDIV [input_op; Lit (n2w divisor)] cs3 = (op, st')`] >>
@@ -1920,7 +1920,7 @@ Proof
   rpt (pairarg_tac >> gvs[]) >>
   imp_res_tac emit_op_extends >>
   imp_res_tac compile_select_extends >>
-  Q.RENAME_TAC [`emit_op SGT [val_op; Lit 0w] st = (is_pos_op, cs1)`,
+  rename [`emit_op SGT [val_op; Lit 0w] st = (is_pos_op, cs1)`,
           `emit_op ADD [val_op; Lit (n2w (divisor - 1))] cs1 = (adj_op, cs2)`,
           `compile_select is_pos_op adj_op val_op cs2 = (input_op, cs3)`,
           `emit_op SDIV [input_op; Lit (n2w divisor)] cs3 = (op, st')`] >>
@@ -2074,7 +2074,7 @@ Proof
   rpt strip_tac >>
   gvs[compile_extract32_def, comp_bind_def, comp_ignore_bind_def] >>
   rpt (pairarg_tac >> gvs[]) >>
-  Q.RENAME_TAC [`emit_op MLOAD [src_ptr] st = (src_len, cs1)`,
+  rename [`emit_op MLOAD [src_ptr] st = (src_len, cs1)`,
           `emit_op ADD [src_ptr; Lit 32w] cs1 = (src_data, cs2)`,
           `emit_op ADD [start_op; Lit 32w] cs2 = (end_op, cs3)`,
           `emit_op GT [end_op; src_len] cs3 = (oob, cs4)`,

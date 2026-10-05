@@ -4,13 +4,8 @@ Ancestors
 Libs
   vyperCheckContractFrontendLib
 
-(* Declare fixtures relative to this source file so holbuild stages them at
-   the same relative path and includes their contents in the cache key. *)
-fun holbuild_extra_deps (_ : string list) = ()
-val () = holbuild_extra_deps ["../tests/fixtures/check_contract"]
-
 val address = ``0w : address``;
-val fixture_dir = "../tests/fixtures/check_contract/";
+val fixture_dir = "../../../tests/fixtures/check_contract/";
 
 fun check_fixture in_deploy path = let
   val checked = vyperCheckContractFrontendLib.check_contract_file

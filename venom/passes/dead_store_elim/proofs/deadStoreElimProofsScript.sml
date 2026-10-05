@@ -1753,7 +1753,7 @@ Proof
       |> SIMP_RULE (srw_ss()) []) >>
   impl_tac
   >- (simp[] >> rpt strip_tac >>
-      Q.RENAME_TAC [`ISL xx`] >> Cases_on `xx` >> gvs[Abbr`g`] >>
+      rename [`ISL xx`] >> Cases_on `xx` >> gvs[Abbr`g`] >>
       Cases_on `pointer_use_step_step fn x` >> simp[] >>
       gvs[pointer_use_step_step_def, LET_DEF] >> rw[] >> simp[listTheory.MEM_APPEND]) >>
   disch_tac >>

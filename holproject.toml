@@ -16,6 +16,12 @@ roots = ["vyperHolScript.sml",
 "semantics/prop/vyperLogPreservationScript.sml" = 5
 "venom/defs/venomExecSemanticsScript.sml" = 5
 "venom/proofs/execEquivProofsScript.sml" = 5
+"venom/passes/shared/proofs/passSharedSubstScript.sml" = 5
+"venom/passes/shared/proofs/passSharedFrameScript.sml" = 5
+"venom/passes/concretize_mem_loc/proofs/concretizeMemLocProofsScript.sml" = 5
+"venom/passes/mem2var/proofs/mem2varBlockSimHelpersScript.sml" = 5
+"venom/passes/phi_elimination/proofs/phiBlockScript.sml" = 5
+"venom/passes/dft/proofs/dftCorrectnessScript.sml" = 5
 
 [dependencies.verifereum]
 git = "https://github.com/verifereum/verifereum.git"

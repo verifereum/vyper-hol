@@ -593,8 +593,7 @@ Proof
     metis_tac[step_inst_base_abort_opcode] >>
   gvs[] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  ONCE_REWRITE_TAC[step_inst_base_def] >>
-  ASM_REWRITE_TAC[opcode_case_def] >> rw[] >>
+  rw[step_inst_base_def] >>
   rpt strip_tac >>
   gvs[AllCaseEqs()] >>
   rpt (first_x_assum (fn th => mp_tac (REWRITE_RULE [eval_operand_def] th))) >>

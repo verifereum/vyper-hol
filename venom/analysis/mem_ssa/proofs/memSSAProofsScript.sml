@@ -301,13 +301,13 @@ Triviality remove_redundant_phis_non_redundant_preserved:
 Proof
   Induct >> simp[mem_ssa_remove_redundant_phis_def] >>
   Cases >> rpt gen_tac >> strip_tac >>
-  Q.RENAME_TAC [`(lbl', pid')::rest`] >>
+  rename [`(lbl', pid')::rest`] >>
   simp[mem_ssa_remove_redundant_phis_def] >>
   Cases_on `FLOOKUP ms.ms_phi_ops pid'` >> simp[]
   >- ((* NONE: state unchanged *)
     first_x_assum irule >> simp[] >> metis_tac[])
   >- ((* SOME ops' *)
-    Q.RENAME_TAC [`FLOOKUP ms.ms_phi_ops pid' = SOME ops'`] >>
+    rename [`FLOOKUP ms.ms_phi_ops pid' = SOME ops'`] >>
     Cases_on `mem_ssa_phi_redundant ops'` >> simp[]
     >- ((* redundant: lbl' removed from block_phis *)
       (* lbl' ≠ lbl because our precondition says lbl's phi is non-redundant *)
@@ -823,7 +823,7 @@ Proof
       rpt conj_tac >> TRY (first_x_assum ACCEPT_TAC)
       >- (gvs[ALL_DISTINCT]) >>
       rpt strip_tac >> first_x_assum irule >> metis_tac[MEM])
-  >> Q.RENAME_TAC [`lookup_block h fn.fn_blocks = SOME bb`] >>
+  >> rename [`lookup_block h fn.fn_blocks = SOME bb`] >>
   rpt strip_tac >>
   first_x_assum (qspecl_then [`bp`, `addr_sp`, `fn`,
     `mem_ssa_process_block bp addr_sp h ms bb.bb_instructions`] mp_tac) >>
@@ -1827,7 +1827,7 @@ Proof
     simp[] >>
     impl_tac >- metis_tac[process_inst_preserves_fresh] >>
     strip_tac >> simp[])
-  >> Q.RENAME_TAC [`FLOOKUP _ aid = SOME node'`] >>
+  >> rename [`FLOOKUP _ aid = SOME node'`] >>
   (* aid was created by process_inst h (since FLOOKUP ms = NONE) *)
   (* process_inst only creates MnDef/MnUse, never MnPhi *)
   `!blk. node' <> MnPhi blk` by (
@@ -1878,7 +1878,7 @@ Proof
   Cases_on `lookup_block h fn.fn_blocks` >> fs[]
   >- (first_x_assum match_mp_tac >> metis_tac[])
   >>
-  Q.RENAME_TAC [`lookup_block h _ = SOME bb`] >>
+  rename [`lookup_block h _ = SOME bb`] >>
   Cases_on `FLOOKUP (mem_ssa_process_block bp addr_sp h ms bb.bb_instructions).ms_nodes aid`
   >- (
     first_x_assum (qspecl_then [`bp`, `addr_sp`, `fn`,
@@ -1888,7 +1888,7 @@ Proof
     disch_then match_mp_tac >>
     metis_tac[process_block_preserves_fresh])
   >>
-  Q.RENAME_TAC [`FLOOKUP _ aid = SOME node'`] >>
+  rename [`FLOOKUP _ aid = SOME node'`] >>
   (* First show node' is preserved to the final result as node *)
   `nodes_fresh (mem_ssa_process_block bp addr_sp h ms bb.bb_instructions)` by
     metis_tac[process_block_preserves_fresh] >>
@@ -2162,7 +2162,7 @@ Proof
       simp[phase1_fresh]) >>
     metis_tac[])
   >>
-  Q.RENAME_TAC [`FLOOKUP _ aid = SOME node'`] >>
+  rename [`FLOOKUP _ aid = SOME node'`] >>
   `FLOOKUP (mem_ssa_insert_phis
       (mem_ssa_process_blocks bp addr_sp fn mem_ssa_init order)
       cfg dom ef fuel wl).ms_nodes aid = SOME node'` by (
@@ -3153,7 +3153,7 @@ Proof
     simp[] >> strip_tac >>
     first_x_assum irule >> simp[] >> metis_tac[],
     (* Goal 3: lbl ≠ h, lookup_block h = SOME x *)
-    Q.RENAME_TAC [`lookup_block h _ = SOME bb_h`] >>
+    rename [`lookup_block h _ = SOME bb_h`] >>
     `~MEM iid (MAP (\i. i.inst_id) bb_h.bb_instructions)` by (
       strip_tac >>
       `bb = bb_h` by metis_tac[fn_inst_ids_distinct_unique_block, lookup_block_props] >>
@@ -5520,7 +5520,7 @@ Proof
     fs[finite_mapTheory.FLOOKUP_DEF, FDOM_FEMPTY] >>
   simp[] >> strip_tac >>
   (* node for a: non-phi, reaching_in_block ms2 ... (mn_inst_id node) (mn_block node) = b *)
-  Q.RENAME_TAC [`FLOOKUP ms2.ms_nodes a = SOME anode`] >>
+  rename [`FLOOKUP ms2.ms_nodes a = SOME anode`] >>
   (* node for b *)
   `?bnode. FLOOKUP ms2.ms_nodes b = SOME bnode` by fs[flookup_thm] >>
   `THE (FLOOKUP ms2.ms_nodes b) = bnode` by simp[] >>
@@ -5626,7 +5626,7 @@ Proof
   `FLOOKUP ms2.ms_reaching a <> SOME b` by
     fs[finite_mapTheory.FLOOKUP_DEF, FDOM_FEMPTY] >>
   simp[] >> strip_tac >>
-  Q.RENAME_TAC [`FLOOKUP ms2.ms_nodes a = SOME anode`] >>
+  rename [`FLOOKUP ms2.ms_nodes a = SOME anode`] >>
   `?bnode. FLOOKUP ms2.ms_nodes b = SOME bnode` by fs[flookup_thm] >>
   `THE (FLOOKUP ms2.ms_nodes b) = bnode` by simp[] >>
   `THE (FLOOKUP ms2.ms_nodes a) = anode` by simp[] >>
@@ -5782,7 +5782,7 @@ Proof
   `FLOOKUP ms2.ms_reaching x <> SOME rd` by
     fs[finite_mapTheory.FLOOKUP_DEF, FDOM_FEMPTY] >>
   simp[] >> strip_tac >>
-  Q.RENAME_TAC [`FLOOKUP ms2.ms_nodes x = SOME xnode`] >>
+  rename [`FLOOKUP ms2.ms_nodes x = SOME xnode`] >>
   `THE (FLOOKUP ms2.ms_nodes x) = xnode` by simp[] >>
   fs[] >>
   (* ALL_DISTINCT inst_ids *)
@@ -5913,7 +5913,7 @@ Proof
     disch_then (qspecl_then [`bp`, `fn`, `addr_sp`, `a`, `b`] mp_tac) >>
     simp[])
   (* n = SUC n': establish mid properties then use IH *)
-  \\ Q.RENAME_TAC [`reaching_chain _ (SUC n') mid b`]
+  \\ rename [`reaching_chain _ (SUC n') mid b`]
   (* mid ≠ 0: phis have no reaching, but mid has a reaching chain *)
   \\ `mid <> 0` by (
     strip_tac >> pop_assum SUBST_ALL_TAC >>

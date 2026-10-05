@@ -328,10 +328,9 @@ Proof
               (Q.SPECL [`fuel`, `run_ctx`, `bb`, `s1`, `v1`]
                 analysisSimProofsTheory.run_block_OK_not_halted) th))))
   >> (ALL_TAC THEN_LT TRYALL
-        (qspecl_then [`R_ok`, `R_term`, `v1`, `v2`] mp_tac
-           valid_state_rel_R_ok_halted >>
-        Tactical.THEN1 (impl_tac, conj_tac >> first_assum ACCEPT_TAC) >>
-        strip_tac))
+       (qspecl_then [`R_ok`, `R_term`, `v1`, `v2`] mp_tac
+          valid_state_rel_R_ok_halted >>
+        impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >> strip_tac))
   >> (ALL_TAC THEN_LT TRYALL
        (`~v2.vs_halted` by
           (qpat_x_assum `~v1.vs_halted` mp_tac >>
@@ -554,7 +553,7 @@ Proof
   (ALL_TAC THEN_LT TRYALL
     (qspecl_then [`R_ok`, `R_term`, `v1`, `v2`] mp_tac
        valid_state_rel_R_ok_halted >>
-     Tactical.THEN1 (impl_tac, conj_tac >> first_assum ACCEPT_TAC) >> strip_tac)) >>
+     impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >> strip_tac)) >>
   (ALL_TAC THEN_LT TRYALL
     (`~v2.vs_halted` by
        (qpat_x_assum `~v1.vs_halted` mp_tac >>
@@ -758,7 +757,7 @@ Proof
   (ALL_TAC THEN_LT TRYALL
     (qspecl_then [`R_ok`, `R_term`, `v1`, `v2`] mp_tac
        valid_state_rel_R_ok_halted >>
-     Tactical.THEN1 (impl_tac, conj_tac >> first_assum ACCEPT_TAC) >> strip_tac)) >>
+     impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >> strip_tac)) >>
   (ALL_TAC THEN_LT TRYALL
     (`~v2.vs_halted` by
        (qpat_x_assum `~v1.vs_halted` mp_tac >>

@@ -195,7 +195,7 @@ Proof
     `MEM lbl (fn_labels fn)` by
       metis_tac[cfgAnalysisPropsTheory.cfg_analyze_reachable_in_labels] >>
     gvs[venomInstTheory.fn_labels_def, MEM_MAP] >>
-    Q.RENAME_TAC [`MEM blk fn.fn_blocks`] >>
+    rename [`MEM blk fn.fn_blocks`] >>
     qexists_tac `blk` >>
     irule venomExecProofsTheory.MEM_lookup_block >>
     gvs[venomWfTheory.wf_function_def, venomInstTheory.fn_labels_def]) >>
@@ -618,7 +618,7 @@ Proof
        simp[Abbr `result`]) >>
     metis_tac[])
   >> ((* n = SUC n': df_at lbl (SUC (SUC n')) = transfer ... <> bottom *)
-    Q.RENAME_TAC [`SUC (SUC n')`] >>
+    rename [`SUC (SUC n')`] >>
     `SUC (SUC n') <= LENGTH bb.bb_instructions` by simp[] >>
     `df_at bottom result lbl (SUC (SUC n')) =
      transfer ctx (EL (SUC n') bb.bb_instructions)
@@ -744,7 +744,7 @@ Proof
       metis_tac[cfgAnalysisPropsTheory.cfg_analyze_reachable_in_labels,
                 Abbr `cfg`] >>
     gvs[venomInstTheory.fn_labels_def, MEM_MAP] >>
-    Q.RENAME_TAC [`MEM bb fn.fn_blocks`] >>
+    rename [`MEM bb fn.fn_blocks`] >>
     qexists_tac `bb` >>
     `bb_well_formed bb` by
       (gvs[venomWfTheory.wf_function_def] >> metis_tac[]) >>
