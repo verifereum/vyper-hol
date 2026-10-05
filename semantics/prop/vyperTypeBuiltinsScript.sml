@@ -37,6 +37,14 @@ Proof
   >> simp[LENGTH_word_to_bytes,word_to_bytes_be_def]
 QED
 
+(* Both codehash branches have the same fixed result width. *)
+Theorem evaluate_account_codehash_length:
+  LENGTH (if account_empty a then REPLICATE 32 0w
+          else Keccak_256_w64 a.code) = 32
+Proof
+  rw[LENGTH_Keccak_256_w64]
+QED
+
 Theorem account_well_typed_op:
   account_well_typed a ∧ evaluate_type tenv (account_item_type item) = SOME tv ∧
   value_has_type (BaseTV AddressT) addr_v ==>
@@ -45,7 +53,7 @@ Proof
   strip_tac >> Cases_on `addr_v` >> gvs[value_has_type_def] >>
   Cases_on `item` >>
   gvs[account_well_typed_def, account_item_type_def, evaluate_account_op_def,
-      evaluate_type_def, value_has_type_def, LENGTH_Keccak_256_w64]
+      evaluate_type_def, value_has_type_def, evaluate_account_codehash_length]
 QED
 
 Theorem Acc_builtin_sound:

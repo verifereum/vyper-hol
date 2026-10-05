@@ -102,13 +102,31 @@ val () = cv_auto_trans current_module_def;
 Definition evaluate_account_op_def:
   evaluate_account_op Address bs _ = BytesV bs ∧
   evaluate_account_op Balance _ a = IntV &a.balance ∧
-  evaluate_account_op Codehash _ a = BytesV (Keccak_256_w64 a.code) ∧
+  evaluate_account_op Codehash _ a =
+    BytesV (if account_empty a then REPLICATE 32 0w else Keccak_256_w64 a.code) ∧
   evaluate_account_op Codesize _ a = IntV $ &LENGTH a.code ∧
   evaluate_account_op IsContract _ a = BoolV (a.code ≠ []) ∧
   evaluate_account_op Code _ a = BytesV a.code
 End
 
 val () = cv_auto_trans evaluate_account_op_def;
+
+(* ===== Account codehash boundaries ===== *)
+
+(* Emptiness includes balance and nonce, not just the absence of code. *)
+Theorem evaluate_account_codehash_empty:
+  account_empty a ==>
+  evaluate_account_op Codehash bs a = BytesV (REPLICATE 32 0w)
+Proof
+  simp[evaluate_account_op_def]
+QED
+
+Theorem evaluate_account_codehash_nonempty:
+  ~account_empty a ==>
+  evaluate_account_op Codehash bs a = BytesV (Keccak_256_w64 a.code)
+Proof
+  simp[evaluate_account_op_def]
+QED
 
 Definition evaluate_block_hash_def:
   evaluate_block_hash t n =
