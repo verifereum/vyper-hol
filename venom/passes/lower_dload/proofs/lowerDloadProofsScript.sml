@@ -16,6 +16,10 @@ Ancestors
   lowerDloadDefs stateEquiv venomExecSemantics passSimulationDefs
   venomExecProps venomInst venomState venomInstProps instIdxIndep
   finite_map words list rich_list
+Libs
+  lowerDloadFrameLib
+
+val _ = augment_srw_ss [lowerDloadFrameLib.frame_ss];
 
 val dim256 = fcpLib.INDEX_CONV ``dimindex(:256)``;
 

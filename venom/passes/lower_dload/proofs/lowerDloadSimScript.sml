@@ -13,7 +13,9 @@ Ancestors
   venomInstProps analysisSimDefs instIdxIndep
   finite_map words list rich_list pred_set arithmetic
 Libs
-  BasicProvers
+  BasicProvers lowerDloadFrameLib
+
+val _ = augment_srw_ss [lowerDloadFrameLib.frame_ss];
 
 (* ===== run_insts simulation ===== *)
 

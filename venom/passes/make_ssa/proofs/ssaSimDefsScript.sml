@@ -15,8 +15,12 @@
 
 Theory ssaSimDefs
 Ancestors
-  stateEquiv venomExecSemantics venomExecProofs venomWf venomState venomInst
+  ssaFrame stateEquiv venomExecSemantics venomExecProofs venomWf venomState venomInst
   list rich_list finite_map pred_set
+Libs
+  ssaFrameLib
+
+val _ = augment_srw_ss [ssaFrameLib.frame_ss];
 
 (* ==========================================================================
    Part 0: Utility lemmas
@@ -24,29 +28,10 @@ Ancestors
 
 Theorem execution_equiv_UNIV:
   execution_equiv UNIV s1 s2 <=>
-    s1.vs_memory = s2.vs_memory /\
-    s1.vs_transient = s2.vs_transient /\
-    s1.vs_halted = s2.vs_halted /\
-    s1.vs_returndata = s2.vs_returndata /\
-    s1.vs_accounts = s2.vs_accounts /\
-    s1.vs_call_ctx = s2.vs_call_ctx /\
-    s1.vs_tx_ctx = s2.vs_tx_ctx /\
-    s1.vs_block_ctx = s2.vs_block_ctx /\
-    s1.vs_logs = s2.vs_logs /\
-    s1.vs_immutables = s2.vs_immutables /\
-    s1.vs_data_section = s2.vs_data_section /\
-    s1.vs_labels = s2.vs_labels /\
-    s1.vs_code = s2.vs_code /\
-    s1.vs_params = s2.vs_params /\
-    s1.vs_fmp = s2.vs_fmp /\
-    s1.vs_call_entry_fmp = s2.vs_call_entry_fmp /\
-    s1.vs_initial_fmp = s2.vs_initial_fmp /\
-    s1.vs_return_pc_token = s2.vs_return_pc_token /\
-    s1.vs_prev_hashes = s2.vs_prev_hashes /\
-    s1.vs_allocas = s2.vs_allocas /\
-    s1.vs_alloca_next = s2.vs_alloca_next
+    ssa_execution_frame s1 = ssa_execution_frame s2
 Proof
-  simp[execution_equiv_def, IN_UNIV]
+  simp[execution_equiv_def, IN_UNIV, ssa_execution_frame_def,
+       venom_state_component_equality] >> metis_tac[]
 QED
 
 Theorem result_equiv_UNIV_refl:
@@ -105,53 +90,31 @@ Definition ssa_sim_def:
   ssa_sim sigma s1 s2 <=>
     (!x v. lookup_var x s1 = SOME v ==>
            lookup_var (sigma x) s2 = SOME v) /\
-    s1.vs_memory = s2.vs_memory /\
-    s1.vs_transient = s2.vs_transient /\
-    (s1.vs_halted <=> s2.vs_halted) /\
-    s1.vs_returndata = s2.vs_returndata /\
-    s1.vs_accounts = s2.vs_accounts /\
-    s1.vs_call_ctx = s2.vs_call_ctx /\
-    s1.vs_tx_ctx = s2.vs_tx_ctx /\
-    s1.vs_block_ctx = s2.vs_block_ctx /\
-    s1.vs_logs = s2.vs_logs /\
-    s1.vs_immutables = s2.vs_immutables /\
-    s1.vs_data_section = s2.vs_data_section /\
-    s1.vs_labels = s2.vs_labels /\
-    s1.vs_code = s2.vs_code /\
-    s1.vs_params = s2.vs_params /\
-    s1.vs_fmp = s2.vs_fmp /\
-    s1.vs_call_entry_fmp = s2.vs_call_entry_fmp /\
-    s1.vs_initial_fmp = s2.vs_initial_fmp /\
-    s1.vs_return_pc_token = s2.vs_return_pc_token /\
-    s1.vs_prev_hashes = s2.vs_prev_hashes /\
-    s1.vs_allocas = s2.vs_allocas /\
-    s1.vs_alloca_next = s2.vs_alloca_next /\
-    s1.vs_current_bb = s2.vs_current_bb /\
-    s1.vs_prev_bb = s2.vs_prev_bb
+    ssa_frame s1 = ssa_frame s2
 End
 
 Theorem ssa_sim_implies_exec_equiv_UNIV:
   !sigma s1 s2. ssa_sim sigma s1 s2 ==> execution_equiv UNIV s1 s2
 Proof
-  rw[ssa_sim_def, execution_equiv_UNIV]
+  simp[ssa_sim_def, execution_equiv_UNIV, ssa_frame_execution]
 QED
 
 Theorem ssa_sim_halted:
   !sigma s1 s2. ssa_sim sigma s1 s2 ==> (s1.vs_halted <=> s2.vs_halted)
 Proof
-  simp[ssa_sim_def]
+  simp[ssa_sim_def, ssa_frame_def, venom_state_component_equality]
 QED
 
 Theorem ssa_sim_current_bb:
   !sigma s1 s2. ssa_sim sigma s1 s2 ==> (s1.vs_current_bb = s2.vs_current_bb)
 Proof
-  simp[ssa_sim_def]
+  simp[ssa_sim_def, ssa_frame_def, venom_state_component_equality]
 QED
 
 Theorem ssa_sim_prev_bb:
   !sigma s1 s2. ssa_sim sigma s1 s2 ==> (s1.vs_prev_bb = s2.vs_prev_bb)
 Proof
-  simp[ssa_sim_def]
+  simp[ssa_sim_def, ssa_frame_def, venom_state_component_equality]
 QED
 
 Theorem ssa_sim_identity:
@@ -219,7 +182,8 @@ Theorem eval_operand_renamed:
     eval_operand op s1 = SOME v ==>
     eval_operand (renamed_operand sigma op) s2 = SOME v
 Proof
-  Cases >> simp[renamed_operand_def, eval_operand_def, ssa_sim_def, lookup_var_def] >>
+  Cases >> simp[renamed_operand_def, eval_operand_def, ssa_sim_def,
+                lookup_var_def, ssa_frame_def, venom_state_component_equality] >>
   rw[] >> gvs[]
 QED
 
@@ -465,7 +429,8 @@ Theorem ssa_sim_fmp_update:
     ssa_sim sigma s1 s2 ==>
     ssa_sim sigma (s1 with vs_fmp := fmp) (s2 with vs_fmp := fmp)
 Proof
-  rw[ssa_sim_def, lookup_var_def]
+  rw[ssa_sim_def, lookup_var_def, ssa_frame_def,
+     venom_state_component_equality]
 QED
 
 (* ssa_sim is preserved by update_var on corresponding variables,
@@ -557,29 +522,7 @@ Theorem ssa_sim_non_var_update:
     ssa_sim sigma s1 s2 /\
     (!x. lookup_var x s1' = lookup_var x s1) /\
     (!x. lookup_var x s2' = lookup_var x s2) /\
-    s1'.vs_memory = s2'.vs_memory /\
-    s1'.vs_transient = s2'.vs_transient /\
-    (s1'.vs_halted <=> s2'.vs_halted) /\
-    s1'.vs_returndata = s2'.vs_returndata /\
-    s1'.vs_accounts = s2'.vs_accounts /\
-    s1'.vs_call_ctx = s2'.vs_call_ctx /\
-    s1'.vs_tx_ctx = s2'.vs_tx_ctx /\
-    s1'.vs_block_ctx = s2'.vs_block_ctx /\
-    s1'.vs_logs = s2'.vs_logs /\
-    s1'.vs_immutables = s2'.vs_immutables /\
-    s1'.vs_data_section = s2'.vs_data_section /\
-    s1'.vs_labels = s2'.vs_labels /\
-    s1'.vs_code = s2'.vs_code /\
-    s1'.vs_params = s2'.vs_params /\
-    s1'.vs_fmp = s2'.vs_fmp /\
-    s1'.vs_call_entry_fmp = s2'.vs_call_entry_fmp /\
-    s1'.vs_initial_fmp = s2'.vs_initial_fmp /\
-    s1'.vs_return_pc_token = s2'.vs_return_pc_token /\
-    s1'.vs_prev_hashes = s2'.vs_prev_hashes /\
-    s1'.vs_allocas = s2'.vs_allocas /\
-    s1'.vs_alloca_next = s2'.vs_alloca_next /\
-    s1'.vs_current_bb = s2'.vs_current_bb /\
-    s1'.vs_prev_bb = s2'.vs_prev_bb ==>
+    ssa_frame s1' = ssa_frame s2' ==>
     ssa_sim sigma s1' s2'
 Proof
   rw[ssa_sim_def] >> metis_tac[]
@@ -618,7 +561,8 @@ Theorem jump_to_ssa_sim:
     ssa_sim sigma s1 s2 ==>
     ssa_sim sigma (jump_to lbl s1) (jump_to lbl s2)
 Proof
-  rw[ssa_sim_def, jump_to_def, lookup_var_def]
+  rw[ssa_sim_def, jump_to_def, lookup_var_def, ssa_frame_def,
+     venom_state_component_equality]
 QED
 
 (* halt_state preserves ssa_sim *)
@@ -627,7 +571,8 @@ Theorem halt_state_ssa_sim:
     ssa_sim sigma s1 s2 ==>
     ssa_sim sigma (halt_state s1) (halt_state s2)
 Proof
-  rw[ssa_sim_def, halt_state_def, lookup_var_def]
+  rw[ssa_sim_def, halt_state_def, lookup_var_def, ssa_frame_def,
+     venom_state_component_equality]
 QED
 
 (* set_returndata preserves ssa_sim *)
@@ -636,7 +581,8 @@ Theorem set_returndata_ssa_sim:
     ssa_sim sigma s1 s2 ==>
     ssa_sim sigma (set_returndata rd s1) (set_returndata rd s2)
 Proof
-  rw[ssa_sim_def, set_returndata_def, lookup_var_def]
+  rw[ssa_sim_def, set_returndata_def, lookup_var_def, ssa_frame_def,
+     venom_state_component_equality]
 QED
 
 (* revert_state preserves ssa_sim (revert doesn't change vars) *)
@@ -645,7 +591,8 @@ Theorem revert_state_ssa_sim:
     ssa_sim sigma s1 s2 ==>
     ssa_sim sigma (revert_state s1) (revert_state s2)
 Proof
-  rw[ssa_sim_def, revert_state_def, lookup_var_def]
+  rw[ssa_sim_def, revert_state_def, lookup_var_def, ssa_frame_def,
+     venom_state_component_equality]
 QED
 
 (* General non-terminator peel: for any step_inst result *)

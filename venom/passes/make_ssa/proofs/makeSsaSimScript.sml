@@ -13,6 +13,10 @@ Ancestors
   cfgTransform cfgTransformProps passSimulationDefs passSimulationProps
   execEquivParamDefs execEquivParamProofs execEquivProofs
   list rich_list alist finite_map pred_set string arithmetic
+Libs
+  ssaFrameLib
+
+val _ = augment_srw_ss [ssaFrameLib.frame_ss];
 
 (* IH ref cell — must be val, not fun *)
 val ih_ref : thm ref = ref TRUTH;

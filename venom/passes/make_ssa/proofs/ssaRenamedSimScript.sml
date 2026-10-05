@@ -13,7 +13,9 @@ Ancestors
   ssaSimDefs venomExecSemantics venomInst venomState opcodeClass
   list rich_list finite_map pred_set
 Libs
-  ssaRenamedSimLib
+  ssaRenamedSimLib ssaFrameLib
+
+val _ = augment_srw_ss [ssaFrameLib.frame_ss];
 
 (* ==========================================================================
    exec_* Category Helpers for renamed instructions
