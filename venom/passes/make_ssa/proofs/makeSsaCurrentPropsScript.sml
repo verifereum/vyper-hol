@@ -704,7 +704,7 @@ Proof
   pop_assum $ mk_asm "ih" >> rpt gen_tac >>
   simp[rename_current_outputs_def] >>
   pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >> rpt strip_tac >>
-  rename [`push_current_name s rs h = (rs1,s1,name)`,
+  Q.RENAME_TAC [`push_current_name s rs h = (rs1,s1,name)`,
           `rename_current_outputs s1 rs1 vs = (rs2,s2,rest)`] >>
   `MEM h s.irs_used_vars` by gvs[ssa_vars_covered_def] >>
   `ssa_stacks_covered s1 (SND rs1) /\
@@ -831,7 +831,7 @@ Proof
   pop_assum $ mk_asm "ih" >> rpt gen_tac >>
   simp[rename_current_block_insts_def] >>
   pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >> rpt strip_tac >>
-  rename [`rename_current_inst s rs h = (rs1,s1,inst1)`,
+  Q.RENAME_TAC [`rename_current_inst s rs h = (rs1,s1,inst1)`,
           `rename_current_block_insts s1 rs1 insts = (rs2,s2,rest)`] >>
   `ssa_vars_covered s (inst_ir_vars h)` by
     gvs[ssa_vars_covered_def, listTheory.EVERY_APPEND] >>
@@ -2709,7 +2709,7 @@ Proof
   ho_match_mp_tac current_dom_tree_induction >> rpt conj_tac
   >- (rpt strip_tac >> gvs[rename_current_blocks_def, AllCaseEqs()] >>
       pairarg_tac >> gvs[] >>
-      rename [`lookup_block lbl bbs = SOME bb`,
+      Q.RENAME_TAC [`lookup_block lbl bbs = SOME bb`,
               `rename_current_block_insts s rs bb.bb_instructions =
                  (rs1,s1,insts')`] >>
       `EVERY (\inst. ~is_raw_fmp_opcode inst.inst_opcode)

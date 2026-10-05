@@ -181,7 +181,7 @@ Proof
     gvs[LAST_DEF] >> simp[]
   ) >>
   (* Step: l = h'::t, list is h::(h'::t) *)
-  rename [`h::(h'::t)`] >>
+  Q.RENAME_TAC [`h::(h'::t)`] >>
   Cases_on `is_terminator h.inst_opcode`
   >- (
     (* h is terminator => h must be LAST, but LAST is h'::t's last. Contradiction:

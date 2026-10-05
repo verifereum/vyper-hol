@@ -62,12 +62,12 @@ Theorem pointer_use_step_mem:
 Proof
   rpt gen_tac >> simp[pointer_use_step_def, MEM_FLAT, MEM_MAP] >>
   rpt strip_tac >> gvs[] >>
-  rename [`MEM bb fn.fn_blocks`] >>
+  rename1 `MEM bb fn.fn_blocks` >>
   gvs[MEM_FLAT, MEM_MAP] >>
-  rename [`MEM inst' bb.bb_instructions`] >>
+  rename1 `MEM inst' bb.bb_instructions` >>
   pop_assum mp_tac >> rw[] >> gvs[AllCaseEqs()] >>
   gvs[EXISTS_MEM] >>
-  rename [`MEM op inst'.inst_operands`] >>
+  rename1 `MEM op inst'.inst_operands` >>
   Cases_on `op` >> gvs[] >>
   metis_tac[]
 QED
@@ -194,14 +194,14 @@ Proof
   >- (`v IN roots` by gvs[MEM_SET_TO_LIST] >>
       `v IN alloca_roots fn` by gvs[SUBSET_DEF] >>
       gvs[alloca_roots_def, inst_output_def, AllCaseEqs()] >>
-      rename [`MEM inst' (fn_insts fn)`] >>
+      rename1 `MEM inst' (fn_insts fn)` >>
       `MEM inst (fn_insts fn)` by metis_tac[mem_fn_insts_intro] >>
       `inst = inst'` by
         (irule ssa_unique_output >> simp[] >> metis_tac[]) >>
       gvs[is_alloca_op_def])
   (* Case 2: pointer-preserving inst' with pv operand. SSA: inst = inst'. *)
-  >- (rename [`MEM inst' bb'.bb_instructions`,
-              `MEM (Var u) inst'.inst_operands`] >>
+  >- (rename1 `MEM inst' bb'.bb_instructions` >>
+      rename1 `MEM (Var u) inst'.inst_operands` >>
       `MEM inst (fn_insts fn) /\ MEM inst' (fn_insts fn)` by
         metis_tac[mem_fn_insts_intro] >>
       `inst = inst'` by

@@ -1089,7 +1089,7 @@ Proof
     imp_res_tac venomExecPropsTheory.run_block_preserves_labels >> fs[Excl "run_block_def"]) >>
   first_x_assum (qspecl_then [`ctx`, `v`] mp_tac) >> simp[Excl "run_block_def", Excl "run_block_entry_def", Excl "run_blocks_def"] >>
   strip_tac >>
-  rename [`result_equiv _ _ (run_blocks fuel2 _ _ _)`] >>
+  Q.RENAME_TAC [`result_equiv _ _ (run_blocks fuel2 _ _ _)`] >>
   `run_block_entry fuel2 ctx cur_bb s = OK v` by (
     drule venomExecPropsTheory.run_block_fuel_mono_OK >> simp[Excl "run_block_def", Excl "run_block_entry_def", Excl "run_blocks_def"]) >>
   qexists_tac `SUC fuel2` >> conj_tac >- simp[] >>
@@ -2562,7 +2562,7 @@ Proof
   rpt strip_tac >>
   mp_tac (Q.SPECL [`s`, `bb.bb_instructions`] eval_phis_ok_or_error_defs) >>
   Cases_on `eval_phis s bb.bb_instructions` >> gvs[exec_result_distinct]
-  >- (rename [`eval_phis s bb.bb_instructions = OK s_phi`] >>
+  >- (Q.RENAME_TAC [`eval_phis s bb.bb_instructions = OK s_phi`] >>
       imp_res_tac bb_well_formed_same_instrs >>
       mp_tac (Q.SPECL [`pred_lbl`, `pred_bb`, `bb.bb_instructions`, `var`,
                         `func`, `bb`] phi_vars_resolve_phi_full) >>
@@ -3219,7 +3219,7 @@ Proof
     imp_res_tac venomExecPropsTheory.run_block_preserves_labels >> fs[Excl "run_block_def"]) >>
   first_x_assum (qspecl_then [`ctx`, `v`] mp_tac) >> simp[Excl "run_block_def", Excl "run_block_entry_def", Excl "run_blocks_def"] >>
   strip_tac >>
-  rename [`result_equiv _ _ (run_blocks fuel2 _ _ _)`] >>
+  Q.RENAME_TAC [`result_equiv _ _ (run_blocks fuel2 _ _ _)`] >>
   `run_block_entry fuel2 ctx target_bb s = OK v` by (
     drule venomExecPropsTheory.run_block_fuel_mono_OK >> simp[Excl "run_block_def", Excl "run_block_entry_def", Excl "run_blocks_def"]) >>
   qexists_tac `SUC fuel2` >> conj_tac >- simp[] >>

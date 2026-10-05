@@ -489,9 +489,9 @@ val () = cv_auto_trans_rec default_to_abi_def (
     | INR (INR fields) => cv_size fields)`
   \\ rw[]
   \\ Cases_on `cv_v` \\ gvs[]
-  \\ rename [`cv_snd p`]
+  \\ Q.RENAME_TAC [`cv_snd p`]
   \\ Cases_on `p` \\ gvs[]
-  \\ rename [`cv_fst p`]
+  \\ Q.RENAME_TAC [`cv_fst p`]
   \\ Cases_on `p` \\ gvs[]);
 
 (* Helper: convert base type values to ABI values.

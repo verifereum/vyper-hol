@@ -601,7 +601,7 @@ Triviality storage_imm_log_assert_not_halt[local]:
 Proof
   rpt strip_tac >> gvs[] >>
   qpat_x_assum `step_inst_base inst s = Halt vs'` mp_tac >>
-  ASM_REWRITE_TAC[step_inst_base_def] >>
+  ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >>
   gvs[AllCaseEqs()]
 QED
 
@@ -615,7 +615,7 @@ Triviality nofail_storage_imm_log_not_abort[local]:
 Proof
   rpt strip_tac >> gvs[] >>
   qpat_x_assum `step_inst_base inst s = Abort a vs'` mp_tac >>
-  ASM_REWRITE_TAC[step_inst_base_def] >>
+  ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >>
   gvs[AllCaseEqs()]
 QED
 

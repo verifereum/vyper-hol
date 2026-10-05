@@ -365,19 +365,19 @@ Proof
     (fn th => mp_tac (REWRITE_RULE [o1_fn_passes_def] th)) >>
   strip_tac >>
   dxrule run_configured_fn_pass_fold_first_step >> strip_tac >>
-  rename [`unit_with_current_fn unit fn = SOME observed1`,
+  Q.RENAME_TAC [`unit_with_current_fn unit fn = SOME observed1`,
           `execute_configured_fn_pass rpolicy (CFP_Simple VP_MakeSSA)
              observed1 s fn = SOME out1`] >>
   dxrule run_configured_fn_pass_fold_first_step >> strip_tac >>
-  rename [`unit_with_current_fn unit out1.fpo_function = SOME observed2`,
+  Q.RENAME_TAC [`unit_with_current_fn unit out1.fpo_function = SOME observed2`,
           `execute_configured_fn_pass rpolicy (CFP_Simple VP_LowerDload)
              observed2 out1.fpo_supply out1.fpo_function = SOME out2`] >>
   dxrule run_configured_fn_pass_fold_first_step >> strip_tac >>
-  rename [`unit_with_current_fn unit out2.fpo_function = SOME observed3`,
+  Q.RENAME_TAC [`unit_with_current_fn unit out2.fpo_function = SOME observed3`,
           `execute_configured_fn_pass rpolicy (CFP_Simple VP_ConcretizeMemLoc)
              observed3 out2.fpo_supply out2.fpo_function = SOME out3`] >>
   dxrule run_configured_fn_pass_fold_first_step >> strip_tac >>
-  rename [`unit_with_current_fn unit out3.fpo_function = SOME observed4`,
+  Q.RENAME_TAC [`unit_with_current_fn unit out3.fpo_function = SOME observed4`,
           `execute_configured_fn_pass rpolicy (CFP_Simple VP_FmpLowering)
              observed4 out3.fpo_supply out3.fpo_function = SOME out4`] >>
   `IS_SOME out3.fpo_function.fn_eom` by
@@ -403,7 +403,7 @@ Proof
   `o1_fn_structural_output out4.fpo_function` by
     simp[o1_fn_structural_output_def] >>
   dxrule run_configured_fn_pass_fold_first_step >> strip_tac >>
-  rename [`unit_with_current_fn unit out4.fpo_function = SOME observed5`,
+  Q.RENAME_TAC [`unit_with_current_fn unit out4.fpo_function = SOME observed5`,
           `execute_configured_fn_pass rpolicy (CFP_Simple VP_MakeSSA)
              observed5 out4.fpo_supply out4.fpo_function = SOME out5`] >>
   `o1_fn_structural_output out5.fpo_function` by
@@ -412,7 +412,7 @@ Proof
                `VP_MakeSSA`,`observed5`] >>
      simp[venomPassScheduleTheory.fn_pass_tag_def]) >>
   dxrule run_configured_fn_pass_fold_first_step >> strip_tac >>
-  rename [`unit_with_current_fn unit out5.fpo_function = SOME observed6`,
+  Q.RENAME_TAC [`unit_with_current_fn unit out5.fpo_function = SOME observed6`,
           `execute_configured_fn_pass rpolicy (CFP_Simple VP_SimplifyCFG)
              observed6 out5.fpo_supply out5.fpo_function = SOME out6`] >>
   `o1_fn_structural_output out6.fpo_function` by
@@ -421,7 +421,7 @@ Proof
                `VP_SimplifyCFG`,`observed6`] >>
      simp[venomPassScheduleTheory.fn_pass_tag_def]) >>
   dxrule run_configured_fn_pass_fold_first_step >> strip_tac >>
-  rename [`unit_with_current_fn unit out6.fpo_function = SOME observed7`,
+  Q.RENAME_TAC [`unit_with_current_fn unit out6.fpo_function = SOME observed7`,
           `execute_configured_fn_pass rpolicy (CFP_Simple VP_SingleUseExpansion)
              observed7 out6.fpo_supply out6.fpo_function = SOME out7`] >>
   `o1_fn_structural_output out7.fpo_function` by
@@ -430,7 +430,7 @@ Proof
                `VP_SingleUseExpansion`,`observed7`] >>
      simp[venomPassScheduleTheory.fn_pass_tag_def]) >>
   dxrule run_configured_fn_pass_fold_first_step >> strip_tac >>
-  rename [`unit_with_current_fn unit out7.fpo_function = SOME observed8`,
+  Q.RENAME_TAC [`unit_with_current_fn unit out7.fpo_function = SOME observed8`,
           `execute_configured_fn_pass rpolicy (CFP_Simple VP_DFT)
              observed8 out7.fpo_supply out7.fpo_function = SOME out8`] >>
   `o1_fn_structural_output out8.fpo_function` by
@@ -439,7 +439,7 @@ Proof
                `VP_DFT`,`observed8`] >>
      simp[venomPassScheduleTheory.fn_pass_tag_def]) >>
   dxrule run_configured_fn_pass_fold_first_step >> strip_tac >>
-  rename [`unit_with_current_fn unit out8.fpo_function = SOME observed9`,
+  Q.RENAME_TAC [`unit_with_current_fn unit out8.fpo_function = SOME observed9`,
           `execute_configured_fn_pass rpolicy (CFP_Simple VP_CFGNormalization)
              observed9 out8.fpo_supply out8.fpo_function = SOME out9`] >>
   `o1_fn_structural_output out9.fpo_function` by

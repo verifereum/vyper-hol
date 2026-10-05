@@ -1688,7 +1688,7 @@ Proof
   gvs[check_value_type_def, assignable_type_def, well_formed_type_def,
       evaluate_type_def, AllCaseEqs(), bind_def, return_def, raise_def,
       IS_SOME_EXISTS] >>
-  rename [`evaluate_type (get_tenv cx) t = SOME elem_tv`,
+  Q.RENAME_TAC [`evaluate_type (get_tenv cx) t = SOME elem_tv`,
           `type_slot_size (ArrayTV elem_tv bd)`] >>
   gvs[check_array_bounds_def, ignore_bind_def, lift_sum_def,
       evaluate_subscript_def, evaluate_type_def, LET_THM,
@@ -2891,4 +2891,3 @@ Proof
   Cases_on `q` >> gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
   rpt strip_tac >> gvs[]
 QED
-

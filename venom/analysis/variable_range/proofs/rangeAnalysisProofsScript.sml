@@ -1610,7 +1610,7 @@ Proof
   \\ PURE_ONCE_REWRITE_TAC[exec_block_def]
   \\ ASM_REWRITE_TAC[get_instruction_def]
   \\ Cases_on `step_inst fuel ctx (EL idx bb.bb_instructions) s`
-  \\ simp[] \\ rename [`step_inst _ _ _ _ = OK step_st`]
+  \\ simp[] \\ Q.RENAME_TAC [`step_inst _ _ _ _ = OK step_st`]
   \\ reverse (Cases_on `is_terminator (EL idx bb.bb_instructions).inst_opcode`)
   >- (
     (* Non-terminator case *)

@@ -327,21 +327,21 @@ Proof
       simp[Once step_inst_def, step_inst_base_def] >>
       rpt (BasicProvers.PURE_FULL_CASE_TAC >> gvs[]) >>
       rpt strip_tac >>
-      rename [`inst.inst_outputs = [out]`, `inst.inst_operands = [Lit idx]`] >>
+      Q.RENAME_TAC [`inst.inst_outputs = [out]`, `inst.inst_operands = [Lit idx]`] >>
       qexists_tac `update_var out (EL (w2n idx) s2.vs_params) s2` >>
       simp[Once step_inst_def, step_inst_base_def])
   >- (qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
       simp[Once step_inst_def, step_inst_base_def] >>
       rpt (BasicProvers.PURE_FULL_CASE_TAC >> gvs[]) >>
       rpt strip_tac >>
-      rename [`inst.inst_outputs = [out]`, `inst.inst_operands = [Lit idx]`] >>
+      Q.RENAME_TAC [`inst.inst_outputs = [out]`, `inst.inst_operands = [Lit idx]`] >>
       qexists_tac `update_var out (EL (w2n idx) s2.vs_params) s2` >>
       simp[Once step_inst_def, step_inst_base_def])
   >- (qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
       simp[Once step_inst_def, step_inst_base_def] >>
       rpt (BasicProvers.PURE_FULL_CASE_TAC >> gvs[]) >>
       rpt strip_tac >>
-      rename [`inst.inst_outputs = [out]`, `inst.inst_operands = [Lit idx]`] >>
+      Q.RENAME_TAC [`inst.inst_outputs = [out]`, `inst.inst_operands = [Lit idx]`] >>
       qexists_tac `update_var out s2.vs_return_pc_token s2` >>
       simp[Once step_inst_def, step_inst_base_def])
 QED
@@ -406,7 +406,9 @@ Proof
   `s2.vs_return_pc_token = s1.vs_return_pc_token` by
     fs[state_equiv_def, execution_equiv_def] >>
   fs[is_param_opcode_iff] >>
-  simp[step_inst_def, step_inst_base_def, lift_result_def] >>
+  simp[step_inst_non_invoke] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  ASM_REWRITE_TAC[opcode_case_def] >> simp[lift_result_def] >>
   rpt (BasicProvers.PURE_FULL_CASE_TAC >> gvs[lift_result_def]) >>
   metis_tac[stateEquivPropsTheory.update_var_preserves]
 QED
@@ -3595,4 +3597,3 @@ Proof
   Cases_on `exec_block fuel ctx bb s` >>
   simp[lift_result_def, state_equiv_refl, execution_equiv_refl]
 QED
-

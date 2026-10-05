@@ -17,7 +17,7 @@
 Theory makeSsaHelper
 Ancestors
   ssaSimDefs ssaRenamedSim ssaPipeline makeSsaDefs stateEquiv
-  venomExecSemantics venomExecProofs venomWf venomState venomInst
+  venomExecSemantics venomExecProofs venomInstProps venomWf venomState venomInst
   cfgTransform cfgTransformProps passSimulationDefs passSimulationProps
   execEquivParamDefs execEquivParamProofs
   list rich_list alist finite_map pred_set string arithmetic
@@ -860,30 +860,20 @@ Theorem step_inst_base_lookup_preserved[local]:
     step_inst_base inst s = OK s' /\ ~MEM x inst.inst_outputs ==>
     lookup_var x s' = lookup_var x s
 Proof
-  rpt gen_tac >>
-  ONCE_REWRITE_TAC[step_inst_base_def] >>
-  Cases_on `inst.inst_opcode` >>
-  PURE_REWRITE_TAC[venomInstTheory.opcode_case_def] >>
-  gvs[exec_pure1_def] >>
-  gvs[exec_pure2_def] >>
-  gvs[exec_pure3_def] >>
-  gvs[exec_read0_def, exec_read1_def] >>
-  gvs[exec_write2_def, exec_alloca_def] >>
-  gvs[exec_ext_call_def] >>
-  gvs[exec_delegatecall_def] >>
-  gvs[exec_create_def] >>
-  gvs[extract_venom_result_def] >>
-  gvs[AllCaseEqs(), LET_THM] >>
-  gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
-  gvs[jump_to_def, mcopy_def, mstore_def, istore_def, mstore8_def] >>
-  gvs[sstore_def, tstore_def] >>
-  gvs[halt_state_def, revert_state_def, set_returndata_def] >>
-  rpt strip_tac >> gvs[FLOOKUP_UPDATE] >>
-  TRY (gvs[write_memory_with_expansion_def, LET_THM] >> NO_TAC) >>
-  TRY (pairarg_tac >> gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >> NO_TAC) >>
-  TRY (Cases_on `result` >> gvs[AllCaseEqs()]) >>
-  TRY (Cases_on `y` >> gvs[AllCaseEqs()]) >>
-  gvs[lookup_var_def]
+  rpt strip_tac >>
+  Cases_on `is_terminator inst.inst_opcode`
+  >- (drule_all step_inst_base_ok_terminator_jump_local >>
+      strip_tac >> gvs[] >>
+      qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
+      PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+      ASM_REWRITE_TAC[opcode_case_def] >>
+      gvs[AllCaseEqs(), lookup_var_def, jump_to_def,
+          halt_state_def, revert_state_def, set_returndata_def] >>
+      rpt strip_tac >> gvs[]) >>
+  `inst.inst_opcode <> INVOKE` by
+    (drule step_inst_base_OK_not_INVOKE >> simp[]) >>
+  `step_inst ARB ARB inst s = OK s'` by simp[step_inst_non_invoke] >>
+  drule_all step_preserves_non_output_vars >> simp[]
 QED
 
 (* vars_colon_free preservation through step_inst_base *)
@@ -7526,5 +7516,3 @@ Proof
         PURE_REWRITE_TAC [PURE_REWRITE_RULE [markerTheory.Abbrev_def] ab]) >>
       first_assum ACCEPT_TAC)
 QED
-
-

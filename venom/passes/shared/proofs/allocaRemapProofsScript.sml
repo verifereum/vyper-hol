@@ -261,7 +261,7 @@ Proof
       |> SIMP_RULE (srw_ss()) []) >>
   impl_tac
   >- (simp[] >> rpt strip_tac >>
-      rename [`ISL xx`] >> Cases_on `xx` >> gvs[Abbr`g`] >>
+      Q.RENAME_TAC [`ISL xx`] >> Cases_on `xx` >> gvs[Abbr`g`] >>
       Cases_on `pointer_use_step_step fn x` >> simp[] >>
       gvs[pointer_use_step_step_def, LET_DEF] >> rw[] >> simp[MEM_APPEND]) >>
   disch_tac >>
@@ -421,7 +421,7 @@ QED
 
 Resume splice_preserves_remap_mem[splice_agrees]:
   simp[alloca_mem_agrees_def] >> rpt strip_tac >>
-  rename [`FLOOKUP s1.vs_allocas a = SOME (ooff, asz)`,
+  Q.RENAME_TAC [`FLOOKUP s1.vs_allocas a = SOME (ooff, asz)`,
           `FLOOKUP remap a = SOME noff`, `j < asz`] >>
   (* Specialize the splice lemmas for ooff + j and noff + j *)
   qpat_x_assum `!i. mem_byte_at m1 _ = _` (qspec_then `ooff + j` assume_tac) >>
@@ -753,7 +753,7 @@ QED
 Resume mstore_preserves_remap_mem[mstore_agrees]:
   simp[alloca_mem_agrees_def, mstore_allocas, mem_byte_at_mstore] >>
   rpt strip_tac >>
-  rename [`FLOOKUP s1.vs_allocas a = SOME (ooff, asz)`,
+  Q.RENAME_TAC [`FLOOKUP s1.vs_allocas a = SOME (ooff, asz)`,
           `FLOOKUP remap a = SOME noff`, `j < asz`] >>
   Cases_on `a = aid`
   >- (gvs[] >>
@@ -816,7 +816,7 @@ QED
 Resume mstore8_preserves_remap_mem[mstore8_agrees]:
   simp[alloca_mem_agrees_def, mstore8_allocas, mem_byte_at_mstore8] >>
   rpt strip_tac >>
-  rename [`FLOOKUP s1.vs_allocas a = SOME (ooff, asz)`,
+  Q.RENAME_TAC [`FLOOKUP s1.vs_allocas a = SOME (ooff, asz)`,
           `FLOOKUP remap a = SOME noff`, `j < asz`] >>
   Cases_on `a = aid`
   >- (gvs[] >>
@@ -1237,7 +1237,7 @@ Theorem operand_defined_iff[local]:
 Proof
   rpt strip_tac >> EQ_TAC >> strip_tac >>
   Cases_on `op` >> gvs[eval_operand_def] >>
-  TRY (rename [`lookup_var nm`]) >>
+  TRY (Q.RENAME_TAC [`lookup_var nm`]) >>
   TRY (Cases_on `nm IN pointer_derived_vars fn roots`) >>
   gvs[alloca_remap_rel_def, LET_DEF] >>
   TRY (first_x_assum (qspec_then `nm` mp_tac) >> simp[] >>
