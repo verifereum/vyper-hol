@@ -150,6 +150,95 @@ End
 
 val () = cv_auto_trans lookup_callable_function_def;
 
+(* ===== @raw_return declarations ===== *)
+
+(* TOP-LEVEL: matches_fn
+   Does tl declare a function named name with visibility vis?  Only FunctionDecl
+   entries can, so generated getters never match. *)
+Definition matches_fn_def:
+  matches_fn name vis (FunctionDecl fv _ _ _ id _ _ _ _) = (id = name ∧ vis = fv) ∧
+  matches_fn name vis _ = F
+End
+
+(* TOP-LEVEL: lookup_raw_return
+   The @raw_return flag of the first FunctionDecl matching (name, vis), and NONE
+   when ts declares no such function.  Same selection order as lookup_function's
+   FunctionDecl case, so both lookups reach the same declaration first; see
+   lookup_raw_return_of_first. *)
+Definition lookup_raw_return_def:
+  lookup_raw_return src_id_opt name vis [] = NONE ∧
+  lookup_raw_return src_id_opt name vis
+    (FunctionDecl fv fm nr rr id args dflts ret body :: ts) =
+  (if id = name ∧ vis = fv then SOME rr
+   else lookup_raw_return src_id_opt name vis ts) ∧
+  lookup_raw_return src_id_opt name vis (_ :: ts) =
+    lookup_raw_return src_id_opt name vis ts
+End
+
+val () = cv_auto_trans lookup_raw_return_def;
+
+(* TOP-LEVEL: lookup_raw_return_or_F
+   lookup_raw_return with "no such function" folded into F. *)
+Definition lookup_raw_return_or_F_def:
+  lookup_raw_return_or_F src_id_opt name vis ts =
+    case lookup_raw_return src_id_opt name vis ts of
+      SOME rr => rr
+    | NONE => F
+End
+
+val () = cv_auto_trans lookup_raw_return_or_F_def;
+
+Theorem lookup_raw_return_head:
+  lookup_raw_return src name vis
+    (FunctionDecl fv fm nr rr id args dflts ret body :: ts) =
+  (if id = name ∧ vis = fv then SOME rr
+   else lookup_raw_return src name vis ts)
+Proof
+  simp[lookup_raw_return_def]
+QED
+
+(* KEY LEMMA: the reported flag comes from a declaration of that name and
+   visibility, so a positive answer is justified. *)
+Theorem lookup_raw_return_MEM:
+  ∀src name vis ts rr.
+    lookup_raw_return src name vis ts = SOME rr ==>
+    ∃fv fm nr id args dflts ret body.
+      MEM (FunctionDecl fv fm nr rr id args dflts ret body) ts ∧
+      id = name ∧ vis = fv
+Proof
+  Induct_on `ts` >> TRY (Cases_on `h`) >> TRY (Cases_on `h`)
+  >> rw[lookup_raw_return_def, AllCaseEqs()] >> metis_tac[]
+QED
+
+(* KEY LEMMA: the reported flag is the flag of the *first* matching
+   declaration; entries before it never contribute. *)
+Theorem lookup_raw_return_of_first:
+  ∀src name vis fv fm nr rr id args dflts ret body rest pre.
+    id = name ∧ vis = fv ∧
+    (∀tl. MEM tl pre ⇒ ¬matches_fn name vis tl) ==>
+    lookup_raw_return src name vis
+      (pre ++ (FunctionDecl fv fm nr rr id args dflts ret body :: rest)) = SOME rr
+Proof
+  Induct_on `pre` >> rw[]
+  \\ TRY (Cases_on `h`) >> TRY (Cases_on `h`)
+  \\ fs[lookup_raw_return_def, matches_fn_def]
+  \\ metis_tac[matches_fn_def]
+QED
+
+(* KEY LEMMA: with lookup_raw_return_MEM, this pins lookup_raw_return to the
+   @raw_return flag of the first FunctionDecl of that name and visibility.  A
+   generated getter never matches (matches_fn), and Vyper forbids a getter or a
+   second function reusing a contract-level name. *)
+Theorem lookup_raw_return_or_F_of_first:
+  ∀src name vis fv fm nr rr id args dflts ret body rest pre.
+    id = name ∧ vis = fv ∧
+    (∀tl. MEM tl pre ⇒ ¬matches_fn name vis tl) ==>
+    lookup_raw_return_or_F src name vis
+      (pre ++ (FunctionDecl fv fm nr rr id args dflts ret body :: rest)) = rr
+Proof
+  rw[lookup_raw_return_of_first, lookup_raw_return_or_F_def]
+QED
+
 Definition bind_arguments_def:
   bind_arguments tenv ([]: argument list) [] = SOME (FEMPTY: scope) ∧
   bind_arguments tenv ((id, typ)::params) (v::vs) =
@@ -1740,6 +1829,34 @@ Definition find_function_module_def:
         ALOOKUP export_map func_name  (* Returns SOME src_id if exported *)
 End
 
+(* TOP-LEVEL: call_external_raw_return
+   The @raw_return flag of the function call_external runs for tx, else F.
+   Resolves the module as call_external does - same find_function_module, same
+   get_module_code - so the flag describes the executed declaration.  A missing
+   declaration (the implicit default entry) reports F. *)
+Definition call_external_raw_return_def:
+  call_external_raw_return am tx =
+  let src_id_opt = find_function_module am tx.target tx.function_name in
+  let cx = initial_evaluation_context am.sources am.layouts tx src_id_opt in
+  case get_module_code cx src_id_opt of
+    NONE => F
+  | SOME ts => lookup_raw_return_or_F src_id_opt tx.function_name External ts
+End
+
+val () = cv_auto_trans call_external_raw_return_def;
+
+(* KEY LEMMA: the flag is resolved from the same module code the call runs. *)
+Theorem call_external_raw_return_module_code:
+  ∀am tx ts rr src_id_opt.
+    find_function_module am tx.target tx.function_name = src_id_opt ∧
+    get_module_code (initial_evaluation_context am.sources am.layouts tx src_id_opt)
+      src_id_opt = SOME ts ∧
+    lookup_raw_return src_id_opt tx.function_name External ts = SOME rr ==>
+    call_external_raw_return am tx = rr
+Proof
+  rw[call_external_raw_return_def, lookup_raw_return_or_F_def] >> metis_tac[]
+QED
+
 Definition call_external_def:
   call_external am tx =
   (* Determine which module to use for type environment *)
@@ -1759,6 +1876,21 @@ Definition call_external_def:
    | SOME (mut, nr, args, dflts, ret, body) =>
        call_external_function am cx nr mut ts all_mods args dflts tx.args body ret
 End
+
+(* KEY LEMMA (typing): a safe_cast value of a bytestring type always has raw
+   bytes, so external_returndata's error branch is unreachable for a well-typed
+   @raw_return return value. *)
+Theorem safe_cast_bytestring_raw_return_bytes:
+  ∀tv v v'.
+    is_bytestring_tv tv ∧ safe_cast tv v = SOME v' ⇒
+    ∃bs. raw_return_bytes v' = SOME bs
+Proof
+  Cases_on `tv` >> fs[is_bytestring_tv_def, safe_cast_def]
+  >> TRY (Cases_on `b`) >> TRY (Cases_on `b'`)
+  >> fs[is_bytestring_tv_def, safe_cast_def]
+  >> TRY (Cases_on `v`) >> TRY (Cases_on `v'`)
+  >> fs[raw_return_bytes_def] >> metis_tac[]
+QED
 
 (* Explicit transaction boundary. Ordinary function entry preserves accumulated
    logs so that nested and sequential calls can share one transaction trace;
