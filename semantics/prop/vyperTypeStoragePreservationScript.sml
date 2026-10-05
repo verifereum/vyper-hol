@@ -429,12 +429,8 @@ Theorem array_ref_dynamic_pop_final_endpoint_preserves_contract_storage_well_for
   w2n (read_slot (get_storage cx st b) (w2n slot)) = len /\
   0 < len /\
   0 < type_slot_size elem_tv /\
-  value_has_type elem_tv v /\
-  write_storage_slot cx b
-    (n2w (w2n slot + 1 + (len - 1) * type_slot_size elem_tv))
-    elem_tv v st = (INL (),st1) /\
   write_storage_slot cx b slot (BaseTV (UintT 256))
-    (IntV (&(len - 1))) st1 = (INL (),st2) ==>
+    (IntV (&(len - 1))) st = (INL (),st2) ==>
   contract_storage_well_formed cx st2
 Proof
   rpt strip_tac >>
@@ -463,19 +459,12 @@ Proof
     (irule vyperStorageReadSoundnessTheory.resolve_array_element_current_region >>
      qexistsl [`root_slot`, `[]`, `st`, `subs`, `get_tenv cx`,
                 `ArrayTV root_elem_tv root_bd`, `typ`] >> simp[]) >>
-  `well_formed_type_value elem_tv` by
-    gvs[vyperTypingTheory.well_formed_type_value_def] >>
-  `w2n slot + 1 + (len - 1) * type_slot_size elem_tv =
-   w2n slot + (type_slot_size elem_tv * (len - 1) + 1)` by
-    (once_rewrite_tac [arithmeticTheory.MULT_COMM] >> decide_tac) >>
   gvs[runtime_storage_consistent_def] >>
-  irule vyperStorageWritePreservationTheory.resolve_array_element_dynamic_pop_final_write_preserves_contract_storage_well_formed >>
-  conj_tac >- simp[] >>
-  qexistsl [`b`, `elem_tv`,
-             `w2n (read_slot (get_storage cx st b) (w2n slot))`, `max`,
-             `src`, `id`, `root_slot`, `slot`, `st`, `st1`, `st`, `subs`,
-             `get_tenv cx`, `ArrayTV root_elem_tv root_bd`, `typ`, `v`] >>
-  simp[]
+  irule vyperStorageWritePreservationTheory.resolve_array_element_dynamic_pop_header_write_preserves_contract_storage_well_formed >>
+  simp[] >>
+  qexistsl [`b`, `elem_tv`, `id`, `max`, `src`, `root_slot`,
+             `slot`, `st`, `subs`, `get_tenv cx`,
+             `ArrayTV root_elem_tv root_bd`, `typ`] >> simp[]
 QED
 Theorem assignable_context_ArrayRef_metadata:
   assign_target_assignable_context cx
@@ -625,16 +614,6 @@ Proof
   rpt strip_tac >>
   `0 < type_slot_size elem_tv` by
     metis_tac[vyperStorageWritePreservationTheory.evaluate_type_ArrayTV_inv] >>
-  `well_formed_type_value elem_tv` by
-    (drule vyperStorageWritePreservationTheory.evaluate_type_ArrayTV_inv >>
-     strip_tac >>
-     metis_tac[vyperTypeValuesTheory.evaluate_type_well_formed_type_value]) >>
-  `?elem_ty. evaluate_type env.type_defs elem_ty = SOME elem_tv` by
-    metis_tac[vyperStorageWritePreservationTheory.evaluate_type_ArrayTV_inv] >>
-  `value_has_type elem_tv (default_value elem_tv)` by
-    metis_tac[vyperTypeDefaultsTheory.default_value_has_type_thm] >>
-  `IS_SOME (encode_value elem_tv (default_value elem_tv))` by
-    metis_tac[vyperTypingTheory.value_has_type_equiv] >>
   `IS_SOME (encode_value (BaseTV (UintT 256))
       (IntV (&(w2n (lookup_storage slot (get_storage cx st b)) - 1))))` by
     simp[vyperStorageTheory.encode_value_def,
@@ -650,45 +629,16 @@ Proof
   imp_res_tac vyperStatePreservationTheory.read_storage_slot_state >> gvs[] >>
   gvs[vyperStorageTheory.read_slot_def] >>
   FIRST
-    [qpat_x_assum `encode_value elem_tv (default_value elem_tv) = NONE` mp_tac >>
-       gvs[vyperTypingTheory.value_has_type_equiv],
-     (qpat_x_assum `write_storage_slot cx b _ elem_tv (default_value elem_tv) _ = (INR _,_)` mp_tac >>
-      simp[vyperStorageBackendTheory.write_storage_slot_eq, AllCaseEqs()] >>
-      strip_tac >> gvs[]),
-     (qpat_x_assum `write_storage_slot cx b slot (BaseTV (UintT 256)) _ _ = (INR _,_)` mp_tac >>
-      simp[vyperStorageBackendTheory.write_storage_slot_eq, AllCaseEqs()] >>
-      strip_tac >> gvs[]),
-     (`slot + n2w (type_slot_size elem_tv *
-          (w2n (lookup_storage slot (get_storage cx s'' b)) - 1) + 1) =
-        n2w (w2n slot +
-          (type_slot_size elem_tv *
-           (w2n (lookup_storage slot (get_storage cx s'' b)) - 1) + 1))` by
-        rewrite_tac[GSYM wordsTheory.word_add_n2w,
-                    wordsTheory.n2w_w2n] >>
-      `w2n slot +
-          (type_slot_size elem_tv *
-           (w2n (lookup_storage slot (get_storage cx s'' b)) - 1) + 1) =
-        w2n slot + 1 +
-          (w2n (lookup_storage slot (get_storage cx s'' b)) - 1) *
-          type_slot_size elem_tv` by
-        (once_rewrite_tac[arithmeticTheory.MULT_COMM] >> decide_tac) >>
-      `write_storage_slot cx b
-          (n2w (w2n slot + 1 +
-             (w2n (lookup_storage slot (get_storage cx s'' b)) - 1) *
-             type_slot_size elem_tv)) elem_tv (default_value elem_tv) s'' =
-          (INL (),s'³')` by metis_tac[] >>
-      `w2n (read_slot (get_storage cx s'' b) (w2n slot)) =
-       w2n (lookup_storage slot (get_storage cx s'' b))` by
-        simp[vyperStorageTheory.read_slot_def] >>
-      `runtime_storage_consistent env cx s''` by
-        simp[runtime_storage_consistent_def] >>
+    [(qpat_x_assum `write_storage_slot _ _ _ _ _ _ = (INL (),_)` assume_tac >>
+      rename1 `runtime_storage_consistent env cx pop_st` >>
       irule array_ref_dynamic_pop_final_endpoint_preserves_contract_storage_well_formed >>
       qexistsl [`b`, `code`, `decl_id`, `elem_tv`, `env`, `id`,
-                `w2n (lookup_storage slot (get_storage cx s'' b))`, `max`,
-                `root_bd`, `root_elem_tv`, `root_slot`, `slot`, `src`, `s''`,
-                `s'³'`, `REVERSE sbs`, `typ`, `default_value elem_tv`] >>
+                `w2n (lookup_storage slot (get_storage cx pop_st b))`, `max`,
+                `root_bd`, `root_elem_tv`, `root_slot`, `slot`, `src`, `pop_st`,
+                `REVERSE sbs`, `typ`] >>
       simp[vyperStorageTheory.read_slot_def]),
-     gvs[runtime_storage_consistent_def]]
+     gvs[runtime_storage_consistent_def,
+         vyperStorageBackendTheory.write_storage_slot_eq, AllCaseEqs()]]
 QED
 
 

@@ -938,7 +938,6 @@ Definition assign_target_def:
             last_idx <<- stored_len - 1;
             last_slot <<- elem_slot + n2w (1 + last_idx * type_slot_size pop_elem_tv);
             popped <- read_storage_slot cx is_transient last_slot pop_elem_tv;
-            write_storage_slot cx is_transient last_slot pop_elem_tv (default_value pop_elem_tv);
             write_storage_slot cx is_transient elem_slot (BaseTV (UintT 256))
               (IntV &last_idx);
             return $ SOME popped

@@ -588,8 +588,6 @@ Theorem array_pop_tail_logs[local]:
       last_idx <<- stored_len - 1;
       last_slot <<- elem_slot + n2w (1 + last_idx * type_slot_size pop_elem_tv);
       popped <- read_storage_slot cx is_transient last_slot pop_elem_tv;
-      write_storage_slot cx is_transient last_slot pop_elem_tv
-        (default_value pop_elem_tv);
       write_storage_slot cx is_transient elem_slot (BaseTV (UintT 256))
         (IntV &last_idx);
       return (SOME popped)
@@ -635,8 +633,6 @@ Theorem arrayref_assignment_suffix_logs[local]:
           last_idx <<- stored_len - 1;
           last_slot <<- elem_slot + n2w (1 + last_idx * type_slot_size pop_elem_tv);
           popped <- read_storage_slot cx is_transient last_slot pop_elem_tv;
-          write_storage_slot cx is_transient last_slot pop_elem_tv
-            (default_value pop_elem_tv);
           write_storage_slot cx is_transient elem_slot (BaseTV (UintT 256))
             (IntV &last_idx);
           return (SOME popped)
@@ -741,10 +737,6 @@ Theorem arrayref_assignment_normal_logs[local]:
                  (elem_slot + n2w (type_slot_size pop_elem_tv *
                                     (w2n (lookup_storage elem_slot storage) - 1) + 1))
                  pop_elem_tv;
-               write_storage_slot cx is_transient
-                 (elem_slot + n2w (type_slot_size pop_elem_tv *
-                                    (w2n (lookup_storage elem_slot storage) - 1) + 1))
-                 pop_elem_tv (default_value pop_elem_tv);
                write_storage_slot cx is_transient elem_slot (BaseTV (UintT 256))
                  (IntV (&(w2n (lookup_storage elem_slot storage) - 1)));
                return (SOME popped)
