@@ -42,6 +42,20 @@ Proof
   simp[]
 QED
 
+Theorem vsr_R_ok_frame:
+  valid_state_rel R_ok R_term /\ R_ok s1 s2 ==>
+  vsr_frame s1 = vsr_frame s2
+Proof
+  rw[valid_state_rel_def, Excl "vsr_complete_mask_equality"]
+QED
+
+Theorem vsr_R_term_frame:
+  valid_state_rel R_ok R_term /\ R_term s1 s2 ==>
+  vsr_term_frame s1 = vsr_term_frame s2
+Proof
+  rw[valid_state_rel_def, Excl "vsr_complete_mask_equality"]
+QED
+
 Theorem vsr_R_ok_fields:
   !R_ok R_term s1 s2. valid_state_rel R_ok R_term /\ R_ok s1 s2 ==>
     s1.vs_call_ctx = s2.vs_call_ctx /\
@@ -69,7 +83,8 @@ Theorem vsr_R_ok_fields:
     s1.vs_allocas = s2.vs_allocas /\
     s1.vs_alloca_next = s2.vs_alloca_next
 Proof
-  rw[valid_state_rel_def]
+  rpt strip_tac >> drule_all vsr_R_ok_frame >>
+  simp[vsr_frame_def, venom_state_component_equality]
 QED
 
 Theorem vsr_R_term_fields:
@@ -96,7 +111,8 @@ Theorem vsr_R_term_fields:
     s1.vs_allocas = s2.vs_allocas /\
     s1.vs_alloca_next = s2.vs_alloca_next
 Proof
-  rpt strip_tac >> fs[valid_state_rel_def]
+  rpt strip_tac >> drule_all vsr_R_term_frame >>
+  simp[vsr_term_frame_def, venom_state_component_equality]
 QED
 
 Theorem vsr_R_ok_R_term:
@@ -129,19 +145,19 @@ QED
 Theorem vsr_R_ok_halted:
   !R_ok R_term s1 s2. valid_state_rel R_ok R_term /\ R_ok s1 s2 ==> s1.vs_halted = s2.vs_halted
 Proof
-  rw[valid_state_rel_def]
+  rpt strip_tac >> drule_all vsr_R_ok_fields >> simp[]
 QED
 
 Theorem vsr_R_ok_current_bb:
   !R_ok R_term s1 s2. valid_state_rel R_ok R_term /\ R_ok s1 s2 ==> s1.vs_current_bb = s2.vs_current_bb
 Proof
-  rw[valid_state_rel_def]
+  rpt strip_tac >> drule_all vsr_R_ok_fields >> simp[]
 QED
 
 Theorem vsr_R_ok_prev_bb:
   !R_ok R_term s1 s2. valid_state_rel R_ok R_term /\ R_ok s1 s2 ==> s1.vs_prev_bb = s2.vs_prev_bb
 Proof
-  rw[valid_state_rel_def]
+  rpt strip_tac >> drule_all vsr_R_ok_fields >> simp[]
 QED
 
 Theorem vsr_R_term_refl:
@@ -288,7 +304,7 @@ Theorem vsr_jump_to:
     valid_state_rel R_ok R_term /\ R_ok s1 s2 ==>
     R_ok (jump_to lbl s1) (jump_to lbl s2)
 Proof
-  rpt strip_tac >> simp[jump_to_def] >>
+  rpt strip_tac >> imp_res_tac vsr_R_ok_fields >> simp[jump_to_def] >>
   vsr_reconstruct_R_ok_tac `s1` `s2`
 QED
 
@@ -599,8 +615,8 @@ Theorem vsr_setup_callee_eq:
     valid_state_rel R_ok R_term /\ R_ok s1 s2 ==>
     setup_callee fn args s1 = setup_callee fn args s2
 Proof
-  rw[setup_callee_def] >> imp_res_tac vsr_R_ok_fields >>
-  gvs[venom_state_component_equality]
+  rpt strip_tac >> irule vsr_frame_setup_callee >>
+  drule_all vsr_R_ok_frame >> simp[]
 QED
 
 Theorem vsr_merge_callee_R_ok:

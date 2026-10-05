@@ -417,6 +417,7 @@ Theorem state_equiv_execution_equiv_valid_state_rel_proof:
 Proof
   rw[valid_state_rel_def] >>
   fs[state_equiv_def, execution_equiv_def,
+     vsr_frame_def, vsr_term_frame_def, venom_state_component_equality,
      update_var_def, lookup_var_def] >>
   rpt strip_tac >>
   simp[FLOOKUP_UPDATE, eval_operand_def, lookup_var_def] >>
@@ -432,6 +433,7 @@ Theorem valid_state_rel_mixed_proof:
 Proof
   rw[valid_state_rel_def] >>
   fs[state_equiv_def, execution_equiv_def,
+     vsr_frame_def, vsr_term_frame_def, venom_state_component_equality,
      update_var_def, lookup_var_def, SUBSET_DEF] >>
   rpt strip_tac >>
   simp[FLOOKUP_UPDATE, eval_operand_def, lookup_var_def] >>
