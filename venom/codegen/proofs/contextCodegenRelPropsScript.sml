@@ -4,6 +4,61 @@ Theory contextCodegenRelProps
 Ancestors
   contextCodegenRel planSpillBounds codegenRel
 
+(* ===== Visited-instruction invariant interface ===== *)
+
+Theorem fn_entry_inv_active:
+  fn_entry_inv Inv ctx fn s /\ enters_block fn s s1 /\
+  active_inst fn inst s1 ==> Inv ctx fn inst s1
+Proof
+  simp[fn_entry_inv_def] >> metis_tac[]
+QED
+
+Theorem reachability_closed_next:
+  reachability_closed Inv ctx /\ Inv ctx fn inst s /\
+  active_inst fn inst s /\ ~is_terminator inst.inst_opcode /\
+  step_inst fuel ctx inst s = OK s' /\
+  active_inst fn inst' (s' with vs_inst_idx := SUC s.vs_inst_idx) ==>
+  Inv ctx fn inst' (s' with vs_inst_idx := SUC s.vs_inst_idx)
+Proof
+  simp[reachability_closed_def] >> metis_tac[]
+QED
+
+Theorem reachability_closed_block:
+  reachability_closed Inv ctx /\ Inv ctx fn inst s /\
+  active_inst fn inst s /\ is_terminator inst.inst_opcode /\
+  step_inst fuel ctx inst s = OK s' /\ ~s'.vs_halted /\
+  enters_block fn s' s1 /\ active_inst fn inst' s1 ==>
+  Inv ctx fn inst' s1
+Proof
+  simp[reachability_closed_def] >> metis_tac[]
+QED
+
+Theorem reachability_closed_callee:
+  reachability_closed Inv ctx /\ Inv ctx caller invoke s /\
+  active_inst caller invoke s /\ invoke.inst_opcode = INVOKE /\
+  decode_invoke invoke = SOME (nm,ops) /\
+  lookup_function nm ctx.ctx_functions = SOME callee /\
+  eval_operands ops s = SOME args /\ setup_callee callee args s = SOME cs ==>
+  fn_entry_inv Inv ctx callee cs
+Proof
+  simp[reachability_closed_def] >> metis_tac[]
+QED
+
+Theorem codegen_reachability_package_entry:
+  codegen_reachability_package Inv ctx vs ==>
+  reachability_closed Inv ctx /\
+  ?name fn lbl.
+    ctx.ctx_entry = SOME name /\
+    lookup_function name ctx.ctx_functions = SOME fn /\
+    fn_entry_label fn = SOME lbl /\
+    fn_entry_inv Inv ctx fn
+      (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |> )
+Proof
+  simp[codegen_reachability_package_def]
+QED
+
+(* ===== Context spill boundaries ===== *)
+
 Theorem context_spill_byte_of_region:
   MEM r cp.cp_regions /\
   r.sr_spill_base <= i /\ i < r.sr_spill_end ==>
