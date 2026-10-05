@@ -248,17 +248,25 @@ Proof
   rpt CASE_TAC >> gvs[]
 QED
 
+val () = evalCompilerBytecodeLib.add_staged_compile_eval
+  ([scalar_decimal_min_runtime_compile_def,
+    scalar_decimal_min_runtime_pipeline_eval,
+    optionTheory.option_case_compute,
+    optionTheory.IS_SOME_DEF, optionTheory.THE_DEF,
+    pairTheory.pair_case_thm, LET_THM, COND_CLAUSES,
+    REFL_CLAUSE, NOT_CLAUSES,
+    scalar_decimal_min_unit_eval,
+    scalar_decimal_min_out_final_assembly_eval,
+    scalar_decimal_min_rpolicy_final_assembly_eval] @ scalar_decimal_min_runtime_accessors)
+  [codegenTheory.finalize_codegen_identity, scalar_decimal_min_codegen_assembly_eval]
+  [scalar_decimal_min_compile_staged]
+  ``scalar_decimal_min_runtime_compile scalar_decimal_min_program``
+  ``compile_vyper (K SOME) (o1_policy all_capabilities) scalar_decimal_min_program``
+
 Theorem scalar_decimal_min_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_decimal_min_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "scalar_decimal_min.hex")
 Proof
-  PURE_REWRITE_TAC [scalar_decimal_min_compile_staged] >>
-  PURE_REWRITE_TAC [scalar_decimal_min_runtime_matches_python_oracle] >>
-  simp_tac pure_ss
-    [optionTheory.option_case_compute,
-     optionTheory.IS_SOME_DEF, optionTheory.THE_DEF,
-     optionTheory.OPTION_MAP_DEF, LET_THM, COND_CLAUSES,
-     scalar_decimal_min_deploy_matches_python_oracle] >>
   EVAL_TAC
 QED
