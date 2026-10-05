@@ -239,8 +239,8 @@ Proof
   rpt (BasicProvers.FULL_CASE_TAC >> fs[]) >> gvs compile_defs >>
   TRY (gvs[emitted_insts_def, run_inst_seq_def, SF SFY_ss] >> NO_TAC) >>
   emitted_insts_tac >>
-  (* The original twelve weak_spec_step_tac stages ran on all four paths.
-     Move those same stages into each existing Resume to bound each leaf. *)
+  (* Split before the shared prefix as in TASK_003, so every original
+     instruction stage is timed independently in its path Resume. *)
   ALL_TAC >| [suspend "path0", suspend "path1",
               suspend "path2", suspend "path3"]
 QED
@@ -254,6 +254,12 @@ Resume compile_type_convert_14[path0]:
   weak_spec_step_tac >> weak_spec_step_tac >>
   weak_spec_step_tac >> weak_spec_step_tac >>
   weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >>
   weak_spec_step_tac >> weak_spec_step_tac >>
   weak_spec_step_tac >> weak_spec_step_tac >>
   weak_spec_step_tac >> weak_spec_step_tac >>
@@ -281,6 +287,12 @@ Resume compile_type_convert_14[path1]:
   weak_spec_step_tac >> weak_spec_step_tac >>
   weak_spec_step_tac >> weak_spec_step_tac >>
   weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
   weak_spec_step_tac >> weak_spec_step_tac >>
   weak_spec_step_tac >> weak_spec_step_tac >>
   weak_spec_step_tac >> weak_spec_step_tac >>
@@ -303,6 +315,12 @@ Resume compile_type_convert_14[path2]:
   weak_spec_step_tac >> weak_spec_step_tac >>
   weak_spec_step_tac >> weak_spec_step_tac >>
   weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
   weak_spec_step_tac >> weak_spec_step_tac >>
   weak_spec_step_tac >> weak_spec_step_tac >>
   weak_spec_step_tac >> weak_spec_step_tac >>
@@ -320,6 +338,12 @@ Resume compile_type_convert_14[path3]:
   weak_spec_step_tac >> weak_spec_step_tac >>
   weak_spec_step_tac >> weak_spec_step_tac >>
   weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >>
   weak_spec_step_tac >> weak_spec_step_tac >>
   weak_spec_step_tac >> weak_spec_step_tac >>
   weak_spec_step_tac >> weak_spec_step_tac >>

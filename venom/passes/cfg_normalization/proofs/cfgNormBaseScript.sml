@@ -2055,12 +2055,12 @@ Proof
   Cases_on `eval_operands x1 s` >> simp[] >>
   simp[setup_callee_def] >>
   Cases_on `NULL x.fn_blocks` >> simp[] >>
-  Cases_on `NULL x'` >> simp[] >>
   qabbrev_tac `callee_s = s with <|vs_vars := FEMPTY; vs_prev_bb := NONE;
     vs_current_bb := (HD x.fn_blocks).bb_label;
     vs_inst_idx := 0; vs_halted := F; vs_params := x';
     vs_fmp := s.vs_fmp; vs_call_entry_fmp := s.vs_fmp;
-    vs_return_pc_token := LAST x'; vs_allocas := FEMPTY|>` >>
+    vs_return_pc_token := if NULL x' then 0w else LAST x';
+    vs_allocas := FEMPTY|>` >>
   Cases_on `run_blocks fuel ctx x callee_s` >> simp[] >>
   simp[merge_callee_state_def, bind_outputs_def] >>
   Cases_on `LENGTH inst.inst_outputs = LENGTH i.iret_values` >> simp[] >>
@@ -2075,7 +2075,8 @@ Proof
     vs_current_bb := (HD x.fn_blocks).bb_label;
     vs_inst_idx := 0; vs_halted := F; vs_params := x';
     vs_fmp := s.vs_fmp; vs_call_entry_fmp := s.vs_fmp;
-    vs_return_pc_token := LAST x'; vs_allocas := FEMPTY|> = callee_s` by
+    vs_return_pc_token := if NULL x' then 0w else LAST x';
+    vs_allocas := FEMPTY|> = callee_s` by
     (qunabbrev_tac `callee_s` >> simp[]) >>
   simp[merge_callee_state_def, bind_outputs_def] >>
   gvs[] >>
@@ -2719,13 +2720,13 @@ Proof
   Cases_on `eval_operands x1 s` >> simp[] >>
   simp[setup_callee_def] >>
   Cases_on `NULL x.fn_blocks` >> simp[] >>
-  Cases_on `NULL x'` >> simp[] >>
   Cases_on `run_blocks fuel ctx x
     (s with <|vs_vars := FEMPTY; vs_prev_bb := NONE;
       vs_current_bb := (HD x.fn_blocks).bb_label;
       vs_inst_idx := 0; vs_halted := F; vs_params := x';
       vs_fmp := s.vs_fmp; vs_call_entry_fmp := s.vs_fmp;
-      vs_return_pc_token := LAST x'; vs_allocas := FEMPTY|>)` >>
+      vs_return_pc_token := if NULL x' then 0w else LAST x';
+      vs_allocas := FEMPTY|>)` >>
   simp[merge_callee_state_def, bind_outputs_def] >>
   Cases_on `LENGTH inst.inst_outputs = LENGTH i.iret_values` >> simp[] >>
   (`s with <|vs_memory := v.vs_memory; vs_transient := v.vs_transient;

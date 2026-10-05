@@ -39,7 +39,7 @@ Ancestors
   allocaRemapDefs pointerConfinedDefs memLocDefs
   venomExecSemantics venomEffects venomWf venomMemDefs
   venomInst venomState venomInstProps passSharedTransfer
-  allocaRemapSSA stateEquiv passSharedField opcodeClass
+  allocaRemapSSA stateEquiv passSharedField passSharedFrame opcodeClass
   list rich_list byte arithmetic finite_map alist words pred_set
 
 (* Make is_immutable_op reduce automatically in simp/gvs/fs *)
@@ -4055,6 +4055,11 @@ Proof
   rpt strip_tac >>
   (* Step 1: Identify the 3 opcodes that can produce Abort *)
   `inst.inst_opcode = ASSERT \/ inst.inst_opcode = ASSERT_UNREACHABLE \/
+   inst.inst_opcode = RETURNDATACOPY` by
+    (drule_all step_inst_base_abort_opcode >> simp[]) >>
+  (* Original exhaustive classification proof (the flat 101-goal simp
+     exceeded the 10s tactic budget); reuse the existing classification.
+  `inst.inst_opcode = ASSERT \/ inst.inst_opcode = ASSERT_UNREACHABLE \/
    inst.inst_opcode = RETURNDATACOPY` by (
     pop_assum mp_tac >>
     qpat_x_assum `~is_ext_call_op _` mp_tac >>
@@ -4072,6 +4077,7 @@ Proof
          exec_alloca_def, eval_operands_def] >>
     rpt strip_tac >> gvs[AllCaseEqs()] >>
     rpt (BasicProvers.FULL_CASE_TAC >> gvs[])) >>
+  *)
   (* 3 goals: ASSERT, ASSERT_UNREACHABLE, RETURNDATACOPY *)
   gvs[]
   >- suspend "assert_case"

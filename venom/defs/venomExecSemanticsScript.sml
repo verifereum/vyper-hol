@@ -1261,11 +1261,12 @@ Definition merge_callee_state_def:
 End
 
 (* Prepare callee state: fresh frame rooted at the caller's current FMP.
-   The final evaluated argument is the logical return-PC token; the complete
-   argument vector is retained for indexed PARAM/FMP_PARAM semantics. *)
+   The final evaluated argument is the logical return-PC token (0w when there
+   are no arguments); the complete argument vector is retained for indexed
+   PARAM/FMP_PARAM semantics. *)
 Definition setup_callee_def:
   setup_callee fn args s =
-    if NULL fn.fn_blocks \/ NULL args then NONE
+    if NULL fn.fn_blocks then NONE
     else SOME (s with <|
       vs_vars            := FEMPTY;
       vs_params          := args;
@@ -1276,7 +1277,7 @@ Definition setup_callee_def:
       vs_allocas         := FEMPTY;
       vs_fmp             := s.vs_fmp;
       vs_call_entry_fmp  := s.vs_fmp;
-      vs_return_pc_token := LAST args
+      vs_return_pc_token := if NULL args then 0w else LAST args
     |>)
 End
 
@@ -1318,7 +1319,7 @@ Theorem setup_callee_frame:
   setup_callee fn args caller = SOME callee ==>
   callee.vs_fmp = caller.vs_fmp /\
   callee.vs_call_entry_fmp = caller.vs_fmp /\
-  callee.vs_return_pc_token = LAST args /\
+  callee.vs_return_pc_token = (if NULL args then 0w else LAST args) /\
   callee.vs_params = args
 Proof
   rw[setup_callee_def] >> gvs[]

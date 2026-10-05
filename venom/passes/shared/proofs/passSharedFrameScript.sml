@@ -473,7 +473,7 @@ QED
 (* Non-terminator non-INVOKE step_inst_base can only Abort from
    ASSERT (Revert_abort), ASSERT_UNREACHABLE (ExHalt_abort),
    RETURNDATACOPY (ExHalt_abort). All set returndata to []. *)
-Theorem step_inst_base_abort_opcode[local]:
+Theorem step_inst_base_abort_opcode:
   !inst s a s'.
     step_inst_base inst s = Abort a s' /\
     ~is_terminator inst.inst_opcode ==>
