@@ -31,7 +31,7 @@ Theorem execution_equiv_UNIV:
     ssa_execution_frame s1 = ssa_execution_frame s2
 Proof
   simp[execution_equiv_def, IN_UNIV, ssa_execution_frame_def,
-       venom_state_component_equality] >> metis_tac[]
+       stateFrameTheory.execution_frame_def]
 QED
 
 Theorem result_equiv_UNIV_refl:

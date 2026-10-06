@@ -185,11 +185,7 @@ QED
 Theorem state_equiv_empty_eq[local]:
   !s1 s2. state_equiv {} s1 s2 ==> (s1 = s2)
 Proof
-  rw[state_equiv_def, execution_equiv_def,
-     venom_state_component_equality] >>
-  `FLOOKUP s1.vs_vars = FLOOKUP s2.vs_vars` by
-    (simp[FUN_EQ_THM] >> fs[lookup_var_def]) >>
-  fs[finite_mapTheory.FLOOKUP_EXT]
+  ACCEPT_TAC stateEquivPropsTheory.state_equiv_empty_eq
 QED
 
 (* Helper: phi_single_origin always gives an origin with singleton output *)

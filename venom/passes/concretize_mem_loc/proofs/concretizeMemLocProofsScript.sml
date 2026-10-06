@@ -781,9 +781,7 @@ val lookup_block_map_proof = lookup_block_map;
 Triviality state_equiv_empty_eq:
   !s2 s3. state_equiv {} s2 s3 ==> s2 = s3
 Proof
-  rw[state_equiv_def, execution_equiv_def, NOT_IN_EMPTY,
-     venom_state_component_equality, lookup_var_def] >>
-  metis_tac[fmap_eq_flookup]
+  ACCEPT_TAC stateEquivPropsTheory.state_equiv_empty_eq
 QED
 
 (* execution_equiv {} preserves concretize_rel on the right,

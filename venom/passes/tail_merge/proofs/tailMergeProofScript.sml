@@ -3517,8 +3517,7 @@ Theorem execution_equiv_full_eq[local]:
     s1.vs_prev_bb = s2.vs_prev_bb ==>
     s1 = s2
 Proof
-  rpt strip_tac >>
-  gvs[execution_equiv_def, venom_state_component_equality]
+  metis_tac[execution_equiv_def, stateFrameTheory.execution_frame_eq]
 QED
 
 (* Main OK case dispatcher: halted, NONE, SOME *)

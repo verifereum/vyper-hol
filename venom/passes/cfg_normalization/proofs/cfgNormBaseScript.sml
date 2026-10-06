@@ -498,8 +498,11 @@ Theorem setup_callee_equiv[local]:
     execution_equiv UNIV s1 s2 ==>
     setup_callee fn args s1 = setup_callee fn args s2
 Proof
-  rw[setup_callee_def, execution_equiv_def,
-     venom_state_component_equality]
+  rpt strip_tac >>
+  irule stateFrameTheory.execution_frame_projection >>
+  conj_tac
+  >- simp[setup_callee_def, stateFrameTheory.execution_frame_def] >>
+  fs[Excl "core_complete_mask_equality", execution_equiv_def]
 QED
 
 (* merge_callee_state preserves state_equiv on caller vars *)
