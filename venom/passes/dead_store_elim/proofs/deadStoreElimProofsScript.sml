@@ -42,7 +42,7 @@
 
 Theory deadStoreElimProofs
 Ancestors
-  deadStoreElimDefs passSimulationProps basePtrProps passSharedProps While
+  deadStoreElimFrame deadStoreElimDefs passSimulationProps basePtrProps passSharedProps While
   venomMemProps venomMemProofs memAliasDefs passSharedField cfgAnalysisProps
   stateEquiv stateEquivProps venomState venomInst venomInstProps
   passSimulationDefs passSharedDefs execEquivParamDefs
@@ -51,7 +51,9 @@ Ancestors
   venomExecSemantics allocaRemapDefs pointerConfinedDefs
   venomEffects
 Libs
-  BasicProvers
+  BasicProvers deadStoreElimFrameLib
+
+val _ = augment_srw_ss [deadStoreElimFrameLib.frame_ss];
 
 (* ===== dse_equiv / dse_all_equiv properties ===== *)
 
