@@ -1,6 +1,7 @@
 Theory mem2varBlockSimHelpers
 Ancestors
   mem2varProofs passSharedFrame passSharedTransfer passSharedField instIdxIndep
+  opcodeClass
   venomMemProps venomMemProofs venomExecProofs venomInstProofs
   mem2varDefs
   venomExecSemantics venomState venomWf
@@ -4695,16 +4696,13 @@ Proof
   gvs[AllCaseEqs()]
 QED
 
-val step_base_result_tac =
-  rw[step_inst_base_def] >>
-  gvs[AllCaseEqs(), is_terminator_def];
-
 Theorem step_inst_base_no_halt:
   !inst s s'.
     step_inst_base inst s = Halt s' ==>
     is_terminator inst.inst_opcode
 Proof
-  step_base_result_tac
+  rpt strip_tac >> drule step_inst_base_halt_opcodes >>
+  strip_tac >> gvs[is_terminator_def]
 QED
 
 Theorem step_inst_base_no_intret:
@@ -4712,7 +4710,8 @@ Theorem step_inst_base_no_intret:
     step_inst_base inst s = IntRet vs s' ==>
     is_terminator inst.inst_opcode
 Proof
-  step_base_result_tac
+  rpt strip_tac >> drule step_inst_base_intret_opcodes >>
+  strip_tac >> gvs[is_terminator_def]
 QED
 
 (* Abort: both sides run same non-promoted instruction *)
@@ -4737,7 +4736,11 @@ Theorem step_inst_base_abort_form:
     (s' = halt_state (set_returndata [] s) /\ a = ExHalt_abort) \/
     (s' = revert_state (set_returndata [] s) /\ a = Revert_abort)
 Proof
-  step_base_result_tac
+  rpt strip_tac >> drule step_inst_base_abort_opcodes >> strip_tac >>
+  gvs[is_terminator_def] >>
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  ASM_REWRITE_TAC[opcode_case_def] >> rw[] >> gvs[AllCaseEqs()]
 QED
 
 (* m2v_non32_ok preserved under halt/revert state transform *)
@@ -5007,7 +5010,7 @@ Proof
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
   gvs[]
   >- (strip_tac >> drule step_inst_base_mstore_no_abort >> simp[])
-  >> step_base_result_tac
+  >> strip_tac >> drule step_inst_base_abort_opcodes >> simp[]
 QED
 
 (* Operand agreement for non-fresh operands — extracted common pattern *)

@@ -8202,7 +8202,8 @@ Proof
              metis_tac[dft_block_from_orig])) >>
       `from_block bb.bb_instructions x' /\ from_block bb.bb_instructions y'` by
         (fs[block_body_def, MEM_FILTER, from_block_def] >> metis_tac[]) >>
-      metis_tac[from_block_full_dep])
+      qspecl_then [`bb.bb_instructions`, `build_eda bb.bb_instructions`,
+                   `x`, `y`, `x'`, `y'`] mp_tac from_block_full_dep >> simp[])
   >- (rpt strip_tac >>
       `from_block bb.bb_instructions i` by
         (`MEM i (FILTER (\i. ~is_pseudo i.inst_opcode)
