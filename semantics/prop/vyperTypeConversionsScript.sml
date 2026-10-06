@@ -7,6 +7,7 @@ Ancestors
   list rich_list arithmetic finite_map option pair words byte
   vyperAST vyperValue vyperValueOperation vyperMisc vyperContext
   vyperTyping vyperArith vyperTypeSystem vyperTypeValues vyperTypeDefaults
+  vyperDecimalBounds
 Libs
   wordsLib
 
@@ -145,8 +146,11 @@ Theorem evaluate_convert_well_typed:
 Proof
   ho_match_mp_tac evaluate_convert_ind >>
   rpt strip_tac >>
-  gvs[evaluate_convert_def, AllCaseEqs(), evaluate_type_def,
-      value_has_type_def, bounded_decimal_op_def,
+  gvs[evaluate_convert_def, AllCaseEqs(), evaluate_type_def] >>
+  TRY (`0 < n` by decide_tac >>
+       drule_all decimal_truncate_signed_bound >> strip_tac) >>
+  TRY (drule_all decimal_div_unsigned_bound >> strip_tac) >>
+  gvs[value_has_type_def, bounded_decimal_op_def,
       within_int_bound_def, compatible_bound_def] >>
   gvs[LENGTH_TAKE, listTheory.PAD_RIGHT,
       LENGTH_word_to_bytes, word_to_bytes_be_def] >>

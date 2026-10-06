@@ -656,16 +656,16 @@ Definition evaluate_convert_def:
      else INR (RuntimeError "convert string bytes")) ∧
   evaluate_convert _ (IntV i) (BaseT DecimalT) =
     bounded_decimal_op (i * 10000000000) ∧
-  (* Truncation toward zero, matching EVM SDIV semantics *)
+  (* Check exact scaled bounds BEFORE truncation. Signed division truncates
+     toward zero (EVM SDIV); unsigned division follows the nonnegative check. *)
   evaluate_convert _ (DecimalV i) (BaseT (IntT n)) =
-    (let r = SGN i * (ABS i / 10000000000) in
-     if within_int_bound (Signed n) r
-     then INL $ IntV r
+    (if -&(2 ** (n - 1)) * 10000000000 ≤ i ∧
+        i ≤ (&(2 ** (n - 1)) - 1) * 10000000000
+     then INL $ IntV (SGN i * (ABS i / 10000000000))
      else INR (RuntimeError "convert decimal int")) ∧
   evaluate_convert _ (DecimalV i) (BaseT (UintT n)) =
-    (let r = SGN i * (ABS i / 10000000000) in
-     if 0 ≤ r ∧ within_int_bound (Unsigned n) r
-     then INL $ IntV r
+    (if 0 ≤ i ∧ i ≤ (&(2 ** n) - 1) * 10000000000
+     then INL $ IntV (i / 10000000000)
      else INR (RuntimeError "convert decimal uint")) ∧
   evaluate_convert _ _ _ = INR (TypeError "convert")
 End
