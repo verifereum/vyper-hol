@@ -2,7 +2,7 @@ Theory mem2varBlockSimHelpers
 Ancestors
   mem2varProofs passSharedFrame passSharedTransfer passSharedField instIdxIndep
   venomMemProps venomMemProofs venomExecProofs venomInstProofs
-  mem2varDefs
+  mem2varDefs mem2varFrame
   venomExecSemantics venomState venomWf
   venomInst
   stateEquiv
@@ -14,7 +14,9 @@ Ancestors
   venomEffects venomMemDefs
   finite_map list rich_list pred_set pair
 Libs
-  HolKernel boolLib bossLib BasicProvers dep_rewrite markerLib
+  HolKernel boolLib bossLib BasicProvers dep_rewrite markerLib mem2varFrameLib
+
+val _ = augment_srw_ss [mem2varFrameLib.frame_ss];
 
 (* ================================================================
    FLAT MAP INDEX LEMMAS
@@ -344,27 +346,7 @@ Definition m2v_inv_noix_def:
   m2v_inv_noix fn s1 s2 <=>
     (!v. v NOTIN m2v_fresh_vars fn ==>
          lookup_var v s1 = lookup_var v s2) /\
-    s1.vs_current_bb = s2.vs_current_bb /\
-    s1.vs_prev_bb = s2.vs_prev_bb /\
-    s1.vs_transient = s2.vs_transient /\
-    (s1.vs_halted <=> s2.vs_halted) /\
-    s1.vs_returndata = s2.vs_returndata /\
-    s1.vs_accounts = s2.vs_accounts /\
-    s1.vs_call_ctx = s2.vs_call_ctx /\
-    s1.vs_tx_ctx = s2.vs_tx_ctx /\
-    s1.vs_block_ctx = s2.vs_block_ctx /\
-    s1.vs_logs = s2.vs_logs /\
-    s1.vs_immutables = s2.vs_immutables /\
-    s1.vs_data_section = s2.vs_data_section /\
-    s1.vs_labels = s2.vs_labels /\
-    s1.vs_code = s2.vs_code /\
-    s1.vs_params = s2.vs_params /\
-    s1.vs_fmp = s2.vs_fmp /\
-    s1.vs_initial_fmp = s2.vs_initial_fmp /\
-    s1.vs_return_pc_token = s2.vs_return_pc_token /\
-    s1.vs_prev_hashes = s2.vs_prev_hashes /\
-    s1.vs_allocas = s2.vs_allocas /\
-    s1.vs_alloca_next = s2.vs_alloca_next /\
+    m2v_frame s1 = m2v_frame s2 /\
     allocas_non_overlapping s1 /\
     (!i. ~in_promoted_region fn s1 i ==>
          mem_byte i s1 = mem_byte i s2) /\
@@ -1590,7 +1572,7 @@ Proof
   simp[] >>
   disch_then irule >>
   qpat_x_assum `m2v_inv_noix _ _ _`
-    (strip_assume_tac o REWRITE_RULE [m2v_inv_noix_def]) >> simp[]
+    (strip_assume_tac o REWRITE_RULE [m2v_inv_noix_def]) >> fs[]
 QED
 
 (* Extract functional bridge: given the ALLOCA instruction for ao, get FLOOKUP *)
@@ -3001,8 +2983,11 @@ QED
 (* Shared tactic for all 5 ext_call Resume blocks:
    TRY each exec helper, then discharge NAS range conditions *)
 (* Extract call_ctx equality from m2v_inv_noix *)
-fun m2v_inv_call_ctx th =
-  List.nth (CONJUNCTS (REWRITE_RULE [m2v_inv_noix_def] th), 7);
+Theorem m2v_inv_noix_call_ctx:
+  m2v_inv_noix fn s1 s2 ==> s1.vs_call_ctx = s2.vs_call_ctx
+Proof
+  simp[m2v_inv_noix_def]
+QED
 
 val m2v_ext_call_tac =
   strip_tac >> gvs[] >>
@@ -3011,9 +2996,9 @@ val m2v_ext_call_tac =
          match_mp_tac exec_create_m2v_inv] >>
   (* match_mp_tac unifies st with s2 fields;
      rewrite exec asm using call_ctx equality from m2v_inv_noix *)
-  qpat_assum `m2v_inv_noix _ _ _`
-    (fn th => assume_tac th >>
-              RULE_ASSUM_TAC (REWRITE_RULE [m2v_inv_call_ctx th])) >>
+  drule m2v_inv_noix_call_ctx >> strip_tac >>
+  qpat_assum `s1.vs_call_ctx = s2.vs_call_ctx`
+    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
   simp[] >>
   rpt conj_tac >>
   TRY (CHANGED_TAC (simp[]) >> NO_TAC) >>
@@ -3297,7 +3282,7 @@ Resume m2v_nonterminal_step_dispatch[mstore_unchanged]:
     simp[] >>
     qpat_x_assum `m2v_inv_noix _ _ _`
       (strip_assume_tac o REWRITE_RULE [m2v_inv_noix_def]) >>
-    simp[]) >>
+    fs[]) >>
   simp[] >>
   (* 5. Apply m2v_inv_noix_both_sides_mstore *)
   irule m2v_inv_noix_both_sides_mstore >> simp[] >>
