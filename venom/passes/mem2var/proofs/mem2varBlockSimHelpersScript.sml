@@ -1,5 +1,6 @@
 Theory mem2varBlockSimHelpers
 Ancestors
+  oracleExecProps
   mem2varProofs passSharedFrame passSharedTransfer passSharedField instIdxIndep
   venomMemProps venomMemProofs venomExecProofs venomInstProofs
   mem2varDefs mem2varFrame
@@ -1028,6 +1029,7 @@ Proof
       step_inst_base_preserves_stable_frame_metadata) >> simp[]) >>
   `v1.vs_initial_fmp = v2.vs_initial_fmp /\
    v1.vs_return_pc_token = v2.vs_return_pc_token` by metis_tac[] >>
+  imp_res_tac step_inst_base_oracle >>
   imp_res_tac step_inst_preserves_alloca_state >>
   imp_res_tac step_inst_preserves_all >>
   imp_res_tac no_mem_write_excludes_others >>

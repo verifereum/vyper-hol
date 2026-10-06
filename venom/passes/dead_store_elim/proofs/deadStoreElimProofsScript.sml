@@ -49,7 +49,7 @@ Ancestors
   vfmTypes vfmState byte fcp memLocDefs
   dfIterateDefs finite_map basePtrDefs
   venomExecSemantics allocaRemapDefs pointerConfinedDefs
-  venomEffects
+  venomEffects oracleExecProps
 Libs
   BasicProvers deadStoreElimFrameLib
 
@@ -358,6 +358,7 @@ Proof
   imp_res_tac memory_def_opcode_not_terminator >>
   imp_res_tac is_memory_def_opcode_not_alloca_op >>
   imp_res_tac effects_in_space_not_invoke >>
+  imp_res_tac step_inst_noninvoke_oracle >>
   imp_res_tac effects_in_space_notin_write_effects >>
   Cases_on `(space:addr_space)` >> gvs[is_memory_def_opcode_def, space_effect_def] >>
   simp[dse_equiv_def] >>

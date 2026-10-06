@@ -36,7 +36,7 @@
 
 Theory allocaRemapProofs
 Ancestors
-  allocaRemapDefs pointerConfinedDefs memLocDefs passResidualFrame
+  allocaRemapDefs pointerConfinedDefs memLocDefs passResidualFrame oracleExecProps
   venomExecSemantics venomEffects venomWf venomMemDefs
   venomInst venomState venomInstProps passSharedTransfer
   allocaRemapSSA stateEquiv passSharedField passSharedFrame opcodeClass
@@ -44,6 +44,16 @@ Ancestors
 
 (* Make is_immutable_op reduce automatically in simp/gvs/fs *)
 val _ = augment_srw_ss [rewrites [is_immutable_op_def]];
+
+(* Oracle fields are retained by the residual relation and primitive steps. *)
+Theorem remap_step_oracle:
+  alloca_remap_rel fn roots remap s1 s2 /\
+  step_inst_base inst s1 = OK v1 /\ step_inst_base inst s2 = OK v2 ==>
+  v1.vs_outcomes = v2.vs_outcomes /\ v1.vs_requests = v2.vs_requests
+Proof
+  rw[alloca_remap_rel_def] >>
+  imp_res_tac step_inst_base_oracle >> gvs[]
+QED
 
 (* ===== Operand Agreement ===== *)
 
@@ -1533,6 +1543,7 @@ Proof
   disch_then (qspecl_then [`inst`, `s1`, `s2`, `v1`, `v2`] mp_tac) >>
   (impl_tac >- gvs[]) >> strip_tac >>
   (* Step 8: Reconstruct alloca_remap_rel *)
+  drule_all remap_step_oracle >> strip_tac >>
   irule remap_rel_from_equiv >>
   gvs[] >> rpt conj_tac
   (* Non-pv vars agree *)
@@ -3428,6 +3439,7 @@ Proof
     immutable_op_output_vars_agree) >>
   impl_tac >- simp[] >> strip_tac >>
   (* 10. Reconstruct alloca_remap_rel *)
+  drule_all remap_step_oracle >> strip_tac >>
   irule remap_rel_from_equiv >> gvs[] >> rpt conj_tac
   (* Non-PV vars *)
   >- (rpt strip_tac >>

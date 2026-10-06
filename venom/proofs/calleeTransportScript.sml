@@ -1,11 +1,11 @@
-(* Callee transport preparation for extending venom_state.
+(* Callee transport for venom_state, including oracle list fields.
  * TOP-LEVEL: setup/merge projections; merge identity and composition;
  * selector-parametric setup/adopt transport; output-binding projections.
  * Existing generic bind_outputs_preserves is reused from venomInstProofs1.
  * Concrete projection lists describe today's fields, not an exhaustive
  * future shared-state interface. Exact identities and arbitrary selectors
  * avoid enumerating newly inherited/copied fields.
- * No state representation, call semantics, or relation is changed here.
+ * Calls remain concrete; oracle fields are transported, not consumed.
  *)
 Theory calleeTransport
 Ancestors
@@ -70,6 +70,13 @@ Proof
   simp[merge_callee_state_def]
 QED
 
+Theorem merge_callee_state_oracle[simp]:
+  (merge_callee_state caller callee).vs_outcomes = callee.vs_outcomes /\
+  (merge_callee_state caller callee).vs_requests = callee.vs_requests
+Proof
+  simp[merge_callee_state_def]
+QED
+
 (* ===== Exact record transport ===== *)
 
 Theorem merge_callee_state_id[simp]:
@@ -118,6 +125,15 @@ Proof
   strip_tac >> rw[setup_callee_def] >> gvs[]
 QED
 
+Theorem setup_callee_oracle:
+  setup_callee fn args caller = SOME callee ==>
+  callee.vs_outcomes = caller.vs_outcomes /\
+  callee.vs_requests = caller.vs_requests
+Proof
+  strip_tac >> conj_tac >>
+  irule setup_callee_projection >> simp[] >> metis_tac[]
+QED
+
 (* NONE is identity; SOME changes only FMP. A selector of any other field
    satisfies the premise, including future shared fields. *)
 Theorem adopt_return_fmp_projection:
@@ -126,6 +142,21 @@ Theorem adopt_return_fmp_projection:
 Proof
   strip_tac >> Cases_on `ir.iret_adopt_fmp` >>
   simp[adopt_return_fmp_def]
+QED
+
+Theorem adopt_return_fmp_oracle[simp]:
+  (adopt_return_fmp ir s).vs_outcomes = s.vs_outcomes /\
+  (adopt_return_fmp ir s).vs_requests = s.vs_requests
+Proof
+  conj_tac >> irule adopt_return_fmp_projection >> simp[]
+QED
+
+Theorem bind_outputs_oracle:
+  bind_outputs outs vals s = SOME s' ==>
+  s'.vs_outcomes = s.vs_outcomes /\ s'.vs_requests = s.vs_requests
+Proof
+  strip_tac >> conj_tac >>
+  irule bind_outputs_preserves >> simp[update_var_def] >> metis_tac[]
 QED
 
 (* Reuse the generic output-binding transport rather than reproving FOLDL

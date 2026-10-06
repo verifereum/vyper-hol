@@ -1242,8 +1242,8 @@ End
 
 (* Merge callee's side effects back into caller after INVOKE.
    Internal function calls share the same contract, so mutable state
-   (memory, transient storage, accounts, returndata, logs, immutables)
-   propagates from callee to caller.  vs_alloca_next propagates too
+   (memory, transient storage, accounts, returndata, logs, immutables,
+   remaining outcomes and recorded requests) propagates from callee to caller.  vs_alloca_next propagates too
    (global bump pointer).  vs_allocas stays as caller's (per-frame).
    Caller-local fields (vars, params, control flow, contexts) are kept. *)
 Definition merge_callee_state_def:
@@ -1254,6 +1254,8 @@ Definition merge_callee_state_def:
       vs_accounts   := callee.vs_accounts;
       vs_returndata := callee.vs_returndata;
       vs_logs       := callee.vs_logs;
+      vs_outcomes   := callee.vs_outcomes;
+      vs_requests   := callee.vs_requests;
       vs_immutables := callee.vs_immutables;
       vs_alloca_next := callee.vs_alloca_next
       (* vs_allocas NOT copied — caller keeps its own frame's allocas *)
