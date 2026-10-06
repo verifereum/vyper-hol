@@ -41,7 +41,7 @@
 
 Theory allocaRemapDefs
 Ancestors
-  venomState venomExecSemantics pointerConfinedDefs venomMemDefs
+  venomState venomExecSemantics pointerConfinedDefs venomMemDefs passResidualFrame
 
 (* ===== Memory Byte Access ===== *)
 
@@ -283,30 +283,8 @@ Definition alloca_remap_rel_def:
       FLOOKUP s2.vs_allocas aid = SOME (new_off, sz)) /\
     (* 7. Memory lengths agree (needed for MEMTOP determinism) *)
     LENGTH s1.vs_memory = LENGTH s2.vs_memory /\
-    (* 8. Scalar state fields agree.
-       vs_alloca_next intentionally omitted — naturally differs
-       when alloca regions are at different offsets. *)
-    s1.vs_halted = s2.vs_halted /\
-    s1.vs_returndata = s2.vs_returndata /\
-    s1.vs_accounts = s2.vs_accounts /\
-    s1.vs_transient = s2.vs_transient /\
-    s1.vs_call_ctx = s2.vs_call_ctx /\
-    s1.vs_tx_ctx = s2.vs_tx_ctx /\
-    s1.vs_block_ctx = s2.vs_block_ctx /\
-    s1.vs_logs = s2.vs_logs /\
-    s1.vs_immutables = s2.vs_immutables /\
-    s1.vs_data_section = s2.vs_data_section /\
-    s1.vs_labels = s2.vs_labels /\
-    s1.vs_code = s2.vs_code /\
-    s1.vs_params = s2.vs_params /\
-    s1.vs_prev_bb = s2.vs_prev_bb /\
-    s1.vs_current_bb = s2.vs_current_bb /\
-    s1.vs_inst_idx = s2.vs_inst_idx /\
-    s1.vs_prev_hashes = s2.vs_prev_hashes /\
-    (* Frame metadata is observable through GETFMP/INITIAL_FMP/RETPC_PARAM
-       and internal returns; unlike allocation offsets it is not remapped. *)
-    s1.vs_fmp = s2.vs_fmp /\
-    s1.vs_call_entry_fmp = s2.vs_call_entry_fmp /\
-    s1.vs_initial_fmp = s2.vs_initial_fmp /\
-    s1.vs_return_pc_token = s2.vs_return_pc_token
+    (* 8. Residual state agrees: vars, memory, allocation map and bump
+       pointer alone are erased. All four FMP components remain compared:
+       frame metadata is observable and is not remapped. *)
+    alloca_remap_frame s1 = alloca_remap_frame s2
 End

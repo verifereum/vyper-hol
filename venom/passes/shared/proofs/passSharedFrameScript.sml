@@ -9,7 +9,7 @@
 
 Theory passSharedFrame
 Ancestors
-  passSharedVarFrame passSharedTransfer passSharedField
+  passSharedVarFrame passSharedTransfer passSharedField passResidualFrame
 
 open venomStateTheory venomInstTheory venomExecSemanticsTheory
      venomEffectsTheory venomInstPropsTheory
@@ -182,36 +182,12 @@ QED
 (* ===== commute_equiv definition and helpers ============================ *)
 (* ===================================================================== *)
 
-(* State equivalence ignoring vs_allocas and specified variables.
- * vs_allocas is internal ALLOCA bookkeeping: concrete offsets depend
- * on allocation order but don't affect observable behaviour because
- * ALLOCA output vars are already excluded via the vars parameter.
- * This is state_equiv without the vs_allocas conjunct. *)
+(* Variables agree outside vars. Allocation map and bump pointer were
+ * already unconstrained; all other fields remain in the residual frame. *)
 Definition commute_equiv_def:
   commute_equiv vars s1 s2 <=>
     (!w. w NOTIN vars ==> lookup_var w s1 = lookup_var w s2) /\
-    s1.vs_memory = s2.vs_memory /\
-    s1.vs_transient = s2.vs_transient /\
-    s1.vs_prev_bb = s2.vs_prev_bb /\
-    s1.vs_current_bb = s2.vs_current_bb /\
-    s1.vs_inst_idx = s2.vs_inst_idx /\
-    s1.vs_halted = s2.vs_halted /\
-    s1.vs_returndata = s2.vs_returndata /\
-    s1.vs_accounts = s2.vs_accounts /\
-    s1.vs_call_ctx = s2.vs_call_ctx /\
-    s1.vs_tx_ctx = s2.vs_tx_ctx /\
-    s1.vs_block_ctx = s2.vs_block_ctx /\
-    s1.vs_logs = s2.vs_logs /\
-    s1.vs_immutables = s2.vs_immutables /\
-    s1.vs_data_section = s2.vs_data_section /\
-    s1.vs_labels = s2.vs_labels /\
-    s1.vs_code = s2.vs_code /\
-    s1.vs_params = s2.vs_params /\
-    s1.vs_fmp = s2.vs_fmp /\
-    s1.vs_call_entry_fmp = s2.vs_call_entry_fmp /\
-    s1.vs_initial_fmp = s2.vs_initial_fmp /\
-    s1.vs_return_pc_token = s2.vs_return_pc_token /\
-    s1.vs_prev_hashes = s2.vs_prev_hashes
+    commute_frame s1 = commute_frame s2
 End
 
 Theorem state_equiv_imp_commute_equiv[local]:

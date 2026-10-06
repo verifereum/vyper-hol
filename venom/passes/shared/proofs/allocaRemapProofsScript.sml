@@ -36,7 +36,7 @@
 
 Theory allocaRemapProofs
 Ancestors
-  allocaRemapDefs pointerConfinedDefs memLocDefs
+  allocaRemapDefs pointerConfinedDefs memLocDefs passResidualFrame
   venomExecSemantics venomEffects venomWf venomMemDefs
   venomInst venomState venomInstProps passSharedTransfer
   allocaRemapSSA stateEquiv passSharedField passSharedFrame opcodeClass
@@ -623,7 +623,7 @@ val alloca_remap_rel_scalars = prove(
     LENGTH s1.vs_memory = LENGTH s2.vs_memory /\
     FDOM s1.vs_allocas = FDOM s2.vs_allocas``,
   REWRITE_TAC[alloca_remap_rel_def, LET_DEF] >> BETA_TAC >>
-  strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC);
+  strip_tac >> fs[]);
 
 (* Non-PV lookup: extracts the lookup_var clause without full expansion. *)
 val alloca_remap_rel_non_pv_lookup = prove(
@@ -949,23 +949,7 @@ Theorem alloca_remap_rel_intro[local]:
          FLOOKUP remap aid = SOME new_off ==>
          FLOOKUP s2.vs_allocas aid = SOME (new_off, sz)) /\
     LENGTH s1.vs_memory = LENGTH s2.vs_memory /\
-    (s1.vs_halted <=> s2.vs_halted) /\
-    s1.vs_returndata = s2.vs_returndata /\
-    s1.vs_accounts = s2.vs_accounts /\
-    s1.vs_transient = s2.vs_transient /\
-    s1.vs_call_ctx = s2.vs_call_ctx /\ s1.vs_tx_ctx = s2.vs_tx_ctx /\
-    s1.vs_block_ctx = s2.vs_block_ctx /\ s1.vs_logs = s2.vs_logs /\
-    s1.vs_immutables = s2.vs_immutables /\
-    s1.vs_data_section = s2.vs_data_section /\
-    s1.vs_labels = s2.vs_labels /\ s1.vs_code = s2.vs_code /\
-    s1.vs_params = s2.vs_params /\ s1.vs_prev_bb = s2.vs_prev_bb /\
-    s1.vs_current_bb = s2.vs_current_bb /\
-    s1.vs_inst_idx = s2.vs_inst_idx /\
-    s1.vs_prev_hashes = s2.vs_prev_hashes /\
-    s1.vs_fmp = s2.vs_fmp /\
-    s1.vs_call_entry_fmp = s2.vs_call_entry_fmp /\
-    s1.vs_initial_fmp = s2.vs_initial_fmp /\
-    s1.vs_return_pc_token = s2.vs_return_pc_token ==>
+    alloca_remap_frame s1 = alloca_remap_frame s2 ==>
     alloca_remap_rel fn roots remap s1 s2
 Proof
   simp[alloca_remap_rel_def, LET_DEF]
@@ -1404,27 +1388,7 @@ Theorem remap_rel_from_equiv[local]:
            new_off <= w2n w2 /\ w2n w2 < new_off + sz /\
            orig_off + sz < dimword (:256) /\
            new_off + sz < dimword (:256)) /\
-    (v1.vs_halted <=> v2.vs_halted) /\
-    v1.vs_returndata = v2.vs_returndata /\
-    v1.vs_accounts = v2.vs_accounts /\
-    v1.vs_transient = v2.vs_transient /\
-    v1.vs_call_ctx = v2.vs_call_ctx /\
-    v1.vs_tx_ctx = v2.vs_tx_ctx /\
-    v1.vs_block_ctx = v2.vs_block_ctx /\
-    v1.vs_logs = v2.vs_logs /\
-    v1.vs_immutables = v2.vs_immutables /\
-    v1.vs_data_section = v2.vs_data_section /\
-    v1.vs_labels = v2.vs_labels /\
-    v1.vs_code = v2.vs_code /\
-    v1.vs_params = v2.vs_params /\
-    v1.vs_prev_bb = v2.vs_prev_bb /\
-    v1.vs_current_bb = v2.vs_current_bb /\
-    v1.vs_inst_idx = v2.vs_inst_idx /\
-    v1.vs_prev_hashes = v2.vs_prev_hashes /\
-    v1.vs_fmp = v2.vs_fmp /\
-    v1.vs_call_entry_fmp = v2.vs_call_entry_fmp /\
-    v1.vs_initial_fmp = v2.vs_initial_fmp /\
-    v1.vs_return_pc_token = v2.vs_return_pc_token ==>
+    alloca_remap_frame v1 = alloca_remap_frame v2 ==>
     alloca_remap_rel fn roots remap v1 v2
 Proof
   rpt gen_tac >> strip_tac >>
@@ -1437,6 +1401,7 @@ Proof
   REWRITE_TAC[allocas_non_overlapping_def, alloca_mem_agrees_def,
               in_alloca_region_def] >>
   ASM_REWRITE_TAC[] >>
+  fs[] >>
   rpt conj_tac >>
   TRY (rpt strip_tac >> res_tac >> NO_TAC) >>
   rpt strip_tac >>
@@ -1457,6 +1422,7 @@ Proof
   qpat_x_assum `alloca_remap_rel _ _ _ _ _`
     (fn th => assume_tac th >> strip_assume_tac
       (BETA_RULE (REWRITE_RULE[alloca_remap_rel_def, LET_DEF] th))) >>
+  fs[] >>
   irule remap_rel_from_equiv >>
   simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
   conj_tac >- (rpt strip_tac >> Cases_on `out = v` >>
@@ -1519,7 +1485,7 @@ Proof
    (s1.vs_halted <=> s2.vs_halted)` by
     (qpat_assum `alloca_remap_rel _ _ _ _ _` mp_tac >>
      REWRITE_TAC[alloca_remap_rel_def, LET_DEF] >> BETA_TAC >>
-     strip_tac >> simp[]) >>
+     strip_tac >> fs[]) >>
   (* Step 2: Operand agreement (all operands non-pointer) *)
   `!op. MEM op inst.inst_operands ==>
         eval_operand op s1 = eval_operand op s2` by
@@ -1556,7 +1522,7 @@ Proof
   `LENGTH s1.vs_memory = LENGTH s2.vs_memory` by
     (qpat_assum `alloca_remap_rel _ _ _ _ _` mp_tac >>
      REWRITE_TAC[alloca_remap_rel_def, LET_DEF] >> BETA_TAC >>
-     strip_tac >> simp[]) >>
+     strip_tac >> fs[]) >>
   `!v. MEM v inst.inst_outputs ==> lookup_var v s1 = lookup_var v s2` by
     (rpt strip_tac >>
      `v NOTIN pointer_derived_vars fn roots` by res_tac >>
@@ -1808,6 +1774,7 @@ Proof
     (fn th => assume_tac th >>
      strip_assume_tac
        (BETA_RULE (REWRITE_RULE[alloca_remap_rel_def, LET_DEF] th))) >>
+  fs[] >>
   irule remap_rel_from_equiv >>
   simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
   (* scalar equalities resolved by simp; remaining: nonpv ∧ ∃s1' s2'. ... *)
@@ -3758,7 +3725,7 @@ Proof
       `FDOM s1.vs_allocas = FDOM s2.vs_allocas` by (
         qpat_x_assum `alloca_remap_rel _ _ _ _ _` mp_tac >>
         REWRITE_TAC[alloca_remap_rel_def, LET_DEF] >> BETA_TAC >>
-        strip_tac >> simp[]) >>
+        strip_tac >> fs[]) >>
       `inst.inst_id NOTIN FDOM s2.vs_allocas` by gvs[] >>
       simp[FLOOKUP_DEF])) >>
     simp[LET_DEF] >> strip_tac >> gvs[] >>
