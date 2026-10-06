@@ -337,6 +337,25 @@ Proof
   gvs[]
 QED
 
+(* Cache each opcode branch once, rather than rewriting the full dispatch
+   separately in every operand-shape case. *)
+val step_inst_base_opcode_rewrites = let
+  val expanded = PURE_ONCE_REWRITE_CONV [step_inst_base_def]
+    ``step_inst_base inst s``
+  fun specialize opc = let
+    val eq_asm = ASSUME (mk_eq (``inst.inst_opcode``, opc))
+    val resolved = CONV_RULE (RAND_CONV (REWRITE_CONV [opcode_case_def]))
+      (SUBS [eq_asm] expanded)
+  in GEN_ALL (DISCH (concl eq_asm) resolved) end
+in map specialize (TypeBase.constructors_of ``:opcode``) end;
+
+fun rewrite_step_inst_base_opcode eq = let
+  val opc = rhs (concl eq)
+  val rewrite = valOf (List.find
+    (fn th => aconv (rhs (fst (dest_imp (concl (SPEC_ALL th))))) opc)
+    step_inst_base_opcode_rewrites)
+in simp[rewrite, eq] end;
+
 Theorem step_inst_base_operands_irrelevant_safe[local]:
   !g inst s.
     (!op. eval_operand (g op) s = eval_operand op s) /\
@@ -358,9 +377,9 @@ Proof
   >- (`(inst with inst_operands := []) = inst` by
         simp[instruction_component_equality] >>
       gvs[])
-  >> CONV_TAC (LHS_CONV (ONCE_REWRITE_CONV [step_inst_base_def])) >>
+  >> Cases_on `inst.inst_opcode` >> gvs[is_alloca_op_def] >>
+  qpat_x_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode >>
   simp (exec_map_thms @ exec_inst_operands_thms @ [eval_operands_map_thm]) >>
-  CONV_TAC (RHS_CONV (ONCE_REWRITE_CONV [step_inst_base_def])) >>
   Cases_on `inst.inst_operands` >> gvs[] >>
   TRY (Cases_on `t` >> simp[]) >>
   TRY (FIRST [Cases_on `t'`, Cases_on `t`] >> simp[]) >>
@@ -370,33 +389,6 @@ Proof
   TRY (FIRST [Cases_on `t`, Cases_on `t'`, Cases_on `t''`] >> simp[]) >>
   TRY (FIRST [Cases_on `t`, Cases_on `t'`, Cases_on `t''`] >> simp[]) >>
   TRY (FIRST [Cases_on `t`, Cases_on `t'`, Cases_on `t''`] >> simp[])
-  >- (qmatch_goalsub_abbrev_tac `lhs = rhs` >>
-      Cases_on `inst.inst_opcode` >>
-      gvs[Abbr `lhs`, Abbr `rhs`, is_alloca_op_def])
-  >- (qmatch_goalsub_abbrev_tac `lhs = rhs` >>
-      Cases_on `inst.inst_opcode` >>
-      gvs[Abbr `lhs`, Abbr `rhs`, is_alloca_op_def])
-  >- (qmatch_goalsub_abbrev_tac `lhs = rhs` >>
-      Cases_on `inst.inst_opcode` >>
-      gvs[Abbr `lhs`, Abbr `rhs`, is_alloca_op_def])
-  >- (qmatch_goalsub_abbrev_tac `lhs = rhs` >>
-      Cases_on `inst.inst_opcode` >>
-      gvs[Abbr `lhs`, Abbr `rhs`, is_alloca_op_def])
-  >- (qmatch_goalsub_abbrev_tac `lhs = rhs` >>
-      Cases_on `inst.inst_opcode` >>
-      gvs[Abbr `lhs`, Abbr `rhs`, is_alloca_op_def])
-  >- (qmatch_goalsub_abbrev_tac `lhs = rhs` >>
-      Cases_on `inst.inst_opcode` >>
-      gvs[Abbr `lhs`, Abbr `rhs`, is_alloca_op_def])
-  >- (qmatch_goalsub_abbrev_tac `lhs = rhs` >>
-      Cases_on `inst.inst_opcode` >>
-      gvs[Abbr `lhs`, Abbr `rhs`, is_alloca_op_def])
-  >- (qmatch_goalsub_abbrev_tac `lhs = rhs` >>
-      Cases_on `inst.inst_opcode` >>
-      gvs[Abbr `lhs`, Abbr `rhs`, is_alloca_op_def])
-  >- (qmatch_goalsub_abbrev_tac `lhs = rhs` >>
-      Cases_on `inst.inst_opcode` >>
-      gvs[Abbr `lhs`, Abbr `rhs`, is_alloca_op_def])
 QED
 
 Triviality step_inst_base_jnz_map[local]:

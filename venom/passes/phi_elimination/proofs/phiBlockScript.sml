@@ -406,7 +406,9 @@ Proof
   `s2.vs_return_pc_token = s1.vs_return_pc_token` by
     fs[state_equiv_def, execution_equiv_def] >>
   fs[is_param_opcode_iff] >>
-  simp[step_inst_def, step_inst_base_def, lift_result_def] >>
+  simp[step_inst_non_invoke] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  ASM_REWRITE_TAC[opcode_case_def] >> simp[lift_result_def] >>
   rpt (BasicProvers.PURE_FULL_CASE_TAC >> gvs[lift_result_def]) >>
   metis_tac[stateEquivPropsTheory.update_var_preserves]
 QED
