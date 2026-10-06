@@ -1,7 +1,7 @@
 Theory vyperTestRunner
 Ancestors
-  contractABI vyperABI vyperInterpreter vyperSmallStep jsonAST jsonToVyper
-  vfmContext vfmExecution vfmTransaction
+  contractABI vyperABIDecode vyperABI vyperInterpreter vyperSmallStep jsonAST
+  jsonToVyper vfmContext vfmExecution vfmTransaction
 Libs
   cv_transLib wordsLib
 
@@ -143,11 +143,14 @@ Definition compute_vyper_args_def:
        which is the maximum encoding size for this type. *)
     bound = vyper_abi_size_bound tenv (TupleT vyTys);
     padded = PAD_RIGHT 0w bound cd;
+    (* Argument decoding uses Vyper's lenient ABI decoding (see
+       vyperABIDecode): calldata/CODE argument clamps preserve legacy
+       wrap-around head arithmetic. *)
     argsOpt = if
       static_length abiTupTy ≤ LENGTH cd ∧
-      valid_enc abiTupTy padded
+      vyper_abi_valid_enc abiTupTy padded 0
     then let
-      abiArgsTup = dec abiTupTy padded;
+      abiArgsTup = vyper_abi_dec abiTupTy padded 0;
       vyArgsTup = abi_to_vyper tenv (TupleT vyTys) abiArgsTup;
       vyArgsTv = evaluate_type tenv (TupleT vyTys);
       vyArgs = (case OPTION_BIND vyArgsTv
@@ -383,7 +386,9 @@ Definition run_raw_deployment_def:
                             dt.gasLimit dt.gasPrice in
     let expected = callee_from_tx_to dt.deployer sender.nonce NONE in
     let blk = make_create_block dt in
-    if expected <> dt.expectedAddress then
+    (* Failed deployments may record no address (0w); only check the CREATE
+       address when the trace recorded one. *)
+    if dt.expectedAddress <> 0w /\ expected <> dt.expectedAddress then
       INR (Error $ RuntimeError "raw deployment address mismatch")
     else
       case vfmExecution$run_transaction (Collect empty_domain) F dt.chainId
