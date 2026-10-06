@@ -16,6 +16,9 @@ Datatype:
   ; target: address
   ; function_name: identifier
   ; args: value list
+  (* Original call input, including the selector; never ABI-decoder padding.
+     Creation frames have empty calldata (constructor arguments are code data). *)
+  ; calldata: word8 list
   ; value: num
   ; time_stamp: num
   ; block_number: num
@@ -41,6 +44,7 @@ Definition empty_call_txn_def:
     target := 0w;
     function_name := "";
     args := [];
+    calldata := [];
     value := 0;
     time_stamp := 0;
     block_number := 0;

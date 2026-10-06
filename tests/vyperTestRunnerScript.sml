@@ -174,6 +174,7 @@ Definition run_deployment_def:
           ; target := dt.deployedAddress
           ; function_name := name
           ; args := args
+          ; calldata := []
           ; value := dt.value
           ; time_stamp := dt.timeStamp
           ; block_number := dt.blockNumber
@@ -200,6 +201,7 @@ Definition call_trace_txn_def:
      ; target := ct.target
      ; function_name := ""
      ; args := []
+     ; calldata := ct.callData
      ; value := ct.value
      ; time_stamp := ct.timeStamp
      ; block_number := ct.blockNumber
@@ -246,6 +248,7 @@ Definition run_call_def:
           ; target := ct.target
           ; function_name := name
           ; args := args
+          ; calldata := ct.callData
           ; value := ct.value
           ; time_stamp := ct.timeStamp
           ; block_number := ct.blockNumber
