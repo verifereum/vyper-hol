@@ -600,6 +600,11 @@ Definition evaluate_convert_def:
      if within_int_bound (Signed n) i
      then INL $ IntV i
      else INR (RuntimeError "convert BytesV int bound")) ∧
+  evaluate_convert _ (BytesV bs) (BaseT AddressT) =
+    (let n = w2n (word_of_bytes_be (PAD_LEFT 0w 32 bs) : bytes32) in
+     if n < 2 ** 160
+     then INL $ AddressV (n2w n)
+     else INR (RuntimeError "convert bytes address")) ∧
   evaluate_convert _ (IntV i) (BaseT (IntT n)) =
     (if within_int_bound (Signed n) i
      then INL $ IntV i

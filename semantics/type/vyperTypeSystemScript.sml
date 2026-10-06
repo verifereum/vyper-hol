@@ -393,6 +393,7 @@ Definition valid_conversion_def:
   valid_conversion (BaseT (BytesT _)) (BaseT (BytesT _)) = T /\
   valid_conversion (BaseT (BytesT _)) (BaseT (UintT _)) = T /\
   valid_conversion (BaseT (BytesT _)) (BaseT (IntT _)) = T /\
+  valid_conversion (BaseT (BytesT _)) (BaseT AddressT) = T /\
   valid_conversion (BaseT (UintT _)) (BaseT (UintT _)) = T /\
   valid_conversion (BaseT (UintT _)) (BaseT (IntT _)) = T /\
   valid_conversion (BaseT (IntT _)) (BaseT (UintT _)) = T /\
