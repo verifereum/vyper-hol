@@ -585,6 +585,8 @@ Definition evaluate_convert_def:
   evaluate_convert _ (BytesV bs) (BaseT (BytesT (Fixed n))) =
     (if LENGTH bs ≤ n
      then INL $ BytesV (PAD_RIGHT 0w n bs)
+     else if EVERY (λb. b = 0w) (DROP n bs)
+     then INL $ BytesV (TAKE n bs)
      else INR (RuntimeError "convert BytesV bound")) ∧
   evaluate_convert _ (BytesV bs) (BaseT (BytesT (Dynamic n))) =
     (if LENGTH bs ≤ n

@@ -110,7 +110,8 @@ Proof
   TRY (drule_all address_value_is_bytes >> strip_tac >> gvs[]) >>
   TRY (drule_all string_value_is_string >> strip_tac >> gvs[]) >>
   TRY (drule_all flag_value_is_flag >> strip_tac >> gvs[]) >>
-  gvs[oneline value_has_type_def, evaluate_convert_def]
+  gvs[oneline value_has_type_def, evaluate_convert_def] >>
+  gvs[AllCaseEqs()]
 QED
 
 Theorem evaluate_max_value_well_typed:
