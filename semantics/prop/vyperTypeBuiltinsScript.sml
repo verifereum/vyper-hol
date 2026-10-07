@@ -5,10 +5,11 @@
 Theory vyperTypeBuiltins
 Ancestors
   list rich_list pred_set prim_rec arithmetic finite_map option pair sorting
-  words byte integer keccak vyperAST vyperValue vyperValueOperation vyperMisc
+  words byte integer intExtension keccak vyperAST vyperValue vyperValueOperation vyperMisc
   vyperABI vyperInterpreter vyperState vyperContext vyperStorage
   vyperTyping vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeInvariants vyperTypeValues
   vyperTypeBytesCrypto vyperTypeDefaults vyperTypeConversions vyperTypeABI vyperEvalBinop
+  vyperDecimalBounds
   vyperAssignPreservesType bn254 vfmExecution
 Libs
   wordsLib
@@ -766,7 +767,8 @@ Proof
   fs[arithmeticTheory.DIV_LT_X]
 QED
 
-(* Decimal Mul: w2i(word_quot(i2w p) / 10^10w) preserves Signed 168 bound *)
+(* TASK015: preserve the former absolute-quotient bridge and its proof text.
+   The replacement below uses the signed-result test, including -2 ** 167.
 Theorem decimal_mul_word_bound[local]:
   !p. within_int_bound (Signed 168) (ABS p / 10000000000) ==>
       within_int_bound (Signed 168) (w2i ((i2w p : bytes32) / 0x2540BE400w))
@@ -811,6 +813,46 @@ Proof
         Cases_on `p quot 10000000000 < 0` >> fs[] >> intLib.ARITH_TAC) >>
   `w2i (i2w (p quot 10000000000) : bytes32) = p quot 10000000000`
     by (qspecl_then [`p quot 10000000000`, `256`] mp_tac w2i_i2w_within_signed >> simp[]) >>
+  simp[]
+QED
+
+*)
+
+(* Decimal Mul: the signed-result check also bounds the equivalent word quotient. *)
+Theorem decimal_mul_word_bound[local]:
+  !p. within_int_bound (Signed 168) (SGN p * (ABS p / 10000000000)) ==>
+      within_int_bound (Signed 168) (w2i ((i2w p : bytes32) / 0x2540BE400w))
+Proof
+  rpt strip_tac >>
+  `0 ≤ ABS p / 10000000000` by
+    (simp[integerTheory.int_div, integerTheory.INT_ABS] >>
+     Cases_on `0 ≤ p` >> simp[] >> intLib.ARITH_TAC) >>
+  `ABS p / 10000000000 < 2 ** 167 + 1` by
+    (qpat_x_assum `within_int_bound _ _` mp_tac >>
+     simp[within_int_bound_def, SGN_def] >>
+     Cases_on `p < 0` >> Cases_on `p = 0` >> simp[] >> intLib.ARITH_TAC) >>
+  `ABS p < (2 ** 167 + 1) * 10000000000` by
+    (irule int_div_lt_imp >> simp[integerTheory.INT_ABS_POS]) >>
+  `ABS p < 2 ** 255` by
+    (`(2:int) ** 167 * 10000000000 + 10000000000 < 2 ** 255` by EVAL_TAC >>
+     intLib.ARITH_TAC) >>
+  `within_int_bound (Signed 256) p` by
+    (simp[within_int_bound_def] >>
+     Cases_on `p < 0` >> fs[integerTheory.INT_ABS] >> intLib.ARITH_TAC) >>
+  `w2i (i2w p : bytes32) = p` by
+    (qspecl_then [`p`, `256`] mp_tac w2i_i2w_within_signed >> simp[]) >>
+  `(0x2540BE400w : bytes32) ≠ 0w` by EVAL_TAC >>
+  `w2i (0x2540BE400w : bytes32) = 10000000000` by EVAL_TAC >>
+  `(i2w p : bytes32) / 0x2540BE400w = i2w (p quot 10000000000)` by
+    (drule integer_wordTheory.word_quot >>
+     disch_then (qspec_then `i2w p` mp_tac) >> simp[]) >>
+  `within_int_bound (Signed 168) (p quot 10000000000)` by
+    gvs[GSYM decimal_truncate_eq_quot] >>
+  `within_int_bound (Signed 256) (p quot 10000000000)` by
+    (qpat_x_assum `within_int_bound (Signed 168) _` mp_tac >>
+     simp[within_int_bound_def] >> intLib.ARITH_TAC) >>
+  `w2i (i2w (p quot 10000000000) : bytes32) = p quot 10000000000` by
+    (qspecl_then [`p quot 10000000000`, `256`] mp_tac w2i_i2w_within_signed >> simp[]) >>
   simp[]
 QED
 
@@ -1122,10 +1164,8 @@ Proof
   TRY (
     imp_res_tac wrapped_int_op_INL_Signed >>
     gvs[within_int_bound_def] >> NO_TAC) >>
-  (* Decimal Mul: bridge word_quot to integer division *)
-  TRY (
-    imp_res_tac decimal_mul_word_bound >>
-    gvs[within_int_bound_def] >> NO_TAC) >>
+  (* Decimal Mul: the checked signed quotient is the returned value. *)
+  TRY (gvs[within_int_bound_def] >> NO_TAC) >>
   (* ExpMod: word_exp result bounded by 2^256 *)
   TRY (
     mp_tac w2n_word_exp_lt_256 >> simp[] >> NO_TAC) >>

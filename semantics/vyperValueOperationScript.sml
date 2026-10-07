@@ -230,9 +230,10 @@ Definition evaluate_binop_def:
          IntV i1 => (case v2 of IntV i2 =>
            bounded_int_op u (i1 * i2) | _ => INR (TypeError "binop"))
        | DecimalV i1 => (case v2 of DecimalV i2 =>
-           (let p = i1 * i2 in
-            if within_int_bound (Signed 168) ((ABS p) / 10000000000)
-            then INL $ DecimalV $ w2i $ word_quot (i2w p) (10000000000w: bytes32)
+           (let p = i1 * i2;
+                q = SGN p * (ABS p / 10000000000) in
+            if within_int_bound (Signed 168) q
+            then INL $ DecimalV q
             else INR (RuntimeError "Decimal Mul bound")) | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | Div => (case v1 of
