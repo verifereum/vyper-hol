@@ -65,6 +65,8 @@ val _ = Theory.add_ML_dependency "stateEquivMaskLib";
  *                    rolled back on revert, cleared at tx boundary)
  *   - vs_immutables: Immutable storage (written by ISTORE in constructor,
  *                    baked into deployed bytecode, read-only at runtime)
+ *   - vs_requests  : External-call requests, compared on success only
+ * Leftover outcomes are not observable; aborts still use revert_equiv.
  *
  * USE FOR: Proving that two executions have the same external effect,
  * regardless of how they got there.
@@ -77,7 +79,8 @@ Definition observable_equiv_def:
     s1.vs_halted = s2.vs_halted /\
     s1.vs_logs = s2.vs_logs /\
     s1.vs_transient = s2.vs_transient /\
-    s1.vs_immutables = s2.vs_immutables
+    s1.vs_immutables = s2.vs_immutables /\
+    s1.vs_requests = s2.vs_requests
 End
 
 (* ==========================================================================
