@@ -5,8 +5,8 @@
  * No proof dependencies -- only definition-level ancestors.
  *
  * TOP-LEVEL:
- *   ctx_transform_correct -- semantic correctness for a context transform
- *   checked_unit_transform_correct -- successful atomic unit transform contract
+ *   ctx_transform_correct_legacy -- old generic pass-correctness contract
+ *   checked_unit_transform_correct_legacy -- old atomic unit transform contract
  *   source_deployment_rel -- source target/module linkage
  *   finalizer_correct -- successful finalizer safety/preserve contract
  *   initial_codegen_state_rel -- context-plan initial FMP/token agreement
@@ -38,10 +38,14 @@ Ancestors
 
 (* ===== Generic Compiler Contracts ===== *)
 
-(* A context transform is correct when executions from the same initial
-   Venom state satisfy the generic pass-correctness contract. *)
-Definition ctx_transform_correct_def:
-  ctx_transform_correct R_ok R_term ctx ctx' s <=>
+(* TEMPORARY COMPATIBILITY (TASK048; removal owner TASK056).
+   The old stronger, bidirectional pass_correct contract is preserved verbatim
+   under explicit _legacy names. Old e2e clients still require it; it is NOT an
+   alias of unitTransformDefs' forward/abort-weakened contract, and no bridge
+   between the two is claimed. Preserve these claims/proofs until the planned
+   e2e replacements land. *)
+Definition ctx_transform_correct_legacy_def:
+  ctx_transform_correct_legacy R_ok R_term ctx ctx' s <=>
     pass_correct R_ok R_term R_term
       (\fuel. run_context fuel ctx s)
       (\fuel. run_context fuel ctx' s)
@@ -49,13 +53,13 @@ End
 
 (* The pipeline boundary keeps each context and its associated data segment
    together in a compilation_unit.  Execution projects only the contexts. *)
-Definition checked_unit_transform_correct_def:
-  checked_unit_transform_correct
+Definition checked_unit_transform_correct_legacy_def:
+  checked_unit_transform_correct_legacy
     (pipeline : resolved_compiler_policy -> compilation_unit ->
                 pipeline_output option)
     rpolicy R_ok R_term (unit : compilation_unit) s <=>
     ?out. pipeline rpolicy unit = SOME out /\
-      ctx_transform_correct R_ok R_term
+      ctx_transform_correct_legacy R_ok R_term
         unit.cu_context out.po_unit.cu_context s
 End
 

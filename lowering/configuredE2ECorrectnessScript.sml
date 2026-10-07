@@ -4,7 +4,9 @@
  * This theory keeps the generic compiler and semantic obligations explicit,
  * while exposing the two successful phases of compile_vyper_with and the
  * O1 specialization (all target capabilities) of the generic end-to-end
- * theorem.
+ * theorem. TASK048 compatibility: the semantic obligation remains the
+ * old checked_unit_transform_correct_legacy contract, not the new S4.
+ * Removal owner TASK056; original theorem claim/proof otherwise unchanged.
  *)
 
 Theory configuredE2ECorrectness
@@ -107,7 +109,7 @@ Theorem e2e_vyper_to_evm_O1:
     valid_vyper_call am tx tenv ctxt.msgParams.data ret /\
     cenv.ce_type_env = tenv /\
     cenv.ce_event_info = compiled_event_info tops /\
-    checked_unit_transform_correct
+    checked_unit_transform_correct_legacy
       (\rpolicy unit.
          run_venom_pipeline (K T) (K T) (K T)
            rpolicy o1_pipeline_spec unit)

@@ -7,7 +7,8 @@
  *   Vyper source semantics (call_external).
  *
  * Internal proof structure:
- *   1. checked_unit_transform_correct: source unit ~ transformed unit
+ *   1. checked_unit_transform_correct_legacy: old stronger unit contract
+ *      (TASK048 compatibility; removal owner TASK056, not the new S4)
  *   2. codegen_correct: transformed Venom context ~ EVM run
  *   3. finalizer_correct: assembled output ~ finalized runtime bytecode
  *
@@ -307,7 +308,7 @@ Theorem source_unit_execution_through_pipeline[local]:
   !tenv cenv am tx ret unit vs pipeline rpolicy out R_ok R_term.
     source_unit_execution_correct tenv cenv am tx ret unit vs /\
     pipeline rpolicy unit = SOME out /\
-    checked_unit_transform_correct pipeline rpolicy R_ok R_term unit vs /\
+    checked_unit_transform_correct_legacy pipeline rpolicy R_ok R_term unit vs /\
     (!s1 s2. R_ok s1 s2 ==> observable_equiv s1 s2) /\
     (!s1 s2. R_term s1 s2 ==> observable_equiv s1 s2)
     ==>
@@ -322,8 +323,8 @@ Theorem source_unit_execution_through_pipeline[local]:
 Proof
   rpt strip_tac >>
   gvs[source_unit_execution_correct_def,
-      checked_unit_transform_correct_def,
-      ctx_transform_correct_def, pass_correct_def] >>
+      checked_unit_transform_correct_legacy_def,
+      ctx_transform_correct_legacy_def, pass_correct_def] >>
   `!r1 r2. lift_result R_ok R_term R_term r1 r2 ==>
            observable_result_equiv r1 r2` by
     (rpt gen_tac >> Cases_on `r1` >> Cases_on `r2` >>
@@ -379,7 +380,7 @@ Theorem e2e_vyper_to_evm:
     valid_vyper_call am tx tenv ctxt.msgParams.data ret /\
     cenv.ce_type_env = tenv /\
     cenv.ce_event_info = compiled_event_info tops /\
-    checked_unit_transform_correct pipeline rpolicy R_ok R_term unit vs /\
+    checked_unit_transform_correct_legacy pipeline rpolicy R_ok R_term unit vs /\
     (!s1 s2. R_ok s1 s2 ==> observable_equiv s1 s2) /\
     (!s1 s2. R_term s1 s2 ==> observable_equiv s1 s2) /\
     finalizer_correct rpolicy finalizer
@@ -491,7 +492,7 @@ Theorem vyper_call_correct:
     valid_vyper_call am tx tenv ctxt.msgParams.data ret /\
     cenv.ce_type_env = tenv /\
     cenv.ce_event_info = compiled_event_info tops /\
-    checked_unit_transform_correct pipeline rpolicy R_ok R_term unit vs /\
+    checked_unit_transform_correct_legacy pipeline rpolicy R_ok R_term unit vs /\
     (!s1 s2. R_ok s1 s2 ==> observable_equiv s1 s2) /\
     (!s1 s2. R_term s1 s2 ==> observable_equiv s1 s2) /\
     finalizer_correct rpolicy finalizer
