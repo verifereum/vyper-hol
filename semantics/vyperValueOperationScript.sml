@@ -659,6 +659,10 @@ Definition evaluate_convert_def:
     (if compatible_bound bd (LENGTH s)
      then INL $ BytesV (MAP (n2w o ORD) s)
      else INR (RuntimeError "convert string bytes")) ∧
+  evaluate_convert _ (BytesV bs) (BaseT DecimalT) =
+    bounded_decimal_op (w2i
+      ((word_of_bytes_be (PAD_RIGHT 0w 32 bs) : bytes32) >>
+       (8 * (32 - LENGTH bs)))) ∧
   evaluate_convert _ (IntV i) (BaseT DecimalT) =
     bounded_decimal_op (i * 10000000000) ∧
   (* Check exact scaled bounds BEFORE truncation. Signed division truncates
