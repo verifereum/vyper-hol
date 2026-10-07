@@ -519,9 +519,10 @@ End
 
 Definition resolve_func_module_ref_def:
   resolve_func_module_ref ctx
-      (JE_Attribute (JE_Name alias (SOME "module") src _)
+      (JE_Attribute (JE_Name alias tc src _)
         _ _ _ _ _ _) fallback =
-    resolve_module_alias ctx alias src ∧
+    (if tc = SOME "module" then resolve_module_alias ctx alias src
+     else resolve_source_ref ctx fallback) ∧
   resolve_func_module_ref ctx _ fallback = resolve_source_ref ctx fallback
 End
 
@@ -722,36 +723,10 @@ Proof
 QED
 
 
-Definition translate_call_def:
-  translate_call ctx func args' kwargs' ret_ty src_id_opt translated_pop_index =
-    let rty = translate_type (signature_type_ctx ctx src_id_opt) ret_ty in
-    case func of
-    | JE_Name name (SOME "interface") _ _ =>
-        interface_constructor_result rty args'
-    | JE_Name name _ _ _ => make_builtin_call rty name args' kwargs' ret_ty
-    (* lib.__at__(addr) / lib.__interface__(addr) - interface instantiation, just returns the address *)
-    | JE_Attribute _ "__at__" _ _ _ _ _ =>
-        interface_constructor_result rty args'
-    | JE_Attribute _ "__interface__" _ _ _ _ _ =>
-        interface_constructor_result rty args'
-    | JE_Attribute base "pop" _ _ _ _ _ =>
-        (case base of
-         | JE_Name id _ _ _ => Pop rty (make_name_target ctx id)
-         | JE_Attribute (JE_Name "self" _ _ _) attr _ _ _ _ _ => Pop rty (TopLevelNameTarget (NONE, attr))
-         | JE_Attribute (JE_Name id (SOME "module") src_id_opt _) attr _ _ _ _ _ =>
-             Pop rty (TopLevelNameTarget (resolve_source_ref ctx src_id_opt, attr))
-         | JE_Attribute (JE_Name id _ _ _) attr _ _ _ _ _ =>
-             Pop rty (AttributeTarget (make_name_target ctx id) attr)
-         | JE_Subscript (JE_Name id _ _ _) idx _ =>
-             Pop rty (SubscriptTarget (make_name_target ctx id)
-               (case translated_pop_index of
-                | SOME e => e
-                | NONE => Literal (BaseT BoolT) (BoolL T)))
-         | _ => Call rty (IntCall (NONE, "pop")) args' NONE)
-    (* self.func(args) - internal call *)
-    | JE_Attribute (JE_Name "self" _ _ _) fname _ _ _ _ _ => Call rty (IntCall (resolve_source_ref ctx src_id_opt, fname)) args' NONE
-    (* Module struct constructor, interface constructor, or module function call *)
-    | _ => if is_interface_constructor func then
+(* Shared fallback after the name, interface shortcut, pop and self branches. *)
+Definition translate_module_call_def:
+  translate_module_call ctx func args' kwargs' ret_ty src_id_opt rty =
+           if is_interface_constructor func then
              interface_constructor_result rty args'
            else let nsid = resolve_func_module_ref ctx func src_id_opt;
                fname = extract_func_name func in
@@ -775,6 +750,41 @@ Definition translate_call_def:
             | _ =>
               (* Module call: use source_id from type_decl_node *)
               Call rty (IntCall (nsid, fname)) args' NONE)
+End
+
+Definition translate_call_def:
+  translate_call ctx func args' kwargs' ret_ty src_id_opt translated_pop_index =
+    let rty = translate_type (signature_type_ctx ctx src_id_opt) ret_ty in
+    case func of
+    | JE_Name name tc _ _ =>
+        if tc = SOME "interface" then interface_constructor_result rty args'
+        else make_builtin_call rty name args' kwargs' ret_ty
+    | JE_Attribute base fname _ _ _ _ _ =>
+        (* Interface shortcuts take priority over pop and self calls. *)
+        if fname = "__at__" \/ fname = "__interface__" then
+          interface_constructor_result rty args'
+        else if fname = "pop" then
+          (case base of
+           | JE_Name id _ _ _ => Pop rty (make_name_target ctx id)
+           | JE_Attribute (JE_Name id tc src _) attr _ _ _ _ _ =>
+               if id = "self" then Pop rty (TopLevelNameTarget (NONE, attr))
+               else if tc = SOME "module" then
+                 Pop rty (TopLevelNameTarget (resolve_source_ref ctx src, attr))
+               else Pop rty (AttributeTarget (make_name_target ctx id) attr)
+           | JE_Subscript (JE_Name id _ _ _) idx _ =>
+               Pop rty (SubscriptTarget (make_name_target ctx id)
+                 (case translated_pop_index of
+                  | SOME e => e
+                  | NONE => Literal (BaseT BoolT) (BoolL T)))
+           | _ => Call rty (IntCall (NONE, "pop")) args' NONE)
+        else
+          (case base of
+           | JE_Name id _ _ _ =>
+               if id = "self" then
+                 Call rty (IntCall (resolve_source_ref ctx src_id_opt, fname)) args' NONE
+               else translate_module_call ctx func args' kwargs' ret_ty src_id_opt rty
+           | _ => translate_module_call ctx func args' kwargs' ret_ty src_id_opt rty)
+    | _ => translate_module_call ctx func args' kwargs' ret_ty src_id_opt rty
 End
 
 
