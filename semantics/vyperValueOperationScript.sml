@@ -268,7 +268,7 @@ Definition evaluate_binop_def:
        | _ => INR (TypeError "binop"))
      | UnsafeDiv => (case v1 of
          IntV i1 => (case v2 of IntV i2 =>
-           if i2 = 0 then INR (RuntimeError "UnsafeDiv0") else
+           if i2 = 0 then wrapped_int_op u 0 else
            wrapped_int_op u $
              (if is_Unsigned u
               then &(w2n $ word_div ((i2w i1):bytes32) (i2w i2))
