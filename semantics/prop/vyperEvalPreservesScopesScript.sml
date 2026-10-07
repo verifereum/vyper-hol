@@ -741,6 +741,7 @@ Proof
   >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
   >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
   >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
+  >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
   >- drule_all_then ACCEPT_TAC eval_exprs_preserves_scopes_dom
   >- (drule eval_exprs_preserves_scopes_dom >> gvs[])
 QED
@@ -1095,6 +1096,7 @@ Proof
   >> conj_tac >- simp[] (* ExtCall: T *)
   >> conj_tac >- simp[] (* IntCall: T *)
   >> conj_tac >- simp[] (* RawCallTarget: T *)
+  >> conj_tac >- simp[] (* RawCallCalldataTarget: T *)
   >> conj_tac >- simp[] (* RawLog: T *)
   >> conj_tac >- simp[] (* RawRevert: T *)
   >> conj_tac >- simp[] (* SelfDestructTarget: T *)
@@ -2051,25 +2053,19 @@ Proof
   (* Shared approach: IH gives preserves_tv for eval_exprs.
      Remaining ops preserve scopes+immutables, so preserves_tv_eq +
      preserves_tv_trans finishes. *)
-  (* RawCallTarget *)
+  (* Both raw_call input forms preserve scopes and immutables after operands. *)
   conj_tac >- (
     rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-    gvs[Once evaluate_def, bind_apply, ignore_bind_apply, AllCaseEqs(),
-         return_def, COND_RATOR, LET_THM, pairTheory.UNCURRY] >>
-    imp_res_tac check_state >>
-    imp_res_tac type_check_state >>
-    imp_res_tac lift_option_type_state >>
-    imp_res_tac lift_option_state >>
-    imp_res_tac get_accounts_state >>
-    imp_res_tac get_transient_storage_state >>
-    imp_res_tac update_accounts_scopes >>
-    imp_res_tac update_accounts_immutables >>
-    imp_res_tac update_transient_scopes >>
-    imp_res_tac update_transient_immutables >>
-    imp_res_tac append_logs_scopes >>
-    imp_res_tac append_logs_immutables >> gvs[] >>
-    first_x_assum drule >> rw[] >>
-    gvs[preserves_tv_def]) >>
+    gvs[Once evaluate_def, bind_apply, ignore_bind_apply, AllCaseEqs(), return_def] >>
+    imp_res_tac type_check_state >> imp_res_tac lift_option_type_state >>
+    imp_res_tac eval_raw_call_preserves_non_accounts >> gvs[] >>
+    first_x_assum drule >> rw[] >> gvs[preserves_tv_def]) >>
+  conj_tac >- (
+    rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+    gvs[Once evaluate_def, bind_apply, ignore_bind_apply, AllCaseEqs(), return_def] >>
+    imp_res_tac type_check_state >> imp_res_tac lift_option_type_state >>
+    imp_res_tac eval_raw_call_preserves_non_accounts >> gvs[] >>
+    first_x_assum drule >> rw[] >> gvs[preserves_tv_def]) >>
   (* RawLog *)
   conj_tac >- (
     rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>

@@ -1934,6 +1934,7 @@ Proof
     suspend "Expr_Call_ExtCall_result")) >>
   TRY(rename1 `Send` >> suspend "Expr_Call_Send") >>
   TRY(rename1 `RawCallTarget` >> suspend "Expr_Call_RawCallTarget") >>
+  TRY(rename1 `RawCallCalldataTarget` >> suspend "Expr_Call_RawCallCalldataTarget") >>
   TRY(rename1 `RawLog` >> suspend "Expr_Call_RawLog") >>
   TRY(rename1 `RawRevert` >> suspend "Expr_Call_RawRevert") >>
   TRY(rename1 `SelfDestructTarget` >> suspend "Expr_Call_SelfDestructTarget") >>
@@ -9825,41 +9826,38 @@ Resume eval_all_type_sound_mutual[Expr_Call_RawCallTarget]:
       impl_tac >- simp[] >>
       strip_tac >> gvs[] >>
       `LENGTH vs = 3` by (gvs[exprs_runtime_typed_def] >> metis_tac[listTheory.LIST_REL_LENGTH]) >>
-      simp_tac(srw_ss())[bind_def, ignore_bind_def, check_def, assert_def,
-                           return_def, raise_def, lift_option_def,
-                           get_accounts_def, get_transient_storage_def,
-                           update_accounts_def, update_transient_def] >>
-      Cases_on `flags.rcf_is_delegate` >> gvs[return_def, raise_def, no_type_error_result_def] >>
-      Cases_on `run_ext_call cx.txn.target target_addr data
-                  (if flags.rcf_is_static then NONE else SOME amount)
-                  args_st.accounts args_st.tStorage (vyper_to_tx_params cx.txn)` >>
-      gvs[return_def, raise_def, no_type_error_result_def]
-      >- (strip_tac >> gvs[]) >>
-      PairCases_on `x` >> gvs[] >>
-      `accounts_well_typed x2` by (drule_all run_ext_call_accounts_well_typed >> simp[]) >>
-      strip_tac >> gvs[update_accounts_def, update_transient_def, bind_def, return_def] >>
-      `runtime_consistent env cx (args_st with <|accounts := x2; tStorage := x3|>)` by
-        metis_tac[update_accounts_transient_runtime_consistent, runtime_consistent_def] >>
-      `runtime_consistent env cx
-         ((args_st with <|accounts := x2; tStorage := x3|>) with
-            logs := args_st.logs ++ x4)` by (
-        qspecl_then [`env`, `cx`,
-                     `args_st with <|accounts := x2; tStorage := x3|>`, `x4`]
-          mp_tac runtime_consistent_logs_append >>
-        simp[]) >>
-      Cases_on `x0` >> Cases_on `flags.rcf_revert_on_failure` >>
-      Cases_on `flags.rcf_max_outsize = 0` >>
-      gvs[check_def, assert_def, bind_def, return_def, raise_def,
-          append_logs_def, runtime_consistent_def, no_type_error_result_def,
-          expr_result_typed_def, expr_runtime_typed_def, expr_type_def,
-          toplevel_value_typed_def, value_has_type_def, raw_call_return_type_def,
-          evaluate_type_def, is_HashMapRef_def] >>
-      mp_tac (Q.SPEC `flags.rcf_max_outsize` (GEN_ALL raw_call_bytes_slot_size_bound)) >>
-      impl_tac >- simp[] >>
-      TRY strip_tac >>
-      gvs[listTheory.LENGTH_TAKE_EQ, value_has_type_def, evaluate_type_def,
-          raw_call_return_type_def] >>
-      decide_tac) >>
+      simp[bind_def, return_def] >> strip_tac >>
+      `runtime_consistent env cx args_st` by simp[runtime_consistent_def] >>
+      drule_all (SRULE [] eval_raw_call_result_sound) >> strip_tac >>
+      Cases_on `res` >>
+      gvs[runtime_consistent_def, no_type_error_result_def, expr_type_def]) >>
+    strip_tac >> gvs[]) >>
+  rpt strip_tac >> gvs[Once well_typed_expr_def]
+QED
+
+Resume eval_all_type_sound_mutual[Expr_Call_RawCallCalldataTarget]:
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (
+    strip_tac >>
+    qpat_x_assum `call_evaluation_safe cx
+      (int_calls_expr (Call _ (RawCallCalldataTarget _) es _))` mp_tac >>
+    simp[int_calls_expr_def] >> strip_tac >>
+    qpat_x_assum `well_typed_expr env (Call _ (RawCallCalldataTarget _) _ _)` mp_tac >>
+    rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
+    qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+    simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
+      type_check_def, assert_def, return_def, raise_def, lift_option_type_def] >>
+    Cases_on `eval_exprs cx es st` >>
+    rename1 `eval_exprs cx es st = (args_res,args_st)` >>
+    first_x_assum drule_all >> strip_tac >>
+    Cases_on `args_res` >> gvs[no_type_error_result_def]
+    >- (
+      drule_all raw_call_calldata_args_runtime_typed_dest >> strip_tac >>
+      gvs[bind_def, return_def] >> strip_tac >>
+      `runtime_consistent env cx args_st` by simp[runtime_consistent_def] >>
+      drule_all (SRULE [] eval_raw_call_result_sound) >> strip_tac >>
+      Cases_on `res` >>
+      gvs[runtime_consistent_def, no_type_error_result_def, expr_type_def]) >>
     strip_tac >> gvs[]) >>
   rpt strip_tac >> gvs[Once well_typed_expr_def]
 QED

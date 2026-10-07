@@ -1,7 +1,7 @@
 Theory vyperLogPreservation
 
 Ancestors
-  vyperCall vyperStatePreservation
+  vyperCall vyperStatePreservation vyperInterpreter vyperState vyperMisc
 
 Definition log_extends_def:
   log_extends (st:evaluation_state) (st':evaluation_state) <=>
@@ -2788,31 +2788,57 @@ Proof
   rpt strip_tac >> gvs[rich_listTheory.IS_PREFIX_APPEND]
 QED
 
+Theorem eval_raw_call_log_extends:
+  eval_raw_call cx flags target_addr calldata amount st = (res,st') ==>
+  log_extends st st'
+Proof
+  Cases_on `flags.rcf_is_delegate` >>
+  simp[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def, raise_def, get_accounts_def,
+       get_transient_storage_def, log_extends_refl] >>
+  Cases_on `run_ext_call cx.txn.target target_addr calldata
+    (if flags.rcf_is_static then NONE else SOME amount)
+    st.accounts st.tStorage (vyper_to_tx_params cx.txn)` >>
+  simp[lift_option_def, bind_def, return_def, raise_def, log_extends_refl] >>
+  PairCases_on `x` >>
+  Cases_on `flags.rcf_revert_on_failure` >> Cases_on `x0` >>
+  Cases_on `flags.rcf_max_outsize = 0` >>
+  simp[update_accounts_def, update_transient_def, append_logs_def,
+       check_def, assert_def, bind_def, ignore_bind_def, return_def, raise_def,
+       log_extends_def, rich_listTheory.IS_PREFIX_APPEND] >>
+  rpt strip_tac >> gvs[log_extends_def, rich_listTheory.IS_PREFIX_APPEND]
+QED
+
 Theorem case_expr_raw_call_logs[local]:
   (!s0 r s1. eval_exprs cx es s0 = (r,s1) ==> log_extends s0 s1) ==>
   !st res st'. eval_expr cx (Call ty (RawCallTarget flags) es drv) st =
     (res,st') ==> log_extends st st'
 Proof
-  rpt strip_tac >>
-  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[Once vyperInterpreterTheory.evaluate_def] >>
-  pure_rewrite_tac[vyperStateTheory.ignore_bind_def] >>
-  simp[vyperStateTheory.bind_def, vyperStateTheory.return_def,
-       vyperStateTheory.raise_def, vyperStateTheory.check_def,
-       vyperStateTheory.type_check_def, vyperStateTheory.assert_def,
-       vyperStateTheory.get_accounts_def,
-       vyperStateTheory.get_transient_storage_def, AllCaseEqs()] >>
+  rpt strip_tac >> qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, return_def, raise_def,
+       type_check_def, assert_def, lift_option_type_def,
+       option_CASE_rator, AllCaseEqs()] >>
   rpt strip_tac >> gvs[log_extends_refl] >>
-  imp_res_tac lift_option_type_state >> imp_res_tac lift_option_state >> gvs[] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  imp_res_tac raw_call_tail_log_extends >>
   first_x_assum drule >> strip_tac >>
-  irule log_extends_trans >> goal_assum drule >>
-  irule raw_call_tail_log_extends >>
-  simp[vyperStateTheory.check_def] >>
-  qexistsl [`accounts'`, `emitted_logs`, `flags`, `res`, `returnData`,
-            `success`, `tStorage'`] >>
-  first_assum ACCEPT_TAC
+  TRY (gvs[] >> NO_TAC) >>
+  drule eval_raw_call_log_extends >> strip_tac >>
+  drule_all log_extends_trans >> simp[]
+QED
+
+Theorem case_expr_raw_call_calldata_logs[local]:
+  (!s0 r s1. eval_exprs cx es s0 = (r,s1) ==> log_extends s0 s1) ==>
+  !st res st'. eval_expr cx (Call ty (RawCallCalldataTarget flags) es drv) st =
+    (res,st') ==> log_extends st st'
+Proof
+  rpt strip_tac >> qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, return_def, raise_def,
+       type_check_def, assert_def, lift_option_type_def,
+       option_CASE_rator, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[log_extends_refl] >>
+  first_x_assum drule >> strip_tac >>
+  TRY (gvs[] >> NO_TAC) >>
+  drule eval_raw_call_log_extends >> strip_tac >>
+  drule_all log_extends_trans >> simp[]
 QED
 
 Theorem case_expr_raw_log_logs[local]:
@@ -3000,6 +3026,7 @@ in
      case_expr_builtin_logs, case_expr_if_logs, case_expr_struct_lit_logs,
      case_expr_send_logs, case_expr_selfdestruct_logs, case_expr_create_logs,
      case_expr_ext_call_logs, case_expr_raw_call_logs,
+     case_expr_raw_call_calldata_logs,
      case_expr_raw_log_logs, case_expr_raw_revert_logs,
      case_expr_attribute_logs, case_expr_type_builtin_logs,
      case_eval_exprs_nil_logs, case_eval_exprs_cons_logs]

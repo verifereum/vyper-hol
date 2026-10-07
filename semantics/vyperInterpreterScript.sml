@@ -1002,6 +1002,61 @@ End
 
 val () = cv_auto_trans run_ext_call_def;
 
+(* Shared execution after raw_call operands have been evaluated and decoded.
+   Both input forms retain the same static/revert/output and state effects. *)
+Definition eval_raw_call_def:
+  eval_raw_call cx flags target_addr calldata amount = do
+    value_opt <<- if flags.rcf_is_static then NONE else SOME amount;
+    type_check (¬flags.rcf_is_delegate) "raw_call delegate unsupported";
+    accounts <- get_accounts;
+    tStorage <- get_transient_storage;
+    result <- lift_option
+      (run_ext_call cx.txn.target target_addr calldata value_opt accounts tStorage
+        (vyper_to_tx_params cx.txn)) "raw_call run failed";
+    success <<- FST result; result1 <<- SND result;
+    returnData <<- FST result1; result2 <<- SND result1;
+    accounts' <<- FST result2; result3 <<- SND result2;
+    tStorage' <<- FST result3; emitted_logs <<- SND result3;
+    update_accounts (K accounts');
+    update_transient (K tStorage');
+    append_logs emitted_logs;
+    if flags.rcf_revert_on_failure then do
+      check success "raw_call reverted";
+      if flags.rcf_max_outsize = 0 then return $ Value NoneV
+      else return $ Value $ BytesV (TAKE flags.rcf_max_outsize returnData)
+    od else
+      if flags.rcf_max_outsize = 0 then return $ Value $ BoolV success
+      else return $ Value $ ArrayV $ TupleV [BoolV success;
+             BytesV (TAKE flags.rcf_max_outsize returnData)]
+  od
+End
+
+val () = eval_raw_call_def
+  |> SRULE [FUN_EQ_THM, bind_def, ignore_bind_def, LET_RATOR,
+            COND_RATOR, prod_CASE_rator, sum_CASE_rator, lift_option_def,
+            option_CASE_rator, type_check_def, assert_def]
+  |> cv_auto_trans;
+
+Theorem eval_raw_call_preserves_non_accounts:
+  eval_raw_call cx flags target_addr calldata amount st = (res, st') ==>
+  st'.scopes = st.scopes /\ st'.immutables = st.immutables
+Proof
+  Cases_on `flags.rcf_is_delegate` >>
+  simp[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def, raise_def, get_accounts_def,
+       get_transient_storage_def] >>
+  Cases_on `run_ext_call cx.txn.target target_addr calldata
+    (if flags.rcf_is_static then NONE else SOME amount)
+    st.accounts st.tStorage (vyper_to_tx_params cx.txn)` >>
+  simp[lift_option_def, bind_def, return_def, raise_def] >>
+  PairCases_on `x` >>
+  Cases_on `flags.rcf_revert_on_failure` >> Cases_on `x0` >>
+  Cases_on `flags.rcf_max_outsize = 0` >>
+  simp[update_accounts_def, update_transient_def, append_logs_def,
+       check_def, assert_def, bind_def, ignore_bind_def, return_def, raise_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
 (* Dynamic array bounds check: reads stored length from storage *)
 Definition check_array_bounds_def:
   check_array_bounds cx (ArrayRef is_transient base_slot _ (Dynamic _)) (IntV i) = do
@@ -1402,28 +1457,14 @@ Definition evaluate_def:
     target_addr <- lift_option_type (dest_AddressV (EL 0 vs)) "raw_call target";
     calldata <- lift_option_type (dest_BytesV (EL 1 vs)) "raw_call data";
     amount <- lift_option_type (dest_NumV (EL 2 vs)) "raw_call value";
-    value_opt <<- if flags.rcf_is_static then NONE else SOME amount;
-    (* delegate_call not yet supported in semantics *)
-    type_check (¬flags.rcf_is_delegate) "raw_call delegate unsupported";
-    accounts <- get_accounts;
-    tStorage <- get_transient_storage;
-    txParams <<- vyper_to_tx_params cx.txn;
-    caller <<- cx.txn.target;
-    result <- lift_option
-      (run_ext_call caller target_addr calldata value_opt accounts tStorage txParams)
-      "raw_call run failed";
-    (success, returnData, accounts', tStorage', emitted_logs) <<- result;
-    update_accounts (K accounts');
-    update_transient (K tStorage');
-    append_logs emitted_logs;
-    if flags.rcf_revert_on_failure then do
-      check success "raw_call reverted";
-      if flags.rcf_max_outsize = 0 then return $ Value NoneV
-      else return $ Value $ BytesV (TAKE flags.rcf_max_outsize returnData)
-    od else
-      if flags.rcf_max_outsize = 0 then return $ Value $ BoolV success
-      else return $ Value $ ArrayV $ TupleV [BoolV success;
-             BytesV (TAKE flags.rcf_max_outsize returnData)]
+    eval_raw_call cx flags target_addr calldata amount
+  od ∧
+  eval_expr cx (Call ty (RawCallCalldataTarget flags) es _) = do
+    vs <- eval_exprs cx es;
+    type_check (LENGTH vs = 2) "raw_call calldata args";
+    target_addr <- lift_option_type (dest_AddressV (EL 0 vs)) "raw_call target";
+    amount <- lift_option_type (dest_NumV (EL 1 vs)) "raw_call value";
+    eval_raw_call cx flags target_addr cx.txn.calldata amount
   od ∧
   (* raw_log(topics_list, data)
      args = [topics_array; data_bytes] *)

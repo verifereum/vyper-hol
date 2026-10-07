@@ -337,6 +337,11 @@ signature vyperASTSyntax = sig
   val mk_RawCallTarget_tm : term -> term
   val dest_RawCallTarget_tm : term -> term
   val is_RawCallTarget : term -> bool
+
+  val RawCallCalldataTarget_tm : term
+  val mk_RawCallCalldataTarget_tm : term -> term
+  val dest_RawCallCalldataTarget_tm : term -> term
+  val is_RawCallCalldataTarget : term -> bool
   val RawLog_tm : term
   val is_RawLog : term -> bool
   val RawRevert_tm : term
@@ -629,6 +634,7 @@ signature vyperASTSyntax = sig
     | VExtCall of term * term
     | VSend
     | VRawCallTarget of term
+    | VRawCallCalldataTarget of term
     | VRawLog
     | VRawRevert
     | VSelfDestructTarget

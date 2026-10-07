@@ -1154,6 +1154,7 @@ Proof
   TRY(rename1 `ExtCall` >> suspend "Expr_Call_ExtCall") >>
   TRY(rename1 `Send` >> suspend "Expr_Call_Send") >>
   TRY(rename1 `RawCallTarget` >> suspend "Expr_Call_RawCallTarget") >>
+  TRY(rename1 `RawCallCalldataTarget` >> suspend "Expr_Call_RawCallCalldataTarget") >>
   TRY(rename1 `RawLog` >> suspend "Expr_Call_RawLog") >>
   TRY(rename1 `RawRevert` >> suspend "Expr_Call_RawRevert") >>
   TRY(rename1 `SelfDestructTarget` >> suspend "Expr_Call_SelfDestructTarget") >>
@@ -1745,6 +1746,34 @@ Resume eval_all_storage_preservation_mutual[Expr_Pop]:
 QED
 
 
+Theorem eval_raw_call_preserves_contract_storage:
+  protected_storage_calls_preserve cx /\ contract_storage_well_formed cx st /\
+  eval_raw_call cx flags target_addr calldata amount st = (res,st') ==>
+  contract_storage_well_formed cx st'
+Proof
+  strip_tac >> qpat_x_assum `eval_raw_call _ _ _ _ _ _ = _` mp_tac >>
+  Cases_on `flags.rcf_is_delegate` >>
+  simp[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def, raise_def, get_accounts_def, get_transient_storage_def]
+  >- (strip_tac >> gvs[]) >>
+  Cases_on `run_ext_call cx.txn.target target_addr calldata
+    (if flags.rcf_is_static then NONE else SOME amount)
+    st.accounts st.tStorage (vyper_to_tx_params cx.txn)` >>
+  simp[lift_option_def, bind_def, return_def, raise_def]
+  >- (strip_tac >> gvs[]) >>
+  PairCases_on `x` >> simp[] >>
+  `contract_storage_well_formed cx (st with <|accounts := x2; tStorage := x3|>)` by
+    (drule_all protected_storage_calls_preserve_run_ext_call >> simp[]) >>
+  `contract_storage_well_formed cx
+     ((st with <|accounts := x2; tStorage := x3|>) with logs := st.logs ++ x4)` by
+    metis_tac[contract_storage_well_formed_logs] >>
+  Cases_on `x0` >> Cases_on `flags.rcf_revert_on_failure` >>
+  Cases_on `flags.rcf_max_outsize = 0` >>
+  simp[update_accounts_def, update_transient_def, append_logs_def,
+       check_def, assert_def, bind_def, ignore_bind_def, return_def, raise_def] >>
+  strip_tac >> gvs[]
+QED
+
 Resume eval_all_storage_preservation_mutual[Expr_Call_RawCallTarget]:
   rpt gen_tac >> strip_tac >>
   conj_tac
@@ -1779,35 +1808,40 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_RawCallTarget]:
         metis_tac[listTheory.LIST_REL_LENGTH]) >>
       mp_tac raw_call_args_runtime_typed_dest >>
       impl_tac >- simp[] >> strip_tac >> gvs[] >>
-      simp_tac(srw_ss())[bind_def, ignore_bind_def, check_def, assert_def,
-        return_def, raise_def, lift_option_def, get_accounts_def,
-        get_transient_storage_def, update_accounts_def, update_transient_def] >>
-      Cases_on `flags.rcf_is_delegate` >> gvs[return_def, raise_def] >>
-      Cases_on `run_ext_call cx.txn.target target_addr data
-                  (if flags.rcf_is_static then NONE else SOME amount)
-                  args_st.accounts args_st.tStorage (vyper_to_tx_params cx.txn)` >>
-      gvs[return_def, raise_def]
-      >- (rpt strip_tac >> gvs[] >>
-          metis_tac[runtime_storage_consistent_storage]) >>
-      PairCases_on `x` >> gvs[] >>
-      `contract_storage_well_formed cx
-         (args_st with <|accounts := x2; tStorage := x3|>)` by
-        metis_tac[protected_storage_calls_preserve_run_ext_call,
-                  runtime_storage_consistent_storage] >>
-      `contract_storage_well_formed cx
-         ((args_st with <|accounts := x2; tStorage := x3|>) with
-            logs := args_st.logs ++ x4)` by
-        metis_tac[contract_storage_well_formed_logs] >>
-      strip_tac >>
-      gvs[update_accounts_def, update_transient_def, bind_def, return_def] >>
-      Cases_on `x0` >> Cases_on `flags.rcf_revert_on_failure` >>
-      Cases_on `flags.rcf_max_outsize = 0` >>
-      gvs[check_def, assert_def, bind_def, return_def, raise_def,
-          append_logs_def]) >>
+      simp[bind_def, return_def] >> strip_tac >>
+      drule_all eval_raw_call_preserves_contract_storage >> simp[]) >>
     rpt strip_tac >> gvs[]) >>
   rpt strip_tac >> gvs[Once well_typed_expr_def]
 QED
 
+
+Resume eval_all_storage_preservation_mutual[Expr_Call_RawCallCalldataTarget]:
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (
+    strip_tac >>
+    qpat_x_assum `call_evaluation_safe cx
+      (int_calls_expr (Call _ (RawCallCalldataTarget _) es _))` mp_tac >>
+    simp[int_calls_expr_def] >> strip_tac >>
+    qpat_x_assum `well_typed_expr env (Call _ (RawCallCalldataTarget _) _ _)` mp_tac >>
+    rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
+    qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+    simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
+      type_check_def, assert_def, return_def, raise_def, lift_option_type_def] >>
+    Cases_on `eval_exprs cx es st` >>
+    rename1 `eval_exprs cx es st = (args_res,args_st)` >>
+    first_x_assum drule_all >> strip_tac >>
+    Cases_on `args_res` >> gvs[]
+    >- (
+      rename1 `eval_exprs cx es st = (INL vs,args_st)` >>
+      `exprs_runtime_typed env es vs` by (
+        irule eval_exprs_success_runtime_typed >> simp[] >>
+        metis_tac[runtime_storage_consistent_runtime]) >>
+      drule_all raw_call_calldata_args_runtime_typed_dest >> strip_tac >>
+      gvs[bind_def, return_def] >> strip_tac >>
+      drule_all eval_raw_call_preserves_contract_storage >> simp[]) >>
+    rpt strip_tac >> gvs[]) >>
+  rpt strip_tac >> gvs[Once well_typed_expr_def]
+QED
 
 Resume eval_all_storage_preservation_mutual[AnnAssign]:
   rpt gen_tac >> strip_tac >>

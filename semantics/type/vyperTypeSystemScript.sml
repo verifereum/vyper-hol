@@ -568,6 +568,10 @@ Definition well_typed_expr_def:
      EL 0 (MAP expr_type args) = BaseT AddressT /\
      (?bd. EL 1 (MAP expr_type args) = BaseT (BytesT bd)) /\
      EL 2 (MAP expr_type args) = BaseT (UintT 256)) /\
+  well_typed_expr env (Call ty (RawCallCalldataTarget flags) args drv) =
+    (well_typed_exprs env args /\ drv = NONE /\ ty = raw_call_return_type flags /\
+     flags.rcf_max_outsize < dimword(:256) /\ ¬flags.rcf_is_delegate /\
+     MAP expr_type args = [BaseT AddressT; BaseT (UintT 256)]) /\
   well_typed_expr env (Call ty RawLog args drv) =
     (well_typed_exprs env args /\ drv = NONE /\ ty = NoneT /\ LENGTH args = 2 /\
      (?bd. EL 0 (MAP expr_type args) = ArrayT (BaseT (BytesT (Fixed 32))) bd /\

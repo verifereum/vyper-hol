@@ -11,7 +11,8 @@ roots = ["vyperHolScript.sml",
          "frontend/vyperCheckContractFrontendLibTestScript.sml",
          "tests/vyperCheckContractTraceLibTestScript.sml",
          "tests/vyperCalldataLenTestScript.sml",
-         "tests/vyperCalldataSliceTestScript.sml"]
+         "tests/vyperCalldataSliceTestScript.sml",
+         "tests/vyperRawCallCalldataTestScript.sml"]
 
 [build.theory_tactic_timeouts]
 "semantics/vyperInterpreterScript.sml" = 5

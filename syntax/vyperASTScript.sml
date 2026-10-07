@@ -206,6 +206,9 @@ Datatype:
      args = [to_addr; data_bytes; value]
      Keyword args (compile-time constants) are in raw_call_flags *)
   | RawCallTarget raw_call_flags
+  (* raw_call(to, msg.data, ...): original transaction input, never a bounded
+     ordinary expression. Runtime operands are [to_addr; value]. *)
+  | RawCallCalldataTarget raw_call_flags
   (* raw_log(topics, data)
      args = [data_bytes; topic1; ...; topicN] where N ≤ 4 *)
   | RawLog

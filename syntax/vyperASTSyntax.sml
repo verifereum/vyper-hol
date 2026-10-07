@@ -410,6 +410,9 @@ val (ExtCall_tm, mk_ExtCall_tm, dest_ExtCall_tm, is_ExtCall) =
 val (Send_tm, is_Send) = syntax0 "Send"
 val (RawCallTarget_tm, mk_RawCallTarget_tm, dest_RawCallTarget_tm,
      is_RawCallTarget) = syntax_fns1 "vyperAST" "RawCallTarget"
+val (RawCallCalldataTarget_tm, mk_RawCallCalldataTarget_tm,
+     dest_RawCallCalldataTarget_tm, is_RawCallCalldataTarget) =
+  syntax_fns1 "vyperAST" "RawCallCalldataTarget"
 val (RawLog_tm, is_RawLog) = syntax0 "RawLog"
 val (RawRevert_tm, is_RawRevert) = syntax0 "RawRevert"
 val (SelfDestructTarget_tm, is_SelfDestructTarget) = syntax0 "SelfDestructTarget"
@@ -602,6 +605,7 @@ datatype call_target_view =
   | VExtCall of term * term
   | VSend
   | VRawCallTarget of term
+  | VRawCallCalldataTarget of term
   | VRawLog
   | VRawRevert
   | VSelfDestructTarget
@@ -612,6 +616,8 @@ fun view_call_target tm =
   else if is_ExtCall tm then VExtCall (dest_ExtCall_tm tm)
   else if is_Send tm then VSend
   else if is_RawCallTarget tm then VRawCallTarget (dest_RawCallTarget_tm tm)
+  else if is_RawCallCalldataTarget tm then
+    VRawCallCalldataTarget (dest_RawCallCalldataTarget_tm tm)
   else if is_RawLog tm then VRawLog
   else if is_RawRevert tm then VRawRevert
   else if is_SelfDestructTarget tm then VSelfDestructTarget

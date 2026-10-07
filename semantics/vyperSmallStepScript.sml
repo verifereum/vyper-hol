@@ -63,6 +63,7 @@ Datatype:
   | ExtCallK bool identifier (type list) type (expr option) eval_continuation
   (* Chain interaction builtin continuations *)
   | RawCallK type raw_call_flags eval_continuation
+  | RawCallCalldataK raw_call_flags eval_continuation
   | RawLogK eval_continuation
   | RawRevertK eval_continuation
   | SelfDestructK eval_continuation
@@ -178,6 +179,8 @@ Definition eval_expr_cps_def:
   (* Chain interaction builtins *)
   eval_expr_cps cx10 (Call ty (RawCallTarget flags) es _) st k =
     eval_exprs_cps cx10 es st (RawCallK ty flags k) ∧
+  eval_expr_cps cx10 (Call ty (RawCallCalldataTarget flags) es _) st k =
+    eval_exprs_cps cx10 es st (RawCallCalldataK flags k) ∧
   eval_expr_cps cx10 (Call _ RawLog es _) st k =
     eval_exprs_cps cx10 es st (RawLogK k) ∧
   eval_expr_cps cx10 (Call _ RawRevert es _) st k =
@@ -397,6 +400,7 @@ Definition apply_exc_def:
   apply_exc cx ex st (CallSendK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (ExtCallK _ _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (RawCallK _ _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (RawCallCalldataK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (RawLogK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (RawRevertK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (SelfDestructK k) = AK cx (ApplyExc ex) st k ∧
@@ -719,27 +723,16 @@ Definition apply_vals_def:
       target_addr <- lift_option_type (dest_AddressV (EL 0 vs)) "raw_call target";
       calldata <- lift_option_type (dest_BytesV (EL 1 vs)) "raw_call data";
       amount <- lift_option_type (dest_NumV (EL 2 vs)) "raw_call value";
-      value_opt <<- if flags.rcf_is_static then NONE else SOME amount;
-      type_check (¬flags.rcf_is_delegate) "raw_call delegate unsupported";
-      accounts <- get_accounts;
-      tStorage <- get_transient_storage;
-      txParams <<- vyper_to_tx_params cx.txn;
-      caller <<- cx.txn.target;
-      result <- lift_option
-        (run_ext_call caller target_addr calldata value_opt accounts tStorage txParams)
-        "raw_call run failed";
-      (success, returnData, accounts', tStorage', emitted_logs) <<- result;
-      update_accounts (K accounts');
-      update_transient (K tStorage');
-      append_logs emitted_logs;
-      if flags.rcf_revert_on_failure then do
-        check success "raw_call reverted";
-        if flags.rcf_max_outsize = 0 then return $ Value NoneV
-        else return $ Value $ BytesV (TAKE flags.rcf_max_outsize returnData)
-      od else
-        if flags.rcf_max_outsize = 0 then return $ Value $ BoolV success
-        else return $ Value $ ArrayV $ TupleV [BoolV success;
-               BytesV (TAKE flags.rcf_max_outsize returnData)]
+      eval_raw_call cx flags target_addr calldata amount
+    od st
+    of (INR ex, st) => AK cx (ApplyExc ex) st k
+     | (INL tv, st) => AK cx (ApplyTv tv) st k) ∧
+  apply_vals cx vs st (RawCallCalldataK flags k) =
+    (case do
+      type_check (LENGTH vs = 2) "raw_call calldata args";
+      target_addr <- lift_option_type (dest_AddressV (EL 0 vs)) "raw_call target";
+      amount <- lift_option_type (dest_NumV (EL 1 vs)) "raw_call value";
+      eval_raw_call cx flags target_addr cx.txn.calldata amount
     od st
     of (INR ex, st) => AK cx (ApplyExc ex) st k
      | (INL tv, st) => AK cx (ApplyTv tv) st k) ∧
@@ -1638,6 +1631,12 @@ Proof
   (* Chain interaction builtins: all use same tactic.
      CPS evals exprs then calls apply_vals which matches big-step body.
       Applied per-case (not via rpt) to stay within the per-tactic budget. *)
+  \\ conj_tac >- (
+    rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def]
+    \\ gvs[prod_CASE_rator, sum_CASE_rator, cont_def]
+    \\ CASE_TAC \\ gvs[] \\ CASE_TAC \\ gvs[]
+    \\ rw[Once OWHILE_THM, nextk_def, stepk_def,
+          apply_exc_def, apply_vals_def, ignore_bind_def, bind_def])
   \\ conj_tac >- (
     rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def]
     \\ gvs[prod_CASE_rator, sum_CASE_rator, cont_def]

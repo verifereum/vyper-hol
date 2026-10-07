@@ -2301,6 +2301,9 @@ Definition compile_call_def:
   compile_call cfn cenv ret_ty ty (RawCallTarget rcf) args default_ret st =
     (let (_, st') = emit_inst INVALID [] [] st in
      (StackValue ret_ty (Lit 0w), st')) ∧
+  compile_call cfn cenv ret_ty ty (RawCallCalldataTarget rcf) args default_ret st =
+    (let (_, st') = emit_inst INVALID [] [] st in
+     (StackValue ret_ty (Lit 0w), st')) ∧
   compile_call cfn cenv ret_ty ty RawLog args default_ret st =
     (let (_, st') = emit_inst INVALID [] [] st in
      (StackValue ret_ty (Lit 0w), st')) ∧

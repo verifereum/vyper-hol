@@ -1572,6 +1572,62 @@ Proof
   qexists_tac `Num i` >> simp[]
 QED
 
+Theorem raw_call_calldata_args_runtime_typed_dest:
+  exprs_runtime_typed env es vs /\
+  MAP expr_type es = [BaseT AddressT; BaseT (UintT 256)] ==>
+  ?target_addr amount. LENGTH vs = 2 /\
+    dest_AddressV (HD vs) = SOME target_addr /\
+    dest_NumV (EL 1 vs) = SOME amount
+Proof
+  rw[exprs_runtime_typed_def] >>
+  Cases_on `es` >> gvs[evaluate_type_def] >>
+  rename1 `value_has_type (BaseTV AddressT) v_addr` >>
+  rename1 `value_has_type (BaseTV (UintT 256)) v_amt` >>
+  Cases_on `v_addr` >> gvs[value_has_type_def, dest_AddressV_def] >>
+  Cases_on `v_amt` >> gvs[value_has_type_def, dest_NumV_def] >>
+  rename1 `0 <= i` >>
+  `~(i < 0:int)` by intLib.ARITH_TAC >> qexists_tac `Num i` >> simp[]
+QED
+
+(* Shared execution is independent of how the input bytes were obtained. *)
+Theorem eval_raw_call_result_sound:
+  runtime_consistent env cx st /\ ¬flags.rcf_is_delegate /\
+  flags.rcf_max_outsize < dimword(:256) /\
+  eval_raw_call cx flags target_addr calldata amount st = (res,st') ==>
+  runtime_consistent env cx st' /\ no_type_error_result res /\
+  (!tv e. res = INL tv /\ expr_type e = raw_call_return_type flags ==>
+    expr_result_typed env e tv)
+Proof
+  strip_tac >> qpat_x_assum `eval_raw_call _ _ _ _ _ _ = _` mp_tac >>
+  simp[eval_raw_call_def, type_check_def, assert_def, bind_def, ignore_bind_def,
+       return_def, get_accounts_def, get_transient_storage_def] >>
+  Cases_on `run_ext_call cx.txn.target target_addr calldata
+    (if flags.rcf_is_static then NONE else SOME amount)
+    st.accounts st.tStorage (vyper_to_tx_params cx.txn)` >>
+  simp[lift_option_def, bind_def, return_def, raise_def]
+  >- (strip_tac >> gvs[no_type_error_result_def]) >>
+  PairCases_on `x` >> simp[] >>
+  `accounts_well_typed x2` by (
+    fs[runtime_consistent_def] >> drule_all run_ext_call_accounts_well_typed >> simp[]) >>
+  `runtime_consistent env cx (st with <|accounts := x2; tStorage := x3|>)` by
+    (drule_all update_accounts_transient_runtime_consistent >> simp[]) >>
+  `runtime_consistent env cx
+    ((st with <|accounts := x2; tStorage := x3|>) with logs := st.logs ++ x4)` by (
+    qspecl_then [`env`, `cx`, `st with <|accounts := x2; tStorage := x3|>`, `x4`]
+      mp_tac runtime_consistent_logs_append >> simp[]) >>
+  Cases_on `x0` >> Cases_on `flags.rcf_revert_on_failure` >>
+  Cases_on `flags.rcf_max_outsize = 0` >>
+  simp[update_accounts_def, update_transient_def, append_logs_def,
+       check_def, assert_def, bind_def, ignore_bind_def, return_def, raise_def] >>
+  rpt strip_tac >> gvs[no_type_error_result_def, expr_result_typed_def,
+    expr_runtime_typed_def, toplevel_value_typed_def, value_has_type_def,
+    raw_call_return_type_def, evaluate_type_def, is_HashMapRef_def] >>
+  mp_tac (Q.SPEC `flags.rcf_max_outsize` (GEN_ALL raw_call_bytes_slot_size_bound)) >>
+  impl_tac >- simp[] >> TRY strip_tac >>
+  gvs[listTheory.LENGTH_TAKE_EQ, value_has_type_def, evaluate_type_def,
+      raw_call_return_type_def] >> decide_tac
+QED
+
 Theorem raw_log_args_runtime_typed_dest:
   exprs_runtime_typed env es vs /\
   LENGTH es = 2 /\

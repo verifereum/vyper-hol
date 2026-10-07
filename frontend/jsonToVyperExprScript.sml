@@ -241,6 +241,14 @@ Definition kwarg_method_id_def:
 End
 
 
+Definition raw_call_flags_of_kwargs_def:
+  raw_call_flags_of_kwargs kwargs =
+    <| rcf_max_outsize := kwarg_num "max_outsize" kwargs 0;
+       rcf_is_delegate := kwarg_bool "is_delegate_call" kwargs F;
+       rcf_is_static := kwarg_bool "is_static_call" kwargs F;
+       rcf_revert_on_failure := kwarg_bool "revert_on_failure" kwargs T |>
+End
+
 Definition make_builtin_call_def:
   make_builtin_call ty name args kwargs ret_ty =
     if name = "len" then Builtin ty Len args
@@ -283,10 +291,7 @@ Definition make_builtin_call_def:
                 is_delegate_call=F, is_static_call=F, revert_on_failure=T)
        Convention: args in Call = [to_addr; data_bytes; value] *)
     else if name = "raw_call" then
-      let flags = <| rcf_max_outsize := kwarg_num "max_outsize" kwargs 0;
-                     rcf_is_delegate := kwarg_bool "is_delegate_call" kwargs F;
-                     rcf_is_static := kwarg_bool "is_static_call" kwargs F;
-                     rcf_revert_on_failure := kwarg_bool "revert_on_failure" kwargs T |> in
+      let flags = raw_call_flags_of_kwargs kwargs in
       let value_e = kwarg_expr "value" kwargs (Literal (BaseT (UintT 256)) (IntL 0)) in
       Call ty (RawCallTarget flags) (args ++ [value_e]) NONE
     else if name = "raw_log" then Call ty RawLog args NONE
@@ -776,8 +781,9 @@ End
 (* Recognize the source shape before translating msg.data: it is not an
    ordinary bounded bytes value in the internal AST. *)
 Definition is_calldata_len_call_def:
-  is_calldata_len_call (JE_Name "len" _ _ _)
-    [JE_Attribute (JE_Name "msg" _ _ _) "data" _ _ _ _ _] [] = T /\
+  is_calldata_len_call (JE_Name name _ _ _)
+    [JE_Attribute (JE_Name base _ _ _) attr _ _ _ _ _] [] =
+      (name = "len" /\ base = "msg" /\ attr = "data") /\
   is_calldata_len_call _ _ _ = F
 End
 
@@ -790,8 +796,9 @@ Definition calldata_slice_length_def:
 End
 
 Definition is_calldata_slice_call_def:
-  is_calldata_slice_call (JE_Name "slice" _ _ _)
-    (JE_Attribute (JE_Name "msg" _ _ _) "data" _ _ _ _ _ :: _) = T /\
+  is_calldata_slice_call (JE_Name name _ _ _)
+    (JE_Attribute (JE_Name base _ _ _) attr _ _ _ _ _ :: _) =
+      (name = "slice" /\ base = "msg" /\ attr = "data") /\
   is_calldata_slice_call _ _ = F
 End
 
@@ -799,6 +806,29 @@ Definition calldata_slice_bound_def:
   calldata_slice_bound [data; start; len] [] = calldata_slice_length len /\
   calldata_slice_bound _ _ = NONE
 End
+
+(* Match only the dedicated source operand; compiler type/source metadata
+   does not turn msg.data into an ordinary bounded bytes expression. *)
+Definition is_raw_call_calldata_call_def:
+  is_raw_call_calldata_call (JE_Name name _ _ _)
+    [target; JE_Attribute (JE_Name base _ _ _) attr _ _ _ _ _] =
+      (name = "raw_call" /\ base = "msg" /\ attr = "data") /\
+  is_raw_call_calldata_call _ _ = F
+End
+
+Theorem is_raw_call_calldata_call_length:
+  !func args. is_raw_call_calldata_call func args ==> LENGTH args = 2
+Proof
+  ho_match_mp_tac is_raw_call_calldata_call_ind >>
+  simp[is_raw_call_calldata_call_def]
+QED
+
+Theorem is_raw_call_calldata_call_nonempty:
+  is_raw_call_calldata_call func args ==> args <> []
+Proof
+  Cases_on `args` >> simp[] >> Cases_on `func` >>
+  simp[is_raw_call_calldata_call_def]
+QED
 
 Definition translate_expr_def:
   (translate_expr ctx (JE_Int v ty) =
@@ -893,6 +923,13 @@ Definition translate_expr_def:
        (* Rejection marker for the total translator; never a zero-length slice.
           The type checker rejects CalldataSlice 0 regardless of operands. *)
        | NONE => Builtin (BaseT (BytesT (Dynamic 0))) (CalldataSlice 0) [])
+    else if is_raw_call_calldata_call func args then
+      let kwargs' = translate_kwargs ctx kwargs in
+      let value_e = kwarg_expr "value" kwargs'
+        (Literal (BaseT (UintT 256)) (IntL 0)) in
+      Call (translate_type (expr_type_ctx ctx) ret_ty)
+        (RawCallCalldataTarget (raw_call_flags_of_kwargs kwargs'))
+        [translate_expr ctx (HD args); value_e] NONE
     else let args' = translate_expr_list ctx args in
     let kwargs' = translate_kwargs ctx kwargs in
     let translated_pop_index =
@@ -950,6 +987,8 @@ Termination
   >> imp_res_tac find_keyword_size
   >> imp_res_tac call_pop_index_size
   >> gvs[]
+  >> drule is_raw_call_calldata_call_nonempty
+  >> Cases_on `args` >> gvs[]
 End
 
 
