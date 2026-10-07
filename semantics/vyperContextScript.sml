@@ -380,6 +380,10 @@ val () = cv_auto_trans evaluate_ecmul_def;
 Definition evaluate_builtin_def:
   evaluate_builtin cx acc ty bt vs =
     case bt of
+    | CalldataLen =>
+        (case vs of
+         | [] => INL $ IntV &(LENGTH cx.txn.calldata)
+         | _ => INR (TypeError "builtin"))
     | Not =>
         (case vs of
          | [BoolV b] => INL (BoolV (¬b))
@@ -546,6 +550,7 @@ val () = cv_auto_trans type_builtin_args_length_ok_def;
 
 Definition builtin_args_length_ok_def:
   builtin_args_length_ok Len n = (n = 1n) ∧
+  builtin_args_length_ok CalldataLen n = (n = 0) ∧
   builtin_args_length_ok Not n = (n = 1) ∧
   builtin_args_length_ok Neg n = (n = 1) ∧
   builtin_args_length_ok Abs n = (n = 1) ∧

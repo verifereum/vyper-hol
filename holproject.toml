@@ -9,7 +9,8 @@ version = "0.2.3"
 roots = ["vyperHolScript.sml",
          "semantics/type/vyperCheckContractLibTestScript.sml",
          "frontend/vyperCheckContractFrontendLibTestScript.sml",
-         "tests/vyperCheckContractTraceLibTestScript.sml"]
+         "tests/vyperCheckContractTraceLibTestScript.sml",
+         "tests/vyperCalldataLenTestScript.sml"]
 
 [build.theory_tactic_timeouts]
 "semantics/vyperInterpreterScript.sml" = 5

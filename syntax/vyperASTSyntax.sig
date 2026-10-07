@@ -438,6 +438,7 @@ signature vyperASTSyntax = sig
   val TEther_tm : term val is_TEther : term -> bool
 
   val Len_tm : term val is_Len : term -> bool
+  val CalldataLen_tm : term val is_CalldataLen : term -> bool
   val Not_tm : term val is_Not : term -> bool
   val Neg_tm : term val is_Neg : term -> bool
   val Abs_tm : term val is_Abs : term -> bool

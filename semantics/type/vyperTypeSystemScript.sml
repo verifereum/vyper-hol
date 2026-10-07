@@ -167,6 +167,8 @@ End
 Definition well_typed_builtin_app_def:
   well_typed_builtin_app ty (Bop bop) ts =
     (LENGTH ts = 2 /\ well_typed_binop ty bop (EL 0 ts) (EL 1 ts)) /\
+  well_typed_builtin_app ty CalldataLen ts =
+    (ts = [] /\ ty = BaseT (UintT 256)) /\
   well_typed_builtin_app ty Len ts =
     (LENGTH ts = 1 /\ ty = BaseT (UintT 256) /\ is_sized_type (HD ts)) /\
   well_typed_builtin_app ty Not ts =

@@ -141,6 +141,7 @@ End
 Datatype:
   builtin
   = Len
+  | CalldataLen (* len(msg.data): complete calldata, including selector *)
   | Not
   | Neg
   | Abs           (* abs(x): absolute value with overflow check *)

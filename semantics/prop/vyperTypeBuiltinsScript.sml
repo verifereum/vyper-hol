@@ -14,6 +14,18 @@ Libs
   wordsLib
   intLib
 
+(* ===== Calldata length ===== *)
+
+Theorem CalldataLen_builtin_success_type:
+  context_well_typed cx ∧
+  evaluate_type tenv (BaseT (UintT 256)) = SOME tv ∧
+  evaluate_builtin cx acc (BaseT (UintT 256)) CalldataLen [] = INL v ==>
+  value_has_type tv v
+Proof
+  rw[evaluate_builtin_def, evaluate_type_def] >>
+  gvs[value_has_type_def, context_well_typed_def]
+QED
+
 (* ===== Environment/account items ===== *)
 
 Theorem Env_builtin_no_type_error:
@@ -3022,6 +3034,7 @@ Proof
       is_int_type_inv, is_numeric_type_inv, is_bool_type_inv,
       is_flag_type_inv, is_comparable_type_inv,
       is_bytes_or_string_type_inv] >>
+  TRY (drule_all CalldataLen_builtin_success_type >> simp[] >> NO_TAC) >>
   (* Phase 2: resolve type values *)
   gvs[evaluate_type_def] >>
     TRY (rename1 `evaluate_builtin _ _ (BaseT BoolT) Not [BoolV b] = INL v` >>

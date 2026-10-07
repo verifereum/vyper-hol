@@ -773,6 +773,14 @@ Definition translate_call_def:
 End
 
 
+(* Recognize the source shape before translating msg.data: it is not an
+   ordinary bounded bytes value in the internal AST. *)
+Definition is_calldata_len_call_def:
+  is_calldata_len_call (JE_Name "len" _ _ _)
+    [JE_Attribute (JE_Name "msg" _ _ _) "data" _ _ _ _ _] [] = T /\
+  is_calldata_len_call _ _ _ = F
+End
+
 Definition translate_expr_def:
   (translate_expr ctx (JE_Int v ty) =
     Literal (translate_type (expr_type_ctx ctx) ty) (IntL v)) /\
@@ -857,7 +865,9 @@ Definition translate_expr_def:
   (* Call - single case with internal dispatch to avoid pattern completion issues *)
   (* JE_Call now includes source_id for module calls *)
   (translate_expr ctx (JE_Call func args kwargs ret_ty src_id_opt) =
-    let args' = translate_expr_list ctx args in
+    if is_calldata_len_call func args kwargs then
+      Builtin (BaseT (UintT 256)) CalldataLen []
+    else let args' = translate_expr_list ctx args in
     let kwargs' = translate_kwargs ctx kwargs in
     let translated_pop_index =
       OPTION_MAP (translate_expr ctx) (call_pop_index func) in
