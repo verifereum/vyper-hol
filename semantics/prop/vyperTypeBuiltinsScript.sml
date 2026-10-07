@@ -3524,8 +3524,10 @@ Proof
     (cj 2 vyper_to_abi_enc_length_bound) >> simp[] >> decide_tac
 QED
 
+(* The tuple byte encoder is used only on the non-unwrapping path. *)
 Theorem well_typed_abi_encode_tuple_success[local]:
-  abi_encode_size_ok (get_tenv cx) (TupleT ts) o' n /\
+  abi_encode_size_ok (get_tenv cx) ensure (TupleT ts) o' n /\
+  (ensure \/ ¬needs_external_call_wrap (TupleT ts)) /\
   MAP (evaluate_type (get_tenv cx)) ts = MAP SOME tvs /\
   evaluate_type (get_tenv cx) (BaseT (BytesT (Dynamic n))) = SOME result_tv /\
   LIST_REL value_has_type tvs vs /\
@@ -3539,7 +3541,9 @@ Proof
     simp[value_has_type_def, values_have_types_LIST_REL] >>
   `vyper_abi_size_bound (get_tenv cx) (TupleT ts) +
    abi_encode_method_id_size o' <= n` by
-    gvs[abi_encode_size_ok_def] >>
+    (Cases_on `ts` >- gvs[abi_encode_size_ok_def] >>
+     rename1 `MAP _ (ty::tys) = _` >> Cases_on `tys` >>
+     gvs[abi_encode_size_ok_def, needs_external_call_wrap_def]) >>
   `abi_encode_method_id_size o' +
    vyper_abi_size_bound (get_tenv cx) (TupleT ts) <= n` by
     decide_tac >>
@@ -3586,8 +3590,7 @@ Proof
       simp[evaluate_type_def, value_has_type_def])
   >| [ (`abi_encode_method_id_size o' +
          vyper_abi_size_bound (get_tenv cx) t <= n` by
-          (gvs[abi_encode_size_ok_def, vyper_abi_size_bound_def] >>
-           Cases_on `vyper_is_dynamic (get_tenv cx) t` >> gvs[] >> decide_tac) >>
+          gvs[abi_encode_size_ok_def] >>
         irule evaluate_abi_encode_bytes_success_type_bound >>
         qexistsl [`n`, `get_tenv cx`, `x0`, `t`, `v'`] >> simp[])
      , metis_tac[well_typed_abi_encode_tuple_success]
@@ -3638,20 +3641,21 @@ QED
    Old probes confirmed the gap; repair adds the bound.
    New probe below verifies the repair correctly rejects the too-small bound. *)
 
-(* Probe: with the repaired definition, n=1 is correctly REJECTED for uint256 encoding
-   because vyper_abi_size_bound FEMPTY (TupleT [BaseT (UintT 256)]) = 32 > 1 *)
+(* Both wrapping modes reject n=1 for uint256: the actual bound is 32. *)
 Theorem abi_encode_probe_result_ok_rejects_small_bound:
-  ¬type_builtin_result_ok FEMPTY (AbiEncode T NONE) (BaseT (BytesT (Dynamic 1)))
+  !ensure. ¬type_builtin_result_ok FEMPTY (AbiEncode ensure NONE) (BaseT (BytesT (Dynamic 1)))
     (TupleT [BaseT (UintT 256)]) [BaseT (UintT 256)]
 Proof
+  Cases_on `ensure` >>
   simp[type_builtin_result_ok_def, abi_encode_size_ok_def] >> EVAL_TAC >> decide_tac
 QED
 
-(* Probe: with n=32, the result_ok predicate is satisfied *)
+(* Both wrapping modes accept the exact static uint256 bound. *)
 Theorem abi_encode_probe_result_ok_accepts_correct_bound:
-  type_builtin_result_ok FEMPTY (AbiEncode T NONE) (BaseT (BytesT (Dynamic 32)))
+  !ensure. type_builtin_result_ok FEMPTY (AbiEncode ensure NONE) (BaseT (BytesT (Dynamic 32)))
     (TupleT [BaseT (UintT 256)]) [BaseT (UintT 256)]
 Proof
+  Cases_on `ensure` >>
   simp[type_builtin_result_ok_def, abi_encode_size_ok_def] >> EVAL_TAC >> decide_tac
 QED
 
