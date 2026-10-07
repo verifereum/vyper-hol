@@ -262,7 +262,10 @@ Proof
                    as_tx_ctx := vs.vs_tx_ctx;
                    as_block_ctx := vs.vs_block_ctx;
                    as_code := vs.vs_code;
-                   as_prev_hashes := vs.vs_prev_hashes |>` >>
+                   as_prev_hashes := vs.vs_prev_hashes;
+                   as_outcomes := vs.vs_outcomes;
+                   as_requests := vs.vs_requests;
+                   as_gas_readings := [] |>` >>
   gvs[initial_state_rel_def, call_ctx_rel_def, tx_ctx_rel_def,
       block_ctx_rel_def, blockhash_rel_def, stack_params_rel_def,
       context_venom_asm_rel_def, fn_init_ps_def,

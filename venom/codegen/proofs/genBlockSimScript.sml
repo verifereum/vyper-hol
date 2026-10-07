@@ -5113,7 +5113,8 @@ Resume gen_inst_ok_sim[none]:
   >> suspend "assert_unreachable_ok"
 QED
 
-Theorem istore_emit_relation_agreement[local]:
+(* Saved concrete baseline check: includes every assembly record field. *)
+Theorem istore_emit_relation_agreement:
   let inst = mk_inst 0 ISTORE [Lit (0w:bytes32); Lit (1w:bytes32)] [] in
   let vs = init_venom_state "entry" in
   let ps = (init_plan_state 0) with
@@ -5129,7 +5130,10 @@ Theorem istore_emit_relation_agreement[local]:
               as_tx_ctx := vs.vs_tx_ctx;
               as_block_ctx := vs.vs_block_ctx;
               as_code := vs.vs_code;
-              as_prev_hashes := vs.vs_prev_hashes |> in
+              as_prev_hashes := vs.vs_prev_hashes;
+              as_outcomes := vs.vs_outcomes;
+              as_requests := vs.vs_requests;
+              as_gas_readings := [] |> in
   let st' = st with <| as_stack := [];
                        as_memory := word_to_bytes (1w:bytes32) T;
                        as_pc := 2 |> in
@@ -5388,7 +5392,8 @@ Resume gen_inst_ok_sim[istore]:
   simp[Abbr `as2`]
 QED
 
-Theorem istore_spill_overlap_mismatch[local]:
+(* Saved counterevidence, unchanged apart from the required full literal. *)
+Theorem istore_spill_overlap_mismatch:
   let vs0 = (init_venom_state "entry") with <|
               vs_memory := word_to_bytes (1w:bytes32) T;
               vs_vars := FEMPTY |+ ("spill",(0w:bytes32)) |> in
@@ -5409,7 +5414,10 @@ Theorem istore_spill_overlap_mismatch[local]:
                as_tx_ctx := vs0.vs_tx_ctx;
                as_block_ctx := vs0.vs_block_ctx;
                as_code := vs0.vs_code;
-               as_prev_hashes := vs0.vs_prev_hashes |> in
+               as_prev_hashes := vs0.vs_prev_hashes;
+               as_outcomes := vs0.vs_outcomes;
+               as_requests := vs0.vs_requests;
+               as_gas_readings := [] |> in
   let vs1 = istore 0 (1w:bytes32) vs0 in
   let as1 = as0 with <| as_stack := [];
                         as_memory := word_to_bytes (1w:bytes32) T;

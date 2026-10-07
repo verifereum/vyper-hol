@@ -2873,12 +2873,17 @@ val context_state_finish_tac : tactic =
   fs[] >> rpt (IF_CASES_TAC >> simp[]) >>
   gas_close_tac;
 
+(* TASK041: gas_existing_relation_counterexample (asmOracleRegression)
+ * closes the counterexample to this old GAS-inclusive claim. Until TASK042
+ * supplies a trace-aware relation, this step interface excludes only GAS;
+ * asm_evm_rel itself remains unchanged. *)
 Theorem asm_evm_step_context_dispatch[local]:
   !prog as es name r.
     asm_encoding_wf prog /\ asm_evm_rel prog as es /\ LENGTH es.contexts = 1 /\
     as.as_pc < LENGTH prog /\ EL as.as_pc prog = AsmOp name /\
     (!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)) /\
     LENGTH as.as_stack < stack_limit /\
+    name <> "GAS" /\
     asm_step_context name as = SOME r ==>
     (?es1 exc. step es = (INR (SOME exc), es1) /\ exc <> StackOverflow) \/
     (case r of
@@ -3687,7 +3692,8 @@ Theorem asm_evm_step:
     ~is_data_inst (EL as.as_pc prog) /\
     (!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)) /\
     LENGTH as.as_stack < stack_limit /\
-    no_asm_calls prog ==>
+    no_asm_calls prog /\
+    EL as.as_pc prog <> AsmOp "GAS" ==>
     (?es1 exc. step es = (INR (SOME exc), es1) /\
                exc <> StackOverflow) \/
     (case asm_step (SND (compute_label_offsets prog))
