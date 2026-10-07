@@ -1,10 +1,12 @@
-(* Oracle representation is inert in the concrete primitive semantics.
- * INVOKE transport is handled by calleeTransport, not call activation. *)
+(* Only non-CALL/non-STATICCALL primitives preserve the oracle lists.
+ * Activated-call counterexamples live in venomCallActivationRegression.
+ * INVOKE transport remains the calleeTransport boundary. *)
 Theory oracleExecProps
 Ancestors
   venomState venomInst venomExecSemantics oracleStateProps
 
 Theorem step_inst_base_oracle:
+  inst.inst_opcode <> CALL /\ inst.inst_opcode <> STATICCALL /\
   step_inst_base inst s = OK s' ==>
   s'.vs_outcomes = s.vs_outcomes /\ s'.vs_requests = s.vs_requests
 Proof
@@ -22,7 +24,8 @@ Proof
 QED
 
 Theorem step_inst_noninvoke_oracle:
-  inst.inst_opcode <> INVOKE /\ step_inst fuel ctx inst s = OK s' ==>
+  inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> CALL /\
+  inst.inst_opcode <> STATICCALL /\ step_inst fuel ctx inst s = OK s' ==>
   s'.vs_outcomes = s.vs_outcomes /\ s'.vs_requests = s.vs_requests
 Proof
   simp[Once step_inst_def] >> strip_tac >> gvs[] >>

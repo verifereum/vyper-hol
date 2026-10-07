@@ -154,13 +154,15 @@ Proof
        venom_state_component_equality]
 QED
 
-(* Successful concrete primitive steps, with no new opcode premise. *)
+(* Successful steps project the existing full paired result relation. *)
 Theorem commute_equiv_step_oracle:
-  commute_equiv vars s1 s2 /\
+  lift_result (commute_equiv vars) (commute_equiv vars) (commute_equiv vars)
+    (step_inst_base inst1 s1) (step_inst_base inst2 s2) /\
   step_inst_base inst1 s1 = OK t1 /\ step_inst_base inst2 s2 = OK t2 ==>
   t1.vs_outcomes = t2.vs_outcomes /\ t1.vs_requests = t2.vs_requests
 Proof
-  metis_tac[commute_equiv_oracle, step_inst_base_oracle]
+  (* Legacy preservation: metis_tac[commute_equiv_oracle, step_inst_base_oracle] *)
+  strip_tac >> gvs[lift_result_def] >> metis_tac[commute_equiv_oracle]
 QED
 
 (* All four state-bearing constructors; Error is state-free as before. *)
@@ -201,13 +203,16 @@ Proof
        venom_state_component_equality]
 QED
 
-(* Successful concrete primitive steps, with no new opcode premise. *)
+(* Successful steps project the existing full paired result relation. *)
 Theorem alloca_remap_rel_step_oracle:
-  alloca_remap_rel fn roots remap s1 s2 /\
+  lift_result (alloca_remap_rel fn roots remap)
+    (alloca_remap_rel fn roots remap) (alloca_remap_rel fn roots remap)
+    (step_inst_base inst1 s1) (step_inst_base inst2 s2) /\
   step_inst_base inst1 s1 = OK t1 /\ step_inst_base inst2 s2 = OK t2 ==>
   t1.vs_outcomes = t2.vs_outcomes /\ t1.vs_requests = t2.vs_requests
 Proof
-  metis_tac[alloca_remap_rel_oracle, step_inst_base_oracle]
+  (* Legacy preservation: metis_tac[alloca_remap_rel_oracle, step_inst_base_oracle] *)
+  strip_tac >> gvs[lift_result_def] >> metis_tac[alloca_remap_rel_oracle]
 QED
 
 (* All four state-bearing constructors; Error is state-free as before. *)
@@ -249,13 +254,16 @@ Proof
        venom_state_component_equality] >> strip_tac >> gvs[]
 QED
 
-(* Successful concrete primitive steps, with no new opcode premise. *)
+(* Successful steps project the existing full paired result relation. *)
 Theorem concretize_rel_step_oracle:
-  concretize_rel amap fn livesets init s1 s2 /\
+  lift_result (concretize_rel amap fn livesets init)
+    (concretize_rel amap fn livesets init) (concretize_rel amap fn livesets init)
+    (step_inst_base inst1 s1) (step_inst_base inst2 s2) /\
   step_inst_base inst1 s1 = OK t1 /\ step_inst_base inst2 s2 = OK t2 ==>
   t1.vs_outcomes = t2.vs_outcomes /\ t1.vs_requests = t2.vs_requests
 Proof
-  metis_tac[concretize_rel_oracle, step_inst_base_oracle]
+  (* Legacy preservation: metis_tac[concretize_rel_oracle, step_inst_base_oracle] *)
+  strip_tac >> gvs[lift_result_def] >> metis_tac[concretize_rel_oracle]
 QED
 
 (* All four state-bearing constructors; Error is state-free as before. *)

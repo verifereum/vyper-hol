@@ -45,9 +45,11 @@ Ancestors
 (* Make is_immutable_op reduce automatically in simp/gvs/fs *)
 val _ = augment_srw_ss [rewrites [is_immutable_op_def]];
 
-(* Oracle fields are retained by the residual relation and primitive steps. *)
+(* Oracle fields are retained by non-call primitive steps. The two users
+   here already exclude external calls; arbitrary calls require input agreement. *)
 Theorem remap_step_oracle:
   alloca_remap_rel fn roots remap s1 s2 /\
+  inst.inst_opcode <> CALL /\ inst.inst_opcode <> STATICCALL /\
   step_inst_base inst s1 = OK v1 /\ step_inst_base inst s2 = OK v2 ==>
   v1.vs_outcomes = v2.vs_outcomes /\ v1.vs_requests = v2.vs_requests
 Proof
@@ -1543,6 +1545,8 @@ Proof
   disch_then (qspecl_then [`inst`, `s1`, `s2`, `v1`, `v2`] mp_tac) >>
   (impl_tac >- gvs[]) >> strip_tac >>
   (* Step 8: Reconstruct alloca_remap_rel *)
+  `inst.inst_opcode <> CALL /\ inst.inst_opcode <> STATICCALL` by
+    (rpt conj_tac >> strip_tac >> gvs[is_ext_call_op_def]) >>
   drule_all remap_step_oracle >> strip_tac >>
   irule remap_rel_from_equiv >>
   gvs[] >> rpt conj_tac
@@ -3439,6 +3443,8 @@ Proof
     immutable_op_output_vars_agree) >>
   impl_tac >- simp[] >> strip_tac >>
   (* 10. Reconstruct alloca_remap_rel *)
+  `inst.inst_opcode <> CALL /\ inst.inst_opcode <> STATICCALL` by
+    (rpt conj_tac >> strip_tac >> gvs[is_ext_call_op_def]) >>
   drule_all remap_step_oracle >> strip_tac >>
   irule remap_rel_from_equiv >> gvs[] >> rpt conj_tac
   (* Non-PV vars *)

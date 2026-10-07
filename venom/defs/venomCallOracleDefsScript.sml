@@ -6,7 +6,7 @@
  *)
 Theory venomCallOracleDefs
 Ancestors
-  venomState extCallOracle
+  venomState extCallOracle pair
 
 Definition venom_call_request_def:
   venom_call_request s (addr:bytes32) (value:bytes32)
@@ -39,3 +39,28 @@ Definition consume_call_outcome_def:
          vs_memory := (write_memory_with_expansion retOff
            (TAKE retSize outcome.co_returnData) s).vs_memory |>)
 End
+
+(* Eliminate tuple case plumbing once for activated dispatch consumers.
+ * Unchanged-field projections then simplify without per-field APIs. *)
+Theorem consume_call_outcome_eq[simp]:
+  consume_call_outcome rq ro rs s =
+    (if (FST (take_outcome rq s.vs_outcomes)).co_success then 1w else 0w,
+     s with <|
+       vs_outcomes := SND (take_outcome rq s.vs_outcomes);
+       vs_requests := record_request rq s.vs_requests;
+       vs_accounts := FST (adopt_outcome rq
+         (FST (take_outcome rq s.vs_outcomes))
+         (s.vs_accounts, s.vs_transient, s.vs_logs));
+       vs_transient := FST (SND (adopt_outcome rq
+         (FST (take_outcome rq s.vs_outcomes))
+         (s.vs_accounts, s.vs_transient, s.vs_logs)));
+       vs_logs := SND (SND (adopt_outcome rq
+         (FST (take_outcome rq s.vs_outcomes))
+         (s.vs_accounts, s.vs_transient, s.vs_logs)));
+       vs_returndata := (FST (take_outcome rq s.vs_outcomes)).co_returnData;
+       vs_memory := (write_memory_with_expansion ro
+         (TAKE rs (FST (take_outcome rq s.vs_outcomes)).co_returnData) s).vs_memory |>)
+Proof
+  simp[consume_call_outcome_def] >> pairarg_tac >> simp[] >>
+  pairarg_tac >> simp[]
+QED

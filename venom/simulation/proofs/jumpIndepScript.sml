@@ -14,7 +14,7 @@
 
 Theory jumpIndep
 Ancestors
-  instIdxIndep venomExecSemantics venomState venomInst
+  instIdxIndep venomExecSemantics venomState venomInst venomCallOracleDefs
 Libs
   finite_mapTheory listTheory BasicProvers pairTheory
 
@@ -391,9 +391,10 @@ Theorem exec_ext_call_jump[local]:
       (exec_ext_call inst s gas addr value ao as_ ro rs is_static)
 Proof
   rpt gen_tac >>
-  simp([exec_ext_call_def, make_venom_call_state_jump] @ ext_call_rw) >>
+  simp([exec_ext_call_def, venom_call_request_def,
+        write_memory_with_expansion_def, make_venom_call_state_jump] @ ext_call_rw) >>
   EVERY_CASE_TAC >>
-  simp[instIdxIndepTheory.exec_result_map_def, update_var_jump,
+  simp[instIdxIndepTheory.exec_result_map_def, update_var_def, update_var_jump,
        venom_state_component_equality]
 QED
 

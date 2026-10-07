@@ -1470,6 +1470,9 @@ Proof
   (impl_tac >- fast_conj) >>
   strip_tac >>
   drule_all ok_ok_frame_fields >> strip_tac >>
+  `inst1.inst_opcode <> CALL /\ inst1.inst_opcode <> STATICCALL /\
+   inst2.inst_opcode <> CALL /\ inst2.inst_opcode <> STATICCALL` by
+    (rpt conj_tac >> strip_tac >> gvs[is_ext_call_op_def]) >>
   imp_res_tac step_inst_base_oracle >>
   (* Close commute_equiv — all needed equalities are in assumptions.
      Each field is s12.F = X = ... = s21.F via transitivity of 2-4 equalities.

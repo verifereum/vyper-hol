@@ -19,7 +19,7 @@
 Theory execEquivProofs
 Ancestors
   stateEquivProofs stateEquiv venomExecSemantics venomExecProofs venomState venomInst venomWf list
-  rich_list finite_map
+  rich_list finite_map venomCallOracleDefs
 
 (* ==========================================================================
    exec_* Category Helpers
@@ -938,6 +938,22 @@ Triviality exec_ext_call_equiv:
       (exec_ext_call inst s1 gas addr value ao as_ ro rs is_static)
       (exec_ext_call inst s2 gas addr value ao as_ ro rs is_static)
 Proof
+  rpt strip_tac >>
+  `venom_call_request s1 addr value ao as_ is_static =
+   venom_call_request s2 addr value ao as_ is_static` by
+    fs[state_equiv_def, execution_equiv_def,
+       venom_call_request_def, read_memory_def] >>
+  fs[state_equiv_def, execution_equiv_def] >>
+  Cases_on `inst.inst_outputs` >> simp[exec_ext_call_def, result_equiv_def] >>
+  rename1 `inst.inst_outputs = out::rest_outputs` >>
+  Cases_on `rest_outputs` >> simp[exec_ext_call_def, result_equiv_def] >>
+  rw[state_equiv_def, execution_equiv_def, lookup_var_def,
+     update_var_def, FLOOKUP_UPDATE, write_memory_with_expansion_def] >>
+  gvs[lookup_var_def] >> Cases_on `out = v` >> simp[]
+QED
+
+(* Original concrete-call proof retained:
+Proof
   rw[exec_ext_call_def, LET_THM] >>
   `s1.vs_memory = s2.vs_memory /\ s1.vs_accounts = s2.vs_accounts /\
    s1.vs_logs = s2.vs_logs /\ s1.vs_call_ctx = s2.vs_call_ctx /\
@@ -950,6 +966,7 @@ Proof
        LET_THM] >>
   irule extract_venom_result_result_equiv >> simp[]
 QED
+*)
 
 (* exec_delegatecall preserves equiv when states and operands match *)
 Triviality exec_delegatecall_equiv:

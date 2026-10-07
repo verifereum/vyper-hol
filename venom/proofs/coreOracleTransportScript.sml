@@ -1,24 +1,29 @@
-(* CURRENT TASK035 primitive/setup/merge contracts, not oracle activation.
- * TASK040 must revisit primitive preservation when CALL consumes outcomes. *)
+(* Activated TASK040 contracts: successful paired steps project the existing
+ * full result relations. Setup/merge still transport the incoming lists.
+ * No arbitrary-instruction pre-state preservation is asserted. *)
 Theory coreOracleTransport
 Ancestors
   coreOracleCoverage oracleExecProps calleeTransport stateEquiv
   stateEquivProps venomExecSemantics venomState
 
 Theorem core_equiv_step_oracle:
-  (execution_equiv vars s1 s2 \/ state_equiv vars s1 s2) /\
+  result_equiv vars (step_inst_base i1 s1) (step_inst_base i2 s2) /\
   step_inst_base i1 s1 = OK t1 /\ step_inst_base i2 s2 = OK t2 ==>
   t1.vs_outcomes = t2.vs_outcomes /\ t1.vs_requests = t2.vs_requests
 Proof
-  metis_tac[step_inst_base_oracle, execution_equiv_oracle, state_equiv_oracle]
+  (* Legacy preservation: metis_tac[step_inst_base_oracle,
+       execution_equiv_oracle, state_equiv_oracle] *)
+  strip_tac >> gvs[result_equiv_def] >> metis_tac[state_equiv_oracle]
 QED
 
 Theorem valid_state_rel_step_oracle:
-  valid_state_rel R_ok R_term /\ (R_ok s1 s2 \/ R_term s1 s2) /\
+  valid_state_rel R_ok R_term /\
+  lift_result R_ok R_term R_term (step_inst_base i1 s1) (step_inst_base i2 s2) /\
   step_inst_base i1 s1 = OK t1 /\ step_inst_base i2 s2 = OK t2 ==>
   t1.vs_outcomes = t2.vs_outcomes /\ t1.vs_requests = t2.vs_requests
 Proof
-  metis_tac[step_inst_base_oracle, valid_state_rel_oracle]
+  (* Legacy preservation: metis_tac[step_inst_base_oracle, valid_state_rel_oracle] *)
+  strip_tac >> gvs[lift_result_def] >> metis_tac[valid_state_rel_oracle]
 QED
 
 Theorem core_equiv_callee_oracle:

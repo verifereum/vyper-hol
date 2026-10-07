@@ -1,19 +1,20 @@
-(* TASK038: CURRENT concrete primitive and callee field transport only.
- * TOP-LEVEL: generic transports and every assigned/derived running family.
- * Reuses TASK035 boundaries; review primitive preservation on TASK040
- * activation. No per-relation semantic induction or admitted simulator. *)
+(* TASK040: paired-step projections from existing full result relations;
+ * callee transport remains unchanged. No arbitrary paired preservation,
+ * new observability premise, or admitted simulator is used. *)
 Theory remainingOracleTransport
 Ancestors
   remainingOracleCoverage oracleExecProps calleeTransport
-  venomExecSemantics venomState
+  venomExecSemantics venomState stateEquiv
 
 Theorem oracle_relation_step:
   (!s1 s2. R s1 s2 ==>
     s1.vs_outcomes = s2.vs_outcomes /\ s1.vs_requests = s2.vs_requests) /\
-  R s1 s2 /\ step_inst_base i1 s1 = OK t1 /\ step_inst_base i2 s2 = OK t2 ==>
+  lift_result R R R (step_inst_base i1 s1) (step_inst_base i2 s2) /\
+  step_inst_base i1 s1 = OK t1 /\ step_inst_base i2 s2 = OK t2 ==>
   t1.vs_outcomes = t2.vs_outcomes /\ t1.vs_requests = t2.vs_requests
 Proof
-  metis_tac[step_inst_base_oracle]
+  (* Legacy preservation: metis_tac[step_inst_base_oracle] *)
+  strip_tac >> gvs[lift_result_def] >> metis_tac[]
 QED
 
 Theorem oracle_relation_callee:
@@ -31,7 +32,9 @@ Proof
 QED
 
 Theorem copy_fwd_rel_step_oracle:
-  copyFwdEquiv$copy_fwd_rel dst src sz s1 s2 /\
+  lift_result (copyFwdEquiv$copy_fwd_rel dst src sz)
+    (copyFwdEquiv$copy_fwd_rel dst src sz) (copyFwdEquiv$copy_fwd_rel dst src sz)
+    (step_inst_base i1 s1) (step_inst_base i2 s2) /\
   step_inst_base i1 s1 = OK t1 /\ step_inst_base i2 s2 = OK t2 ==>
   t1.vs_outcomes = t2.vs_outcomes /\ t1.vs_requests = t2.vs_requests
 Proof
@@ -39,7 +42,9 @@ Proof
 QED
 
 Theorem icf_equiv_step_oracle:
-  invokeCopyFwdCommonDefs$icf_equiv s1 s2 /\
+  lift_result invokeCopyFwdCommonDefs$icf_equiv
+    invokeCopyFwdCommonDefs$icf_equiv invokeCopyFwdCommonDefs$icf_equiv
+    (step_inst_base i1 s1) (step_inst_base i2 s2) /\
   step_inst_base i1 s1 = OK t1 /\ step_inst_base i2 s2 = OK t2 ==>
   t1.vs_outcomes = t2.vs_outcomes /\ t1.vs_requests = t2.vs_requests
 Proof
@@ -47,7 +52,9 @@ Proof
 QED
 
 Theorem dse_equiv_step_oracle:
-  deadStoreElimDefs$dse_equiv space s1 s2 /\
+  lift_result (deadStoreElimDefs$dse_equiv space)
+    (deadStoreElimDefs$dse_equiv space) (deadStoreElimDefs$dse_equiv space)
+    (step_inst_base i1 s1) (step_inst_base i2 s2) /\
   step_inst_base i1 s1 = OK t1 /\ step_inst_base i2 s2 = OK t2 ==>
   t1.vs_outcomes = t2.vs_outcomes /\ t1.vs_requests = t2.vs_requests
 Proof
@@ -55,7 +62,9 @@ Proof
 QED
 
 Theorem dse_all_equiv_step_oracle:
-  deadStoreElimDefs$dse_all_equiv s1 s2 /\
+  lift_result deadStoreElimDefs$dse_all_equiv
+    deadStoreElimDefs$dse_all_equiv deadStoreElimDefs$dse_all_equiv
+    (step_inst_base i1 s1) (step_inst_base i2 s2) /\
   step_inst_base i1 s1 = OK t1 /\ step_inst_base i2 s2 = OK t2 ==>
   t1.vs_outcomes = t2.vs_outcomes /\ t1.vs_requests = t2.vs_requests
 Proof
@@ -63,7 +72,9 @@ Proof
 QED
 
 Theorem m2v_equiv_step_oracle:
-  mem2varDefs$m2v_equiv vars s1 s2 /\
+  lift_result (mem2varDefs$m2v_equiv vars)
+    (mem2varDefs$m2v_equiv vars) (mem2varDefs$m2v_equiv vars)
+    (step_inst_base i1 s1) (step_inst_base i2 s2) /\
   step_inst_base i1 s1 = OK t1 /\ step_inst_base i2 s2 = OK t2 ==>
   t1.vs_outcomes = t2.vs_outcomes /\ t1.vs_requests = t2.vs_requests
 Proof
@@ -71,7 +82,9 @@ Proof
 QED
 
 Theorem m2v_inv_noix_step_oracle:
-  mem2varBlockSimHelpers$m2v_inv_noix fn s1 s2 /\
+  lift_result (mem2varBlockSimHelpers$m2v_inv_noix fn)
+    (mem2varBlockSimHelpers$m2v_inv_noix fn) (mem2varBlockSimHelpers$m2v_inv_noix fn)
+    (step_inst_base i1 s1) (step_inst_base i2 s2) /\
   step_inst_base i1 s1 = OK t1 /\ step_inst_base i2 s2 = OK t2 ==>
   t1.vs_outcomes = t2.vs_outcomes /\ t1.vs_requests = t2.vs_requests
 Proof
@@ -79,7 +92,9 @@ Proof
 QED
 
 Theorem memzero_inv_step_oracle:
-  mmCorrectnessProofs$memzero_inv fresh s1 s2 /\
+  lift_result (mmCorrectnessProofs$memzero_inv fresh)
+    (mmCorrectnessProofs$memzero_inv fresh) (mmCorrectnessProofs$memzero_inv fresh)
+    (step_inst_base i1 s1) (step_inst_base i2 s2) /\
   step_inst_base i1 s1 = OK t1 /\ step_inst_base i2 s2 = OK t2 ==>
   t1.vs_outcomes = t2.vs_outcomes /\ t1.vs_requests = t2.vs_requests
 Proof
@@ -87,7 +102,9 @@ Proof
 QED
 
 Theorem R_dse_ok_step_oracle:
-  deadStoreElimProofs$R_dse_ok space s1 s2 /\
+  lift_result (deadStoreElimProofs$R_dse_ok space)
+    (deadStoreElimProofs$R_dse_ok space) (deadStoreElimProofs$R_dse_ok space)
+    (step_inst_base i1 s1) (step_inst_base i2 s2) /\
   step_inst_base i1 s1 = OK t1 /\ step_inst_base i2 s2 = OK t2 ==>
   t1.vs_outcomes = t2.vs_outcomes /\ t1.vs_requests = t2.vs_requests
 Proof
@@ -95,7 +112,9 @@ Proof
 QED
 
 Theorem m2v_inv_step_oracle:
-  mem2varDefs$m2v_inv fn s1 s2 /\
+  lift_result (mem2varDefs$m2v_inv fn)
+    (mem2varDefs$m2v_inv fn) (mem2varDefs$m2v_inv fn)
+    (step_inst_base i1 s1) (step_inst_base i2 s2) /\
   step_inst_base i1 s1 = OK t1 /\ step_inst_base i2 s2 = OK t2 ==>
   t1.vs_outcomes = t2.vs_outcomes /\ t1.vs_requests = t2.vs_requests
 Proof

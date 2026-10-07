@@ -11,7 +11,7 @@
 Theory ssaRenamedSim
 Ancestors
   ssaSimDefs venomExecSemantics venomInst venomState opcodeClass
-  list rich_list finite_map pred_set
+  list rich_list finite_map pred_set venomCallOracleDefs
 Libs
   ssaRenamedSimLib ssaFrameLib
 
@@ -262,6 +262,26 @@ Triviality exec_ext_call_renamed:
           ssa_sim ((HD inst1.inst_outputs =+ HD inst2.inst_outputs) sigma)
                   s1' s2'
 Proof
+  rpt strip_tac >>
+  `venom_call_request s1 addr_w value ao as_ is_static =
+   venom_call_request s2 addr_w value ao as_ is_static` by
+    fs[ssa_sim_def, venom_call_request_def, read_memory_def] >>
+  `s1.vs_outcomes = s2.vs_outcomes /\ s1.vs_requests = s2.vs_requests` by
+    fs[ssa_sim_def] >>
+  gvs[exec_ext_call_def, AllCaseEqs()] >>
+  qexists_tac `update_var (HD inst2.inst_outputs)
+    (if (FST (take_outcome
+      (venom_call_request s2 addr_w value ao as_ is_static) s2.vs_outcomes)).co_success
+     then 1w else 0w)
+    (SND (consume_call_outcome
+      (venom_call_request s2 addr_w value ao as_ is_static) (w2n ro) (w2n rs) s2))` >>
+  Cases_on `inst2.inst_outputs` >> gvs[] >>
+  irule ssa_sim_update_var >>
+  gvs[ssa_sim_def, lookup_var_def, write_memory_with_expansion_def]
+QED
+
+(* Original concrete-call proof retained:
+Proof
   rw[exec_ext_call_def, LET_THM] >>
   imp_res_tac ssa_sim_fields >> gvs[read_memory_def] >>
   `make_venom_call_state s1 (w2w addr_w) (w2n gas) (w2n value)
@@ -278,6 +298,7 @@ Proof
   gvs[extract_venom_result_def, AllCaseEqs(), LET_THM, lookup_var_def] >>
   BasicProvers.every_case_tac >> gvs[]
 QED
+*)
 
 (* exec_delegatecall simulation *)
 Triviality exec_delegatecall_renamed:

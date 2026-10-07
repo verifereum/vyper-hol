@@ -327,6 +327,17 @@ Proof
   Cases_on `inst.inst_opcode` >> EVAL_TAC
 QED
 
+(* A dead store confined to one space is not an oracle call. *)
+Theorem effects_in_space_not_oracle_call:
+  effects_in_space space inst ==>
+  inst.inst_opcode <> CALL /\ inst.inst_opcode <> STATICCALL
+Proof
+  Cases_on `space` >>
+  simp[Once effects_in_space_def, Once is_memory_def_opcode_def, space_effect_def] >>
+  Cases_on `inst.inst_opcode` >> EVAL_TAC >> simp[] >>
+  rpt strip_tac >> metis_tac[effect_distinct]
+QED
+
 (* step_preserves_non_output_vars with empty outputs gives unconditional
    variable preservation. irule can match this directly. *)
 Triviality step_preserves_all_vars_empty_outputs:
@@ -358,6 +369,7 @@ Proof
   imp_res_tac memory_def_opcode_not_terminator >>
   imp_res_tac is_memory_def_opcode_not_alloca_op >>
   imp_res_tac effects_in_space_not_invoke >>
+  imp_res_tac effects_in_space_not_oracle_call >>
   imp_res_tac step_inst_noninvoke_oracle >>
   imp_res_tac effects_in_space_notin_write_effects >>
   Cases_on `(space:addr_space)` >> gvs[is_memory_def_opcode_def, space_effect_def] >>

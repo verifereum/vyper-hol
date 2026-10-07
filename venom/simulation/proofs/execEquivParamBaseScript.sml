@@ -9,7 +9,7 @@ Theory execEquivParamBase
 Ancestors
   execEquivParamDefs passSimulationDefs stateEquivProps execEquivProps
   stateEquiv venomInst venomExecSemantics venomState
-  finite_map list rich_list
+  finite_map list rich_list venomCallOracleDefs
 
 open execEquivParamLib
 
@@ -512,6 +512,23 @@ Theorem vsr_exec_ext_call:
       (exec_ext_call inst s1 gas addr value ao as_ ro rs is_static)
       (exec_ext_call inst s2 gas addr value ao as_ ro rs is_static)
 Proof
+  rpt strip_tac >>
+  drule_all vsr_R_ok_frame >> strip_tac >>
+  `venom_call_request s1 addr value ao as_ is_static =
+   venom_call_request s2 addr value ao as_ is_static` by
+    fs[vsr_frame_def, venom_call_request_def, read_memory_def,
+       venom_state_component_equality] >>
+  fs[vsr_frame_def, venom_state_component_equality] >>
+  Cases_on `inst.inst_outputs` >> simp[exec_ext_call_def, lift_result_def] >>
+  rename1 `inst.inst_outputs = out::rest_outputs` >>
+  Cases_on `rest_outputs` >> simp[exec_ext_call_def, lift_result_def] >>
+  Cases_on `(FST (take_outcome
+    (venom_call_request s2 addr value ao as_ is_static) s2.vs_outcomes)).co_success` >>
+  simp[] >> ext_call_result_tac ()
+QED
+
+(* Original concrete-call proof retained:
+Proof
   rw[LET_THM, exec_ext_call_def] >>
   imp_res_tac vsr_R_ok_fields >> gvs[] >>
   simp[read_memory_def, make_venom_call_state_def,
@@ -531,6 +548,7 @@ Proof
   Cases_on `t` >> gvs[lift_result_def] >>
   ext_call_result_tac ()
 QED
+*)
 
 Theorem vsr_exec_delegatecall:
   !R_ok R_term inst s1 s2 gas addr ao as_ ro rs.

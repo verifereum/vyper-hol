@@ -10,6 +10,7 @@
 Theory venomExecSemantics
 Ancestors
   venomState venomInst venomLayout dretShapeDefs keccak vfmExecution
+  venomCallOracleDefs
 
 (* --------------------------------------------------------------------------
    Arithmetic/Logic Operations (using bytes32 = 256 word)
@@ -453,23 +454,19 @@ Definition extract_venom_result_def:
        | _ => NONE)
 End
 
-(* Execute CALL/STATICCALL via verifereum EVM semantics.
+(* Execute CALL/STATICCALL using the shared outcome oracle.
+   Operand evaluation, including gas, remains in step_inst_base; only the
+   evaluated gas value is ignored. Concrete helpers remain for other opcodes.
    CALL: operands = [gas; addr; value; argsOff; argsSize; retOff; retSize]
    STATICCALL: operands = [gas; addr; argsOff; argsSize; retOff; retSize]
 *)
 Definition exec_ext_call_def:
   exec_ext_call inst s gas addr_w value argsOff argsSize retOff retSize is_static =
-    let calldata = read_memory (w2n argsOff) (w2n argsSize) s in
-    let target : address = w2w addr_w in
-    let code = (lookup_account target s.vs_accounts).code in
-    let evm_s = make_venom_call_state s target (w2n gas) (w2n value)
-                  calldata code is_static in
-    case extract_venom_result s 1w (w2n retOff) (w2n retSize) (run evm_s) of
-    | SOME (output, s') =>
-        (case inst.inst_outputs of
-           [out] => OK (update_var out output s')
-         | _ => Error "ext_call requires single output")
-    | NONE => Error "ext_call: non-terminating or invalid state"
+    let rq = venom_call_request s addr_w value argsOff argsSize is_static;
+        (output, s') = consume_call_outcome rq (w2n retOff) (w2n retSize) s
+    in case inst.inst_outputs of
+         [out] => OK (update_var out output s')
+       | _ => Error "ext_call requires single output"
 End
 
 (* Execute DELEGATECALL via verifereum EVM semantics.
@@ -1203,14 +1200,14 @@ Proof
   ASM_REWRITE_TAC[opcode_case_def] >>
   gvs[AllCaseEqs(), exec_pure1_def, exec_pure2_def, exec_pure3_def,
       exec_read0_def, exec_read1_def, exec_write2_def,
-      exec_ext_call_def, exec_delegatecall_def,
+      exec_ext_call_def, consume_call_outcome_def, exec_delegatecall_def,
       exec_create_def, exec_alloca_def,
       extract_venom_result_def] >>
   rpt strip_tac >> gvs[] >>
   rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
   fs[update_var_def, mstore_def, mstore8_def, sstore_def, tstore_def,
      istore_def, write_memory_with_expansion_def, mcopy_def,
-     revert_state_def, eval_operands_def]
+     revert_state_def, eval_operands_def] >> gvs[AllCaseEqs()]
 QED
 
 (* --------------------------------------------------------------------------

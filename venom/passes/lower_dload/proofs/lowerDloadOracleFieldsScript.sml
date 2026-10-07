@@ -102,14 +102,16 @@ Proof
   simp[ld_ok_refl, ld_equiv_def]
 QED
 
-(* TASK035's concrete primitive preservation covers arbitrary opcodes and
-   payloads, including concrete CALL; no new opcode/observability premise. *)
+(* Project the existing full paired result relation, not pre-state
+   preservation across arbitrary instructions. *)
 Theorem ld_ok_step_oracle:
-  ld_ok vars s1 s2 /\
+  lift_result (ld_ok vars) (ld_equiv vars) (ld_equiv vars)
+    (step_inst_base inst1 s1) (step_inst_base inst2 s2) /\
   step_inst_base inst1 s1 = OK t1 /\ step_inst_base inst2 s2 = OK t2 ==>
   t1.vs_outcomes = t2.vs_outcomes /\ t1.vs_requests = t2.vs_requests
 Proof
-  metis_tac[ld_ok_oracle, step_inst_base_oracle]
+  (* Legacy preservation: metis_tac[ld_ok_oracle, step_inst_base_oracle] *)
+  strip_tac >> gvs[lift_result_def] >> metis_tac[ld_ok_oracle]
 QED
 
 (* Error has no state projection. All four state-bearing constructors use

@@ -1,5 +1,6 @@
 Theory mem2varBlockSimHelpers
 Ancestors
+  venomCallOracleDefs venomCallOracleProps
   oracleExecProps
   mem2varProofs passSharedFrame passSharedTransfer passSharedField instIdxIndep
   venomMemProps venomMemProofs venomExecProofs venomInstProofs
@@ -1029,6 +1030,8 @@ Proof
       step_inst_base_preserves_stable_frame_metadata) >> simp[]) >>
   `v1.vs_initial_fmp = v2.vs_initial_fmp /\
    v1.vs_return_pc_token = v2.vs_return_pc_token` by metis_tac[] >>
+  `inst.inst_opcode <> CALL /\ inst.inst_opcode <> STATICCALL` by
+    (rpt conj_tac >> strip_tac >> gvs[is_ext_call_op_def]) >>
   imp_res_tac step_inst_base_oracle >>
   imp_res_tac step_inst_preserves_alloca_state >>
   imp_res_tac step_inst_preserves_all >>
@@ -2736,6 +2739,52 @@ QED
    4. Decompose s1 case, drule extract_venom_result_m2v_inv
    5. Show update_var preserves invariant *)
 
+(* Used by consuming calls after range-safe memory/adoption transport. *)
+Theorem m2v_inv_noix_call_lists:
+  m2v_inv_noix fn s1 s2 ==>
+  m2v_inv_noix fn
+    (s1 with <| vs_outcomes := os; vs_requests := rqs |>)
+    (s2 with <| vs_outcomes := os; vs_requests := rqs |>)
+Proof
+  simp[m2v_inv_noix_def, lookup_var_def, mem_byte_def, mload_def,
+       in_promoted_region_def, allocas_non_overlapping_def] >>
+  strip_tac >> gvs[] >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem consume_call_outcome_m2v_inv:
+  m2v_inv_noix fn s1 s2 /\ m2v_non32_ok fn s1 s2 /\
+  (!i. ro <= i /\ i < ro + rs ==> ~in_promoted_region fn s1 i) ==>
+  m2v_inv_noix fn
+    (SND (consume_call_outcome rq ro rs s1))
+    (SND (consume_call_outcome rq ro rs s2))
+Proof
+  rpt strip_tac >>
+  `s1.vs_outcomes = s2.vs_outcomes /\ s1.vs_requests = s2.vs_requests /\
+   s1.vs_accounts = s2.vs_accounts /\ s1.vs_transient = s2.vs_transient /\
+   s1.vs_logs = s2.vs_logs` by gvs[m2v_inv_noix_def] >>
+  qabbrev_tac `bytes = TAKE rs (FST (take_outcome rq s2.vs_outcomes)).co_returnData` >>
+  qabbrev_tac `rd = (FST (take_outcome rq s2.vs_outcomes)).co_returnData` >>
+  qabbrev_tac `ac = FST (adopt_outcome rq (FST (take_outcome rq s2.vs_outcomes))
+                         (s2.vs_accounts,s2.vs_transient,s2.vs_logs))` >>
+  qabbrev_tac `ts = FST (SND (adopt_outcome rq (FST (take_outcome rq s2.vs_outcomes))
+                         (s2.vs_accounts,s2.vs_transient,s2.vs_logs)))` >>
+  qabbrev_tac `lgs = SND (SND (adopt_outcome rq (FST (take_outcome rq s2.vs_outcomes))
+                         (s2.vs_accounts,s2.vs_transient,s2.vs_logs)))` >>
+  `m2v_inv_noix fn
+    (s1 with <| vs_memory := (write_memory_with_expansion ro bytes s1).vs_memory;
+                vs_transient := ts; vs_returndata := rd;
+                vs_accounts := ac; vs_logs := lgs |>)
+    (s2 with <| vs_memory := (write_memory_with_expansion ro bytes s2).vs_memory;
+                vs_transient := ts; vs_returndata := rd;
+                vs_accounts := ac; vs_logs := lgs |>)` by
+    (irule m2v_inv_noix_ext_update >> simp[Abbr`bytes`, LENGTH_TAKE_EQ] >>
+     rpt strip_tac >> first_x_assum irule >> simp[]) >>
+  drule m2v_inv_noix_call_lists >>
+  disch_then (qspecl_then [`record_request rq s2.vs_requests`,
+                          `SND (take_outcome rq s2.vs_outcomes)`] mp_tac) >>
+  simp[Abbr`bytes`, Abbr`rd`, Abbr`ac`, Abbr`ts`, Abbr`lgs`]
+QED
+
 (* exec_ext_call (CALL/STATICCALL) preserves m2v_inv_noix *)
 Triviality exec_ext_call_m2v_inv:
   m2v_inv_noix fn s1 s2 /\ m2v_non32_ok fn s1 s2 /\
@@ -2755,6 +2804,26 @@ Proof
   `read_memory (w2n ao) (w2n as_) s1 =
    read_memory (w2n ao) (w2n as_) s2` by
     metis_tac[read_memory_m2v_inv] >>
+  `venom_call_request s1 addr val ao as_ st =
+   venom_call_request s2 addr val ao as_ st` by
+    fs[m2v_inv_noix_def, venom_call_request_def] >>
+  `s1.vs_outcomes = s2.vs_outcomes` by fs[m2v_inv_noix_def] >>
+  `m2v_inv_noix fn
+    (SND (consume_call_outcome (venom_call_request s2 addr val ao as_ st)
+      (w2n ro) (w2n rs) s1))
+    (SND (consume_call_outcome (venom_call_request s2 addr val ao as_ st)
+      (w2n ro) (w2n rs) s2))` by
+    (irule consume_call_outcome_m2v_inv >> simp[]) >>
+  gvs[exec_ext_call_def, AllCaseEqs()] >>
+  irule m2v_inv_noix_update_var >> simp[]
+QED
+
+(* Original concrete-call proof retained:
+Proof
+  strip_tac >>
+  `read_memory (w2n ao) (w2n as_) s1 =
+   read_memory (w2n ao) (w2n as_) s2` by
+    metis_tac[read_memory_m2v_inv] >>
   `s1.vs_accounts = s2.vs_accounts` by gvs[m2v_inv_noix_def] >>
   gvs[exec_ext_call_def, LET_THM] >>
   `make_venom_call_state s1 = make_venom_call_state s2` by
@@ -2766,6 +2835,7 @@ Proof
   simp[AllCaseEqs()] >>
   irule m2v_inv_noix_update_var >> simp[]
 QED
+*)
 
 (* exec_delegatecall preserves m2v_inv_noix *)
 Triviality exec_delegatecall_m2v_inv:
@@ -5216,7 +5286,8 @@ Triviality exec_ext_call_nao:
 Proof
   simp[exec_ext_call_def, LET_THM, AllCaseEqs()] >>
   rpt strip_tac >> gvs[update_var_def] >>
-  metis_tac[extract_venom_result_nao]
+  (* Legacy completion: metis_tac[extract_venom_result_nao] *)
+  simp[LENGTH_write_memory_with_expansion] >> metis_tac[]
 QED
 
 (* exec_delegatecall preserves alloca_next and memory length = MAX old D *)
@@ -5247,7 +5318,7 @@ QED
    callee construction, exec_* produces the same wmwe expansion D. *)
 (* Planned outcome-consumption interface: only the outcomes must agree;
    request histories do not determine the return-buffer expansion. *)
-Triviality exec_ext_call_same_D:
+Theorem exec_ext_call_same_D:
   !inst s1 s2 g a v ao as_ ro rs st s1' s2'.
     exec_ext_call inst s1 g a v ao as_ ro rs st = OK s1' /\
     exec_ext_call inst s2 g a v ao as_ ro rs st = OK s2' /\
@@ -5262,10 +5333,17 @@ Triviality exec_ext_call_same_D:
     ?D. LENGTH s1'.vs_memory = MAX (LENGTH s1.vs_memory) D /\
         LENGTH s2'.vs_memory = MAX (LENGTH s2.vs_memory) D
 Proof
+  (* Legacy completion proof:
   simp[exec_ext_call_def, LET_THM, AllCaseEqs(),
        make_venom_call_state_def] >>
   rpt strip_tac >> gvs[update_var_def] >>
   metis_tac[extract_venom_result_same_D]
+  *)
+  rpt strip_tac >>
+  `venom_call_request s1 a v ao as_ st = venom_call_request s2 a v ao as_ st` by
+    simp[venom_call_request_def] >>
+  gvs[exec_ext_call_def, AllCaseEqs(), update_var_def] >>
+  simp[LENGTH_write_memory_with_expansion] >> metis_tac[]
 QED
 
 Triviality exec_delegatecall_same_D:

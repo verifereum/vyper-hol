@@ -83,13 +83,15 @@ Proof
   simp[ssa_sim_identity]
 QED
 
-(* TASK035 preservation: no restriction on the two primitive opcodes. *)
+(* Project the existing paired full-state relation on successful steps. *)
 Theorem ssa_sim_step_oracle:
-  ssa_sim sigma s1 s2 /\
+  lift_result (ssa_sim sigma) (ssa_sim sigma) (ssa_sim sigma)
+    (step_inst_base inst1 s1) (step_inst_base inst2 s2) /\
   step_inst_base inst1 s1 = OK t1 /\ step_inst_base inst2 s2 = OK t2 ==>
   t1.vs_outcomes = t2.vs_outcomes /\ t1.vs_requests = t2.vs_requests
 Proof
-  metis_tac[ssa_sim_oracle, step_inst_base_oracle]
+  (* Legacy preservation: metis_tac[ssa_sim_oracle, step_inst_base_oracle] *)
+  strip_tac >> gvs[lift_result_def] >> metis_tac[ssa_sim_oracle]
 QED
 
 (* All state-bearing results, including Abort and IntRet, retain both lists.
