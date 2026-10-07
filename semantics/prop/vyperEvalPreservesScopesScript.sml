@@ -2112,7 +2112,7 @@ Proof
     Cases_on `eval_exprs cx es st` >> Cases_on `q` >> simp[] >>
     strip_tac >>
     first_x_assum drule >> strip_tac >>
-    drule eval_create_preserves_non_accounts >> strip_tac >>
+    drule eval_create_preserves_scopes_immutables >> strip_tac >>
     irule preserves_tv_trans >> first_assum (irule_at Any) >>
     gvs[preserves_tv_def]) >>
   (* eval_exprs [] *)

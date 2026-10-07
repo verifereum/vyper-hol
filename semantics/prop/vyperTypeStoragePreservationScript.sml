@@ -24,7 +24,7 @@ Theory vyperTypeStoragePreservation
 Ancestors
   vyperTypeStatePreservation vyperHashMapPreservation vyperStorageFrame
   vyperStorageLayoutSafety vyperStorageReadSoundness vyperState
-  vyperStorageBackend
+  vyperStorageBackend vyperCreate vyperInterpreter
 Libs
   wordsLib markerLib
 
@@ -1545,6 +1545,64 @@ Theorem protected_storage_calls_preserve_revert:
     (st with <| accounts := accounts'; tStorage := tStorage' |>)
 Proof
   metis_tac[protected_storage_calls_preserve_run_ext_call]
+QED
+
+(* ===== CREATE postulate =====
+   Storage is NOT preserved through creation in general: the created
+   constructor runs arbitrary EVM code that may write any account's storage,
+   including the protected transaction target's own.  As with external calls
+   above, the frame condition on the adapter boundary is therefore a
+   postulate, parameterized by the context, discharged analogously.
+
+   The postulate covers the whole creation step, i.e. the Vyper-side prelude
+   (reset the freshly allocated account, transfer the endowment, bump both
+   nonces) together with the adapter run.  Folding the prelude in is required:
+   create_prelude_accounts rewrites the new account wholesale, so the protected
+   frame is not a property of the adapter call in isolation but of prelude and
+   run together. *)
+Definition protected_storage_creates_preserve_def:
+  protected_storage_creates_preserve cx <=>
+    (!sender address initcode value st txp code_opt
+       accounts' tStorage' emitted_logs.
+      run_create_evm sender address initcode value
+        (create_prelude_accounts sender address value st.accounts)
+        st.tStorage txp =
+        SOME (code_opt,accounts',tStorage',emitted_logs) /\
+      contract_storage_well_formed cx st ==>
+      contract_storage_well_formed cx
+        (st with <| accounts := accounts'; tStorage := tStorage' |>)) /\
+    (* a failed creation keeps only the prelude's effects, which leave the
+       protected storage alone *)
+    (!sender address initcode value st txp.
+      run_create_evm sender address initcode value
+        (create_prelude_accounts sender address value st.accounts)
+        st.tStorage txp = NONE ==>
+      contract_storage_well_formed cx
+        (st with accounts updated_by (create_prelude_accounts sender address value)))
+End
+
+Theorem protected_storage_creates_preserve_run_create_evm:
+  protected_storage_creates_preserve cx /\
+  run_create_evm sender address initcode value
+    (create_prelude_accounts sender address value st.accounts)
+    st.tStorage txp =
+    SOME (code_opt,accounts',tStorage',emitted_logs) /\
+  contract_storage_well_formed cx st ==>
+  contract_storage_well_formed cx
+    (st with <| accounts := accounts'; tStorage := tStorage' |>)
+Proof
+  simp[protected_storage_creates_preserve_def] >> metis_tac[]
+QED
+
+Theorem protected_storage_creates_preserve_run_create_evm_NONE:
+  protected_storage_creates_preserve cx /\
+  run_create_evm sender address initcode value
+    (create_prelude_accounts sender address value st.accounts)
+    st.tStorage txp = NONE ==>
+  contract_storage_well_formed cx
+    (st with accounts updated_by (create_prelude_accounts sender address value))
+Proof
+  simp[protected_storage_creates_preserve_def] >> metis_tac[]
 QED
 
 Theorem protected_storage_call_output_persistent_region:

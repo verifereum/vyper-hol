@@ -1,7 +1,7 @@
 Theory vyperLogPreservation
 
 Ancestors
-  vyperCall vyperStatePreservation
+  vyperCall vyperStatePreservation vyperCreate
 
 Definition log_extends_def:
   log_extends (st:evaluation_state) (st':evaluation_state) <=>
@@ -1566,10 +1566,10 @@ Proof
   simp[Once vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def,
        AllCaseEqs()] >>
   rpt strip_tac >> gvs[log_extends_refl] >>
-  imp_res_tac vyperCreateTheory.eval_create_preserves_non_accounts >> gvs[] >>
+  imp_res_tac type_check_state >> imp_res_tac lift_option_type_state >>
   first_x_assum drule >> strip_tac >>
   irule log_extends_trans >> goal_assum drule >>
-  irule log_extends_eq_logs >> gvs[]
+  metis_tac[eval_create_preserves_logs, log_extends_eq_logs]
 QED
 
 Theorem finally_log_extends[local]:
