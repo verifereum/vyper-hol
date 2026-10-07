@@ -781,6 +781,25 @@ Definition is_calldata_len_call_def:
   is_calldata_len_call _ _ _ = F
 End
 
+(* A compiler-folded integer is a compile-time length, not a runtime index. *)
+Definition calldata_slice_length_def:
+  calldata_slice_length (JE_Int i _) =
+    (if 0 < i /\ i < &(2 ** 256) then SOME (Num i) else NONE) /\
+  calldata_slice_length (JE_Folded _ folded) = calldata_slice_length folded /\
+  calldata_slice_length _ = NONE
+End
+
+Definition is_calldata_slice_call_def:
+  is_calldata_slice_call (JE_Name "slice" _ _ _)
+    (JE_Attribute (JE_Name "msg" _ _ _) "data" _ _ _ _ _ :: _) = T /\
+  is_calldata_slice_call _ _ = F
+End
+
+Definition calldata_slice_bound_def:
+  calldata_slice_bound [data; start; len] [] = calldata_slice_length len /\
+  calldata_slice_bound _ _ = NONE
+End
+
 Definition translate_expr_def:
   (translate_expr ctx (JE_Int v ty) =
     Literal (translate_type (expr_type_ctx ctx) ty) (IntL v)) /\
@@ -867,6 +886,13 @@ Definition translate_expr_def:
   (translate_expr ctx (JE_Call func args kwargs ret_ty src_id_opt) =
     if is_calldata_len_call func args kwargs then
       Builtin (BaseT (UintT 256)) CalldataLen []
+    else if is_calldata_slice_call func args then
+      (case calldata_slice_bound args kwargs of
+       | SOME n => Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n)
+                     [EL 1 (translate_expr_list ctx args)]
+       (* Rejection marker for the total translator; never a zero-length slice.
+          The type checker rejects CalldataSlice 0 regardless of operands. *)
+       | NONE => Builtin (BaseT (BytesT (Dynamic 0))) (CalldataSlice 0) [])
     else let args' = translate_expr_list ctx args in
     let kwargs' = translate_kwargs ctx kwargs in
     let translated_pop_index =

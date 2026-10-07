@@ -26,6 +26,49 @@ Proof
   gvs[value_has_type_def, context_well_typed_def]
 QED
 
+(* ===== Calldata slices ===== *)
+
+Theorem evaluate_calldata_slice_no_type_error:
+  0 <= i ==>
+  evaluate_calldata_slice bs (IntV i) n <> INR (TypeError msg)
+Proof
+  rw[evaluate_calldata_slice_def, evaluate_slice_def, dest_NumV_def,
+     compatible_bound_def] >-
+    (qsuff_tac `F` >- simp[] >> intLib.ARITH_TAC) >> rw[]
+QED
+
+Theorem evaluate_calldata_slice_success_bound:
+  evaluate_calldata_slice bs sv n = INL v ==>
+  ?out. v = BytesV out /\ LENGTH out <= n
+Proof
+  Cases_on `sv` >>
+  rw[evaluate_calldata_slice_def, evaluate_slice_def, dest_NumV_def,
+     compatible_bound_def] >> gvs[AllCaseEqs(), LENGTH_TAKE]
+QED
+
+Theorem CalldataSlice_builtin_no_type_error:
+  MAP (evaluate_type tenv) [BaseT (UintT 256)] = MAP SOME tvs /\
+  LIST_REL value_has_type tvs vs ==>
+  evaluate_builtin cx acc ty (CalldataSlice n) vs <> INR (TypeError msg)
+Proof
+  Cases_on `tvs` >> rw[evaluate_type_def] >> gvs[] >>
+  rename1 `value_has_type (BaseTV (UintT 256)) sv` >>
+  Cases_on `sv` >> gvs[value_has_type_def, evaluate_builtin_def] >>
+  irule evaluate_calldata_slice_no_type_error >> simp[]
+QED
+
+Theorem CalldataSlice_builtin_success_type:
+  evaluate_type tenv (BaseT (BytesT (Dynamic n))) = SOME tv /\
+  evaluate_builtin cx acc (BaseT (BytesT (Dynamic n))) (CalldataSlice n) vs = INL v ==>
+  value_has_type tv v
+Proof
+  rpt strip_tac >> Cases_on `vs` >>
+  gvs[evaluate_builtin_def, AllCaseEqs()] >>
+  drule evaluate_calldata_slice_success_bound >>
+  strip_tac >> gvs[evaluate_type_def, value_has_type_def,
+                   compatible_bound_def, AllCaseEqs()]
+QED
+
 (* ===== Environment/account items ===== *)
 
 Theorem Env_builtin_no_type_error:
@@ -2926,6 +2969,7 @@ Proof
       is_flag_type_inv, is_comparable_type_inv,
       is_bytes_or_string_type_inv] >>
   gen_tac >>
+
   (* Bop: delegate to well_typed_binop_no_type_error *)
   TRY (metis_tac[well_typed_builtin_bop_no_type_error] >> NO_TAC) >>
   (* Not: delegate to bool_not/uint_not/flag_Not helpers *)
@@ -3011,9 +3055,10 @@ Proof
        Cases_on `v'` >> gvs[value_has_type_def] >>
        Cases_on `v''` >> gvs[value_has_type_def] >>
        simp[evaluate_builtin_def] >> NO_TAC) >>
-  (* Abs *)
+  (* Resolve simple builtin values; CalldataSlice delegates to its helper. *)
   gvs[evaluate_type_def] >>
-  rw[evaluate_builtin_def, type_to_int_bound_def]
+  rw[evaluate_builtin_def, type_to_int_bound_def] >>
+  irule evaluate_calldata_slice_no_type_error >> simp[]
 QED
 
 (* Builtin success-type theorem: well-typed inputs produce well-typed outputs *)
@@ -3035,6 +3080,7 @@ Proof
       is_flag_type_inv, is_comparable_type_inv,
       is_bytes_or_string_type_inv] >>
   TRY (drule_all CalldataLen_builtin_success_type >> simp[] >> NO_TAC) >>
+  TRY (drule_all CalldataSlice_builtin_success_type >> simp[] >> NO_TAC) >>
   (* Phase 2: resolve type values *)
   gvs[evaluate_type_def] >>
     TRY (rename1 `evaluate_builtin _ _ (BaseT BoolT) Not [BoolV b] = INL v` >>

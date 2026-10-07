@@ -739,7 +739,29 @@ fun d_json_expr () : term decoder = achoose "expr" [
   check_ast_type "Call" $
     JSONDecode.map (fn ((func, args, kwargs), (ty, src_id_opt)) => mk_JE_Call(func, args, kwargs, ty, src_id_opt)) $
     tuple2 (tuple3 (field "func" (delay d_json_expr),
-                    field "args" (array (delay d_json_expr)),
+                    achoose "call arguments" [
+                      (* Preserve folded integer lengths for the ad-hoc calldata
+                         slice. In particular, BinOp.folded_value is not a runtime
+                         expression; start remains decoded normally. *)
+                      check (field "func" $ field "id" string)
+                        (fn s => s = "slice") "not slice" $
+                      check (field "args" $ sub 0 $ field "attr" string)
+                        (fn s => s = "data") "not data" $
+                      check (field "args" $ sub 0 $ field "value" $ field "id" string)
+                        (fn s => s = "msg") "not msg" $
+                      field "args" $
+                        JSONDecode.map (fn (args, folded) =>
+                          case args of
+                            data::start::len::rest =>
+                              data::start::mk_JE_Folded (len, folded)::rest
+                          | _ => args) $
+                        tuple2 (array (delay d_json_expr),
+                          sub 2 $ field "folded_value" $ check_ast_type "Int" $
+                            JSONDecode.map (fn (v, ty) => mk_JE_Int(v, ty)) $
+                            tuple2 (field "value" inttm,
+                              orElse (field "type" json_type, succeed JT_None_tm))),
+                      field "args" (array (delay d_json_expr))
+                    ],
                     orElse(field "keywords" (array (delay d_json_keyword)), succeed [])),
             tuple2 ((* type field may be missing or null *)
                     orElse (field "type" json_type, succeed JT_None_tm),

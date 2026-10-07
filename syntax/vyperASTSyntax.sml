@@ -214,6 +214,7 @@ val (TEther_tm, is_TEther) = syntax0 "TEther"
 
 val (Len_tm, is_Len) = syntax0 "Len"
 val (CalldataLen_tm, is_CalldataLen) = syntax0 "CalldataLen"
+val (CalldataSlice_tm, mk_CalldataSlice_tm, dest_CalldataSlice_tm, is_CalldataSlice) = syntax_fns1 "vyperAST" "CalldataSlice"
 val (Not_tm, is_Not) = syntax0 "Not"
 val (Neg_tm, is_Neg) = syntax0 "Neg"
 val (Abs_tm, is_Abs) = syntax0 "Abs"
