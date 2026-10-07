@@ -5245,11 +5245,14 @@ QED
 
 (* Same-D variants: when two states agree on all fields that affect the
    callee construction, exec_* produces the same wmwe expansion D. *)
+(* Planned outcome-consumption interface: only the outcomes must agree;
+   request histories do not determine the return-buffer expansion. *)
 Triviality exec_ext_call_same_D:
   !inst s1 s2 g a v ao as_ ro rs st s1' s2'.
     exec_ext_call inst s1 g a v ao as_ ro rs st = OK s1' /\
     exec_ext_call inst s2 g a v ao as_ ro rs st = OK s2' /\
     read_memory (w2n ao) (w2n as_) s1 = read_memory (w2n ao) (w2n as_) s2 /\
+    s1.vs_outcomes = s2.vs_outcomes /\
     s1.vs_accounts = s2.vs_accounts /\
     s1.vs_call_ctx = s2.vs_call_ctx /\
     s1.vs_transient = s2.vs_transient /\
