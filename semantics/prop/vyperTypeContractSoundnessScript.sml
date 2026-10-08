@@ -1213,7 +1213,7 @@ Proof
       qpat_x_assum `well_typed_expr _ (StructLit _ _ _)` mp_tac >>
       simp[Once well_typed_expr_def] >> strip_tac >>
       `state_well_typed (initial_state am [FEMPTY])` by
-        (irule initial_state_single_scope_well_typed >>
+        (irule initial_state_single_scope_well_typed_simple >>
          simp[scope_well_typed_def]) >>
       `!e. MEM e (MAP SND kes) ==>
            well_typed_expr (artifact_env artifact mods current_src) e` by
@@ -1242,7 +1242,7 @@ Proof
         (qpat_x_assum `well_typed_expr _ (Subscript _ _ _)` mp_tac >>
          simp[Once well_typed_expr_def] >> metis_tac[]) >>
       `state_well_typed (initial_state am [FEMPTY])` by
-        (irule initial_state_single_scope_well_typed >>
+        (irule initial_state_single_scope_well_typed_simple >>
          simp[scope_well_typed_def]) >>
       `?tv1 v2.
          eval_pure_expr cx (initial_state am [FEMPTY]) e = SOME tv1 /\
@@ -1317,7 +1317,7 @@ Proof
             simp[Once eval_pure_expr_def] >> gvs[AllCaseEqs()] >>
             strip_tac >> gvs[]) >>
       `state_well_typed (initial_state am [FEMPTY])` by
-        (irule initial_state_single_scope_well_typed >> simp[scope_well_typed_def]) >>
+        (irule initial_state_single_scope_well_typed_simple >> simp[scope_well_typed_def]) >>
       `!e. MEM e es ==>
          well_typed_expr (artifact_env artifact mods current_src) e` by
         (qpat_x_assum `well_typed_exprs _ es` mp_tac >>
@@ -1825,9 +1825,20 @@ Proof
   metis_tac[]
 QED
 
+(* Existing frame relations inspect only the old projections. *)
+Theorem oracle_fields_frame_invariants[local,simp]:
+  (preserves_tv cx (st with <|outcomes := orc; requests := rqs|>) st' <=>
+   preserves_tv cx st st') /\
+  (preserves_immutables_dom cx
+     (st with <|outcomes := orc; requests := rqs|>) st' <=>
+   preserves_immutables_dom cx st st')
+Proof
+  simp[preserves_tv_def, preserves_immutables_dom_def]
+QED
+
 Theorem preserves_tv_initial_immutables_lookup[local]:
-  !cx am_c env st src id tv x.
-    preserves_tv cx (initial_state am_c [env]) st ==>
+  !orc rqs cx am_c env st src id tv x.
+    preserves_tv cx (initial_state am_c [env] with <|outcomes := orc; requests := rqs|>) st ==>
     FLOOKUP
       (get_source_immutables src
         (case ALOOKUP am_c.immutables cx.txn.target of SOME m => m | NONE => [])) id = SOME (tv,x) ==>
@@ -1841,7 +1852,7 @@ Proof
 QED
 
 Theorem preserves_tv_unlock_abstract_machine_immutables_lookup[local]:
-  preserves_tv cx (initial_state am_c [env]) st_body /\
+  preserves_tv cx (initial_state am_c [env] with <|outcomes := orc; requests := rqs|>) st_body /\
   st_unlocked.immutables = st_body.immutables /\
   am_out = abstract_machine_from_state am_c.sources am_c.exports am_c.layouts st_unlocked /\
   FLOOKUP
@@ -1853,7 +1864,7 @@ Theorem preserves_tv_unlock_abstract_machine_immutables_lookup[local]:
         (case ALOOKUP am_out.immutables cx.txn.target of SOME m => m | NONE => [])) id = SOME (tv,y)
 Proof
   rw[abstract_machine_from_state_def] >>
-  drule preserves_tv_initial_immutables_lookup >>
+  drule (SRULE [] preserves_tv_initial_immutables_lookup) >>
   disch_then drule >>
   rw[] >>
   metis_tac[]
@@ -1868,7 +1879,7 @@ Theorem call_external_function_deploy_normal_success_lookup_transport:
       else return ());
      send_call_value mut cx;
      eval_stmts cx body
-   od (initial_state am_c [env]) = (INL (),st_body)) /\
+   od (initial_state am_c [env] with <|outcomes := orc; requests := rqs|>) = (INL (),st_body)) /\
   (if nr /\ ~(mut = View \/ mut = Pure) then
      case cx.nonreentrant_slot of
        NONE => return ()
@@ -1884,7 +1895,7 @@ Theorem call_external_function_deploy_normal_success_lookup_transport:
         (case ALOOKUP am_out.immutables cx.txn.target of SOME m => m | NONE => [])) id = SOME (tv,y)
 Proof
   rw[] >>
-  `preserves_tv cx (initial_state am_c [env]) st_body` by
+  `preserves_tv cx (initial_state am_c [env] with <|outcomes := orc; requests := rqs|>) st_body` by
     metis_tac[call_body_prefix_lock_preserves_tv,
               call_body_prefix_preserves_tv, return_def, bind_def] >>
   `st_unlocked.immutables = st_body.immutables` by
@@ -1903,7 +1914,7 @@ Theorem call_external_function_deploy_return_success_lookup_transport:
       else return ());
      send_call_value mut cx;
      eval_stmts cx body
-   od (initial_state am_c [env]) = (INR (ReturnException v_ret),st_body)) /\
+   od (initial_state am_c [env] with <|outcomes := orc; requests := rqs|>) = (INR (ReturnException v_ret),st_body)) /\
   (if nr /\ ~(mut = View \/ mut = Pure) then
      case cx.nonreentrant_slot of
        NONE => return ()
@@ -1919,7 +1930,7 @@ Theorem call_external_function_deploy_return_success_lookup_transport:
         (case ALOOKUP am_out.immutables cx.txn.target of SOME m => m | NONE => [])) id = SOME (tv,y)
 Proof
   rw[] >>
-  `preserves_tv cx (initial_state am_c [env]) st_body` by
+  `preserves_tv cx (initial_state am_c [env] with <|outcomes := orc; requests := rqs|>) st_body` by
     metis_tac[call_body_prefix_lock_preserves_tv,
               call_body_prefix_preserves_tv, return_def, bind_def] >>
   `st_unlocked.immutables = st_body.immutables` by
@@ -2032,11 +2043,11 @@ Proof
   strip_tac >>
   gvs[] >-
     (irule call_external_function_deploy_normal_success_lookup_transport >>
-     qexistsl [`am_c`, `body`, `env`, `mut`, `nr`, `st_body`, `st_unlocked`, `()`, `x`] >>
-     simp[]) >>
+     qexistsl [`am_c`, `body`, `env`, `mut`, `nr`, `NONE`, `[]`, `st_body`, `st_unlocked`, `()`, `x`] >>
+     gvs[initial_state_def]) >>
   irule call_external_function_deploy_return_success_lookup_transport >>
-  qexistsl [`am_c`, `body`, `env`, `mut`, `nr`, `st_body`, `st_unlocked`, `()`, `v_ret`, `x`] >>
-  simp[]
+  qexistsl [`am_c`, `body`, `env`, `mut`, `nr`, `NONE`, `[]`, `st_body`, `st_unlocked`, `()`, `v_ret`, `x`] >>
+  gvs[initial_state_def]
 QED
 
 Theorem send_call_value_preserves_immutables[local]:
@@ -2205,7 +2216,7 @@ Theorem call_lock_send_prefix_body_state_ready_c53:
         | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
       else return ());
      send_call_value mut cx
-   od (initial_state am [env]) = (INL (),st)) ==>
+   od (initial_state am [env] with <|outcomes := orc; requests := rqs|>) = (INL (),st)) ==>
   st.scopes = [env] /\
   st.immutables = am.immutables /\
   state_well_typed st
@@ -2401,7 +2412,7 @@ Theorem call_lock_send_eval_prefix_no_type_error_c53[local]:
         else return ());
        send_call_value mut cx;
        eval_stmts cx body
-     od (initial_state am [scope]))
+     od (initial_state am [scope] with <|outcomes := orc; requests := rqs|>))
 Proof
   rpt strip_tac >>
   `scope_well_typed scope` by
@@ -2427,18 +2438,18 @@ Proof
                | SOME slot => acquire_nonreentrant_lock
                    (initial_evaluation_context am.sources am.layouts tx src).txn.target slot
                    (mut = View \/ mut = Pure)
-             else return ()) (initial_state am [scope])` >>
+             else return ()) (initial_state am [scope] with <|outcomes := orc; requests := rqs|>)` >>
   Cases_on `q` >> gvs[]
   >- (Cases_on `send_call_value mut (initial_evaluation_context am.sources am.layouts tx src) r` >>
       Cases_on `q` >> gvs[]
       >- (`r''.scopes = [scope] /\ r''.immutables = am.immutables /\ state_well_typed r''` by
             (irule call_lock_send_prefix_body_state_ready_c53 >>
              simp[bind_def, ignore_bind_def] >>
-             qexistsl [`initial_evaluation_context am.sources am.layouts tx src`, `mut`, `nr`] >>
+             qexistsl [`initial_evaluation_context am.sources am.layouts tx src`, `mut`, `nr`, `orc`, `rqs`] >>
              simp[]) >>
           `accounts_well_typed r.accounts` by
             (imp_res_tac call_lock_action_preserves_accounts_c53 >>
-             gvs[initial_state_accounts_well_typed]) >>
+             gvs[initial_state_accounts_well_typed_simple]) >>
           `accounts_well_typed r''.accounts` by
             (imp_res_tac send_call_value_accounts_well_typed_c53 >> gvs[]) >>
           simp[GSYM vyperTypeExprSoundnessTheory.no_type_error_eval_def] >>
@@ -2467,7 +2478,7 @@ Proof
          | SOME slot => acquire_nonreentrant_lock
              (initial_evaluation_context am.sources am.layouts tx src).txn.target slot
              (mut = View \/ mut = Pure)
-       else return ()) (initial_state am [scope]))` by (
+       else return ()) (initial_state am [scope] with <|outcomes := orc; requests := rqs|>))` by (
     irule call_lock_action_no_type_error_c53 >>
     qpat_assum `nr ==> _` ACCEPT_TAC) >>
   gvs[vyperTypeExprSoundnessTheory.no_type_error_eval_def]
@@ -2488,7 +2499,7 @@ Theorem call_lock_send_eval_return_typed_c53[local]:
       else return ());
      send_call_value mut (initial_evaluation_context am.sources am.layouts tx src);
      eval_stmts (initial_evaluation_context am.sources am.layouts tx src) body
-   od (initial_state am [scope]) = (INR (ReturnException v),st')) ==>
+   od (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) = (INR (ReturnException v),st')) ==>
   ?ret_tv. evaluate_type (type_env_all_modules mods) ret = SOME ret_tv /\
            value_has_type ret_tv v
 Proof
@@ -2510,7 +2521,7 @@ Proof
                  NONE => raise (Error (TypeError "nonreentrant slot missing"))
                | SOME slot => acquire_nonreentrant_lock tx.target slot
                    (mut = View \/ mut = Pure)
-             else return ()) (initial_state am [scope])` >>
+             else return ()) (initial_state am [scope] with <|outcomes := orc; requests := rqs|>)` >>
   Cases_on `q` >> gvs[]
   >- (Cases_on `send_call_value mut
          (initial_evaluation_context am.sources am.layouts tx src) r` >>
@@ -2521,21 +2532,22 @@ Proof
             irule call_lock_send_prefix_body_state_ready_c53 >>
             simp[] >>
             qexistsl [`initial_evaluation_context am.sources am.layouts tx src`,
-                      `mut`, `nr`] >>
+                      `mut`, `nr`, `orc`, `rqs`] >>
             gvs[bind_def, ignore_bind_def, initial_evaluation_context_def]) >>
-          `r.accounts = (initial_state am [scope]).accounts` by (
+          `r.accounts =
+             (initial_state am [scope] with <|outcomes := orc; requests := rqs|>).accounts` by (
             qpat_x_assum `(if nr then _ else _) _ = (INL (),r)` mp_tac >>
             simp[initial_evaluation_context_def] >>
             Cases_on `nr` >> gvs[return_def, raise_def] >>
             Cases_on `lookup_nonreentrant_slot am.layouts tx.target` >>
-            gvs[return_def, raise_def] >> strip_tac >>
+            gvs[return_def, raise_def] >> strip_tac >> gvs[] >>
             qpat_x_assum `acquire_nonreentrant_lock _ _ _ _ = _` mp_tac >>
             rw[acquire_nonreentrant_lock_def, bind_def, ignore_bind_def,
                get_transient_storage_def, update_transient_def, return_def,
                raise_def, assert_def, check_def] >>
             gvs[AllCaseEqs(), return_def, raise_def]) >>
           `accounts_well_typed r.accounts` by
-            gvs[initial_state_accounts_well_typed] >>
+            gvs[initial_state_accounts_well_typed_simple] >>
           `accounts_well_typed r''.accounts` by (
             imp_res_tac send_call_value_accounts_well_typed_c53 >> gvs[]) >>
           `call_evaluation_safe
@@ -2566,7 +2578,7 @@ Theorem call_lock_send_eval_return_typed_case_c53[local]:
            case (initial_evaluation_context am.sources am.layouts tx src).nonreentrant_slot of
              NONE => raise (Error (TypeError "nonreentrant slot missing"))
            | SOME slot => acquire_nonreentrant_lock tx.target slot (mut = View \/ mut = Pure)
-         else return ()) (initial_state am [scope]) of
+         else return ()) (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) of
      (INL x,s'') =>
        (case send_call_value mut
           (initial_evaluation_context am.sources am.layouts tx src) s'' of
@@ -2613,8 +2625,11 @@ Proof
         send_call_value mut (initial_evaluation_context am.sources am.layouts tx src);
         eval_stmts (initial_evaluation_context am.sources am.layouts tx src) body
       od (initial_state am [scope]))` by
-    metis_tac[call_lock_send_eval_prefix_no_type_error_c53,
-              checked_contract_runtime_ready_def] >>
+    (simp[initial_state_def] >>
+     metis_tac[SRULE [initial_state_def]
+       (Q.INST [`orc` |-> `NONE`, `rqs` |-> `[]`]
+         call_lock_send_eval_prefix_no_type_error_c53),
+       checked_contract_runtime_ready_def]) >>
   drule call_external_function_exact_args_rewrites_c53 >> strip_tac >>
   qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[call_external_function_def, evaluate_defaults_def,
@@ -2647,7 +2662,10 @@ Proof
       od (initial_state am [scope]) = (INR (ReturnException v),r)` by
        gvs[bind_def, ignore_bind_def, initial_evaluation_context_def] >>
      `value_has_type ret_tv v` by (
-       drule_all call_lock_send_eval_return_typed_c53 >>
+       gvs[initial_state_def] >>
+       drule_all (SRULE [initial_state_def]
+         (Q.INST [`orc` |-> `NONE`, `rqs` |-> `[]`]
+           call_lock_send_eval_return_typed_c53)) >>
        strip_tac >> gvs[]) >>
      drule vyperTypingTheory.safe_cast_well_typed >> gvs[],
      qpat_x_assum
@@ -2720,8 +2738,9 @@ Theorem call_body_prefix_preserves_immutables_dom[local]:
       else return ());
      send_call_value mut cx;
      eval_stmts cx body
-   od (initial_state am_c [env]) = (res,st')) ==>
-  preserves_immutables_dom cx (initial_state am_c [env]) st'
+   od (initial_state am_c [env] with <|outcomes := orc; requests := rqs|>) = (res,st')) ==>
+  preserves_immutables_dom cx
+    (initial_state am_c [env] with <|outcomes := orc; requests := rqs|>) st'
 Proof
   rw[bind_def, ignore_bind_def] >>
   imp_res_tac call_lock_action_preserves_immutables >>
@@ -2772,6 +2791,23 @@ Proof
   simp[IS_SOME_EXISTS, EXISTS_PROD]
 QED
 
+(* The current concrete deployment API still starts with NONE/[] (TASK027). *)
+Theorem call_body_prefix_preserves_immutables_dom_simple[local]:
+  (do
+     (if nr then
+        case cx.nonreentrant_slot of
+          NONE => raise (Error (TypeError "nonreentrant slot missing"))
+        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
+      else return ());
+     send_call_value mut cx;
+     eval_stmts cx body
+   od (initial_state am_c [env]) = (res,st')) ==>
+  preserves_immutables_dom cx (initial_state am_c [env]) st'
+Proof
+  mp_tac (Q.INST [`orc` |-> `NONE`, `rqs` |-> `[]`]
+    call_body_prefix_preserves_immutables_dom) >> simp[initial_state_def]
+QED
+
 Theorem call_external_function_deploy_success_final_lookup_source_exists_in_constants[local]:
   cx.in_deploy /\
   call_external_function am cx nr mut ts all_mods args dflts vals body ret =
@@ -2789,7 +2825,7 @@ Proof
   drule_all call_external_function_deploy_success_cases >>
   strip_tac >>
   gvs[]
-  >- (imp_res_tac call_body_prefix_preserves_immutables_dom >>
+  >- (imp_res_tac call_body_prefix_preserves_immutables_dom_simple >>
       `st_unlocked.immutables = st_body.immutables` by
         (Cases_on `nr` >> gvs[return_def] >>
          Cases_on `mut = View` >> gvs[return_def] >>
@@ -2803,7 +2839,7 @@ Proof
       qexists `am_c with immutables := st_body.immutables` >>
       qexists `tv` >>
       qexists `x` >> simp[initial_state_def]) >>
-  imp_res_tac call_body_prefix_preserves_immutables_dom >>
+  imp_res_tac call_body_prefix_preserves_immutables_dom_simple >>
   `st_unlocked.immutables = st_body.immutables` by
     (Cases_on `nr` >> gvs[return_def] >>
      Cases_on `mut = View` >> gvs[return_def] >>
@@ -4050,8 +4086,10 @@ Theorem checked_public_getter_initial_body_execution_selected:
   external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,body) /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
   cx = initial_evaluation_context am.sources am.layouts tx src ==>
-  no_type_error_eval (eval_stmts cx body (initial_state am [scope])) /\
-  (!v st'. eval_stmts cx body (initial_state am [scope]) =
+  no_type_error_eval (eval_stmts cx body
+    (initial_state am [scope] with <|outcomes := orc; requests := rqs|>)) /\
+  (!v st'. eval_stmts cx body
+    (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) =
       (INR (ReturnException v),st') ==>
     ?ret_tv. evaluate_type (type_env_all_modules mods) ret = SOME ret_tv /\
              value_has_type ret_tv v)
@@ -4059,12 +4097,15 @@ Proof
   strip_tac >>
   `scope_well_typed scope` by
     metis_tac[bind_arguments_scope_well_typed_from_success] >>
-  `accounts_well_typed (initial_state am [scope]).accounts` by
-    metis_tac[initial_state_accounts_well_typed] >>
-  `state_well_typed (initial_state am [scope])` by
-    metis_tac[initial_state_single_scope_well_typed] >>
-  `(initial_state am [scope]).scopes = [scope]` by simp[initial_state_def] >>
-  `(initial_state am [scope]).immutables = am.immutables` by
+  `accounts_well_typed
+     (initial_state am [scope] with <|outcomes := orc; requests := rqs|>).accounts` by
+    (simp[] >> metis_tac[initial_state_accounts_well_typed_simple]) >>
+  `state_well_typed
+     (initial_state am [scope] with <|outcomes := orc; requests := rqs|>)` by
+    (simp[] >> metis_tac[initial_state_single_scope_well_typed_simple]) >>
+  `(initial_state am [scope] with <|outcomes := orc; requests := rqs|>).scopes = [scope]` by
+    simp[initial_state_def] >>
+  `(initial_state am [scope] with <|outcomes := orc; requests := rqs|>).immutables = am.immutables` by
     simp[initial_state_def] >>
   drule_all checked_public_getter_post_prefix_body_execution_selected >>
   simp[]
@@ -4089,7 +4130,9 @@ Proof
        (INR (ReturnException v),st') ==>
      ?ret_tv. evaluate_type (type_env_all_modules mods) ret = SOME ret_tv /\
               value_has_type ret_tv v)` by
-    (drule_all checked_public_getter_initial_body_execution_selected >> simp[]) >>
+    (drule_all checked_public_getter_initial_body_execution_selected >>
+     disch_then (qspecl_then [`[]`, `NONE`] mp_tac) >>
+     simp[initial_state_def]) >>
   `nr = F /\ mut = View /\ dflts = [] /\ ?exp. body = [Return (SOME exp)]` by
     (Cases_on `decl` >> gvs[is_public_getter_decl_def, external_getter_tuple_def]
      >- (Cases_on `v` >> gvs[] >> Cases_on `is_ArrayT t` >> gvs[]
@@ -4263,7 +4306,7 @@ Theorem call_lock_send_prefix_body_state_ready[local]:
         | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
       else return ());
      send_call_value mut cx
-   od (initial_state am [env]) = (INL (),st)) ==>
+   od (initial_state am [env] with <|outcomes := orc; requests := rqs|>) = (INL (),st)) ==>
   st.scopes = [env] /\
   st.immutables = am.immutables /\
   state_well_typed st
