@@ -1,7 +1,7 @@
 Theory vyperEvalExprPreservesScopesDom
 Ancestors
   vyperMisc vyperContext vyperState vyperCreate vyperInterpreter vyperLookup
-  vyperScopePreservation vyperStatePreservation
+  vyperScopePreservation vyperStatePreservation vyperCallFrame vyperCallOutcomeFrame
 
 (* ========================================================================
    Utility: eval_exprs preserves scopes dom from per-element IH
@@ -336,7 +336,7 @@ Proof
   simp[evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def,
        check_def, type_check_def, assert_def, lift_option_def, lift_option_type_def] >>
   strip_tac >> gvs[return_def, raise_def, GSYM lift_option_def, GSYM lift_option_type_def] >>
-  imp_res_tac transfer_value_scopes >>
+  imp_res_tac concrete_send_step_locals >>
   imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes >> imp_res_tac lift_option_type_scopes >> gvs[] >>
   first_x_assum (qspec_then `st` mp_tac) >> simp[check_def, type_check_def, assert_def, return_def]
 QED
@@ -586,82 +586,69 @@ Resume eval_mutual_preserves_scopes_dom[ExtCall]:
     \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes \\ gvs[] )
   \\ BasicProvers.LET_ELIM_TAC
   \\ qpat_x_assum`_ = _`mp_tac
-  \\ rewrite_tac[bind_def, ignore_bind_def]
-  \\ BasicProvers.TOP_CASE_TAC
-  \\ reverse BasicProvers.TOP_CASE_TAC
-  >- (
-    first_x_assum drule
-    \\ first_x_assum(qspec_then`ARB`kall_tac)
-    \\ rw[]
-    \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
-    \\ gvs[check_def, type_check_def, assert_def, bind_def, COND_RATOR, CaseEq"bool",
-           return_def, CaseEq"sum", CaseEq"prod", get_accounts_def,
-           get_transient_storage_def]
-    \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes \\ gvs[] )
-  \\ rewrite_tac[bind_def, ignore_bind_def]
-  \\ BasicProvers.TOP_CASE_TAC
-  \\ reverse BasicProvers.TOP_CASE_TAC
-  >- (pop_assum mp_tac \\ rw[update_accounts_def, return_def])
-  \\ rewrite_tac[bind_def, ignore_bind_def]
-  \\ BasicProvers.TOP_CASE_TAC
-  \\ reverse BasicProvers.TOP_CASE_TAC
-  >- (pop_assum mp_tac \\ rw[update_transient_def, return_def])
-  \\ IF_CASES_TAC
-  >- (
-    strip_tac
-    \\ last_x_assum $ funpow 2 drule_then drule
-    \\ simp[]
-    \\ rpt $ disch_then $ drule_at Any
-    \\ gvs[]
-    \\ rpt $ disch_then $ drule_at Any
-    \\ gvs[ignore_bind_def]
-    \\ disch_then $ drule_at Any
-    \\ imp_res_tac check_scopes >> imp_res_tac type_check_scopes
-    \\ imp_res_tac update_accounts_scopes
-    \\ imp_res_tac update_transient_scopes
-    \\ imp_res_tac append_logs_scopes
-    \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
-    \\ strip_tac
-    \\ gvs[append_logs_def, return_def, check_def, type_check_def, assert_def]
-    \\ first_x_assum drule
-    \\ first_x_assum drule
-    \\ gvs[get_accounts_def, get_transient_storage_def, return_def,
-           check_def, assert_def,
-           COND_RATOR, CaseEq"bool", bind_def, CaseEq"sum", CaseEq"prod"]
-    \\ imp_res_tac check_scopes >> imp_res_tac type_check_scopes
-    \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
-    \\ gvs[])
-  \\ rewrite_tac[bind_def, ignore_bind_def]
-  \\ BasicProvers.TOP_CASE_TAC
-  \\ reverse BasicProvers.TOP_CASE_TAC
-  >- (
-    first_x_assum drule
-    \\ first_x_assum(qspec_then`ARB`kall_tac)
-    \\ rw[] \\ imp_res_tac check_scopes >> imp_res_tac type_check_scopes
-    \\ imp_res_tac update_accounts_scopes
-    \\ imp_res_tac update_transient_scopes
-    \\ imp_res_tac append_logs_scopes
-    \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
-    \\ imp_res_tac lift_sum_scopes >> imp_res_tac lift_sum_runtime_scopes
-    \\ gvs[get_accounts_def, get_transient_storage_def, return_def,
-           COND_RATOR, CaseEq"bool", bind_def, CaseEq"sum", CaseEq"prod"]
-    \\ imp_res_tac check_scopes >> imp_res_tac type_check_scopes
-    \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
-    \\ gvs[assert_def] )
-  \\ first_x_assum drule
-  \\ first_x_assum(qspec_then`ARB`kall_tac)
-  \\ rw[return_def] \\ imp_res_tac check_scopes >> imp_res_tac type_check_scopes
-  \\ imp_res_tac update_accounts_scopes
-  \\ imp_res_tac update_transient_scopes
-  \\ imp_res_tac append_logs_scopes
-  \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
-  \\ imp_res_tac lift_sum_scopes >> imp_res_tac lift_sum_runtime_scopes
-  \\ gvs[get_accounts_def, get_transient_storage_def, return_def,
-         COND_RATOR, CaseEq"bool", bind_def, CaseEq"sum", CaseEq"prod"]
-  \\ imp_res_tac lift_sum_runtime_scopes
-  \\ imp_res_tac check_scopes >> imp_res_tac type_check_scopes
-  \\ imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes
-  \\ gvs[assert_def]
+  \\ rewrite_tac[GSYM check_def, GSYM ignore_bind_def,
+                 concrete_extcall_tail_cases]
+  \\ rpt strip_tac
+  \\ RULE_ASSUM_TAC (REWRITE_RULE [GSYM ignore_bind_def])
+  \\ imp_res_tac check_state \\ imp_res_tac type_check_state
+  \\ imp_res_tac lift_option_state \\ imp_res_tac lift_option_type_state
+  \\ imp_res_tac concrete_extcall_value_state
+  \\ gvs[get_accounts_def, get_transient_storage_def, return_def]
+  \\ imp_res_tac type_check_state \\ imp_res_tac lift_option_type_state
+  \\ gvs[]
+  \\ first_x_assum drule_all \\ strip_tac \\ gvs[]
+  \\ qpat_x_assum `(if _ then _ else _) _ = _` mp_tac
+  \\ reverse IF_CASES_TAC
+  >- (simp[bind_def, return_def, AllCaseEqs()] \\ rpt strip_tac \\ gvs[]
+      \\ imp_res_tac lift_sum_runtime_scopes \\ gvs[]
+      \\ first_x_assum drule_all \\ simp[])
+  \\ strip_tac \\ gvs[]
+  \\ rename1 `lift_option
+       (run_ext_call caller addr data value_opt r.accounts r.tStorage txParams)
+       "ExtCall run failed" r = _`
+  \\ `check (~NULL (lookup_account addr r.accounts).code)
+        "ExtCall target has no code" r = (INL (),r)` by
+       simp[check_def, assert_def, return_def]
+  \\ first_x_assum drule_all \\ strip_tac \\ gvs[]
+
+QED
+
+(* Oracle sibling for the ExtCall resume. Domain equality, not value or
+   account/storage preservation; k supplies the inductive continuation fact. *)
+Theorem ExtCall_outcome_preserves_scopes_dom:
+  (!bs s res t. k bs s = (res,t) ==> MAP FDOM s.scopes = MAP FDOM t.scopes) /\
+  (do
+    accounts <- get_accounts;
+    (if ret_type = NoneT then
+       check (~NULL (lookup_account target accounts).code) "ExtCall target has no code"
+     else return ());
+    (rq,outcome) <- take_call_outcome target calldata value_opt;
+    check outcome.co_success "ExtCall reverted";
+    adopt_call_outcome rq outcome;
+    k outcome.co_returnData
+  od) st = (res,st') ==> MAP FDOM st.scopes = MAP FDOM st'.scopes
+Proof
+  rpt strip_tac >>
+  `!s t u. MAP FDOM s.scopes = MAP FDOM t.scopes /\
+            MAP FDOM t.scopes = MAP FDOM u.scopes ==>
+            MAP FDOM s.scopes = MAP FDOM u.scopes` by metis_tac[] >>
+  drule_all (ExtCall_outcome_transport |> Q.INST
+    [`R` |-> `\s t. MAP FDOM s.scopes = MAP FDOM t.scopes`] |> SRULE []) >> simp[]
+QED
+
+Theorem Send_outcome_preserves_locals:
+  (do
+    (rq,outcome) <- take_call_outcome target [] (SOME amount);
+    check outcome.co_success "send failed";
+    adopt_call_outcome rq outcome;
+    return (Value NoneV)
+  od) st = (res,st') ==>
+  st'.scopes = st.scopes /\ st'.immutables = st.immutables
+Proof
+  strip_tac >>
+  drule_all (Send_outcome_transport |> Q.INST
+    [`R` |-> `\s t. t.scopes = s.scopes /\ t.immutables = s.immutables`]
+    |> SRULE []) >> simp[]
 QED
 
 (* Lock operations preserve scopes: needed for IntCall handler.

@@ -3314,6 +3314,8 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_ExtCall]:
              (!vt. type_place_expr env0 (THE drv) = SOME vt ==>
               contract_storage_well_formed cx st0')` by (
             rpt strip_tac >>
+            (* Original specialization, before source-exception grammar makes
+               the successful prefix equalities simplify out of this IH:
             qpat_x_assum `!s' value_opt arg_vals. _`
               (qspecl_then
                 [`args_st`, `SOME amount`, `TL (TL vs)`, `args_st`,
@@ -3323,9 +3325,21 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_ExtCall]:
                  `(args_st with <|accounts := result2; tStorage := result3|>) with
                     logs := args_st.logs ++ result4`,
                  `env0`, `st0`, `res0`, `st0'`] mp_tac) >>
+            *)
+            qpat_x_assum
+              `!sa sb sc sd accounts transient logs se sf en s r t. _`
+              (qspecl_then
+                [`args_st`, `args_st`, `args_st`, `args_st`,
+                 `result2`, `result3`, `result4`,
+                 `args_st with <|accounts := result2; tStorage := result3|>`,
+                 `(args_st with <|accounts := result2; tStorage := result3|>) with
+                    logs := args_st.logs ++ result4`,
+                 `env0`, `st0`, `res0`, `st0'`] mp_tac) >>
             simp[assert_def, bind_def, return_def, raise_def, append_logs_def] >>
             (impl_tac >- EVAL_TAC) >> strip_tac >> metis_tac[]) >>
-          qpat_x_assum `!s' value_opt arg_vals. _` kall_tac >>
+          (* Original: qpat_x_assum `!s' value_opt arg_vals. _` kall_tac >> *)
+          qpat_x_assum
+            `!sa sb sc sd accounts transient logs se sf en s r t. _` kall_tac >>
           unabbrev_all_tac >>
           `accounts_well_typed args_st.accounts` by
             metis_tac[runtime_consistent_def] >>

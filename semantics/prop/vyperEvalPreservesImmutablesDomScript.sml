@@ -3,7 +3,7 @@ Ancestors
   vyperMisc vyperAST vyperValue vyperContext vyperState vyperStorageBackend vyperCreate vyperInterpreter
   vyperLookup vyperScopePreservation vyperStatePreservation
   vyperAssignTarget vyperEvalExprPreservesScopesDom
-  vyperImmutablesPreservation
+  vyperImmutablesPreservation vyperCallFrame vyperCallOutcomeFrame
 
 (* ========================================================================
    Preservation of immutables domain through eval_expr / eval_stmts.
@@ -1487,7 +1487,7 @@ Proof
   TRY BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def] >>
   TRY BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def] >>
   TRY BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def] >>
-  imp_res_tac transfer_value_immutables >> gvs[] >>
+  imp_res_tac concrete_send_step_locals >> gvs[] >>
   first_x_assum drule >>
   metis_tac[preserves_immutables_dom_trans, preserves_immutables_dom_eq]
 QED
@@ -1702,8 +1702,9 @@ Theorem extcall_inner_pipeline_imm_dom[local]:
     od s = (res, s') ⇒
     preserves_immutables_dom cx s s'
 Proof
-  rw[bind_def, ignore_bind_def, check_def, type_check_def, assert_def,
-     update_accounts_def, update_transient_def, append_logs_def, return_def,
+  (* NONE tail: the named contract isolates the concrete installation. *)
+  rewrite_tac[GSYM ignore_bind_def, concrete_extcall_tail] >>
+  rw[bind_def, return_def,
      raise_def, lift_sum_def, lift_sum_runtime_def]
   \\ rpt strip_tac \\ gvs[AllCaseEqs(), preserves_immutables_dom_refl]
   \\ TRY (irule preserves_immutables_dom_eq
@@ -1784,6 +1785,48 @@ Proof
   \\ gvs[]
 QED
 
+
+(* Oracle sibling of extcall_inner_pipeline_imm_dom / full pipeline. *)
+Theorem ExtCall_outcome_preserves_immutables_dom:
+  (!bs s res t. k bs s = (res,t) ==> preserves_immutables_dom cx s t) /\
+  (do
+    accounts <- get_accounts;
+    (if ret_type = NoneT then
+       check (~NULL (lookup_account target accounts).code) "ExtCall target has no code"
+     else return ());
+    (rq,outcome) <- take_call_outcome target calldata value_opt;
+    check outcome.co_success "ExtCall reverted";
+    adopt_call_outcome rq outcome;
+    k outcome.co_returnData
+  od) st = (res,st') ==> preserves_immutables_dom cx st st'
+Proof
+  rpt strip_tac >>
+  `!s t u. preserves_immutables_dom cx s t /\ preserves_immutables_dom cx t u ==>
+            preserves_immutables_dom cx s u` by
+    metis_tac[preserves_immutables_dom_trans] >>
+  `!s os rqs. preserves_immutables_dom cx s
+      (s with <|outcomes := os; requests := rqs|>)` by
+    (rpt gen_tac >> irule preserves_immutables_dom_eq >> simp[]) >>
+  `!s accounts transient logs. preserves_immutables_dom cx s
+      (s with <|accounts := accounts; tStorage := transient;
+                logs := s.logs ++ logs|>)` by
+    (rpt gen_tac >> irule preserves_immutables_dom_eq >> simp[]) >>
+  `!s. preserves_immutables_dom cx s s` by simp[preserves_immutables_dom_refl] >>
+  drule_all (ExtCall_outcome_transport |> Q.INST
+    [`R` |-> `preserves_immutables_dom cx`]) >> simp[]
+QED
+
+Theorem Send_outcome_preserves_immutables_dom:
+  (do
+    (rq,outcome) <- take_call_outcome target [] (SOME amount);
+    check outcome.co_success "send failed";
+    adopt_call_outcome rq outcome;
+    return (Value NoneV)
+  od) st = (res,st') ==> preserves_immutables_dom cx st st'
+Proof
+  strip_tac >> drule Send_outcome_preserves_locals >> strip_tac >>
+  irule preserves_immutables_dom_eq >> simp[]
+QED
 
 Theorem intcall_args_length_sub[local]:
   ∀given expected defaults.
