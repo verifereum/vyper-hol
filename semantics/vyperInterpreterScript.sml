@@ -1133,8 +1133,18 @@ Definition evaluate_def:
     vs <- eval_exprs cx es;
     toAddr <- lift_option_type (dest_AddressV $ EL 0 vs) "Send not AddressV";
     amount <- lift_option_type (dest_NumV $ EL 1 vs) "Send not NumV";
+    outcomes <- (λst. return st.outcomes st);
+    case outcomes of
+    | SOME _ => do
+      (rq, outcome) <- vyperCallOutcome$take_call_outcome toAddr [] (SOME amount);
+      check (call_outcome_success outcome) "send failed";
+      vyperCallOutcome$adopt_call_outcome rq outcome;
+      return $ Value $ NoneV
+    od
+    | NONE => do
     transfer_value cx.txn.target toAddr amount;
     return $ Value $ NoneV
+    od
   od ∧
   eval_expr cx (Call _ (ExtCall is_static (func_name, arg_types, ret_type)) es drv) = do
     vs <- eval_exprs cx es;

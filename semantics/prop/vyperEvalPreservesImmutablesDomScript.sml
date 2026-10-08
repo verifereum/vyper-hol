@@ -1482,6 +1482,7 @@ Proof
   (* Simplify conditional IH *)
   RULE_ASSUM_TAC (REWRITE_RULE [check_def, type_check_def, assert_def, return_def]) >>
   gvs[] >>
+  (* Original concrete-only continuation retained:
   (* Resolve case expressions on dest_AddressV/dest_NumV *)
   TRY BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def] >>
   TRY BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def] >>
@@ -1490,6 +1491,17 @@ Proof
   imp_res_tac concrete_send_step_locals >> gvs[] >>
   first_x_assum drule >>
   metis_tac[preserves_immutables_dom_trans, preserves_immutables_dom_eq]
+  *)
+  gvs[GSYM lift_option_type_def] >>
+  imp_res_tac lift_option_type_state >> gvs[] >>
+  first_x_assum drule >> strip_tac >> gvs[] >>
+  qmatch_asmsub_rename_tac `case tailst.outcomes of NONE => _ | SOME _ => _` >>
+  Cases_on `tailst.outcomes` >> gvs[]
+  >- (gvs[bind_def, return_def, AllCaseEqs()] >>
+      imp_res_tac concrete_send_step_locals >> gvs[] >>
+      metis_tac[preserves_immutables_dom_trans, preserves_immutables_dom_eq]) >>
+  imp_res_tac (Send_outcome_preserves_locals |> SRULE [check_def, ignore_bind_def]) >>
+  gvs[] >> metis_tac[preserves_immutables_dom_trans, preserves_immutables_dom_eq]
 QED
 
 (* ----- Case 45: eval_exprs (e::es) ----- *)

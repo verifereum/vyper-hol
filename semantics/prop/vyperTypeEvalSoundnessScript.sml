@@ -9926,8 +9926,17 @@ Resume eval_all_type_sound_mutual[Expr_Call_Send]:
       drule_all send_args_runtime_typed_dest >> strip_tac >> gvs[] >>
       (* Original transfer/return reasoning retained below. *)
       `runtime_consistent env cx args_st` by simp[runtime_consistent_def] >>
+      (* Original concrete tail:
       strip_tac >> gvs[return_def] >>
       drule_all (concrete_send_type_sound |>
+        SRULE [bind_def, ignore_bind_def, return_def]) >>
+      simp[no_type_error_result_def]
+      *)
+      Cases_on `args_st.outcomes` >> strip_tac >> gvs[bind_def, return_def]
+      >- (drule_all (concrete_send_type_sound |>
+            SRULE [bind_def, ignore_bind_def, return_def]) >>
+          simp[no_type_error_result_def]) >>
+      drule_all (Send_outcome_type_sound |>
         SRULE [bind_def, ignore_bind_def, return_def]) >>
       simp[no_type_error_result_def])
     (* Original concrete tail proof:

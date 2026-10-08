@@ -38,6 +38,9 @@ Proof
   simp[]
 QED
 
+(* Original pre-activation statement/proof retained. The Send conjunct is
+   false in SOME mode: vyperSendModesTest.send_zero_initial_state_not_inert
+   was saved in inertcounter2 before this minimal amendment.
 (* Exercise the complete arbitrary initial state, including arbitrary
  * nonempty prior requests/outcomes. SOME still does not consume an outcome. *)
 Theorem oracle_initial_state_inert_modes:
@@ -52,4 +55,21 @@ Theorem oracle_initial_state_inert_modes:
       (INR (Error (TypeError "ExtCall no target")), st)
 Proof
   EVAL_TAC >> simp[return_def, transfer_value_def]
+QED
+*)
+
+(* NONE Send remains concrete; the empty ExtCall fails before take in either mode. *)
+Theorem oracle_initial_state_inert_modes:
+  let st = initial_state am scs with <|outcomes := orc; requests := rqs|> in
+    (orc = NONE ==>
+      eval_expr empty_evaluation_context
+        (Call NoneT Send
+          [Literal (BaseT AddressT) (BytesL (REPLICATE 20 0w));
+           Literal (BaseT (UintT 256)) (IntL 0)] NONE) st =
+        (INL (Value NoneV), st)) /\
+    eval_expr empty_evaluation_context
+      (Call NoneT (ExtCall T ("unused", [], NoneT)) [] NONE) st =
+      (INR (Error (TypeError "ExtCall no target")), st)
+Proof
+  Cases_on `orc` >> EVAL_TAC >> simp[bind_def, return_def, transfer_value_def]
 QED

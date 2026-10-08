@@ -2695,13 +2695,25 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_Send]:
     strip_tac >> first_x_assum drule_all >> strip_tac >>
     Cases_on `args_res` >> gvs[]
     >- (
+      `runtime_consistent env cx args_st` by
+        metis_tac[eval_exprs_preserves_runtime_consistent,
+                  runtime_storage_consistent_runtime] >>
+      `runtime_storage_consistent env cx args_st` by
+        metis_tac[runtime_storage_consistent_intro,
+                  runtime_storage_consistent_layout] >>
+      ORACLE_STORAGE_TAC >>
       Cases_on `dest_AddressV (HD x)` >> gvs[return_def, raise_def] >>
       Cases_on `dest_NumV (x❲1❳)` >> gvs[return_def, raise_def] >>
-      Cases_on `transfer_value cx.txn.target x' x'' args_st` >>
-      rename1 `transfer_value cx.txn.target x' x'' args_st =
-                 (transfer_res,transfer_st)` >>
-      drule_all transfer_value_preserves_contract_storage_well_formed >>
-      Cases_on `transfer_res` >> gvs[return_def, raise_def]) >>
+      Cases_on `args_st.outcomes` >> gvs[bind_def, return_def]
+      >- (
+        (* Original concrete transfer tail, retained in NONE mode. *)
+        Cases_on `transfer_value cx.txn.target x' x'' args_st` >>
+        rename1 `transfer_value cx.txn.target x' x'' args_st =
+                   (transfer_res,transfer_st)` >>
+        drule_all transfer_value_preserves_contract_storage_well_formed >>
+        Cases_on `transfer_res` >> gvs[return_def, raise_def]) >>
+      drule_all (Send_outcome_storage_suffix |>
+        SRULE [bind_def, ignore_bind_def, return_def]) >> simp[]) >>
     rpt strip_tac >> gvs[]) >>
   rpt strip_tac >>
   qpat_x_assum `type_place_expr env (Call _ Send _ _) = SOME vt` mp_tac >>

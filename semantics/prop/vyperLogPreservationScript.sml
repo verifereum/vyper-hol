@@ -1517,6 +1517,33 @@ Proof
   strip_tac >> drule concrete_send_step_locals >> simp[]
 QED
 
+Theorem log_extends_outcome_rules[local]:
+  (!s. log_extends s s) /\
+  (!s t u. log_extends s t /\ log_extends t u ==> log_extends s u) /\
+  (!s os rqs. log_extends s (s with <|outcomes := os; requests := rqs|>)) /\
+  (!s accounts transient logs. log_extends s
+     (s with <|accounts := accounts; tStorage := transient;
+               logs := s.logs ++ logs|>))
+Proof
+  rpt conj_tac
+  >- simp[log_extends_refl]
+  >- metis_tac[log_extends_trans]
+  >- simp[log_extends_def, rich_listTheory.IS_PREFIX_REFL] >>
+  simp[log_extends_def, rich_listTheory.IS_PREFIX_APPEND]
+QED
+
+Theorem Send_outcome_log_extends:
+  (do
+    (rq,outcome) <- take_call_outcome target [] (SOME amount);
+    check outcome.co_success "send failed";
+    adopt_call_outcome rq outcome;
+    return (Value NoneV)
+  od) st = (res,st') ==> log_extends st st'
+Proof
+  strip_tac >> strip_assume_tac log_extends_outcome_rules >>
+  drule_all (Send_outcome_transport |> Q.INST [`R` |-> `log_extends`]) >> simp[]
+QED
+
 Theorem case_expr_send_logs[local]:
   (!s0 s1. type_check (LENGTH es = 2) "Send args" s0 = (INL (),s1) ==>
      !st res st'. eval_exprs cx es st = (res,st') ==> log_extends st st') ==>
@@ -1531,8 +1558,18 @@ Proof
   rpt strip_tac >> gvs[log_extends_refl] >>
   imp_res_tac type_check_guard_specialize >>
   imp_res_tac type_check_state >> imp_res_tac lift_option_type_state >>
+  (* Original concrete tail:
   imp_res_tac concrete_send_step_locals >> gvs[] >>
   metis_tac[log_extends_trans, log_extends_eq_logs]
+  *)
+  gvs[log_extends_refl] >>
+  qmatch_asmsub_rename_tac `case tailst.outcomes of NONE => _ | SOME _ => _` >>
+  Cases_on `tailst.outcomes` >> gvs[]
+  >- (gvs[vyperStateTheory.bind_def, vyperStateTheory.return_def, AllCaseEqs()] >>
+      imp_res_tac concrete_send_step_locals >> gvs[] >>
+      metis_tac[log_extends_trans, log_extends_eq_logs]) >>
+  drule (Send_outcome_log_extends |> SRULE [vyperStateTheory.ignore_bind_def]) >>
+  strip_tac >> irule log_extends_trans >> goal_assum drule >> simp[]
 QED
 
 Theorem case_expr_selfdestruct_logs[local]:
@@ -2217,20 +2254,7 @@ Proof
     accounts := accounts'; tStorage := tStorage'|>` >>
   simp[log_extends_def, rich_listTheory.IS_PREFIX_APPEND]
 QED
-Theorem log_extends_outcome_rules[local]:
-  (!s. log_extends s s) /\
-  (!s t u. log_extends s t /\ log_extends t u ==> log_extends s u) /\
-  (!s os rqs. log_extends s (s with <|outcomes := os; requests := rqs|>)) /\
-  (!s accounts transient logs. log_extends s
-     (s with <|accounts := accounts; tStorage := transient;
-               logs := s.logs ++ logs|>))
-Proof
-  rpt conj_tac
-  >- simp[log_extends_refl]
-  >- metis_tac[log_extends_trans]
-  >- simp[log_extends_def, rich_listTheory.IS_PREFIX_REFL] >>
-  simp[log_extends_def, rich_listTheory.IS_PREFIX_APPEND]
-QED
+(* log_extends_outcome_rules is proved before the actual Send consumer. *)
 
 (* Oracle siblings: logs extend, they are not equal on nonstatic success. *)
 Theorem ExtCall_outcome_log_extends:
@@ -2250,17 +2274,7 @@ Proof
   drule_all (ExtCall_outcome_transport |> Q.INST [`R` |-> `log_extends`]) >> simp[]
 QED
 
-Theorem Send_outcome_log_extends:
-  (do
-    (rq,outcome) <- take_call_outcome target [] (SOME amount);
-    check outcome.co_success "send failed";
-    adopt_call_outcome rq outcome;
-    return (Value NoneV)
-  od) st = (res,st') ==> log_extends st st'
-Proof
-  strip_tac >> strip_assume_tac log_extends_outcome_rules >>
-  drule_all (Send_outcome_transport |> Q.INST [`R` |-> `log_extends`]) >> simp[]
-QED
+(* Send_outcome_log_extends is proved before its actual Send consumer. *)
 
 Theorem ext_call_result_tail_log_extends[local]:
   (!e. drv = SOME e ==>

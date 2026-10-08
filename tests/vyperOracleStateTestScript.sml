@@ -1,6 +1,6 @@
-(* TASK025 record migration only: both modes are still inert. These checks
- * exercise the complete state, including nonempty shared-oracle values.
- * No oracle-taking entry API or evaluator clause is introduced here. *)
+(* Record migration regressions refreshed for Send activation. Concrete
+ * NONE remains inert; ordinary SOME Send now consumes/records an outcome.
+ * Original pre-activation claims are retained below. *)
 Theory vyperOracleStateTest
 Ancestors
   arithmetic integer words list option finite_map cv_type While vyperAST vyperValue vyperContext
@@ -75,6 +75,9 @@ Definition oracle_state_observations_def:
       (Call NoneT (ExtCall T ("unused", [], NoneT)) [] NONE) st) =
       INR (Error (TypeError "ExtCall no target"))
 End
+(* Original precondition translation/proof retained. The now-registered
+   cont_pre_eval_expr_cps closes both termination obligations during
+   translation, so cv_auto_trans_pre correctly reports no precondition.
 val oracle_state_observations_pre_def = oracle_state_observations_def
   |> SRULE [eval_expr_eq_cont_cps]
   |> cv_auto_trans_pre "oracle_state_observations_pre";
@@ -90,11 +93,42 @@ Proof
   disch_then (fn th => REWRITE_TAC [th]) >>
   simp[cont_def, Once OWHILE_THM, nextk_def]
 QED
+*)
+val () = oracle_state_observations_def
+  |> SRULE [eval_expr_eq_cont_cps] |> cv_auto_trans;
 
+(* Keep the old public validity predicate explicit: these are precisely
+   the two expression-termination obligations, not a big-step computation. *)
+Definition oracle_state_observations_pre_def:
+  oracle_state_observations_pre os rqs <=>
+    cont_pre (eval_expr_cps empty_evaluation_context
+      (Call NoneT Send
+        [Literal (BaseT AddressT) (BytesL (REPLICATE 20 0w));
+         Literal (BaseT (UintT 256)) (IntL 0)] NONE)
+      (empty_state with <|outcomes := os; requests := rqs|>) DoneK) /\
+    cont_pre (eval_expr_cps empty_evaluation_context
+      (Call NoneT (ExtCall T ("unused", [], NoneT)) [] NONE)
+      (empty_state with <|outcomes := os; requests := rqs|>) DoneK)
+End
+
+Theorem oracle_state_observations_pre[cv_pre]:
+  oracle_state_observations_pre os rqs
+Proof
+  simp[oracle_state_observations_pre_def, cont_pre_eval_expr_cps]
+QED
+
+(* Original pre-activation claim, falsified by the closed actual zero Send
+   counterexample saved in vyperSendModesTest before this amendment.
 Theorem oracle_state_inert_eval:
   oracle_state_smoke os rqs
 Proof
   EVAL_TAC >> simp[return_def, transfer_value_def]
+QED
+*)
+Theorem oracle_state_inert_eval:
+  os = NONE ==> oracle_state_smoke os rqs
+Proof
+  strip_tac >> gvs[] >> EVAL_TAC >> simp[bind_def, return_def, transfer_value_def]
 QED
 
 Theorem oracle_state_none_cv:
@@ -103,11 +137,25 @@ Proof
   CONV_TAC cv_eval
 QED
 
+(* Original false expectations retained; neither selected fixture was dropped.
 (* Empty SOME must not activate outcome consumption in this task, and a
  * failing outcome must not change today's successful zero-value Send. *)
 Theorem oracle_state_some_cv:
   oracle_state_observations (SOME []) [] /\
   oracle_state_observations (SOME [extCallOracle$failed_outcome
+    <|cr_target := 0w; cr_value := 0; cr_data := []; cr_static := F;
+      cr_accounts := empty_accounts; cr_tStorage := empty_transient_storage|>])
+    [<|cr_target := 0w; cr_value := 0; cr_data := []; cr_static := F;
+       cr_accounts := empty_accounts; cr_tStorage := empty_transient_storage|>]
+Proof
+  CONV_TAC cv_eval
+QED
+*)
+(* The same two fixtures now fail Send. Direct CPS snapshots in
+   vyperSendCpsCVTest additionally certify the consumed suffix/requests. *)
+Theorem oracle_state_some_cv:
+  ~oracle_state_observations (SOME []) [] /\
+  ~oracle_state_observations (SOME [extCallOracle$failed_outcome
     <|cr_target := 0w; cr_value := 0; cr_data := []; cr_static := F;
       cr_accounts := empty_accounts; cr_tStorage := empty_transient_storage|>])
     [<|cr_target := 0w; cr_value := 0; cr_data := []; cr_static := F;

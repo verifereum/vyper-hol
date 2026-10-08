@@ -1885,9 +1885,17 @@ Proof
          return_def] >>
     imp_res_tac type_check_state >>
     imp_res_tac lift_option_type_state >>
+    (* Original concrete tail:
     imp_res_tac concrete_send_step_locals >> gvs[] >>
     first_x_assum drule_all >> rw[] >>
-    gvs[preserves_tv_def] ) >>
+    gvs[preserves_tv_def]
+    *)
+    gvs[] >> first_x_assum drule_all >> strip_tac >> gvs[] >>
+    qmatch_asmsub_rename_tac `case tailst.outcomes of NONE => _ | SOME _ => _` >>
+    Cases_on `tailst.outcomes` >> gvs[]
+    >- (gvs[bind_apply, ignore_bind_apply, return_def, AllCaseEqs()] >>
+        imp_res_tac concrete_send_step_locals >> gvs[preserves_tv_def]) >>
+    imp_res_tac Send_outcome_preserves_locals >> gvs[preserves_tv_def] ) >>
   (* ExtCall: the original concrete-only proof is retained below. *)
   conj_tac >- suspend "ExtCall" >>
   (* TASK032 provenance: actual oracle-mode transport is resumed below.

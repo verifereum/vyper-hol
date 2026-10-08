@@ -322,6 +322,21 @@ Proof
   TRY (Cases_on `evaluate_type_builtin cx tb typ vs` >> gvs[return_def, raise_def])
 QED
 
+Theorem Send_outcome_preserves_locals:
+  (do
+    (rq,outcome) <- take_call_outcome target [] (SOME amount);
+    check outcome.co_success "send failed";
+    adopt_call_outcome rq outcome;
+    return (Value NoneV)
+  od) st = (res,st') ==>
+  st'.scopes = st.scopes /\ st'.immutables = st.immutables
+Proof
+  strip_tac >>
+  drule_all (Send_outcome_transport |> Q.INST
+    [`R` |-> `\s t. t.scopes = s.scopes /\ t.immutables = s.immutables`]
+    |> SRULE []) >> simp[]
+QED
+
 (* Goal 16: Send (guarded P8 IH) *)
 Theorem case_Send_dom[local]:
   ∀cx ty es v0.
@@ -337,9 +352,22 @@ Proof
   simp[evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def,
        check_def, type_check_def, assert_def, lift_option_def, lift_option_type_def] >>
   strip_tac >> gvs[return_def, raise_def, GSYM lift_option_def, GSYM lift_option_type_def] >>
+  (* Original concrete tail proof retained:
   imp_res_tac concrete_send_step_locals >>
   imp_res_tac lift_option_scopes >> imp_res_tac lift_option_type_scopes >> imp_res_tac lift_option_type_scopes >> gvs[] >>
   first_x_assum (qspec_then `st` mp_tac) >> simp[check_def, type_check_def, assert_def, return_def]
+  *)
+  imp_res_tac lift_option_type_scopes >> gvs[] >>
+  first_x_assum (qspec_then `st` mp_tac) >>
+  simp[check_def, type_check_def, assert_def, return_def] >> strip_tac >>
+  gvs[] >>
+  qmatch_asmsub_rename_tac `case tailst.outcomes of NONE => _ | SOME _ => _` >>
+  Cases_on `tailst.outcomes` >> gvs[]
+  >- (gvs[bind_def, return_def, AllCaseEqs()] >>
+      imp_res_tac concrete_send_step_locals >> gvs[] >>
+      first_x_assum drule >> simp[]) >>
+  imp_res_tac (Send_outcome_preserves_locals |> SRULE [check_def, ignore_bind_def]) >>
+  gvs[] >> first_x_assum drule >> simp[]
 QED
 
 (* ===== Chain interaction builtins (unguarded eval_exprs IH) ===== *)
@@ -860,20 +888,7 @@ Proof
     [`R` |-> `\s t. MAP FDOM s.scopes = MAP FDOM t.scopes`] |> SRULE []) >> simp[]
 QED
 
-Theorem Send_outcome_preserves_locals:
-  (do
-    (rq,outcome) <- take_call_outcome target [] (SOME amount);
-    check outcome.co_success "send failed";
-    adopt_call_outcome rq outcome;
-    return (Value NoneV)
-  od) st = (res,st') ==>
-  st'.scopes = st.scopes /\ st'.immutables = st.immutables
-Proof
-  strip_tac >>
-  drule_all (Send_outcome_transport |> Q.INST
-    [`R` |-> `\s t. t.scopes = s.scopes /\ t.immutables = s.immutables`]
-    |> SRULE []) >> simp[]
-QED
+(* Send_outcome_preserves_locals is proved before its actual Send consumer. *)
 
 (* Lock operations preserve scopes: needed for IntCall handler.
    Uses bind form (not ignore_bind) because earlier SIMP_TAC expands ignore_bind.

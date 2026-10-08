@@ -925,7 +925,8 @@ Proof
     gvs[bind_def, return_def, AllCaseEqs()] >>
     resolve_tac) >>
   conj_tac >- unfold_tac >>
-  conj_tac >- unfold_tac >>
+  (* Original Send dispatch: conj_tac >- unfold_tac *)
+  conj_tac >- (rename1`Send` >> suspend "Send") >>
   conj_tac >- (rename1`ExtCall` >> suspend "ExtCall") >>
   conj_tac >- (rpt gen_tac >> strip_tac >>
     match_mp_tac int_call_no_control >>
@@ -933,6 +934,22 @@ Proof
   conj_tac >- (rpt strip_tac >> drule_all raw_call_no_control >> simp[]) >>
   conj_tac >- unfold_tac >>
   rpt conj_tac >> unfold_tac
+QED
+
+Resume eval_expr_no_control_with_bt[Send]:
+  rpt strip_tac >> pop_assum mp_tac >>
+  PURE_REWRITE_TAC [Once evaluate_def] >> strip_tac >>
+  step_tac >- close_type_check >>
+  step_tac >- (res_tac >> gvs[no_control_exc_def]) >>
+  step_tac >- close_lift_option_type >>
+  step_tac >- close_lift_option_type >>
+  qpat_x_assum `bind _ _ _ = _` mp_tac >>
+  simp[Once bind_def, return_def] >> strip_tac >>
+  qmatch_asmsub_rename_tac `case tailst.outcomes of NONE => _ | SOME _ => _` >>
+  Cases_on `tailst.outcomes` >> gvs[]
+  >- (gvs[bind_def, ignore_bind_def, return_def, AllCaseEqs()] >>
+      drule transfer_value_no_control >> simp[]) >>
+  drule Send_outcome_runtime_error >> rw[no_control_exc_def]
 QED
 
 (* TASK032: original concrete-only ExtCall proof retained.
