@@ -1,6 +1,6 @@
 Theory vyperEvalPreservesImmutablesDom
 Ancestors
-  vyperMisc vyperAST vyperValue vyperContext vyperState vyperStorageBackend vyperCreate vyperInterpreter
+  pair vyperMisc vyperAST vyperValue vyperContext vyperState vyperStorageBackend vyperCreate vyperInterpreter
   vyperLookup vyperScopePreservation vyperStatePreservation
   vyperAssignTarget vyperEvalExprPreservesScopesDom
   vyperImmutablesPreservation vyperCallFrame vyperCallOutcomeFrame
@@ -3464,6 +3464,7 @@ Proof
   >- (drule_all case_eval_exprs_cons_imm_dom >> simp[])
 QED
 
+(* TASK032: original concrete-only ExtCall resume retained.
 Resume immutables_dom_mutual[ExtCall]:
   rpt strip_tac
   \\ qpat_x_assum `eval_expr _ _ _ = _` mp_tac
@@ -3568,6 +3569,90 @@ Resume immutables_dom_mutual[ExtCall]:
   \\ first_x_assum irule
   \\ (conj_tac >- (qexists_tac `r` >> simp[append_logs_def, return_def]))
   \\ simp[]
+QED
+
+*)
+
+Theorem imm_dom_locals[local]:
+  !s t. t.scopes = s.scopes /\ t.immutables = s.immutables ==>
+    preserves_immutables_dom cx s t
+Proof
+  rpt strip_tac >> irule preserves_immutables_dom_eq >> simp[]
+QED
+
+val IMM_DOM_FRAME_PRIMITIVES =
+  MATCH_MP state_rel_frame_locals_primitives imm_dom_locals;
+val IMM_DOM_FRAME_TAKE =
+  MATCH_MP state_rel_frame_locals_take imm_dom_locals;
+
+Theorem imm_dom_frame_append_logs[local]:
+  state_rel_frame (preserves_immutables_dom cx) (append_logs logs)
+Proof
+  simp[state_rel_frame_def, append_logs_def, return_def] >> gen_tac >>
+  irule preserves_immutables_dom_eq >> simp[]
+QED
+
+Theorem imm_dom_frame_bind_guarded[local]:
+  state_rel_frame (preserves_immutables_dom cx) f /\
+  (!s v t. f s = (INL v,t) ==> state_rel_frame (preserves_immutables_dom cx) (g v)) ==>
+  state_rel_frame (preserves_immutables_dom cx) (vyperState$bind f g)
+Proof
+  rpt strip_tac >> irule state_rel_frame_bind_guarded >> simp[] >>
+  metis_tac[preserves_immutables_dom_trans]
+QED
+
+Theorem imm_dom_frame_at[local]:
+  state_rel_frame (preserves_immutables_dom cx) f /\ f st = (res,st') ==>
+  preserves_immutables_dom cx st st'
+Proof
+  simp[state_rel_frame_result]
+QED
+
+val IMM_DOM_FRAME_TAC =
+  rpt (FIRST [CHANGED_TAC (CONV_TAC (DEPTH_CONV ETA_CONV)),
+    CHANGED_TAC (simp_tac bool_ss
+      [FORALL_PROD, pair_case_thm, UNCURRY, imm_dom_frame_append_logs,
+       IMM_DOM_FRAME_PRIMITIVES]),
+    first_assum ACCEPT_TAC, MATCH_ACCEPT_TAC IMM_DOM_FRAME_TAKE,
+    CHANGED_TAC (fn (asl,w) =>
+      simp_tac bool_ss (pair_case_thm :: UNCURRY ::
+        List.map ASSUME (List.filter is_eq asl)) (asl,w)),
+    irule imm_dom_frame_bind_guarded >> conj_tac,
+    CHANGED_TAC (rewrite_tac[ignore_bind_def]),
+    gen_tac, strip_tac, conj_tac, CASE_TAC]);
+
+Resume immutables_dom_mutual[ExtCall]:
+  qpat_assum `eval_expr _ _ _ = _` (fn th =>
+    let val result = #1 (pairSyntax.dest_pair (rhs (concl th))) in
+      irule (INST_TYPE [alpha |-> type_of result] imm_dom_frame_at) >>
+      exists_tac (rator (lhs (concl th))) >> exists_tac result
+    end) >>
+  simp[Once evaluate_def] >>
+  RULE_ASSUM_TAC (REWRITE_RULE [GSYM state_rel_frame_result]) >>
+  IMM_DOM_FRAME_TAC >|
+  [suspend "return_path_1", suspend "return_path_2",
+   suspend "return_path_3", suspend "return_path_4"]
+QED
+
+val IMM_DOM_FRAME_IH_TAC =
+  gvs[oneTheory.one, ignore_bind_def, append_logs_def] >>
+  rpt (FIRST [first_assum ACCEPT_TAC,
+    first_x_assum (fn th =>
+      if is_imp (snd (strip_forall (concl th))) then
+        drule_at Any th >> simp[] >> strip_tac
+      else NO_TAC)]);
+
+Resume immutables_dom_mutual[return_path_1]:
+  IMM_DOM_FRAME_IH_TAC
+QED
+Resume immutables_dom_mutual[return_path_2]:
+  IMM_DOM_FRAME_IH_TAC
+QED
+Resume immutables_dom_mutual[return_path_3]:
+  IMM_DOM_FRAME_IH_TAC
+QED
+Resume immutables_dom_mutual[return_path_4]:
+  IMM_DOM_FRAME_IH_TAC
 QED
 
 Finalise immutables_dom_mutual

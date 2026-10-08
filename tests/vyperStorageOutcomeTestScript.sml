@@ -9,6 +9,9 @@ Ancestors
   vyperTypeInvariants vyperCallOutcomeTest
 Libs monadsyntax
 
+(* Original TASK031 claims/proofs retained: exact SOME-list equality is
+   refuted by activated_ExtCall_consumes_counterexample. Mode equivalence
+   and a general suffix remain valid, including default consumption.
 Theorem inactive_evaluator_modes:
   eval_stmt cx s st = (res,st') ==>
   (st.outcomes = NONE <=> st'.outcomes = NONE) /\
@@ -24,6 +27,25 @@ Theorem actual_default_evaluator_suffix:
   (!os. st.outcomes = SOME os ==> st'.outcomes = SOME os)
 Proof
   strip_tac >> imp_res_tac eval_outcomes_preserved_mutual >> simp[]
+QED
+*)
+
+Theorem inactive_evaluator_modes:
+  eval_stmt cx s st = (res,st') ==>
+  (st.outcomes = NONE <=> st'.outcomes = NONE) /\
+  outcome_suffix st.outcomes st'.outcomes
+Proof
+  strip_tac >> imp_res_tac eval_outcome_suffix_mutual >>
+  drule outcome_suffix_modes >> simp[]
+QED
+
+Theorem actual_default_evaluator_suffix:
+  eval_expr cx (THE drv) st = (res,st') ==>
+  outcome_suffix st.outcomes st'.outcomes /\
+  (st.outcomes = NONE <=> st'.outcomes = NONE)
+Proof
+  strip_tac >> imp_res_tac eval_outcome_suffix_mutual >>
+  drule outcome_suffix_modes >> simp[]
 QED
 
 Theorem remaining_oracle_storage_EVERY:

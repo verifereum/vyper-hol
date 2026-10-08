@@ -1,5 +1,6 @@
 Theory vyperInterpreter
 Ancestors
+  vyperCallOutcome[ignore_grammar]
   arithmetic alist combin option list finite_map pair
   rich_list cv cv_std vfmState vfmContext vfmCompute[ignore_grammar]
   vfmExecution[ignore_grammar] vyperAST vyperABI
@@ -7,6 +8,13 @@ Ancestors
   vyperEvent vyperCreate vyperRuntimeAccounts
 Libs
   cv_transLib wordsLib monadsyntax
+
+(* Import only the two outcome selectors used here, without EVM/crypto
+   grammar shadowing source operations in existing proof consumers. *)
+val () = overload_on ("call_outcome_success", Term.prim_mk_const
+  {Thy = "extCallOracle", Name = "recordtype.call_outcome.seldef.co_success"});
+val () = overload_on ("call_outcome_return_data", Term.prim_mk_const
+  {Thy = "extCallOracle", Name = "recordtype.call_outcome.seldef.co_returnData"});
 
 (* writing logs *)
 
@@ -1144,6 +1152,25 @@ Definition evaluate_def:
     tenv <<- get_tenv cx;
     calldata <- lift_option_type (build_ext_calldata tenv func_name arg_types arg_vals)
                                  "ExtCall build_calldata";
+    outcomes <- (λst. return st.outcomes st);
+    case outcomes of
+    | SOME _ => do
+      accounts <- get_accounts;
+      (if ret_type = NoneT then
+        check (¬NULL (lookup_account target_addr accounts).code) "ExtCall target has no code"
+       else return ());
+      (rq, outcome) <- vyperCallOutcome$take_call_outcome target_addr calldata value_opt;
+      check (call_outcome_success outcome) "ExtCall reverted";
+      vyperCallOutcome$adopt_call_outcome rq outcome;
+      if call_outcome_return_data outcome = [] ∧ IS_SOME drv then
+        eval_expr cx (THE drv)
+      else do
+        ret_val <- lift_sum_runtime (evaluate_abi_decode_return tenv ret_type
+          (call_outcome_return_data outcome));
+        return $ Value ret_val
+      od
+    od
+    | NONE => do
     accounts <- get_accounts;
     (* Vyper reverts if target has no code (EXTCODESIZE == 0) *)
     check (¬NULL (lookup_account target_addr accounts).code) "ExtCall target has no code";
@@ -1163,6 +1190,7 @@ Definition evaluate_def:
     else do
       ret_val <- lift_sum_runtime (evaluate_abi_decode_return tenv ret_type returnData);
       return $ Value ret_val
+    od
     od
   od ∧
   eval_expr cx (Call _ (IntCall (src_id_opt, fn)) es _) = do

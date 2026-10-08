@@ -1,7 +1,7 @@
 Theory vyperExprNoControl
 
 Ancestors
-  vyperCreate vyperInterpreter vyperAST vyperMisc
+  pair vyperCreate vyperInterpreter vyperAST vyperMisc
   vyperCallFrame vyperCallOutcome vyperCallOutcomeBranches vyperCallOutcomeFrame
   vyperRuntimeAccounts vyperState
 Libs
@@ -935,6 +935,7 @@ Proof
   rpt conj_tac >> unfold_tac
 QED
 
+(* TASK032: original concrete-only ExtCall proof retained.
 Resume eval_expr_no_control_with_bt[ExtCall]:
   rpt strip_tac >> pop_assum mp_tac
   >> PURE_REWRITE_TAC[Once evaluate_def] >> strip_tac
@@ -1005,6 +1006,93 @@ Resume eval_expr_no_control_with_bt[ExtCall]:
   >> PairCases_on `r''` >> gvs[]
   >> rpt (disch_then drule)
   >> strip_tac >> last_x_assum irule >> metis_tac[]
+QED
+
+*)
+
+Definition no_control_monad_def:
+  no_control_monad f <=> !s exc t.
+    f s = (INR exc,t) ==> no_control_exc exc
+End
+
+Theorem no_control_monad_bind_guarded[local]:
+  no_control_monad f /\
+  (!s v t. f s = (INL v,t) ==> no_control_monad (g v)) ==>
+  no_control_monad (vyperState$bind f g)
+Proof
+  simp[no_control_monad_def] >> rpt strip_tac >>
+  drule bind_no_control >> disch_then irule >> metis_tac[]
+QED
+
+Theorem no_control_monad_primitives[local]:
+  no_control_monad (return v) /\
+  no_control_monad (λs. return (g s) s) /\
+  no_control_monad (type_check b msg) /\ no_control_monad (check b msg) /\
+  no_control_monad (lift_option opt msg) /\
+  no_control_monad (lift_option_type opt msg) /\
+  no_control_monad (lift_sum_runtime rs) /\
+  no_control_monad get_accounts /\ no_control_monad get_transient_storage /\
+  no_control_monad (update_accounts upd) /\
+  no_control_monad (update_transient upd_t) /\
+  no_control_monad (append_logs logs) /\
+  no_control_monad (adopt_call_outcome rq co)
+Proof
+  simp[no_control_monad_def, return_def, raise_def, check_def, type_check_def,
+       assert_def, lift_option_def, lift_option_type_def, lift_sum_runtime_def,
+       get_accounts_def, get_transient_storage_def, update_accounts_def,
+       update_transient_def, append_logs_def, adopt_call_outcome_equation] >>
+  rpt strip_tac >> rpt CASE_TAC >>
+  gvs[option_CASE_rator, sum_CASE_rator, AllCaseEqs(),
+      return_def, raise_def, no_control_exc_def]
+QED
+
+Theorem no_control_monad_take[local]:
+  no_control_monad (take_call_outcome target calldata value_opt)
+Proof
+  simp[no_control_monad_def] >> rpt strip_tac >>
+  drule take_call_outcome_error >> rw[no_control_exc_def]
+QED
+
+val NO_CONTROL_MONAD_TAC =
+  rpt (FIRST [CHANGED_TAC (CONV_TAC (DEPTH_CONV ETA_CONV)),
+    CHANGED_TAC (simp_tac bool_ss
+      [FORALL_PROD, pair_case_thm, UNCURRY, no_control_monad_primitives]),
+    first_assum ACCEPT_TAC, MATCH_ACCEPT_TAC no_control_monad_take,
+    CHANGED_TAC (fn (asl,w) =>
+      simp_tac bool_ss (pair_case_thm :: UNCURRY ::
+        List.map ASSUME (List.filter is_eq asl)) (asl,w)),
+    irule no_control_monad_bind_guarded >> conj_tac,
+    CHANGED_TAC (rewrite_tac[ignore_bind_def]),
+    gen_tac, strip_tac, conj_tac, CASE_TAC]);
+
+Resume eval_expr_no_control_with_bt[ExtCall]:
+  rpt gen_tac >> strip_tac >>
+  simp[GSYM no_control_monad_def, Once evaluate_def] >>
+  RULE_ASSUM_TAC (REWRITE_RULE [GSYM no_control_monad_def]) >>
+  NO_CONTROL_MONAD_TAC >|
+  [suspend "return_path_1", suspend "return_path_2",
+   suspend "return_path_3", suspend "return_path_4"]
+QED
+
+val NO_CONTROL_MONAD_IH_TAC =
+  gvs[oneTheory.one, ignore_bind_def] >>
+  rpt (FIRST [first_assum ACCEPT_TAC,
+    first_x_assum (fn th =>
+      if is_imp (snd (strip_forall (concl th))) then
+        drule_at Any th >> simp[] >> strip_tac
+      else NO_TAC)]);
+
+Resume eval_expr_no_control_with_bt[return_path_1]:
+  NO_CONTROL_MONAD_IH_TAC
+QED
+Resume eval_expr_no_control_with_bt[return_path_2]:
+  NO_CONTROL_MONAD_IH_TAC
+QED
+Resume eval_expr_no_control_with_bt[return_path_3]:
+  NO_CONTROL_MONAD_IH_TAC
+QED
+Resume eval_expr_no_control_with_bt[return_path_4]:
+  NO_CONTROL_MONAD_IH_TAC
 QED
 
 Finalise eval_expr_no_control_with_bt

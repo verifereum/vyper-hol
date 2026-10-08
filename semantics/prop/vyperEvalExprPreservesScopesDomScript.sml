@@ -1,7 +1,8 @@
 Theory vyperEvalExprPreservesScopesDom
 Ancestors
-  vyperMisc vyperContext vyperState vyperCreate vyperInterpreter vyperLookup
+  pair sum vyperMisc vyperContext vyperState vyperCreate vyperInterpreter vyperLookup
   vyperScopePreservation vyperStatePreservation vyperCallFrame vyperCallOutcomeFrame
+  vyperCallOutcome[ignore_grammar]
 
 (* ========================================================================
    Utility: eval_exprs preserves scopes dom from per-element IH
@@ -503,6 +504,7 @@ Proof
   simp[]
 QED
 
+(* Original concrete-only resume retained for TASK032 provenance.
 Resume eval_mutual_preserves_scopes_dom[ExtCall]:
   rpt gen_tac
   \\ strip_tac
@@ -611,6 +613,228 @@ Resume eval_mutual_preserves_scopes_dom[ExtCall]:
        simp[check_def, assert_def, return_def]
   \\ first_x_assum drule_all \\ strip_tac \\ gvs[]
 
+QED
+
+*)
+
+(* Superseded branchwise experiment retained while developing the guarded
+   monadic transport below; not an active proof.
+fun EXT_CALL_DOM_GOAL_CASE_TAC (g as (_,w)) =
+  let
+    fun branch tm =
+      let val (name,_) = dest_const tm
+      in name = "COND" orelse String.isSuffix "_CASE" name end
+      handle HOL_ERR _ => false;
+  in
+    if can (find_term branch) w then BasicProvers.TOP_CASE_TAC g
+    else NO_TAC g
+  end;
+
+val EXT_CALL_DOM_SIMP_TAC =
+  gvs[bind_def, ignore_bind_def, return_def, UNCURRY,
+      type_check_def, check_def, assert_def, lift_option_type_def,
+      get_accounts_def, get_transient_storage_def, update_accounts_def,
+      update_transient_def, append_logs_def, raise_def,
+      lift_option_def, lift_sum_runtime_def];
+
+val EXT_CALL_DOM_CASES_TAC =
+  EXT_CALL_DOM_SIMP_TAC >> EXT_CALL_DOM_GOAL_CASE_TAC >>
+  EXT_CALL_DOM_SIMP_TAC >> EXT_CALL_DOM_GOAL_CASE_TAC >>
+  EXT_CALL_DOM_SIMP_TAC >> EXT_CALL_DOM_GOAL_CASE_TAC >>
+  EXT_CALL_DOM_SIMP_TAC >> rpt strip_tac;
+
+val EXT_CALL_DOM_FINISH_TAC =
+  imp_res_tac (take_call_outcome_frame |>
+    SRULE [evaluation_state_component_equality]) >>
+  imp_res_tac (adopt_call_outcome_frame |>
+    SRULE [evaluation_state_component_equality]) >> gvs[] >>
+  TRY (rename1 `run_ext_call _ _ _ _ _ _ _ = SOME call_result` >>
+    PairCases_on `call_result` >> gvs[]) >>
+  TRY (rename1 `take_call_outcome _ _ _ _ = (INL call_pair,_)` >>
+    PairCases_on `call_pair` >> gvs[]) >>
+  rpt (FIRST [CHANGED_TAC (gvs[]),
+    first_x_assum (fn th =>
+      if is_imp (snd (strip_forall (concl th))) then
+        drule_at Any th >> simp[] >> strip_tac
+      else NO_TAC)]);
+
+Resume eval_mutual_preserves_scopes_dom[ExtCall]:
+  rpt strip_tac >>
+  rename1 `eval_expr cx (Call loc (ExtCall stat (func_name,arg_types,ret_type)) es drv) st = _` >>
+  qpat_x_assum `eval_expr _ (Call _ (ExtCall _ _) _ _) _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def] >>
+  Cases_on `eval_exprs cx es st` >>
+  rename1 `eval_exprs cx es st = (args_result,st_args)` >>
+  reverse (Cases_on `args_result`)
+  >- (simp[] >> strip_tac >> gvs[] >>
+      qpat_x_assum `!s r t. eval_exprs _ _ _ = _ ==> _` drule >> simp[]) >>
+  rename1 `eval_exprs cx es st = (INL vs,st_args)` >>
+  `MAP FDOM st.scopes = MAP FDOM st_args.scopes` by
+    (qpat_x_assum `!s r t. eval_exprs _ _ _ = _ ==> _` drule >> simp[]) >>
+  Cases_on `stat` >> Cases_on `st_args.outcomes` >>
+  Cases_on `ret_type = NoneT` >|
+  [suspend "static_none_noneT", suspend "static_none_value",
+   suspend "static_some_noneT", suspend "static_some_value",
+   suspend "nonstatic_none_noneT", suspend "nonstatic_none_value",
+   suspend "nonstatic_some_noneT", suspend "nonstatic_some_value"]
+QED
+
+Resume eval_mutual_preserves_scopes_dom[static_none_noneT]:
+  EXT_CALL_DOM_SIMP_TAC >> EXT_CALL_DOM_GOAL_CASE_TAC >>
+  EXT_CALL_DOM_SIMP_TAC >> EXT_CALL_DOM_GOAL_CASE_TAC >>
+  EXT_CALL_DOM_SIMP_TAC >> EXT_CALL_DOM_GOAL_CASE_TAC >>
+  EXT_CALL_DOM_SIMP_TAC >> rpt strip_tac >> EXT_CALL_DOM_FINISH_TAC
+QED
+Resume eval_mutual_preserves_scopes_dom[static_none_value]:
+  EXT_CALL_DOM_SIMP_TAC >> EXT_CALL_DOM_GOAL_CASE_TAC >>
+  EXT_CALL_DOM_SIMP_TAC >> EXT_CALL_DOM_GOAL_CASE_TAC >>
+  EXT_CALL_DOM_SIMP_TAC >> EXT_CALL_DOM_GOAL_CASE_TAC >>
+  EXT_CALL_DOM_SIMP_TAC >> rpt strip_tac >> EXT_CALL_DOM_FINISH_TAC
+QED
+Resume eval_mutual_preserves_scopes_dom[static_some_noneT]:
+  EXT_CALL_DOM_SIMP_TAC >> EXT_CALL_DOM_GOAL_CASE_TAC >>
+  EXT_CALL_DOM_SIMP_TAC >> EXT_CALL_DOM_GOAL_CASE_TAC >>
+  EXT_CALL_DOM_SIMP_TAC >> EXT_CALL_DOM_GOAL_CASE_TAC >>
+  EXT_CALL_DOM_SIMP_TAC >> rpt strip_tac >> EXT_CALL_DOM_FINISH_TAC
+QED
+Resume eval_mutual_preserves_scopes_dom[static_some_value]:
+  EXT_CALL_DOM_SIMP_TAC >> EXT_CALL_DOM_GOAL_CASE_TAC >>
+  EXT_CALL_DOM_SIMP_TAC >> EXT_CALL_DOM_GOAL_CASE_TAC >>
+  EXT_CALL_DOM_SIMP_TAC >> EXT_CALL_DOM_GOAL_CASE_TAC >>
+  EXT_CALL_DOM_SIMP_TAC >> rpt strip_tac >> EXT_CALL_DOM_FINISH_TAC
+QED
+Resume eval_mutual_preserves_scopes_dom[nonstatic_none_noneT]:
+  EXT_CALL_DOM_SIMP_TAC >> EXT_CALL_DOM_GOAL_CASE_TAC >>
+  EXT_CALL_DOM_SIMP_TAC >> EXT_CALL_DOM_GOAL_CASE_TAC >>
+  EXT_CALL_DOM_SIMP_TAC >> EXT_CALL_DOM_GOAL_CASE_TAC >>
+  EXT_CALL_DOM_SIMP_TAC >> rpt strip_tac >> EXT_CALL_DOM_FINISH_TAC
+QED
+Resume eval_mutual_preserves_scopes_dom[nonstatic_none_value]:
+  EXT_CALL_DOM_SIMP_TAC >> EXT_CALL_DOM_GOAL_CASE_TAC >>
+  EXT_CALL_DOM_SIMP_TAC >> EXT_CALL_DOM_GOAL_CASE_TAC >>
+  EXT_CALL_DOM_SIMP_TAC >> EXT_CALL_DOM_GOAL_CASE_TAC >>
+  EXT_CALL_DOM_SIMP_TAC >> rpt strip_tac >> EXT_CALL_DOM_FINISH_TAC
+QED
+Resume eval_mutual_preserves_scopes_dom[nonstatic_some_noneT]:
+  EXT_CALL_DOM_SIMP_TAC >> EXT_CALL_DOM_GOAL_CASE_TAC >>
+  EXT_CALL_DOM_SIMP_TAC >> EXT_CALL_DOM_GOAL_CASE_TAC >>
+  EXT_CALL_DOM_SIMP_TAC >> EXT_CALL_DOM_GOAL_CASE_TAC >>
+  EXT_CALL_DOM_SIMP_TAC >> rpt strip_tac >> EXT_CALL_DOM_FINISH_TAC
+QED
+Resume eval_mutual_preserves_scopes_dom[nonstatic_some_value]:
+  EXT_CALL_DOM_SIMP_TAC >> EXT_CALL_DOM_GOAL_CASE_TAC >>
+  EXT_CALL_DOM_SIMP_TAC >> EXT_CALL_DOM_GOAL_CASE_TAC >>
+  EXT_CALL_DOM_SIMP_TAC >> EXT_CALL_DOM_GOAL_CASE_TAC >>
+  EXT_CALL_DOM_SIMP_TAC >> rpt strip_tac >> EXT_CALL_DOM_FINISH_TAC
+QED
+*)
+
+Definition scopes_dom_frame_def:
+  scopes_dom_frame f <=> !st.
+    MAP FDOM st.scopes = MAP FDOM (SND (f st)).scopes
+End
+
+Theorem scopes_dom_frame_result[local]:
+  scopes_dom_frame f <=> !st res st'. f st = (res,st') ==>
+    MAP FDOM st.scopes = MAP FDOM st'.scopes
+Proof
+  simp[scopes_dom_frame_def] >> eq_tac >> rpt strip_tac
+  >- (first_x_assum (qspec_then `st` mp_tac) >> simp[]) >>
+  first_x_assum (qspecl_then [`st`,`FST (f st)`,`SND (f st)`] mp_tac) >> simp[]
+QED
+
+Theorem scopes_dom_frame_bind_guarded[local]:
+  scopes_dom_frame f /\
+  (!s v t. f s = (INL v,t) ==> scopes_dom_frame (g v)) ==>
+  scopes_dom_frame (monad_bind f g)
+Proof
+  rewrite_tac[scopes_dom_frame_def, bind_def] >> rpt strip_tac >>
+  Cases_on `f st` >> Cases_on `q` >>
+  simp_tac bool_ss [pair_case_thm, sum_case_def, SND] >>
+  qpat_x_assum `!st. MAP _ st.scopes = MAP _ (SND (f st)).scopes`
+    (qspec_then `st` mp_tac) >>
+  asm_simp_tac bool_ss [SND] >> strip_tac >>
+  TRY (qpat_x_assum `f st = (INL x,r)` (fn eqth =>
+    qpat_x_assum `!s v t. _` (fn th =>
+      mp_tac (Q.SPEC `r` (MP (Q.SPECL [`st`,`x`,`r`] th) eqth)))) >>
+    asm_simp_tac bool_ss [])
+QED
+
+Theorem scopes_dom_frame_primitives[local]:
+  scopes_dom_frame (return v) /\ scopes_dom_frame (raise e) /\
+  scopes_dom_frame (type_check b msg) /\ scopes_dom_frame (check b msg) /\
+  scopes_dom_frame (lift_option opt msg) /\
+  scopes_dom_frame (lift_option_type opt msg) /\
+  scopes_dom_frame (lift_sum_runtime rs) /\
+  scopes_dom_frame get_accounts /\ scopes_dom_frame get_transient_storage /\
+  scopes_dom_frame (update_accounts upd) /\
+  scopes_dom_frame (update_transient upd_t) /\
+  scopes_dom_frame (append_logs logs) /\
+  scopes_dom_frame (adopt_call_outcome rq co)
+Proof
+  simp[scopes_dom_frame_def, return_def, raise_def, check_def, type_check_def,
+       assert_def, lift_option_def, lift_option_type_def, lift_sum_runtime_def,
+       get_accounts_def, get_transient_storage_def, update_accounts_def,
+       update_transient_def, append_logs_def, adopt_call_outcome_equation] >>
+  rpt strip_tac >> rpt CASE_TAC >> simp[return_def, raise_def]
+QED
+
+Theorem scopes_dom_frame_read[local]:
+  scopes_dom_frame (λst. return (g st) st)
+Proof
+  simp[scopes_dom_frame_def, return_def]
+QED
+
+Theorem scopes_dom_frame_take[local]:
+  scopes_dom_frame (take_call_outcome target calldata value_opt)
+Proof
+  simp[scopes_dom_frame_result] >> rpt strip_tac >>
+  drule take_call_outcome_frame >>
+  simp[evaluation_state_component_equality] >> strip_tac >> simp[]
+QED
+
+val SCOPES_DOM_FRAME_TAC =
+  rpt (FIRST [CHANGED_TAC (CONV_TAC (DEPTH_CONV ETA_CONV)),
+    CHANGED_TAC (simp_tac bool_ss
+      [ETA_AX, FORALL_PROD, pair_case_thm, UNCURRY, scopes_dom_frame_primitives]),
+    first_assum ACCEPT_TAC,
+    MATCH_ACCEPT_TAC scopes_dom_frame_read,
+    MATCH_ACCEPT_TAC scopes_dom_frame_take,
+    CHANGED_TAC (fn (asl,w) =>
+      simp_tac bool_ss (pair_case_thm :: UNCURRY ::
+        List.map ASSUME (List.filter is_eq asl)) (asl,w)),
+    irule scopes_dom_frame_bind_guarded >> conj_tac,
+    CHANGED_TAC (rewrite_tac[ignore_bind_def]),
+    gen_tac, strip_tac, conj_tac, CASE_TAC]);
+
+Resume eval_mutual_preserves_scopes_dom[ExtCall]:
+  rpt gen_tac >> strip_tac >>
+  simp[GSYM scopes_dom_frame_result, Once evaluate_def] >>
+  RULE_ASSUM_TAC (REWRITE_RULE [GSYM scopes_dom_frame_result]) >>
+  SCOPES_DOM_FRAME_TAC >|
+  [suspend "return_path_1", suspend "return_path_2",
+   suspend "return_path_3", suspend "return_path_4"]
+QED
+
+val SCOPES_DOM_IH_TAC =
+  gvs[oneTheory.one, ignore_bind_def] >>
+  rpt (FIRST [first_assum ACCEPT_TAC,
+    first_x_assum (fn th =>
+      if is_imp (snd (strip_forall (concl th))) then
+        drule_at Any th >> simp[] >> strip_tac
+      else NO_TAC)]);
+
+Resume eval_mutual_preserves_scopes_dom[return_path_1]:
+  SCOPES_DOM_IH_TAC
+QED
+Resume eval_mutual_preserves_scopes_dom[return_path_2]:
+  SCOPES_DOM_IH_TAC
+QED
+Resume eval_mutual_preserves_scopes_dom[return_path_3]:
+  SCOPES_DOM_IH_TAC
+QED
+Resume eval_mutual_preserves_scopes_dom[return_path_4]:
+  SCOPES_DOM_IH_TAC
 QED
 
 (* Oracle sibling for the ExtCall resume. Domain equality, not value or

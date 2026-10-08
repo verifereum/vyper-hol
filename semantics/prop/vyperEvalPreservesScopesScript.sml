@@ -1,6 +1,6 @@
 Theory vyperEvalPreservesScopes
 Ancestors
-  vyperCallFrame vyperCallOutcomeFrame
+  pair vyperCallFrame vyperCallOutcomeFrame vyperCallOutcome[ignore_grammar]
   vyperTypeInvariants
   vyperState vyperCreate vyperInterpreter vyperLookup
   vyperEvalExprPreservesScopesDom vyperScopePreservation
@@ -1888,7 +1888,9 @@ Proof
     imp_res_tac concrete_send_step_locals >> gvs[] >>
     first_x_assum drule_all >> rw[] >>
     gvs[preserves_tv_def] ) >>
-  (* ExtCall *)
+  (* ExtCall: the original concrete-only proof is retained below. *)
+  conj_tac >- suspend "ExtCall" >>
+  (* TASK032 provenance: actual oracle-mode transport is resumed below.
   conj_tac >- (
     rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
     pop_assum mp_tac >>
@@ -2011,6 +2013,7 @@ Proof
     strip_tac >> gvs[] >> first_x_assum drule_all >> rw[] >>
     irule preserves_tv_trans >> qexists_tac `sc` >>
     gvs[preserves_tv_def]) >>
+  *)
   (* IntCall *)
   conj_tac >- (
     rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
@@ -2439,6 +2442,90 @@ Resume eval_preserves_tv[IntCall_ptv]:
     simp[finally_def, ignore_bind_def, bind_def, return_def, raise_def]
   ) >>
   irule preserves_tv_trans >> qexists_tac `r'` >> simp[]
+QED
+
+Theorem tv_frame_primitives[local]:
+  state_rel_frame (preserves_tv cx) (return v) /\
+  state_rel_frame (preserves_tv cx) (raise e) /\
+  state_rel_frame (preserves_tv cx) (type_check b msg) /\
+  state_rel_frame (preserves_tv cx) (check b msg) /\
+  state_rel_frame (preserves_tv cx) (lift_option opt msg) /\
+  state_rel_frame (preserves_tv cx) (lift_option_type opt msg) /\
+  state_rel_frame (preserves_tv cx) (lift_sum_runtime rs) /\
+  state_rel_frame (preserves_tv cx) get_accounts /\
+  state_rel_frame (preserves_tv cx) get_transient_storage /\
+  state_rel_frame (preserves_tv cx) (update_accounts upd) /\
+  state_rel_frame (preserves_tv cx) (update_transient upd_t) /\
+  state_rel_frame (preserves_tv cx) (append_logs logs) /\
+  state_rel_frame (preserves_tv cx) (adopt_call_outcome rq co)
+Proof
+  simp[state_rel_frame_def, return_def, raise_def, check_def, type_check_def,
+       assert_def, lift_option_def, lift_option_type_def, lift_sum_runtime_def,
+       get_accounts_def, get_transient_storage_def, update_accounts_def,
+       update_transient_def, append_logs_def, adopt_call_outcome_equation] >>
+  rpt strip_tac >> rpt CASE_TAC >> simp[return_def, raise_def, preserves_tv_def]
+QED
+
+Theorem tv_frame_take[local]:
+  state_rel_frame (preserves_tv cx) (take_call_outcome target calldata value_opt)
+Proof
+  simp[state_rel_frame_result] >> rpt strip_tac >>
+  drule take_call_outcome_frame >>
+  simp[evaluation_state_component_equality] >> strip_tac >>
+  irule preserves_tv_eq >> simp[]
+QED
+
+Theorem tv_frame_bind_guarded[local]:
+  state_rel_frame (preserves_tv cx) f /\
+  (!s v t. f s = (INL v,t) ==> state_rel_frame (preserves_tv cx) (g v)) ==>
+  state_rel_frame (preserves_tv cx) (vyperState$bind f g)
+Proof
+  rpt strip_tac >> irule state_rel_frame_bind_guarded >> simp[] >>
+  metis_tac[preserves_tv_trans]
+QED
+
+val TV_FRAME_TAC =
+  rpt (FIRST [CHANGED_TAC (CONV_TAC (DEPTH_CONV ETA_CONV)),
+    CHANGED_TAC (simp_tac bool_ss
+      [FORALL_PROD, pair_case_thm, UNCURRY, tv_frame_primitives]),
+    first_assum ACCEPT_TAC,
+    irule state_rel_frame_read >> simp[],
+    MATCH_ACCEPT_TAC tv_frame_take,
+    CHANGED_TAC (fn (asl,w) =>
+      simp_tac bool_ss (pair_case_thm :: UNCURRY ::
+        List.map ASSUME (List.filter is_eq asl)) (asl,w)),
+    irule tv_frame_bind_guarded >> conj_tac,
+    CHANGED_TAC (rewrite_tac[ignore_bind_def]),
+    gen_tac, strip_tac, conj_tac, CASE_TAC]);
+
+Resume eval_preserves_tv[ExtCall]:
+  rpt gen_tac >> strip_tac >>
+  simp[GSYM state_rel_frame_result, Once evaluate_def] >>
+  RULE_ASSUM_TAC (REWRITE_RULE [GSYM state_rel_frame_result]) >>
+  TV_FRAME_TAC >|
+  [suspend "return_path_1", suspend "return_path_2",
+   suspend "return_path_3", suspend "return_path_4"]
+QED
+
+val TV_FRAME_IH_TAC =
+  gvs[oneTheory.one, ignore_bind_def] >>
+  rpt (FIRST [first_assum ACCEPT_TAC,
+    first_x_assum (fn th =>
+      if is_imp (snd (strip_forall (concl th))) then
+        drule_at Any th >> simp[] >> strip_tac
+      else NO_TAC)]);
+
+Resume eval_preserves_tv[return_path_1]:
+  TV_FRAME_IH_TAC
+QED
+Resume eval_preserves_tv[return_path_2]:
+  TV_FRAME_IH_TAC
+QED
+Resume eval_preserves_tv[return_path_3]:
+  TV_FRAME_IH_TAC
+QED
+Resume eval_preserves_tv[return_path_4]:
+  TV_FRAME_IH_TAC
 QED
 
 Finalise eval_preserves_tv

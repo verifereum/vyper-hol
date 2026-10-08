@@ -5,7 +5,7 @@
 Theory vyperTypeCallOutcome
 Ancestors
   pair sum list option vyperState vyperCallOutcome vyperCallOutcomeBranches
-  vyperCallOutcomeFrame vyperRuntimeAccounts vyperTypeExtCallSoundness
+  vyperCallOutcomeFrame vyperRuntimeAccounts vyperTypeExtCallCore
   vyperTypeValues vyperTypeInvariants vyperTypeExprResult vyperTypeExprSoundness vyperTypeEnv vyperTypeSystem
   vyperInterpreter vyperAST vyperValue vyperTyping
 Libs monadsyntax

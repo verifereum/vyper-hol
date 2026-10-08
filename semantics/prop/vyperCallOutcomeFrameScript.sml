@@ -14,6 +14,83 @@ val () = monadsyntax.enable_monad "vyper_evaluation";
 val () = Parse.type_abbrev ("exception", ``:vyperState$exception``);
 val _ = hide "body";
 
+(* Guarded monadic transport retains the actual success equations used by
+   evaluate_ind, including consuming default-return continuations. *)
+Definition state_rel_frame_def:
+  state_rel_frame R f <=> !st. R st (SND (f st))
+End
+
+Theorem state_rel_frame_result:
+  state_rel_frame R f <=> !st res st'. f st = (res,st') ==> R st st'
+Proof
+  simp[state_rel_frame_def] >> eq_tac >> rpt strip_tac
+  >- (first_x_assum (qspec_then `st` mp_tac) >> simp[]) >>
+  first_x_assum (qspecl_then [`st`,`FST (f st)`,`SND (f st)`] mp_tac) >> simp[]
+QED
+
+Theorem state_rel_frame_at:
+  state_rel_frame R f /\ f st = (res,st') ==> R st st'
+Proof
+  simp[state_rel_frame_result]
+QED
+
+Theorem state_rel_frame_bind_guarded:
+  (!s t u. R s t /\ R t u ==> R s u) /\
+  state_rel_frame R f /\
+  (!s v t. f s = (INL v,t) ==> state_rel_frame R (g v)) ==>
+  state_rel_frame R (vyperState$bind f g)
+Proof
+  simp[state_rel_frame_def, bind_def] >> rpt strip_tac >>
+  Cases_on `f st` >> Cases_on `q` >> gvs[] >>
+  `R st r` by
+    (qpat_x_assum `!st. R st (SND (f st))` (qspec_then `st` mp_tac) >> simp[]) >>
+  TRY (qpat_x_assum `!s v t. _` (qspecl_then [`st`,`x`,`r`] mp_tac) >>
+    simp[] >> disch_then (qspec_then `r` mp_tac) >>
+    strip_tac >> qpat_x_assum `!s t u. _` drule_all >> simp[])
+QED
+
+Theorem state_rel_frame_read:
+  (!s. R s s) ==> state_rel_frame R (λst. vyperState$return (g st) st)
+Proof
+  simp[state_rel_frame_def, return_def]
+QED
+
+(* Shared local-frame kit for evaluator properties which depend only on
+   scopes/immutables. Account/storage/log/oracle effects remain unrestricted. *)
+Theorem state_rel_frame_locals_primitives:
+  (!s t. t.scopes = s.scopes /\ t.immutables = s.immutables ==> R s t) ==>
+  state_rel_frame R (vyperState$return v) /\
+  state_rel_frame R (λs. vyperState$return (g s) s) /\
+  state_rel_frame R (vyperState$raise e) /\
+  state_rel_frame R (type_check b msg) /\ state_rel_frame R (check b msg) /\
+  state_rel_frame R (lift_option opt msg) /\
+  state_rel_frame R (lift_option_type opt msg) /\
+  state_rel_frame R (lift_sum_runtime rs) /\
+  state_rel_frame R get_accounts /\ state_rel_frame R get_transient_storage /\
+  state_rel_frame R (update_accounts upd) /\
+  state_rel_frame R (update_transient upd_t) /\
+  state_rel_frame R (λs. vyperState$return () (s with logs updated_by logs_upd)) /\
+  state_rel_frame R (λs. vyperState$return () (s with logs := s.logs ++ logs)) /\
+  state_rel_frame R (adopt_call_outcome rq co)
+Proof
+  strip_tac >>
+  simp[state_rel_frame_def, return_def, raise_def, check_def, type_check_def,
+       assert_def, lift_option_def, lift_option_type_def, lift_sum_runtime_def,
+       get_accounts_def, get_transient_storage_def, update_accounts_def,
+       update_transient_def, adopt_call_outcome_equation] >>
+  rpt strip_tac >> rpt CASE_TAC >> simp[return_def, raise_def]
+QED
+
+Theorem state_rel_frame_locals_take:
+  (!s t. t.scopes = s.scopes /\ t.immutables = s.immutables ==> R s t) ==>
+  state_rel_frame R (take_call_outcome target calldata value_opt)
+Proof
+  simp[state_rel_frame_result] >> rpt strip_tac >>
+  drule take_call_outcome_frame >>
+  simp[evaluation_state_component_equality] >> strip_tac >>
+  first_x_assum irule >> simp[]
+QED
+
 Theorem take_call_outcome_transport:
   (!s os rqs. R s (s with <|outcomes := os; requests := rqs|>)) /\
   take_call_outcome target calldata value_opt st = (res,st') ==>

@@ -10,15 +10,31 @@ Ancestors
   vyperTypeExtCallSoundness vyperTypeABI vyperTypeEnvPreservation vyperTypeStatePreservation
   vyperTypeStmtSoundness vyperTypeAssignContext vyperTypeStoragePreservation
   vyperTypeBindArguments vyperEvalOutcomeSuffix vyperCallOutcomeStorage
+  vyperCallOutcome[ignore_grammar]
 Libs
   wordsLib markerLib
 
-(* Inactive outputs retain their oracle; one residual-frame lemma supplies
-   record-updated arguments. TASK033 substitutes suffix_EVERY at take sites. *)
+(* Active ExtCall outputs retain a suffix oracle. EVERY transports storage
+   payload validity to evaluator results; residual frames handle only the
+   non-consuming record updates. Send remains concrete until TASK033. *)
 (* Instantiate the one residual-frame lemma at actual state arguments/output
    states, including record updates. Failed attempts leave no assumptions. *)
+(* Previous experimental tactic retained while replacing its broad search.
 fun ORACLE_STORAGE_TAC g =
-  (imp_res_tac eval_outcomes_preserved_mutual >>
+  ((fn (asl,w) =>
+     let
+       val names = ["eval_stmt", "eval_stmts", "eval_iterator", "eval_target",
+         "eval_targets", "eval_base_target", "eval_for", "eval_expr", "eval_exprs"];
+       fun position n [] = 10
+         | position n (h::t) = if n = h then 1 else 1 + position n t;
+       fun derive tm =
+         let val (lhs,_) = dest_eq tm
+             val name = fst (dest_const (fst (strip_comb lhs)))
+             val index = position name names
+         in if index > 9 then NONE
+            else SOME (MATCH_MP (cj index eval_outcome_suffix_mutual) (ASSUME tm))
+         end handle HOL_ERR _ => NONE;
+     in MAP_EVERY ASSUME_TAC (List.mapPartial derive asl) (asl,w) end) >>
    (fn (asl,w) =>
      let
        fun head tm = fst (dest_const (fst (strip_comb tm))) handle HOL_ERR _ => "";
@@ -33,17 +49,77 @@ fun ORACLE_STORAGE_TAC g =
          if head tm = "oracle_storage_ok" then SOME (snd (strip_comb tm)) else NONE;
        fun uniq xs = List.foldr (fn (x,acc) =>
          if List.exists (aconv x) acc then acc else x::acc) [] xs;
-       val candidates = uniq (List.concat (List.map states asl));
+       val needed = List.map (List.last o snd o strip_comb)
+         (find_terms (fn tm => head tm = "oracle_storage_ok" andalso
+           List.length (snd (strip_comb tm)) = 2) w);
+       val candidates = if null needed then uniq (List.concat (List.map states asl))
+                        else uniq needed;
        val parents = List.mapPartial oracle (uniq asl);
        fun transport [cx,st] target =
          if type_of target <> type_of st then ALL_TAC else
          TRY (SUBGOAL_THEN
            (list_mk_comb (``oracle_storage_ok``,[cx,target])) ASSUME_TAC
-           >- (irule oracle_storage_ok_frame >> exists_tac st >>
-               conj_tac >> FIRST [first_assum ACCEPT_TAC,
-                 simp_tac (srw_ss()) (List.map ASSUME (List.filter is_eq asl))]))
+           >- FIRST [
+             irule oracle_storage_ok_suffix >> exists_tac st >>
+             conj_tac >> FIRST [first_assum ACCEPT_TAC,
+               simp_tac (srw_ss()) (List.map ASSUME
+                 (List.filter (fn tm => not (is_forall tm)) asl))],
+             irule oracle_storage_ok_frame >> exists_tac st >>
+             conj_tac >> FIRST [first_assum ACCEPT_TAC,
+               simp_tac (srw_ss()) (List.map ASSUME
+                 (List.filter (fn tm => not (is_forall tm)) asl))]])
          | transport _ _ = ALL_TAC;
      in MAP_EVERY (fn p => MAP_EVERY (transport p) candidates) parents (asl,w) end)) g;
+*)
+
+fun ORACLE_STORAGE_TAC (asl,w) =
+  let
+    fun head tm = fst (dest_const (fst (strip_comb tm))) handle HOL_ERR _ => "";
+    val names = ["eval_stmt", "eval_stmts", "eval_iterator", "eval_target",
+      "eval_targets", "eval_base_target", "eval_for", "eval_expr", "eval_exprs"];
+    fun position n [] = 10
+      | position n (h::t) = if n = h then 1 else 1 + position n t;
+    fun suffix tm =
+      let val (lhs,_) = dest_eq tm
+          val i = position (head lhs) names
+      in if i > 9 then NONE
+         else SOME (MATCH_MP (cj i eval_outcome_suffix_mutual) (ASSUME tm))
+      end handle HOL_ERR _ => NONE;
+    val state_ty = ``:evaluation_state``;
+    val outcomes_ty = type_of ``(s:evaluation_state).outcomes``;
+    fun state_eq tm = is_eq tm andalso
+      (type_of (lhs tm) = state_ty orelse type_of (lhs tm) = outcomes_ty);
+    fun uniq ts = List.foldl (fn (t,acc) =>
+      if List.exists (aconv t) acc then acc else t::acc) [] ts;
+    val eqs = List.map ASSUME (List.filter state_eq asl);
+    val suffixes = List.map (SIMP_RULE (srw_ss()) eqs)
+      (List.map ASSUME (List.filter (fn tm => head tm = "outcome_suffix") asl) @
+       List.mapPartial suffix asl);
+    val parents = List.filter (fn tm => head tm = "oracle_storage_ok") asl;
+    fun states tm =
+      if head tm = "runtime_storage_consistent" then [List.last (snd (strip_comb tm))]
+      else if is_eq tm then
+        let val (l,r) = dest_eq tm val (_,s) = pairSyntax.dest_pair r
+        in if type_of s = state_ty then [rand l,s] else [] end
+        handle HOL_ERR _ => []
+      else [];
+    val needed = List.map (List.last o snd o strip_comb)
+      (find_terms (fn tm => head tm = "oracle_storage_ok" andalso
+        List.length (snd (strip_comb tm)) = 2) w);
+    val candidates = uniq
+      (if null needed then List.concat (List.map states asl) else needed);
+    fun transport p target =
+      let val [cx,st] = snd (strip_comb p)
+          val selector = rator ``(s:evaluation_state).outcomes``
+          val goal = list_mk_icomb (``outcome_suffix``,
+            [mk_comb (selector,st), mk_comb (selector,target)])
+          val proof = EQT_ELIM (SIMP_CONV (srw_ss()) (eqs @ suffixes) goal)
+      in SOME (MATCH_MP oracle_storage_ok_suffix (CONJ (ASSUME p) proof)) end
+      handle HOL_ERR _ => NONE | Match => NONE | UNCHANGED => NONE;
+    val facts = List.concat (List.map (fn p => List.mapPartial (transport p) candidates) parents);
+  in MAP_EVERY (fn th => fn g =>
+       if List.exists (aconv (concl th)) (fst g) then ALL_TAC g else ASSUME_TAC th g)
+       facts (asl,w) end;
 
 (* Primitive nonreentrant-lock boundary facts.  These expose the exact
    transient write before the evaluator proof uses layout separation. *)
@@ -2944,6 +3020,7 @@ Resume eval_all_storage_preservation_mutual[For_cons]:
   `runtime_storage_consistent env cx st_after` by
     metis_tac[runtime_storage_consistent_intro,
               runtime_storage_consistent_layout] >>
+  ORACLE_STORAGE_TAC >>
   Cases_on `loop_res`
   >- (Cases_on `x`
       >- (`st' = st_after` by (
@@ -3189,6 +3266,12 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_ExtCall]:
                    SOME calldata` by
                 (drule_all build_ext_calldata_typed >> simp[]) >>
               pop_assum strip_assume_tac >>
+              ORACLE_STORAGE_TAC >>
+              reverse (Cases_on `args_st.outcomes`)
+              >- suspend "Expr_Call_ExtCall_static_oracle" >>
+              POP_ASSUM_LIST (fn ths => MAP_EVERY ASSUME_TAC
+                (List.rev (List.filter (fn th => not (is_forall (concl th) andalso
+                  can (find_term (aconv ``take_call_outcome``)) (concl th))) ths))) >>
               qpat_x_assum `eval_expr cx (Call _ (ExtCall T _) _ _) st = (res,st')`
                 mp_tac >>
               simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
@@ -3218,14 +3301,22 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_ExtCall]:
               Cases_on `run_ext_call cx.txn.target target_addr calldata NONE
                 args_st.accounts args_st.tStorage (vyper_to_tx_params cx.txn)` >>
               rewrite_tac[return_def, raise_def]
-              >- (simp[raise_def] >> strip_tac >> gvs[] >>
+              >- (simp[raise_def] >> strip_tac >>
+                  gvs[vyperStateTheory.get_accounts_def,
+                      vyperStateTheory.get_transient_storage_def,
+                      bind_def, return_def, assert_def, raise_def] >>
                   metis_tac[runtime_storage_consistent_storage]) >>
               rename1 `SOME result` >> PairCases_on `result` >>
               simp_tac(srw_ss())[assert_def, bind_def, return_def] >>
               reverse (Cases_on `result0`) >> simp_tac(srw_ss())[]
-              >- (strip_tac >> gvs[] >>
+              >- (strip_tac >>
+                  gvs[vyperStateTheory.get_accounts_def,
+                      vyperStateTheory.get_transient_storage_def,
+                      bind_def, return_def, assert_def, raise_def] >>
                   metis_tac[runtime_storage_consistent_storage]) >>
-              simp_tac(srw_ss())[update_accounts_def, update_transient_def,
+              simp_tac(srw_ss())[vyperStateTheory.get_accounts_def,
+                                 vyperStateTheory.get_transient_storage_def,
+                                 bind_def, assert_def, update_accounts_def, update_transient_def,
                                  return_def] >>
               qmatch_abbrev_tac `GG` >>
               first_x_assum drule >>
@@ -3234,6 +3325,8 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_ExtCall]:
                    get_transient_storage_def, update_accounts_def,
                    update_transient_def] >>
               disch_then drule >>
+              disch_then (qspec_then `args_st` mp_tac) >>
+              simp[raise_def, return_def] >>
               disch_then (qspec_then `args_st` mp_tac) >>
               simp[raise_def, return_def] >> strip_tac >>
               unabbrev_all_tac >>
@@ -3287,7 +3380,8 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_ExtCall]:
                        `res`, `st'`] mp_tac) >>
                   simp[append_logs_def, return_def] >>
                   qpat_x_assum `_ = (res,st')` mp_tac >>
-                  simp[append_logs_def, return_def] >>
+                  simp[bind_def, assert_def, update_accounts_def,
+                       update_transient_def, append_logs_def, return_def] >>
                   metis_tac[]) >>
               strip_tac >> Cases_on `drv` >> gvs[] >>
               qpat_x_assum `(do _ od) _ = (res,st')` mp_tac >>
@@ -3298,7 +3392,8 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_ExtCall]:
                 `evaluate_abi_decode_return env.type_defs decode_ty result1` >>
               gvs[return_def, raise_def] >> strip_tac >> gvs[] >>
               qpat_x_assum `_ = (res,st')` mp_tac >>
-              simp[append_logs_def, return_def] >>
+              simp[bind_def, assert_def, update_accounts_def,
+                   update_transient_def, append_logs_def, return_def] >>
               metis_tac[runtime_storage_consistent_storage]) >>
           qpat_x_assum
             `if F then _ else MAP expr_type es =
@@ -3315,6 +3410,12 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_ExtCall]:
                SOME calldata` by
             (drule_all build_ext_calldata_typed >> simp[]) >>
           pop_assum strip_assume_tac >>
+          ORACLE_STORAGE_TAC >>
+          reverse (Cases_on `args_st.outcomes`)
+          >- suspend "Expr_Call_ExtCall_nonstatic_oracle" >>
+          POP_ASSUM_LIST (fn ths => MAP_EVERY ASSUME_TAC
+            (List.rev (List.filter (fn th => not (is_forall (concl th) andalso
+              can (find_term (aconv ``take_call_outcome``)) (concl th))) ths))) >>
           qpat_x_assum `eval_expr cx (Call _ (ExtCall F _) _ _) st = (res,st')`
             mp_tac >>
           simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
@@ -3341,14 +3442,24 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_ExtCall]:
           Cases_on `run_ext_call cx.txn.target target_addr calldata (SOME amount)
             args_st.accounts args_st.tStorage (vyper_to_tx_params cx.txn)` >>
           rewrite_tac[return_def, raise_def]
-          >- (simp[raise_def] >> strip_tac >> gvs[] >>
+          >- (simp[raise_def] >> strip_tac >>
+              gvs[vyperStateTheory.get_accounts_def,
+                  vyperStateTheory.get_transient_storage_def,
+                  bind_def, return_def, assert_def, raise_def] >>
               metis_tac[runtime_storage_consistent_storage]) >>
-          rename1 `SOME result` >> PairCases_on `result` >>
+          rename1 `run_ext_call cx.txn.target target_addr calldata (SOME amount)
+            args_st.accounts args_st.tStorage (vyper_to_tx_params cx.txn) = SOME result` >>
+          PairCases_on `result` >>
           simp_tac(srw_ss())[assert_def, bind_def, return_def] >>
           reverse (Cases_on `result0`) >> simp_tac(srw_ss())[]
-          >- (strip_tac >> gvs[] >>
+          >- (strip_tac >>
+              gvs[vyperStateTheory.get_accounts_def,
+                  vyperStateTheory.get_transient_storage_def,
+                  bind_def, return_def, assert_def, raise_def] >>
               metis_tac[runtime_storage_consistent_storage]) >>
-          simp_tac(srw_ss())[update_accounts_def, update_transient_def,
+          simp_tac(srw_ss())[vyperStateTheory.get_accounts_def,
+                             vyperStateTheory.get_transient_storage_def,
+                             bind_def, assert_def, update_accounts_def, update_transient_def,
                              return_def] >>
           `!s0 err.
              (do
@@ -3399,9 +3510,9 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_ExtCall]:
                  `env0`, `st0`, `res0`, `st0'`] mp_tac) >>
             *)
             qpat_x_assum
-              `!sa sb sc sd accounts transient logs se sf en s r t. _`
+              `!sa sb sc sd sr accounts transient logs se sf en s r t. _`
               (qspecl_then
-                [`args_st`, `args_st`, `args_st`, `args_st`,
+                [`args_st`, `args_st`, `args_st`, `args_st`, `args_st`,
                  `result2`, `result3`, `result4`,
                  `args_st with <|accounts := result2; tStorage := result3|>`,
                  `(args_st with <|accounts := result2; tStorage := result3|>) with
@@ -3460,7 +3571,8 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_ExtCall]:
                    `res`, `st'`] mp_tac) >>
               simp[append_logs_def, return_def] >>
               qpat_x_assum `_ = (res,st')` mp_tac >>
-              simp[append_logs_def, return_def] >>
+              simp[bind_def, assert_def, update_accounts_def,
+                   update_transient_def, append_logs_def, return_def] >>
               metis_tac[]) >>
           strip_tac >> Cases_on `drv` >> gvs[] >>
           qpat_x_assum `(do _ od) _ = (res,st')` mp_tac >>
@@ -3471,7 +3583,8 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_ExtCall]:
             `evaluate_abi_decode_return env.type_defs decode_ty result1` >>
           gvs[return_def, raise_def] >> strip_tac >> gvs[] >>
           qpat_x_assum `_ = (res,st')` mp_tac >>
-          simp[append_logs_def, return_def] >>
+          simp[bind_def, assert_def, update_accounts_def,
+               update_transient_def, append_logs_def, return_def] >>
           metis_tac[runtime_storage_consistent_storage]) >>
       qpat_x_assum `!s'' vs t. _` kall_tac >>
       gvs[] >>
@@ -3481,6 +3594,83 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_ExtCall]:
           assume_tac) >>
       gvs[] >> metis_tac[runtime_storage_consistent_storage]) >>
   rpt strip_tac >> gvs[Once well_typed_expr_def]
+QED
+
+fun EXTCALL_STORAGE_ORACLE_IH_TAC g =
+  POP_ASSUM_LIST (fn ths => MAP_EVERY ASSUME_TAC (List.rev (List.map
+    (fn th => if is_forall (concl th) andalso
+      can (find_term (aconv ``take_call_outcome``)) (concl th)
+      then SIMP_RULE (srw_ss())
+        [type_check_def, check_def, assert_def, lift_option_type_def,
+         return_def, raise_def, bind_def, ignore_bind_def, get_accounts_def]
+        th else th) (List.filter
+      (fn th => not (is_forall (concl th) andalso
+        can (find_term (aconv ``run_ext_call``)) (concl th))) ths)))) g;
+
+val EXTCALL_STORAGE_ORACLE_MARK_TAC = FIRST_X_ASSUM (fn th =>
+  if is_forall (concl th) andalso
+    can (find_term (aconv ``take_call_outcome``)) (concl th)
+  then mk_asm "storage_oracle_driver" th else NO_TAC);
+
+val EXTCALL_STORAGE_ORACLE_RETURN_TAC =
+  Cases_on `ret_type = NoneT /\ NULL (lookup_account target_addr args_st.accounts).code`
+  >- (POP_ASSUM_LIST (fn ths => MAP_EVERY ASSUME_TAC
+       (List.filter (fn th => not (is_forall (concl th))) ths)) >>
+      gvs[bind_def, ignore_bind_def, get_accounts_def, return_def, check_def,
+          assert_def, raise_def, runtime_storage_consistent_def]) >>
+  mp_tac (ExtCall_outcome_return_storage_preserved |> Q.INST
+    [`env` |-> `env`, `st` |-> `args_st`, `target` |-> `target_addr`,
+     `value_opt` |-> `value_opt`, `calldata` |-> `calldata`, `drv` |-> `drv`,
+     `ret_type` |-> `ret_type`, `res` |-> `res`, `st'` |-> `st'`, `cx` |-> `cx`]) >>
+  simp[] >> impl_tac >- (
+    rpt gen_tac >> strip_tac >>
+    drule_all take_adopt_call_outcome_runtime_storage_suffix >> strip_tac >>
+    `well_typed_expr env (THE drv)` by metis_tac[well_typed_opt_THE] >>
+    `call_evaluation_safe cx (int_calls_expr (THE drv))` by (
+      Cases_on `drv` >> gvs[] >>
+      qpat_assum `call_evaluation_safe cx (int_calls_expr (Call _ (ExtCall _ _) es (SOME _)))`
+        mp_tac >> pure_rewrite_tac[int_calls_expr_def] >>
+      metis_tac[call_evaluation_safe_append_right]) >>
+    FIRST [asm "storage_oracle_driver" (qspecl_then
+      [`st`, `vs`, `args_st`, `args_st`, `target_addr`, `args_st`, `args_st`,
+       `calldata`, `args_st`, `args_st`, `caseOracle`, `args_st`, `args_st`,
+       `args_st`, `args_st`, `rq`, `co`, `st1`, `st1`, `st2`] mp_tac),
+      asm "storage_oracle_driver" (qspecl_then
+      [`st`, `vs`, `args_st`, `args_st`, `target_addr`, `args_st`,
+       `args_st`, `value_opt`, `TL (TL vs)`, `args_st`, `args_st`,
+       `calldata`, `args_st`, `args_st`, `caseOracle`, `args_st`, `args_st`,
+       `args_st`, `args_st`, `rq`, `co`, `st1`, `st1`, `st2`] mp_tac)] >>
+    impl_tac >- (Cases_on `ret_type = NoneT` >>
+      gvs[return_def, assert_def, bind_def, ignore_bind_def, Abbr`value_opt`]) >>
+    disch_then (qspecl_then [`env`, `st2`, `r`, `t`] mp_tac) >>
+    simp[] >> strip_tac >> first_assum ACCEPT_TAC) >> simp[];
+
+Resume eval_all_storage_preservation_mutual[Expr_Call_ExtCall_static_oracle]:
+  qpat_x_assum `v14 = ret_type` SUBST_ALL_TAC >>
+  EXTCALL_STORAGE_ORACLE_IH_TAC >> EXTCALL_STORAGE_ORACLE_MARK_TAC >>
+  rename1 `args_st.outcomes = SOME caseOracle` >>
+  `build_ext_calldata (get_tenv cx) func_name arg_types (TL vs) = SOME calldata`
+    by simp[] >>
+  drule_all (eval_extcall_SOME_tail |> Q.INST [`stat` |-> `T`, `amount` |-> `0`] |> SRULE []) >>
+  disch_then (qspecl_then [`ret_type`, `drv`] assume_tac) >>
+  qpat_x_assum `eval_expr _ _ _ = (res,st')` mp_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` (fn th => rewrite_tac[th]) >> strip_tac >>
+  qabbrev_tac `value_opt = (NONE:num option)` >>
+  EXTCALL_STORAGE_ORACLE_RETURN_TAC
+QED
+
+Resume eval_all_storage_preservation_mutual[Expr_Call_ExtCall_nonstatic_oracle]:
+  qpat_x_assum `v14 = ret_type` SUBST_ALL_TAC >>
+  EXTCALL_STORAGE_ORACLE_IH_TAC >> EXTCALL_STORAGE_ORACLE_MARK_TAC >>
+  rename1 `args_st.outcomes = SOME caseOracle` >>
+  `build_ext_calldata (get_tenv cx) func_name arg_types (TL (TL vs)) = SOME calldata`
+    by simp[] >>
+  drule_all (eval_extcall_SOME_tail |> Q.INST [`stat` |-> `F`] |> SRULE []) >>
+  disch_then (qspecl_then [`ret_type`, `drv`] assume_tac) >>
+  qpat_x_assum `eval_expr _ _ _ = (res,st')` mp_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` (fn th => rewrite_tac[th]) >> strip_tac >>
+  qabbrev_tac `value_opt = SOME amount` >>
+  EXTCALL_STORAGE_ORACLE_RETURN_TAC
 QED
 
 Theorem lift_option_type_INL_eq_storage[local]:

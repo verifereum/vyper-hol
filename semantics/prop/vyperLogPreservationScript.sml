@@ -1,7 +1,8 @@
 Theory vyperLogPreservation
 
 Ancestors
-  vyperCall vyperStatePreservation vyperCallFrame vyperCallOutcomeFrame
+  pair option sum vyperMisc vyperCall vyperStatePreservation vyperCallFrame vyperCallOutcomeFrame
+  vyperState[ignore_grammar] vyperInterpreter[ignore_grammar] vyperCallOutcome[ignore_grammar]
 
 (* Keep existing free statement-list variables when importing oracle grammar. *)
 val _ = hide "body";
@@ -2776,6 +2777,8 @@ Proof
 QED
 
 
+(* Original concrete-only proof retained. The same true statement is derived
+   below from the completed actual evaluator induction.
 Theorem case_expr_ext_call_logs[local]:
   (!s0 r s1. eval_exprs cx es s0 = (r,s1) ==> log_extends s0 s1) /\
   (!s0 vs s1 tenv accounts' tStorage' emitted_logs e.
@@ -2811,6 +2814,8 @@ Proof
      metis_tac[]) >>
   gvs[]
 QED
+
+*)
 
 Theorem raw_call_tail_log_extends[local]:
   (do x <- update_accounts (K accounts');
@@ -3047,7 +3052,8 @@ in
      lookup_flag_mem_log_extends, case_expr_subscript_logs, case_expr_pop_logs,
      case_expr_builtin_logs, case_expr_if_logs, case_expr_struct_lit_logs,
      case_expr_send_logs, case_expr_selfdestruct_logs, case_expr_create_logs,
-     case_expr_ext_call_logs, case_expr_raw_call_logs,
+     (* case_expr_ext_call_logs: derived after the active induction *)
+     case_expr_raw_call_logs,
      case_expr_raw_log_logs, case_expr_raw_revert_logs,
      case_expr_attribute_logs, case_expr_type_builtin_logs,
      case_eval_exprs_nil_logs, case_eval_exprs_cons_logs]
@@ -3074,8 +3080,9 @@ val REST_ATOMIC_DISPATCH_TAC =
       rpt conj_tac >> first_assum MATCH_ACCEPT_TAC,
       rpt gen_tac >> strip_tac >>
       ho_match_mp_tac case_stmt_append_logs >>
-      rpt conj_tac >> first_assum MATCH_ACCEPT_TAC,
-      rpt gen_tac >> strip_tac >>
+      rpt conj_tac >> first_assum MATCH_ACCEPT_TAC
+      (* Original concrete-only ExtCall dispatch retained:
+      , rpt gen_tac >> strip_tac >>
       ho_match_mp_tac case_expr_ext_call_logs >>
       conj_tac >- first_assum MATCH_ACCEPT_TAC >>
       rpt gen_tac >> strip_tac >>
@@ -3095,7 +3102,7 @@ val REST_ATOMIC_DISPATCH_TAC =
         simp[vyperStateTheory.update_transient_def,
              vyperStateTheory.return_def] >>
       PRED_ASSUM is_guarded_eval_expr_ih
-        (specialize_guard_then 12 MATCH_ACCEPT_TAC)] @
+        (specialize_guard_then 12 MATCH_ACCEPT_TAC) *)] @
      map APPLY_CASE_HELPER_TAC eval_case_helpers @
      map APPLY_NORMALIZED_CASE_HELPER_TAC eval_case_helpers @
      [simp[Once vyperInterpreterTheory.evaluate_def,
@@ -3103,6 +3110,82 @@ val REST_ATOMIC_DISPATCH_TAC =
            vyperStateTheory.return_def, vyperStateTheory.raise_def,
            log_extends_refl]]) >>
   simp[]
+
+(* Compositional proof control for the actual activated call clause. *)
+Definition log_monad_def:
+  log_monad f <=> !s r t. f s = (r,t) ==> log_extends s t
+End
+
+Theorem log_monad_bind_guarded[local]:
+  log_monad f /\
+  (!s v t. f s = (INL v,t) ==> log_monad (g v)) ==>
+  log_monad (vyperState$bind f g)
+Proof
+  simp[log_monad_def, vyperStateTheory.bind_def] >> rpt strip_tac >>
+  Cases_on `f s` >> Cases_on `q` >> gvs[] >>
+  first_x_assum drule_all >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  drule_all log_extends_trans >> simp[]
+QED
+
+Theorem log_monad_primitives[local]:
+  log_monad (return v) /\ log_monad (\s. return (g s) s) /\
+  log_monad (type_check b msg) /\ log_monad (check b msg) /\
+  log_monad (lift_option opt msg) /\ log_monad (lift_option_type opt msg) /\
+  log_monad (lift_sum_runtime rs) /\ log_monad get_accounts /\
+  log_monad get_transient_storage /\ log_monad (update_accounts upd) /\
+  log_monad (update_transient upd_t) /\ log_monad (append_logs logs) /\
+  log_monad (adopt_call_outcome rq co)
+Proof
+  simp[log_monad_def, vyperStateTheory.return_def, vyperStateTheory.raise_def,
+       vyperStateTheory.check_def, vyperStateTheory.type_check_def,
+       vyperStateTheory.assert_def, vyperStateTheory.lift_option_def,
+       vyperStateTheory.lift_option_type_def, vyperStateTheory.lift_sum_runtime_def,
+       vyperStateTheory.get_accounts_def, vyperStateTheory.get_transient_storage_def,
+       vyperStateTheory.update_accounts_def, vyperStateTheory.update_transient_def,
+       append_logs_def, adopt_call_outcome_equation] >>
+  rpt strip_tac >> rpt CASE_TAC >>
+  gvs[option_CASE_rator, sum_CASE_rator, AllCaseEqs(),
+      vyperStateTheory.return_def, vyperStateTheory.raise_def,
+      log_extends_def, rich_listTheory.IS_PREFIX_APPEND,
+      rich_listTheory.IS_PREFIX_REFL]
+QED
+
+Theorem log_monad_take[local]:
+  log_monad (take_call_outcome target calldata value_opt)
+Proof
+  simp[log_monad_def] >> rpt strip_tac >>
+  drule take_call_outcome_frame >>
+  simp[evaluation_state_component_equality, log_extends_def,
+       rich_listTheory.IS_PREFIX_REFL]
+QED
+
+val EXTCALL_LOG_MONAD_TAC =
+  rpt (FIRST [CHANGED_TAC (CONV_TAC (DEPTH_CONV ETA_CONV)),
+    CHANGED_TAC (simp_tac bool_ss
+      [FORALL_PROD, pair_case_thm, UNCURRY, log_monad_primitives]),
+    first_assum ACCEPT_TAC, MATCH_ACCEPT_TAC log_monad_take,
+    CHANGED_TAC (fn (asl,w) => simp_tac bool_ss
+      (pair_case_thm :: UNCURRY :: List.map ASSUME (List.filter is_eq asl)) (asl,w)),
+    irule log_monad_bind_guarded >> conj_tac,
+    CHANGED_TAC (rewrite_tac[vyperStateTheory.ignore_bind_def]),
+    gen_tac, strip_tac, conj_tac, CASE_TAC]);
+
+val EXTCALL_LOG_IH_TAC =
+  POP_ASSUM_LIST (fn ths =>
+    let val (ihs, facts) = List.partition (is_forall o concl) ths in
+      MAP_EVERY ASSUME_TAC (List.rev facts) >>
+      gvs[oneTheory.one, vyperStateTheory.ignore_bind_def] >>
+      MAP_EVERY (ASSUME_TAC o REWRITE_RULE [vyperStateTheory.ignore_bind_def])
+        (List.rev ihs)
+    end) >>
+  rpt (FIRST [first_assum ACCEPT_TAC,
+    first_x_assum (fn th => MATCH_ACCEPT_TAC
+      (SIMP_RULE (srw_ss()) [append_logs_def, vyperStateTheory.return_def] th)),
+    first_x_assum (fn th =>
+      if is_imp (snd (strip_forall (concl th))) then
+        drule_at Any th >> simp_tac bool_ss [] >> strip_tac
+      else NO_TAC)]);
 
 Theorem eval_mutual_log_extends[local]:
   (!cx s st res st'. eval_stmt cx s st = (res,st') ==> log_extends st st') /\
@@ -3135,6 +3218,13 @@ Proof
       vyperInterpreterTheory.evaluate_ind)) >>
   impl_tac >-
     (rpt conj_tac >> TRY (simp[] >> NO_TAC) >~
+       [`_ ==> !st res st'.
+           eval_expr _ (Call _ (ExtCall _ _) _ _) st = (res,st') ==>
+           log_extends st st'`] >-
+         (rpt gen_tac >> strip_tac >>
+          simp[GSYM log_monad_def, Once vyperInterpreterTheory.evaluate_def] >>
+          RULE_ASSUM_TAC (REWRITE_RULE [GSYM log_monad_def]) >>
+          EXTCALL_LOG_MONAD_TAC >> EXTCALL_LOG_IH_TAC) >~
        [`_ ==> !st res st'.
            eval_expr _ (Call _ (IntCall _) _ _) st = (res,st') ==>
            log_extends st st'`] >-
@@ -3284,6 +3374,23 @@ Theorem eval_expr_log_extends:
     eval_expr cx e st = (res,st') ==> log_extends st st'
 Proof
   metis_tac[eval_mutual_log_extends]
+QED
+
+Theorem case_expr_ext_call_logs[local]:
+  (!s0 r s1. eval_exprs cx es s0 = (r,s1) ==> log_extends s0 s1) /\
+  (!s0 vs s1 tenv accounts' tStorage' emitted_logs e.
+     eval_exprs cx es s0 = (INL vs,s1) /\
+     drv = SOME e /\
+     ext_call_after_args_with cx static func_name arg_types vs
+       (\tenv result. return (tenv,result)) s1 =
+       (INL (tenv,(T,[],accounts',tStorage',emitted_logs)),s1) ==>
+     !u0 r u1. eval_expr cx e u0 = (r,u1) ==> log_extends u0 u1) ==>
+  !st res st'.
+    eval_expr cx (Call ty (ExtCall static (func_name,arg_types,ret_type))
+                         es drv) st = (res,st') ==>
+    log_extends st st'
+Proof
+  rpt strip_tac >> drule eval_expr_log_extends >> simp[]
 QED
 
 Theorem eval_exprs_log_extends:

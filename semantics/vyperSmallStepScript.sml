@@ -2,6 +2,7 @@ Theory vyperSmallStep
 Ancestors
   arithmetic combin pair list While
   vyperMisc vyperValue vyperContext vyperState vyperCreate vyperInterpreter vyperABI
+  vyperCallOutcome[ignore_grammar]
 Libs
   cv_transLib wordsLib
 
@@ -660,6 +661,25 @@ Definition apply_vals_def:
       tenv <<- get_tenv cx;
       calldata <- lift_option_type (build_ext_calldata tenv func_name arg_types arg_vals)
                                    "ExtCall build_calldata";
+      outcomes <- (λst. return st.outcomes st);
+      case outcomes of
+      | SOME _ => do
+        accounts <- get_accounts;
+        (if ret_type = NoneT then
+          check (¬NULL (lookup_account target_addr accounts).code) "ExtCall target has no code"
+         else return ());
+        (rq, outcome) <- vyperCallOutcome$take_call_outcome target_addr calldata value_opt;
+        check (call_outcome_success outcome) "ExtCall reverted";
+        vyperCallOutcome$adopt_call_outcome rq outcome;
+        if call_outcome_return_data outcome = [] ∧ IS_SOME drv then
+          return (INL (THE drv))
+        else do
+          ret_val <- lift_sum_runtime (evaluate_abi_decode_return tenv ret_type
+            (call_outcome_return_data outcome));
+          return (INR (Value ret_val))
+        od
+      od
+      | NONE => do
       accounts <- get_accounts;
       (* Vyper reverts if target has no code (EXTCODESIZE == 0) *)
       check (¬NULL (lookup_account target_addr accounts).code) "ExtCall target has no code";
@@ -679,6 +699,7 @@ Definition apply_vals_def:
       else do
         ret_val <- lift_sum_runtime (evaluate_abi_decode_return tenv ret_type returnData);
         return (INR (Value ret_val))
+      od
       od
     od st
     of (INR ex, st) => AK cx (ApplyExc ex) st k
@@ -1435,6 +1456,9 @@ Proof
       \\ drule eval_exprs_length
       \\ gvs[check_def, type_check_def, assert_def] )
     \\ rw[] )
+  \\ conj_tac >- suspend "ExtCall"
+  (* TASK032: original concrete-only CPS proof retained. The two actual
+     modes require separate generated default guards.
   \\ conj_tac >- ( (* ExtCall *)
     rw[eval_expr_cps_def, evaluate_def, bind_def]
     >> CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
@@ -1497,6 +1521,7 @@ Proof
     >> simp[Abbr`cc1`,Abbr`cc2`]
     >> IF_CASES_TAC >> gvs[bind_def,return_def]
     >> CASE_TAC >> CASE_TAC >> simp[] )
+  *)
   \\ conj_tac >- ( (* IntCall *)
     rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def,
        no_recursion_def]
@@ -1687,6 +1712,71 @@ Proof
   \\ rw[Once OWHILE_THM, stepk_def]
 QED
 
+val EXT_CALL_CPS_TAC =
+  rpt (FIRST [first_assum MATCH_ACCEPT_TAC,
+    CHANGED_TAC (gvs[bind_def, ignore_bind_def, return_def, UNCURRY,
+      type_check_def, check_def, assert_def, lift_option_type_def,
+      get_accounts_def, get_transient_storage_def, update_accounts_def,
+      update_transient_def, append_logs_def, raise_def]),
+    first_x_assum (fn th =>
+      if is_imp (snd (strip_forall (concl th))) then
+        drule_at Any th >> simp[] >> strip_tac
+      else NO_TAC),
+    CASE_TAC]) >>
+  TRY (rename1 `lift_option (run_ext_call _ _ _ _ _ _ _) _ _ = (INL call_result,_)` >>
+    PairCases_on `call_result` >> gvs[]) >>
+  TRY (rename1 `vyperCallOutcome$take_call_outcome _ _ _ _ = (INL call_pair,_)` >>
+    PairCases_on `call_pair` >> gvs[]) >>
+  rpt (FIRST [CHANGED_TAC (gvs[]),
+    first_x_assum (fn th =>
+      if is_imp (snd (strip_forall (concl th))) then
+        drule_at Any th >> simp[] >> strip_tac
+      else NO_TAC)]);
+
+Resume eval_cps_eq[ExtCall]:
+  rpt strip_tac >>
+  rename1 `ExtCall stat (func_name, arg_types, ret_type)` >>
+  rw[eval_expr_cps_def, evaluate_def, bind_def] >>
+  CASE_TAC >> gvs[cont_def] >> reverse CASE_TAC
+  >- rw[Once OWHILE_THM, stepk_def, apply_exc_def] >>
+  simp[Once OWHILE_THM, stepk_def, apply_vals_def, liftk1] >>
+  rename1 `eval_exprs cx es st = (INL vs,st_args)` >>
+  qpat_x_assum `!st k. OWHILE _ _ (eval_exprs_cps _ _ _ _) = _` kall_tac >>
+  Cases_on `stat` >> Cases_on `st_args.outcomes` >>
+  Cases_on `ret_type = NoneT` >|
+  [suspend "static_none_noneT", suspend "static_none_value",
+   suspend "static_some_noneT", suspend "static_some_value",
+   suspend "nonstatic_none_noneT", suspend "nonstatic_none_value",
+   suspend "nonstatic_some_noneT", suspend "nonstatic_some_value"]
+QED
+
+Resume eval_cps_eq[static_none_noneT]:
+  EXT_CALL_CPS_TAC
+QED
+Resume eval_cps_eq[static_none_value]:
+  EXT_CALL_CPS_TAC
+QED
+Resume eval_cps_eq[static_some_noneT]:
+  EXT_CALL_CPS_TAC
+QED
+Resume eval_cps_eq[static_some_value]:
+  EXT_CALL_CPS_TAC
+QED
+Resume eval_cps_eq[nonstatic_none_noneT]:
+  EXT_CALL_CPS_TAC
+QED
+Resume eval_cps_eq[nonstatic_none_value]:
+  EXT_CALL_CPS_TAC
+QED
+Resume eval_cps_eq[nonstatic_some_noneT]:
+  EXT_CALL_CPS_TAC
+QED
+Resume eval_cps_eq[nonstatic_some_value]:
+  EXT_CALL_CPS_TAC
+QED
+
+Finalise eval_cps_eq
+
 Definition fromk_def[simp]:
   fromk x =
     case x of
@@ -1842,3 +1932,16 @@ val () = cv_auto_trans clear_machine_logs_def;
 val () = cv_auto_trans call_external_transaction_def;
 
 val () = cv_auto_trans load_contract_def;
+
+(* CV validity only: expression evaluation reaches DoneK.  Registering this
+   precondition does not replace the CPS computation by its big-step result.
+   Keep it after existing translations so their equations are unchanged. *)
+Theorem cont_pre_eval_expr_cps[cv_pre]:
+  cont_pre (eval_expr_cps cx e st DoneK)
+Proof
+  rw[cont_pre_IS_SOME_cont]
+  \\ qspecl_then[`cx`,`e`,`st`,`DoneK`]mp_tac $ cj 8 eval_cps_eq
+  \\ rw[cont_def]
+  \\ CASE_TAC \\ CASE_TAC \\ gvs[]
+  \\ rw[Once OWHILE_THM]
+QED
