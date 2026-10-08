@@ -1553,6 +1553,8 @@ Definition initial_state_def:
    ; logs := am.logs
    ; scopes := scs
    ; tStorage := am.tStorage
+   ; outcomes := NONE
+   ; requests := []
    |>
 End
 

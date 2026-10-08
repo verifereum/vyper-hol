@@ -3,7 +3,7 @@ Ancestors
   arithmetic alist combin option list finite_map pair rich_list
   cv cv_std vfmTypes vfmState vfmContext vfmExecution[ignore_grammar]
   vyperAST vyperMisc vyperValue vyperValueOperation
-  vyperStorage vyperContext
+  vyperStorage vyperContext extCallOracle[ignore_grammar]
 Libs
   cv_transLib wordsLib monadsyntax
 
@@ -128,6 +128,8 @@ Datatype:
   ; scopes: scope list
   ; accounts: evm_accounts
   ; tStorage: transient_storage
+  ; outcomes: extCallOracle$call_outcome list option
+  ; requests: extCallOracle$call_request list
   |>
 End
 
@@ -137,7 +139,9 @@ Definition empty_state_def:
     immutables := [];
     logs := [];
     scopes := [];
-    tStorage := empty_transient_storage
+    tStorage := empty_transient_storage;
+    outcomes := NONE;
+    requests := []
   |>
 End
 
