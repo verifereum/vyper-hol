@@ -13,7 +13,7 @@
 
 Theory blockSimHelpers
 Ancestors
-  asmSem planExec stackModel codegenRel stackPlanTypes stackPlanGen venomExecSemantics venomExecProofs venomState venomInst list rich_list arithmetic indexedLists stackOpSim instSimHelpers venomWf
+  asmSem planExec stackModel codegenRel stackPlanTypes stackPlanGen venomExecSemantics venomExecProofs venomState venomInst list rich_list arithmetic indexedLists stackOpSim instSimHelpers venomWf symbolResolve
 Libs
   BasicProvers
 
@@ -421,6 +421,9 @@ QED
 Theorem block_insts_sim:
   !remaining.  (* induction variable: remaining instruction list *)
   !initial_fmp fuel ctx lo o2pc prog bb k gen_plan ps_k vs as inst_ops ps_final.
+    (* Concrete full-program maps, shared by every instruction and the IH. *)
+    lo = SND (compute_label_offsets prog) /\
+    o2pc = build_offset_to_pc prog /\
     (* Structural *)
     bb_well_formed bb /\
     remaining = DROP k bb.bb_instructions /\

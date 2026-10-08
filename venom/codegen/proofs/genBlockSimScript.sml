@@ -1367,6 +1367,8 @@ Theorem gen_inst_halt_sim:
   !fuel ctx label_offsets offset_to_pc prog
    liveness dfg cfg fn inst next_liveness is_halting
    next_is_term bb_label ps vs as ops ps'.
+    label_offsets = SND (compute_label_offsets prog) /\
+    offset_to_pc = build_offset_to_pc prog /\
     codegen_ready_fn fn /\
     (* Dischargeable at block level from codegen_ready_fn + MEM bb/inst *)
     inst_wf inst /\
@@ -1413,6 +1415,10 @@ Theorem gen_inst_halt_sim:
         venom_asm_terminal_rel vs' as'
 Proof
   rpt strip_tac >>
+  (* Concrete-map premises repair the deferred control-flow contract.
+     Proved cases work for arbitrary maps; retain their symbolic proof context. *)
+  qpat_x_assum `label_offsets = SND (compute_label_offsets prog)` kall_tac >>
+  qpat_x_assum `offset_to_pc = build_offset_to_pc prog` kall_tac >>
   (* Only STOP/RETURN/SINK/SELFDESTRUCT/INVOKE can Halt *)
   imp_res_tac step_inst_halt_opcodes >>
   gvs[]
@@ -1596,6 +1602,8 @@ Theorem gen_inst_abort_sim:
   !fuel ctx label_offsets offset_to_pc prog
    liveness dfg cfg fn inst next_liveness is_halting
    next_is_term bb_label ps vs as ops ps' a.
+    label_offsets = SND (compute_label_offsets prog) /\
+    offset_to_pc = build_offset_to_pc prog /\
     codegen_ready_fn fn /\
     (* Dischargeable at block level from codegen_ready_fn + MEM bb/inst *)
     inst_wf inst /\
@@ -1677,6 +1685,9 @@ Theorem gen_inst_abort_sim:
         venom_asm_terminal_rel vs' as'
 Proof
   rpt strip_tac >>
+  (* Proved cases are map-parametric; deferred jumps require concrete maps. *)
+  qpat_x_assum `label_offsets = SND (compute_label_offsets prog)` kall_tac >>
+  qpat_x_assum `offset_to_pc = build_offset_to_pc prog` kall_tac >>
   imp_res_tac step_inst_abort_opcodes >>
   gvs[]
   >- suspend "revert"
@@ -3088,6 +3099,8 @@ Theorem gen_inst_ok_sim:
   !fuel ctx lo o2pc prog
    liveness dfg cfg fn inst next_liveness is_halting
    next_is_term bb_label base ps vs as ops ps'.
+    lo = SND (compute_label_offsets prog) /\
+    o2pc = build_offset_to_pc prog /\
     inst.inst_opcode <> INVOKE /\
     generated_plan_state_wf base ps /\
     codegen_ready_fn fn /\
@@ -3162,6 +3175,9 @@ Theorem gen_inst_ok_sim:
          as'.as_pc = as.as_pc + LENGTH (execute_plan initial_fmp ops))
 Proof
   rpt strip_tac >>
+  (* Do not substitute concrete maps into the preserved map-parametric proofs. *)
+  qpat_x_assum `lo = SND (compute_label_offsets prog)` kall_tac >>
+  qpat_x_assum `o2pc = build_offset_to_pc prog` kall_tac >>
   `plan_slots_bounded base' ps` by fs[generated_plan_state_wf_def] >>
   (* Dispatch on generate_inst_plan cases *)
   qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
