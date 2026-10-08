@@ -6,7 +6,9 @@
  * (byte list) produces a corresponding result.
  *
  * TOP-LEVEL:
- *   codegen_correct    — whole-context correctness (run_context vs run)
+ *   codegen_correct    — planned S7 (run_context vs run_call/frame outcome)
+ *   initial_ctx_rel, venom_frame_rel — exact initial/terminal frame interfaces
+ *   codegen_correct_legacy — preserved old admission; removal owner TASK056
  *
  * STATUS: Whole-context codegen correctness is currently open/cheated and
  * depends on closing/stabilizing Venom→Asm and Asm→EVM simulation layers.
@@ -23,15 +25,8 @@
  * ============================
  * How each EVM exception is handled in the correctness argument:
  *
- * OutOfGas — undischargeable in general. Requires gas_sufficient
- *   hypothesis at the top-level entry point (call_vyper_contract).
- *   Only exception that needs an explicit disjunct in theorem statements.
- *
- * StackOverflow — discharged by asm_stack_bounded precondition.
- *   The compiler should reject programs where the stack model exceeds
- *   1024. NOTE: if this fires, the proper fix is depth-aware spilling
- *   (spill to memory when stack depth approaches limit), but that is
- *   an algorithmic change to the codegen, not yet implemented.
+ * OutOfGas and StackOverflow — resource-starvation disjuncts of S7.
+ *   No existential sufficient-gas bound or generated-stack bound is claimed.
  *
  * StackUnderflow — discharged by construction (codegen stack model
  *   tracks height; well-formed plans never underflow).
@@ -41,12 +36,8 @@
  *
  * Reverted — handled explicitly (separate case in theorem conclusion).
  *
- * WriteInStaticContext — when the call context is static, writes
- *   (SSTORE, LOG, CREATE, SELFDESTRUCT) are demoted to nops. This is
- *   defined as an allowed optimization: the Venom semantics can
- *   execute the write, but the EVM silently fails. The correctness
- *   theorem treats this as an exception disjunct (subsumed by SOME exc).
- *   TODO: formalize static-context demotion as a separate pass/property.
+ * WriteInStaticContext — initial_ctx_rel excludes static entry frames.
+ *   Venom does not demote writes to nops; no static-write simulation is claimed.
  *
  * OutOfBoundsRead — RETURNDATACOPY past returndata length. Should be
  *   discharged by construction: Venom ExHalt maps to this. The proof
@@ -73,14 +64,15 @@ Ancestors
   codegenRel asmSem asmWf stackPlanGen stackPlanTypes planExec
   symbolResolve venomExecSemantics venomState venomInst contextCodegenRel
   stackOpSim fnPlanDecomp list rich_list finite_map arithmetic
+  frameOutcome callTrace unitShapeDefs vfmExecutionProp
 Libs
   BasicProvers
 
 (* ===== Context Correspondence Helpers ===== *)
 
 (* Call context correspondence: Venom call context matches EVM message params *)
-Definition call_ctx_rel_def:
-  call_ctx_rel cc mp ⇔
+Definition msg_ctx_rel_def:
+  msg_ctx_rel cc mp ⇔
     cc.cc_caller = mp.caller ∧
     cc.cc_address = mp.callee ∧
     cc.cc_callvalue = n2w mp.value ∧
@@ -158,7 +150,7 @@ Definition initial_state_rel_def:
          (* Venom state: not halted, at instruction 0 *)
          vs.vs_halted = F ∧
          vs.vs_inst_idx = 0 ∧
-         call_ctx_rel vs.vs_call_ctx ctxt.msgParams ∧
+         msg_ctx_rel vs.vs_call_ctx ctxt.msgParams ∧
          tx_ctx_rel vs.vs_tx_ctx es.txParams ∧
          block_ctx_rel vs.vs_block_ctx es.txParams ∧
          blockhash_rel vs es.txParams ∧
@@ -266,7 +258,7 @@ Proof
                    as_outcomes := vs.vs_outcomes;
                    as_requests := vs.vs_requests;
                    as_gas_readings := [] |>` >>
-  gvs[initial_state_rel_def, call_ctx_rel_def, tx_ctx_rel_def,
+  gvs[initial_state_rel_def, msg_ctx_rel_def, tx_ctx_rel_def,
       block_ctx_rel_def, blockhash_rel_def, stack_params_rel_def,
       context_venom_asm_rel_def, fn_init_ps_def,
       init_plan_state_def, init_spill_alloc_def, LET_THM,
@@ -318,12 +310,88 @@ Proof
   every_case_tac >> simp[run_function_never_ok]
 QED
 
-(* ===== Whole-Context Codegen Correctness ===== *)
+(* ===== Whole-Context Frame Interface ===== *)
+
+(* Moved from e2eDefs without changing the permanent FMP/token contract. *)
+Definition initial_codegen_state_rel_def:
+  initial_codegen_state_rel cp vs <=>
+    vs.vs_fmp = n2w cp.cp_initial_fmp /\
+    vs.vs_call_entry_fmp = n2w cp.cp_initial_fmp /\
+    vs.vs_initial_fmp = n2w cp.cp_initial_fmp /\
+    vs.vs_return_pc_token = 0w
+End
+
+(* First function, fresh non-static frame, live state, exact deployed code,
+   concrete labels, and the outcomes actually traced from our frame's run. *)
+Definition initial_ctx_rel_def:
+  initial_ctx_rel cp prog ctx vs es <=>
+    ?fn fns ctxt rb rest.
+      ctx.ctx_functions = fn :: fns /\ es.contexts = (ctxt, rb) :: rest /\
+      initial_state_rel cp prog 0 fn vs es /\
+      initial_codegen_state_rel cp vs /\
+      wf_state es /\ (?d. es.msdomain = Collect d) /\
+      ~ctxt.msgParams.static /\
+      ctxt.msgParams.code = assemble prog /\
+      ctxt.msgParams.parsed = parse_code 0 FEMPTY (assemble prog) /\
+      LENGTH (assemble prog) <= 24576 /\
+      vs.vs_vars = FEMPTY /\ vs.vs_data_section = [] /\
+      (!l. FLOOKUP vs.vs_labels l =
+           OPTION_MAP n2w (FLOOKUP (SND (compute_label_offsets prog)) l)) /\
+      vs.vs_outcomes = MAP SND (call_trace es) /\ vs.vs_requests = []
+End
+
+(* Terminal oracle leftovers are not observable. Only success compares the
+   executed requests/effects/logs; each abort has its precise frame clause. *)
+Definition venom_frame_rel_def:
+  venom_frame_rel es r es' res <=>
+    case res of
+      Halt vs' =>
+        frame_outcome es r es' NONE vs'.vs_returndata vs'.vs_logs /\
+        es'.rollback.accounts = vs'.vs_accounts /\
+        es'.rollback.tStorage = vs'.vs_transient /\
+        vs'.vs_requests = MAP FST (call_trace es)
+    | Abort Revert_abort vs' =>
+        ?lgs. frame_outcome es r es' (SOME Reverted) vs'.vs_returndata lgs
+    | Abort ExHalt_abort vs' =>
+        ?exc lgs. exc <> Reverted /\ frame_outcome es r es' (SOME exc) [] lgs
+    | Error _ => T
+    | OK _ => F
+    | IntRet _ _ => F
+End
+
+(* PLANNED ADMISSION S7; proof owner Milestones 2.1 and 4.
+   Compose frame-aware Venom/assembly simulation with the observed EVM run.
+   Assembly starts with gas_readings es, NOT an equality with Venom GAS.
+   Actual reachability supplies memory obligations and shape excludes opaque
+   GAS misuse/forbidden opcodes/label collisions. Resource and valid-computed-
+   precompile starvation are explicit disjuncts. No sufficient-gas existential,
+   arbitrary label maps, or positional entry parameter is in this API.
+   The current non-GAS EVM lemmas do not yet prove this trace-aware statement. *)
+Theorem codegen_correct:
+  !fuel rpolicy unit cp prog Inv vs es.
+    generate_context_plan unit.cu_context = SOME cp /\
+    codegen_assembly rpolicy unit = SOME prog /\
+    unit_shape_ok unit /\
+    codegen_context_obligations Inv unit.cu_context cp /\
+    codegen_reachability_package Inv unit.cu_context vs /\
+    initial_ctx_rel cp prog unit.cu_context vs es
+    ==>
+    ?r es'. run_call es = SOME (r, es') /\
+            (frame_resource_starved es r es' \/
+             precompile_call_starved es \/
+             venom_frame_rel es r es' (run_context fuel unit.cu_context vs))
+Proof
+  cheat
+QED
+
+(* ===== Preserved Legacy Contract (removal owner TASK056) ===== *)
 
 (* Initial correspondence at the selected context-entry region.  [off] is
    an assembly-instruction index and the EVM PC is its byte offset. *)
-Definition initial_ctx_rel_def:
-  initial_ctx_rel cp prog off ctx vs es ⇔
+(* TEMPORARY COMPATIBILITY: exact old boundary, removal owner TASK056.
+   This saved-snapshot/positioned relation is NOT the new live-frame API. *)
+Definition initial_ctx_rel_legacy_def:
+  initial_ctx_rel_legacy cp prog off ctx vs es ⇔
     (case es.contexts of
        (ctxt, rb) :: _ =>
          rb.accounts = vs.vs_accounts ∧
@@ -338,7 +406,10 @@ End
 
 (* Conditional whole-context correctness for an explicitly positioned named
    entry function in a complete compilation unit. *)
-Theorem codegen_correct:
+(* EXISTING LEGACY ADMISSION: statement and proof retained exactly modulo
+   the boundary rename. Old e2e proof consumers require it until TASK056;
+   it is not a producer/alias of S7 and is NOT certified. *)
+Theorem codegen_correct_legacy:
   ∀fuel rpolicy unit cp prog name i r fn off Inv vs.
     generate_context_plan unit.cu_context = SOME cp ∧
     codegen_assembly rpolicy unit = SOME prog ∧
@@ -353,7 +424,7 @@ Theorem codegen_correct:
     codegen_context_obligations Inv unit.cu_context cp ∧
     codegen_reachability_package Inv unit.cu_context vs ⇒
     ∃gas_needed.
-      ∀es. initial_ctx_rel cp prog off unit.cu_context vs es ∧
+      ∀es. initial_ctx_rel_legacy cp prog off unit.cu_context vs es ∧
            (case es.contexts of
               (ctxt, rb) :: _ =>
                 ctxt.msgParams.gasLimit ≥ gas_needed ∧

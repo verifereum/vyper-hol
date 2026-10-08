@@ -1,15 +1,15 @@
 (*
  * End-to-End Definitions (Vyper-to-EVM Correspondence Predicates)
  *
- * Pure definitions used by the e2e correctness theorems.
- * No proof dependencies -- only definition-level ancestors.
+ * Contracts and proved log-encoding facts used by the e2e theorems.
+ * The initial FMP/token contract is imported from its codegen owner;
+ * no lowering ancestor is introduced into a Venom interface.
  *
  * TOP-LEVEL:
  *   ctx_transform_correct_legacy -- old generic pass-correctness contract
  *   checked_unit_transform_correct_legacy -- old atomic unit transform contract
  *   source_deployment_rel -- source target/module linkage
  *   finalizer_correct -- successful finalizer safety/preserve contract
- *   initial_codegen_state_rel -- context-plan initial FMP/token agreement
  *   return_data_encodes    -- Vyper return value ~ EVM returndata
  *   non_indexed_values     -- extract non-indexed event args
  *   non_indexed_types      -- extract non-indexed event arg types
@@ -30,7 +30,7 @@ Ancestors
   vyperInterpreter vyperEntryCompat
   compileEnv
   selectorDispatch
-  codegenRel
+  codegenRel codegenCorrectness
   venomState
   passSimulationDefs
   assemblyFinalizer
@@ -82,15 +82,8 @@ Definition source_deployment_rel_def:
            ALOOKUP mods cenv.ce_module = SOME tops
 End
 
-(* Code generation starts from the FMP certified by the context plan, while
-   the logical return continuation token is initially zero. *)
-Definition initial_codegen_state_rel_def:
-  initial_codegen_state_rel cp vs <=>
-    vs.vs_fmp = n2w cp.cp_initial_fmp /\
-    vs.vs_call_entry_fmp = n2w cp.cp_initial_fmp /\
-    vs.vs_initial_fmp = n2w cp.cp_initial_fmp /\
-    vs.vs_return_pc_token = 0w
-End
+(* initial_codegen_state_rel is owned by codegenCorrectness. The dependency
+   is one-way: no Venom interface imports lowering. *)
 
 (* ===== E2E Result Predicates ===== *)
 

@@ -101,7 +101,7 @@ Theorem e2e_vyper_to_evm_O1:
     contextCodegenRel$codegen_reachability_package
       Inv out.po_unit.cu_context vs /\
     initial_codegen_state_rel cp vs /\
-    codegenCorrectness$initial_ctx_rel cp prog off
+    codegenCorrectness$initial_ctx_rel_legacy cp prog off
       out.po_unit.cu_context vs es /\
     asm_pc_to_offset prog off = 0 /\
     es.contexts = (ctxt, rb) :: rest /\

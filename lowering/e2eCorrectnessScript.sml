@@ -372,7 +372,7 @@ Theorem e2e_vyper_to_evm:
     contextCodegenRel$codegen_reachability_package
       Inv out.po_unit.cu_context vs /\
     initial_codegen_state_rel cp vs /\
-    codegenCorrectness$initial_ctx_rel cp prog off
+    codegenCorrectness$initial_ctx_rel_legacy cp prog off
       out.po_unit.cu_context vs es /\
     asm_pc_to_offset prog off = 0 /\
     es.contexts = (ctxt, rb) :: rest /\
@@ -391,7 +391,7 @@ Theorem e2e_vyper_to_evm:
 Proof
   rpt strip_tac >>
   drule_all source_unit_execution_through_pipeline >> strip_tac >>
-  drule_all codegen_correct >> strip_tac >>
+  drule_all codegen_correct_legacy >> strip_tac >>
   qpat_x_assum `!fuel. ?gas_needed. _`
     (qspec_then `fuel'` strip_assume_tac) >>
   qexists `gas_needed` >> strip_tac >>
@@ -484,7 +484,7 @@ Theorem vyper_call_correct:
     contextCodegenRel$codegen_reachability_package
       Inv out.po_unit.cu_context vs /\
     initial_codegen_state_rel cp vs /\
-    codegenCorrectness$initial_ctx_rel cp prog off
+    codegenCorrectness$initial_ctx_rel_legacy cp prog off
       out.po_unit.cu_context vs es /\
     asm_pc_to_offset prog off = 0 /\
     es.contexts = (ctxt, rb) :: rest /\
