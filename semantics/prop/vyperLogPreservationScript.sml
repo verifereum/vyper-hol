@@ -3401,12 +3401,12 @@ Proof
   metis_tac[log_extends_eq_logs, log_extends_trans]
 QED
 Theorem call_external_function_success_log_extends:
-  call_external_function am cx nr mut ts all_mods args dflts vals body ret =
-    (INL v,am') ==>
+  call_external_function orc am cx nr mut ts all_mods args dflts vals body ret =
+    (INL v,am',rqs) ==>
   machine_log_extends am am'
 Proof
   rpt strip_tac >>
-  qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[Once vyperInterpreterTheory.call_external_function_def,
        AllCaseEqs()] >>
   rpt strip_tac >>
@@ -3420,7 +3420,7 @@ Proof
                else return ();
                send_call_value mut cx;
                eval_stmts cx body
-             od) (initial_state am_c [env])` >>
+             od) (initial_state am_c [env] with <|outcomes := orc; requests := []|>)` >>
   Cases_on `q` >> gvs[AllCaseEqs()] >>
   Cases_on `(if nr /\ mut <> View /\ mut <> Pure then
                case cx.nonreentrant_slot of
@@ -3443,31 +3443,31 @@ Proof
 QED
 
 Theorem call_external_success_log_extends:
-  call_external am tx = (INL v,am') ==> machine_log_extends am am'
+  call_external orc am tx = (INL v,am',rqs) ==> machine_log_extends am am'
 Proof
   rpt strip_tac >>
-  qpat_x_assum `call_external _ _ = _` mp_tac >>
+  qpat_x_assum `call_external _ _ _ = _` mp_tac >>
   simp[Once vyperInterpreterTheory.call_external_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
   imp_res_tac call_external_function_success_log_extends
 QED
 
 Theorem call_external_function_error_logs_rollback:
-  call_external_function am cx nr mut ts all_mods args dflts vals body ret =
-    (INR e,am') ==>
+  call_external_function orc am cx nr mut ts all_mods args dflts vals body ret =
+    (INR e,am',rqs) ==>
   am'.logs = am.logs
 Proof
   strip_tac >> imp_res_tac call_external_function_error_rollback >> gvs[]
 QED
 
 Theorem call_external_error_logs_rollback:
-  call_external am tx = (INR e,am') ==> am'.logs = am.logs
+  call_external orc am tx = (INR e,am',rqs) ==> am'.logs = am.logs
 Proof
   strip_tac >> imp_res_tac call_external_error_rollback >> gvs[]
 QED
 
 Theorem call_external_log_extends:
-  call_external am tx = (res,am') ==> machine_log_extends am am'
+  call_external orc am tx = (res,am',rqs) ==> machine_log_extends am am'
 Proof
   Cases_on `res` >> strip_tac >-
     (imp_res_tac call_external_success_log_extends) >>
@@ -3476,15 +3476,15 @@ Proof
 QED
 
 Theorem call_external_transaction_log_extends_empty:
-  call_external_transaction am tx = (res,am') ==>
+  call_external_transaction orc am tx = (res,am',rqs) ==>
   isPREFIX [] am'.logs
 Proof
   simp[]
 QED
 
 Theorem call_external_transaction_success_fresh:
-  call_external_transaction am tx = (INL v,am') ==>
-  call_external (clear_machine_logs am) tx = (INL v,am') /\
+  call_external_transaction orc am tx = (INL v,am',rqs) ==>
+  call_external orc (clear_machine_logs am) tx = (INL v,am',rqs) /\
   machine_log_extends (clear_machine_logs am) am'
 Proof
   simp[vyperInterpreterTheory.call_external_transaction_def] >>

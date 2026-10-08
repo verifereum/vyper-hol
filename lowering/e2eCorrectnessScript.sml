@@ -35,7 +35,7 @@ Ancestors
   stateEquiv stateEquivProps
   venomExecSemantics
   vyperABI
-  vyperInterpreter
+  vyperInterpreter vyperEntryCompat
   compileEnv compileVyper
   venomInst
   list
@@ -178,7 +178,7 @@ Definition call_result_matches_def:
       |>;
       msdomain := md
     |> ∧
-    case call_external am tx of
+    case call_external_simple am tx of
       (INL v, am') =>
         (* EVM indicates success *)
         (r = INR NONE ∨
@@ -278,7 +278,7 @@ Definition source_unit_execution_correct_def:
     ?fuel. external_call_result_rel tenv cenv
       (initial_evaluation_context am.sources am.layouts tx
         (find_function_module am tx.target tx.function_name))
-      ret (call_external am tx) (run_context fuel unit.cu_context vs)
+      ret (call_external_simple am tx) (run_context fuel unit.cu_context vs)
 End
 
 Theorem source_unit_execution_correct:
@@ -286,7 +286,7 @@ Theorem source_unit_execution_correct:
   ?fuel. external_call_result_rel tenv cenv
     (initial_evaluation_context am.sources am.layouts tx
       (find_function_module am tx.target tx.function_name))
-    ret (call_external am tx) (run_context fuel unit.cu_context vs)
+    ret (call_external_simple am tx) (run_context fuel unit.cu_context vs)
 Proof
   simp[source_unit_execution_correct_def]
 QED
@@ -316,7 +316,7 @@ Theorem source_unit_execution_through_pipeline[local]:
       external_call_result_rel tenv cenv
         (initial_evaluation_context am.sources am.layouts tx
           (find_function_module am tx.target tx.function_name))
-        ret (call_external am tx) (run_context fuel unit.cu_context vs) /\
+        ret (call_external_simple am tx) (run_context fuel unit.cu_context vs) /\
       observable_result_equiv
         (run_context fuel unit.cu_context vs)
         (run_context fuel' out.po_unit.cu_context vs)
@@ -398,8 +398,8 @@ Proof
   first_x_assum (qspec_then `es` mp_tac) >>
   (impl_tac >- (gvs[call_state_rel_def])) >>
   strip_tac >>
-  Cases_on `call_external am tx` >>
-  rename1 `call_external am tx = (src_result, am')` >>
+  Cases_on `call_external_simple am tx` >>
+  rename1 `call_external_simple am tx = (src_result, am')` >>
   Cases_on `src_result` >>
   Cases_on `run_context fuel unit.cu_context vs` >>
   Cases_on `run_context fuel' out.po_unit.cu_context vs` >>
@@ -448,7 +448,7 @@ QED
 
    When EVM execution enters compiled Vyper bytecode (at any point
    in the call stack), the result corresponds to the Vyper source
-   semantics (call_external am tx).
+   semantics (the NONE-mode pair projection call_external_simple am tx).
 
    Covers both outermost calls (rest = [], as in a transaction) and
    inner calls (rest ≠ [], as in a CALL from another contract).

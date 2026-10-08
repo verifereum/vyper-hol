@@ -35,7 +35,7 @@ Ancestors
   contextProps
   arithmeticProps
   abiEncoderProps
-  vyperInterpreter
+  vyperInterpreter vyperEntryCompat
   vyperContext
   venomExecSemantics
   venomState
@@ -60,7 +60,8 @@ Definition external_call_state_rel_def:
 End
 
 (* Relates Vyper external call results to Venom execution results.
-   call_external returns (value + exception, abstract_machine).
+   call_external_simple projects the NONE-mode result to
+   (value + exception, abstract_machine). No oracle-mode bridge is claimed.
    run_context returns exec_result.
 
    Parameterized by tenv (type environment), cenv/cx (the lowering
@@ -127,7 +128,7 @@ Theorem vyper_to_venom_correct:
     ?fuel.
       external_call_result_rel tenv cenv
         (initial_evaluation_context am.sources am.layouts tx (find_function_module am tx.target tx.function_name))
-        ret (call_external am tx) (run_context fuel ctx vs)
+        ret (call_external_simple am tx) (run_context fuel ctx vs)
 Proof
   cheat
 QED

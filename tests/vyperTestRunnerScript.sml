@@ -188,7 +188,9 @@ Definition run_deployment_def:
           ; base_fee := 0
           ; prev_randao := 0
           ; origin := dt.deployer |>;
-    in load_contract am tx all_mods dt.sourceExports
+    in case load_contract NONE am tx all_mods dt.sourceExports of
+         INL (am', _) => INL am'
+       | INR ex => INR ex
   in (sns, res)
 End
 
@@ -262,7 +264,8 @@ Definition run_call_def:
           ; origin := ct.sender |>;
     (* TODO(test-semantics): set static-call context based on ct.static. *)
     (* TODO(test-semantics): thread additional environment data from the trace. *)
-  in (call_external am tx, (retTys, (retTypes, tenv)))
+  in (let (res, am', _) = call_external NONE am tx in (res, am'),
+      (retTys, (retTypes, tenv)))
 End
 
 val () = cv_auto_trans run_call_def;

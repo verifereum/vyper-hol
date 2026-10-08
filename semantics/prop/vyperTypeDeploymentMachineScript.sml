@@ -466,8 +466,8 @@ Theorem checked_constructor_call_success_preserves_machine_well_typed:
   installed_am = (am with immutables updated_by CONS (target,imms)) /\
   machine_well_typed installed_am /\ context_well_typed cx /\
   checked_deployment_constants_ready cx installed_am target mods /\
-  call_external_function installed_am cx nr mut ts mods args dflts vals body ret =
-    (INL v,am_out) ==>
+  call_external_function orc installed_am cx nr mut ts mods args dflts vals body ret =
+    (INL v,am_out,rqs) ==>
   machine_well_typed am_out
 Proof
   strip_tac >>
@@ -485,7 +485,7 @@ Proof
          | SOME slot => acquire_nonreentrant_lock
              (initial_evaluation_context sources layouts tx NONE).txn.target slot
              (mut = View \/ mut = Pure)
-       else return ()) (initial_state am_c [env]) = (INL (),lock_st) /\
+       else return ()) (initial_state am_c [env] with <|outcomes := orc; requests := []|>) = (INL (),lock_st) /\
       send_call_value mut
         (initial_evaluation_context sources layouts tx NONE with in_deploy := T)
         lock_st = (INL (),body_st) /\
@@ -498,14 +498,14 @@ Proof
          qexistsl
            [`initial_evaluation_context sources layouts tx NONE`,
             `mut = View \/ mut = Pure`,`nr`,
-           `initial_state am_c [env]`,`st'`] >> first_assum ACCEPT_TAC) >>
+           `initial_state am_c [env] with <|outcomes := orc; requests := []|>`,`st'`] >> first_assum ACCEPT_TAC) >>
      metis_tac[]) >>
   irule checked_constructor_prefix_run_preserves_machine_well_typed >>
   qexistsl [`am`,`args`,`body`,`body_st`,`st_body`,
     `initial_evaluation_context sources layouts tx NONE with in_deploy := T`,
     `deploy_art`,`dflts`,`imms`,
     `am with immutables updated_by CONS (tx.target,imms)`,
-    `layouts`,`lock_st`,`mods`,`mut`,`nr`,`NONE`,`res`,`ret`,`[]`,`runtime_art`,`env`,`sources`,
+    `layouts`,`lock_st`,`mods`,`mut`,`nr`,`orc`,`res`,`ret`,`[]`,`runtime_art`,`env`,`sources`,
     `tx.target`,`ts`,`tx`,`vals ++ dflt_vs`] >>
   gvs[initial_evaluation_context_def, initial_state_def]
 QED
@@ -557,7 +557,7 @@ Theorem load_contract_establishes_machine_well_typed:
        (am with <|immutables updated_by CONS (tx.target,imms);
                   exports updated_by CONS (tx.target,exps)|>)
        tx.target mods) /\
-  load_contract am tx mods exps = INL am_deployed ==>
+  load_contract orc am tx mods exps = INL (am_deployed,rqs) ==>
   machine_well_typed am_deployed
 Proof
   strip_tac >>
@@ -576,7 +576,7 @@ Proof
         `deploy_art`,`dflts`,`imms`,
         `am with <|immutables updated_by CONS (tx.target,imms);
                    exports updated_by CONS (tx.target,exps)|>`,
-        `am.layouts`,`mods`,`mut`,`nr`,`ret`,`runtime_art`,
+        `am.layouts`,`mods`,`mut`,`nr`,`orc`,`ret`,`rqs`,`runtime_art`,
         `(tx.target,mods)::am.sources`,`tx.target`,`ts`,`tx`,`v`,`tx.args`] >>
      gvs[]) >>
   irule deployment_source_install_preserves_machine_well_typed >> simp[]

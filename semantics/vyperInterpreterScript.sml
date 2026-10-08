@@ -1656,26 +1656,26 @@ Definition evaluate_defaults_def:
 End
 
 Definition call_external_function_def:
-  call_external_function am cx nr mut ts all_mods args dflts vals body ret =
+  call_external_function orc am cx nr mut ts all_mods args dflts vals body ret =
   let all_tenv = type_env_all_modules all_mods in
   let n_provided = LENGTH vals in
   let n_expected = LENGTH args in
   let n_missing = n_expected - n_provided in
   if n_provided > n_expected ∨ n_missing > LENGTH dflts then
-    (INR $ Error (RuntimeError "call args length"), am)
+    (INR $ Error (RuntimeError "call args length"), am, [])
   else
   let needed_dflts = DROP (LENGTH dflts - n_missing) dflts in
   case evaluate_defaults cx am needed_dflts of
-  | NONE => (INR $ Error (RuntimeError "call evaluate_defaults"), am)
+  | NONE => (INR $ Error (RuntimeError "call evaluate_defaults"), am, [])
   | SOME dflt_vs =>
   case bind_arguments all_tenv args (vals ++ dflt_vs)
-  of NONE => (INR $ Error (RuntimeError "call bind_arguments"), am)
+  of NONE => (INR $ Error (RuntimeError "call bind_arguments"), am, [])
    | SOME env =>
   (case (if cx.in_deploy then evaluate_all_constants cx am cx.txn.target all_mods
          else SOME am)
-   of NONE => (INR $ Error (RuntimeError "call constants_env"), am)
+   of NONE => (INR $ Error (RuntimeError "call constants_env"), am, [])
     | SOME am_c =>
-   let st = initial_state am_c [env] in
+   let st = initial_state am_c [env] with <| outcomes := orc; requests := [] |> in
    let srcs = am_c.sources in
    let exps = am_c.exports in
    let layouts = am_c.layouts in
@@ -1690,26 +1690,26 @@ Definition call_external_function_def:
      | NONE => return ()
      | SOME slot => release_nonreentrant_lock cx.txn.target slot
      else return () in
-   let (res, st) =
+   let (res, am_out, rqs) =
      (case do lock_action; send_call_value mut cx; eval_stmts cx body od st
       of
        | (INL (), st) =>
            (case unlock_action st of
-            | (INL (), st) => (INL NoneV, abstract_machine_from_state srcs exps layouts st)
-            | (INR e, st) => (INR e, am))
+            | (INL (), st) => (INL NoneV, abstract_machine_from_state srcs exps layouts st, st.requests)
+            | (INR e, st) => (INR e, am, st.requests))
        | (INR (ReturnException v), st) =>
            (case unlock_action st of
             | (INL (), st) =>
               (let am_ret = abstract_machine_from_state srcs exps layouts st in
                case evaluate_type all_tenv ret
-               of NONE => (INR (Error (TypeError "eval ret")), am)
+               of NONE => (INR (Error (TypeError "eval ret")), am, st.requests)
                 | SOME tv =>
                case safe_cast tv v
-               of NONE => (INR (Error (TypeError "ext cast ret")), am)
-                | SOME v => (INL v, am_ret))
-            | (INR e, st) => (INR e, am))
-       | (INR e, st) => (INR e, am)) in
-    (res, st (* transient storage cleared separately via ClearTransientStorage action *)))
+               of NONE => (INR (Error (TypeError "ext cast ret")), am, st.requests)
+                | SOME v => (INL v, am_ret, st.requests))
+            | (INR e, st) => (INR e, am, st.requests))
+       | (INR e, st) => (INR e, am, st.requests)) in
+    (res, am_out, rqs (* transient storage cleared separately via ClearTransientStorage action *)))
 End
 
 (* Lookup function, checking exports first for external calls *)
@@ -1743,23 +1743,23 @@ Definition find_function_module_def:
 End
 
 Definition call_external_def:
-  call_external am tx =
+  call_external orc am tx =
   (* Determine which module to use for type environment *)
   let src_id_opt = find_function_module am tx.target tx.function_name in
   let cx = initial_evaluation_context am.sources am.layouts tx src_id_opt in
   (* Get all modules for this contract (needed for combined type_env) *)
   case ALOOKUP am.sources tx.target of
-    NONE => (INR $ Error (RuntimeError "call get sources"), am)
+    NONE => (INR $ Error (RuntimeError "call get sources"), am, [])
   | SOME all_mods =>
   case (case src_id_opt of
           NONE => get_self_code cx
         | SOME src_id => get_module_code cx (SOME src_id))
-  of NONE => (INR $ Error (RuntimeError "call get_self_code"), am)
+  of NONE => (INR $ Error (RuntimeError "call get_self_code"), am, [])
    | SOME ts =>
   case lookup_exported_function cx am tx.function_name
-  of NONE => (INR $ Error (RuntimeError "call lookup_function"), am)
+  of NONE => (INR $ Error (RuntimeError "call lookup_function"), am, [])
    | SOME (mut, nr, args, dflts, ret, body) =>
-       call_external_function am cx nr mut ts all_mods args dflts tx.args body ret
+       call_external_function orc am cx nr mut ts all_mods args dflts tx.args body ret
 End
 
 (* Explicit transaction boundary. Ordinary function entry preserves accumulated
@@ -1770,7 +1770,7 @@ Definition clear_machine_logs_def:
 End
 
 Definition call_external_transaction_def:
-  call_external_transaction am tx = call_external (clear_machine_logs am) tx
+  call_external_transaction orc am tx = call_external orc (clear_machine_logs am) tx
 End
 
 (* Vyper-level deployment abstraction.  The target address is supplied by the
@@ -1785,7 +1785,7 @@ End
    same path, including constant evaluation and deployment value transfer.  The
    NONE case below is defensive and unreachable for finite declaration lists. *)
 Definition load_contract_def:
-  load_contract am tx mods exps =
+  load_contract orc am tx mods exps =
   let addr = tx.target in
   let ts = case ALOOKUP mods NONE of SOME ts => ts | NONE => [] in
   let tenv = type_env_all_modules mods in
@@ -1799,7 +1799,7 @@ Definition load_contract_def:
      | SOME (mut, nr, args, dflts, ret, body) =>
        let cx = (initial_evaluation_context ((addr,mods)::am.sources) am.layouts tx NONE)
                 with in_deploy := T in
-       case call_external_function am cx nr mut ts mods args dflts tx.args body ret
-         of (INR e, _) => INR e
-          | (_, am) => INL (am with sources updated_by CONS (addr, mods))
+       case call_external_function orc am cx nr mut ts mods args dflts tx.args body ret
+         of (INR e, _, _) => INR e
+          | (_, am, rqs) => INL (am with sources updated_by CONS (addr, mods), rqs)
 End

@@ -311,12 +311,12 @@ QED
 
 Theorem call_external_function_nondeploy_failure_rolls_back:
   ~cx.in_deploy /\
-  call_external_function am cx nr mut ts mods args dflts vals body ret =
-    (INR exc,am') ==>
+  call_external_function orc am cx nr mut ts mods args dflts vals body ret =
+    (INR exc,am',rqs) ==>
   am' = am
 Proof
   strip_tac >>
-  qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[Once call_external_function_def] >>
   gvs[AllCaseEqs()] >> strip_tac >>
   Cases_on `do
@@ -328,7 +328,7 @@ Proof
      else return ());
     send_call_value mut cx;
     eval_stmts cx body
-  od (initial_state am [env])` >>
+  od (initial_state am [env] with <|outcomes := orc; requests := []|>)` >>
   Cases_on `q` >> gvs[AllCaseEqs()] >>
   Cases_on `(if nr /\ mut <> View /\ mut <> Pure then
                case cx.nonreentrant_slot of
@@ -342,9 +342,9 @@ Proof
 QED
 
 Theorem call_external_function_initial_failure_rolls_back:
-  call_external_function am
+  call_external_function orc am
     (initial_evaluation_context am.sources am.layouts tx src)
-    nr mut ts mods args dflts vals body ret = (INR exc,am') ==>
+    nr mut ts mods args dflts vals body ret = (INR exc,am',rqs) ==>
   am' = am
 Proof
   strip_tac >>
@@ -354,14 +354,14 @@ Proof
 QED
 
 Theorem call_external_failure_rolls_back:
-  call_external am tx = (INR exc,am') ==> am' = am
+  call_external orc am tx = (INR exc,am',rqs) ==> am' = am
 Proof
   rw[call_external_def] >> gvs[AllCaseEqs()] >>
   metis_tac[call_external_function_initial_failure_rolls_back]
 QED
 
 Theorem checked_call_external_failure_preserves_machine_well_typed:
-  machine_well_typed am /\ call_external am tx = (INR exc,am') ==>
+  machine_well_typed am /\ call_external orc am tx = (INR exc,am',rqs) ==>
   machine_well_typed am'
 Proof
   metis_tac[call_external_failure_rolls_back]
@@ -380,8 +380,8 @@ Theorem call_external_function_selected_explicit_success_machine_well_typed[loca
   evaluate_defaults cx am
     (DROP (LENGTH dflts - (LENGTH args - LENGTH vals)) dflts) = SOME dflt_vs /\
   bind_arguments (type_env_all_modules mods) args (vals ++ dflt_vs) = SOME scope /\
-  call_external_function am cx nr mut ts mods args dflts vals body ret =
-    (INL v,am') ==>
+  call_external_function orc am cx nr mut ts mods args dflts vals body ret =
+    (INL v,am',rqs) ==>
   machine_well_typed am'
 Proof
   rpt strip_tac >>
@@ -395,8 +395,8 @@ Proof
        else return ());
       send_call_value mut cx;
       eval_stmts cx body
-    od (initial_state am [scope])` >>
-  qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+    od (initial_state am [scope] with <|outcomes := orc; requests := []|>)` >>
+  qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[Once call_external_function_def] >>
   gvs[AllCaseEqs(), initial_evaluation_context_def] >> strip_tac >>
   qabbrev_tac `call_res = FST call_run` >>
@@ -416,7 +416,7 @@ Proof
     irule checked_explicit_call_run_success_components >>
     qexistsl [`am`, `args`, `art`, `body`,
               `initial_evaluation_context am.sources am.layouts tx src`,
-              `dflts`, `mods`, `mut`, `nr`, `NONE`,
+              `dflts`, `mods`, `mut`, `nr`, `orc`,
               `raw`, `call_res`, `ret`, `[]`, `scope`, `src`, `ts`, `tx`,
               `vals ++ dflt_vs`] >>
     gvs[Abbr`call_res`, initial_evaluation_context_def, initial_state_def]) >>
@@ -453,8 +453,8 @@ Theorem call_external_function_selected_getter_success_machine_well_typed[local]
   evaluate_defaults cx am
     (DROP (LENGTH dflts - (LENGTH args - LENGTH vals)) dflts) = SOME dflt_vs /\
   bind_arguments (type_env_all_modules mods) args (vals ++ dflt_vs) = SOME scope /\
-  call_external_function am cx nr mut ts mods args dflts vals body ret =
-    (INL v,am') ==>
+  call_external_function orc am cx nr mut ts mods args dflts vals body ret =
+    (INL v,am',rqs) ==>
   machine_well_typed am'
 Proof
   rpt strip_tac >>
@@ -478,8 +478,8 @@ Proof
          (initial_evaluation_context am.sources am.layouts tx src);
        eval_stmts (initial_evaluation_context am.sources am.layouts tx src)
          [Return (SOME exp)]
-    od (initial_state am [scope])` >>
-  qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+    od (initial_state am [scope] with <|outcomes := orc; requests := []|>)` >>
+  qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[Once call_external_function_def] >>
   gvs[AllCaseEqs(), initial_evaluation_context_def] >> strip_tac >>
   gvs[bind_def, ignore_bind_def, return_def] >>
@@ -490,11 +490,12 @@ Proof
    accounts_well_typed getter_run1.accounts` by (
     gvs[initial_state_def] >>
     funpow 6 drule_then drule (SRULE [initial_state_def]
-      (Q.INST [`orc` |-> `NONE`, `rqs` |-> `[]`]
+      (Q.INST [`rqs` |-> `[]`]
         checked_getter_send_eval_success_components)) >>
     simp[Abbr`getter_res`, initial_evaluation_context_def] >>
     strip_tac >>
     first_x_assum irule >>
+    qexists `orc` >>
     qexistsl
       [`FST
          (do send_call_value View
@@ -502,7 +503,7 @@ Proof
              eval_stmts
                (initial_evaluation_context am.sources am.layouts tx src)
                [Return (SOME exp)]
-          od (initial_state am [scope]))`,
+          od (initial_state am [scope] with <|outcomes := orc; requests := []|>))`,
        `scope`, `vals ++ dflt_vs`] >>
     simp[bind_def, ignore_bind_def, initial_evaluation_context_def, initial_state_def]) >>
   Cases_on `evaluate_type (type_env_all_modules mods) ret` >> gvs[] >>
@@ -516,11 +517,11 @@ Theorem checked_call_external_success_preserves_machine_well_typed:
   checked_contract_runtime_ready art mods am tx /\
   machine_well_typed am /\ call_tx_well_typed tx /\
   checked_external_call_inputs_ready am tx /\
-  call_external am tx = (INL v,am') ==>
+  call_external orc am tx = (INL v,am',rqs) ==>
   machine_well_typed am'
 Proof
   rpt strip_tac >>
-  qpat_x_assum `call_external am tx = _` mp_tac >>
+  qpat_x_assum `call_external orc am tx = _` mp_tac >>
   simp[Once call_external_def] >>
   gvs[AllCaseEqs()] >> strip_tac >>
   gvs[checked_contract_runtime_ready_def, get_self_code_def] >>
@@ -547,7 +548,7 @@ Proof
        SOME dflt_vs /\
      bind_arguments (type_env_all_modules all_mods) args
        (tx.args ++ dflt_vs) = SOME scope` by (
-    qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+    qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
     simp[Once call_external_function_def] >>
     gvs[AllCaseEqs()] >> metis_tac[]) >>
   gvs[] >>
@@ -558,7 +559,7 @@ Proof
        qexistsl [`am`, `args`, `art`, `body'`,
                  `initial_evaluation_context am.sources am.layouts tx
                     (find_function_module am tx.target tx.function_name)`,
-                 `dflt_vs`, `dflts`, `all_mods`, `mut`, `nr`, `raw`, `ret`, `scope`,
+                 `dflt_vs`, `dflts`, `all_mods`, `mut`, `nr`, `orc`, `raw`, `ret`, `rqs`, `scope`,
                  `find_function_module am tx.target tx.function_name`, `ts`, `tx`,
                  `v`, `tx.args`],
        qpat_x_assum `is_public_getter_decl _ _` mp_tac >> strip_tac >>
@@ -566,7 +567,7 @@ Proof
        qexistsl [`am`, `args`, `art`, `body'`,
                  `initial_evaluation_context am.sources am.layouts tx
                     (find_function_module am tx.target tx.function_name)`,
-                 `decl`, `dflt_vs`, `dflts`, `all_mods`, `mut`, `nr`, `ret`, `scope`,
+                 `decl`, `dflt_vs`, `dflts`, `all_mods`, `mut`, `nr`, `orc`, `ret`, `rqs`, `scope`,
                  `find_function_module am tx.target tx.function_name`, `ts`, `tx`,
                  `v`, `tx.args`]] >>
     gvs[get_module_code_def, initial_evaluation_context_def,
@@ -579,7 +580,7 @@ Theorem checked_call_external_preserves_machine_well_typed:
   checked_contract_runtime_ready art mods am tx /\
   machine_well_typed am /\ call_tx_well_typed tx /\
   checked_external_call_inputs_ready am tx /\
-  call_external am tx = (res,am') ==>
+  call_external orc am tx = (res,am',rqs) ==>
   machine_well_typed am'
 Proof
   Cases_on `res` >> strip_tac

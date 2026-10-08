@@ -27,7 +27,7 @@ Ancestors
   vfmExecution
   vyperABI
   vyperEvent
-  vyperInterpreter
+  vyperInterpreter vyperEntryCompat
   compileEnv
   selectorDispatch
   codegenRel
@@ -304,7 +304,7 @@ End
    - Break/Continue/Return: F (never escape call_external) *)
 Definition vyper_evm_correspondence_def:
   vyper_evm_correspondence tenv event_info ret am tx es <=>
-    (case call_external am tx of
+    (case call_external_simple am tx of
        (INL v, am') =>
          ?es'.
            run es = SOME (INR NONE, es') /\
