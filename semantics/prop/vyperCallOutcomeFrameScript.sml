@@ -63,7 +63,8 @@ Proof
 QED
 
 (* The actual TASK028 continuation equations isolate the pre-take code check. *)
-Theorem ExtCall_outcome_checked_tail[local]:
+(* Promoted from local for the storage/suffix client; equation/proof unchanged. *)
+Theorem ExtCall_outcome_checked_tail:
   (do
     accounts <- get_accounts;
     (if ret_type = NoneT then

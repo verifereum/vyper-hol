@@ -65,6 +65,66 @@ Proof
   simp[runtime_storage_consistent_def]
 QED
 
+(* ===== Oracle storage boundary (PLAN T6.2 / D26) ===== *)
+Definition oracle_storage_ok_def:
+  oracle_storage_ok cx st <=>
+    !os. st.outcomes = SOME os ==>
+      EVERY (\co. co.co_success ==>
+        contract_storage_well_formed cx
+          (st with <|accounts := co.co_accounts; tStorage := co.co_tStorage|>)) os
+End
+
+(* Payload storage depends on cx and the supplied two backends, not on the
+   remaining fields of the evaluation state. No runtime account guard is used. *)
+Theorem contract_storage_payload_frame:
+  contract_storage_well_formed cx
+    (st with <|accounts := accounts; tStorage := transient|>) <=>
+  contract_storage_well_formed cx
+    (other with <|accounts := accounts; tStorage := transient|>)
+Proof
+  EQ_TAC >> strip_tac >> irule contract_storage_well_formed_storage_frame >>
+  goal_assum (drule_at Any) >> Cases >> simp[get_storage_def]
+QED
+
+Theorem oracle_storage_ok_outcomes:
+  st'.outcomes = st.outcomes ==>
+  (oracle_storage_ok cx st' <=> oracle_storage_ok cx st)
+Proof
+  simp[oracle_storage_ok_def] >> strip_tac >>
+  simp[contract_storage_payload_frame |> Q.INST [`other` |-> `empty_state`]]
+QED
+
+(* A single generic residual-frame normal form; scopes/logs/requests and all
+   other state fields are irrelevant after the two payload backends are set. *)
+Theorem oracle_storage_ok_payload:
+  oracle_storage_ok cx st <=>
+    !os. st.outcomes = SOME os ==>
+      EVERY (\co. co.co_success ==>
+        contract_storage_well_formed cx
+          (empty_state with <|accounts := co.co_accounts;
+                              tStorage := co.co_tStorage|>)) os
+Proof
+  simp[oracle_storage_ok_def,
+    contract_storage_payload_frame |> Q.INST [`other` |-> `empty_state`]]
+QED
+
+Theorem oracle_storage_ok_frame:
+  oracle_storage_ok cx st /\ st'.outcomes = st.outcomes ==>
+  oracle_storage_ok cx st'
+Proof
+  metis_tac[oracle_storage_ok_outcomes]
+QED
+
+(* Generic storage projection transport, independent of residual fields. *)
+Theorem contract_storage_well_formed_backends_frame:
+  contract_storage_well_formed cx st /\
+  st'.accounts = st.accounts /\ st'.tStorage = st.tStorage ==>
+  contract_storage_well_formed cx st'
+Proof
+  rpt strip_tac >> irule contract_storage_well_formed_storage_frame >>
+  goal_assum (drule_at Any) >> Cases >> simp[get_storage_def]
+QED
+
 (* Scope updates are transparent to both protected storage backends. *)
 Theorem set_scopes_storage_frame:
   set_scopes scopes st = (res,st') ==>

@@ -9,9 +9,41 @@ Ancestors
   vyperTypeBuiltins vyperTypeExprResult vyperTypeExprSoundness vyperTypeEvalSoundness
   vyperTypeExtCallSoundness vyperTypeABI vyperTypeEnvPreservation vyperTypeStatePreservation
   vyperTypeStmtSoundness vyperTypeAssignContext vyperTypeStoragePreservation
-  vyperTypeBindArguments
+  vyperTypeBindArguments vyperEvalOutcomeSuffix vyperCallOutcomeStorage
 Libs
   wordsLib markerLib
+
+(* Inactive outputs retain their oracle; one residual-frame lemma supplies
+   record-updated arguments. TASK033 substitutes suffix_EVERY at take sites. *)
+(* Instantiate the one residual-frame lemma at actual state arguments/output
+   states, including record updates. Failed attempts leave no assumptions. *)
+fun ORACLE_STORAGE_TAC g =
+  (imp_res_tac eval_outcomes_preserved_mutual >>
+   (fn (asl,w) =>
+     let
+       fun head tm = fst (dest_const (fst (strip_comb tm))) handle HOL_ERR _ => "";
+       fun states tm =
+         if head tm = "runtime_storage_consistent" then [List.last (snd (strip_comb tm))]
+         else if is_eq tm then
+           let val (l,r) = dest_eq tm
+               val (_,s) = pairSyntax.dest_pair r
+           in [rand l,s] end handle HOL_ERR _ => []
+         else [];
+       fun oracle tm =
+         if head tm = "oracle_storage_ok" then SOME (snd (strip_comb tm)) else NONE;
+       fun uniq xs = List.foldr (fn (x,acc) =>
+         if List.exists (aconv x) acc then acc else x::acc) [] xs;
+       val candidates = uniq (List.concat (List.map states asl));
+       val parents = List.mapPartial oracle (uniq asl);
+       fun transport [cx,st] target =
+         if type_of target <> type_of st then ALL_TAC else
+         TRY (SUBGOAL_THEN
+           (list_mk_comb (``oracle_storage_ok``,[cx,target])) ASSUME_TAC
+           >- (irule oracle_storage_ok_frame >> exists_tac st >>
+               conj_tac >> FIRST [first_assum ACCEPT_TAC,
+                 simp_tac (srw_ss()) (List.map ASSUME (List.filter is_eq asl))]))
+         | transport _ _ = ALL_TAC;
+     in MAP_EVERY (fn p => MAP_EVERY (transport p) candidates) parents (asl,w) end)) g;
 
 (* Primitive nonreentrant-lock boundary facts.  These expose the exact
    transient write before the evaluator proof uses layout separation. *)
@@ -658,11 +690,13 @@ Theorem intcall_lock_state_preserves_runtime_frame_storage[local]:
      else return ()) st = (INL (),lock_st) ==>
     lock_st.scopes = st.scopes /\
     lock_st.immutables = st.immutables /\
-    lock_st.accounts = st.accounts
+    lock_st.accounts = st.accounts /\
+    lock_st.outcomes = st.outcomes
 Proof
   rpt strip_tac >>
   Cases_on `nr` >> gvs[return_def, raise_def] >>
   Cases_on `cx.nonreentrant_slot` >> gvs[raise_def] >>
+  imp_res_tac lock_outcomes_preserved >>
   drule acquire_nonreentrant_lock_scopes >>
   drule acquire_nonreentrant_lock_immutables >>
   drule acquire_nonreentrant_lock_frame >>
@@ -1033,6 +1067,7 @@ Theorem eval_all_storage_preservation_mutual:
     functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_stmt s) /\
     protected_storage_calls_preserve cx /\
+    oracle_storage_ok cx st /\
     eval_stmt cx s st = (res,st') ==>
     contract_storage_well_formed cx st') /\
   (!cx ss. !env ret_ty env' st res st'.
@@ -1041,6 +1076,7 @@ Theorem eval_all_storage_preservation_mutual:
     functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_stmts ss) /\
     protected_storage_calls_preserve cx /\
+    oracle_storage_ok cx st /\
     eval_stmts cx ss st = (res,st') ==>
     contract_storage_well_formed cx st') /\
   (!cx it. !env ty st res st'.
@@ -1049,6 +1085,7 @@ Theorem eval_all_storage_preservation_mutual:
     functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_iterator it) /\
     protected_storage_calls_preserve cx /\
+    oracle_storage_ok cx st /\
     eval_iterator cx it st = (res,st') ==>
     contract_storage_well_formed cx st') /\
   (!cx tgt. !env ty st res st'.
@@ -1057,6 +1094,7 @@ Theorem eval_all_storage_preservation_mutual:
     functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_atarget tgt) /\
     protected_storage_calls_preserve cx /\
+    oracle_storage_ok cx st /\
     eval_target cx tgt st = (res,st') ==>
     contract_storage_well_formed cx st') /\
   (!cx tgts. !env tys st res st'.
@@ -1065,6 +1103,7 @@ Theorem eval_all_storage_preservation_mutual:
     functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_atargets tgts) /\
     protected_storage_calls_preserve cx /\
+    oracle_storage_ok cx st /\
     eval_targets cx tgts st = (res,st') ==>
     contract_storage_well_formed cx st') /\
   (!cx bt. !env vt st res st'.
@@ -1073,6 +1112,7 @@ Theorem eval_all_storage_preservation_mutual:
     functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_target bt) /\
     protected_storage_calls_preserve cx /\
+    oracle_storage_ok cx st /\
     eval_base_target cx bt st = (res,st') ==>
     contract_storage_well_formed cx st') /\
   (!cx tyv id body vs. !env ret_ty ty env_after st res st'.
@@ -1084,6 +1124,7 @@ Theorem eval_all_storage_preservation_mutual:
     functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_stmts body) /\
     protected_storage_calls_preserve cx /\
+    oracle_storage_ok cx st /\
     eval_for cx tyv id body vs st = (res,st') ==>
     contract_storage_well_formed cx st') /\
   (!cx e. !env st res st'.
@@ -1091,6 +1132,7 @@ Theorem eval_all_storage_preservation_mutual:
     functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_expr e) /\
     protected_storage_calls_preserve cx /\
+    oracle_storage_ok cx st /\
     eval_expr cx e st = (res,st') ==>
     ((well_typed_expr env e ==> contract_storage_well_formed cx st') /\
      (!vt. type_place_expr env e = SOME vt ==>
@@ -1101,6 +1143,7 @@ Theorem eval_all_storage_preservation_mutual:
     functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_exprs es) /\
     protected_storage_calls_preserve cx /\
+    oracle_storage_ok cx st /\
     eval_exprs cx es st = (res,st') ==>
     contract_storage_well_formed cx st')
 Proof
@@ -1281,6 +1324,7 @@ Resume eval_all_storage_preservation_mutual[Stmts_cons]:
     `runtime_storage_consistent env'' cx st1` by
       simp[runtime_storage_consistent_def, runtime_consistent_def] >>
     Cases_on `eval_stmts cx ss st1` >>
+    ORACLE_STORAGE_TAC >>
     first_x_assum drule_all >> strip_tac >>
     gvs[bind_def] >> rpt strip_tac >> gvs[]) >>
   gvs[bind_def] >> rpt strip_tac >> gvs[]
@@ -1315,6 +1359,7 @@ Resume eval_all_storage_preservation_mutual[BaseTarget_Subscript]:
     PairCases_on `x` >> gvs[bind_def, return_def] >>
     Cases_on `eval_expr cx e st1` >>
     rename1 `eval_expr cx e st1 = (expr_res,st2)` >>
+    ORACLE_STORAGE_TAC >>
     first_x_assum drule_all >> strip_tac >>
     `contract_storage_well_formed cx st2` by metis_tac[] >>
     Cases_on `expr_res` >> gvs[bind_def, return_def]
@@ -1418,6 +1463,7 @@ Resume eval_all_storage_preservation_mutual[Exprs_cons]:
     Cases_on `mr` >> gvs[]
     >- (
       Cases_on `eval_exprs cx es st1` >>
+      ORACLE_STORAGE_TAC >>
       first_x_assum drule_all >> strip_tac >>
       Cases_on `q` >> gvs[bind_def] >> rpt strip_tac >> gvs[]) >>
     rpt strip_tac >> gvs[]) >>
@@ -1452,6 +1498,7 @@ Resume eval_all_storage_preservation_mutual[Targets_cons]:
   Cases_on `target_res` >> gvs[return_def]
   >- (
     Cases_on `eval_targets cx tgts st1` >>
+    ORACLE_STORAGE_TAC >>
     first_x_assum drule_all >> strip_tac >>
     Cases_on `q` >> gvs[bind_def] >> rpt strip_tac >> gvs[]) >>
   rpt strip_tac >> gvs[]
@@ -1876,6 +1923,7 @@ Resume eval_all_storage_preservation_mutual[Assign]:
     `runtime_storage_consistent env cx st1` by
       metis_tac[runtime_storage_consistent_intro,
                 runtime_storage_consistent_layout] >>
+    ORACLE_STORAGE_TAC >>
     `target_runtime_typed env cx st1 tgt (expr_type e) gv` by (
       irule eval_target_success_runtime_typed >> simp[] >>
       metis_tac[runtime_storage_consistent_runtime]) >>
@@ -1972,6 +2020,7 @@ Resume eval_all_storage_preservation_mutual[Append]:
     qpat_x_assum `case INL _ of _ => _ | _ => _` mp_tac >>
     rewrite_tac[] >> strip_tac >>
     rename1 `eval_base_target cx bt st = (INL (loc,sbs),st1)` >>
+    ORACLE_STORAGE_TAC >>
     `target_runtime_typed env cx st1 (BaseTarget bt)
        (ArrayT (expr_type e) (Dynamic n)) (BaseTargetV loc sbs)` by (
       irule eval_base_target_success_runtime_typed >> simp[] >>
@@ -2058,8 +2107,11 @@ Resume eval_all_storage_preservation_mutual[AugAssign]:
   rename1 `eval_base_target cx bt st = (target_res,st1)` >>
   `type_place_target env bt = SOME (Type ty)` by
     fs[well_typed_target_def] >>
+  (* Original selector (before the oracle conjunct):
+     qpat_x_assum `!env vt st res st'. _ /\ _ /\ _ /\ _ /\ _ /\
+                     eval_base_target _ _ _ = _ ==> _` *)
   qpat_x_assum `!env vt st res st'. _ /\ _ /\ _ /\ _ /\ _ /\
-                  eval_base_target _ _ _ = _ ==> _`
+                  _ /\ eval_base_target _ _ _ = _ ==> _`
     (qspecl_then [`env`, `Type ty`, `st`, `target_res`, `st1`] mp_tac) >>
   simp[] >> strip_tac >>
   `runtime_consistent env cx st1` by
@@ -2076,6 +2128,7 @@ Resume eval_all_storage_preservation_mutual[AugAssign]:
     rename1 `eval_base_target cx bt st = (INL (loc,sbs),st1)` >>
     `type_place_target env bt = SOME (Type ty)` by
       fs[well_typed_target_def] >>
+    ORACLE_STORAGE_TAC >>
     `target_runtime_typed env cx st1 (BaseTarget bt) ty
        (BaseTargetV loc sbs)` by (
       irule eval_base_target_success_runtime_typed >> simp[] >>
@@ -2206,6 +2259,7 @@ Resume eval_all_storage_preservation_mutual[If]:
       `push_scope st1 =
          (INL (),st1 with scopes updated_by CONS FEMPTY)` by
         simp[push_scope_def, return_def] >>
+      ORACLE_STORAGE_TAC >>
       first_x_assum drule_all >> strip_tac >>
       `contract_storage_well_formed cx stb` by simp[] >>
       qpat_x_assum `do _ od _ = _` mp_tac >>
@@ -2227,6 +2281,7 @@ Resume eval_all_storage_preservation_mutual[If]:
     `push_scope st1 =
        (INL (),st1 with scopes updated_by CONS FEMPTY)` by
       simp[push_scope_def, return_def] >>
+    ORACLE_STORAGE_TAC >>
     first_x_assum drule_all >> strip_tac >>
     `contract_storage_well_formed cx stb` by simp[] >>
     qpat_x_assum `do _ od _ = _` mp_tac >>
@@ -2281,6 +2336,7 @@ Resume eval_all_storage_preservation_mutual[AssertReason]:
     Cases_on `b` >> gvs[switch_BoolV_def, return_def, raise_def] >>
     Cases_on `eval_expr cx e' st1` >>
     rename1 `eval_expr cx e' st1 = (reason_res,st2)` >>
+    ORACLE_STORAGE_TAC >>
     first_x_assum drule_all >> strip_tac >>
     Cases_on `reason_res` >> gvs[bind_def, return_def, raise_def] >>
     Cases_on `get_Value x st2` >> imp_res_tac get_Value_state >> gvs[] >>
@@ -2315,6 +2371,7 @@ Resume eval_all_storage_preservation_mutual[Iterator_Range]:
   `runtime_storage_consistent env cx st1` by
     metis_tac[runtime_storage_consistent_intro,
               runtime_storage_consistent_layout] >>
+  ORACLE_STORAGE_TAC >>
   Cases_on `expr1_res` >> gvs[bind_def, return_def, raise_def]
   >- (
     Cases_on `get_Value x st1` >>
@@ -2381,15 +2438,19 @@ Resume eval_all_storage_preservation_mutual[Expr_IfExp]:
       gvs[expr_result_typed_def, expr_runtime_typed_def, evaluate_type_def]) >>
     drule toplevel_value_typed_BoolTV >> strip_tac >>
     BasicProvers.VAR_EQ_TAC >>
+    ORACLE_STORAGE_TAC >>
+    (* Original inner selectors (one antecedent before eval_expr):
+       ∀env' st' res st''. _ ∧ eval_expr cx e' st' = (res,st'') ⇒ _
+       ∀env' st' res st''. _ ∧ eval_expr cx e'' st' = (res,st'') ⇒ _ *)
     Cases_on `b` >> gvs[switch_BoolV_def]
     >- (qpat_x_assum
           `∀s'' tv t. eval_expr cx e s'' = (INL tv,t) ⇒
-             ∀env' st' res st''. _ ∧ eval_expr cx e' st' = (res,st'') ⇒ _`
+             ∀env' st' res st''. _ ∧ _ ∧ eval_expr cx e' st' = (res,st'') ⇒ _`
           (qspecl_then [`st`, `Value (BoolV T)`, `st1`] mp_tac) >>
         simp[] >> strip_tac >> metis_tac[]) >>
     qpat_x_assum
       `∀s'' tv t. eval_expr cx e s'' = (INL tv,t) ⇒
-         ∀env' st' res st''. _ ∧ eval_expr cx e'' st' = (res,st'') ⇒ _`
+         ∀env' st' res st''. _ ∧ _ ∧ eval_expr cx e'' st' = (res,st'') ⇒ _`
       (qspecl_then [`st`, `Value (BoolV F)`, `st1`] mp_tac) >>
     simp[] >> strip_tac >> metis_tac[]) >>
   rpt strip_tac >> gvs[]
@@ -2718,6 +2779,7 @@ Resume eval_all_storage_preservation_mutual[For]:
   `runtime_storage_consistent env cx st1` by
     metis_tac[runtime_storage_consistent_intro,
               runtime_storage_consistent_layout] >>
+  ORACLE_STORAGE_TAC >>
   Cases_on `iter_res` >> gvs[bind_apply, return_def, raise_def]
   >- (
     drule_all eval_iterator_success_values_typed >> strip_tac >> gvs[] >>
@@ -2847,6 +2909,7 @@ Resume eval_all_storage_preservation_mutual[For_cons]:
   impl_tac >- first_assum ACCEPT_TAC >>
   disch_then (qspecl_then [`extend_local env id ty F`, `ret_ty`, `env_after`,
                            `stp`, `res_body`, `st_body`] mp_tac) >>
+  ORACLE_STORAGE_TAC >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   strip_tac >>
   `contract_storage_well_formed cx st_after` by (
@@ -2909,6 +2972,7 @@ Resume eval_all_storage_preservation_mutual[For_cons]:
           conj_tac >- (qpat_assum `functions_well_typed cx` ACCEPT_TAC) >>
           conj_tac >- (qpat_assum `call_evaluation_safe cx (int_calls_stmts body')` ACCEPT_TAC) >>
           conj_tac >- (qpat_assum `protected_storage_calls_preserve cx` ACCEPT_TAC) >>
+          conj_tac >- (qpat_assum `oracle_storage_ok cx st_after` ACCEPT_TAC) >>
           qpat_assum `eval_for cx tyv id body' vs st_after = (res,st')` ACCEPT_TAC) >>
         simp[]))
   >- (`st' = st_after` by (
@@ -2986,6 +3050,7 @@ Resume eval_all_storage_preservation_mutual[Expr_Subscript]:
       TRY (rename1 `eval_expr cx e st = (INL base_tv,st1)` >>
           Cases_on `eval_expr cx e' st1` >>
           rename1 `eval_expr cx e' st1 = (index_res,st2)` >>
+          ORACLE_STORAGE_TAC >>
           first_x_assum drule_all >> strip_tac >>
           `contract_storage_well_formed cx st2` by metis_tac[] >>
           `runtime_consistent env cx st2` by
@@ -3022,6 +3087,7 @@ Resume eval_all_storage_preservation_mutual[Expr_Subscript]:
   TRY (rename1 `eval_expr cx e st = (INL base_tv,st1)` >>
       Cases_on `eval_expr cx e' st1` >>
       rename1 `eval_expr cx e' st1 = (index_res,st2)` >>
+      ORACLE_STORAGE_TAC >>
       first_x_assum drule_all >> strip_tac >>
       `contract_storage_well_formed cx st2` by metis_tac[] >>
       `runtime_consistent env cx st2` by
@@ -3040,10 +3106,13 @@ Resume eval_all_storage_preservation_mutual[Expr_Subscript]:
 QED
 
 
-Theorem extcall_return_tail_preserves_contract_storage[local]:
+(* Formerly local; saved under the same name for the assigned T6.2 boundary
+   and direct Hyp0/no-admission certification. No compatibility alias. *)
+Theorem extcall_return_tail_preserves_contract_storage:
   runtime_storage_consistent env cx st /\
   functions_well_typed cx /\
   protected_storage_calls_preserve cx /\
+  oracle_storage_ok cx st /\
   well_typed_opt env drv /\
   (returnData = [] /\ IS_SOME drv ==>
     call_evaluation_safe cx (int_calls_expr (THE drv))) /\
@@ -3053,6 +3122,7 @@ Theorem extcall_return_tail_preserves_contract_storage[local]:
       functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_expr (THE drv)) /\
       protected_storage_calls_preserve cx /\
+      oracle_storage_ok cx st0 /\
       eval_expr cx (THE drv) st0 = (res0,st0') ==>
       (well_typed_expr env0 (THE drv) ==>
        contract_storage_well_formed cx st0') /\
@@ -3198,6 +3268,7 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_ExtCall]:
                     logs := args_st.logs ++ result4)` by
                 metis_tac[runtime_storage_consistent_intro,
                           runtime_storage_consistent_layout] >>
+              ORACLE_STORAGE_TAC >>
               Cases_on `result1 = [] /\ IS_SOME drv` >> gvs[]
               >- (Cases_on `drv` >> gvs[Once well_typed_expr_def] >> strip_tac >>
                   `call_evaluation_safe cx (int_calls_expr x)` by (
@@ -3307,6 +3378,7 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_ExtCall]:
           `(result1 = [] /\ IS_SOME drv) ==>
            !env0 st0 res0 st0'.
              runtime_storage_consistent env0 cx st0 /\
+             oracle_storage_ok cx st0 /\
              call_evaluation_safe cx (int_calls_expr (THE drv)) /\
              eval_expr cx (THE drv) st0 = (res0,st0') ==>
              (well_typed_expr env0 (THE drv) ==>
@@ -3372,6 +3444,7 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_ExtCall]:
                 logs := args_st.logs ++ result4)` by
             metis_tac[runtime_storage_consistent_intro,
                       runtime_storage_consistent_layout] >>
+          ORACLE_STORAGE_TAC >>
           Cases_on `result1 = [] /\ IS_SOME drv` >> gvs[]
           >- (Cases_on `drv` >> gvs[Once well_typed_expr_def] >> strip_tac >>
               `call_evaluation_safe cx (int_calls_expr x)` by (
@@ -3488,6 +3561,12 @@ Proof
 QED
 
 
+Theorem oracle_storage_ok_stk[simp]:
+  oracle_storage_ok (cx with stk updated_by f) st <=> oracle_storage_ok cx st
+Proof
+  simp[oracle_storage_ok_def, contract_storage_well_formed_stk]
+QED
+
 Theorem protected_storage_calls_preserve_stk[local]:
   protected_storage_calls_preserve (cx with stk updated_by f) <=>
   protected_storage_calls_preserve cx
@@ -3569,6 +3648,7 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_IntCall]:
           functions_well_typed cx /\
           call_evaluation_safe cx (int_calls_exprs es) /\
           protected_storage_calls_preserve cx /\
+          oracle_storage_ok cx st0 /\
           eval_exprs cx es st0 = (res0,st0') ==> _`
     (mk_asm "actual_ih") >>
   qpat_x_assum
@@ -3581,6 +3661,7 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_IntCall]:
           functions_well_typed cx0 /\
           call_evaluation_safe cx0 (int_calls_exprs es0) /\
           protected_storage_calls_preserve cx0 /\
+          oracle_storage_ok cx0 st0 /\
           eval_exprs cx0 es0 st0 = (res0,st0') ==> _`
     (mk_asm "default_ih") >>
   qpat_x_assum
@@ -3595,6 +3676,7 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_IntCall]:
           functions_well_typed cx0 /\
           call_evaluation_safe cx0 (int_calls_stmts body0) /\
           protected_storage_calls_preserve cx0 /\
+          oracle_storage_ok cx0 st0 /\
           eval_stmts cx0 body0 st0 = (res0,st0') ==> _`
     (mk_asm "body_ih") >>
   suspend "intcall_storage"
@@ -3738,6 +3820,7 @@ Resume eval_all_storage_preservation_mutual[intcall_storage]:
     `protected_storage_calls_preserve
        (cx with stk updated_by CONS (src_id_opt,fn))` by
       simp[protected_storage_calls_preserve_stk] >>
+    ORACLE_STORAGE_TAC >>
     `!r1 s1.
        eval_exprs (cx with stk updated_by CONS (src_id_opt,fn))
          (DROP (LENGTH x''3 - (LENGTH x''2 - LENGTH es)) x''3)
@@ -3840,7 +3923,8 @@ Resume eval_all_storage_preservation_mutual[intcall_storage]:
       drule eval_exprs_preserves_runtime_consistent_from_eval >> simp[]) >>
     `lock_st.scopes = args_st.scopes /\
      lock_st.immutables = pre.immutables /\
-     lock_st.accounts = pre.accounts` by (
+     lock_st.accounts = pre.accounts /\
+     lock_st.outcomes = pre.outcomes` by (
       drule intcall_lock_state_preserves_runtime_frame_storage >>
       simp[]) >>
     `env_immutables_consistent env_body
@@ -3918,6 +4002,7 @@ Resume eval_all_storage_preservation_mutual[intcall_storage]:
            `lock_st with scopes := [call_env]`] mp_tac) >>
       simp[get_scopes_def, lift_option_type_def, push_function_def,
            return_def] >> strip_tac >>
+      ORACLE_STORAGE_TAC >>
       qpat_x_assum `!env' ret_ty env'' bst bres bst'. _` drule_all >>
       simp[contract_storage_well_formed_stk]) >>
     (qpat_assum `_ = (res,st')` (mk_asm "suffix_eq") >>
@@ -3948,6 +4033,7 @@ Theorem eval_stmt_preserves_contract_storage_well_formed:
   functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_stmt s) /\
   protected_storage_calls_preserve cx /\
+  oracle_storage_ok cx st /\
   eval_stmt cx s st = (res,st') ==>
   contract_storage_well_formed cx st'
 Proof
@@ -3960,6 +4046,7 @@ Theorem eval_stmts_preserves_contract_storage_well_formed:
   functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_stmts ss) /\
   protected_storage_calls_preserve cx /\
+  oracle_storage_ok cx st /\
   eval_stmts cx ss st = (res,st') ==>
   contract_storage_well_formed cx st'
 Proof
@@ -3972,6 +4059,7 @@ Theorem eval_expr_preserves_contract_storage_well_formed:
   functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_expr e) /\
   protected_storage_calls_preserve cx /\
+  oracle_storage_ok cx st /\
   eval_expr cx e st = (res,st') ==>
   contract_storage_well_formed cx st'
 Proof
@@ -3984,6 +4072,7 @@ Theorem eval_exprs_preserves_contract_storage_well_formed:
   functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_exprs es) /\
   protected_storage_calls_preserve cx /\
+  oracle_storage_ok cx st /\
   eval_exprs cx es st = (res,st') ==>
   contract_storage_well_formed cx st'
 Proof
