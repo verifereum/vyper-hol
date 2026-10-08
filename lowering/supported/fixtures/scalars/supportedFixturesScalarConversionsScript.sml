@@ -1,0 +1,66 @@
+(* TOP-LEVEL: exact membership of scalar conversion fixtures. *)
+Theory supportedFixturesScalarConversions
+Ancestors supportedProgram evalCompilerSubsetScalars
+Libs supportedEvalLib intLib
+
+val () = supportedEvalLib.configure ();
+
+Theorem scalar_convert_address_supported_program:
+  supported_program evalCompilerSubsetScalars$scalar_convert_address_program
+Proof
+  EVAL_TAC
+QED
+
+Theorem scalar_convert_bytes_dynamic_supported_program:
+  supported_program evalCompilerSubsetScalars$scalar_convert_bytes_dynamic_program
+Proof
+  EVAL_TAC
+QED
+
+Theorem scalar_convert_bytes_fixed_supported_program:
+  supported_program evalCompilerSubsetScalars$scalar_convert_bytes_fixed_program
+Proof
+  EVAL_TAC
+QED
+
+Theorem scalar_convert_uint_to_bytes32_supported_program:
+  supported_program evalCompilerSubsetScalars$scalar_convert_uint_to_bytes32_program
+Proof
+  EVAL_TAC
+QED
+
+Theorem scalar_convert_bytes32_to_address_supported_program:
+  supported_program evalCompilerSubsetScalars$scalar_convert_bytes32_to_address_program
+Proof
+  EVAL_TAC
+QED
+
+Theorem scalar_convert_bytes32_to_decimal_supported_program:
+  supported_program evalCompilerSubsetScalars$scalar_convert_bytes32_to_decimal_program
+Proof
+  EVAL_TAC
+QED
+
+Theorem scalar_convert_bytes32_to_bytes4_supported_program:
+  supported_program evalCompilerSubsetScalars$scalar_convert_bytes32_to_bytes4_program
+Proof
+  EVAL_TAC
+QED
+
+Theorem scalar_convert_decimal_supported_program:
+  supported_program evalCompilerSubsetScalars$scalar_convert_decimal_program
+Proof
+  EVAL_TAC
+QED
+
+Theorem scalar_convert_int_to_decimal_supported_program:
+  supported_program evalCompilerSubsetScalars$scalar_convert_int_to_decimal_program
+Proof
+  EVAL_TAC
+QED
+
+Theorem scalar_convert_integer_supported_program:
+  supported_program evalCompilerSubsetScalars$scalar_convert_integer_program
+Proof
+  EVAL_TAC
+QED
