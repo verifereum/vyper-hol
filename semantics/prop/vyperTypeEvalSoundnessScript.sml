@@ -9774,6 +9774,13 @@ Resume eval_all_type_sound_mutual[Expr_Call_Send]:
     >- (
       rename1 `exprs_runtime_typed env es vs` >>
       drule_all send_args_runtime_typed_dest >> strip_tac >> gvs[] >>
+      (* Original transfer/return reasoning retained below. *)
+      `runtime_consistent env cx args_st` by simp[runtime_consistent_def] >>
+      strip_tac >> gvs[return_def] >>
+      drule_all (concrete_send_type_sound |>
+        SRULE [bind_def, ignore_bind_def, return_def]) >>
+      simp[no_type_error_result_def])
+    (* Original concrete tail proof:
       Cases_on `transfer_value cx.txn.target toAddr amount args_st` >>
       rename1 `transfer_value cx.txn.target toAddr amount args_st = (transfer_res,transfer_st)` >>
       Cases_on `transfer_res` >> gvs[return_def, no_type_error_result_def]
@@ -9795,7 +9802,8 @@ Resume eval_all_type_sound_mutual[Expr_Call_Send]:
         qspecl_then [`cx.txn.target`, `toAddr`, `amount`, `args_st`, `s`]
           mp_tac transfer_value_no_type_error >>
         simp[]) >>
-      strip_tac >> gvs[runtime_consistent_def]) >>
+      strip_tac >> gvs[runtime_consistent_def])
+    *) >>
     strip_tac >> gvs[]) >>
   rpt strip_tac >>
   qpat_x_assum `type_place_expr env (Call _ Send _ _) = SOME vt` mp_tac >>

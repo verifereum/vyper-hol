@@ -1,9 +1,21 @@
 Theory vyperExprNoControl
 
 Ancestors
-  vyperCreate vyperInterpreter vyperAST vyperState vyperMisc
+  vyperCreate vyperInterpreter vyperAST vyperMisc
+  vyperCallFrame vyperCallOutcome vyperCallOutcomeBranches vyperCallOutcomeFrame
+  vyperRuntimeAccounts vyperState
 Libs
-  pairLib
+  pairLib monadsyntax
+
+val () = monadsyntax.enable_monad "vyper_evaluation";
+val () = Parse.type_abbrev ("exception", ``:vyperState$exception``);
+val _ = hide "body";
+val _ = overload_on ("bind", ``vyperState$bind``);
+val _ = overload_on ("return", ``vyperState$return``);
+val _ = overload_on ("ignore_bind", ``vyperState$ignore_bind``);
+val _ = overload_on ("raise", ``vyperState$raise``);
+val _ = overload_on ("try", ``vyperState$try``);
+val _ = overload_on ("finally", ``vyperState$finally``);
 
 (* ===== Helper predicate ===== *)
 Definition no_control_exc_def:
@@ -212,6 +224,7 @@ Theorem transfer_value_no_control:
   ∀from to amt s exc s'.
   transfer_value from to amt s = (INR exc, s') ⇒ no_control_exc exc
 Proof
+  (* Original concrete implementation proof:
   rpt gen_tac >>
   rename1 `transfer_value fromAddr toAddr amount st = (INR exc, st') ⇒ no_control_exc exc` >>
   Cases_on `amount = 0 ∨ fromAddr = toAddr`
@@ -220,6 +233,8 @@ Proof
     get_accounts_def, return_def, update_accounts_def]
   >> strip_tac >> gvs[AllCaseEqs(), return_def]
   >> imp_res_tac check_no_control
+  *)
+  rpt strip_tac >> drule concrete_send_error >> rw[no_control_exc_def]
 QED
 
 Theorem get_immutables_no_control:
@@ -590,6 +605,135 @@ Proof
   >> gvs[return_def]
 QED
 
+(* Default/decode boundary used by the live concrete ExtCall resume and its
+   oracle sibling. Decode errors are runtime errors; default errors are IH. *)
+Theorem extcall_return_tail_no_control:
+  (bs = [] /\ IS_SOME drv ==>
+    !s exc t. eval_expr cx (THE drv) s = (INR exc,t) ==> no_control_exc exc) /\
+  (if bs = [] /\ IS_SOME drv then eval_expr cx (THE drv)
+   else do
+     v <- lift_sum_runtime (evaluate_abi_decode_return tenv ret_type bs);
+     return (Value v)
+   od) st = (INR exc,st') ==>
+  no_control_exc exc
+Proof
+  Cases_on `bs = [] /\ IS_SOME drv` >> simp[] >> rpt strip_tac
+  >- (first_x_assum drule >> simp[]) >>
+  gvs[bind_def, return_def, AllCaseEqs()] >>
+  drule lift_sum_runtime_no_control >> simp[]
+QED
+
+Theorem checked_call_outcome_no_control:
+  (!bs rq outcome st1 st2 caseSuffix protectTypedAccounts exc t.
+    take_call_outcome target calldata value_opt st = (INL (rq,outcome),st1) /\
+    outcome.co_success /\ adopt_call_outcome rq outcome st1 = (INL (),st2) /\
+    caseSuffix = st2.outcomes /\ protectTypedAccounts /\
+    protectTypedAccounts = (~rq.cr_static ==> accounts_runtime_well_typed st2.accounts) /\
+    bs = outcome.co_returnData /\
+    k bs st2 = (INR exc,t) ==> no_control_exc exc) /\
+  (do
+    (rq,outcome) <- take_call_outcome target calldata value_opt;
+    check outcome.co_success msg;
+    adopt_call_outcome rq outcome;
+    k outcome.co_returnData
+  od) st = (INR exc,st') ==>
+  no_control_exc exc
+Proof
+  simp[checked_call_outcome_cases] >> rpt strip_tac
+  >- (drule take_call_outcome_error >> rw[no_control_exc_def])
+  >- simp[no_control_exc_def] >>
+  drule_all take_adopt_call_outcome_effects >> strip_tac >>
+  `~rq.cr_static ==> accounts_runtime_well_typed st2.accounts` by metis_tac[] >>
+  first_x_assum drule_all >> simp[]
+QED
+
+Theorem ExtCall_outcome_no_control:
+  (!bs rq outcome st1 st2 caseSuffix protectTypedAccounts exc t.
+    take_call_outcome target calldata value_opt st = (INL (rq,outcome),st1) /\
+    outcome.co_success /\ adopt_call_outcome rq outcome st1 = (INL (),st2) /\
+    caseSuffix = st2.outcomes /\ protectTypedAccounts /\
+    protectTypedAccounts = (~rq.cr_static ==> accounts_runtime_well_typed st2.accounts) /\
+    bs = outcome.co_returnData /\
+    k bs st2 = (INR exc,t) ==> no_control_exc exc) /\
+  (do
+    accounts <- get_accounts;
+    (if ret_type = NoneT then
+      check (~NULL (lookup_account target accounts).code) "ExtCall target has no code"
+     else return ());
+    (rq,outcome) <- take_call_outcome target calldata value_opt;
+    check outcome.co_success "ExtCall reverted";
+    adopt_call_outcome rq outcome;
+    k outcome.co_returnData
+  od) st = (INR exc,st') ==>
+  no_control_exc exc
+Proof
+  Cases_on `take_call_outcome target calldata value_opt st` >>
+  rename1 `take_call_outcome target calldata value_opt st = (answer,mid)` >>
+  drule ExtCall_outcome_continue >>
+  disch_then (qspecl_then [`ret_type`,`k`] assume_tac) >>
+  drule checked_call_outcome_continue >>
+  disch_then (qspecl_then [`"ExtCall reverted"`,`k`] assume_tac) >>
+  rpt strip_tac >>
+  Cases_on `ret_type = NoneT /\ NULL (lookup_account target st.accounts).code` >>
+  gvs[] >- simp[no_control_exc_def] >>
+  irule checked_call_outcome_no_control >>
+  qexistsl_tac [`calldata`,`k`,`"ExtCall reverted"`,`st`,`st'`,`target`,`value_opt`] >>
+  simp[] >> first_assum ACCEPT_TAC
+QED
+
+(* Exact SourceExtCall empty-data/default continuation for TASK032/033.
+   No-control IH is only needed for a taken successful outcome with [] data.
+   Unlike type preservation this theorem requires no initial account typing. *)
+Theorem ExtCall_outcome_return_no_control:
+  (!rq outcome st1 st2 caseSuffix protectTypedAccounts exc t.
+    take_call_outcome target calldata value_opt st = (INL (rq,outcome),st1) /\
+    outcome.co_success /\ adopt_call_outcome rq outcome st1 = (INL (),st2) /\
+    caseSuffix = st2.outcomes /\ protectTypedAccounts /\
+    protectTypedAccounts = (~rq.cr_static ==> accounts_runtime_well_typed st2.accounts) /\
+    outcome.co_returnData = [] /\ IS_SOME drv /\
+    eval_expr cx (THE drv) st2 = (INR exc,t) ==> no_control_exc exc) /\
+  (do
+    accounts <- get_accounts;
+    (if ret_type = NoneT then
+      check (~NULL (lookup_account target accounts).code) "ExtCall target has no code"
+     else return ());
+    (rq,outcome) <- take_call_outcome target calldata value_opt;
+    check outcome.co_success "ExtCall reverted";
+    adopt_call_outcome rq outcome;
+    if outcome.co_returnData = [] /\ IS_SOME drv then eval_expr cx (THE drv)
+    else do
+      v <- lift_sum_runtime (evaluate_abi_decode_return (get_tenv cx) ret_type outcome.co_returnData);
+      return (Value v)
+    od
+  od) st = (INR exc,st') ==>
+  no_control_exc exc
+Proof
+  rpt strip_tac >>
+  drule_at Any (ExtCall_outcome_no_control |>
+    INST_TYPE [alpha |-> ``:toplevel_value``] |> Q.INST
+    [`k` |-> `\bs. if bs = [] /\ IS_SOME drv then eval_expr cx (THE drv)
+      else do v <- lift_sum_runtime (evaluate_abi_decode_return (get_tenv cx) ret_type bs);
+              return (Value v) od`] |> BETA_RULE) >>
+  disch_then irule >> rpt gen_tac >> strip_tac >> gvs[] >>
+  Cases_on `outcome.co_returnData = [] /\ IS_SOME drv`
+  >- (gvs[] >> first_x_assum drule_all >> simp[]) >>
+  gvs[bind_def, return_def, AllCaseEqs()] >>
+  drule lift_sum_runtime_no_control >> simp[]
+QED
+
+Theorem Send_outcome_runtime_error:
+  (do
+    (rq,outcome) <- take_call_outcome target [] (SOME amount);
+    check outcome.co_success "send failed";
+    adopt_call_outcome rq outcome;
+    return (Value NoneV)
+  od) st = (INR exc,st') ==>
+  ?msg. exc = Error (RuntimeError msg)
+Proof
+  simp[checked_call_outcome_cases, return_def] >> rpt strip_tac
+  >- (drule take_call_outcome_error >> rw[] >> simp[]) >> simp[]
+QED
+
 (* ===== Case 19: IntCall ===== *)
 
 (* Sub-helper: cleanup block never errors *)
@@ -836,12 +980,16 @@ Resume eval_expr_no_control_with_bt[ExtCall]:
   >> qpat_x_assum `∀s'' vs t. _` (fn ih =>
        step_tac >- gvs[append_logs_def, return_def] >> assume_tac ih)
   (* Handle the if-tail *)
+  (* Original decode dispatch:
   >> qpat_x_assum `(if _ then _ else _) _ = _` mp_tac
   >> simp[COND_RATOR] >> strip_tac
   >> pop_assum mp_tac
   >> simp[return_def, bind_def, AllCaseEqs()]
   >> reverse strip_tac
   >- (imp_res_tac lift_sum_runtime_no_control)
+  *)
+  >> drule_at Any extcall_return_tail_no_control
+  >> disch_then irule >> strip_tac >> rpt gen_tac >> strip_tac
   (* Instantiate IH via chained drule *)
   >> qpat_x_assum `∀s'' vs t. _`
        (mp_tac o REWRITE_RULE [GSYM AND_IMP_INTRO])

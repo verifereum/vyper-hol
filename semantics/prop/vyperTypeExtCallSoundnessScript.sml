@@ -10,7 +10,7 @@ Ancestors
   list rich_list pred_set prim_rec arithmetic finite_map option pair sum
   vyperAST vyperValue vyperValueOperation vyperMisc vyperABI
   vyperCreate vyperInterpreter vyperState vyperContext vyperStorage vyperTyping
-  vyperRuntimeAccounts
+  vyperRuntimeAccounts vyperCallFrame
   vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeInvariants vyperTypeValues
   vyperTypeEnv vyperTypeEnvExtension vyperTypeEnvPreservation vyperTypeScopePop
   vyperTypeABI vyperTypeBindArguments vyperTypeExprResult
@@ -209,9 +209,15 @@ Theorem transfer_value_no_type_error:
   !from to amount st s.
     FST (transfer_value from to amount st) <> INR (Error (TypeError s))
 Proof
+  (* Original implementation proof:
   rw[transfer_value_def, bind_def, ignore_bind_def, get_accounts_def, return_def,
      check_def, assert_def, raise_def, update_accounts_def] >>
   rpt (CASE_TAC >> gvs[return_def, raise_def])
+  *)
+  rpt gen_tac >> Cases_on `transfer_value from to amount st` >>
+  rename1 `transfer_value from to amount st = (res,st')` >>
+  Cases_on `res` >> simp[] >>
+  drule concrete_send_error >> rw[]
 QED
 
 Theorem transfer_value_accounts_well_typed:
@@ -250,6 +256,32 @@ Proof
   simp[]
 QED
 
+(* Concrete sibling of Send_outcome_type_sound. This is the actual live
+   transfer/return tail, with its implementation hidden from evaluator IHs. *)
+Theorem concrete_send_type_sound:
+  runtime_consistent env cx st /\
+  (do transfer_value fromAddr toAddr amount; return (Value NoneV) od) st =
+    (res,st') ==>
+  state_well_typed st' /\ env_consistent env cx st' /\
+  accounts_well_typed st'.accounts /\ no_type_error_result res /\
+  case res of
+  | INL tv => expr_result_typed env (Call NoneT Send es extra) tv
+  | INR _ => T
+Proof
+  simp[bind_def, ignore_bind_def, return_def] >>
+  Cases_on `transfer_value fromAddr toAddr amount st` >>
+  rename1 `transfer_value fromAddr toAddr amount st = (answer,mid)` >>
+  Cases_on `answer` >> simp[] >> rpt gen_tac >> strip_tac >> gvs[] >>
+  `runtime_consistent env cx mid` by
+    (drule transfer_value_runtime_consistent >>
+     disch_then (qspecl_then [`fromAddr`,`toAddr`,`amount`] mp_tac) >> simp[]) >>
+  gvs[runtime_consistent_def, no_type_error_result_def,
+      expr_result_typed_def, expr_runtime_typed_def, expr_type_def,
+      toplevel_value_typed_def, value_has_type_def, evaluate_type_def,
+      is_HashMapRef_def] >>
+  drule concrete_send_error >> rw[]
+QED
+
 Theorem evaluate_abi_decode_return_well_typed:
   !tenv ret_type bs v tv.
     evaluate_abi_decode_return tenv ret_type bs = INL v /\
@@ -277,6 +309,30 @@ Proof
   metis_tac[]
 QED
 
+
+(* Decoder-only boundary shared by concrete and oracle tails. Invalid bytes
+   are RuntimeError, never source TypeError or control transfer. *)
+Theorem extcall_decode_return_sound:
+  runtime_consistent env cx st /\
+  evaluate_type env.type_defs ret_type = SOME ret_tv /\
+  (do
+    v <- lift_sum_runtime (evaluate_abi_decode_return env.type_defs ret_type bs);
+    return (Value v)
+  od) st = (res,st') ==>
+  state_well_typed st' /\ env_consistent env cx st' /\
+  accounts_well_typed st'.accounts /\ no_type_error_result res /\
+  case res of
+  | INL tv => expr_result_typed env (Call ret_type (ExtCall stat fsig) es drv) tv
+  | INR _ => T
+Proof
+  simp[lift_sum_runtime_def, bind_def, return_def, raise_def] >>
+  Cases_on `evaluate_abi_decode_return env.type_defs ret_type bs` >>
+  simp[return_def, raise_def] >> rpt strip_tac >> gvs[] >>
+  gvs[runtime_consistent_def, no_type_error_result_def,
+      expr_result_typed_def, expr_runtime_typed_def, expr_type_def,
+      toplevel_value_typed_def, is_HashMapRef_def] >>
+  drule_all evaluate_abi_decode_return_well_typed >> simp[]
+QED
 
 Theorem extcall_return_tail_sound:
   !env cx es drv ret_type ret_tv returnData st res st'.
@@ -312,6 +368,7 @@ Proof
     simp[] >> strip_tac >>
     Cases_on `res` >> gvs[expr_result_typed_def, expr_runtime_typed_def, expr_type_def] >>
     metis_tac[well_typed_expr_not_hashmap_place]) >>
+  (* Original decoder branch:
   qpat_x_assum `(do _ od) _ = _` mp_tac >>
   simp[lift_sum_runtime_def, bind_def, return_def, raise_def] >>
   Cases_on `evaluate_abi_decode_return env.type_defs ret_type returnData` >>
@@ -322,6 +379,8 @@ Proof
   qspecl_then [`env.type_defs`, `ret_type`, `returnData`, `x`, `ret_tv`]
     mp_tac evaluate_abi_decode_return_well_typed >>
   simp[toplevel_value_typed_def]
+  *)
+  drule_all extcall_decode_return_sound >> simp[]
 QED
 
 Theorem runtime_consistent_logs_append:
@@ -426,6 +485,7 @@ Proof
     metis_tac[well_typed_expr_not_hashmap_place]) >>
   `runtime_consistent env cx (base_st with <| accounts := accounts'; tStorage := tStorage' |>)` by
     metis_tac[update_accounts_transient_runtime_consistent] >>
+  (* Original decoder reasoning, now shared with the guarded oracle sibling:
   gvs[runtime_consistent_def] >>
   gvs[lift_sum_runtime_def, bind_def, return_def, raise_def] >>
   Cases_on `evaluate_abi_decode_return env.type_defs ret_type returnData` >>
@@ -439,6 +499,9 @@ Proof
   gvs[lift_sum_runtime_def, bind_def, return_def, raise_def,
       no_type_error_result_def, expr_result_typed_def, expr_runtime_typed_def,
       expr_type_def, toplevel_value_typed_def, is_HashMapRef_def]
+  *)
+  strip_tac >> Cases_on `returnData = []` >> gvs[] >>
+  drule_all extcall_decode_return_sound >> simp[]
 QED
 Theorem env_consistent_get_tenv:
   env_consistent env cx st ==> get_tenv cx = env.type_defs

@@ -96,6 +96,18 @@ Proof
      return_def, raise_def] >> gvs[AllCaseEqs()]
 QED
 
+(* Both rejection checks are runtime failures; transfer cannot manufacture
+   source TypeError or control exceptions. *)
+Theorem concrete_send_error:
+  transfer_value fromAddr toAddr amount st = (INR exc,st') ==>
+  (exc = Error (RuntimeError "transfer_value amount") \/
+   exc = Error (RuntimeError "transfer_value recipient overflow")) /\ st' = st
+Proof
+  rw[transfer_value_def, bind_def, ignore_bind_def, get_accounts_def,
+     check_def, assert_def, update_accounts_def, return_def, raise_def] >>
+  gvs[AllCaseEqs()]
+QED
+
 Theorem concrete_send_tail_frame:
   (do transfer_value fromAddr toAddr amount; return (Value NoneV) od) st =
     (res,st') ==>
