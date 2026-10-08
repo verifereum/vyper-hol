@@ -161,7 +161,11 @@ Definition compute_vyper_args_def:
     (argsOpt, tenv, SND vyTysRet)
 End
 
-val () = cv_auto_trans compute_vyper_args_def;
+(* Keep the logical runner on the original ABI semantics. Only its CV
+   implementation uses the unconditionally proved-equivalent fast paths. *)
+val () = compute_vyper_args_def
+  |> REWRITE_RULE [vyper_abi_dec_eq_fast, vyper_abi_valid_enc_eq_fast]
+  |> cv_auto_trans;
 
 Definition run_deployment_def:
   run_deployment am dt = let
