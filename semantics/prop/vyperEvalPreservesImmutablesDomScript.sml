@@ -3372,15 +3372,24 @@ Proof
      use transitivity + _eq for success path. *)
   (* RawCallTarget *)
   >- (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-      simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def,
-           check_def, type_check_def, assert_def, lift_option_def, lift_option_type_def,
-           get_accounts_def, get_transient_storage_def, option_CASE_rator] >>
-      rpt strip_tac >> gvs[AllCaseEqs(), return_def, raise_def] >>
-      first_x_assum drule >> strip_tac >>
+      simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def,
+           raise_def, type_check_def, assert_def, lift_option_type_def,
+           option_CASE_rator] >>
+      rpt strip_tac >> gvs[] >> first_x_assum drule >> strip_tac >>
       TRY (gvs[] >> NO_TAC) >>
+      drule eval_raw_call_preserves_non_accounts >> strip_tac >>
       irule preserves_immutables_dom_trans >> first_assum (irule_at Any) >>
-      irule raw_call_callback_preserves_immutables_dom >>
-      first_assum (irule_at Any))
+      irule preserves_immutables_dom_eq >> gvs[])
+  (* RawCallCalldataTarget *)
+  >- (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def,
+           raise_def, type_check_def, assert_def, lift_option_type_def,
+           option_CASE_rator] >>
+      rpt strip_tac >> gvs[] >> first_x_assum drule >> strip_tac >>
+      TRY (gvs[] >> NO_TAC) >>
+      drule eval_raw_call_preserves_non_accounts >> strip_tac >>
+      irule preserves_immutables_dom_trans >> first_assum (irule_at Any) >>
+      irule preserves_immutables_dom_eq >> gvs[])
   (* RawLog *)
   >- (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
       simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def,

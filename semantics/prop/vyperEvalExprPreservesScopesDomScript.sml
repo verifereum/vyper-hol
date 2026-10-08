@@ -352,13 +352,30 @@ Theorem case_RawCallTarget_dom[local]:
       MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
   rpt strip_tac >> qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def,
-       check_def, type_check_def, assert_def, lift_option_def, lift_option_type_def,
-       get_accounts_def, get_transient_storage_def, option_CASE_rator] >>
-  strip_tac >> gvs[AllCaseEqs(), return_def, raise_def] >>
-  pairarg_tac >> gvs[update_accounts_def, update_transient_def, append_logs_def,
-       bind_def, ignore_bind_def, return_def, raise_def, AllCaseEqs(), assert_def,
-       COND_RATOR, CaseEq"bool"]
+  simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def,
+       raise_def, type_check_def, assert_def, lift_option_type_def,
+       option_CASE_rator] >>
+  rpt strip_tac >> gvs[] >>
+  TRY (first_x_assum drule >> simp[] >> NO_TAC) >>
+  first_x_assum drule >> strip_tac >>
+  drule eval_raw_call_preserves_non_accounts >> strip_tac >> gvs[]
+QED
+
+Theorem case_RawCallCalldataTarget_dom[local]:
+  ∀cx ty flags es v0.
+    (∀st res st'. eval_exprs cx es st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
+    ∀st res st'.
+      eval_expr cx (Call ty (RawCallCalldataTarget flags) es v0) st = (res,st') ⇒
+      MAP FDOM st.scopes = MAP FDOM st'.scopes
+Proof
+  rpt strip_tac >> qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def,
+       raise_def, type_check_def, assert_def, lift_option_type_def,
+       option_CASE_rator] >>
+  rpt strip_tac >> gvs[] >>
+  TRY (first_x_assum drule >> simp[] >> NO_TAC) >>
+  first_x_assum drule >> strip_tac >>
+  drule eval_raw_call_preserves_non_accounts >> strip_tac >> gvs[]
 QED
 
 (* RawLog *)
@@ -493,6 +510,7 @@ Proof
     suspend "ExtCall" >-
     suspend "IntCall" >-
     ACCEPT_TAC case_RawCallTarget_dom >-
+    ACCEPT_TAC case_RawCallCalldataTarget_dom >-
     ACCEPT_TAC case_RawLog_dom >-
     ACCEPT_TAC case_RawRevert_dom >-
     ACCEPT_TAC case_SelfDestructTarget_dom >-

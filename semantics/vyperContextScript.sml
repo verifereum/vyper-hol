@@ -16,6 +16,9 @@ Datatype:
   ; target: address
   ; function_name: identifier
   ; args: value list
+  (* Original call input, including the selector; never ABI-decoder padding.
+     Creation frames have empty calldata (constructor arguments are code data). *)
+  ; calldata: word8 list
   ; value: num
   ; time_stamp: num
   ; block_number: num
@@ -41,6 +44,7 @@ Definition empty_call_txn_def:
     target := 0w;
     function_name := "";
     args := [];
+    calldata := [];
     value := 0;
     time_stamp := 0;
     block_number := 0;
@@ -373,9 +377,31 @@ End
 
 val () = cv_auto_trans evaluate_ecmul_def;
 
+(* Calldata is not a bounded input value. Check the EVM-sized end before
+   using the ordinary, non-padding bytes slice implementation. *)
+Definition evaluate_calldata_slice_def:
+  evaluate_calldata_slice bs sv n =
+    case dest_NumV sv of
+    | NONE => INR (TypeError "calldata slice start")
+    | SOME start =>
+        if n = 0 \/ 2 ** 256 <= start + n then
+          INR (RuntimeError "calldata slice overflow")
+        else evaluate_slice (BytesV bs) sv (IntV &n) n
+End
+
+val () = cv_auto_trans evaluate_calldata_slice_def;
+
 Definition evaluate_builtin_def:
   evaluate_builtin cx acc ty bt vs =
     case bt of
+    | CalldataLen =>
+        (case vs of
+         | [] => INL $ IntV &(LENGTH cx.txn.calldata)
+         | _ => INR (TypeError "builtin"))
+    | CalldataSlice n =>
+        (case vs of
+         | [sv] => evaluate_calldata_slice cx.txn.calldata sv n
+         | _ => INR (TypeError "builtin"))
     | Not =>
         (case vs of
          | [BoolV b] => INL (BoolV (¬b))
@@ -542,6 +568,8 @@ val () = cv_auto_trans type_builtin_args_length_ok_def;
 
 Definition builtin_args_length_ok_def:
   builtin_args_length_ok Len n = (n = 1n) ∧
+  builtin_args_length_ok CalldataLen n = (n = 0) ∧
+  builtin_args_length_ok (CalldataSlice _) n = (n = 1) ∧
   builtin_args_length_ok Not n = (n = 1) ∧
   builtin_args_length_ok Neg n = (n = 1) ∧
   builtin_args_length_ok Abs n = (n = 1) ∧

@@ -714,6 +714,26 @@ Proof
   >> strip_tac >> drule int_call_tail_no_control >> simp[]
 QED
 
+Theorem eval_raw_call_no_control:
+  eval_raw_call cx flags target_addr calldata amount st = (INR exc, st') ==>
+  no_control_exc exc
+Proof
+  Cases_on `flags.rcf_is_delegate` >>
+  simp[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def, raise_def, get_accounts_def,
+       get_transient_storage_def, no_control_exc_def] >>
+  Cases_on `run_ext_call cx.txn.target target_addr calldata
+    (if flags.rcf_is_static then NONE else SOME amount)
+    st.accounts st.tStorage (vyper_to_tx_params cx.txn)` >>
+  simp[lift_option_def, bind_def, return_def, raise_def, no_control_exc_def] >>
+  PairCases_on `x` >>
+  Cases_on `flags.rcf_revert_on_failure` >> Cases_on `x0` >>
+  Cases_on `flags.rcf_max_outsize = 0` >>
+  simp[update_accounts_def, update_transient_def, append_logs_def,
+       check_def, assert_def, bind_def, ignore_bind_def, return_def, raise_def,
+       no_control_exc_def]
+QED
+
 (* ===== Case 20: RawCallTarget ===== *)
 
 Theorem raw_call_no_control[local]:
@@ -724,17 +744,26 @@ Theorem raw_call_no_control[local]:
     (INR exc,st') ⇒ no_control_exc exc
 Proof
   rpt strip_tac >> pop_assum mp_tac
-  >> PURE_REWRITE_TAC[Once evaluate_def] >> simp mono
-  >> strip_tac >> gvs[AllCaseEqs(), pairTheory.ELIM_UNCURRY]
-  >> TRY (FIRST (map (fn th => imp_res_tac th >> gvs[no_control_exc_def]
-       >> NO_TAC) helpers))
-  >> TRY (res_tac >> gvs[no_control_exc_def] >> NO_TAC)
-  >> rpt (step_tac >- helper_close)
-  >> gvs[update_accounts_def, update_transient_def, return_def]
-  >> Cases_on `flags.rcf_revert_on_failure`
-  >> gvs[return_def, bind_def, COND_RATOR, AllCaseEqs()]
-  >> imp_res_tac check_no_control
-  >> imp_res_tac append_logs_no_control
+  >> simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+          assert_def, lift_option_type_def, return_def, raise_def,
+          option_CASE_rator, AllCaseEqs()]
+  >> rpt strip_tac >> gvs[no_control_exc_def]
+  >> imp_res_tac eval_raw_call_no_control >> res_tac >> gvs[no_control_exc_def]
+QED
+
+Theorem raw_call_calldata_no_control[local]:
+  ∀cx ty flags es drv.
+  (∀s exc st'. eval_exprs cx es s = (INR exc,st') ⇒ no_control_exc exc) ⇒
+  ∀s exc st'.
+    eval_expr cx (Call ty (RawCallCalldataTarget flags) es drv) s =
+      (INR exc,st') ⇒ no_control_exc exc
+Proof
+  rpt strip_tac >> pop_assum mp_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, lift_option_type_def, return_def, raise_def,
+       option_CASE_rator, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[no_control_exc_def] >>
+  imp_res_tac eval_raw_call_no_control >> res_tac >> gvs[no_control_exc_def]
 QED
 
 (* ===== Main theorem ===== *)
@@ -787,6 +816,7 @@ Proof
     match_mp_tac int_call_no_control >>
     metis_tac[]) >>
   conj_tac >- (rpt strip_tac >> drule_all raw_call_no_control >> simp[]) >>
+  conj_tac >- (rpt strip_tac >> drule_all raw_call_calldata_no_control >> simp[]) >>
   conj_tac >- unfold_tac >>
   rpt conj_tac >> unfold_tac
 QED

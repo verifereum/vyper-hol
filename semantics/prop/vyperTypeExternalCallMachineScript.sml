@@ -168,11 +168,19 @@ Proof
     (initial_state am [scope])` >>
   Cases_on `q` >> gvs[]
   >- (rpt strip_tac >>
-      metis_tac[checked_getter_body_from_states_preserves_components,
-                return_def])
+      mp_tac (GEN_ALL (Q.INST
+        [`mut` |-> `View`, `nr` |-> `F`, `dflts` |-> `[]`,
+         `cx` |-> `initial_evaluation_context am.sources am.layouts tx src`,
+         `lock_st` |-> `initial_state am [scope]`]
+        (SPEC_ALL checked_getter_body_from_states_preserves_components))) >>
+      simp[return_def] >> disch_then drule_all >> simp[])
   >- (rpt strip_tac >>
-      metis_tac[checked_getter_body_from_states_preserves_components,
-                return_def])
+      mp_tac (GEN_ALL (Q.INST
+        [`mut` |-> `View`, `nr` |-> `F`, `dflts` |-> `[]`,
+         `cx` |-> `initial_evaluation_context am.sources am.layouts tx src`,
+         `lock_st` |-> `initial_state am [scope]`]
+        (SPEC_ALL checked_getter_body_from_states_preserves_components))) >>
+      simp[return_def] >> disch_then drule_all >> simp[])
   >- (rpt strip_tac >>
       FIRST
         [drule_at(Pat`send_call_value`) send_call_value_no_control_c53 >>

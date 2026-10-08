@@ -167,6 +167,11 @@ End
 Definition well_typed_builtin_app_def:
   well_typed_builtin_app ty (Bop bop) ts =
     (LENGTH ts = 2 /\ well_typed_binop ty bop (EL 0 ts) (EL 1 ts)) /\
+  well_typed_builtin_app ty CalldataLen ts =
+    (ts = [] /\ ty = BaseT (UintT 256)) /\
+  well_typed_builtin_app ty (CalldataSlice n) ts =
+    (0 < n /\ n < 2 ** 256 /\ ts = [BaseT (UintT 256)] /\
+     ty = BaseT (BytesT (Dynamic n))) /\
   well_typed_builtin_app ty Len ts =
     (LENGTH ts = 1 /\ ty = BaseT (UintT 256) /\ is_sized_type (HD ts)) /\
   well_typed_builtin_app ty Not ts =
@@ -563,6 +568,10 @@ Definition well_typed_expr_def:
      EL 0 (MAP expr_type args) = BaseT AddressT /\
      (?bd. EL 1 (MAP expr_type args) = BaseT (BytesT bd)) /\
      EL 2 (MAP expr_type args) = BaseT (UintT 256)) /\
+  well_typed_expr env (Call ty (RawCallCalldataTarget flags) args drv) =
+    (well_typed_exprs env args /\ drv = NONE /\ ty = raw_call_return_type flags /\
+     flags.rcf_max_outsize < dimword(:256) /\ ¬flags.rcf_is_delegate /\
+     MAP expr_type args = [BaseT AddressT; BaseT (UintT 256)]) /\
   well_typed_expr env (Call ty RawLog args drv) =
     (well_typed_exprs env args /\ drv = NONE /\ ty = NoneT /\ LENGTH args = 2 /\
      (?bd. EL 0 (MAP expr_type args) = ArrayT (BaseT (BytesT (Fixed 32))) bd /\

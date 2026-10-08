@@ -241,6 +241,14 @@ Definition kwarg_method_id_def:
 End
 
 
+Definition raw_call_flags_of_kwargs_def:
+  raw_call_flags_of_kwargs kwargs =
+    <| rcf_max_outsize := kwarg_num "max_outsize" kwargs 0;
+       rcf_is_delegate := kwarg_bool "is_delegate_call" kwargs F;
+       rcf_is_static := kwarg_bool "is_static_call" kwargs F;
+       rcf_revert_on_failure := kwarg_bool "revert_on_failure" kwargs T |>
+End
+
 Definition make_builtin_call_def:
   make_builtin_call ty name args kwargs ret_ty =
     if name = "len" then Builtin ty Len args
@@ -283,10 +291,7 @@ Definition make_builtin_call_def:
                 is_delegate_call=F, is_static_call=F, revert_on_failure=T)
        Convention: args in Call = [to_addr; data_bytes; value] *)
     else if name = "raw_call" then
-      let flags = <| rcf_max_outsize := kwarg_num "max_outsize" kwargs 0;
-                     rcf_is_delegate := kwarg_bool "is_delegate_call" kwargs F;
-                     rcf_is_static := kwarg_bool "is_static_call" kwargs F;
-                     rcf_revert_on_failure := kwarg_bool "revert_on_failure" kwargs T |> in
+      let flags = raw_call_flags_of_kwargs kwargs in
       let value_e = kwarg_expr "value" kwargs (Literal (BaseT (UintT 256)) (IntL 0)) in
       Call ty (RawCallTarget flags) (args ++ [value_e]) NONE
     else if name = "raw_log" then Call ty RawLog args NONE
@@ -514,9 +519,10 @@ End
 
 Definition resolve_func_module_ref_def:
   resolve_func_module_ref ctx
-      (JE_Attribute (JE_Name alias (SOME "module") src _)
+      (JE_Attribute (JE_Name alias tc src _)
         _ _ _ _ _ _) fallback =
-    resolve_module_alias ctx alias src ∧
+    (if tc = SOME "module" then resolve_module_alias ctx alias src
+     else resolve_source_ref ctx fallback) ∧
   resolve_func_module_ref ctx _ fallback = resolve_source_ref ctx fallback
 End
 
@@ -717,36 +723,10 @@ Proof
 QED
 
 
-Definition translate_call_def:
-  translate_call ctx func args' kwargs' ret_ty src_id_opt translated_pop_index =
-    let rty = translate_type (signature_type_ctx ctx src_id_opt) ret_ty in
-    case func of
-    | JE_Name name (SOME "interface") _ _ =>
-        interface_constructor_result rty args'
-    | JE_Name name _ _ _ => make_builtin_call rty name args' kwargs' ret_ty
-    (* lib.__at__(addr) / lib.__interface__(addr) - interface instantiation, just returns the address *)
-    | JE_Attribute _ "__at__" _ _ _ _ _ =>
-        interface_constructor_result rty args'
-    | JE_Attribute _ "__interface__" _ _ _ _ _ =>
-        interface_constructor_result rty args'
-    | JE_Attribute base "pop" _ _ _ _ _ =>
-        (case base of
-         | JE_Name id _ _ _ => Pop rty (make_name_target ctx id)
-         | JE_Attribute (JE_Name "self" _ _ _) attr _ _ _ _ _ => Pop rty (TopLevelNameTarget (NONE, attr))
-         | JE_Attribute (JE_Name id (SOME "module") src_id_opt _) attr _ _ _ _ _ =>
-             Pop rty (TopLevelNameTarget (resolve_source_ref ctx src_id_opt, attr))
-         | JE_Attribute (JE_Name id _ _ _) attr _ _ _ _ _ =>
-             Pop rty (AttributeTarget (make_name_target ctx id) attr)
-         | JE_Subscript (JE_Name id _ _ _) idx _ =>
-             Pop rty (SubscriptTarget (make_name_target ctx id)
-               (case translated_pop_index of
-                | SOME e => e
-                | NONE => Literal (BaseT BoolT) (BoolL T)))
-         | _ => Call rty (IntCall (NONE, "pop")) args' NONE)
-    (* self.func(args) - internal call *)
-    | JE_Attribute (JE_Name "self" _ _ _) fname _ _ _ _ _ => Call rty (IntCall (resolve_source_ref ctx src_id_opt, fname)) args' NONE
-    (* Module struct constructor, interface constructor, or module function call *)
-    | _ => if is_interface_constructor func then
+(* Shared fallback after the name, interface shortcut, pop and self branches. *)
+Definition translate_module_call_def:
+  translate_module_call ctx func args' kwargs' ret_ty src_id_opt rty =
+           if is_interface_constructor func then
              interface_constructor_result rty args'
            else let nsid = resolve_func_module_ref ctx func src_id_opt;
                fname = extract_func_name func in
@@ -772,6 +752,93 @@ Definition translate_call_def:
               Call rty (IntCall (nsid, fname)) args' NONE)
 End
 
+Definition translate_call_def:
+  translate_call ctx func args' kwargs' ret_ty src_id_opt translated_pop_index =
+    let rty = translate_type (signature_type_ctx ctx src_id_opt) ret_ty in
+    case func of
+    | JE_Name name tc _ _ =>
+        if tc = SOME "interface" then interface_constructor_result rty args'
+        else make_builtin_call rty name args' kwargs' ret_ty
+    | JE_Attribute base fname _ _ _ _ _ =>
+        (* Interface shortcuts take priority over pop and self calls. *)
+        if fname = "__at__" \/ fname = "__interface__" then
+          interface_constructor_result rty args'
+        else if fname = "pop" then
+          (case base of
+           | JE_Name id _ _ _ => Pop rty (make_name_target ctx id)
+           | JE_Attribute (JE_Name id tc src _) attr _ _ _ _ _ =>
+               if id = "self" then Pop rty (TopLevelNameTarget (NONE, attr))
+               else if tc = SOME "module" then
+                 Pop rty (TopLevelNameTarget (resolve_source_ref ctx src, attr))
+               else Pop rty (AttributeTarget (make_name_target ctx id) attr)
+           | JE_Subscript (JE_Name id _ _ _) idx _ =>
+               Pop rty (SubscriptTarget (make_name_target ctx id)
+                 (case translated_pop_index of
+                  | SOME e => e
+                  | NONE => Literal (BaseT BoolT) (BoolL T)))
+           | _ => Call rty (IntCall (NONE, "pop")) args' NONE)
+        else
+          (case base of
+           | JE_Name id _ _ _ =>
+               if id = "self" then
+                 Call rty (IntCall (resolve_source_ref ctx src_id_opt, fname)) args' NONE
+               else translate_module_call ctx func args' kwargs' ret_ty src_id_opt rty
+           | _ => translate_module_call ctx func args' kwargs' ret_ty src_id_opt rty)
+    | _ => translate_module_call ctx func args' kwargs' ret_ty src_id_opt rty
+End
+
+
+(* Recognize the source shape before translating msg.data: it is not an
+   ordinary bounded bytes value in the internal AST. *)
+Definition is_calldata_len_call_def:
+  is_calldata_len_call (JE_Name name _ _ _)
+    [JE_Attribute (JE_Name base _ _ _) attr _ _ _ _ _] [] =
+      (name = "len" /\ base = "msg" /\ attr = "data") /\
+  is_calldata_len_call _ _ _ = F
+End
+
+(* A compiler-folded integer is a compile-time length, not a runtime index. *)
+Definition calldata_slice_length_def:
+  calldata_slice_length (JE_Int i _) =
+    (if 0 < i /\ i < &(2 ** 256) then SOME (Num i) else NONE) /\
+  calldata_slice_length (JE_Folded _ folded) = calldata_slice_length folded /\
+  calldata_slice_length _ = NONE
+End
+
+Definition is_calldata_slice_call_def:
+  is_calldata_slice_call (JE_Name name _ _ _)
+    (JE_Attribute (JE_Name base _ _ _) attr _ _ _ _ _ :: _) =
+      (name = "slice" /\ base = "msg" /\ attr = "data") /\
+  is_calldata_slice_call _ _ = F
+End
+
+Definition calldata_slice_bound_def:
+  calldata_slice_bound [data; start; len] [] = calldata_slice_length len /\
+  calldata_slice_bound _ _ = NONE
+End
+
+(* Match only the dedicated source operand; compiler type/source metadata
+   does not turn msg.data into an ordinary bounded bytes expression. *)
+Definition is_raw_call_calldata_call_def:
+  is_raw_call_calldata_call (JE_Name name _ _ _)
+    [target; JE_Attribute (JE_Name base _ _ _) attr _ _ _ _ _] =
+      (name = "raw_call" /\ base = "msg" /\ attr = "data") /\
+  is_raw_call_calldata_call _ _ = F
+End
+
+Theorem is_raw_call_calldata_call_length:
+  !func args. is_raw_call_calldata_call func args ==> LENGTH args = 2
+Proof
+  ho_match_mp_tac is_raw_call_calldata_call_ind >>
+  simp[is_raw_call_calldata_call_def]
+QED
+
+Theorem is_raw_call_calldata_call_nonempty:
+  is_raw_call_calldata_call func args ==> args <> []
+Proof
+  Cases_on `args` >> simp[] >> Cases_on `func` >>
+  simp[is_raw_call_calldata_call_def]
+QED
 
 Definition translate_expr_def:
   (translate_expr ctx (JE_Int v ty) =
@@ -857,7 +924,23 @@ Definition translate_expr_def:
   (* Call - single case with internal dispatch to avoid pattern completion issues *)
   (* JE_Call now includes source_id for module calls *)
   (translate_expr ctx (JE_Call func args kwargs ret_ty src_id_opt) =
-    let args' = translate_expr_list ctx args in
+    if is_calldata_len_call func args kwargs then
+      Builtin (BaseT (UintT 256)) CalldataLen []
+    else if is_calldata_slice_call func args then
+      (case calldata_slice_bound args kwargs of
+       | SOME n => Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n)
+                     [EL 1 (translate_expr_list ctx args)]
+       (* Rejection marker for the total translator; never a zero-length slice.
+          The type checker rejects CalldataSlice 0 regardless of operands. *)
+       | NONE => Builtin (BaseT (BytesT (Dynamic 0))) (CalldataSlice 0) [])
+    else if is_raw_call_calldata_call func args then
+      let kwargs' = translate_kwargs ctx kwargs in
+      let value_e = kwarg_expr "value" kwargs'
+        (Literal (BaseT (UintT 256)) (IntL 0)) in
+      Call (translate_type (expr_type_ctx ctx) ret_ty)
+        (RawCallCalldataTarget (raw_call_flags_of_kwargs kwargs'))
+        [translate_expr ctx (HD args); value_e] NONE
+    else let args' = translate_expr_list ctx args in
     let kwargs' = translate_kwargs ctx kwargs in
     let translated_pop_index =
       OPTION_MAP (translate_expr ctx) (call_pop_index func) in
@@ -914,6 +997,8 @@ Termination
   >> imp_res_tac find_keyword_size
   >> imp_res_tac call_pop_index_size
   >> gvs[]
+  >> drule is_raw_call_calldata_call_nonempty
+  >> Cases_on `args` >> gvs[]
 End
 
 
