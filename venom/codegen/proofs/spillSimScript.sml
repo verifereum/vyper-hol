@@ -513,6 +513,8 @@ Theorem spill_asm_steps[local]:
           st'.as_transient = st.as_transient /\
           st'.as_returndata = st.as_returndata /\
           st'.as_logs = st.as_logs /\
+          st'.as_outcomes = st.as_outcomes /\
+          st'.as_requests = st.as_requests /\
           st'.as_call_ctx = st.as_call_ctx /\
           st'.as_tx_ctx = st.as_tx_ctx /\
           st'.as_block_ctx = st.as_block_ctx /\
@@ -559,6 +561,8 @@ Theorem restore_asm_steps[local]:
           st'.as_transient = st.as_transient /\
           st'.as_returndata = st.as_returndata /\
           st'.as_logs = st.as_logs /\
+          st'.as_outcomes = st.as_outcomes /\
+          st'.as_requests = st.as_requests /\
           st'.as_call_ctx = st.as_call_ctx /\
           st'.as_tx_ctx = st.as_tx_ctx /\
           st'.as_block_ctx = st.as_block_ctx /\

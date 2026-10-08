@@ -5379,7 +5379,7 @@ Resume gen_inst_ok_sim[istore]:
            (fn th => ACCEPT_TAC (cj 3 (REWRITE_RULE[venom_asm_rel_def] th)))) >>
      qpat_assum `venom_asm_rel lo ps4 vs as'`
        (fn th => STRIP_ASSUME_TAC (REWRITE_RULE[venom_asm_rel_def] th)) >>
-     ASM_REWRITE_TAC[]) >>
+     ASM_REWRITE_TAC[] >> simp[istore_def, mstore_def]) >>
   `venom_asm_rel lo
      (release_dead_spills next_liveness
        (ps4 with ps_stack := stack_pop 2 ps4.ps_stack))

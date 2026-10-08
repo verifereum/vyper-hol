@@ -283,12 +283,16 @@ Proof
   simp[venom_asm_rel_def, venom_asm_terminal_rel_def]
 QED
 
+(* The old four-field constructor is refuted by
+   codegenOracleRegression$terminal_constructor_missing_requests_counterexample.
+   Add exactly the planned observable request clause, not leftover outcomes. *)
 Theorem venom_asm_terminal_rel_intro:
   !vs (as1:asm_state).
     as1.as_accounts = vs.vs_accounts /\
     as1.as_transient = vs.vs_transient /\
     as1.as_returndata = vs.vs_returndata /\
-    as1.as_logs = vs.vs_logs ==>
+    as1.as_logs = vs.vs_logs /\
+    as1.as_requests = vs.vs_requests ==>
     venom_asm_terminal_rel vs as1
 Proof
   simp[venom_asm_terminal_rel_def]
