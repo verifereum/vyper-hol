@@ -117,6 +117,89 @@ Proof
   simp[oracle_state_observations_pre_def, cont_pre_eval_expr_cps]
 QED
 
+(* Preserve the original Hol_reln exports as explicit derived claims.
+   The registered CPS validity rewrite makes translation unconditional, but
+   does not remove the old constructor premise from these public schemas.
+   The historical ind and strongind coincide because there is no recursive
+   occurrence of this predicate in its sole constructor premise. *)
+(* Local parsing name for the raw record constructor used by Hol_reln;
+   record literals instead elaborate to updates of ARB. *)
+val () = temp_overload_on ("OracleStateRecord",
+  prim_mk_const {Thy = "vyperState", Name = "recordtype.evaluation_state"});
+Theorem oracle_state_observations_pre_cases:
+  !a0 a1.
+    oracle_state_observations_pre a0 a1 <=>
+    !v. v =
+      (let v0 = empty_state in
+        vyperState$evaluation_state_CASE v0 (\v1 v2 v3 v4 v5 v6 v7.
+          OracleStateRecord v1 v2 v3 v4 v5 a0 a1)) ==>
+      cont_pre (eval_expr_cps empty_evaluation_context
+        (Call NoneT Send
+          [Literal (BaseT AddressT) (BytesL (REPLICATE 20 0w));
+           Literal (BaseT (UintT 256)) (IntL 0)] NONE) v DoneK) /\
+      cont_pre (eval_expr_cps empty_evaluation_context
+        (Call NoneT (ExtCall T ("unused", [], NoneT)) [] NONE) v DoneK)
+Proof
+  Cases_on `empty_state` >>
+  simp[oracle_state_observations_pre_def, evaluation_state_case_def,
+       evaluation_state_fn_updates]
+QED
+
+Theorem oracle_state_observations_pre_rules:
+  !os rqs.
+    (!v. v =
+      (let v0 = empty_state in
+        vyperState$evaluation_state_CASE v0 (\v1 v2 v3 v4 v5 v6 v7.
+          OracleStateRecord v1 v2 v3 v4 v5 os rqs)) ==>
+      cont_pre (eval_expr_cps empty_evaluation_context
+        (Call NoneT Send
+          [Literal (BaseT AddressT) (BytesL (REPLICATE 20 0w));
+           Literal (BaseT (UintT 256)) (IntL 0)] NONE) v DoneK) /\
+      cont_pre (eval_expr_cps empty_evaluation_context
+        (Call NoneT (ExtCall T ("unused", [], NoneT)) [] NONE) v DoneK)) ==>
+    oracle_state_observations_pre os rqs
+Proof
+  simp[oracle_state_observations_pre_cases]
+QED
+
+Theorem oracle_state_observations_pre_ind:
+  !P.
+    (!os rqs.
+      (!v. v =
+        (let v0 = empty_state in
+          vyperState$evaluation_state_CASE v0 (\v1 v2 v3 v4 v5 v6 v7.
+            OracleStateRecord v1 v2 v3 v4 v5 os rqs)) ==>
+        cont_pre (eval_expr_cps empty_evaluation_context
+          (Call NoneT Send
+            [Literal (BaseT AddressT) (BytesL (REPLICATE 20 0w));
+             Literal (BaseT (UintT 256)) (IntL 0)] NONE) v DoneK) /\
+        cont_pre (eval_expr_cps empty_evaluation_context
+          (Call NoneT (ExtCall T ("unused", [], NoneT)) [] NONE) v DoneK)) ==>
+      P os rqs) ==>
+    !a0 a1. oracle_state_observations_pre a0 a1 ==> P a0 a1
+Proof
+  simp[oracle_state_observations_pre_cases]
+QED
+
+Theorem oracle_state_observations_pre_strongind:
+  !P.
+    (!os rqs.
+      (!v. v =
+        (let v0 = empty_state in
+          vyperState$evaluation_state_CASE v0 (\v1 v2 v3 v4 v5 v6 v7.
+            OracleStateRecord v1 v2 v3 v4 v5 os rqs)) ==>
+        cont_pre (eval_expr_cps empty_evaluation_context
+          (Call NoneT Send
+            [Literal (BaseT AddressT) (BytesL (REPLICATE 20 0w));
+             Literal (BaseT (UintT 256)) (IntL 0)] NONE) v DoneK) /\
+        cont_pre (eval_expr_cps empty_evaluation_context
+          (Call NoneT (ExtCall T ("unused", [], NoneT)) [] NONE) v DoneK)) ==>
+      P os rqs) ==>
+    !a0 a1. oracle_state_observations_pre a0 a1 ==> P a0 a1
+Proof
+  simp[oracle_state_observations_pre_cases]
+QED
+
 (* Original pre-activation claim, falsified by the closed actual zero Send
    counterexample saved in vyperSendModesTest before this amendment.
 Theorem oracle_state_inert_eval:
