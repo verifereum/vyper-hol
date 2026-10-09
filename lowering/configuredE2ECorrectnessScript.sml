@@ -119,6 +119,13 @@ Theorem e2e_vyper_to_evm_O1:
       vyper_evm_correspondence_legacy tenv (compiled_event_info tops) ret am tx es
 Proof
   rpt strip_tac >>
+  (* TASK054: original proof text preserved verbatim:
+Proof
+  rpt strip_tac >>
   drule_all e2eCorrectnessTheory.e2e_vyper_to_evm >>
+  simp[]
+QED
+     This proved client retains the old stage-admitted contract until TASK056. *)
+  drule_all e2eCorrectnessTheory.e2e_vyper_to_evm_legacy >>
   simp[]
 QED

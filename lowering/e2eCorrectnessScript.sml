@@ -28,9 +28,12 @@
  * assumptions. See docs/compiler-proof-roadmap.md.
  *)
 
+(* TASK054: e2e_vyper_to_evm is now the clean generic PLAN §8.1 theorem.
+   The historical header above describes only the preserved legacy clients.
+   The previous composition and proof remain under e2e_vyper_to_evm_legacy. *)
 Theory e2eCorrectness
 Ancestors
-  e2eDefs e2eLegacyDefs
+  e2eDefs e2eLegacyDefs e2eComposition unitTransformDefs
   vyperLoweringCorrect vfmExecution
   venomPipelineCorrect
   passSimulationDefs
@@ -216,6 +219,45 @@ Definition call_result_matches_def:
 End
 
 *)
+
+(* ===== Generic three-stage composition (PLAN §8.1) ===== *)
+
+(* The stages are explicit premises, not appeals to admitted S1-S7.
+   Source exemption is handled before the conditional stages are opened.
+   Totality supplies an actual EVM run even when neither stage applies. *)
+Theorem e2e_vyper_to_evm:
+  !tops ret am tx ctx ctx' vs es.
+    vs.vs_outcomes = MAP SND (call_trace es) /\
+    (?fuel. external_call_result_rel tops ret tx
+              (call_external (SOME vs.vs_outcomes) am tx)
+              (run_context fuel ctx vs)) /\
+    (~source_exempt tops (call_external (SOME vs.vs_outcomes) am tx) ==>
+       ctx_transform_correct ctx ctx' vs /\
+       !fuel. ?r es'.
+         run_call es = SOME (r, es') /\
+         (frame_resource_starved es r es' \/ precompile_call_starved es \/
+          venom_frame_rel es r es' (run_context fuel ctx' vs)))
+    ==>
+    ?r es'. run_call es = SOME (r, es') /\
+            (frame_resource_starved es r es' \/ precompile_call_starved es \/
+             call_result_rel tops ret am tx es r es')
+Proof
+  rpt strip_tac >>
+  qspec_then `es` strip_assume_tac run_call_total >>
+  qexistsl_tac [`r`, `es'`] >> simp[] >>
+  Cases_on `source_exempt tops (call_external (SOME vs.vs_outcomes) am tx)`
+  >- (disj2_tac >> disj2_tac >>
+      irule source_exempt_call_result_rel >> gvs[]) >>
+  gvs[] >>
+  drule_all external_call_result_rel_terminates >> strip_tac >>
+  drule_all ctx_transform_correct_forward >> strip_tac >>
+  (* gvs identifies every stage-3 witness with the actual run by uniqueness. *)
+  qpat_x_assum `!fuel. frame_resource_starved es r es' \/ _`
+    (qspec_then `fuel'` strip_assume_tac) >>
+  gvs[] >>
+  drule_all external_call_result_rel_unit_transport >> strip_tac >>
+  drule_all external_call_result_rel_frame >> simp[]
+QED
 
 (* ===== Adapter Lemmas for vyper_call_correct ===== *)
 (* TASK049: every theorem below remains a LEGACY claim. In particular the
@@ -477,8 +519,9 @@ QED
 *)
 
 (* Preserved legacy composition proof, STAGE-ADMITTED, not PLAN 5.5
-   correctness. Public name retained; every obsolete contract is explicit. *)
-Theorem e2e_vyper_to_evm:
+   correctness. TASK054: renamed from e2e_vyper_to_evm; original proof text
+   is unchanged. Removal owner TASK056. No old/new equivalence is claimed. *)
+Theorem e2e_vyper_to_evm_legacy:
   !tops pipeline finalizer policy rpolicy unit out prog deploy_bc runtime_bc
    cp name i r fn off Inv cenv am tx tenv ret ctxt rb rest es vs R_ok R_term.
     resolve_o1_policy policy = SOME rpolicy /\
@@ -690,7 +733,9 @@ Theorem vyper_call_correct:
       ctxt.msgParams.gasLimit >= gas_needed ==>
       vyper_evm_correspondence_legacy tenv (compiled_event_info tops) ret am tx es
 Proof
-  rpt strip_tac >> drule_all e2e_vyper_to_evm >> simp[]
+  (* Original proof text retained above verbatim under TASK049 provenance.
+     TASK054 changes only the target name of this legacy caller. *)
+  rpt strip_tac >> drule_all e2e_vyper_to_evm_legacy >> simp[]
 QED
 
 (* ===================================================================== *)
