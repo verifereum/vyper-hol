@@ -4,7 +4,7 @@ Latest audit:
 
 - [compiler-proof-status-2026-10-09.md](compiler-proof-status-2026-10-09.md)
   — accepted TASK056 statement/composition audit; S1–S7 admitted,
-  environmental producers partial/absent, TASK060 final certification outstanding.
+  environmental producers partial/absent; [TASK060 final exit verified](compiler-proof-milestone-1-exit-2026-10-09.md).
 
 Historical snapshots:
 

@@ -4,8 +4,9 @@ Current Milestone 1 boundary: accepted primary `e4cb0914`, audited 2026-10-09.
 This is a dependency/assumption inventory, **not a fully verified compiler**.
 The [dated audit](compiler-proof-status-2026-10-09.md) contains the entire public
 schema, exact saved-object receipts and historical evidence identities.
-TASK060 final merged certification is **outstanding**; no builds/tests were
-rerun for this documentation.
+TASK060 final merged validation is **complete**; see the
+[exit report](compiler-proof-milestone-1-exit-2026-10-09.md).
+The initial documentation audit did not rerun builds/tests.
 
 Related: [specification](compiler-correctness-specification.md#calls-and-nested-contexts),
 [definition parity](compiler-definition-parity.md),
@@ -176,8 +177,8 @@ Reuse only identified valid evidence at its scope. TASK034's completed primary
 source/generated non-parity checkpoint and TASK022 membership gate retain their
 own revisions. TASK056's current eight-root primary gate and logical audits are
 local/targeted, not full final integration. TASK065 strict101/exact-byte proof is
-**historical only**. TASK060 must still certify final project/optional/module
-closure, all selected generated results, all101 membership/strict bytecode
-objects and independent bytes plus final documentation/dependency/admission
-checks. Later milestones must prove the admitted stages and environment
-producers. See [evidence provenance](compiler-proof-status-2026-10-09.md#evidence-provenance-and-remaining-checkpoint-debt).
+**historical only**. The subsequent [TASK060 exit report](compiler-proof-milestone-1-exit-2026-10-09.md)
+certifies the final project/optional/module closure, all selected generated
+results, all101 membership/strict bytecode objects, independent bytes and final
+documentation/dependency/admission checks. Later milestones must still prove
+the admitted stages and environment producers. See [evidence provenance](compiler-proof-status-2026-10-09.md#evidence-provenance-and-remaining-checkpoint-debt).

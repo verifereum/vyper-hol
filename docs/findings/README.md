@@ -148,15 +148,17 @@ PY
 ```
 
 This is a static documentation gate, **not** a HOL/suite/audit-tool invocation.
-For preservation inspect `git diff e88dae75 --name-status`: only these13 new
-Markdown files may appear. For theorem evidence follow each named source and
+For the original TASK059 delivery, inspect
+`git diff ceae858c 0c622fda --name-status`: exactly these13 new Markdown files
+appear. Later TASK060 documentation updates are separately recorded. For theorem evidence follow each named source and
 receipt above; declaration parsing alone does not verify a saved kernel object.
 
 **Full-site classification remains the TASK057 audit's128 live source sites;
 the current top has exactly seven ADMITTED leaves S1–S7, generic composition
 has zero.** Off-path deployment and function simulation are separately admitted.
-This is sourced classification, **not a fresh certificate**. TASK060 is still
-**OPEN**: final merged default/optional closure, selected3820 results, all101
-memberships, strict101 certificates/202 independent exact byte lists and complete
-final dependency/admission/documentation checks. Whitelist membership, accepted
-local corrections and source checkpoints do not prove the whole compiler.
+The original reports' sourced classification is **not a fresh certificate**.
+The subsequent [TASK060 exit verification](../compiler-proof-milestone-1-exit-2026-10-09.md)
+passed final merged default/optional closure, all3820 selected results, all101
+memberships, strict101 certificates/202 independent unchanged byte lists and
+final dependency/admission/documentation checks. This does not turn whitelist
+membership, corrections or admitted stages into a fully verified compiler.

@@ -39,8 +39,8 @@ Related documents:
   not current certificates or hidden compatibility bridges.
 - 101 whitelist membership proofs and historical strict101/exact-byte evidence
   have identified scopes. Neither is universal compile success or semantic
-  correctness, nor final merged certification. **TASK060 NOT DONE**: only its
-  future owner may retire the honest flag in the current status.
+  correctness. The subsequent [TASK060 exit verification](compiler-proof-milestone-1-exit-2026-10-09.md)
+  also passed final merged validation; S1–S7 remain admitted.
 
 ### Current stage contracts and proof owners
 
@@ -294,8 +294,8 @@ retired definitions and all14 final claim/helper entries, preserving original
 proofs and exact Git identities, with no old/new bridge.
 
 **Statement exit:** exact generic/top composition and named premise/admission
-inventory exist. **Validation exit remains pending TASK060**; this roadmap
-neither closes that gate nor certifies S1–S7.
+inventory exist. **Validation exit passed in [TASK060](compiler-proof-milestone-1-exit-2026-10-09.md)**;
+this does not prove S1–S7.
 
 ## Milestone 2: First closed results
 
@@ -720,13 +720,13 @@ is authoritative for receipt scopes/partial producers. Original source/gas/
 codegen false-statement history remains in that audit and the earlier
 [drafts/counterexamples](compiler-proof-drafts-and-counterexamples.md).
 F25/F26 are reproduced in H3-findings from PLAN, not linked to a nonexistent
-TASK059 report; future finding reports belong to059 and must be read/validated
-before linking. This update neither publishes issues nor edits peer reports.
+TASK059 report. The completed [twelve finding reports](findings/README.md)
+cover F10–F16/F18/F21–F24 and remain local, not externally published.
 
-**TASK060 NOT DONE:** the future final owner must validate final merged full
-project/default/affected optional/module-library closure, every selected
-generated result, all101 membership proofs, mandatory strict101 compiler
-certificates and independent exact bytes, plus final dependency/admission/
-documentation checks. Earlier targeted gates do not retire this debt. Future
+**TASK060 complete:** the [final exit report](compiler-proof-milestone-1-exit-2026-10-09.md)
+records final merged project/default/optional/module validation, 3820 selected
+generated results, all101 memberships and strict compiler certificates,
+202 independent unchanged byte lists, and final dependency/admission/
+documentation checks. Earlier targeted gates retain their own scopes.
 S1–S7/function/deployment proofs and Milestone7 producers/satisfiability remain
-later milestones even after060 validates the statement infrastructure.
+later milestones; final validation is not full compiler verification.

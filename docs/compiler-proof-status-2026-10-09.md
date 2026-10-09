@@ -3,15 +3,18 @@
 **Milestone 1 statement/composition audit, not full compiler verification.**
 The host `date -I` returned `2026-10-09`. Source baseline and accepted primary
 HEAD: `e4cb09143b677747c4f857185e515b9c5999fe0c` (TASK056 integrated).
-This documentation-only audit reuses identified saved-object receipts; it does
-not run HOL, parity, or generated tests. TASK060 final certification is **not done**.
+The initial TASK057 documentation audit reused identified saved-object receipts
+without running HOL or tests. TASK060 subsequently passed the final combined
+build, saved-kernel, coverage and independent-byte checks; see the
+[2026-10-09 exit report](compiler-proof-milestone-1-exit-2026-10-09.md).
 
 The [2026-09-28 audit](compiler-proof-status-2026-09-28.md) remains an unchanged
 historical snapshot of `5c9b1738`, including its old statements and counterexamples.
 See also [dependencies](compiler-proof-dependencies.md),
 [Calls and nested contexts](compiler-correctness-specification.md#calls-and-nested-contexts),
 and [earlier drafts/counterexamples](compiler-proof-drafts-and-counterexamples.md).
-Future roadmap/issue updates belong to TASK058/059, not this audit.
+TASK058/059's [roadmap](compiler-proof-roadmap.md) and
+[twelve local finding reports](findings/README.md) are complete.
 
 ## Public runtime theorem
 
@@ -314,11 +317,12 @@ call kernel receipt `22e1aa0f585818aaf37cb0800cd5550482d29c4a1c7178079555e0ea5d6
 The current primary source/saved-export names agree with these receipts; no
 private cache is borrowed and no fresh kernel audit is claimed by this task.
 
-**TASK060 outstanding:** final merged full project/default and affected
-optional/module-library closure, every selected generated result, all101
-supported-fixture proofs, mandatory strict101 bytecode certificates and
-independent exact bytes, final complete dependency/admission/documentation
-checks. Accepted local gates and completed source checkpoints are not that
-final gate. Proving S1–S7, off-path function/deployment simulation, and
-Milestone 7 environment/satisfiability/callee producers remains later milestone
-work, even after TASK060 validates the Milestone 1 statement infrastructure.
+**TASK060 complete:** the [final exit report](compiler-proof-milestone-1-exit-2026-10-09.md)
+records 28 successful build operations and four kernel audits on combined
+`0c622fda` (unchanged SML revision `e4cb0914`): full project/default/module
+closure, 3820 selected results, all101 memberships and strict compiler
+certificates, 202 unchanged independent byte lists, and final dependency/site/
+documentation checks. Historical receipts above retain their original scopes;
+they are not relabeled final evidence. No Milestone 1 checkpoint debt remains.
+Proving S1–S7, off-path function/deployment simulation, and Milestone 7
+environment/satisfiability/callee producers remains later milestone work.

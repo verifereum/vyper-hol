@@ -1,0 +1,80 @@
+{
+  "status": "MILESTONE_1_FINAL_EXIT_ACCEPTED",
+  "date": "2026-10-09",
+  "certified_head": "0c622fda333f3c324010a9980c264a89ea6d4023",
+  "sml_revision": "e4cb09143b677747c4f857185e515b9c5999fe0c",
+  "source_digest": "eb498134563704e212038f553f307d809641f78230e27ee918c8fa1b33438aed",
+  "source_identity_files": 1045,
+  "verifereum_pin": "b116b3c46c17381e968d25b81cd81b6ab2b76ab2",
+  "verifereum_source_digest": "6e4b83bbcad6f15559ce642c88360fcada000bf242635ca437c908d563c67a4f",
+  "config_sha256": {
+    ".holconfig.toml": "102227c4bb6669d17933346279fa400b50fab9c84abdb77b93f28cc92c2e69b2",
+    "VYPER_PIN": "9a123fbe3fda20b7ef84343203c21043151277d7175e47ecdc9ec774bf6a6b68",
+    "holproject.toml": "9fb0b52ae438faad6a994ee72e4839a54a040e275dbaab04854140b52ec2ba32"
+  },
+  "successful_build_operations": 28,
+  "successful_kernel_audits": 4,
+  "scope_roots": {
+    "ordinary": 738,
+    "generated": 254,
+    "nonparity_union": 992,
+    "parity": 46,
+    "default": 4
+  },
+  "saved_kernel": {
+    "generated_cohorts": 127,
+    "exact_selected_closed_results": 3820,
+    "unchanged_export_json": 252,
+    "supported_plain_EVAL": 101,
+    "strict_full_equalities_plain_EVAL": 101,
+    "independent_saved_RHS_byte_lists": 202,
+    "unchanged_oracle_bytes": 44632,
+    "evaluation_exports": 826,
+    "support_exports": 394,
+    "source_clean_selections": 1451,
+    "changed_clean_selections": 497,
+    "classified_NOT_certified": 10
+  },
+  "admission_sites": {
+    "baseline": 136,
+    "removed_named": 15,
+    "added_planned": 7,
+    "final": 128,
+    "accepted_identity_match": true
+  },
+  "top_direct_admitted_dependencies": [
+    "vyperLoweringCorrect.lower_vyper_runtime_unit_correct",
+    "vyperLoweringCorrect.lower_vyper_runtime_unit_source_unit_ok",
+    "vyperLoweringCorrect.lower_vyper_runtime_unit_memory_ok",
+    "o1PipelineCorrect.run_venom_pipeline_correct",
+    "o1PipelineCorrect.o1_pipeline_memory_obligations",
+    "o1PipelineCorrect.run_venom_pipeline_output_shape",
+    "codegenCorrectness.codegen_correct"
+  ],
+  "generic_and_L1_L13_admitted_dependencies": 0,
+  "formerly_proved_semantic_claims_newly_cheated": [],
+  "source_repairs_during_final_checkpoint": [],
+  "remaining_milestone_1_checkpoint_debt": [],
+  "external_evidence_root": "/tmp/m1-evidence-060-prep/final-combined-03",
+  "external_artifacts_are_ephemeral": true,
+  "artifact_sha256": {
+    "manifest.json": "b2827a407e1d08084666c26dd195039019d31e7ab290f63ba0edb0b474a91771",
+    "verification-complete.log": "2845e1f2c6b8fe0884287e21d3b5b4b2394ca3a003925fdb4f22ad26346f5b6f",
+    "final-reconciliation.json": "9ee1d8a1f4d0ecba0c2de78168b53228efb142e1dc84af5cbee4df17c99f74db",
+    "final-plan-review.txt": "5f91798e5e745b7081e1850be501b9e8d18c59ed2bde9fa8184d8f97f5ac26ed",
+    "documentation-links-rechecked.json": "cbf89581c86e27a0598d2d8832ac4633202800408697ee89180db5285137baaa",
+    "/tmp/m1-result-060-primary.md": "dd3928fa5a00a076a92f097a317a0f199b1e29ca5b158f8616d927435734b733"
+  },
+  "kernel_transcript_sha256": {
+    "generated-kernel": "a8ef54bfa95b0890b18874a912431acc9525b8a9bcb9ca69dd33bad4de2a878e",
+    "source-kernel": "71f6cb7e1e4b51e24c6863127ce925d230a73ed30a308b29d593d3d205ad3127",
+    "changed-kernel": "5769c4b641e974f9ac122745087dc7b7b37d0a6b7e27678e2dd8bc8ee77be461",
+    "strict-kernel": "47d134b951a5020e693943a9613b33a3347161003134c877083d8cfd22b75593"
+  },
+  "preserved_unsuccessful_parity_attempts": [
+    {"receipt": "execute-026", "exit": 124, "outer_seconds": 3600},
+    {"receipt": "execute-026-resume", "exit": 124, "outer_seconds": 3600}
+  ],
+  "accepted_parity_receipt": "execute-026-final",
+  "semantic_limits": "S1-S7 remain admitted; function/deployment proofs and environmental producers/satisfiability remain deferred. This is not a fully verified compiler."
+}

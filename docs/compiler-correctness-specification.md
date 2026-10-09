@@ -85,7 +85,8 @@ The saved `e2eCorrectness.vyper_call_correct` is composed from **ADMITTED S1–S
 clean generic composition and structural producers do not prove those stages.
 See the [dated audit](compiler-proof-status-2026-10-09.md#public-runtime-theorem)
 and [dependency inventory](compiler-proof-dependencies.md) for actual owners,
-partial/absent producers and built evidence. TASK060 final certification is not done.
+partial/absent producers and built evidence. [TASK060 final validation](compiler-proof-milestone-1-exit-2026-10-09.md)
+is complete, without proving the admitted stages.
 
 The entire public theorem is:
 
@@ -218,8 +219,8 @@ Milestone4.2, also off path. The
 [completed retirement ledger](../lowering/e2eLegacy.md) retains original proof
 history and maps all obsolete APIs to the clean new boundary; no compatibility
 bridge is a current producer. Final project/generated/all101/strict bytecode
-checks remain TASK060 debt; historical TASK065 parity evidence is not current
-certification.
+checks passed in [TASK060](compiler-proof-milestone-1-exit-2026-10-09.md);
+historical TASK065 parity retains its original scope, not the final certificate.
 
 ## Pipeline configurations
 
