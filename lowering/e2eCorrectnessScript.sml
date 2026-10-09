@@ -298,15 +298,18 @@ QED
 Definition source_unit_execution_correct_legacy_def:
   source_unit_execution_correct_legacy tenv cenv am tx ret
     (unit : compilation_unit) vs <=>
-    ?fuel. external_call_result_rel tenv cenv
+    ?fuel. external_call_result_rel_legacy tenv cenv
       (initial_evaluation_context am.sources am.layouts tx
         (find_function_module am tx.target tx.function_name))
       ret (call_external_simple am tx) (run_context fuel unit.cu_context vs)
 End
 
-Theorem source_unit_execution_correct:
+(* TASK051: old alias theorem/proof retained with the explicit legacy result
+   name; NOT an equivalence with the new oracle-mode boundary.
+   Previous saved name: source_unit_execution_correct. Removal TASK056. *)
+Theorem source_unit_execution_correct_legacy:
   source_unit_execution_correct_legacy tenv cenv am tx ret unit vs <=>
-  ?fuel. external_call_result_rel tenv cenv
+  ?fuel. external_call_result_rel_legacy tenv cenv
     (initial_evaluation_context am.sources am.layouts tx
       (find_function_module am tx.target tx.function_name))
     ret (call_external_simple am tx) (run_context fuel unit.cu_context vs)
@@ -366,7 +369,7 @@ Theorem source_unit_execution_through_pipeline[local]:
     (!s1 s2. R_term s1 s2 ==> observable_equiv s1 s2)
     ==>
     ?fuel fuel'.
-      external_call_result_rel tenv cenv
+      external_call_result_rel_legacy tenv cenv
         (initial_evaluation_context am.sources am.layouts tx
           (find_function_module am tx.target tx.function_name))
         ret (call_external_simple am tx) (run_context fuel unit.cu_context vs) /\
@@ -534,7 +537,9 @@ Proof
   Cases_on `src_result` >>
   Cases_on `run_context fuel unit.cu_context vs` >>
   Cases_on `run_context fuel' out.po_unit.cu_context vs` >>
-  gvs[external_call_result_rel_def, observable_result_equiv_def,
+  (* TASK051 original rewrite: external_call_result_rel_def. The identical
+     NONE-mode contract now has its explicit _legacy name. *)
+  gvs[external_call_result_rel_legacy_def, observable_result_equiv_def,
       observable_equiv_def, revert_equiv_def,
       vyper_evm_correspondence_legacy_def] >>
   gvs[return_data_encodes_legacy_def, state_effects_match_legacy_def,
@@ -543,8 +548,8 @@ Proof
   >- (Cases_on `es'.contexts` >> gvs[] >> PairCases_on `h` >>
       gvs[] >> metis_tac[external_logs_rel_logs_correspond])
   >- (Cases_on `y` >> Cases_on `a` >>
-      gvs[external_call_result_rel_def])
-  >> Cases_on `y` >> gvs[external_call_result_rel_def]
+      gvs[external_call_result_rel_legacy_def])
+  >> Cases_on `y` >> gvs[external_call_result_rel_legacy_def]
 QED
 
 (* Bridge from vyper_evm_correspondence to run_call + call_result_matches.
