@@ -1,9 +1,9 @@
-(* Entry API staging regressions: actual CPS/CV entries, arbitrary body-state
-   certificates, concrete NONE compatibility, rollback and final requests.
-   ExtCall/Send consumption is deliberately not active until TASK032/033. *)
+(* Entry API regressions: actual CPS/CV entries, arbitrary body-state
+   certificates, full NONE/SOME results, rollback and final requests.
+   TASK056: obsolete pair-projection owner removed; direct clean entry API. *)
 Theory vyperOracleEntryTest
 Ancestors
-  vyperInterpreter vyperSmallStep vyperEntryCompat vyperCall extCallOracle
+  vyperInterpreter vyperSmallStep vyperCall extCallOracle
   vyperState vyperContext vyperValue vyperAST finite_map list option
 Libs cv_transLib wordsLib
 

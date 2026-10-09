@@ -128,21 +128,20 @@ val () = List.app (fn (name, _) => check_saved ("e2eComposition", name))
 val () = List.app (fn (name, _) => check_saved ("e2eCompositionChecks", name))
                  (DB.theorems "e2eCompositionChecks");
 
-(* The retained clients remain explicitly legacy/stage-admitted, NOT clean
- * certificates. Their saved objects must still have zero kernel hypotheses
- * and no axioms. Their admission dependencies are audited separately. *)
-fun check_legacy (thy, name) =
+(* TASK056: the replacement top is explicitly stage-admitted, NOT a clean
+ * certificate. The seven exact logical leaves are checked by cheat_audit deps.
+ * Deployment is a separate off-call-path planned admission. *)
+fun check_classified_stage (thy, name) =
   let
     val th = DB.fetch thy name
     val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
     val _ = if null (Thm.hyp th) andalso null axioms then ()
-            else raise Fail ("TASK054 broken legacy client: " ^ thy ^ "." ^ name)
+            else raise Fail ("TASK056 broken classified stage: " ^ thy ^ "." ^ name)
   in
-    print ("TASK054 LEGACY " ^ thy ^ "." ^ name ^
+    print ("TASK056 CLASSIFIED STAGE " ^ thy ^ "." ^ name ^
            " Hyp=0 axioms=[] oracles=[" ^ String.concatWith "," oracles ^
            "] NOT a clean certificate\n")
   end;
-val () = List.app check_legacy
-  [("e2eCorrectness", "e2e_vyper_to_evm_legacy"),
-   ("e2eCorrectness", "vyper_call_correct"),
-   ("configuredE2ECorrectness", "e2e_vyper_to_evm_O1")];
+val () = List.app check_classified_stage
+  [("e2eCorrectness", "vyper_call_correct"),
+   ("e2eCorrectness", "e2e_deploy_correctness")];

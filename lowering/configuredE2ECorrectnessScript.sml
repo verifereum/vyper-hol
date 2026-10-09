@@ -1,14 +1,11 @@
 (*
  * Configured end-to-end correctness interfaces.
  *
- * This theory keeps the generic compiler and semantic obligations explicit,
- * while exposing the two successful phases of compile_vyper_with and the
- * O1 specialization (all target capabilities) of the generic end-to-end
- * theorem. TASK048 compatibility: the semantic obligation remains the
- * old checked_unit_transform_correct_legacy contract, not the new S4.
- * TASK049: all pre-5.5 call/source/result predicates are now explicitly
- * _legacy. No equivalence to e2eDefs' new boundary is assumed or proved.
- * Removal owner TASK056; original theorem claim/proof otherwise unchanged.
+ * The two successful compile_vyper_with phases are proved, with unchanged
+ * public schemas and original proof owner compilePhasesProps. TASK056 retires
+ * the superseded O1 wrapper; exact O1 call correctness is vyper_call_correct.
+ * Original superseded proof text is retained below, inactive, with replacement
+ * mapping in lowering/e2eLegacy.md. No old/new equivalence is claimed.
  *)
 
 Theory configuredE2ECorrectness
@@ -61,6 +58,8 @@ Proof
   MATCH_ACCEPT_TAC compilePhasesPropsTheory.compile_vyper_with_deploy_runtime_compose
 QED
 
+(* TASK056 RETIRED SOURCE ARCHIVE: superseded by exact public
+   e2eCorrectness$vyper_call_correct. Original statement/proof retained.
 (* The O1 specialization is obtained solely by instantiating the generic
    end-to-end correctness theorem; all semantic obligations remain explicit. *)
 Theorem e2e_vyper_to_evm_O1:
@@ -129,3 +128,4 @@ QED
   drule_all e2eCorrectnessTheory.e2e_vyper_to_evm_legacy >>
   simp[]
 QED
+*)

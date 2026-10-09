@@ -8,7 +8,7 @@
  * TOP-LEVEL:
  *   codegen_correct    — planned S7 (run_context vs run_call/frame outcome)
  *   initial_ctx_rel, venom_frame_rel — exact initial/terminal frame interfaces
- *   codegen_correct_legacy — preserved old admission; removal owner TASK056
+ *   TASK056: obsolete positioned codegen admission retired (inactive archive).
  *
  * STATUS: Whole-context codegen correctness is currently open/cheated and
  * depends on closing/stabilizing Venom→Asm and Asm→EVM simulation layers.
@@ -384,6 +384,8 @@ Proof
   cheat
 QED
 
+(* TASK056 RETIRED SOURCE ARCHIVE. Replaced by initial_ctx_rel and S7 above;
+   no equivalence bridge. Original legacy admission/proof preserved verbatim.
 (* ===== Preserved Legacy Contract (removal owner TASK056) ===== *)
 
 (* Initial correspondence at the selected context-entry region.  [off] is
@@ -448,3 +450,4 @@ Theorem codegen_correct_legacy:
 Proof
   cheat
 QED
+*)

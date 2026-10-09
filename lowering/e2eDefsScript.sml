@@ -4,10 +4,10 @@
  * value_transfer_ok, accounts_after_transfer, call_state_rel,
  * valid_vyper_call, compiled_event_info, return_bytes,
  * decode_strictness_exempt, source_exempt, call_result_rel, logs_correspond.
- * Old proved consumers use e2eLegacyDefs (removal TASK056). No equivalence
- * between the old and new boundaries is claimed. S1-S3 belong to TASK051.
+ * TASK056: all compiler/call consumers use this exact boundary; the obsolete
+ * compatibility owner is deleted. No old/new equivalence is claimed.
  * DAG: source/typing/storage + supported syntax + frame/trace -> e2eDefs;
- * e2eDefs -> e2eLegacyDefs -> old e2eCorrectness/configured consumers.
+ * e2eDefs -> entry/producers/composition -> e2eCorrectness.
  *)
 Theory e2eDefs
 Ancestors
@@ -273,8 +273,9 @@ Proof
 QED
 
 
-(* OBSOLETE after source logs became concrete events. Preserved until the
-   surrounding legacy compatibility package is removed deliberately.
+(* RETIRED PROVENANCE: source logs are concrete events. Replacement claims
+   log_entry_equiv_concrete_event/log_entry_corresponds_concrete_event below.
+   Original symbolic-log proofs retained, not saved or used.
 Theorem log_entry_equiv_encode_vyper_event:
   log_entry_equiv cenv addr (eid, vals) ev <=>
   encode_vyper_event cenv.ce_event_info cenv.ce_type_env addr

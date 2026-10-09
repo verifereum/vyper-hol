@@ -1,39 +1,19 @@
-(*
- * Legacy End-to-End Vyper-to-EVM Correctness (pre-PLAN-5.5 contracts)
- * TASK049: public proved clients retained, but NOT upgraded to the new
- * boundary. Existing stage admissions remain visible; removal TASK056.
- * New boundary/API owner: e2eDefs; old contracts: e2eLegacyDefs.
- *
- * TOP-LEVEL theorem: vyper_call_correct
- *   When EVM execution enters compiled Vyper bytecode (via CALL at
- *   any point in the call stack), the result corresponds to the
- *   Vyper source semantics (call_external).
- *
- * Internal proof structure:
- *   1. checked_unit_transform_correct_legacy: old stronger unit contract
- *      (TASK048 compatibility; removal owner TASK056, not the new S4)
- *   2. codegen_correct: transformed Venom context ~ EVM run
- *   3. finalizer_correct: assembled output ~ finalized runtime bytecode
- *
- * TOP-LEVEL:
- *   run_call                -- EVM execution of a single call frame
- *   call_state_rel          -- pre-call Vyper/EVM state correspondence
- *   vyper_call_correct      -- checked-unit compiler/call correctness theorem
- *
- * Old boundary definitions are in e2eLegacyDefsTheory under _legacy names.
- * Concrete log correspondence and compiled_event_info are in e2eDefsTheory.
- *
- * STATUS: E2E composition is scaffolding until lowering, the concrete Venom
- * pipeline instance, and codegen correctness are all closed with compatible
- * assumptions. See docs/compiler-proof-roadmap.md.
+(* End-to-End Vyper-to-EVM Correctness (PLAN §2.1/§8.1).
+ * TOP-LEVEL: vyper_call_correct (exact §2.1, composed from S1-S7),
+ * e2e_vyper_to_evm (admission-free generic §8.1 composition),
+ * e2e_venom_pipeline, compile_vyper_runtime_bytecode (preserved proved APIs),
+ * e2e_deploy_correctness (separate planned §5.11 admission).
+ * Boundary/oracle/entry definitions live below this composition owner.
+ * Deployment and gen_fn_simulation are OFF the call's logical dependency path;
+ * definition-owner imports are not uses of their admitted correctness facts.
+ * TASK056: no active legacy constant/alias. Original retired proof text is
+ * retained in inactive SOURCECOMMENT archives; mapping: lowering/e2eLegacy.md.
+ * This composes planned stages; it does NOT prove the outstanding stage proofs.
  *)
-
-(* TASK054: e2e_vyper_to_evm is now the clean generic PLAN §8.1 theorem.
-   The historical header above describes only the preserved legacy clients.
-   The previous composition and proof remain under e2e_vyper_to_evm_legacy. *)
 Theory e2eCorrectness
 Ancestors
-  e2eDefs e2eLegacyDefs e2eComposition unitTransformDefs e2eDeployDefs
+  e2eDefs e2eComposition unitTransformDefs e2eDeployDefs
+  e2eProducers e2eEntry o1PipelineCorrect contextCodegenRel
   vyperLoweringCorrect vfmExecution
   venomPipelineCorrect
   passSimulationDefs
@@ -41,7 +21,7 @@ Ancestors
   stateEquiv stateEquivProps
   venomExecSemantics
   vyperABI
-  vyperInterpreter vyperEntryCompat
+  vyperInterpreter
   compileEnv compileVyper
   venomInst
   list
@@ -50,9 +30,9 @@ Ancestors
    Call-Level Correctness (Main Theorem)
    ===================================================================== *)
 
-(* TASK049: original pre-5.5 boundary text retained verbatim below.
-   Active old definitions now live in e2eLegacyDefs under _legacy names.
-   This is provenance, NOT an old/new equivalence claim. Removal TASK056.
+(* TASK056 RETIRED SOURCE ARCHIVE: original pre-5.5 boundary text below.
+   No active local run_call or legacy owner remains. Replacement: e2eDefs plus
+   Verifereum frame/trace API. Provenance only, NOT an equivalence claim.
 
 (* ===== run_call: EVM execution of a single call frame ===== *)
 
@@ -259,6 +239,8 @@ Proof
   drule_all external_call_result_rel_frame >> simp[]
 QED
 
+(* TASK056 RETIRED PROOF ARCHIVE: old schemas/proofs preserved verbatim.
+   Replacement mapping: lowering/e2eLegacy.md. No active legacy API below.
 (* ===== Adapter Lemmas for vyper_call_correct ===== *)
 (* TASK049: every theorem below remains a LEGACY claim. In particular the
    existing admitted bridge and codegen dependencies are not new certificates.
@@ -738,7 +720,64 @@ Proof
   rpt strip_tac >> drule_all e2e_vyper_to_evm_legacy >> simp[]
 QED
 
-(* ===================================================================== *)
+*)
+
+(* ===== PLAN §2.1 call theorem: only the seven planned stage leaves ===== *)
+
+Theorem vyper_call_correct:
+  !policy tops deploy_bc runtime_bc am tx ret es.
+    compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    source_storage_ok tops am tx /\
+    call_state_rel tops runtime_bc am tx es /\
+    valid_vyper_call tops tx (FST (HD es.contexts)).msgParams.data ret /\
+    call_outcomes_ok tops am tx (MAP SND (call_trace es))
+    ==>
+    ?r es'.
+      run_call es = SOME (r, es') /\
+      (frame_resource_starved es r es' \/
+       precompile_call_starved es \/
+       call_result_rel tops ret am tx es r es')
+Proof
+  rpt strip_tac >>
+  drule compile_vyper_runtime_phases >> strip_tac >>
+  rename1 `generate_context_plan out.po_unit.cu_context = SOME cplan` >>
+  qpat_x_assum `runtime_bc = assemble _` SUBST_ALL_TAC >>
+  drule_all lower_vyper_runtime_unit_source_unit_ok >> strip_tac >>
+  drule_all run_venom_pipeline_output_shape >> strip_tac >>
+  drule_all entry_venom_state_initial_venom_state_rel >>
+  disch_then (qspec_then `cplan` assume_tac) >>
+  drule_all entry_venom_state_initial_ctx_rel >>
+  disch_then (qspec_then `cplan` assume_tac) >>
+  qspecl_then [`prog`, `cplan`, `es`] assume_tac
+    entry_venom_state_o1_initial_state_ok >>
+  qabbrev_tac `vs = entry_venom_state prog cplan es` >>
+  `vs.vs_outcomes = MAP SND (call_trace es) /\
+   vs.vs_initial_fmp = n2w cplan.cp_initial_fmp /\
+   vs.vs_call_ctx.cc_calldata = (FST (HD es.contexts)).msgParams.data` by
+    simp[Abbr`vs`, entry_venom_state_def] >>
+  `valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+   call_outcomes_ok tops am tx vs.vs_outcomes` by simp[] >>
+  `source_deployment_rel tops am tx` by fs[call_state_rel_def] >>
+  `source_unit_execution_correct tops ret am tx unit vs` by
+    (irule lower_vyper_runtime_unit_correct >> simp[] >>
+     qexists_tac `rpolicy` >> simp[]) >>
+  irule e2e_vyper_to_evm >>
+  qexistsl_tac [`unit.cu_context`, `out.po_unit.cu_context`, `vs`] >>
+  simp[] >> conj_tac
+  >- (fs[source_unit_execution_correct_def] >>
+      qexists_tac `fuel` >> gvs[]) >> strip_tac >>
+  `~source_exempt tops (call_external (SOME vs.vs_outcomes) am tx)` by simp[] >>
+  drule_all lower_vyper_runtime_unit_memory_ok >> strip_tac >>
+  drule_all run_venom_pipeline_correct >> strip_tac >>
+  drule_all o1_pipeline_memory_obligations >> strip_tac >>
+  drule_all o1_pipeline_codegen_obligations >> strip_tac >>
+  conj_tac
+  >- gvs[checked_unit_transform_correct_def] >>
+  gen_tac >> irule codegen_correct >> simp[] >>
+  qexistsl_tac [`Inv`, `prog`, `rpolicy`] >> simp[]
+QED
 
 (* ===== Component Theorems ===== *)
 

@@ -21,7 +21,7 @@
  *   lower_vyper_runtime_unit_source_unit_ok -- S2 (Milestone 5)
  *   lower_vyper_runtime_unit_memory_ok -- S3 (Milestone 5)
  *
- * Legacy NONE-mode result definition retained explicitly until TASK056.
+ * TASK056: obsolete NONE-mode relation retained as inactive source provenance.
  * STATUS: S1-S3 are statements, NOT proved correctness certificates.
  * Before major proof repair, check lowering definitions against the chosen
  * upstream compiler target; see docs/compiler-definition-parity.md.
@@ -39,13 +39,15 @@ Ancestors
   contextProps
   arithmeticProps
   abiEncoderProps
-  vyperInterpreter vyperEntryCompat
+  vyperInterpreter
   vyperContext
   venomExecSemantics
   venomState
   compileEnv e2eDefs supportedProgram compileVyper
   unitTransformDefs unitShapeDefs
 
+(* TASK056 RETIRED SOURCE ARCHIVE: old NONE-mode helpers, replaced by the
+   exact oracle-mode boundary below. Original text retained without bridges.
 (* ===== Cross-Domain Result Relation ===== *)
 
 (* Observable state produced by an external source call. Function-local scope
@@ -98,6 +100,8 @@ Definition external_call_result_rel_legacy_def:
   (* All other combinations are invalid *)
   (external_call_result_rel_legacy _ _ _ _ _ _ <=> F)
 End
+
+*)
 
 (* ===== PLAN 5.7 oracle-mode boundary ===== *)
 
