@@ -13,7 +13,10 @@
 
 Theory configuredE2ECorrectness
 Ancestors
-  e2eCorrectness
+  e2eCorrectness compilePhasesProps
+
+(* Structural phase proofs now live below the semantic composition layer.
+   These public re-exports preserve their original statements. *)
 
 (* A successful generic compilation records all intermediate values from both
    the runtime and deployment phases. *)
@@ -31,11 +34,7 @@ Theorem compile_vyper_with_success_phases:
     deploy_out.po_final_assembly = rpolicy.rpol_final_assembly /\
     finalize_codegen finalizer rpolicy deploy_out.po_unit = SOME deploy_bc
 Proof
-  simp[compileVyperTheory.compile_vyper_with_def,
-       compileVyperTheory.checked_unit_pipeline_def] >>
-  rpt strip_tac >>
-  gvs[AllCaseEqs()] >>
-  goal_assum $ drule_at Any
+  MATCH_ACCEPT_TAC compilePhasesPropsTheory.compile_vyper_with_success_phases
 QED
 
 (* Phase-local conditional results compose for the exact bytecode pair returned
@@ -59,12 +58,7 @@ Theorem compile_vyper_with_deploy_runtime_compose:
      ==> deploy_ok deploy_bc runtime_bc)
   ==> runtime_ok runtime_bc /\ deploy_ok deploy_bc runtime_bc
 Proof
-  strip_tac >>
-  drule compile_vyper_with_success_phases >>
-  strip_tac >>
-  conj_tac
-  >- (first_x_assum irule >> simp[])
-  >> first_x_assum irule >> simp[]
+  MATCH_ACCEPT_TAC compilePhasesPropsTheory.compile_vyper_with_deploy_runtime_compose
 QED
 
 (* The O1 specialization is obtained solely by instantiating the generic
