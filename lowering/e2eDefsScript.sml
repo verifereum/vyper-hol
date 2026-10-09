@@ -1,101 +1,174 @@
-(*
- * End-to-End Definitions (Vyper-to-EVM Correspondence Predicates)
- *
- * Contracts and proved log-encoding facts used by the e2e theorems.
- * The initial FMP/token contract is imported from its codegen owner;
- * no lowering ancestor is introduced into a Venom interface.
- *
- * TOP-LEVEL:
- *   ctx_transform_correct_legacy -- old generic pass-correctness contract
- *   checked_unit_transform_correct_legacy -- old atomic unit transform contract
- *   source_deployment_rel -- source target/module linkage
- *   finalizer_correct -- successful finalizer safety/preserve contract
- *   return_data_encodes    -- Vyper return value ~ EVM returndata
- *   non_indexed_values     -- extract non-indexed event args
- *   non_indexed_types      -- extract non-indexed event arg types
- *   log_entry_corresponds  -- single Vyper log ~ EVM event
- *   logs_correspond        -- Vyper logs ~ EVM events (LIST_REL)
- *   state_effects_match    -- Vyper side effects ~ EVM post-state
- *   state_unchanged        -- rollback state unchanged (for reverts)
- *   vyper_evm_correspondence -- full Vyper-EVM case split
- *   initial_evm_rel        -- EVM state initialized with bytecode
- *   valid_function_call    -- source function callable with given args
+(* PLAN 5.5 boundary, not a compiler correctness certificate.
+ * TOP-LEVEL: layouts_agree, source_deployment_rel, source_typing_ok,
+ * source_storage_ok, call_outcomes_ok, tx_env_ok, tx_block_fields_rel,
+ * value_transfer_ok, accounts_after_transfer, call_state_rel,
+ * valid_vyper_call, compiled_event_info, return_bytes,
+ * decode_strictness_exempt, source_exempt, call_result_rel, logs_correspond.
+ * Old proved consumers use e2eLegacyDefs (removal TASK056). No equivalence
+ * between the old and new boundaries is claimed. S1-S3 belong to TASK051.
+ * DAG: source/typing/storage + supported syntax + frame/trace -> e2eDefs;
+ * e2eDefs -> e2eLegacyDefs -> old e2eCorrectness/configured consumers.
  *)
-
 Theory e2eDefs
 Ancestors
-  vfmExecution
-  vyperABI
-  vyperEvent
-  vyperInterpreter vyperEntryCompat
-  compileEnv
-  selectorDispatch
-  codegenRel codegenCorrectness
-  venomState
-  passSimulationDefs
-  assemblyFinalizer
-  asmTargetSafety
+  vfmExecution vfmExecutionProp vfmState
+  frameOutcome callTrace
+  vyperABI vyperEvent vyperInterpreter
+  vyperTypeContract vyperTypeContractSoundness vyperTypeInitialState
+  vyperStorageLayoutSafety vyperRuntimeAccounts
+  supportedProgram compileEnv selectorDispatch
 
-(* ===== Generic Compiler Contracts ===== *)
+(* ===== Source deployment, typing and storage ===== *)
 
-(* TEMPORARY COMPATIBILITY (TASK048; removal owner TASK056).
-   The old stronger, bidirectional pass_correct contract is preserved verbatim
-   under explicit _legacy names. Old e2e clients still require it; it is NOT an
-   alias of unitTransformDefs' forward/abort-weakened contract, and no bridge
-   between the two is claimed. Preserve these claims/proofs until the planned
-   e2e replacements land. *)
-Definition ctx_transform_correct_legacy_def:
-  ctx_transform_correct_legacy R_ok R_term ctx ctx' s <=>
-    pass_correct R_ok R_term R_term
-      (\fuel. run_context fuel ctx s)
-      (\fuel. run_context fuel ctx' s)
+Definition layouts_agree_def:
+  layouts_agree tops am tx <=>
+    let (sl, tl) = (case ALOOKUP am.layouts tx.target of
+                      SOME p => p | NONE => ([], [])) in
+      (!vis id ty n. MEM (VariableDecl vis Storage id ty (SOME n)) tops ==>
+                     ALOOKUP sl (NONE, id) = SOME n) /\
+      (!vis id ty n. MEM (VariableDecl vis Transient id ty (SOME n)) tops ==>
+                     ALOOKUP tl (NONE, id) = SOME n) /\
+      (!vis id kt vt n. MEM (HashMapDecl vis F id kt vt (SOME n)) tops ==>
+                        ALOOKUP sl (NONE, id) = SOME n)
 End
 
-(* The pipeline boundary keeps each context and its associated data segment
-   together in a compilation_unit.  Execution projects only the contexts. *)
-Definition checked_unit_transform_correct_legacy_def:
-  checked_unit_transform_correct_legacy
-    (pipeline : resolved_compiler_policy -> compilation_unit ->
-                pipeline_output option)
-    rpolicy R_ok R_term (unit : compilation_unit) s <=>
-    ?out. pipeline rpolicy unit = SOME out /\
-      ctx_transform_correct_legacy R_ok R_term
-        unit.cu_context out.po_unit.cu_context s
-End
-
-(* Every successful finalization is target-safe.  Preserve policy additionally
-   requires exact identity of the assembly instruction list. *)
-Definition finalizer_correct_def:
-  finalizer_correct rpolicy (finalizer : assembly_finalizer) <=>
-    !asm finalized_asm.
-      finalizer rpolicy asm = SOME finalized_asm ==>
-      assembly_target_safe rpolicy.rpol_target finalized_asm /\
-      (rpolicy.rpol_final_assembly = FAP_Preserve ==>
-       finalized_asm = asm)
-End
-
-(* The source target selects a module map, and the certified compile
-   environment selects exactly the source top-level statements being run. *)
 Definition source_deployment_rel_def:
-  source_deployment_rel tops am tx cenv <=>
-    ?mods. ALOOKUP am.sources tx.target = SOME mods /\
-           ALOOKUP mods cenv.ce_module = SOME tops
+  source_deployment_rel tops am tx <=>
+    ALOOKUP am.sources tx.target = SOME [(NONE, tops)] /\
+    ALOOKUP am.exports tx.target = NONE /\
+    layouts_agree tops am tx
 End
 
-(* initial_codegen_state_rel is owned by codegenCorrectness. The dependency
-   is one-way: no Venom interface imports lowering. *)
+Definition source_typing_ok_def:
+  source_typing_ok tops am tx <=>
+    ?art. check_contract F am.layouts tx.target [(NONE, tops)] = SOME art /\
+          checked_contract_runtime_ready art [(NONE, tops)] am tx /\
+          machine_well_typed am /\ call_tx_well_typed tx
+End
 
-(* ===== E2E Result Predicates ===== *)
+Definition source_storage_ok_def:
+  source_storage_ok (tops : toplevel list) am tx <=>
+    let cx = initial_evaluation_context am.sources am.layouts tx NONE in
+      contract_storage_well_formed cx (initial_state am []) /\
+      storage_layout_safe cx
+End
 
-(* EVM returndata equals ABI encoding of Vyper return value.
-   Bridges Vyper values to EVM bytes via the ABI encoding scheme. *)
-Definition return_data_encodes_def:
-  return_data_encodes tenv ret_type v es' <=>
-    ?abi_val ctxt rb rest.
-      es'.contexts = (ctxt, rb) :: rest /\
-      vyper_to_abi tenv ret_type v = SOME abi_val /\
-      ctxt.returnData =
-        enc (vyper_to_abi_type tenv ret_type) abi_val
+Definition call_outcomes_ok_def:
+  call_outcomes_ok (tops : toplevel list) am tx os <=>
+    let cx = initial_evaluation_context am.sources am.layouts tx NONE in
+      EVERY (\outcome. outcome.co_success ==>
+                 accounts_runtime_well_typed outcome.co_accounts /\
+                 contract_storage_well_formed cx
+                   (initial_state (am with <| accounts := outcome.co_accounts;
+                                              tStorage := outcome.co_tStorage |>) []))
+            os
+End
+
+(* ===== Transaction environment and entry transfer ===== *)
+
+Definition tx_env_ok_def:
+  tx_env_ok tx <=>
+    tx.block_number <> 0 /\ tx.block_number < 2 ** 255 /\
+    MIN 256 tx.block_number <= LENGTH tx.block_hashes /\
+    LENGTH tx.block_hashes <= 256
+End
+
+Definition tx_block_fields_rel_def:
+  tx_block_fields_rel tx txp <=>
+    txp.origin = tx.origin /\ txp.gasPrice = tx.gas_price /\
+    txp.baseFeePerGas = tx.base_fee /\ txp.blockNumber = tx.block_number /\
+    txp.blockTimeStamp = tx.time_stamp /\ txp.blockCoinBase = tx.coinbase /\
+    txp.blockGasLimit = tx.gas_limit /\ txp.chainId = tx.chain_id /\
+    txp.blobHashes = tx.blob_hashes /\
+    txp.baseFeePerBlobGas = tx.blob_base_fee /\
+    txp.prevRandao = n2w tx.prev_randao /\
+    txp.prevHashes = tx.block_hashes /\ tx_env_ok tx
+End
+
+Definition value_transfer_ok_def:
+  value_transfer_ok tx accounts <=>
+    tx.value = 0 \/ tx.sender = tx.target \/
+    (tx.value <= (lookup_account tx.sender accounts).balance /\
+     (lookup_account tx.target accounts).balance + tx.value < 2 ** 256)
+End
+
+Definition accounts_after_transfer_def:
+  accounts_after_transfer tx accounts =
+    if tx.value = 0 \/ tx.sender = tx.target then accounts
+    else
+      let sender = lookup_account tx.sender accounts in
+      let recipient = lookup_account tx.target accounts in
+        (update_account tx.sender (sender with balance updated_by (flip $- tx.value)) o
+         update_account tx.target (recipient with balance updated_by ($+ tx.value)))
+        accounts
+End
+
+(* ===== Fresh nonstatic frame: LIVE post-transfer accounts ===== *)
+
+Definition call_state_rel_def:
+  call_state_rel tops runtime_bc am tx es <=>
+    ?ctxt rb rest.
+      es.contexts = (ctxt, rb) :: rest /\
+      wf_state es /\ (?d. es.msdomain = Collect d) /\
+      ctxt.jumpDest = NONE /\ ~ctxt.msgParams.static /\
+      (?mr. ctxt.msgParams.outputTo = Memory mr) /\
+      ctxt.msgParams.code = runtime_bc /\
+      ctxt.msgParams.parsed = parse_code 0 FEMPTY runtime_bc /\
+      LENGTH runtime_bc <= 24576 /\
+      ctxt.pc = 0 /\ ctxt.stack = [] /\ ctxt.logs = [] /\
+      ctxt.returnData = [] /\ ctxt.memory = [] /\
+      value_transfer_ok tx am.accounts /\
+      es.rollback.accounts = accounts_after_transfer tx am.accounts /\
+      es.rollback.tStorage = am.tStorage /\ am.logs = [] /\
+      ctxt.msgParams.caller = tx.sender /\ ctxt.msgParams.callee = tx.target /\
+      ctxt.msgParams.value = tx.value /\
+      tx_block_fields_rel tx es.txParams /\
+      source_deployment_rel tops am tx
+End
+
+(* Exact PLAN lookup: the source lookup_function API, no invented additional
+   MEM/selector-uniqueness premise. Supported-program restrictions are separate. *)
+Definition valid_vyper_call_def:
+  valid_vyper_call tops tx calldata ret <=>
+    ?mut args body.
+      vyperInterpreter$lookup_function NONE tx.function_name External tops =
+        SOME (mut, F, args, [], ret, body) /\
+      tx.function_name <> "__default__" /\
+      LENGTH tx.args = LENGTH args /\
+      IS_SOME (bind_arguments (type_env tops) args tx.args) /\
+      calldata_encodes (type_env tops) tx.function_name (MAP SND args)
+        tx.args calldata
+End
+
+Definition compiled_event_info_def:
+  compiled_event_info program =
+    build_event_info (type_env program) program
+      ((K NONE) : string -> (num # type list # bool list) option)
+End
+
+(* ===== Canonical external return encoding and the ONLY exemption ===== *)
+
+Definition return_bytes_def:
+  return_bytes tops ret v out <=>
+    if ret = NoneT then out = []
+    else ?abi_v.
+           vyper_to_abi (type_env tops) ret v = SOME abi_v /\
+           out = if needs_external_call_wrap ret
+                 then enc (Tuple [vyper_to_abi_type (type_env tops) ret])
+                          (ListV [abi_v])
+                 else enc (vyper_to_abi_type (type_env tops) ret) abi_v
+End
+
+Definition decode_strictness_exempt_def:
+  decode_strictness_exempt tops e <=>
+    e = RuntimeError "abi_decode invalid" /\
+    ?ty. occurs_abi_decode_target ty tops /\
+         is_dynamic (vyper_to_abi_type (type_env tops) ty)
+End
+
+Definition source_exempt_def:
+  source_exempt tops (src : (value + exception) # abstract_machine # call_request list) <=>
+    case FST src of INR (Error e) => decode_strictness_exempt tops e | _ => F
 End
 
 (* ===== Log Correspondence ===== *)
@@ -266,98 +339,28 @@ Definition logs_correspond_def:
       vyper_logs evm_logs
 End
 
-(* EVM post-state matches Vyper side effects:
-   accounts, transient storage, and logs all correspond. *)
-Definition state_effects_match_def:
-  state_effects_match event_info (addr : address) tenv
-    (am' : abstract_machine) es' <=>
-    ?ctxt rb rest.
-      es'.contexts = (ctxt, rb) :: rest /\
-      es'.rollback.accounts = am'.accounts /\
-      es'.rollback.tStorage = am'.tStorage /\
-      logs_correspond event_info tenv addr am'.logs ctxt.logs
-End
+(* ===== Frame-aware result: outcomes in, requests compared ONLY on success ===== *)
 
-(* Rollback state unchanged at the call boundary: committed accounts and
-   transient storage in the global rollback record are the same before and
-   after execution. This avoids comparing per-frame snapshots, which EVM may
-   update internally for gas accounting while still rolling back the call. *)
-Definition state_unchanged_def:
-  state_unchanged es es' <=>
-    es'.rollback.accounts = es.rollback.accounts /\
-    es'.rollback.tStorage = es.rollback.tStorage
-End
-
-(* Full Vyper-EVM correspondence for a single external call.
-   Packages the case split on call_external result:
-   - Success: EVM halts, returndata + state effects match
-   - Assert/revert: outermost EVM execution reports REVERT; rollback is
-     applied by the caller rather than by this run boundary
-   - Error: T (could be F under well-formedness)
-   - Break/Continue/Return: F (never escape call_external) *)
-Definition vyper_evm_correspondence_def:
-  vyper_evm_correspondence tenv event_info ret am tx es <=>
-    (case call_external_simple am tx of
-       (INL v, am') =>
-         ?es'.
-           run es = SOME (INR NONE, es') /\
-           return_data_encodes tenv ret v es' /\
-           state_effects_match event_info tx.target tenv am' es'
-     | (INR (AssertException _), _) =>
-         ?es'. run es = SOME (INR (SOME Reverted), es')
-     | (INR (Error _), _) => T
-     | (INR BreakException, _) => F
-     | (INR ContinueException, _) => F
-     | (INR (ReturnException _), _) => F)
-End
-
-(* ===== EVM State Predicates ===== *)
-
-(* EVM execution state corresponds to initial Venom state,
-   with compiled bytecode loaded. Combines the initial state
-   correspondence (shared environment, memory, empty stack)
-   with the bytecode loading condition.
-   Calldata: EVM msgParams.data = Venom cc_calldata (selector+ABI args). *)
-Definition initial_evm_rel_def:
-  initial_evm_rel cp bytecode vs es <=>
-    initial_codegen_state_rel cp vs /\
-    ~NULL es.contexts /\
-    let (ctxt, rb) = HD es.contexts in
-      rb.accounts = vs.vs_accounts /\
-      rb.tStorage = vs.vs_transient /\
-      ctxt.returnData = vs.vs_returndata /\
-      ctxt.logs = vs.vs_logs /\
-      ctxt.stack = [] /\
-      (!i. read_byte i vs.vs_memory = read_byte i ctxt.memory) /\
-      ctxt.msgParams.data = vs.vs_call_ctx.cc_calldata /\
-      ctxt.pc = 0 /\
-      ctxt.msgParams.code = bytecode /\
-      ctxt.msgParams.parsed = parse_code 0 FEMPTY bytecode
-End
-
-(* ===== Source Predicates ===== *)
-
-(* Valid function call: source function exists in the abstract machine,
-   calldata correctly ABI-encodes the arguments, and the selector
-   table routes to the right function.
-
-   Calldata is constrained via the tx (source args) and the EVM
-   calldata bytes (in initial_evm_rel). The relation between
-   tx.args and the ABI-encoded calldata is:
-     calldata_encodes tenv name arg_types tx.args calldata_bytes
-
-   No vs parameter needed -- calldata_encodes takes the byte list
-   directly, and initial_evm_rel ensures EVM and Venom agree. *)
-Definition valid_function_call_def:
-  valid_function_call tenv am tx selectors calldata args ret <=>
-    (?mut nr dflts body.
-       lookup_exported_function
-         (initial_evaluation_context am.sources am.layouts tx (find_function_module am tx.target tx.function_name)) am
-         tx.function_name = SOME (mut, nr, args, dflts, ret, body)) /\
-    calldata_encodes tenv tx.function_name (MAP SND args) tx.args
-      calldata /\
-    (?sel fn_lbl htz.
-       MEM (sel, fn_lbl, htz) selectors /\
-       selector_matches sel tx.function_name
-         (vyper_to_abi_types tenv (MAP SND args)))
+Definition call_result_rel_def:
+  call_result_rel tops ret am tx es r es' <=>
+    let trace = call_trace es in
+    case call_external (SOME (MAP SND trace)) am tx of
+      (INL v, am', rqs) =>
+        ?out lgs.
+          frame_outcome es r es' NONE out lgs /\
+          return_bytes tops ret v out /\
+          es'.rollback.accounts = am'.accounts /\
+          es'.rollback.tStorage = am'.tStorage /\
+          logs_correspond (compiled_event_info tops) (type_env tops)
+            tx.target am'.logs lgs /\
+          rqs = MAP FST trace
+    | (INR (AssertException s), _, _) =>
+        ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
+                      (exc = Reverted \/ s = "UNREACHABLE")
+    | (INR (Error e), _, _) =>
+        decode_strictness_exempt tops e \/
+        ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs
+    | (INR BreakException, _, _) => F
+    | (INR ContinueException, _, _) => F
+    | (INR (ReturnException _), _, _) => F
 End

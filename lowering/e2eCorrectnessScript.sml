@@ -1,5 +1,8 @@
 (*
- * End-to-End Vyper-to-EVM Correctness
+ * Legacy End-to-End Vyper-to-EVM Correctness (pre-PLAN-5.5 contracts)
+ * TASK049: public proved clients retained, but NOT upgraded to the new
+ * boundary. Existing stage admissions remain visible; removal TASK056.
+ * New boundary/API owner: e2eDefs; old contracts: e2eLegacyDefs.
  *
  * TOP-LEVEL theorem: vyper_call_correct
  *   When EVM execution enters compiled Vyper bytecode (via CALL at
@@ -17,8 +20,8 @@
  *   call_state_rel          -- pre-call Vyper/EVM state correspondence
  *   vyper_call_correct      -- checked-unit compiler/call correctness theorem
  *
- * Definitions (return_data_encodes, log_entry_corresponds,
- * state_effects_match, etc.) are in e2eDefsTheory.
+ * Old boundary definitions are in e2eLegacyDefsTheory under _legacy names.
+ * Concrete log correspondence and compiled_event_info are in e2eDefsTheory.
  *
  * STATUS: E2E composition is scaffolding until lowering, the concrete Venom
  * pipeline instance, and codegen correctness are all closed with compatible
@@ -27,7 +30,7 @@
 
 Theory e2eCorrectness
 Ancestors
-  e2eDefs
+  e2eDefs e2eLegacyDefs
   vyperLoweringCorrect vfmExecution
   venomPipelineCorrect
   passSimulationDefs
@@ -43,6 +46,10 @@ Ancestors
 (* =====================================================================
    Call-Level Correctness (Main Theorem)
    ===================================================================== *)
+
+(* TASK049: original pre-5.5 boundary text retained verbatim below.
+   Active old definitions now live in e2eLegacyDefs under _legacy names.
+   This is provenance, NOT an old/new equivalence claim. Removal TASK056.
 
 (* ===== run_call: EVM execution of a single call frame ===== *)
 
@@ -208,17 +215,22 @@ Definition call_result_matches_def:
     | (INR (ReturnException _), _) => F
 End
 
+*)
+
 (* ===== Adapter Lemmas for vyper_call_correct ===== *)
+(* TASK049: every theorem below remains a LEGACY claim. In particular the
+   existing admitted bridge and codegen dependencies are not new certificates.
+   Clean PLAN 5.5 composition will be provided by TASK054/056. *)
 
 (* The checked-unit correspondence below combines the explicit compilation,
    source-deployment, transform, codegen, and finalizer interfaces.  These
    small adapters keep initial-state and valid-call conversions local to the
    call-level consumer. *)
-Theorem call_state_rel_initial_evm_rel[local]:
+Theorem call_state_rel_initial_evm_rel_legacy[local]:
   !program cp bytecode am tx tenv ctxt rb rest es vs.
     initial_codegen_state_rel cp vs /\
     es.contexts = (ctxt, rb) :: rest /\
-    call_state_rel program bytecode am tx tenv ctxt rb es.txParams /\
+    call_state_rel_legacy program bytecode am tx tenv ctxt rb es.txParams /\
     rb.accounts = vs.vs_accounts /\
     rb.tStorage = vs.vs_transient /\
     ctxt.returnData = vs.vs_returndata /\
@@ -226,12 +238,17 @@ Theorem call_state_rel_initial_evm_rel[local]:
     (!i. read_byte i vs.vs_memory = read_byte i ctxt.memory) /\
     ctxt.msgParams.data = vs.vs_call_ctx.cc_calldata
     ==>
-    initial_evm_rel cp bytecode vs es
+    initial_evm_rel_legacy cp bytecode vs es
+Proof
+(* Original proof text:
 Proof
   rw[call_state_rel_def, initial_evm_rel_def] >> metis_tac[]
 QED
+*)
+  rw[call_state_rel_legacy_def, initial_evm_rel_legacy_def] >> metis_tac[]
+QED
 
-Theorem valid_vyper_call_valid_function_call[local]:
+Theorem valid_vyper_call_valid_function_call_legacy[local]:
   !am tx tenv selectors calldata args ret mut nr dflts body.
     lookup_exported_function
       (initial_evaluation_context am.sources am.layouts tx (find_function_module am tx.target tx.function_name)) am
@@ -242,9 +259,14 @@ Theorem valid_vyper_call_valid_function_call[local]:
        selector_matches sel tx.function_name
          (vyper_to_abi_types tenv (MAP SND args)))
     ==>
-    valid_function_call tenv am tx selectors calldata args ret
+    valid_function_call_legacy tenv am tx selectors calldata args ret
+Proof
+(* Original proof text:
 Proof
   rw[valid_function_call_def] >> metis_tac[]
+QED
+*)
+  rw[valid_function_call_legacy_def] >> metis_tac[]
 QED
 
 Theorem log_entry_equiv_log_entry_corresponds[local]:
@@ -269,11 +291,12 @@ Proof
   simp[]
 QED
 
-(* The source semantics of the exact packaged compilation unit is an explicit
+(* LEGACY source-unit obligation (replacement TASK051, removal TASK056).
+   The source semantics of the exact packaged compilation unit is an explicit
    boundary obligation.  In particular, it is not reconstructed from the
    weaker observable equivalence used by generic transform correctness. *)
-Definition source_unit_execution_correct_def:
-  source_unit_execution_correct tenv cenv am tx ret
+Definition source_unit_execution_correct_legacy_def:
+  source_unit_execution_correct_legacy tenv cenv am tx ret
     (unit : compilation_unit) vs <=>
     ?fuel. external_call_result_rel tenv cenv
       (initial_evaluation_context am.sources am.layouts tx
@@ -282,13 +305,18 @@ Definition source_unit_execution_correct_def:
 End
 
 Theorem source_unit_execution_correct:
-  source_unit_execution_correct tenv cenv am tx ret unit vs <=>
+  source_unit_execution_correct_legacy tenv cenv am tx ret unit vs <=>
   ?fuel. external_call_result_rel tenv cenv
     (initial_evaluation_context am.sources am.layouts tx
       (find_function_module am tx.target tx.function_name))
     ret (call_external_simple am tx) (run_context fuel unit.cu_context vs)
 Proof
+  (* Original proof text:
+Proof
   simp[source_unit_execution_correct_def]
+QED
+  *)
+  simp[source_unit_execution_correct_legacy_def]
 QED
 Theorem run_context_zero_error[local]:
   !ctx vs. ?e. run_context 0 ctx vs = Error e
@@ -304,22 +332,7 @@ Proof
   >> simp[run_context_def, run_function_def, Once run_blocks_def]
 QED
 
-Theorem source_unit_execution_through_pipeline[local]:
-  !tenv cenv am tx ret unit vs pipeline rpolicy out R_ok R_term.
-    source_unit_execution_correct tenv cenv am tx ret unit vs /\
-    pipeline rpolicy unit = SOME out /\
-    checked_unit_transform_correct_legacy pipeline rpolicy R_ok R_term unit vs /\
-    (!s1 s2. R_ok s1 s2 ==> observable_equiv s1 s2) /\
-    (!s1 s2. R_term s1 s2 ==> observable_equiv s1 s2)
-    ==>
-    ?fuel fuel'.
-      external_call_result_rel tenv cenv
-        (initial_evaluation_context am.sources am.layouts tx
-          (find_function_module am tx.target tx.function_name))
-        ret (call_external_simple am tx) (run_context fuel unit.cu_context vs) /\
-      observable_result_equiv
-        (run_context fuel unit.cu_context vs)
-        (run_context fuel' out.po_unit.cu_context vs)
+(* TASK049 original proof text retained verbatim:
 Proof
   rpt strip_tac >>
   gvs[source_unit_execution_correct_def,
@@ -343,7 +356,49 @@ Proof
      qexistsl [`fuel`, `0`] >>
      gvs[observable_result_equiv_def]
 QED
+*)
+Theorem source_unit_execution_through_pipeline[local]:
+  !tenv cenv am tx ret unit vs pipeline rpolicy out R_ok R_term.
+    source_unit_execution_correct_legacy tenv cenv am tx ret unit vs /\
+    pipeline rpolicy unit = SOME out /\
+    checked_unit_transform_correct_legacy pipeline rpolicy R_ok R_term unit vs /\
+    (!s1 s2. R_ok s1 s2 ==> observable_equiv s1 s2) /\
+    (!s1 s2. R_term s1 s2 ==> observable_equiv s1 s2)
+    ==>
+    ?fuel fuel'.
+      external_call_result_rel tenv cenv
+        (initial_evaluation_context am.sources am.layouts tx
+          (find_function_module am tx.target tx.function_name))
+        ret (call_external_simple am tx) (run_context fuel unit.cu_context vs) /\
+      observable_result_equiv
+        (run_context fuel unit.cu_context vs)
+        (run_context fuel' out.po_unit.cu_context vs)
+Proof
+  rpt strip_tac >>
+  (* Original first rewrite: gvs[source_unit_execution_correct_def, *)
+  gvs[source_unit_execution_correct_legacy_def,
+      checked_unit_transform_correct_legacy_def,
+      ctx_transform_correct_legacy_def, pass_correct_def] >>
+  `!r1 r2. lift_result R_ok R_term R_term r1 r2 ==>
+           observable_result_equiv r1 r2` by
+    (rpt gen_tac >> Cases_on `r1` >> Cases_on `r2` >>
+     fs[lift_result_def, observable_result_equiv_def,
+        observable_equiv_def, revert_equiv_def] >>
+     metis_tac[]) >>
+  Cases_on `terminates (run_context fuel unit.cu_context vs)`
+  >- (`?fuel'. terminates
+          (run_context fuel' out.po_unit.cu_context vs)` by metis_tac[] >>
+      qexistsl [`fuel`, `fuel'`] >>
+      metis_tac[])
+  >> Cases_on `run_context fuel unit.cu_context vs` >>
+     gvs[terminates_def] >>
+     qspecl_then [`out.po_unit.cu_context`, `vs`] strip_assume_tac
+       run_context_zero_error >>
+     qexistsl [`fuel`, `0`] >>
+     gvs[observable_result_equiv_def]
+QED
 
+(* TASK049 original theorem statement/proof retained verbatim:
 Theorem e2e_vyper_to_evm:
   !tops pipeline finalizer policy rpolicy unit out prog deploy_bc runtime_bc
    cp name i r fn off Inv cenv am tx tenv ret ctxt rb rest es vs R_ok R_term.
@@ -416,6 +471,82 @@ Proof
   >> Cases_on `y` >> gvs[external_call_result_rel_def]
 QED
 
+*)
+
+(* Preserved legacy composition proof, STAGE-ADMITTED, not PLAN 5.5
+   correctness. Public name retained; every obsolete contract is explicit. *)
+Theorem e2e_vyper_to_evm:
+  !tops pipeline finalizer policy rpolicy unit out prog deploy_bc runtime_bc
+   cp name i r fn off Inv cenv am tx tenv ret ctxt rb rest es vs R_ok R_term.
+    resolve_o1_policy policy = SOME rpolicy /\
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    pipeline rpolicy unit = SOME out /\
+    out.po_final_assembly = rpolicy.rpol_final_assembly /\
+    finalize_codegen finalizer rpolicy out.po_unit = SOME runtime_bc /\
+    codegen_assembly rpolicy out.po_unit = SOME prog /\
+    runtime_bc = assemble prog /\
+    compile_vyper_with pipeline finalizer policy tops
+      = SOME (deploy_bc, runtime_bc) /\
+    source_deployment_rel_legacy tops am tx cenv /\
+    source_unit_execution_correct_legacy tenv cenv am tx ret unit vs /\
+    generate_context_plan out.po_unit.cu_context = SOME cp /\
+    out.po_unit.cu_context.ctx_entry = SOME name /\
+    lookup_function name out.po_unit.cu_context.ctx_functions = SOME fn /\
+    i < LENGTH out.po_unit.cu_context.ctx_functions /\
+    EL i out.po_unit.cu_context.ctx_functions = fn /\
+    EL i cp.cp_regions = r /\
+    ops_contain_at off
+      (execute_plan cp.cp_initial_fmp (context_plan_ops cp))
+      (execute_plan cp.cp_initial_fmp r.sr_plan) /\
+    contextCodegenRel$codegen_context_obligations
+      Inv out.po_unit.cu_context cp /\
+    contextCodegenRel$codegen_reachability_package
+      Inv out.po_unit.cu_context vs /\
+    initial_codegen_state_rel cp vs /\
+    codegenCorrectness$initial_ctx_rel_legacy cp prog off
+      out.po_unit.cu_context vs es /\
+    asm_pc_to_offset prog off = 0 /\
+    es.contexts = (ctxt, rb) :: rest /\
+    call_state_rel_legacy tops runtime_bc am tx tenv ctxt rb es.txParams /\
+    valid_vyper_call_legacy am tx tenv ctxt.msgParams.data ret /\
+    cenv.ce_type_env = tenv /\
+    cenv.ce_event_info = compiled_event_info tops /\
+    checked_unit_transform_correct_legacy pipeline rpolicy R_ok R_term unit vs /\
+    (!s1 s2. R_ok s1 s2 ==> observable_equiv s1 s2) /\
+    (!s1 s2. R_term s1 s2 ==> observable_equiv s1 s2) /\
+    finalizer_correct_legacy rpolicy finalizer
+    ==>
+    ?gas_needed.
+      ctxt.msgParams.gasLimit >= gas_needed ==>
+      vyper_evm_correspondence_legacy tenv (compiled_event_info tops) ret am tx es
+Proof
+  rpt strip_tac >>
+  drule_all source_unit_execution_through_pipeline >> strip_tac >>
+  drule_all codegen_correct_legacy >> strip_tac >>
+  qpat_x_assum `!fuel. ?gas_needed. _`
+    (qspec_then `fuel'` strip_assume_tac) >>
+  qexists `gas_needed` >> strip_tac >>
+  first_x_assum (qspec_then `es` mp_tac) >>
+  (impl_tac >- (gvs[call_state_rel_legacy_def])) >>
+  strip_tac >>
+  Cases_on `call_external_simple am tx` >>
+  rename1 `call_external_simple am tx = (src_result, am')` >>
+  Cases_on `src_result` >>
+  Cases_on `run_context fuel unit.cu_context vs` >>
+  Cases_on `run_context fuel' out.po_unit.cu_context vs` >>
+  gvs[external_call_result_rel_def, observable_result_equiv_def,
+      observable_equiv_def, revert_equiv_def,
+      vyper_evm_correspondence_legacy_def] >>
+  gvs[return_data_encodes_legacy_def, state_effects_match_legacy_def,
+      final_state_rel_def, external_call_state_rel_def,
+      initial_evaluation_context_def]
+  >- (Cases_on `es'.contexts` >> gvs[] >> PairCases_on `h` >>
+      gvs[] >> metis_tac[external_logs_rel_logs_correspond])
+  >- (Cases_on `y` >> Cases_on `a` >>
+      gvs[external_call_result_rel_def])
+  >> Cases_on `y` >> gvs[external_call_result_rel_def]
+QED
+
 (* Bridge from vyper_evm_correspondence to run_call + call_result_matches.
 
    vyper_evm_correspondence is defined in terms of VFM's `run` which
@@ -432,19 +563,19 @@ QED
    context stack management, handle_exception, and the OWHILE loop. *)
 Theorem evm_correspondence_to_call_result[local]:
   !tenv event_info am tx ret es.
-    vyper_evm_correspondence tenv event_info ret am tx es /\
+    vyper_evm_correspondence_legacy tenv event_info ret am tx es /\
     ~NULL es.contexts
     ==>
     ?r es_final.
-      run_call es = SOME (r, es_final) /\
-      call_result_matches tenv event_info am tx ret r es es_final
+      run_call_legacy es = SOME (r, es_final) /\
+      call_result_matches_legacy tenv event_info am tx ret r es es_final
 Proof
   cheat
 QED
 
 (* ===== Main Correctness Theorem ===== *)
 
-(* Compiler correctness for a single external call.
+(* LEGACY compiler correctness for a single external call.
 
    When EVM execution enters compiled Vyper bytecode (at any point
    in the call stack), the result corresponds to the Vyper source
@@ -456,6 +587,7 @@ QED
 
    Gas is existential: there exists a gas bound such that with enough
    gas, EVM execution produces the correct result. *)
+(* TASK049 original theorem statement/proof retained verbatim:
 Theorem vyper_call_correct:
   !tops pipeline finalizer policy rpolicy unit out prog deploy_bc runtime_bc
    cp name i r fn off Inv cenv am tx tenv ret ctxt rb rest es vs R_ok R_term.
@@ -500,6 +632,58 @@ Theorem vyper_call_correct:
     ?gas_needed.
       ctxt.msgParams.gasLimit >= gas_needed ==>
       vyper_evm_correspondence tenv (compiled_event_info tops) ret am tx es
+Proof
+  rpt strip_tac >> drule_all e2e_vyper_to_evm >> simp[]
+QED
+
+*)
+
+(* Preserved legacy public wrapper, STAGE-ADMITTED. Its existing admitted
+   dependencies remain classified as such; NOT a new-boundary certificate. *)
+Theorem vyper_call_correct:
+  !tops pipeline finalizer policy rpolicy unit out prog deploy_bc runtime_bc
+   cp name i r fn off Inv cenv am tx tenv ret ctxt rb rest es vs R_ok R_term.
+    resolve_o1_policy policy = SOME rpolicy /\
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    pipeline rpolicy unit = SOME out /\
+    out.po_final_assembly = rpolicy.rpol_final_assembly /\
+    finalize_codegen finalizer rpolicy out.po_unit = SOME runtime_bc /\
+    codegen_assembly rpolicy out.po_unit = SOME prog /\
+    runtime_bc = assemble prog /\
+    compile_vyper_with pipeline finalizer policy tops
+      = SOME (deploy_bc, runtime_bc) /\
+    source_deployment_rel_legacy tops am tx cenv /\
+    source_unit_execution_correct_legacy tenv cenv am tx ret unit vs /\
+    generate_context_plan out.po_unit.cu_context = SOME cp /\
+    out.po_unit.cu_context.ctx_entry = SOME name /\
+    lookup_function name out.po_unit.cu_context.ctx_functions = SOME fn /\
+    i < LENGTH out.po_unit.cu_context.ctx_functions /\
+    EL i out.po_unit.cu_context.ctx_functions = fn /\
+    EL i cp.cp_regions = r /\
+    ops_contain_at off
+      (execute_plan cp.cp_initial_fmp (context_plan_ops cp))
+      (execute_plan cp.cp_initial_fmp r.sr_plan) /\
+    contextCodegenRel$codegen_context_obligations
+      Inv out.po_unit.cu_context cp /\
+    contextCodegenRel$codegen_reachability_package
+      Inv out.po_unit.cu_context vs /\
+    initial_codegen_state_rel cp vs /\
+    codegenCorrectness$initial_ctx_rel_legacy cp prog off
+      out.po_unit.cu_context vs es /\
+    asm_pc_to_offset prog off = 0 /\
+    es.contexts = (ctxt, rb) :: rest /\
+    call_state_rel_legacy tops runtime_bc am tx tenv ctxt rb es.txParams /\
+    valid_vyper_call_legacy am tx tenv ctxt.msgParams.data ret /\
+    cenv.ce_type_env = tenv /\
+    cenv.ce_event_info = compiled_event_info tops /\
+    checked_unit_transform_correct_legacy pipeline rpolicy R_ok R_term unit vs /\
+    (!s1 s2. R_ok s1 s2 ==> observable_equiv s1 s2) /\
+    (!s1 s2. R_term s1 s2 ==> observable_equiv s1 s2) /\
+    finalizer_correct_legacy rpolicy finalizer
+    ==>
+    ?gas_needed.
+      ctxt.msgParams.gasLimit >= gas_needed ==>
+      vyper_evm_correspondence_legacy tenv (compiled_event_info tops) ret am tx es
 Proof
   rpt strip_tac >> drule_all e2e_vyper_to_evm >> simp[]
 QED

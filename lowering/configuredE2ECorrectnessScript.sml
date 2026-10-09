@@ -6,6 +6,8 @@
  * O1 specialization (all target capabilities) of the generic end-to-end
  * theorem. TASK048 compatibility: the semantic obligation remains the
  * old checked_unit_transform_correct_legacy contract, not the new S4.
+ * TASK049: all pre-5.5 call/source/result predicates are now explicitly
+ * _legacy. No equivalence to e2eDefs' new boundary is assumed or proved.
  * Removal owner TASK056; original theorem claim/proof otherwise unchanged.
  *)
 
@@ -85,8 +87,8 @@ Theorem e2e_vyper_to_evm_O1:
            rpolicy o1_pipeline_spec unit)
       finalizer (o1_policy all_capabilities) tops =
         SOME (deploy_bc, runtime_bc) /\
-    source_deployment_rel tops am tx cenv /\
-    source_unit_execution_correct tenv cenv am tx ret unit vs /\
+    source_deployment_rel_legacy tops am tx cenv /\
+    source_unit_execution_correct_legacy tenv cenv am tx ret unit vs /\
     generate_context_plan out.po_unit.cu_context = SOME cp /\
     out.po_unit.cu_context.ctx_entry = SOME name /\
     lookup_function name out.po_unit.cu_context.ctx_functions = SOME fn /\
@@ -105,8 +107,8 @@ Theorem e2e_vyper_to_evm_O1:
       out.po_unit.cu_context vs es /\
     asm_pc_to_offset prog off = 0 /\
     es.contexts = (ctxt, rb) :: rest /\
-    call_state_rel tops runtime_bc am tx tenv ctxt rb es.txParams /\
-    valid_vyper_call am tx tenv ctxt.msgParams.data ret /\
+    call_state_rel_legacy tops runtime_bc am tx tenv ctxt rb es.txParams /\
+    valid_vyper_call_legacy am tx tenv ctxt.msgParams.data ret /\
     cenv.ce_type_env = tenv /\
     cenv.ce_event_info = compiled_event_info tops /\
     checked_unit_transform_correct_legacy
@@ -116,11 +118,11 @@ Theorem e2e_vyper_to_evm_O1:
       rpolicy R_ok R_term unit vs /\
     (!s1 s2. R_ok s1 s2 ==> observable_equiv s1 s2) /\
     (!s1 s2. R_term s1 s2 ==> observable_equiv s1 s2) /\
-    finalizer_correct rpolicy finalizer
+    finalizer_correct_legacy rpolicy finalizer
     ==>
     ?gas_needed.
       ctxt.msgParams.gasLimit >= gas_needed ==>
-      vyper_evm_correspondence tenv (compiled_event_info tops) ret am tx es
+      vyper_evm_correspondence_legacy tenv (compiled_event_info tops) ret am tx es
 Proof
   rpt strip_tac >>
   drule_all e2eCorrectnessTheory.e2e_vyper_to_evm >>
