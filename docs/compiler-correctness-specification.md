@@ -77,20 +77,149 @@ The exact observation type/relation is a phase-2 deliverable. It should support 
 
 ## Calls and nested contexts
 
-A compiled contract can call other contracts, and those calls can call back into it. The theorem must cover such programs. A theorem restricted to programs without calls, or to a single EVM execution context (`LENGTH es.contexts = 1`), is not the final codegen theorem.
+### Current Milestone 1 runtime contract (2026-10-09)
 
-A *call frame* is one EVM execution context: the code being run, its stack, memory and program counter. A contract call pushes a new frame onto Verifereum's context list (`es.contexts`), and returning pops it.
+The broader intended scope elsewhere in this planning specification is **future
+scope**, not today's certificate. The accepted primary source is `e4cb0914`.
+The saved `e2eCorrectness.vyper_call_correct` is composed from **ADMITTED S1–S7**;
+clean generic composition and structural producers do not prove those stages.
+See the [dated audit](compiler-proof-status-2026-10-09.md#public-runtime-theorem)
+and [dependency inventory](compiler-proof-dependencies.md) for actual owners,
+partial/absent producers and built evidence. TASK060 final certification is not done.
 
-**How the proof treats calls** (decided 2026-09-29, following the discussion on [#98](https://github.com/verifereum/vyper-hol/issues/98); roadmap Milestone 1.1 has the details):
+The entire public theorem is:
 
-- **One frame.** The theorem covers one frame running the compiled contract. Any frames below it, belonging to the callers, are arbitrary. It is stated with Verifereum's `run_call`, which runs the EVM until the current frame returns and then stops. So the theorem describes one call into the contract, whether it is the top-level transaction or a call from another contract.
-- **A call is a single step.** When the contract calls another contract, the source semantics and the compiled code both leave the entire callee execution to Verifereum, including any further calls it makes, even calls back into our contract. The assembly-to-EVM proof treats a call instruction, together with everything the callee does, as one step of our frame.
-- **Calls back into the contract.** For those, the theorem is applied again, separately, at the point where the inner call starts. The theorem therefore never needs to assume its own correctness for inner calls.
-- **Gas.** Gas amounts the source program reads, like `msg.gas` or the gas given to a call, come from a list of values supplied from outside the source semantics. The theorem requires these values to equal the ones the compiled code actually sees during its EVM execution.
+```sml
+!policy tops deploy_bc runtime_bc am tx ret es.
+  compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
+  supported_program tops /\
+  source_typing_ok tops am tx /\
+  source_storage_ok tops am tx /\
+  call_state_rel tops runtime_bc am tx es /\
+  valid_vyper_call tops tx (FST (HD es.contexts)).msgParams.data ret /\
+  call_outcomes_ok tops am tx (MAP SND (call_trace es))
+  ==>
+  ?r es'. run_call es = SOME (r, es') /\
+    (frame_resource_starved es r es' \/ precompile_call_starved es \/
+     call_result_rel tops ret am tx es r es')
+```
 
-The rejected alternative was to give the assembly semantics its own model of the frame stack, so that the proof would follow execution into and out of every callee. That would need a source semantics that also runs callee contracts, and a correctness argument that holds for calls back into the contract being proved.
+This is the actual O1 compiler with identity finalizer `K SOME`, not an
+arbitrary minimal/custom pipeline. Exactly seven public premises remain;
+L1 produces raw/O1/assembly/plan witnesses and exact runtime bytes from compile
+success, and L6–L8 construct initial relations from the supplied boundary.
+The whitelist `supported_program` is computational syntax on `tops` alone,
+with 101 fixture membership proofs; it is not typing or semantic correctness.
 
-The design must still cover return data, reverts, undoing or keeping state changes when a call fails or succeeds, gas, and calls back into the contract.
+### One fresh frame, including nested callers
+
+A call frame is the head EVM context. `run_call` is Verifereum's execution until
+that frame ends; parent frames below it are arbitrary. It is not a claim about
+running the entire transaction. `call_state_rel` requires a fresh **nonstatic**
+frame: wf_state/Collect mode, memory output, code exactly `runtime_bc`, its
+`parse_code 0 FEMPTY` map, size <=24576, jumpDest NONE, PC0 and empty stack,
+memory, logs and return data. Message caller/callee/value and transaction/block
+fields agree with the source. Block number is nonzero and <2**255 and the hash
+window obeys MIN256 <= length <=256. Entry value transfer succeeds and **live**
+`es.rollback.accounts` are the post-transfer source accounts (not the saved
+head rollback snapshot); transient storage agrees and source input logs are empty.
+
+The exact singleton main source must already be installed at `tx.target`, with
+no exports and declared layout slots. Runtime typing readiness likewise requires
+installed sources and ready immutables; it is not readiness for an uninstalled
+source target. No separate equality of target account code to runtime bytes is
+required beyond the executing frame's code equation. `valid_vyper_call` selects
+the exact External declaration, nonreentrant flag F, no defaults, no
+`__default__`, exact argument count, successful bounded binding and encoded
+calldata for the declared argument types; `ret` is the looked-up return type.
+
+`frame_outcome` describes both single-frame and nested completion. In the nested
+case our frame is popped, the parent receives the success flag/return data,
+advances its PC and gets the actual short-write output-memory splice. Success
+appends our logs; failure rolls back to the saved snapshot without appending
+failed-frame logs. This defined boundary and selected witnesses are not a proof
+of S7 or of environmental satisfiability.
+
+### Outcome oracle, not a source gas oracle
+
+`call_trace es` is the ordered request/outcome trace of **our frame**, not the
+trace of every descendant instruction. Requests contain target/value/calldata,
+static flag and live pre-call account/transient snapshots; outcomes contain
+success, return bytes, post-call accounts/transient storage and logs. Source
+`call_external (SOME (MAP SND (call_trace es))) am tx`, Venom and assembly take
+these outcomes instead of executing callees. Successful nonstatic outcomes
+adopt accounts (including storage/code), transient storage and logs; static and
+failed outcomes do not adopt payloads. The source's NONE mode still executes
+concrete calls and the two-argument initializer still starts with NONE/empty
+requests. Arbitrary source SOME lists use this **same evaluator**, not a second
+source semantics.
+
+Computed value-zero precompiles1/2/6/7 are computed from pure input, consume no
+outcome and record no request; they are filtered out of `call_trace`. Other
+calls, including nonzero-value precompile calls, remain ordinary oracle calls.
+Verifereum still executes callees and any reentrant calls; the oracle abstracts
+that whole execution into an outcome. Re-applying a frame theorem to an inner
+call requires its own premises. No current theorem connects all source-executed
+callees to the EVM outcomes or proves a closed-world/reentrant composition.
+
+`call_outcomes_ok` has **no current producer**. For every successful outcome
+(including static ones) it requires the actual runtime account bounds (balances
+<2**256, code length <=24576) and source contract-storage validity of the supplied
+accounts/transient storage in the actual initial context. The source checks
+account bounds on successful nonstatic adoption, **not storage validity**.
+Type/storage preservation theorems consume guards; they do not weaken them or
+manufacture a universal environmental producer. The detailed
+[partial-producer audit](compiler-proof-status-2026-10-09.md#what-partial-producers-actually-establish)
+records readiness/input/constants/protected-storage/oracle hypotheses.
+
+The shared entry Venom state has **cc_gas=0**, concrete assembly labels and plan
+FMP fields. Venom GAS is untouched, with opaque GAS results restricted to
+CALL/STATICCALL gas operands; oracle call semantics evaluate then ignore those
+values. Assembly uses frame-local EVM gas readings. There is **no caller-read
+gas oracle**, source `msg.gas` guarantee or `gas=` keyword guarantee. The old
+2026-09-29 gas-oracle account of this design is superseded by the outcome oracle.
+
+### Observations, resources and limits
+
+- Success requires a successful frame outcome, canonical `return_bytes`
+  (empty NoneT, otherwise ABI with required singleton wrapping), equal live
+  accounts/transient storage, ordered concrete logs and **the entire request
+  sequence** equal to the observed trace requests. Requests are compared only
+  on success; terminal leftover outcome lists are not related observations.
+- Assertion/raise requires Reverted, except `"UNREACHABLE"` permits any failure.
+  Non-exempt source Error requires a failed frame. Lowering requires a
+  terminating Halt/Abort, never a stuck Error, OK, IntRet or fuel-zero escape;
+  escaped Break/Continue/Return control has no corresponding result clause.
+  There is **no revert-data/reason/general abort-kind equality**. The pipeline
+  is a forward simulation with deliberately weaker failure observations.
+- The sole exemption is exact `RuntimeError "abi_decode invalid"` when a function
+  body contains a dynamic ABI decode target. It is not arbitrary ReturnReject,
+  every decoder error, static-only decoding or `"abi_decode conversion"`.
+  Callee-return rejection can be exempt only when it produces that same message
+  in such a program. Exempt runs still have an actual EVM run but no result/effect
+  correspondence obligation.
+- Resource alternatives are genuine frame OutOfGas/StackOverflow, or a failed
+  value-zero computed precompile whose pure input was valid. Invalid ecadd/ecmul
+  input is not precompile starvation. There is no existential sufficient-gas
+  loophole, gas bound or guarantee of success regardless of resources.
+- Static entry, runtime immutables, msg.gas/gas=, fallback invocation and
+  arbitrary unsupported programs are outside this runtime contract. Outgoing
+  STATICCALL is not a static-entry guarantee. Environmental satisfiability,
+  transaction entry/storage and callee-outcome producers remain Milestone 7
+  obligations; selected boundary regressions do not discharge them.
+
+Deployment is separate: the real `e2e_deploy_correctness` is **ADMITTED**,
+Milestone6 item7, off this call path. It has Call-free constructor/canonical ABI,
+pre-constant deployment typing/storage and fresh single-frame creation with an
+uninstalled source target; it returns/installs runtime bytes and compares other
+accounts and target modulo code, transient storage and logs. It is not the old
+proved `==> T` placeholder. `gen_fn_simulation` is separately ADMITTED,
+Milestone4.2, also off path. The
+[completed retirement ledger](../lowering/e2eLegacy.md) retains original proof
+history and maps all obsolete APIs to the clean new boundary; no compatibility
+bridge is a current producer. Final project/generated/all101/strict bytecode
+checks remain TASK060 debt; historical TASK065 parity evidence is not current
+certification.
 
 ## Pipeline configurations
 
