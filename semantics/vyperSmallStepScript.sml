@@ -1722,7 +1722,26 @@ Proof
   \\ rw[Once OWHILE_THM, stepk_def]
 QED
 
-val EXT_CALL_CPS_TAC =
+(* The induction supplies a default-expression guard for each oracle mode.
+   Drop the unreachable mode before simplifying or matching those guards. *)
+fun DROP_EXT_CALL_IH_TAC c =
+  first_x_assum (fn th =>
+    if can (find_term (fn tm => is_const tm andalso same_const tm c))
+           (concl th) then ALL_TAC else NO_TAC);
+
+val EXT_CALL_CPS_PREP_TAC =
+  FIRST
+    [qpat_x_assum `st_args.outcomes = NONE` (fn th =>
+       DROP_EXT_CALL_IH_TAC ``vyperCallOutcome$take_call_outcome`` >>
+       assume_tac th),
+     qpat_x_assum `st_args.outcomes = SOME _` (fn th =>
+       DROP_EXT_CALL_IH_TAC ``run_ext_call`` >> assume_tac th)] >>
+  gvs[bind_def, ignore_bind_def, return_def, UNCURRY,
+    type_check_def, check_def, assert_def, lift_option_type_def,
+    get_accounts_def, get_transient_storage_def, update_accounts_def,
+    update_transient_def, append_logs_def, raise_def];
+
+val EXT_CALL_CPS_CASES_TAC =
   rpt (FIRST [first_assum MATCH_ACCEPT_TAC,
     CHANGED_TAC (gvs[bind_def, ignore_bind_def, return_def, UNCURRY,
       type_check_def, check_def, assert_def, lift_option_type_def,
@@ -1732,7 +1751,9 @@ val EXT_CALL_CPS_TAC =
       if is_imp (snd (strip_forall (concl th))) then
         drule_at Any th >> simp[] >> strip_tac
       else NO_TAC),
-    CASE_TAC]) >>
+    CASE_TAC]);
+
+val EXT_CALL_CPS_FINISH_TAC =
   TRY (rename1 `lift_option (run_ext_call _ _ _ _ _ _ _) _ _ = (INL call_result,_)` >>
     PairCases_on `call_result` >> gvs[]) >>
   TRY (rename1 `vyperCallOutcome$take_call_outcome _ _ _ _ = (INL call_pair,_)` >>
@@ -1761,28 +1782,28 @@ Resume eval_cps_eq[ExtCall]:
 QED
 
 Resume eval_cps_eq[static_none_noneT]:
-  EXT_CALL_CPS_TAC
+  EXT_CALL_CPS_PREP_TAC >> EXT_CALL_CPS_CASES_TAC >> EXT_CALL_CPS_FINISH_TAC
 QED
 Resume eval_cps_eq[static_none_value]:
-  EXT_CALL_CPS_TAC
+  EXT_CALL_CPS_PREP_TAC >> EXT_CALL_CPS_CASES_TAC >> EXT_CALL_CPS_FINISH_TAC
 QED
 Resume eval_cps_eq[static_some_noneT]:
-  EXT_CALL_CPS_TAC
+  EXT_CALL_CPS_PREP_TAC >> EXT_CALL_CPS_CASES_TAC >> EXT_CALL_CPS_FINISH_TAC
 QED
 Resume eval_cps_eq[static_some_value]:
-  EXT_CALL_CPS_TAC
+  EXT_CALL_CPS_PREP_TAC >> EXT_CALL_CPS_CASES_TAC >> EXT_CALL_CPS_FINISH_TAC
 QED
 Resume eval_cps_eq[nonstatic_none_noneT]:
-  EXT_CALL_CPS_TAC
+  EXT_CALL_CPS_PREP_TAC >> EXT_CALL_CPS_CASES_TAC >> EXT_CALL_CPS_FINISH_TAC
 QED
 Resume eval_cps_eq[nonstatic_none_value]:
-  EXT_CALL_CPS_TAC
+  EXT_CALL_CPS_PREP_TAC >> EXT_CALL_CPS_CASES_TAC >> EXT_CALL_CPS_FINISH_TAC
 QED
 Resume eval_cps_eq[nonstatic_some_noneT]:
-  EXT_CALL_CPS_TAC
+  EXT_CALL_CPS_PREP_TAC >> EXT_CALL_CPS_CASES_TAC >> EXT_CALL_CPS_FINISH_TAC
 QED
 Resume eval_cps_eq[nonstatic_some_value]:
-  EXT_CALL_CPS_TAC
+  EXT_CALL_CPS_PREP_TAC >> EXT_CALL_CPS_CASES_TAC >> EXT_CALL_CPS_FINISH_TAC
 QED
 
 Finalise eval_cps_eq

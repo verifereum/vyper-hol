@@ -59,7 +59,13 @@ Theorem consume_call_outcome_oracle_transport:
   (SND (consume_call_outcome rq1 ro1 rs1 s1)).vs_requests =
     (SND (consume_call_outcome rq2 ro2 rs2 s2)).vs_requests
 Proof
-  metis_tac[consume_call_outcome_observation, PAIR_EQ]
+  strip_tac >>
+  map_every assume_tac
+    [Q.INST [`rq` |-> `rq1`, `ro` |-> `ro1`, `rs` |-> `rs1`, `s` |-> `s1`]
+       consume_call_outcome_observation,
+     Q.INST [`rq` |-> `rq2`, `ro` |-> `ro2`, `rs` |-> `rs2`, `s` |-> `s2`]
+       consume_call_outcome_observation] >>
+  gvs[PAIR_EQ]
 QED
 
 Theorem consume_call_outcome_frame:

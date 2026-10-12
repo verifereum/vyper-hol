@@ -418,13 +418,21 @@ Proof
        return_def] >> rpt gen_tac >> CASE_TAC >> simp[]
 QED
 
+(* Precompute the unconditional suffix facts. Using outcomes_suffix_frame
+   as a conditional rewrite makes simp retry a frame proof for every compound
+   monadic term, including recursive evaluators that can consume outcomes. *)
+val outcomes_suffix_frame_simps =
+  List.map (GEN_ALL o MATCH_MP outcomes_suffix_frame o SPEC_ALL)
+    (List.concat (List.map (CONJUNCTS o SPEC_ALL)
+      [outcomes_frame_assignment, outcomes_frame_reads,
+       outcomes_frame_primitives, outcomes_frame_handlers,
+       outcomes_frame_return, outcomes_frame_raise, outcomes_frame_create,
+       outcomes_frame_assign_result, outcomes_frame_resolve_array,
+       outcomes_frame_adopt]));
+
 val OUTCOMES_SUFFIX_TAC =
   rpt (FIRST [CHANGED_TAC (simp_tac bool_ss
-      [FORALL_PROD, pair_case_thm, UNCURRY, outcomes_suffix_frame,
-       outcomes_frame_assignment, outcomes_frame_reads, outcomes_frame_primitives,
-       outcomes_frame_handlers, outcomes_frame_return, outcomes_frame_raise,
-       outcomes_frame_create, outcomes_frame_assign_result,
-       outcomes_frame_resolve_array, outcomes_frame_adopt]),
+      ([FORALL_PROD, pair_case_thm, UNCURRY] @ outcomes_suffix_frame_simps)),
     first_assum ACCEPT_TAC,
     MATCH_ACCEPT_TAC outcomes_suffix_read,
     MATCH_ACCEPT_TAC outcomes_suffix_take,

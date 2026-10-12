@@ -3185,21 +3185,23 @@ val EXTCALL_LOG_MONAD_TAC =
     CHANGED_TAC (rewrite_tac[vyperStateTheory.ignore_bind_def]),
     gen_tac, strip_tac, conj_tac, CASE_TAC]);
 
-val EXTCALL_LOG_IH_TAC =
+(* Normalize facts and guarded IHs identically before matching the entire
+   success guard. Matching one arbitrary conjunct at a time branches over
+   unrelated operational equations and repeatedly revisits both oracle modes. *)
+val EXTCALL_LOG_IH_PREP_TAC =
   POP_ASSUM_LIST (fn ths =>
     let val (ihs, facts) = List.partition (is_forall o concl) ths in
       MAP_EVERY ASSUME_TAC (List.rev facts) >>
-      gvs[oneTheory.one, vyperStateTheory.ignore_bind_def] >>
-      MAP_EVERY (ASSUME_TAC o REWRITE_RULE [vyperStateTheory.ignore_bind_def])
-        (List.rev ihs)
-    end) >>
-  rpt (FIRST [first_assum ACCEPT_TAC,
-    first_x_assum (fn th => MATCH_ACCEPT_TAC
-      (SIMP_RULE (srw_ss()) [append_logs_def, vyperStateTheory.return_def] th)),
-    first_x_assum (fn th =>
-      if is_imp (snd (strip_forall (concl th))) then
-        drule_at Any th >> simp_tac bool_ss [] >> strip_tac
-      else NO_TAC)]);
+      gvs[oneTheory.one, vyperStateTheory.ignore_bind_def,
+          vyperStateTheory.return_def, append_logs_def] >>
+      MAP_EVERY (ASSUME_TAC o SIMP_RULE (srw_ss())
+        [oneTheory.one, vyperStateTheory.ignore_bind_def,
+         vyperStateTheory.return_def, append_logs_def]) (List.rev ihs)
+    end);
+
+val EXTCALL_LOG_IH_TAC =
+  FIRST [first_assum ACCEPT_TAC,
+    first_x_assum (fn th => drule_all th >> simp[] >> NO_TAC)];
 
 Theorem eval_mutual_log_extends[local]:
   (!cx s st res st'. eval_stmt cx s st = (res,st') ==> log_extends st st') /\
@@ -3238,7 +3240,8 @@ Proof
          (rpt gen_tac >> strip_tac >>
           simp[GSYM log_monad_def, Once vyperInterpreterTheory.evaluate_def] >>
           RULE_ASSUM_TAC (REWRITE_RULE [GSYM log_monad_def]) >>
-          EXTCALL_LOG_MONAD_TAC >> EXTCALL_LOG_IH_TAC) >~
+          EXTCALL_LOG_MONAD_TAC >> EXTCALL_LOG_IH_PREP_TAC >>
+          EXTCALL_LOG_IH_TAC) >~
        [`_ ==> !st res st'.
            eval_expr _ (Call _ (IntCall _) _ _) st = (res,st') ==>
            log_extends st st'`] >-

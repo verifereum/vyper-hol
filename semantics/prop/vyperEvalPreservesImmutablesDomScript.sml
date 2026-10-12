@@ -3646,13 +3646,12 @@ Resume immutables_dom_mutual[ExtCall]:
    suspend "return_path_3", suspend "return_path_4"]
 QED
 
+(* Normalize both sides of the operational guards, then match the complete
+   guard instead of repeatedly searching for an arbitrary conjunct. *)
 val IMM_DOM_FRAME_IH_TAC =
-  gvs[oneTheory.one, ignore_bind_def, append_logs_def] >>
-  rpt (FIRST [first_assum ACCEPT_TAC,
-    first_x_assum (fn th =>
-      if is_imp (snd (strip_forall (concl th))) then
-        drule_at Any th >> simp[] >> strip_tac
-      else NO_TAC)]);
+  gvs[oneTheory.one, ignore_bind_def, append_logs_def, return_def] >>
+  FIRST [first_assum ACCEPT_TAC,
+    first_x_assum (fn th => drule_all th >> simp[] >> NO_TAC)];
 
 Resume immutables_dom_mutual[return_path_1]:
   IMM_DOM_FRAME_IH_TAC

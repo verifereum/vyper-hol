@@ -252,11 +252,11 @@ Proof
       metis_tac[vsr_update_var_R_ok])
   >- (irule vsr_step_inst_bump >> simp[])
   >- (vsr_eval_rewrite_tac () >>
-      rpt (CASE_TAC >> gvs[lift_result_def]) >>
-      metis_tac[vsr_update_var_R_ok])
+      rpt (BasicProvers.TOP_CASE_TAC >> simp[lift_result_def]) >>
+      vsr_irule vsr_update_var_R_ok >> simp[])
   >- (vsr_eval_rewrite_tac () >>
-      rpt (CASE_TAC >> gvs[lift_result_def]) >>
-      metis_tac[vsr_update_var_R_ok])
+      rpt (BasicProvers.TOP_CASE_TAC >> simp[lift_result_def]) >>
+      vsr_irule vsr_update_var_R_ok >> simp[])
 QED
 
 
