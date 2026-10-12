@@ -184,9 +184,14 @@ Theorem outcomes_frame_assignment:
 Proof
   ho_match_mp_tac assign_target_ind >> rpt conj_tac >> rpt gen_tac >>
   simp[Once assign_target_def, FORALL_PROD] >> rpt strip_tac >>
-  rpt (FIRST [CHANGED_TAC (simp[FORALL_PROD]),
+  rpt (FIRST [CHANGED_TAC (simp_tac bool_ss
+      [FORALL_PROD, pair_case_thm, UNCURRY, outcomes_frame_reads,
+       outcomes_frame_primitives, outcomes_frame_assign_result,
+       outcomes_frame_resolve_array, outcomes_frame_return,
+       outcomes_frame_raise]),
+    first_assum ACCEPT_TAC,
     irule outcomes_frame_bind >> conj_tac,
-    irule outcomes_frame_ignore_bind >> conj_tac,
+    CHANGED_TAC (rewrite_tac[ignore_bind_def]),
     irule outcomes_frame_cond >> conj_tac,
     gen_tac, CASE_TAC])
 QED
@@ -227,6 +232,17 @@ Theorem outcomes_frame_create[simp]:
   outcomes_frame (eval_create cx kind has_salt rof arg_tys vs)
 Proof
   simp[eval_create_def, create_soft_failure_def] >>
+  rpt (FIRST [CHANGED_TAC (simp[FORALL_PROD]),
+    irule outcomes_frame_bind >> conj_tac,
+    irule outcomes_frame_ignore_bind >> conj_tac,
+    irule outcomes_frame_cond >> conj_tac,
+    gen_tac, CASE_TAC])
+QED
+
+Theorem outcomes_frame_raw_call[simp]:
+  outcomes_frame (eval_raw_call cx flags target_addr calldata amount)
+Proof
+  simp[eval_raw_call_def] >>
   rpt (FIRST [CHANGED_TAC (simp[FORALL_PROD]),
     irule outcomes_frame_bind >> conj_tac,
     irule outcomes_frame_ignore_bind >> conj_tac,
@@ -428,7 +444,7 @@ val outcomes_suffix_frame_simps =
        outcomes_frame_primitives, outcomes_frame_handlers,
        outcomes_frame_return, outcomes_frame_raise, outcomes_frame_create,
        outcomes_frame_assign_result, outcomes_frame_resolve_array,
-       outcomes_frame_adopt]));
+       outcomes_frame_adopt, outcomes_frame_raw_call]));
 
 val OUTCOMES_SUFFIX_TAC =
   rpt (FIRST [CHANGED_TAC (simp_tac bool_ss

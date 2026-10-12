@@ -210,12 +210,10 @@ val ClearTransientStorage_tm =
   prim_mk_const{Thy="vyperTestRunner",Name="ClearTransientStorage"}
 
 val unsupported_code = [
-  "@raw_return\n" (* TODO: add *)
 ]
 
 val unsupported_patterns = unsupported_code @ [
   "msg.mana", "msg.gas",
-  "msg.data",
   "gas=",
   (* JSON ABI interface imports currently expose legacy ABI entries
      with constant/payable instead of stateMutability, and dynamic ABI bytes
@@ -252,6 +250,48 @@ fun first_some [] = NONE
   | first_some (NONE::xs) = first_some xs
   | first_some (SOME x::_) = SOME x
 
+(* Delegate raw_call is independent of msg.data (#327): both recursive and
+   CPS execution reject it. Classify the exported AST, not source spacing.
+   #39 tracks the remaining chain-interaction builtin semantics. *)
+fun has_delegate_raw_call json = let
+  fun field_value key fields =
+    case List.find (fn (name,_) => name = key) fields of
+      SOME (_,value) => SOME value
+    | NONE => NONE
+  fun string_field key value fields =
+    case field_value key fields of
+      SOME (JSON.STRING actual) => actual = value
+    | _ => false
+  fun delegate_keyword (JSON.OBJECT fields) =
+        string_field "ast_type" "keyword" fields andalso
+        string_field "arg" "is_delegate_call" fields andalso
+        (case field_value "value" fields of
+           SOME (JSON.OBJECT value_fields) =>
+             (case field_value "value" value_fields of
+                SOME (JSON.BOOL true) => true
+              | _ => false)
+         | _ => false)
+    | delegate_keyword _ = false
+  fun walk (JSON.OBJECT fields) =
+        (string_field "ast_type" "Call" fields andalso
+         (case field_value "func" fields of
+            SOME (JSON.OBJECT func_fields) =>
+              string_field "ast_type" "Name" func_fields andalso
+              string_field "id" "raw_call" func_fields
+          | _ => false) andalso
+         (case field_value "keywords" fields of
+            SOME (JSON.ARRAY keywords) => List.exists delegate_keyword keywords
+          | _ => false)) orelse
+        List.exists (fn (_,value) => walk value) fields
+    | walk (JSON.ARRAY values) = List.exists walk values
+    | walk _ = false
+in
+  walk json
+end
+
+val delegate_raw_call_reason =
+  "unsupported feature: delegate raw_call; issue=https://github.com/verifereum/vyper-hol/issues/39"
+
 fun unsupported_source_reason_for jsons =
   case List.concat (List.map source_codes_json jsons) of
     [] => SOME "missing source_code"
@@ -263,7 +303,9 @@ fun unsupported_source_reason_for jsons =
            if List.exists (String.isSubstring pat) srcs
            then SOME ("unsupported source pattern: " ^ pat)
            else NONE)
-         unsupported_patterns)
+         unsupported_patterns @
+         [if List.exists has_delegate_raw_call jsons
+          then SOME delegate_raw_call_reason else NONE])
 
 fun unsupported_source_reason j = unsupported_source_reason_for [j]
 
@@ -312,6 +354,14 @@ val outside_admitted_suites_reason = "outside currently admitted test suites"
 val outside_admitted_suites_issue =
   "https://github.com/verifereum/vyper-hol/issues/36"
 
+(* Negative tests assert a compile-time diagnostic, so they record no deployment
+   and no call and there is nothing to replay.  Kept in their own bucket rather
+   than counted as semantic exclusions: the checks they need are frontend and
+   elaboration work, behind the missing formal front end (issues/46) and the
+   partial type checker (issues/47). *)
+val no_traces_reason = "no exported traces (negative test, frontend diagnostics)"
+val no_traces_issue = "https://github.com/verifereum/vyper-hol/issues/46"
+
 (* Individual test names that bypass unsupported pattern checks *)
 val allowed_test_names = [
   (* extcall tests - staticcall now enabled globally *)
@@ -321,22 +371,6 @@ val allowed_test_names = [
 
 (* Tests excluded by name - require architectural changes *)
 val excluded_test_names = [
-  (* Null-AST raw deployments now decode and execute, but these ABI-decode
-     cases still hit independent ABI argument/strictness limitations in the
-     source contract call path before or around the raw helper interaction. *)
-  "test_abi_arg_wrapped_complex_member_head",
-  "test_abi_arg_wrapped_dynarray_head",
-  (*"test_abi_decode_child_head_points_to_parent",*)
-  "test_abi_decode_complex_arithmetic_overflow",
-  (*"test_abi_decode_complex_empty_dynarray",
-  "test_abi_decode_empty_toplevel_dynarray",
-  "test_abi_decode_extcall_complex_empty_dynarray",
-  "test_abi_decode_extcall_empty_array",
-  "test_abi_decode_extcall_zero_len_array2",
-  "test_abi_decode_invalid_toplevel_dynarray_head",
-  "test_abi_decode_merge_head_and_length",
-  "test_abi_decode_nonstrict_head",
-  "test_abi_decode_nonstrict_head_oob",*)
   (* Raw bytecode blueprint creation remains coordinated with #379. *)
   "test_create_from_blueprint_bad_code_offset",
   (* Independent semantic mismatch in the currently admitted raw_call tests. *)
@@ -372,7 +406,6 @@ val excluded_test_names = [
   (* Tests using shift() builtin which is not yet translated.
      TODO: add shift builtin support *)
   "test_uint256_mulmod_complex",
-  (* msg.data tests now excluded by unsupported_patterns *)
   (* skip_contract_check=True keyword not yet supported in ExtCall.
      TODO: add skip_contract_check flag to ExtCall AST *)
   "test_skip_contract_check",
@@ -947,7 +980,8 @@ fun print_raw_coverage output json_path report = let
   fun emit_named reason names = List.app (fn name => emit (String.concat
     ["[vyper-coverage] excluded file=", json_path,
      " test=", name, " reason=", reason, "\n"])) (List.rev names)
-  val () = emit_named "no exported traces" (#no_traces report)
+  val () = emit_named (String.concat [no_traces_reason, "; issue=", no_traces_issue])
+               (#no_traces report)
   val () = List.app (fn name => emit (String.concat
     ["[vyper-coverage] selected file=", json_path,
      " test=", name, " reason=source supplied by fixture\n"]))
@@ -1094,6 +1128,8 @@ fun write_coverage_report output_path = let
        " excluded_name=", Int.toString excluded_name,
        " excluded_pattern=", Int.toString excluded_pattern,
        " no_exported_traces=", Int.toString no_traces,
+       " no_exported_traces_reason=", no_traces_reason,
+       " no_exported_traces_issue=", no_traces_issue,
        " source_from_fixture=", Int.toString fixture_source,
        " missing_source=", Int.toString missing_source,
        " blank_source=", Int.toString blank_source,

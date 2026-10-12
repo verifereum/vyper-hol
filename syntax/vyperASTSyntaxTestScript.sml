@@ -177,6 +177,7 @@ val call_target_samples =
             (listSyntax.mk_list ([u256], vyperASTSyntax.type_ty), u256)))
   , vyperASTSyntax.Send_tm
   , vyperASTSyntax.mk_RawCallTarget_tm flags
+  , vyperASTSyntax.mk_RawCallCalldataTarget_tm flags
   , vyperASTSyntax.RawLog_tm
   , vyperASTSyntax.RawRevert_tm
   , vyperASTSyntax.SelfDestructTarget_tm

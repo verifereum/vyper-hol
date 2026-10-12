@@ -158,6 +158,95 @@ End
 
 val () = cv_auto_trans lookup_callable_function_def;
 
+(* ===== @raw_return declarations ===== *)
+
+(* TOP-LEVEL: matches_fn
+   Does tl declare a function named name with visibility vis?  Only FunctionDecl
+   entries can, so generated getters never match. *)
+Definition matches_fn_def:
+  matches_fn name vis (FunctionDecl fv _ _ _ id _ _ _ _) = (id = name ∧ vis = fv) ∧
+  matches_fn name vis _ = F
+End
+
+(* TOP-LEVEL: lookup_raw_return
+   The @raw_return flag of the first FunctionDecl matching (name, vis), and NONE
+   when ts declares no such function.  Same selection order as lookup_function's
+   FunctionDecl case, so both lookups reach the same declaration first; see
+   lookup_raw_return_of_first. *)
+Definition lookup_raw_return_def:
+  lookup_raw_return src_id_opt name vis [] = NONE ∧
+  lookup_raw_return src_id_opt name vis
+    (FunctionDecl fv fm nr rr id args dflts ret body :: ts) =
+  (if id = name ∧ vis = fv then SOME rr
+   else lookup_raw_return src_id_opt name vis ts) ∧
+  lookup_raw_return src_id_opt name vis (_ :: ts) =
+    lookup_raw_return src_id_opt name vis ts
+End
+
+val () = cv_auto_trans lookup_raw_return_def;
+
+(* TOP-LEVEL: lookup_raw_return_or_F
+   lookup_raw_return with "no such function" folded into F. *)
+Definition lookup_raw_return_or_F_def:
+  lookup_raw_return_or_F src_id_opt name vis ts =
+    case lookup_raw_return src_id_opt name vis ts of
+      SOME rr => rr
+    | NONE => F
+End
+
+val () = cv_auto_trans lookup_raw_return_or_F_def;
+
+Theorem lookup_raw_return_head:
+  lookup_raw_return src name vis
+    (FunctionDecl fv fm nr rr id args dflts ret body :: ts) =
+  (if id = name ∧ vis = fv then SOME rr
+   else lookup_raw_return src name vis ts)
+Proof
+  simp[lookup_raw_return_def]
+QED
+
+(* KEY LEMMA: the reported flag comes from a declaration of that name and
+   visibility, so a positive answer is justified. *)
+Theorem lookup_raw_return_MEM:
+  ∀src name vis ts rr.
+    lookup_raw_return src name vis ts = SOME rr ==>
+    ∃fv fm nr id args dflts ret body.
+      MEM (FunctionDecl fv fm nr rr id args dflts ret body) ts ∧
+      id = name ∧ vis = fv
+Proof
+  Induct_on `ts` >> TRY (Cases_on `h`) >> TRY (Cases_on `h`)
+  >> rw[lookup_raw_return_def, AllCaseEqs()] >> metis_tac[]
+QED
+
+(* KEY LEMMA: the reported flag is the flag of the *first* matching
+   declaration; entries before it never contribute. *)
+Theorem lookup_raw_return_of_first:
+  ∀src name vis fv fm nr rr id args dflts ret body rest pre.
+    id = name ∧ vis = fv ∧
+    (∀tl. MEM tl pre ⇒ ¬matches_fn name vis tl) ==>
+    lookup_raw_return src name vis
+      (pre ++ (FunctionDecl fv fm nr rr id args dflts ret body :: rest)) = SOME rr
+Proof
+  Induct_on `pre` >> rw[]
+  \\ TRY (Cases_on `h`) >> TRY (Cases_on `h`)
+  \\ fs[lookup_raw_return_def, matches_fn_def]
+  \\ metis_tac[matches_fn_def]
+QED
+
+(* KEY LEMMA: with lookup_raw_return_MEM, this pins lookup_raw_return to the
+   @raw_return flag of the first FunctionDecl of that name and visibility.  A
+   generated getter never matches (matches_fn), and Vyper forbids a getter or a
+   second function reusing a contract-level name. *)
+Theorem lookup_raw_return_or_F_of_first:
+  ∀src name vis fv fm nr rr id args dflts ret body rest pre.
+    id = name ∧ vis = fv ∧
+    (∀tl. MEM tl pre ⇒ ¬matches_fn name vis tl) ==>
+    lookup_raw_return_or_F src name vis
+      (pre ++ (FunctionDecl fv fm nr rr id args dflts ret body :: rest)) = rr
+Proof
+  rw[lookup_raw_return_of_first, lookup_raw_return_or_F_def]
+QED
+
 Definition bind_arguments_def:
   bind_arguments tenv ([]: argument list) [] = SOME (FEMPTY: scope) ∧
   bind_arguments tenv ((id, typ)::params) (v::vs) =
@@ -829,6 +918,61 @@ End
 
 val () = cv_auto_trans run_ext_call_def;
 
+(* Shared execution after raw_call operands have been evaluated and decoded.
+   Both input forms retain the same static/revert/output and state effects. *)
+Definition eval_raw_call_def:
+  eval_raw_call cx flags target_addr calldata amount = do
+    value_opt <<- if flags.rcf_is_static then NONE else SOME amount;
+    type_check (¬flags.rcf_is_delegate) "raw_call delegate unsupported";
+    accounts <- get_accounts;
+    tStorage <- get_transient_storage;
+    result <- lift_option
+      (run_ext_call cx.txn.target target_addr calldata value_opt accounts tStorage
+        (vyper_to_tx_params cx.txn)) "raw_call run failed";
+    success <<- FST result; result1 <<- SND result;
+    returnData <<- FST result1; result2 <<- SND result1;
+    accounts' <<- FST result2; result3 <<- SND result2;
+    tStorage' <<- FST result3; emitted_logs <<- SND result3;
+    update_accounts (K accounts');
+    update_transient (K tStorage');
+    append_logs emitted_logs;
+    if flags.rcf_revert_on_failure then do
+      check success "raw_call reverted";
+      if flags.rcf_max_outsize = 0 then return $ Value NoneV
+      else return $ Value $ BytesV (TAKE flags.rcf_max_outsize returnData)
+    od else
+      if flags.rcf_max_outsize = 0 then return $ Value $ BoolV success
+      else return $ Value $ ArrayV $ TupleV [BoolV success;
+             BytesV (TAKE flags.rcf_max_outsize returnData)]
+  od
+End
+
+val () = eval_raw_call_def
+  |> SRULE [FUN_EQ_THM, bind_def, ignore_bind_def, LET_RATOR,
+            COND_RATOR, prod_CASE_rator, sum_CASE_rator, lift_option_def,
+            option_CASE_rator, type_check_def, assert_def]
+  |> cv_auto_trans;
+
+Theorem eval_raw_call_preserves_non_accounts:
+  eval_raw_call cx flags target_addr calldata amount st = (res, st') ==>
+  st'.scopes = st.scopes /\ st'.immutables = st.immutables
+Proof
+  Cases_on `flags.rcf_is_delegate` >>
+  simp[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def, raise_def, get_accounts_def,
+       get_transient_storage_def] >>
+  Cases_on `run_ext_call cx.txn.target target_addr calldata
+    (if flags.rcf_is_static then NONE else SOME amount)
+    st.accounts st.tStorage (vyper_to_tx_params cx.txn)` >>
+  simp[lift_option_def, bind_def, return_def, raise_def] >>
+  PairCases_on `x` >>
+  Cases_on `flags.rcf_revert_on_failure` >> Cases_on `x0` >>
+  Cases_on `flags.rcf_max_outsize = 0` >>
+  simp[update_accounts_def, update_transient_def, append_logs_def,
+       check_def, assert_def, bind_def, ignore_bind_def, return_def, raise_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
 (* Dynamic array bounds check: reads stored length from storage *)
 Definition check_array_bounds_def:
   check_array_bounds cx (ArrayRef is_transient base_slot _ (Dynamic _)) (IntV i) = do
@@ -1259,28 +1403,14 @@ Definition evaluate_def:
     target_addr <- lift_option_type (dest_AddressV (EL 0 vs)) "raw_call target";
     calldata <- lift_option_type (dest_BytesV (EL 1 vs)) "raw_call data";
     amount <- lift_option_type (dest_NumV (EL 2 vs)) "raw_call value";
-    value_opt <<- if flags.rcf_is_static then NONE else SOME amount;
-    (* delegate_call not yet supported in semantics *)
-    type_check (¬flags.rcf_is_delegate) "raw_call delegate unsupported";
-    accounts <- get_accounts;
-    tStorage <- get_transient_storage;
-    txParams <<- vyper_to_tx_params cx.txn;
-    caller <<- cx.txn.target;
-    result <- lift_option
-      (run_ext_call caller target_addr calldata value_opt accounts tStorage txParams)
-      "raw_call run failed";
-    (success, returnData, accounts', tStorage', emitted_logs) <<- result;
-    update_accounts (K accounts');
-    update_transient (K tStorage');
-    append_logs emitted_logs;
-    if flags.rcf_revert_on_failure then do
-      check success "raw_call reverted";
-      if flags.rcf_max_outsize = 0 then return $ Value NoneV
-      else return $ Value $ BytesV (TAKE flags.rcf_max_outsize returnData)
-    od else
-      if flags.rcf_max_outsize = 0 then return $ Value $ BoolV success
-      else return $ Value $ ArrayV $ TupleV [BoolV success;
-             BytesV (TAKE flags.rcf_max_outsize returnData)]
+    eval_raw_call cx flags target_addr calldata amount
+  od ∧
+  eval_expr cx (Call ty (RawCallCalldataTarget flags) es _) = do
+    vs <- eval_exprs cx es;
+    type_check (LENGTH vs = 2) "raw_call calldata args";
+    target_addr <- lift_option_type (dest_AddressV (EL 0 vs)) "raw_call target";
+    amount <- lift_option_type (dest_NumV (EL 1 vs)) "raw_call value";
+    eval_raw_call cx flags target_addr cx.txn.calldata amount
   od ∧
   (* raw_log(topics_list, data)
      args = [topics_array; data_bytes] *)
@@ -1688,6 +1818,34 @@ Definition find_function_module_def:
         ALOOKUP export_map func_name  (* Returns SOME src_id if exported *)
 End
 
+(* TOP-LEVEL: call_external_raw_return
+   The @raw_return flag of the function call_external runs for tx, else F.
+   Resolves the module as call_external does - same find_function_module, same
+   get_module_code - so the flag describes the executed declaration.  A missing
+   declaration (the implicit default entry) reports F. *)
+Definition call_external_raw_return_def:
+  call_external_raw_return am tx =
+  let src_id_opt = find_function_module am tx.target tx.function_name in
+  let cx = initial_evaluation_context am.sources am.layouts tx src_id_opt in
+  case get_module_code cx src_id_opt of
+    NONE => F
+  | SOME ts => lookup_raw_return_or_F src_id_opt tx.function_name External ts
+End
+
+val () = cv_auto_trans call_external_raw_return_def;
+
+(* KEY LEMMA: the flag is resolved from the same module code the call runs. *)
+Theorem call_external_raw_return_module_code:
+  ∀am tx ts rr src_id_opt.
+    find_function_module am tx.target tx.function_name = src_id_opt ∧
+    get_module_code (initial_evaluation_context am.sources am.layouts tx src_id_opt)
+      src_id_opt = SOME ts ∧
+    lookup_raw_return src_id_opt tx.function_name External ts = SOME rr ==>
+    call_external_raw_return am tx = rr
+Proof
+  rw[call_external_raw_return_def, lookup_raw_return_or_F_def] >> metis_tac[]
+QED
+
 Definition call_external_def:
   call_external orc am tx =
   (* Determine which module to use for type environment *)
@@ -1707,6 +1865,21 @@ Definition call_external_def:
    | SOME (mut, nr, args, dflts, ret, body) =>
        call_external_function orc am cx nr mut ts all_mods args dflts tx.args body ret
 End
+
+(* KEY LEMMA (typing): a safe_cast value of a bytestring type always has raw
+   bytes, so external_returndata's error branch is unreachable for a well-typed
+   @raw_return return value. *)
+Theorem safe_cast_bytestring_raw_return_bytes:
+  ∀tv v v'.
+    is_bytestring_tv tv ∧ safe_cast tv v = SOME v' ⇒
+    ∃bs. raw_return_bytes v' = SOME bs
+Proof
+  Cases_on `tv` >> fs[is_bytestring_tv_def, safe_cast_def]
+  >> TRY (Cases_on `b`) >> TRY (Cases_on `b'`)
+  >> fs[is_bytestring_tv_def, safe_cast_def]
+  >> TRY (Cases_on `v`) >> TRY (Cases_on `v'`)
+  >> fs[raw_return_bytes_def] >> metis_tac[]
+QED
 
 (* Explicit transaction boundary. Ordinary function entry preserves accumulated
    logs so that nested and sequential calls can share one transaction trace;

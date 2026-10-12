@@ -26,6 +26,7 @@ val _ = Parse.hide "body";
 
 Definition call_tx_well_typed_def:
   call_tx_well_typed tx <=>
+    LENGTH tx.calldata < 2 ** 256 /\
     tx.value < 2 ** 256 /\
     tx.time_stamp < 2 ** 256 /\
     tx.block_number < 2 ** 256 /\

@@ -39,20 +39,6 @@ fun exists_var_tac name (g as (asl, w)) =
 
 fun exists_vars_tac names = Tactical.EVERY (map exists_var_tac names);
 
-(* Apply a function to a free variable by name, producing a tactic *)
-fun with_var name (f : term -> tactic) (g as (asl, w)) : goal list * validation =
-  f (find_free_var name g) g;
-
-(* specl_then with variable names instead of quotations *)
-fun specl_vars_then names ttac thm (g as (asl, w)) =
-  let val tms = map (fn n => find_free_var n g) names
-  in ttac (SPECL tms thm) g end;
-
-(* exists_tac with a term-building function applied to free vars *)
-fun exists_term_tac f names (g as (asl, w)) =
-  let val tms = map (fn n => find_free_var n g) names
-  in Tactic.EXISTS_TAC (f tms) g end;
-
 (* Normalize record constructor to record literal form.
    HOL4 treats instruction n o l l0 and <|inst_id:=n;...|> as
    syntactically different terms. This bridges them. *)

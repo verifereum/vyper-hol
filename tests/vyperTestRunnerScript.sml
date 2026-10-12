@@ -1,7 +1,7 @@
 Theory vyperTestRunner
 Ancestors
-  contractABI vyperABI vyperSmallStep jsonAST jsonToVyper
-  vfmContext vfmExecution vfmTransaction
+  contractABI vyperABIDecode vyperABI vyperInterpreter vyperSmallStep jsonAST
+  jsonToVyper vfmContext vfmExecution vfmTransaction
 Libs
   cv_transLib wordsLib
 
@@ -143,11 +143,14 @@ Definition compute_vyper_args_def:
        which is the maximum encoding size for this type. *)
     bound = vyper_abi_size_bound tenv (TupleT vyTys);
     padded = PAD_RIGHT 0w bound cd;
+    (* Argument decoding uses Vyper's lenient ABI decoding (see
+       vyperABIDecode): calldata/CODE argument clamps preserve legacy
+       wrap-around head arithmetic. *)
     argsOpt = if
       static_length abiTupTy ≤ LENGTH cd ∧
-      valid_enc abiTupTy padded
+      vyper_abi_valid_enc abiTupTy padded 0
     then let
-      abiArgsTup = dec abiTupTy padded;
+      abiArgsTup = vyper_abi_dec abiTupTy padded 0;
       vyArgsTup = abi_to_vyper tenv (TupleT vyTys) abiArgsTup;
       vyArgsTv = evaluate_type tenv (TupleT vyTys);
       vyArgs = (case OPTION_BIND vyArgsTv
@@ -158,7 +161,11 @@ Definition compute_vyper_args_def:
     (argsOpt, tenv, SND vyTysRet)
 End
 
-val () = cv_auto_trans compute_vyper_args_def;
+(* Keep the logical runner on the original ABI semantics. Only its CV
+   implementation uses the unconditionally proved-equivalent fast paths. *)
+val () = compute_vyper_args_def
+  |> REWRITE_RULE [vyper_abi_dec_eq_fast, vyper_abi_valid_enc_eq_fast]
+  |> cv_auto_trans;
 
 Definition run_deployment_def:
   run_deployment am dt = let
@@ -174,6 +181,7 @@ Definition run_deployment_def:
           ; target := dt.deployedAddress
           ; function_name := name
           ; args := args
+          ; calldata := []
           ; value := dt.value
           ; time_stamp := dt.timeStamp
           ; block_number := dt.blockNumber
@@ -202,6 +210,7 @@ Definition call_trace_txn_def:
      ; target := ct.target
      ; function_name := ""
      ; args := []
+     ; calldata := ct.callData
      ; value := ct.value
      ; time_stamp := ct.timeStamp
      ; block_number := ct.blockNumber
@@ -242,12 +251,13 @@ Definition run_call_def:
     retTypes = SND (SND ar);
   in
     case FST ar of NONE => ((INR (Error $ RuntimeError "run_call args"), am),
-                            (retTys, (retTypes, FEMPTY)))
+                            (retTys, (retTypes, (FEMPTY, F))))
   | SOME args => let
     tx = <| sender := ct.sender
           ; target := ct.target
           ; function_name := name
           ; args := args
+          ; calldata := ct.callData
           ; value := ct.value
           ; time_stamp := ct.timeStamp
           ; block_number := ct.blockNumber
@@ -264,8 +274,12 @@ Definition run_call_def:
           ; origin := ct.sender |>;
     (* TODO(test-semantics): set static-call context based on ct.static. *)
     (* TODO(test-semantics): thread additional environment data from the trace. *)
+    (* Whether the callee returns raw bytes or an ABI encoding, and hence how
+       its EVM returndata must be read back, is decided by the interpreter
+       (call_external_raw_return) from the declaration call_external runs. *)
+    is_raw = call_external_raw_return am tx
   in (let (res, am', _) = call_external NONE am tx in (res, am'),
-      (retTys, (retTypes, tenv)))
+      (retTys, (retTypes, (tenv, is_raw))))
 End
 
 val () = cv_auto_trans run_call_def;
@@ -382,7 +396,9 @@ Definition run_raw_deployment_def:
                             dt.gasLimit dt.gasPrice in
     let expected = callee_from_tx_to dt.deployer sender.nonce NONE in
     let blk = make_create_block dt in
-    if expected <> dt.expectedAddress then
+    (* Failed deployments may record no address (0w); only check the CREATE
+       address when the trace recorded one. *)
+    if dt.expectedAddress <> 0w /\ expected <> dt.expectedAddress then
       INR (Error $ RuntimeError "raw deployment address mismatch")
     else
       case vfmExecution$run_transaction (Collect empty_domain) F dt.chainId
@@ -477,14 +493,12 @@ Definition run_trace_def:
          of NONE => INR (Error $ RuntimeError "error expected")
           | SOME out => let
               ar = SND (SND cr);
-              rawVyRetTy = FST ar; tenv = SND ar;
+              rawVyRetTy = FST ar; tenv = FST (SND ar);
+              is_raw = SND (SND ar);
             in
-              case evaluate_abi_decode_return tenv rawVyRetTy out of
-              | INR _ => INR (Error $ RuntimeError "output mismatch")
-              | INL decoded =>
-                  if decoded = v
-                  then INL am
-                  else INR (Error $ RuntimeError "output mismatch"))
+              if external_returndata_agrees is_raw tenv rawVyRetTy v out
+              then INL am
+              else INR (Error $ RuntimeError "output mismatch"))
 End
 
 val () = cv_auto_trans run_trace_def;

@@ -1171,3 +1171,92 @@ Definition build_ext_calldata_def:
 End
 
 val () = cv_auto_trans build_ext_calldata_def;
+
+(* ===== External Return Encoding (incl. @raw_return) ===== *)
+
+(* TOP-LEVEL: external_returndata
+   Returndata of an external call that produced value v for declared type typ.
+   An ordinary function returns the ABI encoding of v (evaluate_abi_encode_bytes,
+   inverse of the evaluate_abi_decode_return the call sites apply to observed
+   returndata).  A @raw_return function returns its bytestring value's content
+   bytes verbatim: no length word, no padding, possibly empty.  The error branch
+   is unreachable for a well-typed return value: call_external_function reports
+   only safe_casted values, and safe_cast_bytestring_raw_return_bytes gives such
+   a value raw bytes whenever typ is a Bytes/String type. *)
+Definition external_returndata_def:
+  external_returndata raw_return tenv typ v =
+    if raw_return then
+      case raw_return_bytes v of
+        SOME bs => INL bs
+      | NONE => INR "external_returndata: @raw_return needs a bytestring value"
+    else evaluate_abi_encode_bytes tenv typ v
+End
+
+val () = cv_auto_trans external_returndata_def;
+
+(* KEY LEMMA: the @raw_return branch returns exactly the value's own bytes. *)
+Theorem external_returndata_raw_SOME_iff:
+  ∀tenv typ v bs.
+    external_returndata T tenv typ v = INL bs ⇔ raw_return_bytes v = SOME bs
+Proof
+  simp[external_returndata_def]
+  >> Cases_on `raw_return_bytes v` >> simp[]
+QED
+
+(* KEY LEMMA: an ordinary external call returns the ABI encoding. *)
+Theorem external_returndata_plain:
+  ∀tenv typ v.
+    external_returndata F tenv typ v = evaluate_abi_encode_bytes tenv typ v
+Proof
+  simp[external_returndata_def] >> metis_tac[]
+QED
+
+(* TOP-LEVEL: external_returndata_agrees
+   Whether observed returndata agrees with the value the semantics computed.
+   An ordinary function ABI-encodes, so returndata must decode back to v; a
+   @raw_return function returns raw content bytes, so returndata must be exactly
+   those, as external_returndata produces. *)
+Definition external_returndata_agrees_def:
+  external_returndata_agrees is_raw tenv ret v out =
+    if is_raw then
+      (case external_returndata T tenv ret v of
+         INR e => F
+       | INL expected => (out = expected))
+    else
+      (case evaluate_abi_decode_return tenv ret out of
+         INR e => F
+       | INL decoded => (decoded = v))
+End
+
+val () = cv_auto_trans external_returndata_agrees_def;
+
+(* KEY LEMMA: the @raw_return agreement is exactly byte equality against the
+   raw encoding; the ordinary agreement is exactly successful decoding. *)
+Theorem external_returndata_agrees_T:
+  ∀tenv ret v out.
+    external_returndata_agrees T tenv ret v out ⇔
+    ∃bs. external_returndata T tenv ret v = INL bs ∧ out = bs
+Proof
+  simp[external_returndata_agrees_def] >> Cases_on `external_returndata T tenv ret v`
+  >> simp[EQ_SYM_EQ]
+QED
+
+Theorem external_returndata_agrees_F:
+  ∀tenv ret v out.
+    external_returndata_agrees F tenv ret v out ⇔
+    evaluate_abi_decode_return tenv ret out = INL v
+Proof
+  simp[external_returndata_agrees_def] >> Cases_on `evaluate_abi_decode_return tenv ret out`
+  >> simp[]
+QED
+
+(* KEY LEMMA: a @raw_return value with no bytestring representation is
+   rejected rather than silently encoded. *)
+Theorem external_returndata_raw_NONE:
+  ∀tenv typ v.
+    raw_return_bytes v = NONE ⇒
+      external_returndata T tenv typ v =
+        INR "external_returndata: @raw_return needs a bytestring value"
+Proof
+  rw[external_returndata_def, option_CASE_rator] >> metis_tac[]
+QED

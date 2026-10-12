@@ -213,6 +213,8 @@ val (GEther_tm, is_GEther) = syntax0 "GEther"
 val (TEther_tm, is_TEther) = syntax0 "TEther"
 
 val (Len_tm, is_Len) = syntax0 "Len"
+val (CalldataLen_tm, is_CalldataLen) = syntax0 "CalldataLen"
+val (CalldataSlice_tm, mk_CalldataSlice_tm, dest_CalldataSlice_tm, is_CalldataSlice) = syntax_fns1 "vyperAST" "CalldataSlice"
 val (Not_tm, is_Not) = syntax0 "Not"
 val (Neg_tm, is_Neg) = syntax0 "Neg"
 val (Abs_tm, is_Abs) = syntax0 "Abs"
@@ -408,6 +410,9 @@ val (ExtCall_tm, mk_ExtCall_tm, dest_ExtCall_tm, is_ExtCall) =
 val (Send_tm, is_Send) = syntax0 "Send"
 val (RawCallTarget_tm, mk_RawCallTarget_tm, dest_RawCallTarget_tm,
      is_RawCallTarget) = syntax_fns1 "vyperAST" "RawCallTarget"
+val (RawCallCalldataTarget_tm, mk_RawCallCalldataTarget_tm,
+     dest_RawCallCalldataTarget_tm, is_RawCallCalldataTarget) =
+  syntax_fns1 "vyperAST" "RawCallCalldataTarget"
 val (RawLog_tm, is_RawLog) = syntax0 "RawLog"
 val (RawRevert_tm, is_RawRevert) = syntax0 "RawRevert"
 val (SelfDestructTarget_tm, is_SelfDestructTarget) = syntax0 "SelfDestructTarget"
@@ -600,6 +605,7 @@ datatype call_target_view =
   | VExtCall of term * term
   | VSend
   | VRawCallTarget of term
+  | VRawCallCalldataTarget of term
   | VRawLog
   | VRawRevert
   | VSelfDestructTarget
@@ -610,6 +616,8 @@ fun view_call_target tm =
   else if is_ExtCall tm then VExtCall (dest_ExtCall_tm tm)
   else if is_Send tm then VSend
   else if is_RawCallTarget tm then VRawCallTarget (dest_RawCallTarget_tm tm)
+  else if is_RawCallCalldataTarget tm then
+    VRawCallCalldataTarget (dest_RawCallCalldataTarget_tm tm)
   else if is_RawLog tm then VRawLog
   else if is_RawRevert tm then VRawRevert
   else if is_SelfDestructTarget tm then VSelfDestructTarget

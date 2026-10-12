@@ -159,6 +159,19 @@ Proof
   simp[lower_value_def, comp_bind_def]
 QED
 
+(* msg.data has no expression callback; only the address and value are children. *)
+Theorem compile_raw_call_calldata_callback_contract:
+  expr_callbacks_agree f g cenv args ⇒
+  compile_call f cenv ret_ty ty (RawCallCalldataTarget rcf) args default_ret st =
+  compile_call g cenv ret_ty ty (RawCallCalldataTarget rcf) args default_ret st
+Proof
+  Cases_on `args` >- simp[compile_call_def] >>
+  rename1 `addr_e::rest` >> Cases_on `rest` >- simp[compile_call_def] >>
+  rename1 `addr_e::value_e::tail` >> Cases_on `tail` >>
+  simp[compile_call_def] >> strip_tac >> fs[] >>
+  simp[lower_value_def, comp_bind_def]
+QED
+
 Theorem compile_extcall_callback_contract:
   expr_callbacks_agree f g cenv (call_callback_children args default_ret) ⇒
   compile_call f cenv ret_ty ty (ExtCall static_call (fn_name,arg_types,return_type))
@@ -184,6 +197,8 @@ Proof
   FIRST [irule compile_intcall_callback_contract >>
            fs[call_callback_children_def] >> Cases_on `default_ret` >> fs[],
          irule compile_send_callback_contract >>
+           fs[call_callback_children_def] >> Cases_on `default_ret` >> fs[],
+         irule compile_raw_call_calldata_callback_contract >>
            fs[call_callback_children_def] >> Cases_on `default_ret` >> fs[],
          rename1 `compile_call f _ _ _ (ExtCall _ signature)` >>
            PairCases_on `signature` >>

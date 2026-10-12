@@ -337,6 +337,11 @@ signature vyperASTSyntax = sig
   val mk_RawCallTarget_tm : term -> term
   val dest_RawCallTarget_tm : term -> term
   val is_RawCallTarget : term -> bool
+
+  val RawCallCalldataTarget_tm : term
+  val mk_RawCallCalldataTarget_tm : term -> term
+  val dest_RawCallCalldataTarget_tm : term -> term
+  val is_RawCallCalldataTarget : term -> bool
   val RawLog_tm : term
   val is_RawLog : term -> bool
   val RawRevert_tm : term
@@ -438,6 +443,11 @@ signature vyperASTSyntax = sig
   val TEther_tm : term val is_TEther : term -> bool
 
   val Len_tm : term val is_Len : term -> bool
+  val CalldataLen_tm : term val is_CalldataLen : term -> bool
+  val CalldataSlice_tm : term
+  val mk_CalldataSlice_tm : term -> term
+  val dest_CalldataSlice_tm : term -> term
+  val is_CalldataSlice : term -> bool
   val Not_tm : term val is_Not : term -> bool
   val Neg_tm : term val is_Neg : term -> bool
   val Abs_tm : term val is_Abs : term -> bool
@@ -624,6 +634,7 @@ signature vyperASTSyntax = sig
     | VExtCall of term * term
     | VSend
     | VRawCallTarget of term
+    | VRawCallCalldataTarget of term
     | VRawLog
     | VRawRevert
     | VSelfDestructTarget

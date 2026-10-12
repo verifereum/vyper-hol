@@ -2331,6 +2331,22 @@ Definition compile_call_def:
   compile_call cfn cenv ret_ty ty (RawCallTarget rcf) args default_ret st =
     (let (_, st') = emit_inst INVALID [] [] st in
      (StackValue ret_ty (Lit 0w), st')) ∧
+  compile_call cfn cenv ret_ty ty (RawCallCalldataTarget rcf) args default_ret st =
+    (case args of
+       [addr_e; value_e] =>
+         let (addr_op, st1) = lower_value cfn cenv (BaseT AddressT) addr_e st in
+         let ((data_ptr, data_len), st2) = compile_msg_data_to_memory st1 in
+         let (value_op, st3) = lower_value cfn cenv (BaseT (UintT 256)) value_e st2 in
+         let (gas_op, st4) = emit_op GAS [] st3 in
+         let call_ty = if rcf.rcf_is_delegate then DelegateCall
+                       else if rcf.rcf_is_static then StaticCall
+                       else RegularCall in
+         let (result_op, st5) = compile_raw_call addr_op data_ptr data_len gas_op
+           value_op call_ty rcf.rcf_max_outsize rcf.rcf_revert_on_failure st4 in
+         if rcf.rcf_max_outsize = 0 then (StackValue ret_ty result_op, st5)
+         else (LocatedValue ret_ty (mk_ptr result_op LocMemory), st5)
+     | _ => let (_, st') = emit_inst INVALID [] [] st in
+            (StackValue ret_ty (Lit 0w), st')) ∧
   compile_call cfn cenv ret_ty ty RawLog args default_ret st =
     (let (_, st') = emit_inst INVALID [] [] st in
      (StackValue ret_ty (Lit 0w), st')) ∧
@@ -2652,6 +2668,14 @@ Definition compile_builtin_dispatch_body_def:
           | _ =>
               let (v, st1) = lower_value compile_expr cenv arg_ty e1 st in
               as_stack_val ret_ty (compile_sha256_word v st1))
+     | CalldataLen =>
+         as_stack_val ret_ty (compile_builtin_calldatasize st)
+     | CalldataSlice n =>
+         (let start_e = HD args in
+          let (start_op, st1) = lower_value compile_expr cenv
+                                  (expr_type start_e) start_e st in
+          as_ptr_val ret_ty LocMemory
+            (compile_slice_calldata start_op (Lit (n2w n)) (n + 32) st1))
      | Len =>
          (let e1 = HD args in
           if is_msg_data e1 then

@@ -5,6 +5,7 @@
 Theory exprRecursionRegression
 Ancestors
   compileEnv vyperAST relation exprLowering exprCallBounds list
+  builtinSystem
 Libs
   monadsyntax
 
@@ -79,6 +80,44 @@ Theorem ifexp_callback_probe_equation:
 Proof
   simp[Once ifexp_callback_probe_def] >>
   CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]
+QED
+
+(* ===== Calldata AST dispatch regressions ===== *)
+
+Theorem calldata_len_dispatch:
+  compile_builtin_dispatch_body cfn cenv ret_ty ty CalldataLen [] st =
+    as_stack_val ret_ty (compile_builtin_calldatasize st)
+Proof
+  simp[compile_builtin_dispatch_body_def]
+QED
+
+(* The start is lowered exactly once; the fixed length is not an AST operand. *)
+Theorem calldata_slice_dispatch:
+  compile_builtin_dispatch_body cfn cenv ret_ty ty (CalldataSlice n) [start] st =
+    (let (start_op, st1) = lower_value cfn cenv (expr_type start) start st in
+     as_ptr_val ret_ty LocMemory
+       (compile_slice_calldata start_op (Lit (n2w n)) (n + 32) st1))
+Proof
+  simp[compile_builtin_dispatch_body_def]
+QED
+
+(* Calldata is copied directly, without lowering a fictitious bytes operand. *)
+Theorem raw_call_calldata_dispatch:
+  compile_call cfn cenv ret_ty ty (RawCallCalldataTarget rcf)
+    [addr_e; value_e] default_ret st =
+    (let (addr_op, st1) = lower_value cfn cenv (BaseT AddressT) addr_e st in
+     let ((data_ptr, data_len), st2) = compile_msg_data_to_memory st1 in
+     let (value_op, st3) = lower_value cfn cenv (BaseT (UintT 256)) value_e st2 in
+     let (gas_op, st4) = emit_op GAS [] st3 in
+     let call_ty = if rcf.rcf_is_delegate then DelegateCall
+                   else if rcf.rcf_is_static then StaticCall
+                   else RegularCall in
+     let (result_op, st5) = compile_raw_call addr_op data_ptr data_len gas_op
+       value_op call_ty rcf.rcf_max_outsize rcf.rcf_revert_on_failure st4 in
+     if rcf.rcf_max_outsize = 0 then (StackValue ret_ty result_op, st5)
+     else (LocatedValue ret_ty (mk_ptr result_op LocMemory), st5))
+Proof
+  simp[compile_call_def]
 QED
 
 (* An opaque helper still receives a restricted recursive callback. *)

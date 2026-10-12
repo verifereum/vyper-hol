@@ -9,7 +9,11 @@ version = "0.2.3"
 roots = ["vyperHolScript.sml",
          "semantics/type/vyperCheckContractLibTestScript.sml",
          "frontend/vyperCheckContractFrontendLibTestScript.sml",
-         "tests/vyperCheckContractTraceLibTestScript.sml"]
+         "tests/vyperCheckContractTraceLibTestScript.sml",
+         "tests/vyperTestLibTestScript.sml",
+         "tests/vyperCalldataLenTestScript.sml",
+         "tests/vyperCalldataSliceTestScript.sml",
+         "tests/vyperRawCallCalldataTestScript.sml"]
 
 [build.theory_tactic_timeouts]
 "semantics/vyperInterpreterScript.sml" = 5
@@ -19,4 +23,4 @@ roots = ["vyperHolScript.sml",
 
 [dependencies.verifereum]
 git = "https://github.com/verifereum/verifereum.git"
-rev = "b116b3c46c17381e968d25b81cd81b6ab2b76ab2"
+rev = "f5e172ccbf45addef7096feea76428de3ed3dfa8"

@@ -15,28 +15,6 @@ Ancestors
   pred_set arithmetic list rich_list
 Libs
 
-(* Quotation-free tactic helpers *)
-fun find_free_var name (asl, w) =
-  let val vs = free_varsl (w::asl)
-  in valOf (List.find (fn v => fst (dest_var v) = name) vs) end;
-
-fun exists_var_tac name (g as (asl, w)) =
-  Tactic.EXISTS_TAC (find_free_var name g) g;
-
-fun exists_vars_tac names = Tactical.EVERY (map exists_var_tac names);
-
-fun with_var name (f : term -> tactic) (g as (asl, w)) : goal list * validation =
-  f (find_free_var name g) g;
-
-fun specl_vars_then names ttac thm (g as (asl, w)) =
-  let val tms = map (fn n => find_free_var n g) names
-  in ttac (SPECL tms thm) g end;
-
-fun exists_term_tac f names (g as (asl, w)) =
-  let val tms = map (fn n => find_free_var n g) names
-  in Tactic.EXISTS_TAC (f tms) g end;
-
-
 (* Safe/ASSERT/terminator trichotomy excludes INVOKE *)
 Triviality safe_assert_term_no_invoke[local]:
   !insts.
