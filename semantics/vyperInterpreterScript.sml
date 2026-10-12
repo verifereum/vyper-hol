@@ -4,22 +4,9 @@ Ancestors
   rich_list cv cv_std vfmState vfmContext vfmCompute[ignore_grammar]
   vfmExecution[ignore_grammar] vyperAST vyperABI
   vyperMisc vyperValue vyperValueOperation vyperStorage vyperContext vyperState
-  vyperEvent vyperCreate
+  vyperEvent vyperEvmBoundary vyperCreate
 Libs
   cv_transLib wordsLib monadsyntax
-
-(* writing logs *)
-
-Definition push_log_def:
-  push_log log st = return () $ st with logs := st.logs ++ [log]
-End
-
-Definition append_logs_def:
-  append_logs logs st = return () $ st with logs := st.logs ++ logs
-End
-
-val () = cv_auto_trans push_log_def;
-val () = cv_auto_trans append_logs_def;
 
 (* manipulating (internal call) function stack *)
 
@@ -730,74 +717,16 @@ val () = cv_auto_trans get_range_limits_def;
 
 (* ===== External Call Execution via Verifereum ===== *)
 
-(* Build a transaction record for initial_context.
-   Only the fields used by initial_msg_params matter:
-   - from: becomes msg.sender (caller)
-   - to: target address
-   - value: becomes msg.value
-   - data: becomes msg.data (calldata)
-   - gasLimit: gas available for the call
-   Other fields are unused placeholders. *)
-Definition make_call_tx_def:
-  make_call_tx caller callee value calldata gas_limit : transaction =
-    <| from := caller
-     ; to := SOME callee
-     ; data := calldata
-     ; nonce := 0
-     ; value := value
-     ; gasLimit := gas_limit
-     ; gasPrice := 0
-     ; accessList := []
-     ; blobVersionedHashes := []
-     ; maxFeePerBlobGas := NONE
-     ; maxFeePerGas := NONE
-     ; authorizationList := []
-     |>
-End
-
-val () = cv_auto_trans make_call_tx_def;
-
-(* Build transaction_parameters from Vyper call_txn.
-   These are the transaction-level parameters that persist across calls.
-
-   Maps call_txn fields to Verifereum transaction_parameters. *)
-Definition vyper_to_tx_params_def:
-  vyper_to_tx_params (txn: call_txn) : transaction_parameters =
-    <| origin := txn.origin
-     ; gasPrice := txn.gas_price
-     ; baseFeePerGas := txn.base_fee
-     ; baseFeePerBlobGas := txn.blob_base_fee
-     ; blockNumber := txn.block_number
-     ; blockTimeStamp := txn.time_stamp
-     ; blockCoinBase := txn.coinbase
-     ; blockGasLimit := txn.gas_limit
-     ; prevRandao := n2w txn.prev_randao
-     ; prevHashes := txn.block_hashes
-     ; blobHashes := txn.blob_hashes
-     ; chainId := txn.chain_id
-     ; authRefund := 0
-     |>
-End
-
-val () = cv_auto_trans vyper_to_tx_params_def;
-
-(* Default gas limit for external calls - effectively infinite.
-   TODO(semantic-limitation): this may need to be configurable or supplied by
-   an oracle once external-call gas modelling is formalized. *)
-Definition default_call_gas_limit_def:
-  default_call_gas_limit : num = 2 ** 64
-End
-
-val () = cv_auto_trans default_call_gas_limit_def;
-
+(* Build a transaction record for initial_context via the shared EVM boundary
+   helpers in vyperEvmBoundary. *)
 (* Build execution_state for an external call *)
 Definition make_ext_call_state_def:
   make_ext_call_state caller callee code calldata value_opt
                       accounts tStorage txParams =
-    let gas_limit = default_call_gas_limit in
+    let gas_limit = default_evm_gas_limit in
     let value = (case value_opt of NONE => 0 | SOME v => v) in
     let is_static = IS_NONE value_opt in
-    let tx = make_call_tx caller callee value calldata gas_limit in
+    let tx = make_evm_tx caller callee value calldata gas_limit in
     let ctxt = initial_context callee code is_static empty_return_destination tx in
     (* Transfer value from caller to callee, mirroring EVM CALL behavior.
        The EVM does this in proceed_call before entering the sub-context. *)

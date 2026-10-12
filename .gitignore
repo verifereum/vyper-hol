@@ -7,10 +7,6 @@
 # Interactive HOL4 session files
 .hol_init.sml
 .hol_cmd.sml
-.hol_test.sml
-
-# Local build logs
-.hol-logs/
 
 # Generated Vyper test inputs and coverage report
 tests/vyper-test-exports

@@ -185,8 +185,8 @@ QED
 
    Mirrors the ext-call chain above, but for run_create_evm.  The creation
    boundary reaches Verifereum through two stages: the Vyper-side account
-   prelude (create_prelude_accounts, cf. proceed_create_accounts for the old
-   direct-update path), and then the adapter's own result extraction. *)
+   prelude create_prelude_accounts, and then the adapter's own result
+   extraction. *)
 
 Theorem create_accounts_ok_imp_extract_premise:
   !outcome.
@@ -2026,34 +2026,6 @@ Proof
   Cases_on `v` >> gvs[value_has_type_def]
 QED
 
-Theorem build_create_code_runtime_code_bound:
-  accounts_well_typed accounts /\
-  build_create_code tenv kind ops accounts ctor_tys = SOME code_info ==>
-  !code. code_info.cc_runtime_code = SOME code ==>
-         LENGTH code <= max_code_size
-Proof
-  rpt strip_tac >>
-  Cases_on `kind` >>
-  gvs[build_create_code_def, AllCaseEqs(), LET_THM,
-      accounts_well_typed_def, account_well_typed_def,
-      vfmConstantsTheory.max_code_size_def] >>
-  first_x_assum (qspec_then `a` mp_tac) >> simp[]
-QED
-
-Theorem install_created_code_accounts_well_typed:
-  accounts_well_typed accounts /\
-  (!code. runtime_code = SOME code ==> LENGTH code <= max_code_size) ==>
-  accounts_well_typed
-    (install_created_code address runtime_code accounts)
-Proof
-  Cases_on `runtime_code` >>
-  gvs[install_created_code_def, accounts_well_typed_def,
-      account_well_typed_def, vfmConstantsTheory.max_code_size_def,
-      vfmStateTheory.lookup_account_def, vfmStateTheory.update_account_def,
-      combinTheory.APPLY_UPDATE_THM] >>
-  rpt strip_tac >> Cases_on `addr = address` >> gvs[]
-QED
-
 Theorem lookup_account_increment_nonce_balance[simp]:
   (lookup_account a (vfmExecution$increment_nonce b accounts)).balance =
   (lookup_account a accounts).balance
@@ -2062,24 +2034,6 @@ Proof
        vfmStateTheory.lookup_account_def, vfmStateTheory.update_account_def,
        combinTheory.APPLY_UPDATE_THM] >>
   Cases_on `a = b` >> simp[]
-QED
-
-Theorem proceed_create_accounts_well_typed:
-  accounts_well_typed accounts /\
-  amount <= (lookup_account sender accounts).balance /\
-  (lookup_account address accounts).balance + amount < 2 ** 256 /\
-  (!code. runtime_code = SOME code ==> LENGTH code <= max_code_size) ==>
-  accounts_well_typed
-    (proceed_create_accounts sender address amount runtime_code accounts)
-Proof
-  rpt strip_tac >>
-  simp[proceed_create_accounts_def] >>
-  irule install_created_code_accounts_well_typed >>
-  simp[] >>
-  irule vfm_transfer_value_accounts_well_typed >>
-  simp[accounts_well_typed_increment_nonce] >>
-  qpat_x_assum `(lookup_account address accounts).balance + amount < 2 ** 256`
-    mp_tac >> simp[ADD_COMM]
 QED
 
 
