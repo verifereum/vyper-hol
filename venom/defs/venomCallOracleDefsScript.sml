@@ -1,5 +1,5 @@
-(* TASK040 prerequisite: reusable request/completion plumbing, NOT activation.
- * No opcode dispatch or concrete EVM helper is changed by this theory.
+(* Request/completion plumbing for the external-call outcome oracle (PLAN 5.4).
+ * Used by exec_ext_call (venomExecSemantics) for CALL and STATICCALL.
  * TOP-LEVEL: venom_call_request (already-evaluated operands),
  * consume_call_outcome (success word and state, before output binding).
  * Gas evaluation and single-output validation remain the dispatcher's job.

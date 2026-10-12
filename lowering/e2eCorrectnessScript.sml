@@ -812,23 +812,6 @@ Proof
   metis_tac[]
 QED
 
-(* ===== Full E2E: Vyper to EVM ===== *)
-
-(* Composes all three legs into a single theorem relating Vyper
-   source semantics to EVM bytecode execution.
- *
- * Correspondence:
- *   Vyper success (INL v)       => EVM normal halt, returndata =
- *                                  ABI encoding of v, accounts,
- *                                  transient storage, and logs match
- *   Vyper revert (AssertExc)    => outermost EVM execution reports REVERT
- *   Vyper error                 => T (indicates source-level error;
- *                                  could be strengthened to F under
- *                                  well-formedness of am/tx)
- *   Break/Continue/Return       => F -- internal control flow,
- *                                  never escapes call_external
- *)
-
 (* ===== Deploy Phase ===== *)
 
 (* TASK055: superseded placeholder preserved verbatim. Its claim was true
