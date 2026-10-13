@@ -354,13 +354,13 @@ val outside_admitted_suites_reason = "outside currently admitted test suites"
 val outside_admitted_suites_issue =
   "https://github.com/verifereum/vyper-hol/issues/36"
 
-(* Untraced items cannot be replayed. Names identifying unchecked
-   compiler/checker assertions have a separate compile_only_uncovered bucket;
-   do not assume every remaining untraced item is a negative test. *)
-val no_traces_reason = "no exported traces (not replayable)"
+(* Negative tests assert a compile-time diagnostic, so they record no deployment
+   and no call and there is nothing to replay.  Kept in their own bucket rather
+   than counted as semantic exclusions: the checks they need are frontend and
+   elaboration work, behind the missing formal front end (issues/46) and the
+   partial type checker (issues/47). *)
+val no_traces_reason = "no exported traces (negative test, frontend diagnostics)"
 val no_traces_issue = "https://github.com/verifereum/vyper-hol/issues/46"
-val compile_only_reason = "compile-only checker/compiler assertion not checked by HOL"
-val compile_only_issue = "https://github.com/verifereum/vyper-hol/issues/46"
 
 (* Individual test names that bypass unsupported pattern checks *)
 val allowed_test_names = [
@@ -425,20 +425,6 @@ fun glob_match pat str =
   in
     step (String.explode pat) (String.explode str)
   end
-
-(* These names identify compiler/checker assertions without an executable trace.
-   Match only zero-expanded-trace items; a traceful parameterization still
-   belongs to the normal replay selection.  This is an inventory gap, not a
-   claim that the exported JSON contains the source or expected diagnostic. *)
-val compile_only_patterns = [
-  "test_unimplemented_*",
-  "test_invalid_*",
-  "test_*_opcodes*",
-  "test_*_roundtrip*"
-]
-
-fun is_compile_only_name name =
-  List.exists (fn pat => glob_match pat name) compile_only_patterns
 
 datatype test_file_disposition =
     AdmittedTestFile
@@ -946,8 +932,6 @@ fun read_coverage_json json_path = let
        pattern_skips,no_traces,fixture_source,missing_source,blank_source,
        unresolved_deps,malformed) =
     List.foldl classify (0,0,0,0,[],[],[],[],[],[],[],[]) items
-  val compile_only_uncovered = List.filter is_compile_only_name no_traces
-  val no_traces = List.filter (not o is_compile_only_name) no_traces
 in
   {total_items = List.length items,
    fixtures = List.length fixtures,
@@ -958,7 +942,6 @@ in
    name_skips = name_skips,
    pattern_skips = pattern_skips,
    no_traces = no_traces,
-   compile_only_uncovered = compile_only_uncovered,
    fixture_source = fixture_source,
    missing_source = missing_source,
    blank_source = blank_source,
@@ -980,8 +963,6 @@ fun print_raw_coverage output json_path report = let
      " excluded_name=", Int.toString (List.length (#name_skips report)),
      " excluded_pattern=", Int.toString (List.length (#pattern_skips report)),
      " no_exported_traces=", Int.toString (List.length (#no_traces report)),
-     " compile_only_uncovered=",
-       Int.toString (List.length (#compile_only_uncovered report)),
      " source_from_fixture=", Int.toString (List.length (#fixture_source report)),
      " missing_source=", Int.toString (List.length (#missing_source report)),
      " blank_source=", Int.toString (List.length (#blank_source report)),
@@ -1001,9 +982,6 @@ fun print_raw_coverage output json_path report = let
      " test=", name, " reason=", reason, "\n"])) (List.rev names)
   val () = emit_named (String.concat [no_traces_reason, "; issue=", no_traces_issue])
                (#no_traces report)
-  val () = emit_named
-    (String.concat [compile_only_reason, "; issue=", compile_only_issue])
-    (#compile_only_uncovered report)
   val () = List.app (fn name => emit (String.concat
     ["[vyper-coverage] selected file=", json_path,
      " test=", name, " reason=source supplied by fixture\n"]))
@@ -1054,7 +1032,6 @@ fun write_coverage_report output_path = let
   val excluded_name = sum (List.length o #name_skips)
   val excluded_pattern = sum (List.length o #pattern_skips)
   val no_traces = sum (List.length o #no_traces)
-  val compile_only_uncovered = sum (List.length o #compile_only_uncovered)
   val fixture_source = sum (List.length o #fixture_source)
   val missing_source = sum (List.length o #missing_source)
   val blank_source = sum (List.length o #blank_source)
@@ -1063,9 +1040,8 @@ fun write_coverage_report output_path = let
     (List.length o #unreferenced_traced_fixtures)
   val malformed = sum (List.length o #malformed)
   val zero_selected = sum (fn report => if #selected report = 0 then 1 else 0)
-  val excluded_test_items =
-    excluded_name + excluded_pattern + no_traces + compile_only_uncovered +
-    missing_source + blank_source
+  val excluded_test_items = excluded_name + excluded_pattern + no_traces +
+                            missing_source + blank_source
 
   fun excluded_sum field =
     List.foldl (fn ((_,_,_,_,inventory),n) => field inventory + n)
@@ -1154,9 +1130,6 @@ fun write_coverage_report output_path = let
        " no_exported_traces=", Int.toString no_traces,
        " no_exported_traces_reason=", no_traces_reason,
        " no_exported_traces_issue=", no_traces_issue,
-       " compile_only_uncovered=", Int.toString compile_only_uncovered,
-       " compile_only_uncovered_reason=", compile_only_reason,
-       " compile_only_uncovered_issue=", compile_only_issue,
        " source_from_fixture=", Int.toString fixture_source,
        " missing_source=", Int.toString missing_source,
        " blank_source=", Int.toString blank_source,
