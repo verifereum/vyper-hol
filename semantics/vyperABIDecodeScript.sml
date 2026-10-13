@@ -12,7 +12,8 @@ Libs
      vyper_abi_dec          decode an abi_value at a buffer offset
      vyper_abi_valid_enc    acceptance gate for vyper_abi_dec (Vyper clamps)
      vyper_abi_dec_fast / vyper_abi_valid_enc_fast
-                           sequential numeric scalar-array fast paths
+                           recursive copies with sequential numeric
+                           scalar-array fast paths
      vyper_abi_dec_eq_fast / vyper_abi_valid_enc_eq_fast
                            unconditional implementation equivalence
 
@@ -242,12 +243,13 @@ QED
 (* ===== Sequential numeric scalar-array decoding ===== *)
 
 (* Advance suffixes for numeric scalar arrays instead of repeatedly dropping
-   from the whole buffer. Validation carries the remaining length, computed
-   once at entry. The fast paths cover direct dynamic scalar arrays and
-   singleton tuples containing them; other shapes use the original code.
-   In particular, dynamic tuple heads still target the original whole buffer
-   using 256-bit wrapping arithmetic. No Vyper bounds or acceptance rules
-   are added here: these functions implement the original ABI semantics. *)
+   from the whole buffer, which is quadratic in the calldata size. Validation
+   carries the remaining length, computed once at entry. The fast paths cover
+   static and dynamic scalar arrays wherever they occur; all other shapes
+   mirror the original code. In particular, dynamic heads still target the
+   original whole buffer using 256-bit wrapping arithmetic. No Vyper bounds or
+   acceptance rules are added here: these functions implement the original
+   ABI semantics. *)
 
 Definition vyper_abi_scalar_def:
   vyper_abi_scalar (Uint _) = T ∧
@@ -295,37 +297,6 @@ Definition vyper_abi_valid_scalar_array_def:
            vyper_abi_valid_scalars n t elements (LENGTH elements))
 End
 val () = cv_auto_trans vyper_abi_valid_scalar_array_def;
-
-(* TOP-LEVEL: narrow fast paths; all other shapes retain the original
-   implementation. Keep the whole buffer for wrapped tuple-head targets. *)
-Definition vyper_abi_dec_fast_def:
-  vyper_abi_dec_fast (Array NONE t) bs off =
-    (if vyper_abi_scalar t then vyper_abi_dec_scalar_array t bs off
-     else vyper_abi_dec (Array NONE t) bs off) ∧
-  vyper_abi_dec_fast (Tuple [Array NONE t]) bs off =
-    (if vyper_abi_scalar t then
-       let j = dest_NumV (dec_number (Uint 256) (TAKE 32 (DROP off bs)))
-       in ListV [vyper_abi_dec_scalar_array t bs (vyper_abi_head_target off j)]
-     else vyper_abi_dec (Tuple [Array NONE t]) bs off) ∧
-  vyper_abi_dec_fast ty bs off = vyper_abi_dec ty bs off
-End
-val () = cv_auto_trans vyper_abi_dec_fast_def;
-
-Definition vyper_abi_valid_enc_fast_def:
-  vyper_abi_valid_enc_fast (Array NONE t) bs off =
-    (if vyper_abi_scalar t then vyper_abi_valid_scalar_array t bs off
-     else vyper_abi_valid_enc (Array NONE t) bs off) ∧
-  vyper_abi_valid_enc_fast (Tuple [Array NONE t]) bs off =
-    (if vyper_abi_scalar t then
-       (1 < dimword (:256) ∧ off + 32 ≤ LENGTH bs ∧
-        let dn = dec_number (Uint 256) (TAKE 32 (DROP off bs))
-        in is_num_value dn ∧
-           vyper_abi_valid_scalar_array t bs
-             (vyper_abi_head_target off (dest_NumV dn)))
-     else vyper_abi_valid_enc (Tuple [Array NONE t]) bs off) ∧
-  vyper_abi_valid_enc_fast ty bs off = vyper_abi_valid_enc ty bs off
-End
-val () = cv_auto_trans vyper_abi_valid_enc_fast_def;
 
 (* Helper: the supported scalar types occupy one word, with no heads. *)
 Theorem vyper_abi_scalar_properties:
@@ -393,31 +364,215 @@ Proof
           vyper_abi_valid_array_scalars, vyper_abi_drop_suffix, ADD_COMM]
 QED
 
-Theorem vyper_abi_dec_scalar_tuple_eq:
-  vyper_abi_scalar t ⇒
-    vyper_abi_dec (Tuple [Array NONE t]) bs off =
-    ListV [vyper_abi_dec_scalar_array t bs
-      (vyper_abi_head_target off
-        (dest_NumV (dec_number (Uint 256) (TAKE 32 (DROP off bs)))))]
+(* ===== Recursive fast paths ===== *)
+
+(* TOP-LEVEL: the original decoder with every numeric scalar array, static or
+   dynamic and at any nesting depth, decoded by advancing a suffix instead of
+   repeatedly dropping from the whole buffer.  Everything else, including the
+   wrapping head arithmetic against the whole buffer, mirrors vyper_abi_dec. *)
+Definition vyper_abi_dec_fast_def:
+  vyper_abi_dec_fast (Tuple ts) bs off =
+    vyper_abi_dec_tuple_fast ts bs off off [] ∧
+  vyper_abi_dec_fast (Array (SOME n) t) bs off = (
+    if vyper_abi_scalar t then vyper_abi_dec_scalars n t (DROP off bs) []
+    else
+    let lt = if is_dynamic t then NONE else SOME $ static_length t in
+    vyper_abi_dec_array_fast n lt t bs off off [] ) ∧
+  vyper_abi_dec_fast (Array NONE t) bs off = (
+    if vyper_abi_scalar t then vyper_abi_dec_scalar_array t bs off
+    else
+    let lt = if is_dynamic t then NONE else SOME $ static_length t in
+    let n = dest_NumV (dec_number (Uint 256) (TAKE 32 (DROP off bs))) in
+    let h = off + 32 in
+      vyper_abi_dec_array_fast n lt t bs h h [] ) ∧
+  vyper_abi_dec_fast t bs off = vyper_abi_dec t bs off ∧
+  vyper_abi_dec_array_fast 0 _ _ _ _ _ acc = ListV (REVERSE acc) ∧
+  vyper_abi_dec_array_fast (SUC n) NONE t bs boff hoff acc = (
+    let j = dest_NumV (dec_number (Uint 256) (TAKE 32 (DROP hoff bs))) in
+    let v = vyper_abi_dec_fast t bs (vyper_abi_head_target boff j) in
+    vyper_abi_dec_array_fast n NONE t bs boff (hoff + 32) (v::acc) ) ∧
+  vyper_abi_dec_array_fast (SUC n) (SOME l) t bs boff hoff acc = (
+    let v = vyper_abi_dec_fast t bs hoff in
+    vyper_abi_dec_array_fast n (SOME l) t bs boff (hoff + l) (v::acc) ) ∧
+  vyper_abi_dec_tuple_fast [] _ _ _ acc = ListV (REVERSE acc) ∧
+  vyper_abi_dec_tuple_fast (t::ts) bs boff hoff acc =
+    if is_dynamic t then
+      let j = dest_NumV (dec_number (Uint 256) (TAKE 32 (DROP hoff bs))) in
+      let v = vyper_abi_dec_fast t bs (vyper_abi_head_target boff j) in
+      vyper_abi_dec_tuple_fast ts bs boff (hoff + 32) (v::acc)
+    else
+      let n = static_length t in
+      let v = vyper_abi_dec_fast t bs hoff in
+      vyper_abi_dec_tuple_fast ts bs boff (hoff + n) (v::acc)
+Termination
+  WF_REL_TAC ‘inv_image ($< LEX $<) (λx. case x of
+    (INR (INR (ts,_,_,_,_))) => (list_size abi_type_size ts, 0)
+  | (INR (INL (n,_,t,_,_,_,_))) => (abi_type_size t, n)
+  | (INL (t,_,_)) => (abi_type_size t, 0))’
+End
+
+val pre = cv_trans_pre_rec
+  "vyper_abi_dec_fast_pre vyper_abi_dec_array_fast_pre vyper_abi_dec_tuple_fast_pre"
+  vyper_abi_dec_fast_def (
+  WF_REL_TAC ‘inv_image ($< LEX $<)
+  (λx. case x of
+    (INR (INR (ts,_,_,_,_))) => (cv_size ts, 0)
+  | (INR (INL (n,_,t,_,_,_,_))) => (cv_size t, cv$c2n n)
+  | (INL (t,_,_)) => (cv_size t, 0))’
+  \\ rpt conj_tac
+  \\ Cases_on`cv_v` \\ rw[] \\ gs[cv_lt_Num_0]
+  \\ qmatch_goalsub_rename_tac`cv_snd p`
+  \\ Cases_on`p` \\ gs[]
+);
+
+Theorem vyper_abi_dec_fast_pre[cv_pre]:
+  (∀v bs off. vyper_abi_dec_fast_pre v bs off) ∧
+  (∀v0 v v1 v2 v3 v4 acc. vyper_abi_dec_array_fast_pre v0 v v1 v2 v3 v4 acc) ∧
+  (∀v v4 v5 v6 acc. vyper_abi_dec_tuple_fast_pre v v4 v5 v6 acc)
 Proof
-  strip_tac
-  >> simp[Once vyper_abi_dec_def]
-  >> simp[Once vyper_abi_dec_def]
-  >> simp[Once vyper_abi_dec_def, vyper_abi_dec_scalar_array_eq]
+  ho_match_mp_tac vyper_abi_dec_fast_ind
+  \\ rw[]
+  \\ rw[Once pre]
 QED
 
-Theorem vyper_abi_valid_scalar_tuple_eq:
-  vyper_abi_scalar t ⇒
-    vyper_abi_valid_enc (Tuple [Array NONE t]) bs off =
-    (1 < dimword (:256) ∧ off + 32 ≤ LENGTH bs ∧
-     let dn = dec_number (Uint 256) (TAKE 32 (DROP off bs))
-     in is_num_value dn ∧ vyper_abi_valid_scalar_array t bs
-       (vyper_abi_head_target off (dest_NumV dn)))
+(* TOP-LEVEL: the acceptance gate with the same recursive fast paths. *)
+Definition vyper_abi_valid_enc_fast_def:
+  vyper_abi_valid_enc_fast (Tuple ts) bs off =
+    (LENGTH ts < dimword (:256) ∧
+     vyper_abi_valid_enc_tuple_fast ts bs off off) ∧
+  vyper_abi_valid_enc_fast (Array (SOME n) t) bs off =
+    (if vyper_abi_scalar t then
+       n < dimword (:256) ∧
+       (let rest = DROP off bs in
+        vyper_abi_valid_scalars n t rest (LENGTH rest))
+     else
+     let lt = if is_dynamic t then NONE else SOME $ static_length t in
+     n < dimword (:256) ∧
+     vyper_abi_valid_enc_array_fast n lt t bs off off) ∧
+  vyper_abi_valid_enc_fast (Array NONE t) bs off =
+    (if vyper_abi_scalar t then vyper_abi_valid_scalar_array t bs off
+     else
+     off + 32 ≤ LENGTH bs ∧
+     let
+       lt = if is_dynamic t then NONE else SOME $ static_length t;
+       dn = dec_number (Uint 256) (TAKE 32 (DROP off bs))
+     in is_num_value dn ∧ let
+       n = dest_NumV dn;
+       h = off + 32
+     in n < dimword (:256) ∧
+        vyper_abi_valid_enc_array_fast n lt t bs h h) ∧
+  vyper_abi_valid_enc_fast t bs off = vyper_abi_valid_enc t bs off ∧
+  vyper_abi_valid_enc_array_fast 0 _ _ _ _ _ = T ∧
+  vyper_abi_valid_enc_array_fast (SUC n) NONE t bs boff hoff =
+    (hoff + 32 ≤ LENGTH bs ∧
+     let
+       dn = dec_number (Uint 256) (TAKE 32 (DROP hoff bs))
+     in is_num_value dn ∧ let
+       j = dest_NumV dn
+     in
+       vyper_abi_valid_enc_fast t bs (vyper_abi_head_target boff j) ∧
+       vyper_abi_valid_enc_array_fast n NONE t bs boff (hoff + 32)) ∧
+  vyper_abi_valid_enc_array_fast (SUC n) (SOME l) t bs boff hoff =
+    (hoff + l ≤ LENGTH bs ∧
+     vyper_abi_valid_enc_fast t bs hoff ∧
+     vyper_abi_valid_enc_array_fast n (SOME l) t bs boff (hoff + l)) ∧
+  vyper_abi_valid_enc_tuple_fast [] _ _ _ = T ∧
+  vyper_abi_valid_enc_tuple_fast (t::ts) bs boff hoff =
+    (if is_dynamic t then
+       hoff + 32 ≤ LENGTH bs ∧
+       let
+         dn = dec_number (Uint 256) (TAKE 32 (DROP hoff bs))
+       in is_num_value dn ∧ let
+         j = dest_NumV dn
+       in
+         vyper_abi_valid_enc_fast t bs (vyper_abi_head_target boff j) ∧
+         vyper_abi_valid_enc_tuple_fast ts bs boff (hoff + 32)
+     else let
+       n = static_length t
+     in
+       hoff + n ≤ LENGTH bs ∧
+       vyper_abi_valid_enc_fast t bs hoff ∧
+       vyper_abi_valid_enc_tuple_fast ts bs boff (hoff + n))
+Termination
+  WF_REL_TAC ‘inv_image ($< LEX $<) (λx. case x of
+    (INR (INR (ts,_,_,_))) => (list_size abi_type_size ts, 0)
+  | (INR (INL (n,_,t,_,_,_))) => (abi_type_size t, n)
+  | (INL (t,_,_)) => (abi_type_size t, 0))’
+End
+
+val pre = cv_trans_pre_rec
+  "vyper_abi_valid_enc_fast_pre vyper_abi_valid_enc_array_fast_pre vyper_abi_valid_enc_tuple_fast_pre"
+  vyper_abi_valid_enc_fast_def (
+  WF_REL_TAC ‘inv_image ($< LEX $<)
+  (λx. case x of
+    (INR (INR (ts,_,_,_))) => (cv_size ts, 0)
+  | (INR (INL (n,_,t,_,_,_))) => (cv_size t, cv$c2n n)
+  | (INL (t,_,_)) => (cv_size t, 0))’
+  \\ rpt conj_tac
+  \\ Cases_on`cv_v` \\ rw[] \\ gs[cv_lt_Num_0]
+  \\ qmatch_goalsub_rename_tac`cv_snd p`
+  \\ Cases_on`p` \\ gs[]
+);
+
+Theorem vyper_abi_valid_enc_fast_pre[cv_pre]:
+  (∀v bs off. vyper_abi_valid_enc_fast_pre v bs off) ∧
+  (∀v0 v v1 v2 v3 v4. vyper_abi_valid_enc_array_fast_pre v0 v v1 v2 v3 v4) ∧
+  (∀v v4 v5 v6. vyper_abi_valid_enc_tuple_fast_pre v v4 v5 v6)
 Proof
-  strip_tac
-  >> simp[Once vyper_abi_valid_enc_def]
-  >> simp[Once vyper_abi_valid_enc_def]
-  >> simp[vyper_abi_valid_scalar_array_eq]
+  ho_match_mp_tac vyper_abi_valid_enc_fast_ind
+  \\ rpt strip_tac
+  \\ once_rewrite_tac [pre]
+  \\ simp []
+QED
+
+(* Helper: a static scalar array is its sequential scalar decoding. *)
+Theorem vyper_abi_dec_static_scalar_array_eq:
+  vyper_abi_scalar t ⇒
+    vyper_abi_dec (Array (SOME n) t) bs off =
+    vyper_abi_dec_scalars n t (DROP off bs) []
+Proof
+  strip_tac >> drule vyper_abi_scalar_properties >> strip_tac
+  >> simp[Once vyper_abi_dec_def, vyper_abi_dec_array_scalars]
+QED
+
+Theorem vyper_abi_valid_static_scalar_array_eq:
+  vyper_abi_scalar t ⇒
+    vyper_abi_valid_enc (Array (SOME n) t) bs off =
+    (n < dimword (:256) ∧
+     vyper_abi_valid_scalars n t (DROP off bs) (LENGTH (DROP off bs)))
+Proof
+  strip_tac >> drule vyper_abi_scalar_properties >> strip_tac
+  >> simp[Once vyper_abi_valid_enc_def, vyper_abi_valid_array_scalars]
+QED
+
+(* KEY LEMMA: the fast decoder is the original one, unconditionally. *)
+Theorem vyper_abi_dec_fast_eq:
+  (∀t bs off. vyper_abi_dec_fast t bs off = vyper_abi_dec t bs off) ∧
+  (∀n lt t bs boff hoff acc.
+     vyper_abi_dec_array_fast n lt t bs boff hoff acc =
+     vyper_abi_dec_array n lt t bs boff hoff acc) ∧
+  (∀ts bs boff hoff acc.
+     vyper_abi_dec_tuple_fast ts bs boff hoff acc =
+     vyper_abi_dec_tuple ts bs boff hoff acc)
+Proof
+  ho_match_mp_tac vyper_abi_dec_fast_ind >> rw[]
+  >> simp[Once vyper_abi_dec_fast_def] >> rw[]
+  >> gvs[vyper_abi_dec_static_scalar_array_eq, vyper_abi_dec_scalar_array_eq]
+  >> simp[Once vyper_abi_dec_def]
+QED
+
+Theorem vyper_abi_valid_enc_fast_eq:
+  (∀t bs off. vyper_abi_valid_enc_fast t bs off = vyper_abi_valid_enc t bs off) ∧
+  (∀n lt t bs boff hoff.
+     vyper_abi_valid_enc_array_fast n lt t bs boff hoff =
+     vyper_abi_valid_enc_array n lt t bs boff hoff) ∧
+  (∀ts bs boff hoff.
+     vyper_abi_valid_enc_tuple_fast ts bs boff hoff =
+     vyper_abi_valid_enc_tuple ts bs boff hoff)
+Proof
+  ho_match_mp_tac vyper_abi_valid_enc_fast_ind >> rw[]
+  >> simp[Once vyper_abi_valid_enc_fast_def] >> rw[]
+  >> gvs[vyper_abi_valid_static_scalar_array_eq, vyper_abi_valid_scalar_array_eq]
   >> simp[Once vyper_abi_valid_enc_def]
 QED
 
@@ -426,31 +581,11 @@ QED
 Theorem vyper_abi_dec_eq_fast:
   ∀ty bs off. vyper_abi_dec ty bs off = vyper_abi_dec_fast ty bs off
 Proof
-  rpt gen_tac >> Cases_on `ty` >> simp[vyper_abi_dec_fast_def]
-  >- (rename1 `Array bound t` >> Cases_on `bound`
-      >> simp[vyper_abi_dec_fast_def]
-      >> Cases_on `vyper_abi_scalar t`
-      >> simp[vyper_abi_dec_fast_def, vyper_abi_dec_scalar_array_eq])
-  >> rename1 `Tuple ts` >> Cases_on `ts` >> simp[vyper_abi_dec_fast_def]
-  >> rename1 `Tuple (elem::more)` >> Cases_on `more` >> simp[vyper_abi_dec_fast_def]
-  >> Cases_on `elem` >> simp[vyper_abi_dec_fast_def]
-  >> rename1 `Array bound scalar` >> Cases_on `bound` >> simp[vyper_abi_dec_fast_def]
-  >> Cases_on `vyper_abi_scalar scalar`
-  >> simp[vyper_abi_dec_fast_def, vyper_abi_dec_scalar_tuple_eq]
+  simp[vyper_abi_dec_fast_eq]
 QED
 
 Theorem vyper_abi_valid_enc_eq_fast:
   ∀ty bs off. vyper_abi_valid_enc ty bs off = vyper_abi_valid_enc_fast ty bs off
 Proof
-  rpt gen_tac >> Cases_on `ty` >> simp[vyper_abi_valid_enc_fast_def]
-  >- (rename1 `Array bound t` >> Cases_on `bound`
-      >> simp[vyper_abi_valid_enc_fast_def]
-      >> Cases_on `vyper_abi_scalar t`
-      >> simp[vyper_abi_valid_enc_fast_def, vyper_abi_valid_scalar_array_eq])
-  >> rename1 `Tuple ts` >> Cases_on `ts` >> simp[vyper_abi_valid_enc_fast_def]
-  >> rename1 `Tuple (elem::more)` >> Cases_on `more` >> simp[vyper_abi_valid_enc_fast_def]
-  >> Cases_on `elem` >> simp[vyper_abi_valid_enc_fast_def]
-  >> rename1 `Array bound scalar` >> Cases_on `bound` >> simp[vyper_abi_valid_enc_fast_def]
-  >> Cases_on `vyper_abi_scalar scalar`
-  >> simp[vyper_abi_valid_enc_fast_def, vyper_abi_valid_scalar_tuple_eq]
+  simp[vyper_abi_valid_enc_fast_eq]
 QED
