@@ -140,7 +140,7 @@ Theorem checked_scalar_public_getter_eval_no_type_error:
   ALOOKUP mods src = SOME ts /\
   MEM (VariableDecl Public mut fn typ init) ts /\
   eval_expr (initial_evaluation_context am.sources am.layouts tx src)
-    (TopLevelName NoneT (src,fn)) (initial_state am [scope]) = (res,st') ==>
+    (TopLevelName NoneT (src,fn)) (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) = (res,st') ==>
   no_type_error_result res
 Proof
   rpt strip_tac >>
@@ -230,7 +230,7 @@ Theorem checked_scalar_public_getter_eval_no_type_error_materialisable:
   ALOOKUP mods src = SOME ts /\
   MEM (VariableDecl Public mut fn typ init) ts /\
   eval_expr (initial_evaluation_context am.sources am.layouts tx src)
-    (TopLevelName NoneT (src,fn)) (initial_state am [scope]) = (res,st') ==>
+    (TopLevelName NoneT (src,fn)) (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) = (res,st') ==>
   no_type_error_result res /\
   (case res of INL tvl => (?v. tvl = Value v) \/
                            (?is_transient slot elem_tv bd. tvl = ArrayRef is_transient slot elem_tv bd)
@@ -573,7 +573,7 @@ Theorem bind_arguments_Name_eval_no_type_error[local]:
   bind_arguments tenv args vals = SOME scope /\
   MEM (id,typ) args /\
   (!id' typ'. MEM (id',typ') args /\ string_to_num id' = string_to_num id ==> typ' = typ) /\
-  eval_expr cx (Name NoneT id) (initial_state am [scope]) = (res,st') ==>
+  eval_expr cx (Name NoneT id) (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) = (res,st') ==>
   no_type_error_result res
 Proof
   rpt strip_tac >>
@@ -590,7 +590,7 @@ Theorem bind_arguments_Name_eval_Value[local]:
   bind_arguments tenv args vals = SOME scope /\
   MEM (id,typ) args /\
   (!id' typ'. MEM (id',typ') args /\ string_to_num id' = string_to_num id ==> typ' = typ) /\
-  eval_expr cx (Name NoneT id) (initial_state am [scope]) = (INL tvl,st') ==>
+  eval_expr cx (Name NoneT id) (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) = (INL tvl,st') ==>
   ?v. tvl = Value v
 Proof
   rpt strip_tac >>
@@ -767,7 +767,7 @@ Theorem checked_public_hashmap_TopLevelName_carrier:
   ALOOKUP mods src = SOME ts /\
   MEM (HashMapDecl Public is_transient id kt vt init) ts /\
   eval_expr (initial_evaluation_context am.sources am.layouts tx src)
-    (TopLevelName NoneT (src,id)) (initial_state am [scope]) = (INL tvl,st') ==>
+    (TopLevelName NoneT (src,id)) (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) = (INL tvl,st') ==>
   ?slot. tvl = HashMapRef is_transient slot kt vt
 Proof
   rpt strip_tac >>
@@ -796,7 +796,7 @@ Theorem checked_public_hashmap_TopLevelName_no_type_error:
   ALOOKUP mods src = SOME ts /\
   MEM (HashMapDecl Public is_transient id kt vt init) ts /\
   eval_expr (initial_evaluation_context am.sources am.layouts tx src)
-    (TopLevelName NoneT (src,id)) (initial_state am [scope]) = (res,st') ==>
+    (TopLevelName NoneT (src,id)) (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) = (res,st') ==>
   no_type_error_result res
 Proof
   rpt strip_tac >>
@@ -945,7 +945,7 @@ Theorem build_getter_bound_Name_eval_no_type_error[local]:
   build_getter e kt vt n = (args,ret,exp) /\
   MEM (id,typ) args /\
   bind_arguments tenv args vals = SOME scope /\
-  eval_expr cx (Name NoneT id) (initial_state am [scope]) = (res,st') ==>
+  eval_expr cx (Name NoneT id) (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) = (res,st') ==>
   no_type_error_result res
 Proof
   rpt strip_tac >>
@@ -1522,10 +1522,10 @@ Theorem generated_hashmap_subscript_step_no_type_error:
   check_value_type (get_tenv cx) vt /\
   pure_expr e /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME NoneTV /\
-  eval_expr cx e (initial_state am [scope]) =
+  eval_expr cx e (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) =
     (INL (HashMapRef is_transient slot kt vt),st1) /\
   eval_expr cx (Subscript NoneT e (Name NoneT (num_to_dec_string n)))
-    (initial_state am [scope]) = (res,st2) ==>
+    (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) = (res,st2) ==>
   no_type_error_result res
 Proof
   rpt strip_tac >>
@@ -1539,7 +1539,7 @@ Proof
         first_x_assum (qspecl_then [`num_to_dec_string n`, `kt`, `id'`, `typ'`] mp_tac) >>
         simp[])) >>
      simp[]) >>
-  `st1 = initial_state am [scope]` by metis_tac[eval_expr_preserves_state] >>
+  `st1 = initial_state am [scope] with <|outcomes := orc; requests := rqs|>` by metis_tac[eval_expr_preserves_state] >>
   gvs[initial_state_def] >>
   qpat_x_assum `eval_expr cx (Subscript _ _ _) _ = _` mp_tac >>
   simp[Once evaluate_def, Once evaluate_def,
@@ -1550,12 +1550,13 @@ Proof
   irule Subscript_NoneTV_HashMapRef_no_TypeError >>
   qexistsl [`slot`, `cx`, `is_transient`, `kt`, `entry.value`,
             `<|immutables := am.immutables; logs := am.logs; scopes := [scope];
-               accounts := am.accounts; tStorage := am.tStorage|>`, `st2`, `vt`] >>
+               accounts := am.accounts; tStorage := am.tStorage;
+               outcomes := orc; requests := rqs|>`, `st2`, `vt`] >>
   simp[]
 QED
 
 Theorem generated_hashmap_subscript_step_no_type_error_params:
-  !tenv params vals scope n kt vt cx e am is_transient slot st1 res st2.
+  !orc rqs tenv params vals scope n kt vt cx e am is_transient slot st1 res st2.
   bind_arguments tenv params vals = SOME scope /\
   MEM (num_to_dec_string n, kt) params /\
   (!id typ id' typ'. MEM (id,typ) params /\ MEM (id',typ') params /\
@@ -1563,10 +1564,10 @@ Theorem generated_hashmap_subscript_step_no_type_error_params:
   check_value_type (get_tenv cx) vt /\
   pure_expr e /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME NoneTV /\
-  eval_expr cx e (initial_state am [scope]) =
+  eval_expr cx e (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) =
     (INL (HashMapRef is_transient slot kt vt),st1) /\
   eval_expr cx (Subscript NoneT e (Name NoneT (num_to_dec_string n)))
-    (initial_state am [scope]) = (res,st2) ==>
+    (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) = (res,st2) ==>
   no_type_error_result res
 Proof
   metis_tac[generated_hashmap_subscript_step_no_type_error]
@@ -1574,7 +1575,7 @@ QED
 
 
 Theorem generated_hashmap_subscript_step_error_no_type_error_params:
-  !tenv params vals scope n kt vt cx e am is_transient slot st1 err st2.
+  !orc rqs tenv params vals scope n kt vt cx e am is_transient slot st1 err st2.
   bind_arguments tenv params vals = SOME scope /\
   MEM (num_to_dec_string n, kt) params /\
   (!id typ id' typ'. MEM (id,typ) params /\ MEM (id',typ') params /\
@@ -1582,10 +1583,10 @@ Theorem generated_hashmap_subscript_step_error_no_type_error_params:
   check_value_type (get_tenv cx) vt /\
   pure_expr e /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME NoneTV /\
-  eval_expr cx e (initial_state am [scope]) =
+  eval_expr cx e (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) =
     (INL (HashMapRef is_transient slot kt vt),st1) /\
   eval_expr cx (Subscript NoneT e (Name NoneT (num_to_dec_string n)))
-    (initial_state am [scope]) = (INR err,st2) ==>
+    (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) = (INR err,st2) ==>
   no_type_error_result (INR err)
 Proof
   rpt strip_tac >> drule_all generated_hashmap_subscript_step_no_type_error_params >>
@@ -1593,7 +1594,7 @@ Proof
   fs[vyperTypeExprSoundnessTheory.no_type_error_result_def]
 QED
 Theorem generated_hashmap_array_subscript_step_no_type_error_params[local]:
-  !tenv params vals scope n kt t b cx e am is_transient slot st1 res st2.
+  !orc rqs tenv params vals scope n kt t b cx e am is_transient slot st1 res st2.
   bind_arguments tenv params vals = SOME scope /\
   MEM (num_to_dec_string n, kt) params /\
   (!id typ id' typ'. MEM (id,typ) params /\ MEM (id',typ') params /\
@@ -1601,14 +1602,14 @@ Theorem generated_hashmap_array_subscript_step_no_type_error_params[local]:
   assignable_type (get_tenv cx) (ArrayT t b) /\
   pure_expr e /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME NoneTV /\
-  eval_expr cx e (initial_state am [scope]) =
+  eval_expr cx e (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) =
     (INL (HashMapRef is_transient slot kt (Type (ArrayT t b))),st1) /\
   eval_expr cx (Subscript NoneT e (Name NoneT (num_to_dec_string n)))
-    (initial_state am [scope]) = (res,st2) ==>
+    (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) = (res,st2) ==>
   no_type_error_result res
 Proof
   rpt strip_tac >> irule generated_hashmap_subscript_step_no_type_error_params >>
-  qexistsl [`am`, `cx`, `e`, `is_transient`, `kt`, `n`, `params`, `scope`,
+  qexistsl [`am`, `cx`, `e`, `is_transient`, `kt`, `n`, `orc`, `params`, `rqs`, `scope`,
             `slot`, `st1`, `st2`, `tenv`, `vals`, `Type (ArrayT t b)`] >>
   simp[check_value_type_def] >> rpt strip_tac >> metis_tac[]
 QED
@@ -1620,10 +1621,10 @@ Theorem generated_hashmap_subscript_step_success_carrier:
       string_to_num id' = string_to_num id ==> typ' = typ) /\
   pure_expr e /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME NoneTV /\
-  eval_expr cx e (initial_state am [scope]) =
+  eval_expr cx e (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) =
     (INL (HashMapRef is_transient slot kt (HashMapT kt' vt')),st1) /\
   eval_expr cx (Subscript NoneT e (Name NoneT (num_to_dec_string n)))
-    (initial_state am [scope]) = (INL tvl,st2) ==>
+    (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) = (INL tvl,st2) ==>
   ?slot'. tvl = HashMapRef is_transient slot' kt' vt'
 Proof
   rpt strip_tac >>
@@ -1637,7 +1638,7 @@ Proof
         first_x_assum (qspecl_then [`num_to_dec_string n`, `kt`, `id'`, `typ'`] mp_tac) >>
         simp[])) >>
      simp[]) >>
-  `st1 = initial_state am [scope]` by metis_tac[eval_expr_preserves_state] >>
+  `st1 = initial_state am [scope] with <|outcomes := orc; requests := rqs|>` by metis_tac[eval_expr_preserves_state] >>
   gvs[initial_state_def] >>
   qpat_x_assum `eval_expr cx (Subscript _ _ _) _ = _` mp_tac >>
   simp[Once evaluate_def, Once evaluate_def,
@@ -1659,10 +1660,10 @@ Theorem generated_hashmap_array_tail_subscript_success_carrier[local]:
   check_value_type (get_tenv cx) (Type vt) /\ is_ArrayT vt /\
   pure_expr e /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME NoneTV /\
-  eval_expr cx e (initial_state am [scope]) =
+  eval_expr cx e (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) =
     (INL (HashMapRef is_transient slot kt (Type vt)),st1) /\
   eval_expr cx (Subscript NoneT e (Name NoneT (num_to_dec_string n)))
-    (initial_state am [scope]) = (INL tvl,st2) ==>
+    (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) = (INL tvl,st2) ==>
   (?av. tvl = Value (ArrayV av)) \/
   (?is_transient' slot' elem_tv bd. tvl = ArrayRef is_transient' slot' elem_tv bd)
 Proof
@@ -1677,7 +1678,7 @@ Proof
         first_x_assum (qspecl_then [`num_to_dec_string n`, `kt`, `id'`, `typ'`] mp_tac) >>
         simp[])) >>
      simp[]) >>
-  `st1 = initial_state am [scope]` by metis_tac[eval_expr_preserves_state] >>
+  `st1 = initial_state am [scope] with <|outcomes := orc; requests := rqs|>` by metis_tac[eval_expr_preserves_state] >>
   gvs[initial_state_def] >>
   qpat_x_assum `eval_expr cx (Subscript _ _ _) _ = _` mp_tac >>
   simp[Once evaluate_def, Once evaluate_def,
@@ -1696,7 +1697,7 @@ Proof
   Cases_on `entry.value` >> gvs[check_array_bounds_def, return_def] >>
   Cases_on `read_storage_slot cx is_transient
              (hashmap_slot slot (encode_hashmap_key kt entry.value))
-             (ArrayTV elem_tv bd) (initial_state am [scope])` >>
+             (ArrayTV elem_tv bd) (initial_state am [scope] with <|outcomes := orc; requests := rqs|>)` >>
   Cases_on `q` >> gvs[initial_state_def, bind_def, return_def, raise_def] >>
   rpt strip_tac >> gvs[] >>
   (`well_formed_type_value (ArrayTV elem_tv bd)` by
@@ -1718,10 +1719,10 @@ Theorem generated_hashmap_array_tail_subscript_typed_package:
   pure_expr e /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME NoneTV /\
   evaluate_type (get_tenv cx) elem_ast = SOME elem_tv /\
-  eval_expr cx e (initial_state am [scope]) =
+  eval_expr cx e (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) =
     (INL (HashMapRef is_transient slot kt (Type (ArrayT elem_ast bd_ast))),st1) /\
   eval_expr cx (Subscript NoneT e (Name NoneT (num_to_dec_string n)))
-    (initial_state am [scope]) = (INL tvl,step_st) ==>
+    (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) = (INL tvl,step_st) ==>
   ((?av bd. tvl = Value (ArrayV av) /\
             value_has_type (ArrayTV elem_tv bd) (ArrayV av)) \/
    (?is_transient' slot' bd. tvl = ArrayRef is_transient' slot' elem_tv bd))
@@ -1737,7 +1738,7 @@ Proof
         first_x_assum (qspecl_then [`num_to_dec_string n`, `kt`, `id'`, `typ'`] mp_tac) >>
         simp[])) >>
      simp[]) >>
-  `st1 = initial_state am [scope]` by metis_tac[eval_expr_preserves_state] >>
+  `st1 = initial_state am [scope] with <|outcomes := orc; requests := rqs|>` by metis_tac[eval_expr_preserves_state] >>
   gvs[initial_state_def] >>
   qpat_x_assum `eval_expr cx (Subscript _ _ _) _ = _` mp_tac >>
   simp[Once evaluate_def, Once evaluate_def,
@@ -1753,7 +1754,7 @@ Proof
   gvs[bind_def, return_def, raise_def] >>
   Cases_on `read_storage_slot cx is_transient
              (hashmap_slot slot (encode_hashmap_key kt entry.value))
-             (ArrayTV elem_tv bd_ast) (initial_state am [scope])` >>
+             (ArrayTV elem_tv bd_ast) (initial_state am [scope] with <|outcomes := orc; requests := rqs|>)` >>
   Cases_on `q` >> gvs[initial_state_def, bind_def, return_def, raise_def] >>
   rpt strip_tac >> gvs[] >>
   (`well_formed_type_value (ArrayTV elem_tv bd_ast)` by
@@ -1807,7 +1808,7 @@ Theorem checked_public_array_TopLevelName_indexable_carrier[local]:
   ALOOKUP mods src = SOME ts /\ MEM (VariableDecl Public mut fn typ init) ts /\
   is_ArrayT typ /\
   eval_expr (initial_evaluation_context am.sources am.layouts tx src)
-    (TopLevelName NoneT (src,fn)) (initial_state am [scope]) = (INL tvl,st') ==>
+    (TopLevelName NoneT (src,fn)) (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) = (INL tvl,st') ==>
   (?av. tvl = Value (ArrayV av)) \/
   (?is_transient slot elem_tv bd. tvl = ArrayRef is_transient slot elem_tv bd)
 Proof
@@ -1926,7 +1927,7 @@ Theorem checked_public_array_TopLevelName_typed_indexable_carrier:
   evaluate_type (get_tenv (initial_evaluation_context am.sources am.layouts tx src)) typ =
     SOME (ArrayTV elem_tv bd) /\
   eval_expr (initial_evaluation_context am.sources am.layouts tx src)
-    (TopLevelName NoneT (src,fn)) (initial_state am [scope]) = (INL tvl,st') ==>
+    (TopLevelName NoneT (src,fn)) (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) = (INL tvl,st') ==>
   ((?av. tvl = Value (ArrayV av) /\
          value_has_type (ArrayTV elem_tv bd) (ArrayV av)) \/
    (?is_transient slot. tvl = ArrayRef is_transient slot elem_tv bd))
@@ -2042,7 +2043,7 @@ Theorem checked_public_array_TopLevelName_typed_indexable_carrier_ArrayT:
   type_slot_size (ArrayTV elem_tv b) <
     115792089237316195423570985008687907853269984665640564039457584007913129639936 /\
   eval_expr (initial_evaluation_context am.sources am.layouts tx src)
-    (TopLevelName NoneT (src,fn)) (initial_state am [scope]) = (INL tvl,st') ==>
+    (TopLevelName NoneT (src,fn)) (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) = (INL tvl,st') ==>
   ((?av. tvl = Value (ArrayV av) /\
          value_has_type (ArrayTV elem_tv b) (ArrayV av)) \/
    (?is_transient slot. tvl = ArrayRef is_transient slot elem_tv b))
@@ -2050,7 +2051,7 @@ Proof
   rpt strip_tac >>
   irule (Q.INST [`typ` |-> `ArrayT t b`, `bd` |-> `b`]
            checked_public_array_TopLevelName_typed_indexable_carrier) >>
-  qexistsl [`am`, `art`, `fn`, `init`, `mods`, `mut`, `scope`, `src`,
+  qexistsl [`am`, `art`, `fn`, `init`, `mods`, `mut`, `orc`, `rqs`, `scope`, `src`,
             `st'`, `t`, `ts`, `tx`] >>
   simp[is_ArrayT_def, evaluate_type_def, get_tenv_def,
        initial_evaluation_context_def]
@@ -2372,11 +2373,11 @@ Theorem generated_array_subscript_step_Value_typed_carrier[local]:
       string_to_num id' = string_to_num id ==> typ' = typ) /\
   pure_expr e /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (ArrayTV (ArrayTV inner_tv inner_bd) bd) /\
-  eval_expr cx e (initial_state am [scope]) = (INL (Value (ArrayV av)),st1) /\
+  eval_expr cx e (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) = (INL (Value (ArrayV av)),st1) /\
   value_has_type (ArrayTV (ArrayTV inner_tv inner_bd) bd) (ArrayV av) /\
   well_formed_type_value (ArrayTV inner_tv inner_bd) /\
   eval_expr cx (Subscript NoneT e (Name NoneT (num_to_dec_string n)))
-    (initial_state am [scope]) = (res,st2) ==>
+    (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) = (res,st2) ==>
   no_type_error_result res /\
   (case res of
    | INL tvl' =>
@@ -2395,7 +2396,7 @@ Proof
         first_x_assum (qspecl_then [`num_to_dec_string n`, `BaseT (UintT 256)`, `id'`, `typ'`] mp_tac) >>
         simp[])) >>
      simp[]) >>
-  `st1 = initial_state am [scope]` by metis_tac[eval_expr_preserves_state] >>
+  `st1 = initial_state am [scope] with <|outcomes := orc; requests := rqs|>` by metis_tac[eval_expr_preserves_state] >>
   gvs[initial_state_def] >>
   qpat_x_assum `eval_expr cx (Subscript _ _ _) _ = _` mp_tac >>
   simp[Once evaluate_def, Once evaluate_def,
@@ -2403,7 +2404,8 @@ Proof
        lift_option_type_def, return_def, raise_def] >>
   Cases_on `check_array_bounds cx (Value (ArrayV av)) (IntV i)
               <|immutables := am.immutables; logs := am.logs; scopes := [scope];
-                accounts := am.accounts; tStorage := am.tStorage|>` >>
+                accounts := am.accounts; tStorage := am.tStorage;
+                outcomes := orc; requests := rqs|>` >>
   rename1 `check_array_bounds _ _ _ _ = (bounds_res,bounds_st)` >>
   Cases_on `bounds_res` >> simp[bind_def, return_def, raise_def]
   >- (Cases_on `evaluate_subscript (get_tenv cx) (ArrayTV (ArrayTV inner_tv inner_bd) bd)
@@ -2438,10 +2440,10 @@ Theorem generated_array_subscript_step_ArrayRef_typed_carrier[local]:
       string_to_num id' = string_to_num id ==> typ' = typ) /\
   pure_expr e /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (ArrayTV (ArrayTV inner_tv inner_bd) bd) /\
-  eval_expr cx e (initial_state am [scope]) = (INL (ArrayRef is_transient slot (ArrayTV inner_tv inner_bd) bd),st1) /\
+  eval_expr cx e (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) = (INL (ArrayRef is_transient slot (ArrayTV inner_tv inner_bd) bd),st1) /\
   well_formed_type_value (ArrayTV inner_tv inner_bd) /\
   eval_expr cx (Subscript NoneT e (Name NoneT (num_to_dec_string n)))
-    (initial_state am [scope]) = (res,st2) ==>
+    (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) = (res,st2) ==>
   no_type_error_result res /\
   (case res of
    | INL tvl' => ?slot'. tvl' = ArrayRef is_transient slot' inner_tv inner_bd
@@ -2459,7 +2461,7 @@ Proof
         first_x_assum (qspecl_then [`num_to_dec_string n`, `BaseT (UintT 256)`, `id'`, `typ'`] mp_tac) >>
         simp[])) >>
      simp[]) >>
-  `st1 = initial_state am [scope]` by metis_tac[eval_expr_preserves_state] >>
+  `st1 = initial_state am [scope] with <|outcomes := orc; requests := rqs|>` by metis_tac[eval_expr_preserves_state] >>
   gvs[initial_state_def] >>
   qpat_x_assum `eval_expr cx (Subscript _ _ _) _ = _` mp_tac >>
   simp[Once evaluate_def, Once evaluate_def,
@@ -2467,7 +2469,8 @@ Proof
        lift_option_type_def, return_def, raise_def] >>
   Cases_on `check_array_bounds cx (ArrayRef is_transient slot (ArrayTV inner_tv inner_bd) bd) (IntV i)
               <|immutables := am.immutables; logs := am.logs; scopes := [scope];
-                accounts := am.accounts; tStorage := am.tStorage|>` >>
+                accounts := am.accounts; tStorage := am.tStorage;
+                outcomes := orc; requests := rqs|>` >>
   rename1 `check_array_bounds _ _ _ _ = (bounds_res,bounds_st)` >>
   Cases_on `bounds_res`
   >- (Cases_on `evaluate_subscript (get_tenv cx) (ArrayTV (ArrayTV inner_tv inner_bd) bd)
@@ -2508,13 +2511,13 @@ Theorem generated_array_subscript_step_typed_carrier[local]:
       string_to_num id' = string_to_num id ==> typ' = typ) /\
   pure_expr e /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (ArrayTV (ArrayTV inner_tv inner_bd) bd) /\
-  eval_expr cx e (initial_state am [scope]) = (INL tvl,st1) /\
+  eval_expr cx e (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) = (INL tvl,st1) /\
   ((?av. tvl = Value (ArrayV av) /\
          value_has_type (ArrayTV (ArrayTV inner_tv inner_bd) bd) (ArrayV av)) \/
    (?is_transient slot. tvl = ArrayRef is_transient slot (ArrayTV inner_tv inner_bd) bd)) /\
   well_formed_type_value (ArrayTV inner_tv inner_bd) /\
   eval_expr cx (Subscript NoneT e (Name NoneT (num_to_dec_string n)))
-    (initial_state am [scope]) = (res,st2) ==>
+    (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) = (res,st2) ==>
   no_type_error_result res /\
   (case res of
    | INL tvl' =>
@@ -2587,11 +2590,11 @@ Theorem generated_array_subscript_step_NoneTV_carrier_no_type_error:
       string_to_num id' = string_to_num id ==> typ' = typ) /\
   pure_expr e /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME NoneTV /\
-  eval_expr cx e (initial_state am [scope]) = (INL tvl,st1) /\
+  eval_expr cx e (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) = (INL tvl,st1) /\
   ((?av. tvl = Value (ArrayV av)) \/
    (?is_transient slot elem_tv bd. tvl = ArrayRef is_transient slot elem_tv bd)) /\
   eval_expr cx (Subscript NoneT e (Name NoneT (num_to_dec_string n)))
-    (initial_state am [scope]) = (res,st2) ==>
+    (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) = (res,st2) ==>
   no_type_error_result res
 Proof
   rpt strip_tac >> gvs[] >>
@@ -2606,7 +2609,7 @@ Proof
         first_x_assum (qspecl_then [`num_to_dec_string n`, `BaseT (UintT 256)`, `id'`, `typ'`] mp_tac) >>
         simp[])) >>
      simp[]) >>
-  `st1 = initial_state am [scope]` by metis_tac[eval_expr_preserves_state] >>
+  `st1 = initial_state am [scope] with <|outcomes := orc; requests := rqs|>` by metis_tac[eval_expr_preserves_state] >>
   gvs[initial_state_def] >>
   qpat_x_assum `eval_expr cx (Subscript _ _ _) _ = _` mp_tac >>
   simp[Once evaluate_def, Once evaluate_def,
@@ -2627,11 +2630,11 @@ Theorem generated_array_subscript_step_NoneTV_materialisable:
       string_to_num id' = string_to_num id ==> typ' = typ) /\
   pure_expr e /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME NoneTV /\
-  eval_expr cx e (initial_state am [scope]) = (INL tvl,st1) /\
+  eval_expr cx e (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) = (INL tvl,st1) /\
   ((?av. tvl = Value (ArrayV av)) \/
    (?is_transient slot elem_tv bd. tvl = ArrayRef is_transient slot elem_tv bd)) /\
   eval_expr cx (Subscript NoneT e (Name NoneT (num_to_dec_string n)))
-    (initial_state am [scope]) = (res,st2) ==>
+    (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) = (res,st2) ==>
   no_type_error_result res /\
   (case res of
    | INL tvl' => (?v. tvl' = Value v) \/
@@ -2652,7 +2655,7 @@ Proof
         first_x_assum (qspecl_then [`num_to_dec_string n`, `BaseT (UintT 256)`, `id'`, `typ'`] mp_tac) >>
         simp[])) >>
      simp[]) >>
-  `st1 = initial_state am [scope]` by metis_tac[eval_expr_preserves_state] >>
+  `st1 = initial_state am [scope] with <|outcomes := orc; requests := rqs|>` by metis_tac[eval_expr_preserves_state] >>
   gvs[initial_state_def] >>
   qpat_x_assum `eval_expr cx (Subscript _ _ _) _ = _` mp_tac >>
   simp[Once evaluate_def, Once evaluate_def,
@@ -2661,7 +2664,8 @@ Proof
   rpt strip_tac >> gvs[]
   >- (Cases_on `check_array_bounds cx (Value (ArrayV av)) (IntV i)
                     <|immutables := am.immutables; logs := am.logs; scopes := [scope];
-                      accounts := am.accounts; tStorage := am.tStorage|>` >>
+                      accounts := am.accounts; tStorage := am.tStorage;
+                      outcomes := orc; requests := rqs|>` >>
       Cases_on `q` >>
       gvs[bind_def, ignore_bind_def, return_def, raise_def,
           lift_sum_def, evaluate_subscript_def, AllCaseEqs()] >>
@@ -2669,7 +2673,8 @@ Proof
       gvs[bind_def, return_def, raise_def]) >>
   Cases_on `check_array_bounds cx (ArrayRef is_transient slot elem_tv bd) (IntV i)
                     <|immutables := am.immutables; logs := am.logs; scopes := [scope];
-                      accounts := am.accounts; tStorage := am.tStorage|>` >>
+                      accounts := am.accounts; tStorage := am.tStorage;
+                      outcomes := orc; requests := rqs|>` >>
   Cases_on `q` >>
   gvs[bind_def, ignore_bind_def, return_def, raise_def, lift_sum_def] >>
   Cases_on `evaluate_subscript (get_tenv cx) NoneTV
@@ -2786,13 +2791,13 @@ Theorem generated_array_subscript_step_NoneTV_nested_carrier:
       string_to_num id' = string_to_num id ==> typ' = typ) /\
   pure_expr e /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME NoneTV /\
-  eval_expr cx e (initial_state am [scope]) = (INL tvl,st1) /\
+  eval_expr cx e (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) = (INL tvl,st1) /\
   ((?av. tvl = Value (ArrayV av) /\
          value_has_type (ArrayTV (ArrayTV inner_tv inner_bd) bd) (ArrayV av)) \/
    (?is_transient slot. tvl = ArrayRef is_transient slot (ArrayTV inner_tv inner_bd) bd)) /\
   well_formed_type_value (ArrayTV inner_tv inner_bd) /\
   eval_expr cx (Subscript NoneT e (Name NoneT (num_to_dec_string n)))
-    (initial_state am [scope]) = (res,st2) ==>
+    (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) = (res,st2) ==>
   no_type_error_result res /\
   (case res of
    | INL tvl' =>
@@ -2817,7 +2822,7 @@ Proof
         first_x_assum (qspecl_then [`num_to_dec_string n`, `BaseT (UintT 256)`, `id'`, `typ'`] mp_tac) >>
         simp[])) >>
      simp[]) >>
-  `st1 = initial_state am [scope]` by metis_tac[eval_expr_preserves_state] >>
+  `st1 = initial_state am [scope] with <|outcomes := orc; requests := rqs|>` by metis_tac[eval_expr_preserves_state] >>
   gvs[initial_state_def] >>
   qpat_x_assum `eval_expr cx (Subscript _ _ _) _ = _` mp_tac >>
   simp[Once evaluate_def, Once evaluate_def,
@@ -2826,7 +2831,8 @@ Proof
   rpt strip_tac >> gvs[]
   >- (Cases_on `check_array_bounds cx (Value (ArrayV av)) (IntV i)
                     <|immutables := am.immutables; logs := am.logs; scopes := [scope];
-                      accounts := am.accounts; tStorage := am.tStorage|>` >>
+                      accounts := am.accounts; tStorage := am.tStorage;
+                      outcomes := orc; requests := rqs|>` >>
       Cases_on `q` >>
       gvs[bind_def, ignore_bind_def, return_def, raise_def, lift_sum_def] >>
       Cases_on `evaluate_subscript (get_tenv cx) NoneTV (Value (ArrayV av)) (IntV i)` >>
@@ -2840,7 +2846,8 @@ Proof
       gvs[evaluate_subscript_def, AllCaseEqs()]) >>
   Cases_on `check_array_bounds cx (ArrayRef is_transient slot (ArrayTV inner_tv inner_bd) bd) (IntV i)
                     <|immutables := am.immutables; logs := am.logs; scopes := [scope];
-                      accounts := am.accounts; tStorage := am.tStorage|>` >>
+                      accounts := am.accounts; tStorage := am.tStorage;
+                      outcomes := orc; requests := rqs|>` >>
   Cases_on `q` >>
   gvs[bind_def, ignore_bind_def, return_def, raise_def, lift_sum_def] >>
   Cases_on `evaluate_subscript (get_tenv cx) NoneTV

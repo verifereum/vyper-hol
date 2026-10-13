@@ -951,7 +951,7 @@ Theorem checked_explicit_external_entry_establishes_type_soundness_preconditions
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
   args_values_typed (type_env_all_modules mods) args vals ==>
   ?env_body env_after st.
-    st = initial_state am [scope] /\
+    st = (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) /\
     functions_well_typed
       ((initial_evaluation_context am.sources am.layouts tx src) with stk := [(src,fn)]) /\
     accounts_well_typed st.accounts /\
@@ -967,7 +967,8 @@ Proof
   `scope_well_typed scope` by
     metis_tac[bind_arguments_scope_well_typed_from_success] >>
   qexistsl [`env_body`, `env_after`] >>
-  rw[initial_state_accounts_well_typed, initial_state_single_scope_well_typed] >-
+  rw[initial_state_accounts_well_typed_simple,
+     initial_state_single_scope_well_typed_simple] >-
     (irule check_contract_functions_well_typed_initial_stk >> simp[]) >>
   rw[env_consistent_def]
   >- (irule env_context_consistent_same_static_maps >>
@@ -982,7 +983,7 @@ Proof
       irule bind_arguments_env_scopes_consistent >>
       qexistsl [`args`, `type_env_all_modules mods`, `vals`] >>
       gvs[get_tenv_def, initial_evaluation_context_def] >> metis_tac[])
-  >- (irule immutables_ready_env_immutables_consistent >>
+  >- (irule (SRULE [] immutables_ready_env_immutables_consistent) >>
       qexists `artifact_env art mods src` >>
       gvs[artifact_env_def])
 QED
@@ -1007,7 +1008,7 @@ Theorem check_contract_explicit_external_entry_no_type_error:
     (eval_stmts
       ((initial_evaluation_context am.sources am.layouts tx src) with stk := [(src,fn)])
       body
-      (initial_state am [scope]))
+      (initial_state am [scope] with <|outcomes := orc; requests := rqs|>))
 Proof
   metis_tac[
     checked_explicit_external_entry_establishes_type_soundness_preconditions,

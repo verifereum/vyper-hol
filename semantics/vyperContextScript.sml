@@ -4,7 +4,7 @@ Ancestors
   cv cv_std vfmState vfmCompute[ignore_grammar] sha2
   vyperAST vyperABI vyperMisc vyperValue vyperValueOperation vyperStorage
 Libs
-  cv_transLib wordsLib
+  cv_transLib wordsLib intLib
 
 
 (* Environment and context for a contract call *)
@@ -106,13 +106,31 @@ val () = cv_auto_trans current_module_def;
 Definition evaluate_account_op_def:
   evaluate_account_op Address bs _ = BytesV bs ∧
   evaluate_account_op Balance _ a = IntV &a.balance ∧
-  evaluate_account_op Codehash _ a = BytesV (Keccak_256_w64 a.code) ∧
+  evaluate_account_op Codehash _ a =
+    BytesV (if account_empty a then REPLICATE 32 0w else Keccak_256_w64 a.code) ∧
   evaluate_account_op Codesize _ a = IntV $ &LENGTH a.code ∧
   evaluate_account_op IsContract _ a = BoolV (a.code ≠ []) ∧
   evaluate_account_op Code _ a = BytesV a.code
 End
 
 val () = cv_auto_trans evaluate_account_op_def;
+
+(* ===== Account codehash boundaries ===== *)
+
+(* Emptiness includes balance and nonce, not just the absence of code. *)
+Theorem evaluate_account_codehash_empty:
+  account_empty a ==>
+  evaluate_account_op Codehash bs a = BytesV (REPLICATE 32 0w)
+Proof
+  simp[evaluate_account_op_def]
+QED
+
+Theorem evaluate_account_codehash_nonempty:
+  ~account_empty a ==>
+  evaluate_account_op Codehash bs a = BytesV (Keccak_256_w64 a.code)
+Proof
+  simp[evaluate_account_op_def]
+QED
 
 Definition evaluate_block_hash_def:
   evaluate_block_hash t n =
@@ -353,7 +371,7 @@ Definition evaluate_ecadd_def:
          let p1 = (Num x1, Num y1);
              p2 = (Num x2, Num y2)
          in case vfmExecution$ecadd p1 p2 of
-              NONE => INL $ mk_ec_result (0, 0)
+              NONE => INR (RuntimeError "ECAdd invalid point")
             | SOME r => INL $ mk_ec_result r )
      | _ => INR (TypeError "ECAdd type")) ∧
   evaluate_ecadd _ = INR (TypeError "ECAdd args")
@@ -369,13 +387,97 @@ Definition evaluate_ecmul_def:
            p = (Num x, Num y);
            n = Num scalar
          in (case vfmExecution$ecmul p n of
-               NONE => INL $ mk_ec_result (0, 0)
+               NONE => INR (RuntimeError "ECMul invalid point")
              | SOME r => INL $ mk_ec_result r)
      | NONE => INR (TypeError "ECMul type")) ∧
   evaluate_ecmul _ = INR (TypeError "ECMul args")
 End
 
 val () = cv_auto_trans evaluate_ecmul_def;
+
+(* ===== EC precompile boundaries ===== *)
+
+(* Invalid curve points are runtime failures, not ill-typed arguments.
+   Successful precompile results, including the zero point, pass through. *)
+Theorem evaluate_ecadd_invalid_point:
+  extract_ec_point p1 = SOME (x1, y1) /\
+  extract_ec_point p2 = SOME (x2, y2) /\
+  vfmExecution$ecadd (Num x1, Num y1) (Num x2, Num y2) = NONE ==>
+  evaluate_ecadd [p1; p2] = INR (RuntimeError "ECAdd invalid point")
+Proof
+  simp[evaluate_ecadd_def]
+QED
+
+Theorem evaluate_ecmul_invalid_point:
+  extract_ec_point p = SOME (x, y) /\
+  vfmExecution$ecmul (Num x, Num y) (Num scalar) = NONE ==>
+  evaluate_ecmul [p; IntV scalar] = INR (RuntimeError "ECMul invalid point")
+Proof
+  simp[evaluate_ecmul_def]
+QED
+
+Theorem evaluate_ecadd_success:
+  extract_ec_point p1 = SOME (x1, y1) /\
+  extract_ec_point p2 = SOME (x2, y2) /\
+  vfmExecution$ecadd (Num x1, Num y1) (Num x2, Num y2) = SOME r ==>
+  evaluate_ecadd [p1; p2] = INL (mk_ec_result r)
+Proof
+  simp[evaluate_ecadd_def]
+QED
+
+Theorem evaluate_ecmul_success:
+  extract_ec_point p = SOME (x, y) /\
+  vfmExecution$ecmul (Num x, Num y) (Num scalar) = SOME r ==>
+  evaluate_ecmul [p; IntV scalar] = INL (mk_ec_result r)
+Proof
+  simp[evaluate_ecmul_def]
+QED
+
+(* Off-curve inputs fail in either add position, and even for scalar zero. *)
+Theorem evaluate_ec_invalid_point_regression:
+  evaluate_ecadd [mk_ec_result (1, 1); mk_ec_result (0, 0)] =
+    INR (RuntimeError "ECAdd invalid point") /\
+  evaluate_ecadd [mk_ec_result (0, 0); mk_ec_result (1, 1)] =
+    INR (RuntimeError "ECAdd invalid point") /\
+  evaluate_ecmul [mk_ec_result (1, 1); IntV 0] =
+    INR (RuntimeError "ECMul invalid point") /\
+  evaluate_ecmul [mk_ec_result (1, 1); IntV 1] =
+    INR (RuntimeError "ECMul invalid point")
+Proof
+  EVAL_TAC
+QED
+
+(* Coordinates at the field modulus are invalid, even for scalar zero. *)
+Theorem evaluate_ec_field_bound_regression:
+  evaluate_ecadd
+    [mk_ec_result (bn254$bn254p, 2); mk_ec_result (0, 0)] =
+    INR (RuntimeError "ECAdd invalid point") /\
+  evaluate_ecadd
+    [mk_ec_result (0, 0); mk_ec_result (1, bn254$bn254p)] =
+    INR (RuntimeError "ECAdd invalid point") /\
+  evaluate_ecmul [mk_ec_result (bn254$bn254p, 2); IntV 0] =
+    INR (RuntimeError "ECMul invalid point") /\
+  evaluate_ecmul [mk_ec_result (1, bn254$bn254p); IntV 1] =
+    INR (RuntimeError "ECMul invalid point")
+Proof
+  EVAL_TAC
+QED
+
+(* Infinity is valid; a genuine zero result must not become a failure. *)
+Theorem evaluate_ec_valid_point_regression:
+  evaluate_ecadd [mk_ec_result (0, 0); mk_ec_result (0, 0)] =
+    INL (mk_ec_result (0, 0)) /\
+  evaluate_ecadd [mk_ec_result (0, 0); mk_ec_result (1, 2)] =
+    INL (mk_ec_result (1, 2)) /\
+  evaluate_ecmul [mk_ec_result (0, 0); IntV 1] =
+    INL (mk_ec_result (0, 0)) /\
+  evaluate_ecmul [mk_ec_result (1, 2); IntV 0] =
+    INL (mk_ec_result (0, 0)) /\
+  evaluate_ecmul [mk_ec_result (1, 2); IntV 1] =
+    INL (mk_ec_result (1, 2))
+Proof
+  EVAL_TAC
+QED
 
 (* Calldata is not a bounded input value. Check the EVM-sized end before
    using the ordinary, non-padding bytes slice implementation. *)

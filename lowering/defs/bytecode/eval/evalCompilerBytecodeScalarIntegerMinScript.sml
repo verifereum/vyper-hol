@@ -271,19 +271,26 @@ Proof
   rpt CASE_TAC >> gvs[]
 QED
 
+val () = evalCompilerBytecodeLib.add_staged_compile_eval
+  ([scalar_integer_min_int256_runtime_compile_def,
+    scalar_integer_min_int256_runtime_pipeline_eval,
+    optionTheory.option_case_compute,
+    optionTheory.IS_SOME_DEF, optionTheory.THE_DEF,
+    pairTheory.pair_case_thm, LET_THM, COND_CLAUSES,
+    REFL_CLAUSE, NOT_CLAUSES,
+    scalar_integer_min_int256_unit_eval,
+    scalar_integer_min_int256_out_final_assembly_eval,
+    scalar_integer_min_int256_rpolicy_final_assembly_eval] @ scalar_integer_min_int256_runtime_accessors)
+  [codegenTheory.finalize_codegen_identity, scalar_integer_min_int256_codegen_assembly_eval]
+  [scalar_integer_min_int256_compile_staged]
+  ``scalar_integer_min_int256_runtime_compile scalar_integer_min_int256_program``
+  ``compile_vyper (K SOME) (o1_policy all_capabilities) scalar_integer_min_int256_program``
+
 Theorem scalar_integer_min_int256_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_integer_min_int256_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes
       "scalar_integer_min_int256.hex")
 Proof
-  PURE_REWRITE_TAC [scalar_integer_min_int256_compile_staged] >>
-  PURE_REWRITE_TAC
-    [scalar_integer_min_int256_runtime_matches_python_oracle] >>
-  simp_tac pure_ss
-    [optionTheory.option_case_compute,
-     optionTheory.IS_SOME_DEF, optionTheory.THE_DEF,
-     optionTheory.OPTION_MAP_DEF, LET_THM, COND_CLAUSES,
-     scalar_integer_min_int256_deploy_matches_python_oracle] >>
   EVAL_TAC
 QED

@@ -186,7 +186,7 @@ Definition for_pass_program_def:
        [For "i" (BaseT (UintT 256))
           (Range (Literal (BaseT (UintT 256)) (IntL 0))
                  (Literal (BaseT (UintT 256)) (IntL 2)))
-          0
+          2
           [Pass];
         Return (SOME (Literal (BaseT (UintT 256)) (IntL 1)))]]
 End
@@ -200,7 +200,7 @@ Definition for_accum_program_def:
         For "i" (BaseT (UintT 256))
           (Range (Literal (BaseT (UintT 256)) (IntL 0))
                  (Literal (BaseT (UintT 256)) (IntL 2)))
-          0
+          2
           [Assign (BaseTarget (NameTarget "y"))
              (Builtin (BaseT (UintT 256)) (Bop Add)
                 [Name (BaseT (UintT 256)) "y";
@@ -217,7 +217,7 @@ Definition for_continue_program_def:
         For "i" (BaseT (UintT 256))
           (Range (Literal (BaseT (UintT 256)) (IntL 0))
                  (Literal (BaseT (UintT 256)) (IntL 3)))
-          0
+          3
           [If (Builtin (BaseT BoolT) (Bop Eq)
                  [Name (BaseT (UintT 256)) "i";
                   Literal (BaseT (UintT 256)) (IntL 1)])
@@ -239,7 +239,7 @@ Definition for_break_program_def:
         For "i" (BaseT (UintT 256))
           (Range (Literal (BaseT (UintT 256)) (IntL 0))
                  (Literal (BaseT (UintT 256)) (IntL 3)))
-          0
+          3
           [If (Builtin (BaseT BoolT) (Bop Eq)
                  [Name (BaseT (UintT 256)) "i";
                   Literal (BaseT (UintT 256)) (IntL 2)])

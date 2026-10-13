@@ -16,6 +16,10 @@ Ancestors
   lowerDloadDefs stateEquiv venomExecSemantics passSimulationDefs
   venomExecProps venomInst venomState venomInstProps instIdxIndep
   finite_map words list rich_list
+Libs
+  lowerDloadFrameLib
+
+val _ = augment_srw_ss [lowerDloadFrameLib.frame_ss];
 
 val dim256 = fcpLib.INDEX_CONV ``dimindex(:256)``;
 
@@ -569,7 +573,9 @@ val ld_terminator_tac =
         eval_operands inst.inst_operands s2` by
         (irule eval_operands_agree >> rpt strip_tac >> res_tac >> gvs[]) >>
        gvs[]) >>
-  gvs[lift_result_def] >> ld_close_tac;
+  gvs[lift_result_def] >>
+  (* STOP now uses the same returndata setter as RETURN; reuse its helper. *)
+  PURE_REWRITE_TAC[GSYM set_returndata_def] >> ld_close_tac;
 
 Theorem step_inst_base_ld_ok_jnz:
   !inst s1 s2 vars.

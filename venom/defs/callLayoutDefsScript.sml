@@ -140,7 +140,8 @@ Proof
       >> qpat_x_assum `!k. canonical_entry_params_from k insts ==> _`
            (qspec_then `SUC k` mp_tac)
       >> simp[] >> strip_tac
-      >> qexistsl [`inst::users`, `fmp`, `retpc`, `body`]
+      >> rename1 `no_param_insts tail_insts`
+      >> qexistsl [`inst::users`, `fmp`, `retpc`, `tail_insts`]
       >> qpat_x_assum `fmp = _` SUBST_ALL_TAC
       >> qpat_x_assum `retpc = _` SUBST_ALL_TAC
       >> fs[listTheory.APPEND_NIL]
@@ -148,7 +149,8 @@ Proof
   >> Cases_on `inst.inst_opcode = FMP_PARAM`
   >- (simp[canonical_entry_params_from_def, canonical_after_fmp_iff]
       >> strip_tac
-      >> qexistsl [`[]`, `[inst]`, `retpc`, `body`]
+      >> rename1 `no_param_insts tail_insts`
+      >> qexistsl [`[]`, `[inst]`, `retpc`, `tail_insts`]
       >> qpat_x_assum `retpc = _` SUBST_ALL_TAC
       >> fs[listTheory.APPEND_NIL]
       >> simp[param_insts_from_def])
@@ -195,11 +197,11 @@ Theorem canonical_entry_params_from_hidden_suffix:
     no_param_insts body ==>
     canonical_entry_params_from k (fmp ++ retpc ++ body)
 Proof
-  rpt gen_tac >> strip_tac >> gvs[]
+  rpt gen_tac >> strip_tac >> rename1 `no_param_insts tail_insts` >> gvs[]
   >> simp[canonical_entry_params_from_def, canonical_after_fmp_def,
           param_insts_from_def, no_param_insts_def, is_param_opcode_iff,
           listTheory.APPEND_NIL]
-  >> Cases_on `body`
+  >> Cases_on `tail_insts`
   >> gvs[canonical_entry_params_from_def, canonical_after_fmp_def,
          no_param_insts_def, param_insts_from_def, is_param_opcode_iff]
 QED
@@ -215,20 +217,20 @@ Theorem canonical_entry_params_from_complete:
     no_param_insts body ==>
     canonical_entry_params_from k (users ++ fmp ++ retpc ++ body)
 Proof
-  rpt gen_tac >> strip_tac
+  rpt gen_tac >> strip_tac >> rename1 `no_param_insts tail_insts`
   >> `param_insts_from k (users ++ (fmp ++ retpc))` by
        gvs[listTheory.APPEND_ASSOC]
   >> drule (iffLR param_insts_from_append)
   >> strip_tac
   >> `canonical_entry_params_from (k + LENGTH users)
-        (fmp ++ retpc ++ body)` by
+        (fmp ++ retpc ++ tail_insts)` by
        (irule canonical_entry_params_from_hidden_suffix >> simp[])
   >> `canonical_entry_params_from k
-        (users ++ (fmp ++ retpc ++ body))` by
+        (users ++ (fmp ++ retpc ++ tail_insts))` by
        (irule canonical_entry_params_from_prepend_users
         >> rpt conj_tac >> first_assum ACCEPT_TAC)
   >> qpat_x_assum
-       `canonical_entry_params_from k (users ++ (fmp ++ retpc ++ body))`
+       `canonical_entry_params_from k (users ++ (fmp ++ retpc ++ tail_insts))`
        mp_tac
   >> pure_rewrite_tac[listTheory.APPEND_ASSOC]
   >> simp[]
@@ -379,17 +381,17 @@ Theorem canonical_param_prefix_queries:
     OPTION_TO_LIST (fn_retpc_param fn) = retpc /\
     LENGTH (fn_user_param_insts fn) = LENGTH users
 Proof
-  rpt gen_tac >> strip_tac
+  rpt gen_tac >> strip_tac >> rename1 `no_param_insts tail_insts`
   >> `FILTER (\inst. inst.inst_opcode = PARAM)
-             (users ++ fmp ++ retpc ++ body) = users /\
+             (users ++ fmp ++ retpc ++ tail_insts) = users /\
       OPTION_TO_LIST
         (FIND (\inst. inst.inst_opcode = FMP_PARAM)
-              (users ++ fmp ++ retpc ++ body)) = fmp /\
+              (users ++ fmp ++ retpc ++ tail_insts)) = fmp /\
       OPTION_TO_LIST
         (FIND (\inst. inst.inst_opcode = RETPC_PARAM)
-              (users ++ fmp ++ retpc ++ body)) = retpc` by
+              (users ++ fmp ++ retpc ++ tail_insts)) = retpc` by
        (irule canonical_phase_queries >> metis_tac[])
-  >> `fn_entry_insts fn = users ++ fmp ++ retpc ++ body` by
+  >> `fn_entry_insts fn = users ++ fmp ++ retpc ++ tail_insts` by
        simp[fn_entry_insts_def, entry_block_def]
   >> `fn_user_param_insts fn = users` by
        (rewrite_tac[fn_user_param_insts_def]
@@ -450,7 +452,8 @@ Theorem canonical_param_prefix_erase:
           (users ++ fmp ++ retpc)
 Proof
   rpt gen_tac >> strip_tac
-  >> `fn_entry_insts fn = users ++ fmp ++ retpc ++ body` by
+  >> rename1 `entry.bb_instructions = users ++ fmp ++ retpc ++ tail_insts`
+  >> `fn_entry_insts fn = users ++ fmp ++ retpc ++ tail_insts` by
        simp[fn_entry_insts_def, entry_block_def]
   >> `TAKE (LENGTH (users ++ fmp ++ retpc)) (fn_entry_insts fn) =
       users ++ fmp ++ retpc` by

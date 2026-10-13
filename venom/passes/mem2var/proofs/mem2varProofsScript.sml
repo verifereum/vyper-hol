@@ -1,6 +1,6 @@
 Theory mem2varProofs
 Ancestors
-  mem2varDefs basePtrProps pointerConfinedDefs passSimulationProps
+  mem2varDefs mem2varFrame basePtrProps pointerConfinedDefs passSimulationProps
   memLocDefs venomExecProofs venomInstProofs venomMemDefs venomMemProps
   basePtrDefs
   passSimulationDefs
@@ -11,7 +11,9 @@ Ancestors
   finite_map list pred_set pair
   string ASCIInumbers
 Libs
-  HolKernel boolLib bossLib BasicProvers markerLib
+  HolKernel boolLib bossLib BasicProvers markerLib mem2varFrameLib
+
+val _ = augment_srw_ss [mem2varFrameLib.frame_ss];
 
 
 (* Helper: m2v_scan_step preserves the invariant in one step *)

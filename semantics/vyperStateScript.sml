@@ -3,7 +3,7 @@ Ancestors
   arithmetic alist combin option list finite_map pair rich_list
   cv cv_std vfmTypes vfmState vfmContext vfmExecution[ignore_grammar]
   vyperAST vyperMisc vyperValue vyperValueOperation
-  vyperStorage vyperContext
+  vyperStorage vyperContext extCallOracle[ignore_grammar]
 Libs
   cv_transLib wordsLib monadsyntax
 
@@ -128,6 +128,8 @@ Datatype:
   ; scopes: scope list
   ; accounts: evm_accounts
   ; tStorage: transient_storage
+  ; outcomes: extCallOracle$call_outcome list option
+  ; requests: extCallOracle$call_request list
   |>
 End
 
@@ -137,7 +139,9 @@ Definition empty_state_def:
     immutables := [];
     logs := [];
     scopes := [];
-    tStorage := empty_transient_storage
+    tStorage := empty_transient_storage;
+    outcomes := NONE;
+    requests := []
   |>
 End
 
@@ -938,7 +942,6 @@ Definition assign_target_def:
             last_idx <<- stored_len - 1;
             last_slot <<- elem_slot + n2w (1 + last_idx * type_slot_size pop_elem_tv);
             popped <- read_storage_slot cx is_transient last_slot pop_elem_tv;
-            write_storage_slot cx is_transient last_slot pop_elem_tv (default_value pop_elem_tv);
             write_storage_slot cx is_transient elem_slot (BaseTV (UintT 256))
               (IntV &last_idx);
             return $ SOME popped

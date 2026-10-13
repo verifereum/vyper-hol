@@ -8,8 +8,8 @@ Theory loweringMemSafetyProofs
 Ancestors
   loweringMemSafetyDefs
   allocaRemapDefs pointerConfinedDefs
-  vyperTypeSoundness vyperTypeSoundnessDefs vyperTyping vyperValue
-  vyperTypeSoundnessHelpers vyperAST rich_list vyperMisc
+  vyperTypeSoundness vyperTypeABI vyperTyping vyperValue
+  vyperAST rich_list vyperMisc
   list option pair
   venomState venomMemDefs compileVyper words arithmetic
 

@@ -10,6 +10,7 @@
 Theory venomExecSemantics
 Ancestors
   venomState venomInst venomLayout dretShapeDefs keccak vfmExecution
+  venomCallOracleDefs
 
 (* --------------------------------------------------------------------------
    Arithmetic/Logic Operations (using bytes32 = 256 word)
@@ -453,23 +454,19 @@ Definition extract_venom_result_def:
        | _ => NONE)
 End
 
-(* Execute CALL/STATICCALL via verifereum EVM semantics.
+(* Execute CALL/STATICCALL using the shared outcome oracle.
+   Operand evaluation, including gas, remains in step_inst_base; only the
+   evaluated gas value is ignored. Concrete helpers remain for other opcodes.
    CALL: operands = [gas; addr; value; argsOff; argsSize; retOff; retSize]
    STATICCALL: operands = [gas; addr; argsOff; argsSize; retOff; retSize]
 *)
 Definition exec_ext_call_def:
   exec_ext_call inst s gas addr_w value argsOff argsSize retOff retSize is_static =
-    let calldata = read_memory (w2n argsOff) (w2n argsSize) s in
-    let target : address = w2w addr_w in
-    let code = (lookup_account target s.vs_accounts).code in
-    let evm_s = make_venom_call_state s target (w2n gas) (w2n value)
-                  calldata code is_static in
-    case extract_venom_result s 1w (w2n retOff) (w2n retSize) (run evm_s) of
-    | SOME (output, s') =>
-        (case inst.inst_outputs of
-           [out] => OK (update_var out output s')
-         | _ => Error "ext_call requires single output")
-    | NONE => Error "ext_call: non-terminating or invalid state"
+    let rq = venom_call_request s addr_w value argsOff argsSize is_static;
+        (output, s') = consume_call_outcome rq (w2n retOff) (w2n retSize) s
+    in case inst.inst_outputs of
+         [out] => OK (update_var out output s')
+       | _ => Error "ext_call requires single output"
 End
 
 (* Execute DELEGATECALL via verifereum EVM semantics.
@@ -743,7 +740,7 @@ Definition step_inst_base_def:
                              iret_adopt_fmp := SOME final_cursor |> s'')
 
     (* Termination *)
-    | STOP => Halt (halt_state s)
+    | STOP => Halt (halt_state (s with vs_returndata := []))
 
     | RETURN =>
         (case inst.inst_operands of
@@ -1203,14 +1200,14 @@ Proof
   ASM_REWRITE_TAC[opcode_case_def] >>
   gvs[AllCaseEqs(), exec_pure1_def, exec_pure2_def, exec_pure3_def,
       exec_read0_def, exec_read1_def, exec_write2_def,
-      exec_ext_call_def, exec_delegatecall_def,
+      exec_ext_call_def, consume_call_outcome_def, exec_delegatecall_def,
       exec_create_def, exec_alloca_def,
       extract_venom_result_def] >>
   rpt strip_tac >> gvs[] >>
   rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
   fs[update_var_def, mstore_def, mstore8_def, sstore_def, tstore_def,
      istore_def, write_memory_with_expansion_def, mcopy_def,
-     revert_state_def, eval_operands_def]
+     revert_state_def, eval_operands_def] >> gvs[AllCaseEqs()]
 QED
 
 (* --------------------------------------------------------------------------
@@ -1242,8 +1239,8 @@ End
 
 (* Merge callee's side effects back into caller after INVOKE.
    Internal function calls share the same contract, so mutable state
-   (memory, transient storage, accounts, returndata, logs, immutables)
-   propagates from callee to caller.  vs_alloca_next propagates too
+   (memory, transient storage, accounts, returndata, logs, immutables,
+   remaining outcomes and recorded requests) propagates from callee to caller.  vs_alloca_next propagates too
    (global bump pointer).  vs_allocas stays as caller's (per-frame).
    Caller-local fields (vars, params, control flow, contexts) are kept. *)
 Definition merge_callee_state_def:
@@ -1254,6 +1251,8 @@ Definition merge_callee_state_def:
       vs_accounts   := callee.vs_accounts;
       vs_returndata := callee.vs_returndata;
       vs_logs       := callee.vs_logs;
+      vs_outcomes   := callee.vs_outcomes;
+      vs_requests   := callee.vs_requests;
       vs_immutables := callee.vs_immutables;
       vs_alloca_next := callee.vs_alloca_next
       (* vs_allocas NOT copied — caller keeps its own frame's allocas *)
@@ -1261,11 +1260,12 @@ Definition merge_callee_state_def:
 End
 
 (* Prepare callee state: fresh frame rooted at the caller's current FMP.
-   The final evaluated argument is the logical return-PC token; the complete
-   argument vector is retained for indexed PARAM/FMP_PARAM semantics. *)
+   The final evaluated argument is the logical return-PC token (0w when there
+   are no arguments); the complete argument vector is retained for indexed
+   PARAM/FMP_PARAM semantics. *)
 Definition setup_callee_def:
   setup_callee fn args s =
-    if NULL fn.fn_blocks \/ NULL args then NONE
+    if NULL fn.fn_blocks then NONE
     else SOME (s with <|
       vs_vars            := FEMPTY;
       vs_params          := args;
@@ -1276,7 +1276,7 @@ Definition setup_callee_def:
       vs_allocas         := FEMPTY;
       vs_fmp             := s.vs_fmp;
       vs_call_entry_fmp  := s.vs_fmp;
-      vs_return_pc_token := LAST args
+      vs_return_pc_token := if NULL args then 0w else LAST args
     |>)
 End
 
@@ -1318,7 +1318,7 @@ Theorem setup_callee_frame:
   setup_callee fn args caller = SOME callee ==>
   callee.vs_fmp = caller.vs_fmp /\
   callee.vs_call_entry_fmp = caller.vs_fmp /\
-  callee.vs_return_pc_token = LAST args /\
+  callee.vs_return_pc_token = (if NULL args then 0w else LAST args) /\
   callee.vs_params = args
 Proof
   rw[setup_callee_def] >> gvs[]

@@ -103,7 +103,8 @@ QED
  * These results leave the established runtime and type-soundness predicates
  * unchanged.  External calls are admitted only through the exact protected
  * caller storage condition, which covers every successful or reverted result
- * and both persistent and transient storage.
+ * and both persistent and transient storage. Successful recorded payloads
+ * additionally satisfy the exact PLAN T6.2 oracle_storage_ok premise.
  *)
 
 Theorem typed_stmt_preserves_runtime_storage:
@@ -112,6 +113,7 @@ Theorem typed_stmt_preserves_runtime_storage:
   functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_stmt s) /\
   protected_storage_calls_preserve cx /\
+  oracle_storage_ok cx st /\
   eval_stmt cx s st = (res,st') ==>
   no_type_error_result res /\
   case res of
@@ -134,6 +136,7 @@ Theorem typed_stmts_preserve_runtime_storage:
   functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_stmts ss) /\
   protected_storage_calls_preserve cx /\
+  oracle_storage_ok cx st /\
   eval_stmts cx ss st = (res,st') ==>
   no_type_error_result res /\
   case res of
@@ -159,6 +162,7 @@ Theorem typed_expr_preserves_runtime_storage:
   functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_expr e) /\
   protected_storage_calls_preserve cx /\
+  oracle_storage_ok cx st /\
   eval_expr cx e st = (res,st') ==>
   runtime_storage_consistent env cx st' /\
   no_type_error_result res /\
@@ -180,6 +184,7 @@ Theorem typed_exprs_preserve_runtime_storage:
   functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_exprs es) /\
   protected_storage_calls_preserve cx /\
+  oracle_storage_ok cx st /\
   eval_exprs cx es st = (res,st') ==>
   runtime_storage_consistent env cx st' /\
   no_type_error_result res /\

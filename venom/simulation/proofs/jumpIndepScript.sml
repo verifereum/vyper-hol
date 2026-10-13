@@ -14,7 +14,7 @@
 
 Theory jumpIndep
 Ancestors
-  instIdxIndep venomExecSemantics venomState venomInst
+  instIdxIndep venomExecSemantics venomState venomInst venomCallOracleDefs
 Libs
   finite_mapTheory listTheory BasicProvers pairTheory
 
@@ -175,7 +175,7 @@ QED
 val jmp_rw = [eval_op_jump, eval_ops_jump, update_var_jump,
               write_mem_jump, read_mem_jump,
               halt_state_jump, revert_state_jump, set_returndata_jump,
-              mstore_jump, mstore8_jump, sstore_jump, tstore_jump, mcopy_jump,
+              istore_def, mstore_jump, mstore8_jump, sstore_jump, tstore_jump, mcopy_jump,
               mload_jump, sload_jump, tload_jump,
               instIdxIndepTheory.exec_result_map_def];
 
@@ -391,9 +391,10 @@ Theorem exec_ext_call_jump[local]:
       (exec_ext_call inst s gas addr value ao as_ ro rs is_static)
 Proof
   rpt gen_tac >>
-  simp([exec_ext_call_def, make_venom_call_state_jump] @ ext_call_rw) >>
+  simp([exec_ext_call_def, venom_call_request_def,
+        write_memory_with_expansion_def, make_venom_call_state_jump] @ ext_call_rw) >>
   EVERY_CASE_TAC >>
-  simp[instIdxIndepTheory.exec_result_map_def, update_var_jump,
+  simp[instIdxIndepTheory.exec_result_map_def, update_var_def, update_var_jump,
        venom_state_component_equality]
 QED
 
@@ -454,16 +455,18 @@ Theorem step_inst_base_jump_indep:
                        vs_inst_idx := idx|>)
       (step_inst_base inst s)
 Proof
+  (* Keep the original case proof, but finish each opcode separately rather
+     than timing simplification of all 85 live branches as one tactic. *)
   rpt gen_tac >> Cases_on `inst.inst_opcode` >>
-  simp[is_pseudo_def, is_terminator_def] >>
-  simp[step_inst_base_def, exec_pure1_jump, exec_pure2_jump,
-       exec_pure3_jump, exec_alloca_jump] >>
-  TRY (irule exec_read0_jump >> simp jmp_rw >> NO_TAC) >>
-  TRY (irule exec_read1_jump >> simp jmp_rw >> NO_TAC) >>
-  TRY (irule exec_write2_jump >> simp jmp_rw >> NO_TAC) >>
-  simp[eval_op_jump, eval_ops_jump,
-       exec_ext_call_jump, exec_delegatecall_jump, exec_create_jump] >>
-  EVERY_CASE_TAC >>
-  simp(jmp_rw @ [venom_state_component_equality])
+  (simp[is_pseudo_def, is_terminator_def] >>
+   simp[step_inst_base_def, exec_pure1_jump, exec_pure2_jump,
+        exec_pure3_jump, exec_alloca_jump] >>
+   TRY (irule exec_read0_jump >> simp jmp_rw >> NO_TAC) >>
+   TRY (irule exec_read1_jump >> simp jmp_rw >> NO_TAC) >>
+   TRY (irule exec_write2_jump >> simp jmp_rw >> NO_TAC) >>
+   simp[eval_op_jump, eval_ops_jump,
+        exec_ext_call_jump, exec_delegatecall_jump, exec_create_jump] >>
+   EVERY_CASE_TAC >>
+   simp(jmp_rw @ [venom_state_component_equality]))
 QED
 

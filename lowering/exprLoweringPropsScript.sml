@@ -18,7 +18,7 @@
 
 Theory exprLoweringProps
 Ancestors
-  exprLowering emitHelper compileEnv
+  exprLowering emitHelper compileEnv builtinSystem
   venomExecSemantics venomState venomInst venomInstProps
   vyperInterpreter vyperContext
   vyperState vyperValueOperation
@@ -2676,13 +2676,66 @@ irule ci_mono_ignore_bind >> conj_tac
 >> simp[ci_mono_comp_return]
 QED
 
+Theorem ci_mono_compile_msg_data_to_memory[local]:
+  ∀sa. ci_mono sa (SND (compile_msg_data_to_memory sa))
+Proof
+  simp[compile_msg_data_to_memory_def, contextTheory.compile_alloc_dynamic_def] >>
+  rpt gen_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- simp[ci_mono_emit_op] >>
+  rpt gen_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- simp[ci_mono_emit_op] >>
+  rpt gen_tac >> ho_match_mp_tac ci_mono_ignore_bind >>
+  simp[ci_mono_emit_void, ci_mono_comp_return]
+QED
+
+Theorem ci_mono_compile_raw_call[local]:
+  ∀addr dp dl gas value call_ty max_outsize rof sa.
+    ci_mono sa
+      (SND (compile_raw_call addr dp dl gas value call_ty max_outsize rof sa))
+Proof
+  rpt gen_tac >> Cases_on `call_ty` >>
+  simp[compile_raw_call_def, LET_THM] >>
+  rpt (FIRST [
+    CHANGED_TAC (simp[LET_THM, pairTheory.FORALL_PROD,
+      pairTheory.UNCURRY_DEF, ci_mono_emit_op, ci_mono_emit_void,
+      ci_mono_emit_inst, ci_mono_compile_alloc_buffer,
+      ci_mono_fresh_label, ci_mono_new_block, ci_mono_compile_select,
+      ci_mono_comp_return]),
+    gen_tac,
+    ho_match_mp_tac ci_mono_bind >> conj_tac,
+    ho_match_mp_tac ci_mono_ignore_bind >> conj_tac,
+    IF_CASES_TAC])
+QED
+
+Theorem ci_mono_compile_raw_call_calldata[local]:
+  ∀cfn cenv ret_ty ty rcf args default_ret sa.
+    (∀cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
+    ci_mono sa (SND (compile_call cfn cenv ret_ty ty
+      (RawCallCalldataTarget rcf) args default_ret sa))
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `args` >- simp[compile_call_def, pairTheory.UNCURRY, ci_mono_emit_inst] >>
+  rename1 `addr_e::rest` >> Cases_on `rest`
+  >- simp[compile_call_def, pairTheory.UNCURRY, ci_mono_emit_inst] >>
+  rename1 `addr_e::value_e::tail` >> Cases_on `tail` >>
+  Cases_on `rcf.rcf_max_outsize = 0` >>
+  simp[compile_call_def, LET_THM, pairTheory.UNCURRY, ci_mono_emit_inst] >>
+  irule ci_mono_trans >> irule_at (Pos last) ci_mono_compile_raw_call >>
+  irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_op >>
+  irule ci_mono_trans >> irule_at (Pos last) ci_mono_lower_value_cfn >>
+  (conj_tac >- simp[]) >>
+  irule ci_mono_trans >> irule_at (Pos last) ci_mono_compile_msg_data_to_memory >>
+  irule ci_mono_lower_value_cfn >> simp[]
+QED
+
 Theorem ci_mono_compile_call[local]:
   ∀ cfn cenv ret_ty ty target args default_ret sa.
     (∀ cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
     ci_mono sa (SND (compile_call cfn cenv ret_ty ty target args default_ret sa))
 Proof
   rpt gen_tac >> strip_tac >> Cases_on `target` >>
-  TRY (simp[compile_call_def, LET_THM, pairTheory.UNCURRY, ci_mono_emit_inst] >> NO_TAC)
+  TRY (simp[compile_call_def, LET_THM, pairTheory.UNCURRY, ci_mono_emit_inst] >> NO_TAC) >>
+  TRY (irule ci_mono_compile_raw_call_calldata >> simp[] >> NO_TAC)
   >- ( (* IntCall *)
     simp[compile_call_def, LET_THM, pairTheory.UNCURRY] >>
 rpt IF_CASES_TAC >> gvs[] >>

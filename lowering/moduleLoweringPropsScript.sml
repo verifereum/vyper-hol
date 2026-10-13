@@ -3,17 +3,9 @@
  *
  * TOP-LEVEL:
  *   compile_selector_dispatch_linear_correct — linear dispatch: partial CFG
- *   compile_selector_dispatch_sparse_correct — sparse dispatch: partial CFG
- *   compile_entry_point_kwargs_correct — kwargs init + JMP: partial CFG
  *   compile_entry_checks_correct — nonpayable/calldatasize checks (single-block)
  *   compile_entry_checks_nonpayable_revert — nonpayable revert (derived)
  *   compile_constructor_epilogue_correct — runtime code copy + RETURN (single-block)
- *   compile_generate_runtime_correct — top-level module correctness (stitching)
- *
- * Definitions:
- *   runtime_input_labels — labels the caller must supply as external
- *   runtime_inputs_ok — well-formed runtime compilation inputs
- *   dispatch_labels_covered — selector labels ⊆ external fn entry labels
  *
  * Helper (no standalone correctness — always composed):
  *   compile_decode_args_nil   — empty arg list is no-op
@@ -23,16 +15,15 @@
  * Lowering: moduleLoweringScript.sml
  *
  * NOTE on execution models:
- *   - Selector dispatch and entry_point_kwargs create partial CFGs that
- *     jump to external labels (fn bodies, fallback, common body).
- *     These use run_compiled_fragment which treats exit to a non-assembled
+ *   - Linear selector dispatch creates a partial CFG that jumps to
+ *     external labels (fn bodies, fallback).
+ *     It uses run_compiled_fragment which treats exit to a non-assembled
  *     label as OK (returning the state at the exit point).
  *   - Entry checks and constructor epilogue stay within a single block,
  *     so they use the simpler run_inst_seq/emitted_insts pattern.
  *   - compile_decode_args and compile_init_kwargs are fragments (no terminator)
  *     always composed within a larger compilation. No standalone theorem;
- *     correctness is proved at the wrapper level (entry_point_kwargs for
- *     kwargs, compile_external_function_body for positional args).
+ *     theorems here cover only their empty-input cases.
  *)
 
 Theory moduleLoweringProps
@@ -154,74 +145,6 @@ Proof
   ... (Step 3: exec_block_inst_seq_jnz, case split on JNZ cond,
        induction on selectors for dispatch branch) ...
   *)
-  cheat
-QED
-
-(* Sparse dispatch: like linear dispatch but uses bucket-based matching
-   with selectors that carry a trailing-zeroes flag. Exits to
-   fallback_lbl or one of the per-fn labels in selectors.
-   Same label-space hypotheses as linear dispatch. *)
-Theorem compile_selector_dispatch_sparse_correct:
-  ∀ selectors bucket_count fallback_lbl ss st st' ctx.
-    compile_selector_dispatch_sparse selectors bucket_count fallback_lbl st =
-      ((), st') ∧
-    compile_state_ok st ∧
-    label_external st fallback_lbl ∧
-    EVERY (label_external st) (MAP (FST o SND) selectors) ∧
-    ALL_DISTINCT (fallback_lbl :: MAP (FST o SND) selectors) ∧
-    fresh_vars_wrt st ss ∧
-    ¬ss.vs_halted
-    ⇒
-    ∃ fuel ss'.
-      run_compiled_fragment ctx st st' ss fuel = OK ss' ∧
-      (ss'.vs_current_bb = fallback_lbl ∨
-       MEM ss'.vs_current_bb (MAP (FST o SND) selectors)) ∧
-      (* Sparse dispatch uses CODECOPY to read bucket headers into
-         scratch memory (offset 30w), so vs_memory is NOT preserved.
-         A memory-region preservation predicate is future work. *)
-      observable_equiv ss ss' ∧
-      ss'.vs_call_ctx = ss.vs_call_ctx ∧
-      ¬ss'.vs_halted ∧
-      fresh_vars_wrt st' ss' ∧
-      compile_state_ok st'
-Proof
-  cheat
-QED
-
-(* ===== Kwargs Entry Point ===== *)
-
-(* compile_entry_point_kwargs: inits kwargs + JMP to common_label.
-   Replaces standalone compile_init_kwargs_correct — init_kwargs is a
-   fragment (no terminator) always composed within entry_point_kwargs
-   or similar wrapper.
-
-   Label-space hypothesis: common_label is external to st (not yet bound
-   and outside the future fresh_label co-domain). *)
-Theorem compile_entry_point_kwargs_correct:
-  ∀ cenv kwarg_vars calldata_offset kwargs_from_calldata common_label
-    ss st st' ctx.
-    compile_entry_point_kwargs cenv kwarg_vars calldata_offset
-                               kwargs_from_calldata common_label st = ((), st') ∧
-    compile_state_ok st ∧
-    label_external st common_label ∧
-    fresh_vars_wrt st ss ∧
-    ¬ss.vs_halted
-    ⇒
-    ∃ fuel ss'.
-      (run_compiled_fragment ctx st st' ss fuel = OK ss' ∧
-       ss'.vs_current_bb = common_label ∧
-       (* Kwargs writes to kwarg memory regions defined by cenv plus
-          scratch for ABI decode; vs_allocas may also grow via ALLOCA
-          in compile_abi_decode_to_buf. vs_memory is NOT preserved. *)
-       observable_equiv ss ss' ∧
-       ss'.vs_call_ctx = ss.vs_call_ctx ∧
-       ¬ss'.vs_halted ∧
-       fresh_vars_wrt st' ss' ∧
-       compile_state_ok st') ∨
-      (run_compiled_fragment ctx st st' ss fuel = Abort Revert_abort ss'
-       (* Abort state is EVM-rolled back; only returndata observable.
-          Callers use revert_equiv / lift_result, not state preservation. *))
-Proof
   cheat
 QED
 
@@ -580,79 +503,4 @@ Proof
   drule_at (Pos hd) (Q.ISPEC `\s. s.vs_halted` run_inst_seq_preserves_field) >>
   (impl_tac >- (rpt strip_tac >> res_tac >> fs[])) >>
   simp[]
-QED
-
-(* ===== Top-Level Module Correctness ===== *)
-
-(* Labels the caller must supply as external: selector fn targets,
-   external entry labels, internal fn labels. These must be pairwise
-   distinct and external to st (not already bound, not in future
-   fresh_label co-domain). In practice the frontend allocates these
-   via fresh_label before calling compile_generate_runtime, and
-   cs_next_label is advanced past all of them. *)
-Definition runtime_input_labels_def:
-  runtime_input_labels selectors external_fns internal_fns =
-    MAP (λ(sel,lbl,has_tz). lbl) selectors ++
-    MAP (λ(entry_lbl, cenv, pos_args, min_cds, is_payable,
-            is_nr, nkey, use_trans, is_view, body, ret_type).
-           entry_lbl) external_fns ++
-    MAP (λ(fn_lbl, cenv, params, has_ret_buf, is_nr, nkey, use_trans,
-            is_view, is_ctor, imm_len, body, ret_type).
-           fn_lbl) internal_fns
-End
-
-(* Selector-declared function labels must match up with external_fn
-   entry labels so that a JMP from dispatch lands on an emitted block. *)
-Definition dispatch_labels_covered_def:
-  dispatch_labels_covered selectors external_fns ⇔
-    set (MAP (λ(sel,lbl,_). lbl) selectors) ⊆
-      set (MAP (λ(entry_lbl,_,_,_,_,_,_,_,_,_,_). entry_lbl) external_fns)
-End
-
-Definition runtime_inputs_ok_def:
-  runtime_inputs_ok selectors external_fns internal_fns st ⇔
-    compile_state_ok st ∧
-    EVERY (label_external st)
-          (runtime_input_labels selectors external_fns internal_fns) ∧
-    ALL_DISTINCT (runtime_input_labels selectors external_fns internal_fns) ∧
-    dispatch_labels_covered selectors external_fns
-End
-
-(* Top-level correctness of compile_generate_runtime.
-   Under well-formed inputs (frontend-allocated labels are fresh wrt st,
-   pairwise distinct, selector labels match external_fn labels), the
-   assembled runtime function executes to one of:
-   - Halt ss'              (normal RETURN/STOP from a function body)
-   - Abort Revert_abort    (entry-check failure or explicit REVERT)
-   - IntRet vals ss'       (unusual: an internal function returned to
-                             top level; shouldn't happen for well-typed
-                             modules, but is a legal exec_result shape
-                             given the semantics we have)
-
-   Explicitly excludes Error "out of fuel" (we quantify ∃fuel).
-
-   NOTE: This is the module-level stitching theorem. It consumes the
-   three fragment-level correctness theorems for dispatch/kwargs plus
-   correctness theorems for external/internal function bodies (stated
-   separately; several are still cheated upstream). *)
-Theorem compile_generate_runtime_correct:
-  ∀ selectors external_fns internal_fns fallback_fn dispatch_strategy
-    bucket_count fn_metadata_bytes dense_buckets entry_info
-    st st' ss ctx.
-    compile_generate_runtime selectors external_fns internal_fns
-        fallback_fn dispatch_strategy bucket_count fn_metadata_bytes
-        dense_buckets entry_info st = ((), st') ∧
-    runtime_inputs_ok selectors external_fns internal_fns st ∧
-    fresh_vars_wrt st ss ∧
-    ¬ss.vs_halted
-    ⇒
-    ∃ fuel result.
-      run_blocks fuel ctx (assemble_function st st')
-        (ss with <| vs_current_bb := st.cs_current_bb;
-                     vs_inst_idx := LENGTH st.cs_current_insts |>) = result ∧
-      ((∃ ss'. result = Halt ss') ∨
-       (∃ ss'. result = Abort Revert_abort ss') ∨
-       (∃ vals ss'. result = IntRet vals ss'))
-Proof
-  cheat
 QED

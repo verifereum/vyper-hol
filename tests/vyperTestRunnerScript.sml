@@ -196,7 +196,9 @@ Definition run_deployment_def:
           ; base_fee := 0
           ; prev_randao := 0
           ; origin := dt.deployer |>;
-    in load_contract am tx all_mods dt.sourceExports
+    in case load_contract NONE am tx all_mods dt.sourceExports of
+         INL (am', _) => INL am'
+       | INR ex => INR ex
   in (sns, res)
 End
 
@@ -276,7 +278,8 @@ Definition run_call_def:
        its EVM returndata must be read back, is decided by the interpreter
        (call_external_raw_return) from the declaration call_external runs. *)
     is_raw = call_external_raw_return am tx
-  in (call_external am tx, (retTys, (retTypes, (tenv, is_raw))))
+  in (let (res, am', _) = call_external NONE am tx in (res, am'),
+      (retTys, (retTypes, (tenv, is_raw))))
 End
 
 val () = cv_auto_trans run_call_def;

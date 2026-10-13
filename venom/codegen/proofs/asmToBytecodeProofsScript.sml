@@ -475,7 +475,6 @@ QED
 (* The main range lemma: FOLDL entries with values >= pc0 have canonical offsets *)
 Theorem botp_range_lemma:
   ∀prog (m0:num|->num) off0 pc0 off pc.
-    (∀i. i < LENGTH prog ⇒ 0 < asm_inst_size (EL i prog)) ∧
     (∀off' pc'. FLOOKUP m0 off' = SOME pc' ⇒ pc' < pc0) ∧
     FLOOKUP
       (FST (FOLDL (λ(m,off,pc) inst.
@@ -492,12 +491,6 @@ Proof
   \\ qpat_x_assum `FLOOKUP (FST (FOLDL _ _ (_::_))) _ = _`
        (mp_tac o ONCE_REWRITE_RULE [listTheory.FOLDL])
   \\ simp[] \\ strip_tac
-  (* Derive tail size fact *)
-  \\ sg `∀i. i < LENGTH prog ⇒ 0 < asm_inst_size (EL i prog)`
-  >- (
-    MATCH_MP_TAC asm_inst_size_pos_tail >>
-    qexists_tac `h` >> first_assum ACCEPT_TAC
-  )
   (* Case split: pc = pc0 or pc > pc0 *)
   \\ Cases_on `pc = pc0`
   >- (
@@ -519,7 +512,6 @@ Proof
   \\ impl_tac
   >- (
     rpt conj_tac
-    >- first_assum ACCEPT_TAC
     >- (rpt strip_tac >> Cases_on `off' = off0` >> gvs[FLOOKUP_UPDATE] >>
         res_tac >> gvs[])
     >- (first_assum ACCEPT_TAC)
@@ -535,10 +527,10 @@ QED
 (* Reverse direction of offset_to_pc_inverse:
    FLOOKUP (build_offset_to_pc prog) off = SOME pc implies
    pc < LENGTH prog and asm_pc_to_offset prog pc = off.
-   Requires all instruction sizes are positive up to pc. *)
+   Zero-size instructions may overwrite earlier entries at the same offset;
+   every surviving entry still records the offset of its returned index. *)
 Theorem offset_to_pc_reverse:
   ∀prog off pc.
-    (∀i. i < LENGTH prog ⇒ 0 < asm_inst_size (EL i prog)) ∧
     FLOOKUP (build_offset_to_pc prog) off = SOME pc ⇒
     pc < LENGTH prog ∧ asm_pc_to_offset prog pc = off
 Proof

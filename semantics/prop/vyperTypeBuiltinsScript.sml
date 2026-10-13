@@ -5,10 +5,11 @@
 Theory vyperTypeBuiltins
 Ancestors
   list rich_list pred_set prim_rec arithmetic finite_map option pair sorting
-  words byte integer keccak vyperAST vyperValue vyperValueOperation vyperMisc
+  words byte integer intExtension keccak vyperAST vyperValue vyperValueOperation vyperMisc
   vyperABI vyperInterpreter vyperState vyperContext vyperStorage
   vyperTyping vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeInvariants vyperTypeValues
   vyperTypeBytesCrypto vyperTypeDefaults vyperTypeConversions vyperTypeABI vyperEvalBinop
+  vyperDecimalBounds
   vyperAssignPreservesType bn254 vfmExecution
 Libs
   wordsLib
@@ -92,6 +93,14 @@ Proof
   >> simp[LENGTH_word_to_bytes,word_to_bytes_be_def]
 QED
 
+(* Both codehash branches have the same fixed result width. *)
+Theorem evaluate_account_codehash_length:
+  LENGTH (if account_empty a then REPLICATE 32 0w
+          else Keccak_256_w64 a.code) = 32
+Proof
+  rw[LENGTH_Keccak_256_w64]
+QED
+
 Theorem account_well_typed_op:
   account_well_typed a ∧ evaluate_type tenv (account_item_type item) = SOME tv ∧
   value_has_type (BaseTV AddressT) addr_v ==>
@@ -100,7 +109,7 @@ Proof
   strip_tac >> Cases_on `addr_v` >> gvs[value_has_type_def] >>
   Cases_on `item` >>
   gvs[account_well_typed_def, account_item_type_def, evaluate_account_op_def,
-      evaluate_type_def, value_has_type_def, LENGTH_Keccak_256_w64]
+      evaluate_type_def, value_has_type_def, evaluate_account_codehash_length]
 QED
 
 Theorem Acc_builtin_sound:
@@ -813,7 +822,8 @@ Proof
   fs[arithmeticTheory.DIV_LT_X]
 QED
 
-(* Decimal Mul: w2i(word_quot(i2w p) / 10^10w) preserves Signed 168 bound *)
+(* TASK015: preserve the former absolute-quotient bridge and its proof text.
+   The replacement below uses the signed-result test, including -2 ** 167.
 Theorem decimal_mul_word_bound[local]:
   !p. within_int_bound (Signed 168) (ABS p / 10000000000) ==>
       within_int_bound (Signed 168) (w2i ((i2w p : bytes32) / 0x2540BE400w))
@@ -858,6 +868,46 @@ Proof
         Cases_on `p quot 10000000000 < 0` >> fs[] >> intLib.ARITH_TAC) >>
   `w2i (i2w (p quot 10000000000) : bytes32) = p quot 10000000000`
     by (qspecl_then [`p quot 10000000000`, `256`] mp_tac w2i_i2w_within_signed >> simp[]) >>
+  simp[]
+QED
+
+*)
+
+(* Decimal Mul: the signed-result check also bounds the equivalent word quotient. *)
+Theorem decimal_mul_word_bound[local]:
+  !p. within_int_bound (Signed 168) (SGN p * (ABS p / 10000000000)) ==>
+      within_int_bound (Signed 168) (w2i ((i2w p : bytes32) / 0x2540BE400w))
+Proof
+  rpt strip_tac >>
+  `0 ≤ ABS p / 10000000000` by
+    (simp[integerTheory.int_div, integerTheory.INT_ABS] >>
+     Cases_on `0 ≤ p` >> simp[] >> intLib.ARITH_TAC) >>
+  `ABS p / 10000000000 < 2 ** 167 + 1` by
+    (qpat_x_assum `within_int_bound _ _` mp_tac >>
+     simp[within_int_bound_def, SGN_def] >>
+     Cases_on `p < 0` >> Cases_on `p = 0` >> simp[] >> intLib.ARITH_TAC) >>
+  `ABS p < (2 ** 167 + 1) * 10000000000` by
+    (irule int_div_lt_imp >> simp[integerTheory.INT_ABS_POS]) >>
+  `ABS p < 2 ** 255` by
+    (`(2:int) ** 167 * 10000000000 + 10000000000 < 2 ** 255` by EVAL_TAC >>
+     intLib.ARITH_TAC) >>
+  `within_int_bound (Signed 256) p` by
+    (simp[within_int_bound_def] >>
+     Cases_on `p < 0` >> fs[integerTheory.INT_ABS] >> intLib.ARITH_TAC) >>
+  `w2i (i2w p : bytes32) = p` by
+    (qspecl_then [`p`, `256`] mp_tac w2i_i2w_within_signed >> simp[]) >>
+  `(0x2540BE400w : bytes32) ≠ 0w` by EVAL_TAC >>
+  `w2i (0x2540BE400w : bytes32) = 10000000000` by EVAL_TAC >>
+  `(i2w p : bytes32) / 0x2540BE400w = i2w (p quot 10000000000)` by
+    (drule integer_wordTheory.word_quot >>
+     disch_then (qspec_then `i2w p` mp_tac) >> simp[]) >>
+  `within_int_bound (Signed 168) (p quot 10000000000)` by
+    gvs[GSYM decimal_truncate_eq_quot] >>
+  `within_int_bound (Signed 256) (p quot 10000000000)` by
+    (qpat_x_assum `within_int_bound (Signed 168) _` mp_tac >>
+     simp[within_int_bound_def] >> intLib.ARITH_TAC) >>
+  `w2i (i2w (p quot 10000000000) : bytes32) = p quot 10000000000` by
+    (qspecl_then [`p quot 10000000000`, `256`] mp_tac w2i_i2w_within_signed >> simp[]) >>
   simp[]
 QED
 
@@ -1169,10 +1219,8 @@ Proof
   TRY (
     imp_res_tac wrapped_int_op_INL_Signed >>
     gvs[within_int_bound_def] >> NO_TAC) >>
-  (* Decimal Mul: bridge word_quot to integer division *)
-  TRY (
-    imp_res_tac decimal_mul_word_bound >>
-    gvs[within_int_bound_def] >> NO_TAC) >>
+  (* Decimal Mul: the checked signed quotient is the returned value. *)
+  TRY (gvs[within_int_bound_def] >> NO_TAC) >>
   (* ExpMod: word_exp result bounded by 2^256 *)
   TRY (
     mp_tac w2n_word_exp_lt_256 >> simp[] >> NO_TAC) >>
@@ -2480,8 +2528,8 @@ Proof
   Cases_on `vs` >> simp[evaluate_ecadd_def] >>
   Cases_on `t` >> simp[evaluate_ecadd_def] >>
   Cases_on `t'` >> simp[evaluate_ecadd_def, AllCaseEqs(), LET_THM] >>
-  rpt strip_tac >> gvs[]
-  >- (irule mk_ec_result_well_typed >> simp[]) >>
+  (* The invalid-point branch is now an exception, so only SOME survives. *)
+  rpt strip_tac >> gvs[] >>
   gvs[vfmExecutionTheory.ecadd_def, AllCaseEqs()] >>
   irule mk_ec_result_well_typed >> simp[addAffine_bounded]
 QED
@@ -2495,8 +2543,8 @@ Proof
   Cases_on `t` >> simp[evaluate_ecmul_def] >>
   Cases_on `h'` >> simp[evaluate_ecmul_def] >>
   Cases_on `t'` >> simp[evaluate_ecmul_def, AllCaseEqs(), LET_THM] >>
-  rpt strip_tac >> gvs[]
-  >- (irule mk_ec_result_well_typed >> simp[]) >>
+  (* The invalid-point branch is now an exception, so only SOME survives. *)
+  rpt strip_tac >> gvs[] >>
   gvs[vfmExecutionTheory.ecmul_def, AllCaseEqs()] >>
   irule mk_ec_result_well_typed >>
   irule mulAffine_bounded >>
@@ -3535,8 +3583,10 @@ Proof
     (cj 2 vyper_to_abi_enc_length_bound) >> simp[] >> decide_tac
 QED
 
+(* The tuple byte encoder is used only on the non-unwrapping path. *)
 Theorem well_typed_abi_encode_tuple_success[local]:
-  abi_encode_size_ok (get_tenv cx) (TupleT ts) o' n /\
+  abi_encode_size_ok (get_tenv cx) ensure (TupleT ts) o' n /\
+  (ensure \/ ¬needs_external_call_wrap (TupleT ts)) /\
   MAP (evaluate_type (get_tenv cx)) ts = MAP SOME tvs /\
   evaluate_type (get_tenv cx) (BaseT (BytesT (Dynamic n))) = SOME result_tv /\
   LIST_REL value_has_type tvs vs /\
@@ -3550,7 +3600,9 @@ Proof
     simp[value_has_type_def, values_have_types_LIST_REL] >>
   `vyper_abi_size_bound (get_tenv cx) (TupleT ts) +
    abi_encode_method_id_size o' <= n` by
-    gvs[abi_encode_size_ok_def] >>
+    (Cases_on `ts` >- gvs[abi_encode_size_ok_def] >>
+     rename1 `MAP _ (ty::tys) = _` >> Cases_on `tys` >>
+     gvs[abi_encode_size_ok_def, needs_external_call_wrap_def]) >>
   `abi_encode_method_id_size o' +
    vyper_abi_size_bound (get_tenv cx) (TupleT ts) <= n` by
     decide_tac >>
@@ -3597,8 +3649,7 @@ Proof
       simp[evaluate_type_def, value_has_type_def])
   >| [ (`abi_encode_method_id_size o' +
          vyper_abi_size_bound (get_tenv cx) t <= n` by
-          (gvs[abi_encode_size_ok_def, vyper_abi_size_bound_def] >>
-           Cases_on `vyper_is_dynamic (get_tenv cx) t` >> gvs[] >> decide_tac) >>
+          gvs[abi_encode_size_ok_def] >>
         irule evaluate_abi_encode_bytes_success_type_bound >>
         qexistsl [`n`, `get_tenv cx`, `x0`, `t`, `v'`] >> simp[])
      , metis_tac[well_typed_abi_encode_tuple_success]
@@ -3649,20 +3700,21 @@ QED
    Old probes confirmed the gap; repair adds the bound.
    New probe below verifies the repair correctly rejects the too-small bound. *)
 
-(* Probe: with the repaired definition, n=1 is correctly REJECTED for uint256 encoding
-   because vyper_abi_size_bound FEMPTY (TupleT [BaseT (UintT 256)]) = 32 > 1 *)
+(* Both wrapping modes reject n=1 for uint256: the actual bound is 32. *)
 Theorem abi_encode_probe_result_ok_rejects_small_bound:
-  ¬type_builtin_result_ok FEMPTY (AbiEncode T NONE) (BaseT (BytesT (Dynamic 1)))
+  !ensure. ¬type_builtin_result_ok FEMPTY (AbiEncode ensure NONE) (BaseT (BytesT (Dynamic 1)))
     (TupleT [BaseT (UintT 256)]) [BaseT (UintT 256)]
 Proof
+  Cases_on `ensure` >>
   simp[type_builtin_result_ok_def, abi_encode_size_ok_def] >> EVAL_TAC >> decide_tac
 QED
 
-(* Probe: with n=32, the result_ok predicate is satisfied *)
+(* Both wrapping modes accept the exact static uint256 bound. *)
 Theorem abi_encode_probe_result_ok_accepts_correct_bound:
-  type_builtin_result_ok FEMPTY (AbiEncode T NONE) (BaseT (BytesT (Dynamic 32)))
+  !ensure. type_builtin_result_ok FEMPTY (AbiEncode ensure NONE) (BaseT (BytesT (Dynamic 32)))
     (TupleT [BaseT (UintT 256)]) [BaseT (UintT 256)]
 Proof
+  Cases_on `ensure` >>
   simp[type_builtin_result_ok_def, abi_encode_size_ok_def] >> EVAL_TAC >> decide_tac
 QED
 

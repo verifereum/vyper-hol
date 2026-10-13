@@ -25,7 +25,8 @@ Definition context_memory_rel_def:
         read_byte i venom_mem = read_byte i asm_mem
 End
 (* Context-facing Venom/assembly relation.  Unlike venom_asm_rel, its memory
-   mask covers every spill region in the complete context plan. *)
+   mask covers every spill region in the complete context plan.  Its running
+   oracle/request clauses match venom_asm_rel; GAS readings remain free. *)
 Definition context_venom_asm_rel_def:
   context_venom_asm_rel cp label_offsets ps vs as <=>
     plan_stack_rel label_offsets vs ps.ps_stack as.as_stack /\
@@ -35,6 +36,8 @@ Definition context_venom_asm_rel_def:
     as.as_transient = vs.vs_transient /\
     as.as_returndata = vs.vs_returndata /\
     as.as_logs = vs.vs_logs /\
+    as.as_outcomes = vs.vs_outcomes /\
+    as.as_requests = vs.vs_requests /\
     as.as_call_ctx = vs.vs_call_ctx /\
     as.as_tx_ctx = vs.vs_tx_ctx /\
     as.as_block_ctx = vs.vs_block_ctx /\
@@ -107,6 +110,13 @@ Definition source_memory_read_ranges_def:
                 SOME off => [(w2n off,32)]
               | NONE => [])
          | _ => [])
+    | ILOAD =>
+        (case inst.inst_operands of
+           [off_op] =>
+             (case eval_operand off_op vs of
+                SOME off => [(w2n off,32)]
+              | NONE => [])
+         | _ => [])
     | MCOPY =>
         (case inst.inst_operands of
            [dst_op; src_op; len_op] =>
@@ -134,9 +144,10 @@ Definition source_memory_read_ranges_def:
              let n = w2n tc in
              if LENGTH rest <> n + 2 then []
              else
-               let off_op = EL 0 rest in
-               let len_op = EL 1 rest in
-               let topic_ops = DROP 2 rest in
+               let rev = REVERSE rest in
+               let off_op = EL 0 rev in
+               let len_op = EL 1 rev in
+               let topic_ops = DROP 2 rev in
                (case eval_operands topic_ops vs of
                   NONE => []
                 | SOME topics => memory_range_of_operands off_op len_op vs)
@@ -226,68 +237,40 @@ Definition active_inst_def:
          EL vs.vs_inst_idx bb.bb_instructions = inst
 End
 
-(* A non-vacuous initial witness at the context's actual entry function. *)
-Definition initial_entry_satisfies_def:
-  initial_entry_satisfies Inv ctx initial_vs <=>
-    ?name fn inst.
-      ctx.ctx_entry = SOME name /\
-      lookup_function name ctx.ctx_functions = SOME fn /\
-      active_inst fn inst initial_vs /\
-      Inv ctx fn inst initial_vs
+(* run_blocks evaluates the PHI prefix before exposing an instruction. *)
+Definition enters_block_def:
+  enters_block fn s s1 <=>
+    ?bb s_phi. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+               eval_phis s bb.bb_instructions = OK s_phi /\
+               s1 = s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions
 End
 
-(* Closure across an ordinary successful instruction step, when the result
-   exposes another active instruction in the same function. *)
-Definition reachable_inv_closed_under_steps_def:
-  reachable_inv_closed_under_steps Inv ctx <=>
-    !fn inst next_inst vs vs' fuel.
-      Inv ctx fn inst vs /\ active_inst fn inst vs /\
-      inst.inst_opcode <> INVOKE /\
-      step_inst fuel ctx inst vs = OK vs' /\
-      active_inst fn next_inst vs' ==>
-      Inv ctx fn next_inst vs'
+Definition fn_entry_inv_def:
+  fn_entry_inv Inv ctx fn s <=>
+    !s1 inst. enters_block fn s s1 /\ active_inst fn inst s1 ==>
+              Inv ctx fn inst s1
 End
 
-(* Closure when an INVOKE transfers control into a freshly set-up callee. *)
-Definition reachable_inv_closed_under_calls_def:
-  reachable_inv_closed_under_calls Inv ctx <=>
-    !caller_fn invoke caller_vs callee_name arg_ops callee_fn args callee_vs
-     callee_inst.
-      Inv ctx caller_fn invoke caller_vs /\
-      active_inst caller_fn invoke caller_vs /\
-      invoke.inst_opcode = INVOKE /\
-      decode_invoke invoke = SOME (callee_name,arg_ops) /\
-      lookup_function callee_name ctx.ctx_functions = SOME callee_fn /\
-      eval_operands arg_ops caller_vs = SOME args /\
-      setup_callee callee_fn args caller_vs = SOME callee_vs /\
-      active_inst callee_fn callee_inst callee_vs ==>
-      Inv ctx callee_fn callee_inst callee_vs
-End
-
-(* Closure across the explicit return-state plumbing used by INVOKE. *)
-Definition reachable_inv_closed_under_returns_def:
-  reachable_inv_closed_under_returns Inv ctx <=>
-    !caller_fn invoke caller_vs callee_fn callee_inst callee_vs callee_done
-     ret merged adopted returned_vs.
-      Inv ctx caller_fn invoke caller_vs /\
-      Inv ctx callee_fn callee_inst callee_vs /\
-      active_inst callee_fn callee_inst callee_vs /\
-      step_inst_base callee_inst callee_vs = IntRet ret callee_done /\
-      merged = merge_callee_state caller_vs callee_done /\
-      adopted = adopt_return_fmp ret merged /\
-      bind_outputs invoke.inst_outputs ret.iret_values adopted = SOME returned_vs ==>
-      Inv ctx caller_fn invoke returned_vs
-End
-
-(* INVOKE is aggregate in step_inst: callee run, merge, FMP adoption, and
-   output binding occur inside one successful semantic step. *)
-Definition reachable_inv_closed_under_invoke_def:
-  reachable_inv_closed_under_invoke Inv ctx <=>
-    !fn inst vs vs' fuel.
-      Inv ctx fn inst vs /\ active_inst fn inst vs /\
-      inst.inst_opcode = INVOKE /\
-      step_inst fuel ctx inst vs = OK vs' ==>
-      Inv ctx fn inst vs'
+(* Closure at actual step_inst call sites, not unincremented step results.
+   The ordinary continuation includes aggregate INVOKE return plumbing. *)
+Definition reachability_closed_def:
+  reachability_closed Inv ctx <=>
+    (!fn inst inst' s s' fuel.
+       Inv ctx fn inst s /\ active_inst fn inst s /\
+       ~is_terminator inst.inst_opcode /\ step_inst fuel ctx inst s = OK s' /\
+       active_inst fn inst' (s' with vs_inst_idx := SUC s.vs_inst_idx) ==>
+       Inv ctx fn inst' (s' with vs_inst_idx := SUC s.vs_inst_idx)) /\
+    (!fn inst inst' s s' s1 fuel.
+       Inv ctx fn inst s /\ active_inst fn inst s /\
+       is_terminator inst.inst_opcode /\ step_inst fuel ctx inst s = OK s' /\
+       ~s'.vs_halted /\ enters_block fn s' s1 /\ active_inst fn inst' s1 ==>
+       Inv ctx fn inst' s1) /\
+    (!caller inv s nm ops callee args cs.
+       Inv ctx caller inv s /\ active_inst caller inv s /\
+       inv.inst_opcode = INVOKE /\ decode_invoke inv = SOME (nm, ops) /\
+       lookup_function nm ctx.ctx_functions = SOME callee /\
+       eval_operands ops s = SOME args /\ setup_callee callee args s = SOME cs ==>
+       fn_entry_inv Inv ctx callee cs)
 End
 
 Definition codegen_memory_obligations_def:
@@ -309,11 +292,14 @@ End
 
 Definition codegen_reachability_package_def:
   codegen_reachability_package Inv ctx initial_vs <=>
-    initial_entry_satisfies Inv ctx initial_vs /\
-    reachable_inv_closed_under_steps Inv ctx /\
-    reachable_inv_closed_under_calls Inv ctx /\
-    reachable_inv_closed_under_returns Inv ctx /\
-    reachable_inv_closed_under_invoke Inv ctx
+    reachability_closed Inv ctx /\
+    ?name fn lbl.
+      ctx.ctx_entry = SOME name /\
+      lookup_function name ctx.ctx_functions = SOME fn /\
+      fn_entry_label fn = SOME lbl /\
+      fn_entry_inv Inv ctx fn
+        (initial_vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
+                            vs_inst_idx := 0 |>)
 End
 
 Definition codegen_context_obligations_def:
@@ -327,12 +313,6 @@ Definition codegen_context_obligations_def:
        entry_fn_no_ret efn) /\
     codegen_memory_obligations Inv ctx cp
 End
-
-Theorem initial_entry_satisfies_false[simp]:
-  ~initial_entry_satisfies (\ctx fn inst vs. F) ctx initial_vs
-Proof
-  simp[initial_entry_satisfies_def]
-QED
 
 Theorem byte_in_memory_range_zero[simp]:
   ~byte_in_memory_range (off,0) i

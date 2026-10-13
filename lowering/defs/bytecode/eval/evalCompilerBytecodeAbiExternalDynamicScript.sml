@@ -311,17 +311,25 @@ Proof
   rpt CASE_TAC >> gvs[]
 QED
 
+val () = evalCompilerBytecodeLib.add_staged_compile_eval
+  ([external_dynamic_runtime_compile_def,
+    external_dynamic_runtime_pipeline_eval,
+    optionTheory.option_case_compute,
+    optionTheory.IS_SOME_DEF, optionTheory.THE_DEF,
+    pairTheory.pair_case_thm, LET_THM, COND_CLAUSES,
+    REFL_CLAUSE, NOT_CLAUSES,
+    external_dynamic_unit_eval,
+    external_dynamic_out_final_assembly_eval,
+    external_dynamic_rpolicy_final_assembly_eval] @ external_dynamic_runtime_accessors)
+  [codegenTheory.finalize_codegen_identity, external_dynamic_codegen_assembly_eval]
+  [external_dynamic_compile_staged]
+  ``external_dynamic_runtime_compile task090_external_dynamic_program``
+  ``compile_vyper (K SOME) (o1_policy all_capabilities) task090_external_dynamic_program``
+
 Theorem external_dynamic_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     task090_external_dynamic_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "external_dynamic.hex")
 Proof
-  PURE_REWRITE_TAC [external_dynamic_compile_staged] >>
-  PURE_REWRITE_TAC [external_dynamic_runtime_matches_python_oracle] >>
-  simp_tac pure_ss
-    [optionTheory.option_case_compute,
-     optionTheory.IS_SOME_DEF, optionTheory.THE_DEF,
-     optionTheory.OPTION_MAP_DEF, LET_THM, COND_CLAUSES,
-     external_dynamic_deploy_matches_python_oracle] >>
   EVAL_TAC
 QED

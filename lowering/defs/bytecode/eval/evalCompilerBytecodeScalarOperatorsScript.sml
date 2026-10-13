@@ -136,9 +136,12 @@ val scalar_unary_compile_step0 = SIMP_CONV pure_ss
       scalar_unary_program``
 val scalar_unary_compile_eval = TRANS scalar_unary_compile_step0
   (EVAL (rhs (concl scalar_unary_compile_step0)))
-val scalar_unary_oracle_eq = EQT_ELIM (EVAL (mk_eq
-  (rhs (concl scalar_unary_compile_eval),
-   ``SOME ^(evalCompilerBytecodeLib.read_hex_bytes "scalar_unary.hex")``)))
-val scalar_unary_matches_python_oracle = save_thm
-  ("scalar_unary_matches_python_oracle",
-   TRANS scalar_unary_compile_eval scalar_unary_oracle_eq)
+val () = evalCompilerBytecodeLib.add_compile_eval scalar_unary_compile_eval
+
+Theorem scalar_unary_matches_python_oracle:
+  compile_vyper (K SOME) (o1_policy all_capabilities)
+    scalar_unary_program =
+    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "scalar_unary.hex")
+Proof
+  EVAL_TAC
+QED

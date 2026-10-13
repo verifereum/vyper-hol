@@ -1,14 +1,128 @@
 Theory vyperCheckContractLibTest
 Ancestors
-  vyperTypeContract
+  vyperTypeContract evalCompilerSubsetAbiBuiltins vyperABI vyperContext
+  vyperTypeSystem
 Libs
-  vyperCheckContractLib
+  vyperCheckContractLib cv_transLib
 
 val empty_layouts =
   ``([] : (address # (storage_layout # storage_layout)) list)``
 val empty_modules =
   ``([(NONE, [])] : (num option # toplevel list) list)``
 val zero_address = ``(0w : address)``
+
+(* ABI encoding's bound follows the evaluator's singleton wrapping mode.
+   The unchanged encode_dynamic fixture has an inner bound of 192 bytes,
+   plus its four-byte method id, not a 224-byte outer tuple plus method id. *)
+Theorem abi_encode_dynamic_exact_bound:
+  type_builtin_result_ok FEMPTY (AbiEncode ensure method_id)
+    (BaseT (BytesT (Dynamic n)))
+    (TupleT [TupleT [BaseT (StringT 16); BaseT (BytesT (Dynamic 16))]])
+    [TupleT [BaseT (StringT 16); BaseT (BytesT (Dynamic 16))]] <=>
+  (if ensure then 224 else 192) + abi_encode_method_id_size method_id <= n
+Proof
+  Cases_on `ensure` >>
+  simp[type_builtin_result_ok_def, abi_encode_size_ok_def,
+       vyper_abi_size_bound_def, vyper_is_dynamic_def, contractABITheory.ceil32_def]
+QED
+
+Theorem abi_encode_dynamic_wrapping_bounds:
+  abi_encode_size_ok FEMPTY F
+    (TupleT [TupleT [BaseT (StringT 16); BaseT (BytesT (Dynamic 16))]])
+    (SOME [222w; 173w; 190w; 239w]) 196 /\
+  ¬abi_encode_size_ok FEMPTY T
+    (TupleT [TupleT [BaseT (StringT 16); BaseT (BytesT (Dynamic 16))]])
+    (SOME [222w; 173w; 190w; 239w]) 196 /\
+  abi_encode_size_ok FEMPTY T
+    (TupleT [TupleT [BaseT (StringT 16); BaseT (BytesT (Dynamic 16))]])
+    (SOME [222w; 173w; 190w; 239w]) 228 /\
+  abi_encode_size_ok FEMPTY F
+    (TupleT [TupleT [BaseT (StringT 16); BaseT (BytesT (Dynamic 16))]]) NONE 192 /\
+  abi_encode_size_ok FEMPTY T
+    (TupleT [TupleT [BaseT (StringT 16); BaseT (BytesT (Dynamic 16))]]) NONE 224
+Proof
+  EVAL_TAC
+QED
+
+(* All other target shapes keep their previous bound; no method-id restriction
+   is smuggled into the size predicate. Argument validation remains separate. *)
+Theorem abi_encode_other_targets_unchanged:
+  (!ts. target_ty <> TupleT ts) ==>
+  (abi_encode_size_ok tenv ensure target_ty method_id n <=>
+   vyper_abi_size_bound tenv target_ty + abi_encode_method_id_size method_id <= n)
+Proof
+  Cases_on `target_ty` >> simp[abi_encode_size_ok_def]
+QED
+
+Theorem abi_encode_nonsingleton_tuples_unchanged:
+  LENGTH ts <> 1 ==>
+  (abi_encode_size_ok tenv ensure (TupleT ts) method_id n <=>
+   vyper_abi_size_bound tenv (TupleT ts) + abi_encode_method_id_size method_id <= n)
+Proof
+  Cases_on `ts` >> simp[abi_encode_size_ok_def] >>
+  strip_tac >> rename1 `rest <> []` >> Cases_on `rest` >> gvs[]
+QED
+
+(* Targeted CV translation/check of the changed checker predicate, rather than
+   relying solely on its kernel computation path. *)
+val () = cv_auto_trans abi_encode_method_id_size_def;
+val () = cv_auto_trans abi_encode_size_ok_def;
+
+Theorem abi_encode_dynamic_result_bound_cv:
+  type_builtin_result_ok FEMPTY (AbiEncode F (SOME [222w; 173w; 190w; 239w]))
+    (BaseT (BytesT (Dynamic 196)))
+    (TupleT [TupleT [BaseT (StringT 16); BaseT (BytesT (Dynamic 16))]])
+    [TupleT [BaseT (StringT 16); BaseT (BytesT (Dynamic 16))]] /\
+  ¬type_builtin_result_ok FEMPTY (AbiEncode T (SOME [222w; 173w; 190w; 239w]))
+    (BaseT (BytesT (Dynamic 196)))
+    (TupleT [TupleT [BaseT (StringT 16); BaseT (BytesT (Dynamic 16))]])
+    [TupleT [BaseT (StringT 16); BaseT (BytesT (Dynamic 16))]]
+Proof
+  simp[type_builtin_result_ok_def] >> CONV_TAC cv_eval
+QED
+
+(* Maximal well-typed dynamic inputs attain the four advertised bounds in the
+   evaluator, including both method-id and wrapping choices. *)
+Definition abi_encode_wrapping_cases_ok_def:
+  abi_encode_wrapping_cases_ok = EVERY (λ(ensure, method_id, n).
+    case evaluate_type_builtin empty_evaluation_context (AbiEncode ensure method_id)
+      (TupleT [TupleT [BaseT (StringT 16); BaseT (BytesT (Dynamic 16))]])
+      [ArrayV (TupleV [StringV "abcdefghijklmnop"; BytesV (REPLICATE 16 1w)])] of
+      INL (BytesV bs) => LENGTH bs = n
+    | _ => F)
+    [(F, NONE, 192); (T, NONE, 224);
+     (F, SOME [222w; 173w; 190w; 239w], 196);
+     (T, SOME [222w; 173w; 190w; 239w], 228)]
+End
+val () = cv_auto_trans abi_encode_wrapping_cases_ok_def;
+
+Theorem abi_encode_wrapping_lengths_eval:
+  abi_encode_wrapping_cases_ok
+Proof
+  EVAL_TAC
+QED
+
+Theorem abi_encode_wrapping_lengths_cv:
+  abi_encode_wrapping_cases_ok
+Proof
+  CONV_TAC cv_eval
+QED
+
+Theorem abi_dynamic_fixture_runtime_checked:
+  IS_SOME (check_contract F [] (0w : address)
+    [(NONE, task090_abi_dynamic_program)])
+Proof
+  simp[task090_abi_dynamic_program_def] >>
+  CONV_TAC (RAND_CONV vyperCheckContractLib.check_contract_conv) >> simp[]
+QED
+
+Theorem abi_dynamic_fixture_deployment_checked:
+  IS_SOME (check_contract T [] (0w : address)
+    [(NONE, task090_abi_dynamic_program)])
+Proof
+  simp[task090_abi_dynamic_program_def] >>
+  CONV_TAC (RAND_CONV vyperCheckContractLib.check_contract_conv) >> simp[]
+QED
 
 fun assert_some th =
   if optionSyntax.is_some (rhs (concl th)) then ()

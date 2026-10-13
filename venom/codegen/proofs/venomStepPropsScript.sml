@@ -180,7 +180,9 @@ Proof
      LOG, MCOPY, CALLDATACOPY, RETURNDATACOPY, CODECOPY, EXTCODECOPY,
      DLOADBYTES, SHA3, JMP, JNZ, DJMP, PARAM, ASSIGN, PHI, OFFSET,
      and exec_write2 cases: MSTORE, SSTORE, TSTORE *)
-  gvs[LET_THM, exec_write2_def, AllCaseEqs()]
+  gvs[LET_THM, exec_write2_def, istore_def, AllCaseEqs()] >>
+  (* DRET's opaque packing continuation can only return IntRet. *)
+  pairarg_tac >> gvs[]
 QED
 
 (* ===================================================================

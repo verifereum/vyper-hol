@@ -2033,6 +2033,32 @@ QED
 
 
 
+(* A pop need only shrink the header: unused elements are not inspected. *)
+Theorem dynamic_array_pop_header_write_preserves:
+  slots_in_range (get_storage cx st b) off (ArrayTV tv (Dynamic max)) /\
+  w2n (read_slot (get_storage cx st b) off) = len /\
+  0 < len /\
+  0 < type_slot_size tv /\
+  off + type_slot_size (ArrayTV tv (Dynamic max)) <= dimword(:256) /\
+  write_storage_slot cx b (n2w off) (BaseTV (UintT 256))
+    (IntV (&(len - 1))) st = (INL (), st') ==>
+  slots_in_range (get_storage cx st' b) off (ArrayTV tv (Dynamic max))
+Proof
+  rpt strip_tac >>
+  `len <= max` by
+    (qpat_x_assum `slots_in_range _ _ _` mp_tac >>
+     simp[slots_in_range_def]) >>
+  `len < dimword(:256)` by metis_tac[wordsTheory.w2n_lt] >>
+  `len - 1 < dimword(:256)` by decide_tac >>
+  `value_has_type (BaseTV (UintT 256)) (IntV (&(len - 1)))` by
+    (simp[value_has_type_def, integerTheory.NUM_OF_INT,
+          integerTheory.INT_POS] >>
+     qpat_x_assum `len - 1 < dimword(:256)` mp_tac >> simp[]) >>
+  drule_at (Pat `write_storage_slot`)
+    dynamic_array_shrink_header_write_reconstruct_forward >>
+  disch_then (qspecl_then [`tv`, `max`] irule) >> simp[]
+QED
+
 Theorem dynamic_array_pop_two_writes_preserve:
   slots_in_range (get_storage cx st b) off (ArrayTV tv (Dynamic max)) /\
   w2n (read_slot (get_storage cx st b) off) = len /\
@@ -2372,6 +2398,55 @@ Proof
 QED
 (* Sequential form for append/pop final endpoints.  The intermediate selected
    root fact is explicit because a failed second write may expose st1. *)
+Theorem resolve_array_element_dynamic_pop_header_write_preserves_contract_storage_well_formed:
+  contract_storage_well_formed cx st /\
+  storage_layout_safe cx /\
+  declared_storage_region cx mid id [] = SOME (b,root_slot,tv) /\
+  evaluate_type tenv ty = SOME tv /\
+  well_formed_type_value tv /\
+  0 < type_slot_size elem_tv /\
+  w2n (root_slot:bytes32) + type_slot_size tv <= dimword(:256) /\
+  slots_in_range (get_storage cx st b) (w2n root_slot) tv /\
+  resolve_array_element cx b root_slot tv subs st =
+    (INL (slot,ArrayTV elem_tv (Dynamic max),[]),st) /\
+  w2n slot + type_slot_size (ArrayTV elem_tv (Dynamic max)) <= dimword(:256) /\
+  slots_in_range (get_storage cx st b) (w2n slot) (ArrayTV elem_tv (Dynamic max)) /\
+  w2n (read_slot (get_storage cx st b) (w2n slot)) = len /\
+  0 < len /\
+  write_storage_slot cx b slot (BaseTV (UintT 256))
+    (IntV (&(len - 1))) st = (INL (),st') ==>
+  contract_storage_well_formed cx st'
+Proof
+  rpt strip_tac >>
+  `len < dimword(:256)` by metis_tac[wordsTheory.w2n_lt] >>
+  `len - 1 < dimword(:256)` by decide_tac >>
+  `value_has_type (BaseTV (UintT 256)) (IntV (&(len - 1)))` by
+    (simp[value_has_type_def, integerTheory.NUM_OF_INT, integerTheory.INT_POS] >>
+     qpat_x_assum `len - 1 < dimword(:256)` mp_tac >> simp[]) >>
+  `slots_in_range (get_storage cx st' b) (w2n slot)
+     (ArrayTV elem_tv (Dynamic max))` by
+    (irule dynamic_array_pop_header_write_preserves >> simp[] >>
+     qexists `st` >> simp[]) >>
+  `slots_in_range (get_storage cx st' b) (w2n root_slot) tv` by
+    (irule resolve_array_element_contained_write_preserves_root >> simp[] >>
+     conj_tac >- (qexistsl [`tenv`, `ty`] >> simp[]) >>
+     qexistsl [`ArrayTV elem_tv (Dynamic max)`, `slot`, `st`, `st`, `subs`,
+                `slot`, `BaseTV (UintT 256)`, `IntV (&(len - 1))`] >>
+     simp[vyperValueTheory.type_slot_size_def]) >>
+  `w2n root_slot <= w2n slot /\
+   w2n slot + type_slot_size (BaseTV (UintT 256)) <=
+     w2n root_slot + type_slot_size tv` by
+    (irule resolved_write_contained_in_declared_root >> simp[] >>
+     conj_tac >- (qexistsl [`tenv`, `ty`] >> simp[]) >>
+     qexistsl [`b`, `cx`, `[]`, `ArrayTV elem_tv (Dynamic max)`, `slot`,
+                `st`, `st`, `subs`] >>
+     simp[vyperValueTheory.type_slot_size_def]) >>
+  irule contained_ordinary_write_preserves_contract_storage_well_formed >>
+  simp[] >>
+  qexistsl [`b`, `mid`, `id`, `root_slot`, `st`, `tv`, `slot`,
+             `BaseTV (UintT 256)`, `IntV (&(len - 1))`] >> simp[]
+QED
+
 Theorem two_contained_ordinary_writes_preserve_contract_storage_well_formed:
   contract_storage_well_formed cx st /\
   storage_layout_safe cx /\

@@ -37,7 +37,7 @@
 Theory invokeCopyFwdCommonDefs
 Ancestors
   readonlyMemoryArgsDefs dfgDefs basePtrDefs memAliasDefs dominatorDefs
-  passSharedDefs venomEffects cfgDefs
+  passSharedDefs venomEffects cfgDefs passResidualFrame
 
 (* ===== Analysis Context ===== *)
 
@@ -337,22 +337,7 @@ End
 Definition icf_equiv_def:
   icf_equiv s1 s2 <=>
     (!v. lookup_var v s1 = lookup_var v s2) /\
-    s1.vs_current_bb = s2.vs_current_bb /\
-    s1.vs_inst_idx = s2.vs_inst_idx /\
-    s1.vs_prev_bb = s2.vs_prev_bb /\
-    s1.vs_transient = s2.vs_transient /\
-    s1.vs_halted = s2.vs_halted /\
-    s1.vs_returndata = s2.vs_returndata /\
-    s1.vs_accounts = s2.vs_accounts /\
-    s1.vs_call_ctx = s2.vs_call_ctx /\
-    s1.vs_tx_ctx = s2.vs_tx_ctx /\
-    s1.vs_block_ctx = s2.vs_block_ctx /\
-    s1.vs_logs = s2.vs_logs /\
-    s1.vs_immutables = s2.vs_immutables /\
-    s1.vs_data_section = s2.vs_data_section /\
-    s1.vs_labels = s2.vs_labels /\
-    s1.vs_code = s2.vs_code /\
-    s1.vs_params = s2.vs_params /\
-    s1.vs_prev_hashes = s2.vs_prev_hashes /\
-    s1.vs_allocas = s2.vs_allocas
+    (* Memory, four FMP components and the bump pointer were unconstrained;
+       all control components and the allocation map remain compared. *)
+    icf_frame s1 = icf_frame s2
 End

@@ -1,155 +1,208 @@
-(*
- * Parameterized Execution Equivalence — Definitions
- *
- * Closure conditions on a (R_ok, R_term) relation pair that enable
- * step_inst_preserves_R (the master theorem).
- *
- * (state_equiv vars, execution_equiv vars) satisfies valid_state_rel.
- * This eliminates per-pass boilerplate (~800 LOC each for RTA, phi-elim, etc.)
- *
- * TOP-LEVEL:
- *   valid_state_rel — closure conditions on (R_ok, R_term) pair
- *)
-
+(* Parameterized execution equivalence: extensible frame/reconstruction contract.
+   The masks erase exactly the independently related register environment and,
+   for terminal results only, the deliberately ignored control-flow fields.
+   Every other component (including future components) remains in the record. *)
 Theory execEquivParamDefs
 Ancestors
-  stateEquiv venomExecSemantics venomState venomInst
+  stateEquiv venomExecSemantics venomState venomInst finite_map
+Libs
+  execEquivParamMaskLib
 
-(* Closure conditions on a (R_ok, R_term) relation pair.
-   Any pair satisfying these supports step_inst_preserves_R.
+val _ = Theory.add_ML_dependency "execEquivParamMaskLib";
 
-   R_ok: used for OK results (continuation). Must preserve all state fields
-         including control flow (needed for block_sim_function fuel induction).
-   R_term: used for Halt/Revert results (terminal). May omit control flow
-           fields since execution has stopped.
+Definition vsr_frame_def:
+  vsr_frame s = s with vs_vars := FEMPTY
+End
 
-   Both must be closed under update_var, preserve eval_operand, and support
-   reconstruction (non-vars field updates applied to both sides preserve the
-   relation). *)
+Definition vsr_term_frame_def:
+  vsr_term_frame s = s with <| vs_vars := FEMPTY;
+    vs_prev_bb := NONE; vs_current_bb := ""; vs_inst_idx := 0 |>
+End
+
 Definition valid_state_rel_def:
   valid_state_rel
     (R_ok : venom_state -> venom_state -> bool)
     (R_term : venom_state -> venom_state -> bool) <=>
-    (* R_ok preserves all execution-relevant state fields including control flow *)
-    (!s1 s2. R_ok s1 s2 ==>
-      s1.vs_call_ctx = s2.vs_call_ctx /\
-      s1.vs_tx_ctx = s2.vs_tx_ctx /\
-      s1.vs_block_ctx = s2.vs_block_ctx /\
-      s1.vs_accounts = s2.vs_accounts /\
-      s1.vs_memory = s2.vs_memory /\
-      s1.vs_transient = s2.vs_transient /\
-      s1.vs_returndata = s2.vs_returndata /\
-      s1.vs_halted = s2.vs_halted /\
-      s1.vs_prev_bb = s2.vs_prev_bb /\
-      s1.vs_current_bb = s2.vs_current_bb /\
-      s1.vs_inst_idx = s2.vs_inst_idx /\
-      s1.vs_params = s2.vs_params /\
-      s1.vs_fmp = s2.vs_fmp /\
-      s1.vs_call_entry_fmp = s2.vs_call_entry_fmp /\
-      s1.vs_initial_fmp = s2.vs_initial_fmp /\
-      s1.vs_return_pc_token = s2.vs_return_pc_token /\
-      s1.vs_logs = s2.vs_logs /\
-      s1.vs_immutables = s2.vs_immutables /\
-      s1.vs_data_section = s2.vs_data_section /\
-      s1.vs_labels = s2.vs_labels /\
-      s1.vs_code = s2.vs_code /\
-      s1.vs_prev_hashes = s2.vs_prev_hashes /\
-      s1.vs_allocas = s2.vs_allocas /\
-      s1.vs_alloca_next = s2.vs_alloca_next) /\
-    (* R_term preserves execution-relevant fields (may omit control flow) *)
-    (!s1 s2. R_term s1 s2 ==>
-      s1.vs_call_ctx = s2.vs_call_ctx /\
-      s1.vs_tx_ctx = s2.vs_tx_ctx /\
-      s1.vs_block_ctx = s2.vs_block_ctx /\
-      s1.vs_accounts = s2.vs_accounts /\
-      s1.vs_memory = s2.vs_memory /\
-      s1.vs_transient = s2.vs_transient /\
-      s1.vs_returndata = s2.vs_returndata /\
-      s1.vs_halted = s2.vs_halted /\
-      s1.vs_params = s2.vs_params /\
-      s1.vs_fmp = s2.vs_fmp /\
-      s1.vs_call_entry_fmp = s2.vs_call_entry_fmp /\
-      s1.vs_initial_fmp = s2.vs_initial_fmp /\
-      s1.vs_return_pc_token = s2.vs_return_pc_token /\
-      s1.vs_logs = s2.vs_logs /\
-      s1.vs_immutables = s2.vs_immutables /\
-      s1.vs_data_section = s2.vs_data_section /\
-      s1.vs_labels = s2.vs_labels /\
-      s1.vs_code = s2.vs_code /\
-      s1.vs_prev_hashes = s2.vs_prev_hashes /\
-      s1.vs_allocas = s2.vs_allocas /\
-      s1.vs_alloca_next = s2.vs_alloca_next) /\
-    (* Both closed under var update *)
+    (!s1 s2. R_ok s1 s2 ==> vsr_frame s1 = vsr_frame s2) /\
+    (!s1 s2. R_term s1 s2 ==> vsr_term_frame s1 = vsr_term_frame s2) /\
     (!s1 s2 x v. R_ok s1 s2 ==>
                   R_ok (update_var x v s1) (update_var x v s2)) /\
     (!s1 s2 x v. R_term s1 s2 ==>
                   R_term (update_var x v s1) (update_var x v s2)) /\
-    (* Both preserve eval_operand when operand var agrees *)
     (!s1 s2 op. R_ok s1 s2 /\
        (!x. op = Var x ==> lookup_var x s1 = lookup_var x s2) ==>
        eval_operand op s1 = eval_operand op s2) /\
     (!s1 s2 op. R_term s1 s2 /\
        (!x. op = Var x ==> lookup_var x s1 = lookup_var x s2) ==>
        eval_operand op s1 = eval_operand op s2) /\
-    (* R_ok implies R_term *)
     (!s1 s2. R_ok s1 s2 ==> R_term s1 s2) /\
-    (* Both reflexive *)
     (!s. R_ok s s) /\
     (!s. R_term s s) /\
-    (* Reconstruction: R_ok is determined by vs_vars given non-vars field agreement.
-       If R_ok s1 s2 holds (constraining vs_vars), then any t1, t2 with the same
-       vs_vars and agreeing non-vars fields are also R_ok-related.
-       This enables closure under halt_state, jump_to, write_memory, etc. *)
     (!s1 s2 t1 t2. R_ok s1 s2 /\
       t1.vs_vars = s1.vs_vars /\ t2.vs_vars = s2.vs_vars /\
-      t1.vs_call_ctx = t2.vs_call_ctx /\
-      t1.vs_tx_ctx = t2.vs_tx_ctx /\
-      t1.vs_block_ctx = t2.vs_block_ctx /\
-      t1.vs_accounts = t2.vs_accounts /\
-      t1.vs_memory = t2.vs_memory /\
-      t1.vs_transient = t2.vs_transient /\
-      t1.vs_returndata = t2.vs_returndata /\
-      t1.vs_halted = t2.vs_halted /\
-      t1.vs_prev_bb = t2.vs_prev_bb /\
-      t1.vs_current_bb = t2.vs_current_bb /\
-      t1.vs_inst_idx = t2.vs_inst_idx /\
-      t1.vs_params = t2.vs_params /\
-      t1.vs_fmp = t2.vs_fmp /\
-      t1.vs_call_entry_fmp = t2.vs_call_entry_fmp /\
-      t1.vs_initial_fmp = t2.vs_initial_fmp /\
-      t1.vs_return_pc_token = t2.vs_return_pc_token /\
-      t1.vs_logs = t2.vs_logs /\
-      t1.vs_immutables = t2.vs_immutables /\
-      t1.vs_data_section = t2.vs_data_section /\
-      t1.vs_labels = t2.vs_labels /\
-      t1.vs_code = t2.vs_code /\
-      t1.vs_prev_hashes = t2.vs_prev_hashes /\
-      t1.vs_allocas = t2.vs_allocas /\
-      t1.vs_alloca_next = t2.vs_alloca_next
-      ==> R_ok t1 t2) /\
-    (* Reconstruction for R_term (same but R_term-tracked fields only) *)
+      vsr_frame t1 = vsr_frame t2 ==> R_ok t1 t2) /\
     (!s1 s2 t1 t2. R_term s1 s2 /\
       t1.vs_vars = s1.vs_vars /\ t2.vs_vars = s2.vs_vars /\
-      t1.vs_call_ctx = t2.vs_call_ctx /\
-      t1.vs_tx_ctx = t2.vs_tx_ctx /\
-      t1.vs_block_ctx = t2.vs_block_ctx /\
-      t1.vs_accounts = t2.vs_accounts /\
-      t1.vs_memory = t2.vs_memory /\
-      t1.vs_transient = t2.vs_transient /\
-      t1.vs_returndata = t2.vs_returndata /\
-      t1.vs_halted = t2.vs_halted /\
-      t1.vs_params = t2.vs_params /\
-      t1.vs_fmp = t2.vs_fmp /\
-      t1.vs_call_entry_fmp = t2.vs_call_entry_fmp /\
-      t1.vs_initial_fmp = t2.vs_initial_fmp /\
-      t1.vs_return_pc_token = t2.vs_return_pc_token /\
-      t1.vs_logs = t2.vs_logs /\
-      t1.vs_immutables = t2.vs_immutables /\
-      t1.vs_data_section = t2.vs_data_section /\
-      t1.vs_labels = t2.vs_labels /\
-      t1.vs_code = t2.vs_code /\
-      t1.vs_prev_hashes = t2.vs_prev_hashes /\
-      t1.vs_allocas = t2.vs_allocas /\
-      t1.vs_alloca_next = t2.vs_alloca_next
-      ==> R_term t1 t2)
+      vsr_term_frame t1 = vsr_term_frame t2 ==> R_term t1 t2)
 End
+
+(* Public reconstruction premises retain the entire residual record. *)
+Theorem vsr_reconstruct_R_ok:
+  valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
+  t1.vs_vars = s1.vs_vars /\ t2.vs_vars = s2.vs_vars /\
+  vsr_frame t1 = vsr_frame t2 ==> R_ok t1 t2
+Proof
+  rw[valid_state_rel_def, Excl "vsr_complete_mask_equality"] >> metis_tac[]
+QED
+
+Theorem vsr_reconstruct_R_term:
+  valid_state_rel R_ok R_term /\ R_term s1 s2 /\
+  t1.vs_vars = s1.vs_vars /\ t2.vs_vars = s2.vs_vars /\
+  vsr_term_frame t1 = vsr_term_frame t2 ==> R_term t1 t2
+Proof
+  rw[valid_state_rel_def, Excl "vsr_complete_mask_equality"] >> metis_tac[]
+QED
+
+(* Exact reconstruction, not an exhaustive selector characterization. *)
+Theorem vsr_frame_restore[simp]:
+  vsr_frame s with vs_vars := s.vs_vars = s
+Proof
+  simp[vsr_frame_def]
+QED
+
+Theorem vsr_term_frame_restore[simp]:
+  vsr_term_frame s with <| vs_vars := s.vs_vars;
+    vs_prev_bb := s.vs_prev_bb; vs_current_bb := s.vs_current_bb;
+    vs_inst_idx := s.vs_inst_idx |> = s
+Proof
+  simp[vsr_term_frame_def]
+QED
+
+Theorem vsr_frame_idempotent[simp]:
+  vsr_frame (vsr_frame s) = vsr_frame s /\
+  vsr_term_frame (vsr_term_frame s) = vsr_term_frame s /\
+  vsr_term_frame (vsr_frame s) = vsr_term_frame s /\
+  vsr_frame (vsr_term_frame s) = vsr_term_frame s
+Proof
+  simp[vsr_frame_def, vsr_term_frame_def]
+QED
+
+Theorem vsr_frame_vars[simp]:
+  vsr_frame (s with vs_vars := env) = vsr_frame s /\
+  vsr_term_frame (s with vs_vars := env) = vsr_term_frame s /\
+  vsr_frame (update_var x v s) = vsr_frame s /\
+  vsr_term_frame (update_var x v s) = vsr_term_frame s
+Proof
+  simp[vsr_frame_def, vsr_term_frame_def, update_var_def]
+QED
+
+Theorem vsr_term_frame_control[simp]:
+  vsr_term_frame (s with vs_prev_bb := prev) = vsr_term_frame s /\
+  vsr_term_frame (s with vs_current_bb := current) = vsr_term_frame s /\
+  vsr_term_frame (s with vs_inst_idx := idx) = vsr_term_frame s
+Proof
+  simp[vsr_term_frame_def]
+QED
+
+Theorem vsr_frame_shared_updates[simp]:
+  vsr_frame (s with vs_memory := m) = vsr_frame s with vs_memory := m /\
+  vsr_frame (s with vs_transient := t) = vsr_frame s with vs_transient := t /\
+  vsr_frame (s with vs_accounts := a) = vsr_frame s with vs_accounts := a /\
+  vsr_frame (s with vs_returndata := r) = vsr_frame s with vs_returndata := r /\
+  vsr_frame (s with vs_halted := h) = vsr_frame s with vs_halted := h /\
+  vsr_frame (s with vs_logs := l) = vsr_frame s with vs_logs := l /\
+  vsr_frame (s with vs_immutables := im) = vsr_frame s with vs_immutables := im /\
+  vsr_frame (s with vs_allocas := al) = vsr_frame s with vs_allocas := al /\
+  vsr_frame (s with vs_alloca_next := n) = vsr_frame s with vs_alloca_next := n /\
+  vsr_frame (s with vs_fmp := fmp) = vsr_frame s with vs_fmp := fmp /\
+  vsr_frame (s with vs_inst_idx := i) = vsr_frame s with vs_inst_idx := i /\
+  vsr_frame (s with vs_prev_bb := p) = vsr_frame s with vs_prev_bb := p /\
+  vsr_frame (s with vs_current_bb := c) = vsr_frame s with vs_current_bb := c
+Proof
+  simp[vsr_frame_def]
+QED
+
+Theorem vsr_term_frame_shared_updates[simp]:
+  vsr_term_frame (s with vs_memory := m) = vsr_term_frame s with vs_memory := m /\
+  vsr_term_frame (s with vs_transient := t) = vsr_term_frame s with vs_transient := t /\
+  vsr_term_frame (s with vs_accounts := a) = vsr_term_frame s with vs_accounts := a /\
+  vsr_term_frame (s with vs_returndata := r) = vsr_term_frame s with vs_returndata := r /\
+  vsr_term_frame (s with vs_halted := h) = vsr_term_frame s with vs_halted := h /\
+  vsr_term_frame (s with vs_logs := l) = vsr_term_frame s with vs_logs := l /\
+  vsr_term_frame (s with vs_immutables := im) = vsr_term_frame s with vs_immutables := im /\
+  vsr_term_frame (s with vs_allocas := al) = vsr_term_frame s with vs_allocas := al /\
+  vsr_term_frame (s with vs_alloca_next := n) = vsr_term_frame s with vs_alloca_next := n /\
+  vsr_term_frame (s with vs_fmp := fmp) = vsr_term_frame s with vs_fmp := fmp
+Proof
+  simp[vsr_term_frame_def]
+QED
+
+Theorem vsr_oracle_updates[simp]:
+  vsr_frame (s with vs_outcomes := os) = vsr_frame s with vs_outcomes := os /\
+  vsr_frame (s with vs_requests := rqs) = vsr_frame s with vs_requests := rqs /\
+  vsr_term_frame (s with vs_outcomes := os) =
+    vsr_term_frame s with vs_outcomes := os /\
+  vsr_term_frame (s with vs_requests := rqs) =
+    vsr_term_frame s with vs_requests := rqs
+Proof
+  simp[vsr_frame_def, vsr_term_frame_def]
+QED
+
+Theorem vsr_oracle_same_updates[simp]:
+  (vsr_frame s with vs_outcomes := s.vs_outcomes) = vsr_frame s /\
+  (vsr_frame s with vs_requests := s.vs_requests) = vsr_frame s /\
+  (vsr_term_frame s with vs_outcomes := s.vs_outcomes) = vsr_term_frame s /\
+  (vsr_term_frame s with vs_requests := s.vs_requests) = vsr_term_frame s
+Proof
+  simp[vsr_frame_def, vsr_term_frame_def, venom_state_component_equality]
+QED
+
+(* Removing redundant writes without expanding residual-record equality. *)
+Theorem vsr_frame_same_updates[simp]:
+  (vsr_frame s with vs_memory := s.vs_memory) = vsr_frame s /\
+  (vsr_frame s with vs_transient := s.vs_transient) = vsr_frame s /\
+  (vsr_frame s with vs_accounts := s.vs_accounts) = vsr_frame s /\
+  (vsr_frame s with vs_returndata := s.vs_returndata) = vsr_frame s /\
+  (vsr_frame s with vs_halted := s.vs_halted) = vsr_frame s /\
+  (vsr_frame s with vs_logs := s.vs_logs) = vsr_frame s /\
+  (vsr_frame s with vs_immutables := s.vs_immutables) = vsr_frame s /\
+  (vsr_frame s with vs_allocas := s.vs_allocas) = vsr_frame s /\
+  (vsr_frame s with vs_alloca_next := s.vs_alloca_next) = vsr_frame s /\
+  (vsr_frame s with vs_fmp := s.vs_fmp) = vsr_frame s /\
+  (vsr_frame s with vs_inst_idx := s.vs_inst_idx) = vsr_frame s /\
+  (vsr_frame s with vs_prev_bb := s.vs_prev_bb) = vsr_frame s /\
+  (vsr_frame s with vs_current_bb := s.vs_current_bb) = vsr_frame s
+Proof
+  simp[vsr_frame_def, venom_state_component_equality]
+QED
+
+Theorem vsr_term_frame_same_updates[simp]:
+  (vsr_term_frame s with vs_memory := s.vs_memory) = vsr_term_frame s /\
+  (vsr_term_frame s with vs_transient := s.vs_transient) = vsr_term_frame s /\
+  (vsr_term_frame s with vs_accounts := s.vs_accounts) = vsr_term_frame s /\
+  (vsr_term_frame s with vs_returndata := s.vs_returndata) = vsr_term_frame s /\
+  (vsr_term_frame s with vs_halted := s.vs_halted) = vsr_term_frame s /\
+  (vsr_term_frame s with vs_logs := s.vs_logs) = vsr_term_frame s /\
+  (vsr_term_frame s with vs_immutables := s.vs_immutables) = vsr_term_frame s /\
+  (vsr_term_frame s with vs_allocas := s.vs_allocas) = vsr_term_frame s /\
+  (vsr_term_frame s with vs_alloca_next := s.vs_alloca_next) = vsr_term_frame s /\
+  (vsr_term_frame s with vs_fmp := s.vs_fmp) = vsr_term_frame s
+Proof
+  simp[vsr_term_frame_def, venom_state_component_equality]
+QED
+
+Theorem vsr_frame_setup_callee_mask[simp]:
+  setup_callee fn args (vsr_frame s) = setup_callee fn args s
+Proof
+  simp[setup_callee_def, vsr_frame_def]
+QED
+
+Theorem vsr_frame_setup_callee:
+  vsr_frame s1 = vsr_frame s2 ==> setup_callee fn args s1 = setup_callee fn args s2
+Proof
+  strip_tac >>
+  qpat_x_assum `vsr_frame s1 = _`
+    (mp_tac o AP_TERM ``setup_callee fn args``) >> simp[]
+QED
+
+

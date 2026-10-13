@@ -21,7 +21,7 @@
 
 Theory concretizeMemLocProofs
 Ancestors
-  concretizeMemLocDefs allocaRemapDefs pointerConfinedDefs
+  concretizeMemLocDefs allocaRemapDefs pointerConfinedDefs passResidualFrame
   passSimulationProps passSimulationDefs passSharedProps passSharedDefs
   venomWf venomExecSemantics venomExecProofs opcodeClass
   venomMemDefs venomMemProofs stateEquiv
@@ -195,26 +195,10 @@ Definition concretize_rel_def:
          mem_byte_at s2.vs_memory i) /\
     (* 5. Non-overlapping regions in s1 *)
     allocas_non_overlapping s1 /\
-    (* 6. Scalar state fields agree *)
-    s1.vs_halted = s2.vs_halted /\
-    s1.vs_returndata = s2.vs_returndata /\
-    s1.vs_accounts = s2.vs_accounts /\
-    s1.vs_transient = s2.vs_transient /\
-    s1.vs_call_ctx = s2.vs_call_ctx /\
-    s1.vs_tx_ctx = s2.vs_tx_ctx /\
-    s1.vs_block_ctx = s2.vs_block_ctx /\
-    s1.vs_logs = s2.vs_logs /\
-    s1.vs_data_section = s2.vs_data_section /\
-    s1.vs_labels = s2.vs_labels /\
-    s1.vs_code = s2.vs_code /\
-    s1.vs_params = s2.vs_params /\
-    s1.vs_prev_bb = s2.vs_prev_bb /\
-    s1.vs_current_bb = s2.vs_current_bb /\
-    s1.vs_prev_hashes = s2.vs_prev_hashes /\
-    s1.vs_fmp = s2.vs_fmp /\
-    s1.vs_call_entry_fmp = s2.vs_call_entry_fmp /\
-    s1.vs_initial_fmp = s2.vs_initial_fmp /\
-    s1.vs_return_pc_token = s2.vs_return_pc_token
+    (* 6. Residual state agrees. Variables/memory/allocas remain partially
+       related above; indices, immutables and bump pointer were ignored.
+       All four FMP components and both block labels remain compared. *)
+    concretize_frame s1 = concretize_frame s2
 End
 
 (* ===== 1. Allocator Soundness ===== *)
@@ -781,9 +765,7 @@ val lookup_block_map_proof = lookup_block_map;
 Triviality state_equiv_empty_eq:
   !s2 s3. state_equiv {} s2 s3 ==> s2 = s3
 Proof
-  rw[state_equiv_def, execution_equiv_def, NOT_IN_EMPTY,
-     venom_state_component_equality, lookup_var_def] >>
-  metis_tac[fmap_eq_flookup]
+  ACCEPT_TAC stateEquivPropsTheory.state_equiv_empty_eq
 QED
 
 (* execution_equiv {} preserves concretize_rel on the right,
@@ -2614,25 +2596,7 @@ Triviality concretize_rel_frame:
     t1.vs_memory = s1.vs_memory /\ t2.vs_memory = s2.vs_memory /\
     t1.vs_allocas = s1.vs_allocas /\
     t1.vs_current_bb = s1.vs_current_bb /\
-    (t1.vs_halted <=> t2.vs_halted) /\
-    t1.vs_returndata = t2.vs_returndata /\
-    t1.vs_accounts = t2.vs_accounts /\
-    t1.vs_transient = t2.vs_transient /\
-    t1.vs_call_ctx = t2.vs_call_ctx /\
-    t1.vs_tx_ctx = t2.vs_tx_ctx /\
-    t1.vs_block_ctx = t2.vs_block_ctx /\
-    t1.vs_logs = t2.vs_logs /\
-    t1.vs_data_section = t2.vs_data_section /\
-    t1.vs_labels = t2.vs_labels /\
-    t1.vs_code = t2.vs_code /\
-    t1.vs_params = t2.vs_params /\
-    t1.vs_prev_bb = t2.vs_prev_bb /\
-    t1.vs_current_bb = t2.vs_current_bb /\
-    t1.vs_prev_hashes = t2.vs_prev_hashes /\
-    t1.vs_fmp = t2.vs_fmp /\
-    t1.vs_call_entry_fmp = t2.vs_call_entry_fmp /\
-    t1.vs_initial_fmp = t2.vs_initial_fmp /\
-    t1.vs_return_pc_token = t2.vs_return_pc_token ==>
+    concretize_frame t1 = concretize_frame t2 ==>
     concretize_rel amap fn livesets init t1 t2
 Proof
   rpt strip_tac >>
@@ -2776,6 +2740,8 @@ Proof
    s1.vs_call_entry_fmp = s2.vs_call_entry_fmp /\
    s1.vs_initial_fmp = s2.vs_initial_fmp /\
    s1.vs_return_pc_token = s2.vs_return_pc_token` by
+    fs[concretize_rel_def, LET_THM] >>
+  `s1.vs_outcomes = s2.vs_outcomes /\ s1.vs_requests = s2.vs_requests` by
     fs[concretize_rel_def, LET_THM] >>
   (* Step 5: case split on opcode — SSTORE, TSTORE, STOP, SINK,
      INVALID, SELFDESTRUCT, RET remain (RETURN/REVERT eliminated by

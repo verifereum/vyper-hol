@@ -12,7 +12,6 @@
  *   - exec_block_state_equiv       : OK-case corollary of exec_block_result_equiv (state_equiv)
  *   - run_block_result_equiv        : run_block (eval_phis + exec_block) preserves result_equiv under same preconditions
  *   - run_function_result_equiv    : If state_equiv and all blocks have no INVOKE and no operand vars in exception set, run_function preserves result_equiv
- *   - run_function_result_equiv_closed : Variant with reachable-block set (safe) closed under successors
  *   - run_block_lift_result / run_block_lift_result_equiv : Lift exec_block results to run_block results
  *   - state_equiv_inst_idx         : Setting vs_inst_idx to same value on both sides preserves state_equiv
  *)
@@ -20,7 +19,7 @@
 Theory execEquivProofs
 Ancestors
   stateEquivProofs stateEquiv venomExecSemantics venomExecProofs venomState venomInst venomWf list
-  rich_list finite_map
+  rich_list finite_map venomCallOracleDefs
 
 (* ==========================================================================
    exec_* Category Helpers
@@ -939,6 +938,22 @@ Triviality exec_ext_call_equiv:
       (exec_ext_call inst s1 gas addr value ao as_ ro rs is_static)
       (exec_ext_call inst s2 gas addr value ao as_ ro rs is_static)
 Proof
+  rpt strip_tac >>
+  `venom_call_request s1 addr value ao as_ is_static =
+   venom_call_request s2 addr value ao as_ is_static` by
+    fs[state_equiv_def, execution_equiv_def,
+       venom_call_request_def, read_memory_def] >>
+  fs[state_equiv_def, execution_equiv_def] >>
+  Cases_on `inst.inst_outputs` >> simp[exec_ext_call_def, result_equiv_def] >>
+  rename1 `inst.inst_outputs = out::rest_outputs` >>
+  Cases_on `rest_outputs` >> simp[exec_ext_call_def, result_equiv_def] >>
+  rw[state_equiv_def, execution_equiv_def, lookup_var_def,
+     update_var_def, FLOOKUP_UPDATE, write_memory_with_expansion_def] >>
+  gvs[lookup_var_def] >> Cases_on `out = v` >> simp[]
+QED
+
+(* Original concrete-call proof retained:
+Proof
   rw[exec_ext_call_def, LET_THM] >>
   `s1.vs_memory = s2.vs_memory /\ s1.vs_accounts = s2.vs_accounts /\
    s1.vs_logs = s2.vs_logs /\ s1.vs_call_ctx = s2.vs_call_ctx /\
@@ -951,6 +966,7 @@ Proof
        LET_THM] >>
   irule extract_venom_result_result_equiv >> simp[]
 QED
+*)
 
 (* exec_delegatecall preserves equiv when states and operands match *)
 Triviality exec_delegatecall_equiv:
@@ -1961,25 +1977,4 @@ Proof
     rw[run_block_def] >>
     `eval_phis s bt_bb.bb_instructions = Error e` by fs[] >>
     simp[result_equiv_is_lift_result, lift_result_def])
-QED
-
-
-Theorem run_function_result_equiv_closed:
-  !fuel ctx vars fn s1 s2 safe.
-    state_equiv vars s1 s2 /\
-    (!lbl. fn_entry_label fn = SOME lbl ==> lbl IN safe) /\
-    (!lbl bb. lbl IN safe /\ lookup_block lbl fn.fn_blocks = SOME bb ==>
-      bb_well_formed bb /\
-      EVERY inst_wf bb.bb_instructions /\
-      EVERY (\inst. inst.inst_opcode <> INVOKE) bb.bb_instructions /\
-      (!inst x. MEM inst bb.bb_instructions /\
-               MEM (Var x) inst.inst_operands ==> x NOTIN vars) /\
-      (!s. MEM s (bb_succs bb) ==> s IN safe)) ==>
-    result_equiv vars (run_function fuel ctx fn s1) (run_function fuel ctx fn s2)
-Proof
-  rpt strip_tac >>
-  simp[run_function_def] >>
-  Cases_on `fn_entry_label fn` >> simp[result_equiv_def] >>
-  rename1 `fn_entry_label fn = SOME lbl` >>
-  cheat
 QED

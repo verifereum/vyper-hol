@@ -1,4 +1,8 @@
-(* Exact staged Python-oracle bytecode check for dynamic ABI encode/decode. *)
+(* Exact staged Python-oracle bytecode check for dynamic ABI encode/decode.
+   TOP-LEVEL: abi_dynamic_matches_python_oracle (plain EVAL_TAC).
+   Checked checkpoints: abi_dynamic_available_00 through _12 cover all 495
+   concrete SSA use-site availability obligations, in slices of at most 40.
+   No compiler stage depends on the independent Python bytecode oracle. *)
 
 Theory evalCompilerBytecodeAbiDynamic
 Ancestors evalCompilerSubsetAbiBuiltins compileVyper concretizeMemLocDefs codegenReadyCompute stackPlanGenCompute alist byte integer_word option cv_std
@@ -198,24 +202,139 @@ val () =
   if length abi_dynamic_ready_available_terms = 495 then ()
   else raise Fail "expected 495 ABI-dynamic availability calls"
 val () = computeLib.upd_compset (computeLib.add_thms
-  [codegenReadyComputeTheory.def_available_at_exec_def])
+  [codegenReadyComputeTheory.def_available_at_exec_compute])
 fun abi_dynamic_take_chunk _ [] = ([],[])
   | abi_dynamic_take_chunk 0 xs = ([],xs)
   | abi_dynamic_take_chunk n (x::xs) = let
       val (front,rest) = abi_dynamic_take_chunk (n - 1) xs
     in (x::front,rest) end
-fun abi_dynamic_rewrite_available current [] = current
-  | abi_dynamic_rewrite_available current terms = let
-      val (chunk,rest) = abi_dynamic_take_chunk 40 terms
-      val evals = map EVAL chunk
-      val step = PURE_REWRITE_CONV evals (rhs (concl current))
-    in
-      abi_dynamic_rewrite_available (TRANS current step) rest
-    end
-val abi_dynamic_ready_dom_exec_step3 =
-  abi_dynamic_rewrite_available
-    (REFL (rhs (concl abi_dynamic_ready_dom_exec_step2)))
-    abi_dynamic_ready_available_terms
+(* Each conjunction is a useful, kernel-checked stage: all concrete use
+   sites in this slice have an available definition.  Unlike the former
+   top-level map EVAL, these computations are timed and independently
+   checkpointed by holbuild. *)
+fun abi_dynamic_available_slice n =
+  list_mk_conj (#1 (abi_dynamic_take_chunk 40
+    (List.drop (abi_dynamic_ready_available_terms, 40 * n))))
+
+Theorem abi_dynamic_available_00:
+  ^(abi_dynamic_available_slice 0)
+Proof
+  EVAL_TAC
+QED
+Theorem abi_dynamic_available_01:
+  ^(abi_dynamic_available_slice 1)
+Proof
+  (* Original proof: EVAL_TAC. Compute each site independently instead of
+     retaining the normalizer's work for forty large graph calls at once. *)
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  EVAL_TAC
+QED
+Theorem abi_dynamic_available_02:
+  ^(abi_dynamic_available_slice 2)
+Proof
+  EVAL_TAC
+QED
+Theorem abi_dynamic_available_03:
+  ^(abi_dynamic_available_slice 3)
+Proof
+  EVAL_TAC
+QED
+Theorem abi_dynamic_available_04:
+  ^(abi_dynamic_available_slice 4)
+Proof
+  EVAL_TAC
+QED
+Theorem abi_dynamic_available_05:
+  ^(abi_dynamic_available_slice 5)
+Proof
+  EVAL_TAC
+QED
+Theorem abi_dynamic_available_06:
+  ^(abi_dynamic_available_slice 6)
+Proof
+  EVAL_TAC
+QED
+Theorem abi_dynamic_available_07:
+  ^(abi_dynamic_available_slice 7)
+Proof
+  EVAL_TAC
+QED
+Theorem abi_dynamic_available_08:
+  ^(abi_dynamic_available_slice 8)
+Proof
+  EVAL_TAC
+QED
+Theorem abi_dynamic_available_09:
+  ^(abi_dynamic_available_slice 9)
+Proof
+  EVAL_TAC
+QED
+Theorem abi_dynamic_available_10:
+  ^(abi_dynamic_available_slice 10)
+Proof
+  EVAL_TAC
+QED
+Theorem abi_dynamic_available_11:
+  ^(abi_dynamic_available_slice 11)
+Proof
+  EVAL_TAC
+QED
+Theorem abi_dynamic_available_12:
+  ^(abi_dynamic_available_slice 12)
+Proof
+  EVAL_TAC
+QED
+
+val abi_dynamic_ready_available_evals = map EQT_INTRO
+  (List.concat (map CONJUNCTS
+    [abi_dynamic_available_00, abi_dynamic_available_01,
+     abi_dynamic_available_02, abi_dynamic_available_03,
+     abi_dynamic_available_04, abi_dynamic_available_05,
+     abi_dynamic_available_06, abi_dynamic_available_07,
+     abi_dynamic_available_08, abi_dynamic_available_09,
+     abi_dynamic_available_10, abi_dynamic_available_11,
+     abi_dynamic_available_12]))
+val abi_dynamic_ready_dom_exec_step3 = PURE_REWRITE_CONV
+  abi_dynamic_ready_available_evals
+  (rhs (concl abi_dynamic_ready_dom_exec_step2))
 val abi_dynamic_ready_dom_exec_eval =
   TRANS abi_dynamic_ready_dom_exec_step1
     (TRANS abi_dynamic_ready_dom_exec_step2
@@ -591,38 +710,33 @@ val abi_dynamic_finalize_deploy_eval = save_thm
    EVAL ``finalize_codegen (K SOME) ^abi_dynamic_rpolicy
        ^abi_dynamic_final_deploy_unit``)
 
-val abi_dynamic_compile_term =
-  ``compile_vyper (K SOME) (o1_policy all_capabilities)
-      task090_abi_dynamic_program``
-val abi_dynamic_compile_step0 = SIMP_CONV pure_ss
-  [compileVyperTheory.compile_vyper_def,
-   compileVyperTheory.compile_vyper_with_def,
-   compileVyperTheory.checked_unit_pipeline_def,
-   optionTheory.option_case_def, boolTheory.COND_CLAUSES,
-   abi_dynamic_policy_eval, abi_dynamic_lower_runtime_eval,
-   abi_dynamic_run_pipeline_eval, abi_dynamic_finalize_eval,
-   abi_dynamic_lower_deploy_eval, abi_dynamic_deploy_pipeline_eval,
-   abi_dynamic_finalize_deploy_eval, LET_THM, pairTheory.FST,
-   pairTheory.SND, pairTheory.UNCURRY_DEF, pairTheory.pair_case_def]
-  abi_dynamic_compile_term
-val abi_dynamic_compile_eval = TRANS abi_dynamic_compile_step0
-  (EVAL (rhs (concl abi_dynamic_compile_step0)))
-val abi_dynamic_compile_eval = save_thm
-  ("abi_dynamic_compile_eval", abi_dynamic_compile_eval)
-Theorem abi_dynamic_compile_computed: T
-Proof
-  simp[]
-QED
-val abi_dynamic_oracle_eq = EQT_ELIM (EVAL (mk_eq
-  (rhs (concl abi_dynamic_compile_eval),
-   ``SOME ^(evalCompilerBytecodeLib.read_hex_bytes "abi_dynamic.hex")``)))
-val abi_dynamic_matches_python_oracle = save_thm
-  ("abi_dynamic_matches_python_oracle",
-   TRANS abi_dynamic_compile_eval abi_dynamic_oracle_eq)
+(* CBV reduces arguments before equation dispatch.  Certify that normal
+   form by congruence, rather than assuming aliases match evaluator inputs.
+   Only compiler stages are registered: never compile_vyper or oracle bytes. *)
+fun abi_dynamic_cbv_stage th = let
+  val (head,args) = strip_comb (lhs (concl th))
+  val args_eq = List.foldl
+    (fn (arg,eq) => MK_COMB (eq,EVAL arg)) (REFL head) args
+in TRANS (SYM args_eq) th end
+val () = computeLib.upd_compset (computeLib.add_thms
+  (map abi_dynamic_cbv_stage
+    [abi_dynamic_policy_eval, abi_dynamic_lower_runtime_eval,
+     abi_dynamic_run_pipeline_eval, abi_dynamic_finalize_eval,
+     abi_dynamic_lower_deploy_eval, abi_dynamic_deploy_pipeline_eval,
+     abi_dynamic_finalize_deploy_eval]))
 
-(* The concrete staging theorems are evaluator checkpoints, not API.  Keeping
-   only the final parity theorem makes the generated theory load within the
-   bounded HOL store. *)
+Theorem abi_dynamic_matches_python_oracle:
+  compile_vyper (K SOME) (o1_policy all_capabilities)
+    task090_abi_dynamic_program =
+    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "abi_dynamic.hex")
+Proof
+  EVAL_TAC
+QED
+
+(* Retain the checked availability slices and final parity theorem.  Remove
+   the older, larger transient stage equations from the theory export; they
+   remain certified computations in the script and in holbuild checkpoints.
+   The local compset registrations above do not export a compile result. *)
 val () = List.app Theory.delete_binding
   ["abi_dynamic_policy_eval",
    "abi_dynamic_lower_runtime_eval", "abi_dynamic_lower_runtime_computed",
@@ -644,5 +758,4 @@ val () = List.app Theory.delete_binding
    "abi_dynamic_fn_plan_computed", "abi_dynamic_context_plan_eval",
    "abi_dynamic_execute_plan_eval", "abi_dynamic_codegen_eval",
    "abi_dynamic_finalize_eval", "abi_dynamic_lower_deploy_eval",
-   "abi_dynamic_deploy_pipeline_eval", "abi_dynamic_finalize_deploy_eval",
-   "abi_dynamic_compile_eval", "abi_dynamic_compile_computed"]
+   "abi_dynamic_deploy_pipeline_eval", "abi_dynamic_finalize_deploy_eval"]

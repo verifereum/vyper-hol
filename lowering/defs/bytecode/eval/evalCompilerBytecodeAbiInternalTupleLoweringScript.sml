@@ -1,7 +1,7 @@
 (* Checked source-lowering staging for the internal_tuple_call fixture. *)
 
 Theory evalCompilerBytecodeAbiInternalTupleLowering
-Ancestors evalCompilerSubsetAbiInternalCalls compileVyper concretizeMemLocDefs alist byte integer_word option
+Ancestors evalCompilerSubsetAbiInternalCalls compileVyper concretizeMemLocDefs alist byte integer_word option typedCopyDomain
 Libs evalCompilerBytecodeLib finite_mapLib computeLib wordsLib pairLib
 
 fun holbuild_extra_deps (_ : string list) = ()
@@ -983,6 +983,7 @@ val internal_tuple_call_internal_function_eval = save_thm
 *)
 
 Theorem compile_internal_return_fixed_tuple:
+  acyclic_struct_metadata cenv.ce_struct_fields /\
   ¬is_abi_dynamic cenv.ce_struct_fields (TupleT dst_tys) ⇒
   compile_internal_return cenv (SOME val_op) return_pc 0
       (TupleT dst_tys) (TupleT src_tys) elem_types (SOME buf_op) =
@@ -1001,6 +1002,12 @@ Proof
        compileEnvTheory.is_bytestring_type_def]
 QED
 
+Theorem internal_tuple_call_cenv2_acyclic:
+  acyclic_struct_metadata (^internal_tuple_call_cenv2).ce_struct_fields
+Proof
+  EVAL_TAC
+QED
+
 val internal_tuple_call_src_ty_eval =
   EVAL ``expr_type ^internal_tuple_call_return_expr``
 val internal_tuple_call_internal_return_clean_step0 = QCONV
@@ -1016,6 +1023,7 @@ val internal_tuple_call_internal_return_clean_step0 = QCONV
       ^internal_tuple_call_state15``
 val internal_tuple_call_internal_return_clean_step1 = SIMP_CONV (srw_ss())
   [compile_internal_return_fixed_tuple,
+   internal_tuple_call_cenv2_acyclic,
    internal_tuple_call_is_dynamic_eval]
   (rhs (concl internal_tuple_call_internal_return_clean_step0))
 val internal_tuple_call_internal_return_clean_step2 = SIMP_CONV pure_ss

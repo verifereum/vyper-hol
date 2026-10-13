@@ -398,6 +398,8 @@ Definition valid_conversion_def:
   valid_conversion (BaseT (BytesT _)) (BaseT (BytesT _)) = T /\
   valid_conversion (BaseT (BytesT _)) (BaseT (UintT _)) = T /\
   valid_conversion (BaseT (BytesT _)) (BaseT (IntT _)) = T /\
+  valid_conversion (BaseT (BytesT _)) (BaseT AddressT) = T /\
+  valid_conversion (BaseT (BytesT _)) (BaseT DecimalT) = T /\
   valid_conversion (BaseT (UintT _)) (BaseT (UintT _)) = T /\
   valid_conversion (BaseT (UintT _)) (BaseT (IntT _)) = T /\
   valid_conversion (BaseT (IntT _)) (BaseT (UintT _)) = T /\
@@ -453,15 +455,17 @@ Definition abi_encode_method_id_size_def:
 End
 
 Definition abi_encode_size_ok_def:
-  abi_encode_size_ok tenv target_ty method_id n =
-    (vyper_abi_size_bound tenv target_ty +
+  abi_encode_size_ok tenv ensure target_ty method_id n =
+    (vyper_abi_size_bound tenv
+       (case target_ty of TupleT [t] => if ensure then target_ty else t
+                       | _ => target_ty) +
      abi_encode_method_id_size method_id <= n)
 End
 
 Definition type_builtin_result_ok_def:
-  type_builtin_result_ok tenv (AbiEncode _ method_id) result_ty target_ty arg_tys =
+  type_builtin_result_ok tenv (AbiEncode ensure method_id) result_ty target_ty arg_tys =
     (?n. result_ty = BaseT (BytesT (Dynamic n)) ∧ target_ty = TupleT arg_tys ∧
-         abi_encode_size_ok tenv target_ty method_id n) ∧
+         abi_encode_size_ok tenv ensure target_ty method_id n) ∧
   type_builtin_result_ok tenv Empty result_ty target_ty arg_tys = (result_ty = target_ty) ∧
   type_builtin_result_ok tenv MaxValue result_ty target_ty arg_tys = (result_ty = target_ty) ∧
   type_builtin_result_ok tenv MinValue result_ty target_ty arg_tys = (result_ty = target_ty) ∧

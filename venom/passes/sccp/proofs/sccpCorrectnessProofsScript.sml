@@ -667,8 +667,10 @@ Proof
        NO_TAC) >>
   (* IntRet case: execution_equiv {} => merge_callee_state equal *)
   `merge_callee_state s v = merge_callee_state s v'` by (
-    fs[execution_equiv_def, merge_callee_state_def,
-       venom_state_component_equality]) >>
+    irule stateFrameTheory.execution_frame_projection >>
+    conj_tac
+    >- simp[merge_callee_state_def, stateFrameTheory.execution_frame_def] >>
+    fs[Excl "core_complete_mask_equality", execution_equiv_def]) >>
   gvs[] >>
   Cases_on `bind_outputs inst.inst_outputs i.iret_values
     (adopt_return_fmp i (merge_callee_state s v'))` >>

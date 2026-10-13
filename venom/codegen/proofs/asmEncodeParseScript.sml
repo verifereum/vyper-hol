@@ -243,7 +243,7 @@ QED
 (* Main result: at instruction i, parse_code has the exact opname *)
 Theorem assemble_parse_exact:
   ∀prog i.
-    asm_wf prog ∧
+    asm_encoding_wf prog ∧
     i < LENGTH prog ∧
     (∀j. j ≤ i ⇒ ¬is_data_inst (EL j prog)) ⇒
     ∃op. FLOOKUP (parse_code 0 FEMPTY (assemble prog))
@@ -253,7 +253,6 @@ Theorem assemble_parse_exact:
          wf_opname op
 Proof
   rpt strip_tac >>
-  `asm_encoding_wf prog` by fs[asm_wf_def] >>
   `SUC i ≤ LENGTH prog` by decide_tac >>
   `∀j. j < SUC i ⇒ ¬is_data_inst (EL j prog)` by
     (rpt strip_tac >> `j ≤ i` by decide_tac >> gvs[]) >>
@@ -314,13 +313,12 @@ QED
 
 Theorem offset_in_bounds:
   ∀prog pc.
-    asm_wf prog ∧
+    asm_encoding_wf prog ∧
     pc < LENGTH prog ∧
     (∀j. j ≤ pc ⇒ ¬is_data_inst (EL j prog)) ⇒
     asm_pc_to_offset prog pc < LENGTH (assemble prog)
 Proof
   rpt strip_tac >>
-  `asm_encoding_wf prog` by fs[asm_wf_def] >>
   (* offset pc < offset (SUC pc) via strict mono (non-data at pc) *)
   `asm_pc_to_offset prog pc < asm_pc_to_offset prog (SUC pc)` by
     (irule asm_pc_to_offset_mono >>

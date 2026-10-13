@@ -828,8 +828,9 @@ Definition call_ctx_rel_def:
      bc.bc_blobbasefee = n2w txn.blob_base_fee)
 End
 
-(* Top-level state relation.
-   Ties together all sub-relations between interpreter and Venom states. *)
+(* Top-level oracle-mode state relation (PLAN 5.7).
+   Ties together all sub-relations and exactly the current oracle suffix and
+   request prefix. NONE-mode compatibility does not satisfy this relation. *)
 Definition state_rel_def:
   state_rel cenv cx vs ss =
     (vars_rel cenv vs.scopes ss ∧
@@ -839,7 +840,9 @@ Definition state_rel_def:
      transient_vars_rel cenv cx ∧
      immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor vs ss ∧
      logs_rel cenv cx.txn.target vs ss ∧
-     call_ctx_rel cx.txn ss.vs_call_ctx ss.vs_tx_ctx ss.vs_block_ctx)
+     call_ctx_rel cx.txn ss.vs_call_ctx ss.vs_tx_ctx ss.vs_block_ctx ∧
+     vs.outcomes = SOME ss.vs_outcomes ∧
+     vs.requests = ss.vs_requests)
 End
 
 (* ===== Result Relation ===== *)
@@ -891,9 +894,10 @@ Definition result_rel_def:
   (* External return → Halt with ABI-encoded data *)
   (result_rel ret_tv cenv cx (INR (ReturnException v), vs') (Halt ss') =
     state_rel cenv cx vs' ss') ∧
-  (* Assert/revert → Abort with revert (normal assert) or halt (UNREACHABLE) *)
+  (* Every reason may REVERT, including an ordinary raise "UNREACHABLE".
+     Only the distinguished UNREACHABLE exception may map to ExHalt_abort. *)
   (result_rel ret_tv cenv cx (INR (AssertException s), vs') (Abort Revert_abort ss') =
-    (s ≠ "UNREACHABLE")) ∧
+    T) ∧
   (result_rel ret_tv cenv cx (INR (AssertException s), vs') (Abort ExHalt_abort ss') =
     (s = "UNREACHABLE")) ∧
   (* Error → Abort (any type) *)

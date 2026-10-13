@@ -81,7 +81,7 @@ val () =
   if length mixed_event_types_ready_available_terms = 218 then ()
   else raise Fail "expected 218 mixed-event def_available_at_exec calls"
 val () = computeLib.upd_compset (computeLib.add_thms
-  [codegenReadyComputeTheory.def_available_at_exec_def])
+  [codegenReadyComputeTheory.def_available_at_exec_compute])
 fun mixed_event_types_split_at n xs =
   (List.take (xs,n), List.drop (xs,n))
 val (mixed_event_types_ready_terms0,mixed_event_types_ready_terms_rest0) =

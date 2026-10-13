@@ -462,9 +462,12 @@ Theorem abi_static_compile_computed: T
 Proof
   simp[]
 QED
-val abi_static_oracle_eq = EQT_ELIM (EVAL (mk_eq
-  (rhs (concl abi_static_compile_eval),
-   ``SOME ^(evalCompilerBytecodeLib.read_hex_bytes "abi_static.hex")``)))
-val abi_static_matches_python_oracle = save_thm
-  ("abi_static_matches_python_oracle",
-   TRANS abi_static_compile_eval abi_static_oracle_eq)
+val () = evalCompilerBytecodeLib.add_compile_eval abi_static_compile_eval
+
+Theorem abi_static_matches_python_oracle:
+  compile_vyper (K SOME) (o1_policy all_capabilities)
+    task090_abi_static_program =
+    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "abi_static.hex")
+Proof
+  EVAL_TAC
+QED

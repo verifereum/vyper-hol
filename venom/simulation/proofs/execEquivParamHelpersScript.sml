@@ -130,8 +130,8 @@ Theorem vsr_step_inst_terminator:
     MEM inst.inst_opcode [STOP;SINK] ==>
     lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rw[] >> ASM_REWRITE_TAC[step_inst_base_def] >> simp[lift_result_def] >>
-  imp_res_tac vsr_terminal_R_term >> simp[]
+  rw[] >> ASM_REWRITE_TAC[step_inst_base_def] >>
+  simp[lift_result_def, halt_state_def] >> vsr_terminal_tac ()
 QED
 
 Theorem vsr_step_inst_return:

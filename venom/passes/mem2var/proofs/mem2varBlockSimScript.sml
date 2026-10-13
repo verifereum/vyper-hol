@@ -1,7 +1,7 @@
 Theory mem2varBlockSim
 Ancestors
   mem2varBlockSimHelpers
-  mem2varDefs mem2varProofs
+  mem2varDefs mem2varProofs mem2varFrame
   passSharedTransfer passSharedField
   venomExecSemantics venomState venomWf
   venomInst venomInstProofs venomExecProofs
@@ -14,7 +14,9 @@ Ancestors
   venomEffects venomMemDefs venomMemProps venomMemProofs
   finite_map list rich_list pred_set pair
 Libs
-  HolKernel boolLib bossLib BasicProvers dep_rewrite markerLib
+  HolKernel boolLib bossLib BasicProvers dep_rewrite markerLib mem2varFrameLib
+
+val _ = augment_srw_ss [mem2varFrameLib.frame_ss];
 
 Theorem m2v_per_block_sim_at[local]:
   !n fn bb fuel ctx s1 s2.

@@ -7,13 +7,15 @@
 
 Theory lowerDloadSim
 Ancestors
-  lowerDloadProofs lowerDloadClassify lowerDloadDefs
+  lowerDloadProofs lowerDloadClassify lowerDloadDefs lowerDloadOracleFields
   stateEquiv venomExecSemantics passSimulationDefs
   venomExecProps venomInst venomState venomWf
   venomInstProps analysisSimDefs instIdxIndep
   finite_map words list rich_list pred_set arithmetic
 Libs
-  BasicProvers
+  BasicProvers lowerDloadFrameLib
+
+val _ = augment_srw_ss [lowerDloadFrameLib.frame_ss];
 
 (* ===== run_insts simulation ===== *)
 
@@ -1697,6 +1699,37 @@ Proof
   ONCE_REWRITE_TAC[run_block_def] >>
   ASM_REWRITE_TAC[] >>
   simp[lower_dload_block_def, lower_dload_eval_phis, lift_result_def]
+QED
+
+(* Closed field projection of the actual legacy block simulation. All old
+   premises and the full simulation conclusion are retained. *)
+Theorem lower_dload_run_block_oracle:
+  !fn bb fuel ctx s1 s2.
+    ld_ok (ld_exempt_vars_fn fn) s1 s2 /\
+    s1.vs_inst_idx = 0 /\
+    wf_function fn /\ fn_inst_wf fn /\
+    code_layout_valid s1 /\ code_layout_valid s2 /\
+    ld_no_mem_read fn /\ ld_dload_safe fn /\
+    ld_no_original_alloca fn /\
+    MEM bb fn.fn_blocks /\
+    (!bb' inst x.
+       MEM bb' fn.fn_blocks /\ MEM inst bb'.bb_instructions /\
+       MEM (Var x) inst.inst_operands ==>
+       x NOTIN ld_fresh_vars_fn fn) ==>
+    lift_result (ld_ok (ld_exempt_vars_fn fn))
+      (ld_equiv (ld_exempt_vars_fn fn)) (ld_equiv (ld_exempt_vars_fn fn))
+      (run_block fuel ctx bb s1)
+      (run_block fuel ctx (lower_dload_block bb) s2) /\
+    lift_result
+      (\s1 s2. s1.vs_outcomes = s2.vs_outcomes /\ s1.vs_requests = s2.vs_requests)
+      (\s1 s2. s1.vs_outcomes = s2.vs_outcomes /\ s1.vs_requests = s2.vs_requests)
+      (\s1 s2. s1.vs_outcomes = s2.vs_outcomes /\ s1.vs_requests = s2.vs_requests)
+      (run_block fuel ctx bb s1)
+      (run_block fuel ctx (lower_dload_block bb) s2)
+Proof
+  rpt gen_tac >> strip_tac >> drule_all ld_run_block_sim >>
+  strip_tac >> ASM_REWRITE_TAC[] >> irule ld_lift_result_oracle >>
+  qexists_tac `ld_exempt_vars_fn fn` >> simp[]
 QED
 
 (* ===== Main theorem: two-state strengthened induction ===== *)

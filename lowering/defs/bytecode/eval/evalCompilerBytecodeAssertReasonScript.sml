@@ -351,17 +351,25 @@ Proof
   rpt CASE_TAC >> gvs[]
 QED
 
+val () = evalCompilerBytecodeLib.add_staged_compile_eval
+  ([assert_reason_runtime_compile_def,
+    assert_reason_runtime_pipeline_eval,
+    optionTheory.option_case_compute,
+    optionTheory.IS_SOME_DEF, optionTheory.THE_DEF,
+    pairTheory.pair_case_thm, LET_THM, COND_CLAUSES,
+    REFL_CLAUSE, NOT_CLAUSES,
+    assert_reason_unit_eval,
+    assert_reason_out_final_assembly_eval,
+    assert_reason_rpolicy_final_assembly_eval] @ assert_reason_runtime_accessors)
+  [codegenTheory.finalize_codegen_identity, assert_reason_codegen_assembly_eval]
+  [assert_reason_compile_staged]
+  ``assert_reason_runtime_compile assert_reason_program``
+  ``compile_vyper (K SOME) (o1_policy all_capabilities) assert_reason_program``
+
 Theorem assert_reason_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     assert_reason_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "assert_reason.hex")
 Proof
-  PURE_REWRITE_TAC [assert_reason_compile_staged] >>
-  PURE_REWRITE_TAC [assert_reason_runtime_matches_python_oracle] >>
-  simp_tac pure_ss
-    [optionTheory.option_case_compute,
-     optionTheory.IS_SOME_DEF, optionTheory.THE_DEF,
-     optionTheory.OPTION_MAP_DEF, LET_THM, COND_CLAUSES,
-     assert_reason_deploy_matches_python_oracle] >>
   EVAL_TAC
 QED

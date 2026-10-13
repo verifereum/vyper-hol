@@ -36,7 +36,7 @@
 
 Theory lowerDloadDefs
 Ancestors
-  passSimulationDefs venomExecSemantics venomInst irSupply
+  lowerDloadFrame passSimulationDefs venomExecSemantics venomInst irSupply
 (* ===== Fresh Variable Names ===== *)
 
 (* Fresh variable for alloca output.
@@ -363,12 +363,14 @@ End
 (* ===== Lower-DLOAD Equivalence ===== *)
 
 (* Tightest correct equivalence for lower_dload: everything in
-   execution_equiv except vs_memory, vs_allocas, and vs_returndata.
+   execution_equiv except vs_memory, vs_allocas, vs_alloca_next, and
+   vs_returndata. Control fields remain ignored, as in execution_equiv.
 
    Why these are excluded:
    - vs_memory: DLOAD lowering uses ALLOCA+CODECOPY as scratch space,
      modifying memory beyond what the original DLOAD touches.
-   - vs_allocas: ALLOCA introduces new alloca entries.
+   - vs_allocas / vs_alloca_next: ALLOCA introduces entries and bumps its
+     scratch allocation pointer.
    - vs_returndata: RETURN/REVERT reads vs_memory to produce returndata;
      since memory can differ, returndata can too.
 
@@ -380,24 +382,5 @@ End
 Definition ld_equiv_def:
   ld_equiv vars s1 s2 <=>
     (!v. v NOTIN vars ==> lookup_var v s1 = lookup_var v s2) /\
-    (* vs_memory OMITTED — DLOAD lowering uses scratch memory *)
-    s1.vs_transient = s2.vs_transient /\
-    s1.vs_halted = s2.vs_halted /\
-    (* vs_returndata OMITTED — RETURN reads from divergent memory *)
-    s1.vs_accounts = s2.vs_accounts /\
-    s1.vs_call_ctx = s2.vs_call_ctx /\
-    s1.vs_tx_ctx = s2.vs_tx_ctx /\
-    s1.vs_block_ctx = s2.vs_block_ctx /\
-    s1.vs_logs = s2.vs_logs /\
-    s1.vs_immutables = s2.vs_immutables /\
-    s1.vs_data_section = s2.vs_data_section /\
-    s1.vs_labels = s2.vs_labels /\
-    s1.vs_code = s2.vs_code /\
-    s1.vs_params = s2.vs_params /\
-    s1.vs_prev_hashes = s2.vs_prev_hashes /\
-    s1.vs_fmp = s2.vs_fmp /\
-    s1.vs_call_entry_fmp = s2.vs_call_entry_fmp /\
-    s1.vs_initial_fmp = s2.vs_initial_fmp /\
-    s1.vs_return_pc_token = s2.vs_return_pc_token
-    (* vs_allocas OMITTED — ALLOCA introduces new entries *)
+    ld_execution_frame s1 = ld_execution_frame s2
 End

@@ -9,6 +9,7 @@
 
 Theory tailMergeStep
 Ancestors
+  venomCallOracleDefs
   stateEquiv venomExecSemantics execEquivProofs list rich_list
 Libs
   stateEquivTheory stateEquivProofsTheory
@@ -659,7 +660,13 @@ val ee_UNIV_exec_ext_call = prove(``
     | (Error _, Error _) => T
     | (Abort a1 s1', Abort a2 s2') => a1 = a2 /\ execution_equiv UNIV s1' s2'
     | _ => F``,
-  prove_exec_wrapper exec_ext_call_def);
+  (* Legacy concrete tactic: prove_exec_wrapper exec_ext_call_def *)
+  rpt strip_tac >> fs[execution_equiv_def] >>
+  Cases_on `inst1.inst_outputs` >> Cases_on `inst2.inst_outputs` >>
+  gvs[exec_ext_call_def, venom_call_request_def, read_memory_def] >>
+  rpt (CASE_TAC >> gvs[]) >>
+  simp[execution_equiv_def, update_var_def,
+       write_memory_with_expansion_def]);
 
 val ee_UNIV_exec_delegatecall = prove(``
   !inst1 inst2 s1 s2 gas addr ao as_ ro rs.
@@ -1170,7 +1177,12 @@ val exec_ext_call_output = prove(``
     !k. k < LENGTH inst1.inst_outputs ==>
         lookup_var (EL k inst1.inst_outputs) s1' =
         lookup_var (EL k inst2.inst_outputs) s2'``,
-  prove_exec_output_wrapper exec_ext_call_def);
+  (* Legacy concrete tactic: prove_exec_output_wrapper exec_ext_call_def *)
+  rpt strip_tac >> fs[execution_equiv_def] >>
+  gvs[exec_ext_call_def, venom_call_request_def, read_memory_def,
+      AllCaseEqs(), lookup_var_def, update_var_def,
+      finite_mapTheory.FLOOKUP_UPDATE] >>
+  `k = 0` by simp[] >> gvs[]);
 
 val exec_delegatecall_output = prove(``
   !inst1 inst2 s1 s2 g a ao as_ ro rs s1' s2'.

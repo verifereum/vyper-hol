@@ -9,7 +9,7 @@
 
 Theory prevBbIndep
 Ancestors
-  venomExecSemantics venomState venomInst
+  venomExecSemantics venomState venomInst venomCallOracleDefs
 Libs
   finite_mapTheory listTheory BasicProvers pairTheory
 
@@ -311,9 +311,10 @@ Theorem exec_ext_call_prev_bb[local]:
       (exec_ext_call inst s gas addr value ao as_ ro rs is_static)
 Proof
   rpt gen_tac >>
-  simp([exec_ext_call_def, make_venom_call_state_prev_bb] @ ext_call_rw_prev_bb) >>
+  simp([exec_ext_call_def, venom_call_request_def,
+        write_memory_with_expansion_def, make_venom_call_state_prev_bb] @ ext_call_rw_prev_bb) >>
   BasicProvers.EVERY_CASE_TAC >>
-  simp[exec_result_map_prev_bb_def, update_var_prev_bb, venom_state_component_equality]
+  simp[exec_result_map_prev_bb_def, update_var_def, update_var_prev_bb, venom_state_component_equality]
 QED
 
 Theorem exec_delegatecall_prev_bb[local]:

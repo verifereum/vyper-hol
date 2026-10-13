@@ -2898,14 +2898,9 @@ Proof
         simp[]) >>
    simp[no_type_error_result_def] >> CCONTR_TAC >> gvs[] >>
    metis_tac[write_storage_slot_no_type_error_from_value_has_type]) >-
-  (* Goal 3: first write_storage_slot INR (default_value) *)
-  (drule evaluate_type_ArrayT_cases >> strip_tac >> gvs[] >>
-   drule default_value_has_type_thm >> simp[] >>
-   simp[no_type_error_result_def] >> CCONTR_TAC >> gvs[] >>
-   metis_tac[write_storage_slot_no_type_error_from_value_has_type]) >-
-  (* Goal 4: read_storage_slot INR *)
+  (* Goal 3: read_storage_slot INR *)
   (drule read_storage_slot_error >> rpt strip_tac >> simp[no_type_error_result_def]) >>
-  (* Goal 5: check failure (stored_len = 0) -> RuntimeError *)
+  (* Goal 4: check failure (stored_len = 0) -> RuntimeError *)
   simp[no_type_error_result_def]
 QED
 

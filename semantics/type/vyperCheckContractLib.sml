@@ -122,6 +122,7 @@ val checker_defs =
    vyperASTTheory.abi_encode_method_id_bytes_def,
    vyperABITheory.vyper_abi_size_bound_def,
    vyperABITheory.vyper_is_dynamic_def,
+   contractABITheory.ceil32_def,
    raw_call_return_type_def,
    create_arg_types_ok_def,
    optionTheory.option_case_lazily,
