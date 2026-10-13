@@ -507,6 +507,25 @@ Proof
       state_well_typed_def]
 QED
 
+(* Deleting only accounts queued by SELFDESTRUCT preserves account typing. *)
+Theorem accounts_well_typed_process_deletions:
+  !pending accounts.
+    accounts_well_typed accounts ==>
+    accounts_well_typed (vfmExecution$process_deletions pending accounts)
+Proof
+  Induct >> simp[vfmExecutionTheory.process_deletions_def] >>
+  metis_tac[vyperTypeExtCallSoundnessTheory.accounts_well_typed_update_account,
+            vyperTypeExtCallSoundnessTheory.account_well_typed_empty_account_state]
+QED
+
+Theorem finalize_pending_deletions_machine_well_typed:
+  machine_well_typed am ==>
+  machine_well_typed (finalize_pending_deletions am)
+Proof
+  simp[machine_well_typed_def, finalize_pending_deletions_def,
+       accounts_well_typed_process_deletions]
+QED
+
 Theorem checked_call_external_success_preserves_machine_well_typed:
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\
@@ -547,6 +566,7 @@ Proof
     simp[Once call_external_function_def] >>
     gvs[AllCaseEqs()] >> metis_tac[]) >>
   gvs[] >>
+  irule finalize_pending_deletions_machine_well_typed >>
   (FIRST
       [qpat_x_assum `MEM (FunctionDecl External _ _ _ _ _ _ _ _) _` mp_tac >>
        strip_tac >>

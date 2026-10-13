@@ -1549,6 +1549,7 @@ Datatype:
   ; layouts: (address, storage_layout # storage_layout) alist  (* (storage, transient) *)
   ; tStorage: transient_storage
   ; logs: log list
+  ; pending_deletions: address list
   |>
 End
 
@@ -1561,6 +1562,7 @@ Definition initial_machine_state_def:
   ; layouts := []
   ; tStorage := empty_transient_storage
   ; logs := []
+  ; pending_deletions := []
   |>
 End
 
@@ -1571,6 +1573,7 @@ Definition initial_state_def:
    ; logs := am.logs
    ; scopes := scs
    ; tStorage := am.tStorage
+   ; pending_deletions := am.pending_deletions
    |>
 End
 
@@ -1585,6 +1588,7 @@ Definition abstract_machine_from_state_def:
    ; layouts := layouts
    ; tStorage := st.tStorage
    ; logs := st.logs
+   ; pending_deletions := st.pending_deletions
    |> : abstract_machine
 End
 
@@ -1786,6 +1790,28 @@ Proof
   rw[call_external_raw_return_def, lookup_raw_return_or_F_def] >> metis_tac[]
 QED
 
+(* SELFDESTRUCT schedules deletion until the enclosing transaction commits. *)
+Definition finalize_pending_deletions_def:
+  finalize_pending_deletions am =
+    am with <| accounts :=
+      vfmExecution$process_deletions am.pending_deletions am.accounts;
+      pending_deletions := [] |>
+End
+
+val () = cv_auto_trans finalize_pending_deletions_def;
+
+Theorem finalize_pending_deletions_metadata[simp]:
+  (finalize_pending_deletions am).sources = am.sources /\
+  (finalize_pending_deletions am).exports = am.exports /\
+  (finalize_pending_deletions am).immutables = am.immutables /\
+  (finalize_pending_deletions am).layouts = am.layouts /\
+  (finalize_pending_deletions am).tStorage = am.tStorage /\
+  (finalize_pending_deletions am).logs = am.logs /\
+  (finalize_pending_deletions am).pending_deletions = []
+Proof
+  simp[finalize_pending_deletions_def]
+QED
+
 Definition call_external_def:
   call_external am tx =
   (* Determine which module to use for type environment *)
@@ -1803,7 +1829,9 @@ Definition call_external_def:
   case lookup_exported_function cx am tx.function_name
   of NONE => (INR $ Error (RuntimeError "call lookup_function"), am)
    | SOME (mut, nr, args, dflts, ret, body) =>
-       call_external_function am cx nr mut ts all_mods args dflts tx.args body ret
+       case call_external_function am cx nr mut ts all_mods args dflts tx.args body ret of
+       | (INL value, am') => (INL value, finalize_pending_deletions am')
+       | failure => failure
 End
 
 (* KEY LEMMA (typing): a safe_cast value of a bytestring type always has raw
@@ -1821,9 +1849,8 @@ Proof
   >> fs[raw_return_bytes_def] >> metis_tac[]
 QED
 
-(* Explicit transaction boundary. Ordinary function entry preserves accumulated
-   logs so that nested and sequential calls can share one transaction trace;
-   callers use this wrapper when starting a fresh top-level transaction. *)
+(* The transaction entry resets logs; call_external commits queued
+   SELFDESTRUCT deletions on a successful return. *)
 Definition clear_machine_logs_def:
   clear_machine_logs (am: abstract_machine) = am with logs := []
 End
@@ -1860,5 +1887,6 @@ Definition load_contract_def:
                 with in_deploy := T in
        case call_external_function am cx nr mut ts mods args dflts tx.args body ret
          of (INR e, _) => INR e
-          | (_, am) => INL (am with sources updated_by CONS (addr, mods))
+          | (_, am) => INL (finalize_pending_deletions
+                               (am with sources updated_by CONS (addr, mods)))
 End

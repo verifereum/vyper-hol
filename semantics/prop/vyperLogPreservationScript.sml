@@ -3457,7 +3457,8 @@ Proof
   qpat_x_assum `call_external _ _ = _` mp_tac >>
   simp[Once vyperInterpreterTheory.call_external_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
-  imp_res_tac call_external_function_success_log_extends
+  imp_res_tac call_external_function_success_log_extends >>
+  gvs[machine_log_extends_def, vyperInterpreterTheory.finalize_pending_deletions_def]
 QED
 
 Theorem call_external_function_error_logs_rollback:

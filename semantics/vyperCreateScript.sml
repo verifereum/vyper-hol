@@ -351,14 +351,13 @@ val () = create_soft_failure_def
    The adapter receives pre-creation accounts and builds the live prelude
    internally.  A failed constructor restores the pre-endowment snapshot
    after one creator nonce increment.  On success it returns deposited code,
-   accounts, transient storage and emitted logs; on REVERT it also returns
-   the constructor's revert bytes.  Other EVM exceptions return NONE. *)
+   accounts, transient storage, emitted logs, and queued deletions; on REVERT
+   it also returns the constructor's revert bytes.  Other EVM exceptions return NONE. *)
 
 (* Verifereum's proceed_create account prelude: bump the sender nonce, transfer
-   the endowment, bump the (fresh) target nonce.  The target account is not
-   reset -- Verifereum only rewrites `original`, the sub-context snapshot used
-   for SSTORE gas and SELFDESTRUCT, so a pre-existing balance at that address
-   survives and simply receives the endowment. *)
+   the endowment, bump the (fresh) target nonce.  The live target account is not
+   reset: only the original-account snapshot used for SSTORE gas and
+   SELFDESTRUCT is emptied, preserving any pre-existing balance plus endowment. *)
 Definition create_prelude_accounts_def:
   create_prelude_accounts sender address value accounts =
     let accounts0 = vfmExecution$increment_nonce sender accounts in
@@ -382,7 +381,7 @@ val () = cv_auto_trans create_rollback_accounts_def;
    execution state whose message runs the initcode with a Code destination. *)
 Definition make_create_state_def:
   make_create_state sender address initcode value
-                    accounts tStorage txParams =
+                    accounts tStorage pending txParams =
     let gas_limit = default_evm_gas_limit in
     let tx = make_evm_tx sender address value [] gas_limit in
     let ctxt = initial_context address initcode F (Code address) tx in
@@ -391,19 +390,20 @@ Definition make_create_state_def:
     let rollback = <| accounts := accounts
                     ; tStorage := tStorage
                     ; accesses := accesses
-                    ; toDelete := [] |> in
-    <| contexts := [(ctxt, rollback)]
+                    ; toDelete := pending |> in
+    <| contexts := [(ctxt, rollback with accounts :=
+                      update_account address empty_account_state accounts)]
      ; txParams := txParams
      ; rollback := rollback
      ; msdomain := Collect empty_domain
     |>
 End
 
-(* Extract creation results from Verifereum execution.  Success yields the
-   deposited runtime code, post-constructor state and emitted logs; revert
-   yields the rollback snapshot and its return data. *)
+(* Extract creation results from Verifereum execution. Success yields the
+   deposited runtime code, post-constructor state, emitted logs, and pending
+   deletions; revert yields the rollback snapshot and its return data. *)
 Definition extract_create_result_def:
-  extract_create_result revert_accounts revert_tStorage
+  extract_create_result revert_accounts revert_tStorage pending
     (result : unit + vfmExecution$exception option, final_state) =
     case final_state.contexts of
     | [(ctxt, _)] =>
@@ -411,9 +411,11 @@ Definition extract_create_result_def:
          | INR NONE =>
              SOME (SOME ctxt.returnData,
                    final_state.rollback.accounts,
-                   final_state.rollback.tStorage, ctxt.logs, [])
+                   final_state.rollback.tStorage, ctxt.logs, [],
+                   final_state.rollback.toDelete)
          | INR (SOME Reverted) =>
-             SOME (NONE, revert_accounts, revert_tStorage, [], ctxt.returnData)
+             SOME (NONE, revert_accounts, revert_tStorage, [], ctxt.returnData,
+                   pending)
          | _ => NONE)
     | _ => NONE
 End
@@ -533,15 +535,15 @@ val () = cv_auto_trans create_accounts_ok_aux_def;
 (* Run initcode with the EVM prelude, retaining the pre-endowment account map
    so failed creation restores everything except the creator nonce bump. *)
 Definition run_create_evm_def:
-  run_create_evm sender address initcode value accounts tStorage txParams =
+  run_create_evm sender address initcode value accounts tStorage pending txParams =
     let post = create_prelude_accounts sender address value accounts in
     case vfmExecution$run_call
            (make_create_state sender address initcode value
-              post tStorage txParams) of
+              post tStorage pending txParams) of
     | SOME outcome =>
         if create_accounts_ok_aux (FST outcome) (SND outcome).rollback.accounts
         then extract_create_result (create_rollback_accounts sender accounts)
-                                 tStorage outcome
+                                 tStorage pending outcome
         else NONE
     | NONE => NONE
 End
@@ -590,18 +592,20 @@ Definition eval_create_def:
         check (existing.balance + ops.co_value < 2 ** 256)
           "create recipient balance overflow";
         tStorage <- get_transient_storage;
+        pending <- get_pending_deletions;
         update_accounts
           (create_prelude_accounts cx.txn.target new_addr ops.co_value);
         case run_create_evm cx.txn.target new_addr code_info.cc_initcode
-               ops.co_value accounts tStorage
+               ops.co_value accounts tStorage pending
                (vyper_to_tx_params cx.txn) of
         | NONE => do
             update_accounts (K (create_rollback_accounts cx.txn.target accounts));
             create_soft_failure rof "create failed"
           od
-        | SOME (code_opt, accounts', tStorage', logs', revertData) => do
+        | SOME (code_opt, accounts', tStorage', logs', revertData, pending') => do
             update_accounts (K accounts');
             update_transient (K tStorage');
+            update_pending_deletions (K pending');
             case code_opt of
             | SOME _ => do
                 append_logs logs';
@@ -622,7 +626,8 @@ End
    'evaluation_state -> (α + exception) # evaluation_state, and aborts with
    "Argument contains function type".  The adapter result itself is plain
    data: run_create_evm and extract_create_result are both cv-translated above
-   and return code, accounts, transient storage, logs and revert data. *)
+   and return code, accounts, transient storage, logs, revert data, and
+   pending deletions. *)
 val eval_create_cv_def = eval_create_def
   |> SRULE [FUN_EQ_THM, bind_def, ignore_bind_def, lift_option_def, lift_option_type_def,
             lift_sum_def, lift_sum_runtime_def, prod_CASE_rator, LET_RATOR,
@@ -642,18 +647,19 @@ Proof
 QED
 
 (* KEY LEMMA: the EVM-backed tail of eval_create only updates accounts,
-   transient storage, and logs — never scopes or immutables.  Stated with
-   the accessor monads already unfolded, so that it matches eval_create's body
+   transient storage, pending deletions, and logs — never scopes or immutables.
+   Stated with the accessor monads already unfolded, so it matches eval_create's body
    directly. *)
 Theorem create_tail_preserves_scopes:
-  (case run_create_evm a b c d e f g of
+  (case run_create_evm a b c d e f h g of
    | NONE => do
        x <- update_accounts (K (create_rollback_accounts a e));
        create_soft_failure rof "create failed"
      od
-   | SOME (code_opt, accounts', tStorage', logs', revertData) =>
+   | SOME (code_opt, accounts', tStorage', logs', revertData, pending') =>
        do x <- update_accounts (K accounts');
           x <- update_transient (K tStorage');
+          x <- update_pending_deletions (K pending');
           case code_opt of
           | SOME _ => do x <- append_logs logs'; return (Value (AddressV new_addr)) od
           | NONE => if rof then raise (Error (RevertData revertData))
@@ -661,17 +667,17 @@ Theorem create_tail_preserves_scopes:
        od) s = (res, st') ==>
   st'.scopes = s.scopes /\ st'.immutables = s.immutables
 Proof
-  Cases_on `run_create_evm a b c d e f g`
+  Cases_on `run_create_evm a b c d e f h g`
   >- (Cases_on `rof` >>
       gvs[bind_apply, ignore_bind_apply, update_accounts_def,
           create_soft_failure_def, return_def, raise_def] >>
       rpt strip_tac >> gvs[evaluation_state_accfupds]) >>
   gvs[bind_apply, ignore_bind_apply, update_accounts_def,
-      update_transient_def, append_logs_def, create_soft_failure_def,
+      update_transient_def, update_pending_deletions_def, append_logs_def, create_soft_failure_def,
       return_def, raise_def, AllCaseEqs(), evaluation_state_accfupds] >>
   PairCases_on `x` >> Cases_on `x0` >> Cases_on `rof` >>
   gvs[bind_apply, ignore_bind_apply, update_accounts_def,
-      update_transient_def, append_logs_def, create_soft_failure_def,
+      update_transient_def, update_pending_deletions_def, append_logs_def, create_soft_failure_def,
       return_def, raise_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[evaluation_state_accounts_tStorage_acc,
                        evaluation_state_accfupds]
@@ -679,14 +685,15 @@ QED
 
 (* Every creation path leaves the old log sequence as a prefix. *)
 Theorem create_tail_log_extends:
-  (case run_create_evm a b c d e1 g txp of
+  (case run_create_evm a b c d e1 g h txp of
    | NONE => do
        x <- update_accounts (K (create_rollback_accounts a e1));
        create_soft_failure rof "create failed"
      od
-   | SOME (code_opt, accounts', tStorage', logs', revertData) =>
+   | SOME (code_opt, accounts', tStorage', logs', revertData, pending') =>
        do x <- update_accounts (K accounts');
           x <- update_transient (K tStorage');
+          x <- update_pending_deletions (K pending');
           case code_opt of
           | SOME _ => do x <- append_logs logs'; return (Value (AddressV new_addr)) od
           | NONE => if rof then raise (Error (RevertData revertData))
@@ -694,19 +701,19 @@ Theorem create_tail_log_extends:
        od) s = (res, st') ==>
   isPREFIX s.logs st'.logs
 Proof
-  Cases_on `run_create_evm a b c d e1 g txp`
+  Cases_on `run_create_evm a b c d e1 g h txp`
   >- (Cases_on `rof` >>
       gvs[bind_apply, ignore_bind_apply, update_accounts_def,
           create_soft_failure_def, return_def, raise_def] >>
       rpt strip_tac >>
       gvs[evaluation_state_accfupds, rich_listTheory.IS_PREFIX_REFL]) >>
   gvs[bind_apply, ignore_bind_apply, update_accounts_def,
-      update_transient_def, append_logs_def, create_soft_failure_def,
+      update_transient_def, update_pending_deletions_def, append_logs_def, create_soft_failure_def,
       return_def, raise_def, AllCaseEqs(), evaluation_state_accfupds,
       rich_listTheory.IS_PREFIX_REFL, rich_listTheory.IS_PREFIX_APPEND] >>
   PairCases_on `x` >> Cases_on `x0` >> Cases_on `rof` >>
   gvs[bind_apply, ignore_bind_apply, update_accounts_def,
-      update_transient_def, append_logs_def, create_soft_failure_def,
+      update_transient_def, update_pending_deletions_def, append_logs_def, create_soft_failure_def,
       return_def, raise_def, AllCaseEqs()] >>
   rpt strip_tac >>
   gvs[evaluation_state_accounts_tStorage_acc, evaluation_state_accfupds,
@@ -716,14 +723,15 @@ QED
 (* Every raise on the EVM-backed tail raises an Error; the remaining outcomes
    all come from return. *)
 Theorem create_tail_exception_is_error:
-  (case run_create_evm a b c d e1 g txp of
+  (case run_create_evm a b c d e1 g h txp of
    | NONE => do
        x <- update_accounts (K (create_rollback_accounts a e1));
        create_soft_failure rof "create failed"
      od
-   | SOME (code_opt, accounts', tStorage', logs', revertData) =>
+   | SOME (code_opt, accounts', tStorage', logs', revertData, pending') =>
        do x <- update_accounts (K accounts');
           x <- update_transient (K tStorage');
+          x <- update_pending_deletions (K pending');
           case code_opt of
           | SOME _ => do x <- append_logs logs'; return (Value (AddressV new_addr)) od
           | NONE => if rof then raise (Error (RevertData revertData))
@@ -731,17 +739,17 @@ Theorem create_tail_exception_is_error:
        od) s = (INR ex, st') ==>
   ?err. ex = Error err
 Proof
-  Cases_on `run_create_evm a b c d e1 g txp`
+  Cases_on `run_create_evm a b c d e1 g h txp`
   >- (Cases_on `rof` >>
       gvs[bind_apply, ignore_bind_apply, update_accounts_def,
           create_soft_failure_def, return_def, raise_def] >>
       rpt strip_tac >> gvs[]) >>
   gvs[bind_apply, ignore_bind_apply, update_accounts_def,
-      update_transient_def, append_logs_def, create_soft_failure_def,
+      update_transient_def, update_pending_deletions_def, append_logs_def, create_soft_failure_def,
       return_def, raise_def, AllCaseEqs()] >>
   PairCases_on `x` >> Cases_on `x0` >> Cases_on `rof` >>
   gvs[bind_apply, ignore_bind_apply, update_accounts_def,
-      update_transient_def, append_logs_def, create_soft_failure_def,
+      update_transient_def, update_pending_deletions_def, append_logs_def, create_soft_failure_def,
       return_def, raise_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[]
 QED
@@ -765,7 +773,7 @@ Proof
             SOME code_info` >>
   gvs[eval_create_def, bind_apply, ignore_bind_apply, lift_option_type_def,
       get_accounts_def, update_accounts_def, get_transient_storage_def,
-      update_transient_def, check_def, assert_def, return_def,
+      get_pending_deletions_def, update_transient_def, check_def, assert_def, return_def,
       raise_def, AllCaseEqs(), COND_RATOR] >>
   (* The pre-creation checks touch only accounts, so they append nothing; the
      EVM-backed tail is handed to create_tail_log_extends. *)
@@ -780,9 +788,9 @@ Proof
         return_def, raise_def, evaluation_state_accounts_tStorage_acc]),
    (* EVM-backed creation *)
    (gvs[assert_def, bind_apply, get_transient_storage_def,
-         get_accounts_def, update_accounts_def, return_def,
+         get_pending_deletions_def, get_accounts_def, update_accounts_def, return_def,
          raise_def, AllCaseEqs()] >>
-    qpat_x_assum `(case run_create_evm _ _ _ _ _ _ _ of _ => _) _`
+    qpat_x_assum `(case run_create_evm _ _ _ _ _ _ _ _ of _ => _) _`
       (fn tm => mp_tac tm) >>
     strip_tac >>
     drule create_tail_log_extends >>
@@ -812,7 +820,7 @@ Proof
      (balance, collision) = (T,T), (T,F), (F,T), (F,F). *)
   gvs[eval_create_def, bind_apply, ignore_bind_apply, lift_option_type_def,
       get_accounts_def, update_accounts_def, get_transient_storage_def,
-      update_transient_def, check_def, assert_def, return_def,
+      get_pending_deletions_def, update_transient_def, check_def, assert_def, return_def,
       raise_def, AllCaseEqs(), COND_RATOR,
       evaluation_state_accounts_tStorage_acc] >|
   [(* insufficient balance or nonce limit: soft failure *)
@@ -824,10 +832,10 @@ Proof
     gvs[create_soft_failure_def, return_def, raise_def,
         evaluation_state_accfupds]),
    (* EVM-backed creation *)
-   gvs[bind_apply, get_transient_storage_def, update_accounts_def,
-       get_accounts_def, return_def, evaluation_state_accfupds,
+   gvs[bind_apply, get_transient_storage_def, get_pending_deletions_def,
+       update_accounts_def, get_accounts_def, return_def, evaluation_state_accfupds,
        AllCaseEqs()] >>
-   qpat_x_assum `(case run_create_evm _ _ _ _ _ _ _ of _ => _) _`
+   qpat_x_assum `(case run_create_evm _ _ _ _ _ _ _ _ of _ => _) _`
      (fn tm => mp_tac tm) >>
    drule create_tail_preserves_scopes >>
    simp[]]
@@ -868,14 +876,15 @@ QED
 (* KEY LEMMA for the type-soundness consumer.  The EVM-backed tail runs no
    typing checks: every outcome is an address or a non-TypeError Error. *)
 Theorem create_tail_no_type_error:
-  (case run_create_evm a b c d e1 g txp of
+  (case run_create_evm a b c d e1 g h txp of
    | NONE => do
        x <- update_accounts (K (create_rollback_accounts a e1));
        create_soft_failure rof "create failed"
      od
-   | SOME (code_opt, accounts', tStorage', logs', revertData) =>
+   | SOME (code_opt, accounts', tStorage', logs', revertData, pending') =>
        do x <- update_accounts (K accounts');
           x <- update_transient (K tStorage');
+          x <- update_pending_deletions (K pending');
           case code_opt of
           | SOME _ => do x <- append_logs logs'; return (Value (AddressV new_addr)) od
           | NONE => if rof then raise (Error (RevertData revertData))
@@ -883,17 +892,17 @@ Theorem create_tail_no_type_error:
        od) s = (res, st') ==>
   !msg. res <> INR (Error (TypeError msg))
 Proof
-  Cases_on `run_create_evm a b c d e1 g txp`
+  Cases_on `run_create_evm a b c d e1 g h txp`
   >- (Cases_on `rof` >>
       gvs[bind_apply, ignore_bind_apply, update_accounts_def,
           create_soft_failure_def, return_def, raise_def] >>
       rpt strip_tac >> gvs[]) >>
   gvs[bind_apply, ignore_bind_apply, update_accounts_def,
-      update_transient_def, append_logs_def, create_soft_failure_def,
+      update_transient_def, update_pending_deletions_def, append_logs_def, create_soft_failure_def,
       return_def, raise_def, AllCaseEqs()] >>
   PairCases_on `x` >> Cases_on `x0` >> Cases_on `rof` >>
   gvs[bind_apply, ignore_bind_apply, update_accounts_def,
-      update_transient_def, append_logs_def, create_soft_failure_def,
+      update_transient_def, update_pending_deletions_def, append_logs_def, create_soft_failure_def,
       return_def, raise_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[]
 QED
@@ -915,7 +924,7 @@ Proof
      their own lemmas.  create_soft_failure is left unfolded in the tail so
      that the tail still matches create_tail_exception_is_error. *)
   gvs[eval_create_def, bind_apply, ignore_bind_apply, lift_option_type_def,
-      get_accounts_def, get_transient_storage_def, update_accounts_def,
+      get_accounts_def, get_transient_storage_def, get_pending_deletions_def, update_accounts_def,
       check_def, assert_def, return_def, raise_def, AllCaseEqs(),
       COND_RATOR] >|
   [(* insufficient balance or nonce limit: soft failure *)
@@ -931,14 +940,14 @@ Proof
        (create_address cx.txn.target
           (lookup_account cx.txn.target st.accounts).nonce
           ops.co_salt x.cc_initcode) x.cc_initcode ops.co_value
-       st.accounts st.tStorage (vyper_to_tx_params cx.txn)`
+       st.accounts st.tStorage st.pending_deletions (vyper_to_tx_params cx.txn)`
     >- (Cases_on `rof` >>
         gvs[bind_apply, ignore_bind_apply, update_accounts_def,
             create_soft_failure_def, return_def, raise_def] >>
         rpt strip_tac >> gvs[]) >>
     PairCases_on `x'` >> Cases_on `x'0` >> Cases_on `rof` >>
     gvs[bind_apply, ignore_bind_apply, update_accounts_def,
-        update_transient_def, append_logs_def, create_soft_failure_def,
+        update_transient_def, update_pending_deletions_def, append_logs_def, create_soft_failure_def,
         return_def, raise_def, AllCaseEqs()])]
 QED
 
@@ -954,16 +963,19 @@ Proof
   qpat_x_assum `eval_create _ _ _ _ _ _ st = _` mp_tac >>
   gvs[eval_create_def, bind_def, ignore_bind_def, lift_option_type_def,
       get_accounts_def, update_accounts_def, get_transient_storage_def,
-      update_transient_def, check_def, return_def, raise_def, AllCaseEqs()] >>
+      get_pending_deletions_def, update_transient_def, check_def, return_def, raise_def, AllCaseEqs()] >>
   gvs[eval_create_def, bind_apply, ignore_bind_apply, lift_option_type_def,
       get_accounts_def, update_accounts_def, get_transient_storage_def,
-      update_transient_def, check_def, assert_def,
+      get_pending_deletions_def, update_transient_def, check_def, assert_def,
       return_def, raise_def, AllCaseEqs(), COND_RATOR] >>
   gvs[COND_RATOR] >>
   (* Every remaining exceptional result is a non-TypeError Error: either a
      Vyper-side soft failure or an EVM-backed constructor failure. *)
   strip_tac >>
-  rpt (FIRST [metis_tac[create_soft_failure_no_type_error],
-              metis_tac[create_tail_no_type_error],
-              gvs[]])
+  FIRST [drule_all create_soft_failure_no_type_error >> simp[],
+         drule_all create_tail_no_type_error >> simp[],
+         gvs[bind_apply, ignore_bind_apply, update_accounts_def,
+             update_transient_def, update_pending_deletions_def,
+             append_logs_def, create_soft_failure_def,
+             return_def, raise_def, AllCaseEqs()]]
 QED

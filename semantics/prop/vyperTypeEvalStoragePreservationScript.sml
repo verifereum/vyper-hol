@@ -464,6 +464,31 @@ Proof
        get_storage_logs]
 QED
 
+Theorem contract_storage_well_formed_accounts_transient_frame[local]:
+  contract_storage_well_formed cx st /\
+  st.accounts = st'.accounts /\ st.tStorage = st'.tStorage ==>
+  contract_storage_well_formed cx st'
+Proof
+  rpt strip_tac >>
+  irule contract_storage_well_formed_storage_frame >>
+  qexists_tac `st` >>
+  conj_tac >- (gen_tac >> Cases_on `b` >>
+                 simp[vyperStorageBackendTheory.get_storage_def]) >>
+  simp[]
+QED
+
+Theorem contract_storage_well_formed_pending_deletions[local]:
+  contract_storage_well_formed cx st ==>
+  contract_storage_well_formed cx
+    (st with pending_deletions := pending)
+Proof
+  strip_tac >>
+  irule contract_storage_well_formed_storage_frame >>
+  qexists_tac `st` >> simp[] >>
+  gen_tac >> Cases_on `b` >>
+  simp[vyperStorageBackendTheory.get_storage_def]
+QED
+
 Theorem contract_storage_well_formed_scopes[local]:
   contract_storage_well_formed cx st ==>
   contract_storage_well_formed cx (st with scopes := scopes)
@@ -2681,20 +2706,21 @@ QED
 (* The EVM-backed tail of eval_create: the interpreter applies the prelude to
    its state, while the adapter receives the original accounts and computes
    its own prelude.  NONE restores the rollback accounts; SOME installs the
-   adapter's final accounts and transient storage.  Both outcomes are covered
-   by the protected-storage adapter-boundary postulate. *)
+   adapter's final accounts, transient storage, and pending deletions.  Both
+   outcomes are covered by the protected-storage adapter-boundary postulate. *)
 Theorem create_evm_tail_contract_storage[local]:
   protected_storage_creates_preserve cx /\
   contract_storage_well_formed cx s /\
   (case run_create_evm sender address initcode value s.accounts
-          s.tStorage txp of
+          s.tStorage s.pending_deletions txp of
      NONE => do
        x <- update_accounts (K (create_rollback_accounts sender s.accounts));
        create_soft_failure rof "create failed"
      od
-   | SOME (code_opt,accounts',tStorage',logs',revertData) =>
+   | SOME (code_opt,accounts',tStorage',logs',revertData,pending') =>
        do x <- update_accounts (K accounts');
           x <- update_transient (K tStorage');
+          x <- update_pending_deletions (K pending');
           case code_opt of
             SOME v => do
               x <- append_logs logs';
@@ -2710,7 +2736,7 @@ Proof
   strip_tac >>
   (* The case expression is under-applied, so split the adapter result first. *)
   Cases_on `run_create_evm sender address initcode value s.accounts
-              s.tStorage txp`
+              s.tStorage s.pending_deletions txp`
   >| [(* adapter NONE: rollback the interpreter's prelude *)
       (gs[] >>
        Cases_on `rof` >>
@@ -2719,14 +2745,20 @@ Proof
            evaluation_state_accfupds] >>
        drule_all protected_storage_creates_preserve_run_create_evm_NONE >>
        metis_tac[]),
-      (* adapter SOME: install its accounts and transient storage *)
+      (* adapter SOME: install its accounts, transient storage and deletions *)
       (PairCases_on `x` >> Cases_on `x0` >> Cases_on `rof` >>
        gvs[bind_apply, ignore_bind_apply, update_accounts_def,
-           update_transient_def, append_logs_def,
+           update_transient_def, update_pending_deletions_def, append_logs_def,
            return_def, raise_def, AllCaseEqs(),
            evaluation_state_accfupds] >>
        drule_all protected_storage_creates_preserve_run_create_evm >>
-       metis_tac[contract_storage_well_formed_logs])]
+       strip_tac >>
+       rename1 `contract_storage_well_formed cx
+         (s with <|accounts := new_accounts; tStorage := new_tStorage|>)` >>
+       irule contract_storage_well_formed_accounts_transient_frame >>
+       qexists_tac `s with <|accounts := new_accounts;
+                             tStorage := new_tStorage|>` >>
+       simp[evaluation_state_accfupds])]
 QED
 
 Theorem eval_create_contract_storage_postulate[local]:
@@ -2751,7 +2783,8 @@ Proof
      them into (balance, collision) = (T,T), (T,F), (F,T), (F,F) *)
   gvs[eval_create_def, bind_apply, ignore_bind_apply, lift_option_type_def,
       get_accounts_def, update_accounts_def, get_transient_storage_def,
-      update_transient_def, check_def, assert_def, return_def, raise_def,
+      get_pending_deletions_def, update_transient_def, check_def, assert_def,
+      return_def, raise_def,
       AllCaseEqs(), COND_RATOR] >|
   [(* insufficient balance or nonce limit: soft failure *)
    (Cases_on `rof` >> gvs[create_soft_failure_def, return_def, raise_def]),

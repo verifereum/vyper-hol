@@ -1560,16 +1560,17 @@ QED
 Definition protected_storage_creates_preserve_def:
   protected_storage_creates_preserve cx <=>
     (!sender address initcode value st txp code_opt
-       accounts' tStorage' emitted_logs revertData.
-      run_create_evm sender address initcode value st.accounts st.tStorage txp =
-        SOME (code_opt,accounts',tStorage',emitted_logs,revertData) /\
+       accounts' tStorage' emitted_logs revertData pending'.
+      run_create_evm sender address initcode value st.accounts st.tStorage
+        st.pending_deletions txp =
+        SOME (code_opt,accounts',tStorage',emitted_logs,revertData,pending') /\
       contract_storage_well_formed cx st ==>
       contract_storage_well_formed cx
         (st with <| accounts := accounts'; tStorage := tStorage' |>)) /\
     (* A failed adapter run retains only the sender nonce bump. *)
     (!sender address initcode value st txp.
-      run_create_evm sender address initcode value st.accounts st.tStorage txp =
-        NONE /\
+      run_create_evm sender address initcode value st.accounts st.tStorage
+        st.pending_deletions txp = NONE /\
       contract_storage_well_formed cx st ==>
       contract_storage_well_formed cx
         (st with accounts := create_rollback_accounts sender st.accounts))
@@ -1577,8 +1578,9 @@ End
 
 Theorem protected_storage_creates_preserve_run_create_evm:
   protected_storage_creates_preserve cx /\
-  run_create_evm sender address initcode value st.accounts st.tStorage txp =
-    SOME (code_opt,accounts',tStorage',emitted_logs,revertData) /\
+  run_create_evm sender address initcode value st.accounts st.tStorage
+    st.pending_deletions txp =
+    SOME (code_opt,accounts',tStorage',emitted_logs,revertData,pending') /\
   contract_storage_well_formed cx st ==>
   contract_storage_well_formed cx
     (st with <| accounts := accounts'; tStorage := tStorage' |>)
@@ -1588,7 +1590,8 @@ QED
 
 Theorem protected_storage_creates_preserve_run_create_evm_NONE:
   protected_storage_creates_preserve cx /\
-  run_create_evm sender address initcode value st.accounts st.tStorage txp = NONE /\
+  run_create_evm sender address initcode value st.accounts st.tStorage
+    st.pending_deletions txp = NONE /\
   contract_storage_well_formed cx st ==>
   contract_storage_well_formed cx
     (st with accounts := create_rollback_accounts sender st.accounts)

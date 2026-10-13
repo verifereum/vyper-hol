@@ -203,14 +203,15 @@ Proof
 QED
 
 Theorem extract_create_result_accounts_well_typed:
-  !orig_accounts orig_tStorage result final_state
-   code_opt accounts' tStorage' logs' revertData.
+  !orig_accounts orig_tStorage pending result final_state
+   code_opt accounts' tStorage' logs' revertData pending'.
     accounts_well_typed orig_accounts /\
     (case result of
      | INR NONE => accounts_well_typed final_state.rollback.accounts
      | _ => T) /\
-    extract_create_result orig_accounts orig_tStorage (result, final_state) =
-      SOME (code_opt, accounts', tStorage', logs', revertData) ==>
+    extract_create_result orig_accounts orig_tStorage pending
+      (result, final_state) =
+      SOME (code_opt, accounts', tStorage', logs', revertData, pending') ==>
     accounts_well_typed accounts'
 Proof
   rw[extract_create_result_def] >>
@@ -2029,22 +2030,23 @@ Proof
   qpat_x_assum `_ + value < _` mp_tac >> simp[]
 QED
 Theorem run_create_evm_accounts_well_typed:
-  !sender address initcode value accounts tStorage txParams
-   code_opt accounts' tStorage' logs' revertData.
+  !sender address initcode value accounts tStorage pending txParams
+   code_opt accounts' tStorage' logs' revertData pending'.
     accounts_well_typed accounts /\
-    run_create_evm sender address initcode value accounts tStorage txParams =
-      SOME (code_opt, accounts', tStorage', logs', revertData) ==>
+    run_create_evm sender address initcode value accounts tStorage pending
+      txParams =
+      SOME (code_opt, accounts', tStorage', logs', revertData, pending') ==>
     accounts_well_typed accounts'
 Proof
   rw[run_create_evm_def] >>
   gvs[AllCaseEqs()] >>
-  qmatch_asmsub_abbrev_tac `extract_create_result _ _ outcome = SOME _` >>
+  qmatch_asmsub_abbrev_tac `extract_create_result _ _ _ outcome = SOME _` >>
   PairCases_on `outcome` >>
   drule create_accounts_ok_imp_extract_premise >>
   strip_tac >>
   qspecl_then [`create_rollback_accounts sender accounts`, `tStorage`,
-               `outcome0`, `outcome1`, `code_opt`, `accounts'`,
-               `tStorage'`, `logs'`, `revertData`]
+               `pending`, `outcome0`, `outcome1`, `code_opt`, `accounts'`,
+               `tStorage'`, `logs'`, `revertData`, `pending'`]
     mp_tac extract_create_result_accounts_well_typed >>
   simp[create_rollback_accounts_def, accounts_well_typed_increment_nonce] >>
   gvs[]
@@ -2070,7 +2072,8 @@ Proof
             SOME code_info` >>
   gvs[eval_create_def, bind_apply, ignore_bind_apply, lift_option_type_def,
       get_accounts_def, update_accounts_def, get_transient_storage_def,
-      update_transient_def, check_def, assert_def, return_def,
+      get_pending_deletions_def, update_transient_def,
+      update_pending_deletions_def, check_def, assert_def, return_def,
       raise_def, AllCaseEqs(), COND_RATOR,
       evaluation_state_accounts_tStorage_acc] >|
   [(* insufficient balance or nonce limit: state untouched *)
@@ -2087,9 +2090,9 @@ Proof
     irule accounts_well_typed_increment_nonce >> simp[]),
    (* EVM-backed creation: prelude then adapter preserve well-typedness *)
    (gvs[bind_apply, ignore_bind_apply, get_transient_storage_def,
-        update_accounts_def, get_accounts_def, return_def, AllCaseEqs(),
-        create_soft_failure_def] >>
-    qpat_x_assum `(case run_create_evm _ _ _ _ _ _ _ of _ => _) _`
+        get_pending_deletions_def, update_accounts_def, get_accounts_def,
+        return_def, AllCaseEqs(), create_soft_failure_def] >>
+    qpat_x_assum `(case run_create_evm _ _ _ _ _ _ _ _ of _ => _) _`
       (fn tm => mp_tac tm) >>
     (* Both balance guards succeeded, so the prelude state is well typed. *)
     `accounts_well_typed
@@ -2103,7 +2106,8 @@ Proof
                    (lookup_account cx.txn.target s''.accounts).nonce
                    ops.co_salt code_info.cc_initcode)
                 code_info.cc_initcode ops.co_value s''.accounts
-                s''.tStorage (vyper_to_tx_params cx.txn)`
+                s''.tStorage s''.pending_deletions
+                (vyper_to_tx_params cx.txn)`
      >| [(* adapter NONE: restore the sender-only nonce increment *)
          (Cases_on `rof` >>
           gvs[create_rollback_accounts_def, create_soft_failure_def,
@@ -2115,8 +2119,9 @@ Proof
          (* adapter SOME: install adapter results; success may append logs *)
          (PairCases_on `x` >> Cases_on `x0` >> Cases_on `rof` >>
           gvs[bind_apply, ignore_bind_apply, update_accounts_def,
-              update_transient_def, append_logs_def, return_def,
-              raise_def, AllCaseEqs(), evaluation_state_accfupds] >>
+              update_transient_def, update_pending_deletions_def,
+              append_logs_def, return_def, raise_def, AllCaseEqs(),
+              evaluation_state_accfupds] >>
           strip_tac >>
           pop_assum (fn th => REWRITE_TAC[GSYM th]) >>
           `accounts_well_typed x1` by
@@ -2169,8 +2174,8 @@ Proof
     gvs[runtime_consistent_def] >>
     qpat_x_assum `eval_create _ _ _ _ _ _ _ = _` mp_tac >>
     simp[eval_create_def, bind_def, ignore_bind_def, lift_option_type_def,
-         get_accounts_def, update_accounts_def, check_def, assert_def,
-         create_soft_failure_def, return_def, raise_def] >>
+         get_accounts_def, update_accounts_def, get_pending_deletions_def,
+         check_def, assert_def, create_soft_failure_def, return_def, raise_def] >>
     rpt (IF_CASES_TAC >>
          gvs[bind_def, ignore_bind_def, update_accounts_def,
              check_def, assert_def, create_soft_failure_def,
@@ -2181,11 +2186,12 @@ Proof
     rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
     first_x_assum mp_tac >>
     strip_tac >>
-    gvs[get_transient_storage_def, get_accounts_def, bind_apply,
-        ignore_bind_apply, return_def, raise_def, create_soft_failure_def,
+    gvs[get_transient_storage_def, get_pending_deletions_def,
+        get_accounts_def, bind_apply, ignore_bind_apply, return_def,
+        raise_def, create_soft_failure_def,
         evaluation_state_accounts_tStorage_acc] >>
 qpat_x_assum
-      `(case run_create_evm _ _ _ _ _ _ _ of _ => _) _ = _` mp_tac >>
+      `(case run_create_evm _ _ _ _ _ _ _ _ of _ => _) _ = _` mp_tac >>
     strip_tac >>
     (* The tail case is under-applied, i.e. `(case .. of ..) s`, so it cannot
        be unified structurally.  Split on run_create_evm directly instead --
@@ -2195,7 +2201,7 @@ qpat_x_assum
                    (lookup_account cx.txn.target st.accounts).nonce
                    ops.co_salt code_info.cc_initcode)
                 code_info.cc_initcode ops.co_value st.accounts
-                st.tStorage (vyper_to_tx_params cx.txn)`
+                st.tStorage st.pending_deletions (vyper_to_tx_params cx.txn)`
     >- (* adapter NONE: rollback then soft failure *)
       gs[create_rollback_accounts_def, create_soft_failure_def,
          update_accounts_def, bind_apply, ignore_bind_apply,
@@ -2204,7 +2210,8 @@ qpat_x_assum
     gs[] >>
     rpt (try (PairCases_on `x`)) >>
     gvs[bind_apply, ignore_bind_apply, update_accounts_def,
-        update_transient_def, append_logs_def, create_soft_failure_def,
+        update_transient_def, update_pending_deletions_def,
+        append_logs_def, create_soft_failure_def,
         raise_def, return_def, AllCaseEqs()] >>
     rpt (try (Cases_on `x0`)) >>
     rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>

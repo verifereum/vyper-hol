@@ -128,6 +128,7 @@ Datatype:
   ; scopes: scope list
   ; accounts: evm_accounts
   ; tStorage: transient_storage
+  ; pending_deletions: address list
   |>
 End
 
@@ -137,7 +138,8 @@ Definition empty_state_def:
     immutables := [];
     logs := [];
     scopes := [];
-    tStorage := empty_transient_storage
+    tStorage := empty_transient_storage;
+    pending_deletions := []
   |>
 End
 
@@ -365,6 +367,17 @@ val () = cv_auto_trans get_transient_storage_def;
 
 Definition update_transient_def:
   update_transient f st = return () (st with tStorage updated_by f)
+End
+
+Definition get_pending_deletions_def:
+  get_pending_deletions st = return st.pending_deletions st
+End
+
+val () = cv_auto_trans get_pending_deletions_def;
+
+Definition update_pending_deletions_def:
+  update_pending_deletions f st =
+    return () (st with pending_deletions updated_by f)
 End
 
 Definition get_storage_backend_def:

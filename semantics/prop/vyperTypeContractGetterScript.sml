@@ -1550,7 +1550,8 @@ Proof
   irule Subscript_NoneTV_HashMapRef_no_TypeError >>
   qexistsl [`slot`, `cx`, `is_transient`, `kt`, `entry.value`,
             `<|immutables := am.immutables; logs := am.logs; scopes := [scope];
-               accounts := am.accounts; tStorage := am.tStorage|>`, `st2`, `vt`] >>
+               accounts := am.accounts; tStorage := am.tStorage;
+               pending_deletions := am.pending_deletions|>`, `st2`, `vt`] >>
   simp[]
 QED
 
@@ -2403,7 +2404,8 @@ Proof
        lift_option_type_def, return_def, raise_def] >>
   Cases_on `check_array_bounds cx (Value (ArrayV av)) (IntV i)
               <|immutables := am.immutables; logs := am.logs; scopes := [scope];
-                accounts := am.accounts; tStorage := am.tStorage|>` >>
+                accounts := am.accounts; tStorage := am.tStorage;
+                pending_deletions := am.pending_deletions|>` >>
   rename1 `check_array_bounds _ _ _ _ = (bounds_res,bounds_st)` >>
   Cases_on `bounds_res` >> simp[bind_def, return_def, raise_def]
   >- (Cases_on `evaluate_subscript (get_tenv cx) (ArrayTV (ArrayTV inner_tv inner_bd) bd)
@@ -2467,7 +2469,8 @@ Proof
        lift_option_type_def, return_def, raise_def] >>
   Cases_on `check_array_bounds cx (ArrayRef is_transient slot (ArrayTV inner_tv inner_bd) bd) (IntV i)
               <|immutables := am.immutables; logs := am.logs; scopes := [scope];
-                accounts := am.accounts; tStorage := am.tStorage|>` >>
+                accounts := am.accounts; tStorage := am.tStorage;
+                pending_deletions := am.pending_deletions|>` >>
   rename1 `check_array_bounds _ _ _ _ = (bounds_res,bounds_st)` >>
   Cases_on `bounds_res`
   >- (Cases_on `evaluate_subscript (get_tenv cx) (ArrayTV (ArrayTV inner_tv inner_bd) bd)
@@ -2661,7 +2664,8 @@ Proof
   rpt strip_tac >> gvs[]
   >- (Cases_on `check_array_bounds cx (Value (ArrayV av)) (IntV i)
                     <|immutables := am.immutables; logs := am.logs; scopes := [scope];
-                      accounts := am.accounts; tStorage := am.tStorage|>` >>
+                      accounts := am.accounts; tStorage := am.tStorage;
+                      pending_deletions := am.pending_deletions|>` >>
       Cases_on `q` >>
       gvs[bind_def, ignore_bind_def, return_def, raise_def,
           lift_sum_def, evaluate_subscript_def, AllCaseEqs()] >>
@@ -2669,7 +2673,8 @@ Proof
       gvs[bind_def, return_def, raise_def]) >>
   Cases_on `check_array_bounds cx (ArrayRef is_transient slot elem_tv bd) (IntV i)
                     <|immutables := am.immutables; logs := am.logs; scopes := [scope];
-                      accounts := am.accounts; tStorage := am.tStorage|>` >>
+                      accounts := am.accounts; tStorage := am.tStorage;
+                      pending_deletions := am.pending_deletions|>` >>
   Cases_on `q` >>
   gvs[bind_def, ignore_bind_def, return_def, raise_def, lift_sum_def] >>
   Cases_on `evaluate_subscript (get_tenv cx) NoneTV
@@ -2826,7 +2831,8 @@ Proof
   rpt strip_tac >> gvs[]
   >- (Cases_on `check_array_bounds cx (Value (ArrayV av)) (IntV i)
                     <|immutables := am.immutables; logs := am.logs; scopes := [scope];
-                      accounts := am.accounts; tStorage := am.tStorage|>` >>
+                      accounts := am.accounts; tStorage := am.tStorage;
+                      pending_deletions := am.pending_deletions|>` >>
       Cases_on `q` >>
       gvs[bind_def, ignore_bind_def, return_def, raise_def, lift_sum_def] >>
       Cases_on `evaluate_subscript (get_tenv cx) NoneTV (Value (ArrayV av)) (IntV i)` >>
@@ -2840,7 +2846,8 @@ Proof
       gvs[evaluate_subscript_def, AllCaseEqs()]) >>
   Cases_on `check_array_bounds cx (ArrayRef is_transient slot (ArrayTV inner_tv inner_bd) bd) (IntV i)
                     <|immutables := am.immutables; logs := am.logs; scopes := [scope];
-                      accounts := am.accounts; tStorage := am.tStorage|>` >>
+                      accounts := am.accounts; tStorage := am.tStorage;
+                      pending_deletions := am.pending_deletions|>` >>
   Cases_on `q` >>
   gvs[bind_def, ignore_bind_def, return_def, raise_def, lift_sum_def] >>
   Cases_on `evaluate_subscript (get_tenv cx) NoneTV
