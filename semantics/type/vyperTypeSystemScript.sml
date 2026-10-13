@@ -49,6 +49,14 @@ Definition is_flag_type_def[simp]:
   is_flag_type _ = F
 End
 
+(* The compiler lowers `~` to a word NOT for exactly uint256 and bytes32
+   (vyper/codegen/expr.py, parse_UnaryOp); narrow unsigned types are rejected
+   outright with UnimplementedException. *)
+Definition is_bytes32_type_def[simp]:
+  is_bytes32_type (BaseT (BytesT (Fixed 32))) = T /\
+  is_bytes32_type _ = F
+End
+
 Definition is_sized_type_def[simp]:
   is_sized_type (ArrayT _ _) = T /\
   is_sized_type (BaseT (StringT _)) = T /\
@@ -175,7 +183,8 @@ Definition well_typed_builtin_app_def:
   well_typed_builtin_app ty Len ts =
     (LENGTH ts = 1 /\ ty = BaseT (UintT 256) /\ is_sized_type (HD ts)) /\
   well_typed_builtin_app ty Not ts =
-    (LENGTH ts = 1 ∧ HD ts = ty ∧ (is_bool_type ty ∨ is_uint_type ty ∨ is_flag_type ty)) ∧
+    (LENGTH ts = 1 ∧ HD ts = ty ∧
+     (is_bool_type ty ∨ is_uint256_type ty ∨ is_bytes32_type ty ∨ is_flag_type ty)) ∧
   well_typed_builtin_app ty Neg ts = (ts = [ty] /\ is_numeric_type ty) /\
   well_typed_builtin_app ty Keccak256 ts =
     (LENGTH ts = 1 /\ ty = BaseT (BytesT (Fixed 32)) /\ is_bytes_or_string_type (HD ts)) /\

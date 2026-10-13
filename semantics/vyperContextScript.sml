@@ -505,15 +505,23 @@ Definition evaluate_builtin_def:
          | [sv] => evaluate_calldata_slice cx.txn.calldata sv n
          | _ => INR (TypeError "builtin"))
     | Not =>
+        (* `~` is a bitwise NOT. The compiler only ever lowers it on bool,
+           uint256, bytes32 and flags (vyper/codegen/expr.py parse_UnaryOp);
+           narrower unsigned types are rejected at compile time, so they
+           never reach here under a checked contract.  Word-based NOT on a
+           256-bit word is total on every nonnegative operand, so an
+           oversized value cannot produce a negative "success". *)
         (case vs of
          | [BoolV b] => INL (BoolV (¬b))
          | [IntV i] =>
              (case type_to_int_bound ty of
               | SOME u =>
                   if is_Unsigned u ∧ 0 ≤ i then
-                    INL (IntV (&(2 ** int_bound_bits u) - 1 - i))
+                    INL (IntV (&(w2n (~((n2w (Num i)) : bytes32)))))
                   else INR (TypeError "signed Not")
               | NONE => INR (TypeError "Not type"))
+         | [BytesV bs] =>
+              INL (BytesV (word_to_bytes_be (~(word_of_bytes_be bs : bytes32))))
          | [FlagV n] =>
              (case evaluate_type (get_tenv cx) ty of
               | SOME (FlagTV m) => INL $ FlagV $

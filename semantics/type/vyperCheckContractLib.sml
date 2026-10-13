@@ -79,6 +79,8 @@ val checker_defs =
    is_numeric_type_def,
    is_uint_type_def,
    is_bool_type_def,
+   is_uint256_type_def,
+   is_bytes32_type_def,
    is_flag_type_def,
    is_sized_type_def,
    is_bytes_or_string_type_def,
