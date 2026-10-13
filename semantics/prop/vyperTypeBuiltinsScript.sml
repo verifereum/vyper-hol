@@ -12,7 +12,7 @@ Ancestors
   vyperAssignPreservesType bn254 vfmExecution
 Libs
   wordsLib
-  intLib
+  intLib fcpLib
 
 (* ===== Calldata length ===== *)
 
@@ -287,6 +287,22 @@ Theorem is_bool_type_inv[local]:
 Proof
   gen_tac >> Cases_on `ty` >- (Cases_on `b` >> simp[is_bool_type_def] >> metis_tac[]) >>
   simp[is_bool_type_def]
+QED
+
+Theorem is_uint256_type_inv[local]:
+  !ty. is_uint256_type ty ⇔ ty = BaseT (UintT 256)
+Proof
+  gen_tac >> Cases_on `ty` >- (Cases_on `b` >> simp[is_uint256_type_def] >> metis_tac[]) >>
+  simp[is_uint256_type_def]
+QED
+
+Theorem is_bytes32_type_inv[local]:
+  !ty. is_bytes32_type ty ⇔ ty = BaseT (BytesT (Fixed 32))
+Proof
+  gen_tac >> Cases_on `ty` >> simp[is_bytes32_type_def] >>
+  Cases_on `b` >> simp[is_bytes32_type_def] >>
+  Cases_on `b'` >> simp[is_bytes32_type_def] >>
+  metis_tac[]
 QED
 
 Theorem is_numeric_type_inv[local]:
@@ -2551,20 +2567,63 @@ Proof
   intLib.ARITH_TAC
 QED
 
-(* Helper: Uint Not result stays in the same unsigned range. *)
-Theorem uint_not_result_bound[local]:
-  0 ≤ i ∧ Num i < 2 ** n ==>
-  0 ≤ (&(2 ** n):int) - 1 - i ∧ Num ((&(2 ** n):int) - 1 - i) < 2 ** n
+(* Helper: dimword(:256) = 2 ** 256, so `w2n_lt` reads as a 256-bit bound. *)
+Theorem dimword_256[local]:
+  dimword(:256) = 2 ** 256
+Proof
+  CONV_TAC (RAND_CONV fcpLib.INDEX_CONV) >>
+  simp[wordsTheory.dimword_def]
+QED
+
+(* Helper: the 256-bit word NOT always lands back in [0, 2 ** 256), whatever
+   the operand.  This is what rules out a negative "success" from an
+   oversized operand: the word formulation is total on all n2w inputs. *)
+Theorem not_word_lt_256[local]:
+  !i. 0 ≤ i ==> Num &(w2n (~((n2w (Num i)) : bytes32))) < 2 ** 256
 Proof
   rpt strip_tac >>
-  `i < (&(2 ** n):int)` by (
-    `0 ≤ (&(2 ** n):int)` by simp[] >>
-    fs[GSYM integerTheory.NUM_LT, integerTheory.NUM_OF_INT]) >>
-  `0 ≤ (&(2 ** n):int) - 1 - i ∧ (&(2 ** n):int) - 1 - i < (&(2 ** n):int)`
-    by intLib.ARITH_TAC >>
-  `Num ((&(2 ** n):int) - 1 - i) < Num (&(2 ** n):int)` by (
-    irule vyperArithTheory.Num_int_lt >> simp[]) >>
-  pop_assum mp_tac >> simp[integerTheory.NUM_OF_INT]
+  `w2n (~((n2w (Num i)) : bytes32)) < 2 ** 256` by
+    metis_tac[wordsTheory.w2n_lt, dimword_256] >>
+  qpat_x_assum `w2n _ < _` mp_tac >>
+  simp[integerTheory.NUM_OF_INT]
+QED
+
+(* Helper: on the valid uint256 domain the word NOT agrees with the
+   arithmetic 2 ** 256 - 1 - i, so the two formulations are interchangeable
+   for reachable operands.  Stated over `num` to keep the 256-bit numeral
+   out of the integer rewriting rules. *)
+Theorem not_word_arith_equiv[local]:
+  0 ≤ i ∧ Num i < 2 ** 256 ==>
+  w2n (~((n2w (Num i)) : bytes32)) = 2 ** 256 - 1 - Num i
+Proof
+  strip_tac >>
+  `Num i < dimword(:256)` by metis_tac[dimword_256] >>
+  `~(n2w (Num i) : bytes32) = n2w (dimword(:256) - 1 - Num i MOD dimword(:256))` by
+    simp[Once wordsTheory.word_1comp_n2w] >>
+  `Num i MOD dimword(:256) = Num i` by metis_tac[LESS_MOD] >>
+  `w2n ((n2w (dimword(:256) - 1 - Num i)) : bytes32) = dimword(:256) - 1 - Num i` by (
+    `dimword(:256) - 1 - Num i < dimword(:256)` by simp[] >>
+    metis_tac[wordsTheory.w2n_n2w, LESS_MOD]) >>
+  metis_tac[dimword_256]
+QED
+
+(* Helper: Not with uint256 type preserves the statically computed result type.
+   Narrow unsigned types are excluded: the checker rejects them, matching the
+   compiler, which refuses `~` below uint256. *)
+Theorem uint_not_success_type[local]:
+  is_uint256_type ty ∧
+  evaluate_type (get_tenv cx) ty = SOME tv ∧
+  value_has_type tv v ∧
+  evaluate_builtin cx acc ty Not [v] = INL out ==>
+  value_has_type tv out
+Proof
+  strip_tac >>
+  qpat_x_assum `is_uint256_type _` mp_tac >>
+  REWRITE_TAC[is_uint256_type_inv] >> strip_tac >>
+  gvs[evaluate_type_def, evaluate_builtin_def,
+      type_to_int_bound_def, is_Unsigned_def] >>
+  qspec_then `~((n2w (Num i)) : bytes32)` mp_tac wordsTheory.w2n_lt >>
+  simp[dimword_256]
 QED
 
 (* Helper: Not with bool type preserves the statically computed result type. *)
@@ -2581,23 +2640,6 @@ Proof
   gvs[evaluate_type_def, value_has_type_def, evaluate_builtin_def]
 QED
 
-(* Helper: Not with uint type preserves the statically computed result type. *)
-Theorem uint_not_success_type[local]:
-  is_uint_type ty ∧
-  evaluate_type (get_tenv cx) ty = SOME tv ∧
-  value_has_type tv v ∧
-  evaluate_builtin cx acc ty Not [v] = INL out ==>
-  value_has_type tv out
-Proof
-  strip_tac >>
-  qpat_x_assum `is_uint_type _` mp_tac >>
-  REWRITE_TAC[is_uint_type_def] >> strip_tac >>
-  gvs[] >>
-  imp_res_tac evaluate_type_BaseT_SOME >> gvs[] >>
-  gvs[evaluate_builtin_def, type_to_int_bound_def, is_Unsigned_def] >>
-  metis_tac[uint_not_result_bound]
-QED
-
 (* Helper: Not with flag type preserves the statically computed result type. *)
 Theorem flag_Not_success_type[local]:
   context_well_typed cx ∧
@@ -2612,6 +2654,49 @@ Proof
   gvs[value_has_type_def, evaluate_type_def, evaluate_builtin_def] >>
   rewrite_tac[wordsTheory.WORD_NEG_1, GSYM wordsTheory.WORD_NOT_0] >>
   simp[w2n_and_low_mask_lt]
+QED
+
+(* ===== bytes32 Not ===== *)
+
+(* word_to_bytes_be always emits exactly 32 bytes. *)
+Theorem LENGTH_word_to_bytes_be_32[local,simp]:
+  !w:bytes32. LENGTH (word_to_bytes_be w) = 32
+Proof
+  simp[byteTheory.word_to_bytes_be_def, byteTheory.LENGTH_word_to_bytes,
+       wordsTheory.dimword_def] >>
+  `dimindex(:256) = 256` by EVAL_TAC >> simp[]
+QED
+
+(* Helper: Not with bytes32 type never returns TypeError. *)
+Theorem bytes32_not_no_type_error[local]:
+  is_bytes32_type ty ∧
+  evaluate_type (get_tenv cx) ty = SOME tv ∧
+  value_has_type tv v ==>
+  !msg. evaluate_builtin cx acc ty Not [v] ≠ INR (TypeError msg)
+Proof
+  strip_tac >> gen_tac >>
+  qpat_x_assum `is_bytes32_type _` mp_tac >>
+  REWRITE_TAC[is_bytes32_type_inv] >> strip_tac >>
+  gvs[] >>
+  imp_res_tac evaluate_type_BaseT_SOME >> gvs[] >>
+  simp[evaluate_builtin_def]
+QED
+
+(* Helper: Not with bytes32 type preserves the statically computed result
+   type: the result is always exactly 32 bytes wide. *)
+Theorem bytes32_not_success_type[local]:
+  is_bytes32_type ty ∧
+  evaluate_type (get_tenv cx) ty = SOME tv ∧
+  value_has_type tv v ∧
+  evaluate_builtin cx acc ty Not [v] = INL out ==>
+  value_has_type tv out
+Proof
+  strip_tac >>
+  qpat_x_assum `is_bytes32_type _` mp_tac >>
+  REWRITE_TAC[is_bytes32_type_inv] >> strip_tac >>
+  gvs[] >>
+  imp_res_tac evaluate_type_BaseT_SOME >> gvs[] >>
+  gvs[evaluate_builtin_def, value_has_type_def]
 QED
 
 (* Helper: Neg never returns TypeError *)
@@ -2964,17 +3049,20 @@ Proof
       LENGTH_EQ_NUM_compute,
       Excl "is_int_type_def", Excl "is_numeric_type_def", Excl "is_bool_type_def",
       Excl "is_flag_type_def", Excl "is_comparable_type_def",
-      Excl "is_bytes_or_string_type_def",
+      Excl "is_bytes_or_string_type_def", Excl "is_uint256_type_def",
+      Excl "is_bytes32_type_def",
       is_int_type_inv, is_numeric_type_inv, is_bool_type_inv,
       is_flag_type_inv, is_comparable_type_inv,
+      is_uint256_type_inv, is_bytes32_type_inv,
       is_bytes_or_string_type_inv] >>
   gen_tac >>
 
   (* Bop: delegate to well_typed_binop_no_type_error *)
   TRY (metis_tac[well_typed_builtin_bop_no_type_error] >> NO_TAC) >>
-  (* Not: delegate to bool_not/uint_not/flag_Not helpers *)
+  (* Not: delegate to bool_not/uint_not/bytes32_not/flag_Not helpers *)
   TRY (irule bool_not_no_type_error >> gvs[] >> NO_TAC) >>
   TRY (irule uint_not_no_type_error >> gvs[] >> NO_TAC) >>
+  TRY (irule bytes32_not_no_type_error >> gvs[] >> NO_TAC) >>
   TRY (irule flag_Not_no_type_error >> gvs[] >> NO_TAC) >>
   (* Neg: delegate to neg_no_type_error *)
   TRY (irule neg_no_type_error >> gvs[] >> NO_TAC) >>
@@ -3075,22 +3163,26 @@ Proof
       LENGTH_EQ_NUM_compute,
       Excl "is_int_type_def", Excl "is_numeric_type_def", Excl "is_bool_type_def",
       Excl "is_flag_type_def", Excl "is_comparable_type_def",
-      Excl "is_bytes_or_string_type_def",
+      Excl "is_bytes_or_string_type_def", Excl "is_uint256_type_def",
+      Excl "is_bytes32_type_def",
       is_int_type_inv, is_numeric_type_inv, is_bool_type_inv,
       is_flag_type_inv, is_comparable_type_inv,
+      is_uint256_type_inv, is_bytes32_type_inv,
       is_bytes_or_string_type_inv] >>
   TRY (drule_all CalldataLen_builtin_success_type >> simp[] >> NO_TAC) >>
   TRY (drule_all CalldataSlice_builtin_success_type >> simp[] >> NO_TAC) >>
   (* Phase 2: resolve type values *)
   gvs[evaluate_type_def] >>
-    TRY (rename1 `evaluate_builtin _ _ (BaseT BoolT) Not [BoolV b] = INL v` >>
-       gvs[evaluate_builtin_def, value_has_type_def] >>
-       qexists_tac `¬b` >> gvs[] >> NO_TAC) >>
-  TRY (rename1 `evaluate_builtin _ _ (BaseT (UintT n)) Not [IntV i] = INL v` >>
-       gvs[evaluate_builtin_def, type_to_int_bound_def, is_Unsigned_def,
-           int_bound_bits_def] >>
-       gvs[] >> fs [evaluate_builtin_def] >>EVAL_TAC  >> gvs [bounded_int_op_def, type_to_int_bound_def,within_int_bound_def ] >> rw [type_to_int_bound_def,uint_not_result_bound,within_int_bound_def,bounded_int_op_def] >>   NO_TAC) >>
-  
+  (* Not: solve each concrete type without searching across unrelated builtins. *)
+  TRY (rename1 `evaluate_builtin _ _ (BaseT (BytesT (Fixed 32))) Not [BytesV bs] = INL v` >>
+       gvs[evaluate_builtin_def, value_has_type_def,
+           LENGTH_word_to_bytes_be_32] >> NO_TAC) >>
+  TRY (rename1 `evaluate_builtin _ _ (BaseT (UintT 256)) Not [IntV i] = INL v` >>
+       gvs[evaluate_builtin_def, type_to_int_bound_def, is_Unsigned_def] >>
+       qspec_then `~((n2w (Num i)) : bytes32)` mp_tac wordsTheory.w2n_lt >>
+       simp[dimword_256] >> NO_TAC) >>
+  TRY (rename1 `evaluate_builtin _ _ (BaseT BoolT) Not [BoolV b] = INL v` >>
+       gvs[evaluate_builtin_def, value_has_type_def] >> NO_TAC) >>
   TRY (rename1 `evaluate_builtin _ _ (FlagT fid) Not [_] = INL _` >>
        Cases_on `FLOOKUP (get_tenv cx) (type_key fid)` >> gvs[] >>
        Cases_on `x` >> gvs[] >>

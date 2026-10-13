@@ -12,6 +12,7 @@ roots = ["vyperHolScript.sml",
          "tests/vyperCheckContractTraceLibTestScript.sml",
          "tests/vyperTestLibTestScript.sml",
          "tests/vyperCalldataLenTestScript.sml",
+         "tests/vyperInvertTestScript.sml",
          "tests/vyperCalldataSliceTestScript.sml",
          "tests/vyperRawCallCalldataTestScript.sml"]
 
