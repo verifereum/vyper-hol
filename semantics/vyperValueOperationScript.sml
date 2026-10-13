@@ -87,7 +87,7 @@ val () = cv_auto_trans extract_elements_def;
 
 (* error type for pure functions *)
 Datatype:
-  error = RuntimeError string | TypeError string
+  error = RuntimeError string | TypeError string | RevertData (word8 list)
 End
 
 (* binary operators and bounds checking *)

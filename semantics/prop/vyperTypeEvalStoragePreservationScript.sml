@@ -2678,48 +2678,55 @@ Proof
   simp[increment_nonce_update_frame]
 QED
 
-(* The EVM-backed tail of eval_create: the prelude, then the adapter run, over
-   the state the balance-overflow guard hands on.  This is the shape eval_create's
-   body has once the operand decodes and the pre-conditions are resolved, so the
-   consumer applies it without further unfolding.  Discharged by the
-   adapter-boundary postulate protected_storage_creates_preserve, whose two
-   clauses are the success and the NONE case of run_create_evm. *)
+(* The EVM-backed tail of eval_create: the interpreter applies the prelude to
+   its state, while the adapter receives the original accounts and computes
+   its own prelude.  NONE restores the rollback accounts; SOME installs the
+   adapter's final accounts and transient storage.  Both outcomes are covered
+   by the protected-storage adapter-boundary postulate. *)
 Theorem create_evm_tail_contract_storage[local]:
   protected_storage_creates_preserve cx /\
   contract_storage_well_formed cx s /\
-  (case run_create_evm sender address initcode value
-          (create_prelude_accounts sender address value s.accounts)
+  (case run_create_evm sender address initcode value s.accounts
           s.tStorage txp of
-     NONE => create_soft_failure rof "create failed"
-   | SOME (code_opt,accounts',tStorage',logs') =>
+     NONE => do
+       x <- update_accounts (K (create_rollback_accounts sender s.accounts));
+       create_soft_failure rof "create failed"
+     od
+   | SOME (code_opt,accounts',tStorage',logs',revertData) =>
        do x <- update_accounts (K accounts');
           x <- update_transient (K tStorage');
           case code_opt of
-            NONE => return (Value (AddressV 0w))
-          | SOME v => return (Value (AddressV new_addr))
+            SOME v => do
+              x <- append_logs logs';
+              return (Value (AddressV new_addr))
+            od
+          | NONE => if rof then raise (Error (RevertData revertData))
+                    else return (Value (AddressV 0w))
           od)
      (s with accounts updated_by
              (create_prelude_accounts sender address value)) = (res,st') ==>
   contract_storage_well_formed cx st'
 Proof
   strip_tac >>
-  (* split on run_create_evm directly: the case expression is under-applied,
-     `(case .. of ..) s`, which AllCaseEqs cannot rewrite *)
-  Cases_on `run_create_evm sender address initcode value
-              (create_prelude_accounts sender address value s.accounts)
+  (* The case expression is under-applied, so split the adapter result first. *)
+  Cases_on `run_create_evm sender address initcode value s.accounts
               s.tStorage txp`
-  >| [(* adapter NONE: only the prelude's effects survive *)
+  >| [(* adapter NONE: rollback the interpreter's prelude *)
       (gs[] >>
        Cases_on `rof` >>
-       gvs[create_soft_failure_def, return_def, raise_def] >>
+       gvs[bind_apply, ignore_bind_apply, update_accounts_def,
+           create_soft_failure_def, return_def, raise_def,
+           evaluation_state_accfupds] >>
        drule_all protected_storage_creates_preserve_run_create_evm_NONE >>
        metis_tac[]),
       (* adapter SOME: install its accounts and transient storage *)
-      (PairCases_on `x` >> Cases_on `x0` >>
+      (PairCases_on `x` >> Cases_on `x0` >> Cases_on `rof` >>
        gvs[bind_apply, ignore_bind_apply, update_accounts_def,
-           update_transient_def, return_def, raise_def, AllCaseEqs()] >>
+           update_transient_def, append_logs_def,
+           return_def, raise_def, AllCaseEqs(),
+           evaluation_state_accfupds] >>
        drule_all protected_storage_creates_preserve_run_create_evm >>
-       metis_tac[])]
+       metis_tac[contract_storage_well_formed_logs])]
 QED
 
 Theorem eval_create_contract_storage_postulate[local]:

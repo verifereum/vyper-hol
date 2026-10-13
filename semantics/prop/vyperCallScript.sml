@@ -1,7 +1,7 @@
 Theory vyperCall
 
 Ancestors
-  vyperInterpreter
+  vyperInterpreter vyperState
 
 Definition extcall_call_def:
   extcall_call cx is_static (func_name, arg_types, ret_type) vs

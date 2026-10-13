@@ -1554,39 +1554,31 @@ QED
    above, the frame condition on the adapter boundary is therefore a
    postulate, parameterized by the context, discharged analogously.
 
-   The postulate covers the whole creation step, i.e. the Vyper-side prelude
-   (reset the freshly allocated account, transfer the endowment, bump both
-   nonces) together with the adapter run.  Folding the prelude in is required:
-   create_prelude_accounts rewrites the new account wholesale, so the protected
-   frame is not a property of the adapter call in isolation but of prelude and
-   run together. *)
+   The adapter includes the creation prelude internally (endowment transfer
+   and nonce bumps) and rolls back to the sender nonce bump on failure.  The
+   protected frame covers the complete adapter step. *)
 Definition protected_storage_creates_preserve_def:
   protected_storage_creates_preserve cx <=>
     (!sender address initcode value st txp code_opt
-       accounts' tStorage' emitted_logs.
-      run_create_evm sender address initcode value
-        (create_prelude_accounts sender address value st.accounts)
-        st.tStorage txp =
-        SOME (code_opt,accounts',tStorage',emitted_logs) /\
+       accounts' tStorage' emitted_logs revertData.
+      run_create_evm sender address initcode value st.accounts st.tStorage txp =
+        SOME (code_opt,accounts',tStorage',emitted_logs,revertData) /\
       contract_storage_well_formed cx st ==>
       contract_storage_well_formed cx
         (st with <| accounts := accounts'; tStorage := tStorage' |>)) /\
-    (* a failed creation keeps only the prelude's effects, which leave the
-       protected storage alone *)
+    (* A failed adapter run retains only the sender nonce bump. *)
     (!sender address initcode value st txp.
-      run_create_evm sender address initcode value
-        (create_prelude_accounts sender address value st.accounts)
-        st.tStorage txp = NONE ==>
+      run_create_evm sender address initcode value st.accounts st.tStorage txp =
+        NONE /\
+      contract_storage_well_formed cx st ==>
       contract_storage_well_formed cx
-        (st with accounts updated_by (create_prelude_accounts sender address value)))
+        (st with accounts := create_rollback_accounts sender st.accounts))
 End
 
 Theorem protected_storage_creates_preserve_run_create_evm:
   protected_storage_creates_preserve cx /\
-  run_create_evm sender address initcode value
-    (create_prelude_accounts sender address value st.accounts)
-    st.tStorage txp =
-    SOME (code_opt,accounts',tStorage',emitted_logs) /\
+  run_create_evm sender address initcode value st.accounts st.tStorage txp =
+    SOME (code_opt,accounts',tStorage',emitted_logs,revertData) /\
   contract_storage_well_formed cx st ==>
   contract_storage_well_formed cx
     (st with <| accounts := accounts'; tStorage := tStorage' |>)
@@ -1596,11 +1588,10 @@ QED
 
 Theorem protected_storage_creates_preserve_run_create_evm_NONE:
   protected_storage_creates_preserve cx /\
-  run_create_evm sender address initcode value
-    (create_prelude_accounts sender address value st.accounts)
-    st.tStorage txp = NONE ==>
+  run_create_evm sender address initcode value st.accounts st.tStorage txp = NONE /\
+  contract_storage_well_formed cx st ==>
   contract_storage_well_formed cx
-    (st with accounts updated_by (create_prelude_accounts sender address value))
+    (st with accounts := create_rollback_accounts sender st.accounts)
 Proof
   simp[protected_storage_creates_preserve_def] >> metis_tac[]
 QED
