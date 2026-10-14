@@ -4,7 +4,7 @@ Ancestors
   cv cv_std vfmState vfmCompute[ignore_grammar] sha2
   vyperAST vyperABI vyperMisc vyperValue vyperValueOperation vyperStorage
 Libs
-  cv_transLib wordsLib
+  cv_transLib wordsLib intLib
 
 
 (* Environment and context for a contract call *)
@@ -16,6 +16,9 @@ Datatype:
   ; target: address
   ; function_name: identifier
   ; args: value list
+  (* Original call input, including the selector; never ABI-decoder padding.
+     Creation frames have empty calldata (constructor arguments are code data). *)
+  ; calldata: word8 list
   ; value: num
   ; time_stamp: num
   ; block_number: num
@@ -41,6 +44,7 @@ Definition empty_call_txn_def:
     target := 0w;
     function_name := "";
     args := [];
+    calldata := [];
     value := 0;
     time_stamp := 0;
     block_number := 0;
@@ -102,13 +106,31 @@ val () = cv_auto_trans current_module_def;
 Definition evaluate_account_op_def:
   evaluate_account_op Address bs _ = BytesV bs ∧
   evaluate_account_op Balance _ a = IntV &a.balance ∧
-  evaluate_account_op Codehash _ a = BytesV (Keccak_256_w64 a.code) ∧
+  evaluate_account_op Codehash _ a =
+    BytesV (if account_empty a then REPLICATE 32 0w else Keccak_256_w64 a.code) ∧
   evaluate_account_op Codesize _ a = IntV $ &LENGTH a.code ∧
   evaluate_account_op IsContract _ a = BoolV (a.code ≠ []) ∧
   evaluate_account_op Code _ a = BytesV a.code
 End
 
 val () = cv_auto_trans evaluate_account_op_def;
+
+(* ===== Account codehash boundaries ===== *)
+
+(* Emptiness includes balance and nonce, not just the absence of code. *)
+Theorem evaluate_account_codehash_empty:
+  account_empty a ==>
+  evaluate_account_op Codehash bs a = BytesV (REPLICATE 32 0w)
+Proof
+  simp[evaluate_account_op_def]
+QED
+
+Theorem evaluate_account_codehash_nonempty:
+  ~account_empty a ==>
+  evaluate_account_op Codehash bs a = BytesV (Keccak_256_w64 a.code)
+Proof
+  simp[evaluate_account_op_def]
+QED
 
 Definition evaluate_block_hash_def:
   evaluate_block_hash t n =
@@ -349,7 +371,7 @@ Definition evaluate_ecadd_def:
          let p1 = (Num x1, Num y1);
              p2 = (Num x2, Num y2)
          in case vfmExecution$ecadd p1 p2 of
-              NONE => INL $ mk_ec_result (0, 0)
+              NONE => INR (RuntimeError "ECAdd invalid point")
             | SOME r => INL $ mk_ec_result r )
      | _ => INR (TypeError "ECAdd type")) ∧
   evaluate_ecadd _ = INR (TypeError "ECAdd args")
@@ -365,7 +387,7 @@ Definition evaluate_ecmul_def:
            p = (Num x, Num y);
            n = Num scalar
          in (case vfmExecution$ecmul p n of
-               NONE => INL $ mk_ec_result (0, 0)
+               NONE => INR (RuntimeError "ECMul invalid point")
              | SOME r => INL $ mk_ec_result r)
      | NONE => INR (TypeError "ECMul type")) ∧
   evaluate_ecmul _ = INR (TypeError "ECMul args")
@@ -373,19 +395,133 @@ End
 
 val () = cv_auto_trans evaluate_ecmul_def;
 
+(* ===== EC precompile boundaries ===== *)
+
+(* Invalid curve points are runtime failures, not ill-typed arguments.
+   Successful precompile results, including the zero point, pass through. *)
+Theorem evaluate_ecadd_invalid_point:
+  extract_ec_point p1 = SOME (x1, y1) /\
+  extract_ec_point p2 = SOME (x2, y2) /\
+  vfmExecution$ecadd (Num x1, Num y1) (Num x2, Num y2) = NONE ==>
+  evaluate_ecadd [p1; p2] = INR (RuntimeError "ECAdd invalid point")
+Proof
+  simp[evaluate_ecadd_def]
+QED
+
+Theorem evaluate_ecmul_invalid_point:
+  extract_ec_point p = SOME (x, y) /\
+  vfmExecution$ecmul (Num x, Num y) (Num scalar) = NONE ==>
+  evaluate_ecmul [p; IntV scalar] = INR (RuntimeError "ECMul invalid point")
+Proof
+  simp[evaluate_ecmul_def]
+QED
+
+Theorem evaluate_ecadd_success:
+  extract_ec_point p1 = SOME (x1, y1) /\
+  extract_ec_point p2 = SOME (x2, y2) /\
+  vfmExecution$ecadd (Num x1, Num y1) (Num x2, Num y2) = SOME r ==>
+  evaluate_ecadd [p1; p2] = INL (mk_ec_result r)
+Proof
+  simp[evaluate_ecadd_def]
+QED
+
+Theorem evaluate_ecmul_success:
+  extract_ec_point p = SOME (x, y) /\
+  vfmExecution$ecmul (Num x, Num y) (Num scalar) = SOME r ==>
+  evaluate_ecmul [p; IntV scalar] = INL (mk_ec_result r)
+Proof
+  simp[evaluate_ecmul_def]
+QED
+
+(* Off-curve inputs fail in either add position, and even for scalar zero. *)
+Theorem evaluate_ec_invalid_point_regression:
+  evaluate_ecadd [mk_ec_result (1, 1); mk_ec_result (0, 0)] =
+    INR (RuntimeError "ECAdd invalid point") /\
+  evaluate_ecadd [mk_ec_result (0, 0); mk_ec_result (1, 1)] =
+    INR (RuntimeError "ECAdd invalid point") /\
+  evaluate_ecmul [mk_ec_result (1, 1); IntV 0] =
+    INR (RuntimeError "ECMul invalid point") /\
+  evaluate_ecmul [mk_ec_result (1, 1); IntV 1] =
+    INR (RuntimeError "ECMul invalid point")
+Proof
+  EVAL_TAC
+QED
+
+(* Coordinates at the field modulus are invalid, even for scalar zero. *)
+Theorem evaluate_ec_field_bound_regression:
+  evaluate_ecadd
+    [mk_ec_result (bn254$bn254p, 2); mk_ec_result (0, 0)] =
+    INR (RuntimeError "ECAdd invalid point") /\
+  evaluate_ecadd
+    [mk_ec_result (0, 0); mk_ec_result (1, bn254$bn254p)] =
+    INR (RuntimeError "ECAdd invalid point") /\
+  evaluate_ecmul [mk_ec_result (bn254$bn254p, 2); IntV 0] =
+    INR (RuntimeError "ECMul invalid point") /\
+  evaluate_ecmul [mk_ec_result (1, bn254$bn254p); IntV 1] =
+    INR (RuntimeError "ECMul invalid point")
+Proof
+  EVAL_TAC
+QED
+
+(* Infinity is valid; a genuine zero result must not become a failure. *)
+Theorem evaluate_ec_valid_point_regression:
+  evaluate_ecadd [mk_ec_result (0, 0); mk_ec_result (0, 0)] =
+    INL (mk_ec_result (0, 0)) /\
+  evaluate_ecadd [mk_ec_result (0, 0); mk_ec_result (1, 2)] =
+    INL (mk_ec_result (1, 2)) /\
+  evaluate_ecmul [mk_ec_result (0, 0); IntV 1] =
+    INL (mk_ec_result (0, 0)) /\
+  evaluate_ecmul [mk_ec_result (1, 2); IntV 0] =
+    INL (mk_ec_result (0, 0)) /\
+  evaluate_ecmul [mk_ec_result (1, 2); IntV 1] =
+    INL (mk_ec_result (1, 2))
+Proof
+  EVAL_TAC
+QED
+
+(* Calldata is not a bounded input value. Check the EVM-sized end before
+   using the ordinary, non-padding bytes slice implementation. *)
+Definition evaluate_calldata_slice_def:
+  evaluate_calldata_slice bs sv n =
+    case dest_NumV sv of
+    | NONE => INR (TypeError "calldata slice start")
+    | SOME start =>
+        if n = 0 \/ 2 ** 256 <= start + n then
+          INR (RuntimeError "calldata slice overflow")
+        else evaluate_slice (BytesV bs) sv (IntV &n) n
+End
+
+val () = cv_auto_trans evaluate_calldata_slice_def;
+
 Definition evaluate_builtin_def:
   evaluate_builtin cx acc ty bt vs =
     case bt of
+    | CalldataLen =>
+        (case vs of
+         | [] => INL $ IntV &(LENGTH cx.txn.calldata)
+         | _ => INR (TypeError "builtin"))
+    | CalldataSlice n =>
+        (case vs of
+         | [sv] => evaluate_calldata_slice cx.txn.calldata sv n
+         | _ => INR (TypeError "builtin"))
     | Not =>
+        (* `~` is a bitwise NOT. The compiler only ever lowers it on bool,
+           uint256, bytes32 and flags (vyper/codegen/expr.py parse_UnaryOp);
+           narrower unsigned types are rejected at compile time, so they
+           never reach here under a checked contract.  Word-based NOT on a
+           256-bit word is total on every nonnegative operand, so an
+           oversized value cannot produce a negative "success". *)
         (case vs of
          | [BoolV b] => INL (BoolV (¬b))
          | [IntV i] =>
              (case type_to_int_bound ty of
               | SOME u =>
                   if is_Unsigned u ∧ 0 ≤ i then
-                    INL (IntV (&(2 ** int_bound_bits u) - 1 - i))
+                    INL (IntV (&(w2n (~((n2w (Num i)) : bytes32)))))
                   else INR (TypeError "signed Not")
               | NONE => INR (TypeError "Not type"))
+         | [BytesV bs] =>
+              INL (BytesV (word_to_bytes_be (~(word_of_bytes_be bs : bytes32))))
          | [FlagV n] =>
              (case evaluate_type (get_tenv cx) ty of
               | SOME (FlagTV m) => INL $ FlagV $
@@ -542,6 +678,8 @@ val () = cv_auto_trans type_builtin_args_length_ok_def;
 
 Definition builtin_args_length_ok_def:
   builtin_args_length_ok Len n = (n = 1n) ∧
+  builtin_args_length_ok CalldataLen n = (n = 0) ∧
+  builtin_args_length_ok (CalldataSlice _) n = (n = 1) ∧
   builtin_args_length_ok Not n = (n = 1) ∧
   builtin_args_length_ok Neg n = (n = 1) ∧
   builtin_args_length_ok Abs n = (n = 1) ∧

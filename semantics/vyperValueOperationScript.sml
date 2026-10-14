@@ -230,9 +230,10 @@ Definition evaluate_binop_def:
          IntV i1 => (case v2 of IntV i2 =>
            bounded_int_op u (i1 * i2) | _ => INR (TypeError "binop"))
        | DecimalV i1 => (case v2 of DecimalV i2 =>
-           (let p = i1 * i2 in
-            if within_int_bound (Signed 168) ((ABS p) / 10000000000)
-            then INL $ DecimalV $ w2i $ word_quot (i2w p) (10000000000w: bytes32)
+           (let p = i1 * i2;
+                q = SGN p * (ABS p / 10000000000) in
+            if within_int_bound (Signed 168) q
+            then INL $ DecimalV q
             else INR (RuntimeError "Decimal Mul bound")) | _ => INR (TypeError "binop"))
        | _ => INR (TypeError "binop"))
      | Div => (case v1 of
@@ -268,7 +269,7 @@ Definition evaluate_binop_def:
        | _ => INR (TypeError "binop"))
      | UnsafeDiv => (case v1 of
          IntV i1 => (case v2 of IntV i2 =>
-           if i2 = 0 then INR (RuntimeError "UnsafeDiv0") else
+           if i2 = 0 then wrapped_int_op u 0 else
            wrapped_int_op u $
              (if is_Unsigned u
               then &(w2n $ word_div ((i2w i1):bytes32) (i2w i2))
@@ -585,6 +586,8 @@ Definition evaluate_convert_def:
   evaluate_convert _ (BytesV bs) (BaseT (BytesT (Fixed n))) =
     (if LENGTH bs ≤ n
      then INL $ BytesV (PAD_RIGHT 0w n bs)
+     else if EVERY (λb. b = 0w) (DROP n bs)
+     then INL $ BytesV (TAKE n bs)
      else INR (RuntimeError "convert BytesV bound")) ∧
   evaluate_convert _ (BytesV bs) (BaseT (BytesT (Dynamic n))) =
     (if LENGTH bs ≤ n
@@ -600,6 +603,11 @@ Definition evaluate_convert_def:
      if within_int_bound (Signed n) i
      then INL $ IntV i
      else INR (RuntimeError "convert BytesV int bound")) ∧
+  evaluate_convert _ (BytesV bs) (BaseT AddressT) =
+    (let n = w2n (word_of_bytes_be (PAD_LEFT 0w 32 bs) : bytes32) in
+     if n < 2 ** 160
+     then INL $ AddressV (n2w n)
+     else INR (RuntimeError "convert bytes address")) ∧
   evaluate_convert _ (IntV i) (BaseT (IntT n)) =
     (if within_int_bound (Signed n) i
      then INL $ IntV i
@@ -654,18 +662,22 @@ Definition evaluate_convert_def:
     (if compatible_bound bd (LENGTH s)
      then INL $ BytesV (MAP (n2w o ORD) s)
      else INR (RuntimeError "convert string bytes")) ∧
+  evaluate_convert _ (BytesV bs) (BaseT DecimalT) =
+    bounded_decimal_op (w2i
+      ((word_of_bytes_be (PAD_RIGHT 0w 32 bs) : bytes32) >>
+       (8 * (32 - LENGTH bs)))) ∧
   evaluate_convert _ (IntV i) (BaseT DecimalT) =
     bounded_decimal_op (i * 10000000000) ∧
-  (* Truncation toward zero, matching EVM SDIV semantics *)
+  (* Check exact scaled bounds BEFORE truncation. Signed division truncates
+     toward zero (EVM SDIV); unsigned division follows the nonnegative check. *)
   evaluate_convert _ (DecimalV i) (BaseT (IntT n)) =
-    (let r = SGN i * (ABS i / 10000000000) in
-     if within_int_bound (Signed n) r
-     then INL $ IntV r
+    (if -&(2 ** (n - 1)) * 10000000000 ≤ i ∧
+        i ≤ (&(2 ** (n - 1)) - 1) * 10000000000
+     then INL $ IntV (SGN i * (ABS i / 10000000000))
      else INR (RuntimeError "convert decimal int")) ∧
   evaluate_convert _ (DecimalV i) (BaseT (UintT n)) =
-    (let r = SGN i * (ABS i / 10000000000) in
-     if 0 ≤ r ∧ within_int_bound (Unsigned n) r
-     then INL $ IntV r
+    (if 0 ≤ i ∧ i ≤ (&(2 ** n) - 1) * 10000000000
+     then INL $ IntV (i / 10000000000)
      else INR (RuntimeError "convert decimal uint")) ∧
   evaluate_convert _ _ _ = INR (TypeError "convert")
 End

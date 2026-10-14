@@ -15,7 +15,11 @@ Ancestors
   dfgAnalysisProps dfgDefs
   venomInst venomState venomEffects pred_set finite_map
   list rich_list arithmetic words alist
-  mmCopy mmScan passSharedField execEquivProps
+  mmCopy mmScan passSharedField execEquivProps memzeroFrame
+Libs
+  memzeroFrameLib
+
+val _ = augment_srw_ss [memzeroFrameLib.frame_ss];
 
 (* ===== Fresh variables ===== *)
 
@@ -749,30 +753,8 @@ QED
    Non-volatile-memory instructions produce same non-memory result on both. *)
 Definition memzero_inv_def:
   memzero_inv fresh s1 s2 <=>
-    (* All non-memory fields agree *)
-    s1.vs_halted = s2.vs_halted /\
-    s1.vs_call_ctx = s2.vs_call_ctx /\
-    s1.vs_tx_ctx = s2.vs_tx_ctx /\
-    s1.vs_block_ctx = s2.vs_block_ctx /\
-    s1.vs_data_section = s2.vs_data_section /\
-    s1.vs_labels = s2.vs_labels /\
-    s1.vs_code = s2.vs_code /\
-    s1.vs_params = s2.vs_params /\
-    s1.vs_prev_hashes = s2.vs_prev_hashes /\
-    s1.vs_prev_bb = s2.vs_prev_bb /\
-    s1.vs_current_bb = s2.vs_current_bb /\
-    s1.vs_inst_idx = s2.vs_inst_idx /\
-    s1.vs_immutables = s2.vs_immutables /\
-    s1.vs_returndata = s2.vs_returndata /\
-    s1.vs_transient = s2.vs_transient /\
-    s1.vs_accounts = s2.vs_accounts /\
-    s1.vs_logs = s2.vs_logs /\
-    s1.vs_fmp = s2.vs_fmp /\
-    s1.vs_call_entry_fmp = s2.vs_call_entry_fmp /\
-    s1.vs_initial_fmp = s2.vs_initial_fmp /\
-    s1.vs_return_pc_token = s2.vs_return_pc_token /\
-    s1.vs_allocas = s2.vs_allocas /\
-    s1.vs_alloca_next = s2.vs_alloca_next /\
+    (* All components except separately related variables and memory agree. *)
+    memzero_frame s1 = memzero_frame s2 /\
     (* Variables agree on non-fresh *)
     (!v. v NOTIN fresh ==> lookup_var v s1 = lookup_var v s2)
 End

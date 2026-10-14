@@ -11,7 +11,6 @@
  *   compile_get_element_ptr_correct   — get_element_ptr adds offset to parent pointer
  *   val_in_memory_prim_enc            — primitive val_in_memory matches ABI encoding
  *   val_in_memory_flag_enc            — flag val_in_memory matches ABI encoding
- *   compile_abi_zero_pad_correct      — zero-pad bytestring to 32-byte boundary
  *
  * Source: abi/abi_encoder.py, abi/abi_decoder.py
  * Lowering: abiEncoderScript.sml
@@ -782,18 +781,4 @@ conj_tac >- (
 ) >>
 simp[eval_operand_update_var, wordsTheory.word_add_n2w]
 QED
-
-(* ===== Zero Padding ===== *)
-
-(* ABI zero-pad: pads bytestring to 32-byte boundary *)
-Theorem compile_abi_zero_pad_correct:
-  ∀ bytez_ptr length count ss st st'.
-    compile_abi_zero_pad bytez_ptr length count st = ((), st')
-    ⇒
-    ∃ ss'.
-      run_inst_seq (emitted_insts st st') ss = OK ss'
-Proof
-  cheat
-QED
-
 

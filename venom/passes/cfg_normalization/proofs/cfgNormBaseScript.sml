@@ -151,7 +151,7 @@ Theorem cx_orig_stop[local]:
   !s. step_inst_base
       <| inst_id := 1; inst_opcode := STOP;
          inst_operands := []; inst_outputs := [] |> s =
-    Halt (halt_state s)
+    Halt (halt_state (s with vs_returndata := []))
 Proof
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> rw[]
 QED
@@ -283,7 +283,8 @@ Theorem cx2_orig_halt[local]:
   !s ctx. s.vs_current_bb = "B" /\ s.vs_prev_bb = SOME "P" /\
           s.vs_inst_idx = 0 /\ FLOOKUP s.vs_vars "x" = SOME 42w ==>
     run_blocks (SUC 0) ctx cx2_func s =
-    Halt (halt_state (update_var "y" 42w (s with vs_inst_idx := 1)))
+    Halt (halt_state
+      ((update_var "y" 42w (s with vs_inst_idx := 1)) with vs_returndata := []))
 Proof
   rpt strip_tac >>
   ONCE_REWRITE_TAC[run_blocks_def] >>
@@ -497,8 +498,11 @@ Theorem setup_callee_equiv[local]:
     execution_equiv UNIV s1 s2 ==>
     setup_callee fn args s1 = setup_callee fn args s2
 Proof
-  rw[setup_callee_def, execution_equiv_def,
-     venom_state_component_equality]
+  rpt strip_tac >>
+  irule stateFrameTheory.execution_frame_projection >>
+  conj_tac
+  >- simp[setup_callee_def, stateFrameTheory.execution_frame_def] >>
+  fs[Excl "core_complete_mask_equality", execution_equiv_def]
 QED
 
 (* merge_callee_state preserves state_equiv on caller vars *)
@@ -2054,12 +2058,12 @@ Proof
   Cases_on `eval_operands x1 s` >> simp[] >>
   simp[setup_callee_def] >>
   Cases_on `NULL x.fn_blocks` >> simp[] >>
-  Cases_on `NULL x'` >> simp[] >>
   qabbrev_tac `callee_s = s with <|vs_vars := FEMPTY; vs_prev_bb := NONE;
     vs_current_bb := (HD x.fn_blocks).bb_label;
     vs_inst_idx := 0; vs_halted := F; vs_params := x';
     vs_fmp := s.vs_fmp; vs_call_entry_fmp := s.vs_fmp;
-    vs_return_pc_token := LAST x'; vs_allocas := FEMPTY|>` >>
+    vs_return_pc_token := if NULL x' then 0w else LAST x';
+    vs_allocas := FEMPTY|>` >>
   Cases_on `run_blocks fuel ctx x callee_s` >> simp[] >>
   simp[merge_callee_state_def, bind_outputs_def] >>
   Cases_on `LENGTH inst.inst_outputs = LENGTH i.iret_values` >> simp[] >>
@@ -2074,7 +2078,8 @@ Proof
     vs_current_bb := (HD x.fn_blocks).bb_label;
     vs_inst_idx := 0; vs_halted := F; vs_params := x';
     vs_fmp := s.vs_fmp; vs_call_entry_fmp := s.vs_fmp;
-    vs_return_pc_token := LAST x'; vs_allocas := FEMPTY|> = callee_s` by
+    vs_return_pc_token := if NULL x' then 0w else LAST x';
+    vs_allocas := FEMPTY|> = callee_s` by
     (qunabbrev_tac `callee_s` >> simp[]) >>
   simp[merge_callee_state_def, bind_outputs_def] >>
   gvs[] >>
@@ -2082,12 +2087,14 @@ Proof
      <|vs_memory := v.vs_memory; vs_transient := v.vs_transient;
        vs_prev_bb := p; vs_returndata := v.vs_returndata;
        vs_accounts := v.vs_accounts; vs_logs := v.vs_logs;
+       vs_outcomes := v.vs_outcomes; vs_requests := v.vs_requests;
        vs_immutables := v.vs_immutables;
        vs_alloca_next := v.vs_alloca_next|> =
    (s with
      <|vs_memory := v.vs_memory; vs_transient := v.vs_transient;
        vs_returndata := v.vs_returndata; vs_accounts := v.vs_accounts;
-       vs_logs := v.vs_logs; vs_immutables := v.vs_immutables;
+       vs_logs := v.vs_logs; vs_outcomes := v.vs_outcomes;
+       vs_requests := v.vs_requests; vs_immutables := v.vs_immutables;
        vs_alloca_next := v.vs_alloca_next|>) with vs_prev_bb := p` by simp[] >>
   pop_assum (fn th => REWRITE_TAC[th]) >>
   simp[adopt_return_fmp_prev_bb, foldl_update_var_prev_bb]
@@ -2718,22 +2725,24 @@ Proof
   Cases_on `eval_operands x1 s` >> simp[] >>
   simp[setup_callee_def] >>
   Cases_on `NULL x.fn_blocks` >> simp[] >>
-  Cases_on `NULL x'` >> simp[] >>
   Cases_on `run_blocks fuel ctx x
     (s with <|vs_vars := FEMPTY; vs_prev_bb := NONE;
       vs_current_bb := (HD x.fn_blocks).bb_label;
       vs_inst_idx := 0; vs_halted := F; vs_params := x';
       vs_fmp := s.vs_fmp; vs_call_entry_fmp := s.vs_fmp;
-      vs_return_pc_token := LAST x'; vs_allocas := FEMPTY|>)` >>
+      vs_return_pc_token := if NULL x' then 0w else LAST x';
+      vs_allocas := FEMPTY|>)` >>
   simp[merge_callee_state_def, bind_outputs_def] >>
   Cases_on `LENGTH inst.inst_outputs = LENGTH i.iret_values` >> simp[] >>
   (`s with <|vs_memory := v.vs_memory; vs_transient := v.vs_transient;
      vs_prev_bb := p; vs_returndata := v.vs_returndata;
      vs_accounts := v.vs_accounts; vs_logs := v.vs_logs;
+     vs_outcomes := v.vs_outcomes; vs_requests := v.vs_requests;
      vs_immutables := v.vs_immutables; vs_alloca_next := v.vs_alloca_next|> =
    (s with <|vs_memory := v.vs_memory; vs_transient := v.vs_transient;
      vs_returndata := v.vs_returndata; vs_accounts := v.vs_accounts;
-     vs_logs := v.vs_logs; vs_immutables := v.vs_immutables;
+     vs_logs := v.vs_logs; vs_outcomes := v.vs_outcomes;
+     vs_requests := v.vs_requests; vs_immutables := v.vs_immutables;
      vs_alloca_next := v.vs_alloca_next|>) with vs_prev_bb := p`
     by simp[venomStateTheory.venom_state_component_equality]) >>
   pop_assum (fn eq => REWRITE_TAC[eq]) >>

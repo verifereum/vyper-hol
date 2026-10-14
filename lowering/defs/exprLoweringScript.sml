@@ -34,7 +34,7 @@
 
 Theory exprLowering
 Ancestors
-  pred_set list
+  pred_set list exprCallBounds vyperAST
   emitHelper compileEnv context valueEncoding venomInst vyperValueOperation
   builtinAbi builtinBytes builtinCreate
   builtinHashing builtinMath builtinMisc builtinSimple
@@ -1894,6 +1894,17 @@ Definition lower_value_def:
     od
 End
 
+(* Helper: Defn must see the single actual callback expression, rather than
+   quantify over completely unrelated expression/environment/type inputs. *)
+Theorem lower_value_cong[defncong]:
+  cenv = cenv' ∧ ty = ty' ∧ e = e' ∧ st = st' ∧
+  (∀a b child s. a = cenv' ∧ b = ty' ∧ child = e' ⇒
+     f a b child s = g a b child s) ⇒
+  lower_value f cenv ty e st = lower_value g cenv' ty' e' st'
+Proof
+  rpt strip_tac >> gvs[lower_value_def, comp_bind_def]
+QED
+
 (* Like lower_value but also returns the source data_location option.
    SOME loc for LocatedValues (ptr_location), NONE for StackValues.
    Mirrors Python: _copy_complex_type reads src_vv.location before unwrap. *)
@@ -2024,6 +2035,25 @@ Definition compile_multi_exprs_def:
 Termination
   WF_REL_TAC `measure (LENGTH o (FST o SND o SND))`
 End
+
+(* Helper: the list callback only compiles members of its input list. *)
+Theorem compile_multi_exprs_callback_cong:
+  ∀es. (∀e. MEM e es ⇒ f cenv (expr_type e) e = g cenv (expr_type e) e) ⇒
+       compile_multi_exprs f cenv es = compile_multi_exprs g cenv es
+Proof
+  Induct >> simp[compile_multi_exprs_def] >> rpt strip_tac >>
+  fs[] >> simp[lower_value_def]
+QED
+
+Theorem compile_multi_exprs_cong[defncong]:
+  cenv = cenv' ∧ es = es' ∧ st = st' ∧
+  (∀a b e s. a = cenv' ∧ b = expr_type e ∧ MEM e es' ⇒
+     f a b e s = g a b e s) ⇒
+  compile_multi_exprs f cenv es st = compile_multi_exprs g cenv' es' st'
+Proof
+  rpt strip_tac >> gvs[] >> AP_THM_TAC >>
+  irule compile_multi_exprs_callback_cong >> simp[FUN_EQ_THM]
+QED
 
 (* Compile subscript access: array[index], mapping[key], tuple[N].
    Dispatches on base type. HashMap (mapping) dispatched via ce_is_hashmap.
@@ -2301,6 +2331,22 @@ Definition compile_call_def:
   compile_call cfn cenv ret_ty ty (RawCallTarget rcf) args default_ret st =
     (let (_, st') = emit_inst INVALID [] [] st in
      (StackValue ret_ty (Lit 0w), st')) ∧
+  compile_call cfn cenv ret_ty ty (RawCallCalldataTarget rcf) args default_ret st =
+    (case args of
+       [addr_e; value_e] =>
+         let (addr_op, st1) = lower_value cfn cenv (BaseT AddressT) addr_e st in
+         let ((data_ptr, data_len), st2) = compile_msg_data_to_memory st1 in
+         let (value_op, st3) = lower_value cfn cenv (BaseT (UintT 256)) value_e st2 in
+         let (gas_op, st4) = emit_op GAS [] st3 in
+         let call_ty = if rcf.rcf_is_delegate then DelegateCall
+                       else if rcf.rcf_is_static then StaticCall
+                       else RegularCall in
+         let (result_op, st5) = compile_raw_call addr_op data_ptr data_len gas_op
+           value_op call_ty rcf.rcf_max_outsize rcf.rcf_revert_on_failure st4 in
+         if rcf.rcf_max_outsize = 0 then (StackValue ret_ty result_op, st5)
+         else (LocatedValue ret_ty (mk_ptr result_op LocMemory), st5)
+     | _ => let (_, st') = emit_inst INVALID [] [] st in
+            (StackValue ret_ty (Lit 0w), st')) ∧
   compile_call cfn cenv ret_ty ty RawLog args default_ret st =
     (let (_, st') = emit_inst INVALID [] [] st in
      (StackValue ret_ty (Lit 0w), st')) ∧
@@ -2437,8 +2483,12 @@ End
    the loaded value, compile_expr directly when they need location info.
    Nested case expressions extracted to helpers (compile_invert, compile_acc,
    is_msg_data, is_self_code, is_extcode) to reduce pattern completion. *)
-val compile_expr_defn = Defn.Hol_defn "compile_expr" `
-  compile_expr cenv ty e st =
+(* Open bodies preserve the original compiler operations. The total recursive
+   interface below supplies structurally restricted callbacks, so an opaque
+   helper can never demand a recursive call on unrelated AST inputs. *)
+Definition compile_expr_body_def:
+  compile_expr_body compile_expr compile_builtin_dispatch compile_type_builtin_dispatch
+    cenv ty e st =
     (let ret_ty = expr_type e in
      case e of
      Literal _ l => compile_literal_vv ret_ty l st
@@ -2521,9 +2571,11 @@ val compile_expr_defn = Defn.Hol_defn "compile_expr" `
            LocStorage => SSTORE | LocTransient => TSTORE | _ => MSTORE) in
         let (elem_ptr, st1) =
           compile_dynarray_pop target_op ws elem_size load_opc store_opc st in
-        (LocatedValue ret_ty (mk_ptr elem_ptr loc), st1))) ∧
+        (LocatedValue ret_ty (mk_ptr elem_ptr loc), st1)))
+End
 
-  compile_builtin_dispatch cenv ret_ty ty bi args st =
+Definition compile_builtin_dispatch_body_def:
+  compile_builtin_dispatch_body compile_expr cenv ret_ty ty bi args st =
     (case bi of
        Bop op =>
          (let e1 = HD args in let e2 = HD (TL args) in
@@ -2616,6 +2668,14 @@ val compile_expr_defn = Defn.Hol_defn "compile_expr" `
           | _ =>
               let (v, st1) = lower_value compile_expr cenv arg_ty e1 st in
               as_stack_val ret_ty (compile_sha256_word v st1))
+     | CalldataLen =>
+         as_stack_val ret_ty (compile_builtin_calldatasize st)
+     | CalldataSlice n =>
+         (let start_e = HD args in
+          let (start_op, st1) = lower_value compile_expr cenv
+                                  (expr_type start_e) start_e st in
+          as_ptr_val ret_ty LocMemory
+            (compile_slice_calldata start_op (Lit (n2w n)) (n + 32) st1))
      | Len =>
          (let e1 = HD args in
           if is_msg_data e1 then
@@ -2769,15 +2829,11 @@ val compile_expr_defn = Defn.Hol_defn "compile_expr" `
                 (compile_make_array compile_expr cenv args elem_sz has_lw
                    total_size buf_op 0 st2))
      (* Chain interaction builtins (raw_call, raw_log, selfdestruct, create)
-        are handled via call_target, not builtin - see Call cases *)) ∧
+        are handled via call_target, not builtin - see Call cases *))
+End
 
-  compile_type_builtin_dispatch cenv vv_ty ty tb ret_ty args st =
-    (* Dead branch: forces HOL4 Defn to recognize mutual recursion with
-       compile_builtin_dispatch. Without this call, Defn would not see
-       the recursion edge and would reject the definition group. *)
-    if F then
-      compile_builtin_dispatch cenv vv_ty ty (Env TimeStamp) [] st
-    else
+Definition compile_type_builtin_dispatch_body_def:
+  compile_type_builtin_dispatch_body compile_expr cenv vv_ty ty tb ret_ty args st =
     (case tb of
        Convert =>
          (let e1 = HD args in
@@ -2832,7 +2888,45 @@ val compile_expr_defn = Defn.Hol_defn "compile_expr" `
           let abi_max = abi_size_bound cenv.ce_struct_fields ret_ty in
           let out_size = type_memory_bytes cenv ret_ty in
           as_ptr_val vv_ty LocMemory (lower_abi_decode data_op dec_info abi_min abi_max out_size st2)))
-`;
+End
+
+Definition compile_expr_raw_def:
+  compile_expr cenv ty e st =
+    compile_expr_body
+      (expr_child_callback (expr_size e) compile_expr)
+      (builtin_child_callback (expr_size e) compile_builtin_dispatch)
+      (type_child_callback (expr_size e) compile_type_builtin_dispatch)
+      cenv ty e st ∧
+  compile_builtin_dispatch cenv ret_ty ty bi args st =
+    compile_builtin_dispatch_body
+      (expr_child_callback (list_size expr_size args) compile_expr)
+      cenv ret_ty ty bi args st ∧
+  compile_type_builtin_dispatch cenv vv_ty ty tb ret_ty args st =
+    (if F then compile_builtin_dispatch cenv vv_ty ty (Env TimeStamp) [] st else
+     compile_type_builtin_dispatch_body
+      (expr_child_callback (list_size expr_size args) compile_expr)
+      cenv vv_ty ty tb ret_ty args st)
+Termination
+  WF_REL_TAC `measure (λx.
+    case x of
+      INL (cenv,ty,e,st) => 2 * expr_size e + 2
+    | INR (INL (cenv,ret_ty,ty,bi,args,st)) => 2 * list_size expr_size args + 1
+    | INR (INR (cenv,vv_ty,ty,tb,ret_ty,args,st)) => 2 * list_size expr_size args + 1)` >>
+  simp[]
+End
+
+(* Normalize the definition API only, never recursive compiler equations as
+   simplification rules inside this conversion. Eta-long Defn callbacks would
+   make clients' ordinary simp[compile_expr_def] unfold underneath callbacks
+   forever. Expose the bodies with eta-contracted, guarded callbacks instead.
+   These are closed kernel conversions of the proved definition. *)
+val compile_expr_def =
+  SIMP_RULE (srw_ss())
+    [compile_expr_body_def, compile_builtin_dispatch_body_def,
+     compile_type_builtin_dispatch_body_def]
+    (CONV_RULE (DEPTH_CONV ETA_CONV) compile_expr_raw_def);
+val _ = save_thm ("compile_expr_def", compile_expr_def);
+val _ = save_thm ("compile_expr_ind", compile_expr_raw_ind);
 
 (* Public component equations expose the post-projection recursive calls.
    Concrete evaluators use these instead of the internal UNION/RESTRICT
@@ -2840,11 +2934,10 @@ val compile_expr_defn = Defn.Hol_defn "compile_expr" `
 val [compile_expr_component_eq,
      compile_builtin_dispatch_component_eq,
      compile_type_builtin_dispatch_component_eq] =
-  Defn.eqns_of compile_expr_defn;
+  CONJUNCTS compile_expr_def;
 val _ = save_thm ("compile_expr_component_eq", compile_expr_component_eq);
 val _ = save_thm ("compile_builtin_dispatch_component_eq",
                   compile_builtin_dispatch_component_eq);
 val _ = save_thm ("compile_type_builtin_dispatch_component_eq",
                   compile_type_builtin_dispatch_component_eq);
 
-val _ = Defn.save_defn compile_expr_defn;

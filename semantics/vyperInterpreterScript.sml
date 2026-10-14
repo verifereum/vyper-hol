@@ -1,12 +1,20 @@
 Theory vyperInterpreter
 Ancestors
+  vyperCallOutcome[ignore_grammar]
   arithmetic alist combin option list finite_map pair
   rich_list cv cv_std vfmState vfmContext vfmCompute[ignore_grammar]
   vfmExecution[ignore_grammar] vyperAST vyperABI
   vyperMisc vyperValue vyperValueOperation vyperStorage vyperContext vyperState
-  vyperEvent vyperEvmBoundary vyperCreate
+  vyperEvent vyperEvmBoundary vyperCreate vyperRuntimeAccounts
 Libs
   cv_transLib wordsLib monadsyntax
+
+(* Import only the two outcome selectors used here, without EVM/crypto
+   grammar shadowing source operations in existing proof consumers. *)
+val () = overload_on ("call_outcome_success", Term.prim_mk_const
+  {Thy = "extCallOracle", Name = "recordtype.call_outcome.seldef.co_success"});
+val () = overload_on ("call_outcome_return_data", Term.prim_mk_const
+  {Thy = "extCallOracle", Name = "recordtype.call_outcome.seldef.co_returnData"});
 
 (* manipulating (internal call) function stack *)
 
@@ -781,100 +789,8 @@ End
 
 val () = cv_auto_trans ext_call_value_transfer_ok_def;
 
-Definition account_runtime_well_typed_def:
-  account_runtime_well_typed (a : account_state) <=>
-    a.balance < 2 ** 256 /\ LENGTH a.code <= 24576
-End
-
-val () = cv_auto_trans account_runtime_well_typed_def;
-
-Definition accounts_runtime_well_typed_def:
-  accounts_runtime_well_typed (accounts : evm_accounts) <=>
-    !addr. account_runtime_well_typed (lookup_account addr accounts)
-End
-
-Definition accounts_spt_runtime_well_typed_def:
-  (accounts_spt_runtime_well_typed (LN : account_state spt) <=> T) /\
-  (accounts_spt_runtime_well_typed (LS a) <=> account_runtime_well_typed a) /\
-  (accounts_spt_runtime_well_typed (BN l r) <=>
-    accounts_spt_runtime_well_typed l /\ accounts_spt_runtime_well_typed r) /\
-  (accounts_spt_runtime_well_typed (BS l a r) <=>
-    accounts_spt_runtime_well_typed l /\ account_runtime_well_typed a /\
-    accounts_spt_runtime_well_typed r)
-End
-
-val () = cv_auto_trans accounts_spt_runtime_well_typed_def;
-
-Theorem account_runtime_well_typed_empty_account_state[simp]:
-  account_runtime_well_typed empty_account_state
-Proof
-  simp[account_runtime_well_typed_def, empty_account_state_def]
-QED
-
-Theorem accounts_spt_runtime_well_typed_lookup:
-  !t k a.
-    wf t /\ accounts_spt_runtime_well_typed t /\ lookup k t = SOME a ==>
-    account_runtime_well_typed a
-Proof
-  Induct >> rw[accounts_spt_runtime_well_typed_def, sptreeTheory.lookup_def,
-                sptreeTheory.wf_def]
-  >> metis_tac[]
-QED
-
-Theorem accounts_spt_runtime_well_typed_insert:
-  !k a t.
-    accounts_spt_runtime_well_typed t /\ account_runtime_well_typed a ==>
-    accounts_spt_runtime_well_typed (insert k a t)
-Proof
-  recInduct sptreeTheory.insert_ind >>
-  rpt conj_tac >> rpt gen_tac >> strip_tac >> strip_tac >>
-  gvs[accounts_spt_runtime_well_typed_def] >>
-  Cases_on `k = 0` >-
-    simp[Once sptreeTheory.insert_def, accounts_spt_runtime_well_typed_def] >>
-  Cases_on `EVEN k` >-
-    (PURE_ONCE_REWRITE_TAC [sptreeTheory.insert_def] >>
-     gvs[accounts_spt_runtime_well_typed_def]) >>
-  PURE_ONCE_REWRITE_TAC [sptreeTheory.insert_def] >>
-  gvs[accounts_spt_runtime_well_typed_def]
-QED
-
-Theorem accounts_spt_runtime_well_typed_build_spt:
-  !accounts.
-    accounts_spt_runtime_well_typed
-      (build_spt empty_account_state (dimword (:160)) accounts) <=>
-    accounts_runtime_well_typed accounts
-Proof
-  rw[accounts_runtime_well_typed_def, EQ_IMP_THM]
-  >- (
-    Cases_on `accounts addr = empty_account_state` >- simp[lookup_account_def] >>
-    `lookup (w2n addr) (build_spt empty_account_state (dimword (:160)) accounts) =
-       SOME (accounts addr)`
-      by (simp[lookup_build_spt] >> qspec_then `addr` mp_tac wordsTheory.w2n_lt >> simp[]) >>
-    simp[lookup_account_def] >>
-    irule accounts_spt_runtime_well_typed_lookup >>
-    qexistsl [`w2n addr`, `build_spt empty_account_state (dimword (:160)) accounts`] >>
-    simp[] ) >>
-  qsuff_tac `!n. accounts_spt_runtime_well_typed
-                   (build_spt empty_account_state n accounts)` >- simp[] >>
-  Induct >- simp[build_spt_def, accounts_spt_runtime_well_typed_def] >>
-  simp[build_spt_def] >> rw[] >>
-  irule accounts_spt_runtime_well_typed_insert >> simp[] >>
-  first_x_assum (qspec_then `n2w n` mp_tac) >> simp[lookup_account_def]
-QED
-
-val cv_accounts_spt_runtime_well_typed_thm = theorem "cv_accounts_spt_runtime_well_typed_thm";
-
-Theorem accounts_runtime_well_typed_cv_rep[cv_rep]:
-  cv_rep T
-    (cv_accounts_spt_runtime_well_typed (from_evm_accounts accounts))
-    b2c
-    (accounts_runtime_well_typed accounts)
-Proof
-  simp[cv_repTheory.cv_rep_def, from_evm_accounts_def,
-       GSYM cv_accounts_spt_runtime_well_typed_thm] >>
-  AP_TERM_TAC >>
-  simp[Once (GSYM accounts_spt_runtime_well_typed_build_spt)]
-QED
+(* Account bounds and their CV representation live in vyperRuntimeAccounts,
+   below the interpreter so oracle helpers can be evaluator parents. *)
 
 Definition ext_call_success_accounts_ok_aux_def:
   ext_call_success_accounts_ok_aux
@@ -930,6 +846,61 @@ Definition run_ext_call_def:
 End
 
 val () = cv_auto_trans run_ext_call_def;
+
+(* Shared execution after raw_call operands have been evaluated and decoded.
+   Both input forms retain the same static/revert/output and state effects. *)
+Definition eval_raw_call_def:
+  eval_raw_call cx flags target_addr calldata amount = do
+    value_opt <<- if flags.rcf_is_static then NONE else SOME amount;
+    type_check (¬flags.rcf_is_delegate) "raw_call delegate unsupported";
+    accounts <- get_accounts;
+    tStorage <- get_transient_storage;
+    result <- lift_option
+      (run_ext_call cx.txn.target target_addr calldata value_opt accounts tStorage
+        (vyper_to_tx_params cx.txn)) "raw_call run failed";
+    success <<- FST result; result1 <<- SND result;
+    returnData <<- FST result1; result2 <<- SND result1;
+    accounts' <<- FST result2; result3 <<- SND result2;
+    tStorage' <<- FST result3; emitted_logs <<- SND result3;
+    update_accounts (K accounts');
+    update_transient (K tStorage');
+    append_logs emitted_logs;
+    if flags.rcf_revert_on_failure then do
+      check success "raw_call reverted";
+      if flags.rcf_max_outsize = 0 then return $ Value NoneV
+      else return $ Value $ BytesV (TAKE flags.rcf_max_outsize returnData)
+    od else
+      if flags.rcf_max_outsize = 0 then return $ Value $ BoolV success
+      else return $ Value $ ArrayV $ TupleV [BoolV success;
+             BytesV (TAKE flags.rcf_max_outsize returnData)]
+  od
+End
+
+val () = eval_raw_call_def
+  |> SRULE [FUN_EQ_THM, bind_def, ignore_bind_def, LET_RATOR,
+            COND_RATOR, prod_CASE_rator, sum_CASE_rator, lift_option_def,
+            option_CASE_rator, type_check_def, assert_def]
+  |> cv_auto_trans;
+
+Theorem eval_raw_call_preserves_non_accounts:
+  eval_raw_call cx flags target_addr calldata amount st = (res, st') ==>
+  st'.scopes = st.scopes /\ st'.immutables = st.immutables
+Proof
+  Cases_on `flags.rcf_is_delegate` >>
+  simp[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def, raise_def, get_accounts_def,
+       get_transient_storage_def] >>
+  Cases_on `run_ext_call cx.txn.target target_addr calldata
+    (if flags.rcf_is_static then NONE else SOME amount)
+    st.accounts st.tStorage (vyper_to_tx_params cx.txn)` >>
+  simp[lift_option_def, bind_def, return_def, raise_def] >>
+  PairCases_on `x` >>
+  Cases_on `flags.rcf_revert_on_failure` >> Cases_on `x0` >>
+  Cases_on `flags.rcf_max_outsize = 0` >>
+  simp[update_accounts_def, update_transient_def, append_logs_def,
+       check_def, assert_def, bind_def, ignore_bind_def, return_def, raise_def] >>
+  rpt strip_tac >> gvs[]
+QED
 
 (* Dynamic array bounds check: reads stored length from storage *)
 Definition check_array_bounds_def:
@@ -1235,8 +1206,18 @@ Definition evaluate_def:
     vs <- eval_exprs cx es;
     toAddr <- lift_option_type (dest_AddressV $ EL 0 vs) "Send not AddressV";
     amount <- lift_option_type (dest_NumV $ EL 1 vs) "Send not NumV";
+    outcomes <- (λst. return st.outcomes st);
+    case outcomes of
+    | SOME _ => do
+      (rq, outcome) <- vyperCallOutcome$take_call_outcome toAddr [] (SOME amount);
+      check (call_outcome_success outcome) "send failed";
+      vyperCallOutcome$adopt_call_outcome rq outcome;
+      return $ Value $ NoneV
+    od
+    | NONE => do
     transfer_value cx.txn.target toAddr amount;
     return $ Value $ NoneV
+    od
   od ∧
   eval_expr cx (Call _ (ExtCall is_static (func_name, arg_types, ret_type)) es drv) = do
     vs <- eval_exprs cx es;
@@ -1254,6 +1235,25 @@ Definition evaluate_def:
     tenv <<- get_tenv cx;
     calldata <- lift_option_type (build_ext_calldata tenv func_name arg_types arg_vals)
                                  "ExtCall build_calldata";
+    outcomes <- (λst. return st.outcomes st);
+    case outcomes of
+    | SOME _ => do
+      accounts <- get_accounts;
+      (if ret_type = NoneT then
+        check (¬NULL (lookup_account target_addr accounts).code) "ExtCall target has no code"
+       else return ());
+      (rq, outcome) <- vyperCallOutcome$take_call_outcome target_addr calldata value_opt;
+      check (call_outcome_success outcome) "ExtCall reverted";
+      vyperCallOutcome$adopt_call_outcome rq outcome;
+      if call_outcome_return_data outcome = [] ∧ IS_SOME drv then
+        eval_expr cx (THE drv)
+      else do
+        ret_val <- lift_sum_runtime (evaluate_abi_decode_return tenv ret_type
+          (call_outcome_return_data outcome));
+        return $ Value ret_val
+      od
+    od
+    | NONE => do
     accounts <- get_accounts;
     (* Vyper reverts if target has no code (EXTCODESIZE == 0) *)
     check (¬NULL (lookup_account target_addr accounts).code) "ExtCall target has no code";
@@ -1273,6 +1273,7 @@ Definition evaluate_def:
     else do
       ret_val <- lift_sum_runtime (evaluate_abi_decode_return tenv ret_type returnData);
       return $ Value ret_val
+    od
     od
   od ∧
   eval_expr cx (Call _ (IntCall (src_id_opt, fn)) es _) = do
@@ -1331,28 +1332,14 @@ Definition evaluate_def:
     target_addr <- lift_option_type (dest_AddressV (EL 0 vs)) "raw_call target";
     calldata <- lift_option_type (dest_BytesV (EL 1 vs)) "raw_call data";
     amount <- lift_option_type (dest_NumV (EL 2 vs)) "raw_call value";
-    value_opt <<- if flags.rcf_is_static then NONE else SOME amount;
-    (* delegate_call not yet supported in semantics *)
-    type_check (¬flags.rcf_is_delegate) "raw_call delegate unsupported";
-    accounts <- get_accounts;
-    tStorage <- get_transient_storage;
-    txParams <<- vyper_to_tx_params cx.txn;
-    caller <<- cx.txn.target;
-    result <- lift_option
-      (run_ext_call caller target_addr calldata value_opt accounts tStorage txParams)
-      "raw_call run failed";
-    (success, returnData, accounts', tStorage', emitted_logs) <<- result;
-    update_accounts (K accounts');
-    update_transient (K tStorage');
-    append_logs emitted_logs;
-    if flags.rcf_revert_on_failure then do
-      check success "raw_call reverted";
-      if flags.rcf_max_outsize = 0 then return $ Value NoneV
-      else return $ Value $ BytesV (TAKE flags.rcf_max_outsize returnData)
-    od else
-      if flags.rcf_max_outsize = 0 then return $ Value $ BoolV success
-      else return $ Value $ ArrayV $ TupleV [BoolV success;
-             BytesV (TAKE flags.rcf_max_outsize returnData)]
+    eval_raw_call cx flags target_addr calldata amount
+  od ∧
+  eval_expr cx (Call ty (RawCallCalldataTarget flags) es _) = do
+    vs <- eval_exprs cx es;
+    type_check (LENGTH vs = 2) "raw_call calldata args";
+    target_addr <- lift_option_type (dest_AddressV (EL 0 vs)) "raw_call target";
+    amount <- lift_option_type (dest_NumV (EL 1 vs)) "raw_call value";
+    eval_raw_call cx flags target_addr cx.txn.calldata amount
   od ∧
   (* raw_log(topics_list, data)
      args = [topics_array; data_bytes] *)
@@ -1574,6 +1561,8 @@ Definition initial_state_def:
    ; scopes := scs
    ; tStorage := am.tStorage
    ; pending_deletions := am.pending_deletions
+   ; outcomes := NONE
+   ; requests := []
    |>
 End
 
@@ -1676,26 +1665,26 @@ Definition evaluate_defaults_def:
 End
 
 Definition call_external_function_def:
-  call_external_function am cx nr mut ts all_mods args dflts vals body ret =
+  call_external_function orc am cx nr mut ts all_mods args dflts vals body ret =
   let all_tenv = type_env_all_modules all_mods in
   let n_provided = LENGTH vals in
   let n_expected = LENGTH args in
   let n_missing = n_expected - n_provided in
   if n_provided > n_expected ∨ n_missing > LENGTH dflts then
-    (INR $ Error (RuntimeError "call args length"), am)
+    (INR $ Error (RuntimeError "call args length"), am, [])
   else
   let needed_dflts = DROP (LENGTH dflts - n_missing) dflts in
   case evaluate_defaults cx am needed_dflts of
-  | NONE => (INR $ Error (RuntimeError "call evaluate_defaults"), am)
+  | NONE => (INR $ Error (RuntimeError "call evaluate_defaults"), am, [])
   | SOME dflt_vs =>
   case bind_arguments all_tenv args (vals ++ dflt_vs)
-  of NONE => (INR $ Error (RuntimeError "call bind_arguments"), am)
+  of NONE => (INR $ Error (RuntimeError "call bind_arguments"), am, [])
    | SOME env =>
   (case (if cx.in_deploy then evaluate_all_constants cx am cx.txn.target all_mods
          else SOME am)
-   of NONE => (INR $ Error (RuntimeError "call constants_env"), am)
+   of NONE => (INR $ Error (RuntimeError "call constants_env"), am, [])
     | SOME am_c =>
-   let st = initial_state am_c [env] in
+   let st = initial_state am_c [env] with <| outcomes := orc; requests := [] |> in
    let srcs = am_c.sources in
    let exps = am_c.exports in
    let layouts = am_c.layouts in
@@ -1710,26 +1699,26 @@ Definition call_external_function_def:
      | NONE => return ()
      | SOME slot => release_nonreentrant_lock cx.txn.target slot
      else return () in
-   let (res, st) =
+   let (res, am_out, rqs) =
      (case do lock_action; send_call_value mut cx; eval_stmts cx body od st
       of
        | (INL (), st) =>
            (case unlock_action st of
-            | (INL (), st) => (INL NoneV, abstract_machine_from_state srcs exps layouts st)
-            | (INR e, st) => (INR e, am))
+            | (INL (), st) => (INL NoneV, abstract_machine_from_state srcs exps layouts st, st.requests)
+            | (INR e, st) => (INR e, am, st.requests))
        | (INR (ReturnException v), st) =>
            (case unlock_action st of
             | (INL (), st) =>
               (let am_ret = abstract_machine_from_state srcs exps layouts st in
                case evaluate_type all_tenv ret
-               of NONE => (INR (Error (TypeError "eval ret")), am)
+               of NONE => (INR (Error (TypeError "eval ret")), am, st.requests)
                 | SOME tv =>
                case safe_cast tv v
-               of NONE => (INR (Error (TypeError "ext cast ret")), am)
-                | SOME v => (INL v, am_ret))
-            | (INR e, st) => (INR e, am))
-       | (INR e, st) => (INR e, am)) in
-    (res, st (* transient storage cleared separately via ClearTransientStorage action *)))
+               of NONE => (INR (Error (TypeError "ext cast ret")), am, st.requests)
+                | SOME v => (INL v, am_ret, st.requests))
+            | (INR e, st) => (INR e, am, st.requests))
+       | (INR e, st) => (INR e, am, st.requests)) in
+    (res, am_out, rqs (* transient storage cleared separately via ClearTransientStorage action *)))
 End
 
 (* Lookup function, checking exports first for external calls *)
@@ -1813,24 +1802,24 @@ Proof
 QED
 
 Definition call_external_def:
-  call_external am tx =
+  call_external orc am tx =
   (* Determine which module to use for type environment *)
   let src_id_opt = find_function_module am tx.target tx.function_name in
   let cx = initial_evaluation_context am.sources am.layouts tx src_id_opt in
   (* Get all modules for this contract (needed for combined type_env) *)
   case ALOOKUP am.sources tx.target of
-    NONE => (INR $ Error (RuntimeError "call get sources"), am)
+    NONE => (INR $ Error (RuntimeError "call get sources"), am, [])
   | SOME all_mods =>
   case (case src_id_opt of
           NONE => get_self_code cx
         | SOME src_id => get_module_code cx (SOME src_id))
-  of NONE => (INR $ Error (RuntimeError "call get_self_code"), am)
+  of NONE => (INR $ Error (RuntimeError "call get_self_code"), am, [])
    | SOME ts =>
   case lookup_exported_function cx am tx.function_name
-  of NONE => (INR $ Error (RuntimeError "call lookup_function"), am)
+  of NONE => (INR $ Error (RuntimeError "call lookup_function"), am, [])
    | SOME (mut, nr, args, dflts, ret, body) =>
-       case call_external_function am cx nr mut ts all_mods args dflts tx.args body ret of
-       | (INL value, am') => (INL value, finalize_pending_deletions am')
+       case call_external_function orc am cx nr mut ts all_mods args dflts tx.args body ret of
+         (INL value, am', rqs) => (INL value, finalize_pending_deletions am', rqs)
        | failure => failure
 End
 
@@ -1856,7 +1845,7 @@ Definition clear_machine_logs_def:
 End
 
 Definition call_external_transaction_def:
-  call_external_transaction am tx = call_external (clear_machine_logs am) tx
+  call_external_transaction orc am tx = call_external orc (clear_machine_logs am) tx
 End
 
 (* Vyper-level deployment abstraction.  The target address is supplied by the
@@ -1871,7 +1860,7 @@ End
    same path, including constant evaluation and deployment value transfer.  The
    NONE case below is defensive and unreachable for finite declaration lists. *)
 Definition load_contract_def:
-  load_contract am tx mods exps =
+  load_contract orc am tx mods exps =
   let addr = tx.target in
   let ts = case ALOOKUP mods NONE of SOME ts => ts | NONE => [] in
   let tenv = type_env_all_modules mods in
@@ -1885,8 +1874,8 @@ Definition load_contract_def:
      | SOME (mut, nr, args, dflts, ret, body) =>
        let cx = (initial_evaluation_context ((addr,mods)::am.sources) am.layouts tx NONE)
                 with in_deploy := T in
-       case call_external_function am cx nr mut ts mods args dflts tx.args body ret
-         of (INR e, _) => INR e
-          | (_, am) => INL (finalize_pending_deletions
-                               (am with sources updated_by CONS (addr, mods)))
+       case call_external_function orc am cx nr mut ts mods args dflts tx.args body ret
+         of (INR e, _, _) => INR e
+          | (_, am', rqs) => INL (finalize_pending_deletions
+                                    (am' with sources updated_by CONS (addr, mods)), rqs)
 End

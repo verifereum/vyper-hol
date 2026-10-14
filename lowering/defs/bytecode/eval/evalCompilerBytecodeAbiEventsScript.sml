@@ -311,17 +311,25 @@ Proof
   rpt CASE_TAC >> gvs[]
 QED
 
+val () = evalCompilerBytecodeLib.add_staged_compile_eval
+  ([mixed_event_types_runtime_compile_def,
+    mixed_event_types_runtime_pipeline_eval,
+    optionTheory.option_case_compute,
+    optionTheory.IS_SOME_DEF, optionTheory.THE_DEF,
+    pairTheory.pair_case_thm, LET_THM, COND_CLAUSES,
+    REFL_CLAUSE, NOT_CLAUSES,
+    mixed_event_types_unit_eval,
+    mixed_event_types_out_final_assembly_eval,
+    mixed_event_types_rpolicy_final_assembly_eval] @ mixed_event_types_runtime_accessors)
+  [codegenTheory.finalize_codegen_identity, mixed_event_types_codegen_assembly_eval]
+  [mixed_event_types_compile_staged]
+  ``mixed_event_types_runtime_compile task090_mixed_event_types_program``
+  ``compile_vyper (K SOME) (o1_policy all_capabilities) task090_mixed_event_types_program``
+
 Theorem mixed_event_types_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     task090_mixed_event_types_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "mixed_event_types.hex")
 Proof
-  PURE_REWRITE_TAC [mixed_event_types_compile_staged] >>
-  PURE_REWRITE_TAC [mixed_event_types_runtime_matches_python_oracle] >>
-  simp_tac pure_ss
-    [optionTheory.option_case_compute,
-     optionTheory.IS_SOME_DEF, optionTheory.THE_DEF,
-     optionTheory.OPTION_MAP_DEF, LET_THM, COND_CLAUSES,
-     mixed_event_types_deploy_matches_python_oracle] >>
   EVAL_TAC
 QED

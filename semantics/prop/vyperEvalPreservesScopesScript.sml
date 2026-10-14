@@ -1,9 +1,13 @@
 Theory vyperEvalPreservesScopes
 Ancestors
+  pair vyperCallFrame vyperCallOutcomeFrame vyperCallOutcome[ignore_grammar]
   vyperTypeInvariants
   vyperState vyperCreate vyperInterpreter vyperLookup
   vyperEvalExprPreservesScopesDom vyperScopePreservation
   vyperMisc vyperImmutablesPreservation vyperStatePreservation
+
+(* Preserve the existing statement-list free variables against crypto's body. *)
+val _ = hide "body";
 
 Definition preserves_scopes_dom_def:
   preserves_scopes_dom st st' ⇔
@@ -474,13 +478,14 @@ Theorem case_eval_for_cons_dom[local]:
       eval_for cx tyv nm body (v::vs) st = (res, st') ⇒ preserves_scopes_dom st st'
 Proof
   rpt strip_tac >>
+  rename1 `eval_for cx tyv nm loop_body (v::vs) st = (res,st')` >>
   qpat_x_assum `eval_for _ _ _ _ _ _ = _` mp_tac >>
   simp[evaluate_def, bind_def, ignore_bind_def, push_scope_with_var_def, return_def, AllCaseEqs()] >>
   strip_tac >> gvs[] >>
   (* Handle error case from finally: unfold and use try_body_preserves_tl_dom *)
   TRY (
     gvs[finally_def, AllCaseEqs(), bind_def, ignore_bind_def, pop_scope_def, return_def, raise_def] >>
-    qspecl_then [`cx`, `body`, `nm`, `tyv`, `v`, `st`] mp_tac try_body_preserves_tl_dom >>
+    qspecl_then [`cx`, `loop_body`, `nm`, `tyv`, `v`, `st`] mp_tac try_body_preserves_tl_dom >>
     impl_tac >- (rpt strip_tac >> gvs[push_scope_with_var_def, return_def] >> first_x_assum drule >> simp[]) >>
     simp[push_scope_with_var_def, return_def] >> strip_tac >>
     gvs[preserves_scopes_dom_def] >>
@@ -492,7 +497,7 @@ Proof
   strip_tac >> gvs[bind_def, ignore_bind_def, pop_scope_def, return_def, raise_def, AllCaseEqs()] >>
   (* Use try_body_preserves_tl_dom to establish MAP FDOM preservation *)
   sg `MAP FDOM (TL (st with scopes updated_by CONS (FEMPTY |+ (nm,<| assignable := F; type := tyv; value := v |>))).scopes) = MAP FDOM (TL s'³'.scopes)` >-
-  (qspecl_then [`cx`, `body`, `nm`, `tyv`, `v`, `st`] mp_tac try_body_preserves_tl_dom >>
+  (qspecl_then [`cx`, `loop_body`, `nm`, `tyv`, `v`, `st`] mp_tac try_body_preserves_tl_dom >>
    impl_tac >- (rpt strip_tac >> gvs[push_scope_with_var_def, return_def] >> first_x_assum drule >> simp[]) >>
    simp[push_scope_with_var_def, return_def] >> strip_tac >>
    first_x_assum drule >> simp[]) >> gvs[] >>
@@ -736,6 +741,7 @@ Proof
   >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
   >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
   (* chain interaction builtins *)
+  >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
   >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
   >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
   >- drule_all_then ACCEPT_TAC eval_expr_preserves_scopes_dom
@@ -1095,6 +1101,7 @@ Proof
   >> conj_tac >- simp[] (* ExtCall: T *)
   >> conj_tac >- simp[] (* IntCall: T *)
   >> conj_tac >- simp[] (* RawCallTarget: T *)
+  >> conj_tac >- simp[] (* RawCallCalldataTarget: T *)
   >> conj_tac >- simp[] (* RawLog: T *)
   >> conj_tac >- simp[] (* RawRevert: T *)
   >> conj_tac >- simp[] (* SelfDestructTarget: T *)
@@ -1880,11 +1887,20 @@ Proof
          return_def] >>
     imp_res_tac type_check_state >>
     imp_res_tac lift_option_type_state >>
-    imp_res_tac transfer_value_scopes >>
-    imp_res_tac transfer_value_immutables >> gvs[] >>
+    (* Original concrete tail:
+    imp_res_tac concrete_send_step_locals >> gvs[] >>
     first_x_assum drule_all >> rw[] >>
-    gvs[preserves_tv_def] ) >>
-  (* ExtCall *)
+    gvs[preserves_tv_def]
+    *)
+    gvs[] >> first_x_assum drule_all >> strip_tac >> gvs[] >>
+    qmatch_asmsub_rename_tac `case tailst.outcomes of NONE => _ | SOME _ => _` >>
+    Cases_on `tailst.outcomes` >> gvs[]
+    >- (gvs[bind_apply, ignore_bind_apply, return_def, AllCaseEqs()] >>
+        imp_res_tac concrete_send_step_locals >> gvs[preserves_tv_def]) >>
+    imp_res_tac Send_outcome_preserves_locals >> gvs[preserves_tv_def] ) >>
+  (* ExtCall: the original concrete-only proof is retained below. *)
+  conj_tac >- suspend "ExtCall" >>
+  (* TASK032 provenance: actual oracle-mode transport is resumed below.
   conj_tac >- (
     rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
     pop_assum mp_tac >>
@@ -1954,6 +1970,7 @@ Proof
     qmatch_goalsub_rename_tac`_ p _ = (_,_)` >>
     PairCases_on`p` >>
     simp_tac std_ss [] >>
+    (* Original concrete installation proof preserved for comparison:
     simp[ignore_bind_apply] >>
     BasicProvers.TOP_CASE_TAC >>
     imp_res_tac check_state >>
@@ -1972,6 +1989,12 @@ Proof
       rw[] >> gvs[preserves_tv_def] ) >>
     imp_res_tac append_logs_preserves_tv >>
     gvs[append_logs_def, return_def] >>
+    *)
+    rewrite_tac[GSYM ignore_bind_def] >>
+    simp[concrete_extcall_tail_cases] >>
+    rpt strip_tac >> gvs[] >>
+    TRY (gvs[preserves_tv_def] >> NO_TAC) >>
+    (* Original post-install chain preserved:
     reverse IF_CASES_TAC >- (
       simp[bind_apply, AllCaseEqs(), return_def] >>
       rw[] >> imp_res_tac lift_sum_runtime_state >> gvs[] >>
@@ -1990,7 +2013,17 @@ Proof
     goal_assum drule >>
     irule preserves_tv_trans >>
     goal_assum $ drule_at Any >>
+    gvs[preserves_tv_def]
+    *)
+    qpat_x_assum `(if _ then _ else _) _ = _` mp_tac >>
+    reverse IF_CASES_TAC >- (
+      simp[bind_apply, AllCaseEqs(), return_def] >>
+      rw[] >> imp_res_tac lift_sum_runtime_state >>
+      gvs[preserves_tv_def]) >>
+    strip_tac >> gvs[] >> first_x_assum drule_all >> rw[] >>
+    irule preserves_tv_trans >> qexists_tac `sc` >>
     gvs[preserves_tv_def]) >>
+  *)
   (* IntCall *)
   conj_tac >- (
     rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
@@ -2051,25 +2084,19 @@ Proof
   (* Shared approach: IH gives preserves_tv for eval_exprs.
      Remaining ops preserve scopes+immutables, so preserves_tv_eq +
      preserves_tv_trans finishes. *)
-  (* RawCallTarget *)
+  (* Both raw_call input forms preserve scopes and immutables after operands. *)
   conj_tac >- (
     rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-    gvs[Once evaluate_def, bind_apply, ignore_bind_apply, AllCaseEqs(),
-         return_def, COND_RATOR, LET_THM, pairTheory.UNCURRY] >>
-    imp_res_tac check_state >>
-    imp_res_tac type_check_state >>
-    imp_res_tac lift_option_type_state >>
-    imp_res_tac lift_option_state >>
-    imp_res_tac get_accounts_state >>
-    imp_res_tac get_transient_storage_state >>
-    imp_res_tac update_accounts_scopes >>
-    imp_res_tac update_accounts_immutables >>
-    imp_res_tac update_transient_scopes >>
-    imp_res_tac update_transient_immutables >>
-    imp_res_tac append_logs_scopes >>
-    imp_res_tac append_logs_immutables >> gvs[] >>
-    first_x_assum drule >> rw[] >>
-    gvs[preserves_tv_def]) >>
+    gvs[Once evaluate_def, bind_apply, ignore_bind_apply, AllCaseEqs(), return_def] >>
+    imp_res_tac type_check_state >> imp_res_tac lift_option_type_state >>
+    imp_res_tac eval_raw_call_preserves_non_accounts >> gvs[] >>
+    first_x_assum drule >> rw[] >> gvs[preserves_tv_def]) >>
+  conj_tac >- (
+    rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+    gvs[Once evaluate_def, bind_apply, ignore_bind_apply, AllCaseEqs(), return_def] >>
+    imp_res_tac type_check_state >> imp_res_tac lift_option_type_state >>
+    imp_res_tac eval_raw_call_preserves_non_accounts >> gvs[] >>
+    first_x_assum drule >> rw[] >> gvs[preserves_tv_def]) >>
   (* RawLog *)
   conj_tac >- (
     rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
@@ -2421,4 +2448,116 @@ Resume eval_preserves_tv[IntCall_ptv]:
   irule preserves_tv_trans >> qexists_tac `r'` >> simp[]
 QED
 
+Theorem tv_frame_primitives[local]:
+  state_rel_frame (preserves_tv cx) (return v) /\
+  state_rel_frame (preserves_tv cx) (raise e) /\
+  state_rel_frame (preserves_tv cx) (type_check b msg) /\
+  state_rel_frame (preserves_tv cx) (check b msg) /\
+  state_rel_frame (preserves_tv cx) (lift_option opt msg) /\
+  state_rel_frame (preserves_tv cx) (lift_option_type opt msg) /\
+  state_rel_frame (preserves_tv cx) (lift_sum_runtime rs) /\
+  state_rel_frame (preserves_tv cx) get_accounts /\
+  state_rel_frame (preserves_tv cx) get_transient_storage /\
+  state_rel_frame (preserves_tv cx) (update_accounts upd) /\
+  state_rel_frame (preserves_tv cx) (update_transient upd_t) /\
+  state_rel_frame (preserves_tv cx) (append_logs logs) /\
+  state_rel_frame (preserves_tv cx) (adopt_call_outcome rq co)
+Proof
+  simp[state_rel_frame_def, return_def, raise_def, check_def, type_check_def,
+       assert_def, lift_option_def, lift_option_type_def, lift_sum_runtime_def,
+       get_accounts_def, get_transient_storage_def, update_accounts_def,
+       update_transient_def, append_logs_def, adopt_call_outcome_equation] >>
+  rpt strip_tac >> rpt CASE_TAC >> simp[return_def, raise_def, preserves_tv_def]
+QED
+
+Theorem tv_frame_take[local]:
+  state_rel_frame (preserves_tv cx) (take_call_outcome target calldata value_opt)
+Proof
+  simp[state_rel_frame_result] >> rpt strip_tac >>
+  drule take_call_outcome_frame >>
+  simp[evaluation_state_component_equality] >> strip_tac >>
+  irule preserves_tv_eq >> simp[]
+QED
+
+Theorem tv_frame_bind_guarded[local]:
+  state_rel_frame (preserves_tv cx) f /\
+  (!s v t. f s = (INL v,t) ==> state_rel_frame (preserves_tv cx) (g v)) ==>
+  state_rel_frame (preserves_tv cx) (vyperState$bind f g)
+Proof
+  rpt strip_tac >> irule state_rel_frame_bind_guarded >> simp[] >>
+  metis_tac[preserves_tv_trans]
+QED
+
+val TV_FRAME_TAC =
+  rpt (FIRST [CHANGED_TAC (CONV_TAC (DEPTH_CONV ETA_CONV)),
+    CHANGED_TAC (simp_tac bool_ss
+      [FORALL_PROD, pair_case_thm, UNCURRY, tv_frame_primitives]),
+    first_assum ACCEPT_TAC,
+    irule state_rel_frame_read >> simp[],
+    MATCH_ACCEPT_TAC tv_frame_take,
+    CHANGED_TAC (fn (asl,w) =>
+      simp_tac bool_ss (pair_case_thm :: UNCURRY ::
+        List.map ASSUME (List.filter is_eq asl)) (asl,w)),
+    irule tv_frame_bind_guarded >> conj_tac,
+    CHANGED_TAC (rewrite_tac[ignore_bind_def]),
+    gen_tac, strip_tac, conj_tac, CASE_TAC]);
+
+Resume eval_preserves_tv[ExtCall]:
+  rpt gen_tac >> strip_tac >>
+  simp[GSYM state_rel_frame_result, Once evaluate_def] >>
+  RULE_ASSUM_TAC (REWRITE_RULE [GSYM state_rel_frame_result]) >>
+  TV_FRAME_TAC >|
+  [suspend "return_path_1", suspend "return_path_2",
+   suspend "return_path_3", suspend "return_path_4"]
+QED
+
+val TV_FRAME_IH_TAC =
+  gvs[oneTheory.one, ignore_bind_def] >>
+  rpt (FIRST [first_assum ACCEPT_TAC,
+    first_x_assum (fn th =>
+      if is_imp (snd (strip_forall (concl th))) then
+        drule_at Any th >> simp[] >> strip_tac
+      else NO_TAC)]);
+
+Resume eval_preserves_tv[return_path_1]:
+  TV_FRAME_IH_TAC
+QED
+Resume eval_preserves_tv[return_path_2]:
+  TV_FRAME_IH_TAC
+QED
+Resume eval_preserves_tv[return_path_3]:
+  TV_FRAME_IH_TAC
+QED
+Resume eval_preserves_tv[return_path_4]:
+  TV_FRAME_IH_TAC
+QED
+
 Finalise eval_preserves_tv
+
+(* Oracle sibling of the concrete ExtCall tail in eval_preserves_tv.
+   k is the evaluator-owned default/decode continuation, not a callee run. *)
+Theorem ExtCall_outcome_preserves_tv:
+  (!bs s res t. k bs s = (res,t) ==> preserves_tv cx s t) /\
+  (do
+    accounts <- get_accounts;
+    (if ret_type = NoneT then
+       check (~NULL (lookup_account target accounts).code) "ExtCall target has no code"
+     else return ());
+    (rq,outcome) <- take_call_outcome target calldata value_opt;
+    check outcome.co_success "ExtCall reverted";
+    adopt_call_outcome rq outcome;
+    k outcome.co_returnData
+  od) st = (res,st') ==> preserves_tv cx st st'
+Proof
+  rpt strip_tac >>
+  `!s t u. preserves_tv cx s t /\ preserves_tv cx t u ==>
+            preserves_tv cx s u` by metis_tac[preserves_tv_trans] >>
+  `!s os rqs. preserves_tv cx s
+      (s with <|outcomes := os; requests := rqs|>)` by simp[preserves_tv_def] >>
+  `!s accounts transient logs. preserves_tv cx s
+      (s with <|accounts := accounts; tStorage := transient;
+                logs := s.logs ++ logs|>)` by simp[preserves_tv_def] >>
+  `!s. preserves_tv cx s s` by simp[] >>
+  drule_all (ExtCall_outcome_transport |> Q.INST
+    [`R` |-> `preserves_tv cx`]) >> simp[]
+QED

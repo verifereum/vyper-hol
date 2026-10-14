@@ -49,6 +49,14 @@ Definition is_flag_type_def[simp]:
   is_flag_type _ = F
 End
 
+(* The compiler lowers `~` to a word NOT for exactly uint256 and bytes32
+   (vyper/codegen/expr.py, parse_UnaryOp); narrow unsigned types are rejected
+   outright with UnimplementedException. *)
+Definition is_bytes32_type_def[simp]:
+  is_bytes32_type (BaseT (BytesT (Fixed 32))) = T /\
+  is_bytes32_type _ = F
+End
+
 Definition is_sized_type_def[simp]:
   is_sized_type (ArrayT _ _) = T /\
   is_sized_type (BaseT (StringT _)) = T /\
@@ -167,10 +175,16 @@ End
 Definition well_typed_builtin_app_def:
   well_typed_builtin_app ty (Bop bop) ts =
     (LENGTH ts = 2 /\ well_typed_binop ty bop (EL 0 ts) (EL 1 ts)) /\
+  well_typed_builtin_app ty CalldataLen ts =
+    (ts = [] /\ ty = BaseT (UintT 256)) /\
+  well_typed_builtin_app ty (CalldataSlice n) ts =
+    (0 < n /\ n < 2 ** 256 /\ ts = [BaseT (UintT 256)] /\
+     ty = BaseT (BytesT (Dynamic n))) /\
   well_typed_builtin_app ty Len ts =
     (LENGTH ts = 1 /\ ty = BaseT (UintT 256) /\ is_sized_type (HD ts)) /\
   well_typed_builtin_app ty Not ts =
-    (LENGTH ts = 1 ∧ HD ts = ty ∧ (is_bool_type ty ∨ is_uint_type ty ∨ is_flag_type ty)) ∧
+    (LENGTH ts = 1 ∧ HD ts = ty ∧
+     (is_bool_type ty ∨ is_uint256_type ty ∨ is_bytes32_type ty ∨ is_flag_type ty)) ∧
   well_typed_builtin_app ty Neg ts = (ts = [ty] /\ is_numeric_type ty) /\
   well_typed_builtin_app ty Keccak256 ts =
     (LENGTH ts = 1 /\ ty = BaseT (BytesT (Fixed 32)) /\ is_bytes_or_string_type (HD ts)) /\
@@ -393,6 +407,8 @@ Definition valid_conversion_def:
   valid_conversion (BaseT (BytesT _)) (BaseT (BytesT _)) = T /\
   valid_conversion (BaseT (BytesT _)) (BaseT (UintT _)) = T /\
   valid_conversion (BaseT (BytesT _)) (BaseT (IntT _)) = T /\
+  valid_conversion (BaseT (BytesT _)) (BaseT AddressT) = T /\
+  valid_conversion (BaseT (BytesT _)) (BaseT DecimalT) = T /\
   valid_conversion (BaseT (UintT _)) (BaseT (UintT _)) = T /\
   valid_conversion (BaseT (UintT _)) (BaseT (IntT _)) = T /\
   valid_conversion (BaseT (IntT _)) (BaseT (UintT _)) = T /\
@@ -448,15 +464,17 @@ Definition abi_encode_method_id_size_def:
 End
 
 Definition abi_encode_size_ok_def:
-  abi_encode_size_ok tenv target_ty method_id n =
-    (vyper_abi_size_bound tenv target_ty +
+  abi_encode_size_ok tenv ensure target_ty method_id n =
+    (vyper_abi_size_bound tenv
+       (case target_ty of TupleT [t] => if ensure then target_ty else t
+                       | _ => target_ty) +
      abi_encode_method_id_size method_id <= n)
 End
 
 Definition type_builtin_result_ok_def:
-  type_builtin_result_ok tenv (AbiEncode _ method_id) result_ty target_ty arg_tys =
+  type_builtin_result_ok tenv (AbiEncode ensure method_id) result_ty target_ty arg_tys =
     (?n. result_ty = BaseT (BytesT (Dynamic n)) ∧ target_ty = TupleT arg_tys ∧
-         abi_encode_size_ok tenv target_ty method_id n) ∧
+         abi_encode_size_ok tenv ensure target_ty method_id n) ∧
   type_builtin_result_ok tenv Empty result_ty target_ty arg_tys = (result_ty = target_ty) ∧
   type_builtin_result_ok tenv MaxValue result_ty target_ty arg_tys = (result_ty = target_ty) ∧
   type_builtin_result_ok tenv MinValue result_ty target_ty arg_tys = (result_ty = target_ty) ∧
@@ -563,6 +581,10 @@ Definition well_typed_expr_def:
      EL 0 (MAP expr_type args) = BaseT AddressT /\
      (?bd. EL 1 (MAP expr_type args) = BaseT (BytesT bd)) /\
      EL 2 (MAP expr_type args) = BaseT (UintT 256)) /\
+  well_typed_expr env (Call ty (RawCallCalldataTarget flags) args drv) =
+    (well_typed_exprs env args /\ drv = NONE /\ ty = raw_call_return_type flags /\
+     flags.rcf_max_outsize < dimword(:256) /\ ¬flags.rcf_is_delegate /\
+     MAP expr_type args = [BaseT AddressT; BaseT (UintT 256)]) /\
   well_typed_expr env (Call ty RawLog args drv) =
     (well_typed_exprs env args /\ drv = NONE /\ ty = NoneT /\ LENGTH args = 2 /\
      (?bd. EL 0 (MAP expr_type args) = ArrayT (BaseT (BytesT (Fixed 32))) bd /\

@@ -393,11 +393,14 @@ Proof
        vyperValueOperationTheory.binop_negate_def]
 QED
 
-(* ========= Division/Modulo: success implies nonzero divisor ========== *)
+(* ========= Checked Division/Modulo: success implies nonzero divisor ========= *)
+(* UnsafeDiv is excluded: unsafe_div_success_nonzero_counterexample in
+   vyperUnsafeDivTest is a closed kernel witness for successful zero division.
+   The original proof below is retained, including its now-impossible branch. *)
 
 Theorem evaluate_binop_div_mod_success_nonzero:
   ∀u tv bop v1 v2 result.
-    (bop = Div ∨ bop = UnsafeDiv ∨ bop = Mod) ∧
+    (bop = Div ∨ bop = Mod) ∧
     evaluate_binop u tv bop v1 v2 = INL result ⇒
     (∃i1 i2. v1 = IntV i1 ∧ v2 = IntV i2 ∧ i2 ≠ 0) ∨
     (∃i1 i2. v1 = DecimalV i1 ∧ v2 = DecimalV i2 ∧ i2 ≠ 0)

@@ -31,7 +31,7 @@
 
 Theory context
 Ancestors
-  emitHelper compileEnv venomInst
+  emitHelper compileEnv venomInst typedCopyDomain list pair arithmetic combin
 Libs
   monadsyntax
 
@@ -635,10 +635,11 @@ End
      DynArrayT → compile_copy_dynarray_typed (length check + per-element loop)
      StructT → compile_struct_typed_copy (per-field by name, recursive)
    All dispatch functions RECURSE into compile_store_memory_typed.
-   Terminates because sub-type depth strictly decreases (requires
-   well_formed_sft acyclicity for struct recursion through cenv).
+   Recursive complex copying rejects cyclic metadata with INVALID. The
+   computable acyclic domain and total rank are proved in typedCopyDomain;
+   recursive compiler calls keep cenv unchanged, including numeric field sizes.
    Mirrors Python: context.py _store_memory_typed (recursive) *)
-val compile_store_memory_typed_defn = Defn.Hol_defn "compile_store_memory_typed" `
+Definition compile_store_memory_typed_def:
   (* Top-level dispatch *)
   compile_store_memory_typed cenv dst dst_ty src src_ty =
     (if is_word_type dst_ty then
@@ -647,6 +648,8 @@ val compile_store_memory_typed_defn = Defn.Hol_defn "compile_store_memory_typed"
       od
     else if is_bytestring_type dst_ty ∧ is_bytestring_type src_ty then
       compile_store_bytestring src dst
+    else if ~acyclic_struct_metadata cenv.ce_struct_fields then
+      emit_void INVALID []
     else
       case (dst_ty, src_ty) of
         (ArrayT dst_elem (Dynamic dst_cap), ArrayT src_elem (Dynamic _)) =>
@@ -774,12 +777,28 @@ val compile_store_memory_typed_defn = Defn.Hol_defn "compile_store_memory_typed"
         compile_struct_typed_copy cenv dst src dst_rest src_fields
                                (dst_off + dst_sz) (src_off + src_sz)
      od)
-`;
-
-(* Termination: struct recursion through cenv.ce_struct_fields requires
-   well_formed_sft (acyclic struct graph). Same root cause as the 3
-   compileEnv termination cheats. Provable with struct_type_depth measure. *)
-val _ = Defn.save_defn compile_store_memory_typed_defn;
+Termination
+  (* Phase offsets separate store calls from list/array helper calls. No
+     compiler state, source type, or capacity is a recursion measure. *)
+   WF_REL_TAC `measure (λx. case x of
+     INL (cenv,dst,dst_ty,src,src_ty) =>
+       3 * type_rank cenv.ce_struct_fields dst_ty
+   | INR (INL (cenv,dst,src,dst_tys,src_tys,dst_off,src_off)) =>
+       3 * SUM (MAP (type_rank cenv.ce_struct_fields) dst_tys) + 1
+   | INR (INR (INL (cenv,dst,dst_elem,src,src_elem,ncopy))) =>
+       3 * type_rank cenv.ce_struct_fields dst_elem + 1
+   | INR (INR (INR (INL (cenv,dst,dst_elem,capacity,src,src_elem)))) =>
+       3 * type_rank cenv.ce_struct_fields dst_elem + 1
+   | INR (INR (INR (INR (cenv,dst,src,dst_fields,src_fields,dst_off,src_off)))) =>
+       3 * SUM (MAP (type_rank cenv.ce_struct_fields o FST o SND) dst_fields) + 1)` >>
+   rpt strip_tac >> gvs[is_word_type_def, is_bytestring_type_def] >>
+   ASM_SIMP_TAC std_ss [type_rank_struct_equation] >>
+   simp[type_rank_def] >>
+   mp_tac (Q.SPECL [`cenv.ce_struct_fields`,`dst_ty`] type_rank_positive) >>
+   mp_tac (Q.SPECL [`cenv.ce_struct_fields`,`dst_fty`] type_rank_positive) >>
+   simp[LEFT_ADD_DISTRIB, RIGHT_ADD_DISTRIB, o_DEF] >>
+   CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[] >> decide_tac
+End
 
 (* NOTE: compile_store_complex_type and compile_copy_complex_type deleted —
    dead code. Actual callers use compile_word_copy_loop / compile_ptr_load

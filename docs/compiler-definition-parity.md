@@ -75,6 +75,24 @@ The matrix should eventually identify exact Python modules, classes, and functio
 | Selectors/entry metadata | selector and entry inputs | unknown | Current HOL top-level lowering accepts pre-extracted data. |
 | Compiler settings/EVM version | pipeline/codegen parameters | unknown | Must be fixed explicitly in theorem inputs. |
 
+Unary operators are a checked frontend boundary at `VYPER_PIN`: the compiler's
+`Expr.parse_UnaryOp` lowers boolean `not`, bitwise `~` for `uint256` and
+`bytes32`, and masked inversion for flags; it rejects narrower unsigned
+integers and fixed bytes for `~`. HOL's `well_typed_builtin_app` uses one
+`Not` builtin for those four result-type families, and `evaluate_builtin`
+uses a 256-bit word complement for integers/bytes32.
+The word result remains in range even for an oversized nonnegative integer
+outside the `value_has_type` invariant. `tests/vyperInvertTestScript.sml`
+checks translation, acceptance/rejection, contract checking, and execution.
+This does not certify the broader frontend metadata boundary in the table.
+
+The exported test funnel alone cannot detect either historical mismatch:
+`setup-vyper-test-exports` deselects fuzzing tests, including the only
+runtime bytes32 inversion test; negative `test_unimplemented_unary_not`
+cases export no traces/source and cannot be replayed. Direct deterministic
+HOL regressions are build roots, independent of exported traces; they do not
+convert the upstream compile-only tests into replayed tests.
+
 ### Lowering definitions
 
 | HOL file/area | Pinned Python source area | Status | Notes |

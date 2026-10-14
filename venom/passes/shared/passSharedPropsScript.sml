@@ -377,8 +377,7 @@ Proof
   (* OK-OK case: use terminator_OK_inst_idx_0 to get idx=0 *)
   imp_res_tac terminator_OK_inst_idx_0 >> gvs[] >>
   Cases_on `v.vs_halted` >>
-  simp[result_equiv_def, state_equiv_def, execution_equiv_def,
-       lookup_var_def, venom_state_component_equality]
+  simp[result_equiv_def, state_equiv_def, execution_equiv_def, lookup_var_def]
 QED
 
 (* Generalized: relates exec_block at any idx to exec_block on filtered block
@@ -504,20 +503,14 @@ QED
 Triviality state_equiv_empty_eq:
   !s1 s2. state_equiv {} s1 s2 ==> s1 = s2
 Proof
-  rw[state_equiv_def, execution_equiv_def, venom_state_component_equality,
-     lookup_var_def] >>
-  `!v. FLOOKUP s1.vs_vars v = FLOOKUP s2.vs_vars v` by metis_tac[] >>
-  metis_tac[finite_mapTheory.FLOOKUP_EXT, EQ_EXT]
+  ACCEPT_TAC stateEquivPropsTheory.state_equiv_empty_eq
 QED
 
 Triviality result_equiv_empty_ok:
   !s1 s2.
     result_equiv {} (OK s1) (OK s2) ==> s1 = s2
 Proof
-  rw[result_equiv_def, state_equiv_def, execution_equiv_def,
-     venom_state_component_equality, lookup_var_def] >>
-  `!v. FLOOKUP s1.vs_vars v = FLOOKUP s2.vs_vars v` by metis_tac[] >>
-  metis_tac[finite_mapTheory.FLOOKUP_EXT, EQ_EXT]
+  simp[result_equiv_def, stateEquivPropsTheory.state_equiv_empty_eq]
 QED
 
 (* If no element in the list is PHI, phi_prefix_length = 0 *)

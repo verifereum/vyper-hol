@@ -21,6 +21,10 @@ Ancestors
   cfgTransform cfgTransformProps passSimulationDefs passSimulationProps
   execEquivParamDefs execEquivParamProofs
   list rich_list alist finite_map pred_set string arithmetic
+Libs
+  ssaFrameLib
+
+val _ = augment_srw_ss [ssaFrameLib.frame_ss];
 
 (* ALOOKUP CASE elimination helper *)
 Theorem alookup_case_elim[local]:

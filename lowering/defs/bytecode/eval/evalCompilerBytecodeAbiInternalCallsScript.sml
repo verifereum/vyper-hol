@@ -42,14 +42,15 @@ val internal_tuple_call_compile_step1 =
 val internal_tuple_call_compile_eval =
   TRANS internal_tuple_call_compile_step0
     internal_tuple_call_compile_step1
-val internal_tuple_call_oracle_eq = EQT_ELIM (EVAL (mk_eq
-  (rhs (concl internal_tuple_call_compile_eval),
-   ``SOME ^(evalCompilerBytecodeLib.read_hex_bytes
-       "internal_tuple_call.hex")``)))
-val internal_tuple_call_matches_python_oracle = save_thm
-  ("internal_tuple_call_matches_python_oracle",
-   TRANS internal_tuple_call_compile_eval
-     internal_tuple_call_oracle_eq)
+val () = evalCompilerBytecodeLib.add_compile_eval internal_tuple_call_compile_eval
+
+Theorem internal_tuple_call_matches_python_oracle:
+  compile_vyper (K SOME) (o1_policy all_capabilities)
+    task090_internal_tuple_call_program =
+    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "internal_tuple_call.hex")
+Proof
+  EVAL_TAC
+QED
 
 Theorem internal_struct_call_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
@@ -195,11 +196,12 @@ val internal_bytes_call_compile_step1 =
 val internal_bytes_call_compile_eval =
   TRANS internal_bytes_call_compile_step0
     internal_bytes_call_compile_step1
-val internal_bytes_call_oracle_eq = EQT_ELIM (EVAL (mk_eq
-  (rhs (concl internal_bytes_call_compile_eval),
-   ``SOME ^(evalCompilerBytecodeLib.read_hex_bytes
-       "internal_bytes_call.hex")``)))
-val internal_bytes_call_matches_python_oracle = save_thm
-  ("internal_bytes_call_matches_python_oracle",
-   TRANS internal_bytes_call_compile_eval
-     internal_bytes_call_oracle_eq)
+val () = evalCompilerBytecodeLib.add_compile_eval internal_bytes_call_compile_eval
+
+Theorem internal_bytes_call_matches_python_oracle:
+  compile_vyper (K SOME) (o1_policy all_capabilities)
+    task090_internal_bytes_call_program =
+    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "internal_bytes_call.hex")
+Proof
+  EVAL_TAC
+QED

@@ -1,15 +1,19 @@
 (*
  * Configured end-to-end correctness interfaces.
  *
- * This theory keeps the generic compiler and semantic obligations explicit,
- * while exposing the two successful phases of compile_vyper_with and the
- * O1 specialization (all target capabilities) of the generic end-to-end
- * theorem.
+ * The two successful compile_vyper_with phases are proved, with unchanged
+ * public schemas and original proof owner compilePhasesProps. TASK056 retires
+ * the superseded O1 wrapper; exact O1 call correctness is vyper_call_correct.
+ * Original superseded proof text is retained below, inactive, with replacement
+ * mapping in lowering/e2eLegacy.md. No old/new equivalence is claimed.
  *)
 
 Theory configuredE2ECorrectness
 Ancestors
-  e2eCorrectness
+  e2eCorrectness compilePhasesProps
+
+(* Structural phase proofs now live below the semantic composition layer.
+   These public re-exports preserve their original statements. *)
 
 (* A successful generic compilation records all intermediate values from both
    the runtime and deployment phases. *)
@@ -27,11 +31,7 @@ Theorem compile_vyper_with_success_phases:
     deploy_out.po_final_assembly = rpolicy.rpol_final_assembly /\
     finalize_codegen finalizer rpolicy deploy_out.po_unit = SOME deploy_bc
 Proof
-  simp[compileVyperTheory.compile_vyper_with_def,
-       compileVyperTheory.checked_unit_pipeline_def] >>
-  rpt strip_tac >>
-  gvs[AllCaseEqs()] >>
-  goal_assum $ drule_at Any
+  MATCH_ACCEPT_TAC compilePhasesPropsTheory.compile_vyper_with_success_phases
 QED
 
 (* Phase-local conditional results compose for the exact bytecode pair returned
@@ -55,14 +55,11 @@ Theorem compile_vyper_with_deploy_runtime_compose:
      ==> deploy_ok deploy_bc runtime_bc)
   ==> runtime_ok runtime_bc /\ deploy_ok deploy_bc runtime_bc
 Proof
-  strip_tac >>
-  drule compile_vyper_with_success_phases >>
-  strip_tac >>
-  conj_tac
-  >- (first_x_assum irule >> simp[])
-  >> first_x_assum irule >> simp[]
+  MATCH_ACCEPT_TAC compilePhasesPropsTheory.compile_vyper_with_deploy_runtime_compose
 QED
 
+(* TASK056 RETIRED SOURCE ARCHIVE: superseded by exact public
+   e2eCorrectness$vyper_call_correct. Original statement/proof retained.
 (* The O1 specialization is obtained solely by instantiating the generic
    end-to-end correctness theorem; all semantic obligations remain explicit. *)
 Theorem e2e_vyper_to_evm_O1:
@@ -83,8 +80,8 @@ Theorem e2e_vyper_to_evm_O1:
            rpolicy o1_pipeline_spec unit)
       finalizer (o1_policy all_capabilities) tops =
         SOME (deploy_bc, runtime_bc) /\
-    source_deployment_rel tops am tx cenv /\
-    source_unit_execution_correct tenv cenv am tx ret unit vs /\
+    source_deployment_rel_legacy tops am tx cenv /\
+    source_unit_execution_correct_legacy tenv cenv am tx ret unit vs /\
     generate_context_plan out.po_unit.cu_context = SOME cp /\
     out.po_unit.cu_context.ctx_entry = SOME name /\
     lookup_function name out.po_unit.cu_context.ctx_functions = SOME fn /\
@@ -99,28 +96,36 @@ Theorem e2e_vyper_to_evm_O1:
     contextCodegenRel$codegen_reachability_package
       Inv out.po_unit.cu_context vs /\
     initial_codegen_state_rel cp vs /\
-    codegenCorrectness$initial_ctx_rel cp prog off
+    codegenCorrectness$initial_ctx_rel_legacy cp prog off
       out.po_unit.cu_context vs es /\
     asm_pc_to_offset prog off = 0 /\
     es.contexts = (ctxt, rb) :: rest /\
-    call_state_rel tops runtime_bc am tx tenv ctxt rb es.txParams /\
-    valid_vyper_call am tx tenv ctxt.msgParams.data ret /\
+    call_state_rel_legacy tops runtime_bc am tx tenv ctxt rb es.txParams /\
+    valid_vyper_call_legacy am tx tenv ctxt.msgParams.data ret /\
     cenv.ce_type_env = tenv /\
     cenv.ce_event_info = compiled_event_info tops /\
-    checked_unit_transform_correct
+    checked_unit_transform_correct_legacy
       (\rpolicy unit.
          run_venom_pipeline (K T) (K T) (K T)
            rpolicy o1_pipeline_spec unit)
       rpolicy R_ok R_term unit vs /\
     (!s1 s2. R_ok s1 s2 ==> observable_equiv s1 s2) /\
     (!s1 s2. R_term s1 s2 ==> observable_equiv s1 s2) /\
-    finalizer_correct rpolicy finalizer
+    finalizer_correct_legacy rpolicy finalizer
     ==>
     ?gas_needed.
       ctxt.msgParams.gasLimit >= gas_needed ==>
-      vyper_evm_correspondence tenv (compiled_event_info tops) ret am tx es
+      vyper_evm_correspondence_legacy tenv (compiled_event_info tops) ret am tx es
+Proof
+  rpt strip_tac >>
+  (* TASK054: original proof text preserved verbatim:
 Proof
   rpt strip_tac >>
   drule_all e2eCorrectnessTheory.e2e_vyper_to_evm >>
   simp[]
 QED
+     This proved client retains the old stage-admitted contract until TASK056. *)
+  drule_all e2eCorrectnessTheory.e2e_vyper_to_evm_legacy >>
+  simp[]
+QED
+*)

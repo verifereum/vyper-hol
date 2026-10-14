@@ -18,6 +18,24 @@ Libs
 
 val _ = Parse.hide "body";
 
+(* Oracle bookkeeping is outside the existing typing/scopes/immutable
+ * invariants. No condition on the supplied outcomes is needed. *)
+Theorem oracle_fields_type_invariants[simp]:
+  (state_well_typed (st with <|outcomes := orc; requests := rqs|>) <=>
+   state_well_typed st) /\
+  (env_scopes_consistent env cx
+     (st with <|outcomes := orc; requests := rqs|>) <=>
+   env_scopes_consistent env cx st) /\
+  (env_immutables_consistent env cx
+     (st with <|outcomes := orc; requests := rqs|>) <=>
+   env_immutables_consistent env cx st) /\
+  (env_consistent env cx (st with <|outcomes := orc; requests := rqs|>) <=>
+   env_consistent env cx st)
+Proof
+  simp[state_well_typed_def, env_scopes_consistent_def,
+       env_immutables_consistent_def, env_consistent_def]
+QED
+
 (* Runtime well-typedness of an abstract machine, separated from any particular
  * function environment.  Readiness of globals/immutables is target- and
  * environment-dependent, so it is captured separately by immutables_ready below. *)
@@ -797,16 +815,35 @@ QED
 
 Theorem initial_state_accounts_well_typed:
   machine_well_typed am ==>
-  accounts_well_typed (initial_state am scs).accounts
+  accounts_well_typed
+    (initial_state am scs with <|outcomes := orc; requests := rqs|>).accounts
 Proof
   simp[machine_well_typed_def, initial_state_def]
 QED
 
 Theorem initial_state_single_scope_well_typed:
   machine_well_typed am /\ scope_well_typed scope ==>
-  state_well_typed (initial_state am [scope])
+  state_well_typed
+    (initial_state am [scope] with <|outcomes := orc; requests := rqs|>)
 Proof
   simp[machine_well_typed_def, initial_state_def, state_well_typed_def]
+QED
+
+(* Concrete entry consumers normalize record projections before rewriting. *)
+Theorem initial_state_accounts_well_typed_simple:
+  machine_well_typed am ==>
+  accounts_well_typed (initial_state am scs).accounts
+Proof
+  mp_tac (Q.INST [`orc` |-> `NONE`, `rqs` |-> `[]`]
+    initial_state_accounts_well_typed) >> simp[initial_state_def]
+QED
+
+Theorem initial_state_single_scope_well_typed_simple:
+  machine_well_typed am /\ scope_well_typed scope ==>
+  state_well_typed (initial_state am [scope])
+Proof
+  mp_tac (Q.INST [`orc` |-> `NONE`, `rqs` |-> `[]`]
+    initial_state_single_scope_well_typed) >> simp[]
 QED
 
 Theorem env_context_consistent_empty_static_maps:
@@ -958,7 +995,8 @@ Theorem immutables_ready_env_immutables_consistent:
   env.bare_global_assignable = env_base.bare_global_assignable /\
   env.toplevel_vtypes = env_base.toplevel_vtypes /\
   immutables_ready env_base.bare_globals env_base.toplevel_vtypes cx am.immutables ==>
-  env_immutables_consistent env cx (initial_state am [scope])
+  env_immutables_consistent env cx
+    (initial_state am [scope] with <|outcomes := orc; requests := rqs|>)
 Proof
   rw[immutables_ready_def, env_immutables_consistent_def, initial_state_def] >> metis_tac[]
 QED
@@ -985,7 +1023,7 @@ Theorem callable_entry_establishes_type_soundness_preconditions:
   bind_arguments (get_tenv cx) args vals = SOME scope /\
   args_values_typed (get_tenv cx) args vals ==>
   ?env_body env_after st.
-    st = initial_state am [scope] /\
+    st = (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) /\
     env_body.current_src = src /\
     env_body.type_defs = env_base.type_defs /\
     env_body.fn_sigs = env_base.fn_sigs /\
@@ -1004,7 +1042,8 @@ Proof
   `scope_well_typed scope` by
     metis_tac[bind_arguments_scope_well_typed_from_success] >>
   qexistsl [`env_body`, `env_after`] >>
-  rw[initial_state_accounts_well_typed, initial_state_single_scope_well_typed] >>
+  rw[initial_state_accounts_well_typed_simple,
+     initial_state_single_scope_well_typed_simple] >>
   rw[env_consistent_def]
   >- (irule env_context_consistent_same_static_maps >> qexists `env_base` >> gvs[])
   >- (`env_scopes_consistent env_body cx
@@ -1013,7 +1052,8 @@ Proof
       irule bind_arguments_env_scopes_consistent >>
       qexistsl [`args`, `get_tenv cx`, `vals`] >>
       gvs[] >> metis_tac[])
-  >- (irule immutables_ready_env_immutables_consistent >> qexists `env_base` >> gvs[])
+  >- (irule (SRULE [] immutables_ready_env_immutables_consistent) >>
+      qexists `env_base` >> gvs[])
 QED
 
 (* Direct corollary for type soundness: once callable-entry setup has established
@@ -1032,7 +1072,8 @@ Theorem callable_entry_no_type_error:
     SOME (fm,nr,args,dflts,ret,body) /\
   bind_arguments (get_tenv cx) args vals = SOME scope /\
   args_values_typed (get_tenv cx) args vals ==>
-  no_type_error_eval (eval_stmts cx body (initial_state am [scope]))
+  no_type_error_eval (eval_stmts cx body
+    (initial_state am [scope] with <|outcomes := orc; requests := rqs|>))
 Proof
   metis_tac[
     callable_entry_establishes_type_soundness_preconditions,

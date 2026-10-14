@@ -1,9 +1,21 @@
 Theory vyperExprNoControl
 
 Ancestors
-  vyperCreate vyperInterpreter vyperAST vyperState vyperMisc
+  pair vyperCreate vyperInterpreter vyperAST vyperMisc
+  vyperCallFrame vyperCallOutcome vyperCallOutcomeBranches vyperCallOutcomeFrame
+  vyperRuntimeAccounts vyperState
 Libs
-  pairLib
+  pairLib monadsyntax
+
+val () = monadsyntax.enable_monad "vyper_evaluation";
+val () = Parse.type_abbrev ("exception", ``:vyperState$exception``);
+val _ = hide "body";
+val _ = overload_on ("bind", ``vyperState$bind``);
+val _ = overload_on ("return", ``vyperState$return``);
+val _ = overload_on ("ignore_bind", ``vyperState$ignore_bind``);
+val _ = overload_on ("raise", ``vyperState$raise``);
+val _ = overload_on ("try", ``vyperState$try``);
+val _ = overload_on ("finally", ``vyperState$finally``);
 
 (* ===== Helper predicate ===== *)
 Definition no_control_exc_def:
@@ -212,6 +224,7 @@ Theorem transfer_value_no_control:
   ∀from to amt s exc s'.
   transfer_value from to amt s = (INR exc, s') ⇒ no_control_exc exc
 Proof
+  (* Original concrete implementation proof:
   rpt gen_tac >>
   rename1 `transfer_value fromAddr toAddr amount st = (INR exc, st') ⇒ no_control_exc exc` >>
   Cases_on `amount = 0 ∨ fromAddr = toAddr`
@@ -220,6 +233,8 @@ Proof
     get_accounts_def, return_def, update_accounts_def]
   >> strip_tac >> gvs[AllCaseEqs(), return_def]
   >> imp_res_tac check_no_control
+  *)
+  rpt strip_tac >> drule concrete_send_error >> rw[no_control_exc_def]
 QED
 
 Theorem get_immutables_no_control:
@@ -590,6 +605,135 @@ Proof
   >> gvs[return_def]
 QED
 
+(* Default/decode boundary used by the live concrete ExtCall resume and its
+   oracle sibling. Decode errors are runtime errors; default errors are IH. *)
+Theorem extcall_return_tail_no_control:
+  (bs = [] /\ IS_SOME drv ==>
+    !s exc t. eval_expr cx (THE drv) s = (INR exc,t) ==> no_control_exc exc) /\
+  (if bs = [] /\ IS_SOME drv then eval_expr cx (THE drv)
+   else do
+     v <- lift_sum_runtime (evaluate_abi_decode_return tenv ret_type bs);
+     return (Value v)
+   od) st = (INR exc,st') ==>
+  no_control_exc exc
+Proof
+  Cases_on `bs = [] /\ IS_SOME drv` >> simp[] >> rpt strip_tac
+  >- (first_x_assum drule >> simp[]) >>
+  gvs[bind_def, return_def, AllCaseEqs()] >>
+  drule lift_sum_runtime_no_control >> simp[]
+QED
+
+Theorem checked_call_outcome_no_control:
+  (!bs rq outcome st1 st2 caseSuffix protectTypedAccounts exc t.
+    take_call_outcome target calldata value_opt st = (INL (rq,outcome),st1) /\
+    outcome.co_success /\ adopt_call_outcome rq outcome st1 = (INL (),st2) /\
+    caseSuffix = st2.outcomes /\ protectTypedAccounts /\
+    protectTypedAccounts = (~rq.cr_static ==> accounts_runtime_well_typed st2.accounts) /\
+    bs = outcome.co_returnData /\
+    k bs st2 = (INR exc,t) ==> no_control_exc exc) /\
+  (do
+    (rq,outcome) <- take_call_outcome target calldata value_opt;
+    check outcome.co_success msg;
+    adopt_call_outcome rq outcome;
+    k outcome.co_returnData
+  od) st = (INR exc,st') ==>
+  no_control_exc exc
+Proof
+  simp[checked_call_outcome_cases] >> rpt strip_tac
+  >- (drule take_call_outcome_error >> rw[no_control_exc_def])
+  >- simp[no_control_exc_def] >>
+  drule_all take_adopt_call_outcome_effects >> strip_tac >>
+  `~rq.cr_static ==> accounts_runtime_well_typed st2.accounts` by metis_tac[] >>
+  first_x_assum drule_all >> simp[]
+QED
+
+Theorem ExtCall_outcome_no_control:
+  (!bs rq outcome st1 st2 caseSuffix protectTypedAccounts exc t.
+    take_call_outcome target calldata value_opt st = (INL (rq,outcome),st1) /\
+    outcome.co_success /\ adopt_call_outcome rq outcome st1 = (INL (),st2) /\
+    caseSuffix = st2.outcomes /\ protectTypedAccounts /\
+    protectTypedAccounts = (~rq.cr_static ==> accounts_runtime_well_typed st2.accounts) /\
+    bs = outcome.co_returnData /\
+    k bs st2 = (INR exc,t) ==> no_control_exc exc) /\
+  (do
+    accounts <- get_accounts;
+    (if ret_type = NoneT then
+      check (~NULL (lookup_account target accounts).code) "ExtCall target has no code"
+     else return ());
+    (rq,outcome) <- take_call_outcome target calldata value_opt;
+    check outcome.co_success "ExtCall reverted";
+    adopt_call_outcome rq outcome;
+    k outcome.co_returnData
+  od) st = (INR exc,st') ==>
+  no_control_exc exc
+Proof
+  Cases_on `take_call_outcome target calldata value_opt st` >>
+  rename1 `take_call_outcome target calldata value_opt st = (answer,mid)` >>
+  drule ExtCall_outcome_continue >>
+  disch_then (qspecl_then [`ret_type`,`k`] assume_tac) >>
+  drule checked_call_outcome_continue >>
+  disch_then (qspecl_then [`"ExtCall reverted"`,`k`] assume_tac) >>
+  rpt strip_tac >>
+  Cases_on `ret_type = NoneT /\ NULL (lookup_account target st.accounts).code` >>
+  gvs[] >- simp[no_control_exc_def] >>
+  irule checked_call_outcome_no_control >>
+  qexistsl_tac [`calldata`,`k`,`"ExtCall reverted"`,`st`,`st'`,`target`,`value_opt`] >>
+  simp[] >> first_assum ACCEPT_TAC
+QED
+
+(* Exact SourceExtCall empty-data/default continuation for TASK032/033.
+   No-control IH is only needed for a taken successful outcome with [] data.
+   Unlike type preservation this theorem requires no initial account typing. *)
+Theorem ExtCall_outcome_return_no_control:
+  (!rq outcome st1 st2 caseSuffix protectTypedAccounts exc t.
+    take_call_outcome target calldata value_opt st = (INL (rq,outcome),st1) /\
+    outcome.co_success /\ adopt_call_outcome rq outcome st1 = (INL (),st2) /\
+    caseSuffix = st2.outcomes /\ protectTypedAccounts /\
+    protectTypedAccounts = (~rq.cr_static ==> accounts_runtime_well_typed st2.accounts) /\
+    outcome.co_returnData = [] /\ IS_SOME drv /\
+    eval_expr cx (THE drv) st2 = (INR exc,t) ==> no_control_exc exc) /\
+  (do
+    accounts <- get_accounts;
+    (if ret_type = NoneT then
+      check (~NULL (lookup_account target accounts).code) "ExtCall target has no code"
+     else return ());
+    (rq,outcome) <- take_call_outcome target calldata value_opt;
+    check outcome.co_success "ExtCall reverted";
+    adopt_call_outcome rq outcome;
+    if outcome.co_returnData = [] /\ IS_SOME drv then eval_expr cx (THE drv)
+    else do
+      v <- lift_sum_runtime (evaluate_abi_decode_return (get_tenv cx) ret_type outcome.co_returnData);
+      return (Value v)
+    od
+  od) st = (INR exc,st') ==>
+  no_control_exc exc
+Proof
+  rpt strip_tac >>
+  drule_at Any (ExtCall_outcome_no_control |>
+    INST_TYPE [alpha |-> ``:toplevel_value``] |> Q.INST
+    [`k` |-> `\bs. if bs = [] /\ IS_SOME drv then eval_expr cx (THE drv)
+      else do v <- lift_sum_runtime (evaluate_abi_decode_return (get_tenv cx) ret_type bs);
+              return (Value v) od`] |> BETA_RULE) >>
+  disch_then irule >> rpt gen_tac >> strip_tac >> gvs[] >>
+  Cases_on `outcome.co_returnData = [] /\ IS_SOME drv`
+  >- (gvs[] >> first_x_assum drule_all >> simp[]) >>
+  gvs[bind_def, return_def, AllCaseEqs()] >>
+  drule lift_sum_runtime_no_control >> simp[]
+QED
+
+Theorem Send_outcome_runtime_error:
+  (do
+    (rq,outcome) <- take_call_outcome target [] (SOME amount);
+    check outcome.co_success "send failed";
+    adopt_call_outcome rq outcome;
+    return (Value NoneV)
+  od) st = (INR exc,st') ==>
+  ?msg. exc = Error (RuntimeError msg)
+Proof
+  simp[checked_call_outcome_cases, return_def] >> rpt strip_tac
+  >- (drule take_call_outcome_error >> rw[] >> simp[]) >> simp[]
+QED
+
 (* ===== Case 19: IntCall ===== *)
 
 (* Sub-helper: cleanup block never errors *)
@@ -714,6 +858,26 @@ Proof
   >> strip_tac >> drule int_call_tail_no_control >> simp[]
 QED
 
+Theorem eval_raw_call_no_control:
+  eval_raw_call cx flags target_addr calldata amount st = (INR exc, st') ==>
+  no_control_exc exc
+Proof
+  Cases_on `flags.rcf_is_delegate` >>
+  simp[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def, raise_def, get_accounts_def,
+       get_transient_storage_def, no_control_exc_def] >>
+  Cases_on `run_ext_call cx.txn.target target_addr calldata
+    (if flags.rcf_is_static then NONE else SOME amount)
+    st.accounts st.tStorage (vyper_to_tx_params cx.txn)` >>
+  simp[lift_option_def, bind_def, return_def, raise_def, no_control_exc_def] >>
+  PairCases_on `x` >>
+  Cases_on `flags.rcf_revert_on_failure` >> Cases_on `x0` >>
+  Cases_on `flags.rcf_max_outsize = 0` >>
+  simp[update_accounts_def, update_transient_def, append_logs_def,
+       check_def, assert_def, bind_def, ignore_bind_def, return_def, raise_def,
+       no_control_exc_def]
+QED
+
 (* ===== Case 20: RawCallTarget ===== *)
 
 Theorem raw_call_no_control[local]:
@@ -724,17 +888,26 @@ Theorem raw_call_no_control[local]:
     (INR exc,st') ⇒ no_control_exc exc
 Proof
   rpt strip_tac >> pop_assum mp_tac
-  >> PURE_REWRITE_TAC[Once evaluate_def] >> simp mono
-  >> strip_tac >> gvs[AllCaseEqs(), pairTheory.ELIM_UNCURRY]
-  >> TRY (FIRST (map (fn th => imp_res_tac th >> gvs[no_control_exc_def]
-       >> NO_TAC) helpers))
-  >> TRY (res_tac >> gvs[no_control_exc_def] >> NO_TAC)
-  >> rpt (step_tac >- helper_close)
-  >> gvs[update_accounts_def, update_transient_def, return_def]
-  >> Cases_on `flags.rcf_revert_on_failure`
-  >> gvs[return_def, bind_def, COND_RATOR, AllCaseEqs()]
-  >> imp_res_tac check_no_control
-  >> imp_res_tac append_logs_no_control
+  >> simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+          assert_def, lift_option_type_def, return_def, raise_def,
+          option_CASE_rator, AllCaseEqs()]
+  >> rpt strip_tac >> gvs[no_control_exc_def]
+  >> imp_res_tac eval_raw_call_no_control >> res_tac >> gvs[no_control_exc_def]
+QED
+
+Theorem raw_call_calldata_no_control[local]:
+  ∀cx ty flags es drv.
+  (∀s exc st'. eval_exprs cx es s = (INR exc,st') ⇒ no_control_exc exc) ⇒
+  ∀s exc st'.
+    eval_expr cx (Call ty (RawCallCalldataTarget flags) es drv) s =
+      (INR exc,st') ⇒ no_control_exc exc
+Proof
+  rpt strip_tac >> pop_assum mp_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, lift_option_type_def, return_def, raise_def,
+       option_CASE_rator, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[no_control_exc_def] >>
+  imp_res_tac eval_raw_call_no_control >> res_tac >> gvs[no_control_exc_def]
 QED
 
 (* ===== Main theorem ===== *)
@@ -781,16 +954,35 @@ Proof
     gvs[bind_def, return_def, AllCaseEqs()] >>
     resolve_tac) >>
   conj_tac >- unfold_tac >>
-  conj_tac >- unfold_tac >>
+  (* Original Send dispatch: conj_tac >- unfold_tac *)
+  conj_tac >- (rename1`Send` >> suspend "Send") >>
   conj_tac >- (rename1`ExtCall` >> suspend "ExtCall") >>
   conj_tac >- (rpt gen_tac >> strip_tac >>
     match_mp_tac int_call_no_control >>
     metis_tac[]) >>
   conj_tac >- (rpt strip_tac >> drule_all raw_call_no_control >> simp[]) >>
+  conj_tac >- (rpt strip_tac >> drule_all raw_call_calldata_no_control >> simp[]) >>
   conj_tac >- unfold_tac >>
   rpt conj_tac >> unfold_tac
 QED
 
+Resume eval_expr_no_control_with_bt[Send]:
+  rpt strip_tac >> pop_assum mp_tac >>
+  PURE_REWRITE_TAC [Once evaluate_def] >> strip_tac >>
+  step_tac >- close_type_check >>
+  step_tac >- (res_tac >> gvs[no_control_exc_def]) >>
+  step_tac >- close_lift_option_type >>
+  step_tac >- close_lift_option_type >>
+  qpat_x_assum `bind _ _ _ = _` mp_tac >>
+  simp[Once bind_def, return_def] >> strip_tac >>
+  qmatch_asmsub_rename_tac `case tailst.outcomes of NONE => _ | SOME _ => _` >>
+  Cases_on `tailst.outcomes` >> gvs[]
+  >- (gvs[bind_def, ignore_bind_def, return_def, AllCaseEqs()] >>
+      drule transfer_value_no_control >> simp[]) >>
+  drule Send_outcome_runtime_error >> rw[no_control_exc_def]
+QED
+
+(* TASK032: original concrete-only ExtCall proof retained.
 Resume eval_expr_no_control_with_bt[ExtCall]:
   rpt strip_tac >> pop_assum mp_tac
   >> PURE_REWRITE_TAC[Once evaluate_def] >> strip_tac
@@ -836,12 +1028,16 @@ Resume eval_expr_no_control_with_bt[ExtCall]:
   >> qpat_x_assum `∀s'' vs t. _` (fn ih =>
        step_tac >- gvs[append_logs_def, return_def] >> assume_tac ih)
   (* Handle the if-tail *)
+  (* Original decode dispatch:
   >> qpat_x_assum `(if _ then _ else _) _ = _` mp_tac
   >> simp[COND_RATOR] >> strip_tac
   >> pop_assum mp_tac
   >> simp[return_def, bind_def, AllCaseEqs()]
   >> reverse strip_tac
   >- (imp_res_tac lift_sum_runtime_no_control)
+  *)
+  >> drule_at Any extcall_return_tail_no_control
+  >> disch_then irule >> strip_tac >> rpt gen_tac >> strip_tac
   (* Instantiate IH via chained drule *)
   >> qpat_x_assum `∀s'' vs t. _`
        (mp_tac o REWRITE_RULE [GSYM AND_IMP_INTRO])
@@ -857,6 +1053,97 @@ Resume eval_expr_no_control_with_bt[ExtCall]:
   >> PairCases_on `r''` >> gvs[]
   >> rpt (disch_then drule)
   >> strip_tac >> last_x_assum irule >> metis_tac[]
+QED
+
+*)
+
+Definition no_control_monad_def:
+  no_control_monad f <=> !s exc t.
+    f s = (INR exc,t) ==> no_control_exc exc
+End
+
+Theorem no_control_monad_bind_guarded[local]:
+  no_control_monad f /\
+  (!s v t. f s = (INL v,t) ==> no_control_monad (g v)) ==>
+  no_control_monad (vyperState$bind f g)
+Proof
+  simp[no_control_monad_def] >> rpt strip_tac >>
+  drule bind_no_control >> disch_then irule >> metis_tac[]
+QED
+
+Theorem no_control_monad_primitives[local]:
+  no_control_monad (return v) /\
+  no_control_monad (λs. return (g s) s) /\
+  no_control_monad (type_check b msg) /\ no_control_monad (check b msg) /\
+  no_control_monad (lift_option opt msg) /\
+  no_control_monad (lift_option_type opt msg) /\
+  no_control_monad (lift_sum_runtime rs) /\
+  no_control_monad get_accounts /\ no_control_monad get_transient_storage /\
+  no_control_monad (update_accounts upd) /\
+  no_control_monad (update_transient upd_t) /\
+  no_control_monad (append_logs logs) /\
+  no_control_monad (adopt_call_outcome rq co)
+Proof
+  simp[no_control_monad_def, return_def, raise_def, check_def, type_check_def,
+       assert_def, lift_option_def, lift_option_type_def, lift_sum_runtime_def,
+       get_accounts_def, get_transient_storage_def, update_accounts_def,
+       update_transient_def, append_logs_def, adopt_call_outcome_equation] >>
+  rpt strip_tac >> rpt CASE_TAC >>
+  gvs[option_CASE_rator, sum_CASE_rator, AllCaseEqs(),
+      return_def, raise_def, no_control_exc_def]
+QED
+
+Theorem no_control_monad_take[local]:
+  no_control_monad (take_call_outcome target calldata value_opt)
+Proof
+  simp[no_control_monad_def] >> rpt strip_tac >>
+  drule take_call_outcome_error >> rw[no_control_exc_def]
+QED
+
+val NO_CONTROL_MONAD_TAC =
+  rpt (FIRST [CHANGED_TAC (CONV_TAC (DEPTH_CONV ETA_CONV)),
+    CHANGED_TAC (simp_tac bool_ss
+      [FORALL_PROD, pair_case_thm, UNCURRY, no_control_monad_primitives]),
+    first_assum ACCEPT_TAC, MATCH_ACCEPT_TAC no_control_monad_take,
+    CHANGED_TAC (fn (asl,w) =>
+      simp_tac bool_ss (pair_case_thm :: UNCURRY ::
+        List.map ASSUME (List.filter is_eq asl)) (asl,w)),
+    irule no_control_monad_bind_guarded >> conj_tac,
+    CHANGED_TAC (rewrite_tac[ignore_bind_def]),
+    gen_tac, strip_tac, conj_tac, CASE_TAC]);
+
+Resume eval_expr_no_control_with_bt[ExtCall]:
+  rpt gen_tac >> strip_tac >>
+  simp[GSYM no_control_monad_def, Once evaluate_def] >>
+  RULE_ASSUM_TAC (REWRITE_RULE [GSYM no_control_monad_def]) >>
+  NO_CONTROL_MONAD_TAC >|
+  [suspend "return_path_1", suspend "return_path_2",
+   suspend "return_path_3", suspend "return_path_4"]
+QED
+
+(* Match the guarded IH in semantic order.  Searching at Any repeatedly can
+   instantiate unrelated guards and explode on the concrete ExtCall path. *)
+val NO_CONTROL_MONAD_IH_TAC =
+  gvs[oneTheory.one, ignore_bind_def] >>
+  FIRST [first_assum ACCEPT_TAC,
+    first_assum (fn ih =>
+      if is_imp (snd (strip_forall (concl ih))) then
+        mp_tac (REWRITE_RULE [GSYM AND_IMP_INTRO] ih) >>
+        rpt (disch_then drule) >> strip_tac >>
+        first_assum ACCEPT_TAC >> NO_TAC
+      else NO_TAC)];
+
+Resume eval_expr_no_control_with_bt[return_path_1]:
+  NO_CONTROL_MONAD_IH_TAC
+QED
+Resume eval_expr_no_control_with_bt[return_path_2]:
+  NO_CONTROL_MONAD_IH_TAC
+QED
+Resume eval_expr_no_control_with_bt[return_path_3]:
+  NO_CONTROL_MONAD_IH_TAC
+QED
+Resume eval_expr_no_control_with_bt[return_path_4]:
+  NO_CONTROL_MONAD_IH_TAC
 QED
 
 Finalise eval_expr_no_control_with_bt

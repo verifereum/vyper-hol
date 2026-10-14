@@ -18,6 +18,7 @@
 
 Theory dftCommutation
 Ancestors
+  venomCallOracleDefs
   venomState venomExecSemantics venomExecProps venomEffects venomInst
   venomInstProofs finite_map list pair
 Libs
@@ -586,7 +587,15 @@ Theorem exec_ext_call_frame[local]:
   map_result_state (update_var x v)
     (exec_ext_call inst s gas addr value ao as_ ro rs is_static)
 Proof
-  ext_call_frame_proof [exec_ext_call_def, make_venom_call_state_def]
+  (* Legacy concrete proof: ext_call_frame_proof
+       [exec_ext_call_def, make_venom_call_state_def] *)
+  rpt strip_tac >>
+  Cases_on `inst.inst_outputs` >> gvs[exec_ext_call_def, map_result_state_def] >>
+  rename1 `inst.inst_outputs = out::rest_outputs` >>
+  Cases_on `rest_outputs` >> gvs[exec_ext_call_def, map_result_state_def] >>
+  simp[venom_call_request_def, read_memory_def, update_var_def,
+       write_memory_with_expansion_def, venom_state_component_equality,
+       finite_mapTheory.FUPDATE_COMMUTES]
 QED
 
 (* Frame lemma for exec_delegatecall *)

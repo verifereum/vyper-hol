@@ -23,10 +23,7 @@ Ancestors
 Triviality state_equiv_empty_eq[local]:
   !s1 s2. state_equiv {} s1 s2 ==> s1 = s2
 Proof
-  rpt strip_tac >>
-  fs[state_equiv_def, execution_equiv_def] >>
-  simp[venom_state_component_equality] >>
-  simp[FLOOKUP_EXT, FUN_EQ_THM] >> fs[lookup_var_def]
+  ACCEPT_TAC stateEquivPropsTheory.state_equiv_empty_eq
 QED
 
 (* Nophi invariant predicate for the function-level proof *)

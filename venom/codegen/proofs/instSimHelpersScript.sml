@@ -1,7 +1,7 @@
 (*
  * Instruction Simulation Helpers
  *
- * Foundational lemmas for gen_inst_simulation:
+ * Foundational lemmas for per-instruction simulation:
  *   - operand_val stability under update_var
  *   - venom_asm_rel stability under variable-only updates
  *   - plan_stack_rel properties for operand evaluation

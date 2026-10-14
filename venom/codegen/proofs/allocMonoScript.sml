@@ -447,9 +447,10 @@ Proof
   gen_tac >> Induct >> rpt gen_tac >> simp[FOLDL] >>
   Cases_on `h` >> simp[FOLDL] >>
   Cases_on `g q r init_ps` >>
+  rename1 `g q r init_ps = (step_ops, step_ps)` >>
   simp[LET_THM] >>
   CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >>
-  first_x_assum (qspecl_then [`init_ops ++ q'`, `r'`] mp_tac) >>
+  first_x_assum (qspecl_then [`init_ops ++ step_ops`, `step_ps`] mp_tac) >>
   simp[LET_THM] >>
   CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >>
   simp[]

@@ -127,8 +127,8 @@ Proof
 QED
 
 Theorem call_external_transaction_clears_input_logs:
-  call_external_transaction (am with logs := logs) tx =
-  call_external_transaction am tx
+  call_external_transaction orc (am with logs := logs) tx =
+  call_external_transaction orc am tx
 Proof
   simp[call_external_transaction_def, clear_machine_logs_def]
 QED
@@ -136,7 +136,7 @@ QED
 (* ===== Error Rollback Properties (issue #180) ===== *)
 
 Theorem call_external_function_error_rollback:
-  call_external_function am cx nr mut ts all_mods args dflts vals body ret = (INR e, am') ⇒
+  call_external_function orc am cx nr mut ts all_mods args dflts vals body ret = (INR e, am', rqs) ⇒
   am' = am
 Proof
   simp[Once call_external_function_def, vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def] >>
@@ -145,14 +145,14 @@ Proof
 QED
 
 Theorem call_external_error_rollback:
-  call_external am tx = (INR e, am') ⇒
+  call_external orc am tx = (INR e, am', rqs) ⇒
   am' = am
 Proof
   simp[Once call_external_def] >> strip_tac >> gvs[AllCaseEqs()] >> imp_res_tac call_external_function_error_rollback
 QED
 
 Theorem call_external_transaction_error_logs_empty:
-  call_external_transaction am tx = (INR e, am') ⇒ am'.logs = []
+  call_external_transaction orc am tx = (INR e, am', rqs) ⇒ am'.logs = []
 Proof
   rw[call_external_transaction_def] >>
   drule call_external_error_rollback >>
@@ -160,7 +160,7 @@ Proof
 QED
 
 Theorem call_external_error_no_state_change:
-  call_external am tx = (INR e, am') ⇒
+  call_external orc am tx = (INR e, am', rqs) ⇒
   am'.accounts = am.accounts ∧
   am'.tStorage = am.tStorage ∧
   am'.immutables = am.immutables

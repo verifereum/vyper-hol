@@ -1,7 +1,7 @@
 Theory mem2varCorrectness
 Ancestors
   mem2varProofs mem2varBlockSim
-  mem2varDefs mem2varBlockSimHelpers
+  mem2varDefs mem2varBlockSimHelpers mem2varFrame
   passSimulationDefs passSimulationProps
   stateEquiv
   venomExecSemantics venomState venomWf
@@ -10,7 +10,9 @@ Ancestors
   finite_map list pred_set rich_list
   While
 Libs
-  pairLib
+  pairLib mem2varFrameLib
+
+val _ = augment_srw_ss [mem2varFrameLib.frame_ss];
 
 (* eval_phis/run_block ignore the entry state's vs_inst_idx: PHIs read operands
    and run_block overwrites vs_inst_idx with phi_prefix_length before exec_block. *)

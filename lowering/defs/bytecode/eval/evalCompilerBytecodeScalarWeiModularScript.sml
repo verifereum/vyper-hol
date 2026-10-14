@@ -573,9 +573,12 @@ val scalar_modular_compile_step0 = SIMP_CONV pure_ss
       scalar_modular_program``
 val scalar_modular_compile_eval = TRANS scalar_modular_compile_step0
   (EVAL (rhs (concl scalar_modular_compile_step0)))
-val scalar_modular_oracle_eq = EQT_ELIM (EVAL (mk_eq
-  (rhs (concl scalar_modular_compile_eval),
-   ``SOME ^(evalCompilerBytecodeLib.read_hex_bytes "scalar_modular.hex")``)))
-val scalar_modular_matches_python_oracle = save_thm
-  ("scalar_modular_matches_python_oracle",
-   TRANS scalar_modular_compile_eval scalar_modular_oracle_eq)
+val () = evalCompilerBytecodeLib.add_compile_eval scalar_modular_compile_eval
+
+Theorem scalar_modular_matches_python_oracle:
+  compile_vyper (K SOME) (o1_policy all_capabilities)
+    scalar_modular_program =
+    SOME ^(evalCompilerBytecodeLib.read_hex_bytes "scalar_modular.hex")
+Proof
+  EVAL_TAC
+QED

@@ -9,7 +9,7 @@ Theory execEquivParamBase
 Ancestors
   execEquivParamDefs passSimulationDefs stateEquivProps execEquivProps
   stateEquiv venomInst venomExecSemantics venomState
-  finite_map list rich_list
+  finite_map list rich_list venomCallOracleDefs
 
 open execEquivParamLib
 
@@ -42,6 +42,20 @@ Proof
   simp[]
 QED
 
+Theorem vsr_R_ok_frame:
+  valid_state_rel R_ok R_term /\ R_ok s1 s2 ==>
+  vsr_frame s1 = vsr_frame s2
+Proof
+  rw[valid_state_rel_def, Excl "vsr_complete_mask_equality"]
+QED
+
+Theorem vsr_R_term_frame:
+  valid_state_rel R_ok R_term /\ R_term s1 s2 ==>
+  vsr_term_frame s1 = vsr_term_frame s2
+Proof
+  rw[valid_state_rel_def, Excl "vsr_complete_mask_equality"]
+QED
+
 Theorem vsr_R_ok_fields:
   !R_ok R_term s1 s2. valid_state_rel R_ok R_term /\ R_ok s1 s2 ==>
     s1.vs_call_ctx = s2.vs_call_ctx /\
@@ -69,7 +83,8 @@ Theorem vsr_R_ok_fields:
     s1.vs_allocas = s2.vs_allocas /\
     s1.vs_alloca_next = s2.vs_alloca_next
 Proof
-  rw[valid_state_rel_def]
+  rpt strip_tac >> drule_all vsr_R_ok_frame >>
+  simp[vsr_frame_def, venom_state_component_equality]
 QED
 
 Theorem vsr_R_term_fields:
@@ -96,7 +111,8 @@ Theorem vsr_R_term_fields:
     s1.vs_allocas = s2.vs_allocas /\
     s1.vs_alloca_next = s2.vs_alloca_next
 Proof
-  rpt strip_tac >> fs[valid_state_rel_def]
+  rpt strip_tac >> drule_all vsr_R_term_frame >>
+  simp[vsr_term_frame_def, venom_state_component_equality]
 QED
 
 Theorem vsr_R_ok_R_term:
@@ -129,19 +145,19 @@ QED
 Theorem vsr_R_ok_halted:
   !R_ok R_term s1 s2. valid_state_rel R_ok R_term /\ R_ok s1 s2 ==> s1.vs_halted = s2.vs_halted
 Proof
-  rw[valid_state_rel_def]
+  rpt strip_tac >> drule_all vsr_R_ok_fields >> simp[]
 QED
 
 Theorem vsr_R_ok_current_bb:
   !R_ok R_term s1 s2. valid_state_rel R_ok R_term /\ R_ok s1 s2 ==> s1.vs_current_bb = s2.vs_current_bb
 Proof
-  rw[valid_state_rel_def]
+  rpt strip_tac >> drule_all vsr_R_ok_fields >> simp[]
 QED
 
 Theorem vsr_R_ok_prev_bb:
   !R_ok R_term s1 s2. valid_state_rel R_ok R_term /\ R_ok s1 s2 ==> s1.vs_prev_bb = s2.vs_prev_bb
 Proof
-  rw[valid_state_rel_def]
+  rpt strip_tac >> drule_all vsr_R_ok_fields >> simp[]
 QED
 
 Theorem vsr_R_term_refl:
@@ -288,7 +304,7 @@ Theorem vsr_jump_to:
     valid_state_rel R_ok R_term /\ R_ok s1 s2 ==>
     R_ok (jump_to lbl s1) (jump_to lbl s2)
 Proof
-  rpt strip_tac >> simp[jump_to_def] >>
+  rpt strip_tac >> imp_res_tac vsr_R_ok_fields >> simp[jump_to_def] >>
   vsr_reconstruct_R_ok_tac `s1` `s2`
 QED
 
@@ -496,6 +512,23 @@ Theorem vsr_exec_ext_call:
       (exec_ext_call inst s1 gas addr value ao as_ ro rs is_static)
       (exec_ext_call inst s2 gas addr value ao as_ ro rs is_static)
 Proof
+  rpt strip_tac >>
+  drule_all vsr_R_ok_frame >> strip_tac >>
+  `venom_call_request s1 addr value ao as_ is_static =
+   venom_call_request s2 addr value ao as_ is_static` by
+    fs[vsr_frame_def, venom_call_request_def, read_memory_def,
+       venom_state_component_equality] >>
+  fs[vsr_frame_def, venom_state_component_equality] >>
+  Cases_on `inst.inst_outputs` >> simp[exec_ext_call_def, lift_result_def] >>
+  rename1 `inst.inst_outputs = out::rest_outputs` >>
+  Cases_on `rest_outputs` >> simp[exec_ext_call_def, lift_result_def] >>
+  Cases_on `(FST (take_outcome
+    (venom_call_request s2 addr value ao as_ is_static) s2.vs_outcomes)).co_success` >>
+  simp[] >> ext_call_result_tac ()
+QED
+
+(* Original concrete-call proof retained:
+Proof
   rw[LET_THM, exec_ext_call_def] >>
   imp_res_tac vsr_R_ok_fields >> gvs[] >>
   simp[read_memory_def, make_venom_call_state_def,
@@ -515,6 +548,7 @@ Proof
   Cases_on `t` >> gvs[lift_result_def] >>
   ext_call_result_tac ()
 QED
+*)
 
 Theorem vsr_exec_delegatecall:
   !R_ok R_term inst s1 s2 gas addr ao as_ ro rs.
@@ -599,8 +633,8 @@ Theorem vsr_setup_callee_eq:
     valid_state_rel R_ok R_term /\ R_ok s1 s2 ==>
     setup_callee fn args s1 = setup_callee fn args s2
 Proof
-  rw[setup_callee_def] >> imp_res_tac vsr_R_ok_fields >>
-  gvs[venom_state_component_equality]
+  rpt strip_tac >> irule vsr_frame_setup_callee >>
+  drule_all vsr_R_ok_frame >> simp[]
 QED
 
 Theorem vsr_merge_callee_R_ok:

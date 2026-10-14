@@ -30,7 +30,7 @@
 
 Theory deadStoreElimDefs
 Ancestors
-  analysisSimDefs passSharedDefs venomEffects memSSADefs
+  deadStoreElimFrame analysisSimDefs passSharedDefs venomEffects memSSADefs
   memAliasDefs memLocDefs basePtrDefs cfgDefs While
 
 (* is_store_opcode (in passSharedDefs) covers MSTORE/SSTORE/TSTORE.
@@ -293,19 +293,7 @@ Definition dse_equiv_def:
     (space <> AddrSp_Memory ==> s1.vs_memory = s2.vs_memory) /\
     (space <> AddrSp_Transient ==> s1.vs_transient = s2.vs_transient) /\
     (space <> AddrSp_Storage ==> s1.vs_accounts = s2.vs_accounts) /\
-    s1.vs_halted = s2.vs_halted /\
-    s1.vs_returndata = s2.vs_returndata /\
-    s1.vs_call_ctx = s2.vs_call_ctx /\
-    s1.vs_tx_ctx = s2.vs_tx_ctx /\
-    s1.vs_block_ctx = s2.vs_block_ctx /\
-    s1.vs_logs = s2.vs_logs /\
-    s1.vs_immutables = s2.vs_immutables /\
-    s1.vs_data_section = s2.vs_data_section /\
-    s1.vs_labels = s2.vs_labels /\
-    s1.vs_code = s2.vs_code /\
-    s1.vs_params = s2.vs_params /\
-    s1.vs_prev_hashes = s2.vs_prev_hashes /\
-    s1.vs_allocas = s2.vs_allocas
+    dse_frame space s1 = dse_frame space s2
 End
 
 (* After all 3 spaces: memory, transient, and accounts may differ *)
@@ -316,17 +304,5 @@ End
 Definition dse_all_equiv_def:
   dse_all_equiv s1 s2 <=>
     (!v. lookup_var v s1 = lookup_var v s2) /\
-    s1.vs_halted = s2.vs_halted /\
-    s1.vs_returndata = s2.vs_returndata /\
-    s1.vs_call_ctx = s2.vs_call_ctx /\
-    s1.vs_tx_ctx = s2.vs_tx_ctx /\
-    s1.vs_block_ctx = s2.vs_block_ctx /\
-    s1.vs_logs = s2.vs_logs /\
-    s1.vs_immutables = s2.vs_immutables /\
-    s1.vs_data_section = s2.vs_data_section /\
-    s1.vs_labels = s2.vs_labels /\
-    s1.vs_code = s2.vs_code /\
-    s1.vs_params = s2.vs_params /\
-    s1.vs_prev_hashes = s2.vs_prev_hashes /\
-    s1.vs_allocas = s2.vs_allocas
+    dse_all_frame s1 = dse_all_frame s2
 End

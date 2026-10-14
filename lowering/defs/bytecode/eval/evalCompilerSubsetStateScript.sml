@@ -15,7 +15,7 @@ Definition storage_scalar_loop_program_def:
         For "i" (BaseT (UintT 256))
           (Range (Literal (BaseT (UintT 256)) (IntL 0))
                  (Literal (BaseT (UintT 256)) (IntL 3)))
-          0
+          3
           [AugAssign (BaseT (UintT 256))
              (TopLevelNameTarget (NONE, "counter")) Add
              (Name (BaseT (UintT 256)) "i")];

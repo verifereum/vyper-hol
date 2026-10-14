@@ -11,6 +11,7 @@ Theory venomInstProofs2
 Ancestors
   venomInstProofs1 stateEquivProofs finite_map venomState
   venomExecSemantics venomInst venomEffects pred_set
+  venomCallOracleDefs extCallOracle
 
 (* ===================================================================== *)
 (* ===== EVM Static-Mode Invariant (upstream dependency) =============== *)
@@ -28,6 +29,12 @@ Theorem exec_ext_call_static_preserves:
     s'.vs_logs = s.vs_logs /\
     s'.vs_call_ctx = s.vs_call_ctx
 Proof
+  rw[exec_ext_call_def, AllCaseEqs(), update_var_def,
+     venom_call_request_def, adopt_outcome_def] >> simp[]
+QED
+
+(* Original concrete-call proof, retained for the legacy helper argument:
+Proof
   rw[exec_ext_call_def, make_venom_call_state_def, LET_DEF] >>
   gvs[AllCaseEqs()] >>
   simp[update_var_def] >>
@@ -42,6 +49,7 @@ Proof
        make_rollback_def, vfmExecutionTheory.transfer_value_def] >>
   strip_tac >> gvs[]
 QED
+*)
 
 Theorem exec_pure1_static_preserves:
   exec_pure1 x y s = OK s' ==>

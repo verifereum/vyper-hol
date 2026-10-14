@@ -36,11 +36,36 @@ Proof
        finite_mapTheory.FLOOKUP_UPDATE] >> rw[]
 QED
 
+(* Unconditional equality avoids repeatedly proving the conditional
+   distinctness premise while simplifying generated-variable reads. *)
+Theorem fresh_var_name_eq[local]:
+  !m n. (STRING #"%" (toString m) = STRING #"%" (toString n)) <=> (m = n)
+Proof
+  metis_tac[fresh_var_distinct]
+QED
+
+val weak_spec_step_tac =
+  simp[Once run_inst_seq_def, step_inst_base_def,
+       exec_pure2_def, exec_pure1_def, exec_read1_def,
+       exec_write2_def, mk_inst_def, eval_operand_def,
+       lookup_var_update_var, eval_operand_update_var_if, fresh_var_name_eq];
+
+val weak_spec_close_tac =
+  rpt (BasicProvers.FULL_CASE_TAC >>
+       TRY (metis_tac[eval_operand_update_not_none,
+                     optionTheory.NOT_NONE_SOME])) >>
+  gvs[eval_operand_update_var_if, lookup_var_update_var,
+      fresh_var_name_eq, SF SFY_ss] >>
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  TRY (Cases_on `op` >>
+       gvs[eval_operand_def, lookup_var_update_var] >>
+       rpt (IF_CASES_TAC >> gvs[]) >> NO_TAC);
+
 val weak_spec_chain_tac =
   simp[run_inst_seq_def, step_inst_base_def,
        exec_pure2_def, exec_pure1_def, exec_read1_def,
        exec_write2_def, mk_inst_def,
-       eval_operand_lit, eval_operand_update_var_if] >>
+       eval_operand_lit, eval_operand_update_var_if, fresh_var_name_eq] >>
   rpt (BasicProvers.FULL_CASE_TAC >>
        TRY (metis_tac[eval_operand_update_not_none,
                        optionTheory.NOT_NONE_SOME])) >>
@@ -92,8 +117,44 @@ Theorem compile_type_convert_2:
        eval_operand op ss' = SOME result) ∨
       run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
 Proof
-  arm_tac
+  (* Original proof: arm_tac; its definition remains above. *)
+  rpt strip_tac >> unfold_tac >>
+  rpt (BasicProvers.FULL_CASE_TAC >> fs[]) >>
+  gvs compile_defs >>
+  TRY (gvs[emitted_insts_def, run_inst_seq_def, SF SFY_ss] >> NO_TAC) >>
+  emitted_insts_tac >| [
+    weak_spec_chain_tac, suspend "signed", suspend "unsigned",
+    weak_spec_chain_tac, weak_spec_chain_tac, weak_spec_chain_tac,
+    weak_spec_chain_tac]
 QED
+
+Resume compile_type_convert_2[signed]:
+  qspecl_then [`st`,`ss`,`op`,`w`] mp_tac fresh_vars_wrt_eval_operand >>
+  simp[] >> disch_tac >> Cases_on `op` >> gvs[eval_operand_def] >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_close_tac
+QED
+
+Resume compile_type_convert_2[unsigned]:
+  qspecl_then [`st`,`ss`,`op`,`w`] mp_tac fresh_vars_wrt_eval_operand >>
+  simp[] >> disch_tac >> Cases_on `op` >> gvs[eval_operand_def] >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_close_tac
+QED
+
+Finalise compile_type_convert_2
 
 Theorem compile_type_convert_3:
   ∀ v a b c w ss st op st'.
@@ -104,7 +165,20 @@ Theorem compile_type_convert_3:
        eval_operand op ss' = SOME result) ∨
       run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
 Proof
-  arm_tac
+  (* Original proof: arm_tac. Stage long emitted chains one instruction at a time. *)
+  rpt strip_tac >> unfold_tac >>
+  rpt (BasicProvers.FULL_CASE_TAC >> fs[]) >> gvs compile_defs >>
+  TRY (gvs[emitted_insts_def, run_inst_seq_def, SF SFY_ss] >> NO_TAC) >>
+  emitted_insts_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_close_tac
 QED
 
 Theorem compile_type_convert_4:
@@ -116,7 +190,20 @@ Theorem compile_type_convert_4:
        eval_operand op ss' = SOME result) ∨
       run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
 Proof
-  arm_tac
+  (* Original proof: arm_tac; staged form avoids eager recursive unfolding. *)
+  rpt strip_tac >> unfold_tac >>
+  rpt (BasicProvers.FULL_CASE_TAC >> fs[]) >> gvs compile_defs >>
+  TRY (gvs[emitted_insts_def, run_inst_seq_def, SF SFY_ss] >> NO_TAC) >>
+  emitted_insts_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_close_tac
 QED
 
 Theorem compile_type_convert_5:
@@ -128,7 +215,24 @@ Theorem compile_type_convert_5:
        eval_operand op ss' = SOME result) ∨
       run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
 Proof
-  arm_tac
+  (* Original proof: arm_tac; staged form avoids eager recursive unfolding. *)
+  rpt strip_tac >> unfold_tac >>
+  rpt (BasicProvers.FULL_CASE_TAC >> fs[]) >> gvs compile_defs >>
+  TRY (gvs[emitted_insts_def, run_inst_seq_def, SF SFY_ss] >> NO_TAC) >>
+  emitted_insts_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_close_tac
 QED
 
 Theorem compile_type_convert_6:
@@ -140,7 +244,24 @@ Theorem compile_type_convert_6:
        eval_operand op ss' = SOME result) ∨
       run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
 Proof
-  arm_tac
+  (* Original proof: arm_tac; staged form avoids eager recursive unfolding. *)
+  rpt strip_tac >> unfold_tac >>
+  rpt (BasicProvers.FULL_CASE_TAC >> fs[]) >> gvs compile_defs >>
+  TRY (gvs[emitted_insts_def, run_inst_seq_def, SF SFY_ss] >> NO_TAC) >>
+  emitted_insts_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_close_tac
 QED
 
 Theorem compile_type_convert_7:
@@ -176,7 +297,20 @@ Theorem compile_type_convert_9:
        eval_operand op ss' = SOME result) ∨
       run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
 Proof
-  arm_tac
+  (* Original proof: arm_tac; staged form avoids eager recursive unfolding. *)
+  rpt strip_tac >> unfold_tac >>
+  rpt (BasicProvers.FULL_CASE_TAC >> fs[]) >> gvs compile_defs >>
+  TRY (gvs[emitted_insts_def, run_inst_seq_def, SF SFY_ss] >> NO_TAC) >>
+  emitted_insts_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_close_tac
 QED
 
 Theorem compile_type_convert_10:
@@ -188,5 +322,16 @@ Theorem compile_type_convert_10:
        eval_operand op ss' = SOME result) ∨
       run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
 Proof
-  arm_tac
+  (* Original proof: arm_tac; staged form avoids eager recursive unfolding. *)
+  rpt strip_tac >> unfold_tac >>
+  rpt (BasicProvers.FULL_CASE_TAC >> fs[]) >> gvs compile_defs >>
+  TRY (gvs[emitted_insts_def, run_inst_seq_def, SF SFY_ss] >> NO_TAC) >>
+  emitted_insts_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_step_tac >> weak_spec_step_tac >>
+  weak_spec_close_tac
 QED

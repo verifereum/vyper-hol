@@ -30,7 +30,8 @@ Theory emitHelperProps
 Ancestors
   exprLoweringProps emitHelper compileEnv
   venomExecSemantics venomState venomInst
-  instIdxIndep vfmState
+  instIdxIndep vfmState freshLabelStringProps ASCIInumbers
+  list pred_set arithmetic
 Libs
   intLib
 
@@ -2428,7 +2429,21 @@ Theorem fresh_label_output_inj:
     fresh_label_output s1 k1 = fresh_label_output s2 k2
     ⇒ s1 = s2 ∧ k1 = k2
 Proof
-  cheat
+  rpt gen_tac >>
+  PURE_REWRITE_TAC[fresh_label_output_def, GSYM APPEND_ASSOC] >>
+  simp[] >> strip_tac >>
+  `s1 = s2 /\ toString k1 = toString k2` by
+    (irule decimal_suffix_inj >> fs[toString_digits, APPEND_ASSOC]) >>
+  gvs[toString_inj]
+QED
+
+(* Helper: the counter alone decides future membership, for any suffix. *)
+Theorem fresh_label_output_in_future:
+  fresh_label_output suffix n IN compiler_labels_future m <=> m <= n
+Proof
+  rw[compiler_labels_future_def] >> eq_tac
+  >- (strip_tac >> drule fresh_label_output_inj >> strip_tac >> gvs[]) >>
+  strip_tac >> qexistsl_tac [`suffix`, `n`] >> simp[]
 QED
 
 (* Initial compile_state is well-formed for any entry label that is not
@@ -2484,13 +2499,13 @@ Proof
   cheat
 QED
 
-(* fresh_label: advances counter, returns a label that is external to
-   the pre-state (provable because counter equals old cs_next_label,
-   and compile_state_ok rules out prior binding). *)
+(* fresh_label: the result is external to the post-state, not the pre-state.
+   The old counter is excluded from the advanced future label space;
+   compile_state_ok rules out prior binding. *)
 Theorem fresh_label_produces_external:
   ∀ suffix st lbl st'.
     fresh_label suffix st = (lbl, st') ∧ compile_state_ok st
-    ⇒ label_external st lbl ∧
+    ⇒ label_external st' lbl ∧
       lbl = fresh_label_output suffix st.cs_next_label ∧
       st'.cs_next_label = st.cs_next_label + 1 ∧
       st'.cs_blocks = st.cs_blocks ∧
@@ -2498,7 +2513,16 @@ Theorem fresh_label_produces_external:
       bound_labels st' = bound_labels st ∧
       compile_state_ok st'
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> gvs[fresh_label_def] >>
+  `fresh_label_output suffix st.cs_next_label NOTIN bound_labels st` by
+    (fs[compile_state_ok_def] >>
+     metis_tac[IN_DISJOINT, fresh_label_output_in_future, LESS_EQ_REFL]) >>
+  simp[label_external_def, bound_labels_def, fresh_label_output_in_future,
+       compile_state_ok_def] >>
+  fs[compile_state_ok_def, bound_labels_def, IN_DISJOINT] >>
+  rpt strip_tac >>
+  fs[compiler_labels_future_def] >>
+  metis_tac[DECIDE ``n + 1 <= k ==> n <= k``]
 QED
 
 (* fresh_var / fresh_id don't touch label-space. *)

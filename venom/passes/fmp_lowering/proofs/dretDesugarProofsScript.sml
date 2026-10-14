@@ -509,7 +509,9 @@ Proof
    EVERY dret_value_operand pairs /\
    dret_value_operand return_pc` by
     metis_tac[split_dret_operands_legal] >>
-  `FLAT (MAP inst_ir_labels body) = []` by
+  rename1 `expand_dret_pairs s entry_cursor pairs =
+    SOME (DretPairExpansion expanded_insts dsts final_cursor s1)` >>
+  `FLAT (MAP inst_ir_labels expanded_insts) = []` by
     metis_tac[expand_dret_pairs_labels] >>
   `EVERY dret_value_operand dsts` by
     metis_tac[expand_dret_pairs_dsts_legal] >>

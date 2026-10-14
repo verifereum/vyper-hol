@@ -47,17 +47,17 @@ QED
 
 Theorem asm_bytecode_sim_aux:
   !n prog as es.
-    asm_wf prog /\
+    asm_encoding_wf prog /\
     asm_evm_rel prog as es /\
     LENGTH es.contexts = 1 /\
     no_asm_calls prog /\
+    (!i. i < LENGTH prog ==> EL i prog <> AsmOp "GAS") /\
     (!i. i < LENGTH prog /\ ~is_data_inst (EL i prog) ==>
          !j. j <= i ==> ~is_data_inst (EL j prog)) /\
     (!m as2. asm_steps (SND (compute_label_offsets prog))
                        (build_offset_to_pc prog)
                        prog m as = AsmOK as2 ==>
-             LENGTH as2.as_stack < stack_limit) /\
-    (!i. i < LENGTH prog ==> 0 < asm_inst_size (EL i prog)) ==>
+             LENGTH as2.as_stack < stack_limit) ==>
     (?es' exc. run es = SOME (INR (SOME exc), es') /\
                exc <> StackOverflow) \/
     ((!as'. asm_steps (SND (compute_label_offsets prog))
@@ -87,6 +87,10 @@ Proof
   >> `!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)` by
        (qpat_x_assum `!i. i < LENGTH prog /\ _ ==> _`
           (qspec_then `as.as_pc` mp_tac) >> simp[])
+  (* TASK041: the current step claim excludes GAS after its retained actual
+     counterexample; use this program's same explicit syntactic boundary. *)
+  >> `EL as.as_pc prog <> AsmOp "GAS"` by
+       (first_x_assum irule >> simp[])
   >> drule_all asm_evm_step >> strip_tac
   (* EVM exception case *)
   >- (DISJ1_TAC >>

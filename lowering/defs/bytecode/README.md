@@ -69,9 +69,20 @@ lowering/defs/bytecode/python-o1-bytecode-fixtures --compare-hol \
   --vyper-repo /path/to/vyper
 ```
 
-All 101 retained fixtures have an exact checked theorem; together they check 202
-byte lists (deployment and runtime). Any byte difference or checked-compiler
-`NONE` result fails. No HOL-generated expected output or implementation-derived
+The complete opt-in HOL rollup, including allocation-budget regressions and
+raw-context evaluator-cost measurements, is:
+
+```sh
+holbuild --max-heap 16384 -j1 --tactic-timeout 600 evalCompilerBytecodeParityTheory
+```
+
+All 101 retained fixtures have an exact checked theorem proved by plain
+`EVAL_TAC`; together they check 202 byte lists (deployment and runtime).
+Expensive fixtures use kernel-derived staged compiler evaluation certificates.
+These rederive the exact `lowering_context_ok` check, including
+`unit_alloca_budget ctx < dimword (:256)`, and never register an oracle equality
+as an evaluator rewrite. The independent oracle appears only in parity claims.
+Any byte difference or checked-compiler `NONE` result fails. No HOL-generated expected output or implementation-derived
 fallback is used. The current cached comparison and parity-theory build logs
 contain no `Saved CHEAT` tags. This is finite fixture evidence, not a universal
 compiler-equivalence theorem or a claim about unrelated existing proof debt.

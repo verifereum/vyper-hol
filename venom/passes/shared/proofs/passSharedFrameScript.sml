@@ -9,7 +9,8 @@
 
 Theory passSharedFrame
 Ancestors
-  passSharedVarFrame passSharedTransfer passSharedField
+  oracleExecProps
+  passSharedVarFrame passSharedTransfer passSharedField passResidualFrame
 
 open venomStateTheory venomInstTheory venomExecSemanticsTheory
      venomEffectsTheory venomInstPropsTheory
@@ -182,36 +183,12 @@ QED
 (* ===== commute_equiv definition and helpers ============================ *)
 (* ===================================================================== *)
 
-(* State equivalence ignoring vs_allocas and specified variables.
- * vs_allocas is internal ALLOCA bookkeeping: concrete offsets depend
- * on allocation order but don't affect observable behaviour because
- * ALLOCA output vars are already excluded via the vars parameter.
- * This is state_equiv without the vs_allocas conjunct. *)
+(* Variables agree outside vars. Allocation map and bump pointer were
+ * already unconstrained; all other fields remain in the residual frame. *)
 Definition commute_equiv_def:
   commute_equiv vars s1 s2 <=>
     (!w. w NOTIN vars ==> lookup_var w s1 = lookup_var w s2) /\
-    s1.vs_memory = s2.vs_memory /\
-    s1.vs_transient = s2.vs_transient /\
-    s1.vs_prev_bb = s2.vs_prev_bb /\
-    s1.vs_current_bb = s2.vs_current_bb /\
-    s1.vs_inst_idx = s2.vs_inst_idx /\
-    s1.vs_halted = s2.vs_halted /\
-    s1.vs_returndata = s2.vs_returndata /\
-    s1.vs_accounts = s2.vs_accounts /\
-    s1.vs_call_ctx = s2.vs_call_ctx /\
-    s1.vs_tx_ctx = s2.vs_tx_ctx /\
-    s1.vs_block_ctx = s2.vs_block_ctx /\
-    s1.vs_logs = s2.vs_logs /\
-    s1.vs_immutables = s2.vs_immutables /\
-    s1.vs_data_section = s2.vs_data_section /\
-    s1.vs_labels = s2.vs_labels /\
-    s1.vs_code = s2.vs_code /\
-    s1.vs_params = s2.vs_params /\
-    s1.vs_fmp = s2.vs_fmp /\
-    s1.vs_call_entry_fmp = s2.vs_call_entry_fmp /\
-    s1.vs_initial_fmp = s2.vs_initial_fmp /\
-    s1.vs_return_pc_token = s2.vs_return_pc_token /\
-    s1.vs_prev_hashes = s2.vs_prev_hashes
+    commute_frame s1 = commute_frame s2
 End
 
 Theorem state_equiv_imp_commute_equiv[local]:
@@ -473,7 +450,7 @@ QED
 (* Non-terminator non-INVOKE step_inst_base can only Abort from
    ASSERT (Revert_abort), ASSERT_UNREACHABLE (ExHalt_abort),
    RETURNDATACOPY (ExHalt_abort). All set returndata to []. *)
-Theorem step_inst_base_abort_opcode[local]:
+Theorem step_inst_base_abort_opcode:
   !inst s a s'.
     step_inst_base inst s = Abort a s' /\
     ~is_terminator inst.inst_opcode ==>
@@ -1494,6 +1471,10 @@ Proof
   (impl_tac >- fast_conj) >>
   strip_tac >>
   drule_all ok_ok_frame_fields >> strip_tac >>
+  `inst1.inst_opcode <> CALL /\ inst1.inst_opcode <> STATICCALL /\
+   inst2.inst_opcode <> CALL /\ inst2.inst_opcode <> STATICCALL` by
+    (rpt conj_tac >> strip_tac >> gvs[is_ext_call_op_def]) >>
+  imp_res_tac step_inst_base_oracle >>
   (* Close commute_equiv — all needed equalities are in assumptions.
      Each field is s12.F = X = ... = s21.F via transitivity of 2-4 equalities.
      metis_tac[] handles this since all equalities are in assumptions. *)

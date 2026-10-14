@@ -8,34 +8,19 @@
 
 Theory lowerDloadClassify
 Ancestors
-  lowerDloadDefs stateEquiv venomExecProps venomInstProps instIdxIndep
+  lowerDloadFrame lowerDloadDefs stateEquiv venomExecProps venomInstProps instIdxIndep
   venomExecSemantics venomInst venomState finite_map opcodeClass
+Libs
+  lowerDloadFrameLib
+
+val _ = augment_srw_ss [lowerDloadFrameLib.frame_ss];
 
 (* ===== Cross-block invariant ===== *)
 
 Definition ld_ok_def:
   ld_ok vars s1 s2 <=>
     (!v. v NOTIN vars ==> lookup_var v s1 = lookup_var v s2) /\
-    s1.vs_transient = s2.vs_transient /\
-    s1.vs_halted = s2.vs_halted /\
-    s1.vs_accounts = s2.vs_accounts /\
-    s1.vs_call_ctx = s2.vs_call_ctx /\
-    s1.vs_tx_ctx = s2.vs_tx_ctx /\
-    s1.vs_block_ctx = s2.vs_block_ctx /\
-    s1.vs_logs = s2.vs_logs /\
-    s1.vs_immutables = s2.vs_immutables /\
-    s1.vs_data_section = s2.vs_data_section /\
-    s1.vs_labels = s2.vs_labels /\
-    s1.vs_code = s2.vs_code /\
-    s1.vs_params = s2.vs_params /\
-    s1.vs_prev_hashes = s2.vs_prev_hashes /\
-    s1.vs_fmp = s2.vs_fmp /\
-    s1.vs_call_entry_fmp = s2.vs_call_entry_fmp /\
-    s1.vs_initial_fmp = s2.vs_initial_fmp /\
-    s1.vs_return_pc_token = s2.vs_return_pc_token /\
-    s1.vs_current_bb = s2.vs_current_bb /\
-    s1.vs_inst_idx = s2.vs_inst_idx /\
-    s1.vs_prev_bb = s2.vs_prev_bb
+    ld_frame s1 = ld_frame s2
 End
 
 (* ===== Basic ld_ok properties ===== *)
@@ -49,7 +34,7 @@ QED
 Theorem ld_ok_implies_ld_equiv:
   !vars s1 s2. ld_ok vars s1 s2 ==> ld_equiv vars s1 s2
 Proof
-  simp[ld_ok_def, ld_equiv_def]
+  simp[ld_ok_def, ld_equiv_def, ld_frame_execution]
 QED
 
 Theorem ld_ok_update_var:
@@ -84,7 +69,7 @@ Theorem ld_ok_update_memory:
     ld_ok vars s1 s2 ==>
     ld_ok vars (s1 with vs_memory := m1) (s2 with vs_memory := m2)
 Proof
-  rw[ld_ok_def, lookup_var_def]
+  rw[ld_ok_def, lookup_var_def, ld_frame_def]
 QED
 
 Theorem ld_ok_write_memory:
@@ -94,7 +79,7 @@ Theorem ld_ok_write_memory:
                (write_memory_with_expansion off bytes2 s2)
 Proof
   rw[ld_ok_def, write_memory_with_expansion_def, LET_THM,
-     lookup_var_def]
+     lookup_var_def, ld_frame_def]
 QED
 
 Theorem ld_ok_istore:
@@ -102,7 +87,8 @@ Theorem ld_ok_istore:
     ld_ok vars s1 s2 ==>
     ld_ok vars (istore off val s1) (istore off val s2)
 Proof
-  rw[ld_ok_def, istore_def, mstore_def, lookup_var_def]
+  rw[ld_ok_def, istore_def, mstore_def, lookup_var_def,
+     ld_frame_def, venom_state_component_equality]
 QED
 
 (* ===== eval_operand agreement under ld_ok ===== *)
@@ -113,7 +99,8 @@ Theorem ld_eval_operand_agree:
     (!x. op = Var x ==> x NOTIN vars) ==>
     eval_operand op s1 = eval_operand op s2
 Proof
-  Cases >> simp[eval_operand_def, ld_ok_def]
+  Cases >> simp[eval_operand_def, ld_ok_def, ld_frame_def,
+                venom_state_component_equality]
 QED
 
 Theorem resolve_phi_MEM:

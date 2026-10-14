@@ -159,7 +159,7 @@ End
 
 Definition cex2_insts_def:
   cex2_insts =
-    [|<| inst_id := 0; inst_opcode := MEMTOP;
+    [<| inst_id := 0; inst_opcode := MEMTOP;
         inst_operands := []; inst_outputs := ["v"] |>;
      <| inst_id := 1; inst_opcode := ASSIGN;
         inst_operands := [Var "v"]; inst_outputs := ["w"] |>;

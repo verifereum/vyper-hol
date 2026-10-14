@@ -288,6 +288,7 @@ Definition check_toplevel_decl_def:
         well_formed_type tenv kt /\ hashmap_key_type kt /\ check_value_type tenv vt /\
         IS_SOME (lookup_var_slot_in_layouts layouts addr is_transient src id)
     | StructDecl id fields =>
+        ALL_DISTINCT (MAP FST fields) /\
         EVERY (\(_,ty). assignable_type tenv ty) fields
     | FlagDecl id members => T
     | InterfaceDecl id funcs =>
@@ -343,3 +344,23 @@ Definition check_contract_def:
          EVERY (check_module in_deploy layouts addr mods art) mods
       then SOME art else NONE
 End
+
+(* TOP-LEVEL: Successful checking guarantees distinct member names for every
+   actual struct declaration, including declarations in imported modules. *)
+Theorem check_contract_struct_fields_distinct:
+  check_contract in_deploy layouts addr mods = SOME art /\
+  MEM (src,tls) mods /\
+  MEM (StructDecl id fields) tls ==>
+  ALL_DISTINCT (MAP FST fields)
+Proof
+  strip_tac >>
+  gvs[check_contract_def] >>
+  `check_module in_deploy layouts addr mods
+     (build_contract_type_artifact in_deploy mods) (src,tls)`
+    by fs[EVERY_MEM] >>
+  fs[check_module_def, EVERY_MEM] >>
+  `check_toplevel_decl layouts addr mods
+     (build_contract_type_artifact in_deploy mods) src (StructDecl id fields)`
+    by metis_tac[] >>
+  gvs[check_toplevel_decl_def]
+QED

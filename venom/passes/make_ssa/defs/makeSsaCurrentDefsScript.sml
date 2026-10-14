@@ -219,17 +219,19 @@ Termination
       (nub (MAP (\bb. bb.bb_label) bbs ++ FLAT (MAP SND df)))) +
     LENGTH wl)` >>
   rpt strip_tac >>
+  rename1 `(bbs',rest',has_phi',next_supply) =
+    process_frontiers_supply s var pred_map live_in bbs rest has_phi _` >>
   qabbrev_tac `fs = case ALOOKUP dom_frontiers d of
                       NONE => [] | SOME x => x` >>
   qabbrev_tac `U = nub (MAP (\bb. bb.bb_label) bbs ++
                          FLAT (MAP SND dom_frontiers))` >>
   qabbrev_tac `result = process_frontiers_supply s var pred_map live_in
                           bbs rest has_phi fs` >>
-  `result = (bbs',rest',has_phi',s')` by
+  `result = (bbs',rest',has_phi',next_supply)` by
     simp[Abbr `result`, Abbr `fs`] >>
   pop_assum SUBST_ALL_TAC >> simp[] >>
   `process_frontiers_supply s var pred_map live_in bbs rest has_phi fs =
-   (bbs',rest',has_phi',s')` by gvs[markerTheory.Abbrev_def] >>
+   (bbs',rest',has_phi',next_supply)` by gvs[markerTheory.Abbrev_def] >>
   `MAP (\bb. bb.bb_label) bbs' = MAP (\bb. bb.bb_label) bbs` by
     (irule process_frontiers_supply_labels >> metis_tac[]) >>
   `nub (MAP (\bb. bb.bb_label) bbs' ++ FLAT (MAP SND dom_frontiers)) = U` by

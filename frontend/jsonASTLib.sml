@@ -739,8 +739,43 @@ fun d_json_expr () : term decoder = achoose "expr" [
   check_ast_type "Call" $
     JSONDecode.map (fn ((func, args, kwargs), (ty, src_id_opt)) => mk_JE_Call(func, args, kwargs, ty, src_id_opt)) $
     tuple2 (tuple3 (field "func" (delay d_json_expr),
-                    field "args" (array (delay d_json_expr)),
-                    orElse(field "keywords" (array (delay d_json_keyword)), succeed [])),
+                    achoose "call arguments" [
+                      (* Preserve folded integer lengths for the ad-hoc calldata
+                         slice. In particular, BinOp.folded_value is not a runtime
+                         expression; start remains decoded normally. *)
+                      check (field "func" $ field "id" string)
+                        (fn s => s = "slice") "not slice" $
+                      check (field "args" $ sub 0 $ field "attr" string)
+                        (fn s => s = "data") "not data" $
+                      check (field "args" $ sub 0 $ field "value" $ field "id" string)
+                        (fn s => s = "msg") "not msg" $
+                      field "args" $
+                        JSONDecode.map (fn (args, folded) =>
+                          case args of
+                            data::start::len::rest =>
+                              data::start::mk_JE_Folded (len, folded)::rest
+                          | _ => args) $
+                        tuple2 (array (delay d_json_expr),
+                          sub 2 $ field "folded_value" $ check_ast_type "Int" $
+                            JSONDecode.map (fn (v, ty) => mk_JE_Int(v, ty)) $
+                            tuple2 (field "value" inttm,
+                              orElse (field "type" json_type, succeed JT_None_tm))),
+                      field "args" (array (delay d_json_expr))
+                    ],
+                    achoose "call keywords" [
+                      (* Only the calldata raw_call form consumes folded flag
+                         metadata. Runtime target/value/gas stay unfurled. *)
+                      check (field "func" $ check_ast_type "Name" $ field "id" string)
+                        (fn s => s = "raw_call") "not raw_call" $
+                      check (field "args" $ array (delay d_json_expr))
+                        (fn args => length args = 2) "not two arguments" $
+                      check (field "args" $ sub 1 $ check_ast_type "Attribute" $ field "attr" string)
+                        (fn s => s = "data") "not data" $
+                      check (field "args" $ sub 1 $ field "value" $ check_ast_type "Name" $ field "id" string)
+                        (fn s => s = "msg") "not msg" $
+                      field "keywords" (array (delay d_calldata_raw_call_keyword)),
+                      orElse(field "keywords" (array (delay d_json_keyword)), succeed [])
+                    ]),
             tuple2 ((* type field may be missing or null *)
                     orElse (field "type" json_type, succeed JT_None_tm),
                     orElse (field "func" $ field "type" $ field "type_decl_node" $ field "source_id" source_ref_tm,
@@ -781,6 +816,28 @@ fun d_json_expr () : term decoder = achoose "expr" [
 and d_json_keyword () : term decoder =
   JSONDecode.map (fn (arg, v) => mk_JKeyword(arg, v)) $
   tuple2 (field "arg" string, field "value" (delay d_json_expr))
+and d_calldata_raw_call_keyword () : term decoder = achoose "calldata raw_call keyword" [
+  check (field "arg" string) (fn s => s = "max_outsize") "not max_outsize" $
+  JSONDecode.map (fn (arg, (original, folded)) =>
+    mk_JKeyword(arg, mk_JE_Folded(original, folded))) $
+  tuple2 (field "arg" string,
+    tuple2 (field "value" (delay d_json_expr),
+      field "value" $ field "folded_value" $ check_ast_type "Int" $
+        JSONDecode.map (fn (v, ty) => mk_JE_Int(v, ty)) $
+        tuple2 (field "value" inttm,
+          orElse (field "type" json_type, succeed JT_None_tm)))),
+  check (field "arg" string)
+    (fn s => List.exists (fn key => s = key)
+      ["is_delegate_call", "is_static_call", "revert_on_failure"])
+    "not boolean flag" $
+  JSONDecode.map (fn (arg, (original, folded)) =>
+    mk_JKeyword(arg, mk_JE_Folded(original, folded))) $
+  tuple2 (field "arg" string,
+    tuple2 (field "value" (delay d_json_expr),
+      field "value" $ field "folded_value" $ check_ast_type "NameConstant" $
+        JSONDecode.map mk_JE_Bool (field "value" bool))),
+  delay d_json_keyword
+]
 
 val json_expr = delay d_json_expr
 val json_keyword = delay d_json_keyword

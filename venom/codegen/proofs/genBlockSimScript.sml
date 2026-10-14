@@ -1,5 +1,5 @@
 (*
- * gen_block_simulation helpers
+ * Block and instruction simulation helpers
  *
  * Connects generate_block_plan to block_insts_sim:
  *   - FOLDL ↔ block_foldl equivalence
@@ -295,7 +295,7 @@ QED
 Theorem step_inst_stop_halt[local]:
   !fuel ctx inst vs.
     inst.inst_opcode = STOP ==>
-    step_inst fuel ctx inst vs = Halt (halt_state vs)
+    step_inst fuel ctx inst vs = Halt (halt_state (vs with vs_returndata := []))
 Proof
   rpt strip_tac >>
   `inst = inst with inst_opcode := STOP`
@@ -703,11 +703,10 @@ QED
 Theorem terminal_stop_step:
   !lo o2pc prog st vs.
     asm_block_at prog st.as_pc [AsmOp "STOP"] /\
-    venom_asm_terminal_rel vs st /\
-    vs.vs_returndata = [] ==>
+    venom_asm_terminal_rel vs st ==>
     ?st'.
       asm_steps lo o2pc prog 1 st = AsmHalt st' /\
-      venom_asm_terminal_rel (halt_state vs) st'
+      venom_asm_terminal_rel (halt_state (vs with vs_returndata := [])) st'
 Proof
   rpt strip_tac >>
   `1 = SUC 0` by simp[] >> pop_assum SUBST1_TAC >>
@@ -1368,6 +1367,8 @@ Theorem gen_inst_halt_sim:
   !fuel ctx label_offsets offset_to_pc prog
    liveness dfg cfg fn inst next_liveness is_halting
    next_is_term bb_label ps vs as ops ps'.
+    label_offsets = SND (compute_label_offsets prog) /\
+    offset_to_pc = build_offset_to_pc prog /\
     codegen_ready_fn fn /\
     (* Dischargeable at block level from codegen_ready_fn + MEM bb/inst *)
     inst_wf inst /\
@@ -1403,8 +1404,6 @@ Theorem gen_inst_halt_sim:
       eval_operand (EL 0 inst.inst_operands) vs = SOME off_v /\
       eval_operand (EL 1 inst.inst_operands) vs = SOME sz_v ==>
       w2n off_v + w2n sz_v <= ps.ps_alloc.sa_spill_base) /\
-    (* STOP: returndata already empty (Vyper STOP at end of void fns) *)
-    (inst.inst_opcode = STOP ==> vs.vs_returndata = []) /\
     venom_asm_rel label_offsets ps vs as /\
     generate_inst_plan liveness dfg cfg fn inst
       next_liveness is_halting next_is_term bb_label ps =
@@ -1416,6 +1415,10 @@ Theorem gen_inst_halt_sim:
         venom_asm_terminal_rel vs' as'
 Proof
   rpt strip_tac >>
+  (* Concrete-map premises repair the deferred control-flow contract.
+     Proved cases work for arbitrary maps; retain their symbolic proof context. *)
+  qpat_x_assum `label_offsets = SND (compute_label_offsets prog)` kall_tac >>
+  qpat_x_assum `offset_to_pc = build_offset_to_pc prog` kall_tac >>
   (* Only STOP/RETURN/SINK/SELFDESTRUCT/INVOKE can Halt *)
   imp_res_tac step_inst_halt_opcodes >>
   gvs[]
@@ -1439,7 +1442,7 @@ Resume gen_inst_halt_sim[stop]:
      `~is_pre_codegen_opcode STOP` by EVAL_TAC >> simp[]) >>
   `inst.inst_outputs = []` by
     (fs[inst_wf_def] >> Cases_on `inst.inst_opcode` >> fs[]) >>
-  `vs' = halt_state vs` by
+  `vs' = halt_state (vs with vs_returndata := [])` by
     (imp_res_tac step_inst_stop_halt >> fs[]) >>
   gvs[] >>
   (* Use gen_inst_terminal_setup to get AsmOK intermediate *)
@@ -1599,6 +1602,8 @@ Theorem gen_inst_abort_sim:
   !fuel ctx label_offsets offset_to_pc prog
    liveness dfg cfg fn inst next_liveness is_halting
    next_is_term bb_label ps vs as ops ps' a.
+    label_offsets = SND (compute_label_offsets prog) /\
+    offset_to_pc = build_offset_to_pc prog /\
     codegen_ready_fn fn /\
     (* Dischargeable at block level from codegen_ready_fn + MEM bb/inst *)
     inst_wf inst /\
@@ -1680,6 +1685,9 @@ Theorem gen_inst_abort_sim:
         venom_asm_terminal_rel vs' as'
 Proof
   rpt strip_tac >>
+  (* Proved cases are map-parametric; deferred jumps require concrete maps. *)
+  qpat_x_assum `label_offsets = SND (compute_label_offsets prog)` kall_tac >>
+  qpat_x_assum `offset_to_pc = build_offset_to_pc prog` kall_tac >>
   imp_res_tac step_inst_abort_opcodes >>
   gvs[]
   >- suspend "revert"
@@ -1718,7 +1726,7 @@ Proof
        INVOKE abort requires proving that the callee's execution produces
        a corresponding abort in the generated assembly. This needs
        gen_fn_simulation as an inductive hypothesis (mutual recursion
-       between gen_inst_simulation and gen_fn_simulation). *)
+       between instruction-level simulation and gen_fn_simulation). *)
     cheat
   )
 QED
@@ -3080,7 +3088,7 @@ Proof
 QED
 
 (* Comprehensive local non-call per-instruction OK simulation.
-   Stronger than venomToAsmProps.gen_inst_simulation:
+   Explicit preconditions and guarantees:
    - excludes INVOKE, whose atomic source semantics require context-wide
      callee and return invariants absent from this local theorem
    - requires inst_wf, operand bound, label resolution, prefix_spill_wf
@@ -3091,6 +3099,8 @@ Theorem gen_inst_ok_sim:
   !fuel ctx lo o2pc prog
    liveness dfg cfg fn inst next_liveness is_halting
    next_is_term bb_label base ps vs as ops ps'.
+    lo = SND (compute_label_offsets prog) /\
+    o2pc = build_offset_to_pc prog /\
     inst.inst_opcode <> INVOKE /\
     generated_plan_state_wf base ps /\
     codegen_ready_fn fn /\
@@ -3165,6 +3175,9 @@ Theorem gen_inst_ok_sim:
          as'.as_pc = as.as_pc + LENGTH (execute_plan initial_fmp ops))
 Proof
   rpt strip_tac >>
+  (* Do not substitute concrete maps into the preserved map-parametric proofs. *)
+  qpat_x_assum `lo = SND (compute_label_offsets prog)` kall_tac >>
+  qpat_x_assum `o2pc = build_offset_to_pc prog` kall_tac >>
   `plan_slots_bounded base' ps` by fs[generated_plan_state_wf_def] >>
   (* Dispatch on generate_inst_plan cases *)
   qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
@@ -5116,7 +5129,8 @@ Resume gen_inst_ok_sim[none]:
   >> suspend "assert_unreachable_ok"
 QED
 
-Theorem istore_emit_relation_agreement[local]:
+(* Saved concrete baseline check: includes every assembly record field. *)
+Theorem istore_emit_relation_agreement:
   let inst = mk_inst 0 ISTORE [Lit (0w:bytes32); Lit (1w:bytes32)] [] in
   let vs = init_venom_state "entry" in
   let ps = (init_plan_state 0) with
@@ -5132,7 +5146,10 @@ Theorem istore_emit_relation_agreement[local]:
               as_tx_ctx := vs.vs_tx_ctx;
               as_block_ctx := vs.vs_block_ctx;
               as_code := vs.vs_code;
-              as_prev_hashes := vs.vs_prev_hashes |> in
+              as_prev_hashes := vs.vs_prev_hashes;
+              as_outcomes := vs.vs_outcomes;
+              as_requests := vs.vs_requests;
+              as_gas_readings := [] |> in
   let st' = st with <| as_stack := [];
                        as_memory := word_to_bytes (1w:bytes32) T;
                        as_pc := 2 |> in
@@ -5378,7 +5395,7 @@ Resume gen_inst_ok_sim[istore]:
            (fn th => ACCEPT_TAC (cj 3 (REWRITE_RULE[venom_asm_rel_def] th)))) >>
      qpat_assum `venom_asm_rel lo ps4 vs as'`
        (fn th => STRIP_ASSUME_TAC (REWRITE_RULE[venom_asm_rel_def] th)) >>
-     ASM_REWRITE_TAC[]) >>
+     ASM_REWRITE_TAC[] >> simp[istore_def, mstore_def]) >>
   `venom_asm_rel lo
      (release_dead_spills next_liveness
        (ps4 with ps_stack := stack_pop 2 ps4.ps_stack))
@@ -5391,7 +5408,8 @@ Resume gen_inst_ok_sim[istore]:
   simp[Abbr `as2`]
 QED
 
-Theorem istore_spill_overlap_mismatch[local]:
+(* Saved counterevidence, unchanged apart from the required full literal. *)
+Theorem istore_spill_overlap_mismatch:
   let vs0 = (init_venom_state "entry") with <|
               vs_memory := word_to_bytes (1w:bytes32) T;
               vs_vars := FEMPTY |+ ("spill",(0w:bytes32)) |> in
@@ -5412,7 +5430,10 @@ Theorem istore_spill_overlap_mismatch[local]:
                as_tx_ctx := vs0.vs_tx_ctx;
                as_block_ctx := vs0.vs_block_ctx;
                as_code := vs0.vs_code;
-               as_prev_hashes := vs0.vs_prev_hashes |> in
+               as_prev_hashes := vs0.vs_prev_hashes;
+               as_outcomes := vs0.vs_outcomes;
+               as_requests := vs0.vs_requests;
+               as_gas_readings := [] |> in
   let vs1 = istore 0 (1w:bytes32) vs0 in
   let as1 = as0 with <| as_stack := [];
                         as_memory := word_to_bytes (1w:bytes32) T;

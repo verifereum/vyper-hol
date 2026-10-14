@@ -840,15 +840,20 @@ Proof
               y8 with <| ps_stack := y4; ps_spilled := y5 |>)` mp_tac) >>
     (impl_tac >- (simp[] >> simp[LEX_DEF] >> Cases_on `t` >> simp[])) >>
     simp[] >> strip_tac >>
+    (* Name the recursive result: inherited grammar can change fresh names. *)
+    rename1 `generate_fn_plan_aux_UNION'
+      (INL (y0,y1,y2,y3,[h],y7,
+        y8 with <| ps_stack := y4; ps_spilled := y5 |>)) =
+      SOME (ops_first, seen_first, plan_first)` >>
     (* Apply IH to INR rest call *)
     first_x_assum (qspec_then
-        `INR (y0,y1,y2,y3,y4,y5,t,q',
-              y8 with <| ps_alloc := r'.ps_alloc;
-                         ps_label_counter := r'.ps_label_counter |>)` mp_tac) >>
+        `INR (y0,y1,y2,y3,y4,y5,t,seen_first,
+              y8 with <| ps_alloc := plan_first.ps_alloc;
+                         ps_label_counter := plan_first.ps_label_counter |>)` mp_tac) >>
     (impl_tac >- (
       simp[] >> simp[LEX_DEF] >>
       `CARD (set (fn_labels y3) INTER set y7) <=
-       CARD (set (fn_labels y3) INTER set q')` by (
+       CARD (set (fn_labels y3) INTER set seen_first)` by (
         irule CARD_SUBSET >> simp[SUBSET_DEF] >>
         metis_tac[SUBSET_DEF]) >>
       simp[]

@@ -11,7 +11,7 @@ Ancestors
   passSharedField venomExecSemantics venomExecProps venomEffects venomInstProofs
   venomMemProofs venomState finite_map venomInst stateEquiv stateEquivProps
   passSimulationDefs venomInstProps pred_set sorting passSharedFrame
-  vfmState venomWf
+  vfmState venomWf passResidualFrame
 
 (* ================================================================
    1. step_inst preserves vs_allocas and vs_alloca_next for
@@ -81,9 +81,14 @@ Theorem commute_equiv_allocas_vars_eq:
     (!w. w IN defs ==> lookup_var w s1 = lookup_var w s2) ==>
     s1 = s2
 Proof
-  rw[commute_equiv_def, venom_state_component_equality, fmap_eq_flookup] >>
-  simp[GSYM lookup_var_def] >> rename1 `lookup_var w` >>
-  Cases_on `w IN defs` >> metis_tac[]
+  rpt gen_tac >> strip_tac >>
+  fs[commute_equiv_def, Excl "pass_residual_mask_equality"] >>
+  `s1.vs_vars = s2.vs_vars` by
+    (simp[fmap_eq_flookup, GSYM lookup_var_def] >> gen_tac >>
+     rename1 `lookup_var w s1 = lookup_var w s2` >>
+     Cases_on `w IN defs` >> metis_tac[]) >>
+  irule (iffLR commute_frame_eq) >>
+  simp[Excl "pass_residual_mask_equality"]
 QED
 
 (* ================================================================

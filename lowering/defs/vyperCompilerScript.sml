@@ -372,12 +372,33 @@ Definition forced_alloc_inputs_check_def:
     EVERY function_forced_metadata_ok ctx.ctx_functions
 End
 
+(* ===== Checked unit allocation budget (PLAN §5.7) ===== *)
+
+(* Only a single literal operand contributes a static allocation size.
+   The opcode filter belongs in unit_alloca_budget, not in this helper. *)
+Definition alloca_size_def:
+  alloca_size inst =
+    case inst.inst_operands of [Lit n] => w2n n | _ => 0
+End
+
+(* Count every ALLOCA in every function, including uncalled functions, and
+   multiply by the entry frame plus the number of INVOKE sites. DALLOCA uses
+   the separate frame-memory pointer and is not part of this static budget.
+   This is a compiler guard, not an allocation-memory correctness proof. *)
+Definition unit_alloca_budget_def:
+  unit_alloca_budget ctx =
+    let insts = FLAT (MAP fn_insts ctx.ctx_functions) in
+      (1 + LENGTH (FILTER (\i. i.inst_opcode = INVOKE) insts)) *
+      SUM (MAP alloca_size (FILTER (\i. i.inst_opcode = ALLOCA) insts))
+End
+
 Definition lowering_context_ok_def:
   lowering_context_ok ctx <=>
     ALL_DISTINCT (ctx_fn_names ctx) /\
     wf_invoke_targets_check ctx /\
     ctx_inst_ids_distinct ctx /\
-    forced_alloc_inputs_check ctx
+    forced_alloc_inputs_check ctx /\
+    unit_alloca_budget ctx < dimword (:256)
 End
 (* ===== Policy Boundary ===== *)
 
@@ -409,6 +430,13 @@ QED
 Theorem lowering_context_ok_static_integrity:
   !ctx. lowering_context_ok ctx ==>
         ctx_inst_ids_distinct ctx /\ forced_alloc_inputs_check ctx
+Proof
+  simp[lowering_context_ok_def]
+QED
+
+Theorem lowering_context_ok_alloca_budget:
+  !ctx. lowering_context_ok ctx ==>
+        unit_alloca_budget ctx < dimword (:256)
 Proof
   simp[lowering_context_ok_def]
 QED
@@ -648,6 +676,29 @@ Proof
   simp[run_deploy_lowering_def] >> rpt strip_tac >>
   pairarg_tac >> gvs[AllCaseEqs()] >>
   metis_tac[lowering_context_ok_integrity]
+QED
+
+(* Successful raw lowering enforces the guard on both runtime and deploy
+   paths. No new caller-side premise is needed. *)
+Theorem run_lowering_alloca_budget:
+  run_lowering selectors external_fns internal_fns fallback_fn rpolicy
+    bucket_count fn_metadata_bytes dense_buckets entry_info entry_label = SOME unit ==>
+  unit_alloca_budget unit.cu_context < dimword (:256)
+Proof
+  simp[run_lowering_def] >> rpt strip_tac >>
+  pairarg_tac >> gvs[AllCaseEqs()] >>
+  drule lowering_context_ok_alloca_budget >> simp[]
+QED
+
+Theorem run_deploy_lowering_alloca_budget:
+  run_deploy_lowering has_constructor rpolicy runtime_bytecode immutables_len
+    constructor_args data_size ctor_internal_fns cenv (ctor_stmts : stmt list) is_payable
+    is_nonreentrant nkey use_transient entry_label = SOME unit ==>
+  unit_alloca_budget unit.cu_context < dimword (:256)
+Proof
+  simp[run_deploy_lowering_def] >> rpt strip_tac >>
+  pairarg_tac >> gvs[AllCaseEqs()] >>
+  drule lowering_context_ok_alloca_budget >> simp[]
 QED
 
 Theorem run_lowering_static_integrity:

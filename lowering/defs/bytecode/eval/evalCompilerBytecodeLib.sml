@@ -121,4 +121,38 @@ fun read_hex_bytes filename =
     pairSyntax.mk_pair (hex_bytes_tm deploy, hex_bytes_tm runtime)
   end
 
+(* Kernel-checked staged evaluation certificates only. Neither rewrite list
+   may contain an oracle equality: oracle bytes are read solely in the final
+   parity statement, whose proof remains plain EVAL_TAC. The lowering-stage
+   certificates re-evaluate lowering_context_ok, including the budget guard. *)
+fun add_compile_eval certificate =
+  let
+    (* CBV normalizes arguments before matching a compiler equation. *)
+    fun arguments tm =
+      if is_comb tm then
+        Conv.COMB2_CONV (arguments, computeLib.EVAL_CONV) tm
+      else REFL tm
+    val normalized = Conv.CONV_RULE (Conv.LAND_CONV arguments) certificate
+  in
+    computeLib.upd_compset (computeLib.add_thms [normalized])
+  end
+
+fun add_staged_compile_eval runtime_rewrites codegen_rewrites compile_rewrites
+                            runtime_tm compile_tm =
+  let
+    fun evaluate rewrites tm =
+      let val step = simpLib.SIMP_CONV pureSimps.pure_ss rewrites tm
+      in TRANS step (computeLib.EVAL_CONV (boolSyntax.rhs (concl step))) end
+    val runtime_step = simpLib.SIMP_CONV pureSimps.pure_ss
+      runtime_rewrites runtime_tm
+    val codegen_step = Rewrite.PURE_REWRITE_CONV codegen_rewrites
+      (boolSyntax.rhs (concl runtime_step))
+    val runtime_eval = TRANS runtime_step
+      (TRANS codegen_step (computeLib.EVAL_CONV
+        (boolSyntax.rhs (concl codegen_step))))
+    val compile_eval = evaluate (runtime_eval :: compile_rewrites) compile_tm
+  in
+    add_compile_eval compile_eval
+  end
+
 end

@@ -1469,14 +1469,16 @@ fun prove_fdom_group opcode_list = prove(
      inst_wf inst /\ step_inst_base inst s = OK s' ==>
      FDOM s'.vs_vars = FDOM s.vs_vars UNION set inst.inst_outputs``,
   rpt strip_tac >> gvs[MEM] >>
-  gvs[inst_wf_def, LENGTH_EQ_NUM_compute,
-      step_inst_base_def, exec_pure2_def, exec_pure1_def, exec_pure3_def,
+  gvs[inst_wf_def, LENGTH_EQ_NUM_compute] >>
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  ASM_REWRITE_TAC[step_inst_base_def] >>
+  simp[exec_pure2_def, exec_pure1_def, exec_pure3_def,
       exec_read0_def, exec_read1_def, exec_write2_def,
       exec_alloca_def,
       istore_def, mstore_def, mstore8_def, sstore_def, tstore_def] >>
-  BasicProvers.every_case_tac >>
+  BasicProvers.every_case_tac >> rpt strip_tac >>
   gvs[update_var_def, finite_mapTheory.FDOM_FUPDATE] >>
-  simp[pred_setTheory.EXTENSION] >> metis_tac[]);
+  simp[pred_setTheory.EXTENSION, AC DISJ_ASSOC DISJ_COMM]);
 
 val step_inst_base_fdom_pure2 = prove_fdom_group
   ``[ADD; SUB; MUL; Div; SDIV; Mod; SMOD; Exp;
@@ -1532,7 +1534,7 @@ val step_inst_base_fdom_external = prove(
   BasicProvers.every_case_tac >> gvs[] >>
   imp_res_tac extract_venom_result_preserves_vars >> gvs[] >>
   gvs[update_var_def, finite_mapTheory.FDOM_FUPDATE] >>
-  simp[pred_setTheory.EXTENSION] >> metis_tac[]);
+  simp[pred_setTheory.EXTENSION, AC DISJ_ASSOC DISJ_COMM]);
 
 (* INVOKE: step_inst_base returns Error, so premise is vacuously false *)
 val step_inst_base_fdom_invoke = prove(
