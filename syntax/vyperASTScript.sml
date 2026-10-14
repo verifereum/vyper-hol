@@ -1,6 +1,6 @@
 Theory vyperAST
 Ancestors
-  ASCIInumbers string words vyperMisc[ignore_grammar]
+  ASCIInumbers string words integer vyperMisc[ignore_grammar]
 Libs
   cv_transLib
 
