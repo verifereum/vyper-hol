@@ -189,7 +189,7 @@ Theorem lookup_hashmap_update_name:
     lookup_hashmap cx st mid m kv
 Proof
   rpt gen_tac \\ simp[update_name_def, LET_THM]
-  \\ Cases_on `find_containing_scope (string_to_num n) st.scopes` \\ simp[]
+  \\ Cases_on `find_containing_scope n st.scopes` \\ simp[]
   >- (Cases_on `st.scopes` \\ simp[lookup_hashmap_scopes])
   \\ PairCases_on `x` \\ simp[lookup_hashmap_scopes]
 QED
@@ -326,11 +326,11 @@ Proof
   \\ CASE_TAC \\ simp[]
   \\ CASE_TAC \\ simp[]
   (* Reduce to FST equality *)
-  \\ `FST (lookup_global cx mid (string_to_num m) (set_storage cx st b x')) =
-      FST (lookup_global cx mid (string_to_num m) st)` suffices_by
+  \\ `FST (lookup_global cx mid m (set_storage cx st b x')) =
+      FST (lookup_global cx mid m st)` suffices_by
      (strip_tac
-      \\ Cases_on `lookup_global cx mid (string_to_num m) (set_storage cx st b x')`
-      \\ Cases_on `lookup_global cx mid (string_to_num m) st`
+      \\ Cases_on `lookup_global cx mid m (set_storage cx st b x')`
+      \\ Cases_on `lookup_global cx mid m st`
       \\ gvs[] \\ Cases_on `q` \\ Cases_on `q'` \\ gvs[])
   (* Prove FST equality following lookup_global_scopes_fst pattern *)
   \\ simp[vyperStateTheory.lookup_global_def, vyperStateTheory.bind_def,
@@ -338,7 +338,7 @@ Proof
   \\ Cases_on `get_module_code cx mid`
   \\ simp[vyperStateTheory.return_def, vyperStateTheory.raise_def]
   \\ rename1 `get_module_code cx mid = SOME modcode`
-  \\ Cases_on `find_var_decl_by_num (string_to_num m) modcode` \\ simp[]
+  \\ Cases_on `find_var_decl_by_name m modcode` \\ simp[]
   >- (* Immutables branch *)
      (simp[vyperStateTheory.bind_def, vyperStateTheory.lift_option_type_def, vyperStateTheory.return_def, vyperStateTheory.raise_def,
            get_immutables_set_storage]

@@ -19,7 +19,7 @@ Theorem bind_arguments_scope_lookup:
   !tenv params vs sc n entry.
     bind_arguments tenv params vs = SOME sc /\
     FLOOKUP sc n = SOME entry ==>
-    ?id typ. n = string_to_num id /\ MEM (id,typ) params /\
+    ?id typ. n = id /\ MEM (id,typ) params /\
              evaluate_type tenv typ = SOME entry.type /\ entry.assignable
 Proof
   Induct_on `params` >> simp[Once bind_arguments_def] >>
@@ -27,8 +27,8 @@ Proof
   rpt gen_tac >> Cases_on `vs` >> simp[Once bind_arguments_def] >>
   simp[AllCaseEqs(), PULL_EXISTS] >>
   rpt strip_tac >> gvs[FLOOKUP_UPDATE] >>
-  Cases_on `n = string_to_num q` >> gvs[]
-  >- (qexists_tac `q` >> qexists_tac `r` >> simp[]) >>
+  Cases_on `n = q` >> gvs[]
+  >- (qexists_tac `r` >> simp[]) >>
   first_x_assum drule_all >> rw[] >>
   qexists_tac `id` >> qexists_tac `typ` >> simp[]
 QED
@@ -36,8 +36,8 @@ QED
 Theorem bind_arguments_scope_covers_params:
   !tenv params vs sc id typ.
     bind_arguments tenv params vs = SOME sc /\ MEM (id,typ) params /\
-    (!id' typ'. MEM (id',typ') params /\ string_to_num id' = string_to_num id ==> typ' = typ) ==>
-    ?entry. FLOOKUP sc (string_to_num id) = SOME entry /\
+    (!id' typ'. MEM (id',typ') params /\ id' = id ==> typ' = typ) ==>
+    ?entry. FLOOKUP sc (id) = SOME entry /\
             evaluate_type tenv typ = SOME entry.type /\ entry.assignable
 Proof
   Induct_on `params` >> simp[Once bind_arguments_def] >>
@@ -49,30 +49,28 @@ Proof
       qpat_x_assum `id = q` SUBST_ALL_TAC >>
       qpat_x_assum `typ = r` SUBST_ALL_TAC >>
       rewrite_tac[FLOOKUP_UPDATE] >> simp[]) >>
-  Cases_on `string_to_num q = string_to_num id`
+  Cases_on `q = id`
   >- (qexists_tac `<|assignable := T; type := tv; value := v'|>` >>
       `r = typ` by metis_tac[] >>
       qpat_x_assum `r = typ` SUBST_ALL_TAC >>
       asm_rewrite_tac[FLOOKUP_UPDATE] >> simp[]) >>
   first_x_assum (qspecl_then [`tenv`, `t`, `m`, `id`, `typ`] mp_tac) >>
   impl_tac
-  >- (rpt strip_tac >>
-      qpat_x_assum `!id'' typ''. _` (qspecl_then [`id'`, `typ'`] mp_tac) >>
-      simp[]) >>
+  >- (rpt strip_tac >> simp[] >> metis_tac[]) >>
   strip_tac >>
   qexists_tac `entry` >> asm_rewrite_tac[FLOOKUP_UPDATE] >> simp[]
 QED
 
 Theorem param_var_types_key_agree:
   !vt args id typ id' typ'.
-    (!x ty. MEM (x,ty) args ==> FLOOKUP vt (string_to_num x) = SOME ty) /\
+    (!x ty. MEM (x,ty) args ==> FLOOKUP vt (x) = SOME ty) /\
     MEM (id,typ) args /\ MEM (id',typ') args /\
-    string_to_num id' = string_to_num id ==>
+    id' = id ==>
     typ' = typ
 Proof
   rpt strip_tac >>
-  `FLOOKUP vt (string_to_num id) = SOME typ` by metis_tac[] >>
-  `FLOOKUP vt (string_to_num id) = SOME typ'` by metis_tac[] >>
+  `FLOOKUP vt (id) = SOME typ` by metis_tac[] >>
+  `FLOOKUP vt (id) = SOME typ'` by metis_tac[] >>
   metis_tac[optionTheory.SOME_11]
 QED
 
@@ -80,10 +78,10 @@ Theorem bind_arguments_env_var_type_scope_entry:
   !tenv args vs sc env_body n ty.
     bind_arguments tenv args vs = SOME sc /\
     (!id typ. MEM (id,typ) args ==>
-       FLOOKUP env_body.var_types (string_to_num id) = SOME typ /\
-       FLOOKUP env_body.var_assignable (string_to_num id) = SOME T) /\
+       FLOOKUP env_body.var_types (id) = SOME typ /\
+       FLOOKUP env_body.var_assignable (id) = SOME T) /\
     (!n ty. FLOOKUP env_body.var_types n = SOME ty ==>
-       ?id. MEM (id,ty) args /\ n = string_to_num id) /\
+       ?id. MEM (id,ty) args /\ n = id) /\
     FLOOKUP env_body.var_types n = SOME ty ==>
     ?entry. FLOOKUP sc n = SOME entry /\
             evaluate_type tenv ty = SOME entry.type /\ entry.assignable
@@ -98,16 +96,10 @@ Proof
   simp[] >>
   impl_tac
   >- (rpt strip_tac >>
-      irule param_var_types_key_agree >>
-      qexists_tac `args` >>
-      qexists_tac `pid` >>
-      qexists_tac `id'` >>
-      qexists_tac `env_body.var_types` >>
-      simp[] >>
-      rpt strip_tac >>
-      qpat_x_assum `!id typ. MEM (id,typ) args ==> _`
-        (qspecl_then [`x`, `ty'`] mp_tac) >>
-      simp[]) >>
+      qpat_x_assum `!id typ. MEM (id,typ) args ==> _` (fn th =>
+        qspecl_then [`pid`, `ty`] assume_tac th >>
+        qspecl_then [`pid`, `typ'`] assume_tac th) >>
+      gvs[]) >>
   strip_tac >> gvs[]
 QED
 
@@ -115,8 +107,8 @@ Theorem bind_arguments_scope_entry_env_var_type:
   !tenv args vs sc env_body n entry.
     bind_arguments tenv args vs = SOME sc /\
     (!id typ. MEM (id,typ) args ==>
-       FLOOKUP env_body.var_types (string_to_num id) = SOME typ /\
-       FLOOKUP env_body.var_assignable (string_to_num id) = SOME T) /\
+       FLOOKUP env_body.var_types (id) = SOME typ /\
+       FLOOKUP env_body.var_assignable (id) = SOME T) /\
     FLOOKUP sc n = SOME entry ==>
     ?ty. FLOOKUP env_body.var_types n = SOME ty /\
          evaluate_type tenv ty = SOME entry.type /\ entry.assignable
@@ -137,12 +129,12 @@ Theorem bind_arguments_env_var_assignable_scope_entry:
   !tenv args vs sc env_body n.
     bind_arguments tenv args vs = SOME sc /\
     (!id typ. MEM (id,typ) args ==>
-       FLOOKUP env_body.var_types (string_to_num id) = SOME typ /\
-       FLOOKUP env_body.var_assignable (string_to_num id) = SOME T) /\
+       FLOOKUP env_body.var_types (id) = SOME typ /\
+       FLOOKUP env_body.var_assignable (id) = SOME T) /\
     (!n ty. FLOOKUP env_body.var_types n = SOME ty ==>
-       ?id. MEM (id,ty) args /\ n = string_to_num id) /\
+       ?id. MEM (id,ty) args /\ n = id) /\
     (!n b. FLOOKUP env_body.var_assignable n = SOME b ==>
-       ?id typ. MEM (id,typ) args /\ n = string_to_num id /\ b = T) /\
+       ?id typ. MEM (id,typ) args /\ n = id /\ b = T) /\
     FLOOKUP env_body.var_assignable n = SOME T ==>
     ?entry. FLOOKUP sc n = SOME entry /\ entry.assignable
 Proof
@@ -158,16 +150,10 @@ Proof
   simp[] >>
   impl_tac
   >- (rpt strip_tac >>
-      irule param_var_types_key_agree >>
-      qexists_tac `args` >>
-      qexists_tac `pid` >>
-      qexists_tac `id'` >>
-      qexists_tac `env_body.var_types` >>
-      simp[] >>
-      rpt strip_tac >>
-      qpat_x_assum `!id typ. MEM (id,typ) args ==> _`
-        (qspecl_then [`x`, `ty'`] mp_tac) >>
-      simp[]) >>
+      qpat_x_assum `!id typ. MEM (id,typ) args ==> _` (fn th =>
+        qspecl_then [`pid`, `typ`] assume_tac th >>
+        qspecl_then [`pid`, `typ'`] assume_tac th) >>
+      gvs[]) >>
   strip_tac >>
   qexists_tac `entry` >> simp[]
 QED
@@ -176,17 +162,24 @@ Theorem bind_arguments_env_scopes_consistent:
   !tenv args vs sc env_body cx.
     bind_arguments tenv args vs = SOME sc /\ tenv = get_tenv cx /\
     (!id typ. MEM (id,typ) args ==>
-       FLOOKUP env_body.var_types (string_to_num id) = SOME typ /\
-       FLOOKUP env_body.var_assignable (string_to_num id) = SOME T) /\
+       FLOOKUP env_body.var_types (id) = SOME typ /\
+       FLOOKUP env_body.var_assignable (id) = SOME T) /\
     (!n ty. FLOOKUP env_body.var_types n = SOME ty ==>
-       ?id. MEM (id,ty) args /\ n = string_to_num id) /\
+       ?id. MEM (id,ty) args /\ n = id) /\
     (!n b. FLOOKUP env_body.var_assignable n = SOME b ==>
-       ?id typ. MEM (id,typ) args /\ n = string_to_num id /\ b = T) ==>
+       ?id typ. MEM (id,typ) args /\ n = id /\ b = T) ==>
     env_scopes_consistent env_body cx (st with scopes := [sc])
 Proof
   rw[env_scopes_consistent_def, lookup_scopes_def]
-  >- (drule_all bind_arguments_env_var_type_scope_entry >>
-      strip_tac >> simp[IS_SOME_EXISTS])
+  >- (qspecl_then [`get_tenv cx`, `args`, `vs`, `sc`, `env_body`, `id`, `ty`]
+        mp_tac bind_arguments_env_var_type_scope_entry >>
+      simp[] >> strip_tac >>
+      first_x_assum mp_tac >> impl_tac >- (
+        rpt strip_tac >>
+        qpat_x_assum `!id typ. MEM (id,typ) args ==> _`
+          (qspecl_then [`id'`, `typ`] mp_tac) >>
+        simp[]) >>
+      strip_tac >> gvs[IS_SOME_EXISTS])
   >- (Cases_on `FLOOKUP sc id` >> gvs[] >>
       drule_all bind_arguments_scope_entry_env_var_type >>
       strip_tac >> simp[IS_SOME_EXISTS])
@@ -431,12 +424,12 @@ Theorem intcall_bind_arguments_from_runtime_typed:
     needed_dflts = DROP (LENGTH dflts - (LENGTH params - LENGTH es)) dflts /\
     LENGTH es <= LENGTH params /\ LENGTH params - LENGTH es <= LENGTH dflts /\
     (!id typ. MEM (id,typ) params ==>
-       FLOOKUP env_body.var_types (string_to_num id) = SOME typ /\
-       FLOOKUP env_body.var_assignable (string_to_num id) = SOME T) /\
+       FLOOKUP env_body.var_types (id) = SOME typ /\
+       FLOOKUP env_body.var_assignable (id) = SOME T) /\
     (!n ty. FLOOKUP env_body.var_types n = SOME ty ==>
-       ?id. MEM (id,ty) params /\ n = string_to_num id) /\
+       ?id. MEM (id,ty) params /\ n = id) /\
     (!n b. FLOOKUP env_body.var_assignable n = SOME b ==>
-       ?id typ. MEM (id,typ) params /\ n = string_to_num id /\ b = T) ==>
+       ?id typ. MEM (id,typ) params /\ n = id /\ b = T) ==>
     ?call_env.
       bind_arguments (get_tenv cx) params (actual_vs ++ dflt_vs) = SOME call_env /\
       scope_well_typed call_env /\

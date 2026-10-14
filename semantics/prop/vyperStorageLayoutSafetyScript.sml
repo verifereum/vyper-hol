@@ -33,7 +33,7 @@ Definition declared_storage_region_def:
     case get_module_code cx mid of
     | NONE => NONE
     | SOME code =>
-      case find_var_decl_by_num (string_to_num n) code of
+      case find_var_decl_by_name n code of
       | NONE => NONE
       | SOME (StorageVarDecl b typ,id) =>
           if subs = [] then
@@ -82,7 +82,7 @@ QED
 
 Theorem declared_storage_region_hashmap:
   get_module_code cx mid = SOME code /\
-  find_var_decl_by_num (string_to_num n) code = SOME (HashMapVarDecl b kt vt,id) /\
+  find_var_decl_by_name n code = SOME (HashMapVarDecl b kt vt,id) /\
   lookup_var_slot_from_layout cx b mid id = SOME off /\
   split_hashmap_subscripts (HashMapT kt vt) key_subs =
     SOME (final_type,key_types,[]) /\
@@ -104,7 +104,7 @@ QED
    and prepend the declaration's key type, exactly as the interpreter does. *)
 Theorem declared_hashmap_leaf_agrees_assign_target:
   get_module_code cx mid = SOME code /\
-  find_var_decl_by_num (string_to_num n) code = SOME (HashMapVarDecl b kt vt,id) /\
+  find_var_decl_by_name n code = SOME (HashMapVarDecl b kt vt,id) /\
   lookup_var_slot_from_layout cx b mid id = SOME off /\
   split_hashmap_subscripts vt rest_subs = SOME (final_type,kts,[]) /\
   compute_hashmap_slot (n2w off) (kt::kts) (first_sub::rest_subs) =
@@ -123,7 +123,7 @@ Theorem declared_storage_region_backend:
   declared_storage_region cx mid n subs = SOME (b,slot,tv) ==>
   ?code decl id.
     get_module_code cx mid = SOME code /\
-    find_var_decl_by_num (string_to_num n) code = SOME (decl,id) /\
+    find_var_decl_by_name n code = SOME (decl,id) /\
     ((?typ off. decl = StorageVarDecl b typ /\ subs = [] /\
                  lookup_var_slot_from_layout cx b mid id = SOME off /\
                  slot = n2w off) \/
