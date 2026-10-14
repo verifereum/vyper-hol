@@ -1695,8 +1695,10 @@ QED
 
 (* Helper: inner pipeline after run_ext_call result destructuring *)
 Theorem extcall_inner_pipeline_imm_dom[local]:
-  ∀cx drv tenv ret_type success returnData accounts' tStorage' emitted_logs s res s'.
-    (success ∧ returnData = [] ∧ IS_SOME drv ⇒
+  ∀cx drv tenv ret_type skip_check target_addr success returnData accounts'
+     tStorage' emitted_logs s res s'.
+    (success ∧ returnData = [] ∧ IS_SOME drv ∧
+     (skip_check ∨ ext_call_has_code target_addr accounts') ⇒
        ∀st res st'. eval_expr cx (THE drv) st = (res,st') ⇒
          preserves_immutables_dom cx st st') ⇒
     do
@@ -1704,7 +1706,11 @@ Theorem extcall_inner_pipeline_imm_dom[local]:
       x <- update_accounts (K accounts');
       x <- update_transient (K tStorage');
       x <- append_logs emitted_logs;
-      if returnData = [] ∧ IS_SOME drv then eval_expr cx (THE drv)
+      if returnData = [] ∧ IS_SOME drv then do
+        x <- check (skip_check ∨ ext_call_has_code target_addr accounts')
+               "ExtCall target has no code";
+        eval_expr cx (THE drv)
+      od
       else
         do
           ret_val <-
@@ -1716,12 +1722,14 @@ Theorem extcall_inner_pipeline_imm_dom[local]:
 Proof
   (* NONE tail: the named contract isolates the concrete installation. *)
   rewrite_tac[GSYM ignore_bind_def, concrete_extcall_tail] >>
-  rw[bind_def, return_def,
+  rw[bind_def, ignore_bind_def, check_def, assert_def, return_def,
      raise_def, lift_sum_def, lift_sum_runtime_def]
   \\ rpt strip_tac \\ gvs[AllCaseEqs(), preserves_immutables_dom_refl]
   \\ TRY (irule preserves_immutables_dom_eq
           >> Cases_on `evaluate_abi_decode_return tenv ret_type returnData`
           >> gvs[return_def, raise_def] >> NO_TAC)
+  (* failed code check after the call *)
+  \\ TRY (irule preserves_immutables_dom_eq >> gvs[] >> NO_TAC)
   \\ irule preserves_immutables_dom_trans
   \\ qmatch_asmsub_abbrev_tac `eval_expr cx (THE drv) s_mid`
   \\ qexists_tac `s_mid`
@@ -1732,7 +1740,7 @@ QED
 
 (* Helper: full ExtCall pipeline preserves immutables dom *)
 Theorem extcall_pipeline_preserves_imm_dom[local]:
-  ∀cx drv func_name arg_types ret_type target_addr value_opt arg_vals
+  ∀cx drv func_name arg_types ret_type skip_check target_addr value_opt arg_vals
      caller txParams s res s'.
     (∀ts calldata accounts tStorage success returnData accounts' tStorage' emitted_logs.
        get_self_code cx = SOME ts ⇒
@@ -1740,7 +1748,8 @@ Theorem extcall_pipeline_preserves_imm_dom[local]:
          SOME calldata ⇒
        run_ext_call caller target_addr calldata value_opt accounts tStorage
          txParams = SOME (success, returnData, accounts', tStorage', emitted_logs) ⇒
-       success ∧ returnData = [] ∧ IS_SOME drv ⇒
+       success ∧ returnData = [] ∧ IS_SOME drv ∧
+       (skip_check ∨ ext_call_has_code target_addr accounts') ⇒
        ∀st res st'. eval_expr cx (THE drv) st = (res,st') ⇒
          preserves_immutables_dom cx st st') ⇒
     do
@@ -1761,7 +1770,11 @@ Theorem extcall_pipeline_preserves_imm_dom[local]:
              x <- update_accounts (K accounts');
              x <- update_transient (K tStorage');
              x <- append_logs emitted_logs;
-             if returnData = [] ∧ IS_SOME drv then eval_expr cx (THE drv)
+             if returnData = [] ∧ IS_SOME drv then do
+               x <- check (skip_check ∨ ext_call_has_code target_addr accounts')
+                      "ExtCall target has no code";
+               eval_expr cx (THE drv)
+             od
              else
                do
                  ret_val <-

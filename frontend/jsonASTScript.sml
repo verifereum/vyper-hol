@@ -112,7 +112,7 @@ Datatype:
   | JE_ExtCall string json_source_ref (json_type list) json_type json_expr
       (json_expr list) (json_keyword list)
   | JE_StaticCall string json_source_ref (json_type list) json_type json_expr
-      (json_expr list)
+      (json_expr list) (json_keyword list)
 ;
   json_keyword = JKeyword string json_expr             (* arg, value *)
 End

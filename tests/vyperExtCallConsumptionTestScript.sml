@@ -8,7 +8,7 @@ Libs wordsLib cv_transLib
 
 Definition counter_expr_def:
   counter_expr = Call (BaseT (UintT 256))
-    (ExtCall T ("f", [], BaseT (UintT 256)))
+    (ExtCall T F ("f", [], BaseT (UintT 256)))
     [Literal (BaseT AddressT) (BytesL (REPLICATE 19 0w ++ [9w]))] NONE
 End
 

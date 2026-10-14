@@ -918,6 +918,25 @@ End
 
 val () = cv_auto_trans run_ext_call_def;
 
+(* Vyper's EXTCODESIZE check (vyper/codegen/external_call.py): before the
+   call only when no return data is expected; calls with a return type rely
+   on the returndatasize check instead.  skip_contract_check disables it. *)
+Definition ext_call_has_code_def:
+  ext_call_has_code target accounts ⇔
+    ¬NULL (lookup_account target accounts).code
+End
+
+val () = cv_auto_trans ext_call_has_code_def;
+
+Definition ext_call_precheck_ok_def:
+  ext_call_precheck_ok skip_check ret_type target accounts ⇔
+    case ret_type of
+      NoneT => skip_check ∨ ext_call_has_code target accounts
+    | _ => T
+End
+
+val () = cv_auto_trans ext_call_precheck_ok_def;
+
 (* Shared execution after raw_call operands have been evaluated and decoded.
    Both input forms retain the same static/revert/output and state effects. *)
 Definition eval_raw_call_def:
@@ -1290,7 +1309,7 @@ Definition evaluate_def:
     return $ Value $ NoneV
     od
   od ∧
-  eval_expr cx (Call _ (ExtCall is_static (func_name, arg_types, ret_type)) es drv) = do
+  eval_expr cx (Call _ (ExtCall is_static skip_check (func_name, arg_types, ret_type)) es drv) = do
     vs <- eval_exprs cx es;
     type_check (vs ≠ []) "ExtCall no target";
     target_addr <- lift_option_type (dest_AddressV (HD vs)) "ExtCall target not address";
@@ -1326,8 +1345,10 @@ Definition evaluate_def:
     od
     | NONE => do
     accounts <- get_accounts;
-    (* Vyper reverts if target has no code (EXTCODESIZE == 0) *)
-    check (¬NULL (lookup_account target_addr accounts).code) "ExtCall target has no code";
+    check (ext_call_precheck_ok skip_check ret_type target_addr accounts)
+          "ExtCall target has no code";
+    (* Vyper reverts if target has no code (EXTCODESIZE == 0), see
+         ext_call_precheck_ok for when this check is performed *)
     tStorage <- get_transient_storage;
     txParams <<- vyper_to_tx_params cx.txn;
     caller <<- cx.txn.target;
@@ -1339,8 +1360,12 @@ Definition evaluate_def:
     update_accounts (K accounts');
     update_transient (K tStorage');
     append_logs emitted_logs;
-    if returnData = [] ∧ IS_SOME drv then
+    if returnData = [] ∧ IS_SOME drv then do
+      (* default_return_value path: Vyper checks EXTCODESIZE after the call *)
+      check (skip_check ∨ ext_call_has_code target_addr accounts')
+            "ExtCall target has no code";
       eval_expr cx (THE drv)
+    od
     else do
       ret_val <- lift_sum_runtime (evaluate_abi_decode_return tenv ret_type returnData);
       return $ Value ret_val

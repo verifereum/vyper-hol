@@ -190,10 +190,11 @@ fun mk_JE_ExtCall (func_name, func_src, arg_types, ret_ty, target, args, keyword
                                mk_list(arg_types, json_type_ty),
                                ret_ty, target, mk_list(args, json_expr_ty),
                                mk_list(keywords, json_keyword_ty)])
-fun mk_JE_StaticCall (func_name, func_src, arg_types, ret_ty, target, args) =
+fun mk_JE_StaticCall (func_name, func_src, arg_types, ret_ty, target, args, keywords) =
   list_mk_comb(JE_StaticCall_tm, [fromMLstring func_name, func_src,
                                   mk_list(arg_types, json_type_ty),
-                                  ret_ty, target, mk_list(args, json_expr_ty)])
+                                  ret_ty, target, mk_list(args, json_expr_ty),
+                                  mk_list(keywords, json_keyword_ty)])
 fun mk_JKeyword (arg, v) = list_mk_comb(JKeyword_tm, [fromMLstring arg, v])
 
 (* ===== Statement Constructors ===== *)
@@ -870,15 +871,18 @@ fun d_json_expr () : term decoder = achoose "expr" [
                   field "return_type" json_type,
                 field "value" $ field "func" $ field "value" (delay d_json_expr),
                 field "value" $ field "args" (array (delay d_json_expr))),
-        orElse (field "type" json_type, succeed JT_None_tm)))
+        tuple2 (field "value" $
+                  orElse (field "keywords" (array (delay d_json_keyword)),
+                          succeed []),
+                orElse (field "type" json_type, succeed JT_None_tm))))
       (fn ((func_name, func_src, arg_types), (ret_ty, target, args),
-           result_ty) =>
+           (keywords, result_ty)) =>
         case normalize_interface_return (func_src, ret_ty, result_ty) of
           SOME effective_ret =>
             if invalid_legacy_arguments (arg_types, args)
             then fail "invalid legacy interface argument signature"
             else succeed (mk_JE_StaticCall
-              (func_name, func_src, arg_types, effective_ret, target, args))
+              (func_name, func_src, arg_types, effective_ret, target, args, keywords))
         | NONE => fail "legacy interface return type disagrees with callsite")
 ]
 and d_json_keyword () : term decoder =

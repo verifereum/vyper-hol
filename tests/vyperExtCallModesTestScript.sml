@@ -37,7 +37,7 @@ QED
 
 Theorem activated_NoneT_checks_code_before_take:
   eval_expr empty_evaluation_context
-    (Call NoneT (ExtCall T ("f",[],NoneT))
+    (Call NoneT (ExtCall T F ("f",[],NoneT))
       [Literal (BaseT AddressT) (BytesL (REPLICATE 19 0w ++ [9w]))] NONE)
     counter_state =
     (INR (Error (RuntimeError "ExtCall target has no code")),counter_state)
@@ -47,7 +47,7 @@ QED
 
 Definition sha256_expr_def:
   sha256_expr = Call (BaseT (UintT 256))
-    (ExtCall T ("f",[],BaseT (UintT 256)))
+    (ExtCall T F ("f",[],BaseT (UintT 256)))
     [Literal (BaseT AddressT) (BytesL (REPLICATE 19 0w ++ [2w]))] NONE
 End
 
