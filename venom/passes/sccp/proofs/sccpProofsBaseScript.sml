@@ -42,7 +42,7 @@ Ancestors
   finite_map worklistDefs worklistProps
   list
 Libs
-  pairLib BasicProvers
+  pairLib BasicProvers stepInstBaseLib
 
 (* ===== Counterexample infrastructure ===== *)
 
@@ -767,8 +767,8 @@ Proof
 QED
 
 val ops_irrel_tac =
-  simp[Once step_inst_base_def, exec_read0_ops_irrel] >>
-  simp[Once step_inst_base_def, exec_read0_ops_irrel];
+  STEP_INST_BASE_OPCODE_TAC >>
+  simp[exec_read0_ops_irrel];
 
 Triviality step_inst_base_ops_irrel[local]:
   !inst s ops.
@@ -1498,18 +1498,21 @@ QED
 (* Terminator transfer puts the actual successor in sl_targets.
    For JNZ with known constant, cond_const_sound ensures the taken branch matches. *)
 val term_succ_base_tac =
-  fs[sccp_transfer_inst_def, step_inst_base_def, AllCaseEqs()] >>
+  with_opcode_clause (fn ths =>
+    fs (ths @ [sccp_transfer_inst_def, AllCaseEqs()])) >>
   gvs[jump_to_def, is_terminator_def];
 
 val term_succ_jnz_tac =
-  fs[sccp_transfer_inst_def, step_inst_base_def, AllCaseEqs()] >>
+  with_opcode_clause (fn ths =>
+    fs (ths @ [sccp_transfer_inst_def, AllCaseEqs()])) >>
   gvs[jump_to_def, is_terminator_def] >>
   BasicProvers.EVERY_CASE_TAC >> gvs[] >>
   TRY (metis_tac[cond_const_eval_operand_sound,
                  optionTheory.SOME_11, optionTheory.NOT_NONE_SOME]);
 
 val term_succ_djmp_tac =
-  fs[sccp_transfer_inst_def, step_inst_base_def, AllCaseEqs()] >>
+  with_opcode_clause (fn ths =>
+    fs (ths @ [sccp_transfer_inst_def, AllCaseEqs()])) >>
   gvs[jump_to_def, is_terminator_def] >>
   DISJ1_TAC >> irule extract_labels_el_in_foldr >> metis_tac[];
 

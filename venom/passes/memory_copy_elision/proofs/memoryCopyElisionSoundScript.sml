@@ -29,7 +29,7 @@ Ancestors
   basePtrDefs memLocDefs memAliasDefs memAliasProofs
   finite_map list pred_set
 Libs
-  pairLib fcpLib
+  pairLib fcpLib stepInstBaseLib
 
 (* ===== Soundness predicate ===== *)
 
@@ -1197,8 +1197,9 @@ Proof
 QED
 
 val terminator_tuple_tac =
-  fs[venomExecSemanticsTheory.step_inst_base_def, jump_to_def,
-     halt_state_def, revert_state_def, set_returndata_def, LET_THM] >>
+  with_opcode_clause (fn ths =>
+    fs (ths @ [jump_to_def, halt_state_def, revert_state_def,
+               set_returndata_def, LET_THM])) >>
   rpt (BasicProvers.PURE_FULL_CASE_TAC >>
        fs[jump_to_def, halt_state_def, revert_state_def,
           set_returndata_def]) >>

@@ -17,7 +17,7 @@ Ancestors
   venomExecProps venomInst venomState venomInstProps instIdxIndep
   finite_map words list rich_list
 Libs
-  lowerDloadFrameLib
+  lowerDloadFrameLib stepInstBaseLib
 
 val _ = augment_srw_ss [lowerDloadFrameLib.frame_ss];
 
@@ -566,7 +566,7 @@ QED
 val ld_terminator_tac =
   rpt strip_tac >>
   ld_derive_agree_tac >> ld_derive_fields_tac >>
-  simp[step_inst_base_def, LET_THM] >>
+  with_opcode_clause (fn ths => simp (ths @ [LET_THM])) >>
   rpt (BasicProvers.PURE_FULL_CASE_TAC >>
        gvs[] >> TRY (res_tac >> gvs[])) >>
   TRY (`eval_operands inst.inst_operands s1 =
