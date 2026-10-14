@@ -1237,9 +1237,129 @@ val exec_create_output = prove(``
 
 (* OFFSET now handled by exec_pure2 category dispatch *)
 
+(* --- Per-category output-match lemmas ---
+   One lemma per exec_* category, instantiated per opcode by
+   prove_output_cat, as prove_cat does for step_sim. *)
+
+val exec_pure1_output = prove(``
+  !f inst1 inst2 s1 s2 s1' s2'.
+    exec_pure1 f inst1 s1 = OK s1' /\
+    exec_pure1 f inst2 s2 = OK s2' /\
+    (!i. i < LENGTH inst1.inst_operands ==>
+         eval_operand (EL i inst1.inst_operands) s1 =
+         eval_operand (EL i inst2.inst_operands) s2) ==>
+    !k. k < LENGTH inst1.inst_outputs ==>
+        lookup_var (EL k inst1.inst_outputs) s1' =
+        lookup_var (EL k inst2.inst_outputs) s2'``,
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!i. _ ==> _`
+    (fn th => ASSUME_TAC (SIMP_RULE (srw_ss()) [] (SPEC ``0n`` th))) >>
+  gvs[exec_pure1_def, AllCaseEqs()] >>
+  simp[lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE]);
+
+val exec_pure2_output = prove(``
+  !f inst1 inst2 s1 s2 s1' s2'.
+    exec_pure2 f inst1 s1 = OK s1' /\
+    exec_pure2 f inst2 s2 = OK s2' /\
+    (!i. i < LENGTH inst1.inst_operands ==>
+         eval_operand (EL i inst1.inst_operands) s1 =
+         eval_operand (EL i inst2.inst_operands) s2) ==>
+    !k. k < LENGTH inst1.inst_outputs ==>
+        lookup_var (EL k inst1.inst_outputs) s1' =
+        lookup_var (EL k inst2.inst_outputs) s2'``,
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!i. _ ==> _`
+    (fn th =>
+      ASSUME_TAC (SIMP_RULE (srw_ss()) [] (SPEC ``0n`` th)) >>
+      ASSUME_TAC (SIMP_RULE (srw_ss()) [] (SPEC ``1n`` th))) >>
+  gvs[exec_pure2_def, AllCaseEqs()] >>
+  simp[lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE]);
+
+val exec_pure3_output = prove(``
+  !f inst1 inst2 s1 s2 s1' s2'.
+    exec_pure3 f inst1 s1 = OK s1' /\
+    exec_pure3 f inst2 s2 = OK s2' /\
+    (!i. i < LENGTH inst1.inst_operands ==>
+         eval_operand (EL i inst1.inst_operands) s1 =
+         eval_operand (EL i inst2.inst_operands) s2) ==>
+    !k. k < LENGTH inst1.inst_outputs ==>
+        lookup_var (EL k inst1.inst_outputs) s1' =
+        lookup_var (EL k inst2.inst_outputs) s2'``,
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!i. _ ==> _`
+    (fn th =>
+      ASSUME_TAC (SIMP_RULE (srw_ss()) [] (SPEC ``0n`` th)) >>
+      ASSUME_TAC (SIMP_RULE (srw_ss()) [] (SPEC ``1n`` th)) >>
+      ASSUME_TAC (SIMP_RULE (srw_ss()) [] (SPEC ``2n`` th))) >>
+  gvs[exec_pure3_def, AllCaseEqs()] >>
+  simp[lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE]);
+
+val exec_read0_output = prove(``
+  !f inst1 inst2 s1 s2 s1' s2'.
+    exec_read0 f inst1 s1 = OK s1' /\
+    exec_read0 f inst2 s2 = OK s2' /\
+    f s1 = f s2 ==>
+    !k. k < LENGTH inst1.inst_outputs ==>
+        lookup_var (EL k inst1.inst_outputs) s1' =
+        lookup_var (EL k inst2.inst_outputs) s2'``,
+  rpt gen_tac >> strip_tac >>
+  gvs[exec_read0_def, AllCaseEqs()] >>
+  simp[lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE]);
+
+val exec_read1_output = prove(``
+  !f inst1 inst2 s1 s2 s1' s2'.
+    exec_read1 f inst1 s1 = OK s1' /\
+    exec_read1 f inst2 s2 = OK s2' /\
+    (!i. i < LENGTH inst1.inst_operands ==>
+         eval_operand (EL i inst1.inst_operands) s1 =
+         eval_operand (EL i inst2.inst_operands) s2) /\
+    (!v. f v s1 = f v s2) ==>
+    !k. k < LENGTH inst1.inst_outputs ==>
+        lookup_var (EL k inst1.inst_outputs) s1' =
+        lookup_var (EL k inst2.inst_outputs) s2'``,
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!i. _ ==> _`
+    (fn th => ASSUME_TAC (SIMP_RULE (srw_ss()) [] (SPEC ``0n`` th))) >>
+  gvs[exec_read1_def, AllCaseEqs()] >>
+  simp[lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE]);
+
+fun output_thm_for_cat "exec_pure1" = SOME exec_pure1_output
+  | output_thm_for_cat "exec_pure2" = SOME exec_pure2_output
+  | output_thm_for_cat "exec_pure3" = SOME exec_pure3_output
+  | output_thm_for_cat "exec_read0" = SOME exec_read0_output
+  | output_thm_for_cat "exec_read1" = SOME exec_read1_output
+  | output_thm_for_cat _ = NONE;
+
+(* Category prover: rewrite both steps to the exec_* call, instantiate the
+   category lemma at that call's function, then discharge its side
+   conditions as prove_cat does. The lemma is instantiated explicitly
+   because its two OK premises differ only in names, so drule would match
+   either assumption to either premise. *)
+fun prove_output_cat out_thm cr opc =
+  prove(``!inst1 inst2 s1 s2 s1' s2'.
+    sim_pre inst1 inst2 s1 s2 /\ inst1.inst_opcode = ^opc /\
+    inst1.inst_id = inst2.inst_id /\
+    ALL_DISTINCT inst1.inst_outputs /\
+    ALL_DISTINCT inst2.inst_outputs /\
+    step_inst_base inst1 s1 = OK s1' /\
+    step_inst_base inst2 s2 = OK s2' ==>
+    !k. k < LENGTH inst1.inst_outputs ==>
+        lookup_var (EL k inst1.inst_outputs) s1' =
+        lookup_var (EL k inst2.inst_outputs) s2'``,
+  rpt gen_tac >> strip_tac >>
+  specialize_cr cr >>
+  fs[sim_pre_def] >>
+  qpat_assum `_ inst1 s1 = OK s1'` (fn th =>
+    mp_tac (ISPECL [hd (snd (strip_comb (lhs (concl th)))),
+                    ``inst1:instruction``, ``inst2:instruction``,
+                    ``s1:venom_state``, ``s2:venom_state``,
+                    ``s1':venom_state``, ``s2':venom_state``] out_thm)) >>
+  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> solve_f_eq) >>
+  simp[]);
+
 (* Inline prover: works for all opcodes where output value is a deterministic
    function of operand evals and state fields covered by ee UNIV.
-   Handles: pure1/2/3, read0/1, ALLOCA, DLOAD, LOG, ASSERT, etc *)
+   Handles the opcodes outside the categories above: ALLOCA, BUMP, etc *)
 fun prove_output_inline cr opc =
   prove(``!inst1 inst2 s1 s2 s1' s2'.
     sim_pre inst1 inst2 s1 s2 /\ inst1.inst_opcode = ^opc /\
@@ -1324,7 +1444,9 @@ fun prove_output_opcode opc = let
        then prove_output_ext_call exec_delegatecall_output cr opc
      else if name = "CREATE" orelse name = "CREATE2"
        then prove_output_ext_call exec_create_output cr opc
-     else prove_output_inline cr opc
+     else case output_thm_for_cat (get_rhs_head cr) of
+       SOME out_thm => prove_output_cat out_thm cr opc
+     | NONE => prove_output_inline cr opc
   end;
 
 val _ = print "Starting output-match dispatch...\n";
