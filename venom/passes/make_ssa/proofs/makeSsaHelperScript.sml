@@ -22,7 +22,7 @@ Ancestors
   execEquivParamDefs execEquivParamProofs
   list rich_list alist finite_map pred_set string arithmetic
 Libs
-  ssaFrameLib
+  ssaFrameLib stepInstBaseLib
 
 val _ = augment_srw_ss [ssaFrameLib.frame_ss];
 
@@ -2931,9 +2931,9 @@ local
   ) (TypeBase.constructors_of ``:opcode``);
 
   val nt_ni_clauses = map (fn op_tm =>
-    SIMP_CONV (srw_ss()) [step_inst_base_def]
-      (mk_comb(mk_comb(``step_inst_base``,
-        ``inst with inst_opcode := ^op_tm``), ``st:venom_state``))
+    (STEP_INST_BASE_OPCODE_CONV THENC
+       RAND_CONV (QCONV (SIMP_CONV (srw_ss()) [])))
+      ``step_inst_base (inst with inst_opcode := ^op_tm) st``
   ) nt_ni_ops;
 
   val exec_helper_defs = [

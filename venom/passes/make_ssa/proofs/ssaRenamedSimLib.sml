@@ -19,6 +19,7 @@ end = struct
 
 open HolKernel boolLib bossLib
 open venomInstTheory venomExecSemanticsTheory
+open stepInstBaseLib
 
 (* Generate per-opcode CONDITIONAL reduction of step_inst_base.
    Result: inst.inst_opcode = OPC ==> step_inst_base inst s = exec_xxx ... *)
@@ -40,7 +41,8 @@ fun mk_cond_step_base_thm opc_tm =
               mk_abs(mk_var("_", ``:opcode``), opc_tm)),
       inst_var)
     val lhs = list_mk_comb(``step_inst_base``, [inst_tm, s_var])
-    val unconditional = SIMP_CONV (srw_ss()) [step_inst_base_def] lhs
+    val unconditional = (STEP_INST_BASE_OPCODE_CONV THENC
+      RAND_CONV (QCONV (SIMP_CONV (srw_ss()) []))) lhs
     (* Compose: replace (inst with inst_opcode := OPC) with inst under hypothesis *)
     val conditional = REWRITE_RULE [UNDISCH identity] unconditional
   in DISCH_ALL conditional end
