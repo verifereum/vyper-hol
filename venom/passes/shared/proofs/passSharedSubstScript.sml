@@ -807,9 +807,13 @@ val wf_opcode_contra_tac =
   ASM_REWRITE_TAC[] >>
   gvs[is_alloca_op_def];
 
+(* The record rules expose the opcode behind `inst with inst_operands := _`
+   so opcode_case_def picks its branch before simp, which would otherwise
+   simplify every branch of the case. *)
 val pos_opcode_finish_tac =
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  ASM_REWRITE_TAC[] >>
+  ASM_REWRITE_TAC[instruction_accfupds, instruction_accessors,
+                  opcode_case_def] >>
   simp (exec_pos_thms @ exec_inst_operands_thms) >>
   rpt (BasicProvers.EVERY_CASE_TAC >> gvs[]);
 
