@@ -24,4 +24,4 @@ roots = ["vyperHolScript.sml",
 
 [dependencies.verifereum]
 git = "https://github.com/verifereum/verifereum.git"
-rev = "f5e172ccbf45addef7096feea76428de3ed3dfa8"
+rev = "cdd4eaebd03e82d7a1122435f6a4df658c42b50b"
