@@ -1207,9 +1207,15 @@ in
   Lib.appi define_traces tests
 end
 
+(* Files to generate scripts for. A file with no selected tests would still
+   build both of its theories, so it gets no scripts. *)
+fun selected_test_files () =
+  List.filter (fn (_, path) => #selected (read_coverage_json path) > 0)
+    (test_files ())
+
 fun generate_defn_scripts () = let
   val () = check_generate_dirs ()
-  val files = test_files ()
+  val files = selected_test_files ()
   val gen_dir = generated_dir
   val () = cleanup_generated_scripts files
   val () = List.app (fn (id, jsonp) => let
@@ -1231,7 +1237,7 @@ end
 
 fun generate_test_scripts () = let
   val () = check_generate_dirs ()
-  val files = test_files ()
+  val files = selected_test_files ()
   val gen_dir = generated_dir
   val () = cleanup_generated_scripts files
   val () = List.app (fn (id, _) => let
