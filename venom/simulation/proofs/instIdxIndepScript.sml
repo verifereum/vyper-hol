@@ -5,7 +5,7 @@
  * but never reads or writes vs_inst_idx. So the result differs from the
  * original only in vs_inst_idx, captured by exec_result_map.
  *
- * Built as a separate theory because the 93-opcode case split takes ~60s.
+ * Built as a separate theory because of its 93-opcode case split.
  *
  * TOP-LEVEL:
  *   exec_result_map            — map function over state in exec_result
@@ -16,7 +16,7 @@ Theory instIdxIndep
 Ancestors
   venomExecSemantics venomState venomInst venomCallOracleDefs
 Libs
-  finite_mapTheory listTheory BasicProvers pairTheory
+  finite_mapTheory listTheory BasicProvers pairTheory stepInstBaseLib
 
 (* ================================================================
    exec_result_map — exported
@@ -359,8 +359,8 @@ val idx_rw = [eval_op_inst_idx, eval_ops_inst_idx, update_var_idx,
               sload_idx, tload_idx, exec_result_map_def];
 
 val opcode_idx_tac =
-  simp[step_inst_base_def, exec_pure1_idx, exec_pure2_idx, exec_pure3_idx,
-       exec_alloca_idx] >>
+  with_opcode_clause (fn ths => simp (ths @
+    [exec_pure1_idx, exec_pure2_idx, exec_pure3_idx, exec_alloca_idx])) >>
   TRY (irule exec_read0_idx >> simp idx_rw >> NO_TAC) >>
   TRY (irule exec_read1_idx >> simp idx_rw >> NO_TAC) >>
   TRY (irule exec_write2_idx >> simp idx_rw >> NO_TAC) >>
@@ -468,7 +468,8 @@ Proof
   >- opcode_idx_tac  (* SHA3 *)
   >- opcode_idx_tac  (* CALL *)
   >- opcode_idx_tac  (* STATICCALL *)
-  >- (simp[step_inst_base_def, eval_op_inst_idx, exec_delegatecall_idx] >>
+  >- (with_opcode_clause (fn ths => simp (ths @
+        [eval_op_inst_idx, exec_delegatecall_idx])) >>
       EVERY_CASE_TAC >> simp[exec_result_map_def])  (* DELEGATECALL *)
   >- opcode_idx_tac  (* CREATE *)
   >- opcode_idx_tac  (* CREATE2 *)
@@ -508,10 +509,10 @@ QED
    ================================================================ *)
 
 val terminator_idx_tac =
-  simp[step_inst_base_def,
-       eval_op_inst_idx, eval_ops_inst_idx,
-       jump_to_idx, halt_state_idx, revert_state_idx,
-       set_returndata_idx, read_mem_idx, write_mem_idx] >>
+  with_opcode_clause (fn ths => simp (ths @
+    [eval_op_inst_idx, eval_ops_inst_idx,
+     jump_to_idx, halt_state_idx, revert_state_idx,
+     set_returndata_idx, read_mem_idx, write_mem_idx])) >>
   EVERY_CASE_TAC >>
   simp[exec_result_map_def, venom_state_component_equality];
 
@@ -532,10 +533,10 @@ Proof
   >- terminator_idx_tac  (* REVERT *)
   >- terminator_idx_tac  (* STOP *)
   >- terminator_idx_tac  (* SINK *)
-  >- (simp[step_inst_base_def,
-           eval_op_inst_idx, eval_ops_inst_idx,
-           jump_to_idx, halt_state_idx, revert_state_idx,
-           set_returndata_idx, read_mem_idx, write_mem_idx] >>
+  >- (with_opcode_clause (fn ths => simp (ths @
+        [eval_op_inst_idx, eval_ops_inst_idx,
+         jump_to_idx, halt_state_idx, revert_state_idx,
+         set_returndata_idx, read_mem_idx, write_mem_idx])) >>
       EVERY_CASE_TAC >>
       Cases_on `pack_dret_dynamic s.vs_call_entry_fmp x' s` >>
       Cases_on `r'` >>
@@ -554,20 +555,20 @@ Theorem terminator_OK_inst_idx_0:
 Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode` >> gvs[is_terminator_def]
-  >- gvs[step_inst_base_def, AllCaseEqs(), jump_to_def]  (* JMP *)
-  >- gvs[step_inst_base_def, AllCaseEqs(), jump_to_def]  (* JNZ *)
-  >- gvs[step_inst_base_def, AllCaseEqs(), jump_to_def]  (* DJMP *)
-  >- gvs[step_inst_base_def, AllCaseEqs(), jump_to_def]  (* RET *)
-  >- gvs[step_inst_base_def, AllCaseEqs(), jump_to_def]  (* RETURN *)
-  >- gvs[step_inst_base_def, AllCaseEqs(), jump_to_def]  (* REVERT *)
-  >- gvs[step_inst_base_def, AllCaseEqs(), jump_to_def]  (* STOP *)
-  >- gvs[step_inst_base_def, AllCaseEqs(), jump_to_def]  (* SINK *)
-  >- (gvs[step_inst_base_def, AllCaseEqs(), jump_to_def] >>
+  >- with_opcode_clause (fn ths => gvs (ths @ [AllCaseEqs(), jump_to_def]))  (* JMP *)
+  >- with_opcode_clause (fn ths => gvs (ths @ [AllCaseEqs(), jump_to_def]))  (* JNZ *)
+  >- with_opcode_clause (fn ths => gvs (ths @ [AllCaseEqs(), jump_to_def]))  (* DJMP *)
+  >- with_opcode_clause (fn ths => gvs (ths @ [AllCaseEqs(), jump_to_def]))  (* RET *)
+  >- with_opcode_clause (fn ths => gvs (ths @ [AllCaseEqs(), jump_to_def]))  (* RETURN *)
+  >- with_opcode_clause (fn ths => gvs (ths @ [AllCaseEqs(), jump_to_def]))  (* REVERT *)
+  >- with_opcode_clause (fn ths => gvs (ths @ [AllCaseEqs(), jump_to_def]))  (* STOP *)
+  >- with_opcode_clause (fn ths => gvs (ths @ [AllCaseEqs(), jump_to_def]))  (* SINK *)
+  >- (with_opcode_clause (fn ths => gvs (ths @ [AllCaseEqs(), jump_to_def])) >>
       Cases_on `pack_dret_dynamic s.vs_call_entry_fmp pairs s` >>
       Cases_on `r` >> gvs[])  (* DRET *)
-  >- gvs[step_inst_base_def, AllCaseEqs(), jump_to_def]  (* RETFMP *)
-  >- gvs[step_inst_base_def, AllCaseEqs(), jump_to_def]  (* SELFDESTRUCT *)
-  >- gvs[step_inst_base_def, AllCaseEqs(), jump_to_def]  (* INVALID *)
+  >- with_opcode_clause (fn ths => gvs (ths @ [AllCaseEqs(), jump_to_def]))  (* RETFMP *)
+  >- with_opcode_clause (fn ths => gvs (ths @ [AllCaseEqs(), jump_to_def]))  (* SELFDESTRUCT *)
+  >- with_opcode_clause (fn ths => gvs (ths @ [AllCaseEqs(), jump_to_def]))  (* INVALID *)
 QED
 
 

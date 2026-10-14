@@ -6,6 +6,8 @@ Theory passSharedField
 Ancestors
   passSharedDefs venomExecSemantics venomEffects venomInstProps
   venomState venomInst
+Libs
+  stepInstBaseLib
 
 (* Upstream-style tactic *)
 val field_tac =
@@ -291,7 +293,7 @@ QED
 (* Frame tactic: like field_tac but rewrites eval_operand/update_var
    plus state-access functions that don't depend on vs_memory *)
 val mem_frame_finish_tac =
-  fs[step_inst_base_def] >>
+  with_opcode_clause fs >>
   fs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
      exec_read0_def, exec_read1_def, exec_write2_def,
      exec_alloca_def, extract_venom_result_def] >>
@@ -952,7 +954,7 @@ Proof
 QED
 
 val acct_frame_finish_tac =
-  fs[step_inst_base_def] >>
+  with_opcode_clause fs >>
   fs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
      exec_read0_def, exec_read1_def, exec_write2_def,
      exec_alloca_def, extract_venom_result_def] >>
