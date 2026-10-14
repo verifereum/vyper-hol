@@ -464,7 +464,7 @@ Proof
   Cases_on `eval_exprs cx es st` >> Cases_on `q` >> simp[] >>
   strip_tac >>
   first_x_assum drule >> strip_tac >>
-  drule eval_create_preserves_non_accounts >> strip_tac >> gvs[]
+  drule eval_create_preserves_scopes_immutables >> strip_tac >> gvs[]
 QED
 
 (* Goal 17: ExtCall (exact evaluate_ind shape) *)

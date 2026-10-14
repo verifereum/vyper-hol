@@ -236,7 +236,9 @@ Proof
     irule outcomes_frame_bind >> conj_tac,
     irule outcomes_frame_ignore_bind >> conj_tac,
     irule outcomes_frame_cond >> conj_tac,
-    gen_tac, CASE_TAC])
+    gen_tac, CASE_TAC]) >>
+  simp[outcomes_frame_def, get_pending_deletions_def,
+       update_pending_deletions_def, return_def]
 QED
 
 Theorem outcomes_frame_raw_call[simp]:

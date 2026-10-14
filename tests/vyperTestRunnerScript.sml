@@ -167,6 +167,17 @@ val () = compute_vyper_args_def
   |> REWRITE_RULE [vyper_abi_dec_eq_fast, vyper_abi_valid_enc_eq_fast]
   |> cv_auto_trans;
 
+Definition increment_account_nonce_def:
+  increment_account_nonce addr am =
+    am with accounts updated_by
+      (update_account addr
+        ((lookup_account addr am.accounts) with nonce updated_by SUC))
+End
+
+val () = increment_account_nonce_def
+  |> SRULE [combinTheory.o_DEF, combinTheory.C_DEF]
+  |> cv_auto_trans;
+
 Definition run_deployment_def:
   run_deployment am dt = let
     sns = compute_selector_names dt.contractAbi;
@@ -196,7 +207,8 @@ Definition run_deployment_def:
           ; base_fee := 0
           ; prev_randao := 0
           ; origin := dt.deployer |>;
-    in case load_contract NONE am tx all_mods dt.sourceExports of
+    in case load_contract NONE (increment_account_nonce dt.deployedAddress am)
+                          tx all_mods dt.sourceExports of
          INL (am', _) => INL am'
        | INR ex => INR ex
   in (sns, res)
@@ -335,16 +347,6 @@ val () = do_transfer_def
   |> SRULE [combinTheory.o_DEF, combinTheory.C_DEF]
   |> cv_auto_trans;
 
-Definition increment_account_nonce_def:
-  increment_account_nonce addr am =
-    am with accounts updated_by
-      (update_account addr
-        ((lookup_account addr am.accounts) with nonce updated_by SUC))
-End
-
-val () = increment_account_nonce_def
-  |> SRULE [combinTheory.o_DEF, combinTheory.C_DEF]
-  |> cv_auto_trans;
 
 Definition make_create_tx_def:
   make_create_tx sender nonce value data gas_limit gas_price : transaction =
@@ -430,7 +432,7 @@ Definition run_trace_def:
       let am' = am with accounts updated_by
             (update_account dt.deployedAddress
               ((lookup_account dt.deployedAddress am.accounts)
-                with code := dt.runtimeBytecode)) in
+                with <| code := dt.runtimeBytecode; nonce := 1 |>)) in
       ((dt.deployedAddress,[])::snss, INL (increment_account_nonce dt.deployer am'))
     else let
       (s_layout, t_layout) = extract_storage_layout dt.importMap dt.storageLayout;

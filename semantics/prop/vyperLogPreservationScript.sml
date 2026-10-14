@@ -3,6 +3,7 @@ Theory vyperLogPreservation
 Ancestors
   pair option sum vyperMisc vyperCall vyperStatePreservation vyperCallFrame vyperCallOutcomeFrame
   vyperState[ignore_grammar] vyperInterpreter[ignore_grammar] vyperCallOutcome[ignore_grammar]
+  vyperCreate
 
 (* Keep existing free statement-list variables when importing oracle grammar. *)
 val _ = hide "body";
@@ -1602,10 +1603,10 @@ Proof
   simp[Once vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def,
        AllCaseEqs()] >>
   rpt strip_tac >> gvs[log_extends_refl] >>
-  imp_res_tac vyperCreateTheory.eval_create_preserves_non_accounts >> gvs[] >>
+  imp_res_tac type_check_state >> imp_res_tac lift_option_type_state >>
   first_x_assum drule >> strip_tac >>
   irule log_extends_trans >> goal_assum drule >>
-  irule log_extends_eq_logs >> gvs[]
+  metis_tac[eval_create_logs_extend, log_extends_def]
 QED
 
 Theorem finally_log_extends[local]:
@@ -2243,7 +2244,11 @@ Proof
   rewrite_tac[GSYM vyperStateTheory.check_def,
     GSYM vyperStateTheory.ignore_bind_def, concrete_extcall_tail] >>
   Cases_on `success` >> Cases_on `drv` >>
-  simp[vyperStateTheory.return_def, vyperStateTheory.raise_def, AllCaseEqs()] >>
+  simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+       vyperStateTheory.update_accounts_def, vyperStateTheory.update_transient_def,
+       vyperStateTheory.append_logs_def, vyperStateTheory.check_def,
+       vyperStateTheory.type_check_def, vyperStateTheory.assert_def,
+       vyperStateTheory.return_def, vyperStateTheory.raise_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[log_extends_append] >>
   Cases_on `returnData = []` >>
   gvs[vyperStateTheory.bind_def, vyperStateTheory.return_def,
@@ -2702,7 +2707,7 @@ Proof
        vyperStateTheory.ignore_bind_def,
        vyperStateTheory.update_accounts_def,
        vyperStateTheory.update_transient_def,
-       vyperInterpreterTheory.append_logs_def,
+       vyperStateTheory.append_logs_def,
        vyperStateTheory.check_def, vyperStateTheory.type_check_def,
        vyperStateTheory.assert_def, vyperStateTheory.return_def,
        vyperStateTheory.raise_def, AllCaseEqs()] >>
@@ -2898,7 +2903,7 @@ Proof
   Cases_on `flags.rcf_max_outsize = 0` >>
   simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
        vyperStateTheory.update_accounts_def, vyperStateTheory.update_transient_def,
-       vyperInterpreterTheory.append_logs_def, vyperStateTheory.check_def,
+       vyperStateTheory.append_logs_def, vyperStateTheory.check_def,
        vyperStateTheory.type_check_def, vyperStateTheory.assert_def,
        vyperStateTheory.return_def, vyperStateTheory.raise_def,
        log_extends_def, rich_listTheory.IS_PREFIX_APPEND] >>
@@ -3705,7 +3710,8 @@ Proof
   qpat_x_assum `call_external _ _ _ = _` mp_tac >>
   simp[Once vyperInterpreterTheory.call_external_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
-  imp_res_tac call_external_function_success_log_extends
+  imp_res_tac call_external_function_success_log_extends >>
+  gvs[machine_log_extends_def, vyperInterpreterTheory.finalize_pending_deletions_def]
 QED
 
 Theorem call_external_function_error_logs_rollback:

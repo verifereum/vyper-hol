@@ -1551,6 +1551,7 @@ Proof
   qexistsl [`slot`, `cx`, `is_transient`, `kt`, `entry.value`,
             `<|immutables := am.immutables; logs := am.logs; scopes := [scope];
                accounts := am.accounts; tStorage := am.tStorage;
+               pending_deletions := am.pending_deletions;
                outcomes := orc; requests := rqs|>`, `st2`, `vt`] >>
   simp[]
 QED
@@ -1689,8 +1690,8 @@ Proof
   gvs[check_value_type_def, assignable_type_def, well_formed_type_def,
       evaluate_type_def, AllCaseEqs(), bind_def, return_def, raise_def,
       IS_SOME_EXISTS] >>
-  rename [`evaluate_type (get_tenv cx) t = SOME elem_tv`,
-          `type_slot_size (ArrayTV elem_tv bd)`] >>
+  rename1 `evaluate_type (get_tenv cx) t = SOME elem_tv` >>
+  rename1 `type_slot_size (ArrayTV elem_tv bd)` >>
   gvs[check_array_bounds_def, ignore_bind_def, lift_sum_def,
       evaluate_subscript_def, evaluate_type_def, LET_THM,
       bind_def, return_def, raise_def] >>
@@ -2405,6 +2406,7 @@ Proof
   Cases_on `check_array_bounds cx (Value (ArrayV av)) (IntV i)
               <|immutables := am.immutables; logs := am.logs; scopes := [scope];
                 accounts := am.accounts; tStorage := am.tStorage;
+                pending_deletions := am.pending_deletions;
                 outcomes := orc; requests := rqs|>` >>
   rename1 `check_array_bounds _ _ _ _ = (bounds_res,bounds_st)` >>
   Cases_on `bounds_res` >> simp[bind_def, return_def, raise_def]
@@ -2470,6 +2472,7 @@ Proof
   Cases_on `check_array_bounds cx (ArrayRef is_transient slot (ArrayTV inner_tv inner_bd) bd) (IntV i)
               <|immutables := am.immutables; logs := am.logs; scopes := [scope];
                 accounts := am.accounts; tStorage := am.tStorage;
+                pending_deletions := am.pending_deletions;
                 outcomes := orc; requests := rqs|>` >>
   rename1 `check_array_bounds _ _ _ _ = (bounds_res,bounds_st)` >>
   Cases_on `bounds_res`
@@ -2665,6 +2668,7 @@ Proof
   >- (Cases_on `check_array_bounds cx (Value (ArrayV av)) (IntV i)
                     <|immutables := am.immutables; logs := am.logs; scopes := [scope];
                       accounts := am.accounts; tStorage := am.tStorage;
+                      pending_deletions := am.pending_deletions;
                       outcomes := orc; requests := rqs|>` >>
       Cases_on `q` >>
       gvs[bind_def, ignore_bind_def, return_def, raise_def,
@@ -2674,6 +2678,7 @@ Proof
   Cases_on `check_array_bounds cx (ArrayRef is_transient slot elem_tv bd) (IntV i)
                     <|immutables := am.immutables; logs := am.logs; scopes := [scope];
                       accounts := am.accounts; tStorage := am.tStorage;
+                      pending_deletions := am.pending_deletions;
                       outcomes := orc; requests := rqs|>` >>
   Cases_on `q` >>
   gvs[bind_def, ignore_bind_def, return_def, raise_def, lift_sum_def] >>
@@ -2832,6 +2837,7 @@ Proof
   >- (Cases_on `check_array_bounds cx (Value (ArrayV av)) (IntV i)
                     <|immutables := am.immutables; logs := am.logs; scopes := [scope];
                       accounts := am.accounts; tStorage := am.tStorage;
+                      pending_deletions := am.pending_deletions;
                       outcomes := orc; requests := rqs|>` >>
       Cases_on `q` >>
       gvs[bind_def, ignore_bind_def, return_def, raise_def, lift_sum_def] >>
@@ -2847,6 +2853,7 @@ Proof
   Cases_on `check_array_bounds cx (ArrayRef is_transient slot (ArrayTV inner_tv inner_bd) bd) (IntV i)
                     <|immutables := am.immutables; logs := am.logs; scopes := [scope];
                       accounts := am.accounts; tStorage := am.tStorage;
+                      pending_deletions := am.pending_deletions;
                       outcomes := orc; requests := rqs|>` >>
   Cases_on `q` >>
   gvs[bind_def, ignore_bind_def, return_def, raise_def, lift_sum_def] >>
