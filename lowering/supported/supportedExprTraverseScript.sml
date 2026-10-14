@@ -50,20 +50,12 @@ Termination
   WF_REL_TAC `measure (\x. case x of
       INL (_, e) => expr_size e
     | INR (INL (_, target)) => base_assignment_target_size target
-    | INR (INR (INL (_, es))) => expr4_size es
-    | INR (INR (INR (INL (_, opt)))) => expr3_size opt
-    | INR (INR (INR (INR (_, fields)))) => expr1_size fields)` >>
-  simp[expr_size_def] >>
-  qsuff_tac
-    `(!es. expr4_size es = list_size expr_size es) /\
-     (!opt. expr3_size opt = option_size expr_size opt) /\
-     (!fields. expr1_size fields =
-       list_size (pair_size (list_size char_size) expr_size) fields)`
-  >- (strip_tac >> asm_rewrite_tac[] >> DECIDE_TAC) >>
-  rpt conj_tac >>
-  TRY (Induct >> simp[expr_size_def, listTheory.list_size_def,
-    basicSizeTheory.pair_size_def]) >>
-  Cases >> simp[expr_size_def, basicSizeTheory.option_size_def]
+    | INR (INR (INL (_, es))) => list_size expr_size es
+    | INR (INR (INR (INL (_, opt)))) => option_size expr_size opt
+    | INR (INR (INR (INR (_, fields)))) =>
+        list_size (pair_size (list_size char_size) expr_size) fields)` >>
+  simp[expr_size_def, listTheory.list_size_def,
+       basicSizeTheory.pair_size_def, basicSizeTheory.option_size_def]
 End
 
 Definition expr_effect_root_def:
