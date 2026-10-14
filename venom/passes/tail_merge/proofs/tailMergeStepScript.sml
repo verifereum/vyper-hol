@@ -571,8 +571,34 @@ val inline_close_defs = [execution_equiv_def, update_var_def,
   mcopy_def, istore_def, mstore_def, lookup_var_def,
   finite_mapTheory.FLOOKUP_UPDATE];
 
+(* Split both output lists together, two elements deep (close_extract
+   splits the first level the same way). Left to CASE_TAC, each list is split
+   separately with a gvs over the whole context after every split. *)
+val split_outputs =
+  Cases_on `inst1.inst_outputs` >> Cases_on `inst2.inst_outputs` >>
+  gvs[listTheory.LENGTH_CONS] >>
+  TRY (qpat_x_assum `inst1.inst_outputs = _ :: _` mp_tac >>
+       qpat_x_assum `inst2.inst_outputs = _ :: _` mp_tac >>
+       rename1 `inst2.inst_outputs = _ :: tl2` >>
+       rename1 `inst1.inst_outputs = _ :: tl1` >>
+       Cases_on `tl1` >> Cases_on `tl2` >> rpt strip_tac >>
+       gvs[listTheory.LENGTH_CONS]);
+
+(* split_outputs where it pays: only for a step that reads the outputs, and
+   not for one that matches an operand's constructor (a literal index, say),
+   which is Error on most operand shapes, so splitting the outputs before
+   CASE_TAC splits the operand only multiplies the branches. *)
+fun split_outputs_for cr = let
+  val step = concl cr
+  val reads_outputs = free_in ``inst.inst_outputs`` step
+  val matches_operand =
+    can (find_term (same_const (TypeBase.case_const_of ``:operand``))) step
+  in if reads_outputs andalso not matches_operand then split_outputs
+     else ALL_TAC
+  end;
+
 (* Standard inline tactic: imp_res_tac cr, unfold step_sim,
-   spec evals, decompose operands to sync lengths, then close *)
+   spec evals, decompose operands and outputs to sync lengths, then close *)
 fun prove_inline cr opc =
   prove(``!inst1 inst2 s1 s2.
     sim_pre inst1 inst2 s1 s2 /\ inst1.inst_opcode = ^opc ==>
@@ -580,6 +606,7 @@ fun prove_inline cr opc =
   rpt gen_tac >> strip_tac >> fs[sim_pre_def] >>
   imp_res_tac cr >> simp[step_sim_def] >>
   spec_evals >> decompose_ops >>
+  split_outputs_for cr >>
   rpt (CASE_TAC >> gvs[]) >> gvs inline_close_defs);
 
 (* Fetch Theorem-block helpers as SML vals for use in val proofs *)
