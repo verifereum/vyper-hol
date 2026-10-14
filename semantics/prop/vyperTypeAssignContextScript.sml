@@ -42,7 +42,7 @@ QED
 Definition assignment_value_static_assignable_context_def:
   (assignment_value_static_assignable_context cx (BaseTargetV (TopLevelVar src id) sbs) =
      ?code p. get_module_code cx src = SOME code ∧
-              find_var_decl_by_num (string_to_num id) code = SOME p ∧
+              find_var_decl_by_name id code = SOME p ∧
               (case FST p of
                 | StorageVarDecl is_transient typ =>
                     IS_SOME (evaluate_type (get_tenv cx) typ) ∧
@@ -79,7 +79,7 @@ QED
 Theorem assignment_value_static_assignable_context_TopLevelVar:
   assignment_value_static_assignable_context cx (BaseTargetV (TopLevelVar src id) sbs) ⇔
     ∃code p. get_module_code cx src = SOME code ∧
-             find_var_decl_by_num (string_to_num id) code = SOME p ∧
+             find_var_decl_by_name id code = SOME p ∧
              (case FST p of
                | StorageVarDecl is_transient typ =>
                    IS_SOME (evaluate_type (get_tenv cx) typ) ∧
@@ -201,12 +201,14 @@ Proof
   >- (* Type: use env_consistent projection then the TopLevelVar biconditional *)
      (drule_all env_consistent_toplevel_storage_static >> strip_tac >>
       rw[assignment_value_static_assignable_context_TopLevelVar] >>
-      qexists_tac `ts` >> qexists_tac `(StorageVarDecl is_transient typ, id_str)` >>
-      simp[])
+      qexists_tac `(StorageVarDecl is_transient t, id_str)` >>
+      gvs[GSYM find_var_decl_by_name_num_agree])
   >- (* HashMapT: similar but sbs <> [] from target_path_type *)
      (drule_all env_consistent_toplevel_hashmap_static >> strip_tac >>
       rw[assignment_value_static_assignable_context_TopLevelVar] >>
-      metis_tac[target_path_type_HashMapT_not_nil])
+      `sbs ≠ []` by metis_tac[target_path_type_HashMapT_not_nil] >>
+      qexists_tac `(HashMapVarDecl is_transient t v, id_str)` >>
+      gvs[GSYM find_var_decl_by_name_num_agree])
 QED
 
 Theorem target_runtime_typed_imp_static_assignable_context_mutual:
@@ -362,7 +364,7 @@ Proof
      assign_target_assignable_context reduces to just the static context existential. *)
   simp[assign_target_assignable_context_def, assign_target_assignable_def] >>
   (* Goal: ∃code p. get_module_code cx src = SOME code ∧
-                    find_var_decl_by_num (string_to_num id) code = SOME p ∧
+                    find_var_decl_by_name id code = SOME p ∧
                     (case FST p of StorageVarDecl ... | HashMapVarDecl ...) *)
   drule assign_target_TopLevelVar_success_imp_lookup_global_INL >> strip_tac >>
   drule lookup_global_INL_imp_decl_facts >> strip_tac >>
@@ -370,7 +372,7 @@ Proof
   qexists `code` >>
   (* Now need ∃p. find_var_decl_by_num ... = SOME p ∧ (case FST p of ...)
      Use metis_tac to resolve the universally quantified helper lemma against assumptions *)
-  `?p. find_var_decl_by_num (string_to_num id) code = SOME p`
+  `?p. find_var_decl_by_name id code = SOME p`
     by metis_tac[assign_target_TopLevelVar_INL_imp_find_decl_SOME] >>
   (* p is now in scope; provide it as the existential witness *)
   qexists `p` >> simp[] >>

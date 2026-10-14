@@ -25,7 +25,7 @@ Proof
   simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
        lift_option_def, lift_option_type_def] >>
   rpt strip_tac >>
-  Cases_on `lookup_scopes_val (string_to_num n) st.scopes` >>
+  Cases_on `lookup_scopes_val n st.scopes` >>
   gvs[return_def, raise_def]
 QED
 
@@ -36,7 +36,7 @@ Proof
   simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
        check_def, type_check_def, assert_def, ignore_bind_def] >>
   rpt strip_tac >>
-  Cases_on `IS_SOME (lookup_scopes (string_to_num n) st.scopes)` >>
+  Cases_on `IS_SOME (lookup_scopes n st.scopes)` >>
   gvs[return_def, raise_def]
 QED
 
@@ -50,14 +50,14 @@ Proof
   rpt strip_tac >>
   Cases_on `get_module_code cx q` >>
   gvs[return_def, raise_def] >>
-  Cases_on `is_immutable_decl (string_to_num r) x` >>
+  Cases_on `is_immutable_decl r x` >>
   gvs[return_def]
 QED
 
 Theorem eval_base_target_TopLevelNameTarget_immutable:
   ∀cx st src id ts.
     get_module_code cx src = SOME ts ∧
-    is_immutable_decl (string_to_num id) ts ⇒
+    is_immutable_decl id ts ⇒
     eval_base_target cx (TopLevelNameTarget (src,id)) st =
     (INL (ImmutableVar src id, []), st)
 Proof
@@ -73,7 +73,7 @@ Proof
   rpt strip_tac >>
   qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, lift_option_type_def, return_def, raise_def] >>
-  Cases_on `is_immutable_decl (string_to_num id) ts` >> simp[return_def]
+  Cases_on `is_immutable_decl id ts` >> simp[return_def]
 QED
 
 (* ===== Binop Helper Lemmas ===== *)

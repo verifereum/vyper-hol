@@ -147,7 +147,7 @@ Definition hashmap_var_info_def:
     case get_module_code cx mid of
     | NONE => NONE
     | SOME code =>
-        case find_var_decl_by_num (string_to_num n) code of
+        case find_var_decl_by_name n code of
         | SOME (HashMapVarDecl b kt vt, id) =>
             (case lookup_var_slot_from_layout cx b mid id of
              | SOME off => SOME (b, off, kt, vt)
@@ -293,9 +293,9 @@ Theorem fst_lookup_global_set_storage:
        FST (read_storage_slot cx b (n2w off2) tv2
               (set_storage cx st b storage')) =
        FST (read_storage_slot cx b (n2w off2) tv2 st)) ⇒
-    FST (lookup_global cx mid (string_to_num m)
+    FST (lookup_global cx mid m
            (set_storage cx st b storage')) =
-    FST (lookup_global cx mid (string_to_num m) st)
+    FST (lookup_global cx mid m st)
 Proof
   rpt gen_tac >> strip_tac >>
   SIMP_TAC (srw_ss()) [vyperStateTheory.lookup_global_def,
@@ -306,7 +306,7 @@ Proof
   Cases_on `get_module_code cx mid` >>
   simp[vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
   rename1 `SOME modcode` >>
-  Cases_on `find_var_decl_by_num (string_to_num m) modcode` >> simp[]
+  Cases_on `find_var_decl_by_name m modcode` >> simp[]
   >- ((* Immutables *)
     suspend "immutables")
   >> rename1 `SOME found` >> PairCases_on `found` >>
@@ -327,7 +327,7 @@ Resume fst_lookup_global_set_storage[immutables]:
        set_storage_immutables] >>
   Cases_on `ALOOKUP st.immutables cx.txn.target` >>
   gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
-  Cases_on `FLOOKUP (vyperState$get_source_immutables mid x) (string_to_num m)` >>
+  Cases_on `FLOOKUP (vyperState$get_source_immutables mid x) m` >>
   gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def]
 QED
 
@@ -375,9 +375,9 @@ Proof
   rewrite_tac[lookup_toplevel_name_def] >>
   drule fst_lookup_global_set_storage >>
   disch_tac >>
-  Cases_on `lookup_global cx mid (string_to_num m)
+  Cases_on `lookup_global cx mid m
               (set_storage cx st b storage')` >>
-  Cases_on `lookup_global cx mid (string_to_num m) st` >>
+  Cases_on `lookup_global cx mid m st` >>
   gvs[]
 QED
 

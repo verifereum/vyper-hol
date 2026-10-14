@@ -339,7 +339,7 @@ Theorem case_For_dom[local]:
        lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' = (INL tyv, t) ∧
        eval_iterator cx it s'³' = (INL vs, t') ∧
        check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'⁴' = (INL x, t'') ⇒
-       ∀st res st'. eval_for cx tyv (string_to_num id) body vs st = (res, st') ⇒
+       ∀st res st'. eval_for cx tyv id body vs st = (res, st') ⇒
          preserves_scopes_dom st st') ∧
     (* IH for iterator: guarded by lift_option_type *)
     (∀tenv s'' tyv t.
@@ -1723,7 +1723,7 @@ Proof
     rpt gen_tac >> strip_tac >>
     gvs[Once evaluate_def, bind_def, lift_option_type_def, return_def, raise_def] >>
     Cases_on `get_module_code cx src_id_opt` >> gvs[return_def, raise_def] >>
-    Cases_on `is_immutable_decl (string_to_num id) x` >> gvs[return_def]) >>
+    Cases_on `is_immutable_decl id x` >> gvs[return_def]) >>
   (* AttributeTarget *)
   conj_tac >- (
     rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>

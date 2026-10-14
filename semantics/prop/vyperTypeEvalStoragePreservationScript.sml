@@ -1398,7 +1398,7 @@ Resume eval_all_storage_preservation_mutual[Expr_Name]:
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp_tac(srw_ss())[Once evaluate_def, bind_def, get_scopes_def,
     lift_option_type_def] >>
-  Cases_on `lookup_scopes_val (string_to_num id) st.scopes` >>
+  Cases_on `lookup_scopes_val id st.scopes` >>
   gvs[bind_def, return_def, raise_def, runtime_storage_consistent_def] >>
   rpt strip_tac >> gvs[]
 QED
@@ -1511,7 +1511,7 @@ Resume eval_all_storage_preservation_mutual[BaseTarget_Name]:
   qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, return_def, assert_def, ignore_bind_def,
        get_scopes_def, type_check_def] >>
-  Cases_on `IS_SOME (lookup_scopes (string_to_num id) st.scopes)` >>
+  Cases_on `IS_SOME (lookup_scopes id st.scopes)` >>
   gvs[return_def, raise_def] >> rpt strip_tac >>
   metis_tac[runtime_storage_consistent_storage]
 QED
@@ -3033,7 +3033,7 @@ Resume eval_all_storage_preservation_mutual[For]:
     (qpat_x_assum `runtime_storage_consistent env cx st` mp_tac >>
      simp[runtime_storage_consistent_def, runtime_consistent_def,
           env_consistent_def, env_context_consistent_def]) >>
-  `?env_after. type_stmts (extend_local env (string_to_num id) typ F)
+  `?env_after. type_stmts (extend_local env id typ F)
        ret_ty body' = SOME env_after` by
     (qpat_x_assum `IS_SOME (type_stmts _ _ _)` mp_tac >>
      rewrite_tac[optionTheory.IS_SOME_EXISTS]) >>
@@ -4315,8 +4315,11 @@ Resume eval_all_storage_preservation_mutual[intcall_storage]:
        asm "args_forward" ACCEPT_TAC ORELSE
        asm "args_var_types" ACCEPT_TAC ORELSE
        asm "args_var_assignable" ACCEPT_TAC ORELSE
-       (asm "args_var_assignable" mp_tac >> simp[]) ORELSE
-       simp[env_consistent_def, env_context_consistent_def]))) >>
+       simp[env_consistent_def, env_context_consistent_def]) >>
+      simp[] >>
+      (asm "args_var_types" ACCEPT_TAC ORELSE
+       asm "args_var_assignable" ACCEPT_TAC ORELSE
+       simp[]))) >>
     disch_then (qx_choose_then `call_env` strip_assume_tac) >>
     qpat_assum `bind_arguments (get_tenv cx) x''2
                     (actual_vs ++ dflt_vs) = SOME call_env`

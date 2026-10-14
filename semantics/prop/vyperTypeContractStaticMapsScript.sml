@@ -1499,7 +1499,7 @@ QED
 
 Theorem is_immutable_decl_MEM:
   MEM (VariableDecl vis Immutable id ty init) ts ==>
-  is_immutable_decl (string_to_num id) ts
+  is_immutable_decl id ts
 Proof
   Induct_on `ts` >- rw[is_immutable_decl_def] >>
   gen_tac >> Cases_on `h` >> gvs[is_immutable_decl_def] >>
@@ -1625,6 +1625,61 @@ Proof
   TRY (Cases_on `v0` >> gvs[find_var_decl_by_num_def, toplevel_vtype_keys_toplevel_def]) >>
   metis_tac[find_var_decl_by_num_NONE_after_variable_head_key,
             find_var_decl_by_num_NONE_not_toplevel_string_key,
+            distinct_toplevel_keys_no_tail_Constant_same_id,
+            module_toplevel_vtype_key_MEM_Variable]
+QED
+
+Theorem find_var_decl_by_name_NONE_not_toplevel_key[local]:
+  ~MEM ((src : num option),string_to_num id)
+      (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts)) ==>
+  find_var_decl_by_name id ts = NONE
+Proof
+  Induct_on `ts` >- rw[find_var_decl_by_name_def] >>
+  gen_tac >> Cases_on `h` >>
+  rw[find_var_decl_by_name_def, toplevel_vtype_keys_toplevel_def] >>
+  TRY (Cases_on `v0` >> gvs[find_var_decl_by_name_def]) >>
+  metis_tac[]
+QED
+
+Theorem find_var_decl_by_name_NONE_after_variable_head[local]:
+  ALL_DISTINCT
+    (FLAT (MAP (toplevel_vtype_keys_toplevel (src : num option))
+       (VariableDecl vis mut id ty init :: ts))) ==>
+  find_var_decl_by_name id ts = NONE
+Proof
+  rw[] >>
+  `~MEM ((src : num option),string_to_num id)
+      (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))` by
+    gvs[toplevel_vtype_keys_toplevel_def] >>
+  metis_tac[find_var_decl_by_name_NONE_not_toplevel_key]
+QED
+
+Theorem find_var_decl_by_name_NONE_Immutable:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (src : num option)) ts)) /\
+  MEM (VariableDecl vis Immutable id ty init) ts ==>
+  find_var_decl_by_name id ts = NONE
+Proof
+  Induct_on `ts` >- rw[find_var_decl_by_name_def] >>
+  gen_tac >> Cases_on `h` >>
+  rw[find_var_decl_by_name_def, toplevel_vtype_keys_toplevel_def] >>
+  TRY (Cases_on `v0` >> gvs[find_var_decl_by_name_def, toplevel_vtype_keys_toplevel_def]) >>
+  metis_tac[find_var_decl_by_name_NONE_after_variable_head,
+            find_var_decl_by_name_NONE_not_toplevel_key,
+            distinct_toplevel_keys_no_tail_Immutable_same_id,
+            module_toplevel_vtype_key_MEM_Variable]
+QED
+
+Theorem find_var_decl_by_name_NONE_Constant:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (src : num option)) ts)) /\
+  MEM (VariableDecl vis (Constant e) id ty init) ts ==>
+  find_var_decl_by_name id ts = NONE
+Proof
+  Induct_on `ts` >- rw[find_var_decl_by_name_def] >>
+  gen_tac >> Cases_on `h` >>
+  rw[find_var_decl_by_name_def, toplevel_vtype_keys_toplevel_def] >>
+  TRY (Cases_on `v0` >> gvs[find_var_decl_by_name_def, toplevel_vtype_keys_toplevel_def]) >>
+  metis_tac[find_var_decl_by_name_NONE_after_variable_head,
+            find_var_decl_by_name_NONE_not_toplevel_key,
             distinct_toplevel_keys_no_tail_Constant_same_id,
             module_toplevel_vtype_key_MEM_Variable]
 QED
@@ -2369,6 +2424,45 @@ Proof
   gvs[ALL_DISTINCT_APPEND] >>
   metis_tac[module_toplevel_vtype_key_MEM]
 QED
+
+Theorem find_var_decl_by_name_SOME_storage_var_Storage:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (src : num option)) ts)) /\
+  MEM (VariableDecl vis Storage id ty init) ts ==>
+  find_var_decl_by_name id ts = SOME (StorageVarDecl F ty,id)
+Proof
+  Induct_on `ts` >- rw[find_var_decl_by_name_def] >>
+  gen_tac >> Cases_on `h` >>
+  rw[find_var_decl_by_name_def, toplevel_vtype_keys_toplevel_def] >>
+  TRY (Cases_on `v0` >> gvs[find_var_decl_by_name_def, toplevel_vtype_keys_toplevel_def]) >>
+  gvs[ALL_DISTINCT_APPEND] >>
+  metis_tac[module_toplevel_vtype_key_MEM_Variable]
+QED
+
+Theorem find_var_decl_by_name_SOME_storage_var_Transient:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (src : num option)) ts)) /\
+  MEM (VariableDecl vis Transient id ty init) ts ==>
+  find_var_decl_by_name id ts = SOME (StorageVarDecl T ty,id)
+Proof
+  Induct_on `ts` >- rw[find_var_decl_by_name_def] >>
+  gen_tac >> Cases_on `h` >>
+  rw[find_var_decl_by_name_def, toplevel_vtype_keys_toplevel_def] >>
+  TRY (Cases_on `v0` >> gvs[find_var_decl_by_name_def, toplevel_vtype_keys_toplevel_def]) >>
+  gvs[ALL_DISTINCT_APPEND] >>
+  metis_tac[module_toplevel_vtype_key_MEM_Variable]
+QED
+
+Theorem find_var_decl_by_name_SOME_hashmap:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (src : num option)) ts)) /\
+  MEM (HashMapDecl vis is_transient id kt vt init) ts ==>
+  find_var_decl_by_name id ts = SOME (HashMapVarDecl is_transient kt vt,id)
+Proof
+  Induct_on `ts` >- rw[find_var_decl_by_name_def] >>
+  gen_tac >> Cases_on `h` >>
+  rw[find_var_decl_by_name_def, toplevel_vtype_keys_toplevel_def] >>
+  TRY (Cases_on `v0` >> gvs[find_var_decl_by_name_def, toplevel_vtype_keys_toplevel_def]) >>
+  gvs[ALL_DISTINCT_APPEND] >>
+  metis_tac[module_toplevel_vtype_key_MEM]
+QED
 (* ===== Static-map consistency bridges for contract artifacts ===== *)
 
 Theorem check_contract_bare_globals_consistent_initial:
@@ -2444,7 +2538,7 @@ Theorem check_contract_bare_global_assignable_consistent_initial:
     ?ts. get_module_code (initial_evaluation_context sources layouts tx src) src = SOME ts /\
          FLOOKUP art.cta_bare_globals (src,id) = SOME ty /\
          FLOOKUP art.cta_toplevel_vtypes (src,id) = SOME (Type ty) /\
-         is_immutable_decl id ts /\
+         is_immutable_decl_by_num id ts /\
          find_var_decl_by_num id ts = NONE /\
          ty <> NoneT
 Proof
@@ -2466,7 +2560,8 @@ Proof
     gvs[toplevel_vtypes_complete_def] >>
     qpat_x_assum `!src ts vis mut id ty init. _` irule >>
     simp[get_module_code_def, initial_evaluation_context_def] >> metis_tac[]) >>
-  conj_tac >- metis_tac[is_immutable_decl_MEM] >>
+  conj_tac >- (rw[is_immutable_decl_by_num_def] >>
+                metis_tac[is_immutable_decl_MEM]) >>
   conj_tac >-
    (irule find_var_decl_by_num_NONE_non_storage_var >>
     conj_tac >-

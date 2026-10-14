@@ -403,7 +403,7 @@ Proof
        vyperStateTheory.raise_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
   imp_res_tac lift_option_type_state >> gvs[] >>
-  Cases_on `find_var_decl_by_num n ts` >>
+  Cases_on `find_var_decl_by_name n ts` >>
   gvs[vyperStateTheory.raise_def] >>
   PairCases_on `x` >> Cases_on `x0` >>
   gvs[vyperStateTheory.bind_def, vyperStateTheory.raise_def,
@@ -797,7 +797,7 @@ Theorem assign_target_toplevel_logs[local]:
   st'.logs = st.logs
 Proof
   rpt strip_tac >>
-  Cases_on `lookup_global cx src (string_to_num id) st` >>
+  Cases_on `lookup_global cx src id st` >>
   Cases_on `q` >>
   imp_res_tac lookup_global_state >>
   pop_assum SUBST_ALL_TAC
@@ -868,7 +868,7 @@ Proof
       gvs[vyperStateTheory.assign_target_def, vyperStateTheory.bind_def,
           vyperStateTheory.get_scopes_def, vyperStateTheory.return_def,
           vyperStateTheory.lift_option_def] >>
-      Cases_on `find_containing_scope (string_to_num id) st.scopes` >>
+      Cases_on `find_containing_scope id st.scopes` >>
       gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
       PairCases_on `x` >>
       Cases_on `assign_subscripts x2.type x2.value (REVERSE is) ao` >>
@@ -1220,7 +1220,7 @@ Theorem case_stmt_for_logs[local]:
      eval_iterator cx it s2 = (INL vs,s3) /\
      check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s4 =
        (INL x,s5) ==>
-     !st res st'. eval_for cx tyv (string_to_num id) body vs st = (res,st') ==>
+     !st res st'. eval_for cx tyv id body vs st = (res,st') ==>
        log_extends st st') /\
   (!tenv s0 tyv s1.
      tenv = get_tenv cx /\
@@ -1363,7 +1363,7 @@ Proof
        vyperStateTheory.return_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
   imp_res_tac lift_option_type_state >> gvs[] >>
-  Cases_on `is_immutable_decl (string_to_num sid1) ts` >>
+  Cases_on `is_immutable_decl sid1 ts` >>
   gvs[vyperStateTheory.return_def, log_extends_refl]
 QED
 

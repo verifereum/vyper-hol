@@ -39,7 +39,7 @@ Datatype:
   | IfK1 toplevel_value (stmt list) (stmt list) eval_continuation
   | IfK2 eval_continuation
   | ForK identifier type_value num (stmt list) eval_continuation
-  | ForK1 type_value num (stmt list) (value list) eval_continuation
+  | ForK1 type_value identifier (stmt list) (value list) eval_continuation
   | ExprK eval_continuation
   | StmtsK (stmt list) eval_continuation
   | ArrayK type eval_continuation
@@ -112,17 +112,15 @@ Definition eval_base_target_cps_def:
   eval_base_target_cps cx (NameTarget id) st k =
     (let r = do
         sc <- get_scopes;
-        n <<- string_to_num id;
-        type_check (IS_SOME (lookup_scopes n sc)) "NameTarget not in scope";
+        type_check (IS_SOME (lookup_scopes id sc)) "NameTarget not in scope";
         return $ (ScopedVar id, []) od st in
      liftk cx ApplyBaseTarget r k) ∧
   eval_base_target_cps cx (TopLevelNameTarget (src_id_opt, id)) st k =
     (let r = do
-        n <<- string_to_num id;
         ts <- lift_option_type
                 (get_module_code cx src_id_opt)
                 "TopLevelNameTarget get_module_code";
-        if is_immutable_decl n ts then return $ (ImmutableVar src_id_opt id, [])
+        if is_immutable_decl id ts then return $ (ImmutableVar src_id_opt id, [])
         else return $ (TopLevelVar src_id_opt id, []) od st in
      liftk cx ApplyBaseTarget r k) ∧
   eval_base_target_cps cx (AttributeTarget t id) st k =
@@ -142,11 +140,10 @@ Definition eval_expr_cps_def:
   eval_expr_cps cx1 (Name _ id) st k =
     liftk cx1 ApplyTv
       (do env <- get_scopes;
-          n <<- string_to_num id;
-          v <- lift_option_type (lookup_scopes_val n env) "Name not in scope";
+          v <- lift_option_type (lookup_scopes_val id env) "Name not in scope";
           return $ Value v od st) k ∧
   eval_expr_cps cx2 (TopLevelName _ (src_id_opt, id)) st k =
-    liftk cx2 ApplyTv (lookup_global cx2 src_id_opt (string_to_num id) st) k ∧
+    liftk cx2 ApplyTv (lookup_global cx2 src_id_opt id st) k ∧
   eval_expr_cps cx2 (FlagMember _ nsid mid) st k =
     liftk cx2 ApplyTv (lookup_flag_mem cx2 nsid mid st) k ∧
   eval_expr_cps cx3 (IfExp _ e1 e2 e3) st k =
@@ -620,7 +617,7 @@ Definition apply_vals_def:
     (case do check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long";
              return vs od st
      of (INR ex, st) => apply_exc cx ex st k
-      | (INL vs, st) => eval_for_cps cx tyv (string_to_num id) body vs st k) ∧
+      | (INL vs, st) => eval_for_cps cx tyv id body vs st k) ∧
   apply_vals cx vs st (StructLitK ks k) =
     apply_tv cx (Value $ StructV (ZIP (ks, vs))) st k ∧
   apply_vals cx vs st (BuiltinK ty bt k) =
