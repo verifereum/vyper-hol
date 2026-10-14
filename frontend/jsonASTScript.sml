@@ -14,6 +14,8 @@ Datatype:
   | JT_BytesM num                             (* m for bytes1..bytes32 *)
   | JT_String num                             (* length *)
   | JT_Bytes num                              (* length *)
+  | JT_StringUnbounded                       (* legacy JSON ABI metadata: length="..." *)
+  | JT_BytesUnbounded                        (* resolve from callsite before translation *)
   | JT_StaticArray json_type num              (* value_type, length *)
   | JT_DynArray json_type num                 (* value_type, length *)
   | JT_Struct (int option) string             (* optional declaration source_id, name *)

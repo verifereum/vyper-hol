@@ -39,6 +39,8 @@ val JT_Named_tm = jastk "JT_Named"
 val JT_Integer_tm = jastk "JT_Integer"
 val JT_BytesM_tm = jastk "JT_BytesM"
 val JT_String_tm = jastk "JT_String"
+val JT_StringUnbounded_tm = jastk "JT_StringUnbounded"
+val JT_BytesUnbounded_tm = jastk "JT_BytesUnbounded"
 val JT_Bytes_tm = jastk "JT_Bytes"
 val JT_StaticArray_tm = jastk "JT_StaticArray"
 val JT_DynArray_tm = jastk "JT_DynArray"
@@ -392,13 +394,21 @@ fun d_json_type () : term decoder = achoose "json_type" [
   check (field "typeclass" string) (fn s => s = "bytes_m") "not bytes_m" $
     JSONDecode.map mk_JT_BytesM (field "m" numtm),
 
-  (* String: name = "String" with length *)
+  (* JSON ABI imports use "..." for an unknown dynamic bound. Preserve that
+     distinction until the external call's concrete argument/result is known. *)
   check (field "name" string) (fn s => s = "String") "not String" $
-    JSONDecode.map mk_JT_String (field "length" numtm),
+    achoose "invalid String length" [
+      JSONDecode.map mk_JT_String (field "length" numtm),
+      check (field "length" string) (fn s => s = "...") "not unbounded String" $
+        succeed JT_StringUnbounded_tm
+    ],
 
-  (* Bytes: name = "Bytes" with length *)
   check (field "name" string) (fn s => s = "Bytes") "not Bytes" $
-    JSONDecode.map mk_JT_Bytes (field "length" numtm),
+    achoose "invalid Bytes length" [
+      JSONDecode.map mk_JT_Bytes (field "length" numtm),
+      check (field "length" string) (fn s => s = "...") "not unbounded Bytes" $
+        succeed JT_BytesUnbounded_tm
+    ],
 
   (* Static array: typeclass = "static_array" or "$SArray" *)
   check (field "typeclass" string) (fn s => s = "static_array" orelse s = "$SArray") "not static_array" $
@@ -445,11 +455,13 @@ fun d_json_type () : term decoder = achoose "json_type" [
                     succeed (mk_none intSyntax.int_ty)),
             field "name" string),
 
-  (* Named types (bool, address, decimal, etc) - preserve type declaration source if present *)
-  JSONDecode.map mk_JT_Named $
-    tuple2 (orElse (JSONDecode.map mk_some (field "type_decl_node" $ field "source_id" inttm),
-                    succeed (mk_none intSyntax.int_ty)),
-            field "name" string),
+  (* A malformed dynamic bound must not fall through to a named type. *)
+  check (field "name" string)
+    (fn s => s <> "Bytes" andalso s <> "String") "invalid dynamic type" $
+    JSONDecode.map mk_JT_Named $
+      tuple2 (orElse (JSONDecode.map mk_some (field "type_decl_node" $ field "source_id" inttm),
+                      succeed (mk_none intSyntax.int_ty)),
+              field "name" string),
 
   (* Null type *)
   null JT_None_tm
@@ -590,6 +602,40 @@ val json_boolop : term decoder = achoose "boolop" [
 ]
 
 (* ===== Expression Decoder ===== *)
+
+(* Vyper's JSON ABI interface signatures may leave dynamic lengths as "...".
+   The result of a call still has a concrete, checked bound. Reject an
+   inconsistent signature rather than inventing a bound or dropping the type. *)
+fun is_unbounded_dynamic ty =
+  aconv ty JT_BytesUnbounded_tm orelse aconv ty JT_StringUnbounded_tm
+fun contains_unbounded_dynamic ty =
+  is_unbounded_dynamic ty orelse
+  List.exists contains_unbounded_dynamic (snd (strip_comb ty))
+
+fun invalid_legacy_arguments (arg_types, args) =
+  List.exists (fn ty =>
+    contains_unbounded_dynamic ty andalso not (is_unbounded_dynamic ty))
+    arg_types orelse
+  (List.exists is_unbounded_dynamic arg_types andalso
+   List.length args > List.length arg_types)
+
+
+fun bounded_dynamic ctor ty =
+  let val (head, args) = strip_comb ty
+  in aconv head ctor andalso List.length args = 1 end
+
+fun normalize_interface_return (func_src, ret_ty, result_ty) =
+  if aconv ret_ty JT_BytesUnbounded_tm then
+    if bounded_dynamic JT_Bytes_tm result_ty then SOME result_ty else NONE
+  else if aconv ret_ty JT_StringUnbounded_tm then
+    if bounded_dynamic JT_String_tm result_ty then SOME result_ty else NONE
+  else if contains_unbounded_dynamic ret_ty then NONE
+  else if aconv func_src JMissingSource_tm andalso
+          not (aconv ret_ty result_ty) andalso
+          not (aconv result_ty JT_None_tm andalso
+               aconv ret_ty (mk_JT_Named (mk_none intSyntax.int_ty, "(void)")))
+          then NONE
+  else SOME ret_ty
 
 fun d_json_expr () : term decoder = achoose "expr" [
   (* Int literal - type may be absent for array indices/sizes *)
@@ -785,35 +831,59 @@ fun d_json_expr () : term decoder = achoose "expr" [
   (* ExtCall - preserve target separately from ordinary arguments. *)
   (* Signature extracted from func.type: argument_types, return_type *)
   check_ast_type "ExtCall" $
-    JSONDecode.map (fn ((((func_name, func_src), arg_types), (ret_ty, (target, args))), keywords) =>
-      mk_JE_ExtCall(func_name, func_src, arg_types, ret_ty, target, args, keywords)) $
-    tuple2 (tuple2 (tuple2 (tuple2 (field "value" $ field "func" $ field "attr" string,
-                                    orElse (field "value" $ field "func" $ field "type" $
-                                      field "type_decl_node" $ field "source_id" source_ref_tm,
-                                      succeed JMissingSource_tm)),
-                            field "value" $ field "func" $ field "type" $
-                              orElse (field "argument_types" (array json_type), succeed [])),
-                    tuple2 (field "value" $ field "func" $ field "type" $
-                              orElse (field "return_type" json_type, succeed JT_None_tm),
-                            tuple2 (field "value" $ field "func" $ field "value" (delay d_json_expr),
-                                    field "value" $ field "args" (array (delay d_json_expr))))),
-            field "value" $ orElse (field "keywords" (array (delay d_json_keyword)), succeed [])),
+    andThen
+      (tuple3 (
+        tuple3 (field "value" $ field "func" $ field "attr" string,
+                orElse (field "value" $ field "func" $ field "type" $
+                  field "type_decl_node" $ field "source_id" source_ref_tm,
+                  succeed JMissingSource_tm),
+                field "value" $ field "func" $ field "type" $
+                  field "argument_types" (array json_type)),
+        tuple3 (field "value" $ field "func" $ field "type" $
+                  field "return_type" json_type,
+                field "value" $ field "func" $ field "value" (delay d_json_expr),
+                field "value" $ field "args" (array (delay d_json_expr))),
+        tuple2 (field "value" $
+                  orElse (field "keywords" (array (delay d_json_keyword)),
+                          succeed []),
+                orElse (field "type" json_type, succeed JT_None_tm))))
+      (fn ((func_name, func_src, arg_types), (ret_ty, target, args),
+           (keywords, result_ty)) =>
+        case normalize_interface_return (func_src, ret_ty, result_ty) of
+          SOME effective_ret =>
+            if invalid_legacy_arguments (arg_types, args)
+            then fail "invalid legacy interface argument signature"
+            else succeed (mk_JE_ExtCall
+              (func_name, func_src, arg_types, effective_ret, target, args, keywords))
+        | NONE => fail "legacy interface return type disagrees with callsite"),
 
   (* StaticCall - same structure as ExtCall. *)
   check_ast_type "StaticCall" $
-    JSONDecode.map (fn ((((func_name, func_src), arg_types), (ret_ty, (target, args))), keywords) =>
-      mk_JE_StaticCall(func_name, func_src, arg_types, ret_ty, target, args, keywords)) $
-    tuple2 (tuple2 (tuple2 (tuple2 (field "value" $ field "func" $ field "attr" string,
-                                    orElse (field "value" $ field "func" $ field "type" $
-                                      field "type_decl_node" $ field "source_id" source_ref_tm,
-                                      succeed JMissingSource_tm)),
-                            field "value" $ field "func" $ field "type" $
-                              orElse (field "argument_types" (array json_type), succeed [])),
-                    tuple2 (field "value" $ field "func" $ field "type" $
-                              orElse (field "return_type" json_type, succeed JT_None_tm),
-                            tuple2 (field "value" $ field "func" $ field "value" (delay d_json_expr),
-                                    field "value" $ field "args" (array (delay d_json_expr))))),
-            field "value" $ orElse (field "keywords" (array (delay d_json_keyword)), succeed []))
+    andThen
+      (tuple3 (
+        tuple3 (field "value" $ field "func" $ field "attr" string,
+                orElse (field "value" $ field "func" $ field "type" $
+                  field "type_decl_node" $ field "source_id" source_ref_tm,
+                  succeed JMissingSource_tm),
+                field "value" $ field "func" $ field "type" $
+                  field "argument_types" (array json_type)),
+        tuple3 (field "value" $ field "func" $ field "type" $
+                  field "return_type" json_type,
+                field "value" $ field "func" $ field "value" (delay d_json_expr),
+                field "value" $ field "args" (array (delay d_json_expr))),
+        tuple2 (field "value" $
+                  orElse (field "keywords" (array (delay d_json_keyword)),
+                          succeed []),
+                orElse (field "type" json_type, succeed JT_None_tm))))
+      (fn ((func_name, func_src, arg_types), (ret_ty, target, args),
+           (keywords, result_ty)) =>
+        case normalize_interface_return (func_src, ret_ty, result_ty) of
+          SOME effective_ret =>
+            if invalid_legacy_arguments (arg_types, args)
+            then fail "invalid legacy interface argument signature"
+            else succeed (mk_JE_StaticCall
+              (func_name, func_src, arg_types, effective_ret, target, args, keywords))
+        | NONE => fail "legacy interface return type disagrees with callsite")
 ]
 and d_json_keyword () : term decoder =
   JSONDecode.map (fn (arg, v) => mk_JKeyword(arg, v)) $
@@ -1120,12 +1190,97 @@ val json_interface_func : term decoder =
     )
   )
 
+(* The legacy signature's unbounded argument must be backed by a concrete
+   source declaration (or a concrete expression type). Otherwise translating
+   it as an ABI argument would silently produce NoneT. Vyper local names cannot
+   be shadowed, so a function's argument/local declarations supply the bound. *)
+fun dynamic_decl_type (inferred, ann) =
+  let val (head, xs) = strip_comb ann
+  in
+    if aconv head JTA_Bytes_tm andalso List.length xs = 1 then
+      SOME (mk_JT_Bytes (List.hd xs))
+    else if aconv head JTA_String_tm andalso List.length xs = 1 then
+      SOME (mk_JT_String (List.hd xs))
+    else if bounded_dynamic JT_Bytes_tm inferred orelse
+            bounded_dynamic JT_String_tm inferred then SOME inferred
+    else NONE
+  end
+
+fun collect_function_decls t =
+  let
+    val (head, xs) = strip_comb t
+    val here =
+      if (aconv head JArg_tm orelse aconv head JS_AnnAssign_tm orelse
+          aconv head JS_For_tm) andalso List.length xs >= 3
+      then [(List.nth (xs, 0), List.nth (xs, 1), List.nth (xs, 2))]
+      else []
+  in here @ List.concat (List.map collect_function_decls xs) end
+
+fun dynamic_operand_type decls expr =
+  let
+    val (head, xs) = strip_comb expr
+    fun at n = List.nth (xs, n)
+    fun concrete ty =
+      if bounded_dynamic JT_Bytes_tm ty orelse bounded_dynamic JT_String_tm ty
+      then SOME ty else NONE
+  in
+    if aconv head JE_Name_tm andalso List.length xs = 4 then
+      (case List.find (fn (name, _, _) => aconv name (at 0)) decls of
+         SOME (_, inferred, ann) =>
+           (case dynamic_decl_type (inferred, ann) of
+              SOME bound =>
+                (case concrete (at 3) of
+                   SOME compiler_ty =>
+                     if aconv compiler_ty bound then SOME bound else NONE
+                 | NONE =>
+                     if is_unbounded_dynamic (at 3) then SOME bound else NONE)
+            | NONE => NONE)
+       | NONE => concrete (at 3))
+    else if aconv head JE_Bytes_tm andalso List.length xs = 2 then
+      SOME (mk_JT_Bytes (at 0))
+    else if aconv head JE_Str_tm andalso List.length xs = 2 then
+      SOME (mk_JT_String (at 0))
+    else if (aconv head JE_Call_tm orelse aconv head JE_ExtCall_tm orelse
+             aconv head JE_StaticCall_tm orelse aconv head JE_BinOp_tm orelse
+             aconv head JE_IfExp_tm) andalso List.length xs >= 4 then
+      concrete (at 3)
+    else if aconv head JE_Attribute_tm andalso List.length xs = 7 then
+      concrete (at 6)
+    else if aconv head JE_Subscript_tm andalso List.length xs = 3 then
+      concrete (at 2)
+    else NONE
+  end
+
+fun legacy_arguments_valid decls [] _ = true
+  | legacy_arguments_valid decls _ [] = true
+  | legacy_arguments_valid decls (ty::tys) (arg::args) =
+      (if aconv ty JT_BytesUnbounded_tm then
+         (case dynamic_operand_type decls arg of
+            SOME actual => bounded_dynamic JT_Bytes_tm actual
+          | NONE => false)
+       else if aconv ty JT_StringUnbounded_tm then
+         (case dynamic_operand_type decls arg of
+            SOME actual => bounded_dynamic JT_String_tm actual
+          | NONE => false)
+       else true) andalso legacy_arguments_valid decls tys args
+
+fun validate_legacy_calls decls t =
+  if type_of t = string_ty orelse
+     type_of t = type_of (numSyntax.term_of_int 0) then true
+  else let
+    val (head, xs) = strip_comb t
+    val signature_ok =
+      if (aconv head JE_ExtCall_tm orelse aconv head JE_StaticCall_tm) andalso
+         List.length xs >= 6 then
+        legacy_arguments_valid decls (fst (dest_list (List.nth (xs, 2))))
+          (fst (dest_list (List.nth (xs, 5))))
+      else true
+  in signature_ok andalso List.all (validate_legacy_calls decls) xs end
+
 val json_toplevel : term decoder = achoose "toplevel" [
   (* FunctionDef *)
   check_ast_type "FunctionDef" $
-    JSONDecode.map (fn ((n, d), (((a, df), f), ret_ann), b) =>
-      mk_JTL_FunctionDef(n, d, a, df, f, ret_ann, b)) $
-    tuple3 (
+    andThen (tuple3 (
       tuple2 (field "name" string,
               field "decorator_list" (array decorator_name)),
       tuple2 (tuple2 (field "args" $ check_ast_type "arguments" $
@@ -1133,8 +1288,18 @@ val json_toplevel : term decoder = achoose "toplevel" [
                                 orElse(field "defaults" (array json_expr), succeed [])),
                       field "func_type" json_func_type),
               orElse(field "returns" ast_type, succeed JTA_None_tm)),
-      field "body" (array json_stmt)
-    ),
+      field "body" (array json_stmt)))
+    (fn ((n, d), (((a, df), f), ret_ann), b) =>
+      let
+        val decoded = mk_JTL_FunctionDef(n, d, a, df, f, ret_ann, b)
+        fun valid_with decls = List.all (validate_legacy_calls decls) b
+      in
+        if valid_with [] then succeed decoded
+        else if valid_with
+          (List.concat (List.map collect_function_decls (a @ b))) then
+          succeed decoded
+        else fail "legacy interface argument type disagrees with callsite"
+      end),
 
   (* VariableDecl for HashMaps *)
   check_ast_type "VariableDecl" $

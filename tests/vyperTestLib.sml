@@ -175,7 +175,31 @@ fun mk_Function (n,is,os,m) =
                ("outputs", mk_list(os, abi_arg_ty)),
                ("mutability", m)]))
 
-val abiEntry : term decoder = achoose "abiEntry" [
+(* Only the pinned JSON-ABI exporter emits function entries without
+   stateMutability. Normalize those entries before the canonical decoder;
+   entries already carrying stateMutability follow the existing path. *)
+fun normalize_abi_entry (kvs as (_, _) :: _) = let
+  fun lookup key = Option.map #2 (List.find (fn (k, _) => k = key) kvs)
+  val original = JSON.OBJECT kvs
+  fun invalid msg = raise JSONError (Fail ("legacy ABI: " ^ msg), original)
+in
+  case (lookup "stateMutability", lookup "constant", lookup "payable") of
+    (SOME _, _, _) => original
+  | (NONE, NONE, NONE) => original
+  | (NONE, SOME (JSON.BOOL constant), SOME (JSON.BOOL payable)) =>
+      (case lookup "type" of
+         SOME (JSON.STRING "function") =>
+           if constant andalso payable then invalid "constant and payable both true"
+           else JSON.OBJECT
+             (("stateMutability", JSON.STRING
+                (if payable then "payable"
+                 else if constant then "view" else "nonpayable")) :: kvs)
+       | _ => invalid "constant/payable only supported on functions")
+  | _ => invalid "constant and payable must both be booleans"
+end
+  | normalize_abi_entry [] = JSON.OBJECT []
+
+val canonicalAbiEntry : term decoder = achoose "abiEntry" [
     check_field "type" "function" $
     JSONDecode.map mk_Function $
       tuple4 (field "name" stringtm,
@@ -199,6 +223,9 @@ val abiEntry : term decoder = achoose "abiEntry" [
     field "name" stringtm
   ]
 
+val abiEntry : term decoder =
+  JSONDecode.map (decode canonicalAbiEntry o normalize_abi_entry) rawObject
+
 val Deployment_tm = prim_mk_const{Thy="vyperTestRunner",Name="Deployment"}
 val deployment_trace_ty = #1 $ dom_rng $ type_of Deployment_tm
 
@@ -215,11 +242,6 @@ val unsupported_code = [
 val unsupported_patterns = unsupported_code @ [
   "msg.mana", "msg.gas",
   "gas=",
-  (* JSON ABI interface imports currently expose legacy ABI entries
-     with constant/payable instead of stateMutability, and dynamic ABI bytes
-     as length="..."; the frontend/ABI decoder does not support those yet. *)
-  "import jsonabi as jsonabi",
-  "import JSONInterface"
 ]
 
 fun has_unsupported_patterns src =
@@ -595,23 +617,36 @@ val deployment : term decoder =
                   (field "deployment_type" string)))
 
 val trace : term decoder =
-  achoose "trace" [
-    JSONDecode.map (curry mk_comb Call_tm) call,
-    JSONDecode.map (curry mk_comb Deployment_tm) deployment,
-    JSONDecode.map (curry mk_comb RawDeployment_tm) raw_deployment,
-    check_trace_type "clear_transient_storage" $
-      succeed ClearTransientStorage_tm,
-    JSONDecode.map (fn (a,b) => list_mk_comb(SetBalance_tm, [a,b])) $
-    tuple2 (
-      field "address" address,
-      field "value" numtm)
-  ]
+  andThen (field "trace_type" string) (fn kind =>
+    case kind of
+      "call" => JSONDecode.map (curry mk_comb Call_tm) call
+    | "deployment" =>
+        andThen (field "deployment_type" string) (fn deployment_kind =>
+          if deployment_kind = "raw_bytecode" orelse deployment_kind = "ir"
+          then JSONDecode.map (curry mk_comb RawDeployment_tm) raw_deployment
+          else JSONDecode.map (curry mk_comb Deployment_tm) deployment)
+    | "clear_transient_storage" => succeed ClearTransientStorage_tm
+    | "set_balance" =>
+        JSONDecode.map (fn (a,b) => list_mk_comb(SetBalance_tm, [a,b])) $
+          tuple2 (field "address" address, field "value" numtm)
+    | _ => fail ("unknown trace type: " ^ kind))
 
 (* ===== Fixture / dependency support ===== *)
 (* Fixtures are shared setup items (item_type = "fixture") that tests depend
    on via their "deps" field. We resolve deps by prepending fixture traces
    to the test's own traces, so each test runs from a clean state with
    the fixture setup applied first. All current deps are same-file. *)
+
+val indexed_traces =
+  JSONDecode.map (fn jsons =>
+    let
+      fun go _ [] = []
+        | go i (json::rest) =
+            (decode trace json
+             handle e => raise Fail ("trace " ^ Int.toString i ^
+               ": " ^ exnMessage e)) :: go (i + 1) rest
+    in go 0 jsons end)
+    (array (JSONDecode.map JSON.OBJECT rawObject))
 
 val fixture_decoder =
   check_field "item_type" "fixture" $
@@ -621,7 +656,7 @@ val fixture_decoder =
 val test_with_deps_decoder =
   check_field "item_type" "test" $
   tuple2 (field "deps" (array string),
-          field "traces" (array trace))
+          field "traces" indexed_traces)
 
 (* Extract fixture name from a dep string.
    Dep format: "tests/export/functional/.../test_file.json/fixture_name"
