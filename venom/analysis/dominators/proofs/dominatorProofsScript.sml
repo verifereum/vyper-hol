@@ -3403,7 +3403,7 @@ Triviality walk_foldl_preds[local]:
             NRC (idom_step idom) k p n /\
             !j m. j < k /\ NRC (idom_step idom) j p m ==> m <> target_idom))
 Proof
-  Induct_on `preds` >> simp[] >> rpt strip_tac >>
+  Induct >> simp[] >> rpt strip_tac >>
   mp_tac (Q.SPECL [`fuel`, `idom`, `target`, `h`, `df`, `n`]
     walk_to_idom_adds) >>
   simp[] >> strip_tac >> metis_tac[]
@@ -3433,7 +3433,7 @@ Triviality walk_foldl_preds_other[local]:
        (FOLDL (\df' pred. walk_to_idom idom target pred df' fuel) df preds) n) <=>
      MEM y (fmap_lookup_list df n))
 Proof
-  Induct_on `preds` >> simp[] >> rpt strip_tac >>
+  Induct >> simp[] >> rpt strip_tac >>
   simp[walk_to_idom_other]
 QED
 
