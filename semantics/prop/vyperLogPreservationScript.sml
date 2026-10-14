@@ -3278,19 +3278,21 @@ Proof
           rpt gen_tac >>
           BasicProvers.TOP_CASE_TAC >>
           reverse BasicProvers.TOP_CASE_TAC >-
-            (rpt strip_tac >> imp_res_tac type_check_state >>
-             gvs[log_extends_refl]) >>
+            (rpt strip_tac >> rpt (qpat_x_assum `!x. _` kall_tac) >>
+             imp_res_tac type_check_state >> gvs[log_extends_refl]) >>
           rewrite_tac[vyperStateTheory.bind_def,
                       vyperStateTheory.ignore_bind_def] >>
           BasicProvers.TOP_CASE_TAC >>
           reverse BasicProvers.TOP_CASE_TAC >-
-            (rpt strip_tac >> imp_res_tac type_check_state >>
+            (rpt strip_tac >> rpt (qpat_x_assum `!x. _` kall_tac) >>
+             imp_res_tac type_check_state >>
              imp_res_tac lift_option_type_state >> gvs[log_extends_refl]) >>
           rewrite_tac[vyperStateTheory.bind_def,
                       vyperStateTheory.ignore_bind_def] >>
           BasicProvers.TOP_CASE_TAC >>
           reverse BasicProvers.TOP_CASE_TAC >-
-            (rpt strip_tac >> imp_res_tac type_check_state >>
+            (rpt strip_tac >> rpt (qpat_x_assum `!x. _` kall_tac) >>
+             imp_res_tac type_check_state >>
              imp_res_tac lift_option_type_state >> gvs[log_extends_refl]) >>
           BasicProvers.LET_ELIM_TAC >>
           qpat_x_assum `_ = _` mp_tac >>
@@ -3298,7 +3300,8 @@ Proof
                       vyperStateTheory.ignore_bind_def] >>
           BasicProvers.TOP_CASE_TAC >>
           reverse BasicProvers.TOP_CASE_TAC >-
-            (rpt strip_tac >> imp_res_tac type_check_state >>
+            (rpt strip_tac >> rpt (qpat_x_assum `!x. _` kall_tac) >>
+             imp_res_tac type_check_state >>
              imp_res_tac lift_option_type_state >> gvs[log_extends_refl]) >>
           pop_assum mp_tac >>
           first_x_assum $ funpow 2 drule_then drule >>

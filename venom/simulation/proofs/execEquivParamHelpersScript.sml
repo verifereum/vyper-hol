@@ -22,10 +22,13 @@ open execEquivParamLib
 fun vsr_eval_ops_tac () =
   `!op. MEM op inst.inst_operands ==>
      eval_operand op s1 = eval_operand op s2` by (
-    rw[] >> vsr_irule vsr_eval_operand >> simp[] >> metis_tac[])
+    rw[] >> vsr_irule vsr_eval_operand >> simp[] >>
+    rpt strip_tac >> gvs[])
 
 fun vsr_eval_rewrite_tac () =
-  imp_res_tac vsr_R_ok_fields >> vsr_eval_ops_tac () >> simp[step_inst_base_def]
+  vsr_eval_ops_tac () >>
+  drule_all_then strip_assume_tac vsr_R_ok_fields >>
+  ASM_REWRITE_TAC[step_inst_base_def] >> simp[]
 
 (* ==========================================================================
    step_inst_base-level helpers

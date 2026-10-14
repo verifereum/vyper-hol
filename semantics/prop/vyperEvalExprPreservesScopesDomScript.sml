@@ -862,13 +862,22 @@ Resume eval_mutual_preserves_scopes_dom[ExtCall]:
    suspend "return_path_3", suspend "return_path_4"]
 QED
 
-val SCOPES_DOM_IH_TAC =
-  gvs[oneTheory.one, ignore_bind_def] >>
-  rpt (FIRST [first_assum ACCEPT_TAC,
-    first_x_assum (fn th =>
+(* Normalize unit values and guard equalities with only bool_ss, then match
+   guards in semantic order without context-wide simplification or drule. *)
+fun SCOPES_DOM_IH_TAC (asl,w) =
+  let
+    val normalise = SIMP_RULE bool_ss [oneTheory.one, ignore_bind_def]
+    val facts = List.concat (map (CONJUNCTS o normalise o ASSUME) asl)
+    fun discharge th =
       if is_imp (snd (strip_forall (concl th))) then
-        drule_at Any th >> simp[] >> strip_tac
-      else NO_TAC)]);
+        discharge (tryfind (MATCH_MP th) facts)
+      else th
+    fun close ih g =
+      ACCEPT_TAC (discharge
+        (PURE_REWRITE_RULE [GSYM AND_IMP_INTRO] ih)) g
+  in
+    FIRST (map close facts) (asl,w)
+  end;
 
 Resume eval_mutual_preserves_scopes_dom[return_path_1]:
   SCOPES_DOM_IH_TAC

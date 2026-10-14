@@ -3655,12 +3655,22 @@ Resume immutables_dom_mutual[ExtCall]:
    suspend "return_path_3", suspend "return_path_4"]
 QED
 
-(* Normalize both sides of the operational guards, then match the complete
-   guard instead of repeatedly searching for an arbitrary conjunct. *)
-val IMM_DOM_FRAME_IH_TAC =
-  gvs[oneTheory.one, ignore_bind_def, append_logs_def, return_def] >>
-  FIRST [first_assum ACCEPT_TAC,
-    first_x_assum (fn th => drule_all th >> simp[] >> NO_TAC)];
+(* Match guards in semantic order without simplifying the large guarded IHs
+   or searching the entire context with drule at every monadic step. *)
+fun IMM_DOM_FRAME_IH_TAC (asl,w) =
+  let
+    val normalise = SIMP_RULE bool_ss [oneTheory.one, ignore_bind_def]
+    val facts = List.concat (map (CONJUNCTS o normalise o ASSUME) asl)
+    fun discharge th =
+      if is_imp (snd (strip_forall (concl th))) then
+        discharge (tryfind (MATCH_MP th) facts)
+      else th
+    fun close ih g =
+      ACCEPT_TAC (discharge
+        (PURE_REWRITE_RULE [GSYM AND_IMP_INTRO] ih)) g
+  in
+    FIRST (map close facts) (asl,w)
+  end;
 
 Resume immutables_dom_mutual[return_path_1]:
   IMM_DOM_FRAME_IH_TAC

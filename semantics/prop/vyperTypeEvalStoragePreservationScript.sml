@@ -3489,9 +3489,11 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_ExtCall]:
             args_st.accounts args_st.tStorage (vyper_to_tx_params cx.txn)` >>
           rewrite_tac[return_def, raise_def]
           >- (simp[raise_def] >> strip_tac >>
-              gvs[vyperStateTheory.get_accounts_def,
-                  vyperStateTheory.get_transient_storage_def,
-                  bind_def, return_def, assert_def, raise_def] >>
+              qpat_x_assum `_ args_st = (res,st')` mp_tac >>
+              simp[vyperStateTheory.get_accounts_def,
+                   vyperStateTheory.get_transient_storage_def,
+                   bind_def, return_def, assert_def, raise_def] >>
+              strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
               metis_tac[runtime_storage_consistent_storage]) >>
           rename1 `run_ext_call cx.txn.target target_addr calldata (SOME amount)
             args_st.accounts args_st.tStorage (vyper_to_tx_params cx.txn) = SOME result` >>
@@ -3499,9 +3501,11 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_ExtCall]:
           simp_tac(srw_ss())[assert_def, bind_def, return_def] >>
           reverse (Cases_on `result0`) >> simp_tac(srw_ss())[]
           >- (strip_tac >>
-              gvs[vyperStateTheory.get_accounts_def,
-                  vyperStateTheory.get_transient_storage_def,
-                  bind_def, return_def, assert_def, raise_def] >>
+              qpat_x_assum `_ = (res,st')` mp_tac >>
+              simp[vyperStateTheory.get_accounts_def,
+                   vyperStateTheory.get_transient_storage_def,
+                   bind_def, return_def, assert_def, raise_def] >>
+              strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
               metis_tac[runtime_storage_consistent_storage]) >>
           simp_tac(srw_ss())[vyperStateTheory.get_accounts_def,
                              vyperStateTheory.get_transient_storage_def,
@@ -3633,6 +3637,9 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_ExtCall]:
                update_transient_def, append_logs_def, return_def] >>
           metis_tac[runtime_storage_consistent_storage]) >>
       qpat_x_assum `!s'' vs t. _` kall_tac >>
+      POP_ASSUM_LIST (fn ths => MAP_EVERY ASSUME_TAC
+        (List.rev (List.filter (fn th => not (is_forall (concl th) andalso
+          can (find_term (aconv ``run_ext_call``)) (concl th))) ths))) >>
       gvs[] >>
       drule eval_extcall_args_error >> strip_tac >>
       first_x_assum

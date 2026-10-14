@@ -1632,9 +1632,9 @@ Proof
   rpt strip_tac >>
   fs[is_param_opcode_iff] >>
   simp[step_inst_non_invoke] >>
-  Cases_on `inst` >>
-  simp[step_inst_base_def] >>
-  rpt (BasicProvers.PURE_FULL_CASE_TAC >> gvs[step_inst_base_def])
+  PURE_REWRITE_TAC[step_inst_base_def] >>
+  ASM_REWRITE_TAC[opcode_case_def] >>
+  rpt (BasicProvers.PURE_FULL_CASE_TAC >> gvs[])
 QED
 
 (* --------------------------------------------------------------------------

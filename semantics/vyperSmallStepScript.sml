@@ -1740,8 +1740,10 @@ val EXT_CALL_CPS_PREP_TAC =
     get_accounts_def, get_transient_storage_def, update_accounts_def,
     update_transient_def, append_logs_def, raise_def];
 
+(* One branch/progress step at a time: keep each simplification and IH
+   specialization independently visible to holbuild's tactic budget. *)
 val EXT_CALL_CPS_CASES_TAC =
-  rpt (FIRST [first_assum MATCH_ACCEPT_TAC,
+  TRY (FIRST [first_assum MATCH_ACCEPT_TAC,
     CHANGED_TAC (gvs[bind_def, ignore_bind_def, return_def, UNCURRY,
       type_check_def, check_def, assert_def, lift_option_type_def,
       get_accounts_def, get_transient_storage_def, update_accounts_def,
@@ -1781,28 +1783,60 @@ Resume eval_cps_eq[ExtCall]:
 QED
 
 Resume eval_cps_eq[static_none_noneT]:
-  EXT_CALL_CPS_PREP_TAC >> EXT_CALL_CPS_CASES_TAC >> EXT_CALL_CPS_FINISH_TAC
+  EXT_CALL_CPS_PREP_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  EXT_CALL_CPS_FINISH_TAC
 QED
 Resume eval_cps_eq[static_none_value]:
-  EXT_CALL_CPS_PREP_TAC >> EXT_CALL_CPS_CASES_TAC >> EXT_CALL_CPS_FINISH_TAC
+  EXT_CALL_CPS_PREP_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  EXT_CALL_CPS_FINISH_TAC
 QED
 Resume eval_cps_eq[static_some_noneT]:
-  EXT_CALL_CPS_PREP_TAC >> EXT_CALL_CPS_CASES_TAC >> EXT_CALL_CPS_FINISH_TAC
+  EXT_CALL_CPS_PREP_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  EXT_CALL_CPS_FINISH_TAC
 QED
 Resume eval_cps_eq[static_some_value]:
-  EXT_CALL_CPS_PREP_TAC >> EXT_CALL_CPS_CASES_TAC >> EXT_CALL_CPS_FINISH_TAC
+  EXT_CALL_CPS_PREP_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  EXT_CALL_CPS_FINISH_TAC
 QED
 Resume eval_cps_eq[nonstatic_none_noneT]:
-  EXT_CALL_CPS_PREP_TAC >> EXT_CALL_CPS_CASES_TAC >> EXT_CALL_CPS_FINISH_TAC
+  EXT_CALL_CPS_PREP_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  EXT_CALL_CPS_FINISH_TAC
 QED
 Resume eval_cps_eq[nonstatic_none_value]:
-  EXT_CALL_CPS_PREP_TAC >> EXT_CALL_CPS_CASES_TAC >> EXT_CALL_CPS_FINISH_TAC
+  EXT_CALL_CPS_PREP_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  EXT_CALL_CPS_FINISH_TAC
 QED
 Resume eval_cps_eq[nonstatic_some_noneT]:
-  EXT_CALL_CPS_PREP_TAC >> EXT_CALL_CPS_CASES_TAC >> EXT_CALL_CPS_FINISH_TAC
+  EXT_CALL_CPS_PREP_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  EXT_CALL_CPS_FINISH_TAC
 QED
 Resume eval_cps_eq[nonstatic_some_value]:
-  EXT_CALL_CPS_PREP_TAC >> EXT_CALL_CPS_CASES_TAC >> EXT_CALL_CPS_FINISH_TAC
+  EXT_CALL_CPS_PREP_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  EXT_CALL_CPS_FINISH_TAC
 QED
 
 Finalise eval_cps_eq
