@@ -221,10 +221,21 @@ Proof
   ]
 QED
 
+Theorem expr_list_leq_trans_helper[local]:
+  ∀l1. (∀x. MEM x l1 ⇒ ∀y z.
+    expr_leq x y ∧ expr_leq y z ⇒ expr_leq x z) ⇒
+    ∀l2 l3. expr_list_leq l1 l2 ∧ expr_list_leq l2 l3 ⇒
+      expr_list_leq l1 l3
+Proof
+  Induct >> simp[expr_leq_def] >> rpt gen_tac >> strip_tac >>
+  Cases_on `l2` >> Cases_on `l3` >> simp[expr_leq_def] >>
+  rpt strip_tac >> gvs[] >>
+  metis_tac[CONJUNCT1 expr_leq_antisym]
+QED
+
 (* expr_leq is transitive *)
-Theorem expr_leq_trans[local]:
-  (∀x y z. expr_leq x y ∧ expr_leq y z ⇒ expr_leq x z) ∧
-  (∀l1 l2 l3. expr_list_leq l1 l2 ∧ expr_list_leq l2 l3 ⇒ expr_list_leq l1 l3)
+Theorem expr_leq_trans_expr[local]:
+  ∀x y z. expr_leq x y ∧ expr_leq y z ⇒ expr_leq x z
 Proof
   ho_match_mp_tac avail_expr_induction >> rpt conj_tac >| [
     (* ExprVar *)
@@ -241,19 +252,23 @@ Proof
       `opcode2num o'' < opcode2num o'³' ∨
        opcode2num o'' = opcode2num o'³'` by DECIDE_TAC >| [
         DISJ1_TAC >> DECIDE_TAC,
-        DISJ2_TAC >> metis_tac[]
+        DISJ2_TAC >> irule expr_list_leq_trans_helper >>
+        simp[] >> rename1 `expr_list_leq l middle` >>
+        conj_tac >- first_assum ACCEPT_TAC >>
+        qexists_tac `middle` >> simp[]
       ]
-    ],
-    (* [] *)
-    simp[expr_leq_def],
-    (* x::l1 *)
-    rw[] >> Cases_on `l2` >> Cases_on `l3` >> fs[expr_leq_def] >>
-    Cases_on `x = h` >> Cases_on `h = h'` >> fs[] >-
-      (first_x_assum (qspecl_then [`t`, `t'`] mp_tac) >> simp[]) >>
-    `expr_leq x h'` by (first_x_assum (qspecl_then [`h`, `h'`] mp_tac) >> simp[]) >>
-    Cases_on `x = h'` >> fs[] >>
-    `h = h'` by metis_tac[CONJUNCT1 expr_leq_antisym] >> fs[]
+    ]
   ]
+QED
+
+Theorem expr_leq_trans[local]:
+  (∀x y z. expr_leq x y ∧ expr_leq y z ⇒ expr_leq x z) ∧
+  (∀l1 l2 l3. expr_list_leq l1 l2 ∧ expr_list_leq l2 l3 ⇒ expr_list_leq l1 l3)
+Proof
+  conj_tac >- ACCEPT_TAC expr_leq_trans_expr >>
+  rpt gen_tac >> strip_tac >> irule expr_list_leq_trans_helper >>
+  conj_tac >- metis_tac[expr_leq_trans_expr] >>
+  qexists_tac `l2` >> simp[]
 QED
 
 (* ===== Canonicalization ===== *)
@@ -300,15 +315,15 @@ val map_qsort_idem = prove(
 Theorem canon_expr_idempotent:
   ∀e. canon_expr (canon_expr e) = canon_expr e
 Proof
-  `(∀e. canon_expr (canon_expr e) = canon_expr e) ∧
-   (∀l. MAP canon_expr (MAP canon_expr l) = MAP canon_expr l)`
-    suffices_by simp[] >>
   ho_match_mp_tac avail_expr_induction >> rpt conj_tac >>
   rw[canon_expr_def] >>
   Cases_on `is_commutative o'` >> simp[canon_expr_def] >| [
+    `MAP canon_expr (MAP canon_expr l) = MAP canon_expr l`
+      by simp[listTheory.MAP_MAP_o, listTheory.MAP_EQ_f, combinTheory.o_DEF] >>
     imp_res_tac (ISPECL [``canon_expr``, ``expr_leq``] map_qsort_idem) >>
     CONV_TAC (DEPTH_CONV ETA_CONV) >> fs[qsort_expr_idem],
-    CONV_TAC (DEPTH_CONV ETA_CONV) >> fs[]
+    CONV_TAC (DEPTH_CONV ETA_CONV) >>
+    simp[listTheory.MAP_MAP_o, listTheory.MAP_EQ_f, combinTheory.o_DEF]
   ]
 QED
 
