@@ -839,8 +839,8 @@ Proof
   simp[evaluation_state_component_equality] >> strip_tac >> simp[]
 QED
 
-val SCOPES_DOM_FRAME_TAC =
-  rpt (FIRST [CHANGED_TAC (CONV_TAC (DEPTH_CONV ETA_CONV)),
+val SCOPES_DOM_FRAME_STEP_TAC =
+  FIRST [CHANGED_TAC (CONV_TAC (DEPTH_CONV ETA_CONV)),
     CHANGED_TAC (simp_tac bool_ss
       [ETA_AX, FORALL_PROD, pair_case_thm, UNCURRY, scopes_dom_frame_primitives]),
     first_assum ACCEPT_TAC,
@@ -851,12 +851,22 @@ val SCOPES_DOM_FRAME_TAC =
         List.map ASSUME (List.filter is_eq asl)) (asl,w)),
     irule scopes_dom_frame_bind_guarded >> conj_tac,
     CHANGED_TAC (rewrite_tac[ignore_bind_def]),
-    gen_tac, strip_tac, conj_tac, CASE_TAC]);
+    gen_tac, strip_tac, conj_tac, CASE_TAC];
+
+val SCOPES_DOM_FRAME_TAC = rpt SCOPES_DOM_FRAME_STEP_TAC;
 
 Resume eval_mutual_preserves_scopes_dom[ExtCall]:
   rpt gen_tac >> strip_tac >>
   simp[GSYM scopes_dom_frame_result, Once evaluate_def] >>
   RULE_ASSUM_TAC (REWRITE_RULE [GSYM scopes_dom_frame_result]) >>
+  TRY SCOPES_DOM_FRAME_STEP_TAC >>
+  TRY SCOPES_DOM_FRAME_STEP_TAC >>
+  TRY SCOPES_DOM_FRAME_STEP_TAC >>
+  TRY SCOPES_DOM_FRAME_STEP_TAC >>
+  TRY SCOPES_DOM_FRAME_STEP_TAC >>
+  TRY SCOPES_DOM_FRAME_STEP_TAC >>
+  TRY SCOPES_DOM_FRAME_STEP_TAC >>
+  TRY SCOPES_DOM_FRAME_STEP_TAC >>
   SCOPES_DOM_FRAME_TAC >|
   [suspend "return_path_1", suspend "return_path_2",
    suspend "return_path_3", suspend "return_path_4"]
@@ -871,13 +881,25 @@ val SCOPES_DOM_IH_TAC =
       else NO_TAC)]);
 
 Resume eval_mutual_preserves_scopes_dom[return_path_1]:
-  SCOPES_DOM_IH_TAC
+  simp_tac bool_ss [oneTheory.one, ignore_bind_def] >>
+  rpt (FIRST [first_assum ACCEPT_TAC,
+    first_x_assum (fn th =>
+      if is_imp (snd (strip_forall (concl th))) then
+        drule_at Any th >> simp_tac bool_ss [] >> strip_tac
+      else NO_TAC)]) >>
+  metis_tac[ignore_bind_def]
 QED
 Resume eval_mutual_preserves_scopes_dom[return_path_2]:
   SCOPES_DOM_IH_TAC
 QED
 Resume eval_mutual_preserves_scopes_dom[return_path_3]:
-  SCOPES_DOM_IH_TAC
+  simp_tac bool_ss [oneTheory.one, ignore_bind_def] >>
+  rpt (FIRST [first_assum ACCEPT_TAC,
+    first_x_assum (fn th =>
+      if is_imp (snd (strip_forall (concl th))) then
+        drule_at Any th >> simp_tac bool_ss [] >> strip_tac
+      else NO_TAC)]) >>
+  metis_tac[ignore_bind_def]
 QED
 Resume eval_mutual_preserves_scopes_dom[return_path_4]:
   SCOPES_DOM_IH_TAC

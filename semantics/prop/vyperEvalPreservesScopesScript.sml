@@ -2503,8 +2503,8 @@ Proof
   metis_tac[preserves_tv_trans]
 QED
 
-val TV_FRAME_TAC =
-  rpt (FIRST [CHANGED_TAC (CONV_TAC (DEPTH_CONV ETA_CONV)),
+val TV_FRAME_STEP_TAC =
+  FIRST [CHANGED_TAC (CONV_TAC (DEPTH_CONV ETA_CONV)),
     CHANGED_TAC (simp_tac bool_ss
       [FORALL_PROD, pair_case_thm, UNCURRY, tv_frame_primitives]),
     first_assum ACCEPT_TAC,
@@ -2515,36 +2515,57 @@ val TV_FRAME_TAC =
         List.map ASSUME (List.filter is_eq asl)) (asl,w)),
     irule tv_frame_bind_guarded >> conj_tac,
     CHANGED_TAC (rewrite_tac[ignore_bind_def]),
-    gen_tac, strip_tac, conj_tac, CASE_TAC]);
+    gen_tac, strip_tac, conj_tac, CASE_TAC];
+
+val TV_FRAME_TAC = rpt TV_FRAME_STEP_TAC;
 
 Resume eval_preserves_tv[ExtCall]:
   rpt gen_tac >> strip_tac >>
   simp[GSYM state_rel_frame_result, Once evaluate_def] >>
   RULE_ASSUM_TAC (REWRITE_RULE [GSYM state_rel_frame_result]) >>
+  TRY TV_FRAME_STEP_TAC >>
+  TRY TV_FRAME_STEP_TAC >>
+  TRY TV_FRAME_STEP_TAC >>
+  TRY TV_FRAME_STEP_TAC >>
+  TRY TV_FRAME_STEP_TAC >>
+  TRY TV_FRAME_STEP_TAC >>
+  TRY TV_FRAME_STEP_TAC >>
+  TRY TV_FRAME_STEP_TAC >>
   TV_FRAME_TAC >|
   [suspend "return_path_1", suspend "return_path_2",
    suspend "return_path_3", suspend "return_path_4"]
 QED
 
-val TV_FRAME_IH_TAC =
-  gvs[oneTheory.one, ignore_bind_def] >>
-  rpt (FIRST [first_assum ACCEPT_TAC,
+val TV_FRAME_IH_STEP_TAC =
+  FIRST [first_assum ACCEPT_TAC,
     first_x_assum (fn th =>
       if is_imp (snd (strip_forall (concl th))) then
-        drule_at Any th >> simp[] >> strip_tac
-      else NO_TAC)]);
+        drule_at Any th >> simp_tac bool_ss [] >> strip_tac
+      else NO_TAC)];
 
 Resume eval_preserves_tv[return_path_1]:
-  TV_FRAME_IH_TAC
+  simp_tac bool_ss [oneTheory.one, ignore_bind_def] >>
+  TRY TV_FRAME_IH_STEP_TAC >>
+  rpt TV_FRAME_IH_STEP_TAC >>
+  metis_tac[ignore_bind_def]
 QED
 Resume eval_preserves_tv[return_path_2]:
-  TV_FRAME_IH_TAC
+  simp_tac bool_ss [oneTheory.one, ignore_bind_def] >>
+  TRY TV_FRAME_IH_STEP_TAC >>
+  rpt TV_FRAME_IH_STEP_TAC >>
+  metis_tac[ignore_bind_def]
 QED
 Resume eval_preserves_tv[return_path_3]:
-  TV_FRAME_IH_TAC
+  simp_tac bool_ss [oneTheory.one, ignore_bind_def] >>
+  TRY TV_FRAME_IH_STEP_TAC >>
+  rpt TV_FRAME_IH_STEP_TAC >>
+  metis_tac[ignore_bind_def]
 QED
 Resume eval_preserves_tv[return_path_4]:
-  TV_FRAME_IH_TAC
+  simp_tac bool_ss [oneTheory.one, ignore_bind_def] >>
+  TRY TV_FRAME_IH_STEP_TAC >>
+  rpt TV_FRAME_IH_STEP_TAC >>
+  metis_tac[ignore_bind_def]
 QED
 
 Finalise eval_preserves_tv

@@ -3657,6 +3657,7 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_ExtCall]:
             args_st.accounts args_st.tStorage (vyper_to_tx_params cx.txn)` >>
           rewrite_tac[return_def, raise_def]
           >- (simp[raise_def] >> strip_tac >>
+              qpat_x_assum `!s'' vs t. _` kall_tac >>
               gvs[vyperStateTheory.get_accounts_def,
                   vyperStateTheory.get_transient_storage_def,
                   bind_def, return_def, assert_def, raise_def] >>
@@ -3667,6 +3668,7 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_ExtCall]:
           simp_tac(srw_ss())[assert_def, bind_def, return_def] >>
           reverse (Cases_on `result0`) >> simp_tac(srw_ss())[]
           >- (strip_tac >>
+              qpat_x_assum `!s'' vs t. _` kall_tac >>
               gvs[vyperStateTheory.get_accounts_def,
                   vyperStateTheory.get_transient_storage_def,
                   bind_def, return_def, assert_def, raise_def] >>
