@@ -61,7 +61,7 @@ Definition supported_effect_expr_def:
       Call ty (IntCall id) args NONE =>
         IS_SOME (supported_function_decl tops id Internal) /\
         supported_pure_exprs tops args
-    | Call ty (ExtCall is_static (name, arg_types, ret)) args NONE =>
+    | Call ty (ExtCall is_static skip_check (name, arg_types, ret)) args NONE =>
         EVERY supported_word_type arg_types /\
         supported_external_return_type ret /\
         LENGTH args = LENGTH arg_types + (if is_static then 1 else 2) /\
@@ -90,7 +90,7 @@ QED
 
 Theorem supported_external_call_contract:
   supported_effect_expr tops
-    (Call ty (ExtCall is_static (name, arg_types, ret)) args NONE) <=>
+    (Call ty (ExtCall is_static skip_check (name, arg_types, ret)) args NONE) <=>
   EVERY supported_word_type arg_types /\
   supported_external_return_type ret /\
   LENGTH args = LENGTH arg_types + (if is_static then 1 else 2) /\

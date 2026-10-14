@@ -188,10 +188,11 @@ fun mk_JE_ExtCall (func_name, func_src, arg_types, ret_ty, target, args, keyword
                                mk_list(arg_types, json_type_ty),
                                ret_ty, target, mk_list(args, json_expr_ty),
                                mk_list(keywords, json_keyword_ty)])
-fun mk_JE_StaticCall (func_name, func_src, arg_types, ret_ty, target, args) =
+fun mk_JE_StaticCall (func_name, func_src, arg_types, ret_ty, target, args, keywords) =
   list_mk_comb(JE_StaticCall_tm, [fromMLstring func_name, func_src,
                                   mk_list(arg_types, json_type_ty),
-                                  ret_ty, target, mk_list(args, json_expr_ty)])
+                                  ret_ty, target, mk_list(args, json_expr_ty),
+                                  mk_list(keywords, json_keyword_ty)])
 fun mk_JKeyword (arg, v) = list_mk_comb(JKeyword_tm, [fromMLstring arg, v])
 
 (* ===== Statement Constructors ===== *)
@@ -800,18 +801,19 @@ fun d_json_expr () : term decoder = achoose "expr" [
 
   (* StaticCall - same structure as ExtCall. *)
   check_ast_type "StaticCall" $
-    JSONDecode.map (fn (((func_name, func_src), arg_types), (ret_ty, (target, args))) =>
-      mk_JE_StaticCall(func_name, func_src, arg_types, ret_ty, target, args)) $
-    tuple2 (tuple2 (tuple2 (field "value" $ field "func" $ field "attr" string,
-                            orElse (field "value" $ field "func" $ field "type" $
-                              field "type_decl_node" $ field "source_id" source_ref_tm,
-                              succeed JMissingSource_tm)),
-                    field "value" $ field "func" $ field "type" $
-                      orElse (field "argument_types" (array json_type), succeed [])),
-            tuple2 (field "value" $ field "func" $ field "type" $
-                      orElse (field "return_type" json_type, succeed JT_None_tm),
-                    tuple2 (field "value" $ field "func" $ field "value" (delay d_json_expr),
-                            field "value" $ field "args" (array (delay d_json_expr)))))
+    JSONDecode.map (fn ((((func_name, func_src), arg_types), (ret_ty, (target, args))), keywords) =>
+      mk_JE_StaticCall(func_name, func_src, arg_types, ret_ty, target, args, keywords)) $
+    tuple2 (tuple2 (tuple2 (tuple2 (field "value" $ field "func" $ field "attr" string,
+                                    orElse (field "value" $ field "func" $ field "type" $
+                                      field "type_decl_node" $ field "source_id" source_ref_tm,
+                                      succeed JMissingSource_tm)),
+                            field "value" $ field "func" $ field "type" $
+                              orElse (field "argument_types" (array json_type), succeed [])),
+                    tuple2 (field "value" $ field "func" $ field "type" $
+                              orElse (field "return_type" json_type, succeed JT_None_tm),
+                            tuple2 (field "value" $ field "func" $ field "value" (delay d_json_expr),
+                                    field "value" $ field "args" (array (delay d_json_expr))))),
+            field "value" $ orElse (field "keywords" (array (delay d_json_keyword)), succeed []))
 ]
 and d_json_keyword () : term decoder =
   JSONDecode.map (fn (arg, v) => mk_JKeyword(arg, v)) $

@@ -787,6 +787,12 @@ Definition translate_call_def:
     | _ => translate_module_call ctx func args' kwargs' ret_ty src_id_opt rty
 End
 
+Definition json_keyword_bool_def:
+  json_keyword_bool name kws default =
+    case find_keyword name kws of
+      SOME (JE_Bool b) => b
+    | _ => default
+End
 
 (* Recognize the source shape before translating msg.data: it is not an
    ordinary bounded bytes value in the internal AST. *)
@@ -953,13 +959,14 @@ Definition translate_expr_def:
     let value_expr = case find_keyword "value" keywords of
                      | SOME v => translate_expr ctx v
                      | NONE => Literal (BaseT (UintT 256)) (IntL 0) in
+    let skip_check = json_keyword_bool "skip_contract_check" keywords F in
     let sig_ctx = signature_type_ctx ctx func_src in
     let ret_ty' = translate_type sig_ctx ret_ty in
     (* Vyper records the full declared parameter list in argument_types, even
        when trailing defaulted parameters are omitted.  ExtCall carries the
        effective ABI signature selected at this call site. *)
     Call ret_ty'
-      (ExtCall F
+      (ExtCall F skip_check
         (func_name,
          TAKE (LENGTH args) (MAP (translate_type sig_ctx) arg_types),
          ret_ty'))
@@ -967,19 +974,22 @@ Definition translate_expr_def:
       (OPTION_MAP (translate_expr ctx)
         (find_keyword "default_return_value" keywords))) /\
 
-  (* StaticCall - read-only external call (is_static = T) *)
+  (* StaticCall - read-only external call (is_static = T).
+     No value operand: args = [target; arg1; ...]. *)
   (translate_expr ctx
-      (JE_StaticCall func_name func_src arg_types ret_ty target args) =
+      (JE_StaticCall func_name func_src arg_types ret_ty target args keywords) =
+    let skip_check = json_keyword_bool "skip_contract_check" keywords F in
     let sig_ctx = signature_type_ctx ctx func_src in
     let ret_ty' = translate_type sig_ctx ret_ty in
     (* See ExtCall above: retain only the effective ABI argument types. *)
     Call ret_ty'
-      (ExtCall T
+      (ExtCall T skip_check
         (func_name,
          TAKE (LENGTH args) (MAP (translate_type sig_ctx) arg_types),
          ret_ty'))
       (translate_expr ctx target :: translate_expr_list ctx args)
-      NONE) /\
+      (OPTION_MAP (translate_expr ctx)
+        (find_keyword "default_return_value" keywords))) /\
 
   (* Helper for translating expression lists *)
   (translate_expr_list ctx [] = []) /\

@@ -47,7 +47,7 @@ Theorem extcall_decode_return_sound:
   state_well_typed st' /\ env_consistent env cx st' /\
   accounts_well_typed st'.accounts /\ no_type_error_result res /\
   case res of
-  | INL tv => expr_result_typed env (Call ret_type (ExtCall stat fsig) es drv) tv
+  | INL tv => expr_result_typed env (Call ret_type (ExtCall stat skc fsig) es drv) tv
   | INR _ => T
 Proof
   simp[lift_sum_runtime_def, bind_def, return_def, raise_def] >>

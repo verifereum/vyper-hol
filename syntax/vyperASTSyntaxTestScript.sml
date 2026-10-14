@@ -170,7 +170,7 @@ val flags = vyperASTSyntax.mk_raw_call_flags
 val call_target_samples =
   [ vyperASTSyntax.mk_IntCall_tm nsid
   , vyperASTSyntax.mk_ExtCall_tm
-      (boolSyntax.T,
+      (boolSyntax.T, boolSyntax.F,
        pairSyntax.mk_pair
          (stringSyntax.fromMLstring "f",
           pairSyntax.mk_pair

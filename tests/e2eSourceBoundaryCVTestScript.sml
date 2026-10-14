@@ -14,7 +14,7 @@ Definition boundary_source_program_def:
   boundary_source_program =
     [FunctionDecl External Payable F F "send" [] [] NoneT [Expr (send_call 9w 1)];
      FunctionDecl External Payable F F "ext" [] [] NoneT
-       [Expr (Call NoneT (ExtCall F ("ping",[],NoneT))
+       [Expr (Call NoneT (ExtCall F F ("ping",[],NoneT))
          [Literal (BaseT AddressT) (BytesL (REPLICATE 19 0w ++ [9w]));
           Literal (BaseT (UintT 256)) (IntL 1)] NONE)]]
 End

@@ -57,7 +57,7 @@ Definition oracle_state_smoke_def:
          Literal (BaseT (UintT 256)) (IntL 0)] NONE) st =
       (INL (Value NoneV), st) /\
     eval_expr empty_evaluation_context
-      (Call NoneT (ExtCall T ("unused", [], NoneT)) [] NONE) st =
+      (Call NoneT (ExtCall T F ("unused", [], NoneT)) [] NONE) st =
       (INR (Error (TypeError "ExtCall no target")), st)
 End
 (* CV cannot translate equality on function-valued account/storage records.
@@ -72,7 +72,7 @@ Definition oracle_state_observations_def:
          Literal (BaseT (UintT 256)) (IntL 0)] NONE) st) =
       INL (Value NoneV) /\
     FST (eval_expr empty_evaluation_context
-      (Call NoneT (ExtCall T ("unused", [], NoneT)) [] NONE) st) =
+      (Call NoneT (ExtCall T F ("unused", [], NoneT)) [] NONE) st) =
       INR (Error (TypeError "ExtCall no target"))
 End
 (* Original precondition translation/proof retained. The now-registered
@@ -107,7 +107,7 @@ Definition oracle_state_observations_pre_def:
          Literal (BaseT (UintT 256)) (IntL 0)] NONE)
       (empty_state with <|outcomes := os; requests := rqs|>) DoneK) /\
     cont_pre (eval_expr_cps empty_evaluation_context
-      (Call NoneT (ExtCall T ("unused", [], NoneT)) [] NONE)
+      (Call NoneT (ExtCall T F ("unused", [], NoneT)) [] NONE)
       (empty_state with <|outcomes := os; requests := rqs|>) DoneK)
 End
 
@@ -138,7 +138,7 @@ Theorem oracle_state_observations_pre_cases:
           [Literal (BaseT AddressT) (BytesL (REPLICATE 20 0w));
            Literal (BaseT (UintT 256)) (IntL 0)] NONE) v DoneK) /\
       cont_pre (eval_expr_cps empty_evaluation_context
-        (Call NoneT (ExtCall T ("unused", [], NoneT)) [] NONE) v DoneK)
+        (Call NoneT (ExtCall T F ("unused", [], NoneT)) [] NONE) v DoneK)
 Proof
   Cases_on `empty_state` >>
   simp[oracle_state_observations_pre_def, evaluation_state_case_def,
@@ -156,7 +156,7 @@ Theorem oracle_state_observations_pre_rules:
           [Literal (BaseT AddressT) (BytesL (REPLICATE 20 0w));
            Literal (BaseT (UintT 256)) (IntL 0)] NONE) v DoneK) /\
       cont_pre (eval_expr_cps empty_evaluation_context
-        (Call NoneT (ExtCall T ("unused", [], NoneT)) [] NONE) v DoneK)) ==>
+        (Call NoneT (ExtCall T F ("unused", [], NoneT)) [] NONE) v DoneK)) ==>
     oracle_state_observations_pre os rqs
 Proof
   simp[oracle_state_observations_pre_cases]
@@ -174,7 +174,7 @@ Theorem oracle_state_observations_pre_ind:
             [Literal (BaseT AddressT) (BytesL (REPLICATE 20 0w));
              Literal (BaseT (UintT 256)) (IntL 0)] NONE) v DoneK) /\
         cont_pre (eval_expr_cps empty_evaluation_context
-          (Call NoneT (ExtCall T ("unused", [], NoneT)) [] NONE) v DoneK)) ==>
+          (Call NoneT (ExtCall T F ("unused", [], NoneT)) [] NONE) v DoneK)) ==>
       P os rqs) ==>
     !a0 a1. oracle_state_observations_pre a0 a1 ==> P a0 a1
 Proof
@@ -193,7 +193,7 @@ Theorem oracle_state_observations_pre_strongind:
             [Literal (BaseT AddressT) (BytesL (REPLICATE 20 0w));
              Literal (BaseT (UintT 256)) (IntL 0)] NONE) v DoneK) /\
         cont_pre (eval_expr_cps empty_evaluation_context
-          (Call NoneT (ExtCall T ("unused", [], NoneT)) [] NONE) v DoneK)) ==>
+          (Call NoneT (ExtCall T F ("unused", [], NoneT)) [] NONE) v DoneK)) ==>
       P os rqs) ==>
     !a0 a1. oracle_state_observations_pre a0 a1 ==> P a0 a1
 Proof
