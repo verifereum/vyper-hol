@@ -406,9 +406,6 @@ val excluded_test_names = [
   (* Tests using shift() builtin which is not yet translated.
      TODO: add shift builtin support *)
   "test_uint256_mulmod_complex",
-  (* skip_contract_check=True keyword not yet supported in ExtCall.
-     TODO: add skip_contract_check flag to ExtCall AST *)
-  "test_skip_contract_check",
   (* Out-of-gas test - we don't model gas *)
   "test_ecrecover_oog_handling"
 ]

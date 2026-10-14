@@ -123,6 +123,7 @@ fun ORACLE_STORAGE_TAC (asl,w) =
 
 (* Primitive nonreentrant-lock boundary facts.  These expose the exact
    transient write before the evaluator proof uses layout separation. *)
+
 Theorem acquire_nonreentrant_lock_eq:
   acquire_nonreentrant_lock addr slot is_view st =
     if lookup_storage (n2w slot)
@@ -3276,12 +3277,12 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_ExtCall]:
   >- (strip_tac >>
       `call_evaluation_safe cx (int_calls_exprs es)` by (
         qpat_assum `call_evaluation_safe cx
-          (int_calls_expr (Call v14 (ExtCall is_static' (func_name,arg_types,ret_type)) es drv))`
+          (int_calls_expr (Call v14 (ExtCall is_static' skip_check (func_name,arg_types,ret_type)) es drv))`
           mp_tac >> pure_rewrite_tac[int_calls_expr_def] >> strip_tac >>
         irule call_evaluation_safe_append_left >>
         qexists_tac `int_calls_opt drv` >> simp[]) >>
       qpat_x_assum `well_typed_expr env
-        (Call v14 (ExtCall is_static' (func_name,arg_types,ret_type)) es drv)` mp_tac >>
+        (Call v14 (ExtCall is_static' skip_check (func_name,arg_types,ret_type)) es drv)` mp_tac >>
       rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
       Cases_on `eval_exprs cx es st` >>
       rename1 `eval_exprs cx es st = (args_res,args_st)` >>
@@ -3318,7 +3319,7 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_ExtCall]:
               POP_ASSUM_LIST (fn ths => MAP_EVERY ASSUME_TAC
                 (List.rev (List.filter (fn th => not (is_forall (concl th) andalso
                   can (find_term (aconv ``take_call_outcome``)) (concl th))) ths))) >>
-              qpat_x_assum `eval_expr cx (Call _ (ExtCall T _) _ _) st = (res,st')`
+              qpat_x_assum `eval_expr cx (Call _ (ExtCall T _ _) _ _) st = (res,st')`
                 mp_tac >>
               simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
                 check_def, type_check_def, assert_def, return_def, raise_def,
@@ -3333,7 +3334,7 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_ExtCall]:
               qpat_assum `build_ext_calldata env.type_defs _ _ _ = SOME calldata`
                 (fn th => rewrite_tac[th]) >>
               rewrite_tac[return_def, raise_def] >>
-              Cases_on `NULL (lookup_account target_addr args_st.accounts).code` >>
+              Cases_on `~ext_call_precheck_ok skip_check ret_type target_addr args_st.accounts` >>
               rewrite_tac[return_def, raise_def]
               >- (strip_tac >>
                   qpat_x_assum `_ args_st = (res,st')` mp_tac >>
@@ -3341,6 +3342,7 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_ExtCall]:
                        get_accounts_def, get_transient_storage_def] >>
                   strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
                   metis_tac[runtime_storage_consistent_storage]) >>
+              pop_assum (assume_tac o PURE_REWRITE_RULE[boolTheory.NOT_CLAUSES]) >>
               simp_tac(srw_ss())[return_def, get_accounts_def, assert_def,
                                  get_transient_storage_def, raise_def, bind_def] >>
               asm_rewrite_tac[] >> simp_tac(srw_ss())[] >>
@@ -3409,10 +3411,20 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_ExtCall]:
                           runtime_storage_consistent_layout] >>
               ORACLE_STORAGE_TAC >>
               Cases_on `result1 = [] /\ IS_SOME drv` >> gvs[]
-              >- (Cases_on `drv` >> gvs[Once well_typed_expr_def] >> strip_tac >>
+              >- ((* code check after the call: a failed check leaves storage alone *)
+              reverse (Cases_on `skip_check \/ ext_call_has_code target_addr result2`)
+              >- (rpt strip_tac >> qpat_x_assum `_ = (res,st')` mp_tac >>
+                  qpat_assum `~(skip_check \/ _)` (fn th =>
+                    simp_tac (srw_ss()) [append_logs_def, return_def, assert_def,
+                                         check_def, ignore_bind_def,
+                                         update_accounts_def, update_transient_def,
+                                         bind_def, raise_def, th]) >>
+                  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+                  (first_assum ACCEPT_TAC ORELSE asm_simp_tac (srw_ss()) [])) >>
+              Cases_on `drv` >> gvs[Once well_typed_expr_def] >> strip_tac >>
                   `call_evaluation_safe cx (int_calls_expr x)` by (
                     qpat_assum `call_evaluation_safe cx
-                      (int_calls_expr (Call _ (ExtCall T _) es (SOME x)))` mp_tac >>
+                      (int_calls_expr (Call _ (ExtCall T _ _) es (SOME x)))` mp_tac >>
                     pure_rewrite_tac[int_calls_expr_def] >>
                     metis_tac[call_evaluation_safe_append_right]) >>
                   qpat_x_assum `!s0 t0 env' st'' res' st'''. _`
@@ -3426,8 +3438,9 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_ExtCall]:
                        `res`, `st'`] mp_tac) >>
                   simp[append_logs_def, return_def] >>
                   qpat_x_assum `_ = (res,st')` mp_tac >>
-                  simp[bind_def, assert_def, update_accounts_def,
-                       update_transient_def, append_logs_def, return_def] >>
+                  simp[bind_def, assert_def, check_def, ignore_bind_def,
+                       update_accounts_def, update_transient_def,
+                       append_logs_def, return_def] >>
                   metis_tac[]) >>
               strip_tac >> Cases_on `drv` >> gvs[] >>
               qpat_x_assum `(do _ od) _ = (res,st')` mp_tac >>
@@ -3462,7 +3475,7 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_ExtCall]:
           POP_ASSUM_LIST (fn ths => MAP_EVERY ASSUME_TAC
             (List.rev (List.filter (fn th => not (is_forall (concl th) andalso
               can (find_term (aconv ``take_call_outcome``)) (concl th))) ths))) >>
-          qpat_x_assum `eval_expr cx (Call _ (ExtCall F _) _ _) st = (res,st')`
+          qpat_x_assum `eval_expr cx (Call _ (ExtCall F _ _) _ _) st = (res,st')`
             mp_tac >>
           simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
             check_def, type_check_def, assert_def, return_def, raise_def,
@@ -3476,12 +3489,13 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_ExtCall]:
           qpat_assum `build_ext_calldata env.type_defs _ _ _ = SOME calldata`
             (fn th => rewrite_tac[th]) >>
           rewrite_tac[return_def, raise_def] >>
-          Cases_on `NULL (lookup_account target_addr args_st.accounts).code` >>
+          Cases_on `~ext_call_precheck_ok skip_check ret_type target_addr args_st.accounts` >>
           rewrite_tac[return_def, raise_def]
           >- (qpat_x_assum `!s'' vs t. _` kall_tac >> strip_tac >>
               gvs[assert_def, bind_def, return_def, raise_def,
                   get_accounts_def, get_transient_storage_def] >>
               metis_tac[runtime_storage_consistent_storage]) >>
+          pop_assum (assume_tac o PURE_REWRITE_RULE[boolTheory.NOT_CLAUSES]) >>
           simp_tac(srw_ss())[return_def, get_accounts_def, assert_def,
                              get_transient_storage_def, raise_def, bind_def] >>
           asm_rewrite_tac[] >> simp_tac(srw_ss())[] >>
@@ -3532,7 +3546,8 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_ExtCall]:
                get_transient_storage_def, update_accounts_def,
                update_transient_def] >>
           strip_tac >>
-          `(result1 = [] /\ IS_SOME drv) ==>
+          `(result1 = [] /\ IS_SOME drv /\
+            (skip_check \/ ext_call_has_code target_addr result2)) ==>
            !env0 st0 res0 st0'.
              runtime_storage_consistent env0 cx st0 /\
              oracle_storage_ok cx st0 /\
@@ -3542,7 +3557,7 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_ExtCall]:
               contract_storage_well_formed cx st0') /\
              (!vt. type_place_expr env0 (THE drv) = SOME vt ==>
               contract_storage_well_formed cx st0')` by (
-            rpt strip_tac >>
+            disch_tac >> rpt strip_tac >>
             (* Original specialization, before source-exception grammar makes
                the successful prefix equalities simplify out of this IH:
             qpat_x_assum `!s' value_opt arg_vals. _`
@@ -3603,10 +3618,20 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_ExtCall]:
                       runtime_storage_consistent_layout] >>
           ORACLE_STORAGE_TAC >>
           Cases_on `result1 = [] /\ IS_SOME drv` >> gvs[]
-          >- (Cases_on `drv` >> gvs[Once well_typed_expr_def] >> strip_tac >>
+          >- ((* code check after the call: a failed check leaves storage alone *)
+              reverse (Cases_on `skip_check \/ ext_call_has_code target_addr result2`)
+              >- (rpt strip_tac >> qpat_x_assum `_ = (res,st')` mp_tac >>
+                  qpat_assum `~(skip_check \/ _)` (fn th =>
+                    simp_tac (srw_ss()) [append_logs_def, return_def, assert_def,
+                                         check_def, ignore_bind_def,
+                                         update_accounts_def, update_transient_def,
+                                         bind_def, raise_def, th]) >>
+                  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+                  (first_assum ACCEPT_TAC ORELSE asm_simp_tac (srw_ss()) [])) >>
+              Cases_on `drv` >> gvs[Once well_typed_expr_def] >> strip_tac >>
               `call_evaluation_safe cx (int_calls_expr x)` by (
                 qpat_assum `call_evaluation_safe cx
-                  (int_calls_expr (Call _ (ExtCall F _) es (SOME x)))` mp_tac >>
+                  (int_calls_expr (Call _ (ExtCall F _ _) es (SOME x)))` mp_tac >>
                 pure_rewrite_tac[int_calls_expr_def] >>
                 metis_tac[call_evaluation_safe_append_right]) >>
               qpat_x_assum `!env0 st0 res0 st0'. _`
@@ -3617,29 +3642,36 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_ExtCall]:
                    `res`, `st'`] mp_tac) >>
               simp[append_logs_def, return_def] >>
               qpat_x_assum `_ = (res,st')` mp_tac >>
-              simp[bind_def, assert_def, update_accounts_def,
-                   update_transient_def, append_logs_def, return_def] >>
+              simp[bind_def, assert_def, check_def, ignore_bind_def,
+                   update_accounts_def, update_transient_def,
+                   append_logs_def, return_def] >>
               metis_tac[]) >>
           strip_tac >> Cases_on `drv` >> gvs[] >>
-          qpat_x_assum `(do _ od) _ = (res,st')` mp_tac >>
-          simp[lift_sum_runtime_def, bind_def, return_def, raise_def] >>
+          qpat_x_assum `_ = (res,st')` mp_tac >>
+          simp[lift_sum_runtime_def, bind_def, ignore_bind_def, return_def,
+               raise_def, assert_def, update_accounts_def,
+               update_transient_def, append_logs_def] >>
           qmatch_goalsub_rename_tac
             `evaluate_abi_decode_return env.type_defs decode_ty result1` >>
           Cases_on
             `evaluate_abi_decode_return env.type_defs decode_ty result1` >>
-          gvs[return_def, raise_def] >> strip_tac >> gvs[] >>
-          qpat_x_assum `_ = (res,st')` mp_tac >>
-          simp[bind_def, assert_def, update_accounts_def,
-               update_transient_def, append_logs_def, return_def] >>
-          metis_tac[runtime_storage_consistent_storage]) >>
-      qpat_x_assum `!s'' vs t. _` kall_tac >>
+          simp[return_def, raise_def] >> rpt strip_tac >>
+          rpt BasicProvers.VAR_EQ_TAC >>
+          (first_assum ACCEPT_TAC ORELSE
+           metis_tac[runtime_storage_consistent_storage])) >>
+      rpt (qpat_x_assum `!s'' vs t. _` kall_tac) >>
       gvs[] >>
-      drule eval_extcall_args_error >> strip_tac >>
-      first_x_assum
-        (qspecl_then [`ret_type`, `is_static'`, `func_name`, `arg_types`, `drv`]
-          assume_tac) >>
-      gvs[] >> metis_tac[runtime_storage_consistent_storage]) >>
-  rpt strip_tac >> gvs[Once well_typed_expr_def]
+      drule eval_extcall_args_error >>
+      disch_then (qspecl_then [`ret_type`, `is_static'`, `func_name`,
+                               `arg_types`, `drv`, `skip_check`] assume_tac) >>
+      qpat_x_assum `eval_expr _ _ _ = (res,st')` mp_tac >>
+      pop_assum (fn th => rewrite_tac[th, pairTheory.PAIR_EQ]) >>
+      rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+      qpat_assum `contract_storage_well_formed cx args_st` ACCEPT_TAC) >>
+  (* ExtCall is never a place expression *)
+  rpt strip_tac >>
+  qpat_x_assum `type_place_expr _ _ = SOME _` mp_tac >>
+  simp_tac (srw_ss()) [Once well_typed_expr_def]
 QED
 
 fun EXTCALL_STORAGE_ORACLE_IH_TAC g =
@@ -3674,7 +3706,7 @@ val EXTCALL_STORAGE_ORACLE_RETURN_TAC =
     `well_typed_expr env (THE drv)` by metis_tac[well_typed_opt_THE] >>
     `call_evaluation_safe cx (int_calls_expr (THE drv))` by (
       Cases_on `drv` >> gvs[] >>
-      qpat_assum `call_evaluation_safe cx (int_calls_expr (Call _ (ExtCall _ _) es (SOME _)))`
+      qpat_assum `call_evaluation_safe cx (int_calls_expr (Call _ (ExtCall _ _ _) es (SOME _)))`
         mp_tac >> pure_rewrite_tac[int_calls_expr_def] >>
       metis_tac[call_evaluation_safe_append_right]) >>
     FIRST [asm "storage_oracle_driver" (qspecl_then
@@ -3698,7 +3730,7 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_ExtCall_static_oracle]:
   `build_ext_calldata (get_tenv cx) func_name arg_types (TL vs) = SOME calldata`
     by simp[] >>
   drule_all (eval_extcall_SOME_tail |> Q.INST [`stat` |-> `T`, `amount` |-> `0`] |> SRULE []) >>
-  disch_then (qspecl_then [`ret_type`, `drv`] assume_tac) >>
+  disch_then (assume_tac o SPEC_ALL) >>
   qpat_x_assum `eval_expr _ _ _ = (res,st')` mp_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` (fn th => rewrite_tac[th]) >> strip_tac >>
   qabbrev_tac `value_opt = (NONE:num option)` >>
@@ -3712,7 +3744,7 @@ Resume eval_all_storage_preservation_mutual[Expr_Call_ExtCall_nonstatic_oracle]:
   `build_ext_calldata (get_tenv cx) func_name arg_types (TL (TL vs)) = SOME calldata`
     by simp[] >>
   drule_all (eval_extcall_SOME_tail |> Q.INST [`stat` |-> `F`] |> SRULE []) >>
-  disch_then (qspecl_then [`ret_type`, `drv`] assume_tac) >>
+  disch_then (assume_tac o SPEC_ALL) >>
   qpat_x_assum `eval_expr _ _ _ = (res,st')` mp_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` (fn th => rewrite_tac[th]) >> strip_tac >>
   qabbrev_tac `value_opt = SOME amount` >>

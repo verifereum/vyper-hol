@@ -566,7 +566,7 @@ Definition well_typed_expr_def:
        ty = sig.ret_ty /\ LENGTH args <= LENGTH sig.param_types /\
        LENGTH sig.param_types - sig.num_defaults <= LENGTH args /\
        MAP expr_type args = TAKE (LENGTH args) sig.param_types) /\
-  well_typed_expr env (Call ty (ExtCall is_static (_, arg_types, ret_ty)) args drv) =
+  well_typed_expr env (Call ty (ExtCall is_static _ (_, arg_types, ret_ty)) args drv) =
     (well_typed_exprs env args /\ well_typed_opt env drv /\ well_formed_type env.type_defs ty /\
      ty = ret_ty /\
      (if is_static then MAP expr_type args = BaseT AddressT :: arg_types

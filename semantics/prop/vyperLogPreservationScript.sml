@@ -2224,7 +2224,11 @@ Theorem ext_call_tail_log_extends[local]:
       x <- update_accounts (K accounts');
       x <- update_transient (K tStorage');
       x <- append_logs emitted_logs;
-      if returnData = [] /\ IS_SOME drv then eval_expr cx (THE drv)
+      if returnData = [] /\ IS_SOME drv then do
+          x <- assert (skc \/ ext_call_has_code target_addr accounts')
+                 (Error (RuntimeError "ExtCall target has no code"));
+          eval_expr cx (THE drv)
+        od
       else do
         ret_val <- lift_sum_runtime
           (evaluate_abi_decode_return tenv ret_type returnData);
@@ -2242,7 +2246,11 @@ Proof
   simp[vyperStateTheory.return_def, vyperStateTheory.raise_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[log_extends_append] >>
   Cases_on `returnData = []` >>
-  gvs[vyperStateTheory.bind_def, vyperStateTheory.return_def, AllCaseEqs()] >>
+  gvs[vyperStateTheory.bind_def, vyperStateTheory.return_def,
+      vyperStateTheory.ignore_bind_def, vyperStateTheory.check_def,
+      vyperStateTheory.assert_def, vyperStateTheory.raise_def, AllCaseEqs()] >>
+  (* failed code check after the call: only the call's logs were added *)
+  TRY (qexists_tac `[]` >> simp[] >> NO_TAC) >>
   TRY (imp_res_tac lift_sum_runtime_state >> gvs[] >>
        simp[log_extends_def, rich_listTheory.IS_PREFIX_APPEND] >> NO_TAC) >>
   qpat_x_assum `!s0 r s1. eval_expr cx x s0 = (r,s1) ==> _`
@@ -2279,7 +2287,11 @@ QED
 Theorem ext_call_result_tail_log_extends[local]:
   (!e. drv = SOME e ==>
      !s0 r s1. eval_expr cx e s0 = (r,s1) ==> log_extends s0 s1) /\
-  (if returnData = [] /\ IS_SOME drv then eval_expr cx (THE drv)
+  (if returnData = [] /\ IS_SOME drv then do
+          x <- assert (skc \/ ext_call_has_code target_addr accounts')
+                 (Error (RuntimeError "ExtCall target has no code"));
+          eval_expr cx (THE drv)
+        od
    else do
      ret_val <- lift_sum_runtime
        (evaluate_abi_decode_return tenv ret_type returnData);
@@ -2293,7 +2305,7 @@ Proof
   simp[vyperStateTheory.bind_def, vyperStateTheory.return_def, AllCaseEqs()] >>
   rpt strip_tac >>
   Cases_on `returnData = []` >>
-  gvs[vyperStateTheory.bind_def, vyperStateTheory.return_def, AllCaseEqs()] >>
+  gvs[vyperStateTheory.bind_def, vyperStateTheory.return_def, vyperStateTheory.assert_def, AllCaseEqs()] >>
   TRY (imp_res_tac lift_sum_runtime_state >> gvs[] >>
        simp[log_extends_def, rich_listTheory.IS_PREFIX_APPEND] >> NO_TAC) >>
   qpat_x_assum `!s0 r s1. eval_expr cx x s0 = (r,s1) ==> _`
@@ -2308,14 +2320,18 @@ Proof
 QED
 
 Definition ext_call_finish_def:
-  ext_call_finish cx drv ret_type tenv result =
+  ext_call_finish cx skc target_addr drv ret_type tenv result =
     (\(success,returnData,accounts',tStorage',emitted_logs).
       do
         x <- assert success (Error (RuntimeError "ExtCall reverted"));
         x <- update_accounts (K accounts');
         x <- update_transient (K tStorage');
         x <- append_logs emitted_logs;
-        if returnData = [] /\ IS_SOME drv then eval_expr cx (THE drv)
+        if returnData = [] /\ IS_SOME drv then do
+          x <- assert (skc \/ ext_call_has_code target_addr accounts')
+                 (Error (RuntimeError "ExtCall target has no code"));
+          eval_expr cx (THE drv)
+        od
         else do
           ret_val <- lift_sum_runtime
             (evaluate_abi_decode_return tenv ret_type returnData);
@@ -2331,13 +2347,17 @@ Theorem ext_call_finish_fold[local]:
       x <- update_accounts (K accounts');
       x <- update_transient (K tStorage');
       x <- append_logs emitted_logs;
-      if returnData = [] /\ IS_SOME drv then eval_expr cx (THE drv)
+      if returnData = [] /\ IS_SOME drv then do
+          x <- assert (skc \/ ext_call_has_code target_addr accounts')
+                 (Error (RuntimeError "ExtCall target has no code"));
+          eval_expr cx (THE drv)
+        od
       else do
         ret_val <- lift_sum_runtime
           (evaluate_abi_decode_return tenv ret_type returnData);
         return (Value ret_val)
       od
-    od) result = ext_call_finish cx drv ret_type tenv result
+    od) result = ext_call_finish cx skc target_addr drv ret_type tenv result
 Proof
   PairCases_on `result` >> simp[ext_call_finish_def]
 QED
@@ -2349,13 +2369,17 @@ Theorem ext_call_finish_check_fold[local]:
       update_accounts (K accounts');
       update_transient (K tStorage');
       append_logs emitted_logs;
-      if returnData = [] /\ IS_SOME drv then eval_expr cx (THE drv)
+      if returnData = [] /\ IS_SOME drv then do
+          check (skc \/ ext_call_has_code target_addr accounts')
+                 "ExtCall target has no code";
+          eval_expr cx (THE drv)
+        od
       else do
         ret_val <- lift_sum_runtime
           (evaluate_abi_decode_return tenv ret_type returnData);
         return (Value ret_val)
       od
-    od) result = ext_call_finish cx drv ret_type tenv result
+    od) result = ext_call_finish cx skc target_addr drv ret_type tenv result
 Proof
   PairCases_on `result` >>
   simp[ext_call_finish_def, vyperStateTheory.check_def,
@@ -2363,7 +2387,7 @@ Proof
 QED
 
 Theorem ext_call_finish_log_extends[local]:
-  ext_call_finish cx drv ret_type tenv result st = (res,st') ==>
+  ext_call_finish cx skc target_addr drv ret_type tenv result st = (res,st') ==>
   (!e. drv = SOME e ==>
      !s0 r s1. eval_expr cx e s0 = (r,s1) ==> log_extends s0 s1) ==>
   log_extends st st'
@@ -2379,7 +2403,11 @@ Theorem ext_call_result_log_extends[local]:
         x <- update_accounts (K accounts');
         x <- update_transient (K tStorage');
         x <- append_logs emitted_logs;
-        if returnData = [] /\ IS_SOME drv then eval_expr cx (THE drv)
+        if returnData = [] /\ IS_SOME drv then do
+          x <- assert (skc \/ ext_call_has_code target_addr accounts')
+                 (Error (RuntimeError "ExtCall target has no code"));
+          eval_expr cx (THE drv)
+        od
         else do
           ret_val <- lift_sum_runtime
             (evaluate_abi_decode_return tenv ret_type returnData);
@@ -2417,7 +2445,7 @@ Proof
 QED
 
 Definition ext_call_after_args_with_def:
-  ext_call_after_args_with cx isc func_name arg_types vs k =
+  ext_call_after_args_with cx isc skc ret_type func_name arg_types vs k =
     do
       type_check (vs <> []) "ExtCall no target";
       target_addr <- lift_option_type (dest_AddressV (HD vs))
@@ -2434,13 +2462,13 @@ Definition ext_call_after_args_with_def:
         (build_ext_calldata tenv func_name arg_types arg_vals)
         "ExtCall build_calldata";
       accounts <- get_accounts;
-      check (~NULL (lookup_account target_addr accounts).code)
+      check (ext_call_precheck_ok skc ret_type target_addr accounts)
         "ExtCall target has no code";
       tStorage <- get_transient_storage;
       result <- lift_option
         (run_ext_call cx.txn.target target_addr calldata value_opt accounts
            tStorage (vyper_to_tx_params cx.txn)) "ExtCall run failed";
-      k tenv result
+      k tenv target_addr result
     od
 End
 
@@ -2459,7 +2487,7 @@ Theorem ext_call_generated_success_certificate[local]:
     (build_ext_calldata (get_tenv cx) func_name arg_types arg_vals)
     "ExtCall build_calldata" s = (INL calldata,s) /\
   get_accounts s = (INL accounts,s) /\
-  check (~NULL (lookup_account target_addr accounts).code)
+  check (ext_call_precheck_ok skc ret_type target_addr accounts)
     "ExtCall target has no code" s = (INL (),s) /\
   get_transient_storage s = (INL tStorage,s) /\
   lift_option
@@ -2467,9 +2495,9 @@ Theorem ext_call_generated_success_certificate[local]:
        tStorage (vyper_to_tx_params cx.txn))
     "ExtCall run failed" s =
       (INL (T,[],accounts',tStorage',emitted_logs),s) ==>
-  ext_call_after_args_with cx static func_name arg_types vs
-    (\tenv result. return (tenv,result)) s =
-    (INL (get_tenv cx,(T,[],accounts',tStorage',emitted_logs)),s)
+  ext_call_after_args_with cx static skc ret_type func_name arg_types vs
+    (\tenv target_addr result. return (tenv,target_addr,result)) s =
+    (INL (get_tenv cx,target_addr,(T,[],accounts',tStorage',emitted_logs)),s)
 Proof
   rpt strip_tac >>
   simp[ext_call_after_args_with_def, vyperStateTheory.bind_def,
@@ -2486,10 +2514,10 @@ Proof
 QED
 
 Theorem ext_call_generated_success_certificate_elim[local]:
-  ext_call_after_args_with cx static func_name arg_types vs
-    (\tenv result. return (tenv,result)) s =
-    (INL (get_tenv cx,(T,[],accounts',tStorage',emitted_logs)),s) ==>
-  ?target_addr value_opt arg_vals calldata accounts tStorage.
+  ext_call_after_args_with cx static skc ret_type func_name arg_types vs
+    (\tenv target_addr result. return (tenv,target_addr,result)) s =
+    (INL (get_tenv cx,target_addr,(T,[],accounts',tStorage',emitted_logs)),s) ==>
+  ?value_opt arg_vals calldata accounts tStorage.
     type_check (vs <> []) "ExtCall no target" s = (INL (),s) /\
     lift_option_type (dest_AddressV (HD vs)) "ExtCall target not address" s =
       (INL target_addr,s) /\
@@ -2504,7 +2532,7 @@ Theorem ext_call_generated_success_certificate_elim[local]:
       (build_ext_calldata (get_tenv cx) func_name arg_types arg_vals)
       "ExtCall build_calldata" s = (INL calldata,s) /\
     get_accounts s = (INL accounts,s) /\
-    check (~NULL (lookup_account target_addr accounts).code)
+    check (ext_call_precheck_ok skc ret_type target_addr accounts)
       "ExtCall target has no code" s = (INL (),s) /\
     get_transient_storage s = (INL tStorage,s) /\
     lift_option
@@ -2535,8 +2563,8 @@ Proof
 QED
 
 Theorem ext_call_generated_success_certificate_tenv[local]:
-  ext_call_after_args_with cx static func_name arg_types vs
-    (\tenv result. return (tenv,result)) s = (INL (tenv,result),s) ==>
+  ext_call_after_args_with cx static skc ret_type func_name arg_types vs
+    (\tenv target_addr result. return (tenv,target_addr,result)) s = (INL (tenv,ta,result),s) ==>
   tenv = get_tenv cx
 Proof
   simp[ext_call_after_args_with_def, vyperStateTheory.bind_def,
@@ -2557,10 +2585,10 @@ QED
 
 
 Theorem ext_call_after_args_with_log_extends_snd[local]:
-  (!tenv result s0.
-     log_extends s0 (SND (k tenv result s0))) ==>
+  (!tenv target_addr result s0.
+     log_extends s0 (SND (k tenv target_addr result s0))) ==>
   !st. log_extends st
-    (SND (ext_call_after_args_with cx isc func_name arg_types vs k st))
+    (SND (ext_call_after_args_with cx isc skc ret_type func_name arg_types vs k st))
 Proof
   Cases_on `isc` >> rpt strip_tac >>
   simp[ext_call_after_args_with_def, vyperStateTheory.bind_def,
@@ -2582,13 +2610,13 @@ Proof
 QED
 
 Theorem ext_call_after_args_with_guarded_log_extends_snd[local]:
-  (!tenv result.
-     ext_call_after_args_with cx isc func_name arg_types vs
-       (\tenv result. return (tenv,result)) st =
-       (INL (tenv,result),st) ==>
-     log_extends st (SND (k tenv result st))) ==>
+  (!tenv target_addr result.
+     ext_call_after_args_with cx isc skc ret_type func_name arg_types vs
+       (\tenv target_addr result. return (tenv,target_addr,result)) st =
+       (INL (tenv,target_addr,result),st) ==>
+     log_extends st (SND (k tenv target_addr result st))) ==>
   log_extends st
-    (SND (ext_call_after_args_with cx isc func_name arg_types vs k st))
+    (SND (ext_call_after_args_with cx isc skc ret_type func_name arg_types vs k st))
 Proof
   Cases_on `isc` >> rpt strip_tac >>
   simp[ext_call_after_args_with_def, vyperStateTheory.bind_def,
@@ -2653,15 +2681,16 @@ Proof
 QED
 
 Theorem ext_call_after_args_finish_guarded_log_extends[local]:
-  (!tenv accounts' tStorage' emitted_logs e.
+  (!tenv target_addr accounts' tStorage' emitted_logs e.
      drv = SOME e /\
-     ext_call_after_args_with cx isc func_name arg_types vs
-       (\tenv result. return (tenv,result)) st =
-       (INL (tenv,(T,[],accounts',tStorage',emitted_logs)),st) ==>
+     ext_call_after_args_with cx isc skc ret_type func_name arg_types vs
+       (\tenv target_addr result. return (tenv,target_addr,result)) st =
+       (INL (tenv,target_addr,(T,[],accounts',tStorage',emitted_logs)),st) /\
+     (skc \/ ext_call_has_code target_addr accounts') ==>
      !s0 r s1. eval_expr cx e s0 = (r,s1) ==> log_extends s0 s1) ==>
   log_extends st
-    (SND (ext_call_after_args_with cx isc func_name arg_types vs
-      (\tenv result. ext_call_finish cx drv ret_type tenv result) st))
+    (SND (ext_call_after_args_with cx isc skc ret_type func_name arg_types vs
+      (\tenv target_addr result. ext_call_finish cx skc target_addr drv ret_type tenv result) st))
 Proof
   strip_tac >>
   irule ext_call_after_args_with_guarded_log_extends_snd >>
@@ -2685,6 +2714,12 @@ Proof
   rpt strip_tac >> gvs[log_extends_append] >>
   Cases_on `result1 = []` >>
   gvs[vyperStateTheory.bind_def, vyperStateTheory.return_def, AllCaseEqs()] >>
+  (* default_return_value path: code check after the call *)
+  TRY (Cases_on `skc \/ ext_call_has_code target_addr result2` >>
+       gvs[vyperStateTheory.check_def, vyperStateTheory.ignore_bind_def,
+           vyperStateTheory.bind_def, vyperStateTheory.assert_def,
+           vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
+       TRY (simp[log_extends_def, rich_listTheory.IS_PREFIX_APPEND] >> NO_TAC)) >>
   simp[lift_sum_runtime_return_after_append_log_extends,
        eval_expr_after_append_log_extends, log_extends_refl]
 QED
@@ -2704,7 +2739,7 @@ Theorem ext_call_after_args_fold[local]:
         (build_ext_calldata (get_tenv cx) func_name arg_types arg_vals)
         "ExtCall build_calldata";
       accounts <- get_accounts;
-      check (~NULL (lookup_account target_addr accounts).code)
+      check (ext_call_precheck_ok skc ret_type target_addr accounts)
         "ExtCall target has no code";
       tStorage <- get_transient_storage;
       result <- lift_option
@@ -2716,7 +2751,11 @@ Theorem ext_call_after_args_fold[local]:
           update_accounts (K accounts');
           update_transient (K tStorage');
           append_logs emitted_logs;
-          if returnData = [] /\ IS_SOME drv then eval_expr cx (THE drv)
+          if returnData = [] /\ IS_SOME drv then do
+          check (skc \/ ext_call_has_code target_addr accounts')
+                 "ExtCall target has no code";
+          eval_expr cx (THE drv)
+        od
           else do
             ret_val <- lift_sum_runtime
               (evaluate_abi_decode_return (get_tenv cx) ret_type returnData);
@@ -2724,8 +2763,8 @@ Theorem ext_call_after_args_fold[local]:
           od
         od) result
    od) =
-  ext_call_after_args_with cx isc func_name arg_types vs
-    (\tenv result. ext_call_finish cx drv ret_type tenv result)
+  ext_call_after_args_with cx isc skc ret_type func_name arg_types vs
+    (\tenv target_addr result. ext_call_finish cx skc target_addr drv ret_type tenv result)
 Proof
   simp[ext_call_after_args_with_def, ext_call_finish_def,
        vyperStateTheory.check_def, vyperStateTheory.ignore_bind_def]
@@ -2746,7 +2785,7 @@ Theorem ext_call_after_args_log_extends[local]:
         (build_ext_calldata (get_tenv cx) func_name arg_types arg_vals)
         "ExtCall build_calldata";
       accounts <- get_accounts;
-      check (~NULL (lookup_account target_addr accounts).code)
+      check (ext_call_precheck_ok skc ret_type target_addr accounts)
         "ExtCall target has no code";
       tStorage <- get_transient_storage;
       result <- lift_option
@@ -2758,7 +2797,11 @@ Theorem ext_call_after_args_log_extends[local]:
           update_accounts (K accounts');
           update_transient (K tStorage');
           append_logs emitted_logs;
-          if returnData = [] /\ IS_SOME drv then eval_expr cx (THE drv)
+          if returnData = [] /\ IS_SOME drv then do
+          check (skc \/ ext_call_has_code target_addr accounts')
+                 "ExtCall target has no code";
+          eval_expr cx (THE drv)
+        od
           else do
             ret_val <- lift_sum_runtime
               (evaluate_abi_decode_return (get_tenv cx) ret_type returnData);
@@ -2771,11 +2814,11 @@ Theorem ext_call_after_args_log_extends[local]:
   log_extends st st'
 Proof
   rpt strip_tac >>
-  `!tenv result s0.
+  `!tenv target_addr result s0.
      log_extends s0
-       (SND (ext_call_finish cx drv ret_type tenv result s0))` by
+       (SND (ext_call_finish cx skc target_addr drv ret_type tenv result s0))` by
     (rpt gen_tac >>
-     Cases_on `ext_call_finish cx drv ret_type tenv result s0` >>
+     Cases_on `ext_call_finish cx skc target_addr drv ret_type tenv result s0` >>
      simp[] >>
      drule ext_call_finish_log_extends >>
      disch_then irule >>
@@ -2784,26 +2827,33 @@ Proof
   pure_rewrite_tac[ext_call_finish_check_fold, ext_call_after_args_fold] >>
   strip_tac >>
   `log_extends st
-     (SND (ext_call_after_args_with cx isc func_name arg_types vs
-       (\tenv result. ext_call_finish cx drv ret_type tenv result) st))` by
+     (SND (ext_call_after_args_with cx isc skc ret_type func_name arg_types vs
+       (\tenv target_addr result. ext_call_finish cx skc target_addr drv ret_type tenv result) st))` by
     (irule ext_call_after_args_with_log_extends_snd >> simp[]) >>
   gvs[]
 QED
 
+Theorem check_true_state[local]:
+  b ==> !msg s. check b msg s = (INL (),s)
+Proof
+  simp[vyperStateTheory.check_def, vyperStateTheory.type_check_def,
+       vyperStateTheory.assert_def, vyperStateTheory.return_def]
+QED
 
 (* Original concrete-only proof retained. The same true statement is derived
    below from the completed actual evaluator induction.
 Theorem case_expr_ext_call_logs[local]:
   (!s0 r s1. eval_exprs cx es s0 = (r,s1) ==> log_extends s0 s1) /\
-  (!s0 vs s1 tenv accounts' tStorage' emitted_logs e.
+  (!s0 vs s1 tenv target_addr accounts' tStorage' emitted_logs e.
      eval_exprs cx es s0 = (INL vs,s1) /\
      drv = SOME e /\
-     ext_call_after_args_with cx static func_name arg_types vs
-       (\tenv result. return (tenv,result)) s1 =
-       (INL (tenv,(T,[],accounts',tStorage',emitted_logs)),s1) ==>
+     ext_call_after_args_with cx static skc ret_type func_name arg_types vs
+       (\tenv target_addr result. return (tenv,target_addr,result)) s1 =
+       (INL (tenv,target_addr,(T,[],accounts',tStorage',emitted_logs)),s1) /\
+     (skc \/ ext_call_has_code target_addr accounts') ==>
      !u0 r u1. eval_expr cx e u0 = (r,u1) ==> log_extends u0 u1) ==>
   !st res st'.
-    eval_expr cx (Call ty (ExtCall static (func_name,arg_types,ret_type))
+    eval_expr cx (Call ty (ExtCall static skc (func_name,arg_types,ret_type))
                          es drv) st = (res,st') ==>
     log_extends st st'
 Proof
@@ -2820,8 +2870,8 @@ Proof
   pure_rewrite_tac[ext_call_finish_check_fold, ext_call_after_args_fold] >>
   strip_tac >>
   `log_extends s''
-     (SND (ext_call_after_args_with cx static func_name arg_types vs
-       (\tenv result. ext_call_finish cx drv ret_type tenv result) s''))` by
+     (SND (ext_call_after_args_with cx static skc ret_type func_name arg_types vs
+       (\tenv target_addr result. ext_call_finish cx skc target_addr drv ret_type tenv result) s''))` by
     (irule ext_call_after_args_finish_guarded_log_extends >>
      rpt strip_tac >>
      first_x_assum irule >>
@@ -3261,7 +3311,7 @@ Proof
   impl_tac >-
     (rpt conj_tac >> TRY (simp[] >> NO_TAC) >~
        [`_ ==> !st res st'.
-           eval_expr _ (Call _ (ExtCall _ _) _ _) st = (res,st') ==>
+           eval_expr _ (Call _ (ExtCall _ _ _) _ _) st = (res,st') ==>
            log_extends st st'`] >-
          (rpt gen_tac >> strip_tac >>
           simp[GSYM log_monad_def, Once vyperInterpreterTheory.evaluate_def] >>
@@ -3421,15 +3471,15 @@ QED
 
 Theorem case_expr_ext_call_logs[local]:
   (!s0 r s1. eval_exprs cx es s0 = (r,s1) ==> log_extends s0 s1) /\
-  (!s0 vs s1 tenv accounts' tStorage' emitted_logs e.
+  (!s0 vs s1 tenv target_addr accounts' tStorage' emitted_logs e.
      eval_exprs cx es s0 = (INL vs,s1) /\
      drv = SOME e /\
-     ext_call_after_args_with cx static func_name arg_types vs
-       (\tenv result. return (tenv,result)) s1 =
-       (INL (tenv,(T,[],accounts',tStorage',emitted_logs)),s1) ==>
+     ext_call_after_args_with cx static skip_check ret_type func_name arg_types vs
+       (\tenv target_addr result. return (tenv,target_addr,result)) s1 =
+       (INL (tenv,target_addr,(T,[],accounts',tStorage',emitted_logs)),s1) ==>
      !u0 r u1. eval_expr cx e u0 = (r,u1) ==> log_extends u0 u1) ==>
   !st res st'.
-    eval_expr cx (Call ty (ExtCall static (func_name,arg_types,ret_type))
+    eval_expr cx (Call ty (ExtCall static skip_check (func_name,arg_types,ret_type))
                          es drv) st = (res,st') ==>
     log_extends st st'
 Proof

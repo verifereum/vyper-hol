@@ -46,7 +46,7 @@ Definition cps_failure_observations_def:
   cps_failure_observations =
     let r = vyperSmallStep$fromtvk (vyperSmallStep$cont
       (vyperSmallStep$eval_expr_cps empty_evaluation_context
-        (Call (BaseT (UintT 256)) (ExtCall T ("f",[],BaseT (UintT 256)))
+        (Call (BaseT (UintT 256)) (ExtCall T F ("f",[],BaseT (UintT 256)))
           [Literal (BaseT AddressT) (BytesL (REPLICATE 19 0w ++ [9w]))] NONE)
         (empty_state with outcomes := SOME
           [extCallOracle$failed_outcome

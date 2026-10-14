@@ -174,9 +174,9 @@ QED
 
 Theorem compile_extcall_callback_contract:
   expr_callbacks_agree f g cenv (call_callback_children args default_ret) ⇒
-  compile_call f cenv ret_ty ty (ExtCall static_call (fn_name,arg_types,return_type))
+  compile_call f cenv ret_ty ty (ExtCall static_call skip_check (fn_name,arg_types,return_type))
     args default_ret st =
-  compile_call g cenv ret_ty ty (ExtCall static_call (fn_name,arg_types,return_type))
+  compile_call g cenv ret_ty ty (ExtCall static_call skip_check (fn_name,arg_types,return_type))
     args default_ret st
 Proof
   Cases_on `args` >- simp[compile_call_def] >>
@@ -200,7 +200,7 @@ Proof
            fs[call_callback_children_def] >> Cases_on `default_ret` >> fs[],
          irule compile_raw_call_calldata_callback_contract >>
            fs[call_callback_children_def] >> Cases_on `default_ret` >> fs[],
-         rename1 `compile_call f _ _ _ (ExtCall _ signature)` >>
+         rename1 `compile_call f _ _ _ (ExtCall _ _ signature)` >>
            PairCases_on `signature` >>
            irule compile_extcall_callback_contract >> simp[],
          simp[compile_call_def]]

@@ -2006,6 +2006,21 @@ Proof
       irule append_logs_preserves_tv >>
       qexists_tac `p4` >> qexists_tac `INL ()` >>
       simp[append_logs_def, return_def] ) >>
+    (* default_return_value path: code check after the call *)
+    simp[ignore_bind_apply] >>
+    BasicProvers.TOP_CASE_TAC >>
+    imp_res_tac check_state >>
+    BasicProvers.VAR_EQ_TAC >>
+    reverse BasicProvers.TOP_CASE_TAC >- (
+      rw[] >>
+      irule preserves_tv_trans >>
+      goal_assum drule >>
+      irule preserves_tv_trans >>
+      qexists_tac `r'` >>
+      (conj_tac >- (irule preserves_tv_eq >> gvs[])) >>
+      irule append_logs_preserves_tv >>
+      qexists_tac `p4` >> qexists_tac `INL ()` >>
+      simp[append_logs_def, return_def] ) >>
     strip_tac >> gvs[] >>
     first_x_assum drule_all >>
     rw[] >>

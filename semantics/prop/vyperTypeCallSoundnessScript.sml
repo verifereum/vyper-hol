@@ -129,14 +129,14 @@ Proof
 QED
 
 Theorem external_call_no_type_error:
-  well_typed_expr env (Call ty (ExtCall stat fsig) args drv) /\
+  well_typed_expr env (Call ty (ExtCall stat skip_check fsig) args drv) /\
   env_consistent env cx st /\ state_well_typed st /\
   context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
-  call_evaluation_safe cx (int_calls_expr (Call ty (ExtCall stat fsig) args drv)) ==>
-  no_type_error_eval (eval_expr cx (Call ty (ExtCall stat fsig) args drv) st)
+  call_evaluation_safe cx (int_calls_expr (Call ty (ExtCall stat skip_check fsig) args drv)) ==>
+  no_type_error_eval (eval_expr cx (Call ty (ExtCall stat skip_check fsig) args drv) st)
 Proof
   strip_tac >>
-  Cases_on `eval_expr cx (Call ty (ExtCall stat fsig) args drv) st` >>
+  Cases_on `eval_expr cx (Call ty (ExtCall stat skip_check fsig) args drv) st` >>
   simp[no_type_error_eval_def, no_type_error_result_def] >>
   drule_at(Pat`eval_expr`)(cj 8 eval_all_type_sound_mutual) >>
   disch_then drule >> simp[] >>
@@ -145,7 +145,7 @@ QED
 
 Theorem special_call_no_type_error:
   well_typed_expr env (Call ty target args drv) /\
-  target <> IntCall (src,fn) /\ (!stat fsig. target <> ExtCall stat fsig) /\
+  target <> IntCall (src,fn) /\ (!stat skip_check fsig. target <> ExtCall stat skip_check fsig) /\
   env_consistent env cx st /\ state_well_typed st /\
   context_well_typed cx /\ accounts_well_typed st.accounts /\ functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_expr (Call ty target args drv)) ==>

@@ -17,7 +17,7 @@ End
 val () = cv_auto_trans cpscv_run_def;
 
 Definition cpscv_call_def:
-  cpscv_call static target ret dflt = Call ret (ExtCall static ("f",[],ret))
+  cpscv_call static target ret dflt = Call ret (ExtCall static F ("f",[],ret))
     ([Literal (BaseT AddressT) (BytesL (REPLICATE 19 0w ++ [target]))] ++
       if static then [] else [Literal (BaseT (UintT 256)) (IntL 7)]) dflt
 End
@@ -231,7 +231,7 @@ Definition cpscv_computed_observations_def:
     cpscv_snapshot 3 4w cpscv_initial_logs
       cpscv_initial_requests cpscv_tail_snapshot (SND r) /\
     let nr = cpscv_run
-      (Call (BaseT (UintT 256)) (ExtCall F ("f",[],BaseT (UintT 256)))
+      (Call (BaseT (UintT 256)) (ExtCall F F ("f",[],BaseT (UintT 256)))
         [Literal (BaseT AddressT) (BytesL (REPLICATE 19 0w ++ [2w]));
          Literal (BaseT (UintT 256)) (IntL 0)] NONE)
       (cpscv_state with outcomes := SOME [cpscv_tail]) in
