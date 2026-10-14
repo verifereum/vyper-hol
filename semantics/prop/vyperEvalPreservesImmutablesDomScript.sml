@@ -3642,8 +3642,8 @@ Proof
   simp[state_rel_frame_result]
 QED
 
-val IMM_DOM_FRAME_TAC =
-  rpt (FIRST [CHANGED_TAC (CONV_TAC (DEPTH_CONV ETA_CONV)),
+val IMM_DOM_FRAME_STEP_TAC =
+  FIRST [CHANGED_TAC (CONV_TAC (DEPTH_CONV ETA_CONV)),
     CHANGED_TAC (simp_tac bool_ss
       [FORALL_PROD, pair_case_thm, UNCURRY, imm_dom_frame_append_logs,
        IMM_DOM_FRAME_PRIMITIVES]),
@@ -3653,7 +3653,9 @@ val IMM_DOM_FRAME_TAC =
         List.map ASSUME (List.filter is_eq asl)) (asl,w)),
     irule imm_dom_frame_bind_guarded >> conj_tac,
     CHANGED_TAC (rewrite_tac[ignore_bind_def]),
-    gen_tac, strip_tac, conj_tac, CASE_TAC]);
+    gen_tac, strip_tac, conj_tac, CASE_TAC];
+
+val IMM_DOM_FRAME_TAC = rpt IMM_DOM_FRAME_STEP_TAC;
 
 Resume immutables_dom_mutual[ExtCall]:
   qpat_assum `eval_expr _ _ _ = _` (fn th =>
@@ -3663,29 +3665,63 @@ Resume immutables_dom_mutual[ExtCall]:
     end) >>
   simp[Once evaluate_def] >>
   RULE_ASSUM_TAC (REWRITE_RULE [GSYM state_rel_frame_result]) >>
+  TRY IMM_DOM_FRAME_STEP_TAC >>
+  TRY IMM_DOM_FRAME_STEP_TAC >>
+  TRY IMM_DOM_FRAME_STEP_TAC >>
+  TRY IMM_DOM_FRAME_STEP_TAC >>
+  TRY IMM_DOM_FRAME_STEP_TAC >>
+  TRY IMM_DOM_FRAME_STEP_TAC >>
+  TRY IMM_DOM_FRAME_STEP_TAC >>
+  TRY IMM_DOM_FRAME_STEP_TAC >>
   IMM_DOM_FRAME_TAC >|
   [suspend "return_path_1", suspend "return_path_2",
    suspend "return_path_3", suspend "return_path_4"]
 QED
 
-(* Normalize both sides of the operational guards, then match the complete
-   guard instead of repeatedly searching for an arbitrary conjunct. *)
-val IMM_DOM_FRAME_IH_TAC =
-  gvs[oneTheory.one, ignore_bind_def, append_logs_def, return_def] >>
+(* Reduce guarded return paths one implication at a time to keep the
+   large ExtCall induction hypotheses outside the simplifier. *)
+val IMM_DOM_FRAME_IH_STEP_TAC =
   FIRST [first_assum ACCEPT_TAC,
-    first_x_assum (fn th => drule_all th >> simp[] >> NO_TAC)];
+    first_x_assum (fn th =>
+      if is_imp (snd (strip_forall (concl th))) then
+        drule_at Any th >> simp_tac bool_ss [] >> strip_tac
+      else NO_TAC)];
 
 Resume immutables_dom_mutual[return_path_1]:
-  IMM_DOM_FRAME_IH_TAC
+  simp_tac bool_ss [oneTheory.one, ignore_bind_def, append_logs_def, return_def] >>
+  TRY IMM_DOM_FRAME_IH_STEP_TAC >>
+  TRY IMM_DOM_FRAME_IH_STEP_TAC >>
+  TRY IMM_DOM_FRAME_IH_STEP_TAC >>
+  TRY IMM_DOM_FRAME_IH_STEP_TAC >>
+  rpt IMM_DOM_FRAME_IH_STEP_TAC >>
+  metis_tac[ignore_bind_def, append_logs_def, return_def]
 QED
 Resume immutables_dom_mutual[return_path_2]:
-  IMM_DOM_FRAME_IH_TAC
+  simp_tac bool_ss [oneTheory.one, ignore_bind_def, append_logs_def, return_def] >>
+  TRY IMM_DOM_FRAME_IH_STEP_TAC >>
+  TRY IMM_DOM_FRAME_IH_STEP_TAC >>
+  TRY IMM_DOM_FRAME_IH_STEP_TAC >>
+  TRY IMM_DOM_FRAME_IH_STEP_TAC >>
+  rpt IMM_DOM_FRAME_IH_STEP_TAC >>
+  metis_tac[ignore_bind_def, append_logs_def, return_def]
 QED
 Resume immutables_dom_mutual[return_path_3]:
-  IMM_DOM_FRAME_IH_TAC
+  simp_tac bool_ss [oneTheory.one, ignore_bind_def, append_logs_def, return_def] >>
+  TRY IMM_DOM_FRAME_IH_STEP_TAC >>
+  TRY IMM_DOM_FRAME_IH_STEP_TAC >>
+  TRY IMM_DOM_FRAME_IH_STEP_TAC >>
+  TRY IMM_DOM_FRAME_IH_STEP_TAC >>
+  rpt IMM_DOM_FRAME_IH_STEP_TAC >>
+  metis_tac[ignore_bind_def, append_logs_def, return_def]
 QED
 Resume immutables_dom_mutual[return_path_4]:
-  IMM_DOM_FRAME_IH_TAC
+  simp_tac bool_ss [oneTheory.one, ignore_bind_def, append_logs_def, return_def] >>
+  TRY IMM_DOM_FRAME_IH_STEP_TAC >>
+  TRY IMM_DOM_FRAME_IH_STEP_TAC >>
+  TRY IMM_DOM_FRAME_IH_STEP_TAC >>
+  TRY IMM_DOM_FRAME_IH_STEP_TAC >>
+  rpt IMM_DOM_FRAME_IH_STEP_TAC >>
+  metis_tac[ignore_bind_def, append_logs_def, return_def]
 QED
 
 Finalise immutables_dom_mutual

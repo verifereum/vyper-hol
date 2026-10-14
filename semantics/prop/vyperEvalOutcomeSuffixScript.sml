@@ -177,13 +177,7 @@ Proof
   irule outcomes_frame_state_preserving >>
   metis_tac[resolve_array_element_state]
 QED
-
-Theorem outcomes_frame_assignment:
-  (!cx tgt op. outcomes_frame (assign_target cx tgt op)) /\
-  (!cx tgts vs. outcomes_frame (assign_targets cx tgts vs))
-Proof
-  ho_match_mp_tac assign_target_ind >> rpt conj_tac >> rpt gen_tac >>
-  simp[Once assign_target_def, FORALL_PROD] >> rpt strip_tac >>
+val OUTCOMES_ASSIGN_TAC =
   rpt (FIRST [CHANGED_TAC (simp_tac bool_ss
       [FORALL_PROD, pair_case_thm, UNCURRY, outcomes_frame_reads,
        outcomes_frame_primitives, outcomes_frame_assign_result,
@@ -193,7 +187,30 @@ Proof
     irule outcomes_frame_bind >> conj_tac,
     CHANGED_TAC (rewrite_tac[ignore_bind_def]),
     irule outcomes_frame_cond >> conj_tac,
-    gen_tac, CASE_TAC])
+    gen_tac, CASE_TAC]);
+
+
+Theorem outcomes_frame_assignment:
+  (!cx tgt op. outcomes_frame (assign_target cx tgt op)) /\
+  (!cx tgts vs. outcomes_frame (assign_targets cx tgts vs))
+Proof
+  ho_match_mp_tac assign_target_ind >> rpt conj_tac >> rpt gen_tac >>
+  simp[Once assign_target_def, FORALL_PROD] >> rpt strip_tac
+  >- (rpt (FIRST [
+        CHANGED_TAC (simp_tac bool_ss
+          [FORALL_PROD, pair_case_thm, UNCURRY, outcomes_frame_reads,
+           outcomes_frame_primitives, outcomes_frame_assign_result]),
+        first_assum ACCEPT_TAC,
+        CHANGED_TAC (rewrite_tac[ignore_bind_def]),
+        irule outcomes_frame_bind >> conj_tac,
+        gen_tac]))
+  >- (irule outcomes_frame_bind >>
+      simp[outcomes_frame_reads] >>
+      gen_tac >> irule outcomes_frame_bind >>
+      simp[outcomes_frame_reads] >>
+      gen_tac >> Cases_on `v` >> simp[] >>
+      OUTCOMES_ASSIGN_TAC) >>
+  OUTCOMES_ASSIGN_TAC
 QED
 
 Theorem outcomes_frame_bind_guarded:
@@ -232,6 +249,10 @@ Theorem outcomes_frame_create[simp]:
   outcomes_frame (eval_create cx kind has_salt rof arg_tys vs)
 Proof
   simp[eval_create_def, create_soft_failure_def] >>
+  irule outcomes_frame_bind >> simp[] >> gen_tac >>
+  irule outcomes_frame_bind >> simp[] >> gen_tac >>
+  irule outcomes_frame_bind >> simp[] >> gen_tac >>
+  irule outcomes_frame_bind >> simp[] >> gen_tac >>
   rpt (FIRST [CHANGED_TAC (simp[FORALL_PROD]),
     irule outcomes_frame_bind >> conj_tac,
     irule outcomes_frame_ignore_bind >> conj_tac,
@@ -448,22 +469,29 @@ val outcomes_suffix_frame_simps =
        outcomes_frame_assign_result, outcomes_frame_resolve_array,
        outcomes_frame_adopt, outcomes_frame_raw_call]));
 
-val OUTCOMES_SUFFIX_TAC =
-  rpt (FIRST [CHANGED_TAC (simp_tac bool_ss
-      ([FORALL_PROD, pair_case_thm, UNCURRY] @ outcomes_suffix_frame_simps)),
-    first_assum ACCEPT_TAC,
+val OUTCOMES_SUFFIX_STEP_TAC =
+  FIRST [first_assum ACCEPT_TAC,
     MATCH_ACCEPT_TAC outcomes_suffix_read,
     MATCH_ACCEPT_TAC outcomes_suffix_take,
-    CHANGED_TAC (fn (asl,w) =>
-      simp_tac (bool_ss ++ numSimps.ARITH_ss) (pair_case_thm :: UNCURRY ::
-        List.map ASSUME (List.filter is_eq asl)) (asl,w)),
     irule outcomes_suffix_bind_guarded >> conj_tac,
     CHANGED_TAC (rewrite_tac[ignore_bind_def]),
     irule outcomes_suffix_finally >> conj_tac,
     irule outcomes_suffix_try >> conj_tac,
     CHANGED_TAC (simp_tac bool_ss [switch_BoolV_def]),
+    CHANGED_TAC (simp_tac bool_ss
+      ([FORALL_PROD, pair_case_thm, UNCURRY] @ outcomes_suffix_frame_simps)),
+    CHANGED_TAC (fn (asl,w) =>
+      simp_tac (bool_ss ++ numSimps.ARITH_ss) (pair_case_thm :: UNCURRY ::
+        List.map ASSUME (List.filter is_eq asl)) (asl,w)),
     gen_tac, (strip_tac >> fs[ignore_bind_def]),
-    conj_tac, CASE_TAC]);
+    conj_tac, CASE_TAC];
+
+val OUTCOMES_SUFFIX_TAC = rpt OUTCOMES_SUFFIX_STEP_TAC;
+val OUTCOMES_SUFFIX_BRANCH_TAC =
+  OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >>
+  rpt (FIRST [first_assum ACCEPT_TAC,
+    first_x_assum (fn th => drule_at Any th >> simp[] >> strip_tac)]);
+
 
 Theorem eval_outcomes_suffix_mutual:
   (!cx s. outcomes_suffix (eval_stmt cx s)) /\
@@ -478,15 +506,106 @@ Theorem eval_outcomes_suffix_mutual:
 Proof
   ho_match_mp_tac evaluate_ind >> rpt conj_tac >> rpt gen_tac >>
   TRY strip_tac >> TRY (rename1 `ExtCall` >> suspend "ExtCall") >>
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >>
-  rpt (FIRST [first_assum ACCEPT_TAC,
-    first_x_assum (fn th => drule_at Any th >> simp[] >> strip_tac)])
+  simp[Once evaluate_def] >>
+  simp_tac bool_ss
+    ([FORALL_PROD, pair_case_thm, UNCURRY] @ outcomes_suffix_frame_simps) >|
+  [OUTCOMES_SUFFIX_BRANCH_TAC, OUTCOMES_SUFFIX_BRANCH_TAC,
+   OUTCOMES_SUFFIX_BRANCH_TAC, OUTCOMES_SUFFIX_BRANCH_TAC,
+   OUTCOMES_SUFFIX_BRANCH_TAC, OUTCOMES_SUFFIX_BRANCH_TAC,
+   OUTCOMES_SUFFIX_BRANCH_TAC, OUTCOMES_SUFFIX_BRANCH_TAC,
+   OUTCOMES_SUFFIX_BRANCH_TAC, OUTCOMES_SUFFIX_BRANCH_TAC,
+   OUTCOMES_SUFFIX_BRANCH_TAC, OUTCOMES_SUFFIX_BRANCH_TAC,
+   OUTCOMES_SUFFIX_BRANCH_TAC, OUTCOMES_SUFFIX_BRANCH_TAC,
+   OUTCOMES_SUFFIX_BRANCH_TAC, OUTCOMES_SUFFIX_BRANCH_TAC,
+   OUTCOMES_SUFFIX_BRANCH_TAC, OUTCOMES_SUFFIX_BRANCH_TAC,
+   OUTCOMES_SUFFIX_BRANCH_TAC, OUTCOMES_SUFFIX_BRANCH_TAC,
+   OUTCOMES_SUFFIX_BRANCH_TAC, OUTCOMES_SUFFIX_BRANCH_TAC,
+   OUTCOMES_SUFFIX_BRANCH_TAC, OUTCOMES_SUFFIX_BRANCH_TAC,
+   OUTCOMES_SUFFIX_BRANCH_TAC, OUTCOMES_SUFFIX_BRANCH_TAC,
+   OUTCOMES_SUFFIX_BRANCH_TAC, OUTCOMES_SUFFIX_BRANCH_TAC,
+   OUTCOMES_SUFFIX_BRANCH_TAC, OUTCOMES_SUFFIX_BRANCH_TAC,
+   OUTCOMES_SUFFIX_BRANCH_TAC, OUTCOMES_SUFFIX_BRANCH_TAC,
+   OUTCOMES_SUFFIX_BRANCH_TAC,
+   (TRY OUTCOMES_SUFFIX_STEP_TAC >>
+    TRY OUTCOMES_SUFFIX_STEP_TAC >>
+    TRY OUTCOMES_SUFFIX_STEP_TAC >>
+    TRY OUTCOMES_SUFFIX_STEP_TAC >>
+    TRY OUTCOMES_SUFFIX_STEP_TAC >>
+    TRY OUTCOMES_SUFFIX_STEP_TAC >>
+    TRY OUTCOMES_SUFFIX_STEP_TAC >>
+    TRY OUTCOMES_SUFFIX_STEP_TAC >>
+    OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >>
+    rpt (FIRST [first_assum ACCEPT_TAC,
+      first_x_assum (fn th => drule_at Any th >> simp[] >> strip_tac)])),
+   OUTCOMES_SUFFIX_BRANCH_TAC, OUTCOMES_SUFFIX_BRANCH_TAC,
+   OUTCOMES_SUFFIX_BRANCH_TAC, OUTCOMES_SUFFIX_BRANCH_TAC,
+   OUTCOMES_SUFFIX_BRANCH_TAC, OUTCOMES_SUFFIX_BRANCH_TAC,
+   OUTCOMES_SUFFIX_BRANCH_TAC]
 QED
 
 Resume eval_outcomes_suffix_mutual[ExtCall]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >>
-  rpt (FIRST [first_assum ACCEPT_TAC,
-    first_x_assum (fn th => drule_at Any th >> simp[] >> strip_tac)])
+  simp[Once evaluate_def] >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC >>
+  TRY OUTCOMES_SUFFIX_STEP_TAC
+  >| [OUTCOMES_SUFFIX_TAC >>
+      Cases_on `drv` >> qpat_x_assum `IS_SOME _` mp_tac >> simp[] >>
+      rpt (FIRST [first_assum ACCEPT_TAC,
+        first_x_assum (fn th => drule_at Any th >> simp[] >> strip_tac)]),
+      OUTCOMES_SUFFIX_TAC >>
+      rpt (FIRST [first_assum ACCEPT_TAC,
+        first_x_assum (fn th => drule_at Any th >> simp[] >> strip_tac)]),
+      OUTCOMES_SUFFIX_TAC >>
+      rpt (FIRST [first_assum ACCEPT_TAC,
+        first_x_assum (fn th => drule_at Any th >> simp[] >> strip_tac)]),
+      OUTCOMES_SUFFIX_TAC >>
+      rpt (FIRST [first_assum ACCEPT_TAC,
+        first_x_assum (fn th => drule_at Any th >> simp[] >> strip_tac)])]
 QED
 
 Finalise eval_outcomes_suffix_mutual
