@@ -351,7 +351,7 @@ Proof
   gvs[compile_unsafe_binop_def, comp_return_def,
       comp_ignore_bind_def, comp_bind_def] >>
   pairarg_tac >> gvs[] >>
-  rename [`emit_op opc [x; y] st = (result, cs')`] >>
+  rename1 `emit_op opc [x; y] st = (result, cs')` >>
   Cases_on `bits < 256` >> gvs[comp_return_def]
   >- ((* trunc case: bits < 256 *)
     Cases_on `is_signed` >> gvs[]
@@ -974,9 +974,9 @@ Proof
   rpt strip_tac >>
   gvs[compile_select_def, comp_bind_def] >>
   pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
-  rename [`emit_op XOR [then_op; else_op] st = (diff_op, cs1)`,
-          `emit_op MUL [cond_op; diff_op] cs1 = (scaled_op, cs2)`,
-          `emit_op XOR [else_op; scaled_op] cs2 = (op, st')`] >>
+  rename1 `emit_op XOR [then_op; else_op] st = (diff_op, cs1)` >>
+  rename1 `emit_op MUL [cond_op; diff_op] cs1 = (scaled_op, cs2)` >>
+  rename1 `emit_op XOR [else_op; scaled_op] cs2 = (op, st')` >>
   (* Step 1: XOR(then, else) → diff *)
   `step_inst_base (mk_inst st.cs_next_id XOR [then_op; else_op]
      [STRING #"%" (toString st.cs_next_var)]) ss =
@@ -1110,7 +1110,7 @@ Proof
   gvs[compile_builtin_min_def, comp_bind_def] >>
   Cases_on `use_unsigned` >> gvs[] >>
   pairarg_tac >> gvs[] >>
-  rename [`emit_op _ [a; b] st = (cmp_op, cs1)`]
+  rename1 `emit_op _ [a; b] st = (cmp_op, cs1)`
   >- suspend "unsigned"
   >> suspend "signed"
 QED
@@ -1170,7 +1170,7 @@ Proof
   gvs[compile_builtin_max_def, comp_bind_def] >>
   Cases_on `use_unsigned` >> gvs[] >>
   pairarg_tac >> gvs[] >>
-  rename [`emit_op _ [a; b] st = (cmp_op, cs1)`]
+  rename1 `emit_op _ [a; b] st = (cmp_op, cs1)`
   >- ( (* unsigned: GT → if w2n a > w2n b then a else b *)
     `∀ id out s.
        eval_operand a s = SOME av ∧ eval_operand b s = SOME bv ⇒
@@ -1373,13 +1373,13 @@ Proof
   rpt strip_tac >>
   gvs[compile_builtin_abs_def, comp_bind_def, comp_ignore_bind_def] >>
   rpt (pairarg_tac >> gvs[]) >>
-  rename [`emit_op SUB [Lit 0w; val_op] st = (neg_op, cs1)`,
-          `emit_op SLT [val_op; Lit 0w] cs1 = (isneg_op, cs2)`,
-          `emit_op EQ [val_op; neg_op] cs2 = (ismin_op, cs3)`,
-          `emit_op AND [isneg_op; ismin_op] cs3 = (bad_op, cs4)`,
-          `emit_op ISZERO [bad_op] cs4 = (notbad_op, cs5)`,
-          `emit_void ASSERT [notbad_op] cs5 = (_, cs6)`,
-          `compile_select isneg_op neg_op val_op cs6 = (op, st')`] >>
+  rename1 `emit_op SUB [Lit 0w; val_op] st = (neg_op, cs1)` >>
+  rename1 `emit_op SLT [val_op; Lit 0w] cs1 = (isneg_op, cs2)` >>
+  rename1 `emit_op EQ [val_op; neg_op] cs2 = (ismin_op, cs3)` >>
+  rename1 `emit_op AND [isneg_op; ismin_op] cs3 = (bad_op, cs4)` >>
+  rename1 `emit_op ISZERO [bad_op] cs4 = (notbad_op, cs5)` >>
+  rename1 `emit_void ASSERT [notbad_op] cs5 = (_, cs6)` >>
+  rename1 `compile_select isneg_op neg_op val_op cs6 = (op, st')` >>
   imp_res_tac emit_op_extends >>
   imp_res_tac emit_void_extends >>
   imp_res_tac compile_select_extends >>
@@ -1838,10 +1838,10 @@ Proof
   rpt (pairarg_tac >> gvs[]) >>
   imp_res_tac emit_op_extends >>
   imp_res_tac compile_select_extends >>
-  rename [`emit_op SLT [val_op; Lit 0w] st = (is_neg_op, cs1)`,
-          `emit_op SUB [val_op; Lit (n2w (divisor - 1))] cs1 = (adj_op, cs2)`,
-          `compile_select is_neg_op adj_op val_op cs2 = (input_op, cs3)`,
-          `emit_op SDIV [input_op; Lit (n2w divisor)] cs3 = (op, st')`] >>
+  rename1 `emit_op SLT [val_op; Lit 0w] st = (is_neg_op, cs1)` >>
+  rename1 `emit_op SUB [val_op; Lit (n2w (divisor - 1))] cs1 = (adj_op, cs2)` >>
+  rename1 `compile_select is_neg_op adj_op val_op cs2 = (input_op, cs3)` >>
+  rename1 `emit_op SDIV [input_op; Lit (n2w divisor)] cs3 = (op, st')` >>
   (* Step 1: SLT *)
   `eval_operand (Lit 0w) ss = SOME 0w` by simp[eval_operand_lit] >>
   `step_inst_base (mk_inst st.cs_next_id SLT [val_op; Lit 0w]
@@ -1920,10 +1920,10 @@ Proof
   rpt (pairarg_tac >> gvs[]) >>
   imp_res_tac emit_op_extends >>
   imp_res_tac compile_select_extends >>
-  rename [`emit_op SGT [val_op; Lit 0w] st = (is_pos_op, cs1)`,
-          `emit_op ADD [val_op; Lit (n2w (divisor - 1))] cs1 = (adj_op, cs2)`,
-          `compile_select is_pos_op adj_op val_op cs2 = (input_op, cs3)`,
-          `emit_op SDIV [input_op; Lit (n2w divisor)] cs3 = (op, st')`] >>
+  rename1 `emit_op SGT [val_op; Lit 0w] st = (is_pos_op, cs1)` >>
+  rename1 `emit_op ADD [val_op; Lit (n2w (divisor - 1))] cs1 = (adj_op, cs2)` >>
+  rename1 `compile_select is_pos_op adj_op val_op cs2 = (input_op, cs3)` >>
+  rename1 `emit_op SDIV [input_op; Lit (n2w divisor)] cs3 = (op, st')` >>
   (* Step 1: SGT *)
   `eval_operand (Lit 0w) ss = SOME 0w` by simp[eval_operand_lit] >>
   `step_inst_base (mk_inst st.cs_next_id SGT [val_op; Lit 0w]
@@ -2074,14 +2074,14 @@ Proof
   rpt strip_tac >>
   gvs[compile_extract32_def, comp_bind_def, comp_ignore_bind_def] >>
   rpt (pairarg_tac >> gvs[]) >>
-  rename [`emit_op MLOAD [src_ptr] st = (src_len, cs1)`,
-          `emit_op ADD [src_ptr; Lit 32w] cs1 = (src_data, cs2)`,
-          `emit_op ADD [start_op; Lit 32w] cs2 = (end_op, cs3)`,
-          `emit_op GT [end_op; src_len] cs3 = (oob, cs4)`,
-          `emit_op ISZERO [oob] cs4 = (ok_op, cs5)`,
-          `emit_void ASSERT [ok_op] cs5 = (_, cs6)`,
-          `emit_op ADD [src_data; start_op] cs6 = (load_ptr, cs7)`,
-          `emit_op MLOAD [load_ptr] cs7 = (op, st')`] >>
+  rename1 `emit_op MLOAD [src_ptr] st = (src_len, cs1)` >>
+  rename1 `emit_op ADD [src_ptr; Lit 32w] cs1 = (src_data, cs2)` >>
+  rename1 `emit_op ADD [start_op; Lit 32w] cs2 = (end_op, cs3)` >>
+  rename1 `emit_op GT [end_op; src_len] cs3 = (oob, cs4)` >>
+  rename1 `emit_op ISZERO [oob] cs4 = (ok_op, cs5)` >>
+  rename1 `emit_void ASSERT [ok_op] cs5 = (_, cs6)` >>
+  rename1 `emit_op ADD [src_data; start_op] cs6 = (load_ptr, cs7)` >>
+  rename1 `emit_op MLOAD [load_ptr] cs7 = (op, st')` >>
   imp_res_tac emit_op_extends >>
   imp_res_tac emit_void_extends >>
   (* Step 1: MLOAD[src_ptr] → src_len = mload(w2n pv) ss *)

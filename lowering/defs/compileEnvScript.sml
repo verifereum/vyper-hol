@@ -314,7 +314,7 @@ Datatype:
        as hash-0/no-arg events. *)
     ce_event_info : string -> (num # type list # bool list) option;
     (* Type environment used by ABI conversion for structs/flags/interfaces. *)
-    ce_type_env : (num, type_args) fmap;
+    ce_type_env : (nsid, type_args) fmap;
     (* Internal return: how many return values passed on stack (0 = memory return).
        Set from func_t.returns_stack_count() at function entry. *)
     ce_returns_count : num;
@@ -539,7 +539,7 @@ Definition sfields_tenv_consistent_def:
   sfields_tenv_consistent sfields tenv ⇔
     (* Every struct in tenv exists in sfields with matching field types *)
     (∀ nsid args.
-       FLOOKUP tenv (type_key nsid) = SOME (StructArgs args) ⇒
+       FLOOKUP tenv nsid = SOME (StructArgs args) ⇒
        ∃ fields.
          FLOOKUP sfields (nsid_to_string nsid) = SOME fields ∧
          MAP FST fields = MAP FST args ∧
@@ -549,7 +549,7 @@ Definition sfields_tenv_consistent_def:
        FLOOKUP sfields name = SOME fields ⇒
        ∃ nsid args.
          name = nsid_to_string nsid ∧
-         FLOOKUP tenv (type_key nsid) = SOME (StructArgs args) ∧
+         FLOOKUP tenv nsid = SOME (StructArgs args) ∧
          MAP FST fields = MAP FST args ∧
          MAP (FST o SND) fields = MAP SND args)
 End
