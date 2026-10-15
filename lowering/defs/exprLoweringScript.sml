@@ -2265,8 +2265,8 @@ Definition compile_call_def:
       (case return_buf of
          SOME rbuf => (LocatedValue ret_ty (base_ptr rbuf), st4)
        | NONE => (StackValue ret_ty (Lit 0w), st4))) ∧
-  compile_call cfn cenv ret_ty ty (ExtCall is_static (func_name, arg_types,
-                                           return_type))
+  compile_call cfn cenv ret_ty ty (ExtCall is_static skip_contract_check
+                                     (func_name, arg_types, return_type))
               args default_ret st =
     (case args of
        [] => let (_, st') = emit_inst INVALID [] [] st in
@@ -2297,7 +2297,6 @@ Definition compile_call_def:
        let min_return_size = abi_static_size cenv.ce_struct_fields wrapped_return in
        let ret_mem_bytes = type_memory_bytes cenv return_type in
        let method_id_val = cenv.ce_method_id func_name in
-       let skip_contract_check = F in
        let (has_default, default_op, st4) =
          case default_ret of
            SOME def_e =>

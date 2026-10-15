@@ -128,6 +128,7 @@ Datatype:
   ; scopes: scope list
   ; accounts: evm_accounts
   ; tStorage: transient_storage
+  ; pending_deletions: address list
   ; outcomes: extCallOracle$call_outcome list option
   ; requests: extCallOracle$call_request list
   |>
@@ -140,6 +141,7 @@ Definition empty_state_def:
     logs := [];
     scopes := [];
     tStorage := empty_transient_storage;
+    pending_deletions := [];
     outcomes := NONE;
     requests := []
   |>
@@ -156,6 +158,20 @@ Definition return_def:
 End
 
 val () = cv_auto_trans return_def;
+
+(* writing logs *)
+
+Definition push_log_def:
+  push_log log st = return () $ st with logs := st.logs ++ [log]
+End
+
+val () = cv_auto_trans push_log_def;
+
+Definition append_logs_def:
+  append_logs logs st = return () $ st with logs := st.logs ++ logs
+End
+
+val () = cv_auto_trans append_logs_def;
 
 Definition raise_def:
   raise e s = (INR e, s) : α evaluation_result
@@ -355,6 +371,17 @@ val () = cv_auto_trans get_transient_storage_def;
 
 Definition update_transient_def:
   update_transient f st = return () (st with tStorage updated_by f)
+End
+
+Definition get_pending_deletions_def:
+  get_pending_deletions st = return st.pending_deletions st
+End
+
+val () = cv_auto_trans get_pending_deletions_def;
+
+Definition update_pending_deletions_def:
+  update_pending_deletions f st =
+    return () (st with pending_deletions updated_by f)
 End
 
 Definition get_storage_backend_def:

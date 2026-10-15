@@ -112,6 +112,8 @@ Theorem outcomes_frame_primitives[simp]:
   outcomes_frame (new_variable id ty v) /\
   outcomes_frame (update_accounts fa) /\ outcomes_frame (update_transient ft) /\
   outcomes_frame (append_logs ls) /\ outcomes_frame (push_log lg) /\
+  outcomes_frame get_pending_deletions /\
+  outcomes_frame (update_pending_deletions fp) /\
   outcomes_frame (get_immutables cx src) /\
   outcomes_frame (set_immutable cx src nm ty v) /\
   outcomes_frame (get_storage_backend cx transient) /\
@@ -126,6 +128,7 @@ Proof
     get_scopes_def, set_scopes_def, push_scope_def, pop_scope_def,
     push_scope_with_var_def, new_variable_def, update_accounts_def,
     update_transient_def, append_logs_def, push_log_def,
+    get_pending_deletions_def, update_pending_deletions_def,
     get_immutables_def, get_address_immutables_def,
     set_immutable_def, set_address_immutables_def,
     get_storage_backend_def, set_storage_backend_def, write_storage_slot_def,

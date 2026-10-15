@@ -464,7 +464,7 @@ Proof
   Cases_on `eval_exprs cx es st` >> Cases_on `q` >> simp[] >>
   strip_tac >>
   first_x_assum drule >> strip_tac >>
-  drule eval_create_preserves_non_accounts >> strip_tac >> gvs[]
+  drule eval_create_preserves_scopes_immutables >> strip_tac >> gvs[]
 QED
 
 (* Goal 17: ExtCall (exact evaluate_ind shape) *)
@@ -706,8 +706,8 @@ val EXT_CALL_DOM_FINISH_TAC =
 
 Resume eval_mutual_preserves_scopes_dom[ExtCall]:
   rpt strip_tac >>
-  rename1 `eval_expr cx (Call loc (ExtCall stat (func_name,arg_types,ret_type)) es drv) st = _` >>
-  qpat_x_assum `eval_expr _ (Call _ (ExtCall _ _) _ _) _ = _` mp_tac >>
+  rename1 `eval_expr cx (Call loc (ExtCall stat skip_check (func_name,arg_types,ret_type)) es drv) st = _` >>
+  qpat_x_assum `eval_expr _ (Call _ (ExtCall _ _ _) _ _) _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, ignore_bind_def] >>
   Cases_on `eval_exprs cx es st` >>
   rename1 `eval_exprs cx es st = (args_result,st_args)` >>

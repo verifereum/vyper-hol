@@ -21,7 +21,7 @@ Definition task090_interface_calls_program_def:
        ([] : expr list) (TupleT [BaseT (IntT 128); BaseT BoolT])
        [Return (SOME
           (Call (TupleT [BaseT (IntT 128); BaseT BoolT])
-             (ExtCall T
+             (ExtCall T F
                 ("inspect", [BaseT (IntT 128); BaseT BoolT],
                  TupleT [BaseT (IntT 128); BaseT BoolT]))
              [Name (BaseT AddressT) "target";
@@ -32,7 +32,7 @@ Definition task090_interface_calls_program_def:
        ([] : expr list) (BaseT BoolT)
        [Return (SOME
           (Call (BaseT BoolT)
-             (ExtCall F ("update", [BaseT (UintT 256)], BaseT BoolT))
+             (ExtCall F F ("update", [BaseT (UintT 256)], BaseT BoolT))
              [Name (BaseT AddressT) "target";
               Builtin (BaseT (UintT 256)) (Env ValueSent) [];
               Name (BaseT (UintT 256)) "x"] NONE))]]

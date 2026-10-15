@@ -5,7 +5,7 @@ Ancestors
   rich_list cv cv_std vfmState vfmContext vfmCompute[ignore_grammar]
   vfmExecution[ignore_grammar] vyperAST vyperABI
   vyperMisc vyperValue vyperValueOperation vyperStorage vyperContext vyperState
-  vyperEvent vyperCreate vyperRuntimeAccounts
+  vyperEvent vyperEvmBoundary vyperCreate vyperRuntimeAccounts
 Libs
   cv_transLib wordsLib monadsyntax
 
@@ -15,19 +15,6 @@ val () = overload_on ("call_outcome_success", Term.prim_mk_const
   {Thy = "extCallOracle", Name = "recordtype.call_outcome.seldef.co_success"});
 val () = overload_on ("call_outcome_return_data", Term.prim_mk_const
   {Thy = "extCallOracle", Name = "recordtype.call_outcome.seldef.co_returnData"});
-
-(* writing logs *)
-
-Definition push_log_def:
-  push_log log st = return () $ st with logs := st.logs ++ [log]
-End
-
-Definition append_logs_def:
-  append_logs logs st = return () $ st with logs := st.logs ++ logs
-End
-
-val () = cv_auto_trans push_log_def;
-val () = cv_auto_trans append_logs_def;
 
 (* manipulating (internal call) function stack *)
 
@@ -738,74 +725,16 @@ val () = cv_auto_trans get_range_limits_def;
 
 (* ===== External Call Execution via Verifereum ===== *)
 
-(* Build a transaction record for initial_context.
-   Only the fields used by initial_msg_params matter:
-   - from: becomes msg.sender (caller)
-   - to: target address
-   - value: becomes msg.value
-   - data: becomes msg.data (calldata)
-   - gasLimit: gas available for the call
-   Other fields are unused placeholders. *)
-Definition make_call_tx_def:
-  make_call_tx caller callee value calldata gas_limit : transaction =
-    <| from := caller
-     ; to := SOME callee
-     ; data := calldata
-     ; nonce := 0
-     ; value := value
-     ; gasLimit := gas_limit
-     ; gasPrice := 0
-     ; accessList := []
-     ; blobVersionedHashes := []
-     ; maxFeePerBlobGas := NONE
-     ; maxFeePerGas := NONE
-     ; authorizationList := []
-     |>
-End
-
-val () = cv_auto_trans make_call_tx_def;
-
-(* Build transaction_parameters from Vyper call_txn.
-   These are the transaction-level parameters that persist across calls.
-
-   Maps call_txn fields to Verifereum transaction_parameters. *)
-Definition vyper_to_tx_params_def:
-  vyper_to_tx_params (txn: call_txn) : transaction_parameters =
-    <| origin := txn.origin
-     ; gasPrice := txn.gas_price
-     ; baseFeePerGas := txn.base_fee
-     ; baseFeePerBlobGas := txn.blob_base_fee
-     ; blockNumber := txn.block_number
-     ; blockTimeStamp := txn.time_stamp
-     ; blockCoinBase := txn.coinbase
-     ; blockGasLimit := txn.gas_limit
-     ; prevRandao := n2w txn.prev_randao
-     ; prevHashes := txn.block_hashes
-     ; blobHashes := txn.blob_hashes
-     ; chainId := txn.chain_id
-     ; authRefund := 0
-     |>
-End
-
-val () = cv_auto_trans vyper_to_tx_params_def;
-
-(* Default gas limit for external calls - effectively infinite.
-   TODO(semantic-limitation): this may need to be configurable or supplied by
-   an oracle once external-call gas modelling is formalized. *)
-Definition default_call_gas_limit_def:
-  default_call_gas_limit : num = 2 ** 64
-End
-
-val () = cv_auto_trans default_call_gas_limit_def;
-
+(* Build a transaction record for initial_context via the shared EVM boundary
+   helpers in vyperEvmBoundary. *)
 (* Build execution_state for an external call *)
 Definition make_ext_call_state_def:
   make_ext_call_state caller callee code calldata value_opt
                       accounts tStorage txParams =
-    let gas_limit = default_call_gas_limit in
+    let gas_limit = default_evm_gas_limit in
     let value = (case value_opt of NONE => 0 | SOME v => v) in
     let is_static = IS_NONE value_opt in
-    let tx = make_call_tx caller callee value calldata gas_limit in
+    let tx = make_evm_tx caller callee value calldata gas_limit in
     let ctxt = initial_context callee code is_static empty_return_destination tx in
     (* Transfer value from caller to callee, mirroring EVM CALL behavior.
        The EVM does this in proceed_call before entering the sub-context. *)
@@ -917,6 +846,25 @@ Definition run_ext_call_def:
 End
 
 val () = cv_auto_trans run_ext_call_def;
+
+(* Vyper's EXTCODESIZE check (vyper/codegen/external_call.py): before the
+   call only when no return data is expected; calls with a return type rely
+   on the returndatasize check instead.  skip_contract_check disables it. *)
+Definition ext_call_has_code_def:
+  ext_call_has_code target accounts ⇔
+    ¬NULL (lookup_account target accounts).code
+End
+
+val () = cv_auto_trans ext_call_has_code_def;
+
+Definition ext_call_precheck_ok_def:
+  ext_call_precheck_ok skip_check ret_type target accounts ⇔
+    case ret_type of
+      NoneT => skip_check ∨ ext_call_has_code target accounts
+    | _ => T
+End
+
+val () = cv_auto_trans ext_call_precheck_ok_def;
 
 (* Shared execution after raw_call operands have been evaluated and decoded.
    Both input forms retain the same static/revert/output and state effects. *)
@@ -1290,7 +1238,7 @@ Definition evaluate_def:
     return $ Value $ NoneV
     od
   od ∧
-  eval_expr cx (Call _ (ExtCall is_static (func_name, arg_types, ret_type)) es drv) = do
+  eval_expr cx (Call _ (ExtCall is_static skip_check (func_name, arg_types, ret_type)) es drv) = do
     vs <- eval_exprs cx es;
     type_check (vs ≠ []) "ExtCall no target";
     target_addr <- lift_option_type (dest_AddressV (HD vs)) "ExtCall target not address";
@@ -1326,8 +1274,10 @@ Definition evaluate_def:
     od
     | NONE => do
     accounts <- get_accounts;
-    (* Vyper reverts if target has no code (EXTCODESIZE == 0) *)
-    check (¬NULL (lookup_account target_addr accounts).code) "ExtCall target has no code";
+    check (ext_call_precheck_ok skip_check ret_type target_addr accounts)
+          "ExtCall target has no code";
+    (* Vyper reverts if target has no code (EXTCODESIZE == 0), see
+         ext_call_precheck_ok for when this check is performed *)
     tStorage <- get_transient_storage;
     txParams <<- vyper_to_tx_params cx.txn;
     caller <<- cx.txn.target;
@@ -1339,8 +1289,12 @@ Definition evaluate_def:
     update_accounts (K accounts');
     update_transient (K tStorage');
     append_logs emitted_logs;
-    if returnData = [] ∧ IS_SOME drv then
+    if returnData = [] ∧ IS_SOME drv then do
+      (* default_return_value path: Vyper checks EXTCODESIZE after the call *)
+      check (skip_check ∨ ext_call_has_code target_addr accounts')
+            "ExtCall target has no code";
       eval_expr cx (THE drv)
+    od
     else do
       ret_val <- lift_sum_runtime (evaluate_abi_decode_return tenv ret_type returnData);
       return $ Value ret_val
@@ -1613,6 +1567,7 @@ Datatype:
   ; layouts: (address, storage_layout # storage_layout) alist  (* (storage, transient) *)
   ; tStorage: transient_storage
   ; logs: log list
+  ; pending_deletions: address list
   |>
 End
 
@@ -1625,6 +1580,7 @@ Definition initial_machine_state_def:
   ; layouts := []
   ; tStorage := empty_transient_storage
   ; logs := []
+  ; pending_deletions := []
   |>
 End
 
@@ -1635,6 +1591,7 @@ Definition initial_state_def:
    ; logs := am.logs
    ; scopes := scs
    ; tStorage := am.tStorage
+   ; pending_deletions := am.pending_deletions
    ; outcomes := NONE
    ; requests := []
    |>
@@ -1651,6 +1608,7 @@ Definition abstract_machine_from_state_def:
    ; layouts := layouts
    ; tStorage := st.tStorage
    ; logs := st.logs
+   ; pending_deletions := st.pending_deletions
    |> : abstract_machine
 End
 
@@ -1852,6 +1810,28 @@ Proof
   rw[call_external_raw_return_def, lookup_raw_return_or_F_def] >> metis_tac[]
 QED
 
+(* SELFDESTRUCT schedules deletion until the enclosing transaction commits. *)
+Definition finalize_pending_deletions_def:
+  finalize_pending_deletions am =
+    am with <| accounts :=
+      vfmExecution$process_deletions am.pending_deletions am.accounts;
+      pending_deletions := [] |>
+End
+
+val () = cv_auto_trans finalize_pending_deletions_def;
+
+Theorem finalize_pending_deletions_metadata[simp]:
+  (finalize_pending_deletions am).sources = am.sources /\
+  (finalize_pending_deletions am).exports = am.exports /\
+  (finalize_pending_deletions am).immutables = am.immutables /\
+  (finalize_pending_deletions am).layouts = am.layouts /\
+  (finalize_pending_deletions am).tStorage = am.tStorage /\
+  (finalize_pending_deletions am).logs = am.logs /\
+  (finalize_pending_deletions am).pending_deletions = []
+Proof
+  simp[finalize_pending_deletions_def]
+QED
+
 Definition call_external_def:
   call_external orc am tx =
   (* Determine which module to use for type environment *)
@@ -1869,7 +1849,9 @@ Definition call_external_def:
   case lookup_exported_function cx am tx.function_name
   of NONE => (INR $ Error (RuntimeError "call lookup_function"), am, [])
    | SOME (mut, nr, args, dflts, ret, body) =>
-       call_external_function orc am cx nr mut ts all_mods args dflts tx.args body ret
+       case call_external_function orc am cx nr mut ts all_mods args dflts tx.args body ret of
+         (INL value, am', rqs) => (INL value, finalize_pending_deletions am', rqs)
+       | failure => failure
 End
 
 (* KEY LEMMA (typing): a safe_cast value of a bytestring type always has raw
@@ -1887,9 +1869,8 @@ Proof
   >> fs[raw_return_bytes_def] >> metis_tac[]
 QED
 
-(* Explicit transaction boundary. Ordinary function entry preserves accumulated
-   logs so that nested and sequential calls can share one transaction trace;
-   callers use this wrapper when starting a fresh top-level transaction. *)
+(* The transaction entry resets logs; call_external commits queued
+   SELFDESTRUCT deletions on a successful return. *)
 Definition clear_machine_logs_def:
   clear_machine_logs (am: abstract_machine) = am with logs := []
 End
@@ -1926,5 +1907,6 @@ Definition load_contract_def:
                 with in_deploy := T in
        case call_external_function orc am cx nr mut ts mods args dflts tx.args body ret
          of (INR e, _, _) => INR e
-          | (_, am, rqs) => INL (am with sources updated_by CONS (addr, mods), rqs)
+          | (_, am', rqs) => INL (finalize_pending_deletions
+                                    (am' with sources updated_by CONS (addr, mods)), rqs)
 End

@@ -406,7 +406,7 @@ fun dest_AnnAssign tm =
 val (IntCall_tm, mk_IntCall_tm, dest_IntCall_tm, is_IntCall) =
   syntax_fns1 "vyperAST" "IntCall"
 val (ExtCall_tm, mk_ExtCall_tm, dest_ExtCall_tm, is_ExtCall) =
-  syntax_fns2 "vyperAST" "ExtCall"
+  syntax_fns3 "vyperAST" "ExtCall"
 val (Send_tm, is_Send) = syntax0 "Send"
 val (RawCallTarget_tm, mk_RawCallTarget_tm, dest_RawCallTarget_tm,
      is_RawCallTarget) = syntax_fns1 "vyperAST" "RawCallTarget"
@@ -602,7 +602,7 @@ fun view_stmt tm =
 
 datatype call_target_view =
     VIntCall of term
-  | VExtCall of term * term
+  | VExtCall of term * term * term
   | VSend
   | VRawCallTarget of term
   | VRawCallCalldataTarget of term
