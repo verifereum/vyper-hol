@@ -675,6 +675,21 @@ Proof
   >- (imp_res_tac lookup_block_label >> simp[])
 QED
 
+Triviality dom_tree_list_induction:
+  ∀P Q.
+    (∀s children. Q children ⇒ P (DNode s children)) ∧
+    Q [] ∧ (∀dtree children. P dtree ∧ Q children ⇒ Q (dtree::children)) ⇒
+    (∀tree. P tree) ∧ (∀children. Q children)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `∀children. EVERY P children ⇒ Q children` by
+    (Induct >> simp[] >> metis_tac[]) >>
+  `∀tree. P tree` by
+    (ho_match_mp_tac dom_tree_induction >>
+     simp[GSYM listTheory.EVERY_MEM] >> metis_tac[]) >>
+  simp[] >> metis_tac[listTheory.EVERY_MEM]
+QED
+
 Triviality rename_blocks_preserves_rel:
   !R.
     (!bb. R bb bb) /\
@@ -697,7 +712,7 @@ Triviality rename_blocks_preserves_rel:
       blocks_rel R bbs (SND (rename_children ctrs stacks bbs succ_map children)))
 Proof
   gen_tac >> strip_tac >>
-  ho_match_mp_tac dom_tree_induction >> rpt conj_tac
+  ho_match_mp_tac dom_tree_list_induction >> rpt conj_tac
   >- (
     rw[] >> rw[Once rename_blocks_def] >>
     Cases_on `lookup_block s bbs`
