@@ -52,6 +52,10 @@ Definition translate_type_def:
   (translate_type ctx (JT_BytesM m) = BaseT (BytesT (Fixed m))) ∧
   (translate_type ctx (JT_String n) = BaseT (StringT n)) ∧
   (translate_type ctx (JT_Bytes n) = BaseT (BytesT (Dynamic n))) ∧
+  (* Legacy JSON ABI interface metadata has no bound. It must be resolved
+     against the callsite before use as a canonical ABI signature. *)
+  (translate_type ctx JT_StringUnbounded = NoneT) ∧
+  (translate_type ctx JT_BytesUnbounded = NoneT) ∧
   (translate_type ctx (JT_StaticArray vt len) =
     ArrayT (translate_type ctx vt) (Fixed len)) ∧
   (translate_type ctx (JT_DynArray vt len) =
@@ -245,8 +249,12 @@ Definition inferred_type_consistent_def:
       (JT_BytesM n') = (n = n')) ∧
   (inferred_type_consistent ctx (BaseT (StringT n))
       (JT_String n') = (n = n')) ∧
+  (inferred_type_consistent ctx (BaseT (StringT n))
+      JT_StringUnbounded = T) ∧
   (inferred_type_consistent ctx (BaseT (BytesT (Dynamic n)))
       (JT_Bytes n') = (n = n')) ∧
+  (inferred_type_consistent ctx (BaseT (BytesT (Dynamic n)))
+      JT_BytesUnbounded = T) ∧
   (inferred_type_consistent ctx (ArrayT ty (Fixed n))
       (JT_StaticArray inferred n') =
     (n = n' ∧ inferred_type_consistent ctx ty inferred)) ∧

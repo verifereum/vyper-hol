@@ -51,7 +51,7 @@ Theorem oracle_initial_state_inert_modes:
          Literal (BaseT (UintT 256)) (IntL 0)] NONE) st =
       (INL (Value NoneV), st) /\
     eval_expr empty_evaluation_context
-      (Call NoneT (ExtCall T ("unused", [], NoneT)) [] NONE) st =
+      (Call NoneT (ExtCall T F ("unused", [], NoneT)) [] NONE) st =
       (INR (Error (TypeError "ExtCall no target")), st)
 Proof
   EVAL_TAC >> simp[return_def, transfer_value_def]
@@ -68,7 +68,7 @@ Theorem oracle_initial_state_inert_modes:
            Literal (BaseT (UintT 256)) (IntL 0)] NONE) st =
         (INL (Value NoneV), st)) /\
     eval_expr empty_evaluation_context
-      (Call NoneT (ExtCall T ("unused", [], NoneT)) [] NONE) st =
+      (Call NoneT (ExtCall T F ("unused", [], NoneT)) [] NONE) st =
       (INR (Error (TypeError "ExtCall no target")), st)
 Proof
   Cases_on `orc` >> EVAL_TAC >> simp[bind_def, return_def, transfer_value_def]

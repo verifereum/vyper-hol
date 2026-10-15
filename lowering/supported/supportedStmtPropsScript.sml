@@ -34,7 +34,7 @@ Theorem supported_all_effect_root_positions:
     [expr_test_internal; expr_test_pop;
      Call NoneT Send [expr_test_address;expr_test_uint] NONE;
      Call (BaseT (UintT 256))
-       (ExtCall T ("remote",[BaseT (UintT 256)],BaseT (UintT 256)))
+       (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)))
        [expr_test_address;expr_test_uint] NONE]
 Proof
   EVAL_TAC

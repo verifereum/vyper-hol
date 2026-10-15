@@ -1695,8 +1695,10 @@ QED
 
 (* Helper: inner pipeline after run_ext_call result destructuring *)
 Theorem extcall_inner_pipeline_imm_dom[local]:
-  ∀cx drv tenv ret_type success returnData accounts' tStorage' emitted_logs s res s'.
-    (success ∧ returnData = [] ∧ IS_SOME drv ⇒
+  ∀cx drv tenv ret_type skip_check target_addr success returnData accounts'
+     tStorage' emitted_logs s res s'.
+    (success ∧ returnData = [] ∧ IS_SOME drv ∧
+     (skip_check ∨ ext_call_has_code target_addr accounts') ⇒
        ∀st res st'. eval_expr cx (THE drv) st = (res,st') ⇒
          preserves_immutables_dom cx st st') ⇒
     do
@@ -1704,7 +1706,11 @@ Theorem extcall_inner_pipeline_imm_dom[local]:
       x <- update_accounts (K accounts');
       x <- update_transient (K tStorage');
       x <- append_logs emitted_logs;
-      if returnData = [] ∧ IS_SOME drv then eval_expr cx (THE drv)
+      if returnData = [] ∧ IS_SOME drv then do
+        x <- check (skip_check ∨ ext_call_has_code target_addr accounts')
+               "ExtCall target has no code";
+        eval_expr cx (THE drv)
+      od
       else
         do
           ret_val <-
@@ -1716,12 +1722,14 @@ Theorem extcall_inner_pipeline_imm_dom[local]:
 Proof
   (* NONE tail: the named contract isolates the concrete installation. *)
   rewrite_tac[GSYM ignore_bind_def, concrete_extcall_tail] >>
-  rw[bind_def, return_def,
+  rw[bind_def, ignore_bind_def, check_def, assert_def, return_def,
      raise_def, lift_sum_def, lift_sum_runtime_def]
   \\ rpt strip_tac \\ gvs[AllCaseEqs(), preserves_immutables_dom_refl]
   \\ TRY (irule preserves_immutables_dom_eq
           >> Cases_on `evaluate_abi_decode_return tenv ret_type returnData`
           >> gvs[return_def, raise_def] >> NO_TAC)
+  (* failed code check after the call *)
+  \\ TRY (irule preserves_immutables_dom_eq >> gvs[] >> NO_TAC)
   \\ irule preserves_immutables_dom_trans
   \\ qmatch_asmsub_abbrev_tac `eval_expr cx (THE drv) s_mid`
   \\ qexists_tac `s_mid`
@@ -1732,7 +1740,7 @@ QED
 
 (* Helper: full ExtCall pipeline preserves immutables dom *)
 Theorem extcall_pipeline_preserves_imm_dom[local]:
-  ∀cx drv func_name arg_types ret_type target_addr value_opt arg_vals
+  ∀cx drv func_name arg_types ret_type skip_check target_addr value_opt arg_vals
      caller txParams s res s'.
     (∀ts calldata accounts tStorage success returnData accounts' tStorage' emitted_logs.
        get_self_code cx = SOME ts ⇒
@@ -1740,7 +1748,8 @@ Theorem extcall_pipeline_preserves_imm_dom[local]:
          SOME calldata ⇒
        run_ext_call caller target_addr calldata value_opt accounts tStorage
          txParams = SOME (success, returnData, accounts', tStorage', emitted_logs) ⇒
-       success ∧ returnData = [] ∧ IS_SOME drv ⇒
+       success ∧ returnData = [] ∧ IS_SOME drv ∧
+       (skip_check ∨ ext_call_has_code target_addr accounts') ⇒
        ∀st res st'. eval_expr cx (THE drv) st = (res,st') ⇒
          preserves_immutables_dom cx st st') ⇒
     do
@@ -1761,7 +1770,11 @@ Theorem extcall_pipeline_preserves_imm_dom[local]:
              x <- update_accounts (K accounts');
              x <- update_transient (K tStorage');
              x <- append_logs emitted_logs;
-             if returnData = [] ∧ IS_SOME drv then eval_expr cx (THE drv)
+             if returnData = [] ∧ IS_SOME drv then do
+               x <- check (skip_check ∨ ext_call_has_code target_addr accounts')
+                      "ExtCall target has no code";
+               eval_expr cx (THE drv)
+             od
              else
                do
                  ret_val <-
@@ -3478,7 +3491,7 @@ Proof
       Cases_on `eval_exprs cx es st` >> Cases_on `q` >> simp[] >>
       strip_tac >>
       first_x_assum drule >> strip_tac >>
-      drule eval_create_preserves_non_accounts >> strip_tac >>
+      drule eval_create_preserves_scopes_immutables >> strip_tac >>
       irule preserves_immutables_dom_trans >> first_assum (irule_at Any) >>
       irule preserves_immutables_dom_eq >> gvs[])
   >- gvs[evaluate_def, return_def, preserves_immutables_dom_refl]
@@ -3629,18 +3642,26 @@ Proof
   simp[state_rel_frame_result]
 QED
 
+(* Match primitive frames directly and decompose the monadic spine before
+   trying depth eta conversion. Avoid repeatedly simplifying the remaining
+   pipeline with the full primitive-frame rewrite set. *)
+val IMM_DOM_FRAME_LEAF_TAC = FIRST (map MATCH_ACCEPT_TAC
+  (imm_dom_frame_append_logs :: IMM_DOM_FRAME_TAKE ::
+   CONJUNCTS IMM_DOM_FRAME_PRIMITIVES));
+
 val IMM_DOM_FRAME_TAC =
-  rpt (FIRST [CHANGED_TAC (CONV_TAC (DEPTH_CONV ETA_CONV)),
-    CHANGED_TAC (simp_tac bool_ss
-      [FORALL_PROD, pair_case_thm, UNCURRY, imm_dom_frame_append_logs,
-       IMM_DOM_FRAME_PRIMITIVES]),
-    first_assum ACCEPT_TAC, MATCH_ACCEPT_TAC IMM_DOM_FRAME_TAKE,
+  rpt (FIRST [
+    CHANGED_TAC (simp_tac bool_ss [FORALL_PROD, pair_case_thm, UNCURRY]),
+    gen_tac, strip_tac, conj_tac,
+    first_assum ACCEPT_TAC,
+    irule imm_dom_frame_bind_guarded >> conj_tac,
+    IMM_DOM_FRAME_LEAF_TAC,
+    CONV_TAC (RAND_CONV (REWR_CONV ignore_bind_def)),
+    CHANGED_TAC (CONV_TAC (DEPTH_CONV ETA_CONV)),
     CHANGED_TAC (fn (asl,w) =>
       simp_tac bool_ss (pair_case_thm :: UNCURRY ::
         List.map ASSUME (List.filter is_eq asl)) (asl,w)),
-    irule imm_dom_frame_bind_guarded >> conj_tac,
-    CHANGED_TAC (rewrite_tac[ignore_bind_def]),
-    gen_tac, strip_tac, conj_tac, CASE_TAC]);
+    CASE_TAC]);
 
 Resume immutables_dom_mutual[ExtCall]:
   qpat_assum `eval_expr _ _ _ = _` (fn th =>
@@ -3655,12 +3676,31 @@ Resume immutables_dom_mutual[ExtCall]:
    suspend "return_path_3", suspend "return_path_4"]
 QED
 
-(* Normalize both sides of the operational guards, then match the complete
-   guard instead of repeatedly searching for an arbitrary conjunct. *)
-val IMM_DOM_FRAME_IH_TAC =
-  gvs[oneTheory.one, ignore_bind_def, append_logs_def, return_def] >>
-  FIRST [first_assum ACCEPT_TAC,
-    first_x_assum (fn th => drule_all th >> simp[] >> NO_TAC)];
+(* Normalise tuple projections and branch substitutions once, then match
+   guards in semantic order. Tuple reconstruction guards close by reflexivity;
+   no context-wide drule search is needed at each monadic step. *)
+fun IMM_DOM_FRAME_IH_TAC (asl,w) =
+  let
+    val normalise = SIMP_RULE bool_ss
+      [oneTheory.one, ignore_bind_def, FST, SND, pair_case_thm, UNCURRY]
+    val raw_facts = List.concat (map (CONJUNCTS o normalise o ASSUME) asl)
+    val substitutions = List.filter (fn th =>
+      is_eq (concl th) andalso
+      (is_var (lhs (concl th)) orelse is_var (rhs (concl th)))) raw_facts
+    val facts = map (SIMP_RULE bool_ss substitutions) raw_facts
+    fun discharge th =
+      if is_imp (snd (strip_forall (concl th))) then
+        discharge (tryfind (MATCH_MP th) facts handle HOL_ERR _ =>
+          let val guard = fst (dest_imp (snd (strip_forall (concl th)))) in
+            MATCH_MP th (REFL (rhs guard))
+          end)
+      else th
+    fun close ih g =
+      ACCEPT_TAC (discharge
+        (PURE_REWRITE_RULE [GSYM AND_IMP_INTRO] ih)) g
+  in
+    FIRST (map close facts) (asl,w)
+  end;
 
 Resume immutables_dom_mutual[return_path_1]:
   IMM_DOM_FRAME_IH_TAC

@@ -323,8 +323,8 @@ signature vyperASTSyntax = sig
   val is_IntCall : term -> bool
 
   val ExtCall_tm : term
-  val mk_ExtCall_tm : term * term -> term
-  val dest_ExtCall_tm : term -> term * term
+  val mk_ExtCall_tm : term * term * term -> term
+  val dest_ExtCall_tm : term -> term * term * term
   val is_ExtCall : term -> bool
 
   val Send_tm : term
@@ -631,7 +631,7 @@ signature vyperASTSyntax = sig
 
   datatype call_target_view =
       VIntCall of term
-    | VExtCall of term * term
+    | VExtCall of term * term * term
     | VSend
     | VRawCallTarget of term
     | VRawCallCalldataTarget of term

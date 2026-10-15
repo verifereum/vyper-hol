@@ -61,7 +61,7 @@ Datatype:
   | LenK eval_continuation
   | TypeBuiltinK type_builtin type eval_continuation
   | CallSendK eval_continuation
-  | ExtCallK bool identifier (type list) type (expr option) eval_continuation
+  | ExtCallK bool bool identifier (type list) type (expr option) eval_continuation
   (* Chain interaction builtin continuations *)
   | RawCallK type raw_call_flags eval_continuation
   | RawCallCalldataK raw_call_flags eval_continuation
@@ -175,8 +175,8 @@ Definition eval_expr_cps_def:
     (case type_check (LENGTH es = 2) "Send args" st of
        (INR ex, st) => AK cx9 (ApplyExc ex) st k
      | (INL (), st) => eval_exprs_cps cx9 es st (CallSendK k)) ∧
-  eval_expr_cps cx10 (Call _ (ExtCall is_static (func_name, arg_types, ret_type)) es drv) st k =
-    eval_exprs_cps cx10 es st (ExtCallK is_static func_name arg_types ret_type drv k) ∧
+  eval_expr_cps cx10 (Call _ (ExtCall is_static skip_check (func_name, arg_types, ret_type)) es drv) st k =
+    eval_exprs_cps cx10 es st (ExtCallK is_static skip_check func_name arg_types ret_type drv k) ∧
   (* Chain interaction builtins *)
   eval_expr_cps cx10 (Call ty (RawCallTarget flags) es _) st k =
     eval_exprs_cps cx10 es st (RawCallK ty flags k) ∧
@@ -399,7 +399,7 @@ Definition apply_exc_def:
   apply_exc cx ex st (LenK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (TypeBuiltinK _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (CallSendK k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (ExtCallK _ _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (ExtCallK _ _ _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (RawCallK _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (RawCallCalldataK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (RawLogK k) = AK cx (ApplyExc ex) st k ∧
@@ -659,7 +659,7 @@ Definition apply_vals_def:
       return $ Value NoneV
       od
     od st) k ∧
-  apply_vals cx vs st (ExtCallK is_static func_name arg_types ret_type drv k) =
+  apply_vals cx vs st (ExtCallK is_static skip_check func_name arg_types ret_type drv k) =
     (case do
       type_check (vs ≠ []) "ExtCall no target";
       target_addr <- lift_option_type (dest_AddressV (HD vs)) "ExtCall target not address";
@@ -695,8 +695,10 @@ Definition apply_vals_def:
       od
       | NONE => do
       accounts <- get_accounts;
-      (* Vyper reverts if target has no code (EXTCODESIZE == 0) *)
-      check (¬NULL (lookup_account target_addr accounts).code) "ExtCall target has no code";
+      (* Vyper reverts if target has no code (EXTCODESIZE == 0), see
+         ext_call_precheck_ok for when this check is performed *)
+      check (ext_call_precheck_ok skip_check ret_type target_addr accounts)
+            "ExtCall target has no code";
       tStorage <- get_transient_storage;
       txParams <<- vyper_to_tx_params cx.txn;
       caller <<- cx.txn.target;
@@ -708,8 +710,11 @@ Definition apply_vals_def:
       update_accounts (K accounts');
       update_transient (K tStorage');
       append_logs emitted_logs;
-      if returnData = [] ∧ IS_SOME drv then
+      if returnData = [] ∧ IS_SOME drv then do
+        check (skip_check ∨ ext_call_has_code target_addr accounts')
+              "ExtCall target has no code";
         return (INL (THE drv))
+      od
       else do
         ret_val <- lift_sum_runtime (evaluate_abi_decode_return tenv ret_type returnData);
         return (INR (Value ret_val))
@@ -1470,7 +1475,6 @@ Proof
     \\ qmatch_goalsub_abbrev_tac`pair_CASE cc1`
     \\ qmatch_goalsub_abbrev_tac`lhs = _`
     \\ qmatch_goalsub_abbrev_tac`pair_CASE cc2`
-    >> qmatch_asmsub_abbrev_tac`monad_bind (lift_option _ _) (λresult. gg result)`
     \\ qunabbrev_tac`lhs`
     >> qmatch_asmsub_abbrev_tac`ignore_bind tc1 _`
     >> Cases_on`tc1 r`
@@ -1507,14 +1511,14 @@ Proof
     >> reverse(Cases_on`pp1=[]`)
     >- (
       disch_then kall_tac >>
-      simp[Abbr`cc1`,Abbr`cc2`,Abbr`gg`,bind_def] >>
+      simp[Abbr`cc1`,Abbr`cc2`,bind_def] >>
       ntac 5 CASE_TAC >> simp[] >>
       Cases_on`q` >> simp[] >>
       Cases_on`q'` >> simp[] >>
       Cases_on`q''` >> simp[] >>
       Cases_on`q'''` >> simp[] >>
       Cases_on`q''''` >> simp[return_def])
-    >> gvs[bind_def,Abbr`gg`] >> disch_then drule
+    >> gvs[bind_def] >> disch_then drule
     >> ntac 4 (
       qmatch_asmsub_abbrev_tac`pair_CASE lot`
       >> Cases_on`lot` >> reverse(Cases_on`q`)
@@ -1523,6 +1527,14 @@ Proof
       >> disch_then drule )
     >> simp[Abbr`cc1`,Abbr`cc2`]
     >> IF_CASES_TAC >> gvs[bind_def,return_def]
+    (* default_return_value path: code check after the call *)
+    >> TRY (
+      qmatch_goalsub_abbrev_tac`check cb "ExtCall target has no code" cs`
+      >> Cases_on`check cb "ExtCall target has no code" cs`
+      >> Cases_on`q` >> simp[]
+      >> qmatch_asmsub_rename_tac`check cb _ cs = (INL uu, _)`
+      >> Cases_on`uu`
+      >> disch_then drule >> simp[] >> NO_TAC)
     >> CASE_TAC >> CASE_TAC >> simp[] )
   *)
   \\ conj_tac >- ( (* IntCall *)
@@ -1740,8 +1752,10 @@ val EXT_CALL_CPS_PREP_TAC =
     get_accounts_def, get_transient_storage_def, update_accounts_def,
     update_transient_def, append_logs_def, raise_def];
 
+(* One branch/progress step at a time: keep each simplification and IH
+   specialization independently visible to holbuild's tactic budget. *)
 val EXT_CALL_CPS_CASES_TAC =
-  rpt (FIRST [first_assum MATCH_ACCEPT_TAC,
+  TRY (FIRST [first_assum MATCH_ACCEPT_TAC,
     CHANGED_TAC (gvs[bind_def, ignore_bind_def, return_def, UNCURRY,
       type_check_def, check_def, assert_def, lift_option_type_def,
       get_accounts_def, get_transient_storage_def, update_accounts_def,
@@ -1765,7 +1779,7 @@ val EXT_CALL_CPS_FINISH_TAC =
 
 Resume eval_cps_eq[ExtCall]:
   rpt strip_tac >>
-  rename1 `ExtCall stat (func_name, arg_types, ret_type)` >>
+  rename1 `ExtCall stat skip_check (func_name, arg_types, ret_type)` >>
   rw[eval_expr_cps_def, evaluate_def, bind_def] >>
   CASE_TAC >> gvs[cont_def] >> reverse CASE_TAC
   >- rw[Once OWHILE_THM, stepk_def, apply_exc_def] >>
@@ -1781,28 +1795,60 @@ Resume eval_cps_eq[ExtCall]:
 QED
 
 Resume eval_cps_eq[static_none_noneT]:
-  EXT_CALL_CPS_PREP_TAC >> EXT_CALL_CPS_CASES_TAC >> EXT_CALL_CPS_FINISH_TAC
+  EXT_CALL_CPS_PREP_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  EXT_CALL_CPS_FINISH_TAC
 QED
 Resume eval_cps_eq[static_none_value]:
-  EXT_CALL_CPS_PREP_TAC >> EXT_CALL_CPS_CASES_TAC >> EXT_CALL_CPS_FINISH_TAC
+  EXT_CALL_CPS_PREP_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  EXT_CALL_CPS_FINISH_TAC
 QED
 Resume eval_cps_eq[static_some_noneT]:
-  EXT_CALL_CPS_PREP_TAC >> EXT_CALL_CPS_CASES_TAC >> EXT_CALL_CPS_FINISH_TAC
+  EXT_CALL_CPS_PREP_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  EXT_CALL_CPS_FINISH_TAC
 QED
 Resume eval_cps_eq[static_some_value]:
-  EXT_CALL_CPS_PREP_TAC >> EXT_CALL_CPS_CASES_TAC >> EXT_CALL_CPS_FINISH_TAC
+  EXT_CALL_CPS_PREP_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  EXT_CALL_CPS_FINISH_TAC
 QED
 Resume eval_cps_eq[nonstatic_none_noneT]:
-  EXT_CALL_CPS_PREP_TAC >> EXT_CALL_CPS_CASES_TAC >> EXT_CALL_CPS_FINISH_TAC
+  EXT_CALL_CPS_PREP_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  EXT_CALL_CPS_FINISH_TAC
 QED
 Resume eval_cps_eq[nonstatic_none_value]:
-  EXT_CALL_CPS_PREP_TAC >> EXT_CALL_CPS_CASES_TAC >> EXT_CALL_CPS_FINISH_TAC
+  EXT_CALL_CPS_PREP_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  EXT_CALL_CPS_FINISH_TAC
 QED
 Resume eval_cps_eq[nonstatic_some_noneT]:
-  EXT_CALL_CPS_PREP_TAC >> EXT_CALL_CPS_CASES_TAC >> EXT_CALL_CPS_FINISH_TAC
+  EXT_CALL_CPS_PREP_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  EXT_CALL_CPS_FINISH_TAC
 QED
 Resume eval_cps_eq[nonstatic_some_value]:
-  EXT_CALL_CPS_PREP_TAC >> EXT_CALL_CPS_CASES_TAC >> EXT_CALL_CPS_FINISH_TAC
+  EXT_CALL_CPS_PREP_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  EXT_CALL_CPS_FINISH_TAC
 QED
 
 Finalise eval_cps_eq

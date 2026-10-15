@@ -579,5 +579,6 @@ Proof
         `am.layouts`,`mods`,`mut`,`nr`,`orc`,`ret`,`rqs`,`runtime_art`,
         `(tx.target,mods)::am.sources`,`tx.target`,`ts`,`tx`,`v`,`tx.args`] >>
      gvs[]) >>
+  irule finalize_pending_deletions_machine_well_typed >>
   irule deployment_source_install_preserves_machine_well_typed >> simp[]
 QED

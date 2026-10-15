@@ -464,7 +464,7 @@ Proof
   Cases_on `eval_exprs cx es st` >> Cases_on `q` >> simp[] >>
   strip_tac >>
   first_x_assum drule >> strip_tac >>
-  drule eval_create_preserves_non_accounts >> strip_tac >> gvs[]
+  drule eval_create_preserves_scopes_immutables >> strip_tac >> gvs[]
 QED
 
 (* Goal 17: ExtCall (exact evaluate_ind shape) *)
@@ -706,8 +706,8 @@ val EXT_CALL_DOM_FINISH_TAC =
 
 Resume eval_mutual_preserves_scopes_dom[ExtCall]:
   rpt strip_tac >>
-  rename1 `eval_expr cx (Call loc (ExtCall stat (func_name,arg_types,ret_type)) es drv) st = _` >>
-  qpat_x_assum `eval_expr _ (Call _ (ExtCall _ _) _ _) _ = _` mp_tac >>
+  rename1 `eval_expr cx (Call loc (ExtCall stat skip_check (func_name,arg_types,ret_type)) es drv) st = _` >>
+  qpat_x_assum `eval_expr _ (Call _ (ExtCall _ _ _) _ _) _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, ignore_bind_def] >>
   Cases_on `eval_exprs cx es st` >>
   rename1 `eval_exprs cx es st = (args_result,st_args)` >>
@@ -862,13 +862,22 @@ Resume eval_mutual_preserves_scopes_dom[ExtCall]:
    suspend "return_path_3", suspend "return_path_4"]
 QED
 
-val SCOPES_DOM_IH_TAC =
-  gvs[oneTheory.one, ignore_bind_def] >>
-  rpt (FIRST [first_assum ACCEPT_TAC,
-    first_x_assum (fn th =>
+(* Normalize unit values and guard equalities with only bool_ss, then match
+   guards in semantic order without context-wide simplification or drule. *)
+fun SCOPES_DOM_IH_TAC (asl,w) =
+  let
+    val normalise = SIMP_RULE bool_ss [oneTheory.one, ignore_bind_def]
+    val facts = List.concat (map (CONJUNCTS o normalise o ASSUME) asl)
+    fun discharge th =
       if is_imp (snd (strip_forall (concl th))) then
-        drule_at Any th >> simp[] >> strip_tac
-      else NO_TAC)]);
+        discharge (tryfind (MATCH_MP th) facts)
+      else th
+    fun close ih g =
+      ACCEPT_TAC (discharge
+        (PURE_REWRITE_RULE [GSYM AND_IMP_INTRO] ih)) g
+  in
+    FIRST (map close facts) (asl,w)
+  end;
 
 Resume eval_mutual_preserves_scopes_dom[return_path_1]:
   SCOPES_DOM_IH_TAC

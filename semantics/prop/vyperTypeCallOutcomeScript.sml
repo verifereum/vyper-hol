@@ -152,7 +152,7 @@ Theorem ExtCall_outcome_return_type_sound:
   state_well_typed st' /\ env_consistent env cx st' /\
   accounts_well_typed st'.accounts /\ no_type_error_result res /\
   case res of
-  | INL tv => expr_result_typed env (Call ret_type (ExtCall stat fsig) es drv) tv
+  | INL tv => expr_result_typed env (Call ret_type (ExtCall stat skc fsig) es drv) tv
   | INR _ => T
 Proof
   rpt gen_tac >> strip_tac >>

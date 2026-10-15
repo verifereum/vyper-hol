@@ -14,6 +14,8 @@ Datatype:
   | JT_BytesM num                             (* m for bytes1..bytes32 *)
   | JT_String num                             (* length *)
   | JT_Bytes num                              (* length *)
+  | JT_StringUnbounded                       (* legacy JSON ABI metadata: length="..." *)
+  | JT_BytesUnbounded                        (* resolve from callsite before translation *)
   | JT_StaticArray json_type num              (* value_type, length *)
   | JT_DynArray json_type num                 (* value_type, length *)
   | JT_Struct (int option) string             (* optional declaration source_id, name *)
@@ -110,7 +112,7 @@ Datatype:
   | JE_ExtCall string json_source_ref (json_type list) json_type json_expr
       (json_expr list) (json_keyword list)
   | JE_StaticCall string json_source_ref (json_type list) json_type json_expr
-      (json_expr list)
+      (json_expr list) (json_keyword list)
 ;
   json_keyword = JKeyword string json_expr             (* arg, value *)
 End
