@@ -215,7 +215,7 @@ Termination
   WF_REL_TAC ‘measure (λx. case x of
     | INL (cx,e,st,k) => expr_size e
     | INR (cx,es,st,k) => list_size expr_size es)’
-  \\ rw[expr1_size_map, SUM_MAP_expr2_size, list_size_SUM_MAP, MAP_MAP_o,
+  \\ rw[list_size_SUM_MAP, MAP_MAP_o, ETA_AX,
         list_size_pair_size_map, builtin_args_length_ok_def, check_def, type_check_def,
         assert_def, LENGTH_EQ_NUM_compute] \\ rw[]
 End
