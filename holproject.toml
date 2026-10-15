@@ -16,12 +16,6 @@ roots = ["vyperHolScript.sml",
          "tests/vyperCalldataSliceTestScript.sml",
          "tests/vyperRawCallCalldataTestScript.sml"]
 
-[build.theory_tactic_timeouts]
-"semantics/vyperInterpreterScript.sml" = 5
-"semantics/prop/vyperLogPreservationScript.sml" = 5
-"venom/defs/venomExecSemanticsScript.sml" = 5
-"venom/proofs/execEquivProofsScript.sml" = 5
-
 [dependencies.verifereum]
 git = "https://github.com/verifereum/verifereum.git"
 rev = "f5e172ccbf45addef7096feea76428de3ed3dfa8"
