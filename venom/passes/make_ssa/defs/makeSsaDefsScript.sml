@@ -36,6 +36,22 @@ Datatype:
   dom_tree = DNode string (dom_tree list)
 End
 
+(* Tree/list induction for clients reasoning about a tree and its forest. *)
+Theorem dom_tree_list_induction:
+  ∀P Q.
+    (∀s children. Q children ⇒ P (DNode s children)) ∧
+    Q [] ∧ (∀dtree children. P dtree ∧ Q children ⇒ Q (dtree::children)) ⇒
+    (∀tree. P tree) ∧ (∀children. Q children)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `∀children. EVERY P children ⇒ Q children` by
+    (Induct >> simp[] >> metis_tac[]) >>
+  `∀tree. P tree` by
+    (ho_match_mp_tac (TypeBase.induction_of ``:dom_tree``) >>
+     simp[GSYM listTheory.EVERY_MEM] >> metis_tac[]) >>
+  simp[] >> metis_tac[listTheory.EVERY_MEM]
+QED
+
 (* All labels in a dominator tree. *)
 Definition dom_tree_labels_def:
   dom_tree_labels (DNode lbl children) =
