@@ -12,9 +12,10 @@ val () = holbuild_extra_deps ["../tests/fixtures/check_contract"]
 (* Branch checks for guarded call dispatch; fixture checks below also exercise
    these paths through the contract checker. Deliberately conflicting metadata
    checks that syntax shortcuts and self/pop keep their original priority. *)
-val call_ctx = ``(0, SOME 9, [("lib", 7)], [], [], []) :
+val call_ctx = ``(0, SOME 9, [("lib", 7)], [], [], [], []) :
   int # num option # (string # num) list # string list #
-  (string # type) list # ((num option # string) # type) list``;
+  (string # type) list # ((num option # string) # type) list #
+  (((num option # string) # (num option # string)) list)``;
 val call_arg = ``Literal (BaseT BoolT) (BoolL T)``;
 fun call_name id tc = ``JE_Name ^id ^tc (JExplicitSource 1) JT_None``;
 fun call_attr base name tc =
@@ -22,18 +23,31 @@ fun call_attr base name tc =
 val lib_name = call_name ``"lib"`` ``SOME "module"``;
 val self_name = call_name ``"self"`` ``SOME "module"``;
 val local_name = call_name ``"xs"`` ``NONE : string option``;
-fun check_call label func ret_ty pop_idx expected = let
+fun check_call_with ctx source_ref label func ret_ty pop_idx expected = let
   val translated = bossLib.EVAL
-    ``translate_call ^call_ctx ^func [^call_arg] [] ^ret_ty
-        JMissingSource ^pop_idx``
+    ``translate_call ^ctx ^func [^call_arg] [] ^ret_ty
+        ^source_ref ^pop_idx``
 in
   if aconv (rhs (concl translated)) expected then ()
   else raise Fail ("translate_call dispatch: " ^ label)
 end;
+fun check_call label func ret_ty pop_idx expected =
+  check_call_with call_ctx ``JMissingSource`` label func ret_ty pop_idx expected;
 fun check_bool_call label func expected =
   check_call label func ``JT_Named NONE "bool"`` ``NONE : expr option`` expected;
 fun internal_call nsid name =
   ``Call (BaseT BoolT) (IntCall (^nsid, ^name)) [^call_arg] NONE``;
+val override_call_ctx =
+  ``(0, SOME 0, [], [], [], [],
+      [((SOME 0, "compute"), (NONE, "compute"))]) :
+    int # num option # (string # num) list # string list #
+    (string # type) list # ((num option # string) # type) list #
+    (((num option # string) # (num option # string)) list)``;
+val _ = check_call_with override_call_ctx ``JExplicitSource 0``
+  "abstract call links to concrete override"
+  (call_attr self_name ``"compute"`` ``NONE : string option``)
+  ``JT_Named NONE "bool"`` ``NONE : expr option``
+  (internal_call ``NONE : num option`` ``"compute"``);
 val _ = check_bool_call "interface before builtin"
   (call_name ``"len"`` ``SOME "interface"``) call_arg;
 val _ = app (fn tc => check_bool_call "builtin with negative interface tag"
@@ -104,6 +118,68 @@ val _ = check_call "module function returning struct"
   (call_attr lib_name ``"foo"`` ``NONE : string option``)
   ``JT_Struct NONE "Record"`` ``NONE : expr option``
   ``Call (StructT (SOME 9, "Record")) (IntCall (SOME 7, "foo")) [^call_arg] NONE``;
+
+(* Abstract functions are compile-time holes. Translation must link calls to
+   the concrete override, remove the ellipsis body from executable modules,
+   and reject malformed override declarations before contract checking. *)
+val abstract_u256_fn =
+  ``JTL_FunctionDef "compute" ["abstract"] []
+      [JArg "x" (JT_Integer 256 F) (JTA_Integer 256 F)] []
+      (JFuncType [JT_Integer 256 F] (JT_Integer 256 F))
+      (JTA_Integer 256 F) [JS_Expr JE_Ellipsis]``;
+val concrete_u256_fn =
+  ``JTL_FunctionDef "compute" ["override"] ["base"]
+      [JArg "x" (JT_Integer 256 F) (JTA_Integer 256 F)] []
+      (JFuncType [JT_Integer 256 F] (JT_Integer 256 F))
+      (JTA_Integer 256 F)
+      [JS_Return (SOME (JE_Name "x" NONE JMissingSource
+        (JT_Integer 256 F)))]``;
+val mismatched_u256_fn =
+  ``JTL_FunctionDef "compute" ["override"] ["base"]
+      [JArg "y" (JT_Integer 256 F) (JTA_Integer 256 F)] []
+      (JFuncType [JT_Integer 256 F] (JT_Integer 256 F))
+      (JTA_Integer 256 F)
+      [JS_Return (SOME (JE_Name "y" NONE JMissingSource
+        (JT_Integer 256 F)))]``;
+val import_base =
+  ``JTL_Import [JImportInfo "base" 0 "base" "base.vy"]``;
+val initialize_base =
+  ``JTL_InitializesDecl
+      (JE_Name "base" (SOME "module") (JExplicitSource 0) JT_None)``;
+fun abstract_link_ast main_body imported_body =
+  ``JAnnotatedAST (JModule (-1) F ^main_body)
+      [JImportedModule 0 "base.vy" "base.vy" F ^imported_body]``;
+fun assert_translation label expect_some ast = let
+  val th = bossLib.EVAL ``translate_annotated_ast ^ast``
+  val translated = rhs (concl th)
+  val actual_some = optionSyntax.is_some translated
+in
+  if actual_some = expect_some then ()
+  else raise Fail ("abstract frontend disposition: " ^ label)
+end;
+val valid_abstract_ast =
+  abstract_link_ast
+    ``[^import_base; ^initialize_base; ^concrete_u256_fn]``
+    ``[^abstract_u256_fn]``;
+val _ = assert_translation "valid override" true valid_abstract_ast;
+val _ = assert_translation "override without initializes" false
+  (abstract_link_ast ``[^import_base; ^concrete_u256_fn]``
+    ``[^abstract_u256_fn]``);
+val _ = assert_translation "parameter-name mismatch" false
+  (abstract_link_ast
+    ``[^import_base; ^initialize_base; ^mismatched_u256_fn]``
+    ``[^abstract_u256_fn]``);
+val _ = assert_translation "unimplemented abstract function" false
+  (abstract_link_ast ``[^import_base]`` ``[^abstract_u256_fn]``);
+
+Theorem abstract_override_resolution_is_transitive:
+  resolve_override_aux 3
+    [((SOME 2,"compute"),(SOME 1,"compute"));
+     ((SOME 1,"compute"),(NONE,"compute"))]
+    (SOME 2,"compute") = (NONE,"compute")
+Proof
+  EVAL_TAC
+QED
 
 val address = ``0w : address``;
 val fixture_dir = "../tests/fixtures/check_contract/";

@@ -180,13 +180,13 @@ End
 
 (* Check if a function decl is external *)
 Definition is_external_function_def:
-  is_external_function (JTL_FunctionDef _ decs _ _ _ _ _) = MEM "external" decs ∧
+  is_external_function (JTL_FunctionDef _ decs _ _ _ _ _ _) = MEM "external" decs ∧
   is_external_function _ = F
 End
 
 (* Get function name from a function decl *)
 Definition get_function_name_def:
-  get_function_name (JTL_FunctionDef name _ _ _ _ _ _) = SOME name ∧
+  get_function_name (JTL_FunctionDef name _ _ _ _ _ _ _) = SOME name ∧
   get_function_name _ = NONE
 End
 
@@ -597,7 +597,7 @@ End
 
 Definition toplevel_decl_types_valid_def:
   (toplevel_decl_types_valid nominal_index all_import_maps type_ctx
-      (JTL_FunctionDef _ _ args _ (JFuncType arg_tys ret_ty) ret_ann body) =
+      (JTL_FunctionDef _ _ _ args _ (JFuncType arg_tys ret_ty) ret_ann body) =
     (function_arg_types_valid nominal_index all_import_maps type_ctx args arg_tys ∧
      annotation_resolved nominal_index all_import_maps type_ctx ret_ann ∧
      (ret_ann = JTA_None ∨ inferred_type_consistent type_ctx
@@ -682,16 +682,246 @@ Definition filter_some_def:
   (filter_some (SOME x :: rest) = x :: filter_some rest)
 End
 
+(* ===== Abstract override linking ===== *)
+
+(* Override decorators name modules in the current module's import namespace.
+   Preserve an explicit abstract-call -> overriding-function map; calls are
+   resolved transitively by jsonToVyperExpr before executable AST construction. *)
+Definition override_entries_for_aliases_def:
+  override_entries_for_aliases current_nsid import_map name [] = [] ∧
+  override_entries_for_aliases current_nsid import_map name (alias::aliases) =
+    (case ALOOKUP import_map alias of
+     | SOME target_nsid =>
+         (((SOME target_nsid,name),(current_nsid,name)) ::
+          override_entries_for_aliases current_nsid import_map name aliases)
+     | NONE =>
+         override_entries_for_aliases current_nsid import_map name aliases)
+End
+
+Definition collect_module_overrides_def:
+  collect_module_overrides current_nsid import_map [] = [] ∧
+  collect_module_overrides current_nsid import_map
+      (JTL_FunctionDef name _ override_aliases _ _ _ _ _ :: rest) =
+    override_entries_for_aliases current_nsid import_map name override_aliases ++
+    collect_module_overrides current_nsid import_map rest ∧
+  collect_module_overrides current_nsid import_map (_::rest) =
+    collect_module_overrides current_nsid import_map rest
+End
+
+Definition collect_imported_overrides_def:
+  collect_imported_overrides [] = [] ∧
+  collect_imported_overrides
+      (JImportedModule src_id _ _ _ body :: rest) =
+    let nsid = source_id_to_module_id src_id in
+    collect_module_overrides (SOME nsid)
+      (build_import_map (collect_imports body)) body ++
+    collect_imported_overrides rest
+End
+
+Definition build_override_map_def:
+  build_override_map toplevels imports =
+    collect_module_overrides NONE
+      (build_import_map (collect_imports toplevels)) toplevels ++
+    collect_imported_overrides imports
+End
+
+Definition json_type_supertype_def:
+  (json_type_supertype (JT_String n) (JT_String m) = (m ≤ n)) ∧
+  (json_type_supertype (JT_Bytes n) (JT_Bytes m) = (m ≤ n)) ∧
+  (json_type_supertype (JT_DynArray ty n) (JT_DynArray ty' m) =
+    (m ≤ n ∧ json_type_supertype ty ty')) ∧
+  (json_type_supertype (JT_StaticArray ty n) (JT_StaticArray ty' m) =
+    (n = m ∧ json_type_supertype ty ty')) ∧
+  (json_type_supertype ty ty' = (ty = ty'))
+Termination
+  WF_REL_TAC `measure (json_type_size o FST)` >> simp[]
+End
+
+Definition attach_param_defaults_def:
+  attach_param_defaults args defaults =
+    ZIP (args,
+      REPLICATE (LENGTH args - LENGTH defaults) NONE ++ MAP SOME defaults)
+End
+
+Definition json_function_params_def:
+  json_function_params [] [] = [] ∧
+  json_function_params
+      ((JArg name _ _)::args) ((ty,default_opt)::rest) =
+    (name,ty,default_opt) :: json_function_params args rest ∧
+  json_function_params _ _ = []
+End
+
+Definition default_override_ok_def:
+  default_override_ok NONE _ = T ∧
+  default_override_ok (SOME _) NONE = F ∧
+  default_override_ok (SOME JE_Ellipsis) (SOME _) = T ∧
+  default_override_ok (SOME abstract) (SOME override) =
+    (abstract = override)
+End
+
+Definition override_params_ok_def:
+  override_params_ok [] overrides =
+    EVERY (λ(_,_,default_opt). IS_SOME default_opt) overrides ∧
+  override_params_ok (_::_) [] = F ∧
+  override_params_ok
+      ((abstract_name,abstract_ty,abstract_default)::abstracts)
+      ((override_name,override_ty,override_default)::overrides) =
+    (abstract_name = override_name ∧
+     json_type_supertype override_ty abstract_ty ∧
+     default_override_ok abstract_default override_default ∧
+     override_params_ok abstracts overrides)
+End
+
+Definition mutability_rank_def:
+  mutability_rank decs =
+    if MEM "pure" decs then 0
+    else if MEM "view" decs then 1
+    else if MEM "payable" decs then 3
+    else 2
+End
+
+Definition override_function_compatible_def:
+  override_function_compatible
+      (JTL_FunctionDef override_name override_decs _ override_args
+        override_defaults (JFuncType override_arg_tys override_ret) _ _)
+      (JTL_FunctionDef abstract_name abstract_decs _ abstract_args
+        abstract_defaults (JFuncType abstract_arg_tys abstract_ret) _ _) =
+    (override_name = abstract_name ∧
+     MEM "abstract" abstract_decs ∧
+     ¬MEM "external" override_decs ∧ ¬MEM "deploy" override_decs ∧
+     LENGTH override_defaults ≤ LENGTH override_args ∧
+     LENGTH abstract_defaults ≤ LENGTH abstract_args ∧
+     LENGTH override_args = LENGTH override_arg_tys ∧
+     LENGTH abstract_args = LENGTH abstract_arg_tys ∧
+     override_params_ok
+       (json_function_params abstract_args
+         (attach_param_defaults abstract_arg_tys abstract_defaults))
+       (json_function_params override_args
+         (attach_param_defaults override_arg_tys override_defaults)) ∧
+     json_type_supertype abstract_ret override_ret ∧
+     mutability_rank override_decs ≤ mutability_rank abstract_decs ∧
+     (MEM "nonreentrant" override_decs =
+      MEM "nonreentrant" abstract_decs)) ∧
+  override_function_compatible _ _ = F
+End
+
+Definition collect_function_entries_def:
+  collect_function_entries current_nsid [] = [] ∧
+  collect_function_entries current_nsid (top::rest) =
+    (current_nsid,top) :: collect_function_entries current_nsid rest
+End
+
+Definition collect_imported_function_entries_def:
+  collect_imported_function_entries [] = [] ∧
+  collect_imported_function_entries
+      (JImportedModule src_id _ _ _ body::rest) =
+    collect_function_entries (SOME (source_id_to_module_id src_id)) body ++
+    collect_imported_function_entries rest
+End
+
+Definition function_entry_key_def:
+  function_entry_key
+      (src,JTL_FunctionDef name _ _ _ _ _ _ _) = (src,name) ∧
+  function_entry_key (src,_) = (src,"")
+End
+
+Definition lookup_function_entry_def:
+  lookup_function_entry key [] = NONE ∧
+  lookup_function_entry key (entry::rest) =
+    if function_entry_key entry = key then SOME (SND entry)
+    else lookup_function_entry key rest
+End
+
+Definition is_abstract_entry_def:
+  is_abstract_entry
+      (_,JTL_FunctionDef _ decs _ _ _ _ _ _) = MEM "abstract" decs ∧
+  is_abstract_entry _ = F
+End
+
+Definition key_count_def:
+  key_count key [] = 0 ∧
+  key_count key ((source,_)::rest) =
+    (if source = key then 1 else 0) + key_count key rest
+End
+
+Definition override_links_valid_def:
+  override_links_valid entries override_map =
+    (EVERY (λ(target,source).
+       case (lookup_function_entry target entries,
+             lookup_function_entry source entries) of
+       | (SOME abstract,SOME override) =>
+           override_function_compatible override abstract
+       | _ => F) override_map ∧
+     EVERY (λentry.
+       ¬is_abstract_entry entry ∨
+       key_count (function_entry_key entry) override_map = 1) entries)
+End
+
+Definition override_alias_count_def:
+  override_alias_count [] = 0 ∧
+  override_alias_count
+      (JTL_FunctionDef _ _ aliases _ _ _ _ _::rest) =
+    LENGTH aliases + override_alias_count rest ∧
+  override_alias_count (_::rest) = override_alias_count rest
+End
+
+Definition imported_override_alias_count_def:
+  imported_override_alias_count [] = 0 ∧
+  imported_override_alias_count
+      (JImportedModule _ _ _ _ body::rest) =
+    override_alias_count body + imported_override_alias_count rest
+End
+
+Definition abstract_overrides_valid_def:
+  abstract_overrides_valid toplevels imports override_map =
+    let entries =
+      collect_function_entries NONE toplevels ++
+      collect_imported_function_entries imports in
+    LENGTH override_map =
+      override_alias_count toplevels + imported_override_alias_count imports ∧
+    override_links_valid entries override_map
+End
+
+
+
+Definition initialized_alias_def:
+  initialized_alias alias
+      (JTL_InitializesDecl (JE_Name name _ _ _)) = (alias = name) ∧
+  initialized_alias alias
+      (JTL_InitializesDecl
+        (JE_Subscript (JE_Name name _ _ _) _ _)) = (alias = name) ∧
+  initialized_alias alias _ = F
+End
+
+Definition module_override_declarations_valid_def:
+  module_override_declarations_valid body =
+    EVERY (λtop.
+      case top of
+      | JTL_FunctionDef _ decs aliases _ _ _ _ _ =>
+          ((MEM "abstract" decs ⇒
+              ¬MEM "external" decs ∧ ¬MEM "deploy" decs) ∧
+           EVERY (λalias. EXISTS (initialized_alias alias) body) aliases)
+      | _ => T) body
+End
+
+Definition imported_override_declarations_valid_def:
+  imported_override_declarations_valid [] = T ∧
+  imported_override_declarations_valid
+      (JImportedModule _ _ _ _ body::rest) =
+    (module_override_declarations_valid body ∧
+     imported_override_declarations_valid rest)
+End
 
 Definition translate_module_def:
-  translate_module nominal_index all_import_maps all_toplevel_types
+  translate_module nominal_index all_import_maps all_toplevel_types override_map
       (JModule main_src_id nr_default toplevels) =
     let import_map = build_import_map (collect_imports toplevels) in
     let expr_ctx =
       (main_src_id,
        (NONE,
         (import_map,
-         (collect_consts_and_immutables toplevels, ([], all_toplevel_types))))) in
+         (collect_consts_and_immutables toplevels,
+          ([], (all_toplevel_types, override_map)))))) in
     let type_ctx = (main_src_id, NONE, import_map) in
     filter_some
       (MAP (translate_toplevel nominal_index all_import_maps expr_ctx type_ctx nr_default)
@@ -699,7 +929,7 @@ Definition translate_module_def:
 End
 
 Definition is_function_toplevel_def:
-  is_function_toplevel (JTL_FunctionDef _ _ _ _ _ _ _) = T ∧
+  is_function_toplevel (JTL_FunctionDef _ _ _ _ _ _ _ _) = T ∧
   is_function_toplevel _ = F
 End
 
@@ -707,14 +937,15 @@ End
    ellipsis-bodied function stubs are not executable module implementations. *)
 Definition translate_imported_module_def:
   translate_imported_module nominal_index all_import_maps all_toplevel_types
-      main_src_id (JImportedModule src_id path _ nr_default body) =
+      override_map main_src_id (JImportedModule src_id path _ nr_default body) =
     let nsid = source_id_to_module_id src_id in
     let import_map = build_import_map (collect_imports body) in
     let expr_ctx =
       (main_src_id,
        (SOME nsid,
         (import_map,
-         (collect_consts_and_immutables body, ([], all_toplevel_types))))) in
+         (collect_consts_and_immutables body,
+          ([], (all_toplevel_types, override_map)))))) in
     let type_ctx = (main_src_id, SOME nsid, import_map) in
     let declaration_only = is_interface_path path in
     (SOME nsid, filter_some
@@ -726,13 +957,13 @@ End
 
 Definition translate_imported_modules_def:
   translate_imported_modules nominal_index all_import_maps all_toplevel_types
-      main_src_id [] = [] ∧
+      override_map main_src_id [] = [] ∧
   translate_imported_modules nominal_index all_import_maps all_toplevel_types
-      main_src_id (imp::imports) =
+      override_map main_src_id (imp::imports) =
     translate_imported_module nominal_index all_import_maps all_toplevel_types
-      main_src_id imp ::
+      override_map main_src_id imp ::
     translate_imported_modules nominal_index all_import_maps all_toplevel_types
-      main_src_id imports
+      override_map main_src_id imports
 End
 
 (* ===== Annotate Storage Slots ===== *)
@@ -782,14 +1013,20 @@ Definition translate_annotated_ast_canonical_def:
     let main_index = module_compact_index 0 toplevels in
     let import_map = compact_index_import_map main_index in
     let nominal_index = build_nominal_index toplevels imports in
+    let override_map = build_override_map toplevels imports in
     if ¬all_decl_types_valid nominal_index all_import_maps main_src_id
-        toplevels imports then NONE else
+        toplevels imports ∨
+       ¬abstract_overrides_valid toplevels imports override_map ∨
+       ¬module_override_declarations_valid toplevels ∨
+       ¬imported_override_declarations_valid imports
+    then NONE else
     let all_toplevel_types = build_all_toplevel_types nominal_index
       all_import_maps main_src_id toplevels imports in
     let sources =
-      (NONE, translate_module nominal_index all_import_maps all_toplevel_types main) ::
+      (NONE, translate_module nominal_index all_import_maps all_toplevel_types
+        override_map main) ::
       translate_imported_modules nominal_index all_import_maps
-        all_toplevel_types main_src_id imports in
+        all_toplevel_types override_map main_src_id imports in
     let exports = extract_exports_with_indexes all_import_maps all_inline_maps exports_map main_index in
     SOME (sources, exports, import_map)
 End
