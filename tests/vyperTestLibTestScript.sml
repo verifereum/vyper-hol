@@ -39,3 +39,20 @@ val _ = expect "explicit gas retained" (SOME "unsupported source pattern: gas=")
   [source "raw_call(target, msg.data, gas=1000)"];
 val _ = expect "negative missing source" (SOME "missing source_code") [];
 val _ = expect "blank source" (SOME "blank source_code") [source " \n"];
+
+fun item_type t = ("item_type", JSON.STRING t);
+fun expect_scripts label expected items =
+  if generates_scripts items = expected then ()
+  else raise Fail ("script generation: " ^ label);
+
+val _ = expect_scripts "selected test" true
+  [("t", JSON.OBJECT [item_type "test",
+                      ("source_code", JSON.STRING "return 1")])];
+val _ = expect_scripts "no selected test" false
+  [("t", JSON.OBJECT [item_type "test"]),
+   ("f", JSON.OBJECT [item_type "fixture"])];
+val _ = expect_scripts "malformed item" true
+  [("t", JSON.OBJECT [item_type "test"]), ("m", JSON.OBJECT [])];
+val _ = expect_scripts "unresolved fixture dependency" true
+  [("t", JSON.OBJECT [item_type "test",
+                      ("deps", JSON.ARRAY [JSON.STRING "missing"])])];

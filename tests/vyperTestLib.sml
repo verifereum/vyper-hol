@@ -871,8 +871,7 @@ fun test_file_suite path =
   | [first] => first
   | [] => "unknown"
 
-fun read_coverage_json json_path = let
-  val items = decodeFile rawObject json_path
+fun coverage_of_items items = let
   val fixtures = List.mapPartial (fn (name,json) =>
     if raw_string_field "item_type" json = SOME "fixture"
     then SOME (name,json) else NONE) items
@@ -978,6 +977,9 @@ in
    unreferenced_traced_fixtures = unreferenced_traced_fixtures,
    malformed = malformed}
 end
+
+fun read_coverage_json json_path =
+  coverage_of_items (decodeFile rawObject json_path)
 
 fun print_raw_coverage output json_path report = let
   fun emit text = TextIO.output(output,text)
@@ -1207,10 +1209,19 @@ in
   Lib.appi define_traces tests
 end
 
-(* Files to generate scripts for. A file with no selected tests would still
-   build both of its theories, so it gets no scripts. *)
+(* A file with no selected tests would still build both of its theories, so
+   it gets no scripts, unless an item would fail to decode: its Defs theory
+   is where that failure is reported. *)
+fun generates_scripts items = let
+  val report = coverage_of_items items
+in
+  #selected report > 0 orelse
+  not (List.null (#malformed report)) orelse
+  not (List.null (#unresolved_deps report))
+end
+
 fun selected_test_files () =
-  List.filter (fn (_, path) => #selected (read_coverage_json path) > 0)
+  List.filter (fn (_, path) => generates_scripts (decodeFile rawObject path))
     (test_files ())
 
 fun generate_defn_scripts () = let
