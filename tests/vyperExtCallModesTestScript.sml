@@ -20,7 +20,10 @@ val EXT_CALL_FIXTURE_SIMP =
    empty_state_def, UNCURRY, sum_CASE_rator, option_CASE_rator];
 
 Theorem activated_NONE_keeps_concrete_code_check:
-  eval_expr empty_evaluation_context counter_expr empty_state =
+  eval_expr empty_evaluation_context
+    (Call NoneT (ExtCall T F ("f",[],NoneT))
+      [Literal (BaseT AddressT) (BytesL (REPLICATE 19 0w ++ [9w]))] NONE)
+    empty_state =
     (INR (Error (RuntimeError "ExtCall target has no code")),empty_state)
 Proof
   simp EXT_CALL_FIXTURE_SIMP >> CONV_TAC cv_eval
