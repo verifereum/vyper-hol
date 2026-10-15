@@ -33,6 +33,10 @@
  *   foldl_rel_seq_preserves_observable -- FOLDL rel_seq of
  *                                     observable-equiv-preserving relations
  *                                     preserves observable equivalence
+ *
+ * STATUS: This is generic pipeline/pass composition infrastructure. It does
+ * not by itself certify every concrete optimization-level pipeline; concrete
+ * pass obligations must be supplied separately. See docs/compiler-proof-roadmap.md.
  *)
 
 Theory venomPipelineCorrect

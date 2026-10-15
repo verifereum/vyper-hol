@@ -23,7 +23,7 @@ Ancestors
   memoryCopyElisionDefs analysisSimDefs analysisSimProps
   passSimulationDefs passSimulationProps passSharedDefs passSharedProps
   venomWf venomInst venomInstProps venomState venomExecSemantics
-  venomEffects venomMemDefs venomMemProofs
+  venomEffects venomMemDefs venomMemProps venomMemProofs
   stateEquiv stateEquivProps execEquivParamDefs execEquivParamProps
   dfgAnalysisProps dfgDefs dfAnalyzeDefs
   basePtrDefs memLocDefs memAliasDefs memAliasProofs
@@ -632,24 +632,6 @@ Proof
   Cases >> simp[is_copy_opcode_def]
 QED
 
-(* write_memory_with_expansion is identity when bytes already match *)
-Theorem write_mem_identity[local]:
-  !dst data s. dst + LENGTH data <= LENGTH s.vs_memory /\
-    TAKE (LENGTH data) (DROP dst s.vs_memory) = data ==>
-    write_memory_with_expansion dst data s = s
-Proof
-  rw[write_memory_with_expansion_def, LET_THM] >>
-  `~(dst + LENGTH data - LENGTH s.vs_memory > 0)` by simp[] >>
-  simp[] >>
-  `TAKE dst s.vs_memory ++ data ++ DROP (dst + LENGTH data) s.vs_memory = s.vs_memory`
-    suffices_by (strip_tac >> simp[venom_state_component_equality]) >>
-  `DROP dst s.vs_memory = TAKE (LENGTH data) (DROP dst s.vs_memory) ++
-     DROP (LENGTH data) (DROP dst s.vs_memory)` by simp[TAKE_DROP] >>
-  `DROP (LENGTH data) (DROP dst s.vs_memory) = DROP (dst + LENGTH data) s.vs_memory`
-    by simp[rich_listTheory.DROP_DROP_T, arithmeticTheory.ADD_COMM] >>
-  metis_tac[TAKE_DROP, APPEND_ASSOC]
-QED
-
 (* mcopy is identity when destination bytes already equal source bytes *)
 Theorem mcopy_identity[local]:
   !dst src sz s.
@@ -663,7 +645,7 @@ Proof
   `TAKE sz (DROP src s.vs_memory ++ REPLICATE sz 0w) = TAKE sz (DROP src s.vs_memory)` by
     simp[TAKE_APPEND1] >>
   simp[] >>
-  match_mp_tac write_mem_identity >> simp[]
+  match_mp_tac write_memory_with_expansion_identity >> simp[]
 QED
 
 (* run_insts of singleton = step_inst *)
@@ -691,7 +673,14 @@ Proof
     qexists `inst` >> simp[] >>
     Cases_on `inst.inst_opcode` >> gvs[] >> NO_TAC) >>
   rpt (IF_CASES_TAC >> fs[mk_nop_inst_def, is_terminator_def]) >>
-  rpt (CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def]) >>
+  TRY CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def] >>
+  TRY CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def] >>
+  TRY CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def] >>
+  TRY CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def] >>
+  TRY CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def] >>
+  TRY CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def] >>
+  TRY CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def] >>
+  TRY CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def] >>
   imp_res_tac copy_opcode_not_term >> imp_res_tac copy_opcode_not_invoke >>
   imp_res_tac copy_opcode_not_phi >>
   fs[]
@@ -1034,7 +1023,7 @@ Resume cei_step_sim[nop]:
      So mcopy writes bytes_eq_RHS to dst, but dst already has those bytes -> identity *)
   `mcopy addr (w2n src_val) (w2n n) s = s` by (
     simp[mcopy_def] >>
-    irule write_mem_identity >> simp[LENGTH_TAKE_EQ]) >>
+    irule write_memory_with_expansion_identity >> simp[LENGTH_TAKE_EQ]) >>
   simp[state_equiv_refl]
 QED
 
@@ -1202,7 +1191,7 @@ Triviality terminator_opcode_cases[local]:
     is_terminator op ==>
     op = JMP \/ op = JNZ \/ op = DJMP \/ op = RET \/
     op = RETURN \/ op = REVERT \/ op = STOP \/ op = SINK \/
-    op = SELFDESTRUCT \/ op = INVALID
+    op = SELFDESTRUCT \/ op = INVALID \/ op = DRET \/ op = RETFMP
 Proof
   Cases >> simp[is_terminator_def]
 QED
@@ -1218,7 +1207,8 @@ val terminator_tuple_tac =
 Triviality step_inst_base_terminator_ok_field_tuple[local]:
   !inst s s'.
     step_inst_base inst s = OK s' /\
-    is_terminator inst.inst_opcode ==>
+    is_terminator inst.inst_opcode /\
+    Eff_MEMORY NOTIN write_effects inst.inst_opcode ==>
     (s'.vs_memory, s'.vs_allocas, s'.vs_call_ctx,
      s'.vs_data_section, s'.vs_code, s'.vs_returndata) =
     (s.vs_memory, s.vs_allocas, s.vs_call_ctx,
@@ -1226,22 +1216,25 @@ Triviality step_inst_base_terminator_ok_field_tuple[local]:
 Proof
   rpt strip_tac >>
   drule terminator_opcode_cases >> strip_tac
-  >- terminator_tuple_tac
-  >- terminator_tuple_tac
-  >- terminator_tuple_tac
-  >- terminator_tuple_tac
-  >- terminator_tuple_tac
-  >- terminator_tuple_tac
-  >- terminator_tuple_tac
-  >- terminator_tuple_tac
-  >- terminator_tuple_tac
-  >- terminator_tuple_tac
+  >- terminator_tuple_tac (* JMP *)
+  >- terminator_tuple_tac (* JNZ *)
+  >- terminator_tuple_tac (* DJMP *)
+  >- terminator_tuple_tac (* RET *)
+  >- terminator_tuple_tac (* RETURN *)
+  >- terminator_tuple_tac (* REVERT *)
+  >- terminator_tuple_tac (* STOP *)
+  >- terminator_tuple_tac (* SINK *)
+  >- terminator_tuple_tac (* SELFDESTRUCT *)
+  >- terminator_tuple_tac (* INVALID *)
+  >- fs[write_effects_def] (* DRET excluded by no-memory premise *)
+  >- terminator_tuple_tac (* RETFMP *)
 QED
 
 Triviality step_terminator_preserves_fields[local]:
   !fuel ctx inst s s'.
     step_inst fuel ctx inst s = OK s' /\
-    is_terminator inst.inst_opcode ==>
+    is_terminator inst.inst_opcode /\
+    Eff_MEMORY NOTIN write_effects inst.inst_opcode ==>
     s'.vs_memory = s.vs_memory /\
     s'.vs_allocas = s.vs_allocas /\
     s'.vs_call_ctx = s.vs_call_ctx /\
@@ -1256,24 +1249,6 @@ Proof
     metis_tac[venomExecSemanticsTheory.step_inst_non_invoke] >>
   drule_all step_inst_base_terminator_ok_field_tuple >>
   simp[]
-QED
-
-(* allocas preserved by non-ALLOCA non-INVOKE instructions.
-   Proof follows basePtrProofsScript.step_inst_allocas. *)
-Triviality step_preserves_allocas[local]:
-  !fuel ctx inst s s'.
-    step_inst fuel ctx inst s = OK s' /\
-    ~is_alloca_op inst.inst_opcode /\
-    inst.inst_opcode <> INVOKE ==>
-    s'.vs_allocas = s.vs_allocas
-Proof
-  rpt strip_tac >>
-  `inst.inst_opcode <> ALLOCA` by
-    (Cases_on `inst.inst_opcode` >> fs[is_alloca_op_def]) >>
-  `step_inst_base inst s = OK s'` by
-    metis_tac[venomExecSemanticsTheory.step_inst_non_invoke] >>
-  irule venomMemProofsTheory.step_inst_base_preserves_allocas >>
-  qexists_tac `inst` >> simp[]
 QED
 
 (* cf_sound is preserved by DRESTRICT (subset of entries) *)
@@ -1343,20 +1318,6 @@ Triviality not_invoke_if_no_mem_effect[local]:
   inst.inst_opcode <> INVOKE
 Proof
   CCONTR_TAC >> gvs[invoke_has_mem_effect]
-QED
-
-Triviality step_plain_preserves_memory[local]:
-  !fuel ctx inst s s'.
-    step_inst fuel ctx inst s = OK s' /\
-    Eff_MEMORY NOTIN write_effects inst.inst_opcode /\
-    ~is_alloca_op inst.inst_opcode /\
-    ~is_ext_call_op inst.inst_opcode /\
-    ~is_terminator inst.inst_opcode ==>
-    s'.vs_memory = s.vs_memory
-Proof
-  rpt strip_tac >>
-  drule not_invoke_if_no_mem_effect >> strip_tac >>
-  drule_all step_inst_preserves_all >> simp[]
 QED
 
 (* Variables not in inst_defs (= inst_outputs) preserved by any instruction *)
@@ -1431,9 +1392,10 @@ Proof
   `s'.vs_memory = s.vs_memory` by (
     Cases_on `is_terminator inst.inst_opcode`
     >- metis_tac[step_terminator_preserves_fields]
-    >> metis_tac[step_plain_preserves_memory]) >>
+    >> metis_tac[step_inst_no_memory_write_preserves_memory,
+                 not_invoke_if_no_mem_effect]) >>
   `inst.inst_opcode <> INVOKE` by metis_tac[not_invoke_if_no_mem_effect] >>
-  `s'.vs_allocas = s.vs_allocas` by metis_tac[step_preserves_allocas] >>
+  `s'.vs_allocas = s.vs_allocas` by metis_tac[step_inst_non_alloca_preserves_allocas] >>
   `s'.vs_labels = s.vs_labels` by (
     Cases_on `is_terminator inst.inst_opcode`
     >- (imp_res_tac venomExecPropsTheory.step_inst_preserves_labels_always >>
@@ -1448,13 +1410,6 @@ QED
 
 (* ===== Memory write / disjoint read helpers ===== *)
 
-(* dimindex(:256) = 256; needed for word_to_bytes length *)
-Theorem dimindex_256[local,simp]:
-  dimindex(:256) = 256
-Proof
-  ACCEPT_TAC (fcpLib.INDEX_CONV ``dimindex(:256)``)
-QED
-
 (* word_to_bytes of a bytes32 has length 32 *)
 Theorem word_to_bytes32_length[local,simp]:
   !v:bytes32. LENGTH (word_to_bytes v T) = 32
@@ -1465,49 +1420,6 @@ QED
 (* Reading a disjoint region after write_memory_with_expansion is unchanged.
    Key property: if [off, off+n) doesn't overlap [d, d+len) and is within
    the original memory, then TAKE n (DROP off mem') = TAKE n (DROP off mem). *)
-Theorem write_mem_disjoint_read[local]:
-  !off n d (bytes:word8 list) s.
-    off + n <= LENGTH s.vs_memory /\
-    (off + n <= d \/ d + LENGTH bytes <= off) ==>
-    TAKE n (DROP off (write_memory_with_expansion d bytes s).vs_memory) =
-    TAKE n (DROP off s.vs_memory)
-Proof
-  rw[write_memory_with_expansion_def, LET_THM] >>
-  simp[LIST_EQ_REWRITE, LENGTH_TAKE, LENGTH_DROP] >>
-  rpt strip_tac >>
-  simp[EL_TAKE, EL_DROP, EL_APPEND_EQN, LENGTH_TAKE,
-       rich_listTheory.LENGTH_REPLICATE]
-QED
-
-(* regions_disjoint version of write_mem_disjoint_read *)
-Triviality wmwe_disjoint_read[local]:
-  !off n d (bytes:word8 list) s.
-    off + n <= LENGTH s.vs_memory /\
-    regions_disjoint (off, n) (d, LENGTH bytes) ==>
-    TAKE n (DROP off (write_memory_with_expansion d bytes s).vs_memory) =
-    TAKE n (DROP off s.vs_memory)
-Proof
-  rw[regions_disjoint_def]
-  >- simp[] (* n = 0 *)
-  >- (* LENGTH bytes = 0, i.e. bytes = [] *)
-     (rw[write_memory_with_expansion_def, LET_THM] >>
-      simp[LIST_EQ_REWRITE, LENGTH_TAKE, LENGTH_DROP] >>
-      rpt strip_tac >>
-      simp[EL_TAKE, EL_DROP, EL_APPEND_EQN, LENGTH_TAKE,
-           rich_listTheory.LENGTH_REPLICATE])
-  >> irule write_mem_disjoint_read >> simp[]
-QED
-
-
-
-(* Memory doesn't shrink after write_memory_with_expansion *)
-Theorem write_mem_length_ge[local]:
-  !d (bytes:word8 list) s.
-    LENGTH (write_memory_with_expansion d bytes s).vs_memory >= LENGTH s.vs_memory
-Proof
-  rw[write_memory_with_expansion_def, LET_THM]
-QED
-
 (* Padded read as GENLIST of mem_byte_at *)
 Triviality take_drop_pad_as_genlist[local]:
   !mem:(word8 list) off n.
@@ -1540,12 +1452,12 @@ Proof
   >- (
     (* Case 1: In-bounds. Strip padding via TAKE_APPEND1, use wmwe_disjoint_read. *)
     `n <= LENGTH (DROP off s.vs_memory)` by simp[LENGTH_DROP] >>
-    `LENGTH (write_memory_with_expansion d bytes s).vs_memory >= LENGTH s.vs_memory` by
-      simp[write_mem_length_ge] >>
+    `LENGTH s.vs_memory <= LENGTH (write_memory_with_expansion d bytes s).vs_memory` by
+      (irule write_memory_with_expansion_nondecreasing) >>
     `n <= LENGTH (DROP off (write_memory_with_expansion d bytes s).vs_memory)` by
       simp[LENGTH_DROP] >>
     simp[TAKE_APPEND1] >>
-    irule wmwe_disjoint_read >> simp[])
+    irule write_memory_with_expansion_regions_disjoint_read >> simp[])
   >>
   (* Case 2: OOB. Element-wise. *)
   suspend "oob"
@@ -1575,30 +1487,7 @@ Proof
   simp[rich_listTheory.DROP_TAKE_EQ_NIL, rich_listTheory.TAKE_LENGTH_APPEND]
 QED
 
-(* Reading back the just-written region: unconditionally true *)
-Triviality wmwe_read_self[local]:
-  !offset (bytes:word8 list) s.
-    TAKE (LENGTH bytes)
-      (DROP offset (write_memory_with_expansion offset bytes s).vs_memory) =
-    bytes
-Proof
-  rw[write_memory_with_expansion_def, LET_THM] >>
-  qmatch_goalsub_abbrev_tac `TAKE offset expanded` >>
-  `offset <= LENGTH expanded` by
-    (simp[Abbr `expanded`] >> IF_CASES_TAC >> simp[]) >>
-  simp[take_drop_splice]
-QED
-
-(* write_memory_with_expansion only changes vs_memory: field-independence lemmas *)
-Triviality eval_operand_wmwe[local,simp]:
-  !op off bytes s.
-    eval_operand op (write_memory_with_expansion off bytes s) =
-    eval_operand op s
-Proof
-  Cases >> simp[eval_operand_def, lookup_var_def,
-                write_memory_with_expansion_def, LET_THM]
-QED
-
+(* write_memory_with_expansion only changes vs_memory. *)
 Triviality memloc_runtime_region_wmwe[local,simp]:
   !ml off bytes s.
     memloc_runtime_region ml (write_memory_with_expansion off bytes s) =
@@ -1606,14 +1495,6 @@ Triviality memloc_runtime_region_wmwe[local,simp]:
 Proof
   rw[memloc_runtime_region_def, write_memory_with_expansion_def, LET_THM]
 QED
-
-Triviality wmwe_vs_allocas[local,simp]:
-  !off bytes s.
-    (write_memory_with_expansion off bytes s).vs_allocas = s.vs_allocas
-Proof
-  simp[write_memory_with_expansion_def, LET_THM]
-QED
-
 
 (* ml_is_fixed forces sz = Lit n, and THE ml_size = w2n of evaluated sz *)
 Triviality ml_is_fixed_eval_size[local]:
@@ -1686,38 +1567,7 @@ Proof
   BasicProvers.every_case_tac >> gvs[]
 QED
 
-(* mstore = write_memory_with_expansion with word_to_bytes *)
-Triviality mstore_eq_write_mem[local]:
-  !d v s. mstore d v s = write_memory_with_expansion d (word_to_bytes v T) s
-Proof
-  rw[mstore_def, write_memory_with_expansion_def, LET_THM]
-QED
-
-(* Disjoint region of memory is preserved by mstore.
-   Combines mstore_eq_write_mem + write_mem_disjoint_read + word_to_bytes32_length. *)
-Triviality mstore_disjoint_read[local]:
-  !off n addr_w (v':bytes32) s.
-    off + n <= LENGTH s.vs_memory /\
-    regions_disjoint (off, n) (addr_w, 32) ==>
-    TAKE n (DROP off (mstore addr_w v' s).vs_memory) =
-    TAKE n (DROP off s.vs_memory)
-Proof
-  rpt strip_tac >> Cases_on `n = 0` >- simp[] >>
-  simp[mstore_eq_write_mem] >>
-  irule write_mem_disjoint_read >> simp[word_to_bytes32_length] >>
-  gvs[regions_disjoint_def]
-QED
-
 (* Memory doesn't shrink after mstore *)
-Triviality mstore_mem_length_ge[local,simp]:
-  !addr_w (v':bytes32) s.
-    LENGTH s.vs_memory <= LENGTH (mstore addr_w v' s).vs_memory
-Proof
-  rw[mstore_eq_write_mem] >>
-  mp_tac (SPECL [``addr_w:num``, ``word_to_bytes (v':bytes32) T``,
-                  ``s:venom_state``] write_mem_length_ge) >> simp[]
-QED
-
 (* ===== MSTORE transfer case ===== *)
 
 (* For MSTORE with literal destination operand Lit n:
@@ -1732,7 +1582,8 @@ Triviality bp_write_loc_mstore_lit[local]:
        ml_alloca := NONE; ml_volatile := F |>
 Proof
   rw[bp_get_write_location_def, mem_write_ops_def, bp_segment_from_ops_def,
-     LET_THM, is_alloca_op_def, venomEffectsTheory.write_effects_def] >>
+     LET_THM, is_alloca_op_def, is_raw_fmp_opcode_def,
+     venomEffectsTheory.write_effects_def] >>
   simp[wordsTheory.dimword_def]
 QED
 
@@ -1822,7 +1673,7 @@ Proof
   Cases_on `memloc_runtime_region ml s` >> gvs[] >>
   PairCases_on `x` >> gvs[LET_THM] >>
   rename1 `SOME (addr_ml, sz_ml)` >>
-  mp_tac (Q.SPECL [`write_off`, `bytes`, `s`] write_mem_length_ge) >>
+  mp_tac (Q.SPECL [`write_off`, `bytes`, `s`] write_memory_with_expansion_nondecreasing) >>
   strip_tac >>
   rpt conj_tac
   >- suspend "mem_len"
@@ -1848,7 +1699,7 @@ Resume cf_entry_sound_wmwe[bytes_eq]:
   `TAKE sz_ml (DROP addr_ml
      (write_memory_with_expansion write_off bytes s).vs_memory) =
    TAKE sz_ml (DROP addr_ml s.vs_memory)` by (
-    irule wmwe_disjoint_read >> simp[]) >>
+    irule write_memory_with_expansion_regions_disjoint_read >> simp[]) >>
   simp[] >>
   Cases_on `cf.cf_opcode = MCOPY`
   >- (gvs[cf_source_data_def] >>
@@ -1971,7 +1822,7 @@ Proof
   (* Unfold to get DRESTRICT form *)
   simp[copy_fact_invalidate_def, cf_sound_opt_def,
        bp_get_write_location_def, mem_write_ops_def, LET_THM,
-       write_effects_def, is_alloca_op_def,
+       write_effects_def, is_alloca_op_def, is_raw_fmp_opcode_def,
        bp_segment_from_ops_def, ml_is_fixed_def] >>
   simp[cf_sound_def, FLOOKUP_DRESTRICT] >>
   rpt strip_tac >>
@@ -2208,7 +2059,7 @@ QED
 
 Resume cft_mstore[var_case]:
   simp[bp_get_write_location_def, mem_write_ops_def, LET_THM,
-       write_effects_def, is_alloca_op_def,
+       write_effects_def, is_alloca_op_def, is_raw_fmp_opcode_def,
        copy_fact_invalidate_def] >>
   IF_CASES_TAC
   >- simp[cf_sound_opt_def, cf_sound_def] >>
@@ -2227,14 +2078,14 @@ Resume cft_mstore[var_case]:
     simp[ce_memloc_from_ops_def] >>
     qpat_x_assum `memloc_within_alloca _ s` mp_tac >>
     simp[bp_get_write_location_def, mem_write_ops_def, LET_THM,
-         write_effects_def, is_alloca_op_def,
+         write_effects_def, is_alloca_op_def, is_raw_fmp_opcode_def,
          ce_memloc_from_ops_def]) >>
   gvs[] >>
   irule cft_mstore_var >> simp[] >>
   qpat_x_assum `memloc_within_alloca _ s` mp_tac >>
   simp[ce_memloc_from_ops_def,
        bp_get_write_location_def, mem_write_ops_def, LET_THM,
-       write_effects_def, is_alloca_op_def]
+       write_effects_def, is_alloca_op_def, is_raw_fmp_opcode_def]
 QED
 
 Finalise cft_mstore
@@ -2262,7 +2113,7 @@ Proof
   Cases_on `inst.inst_opcode` >>
   gvs[is_copy_opcode_def, bp_get_write_location_def,
       ce_memloc_from_ops_def, write_effects_def, mem_write_ops_def,
-      is_alloca_op_def]
+      is_alloca_op_def, is_raw_fmp_opcode_def]
 QED
 
 (* bp_ptrs_bounded gives memloc_within_alloca for write locations.
@@ -2274,6 +2125,7 @@ Triviality bp_ptrs_bounded_write_loc[local]:
     bp_ptrs_bounded bp fn s /\
     MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
     inst.inst_opcode <> DLOAD /\ inst.inst_opcode <> INVOKE /\
+    ~is_raw_fmp_opcode inst.inst_opcode /\
     Eff_MEMORY IN write_effects inst.inst_opcode ==>
     memloc_within_alloca (bp_get_write_location bp inst AddrSp_Memory) s
 Proof
@@ -2329,7 +2181,7 @@ Resume copy_fact_transfer_sound_thm[no_mem_effect]:
   `~is_ext_call_op inst.inst_opcode` by gvs[] >>
   `inst.inst_opcode <> INVOKE` by metis_tac[not_invoke_if_no_mem_effect] >>
   `s'.vs_allocas = s.vs_allocas` by
-    (irule step_preserves_allocas >> metis_tac[]) >>
+    (irule step_inst_non_alloca_preserves_allocas >> metis_tac[]) >>
   (* cf_sound_opt: from cft_case4 *)
   conj_asm1_tac
   >- (irule cft_case4 >> metis_tac[])
@@ -2366,7 +2218,7 @@ Resume copy_fact_transfer_sound_thm[mst_sound]:
      (bp_get_write_location ctx.ce_bp inst AddrSp_Memory) s` by (
     mp_tac bp_ptrs_bounded_write_loc >>
     disch_then (qspecl_then [`ctx.ce_bp`,`fn`,`s`,`bb`,`inst`] mp_tac) >>
-    gvs[write_effects_def, opcode2num_thm]) >>
+    gvs[write_effects_def, opcode2num_thm, is_raw_fmp_opcode_def]) >>
   irule cft_mstore >> simp[] >>
   qexistsl [`fuel`, `run_ctx`, `s`] >>
   Cases_on `v` >>
@@ -2381,7 +2233,7 @@ QED
 
 Resume copy_fact_transfer_sound_thm[mst_alloca]:
   `s'.vs_allocas = s.vs_allocas` by (
-    mp_tac step_preserves_allocas >>
+    mp_tac step_inst_non_alloca_preserves_allocas >>
     disch_then (qspecl_then [`fuel`,`run_ctx`,`inst`,`s`,`s'`] mp_tac) >>
     gvs[is_alloca_op_def, opcode2num_thm]) >>
   simp[cf_alloca_ok_opt_def, copy_fact_invalidate_def] >>
@@ -2425,7 +2277,8 @@ Resume copy_fact_transfer_sound_thm[is_copy]:
         disch_then (qspecl_then [`ctx.ce_bp`,`fn`,`s`,`bb`,`inst`] mp_tac) >>
         (impl_tac >- (
           simp[] >> Cases_on `inst.inst_opcode` >>
-          gvs[is_copy_opcode_def, opcode2num_thm, write_effects_def])) >>
+          gvs[is_copy_opcode_def, opcode2num_thm, write_effects_def,
+              is_raw_fmp_opcode_def])) >>
         simp[]) >>
       mp_tac (Q.SPECL [`ctx.ce_bp`, `dst`, `sz`, `s`, `dst_val`]
                 ce_memloc_runtime_w2n) >>
@@ -2477,7 +2330,7 @@ Resume copy_fact_transfer_sound_thm[redundant]:
      (TAKE (w2n sz_val)
         (DROP (w2n src_val) s.vs_memory ++ REPLICATE (w2n sz_val) 0w))
      s = s` by (
-    irule write_mem_identity >>
+    irule write_memory_with_expansion_identity >>
     simp[LENGTH_TAKE_EQ, rich_listTheory.LENGTH_REPLICATE]) >>
   gvs[] >>
   (* v = SOME cfl (since FLOOKUP found something) *)
@@ -2712,7 +2565,7 @@ Resume copy_fact_transfer_sound_thm[nm_bytes]:
      (cf_source_data inst.inst_opcode s) ++ REPLICATE (w2n sz_val) 0w)` >>
   `LENGTH bytes = w2n sz_val` by
     simp[Abbr `bytes`, LENGTH_TAKE_EQ, rich_listTheory.LENGTH_REPLICATE] >>
-  metis_tac[wmwe_read_self, cf_source_data_wmwe]
+  metis_tac[write_memory_with_expansion_read_self, cf_source_data_wmwe]
 QED
 
 Resume copy_fact_transfer_sound_thm[case_mcopy_nofwd]:
@@ -2748,10 +2601,10 @@ Resume copy_fact_transfer_sound_thm[nofwd_bytes]:
      REPLICATE (w2n sz_val) 0w)` >>
   `LENGTH bytes = w2n sz_val` by
     simp[Abbr `bytes`, LENGTH_TAKE_EQ, rich_listTheory.LENGTH_REPLICATE] >>
-  (* LHS = bytes by wmwe_read_self *)
+  (* LHS = bytes by write_memory_with_expansion_read_self *)
   `TAKE (w2n sz_val) (DROP (w2n dst_val)
      (write_memory_with_expansion (w2n dst_val) bytes s).vs_memory) = bytes` by
-    metis_tac[wmwe_read_self] >>
+    metis_tac[write_memory_with_expansion_read_self] >>
   (* RHS: need source disjoint from dest to show old bytes = new bytes *)
   `memloc_within_alloca (ce_memloc_from_ops ctx.ce_bp final_src sz) s` by
     metis_tac[bp_ptrs_bounded_mcopy_read_loc] >>
@@ -2831,16 +2684,16 @@ Resume copy_fact_transfer_sound_thm[fwd_rest2]:
   suspend "fwd_bytes_setup"
 QED
 
-(* Abbreviate bytes, establish wmwe_read_self, reduce to old entry *)
+(* Abbreviate bytes, establish write_memory_with_expansion_read_self, reduce to old entry *)
 Resume copy_fact_transfer_sound_thm[fwd_bytes_setup]:
   qabbrev_tac `bytes = TAKE (w2n sz_val) (DROP (w2n src_val)
      (cf_source_data MCOPY s) ++ REPLICATE (w2n sz_val) 0w)` >>
   `LENGTH bytes = w2n sz_val` by
     simp[Abbr `bytes`, LENGTH_TAKE_EQ, rich_listTheory.LENGTH_REPLICATE] >>
-  (* LHS = bytes by wmwe_read_self *)
+  (* LHS = bytes by write_memory_with_expansion_read_self *)
   `TAKE (w2n sz_val) (DROP (w2n dst_val)
      (write_memory_with_expansion (w2n dst_val) bytes s).vs_memory) = bytes` by
-    metis_tac[wmwe_read_self] >>
+    metis_tac[write_memory_with_expansion_read_self] >>
   (* bytes = TAKE sz (DROP src s.mem) since padding unnecessary *)
   `bytes = TAKE (w2n sz_val) (DROP (w2n src_val) s.vs_memory)` by
     (simp[Abbr `bytes`, cf_source_data_def, TAKE_APPEND1]) >>

@@ -966,7 +966,7 @@ Proof
 QED
 
 (* PHI ID not in dload_nops: PHI opcode ≠ DLOAD *)
-Theorem phi_id_not_in_dload_nops[local]:
+Theorem phi_id_not_in_dload_nops:
   !dfg fn bb inst.
     fn_inst_ids_distinct fn /\ MEM bb fn.fn_blocks /\
     MEM inst bb.bb_instructions /\ inst.inst_opcode = PHI ==>
@@ -981,7 +981,7 @@ Proof
 QED
 
 (* PHI ID not in mstore_map: PHI opcode ≠ MSTORE *)
-Theorem phi_id_not_in_mstore_map[local]:
+Theorem phi_id_not_in_mstore_map:
   !fn bb phi_inst.
     fn_inst_ids_distinct fn /\ MEM bb fn.fn_blocks /\
     MEM phi_inst bb.bb_instructions /\ phi_inst.inst_opcode = PHI ==>
@@ -2072,7 +2072,7 @@ Proof
 QED
 
 (* Memzero: non-PHI source produces only non-PHI outputs *)
-Theorem apply_memzero_inst_non_phi[local]:
+Theorem apply_memzero_inst_non_phi:
   !nop_set rep_map inst inst'.
     inst.inst_opcode <> PHI /\
     MEM inst' (apply_memzero_inst nop_set rep_map inst) ==>
@@ -2120,7 +2120,7 @@ Proof
 QED
 
 (* Mode: non-PHI source produces only non-PHI outputs *)
-Theorem apply_groups_inst_non_phi[local]:
+Theorem apply_groups_inst_non_phi:
   !mode nop_set rep_map inst inst'.
     inst.inst_opcode <> PHI /\
     MEM inst' (apply_groups_inst mode nop_set rep_map inst) ==>

@@ -1,2 +1,0 @@
-# JSON import/parsing layer
-INCLUDES = ../syntax $(VFMDIR)/util $(VFMDIR)/spec

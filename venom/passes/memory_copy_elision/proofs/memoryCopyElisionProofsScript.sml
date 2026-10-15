@@ -20,7 +20,7 @@ Ancestors
   basePtrDefs basePtrProps basePtrProofs
   venomWf venomInst venomInstProps venomEffects venomExecSemantics venomExecProps
   venomState venomMemDefs venomMemProps
-  dfgAnalysisProps dfgCorrectnessProof dfgDefs dfAnalyzeDefs
+  dfgAnalysisProps dfgCorrectnessProof dfgSoundStep dfgDefs dfAnalyzeDefs
   dfIterateProps dfIterateProofs
   memAliasDefs memAliasProofs memLocDefs
   cfgDefs cfgHelpers cfgAnalysisProps
@@ -103,7 +103,14 @@ Proof
     qexists `inst` >> simp[] >>
     Cases_on `inst.inst_opcode` >> gvs[] >> NO_TAC) >>
   rpt (IF_CASES_TAC >> fs[mk_nop_inst_def, is_terminator_def]) >>
-  rpt (CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def]) >>
+  TRY CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def] >>
+  TRY CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def] >>
+  TRY CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def] >>
+  TRY CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def] >>
+  TRY CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def] >>
+  TRY CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def] >>
+  TRY CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def] >>
+  TRY CASE_TAC >> fs[mk_nop_inst_def, is_terminator_def] >>
   imp_res_tac copy_opcode_not_term >> imp_res_tac copy_opcode_not_invoke >>
   imp_res_tac copy_opcode_not_phi >>
   fs[]
@@ -908,7 +915,7 @@ Triviality phi_filter_fwd_inst_wf_for_bp_fdom[local]:
 Proof
   rpt strip_tac >>
   rw[phi_filter_fwd_def] >>
-  Cases_on `inst.inst_opcode` >> gvs[is_ptr_opcode_def, inst_wf_def] >>
+  gvs[inst_wf_def] >>
   simp[phi_well_formed_flat_phi_pairs]
 QED
 
@@ -1121,18 +1128,16 @@ Proof
   Cases_on `t` >> gvs[]
 QED
 
-(* Non-INVOKE: inst_output NONE implies no outputs at all *)
-Triviality inst_wf_output_none_non_invoke[local]:
-  !inst. inst_wf inst /\ inst.inst_opcode <> INVOKE /\
-         inst_output inst = NONE ==>
-    inst.inst_outputs = []
+(* Pointer-producing opcodes have exactly one output, so NONE excludes them. *)
+Triviality inst_wf_output_none_not_ptr_opcode[local]:
+  !inst. inst_wf inst /\ inst_output inst = NONE ==>
+    ~is_ptr_opcode inst.inst_opcode
 Proof
-  rw[inst_output_def] >>
+  rpt strip_tac >> CCONTR_TAC >>
+  fs[is_ptr_opcode_def] >>
+  gvs[inst_wf_def, inst_output_def] >>
   Cases_on `inst.inst_outputs` >> gvs[] >>
-  Cases_on `t` >> gvs[] >>
-  (* 2+ outputs, but non-INVOKE inst_wf constrains to 0 or 1 outputs *)
-  rename1 `inst.inst_outputs = out1 :: out2 :: rest` >>
-  Cases_on `inst.inst_opcode` >> gvs[inst_wf_def]
+  Cases_on `t` >> gvs[]
 QED
 
 (* Output of instruction is not in its own uses (from block-level self-use
@@ -1222,7 +1227,53 @@ Proof
   >> rpt strip_tac >> gvs[bp_get_ptrs_def, FLOOKUP_UPDATE] >>
   gvs[inst_uses_def, venomInstTheory.operand_vars_def,
        venomInstTheory.operand_var_def] >>
-  BasicProvers.EVERY_CASE_TAC >>
+  Cases_on `inst.inst_operands` >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  Cases_on `t` >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY (Cases_on `t'`) >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY (Cases_on `h`) >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY (Cases_on `h'`) >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY BasicProvers.TOP_CASE_TAC >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY BasicProvers.TOP_CASE_TAC >>
   gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
   (* Remaining: ADD/SUB Var-Var with out as operand (contradiction),
      and PHI operand ptrs agreement *)
@@ -1234,13 +1285,17 @@ Proof
        (MAP SND (phi_pairs inst.inst_operands)) =
    MAP (bp_get_ptrs bp) (MAP SND (phi_pairs inst.inst_operands))` by (
     irule MAP_CONG >> simp[] >> rpt strip_tac >>
+    qmatch_goalsub_rename_tac
+      `bp_get_ptrs (DRESTRICT bp (COMPL {out})) phi_v = _` >>
     simp[bp_get_ptrs_def, FLOOKUP_DRESTRICT] >>
-    `x <> out` by (
+    `phi_v <> out` by (
       CCONTR_TAC >> gvs[] >>
       imp_res_tac phi_pairs_mem_operand_vars >>
-      metis_tac[]) >>
+      gvs[EVERY_MEM, venomInstTheory.operand_vars_def,
+          venomInstTheory.operand_var_def]) >>
     simp[]) >>
-  gvs[]
+  BasicProvers.EVERY_CASE_TAC >>
+  gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT]
 QED
 
 (* Per-instruction bp_ptr_sound preservation at the fixpoint.
@@ -1260,7 +1315,8 @@ Triviality bp_handle_inst_fixpoint_sound[local]:
     (!out. inst_output inst = SOME out ==>
        EVERY (\v. v <> out) (inst_uses inst) /\
        (is_ptr_opcode inst.inst_opcode \/ out NOTIN FDOM bp)) /\
-    (inst_output inst = NONE ==> inst.inst_outputs = []) /\
+    (inst_output inst = NONE ==>
+       !out. MEM out inst.inst_outputs ==> bp_get_ptrs bp out = []) /\
     (!v aid off. MEM (Ptr (Allocation aid) off) (bp_get_ptrs bp v) ==>
        FLOOKUP s'.vs_allocas aid = FLOOKUP s.vs_allocas aid) /\
     (!v. inst.inst_opcode = PHI /\
@@ -1279,10 +1335,13 @@ Proof
   CONV_TAC (REWR_CONV bp_ptr_sound_def) >> rpt gen_tac >> strip_tac >>
   Cases_on `inst_output inst`
   >- (
-    (* NONE: inst has no outputs, so lookup_var v preserved *)
+    (* NONE: any outputs are untracked by bp, so the currently tracked v
+       cannot be overwritten. *)
+    `bp_get_ptrs bp v <> []` by metis_tac[] >>
+    `~MEM v inst.inst_outputs` by metis_tac[] >>
     `lookup_var v s' = lookup_var v s` by (
       irule step_inst_preserves_lookup >>
-      qexistsl [`ctx`, `fuel`, `inst`] >> gvs[]) >>
+      qexistsl [`ctx`, `fuel`, `inst`] >> simp[]) >>
     `IS_SOME (lookup_var v s)` by fs[] >>
     `?p. MEM p (bp_get_ptrs bp v) /\ ptr_matches_var p v s` by
       metis_tac[bp_ptr_sound_def] >>
@@ -2405,7 +2464,12 @@ Resume bp_ptr_sound_step_non_invoke[goal1]:
 QED
 
 Resume bp_ptr_sound_step_non_invoke[goal2]:
-  strip_tac >> irule inst_wf_output_none_non_invoke >> simp[]
+  rpt strip_tac >>
+  irule bp_get_ptrs_not_in_fdom >>
+  irule bp_non_ptr_outputs_not_tracked >>
+  qexistsl [`bb`, `fn`, `inst`] >>
+  simp[] >>
+  metis_tac[inst_wf_output_none_not_ptr_opcode]
 QED
 
 Resume bp_ptr_sound_step_non_invoke[goal3]:
@@ -3308,11 +3372,14 @@ Proof
    | Error e => Error e` by (
     CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
     simp[get_instruction_def, Abbr `inst`, Abbr `idx`]) >>
-  pop_assum (fn th => FULL_SIMP_TAC std_ss [th]) >>
+  qpat_x_assum `exec_block fuel run_ctx bb st = OK v` (fn ok_th =>
+    qpat_x_assum `exec_block fuel run_ctx bb st = _` (fn unfold_th =>
+      assume_tac (REWRITE_RULE [unfold_th] ok_th))) >>
   Cases_on `step_inst fuel run_ctx inst st`
   >- (
     rename1 `step_inst _ _ _ _ = OK st'` >>
-    FULL_SIMP_TAC std_ss [exec_result_case_def] >>
+    qpat_x_assum `_ = OK v` (fn th =>
+      assume_tac (SIMP_RULE std_ss [exec_result_case_def] th)) >>
     `dfg_assigns_sound dfg (st' with vs_inst_idx := 0) /\
      bp_ptr_sound bp (st' with vs_inst_idx := 0) /\
      allocas_non_overlapping (st' with vs_inst_idx := 0) /\
@@ -3338,6 +3405,7 @@ Proof
     qpat_x_assum `~is_terminator inst.inst_opcode` (fn nonterm_th =>
       qpat_x_assum `(if is_terminator inst.inst_opcode then if st'.vs_halted then Halt st' else OK st' else run_block_non_phis fuel run_ctx bb (st' with vs_inst_idx := SUC idx)) = OK v`
         (fn eq_th => assume_tac (REWRITE_RULE [nonterm_th] eq_th))) >>
+    qpat_x_assum `n = LENGTH bb.bb_instructions - idx` SUBST_ALL_TAC >>
     qpat_x_assum `!m. m < LENGTH bb.bb_instructions - idx ==> _`
       (qspec_then `LENGTH bb.bb_instructions - SUC idx` mp_tac) >>
     impl_tac >- simp[Abbr `idx`] >>
@@ -4179,7 +4247,7 @@ Triviality ssa_no_self_use[local]:
   !fn bb inst out.
     ssa_form fn /\ def_dominates_uses fn /\ wf_function fn /\
     MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
-    inst_output inst = SOME out ==>
+    inst.inst_opcode <> PHI /\ inst_output inst = SOME out ==>
     ~MEM out (inst_uses inst)
 Proof
   rpt strip_tac >>
@@ -4191,9 +4259,11 @@ Proof
     Cases_on `t` >> gvs[]) >>
   qpat_x_assum `def_dominates_uses _`
     (fn th => assume_tac (REWRITE_RULE[def_dominates_uses_def] th)) >>
-  first_x_assum (qspecl_then [`bb`, `inst`, `out`] mp_tac) >>
-  (impl_tac >- simp[]) >>
-  strip_tac >>
+  `def_available_at fn bb (SOME inst) out` by (
+    first_x_assum (qspecl_then [`bb`, `inst`] mp_tac) >>
+    simp[] >> disch_then (qspec_then `out` mp_tac) >> simp[]) >>
+  qpat_x_assum `def_available_at fn bb _ out`
+    (strip_assume_tac o REWRITE_RULE[def_available_at_def]) >>
   `MEM def_inst (fn_insts fn)` by
     (simp[fn_insts_def] >> metis_tac[mem_block_mem_fn_insts]) >>
   `MEM inst (fn_insts fn)` by
@@ -4907,36 +4977,6 @@ QED
 
 (* ===== Stage 2 helpers: store idempotency ===== *)
 
-(* word_to_bytes ∘ word_of_bytes roundtrip for 32-byte words.
-   Adapted from mmCopyEquivScript. *)
-Triviality dimindex_256[local]:
-  dimindex(:256) = 256
-Proof
-  simp[fcpTheory.index_bit0, dimindex_128,
-       fcpTheory.finite_bit0, finite_128,
-       fcpTheory.index_one, fcpTheory.finite_one]
-QED
-
-Triviality dimword_256_val[local]:
-  dimword(:256) =
-    115792089237316195423570985008687907853269984665640564039457584007913129639936
-Proof
-  simp[dimword_def, dimindex_256]
-QED
-
-Triviality word_bytes_roundtrip_32[local]:
-  !bytes.
-    LENGTH bytes = 32 ==>
-    word_to_bytes (word_of_bytes T (0w:bytes32) bytes) T = bytes
-Proof
-  rw[LIST_EQ_REWRITE, byteTheory.LENGTH_word_to_bytes, dimindex_256] >>
-  fs[] >>
-  rw[byteTheory.word_to_bytes_def, dimindex_256] >>
-  simp[byteTheory.EL_word_to_bytes_aux, dimindex_256] >>
-  simp[byteTheory.get_byte_word_of_bytes_be, dimindex_256] >>
-  simp[byteTheory.first_byte_at_0w, dimword_256_val]
-QED
-
 (* sstore(key, sload(key, s), s) = s *)
 Triviality sstore_sload_id[local]:
   !key s. sstore key (sload key s) s = s
@@ -4981,7 +5021,7 @@ Proof
   (* Bytes roundtrip *)
   `LENGTH (TAKE 32 (DROP offset s.vs_memory)) = 32` by
     simp[LENGTH_TAKE] >>
-  simp[word_bytes_roundtrip_32] >>
+  simp[word_bytes_roundtrip_256] >>
   (* Splice identity: TAKE n l ++ TAKE 32 (DROP n l) ++ DROP (n+32) l = l *)
   `DROP offset s.vs_memory =
    TAKE 32 (DROP offset s.vs_memory) ++ DROP 32 (DROP offset s.vs_memory)` by
@@ -5268,7 +5308,13 @@ Triviality store_step_is_exec_write2[local]:
    step_inst_base inst s =
      exec_write2 (\key val s. tstore key val s) inst s)
 Proof
-  simp[step_inst_base_def]
+  rpt conj_tac
+  >- (strip_tac >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+      ASM_REWRITE_TAC[venomInstTheory.opcode_case_def])
+  >- (strip_tac >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+      ASM_REWRITE_TAC[venomInstTheory.opcode_case_def])
+  >- (strip_tac >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+      ASM_REWRITE_TAC[venomInstTheory.opcode_case_def])
 QED
 
 (* Key helper 1: transformed instruction produces same step_inst result
@@ -5321,8 +5367,8 @@ Proof
   (* Show v1 = n2w addr_res by unfolding bp_get_write_location for
      each concrete opcode+space, exposing bp_segment_from_ops *)
   qpat_x_assum `resolve_memloc_offset _ _ = _` mp_tac >>
-  gvs[bp_get_write_location_def, venomEffectsTheory.write_effects_def,
-      mem_write_ops_def, LET_THM] >>
+  gvs[bp_get_write_location_def, is_raw_fmp_opcode_def,
+      venomEffectsTheory.write_effects_def, mem_write_ops_def, LET_THM] >>
   strip_tac >>
   `v1 = n2w addr_res` by
     metis_tac[write_loc_eval_operand_raw] >>
@@ -5650,7 +5696,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `inst.inst_opcode` >>
   gvs[is_load_fact_opcode_def, load_opcode_addr_space_def,
-      bp_get_read_location_def, mem_read_ops_def,
+      bp_get_read_location_def, is_raw_fmp_opcode_def, mem_read_ops_def,
       venomEffectsTheory.read_effects_def] >>
   irule_at Any EQ_REFL >> simp[]
 QED
@@ -5690,8 +5736,12 @@ Proof
     (mp_tac load_bp_get_read_bridge >> simp[]) >>
   (* Case split on the 3 load opcodes; all use exec_read1 *)
   Cases_on `inst.inst_opcode` >> gvs[is_load_fact_opcode_def] >>
-  gvs[step_inst_def, is_terminator_def, step_inst_base_def,
-      exec_read1_def] >>
+  gvs[step_inst_def, is_terminator_def] >>
+  qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
+  ONCE_REWRITE_TAC[step_inst_base_def] >>
+  ASM_REWRITE_TAC[venomInstTheory.opcode_case_def] >>
+  strip_tac >>
+  gvs[exec_read1_def] >>
   (* From OK result: eval_operand ops.iao_ofst s = SOME v *)
   Cases_on `eval_operand ops.iao_ofst s` >> gvs[] >>
   rename1 `eval_operand _ s = SOME v` >>
@@ -5857,27 +5907,55 @@ Resume lse_inv_preserved[branch5_alloca]:
   metis_tac[]
 QED
 
+Triviality lf_sound_residual_preserved[local]:
+  !fuel ctx inst s s' lf.
+    step_inst fuel ctx inst s = OK s' /\
+    lf_sound lf s /\
+    (!v. v IN FDOM lf ==> ~MEM v inst.inst_outputs) /\
+    ~is_terminator inst.inst_opcode /\
+    ~is_ext_call_op inst.inst_opcode /\
+    ~is_alloca_op inst.inst_opcode /\
+    ~is_effect_free_op inst.inst_opcode /\
+    ~is_load_fact_opcode inst.inst_opcode /\
+    ~is_store_opcode inst.inst_opcode /\
+    ~is_copy_opcode inst.inst_opcode /\
+    Eff_MEMORY NOTIN write_effects inst.inst_opcode ==>
+    lf_sound lf s'
+Proof
+  rpt strip_tac >>
+  `inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> ALLOCA` by
+    (Cases_on `inst.inst_opcode` >>
+     gvs[is_ext_call_op_def, is_alloca_op_def,
+         venomEffectsTheory.write_effects_def,
+         venomEffectsTheory.all_effects_def]) >>
+  `step_inst_base inst s = OK s'` by
+    metis_tac[step_inst_non_invoke] >>
+  `s'.vs_allocas = s.vs_allocas` by
+    metis_tac[venomMemProofsTheory.step_inst_base_preserves_alloca_fields] >>
+  qspecl_then [`fuel`, `ctx`, `inst`, `s`, `s'`] mp_tac
+    step_inst_preserves_all >>
+  impl_tac >- simp[] >> strip_tac >>
+  `s'.vs_memory = s.vs_memory /\
+   s'.vs_accounts = s.vs_accounts /\
+   s'.vs_transient = s.vs_transient` by
+    (Cases_on `inst.inst_opcode` >>
+     gvs[is_effect_free_op_def, is_ext_call_op_def, is_alloca_op_def,
+         is_load_fact_opcode_def, is_store_opcode_def, is_copy_opcode_def,
+         is_terminator_def, venomEffectsTheory.write_effects_def,
+         venomEffectsTheory.all_effects_def,
+         venomEffectsTheory.empty_effects_def]) >>
+  irule lf_sound_state_eq >>
+  qexists `s` >> simp[] >>
+  rpt strip_tac >>
+  qspecl_then [`fuel`, `ctx`, `inst`, `s`, `s'`, `var`]
+    mp_tac step_inst_preserves_lookup >> simp[]
+QED
+
 Resume lse_inv_preserved[branch5_nonef]:
-  (* Pin opcode: only LOG, ASSERT, ASSERT_UNREACHABLE survive all filters *)
-  Cases_on `inst.inst_opcode` >>
-  gvs[is_effect_free_op_def, is_ext_call_op_def, is_alloca_op_def,
-      is_load_fact_opcode_def, is_store_opcode_def, is_copy_opcode_def,
-      is_terminator_def, venomEffectsTheory.write_effects_def,
-      venomEffectsTheory.all_effects_def, venomEffectsTheory.empty_effects_def]
-  (* LOG: use step_log_preserves for most fields + step_inst_preserves_all for call_ctx *)
-  >- (qspecl_then [`fuel`, `ctx`, `inst`, `s`, `s'`] mp_tac
-        step_log_preserves >> simp[] >> strip_tac >>
-      `s'.vs_call_ctx = s.vs_call_ctx` by
-        (qspecl_then [`fuel`, `ctx`, `inst`, `s`, `s'`] mp_tac
-           step_inst_preserves_all >>
-         simp[is_terminator_def, is_alloca_op_def, is_ext_call_op_def]) >>
-      irule lf_sound_state_eq >> qexists `s` >> gvs[])
-  (* ASSERT: s' = s *)
-  >- (imp_res_tac step_assert_identity >>
-      irule lf_sound_state_eq >> qexists `s` >> gvs[])
-  (* ASSERT_UNREACHABLE: s' = s *)
-  >> (imp_res_tac step_assert_unreachable_identity >>
-      irule lf_sound_state_eq >> qexists `s` >> gvs[])
+  simp[lf_sound_inst_idx] >>
+  qspecl_then [`fuel`, `ctx`, `inst`, `s`, `s'`, `lf`]
+    mp_tac lf_sound_residual_preserved >>
+  simp[]
 QED
 
 Triviality lf_at_opcode_inv_early[local]:
@@ -5889,8 +5967,14 @@ Proof
   rpt gen_tac >> reverse IF_CASES_TAC >> gvs[] >- metis_tac[] >>
   simp[load_store_step_def, LET_THM] >> rpt COND_CASES_TAC >>
   gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, invalidate_loads_def] >>
-  rpt (CASE_TAC >>
-       gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT]) >>
+  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
   rpt strip_tac >> gvs[] >> res_tac
 QED
 
@@ -6353,83 +6437,100 @@ Proof
   simp[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def]
 QED
 
-Triviality terminator_opcode_cases[local]:
-  !op.
-    is_terminator op ==>
-    op = JMP \/ op = JNZ \/ op = DJMP \/ op = RET \/
-    op = RETURN \/ op = REVERT \/ op = STOP \/ op = SINK \/
-    op = SELFDESTRUCT \/ op = INVALID
-Proof
-  Cases >> simp[is_terminator_def]
-QED
-
-val terminator_state_tuple_tac =
-  fs[step_inst_base_def, jump_to_def, halt_state_def, revert_state_def,
-     set_returndata_def, LET_THM] >>
-  rpt (BasicProvers.PURE_FULL_CASE_TAC >>
-       fs[jump_to_def, halt_state_def, revert_state_def,
-          set_returndata_def]) >>
-  gvs[];
-
-Triviality step_inst_base_terminator_ok_state_tuple[local]:
-  !inst s s'.
-    step_inst_base inst s = OK s' /\
-    is_terminator inst.inst_opcode ==>
-    (s'.vs_memory, s'.vs_accounts, s'.vs_transient, s'.vs_call_ctx,
-     s'.vs_allocas, s'.vs_alloca_next) =
-    (s.vs_memory, s.vs_accounts, s.vs_transient, s.vs_call_ctx,
-     s.vs_allocas, s.vs_alloca_next)
-Proof
-  rpt strip_tac >>
-  drule terminator_opcode_cases >> strip_tac
-  >- terminator_state_tuple_tac
-  >- terminator_state_tuple_tac
-  >- terminator_state_tuple_tac
-  >- terminator_state_tuple_tac
-  >- terminator_state_tuple_tac
-  >- terminator_state_tuple_tac
-  >- terminator_state_tuple_tac
-  >- terminator_state_tuple_tac
-  >- terminator_state_tuple_tac
-  >- terminator_state_tuple_tac
-QED
-
-(* Terminators returning OK preserve all fields relevant to lf_sound/bp_ptr_sound/alloca_inv *)
+(* Terminators returning OK preserve the metadata needed by bp_ptr_sound and
+   alloca_inv.  DRET may change memory, so deliberately do not claim broader
+   state equality here. *)
 Triviality step_terminator_ok_preserves[local]:
   !fuel ctx inst s s'.
     step_inst fuel ctx inst s = OK s' /\
     is_terminator inst.inst_opcode ==>
-    s'.vs_memory = s.vs_memory /\
-    s'.vs_accounts = s.vs_accounts /\
-    s'.vs_transient = s.vs_transient /\
-    s'.vs_call_ctx = s.vs_call_ctx /\
     s'.vs_allocas = s.vs_allocas /\
     s'.vs_alloca_next = s.vs_alloca_next /\
     (!v. lookup_var v s' = lookup_var v s)
 Proof
   rpt gen_tac >> strip_tac >>
   imp_res_tac step_terminator_preserves_vars >>
-  `inst.inst_opcode <> INVOKE` by (
+  `inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> ALLOCA` by (
     Cases_on `inst.inst_opcode` >> fs[is_terminator_def]) >>
   `step_inst_base inst s = OK s'` by
     metis_tac[step_inst_non_invoke] >>
-  drule_all step_inst_base_terminator_ok_state_tuple >>
+  qspecl_then [`inst`, `s`, `s'`] mp_tac
+    venomMemProofsTheory.step_inst_base_preserves_alloca_fields >>
   simp[]
 QED
 
-(* load_store_step preserves lf for terminators *)
-Triviality lse_terminator_lf_unchanged[local]:
-  !aliases bp uc lf inst.
-    is_terminator inst.inst_opcode ==>
-    FST (load_store_step aliases bp uc (lf, inst)) = lf
+(* DRET changes only memory among the state observations used by load facts.
+   Its transfer removes facts whose address spaces may observe that change. *)
+Triviality dret_lf_sound[local]:
+  !lf fuel ctx inst s s'.
+    lf_sound lf s /\
+    inst.inst_opcode = DRET /\
+    step_inst fuel ctx inst s = OK s' ==>
+    lf_sound (DRESTRICT lf
+      {v | !lfact eff. FLOOKUP lf v = SOME lfact /\
+           effect_of_addr_space
+             (load_opcode_addr_space lfact.lf_opcode) = SOME eff ==>
+           eff NOTIN write_effects DRET}) s'
 Proof
   rpt strip_tac >>
-  Cases_on `inst.inst_opcode` >> fs[is_terminator_def] >>
-  simp[load_store_step_def, LET_THM,
-       is_load_fact_opcode_def, is_store_opcode_def,
-       is_copy_opcode_def, venomEffectsTheory.write_effects_def,
-       venomEffectsTheory.all_effects_def, venomEffectsTheory.empty_effects_def,
-       pred_setTheory.IN_INSERT, pred_setTheory.NOT_IN_EMPTY]
+  `is_mem_write_op inst.inst_opcode` by simp[is_mem_write_op_def] >>
+  drule_all step_mem_write_preserves >> strip_tac >>
+  irule lf_sound_drestrict_non_memory_weak >>
+  rpt conj_tac >>
+  gvs[write_effects_def, all_effects_def, empty_effects_def,
+      contract_storage_def] >>
+  qexists `s` >> simp[]
+QED
+
+Triviality non_dret_terminator_lf_sound[local]:
+  !lf fuel ctx inst s s'.
+    lf_sound lf s /\
+    step_inst fuel ctx inst s = OK s' /\
+    is_terminator inst.inst_opcode /\
+    inst.inst_opcode <> DRET ==>
+    lf_sound lf s'
+Proof
+  rpt strip_tac >>
+  irule lf_sound_state_eq >> qexists `s` >> simp[] >>
+  `inst.inst_opcode <> INVOKE` by
+    (Cases_on `inst.inst_opcode` >> fs[is_terminator_def]) >>
+  `step_inst_base inst s = OK s'` by metis_tac[step_inst_non_invoke] >>
+  qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
+  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  ASM_REWRITE_TAC[] >> simp[] >>
+  rpt (BasicProvers.PURE_FULL_CASE_TAC >>
+       fs[jump_to_def, halt_state_def, revert_state_def,
+          set_returndata_def, lookup_var_def, contract_storage_def]) >>
+  rpt strip_tac >> gvs[]
+QED
+
+(* Successful terminators preserve load-fact soundness.  DRET may change
+   memory, but load_store_step removes memory/FMP facts before the successor. *)
+Triviality lse_terminator_lf_sound[local]:
+  !aliases bp uc lf fuel ctx inst s s'.
+    lf_sound lf s /\
+    step_inst fuel ctx inst s = OK s' /\
+    is_terminator inst.inst_opcode ==>
+    lf_sound (FST (load_store_step aliases bp uc (lf, inst))) s'
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `inst.inst_opcode = DRET`
+  >- (gvs[] >>
+      simp[load_store_step_def, LET_THM, is_load_fact_opcode_def,
+           is_store_opcode_def, is_copy_opcode_def, write_effects_def,
+           all_effects_def, empty_effects_def] >>
+      qspecl_then [`lf`, `fuel`, `ctx`, `inst`, `s`, `s'`] mp_tac
+        dret_lf_sound >>
+      simp[write_effects_def, all_effects_def, empty_effects_def]) >>
+  `FST (load_store_step aliases bp uc (lf, inst)) = lf` by
+    (Cases_on `inst.inst_opcode` >>
+     fs[is_terminator_def, load_store_step_def, LET_THM,
+        is_load_fact_opcode_def, is_store_opcode_def, is_copy_opcode_def,
+        write_effects_def, all_effects_def, empty_effects_def]) >>
+  simp[] >>
+  qspecl_then [`lf`, `fuel`, `ctx`, `inst`, `s`, `s'`] mp_tac
+    non_dret_terminator_lf_sound >> simp[]
 QED
 
 (* is_terminator is preserved by load_store_step *)
@@ -6637,10 +6738,15 @@ QED
 
 Resume lse_pointwise_hyps[terminator_ok]:
   drule_all step_terminator_ok_preserves >> strip_tac >>
-  simp[lf_at_def, lse_terminator_lf_unchanged] >>
+  simp[lf_at_def] >>
   conj_tac
-  >- (irule lf_sound_state_eq >> qexists `s_i` >>
-      gvs[lookup_var_def])
+  >- (simp[lf_sound_inst_idx] >>
+      qspecl_then
+        [`aliases`, `bp`, `uc`,
+         `lf_at aliases bp uc bb.bb_instructions s_i.vs_inst_idx`,
+         `fuel`, `ctx`, `EL s_i.vs_inst_idx bb.bb_instructions`,
+         `s_i`, `s_i'`] mp_tac lse_terminator_lf_sound >>
+      simp[])
   >> metis_tac[bp_ptr_sound_state_eq, alloca_inv_state_eq]
 QED
 
@@ -6768,7 +6874,17 @@ Triviality lf_at_opcode_inv[local]:
 Proof
   Induct_on `i` >> simp[lf_at_def, FLOOKUP_EMPTY] >>
   rpt gen_tac >> reverse IF_CASES_TAC >> gvs[] >- metis_tac[] >>
-  simp[load_store_step_def, LET_THM] >> rpt COND_CASES_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, invalidate_loads_def] >> rpt (CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT]) >> rpt strip_tac >> gvs[] >> res_tac
+  simp[load_store_step_def, LET_THM] >> rpt COND_CASES_TAC >>
+  gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, invalidate_loads_def] >>
+  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  TRY CASE_TAC >> gvs[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  rpt strip_tac >> gvs[] >> res_tac
 QED
 
 (* ALL_DISTINCT flat-map disjointness at different indices *)

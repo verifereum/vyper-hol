@@ -27,10 +27,10 @@ Definition vyper_to_abi_type_def[simp]:
   vyper_to_abi_type env (TupleT ts) = Tuple (vyper_to_abi_types env ts) ∧
   vyper_to_abi_type env (ArrayT t (Dynamic _)) = Array NONE (vyper_to_abi_type env t) ∧
   vyper_to_abi_type env (ArrayT t (Fixed n)) = Array (SOME n) (vyper_to_abi_type env t) ∧
-  vyper_to_abi_type env (StructT id) =
-    (let nid = string_to_num id in
-     case FLOOKUP env nid of
-     | SOME (StructArgs args) => Tuple (vyper_to_abi_types (env \\ nid) (MAP SND args))
+  vyper_to_abi_type env (StructT nsid) =
+    (let key = type_key nsid in
+     case FLOOKUP env key of
+     | SOME (StructArgs args) => Tuple (vyper_to_abi_types (env \\ key) (MAP SND args))
      | _ => Tuple []) ∧
   vyper_to_abi_type env (FlagT _) = Uint 256 ∧
   vyper_to_abi_type env NoneT = Tuple [] ∧
@@ -40,7 +40,7 @@ Termination
   WF_REL_TAC ‘inv_image ($< LEX $<) (λx. case x of
       INL (env, t) => (CARD (FDOM env), type_size t)
     | INR (env, ts) => (CARD (FDOM env), list_size type_size ts))’
-  \\ rw[FLOOKUP_DEF]
+  \\ rw[FLOOKUP_DEF] >> gvs[type_key_def]
   \\ disj1_tac
   \\ CCONTR_TAC
   \\ fs[]
@@ -58,11 +58,12 @@ val () = cv_auto_trans_rec vyper_to_abi_type_def (
   \\ disj1_tac
   \\ pop_assum mp_tac
   \\ qmatch_goalsub_abbrev_tac `cv_lookup ck`
+  >> gvs[cv_type_key_def]
   \\ `cv_ispair ck = cv$Num 0`
   by (
     rw[Abbr`ck`, cv_string_to_num_def]
     \\ rw[Once keccakTheory.cv_l2n_def]
-    \\ rw[cv_ispair_cv_add] )
+    \\ rw[cv_ispair_cv_add,cv_ispair_cv_mul] )
   \\ pop_assum mp_tac
   \\ qid_spec_tac `cv_env`
   \\ qid_spec_tac `ck`
@@ -127,15 +128,15 @@ Definition abi_to_vyper_def[simp]:
 	     | SOME tv => SOME $ ArrayV $ make_array_value tv b vs
       else NONE ) ∧
   abi_to_vyper env NoneT (ListV ls) = (if NULL ls then SOME NoneV else NONE) ∧
-  abi_to_vyper env (StructT id) (ListV vs) =
-    (let nid = string_to_num id in
-      case FLOOKUP env nid of
+  abi_to_vyper env (StructT nsid) (ListV vs) =
+    (let key = type_key nsid in
+      case FLOOKUP env key of
        | SOME (StructArgs args) =>
-         (case abi_to_vyper_list (env \\ nid) (MAP SND args) vs of NONE => NONE
+         (case abi_to_vyper_list (env \\ key) (MAP SND args) vs of NONE => NONE
           | SOME vs => SOME $ StructV $ ZIP (MAP FST args, vs))
        | _ => NONE) ∧
-  abi_to_vyper env (FlagT id) (NumV n) =
-    (case FLOOKUP env (string_to_num id) of
+  abi_to_vyper env (FlagT nsid) (NumV n) =
+    (case FLOOKUP env (type_key nsid) of
       | SOME (FlagArgs m) =>
         if m ≤ 256 ∧ n < 2 ** m then SOME $ FlagV (&n) else NONE
       | _ => NONE) ∧
@@ -174,10 +175,10 @@ Definition vyper_is_dynamic_def:
   vyper_is_dynamic env (TupleT ts) = vyper_any_dynamic env ts ∧
   vyper_is_dynamic env (ArrayT t (Dynamic _)) = T ∧
   vyper_is_dynamic env (ArrayT t (Fixed _)) = vyper_is_dynamic env t ∧
-  vyper_is_dynamic env (StructT id) =
-    (let nid = string_to_num id in
-     case FLOOKUP env nid of
-     | SOME (StructArgs args) => vyper_any_dynamic (env \\ nid) (MAP SND args)
+  vyper_is_dynamic env (StructT nsid) =
+    (let key = type_key nsid in
+     case FLOOKUP env key of
+     | SOME (StructArgs args) => vyper_any_dynamic (env \\ key) (MAP SND args)
      | _ => F) ∧
   vyper_is_dynamic env (FlagT _) = F ∧
   vyper_is_dynamic env NoneT = F ∧
@@ -188,7 +189,7 @@ Termination
   WF_REL_TAC ‘inv_image ($< LEX $<) (λx. case x of
       INL (env, t) => (CARD (FDOM env), type_size t)
     | INR (env, ts) => (CARD (FDOM env), list_size type_size ts))’
-  \\ rw[FLOOKUP_DEF]
+  \\ rw[FLOOKUP_DEF] >> gvs[type_key_def]
   \\ disj1_tac
   \\ CCONTR_TAC
   \\ fs[]
@@ -208,11 +209,12 @@ val () = cv_auto_trans_rec vyper_is_dynamic_def (
   \\ disj1_tac
   \\ pop_assum mp_tac
   \\ qmatch_goalsub_abbrev_tac `cv_lookup ck`
+  >> gvs[cv_type_key_def]
   \\ `cv_ispair ck = cv$Num 0`
   by (
     rw[Abbr`ck`, cv_string_to_num_def]
     \\ rw[Once keccakTheory.cv_l2n_def]
-    \\ rw[cv_ispair_cv_add] )
+    \\ rw[cv_ispair_cv_add,cv_ispair_cv_mul] )
   \\ pop_assum mp_tac
   \\ qid_spec_tac `cv_env`
   \\ qid_spec_tac `ck`
@@ -260,11 +262,11 @@ Definition vyper_abi_size_bound_def:
     32 + n * vyper_abi_embedded_size env t ∧
   vyper_abi_size_bound env (ArrayT t (Fixed n)) =
     n * vyper_abi_embedded_size env t ∧
-  vyper_abi_size_bound env (StructT id) =
-    (let nid = string_to_num id in
-     case FLOOKUP env nid of
+  vyper_abi_size_bound env (StructT nsid) =
+    (let key = type_key nsid in
+     case FLOOKUP env key of
      | SOME (StructArgs args) =>
-         vyper_abi_size_bound_list (env \\ nid) (MAP SND args)
+         vyper_abi_size_bound_list (env \\ key) (MAP SND args)
      | _ => 0) ∧
   vyper_abi_size_bound env (FlagT _) = 32 ∧
   vyper_abi_size_bound env NoneT = 0 ∧
@@ -283,7 +285,7 @@ Termination
     | INR (INL (env, t)) => (CARD (FDOM env), 2 * type_size t + 1)
     (* vyper_abi_size_bound_list *)
     | INR (INR (env, ts)) => (CARD (FDOM env), 2 * list_size type_size ts))’
-  \\ rw[FLOOKUP_DEF]
+  \\ rw[FLOOKUP_DEF] >> gvs[type_key_def]
   \\ TRY (disj1_tac \\ CCONTR_TAC \\ fs[] \\ NO_TAC)
   \\ simp[type_size_def]
 End
@@ -301,11 +303,12 @@ val () = cv_auto_trans_rec vyper_abi_size_bound_def (
   \\ disj1_tac
   \\ pop_assum mp_tac
   \\ qmatch_goalsub_abbrev_tac `cv_lookup ck`
+  >> gvs[cv_type_key_def]
   \\ `cv_ispair ck = cv$Num 0`
   by (
     rw[Abbr`ck`, cv_string_to_num_def]
     \\ rw[Once keccakTheory.cv_l2n_def]
-    \\ rw[cv_ispair_cv_add] )
+    \\ rw[cv_ispair_cv_add,cv_ispair_cv_mul] )
   \\ pop_assum mp_tac
   \\ qid_spec_tac `cv_env`
   \\ qid_spec_tac `ck`
@@ -339,17 +342,70 @@ val () = cv_auto_trans_rec vyper_abi_size_bound_def (
   \\ Cases_on`1 - SUC n MOD 2` \\ gvs[]
 );
 
+(* ===== Vyper's stricter ABI decode validation =====
+   See vyperABIValidScript. *)
+
+Definition abi_head_word_def:
+  abi_head_word (bs:byte list) = dest_NumV (dec_number (Uint 256) (TAKE 32 bs))
+End
+
+val () = cv_auto_trans abi_head_word_def;
+
+Definition vyper_strict_enc_def:
+  vyper_strict_enc env t bs =
+    (static_length (vyper_to_abi_type env t) ≤ LENGTH bs ∧
+     LENGTH bs ≤ vyper_abi_size_bound env t)
+End
+
+val () = cv_auto_trans vyper_strict_enc_def;
+
+(* strengthen valid_enc  *)
+Definition vyper_valid_enc_def:
+  vyper_valid_enc env t bs ⇔
+    (valid_enc (vyper_to_abi_type env t) bs ∧ vyper_strict_enc env t bs)
+End
+
+val () = cv_auto_trans vyper_valid_enc_def;
+
+(* TOP-LEVEL: shared decode step, after the buffer has been validated. *)
+Definition decode_abi_value_def:
+  decode_abi_value tenv typ bs =
+    case abi_to_vyper tenv typ (dec (vyper_to_abi_type tenv typ) bs) of
+      SOME v => INL v
+    | NONE => INR "abi_decode conversion"
+End
+
+val () = cv_auto_trans decode_abi_value_def;
+
+(* TOP-LEVEL: decode a validated buffer (_abi_decode path). *)
 Definition evaluate_abi_decode_def:
   evaluate_abi_decode tenv typ bs =
-    let abiTy = vyper_to_abi_type tenv typ in
-    if valid_enc abiTy bs then
-      case abi_to_vyper tenv typ (dec abiTy bs) of
-        SOME v => INL v
-      | NONE => INR "abi_decode conversion"
+    if vyper_valid_enc tenv typ bs then
+      decode_abi_value tenv typ bs
     else INR "abi_decode invalid"
 End
 
 val () = cv_auto_trans evaluate_abi_decode_def;
+
+(* TOP-LEVEL: returndata gate, without the upper bound the cap enforces. *)
+Definition vyper_valid_enc_returndata_def:
+  vyper_valid_enc_returndata env t bs ⇔
+    (valid_enc (vyper_to_abi_type env t) bs ∧
+     static_length (vyper_to_abi_type env t) ≤ LENGTH bs)
+End
+
+val () = cv_auto_trans vyper_valid_enc_returndata_def;
+
+(* TOP-LEVEL: decode extcall returndata, over the size-capped buffer. *)
+Definition evaluate_abi_decode_returndata_def:
+  evaluate_abi_decode_returndata tenv typ bs =
+    let bs = TAKE (vyper_abi_size_bound tenv typ) bs in
+    if vyper_valid_enc_returndata tenv typ bs then
+      decode_abi_value tenv typ bs
+    else INR "abi_decode invalid"
+End
+
+val () = cv_auto_trans evaluate_abi_decode_returndata_def;
 
 (* Per Vyper ABI spec: wrap return type in tuple unless it's already
    a multi-element tuple (length > 1). See vyper/codegen/core.py *)
@@ -365,12 +421,12 @@ val () = cv_auto_trans needs_external_call_wrap_def;
 Definition evaluate_abi_decode_return_def:
   evaluate_abi_decode_return tenv ret_type bs =
     if needs_external_call_wrap ret_type then
-      case evaluate_abi_decode tenv (TupleT [ret_type]) bs of
+      case evaluate_abi_decode_returndata tenv (TupleT [ret_type]) bs of
       | INL (ArrayV (TupleV [v])) => INL v
       | INL _ => INR "decode return unwrap"
       | INR e => INR e
     else
-      evaluate_abi_decode tenv ret_type bs
+      evaluate_abi_decode_returndata tenv ret_type bs
 End
 
 val () = cv_auto_trans evaluate_abi_decode_return_def;
@@ -477,11 +533,11 @@ Definition vyper_to_abi_def[simp]:
          | NONE => NONE) ∧
   vyper_to_abi env (FlagT _) (FlagV n) = SOME (NumV n) ∧
   vyper_to_abi env NoneT NoneV = SOME (ListV []) ∧
-  vyper_to_abi env (StructT id) (StructV fields) =
-    (let nid = string_to_num id in
-     case FLOOKUP env nid of
+  vyper_to_abi env (StructT nsid) (StructV fields) =
+    (let key = type_key nsid in
+     case FLOOKUP env key of
      | SOME (StructArgs args) =>
-         (case vyper_to_abi_list (env \\ nid) (MAP SND args) (MAP SND fields) of
+         (case vyper_to_abi_list (env \\ key) (MAP SND args) (MAP SND fields) of
           | SOME avs => SOME (ListV avs)
           | NONE => NONE)
      | _ => NONE) ∧
@@ -638,6 +694,7 @@ val vyper_to_abi_pre_def = cv_auto_trans_pre_rec
       \\ gvs[]
       \\ NO_TAC)
   (* Handle StructT cv_delete - first try the disjunction case *)
+  >> gvs[cv_type_key_def]
   \\ TRY (
       disj1_tac
       \\ pop_assum mp_tac
@@ -645,7 +702,7 @@ val vyper_to_abi_pre_def = cv_auto_trans_pre_rec
       \\ `cv_ispair ck = cv$Num 0`
          by (rw[Abbr`ck`, cv_string_to_num_def]
              \\ rw[Once keccakTheory.cv_l2n_def]
-             \\ rw[cv_ispair_cv_add])
+             \\ rw[cv_ispair_cv_add, cv_ispair_cv_mul])
       \\ pop_assum mp_tac
       \\ qid_spec_tac `cv_env`
       \\ qid_spec_tac `ck`
@@ -1073,12 +1130,21 @@ QED
 
 (* ===== ABI Encoding ===== *)
 
-Definition evaluate_abi_encode_def:
-  evaluate_abi_encode tenv typ v =
+Definition evaluate_abi_encode_bytes_def:
+  evaluate_abi_encode_bytes tenv typ v =
     let abiTy = vyper_to_abi_type tenv typ in
     case vyper_to_abi tenv typ v of
-      SOME av => INL $ BytesV (enc abiTy av)
+      SOME av => INL (enc abiTy av)
     | NONE => INR "abi_encode conversion"
+End
+
+val () = cv_auto_trans evaluate_abi_encode_bytes_def;
+
+Definition evaluate_abi_encode_def:
+  evaluate_abi_encode tenv typ v =
+    case evaluate_abi_encode_bytes tenv typ v of
+      INL bs => INL (BytesV bs)
+    | INR err => INR err
 End
 
 val () = cv_auto_trans evaluate_abi_encode_def;
@@ -1105,3 +1171,92 @@ Definition build_ext_calldata_def:
 End
 
 val () = cv_auto_trans build_ext_calldata_def;
+
+(* ===== External Return Encoding (incl. @raw_return) ===== *)
+
+(* TOP-LEVEL: external_returndata
+   Returndata of an external call that produced value v for declared type typ.
+   An ordinary function returns the ABI encoding of v (evaluate_abi_encode_bytes,
+   inverse of the evaluate_abi_decode_return the call sites apply to observed
+   returndata).  A @raw_return function returns its bytestring value's content
+   bytes verbatim: no length word, no padding, possibly empty.  The error branch
+   is unreachable for a well-typed return value: call_external_function reports
+   only safe_casted values, and safe_cast_bytestring_raw_return_bytes gives such
+   a value raw bytes whenever typ is a Bytes/String type. *)
+Definition external_returndata_def:
+  external_returndata raw_return tenv typ v =
+    if raw_return then
+      case raw_return_bytes v of
+        SOME bs => INL bs
+      | NONE => INR "external_returndata: @raw_return needs a bytestring value"
+    else evaluate_abi_encode_bytes tenv typ v
+End
+
+val () = cv_auto_trans external_returndata_def;
+
+(* KEY LEMMA: the @raw_return branch returns exactly the value's own bytes. *)
+Theorem external_returndata_raw_SOME_iff:
+  ∀tenv typ v bs.
+    external_returndata T tenv typ v = INL bs ⇔ raw_return_bytes v = SOME bs
+Proof
+  simp[external_returndata_def]
+  >> Cases_on `raw_return_bytes v` >> simp[]
+QED
+
+(* KEY LEMMA: an ordinary external call returns the ABI encoding. *)
+Theorem external_returndata_plain:
+  ∀tenv typ v.
+    external_returndata F tenv typ v = evaluate_abi_encode_bytes tenv typ v
+Proof
+  simp[external_returndata_def] >> metis_tac[]
+QED
+
+(* TOP-LEVEL: external_returndata_agrees
+   Whether observed returndata agrees with the value the semantics computed.
+   An ordinary function ABI-encodes, so returndata must decode back to v; a
+   @raw_return function returns raw content bytes, so returndata must be exactly
+   those, as external_returndata produces. *)
+Definition external_returndata_agrees_def:
+  external_returndata_agrees is_raw tenv ret v out =
+    if is_raw then
+      (case external_returndata T tenv ret v of
+         INR e => F
+       | INL expected => (out = expected))
+    else
+      (case evaluate_abi_decode_return tenv ret out of
+         INR e => F
+       | INL decoded => (decoded = v))
+End
+
+val () = cv_auto_trans external_returndata_agrees_def;
+
+(* KEY LEMMA: the @raw_return agreement is exactly byte equality against the
+   raw encoding; the ordinary agreement is exactly successful decoding. *)
+Theorem external_returndata_agrees_T:
+  ∀tenv ret v out.
+    external_returndata_agrees T tenv ret v out ⇔
+    ∃bs. external_returndata T tenv ret v = INL bs ∧ out = bs
+Proof
+  simp[external_returndata_agrees_def] >> Cases_on `external_returndata T tenv ret v`
+  >> simp[EQ_SYM_EQ]
+QED
+
+Theorem external_returndata_agrees_F:
+  ∀tenv ret v out.
+    external_returndata_agrees F tenv ret v out ⇔
+    evaluate_abi_decode_return tenv ret out = INL v
+Proof
+  simp[external_returndata_agrees_def] >> Cases_on `evaluate_abi_decode_return tenv ret out`
+  >> simp[]
+QED
+
+(* KEY LEMMA: a @raw_return value with no bytestring representation is
+   rejected rather than silently encoded. *)
+Theorem external_returndata_raw_NONE:
+  ∀tenv typ v.
+    raw_return_bytes v = NONE ⇒
+      external_returndata T tenv typ v =
+        INR "external_returndata: @raw_return needs a bytestring value"
+Proof
+  rw[external_returndata_def, option_CASE_rator] >> metis_tac[]
+QED

@@ -278,6 +278,16 @@ Proof
   rw[bind_outputs_def, foldl_update_var_idx]
 QED
 
+
+Triviality adopt_return_fmp_idx:
+  !ir st j.
+    adopt_return_fmp ir (st with vs_inst_idx := j) =
+    adopt_return_fmp ir st with vs_inst_idx := j
+Proof
+  rpt gen_tac >>
+  Cases_on `ir.iret_adopt_fmp` >>
+  simp[adopt_return_fmp_def]
+QED
 (* Non-terminator step_inst at different idx:
    - OK results: state shifted by idx
    - Non-OK results: execution_equiv {} (ignores idx)
@@ -319,9 +329,10 @@ Proof
     `merge_callee_state (s with vs_inst_idx := j) callee_s' =
      merge_callee_state s callee_s' with vs_inst_idx := j` by
       simp[merge_callee_state_def, venom_state_component_equality] >>
-    simp[bind_outputs_idx] >>
-    Cases_on `bind_outputs inst.inst_outputs ret_vals
-                (merge_callee_state s callee_s')` >>
+    simp[adopt_return_fmp_idx, bind_outputs_idx] >>
+    Cases_on `bind_outputs inst.inst_outputs ret_vals.iret_values
+                (adopt_return_fmp ret_vals
+                  (merge_callee_state s callee_s'))` >>
     simp[result_equiv_def, execution_equiv_def, revert_equiv_def, lookup_var_def,
          venom_state_component_equality]
   ) >>
@@ -366,8 +377,7 @@ Proof
   (* OK-OK case: use terminator_OK_inst_idx_0 to get idx=0 *)
   imp_res_tac terminator_OK_inst_idx_0 >> gvs[] >>
   Cases_on `v.vs_halted` >>
-  simp[result_equiv_def, state_equiv_def, execution_equiv_def,
-       lookup_var_def, venom_state_component_equality]
+  simp[result_equiv_def, state_equiv_def, execution_equiv_def, lookup_var_def]
 QED
 
 (* Generalized: relates exec_block at any idx to exec_block on filtered block
@@ -493,20 +503,14 @@ QED
 Triviality state_equiv_empty_eq:
   !s1 s2. state_equiv {} s1 s2 ==> s1 = s2
 Proof
-  rw[state_equiv_def, execution_equiv_def, venom_state_component_equality,
-     lookup_var_def] >>
-  `!v. FLOOKUP s1.vs_vars v = FLOOKUP s2.vs_vars v` by metis_tac[] >>
-  metis_tac[finite_mapTheory.FLOOKUP_EXT, EQ_EXT]
+  ACCEPT_TAC stateEquivPropsTheory.state_equiv_empty_eq
 QED
 
 Triviality result_equiv_empty_ok:
   !s1 s2.
     result_equiv {} (OK s1) (OK s2) ==> s1 = s2
 Proof
-  rw[result_equiv_def, state_equiv_def, execution_equiv_def,
-     venom_state_component_equality, lookup_var_def] >>
-  `!v. FLOOKUP s1.vs_vars v = FLOOKUP s2.vs_vars v` by metis_tac[] >>
-  metis_tac[finite_mapTheory.FLOOKUP_EXT, EQ_EXT]
+  simp[result_equiv_def, stateEquivPropsTheory.state_equiv_empty_eq]
 QED
 
 (* If no element in the list is PHI, phi_prefix_length = 0 *)
@@ -1031,6 +1035,20 @@ QED
 (* State field preservation *)
 Theorem step_inst_preserves_all =
   passSharedFieldTheory.step_inst_preserves_all
+
+Theorem step_inst_no_memory_write_preserves_memory:
+  ∀fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' ∧
+    Eff_MEMORY NOTIN write_effects inst.inst_opcode ∧
+    ¬is_terminator inst.inst_opcode ∧
+    ¬is_alloca_op inst.inst_opcode ∧
+    ¬is_ext_call_op inst.inst_opcode ∧
+    inst.inst_opcode ≠ INVOKE ⇒
+    s'.vs_memory = s.vs_memory
+Proof
+  rpt strip_tac >>
+  drule_all step_inst_preserves_all >> simp[]
+QED
 
 Theorem step_base_preserves_tracked =
   passSharedFieldTheory.step_base_preserves_tracked

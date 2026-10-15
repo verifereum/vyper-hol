@@ -1,11 +1,10 @@
 (*
- * Dataflow Iterate — Correctness (Statements Only)
+ * Dataflow Iterate — Correctness
  *
  * Convergence theorems for iterate-until-fixpoint.
  * Conditions: f has a bounded measure that strictly increases when f(x) ≠ x.
  *
- * Proofs live in proofs/dfIterateProofsScript.sml;
- * this file re-exports via ACCEPT_TAC.
+ * Technical orbit and step lemmas live in proofs/dfIterateProofsScript.sml.
  *)
 
 Theory dfIterateProps
@@ -20,7 +19,10 @@ Theorem df_iterate_fixpoint:
     (!y. m y <= b) ==>
     f (df_iterate f x) = df_iterate f x
 Proof
-  ACCEPT_TAC df_iterate_fixpoint_proof
+  rpt strip_tac >>
+  irule df_iterate_fixpoint_orbit >>
+  qexistsl_tac [`K T`, `b`, `m`] >>
+  simp[]
 QED
 
 (* Inflationary variant: if f grows a partial order and that order
@@ -35,7 +37,13 @@ Theorem df_iterate_inflationary_fixpoint:
     (!y. P y ==> P (f y)) ==>
     f (df_iterate f x) = df_iterate f x
 Proof
-  ACCEPT_TAC df_iterate_inflationary_fixpoint_proof
+  rpt strip_tac >>
+  irule df_iterate_fixpoint_orbit >>
+  qexistsl_tac [`P`, `b`, `m`] >>
+  rw[] >> `leq y (f y)` by res_tac >>
+  `y <> f y` by metis_tac[] >>
+  `m y < m (f y)` by res_tac >>
+  simp[]
 QED
 
 (* Inflationary variant: the invariant P is preserved through iteration. *)
@@ -49,6 +57,13 @@ Theorem df_iterate_inflationary_invariant:
     (!y. P y ==> P (f y)) ==>
     P (df_iterate f x)
 Proof
-  ACCEPT_TAC df_iterate_inflationary_invariant_proof
+  rpt strip_tac >>
+  qspecl_then [`f`, `m`, `b`, `P`, `x`] mp_tac df_iterate_invariant >>
+  impl_tac >- (
+    rw[] >> `leq y (f y)` by res_tac >>
+    `y <> f y` by metis_tac[] >>
+    `m y < m (f y)` by res_tac >>
+    simp[]) >>
+  simp[]
 QED
 

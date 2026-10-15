@@ -1,5 +1,0 @@
-# Codegen correctness proofs
-# ../defs transitively includes: $(VFMDIR)/util, $(VFMDIR)/spec,
-#   ../../defs, ../../passes/shared/defs, ../../analysis/*/defs,
-#   ../../../syntax, ../../../semantics
-INCLUDES = ../defs ../../proofs $(VFMDIR)/spec/prop

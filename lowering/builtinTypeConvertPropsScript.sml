@@ -1,3 +1,12 @@
+(*
+ * Type Conversion Correctness — incomplete/unwired proof work
+ *
+ * STATUS: This theory is not currently imported by the lowering rollup.
+ * builtinPropsScript notes that compile_type_convert_correct was moved here
+ * for build-time reasons, but the main semantic theorem below remains cheated.
+ * Keep as intended future lowering proof work, not dead code.
+ *)
+
 Theory builtinTypeConvertProps
 Ancestors
   builtinTypeConvert1 builtinTypeConvert2

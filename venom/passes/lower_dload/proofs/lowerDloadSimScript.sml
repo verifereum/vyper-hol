@@ -7,13 +7,15 @@
 
 Theory lowerDloadSim
 Ancestors
-  lowerDloadProofs lowerDloadClassify lowerDloadDefs
+  lowerDloadProofs lowerDloadClassify lowerDloadDefs lowerDloadOracleFields
   stateEquiv venomExecSemantics passSimulationDefs
   venomExecProps venomInst venomState venomWf
   venomInstProps analysisSimDefs instIdxIndep
   finite_map words list rich_list pred_set arithmetic
 Libs
-  BasicProvers
+  BasicProvers lowerDloadFrameLib
+
+val _ = augment_srw_ss [lowerDloadFrameLib.frame_ss];
 
 (* ===== run_insts simulation ===== *)
 
@@ -62,7 +64,8 @@ Theorem step_inst_base_ADD_single[local]:
       (SOME v1, SOME v2) => OK (update_var out (word_add v1 v2) s)
     | _ => Error "undefined operand"
 Proof
-  rw[step_inst_base_def, exec_pure2_def]
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  simp[] >> rw[exec_pure2_def]
 QED
 
 Theorem step_inst_base_CODECOPY3[local]:
@@ -78,7 +81,7 @@ Theorem step_inst_base_CODECOPY3[local]:
           OK (write_memory_with_expansion (w2n dst) bytes s)
     | _ => Error "undefined operand"
 Proof
-  rw[step_inst_base_def]
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> simp[]
 QED
 
 (* DLOADBYTES Error -> expansion also errors.
@@ -348,7 +351,8 @@ val term_idx_tac =
   rpt strip_tac >>
   qpat_x_assum `step_inst_base inst s = OK v` mp_tac >>
   simp[step_inst_base_def, jump_to_def] >>
-  gvs[AllCaseEqs(), PULL_EXISTS] >> rw[] >> gvs[];
+  gvs[AllCaseEqs(), PULL_EXISTS] >> rw[] >> gvs[] >>
+  TRY (pairarg_tac >> pairarg_tac >> gvs[]);
 
 Theorem step_inst_base_term_OK_idx_0[local]:
   !inst s v.
@@ -359,6 +363,8 @@ Theorem step_inst_base_term_OK_idx_0[local]:
 Proof
   gen_tac >> Cases_on `inst.inst_opcode` >>
   simp[is_terminator_def]
+  >- term_idx_tac
+  >- term_idx_tac
   >- term_idx_tac
   >- term_idx_tac
   >- term_idx_tac
@@ -433,8 +439,14 @@ Proof
   simp[EVERY_APPEND] >>
   rename1 `lower_dload_inst h` >>
   simp[lower_dload_inst_def] >>
-  rpt (CASE_TAC >> gvs[]) >>
-  simp[is_terminator_def, EVERY_DEF]
+  CASE_TAC >> gvs[is_terminator_def, EVERY_DEF] >>
+  CASE_TAC >> gvs[is_terminator_def, EVERY_DEF] >>
+  CASE_TAC >> gvs[is_terminator_def, EVERY_DEF] >>
+  CASE_TAC >> gvs[is_terminator_def, EVERY_DEF] >>
+  CASE_TAC >> gvs[is_terminator_def, EVERY_DEF] >>
+  CASE_TAC >> gvs[is_terminator_def, EVERY_DEF] >>
+  CASE_TAC >> gvs[is_terminator_def, EVERY_DEF] >>
+  CASE_TAC >> gvs[is_terminator_def, EVERY_DEF]
 QED
 
 (* Shared inductive prefix for exec_block prefix factoring lemmas.
@@ -1687,6 +1699,37 @@ Proof
   ONCE_REWRITE_TAC[run_block_def] >>
   ASM_REWRITE_TAC[] >>
   simp[lower_dload_block_def, lower_dload_eval_phis, lift_result_def]
+QED
+
+(* Closed field projection of the actual legacy block simulation. All old
+   premises and the full simulation conclusion are retained. *)
+Theorem lower_dload_run_block_oracle:
+  !fn bb fuel ctx s1 s2.
+    ld_ok (ld_exempt_vars_fn fn) s1 s2 /\
+    s1.vs_inst_idx = 0 /\
+    wf_function fn /\ fn_inst_wf fn /\
+    code_layout_valid s1 /\ code_layout_valid s2 /\
+    ld_no_mem_read fn /\ ld_dload_safe fn /\
+    ld_no_original_alloca fn /\
+    MEM bb fn.fn_blocks /\
+    (!bb' inst x.
+       MEM bb' fn.fn_blocks /\ MEM inst bb'.bb_instructions /\
+       MEM (Var x) inst.inst_operands ==>
+       x NOTIN ld_fresh_vars_fn fn) ==>
+    lift_result (ld_ok (ld_exempt_vars_fn fn))
+      (ld_equiv (ld_exempt_vars_fn fn)) (ld_equiv (ld_exempt_vars_fn fn))
+      (run_block fuel ctx bb s1)
+      (run_block fuel ctx (lower_dload_block bb) s2) /\
+    lift_result
+      (\s1 s2. s1.vs_outcomes = s2.vs_outcomes /\ s1.vs_requests = s2.vs_requests)
+      (\s1 s2. s1.vs_outcomes = s2.vs_outcomes /\ s1.vs_requests = s2.vs_requests)
+      (\s1 s2. s1.vs_outcomes = s2.vs_outcomes /\ s1.vs_requests = s2.vs_requests)
+      (run_block fuel ctx bb s1)
+      (run_block fuel ctx (lower_dload_block bb) s2)
+Proof
+  rpt gen_tac >> strip_tac >> drule_all ld_run_block_sim >>
+  strip_tac >> ASM_REWRITE_TAC[] >> irule ld_lift_result_oracle >>
+  qexists_tac `ld_exempt_vars_fn fn` >> simp[]
 QED
 
 (* ===== Main theorem: two-state strengthened induction ===== *)

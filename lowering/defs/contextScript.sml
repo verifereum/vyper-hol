@@ -24,12 +24,14 @@
  *   copy_sarray_typed   — per-element SArray copy with different layouts
  *   copy_dynarray_typed — per-element DynArray copy with different layouts
  *
- * Mirrors Python: ~/vyper/vyper/codegen_venom/context.py, buffer.py, value.py
+ * Mirrors Python: vyper/codegen_venom/context.py:Context,
+ *                 vyper/codegen_venom/buffer.py:Buffer,
+ *                 vyper/codegen_venom/value.py:VyperValue
  *)
 
 Theory context
 Ancestors
-  emitHelper compileEnv venomInst
+  emitHelper compileEnv venomInst typedCopyDomain list pair arithmetic combin
 Libs
   monadsyntax
 
@@ -148,8 +150,8 @@ End
    Mirrors Python: context.py copy_memory *)
 Definition compile_copy_memory_def:
   compile_copy_memory dst src 0 = return () ∧
-  compile_copy_memory dst src size =
-    emit_void MCOPY [dst; src; Lit (n2w size)]
+  compile_copy_memory dst src (SUC size) =
+    emit_void MCOPY [dst; src; Lit (n2w (SUC size))]
 End
 
 (* Parameterized word-copy loop between two address spaces.
@@ -245,17 +247,69 @@ Definition compile_memory_to_transient_def:
 End
 
 (* ===== Allocate Buffer ===== *)
-(* Allocate memory buffer with provenance tracking.
+(* Allocate a fixed-capacity memory buffer with provenance tracking.
    Returns buffer in monad.
    buffer.buf_operand is the IR operand; buffer.buf_size is the allocation size.
    Use base_ptr buf for a LocatedValue with provenance.
-   Mirrors Python: context.py allocate_buffer → Buffer *)
+   Mirrors Python: vyper/codegen_venom/context.py:Context.new_internal_variable *)
 Definition compile_alloc_buffer_def:
   compile_alloc_buffer size =
     do op <- emit_op ALLOCA [Lit (n2w size)];
        return <| buf_operand := op; buf_size := size |>
     od
 End
+
+(* Runtime-sized allocation boundary.  The size is an SSA operand, so this
+   returns only the allocated pointer rather than fabricating a static buffer
+   capacity.  Mirrors Python:
+   vyper/codegen_venom/context.py:Context.new_internal_variable. *)
+Definition compile_alloc_dynamic_def:
+  compile_alloc_dynamic (size_op:operand) = emit_op DALLOCA [size_op]
+End
+
+Theorem compile_alloc_dynamic_result:
+  !(size_op:operand) (st:compile_state) (ptr:operand) (st':compile_state).
+  compile_alloc_dynamic size_op st = (ptr, st') ==>
+  ptr = Var ("%" ++ toString st.cs_next_var) /\
+  st'.cs_next_id = st.cs_next_id + 1 /\
+  st'.cs_next_var = st.cs_next_var + 1 /\
+  st'.cs_current_insts =
+    st.cs_current_insts ++
+      [mk_inst st.cs_next_id DALLOCA [size_op]
+         ["%" ++ toString st.cs_next_var]]
+Proof
+  simp[compile_alloc_dynamic_def, emit_op_def, fresh_id_def, fresh_var_def,
+       emit_def, comp_bind_def, comp_ignore_bind_def, comp_return_def]
+QED
+
+(* Static allocation boundary.  Unlike compile_alloc_buffer, this exposes the
+   instruction ID as a separate result so fixed-placement metadata is keyed by
+   the emitted ALLOCA, never by its SSA output variable. *)
+Definition compile_alloc_buffer_with_id_def:
+  compile_alloc_buffer_with_id size =
+    do id <- fresh_id;
+       out <- fresh_var;
+       emit (mk_inst id ALLOCA [Lit (n2w size)] [out]);
+       return (id, <| buf_operand := Var out; buf_size := size |>)
+    od
+End
+
+Theorem compile_alloc_buffer_with_id_result:
+  !(size:num) (st:compile_state) (id:num) (buf:buffer) (st':compile_state).
+  compile_alloc_buffer_with_id size st = ((id, buf), st') ==>
+  id = st.cs_next_id /\
+  buf.buf_operand = Var ("%" ++ toString st.cs_next_var) /\
+  buf.buf_size = size /\
+  st'.cs_next_id = st.cs_next_id + 1 /\
+  st'.cs_next_var = st.cs_next_var + 1 /\
+  st'.cs_current_insts =
+    st.cs_current_insts ++
+      [mk_inst st.cs_next_id ALLOCA [Lit (n2w size)]
+         ["%" ++ toString st.cs_next_var]]
+Proof
+  simp[compile_alloc_buffer_with_id_def, fresh_id_def, fresh_var_def,
+       emit_def, comp_bind_def, comp_ignore_bind_def, comp_return_def]
+QED
 
 (* ===== Load/Store Storage ===== *)
 (* Mirrors Python: context.py load_storage
@@ -544,22 +598,27 @@ Definition compile_with_byte_offset_def:
 End
 
 (* ===== Store Memory for Bytestrings ===== *)
+(* Compute 32 + ceil32(actual_length), the exact memory range occupied by an
+   in-memory bytes/string value.  This boundary is also used by DRET lowering,
+   which publishes the same source range without first copying it. *)
+Definition compile_bytestring_copy_len_def:
+  compile_bytestring_copy_len val_op =
+    do src_len <- emit_op MLOAD [val_op];
+       padded_len <- emit_op ADD [src_len; Lit 31w];
+       let mask = i2w (- &32) : bytes32 in
+       do rounded <- emit_op AND [padded_len; Lit mask];
+          emit_op ADD [rounded; Lit 32w]
+       od
+    od
+End
+
 (* Copy bytestring to memory: copies 32 + ceil32(actual_length) bytes.
    Mirrors Python: context.py store_memory for _BytestringT.
    Placed before typed copy defs since they dispatch to it. *)
 Definition compile_store_bytestring_def:
   compile_store_bytestring val_op dst_op =
-    do (* Load actual length from val *)
-       src_len <- emit_op MLOAD [val_op];
-       (* ceil32(length) = (length + 31) & ~31 *)
-       padded_len <- emit_op ADD [src_len; Lit 31w];
-       (* ~31 = 0xffffffffffffffe0 *)
-       let mask = i2w (- &32) : bytes32 in
-       do rounded <- emit_op AND [padded_len; Lit mask];
-          (* Total copy: 32 (length word) + ceil32(length) *)
-          copy_len <- emit_op ADD [rounded; Lit 32w];
-          emit_void MCOPY [dst_op; val_op; copy_len]
-       od
+    do copy_len <- compile_bytestring_copy_len val_op;
+       emit_void MCOPY [dst_op; val_op; copy_len]
     od
 End
 
@@ -576,10 +635,11 @@ End
      DynArrayT → compile_copy_dynarray_typed (length check + per-element loop)
      StructT → compile_struct_typed_copy (per-field by name, recursive)
    All dispatch functions RECURSE into compile_store_memory_typed.
-   Terminates because sub-type depth strictly decreases (requires
-   well_formed_sft acyclicity for struct recursion through cenv).
+   Recursive complex copying rejects cyclic metadata with INVALID. The
+   computable acyclic domain and total rank are proved in typedCopyDomain;
+   recursive compiler calls keep cenv unchanged, including numeric field sizes.
    Mirrors Python: context.py _store_memory_typed (recursive) *)
-val compile_store_memory_typed_defn = Defn.Hol_defn "compile_store_memory_typed" `
+Definition compile_store_memory_typed_def:
   (* Top-level dispatch *)
   compile_store_memory_typed cenv dst dst_ty src src_ty =
     (if is_word_type dst_ty then
@@ -588,6 +648,8 @@ val compile_store_memory_typed_defn = Defn.Hol_defn "compile_store_memory_typed"
       od
     else if is_bytestring_type dst_ty ∧ is_bytestring_type src_ty then
       compile_store_bytestring src dst
+    else if ~acyclic_struct_metadata cenv.ce_struct_fields then
+      emit_void INVALID []
     else
       case (dst_ty, src_ty) of
         (ArrayT dst_elem (Dynamic dst_cap), ArrayT src_elem (Dynamic _)) =>
@@ -596,9 +658,9 @@ val compile_store_memory_typed_defn = Defn.Hol_defn "compile_store_memory_typed"
           compile_copy_sarray_typed cenv dst dst_elem src src_elem n
       | (TupleT dst_tys, TupleT src_tys) =>
           compile_typed_copy_fields cenv dst src dst_tys src_tys 0 0
-      | (StructT dst_name, StructT src_name) =>
-          let dst_fields = get_struct_fields cenv.ce_struct_fields dst_name in
-          let src_fields = get_struct_fields cenv.ce_struct_fields src_name in
+      | (StructT dst_nsid, StructT src_nsid) =>
+          let dst_fields = get_struct_fields cenv.ce_struct_fields (nsid_to_string dst_nsid) in
+          let src_fields = get_struct_fields cenv.ce_struct_fields (nsid_to_string src_nsid) in
           compile_struct_typed_copy cenv
             dst src dst_fields src_fields 0 0
       | _ =>
@@ -715,12 +777,28 @@ val compile_store_memory_typed_defn = Defn.Hol_defn "compile_store_memory_typed"
         compile_struct_typed_copy cenv dst src dst_rest src_fields
                                (dst_off + dst_sz) (src_off + src_sz)
      od)
-`;
-
-(* Termination: struct recursion through cenv.ce_struct_fields requires
-   well_formed_sft (acyclic struct graph). Same root cause as the 3
-   compileEnv termination cheats. Provable with struct_type_depth measure. *)
-val _ = Defn.save_defn compile_store_memory_typed_defn;
+Termination
+  (* Phase offsets separate store calls from list/array helper calls. No
+     compiler state, source type, or capacity is a recursion measure. *)
+   WF_REL_TAC `measure (λx. case x of
+     INL (cenv,dst,dst_ty,src,src_ty) =>
+       3 * type_rank cenv.ce_struct_fields dst_ty
+   | INR (INL (cenv,dst,src,dst_tys,src_tys,dst_off,src_off)) =>
+       3 * SUM (MAP (type_rank cenv.ce_struct_fields) dst_tys) + 1
+   | INR (INR (INL (cenv,dst,dst_elem,src,src_elem,ncopy))) =>
+       3 * type_rank cenv.ce_struct_fields dst_elem + 1
+   | INR (INR (INR (INL (cenv,dst,dst_elem,capacity,src,src_elem)))) =>
+       3 * type_rank cenv.ce_struct_fields dst_elem + 1
+   | INR (INR (INR (INR (cenv,dst,src,dst_fields,src_fields,dst_off,src_off)))) =>
+       3 * SUM (MAP (type_rank cenv.ce_struct_fields o FST o SND) dst_fields) + 1)` >>
+   rpt strip_tac >> gvs[is_word_type_def, is_bytestring_type_def] >>
+   ASM_SIMP_TAC std_ss [type_rank_struct_equation] >>
+   simp[type_rank_def] >>
+   mp_tac (Q.SPECL [`cenv.ce_struct_fields`,`dst_ty`] type_rank_positive) >>
+   mp_tac (Q.SPECL [`cenv.ce_struct_fields`,`dst_fty`] type_rank_positive) >>
+   simp[LEFT_ADD_DISTRIB, RIGHT_ADD_DISTRIB, o_DEF] >>
+   CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[] >> decide_tac
+End
 
 (* NOTE: compile_store_complex_type and compile_copy_complex_type deleted —
    dead code. Actual callers use compile_word_copy_loop / compile_ptr_load
@@ -743,12 +821,14 @@ End
 (* compile_store_bytestring moved before typed copy defs (forward ref) *)
 
 (* ===== Load Memory ===== *)
-(* Mirrors Python: context.py load_memory
-   Primitive types: mload the value.
-   Complex types: return the pointer. *)
+(* Pinned convention (VYPER_PIN cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c;
+   introduced by vyperlang/vyper@61507a045f34ab8ee5776de04c5b40ee1d1310e4,
+   vyper/codegen_venom/context.py:VenomCodegenContext.load_memory): MLOAD
+   primitive words and complex values whose memory representation is exactly
+   one 32-byte word; retain a pointer for larger complex values. *)
 Definition compile_load_memory_def:
-  compile_load_memory ptr_op is_prim_word =
-    if is_prim_word then
+  compile_load_memory ptr_op is_prim_word mem_size =
+    if is_prim_word \/ mem_size = 32 then
       emit_op MLOAD [ptr_op]
     else
       return ptr_op

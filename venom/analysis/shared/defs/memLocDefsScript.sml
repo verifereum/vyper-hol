@@ -329,10 +329,10 @@ Definition mem_read_ops_def:
              SOME <| iao_ofst := ofst; iao_size := SOME sz; iao_max_size := SOME sz |>
          | _ => NONE)
     | LOG =>
-        (* EVM: LOG tc offset size topics...
-           In HOL4: Lit tc :: offset :: size :: topics *)
-        (case inst.inst_operands of
-           _::ofst::sz::_ =>
+        (* LOG operands are stored in Python's stack order: topic count,
+           topics, size, offset.  The read starts at the last operand. *)
+        (case REVERSE inst.inst_operands of
+           ofst :: sz :: _ :: _ =>
              SOME <| iao_ofst := ofst; iao_size := SOME sz;
                      iao_max_size := SOME sz |>
          | _ => NONE)

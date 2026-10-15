@@ -43,7 +43,11 @@
 Theory stateEquiv
 Ancestors
   finite_map pred_set
-  venomState venomExecSemantics
+  venomState venomExecSemantics stateFrame
+Libs
+  stateEquivMaskLib
+
+val _ = Theory.add_ML_dependency "stateEquivMaskLib";
 
 (* ==========================================================================
    Level 1: Observable Equivalence (Weakest)
@@ -61,6 +65,8 @@ Ancestors
  *                    rolled back on revert, cleared at tx boundary)
  *   - vs_immutables: Immutable storage (written by ISTORE in constructor,
  *                    baked into deployed bytecode, read-only at runtime)
+ *   - vs_requests  : External-call requests, compared on success only
+ * Leftover outcomes are not observable; aborts still use revert_equiv.
  *
  * USE FOR: Proving that two executions have the same external effect,
  * regardless of how they got there.
@@ -73,7 +79,8 @@ Definition observable_equiv_def:
     s1.vs_halted = s2.vs_halted /\
     s1.vs_logs = s2.vs_logs /\
     s1.vs_transient = s2.vs_transient /\
-    s1.vs_immutables = s2.vs_immutables
+    s1.vs_immutables = s2.vs_immutables /\
+    s1.vs_requests = s2.vs_requests
 End
 
 (* ==========================================================================
@@ -91,24 +98,7 @@ End
 Definition execution_equiv_def:
   execution_equiv vars s1 s2 <=>
     (!v. v NOTIN vars ==> lookup_var v s1 = lookup_var v s2) /\
-    s1.vs_memory = s2.vs_memory /\
-    s1.vs_transient = s2.vs_transient /\
-    (* OMIT: vs_current_bb, vs_inst_idx, vs_prev_bb *)
-    s1.vs_halted = s2.vs_halted /\
-    s1.vs_returndata = s2.vs_returndata /\
-    s1.vs_accounts = s2.vs_accounts /\
-    s1.vs_call_ctx = s2.vs_call_ctx /\
-    s1.vs_tx_ctx = s2.vs_tx_ctx /\
-    s1.vs_block_ctx = s2.vs_block_ctx /\
-    s1.vs_logs = s2.vs_logs /\
-    s1.vs_immutables = s2.vs_immutables /\
-    s1.vs_data_section = s2.vs_data_section /\
-    s1.vs_labels = s2.vs_labels /\
-    s1.vs_code = s2.vs_code /\
-    s1.vs_params = s2.vs_params /\
-    s1.vs_prev_hashes = s2.vs_prev_hashes /\
-    s1.vs_allocas = s2.vs_allocas /\
-    s1.vs_alloca_next = s2.vs_alloca_next
+    execution_frame s1 = execution_frame s2
 End
 
 (* ==========================================================================
@@ -130,6 +120,18 @@ Definition state_equiv_def:
     s1.vs_inst_idx = s2.vs_inst_idx /\
     s1.vs_prev_bb = s2.vs_prev_bb
 End
+
+(* Canonical full-state presentation. Keep the existing public execution /
+   control decomposition; its residual equality is exactly state_frame.
+   This boundary and reconstruction do not enumerate retained selectors. *)
+Theorem state_equiv_frame:
+  state_equiv vars s1 s2 <=>
+    (!v. v NOTIN vars ==> lookup_var v s1 = lookup_var v s2) /\
+    state_frame s1 = state_frame s2
+Proof
+  simp_tac bool_ss [state_equiv_def, execution_equiv_def,
+                    state_frame_execution_frame, GSYM CONJ_ASSOC]
+QED
 
 (* ==========================================================================
    Result Equivalence

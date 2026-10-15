@@ -21,6 +21,12 @@ Definition set_insert_def:
   set_insert x xs = if MEM x xs then xs else x::xs
 End
 
+(* Preserve insertion order, matching Python's OrderedSet.add.  CFG predecessor
+   order is observable by MakeSSA when it lays out PHI operands. *)
+Definition ordered_set_insert_def:
+  ordered_set_insert x xs = if MEM x xs then xs else xs ++ [x]
+End
+
 (* Look up a key in a finite map, returning [] if absent. *)
 Definition fmap_lookup_list_def:
   fmap_lookup_list m k =
@@ -81,6 +87,18 @@ Definition cfg_is_normalized_def:
          LENGTH (cfg_succs_of cfg pred) <= 1)
 End
 
+Theorem cfg_is_normalized_compute[compute]:
+  cfg_is_normalized cfg fn <=>
+    EVERY
+      (λbb.
+        LENGTH (cfg_preds_of cfg bb.bb_label) <= 1 \/
+        EVERY (λpred. LENGTH (cfg_succs_of cfg pred) <= 1)
+          (cfg_preds_of cfg bb.bb_label))
+      fn.fn_blocks
+Proof
+  simp[cfg_is_normalized_def, listTheory.EVERY_MEM]
+QED
+
 (* ==========================================================================
    Successor / predecessor map construction
    ========================================================================== *)
@@ -112,7 +130,7 @@ Definition build_preds_def:
          FOLDR
            (λsucc m2.
               let old = fmap_lookup_list m2 succ in
-              m2 |+ (succ, set_insert bb.bb_label old))
+              m2 |+ (succ, ordered_set_insert bb.bb_label old))
            m succs_lbl)
       (init_preds bbs) bbs
 End

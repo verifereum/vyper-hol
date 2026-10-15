@@ -109,15 +109,25 @@ Proof
     >- metis_tac[vsr_R_term_refl]
     >- metis_tac[vsr_R_term_refl]
     >- (
-      (* IntRet: merge_callee + bind_outputs preserve R_ok *)
+      (* IntRet: merge, optional FMP adoption, and output binding preserve R_ok. *)
       rename1 `run_blocks _ _ _ _ = IntRet vals callee_s'` >>
       sg `OPTREL R_ok
-            (bind_outputs inst.inst_outputs vals (merge_callee_state s1 callee_s'))
-            (bind_outputs inst.inst_outputs vals (merge_callee_state s2 callee_s'))`
-      >- (`R_ok (merge_callee_state s1 callee_s') (merge_callee_state s2 callee_s')` by
+            (bind_outputs inst.inst_outputs vals.iret_values
+              (adopt_return_fmp vals (merge_callee_state s1 callee_s')))
+            (bind_outputs inst.inst_outputs vals.iret_values
+              (adopt_return_fmp vals (merge_callee_state s2 callee_s')))`
+      >- (`R_ok (merge_callee_state s1 callee_s')
+                 (merge_callee_state s2 callee_s')` by
             (irule vsr_merge_callee_R_ok >> metis_tac[]) >>
+          `R_ok (adopt_return_fmp vals (merge_callee_state s1 callee_s'))
+                (adopt_return_fmp vals (merge_callee_state s2 callee_s'))` by
+            (Cases_on `vals.iret_adopt_fmp` >>
+             gvs[adopt_return_fmp_def] >>
+             metis_tac[vsr_fmp_R_ok]) >>
           drule_all vsr_bind_outputs_R_ok >>
-          disch_then (qspecl_then [`inst.inst_outputs`, `vals`] mp_tac) >> simp[])
+          disch_then
+            (qspecl_then [`inst.inst_outputs`, `vals.iret_values`] mp_tac) >>
+          simp[])
       >>
       gvs[optionTheory.OPTREL_def, lift_result_def])
   )
@@ -157,7 +167,10 @@ Proof
     irule vsr_step_inst_ext_call >> simp[] >> metis_tac[],
     irule vsr_step_inst_delegatecall >> simp[] >> metis_tac[],
     irule vsr_step_inst_create >> simp[] >> metis_tac[],
-    irule vsr_step_inst_alloca >> simp[] >> metis_tac[]
+    irule vsr_step_inst_alloca >> simp[] >> metis_tac[],
+    irule vsr_step_inst_fmp_opcode >> simp[] >> metis_tac[],
+    irule vsr_step_inst_dret >> simp[] >> metis_tac[],
+    irule vsr_step_inst_retfmp >> simp[] >> metis_tac[]
   ]
 QED
 
@@ -329,7 +342,10 @@ Proof
   rpt gen_tac >> strip_tac >>
   `s1.vs_prev_bb = s2.vs_prev_bb` by (drule vsr_R_ok_prev_bb >> simp[]) >>
   `EVERY (λinst. inst.inst_opcode = PHI ⇒ ∀x. MEM (Var x) inst.inst_operands ⇒ lookup_var x s1 = lookup_var x s2) bb.bb_instructions` by
-    (irule (Q.SPECL [`R_ok`,`R_term`,`fn`] operand_agreement_EVERY) >> metis_tac[]) >>
+    (mp_tac (Q.SPECL [`R_ok`, `R_term`, `fn`, `bb`, `s1`, `s2`]
+       operand_agreement_EVERY) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     simp[]) >>
   ONCE_REWRITE_TAC[run_block_def] >> qspec_then `s1` assume_tac eval_phis_ok_or_error_defs >> qspec_then `s2` assume_tac eval_phis_ok_or_error_defs >>
   DISJ_CASES_TAC (Q.SPECL [`s1`,`bb.bb_instructions`] eval_phis_ok_or_error_defs) >-
     (DISJ_CASES_TAC (Q.SPECL [`s2`,`bb.bb_instructions`] eval_phis_ok_or_error_defs) >-
@@ -401,6 +417,8 @@ Theorem state_equiv_execution_equiv_valid_state_rel_proof:
 Proof
   rw[valid_state_rel_def] >>
   fs[state_equiv_def, execution_equiv_def,
+     vsr_frame_def, vsr_term_frame_def, venom_state_component_equality,
+     stateFrameTheory.execution_frame_def,
      update_var_def, lookup_var_def] >>
   rpt strip_tac >>
   simp[FLOOKUP_UPDATE, eval_operand_def, lookup_var_def] >>
@@ -416,6 +434,8 @@ Theorem valid_state_rel_mixed_proof:
 Proof
   rw[valid_state_rel_def] >>
   fs[state_equiv_def, execution_equiv_def,
+     vsr_frame_def, vsr_term_frame_def, venom_state_component_equality,
+     stateFrameTheory.execution_frame_def,
      update_var_def, lookup_var_def, SUBSET_DEF] >>
   rpt strip_tac >>
   simp[FLOOKUP_UPDATE, eval_operand_def, lookup_var_def] >>

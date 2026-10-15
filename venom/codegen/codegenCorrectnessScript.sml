@@ -6,8 +6,13 @@
  * (byte list) produces a corresponding result.
  *
  * TOP-LEVEL:
- *   codegen_correct    — whole-context correctness (run_context vs run)
- *   codegen_fn_correct — per-function correctness (run_blocks vs run)
+ *   codegen_correct    — planned S7 (run_context vs run_call/frame outcome)
+ *   initial_ctx_rel, venom_frame_rel — exact initial/terminal frame interfaces
+ *   TASK056: obsolete positioned codegen admission retired (inactive archive).
+ *
+ * STATUS: Whole-context codegen correctness is currently open/cheated and
+ * depends on closing/stabilizing Venom→Asm and Asm→EVM simulation layers.
+ * See docs/compiler-proof-roadmap.md.
  *
  * MEMTOP Exclusion
  * ===============
@@ -20,15 +25,8 @@
  * ============================
  * How each EVM exception is handled in the correctness argument:
  *
- * OutOfGas — undischargeable in general. Requires gas_sufficient
- *   hypothesis at the top-level entry point (call_vyper_contract).
- *   Only exception that needs an explicit disjunct in theorem statements.
- *
- * StackOverflow — discharged by asm_stack_bounded precondition.
- *   The compiler should reject programs where the stack model exceeds
- *   1024. NOTE: if this fires, the proper fix is depth-aware spilling
- *   (spill to memory when stack depth approaches limit), but that is
- *   an algorithmic change to the codegen, not yet implemented.
+ * OutOfGas and StackOverflow — resource-starvation disjuncts of S7.
+ *   No existential sufficient-gas bound or generated-stack bound is claimed.
  *
  * StackUnderflow — discharged by construction (codegen stack model
  *   tracks height; well-formed plans never underflow).
@@ -38,12 +36,8 @@
  *
  * Reverted — handled explicitly (separate case in theorem conclusion).
  *
- * WriteInStaticContext — when the call context is static, writes
- *   (SSTORE, LOG, CREATE, SELFDESTRUCT) are demoted to nops. This is
- *   defined as an allowed optimization: the Venom semantics can
- *   execute the write, but the EVM silently fails. The correctness
- *   theorem treats this as an exception disjunct (subsumed by SOME exc).
- *   TODO: formalize static-context demotion as a separate pass/property.
+ * WriteInStaticContext — initial_ctx_rel excludes static entry frames.
+ *   Venom does not demote writes to nops; no static-write simulation is claimed.
  *
  * OutOfBoundsRead — RETURNDATACOPY past returndata length. Should be
  *   discharged by construction: Venom ExHalt maps to this. The proof
@@ -68,16 +62,17 @@ Theory codegenCorrectness
 Ancestors
   asmToBytecodeProps venomToAsmProps codegen vfmExecution
   codegenRel asmSem asmWf stackPlanGen stackPlanTypes planExec
-  symbolResolve venomExecSemantics venomState venomInst
-  stackOpSim list rich_list finite_map arithmetic
+  symbolResolve venomExecSemantics venomState venomInst contextCodegenRel
+  stackOpSim fnPlanDecomp list rich_list finite_map arithmetic
+  frameOutcome callTrace unitShapeDefs vfmExecutionProp
 Libs
   BasicProvers
 
 (* ===== Context Correspondence Helpers ===== *)
 
 (* Call context correspondence: Venom call context matches EVM message params *)
-Definition call_ctx_rel_def:
-  call_ctx_rel cc mp ⇔
+Definition msg_ctx_rel_def:
+  msg_ctx_rel cc mp ⇔
     cc.cc_caller = mp.caller ∧
     cc.cc_address = mp.callee ∧
     cc.cc_callvalue = n2w mp.value ∧
@@ -134,11 +129,11 @@ End
 
 (* ===== Initial State Correspondence ===== *)
 
-(* At function entry: Venom state and EVM state agree on shared fields,
-   EVM stack holds function arguments matching PARAM variables,
-   all memory is shared (no spill slots allocated yet). *)
+(* At a selected function-region entry, Venom and EVM states agree on
+   shared fields.  [off] is an assembly-instruction index; the EVM PC is
+   the corresponding byte offset in [prog]. *)
 Definition initial_state_rel_def:
-  initial_state_rel fn vs es ⇔
+  initial_state_rel cp prog off fn vs es ⇔
     (case es.contexts of
        (ctxt, rb) :: _ =>
          stack_params_rel fn vs ctxt.stack ∧
@@ -147,16 +142,15 @@ Definition initial_state_rel_def:
          es.rollback.tStorage = vs.vs_transient ∧
          ctxt.returnData = vs.vs_returndata ∧
          ctxt.logs = vs.vs_logs ∧
-         (* Memory fully shared at function entry (no spills yet).
-            read_byte zero-pads, so this handles different lengths. *)
-         (∀i. read_byte i vs.vs_memory = read_byte i ctxt.memory) ∧
-         (* EVM starts at pc = 0, no pending jump *)
-         ctxt.pc = 0 ∧
+         (* Equality is required only outside every context spill region. *)
+         context_memory_rel cp vs.vs_memory ctxt.memory ∧
+         (* Translate the selected instruction index to an EVM byte PC. *)
+         ctxt.pc = asm_pc_to_offset prog off ∧
          ctxt.jumpDest = NONE ∧
          (* Venom state: not halted, at instruction 0 *)
          vs.vs_halted = F ∧
          vs.vs_inst_idx = 0 ∧
-         call_ctx_rel vs.vs_call_ctx ctxt.msgParams ∧
+         msg_ctx_rel vs.vs_call_ctx ctxt.msgParams ∧
          tx_ctx_rel vs.vs_tx_ctx es.txParams ∧
          block_ctx_rel vs.vs_block_ctx es.txParams ∧
          blockhash_rel vs es.txParams ∧
@@ -164,6 +158,16 @@ Definition initial_state_rel_def:
          (∀a. ctxt.msgParams.outputTo ≠ Code a)
      | [] => F)
 End
+
+Theorem initial_state_rel_entry_clauses[local]:
+  ∀cp prog off fn vs es ctxt rb rest.
+    initial_state_rel cp prog off fn vs es /\
+    es.contexts = (ctxt, rb) :: rest ==>
+    context_memory_rel cp vs.vs_memory ctxt.memory /\
+    ctxt.pc = asm_pc_to_offset prog off
+Proof
+  rpt strip_tac >> gvs[initial_state_rel_def]
+QED
 
 (* ===== Return Value Correspondence ===== *)
 
@@ -179,17 +183,8 @@ Definition final_state_rel_def:
      | [] => F)
 End
 
-(* ===== Entry Function Constraints ===== *)
-
-(* The entry function (dispatcher) never uses RET.
-   RET produces IntRet which only makes sense for internal function calls.
-   Vyper's entry function dispatches to external-facing functions and
-   terminates via STOP/RETURN/REVERT, never RET. *)
-Definition entry_fn_no_ret_def:
-  entry_fn_no_ret fn ⇔
-    EVERY (λbb. EVERY (λinst. inst.inst_opcode ≠ RET)
-                      bb.bb_instructions) fn.fn_blocks
-End
+(* entry_fn_no_ret is defined in contextCodegenRel so context-wide
+   obligations and this correctness interface share one constant. *)
 
 (* ===== Composition Helpers ===== *)
 
@@ -207,25 +202,9 @@ Proof
   every_case_tac >> gvs[]
 QED
 
-(* Codegen unfold for single function: codegen with ctx_functions := [fn]
-   gives generate_fn_plan fn fn_eom 0 and assembles the plan. *)
-Theorem codegen_single_fn_unfold[local]:
-  !ctx fn fn_eom data_seg bytecode.
-    codegen (ctx with ctx_functions := [fn])
-            (FEMPTY |+ (fn.fn_name, fn_eom))
-            data_seg = SOME bytecode ==>
-    ?fn_ops ps_final.
-      generate_fn_plan fn fn_eom 0 = SOME (fn_ops, ps_final) /\
-      bytecode = assemble (execute_plan (fn_ops ++ revert_postamble) ++
-                           data_segment_asm data_seg)
-Proof
-  rpt strip_tac >>
-  fs[codegen_def] >>
-  every_case_tac >> gvs[] >>
-  rename1 `generate_context_plan _ _ = SOME plan_ops` >>
-  fs[generate_context_plan_def, LET_THM, FOLDL, FLOOKUP_UPDATE] >>
-  every_case_tac >> gvs[]
-QED
+(* The obsolete single-function codegen unfolding is intentionally absent:
+   context codegen is exposed through [codegen_assembly] and the selected
+   region is located by [ops_contain_at]. *)
 
 (* Prefix of a list is an asm_block_at position 0 *)
 Theorem asm_block_at_prefix[local]:
@@ -234,66 +213,70 @@ Proof
   Induct >> simp[asm_block_at_def, EL_APPEND1]
 QED
 
-(* Bridge from initial state to asm state:
-   At function entry, we can construct an asm_state that simultaneously
-   satisfies venom_asm_rel (linking plan state to asm state) and
-   asm_evm_rel (linking asm state to EVM state). *)
+(* Bridge from a positioned context-region entry to an assembly state. *)
 Theorem initial_state_bridge[local]:
-  !fn fn_eom fn_ops ps_final prog lo vs es data_seg.
-    initial_state_rel fn vs es /\
-    generate_fn_plan fn fn_eom 0 = SOME (fn_ops, ps_final) /\
-    prog = execute_plan (fn_ops ++ revert_postamble) ++
-           data_segment_asm data_seg /\
+  ∀cp prog off fn vs es ctx i r unit lo.
+    initial_state_rel cp prog off fn vs es /\
+    generate_context_plan ctx = SOME cp /\
+    i < LENGTH ctx.ctx_functions /\
+    EL i ctx.ctx_functions = fn /\
+    EL i cp.cp_regions = r /\
+    ops_contain_at off
+      (execute_plan cp.cp_initial_fmp (context_plan_ops cp))
+      (execute_plan cp.cp_initial_fmp r.sr_plan) /\
+    prog = execute_plan cp.cp_initial_fmp (context_plan_ops cp) ++
+           data_segment_asm unit.cu_data_segment /\
     lo = SND (compute_label_offsets prog) /\
     (case es.contexts of
        (ctxt, rb) :: _ =>
          ctxt.msgParams.code = assemble prog /\
          ctxt.msgParams.parsed = parse_code 0 FEMPTY (assemble prog)
      | [] => F) ==>
-    ?as0.
-      venom_asm_rel lo (fn_init_ps fn fn_eom) vs as0 /\
+    ∃as0.
+      context_venom_asm_rel cp lo
+        (fn_init_ps fn r.sr_spill_base) vs as0 /\
       asm_evm_rel prog as0 es /\
-      asm_block_at prog 0 (execute_plan fn_ops) /\
-      as0.as_pc = 0
+      asm_block_at prog off
+        (execute_plan cp.cp_initial_fmp r.sr_plan) /\
+      as0.as_pc = off
 Proof
   rpt gen_tac >> strip_tac >>
-  (* Extract ctxt, rb from es.contexts *)
   every_case_tac >> gvs[] >>
   rename1 `es.contexts = (ctxt, rb) :: rest` >>
-  (* Construct the asm witness *)
   qexists_tac `<| as_stack := ctxt.stack;
                    as_memory := ctxt.memory;
                    as_accounts := vs.vs_accounts;
                    as_transient := vs.vs_transient;
                    as_returndata := vs.vs_returndata;
                    as_logs := vs.vs_logs;
-                   as_pc := 0;
+                   as_pc := off;
                    as_call_ctx := vs.vs_call_ctx;
                    as_tx_ctx := vs.vs_tx_ctx;
                    as_block_ctx := vs.vs_block_ctx;
                    as_code := vs.vs_code;
-                   as_prev_hashes := vs.vs_prev_hashes |>` >>
-  gvs[initial_state_rel_def, call_ctx_rel_def, tx_ctx_rel_def,
+                   as_prev_hashes := vs.vs_prev_hashes;
+                   as_outcomes := vs.vs_outcomes;
+                   as_requests := vs.vs_requests;
+                   as_gas_readings := [] |>` >>
+  gvs[initial_state_rel_def, msg_ctx_rel_def, tx_ctx_rel_def,
       block_ctx_rel_def, blockhash_rel_def, stack_params_rel_def,
-      venom_asm_rel_def, fn_init_ps_def,
+      context_venom_asm_rel_def, fn_init_ps_def,
       init_plan_state_def, init_spill_alloc_def, LET_THM,
-      plan_spill_rel_def, FLOOKUP_DEF, memory_rel_def,
-      asm_evm_rel_def, asm_pc_to_offset_def] >>
-  (* Remaining: plan_stack_rel ∧ blockhash ∧ asm_block_at *)
+      plan_spill_rel_def, FLOOKUP_DEF, asm_evm_rel_def] >>
   conj_tac >- suspend "plan_stack" >>
   conj_tac >- (rpt gen_tac >> simp[CONJ_ASSOC]) >>
-  rewrite_tac[execute_plan_append, GSYM APPEND_ASSOC] >>
-  simp[asm_block_at_prefix]
+  gvs[asm_block_at_def, ops_contain_at_def, EL_APPEND1]
 QED
 
 Resume initial_state_bridge[plan_stack]:
   simp[plan_stack_rel_def, operand_val_def] >>
   rpt strip_tac >>
+  rename1 `j < LENGTH ctxt.stack` >>
   simp[EL_REVERSE, EL_MAP, operand_val_def, FLOOKUP_DEF] >>
-  qpat_x_assum `!i. i < LENGTH ctxt.stack ==> _`
-    (qspec_then `PRE (LENGTH ctxt.stack - i)` mp_tac) >>
+  qpat_x_assum `!k. k < LENGTH ctxt.stack ==> _`
+    (qspec_then `PRE (LENGTH ctxt.stack - j)` mp_tac) >>
   simp[EL_REVERSE] >>
-  `PRE (LENGTH ctxt.stack - PRE (LENGTH ctxt.stack - i)) = i` by simp[] >>
+  `PRE (LENGTH ctxt.stack - PRE (LENGTH ctxt.stack - j)) = j` by simp[] >>
   simp[]
 QED
 
@@ -327,113 +310,90 @@ Proof
   every_case_tac >> simp[run_function_never_ok]
 QED
 
-(* ===== Per-Function Codegen Correctness ===== *)
+(* ===== Whole-Context Frame Interface ===== *)
 
-(* If codegen produces bytecode for a function, and the function
-   halts/reverts in the Venom semantics, then EVM execution of
-   the bytecode produces a corresponding result.
+(* Moved from e2eDefs without changing the permanent FMP/token contract. *)
+Definition initial_codegen_state_rel_def:
+  initial_codegen_state_rel cp vs <=>
+    vs.vs_fmp = n2w cp.cp_initial_fmp /\
+    vs.vs_call_entry_fmp = n2w cp.cp_initial_fmp /\
+    vs.vs_initial_fmp = n2w cp.cp_initial_fmp /\
+    vs.vs_return_pc_token = 0w
+End
 
-   Preconditions:
-     - codegen_ready_fn: SSA, SUE, normalized CFG, valid opcodes
-     - codegen succeeds (SOME bytecode)
-     - initial states correspond (stack has args, shared state matches)
-     - spill safety: Venom execution doesn't clobber spill region
+(* First function, fresh non-static frame, live state, exact deployed code,
+   concrete labels, and the outcomes actually traced from our frame's run. *)
+Definition initial_ctx_rel_def:
+  initial_ctx_rel cp prog ctx vs es <=>
+    ?fn fns ctxt rb rest.
+      ctx.ctx_functions = fn :: fns /\ es.contexts = (ctxt, rb) :: rest /\
+      initial_state_rel cp prog 0 fn vs es /\
+      initial_codegen_state_rel cp vs /\
+      wf_state es /\ (?d. es.msdomain = Collect d) /\
+      ~ctxt.msgParams.static /\
+      ctxt.msgParams.code = assemble prog /\
+      ctxt.msgParams.parsed = parse_code 0 FEMPTY (assemble prog) /\
+      LENGTH (assemble prog) <= 24576 /\
+      vs.vs_vars = FEMPTY /\ vs.vs_data_section = [] /\
+      (!l. FLOOKUP vs.vs_labels l =
+           OPTION_MAP n2w (FLOOKUP (SND (compute_label_offsets prog)) l)) /\
+      vs.vs_outcomes = MAP SND (call_trace es) /\ vs.vs_requests = []
+End
 
-   Gas: existential — there exists a gas bound such that with enough
-   gas, EVM results correspond to Venom results. This proves the
-   theorem is non-vacuous (the success case is always reachable).
-   The gas bound depends on the Venom execution trace (each Venom
-   step maps to finitely many EVM instructions with known gas costs).
+(* Terminal oracle leftovers are not observable. Only success compares the
+   executed requests/effects/logs; each abort has its precise frame clause. *)
+Definition venom_frame_rel_def:
+  venom_frame_rel es r es' res <=>
+    case res of
+      Halt vs' =>
+        frame_outcome es r es' NONE vs'.vs_returndata vs'.vs_logs /\
+        es'.rollback.accounts = vs'.vs_accounts /\
+        es'.rollback.tStorage = vs'.vs_transient /\
+        vs'.vs_requests = MAP FST (call_trace es)
+    | Abort Revert_abort vs' =>
+        ?lgs. frame_outcome es r es' (SOME Reverted) vs'.vs_returndata lgs
+    | Abort ExHalt_abort vs' =>
+        ?exc lgs. exc <> Reverted /\ frame_outcome es r es' (SOME exc) [] lgs
+    | Error _ => T
+    | OK _ => F
+    | IntRet _ _ => F
+End
 
-   StackOverflow is excluded by asm_stack_bounded (codegen must
-   produce stack-bounded asm). TODO: add explicit stack height check
-   to codegen (return NONE if plan_max_height >= 1024).
-
-   Spill safety: step_mem_safe for every Venom step. This is a
-   property of the INPUT PROGRAM — the codegen can't establish it.
-   For Vyper-generated code, the memory allocator ensures fn_eom is
-   above all user allocations. For other frontends, must be assumed.
-
-   Note: this theorem covers a single function. Multi-function
-   contexts compose via the dispatch mechanism (selector table). *)
-Theorem codegen_fn_correct:
-  ∀fuel ctx fn fn_eom data_seg bytecode spill_hwm vs.
-    codegen_ready_fn fn ∧
-    codegen (ctx with ctx_functions := [fn])
-            (FEMPTY |+ (fn.fn_name, fn_eom))
-            data_seg = SOME bytecode ∧
-    (∀inst vs1 vs2 fuel'.
-       step_inst fuel' ctx inst vs1 = OK vs2 ⇒
-       step_mem_safe <| sa_fn_eom := fn_eom;
-                        sa_next_offset := spill_hwm;
-                        sa_free_slots := [] |> vs1 vs2) ⇒
-    ∃gas_needed.
-      ∀es. initial_state_rel fn vs es ∧
-           (case es.contexts of
-              (ctxt, rb) :: _ =>
-                ctxt.msgParams.gasLimit ≥ gas_needed ∧
-                ctxt.msgParams.code = bytecode ∧
-                ctxt.msgParams.parsed = parse_code 0 FEMPTY bytecode
-            | [] => F) ⇒
-        (case run_blocks fuel ctx fn vs of
-           Halt vs' =>
-             ∃es'. run es = SOME (INR NONE, es') ∧
-                   final_state_rel vs' es'
-         | Abort Revert_abort vs' =>
-             ∃es'. run es = SOME (INR (SOME Reverted), es') ∧
-                   final_state_rel vs' es'
-         | Abort ExHalt_abort vs' =>
-             ∃es' exc. run es = SOME (INR (SOME exc), es') ∧
-                       exc ≠ Reverted ∧
-                       final_state_rel vs' es'
-         | OK _ => F
-         | IntRet _ _ => T
-         | Error _ => T)
+(* PLANNED ADMISSION S7; proof owner Milestones 2.1 and 4.
+   Compose frame-aware Venom/assembly simulation with the observed EVM run.
+   Assembly starts with gas_readings es, NOT an equality with Venom GAS.
+   Actual reachability supplies memory obligations and shape excludes opaque
+   GAS misuse/forbidden opcodes/label collisions. Resource and valid-computed-
+   precompile starvation are explicit disjuncts. No sufficient-gas existential,
+   arbitrary label maps, or positional entry parameter is in this API.
+   The current non-GAS EVM lemmas do not yet prove this trace-aware statement. *)
+Theorem codegen_correct:
+  !fuel rpolicy unit cp prog Inv vs es.
+    generate_context_plan unit.cu_context = SOME cp /\
+    codegen_assembly rpolicy unit = SOME prog /\
+    unit_shape_ok unit /\
+    codegen_context_obligations Inv unit.cu_context cp /\
+    codegen_reachability_package Inv unit.cu_context vs /\
+    initial_ctx_rel cp prog unit.cu_context vs es
+    ==>
+    ?r es'. run_call es = SOME (r, es') /\
+            (frame_resource_starved es r es' \/
+             precompile_call_starved es \/
+             venom_frame_rel es r es' (run_context fuel unit.cu_context vs))
 Proof
-  rpt gen_tac >> strip_tac >>
-  (* Unfold codegen to get generate_fn_plan *)
-  drule codegen_single_fn_unfold >> strip_tac >>
-  rename1 `generate_fn_plan fn fn_eom 0 = SOME (fn_ops, ps_final)` >>
-  (* Define the assembly program *)
-  qabbrev_tac `prog = execute_plan (fn_ops ++ revert_postamble) ++
-                       data_segment_asm data_seg` >>
-  qabbrev_tac `lo = SND (compute_label_offsets prog)` >>
-  qabbrev_tac `o2p = build_offset_to_pc prog` >>
-  (* Choose gas_needed — cheat for now.
-     Real proof: sum of gas costs for each EVM step in the trace. *)
-  qexists_tac `0` >>
-  rpt gen_tac >> strip_tac >>
-  (* Case split on run_function — IntRet/Error are trivial *)
-  Cases_on `run_function fuel ctx fn vs` >> gvs[] >>
-  (* OK case: run_function never returns OK *)
-  TRY (rename1 `run_function _ _ _ _ = OK _` >> metis_tac[run_function_never_ok]) >>
-  (* IntRet, Error: conclusion is T — discharged by gvs *)
-  (* Halt and Abort cases: compose gen_fn_simulation + asm_bytecode_sim *)
-  (* Construct initial asm state via bridge *)
-  `?as0. venom_asm_rel lo (fn_init_ps fn fn_eom) vs as0 /\
-         asm_evm_rel prog as0 es /\
-         asm_block_at prog 0 (execute_plan fn_ops) /\
-         as0.as_pc = 0` by (
-    qspecl_then [`fn`, `fn_eom`, `fn_ops`, `ps_final`,
-                 `prog`, `lo`, `vs`, `es`, `data_seg`]
-      mp_tac initial_state_bridge >>
-    impl_tac >- (fs[Abbr `prog`, Abbr `lo`] >>
-                  Cases_on `es.contexts` >> gvs[]) >>
-    metis_tac[]) >>
-  (* Apply gen_fn_simulation to get asm execution.
-     step_mem_safe alloc mismatch between codegen_fn_correct (spill_hwm)
-     and gen_fn_simulation (fn_init_ps alloc). Need monotonicity.
-     Then: asm_bytecode_sim composition. *)
   cheat
 QED
 
-(* ===== Whole-Context Codegen Correctness ===== *)
+(* TASK056 RETIRED SOURCE ARCHIVE. Replaced by initial_ctx_rel and S7 above;
+   no equivalence bridge. Original legacy admission/proof preserved verbatim.
+(* ===== Preserved Legacy Contract (removal owner TASK056) ===== *)
 
-(* Initial state correspondence at context entry: Venom initial state
-   and EVM execution state agree on environment, memory, calldata, etc.
-   No function params on the EVM stack (entry starts with empty stack). *)
-Definition initial_ctx_rel_def:
-  initial_ctx_rel ctx vs es ⇔
+(* Initial correspondence at the selected context-entry region.  [off] is
+   an assembly-instruction index and the EVM PC is its byte offset. *)
+(* TEMPORARY COMPATIBILITY: exact old boundary, removal owner TASK056.
+   This saved-snapshot/positioned relation is NOT the new live-frame API. *)
+Definition initial_ctx_rel_legacy_def:
+  initial_ctx_rel_legacy cp prog off ctx vs es ⇔
     (case es.contexts of
        (ctxt, rb) :: _ =>
          rb.accounts = vs.vs_accounts ∧
@@ -441,41 +401,39 @@ Definition initial_ctx_rel_def:
          ctxt.returnData = vs.vs_returndata ∧
          ctxt.logs = vs.vs_logs ∧
          ctxt.stack = [] ∧
-         (∀i. read_byte i vs.vs_memory = read_byte i ctxt.memory) ∧
-         ctxt.pc = 0
+         context_memory_rel cp vs.vs_memory ctxt.memory ∧
+         ctxt.pc = asm_pc_to_offset prog off
      | [] => F)
 End
 
-(* Top-level codegen correctness: if a well-formed Venom context is
-   compiled to bytecode, and run_context halts/reverts, then EVM
-   execution of the bytecode produces a corresponding result.
-
-   This composes codegen_fn_correct with run_context's dispatch to
-   the entry function. *)
-Theorem codegen_correct:
-  ∀fuel ctx fn_eom_map data_seg bytecode spill_hwm vs.
-    codegen_ready ctx ∧
-    ctx_wf ctx ∧
-    (* Entry function never uses RET (only internal functions do) *)
-    (∀name efn. ctx.ctx_entry = SOME name ∧
-                lookup_function name ctx.ctx_functions = SOME efn ⇒
-                entry_fn_no_ret efn) ∧
-    codegen ctx fn_eom_map data_seg = SOME bytecode ∧
-    (∀fn inst vs1 vs2 fuel'.
-       MEM fn ctx.ctx_functions ∧
-       step_inst fuel' ctx inst vs1 = OK vs2 ⇒
-       step_mem_safe <| sa_fn_eom := 0;
-                        sa_next_offset := spill_hwm;
-                        sa_free_slots := [] |> vs1 vs2) ⇒
+(* Conditional whole-context correctness for an explicitly positioned named
+   entry function in a complete compilation unit. *)
+(* EXISTING LEGACY ADMISSION: statement and proof retained exactly modulo
+   the boundary rename. Old e2e proof consumers require it until TASK056;
+   it is not a producer/alias of S7 and is NOT certified. *)
+Theorem codegen_correct_legacy:
+  ∀fuel rpolicy unit cp prog name i r fn off Inv vs.
+    generate_context_plan unit.cu_context = SOME cp ∧
+    codegen_assembly rpolicy unit = SOME prog ∧
+    unit.cu_context.ctx_entry = SOME name ∧
+    lookup_function name unit.cu_context.ctx_functions = SOME fn ∧
+    i < LENGTH unit.cu_context.ctx_functions ∧
+    EL i unit.cu_context.ctx_functions = fn ∧
+    EL i cp.cp_regions = r ∧
+    ops_contain_at off
+      (execute_plan cp.cp_initial_fmp (context_plan_ops cp))
+      (execute_plan cp.cp_initial_fmp r.sr_plan) ∧
+    codegen_context_obligations Inv unit.cu_context cp ∧
+    codegen_reachability_package Inv unit.cu_context vs ⇒
     ∃gas_needed.
-      ∀es. initial_ctx_rel ctx vs es ∧
+      ∀es. initial_ctx_rel_legacy cp prog off unit.cu_context vs es ∧
            (case es.contexts of
               (ctxt, rb) :: _ =>
                 ctxt.msgParams.gasLimit ≥ gas_needed ∧
-                ctxt.msgParams.code = bytecode ∧
-                ctxt.msgParams.parsed = parse_code 0 FEMPTY bytecode
+                ctxt.msgParams.code = assemble prog ∧
+                ctxt.msgParams.parsed = parse_code 0 FEMPTY (assemble prog)
             | [] => F) ⇒
-        (case run_context fuel ctx vs of
+        (case run_context fuel unit.cu_context vs of
            Halt vs' =>
              ∃es'. run es = SOME (INR NONE, es') ∧
                    final_state_rel vs' es'
@@ -490,19 +448,6 @@ Theorem codegen_correct:
          | IntRet _ _ => F
          | Error _ => T)
 Proof
-  rpt gen_tac >> strip_tac >>
-  (* Choose gas_needed *)
-  qexists_tac `0` >>
-  rpt gen_tac >> strip_tac >>
-  (* Unfold run_context to dispatch to run_function *)
-  simp[Once run_context_def] >>
-  every_case_tac >> gvs[]
-  (* Error cases from run_context dispatch: ctx_entry = NONE,
-     entry function not found, empty entry function.
-     Conclusion is T for Error. *)
-  (* Remaining: run_function on the entry function *)
-  (* OK case: impossible since run_function never returns OK *)
-  >- metis_tac[run_function_never_ok]
-  (* Halt, Abort, IntRet cases: compose gen_fn_simulation + asm_bytecode_sim *)
-  >> cheat
+  cheat
 QED
+*)

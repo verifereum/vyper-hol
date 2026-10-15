@@ -91,7 +91,7 @@ Theorem foldl_phi_matching_inv[local]:
   ∀phis n acc_op acc_m src i v.
     FLOOKUP (SND (FOLDL
       (λ(op_map,matching) (j,phi).
-        (FOLDL (λm w. m |+ (w, j)) op_map phi.inst_outputs,
+        (FOLDL (λm (l,w). m |+ (w, j)) op_map (phi_pairs phi.inst_operands),
          case FIND (λ(l,w). l = src) (phi_pairs phi.inst_operands) of
            NONE => matching
          | SOME (_, w) => matching |+ (j, w)))
@@ -109,7 +109,7 @@ Proof
   strip_tac >>
   first_x_assum (qspecl_then [
     `SUC n`,
-    `FOLDL (λm w. m |+ (w, n)) acc_op h.inst_outputs`,
+    `FOLDL (λm (l,w). m |+ (w, n)) acc_op (phi_pairs h.inst_operands)`,
     `case FIND (λ(l,w). l = src) (phi_pairs h.inst_operands) of
        NONE => acc_m | SOME (_, w) => acc_m |+ (n, w)`,
     `src`, `i`, `v`] mp_tac) >>
@@ -278,8 +278,31 @@ Proof
   >- (fs[df_fold_backward_def, LET_THM] >> rw[] >>
       Cases_on `k = (lbl,idx)` >> fs[FLOOKUP_UPDATE] >> metis_tac[])
   (* Step: h::instrs *)
-  >> fs[df_fold_backward_def, LET_THM] >>
-     pairarg_tac >> fs[] >> rw[]
+  >> qpat_x_assum
+       `df_fold_backward transfer lbl (h::instrs) idx acc inst_map = (fv,im)`
+       mp_tac >>
+     CONV_TAC (LAND_CONV (LHS_CONV
+       (ONCE_REWRITE_CONV [df_fold_backward_def]))) >>
+     strip_tac >> pop_assum mp_tac >>
+     PURE_ONCE_REWRITE_TAC [LET_THM] >> strip_tac >>
+     pairarg_tac >>
+     qpat_x_assum
+       `df_fold_backward transfer lbl instrs (idx + 1) acc inst_map =
+        (acc',inst_map')`
+       (fn fold_eq =>
+         qpat_x_assum
+           `_ (df_fold_backward transfer lbl instrs (idx + 1) acc inst_map) =
+            (fv,im)`
+           (fn result_eq =>
+             ASSUME_TAC fold_eq >>
+             STRIP_ASSUME_TAC (SIMP_RULE std_ss
+               [fold_eq, LET_THM, pairTheory.PAIR_EQ] result_eq))) >>
+     qpat_x_assum `transfer h acc' = fv`
+       (fn th => ONCE_REWRITE_TAC [GSYM th]) >>
+     qpat_x_assum
+       `inst_map' |+ ((lbl,idx),transfer h acc') = im`
+       (fn th => ONCE_REWRITE_TAC [GSYM th]) >>
+     conj_tac
      (* P (transfer h acc') *)
      >- (qpat_x_assum `!transfer lbl idx acc inst_map fv im P. _`
            (qspecl_then [`transfer`, `lbl`, `idx+1`, `acc`, `inst_map`,
@@ -2608,29 +2631,31 @@ QED
    Cross-block liveness transfer
    =================================================================== *)
 
-(* FOLDL of string updates: FLOOKUP in result means in acc or in list *)
-Theorem foldl_string_update_flookup[local]:
-  !outs (m:string |-> num) n v i.
-    FLOOKUP (FOLDL (\m w. m |+ (w, n)) m outs) v = SOME i ==>
-    FLOOKUP m v = SOME i \/ MEM v outs
+(* FOLDL of operand-pair updates: a resulting key was already present or is
+   the variable component of one of the pairs. *)
+Theorem foldl_pair_update_flookup[local]:
+  !pairs (m:string |-> num) n v i.
+    FLOOKUP (FOLDL (\m (l,w). m |+ (w, n)) m pairs) v = SOME i ==>
+    FLOOKUP m v = SOME i \/ MEM v (MAP SND pairs)
 Proof
-  Induct >> simp[] >> rpt strip_tac >>
-  first_x_assum drule >> strip_tac >> gvs[FLOOKUP_UPDATE] >>
-  Cases_on `h = v` >> gvs[]
+  Induct >> simp[] >> rpt gen_tac >> PairCases_on `h` >> simp[] >>
+  strip_tac >> first_x_assum drule >> strip_tac >>
+  gvs[FLOOKUP_UPDATE] >> Cases_on `h1 = v` >> gvs[]
 QED
 
-(* op_map in build_phi_maps: v in domain ⟹ v appears in some phi's outputs *)
+(* op_map in build_phi_maps: a key occurs in a PHI's incoming operands. *)
 Theorem build_phi_maps_op_map_mem[local]:
   !phis n acc_op acc_m src v i.
     FLOOKUP (FST (FOLDL
       (\(op_map,matching) (j,phi).
-        (FOLDL (\m w. m |+ (w, j)) op_map phi.inst_outputs,
+        (FOLDL (\m (l,w). m |+ (w, j)) op_map
+           (phi_pairs phi.inst_operands),
          case FIND (\(l,w). l = src) (phi_pairs phi.inst_operands) of
            NONE => matching
          | SOME (_, w) => matching |+ (j, w)))
       (acc_op, acc_m) (MAPi (\k phi. (n + k, phi)) phis))) v = SOME i ==>
     FLOOKUP acc_op v = SOME i \/
-    ?phi. MEM phi phis /\ MEM v phi.inst_outputs
+    ?phi. MEM phi phis /\ MEM v (MAP SND (phi_pairs phi.inst_operands))
 Proof
   Induct >> simp[MAPi_def] >> rpt gen_tac >>
   simp[combinTheory.o_DEF] >>
@@ -2640,12 +2665,12 @@ Proof
   pop_assum SUBST1_TAC >> strip_tac >>
   first_x_assum (qspecl_then [
     `SUC n`,
-    `FOLDL (\m w. m |+ (w, n)) acc_op h.inst_outputs`,
+    `FOLDL (\m (l,w). m |+ (w, n)) acc_op (phi_pairs h.inst_operands)`,
     `case FIND (\(l,w). l = src) (phi_pairs h.inst_operands) of
        NONE => acc_m | SOME (_, w) => acc_m |+ (n, w)`,
     `src`, `v`, `i`] mp_tac) >>
   impl_tac >- simp[] >> strip_tac >> gvs[]
-  >- (drule foldl_string_update_flookup >> strip_tac >> gvs[] >>
+  >- (drule foldl_pair_update_flookup >> strip_tac >> gvs[] >>
       disj2_tac >> qexists_tac `h` >> simp[])
   >- (disj2_tac >> metis_tac[])
 QED
@@ -2653,19 +2678,19 @@ QED
 Theorem build_phi_maps_op_map_char[local]:
   !src phis v i.
     FLOOKUP (FST (build_phi_maps src phis)) v = SOME i ==>
-    ?phi. MEM phi phis /\ MEM v phi.inst_outputs
+    ?phi. MEM phi phis /\ MEM v (MAP SND (phi_pairs phi.inst_operands))
 Proof
   rw[build_phi_maps_def, LET_THM] >>
   qspecl_then [`phis`, `0`, `FEMPTY`, `FEMPTY`, `src`, `v`, `i`]
     mp_tac build_phi_maps_op_map_mem >> simp[]
 QED
 
-(* Non-phi-output variables pass through input_vars_from *)
+(* Variables that are not incoming PHI operands pass through unchanged. *)
 Theorem input_vars_from_non_phi:
   !src_lbl instrs base v.
     MEM v base /\
     (!inst. MEM inst (collect_phis instrs) ==>
-            ~MEM v inst.inst_outputs) ==>
+            ~MEM v (MAP SND (phi_pairs inst.inst_operands))) ==>
     MEM v (input_vars_from src_lbl instrs base)
 Proof
   rpt strip_tac >> simp[input_vars_from_def, LET_THM] >>
@@ -2793,7 +2818,7 @@ Theorem live_vars_at_cross_block:
     lookup_block succ_lbl fn.fn_blocks = SOME succ_bb /\
     MEM v (live_vars_at lr succ_lbl 0) /\
     (!inst. MEM inst (collect_phis succ_bb.bb_instructions) ==>
-            ~MEM v inst.inst_outputs) ==>
+            ~MEM v (MAP SND (phi_pairs inst.inst_operands))) ==>
     MEM v (live_vars_at lr pred_lbl (LENGTH pred_bb.bb_instructions))
 Proof
   rpt gen_tac >> simp_tac std_ss [LET_THM] >>
@@ -2856,7 +2881,7 @@ Proof
 QED
 
 (* Cross-block forward propagation: if v is not live at exit of a block,
-   and succ has no phi output for v, then v is not live at entry of succ.
+   and succ has no incoming PHI operand v, then v is not live at its entry.
    Contrapositive of live_vars_at_cross_block. *)
 Theorem not_live_cross_block:
   !fn pred_lbl pred_bb succ_lbl succ_bb v.
@@ -2870,7 +2895,7 @@ Theorem not_live_cross_block:
     lookup_block succ_lbl fn.fn_blocks = SOME succ_bb /\
     ~MEM v (live_vars_at lr pred_lbl (LENGTH pred_bb.bb_instructions)) /\
     (!inst. MEM inst (collect_phis succ_bb.bb_instructions) ==>
-            ~MEM v inst.inst_outputs) ==>
+            ~MEM v (MAP SND (phi_pairs inst.inst_operands))) ==>
     ~MEM v (live_vars_at lr succ_lbl 0)
 Proof
   rpt gen_tac >> simp_tac std_ss [LET_THM] >> strip_tac >> strip_tac >>

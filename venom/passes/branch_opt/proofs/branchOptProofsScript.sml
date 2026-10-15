@@ -382,16 +382,23 @@ Proof
   (* SOME case: simplify original's case expression *)
   rename1 `FLOOKUP st.vs_vars v = SOME val` >>
   Cases_on `val = 0w` >> simp[jump_to_def] >>
-  (* Unroll transformed exec_block for the JNZ step *)
-  ONCE_REWRITE_TAC[exec_block_def] >>
-  gvs[venomInstTheory.get_instruction_def, step_inst_non_invoke,
-      venomInstTheory.is_terminator_def, EL_APPEND2,
-      listTheory.LENGTH_FRONT,
-      step_inst_base_def, eval_operand_def, lookup_var_def,
-      FLOOKUP_UPDATE, bool_to_word_def, jump_to_def] >>
-  IF_CASES_TAC >>
-  simp[lift_result_def, state_equiv_def, execution_equiv_def,
-       lookup_var_def, FLOOKUP_UPDATE]
+  (* Unroll transformed exec_block for the JNZ step.  Keep the two value
+     branches separate so simplification does not traverse both large goals. *)
+  ONCE_REWRITE_TAC[exec_block_def]
+  >- (gvs[venomInstTheory.get_instruction_def, step_inst_non_invoke,
+          venomInstTheory.is_terminator_def, EL_APPEND2,
+          listTheory.LENGTH_FRONT, step_inst_base_def, eval_operand_def,
+          lookup_var_def, FLOOKUP_UPDATE, bool_to_word_def, jump_to_def] >>
+      IF_CASES_TAC >>
+      simp[lift_result_def, state_equiv_def, execution_equiv_def,
+           lookup_var_def, FLOOKUP_UPDATE])
+  >- (gvs[venomInstTheory.get_instruction_def, step_inst_non_invoke,
+          venomInstTheory.is_terminator_def, EL_APPEND2,
+          listTheory.LENGTH_FRONT, step_inst_base_def, eval_operand_def,
+          lookup_var_def, FLOOKUP_UPDATE, bool_to_word_def, jump_to_def] >>
+      IF_CASES_TAC >>
+      simp[lift_result_def, state_equiv_def, execution_equiv_def,
+           lookup_var_def, FLOOKUP_UPDATE])
 QED
 
 (* ISZERO insertion: original has N instructions, transformed has N+1.
@@ -920,8 +927,47 @@ Theorem branch_opt_phi_prefix_length[local]:
     phi_prefix_length bb.bb_instructions
 Proof
   rw[branch_opt_block_def, LET_THM] >> fs[NULL_EQ] >>
-  rpt (CASE_TAC >> gvs[phi_prefix_length_front_append1_non_phi,
-                       phi_prefix_length_front_append2_non_phi])
+  TRY (BasicProvers.TOP_CASE_TAC >>
+       gvs[phi_prefix_length_front_append1_non_phi,
+           phi_prefix_length_front_append2_non_phi]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >>
+       gvs[phi_prefix_length_front_append1_non_phi,
+           phi_prefix_length_front_append2_non_phi]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >>
+       gvs[phi_prefix_length_front_append1_non_phi,
+           phi_prefix_length_front_append2_non_phi]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >>
+       gvs[phi_prefix_length_front_append1_non_phi,
+           phi_prefix_length_front_append2_non_phi]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >>
+       gvs[phi_prefix_length_front_append1_non_phi,
+           phi_prefix_length_front_append2_non_phi]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >>
+       gvs[phi_prefix_length_front_append1_non_phi,
+           phi_prefix_length_front_append2_non_phi]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >>
+       gvs[phi_prefix_length_front_append1_non_phi,
+           phi_prefix_length_front_append2_non_phi]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >>
+       gvs[phi_prefix_length_front_append1_non_phi,
+           phi_prefix_length_front_append2_non_phi]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >>
+       gvs[phi_prefix_length_front_append1_non_phi,
+           phi_prefix_length_front_append2_non_phi]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >>
+       gvs[phi_prefix_length_front_append1_non_phi,
+           phi_prefix_length_front_append2_non_phi]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >>
+       gvs[phi_prefix_length_front_append1_non_phi,
+           phi_prefix_length_front_append2_non_phi]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >>
+       gvs[phi_prefix_length_front_append1_non_phi,
+           phi_prefix_length_front_append2_non_phi]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >>
+       gvs[phi_prefix_length_front_append1_non_phi,
+           phi_prefix_length_front_append2_non_phi]) >>
+  gvs[phi_prefix_length_front_append1_non_phi,
+      phi_prefix_length_front_append2_non_phi]
 QED
 
 Theorem branch_opt_phi_prefix_el[local]:
@@ -932,7 +978,20 @@ Theorem branch_opt_phi_prefix_el[local]:
 Proof
   rpt strip_tac >>
   rw[branch_opt_block_def, LET_THM] >> fs[NULL_EQ] >>
-  rpt (CASE_TAC >> gvs[]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> gvs[]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> gvs[]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> gvs[]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> gvs[]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> gvs[]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> gvs[]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> gvs[]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> gvs[]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> gvs[]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> gvs[]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> gvs[]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> gvs[]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> gvs[]) >>
+  gvs[] >>
   `phi_prefix_length bb.bb_instructions < LENGTH bb.bb_instructions` by
     (irule phi_prefix_length_lt_last_non_phi >> simp[]) >>
   simp[EL_FRONT_APPEND1, EL_FRONT_APPEND2]
@@ -974,11 +1033,33 @@ Theorem bo_block_sim_from_phi_idx[local]:
 Proof
   rpt strip_tac >> gvs[] >>
   simp[branch_opt_block_def, LET_THM] >>
-  rpt (CASE_TAC >> simp[lift_result_refl, state_equiv_refl, execution_equiv_refl])
+  TRY (BasicProvers.TOP_CASE_TAC >>
+       simp[lift_result_refl, state_equiv_refl, execution_equiv_refl]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >>
+       simp[lift_result_refl, state_equiv_refl, execution_equiv_refl]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >>
+       simp[lift_result_refl, state_equiv_refl, execution_equiv_refl]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >>
+       simp[lift_result_refl, state_equiv_refl, execution_equiv_refl]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >>
+       simp[lift_result_refl, state_equiv_refl, execution_equiv_refl]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >>
+       simp[lift_result_refl, state_equiv_refl, execution_equiv_refl]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >>
+       simp[lift_result_refl, state_equiv_refl, execution_equiv_refl]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >>
+       simp[lift_result_refl, state_equiv_refl, execution_equiv_refl]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >>
+       simp[lift_result_refl, state_equiv_refl, execution_equiv_refl]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >>
+       simp[lift_result_refl, state_equiv_refl, execution_equiv_refl]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >>
+       simp[lift_result_refl, state_equiv_refl, execution_equiv_refl]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >>
+       simp[lift_result_refl, state_equiv_refl, execution_equiv_refl])
   >- (
     irule lift_result_subset >> qexists_tac `{}` >> simp[EMPTY_SUBSET] >>
-    `inst_wf x` by
-      (qspecl_then [`fn`, `s'`, `x`] mp_tac dfg_inst_wf >> simp[]) >>
+    `inst_wf x` by (drule_all dfg_inst_wf >> simp[]) >>
     `?op. x.inst_operands = [op]` by
       (irule iszero_operand_singleton >> simp[]) >>
     pop_assum strip_assume_tac >>
@@ -998,21 +1079,6 @@ Proof
       (irule phi_prefix_length_lt_last_non_phi >> fs[NULL_EQ]) >>
     irule (SIMP_RULE (srw_ss()) [LET_THM] bo_block_sim_iszero_insertion_from_idx) >>
     simp[])
-  >- (
-    irule lift_result_subset >> qexists_tac `{}` >> simp[EMPTY_SUBSET] >>
-    `inst_wf x` by
-      (qspecl_then [`fn`, `s'`, `x`] mp_tac dfg_inst_wf >> simp[]) >>
-    `?op. x.inst_operands = [op]` by
-      (irule iszero_operand_singleton >> simp[]) >>
-    pop_assum strip_assume_tac >>
-    `phi_prefix_length bb.bb_instructions < LENGTH bb.bb_instructions` by
-      (irule phi_prefix_length_lt_last_non_phi >> fs[NULL_EQ]) >>
-    gvs[] >>
-    irule (SIMP_RULE (srw_ss()) [LET_THM] bo_block_sim_iszero_removal_from_idx) >>
-    simp[] >>
-    qexistsl_tac [`dfg_build_function fn`, `x`] >> simp[] >>
-    rpt strip_tac >>
-    first_x_assum irule >> simp[])
 QED
 
 Theorem bo_same_block_run_block_equiv[local]:

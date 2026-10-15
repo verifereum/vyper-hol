@@ -1,5 +1,0 @@
-# Variable definition analysis definitions
-# From var_definition/defs/:
-#   ../../../defs  = venom/defs
-#   ../../../.. = project root
-INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../../defs ../../../../syntax ../../../../semantics ../../cfg/defs ../../dataflow/defs

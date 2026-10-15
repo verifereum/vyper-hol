@@ -8,8 +8,8 @@ Theory loweringMemSafetyProofs
 Ancestors
   loweringMemSafetyDefs
   allocaRemapDefs pointerConfinedDefs
-  vyperTypeSoundness vyperTypeSoundnessDefs vyperTyping vyperValue
-  vyperTypeSoundnessHelpers vyperAST rich_list vyperMisc
+  vyperTypeSoundness vyperTypeABI vyperTyping vyperValue
+  vyperAST rich_list vyperMisc
   list option pair
   venomState venomMemDefs compileVyper words arithmetic
 
@@ -461,7 +461,7 @@ Theorem lowering_memory_safe:
   ∀selectors ext_fns int_fns fb_fn (dispatch:dispatch_strategy)
     bucket_count fn_meta_bytes dense_buckets entry_info entry_label
     fn cenv s0 s.
-    MEM fn (FST (run_lowering selectors ext_fns int_fns fb_fn
+    MEM fn (FST (run_lowering_pair_compat selectors ext_fns int_fns fb_fn
                    dispatch bucket_count fn_meta_bytes
                    dense_buckets entry_info entry_label)).ctx_functions ∧
     cenv_matches_fn cenv fn ∧

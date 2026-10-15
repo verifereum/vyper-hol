@@ -103,7 +103,9 @@ Theorem step_jnz_behavior:
     if cond <> 0w then OK (jump_to if_nonzero s)
     else OK (jump_to if_zero s)
 Proof
-  rw[step_inst_base_def]
+  rpt strip_tac >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  simp[opcode_case_def]
 QED
 
 (* ==========================================================================
@@ -143,7 +145,9 @@ QED
 val step_term_ok_jump_fields_tac =
   qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
   simp[Once step_inst_def, step_inst_base_def, jump_to_def] >>
-  gvs[AllCaseEqs(), PULL_EXISTS] >> rw[] >> gvs[lookup_var_def] >> NO_TAC;
+  gvs[AllCaseEqs(), PULL_EXISTS] >>
+  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
+  rw[] >> gvs[lookup_var_def] >> NO_TAC;
 
 Triviality step_inst_ok_terminator_jump_fields[local]:
   !fuel ctx inst s v.
@@ -163,6 +167,11 @@ Proof
   >- step_term_ok_jump_fields_tac
   >- step_term_ok_jump_fields_tac
   >- step_term_ok_jump_fields_tac
+  >- step_term_ok_jump_fields_tac
+  >- (qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
+      simp[Once step_inst_def, step_inst_base_def, jump_to_def] >>
+      gvs[AllCaseEqs(), PULL_EXISTS] >> rpt gen_tac >> strip_tac >>
+      pairarg_tac >> gvs[])
   >- step_term_ok_jump_fields_tac
   >- step_term_ok_jump_fields_tac
   >- step_term_ok_jump_fields_tac
@@ -529,7 +538,9 @@ QED
 val term_succ_basic_tac =
   fs[step_inst_base_def, inst_wf_def, get_successors_def,
      get_label_def, jump_to_def, is_terminator_def] >>
-  gvs[AllCaseEqs()] >> rw[] >> gvs[];
+  gvs[AllCaseEqs()] >>
+  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
+  rw[] >> gvs[];
 
 val term_succ_djmp_tac =
   term_succ_basic_tac >>
@@ -553,6 +564,8 @@ Proof
   >- term_succ_basic_tac
   >- term_succ_basic_tac
   >- term_succ_djmp_tac
+  >- term_succ_basic_tac
+  >- term_succ_basic_tac
   >- term_succ_basic_tac
   >- term_succ_basic_tac
   >- term_succ_basic_tac
@@ -979,8 +992,8 @@ Proof
     >- (`step_inst m ctx inst s = Abort a v` by
           (first_x_assum (qspec_then `Abort a v` mp_tac) >> simp[]) >>
         strip_tac >> gvs[] >> simp[Once exec_block_def])
-    >- (`step_inst m ctx inst s = IntRet l v` by
-          (first_x_assum (qspec_then `IntRet l v` mp_tac) >> simp[]) >>
+    >- (`step_inst m ctx inst s = IntRet i v` by
+          (first_x_assum (qspec_then `IntRet i v` mp_tac) >> simp[]) >>
         strip_tac >> gvs[] >> simp[Once exec_block_def])
   )
   (* --- run_blocks case --- *)
@@ -1052,7 +1065,7 @@ Proof
       >- (
         Cases_on `m` >- gvs[] >> rename1 `SUC m''` >>
         `exec_block m'' ctx bb
-           (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) = IntRet l v` by
+           (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) = IntRet i v` by
           (first_x_assum (qspec_then `m''` mp_tac) >> simp[]) >>
         simp[Once run_blocks_def]
       )
@@ -1107,6 +1120,15 @@ Proof
 QED
 
 
+
+Triviality eval_operands_none_mem[local]:
+  !ops s. eval_operands ops s = NONE ==>
+    ?op. MEM op ops /\ eval_operand op s = NONE
+Proof
+  Induct >> simp[eval_operands_def] >> rpt gen_tac >>
+  Cases_on `eval_operand h s` >> simp[] >>
+  Cases_on `eval_operands ops s` >> simp[] >> metis_tac[]
+QED
 
 (* General: if eval_operands returns NONE for the full operand list,
    step_inst_base returns Error for non-excluded opcodes.
@@ -1257,12 +1279,22 @@ Triviality step_inst_base_operands_none_custom[local]:
       ASSIGN; INVOKE; CALLDATACOPY; RETURNDATACOPY; CODECOPY;
       EXTCODECOPY; SHA3; CALL; STATICCALL; DELEGATECALL;
       CREATE; CREATE2; SELFDESTRUCT; ASSERT; ASSERT_UNREACHABLE;
-      DLOADBYTES] /\
+      DLOADBYTES; DALLOCA; DRET; GETFMP; SETFMP; RETFMP;
+      INITIAL_FMP; BUMP; FMP_PARAM; RETPC_PARAM] /\
     inst_wf inst /\
     eval_operands inst.inst_operands s = NONE ==>
     ?e. step_inst_base inst s = Error e
 Proof
   rpt strip_tac >> gvs[MEM]
+  >- operands_none_custom_tac
+  >- operands_none_custom_tac
+  >- operands_none_custom_tac
+  >- operands_none_custom_tac
+  >- operands_none_custom_tac
+  >- operands_none_custom_tac
+  >- operands_none_custom_tac
+  >- operands_none_custom_tac
+  >- operands_none_custom_tac
   >- operands_none_custom_tac
   >- operands_none_custom_tac
   >- operands_none_custom_tac
@@ -1302,11 +1334,15 @@ Proof
   gvs[inst_wf_def] >>
   (* Now: inst.inst_operands = Lit tc :: rest, LENGTH rest = w2n tc + 2,
      eval_operands (Lit tc :: rest) s = NONE *)
-  (* Lit tc always evaluates, so eval_operands rest s = NONE *)
+  (* Lit tc always evaluates, so eval_operands rest s = NONE. *)
   gvs[eval_operands_def, eval_operand_def] >>
-  (* rest has length >= 2, so destructure it *)
-  `?h1 h2 tl. rest = h1 :: h2 :: tl` by
-    (Cases_on `rest` >> gvs[] >>
+  Cases_on `eval_operands rest s` >> gvs[] >>
+  `eval_operands (REVERSE rest) s = NONE` by
+    (drule eval_operands_none_mem >> strip_tac >>
+     irule eval_operands_mem_none >>
+     qexists_tac `op` >> simp[MEM_REVERSE]) >>
+  `?h1 h2 tl. REVERSE rest = h1 :: h2 :: tl` by
+    (Cases_on `REVERSE rest` >> gvs[] >>
      Cases_on `t` >> gvs[]) >>
   gvs[step_inst_base_def, eval_operands_def] >>
   BasicProvers.every_case_tac >> gvs[]
@@ -1326,9 +1362,10 @@ Triviality step_inst_base_operands_none[local]:
 Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode` >> gvs[MEM] >>
-  metis_tac[step_inst_base_operands_none_uniform,
-            step_inst_base_operands_none_custom,
-            step_inst_base_operands_none_log, MEM]
+  FIRST
+    [irule step_inst_base_operands_none_uniform >> simp[MEM] >> NO_TAC,
+     irule step_inst_base_operands_none_custom >> simp[MEM] >> NO_TAC,
+     irule step_inst_base_operands_none_log >> simp[]]
 QED
 
 Theorem step_inst_base_nonerr_var_fdom:
@@ -1432,14 +1469,16 @@ fun prove_fdom_group opcode_list = prove(
      inst_wf inst /\ step_inst_base inst s = OK s' ==>
      FDOM s'.vs_vars = FDOM s.vs_vars UNION set inst.inst_outputs``,
   rpt strip_tac >> gvs[MEM] >>
-  gvs[inst_wf_def, LENGTH_EQ_NUM_compute,
-      step_inst_base_def, exec_pure2_def, exec_pure1_def, exec_pure3_def,
+  gvs[inst_wf_def, LENGTH_EQ_NUM_compute] >>
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  ASM_REWRITE_TAC[step_inst_base_def] >>
+  simp[exec_pure2_def, exec_pure1_def, exec_pure3_def,
       exec_read0_def, exec_read1_def, exec_write2_def,
       exec_alloca_def,
-      mstore_def, mstore8_def, sstore_def, tstore_def] >>
-  BasicProvers.every_case_tac >>
+      istore_def, mstore_def, mstore8_def, sstore_def, tstore_def] >>
+  BasicProvers.every_case_tac >> rpt strip_tac >>
   gvs[update_var_def, finite_mapTheory.FDOM_FUPDATE] >>
-  simp[pred_setTheory.EXTENSION] >> metis_tac[]);
+  simp[pred_setTheory.EXTENSION, AC DISJ_ASSOC DISJ_COMM]);
 
 val step_inst_base_fdom_pure2 = prove_fdom_group
   ``[ADD; SUB; MUL; Div; SDIV; Mod; SMOD; Exp;
@@ -1479,7 +1518,8 @@ val step_inst_base_fdom_no_output = prove(
       mcopy_def, write_memory_with_expansion_def]);
 
 val step_inst_base_fdom_custom1 = prove_fdom_group
-  ``[ASSIGN; SHA3; PARAM; ALLOCA; OFFSET]``;
+  ``[ASSIGN; SHA3; PARAM; ALLOCA; OFFSET; DALLOCA; GETFMP; SETFMP;
+     INITIAL_FMP; BUMP; FMP_PARAM; RETPC_PARAM]``;
 
 (* External calls: extract_venom_result preserves vs_vars, then update_var adds output *)
 val step_inst_base_fdom_external = prove(
@@ -1494,7 +1534,7 @@ val step_inst_base_fdom_external = prove(
   BasicProvers.every_case_tac >> gvs[] >>
   imp_res_tac extract_venom_result_preserves_vars >> gvs[] >>
   gvs[update_var_def, finite_mapTheory.FDOM_FUPDATE] >>
-  simp[pred_setTheory.EXTENSION] >> metis_tac[]);
+  simp[pred_setTheory.EXTENSION, AC DISJ_ASSOC DISJ_COMM]);
 
 (* INVOKE: step_inst_base returns Error, so premise is vacuously false *)
 val step_inst_base_fdom_invoke = prove(
@@ -1553,6 +1593,7 @@ Proof
     (* INVOKE case: merge_callee preserves vs_vars, bind_outputs adds outputs *)
     gvs[Once step_inst_def] >>
     BasicProvers.every_case_tac >> gvs[] >>
+    Cases_on `i.iret_adopt_fmp` >> gvs[adopt_return_fmp_def] >>
     imp_res_tac bind_outputs_fdom >>
     gvs[merge_callee_state_def])
   >- (

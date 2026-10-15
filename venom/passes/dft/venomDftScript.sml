@@ -7,6 +7,7 @@ Ancestors
 
 Theorem dft_pass_correct:
   !fn ctx s.
+    dft_schedule_safe /\
     wf_ssa fn /\ wf_function fn /\ fn_pseudos_prefix fn /\
     s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
     pass_correct (state_equiv {}) (execution_equiv {}) revert_equiv
@@ -20,6 +21,7 @@ QED
 
 Theorem dft_fn_run_function_lift:
   !fuel ctx fn s.
+    dft_schedule_safe /\
     wf_ssa fn /\ wf_function fn /\ fn_pseudos_prefix fn /\
     s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
     lift_result (state_equiv {}) (execution_equiv {}) revert_equiv

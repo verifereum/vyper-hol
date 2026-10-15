@@ -39,20 +39,6 @@ fun exists_var_tac name (g as (asl, w)) =
 
 fun exists_vars_tac names = Tactical.EVERY (map exists_var_tac names);
 
-(* Apply a function to a free variable by name, producing a tactic *)
-fun with_var name (f : term -> tactic) (g as (asl, w)) : goal list * validation =
-  f (find_free_var name g) g;
-
-(* specl_then with variable names instead of quotations *)
-fun specl_vars_then names ttac thm (g as (asl, w)) =
-  let val tms = map (fn n => find_free_var n g) names
-  in ttac (SPECL tms thm) g end;
-
-(* exists_tac with a term-building function applied to free vars *)
-fun exists_term_tac f names (g as (asl, w)) =
-  let val tms = map (fn n => find_free_var n g) names
-  in Tactic.EXISTS_TAC (f tms) g end;
-
 (* Normalize record constructor to record literal form.
    HOL4 treats instruction n o l l0 and <|inst_id:=n;...|> as
    syntactically different terms. This bridges them. *)
@@ -735,6 +721,23 @@ Proof
   )
 QED
 
+(* Shared helper tactic for the non-output cases of ac_dfg_inv_step_ssa. *)
+fun ac_ssa_case2_tac op_name =
+  (Q.SUBGOAL_THEN `lookup_var v s' = lookup_var v s` ASSUME_TAC >-
+    metis_tac[step_preserves_non_output_vars]) >>
+  (Q.SUBGOAL_THEN `IS_SOME (lookup_var v s)` ASSUME_TAC >- gvs[]) >>
+  (Q.SUBGOAL_THEN `!op'. MEM op' inst.inst_operands ==>
+     eval_operand op' s' = eval_operand op' s` ASSUME_TAC >-
+    (rpt strip_tac >>
+     first_x_assum (qspecl_then [`v`, `inst`, `op'`] mp_tac) >>
+     simp[])) >>
+  qpat_x_assum `ac_dfg_inv dfg s` mp_tac >>
+  simp[ac_dfg_inv_def] >> strip_tac >>
+  first_x_assum (qspecl_then [`v`, `inst`, op_name] mp_tac) >>
+  simp[] >> strip_tac >>
+  first_x_assum (qspecl_then [op_name] mp_tac) >>
+  simp[MEM] >> strip_tac >> gvs[]
+
 (* SSA-friendly variant: replaces no-redefine with a weaker condition
    that DFG-tracked operand variables are not among h's outputs.
    This is derivable from SSA ordering (def_dominates_uses). *)
@@ -773,24 +776,6 @@ Proof
       >- metis_tac[step_preserves_non_output_vars]
       >- metis_tac[step_preserves_labels, ac_is_safe_between_def,
                    venomInstPropsTheory.step_preserves_labels])) >>
-  (* Shared helper tactic for Case 2: v not in h's outputs *)
-  let val case2_tac = fn op_name =>
-    (Q.SUBGOAL_THEN `lookup_var v s' = lookup_var v s` ASSUME_TAC >-
-      metis_tac[step_preserves_non_output_vars]) >>
-    (Q.SUBGOAL_THEN `IS_SOME (lookup_var v s)` ASSUME_TAC >- gvs[]) >>
-    (Q.SUBGOAL_THEN `!op'. MEM op' inst.inst_operands ==>
-       eval_operand op' s' = eval_operand op' s` ASSUME_TAC >-
-      (rpt strip_tac >>
-       first_x_assum (qspecl_then [`v`, `inst`, `op'`] mp_tac) >>
-       simp[])) >>
-    qpat_x_assum `ac_dfg_inv dfg s` mp_tac >>
-    simp[ac_dfg_inv_def] >> strip_tac >>
-    first_x_assum (qspecl_then [`v`, `inst`, op_name] mp_tac) >>
-    simp[] >> strip_tac >>
-    first_x_assum (qspecl_then [op_name] mp_tac) >>
-    simp[MEM] >> strip_tac >>
-    gvs[]
-  in
   simp[ac_dfg_inv_def] >> rpt conj_tac
   >- (
     (* ISZERO conjunct *)
@@ -810,7 +795,7 @@ Proof
       imp_res_tac step_iszero_con >>
       gvs[update_var_def, lookup_var_def,
           finite_mapTheory.FLOOKUP_UPDATE])
-    >- case2_tac `input_op`)
+    >- ac_ssa_case2_tac `input_op`)
   >- (
     (* ASSIGN conjunct *)
     rpt gen_tac >> strip_tac >>
@@ -829,8 +814,7 @@ Proof
       imp_res_tac step_assign_con >>
       gvs[update_var_def, lookup_var_def, eval_operand_def,
           finite_mapTheory.FLOOKUP_UPDATE])
-    >- case2_tac `src_op`)
-  end
+    >- ac_ssa_case2_tac `src_op`)
 QED
 
 
@@ -1090,7 +1074,7 @@ Proof
          finite_mapTheory.FLOOKUP_UPDATE] >>
   `step_inst fuel ctx assert_inst s_iz =
    Abort Revert_abort (revert_state (set_returndata [] s_iz))` by (
-    Cases_on `assert_inst` >> gvs[step_inst_non_invoke, step_inst_base_def]) >>
+    irule step_assert_abort >> simp[]) >>
   (* Step 5: Combine into run_insts *)
   simp[run_insts_append, run_insts_def] >>
   (* Step 6: execution_equiv UNIV between abort states *)
@@ -1638,7 +1622,23 @@ Proof
   rpt gen_tac >> strip_tac >>
   `!dfg' p'. ALL_DISTINCT (MAP (\mc. mc.mc_second_id)
      (ac_scan_block dfg' insts p'))` by metis_tac[] >>
-  rpt (CASE_TAC >> gvs[LET_THM, ALL_DISTINCT, MAP, MEM_MAP]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >>
+       gvs[LET_THM, ALL_DISTINCT, MAP, MEM_MAP]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >>
+       gvs[LET_THM, ALL_DISTINCT, MAP, MEM_MAP]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >>
+       gvs[LET_THM, ALL_DISTINCT, MAP, MEM_MAP]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >>
+       gvs[LET_THM, ALL_DISTINCT, MAP, MEM_MAP]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >>
+       gvs[LET_THM, ALL_DISTINCT, MAP, MEM_MAP]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >>
+       gvs[LET_THM, ALL_DISTINCT, MAP, MEM_MAP]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >>
+       gvs[LET_THM, ALL_DISTINCT, MAP, MEM_MAP]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >>
+       gvs[LET_THM, ALL_DISTINCT, MAP, MEM_MAP]) >>
+  gvs[LET_THM, ALL_DISTINCT, MAP, MEM_MAP] >>
   spose_not_then strip_assume_tac >>
   drule ac_scan_second_id_mem >> strip_tac >>
   gvs[ALL_DISTINCT, MEM_MAP]
@@ -2085,11 +2085,14 @@ Theorem ac_or_iz_step:
        eval_operand op s_iz = eval_operand op s)
 Proof
   rpt strip_tac >>
-  simp[LET_THM, run_insts_def, step_inst_non_invoke,
-       step_inst_base_def, exec_pure2_def, exec_pure1_def,
-       update_var_def, eval_operand_def, lookup_var_def,
-       finite_mapTheory.FLOOKUP_UPDATE,
-       execution_equiv_def] >>
+  simp[LET_THM] >>
+  simp[run_insts_def] >>
+  simp[step_inst_non_invoke] >>
+  PURE_REWRITE_TAC[step_inst_base_def] >>
+  simp[venomInstTheory.opcode_case_def] >>
+  simp[exec_pure2_def, exec_pure1_def] >>
+  simp[update_var_def, eval_operand_def, lookup_var_def] >>
+  simp[finite_mapTheory.FLOOKUP_UPDATE, execution_equiv_def] >>
   rpt strip_tac >> Cases_on `op` >>
   fs[eval_operand_def, lookup_var_def, update_var_def,
      finite_mapTheory.FLOOKUP_UPDATE]

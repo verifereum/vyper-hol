@@ -40,13 +40,20 @@ QED
 
 (* ===== Obligations ===== *)
 
+fun lit_codesize_case_tac thms =
+  TRY (BasicProvers.TOP_CASE_TAC >> gvs thms)
+
 (* lit_codesize_inst preserves instruction IDs — the transform only
    replaces opcodes, not identifiers. *)
 Triviality lit_codesize_inst_id:
   !inst. (lit_codesize_inst inst).inst_id = inst.inst_id
 Proof
   rw[literalsCodesizeDefsTheory.lit_codesize_inst_def] >>
-  rpt (BasicProvers.TOP_CASE_TAC >> gvs[])
+  lit_codesize_case_tac [] >> lit_codesize_case_tac [] >>
+  lit_codesize_case_tac [] >> lit_codesize_case_tac [] >>
+  lit_codesize_case_tac [] >> lit_codesize_case_tac [] >>
+  lit_codesize_case_tac [] >> lit_codesize_case_tac [] >>
+  lit_codesize_case_tac [] >> lit_codesize_case_tac [] >> gvs[]
 QED
 
 (* lit_codesize_inst preserves instruction outputs — the transform only
@@ -55,7 +62,11 @@ Triviality lit_codesize_inst_outputs:
   !inst. (lit_codesize_inst inst).inst_outputs = inst.inst_outputs
 Proof
   rw[literalsCodesizeDefsTheory.lit_codesize_inst_def] >>
-  rpt (BasicProvers.TOP_CASE_TAC >> gvs[])
+  lit_codesize_case_tac [] >> lit_codesize_case_tac [] >>
+  lit_codesize_case_tac [] >> lit_codesize_case_tac [] >>
+  lit_codesize_case_tac [] >> lit_codesize_case_tac [] >>
+  lit_codesize_case_tac [] >> lit_codesize_case_tac [] >>
+  lit_codesize_case_tac [] >> lit_codesize_case_tac [] >> gvs[]
 QED
 
 (* Terminator instructions pass through lit_codesize_inst unchanged —
@@ -64,7 +75,17 @@ Triviality lit_codesize_inst_terminator_identity:
   !inst. is_terminator inst.inst_opcode ==> lit_codesize_inst inst = inst
 Proof
   rw[literalsCodesizeDefsTheory.lit_codesize_inst_def] >>
-  rpt (BasicProvers.TOP_CASE_TAC >> gvs[venomInstTheory.is_terminator_def])
+  lit_codesize_case_tac [venomInstTheory.is_terminator_def] >>
+  lit_codesize_case_tac [venomInstTheory.is_terminator_def] >>
+  lit_codesize_case_tac [venomInstTheory.is_terminator_def] >>
+  lit_codesize_case_tac [venomInstTheory.is_terminator_def] >>
+  lit_codesize_case_tac [venomInstTheory.is_terminator_def] >>
+  lit_codesize_case_tac [venomInstTheory.is_terminator_def] >>
+  lit_codesize_case_tac [venomInstTheory.is_terminator_def] >>
+  lit_codesize_case_tac [venomInstTheory.is_terminator_def] >>
+  lit_codesize_case_tac [venomInstTheory.is_terminator_def] >>
+  lit_codesize_case_tac [venomInstTheory.is_terminator_def] >>
+  gvs[venomInstTheory.is_terminator_def]
 QED
 
 (* lit_codesize_inst never introduces a terminator — only non-terminator
@@ -74,7 +95,17 @@ Triviality lit_codesize_inst_nonterminator:
     ~is_terminator (lit_codesize_inst inst).inst_opcode
 Proof
   rw[literalsCodesizeDefsTheory.lit_codesize_inst_def] >>
-  rpt (BasicProvers.TOP_CASE_TAC >> gvs[venomInstTheory.is_terminator_def])
+  lit_codesize_case_tac [venomInstTheory.is_terminator_def] >>
+  lit_codesize_case_tac [venomInstTheory.is_terminator_def] >>
+  lit_codesize_case_tac [venomInstTheory.is_terminator_def] >>
+  lit_codesize_case_tac [venomInstTheory.is_terminator_def] >>
+  lit_codesize_case_tac [venomInstTheory.is_terminator_def] >>
+  lit_codesize_case_tac [venomInstTheory.is_terminator_def] >>
+  lit_codesize_case_tac [venomInstTheory.is_terminator_def] >>
+  lit_codesize_case_tac [venomInstTheory.is_terminator_def] >>
+  lit_codesize_case_tac [venomInstTheory.is_terminator_def] >>
+  lit_codesize_case_tac [venomInstTheory.is_terminator_def] >>
+  gvs[venomInstTheory.is_terminator_def]
 QED
 
 (* PHI opcodes are unchanged by lit_codesize_inst. *)

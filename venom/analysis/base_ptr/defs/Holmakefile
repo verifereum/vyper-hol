@@ -1,5 +1,0 @@
-# Base pointer analysis definitions
-# From base_ptr/defs/:
-#   ../../../defs  = venom/defs
-#   ../../../.. = project root
-INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../../defs ../../../../syntax ../../../../semantics ../../shared ../../shared/defs ../../cfg/defs ../../dataflow/defs

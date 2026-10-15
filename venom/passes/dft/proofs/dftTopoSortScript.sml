@@ -209,11 +209,13 @@ Proof
   rw[inst_data_deps_def, LET_THM, MEM_nub, MEM_APPEND,
      flip_not_terminator] >|
   [disj1_tac >> irule map_the_filter_some_mono >>
-     qexists_tac `(flip_operands inst).inst_operands` >>
+     qexists_tac `python_stack_operands (flip_operands inst).inst_opcode
+       (flip_operands inst).inst_operands` >>
      simp[flip_operands_mem_ops],
    simp[],
    irule map_the_filter_some_mono >>
-     qexists_tac `(flip_operands inst).inst_operands` >>
+     qexists_tac `python_stack_operands (flip_operands inst).inst_opcode
+       (flip_operands inst).inst_operands` >>
      simp[flip_operands_mem_ops]]
 QED
 

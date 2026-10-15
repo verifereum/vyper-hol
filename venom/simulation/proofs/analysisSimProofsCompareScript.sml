@@ -1615,7 +1615,11 @@ Proof
     simp[indexedListsTheory.MAPi_def, eval_phis_def])
   >- (
     `phi_prefix_length (FLAT (MAPi f (h::l))) = 0` by (
-      metis_tac[phi_prefix_length_flat_mapi_local, phi_prefix_length_def]) >>
+      irule EQ_TRANS >>
+      qexists_tac `phi_prefix_length (h::l)` >> conj_tac
+      >- (irule (Q.SPECL [`f`, `h::l`] phi_prefix_length_flat_mapi_local) >>
+          rpt conj_tac >> FIRST_ASSUM ACCEPT_TAC)
+      >- simp[phi_prefix_length_def]) >>
     simp[phi_prefix_length_zero_eval_phis_ok_local, eval_phis_def])
 QED
 

@@ -14,7 +14,7 @@
 
 Theory instIdxIndep
 Ancestors
-  venomExecSemantics venomState venomInst
+  venomExecSemantics venomState venomInst venomCallOracleDefs
 Libs
   finite_mapTheory listTheory BasicProvers pairTheory
 
@@ -104,6 +104,12 @@ Theorem mstore_idx[local]:
   !off v s n. mstore off v (s with vs_inst_idx := n) =
               (mstore off v s) with vs_inst_idx := n
 Proof simp[mstore_def, LET_THM]
+QED
+
+Theorem istore_idx[local]:
+  !off v s n. istore off v (s with vs_inst_idx := n) =
+              (istore off v s) with vs_inst_idx := n
+Proof simp[istore_def, mstore_idx]
 QED
 
 Theorem mstore8_idx[local]:
@@ -310,9 +316,10 @@ Theorem exec_ext_call_idx[local]:
       (exec_ext_call inst s gas addr value ao as_ ro rs is_static)
 Proof
   rpt gen_tac >>
-  simp([exec_ext_call_def, make_venom_call_state_idx] @ ext_call_rw) >>
+  simp([exec_ext_call_def, venom_call_request_def,
+        write_memory_with_expansion_def, make_venom_call_state_idx] @ ext_call_rw) >>
   EVERY_CASE_TAC >>
-  simp[exec_result_map_def, update_var_idx, venom_state_component_equality]
+  simp[exec_result_map_def, update_var_def, update_var_idx, venom_state_component_equality]
 QED
 
 Theorem exec_delegatecall_idx[local]:
@@ -348,7 +355,7 @@ QED
 val idx_rw = [eval_op_inst_idx, eval_ops_inst_idx, update_var_idx,
               write_mem_idx, read_mem_idx, jump_to_idx,
               halt_state_idx, revert_state_idx, set_returndata_idx,
-              mstore_idx, mstore8_idx, sstore_idx, tstore_idx, mcopy_idx, mload_idx,
+              mstore_idx, istore_idx, mstore8_idx, sstore_idx, tstore_idx, mcopy_idx, mload_idx,
               sload_idx, tload_idx, exec_result_map_def];
 
 val opcode_idx_tac =
@@ -361,6 +368,14 @@ val opcode_idx_tac =
        exec_ext_call_idx, exec_delegatecall_idx, exec_create_idx] >>
   EVERY_CASE_TAC >>
   simp(idx_rw @ [venom_state_component_equality]);
+
+(* Isolate the expensive opcode dispatch once for the MUL branch. *)
+Theorem step_inst_base_MUL[local]:
+  !inst s. inst.inst_opcode = MUL ==>
+    step_inst_base inst s = exec_pure2 $* inst s
+Proof
+  simp[step_inst_base_def]
+QED
 
 (* ================================================================
    THE MAIN THEOREM — exported
@@ -375,7 +390,7 @@ Proof
   simp[is_terminator_def]
   >- opcode_idx_tac  (* ADD *)
   >- opcode_idx_tac  (* SUB *)
-  >- opcode_idx_tac  (* MUL *)
+  >- (asm_simp_tac std_ss [step_inst_base_MUL, exec_pure2_idx])  (* MUL *)
   >- opcode_idx_tac  (* Div *)
   >- opcode_idx_tac  (* SDIV *)
   >- opcode_idx_tac  (* Mod *)
@@ -414,7 +429,14 @@ Proof
   >- opcode_idx_tac  (* ASSIGN *)
   >- opcode_idx_tac  (* NOP *)
   >- opcode_idx_tac  (* ALLOCA *)
+  >- opcode_idx_tac  (* DALLOCA *)
+  >- opcode_idx_tac  (* GETFMP *)
+  >- opcode_idx_tac  (* SETFMP *)
+  >- opcode_idx_tac  (* INITIAL_FMP *)
+  >- opcode_idx_tac  (* BUMP *)
   >- opcode_idx_tac  (* INVOKE *)
+  >- opcode_idx_tac  (* FMP_PARAM *)
+  >- opcode_idx_tac  (* RETPC_PARAM *)
   >- opcode_idx_tac  (* CALLER *)
   >- opcode_idx_tac  (* CALLVALUE *)
   >- opcode_idx_tac  (* CALLDATALOAD *)
@@ -459,6 +481,29 @@ Proof
 QED
 
 (* ================================================================
+   DRET packing commutes with instruction-index updates
+   ================================================================ *)
+
+Theorem pack_dret_dynamic_inst_idx_update[local]:
+  !pairs cursor s ptrs final_cursor s' n.
+    pack_dret_dynamic cursor pairs s = (ptrs,final_cursor,s') ==>
+    pack_dret_dynamic cursor pairs (s with vs_inst_idx := n) =
+      (ptrs,final_cursor,s' with vs_inst_idx := n)
+Proof
+  Induct
+  >- simp[pack_dret_dynamic_def]
+  >> rpt gen_tac >> strip_tac >>
+  PairCases_on `h` >>
+  Cases_on `pack_dret_dynamic (cursor + n2w (ceil32 (w2n h1))) pairs
+              (mcopy (w2n cursor) (w2n h0) (w2n h1) s)` >>
+  Cases_on `r` >>
+  gvs[pack_dret_dynamic_def, mcopy_idx] >>
+  first_x_assum drule >>
+  disch_then (fn th => rewrite_tac[th]) >>
+  simp[]
+QED
+
+(* ================================================================
    TERMINATOR idx-indep: normalizing idx to 0 yields same result
    ================================================================ *)
 
@@ -487,6 +532,17 @@ Proof
   >- terminator_idx_tac  (* REVERT *)
   >- terminator_idx_tac  (* STOP *)
   >- terminator_idx_tac  (* SINK *)
+  >- (simp[step_inst_base_def,
+           eval_op_inst_idx, eval_ops_inst_idx,
+           jump_to_idx, halt_state_idx, revert_state_idx,
+           set_returndata_idx, read_mem_idx, write_mem_idx] >>
+      EVERY_CASE_TAC >>
+      Cases_on `pack_dret_dynamic s.vs_call_entry_fmp x' s` >>
+      Cases_on `r'` >>
+      drule pack_dret_dynamic_inst_idx_update >>
+      disch_then (fn th => rewrite_tac[th]) >>
+      gvs[exec_result_map_def, venom_state_component_equality])  (* DRET *)
+  >- terminator_idx_tac  (* RETFMP *)
   >- terminator_idx_tac  (* SELFDESTRUCT *)
   >- terminator_idx_tac  (* INVALID *)
 QED
@@ -506,6 +562,10 @@ Proof
   >- gvs[step_inst_base_def, AllCaseEqs(), jump_to_def]  (* REVERT *)
   >- gvs[step_inst_base_def, AllCaseEqs(), jump_to_def]  (* STOP *)
   >- gvs[step_inst_base_def, AllCaseEqs(), jump_to_def]  (* SINK *)
+  >- (gvs[step_inst_base_def, AllCaseEqs(), jump_to_def] >>
+      Cases_on `pack_dret_dynamic s.vs_call_entry_fmp pairs s` >>
+      Cases_on `r` >> gvs[])  (* DRET *)
+  >- gvs[step_inst_base_def, AllCaseEqs(), jump_to_def]  (* RETFMP *)
   >- gvs[step_inst_base_def, AllCaseEqs(), jump_to_def]  (* SELFDESTRUCT *)
   >- gvs[step_inst_base_def, AllCaseEqs(), jump_to_def]  (* INVALID *)
 QED

@@ -30,7 +30,8 @@ Theory emitHelperProps
 Ancestors
   exprLoweringProps emitHelper compileEnv
   venomExecSemantics venomState venomInst
-  instIdxIndep vfmState
+  instIdxIndep vfmState freshLabelStringProps ASCIInumbers
+  list pred_set arithmetic
 Libs
   intLib
 
@@ -154,7 +155,9 @@ Theorem step_GT:
     step_inst_base (mk_inst id GT [op1; op2] [out]) ss =
       OK (update_var out (bool_to_word (w2n v1 > w2n v2)) ss)
 Proof
-  rw[step_inst_base_def] >> irule exec_pure2_ok >> rw[]
+  rw[] >> ASM_REWRITE_TAC[step_inst_base_def, mk_inst_opcode,
+                           opcode_case_def] >>
+  irule exec_pure2_ok >> rw[]
 QED
 
 Theorem step_LT:
@@ -314,7 +317,12 @@ Theorem assert_ok:
     eval_operand op1 ss = SOME v ∧ v ≠ 0w ⇒
     step_inst_base (mk_inst id ASSERT [op1] []) ss = OK ss
 Proof
-  rw[step_inst_base_def]
+  rpt strip_tac >>
+  `(mk_inst id ASSERT [op1] []).inst_opcode = ASSERT`
+    by simp[venomInstTheory.mk_inst_def] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  pop_assum (fn th => PURE_REWRITE_TAC[th]) >>
+  simp[venomInstTheory.mk_inst_def]
 QED
 
 (* ASSERT with zero condition: Abort Revert *)
@@ -323,7 +331,12 @@ Theorem assert_revert:
     eval_operand op1 ss = SOME 0w ∧ rs = revert_state (set_returndata [] ss) ⇒
     step_inst_base (mk_inst id ASSERT [op1] []) ss = Abort Revert_abort rs
 Proof
-  rw[step_inst_base_def]
+  rpt strip_tac >>
+  `(mk_inst id ASSERT [op1] []).inst_opcode = ASSERT`
+    by simp[venomInstTheory.mk_inst_def] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  pop_assum (fn th => PURE_REWRITE_TAC[th]) >>
+  simp[venomInstTheory.mk_inst_def]
 QED
 
 (* ASSERT either succeeds or reverts (disjunctive form) *)
@@ -333,7 +346,13 @@ Theorem assert_ok_or_revert:
     step_inst_base (mk_inst id ASSERT [op1] []) ss = OK ss ∨
     step_inst_base (mk_inst id ASSERT [op1] []) ss = Abort Revert_abort rs
 Proof
-  rw[step_inst_base_def]
+  rpt strip_tac >>
+  `(mk_inst id ASSERT [op1] []).inst_opcode = ASSERT`
+    by simp[venomInstTheory.mk_inst_def] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  pop_assum (fn th => PURE_REWRITE_TAC[th]) >>
+  simp[venomInstTheory.mk_inst_def] >>
+  Cases_on `v = 0w` >> simp[]
 QED
 
 (* ===== eval_operand after update_var ===== *)
@@ -1258,9 +1277,15 @@ Theorem emit_void_ASSERT_ok_or_revert_mem:
 Proof
   rw[] >>
   drule emitted_insts_emit_void >> strip_tac >> gvs[] >>
-  simp[run_inst_seq_def, step_inst_base_def] >>
-  Cases_on `v = 0w` >> gvs[] >>
-  metis_tac[]
+  Cases_on `v = 0w`
+  >- (`step_inst_base (mk_inst st.cs_next_id ASSERT [op1] []) ss =
+        Abort Revert_abort (revert_state (set_returndata [] ss))`
+        by (irule assert_revert >> simp[]) >>
+      qexists_tac `revert_state (set_returndata [] ss)` >>
+      simp[run_inst_seq_def]) >>
+  `step_inst_base (mk_inst st.cs_next_id ASSERT [op1] []) ss = OK ss`
+    by (irule assert_ok >> simp[]) >>
+  qexists_tac `ss` >> simp[run_inst_seq_def]
 QED
 
 (* ASSERT with non-zero value: OK, state unchanged *)
@@ -1275,7 +1300,9 @@ Theorem emit_void_ASSERT_ok:
 Proof
   rw[] >>
   drule emitted_insts_emit_void >> strip_tac >> gvs[] >>
-  simp[run_inst_seq_def, step_inst_base_def]
+  `step_inst_base (mk_inst st.cs_next_id ASSERT [op1] []) ss = OK ss`
+    by (irule assert_ok >> simp[]) >>
+  simp[run_inst_seq_def]
 QED
 
 (* ASSERT with zero value: Abort *)
@@ -1290,7 +1317,11 @@ Theorem emit_void_ASSERT_revert:
 Proof
   rw[] >>
   drule emitted_insts_emit_void >> strip_tac >> gvs[] >>
-  simp[run_inst_seq_def, step_inst_base_def]
+  `step_inst_base (mk_inst st.cs_next_id ASSERT [op1] []) ss =
+    Abort Revert_abort (revert_state (set_returndata [] ss))`
+    by (irule assert_revert >> simp[]) >>
+  qexists_tac `revert_state (set_returndata [] ss)` >>
+  simp[run_inst_seq_def]
 QED
 
 Theorem emit_op_MLOAD_correct:
@@ -2006,8 +2037,14 @@ Theorem emit_void_ASSERT_ok_or_revert:
 Proof
   rpt gen_tac >> strip_tac >>
   drule emitted_insts_emit_void >> strip_tac >> gvs[] >>
-  simp[run_inst_seq_def, step_inst_base_def, mk_inst_def] >>
-  Cases_on `v1 = 0w` >> gvs[] >>
+  Cases_on `v1 = 0w`
+  >- (`step_inst_base (mk_inst st.cs_next_id ASSERT [op1] []) ss =
+        Abort Revert_abort (revert_state (set_returndata [] ss))`
+        by (irule assert_revert >> simp[]) >>
+      simp[run_inst_seq_def]) >>
+  `step_inst_base (mk_inst st.cs_next_id ASSERT [op1] []) ss = OK ss`
+    by (irule assert_ok >> simp[]) >>
+  simp[run_inst_seq_def] >>
   drule emit_void_extends >> simp[same_blocks_def] >> strip_tac >> gvs[] >>
   irule fresh_vars_wrt_emit_void >>
   goal_assum drule >> gvs[]
@@ -2392,7 +2429,21 @@ Theorem fresh_label_output_inj:
     fresh_label_output s1 k1 = fresh_label_output s2 k2
     ⇒ s1 = s2 ∧ k1 = k2
 Proof
-  cheat
+  rpt gen_tac >>
+  PURE_REWRITE_TAC[fresh_label_output_def, GSYM APPEND_ASSOC] >>
+  simp[] >> strip_tac >>
+  `s1 = s2 /\ toString k1 = toString k2` by
+    (irule decimal_suffix_inj >> fs[toString_digits, APPEND_ASSOC]) >>
+  gvs[toString_inj]
+QED
+
+(* Helper: the counter alone decides future membership, for any suffix. *)
+Theorem fresh_label_output_in_future:
+  fresh_label_output suffix n IN compiler_labels_future m <=> m <= n
+Proof
+  rw[compiler_labels_future_def] >> eq_tac
+  >- (strip_tac >> drule fresh_label_output_inj >> strip_tac >> gvs[]) >>
+  strip_tac >> qexistsl_tac [`suffix`, `n`] >> simp[]
 QED
 
 (* Initial compile_state is well-formed for any entry label that is not
@@ -2448,13 +2499,13 @@ Proof
   cheat
 QED
 
-(* fresh_label: advances counter, returns a label that is external to
-   the pre-state (provable because counter equals old cs_next_label,
-   and compile_state_ok rules out prior binding). *)
+(* fresh_label: the result is external to the post-state, not the pre-state.
+   The old counter is excluded from the advanced future label space;
+   compile_state_ok rules out prior binding. *)
 Theorem fresh_label_produces_external:
   ∀ suffix st lbl st'.
     fresh_label suffix st = (lbl, st') ∧ compile_state_ok st
-    ⇒ label_external st lbl ∧
+    ⇒ label_external st' lbl ∧
       lbl = fresh_label_output suffix st.cs_next_label ∧
       st'.cs_next_label = st.cs_next_label + 1 ∧
       st'.cs_blocks = st.cs_blocks ∧
@@ -2462,7 +2513,16 @@ Theorem fresh_label_produces_external:
       bound_labels st' = bound_labels st ∧
       compile_state_ok st'
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> gvs[fresh_label_def] >>
+  `fresh_label_output suffix st.cs_next_label NOTIN bound_labels st` by
+    (fs[compile_state_ok_def] >>
+     metis_tac[IN_DISJOINT, fresh_label_output_in_future, LESS_EQ_REFL]) >>
+  simp[label_external_def, bound_labels_def, fresh_label_output_in_future,
+       compile_state_ok_def] >>
+  fs[compile_state_ok_def, bound_labels_def, IN_DISJOINT] >>
+  rpt strip_tac >>
+  fs[compiler_labels_future_def] >>
+  metis_tac[DECIDE ``n + 1 <= k ==> n <= k``]
 QED
 
 (* fresh_var / fresh_id don't touch label-space. *)

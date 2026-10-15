@@ -177,7 +177,7 @@ Theorem write_storage_slot_eq:
      | SOME writes =>
          (INL (), set_storage cx st is_t
            (apply_writes slot writes (get_storage cx st is_t)))
-     | NONE => (INR (Error (RuntimeError "write_storage_slot encode")), st))
+     | NONE => (INR (Error (TypeError "write_storage_slot encode")), st))
 Proof
   rw[write_storage_slot_def, bind_def, get_storage_backend_eq,
      lift_option_def, return_def, raise_def, set_storage_backend_eq] >>

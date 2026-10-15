@@ -15,7 +15,7 @@ Ancestors
   codegenRel stackOpSim stackOpAsmSim
   asmSem stackPlanTypes planExec stackModel
   strongPrefixSim instSimHelpers blockSimHelpers
-  asmToBytecodeProofs
+  asmToBytecodeProofs venomState
   list rich_list byte
 Libs BasicProvers
 
@@ -232,11 +232,117 @@ Proof
   )
 QED
 
+Theorem el_mstore_expand_read_byte[local]:
+  !i off mem.
+    i < LENGTH
+      (if off + 32 > LENGTH mem then
+         mem ++ REPLICATE (off + 32 - LENGTH mem) 0w
+       else mem) ==>
+    EL i
+      (if off + 32 > LENGTH mem then
+         mem ++ REPLICATE (off + 32 - LENGTH mem) 0w
+       else mem) =
+    (if i < LENGTH mem then EL i mem else 0w)
+Proof
+  rpt strip_tac >> IF_CASES_TAC >> gvs[] >>
+  Cases_on `i < LENGTH mem`
+  >- simp[EL_APPEND1]
+  >> simp[EL_APPEND2, EL_REPLICATE]
+QED
+
+Theorem read_byte_mstore_outside:
+  !off (v:bytes32) s i.
+    ~(off <= i /\ i < off + 32) ==>
+    read_byte i (mstore off v s).vs_memory = read_byte i s.vs_memory
+Proof
+  rpt strip_tac >>
+  simp[read_byte_def, mstore_def, LET_THM, len_w2b] >>
+  qabbrev_tac `expanded =
+    if off + 32 > LENGTH s.vs_memory then
+      s.vs_memory ++ REPLICATE (off + 32 - LENGTH s.vs_memory) 0w
+    else s.vs_memory` >>
+  `off + 32 <= LENGTH expanded` by
+    (simp[Abbr `expanded`] >> IF_CASES_TAC >> simp[]) >>
+  `off + (32 + (LENGTH expanded - (off + 32))) = LENGTH expanded`
+    by decide_tac >>
+  simp[] >>
+  Cases_on `i < LENGTH expanded`
+  >- (simp[] >> Cases_on `i < off`
+      >- (simp[EL_APPEND1, LENGTH_APPEND, EL_TAKE] >>
+          unabbrev_all_tac >> irule el_mstore_expand_read_byte >> simp[])
+      >> `i >= off + 32` by decide_tac >>
+         simp[EL_APPEND2, LENGTH_APPEND, LENGTH_DROP, len_w2b] >>
+         `~(i < off + 32)` by decide_tac >> simp[EL_DROP] >>
+         unabbrev_all_tac >> irule el_mstore_expand_read_byte >> simp[])
+  >> `~(i < LENGTH s.vs_memory)` suffices_by simp[] >>
+     `LENGTH s.vs_memory <= LENGTH expanded` by
+       (simp[Abbr `expanded`] >> IF_CASES_TAC >> simp[LENGTH_APPEND]) >>
+     decide_tac
+QED
+
+
+Theorem read_byte_splice_inside[local]:
+  !expanded bytes off n i.
+    LENGTH bytes = n /\ off + n <= LENGTH expanded /\
+    off <= i /\ i < off + n ==>
+    read_byte i (TAKE off expanded ++ bytes ++ DROP (off + n) expanded) =
+    EL (i - off) bytes
+Proof
+  rpt strip_tac >>
+  `LENGTH (TAKE off expanded) = off` by simp[LENGTH_TAKE_EQ] >>
+  `i < LENGTH (TAKE off expanded ++ bytes ++ DROP (off + n) expanded)` by
+    simp[LENGTH_APPEND] >>
+  simp[read_byte_def, EL_APPEND2, EL_APPEND1, LENGTH_APPEND]
+QED
+
+Theorem read_byte_mstore_mem_write32_inside:
+  !off (v:bytes32) s am i.
+    off <= i /\ i < off + 32 ==>
+    read_byte i (mstore off v s).vs_memory =
+    read_byte i (mem_write32 off v am)
+Proof
+  rpt strip_tac >>
+  qabbrev_tac `sexpanded =
+    if off + 32 > LENGTH s.vs_memory then
+      s.vs_memory ++ REPLICATE (off + 32 - LENGTH s.vs_memory) 0w
+    else s.vs_memory` >>
+  qabbrev_tac `aexpanded = asm_expand_memory (off + 32) am` >>
+  `off + 32 <= LENGTH sexpanded` by
+    (simp[Abbr `sexpanded`] >> IF_CASES_TAC >> simp[]) >>
+  `off + 32 <= LENGTH aexpanded` by simp[Abbr `aexpanded`] >>
+  simp[mstore_def, mem_write32_def, LET_THM] >>
+  `read_byte i
+      (TAKE off sexpanded ++ word_to_bytes v T ++
+       DROP (off + 32) sexpanded) = EL (i - off) (word_to_bytes v T)` by
+    (irule read_byte_splice_inside >> simp[len_w2b]) >>
+  `read_byte i
+      (TAKE off aexpanded ++ word_to_bytes v T ++
+       DROP (off + 32) aexpanded) = EL (i - off) (word_to_bytes v T)` by
+    (irule read_byte_splice_inside >> simp[len_w2b]) >>
+  metis_tac[]
+QED
+
+Theorem memory_rel_mstore_mem_write32:
+  !alloc off (v:bytes32) s am.
+    memory_rel alloc s.vs_memory am ==>
+    memory_rel alloc (mstore off v s).vs_memory
+                     (mem_write32 off v am)
+Proof
+  rpt gen_tac >> strip_tac >>
+  rewrite_tac[memory_rel_def] >> rpt strip_tac >>
+  Cases_on `off <= i /\ i < off + 32`
+  >- (irule read_byte_mstore_mem_write32_inside >> simp[]) >>
+  `read_byte i s.vs_memory = read_byte i am` by
+    (qpat_x_assum `memory_rel alloc s.vs_memory am` mp_tac >>
+     rewrite_tac[memory_rel_def] >>
+     disch_then (qspec_then `i` irule) >> simp[]) >>
+  metis_tac[read_byte_mstore_outside, read_byte_mem_write32_outside]
+QED
 (* memory_rel preserved: writes to spill region don't affect outside *)
 Theorem memory_rel_mem_write32:
   !alloc vm am off (v:bytes32).
     memory_rel alloc vm am /\
-    alloc.sa_fn_eom <= off /\
+    alloc.sa_spill_base <= off /\
     off + 32 <= alloc.sa_next_offset ==>
     memory_rel alloc vm (mem_write32 off v am)
 Proof
@@ -296,16 +402,34 @@ QED
 Theorem plan_spill_rel_add_entry:
   !lo vs spilled am off (v:bytes32) op.
     plan_spill_rel lo vs spilled am /\
-    operand_val vs lo op = SOME v /\
+    (op <> dead_stack_marker ==> operand_val vs lo op = SOME v) /\
     (!op2 off2. FLOOKUP spilled op2 = SOME off2 ==>
                 off2 + 32 <= off \/ off + 32 <= off2) ==>
     plan_spill_rel lo vs (spilled |+ (op, off)) (mem_write32 off v am)
 Proof
-  rw[plan_spill_rel_def] >> rpt strip_tac >>
-  gvs[finite_mapTheory.FLOOKUP_UPDATE] >>
-  Cases_on `op' = op` >> gvs[]
-  >- simp[mem_write32_read_same]
-  >- (res_tac >> simp[] >> metis_tac[mem_write32_read32_disjoint])
+  rpt strip_tac >>
+  qpat_x_assum `plan_spill_rel _ _ spilled am` mp_tac >>
+  simp[plan_spill_rel_def] >> strip_tac >>
+  simp[plan_spill_rel_def] >> rpt gen_tac >> strip_tac >>
+  Cases_on `op' = op` >|
+  [ (* updated key: either it is dead or the write stores its value *)
+    gvs[finite_mapTheory.FLOOKUP_UPDATE] >>
+    Cases_on `op = dead_stack_marker` >>
+    gvs[mem_write32_read_same],
+    (* distinct key: preserve the old slot through the disjoint write *)
+    gvs[finite_mapTheory.FLOOKUP_UPDATE] >>
+    qpat_x_assum `!key key_off. FLOOKUP spilled key = SOME key_off ==> _`
+      (qspecl_then [`op'`, `off'`] mp_tac) >>
+    impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+    Cases_on `op' = dead_stack_marker`
+    >- simp[] >>
+    gvs[] >>
+    qpat_x_assum `!op2 off2. FLOOKUP spilled op2 = SOME off2 ==> _`
+      (qspecl_then [`op'`, `off'`] mp_tac) >>
+    impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+    once_rewrite_tac[EQ_SYM_EQ] >>
+    match_mp_tac mem_write32_read32_disjoint >> simp[]
+  ]
 QED
 
 (* Removing a spill entry preserves plan_spill_rel *)
@@ -389,6 +513,8 @@ Theorem spill_asm_steps[local]:
           st'.as_transient = st.as_transient /\
           st'.as_returndata = st.as_returndata /\
           st'.as_logs = st.as_logs /\
+          st'.as_outcomes = st.as_outcomes /\
+          st'.as_requests = st.as_requests /\
           st'.as_call_ctx = st.as_call_ctx /\
           st'.as_tx_ctx = st.as_tx_ctx /\
           st'.as_block_ctx = st.as_block_ctx /\
@@ -435,6 +561,8 @@ Theorem restore_asm_steps[local]:
           st'.as_transient = st.as_transient /\
           st'.as_returndata = st.as_returndata /\
           st'.as_logs = st.as_logs /\
+          st'.as_outcomes = st.as_outcomes /\
+          st'.as_requests = st.as_requests /\
           st'.as_call_ctx = st.as_call_ctx /\
           st'.as_tx_ctx = st.as_tx_ctx /\
           st'.as_block_ctx = st.as_block_ctx /\
@@ -487,7 +615,7 @@ Theorem spill_op_venom_asm_rel:
     LENGTH ps.ps_stack >= 1 /\
     off < dimword(:256) /\
     op = stack_peek 0 ps.ps_stack /\
-    ps.ps_alloc.sa_fn_eom <= off /\
+    ps.ps_alloc.sa_spill_base <= off /\
     (!op2 off2. FLOOKUP ps.ps_spilled op2 = SOME off2 ==>
                 off2 + 32 <= off \/ off + 32 <= off2) /\
     asm_block_at prog st.as_pc
@@ -508,7 +636,8 @@ Proof
   `0 < LENGTH ps.ps_stack` by decide_tac >>
   (* Get TOS operand_val from plan_stack_rel *)
   qspecl_then [`lo`, `vs`, `ps.ps_stack`, `st.as_stack`, `0`]
-    mp_tac plan_stack_rel_el >> (impl_tac >- simp[]) >> strip_tac >>
+    mp_tac plan_stack_rel_el >> (impl_tac >- simp[]) >>
+  disch_then assume_tac >>
   (* Normalize: EL 0 (REVERSE stk) = stack_peek 0 stk, EL 0 l = HD l *)
   `EL 0 (REVERSE ps.ps_stack) = stack_peek 0 ps.ps_stack` by
     (fs[stack_peek_def, EL_REVERSE, arithmeticTheory.PRE_SUB1]) >>
@@ -522,11 +651,11 @@ Proof
   PURE_REWRITE_TAC[venom_asm_rel_def] >>
   (* Normalize stack_pop and TL to TAKE/DROP forms *)
   PURE_REWRITE_TAC[stack_pop_def] >>
-  SUBGOAL_THEN ``TL (st.as_stack : bytes32 list) = DROP 1 st.as_stack``
-    (fn th => REWRITE_TAC[th])
-  >- (Cases_on `st.as_stack` >> gvs[]) >>
   rpt conj_tac
-  >- (irule plan_stack_rel_pop >> simp[])
+  >- (qspecl_then [`lo`, `vs`, `ps.ps_stack`, `st.as_stack`, `1`]
+        mp_tac plan_stack_rel_pop >>
+      impl_tac >- simp[] >>
+      Cases_on `st.as_stack` >> gvs[])
   >- (irule plan_spill_rel_add_entry >> gvs[] >> metis_tac[])
   >- (
     (* memory_rel with widened exclusion range *)
@@ -572,8 +701,9 @@ Proof
   qexists_tac `st'` >> simp[] >>
   fs[venom_asm_rel_def] >>
   (* Get the value at the spill offset *)
-  SUBGOAL_THEN ``operand_val vs lo op = SOME
-    (word_of_bytes T 0w (TAKE 32 (DROP off st.as_memory)))``
+  SUBGOAL_THEN ``op = dead_stack_marker \/
+    operand_val vs lo op = SOME
+      (word_of_bytes T 0w (TAKE 32 (DROP off st.as_memory)))``
     ASSUME_TAC
   >- (fs[plan_spill_rel_def] >> res_tac) >>
   simp[venom_asm_rel_def, stack_push_def] >>

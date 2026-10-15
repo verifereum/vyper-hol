@@ -1,12 +1,22 @@
 [holbuild]
-schema = 1
+minimum_version = "0.11.3"
 
 [project]
 name = "vyper-hol"
-version = "0.1.0"
+version = "0.2.3"
 
 [build]
-roots = ["vyperHolScript.sml"]
+roots = ["vyperHolScript.sml",
+         "semantics/type/vyperCheckContractLibTestScript.sml",
+         "frontend/vyperCheckContractFrontendLibTestScript.sml",
+         "tests/vyperCheckContractTraceLibTestScript.sml",
+         "tests/vyperCreateSelfdestructScript.sml",
+         "tests/vyperTestLibTestScript.sml",
+         "tests/vyperCalldataLenTestScript.sml",
+         "tests/vyperInvertTestScript.sml",
+         "tests/vyperCalldataSliceTestScript.sml",
+         "tests/vyperRawCallCalldataTestScript.sml"]
 
 [dependencies.verifereum]
-path = "$VFMDIR" # set env dir, or override in .holconfig.toml
+git = "https://github.com/verifereum/verifereum.git"
+rev = "f5e172ccbf45addef7096feea76428de3ed3dfa8"

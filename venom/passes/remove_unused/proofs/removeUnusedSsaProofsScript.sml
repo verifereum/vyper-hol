@@ -385,6 +385,15 @@ Proof
   ho_match_mp_tac phi_pairs_ind >> rw[phi_pairs_def] >> gvs[] >> metis_tac[]
 QED
 
+Theorem phi_well_formed_var_pair[local]:
+  !ops v.
+    phi_well_formed ops /\ MEM (Var v) ops ==>
+    ?lbl. MEM (lbl,v) (phi_pairs ops)
+Proof
+  ho_match_mp_tac phi_pairs_ind >>
+  rw[phi_pairs_def, phi_well_formed_def] >> gvs[] >> metis_tac[]
+QED
+
 (* fn_cfg_edge → cfg_succs_of (bridge from path-level to analysis-level) *)
 Theorem fn_cfg_edge_succs[local]:
   !fn a b. wf_function fn /\ fn_cfg_edge fn a b ==>
@@ -510,6 +519,13 @@ Proof
   simp[]
 QED
 
+Theorem phi_value_vars_eq_map_snd_phi_pairs[local]:
+  !ops. phi_value_vars ops = MAP SND (phi_pairs ops)
+Proof
+  ho_match_mp_tac phi_pairs_ind >>
+  rw[phi_value_vars_def, phi_pairs_def]
+QED
+
 (* Liveness propagates backward along a CFG path from d to n:
    if v is live at entry of LAST(path), v is only defined at d_bb,
    and LAST(path) <> d, then v is live at d's exit.
@@ -523,6 +539,7 @@ Theorem live_backward_along_path[local]:
     fn_reachable fn d /\
     lookup_block d fn.fn_blocks = SOME d_bb /\
     MEM v (live_vars_at (liveness_analyze fn) (LAST path) 0) /\
+    ~MEM v (remove_unused_phi_vars fn) /\
     (* v only defined at d_bb *)
     (!bb inst. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
               MEM v inst.inst_outputs ==> bb = d_bb) ==>
@@ -546,12 +563,25 @@ Proof
     (irule fn_cfg_edge_target_block >> metis_tac[]) >>
   `?p_bb. lookup_block p fn.fn_blocks = SOME p_bb` by
     (irule fn_reachable_has_block >> simp[]) >>
-  (* v not PHI output at x_bb (v only defined at d_bb, x <> d) *)
+  (* Protected PHI inputs do not need edge-specific backward propagation. *)
   `!inst. MEM inst (collect_phis x_bb.bb_instructions) ==>
-          ~MEM v inst.inst_outputs` by (
+          ~MEM v (MAP SND (phi_pairs inst.inst_operands))` by (
     rpt strip_tac >>
-    `x_bb = d_bb` by metis_tac[collect_phis_mem, lookup_block_MEM] >>
-    metis_tac[lookup_block_label]) >>
+    `MEM v (remove_unused_phi_vars fn)` by (
+      simp_tac std_ss [remove_unused_phi_vars_def, listTheory.MEM_FLAT,
+                       listTheory.MEM_MAP] >>
+      qexists_tac `FLAT (MAP
+        (\inst. if inst.inst_opcode = PHI
+                then phi_value_vars inst.inst_operands else [])
+        x_bb.bb_instructions)` >> conj_tac
+      >- (qexists_tac `x_bb` >>
+          simp[] >> metis_tac[lookup_block_MEM])
+      >- (simp[listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
+          qexists_tac `phi_value_vars inst.inst_operands` >> conj_tac
+          >- (qexists_tac `inst` >> simp[] >>
+              metis_tac[collect_phis_mem])
+          >- simp[phi_value_vars_eq_map_snd_phi_pairs])) >>
+    gvs[]) >>
   (* Set up cfg membership *)
   `MEM x (cfg_analyze fn).cfg_dfs_pre` by
     (irule fn_reachable_in_cfg_dfs_pre >> simp[]) >>
@@ -586,6 +616,7 @@ Theorem live_at_entry_backward_to_dominator[local]:
     fn_dominates fn d n /\ d <> n /\
     lookup_block d fn.fn_blocks = SOME d_bb /\
     MEM v (live_vars_at (liveness_analyze fn) n 0) /\
+    ~MEM v (remove_unused_phi_vars fn) /\
     (* v only defined at d_bb *)
     (!bb inst. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
               MEM v inst.inst_outputs ==> bb = d_bb) ==>
@@ -631,11 +662,26 @@ Proof
   rename1 `idx_b < LENGTH def_bb.bb_instructions` >>
   `MEM v (EL idx_b def_bb.bb_instructions).inst_outputs /\
    is_removable (EL idx_b def_bb.bb_instructions) /\
-   EVERY (\v. ~MEM v (live_after_at (liveness_analyze func)
+   EVERY (\v. ~MEM v (live_after_at
+     (protect_liveness func (remove_unused_phi_vars func)
+        (liveness_analyze func))
      def_bb.bb_label idx_b (LENGTH def_bb.bb_instructions)))
      (EL idx_b def_bb.bb_instructions).inst_outputs` by (
     qpat_x_assum `MEM v (if _ then _ else _)` mp_tac >>
     simp[COND_RAND, COND_RATOR]) >>
+  `live_after_at
+      (protect_liveness func (remove_unused_phi_vars func)
+         (liveness_analyze func))
+      def_bb.bb_label idx_b (LENGTH def_bb.bb_instructions) =
+    remove_unused_phi_vars func ++
+      live_after_at (liveness_analyze func) def_bb.bb_label idx_b
+        (LENGTH def_bb.bb_instructions)` by (
+    irule removeUnusedProofsTheory.live_after_protect_liveness >> simp[]) >>
+  `EVERY (\w. ~MEM w (live_after_at (liveness_analyze func)
+      def_bb.bb_label idx_b (LENGTH def_bb.bb_instructions)))
+      (EL idx_b def_bb.bb_instructions).inst_outputs /\
+   ~MEM v (remove_unused_phi_vars func)` by
+    (gvs[listTheory.EVERY_MEM] >> metis_tac[]) >>
   qabbrev_tac `def_inst = EL idx_b def_bb.bb_instructions` >>
   qabbrev_tac `lr = liveness_analyze func` >>
   qabbrev_tac `cfg = cfg_analyze func` >>
@@ -647,7 +693,32 @@ Proof
     irule wf_lookup_block >> simp[]) >>
   (* v used at (bb, some index) *)
   `MEM v (inst_uses inst)` by (irule operand_var_in_inst_uses >> simp[]) >>
-  (* By def_dominates_uses: get dominance of defining block over use block *)
+  (* A surviving PHI is an ordinary DFG use.  The single pass protects all
+     current PHI inputs, so a removed output cannot be one of them. *)
+  Cases_on `inst.inst_opcode = PHI`
+  >- (`phi_edge_uses_wf func bb inst` by (
+        `def_dominates_uses func` by gvs[wf_ssa_def] >>
+        fs[def_dominates_uses_def] >>
+        first_x_assum (qspecl_then [`bb`, `inst`] mp_tac) >> simp[]) >>
+      `MEM v (remove_unused_phi_vars func)` by (
+        simp_tac std_ss [remove_unused_phi_vars_def,
+          listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
+        qexists_tac `FLAT (MAP
+          (\i. if i.inst_opcode = PHI
+               then phi_value_vars i.inst_operands else [])
+          bb.bb_instructions)` >> conj_tac
+        >- (qexists_tac `bb` >> simp[])
+        >- (simp[listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
+            qexists_tac `phi_value_vars inst.inst_operands` >> conj_tac
+            >- (qexists_tac `inst` >> simp[])
+            >- (simp[phi_value_vars_eq_map_snd_phi_pairs] >>
+                fs[phi_edge_uses_wf_def] >>
+                drule_all phi_well_formed_var_pair >> strip_tac >>
+                simp[listTheory.MEM_MAP] >>
+                qexists_tac `(lbl,v)` >> simp[]))) >>
+      gvs[]) >>
+  (* By def_dominates_uses: get dominance of defining block over an ordinary
+     use block. *)
   `?def_bb' def_inst'.
      MEM def_bb' func.fn_blocks /\ MEM def_inst' def_bb'.bb_instructions /\
      MEM v def_inst'.inst_outputs /\
@@ -658,8 +729,10 @@ Proof
              EL j bb.bb_instructions = inst)` by (
     `def_dominates_uses func` by gvs[wf_ssa_def] >>
     fs[def_dominates_uses_def] >>
-    first_x_assum (qspecl_then [`bb`, `inst`, `v`] mp_tac) >>
-    simp[] >> metis_tac[]) >>
+    first_x_assum (qspecl_then [`bb`, `inst`] mp_tac) >>
+    simp[] >> strip_tac >>
+    first_x_assum (qspec_then `v` mp_tac) >>
+    simp[def_available_at_def]) >>
   (* The defining block must be def_bb by ssa_form *)
   rename1 `MEM def_bb2 func.fn_blocks` >>
   rename1 `MEM def_inst2 def_bb2.bb_instructions` >>

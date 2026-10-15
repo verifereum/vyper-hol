@@ -239,6 +239,32 @@ QED
 
 (* Non-terminator, non-INVOKE instructions never produce Halt or IntRet *)
 (* run_insts on non-term/non-INVOKE/non-ext-call list can only return OK, Abort, or Error *)
+(* Factor identical result-shape proofs before specializing the opcodes. *)
+Triviality dft_exec_helpers_result_shape:
+  (!f inst s v vals a.
+    exec_pure1 f inst s <> Halt v /\ exec_pure1 f inst s <> IntRet vals v /\
+    exec_pure1 f inst s <> Abort a v) /\
+  (!f inst s v vals a.
+    exec_pure2 f inst s <> Halt v /\ exec_pure2 f inst s <> IntRet vals v /\
+    exec_pure2 f inst s <> Abort a v) /\
+  (!f inst s v vals a.
+    exec_pure3 f inst s <> Halt v /\ exec_pure3 f inst s <> IntRet vals v /\
+    exec_pure3 f inst s <> Abort a v) /\
+  (!f inst s v vals a.
+    exec_read0 f inst s <> Halt v /\ exec_read0 f inst s <> IntRet vals v /\
+    exec_read0 f inst s <> Abort a v) /\
+  (!f inst s v vals a.
+    exec_read1 f inst s <> Halt v /\ exec_read1 f inst s <> IntRet vals v /\
+    exec_read1 f inst s <> Abort a v) /\
+  (!f inst s v vals a.
+    exec_write2 f inst s <> Halt v /\ exec_write2 f inst s <> IntRet vals v /\
+    exec_write2 f inst s <> Abort a v)
+Proof
+  rpt conj_tac >>
+  simp[exec_pure1_def, exec_pure2_def, exec_pure3_def,
+       exec_read0_def, exec_read1_def, exec_write2_def, AllCaseEqs()]
+QED
+
 (* Pre-compute: non-terminator non-INVOKE opcodes never produce Halt/IntRet.
    Uses same ML pre-computation pattern as dftPermSim.per_op_no_halt_abort. *)
 local
@@ -249,7 +275,8 @@ local
   ) (TypeBase.constructors_of ``:opcode``);
 
   val nt_ni_clauses = map (fn op_tm =>
-    SIMP_CONV (srw_ss()) [step_inst_base_def]
+    REWRITE_CONV [step_inst_base_def, instruction_accfupds,
+                  TypeBase.case_def_of ``:opcode``]
       (mk_comb(mk_comb(``step_inst_base``,
         ``inst with inst_opcode := ^op_tm``), ``st:venom_state``))
   ) nt_ni_ops;
@@ -269,7 +296,8 @@ local
       `inst with inst_opcode := ^op_tm = inst`
         by simp[instruction_component_equality] >>
       pop_assum (fn eq => ONCE_REWRITE_TAC [GSYM eq]) >>
-      ONCE_REWRITE_TAC [clause] >> simp exec_helper_defs)
+      ONCE_REWRITE_TAC [clause] >>
+      simp[dft_exec_helpers_result_shape] >> simp exec_helper_defs)
   ) (ListPair.zip(nt_ni_ops, nt_ni_clauses));
 in
   val step_inst_base_not_halt_intret_combined = LIST_CONJ per_op_not_halt_intret;
@@ -420,7 +448,8 @@ local
   val non_abort_ops = List.filter (fn op_tm =>
     not (List.exists (fn t => aconv t op_tm) abort_ops)) nt_ni_nec_na_ops;
   val nt_ni_clauses = map (fn op_tm =>
-    SIMP_CONV (srw_ss()) [step_inst_base_def]
+    REWRITE_CONV [step_inst_base_def, instruction_accfupds,
+                  TypeBase.case_def_of ``:opcode``]
       (mk_comb(mk_comb(``step_inst_base``,
         ``inst with inst_opcode := ^op_tm``), ``st:venom_state``))
   ) non_abort_ops;
@@ -437,7 +466,8 @@ local
       `inst with inst_opcode := ^op_tm = inst`
         by simp[instruction_component_equality] >>
       pop_assum (fn eq => ONCE_REWRITE_TAC [GSYM eq]) >>
-      ONCE_REWRITE_TAC [clause] >> simp exec_helper_defs)
+      ONCE_REWRITE_TAC [clause] >>
+      simp[dft_exec_helpers_result_shape] >> simp exec_helper_defs)
   ) (ListPair.zip(non_abort_ops, nt_ni_clauses));
 in
   val step_inst_base_no_abort_combined = LIST_CONJ per_op_no_abort;
@@ -519,8 +549,10 @@ Proof
   (* Only ASSERT, ASSERT_UNREACHABLE, RETURNDATACOPY remain *)
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
   ONCE_REWRITE_TAC[step_inst_base_def] >>
-  simp[AllCaseEqs(), revert_state_def, halt_state_def,
-       set_returndata_def, LET_THM] >>
+  ASM_REWRITE_TAC[venomInstTheory.opcode_case_def] >>
+  simp[AllCaseEqs()] >>
+  simp[revert_state_def, halt_state_def] >>
+  simp[set_returndata_def, LET_THM] >>
   rpt strip_tac >> gvs[]
 QED
 
@@ -548,11 +580,15 @@ Proof
      ONCE_REWRITE_TAC[step_inst_base_def] unfolds once with known opcode. *)
   qpat_x_assum `step_inst_base _ s = _` mp_tac >>
   ONCE_REWRITE_TAC [step_inst_base_def] >>
-  simp[AllCaseEqs(), revert_state_def, halt_state_def,
-       set_returndata_def, LET_THM] >>
+  ASM_REWRITE_TAC[venomInstTheory.opcode_case_def] >>
+  simp[AllCaseEqs()] >>
+  simp[revert_state_def, halt_state_def] >>
+  simp[set_returndata_def, LET_THM] >>
   strip_tac >> gvs[] >>
   ONCE_REWRITE_TAC [step_inst_base_def] >>
-  simp[revert_state_def, halt_state_def, set_returndata_def, LET_THM] >>
+  ASM_REWRITE_TAC[venomInstTheory.opcode_case_def] >>
+  simp[revert_state_def, halt_state_def] >>
+  simp[set_returndata_def, LET_THM] >>
   (* RETURNDATACOPY: also needs sx.vs_returndata = s.vs_returndata *)
   metis_tac[write_effects_sound_returndata,
             eff_ind_returndatacopy_no_write_rd]
@@ -1932,7 +1968,7 @@ Theorem effect_free_or_barrier:
       is_effect_free_op i.inst_opcode \/ is_barrier i
 Proof
   rpt strip_tac >> Cases_on `i.inst_opcode` >>
-  gvs[is_effect_free_op_def, is_barrier_def,
+  gvs[is_effect_free_op_def, is_barrier_def, is_raw_fmp_opcode_def,
       is_volatile_def, is_alloca_op_def, is_pseudo_def, is_terminator_def]
 QED
 
@@ -2835,9 +2871,21 @@ Proof
   gvs[wf_ssa_def] >>
   qpat_x_assum `def_dominates_uses _`
     (strip_assume_tac o REWRITE_RULE[def_dominates_uses_def]) >>
-  first_x_assum (qspecl_then [`bb`, `EL i bd`, `v`] mp_tac) >>
-  impl_tac >- simp[inst_uses_def, MEM_operand_vars_iff] >>
-  strip_tac >>
+  `MEM (EL i bd) bd` by
+    (simp[MEM_EL] >> qexists_tac `i` >> simp[] >> decide_tac) >>
+  `MEM (EL i bd) (block_body bb)` by gvs[Abbr `bd`] >>
+  `~is_pseudo (EL i bd).inst_opcode` by
+    fs[Abbr `bd`, block_body_def, MEM_FILTER] >>
+  `(EL i bd).inst_opcode <> PHI` by
+    (strip_tac >> gvs[is_pseudo_def]) >>
+  `def_available_at fn bb (SOME (EL i bd)) v` by (
+    first_x_assum (qspecl_then [`bb`, `EL i bd`] mp_tac) >>
+    impl_tac >- simp[] >>
+    qpat_x_assum `(EL i bd).inst_opcode <> PHI`
+      (fn th => REWRITE_TAC [th]) >>
+    disch_then (qspec_then `v` mp_tac) >> simp[]) >>
+  qpat_x_assum `def_available_at fn bb (SOME (EL i bd)) v`
+    (strip_assume_tac o REWRITE_RULE[def_available_at_def]) >>
   (* Step 6: def_inst = EL j bd, and def_bb = bb *)
   `MEM def_inst (fn_insts fn)` by
     (irule mem_fn_insts_intro >> qexists `def_bb` >> simp[]) >>
@@ -3041,12 +3089,12 @@ QED
 
 (* from_block preserves full_dep (biconditional) *)
 Triviality from_block_full_dep:
-  !bi x y x' y'.
+  !bi eda x y x' y'.
     ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\
     from_block bi x /\ from_block bi y /\
     from_block bi x' /\ from_block bi y' /\
     x.inst_id = x'.inst_id /\ y.inst_id = y'.inst_id ==>
-    (full_dep (build_full_eda bi) x y <=> full_dep (build_full_eda bi) x' y')
+    (full_dep eda x y <=> full_dep eda x' y')
 Proof
   rpt strip_tac >>
   qpat_x_assum `from_block _ x`
@@ -3106,7 +3154,7 @@ QED
 (* Per-block SSA: no two instructions share an output variable *)
 Triviality schedule_topo_sorted_full_dep:
   !bi eda output.
-    eda = build_full_eda bi /\
+    eda_wf eda bi /\
     output_eda_before eda output /\
     output_producer_before bi output /\
     ALL_DISTINCT (MAP (\i. i.inst_id) output) /\
@@ -3126,10 +3174,9 @@ QED
 (* Case 1: eda_dep(EL i, EL j) with i < j contradicts output_eda_before *)
 Resume schedule_topo_sorted_full_dep[eda_case]:
   fs[output_eda_before_def, eda_dep_def] >>
-  `eda_wf (build_full_eda bi) bi` by simp[build_full_eda_wf] >>
   `~is_pseudo d.inst_opcode` by
     (qpat_x_assum `eda_wf _ _` mp_tac >> rw[eda_wf_def] >>
-     Cases_on `FLOOKUP (build_full_eda bi) (EL i output).inst_id` >> gvs[] >>
+     Cases_on `FLOOKUP eda (EL i output).inst_id` >> gvs[] >>
      res_tac >> simp[]) >>
   (* Apply output_eda_before with k=i, witness d *)
   first_x_assum (qspec_then `i` mp_tac) >> simp[] >>
@@ -5326,6 +5373,7 @@ QED
 Triviality no_forward_data_dep:
   !fn bb i j.
     wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
+    (EL i bb.bb_instructions).inst_opcode <> PHI /\
     i < j /\ j < LENGTH bb.bb_instructions ==>
     DISJOINT (set (inst_uses (EL i bb.bb_instructions)))
              (set (inst_defs (EL j bb.bb_instructions)))
@@ -5355,9 +5403,15 @@ Proof
   `def_dominates_uses fn` by gvs[wf_ssa_def] >>
   qpat_x_assum `def_dominates_uses _`
     (strip_assume_tac o REWRITE_RULE[def_dominates_uses_def]) >>
-  first_x_assum (qspecl_then [`bb`, `EL i bi`, `v`] mp_tac) >>
-  impl_tac >- (simp[Abbr `bi`, MEM_EL] >> metis_tac[MEM_EL]) >>
-  strip_tac >>
+  `(EL i bi).inst_opcode <> PHI` by simp[Abbr `bi`] >>
+  `def_available_at fn bb (SOME (EL i bi)) v` by (
+    first_x_assum (qspecl_then [`bb`, `EL i bi`] mp_tac) >>
+    impl_tac >- (simp[Abbr `bi`, MEM_EL] >> metis_tac[MEM_EL]) >>
+    qpat_x_assum `(EL i bi).inst_opcode <> PHI`
+      (fn th => REWRITE_TAC [th]) >>
+    disch_then (qspec_then `v` mp_tac) >> simp[]) >>
+  qpat_x_assum `def_available_at fn bb (SOME (EL i bi)) v`
+    (strip_assume_tac o REWRITE_RULE[def_available_at_def]) >>
   (* def_inst = EL j bi by ssa_form uniqueness *)
   `ssa_form fn` by gvs[wf_ssa_def] >>
   `MEM def_inst (fn_insts fn)` by
@@ -5452,6 +5506,7 @@ Triviality front_topo_sorted:
   !fn bb eda.
     wf_ssa fn /\ wf_function fn /\
     MEM bb fn.fn_blocks /\
+    EVERY (λinst. inst.inst_opcode <> PHI) bb.bb_instructions /\
     eda = build_full_eda bb.bb_instructions ==>
     topo_sorted (full_dep eda) (FRONT bb.bb_instructions)
 Proof
@@ -5517,7 +5572,8 @@ Resume front_topo_sorted[eda_dep]:
 QED
 
 Resume front_topo_sorted[data_dep]:
-  qspecl_then [`fn`, `bb`, `p`, `q`] mp_tac no_forward_data_dep >>
+  `(EL p bi).inst_opcode <> PHI` by
+    (fs[EVERY_EL, Abbr `bi`] >> metis_tac[]) >> qspecl_then [`fn`, `bb`, `p`, `q`] mp_tac no_forward_data_dep >>
   simp[Abbr `bi`]
 QED
 
@@ -6496,8 +6552,11 @@ Proof
   `a.inst_opcode <> INVOKE` by
     (Cases_on `a.inst_opcode` >> gvs[is_pseudo_def]) >>
   gvs[step_inst_non_invoke] >>
-  Cases_on `a.inst_opcode` >> gvs[is_pseudo_def] >>
-  gvs[Once step_inst_base_def, AllCaseEqs()] >> metis_tac[]
+  Cases_on `a.inst_opcode` >> gvs[is_pseudo_def]
+  >- gvs[Once step_inst_base_def]
+  >- (gvs[Once step_inst_base_def] >> gvs[AllCaseEqs()] >> metis_tac[])
+  >- (gvs[Once step_inst_base_def] >> gvs[AllCaseEqs()] >> metis_tac[])
+  >- (gvs[Once step_inst_base_def] >> gvs[AllCaseEqs()] >> metis_tac[])
 QED
 
 (* Pseudo swap: if pseudo a is data-independent from b, and a->b both OK,
@@ -6548,6 +6607,11 @@ Proof
   `sb.vs_prev_bb = s.vs_prev_bb` by
     metis_tac[step_preserves_control_flow] >>
   `sb.vs_params = s.vs_params` by metis_tac[step_preserves_params] >>
+  `sb.vs_return_pc_token = s.vs_return_pc_token` by
+    (Cases_on `b.inst_opcode = INVOKE`
+     >- metis_tac[invoke_preserves_structural]
+     >> `step_inst_base b s = OK sb` by gvs[step_inst_non_invoke] >>
+        drule venomInstProofs1Theory.step_inst_base_preserves_all >> simp[]) >>
   `!v. ~MEM v b.inst_outputs ==>
        lookup_var v sb = lookup_var v s` by
     metis_tac[step_preserves_non_output_vars] >>
@@ -6578,8 +6642,20 @@ Proof
       imp_res_tac dftCommutationTheory.resolve_phi_MEM >>
       first_x_assum drule >> simp[])
   (* PARAM case *)
-  >> (gvs[Once step_inst_base_def, AllCaseEqs()] >>
+  >- (gvs[Once step_inst_base_def, AllCaseEqs()] >>
       `EL (w2n idx) s.vs_params = val` by
+        (fs[update_var_def, venom_state_component_equality] >>
+         metis_tac[FUPD11_SAME_KEY_AND_BASE]) >>
+      ONCE_REWRITE_TAC[step_inst_base_def] >> gvs[])
+  (* FMP_PARAM case *)
+  >- (gvs[Once step_inst_base_def, AllCaseEqs()] >>
+      `EL (w2n idx) s.vs_params = val` by
+        (fs[update_var_def, venom_state_component_equality] >>
+         metis_tac[FUPD11_SAME_KEY_AND_BASE]) >>
+      ONCE_REWRITE_TAC[step_inst_base_def] >> gvs[])
+  (* RETPC_PARAM case *)
+  >> (gvs[Once step_inst_base_def, AllCaseEqs()] >>
+      `s.vs_return_pc_token = val` by
         (fs[update_var_def, venom_state_component_equality] >>
          metis_tac[FUPD11_SAME_KEY_AND_BASE]) >>
       ONCE_REWRITE_TAC[step_inst_base_def] >> gvs[])
@@ -6624,6 +6700,11 @@ Proof
     metis_tac[step_preserves_params] >>
   `sb.vs_labels = s.vs_labels` by
     metis_tac[step_preserves_labels] >>
+  `sb.vs_return_pc_token = s.vs_return_pc_token` by
+    (Cases_on `b.inst_opcode = INVOKE`
+     >- metis_tac[invoke_preserves_structural]
+     >> `step_inst_base b s = OK sb` by gvs[step_inst_non_invoke] >>
+        drule venomInstProofs1Theory.step_inst_base_preserves_all >> simp[]) >>
   `!v. ~MEM v b.inst_outputs ==>
        lookup_var v sb = lookup_var v s` by
     metis_tac[step_preserves_non_output_vars] >>
@@ -6638,17 +6719,38 @@ Proof
            DISJOINT_DEF, EXTENSION] >>
         metis_tac[mem_var_operand_vars, MEM]) >>
      metis_tac[]) >>
-  (* Now replay the executable pseudo opcode.  PHI is impossible under
-     final semantics because step_inst_base PHI is Error. *)
+  (* Now replay each executable pseudo opcode explicitly. *)
   fs[step_inst_non_invoke] >>
-  Cases_on `a.inst_opcode` >> gvs[is_pseudo_def, Once step_inst_base_def, AllCaseEqs()] >>
-  `EL (w2n idx) s.vs_params = val` by
-    (fs[update_var_def, venom_state_component_equality] >>
-     metis_tac[FUPD11_SAME_KEY_AND_BASE]) >>
-  qexists `update_var out val s` >>
-  conj_tac
-  >- (ONCE_REWRITE_TAC[step_inst_base_def] >> gvs[]) >>
-  fs[]
+  Cases_on `a.inst_opcode` >> gvs[is_pseudo_def]
+  (* PHI is impossible under final semantics. *)
+  >- gvs[Once step_inst_base_def, AllCaseEqs()]
+  (* PARAM case *)
+  >- (gvs[Once step_inst_base_def, AllCaseEqs()] >>
+      `EL (w2n idx) s.vs_params = val` by
+        (fs[update_var_def, venom_state_component_equality] >>
+         metis_tac[FUPD11_SAME_KEY_AND_BASE]) >>
+      qexists `update_var out val s` >>
+      conj_tac
+      >- (ONCE_REWRITE_TAC[step_inst_base_def] >> gvs[]) >>
+      fs[])
+  (* FMP_PARAM case *)
+  >- (gvs[Once step_inst_base_def, AllCaseEqs()] >>
+      `EL (w2n idx) s.vs_params = val` by
+        (fs[update_var_def, venom_state_component_equality] >>
+         metis_tac[FUPD11_SAME_KEY_AND_BASE]) >>
+      qexists `update_var out val s` >>
+      conj_tac
+      >- (ONCE_REWRITE_TAC[step_inst_base_def] >> gvs[]) >>
+      fs[])
+  (* RETPC_PARAM case *)
+  >> (gvs[Once step_inst_base_def, AllCaseEqs()] >>
+      `sb.vs_return_pc_token = val` by
+        (fs[update_var_def, venom_state_component_equality] >>
+         metis_tac[FUPD11_SAME_KEY_AND_BASE]) >>
+      qexists `update_var out val s` >>
+      conj_tac
+      >- (ONCE_REWRITE_TAC[step_inst_base_def] >> gvs[]) >>
+      fs[])
 QED
 
 (* Non-terminator non-INVOKE: can't produce Halt or IntRet from step_inst *)
@@ -6824,15 +6926,15 @@ Proof
   rpt strip_tac >>
   simp[dft_block_def, LET_THM] >>
   qabbrev_tac `bi = bb.bb_instructions` >>
-  qabbrev_tac `eda = build_full_eda bi` >>
+  qabbrev_tac `eda = build_eda bi` >>
   qabbrev_tac `om = build_offspring_map bi order` >>
   qabbrev_tac `entries = entry_instructions bi order eda` >>
   qabbrev_tac `sched = schedule_from_entries bi order eda om entries` >>
   (* Standard preamble *)
-  `eda_wf eda bi` by simp[Abbr `eda`, build_full_eda_wf] >>
+  `eda_wf eda bi` by simp[Abbr `eda`, build_eda_wf] >>
   `eda_topo_compatible bi eda order` by
     (simp[Abbr `eda`] >>
-     qspecl_then [`bi`, `order`] mp_tac eda_topo_compatible_gen_weak >>
+     qspecl_then [`bi`, `order`] mp_tac eda_topo_compatible_gen_weak_plain >>
      simp[] >> disch_then irule >>
      fs[bb_well_formed_def, non_pseudo_defs_before_uses_def, Abbr `bi`]) >>
   `bi <> []` by fs[bb_well_formed_def, Abbr `bi`] >>
@@ -7132,15 +7234,15 @@ Proof
   simp[dft_block_def, LET_THM] >>
   qabbrev_tac `bi = bb.bb_instructions` >>
   qabbrev_tac `phis = FILTER (\i. is_pseudo i.inst_opcode) bi` >>
-  qabbrev_tac `eda = build_full_eda bi` >>
+  qabbrev_tac `eda = build_eda bi` >>
   qabbrev_tac `om = build_offspring_map bi order` >>
   qabbrev_tac `entries = entry_instructions bi order eda` >>
   qabbrev_tac `sched = schedule_from_entries bi order eda om entries` >>
   (* Prerequisites — shared preamble *)
-  `eda_wf eda bi` by simp[Abbr `eda`, build_full_eda_wf] >>
+  `eda_wf eda bi` by simp[Abbr `eda`, build_eda_wf] >>
   `eda_topo_compatible bi eda order` by
     (simp[Abbr `eda`] >>
-     qspecl_then [`bi`, `order`] mp_tac eda_topo_compatible_gen_weak >>
+     qspecl_then [`bi`, `order`] mp_tac eda_topo_compatible_gen_weak_plain >>
      simp[non_pseudo_defs_before_uses_def] >> disch_then irule >>
      fs[bb_well_formed_def, non_pseudo_defs_before_uses_def, Abbr `bi`]) >>
   `bi <> []` by (fs[bb_well_formed_def, Abbr `bi`]) >>
@@ -7652,7 +7754,6 @@ Proof
     (irule wf_fn_block_inst_ids_distinct >> metis_tac[]) >>
   `non_pseudo_defs_before_uses bb.bb_instructions` by
     (simp[non_pseudo_defs_before_uses_def] >>
-     irule defs_before_implies_np >>
      irule wf_ssa_defs_before_uses >> metis_tac[]) >>
   metis_tac[dft_block_well_formed_gen]
 QED
@@ -7663,23 +7764,23 @@ Triviality dft_block_body_topo_sorted[local]:
     ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
     non_pseudo_defs_before_uses bb.bb_instructions /\
     ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions)) ==>
-    topo_sorted (full_dep (build_full_eda bb.bb_instructions))
+    topo_sorted (full_dep (build_eda bb.bb_instructions))
       (block_body (dft_block order bb))
 Proof
   rpt strip_tac >>
   simp[dft_block_def, LET_THM] >>
   qabbrev_tac `bi = bb.bb_instructions` >>
   qabbrev_tac `phis = FILTER (\i. is_pseudo i.inst_opcode) bi` >>
-  qabbrev_tac `eda = build_full_eda bi` >>
+  qabbrev_tac `eda = build_eda bi` >>
   qabbrev_tac `om = build_offspring_map bi order` >>
   qabbrev_tac `entries = entry_instructions bi order eda` >>
   qabbrev_tac `sched = schedule_from_entries bi order eda om entries` >>
-  `eda_wf eda bi` by simp[Abbr `eda`, build_full_eda_wf] >>
+  `eda_wf eda bi` by simp[Abbr `eda`, build_eda_wf] >>
   `np_defs_before_uses bi` by
     gvs[non_pseudo_defs_before_uses_def, Abbr `bi`] >>
   `eda_topo_compatible bi eda order` by
     (simp[Abbr `eda`] >>
-     qspecl_then [`bi`, `order`] mp_tac eda_topo_compatible_gen_weak >>
+     qspecl_then [`bi`, `order`] mp_tac eda_topo_compatible_gen_weak_plain >>
      simp[] >> disch_then irule >> fs[bb_well_formed_def, Abbr `bi`]) >>
   `bi <> []` by fs[bb_well_formed_def, Abbr `bi`] >>
   `!k. k < LENGTH bi /\ is_terminator (EL k bi).inst_opcode ==>
@@ -7753,15 +7854,15 @@ Proof
   simp[dft_block_def, LET_THM] >>
   qabbrev_tac `bi = bb.bb_instructions` >>
   qabbrev_tac `phis = FILTER (\i. is_pseudo i.inst_opcode) bi` >>
-  qabbrev_tac `eda = build_full_eda bi` >>
+  qabbrev_tac `eda = build_eda bi` >>
   qabbrev_tac `om = build_offspring_map bi order` >>
   qabbrev_tac `entries = entry_instructions bi order eda` >>
   qabbrev_tac `sched = schedule_from_entries bi order eda om entries` >>
-  `eda_wf eda bi` by simp[Abbr `eda`, build_full_eda_wf] >>
+  `eda_wf eda bi` by simp[Abbr `eda`, build_eda_wf] >>
   `eda_topo_compatible bi eda order` by
     (fs[Abbr `eda`, Abbr `bi`, bb_well_formed_def,
         non_pseudo_defs_before_uses_def] >>
-     metis_tac[eda_topo_compatible_gen_weak]) >>
+     metis_tac[eda_topo_compatible_gen_weak_plain]) >>
   `np_defs_before_uses bi` by
     gvs[non_pseudo_defs_before_uses_def, Abbr `bi`] >>
   `bi <> []` by fs[bb_well_formed_def, Abbr `bi`] >>
@@ -7790,7 +7891,7 @@ QED
 Triviality dft_block_body_topo_sorted_fn[local]:
   !fn order bb.
     wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks ==>
-    topo_sorted (full_dep (build_full_eda bb.bb_instructions))
+    topo_sorted (full_dep (build_eda bb.bb_instructions))
       (block_body (dft_block order bb))
 Proof
   rpt strip_tac >>
@@ -7808,7 +7909,6 @@ Proof
   >- (irule wf_fn_block_inst_ids_distinct >> metis_tac[])
   >- (gvs[wf_function_def, EVERY_MEM])
   >> (simp[non_pseudo_defs_before_uses_def] >>
-      irule defs_before_implies_np >>
       irule wf_ssa_defs_before_uses >> metis_tac[])
 QED
 
@@ -7891,7 +7991,6 @@ Proof
   >- (gvs[wf_function_def, EVERY_MEM])
   >- (irule wf_fn_block_inst_ids_distinct >> metis_tac[])
   >- (simp[non_pseudo_defs_before_uses_def] >>
-      irule defs_before_implies_np >>
       irule wf_ssa_defs_before_uses >> metis_tac[])
   >> (`ALL_DISTINCT
         (FLAT (MAP (\bb. FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions))
@@ -8088,10 +8187,10 @@ Proof
   simp[pseudos_prefix_def, dft_block_def, LET_THM] >>
   qabbrev_tac `phis = FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions` >>
   qabbrev_tac `sched = schedule_from_entries bb.bb_instructions order
-    (build_full_eda bb.bb_instructions)
+    (build_eda bb.bb_instructions)
     (build_offspring_map bb.bb_instructions order)
     (entry_instructions bb.bb_instructions order
-      (build_full_eda bb.bb_instructions))` >>
+      (build_eda bb.bb_instructions))` >>
   rpt strip_tac >>
   Cases_on `j < LENGTH phis`
   >- (
@@ -8103,7 +8202,7 @@ Proof
   `EL j (phis ++ sched) = EL (j - LENGTH phis) sched` by simp[EL_APPEND2] >>
   `MEM (EL (j - LENGTH phis) sched) sched` by metis_tac[MEM_EL] >>
   `~is_pseudo (EL (j - LENGTH phis) sched).inst_opcode` by
-    metis_tac[schedule_output_from_block, build_full_eda_wf,
+    metis_tac[schedule_output_from_block, build_eda_wf,
               entry_instructions_mem] >>
   gvs[]
 QED
@@ -8114,7 +8213,7 @@ Triviality dft_block_body_topo_sorted_mapped_gen[local]:
     ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
     non_pseudo_defs_before_uses bb.bb_instructions /\
     ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions)) ==>
-    topo_sorted (full_dep (build_full_eda bb.bb_instructions))
+    topo_sorted (full_dep (build_eda bb.bb_instructions))
       (MAP (choose_original (block_body bb)) (block_body (dft_block order bb)))
 Proof
   rpt strip_tac >>
@@ -8133,7 +8232,8 @@ Proof
              metis_tac[dft_block_from_orig])) >>
       `from_block bb.bb_instructions x' /\ from_block bb.bb_instructions y'` by
         (fs[block_body_def, MEM_FILTER, from_block_def] >> metis_tac[]) >>
-      metis_tac[from_block_full_dep])
+      qspecl_then [`bb.bb_instructions`, `build_eda bb.bb_instructions`,
+                   `x`, `y`, `x'`, `y'`] mp_tac from_block_full_dep >> simp[])
   >- (rpt strip_tac >>
       `from_block bb.bb_instructions i` by
         (`MEM i (FILTER (\i. ~is_pseudo i.inst_opcode)
@@ -8150,7 +8250,7 @@ QED
 Triviality dft_block_body_topo_sorted_mapped[local]:
   !fn bb order.
     wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks ==>
-    topo_sorted (full_dep (build_full_eda bb.bb_instructions))
+    topo_sorted (full_dep (build_eda bb.bb_instructions))
       (MAP (choose_original (block_body bb)) (block_body (dft_block order bb)))
 Proof
   rpt strip_tac >>
@@ -8168,7 +8268,6 @@ Proof
   >- (irule wf_fn_block_inst_ids_distinct >> metis_tac[])
   >- (gvs[wf_function_def, EVERY_MEM])
   >> (simp[non_pseudo_defs_before_uses_def] >>
-      irule defs_before_implies_np >>
       irule wf_ssa_defs_before_uses >> metis_tac[])
 QED
 
@@ -8398,8 +8497,27 @@ Proof
   simp[Abbr `P`, dft_block_phis]
 QED
 
+(* The plain Python EDA omits the conservative barrier/abort/ALLOCA chains.
+   Semantic correctness therefore requires the explicit compiler invariant that
+   its schedule still respects the full dependency relation. *)
+Definition dft_schedule_safe_def:
+  dft_schedule_safe <=>
+    !bb order.
+      bb_well_formed bb /\
+      ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+      non_pseudo_defs_before_uses bb.bb_instructions /\
+      ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions)) ==>
+      topo_sorted (full_dep (build_full_eda bb.bb_instructions))
+        (FILTER (\i. ~is_pseudo i.inst_opcode)
+          (dft_block order bb).bb_instructions) /\
+      topo_sorted (full_dep (build_full_eda bb.bb_instructions))
+        (MAP (choose_original (block_body bb))
+          (block_body (dft_block order bb)))
+End
+
 Triviality dft_block_exec_block_same_body_lift_gen[local]:
   !bb order q fuel ctx s.
+    dft_schedule_safe /\
     bb_well_formed bb /\ pseudos_prefix bb /\
     ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
     non_pseudo_defs_before_uses bb.bb_instructions /\
@@ -8432,7 +8550,8 @@ Proof
        rpt conj_tac
        >- (rpt strip_tac >> metis_tac[dft_block_body_from_block])
        >- (irule dft_block_body_choose_perm >> simp[])
-       >> (irule dft_block_body_topo_sorted_mapped_gen >> simp[])) >>
+       >> (qpat_x_assum `dft_schedule_safe` mp_tac >>
+           simp[dft_schedule_safe_def] >> metis_tac[])) >>
      simp[]) >>
   pop_assum strip_assume_tac
   >- (irule exec_block_body_error_lift >> simp[]) >>
@@ -8487,6 +8606,7 @@ QED
 
 Triviality dft_block_exec_block_lift_gen[local]:
   !bb order p q fuel ctx s.
+    dft_schedule_safe /\
     bb_well_formed bb /\ pseudos_prefix bb /\
     ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
     non_pseudo_defs_before_uses bb.bb_instructions /\
@@ -8543,6 +8663,7 @@ QED
 
 Triviality dft_block_run_block_lift_gen[local]:
   !bb order fuel ctx s.
+    dft_schedule_safe /\
     bb_well_formed bb /\ pseudos_prefix bb /\
     ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
     non_pseudo_defs_before_uses bb.bb_instructions /\
@@ -8570,6 +8691,7 @@ QED
 
 Triviality dft_block_run_block_lift[local]:
   !fn bb order fuel ctx s.
+    dft_schedule_safe /\
     wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\ pseudos_prefix bb ==>
     (((?e. run_block fuel ctx bb s = Error e) /\
       (?e. run_block fuel ctx (dft_block order bb) s = Error e)) \/
@@ -8590,14 +8712,31 @@ Proof
           >- (gvs[wf_function_def, EVERY_MEM])
           >- (irule wf_fn_block_inst_ids_distinct >> metis_tac[])
           >> (simp[non_pseudo_defs_before_uses_def] >>
-              irule defs_before_implies_np >>
               irule wf_ssa_defs_before_uses >> metis_tac[])) >>
         simp[])
     >- (gvs[wf_function_def, EVERY_MEM])
     >- (mp_tac (Q.SPECL [`fn`, `order`, `bb`] dft_block_well_formed) >> simp[])
     >- (irule dft_block_pseudos_prefix >> simp[])
-    >> (mp_tac (Q.SPECL [`fn`, `bb`, `order`] dft_block_body_topo_sorted_mapped) >>
-        simp[])) >>
+    >> (`bb_well_formed bb` by gvs[wf_function_def, EVERY_MEM] >>
+        `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
+          (irule wf_fn_block_inst_ids_distinct >> metis_tac[]) >>
+        `non_pseudo_defs_before_uses bb.bb_instructions` by
+          (simp[non_pseudo_defs_before_uses_def] >>
+           irule wf_ssa_defs_before_uses >> metis_tac[]) >>
+        `ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs)
+          bb.bb_instructions))` by
+          (`ALL_DISTINCT
+              (FLAT (MAP (\bb. FLAT (MAP (\i. i.inst_outputs)
+                bb.bb_instructions)) fn.fn_blocks))` by
+              gvs[wf_ssa_def, ssa_form_def, fn_insts_def,
+                  flat_map_outputs_fn_insts_blocks] >>
+           irule all_distinct_flat_mem >>
+           qexists_tac `MAP (\bb. FLAT (MAP (\i. i.inst_outputs)
+             bb.bb_instructions)) fn.fn_blocks` >>
+           simp[MEM_MAP] >> qexists_tac `bb` >> simp[]) >>
+        qpat_x_assum `dft_schedule_safe` mp_tac >>
+        simp[dft_schedule_safe_def] >>
+        disch_then (qspecl_then [`bb`, `order`] mp_tac) >> simp[])) >>
   simp[]
 QED
 
@@ -8723,6 +8862,7 @@ QED
 
 Triviality dft_process_one_preserves_run_rel[local]:
   !cfg lr fn st lbl.
+    dft_schedule_safe /\
     all_blocks_run_rel fn st.dls_blocks /\
     dft_inv st.dls_blocks /\
     (!bb. MEM bb st.dls_blocks ==> pseudos_prefix bb) ==>
@@ -8783,6 +8923,7 @@ QED
 
 Triviality dft_loop_step_preserves_run_rel[local]:
   !cfg lr fn trip.
+    dft_schedule_safe /\
     all_blocks_run_rel fn (FST trip).dls_blocks /\
     dft_inv (FST trip).dls_blocks /\
     (!bb. MEM bb (FST trip).dls_blocks ==> pseudos_prefix bb) ==>
@@ -8802,6 +8943,7 @@ QED
 
 Triviality funpow_dft_loop_preserves_run_rel[local]:
   !n cfg lr fn trip.
+    dft_schedule_safe /\
     all_blocks_run_rel fn (FST trip).dls_blocks /\
     dft_inv (FST trip).dls_blocks /\
     (!bb. MEM bb (FST trip).dls_blocks ==> pseudos_prefix bb) ==>
@@ -8810,16 +8952,19 @@ Triviality funpow_dft_loop_preserves_run_rel[local]:
 Proof
   Induct >> simp[FUNPOW_SUC] >> rpt strip_tac >>
   irule dft_loop_step_preserves_run_rel >>
-  rpt conj_tac
-  >- (mp_tac (Q.SPECL [`n`, `cfg`, `lr`, `fn`, `trip`]
-        funpow_dft_loop_pseudos_prefix) >> simp[])
-  >- (mp_tac (Q.SPECL [`n`, `cfg`, `lr`, `fn`, `trip`]
-        funpow_dft_loop_preserves_inv) >> simp[])
-  >> (first_x_assum irule >> simp[])
+  rpt conj_tac >|
+  [ simp[]
+  , mp_tac (Q.SPECL [`n`, `cfg`, `lr`, `fn`, `trip`]
+      funpow_dft_loop_pseudos_prefix) >> simp[]
+  , mp_tac (Q.SPECL [`n`, `cfg`, `lr`, `fn`, `trip`]
+      funpow_dft_loop_preserves_inv) >> simp[]
+  , first_x_assum irule >> simp[]
+  ]
 QED
 
 Triviality dft_fn_all_run_rel[local]:
   !fn.
+    dft_schedule_safe /\
     wf_ssa fn /\ wf_function fn /\ fn_pseudos_prefix fn ==>
     all_blocks_run_rel fn (dft_fn fn).fn_blocks
 Proof
@@ -8836,6 +8981,7 @@ QED
    results. Fuel induction on run_blocks. *)
 Theorem dft_fn_run_blocks_lift:
   !fuel ctx fn s.
+    dft_schedule_safe /\
     wf_ssa fn /\ wf_function fn /\ fn_pseudos_prefix fn ==>
     lift_result (state_equiv {}) (execution_equiv {}) revert_equiv
       (run_blocks fuel ctx fn s)
@@ -8903,6 +9049,7 @@ QED
 
 Triviality dft_fn_run_function_lift:
   !fuel ctx fn s.
+    dft_schedule_safe /\
     wf_ssa fn /\ wf_function fn /\ fn_pseudos_prefix fn /\
     s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
     lift_result (state_equiv {}) (execution_equiv {}) revert_equiv
@@ -9168,7 +9315,7 @@ Proof
   qabbrev_tac `fl = FILTER (\i. ~is_pseudo i.inst_opcode) bi` >>
   `ALL_DISTINCT (MAP (\i. i.inst_id) bi)` by metis_tac[wf_fn_block_inst_ids_distinct] >>
   `ALL_DISTINCT (MAP (\i. i.inst_id) fl)` by metis_tac[all_distinct_map_filter] >>
-  `defs_before_uses bi` by metis_tac[wf_ssa_defs_before_uses] >>
+  `np_defs_before_uses bi` by metis_tac[wf_ssa_defs_before_uses] >>
   `MEM (EL i fl) fl` by (irule EL_MEM >> decide_tac) >>
   `MEM (EL j fl) fl` by metis_tac[EL_MEM] >>
   `ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bi))` by
@@ -10074,14 +10221,14 @@ QED
 Triviality dft_block_filter_nonpseudo[local]:
   !order bb.
     FILTER (\i. ~is_pseudo i.inst_opcode) (dft_block order bb).bb_instructions =
-    schedule_from_entries bb.bb_instructions order (build_full_eda bb.bb_instructions)
+    schedule_from_entries bb.bb_instructions order (build_eda bb.bb_instructions)
       (build_offspring_map bb.bb_instructions order)
-      (entry_instructions bb.bb_instructions order (build_full_eda bb.bb_instructions))
+      (entry_instructions bb.bb_instructions order (build_eda bb.bb_instructions))
 Proof
   simp[dft_block_def, LET_THM, FILTER_APPEND_DISTRIB, FILTER_FILTER,
        FILTER_EQ_NIL, FILTER_EQ_ID, EVERY_MEM] >>
   rpt strip_tac >>
-  metis_tac[sched_output_nonpseudo, build_full_eda_wf, entry_instructions_mem]
+  metis_tac[sched_output_nonpseudo, build_eda_wf, entry_instructions_mem]
 QED
 
 
@@ -10138,7 +10285,7 @@ QED
 
 Triviality sched_topo_sorted_local[local]:
   !bi eda om entries sched.
-    eda = build_full_eda bi /\
+    eda_wf eda bi /\
     output_eda_before eda sched /\ output_producer_before bi sched /\
     ALL_DISTINCT (MAP (\i. i.inst_id) sched) /\
     ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\
@@ -10626,9 +10773,16 @@ Proof
     by metis_tac[all_distinct_map_filter] >>
   `MEM b_orig.inst_id (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi))`
     by (simp[MEM_MAP] >> qexists_tac `b_orig` >> simp[]) >>
-  `canonical_dep orig_bi b_orig x` by
-    metis_tac[from_barrier_dep_imp_canonical_dep_local, from_barrier_dep_def,
-              iffLR MEM_SPLIT_APPEND_first, map_split_mem_before, MAP_APPEND] >>
+  `?l1 l2.
+     MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi) =
+       l1 ++ [b_orig.inst_id] ++ l2`
+    by metis_tac[MEM_SPLIT_APPEND_first] >>
+  `MEM x.inst_id l1` by
+    (drule_all barrier_in_sfx_from_barrier_dep >> simp[]) >>
+  `canonical_dep orig_bi b_orig x` by (
+    irule from_barrier_dep_imp_canonical_dep_local >>
+    simp[from_barrier_dep_def] >>
+    qexistsl_tac [`l1`, `l2`] >> simp[]) >>
   `canonical_dep orig_bi b' px_b` by (
     irule canonical_dep_inst_id_equiv_filtered >> simp[] >>
     qexistsl_tac [`b_orig`,`x`] >> simp[]) >>
@@ -10837,6 +10991,7 @@ QED
 (* dft_block output satisfies canonical_topo_inv for a single block *)
 Triviality dft_block_preserves_canonical_topo_local[local]:
   !fn bb_orig bb_cur order.
+    dft_schedule_safe /\
     wf_ssa fn /\ wf_function fn /\
     MEM bb_orig fn.fn_blocks /\
     block_perm_of fn bb_cur /\
@@ -10851,7 +11006,7 @@ Proof
   rpt strip_tac >>
   qabbrev_tac `bi = bb_cur.bb_instructions` >>
   qabbrev_tac `orig_bi = bb_orig.bb_instructions` >>
-  qabbrev_tac `eda = build_full_eda bi` >>
+  qabbrev_tac `eda = build_eda bi` >>
   qabbrev_tac `om = build_offspring_map bi order` >>
   qabbrev_tac `entries = entry_instructions bi order eda` >>
   qabbrev_tac `sched = schedule_from_entries bi order eda om entries` >>
@@ -10861,10 +11016,10 @@ Proof
              Abbr `entries`, dft_block_filter_nonpseudo]) >>
   (* Step 2: Pre-conditions for scheduler lemmas *)
   `ALL_DISTINCT (MAP (\i. i.inst_id) bi)` by fs[dft_inv_def, Abbr `bi`] >>
-  `eda_wf eda bi` by simp[Abbr `eda`, Abbr `bi`, build_full_eda_wf] >>
+  `eda_wf eda bi` by simp[Abbr `eda`, Abbr `bi`, build_eda_wf] >>
   `eda_topo_compatible bi eda order` by
     (simp[Abbr `eda`] >>
-     qspecl_then [`bi`, `order`] mp_tac eda_topo_compatible_gen_weak >>
+     qspecl_then [`bi`, `order`] mp_tac eda_topo_compatible_gen_weak_plain >>
      simp[Abbr `bi`, non_pseudo_defs_before_uses_def] >> disch_then irule >> fs[dft_inv_def, bb_well_formed_def, non_pseudo_defs_before_uses_def]) >>
   `EVERY (\i. MEM i bi) entries`
     by simp[Abbr `entries`, Abbr `bi`, entry_instructions_mem] >>
@@ -10885,9 +11040,14 @@ Proof
     by metis_tac[sched_output_eda_local] >>
   `!i. MEM i sched ==> from_block bi i /\ ~is_pseudo i.inst_opcode`
     by metis_tac[sched_mem_from_block_cur_local] >>
-  (* Step 4: Topo-sorted from scheduler — already have this *)
-  `topo_sorted (full_dep eda) sched`
-    by metis_tac[sched_topo_sorted_local] >>
+  (* Step 4: the explicit semantic-safety invariant bridges the plain
+     scheduler to the conservative full dependency relation. *)
+  `topo_sorted (full_dep (build_full_eda bi)) sched` by (
+    qpat_x_assum `dft_schedule_safe` mp_tac >>
+    simp[dft_schedule_safe_def] >>
+    disch_then (qspecl_then [`bb_cur`, `order`] mp_tac) >>
+    simp[Abbr `bi`, Abbr `sched`, Abbr `eda`, Abbr `om`, Abbr `entries`] >>
+    fs[dft_inv_def]) >>
   (* Step 5: Single-step bridge: canonical_dep < full_dep, no TC *)
   `ALL_DISTINCT (MAP (\i. i.inst_id) (FILTER (\i. ~is_pseudo i.inst_opcode) orig_bi))`
     by (simp[Abbr `orig_bi`] >>
@@ -10910,19 +11070,19 @@ Proof
     by (simp[Abbr `orig_bi`] >>
         metis_tac[wf_fn_block_inst_ids_distinct]) >>
   irule topo_sorted_mono_restricted_local >>
-  qexists_tac `full_dep eda` >> simp[] >>
+  qexists_tac `full_dep (build_full_eda bi)` >> simp[] >>
   rpt strip_tac >>
   `from_block orig_bi x` by metis_tac[sched_mem_from_block_orig_local] >>
   `from_block orig_bi y` by metis_tac[sched_mem_from_block_orig_local] >>
   `ALL_DISTINCT (MAP (\i. i.inst_id) bi)` by fs[dft_inv_def, Abbr `bi`] >>
   `!z. MEM z (FILTER (\i. ~is_pseudo i.inst_opcode) bi) ==> from_block orig_bi z`
     by metis_tac[EVERY_MEM] >>
-  simp[Abbr `eda`] >>
   drule_all canonical_dep_imp_full_dep_current >> simp[]
 QED
 (* dft_process_one preserves canonical_topo_inv *)
 Triviality every_map_replace_canonical[local]:
   !fn bbs lbl bb'.
+    dft_schedule_safe /\
     wf_ssa fn /\ wf_function fn /\
     canonical_topo_inv fn bbs /\ all_blocks_perm_of fn bbs /\
     dft_inv bbs /\ MEM bb' bbs /\ bb'.bb_label = lbl ==>
@@ -10944,10 +11104,8 @@ Proof
       `non_pseudo_defs_before_uses bb'.bb_instructions`
         by fs[dft_inv_def, EVERY_MEM] >>
       irule dft_block_preserves_canonical_topo_local >>
-      conj_tac >- fs[dft_inv_def, EVERY_MEM] >>
-      conj_tac >- simp[] >>
-      conj_tac >- (qexists_tac `fn` >> simp[]) >>
-      simp[])
+      fs[dft_inv_def, EVERY_MEM] >>
+      qexists_tac `fn` >> simp[])
   >> ((* unchanged block: b = a *)
       qpat_x_assum `!bb. MEM bb bbs ==> _` (qspec_then `a` assume_tac) >>
       fs[] >> qexists_tac `bb_orig` >> simp[])
@@ -10955,6 +11113,7 @@ QED
 
 Triviality dft_process_one_preserves_canonical_topo[local]:
   !cfg lr fn st lbl.
+    dft_schedule_safe /\
     wf_ssa fn /\ wf_function fn /\
     canonical_topo_inv fn st.dls_blocks /\ all_blocks_perm_of fn st.dls_blocks /\
     dft_inv st.dls_blocks ==>
@@ -10973,6 +11132,7 @@ QED
 
 Triviality dft_loop_step_preserves_canonical_topo[local]:
   !cfg lr fn trip.
+    dft_schedule_safe /\
     wf_ssa fn /\ wf_function fn /\
     canonical_topo_inv fn (FST trip).dls_blocks /\
     all_blocks_perm_of fn (FST trip).dls_blocks /\
@@ -10993,6 +11153,7 @@ QED
 
 Triviality funpow_dft_loop_preserves_canonical_topo[local]:
   !n cfg lr fn trip.
+    dft_schedule_safe /\
     wf_ssa fn /\ wf_function fn /\
     canonical_topo_inv fn (FST trip).dls_blocks /\
     all_blocks_perm_of fn (FST trip).dls_blocks /\
@@ -11001,33 +11162,34 @@ Triviality funpow_dft_loop_preserves_canonical_topo[local]:
       (FST (FUNPOW (dft_loop_step cfg lr fn) n trip)).dls_blocks
 Proof
   Induct >> simp[FUNPOW_SUC] >> rpt strip_tac >>
-  MATCH_MP_TAC dft_loop_step_preserves_canonical_topo >>
-  conj_tac >- simp[] >>
-  conj_tac >- simp[] >>
-  conj_tac
-  >- (first_x_assum MATCH_MP_TAC >> simp[] >>
-      MATCH_MP_TAC funpow_dft_loop_preserves_perm >> simp[]) >>
-  conj_tac >- (MATCH_MP_TAC funpow_dft_loop_preserves_perm >> simp[]) >>
-  MATCH_MP_TAC funpow_dft_loop_preserves_inv >> simp[]
+  `canonical_topo_inv fn
+      (FST (FUNPOW (dft_loop_step cfg lr fn) n trip)).dls_blocks` by
+    (first_x_assum irule >> simp[]) >>
+  `all_blocks_perm_of fn
+      (FST (FUNPOW (dft_loop_step cfg lr fn) n trip)).dls_blocks` by
+    (MATCH_MP_TAC funpow_dft_loop_preserves_perm >> simp[]) >>
+  `dft_inv (FST (FUNPOW (dft_loop_step cfg lr fn) n trip)).dls_blocks` by
+    (MATCH_MP_TAC funpow_dft_loop_preserves_inv >> simp[]) >>
+  MATCH_MP_TAC dft_loop_step_preserves_canonical_topo >> simp[]
 QED
 
 Theorem dft_fn_canonical_topo_inv:
-  !fn. wf_ssa fn /\ wf_function fn ==>
+  !fn. dft_schedule_safe /\ wf_ssa fn /\ wf_function fn ==>
     canonical_topo_inv fn (dft_fn fn).fn_blocks
 Proof
   rpt strip_tac >>
   simp[dft_fn_def, LET_THM] >>
   CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >>
   simp[] >>
-  MATCH_MP_TAC funpow_dft_loop_preserves_canonical_topo >>
-  conj_tac >- simp[] >>
-  conj_tac >- simp[] >>
-  conj_tac >- (simp[canonical_topo_inv_def, EVERY_MEM] >>
-      rpt strip_tac >> qexists_tac `bb` >> simp[] >>
-      irule orig_filter_canonical_topo_sorted_local >>
-      fs[wf_function_def] >> metis_tac[]) >>
-  conj_tac >- simp[all_blocks_perm_of_def, EVERY_MEM, original_block_perm_of] >>
-  simp[] >> irule wf_fn_initial_dft_inv >> simp[]
+  `canonical_topo_inv fn fn.fn_blocks` by
+    (simp[canonical_topo_inv_def, EVERY_MEM] >>
+     rpt strip_tac >> qexists_tac `bb` >> simp[] >>
+     irule orig_filter_canonical_topo_sorted_local >>
+     fs[wf_function_def] >> metis_tac[]) >>
+  `all_blocks_perm_of fn fn.fn_blocks` by
+    simp[all_blocks_perm_of_def, EVERY_MEM, original_block_perm_of] >>
+  `dft_inv fn.fn_blocks` by (irule wf_fn_initial_dft_inv >> simp[]) >>
+  MATCH_MP_TAC funpow_dft_loop_preserves_canonical_topo >> simp[]
 QED
 
 (* Filtering a topologically sorted list preserves topo_sorted.

@@ -571,6 +571,11 @@ QED
 
 (* sccp_transfer_inst preserves FDOM ⊆ and targets ⊆ *)
 (* Helper: sccp_transfer_inst only adds outputs to sl_vals *)
+val sccp_transfer_fdom_case_tac =
+  rpt (BasicProvers.TOP_CASE_TAC >> simp[]) >>
+  TRY (irule foldl_fupdate_bottom_fdom >> simp[]) >>
+  TRY (fs[FDOM_FUPDATE, SUBSET_DEF] >> metis_tac[]);
+
 Triviality sccp_transfer_inst_fdom[local]:
   !fn inst lat.
     set inst.inst_outputs SUBSET set (fn_all_assignments fn) /\
@@ -580,10 +585,12 @@ Triviality sccp_transfer_inst_fdom[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   simp[sccp_transfer_inst_def] >>
-  rpt IF_CASES_TAC >> simp[] >>
-  rpt (BasicProvers.TOP_CASE_TAC >> simp[]) >>
-  TRY (irule foldl_fupdate_bottom_fdom >> simp[]) >>
-  TRY (fs[FDOM_FUPDATE, SUBSET_DEF] >> metis_tac[])
+  rpt IF_CASES_TAC >> simp[]
+  >- (irule foldl_fupdate_bottom_fdom >> simp[])
+  >- sccp_transfer_fdom_case_tac
+  >- sccp_transfer_fdom_case_tac
+  >- sccp_transfer_fdom_case_tac
+  >- sccp_transfer_fdom_case_tac
 QED
 
 (* Helper: labels extracted by FOLDR from operands are subset of
@@ -620,15 +627,7 @@ Proof
 QED
 
 (* Helper: sccp_transfer_inst for terminators adds only successors *)
-Triviality sccp_transfer_inst_term_targets[local]:
-  !fn inst lat.
-    is_terminator inst.inst_opcode ==>
-    (sccp_transfer_inst fn inst lat).sl_targets SUBSET
-    set (get_successors inst) UNION lat.sl_targets
-Proof
-  rpt strip_tac >>
-  simp[sccp_transfer_inst_def, get_successors_def] >>
-  rpt IF_CASES_TAC >> fs[] >>
+val sccp_term_targets_case_tac =
   rpt (BasicProvers.TOP_CASE_TAC >> fs[get_label_def, SUBSET_DEF]) >>
   rpt strip_tac >> fs[] >> rw[] >>
   TRY (imp_res_tac (SIMP_RULE std_ss [SUBSET_DEF]
@@ -642,7 +641,30 @@ Proof
            foldr_labels_tl_subset) >> simp[]) >-
        (simp[SUBSET_DEF] >> rpt strip_tac >>
          imp_res_tac (SIMP_RULE std_ss [SUBSET_DEF]
-           foldr_labels_subset_get_successors) >> simp[]))
+           foldr_labels_subset_get_successors) >> simp[]));
+
+Triviality sccp_transfer_inst_term_targets[local]:
+  !fn inst lat.
+    is_terminator inst.inst_opcode ==>
+    (sccp_transfer_inst fn inst lat).sl_targets SUBSET
+    set (get_successors inst) UNION lat.sl_targets
+Proof
+  rpt strip_tac >>
+  simp[sccp_transfer_inst_def, get_successors_def] >>
+  rpt IF_CASES_TAC >> fs[]
+  >- sccp_term_targets_case_tac
+  >- (Cases_on `inst.inst_operands`
+      >- fs[get_label_def, SUBSET_DEF]
+      >> Cases_on `t`
+      >- fs[get_label_def, SUBSET_DEF]
+      >> Cases_on `h'` >> fs[get_label_def, SUBSET_DEF]
+      >> Cases_on `t'`
+      >- fs[get_label_def, SUBSET_DEF]
+      >> Cases_on `h'` >> fs[get_label_def, SUBSET_DEF]
+      >> Cases_on `t` >> fs[get_label_def, SUBSET_DEF]
+      >> every_case_tac >> fs[get_label_def, SUBSET_DEF] >>
+      rpt strip_tac >> fs[])
+  >- sccp_term_targets_case_tac
 QED
 
 (* Helper: successors of well-formed block instructions are in fn_labels *)

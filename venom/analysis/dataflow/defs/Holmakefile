@@ -1,4 +1,0 @@
-# Dataflow framework definitions
-# dfAnalyzeDefs depends on cfgDefs + venomInst
-# dfAnalyzeWidenDefs depends on dfAnalyzeDefs
-INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../../defs ../../../../syntax ../../../../semantics ../../cfg/defs

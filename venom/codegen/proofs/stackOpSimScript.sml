@@ -109,7 +109,7 @@ QED
 Theorem plan_stack_rel_push:
   !lo vs ps_stk as_stk op v.
     plan_stack_rel lo vs ps_stk as_stk /\
-    operand_val vs lo op = SOME v ==>
+    (op = dead_stack_marker \/ operand_val vs lo op = SOME v) ==>
     plan_stack_rel lo vs (SNOC op ps_stk) (v :: as_stk)
 Proof
   rpt strip_tac >>
@@ -160,6 +160,7 @@ Theorem plan_stack_rel_el:
   !lo vs ps_stk as_stk i.
     plan_stack_rel lo vs ps_stk as_stk /\
     i < LENGTH ps_stk ==>
+    EL i (REVERSE ps_stk) = dead_stack_marker \/
     operand_val vs lo (EL i (REVERSE ps_stk)) = SOME (EL i as_stk)
 Proof
   rw[plan_stack_rel_def] >> res_tac
@@ -178,6 +179,7 @@ QED
 Theorem plan_stack_rel_hd:
   !lo vs ps_stk as_stk.
     plan_stack_rel lo vs ps_stk as_stk /\ ps_stk <> [] ==>
+    LAST ps_stk = dead_stack_marker \/
     operand_val vs lo (LAST ps_stk) = SOME (HD as_stk)
 Proof
   rpt strip_tac >>
@@ -185,7 +187,6 @@ Proof
   imp_res_tac plan_stack_rel_length >>
   `0 < LENGTH as_stk` by decide_tac >>
   qspecl_then [`lo`,`vs`,`ps_stk`,`as_stk`,`0`] mp_tac plan_stack_rel_el >>
-  simp[] >> disch_then (fn th => REWRITE_TAC[GSYM th]) >>
   simp[HD_REVERSE]
 QED
 
@@ -286,8 +287,8 @@ QED
 
 (* execute_plan distributes over append *)
 Theorem execute_plan_append:
-  !ops1 ops2. execute_plan (ops1 ++ ops2) =
-              execute_plan ops1 ++ execute_plan ops2
+  !initial_fmp ops1 ops2. execute_plan initial_fmp (ops1 ++ ops2) =
+              execute_plan initial_fmp ops1 ++ execute_plan initial_fmp ops2
 Proof
   rw[execute_plan_def, MAP_APPEND, FLAT_APPEND]
 QED
@@ -371,8 +372,9 @@ Proof
   rw[asm_step_extcall_def, asm_exec_call_def, asm_exec_staticcall_def,
      asm_exec_delegatecall_def, asm_exec_create_def, asm_exec_create2_def,
      asm_selfdestruct_def, extract_asm_result_def, asm_to_tx_params_def,
+     asm_consume_call_outcome_def,
      asm_next_def, LET_THM] >>
-  asm_next_pc_tac
+  asm_next_pc_tac >> rpt (pairarg_tac >> gvs[])
 QED
 
 Theorem asm_step_copy_pc[local]:
@@ -388,9 +390,10 @@ Theorem asm_step_context_pc[local]:
   !name s1 s2. asm_step_context name s1 = SOME (AsmOK s2) ==>
     s2.as_pc = s1.as_pc + 1
 Proof
-  rw[asm_step_context_def, asm_push_val_def, asm_state_unop_def,
+  rw[asm_step_context_def, asm_gas_def, asm_push_val_def, asm_state_unop_def,
      asm_next_def, LET_THM] >>
-  asm_next_pc_tac
+  simp[] >>
+  every_case_tac >> gvs[]
 QED
 
 Theorem asm_dup_pc[local]:

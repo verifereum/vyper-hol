@@ -10,8 +10,8 @@
  *   - AsmPushLabel: push resolved byte offset onto stack
  *   - JUMP/JUMPI: pop byte offset, map back to asm index via offset_to_pc
  *
- * External calls build execution_state directly from asm_state fields
- * and delegate to verifereum's run.
+ * CALL/STATICCALL use the shared gas-free outcome oracle. Other external
+ * operations retain their concrete Verifereum execution bridge.
  *
  * TOP-LEVEL:
  *   asm_state, asm_result    — execution state and result types
@@ -38,7 +38,10 @@ Datatype:
     as_tx_ctx : tx_context;
     as_block_ctx : block_context;
     as_code : byte list;
-    as_prev_hashes : bytes32 list
+    as_prev_hashes : bytes32 list;
+    as_outcomes : call_outcome list;
+    as_requests : call_request list;
+    as_gas_readings : bytes32 list
   |>
 End
 
@@ -565,24 +568,54 @@ Definition extract_asm_result_def:
        | _ => NONE)
 End
 
+(* Shared request and completion for CALL/STATICCALL. Expand both requested
+ * memory regions, but overwrite only the actual returned prefix. In
+ * particular short returndata never shifts/drops the trailing memory.
+ * Forwarded gas is popped/evaluated by dispatch and deliberately ignored. *)
+Definition asm_call_request_def:
+  asm_call_request s (addr:bytes32) (value:bytes32) ao asz is_static =
+    <| cr_target := w2w addr;
+       cr_value := w2n value;
+       cr_data := TAKE asz (DROP ao (asm_expand_memory (ao + asz) s.as_memory));
+       cr_static := (is_static \/ s.as_call_ctx.cc_static);
+       cr_accounts := s.as_accounts;
+       cr_tStorage := s.as_transient |>
+End
+
+Definition asm_call_memory_def:
+  asm_call_memory ao asz ro rsz mem =
+    let mem' = if asz = 0 then mem else asm_expand_memory (ao + asz) mem in
+    if rsz = 0 then mem' else asm_expand_memory (ro + rsz) mem'
+End
+
+Definition asm_consume_call_outcome_def:
+  asm_consume_call_outcome rq ro rs stk s =
+    let (outcome, rest) = take_outcome rq s.as_outcomes;
+        (accounts, ts, logs) = adopt_outcome rq outcome
+          (s.as_accounts, s.as_transient, s.as_logs);
+        bytes = TAKE rs outcome.co_returnData;
+        output : bytes32 = if outcome.co_success then 1w else 0w
+    in AsmOK (asm_next (s with <|
+         as_stack := output :: stk;
+         as_outcomes := rest;
+         as_requests := record_request rq s.as_requests;
+         as_accounts := accounts;
+         as_transient := ts;
+         as_logs := logs;
+         as_returndata := outcome.co_returnData;
+         as_memory := TAKE ro s.as_memory ++ bytes ++
+                      DROP (ro + LENGTH bytes) s.as_memory |>))
+End
+
 (* CALL: pop [gas, addr, value, argsOff, argsSize, retOff, retSize] *)
 Definition asm_exec_call_def:
   asm_exec_call is_static s =
     case s.as_stack of
-      gas :: addr_w :: value :: ao :: as_ :: ro :: rs :: stk =>
-        let aoff = w2n ao in
-        let asz = w2n as_ in
-        let mem = asm_expand_memory (aoff + asz) s.as_memory in
-        let calldata = TAKE asz (DROP aoff mem) in
-        let target : address = w2w addr_w in
-        let code = (lookup_account target s.as_accounts).code in
-        let evm_s = make_asm_call_state s target (w2n gas)
-                      (w2n value) calldata code is_static in
-        (case extract_asm_result s 1w (w2n ro) (w2n rs)
-                (run evm_s) of
-           SOME (output, s') =>
-             AsmOK (asm_next (s' with as_stack := output :: stk))
-         | NONE => AsmError "call: non-terminating")
+      gas :: addr :: value :: ao :: asz :: ro :: rs :: stk =>
+        let rq = asm_call_request s addr value (w2n ao) (w2n asz) is_static in
+        asm_consume_call_outcome rq (w2n ro) (w2n rs) stk
+          (s with as_memory := asm_call_memory (w2n ao) (w2n asz)
+                                (w2n ro) (w2n rs) s.as_memory)
     | _ => AsmError "call: stack underflow"
 End
 
@@ -590,21 +623,19 @@ End
 Definition asm_exec_staticcall_def:
   asm_exec_staticcall s =
     case s.as_stack of
-      gas :: addr_w :: ao :: as_ :: ro :: rs :: stk =>
-        let aoff = w2n ao in
-        let asz = w2n as_ in
-        let mem = asm_expand_memory (aoff + asz) s.as_memory in
-        let calldata = TAKE asz (DROP aoff mem) in
-        let target : address = w2w addr_w in
-        let code = (lookup_account target s.as_accounts).code in
-        let evm_s = make_asm_call_state s target (w2n gas)
-                      0 calldata code T in
-        (case extract_asm_result s 1w (w2n ro) (w2n rs)
-                (run evm_s) of
-           SOME (output, s') =>
-             AsmOK (asm_next (s' with as_stack := output :: stk))
-         | NONE => AsmError "staticcall: non-terminating")
+      gas :: addr :: ao :: asz :: ro :: rs :: stk =>
+        let rq = asm_call_request s addr 0w (w2n ao) (w2n asz) T in
+        asm_consume_call_outcome rq (w2n ro) (w2n rs) stk
+          (s with as_memory := asm_call_memory (w2n ao) (w2n asz)
+                                (w2n ro) (w2n rs) s.as_memory)
     | _ => AsmError "staticcall: stack underflow"
+End
+
+Definition asm_gas_def:
+  asm_gas s =
+    case s.as_gas_readings of
+      [] => asm_push_val 0w s
+    | reading :: rest => asm_push_val reading (s with as_gas_readings := rest)
 End
 
 (* DELEGATECALL: pop [gas, addr, argsOff, argsSize, retOff, retSize] *)
@@ -797,8 +828,7 @@ Definition asm_step_context_def:
       SOME (asm_push_val (w2w s.as_call_ctx.cc_address) s) else
     if name = "CALLVALUE" then
       SOME (asm_push_val s.as_call_ctx.cc_callvalue s) else
-    (* GAS omitted: no gas model correspondence at asm level.
-       Programs using GAS get AsmError from asm_step_op fallthrough. *)
+    if name = "GAS" then SOME (asm_gas s) else
     if name = "CALLDATASIZE" then
       SOME (asm_push_val (n2w (LENGTH s.as_call_ctx.cc_calldata)) s) else
     if name = "CALLDATALOAD" then SOME (asm_state_unop (λoff s.

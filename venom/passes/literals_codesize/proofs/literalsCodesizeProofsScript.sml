@@ -128,10 +128,12 @@ Theorem lit_codesize_assign_not_step[local]:
       (inst with <|inst_opcode := NOT; inst_operands := [Lit (~c)]|>) s =
     step_inst fuel ctx inst s
 Proof
-  rw[venomExecSemanticsTheory.step_inst_def,
-     venomExecSemanticsTheory.step_inst_base_def,
-     venomExecSemanticsTheory.exec_pure1_def,
-     venomStateTheory.eval_operand_def]
+  rpt strip_tac >>
+  ASM_REWRITE_TAC[venomExecSemanticsTheory.step_inst_def] >>
+  PURE_REWRITE_TAC[venomExecSemanticsTheory.step_inst_base_def] >>
+  ASM_REWRITE_TAC[] >>
+  simp[venomExecSemanticsTheory.exec_pure1_def,
+       venomStateTheory.eval_operand_def]
 QED
 
 Theorem lit_codesize_assign_shl_step[local]:
@@ -151,12 +153,12 @@ Proof
   `trailing_zeros c < 256` by (irule trailing_zeros_bound >> simp[]) >>
   `trailing_zeros c < dimword(:256)` by
     (fs[wordsTheory.dimword_def] >> CONV_TAC fcpLib.INDEX_CONV >> fs[]) >>
-  rw[venomExecSemanticsTheory.step_inst_def,
-     venomExecSemanticsTheory.step_inst_base_def,
-     venomExecSemanticsTheory.exec_pure2_def,
-     venomStateTheory.eval_operand_def,
-     arithmeticTheory.LESS_MOD,
-     lsr_lsl_trailing_zeros]
+  ASM_REWRITE_TAC[venomExecSemanticsTheory.step_inst_def] >>
+  PURE_REWRITE_TAC[venomExecSemanticsTheory.step_inst_base_def] >>
+  ASM_REWRITE_TAC[] >>
+  simp[venomExecSemanticsTheory.exec_pure2_def,
+       venomStateTheory.eval_operand_def,
+       arithmeticTheory.LESS_MOD, lsr_lsl_trailing_zeros]
 QED
 
 (* Core lemma: each well-formed rewritten instruction produces the

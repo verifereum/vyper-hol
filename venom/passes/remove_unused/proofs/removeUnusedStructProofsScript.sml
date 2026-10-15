@@ -398,7 +398,9 @@ Proof
   fs[wf_function_def, fn_succs_closed_def] >>
   `bb_well_formed y` by metis_tac[] >>
   `bb_succs (clear_nops_block
-      (remove_unused_block (liveness_analyze fn) y)) =
+      (remove_unused_block
+        (protect_liveness fn (remove_unused_phi_vars fn) (liveness_analyze fn))
+        y)) =
    bb_succs y` by
     (irule rusp_preserves_bb_succs >> simp[]) >>
   `MEM succ (bb_succs y)` by gvs[] >>
@@ -616,6 +618,25 @@ Proof
 QED
 
 (* Exported *)
+Theorem rusp_block_image[local]:
+  !fn bb.
+    MEM bb fn.fn_blocks ==>
+    ?bb'. MEM bb' (remove_unused_single_pass fn).fn_blocks /\
+          bb'.bb_label = bb.bb_label
+Proof
+  rw[remove_unused_single_pass_def, LET_THM,
+     clear_nops_function_def, function_map_transform_def, MEM_MAP] >>
+  qexists_tac `clear_nops_block
+    (remove_unused_block
+      (protect_liveness fn (remove_unused_phi_vars fn) (liveness_analyze fn))
+      bb)` >>
+  simp[clear_nops_block_def, remove_unused_block_label] >>
+  qexists_tac `remove_unused_block
+    (protect_liveness fn (remove_unused_phi_vars fn) (liveness_analyze fn))
+    bb` >> simp[] >>
+  qexists_tac `bb` >> simp[]
+QED
+
 Theorem rusp_mem_inst_original:
   !fn bb' inst.
     MEM bb' (remove_unused_single_pass fn).fn_blocks /\
@@ -629,8 +650,9 @@ Proof
   simp[clear_nops_block_def, remove_unused_block_label] >>
   gvs[clear_nops_block_def, remove_unused_block_def, LET_THM,
       MEM_FILTER, MEM_MAPi] >>
-  qspecl_then [`live_after_at (liveness_analyze fn) bk.bb_label idx
-    (LENGTH bk.bb_instructions)`,
+  qspecl_then [`live_after_at
+    (protect_liveness fn (remove_unused_phi_vars fn) (liveness_analyze fn))
+    bk.bb_label idx (LENGTH bk.bb_instructions)`,
     `EL idx bk.bb_instructions`] strip_assume_tac
     remove_unused_inst_cases >>
   gvs[mk_nop_inst_def] >>
@@ -692,14 +714,18 @@ Theorem rui_identity_when_output_not_nopd[local]:
     MEM v (EL k bb.bb_instructions).inst_outputs /\
     v NOTIN single_pass_nop_outputs func ==>
     remove_unused_inst
-      (live_after_at (liveness_analyze func) bb.bb_label k
-        (LENGTH bb.bb_instructions))
+      (live_after_at
+        (protect_liveness func (remove_unused_phi_vars func)
+          (liveness_analyze func))
+        bb.bb_label k (LENGTH bb.bb_instructions))
       (EL k bb.bb_instructions) = EL k bb.bb_instructions
 Proof
   rpt strip_tac >> CCONTR_TAC >>
   qspecl_then
-    [`live_after_at (liveness_analyze func) bb.bb_label k
-        (LENGTH bb.bb_instructions)`,
+    [`live_after_at
+        (protect_liveness func (remove_unused_phi_vars func)
+          (liveness_analyze func))
+        bb.bb_label k (LENGTH bb.bb_instructions)`,
      `EL k bb.bb_instructions`] strip_assume_tac
     remove_unused_inst_cases >> gvs[] >>
   qpat_x_assum `v NOTIN _` mp_tac >>
@@ -736,15 +762,19 @@ Proof
   qexists_tac `ob with bb_instructions :=
     FILTER (\i. i.inst_opcode <> NOP)
       (MAPi (\idx i. remove_unused_inst
-        (live_after_at (liveness_analyze func) ob.bb_label idx
-          (LENGTH ob.bb_instructions)) i)
+        (live_after_at
+          (protect_liveness func (remove_unused_phi_vars func)
+            (liveness_analyze func))
+          ob.bb_label idx (LENGTH ob.bb_instructions)) i)
       ob.bb_instructions)` >>
   simp[MEM_FILTER, MEM_MAPi] >>
   conj_tac >- (
     qexists_tac `ob with bb_instructions :=
       MAPi (\idx i. remove_unused_inst
-        (live_after_at (liveness_analyze func) ob.bb_label idx
-          (LENGTH ob.bb_instructions)) i)
+        (live_after_at
+          (protect_liveness func (remove_unused_phi_vars func)
+            (liveness_analyze func))
+          ob.bb_label idx (LENGTH ob.bb_instructions)) i)
       ob.bb_instructions` >>
     simp[] >> qexists_tac `ob` >> simp[]
   ) >>
@@ -771,6 +801,12 @@ Proof
   metis_tac[MEM_EL, EL_MAP, ALL_DISTINCT_EL_IMP, LENGTH_MAP]
 QED
 
+Theorem phi_pairs_mem_var_rusp[local]:
+  !ops l v. MEM (l,v) (phi_pairs ops) ==> MEM (Var v) ops
+Proof
+  ho_match_mp_tac phi_pairs_ind >> rw[phi_pairs_def] >> gvs[] >> metis_tac[]
+QED
+
 (* def_dominates_uses survives: surviving definitions still dominate their uses *)
 Theorem rusp_preserves_def_dominates_uses[local]:
   !func.
@@ -785,8 +821,49 @@ Proof
   rename1 `MEM bb_orig func.fn_blocks` >>
   (`def_dominates_uses func` by gvs[wf_ssa_def]) >>
   pop_assum (mp_tac o SRULE [def_dominates_uses_def]) >>
-  disch_then (qspecl_then [`bb_orig`, `inst`, `v`] mp_tac) >>
-  simp[] >> strip_tac >>
+  disch_then (qspecl_then [`bb_orig`, `inst`] mp_tac) >>
+  Cases_on `inst.inst_opcode = PHI`
+  >- (
+    simp[] >> strip_tac >>
+    fs[phi_edge_uses_wf_def] >> conj_tac
+    >- (`fn_cfg_edge (remove_unused_single_pass func) = fn_cfg_edge func` by
+          metis_tac[rusp_cfg_edge_eq] >> gvs[])
+    >- (rpt strip_tac >>
+        qpat_x_assum `!pred v. MEM (pred,v) _ ==> _`
+          (qspecl_then [`pred`, `v`] mp_tac) >> simp[] >>
+        strip_tac >>
+        rename1 `MEM pred_orig func.fn_blocks` >>
+            rename1 `def_available_at func pred_orig NONE v` >>
+            drule rusp_block_image >> strip_tac >>
+            rename1 `MEM pred_new (remove_unused_single_pass func).fn_blocks` >>
+            qexists_tac `pred_new` >> simp[] >>
+            conj_tac >- metis_tac[rusp_cfg_edge_eq] >>
+            fs[def_available_at_def] >>
+            rename1 `MEM def_bb func.fn_blocks` >>
+            rename1 `MEM def_inst def_bb.bb_instructions` >>
+            `v NOTIN single_pass_nop_outputs func` by (
+              CCONTR_TAC >> gvs[GSYM pred_setTheory.IN_COMPL] >>
+              metis_tac[nop_output_not_used_as_operand,
+                        phi_pairs_mem_var_rusp]) >>
+            `def_inst.inst_opcode <> NOP` by (
+              CCONTR_TAC >> gvs[nop_outputs_empty_def] >> res_tac >>
+              gvs[MEM]) >>
+            `?k_def. k_def < LENGTH def_bb.bb_instructions /\
+                     def_inst = EL k_def def_bb.bb_instructions` by
+              metis_tac[MEM_EL] >>
+            qspecl_then [`func`, `def_bb`, `k_def`, `v`] mp_tac
+              inst_with_used_var_survives >>
+            impl_tac >- gvs[] >> strip_tac >>
+            rename1 `MEM def_new
+              (remove_unused_single_pass func).fn_blocks` >>
+            qexistsl_tac [`def_new`, `def_inst`] >> simp[] >>
+            `fn_dominates (remove_unused_single_pass func) =
+             fn_dominates func` by metis_tac[rusp_dominates_eq] >>
+            gvs[])) >>
+  simp[] >> rpt strip_tac >>
+  qpat_x_assum `!w. MEM (Var w) inst.inst_operands ==> _`
+    (qspec_then `v` mp_tac) >>
+  simp[def_available_at_def] >> strip_tac >>
   rename1 `MEM def_bb func.fn_blocks` >>
   rename1 `MEM def_inst def_bb.bb_instructions` >>
   (`def_inst.inst_opcode <> NOP` by (
@@ -820,16 +897,20 @@ Proof
   gvs[] >>
   (`bb'.bb_instructions = FILTER (\i. i.inst_opcode <> NOP)
     (MAPi (\idx i. remove_unused_inst
-      (live_after_at (liveness_analyze func) bb_orig.bb_label idx
-        (LENGTH bb_orig.bb_instructions)) i)
+      (live_after_at
+        (protect_liveness func (remove_unused_phi_vars func)
+          (liveness_analyze func))
+        bb_orig.bb_label idx (LENGTH bb_orig.bb_instructions)) i)
     bb_orig.bb_instructions)` by (
     gvs[remove_unused_single_pass_def, LET_THM,
         clear_nops_function_def, function_map_transform_def, MEM_MAP,
         clear_nops_block_def, remove_unused_block_def] >>
     metis_tac[all_distinct_map_inj_mem])) >>
   qabbrev_tac `mapi_list = MAPi (\idx i. remove_unused_inst
-    (live_after_at (liveness_analyze func) bb_orig.bb_label idx
-      (LENGTH bb_orig.bb_instructions)) i)
+    (live_after_at
+      (protect_liveness func (remove_unused_phi_vars func)
+        (liveness_analyze func))
+      bb_orig.bb_label idx (LENGTH bb_orig.bb_instructions)) i)
     bb_orig.bb_instructions` >>
   (`EL k_def mapi_list = EL k_def bb_orig.bb_instructions` by (
     simp[Abbr `mapi_list`, EL_MAPi] >>

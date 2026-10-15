@@ -10,7 +10,7 @@
 
 Theory venomWf
 Ancestors
-  venomInst
+  dretShapeDefs venomState
 
 (* ==========================================================================
    PHI operand well-formedness: alternating (Label, Var) pairs.
@@ -18,10 +18,9 @@ Ancestors
 
 Definition phi_well_formed_def:
   phi_well_formed [] = T /\
-  phi_well_formed [_] = T /\
+  phi_well_formed [_] = F /\
   phi_well_formed (Label lbl :: Var v :: rest) = phi_well_formed rest /\
-  phi_well_formed (Label lbl :: _ :: rest) = F /\
-  phi_well_formed (_ :: _ :: rest) = phi_well_formed rest
+  phi_well_formed (_ :: _ :: rest) = F
 End
 
 (* ==========================================================================
@@ -134,9 +133,21 @@ Definition inst_wf_def:
     | NOP => inst.inst_outputs = []
     | PARAM => ∃idx. inst.inst_operands = [Lit idx] ∧
                      LENGTH inst.inst_outputs = 1
-    (* ---- Allocation ---- *)
+    | FMP_PARAM => (∃idx. inst.inst_operands = [Lit idx]) ∧
+                         LENGTH inst.inst_outputs = 1
+    | RETPC_PARAM => (∃idx. inst.inst_operands = [Lit idx]) ∧
+                           LENGTH inst.inst_outputs = 1
+    (* ---- Allocation and frame-memory-pointer operations ---- *)
     | ALLOCA => ∃sz. inst.inst_operands = [Lit sz] ∧
                      LENGTH inst.inst_outputs = 1
+    | DALLOCA => LENGTH inst.inst_operands = 1 ∧
+                 LENGTH inst.inst_outputs = 1
+    | DRET => inst.inst_outputs = [] ∧ IS_SOME (parse_dret_shape inst)
+    | GETFMP => inst.inst_operands = [] ∧ LENGTH inst.inst_outputs = 1
+    | SETFMP => LENGTH inst.inst_operands = 1 ∧ inst.inst_outputs = []
+    | RETFMP => inst.inst_operands <> [] ∧ inst.inst_outputs = []
+    | INITIAL_FMP => inst.inst_operands = [] ∧ LENGTH inst.inst_outputs = 1
+    | BUMP => LENGTH inst.inst_operands = 2 ∧ LENGTH inst.inst_outputs = 2
     (* ---- External calls ---- *)
     | CALL => LENGTH inst.inst_operands = 7 ∧ LENGTH inst.inst_outputs = 1
     | STATICCALL => LENGTH inst.inst_operands = 6 ∧ LENGTH inst.inst_outputs = 1
@@ -144,8 +155,8 @@ Definition inst_wf_def:
     | CREATE => LENGTH inst.inst_operands = 3 ∧ LENGTH inst.inst_outputs = 1
     | CREATE2 => LENGTH inst.inst_operands = 4 ∧ LENGTH inst.inst_outputs = 1
     (* ---- Special ---- *)
-    | OFFSET => ∃op lbl. inst.inst_operands = [op; Label lbl] ∧
-                         LENGTH inst.inst_outputs = 1
+    | OFFSET => ∃v lbl. inst.inst_operands = [Lit v; Label lbl] ∧
+                        LENGTH inst.inst_outputs = 1
     | LOG => ∃tc rest. inst.inst_operands = Lit tc :: rest ∧
                        LENGTH rest = w2n tc + 2 /\ inst.inst_outputs = []
     | SELFDESTRUCT => LENGTH inst.inst_operands = 1 /\ inst.inst_outputs = []
@@ -157,6 +168,234 @@ Definition inst_wf_def:
        arity which can be 0, 1, or more - see check_venom._collect_ret_arities) ---- *)
     | INVOKE => ∃lbl args. inst.inst_operands = Label lbl :: args
 End
+
+(* Executable operand projection used by finite literal-shape checks. *)
+Definition operand_lit_value_def:
+  operand_lit_value (Lit w) = SOME w /\
+  operand_lit_value (Var v) = NONE /\
+  operand_lit_value (Label lbl) = NONE
+End
+
+(* Executable view of inst_wf.  The specification deliberately uses
+ * existential witnesses for operand shapes; this equivalent view makes
+ * those shapes decidable by computeLib. *)
+Definition inst_wf_exec_def:
+  inst_wf_exec inst ⇔
+    case inst.inst_opcode of
+    | ADD => LENGTH inst.inst_operands = 2 ∧ LENGTH inst.inst_outputs = 1
+    | SUB => LENGTH inst.inst_operands = 2 ∧ LENGTH inst.inst_outputs = 1
+    | MUL => LENGTH inst.inst_operands = 2 ∧ LENGTH inst.inst_outputs = 1
+    | Div => LENGTH inst.inst_operands = 2 ∧ LENGTH inst.inst_outputs = 1
+    | Mod => LENGTH inst.inst_operands = 2 ∧ LENGTH inst.inst_outputs = 1
+    | SDIV => LENGTH inst.inst_operands = 2 ∧ LENGTH inst.inst_outputs = 1
+    | SMOD => LENGTH inst.inst_operands = 2 ∧ LENGTH inst.inst_outputs = 1
+    | Exp => LENGTH inst.inst_operands = 2 ∧ LENGTH inst.inst_outputs = 1
+    | EQ => LENGTH inst.inst_operands = 2 ∧ LENGTH inst.inst_outputs = 1
+    | LT => LENGTH inst.inst_operands = 2 ∧ LENGTH inst.inst_outputs = 1
+    | GT => LENGTH inst.inst_operands = 2 ∧ LENGTH inst.inst_outputs = 1
+    | SLT => LENGTH inst.inst_operands = 2 ∧ LENGTH inst.inst_outputs = 1
+    | SGT => LENGTH inst.inst_operands = 2 ∧ LENGTH inst.inst_outputs = 1
+    | AND => LENGTH inst.inst_operands = 2 ∧ LENGTH inst.inst_outputs = 1
+    | OR => LENGTH inst.inst_operands = 2 ∧ LENGTH inst.inst_outputs = 1
+    | XOR => LENGTH inst.inst_operands = 2 ∧ LENGTH inst.inst_outputs = 1
+    | SHL => LENGTH inst.inst_operands = 2 ∧ LENGTH inst.inst_outputs = 1
+    | SHR => LENGTH inst.inst_operands = 2 ∧ LENGTH inst.inst_outputs = 1
+    | SAR => LENGTH inst.inst_operands = 2 ∧ LENGTH inst.inst_outputs = 1
+    | SIGNEXTEND => LENGTH inst.inst_operands = 2 ∧ LENGTH inst.inst_outputs = 1
+    | BYTE => LENGTH inst.inst_operands = 2 ∧ LENGTH inst.inst_outputs = 1
+    | ISZERO => LENGTH inst.inst_operands = 1 ∧ LENGTH inst.inst_outputs = 1
+    | NOT => LENGTH inst.inst_operands = 1 ∧ LENGTH inst.inst_outputs = 1
+    | ADDMOD => LENGTH inst.inst_operands = 3 ∧ LENGTH inst.inst_outputs = 1
+    | MULMOD => LENGTH inst.inst_operands = 3 ∧ LENGTH inst.inst_outputs = 1
+    | CALLER => LENGTH inst.inst_outputs = 1
+    | ADDRESS => LENGTH inst.inst_outputs = 1
+    | CALLVALUE => LENGTH inst.inst_outputs = 1
+    | GAS => LENGTH inst.inst_outputs = 1
+    | ORIGIN => LENGTH inst.inst_outputs = 1
+    | GASPRICE => LENGTH inst.inst_outputs = 1
+    | CHAINID => LENGTH inst.inst_outputs = 1
+    | COINBASE => LENGTH inst.inst_outputs = 1
+    | TIMESTAMP => LENGTH inst.inst_outputs = 1
+    | NUMBER => LENGTH inst.inst_outputs = 1
+    | PREVRANDAO => LENGTH inst.inst_outputs = 1
+    | GASLIMIT => LENGTH inst.inst_outputs = 1
+    | BASEFEE => LENGTH inst.inst_outputs = 1
+    | BLOBBASEFEE => LENGTH inst.inst_outputs = 1
+    | CALLDATASIZE => LENGTH inst.inst_outputs = 1
+    | RETURNDATASIZE => LENGTH inst.inst_outputs = 1
+    | MEMTOP => LENGTH inst.inst_outputs = 1
+    | CODESIZE => LENGTH inst.inst_outputs = 1
+    | SELFBALANCE => LENGTH inst.inst_outputs = 1
+    | MLOAD => LENGTH inst.inst_operands = 1 ∧ LENGTH inst.inst_outputs = 1
+    | SLOAD => LENGTH inst.inst_operands = 1 ∧ LENGTH inst.inst_outputs = 1
+    | TLOAD => LENGTH inst.inst_operands = 1 ∧ LENGTH inst.inst_outputs = 1
+    | ILOAD => LENGTH inst.inst_operands = 1 ∧ LENGTH inst.inst_outputs = 1
+    | DLOAD => LENGTH inst.inst_operands = 1 ∧ LENGTH inst.inst_outputs = 1
+    | BLOCKHASH => LENGTH inst.inst_operands = 1 ∧ LENGTH inst.inst_outputs = 1
+    | BLOBHASH => LENGTH inst.inst_operands = 1 ∧ LENGTH inst.inst_outputs = 1
+    | BALANCE => LENGTH inst.inst_operands = 1 ∧ LENGTH inst.inst_outputs = 1
+    | CALLDATALOAD => LENGTH inst.inst_operands = 1 ∧ LENGTH inst.inst_outputs = 1
+    | EXTCODESIZE => LENGTH inst.inst_operands = 1 ∧ LENGTH inst.inst_outputs = 1
+    | EXTCODEHASH => LENGTH inst.inst_operands = 1 ∧ LENGTH inst.inst_outputs = 1
+    | MSTORE => LENGTH inst.inst_operands = 2 ∧ inst.inst_outputs = []
+    | MSTORE8 => LENGTH inst.inst_operands = 2 ∧ inst.inst_outputs = []
+    | SSTORE => LENGTH inst.inst_operands = 2 ∧ inst.inst_outputs = []
+    | TSTORE => LENGTH inst.inst_operands = 2 ∧ inst.inst_outputs = []
+    | ISTORE => LENGTH inst.inst_operands = 2 ∧ inst.inst_outputs = []
+    | MCOPY => LENGTH inst.inst_operands = 3 ∧ inst.inst_outputs = []
+    | CALLDATACOPY => LENGTH inst.inst_operands = 3 ∧ inst.inst_outputs = []
+    | RETURNDATACOPY => LENGTH inst.inst_operands = 3 ∧ inst.inst_outputs = []
+    | DLOADBYTES => LENGTH inst.inst_operands = 3 ∧ inst.inst_outputs = []
+    | CODECOPY => LENGTH inst.inst_operands = 3 ∧ inst.inst_outputs = []
+    | EXTCODECOPY => LENGTH inst.inst_operands = 4 ∧ inst.inst_outputs = []
+    | SHA3 => LENGTH inst.inst_operands = 2 ∧ LENGTH inst.inst_outputs = 1
+    | JMP =>
+        LENGTH inst.inst_operands = 1 /\
+        IS_SOME (get_label (HD inst.inst_operands)) /\
+        inst.inst_outputs = []
+    | JNZ =>
+        LENGTH inst.inst_operands = 3 /\
+        IS_SOME (get_label (EL 1 inst.inst_operands)) /\
+        IS_SOME (get_label (EL 2 inst.inst_operands)) /\
+        inst.inst_outputs = []
+    | DJMP =>
+        inst.inst_operands <> [] /\
+        EVERY (λop. IS_SOME (get_label op))
+          (TL inst.inst_operands) /\
+        inst.inst_outputs = []
+    | RET => inst.inst_outputs = []
+    | RETURN => LENGTH inst.inst_operands = 2 ∧ inst.inst_outputs = []
+    | REVERT => LENGTH inst.inst_operands = 2 ∧ inst.inst_outputs = []
+    | STOP => inst.inst_outputs = []
+    | SINK => inst.inst_outputs = []
+    | PHI => LENGTH inst.inst_outputs = 1 ∧ phi_well_formed inst.inst_operands
+    | ASSIGN => LENGTH inst.inst_operands = 1 ∧ LENGTH inst.inst_outputs = 1
+    | NOP => inst.inst_outputs = []
+    | PARAM =>
+        LENGTH inst.inst_operands = 1 /\
+        IS_SOME (operand_lit_value (HD inst.inst_operands)) /\
+        LENGTH inst.inst_outputs = 1
+    | FMP_PARAM =>
+        LENGTH inst.inst_operands = 1 /\
+        IS_SOME (operand_lit_value (HD inst.inst_operands)) /\
+        LENGTH inst.inst_outputs = 1
+    | RETPC_PARAM =>
+        LENGTH inst.inst_operands = 1 /\
+        IS_SOME (operand_lit_value (HD inst.inst_operands)) /\
+        LENGTH inst.inst_outputs = 1
+    | ALLOCA =>
+        LENGTH inst.inst_operands = 1 /\
+        IS_SOME (operand_lit_value (HD inst.inst_operands)) /\
+        LENGTH inst.inst_outputs = 1
+    | DALLOCA => LENGTH inst.inst_operands = 1 ∧ LENGTH inst.inst_outputs = 1
+    | DRET => inst.inst_outputs = [] ∧ IS_SOME (parse_dret_shape inst)
+    | GETFMP => inst.inst_operands = [] ∧ LENGTH inst.inst_outputs = 1
+    | SETFMP => LENGTH inst.inst_operands = 1 ∧ inst.inst_outputs = []
+    | RETFMP => inst.inst_operands <> [] ∧ inst.inst_outputs = []
+    | INITIAL_FMP => inst.inst_operands = [] ∧ LENGTH inst.inst_outputs = 1
+    | BUMP => LENGTH inst.inst_operands = 2 ∧ LENGTH inst.inst_outputs = 2
+    | CALL => LENGTH inst.inst_operands = 7 ∧ LENGTH inst.inst_outputs = 1
+    | STATICCALL => LENGTH inst.inst_operands = 6 ∧ LENGTH inst.inst_outputs = 1
+    | DELEGATECALL => LENGTH inst.inst_operands = 6 ∧ LENGTH inst.inst_outputs = 1
+    | CREATE => LENGTH inst.inst_operands = 3 ∧ LENGTH inst.inst_outputs = 1
+    | CREATE2 => LENGTH inst.inst_operands = 4 ∧ LENGTH inst.inst_outputs = 1
+    | OFFSET =>
+        LENGTH inst.inst_operands = 2 /\
+        IS_SOME (operand_lit_value (HD inst.inst_operands)) /\
+        IS_SOME (get_label (EL 1 inst.inst_operands)) /\
+        LENGTH inst.inst_outputs = 1
+    | LOG =>
+        inst.inst_operands <> [] /\
+        (case operand_lit_value (HD inst.inst_operands) of
+           NONE => F
+         | SOME tc =>
+             LENGTH (TL inst.inst_operands) = w2n tc + 2 /\
+             inst.inst_outputs = [])
+    | SELFDESTRUCT => LENGTH inst.inst_operands = 1 ∧ inst.inst_outputs = []
+    | INVALID => inst.inst_outputs = []
+    | ASSERT => LENGTH inst.inst_operands = 1 ∧ inst.inst_outputs = []
+    | ASSERT_UNREACHABLE => LENGTH inst.inst_operands = 1 ∧ inst.inst_outputs = []
+    | INVOKE =>
+        inst.inst_operands <> [] /\
+        IS_SOME (get_label (HD inst.inst_operands))
+End
+
+val inst_wf_compute_case_tac =
+  gvs[inst_wf_def, inst_wf_exec_def, get_label_def,
+      operand_lit_value_def] >>
+  Cases_on `inst.inst_operands` >>
+  gvs[AllCaseEqs(), get_label_def, operand_lit_value_def] >>
+  Cases_on `h` >>
+  gvs[AllCaseEqs(), get_label_def, operand_lit_value_def] >>
+  Cases_on `t` >>
+  gvs[AllCaseEqs(), get_label_def, operand_lit_value_def] >>
+  Cases_on `h` >>
+  gvs[AllCaseEqs(), get_label_def, operand_lit_value_def] >>
+  Cases_on `t'` >>
+  gvs[AllCaseEqs(), get_label_def, operand_lit_value_def] >>
+  Cases_on `h` >>
+  gvs[AllCaseEqs(), get_label_def, operand_lit_value_def] >>
+  Cases_on `t` >>
+  gvs[];
+
+Theorem inst_wf_compute[compute]:
+  inst_wf inst <=> inst_wf_exec inst
+Proof
+  Cases_on `inst.inst_opcode` >|
+    [(* 1-5 *) inst_wf_compute_case_tac, inst_wf_compute_case_tac,
+     inst_wf_compute_case_tac, inst_wf_compute_case_tac, inst_wf_compute_case_tac,
+     (* 6-10 *) inst_wf_compute_case_tac, inst_wf_compute_case_tac,
+     inst_wf_compute_case_tac, inst_wf_compute_case_tac, inst_wf_compute_case_tac,
+     (* 11-15 *) inst_wf_compute_case_tac, inst_wf_compute_case_tac,
+     inst_wf_compute_case_tac, inst_wf_compute_case_tac, inst_wf_compute_case_tac,
+     (* 16-20 *) inst_wf_compute_case_tac, inst_wf_compute_case_tac,
+     inst_wf_compute_case_tac, inst_wf_compute_case_tac, inst_wf_compute_case_tac,
+     (* 21-25 *) inst_wf_compute_case_tac, inst_wf_compute_case_tac,
+     inst_wf_compute_case_tac, inst_wf_compute_case_tac, inst_wf_compute_case_tac,
+     (* 26-30 *) inst_wf_compute_case_tac, inst_wf_compute_case_tac,
+     inst_wf_compute_case_tac, inst_wf_compute_case_tac, inst_wf_compute_case_tac,
+     (* 31-35 *) inst_wf_compute_case_tac, inst_wf_compute_case_tac,
+     inst_wf_compute_case_tac, inst_wf_compute_case_tac, inst_wf_compute_case_tac,
+     (* 36-40 *) inst_wf_compute_case_tac, inst_wf_compute_case_tac,
+     inst_wf_compute_case_tac, inst_wf_compute_case_tac, inst_wf_compute_case_tac,
+     (* 41-45 *) inst_wf_compute_case_tac, inst_wf_compute_case_tac,
+     inst_wf_compute_case_tac, inst_wf_compute_case_tac, inst_wf_compute_case_tac,
+     (* 46-50 *) inst_wf_compute_case_tac, inst_wf_compute_case_tac,
+     inst_wf_compute_case_tac, inst_wf_compute_case_tac, inst_wf_compute_case_tac,
+     (* 51-55 *) inst_wf_compute_case_tac, inst_wf_compute_case_tac,
+     inst_wf_compute_case_tac, inst_wf_compute_case_tac, inst_wf_compute_case_tac,
+     (* 56-60 *) inst_wf_compute_case_tac, inst_wf_compute_case_tac,
+     inst_wf_compute_case_tac, inst_wf_compute_case_tac, inst_wf_compute_case_tac,
+     (* 61-65 *) inst_wf_compute_case_tac, inst_wf_compute_case_tac,
+     inst_wf_compute_case_tac, inst_wf_compute_case_tac, inst_wf_compute_case_tac,
+     (* 66-70 *) inst_wf_compute_case_tac, inst_wf_compute_case_tac,
+     inst_wf_compute_case_tac, inst_wf_compute_case_tac, inst_wf_compute_case_tac,
+     (* 71-75 *) inst_wf_compute_case_tac, inst_wf_compute_case_tac,
+     inst_wf_compute_case_tac, inst_wf_compute_case_tac, inst_wf_compute_case_tac,
+     (* 76-80 *) inst_wf_compute_case_tac, inst_wf_compute_case_tac,
+     inst_wf_compute_case_tac, inst_wf_compute_case_tac, inst_wf_compute_case_tac,
+     (* 81-85 *) inst_wf_compute_case_tac, inst_wf_compute_case_tac,
+     inst_wf_compute_case_tac, inst_wf_compute_case_tac, inst_wf_compute_case_tac,
+     (* 86-90 *) inst_wf_compute_case_tac, inst_wf_compute_case_tac,
+     inst_wf_compute_case_tac, inst_wf_compute_case_tac, inst_wf_compute_case_tac,
+     (* 91-95 *) inst_wf_compute_case_tac, inst_wf_compute_case_tac,
+     inst_wf_compute_case_tac, inst_wf_compute_case_tac, inst_wf_compute_case_tac,
+     (* 96-100 *) inst_wf_compute_case_tac, inst_wf_compute_case_tac,
+     inst_wf_compute_case_tac, inst_wf_compute_case_tac, inst_wf_compute_case_tac,
+     inst_wf_compute_case_tac] (* 101 *)
+QED
+
+Theorem inst_wf_offset_shape:
+  inst_wf inst /\ inst.inst_opcode = OFFSET ==>
+  ?v lbl out.
+    inst.inst_operands = [Lit v; Label lbl] /\
+    inst.inst_outputs = [out]
+Proof
+  rpt strip_tac >>
+  gvs[inst_wf_def] >>
+  Cases_on `inst.inst_outputs` >> gvs[] >>
+  Cases_on `t` >> gvs[]
+QED
 
 (* The function has an entry block (fn_blocks is non-empty). *)
 Definition fn_has_entry_def:
@@ -270,32 +509,61 @@ Definition fn_dominates_def:
            MEM d path
 End
 
-(* Every variable use is dominated by its definition.
-   Standard SSA property: if instruction inst in block bb uses Var v,
-   then v is defined by some instruction in some block def_bb, and
-   def_bb dominates bb.  When def and use are in the same block, the
-   def must appear at a strictly earlier index (intra-block ordering).
-   This is the standard formulation: "every def reaches its use." *)
+(* A definition available at a block endpoint.  NONE denotes the outgoing
+   edge after the whole target block; SOME use_inst denotes the point just
+   before an ordinary instruction.  This one helper is shared by PHI edge
+   uses and ordinary uses, so the two rules cannot drift apart. *)
+Definition def_available_at_def:
+  def_available_at fn target_bb use_inst_opt v <=>
+    ?def_bb def_inst.
+      MEM def_bb fn.fn_blocks /\
+      MEM def_inst def_bb.bb_instructions /\
+      MEM v def_inst.inst_outputs /\
+      fn_dominates fn def_bb.bb_label target_bb.bb_label /\
+      (def_bb = target_bb ==>
+        case use_inst_opt of
+          NONE => T
+        | SOME use_inst =>
+            ?i j. i < j /\ j < LENGTH target_bb.bb_instructions /\
+                  EL i target_bb.bb_instructions = def_inst /\
+                  EL j target_bb.bb_instructions = use_inst)
+End
+(* PHI uses occur on named predecessor edges, unlike ordinary uses which
+   occur at the instruction.  Every incoming value, including a loop-carried
+   self input, must be available at its edge endpoint.  Besides availability,
+   reject malformed pair shapes, duplicate edge names, and missing or extra
+   predecessors. *)
+Definition phi_edge_uses_wf_def:
+  phi_edge_uses_wf fn bb inst <=>
+    phi_well_formed inst.inst_operands /\
+    ALL_DISTINCT (MAP FST (phi_pairs inst.inst_operands)) /\
+    (!pred.
+       fn_cfg_edge fn pred bb.bb_label <=>
+       ?p. MEM p (phi_pairs inst.inst_operands) /\ FST p = pred) /\
+    (!pred v.
+       MEM (pred,v) (phi_pairs inst.inst_operands) ==>
+       ?pred_bb.
+         MEM pred_bb fn.fn_blocks /\
+         pred_bb.bb_label = pred /\
+         fn_cfg_edge fn pred bb.bb_label /\
+         def_available_at fn pred_bb NONE v)
+End
+(* Every ordinary use is available immediately before its instruction; every
+   PHI incoming value is available at the end of its named predecessor. *)
 Definition def_dominates_uses_def:
   def_dominates_uses fn <=>
-    !bb inst v.
+    !bb inst.
       MEM bb fn.fn_blocks /\
-      MEM inst bb.bb_instructions /\
-      MEM (Var v) inst.inst_operands ==>
-      ?def_bb def_inst.
-        MEM def_bb fn.fn_blocks /\
-        MEM def_inst def_bb.bb_instructions /\
-        MEM v def_inst.inst_outputs /\
-        fn_dominates fn def_bb.bb_label bb.bb_label /\
-        (def_bb = bb ==>
-          ?i j. i < j /\ j < LENGTH bb.bb_instructions /\
-                EL i bb.bb_instructions = def_inst /\
-                EL j bb.bb_instructions = inst)
+      MEM inst bb.bb_instructions ==>
+      if inst.inst_opcode = PHI then
+        phi_edge_uses_wf fn bb inst
+      else
+        !v. MEM (Var v) inst.inst_operands ==>
+            def_available_at fn bb (SOME inst) v
 End
-
 (* Well-formed SSA: unique definitions AND definitions dominate uses.
-   Within-block ordering follows from def_dominates_uses + fn_inst_ids_distinct
-   (part of wf_function). *)
+   PHI definitions are checked on predecessor edges; ordinary same-block uses
+   retain strict instruction ordering. *)
 Definition wf_ssa_def:
   wf_ssa fn <=> ssa_form fn /\ def_dominates_uses fn
 End
@@ -382,4 +650,101 @@ Definition venom_wf_def:
           wf_function fn ∧ fn_inst_wf fn)
 End
 
+(* ==========================================================================
+   Executable views of finite well-formedness quantifiers.
+   ========================================================================== *)
 
+Theorem bb_well_formed_compute[compute]:
+  bb_well_formed bb <=>
+    bb.bb_instructions <> [] /\
+    is_terminator (LAST bb.bb_instructions).inst_opcode /\
+    EVERY
+      (λi. is_terminator (EL i bb.bb_instructions).inst_opcode ==>
+           i = PRE (LENGTH bb.bb_instructions))
+      (GENLIST I (LENGTH bb.bb_instructions)) /\
+    EVERY
+      (λj. (EL j bb.bb_instructions).inst_opcode = PHI ==>
+           EVERY
+             (λi. (EL i bb.bb_instructions).inst_opcode = PHI)
+             (GENLIST I j))
+      (GENLIST I (LENGTH bb.bb_instructions))
+Proof
+  simp[bb_well_formed_def, listTheory.EVERY_GENLIST] >>
+  metis_tac[]
+QED
+
+Theorem fn_succs_closed_compute[compute]:
+  fn_succs_closed fn <=>
+    EVERY (λbb. EVERY (λsucc. MEM succ (fn_labels fn)) (bb_succs bb))
+      fn.fn_blocks
+Proof
+  simp[fn_succs_closed_def, listTheory.EVERY_MEM] >>
+  metis_tac[]
+QED
+
+Theorem wf_function_compute[compute]:
+  wf_function fn <=>
+    ALL_DISTINCT (fn_labels fn) /\
+    fn_has_entry fn /\
+    EVERY bb_well_formed fn.fn_blocks /\
+    fn_succs_closed fn /\
+    fn_inst_ids_distinct fn
+Proof
+  simp[wf_function_def, listTheory.EVERY_MEM]
+QED
+
+Theorem ctx_has_entry_compute[compute]:
+  ctx_has_entry ctx <=>
+    case ctx.ctx_entry of
+      NONE => F
+    | SOME entry_name => MEM entry_name (ctx_fn_names ctx)
+Proof
+  Cases_on `ctx.ctx_entry` >> simp[ctx_has_entry_def]
+QED
+
+Triviality invoke_target_shape_case:
+  ((?lbl rest. ops = Label lbl::rest /\ MEM lbl labels) <=>
+   ops <> [] /\
+   case get_label (HD ops) of
+     NONE => F
+   | SOME lbl => MEM lbl labels)
+Proof
+  Cases_on `ops` >> simp[] >>
+  Cases_on `h` >> simp[get_label_def]
+QED
+
+Theorem wf_invoke_targets_compute[compute]:
+  wf_invoke_targets ctx <=>
+    EVERY
+      (λfunc.
+        EVERY
+          (λinst. inst.inst_opcode = INVOKE ==>
+             inst.inst_operands <> [] /\
+             case get_label (HD inst.inst_operands) of
+               NONE => F
+             | SOME lbl => MEM lbl (ctx_fn_names ctx))
+          (fn_insts func))
+      ctx.ctx_functions
+Proof
+  simp[wf_invoke_targets_def, listTheory.EVERY_MEM,
+       invoke_target_shape_case] >>
+  metis_tac[]
+QED
+
+Theorem fn_inst_wf_compute[compute]:
+  fn_inst_wf fn <=>
+    EVERY (λbb. EVERY inst_wf bb.bb_instructions) fn.fn_blocks
+Proof
+  simp[fn_inst_wf_def, listTheory.EVERY_MEM] >>
+  metis_tac[]
+QED
+
+Theorem venom_wf_compute[compute]:
+  venom_wf ctx <=>
+    ctx_wf ctx /\
+    wf_invoke_targets ctx /\
+    ctx_inst_ids_distinct ctx /\
+    EVERY (λfn. wf_function fn /\ fn_inst_wf fn) ctx.ctx_functions
+Proof
+  simp[venom_wf_def, listTheory.EVERY_MEM]
+QED

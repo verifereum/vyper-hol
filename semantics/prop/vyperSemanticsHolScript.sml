@@ -1,14 +1,8 @@
 Theory vyperSemanticsHol
 Ancestors
-  vyperCall
-  vyperEvalBinop
-  vyperEvalPreservesImmutablesDom
+  vyperLogPreservation
   vyperEvalPreservesNameTarget
   vyperEvalPureExpr
-  vyperLookupStorageScopes
-  vyperBareGlobalName
   vyperTypeSoundness
-  vyperUpdateTarget
-  vyperHashMap
-  vyperStorageFrame
-  vyperExprNoControl
+  vyperABIValid
+  vyperTypeDeploymentMachine

@@ -18,6 +18,7 @@
 
 Theory dftCommutation
 Ancestors
+  venomCallOracleDefs
   venomState venomExecSemantics venomExecProps venomEffects venomInst
   venomInstProofs finite_map list pair
 Libs
@@ -80,6 +81,13 @@ Proof
   rw[update_var_def, mstore_def, venom_state_component_equality]
 QED
 
+Theorem update_var_istore_commute:
+  !x v off val s.
+  update_var x v (istore off val s) = istore off val (update_var x v s)
+Proof
+  rw[update_var_def, istore_def, mstore_def, venom_state_component_equality]
+QED
+
 Theorem update_var_mstore8_commute:
   !x v off val s.
   update_var x v (mstore8 off val s) = mstore8 off val (update_var x v s)
@@ -117,6 +125,24 @@ Theorem update_var_mcopy_commute:
 Proof
   rw[update_var_def, mcopy_def, write_memory_with_expansion_def,
      venom_state_component_equality]
+QED
+
+Theorem pack_dret_dynamic_update_var[local]:
+  !cursor pairs s x v.
+    pack_dret_dynamic cursor pairs (update_var x v s) =
+    let (ptrs, final_cursor, s') = pack_dret_dynamic cursor pairs s in
+      (ptrs, final_cursor, update_var x v s')
+Proof
+  Induct_on `pairs`
+  >- simp[pack_dret_dynamic_def]
+  >> Cases_on `h`
+  >> rpt gen_tac
+  >> Cases_on
+       `pack_dret_dynamic (cursor + n2w (ceil32 (w2n r))) pairs
+          (mcopy (w2n cursor) (w2n q) (w2n r) s)`
+  >> Cases_on `r''`
+  >> gvs[Ntimes pack_dret_dynamic_def 2,
+         GSYM update_var_mcopy_commute]
 QED
 
 Theorem update_var_halt_state_commute:
@@ -244,6 +270,16 @@ Proof
   rw[merge_callee_state_def, update_var_def, venom_state_component_equality]
 QED
 
+
+Theorem adopt_return_fmp_update_var[local]:
+  !ir x v s.
+    adopt_return_fmp ir (update_var x v s) =
+    update_var x v (adopt_return_fmp ir s)
+Proof
+  rpt strip_tac >>
+  Cases_on `ir.iret_adopt_fmp` >>
+  simp[adopt_return_fmp_def, update_var_def]
+QED
 Theorem bind_outputs_update_var:
   !outs vals s x v. ~MEM x outs ==>
   bind_outputs outs vals (update_var x v s) =
@@ -410,7 +446,8 @@ val helper_frames = [
 (* Rewrites for threading update_var through state operations *)
 val update_var_rwts = [
   update_var_fields, update_var_commutes,
-  update_var_mstore_commute, update_var_mstore8_commute, update_var_sstore_commute,
+  update_var_mstore_commute, update_var_istore_commute,
+  update_var_mstore8_commute, update_var_sstore_commute,
   update_var_tstore_commute, update_var_write_memory_commute,
   update_var_mcopy_commute, update_var_halt_state_commute,
   update_var_revert_state_commute, update_var_set_returndata_commute,
@@ -550,7 +587,15 @@ Theorem exec_ext_call_frame[local]:
   map_result_state (update_var x v)
     (exec_ext_call inst s gas addr value ao as_ ro rs is_static)
 Proof
-  ext_call_frame_proof [exec_ext_call_def, make_venom_call_state_def]
+  (* Legacy concrete proof: ext_call_frame_proof
+       [exec_ext_call_def, make_venom_call_state_def] *)
+  rpt strip_tac >>
+  Cases_on `inst.inst_outputs` >> gvs[exec_ext_call_def, map_result_state_def] >>
+  rename1 `inst.inst_outputs = out::rest_outputs` >>
+  Cases_on `rest_outputs` >> gvs[exec_ext_call_def, map_result_state_def] >>
+  simp[venom_call_request_def, read_memory_def, update_var_def,
+       write_memory_with_expansion_def, venom_state_component_equality,
+       finite_mapTheory.FUPDATE_COMMUTES]
 QED
 
 (* Frame lemma for exec_delegatecall *)
@@ -599,8 +644,8 @@ Proof
 QED
 
 val base_frame_tac =
-  ASM_REWRITE_TAC[step_inst_base_def] >>
-  simp[] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  ASM_REWRITE_TAC[opcode_case_def] >>
   gvs all_rwts2 >>
   TRY (gvs(all_rwts2 @ custom_defs) >>
        rpt (CHANGED_TAC (BasicProvers.TOP_CASE_TAC >>
@@ -666,7 +711,25 @@ Proof
   >- base_frame_tac (* ASSIGN *)
   >- base_frame_tac (* NOP *)
   >- base_frame_tac (* ALLOCA *)
+  >- (base_frame_tac >>
+      gvs[update_var_def, venom_state_component_equality]) (* DALLOCA *)
+  >- (base_frame_tac >>
+      gvs[pack_dret_dynamic_update_var, update_var_def,
+          venom_state_component_equality] >>
+      rpt (pairarg_tac >>
+           gvs[map_result_state_def, update_var_def,
+               venom_state_component_equality]) >>
+      gvs[map_result_state_def, update_var_def,
+          venom_state_component_equality]) (* DRET *)
+  >- (base_frame_tac >> gvs[update_var_def]) (* GETFMP *)
+  >- (base_frame_tac >>
+      gvs[update_var_def, venom_state_component_equality]) (* SETFMP *)
+  >- (base_frame_tac >> gvs[update_var_def]) (* RETFMP *)
+  >- (base_frame_tac >> gvs[update_var_def]) (* INITIAL_FMP *)
+  >- base_frame_tac (* BUMP *)
   >- base_frame_tac (* INVOKE *)
+  >- base_frame_tac (* FMP_PARAM *)
+  >- (base_frame_tac >> gvs[update_var_def]) (* RETPC_PARAM *)
   >- base_frame_tac (* CALLER *)
   >- base_frame_tac (* CALLVALUE *)
   >- base_frame_tac (* CALLDATALOAD *)
@@ -696,11 +759,26 @@ Proof
   >- base_frame_tac (* BLOBHASH *)
   >- base_frame_tac (* BLOBBASEFEE *)
   >- base_frame_tac (* SHA3 *)
-  >- base_frame_tac (* CALL *)
-  >- base_frame_tac (* STATICCALL *)
-  >- base_frame_tac (* DELEGATECALL *)
-  >- base_frame_tac (* CREATE *)
-  >- base_frame_tac (* CREATE2 *)
+  >- (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+      ASM_REWRITE_TAC[opcode_case_def] >>
+      gvs all_rwts2 >>
+      rpt (CHANGED_TAC (BasicProvers.TOP_CASE_TAC >> gvs all_rwts2)))
+  >- (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+      ASM_REWRITE_TAC[opcode_case_def] >>
+      gvs all_rwts2 >>
+      rpt (CHANGED_TAC (BasicProvers.TOP_CASE_TAC >> gvs all_rwts2)))
+  >- (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+      ASM_REWRITE_TAC[opcode_case_def] >>
+      gvs all_rwts2 >>
+      rpt (CHANGED_TAC (BasicProvers.TOP_CASE_TAC >> gvs all_rwts2)))
+  >- (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+      ASM_REWRITE_TAC[opcode_case_def] >>
+      gvs all_rwts2 >>
+      rpt (CHANGED_TAC (BasicProvers.TOP_CASE_TAC >> gvs all_rwts2)))
+  >- (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+      ASM_REWRITE_TAC[opcode_case_def] >>
+      gvs all_rwts2 >>
+      rpt (CHANGED_TAC (BasicProvers.TOP_CASE_TAC >> gvs all_rwts2)))
   >- base_frame_tac (* LOG *)
   >- base_frame_tac (* SELFDESTRUCT *)
   >- base_frame_tac (* INVALID *)
@@ -759,8 +837,11 @@ Proof
   simp[setup_callee_update_var] >>
   BasicProvers.TOP_CASE_TAC >> simp[] >>
   BasicProvers.TOP_CASE_TAC >> simp[] >>
-  simp[merge_callee_update_var, bind_outputs_update_var] >>
-  Cases_on `bind_outputs inst.inst_outputs l (merge_callee_state s v')` >>
+  simp[merge_callee_update_var, adopt_return_fmp_update_var,
+       bind_outputs_update_var] >>
+  Cases_on
+    `bind_outputs inst.inst_outputs i.iret_values
+       (adopt_return_fmp i (merge_callee_state s v'))` >>
   gvs[]
 QED
 

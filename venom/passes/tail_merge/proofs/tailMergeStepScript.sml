@@ -9,7 +9,8 @@
 
 Theory tailMergeStep
 Ancestors
-  stateEquiv venomExecSemantics execEquivProofs
+  venomCallOracleDefs
+  stateEquiv venomExecSemantics execEquivProofs list rich_list
 Libs
   stateEquivTheory stateEquivProofsTheory
   venomExecSemanticsTheory venomInstTheory venomStateTheory
@@ -56,6 +57,22 @@ Proof
   drule listTheory.EL_DROP >> disch_then (fn th => simp[th]) >>
   `i + n < LENGTH ops2` by DECIDE_TAC >>
   drule listTheory.EL_DROP >> disch_then (fn th => simp[th])
+QED
+
+Theorem eval_operands_reverse_pointwise:
+  !ops1 ops2 s1 s2.
+    LENGTH ops1 = LENGTH ops2 /\
+    (!i. i < LENGTH ops1 ==>
+         eval_operand (EL i ops1) s1 = eval_operand (EL i ops2) s2) ==>
+    !i. i < LENGTH ops1 ==>
+        eval_operand (EL i (REVERSE ops1)) s1 =
+        eval_operand (EL i (REVERSE ops2)) s2
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `!j. j < LENGTH ops1 ==> _`
+    (qspec_then `PRE (LENGTH ops1 - i)` mp_tac) >>
+  (impl_tac >- DECIDE_TAC) >>
+  simp[EL_REVERSE]
 QED
 
 (* ================================================================
@@ -473,8 +490,9 @@ fun mk_cond_rewrite_fast opc = let
 
 (* Classify each opcode by its exec category *)
 val all_opcodes = TypeBase.constructors_of ``:opcode``;
-val excluded = [``JMP``, ``JNZ``, ``DJMP``, ``RET``, ``RETURN``, ``REVERT``,
-  ``STOP``, ``SINK``, ``SELFDESTRUCT``, ``INVALID``, ``PHI``, ``PARAM``];
+val excluded = [``JMP``, ``JNZ``, ``DJMP``, ``RET``, ``DRET``, ``RETFMP``,
+  ``RETURN``, ``REVERT``, ``STOP``, ``SINK``, ``SELFDESTRUCT``, ``INVALID``,
+  ``PHI``, ``PARAM``];
 val target_opcodes = filter (fn t => not (exists (aconv t) excluded)) all_opcodes;
 
 val fast_crs = map mk_cond_rewrite_fast target_opcodes;
@@ -550,7 +568,7 @@ val decompose_ops =
 val inline_close_defs = [execution_equiv_def, update_var_def,
   write_memory_with_expansion_def, read_memory_def,
   halt_state_def, revert_state_def, set_returndata_def,
-  mcopy_def, lookup_var_def,
+  mcopy_def, istore_def, mstore_def, lookup_var_def,
   finite_mapTheory.FLOOKUP_UPDATE];
 
 (* Standard inline tactic: imp_res_tac cr, unfold step_sim,
@@ -642,7 +660,13 @@ val ee_UNIV_exec_ext_call = prove(``
     | (Error _, Error _) => T
     | (Abort a1 s1', Abort a2 s2') => a1 = a2 /\ execution_equiv UNIV s1' s2'
     | _ => F``,
-  prove_exec_wrapper exec_ext_call_def);
+  (* Legacy concrete tactic: prove_exec_wrapper exec_ext_call_def *)
+  rpt strip_tac >> fs[execution_equiv_def] >>
+  Cases_on `inst1.inst_outputs` >> Cases_on `inst2.inst_outputs` >>
+  gvs[exec_ext_call_def, venom_call_request_def, read_memory_def] >>
+  rpt (CASE_TAC >> gvs[]) >>
+  simp[execution_equiv_def, update_var_def,
+       write_memory_with_expansion_def]);
 
 val ee_UNIV_exec_delegatecall = prove(``
   !inst1 inst2 s1 s2 gas addr ao as_ ro rs.
@@ -823,28 +847,35 @@ Proof
     Cases_on `LENGTH t' <> w2n c + 2`
     >- (fs[] >> gvs[step_sim_def])
     >> gvs[] >>
-    (* Both cr equations now have same structure. Extract concrete eval equalities
-       from the indexed quantifier, rewrite, then close via step_sim_def. *)
-    qpat_x_assum `!i. i < _ ==> (eval_operand (EL i _) _ = eval_operand (EL i _) _)`
-      (fn eval_th => let
-        fun spec_fwd n = let
-          val sp = SPEC (numSyntax.term_of_int n) eval_th
-          val (guard, _) = dest_imp (concl sp)
-          in MP sp (DECIDE guard) end
-        val e1 = SIMP_RULE (srw_ss()) [] (spec_fwd 1)
-        val e2 = SIMP_RULE (srw_ss()) [] (spec_fwd 2)
-        in ASSUME_TAC e1 >> ASSUME_TAC e2 >> ASSUME_TAC eval_th end) >>
-    `eval_operands (DROP 2 t) s1 = eval_operands (DROP 2 t') s2` by (
-      match_mp_tac eval_operands_DROP >> conj_tac >- simp[] >>
+    (* Match each operand by its original index, then reverse the indexed
+       agreement to obtain Python's physical LOG stack order. *)
+    `!i. i < LENGTH t ==>
+      eval_operand (EL i t) s1 = eval_operand (EL i t') s2` by (
       rpt strip_tac >>
-      first_x_assum (qspec_then `SUC i` mp_tac) >> simp[]) >>
-    (* Now fs[] rewrites eval_operand (HD t') s2 => eval_operand (HD t) s1 etc.
-       in the inst2 cr equation, unifying both case scrutinees. *)
-    fs[] >>
-    simp[step_sim_def] >>
-    Cases_on `eval_operand (HD t') s2` >> gvs[] >>
-    Cases_on `eval_operand (EL 1 t') s2` >> gvs[] >>
-    Cases_on `eval_operands (DROP 2 t') s2` >> gvs[execution_equiv_def])
+      qpat_x_assum `!j. j < _ ==>
+        eval_operand (EL j (Lit c::t)) s1 = _`
+        (qspec_then `SUC i` mp_tac) >> simp[]) >>
+    `!i. i < LENGTH t ==>
+      eval_operand (EL i (REVERSE t)) s1 =
+      eval_operand (EL i (REVERSE t')) s2` by
+      (qspecl_then [`t`, `t'`, `s1`, `s2`] mp_tac
+         eval_operands_reverse_pointwise >> simp[]) >>
+    `eval_operand (HD (REVERSE t)) s1 =
+     eval_operand (HD (REVERSE t')) s2` by
+      (qpat_x_assum `!i. i < LENGTH t ==> _`
+        (qspec_then `0` mp_tac) >> simp[]) >>
+    `eval_operand (EL 1 (REVERSE t)) s1 =
+     eval_operand (EL 1 (REVERSE t')) s2` by
+      (qpat_x_assum `!i. i < LENGTH t ==> _`
+        (qspec_then `1` mp_tac) >> simp[]) >>
+    `eval_operands (DROP 2 (REVERSE t)) s1 =
+     eval_operands (DROP 2 (REVERSE t')) s2` by
+      (irule eval_operands_DROP >> simp[]) >>
+    fs[] >> simp[step_sim_def] >>
+    Cases_on `eval_operand (HD (REVERSE t')) s2` >> gvs[] >>
+    Cases_on `eval_operand (EL 1 (REVERSE t')) s2` >> gvs[] >>
+    Cases_on `eval_operands (DROP 2 (REVERSE t')) s2` >>
+    gvs[execution_equiv_def])
   >- (Cases_on `h'` >> gvs[step_sim_def])
   >> Cases_on `h'` >> gvs[step_sim_def]
 QED
@@ -1146,7 +1177,12 @@ val exec_ext_call_output = prove(``
     !k. k < LENGTH inst1.inst_outputs ==>
         lookup_var (EL k inst1.inst_outputs) s1' =
         lookup_var (EL k inst2.inst_outputs) s2'``,
-  prove_exec_output_wrapper exec_ext_call_def);
+  (* Legacy concrete tactic: prove_exec_output_wrapper exec_ext_call_def *)
+  rpt strip_tac >> fs[execution_equiv_def] >>
+  gvs[exec_ext_call_def, venom_call_request_def, read_memory_def,
+      AllCaseEqs(), lookup_var_def, update_var_def,
+      finite_mapTheory.FLOOKUP_UPDATE] >>
+  `k = 0` by simp[] >> gvs[]);
 
 val exec_delegatecall_output = prove(``
   !inst1 inst2 s1 s2 g a ao as_ ro rs s1' s2'.
@@ -1181,17 +1217,39 @@ fun prove_output_inline cr opc =
   prove(``!inst1 inst2 s1 s2 s1' s2'.
     sim_pre inst1 inst2 s1 s2 /\ inst1.inst_opcode = ^opc /\
     inst1.inst_id = inst2.inst_id /\
+    ALL_DISTINCT inst1.inst_outputs /\
+    ALL_DISTINCT inst2.inst_outputs /\
     step_inst_base inst1 s1 = OK s1' /\
     step_inst_base inst2 s2 = OK s2' ==>
     !k. k < LENGTH inst1.inst_outputs ==>
         lookup_var (EL k inst1.inst_outputs) s1' =
         lookup_var (EL k inst2.inst_outputs) s2'``,
-  rpt gen_tac >> strip_tac >>
-  specialize_cr cr >>
-  fs[sim_pre_def] >> spec_evals >> decompose_ops >>
-  gvs (AllCaseEqs() :: output_close) >>
-  rpt (CASE_TAC >> gvs output_close) >>
-  metis_tac[]);
+  if aconv opc ``BUMP`` then
+    (rpt gen_tac >> strip_tac >>
+     specialize_cr cr >>
+     fs[sim_pre_def] >>
+     spec_evals >> decompose_ops >>
+     Cases_on `inst1.inst_outputs` >> gvs[] >>
+     Cases_on `t` >> gvs[] >>
+     Cases_on `inst2.inst_outputs` >> gvs[] >>
+     Cases_on `t` >> gvs[] >>
+     Cases_on `t'` >> gvs[] >>
+     qpat_x_assum `_ = OK s2'` mp_tac >>
+     qpat_x_assum `_ = OK s1'` mp_tac >>
+     CASE_TAC >> gvs[] >>
+     CASE_TAC >> gvs[] >>
+     rpt strip_tac >>
+     Cases_on `k` >>
+     gvs[lookup_var_def, update_var_def,
+         finite_mapTheory.FLOOKUP_UPDATE] >>
+     Cases_on `n` >> gvs[])
+  else
+    (rpt gen_tac >> strip_tac >>
+     specialize_cr cr >>
+     fs[sim_pre_def] >> spec_evals >> decompose_ops >>
+     gvs (AllCaseEqs() :: output_close) >>
+     rpt (CASE_TAC >> gvs output_close) >>
+     metis_tac[]));
 
 (* State-mod-only opcodes: modify state but don't use update_var.
    output_match is unprovable for these from sim_pre alone (ee UNIV doesn't
@@ -1214,6 +1272,8 @@ fun prove_output_ext_call bridge_thm cr opc =
   prove(``!inst1 inst2 s1 s2 s1' s2'.
     sim_pre inst1 inst2 s1 s2 /\ inst1.inst_opcode = ^opc /\
     inst1.inst_id = inst2.inst_id /\
+    ALL_DISTINCT inst1.inst_outputs /\
+    ALL_DISTINCT inst2.inst_outputs /\
     step_inst_base inst1 s1 = OK s1' /\
     step_inst_base inst2 s2 = OK s2' ==>
     !k. k < LENGTH inst1.inst_outputs ==>
@@ -1288,6 +1348,8 @@ Theorem step_inst_base_output_match:
   !inst1 inst2 s1 s2 s1' s2'.
     sim_pre inst1 inst2 s1 s2 /\
     inst1.inst_id = inst2.inst_id /\
+    ALL_DISTINCT inst1.inst_outputs /\
+    ALL_DISTINCT inst2.inst_outputs /\
     ~is_terminator inst1.inst_opcode /\
     is_output_opcode inst1.inst_opcode /\
     inst1.inst_opcode <> PHI /\ inst1.inst_opcode <> PARAM /\
@@ -1303,5 +1365,3 @@ Proof
   fs[is_terminator_def, is_output_opcode_def] >>
   output_match_dispatch_tac
 QED
-
-val _ = export_theory();

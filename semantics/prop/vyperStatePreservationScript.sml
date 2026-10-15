@@ -62,7 +62,7 @@ QED
 Theorem get_address_immutables_state:
   !cx st res st'. get_address_immutables cx st = (res, st') ==> st' = st
 Proof
-  rw[get_address_immutables_def, lift_option_def] >>
+  rw[get_address_immutables_def, lift_option_type_def] >>
   Cases_on `ALOOKUP st.immutables cx.txn.target` >> fs[return_def, raise_def]
 QED
 
@@ -84,7 +84,7 @@ QED
 Theorem get_immutables_state:
   !cx src st res st'. get_immutables cx src st = (res, st') ==> st' = st
 Proof
-  rw[get_immutables_def, bind_def, return_def, get_address_immutables_def, lift_option_def] >>
+  rw[get_immutables_def, bind_def, return_def, get_address_immutables_def, lift_option_type_def, lift_option_def] >>
   Cases_on `ALOOKUP st.immutables cx.txn.target` >> fs[return_def, raise_def]
 QED
 
@@ -97,11 +97,16 @@ Proof
   (qpat_x_assum `_ = (res, st')` mp_tac >>
    simp[get_immutables_def, get_address_immutables_def, bind_def,
         lift_option_def, lift_option_type_def, return_def, raise_def] >>
-   rpt CASE_TAC >> gvs[return_def, raise_def]) >>
+   CASE_TAC >> gvs[return_def, raise_def] >>
+   CASE_TAC >> gvs[return_def, raise_def]) >>
   PairCases_on `x'` >> gvs[] >>
   Cases_on `x'0` >> gvs[bind_def, return_def, raise_def] >>
   qpat_x_assum `_ = (res, st')` mp_tac >>
-  rpt (CASE_TAC >> gvs[return_def, raise_def, bind_def]) >>
+  CASE_TAC >> gvs[return_def, raise_def, bind_def] >>
+  CASE_TAC >> gvs[return_def, raise_def, bind_def] >>
+  CASE_TAC >> gvs[return_def, raise_def, bind_def] >>
+  CASE_TAC >> gvs[return_def, raise_def] >>
+  CASE_TAC >> gvs[return_def, raise_def] >>
   rpt strip_tac >> gvs[] >>
   drule read_storage_slot_state >> simp[]
 QED
@@ -207,13 +212,32 @@ Proof
   rw[transfer_value_def, bind_def, get_accounts_def, return_def,
      check_def, raise_def, update_accounts_def, ignore_bind_def,
      assert_def] >>
-  rpt (CASE_TAC >> gvs[return_def, raise_def]) >> gvs[]
+  gvs[AllCaseEqs(), return_def, raise_def]
 QED
 
 Theorem push_log_immutables:
   !l st res st'. push_log l st = (res, st') ==> st'.immutables = st.immutables
 Proof
   rw[push_log_def, return_def] >> gvs[]
+QED
+
+Theorem append_logs_immutables:
+  ∀logs st res st'.
+    append_logs logs st = (res, st') ⇒ st'.immutables = st.immutables
+Proof
+  rw[append_logs_def, return_def] >> gvs[]
+QED
+
+Theorem append_logs_accounts:
+  ∀logs st res st'. append_logs logs st = (res, st') ⇒ st'.accounts = st.accounts
+Proof
+  rw[append_logs_def, return_def] >> gvs[]
+QED
+
+Theorem append_logs_tStorage:
+  ∀logs st res st'. append_logs logs st = (res, st') ⇒ st'.tStorage = st.tStorage
+Proof
+  rw[append_logs_def, return_def] >> gvs[]
 QED
 
 Theorem acquire_nonreentrant_lock_immutables:

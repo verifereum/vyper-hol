@@ -15,28 +15,6 @@ Ancestors
   pred_set arithmetic list rich_list
 Libs
 
-(* Quotation-free tactic helpers *)
-fun find_free_var name (asl, w) =
-  let val vs = free_varsl (w::asl)
-  in valOf (List.find (fn v => fst (dest_var v) = name) vs) end;
-
-fun exists_var_tac name (g as (asl, w)) =
-  Tactic.EXISTS_TAC (find_free_var name g) g;
-
-fun exists_vars_tac names = Tactical.EVERY (map exists_var_tac names);
-
-fun with_var name (f : term -> tactic) (g as (asl, w)) : goal list * validation =
-  f (find_free_var name g) g;
-
-fun specl_vars_then names ttac thm (g as (asl, w)) =
-  let val tms = map (fn n => find_free_var n g) names
-  in ttac (SPECL tms thm) g end;
-
-fun exists_term_tac f names (g as (asl, w)) =
-  let val tms = map (fn n => find_free_var n g) names
-  in Tactic.EXISTS_TAC (f tms) g end;
-
-
 (* Safe/ASSERT/terminator trichotomy excludes INVOKE *)
 Triviality safe_assert_term_no_invoke[local]:
   !insts.
@@ -473,7 +451,8 @@ QED
 Triviality ssa_no_self_reference[local]:
   !fn bb i x.
     wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
-    MEM i bb.bb_instructions /\ MEM x i.inst_outputs /\
+    MEM i bb.bb_instructions /\ i.inst_opcode <> PHI /\
+    MEM x i.inst_outputs /\
     MEM (Var x) i.inst_operands ==> F
 Proof
   rpt strip_tac >>
@@ -487,7 +466,7 @@ Proof
         ?di dj. di < dj /\ dj < LENGTH bb.bb_instructions /\
                 EL di bb.bb_instructions = def_inst /\
                 EL dj bb.bb_instructions = i)` by
-    (fs[def_dominates_uses_def] >> metis_tac[]) >>
+    (fs[def_dominates_uses_def, def_available_at_def] >> metis_tac[]) >>
   (* Both i and def_inst are in fn_insts fn and have x in outputs.
      By all_distinct_flat_map_unique on fn_insts fn: def_inst = i *)
   (Q.SUBGOAL_THEN
@@ -1332,6 +1311,12 @@ Proof
         venomWfTheory.wf_ssa_def, ssa_form_def])
   (* 12: no self-reference *)
   >- (rpt strip_tac >>
+      `i.inst_opcode <> PHI` by (
+        qpat_x_assum `!bb' i'. _ ==> ac_is_safe_between i' \/ _`
+          (qspecl_then [`bb`, `i`] mp_tac) >>
+        simp[] >> strip_tac >>
+        gvs[ac_is_safe_between_def, venomInstTheory.is_terminator_def] >>
+        strip_tac >> gvs[venomInstTheory.is_terminator_def]) >>
       metis_tac[ssa_no_self_reference, MEM_FRONT_NOT_NIL,
         venomWfTheory.wf_function_def, bb_well_formed_def])
   (* 13: fresh vars not in DFG *)
@@ -1522,7 +1507,11 @@ Triviality ac_apply_merge_step_no_phi:
 Proof
   Cases_on `st` >>
   rw[ac_apply_merge_step_def, LET_THM] >>
-  rpt (CASE_TAC >> gvs[EVERY_APPEND])
+  TRY CASE_TAC >> gvs[EVERY_APPEND] >>
+  TRY CASE_TAC >> gvs[EVERY_APPEND] >>
+  TRY CASE_TAC >> gvs[EVERY_APPEND] >>
+  TRY CASE_TAC >> gvs[EVERY_APPEND] >>
+  TRY CASE_TAC >> gvs[EVERY_APPEND]
 QED
 
 Triviality ac_apply_merge_fold_no_phi:

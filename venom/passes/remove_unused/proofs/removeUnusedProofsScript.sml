@@ -34,7 +34,7 @@
 Theory removeUnusedProofs
 Ancestors
   removeUnusedDefs passSimulationProps analysisSimProps venomInstProps venomWf
-  execEquivProps livenessProofs passSharedDefs passSharedProps venomInst
+  opcodeClass execEquivProps livenessProofs passSharedDefs passSharedProps venomInst
   stateEquiv stateEquivProofs venomExecProofs venomExecProps
   venomState venomExecSemantics indexedLists cfgTransform cfgAnalysisProps pointerConfinedDefs
 Libs
@@ -42,17 +42,17 @@ Libs
 
 (* ===== Per-instruction: effect-free removable → state_equiv ===== *)
 
-(* ALLOCA is the only removable opcode that isn't effect-free.
-   All other removable opcodes are effect-free (pure computation,
-   state reads, SSA bookkeeping). *)
-Theorem removable_not_alloca_effect_free[local]:
-  !inst. is_removable inst /\ inst.inst_opcode <> ALLOCA ==>
+(* Every removable opcode outside the pass-owned must-preserve boundary is
+   effect-free (pure computation, state reads, or SSA bookkeeping). *)
+Theorem removable_not_preserved_effect_free[local]:
+  !inst. is_removable inst /\
+         ~remove_unused_must_preserve_op inst.inst_opcode ==>
          is_effect_free_op inst.inst_opcode
 Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode` >>
-  gvs[is_removable_def, is_volatile_def, is_terminator_def,
-      is_effect_free_op_def]
+  gvs[is_removable_def, remove_unused_must_preserve_op_def,
+      is_volatile_def, is_terminator_def, is_effect_free_op_def]
 QED
 
 (* Per-instruction NOP correctness: if an effect-free instruction
@@ -162,6 +162,11 @@ Proof
     `state_equiv vars (merge_callee_state s1 v)
                       (merge_callee_state s2 v)` by
       (irule merge_callee_state_equiv >> gvs[]) >>
+    `state_equiv vars (adopt_return_fmp i (merge_callee_state s1 v))
+                      (adopt_return_fmp i (merge_callee_state s2 v))` by
+      (Cases_on `i.iret_adopt_fmp` >>
+       gvs[adopt_return_fmp_def, state_equiv_def, execution_equiv_def,
+           lookup_var_def]) >>
     simp[bind_outputs_def] >>
     IF_CASES_TAC >> gvs[result_equiv_def] >>
     irule foldl_update_var_state_equiv >> gvs[])
@@ -207,7 +212,7 @@ Definition block_nop_outputs_def:
     set (FLAT (MAPi (\idx inst.
       let live = live_after_at lr bb.bb_label idx
                    (LENGTH bb.bb_instructions) in
-      if inst.inst_opcode <> ALLOCA /\
+      if ~remove_unused_must_preserve_op inst.inst_opcode /\
          is_removable inst /\
          EVERY (\v. ~MEM v live) inst.inst_outputs
       then inst.inst_outputs
@@ -323,11 +328,12 @@ Proof
   rpt (pop_assum mp_tac) >>
   rpt IF_CASES_TAC >> gvs[mk_nop_inst_def,
     instruction_component_equality] >>
-  gvs[is_removable_def]
+  gvs[is_removable_def, is_volatile_def]
+  >- simp[is_effect_free_op_def]
   >- simp[is_effect_free_op_def]
   >- (rpt strip_tac >>
-      irule removable_not_alloca_effect_free >>
-      simp[is_removable_def])
+      irule removable_not_preserved_effect_free >>
+      simp[is_removable_def, remove_unused_must_preserve_op_def])
 QED
 
 (* NOP'd instruction is not a terminator *)
@@ -427,7 +433,9 @@ Theorem step_inst_base_no_halt[local]:
   !inst s s'. step_inst_base inst s = Halt s' ==>
               is_terminator inst.inst_opcode
 Proof
-  step_base_result_tac
+  rpt strip_tac >>
+  drule opcodeClassTheory.step_inst_base_halt_opcodes >>
+  strip_tac >> gvs[is_terminator_def]
 QED
 
 Theorem step_inst_base_no_intret[local]:
@@ -444,7 +452,9 @@ Theorem step_inst_base_no_abort[local]:
     inst.inst_opcode = ASSERT_UNREACHABLE \/
     inst.inst_opcode = RETURNDATACOPY
 Proof
-  step_base_result_tac
+  rpt strip_tac >>
+  drule opcodeClassTheory.step_inst_base_abort_opcodes >>
+  strip_tac >> gvs[is_terminator_def]
 QED
 
 (* Effect-free non-INVOKE step_inst can only return OK or Error. *)
@@ -752,7 +762,8 @@ QED
 (* All NOP'd outputs across all blocks in one pass *)
 Definition single_pass_nop_outputs_def:
   single_pass_nop_outputs fn =
-    let lr = liveness_analyze fn in
+    let lr = protect_liveness fn (remove_unused_phi_vars fn)
+               (liveness_analyze fn) in
     BIGUNION (set (MAP (\bb.
       block_nop_outputs lr bb)
       fn.fn_blocks))
@@ -769,7 +780,8 @@ QED
 Theorem block_nop_outputs_subset_single_pass[local]:
   !fn bb.
     MEM bb fn.fn_blocks ==>
-    let lr = liveness_analyze fn in
+    let lr = protect_liveness fn (remove_unused_phi_vars fn)
+               (liveness_analyze fn) in
     let cfg = cfg_analyze fn in
     block_nop_outputs lr bb SUBSET single_pass_nop_outputs fn
 Proof
@@ -825,16 +837,6 @@ QED
 
 (* ===== Growing V block simulation with SSA + liveness ===== *)
 
-(* Removable non-NOP instructions have exactly one output *)
-Theorem removable_non_nop_single_output[local]:
-  !inst. is_removable inst /\ inst_wf inst /\
-         inst.inst_opcode <> NOP ==>
-         LENGTH inst.inst_outputs = 1
-Proof
-  rpt strip_tac >>
-  Cases_on `inst.inst_opcode` >>
-  gvs[is_removable_def, is_volatile_def, is_terminator_def, inst_wf_def]
-QED
 
 (* Block instructions are in fn_insts *)
 Theorem mem_block_fn_insts[local]:
@@ -1577,6 +1579,69 @@ QED
 
 (* ===== Operand condition from wf_ssa ===== *)
 
+Theorem protected_liveness_points_value[local]:
+  !fn protected lr point live.
+    MEM (point,live) (protected_liveness_points fn protected lr) ==>
+    live = protected ++ live_vars_at lr (FST point) (SND point)
+Proof
+  rw[protected_liveness_points_def, listTheory.MEM_FLAT,
+     listTheory.MEM_MAP] >>
+  gvs[PULL_EXISTS, listTheory.MEM_GENLIST] >> PairCases_on `point` >> gvs[]
+QED
+
+Theorem protected_liveness_points_key[local]:
+  !fn protected lr bb idx.
+    MEM bb fn.fn_blocks /\ idx <= LENGTH bb.bb_instructions ==>
+    MEM (bb.bb_label,idx)
+      (MAP FST (protected_liveness_points fn protected lr))
+Proof
+  rw[protected_liveness_points_def, listTheory.MEM_MAP,
+     listTheory.MEM_FLAT] >>
+  qexists_tac `((bb.bb_label,idx),
+    protected ++ live_vars_at lr bb.bb_label idx)` >> simp[] >>
+  qexists_tac `GENLIST
+    (\i. ((bb.bb_label,i),protected ++ live_vars_at lr bb.bb_label i))
+    (SUC (LENGTH bb.bb_instructions))` >> conj_tac
+  >- (qexists_tac `bb` >> simp[])
+  >- (simp[listTheory.MEM_GENLIST] >> qexists_tac `idx` >> simp[])
+QED
+
+Theorem live_vars_at_protect_liveness[local]:
+  !fn protected lr bb idx.
+    MEM bb fn.fn_blocks /\ idx <= LENGTH bb.bb_instructions ==>
+    live_vars_at (protect_liveness fn protected lr) bb.bb_label idx =
+    protected ++ live_vars_at lr bb.bb_label idx
+Proof
+  rpt strip_tac >>
+  qspecl_then [`fn`, `protected`, `lr`, `bb`, `idx`]
+    mp_tac protected_liveness_points_key >>
+  impl_tac >- simp[] >> strip_tac >>
+  rw[livenessDefsTheory.live_vars_at_def, protect_liveness_def,
+     dfAnalyzeDefsTheory.df_at_def, alistTheory.FLOOKUP_FUPDATE_LIST] >>
+  Cases_on `ALOOKUP
+    (REVERSE (protected_liveness_points fn protected lr))
+    (bb.bb_label,idx)`
+  >- (gvs[alistTheory.ALOOKUP_NONE, listTheory.MEM_MAP] >> metis_tac[]) >>
+  drule alistTheory.ALOOKUP_MEM >> strip_tac >>
+  `MEM ((bb.bb_label,idx),x)
+     (protected_liveness_points fn protected lr)` by gvs[] >>
+  drule protected_liveness_points_value >> strip_tac >>
+  gvs[livenessDefsTheory.live_vars_at_def, dfAnalyzeDefsTheory.df_at_def]
+QED
+
+Theorem live_after_protect_liveness:
+  !fn protected lr bb idx.
+    MEM bb fn.fn_blocks /\ idx < LENGTH bb.bb_instructions ==>
+    live_after_at (protect_liveness fn protected lr) bb.bb_label idx
+      (LENGTH bb.bb_instructions) =
+    protected ++ live_after_at lr bb.bb_label idx
+      (LENGTH bb.bb_instructions)
+Proof
+  rw[live_after_at_def] >>
+  BasicProvers.EVERY_CASE_TAC >> gvs[] >>
+  irule live_vars_at_protect_liveness >> simp[]
+QED
+
 (* Extract definition info from single_pass_nop_outputs membership *)
 Theorem nop_output_has_def[local]:
   !fn v.
@@ -1587,7 +1652,8 @@ Theorem nop_output_has_def[local]:
       MEM v (EL def_idx def_bb.bb_instructions).inst_outputs /\
       is_removable (EL def_idx def_bb.bb_instructions) /\
       ~MEM v (live_after_at (liveness_analyze fn) def_bb.bb_label def_idx
-                (LENGTH def_bb.bb_instructions))
+                (LENGTH def_bb.bb_instructions)) /\
+      ~MEM v (remove_unused_phi_vars fn)
 Proof
   rpt strip_tac >>
   gvs[single_pass_nop_outputs_def, LET_THM, block_nop_outputs_def] >>
@@ -1598,7 +1664,11 @@ Proof
   pop_assum mp_tac >> BasicProvers.EVERY_CASE_TAC >> gvs[] >>
   strip_tac >>
   qexistsl_tac [`def_bb`, `n`] >>
-  gvs[listTheory.EVERY_MEM]
+  gvs[listTheory.EVERY_MEM] >>
+  `~MEM v (live_after_at
+      (protect_liveness fn (remove_unused_phi_vars fn) (liveness_analyze fn))
+      def_bb.bb_label n (LENGTH def_bb.bb_instructions))` by metis_tac[] >>
+  drule_all live_after_protect_liveness >> strip_tac >> gvs[]
 QED
 
 (* Helper: v ∉ live_after_at implies v ∉ live_vars_at at SUC idx *)
@@ -2183,7 +2253,8 @@ Theorem remove_unused_phase1_correct[local]:
        MEM inst bb.bb_instructions /\
        MEM (Var v) inst.inst_operands ==>
        v NOTIN single_pass_nop_outputs fn) ==>
-    let lr = liveness_analyze fn in
+    let lr = protect_liveness fn (remove_unused_phi_vars fn)
+               (liveness_analyze fn) in
     let cfg = cfg_analyze fn in
     let bt = \bb. remove_unused_block lr bb in
     let elim = single_pass_nop_outputs fn in
@@ -2549,8 +2620,9 @@ Proof
      pred_setTheory.SUBSET_DEF] >>
   gvs[pred_setTheory.IN_BIGUNION, listTheory.MEM_MAP] >>
   rename1 `MEM bb fn.fn_blocks` >>
-  mp_tac (Q.SPECL [`liveness_analyze fn`, `bb`]
-    block_nop_outputs_subset_block_outputs) >>
+  mp_tac (Q.SPECL
+    [`protect_liveness fn (remove_unused_phi_vars fn) (liveness_analyze fn)`,
+     `bb`] block_nop_outputs_subset_block_outputs) >>
   rw[pred_setTheory.SUBSET_DEF] >>
   first_x_assum drule >> strip_tac >>
   gvs[listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
@@ -2687,13 +2759,15 @@ Proof
   (* Step 4: Outputs of transformed inst are either original or [].
      Since v ∈ outputs, must be original. *)
   `(remove_unused_inst
-      (live_after_at (liveness_analyze fn) bb'.bb_label m
-         (LENGTH bb'.bb_instructions))
+      (live_after_at
+         (protect_liveness fn (remove_unused_phi_vars fn) (liveness_analyze fn))
+         bb'.bb_label m (LENGTH bb'.bb_instructions))
       (EL m bb'.bb_instructions)).inst_outputs =
     (EL m bb'.bb_instructions).inst_outputs` by (
     mp_tac (Q.SPECL [
-      `live_after_at (liveness_analyze fn) bb'.bb_label m
-         (LENGTH bb'.bb_instructions)`,
+      `live_after_at
+         (protect_liveness fn (remove_unused_phi_vars fn) (liveness_analyze fn))
+         bb'.bb_label m (LENGTH bb'.bb_instructions)`,
       `EL m bb'.bb_instructions`] remove_unused_inst_outputs) >>
     strip_tac >> gvs[]) >>
   (* So v ∈ (EL m bb'.bb_instructions).inst_outputs *)
@@ -2719,7 +2793,7 @@ QED
 
 (* Original: ASSIGN v1 := 42, then STOP *)
 Definition cx_ru_fn1_def:
-  cx_ru_fn1 = ir_function "test_fn"
+  cx_ru_fn1 = mk_raw_function "test_fn"
     [basic_block "entry"
       [instruction 0 ASSIGN [Lit 42w] ["v1"];
        instruction 1 STOP [] []]]
@@ -2727,7 +2801,7 @@ End
 
 (* Transformed: NOP (v1 assignment removed), then STOP *)
 Definition cx_ru_fn2_def:
-  cx_ru_fn2 = ir_function "test_fn"
+  cx_ru_fn2 = mk_raw_function "test_fn"
     [basic_block "entry"
       [instruction 0 NOP [] [];
        instruction 1 STOP [] []]]
@@ -2752,10 +2826,10 @@ QED
 Theorem pass_correct_empty_false_for_nop[local]:
   ~pass_correct (state_equiv {}) (execution_equiv {}) (execution_equiv {})
     (\fuel. run_blocks fuel ARB cx_ru_fn1
-       (ARB with <|vs_vars := FEMPTY;
+       ((init_venom_state "entry") with <|vs_vars := FEMPTY;
                    vs_current_bb := "entry"; vs_inst_idx := 0; vs_halted := F|>))
     (\fuel. run_blocks fuel ARB cx_ru_fn2
-       (ARB with <|vs_vars := FEMPTY;
+       ((init_venom_state "entry") with <|vs_vars := FEMPTY;
                    vs_current_bb := "entry"; vs_inst_idx := 0; vs_halted := F|>))
 Proof
   simp[passSimulationDefsTheory.pass_correct_def,

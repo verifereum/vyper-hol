@@ -50,12 +50,33 @@ End
 (* Lattice value BEFORE instruction idx in block lbl.
    For idx = LENGTH instrs, returns the exit value (after last instruction).
    Returns bottom if not computed (block not yet processed). *)
+Theorem df_flookup_funion:
+  FLOOKUP (FUNION left right) key =
+    case FLOOKUP left key of
+      NONE => FLOOKUP right key
+    | SOME value => SOME value
+Proof
+  simp[finite_mapTheory.FLOOKUP_FUNION] >>
+  CASE_TAC >> gvs[finite_mapTheory.FLOOKUP_DEF]
+QED
+
 Definition df_at_def:
   df_at (bottom : 'a) (st : 'a df_state) lbl idx =
     case FLOOKUP st.ds_inst (lbl, idx) of
       NONE => bottom
     | SOME v => v
 End
+
+Theorem df_at_funion_compute[compute]:
+  df_at bottom
+    <| ds_inst := FUNION left right; ds_boundary := boundary |> lbl idx =
+  case FLOOKUP left (lbl,idx) of
+    NONE => df_at bottom
+      <| ds_inst := right; ds_boundary := boundary |> lbl idx
+  | SOME value => value
+Proof
+  simp[df_at_def, df_flookup_funion] >> CASE_TAC >> simp[]
+QED
 
 (* Boundary value for a block: exit (forward) or entry (backward).
    Returns bottom if not computed. *)

@@ -245,7 +245,7 @@ QED
 Theorem assign_subscripts_array_replace:
   ∀tv a k v.
     array_is_mutable a ∧ valid_index tv a k ⇒
-    assign_subscripts tv (ArrayV a) [IntSubscript k] (Replace v) =
+    assign_subscripts tv (ArrayV a) [ValueSubscript (IntV k)] (Replace v) =
     array_set_index tv a k v
 Proof
   rpt strip_tac >>
@@ -263,7 +263,7 @@ QED
 Theorem assign_array_read_same:
   ∀tv av i v.
     array_is_mutable av ∧ valid_index tv av i ⇒
-    ∃av'. assign_subscripts tv (ArrayV av) [IntSubscript i] (Replace v) =
+    ∃av'. assign_subscripts tv (ArrayV av) [ValueSubscript (IntV i)] (Replace v) =
             INL (ArrayV av') ∧
           array_index tv av' i = SOME v
 Proof
@@ -416,36 +416,37 @@ QED
 Theorem assign_subscripts_replace_INL:
   ∀tv a k v.
     array_is_mutable a ∧ valid_index tv a k ⇒
-    assign_subscripts tv (ArrayV a) [IntSubscript k] (Replace v) =
+    assign_subscripts tv (ArrayV a) [ValueSubscript (IntV k)] (Replace v) =
     INL (ArrayV (array_set tv a k v))
 Proof
   simp[assign_subscripts_array_replace, array_set_index_INL]
 QED
 
 (* assign_subscripts with Update — computes everything inline, no existentials *)
+val assign_subscripts_int_sub_clause = cj 5 assign_subscripts_def;
+val assign_subscripts_update_clause = cj 2 assign_subscripts_def;
+
 Theorem assign_subscripts_update_INL:
   ∀tv a k ty bop v.
     array_is_mutable a ∧ valid_index tv a k ∧
     IS_SOME (type_to_int_bound ty) ∧
-    ISL (evaluate_binop (THE (type_to_int_bound ty)) NoneTV bop
+    ISL (evaluate_binop (THE (type_to_int_bound ty))
+           (case tv of ArrayTV t _ => t | _ => NoneTV) bop
            (THE (array_index tv a k)) v) ⇒
-    assign_subscripts tv (ArrayV a) [IntSubscript k] (Update ty bop v) =
+    assign_subscripts tv (ArrayV a) [ValueSubscript (IntV k)] (Update ty bop v) =
     INL (ArrayV (array_set tv a k
-           (OUTL (evaluate_binop (THE (type_to_int_bound ty)) NoneTV bop
+           (OUTL (evaluate_binop (THE (type_to_int_bound ty))
+                    (case tv of ArrayTV t _ => t | _ => NoneTV) bop
                     (THE (array_index tv a k)) v))))
 Proof
   rpt strip_tac >>
-  `IS_SOME (array_index tv a k)` by simp[array_index_valid] >> let
-    val int_sub_clause = cj 5 assign_subscripts_def
-    val update_clause = cj 2 assign_subscripts_def
-  in
-    ONCE_REWRITE_TAC [int_sub_clause] >>
-    REWRITE_TAC [update_clause] >>
-    simp[LET_THM, array_set_index_INL] >>
-    Cases_on `array_index tv a k` >> fs[] >>
-    Cases_on `type_to_int_bound ty` >> fs[] >>
-    Cases_on `evaluate_binop x' NoneTV bop x v` >> fs[]
-  end
+  `IS_SOME (array_index tv a k)` by simp[array_index_valid] >>
+  ONCE_REWRITE_TAC [assign_subscripts_int_sub_clause] >>
+  REWRITE_TAC [assign_subscripts_update_clause] >>
+  simp[LET_THM, array_set_index_INL] >>
+  Cases_on `array_index tv a k` >> fs[] >>
+  Cases_on `type_to_int_bound ty` >> fs[] >>
+  CASE_TAC >> fs[] >> CASE_TAC >> fs[]
 QED
 
 (* ============================================================

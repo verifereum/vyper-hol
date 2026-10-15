@@ -1,6 +1,6 @@
 Theory vyperAST
 Ancestors
-  string words
+  ASCIInumbers string words vyperMisc[ignore_grammar]
 Libs
   cv_transLib
 
@@ -8,6 +8,19 @@ Type identifier = “:string”;
 
 (* Namespaced identifier: (source_id, name) where NONE = self, SOME n = module *)
 Type nsid = “:num option # identifier”;
+
+Definition pair_num_def:
+  pair_num (x:num) y = if x < y then y * y + x else x * x + x + y
+End
+
+val () = cv_auto_trans pair_num_def;
+
+Definition type_key_def:
+  type_key (NONE, name) = 2 * vyperMisc$string_to_num name ∧
+  type_key (SOME n, name) = 2 * pair_num n (vyperMisc$string_to_num name) + 1
+End
+
+val () = cv_auto_trans type_key_def;
 
 Datatype:
   bound
@@ -31,8 +44,8 @@ Datatype:
   = BaseT base_type
   | TupleT (type list)
   | ArrayT type bound
-  | StructT identifier
-  | FlagT identifier
+  | StructT nsid
+  | FlagT nsid
   | NoneT
 End
 
@@ -128,6 +141,8 @@ End
 Datatype:
   builtin
   = Len
+  | CalldataLen (* len(msg.data): complete calldata, including selector *)
+  | CalldataSlice num (* literal positive length; sole operand is start *)
   | Not
   | Neg
   | Abs           (* abs(x): absolute value with overflow check *)
@@ -172,7 +187,7 @@ Datatype:
   create_kind
   = CreateMinimalProxy  (* create_minimal_proxy_to(target) *)
   | CreateCopyOf        (* create_copy_of(target) *)
-  | CreateFromBlueprint num bool (* code_offset, raw_args *)
+  | CreateFromBlueprint bool (* raw_args; code_offset is an evaluated operand *)
                         (* create_from_blueprint(target, *args) *)
   | RawCreate           (* raw_create(bytecode, *args) *)
 End
@@ -180,17 +195,20 @@ End
 Datatype:
   call_target
   = IntCall nsid
-  | ExtCall bool ext_call_sig (* is_static, resolved signature *)
-                              (* is_static: T for staticcall (read-only), F for extcall *)
-                              (* Convention for Call (ExtCall is_static sig) args:
-                                 - staticcall (T): args = [target; arg1; arg2; ...]
-                                 - extcall (F):    args = [target; value; arg1; arg2; ...]
-                                 where target is address and value is uint256 to send *)
+  | ExtCall bool bool ext_call_sig (* is_static, skip_contract_check, resolved signature *)
+                                   (* is_static: T for staticcall (read-only), F for extcall *)
+                                   (* Convention for Call (ExtCall is_static sig) args:
+                                    - staticcall (T): args = [target; arg1; arg2; ...]
+                                    - extcall (F):    args = [target; value; arg1; arg2; ...]
+                                    where target is address and value is uint256 to send *)
   | Send
   (* raw_call(to, data, max_outsize=0, gas=gas, value=0, ...)
      args = [to_addr; data_bytes; value]
      Keyword args (compile-time constants) are in raw_call_flags *)
   | RawCallTarget raw_call_flags
+  (* raw_call(to, msg.data, ...): original transaction input, never a bounded
+     ordinary expression. Runtime operands are [to_addr; value]. *)
+  | RawCallCalldataTarget raw_call_flags
   (* raw_log(topics, data)
      args = [data_bytes; topic1; ...; topicN] where N ≤ 4 *)
   | RawLog
@@ -200,23 +218,31 @@ Datatype:
   (* selfdestruct(to) — terminus
      args = [to_addr] *)
   | SelfDestructTarget
-  (* create_*(target, *ctor_args, value=0, salt=NONE, revert_on_failure=T)
-     args = [target_or_bytecode; ctor_arg1; ...; value]
-     salt: NONE = CREATE, SOME s = CREATE2 with salt s *)
-  | CreateTarget create_kind bool (* revert_on_failure *)
+  (* Creation operands are stored in their runtime evaluation order:
+     - minimal proxy/copy: [target; value] ++ [salt]?
+     - blueprint: [target; value] ++ [salt]? ++ [code_offset] ++ ctor_args
+     - raw_create: [bytecode; value] ++ ctor_args ++ [salt]?
+     The first bool records salt presence; the second is revert_on_failure. *)
+  | CreateTarget create_kind bool (* has_salt *) bool (* revert_on_failure *)
 End
 
 Datatype:
   type_builtin = Empty | MaxValue | MinValue | Epsilon | Convert | Extract32
   | AbiDecode bool (* unwrap_tuple *)
-  | AbiEncode bool (* ensure_tuple *)
+  | AbiEncode bool (word8 list option) (* ensure_tuple, optional 4-byte method ID *)
 End
+
+Definition abi_encode_method_id_bytes_def:
+  abi_encode_method_id_bytes NONE = [] /\
+  abi_encode_method_id_bytes (SOME bs) = bs
+End
+
+val () = cv_auto_trans abi_encode_method_id_bytes_def;
 
 Datatype:
   expr
   = Name type identifier              (* local/scoped variable *)
-  | BareGlobalName type identifier    (* constant or immutable, looked up by bare name *)
-  | TopLevelName type nsid            (* module-qualified global: self.x, lib.x *)
+  | TopLevelName type nsid            (* top-level binding: self.x, module.x, constants/immutables *)
   | FlagMember type nsid identifier
   | IfExp type expr expr expr
   | Literal type literal
@@ -233,15 +259,13 @@ Datatype:
       (* expr option: default return value *)
 ; base_assignment_target
   = NameTarget identifier              (* local/scoped variable target *)
-  | BareGlobalNameTarget identifier    (* immutable target (assignment only during __init__) *)
-  | TopLevelNameTarget nsid            (* module-qualified global target *)
+  | TopLevelNameTarget nsid            (* top-level binding target *)
   | SubscriptTarget base_assignment_target expr
   | AttributeTarget base_assignment_target identifier
 End
 
 Definition expr_type_def:
   (expr_type (Name ty _) = ty) /\
-  (expr_type (BareGlobalName ty _) = ty) /\
   (expr_type (TopLevelName ty _) = ty) /\
   (expr_type (FlagMember ty _ _) = ty) /\
   (expr_type (IfExp ty _ _ _) = ty) /\

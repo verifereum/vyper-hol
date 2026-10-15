@@ -1,1147 +1,109 @@
 Theory jsonToVyper
 Ancestors
-  integer alist jsonAST vyperAST
+  integer alist rich_list jsonAST vyperAST jsonToVyperType jsonToVyperTopLevel
 Libs
-  cv_transLib intLib
-  integerTheory[qualified]
+  intLib
 
-
-(* Vyper uses negative source_ids for builtin modules (e.g., -2 for math).
-   We add this offset to convert source_ids to non-negative nums.
-   If Vyper adds more builtin modules, this value may need to increase. *)
-Definition builtin_source_id_offset_def:
-  builtin_source_id_offset = 2n
-End
-val () = cv_trans_deep_embedding EVAL builtin_source_id_offset_def;
-
-(* Convert a JSON source_id (int) to a vyperAST source_id (num option).
-   main_src_id maps to NONE (main module), others are offset to be non-negative. *)
-Definition source_id_to_nsid_def:
-  source_id_to_nsid (main_src_id:int) (src_id:int) =
-    if src_id = main_src_id then NONE
-    else SOME (Num (src_id + &builtin_source_id_offset))
-End
-val () = cv_auto_trans source_id_to_nsid_def;
-
-Definition json_nsid_to_nsid_def:
-  json_nsid_to_nsid (main_src_id:int) (src_id:int, name:string) =
-    (source_id_to_nsid main_src_id src_id, name) : nsid
-End
-(* ===== Type Translation ===== *)
-
-(* Define mutual recursion to handle lists explicitly *)
-Definition translate_type_def:
-  (translate_type (JT_Integer bits T) = BaseT (IntT bits)) /\
-  (translate_type (JT_Integer bits F) = BaseT (UintT bits)) /\
-  (translate_type (JT_BytesM m) = BaseT (BytesT (Fixed m))) /\
-  (translate_type (JT_String n) = BaseT (StringT n)) /\
-  (translate_type (JT_Bytes n) = BaseT (BytesT (Dynamic n))) /\
-  (translate_type (JT_StaticArray vt len) = ArrayT (translate_type vt) (Fixed len)) /\
-  (translate_type (JT_DynArray vt len) = ArrayT (translate_type vt) (Dynamic len)) /\
-  (translate_type (JT_Struct name) = StructT name) /\
-  (translate_type (JT_Flag name) = FlagT name) /\
-  (translate_type (JT_Tuple tys) = TupleT (translate_type_list tys)) /\
-  (translate_type (JT_HashMap _ _) = NoneT) /\
-  (translate_type JT_None = NoneT) /\
-  (translate_type (JT_Named name) =
-     if name = "bool" then BaseT BoolT
-     else if name = "address" ∨ name = "self" then BaseT AddressT
-     else if name = "decimal" then BaseT DecimalT
-     else StructT name) /\
-  (translate_type_list [] = []) /\
-  (translate_type_list (t::ts) = translate_type t :: translate_type_list ts)
-Termination
-  WF_REL_TAC `measure (\x. case x of
-    | INL t => json_type_size t
-    | INR ts => list_size json_type_size ts)` >> simp[]
+(* Vyper assigns the shared source ID -2 to builtin modules.  Canonicalize
+   colliding source IDs by matching the exact resolved paths emitted on import
+   metadata and imported module ASTs. *)
+Definition max_nonnegative_source_id_def:
+  max_nonnegative_source_id [] = 0 ∧
+  max_nonnegative_source_id
+      (JImportedModule (src_id : int) _ _ _ _ :: rest) =
+    MAX (Num src_id) (max_nonnegative_source_id rest)
 End
 
-val () = cv_auto_trans translate_type_def;
-
-(* ===== Helper: int_bound from type ===== *)
-
-(* ===== Operator Translation ===== *)
-
-Definition translate_binop_def:
-  (translate_binop JBop_Add = Add) /\
-  (translate_binop JBop_Sub = Sub) /\
-  (translate_binop JBop_Mult = Mul) /\
-  (translate_binop JBop_Div = Div) /\
-  (translate_binop JBop_FloorDiv = Div) /\
-  (translate_binop JBop_Mod = Mod) /\
-  (translate_binop JBop_Pow = Exp) /\
-  (translate_binop JBop_And = And) /\
-  (translate_binop JBop_Or = Or) /\
-  (translate_binop JBop_BitAnd = And) /\
-  (translate_binop JBop_BitOr = Or) /\
-  (translate_binop JBop_BitXor = XOr) /\
-  (translate_binop JBop_LShift = ShL) /\
-  (translate_binop JBop_RShift = ShR) /\
-  (translate_binop JBop_Eq = Eq) /\
-  (translate_binop JBop_NotEq = NotEq) /\
-  (translate_binop JBop_Lt = Lt) /\
-  (translate_binop JBop_LtE = LtE) /\
-  (translate_binop JBop_Gt = Gt) /\
-  (translate_binop JBop_GtE = GtE) /\
-  (translate_binop JBop_In = In) /\
-  (translate_binop JBop_NotIn = NotIn)
+Definition source_id_occurrences_def:
+  source_id_occurrences src_id [] = 0 ∧
+  source_id_occurrences src_id (JImportedModule sid _ _ _ _ :: rest) =
+    (if src_id = sid then 1 else 0) + source_id_occurrences src_id rest
 End
 
-val () = cv_auto_trans translate_binop_def;
-
-(* ===== Hex String to Word8 List Conversion ===== *)
-
-Definition hex_digit_to_num_def:
-  hex_digit_to_num c =
-    if c = #"0" then 0n else
-    if c = #"1" then 1 else
-    if c = #"2" then 2 else
-    if c = #"3" then 3 else
-    if c = #"4" then 4 else
-    if c = #"5" then 5 else
-    if c = #"6" then 6 else
-    if c = #"7" then 7 else
-    if c = #"8" then 8 else
-    if c = #"9" then 9 else
-    if c = #"a" \/ c = #"A" then 10 else
-    if c = #"b" \/ c = #"B" then 11 else
-    if c = #"c" \/ c = #"C" then 12 else
-    if c = #"d" \/ c = #"D" then 13 else
-    if c = #"e" \/ c = #"E" then 14 else
-    if c = #"f" \/ c = #"F" then 15 else 0
+Definition build_module_identity_map_aux_def:
+  build_module_identity_map_aux all_imports next [] = [] ∧
+  build_module_identity_map_aux all_imports (next : num)
+      (JImportedModule (src_id : int) _ resolved_path _ _ :: rest) =
+    let canonical_id : int =
+      if source_id_occurrences src_id all_imports = 1 then src_id else &next in
+    (resolved_path,canonical_id) ::
+      build_module_identity_map_aux all_imports (next + 1) rest
 End
 
-val () = cv_auto_trans hex_digit_to_num_def;
-
-Definition hex_pair_to_word8_def:
-  hex_pair_to_word8 hi lo = n2w (hex_digit_to_num hi * 16 + hex_digit_to_num lo) : word8
+Definition build_module_identity_map_def:
+  build_module_identity_map (main_src_id : int) imports =
+    build_module_identity_map_aux imports
+      (MAX (Num main_src_id) (max_nonnegative_source_id imports) + 1) imports
 End
 
-val () = cv_auto_trans hex_pair_to_word8_def;
-
-Definition hex_string_to_bytes_def:
-  (hex_string_to_bytes [] = []) /\
-  (hex_string_to_bytes [_] = []) /\
-  (hex_string_to_bytes (hi::lo::rest) = hex_pair_to_word8 hi lo :: hex_string_to_bytes rest)
-Termination
-  WF_REL_TAC `measure LENGTH` >> simp[]
+Definition lookup_module_identity_def:
+  lookup_module_identity resolved_path [] = NONE ∧
+  lookup_module_identity resolved_path ((path,src_id)::rest) =
+    if resolved_path = path then SOME src_id
+    else lookup_module_identity resolved_path rest
 End
 
-val () = cv_auto_trans hex_string_to_bytes_def;
-
-Definition strip_0x_def:
-  (strip_0x [] = []) /\
-  (strip_0x [c] = [c]) /\
-  (strip_0x (c1::c2::rest) =
-     if c1 = #"0" /\ (c2 = #"x" \/ c2 = #"X")
-     then rest
-     else c1::c2::rest)
+Definition canonicalize_import_infos_def:
+  canonicalize_import_infos identities [] = [] ∧
+  canonicalize_import_infos identities
+      (JImportInfo alias src_id qualified_name resolved_path :: rest) =
+    let canonical_id =
+      case lookup_module_identity resolved_path identities of
+      | SOME sid => sid
+      | NONE => src_id in
+    JImportInfo alias canonical_id qualified_name resolved_path ::
+      canonicalize_import_infos identities rest
 End
 
-val () = cv_auto_trans strip_0x_def;
-
-(* ===== Decimal String Parsing ===== *)
-
-Definition is_digit_def:
-  is_digit c =
-    (c = #"0" \/ c = #"1" \/ c = #"2" \/ c = #"3" \/ c = #"4" \/
-     c = #"5" \/ c = #"6" \/ c = #"7" \/ c = #"8" \/ c = #"9")
+Definition canonicalize_import_toplevels_def:
+  canonicalize_import_toplevels identities [] = [] ∧
+  canonicalize_import_toplevels identities (JTL_Import infos :: rest) =
+    JTL_Import (canonicalize_import_infos identities infos) ::
+      canonicalize_import_toplevels identities rest ∧
+  canonicalize_import_toplevels identities (top :: rest) =
+    top :: canonicalize_import_toplevels identities rest
 End
 
-val () = cv_auto_trans is_digit_def;
-
-Definition digit_to_num_def:
-  digit_to_num c =
-    if c = #"0" then 0n else
-    if c = #"1" then 1 else
-    if c = #"2" then 2 else
-    if c = #"3" then 3 else
-    if c = #"4" then 4 else
-    if c = #"5" then 5 else
-    if c = #"6" then 6 else
-    if c = #"7" then 7 else
-    if c = #"8" then 8 else
-    if c = #"9" then 9 else 0
+Definition canonicalize_imported_modules_def:
+  canonicalize_imported_modules identities [] = [] ∧
+  canonicalize_imported_modules identities
+      (JImportedModule src_id path resolved_path nr_default body :: rest) =
+    let canonical_id =
+      case lookup_module_identity resolved_path identities of
+      | SOME sid => sid
+      | NONE => src_id in
+    JImportedModule canonical_id path resolved_path nr_default
+      (canonicalize_import_toplevels identities body) ::
+    canonicalize_imported_modules identities rest
 End
 
-val () = cv_auto_trans digit_to_num_def;
-
-Definition num_of_digits_acc_def:
-  (num_of_digits_acc acc [] = acc) /\
-  (num_of_digits_acc acc (c::cs) =
-     num_of_digits_acc (acc * 10 + digit_to_num c) cs)
+Definition canonicalize_annotated_ast_imports_def:
+  canonicalize_annotated_ast_imports
+      (JAnnotatedAST (JModule main_src_id nr_default body) imports) =
+    let identities = build_module_identity_map main_src_id imports in
+    JAnnotatedAST
+      (JModule main_src_id nr_default
+        (canonicalize_import_toplevels identities body))
+      (canonicalize_imported_modules identities imports)
 End
 
-val () = cv_auto_trans num_of_digits_acc_def;
-
-Definition num_of_digits_def:
-  num_of_digits cs = num_of_digits_acc 0 cs
-End
-
-val () = cv_auto_trans num_of_digits_def;
-
-Definition strip_sign_def:
-  (strip_sign [] = (F, [])) /\
-  (strip_sign (c::cs) =
-     if c = #"-" then (T, cs)
-     else if c = #"+" then (F, cs)
-     else (F, c::cs))
-End
-
-val () = cv_auto_trans strip_sign_def;
-
-Definition drop_nondigit_def:
-  (drop_nondigit [] = []) /\
-  (drop_nondigit (c::cs) =
-     if is_digit c then (c::cs) else drop_nondigit cs)
-End
-
-val () = cv_auto_trans drop_nondigit_def;
-
-Definition split_at_e_def:
-  (split_at_e [] = ([], [])) /\
-  (split_at_e (c::cs) =
-     if c = #"e" \/ c = #"E" then ([], cs)
-     else let (l, r) = split_at_e cs in (c::l, r))
-End
-
-val () = cv_auto_trans split_at_e_def;
-
-Definition split_at_dot_def:
-  (split_at_dot [] = ([], [])) /\
-  (split_at_dot (c::cs) =
-     if c = #"." then ([], cs)
-     else let (l, r) = split_at_dot cs in (c::l, r))
-End
-
-val () = cv_auto_trans split_at_dot_def;
-
-Definition pad_right_zeros_def:
-  pad_right_zeros n xs =
-    if LENGTH xs < n then xs ++ REPLICATE (n - LENGTH xs) #"0" else xs
-End
-
-val () = cv_auto_trans pad_right_zeros_def;
-
-Definition decimal_string_to_int_def:
-  decimal_string_to_int s =
-    let (base, exp) = split_at_e s in
-    let (neg_exp, exp_rest) = strip_sign exp in
-    let exp_digits = FILTER is_digit exp_rest in
-    let exp_num = num_of_digits exp_digits in
-    let exp_int = if neg_exp then &0 - &exp_num else &exp_num in
-    let (bd, ad) = split_at_dot base in
-    let ad = FILTER is_digit ad in
-    let target = &10 + exp_int in
-    let pad_len =
-      if target <= & (LENGTH ad) then LENGTH ad else Num target in
-    let ad' = pad_right_zeros pad_len ad in
-    let ds = bd ++ ad' in
-    let (neg, ds_rest) = strip_sign ds in
-    let digits = FILTER is_digit ds_rest in
-    let n = num_of_digits digits in
-      if neg then &0 - &n else &n
-End
-
-val () = cv_auto_trans decimal_string_to_int_def;
-
-(* ===== BoolOp Helpers ===== *)
-(* These work on vyper expr lists (post-translation) *)
-
-Definition boolop_and_def:
-  (boolop_and [] = Literal (BaseT BoolT) (BoolL T)) /\
-  (boolop_and [e] = e) /\
-  (boolop_and (e::es) = IfExp (BaseT BoolT) e (boolop_and es) (Literal (BaseT BoolT) (BoolL F)))
-Termination
-  WF_REL_TAC `measure LENGTH` >> simp[]
-End
-
-val () = cv_auto_trans boolop_and_def;
-
-Definition boolop_or_def:
-  (boolop_or [] = Literal (BaseT BoolT) (BoolL F)) /\
-  (boolop_or [e] = e) /\
-  (boolop_or (e::es) = IfExp (BaseT BoolT) e (Literal (BaseT BoolT) (BoolL T)) (boolop_or es))
-Termination
-  WF_REL_TAC `measure LENGTH` >> simp[]
-End
-
-val () = cv_auto_trans boolop_or_def;
-
-(* ===== Builtin Call Helper (non-recursive, defined before translate_expr) ===== *)
-(* This takes already-translated args and kwargs *)
-
-Definition is_prefix_def:
-  (is_prefix [] _ = T) /\
-  (is_prefix _ [] = F) /\
-  (is_prefix (p::ps) (s::ss) = ((p = s) /\ is_prefix ps ss))
-End
-
-val () = cv_auto_trans is_prefix_def;
-
-Definition is_capitalized_def:
-  (is_capitalized [] = F) /\
-  (is_capitalized (c::cs) = (#"A" <= c /\ c <= #"Z"))
-End
-
-val () = cv_auto_trans is_capitalized_def;
-
-Definition is_cast_name_def:
-  is_cast_name name =
-    (is_capitalized name \/
-     is_prefix "uint" name \/
-     is_prefix "int" name \/
-     is_prefix "bytes" name \/
-     name = "decimal" \/
-     name = "bool" \/
-     name = "address")
-End
-
-val () = cv_auto_trans is_cast_name_def;
-
-Definition is_builtin_cast_name_def:
-  is_builtin_cast_name name =
-    (is_prefix "uint" name \/ is_prefix "Uint" name \/
-     is_prefix "int" name \/ is_prefix "Int" name \/
-     is_prefix "bytes" name \/ is_prefix "Bytes" name \/
-     name = "decimal" \/ name = "Decimal" \/
-     name = "bool" \/ name = "Bool" \/
-     name = "address" \/ name = "Address")
-End
-
-val () = cv_auto_trans is_builtin_cast_name_def;
-
-Definition denomination_of_string_def:
-  denomination_of_string s =
-    if s = "wei" then SOME Wei else
-    if s = "kwei" then SOME Kwei else
-    if s = "babbage" then SOME Kwei else
-    if s = "femtoether" then SOME Kwei else
-    if s = "mwei" then SOME Mwei else
-    if s = "lovelace" then SOME Mwei else
-    if s = "picoether" then SOME Mwei else
-    if s = "gwei" then SOME Gwei else
-    if s = "shannon" then SOME Gwei else
-    if s = "nanoether" then SOME Gwei else
-    if s = "szabo" then SOME Szabo else
-    if s = "microether" then SOME Szabo else
-    if s = "finney" then SOME Finney else
-    if s = "milliether" then SOME Finney else
-    if s = "ether" then SOME Ether else
-    if s = "kether" then SOME KEther else
-    if s = "grand" then SOME KEther else
-    if s = "mether" then SOME MEther else
-    if s = "gether" then SOME GEther else
-    if s = "tether" then SOME TEther else NONE
-End
-
-val () = cv_auto_trans denomination_of_string_def;
-
-Definition denomination_of_expr_def:
-  denomination_of_expr (Literal _ (StringL s)) = denomination_of_string s /\
-  denomination_of_expr _ = NONE
-End
-
-val () = cv_auto_trans denomination_of_expr_def;
-
-(* ===== Keyword Argument Helpers ===== *)
-
-(* Extract boolean kwarg: ALOOKUP on (name, expr) list, pattern match BoolL *)
-Definition kwarg_bool_def:
-  kwarg_bool key (kwargs : (identifier # expr) list) default =
-    case ALOOKUP kwargs key of
-      SOME (Literal _ (BoolL b)) => b
-    | _ => default
-End
-
-val () = cv_auto_trans kwarg_bool_def;
-
-(* Extract numeric kwarg: pattern match IntL *)
-Definition kwarg_num_def:
-  kwarg_num key (kwargs : (identifier # expr) list) (default : num) =
-    case ALOOKUP kwargs key of
-      SOME (Literal _ (IntL n)) => if n >= 0 then Num n else default
-    | _ => default
-End
-
-val () = cv_auto_trans kwarg_num_def;
-
-(* Extract expression kwarg with default *)
-Definition kwarg_expr_def:
-  kwarg_expr key (kwargs : (identifier # expr) list) default =
-    case ALOOKUP kwargs key of
-      SOME e => e
-    | NONE => default
-End
-
-val () = cv_auto_trans kwarg_expr_def;
-
-(* Check if kwarg is present *)
-Definition has_kwarg_def:
-  has_kwarg key (kwargs : (identifier # expr) list) =
-    IS_SOME (ALOOKUP kwargs key)
-End
-
-val () = cv_auto_trans has_kwarg_def;
-
-Definition make_builtin_call_def:
-  make_builtin_call name args kwargs ret_ty =
-    let ty = translate_type ret_ty in
-    if name = "len" then Builtin ty Len args
-    else if name = "concat" then
-      (case ret_ty of JT_String n => Builtin ty (Concat n) args
-                    | JT_Bytes n => Builtin ty (Concat n) args
-                    | _ => Builtin ty (Concat 0) args)
-    else if name = "slice" then
-      (case ret_ty of JT_String n => Builtin ty (Slice n) args
-                    | JT_Bytes n => Builtin ty (Slice n) args
-                    | _ => Builtin ty (Slice 0) args)
-    else if name = "keccak256" then Builtin ty Keccak256 args
-    else if name = "sha256" then Builtin ty Sha256 args
-    else if name = "floor" then Builtin ty Floor args
-    else if name = "ceil" then Builtin ty Ceil args
-    else if name = "blockhash" then Builtin ty BlockHash args
-    else if name = "blobhash" then Builtin ty BlobHash args
-    else if name = "ecrecover" then Builtin ty ECRecover args
-    else if name = "ecadd" then Builtin ty ECAdd args
-    else if name = "ecmul" then Builtin ty ECMul args
-    else if name = "empty" then TypeBuiltin ty Empty ty []
-    else if name = "max_value" then TypeBuiltin ty MaxValue ty []
-    else if name = "min_value" then TypeBuiltin ty MinValue ty []
-    else if name = "convert" then
-      (case args of (arg::_) => TypeBuiltin ty Convert ty [arg]
-                  | _ => TypeBuiltin ty Convert ty [])
-    else if name = "unsafe_add" then Builtin ty (Bop UnsafeAdd) args
-    else if name = "unsafe_sub" then Builtin ty (Bop UnsafeSub) args
-    else if name = "unsafe_mul" then Builtin ty (Bop UnsafeMul) args
-    else if name = "unsafe_div" then Builtin ty (Bop UnsafeDiv) args
-    else if name = "uint256_addmod" then Builtin ty AddMod args
-    else if name = "uint256_mulmod" then Builtin ty MulMod args
-    else if name = "pow_mod256" then Builtin ty PowMod256 args
-    else if name = "min" then Builtin ty (Bop Min) args
-    else if name = "max" then Builtin ty (Bop Max) args
-    else if name = "send" then Call ty Send args NONE
-    (* ===== Chain interaction builtins ===== *)
-    (* raw_call(to, data, max_outsize=0, gas=gas, value=0,
-                is_delegate_call=F, is_static_call=F, revert_on_failure=T)
-       Convention: args in Call = [to_addr; data_bytes; value] *)
-    else if name = "raw_call" then
-      let flags = <| rcf_max_outsize := kwarg_num "max_outsize" kwargs 0;
-                     rcf_is_delegate := kwarg_bool "is_delegate_call" kwargs F;
-                     rcf_is_static := kwarg_bool "is_static_call" kwargs F;
-                     rcf_revert_on_failure := kwarg_bool "revert_on_failure" kwargs T |> in
-      let value_e = kwarg_expr "value" kwargs (Literal (BaseT (UintT 256)) (IntL 0)) in
-      Call ty (RawCallTarget flags) (args ++ [value_e]) NONE
-    else if name = "raw_log" then Call ty RawLog args NONE
-    else if name = "raw_revert" then Call ty RawRevert args NONE
-    else if name = "selfdestruct" then Call ty SelfDestructTarget args NONE
-    else if name = "create_minimal_proxy_to" ∨ name = "create_forwarder_to" then
-      let rof = kwarg_bool "revert_on_failure" kwargs T in
-      let value_e = kwarg_expr "value" kwargs (Literal (BaseT (UintT 256)) (IntL 0)) in
-      Call ty (CreateTarget CreateMinimalProxy rof) (args ++ [value_e]) NONE
-    else if name = "create_copy_of" then
-      let rof = kwarg_bool "revert_on_failure" kwargs T in
-      let value_e = kwarg_expr "value" kwargs (Literal (BaseT (UintT 256)) (IntL 0)) in
-      Call ty (CreateTarget CreateCopyOf rof) (args ++ [value_e]) NONE
-    else if name = "create_from_blueprint" then
-      let rof = kwarg_bool "revert_on_failure" kwargs T in
-      let code_offset = kwarg_num "code_offset" kwargs 3 in
-      let raw_args_flag = kwarg_bool "raw_args" kwargs F in
-      let value_e = kwarg_expr "value" kwargs (Literal (BaseT (UintT 256)) (IntL 0)) in
-      Call ty (CreateTarget (CreateFromBlueprint code_offset raw_args_flag) rof) (args ++ [value_e]) NONE
-    else if name = "raw_create" then
-      let rof = kwarg_bool "revert_on_failure" kwargs T in
-      let value_e = kwarg_expr "value" kwargs (Literal (BaseT (UintT 256)) (IntL 0)) in
-      Call ty (CreateTarget RawCreate rof) (args ++ [value_e]) NONE
-    else if name = "abs" then Builtin ty Abs args
-    else if name = "as_wei_value" then
-      (case args of
-         (v::d::_) =>
-           (case denomination_of_expr d of
-              SOME dn => Builtin ty (AsWeiValue dn) [v]
-            | NONE => Builtin ty (AsWeiValue Wei) [v])
-       | (v::_) => Builtin ty (AsWeiValue Wei) [v]
-       | _ => Builtin ty (AsWeiValue Wei) [])
-    else if name = "uint2str" then
-      (case ret_ty of JT_String n => Builtin ty (Uint2Str n) args
-                    | _ => Builtin ty (Uint2Str 0) args)
-    else if name = "abi_decode" ∨ name = "_abi_decode" then
-      let unwrap = kwarg_bool "unwrap_tuple" kwargs T in
-      (case args of (arg::_) => TypeBuiltin ty (AbiDecode unwrap) (translate_type ret_ty) [arg]
-                  | _ => TypeBuiltin ty (AbiDecode unwrap) (translate_type ret_ty) [])
-    else if name = "abi_encode" ∨ name = "_abi_encode" then
-      let ensure = kwarg_bool "ensure_tuple" kwargs T in
-      let arg_types = TupleT (MAP expr_type args) in
-      TypeBuiltin ty (AbiEncode ensure) arg_types args
-    else if name = "extract32" then
-      TypeBuiltin ty Extract32 (translate_type ret_ty) args
-    else if name = "method_id" then
-      Builtin ty MethodId args
-    (* Struct constructor, cast, or regular call *)
-    else (case ret_ty of
-          | JT_Struct _ => StructLit ty (NONE, name) kwargs
-          | JT_Named _ =>
-              if kwargs <> [] /\ ~is_builtin_cast_name name then
-                StructLit ty (NONE, name) kwargs
-              else
-                if is_cast_name name then
-                    if is_builtin_cast_name name then
-                      (case ty of
-                         BaseT _ =>
-                           (case args of
-                              (arg::_) => TypeBuiltin ty Convert ty [arg]
-                            | _ => TypeBuiltin ty Convert ty [])
-                       | _ =>
-                           (case args of
-                              (arg::_) => arg
-                            | _ => Call ty (IntCall (NONE, name)) args NONE))
-                    else
-                      (case args of
-                         (arg::_) => arg
-                       | _ => Call ty (IntCall (NONE, name)) args NONE)
-                else Call ty (IntCall (NONE, name)) args NONE
-          | _ =>
-              if is_cast_name name then
-                  if is_builtin_cast_name name then
-                    (case ty of
-                       BaseT _ =>
-                         (case args of
-                            (arg::_) => TypeBuiltin ty Convert ty [arg]
-                          | _ => TypeBuiltin ty Convert ty [])
-                     | _ =>
-                         (case args of
-                            (arg::_) => arg
-                          | _ => Call ty (IntCall (NONE, name)) args NONE))
-                  else
-                    (case args of
-                       (arg::_) => arg
-                     | _ => Call ty (IntCall (NONE, name)) args NONE)
-              else Call ty (IntCall (NONE, name)) args NONE)
-End
-
-val () = cv_auto_trans make_builtin_call_def;
-
-(* ===== Module Call Helpers ===== *)
-
-(* Extract function name from a func expression *)
-(* For JE_Attribute base fname, returns fname *)
-Definition extract_func_name_def:
-  (extract_func_name (JE_Attribute _ fname _ _ _ _ _) = fname) /\
-  (extract_func_name (JE_Name name _ _ _) = name) /\
-  (extract_func_name _ = "")
-End
-
-val () = cv_auto_trans extract_func_name_def;
-
-(* Check if a func expression has interface typeclass (for cross-module interface constructors) *)
-Definition is_interface_constructor_def:
-  (is_interface_constructor (JE_Attribute _ _ (SOME tc) _ _ _ _) = (tc = "interface")) /\
-  (is_interface_constructor (JE_Name _ (SOME tc) _ _) = (tc = "interface")) /\
-  (is_interface_constructor _ = F)
-End
-
-val () = cv_auto_trans is_interface_constructor_def;
-
-(* Extract the innermost module's source_id from a module chain *)
-(* For lib1: returns SOME 0 (from JE_Name) *)
-(* For lib1.lib2: returns SOME 1 (from the .lib2 Attribute) *)
-Definition extract_innermost_module_src_def:
-  (* Attribute with module/interface typeclass has source_id directly *)
-  (extract_innermost_module_src (JE_Attribute _ _ (SOME tc) _ _ src_id_opt _) =
-    if tc = "module" ∨ tc = "interface" then SOME src_id_opt else NONE) /\
-  (* JE_Name with module/interface typeclass *)
-  (extract_innermost_module_src (JE_Name _ (SOME tc) src_id_opt _) =
-    if tc = "module" ∨ tc = "interface" then SOME src_id_opt else NONE) /\
-  (* Other cases *)
-  (extract_innermost_module_src _ = NONE)
-End
-
-val () = cv_auto_trans extract_innermost_module_src_def;
-
-(* Check if an expression is a module reference (not an interface-typed value).
-   Used to detect nested module attribute access: mod3.mod2.mod1.X
-   Interface-typed expressions like self.f should NOT match, because they are
-   runtime values with attributes like .address and .balance. *)
-Definition is_module_expr_def:
-  (is_module_expr (JE_Attribute _ _ (SOME tc) _ _ _ _) = (tc = "module")) /\
-  (is_module_expr (JE_Name _ (SOME tc) _ _) = (tc = "module")) /\
-  (is_module_expr _ = F)
-End
-
-val () = cv_auto_trans is_module_expr_def;
-
-(* Detect cross-module flag member pattern: lib1.Action.BUY or lib1.lib2.Roles3.NOBODY *)
-(* Returns SOME (src_id_opt, flag_name) if it matches, NONE otherwise *)
-(* e is the expression immediately under the flag member attribute (i.e., the flag type expression) *)
-(* For lib1.Roles.ADMIN: e = JE_Attribute (JE_Name "lib1"...) "Roles" _ _ *)
-(* For lib1.lib2.Roles3.NOBODY: e = JE_Attribute (JE_Attribute ... "lib2" (SOME "module") (SOME 1)) "Roles3" _ _ *)
-Definition extract_module_flag_def:
-  (* Attribute expression for the flag type - look inside for the module *)
-  (extract_module_flag main_src_id (JE_Attribute inner flag_name _ _ _ _ _) =
-    case extract_innermost_module_src inner of
-    | SOME src_id => SOME (source_id_to_nsid main_src_id src_id, flag_name)
-    | NONE => NONE) /\
-  (extract_module_flag main_src_id _ = NONE)
-End
-
-val () = cv_auto_trans extract_module_flag_def;
-
-(* ===== Constants/Immutables and Name Helpers ===== *)
-
-(* Collect immutable and constant variable names from module toplevels.
-   Both immutables (is_immutable = T) and constants (const_val = SOME _)
-   are stored in the immutables map at runtime, so both need BareGlobalName. *)
 Definition collect_consts_and_immutables_def:
   collect_consts_and_immutables [] = [] ∧
   collect_consts_and_immutables (t :: rest) =
     (case t of
-       JTL_VariableDecl name _ _ T _ _ => name :: collect_consts_and_immutables rest
-     | JTL_VariableDecl name _ _ _ _ (SOME _) => name :: collect_consts_and_immutables rest
+       JTL_VariableDecl name _ _ _ T _ _ => name :: collect_consts_and_immutables rest
+     | JTL_VariableDecl name _ _ _ _ _ (SOME _) => name :: collect_consts_and_immutables rest
      | _ => collect_consts_and_immutables rest)
 End
 
-val () = cv_auto_trans collect_consts_and_immutables_def;
 
-(* Make Name or BareGlobalName based on constants/immutables list *)
-Definition make_name_def:
-  make_name ctx ty id =
-    if MEM id (SND ctx) then BareGlobalName ty id else Name ty id
-End
-
-(* Make NameTarget or BareGlobalNameTarget based on constants/immutables list *)
-Definition make_name_target_def:
-  make_name_target ctx id =
-    if MEM id (SND ctx) then BareGlobalNameTarget id else NameTarget id
-End
-
-(* ===== Expression Translation ===== *)
-
-(* Find a keyword by name in a keyword list, returns the json_expr if found *)
-Definition find_keyword_def:
-  find_keyword name [] = NONE ∧
-  find_keyword name (JKeyword kw_name kw_val :: rest) =
-    if kw_name = name then SOME kw_val
-    else find_keyword name rest
-End
-
-val () = cv_auto_trans find_keyword_def;
-
-(* Lemma: if find_keyword returns SOME v, then v is in the keyword list *)
-Theorem find_keyword_MEM:
-  ∀name kws v. find_keyword name kws = SOME v ⇒ ∃k. MEM (JKeyword k v) kws
-Proof
-  Induct_on `kws` >> rw[find_keyword_def] >>
-  Cases_on `h` >> gvs[find_keyword_def] >>
-  Cases_on `s = name` >> gvs[] >>
-  metis_tac[]
-QED
-
-(* Size lemma for termination: keyword value is smaller than keyword list *)
-Theorem find_keyword_size:
-  ∀name kws v.
-    find_keyword name kws = SOME v ⇒
-    json_expr_size v < list_size json_keyword_size kws
-Proof
-  Induct_on `kws` >> rw[find_keyword_def] >>
-  Cases_on `h` >> gvs[find_keyword_def, json_expr_size_def] >>
-  Cases_on `s = name` >> gvs[json_expr_size_def] >>
-  res_tac >> gvs[]
-QED
-
-Definition translate_expr_def:
-  (translate_expr ctx (JE_Int v ty) =
-    Literal (translate_type ty) (IntL v)) /\
-
-  (translate_expr ctx (JE_Decimal s) =
-    Literal (BaseT DecimalT) (DecimalL (decimal_string_to_int s))) /\
-
-  (translate_expr ctx (JE_Str len s) =
-    Literal (BaseT (StringT len)) (StringL s)) /\
-
-  (translate_expr ctx (JE_GenericStr s) =
-    Literal (BaseT (StringT (STRLEN s))) (StringL s)) /\
-
-  (translate_expr ctx (JE_Bytes len hex) =
-    Literal (BaseT (BytesT (Dynamic len))) (BytesL (hex_string_to_bytes (FILTER isHexDigit (strip_0x hex))))) /\
-
-  (translate_expr ctx (JE_Hex hex) =
-    let bytes = hex_string_to_bytes (FILTER isHexDigit (strip_0x hex)) in
-    Literal (BaseT (BytesT (Fixed (LENGTH bytes)))) (BytesL bytes)) /\
-
-  (translate_expr ctx (JE_Bool b) = Literal (BaseT BoolT) (BoolL b)) /\
-
-  (translate_expr ctx (JE_Name id tc src_id_opt ret_ty) =
-    let ty = translate_type ret_ty in
-    if id = "self" then Builtin (BaseT AddressT) (Env SelfAddr) [] else make_name ctx ty id) /\
-
-  (* Special attributes: msg.*, block.*, tx.*, self.*, module.*, flag members *)
-  (* attr_src_id_opt is from variable_reads on the outer Attribute (for self.x storage access) *)
-  (* base_type_name is the type name of the base expression (e.g., "address" for addr.code) *)
-  (* base_typeclass is the typeclass of the base expression (e.g., "interface" for interface.address) *)
-  (translate_expr ctx (JE_Attribute (JE_Name obj tc src_id_opt _) attr result_tc base_type_name base_typeclass attr_src_id_opt ret_ty) =
-    let ty = translate_type ret_ty in
-    (* Same-module flag member: Action.BUY where tc = SOME "flag" *)
-    if tc = SOME "flag" /\ result_tc = SOME "flag" then FlagMember ty (source_id_to_nsid (FST ctx) src_id_opt, obj) attr
-    else if obj = "msg" /\ attr = "sender" then Builtin (BaseT AddressT) (Env Sender) []
-    else if obj = "msg" /\ attr = "value" then Builtin (BaseT (UintT 256)) (Env ValueSent) []
-    else if obj = "block" /\ attr = "timestamp" then Builtin (BaseT (UintT 256)) (Env TimeStamp) []
-    else if obj = "block" /\ attr = "number" then Builtin (BaseT (UintT 256)) (Env BlockNumber) []
-    else if obj = "block" /\ attr = "prevhash" then Builtin (BaseT (BytesT (Fixed 32))) (Env PrevHash) []
-    else if obj = "block" /\ attr = "blobbasefee" then Builtin (BaseT (UintT 256)) (Env BlobBaseFee) []
-    else if obj = "tx" /\ attr = "gasprice" then Builtin (BaseT (UintT 256)) (Env GasPrice) []
-    else if obj = "chain" /\ attr = "id" then Builtin (BaseT (UintT 256)) (Env ChainId) []
-    else if obj = "self" /\ attr = "balance" then
-      Builtin (BaseT (UintT 256)) (Acc Balance) [Builtin (BaseT AddressT) (Env SelfAddr) []]
-    else if obj = "self" /\ attr = "code" then
-      Builtin (BaseT (BytesT (Dynamic 24576))) (Acc Code) [Builtin (BaseT AddressT) (Env SelfAddr) []]
-    (* self.x: use attr_src_id_opt from variable_reads for cross-module storage access *)
-    else if obj = "self" then TopLevelName ty (source_id_to_nsid (FST ctx) attr_src_id_opt, attr)
-    (* Module variable access (lib1.x): use src_id_opt from module type *)
-    else if tc = SOME "module" then TopLevelName ty (source_id_to_nsid (FST ctx) src_id_opt, attr)
-    else if attr = "balance" /\ base_type_name = SOME "address" then Builtin (BaseT (UintT 256)) (Acc Balance) [make_name ctx ty obj]
-    else if attr = "address" /\ base_type_name = SOME "address" then Builtin (BaseT AddressT) (Acc Address) [make_name ctx ty obj]
-    else if attr = "address" /\ base_typeclass = SOME "interface" then make_name ctx ty obj (* interface.address = interface (identity) *)
-    else if attr = "is_contract" /\ base_type_name = SOME "address" then Builtin (BaseT BoolT) (Acc IsContract) [make_name ctx ty obj]
-    else if attr = "codesize" /\ base_type_name = SOME "address" then Builtin (BaseT (UintT 256)) (Acc Codesize) [make_name ctx ty obj]
-    else if attr = "codehash" /\ base_type_name = SOME "address" then Builtin (BaseT (BytesT (Fixed 32))) (Acc Codehash) [make_name ctx ty obj]
-    else if attr = "code" /\ base_type_name = SOME "address" then Builtin (BaseT (BytesT (Dynamic 24576))) (Acc Code) [make_name ctx ty obj]
-    else Attribute ty (make_name ctx ty obj) attr) /\
-
-  (* General attribute - handles nested and simple cases *)
-  (* Check for cross-module flag access: lib1.Action.BUY *)
-  (* base_type_name is the type name of the base expression (e.g., "address" for addr.code) *)
-  (* base_typeclass is the typeclass of the base expression (e.g., "interface" for interface.address) *)
-  (translate_expr ctx (JE_Attribute e attr result_tc base_type_name base_typeclass attr_src_id_opt ret_ty) =
-    let ty = translate_type ret_ty in
-    if result_tc = SOME "flag" then
-      case extract_module_flag (FST ctx) e of
-      | SOME (src_id_opt, flag_name) => FlagMember ty (src_id_opt, flag_name) attr
-      | NONE => Attribute ty (translate_expr ctx e) attr
-    (* Nested module access: mod3.mod2.mod1.X — use variable_reads source_id *)
-    else if is_module_expr e then
-      TopLevelName ty (source_id_to_nsid (FST ctx) attr_src_id_opt, attr)
-    else if attr = "balance" /\ base_type_name = SOME "address" then Builtin (BaseT (UintT 256)) (Acc Balance) [translate_expr ctx e]
-    else if attr = "address" /\ base_type_name = SOME "address" then Builtin (BaseT AddressT) (Acc Address) [translate_expr ctx e]
-    else if attr = "address" /\ base_typeclass = SOME "interface" then translate_expr ctx e (* interface.address = interface (identity) *)
-    else if attr = "is_contract" /\ base_type_name = SOME "address" then Builtin (BaseT BoolT) (Acc IsContract) [translate_expr ctx e]
-    else if attr = "codesize" /\ base_type_name = SOME "address" then Builtin (BaseT (UintT 256)) (Acc Codesize) [translate_expr ctx e]
-    else if attr = "codehash" /\ base_type_name = SOME "address" then Builtin (BaseT (BytesT (Fixed 32))) (Acc Codehash) [translate_expr ctx e]
-    else if attr = "code" /\ base_type_name = SOME "address" then Builtin (BaseT (BytesT (Dynamic 24576))) (Acc Code) [translate_expr ctx e]
-    else Attribute ty (translate_expr ctx e) attr) /\
-
-  (* Subscript *)
-  (translate_expr ctx (JE_Subscript arr idx ret_ty) =
-    Subscript (translate_type ret_ty) (translate_expr ctx arr) (translate_expr ctx idx)) /\
-
-  (* NamedExpr - only appears in initializes:/uses: annotations, not in executable code *)
-  (translate_expr ctx (JE_NamedExpr target value) =
-    Literal (BaseT BoolT) (BoolL T)) /\
-
-  (* BinOp *)
-  (translate_expr ctx (JE_BinOp l op r ret_ty) =
-    Builtin (translate_type ret_ty) (Bop (translate_binop op)) [translate_expr ctx l; translate_expr ctx r]) /\
-
-  (* BoolOp - convert to nested IfExp *)
-  (translate_expr ctx (JE_BoolOp JBoolop_And es) =
-    boolop_and (translate_expr_list ctx es)) /\
-  (translate_expr ctx (JE_BoolOp JBoolop_Or es) =
-    boolop_or (translate_expr_list ctx es)) /\
-
-  (* UnaryOp *)
-  (translate_expr ctx (JE_UnaryOp JUop_USub e ret_ty) =
-    Builtin (translate_type ret_ty) Neg [translate_expr ctx e]) /\
-  (translate_expr ctx (JE_UnaryOp JUop_Not e ret_ty) =
-    Builtin (BaseT BoolT) Not [translate_expr ctx e]) /\
-  (translate_expr ctx (JE_UnaryOp JUop_Invert e ret_ty) =
-    Builtin (translate_type ret_ty) Not [translate_expr ctx e]) /\
-
-  (* IfExp (ternary) *)
-  (translate_expr ctx (JE_IfExp test body orelse ret_ty) =
-    IfExp (translate_type ret_ty) (translate_expr ctx test) (translate_expr ctx body) (translate_expr ctx orelse)) /\
-
-  (* Tuple *)
-  (translate_expr ctx (JE_Tuple es) =
-    Builtin (TupleT []) (MakeArray NONE (Fixed (LENGTH es))) (translate_expr_list ctx es)) /\
-
-  (* List - array literal *)
-  (translate_expr ctx (JE_List es ty) =
-    let ty' = translate_type ty in
-    case ty of
-    | JT_StaticArray vt len =>
-        Builtin ty' (MakeArray (SOME (translate_type vt)) (Fixed len)) (translate_expr_list ctx es)
-    | JT_DynArray vt len =>
-        Builtin ty' (MakeArray (SOME (translate_type vt)) (Dynamic len)) (translate_expr_list ctx es)
-    | _ =>
-        Builtin ty' (MakeArray NONE (Fixed (LENGTH es))) (translate_expr_list ctx es)) /\
-
-  (* Call - single case with internal dispatch to avoid pattern completion issues *)
-  (* JE_Call now includes source_id for module calls *)
-  (translate_expr ctx (JE_Call func args kwargs ret_ty src_id_opt) =
-    let args' = translate_expr_list ctx args in
-    let kwargs' = translate_kwargs ctx kwargs in
-    let rty = translate_type ret_ty in
-    case func of
-    | JE_Name name (SOME "interface") _ _ => HD args'
-    | JE_Name name _ _ _ => make_builtin_call name args' kwargs' ret_ty
-    (* lib.__at__(addr) / lib.__interface__(addr) - interface instantiation, just returns the address *)
-    | JE_Attribute _ "__at__" _ _ _ _ _ => HD args'
-    | JE_Attribute _ "__interface__" _ _ _ _ _ => HD args'
-    | JE_Attribute base "pop" _ _ _ _ _ =>
-        (case base of
-         | JE_Name id _ _ _ => Pop rty (make_name_target ctx id)
-         | JE_Attribute (JE_Name "self" _ _ _) attr _ _ _ _ _ => Pop rty (TopLevelNameTarget (NONE, attr))
-         | JE_Attribute (JE_Name id (SOME "module") src_id_opt _) attr _ _ _ _ _ =>
-             Pop rty (TopLevelNameTarget (source_id_to_nsid (FST ctx) src_id_opt, attr))
-         | JE_Attribute (JE_Name id _ _ _) attr _ _ _ _ _ =>
-             Pop rty (AttributeTarget (make_name_target ctx id) attr)
-         | JE_Subscript (JE_Name id _ _ _) idx _ =>
-             Pop rty (SubscriptTarget (make_name_target ctx id) (translate_expr ctx idx))
-         | _ => Call rty (IntCall (NONE, "pop")) args' NONE)
-    (* self.func(args) - internal call *)
-    | JE_Attribute (JE_Name "self" _ _ _) fname _ _ _ _ _ => Call rty (IntCall (source_id_to_nsid (FST ctx) src_id_opt, fname)) args' NONE
-    (* Module struct constructor, interface constructor, or module function call *)
-    | _ => if is_interface_constructor func then HD args'
-           else let nsid = source_id_to_nsid (FST ctx) src_id_opt;
-               fname = extract_func_name func in
-           (case ret_ty of
-              JT_Struct sname =>
-                if fname = sname then
-                  (* Struct constructor: library.SomeStruct(x=2) *)
-                  let mod_nsid = case func of
-                      JE_Attribute base _ _ _ _ _ _ =>
-                        (case extract_innermost_module_src base of
-                           SOME sid => source_id_to_nsid (FST ctx) sid
-                         | NONE => nsid)
-                    | _ => nsid in
-                  StructLit rty (mod_nsid, fname) kwargs'
-                else
-                  (* Function call that returns a struct: library.foo() *)
-                  Call rty (IntCall (nsid, fname)) args' NONE
-            | _ =>
-              (* Module call: use source_id from type_decl_node *)
-              Call rty (IntCall (nsid, fname)) args' NONE)) /\
-
-  (* ExtCall - mutating external call (is_static = F) *)
-  (* Convention: args = [target; value; arg1; arg2; ...] *)
-  (translate_expr ctx (JE_ExtCall func_name arg_types ret_ty args keywords) =
-    let value_expr = case find_keyword "value" keywords of
-                     | SOME v => translate_expr ctx v
-                     | NONE => Literal (BaseT (UintT 256)) (IntL 0) in
-    let translated_args = translate_expr_list ctx args in
-    Call (translate_type ret_ty) (ExtCall F (func_name, translate_type_list arg_types, translate_type ret_ty))
-         (case translated_args of
-          | (target :: rest) => target :: value_expr :: rest
-          | [] => [])
-         (OPTION_MAP (translate_expr ctx) (find_keyword "default_return_value" keywords))) /\
-
-  (* StaticCall - read-only external call (is_static = T) *)
-  (* Convention: args = [target; arg1; arg2; ...] (no value) *)
-  (translate_expr ctx (JE_StaticCall func_name arg_types ret_ty args) =
-    Call (translate_type ret_ty) (ExtCall T (func_name, translate_type_list arg_types, translate_type ret_ty))
-         (translate_expr_list ctx args)
-         NONE) /\
-
-  (* Helper for translating expression lists *)
-  (translate_expr_list ctx [] = []) /\
-  (translate_expr_list ctx (e::es) = translate_expr ctx e :: translate_expr_list ctx es) /\
-
-  (* Helper for translating keywords *)
-  (translate_kwargs ctx [] = []) /\
-  (translate_kwargs ctx (JKeyword k v :: rest) = (k, translate_expr ctx v) :: translate_kwargs ctx rest)
-Termination
-  WF_REL_TAC `measure (λx. case x of
-    | INL (_, e) => json_expr_size e
-    | INR (INL (_, es)) => list_size json_expr_size es
-    | INR (INR (_, kws)) => list_size json_keyword_size kws)`
-  >> rw[]
-  >> imp_res_tac find_keyword_size
-  >> gvs[]
-End
-
-(* Skip cv_auto_trans for translate_expr - cv_auto doesn't handle mutual recursion well *)
-(* val () = cv_auto_trans translate_expr_def; *)
-
-(* ===== Assignment Target Translation ===== *)
-(* Defined after translate_expr since it uses it for subscript indices *)
-
-Definition translate_base_target_def:
-  (translate_base_target ctx (JBT_Name id) = make_name_target ctx id) /\
-  (* JBT_TopLevelName is (source_id, name) for self.x and module.x *)
-  (translate_base_target ctx (JBT_TopLevelName nsid) = TopLevelNameTarget (json_nsid_to_nsid (FST ctx) nsid)) /\
-  (translate_base_target ctx (JBT_Subscript tgt idx) =
-    SubscriptTarget (translate_base_target ctx tgt) (translate_expr ctx idx)) /\
-  (translate_base_target ctx (JBT_Attribute tgt attr) =
-    AttributeTarget (translate_base_target ctx tgt) attr)
-Termination
-  WF_REL_TAC `measure (json_base_target_size o SND)` >> simp[]
-End
-
-(* Skip cv_auto_trans for functions that depend on translate_expr *)
-(* val () = cv_auto_trans translate_base_target_def; *)
-
-Definition translate_target_def:
-  (translate_target ctx (JTgt_Base bt) = BaseTarget (translate_base_target ctx bt)) /\
-  (translate_target ctx (JTgt_Tuple tgts) = TupleTarget (MAP (translate_target ctx) tgts))
-Termination
-  WF_REL_TAC `measure (json_target_size o SND)` >> simp[]
-End
-
-(* val () = cv_auto_trans translate_target_def; *)
-
-(* ===== Iterator Translation ===== *)
-
-Definition json_expr_int_opt_def:
-  (json_expr_int_opt (JE_Int v _) = SOME v) /\
-  (json_expr_int_opt (JE_UnaryOp JUop_USub e _) =
-     case json_expr_int_opt e of
-       SOME n => SOME (0 - n)
-     | NONE => NONE) /\
-  (json_expr_int_opt (JE_BinOp l JBop_Add r _) =
-     case (json_expr_int_opt l, json_expr_int_opt r) of
-       (SOME n1, SOME n2) => SOME (n1 + n2)
-     | _ => NONE) /\
-  (json_expr_int_opt (JE_BinOp l JBop_Sub r _) =
-     case (json_expr_int_opt l, json_expr_int_opt r) of
-       (SOME n1, SOME n2) => SOME (n1 - n2)
-     | _ => NONE) /\
-  (json_expr_int_opt _ = NONE)
-End
-
-val () = cv_auto_trans json_expr_int_opt_def;
-
-Definition range_bound_of_args_def:
-  (range_bound_of_args [] = NONE) /\
-  (range_bound_of_args [e] =
-     case json_expr_int_opt e of
-       SOME n => if 0 <= n then SOME (Num n) else SOME 0
-     | NONE => NONE) /\
-  (range_bound_of_args (s::e::_) =
-     case (json_expr_int_opt s, json_expr_int_opt e) of
-       (SOME s', SOME e') =>
-         if s' <= e' then SOME (Num (e' - s')) else SOME 0
-     | _ => NONE)
-End
-
-val () = cv_auto_trans range_bound_of_args_def;
-
-Definition folded_bound_of_args_def:
-  (folded_bound_of_args [] = NONE) /\
-  (folded_bound_of_args [fv] =
-     case fv of
-       SOME n => if 0 <= n then SOME (Num n) else SOME 0
-     | NONE => NONE) /\
-  (folded_bound_of_args (fs::fe::_) =
-     case (fs, fe) of
-       (SOME s, SOME e) =>
-         if s <= e then SOME (Num (e - s)) else SOME 0
-     | _ => NONE)
-End
-
-val () = cv_auto_trans folded_bound_of_args_def;
-
-Definition get_iter_bound_def:
-  (get_iter_bound (JIter_Range args _ (SOME n)) = n) /\
-  (get_iter_bound (JIter_Range args fvs NONE) =
-     case range_bound_of_args args of
-       SOME n => n
-     | NONE => case folded_bound_of_args fvs of SOME n => n | NONE => 0) /\
-  (get_iter_bound (JIter_Array _ (JT_StaticArray _ len)) = len) /\
-  (get_iter_bound (JIter_Array _ (JT_DynArray _ len)) = len) /\
-  (get_iter_bound (JIter_Array _ _) = 0)
-End
-
-val () = cv_auto_trans get_iter_bound_def;
-
-Definition translate_iter_def:
-  (translate_iter ctx var_ty (JIter_Range [] _ _) =
-    Range (Literal (translate_type var_ty) (IntL (integer$int_of_num 0)))
-          (Literal (translate_type var_ty) (IntL (integer$int_of_num 0)))) /\
-  (translate_iter ctx var_ty (JIter_Range [e] _ _) =
-    Range (Literal (translate_type var_ty) (IntL (integer$int_of_num 0)))
-          (translate_expr ctx e)) /\
-  (translate_iter ctx var_ty (JIter_Range (s::e::_) _ _) =
-    Range (translate_expr ctx s) (translate_expr ctx e)) /\
-  (translate_iter ctx var_ty (JIter_Array e _) =
-    Array (translate_expr ctx e))
-End
-
-(* val () = cv_auto_trans translate_iter_def; *)
-
-(* ===== Statement Translation ===== *)
-
-Definition translate_stmt_def:
-  (translate_stmt ctx JS_Pass = Pass) /\
-  (translate_stmt ctx JS_Break = Break) /\
-  (translate_stmt ctx JS_Continue = Continue) /\
-  (translate_stmt ctx (JS_Expr e) = Expr (translate_expr ctx e)) /\
-  (translate_stmt ctx (JS_Return NONE) = Return NONE) /\
-  (translate_stmt ctx (JS_Return (SOME e)) = Return (SOME (translate_expr ctx e))) /\
-  (translate_stmt ctx (JS_Raise NONE) = Raise RaiseBare) /\
-  (translate_stmt ctx (JS_Raise (SOME e)) = Raise (RaiseReason (translate_expr ctx e))) /\
-  (translate_stmt ctx (JS_Assert test NONE) =
-    Assert (translate_expr ctx test) AssertBare) /\
-  (translate_stmt ctx (JS_Assert test (SOME msg)) =
-    Assert (translate_expr ctx test) (AssertReason (translate_expr ctx msg))) /\
-  (translate_stmt ctx (JS_Log event args) =
-    Log (json_nsid_to_nsid (FST ctx) event) (MAP (translate_expr ctx) args)) /\
-  (translate_stmt ctx (JS_If test body orelse) =
-    If (translate_expr ctx test)
-       (MAP (translate_stmt ctx) body)
-       (MAP (translate_stmt ctx) orelse)) /\
-  (translate_stmt ctx (JS_For var ty iter body) =
-    For var (translate_type ty) (translate_iter ctx ty iter)
-        (get_iter_bound iter) (MAP (translate_stmt ctx) body)) /\
-  (translate_stmt ctx (JS_Assign tgt val) =
-    Assign (translate_target ctx tgt) (translate_expr ctx val)) /\
-  (translate_stmt ctx (JS_AnnAssign var ty val) =
-    AnnAssign var (translate_type ty) (translate_expr ctx val)) /\
-  (translate_stmt ctx (JS_AugAssign tgt op val) =
-    AugAssign (expr_type (translate_expr ctx val))
-      (translate_base_target ctx tgt) (translate_binop op) (translate_expr ctx val)) /\
-  (translate_stmt ctx (JS_Append tgt val) =
-    Append (translate_base_target ctx tgt) (translate_expr ctx val))
-Termination
-  WF_REL_TAC `measure (json_stmt_size o SND)` >>
-  rw[] >> simp[json_stmt_size_def]
-End
-
-(* val () = cv_auto_trans translate_stmt_def; *)
-
-(* ===== Top-level Translation ===== *)
-
-Definition translate_visibility_def:
-  translate_visibility decs =
-    if MEM "external" decs then External
-    else if MEM "deploy" decs then Deploy
-    else Internal
-End
-
-(* val () = cv_auto_trans translate_visibility_def; *)
-
-Definition translate_mutability_def:
-  translate_mutability decs =
-    if MEM "pure" decs then Pure
-    else if MEM "view" decs then View
-    else if MEM "payable" decs then Payable
-    else Nonpayable
-End
-
-(* val () = cv_auto_trans translate_mutability_def; *)
-
-Definition translate_arg_def:
-  translate_arg (JArg name ty) = (name, translate_type ty)
-End
-
-val () = cv_auto_trans translate_arg_def;
-
-Definition translate_interface_func_def:
-  translate_interface_func (JInterfaceFunc name args ret_ty decs) =
-    (name,
-     MAP translate_arg args,
-     translate_type ret_ty,
-     translate_mutability decs) : interface_func
-End
-
-(* val () = cv_auto_trans translate_interface_func_def; *)
-
-Definition translate_args_with_types_def:
-  translate_args_with_types args tys =
-    case (args, tys) of
-      ([], []) => []
-    | (JArg name _ :: args', ty :: tys') =>
-        (name, translate_type ty) ::
-        translate_args_with_types args' tys'
-    | _ => MAP translate_arg args
-End
-
-val () = cv_auto_trans translate_args_with_types_def;
-
-Definition translate_value_type_def:
-  (translate_value_type (JVT_Type ty) = Type (translate_type ty)) /\
-  (translate_value_type (JVT_HashMap key_ty val_ty) =
-    HashMapT (translate_type key_ty) (translate_value_type val_ty))
-Termination
-  WF_REL_TAC `measure json_value_type_size` >> simp[]
-End
-
-val () = cv_auto_trans translate_value_type_def;
-
-Definition translate_var_mutability_def:
-  translate_var_mutability ctx is_immutable is_transient is_constant const_val =
-    if is_immutable then Immutable
-    else if is_transient then Transient
-    else if is_constant then
-      (case const_val of
-         SOME e => Constant (translate_expr ctx e)
-       | NONE => Storage)
-    else Storage
-End
-
-(* val () = cv_auto_trans translate_var_mutability_def; *)
-
-Definition translate_toplevel_def:
-  (translate_toplevel ctx (JTL_FunctionDef name decs args defaults (JFuncType arg_tys ret_ty) body) =
-    SOME (FunctionDecl
-      (translate_visibility decs)
-      (translate_mutability decs)
-      (MEM "nonreentrant" decs)
-      (MEM "raw_return" decs)
-      name
-      (translate_args_with_types args arg_tys)
-      (MAP (translate_expr ctx) defaults)
-      (translate_type ret_ty)
-      (MAP (translate_stmt ctx) body))) /\
-
-  (translate_toplevel ctx (JTL_VariableDecl name ty is_public is_immutable is_transient const_val) =
-    SOME (VariableDecl
-      (if is_public then Public else Private)
-      (translate_var_mutability ctx is_immutable is_transient
-        (case const_val of SOME _ => T | NONE => F) const_val)
-      name
-      (translate_type ty)
-      NONE)) /\
-
-  (translate_toplevel ctx (JTL_HashMapDecl name key_ty val_ty is_public is_transient) =
-    SOME (HashMapDecl
-      (if is_public then Public else Private)
-      is_transient
-      name
-      (translate_type key_ty)
-      (translate_value_type val_ty)
-      NONE)) /\
-
-  (translate_toplevel ctx (JTL_EventDef name args) =
-    SOME (EventDecl name (MAP (λ(a,idx). (translate_arg a, idx)) args))) /\
-
-  (translate_toplevel ctx (JTL_StructDef name args) =
-    SOME (StructDecl name (MAP translate_arg args))) /\
-
-  (translate_toplevel ctx (JTL_FlagDef name members) =
-    SOME (FlagDecl name members)) /\
-
-  (translate_toplevel ctx (JTL_InterfaceDef name funcs) =
-    SOME (InterfaceDecl name (MAP translate_interface_func funcs))) /\
-
-  (* Module declarations are compiled away - the imported content is already inlined *)
-  (translate_toplevel ctx (JTL_Import _) = NONE) /\
-  (translate_toplevel ctx (JTL_ExportsDecl _) = NONE) /\
-  (translate_toplevel ctx (JTL_InitializesDecl _) = NONE) /\
-  (translate_toplevel ctx (JTL_UsesDecl _) = NONE) /\
-  (translate_toplevel ctx (JTL_ImplementsDecl _) = NONE)
-End
-
-(* val () = cv_auto_trans translate_toplevel_def; *)
-
-(* ===== Exports Extraction ===== *)
-
-(* Build alias -> source_id map from import info list *)
+(* Names of constants/immutables are translated as top-level names. *)
 Definition build_import_map_def:
   build_import_map [] = [] ∧
-  build_import_map (JImportInfo alias src_id _ :: rest) =
-    (alias, Num (src_id + &builtin_source_id_offset)) :: build_import_map rest
+  build_import_map (JImportInfo alias src_id _ _ :: rest) =
+    (alias, source_id_to_module_id src_id) :: build_import_map rest
 End
 
-val () = cv_auto_trans build_import_map_def;
 
 (* Extract import infos from a toplevel (returns list since JTL_Import has list) *)
 Definition get_import_infos_def:
@@ -1149,7 +111,6 @@ Definition get_import_infos_def:
   get_import_infos _ = []
 End
 
-val () = cv_auto_trans get_import_infos_def;
 
 (* Collect all import infos from toplevels *)
 Definition collect_imports_def:
@@ -1157,22 +118,20 @@ Definition collect_imports_def:
   collect_imports (t::ts) = get_import_infos t ++ collect_imports ts
 End
 
-val () = cv_auto_trans collect_imports_def;
 
 (* Extract source_ids that a module depends on from its body *)
 Definition get_module_deps_def:
   get_module_deps body =
-    MAP (λinfo. case info of JImportInfo _ src_id _ => src_id) (collect_imports body)
+    MAP (λinfo. case info of JImportInfo _ src_id _ _ => src_id) (collect_imports body)
 End
 
-val () = cv_auto_trans get_module_deps_def;
 
 (* Check if imports are topologically sorted (dependencies come before dependents).
    seen: list of source_ids already processed
    Returns T if sorted, F otherwise. *)
 Definition imports_topsorted_def:
   imports_topsorted seen [] = T ∧
-  imports_topsorted seen (JImportedModule src_id _ body :: rest) =
+  imports_topsorted seen (JImportedModule src_id _ _ _ body :: rest) =
     let deps = get_module_deps body in
     if EVERY (λd. MEM d seen) deps
     then imports_topsorted (src_id :: seen) rest
@@ -1196,7 +155,6 @@ Definition transform_layout_key_def:
         | SOME src_id => (SOME src_id, var_name)
 End
 
-val () = cv_auto_trans transform_layout_key_def;
 
 (* Transform all keys in a storage layout *)
 Definition transform_storage_layout_def:
@@ -1206,23 +164,35 @@ Definition transform_storage_layout_def:
     transform_storage_layout import_map rest
 End
 
-val () = cv_auto_trans transform_storage_layout_def;
+(* Extract semantic storage and transient-storage layouts from the compiler
+   layout, transforming optional import aliases into source IDs. *)
+Definition extract_storage_layout_def:
+  extract_storage_layout import_map
+      (jsl : json_storage_layout) :
+      (((num option # string) # num) list) #
+      (((num option # string) # num) list) =
+    (transform_storage_layout import_map
+       (MAP (λ(key, info). (key, info.slot)) jsl.storage),
+     transform_storage_layout import_map
+       (MAP (λ(key, info). (key, info.slot)) jsl.transient))
+End
+
 
 (* Check if a function decl is external *)
 Definition is_external_function_def:
-  is_external_function (JTL_FunctionDef _ decs _ _ _ _) = MEM "external" decs ∧
+  is_external_function (JTL_FunctionDef _ decs _ _ _ _ _) = MEM "external" decs ∧
   is_external_function _ = F
 End
 
 (* Get function name from a function decl *)
 Definition get_function_name_def:
-  get_function_name (JTL_FunctionDef name _ _ _ _ _) = SOME name ∧
+  get_function_name (JTL_FunctionDef name _ _ _ _ _ _) = SOME name ∧
   get_function_name _ = NONE
 End
 
 (* Get name of a public variable or hashmap (generates an external getter) *)
 Definition get_public_var_name_def:
-  get_public_var_name (JTL_VariableDecl name _ T _ _ _) = SOME name ∧
+  get_public_var_name (JTL_VariableDecl name _ _ T _ _ _) = SOME name ∧
   get_public_var_name (JTL_HashMapDecl name _ _ T _) = SOME name ∧
   get_public_var_name _ = NONE
 End
@@ -1245,15 +215,15 @@ End
 (* Find module body by raw source_id in imports list *)
 Definition find_module_body_def:
   find_module_body src_id [] = [] ∧
-  find_module_body src_id (JImportedModule sid _ body :: rest) =
+  find_module_body src_id (JImportedModule sid _ _ _ body :: rest) =
     if src_id = sid then body else find_module_body src_id rest
 End
 
 (* Find module body by offset source_id (num) in imports list *)
 Definition find_module_body_nsid_def:
   find_module_body_nsid nsid [] = [] ∧
-  find_module_body_nsid nsid (JImportedModule sid _ body :: rest) =
-    if nsid = Num (sid + &builtin_source_id_offset) then body
+  find_module_body_nsid nsid (JImportedModule sid _ _ _ body :: rest) =
+    if nsid = source_id_to_module_id sid then body
     else find_module_body_nsid nsid rest
 End
 
@@ -1279,8 +249,8 @@ End
 (* Build a map from source_id to import_map for all imported modules *)
 Definition build_all_import_maps_def:
   build_all_import_maps [] = [] ∧
-  build_all_import_maps (JImportedModule src_id _ body :: rest) =
-    let nsid = Num (src_id + &builtin_source_id_offset) in
+  build_all_import_maps (JImportedModule src_id _ _ _ body :: rest) =
+    let nsid = source_id_to_module_id src_id in
     (nsid, build_import_map (collect_imports body)) ::
     build_all_import_maps rest
 End
@@ -1312,14 +282,26 @@ Definition get_interface_func_names_def:
     name :: get_interface_func_names rest
 End
 
-(* Look up an inline interface definition by name in a module's toplevels *)
-Definition find_inline_interface_def:
-  find_inline_interface_def name [] = NONE ∧
-  find_inline_interface_def name (JTL_InterfaceDef iname funcs :: ts) =
-    (if iname = name then SOME (get_interface_func_names funcs)
-     else find_inline_interface_def name ts) ∧
-  find_inline_interface_def name (_ :: ts) =
-    find_inline_interface_def name ts
+(* Collect inline interface definitions into a compact name -> function-name map. *)
+Definition collect_inline_interfaces_def:
+  collect_inline_interfaces [] = [] ∧
+  collect_inline_interfaces (JTL_InterfaceDef iname funcs :: ts) =
+    (iname, get_interface_func_names funcs) :: collect_inline_interfaces ts ∧
+  collect_inline_interfaces (_ :: ts) = collect_inline_interfaces ts
+End
+
+Definition build_all_inline_interface_maps_def:
+  build_all_inline_interface_maps [] = [] ∧
+  build_all_inline_interface_maps (JImportedModule src_id _ _ _ body :: rest) =
+    let nsid = source_id_to_module_id src_id in
+    (nsid, collect_inline_interfaces body) :: build_all_inline_interface_maps rest
+End
+
+Definition lookup_inline_interface_def:
+  lookup_inline_interface all_inline_maps src_id name =
+    case ALOOKUP all_inline_maps src_id of
+    | SOME imap => ALOOKUP imap name
+    | NONE => NONE
 End
 
 (* Look up interface function names for a named export.
@@ -1343,103 +325,356 @@ Definition find_interface_functions_def:
         | NONE => NONE
 End
 
-(* Expand a single export expression using pre-computed exports_map.
-   exports_map: source_id -> list of (func_name, source_id) exports
-   all_import_maps: source_id -> import_map for each module
-   import_map: alias -> source_id for the current module's imports
-   all_imports: the full imports list (for looking up module bodies) *)
+(* Expand a single export expression using only compact indexes.
+   exports_map: already-computed source_id -> exported (name, defining source_id)
+   all_import_maps: source_id -> alias map
+   all_inline_maps: source_id -> inline interface map
+   import_map: alias map for the current module *)
 Definition expand_single_export_def:
-  expand_single_export exports_map all_import_maps all_imports import_map
+  expand_single_export exports_map all_import_maps all_inline_maps import_map
     (JE_Attribute base func_name _ _ _ _ _) =
     (case resolve_module_expr all_import_maps import_map base of
      | NONE => []
      | SOME src_id =>
          if func_name = "__interface__" then
            case ALOOKUP exports_map src_id of
-           | NONE => []
            | SOME exps => exps
+           | NONE => []
          else
-           (* Check if the function is a direct export *)
            case ALOOKUP exports_map src_id of
            | SOME exps =>
                (case ALOOKUP exps func_name of
                 | SOME final_src_id => [(func_name, final_src_id)]
                 | NONE =>
-                    (* Not a direct function — check if it's a named interface *)
-                    case find_interface_functions exports_map all_import_maps
-                           src_id func_name of
-                    | SOME iface_fns =>
-                        (* Expand to all interface functions, mapped to src_id *)
-                        MAP (λn. (n, src_id)) iface_fns
+                    case find_interface_functions exports_map all_import_maps src_id func_name of
+                    | SOME iface_fns => MAP (λn. (n, src_id)) iface_fns
                     | NONE =>
-                        (* Check inline interface definitions *)
-                        let body = find_module_body_nsid src_id all_imports in
-                        case find_inline_interface_def func_name body of
-                        | SOME iface_fns =>
-                            MAP (λn. (n, src_id)) iface_fns
+                        case lookup_inline_interface all_inline_maps src_id func_name of
+                        | SOME iface_fns => MAP (λn. (n, src_id)) iface_fns
                         | NONE => [(func_name, src_id)])
            | NONE => [(func_name, src_id)]) ∧
   expand_single_export _ _ _ _ _ = []
 End
 
-(* Expand exports from a tuple of export expressions *)
 Definition expand_tuple_exports_def:
-  expand_tuple_exports exports_map all_import_maps all_imports import_map [] = [] ∧
-  expand_tuple_exports exports_map all_import_maps all_imports import_map (e::es) =
-    expand_single_export exports_map all_import_maps all_imports import_map e ++
-    expand_tuple_exports exports_map all_import_maps all_imports import_map es
+  expand_tuple_exports exports_map all_import_maps all_inline_maps import_map [] = [] ∧
+  expand_tuple_exports exports_map all_import_maps all_inline_maps import_map (e::es) =
+    expand_single_export exports_map all_import_maps all_inline_maps import_map e ++
+    expand_tuple_exports exports_map all_import_maps all_inline_maps import_map es
 End
 
-(* Expand exports from an ExportsDecl annotation *)
 Definition expand_export_annotation_def:
-  expand_export_annotation exports_map all_import_maps all_imports import_map (JE_Tuple exprs) =
-    expand_tuple_exports exports_map all_import_maps all_imports import_map exprs ∧
-  expand_export_annotation exports_map all_import_maps all_imports import_map (JE_Attribute base attr tc btn btc sid ty) =
-    expand_single_export exports_map all_import_maps all_imports import_map (JE_Attribute base attr tc btn btc sid ty) ∧
+  expand_export_annotation exports_map all_import_maps all_inline_maps import_map (JE_Tuple exprs) =
+    expand_tuple_exports exports_map all_import_maps all_inline_maps import_map exprs ∧
+  expand_export_annotation exports_map all_import_maps all_inline_maps import_map (JE_Attribute base attr tc btn btc sid ty) =
+    expand_single_export exports_map all_import_maps all_inline_maps import_map (JE_Attribute base attr tc btn btc sid ty) ∧
   expand_export_annotation _ _ _ _ _ = []
 End
 
-(* Expand all exports from a module's toplevels *)
-Definition expand_exports_from_toplevels_def:
-  expand_exports_from_toplevels exports_map all_import_maps all_imports import_map [] = [] ∧
-  expand_exports_from_toplevels exports_map all_import_maps all_imports import_map (t::ts) =
-    (case get_export_annotation t of
-     | SOME ann => expand_export_annotation exports_map all_import_maps all_imports import_map ann
-     | NONE => []) ++
-    expand_exports_from_toplevels exports_map all_import_maps all_imports import_map ts
+Definition collect_export_annotations_def:
+  collect_export_annotations [] = [] ∧
+  collect_export_annotations (JTL_ExportsDecl ann :: ts) = ann :: collect_export_annotations ts ∧
+  collect_export_annotations (_ :: ts) = collect_export_annotations ts
 End
 
-(* Compute a single module's full exports: its external functions + expanded re-exports *)
-Definition compute_module_exports_def:
-  compute_module_exports exports_map all_import_maps all_imports src_id body =
-    let ext_funcs = MAP (λn. (n, src_id)) (get_external_func_names body) in
-    let import_map = build_import_map (collect_imports body) in
-    let reexports = expand_exports_from_toplevels exports_map all_import_maps all_imports import_map body in
+Definition expand_export_annotations_def:
+  expand_export_annotations exports_map all_import_maps all_inline_maps import_map [] = [] ∧
+  expand_export_annotations exports_map all_import_maps all_inline_maps import_map (ann::anns) =
+    expand_export_annotation exports_map all_import_maps all_inline_maps import_map ann ++
+    expand_export_annotations exports_map all_import_maps all_inline_maps import_map anns
+End
+
+Definition module_compact_index_def:
+  module_compact_index nsid body =
+    (nsid,
+     build_import_map (collect_imports body),
+     get_external_func_names body,
+     collect_inline_interfaces body,
+     collect_export_annotations body)
+End
+
+Definition build_import_compact_indexes_def:
+  build_import_compact_indexes [] = [] ∧
+  build_import_compact_indexes (JImportedModule src_id _ _ _ body :: rest) =
+    module_compact_index (source_id_to_module_id src_id) body ::
+    build_import_compact_indexes rest
+End
+
+Definition compact_index_import_map_def:
+  compact_index_import_map (src_id, import_map, ext_names, inline_map, export_anns) = import_map
+End
+
+Definition compact_index_export_anns_def:
+  compact_index_export_anns (src_id, import_map, ext_names, inline_map, export_anns) = export_anns
+End
+
+Definition build_import_maps_from_indexes_def:
+  build_import_maps_from_indexes [] = [] ∧
+  build_import_maps_from_indexes ((src_id, import_map, ext_names, inline_map, export_anns)::rest) =
+    (src_id, import_map) :: build_import_maps_from_indexes rest
+End
+
+Definition build_inline_maps_from_indexes_def:
+  build_inline_maps_from_indexes [] = [] ∧
+  build_inline_maps_from_indexes ((src_id, import_map, ext_names, inline_map, export_anns)::rest) =
+    (src_id, inline_map) :: build_inline_maps_from_indexes rest
+End
+
+Definition compute_index_exports_def:
+  compute_index_exports exports_map all_import_maps all_inline_maps
+    (src_id, import_map, ext_names, inline_map, export_anns) =
+    let ext_funcs = MAP (λn. (n, src_id)) ext_names in
+    let reexports = expand_export_annotations exports_map all_import_maps all_inline_maps import_map export_anns in
     ext_funcs ++ reexports
 End
 
-(* Build exports_map by processing imports in topological order.
-   Requires: imports list is topologically sorted (validated by imports_topsorted).
-   This ensures when we process module M, any module M references via
-   __interface__ has already been added to the accumulator. *)
-Definition build_exports_map_def:
-  build_exports_map all_import_maps all_imports acc [] = acc ∧
-  build_exports_map all_import_maps all_imports acc (JImportedModule src_id _ body :: rest) =
-    let nsid = Num (src_id + &builtin_source_id_offset) in
-    let exps = compute_module_exports acc all_import_maps all_imports nsid body in
-    build_exports_map all_import_maps all_imports ((nsid, exps) :: acc) rest
+Definition build_exports_map_from_indexes_def:
+  build_exports_map_from_indexes all_import_maps all_inline_maps acc [] = acc ∧
+  build_exports_map_from_indexes all_import_maps all_inline_maps acc (idx::rest) =
+    let src_id = FST idx in
+    let exps = compute_index_exports acc all_import_maps all_inline_maps idx in
+    build_exports_map_from_indexes all_import_maps all_inline_maps ((src_id, exps) :: acc) rest
 End
 
-(* Main function: extract exports from main module given imports *)
-Definition extract_exports_def:
-  extract_exports (JModule _ toplevels) imports =
-    let all_import_maps = build_all_import_maps imports in
-    let exports_map = build_exports_map all_import_maps imports [] imports in
-    let import_map = build_import_map (collect_imports toplevels) in
-    expand_exports_from_toplevels exports_map all_import_maps imports import_map toplevels
+Definition extract_exports_with_indexes_def:
+  extract_exports_with_indexes all_import_maps all_inline_maps exports_map main_index =
+    expand_export_annotations exports_map all_import_maps all_inline_maps
+      (compact_index_import_map main_index)
+      (compact_index_export_anns main_index)
 End
 
 (* ===== Module Translation ===== *)
+
+(* Build exact nominal identities directly from syntax declarations. *)
+Definition collect_nominal_decls_def:
+  collect_nominal_decls nsid [] = [] ∧
+  collect_nominal_decls nsid (JTL_StructDef name _ :: rest) =
+    ((nsid, name), StructKind) :: collect_nominal_decls nsid rest ∧
+  collect_nominal_decls nsid (JTL_FlagDef name _ :: rest) =
+    ((nsid, name), FlagKind) :: collect_nominal_decls nsid rest ∧
+  collect_nominal_decls nsid (JTL_InterfaceDef name _ :: rest) =
+    ((nsid, name), InterfaceKind) :: collect_nominal_decls nsid rest ∧
+  collect_nominal_decls nsid (_ :: rest) = collect_nominal_decls nsid rest
+End
+
+Definition collect_imported_nominal_decls_def:
+  collect_imported_nominal_decls [] = [] ∧
+  collect_imported_nominal_decls
+      (JImportedModule src_id _ _ _ body :: rest) =
+    collect_nominal_decls (SOME (source_id_to_module_id src_id)) body ++
+    collect_imported_nominal_decls rest
+End
+
+Definition list_prefix_def:
+  list_prefix [] ys = T ∧
+  list_prefix (x::xs) [] = F ∧
+  list_prefix (x::xs) (y::ys) = (x = y ∧ list_prefix xs ys)
+End
+
+Definition is_interface_path_def:
+  is_interface_path path =
+    (list_prefix (REVERSE ".vyi") (REVERSE path) ∨
+     list_prefix (REVERSE ".json") (REVERSE path))
+End
+
+Definition interface_path_name_def:
+  interface_path_name path =
+    let extension_length = if list_prefix (REVERSE ".json") (REVERSE path)
+                           then 5 else 4 in
+    let without_ext = TAKE (LENGTH path - extension_length) path in
+    REVERSE (PREFIX (λc. c ≠ #"/") (REVERSE without_ext))
+End
+
+(* Builtin imports may share a source ID, so retain the interface basename as
+   well as its source instead of classifying every import from that source. *)
+Definition collect_interface_refs_def:
+  collect_interface_refs [] = [] ∧
+  collect_interface_refs (JImportedModule src_id path _ _ _ :: rest) =
+    if is_interface_path path
+    then (source_id_to_module_id src_id, interface_path_name path) ::
+      collect_interface_refs rest
+    else collect_interface_refs rest
+End
+
+Definition qualified_interface_name_def:
+  qualified_interface_name name qualified_name =
+    (qualified_name = name ∨
+     list_prefix (REVERSE ("." ++ name)) (REVERSE qualified_name))
+End
+
+Definition is_interface_import_def:
+  is_interface_import interface_refs src_id qualified_name =
+    EXISTS (λ(src,name).
+      src = source_id_to_module_id src_id ∧
+      qualified_interface_name name qualified_name) interface_refs
+End
+
+Definition collect_interface_alias_infos_def:
+  collect_interface_alias_infos interface_refs nsid [] = [] ∧
+  collect_interface_alias_infos interface_refs nsid
+      (JImportInfo alias src_id qualified_name path :: rest) =
+    if is_interface_import interface_refs src_id qualified_name ∨
+       list_prefix (REVERSE ".json") (REVERSE path)
+    then ((nsid, alias), InterfaceKind) ::
+      collect_interface_alias_infos interface_refs nsid rest
+    else collect_interface_alias_infos interface_refs nsid rest
+End
+
+Definition collect_interface_aliases_def:
+  collect_interface_aliases interface_refs nsid [] = [] ∧
+  collect_interface_aliases interface_refs nsid (JTL_Import infos :: rest) =
+    collect_interface_alias_infos interface_refs nsid infos ++
+    collect_interface_aliases interface_refs nsid rest ∧
+  collect_interface_aliases interface_refs nsid (_ :: rest) =
+    collect_interface_aliases interface_refs nsid rest
+End
+
+Definition collect_imported_interface_aliases_def:
+  collect_imported_interface_aliases interface_refs [] = [] ∧
+  collect_imported_interface_aliases interface_refs
+      (JImportedModule src_id _ _ _ body :: rest) =
+    collect_interface_aliases interface_refs
+      (SOME (source_id_to_module_id src_id)) body ++
+    collect_imported_interface_aliases interface_refs rest
+End
+
+Definition build_nominal_index_def:
+  build_nominal_index toplevels imports =
+    let interface_refs = collect_interface_refs imports in
+    collect_nominal_decls NONE toplevels ++
+    collect_imported_nominal_decls imports ++
+    collect_interface_aliases interface_refs NONE toplevels ++
+    collect_imported_interface_aliases interface_refs imports
+End
+
+(* Validate syntax-derived declaration types against every compiler type claim
+   before constructing canonical declarations. *)
+Definition arg_type_valid_def:
+  arg_type_valid nominal_index all_import_maps type_ctx (JArg _ inferred ann) =
+    declaration_type_valid nominal_index all_import_maps type_ctx inferred ann
+End
+
+Definition stmt_decl_types_valid_def:
+  stmt_decl_types_valid nominal_index all_import_maps type_ctx [] = T ∧
+  stmt_decl_types_valid nominal_index all_import_maps type_ctx
+      (JS_AnnAssign _ inferred ann _ :: rest) =
+    (declaration_type_valid nominal_index all_import_maps type_ctx inferred ann ∧
+     stmt_decl_types_valid nominal_index all_import_maps type_ctx rest) ∧
+  stmt_decl_types_valid nominal_index all_import_maps type_ctx
+      (JS_For _ inferred ann _ body :: rest) =
+    (declaration_type_valid nominal_index all_import_maps type_ctx inferred ann ∧
+     stmt_decl_types_valid nominal_index all_import_maps type_ctx body ∧
+     stmt_decl_types_valid nominal_index all_import_maps type_ctx rest) ∧
+  stmt_decl_types_valid nominal_index all_import_maps type_ctx
+      (JS_If _ body orelse :: rest) =
+    (stmt_decl_types_valid nominal_index all_import_maps type_ctx body ∧
+     stmt_decl_types_valid nominal_index all_import_maps type_ctx orelse ∧
+     stmt_decl_types_valid nominal_index all_import_maps type_ctx rest) ∧
+  stmt_decl_types_valid nominal_index all_import_maps type_ctx (_ :: rest) =
+    stmt_decl_types_valid nominal_index all_import_maps type_ctx rest
+Termination
+  WF_REL_TAC `measure (λ(_,_,_,stmts). list_size json_stmt_size stmts)` >> simp[]
+End
+
+Definition interface_func_types_valid_def:
+  interface_func_types_valid nominal_index all_import_maps type_ctx
+      (JInterfaceFunc _ args ret_ann _) =
+    (EVERY (arg_type_valid nominal_index all_import_maps type_ctx) args ∧
+     annotation_resolved nominal_index all_import_maps type_ctx ret_ann)
+End
+
+Definition function_arg_types_valid_def:
+  function_arg_types_valid nominal_index all_import_maps type_ctx [] [] = T ∧
+  function_arg_types_valid nominal_index all_import_maps type_ctx
+      (JArg _ inferred ann :: args) (func_inferred :: tys) =
+    (declaration_type_valid nominal_index all_import_maps type_ctx inferred ann ∧
+     inferred_type_consistent type_ctx
+       (canonical_decl_type nominal_index all_import_maps type_ctx inferred ann)
+       func_inferred ∧
+     function_arg_types_valid nominal_index all_import_maps type_ctx args tys) ∧
+  function_arg_types_valid nominal_index all_import_maps type_ctx _ _ = F
+End
+
+Definition toplevel_decl_types_valid_def:
+  (toplevel_decl_types_valid nominal_index all_import_maps type_ctx
+      (JTL_FunctionDef _ _ args _ (JFuncType arg_tys ret_ty) ret_ann body) =
+    (function_arg_types_valid nominal_index all_import_maps type_ctx args arg_tys ∧
+     annotation_resolved nominal_index all_import_maps type_ctx ret_ann ∧
+     (ret_ann = JTA_None ∨ inferred_type_consistent type_ctx
+       (elaborate_annotation nominal_index all_import_maps type_ctx ret_ann)
+       ret_ty) ∧
+     stmt_decl_types_valid nominal_index all_import_maps type_ctx body)) ∧
+  (toplevel_decl_types_valid nominal_index all_import_maps type_ctx
+      (JTL_VariableDecl _ inferred ann _ _ _ _) =
+    declaration_type_valid nominal_index all_import_maps type_ctx inferred ann) ∧
+  (toplevel_decl_types_valid nominal_index all_import_maps type_ctx
+      (JTL_EventDef _ fields) =
+    EVERY (λ(arg,_). arg_type_valid nominal_index all_import_maps type_ctx arg)
+      fields) ∧
+  (toplevel_decl_types_valid nominal_index all_import_maps type_ctx
+      (JTL_StructDef _ fields) =
+    EVERY (arg_type_valid nominal_index all_import_maps type_ctx) fields) ∧
+  (toplevel_decl_types_valid nominal_index all_import_maps type_ctx
+      (JTL_InterfaceDef _ funcs) =
+    EVERY (interface_func_types_valid nominal_index all_import_maps type_ctx)
+      funcs) ∧
+  (toplevel_decl_types_valid nominal_index all_import_maps type_ctx _ = T)
+End
+
+Definition module_decl_types_valid_def:
+  module_decl_types_valid nominal_index all_import_maps type_ctx body =
+    EVERY (toplevel_decl_types_valid nominal_index all_import_maps type_ctx) body
+End
+
+Definition imported_decl_types_valid_def:
+  imported_decl_types_valid nominal_index all_import_maps main_src_id [] = T ∧
+  imported_decl_types_valid nominal_index all_import_maps main_src_id
+      (JImportedModule src_id _ _ _ body :: rest) =
+    (let nsid = source_id_to_module_id src_id in
+     let import_map = build_import_map (collect_imports body) in
+     let type_ctx = (main_src_id, SOME nsid, import_map) in
+     module_decl_types_valid nominal_index all_import_maps type_ctx body ∧
+     imported_decl_types_valid nominal_index all_import_maps main_src_id rest)
+End
+
+Definition all_decl_types_valid_def:
+  all_decl_types_valid nominal_index all_import_maps main_src_id toplevels imports =
+    (let import_map = build_import_map (collect_imports toplevels) in
+     let type_ctx = (main_src_id, NONE, import_map) in
+     module_decl_types_valid nominal_index all_import_maps type_ctx toplevels ∧
+     imported_decl_types_valid nominal_index all_import_maps main_src_id imports)
+End
+
+(* Canonical top-level value types are computed before expression bodies. *)
+Definition collect_toplevel_types_def:
+  collect_toplevel_types nominal_index all_import_maps type_ctx [] = [] ∧
+  collect_toplevel_types nominal_index all_import_maps type_ctx
+      (JTL_VariableDecl name inferred ann _ _ _ _ :: rest) =
+    (((tctx_current_nsid type_ctx, name),
+       canonical_decl_type nominal_index all_import_maps type_ctx inferred ann) ::
+     collect_toplevel_types nominal_index all_import_maps type_ctx rest) ∧
+  collect_toplevel_types nominal_index all_import_maps type_ctx (_ :: rest) =
+    collect_toplevel_types nominal_index all_import_maps type_ctx rest
+End
+
+Definition collect_imported_toplevel_types_def:
+  collect_imported_toplevel_types nominal_index all_import_maps main_src_id [] = [] ∧
+  collect_imported_toplevel_types nominal_index all_import_maps main_src_id
+      (JImportedModule src_id _ _ _ body :: rest) =
+    let nsid = source_id_to_module_id src_id in
+    let import_map = build_import_map (collect_imports body) in
+    let type_ctx = (main_src_id, SOME nsid, import_map) in
+    collect_toplevel_types nominal_index all_import_maps type_ctx body ++
+    collect_imported_toplevel_types nominal_index all_import_maps main_src_id rest
+End
+
+Definition build_all_toplevel_types_def:
+  build_all_toplevel_types nominal_index all_import_maps main_src_id toplevels imports =
+    let import_map = build_import_map (collect_imports toplevels) in
+    let type_ctx = (main_src_id, NONE, import_map) in
+    collect_toplevel_types nominal_index all_import_maps type_ctx toplevels ++
+    collect_imported_toplevel_types nominal_index all_import_maps main_src_id imports
+End
 
 Definition filter_some_def:
   (filter_some [] = []) /\
@@ -1447,26 +682,58 @@ Definition filter_some_def:
   (filter_some (SOME x :: rest) = x :: filter_some rest)
 End
 
-val () = cv_auto_trans filter_some_def;
 
 Definition translate_module_def:
-  translate_module (JModule main_src_id toplevels) =
-    let ctx = (main_src_id, collect_consts_and_immutables toplevels) in
-    filter_some (MAP (translate_toplevel ctx) toplevels)
+  translate_module nominal_index all_import_maps all_toplevel_types
+      (JModule main_src_id nr_default toplevels) =
+    let import_map = build_import_map (collect_imports toplevels) in
+    let expr_ctx =
+      (main_src_id,
+       (NONE,
+        (import_map,
+         (collect_consts_and_immutables toplevels, ([], all_toplevel_types))))) in
+    let type_ctx = (main_src_id, NONE, import_map) in
+    filter_some
+      (MAP (translate_toplevel nominal_index all_import_maps expr_ctx type_ctx nr_default)
+        toplevels)
 End
 
+Definition is_function_toplevel_def:
+  is_function_toplevel (JTL_FunctionDef _ _ _ _ _ _ _) = T ∧
+  is_function_toplevel _ = F
+End
+
+(* Imported interfaces contribute declarations and nominal identities, but their
+   ellipsis-bodied function stubs are not executable module implementations. *)
 Definition translate_imported_module_def:
-  translate_imported_module main_src_id (JImportedModule src_id path body) =
-    let ctx = (main_src_id, collect_consts_and_immutables body) in
-    (SOME (Num (src_id + &builtin_source_id_offset)), filter_some (MAP (translate_toplevel ctx) body))
+  translate_imported_module nominal_index all_import_maps all_toplevel_types
+      main_src_id (JImportedModule src_id path _ nr_default body) =
+    let nsid = source_id_to_module_id src_id in
+    let import_map = build_import_map (collect_imports body) in
+    let expr_ctx =
+      (main_src_id,
+       (SOME nsid,
+        (import_map,
+         (collect_consts_and_immutables body, ([], all_toplevel_types))))) in
+    let type_ctx = (main_src_id, SOME nsid, import_map) in
+    let declaration_only = is_interface_path path in
+    (SOME nsid, filter_some
+      (MAP (λtop.
+        if declaration_only ∧ is_function_toplevel top then NONE
+        else translate_toplevel nominal_index all_import_maps expr_ctx type_ctx
+          nr_default top) body))
 End
 
-(* Extract toplevels from a JModule (needed to get import infos) *)
-Definition main_toplevels_def:
-  main_toplevels (JModule _ toplevels) = toplevels
+Definition translate_imported_modules_def:
+  translate_imported_modules nominal_index all_import_maps all_toplevel_types
+      main_src_id [] = [] ∧
+  translate_imported_modules nominal_index all_import_maps all_toplevel_types
+      main_src_id (imp::imports) =
+    translate_imported_module nominal_index all_import_maps all_toplevel_types
+      main_src_id imp ::
+    translate_imported_modules nominal_index all_import_maps all_toplevel_types
+      main_src_id imports
 End
-
-val () = cv_auto_trans main_toplevels_def;
 
 (* ===== Annotate Storage Slots ===== *)
 
@@ -1503,15 +770,33 @@ End
    - exports: func_name -> source_id
    - import_map: alias -> source_id (for storage layout key transformation)
    Returns NONE if imports are not topologically sorted. *)
-Definition translate_annotated_ast_def:
-  translate_annotated_ast (JAnnotatedAST (JModule main_src_id toplevels) imports) =
+Definition translate_annotated_ast_canonical_def:
+  translate_annotated_ast_canonical
+      (JAnnotatedAST (JModule main_src_id nr_default toplevels) imports) =
     if ¬imports_topsorted [] imports then NONE else
-    let main = JModule main_src_id toplevels in
-    let import_infos = collect_imports (main_toplevels main) in
-    let import_map = build_import_map import_infos in
-    let sources = (NONE, translate_module main) :: MAP (translate_imported_module main_src_id) imports in
-    let exports = extract_exports main imports in
+    let main = JModule main_src_id nr_default toplevels in
+    let import_indexes = build_import_compact_indexes imports in
+    let all_import_maps = build_import_maps_from_indexes import_indexes in
+    let all_inline_maps = build_inline_maps_from_indexes import_indexes in
+    let exports_map = build_exports_map_from_indexes all_import_maps all_inline_maps [] import_indexes in
+    let main_index = module_compact_index 0 toplevels in
+    let import_map = compact_index_import_map main_index in
+    let nominal_index = build_nominal_index toplevels imports in
+    if ¬all_decl_types_valid nominal_index all_import_maps main_src_id
+        toplevels imports then NONE else
+    let all_toplevel_types = build_all_toplevel_types nominal_index
+      all_import_maps main_src_id toplevels imports in
+    let sources =
+      (NONE, translate_module nominal_index all_import_maps all_toplevel_types main) ::
+      translate_imported_modules nominal_index all_import_maps
+        all_toplevel_types main_src_id imports in
+    let exports = extract_exports_with_indexes all_import_maps all_inline_maps exports_map main_index in
     SOME (sources, exports, import_map)
+End
+
+Definition translate_annotated_ast_def:
+  translate_annotated_ast ast =
+    translate_annotated_ast_canonical (canonicalize_annotated_ast_imports ast)
 End
 
 (* Annotate all sources with storage slots from json_storage_layout.

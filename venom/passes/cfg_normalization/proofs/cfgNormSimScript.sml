@@ -7,7 +7,7 @@
 
 Theory cfgNormSim
 Ancestors
-  cfgNormDefs cfgTransform cfgTransformProofs stateEquiv
+  cfgNormDefs cfgTransform cfgTransformProps cfgTransformProofs stateEquiv
   stateEquivProofs venomExecSemantics venomInst venomState
   venomWf execEquivProofs finite_map
 

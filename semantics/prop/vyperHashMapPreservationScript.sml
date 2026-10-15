@@ -273,8 +273,14 @@ Proof
   rpt gen_tac
   \\ simp[vyperStateTheory.get_immutables_def, vyperStateTheory.bind_def,
           vyperStateTheory.get_address_immutables_def,
-          vyperStateTheory.lift_option_def, vyperStateTheory.return_def, vyperStateTheory.raise_def, set_storage_immutables]
-  \\ rpt CASE_TAC \\ gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def]
+          vyperStateTheory.lift_option_def, vyperStateTheory.lift_option_type_def,
+          vyperStateTheory.return_def, vyperStateTheory.raise_def, set_storage_immutables]
+  \\ TRY CASE_TAC \\ gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def]
+  \\ TRY CASE_TAC \\ gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def]
+  \\ TRY CASE_TAC \\ gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def]
+  \\ TRY CASE_TAC \\ gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def]
+  \\ TRY CASE_TAC \\ gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def]
+  \\ TRY CASE_TAC \\ gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def]
 QED
 
 (* Helper: read_storage_slot FST preserved by set_storage under disjointness *)
@@ -357,9 +363,12 @@ Proof
           \\ strip_tac
           \\ first_x_assum (qspecl_then [`x`, `b'`, `x''`, `tv'`] mp_tac)
           \\ simp[vyperLookupStorageTheory.storage_var_info_def])
-      \\ Cases_on `tv'`
       \\ simp[vyperStateTheory.bind_def, vyperStateTheory.return_def, vyperStateTheory.raise_def]
-      \\ rpt CASE_TAC \\ gvs[])
+      \\ Cases_on `read_storage_slot cx b' (n2w x'') tv' (set_storage cx st b x')`
+      \\ Cases_on `read_storage_slot cx b' (n2w x'') tv' st`
+      \\ gvs[]
+      \\ Cases_on `tv'` \\ gvs[vyperStateTheory.bind_def, vyperStateTheory.return_def, vyperStateTheory.raise_def]
+      \\ Cases_on `q` \\ gvs[])
   (* HashMapVarDecl branch *)
   \\ Cases_on `lookup_var_slot_from_layout cx b' mid found1`
   \\ simp[vyperStateTheory.return_def, vyperStateTheory.raise_def]

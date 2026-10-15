@@ -11,6 +11,7 @@ Theory venomInstProofs2
 Ancestors
   venomInstProofs1 stateEquivProofs finite_map venomState
   venomExecSemantics venomInst venomEffects pred_set
+  venomCallOracleDefs extCallOracle
 
 (* ===================================================================== *)
 (* ===== EVM Static-Mode Invariant (upstream dependency) =============== *)
@@ -28,6 +29,12 @@ Theorem exec_ext_call_static_preserves:
     s'.vs_logs = s.vs_logs /\
     s'.vs_call_ctx = s.vs_call_ctx
 Proof
+  rw[exec_ext_call_def, AllCaseEqs(), update_var_def,
+     venom_call_request_def, adopt_outcome_def] >> simp[]
+QED
+
+(* Original concrete-call proof, retained for the legacy helper argument:
+Proof
   rw[exec_ext_call_def, make_venom_call_state_def, LET_DEF] >>
   gvs[AllCaseEqs()] >>
   simp[update_var_def] >>
@@ -42,28 +49,98 @@ Proof
        make_rollback_def, vfmExecutionTheory.transfer_value_def] >>
   strip_tac >> gvs[]
 QED
+*)
+
+Theorem exec_pure1_static_preserves:
+  exec_pure1 x y s = OK s' ==>
+  s'.vs_call_ctx = s.vs_call_ctx /\
+  s'.vs_logs = s.vs_logs /\
+  s'.vs_accounts = s.vs_accounts /\
+  s'.vs_transient = s.vs_transient
+Proof
+  rw[exec_pure1_def, AllCaseEqs(), update_var_def] >>
+  rw[]
+QED
+
+Theorem exec_read0_static_preserves:
+  exec_read0 x y s = OK s' ==>
+  s'.vs_call_ctx = s.vs_call_ctx /\
+  s'.vs_logs = s.vs_logs /\
+  s'.vs_accounts = s.vs_accounts /\
+  s'.vs_transient = s.vs_transient
+Proof
+  rw[exec_read0_def, AllCaseEqs(), update_var_def] >>
+  rw[]
+QED
+
+Theorem exec_read1_static_preserves:
+  exec_read1 x y s = OK s' ==>
+  s'.vs_call_ctx = s.vs_call_ctx /\
+  s'.vs_logs = s.vs_logs /\
+  s'.vs_accounts = s.vs_accounts /\
+  s'.vs_transient = s.vs_transient
+Proof
+  rw[exec_read1_def, AllCaseEqs(), update_var_def] >>
+  rw[]
+QED
+
+Theorem exec_pure2_static_preserves:
+  exec_pure2 x y s = OK s' ==>
+  s'.vs_call_ctx = s.vs_call_ctx /\
+  s'.vs_logs = s.vs_logs /\
+  s'.vs_accounts = s.vs_accounts /\
+  s'.vs_transient = s.vs_transient
+Proof
+  rw[exec_pure2_def, AllCaseEqs(), update_var_def] >>
+  rw[]
+QED
+
+Theorem exec_pure3_static_preserves:
+  exec_pure3 x y s = OK s' ==>
+  s'.vs_call_ctx = s.vs_call_ctx /\
+  s'.vs_logs = s.vs_logs /\
+  s'.vs_accounts = s.vs_accounts /\
+  s'.vs_transient = s.vs_transient
+Proof
+  rw[exec_pure3_def, AllCaseEqs(), update_var_def] >>
+  rw[]
+QED
 
 (* For non-terminator, non-alloca opcodes without the corresponding
    write effect, step_inst_base preserves storage / transient storage /
    log fields. STATICCALL is the only such opcode that touches these
    fields, and static mode ensures preservation. *)
 
-val step_base_static_field_tac =
-  rpt strip_tac >>
+Theorem step_inst_base_preserves_static_fields:
+  !inst s s'. step_inst_base inst s = OK s' /\
+    ~is_terminator inst.inst_opcode /\
+    ~is_alloca_op inst.inst_opcode ==>
+    (Eff_STORAGE NOTIN write_effects inst.inst_opcode ==>
+     contract_storage s' = contract_storage s) /\
+    (Eff_TRANSIENT NOTIN write_effects inst.inst_opcode ==>
+     s'.vs_transient = s.vs_transient) /\
+    (Eff_LOG NOTIN write_effects inst.inst_opcode ==>
+     s'.vs_logs = s.vs_logs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  RULE_ASSUM_TAC (SIMP_RULE std_ss [Once step_inst_base_def]) >>
   Cases_on `inst.inst_opcode` >>
   gvs[is_terminator_def, is_alloca_op_def,
-      write_effects_def, all_effects_def, empty_effects_def] >>
-  fs[step_inst_base_def] >>
-  gvs[AllCaseEqs()] >>
-  fs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def,
-     exec_create_def, extract_venom_result_def] >>
-  gvs[AllCaseEqs()] >>
-  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
-  simp[update_var_def, mstore_def, mstore8_def, sstore_def, tstore_def,
-       write_memory_with_expansion_def, mcopy_def,
-       contract_storage_def] >>
-  imp_res_tac exec_ext_call_static_preserves >> gvs[];
+      write_effects_def, empty_effects_def] >>
+  imp_res_tac exec_pure1_static_preserves >>
+  imp_res_tac exec_read0_static_preserves >>
+  imp_res_tac exec_read1_static_preserves >>
+  imp_res_tac exec_pure2_static_preserves >>
+  imp_res_tac exec_ext_call_static_preserves >>
+  imp_res_tac exec_pure3_static_preserves >> gvs[] >>
+  gvs[exec_write2_def, AllCaseEqs(), update_var_def,
+      contract_storage_def,
+      mcopy_def, mstore_def, mstore8_def,
+      write_memory_with_expansion_def,
+      sstore_def, tstore_def, all_effects_def] >>
+  drule exec_ext_call_static_preserves >>
+  simp[contract_storage_def]
+QED
 
 Theorem step_inst_base_preserves_storage:
   !inst s s'. step_inst_base inst s = OK s' /\
@@ -72,7 +149,7 @@ Theorem step_inst_base_preserves_storage:
     Eff_STORAGE NOTIN write_effects inst.inst_opcode ==>
     contract_storage s' = contract_storage s
 Proof
-  step_base_static_field_tac
+  metis_tac[step_inst_base_preserves_static_fields]
 QED
 
 Theorem step_inst_base_preserves_transient:
@@ -82,7 +159,7 @@ Theorem step_inst_base_preserves_transient:
     Eff_TRANSIENT NOTIN write_effects inst.inst_opcode ==>
     s'.vs_transient = s.vs_transient
 Proof
-  step_base_static_field_tac
+  metis_tac[step_inst_base_preserves_static_fields]
 QED
 
 Theorem step_inst_base_preserves_log:
@@ -92,5 +169,5 @@ Theorem step_inst_base_preserves_log:
     Eff_LOG NOTIN write_effects inst.inst_opcode ==>
     s'.vs_logs = s.vs_logs
 Proof
-  step_base_static_field_tac
+  metis_tac[step_inst_base_preserves_static_fields]
 QED

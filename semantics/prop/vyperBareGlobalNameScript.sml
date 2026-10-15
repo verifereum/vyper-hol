@@ -50,7 +50,7 @@ Theorem lookup_immutable_after_set_immutable:
 Proof
   rw[set_immutable_def, lookup_immutable_def,
      bind_def, LET_THM, get_address_immutables_def,
-     set_address_immutables_def, lift_option_def] >>
+     set_address_immutables_def, lift_option_type_def, lift_option_def] >>
   Cases_on `ALOOKUP st.immutables cx.txn.target` >> gvs[return_def, raise_def] >>
   simp[get_source_immutables_def, set_source_immutables_def,
        alistTheory.ALOOKUP_ADELKEY,
@@ -198,8 +198,8 @@ Proof
   Cases_on `lookup_bare_global_name cx st n2` >> simp[] >>
   PairCases_on `x` >> simp[] >>
   gvs[lookup_bare_global_name_def, lookup_immutable_def] >>
-  simp[set_immutable_def, get_address_immutables_def, lift_option_def,
-       set_address_immutables_def, bind_def, return_def] >>
+  simp[set_immutable_def, get_address_immutables_def, lift_option_type_def,
+       lift_option_def, set_address_immutables_def, bind_def, return_def] >>
   gvs[AllCaseEqs()] >>
   simp[return_def, get_source_immutables_def, set_source_immutables_def,
        alistTheory.ALOOKUP_ADELKEY,
@@ -215,8 +215,8 @@ Proof
   rpt strip_tac >>
   simp[update_bare_global_name_def] >>
   gvs[lookup_bare_global_name_def, lookup_immutable_def] >>
-  simp[set_immutable_def, get_address_immutables_def, lift_option_def,
-       set_address_immutables_def, bind_def, return_def] >>
+  simp[set_immutable_def, get_address_immutables_def, lift_option_type_def,
+       lift_option_def, set_address_immutables_def, bind_def, return_def] >>
   gvs[AllCaseEqs()] >>
   simp[return_def, set_source_immutables_def,
        get_source_immutables_def, finite_mapTheory.FLOOKUP_UPDATE]
@@ -260,7 +260,7 @@ Theorem assign_target_immutable_subscripts_state:
   ∀cx st n sbs ao tv a a'.
     lookup_bare_global_name cx st n = SOME (tv, a) ∧
     assign_subscripts tv a (REVERSE sbs) ao = INL a' ⇒
-    SND (assign_target cx (BaseTargetV (ImmutableVar n) sbs) ao st) =
+    SND (assign_target cx (BaseTargetV (ImmutableVar (current_module cx) n) sbs) ao st) =
     update_bare_global_name cx st n a'
 Proof
   rpt gen_tac >> strip_tac >>
@@ -268,14 +268,14 @@ Proof
   Cases_on `ALOOKUP st.immutables cx.txn.target` >> gvs[] >>
   simp[Once assign_target_def, LET_THM, bind_def,
        get_immutables_def, get_address_immutables_def,
-       lift_option_def, return_def, lift_option_type_def, lift_sum_def] >>
+       lift_option_type_def, lift_option_def, return_def, lift_sum_def] >>
   simp[set_immutable_def, bind_def, get_address_immutables_def,
-       lift_option_def, return_def, set_address_immutables_def,
-       ignore_bind_def, LET_THM] >>
+       lift_option_type_def, lift_option_def, return_def,
+       set_address_immutables_def, ignore_bind_def, LET_THM] >>
   simp[update_bare_global_name_def, lookup_bare_global_name_def,
        lookup_immutable_def, set_immutable_def, bind_def,
-       get_address_immutables_def, lift_option_def, return_def,
-       set_address_immutables_def, LET_THM] >>
+       get_address_immutables_def, lift_option_type_def, lift_option_def,
+       return_def, set_address_immutables_def, LET_THM] >>
   Cases_on `ao` >>
   simp[assign_result_def, return_def, bind_def, lift_sum_def] >>
   rpt (CASE_TAC >> gvs[return_def, raise_def])
@@ -285,17 +285,17 @@ Theorem assign_target_immutable_subscripts_valid:
   ∀cx st n sbs ao tv a a'.
     lookup_bare_global_name cx st n = SOME (tv, a) ∧
     assign_subscripts tv a (REVERSE sbs) ao = INL a' ⇒
-    ISL (FST (assign_target cx (BaseTargetV (ImmutableVar n) sbs) ao st))
+    ISL (FST (assign_target cx (BaseTargetV (ImmutableVar (current_module cx) n) sbs) ao st))
 Proof
   rpt gen_tac >> strip_tac >>
   gvs[lookup_bare_global_name_def, lookup_immutable_def] >>
   Cases_on `ALOOKUP st.immutables cx.txn.target` >> gvs[] >>
   simp[Once assign_target_def, LET_THM, bind_def,
        get_immutables_def, get_address_immutables_def,
-       lift_option_def, return_def, lift_option_type_def, lift_sum_def] >>
+       lift_option_type_def, lift_option_def, return_def, lift_sum_def] >>
   simp[set_immutable_def, bind_def, get_address_immutables_def,
-       lift_option_def, return_def, set_address_immutables_def,
-       ignore_bind_def, LET_THM] >>
+       lift_option_type_def, lift_option_def, return_def,
+       set_address_immutables_def, ignore_bind_def, LET_THM] >>
   Cases_on `ao` >>
   simp[assign_result_def, return_def, bind_def, lift_sum_def] >>
   drule assign_subscripts_PopOp_assign_result >> strip_tac >>
@@ -310,7 +310,7 @@ Theorem valid_target_immutable_subscripts:
   ∀cx st n sbs ao tv a a'.
     lookup_bare_global_name cx st n = SOME (tv, a) ∧
     assign_subscripts tv a (REVERSE sbs) ao = INL a' ⇒
-    valid_target cx st (BaseTargetV (ImmutableVar n) sbs) ao
+    valid_target cx st (BaseTargetV (ImmutableVar (current_module cx) n) sbs) ao
 Proof
   metis_tac[valid_target_def, assign_target_immutable_subscripts_valid]
 QED
@@ -319,7 +319,7 @@ Theorem update_target_immutable_subscripts:
   ∀cx st n sbs ao tv a a'.
     lookup_bare_global_name cx st n = SOME (tv, a) ∧
     assign_subscripts tv a (REVERSE sbs) ao = INL a' ⇒
-    update_target cx st (BaseTargetV (ImmutableVar n) sbs) ao =
+    update_target cx st (BaseTargetV (ImmutableVar (current_module cx) n) sbs) ao =
     update_bare_global_name cx st n a'
 Proof
   metis_tac[update_target_def, assign_target_immutable_subscripts_state]

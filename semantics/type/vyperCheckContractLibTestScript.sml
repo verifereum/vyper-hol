@@ -1,0 +1,326 @@
+Theory vyperCheckContractLibTest
+Ancestors
+  vyperTypeContract evalCompilerSubsetAbiBuiltins vyperABI vyperContext
+  vyperTypeSystem
+Libs
+  vyperCheckContractLib cv_transLib
+
+val empty_layouts =
+  ``([] : (address # (storage_layout # storage_layout)) list)``
+val empty_modules =
+  ``([(NONE, [])] : (num option # toplevel list) list)``
+val zero_address = ``(0w : address)``
+
+(* ABI encoding's bound follows the evaluator's singleton wrapping mode.
+   The unchanged encode_dynamic fixture has an inner bound of 192 bytes,
+   plus its four-byte method id, not a 224-byte outer tuple plus method id. *)
+Theorem abi_encode_dynamic_exact_bound:
+  type_builtin_result_ok FEMPTY (AbiEncode ensure method_id)
+    (BaseT (BytesT (Dynamic n)))
+    (TupleT [TupleT [BaseT (StringT 16); BaseT (BytesT (Dynamic 16))]])
+    [TupleT [BaseT (StringT 16); BaseT (BytesT (Dynamic 16))]] <=>
+  (if ensure then 224 else 192) + abi_encode_method_id_size method_id <= n
+Proof
+  Cases_on `ensure` >>
+  simp[type_builtin_result_ok_def, abi_encode_size_ok_def,
+       vyper_abi_size_bound_def, vyper_is_dynamic_def, contractABITheory.ceil32_def]
+QED
+
+Theorem abi_encode_dynamic_wrapping_bounds:
+  abi_encode_size_ok FEMPTY F
+    (TupleT [TupleT [BaseT (StringT 16); BaseT (BytesT (Dynamic 16))]])
+    (SOME [222w; 173w; 190w; 239w]) 196 /\
+  ¬abi_encode_size_ok FEMPTY T
+    (TupleT [TupleT [BaseT (StringT 16); BaseT (BytesT (Dynamic 16))]])
+    (SOME [222w; 173w; 190w; 239w]) 196 /\
+  abi_encode_size_ok FEMPTY T
+    (TupleT [TupleT [BaseT (StringT 16); BaseT (BytesT (Dynamic 16))]])
+    (SOME [222w; 173w; 190w; 239w]) 228 /\
+  abi_encode_size_ok FEMPTY F
+    (TupleT [TupleT [BaseT (StringT 16); BaseT (BytesT (Dynamic 16))]]) NONE 192 /\
+  abi_encode_size_ok FEMPTY T
+    (TupleT [TupleT [BaseT (StringT 16); BaseT (BytesT (Dynamic 16))]]) NONE 224
+Proof
+  EVAL_TAC
+QED
+
+(* All other target shapes keep their previous bound; no method-id restriction
+   is smuggled into the size predicate. Argument validation remains separate. *)
+Theorem abi_encode_other_targets_unchanged:
+  (!ts. target_ty <> TupleT ts) ==>
+  (abi_encode_size_ok tenv ensure target_ty method_id n <=>
+   vyper_abi_size_bound tenv target_ty + abi_encode_method_id_size method_id <= n)
+Proof
+  Cases_on `target_ty` >> simp[abi_encode_size_ok_def]
+QED
+
+Theorem abi_encode_nonsingleton_tuples_unchanged:
+  LENGTH ts <> 1 ==>
+  (abi_encode_size_ok tenv ensure (TupleT ts) method_id n <=>
+   vyper_abi_size_bound tenv (TupleT ts) + abi_encode_method_id_size method_id <= n)
+Proof
+  Cases_on `ts` >> simp[abi_encode_size_ok_def] >>
+  strip_tac >> rename1 `rest <> []` >> Cases_on `rest` >> gvs[]
+QED
+
+(* Targeted CV translation/check of the changed checker predicate, rather than
+   relying solely on its kernel computation path. *)
+val () = cv_auto_trans abi_encode_method_id_size_def;
+val () = cv_auto_trans abi_encode_size_ok_def;
+
+Theorem abi_encode_dynamic_result_bound_cv:
+  type_builtin_result_ok FEMPTY (AbiEncode F (SOME [222w; 173w; 190w; 239w]))
+    (BaseT (BytesT (Dynamic 196)))
+    (TupleT [TupleT [BaseT (StringT 16); BaseT (BytesT (Dynamic 16))]])
+    [TupleT [BaseT (StringT 16); BaseT (BytesT (Dynamic 16))]] /\
+  ¬type_builtin_result_ok FEMPTY (AbiEncode T (SOME [222w; 173w; 190w; 239w]))
+    (BaseT (BytesT (Dynamic 196)))
+    (TupleT [TupleT [BaseT (StringT 16); BaseT (BytesT (Dynamic 16))]])
+    [TupleT [BaseT (StringT 16); BaseT (BytesT (Dynamic 16))]]
+Proof
+  simp[type_builtin_result_ok_def] >> CONV_TAC cv_eval
+QED
+
+(* Maximal well-typed dynamic inputs attain the four advertised bounds in the
+   evaluator, including both method-id and wrapping choices. *)
+Definition abi_encode_wrapping_cases_ok_def:
+  abi_encode_wrapping_cases_ok = EVERY (λ(ensure, method_id, n).
+    case evaluate_type_builtin empty_evaluation_context (AbiEncode ensure method_id)
+      (TupleT [TupleT [BaseT (StringT 16); BaseT (BytesT (Dynamic 16))]])
+      [ArrayV (TupleV [StringV "abcdefghijklmnop"; BytesV (REPLICATE 16 1w)])] of
+      INL (BytesV bs) => LENGTH bs = n
+    | _ => F)
+    [(F, NONE, 192); (T, NONE, 224);
+     (F, SOME [222w; 173w; 190w; 239w], 196);
+     (T, SOME [222w; 173w; 190w; 239w], 228)]
+End
+val () = cv_auto_trans abi_encode_wrapping_cases_ok_def;
+
+Theorem abi_encode_wrapping_lengths_eval:
+  abi_encode_wrapping_cases_ok
+Proof
+  EVAL_TAC
+QED
+
+Theorem abi_encode_wrapping_lengths_cv:
+  abi_encode_wrapping_cases_ok
+Proof
+  CONV_TAC cv_eval
+QED
+
+Theorem abi_dynamic_fixture_runtime_checked:
+  IS_SOME (check_contract F [] (0w : address)
+    [(NONE, task090_abi_dynamic_program)])
+Proof
+  simp[task090_abi_dynamic_program_def] >>
+  CONV_TAC (RAND_CONV vyperCheckContractLib.check_contract_conv) >> simp[]
+QED
+
+Theorem abi_dynamic_fixture_deployment_checked:
+  IS_SOME (check_contract T [] (0w : address)
+    [(NONE, task090_abi_dynamic_program)])
+Proof
+  simp[task090_abi_dynamic_program_def] >>
+  CONV_TAC (RAND_CONV vyperCheckContractLib.check_contract_conv) >> simp[]
+QED
+
+fun assert_some th =
+  if optionSyntax.is_some (rhs (concl th)) then ()
+  else raise Fail "expected successful check_contract result"
+
+fun assert_none th =
+  if optionSyntax.is_none (rhs (concl th)) then ()
+  else raise Fail "expected rejected check_contract result"
+
+(* Basic API and ML-Boolean construction. *)
+val empty_check = vyperCheckContractLib.check_contract
+  {in_deploy = false, layouts = empty_layouts,
+   address = zero_address, modules = empty_modules}
+val () = assert_some empty_check
+
+(* Storage layout lookup and public getter artifact construction. *)
+val storage_modules =
+  ``([(NONE,
+       [VariableDecl Public Storage "stored" (BaseT (UintT 256)) (SOME 0);
+        FunctionDecl External View F F "read" [] [] (BaseT (UintT 256))
+          [Return (SOME
+             (TopLevelName (BaseT (UintT 256)) (NONE, "stored")))]])]
+      : (num option # toplevel list) list)``
+val storage_layouts =
+  ``([((0w : address),
+       ([((NONE, "stored"), 0)] : storage_layout, [] : storage_layout))]
+      : (address # (storage_layout # storage_layout)) list)``
+val storage_check = vyperCheckContractLib.check_contract
+  {in_deploy = false, layouts = storage_layouts,
+   address = zero_address, modules = storage_modules}
+val () = assert_some storage_check
+
+(* This requires the checker-specific existential witness conversion, default
+   argument typing, string computation, and internal call-graph evaluation. *)
+val internal_modules =
+  ``([(NONE,
+       [FunctionDecl Internal Nonpayable F F "bar"
+          [("x", BaseT (UintT 256))]
+          [Literal (BaseT (UintT 256)) (IntL 7)]
+          (BaseT (UintT 256))
+          [Return (SOME (Name (BaseT (UintT 256)) "x"))];
+        FunctionDecl External Nonpayable F F "foo" [] []
+          (BaseT (UintT 256))
+          [Return (SOME
+             (Call (BaseT (UintT 256)) (IntCall (NONE, "bar")) [] NONE))]])]
+      : (num option # toplevel list) list)``
+val internal_check = vyperCheckContractLib.check_contract
+  {in_deploy = false, layouts = empty_layouts,
+   address = zero_address, modules = internal_modules}
+val () = assert_some internal_check
+val call_graph_constant = prim_mk_const
+  {Thy = "vyperTypeCallGraph", Name = "contract_call_graph_acyclic"}
+val internal_graph_application = mk_comb (call_graph_constant, internal_modules)
+val internal_graph_result = vyperCheckContractLib.check_contract_conv
+  internal_graph_application
+val () = if aconv (lhs (concl internal_graph_result)) internal_graph_application andalso
+                aconv (rhs (concl internal_graph_result)) T then ()
+         else raise Fail "acyclic internal-call graph was rejected"
+
+(* Compiler-generated integer conversions require valid_conversion to compute. *)
+val conversion_modules =
+  ``([(NONE,
+       [FunctionDecl External Pure F F "widen"
+          [("x", BaseT (UintT 8))] [] (BaseT (UintT 256))
+          [Return (SOME
+             (TypeBuiltin (BaseT (UintT 256)) Convert
+               (BaseT (UintT 256))
+               [Name (BaseT (UintT 8)) "x"]))]])]
+      : (num option # toplevel list) list)``
+val conversion_check = vyperCheckContractLib.check_contract
+  {in_deploy = false, layouts = empty_layouts,
+   address = zero_address, modules = conversion_modules}
+val () = assert_some conversion_check
+
+(* len() requires sized-type classification to compute. *)
+val sized_modules =
+  ``([(NONE,
+       [FunctionDecl External Pure F F "array_len"
+          [("xs", ArrayT (BaseT AddressT) (Dynamic 4))] []
+          (BaseT (UintT 256))
+          [Return (SOME
+             (Builtin (BaseT (UintT 256)) Len
+               [Name (ArrayT (BaseT AddressT) (Dynamic 4)) "xs"]))]])]
+      : (num option # toplevel list) list)``
+val sized_check = vyperCheckContractLib.check_contract
+  {in_deploy = false, layouts = empty_layouts,
+   address = zero_address, modules = sized_modules}
+val () = assert_some sized_check
+
+(* The conversion itself computes rejection to NONE. The success-only API must
+   fail closed on that result. *)
+val recursive_modules =
+  ``([(NONE,
+       [FunctionDecl Internal Nonpayable F F "loop" [] []
+          (BaseT (UintT 256))
+          [Return (SOME
+             (Call (BaseT (UintT 256)) (IntCall (NONE, "loop")) [] NONE))]])]
+      : (num option # toplevel list) list)``
+val recursive_application = vyperCheckContractLib.mk_check_contract
+  {in_deploy = false, layouts = empty_layouts,
+   address = zero_address, modules = recursive_modules}
+val recursive_check =
+  vyperCheckContractLib.check_contract_conv recursive_application
+val () = assert_none recursive_check
+
+(* The specialized call-graph conversion also proves longer cycles directly. *)
+val two_cycle_modules =
+  ``([(NONE,
+       [FunctionDecl Internal Nonpayable F F "left" [] [] NoneT
+          [Expr (Call NoneT (IntCall (NONE, "right")) [] NONE)];
+        FunctionDecl Internal Nonpayable F F "right" [] [] NoneT
+          [Expr (Call NoneT (IntCall (NONE, "left")) [] NONE)]])]
+      : (num option # toplevel list) list)``
+val two_cycle_application = mk_comb (call_graph_constant, two_cycle_modules)
+val two_cycle_result = vyperCheckContractLib.check_contract_conv
+  two_cycle_application
+val () = if aconv (lhs (concl two_cycle_result)) two_cycle_application andalso
+                aconv (rhs (concl two_cycle_result)) F then ()
+         else raise Fail "two-node call cycle was not rejected"
+
+fun fails thunk = ((thunk (); false) handle _ => true)
+val () =
+  if fails (fn () => ignore (vyperCheckContractLib.check_contract
+       {in_deploy = false, layouts = empty_layouts,
+        address = zero_address, modules = recursive_modules})) then ()
+  else raise Fail "success API accepted a rejected contract"
+
+(* Open inputs are rejected before conversion. *)
+val () =
+  if fails (fn () => ignore (vyperCheckContractLib.mk_check_contract
+       {in_deploy = false, layouts = empty_layouts,
+        address = mk_var ("address", type_of zero_address),
+        modules = empty_modules})) then ()
+  else raise Fail "open checker input was accepted"
+
+(* The exported compset is cached and sealed, while copy permits functional
+   caller extension without changing the library instance. *)
+val checker_copy =
+  vyperCheckContractLib.check_contract_compset |> computeLib.copy
+val copied_empty_check = computeLib.CBV_CONV checker_copy
+  (vyperCheckContractLib.mk_check_contract
+    {in_deploy = false, layouts = empty_layouts,
+     address = zero_address, modules = empty_modules})
+val () = assert_some copied_empty_check
+
+(* Closed list computations exercise the checker-local list fragment directly. *)
+fun timed_checker_conv label tm = let
+  val timer = Timer.startRealTimer ()
+  val theorem = computeLib.CBV_CONV
+    vyperCheckContractLib.check_contract_compset tm
+  val elapsed = Time.toReal (Timer.checkRealTimer timer)
+  val () = print (label ^ " duration=" ^ Real.toString elapsed ^ "s\n")
+in
+  (theorem, elapsed)
+end
+
+fun assert_closed_result input expected theorem = let
+  val () = if null (hyp theorem) then ()
+    else raise Fail "checker conversion theorem has assumptions"
+  val (actual_input, actual_result) = dest_eq (concl theorem)
+in
+  if aconv actual_input input andalso aconv actual_result expected then ()
+  else raise Fail "unexpected checker conversion result"
+end
+
+val all_distinct_input = ``ALL_DISTINCT [NONE : num option]``
+val (all_distinct_result, _) =
+  timed_checker_conv "ALL_DISTINCT singleton" all_distinct_input
+val () = assert_closed_result all_distinct_input ``T`` all_distinct_result
+
+val endpoint_ty = ``:num option # string``
+fun mk_endpoint i = pairSyntax.mk_pair
+  (optionSyntax.mk_some (numSyntax.mk_numeral (Arbnum.fromInt i)),
+   stringSyntax.fromMLstring ("function_" ^ Int.toString i))
+fun endpoint_indices start count = List.tabulate (count, fn i => start + i)
+fun mk_endpoint_indices indices =
+  listSyntax.mk_list (map mk_endpoint indices, endpoint_ty)
+fun mk_endpoint_list count =
+  mk_endpoint_indices (List.tabulate (count, fn i => i mod 35))
+fun mk_nub_input count =
+  mk_comb
+    (Term.inst [alpha |-> endpoint_ty] ``list$nub``, mk_endpoint_list count)
+
+val nub_40_input = mk_nub_input 40
+val expected_nub_40 =
+  mk_endpoint_indices (endpoint_indices 5 30 @ endpoint_indices 0 5)
+val (nub_40_result, nub_40_elapsed) =
+  timed_checker_conv "nub 40 endpoints" nub_40_input
+val () = assert_closed_result nub_40_input expected_nub_40 nub_40_result
+
+val nub_80_input = mk_nub_input 80
+val expected_nub_80 =
+  mk_endpoint_indices (endpoint_indices 10 25 @ endpoint_indices 0 10)
+val (nub_80_result, nub_80_elapsed) =
+  timed_checker_conv "nub 80 endpoints" nub_80_input
+val () = assert_closed_result nub_80_input expected_nub_80 nub_80_result
+
+val set_membership_input = ``(1 : num) IN {1; 2}``
+val (set_membership_result, _) =
+  timed_checker_conv "predicate-set membership" set_membership_input
+val () = assert_closed_result set_membership_input ``T`` set_membership_result

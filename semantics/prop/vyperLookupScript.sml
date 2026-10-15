@@ -139,6 +139,19 @@ Proof
   rpt gen_tac >> Cases_on `FLOOKUP h id` >> simp[]
 QED
 
+Theorem lookup_scopes_find_containing_scope:
+  !scopes id entry.
+    lookup_scopes id scopes = SOME entry ==>
+    ?pre env rest.
+      find_containing_scope id scopes = SOME (pre, env, entry, rest)
+Proof
+  Induct >> simp[lookup_scopes_def, find_containing_scope_def] >>
+  rpt gen_tac >> Cases_on `FLOOKUP h id` >> gvs[] >>
+  strip_tac >> first_x_assum drule >> strip_tac >>
+  qexists_tac `h::pre` >> qexists_tac `env` >> qexists_tac `rest` >>
+  simp[]
+QED
+
 Theorem find_containing_scope_none_lookup_scopes_none:
   ∀id sc. find_containing_scope id sc = NONE ⇒ lookup_scopes id sc = NONE
 Proof
@@ -493,7 +506,9 @@ Proof
 QED
 
 (* ===== assign_target properties ===== *)
-(* TODO: refactor proofs and move to vyperAssignTarget *)
+(* TODO(cleanup): these reusable assign_target facts should live in
+   vyperAssignTarget; they remain here for now to avoid changing theorem
+   dependencies while preserving logical content. *)
 
 Theorem assign_target_scoped_var_implies_var_assignable:
   ∀cx st n sbs ao.
@@ -532,13 +547,13 @@ QED
 
 Theorem assign_target_name_update:
   ∀cx st n ty bop v v'.
-    lookup_name st n = SOME v ∧ var_assignable st n ∧
+    lookup_name_typed st n = SOME entry ∧ var_assignable st n ∧
     evaluate_binop (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
-                   NoneTV bop v v' = INL new_v ⇒
+                   entry.type bop entry.value v' = INL new_v ⇒
     assign_target cx (BaseTargetV (ScopedVar n) []) (Update ty bop v') st =
     (INL NONE, update_name st n new_v)
 Proof
-  rw[lookup_name_SOME, var_assignable_def] >>
+  rw[var_assignable_def] >>
   gvs[lookup_name_typed_def] >>
   `IS_SOME (find_containing_scope (string_to_num n) st.scopes)`
     by (irule lookup_scopes_find_containing >> simp[]) >>
@@ -585,7 +600,12 @@ Proof
       rename1 `ArrayV av` >> Cases_on `av` >> gvs[pop_element_def, popped_value_def])
   (* step case *)
   >> rpt gen_tac >>
-  Cases_on `h` >> simp[assign_subscripts_def, evaluate_subscripts_def] >>
+  Cases_on `h` >> simp[assign_subscripts_def, evaluate_subscripts_def]
+  >- (Cases_on `v` >> simp[assign_subscripts_def, evaluate_subscripts_def] >>
+      simp[AllCaseEqs()] >> strip_tac >> gvs[] >>
+      Cases_on `a` >>
+      gvs[assign_subscripts_def, evaluate_subscripts_def] >>
+      simp[AllCaseEqs()] >> gvs[AllCaseEqs()]) >>
   simp[AllCaseEqs()] >> strip_tac >> gvs[] >>
   (* AttrSubscript: case split on the value being subscripted *)
   Cases_on `a` >>

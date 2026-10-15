@@ -81,7 +81,7 @@ QED
 Theorem get_address_immutables_scopes:
   !cx st res st'. get_address_immutables cx st = (res, st') ==> st'.scopes = st.scopes
 Proof
-  rw[get_address_immutables_def, lift_option_def] >>
+  rw[get_address_immutables_def, lift_option_type_def, lift_option_def] >>
   Cases_on `ALOOKUP st.immutables cx.txn.target` >> fs[return_def, raise_def]
 QED
 
@@ -133,7 +133,8 @@ QED
 Theorem get_immutables_scopes:
   !cx src st res st'. get_immutables cx src st = (res, st') ==> st'.scopes = st.scopes
 Proof
-  rw[get_immutables_def, bind_def, return_def, get_address_immutables_def, lift_option_def] >>
+  rw[get_immutables_def, bind_def, return_def, get_address_immutables_def,
+     lift_option_type_def, lift_option_def] >>
   Cases_on `ALOOKUP st.immutables cx.txn.target` >> fs[return_def, raise_def]
 QED
 
@@ -146,11 +147,16 @@ Proof
   (qpat_x_assum `_ = (res, st')` mp_tac >>
    simp[get_immutables_def, get_address_immutables_def, bind_def,
         lift_option_def, lift_option_type_def, return_def, raise_def] >>
-   rpt CASE_TAC >> gvs[return_def, raise_def]) >>
+   CASE_TAC >> gvs[return_def, raise_def] >>
+   CASE_TAC >> gvs[return_def, raise_def]) >>
   PairCases_on `x'` >> gvs[] >>
   Cases_on `x'0` >> gvs[bind_def, return_def, raise_def] >>
   qpat_x_assum `_ = (res, st')` mp_tac >>
-  rpt (CASE_TAC >> gvs[return_def, raise_def, bind_def]) >>
+  CASE_TAC >> gvs[return_def, raise_def, bind_def] >>
+  CASE_TAC >> gvs[return_def, raise_def, bind_def] >>
+  CASE_TAC >> gvs[return_def, raise_def, bind_def] >>
+  CASE_TAC >> gvs[return_def, raise_def, bind_def] >>
+  CASE_TAC >> gvs[return_def, raise_def, bind_def] >>
   rpt strip_tac >> gvs[] >>
   drule read_storage_slot_scopes >> simp[]
 QED
@@ -176,7 +182,7 @@ Theorem set_immutable_scopes:
   !cx src n tv v st res st'. set_immutable cx src n tv v st = (res, st') ==> st'.scopes = st.scopes
 Proof
   rw[set_immutable_def, bind_def, return_def, get_address_immutables_def,
-     set_address_immutables_def, lift_option_def] >>
+     set_address_immutables_def, lift_option_type_def, lift_option_def] >>
   Cases_on `ALOOKUP st.immutables cx.txn.target` >> gvs[raise_def, return_def]
 QED
 
@@ -186,11 +192,17 @@ Proof
   rw[push_log_def, return_def] >> simp[]
 QED
 
+Theorem append_logs_scopes:
+  ∀logs st res st'. append_logs logs st = (res, st') ⇒ st'.scopes = st.scopes
+Proof
+  rw[append_logs_def, return_def] >> simp[]
+QED
+
 Theorem transfer_value_scopes:
   !f t a st res st'. transfer_value f t a st = (res, st') ==> st'.scopes = st.scopes
 Proof
   rw[transfer_value_def, bind_def, ignore_bind_def, get_accounts_def, return_def, check_def, type_check_def, assert_def, update_accounts_def] >>
-  gvs[raise_def]
+  gvs[AllCaseEqs(), raise_def]
 QED
 
 Theorem lookup_flag_mem_scopes:

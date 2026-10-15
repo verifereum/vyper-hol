@@ -321,9 +321,16 @@ Theorem state_equiv_empty_eq:
   !s1 s2. state_equiv {} s1 s2 ==> s1 = s2
 Proof
   rpt strip_tac >>
-  fs[state_equiv_def, execution_equiv_def] >>
-  simp[venomStateTheory.venom_state_component_equality] >>
-  simp[finite_mapTheory.FLOOKUP_EXT, FUN_EQ_THM] >>
-  fs[venomStateTheory.lookup_var_def]
+  (* Keep residual equality compact: reconstruction restores only variables,
+     and so also carries components introduced by future record extensions. *)
+  qpat_x_assum `state_equiv {} s1 s2` mp_tac >>
+  simp_tac bool_ss [state_equiv_frame, pred_setTheory.NOT_IN_EMPTY,
+                    venomStateTheory.lookup_var_def] >>
+  strip_tac >>
+  `s1.vs_vars = s2.vs_vars` by
+    simp[finite_mapTheory.FLOOKUP_EXT, FUN_EQ_THM] >>
+  fs[Excl "core_complete_mask_equality",
+     stateFrameTheory.state_frame_eq_reconstruct] >>
+  qpat_x_assum `s1.vs_vars = s2.vs_vars` (SUBST_ALL_TAC o SYM) >> fs[]
 QED
 

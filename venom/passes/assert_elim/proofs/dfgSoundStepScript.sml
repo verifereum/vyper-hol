@@ -259,13 +259,19 @@ Proof
   Cases_on `v = k`
   >- (* v = k: use new-key hypothesis *)
      (`w = nv` by (qpat_x_assum `FLOOKUP _ v = _` mp_tac >>
-                   simp[FLOOKUP_UPDATE]) >>
+                   PURE_REWRITE_TAC[finite_mapTheory.FLOOKUP_UPDATE] >>
+                   ASM_REWRITE_TAC[] >> strip_tac >>
+                   qpat_x_assum `SOME nv = SOME w`
+                     (assume_tac o REWRITE_RULE[optionTheory.SOME_11]) >>
+                   ASM_REWRITE_TAC[]) >>
       rw[] >> first_x_assum drule_all >> strip_tac >>
       rpt conj_tac >> rpt strip_tac >>
       res_tac >> metis_tac[flookup_thm])
   >> (* v <> k: use old dfg_eq_sound *)
-     qpat_x_assum `FLOOKUP _ v = _` mp_tac >> simp[FLOOKUP_UPDATE] >>
-     strip_tac >>
+     `k <> v` by metis_tac[] >>
+     qpat_x_assum `FLOOKUP _ v = _` mp_tac >>
+     PURE_REWRITE_TAC[finite_mapTheory.FLOOKUP_UPDATE] >>
+     ASM_REWRITE_TAC[] >> strip_tac >>
      qpat_x_assum `dfg_eq_sound _ _` mp_tac >>
      PURE_ONCE_REWRITE_TAC [dfg_eq_sound_def] >> strip_tac >>
      first_x_assum drule_all >> strip_tac >>
@@ -392,6 +398,69 @@ Proof
   rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE metis_tac[])
 QED
 
+
+(* Extending an environment preserves DFG soundness when old values are
+   unchanged and every tracked definition present afterwards was already
+   present before the extension.  Operand closure keeps all variable operands
+   of those old tracked definitions in the unchanged part of the environment. *)
+Theorem dfg_sound_fresh_untracked_extension:
+  !dfg env env'.
+    dfg_sound dfg env /\
+    (!x. x IN FDOM env ==> FLOOKUP env' x = FLOOKUP env x) /\
+    (!v dinst. dfg_get_def dfg v = SOME dinst /\
+       v IN FDOM env' /\ dfg_tracked_opcode dinst.inst_opcode ==>
+       v IN FDOM env) /\
+    (!v dinst u. dfg_get_def dfg v = SOME dinst /\
+       v IN FDOM env /\ dfg_tracked_opcode dinst.inst_opcode /\
+       MEM (Var u) dinst.inst_operands ==> u IN FDOM env)
+    ==>
+    dfg_sound dfg env'
+Proof
+  rpt strip_tac >> fs[dfg_sound_def] >> rpt conj_tac
+  >- (PURE_ONCE_REWRITE_TAC[dfg_assign_sound_def] >> rpt strip_tac >>
+      `v IN FDOM env` by metis_tac[dfg_tracked_opcode_def] >>
+      `u IN FDOM env` by
+        metis_tac[dfg_tracked_opcode_def, listTheory.MEM] >>
+      qpat_x_assum `dfg_assign_sound dfg env` mp_tac >>
+      PURE_ONCE_REWRITE_TAC[dfg_assign_sound_def] >> strip_tac >>
+      first_x_assum drule_all >> metis_tac[])
+  >- (PURE_ONCE_REWRITE_TAC[dfg_iszero_sound_def] >> rpt strip_tac >>
+      `v IN FDOM env'` by fs[flookup_thm] >>
+      `v IN FDOM env` by metis_tac[dfg_tracked_opcode_def] >>
+      `tv IN FDOM env` by
+        metis_tac[dfg_tracked_opcode_def, listTheory.MEM] >>
+      `FLOOKUP env v = SOME w` by metis_tac[] >>
+      `FLOOKUP env' tv = FLOOKUP env tv` by metis_tac[] >>
+      qpat_x_assum `dfg_iszero_sound dfg env` mp_tac >>
+      PURE_ONCE_REWRITE_TAC[dfg_iszero_sound_def] >> strip_tac >>
+      first_x_assum drule_all >> metis_tac[])
+  >- (PURE_ONCE_REWRITE_TAC[dfg_eq_sound_def] >> rpt strip_tac >>
+      `v IN FDOM env'` by fs[flookup_thm] >>
+      `v IN FDOM env` by metis_tac[dfg_tracked_opcode_def] >>
+      `FLOOKUP env v = SOME w` by metis_tac[] >>
+      `!u. MEM (Var u) [lhs; rhs] ==>
+           u IN FDOM env /\ FLOOKUP env' u = FLOOKUP env u` by
+        (rpt gen_tac >> strip_tac >> conj_tac >>
+         metis_tac[dfg_tracked_opcode_def, listTheory.MEM]) >>
+      qpat_x_assum `dfg_eq_sound dfg env` mp_tac >>
+      PURE_ONCE_REWRITE_TAC[dfg_eq_sound_def] >> strip_tac >>
+      first_x_assum drule_all >> strip_tac >>
+      rpt conj_tac >> rpt strip_tac >>
+      metis_tac[listTheory.MEM])
+  >- (PURE_ONCE_REWRITE_TAC[dfg_compare_sound_def] >> rpt strip_tac >>
+      `v IN FDOM env'` by fs[flookup_thm] >>
+      `v IN FDOM env` by metis_tac[dfg_tracked_opcode_def] >>
+      `FLOOKUP env v = SOME w` by metis_tac[] >>
+      `!u. MEM (Var u) [lhs; rhs] ==>
+           u IN FDOM env /\ FLOOKUP env' u = FLOOKUP env u` by
+        (rpt gen_tac >> strip_tac >> conj_tac >>
+         metis_tac[dfg_tracked_opcode_def, listTheory.MEM]) >>
+      qpat_x_assum `dfg_compare_sound dfg env` mp_tac >>
+      PURE_ONCE_REWRITE_TAC[dfg_compare_sound_def] >> strip_tac >>
+      first_x_assum drule_all >> strip_tac >>
+      rpt conj_tac >> rpt strip_tac >>
+      metis_tac[listTheory.MEM])
+QED
 (* Every instruction in a well-formed function's flat instruction list
    satisfies inst_wf. *)
 Theorem fn_insts_inst_wf:
@@ -404,17 +473,15 @@ Proof
   Induct >> simp[fn_insts_blocks_def, MEM_APPEND] >> metis_tac[]
 QED
 
-(* Helper: if step_inst_base adds a new variable to vs_vars,
-   it must be the single output. Key link for SSA derivation. *)
-Theorem step_inst_base_new_var_singleton:
-  !inst s s' v.
-    step_inst_base inst s = OK s' /\
-    ~is_terminator inst.inst_opcode /\
-    v NOTIN FDOM s.vs_vars /\ v IN FDOM s'.vs_vars ==>
-    inst.inst_outputs = [v]
-Proof
-  rw[step_inst_base_def] >>
-  gvs[AllCaseEqs(), is_terminator_def] >>
+(* A well-formed instruction other than INVOKE or BUMP has at most one output. *)
+fun inst_wf_output_tac () = rpt strip_tac >> gvs[]
+
+fun dfg_eq_condition_tac () =
+  simp[exec_pure2_def, eval_operand_def, lookup_var_def,
+       update_var_def, FLOOKUP_DEF, bool_to_word_def] >>
+  rpt strip_tac >> gvs[FUPD11_SAME_KEY_AND_BASE, AllCaseEqs()]
+
+fun step_vars_fupdate_finish_tac () =
   fs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
      exec_read0_def, exec_read1_def, exec_write2_def,
      exec_ext_call_def, exec_delegatecall_def,
@@ -426,6 +493,44 @@ Proof
      write_memory_with_expansion_def, mcopy_def,
      revert_state_def, eval_operands_def,
      lookup_var_def, FLOOKUP_UPDATE, FDOM_FUPDATE]
+
+Theorem inst_wf_noninvoke_outputs_at_most_one:
+  !inst. inst_wf inst /\ inst.inst_opcode <> INVOKE /\
+         inst.inst_opcode <> BUMP ==>
+    LENGTH inst.inst_outputs <= 1
+Proof
+  PURE_ONCE_REWRITE_TAC[inst_wf_def] >>
+  Cases_on `inst.inst_opcode` >>
+  inst_wf_output_tac ()
+QED
+
+(* Helper: if a well-formed step_inst_base adds a new variable to vs_vars,
+   it must be the single output. Key link for SSA derivation. *)
+Theorem step_inst_base_new_var_singleton:
+  !inst s s' v.
+    step_inst_base inst s = OK s' /\ inst_wf inst /\
+    ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> BUMP /\
+    v NOTIN FDOM s.vs_vars /\ v IN FDOM s'.vs_vars ==>
+    inst.inst_outputs = [v]
+Proof
+  rpt strip_tac >>
+  `inst.inst_opcode <> INVOKE` by
+    (CCONTR_TAC >> gvs[step_inst_base_def]) >>
+  `inst.inst_opcode <> PHI` by
+    (CCONTR_TAC >> gvs[step_inst_base_def]) >>
+  `FDOM s'.vs_vars = FDOM s.vs_vars UNION set inst.inst_outputs` by
+    (irule venomExecPropsTheory.step_inst_base_fdom >> simp[]) >>
+  `v IN FDOM s.vs_vars UNION set inst.inst_outputs` by
+    (qpat_x_assum `FDOM s'.vs_vars = _` (SUBST1_TAC o SYM) >>
+     first_assum ACCEPT_TAC) >>
+  `v IN set inst.inst_outputs` by
+    (qpat_x_assum `v NOTIN FDOM s.vs_vars` mp_tac >>
+     qpat_x_assum `v IN FDOM s.vs_vars UNION _` mp_tac >>
+     simp[] >> metis_tac[]) >>
+  `LENGTH inst.inst_outputs <= 1` by
+    metis_tac[inst_wf_noninvoke_outputs_at_most_one] >>
+  Cases_on `inst.inst_outputs` >> gvs[] >>
+  Cases_on `t` >> gvs[]
 QED
 
 (* Helper: if step_inst_base adds a new output to FDOM, the resulting
@@ -439,19 +544,20 @@ Theorem step_inst_base_vars_fupdate:
   ==>
     s'.vs_vars = s.vs_vars |+ (out, THE (FLOOKUP s'.vs_vars out))
 Proof
-  rw[step_inst_base_def] >>
-  gvs[AllCaseEqs(), is_terminator_def] >>
-  fs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def,
-     exec_ext_call_def, exec_delegatecall_def,
-     exec_create_def, exec_alloca_def,
-     extract_venom_result_def] >>
-  gvs[AllCaseEqs()] >>
-  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
-  gvs[update_var_def, mstore_def, mstore8_def, sstore_def, tstore_def,
-     write_memory_with_expansion_def, mcopy_def,
-     revert_state_def, eval_operands_def,
-     lookup_var_def, FLOOKUP_UPDATE, FDOM_FUPDATE]
+  rpt strip_tac >>
+  `!v. v <> out ==> lookup_var v s' = lookup_var v s` by
+    (drule_all venomInstProofs1Theory.step_inst_base_preserves_all >>
+     simp[]) >>
+  `!v. FLOOKUP s'.vs_vars v =
+       FLOOKUP (s.vs_vars |+ (out, THE (FLOOKUP s'.vs_vars out))) v` by
+    (gen_tac >> Cases_on `v = out`
+     >- (gvs[FLOOKUP_UPDATE] >>
+         Cases_on `FLOOKUP s'.vs_vars out` >> gvs[flookup_thm])
+     >> `FLOOKUP s'.vs_vars v = FLOOKUP s.vs_vars v` by
+          (qpat_x_assum `!v. v <> out ==> _` (qspec_then `v` mp_tac) >>
+           simp[lookup_var_def]) >>
+        simp[FLOOKUP_UPDATE]) >>
+  metis_tac[FLOOKUP_EXT, FUN_EQ_THM]
 QED
 
 (* SSA uniqueness: DFG entry for a variable maps to the unique instruction
@@ -569,10 +675,10 @@ Proof
   >- ((* EQ *)
       rpt strip_tac >> gvs[MEM] >>
       qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-      simp[step_inst_base_def, exec_pure2_def, eval_operand_def,
-           lookup_var_def, update_var_def, FLOOKUP_DEF,
-           bool_to_word_def] >>
-      rpt strip_tac >> gvs[FUPD11_SAME_KEY_AND_BASE, AllCaseEqs()]) >>
+      PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+      ASM_REWRITE_TAC[] >|
+      [dfg_eq_condition_tac (), dfg_eq_condition_tac (),
+       dfg_eq_condition_tac ()]) >>
   (* LT/GT/SLT/SGT *)
   rpt strip_tac >> gvs[MEM] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
@@ -692,12 +798,46 @@ Theorem dfg_sound_step_inst_new_var:
 Proof
   rpt gen_tac >> DISCH_TAC >> fs[] >>
   (* Derive key facts *)
+  `inst_wf inst` by metis_tac[fn_insts_inst_wf] >>
+  Cases_on `inst.inst_opcode = BUMP`
+  >- (`FDOM s'.vs_vars = FDOM s.vs_vars UNION set inst.inst_outputs` by
+        (irule venomExecPropsTheory.step_inst_base_fdom >> simp[]) >>
+      `!x. x IN FDOM s.vs_vars ==>
+           FLOOKUP s'.vs_vars x = FLOOKUP s.vs_vars x` by
+        (rpt strip_tac >>
+         `~MEM x inst.inst_outputs` by metis_tac[] >>
+         `lookup_var x s' = lookup_var x s` by
+           metis_tac[step_preserves_non_output_vars] >>
+         fs[lookup_var_def]) >>
+      `!v dinst. dfg_get_def (dfg_build_function fn) v = SOME dinst /\
+         v IN FDOM s'.vs_vars /\ dfg_tracked_opcode dinst.inst_opcode ==>
+         v IN FDOM s.vs_vars` by
+        (rpt strip_tac >> CCONTR_TAC >>
+         `MEM v inst.inst_outputs` by
+           (qpat_x_assum `v IN FDOM s'.vs_vars` mp_tac >>
+            ASM_REWRITE_TAC[] >> simp[]) >>
+         `MEM v dinst.inst_outputs /\ MEM dinst (fn_insts fn)` by
+           metis_tac[dfg_build_function_correct] >>
+         `dinst = inst` by metis_tac[] >>
+         `~dfg_tracked_opcode BUMP` by simp[dfg_tracked_opcode_def] >>
+         metis_tac[]) >>
+      conj_tac
+      >- (mp_tac (Q.SPECL [`dfg_build_function fn`, `s.vs_vars`,
+                            `s'.vs_vars`]
+                           dfg_sound_fresh_untracked_extension) >>
+          impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+          simp[])
+      >- (rpt strip_tac >>
+          `v IN FDOM s.vs_vars` by metis_tac[] >>
+          `u IN FDOM s.vs_vars` by metis_tac[] >>
+          fs[])) >>
   `inst.inst_outputs = [out]` by
-    metis_tac[step_inst_base_new_var_singleton] >>
+    (mp_tac (Q.SPECL [`inst`, `s`, `s'`, `out`]
+       step_inst_base_new_var_singleton) >>
+     impl_tac >- simp[] >> simp[]) >>
   `s'.vs_vars = s.vs_vars |+ (out, THE (FLOOKUP s'.vs_vars out))` by
     metis_tac[step_inst_base_vars_fupdate] >>
   qabbrev_tac `nv = THE (FLOOKUP s'.vs_vars out)` >>
-  `inst_wf inst` by metis_tac[fn_insts_inst_wf] >>
   (* SSA uniqueness: dfg entry for out maps to inst *)
   `!dinst0. dfg_get_def (dfg_build_function fn) out = SOME dinst0 ==>
      dinst0 = inst` by (

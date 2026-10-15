@@ -3742,22 +3742,23 @@ Triviality version_propagation_finds_def:
 Proof
   completeInduct_on `n` >> rpt strip_tac >>
   Cases_on `dtree` >>
-  `lbl <> s` by (
+  rename1 `ALL_DISTINCT (dom_tree_labels (DNode tree_root tree_children))` >>
+  `lbl <> tree_root` by (
     CCONTR_TAC >> fs[] >>
-    `cfg_dominates bbs entry s parent_b` by (
+    `cfg_dominates bbs entry tree_root parent_b` by (
       irule dom_tree_root_dominates >>
-      qexists_tac `l` >> qexists_tac `DNode s l` >>
+      qexists_tac `tree_children` >> qexists_tac `DNode tree_root tree_children` >>
       gvs[]) >>
-    `parent_b = s` by (
-      first_x_assum (qspecl_then [`parent_b`, `s`] mp_tac) >> simp[]) >>
+    `parent_b = tree_root` by (
+      first_x_assum (qspecl_then [`parent_b`, `tree_root`] mp_tac) >> simp[]) >>
     gvs[]) >>
-  mp_tac (Q.SPECL [`DNode s l`, `lbl`, `s`, `l`] non_root_has_parent) >> simp[] >> strip_tac >>
+  mp_tac (Q.SPECL [`DNode tree_root tree_children`, `lbl`, `tree_root`, `tree_children`] non_root_has_parent) >> simp[] >> strip_tac >>
   qpat_assum `!d c. cfg_dominates _ _ d c /\ d <> c /\ _ ==> _` (qspecl_then [`parent_b`, `lbl`] mp_tac) >> (impl_tac >- (rpt conj_tac >> gvs[] >> metis_tac[])) >>
   disch_then (qx_choose_then `p_c` (fn th =>
     assume_tac (CONJUNCT1 th) >> assume_tac (CONJUNCT2 th))) >>
   `p_c = p` by gvs[] >> pop_assum (fn eq => RULE_ASSUM_TAC (REWRITE_RULE [eq])) >>
   (* Now single goal with assumption: cfg_dominates bbs entry parent_b p \/ parent_b = p *)
-  qspecl_then [`DNode s l`, `rs`, `bbs`, `sm`, `lbl`, `rs_lbl`, `p`] mp_tac (CONJUNCT1 child_entry_stacks) >> (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  qspecl_then [`DNode tree_root tree_children`, `rs`, `bbs`, `sm`, `lbl`, `rs_lbl`, `p`] mp_tac (CONJUNCT1 child_entry_stacks) >> (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
   `latest_version rs_lbl v = latest_version (FST (rename_block_insts rs_p bb_p.bb_instructions)) v` by (
     Cases_on `rs_lbl` >> Cases_on `FST (rename_block_insts rs_p bb_p.bb_instructions)` >>
     gvs[] >> metis_tac[latest_version_stacks_eq]) >>
@@ -3774,8 +3775,8 @@ Proof
   >- (
     (* Case b: versions equal at p, apply IH *)
     gvs[] >>
-    Cases_on `INDEX_OF lbl (dom_tree_labels (DNode s l))` >> Cases_on `INDEX_OF p (dom_tree_labels (DNode s l))` >> gvs[INDEX_OF_eq_NONE] >> rename1 `INDEX_OF lbl _ = SOME i_lbl` >> rename1 `INDEX_OF p _ = SOME i_p` >> qspecl_then [`DNode s l`, `lbl`, `p`, `i_lbl`, `i_p`] mp_tac parent_index_lt >> (impl_tac >- gvs[]) >> strip_tac >>
-    first_x_assum (qspec_then `i_p` mp_tac) >> (impl_tac >- simp[]) >> disch_then (qspecl_then [`DNode s l`, `rs`, `bbs`, `sm`, `p`, `rs_p`, `v`, `entry`, `parent_b`, `rs_pb`, `bb_pb`] mp_tac) >> (impl_tac >- (rpt conj_tac >> gvs[] >> metis_tac[])) >>
+    Cases_on `INDEX_OF lbl (dom_tree_labels (DNode tree_root tree_children))` >> Cases_on `INDEX_OF p (dom_tree_labels (DNode tree_root tree_children))` >> gvs[INDEX_OF_eq_NONE] >> rename1 `INDEX_OF lbl _ = SOME i_lbl` >> rename1 `INDEX_OF p _ = SOME i_p` >> qspecl_then [`DNode tree_root tree_children`, `lbl`, `p`, `i_lbl`, `i_p`] mp_tac parent_index_lt >> (impl_tac >- gvs[]) >> strip_tac >>
+    first_x_assum (qspec_then `i_p` mp_tac) >> (impl_tac >- simp[]) >> disch_then (qspecl_then [`DNode tree_root tree_children`, `rs`, `bbs`, `sm`, `p`, `rs_p`, `v`, `entry`, `parent_b`, `rs_pb`, `bb_pb`] mp_tac) >> (impl_tac >- (rpt conj_tac >> gvs[] >> metis_tac[])) >>
     strip_tac >>
     qexistsl [`D`, `bb_D`] >> gvs[] >>
     conj_tac >- metis_tac[] >>
@@ -4109,7 +4110,11 @@ Resume phi_coverage[case_eq_phi]:
   ) >>
   conj_tac >- (
     `phi_extends func.fn_blocks (add_phi_nodes dom_frontiers pred_map live_in func.fn_blocks defs)` by simp[add_phi_nodes_phi_extends] >>
-    fs[phi_extends_def]
+    qpat_x_assum
+      `LENGTH (add_phi_nodes dom_frontiers pred_map live_in func.fn_blocks defs) =
+       LENGTH func.fn_blocks`
+      (fn th => PURE_REWRITE_TAC [GSYM th]) >>
+    first_assum ACCEPT_TAC
   ) >>
   qexistsl [`lbl_a`, `lbl_b`, `j_a`] >>
   simp[] >>

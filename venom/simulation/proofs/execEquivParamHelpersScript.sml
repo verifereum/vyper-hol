@@ -22,10 +22,13 @@ open execEquivParamLib
 fun vsr_eval_ops_tac () =
   `!op. MEM op inst.inst_operands ==>
      eval_operand op s1 = eval_operand op s2` by (
-    rw[] >> vsr_irule vsr_eval_operand >> simp[] >> metis_tac[])
+    rw[] >> vsr_irule vsr_eval_operand >> simp[] >>
+    rpt strip_tac >> gvs[])
 
 fun vsr_eval_rewrite_tac () =
-  imp_res_tac vsr_R_ok_fields >> vsr_eval_ops_tac () >> simp[step_inst_base_def]
+  vsr_eval_ops_tac () >>
+  drule_all_then strip_assume_tac vsr_R_ok_fields >>
+  ASM_REWRITE_TAC[step_inst_base_def] >> simp[]
 
 (* ==========================================================================
    step_inst_base-level helpers
@@ -50,7 +53,10 @@ Theorem vsr_step_inst_pure1:
     (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) ==>
     lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rpt strip_tac >> gvs[step_inst_base_def] >>
+  rpt gen_tac >> strip_tac >> gvs[]
+  >- (simp[step_inst_base_NOT] >>
+      vsr_irule vsr_exec_pure1 >> simp[])
+  >> simp[step_inst_base_ISZERO] >>
   vsr_irule vsr_exec_pure1 >> simp[]
 QED
 
@@ -61,7 +67,7 @@ Theorem vsr_step_inst_pure3:
     (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) ==>
     lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rpt strip_tac >> gvs[step_inst_base_def] >>
+  rw[] >> ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >>
   vsr_irule vsr_exec_pure3 >> simp[]
 QED
 
@@ -102,7 +108,7 @@ Theorem vsr_step_inst_extcodehash:
     (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) ==>
     lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rpt strip_tac >> gvs[step_inst_base_def] >>
+  rw[] >> ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >>
   vsr_irule vsr_exec_read1 >> simp[] >> rw[] >>
   imp_res_tac vsr_R_ok_fields >> gvs[]
 QED
@@ -127,8 +133,8 @@ Theorem vsr_step_inst_terminator:
     MEM inst.inst_opcode [STOP;SINK] ==>
     lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rw[] >> ASM_REWRITE_TAC[step_inst_base_def] >> simp[lift_result_def] >>
-  imp_res_tac vsr_terminal_R_term >> simp[]
+  rw[] >> ASM_REWRITE_TAC[step_inst_base_def] >>
+  simp[lift_result_def, halt_state_def] >> vsr_terminal_tac ()
 QED
 
 Theorem vsr_step_inst_return:
@@ -217,10 +223,17 @@ Theorem vsr_step_inst_ssa:
     (!x. MEM (Var x) inst.inst_operands ==> lookup_var x s1 = lookup_var x s2) ==>
     lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rpt strip_tac >> gvs[] >> vsr_eval_rewrite_tac () >>
-  rpt (CASE_TAC >> gvs[lift_result_def]) >>
-  TRY (imp_res_tac resolve_phi_MEM >> res_tac >> gvs[]) >>
-  TRY (vsr_irule vsr_update_var_R_ok >> simp[] >> NO_TAC) >>
+  rpt strip_tac >> gvs[]
+  >- (vsr_eval_rewrite_tac () >>
+      rpt (CASE_TAC >> gvs[lift_result_def]) >>
+      TRY (imp_res_tac resolve_phi_MEM >> res_tac >> gvs[]) >>
+      TRY (vsr_irule vsr_update_var_R_ok >> simp[] >> NO_TAC) >>
+      simp[lift_result_def])
+  >- (vsr_eval_rewrite_tac () >>
+      rpt (CASE_TAC >> gvs[lift_result_def]) >>
+      TRY (vsr_irule vsr_update_var_R_ok >> simp[] >> NO_TAC) >>
+      simp[lift_result_def])
+  >> vsr_eval_rewrite_tac () >>
   simp[lift_result_def]
 QED
 
@@ -281,7 +294,7 @@ Theorem vsr_step_inst_istore:
 Proof
   rpt strip_tac >> gvs[] >> vsr_eval_rewrite_tac () >>
   rpt (CASE_TAC >> gvs[lift_result_def]) >>
-  vsr_irule vsr_immutables_R_ok >> simp[]
+  vsr_irule vsr_istore >> simp[]
 QED
 
 fun vsr_data_copy_operands_tac () =
@@ -309,6 +322,22 @@ Proof
   vsr_irule vsr_write_memory >> simp[]
 QED
 
+fun vsr_extcodecopy_operands_tac () =
+  Cases_on `inst.inst_operands` >- simp[lift_result_def] >>
+  rename1 `inst.inst_operands = op_addr::ops1` >>
+  Cases_on `ops1` >- simp[lift_result_def] >>
+  rename1 `inst.inst_operands = op_addr::op_dst::ops2` >>
+  Cases_on `ops2` >- simp[lift_result_def] >>
+  rename1 `inst.inst_operands = op_addr::op_dst::op_src::ops3` >>
+  Cases_on `ops3` >- simp[lift_result_def] >>
+  rename1 `inst.inst_operands = op_addr::op_dst::op_src::op_size::ops4` >>
+  reverse (Cases_on `ops4`) >- simp[lift_result_def] >>
+  simp[] >>
+  Cases_on `eval_operand op_addr s2` >> gvs[lift_result_def] >>
+  Cases_on `eval_operand op_dst s2` >> gvs[lift_result_def] >>
+  Cases_on `eval_operand op_src s2` >> gvs[lift_result_def] >>
+  Cases_on `eval_operand op_size s2` >> gvs[lift_result_def]
+
 Theorem vsr_step_inst_extcodecopy:
   !R_ok R_term inst s1 s2.
     valid_state_rel R_ok R_term /\ R_ok s1 s2 /\
@@ -317,7 +346,7 @@ Theorem vsr_step_inst_extcodecopy:
     lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt strip_tac >> gvs[] >> vsr_eval_rewrite_tac () >>
-  rpt (CASE_TAC >> gvs[lift_result_def]) >>
+  vsr_extcodecopy_operands_tac () >>
   vsr_irule vsr_write_memory >> simp[]
 QED
 
@@ -398,18 +427,24 @@ Proof
     (rw[] >> first_x_assum (qspec_then `op` mp_tac) >> simp[]) >>
   IF_CASES_TAC >> simp[lift_result_def] >>
   `2 <= LENGTH rest` by simp[] >>
-  `MEM (HD rest) rest` by (Cases_on `rest` >> fs[]) >>
-  `MEM (EL 1 rest) rest` by (irule rich_listTheory.EL_MEM >> simp[]) >>
-  `eval_operand (HD rest) s1 = eval_operand (HD rest) s2` by res_tac >>
-  `eval_operand (EL 1 rest) s1 = eval_operand (EL 1 rest) s2` by res_tac >>
-  `eval_operands (DROP 2 rest) s1 = eval_operands (DROP 2 rest) s2` by (
+  `MEM (HD (REVERSE rest)) rest` by
+    (once_rewrite_tac[GSYM MEM_REVERSE] >>
+     Cases_on `REVERSE rest` >> fs[]) >>
+  `MEM (EL 1 (REVERSE rest)) rest` by
+    (once_rewrite_tac[GSYM MEM_REVERSE] >>
+     irule rich_listTheory.EL_MEM >> simp[]) >>
+  `eval_operand (HD (REVERSE rest)) s1 =
+   eval_operand (HD (REVERSE rest)) s2` by res_tac >>
+  `eval_operand (EL 1 (REVERSE rest)) s1 =
+   eval_operand (EL 1 (REVERSE rest)) s2` by res_tac >>
+  `eval_operands (DROP 2 (REVERSE rest)) s1 =
+   eval_operands (DROP 2 (REVERSE rest)) s2` by (
     qsuff_tac `!ops. (!op. MEM op ops ==> eval_operand op s1 = eval_operand op s2) ==>
                eval_operands ops s1 = eval_operands ops s2`
-    >- (disch_then irule >> rw[] >> res_tac >> metis_tac[MEM_DROP_IMP])
+    >- (disch_then irule >> rw[] >> res_tac >>
+        metis_tac[MEM_DROP_IMP, MEM_REVERSE])
     >> Induct >> rw[eval_operands_def]) >>
   simp[] >>
   rpt (CASE_TAC >> gvs[lift_result_def]) >>
   vsr_irule vsr_logs_R_ok >> simp[]
 QED
-
-val _ = export_theory()

@@ -325,7 +325,9 @@ Resume fst_lookup_global_set_storage[immutables]:
        vyperStateTheory.lift_option_def,
        vyperStateTheory.return_def, vyperStateTheory.raise_def,
        set_storage_immutables] >>
-  rpt CASE_TAC >>
+  Cases_on `ALOOKUP st.immutables cx.txn.target` >>
+  gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
+  Cases_on `FLOOKUP (vyperState$get_source_immutables mid x) (string_to_num m)` >>
   gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def]
 QED
 

@@ -13,9 +13,9 @@
 
 Theory vyperArith
 Ancestors
-  vyperValue
+  vyperValue vfmConstants arithmetic words integer
 Libs
-  intLib wordsLib wordsTheory integerTheory
+  intLib wordsLib
 
 (* ===== Basic bound lemmas ===== *)
 
@@ -26,6 +26,27 @@ Proof
   \\ rpt strip_tac
   \\ irule arithmeticTheory.LESS_LESS_EQ_TRANS
   \\ qexists_tac `2 ** n` \\ simp[bitTheory.TWOEXP_MONO2]
+QED
+
+Theorem word_size_le:
+  0 < n ==> word_size n ≤ n
+Proof
+  strip_tac >>
+  simp[vfmConstantsTheory.word_size_def] >>
+  `n + 31 ≤ 32 * n` by simp[] >>
+  `(n + 31) DIV 32 ≤ (32 * n) DIV 32` by
+    (irule DIV_LE_MONOTONE >> simp[]) >>
+  `(32 * n) DIV 32 = n` by simp[MULT_TO_DIV] >>
+  gvs[]
+QED
+
+Theorem word_size_not_lt_self:
+  0 < n ∧ ¬(word_size n < n) ==> n = 1
+Proof
+  rw[vfmConstantsTheory.word_size_def] >>
+  Cases_on `n` >> gvs[] >>
+  Cases_on `n'` >> gvs[arithmeticTheory.DIV_LT_X] >>
+  decide_tac
 QED
 
 Theorem Num_int_lt:
@@ -92,9 +113,11 @@ Proof
   \\ Cases_on`n = 0` >> gvs[]
   \\ `2 ** (n − 1) ≤ words$INT_MIN (:256)` by
        simp[wordsTheory.INT_MIN_def, arithmeticTheory.EXP_BASE_LE_MONO]
-  \\ Cases_on `i < 0` \\ gvs[]
+  \\ Cases_on `i < 0`
   >- (* i < 0 *)
-     (`Num (-i) ≤ words$INT_MIN (:256)` by
+     (qpat_x_assum `(if i < 0 then _ else _)` mp_tac
+      \\ simp[] \\ strip_tac
+      \\ `Num (-i) ≤ words$INT_MIN (:256)` by
         (irule arithmeticTheory.LESS_EQ_TRANS
          \\ qexists_tac `2 ** (n − 1)` \\ simp[])
       \\ `0 ≤ -i` by simp[]
@@ -106,6 +129,8 @@ Proof
       \\ gvs[integer_wordTheory.INT_MIN_def, integer_wordTheory.INT_MAX_def,
              INT_LE_NEG, INT_OF_NUM_LE, wordsTheory.INT_MIN_def])
   (* i ≥ 0 *)
+  \\ qpat_x_assum `(if i < 0 then _ else _)` mp_tac
+  \\ simp[] \\ strip_tac
   \\ `Num i < words$INT_MIN (:256)` by
        (irule arithmeticTheory.LESS_LESS_EQ_TRANS
         \\ qexists_tac `2 ** (n − 1)` \\ simp[])

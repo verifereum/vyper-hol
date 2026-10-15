@@ -74,20 +74,20 @@ Definition evaluate_type_def:
        if 0 < type_slot_size tv ∧ type_slot_size atv < dimword(:256)
        then SOME atv else NONE
      | _ => NONE) ∧
-  evaluate_type tenv (StructT id) =
-  (let nid = string_to_num id in
-   case FLOOKUP tenv nid of
+  evaluate_type tenv (StructT nsid) =
+  (let key = type_key nsid in
+   case FLOOKUP tenv key of
    | SOME $ StructArgs args =>
      (let names = MAP FST args in
-      case evaluate_types (tenv \\ nid) (MAP SND args) []
+      case evaluate_types (tenv \\ key) (MAP SND args) []
       of SOME tvs =>
         let tv = StructTV (ZIP (names, tvs)) in
         if type_slot_size tv ≤ dimword(:256) then SOME tv else NONE
        | _ => NONE)
    | _ => NONE) ∧
-  evaluate_type tenv (FlagT id) =
-  (let nid = string_to_num id in
-   case FLOOKUP tenv nid of
+  evaluate_type tenv (FlagT nsid) =
+  (let key = type_key nsid in
+   case FLOOKUP tenv key of
    | SOME $ FlagArgs m =>
        (if m ≤ 256 then SOME $ FlagTV m
         else NONE)
@@ -103,7 +103,7 @@ Termination
     case x
       of INL (env, t) => (CARD (FDOM env), type_size t)
        | INR (env, ts, _) => (CARD (FDOM env), list_size type_size ts))’
-  \\ rw[FLOOKUP_DEF]
+  \\ rw[FLOOKUP_DEF, type_key_def] >> gvs[]
   \\ disj1_tac
   \\ CCONTR_TAC
   \\ fs[]
@@ -130,11 +130,13 @@ val () = cv_auto_trans_rec evaluate_type_def (
   \\ disj1_tac
   \\ pop_assum mp_tac
   \\ qmatch_goalsub_abbrev_tac`cv_lookup ck`
+  >> gvs[cv_type_key_def]
   \\ `cv_ispair ck = cv$Num 0`
   by (
     rw[Abbr`ck`, cv_string_to_num_def]
     \\ rw[Once keccakTheory.cv_l2n_def]
-    \\ rw[cv_ispair_cv_add] )
+    \\ rw[cv_ispair_cv_add, cv_ispair_cv_mul]
+  )
   \\ pop_assum mp_tac
   \\ qid_spec_tac`cv_tenv`
   \\ qid_spec_tac`ck`
@@ -399,3 +401,55 @@ Definition dest_ArrayV_def:
 End
 
 val () = cv_auto_trans dest_ArrayV_def;
+
+(* ===== @raw_return return values ===== *)
+
+(* The two constructors with a raw byte representation: BytesV holds its bytes,
+   StringV holds HOL4 chars. *)
+Definition is_bytestring_tv_def[simp]:
+  is_bytestring_tv (BaseTV (StringT _)) = T ∧
+  is_bytestring_tv (BaseTV (BytesT _)) = T ∧
+  is_bytestring_tv _ = F
+End
+
+(* TOP-LEVEL: raw_return_bytes
+   Returndata of a call to a @raw_return function: the value's own bytes, with no
+   length word and no padding, since ABI encoding is bypassed.  NONE when the
+   value has no bytestring representation, which a safe_cast to a bytestring
+   return type rules out; see safe_cast_bytestring_raw_return_bytes. *)
+Definition raw_return_bytes_def:
+  raw_return_bytes (BytesV bs) = SOME bs ∧
+  raw_return_bytes (StringV s) = SOME (MAP ((n2w:num->word8) o ORD) s) ∧
+  raw_return_bytes _ = NONE
+End
+
+val () = cv_auto_trans raw_return_bytes_def;
+
+Theorem raw_return_bytes_BytesV[simp]:
+  raw_return_bytes (BytesV bs) = SOME bs
+Proof
+  simp[raw_return_bytes_def]
+QED
+
+Theorem raw_return_bytes_StringV[simp]:
+  raw_return_bytes (StringV s) = SOME (MAP ((n2w:num->word8) o ORD) s)
+Proof
+  simp[raw_return_bytes_def]
+QED
+
+(* KEY LEMMA: raw_return_bytes succeeds exactly on the bytestring values. *)
+Theorem raw_return_bytes_SOME_iff:
+  ∀v bs. raw_return_bytes v = SOME bs ⇔
+    (∃bs'. v = BytesV bs' ∧ bs' = bs) ∨
+    (∃s. v = StringV s ∧ MAP ((n2w:num->word8) o ORD) s = bs)
+Proof
+  Cases_on `v` >> simp[raw_return_bytes_def] >> metis_tac[]
+QED
+
+(* KEY LEMMA: bytestring values are exactly those that have raw bytes. *)
+Theorem is_bytestring_v_raw_return_bytes:
+  ∀v. (∃bs. raw_return_bytes v = SOME bs) ⇔
+    (∃bs. v = BytesV bs) ∨ (∃s. v = StringV s)
+Proof
+  Cases_on `v` >> simp[raw_return_bytes_def] >> metis_tac[]
+QED

@@ -10,8 +10,13 @@
 .hol_test.sml
 .hol_test_names.sml
 
-# (symlink to) generated Vyper tests
+# Generated Vyper test inputs and coverage report
 tests/vyper-test-exports
+tests/vyper-coverage-report.txt
+
+# Python bytecode caches
+__pycache__/
+*.py[cod]
 
 .alan/
 

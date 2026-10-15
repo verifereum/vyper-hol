@@ -1,3 +1,0 @@
-# Tail merge pass proofs
-INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../../defs ../../../proofs ../../../props ../defs \
-           ../../../simulation ../../../simulation/defs ../../../simulation/proofs

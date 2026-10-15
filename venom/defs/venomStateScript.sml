@@ -8,7 +8,7 @@
 
 Theory venomState
 Ancestors
-  vfmTypes vfmState vfmContext
+  vfmTypes vfmState vfmContext extCallOracle[ignore_grammar]
 
 (* --------------------------------------------------------------------------
    Venom uses the same basic types as EVM (from verifereum):
@@ -96,11 +96,17 @@ Datatype:
     vs_tx_ctx : tx_context;          (* Transaction context *)
     vs_block_ctx : block_context;    (* Block context *)
     vs_logs : event list;            (* Log/event accumulator *)
+    vs_outcomes : extCallOracle$call_outcome list; (* Remaining external-call outcomes *)
+    vs_requests : extCallOracle$call_request list; (* External-call request accumulator *)
     vs_immutables : (num, bytes32) fmap; (* Immutable storage (ILOAD/ISTORE) *)
     vs_data_section : byte list;     (* Read-only data section (DLOAD/DLOADBYTES) *)
     vs_labels : (string, bytes32) fmap; (* Label->address map for data offset labels *)
     vs_code : byte list;             (* Own bytecode (CODECOPY/EXTCODECOPY) *)
     vs_params : bytes32 list;        (* Function parameters (read by PARAM) *)
+    vs_fmp : bytes32;                (* Mutable raw free-memory pointer *)
+    vs_call_entry_fmp : bytes32;     (* Free-memory pointer at frame entry *)
+    vs_initial_fmp : bytes32;        (* Compile-time-resolved initial pointer *)
+    vs_return_pc_token : bytes32;    (* Logical return continuation token *)
     vs_prev_hashes : bytes32 list;  (* Recent block hashes for EVM BLOCKHASH *)
     vs_allocas : (num, num # num) fmap;  (* inst_id -> (offset, size), per frame *)
     vs_alloca_next : num  (* bump pointer: next free alloca offset *)
@@ -157,11 +163,17 @@ Definition init_venom_state_def:
     vs_tx_ctx := empty_tx_context;
     vs_block_ctx := empty_block_context;
     vs_logs := [];
+    vs_outcomes := [];
+    vs_requests := [];
     vs_immutables := FEMPTY;
     vs_data_section := [];
     vs_labels := FEMPTY;
     vs_code := [];
     vs_params := [];
+    vs_fmp := 0w;
+    vs_call_entry_fmp := 0w;
+    vs_initial_fmp := 0w;
+    vs_return_pc_token := 0w;
     vs_prev_hashes := [];
     vs_allocas := FEMPTY;
     vs_alloca_next := 0
@@ -340,4 +352,72 @@ Theorem inst_idx_update_id[simp]:
   s.vs_inst_idx = 0 ==> s with vs_inst_idx := 0 = s
 Proof
   rw[fetch "-" "venom_state_component_equality"]
+QED
+
+(* ===== Oracle projections (representation only; calls remain concrete) ===== *)
+
+Theorem init_venom_state_oracle[simp]:
+  (init_venom_state entry).vs_outcomes = [] /\
+  (init_venom_state entry).vs_requests = []
+Proof
+  simp[init_venom_state_def]
+QED
+
+(* Primitive operations neither consume outcomes nor record requests. *)
+Theorem state_updates_oracle[simp]:
+  (update_var x v s).vs_outcomes = s.vs_outcomes /\
+  (update_var x v s).vs_requests = s.vs_requests /\
+  (write_memory offset bytes s).vs_outcomes = s.vs_outcomes /\
+  (write_memory offset bytes s).vs_requests = s.vs_requests /\
+  (expand_memory n s).vs_outcomes = s.vs_outcomes /\
+  (expand_memory n s).vs_requests = s.vs_requests /\
+  (write_memory_with_expansion offset bytes s).vs_outcomes = s.vs_outcomes /\
+  (write_memory_with_expansion offset bytes s).vs_requests = s.vs_requests /\
+  (mstore offset v s).vs_outcomes = s.vs_outcomes /\
+  (mstore offset v s).vs_requests = s.vs_requests /\
+  (mstore8 offset v s).vs_outcomes = s.vs_outcomes /\
+  (mstore8 offset v s).vs_requests = s.vs_requests /\
+  (sstore key v s).vs_outcomes = s.vs_outcomes /\
+  (sstore key v s).vs_requests = s.vs_requests /\
+  (tstore key v s).vs_outcomes = s.vs_outcomes /\
+  (tstore key v s).vs_requests = s.vs_requests /\
+  (jump_to lbl s).vs_outcomes = s.vs_outcomes /\
+  (jump_to lbl s).vs_requests = s.vs_requests /\
+  (next_inst s).vs_outcomes = s.vs_outcomes /\
+  (next_inst s).vs_requests = s.vs_requests /\
+  (halt_state s).vs_outcomes = s.vs_outcomes /\
+  (halt_state s).vs_requests = s.vs_requests /\
+  (revert_state s).vs_outcomes = s.vs_outcomes /\
+  (revert_state s).vs_requests = s.vs_requests /\
+  (set_returndata rd s).vs_outcomes = s.vs_outcomes /\
+  (set_returndata rd s).vs_requests = s.vs_requests
+Proof
+  simp[update_var_def, write_memory_def, expand_memory_def,
+       write_memory_with_expansion_def, mstore_def, mstore8_def,
+       sstore_def, tstore_def, jump_to_def, next_inst_def,
+       halt_state_def, revert_state_def, set_returndata_def]
+QED
+
+Theorem eval_operand_oracle_updates[simp]:
+  eval_operand op (s with <| vs_outcomes := os; vs_requests := rqs |>) =
+  eval_operand op s
+Proof
+  Cases_on `op` >> simp[eval_operand_def, lookup_var_def]
+QED
+
+Theorem eval_operands_oracle_updates[simp]:
+  eval_operands ops (s with <| vs_outcomes := os; vs_requests := rqs |>) =
+  eval_operands ops s
+Proof
+  Induct_on `ops` >> simp[eval_operands_def]
+QED
+
+Theorem init_venom_state_fmp_fields[local]:
+  ∀entry.
+    (init_venom_state entry).vs_fmp = 0w ∧
+    (init_venom_state entry).vs_call_entry_fmp = 0w ∧
+    (init_venom_state entry).vs_initial_fmp = 0w ∧
+    (init_venom_state entry).vs_return_pc_token = 0w
+Proof
+  simp[init_venom_state_def]
 QED

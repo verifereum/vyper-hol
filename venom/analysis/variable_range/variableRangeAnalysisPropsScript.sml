@@ -32,7 +32,7 @@ Theorem range_analyze_block_sound:
     exec_block fuel ctx bb s = OK s' ⇒
     in_range_state (range_exit_state ra lbl) s'.vs_vars
 Proof
-  ACCEPT_TAC rangeAnalysisProofsTheory.range_analyze_block_sound_proof
+  metis_tac[rangeAnalysisProofsTheory.range_analyze_block_sound_proof]
 QED
 
 (* Query soundness: if the pre-instruction range state recorded by the
@@ -45,5 +45,5 @@ Theorem range_get_range_sound:
     (∀v. op = Lit v ⇒ w = v) ⇒
     in_range (range_get_range ra lbl idx op) w
 Proof
-  ACCEPT_TAC rangeAnalysisProofsTheory.range_get_range_sound_proof
+  metis_tac[rangeAnalysisProofsTheory.range_get_range_sound_proof]
 QED

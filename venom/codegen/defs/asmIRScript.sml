@@ -51,6 +51,7 @@ Datatype:
   | SOSpill num                     (* spill TOS to memory offset *)
   | SORestore num                   (* restore from memory offset to TOS *)
   | SOEmit string                   (* EVM opcode name *)
+  | SOInitialFmp                    (* deferred context-wide initial FMP *)
   | SOLabel string                  (* JUMPDEST label *)
   | SOPushLabel string              (* push label address *)
   | SOPushOfst string num           (* push (label + offset) *)
@@ -67,6 +68,38 @@ Definition encode_num_bytes_def:
     if n = 0 then ([] : byte list)
     else SNOC (n2w n : byte) (encode_num_bytes (n DIV 256))
 End
+
+(* Primitive-recursive evaluator for bounded inputs. *)
+Definition encode_num_bytes_fuel_def:
+  encode_num_bytes_fuel 0 n = ([] : byte list) ∧
+  encode_num_bytes_fuel (SUC fuel) n =
+    if n = 0 then []
+    else SNOC (n2w n : byte)
+      (encode_num_bytes_fuel fuel (n DIV 256))
+End
+
+Theorem encode_num_bytes_fuel_eq:
+  n < 256 ** fuel ==>
+  encode_num_bytes_fuel fuel n = encode_num_bytes n
+Proof
+  qid_spec_tac `n` >> Induct_on `fuel`
+  >- simp[encode_num_bytes_fuel_def, Once encode_num_bytes_def] >>
+  rw[encode_num_bytes_fuel_def, Once encode_num_bytes_def] >>
+  first_x_assum irule >>
+  gvs[arithmeticTheory.DIV_LT_X, arithmeticTheory.EXP,
+      arithmeticTheory.MULT_COMM]
+QED
+
+Theorem encode_num_bytes_w2n_compute:
+  encode_num_bytes (w2n (w : bytes32)) =
+  encode_num_bytes_fuel 32 (w2n w)
+Proof
+  sym_tac >> irule encode_num_bytes_fuel_eq >>
+  `dimindex (:256) = 256` by CONV_TAC fcpLib.INDEX_CONV >>
+  mp_tac (Q.SPEC `w:bytes32`
+    (INST_TYPE [alpha |-> ``:256``] wordsTheory.w2n_lt)) >>
+  simp[wordsTheory.dimword_def]
+QED
 
 (* =========================================================================
    Venom Opcode → EVM Name Mapping
@@ -158,7 +191,17 @@ Definition venom_to_evm_name_def:
   venom_to_evm_name JMP = NONE ∧
   venom_to_evm_name JNZ = NONE ∧
   venom_to_evm_name DJMP = NONE ∧
+  (* Extended-core operations must be lowered before legacy codegen. *)
+  venom_to_evm_name DALLOCA = NONE ∧
+  venom_to_evm_name DRET = NONE ∧
+  venom_to_evm_name GETFMP = NONE ∧
+  venom_to_evm_name SETFMP = NONE ∧
+  venom_to_evm_name RETFMP = NONE ∧
+  venom_to_evm_name INITIAL_FMP = NONE ∧
+  venom_to_evm_name BUMP = NONE ∧
   venom_to_evm_name INVOKE = NONE ∧
+  venom_to_evm_name FMP_PARAM = NONE ∧
+  venom_to_evm_name RETPC_PARAM = NONE ∧
   venom_to_evm_name RET = NONE ∧
   venom_to_evm_name LOG = NONE ∧             (* needs LOG{n} *)
   venom_to_evm_name ASSERT = NONE ∧

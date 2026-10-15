@@ -843,24 +843,33 @@ Theorem df_fold_forward_invariant:
     (!inst v. MEM inst instrs /\ P v ==> P (transfer inst v)) ==>
     P fv /\ !k v. FLOOKUP im k = SOME v ==> P v
 Proof
-  Induct >> rpt strip_tac >> fs[df_fold_forward_def, LET_THM]
-  (* Base: P fv = P acc *)
-  >- rw[]
-  (* Base: FLOOKUP (inst_map |+ ((lbl,idx),acc)) k = SOME v *)
-  >- (rw[] >> fs[finite_mapTheory.FLOOKUP_UPDATE] >>
+  Induct
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `df_fold_forward transfer lbl [] idx acc inst_map = (fv,im)`
+        mp_tac >>
+      simp[Once df_fold_forward_def] >> strip_tac >> gvs[] >>
+      rpt gen_tac >> strip_tac >>
+      fs[finite_mapTheory.FLOOKUP_UPDATE] >>
       Cases_on `(lbl,idx) = k` >> fs[] >> res_tac)
-  (* Inductive: both P fv and P v — apply IH to recursive fold call *)
-  >> (first_x_assum (qspecl_then [`transfer`, `lbl`, `idx+1`,
-        `transfer h acc`, `inst_map |+ ((lbl,idx),acc)`,
-        `fv`, `im`, `P`] mp_tac) >>
-      impl_tac >- (
-        rpt conj_tac
-        >- rw[]
-        >- (first_x_assum match_mp_tac >> rw[])
-        >- (rw[finite_mapTheory.FLOOKUP_UPDATE] >>
-            Cases_on `(lbl,idx) = k'` >> fs[] >> res_tac)
-        >- (rpt strip_tac >> first_x_assum match_mp_tac >> rw[])
-      ) >> metis_tac[])
+  >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum
+    `df_fold_forward transfer lbl (h::instrs) idx acc inst_map = (fv,im)`
+    mp_tac >>
+  CONV_TAC (LAND_CONV (LHS_CONV
+    (ONCE_REWRITE_CONV [df_fold_forward_def]))) >>
+  simp[LET_THM] >> strip_tac >>
+  (* Inductive: apply the IH to the recursive fold call. *)
+  first_x_assum (qspecl_then [`transfer`, `lbl`, `idx+1`,
+    `transfer h acc`, `inst_map |+ ((lbl,idx),acc)`,
+    `fv`, `im`, `P`] mp_tac) >>
+  impl_tac >- (
+    rpt conj_tac
+    >- rw[]
+    >- (first_x_assum match_mp_tac >> rw[])
+    >- (rw[finite_mapTheory.FLOOKUP_UPDATE] >>
+        Cases_on `(lbl,idx) = k'` >> fs[] >> res_tac)
+    >- (rpt strip_tac >> first_x_assum match_mp_tac >> rw[])
+  ) >> metis_tac[]
 QED
 
 (* Generic invariant: forward fold from FEMPTY (df_fold_block Forward) *)
@@ -1554,8 +1563,12 @@ Proof
       Cases_on `k = (lbl,idx)` >> fs[finite_mapTheory.FLOOKUP_UPDATE] >>
       metis_tac[])
   (* step case *)
-  >> fs[dfAnalyzeDefsTheory.df_fold_backward_def, LET_THM] >>
-     pairarg_tac >> fs[] >> rw[]
+  >> qpat_x_assum
+       `df_fold_backward transfer lbl (h::instrs) idx acc inst_map = (fv,im)`
+       mp_tac >>
+     CONV_TAC (LAND_CONV (LHS_CONV
+       (ONCE_REWRITE_CONV [dfAnalyzeDefsTheory.df_fold_backward_def]))) >>
+     strip_tac >> fs[LET_THM] >> pairarg_tac >> fs[] >> rw[]
      (* P (transfer h acc') *)
      >- (qpat_x_assum `!transfer lbl idx acc inst_map fv im. _`
            (qspecl_then [`transfer`, `lbl`, `idx+1`, `acc`, `inst_map`,

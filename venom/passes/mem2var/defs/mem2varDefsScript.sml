@@ -27,7 +27,7 @@
 Theory mem2varDefs
 Ancestors
   passSimulationDefs dfgDefs venomExecSemantics venomInst stateEquiv venomWf
-  pred_set finite_map
+  pred_set finite_map mem2varFrame
 
 (* ===== Fresh Variable ===== *)
 
@@ -198,37 +198,20 @@ End
  * transformation (alloca regions are not written in the transformed code).
  * This relation captures everything that IS preserved:
  *   - All variables (except fresh alloca promotion vars)
- *   - All non-memory state fields
- *   - Control flow fields (usable as both R_ok and R_term in lift_result)
+ *   - Residual m2v_frame (ignores memory, index and call-entry FMP)
+ *   - Both block labels (usable as both R_ok and R_term in lift_result)
  *
  * The `vars` parameter excludes fresh variables introduced by promotion
  * (the alloca_N_M naming scheme). These variables exist only in the
  * transformed state.
  *
- * This is the same relation as icf_equiv (invokeCopyFwdCommon) but
- * with variable exclusion, defined here to avoid cross-pass dependency.
+ * Allocation state and the other three FMP fields remain compared.
+ * Clearing fields in the mask does not constrain their original values.
  *)
 Definition m2v_equiv_def:
   m2v_equiv vars s1 s2 <=>
     (!v. v NOTIN vars ==> lookup_var v s1 = lookup_var v s2) /\
-    s1.vs_current_bb = s2.vs_current_bb /\
-    s1.vs_prev_bb = s2.vs_prev_bb /\
-    s1.vs_transient = s2.vs_transient /\
-    s1.vs_halted = s2.vs_halted /\
-    s1.vs_returndata = s2.vs_returndata /\
-    s1.vs_accounts = s2.vs_accounts /\
-    s1.vs_call_ctx = s2.vs_call_ctx /\
-    s1.vs_tx_ctx = s2.vs_tx_ctx /\
-    s1.vs_block_ctx = s2.vs_block_ctx /\
-    s1.vs_logs = s2.vs_logs /\
-    s1.vs_immutables = s2.vs_immutables /\
-    s1.vs_data_section = s2.vs_data_section /\
-    s1.vs_labels = s2.vs_labels /\
-    s1.vs_code = s2.vs_code /\
-    s1.vs_params = s2.vs_params /\
-    s1.vs_prev_hashes = s2.vs_prev_hashes /\
-    s1.vs_allocas = s2.vs_allocas /\
-    s1.vs_alloca_next = s2.vs_alloca_next
+    m2v_frame s1 = m2v_frame s2
 End
 
 (* Fresh variables introduced by the transform *)

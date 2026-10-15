@@ -21,8 +21,18 @@ Libs
 (* ===== Prefix op definition ===== *)
 
 Definition is_prefix_op_def:
-  is_prefix_op (SOEmit _) = F /\
-  is_prefix_op _ = T
+  is_prefix_op (SOPush op) = T /\
+  is_prefix_op (SOPop n) = T /\
+  is_prefix_op (SOSwap n) = T /\
+  is_prefix_op (SODup n) = T /\
+  is_prefix_op (SOPoke n op) = T /\
+  is_prefix_op (SOSpill off) = T /\
+  is_prefix_op (SORestore off) = T /\
+  is_prefix_op (SOEmit name) = F /\
+  is_prefix_op SOInitialFmp = T /\
+  is_prefix_op (SOLabel lbl) = T /\
+  is_prefix_op (SOPushLabel lbl) = T /\
+  is_prefix_op (SOPushOfst lbl off) = T
 End
 
 (* ===== Shared tactic infrastructure ===== *)
@@ -97,8 +107,16 @@ Theorem prefix_mstore_preserves[local]:
     asm_step lo o2pc (AsmOp "MSTORE") st = AsmOK st' ==> ^side_fields
 Proof
   rpt strip_tac \\
-  fs(all_handler_defs) \\
-  every_case_tac \\ gvs[]
+  qpat_x_assum `asm_step _ _ _ _ = AsmOK _` mp_tac \\
+  PURE_ONCE_REWRITE_TAC[asm_step_def] \\
+  simp_tac std_ss [] \\
+  PURE_ONCE_REWRITE_TAC[asm_step_op_def] \\
+  simp[asm_step_arith_def] \\
+  simp[asm_step_compare_def] \\
+  simp[asm_step_bitwise_def] \\
+  simp[asm_step_memory_def] \\
+  simp[asm_mstore_def, LET_THM, asm_next_def] \\
+  every_case_tac \\ rpt strip_tac \\ gvs[]
 QED
 
 Theorem prefix_mload_preserves[local]:
@@ -163,9 +181,9 @@ Proof
 QED
 
 Theorem exec_prefix_step_preserves:
-  !op inst lo o2pc (st:asm_state) st'.
+  !initial_fmp op inst lo o2pc (st:asm_state) st'.
     is_prefix_op op /\
-    MEM inst (exec_stack_op op) /\
+    MEM inst (exec_stack_op initial_fmp op) /\
     asm_step lo o2pc inst st = AsmOK st' ==> ^side_fields
 Proof
   Cases_on `op`
@@ -181,6 +199,7 @@ Proof
   (* SOSpill-MSt *)  >- (gvs[] \\ metis_tac[prefix_mstore_preserves])
   (* SORestore-Push*)>- (gvs[] \\ metis_tac[prefix_push_preserves])
   (* SORestore-ML *) >- (gvs[] \\ metis_tac[prefix_mload_preserves])
+  (* SOInitialFmp *)  >- (gvs[] \\ metis_tac[prefix_push_preserves])
   (* SOLabel *)      >- metis_tac[prefix_label_preserves]
   (* SOPushLabel *)  >- metis_tac[prefix_pushlabel_preserves]
   (* SOPushOfst *)   >- metis_tac[prefix_pushofst_preserves]
@@ -264,12 +283,16 @@ Proof
   simp[venom_asm_rel_def, venom_asm_terminal_rel_def]
 QED
 
+(* The old four-field constructor is refuted by
+   codegenOracleRegression$terminal_constructor_missing_requests_counterexample.
+   Add exactly the planned observable request clause, not leftover outcomes. *)
 Theorem venom_asm_terminal_rel_intro:
   !vs (as1:asm_state).
     as1.as_accounts = vs.vs_accounts /\
     as1.as_transient = vs.vs_transient /\
     as1.as_returndata = vs.vs_returndata /\
-    as1.as_logs = vs.vs_logs ==>
+    as1.as_logs = vs.vs_logs /\
+    as1.as_requests = vs.vs_requests ==>
     venom_asm_terminal_rel vs as1
 Proof
   simp[venom_asm_terminal_rel_def]

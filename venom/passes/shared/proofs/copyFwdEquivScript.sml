@@ -32,7 +32,7 @@
 
 Theory copyFwdEquiv
 Ancestors
-  allocaRemapDefs pointerConfinedDefs memLocDefs
+  allocaRemapDefs pointerConfinedDefs memLocDefs passResidualFrame
   venomExecSemantics venomState stateEquiv
   finite_map list rich_list
 Libs
@@ -204,11 +204,11 @@ QED
 Theorem copy_fwd_cross_equiv:
   ∀mem dst_addr src_addr sz.
     let mem_after_copy = (mcopy dst_addr src_addr sz
-                           <| vs_memory := mem |>).vs_memory in
+                           ((init_venom_state "") with vs_memory := mem)).vs_memory in
     cross_mem_region_equiv mem_after_copy dst_addr mem src_addr sz
 Proof
   rw[cross_mem_region_equiv_def, LET_THM] >> rpt strip_tac >>
-  mp_tac (Q.SPECL [`<| vs_memory := mem |>`, `dst_addr`, `src_addr`, `sz`]
+  mp_tac (Q.SPECL [`((init_venom_state "") with vs_memory := mem)`, `dst_addr`, `src_addr`, `sz`]
     mcopy_establishes_equiv) >> simp[LET_THM] >>
   disch_then drule >> simp[]
 QED
@@ -283,20 +283,10 @@ Definition copy_fwd_rel_def:
     (* The src region is the same in both (not clobbered) *)
     cross_mem_region_equiv
       s1.vs_memory src_addr s2.vs_memory src_addr alloca_sz ∧
-    (* Control and remaining internal state agrees *)
-    s1.vs_call_ctx = s2.vs_call_ctx ∧
-    s1.vs_tx_ctx = s2.vs_tx_ctx ∧
-    s1.vs_block_ctx = s2.vs_block_ctx ∧
-    s1.vs_data_section = s2.vs_data_section ∧
-    s1.vs_labels = s2.vs_labels ∧
-    s1.vs_code = s2.vs_code ∧
-    s1.vs_params = s2.vs_params ∧
-    s1.vs_prev_hashes = s2.vs_prev_hashes ∧
-    s1.vs_allocas = s2.vs_allocas ∧
-    s1.vs_alloca_next = s2.vs_alloca_next ∧
-    s1.vs_current_bb = s2.vs_current_bb ∧
-    s1.vs_inst_idx = s2.vs_inst_idx ∧
-    s1.vs_prev_bb = s2.vs_prev_bb
+    (* Variables, memory and six observable components are related above;
+       four FMP components were unconstrained. Control and allocation state
+       and every other component remain in this residual record. *)
+    copy_fwd_frame s1 = copy_fwd_frame s2
 End
 
 (* copy_fwd_rel implies observable_equiv *)

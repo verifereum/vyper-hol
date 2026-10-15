@@ -1,2 +1,0 @@
-# Pass shared shared/defs proof internals
-INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../../../syntax ../../../../semantics ../../../defs ../../../proofs ../../../props ../../../analysis/shared ../../../analysis/shared/defs ../defs

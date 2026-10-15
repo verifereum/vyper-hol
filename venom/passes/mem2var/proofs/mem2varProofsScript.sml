@@ -1,7 +1,7 @@
 Theory mem2varProofs
 Ancestors
-  mem2varDefs basePtrProps pointerConfinedDefs passSimulationProps
-  memLocDefs venomExecProofs venomInstProofs venomMemDefs
+  mem2varDefs mem2varFrame basePtrProps pointerConfinedDefs passSimulationProps
+  memLocDefs venomExecProofs venomInstProofs venomMemDefs venomMemProps
   basePtrDefs
   passSimulationDefs
   stateEquiv
@@ -11,7 +11,9 @@ Ancestors
   finite_map list pred_set pair
   string ASCIInumbers
 Libs
-  HolKernel boolLib bossLib BasicProvers markerLib
+  HolKernel boolLib bossLib BasicProvers markerLib mem2varFrameLib
+
+val _ = augment_srw_ss [mem2varFrameLib.frame_ss];
 
 
 (* Helper: m2v_scan_step preserves the invariant in one step *)
@@ -750,6 +752,14 @@ Theorem step_inst_base_ok_preserves_allocas:
     s'.vs_allocas = s.vs_allocas
 Proof
   rpt strip_tac >>
+  mp_tac (Q.SPECL [`inst`, `s`, `s'`]
+    venomMemPropsTheory.step_inst_base_preserves_allocas) >>
+  ASM_REWRITE_TAC[] >> simp[]
+QED
+
+(* Legacy direct proof retained below is unnecessary now that the shared
+   memory-frame theorem is available. *)
+(*
   fs[step_inst_base_def, AllCaseEqs()] >>
   gvs[AllCaseEqs(),
       exec_pure1_def, exec_pure2_def, exec_pure3_def,
@@ -763,6 +773,7 @@ Proof
       revert_state_def, eval_operands_def, jump_to_def,
       lookup_var_def, FLOOKUP_UPDATE, halt_state_def, set_returndata_def]
 QED
+*)
 
 (* Alloca bridge: relates lookup_var of alloca outputs to vs_allocas.
    Two clauses:
@@ -1143,7 +1154,7 @@ Resume alloca_bridge_exec_block[step_cases]:
     (* Non-terminator case *)
     qpat_x_assum `alloca_inv _ ==> _` mp_tac >> simp[] >>
     strip_tac >> first_x_assum irule >> rpt conj_tac
-    >- metis_tac[venomMemProofsTheory.alloca_inv_step_inst_proof]
+    >- metis_tac[venomMemPropsTheory.alloca_inv_step_inst]
     >- (qpat_x_assum `!inst. _` (qspecl_then
           [`inst0`,`fuel`,`ctx`,`s`,`s_mid`] mp_tac) >> simp[])
     >> (mp_tac (Q.SPECL [`fn`,`fuel`,`ctx`,`inst0`,`s`,`s_mid`]

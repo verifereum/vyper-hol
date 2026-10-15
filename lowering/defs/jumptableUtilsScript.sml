@@ -217,5 +217,3 @@ Definition build_sparse_data_sections_def:
     [<| ds_label := "BUCKET_HEADERS";
         ds_items := MAP DataLabel bucket_labels |>]
 End
-
-val _ = export_theory();

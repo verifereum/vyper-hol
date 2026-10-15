@@ -811,7 +811,10 @@ Theorem step_inst_base_assign:
   ?w. eval_operand op st = SOME w /\
       st' = update_var out w st
 Proof
-  strip_tac >> gvs[step_inst_base_def, AllCaseEqs()]
+  strip_tac >>
+  qpat_x_assum `step_inst_base inst st = OK st'` mp_tac >>
+  ASM_REWRITE_TAC[step_inst_base_def] >>
+  simp[AllCaseEqs()] >> strip_tac >> gvs[]
 QED
 
 Theorem step_inst_base_iszero:
@@ -847,7 +850,11 @@ Theorem step_inst_base_lt:
   ?w1 w2. eval_operand op1 st = SOME w1 /\ eval_operand op2 st = SOME w2 /\
            st' = update_var out (bool_to_word (w2n w1 < w2n w2)) st
 Proof
-  strip_tac >> gvs[step_inst_base_def, exec_pure2_def, AllCaseEqs()]
+  strip_tac >>
+  qpat_x_assum `step_inst_base inst st = OK st'` mp_tac >>
+  ASM_REWRITE_TAC[step_inst_base_def] >>
+  simp[exec_pure2_def, AllCaseEqs()] >>
+  strip_tac >> gvs[]
 QED
 
 Theorem step_inst_base_gt:
@@ -856,7 +863,11 @@ Theorem step_inst_base_gt:
   ?w1 w2. eval_operand op1 st = SOME w1 /\ eval_operand op2 st = SOME w2 /\
            st' = update_var out (bool_to_word (w2n w1 > w2n w2)) st
 Proof
-  strip_tac >> gvs[step_inst_base_def, exec_pure2_def, AllCaseEqs()]
+  strip_tac >>
+  qpat_x_assum `step_inst_base inst st = OK st'` mp_tac >>
+  ASM_REWRITE_TAC[step_inst_base_def] >>
+  simp[exec_pure2_def, AllCaseEqs()] >>
+  strip_tac >> gvs[]
 QED
 
 Theorem step_inst_base_eq:
@@ -865,7 +876,11 @@ Theorem step_inst_base_eq:
   ?w1 w2. eval_operand op1 st = SOME w1 /\ eval_operand op2 st = SOME w2 /\
            st' = update_var out (bool_to_word (w1 = w2)) st
 Proof
-  strip_tac >> gvs[step_inst_base_def, exec_pure2_def, AllCaseEqs()]
+  strip_tac >>
+  qpat_x_assum `step_inst_base inst st = OK st'` mp_tac >>
+  ASM_REWRITE_TAC[step_inst_base_def] >>
+  simp[exec_pure2_def, AllCaseEqs()] >>
+  strip_tac >> gvs[]
 QED
 
 Theorem step_inst_base_slt:
@@ -874,7 +889,11 @@ Theorem step_inst_base_slt:
   ?w1 w2. eval_operand op1 st = SOME w1 /\ eval_operand op2 st = SOME w2 /\
            st' = update_var out (bool_to_word (word_lt w1 w2)) st
 Proof
-  strip_tac >> gvs[step_inst_base_def, exec_pure2_def, AllCaseEqs()]
+  strip_tac >>
+  qpat_x_assum `step_inst_base inst st = OK st'` mp_tac >>
+  ASM_REWRITE_TAC[step_inst_base_def] >>
+  simp[exec_pure2_def, AllCaseEqs()] >>
+  strip_tac >> gvs[]
 QED
 
 Theorem step_inst_base_sgt:
@@ -883,7 +902,11 @@ Theorem step_inst_base_sgt:
   ?w1 w2. eval_operand op1 st = SOME w1 /\ eval_operand op2 st = SOME w2 /\
            st' = update_var out (bool_to_word (word_gt w1 w2)) st
 Proof
-  strip_tac >> gvs[step_inst_base_def, exec_pure2_def, AllCaseEqs()]
+  strip_tac >>
+  qpat_x_assum `step_inst_base inst st = OK st'` mp_tac >>
+  ASM_REWRITE_TAC[step_inst_base_def] >>
+  simp[exec_pure2_def, AllCaseEqs()] >>
+  strip_tac >> gvs[]
 QED
 
 

@@ -1,16 +1,18 @@
 Theory mem2varCorrectness
 Ancestors
   mem2varProofs mem2varBlockSim
-  mem2varDefs mem2varBlockSimHelpers
+  mem2varDefs mem2varBlockSimHelpers mem2varFrame
   passSimulationDefs passSimulationProps
   stateEquiv
   venomExecSemantics venomState venomWf
-  venomMemDefs venomExecProofs venomInst
+  venomMemDefs venomMemProps venomExecProofs venomInst
   pointerConfinedDefs memLocDefs instIdxIndep
   finite_map list pred_set rich_list
   While
 Libs
-  pairLib
+  pairLib mem2varFrameLib
+
+val _ = augment_srw_ss [mem2varFrameLib.frame_ss];
 
 (* eval_phis/run_block ignore the entry state's vs_inst_idx: PHIs read operands
    and run_block overwrites vs_inst_idx with phi_prefix_length before exec_block. *)
@@ -232,8 +234,10 @@ Proof
   Cases_on `FIND (\(ao,_0,_1). MEM (Var ao) inst.inst_operands)
                   (m2v_promo_list fn)` >> simp[] >>
   PairCases_on `x` >> simp[m2v_promote_inst_def] >>
-  Cases_on `inst.inst_opcode` >> simp[is_terminator_def] >>
-  rpt (CASE_TAC >> simp[is_terminator_def])
+  Cases_on `inst.inst_opcode` >> simp[is_terminator_def]
+  >- (rpt (CASE_TAC >> simp[is_terminator_def]))
+  >- (rpt (CASE_TAC >> simp[is_terminator_def]))
+  >- (rpt (CASE_TAC >> simp[is_terminator_def]))
 QED
 
 (* m2v_rewrite_inst on non-terminal gives non-terminal singleton *)
@@ -1067,13 +1071,15 @@ Proof
                              s1.vs_alloca_next = s2.vs_alloca_next` >>
             simp[] >> metis_tac[m2v_inv_implies_equiv])))
   >> irule (SRULE [] block_sim_function_with_pred2_bb)
-  >> BETA_TAC >> simp[m2v_bt_preserves_label]
+  >> BETA_TAC
+  >> conj_tac >- (rpt strip_tac >> irule m2v_bt_preserves_label)
   >> conj_tac >- (rpt strip_tac >> gvs[] >>
        metis_tac[m2v_inv_implies_equiv])
   >> conj_tac >- (rpt strip_tac >> gvs[] >>
        metis_tac[m2v_inv_control_flow])
   (* predicate: original-side invariants + fn_reachable + pvars_at_current *)
-  >> qexists `\s1 s2. m2v_fresh_undef fn s1 /\ alloca_inv s1 /\
+  >> conj_tac
+  >- (qexists `\s1 s2. m2v_fresh_undef fn s1 /\ alloca_inv s1 /\
        s1.vs_alloca_next < dimword (:256) /\
        m2v_nonpromoted_access_safe fn s1 /\
        alloca_bridge fn s1 /\
@@ -1090,7 +1096,7 @@ Proof
           impl_tac >- simp[] >>
           DISCH_THEN ACCEPT_TAC)
       >- (mp_tac (Q.SPECL [`fl`, `cx`, `bk`, `sa`, `sa'`]
-            venomMemProofsTheory.alloca_inv_run_block_proof) >>
+            venomMemPropsTheory.alloca_inv_run_block) >>
           impl_tac >- simp[] >>
           DISCH_THEN ACCEPT_TAC)
       >- (mp_tac (Q.SPECL [`fn`, `bk`, `fl`, `cx`, `sa`, `sa'`]
@@ -1120,7 +1126,8 @@ Proof
   qpat_x_assum `m2v_pvars_at_current _ _`
     (mp_tac o REWRITE_RULE[m2v_pvars_at_current_def, m2v_pvars_set_def,
                            lookup_var_def]) >>
-  simp[m2v_pvars_at_current_def, m2v_pvars_set_def, lookup_var_def]
+  simp[m2v_pvars_at_current_def, m2v_pvars_set_def, lookup_var_def])
+  >- simp[]
 QED
 
 Resume m2v_transform_function_correct[nas]:
@@ -1158,7 +1165,8 @@ Resume m2v_transform_function_correct[reach]:
     >- (rpt strip_tac >>
         `i = PRE (LENGTH bk.bb_instructions)` by
           (first_x_assum irule >> simp[]) >>
-        gvs[])
+        qpat_x_assum `i = PRE _` SUBST_ALL_TAC >>
+        qpat_x_assum `PRE _ < _ - 1` mp_tac >> simp[])
     >- simp[]
     >- simp[]) >>
   simp[]

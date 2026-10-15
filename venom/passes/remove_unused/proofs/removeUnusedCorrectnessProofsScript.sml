@@ -181,8 +181,11 @@ Theorem merge_callee_execution_equiv:
     execution_equiv V s1 s2 ==>
     merge_callee_state caller s1 = merge_callee_state caller s2
 Proof
-  rw[execution_equiv_def, merge_callee_state_def,
-     venom_state_component_equality]
+  rpt strip_tac >>
+  irule stateFrameTheory.execution_frame_projection >>
+  conj_tac
+  >- simp[merge_callee_state_def, stateFrameTheory.execution_frame_def] >>
+  fs[Excl "core_complete_mask_equality", execution_equiv_def]
 QED
 
 
@@ -325,7 +328,8 @@ Proof
         simp[is_terminator_def] >>
         Cases_on `bind_outputs
           (EL s.vs_inst_idx bb.bb_instructions).inst_outputs
-          l' (merge_callee_state s v')` >> simp[]))))
+          i'.iret_values
+          (adopt_return_fmp i' (merge_callee_state s v'))` >> simp[]))))
 QED
 
 (* ===== Cross-context function equivalence ===== *)

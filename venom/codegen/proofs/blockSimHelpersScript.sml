@@ -1,20 +1,19 @@
 (*
  * Block Simulation Helpers
  *
- * Core lemmas for gen_block_simulation:
+ * Core lemmas for block-level simulation:
  *   - run_block_step: peeling one instruction from run_block
  *   - run_block_terminator: terminator classification
  *   - label_op_sim: SOLabel preserves venom_asm_rel
- *   - foldl_inst_sim: FOLDL composition of gen_inst_simulation
+ *   - foldl_inst_sim: FOLDL composition of per-instruction simulation
  *
- * These compose per-instruction simulation (gen_inst_simulation)
- * into block-level simulation (gen_block_simulation).
+ * These compose per-instruction simulation into block-level simulation.
  *)
 
 
 Theory blockSimHelpers
 Ancestors
-  asmSem planExec stackModel codegenRel stackPlanTypes stackPlanGen venomExecSemantics venomExecProofs venomState venomInst list rich_list arithmetic indexedLists stackOpSim instSimHelpers venomWf
+  asmSem planExec stackModel codegenRel stackPlanTypes stackPlanGen venomExecSemantics venomExecProofs venomState venomInst list rich_list arithmetic indexedLists stackOpSim instSimHelpers venomWf symbolResolve
 Libs
   BasicProvers
 
@@ -410,7 +409,7 @@ QED
 
 (* ===== Block instruction simulation (inductive core) ===== *)
 
-(* This is the inductive heart of gen_block_simulation.
+(* This is the inductive core of block-level simulation.
    It says: if we have a per-instruction simulation property,
    and block_foldl generates a plan for the remaining instructions,
    then exec_block on those remaining instructions corresponds to
@@ -421,7 +420,10 @@ QED
 *)
 Theorem block_insts_sim:
   !remaining.  (* induction variable: remaining instruction list *)
-  !fuel ctx lo o2pc prog bb k gen_plan ps_k vs as inst_ops ps_final.
+  !initial_fmp fuel ctx lo o2pc prog bb k gen_plan ps_k vs as inst_ops ps_final.
+    (* Concrete full-program maps, shared by every instruction and the IH. *)
+    lo = SND (compute_label_offsets prog) /\
+    o2pc = build_offset_to_pc prog /\
     (* Structural *)
     bb_well_formed bb /\
     remaining = DROP k bb.bb_instructions /\
@@ -433,7 +435,7 @@ Theorem block_insts_sim:
     (* State *)
     ~vs.vs_halted /\
     venom_asm_rel lo ps_k vs as /\
-    asm_block_at prog as.as_pc (execute_plan inst_ops) /\
+    asm_block_at prog as.as_pc (execute_plan initial_fmp inst_ops) /\
     (* OK steps preserve vs_halted (needed to propagate ~vs_halted) *)
     (!inst vs_0 vs_0'.
        step_inst fuel ctx inst vs_0 = OK vs_0' ==>
@@ -445,20 +447,20 @@ Theorem block_insts_sim:
        EL i bb.bb_instructions = inst /\
        gen_plan i inst ps_i = SOME (ops_i, ps_next) /\
        venom_asm_rel lo ps_i vs_i as_i /\
-       asm_block_at prog as_i.as_pc (execute_plan ops_i) /\
+       asm_block_at prog as_i.as_pc (execute_plan initial_fmp ops_i) /\
        step_inst fuel ctx inst vs_i = OK vs_i' /\
        ~is_terminator inst.inst_opcode ==>
        ?n as_i'.
          asm_steps lo o2pc prog n as_i = AsmOK as_i' /\
          venom_asm_rel lo ps_next vs_i' as_i' /\
-         as_i'.as_pc = as_i.as_pc + LENGTH (execute_plan ops_i)) /\
+         as_i'.as_pc = as_i.as_pc + LENGTH (execute_plan initial_fmp ops_i)) /\
     (* OK + terminator + not halted *)
     (!i inst ps_i ops_i ps_next vs_i as_i vs_i'.
        i < LENGTH bb.bb_instructions /\
        EL i bb.bb_instructions = inst /\
        gen_plan i inst ps_i = SOME (ops_i, ps_next) /\
        venom_asm_rel lo ps_i vs_i as_i /\
-       asm_block_at prog as_i.as_pc (execute_plan ops_i) /\
+       asm_block_at prog as_i.as_pc (execute_plan initial_fmp ops_i) /\
        step_inst fuel ctx inst vs_i = OK vs_i' /\
        is_terminator inst.inst_opcode /\ ~vs_i'.vs_halted ==>
        ?n as_i'.
@@ -470,7 +472,7 @@ Theorem block_insts_sim:
        EL i bb.bb_instructions = inst /\
        gen_plan i inst ps_i = SOME (ops_i, ps_next) /\
        venom_asm_rel lo ps_i vs_i as_i /\
-       asm_block_at prog as_i.as_pc (execute_plan ops_i) /\
+       asm_block_at prog as_i.as_pc (execute_plan initial_fmp ops_i) /\
        step_inst fuel ctx inst vs_i = Halt vs_i' ==>
        ?n as_i'.
          asm_steps lo o2pc prog n as_i = AsmHalt as_i' /\
@@ -481,7 +483,7 @@ Theorem block_insts_sim:
        EL i bb.bb_instructions = inst /\
        gen_plan i inst ps_i = SOME (ops_i, ps_next) /\
        venom_asm_rel lo ps_i vs_i as_i /\
-       asm_block_at prog as_i.as_pc (execute_plan ops_i) /\
+       asm_block_at prog as_i.as_pc (execute_plan initial_fmp ops_i) /\
        step_inst fuel ctx inst vs_i = Abort a vs_i' ==>
        ?n as_i'.
          ((a = Revert_abort /\
@@ -546,10 +548,10 @@ Proof
           (MAPi (\i inst. (i + (k + 1),inst)) remaining)` >>
         simp[] >> PairCases_on `x` >> simp[]
       ) >>
-    `asm_block_at prog as.as_pc (execute_plan x0) /\
-     asm_block_at prog (as.as_pc + LENGTH (execute_plan x0))
-       (execute_plan tail_ops)`
-      by (qpat_x_assum `asm_block_at _ _ (execute_plan inst_ops)` mp_tac >>
+    `asm_block_at prog as.as_pc (execute_plan initial_fmp x0) /\
+     asm_block_at prog (as.as_pc + LENGTH (execute_plan initial_fmp x0))
+       (execute_plan initial_fmp tail_ops)`
+      by (qpat_x_assum `asm_block_at _ _ (execute_plan initial_fmp inst_ops)` mp_tac >>
           ASM_REWRITE_TAC[execute_plan_append, asm_block_at_append]) >>
     `get_instruction bb k = SOME h`
       by (rw[get_instruction_def]) >>
@@ -687,7 +689,7 @@ Resume block_insts_sim[ok_nonterm]:
   \\ rename1 `asm_steps lo o2pc prog n1 as = AsmOK as1`
   (* Apply IH *)
   \\ first_x_assum (qspecl_then [
-       `fuel`, `ctx`, `lo`, `o2pc`, `prog`, `bb`, `SUC k`,
+       `initial_fmp`, `fuel`, `ctx`, `lo`, `o2pc`, `prog`, `bb`, `SUC k`,
        `gen_plan`, `x1`, `vs1 with vs_inst_idx := SUC k`,
        `as1`, `tail_ops`, `ps_final`] mp_tac)
   \\ (impl_tac >- suspend "ok_nonterm_ih")

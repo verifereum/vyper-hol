@@ -1,38 +1,29 @@
 name: 'Setup holbuild'
-description: 'Checks out holbuild, exposes its HOL4 pin, and optionally builds it'
+description: 'Checks out pinned holbuild, builds it, and adds it to PATH'
 
 inputs:
   holbuild-repo:
     required: false
-    default: 'https://github.com/charles-cooper/holbuild.git'
+    default: 'https://github.com/HOL-Theorem-Prover/holbuild.git'
     description: 'holbuild repository URL'
-  build:
-    required: false
-    default: 'true'
-    description: 'Whether to build holbuild and add it to PATH'
+  holbuild-ref:
+    required: true
+    description: 'holbuild git revision or tag to use'
 
 outputs:
   holbuild-rev:
     description: 'Resolved holbuild revision'
     value: ${{ steps.version.outputs.holbuild-rev }}
-  hol4-rev:
-    description: 'HOL4 revision pinned by holbuild'
-    value: ${{ steps.hol4-pin.outputs.hol4-rev }}
 
 runs:
   using: 'composite'
   steps:
-    - name: Read holbuild pin from Verifereum
-      id: version
-      shell: bash
-      run: echo "holbuild-rev=$(tr -d '[:space:]' < $VFMDIR/PINS/holbuild.txt)" >> "$GITHUB_OUTPUT"
-
     - name: Cache holbuild checkout/build
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       id: cache-holbuild
       with:
         path: ~/holbuild
-        key: holbuild-tool-${{ runner.os }}-${{ steps.version.outputs.holbuild-rev }}
+        key: holbuild-tool-${{ runner.os }}-${{ runner.arch }}-${{ inputs.holbuild-ref }}
 
     - name: Clone holbuild
       shell: bash
@@ -45,22 +36,22 @@ runs:
       shell: bash
       run: |
         cd "$HOME/holbuild"
-        git fetch origin "${{ steps.version.outputs.holbuild-rev }}"
-        git checkout --detach "${{ steps.version.outputs.holbuild-rev }}"
+        git fetch origin "${{ inputs.holbuild-ref }}"
+        git checkout --detach "${{ inputs.holbuild-ref }}"
 
-    - name: Read HOL4 pin from holbuild
-      id: hol4-pin
-      shell: bash
-      run: echo "hol4-rev=$(tr -d '[:space:]' < $HOME/holbuild/PINS/hol.txt)" >> "$GITHUB_OUTPUT"
-
-    - name: Build holbuild
-      if: inputs.build == 'true'
+    - name: Resolve holbuild revision
+      id: version
       shell: bash
       run: |
         cd "$HOME/holbuild"
-        make HOLDIR="$HOLDIR"
+        echo "holbuild-rev=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+    - name: Build holbuild
+      shell: bash
+      run: |
+        cd "$HOME/holbuild"
+        make
 
     - name: Add holbuild to PATH
-      if: inputs.build == 'true'
       shell: bash
       run: echo "$HOME/holbuild/bin" >> "$GITHUB_PATH"

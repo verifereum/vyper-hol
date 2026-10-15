@@ -1,9 +1,9 @@
 Theory vyperEvalPreservesImmutablesDom
 Ancestors
-  vyperMisc vyperAST vyperValue vyperContext vyperState vyperStorageBackend vyperInterpreter
+  pair vyperMisc vyperAST vyperValue vyperContext vyperState vyperStorageBackend vyperCreate vyperInterpreter
   vyperLookup vyperScopePreservation vyperStatePreservation
   vyperAssignTarget vyperEvalExprPreservesScopesDom
-  vyperImmutablesPreservation
+  vyperImmutablesPreservation vyperCallFrame vyperCallOutcomeFrame
 
 (* ========================================================================
    Preservation of immutables domain through eval_expr / eval_stmts.
@@ -66,8 +66,9 @@ Theorem transfer_value_immutables[local]:
   ∀f t a st res st'.
     transfer_value f t a st = (res, st') ⇒ st'.immutables = st.immutables
 Proof
-  rw[transfer_value_def, bind_def, ignore_bind_def, get_accounts_def, return_def,
-     check_def, type_check_def, assert_def, update_accounts_def] >> gvs[raise_def]
+  rpt strip_tac >>
+  drule vyperStatePreservationTheory.transfer_value_immutables >>
+  simp[]
 QED
 
 Theorem lookup_flag_mem_immutables[local]:
@@ -209,8 +210,8 @@ Proof
 QED
 
 Theorem assign_target_imm_dom_ImmutableVar[local]:
-  ∀cx id is ao st res st'.
-    assign_target cx (BaseTargetV (ImmutableVar id) is) ao st = (res, st') ⇒
+  ∀cx src_id_opt id is ao st res st'.
+    assign_target cx (BaseTargetV (ImmutableVar src_id_opt id) is) ao st = (res, st') ⇒
     preserves_immutables_dom cx st st'
 Proof
   rpt strip_tac >>
@@ -221,18 +222,23 @@ Proof
   Cases_on `ALOOKUP st.immutables cx.txn.target` >>
   simp[return_def, raise_def] >-
   (strip_tac >> gvs[preserves_immutables_dom_refl]) >>
-  Cases_on `FLOOKUP (get_source_immutables (current_module cx) x) (string_to_num id)` >>
+  Cases_on `FLOOKUP (get_source_immutables src_id_opt x) (string_to_num id)` >>
   simp[return_def, raise_def] >-
   (strip_tac >> gvs[preserves_immutables_dom_refl]) >>
   PairCases_on `x'` >> simp[] >>
   Cases_on `assign_subscripts x'0 x'1 (REVERSE is) ao` >>
   simp[lift_sum_def, return_def, raise_def] >>
   strip_tac >> gvs[preserves_immutables_dom_refl] >>
-  Cases_on `set_immutable cx (current_module cx) (string_to_num id) x'0 x' st` >>
-  Cases_on `q` >> gvs[] >-
-  (imp_res_tac assign_result_state >> gvs[] >>
-   gvs[set_immutable_def, bind_def, get_address_immutables_def, lift_option_def,
-       set_address_immutables_def, return_def, raise_def, LET_THM,
+  TRY (qpat_x_assum `lift_option_type (SOME _) _ _ = (INR _,_)` mp_tac >>
+       simp[lift_option_type_def, return_def, raise_def] >> NO_TAC) >>
+  Cases_on `set_immutable cx src_id_opt (string_to_num id) x'0 x' st` >>
+  Cases_on `q` >> gvs[lift_option_type_def, return_def, raise_def] >-
+  (TRY (qpat_x_assum `lift_option_type (SOME x) _ _ = (INR _,_)` mp_tac >>
+        simp[lift_option_type_def, return_def, raise_def] >> NO_TAC) >>
+   imp_res_tac assign_result_state >> gvs[] >>
+   gvs[set_immutable_def, bind_def, get_address_immutables_def,
+       lift_option_type_def, lift_option_def, set_address_immutables_def,
+       return_def, raise_def, LET_THM,
        AllCaseEqs()] >>
    simp[preserves_immutables_dom_def] >> conj_tac
    >- (rpt strip_tac >>
@@ -243,11 +249,12 @@ Proof
            finite_mapTheory.FLOOKUP_UPDATE] >>
       rpt gen_tac >>
       TRY (rename1 `IS_SOME (FLOOKUP (get_source_immutables src _) n)`) >>
-      TRY (Cases_on `src = current_module cx` >> gvs[]) >>
+      TRY (Cases_on `src = src_id_opt` >> gvs[]) >>
       Cases_on `n = string_to_num id` >>
       gvs[get_source_immutables_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
-  gvs[set_immutable_def, bind_def, get_address_immutables_def, lift_option_def,
-      set_address_immutables_def, return_def, raise_def, LET_THM,
+  gvs[set_immutable_def, bind_def, get_address_immutables_def,
+      lift_option_type_def, lift_option_def, set_address_immutables_def,
+      return_def, raise_def, LET_THM,
       AllCaseEqs(), preserves_immutables_dom_refl]
 QED
 
@@ -346,7 +353,7 @@ Theorem lock_acquire_cond_immutables[local]:
   ∀nr slot_opt addr is_view s res s'.
     (if nr then
        case slot_opt of
-         NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+         NONE => raise (Error (TypeError "nonreentrant slot missing"))
        | SOME slot => acquire_nonreentrant_lock addr slot is_view
      else return ()) s = (res, s') ⇒
     s'.immutables = s.immutables
@@ -378,6 +385,28 @@ Theorem preserves_immutables_dom_txn_eq[local]:
     (preserves_immutables_dom cx' st st' ⇔ preserves_immutables_dom cx st st')
 Proof
   simp[preserves_immutables_dom_def]
+QED
+
+Theorem intcall_default_frame_imm_dom[local]:
+  (∀st res st'.
+     eval_exprs cxd needed_dflts st = (res,st') ⇒
+     preserves_immutables_dom cxd st st') ⇒
+  finally
+    (do
+       set_scopes [FEMPTY];
+       eval_exprs cxd needed_dflts
+     od)
+    (set_scopes prev) sget = (res,st1) ⇒
+  preserves_immutables_dom cxd sget st1
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `finally _ _ _ = _` mp_tac >>
+  simp[finally_def, bind_def, ignore_bind_def, set_scopes_def, return_def] >>
+  Cases_on `eval_exprs cxd needed_dflts (sget with scopes := [FEMPTY])` >>
+  Cases_on `q` >> simp[return_def, raise_def] >> strip_tac >> gvs[] >>
+  qpat_x_assum `∀st res st'. eval_exprs cxd needed_dflts st = (res,st') ⇒ _`
+    (drule_then assume_tac) >>
+  gvs[preserves_immutables_dom_def]
 QED
 
 Theorem case_IntCall_imm_dom_inner[local]:
@@ -434,6 +463,248 @@ Proof
   imp_res_tac handle_function_immutables
 QED
 
+Definition post_default_intcall_tail_def:
+  post_default_intcall_tail cx src_id_opt fn mut nr args ret ss vs dflt_vs prev sdfl =
+    (do
+       all_tenv <<- get_tenv cx;
+       env <- lift_option_type (bind_arguments all_tenv args (vs ++ dflt_vs))
+                "IntCall bind_arguments";
+       rtv <- lift_option_type (evaluate_type all_tenv ret) "IntCall eval ret";
+       is_view <<- (mut = View ∨ mut = Pure);
+       (if nr then
+          case cx.nonreentrant_slot of
+          | NONE => raise (Error (TypeError "nonreentrant slot missing"))
+          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
+        else return ());
+       cxf <- push_function (src_id_opt,fn) env cx;
+       rv <- finally
+         (try (do eval_stmts cxf ss; return NoneV od) handle_function)
+         (do
+            pop_function prev;
+            if nr ∧ ¬is_view then
+              case cx.nonreentrant_slot of
+              | NONE => return ()
+              | SOME slot => release_nonreentrant_lock cx.txn.target slot
+            else return ()
+          od);
+       crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
+       return (Value crv)
+     od) sdfl
+End
+
+Theorem post_default_intcall_tail_unfold[local]:
+  post_default_intcall_tail cx src_id_opt fn mut nr args ret ss vs dflt_vs prev sdfl =
+    (do
+       all_tenv <<- get_tenv cx;
+       env <- lift_option_type (bind_arguments all_tenv args (vs ++ dflt_vs))
+                "IntCall bind_arguments";
+       rtv <- lift_option_type (evaluate_type all_tenv ret) "IntCall eval ret";
+       is_view <<- (mut = View ∨ mut = Pure);
+       (if nr then
+          case cx.nonreentrant_slot of
+          | NONE => raise (Error (TypeError "nonreentrant slot missing"))
+          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
+        else return ());
+       cxf <- push_function (src_id_opt,fn) env cx;
+       rv <- finally
+         (try (do eval_stmts cxf ss; return NoneV od) handle_function)
+         (do
+            pop_function prev;
+            if nr ∧ ¬is_view then
+              case cx.nonreentrant_slot of
+              | NONE => return ()
+              | SOME slot => release_nonreentrant_lock cx.txn.target slot
+            else return ()
+          od);
+       crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
+       return (Value crv)
+     od) sdfl
+Proof
+  rw[post_default_intcall_tail_def]
+QED
+
+Definition intcall_tail_body_provider_def:
+  intcall_tail_body_provider cx src_id_opt fn mut nr args ret ss vs dflt_vs sdfl =
+    ∀env s_bind rtv s_eval lk s_lock cx' s_push.
+      lift_option_type (bind_arguments (get_tenv cx) args (vs ++ dflt_vs))
+        "IntCall bind_arguments" sdfl = (INL env,s_bind) ∧
+      lift_option_type (evaluate_type (get_tenv cx) ret)
+        "IntCall eval ret" s_bind = (INL rtv,s_eval) ∧
+      (if nr then
+         case cx.nonreentrant_slot of
+         | NONE => raise (Error (TypeError "nonreentrant slot missing"))
+         | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View ∨ mut = Pure)
+       else return ()) s_eval = (INL lk,s_lock) ∧
+      push_function (src_id_opt,fn) env cx s_lock = (INL cx',s_push) ⇒
+      ∀st res st'. eval_stmts cx' ss st = (res,st') ⇒
+        preserves_immutables_dom cx' st st'
+End
+
+Theorem intcall_tail_body_provider_unfold[local]:
+  intcall_tail_body_provider cx src_id_opt fn mut nr args ret ss vs dflt_vs sdfl =
+    ∀env s_bind rtv s_eval lk s_lock cx' s_push.
+      lift_option_type (bind_arguments (get_tenv cx) args (vs ++ dflt_vs))
+        "IntCall bind_arguments" sdfl = (INL env,s_bind) ∧
+      lift_option_type (evaluate_type (get_tenv cx) ret)
+        "IntCall eval ret" s_bind = (INL rtv,s_eval) ∧
+      (if nr then
+         case cx.nonreentrant_slot of
+         | NONE => raise (Error (TypeError "nonreentrant slot missing"))
+         | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View ∨ mut = Pure)
+       else return ()) s_eval = (INL lk,s_lock) ∧
+      push_function (src_id_opt,fn) env cx s_lock = (INL cx',s_push) ⇒
+      ∀st res st'. eval_stmts cx' ss st = (res,st') ⇒
+        preserves_immutables_dom cx' st st'
+Proof
+  rw[intcall_tail_body_provider_def]
+QED
+
+Theorem intcall_post_default_eq_imm_dom[local]:
+  ∀cx cxd st0 sevl sdfl st'.
+    cxd.txn = cx.txn ⇒
+    preserves_immutables_dom cx st0 sevl ⇒
+    preserves_immutables_dom cxd sevl sdfl ⇒
+    st'.immutables = sdfl.immutables ⇒
+    preserves_immutables_dom cx st0 st'
+Proof
+  rpt strip_tac >>
+  irule preserves_immutables_dom_trans >> qexists_tac `sevl` >>
+  conj_tac >- simp[] >>
+  irule preserves_immutables_dom_trans >> qexists_tac `sdfl` >>
+  conj_tac
+  >- (irule (iffLR preserves_immutables_dom_txn_eq) >>
+      qexists_tac `cxd` >> simp[]) >>
+  irule preserves_immutables_dom_eq >> simp[]
+QED
+
+Theorem case_IntCall_imm_dom_inner_pres[local]:
+  ∀cx src_id_opt fname body st0 sevl sdfl fres sfnl env prev.
+    preserves_immutables_dom cx st0 sevl ∧
+    preserves_immutables_dom
+      (cx with stk updated_by CONS (src_id_opt,fname)) sevl sdfl ∧
+    (∀st res st'.
+       eval_stmts (cx with stk updated_by CONS (src_id_opt,fname)) body st =
+       (res,st') ⇒
+       preserves_immutables_dom
+         (cx with stk updated_by CONS (src_id_opt,fname)) st st') ∧
+    finally
+      (try (bind (eval_stmts (cx with stk updated_by CONS (src_id_opt,fname))
+         body) (λx. return NoneV)) handle_function)
+      (pop_function prev)
+      (sdfl with scopes := [env]) = (fres,sfnl) ⇒
+    preserves_immutables_dom cx st0 sfnl
+Proof
+  rpt strip_tac >>
+  irule preserves_immutables_dom_trans >> qexists_tac `sevl` >> conj_tac >- gvs[] >>
+  irule preserves_immutables_dom_trans >> qexists_tac `sdfl` >> conj_tac
+  >- (irule (iffLR preserves_immutables_dom_txn_eq) >>
+      qexists_tac `cx with stk updated_by CONS (src_id_opt,fname)` >>
+      simp[] >> gvs[]) >>
+  qpat_x_assum `finally _ _ _ = _` mp_tac >>
+  simp[finally_def, AllCaseEqs(), pop_function_def, set_scopes_def,
+       return_def, ignore_bind_def, bind_def, raise_def] >>
+  rpt strip_tac >> gvs[preserves_immutables_dom_eq, preserves_immutables_dom_refl] >>
+  irule preserves_immutables_dom_trans >> qexists_tac `sdfl with scopes := [env]` >>
+  gvs[preserves_immutables_dom_eq] >>
+  irule (iffLR preserves_immutables_dom_txn_eq) >>
+  qexists_tac `cx with stk updated_by CONS (src_id_opt,fname)` >> simp[] >>
+  qpat_x_assum `try _ _ _ = _` mp_tac >>
+  simp[try_def, bind_def, AllCaseEqs(), return_def, raise_def,
+       handle_function_def] >>
+  rpt strip_tac >> gvs[preserves_immutables_dom_refl, preserves_immutables_dom_eq] >>
+  qpat_assum `∀st res st'. eval_stmts _ _ st = (res,st') ⇒ _`
+    drule >> gvs[preserves_immutables_dom_eq] >>
+  BasicProvers.EVERY_CASE_TAC >>
+  gvs[handle_function_def, return_def, raise_def, preserves_immutables_dom_eq] >>
+  qpat_assum `∀st res st'. eval_stmts _ _ st = (res,st') ⇒ _`
+    drule >> gvs[preserves_immutables_dom_eq] >>
+  rpt strip_tac >>
+  TRY (irule preserves_immutables_dom_trans >> qexists_tac `s''` >>
+       conj_tac >- simp[] >>
+       irule preserves_immutables_dom_eq >> simp[] >> NO_TAC) >>
+  TRY (irule preserves_immutables_dom_trans >> qexists_tac `s'³'` >>
+       conj_tac >- simp[] >>
+       irule preserves_immutables_dom_trans >> qexists_tac `s''` >>
+       conj_tac >- (irule preserves_immutables_dom_eq >>
+                     imp_res_tac handle_function_immutables >> simp[]) >>
+       irule preserves_immutables_dom_eq >> simp[] >> NO_TAC) >>
+  irule preserves_immutables_dom_trans >> first_assum (irule_at Any) >>
+  irule preserves_immutables_dom_eq >>
+  gvs[handle_function_def, return_def, raise_def, AllCaseEqs()] >>
+  imp_res_tac handle_function_immutables
+QED
+
+
+Theorem intcall_body_finally_release_imm_dom[local]:
+  ∀cx src_id_opt fn mut nr ss prev env st res st'.
+    (∀st0 res0 st1.
+       eval_stmts (cx with stk updated_by CONS (src_id_opt,fn)) ss st0 = (res0,st1) ⇒
+       preserves_immutables_dom (cx with stk updated_by CONS (src_id_opt,fn)) st0 st1) ∧
+    finally
+      (try (do eval_stmts (cx with stk updated_by CONS (src_id_opt,fn)) ss;
+               return NoneV od) handle_function)
+      (do pop_function prev;
+          if nr ∧ mut ≠ View ∧ mut ≠ Pure then
+            case cx.nonreentrant_slot of
+            | NONE => return ()
+            | SOME slot => release_nonreentrant_lock cx.txn.target slot
+          else return () od)
+      (st with scopes := [env]) = (res,st') ⇒
+    preserves_immutables_dom cx st st'
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `finally _ _ _ = _` mp_tac >>
+  simp[finally_def, AllCaseEqs(), pop_function_def, set_scopes_def,
+       return_def, ignore_bind_def, bind_def, raise_def] >>
+  rpt strip_tac >> gvs[preserves_immutables_dom_eq, preserves_immutables_dom_refl] >>
+  irule preserves_immutables_dom_trans >> qexists_tac `st with scopes := [env]` >>
+  conj_tac >- (irule preserves_immutables_dom_eq >> simp[]) >>
+  irule (iffLR preserves_immutables_dom_txn_eq) >>
+  qexists_tac `cx with stk updated_by CONS (src_id_opt,fn)` >> simp[] >>
+  qpat_x_assum `try _ _ _ = _` mp_tac >>
+  simp[try_def, bind_def, AllCaseEqs(), return_def, raise_def,
+       handle_function_def] >>
+  rpt strip_tac >> gvs[preserves_immutables_dom_refl, preserves_immutables_dom_eq] >>
+  qpat_assum `∀st0 res0 st1. eval_stmts _ _ st0 = (res0,st1) ⇒ _`
+    drule >> gvs[preserves_immutables_dom_eq] >>
+  BasicProvers.EVERY_CASE_TAC >>
+  gvs[handle_function_def, return_def, raise_def, preserves_immutables_dom_eq] >>
+  qpat_assum `∀st0 res0 st1. eval_stmts _ _ st0 = (res0,st1) ⇒ _`
+    drule >> gvs[preserves_immutables_dom_eq] >>
+  rpt strip_tac >>
+  qpat_assum `∀st0 res0 st1. eval_stmts _ _ st0 = (res0,st1) ⇒ _`
+    drule >> strip_tac >>
+  imp_res_tac handle_function_immutables >>
+  imp_res_tac release_nonreentrant_lock_immutables >>
+  imp_res_tac finally_lock_release_immutables >>
+  irule preserves_immutables_dom_trans >>
+  first_assum (irule_at Any) >>
+  irule preserves_immutables_dom_eq >> gvs[]
+QED
+
+Theorem intcall_body_finally_release_imm_dom_use[local]:
+  ∀cx src_id_opt fn mut nr ss prev env st q st'.
+    (∀st0 res0 st1.
+       eval_stmts (cx with stk updated_by CONS (src_id_opt,fn)) ss st0 = (res0,st1) ⇒
+       preserves_immutables_dom (cx with stk updated_by CONS (src_id_opt,fn)) st0 st1) ⇒
+    finally
+      (try (do eval_stmts (cx with stk updated_by CONS (src_id_opt,fn)) ss;
+               return NoneV od) handle_function)
+      (do pop_function prev;
+          if nr ∧ mut ≠ View ∧ mut ≠ Pure then
+            case cx.nonreentrant_slot of
+            | NONE => return ()
+            | SOME slot => release_nonreentrant_lock cx.txn.target slot
+          else return () od)
+      (st with scopes := [env]) = (q,st') ⇒
+    preserves_immutables_dom cx st st'
+Proof
+  rpt strip_tac >>
+  irule intcall_body_finally_release_imm_dom >>
+  qexistsl [`env`, `fn`, `mut`, `nr`, `prev`, `q`, `src_id_opt`, `ss`] >>
+  simp[]
+QED
+
 (* ----- Case 5: Return (SOME e) ----- *)
 Theorem case_Return_SOME_imm_dom[local]:
   ∀cx e.
@@ -464,7 +735,8 @@ Proof
   qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def,
        ignore_bind_def, push_log_def] >>
-  rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
+  rpt strip_tac >> imp_res_tac lift_option_state >>
+  gvs[preserves_immutables_dom_refl] >>
   irule preserves_immutables_dom_trans >> qexists_tac `s''` >>
   gvs[preserves_immutables_dom_eq]
 QED
@@ -843,24 +1115,17 @@ Proof
   simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def,
        lift_option_def, lift_option_type_def] >>
   rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
-  (* Case split on x to get (loc, sbs) and unfold the lambda *)
   Cases_on `x` >> gvs[] >>
-  (* Derive unconditional eval_expr IH and base_target preservation *)
   first_x_assum (qspecl_then [`st`, `q`, `r`, `s''`] mp_tac) >> simp[] >>
   strip_tac >>
-  (* Unfold the do-block *)
   qpat_x_assum `_ s'' = (res, st')` mp_tac >>
   simp[bind_def, AllCaseEqs(), return_def, raise_def] >>
   rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
-  imp_res_tac get_Value_immutables >> imp_res_tac materialise_state >> gvs[] >>
+  imp_res_tac get_Value_immutables >> gvs[] >>
   irule preserves_immutables_dom_trans >> qexists_tac `s''` >>
   conj_tac >- gvs[] >>
-  TRY (first_x_assum drule >> simp[] >> NO_TAC) >>
-  irule preserves_immutables_dom_trans >> qexists_tac `s'³'` >>
-  conj_tac >- (first_x_assum drule >> simp[]) >>
-  TRY (irule preserves_immutables_dom_eq >> gvs[] >> NO_TAC) >>
-  Cases_on `value_to_key v''` >> gvs[return_def, raise_def] >>
-  irule preserves_immutables_dom_eq >> gvs[]
+  qpat_x_assum `!st res st'. eval_expr cx e st = (res,st') ==> _` drule >>
+  simp[preserves_immutables_dom_def]
 QED
 
 (* ----- Case 29: eval_for (v::vs) ----- *)
@@ -1217,12 +1482,26 @@ Proof
   (* Simplify conditional IH *)
   RULE_ASSUM_TAC (REWRITE_RULE [check_def, type_check_def, assert_def, return_def]) >>
   gvs[] >>
+  (* Original concrete-only continuation retained:
   (* Resolve case expressions on dest_AddressV/dest_NumV *)
-  rpt (BasicProvers.FULL_CASE_TAC >>
-       gvs[return_def, raise_def]) >>
-  imp_res_tac transfer_value_immutables >> gvs[] >>
+  TRY BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def] >>
+  TRY BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def] >>
+  TRY BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def] >>
+  TRY BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def] >>
+  imp_res_tac concrete_send_step_locals >> gvs[] >>
   first_x_assum drule >>
   metis_tac[preserves_immutables_dom_trans, preserves_immutables_dom_eq]
+  *)
+  gvs[GSYM lift_option_type_def] >>
+  imp_res_tac lift_option_type_state >> gvs[] >>
+  first_x_assum drule >> strip_tac >> gvs[] >>
+  qmatch_asmsub_rename_tac `case tailst.outcomes of NONE => _ | SOME _ => _` >>
+  Cases_on `tailst.outcomes` >> gvs[]
+  >- (gvs[bind_def, return_def, AllCaseEqs()] >>
+      imp_res_tac concrete_send_step_locals >> gvs[] >>
+      metis_tac[preserves_immutables_dom_trans, preserves_immutables_dom_eq]) >>
+  imp_res_tac (Send_outcome_preserves_locals |> SRULE [check_def, ignore_bind_def]) >>
+  gvs[] >> metis_tac[preserves_immutables_dom_trans, preserves_immutables_dom_eq]
 QED
 
 (* ----- Case 45: eval_exprs (e::es) ----- *)
@@ -1286,24 +1565,18 @@ Proof
   gvs[return_def, raise_def]
 QED
 
-(* ----- Case: eval_base_target (BareGlobalNameTarget id) ----- *)
-Theorem case_BareGlobalNameTarget_imm_dom[local]:
-  ∀cx id.
+(* ----- Case: eval_base_target (TopLevelNameTarget id) ----- *)
+Theorem case_TopLevelNameTarget_imm_dom[local]:
+  ∀cx src_id_opt id.
     ∀st res st'.
-      eval_base_target cx (BareGlobalNameTarget id) st = (res, st') ⇒
+      eval_base_target cx (TopLevelNameTarget (src_id_opt,id)) st = (res, st') ⇒
       preserves_immutables_dom cx st st'
 Proof
   rpt strip_tac >> irule preserves_immutables_dom_eq >>
   qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def] >>
-  Cases_on `get_immutables cx (current_module cx) st` >>
-  Cases_on `q` >> simp[return_def, raise_def] >>
-  imp_res_tac get_immutables_state >> gvs[] >>
-  simp[lift_option_type_def, check_def, type_check_def, assert_def,
-       ignore_bind_def, return_def, raise_def] >>
-  strip_tac >>
-  Cases_on `get_module_code cx (current_module cx)` >>
-  gvs[return_def, raise_def, bind_def, assert_def, ignore_bind_def, AllCaseEqs()]
+  simp[Once evaluate_def, bind_def, lift_option_type_def, return_def, raise_def] >>
+  Cases_on `get_module_code cx src_id_opt` >> simp[return_def, raise_def] >>
+  Cases_on `is_immutable_decl (string_to_num id) x` >> simp[return_def]
 QED
 
 (* ----- Case: eval_base_target (AttributeTarget bt id) ----- *)
@@ -1336,23 +1609,6 @@ Proof
   rpt strip_tac >>
   Cases_on `lookup_scopes_val (string_to_num id) st.scopes` >>
   gvs[return_def, raise_def]
-QED
-
-(* ----- Case: eval_expr (BareGlobalName id) ----- *)
-Theorem case_BareGlobalName_imm_dom[local]:
-  ∀cx id.
-    ∀st res st'.
-      eval_expr cx (BareGlobalName _ id) st = (res, st') ⇒
-      preserves_immutables_dom cx st st'
-Proof
-  rpt strip_tac >> irule preserves_immutables_dom_eq >>
-  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def] >>
-  Cases_on `get_immutables cx (current_module cx) st` >>
-  Cases_on `q` >> simp[return_def, raise_def] >>
-  imp_res_tac get_immutables_state >> gvs[] >>
-  simp[lift_option_type_def, return_def, raise_def] >>
-  Cases_on `FLOOKUP x (string_to_num id)` >> simp[return_def, raise_def]
 QED
 
 (* ----- Case: eval_expr (Builtin bt es) ----- *)
@@ -1439,15 +1695,22 @@ QED
 
 (* Helper: inner pipeline after run_ext_call result destructuring *)
 Theorem extcall_inner_pipeline_imm_dom[local]:
-  ∀cx drv tenv ret_type success returnData accounts' tStorage' s res s'.
-    (success ∧ returnData = [] ∧ IS_SOME drv ⇒
+  ∀cx drv tenv ret_type skip_check target_addr success returnData accounts'
+     tStorage' emitted_logs s res s'.
+    (success ∧ returnData = [] ∧ IS_SOME drv ∧
+     (skip_check ∨ ext_call_has_code target_addr accounts') ⇒
        ∀st res st'. eval_expr cx (THE drv) st = (res,st') ⇒
          preserves_immutables_dom cx st st') ⇒
     do
       x <- check success "ExtCall reverted";
       x <- update_accounts (K accounts');
       x <- update_transient (K tStorage');
-      if returnData = [] ∧ IS_SOME drv then eval_expr cx (THE drv)
+      x <- append_logs emitted_logs;
+      if returnData = [] ∧ IS_SOME drv then do
+        x <- check (skip_check ∨ ext_call_has_code target_addr accounts')
+               "ExtCall target has no code";
+        eval_expr cx (THE drv)
+      od
       else
         do
           ret_val <-
@@ -1457,13 +1720,16 @@ Theorem extcall_inner_pipeline_imm_dom[local]:
     od s = (res, s') ⇒
     preserves_immutables_dom cx s s'
 Proof
-  rw[bind_def, ignore_bind_def, check_def, type_check_def, assert_def,
-     update_accounts_def, update_transient_def, return_def,
+  (* NONE tail: the named contract isolates the concrete installation. *)
+  rewrite_tac[GSYM ignore_bind_def, concrete_extcall_tail] >>
+  rw[bind_def, ignore_bind_def, check_def, assert_def, return_def,
      raise_def, lift_sum_def, lift_sum_runtime_def]
   \\ rpt strip_tac \\ gvs[AllCaseEqs(), preserves_immutables_dom_refl]
   \\ TRY (irule preserves_immutables_dom_eq
           >> Cases_on `evaluate_abi_decode_return tenv ret_type returnData`
           >> gvs[return_def, raise_def] >> NO_TAC)
+  (* failed code check after the call *)
+  \\ TRY (irule preserves_immutables_dom_eq >> gvs[] >> NO_TAC)
   \\ irule preserves_immutables_dom_trans
   \\ qmatch_asmsub_abbrev_tac `eval_expr cx (THE drv) s_mid`
   \\ qexists_tac `s_mid`
@@ -1474,15 +1740,16 @@ QED
 
 (* Helper: full ExtCall pipeline preserves immutables dom *)
 Theorem extcall_pipeline_preserves_imm_dom[local]:
-  ∀cx drv func_name arg_types ret_type target_addr value_opt arg_vals
+  ∀cx drv func_name arg_types ret_type skip_check target_addr value_opt arg_vals
      caller txParams s res s'.
-    (∀ts calldata accounts tStorage success returnData accounts' tStorage'.
+    (∀ts calldata accounts tStorage success returnData accounts' tStorage' emitted_logs.
        get_self_code cx = SOME ts ⇒
        build_ext_calldata (type_env ts) func_name arg_types arg_vals =
          SOME calldata ⇒
        run_ext_call caller target_addr calldata value_opt accounts tStorage
-         txParams = SOME (success, returnData, accounts', tStorage') ⇒
-       success ∧ returnData = [] ∧ IS_SOME drv ⇒
+         txParams = SOME (success, returnData, accounts', tStorage', emitted_logs) ⇒
+       success ∧ returnData = [] ∧ IS_SOME drv ∧
+       (skip_check ∨ ext_call_has_code target_addr accounts') ⇒
        ∀st res st'. eval_expr cx (THE drv) st = (res,st') ⇒
          preserves_immutables_dom cx st st') ⇒
     do
@@ -1497,12 +1764,17 @@ Theorem extcall_pipeline_preserves_imm_dom[local]:
         lift_option
           (run_ext_call caller target_addr calldata value_opt accounts
              tStorage txParams) "ExtCall run failed";
-      (λ(success,returnData,accounts',tStorage').
+      (λ(success,returnData,accounts',tStorage',emitted_logs).
            do
              x <- check success "ExtCall reverted";
              x <- update_accounts (K accounts');
              x <- update_transient (K tStorage');
-             if returnData = [] ∧ IS_SOME drv then eval_expr cx (THE drv)
+             x <- append_logs emitted_logs;
+             if returnData = [] ∧ IS_SOME drv then do
+               x <- check (skip_check ∨ ext_call_has_code target_addr accounts')
+                      "ExtCall target has no code";
+               eval_expr cx (THE drv)
+             od
              else
                do
                  ret_val <-
@@ -1534,10 +1806,786 @@ Proof
   \\ rpt strip_tac
   \\ first_x_assum irule \\ simp[]
   \\ qexists_tac `s.accounts` \\ qexists_tac `x''2`
-  \\ qexists_tac `s.tStorage` \\ qexists_tac `x''3`
+  \\ qexists_tac `x''4` \\ qexists_tac `s.tStorage` \\ qexists_tac `x''3`
   \\ gvs[]
 QED
 
+
+(* Oracle sibling of extcall_inner_pipeline_imm_dom / full pipeline. *)
+Theorem ExtCall_outcome_preserves_immutables_dom:
+  (!bs s res t. k bs s = (res,t) ==> preserves_immutables_dom cx s t) /\
+  (do
+    accounts <- get_accounts;
+    (if ret_type = NoneT then
+       check (~NULL (lookup_account target accounts).code) "ExtCall target has no code"
+     else return ());
+    (rq,outcome) <- take_call_outcome target calldata value_opt;
+    check outcome.co_success "ExtCall reverted";
+    adopt_call_outcome rq outcome;
+    k outcome.co_returnData
+  od) st = (res,st') ==> preserves_immutables_dom cx st st'
+Proof
+  rpt strip_tac >>
+  `!s t u. preserves_immutables_dom cx s t /\ preserves_immutables_dom cx t u ==>
+            preserves_immutables_dom cx s u` by
+    metis_tac[preserves_immutables_dom_trans] >>
+  `!s os rqs. preserves_immutables_dom cx s
+      (s with <|outcomes := os; requests := rqs|>)` by
+    (rpt gen_tac >> irule preserves_immutables_dom_eq >> simp[]) >>
+  `!s accounts transient logs. preserves_immutables_dom cx s
+      (s with <|accounts := accounts; tStorage := transient;
+                logs := s.logs ++ logs|>)` by
+    (rpt gen_tac >> irule preserves_immutables_dom_eq >> simp[]) >>
+  `!s. preserves_immutables_dom cx s s` by simp[preserves_immutables_dom_refl] >>
+  drule_all (ExtCall_outcome_transport |> Q.INST
+    [`R` |-> `preserves_immutables_dom cx`]) >> simp[]
+QED
+
+Theorem Send_outcome_preserves_immutables_dom:
+  (do
+    (rq,outcome) <- take_call_outcome target [] (SOME amount);
+    check outcome.co_success "send failed";
+    adopt_call_outcome rq outcome;
+    return (Value NoneV)
+  od) st = (res,st') ==> preserves_immutables_dom cx st st'
+Proof
+  strip_tac >> drule Send_outcome_preserves_locals >> strip_tac >>
+  irule preserves_immutables_dom_eq >> simp[]
+QED
+
+Theorem intcall_args_length_sub[local]:
+  ∀given expected defaults.
+    given ≤ expected ⇒
+    (expected − given ≤ defaults ⇔ expected ≤ given + defaults)
+Proof
+  decide_tac
+QED
+
+Theorem intcall_default_frame_imm_dom_from_generated_ih[local]:
+  ∀cx src_id_opt fn es ih_check_s ih_mod_s ih_fun_s ih_len_s ih_args_s
+     xrec srec ts smod tup sfun xlen slen vs sevl needed_dflts cxd prev res sdfl.
+    (∀s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut stup nr stup2
+        args sstup dflts sstup2 ret body s3 x1 t3 s4 vs0 t4 es0 cx0.
+      type_check (¬MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) ∧
+      lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
+        (INL ts0,t1) ∧
+      lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
+        "IntCall lookup_function" s2 = (INL tup0,t2) ∧
+      mut = FST tup0 ∧ stup = SND tup0 ∧ (nr ⇔ FST stup) ∧
+      stup2 = SND stup ∧ args = FST stup2 ∧ sstup = SND stup2 ∧
+      dflts = FST sstup ∧ sstup2 = SND sstup ∧ ret = FST sstup2 ∧
+      body = SND sstup2 ∧
+      type_check (LENGTH es ≤ LENGTH args ∧ LENGTH args − LENGTH es ≤ LENGTH dflts)
+        "IntCall args length" s3 = (INL x1,t3) ∧
+      eval_exprs cx es s4 = (INL vs0,t4) ∧
+      es0 = DROP (LENGTH dflts − (LENGTH args − LENGTH es)) dflts ∧
+      cx0 = cx with stk updated_by CONS (src_id_opt,fn) ⇒
+      ∀st res st'. eval_exprs cx0 es0 st = (res,st') ⇒
+        preserves_immutables_dom cx0 st st') ∧
+    type_check (¬MEM (src_id_opt,fn) cx.stk) "recursion" ih_check_s = (INL xrec,srec) ∧
+    lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" ih_mod_s =
+      (INL ts,smod) ∧
+    lift_option_type (lookup_callable_function cx.in_deploy fn ts)
+      "IntCall lookup_function" ih_fun_s = (INL tup,sfun) ∧
+    type_check
+      (LENGTH es ≤ LENGTH (FST (SND (SND tup))) ∧
+       LENGTH (FST (SND (SND tup))) ≤
+         LENGTH es + LENGTH (FST (SND (SND (SND tup)))))
+      "IntCall args length" ih_len_s = (INL xlen,slen) ∧
+    eval_exprs cx es ih_args_s = (INL vs,sevl) ∧
+    needed_dflts =
+      DROP (LENGTH (FST (SND (SND (SND tup)))) −
+            (LENGTH (FST (SND (SND tup))) − LENGTH es))
+           (FST (SND (SND (SND tup)))) ∧
+    cxd = cx with stk updated_by CONS (src_id_opt,fn) ∧
+    finally
+      (do
+         set_scopes [FEMPTY];
+         eval_exprs cxd needed_dflts
+       od)
+      (set_scopes prev) sevl = (res,sdfl) ⇒
+    preserves_immutables_dom cxd sevl sdfl
+Proof
+  rpt strip_tac \\
+  irule intcall_default_frame_imm_dom \\
+  qexists_tac `needed_dflts` \\
+  qexists_tac `prev` \\
+  qexists_tac `res` \\
+  simp[] \\
+  rpt strip_tac \\
+  `type_check
+     (LENGTH es ≤ LENGTH (FST (SND (SND tup))) ∧
+      LENGTH (FST (SND (SND tup))) − LENGTH es ≤
+        LENGTH (FST (SND (SND (SND tup)))))
+     "IntCall args length" ih_len_s = (INL xlen,slen)` by
+    (`(LENGTH es ≤ LENGTH (FST (SND (SND tup))) ∧
+       LENGTH (FST (SND (SND tup))) − LENGTH es ≤
+         LENGTH (FST (SND (SND (SND tup))))) =
+      (LENGTH es ≤ LENGTH (FST (SND (SND tup))) ∧
+       LENGTH (FST (SND (SND tup))) ≤
+         LENGTH es + LENGTH (FST (SND (SND (SND tup)))))` by
+       simp[intcall_args_length_sub] \\
+     pop_assum SUBST1_TAC \\
+     qpat_x_assum `type_check _ "IntCall args length" ih_len_s = _` ACCEPT_TAC) \\
+  first_assum (qspecl_then
+    [`ih_check_s`, `xrec`, `srec`,
+     `ih_mod_s`, `ts`, `smod`,
+     `ih_fun_s`, `tup`, `sfun`,
+     `FST tup`, `SND tup`, `FST (SND tup)`,
+     `SND (SND tup)`, `FST (SND (SND tup))`,
+     `SND (SND (SND tup))`, `FST (SND (SND (SND tup)))`,
+     `SND (SND (SND (SND tup)))`,
+     `FST (SND (SND (SND (SND tup))))`,
+     `SND (SND (SND (SND (SND tup))))`,
+     `ih_len_s`, `xlen`, `slen`,
+     `ih_args_s`, `vs`, `sevl`,
+     `needed_dflts`, `cxd`] mp_tac) \\
+  simp[] \\
+  disch_then drule \\
+  simp[]
+QED
+
+Theorem intcall_tail_body_provider_from_generated_ih[local]:
+  ∀cx src_id_opt fn es ih_check_s ih_mod_s ih_fun_s ih_len_s ih_args_s
+     xrec srec ts smod tup sfun xlen slen vs sevl needed_dflts cxd
+     default_s dflt_vs sdfl get_scope_s prev get_scope_t mut stup nr stup2
+     args sstup dflts sstup2 ret ss.
+    (∀s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20
+        args0 sstup0 dflts0 sstup20 ret0 ss0 s3 x1 t3 s4 vs0 t4
+        needed_dflts0 cxd0 s5 dflt_vs0 t5 all_tenv s6 env t6 s7 prev0 t7
+        s8 rtv t8 is_view s9 lk t9 s10 cx0 t10.
+      type_check (¬MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) ∧
+      lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
+        (INL ts0,t1) ∧
+      lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
+        "IntCall lookup_function" s2 = (INL tup0,t2) ∧
+      mut0 = FST tup0 ∧ stup0 = SND tup0 ∧ (nr0 ⇔ FST stup0) ∧
+      stup20 = SND stup0 ∧ args0 = FST stup20 ∧ sstup0 = SND stup20 ∧
+      dflts0 = FST sstup0 ∧ sstup20 = SND sstup0 ∧ ret0 = FST sstup20 ∧
+      ss0 = SND sstup20 ∧
+      type_check (LENGTH es ≤ LENGTH args0 ∧ LENGTH args0 − LENGTH es ≤ LENGTH dflts0)
+        "IntCall args length" s3 = (INL x1,t3) ∧
+      eval_exprs cx es s4 = (INL vs0,t4) ∧
+      needed_dflts0 = DROP (LENGTH dflts0 − (LENGTH args0 − LENGTH es)) dflts0 ∧
+      cxd0 = cx with stk updated_by CONS (src_id_opt,fn) ∧
+      eval_exprs cxd0 needed_dflts0 s5 = (INL dflt_vs0,t5) ∧
+      all_tenv = get_tenv cx ∧
+      lift_option_type (bind_arguments all_tenv args0 (vs0 ++ dflt_vs0))
+        "IntCall bind_arguments" s6 = (INL env,t6) ∧
+      get_scopes s7 = (INL prev0,t7) ∧
+      lift_option_type (evaluate_type all_tenv ret0) "IntCall eval ret" s8 =
+        (INL rtv,t8) ∧
+      (is_view ⇔ mut0 = View ∨ mut0 = Pure) ∧
+      (if nr0 then
+         case cx.nonreentrant_slot of
+         | NONE => raise (Error (TypeError "nonreentrant slot missing"))
+         | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
+       else return ()) s9 = (INL lk,t9) ∧
+      push_function (src_id_opt,fn) env cx s10 = (INL cx0,t10) ⇒
+      ∀st res st'. eval_stmts cx0 ss0 st = (res,st') ⇒
+        preserves_immutables_dom cx0 st st') ∧
+    type_check (¬MEM (src_id_opt,fn) cx.stk) "recursion" ih_check_s = (INL xrec,srec) ∧
+    lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" ih_mod_s =
+      (INL ts,smod) ∧
+    lift_option_type (lookup_callable_function cx.in_deploy fn ts)
+      "IntCall lookup_function" ih_fun_s = (INL tup,sfun) ∧
+    mut = FST tup ∧ stup = SND tup ∧ (nr ⇔ FST stup) ∧
+    stup2 = SND stup ∧ args = FST stup2 ∧ sstup = SND stup2 ∧
+    dflts = FST sstup ∧ sstup2 = SND sstup ∧ ret = FST sstup2 ∧
+    ss = SND sstup2 ∧
+    type_check
+      (LENGTH es ≤ LENGTH args ∧ LENGTH args ≤ LENGTH es + LENGTH dflts)
+      "IntCall args length" ih_len_s = (INL xlen,slen) ∧
+    eval_exprs cx es ih_args_s = (INL vs,sevl) ∧
+    needed_dflts = DROP (LENGTH dflts − (LENGTH args − LENGTH es)) dflts ∧
+    cxd = cx with stk updated_by CONS (src_id_opt,fn) ∧
+    eval_exprs cxd needed_dflts default_s = (INL dflt_vs,sdfl) ∧
+    get_scopes get_scope_s = (INL prev,get_scope_t) ⇒
+    intcall_tail_body_provider cx src_id_opt fn mut nr args ret ss vs dflt_vs sdfl
+Proof
+  rpt strip_tac \\
+  simp[intcall_tail_body_provider_def] \\
+  rpt strip_tac \\
+  `type_check
+     (LENGTH es ≤ LENGTH args ∧ LENGTH args − LENGTH es ≤ LENGTH dflts)
+     "IntCall args length" ih_len_s = (INL xlen,slen)` by
+    (`(LENGTH es ≤ LENGTH args ∧
+       LENGTH args − LENGTH es ≤ LENGTH dflts) =
+      (LENGTH es ≤ LENGTH args ∧
+       LENGTH args ≤ LENGTH es + LENGTH dflts)` by
+       simp[intcall_args_length_sub] \\
+     pop_assum SUBST1_TAC \\
+     qpat_x_assum `type_check _ "IntCall args length" ih_len_s = _` ACCEPT_TAC) \\
+  qpat_assum `∀s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20
+                  args0 sstup0 dflts0 sstup20 ret0 ss0 s3 x1 t3 s4 vs0 t4
+                  needed_dflts0 cxd0 s5 dflt_vs0 t5 all_tenv s6 env0 t6
+                  s7 prev0 t7 s8 rtv0 t8 is_view s9 lk0 t9 s10 cx0 t10.
+                  type_check (¬MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) ∧
+                  _ ⇒ ∀st0 res0 st1.
+                    eval_stmts cx0 ss0 st0 = (res0,st1) ⇒
+                    preserves_immutables_dom cx0 st0 st1`
+    (qspecl_then
+      [`ih_check_s`, `xrec`, `srec`,
+       `ih_mod_s`, `ts`, `smod`,
+       `ih_fun_s`, `tup`, `sfun`,
+       `mut`, `stup`, `nr`, `stup2`, `args`, `sstup`, `dflts`, `sstup2`,
+       `ret`, `ss`, `ih_len_s`, `xlen`, `slen`,
+       `ih_args_s`, `vs`, `sevl`, `needed_dflts`, `cxd`,
+       `default_s`, `dflt_vs`, `sdfl`, `get_tenv cx`, `sdfl`, `env`, `s_bind`,
+       `get_scope_s`, `prev`, `get_scope_t`, `s_bind`, `rtv`, `s_eval`,
+       `mut = View ∨ mut = Pure`, `s_eval`, `lk`, `s_lock`, `s_lock`, `cx'`,
+       `s_push`] mp_tac) \\
+  simp[] \\
+  disch_then irule \\
+  simp[]
+QED
+
+Theorem intcall_post_default_setup_from_generated_ih[local]:
+  ∀cx src_id_opt fn es ih_check_s ih_mod_s ih_fun_s ih_len_s ih_args_s
+     xrec srec ts smod tup sfun xlen slen vs sevl needed_dflts cxd
+     default_s dflt_vs sdfl get_scope_s prev get_scope_t mut stup nr stup2
+     args sstup dflts sstup2 ret ss.
+    (∀s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20
+        args0 sstup0 dflts0 sstup20 ret0 body0 s3 x1 t3 s4 vs0 t4
+        needed_dflts0 cxd0.
+      type_check (¬MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) ∧
+      lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
+        (INL ts0,t1) ∧
+      lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
+        "IntCall lookup_function" s2 = (INL tup0,t2) ∧
+      mut0 = FST tup0 ∧ stup0 = SND tup0 ∧ (nr0 ⇔ FST stup0) ∧
+      stup20 = SND stup0 ∧ args0 = FST stup20 ∧ sstup0 = SND stup20 ∧
+      dflts0 = FST sstup0 ∧ sstup20 = SND sstup0 ∧ ret0 = FST sstup20 ∧
+      body0 = SND sstup20 ∧
+      type_check (LENGTH es ≤ LENGTH args0 ∧ LENGTH args0 − LENGTH es ≤ LENGTH dflts0)
+        "IntCall args length" s3 = (INL x1,t3) ∧
+      eval_exprs cx es s4 = (INL vs0,t4) ∧
+      needed_dflts0 = DROP (LENGTH dflts0 − (LENGTH args0 − LENGTH es)) dflts0 ∧
+      cxd0 = cx with stk updated_by CONS (src_id_opt,fn) ⇒
+      ∀st res st'. eval_exprs cxd0 needed_dflts0 st = (res,st') ⇒
+        preserves_immutables_dom cxd0 st st') ∧
+    (∀s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20
+        args0 sstup0 dflts0 sstup20 ret0 ss0 s3 x1 t3 s4 vs0 t4
+        needed_dflts0 cxd0 s5 dflt_vs0 t5 all_tenv s6 env t6 s7 prev0 t7
+        s8 rtv t8 is_view s9 lk t9 s10 cx0 t10.
+      type_check (¬MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) ∧
+      lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
+        (INL ts0,t1) ∧
+      lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
+        "IntCall lookup_function" s2 = (INL tup0,t2) ∧
+      mut0 = FST tup0 ∧ stup0 = SND tup0 ∧ (nr0 ⇔ FST stup0) ∧
+      stup20 = SND stup0 ∧ args0 = FST stup20 ∧ sstup0 = SND stup20 ∧
+      dflts0 = FST sstup0 ∧ sstup20 = SND sstup0 ∧ ret0 = FST sstup20 ∧
+      ss0 = SND sstup20 ∧
+      type_check (LENGTH es ≤ LENGTH args0 ∧ LENGTH args0 − LENGTH es ≤ LENGTH dflts0)
+        "IntCall args length" s3 = (INL x1,t3) ∧
+      eval_exprs cx es s4 = (INL vs0,t4) ∧
+      needed_dflts0 = DROP (LENGTH dflts0 − (LENGTH args0 − LENGTH es)) dflts0 ∧
+      cxd0 = cx with stk updated_by CONS (src_id_opt,fn) ∧
+      eval_exprs cxd0 needed_dflts0 s5 = (INL dflt_vs0,t5) ∧
+      all_tenv = get_tenv cx ∧
+      lift_option_type (bind_arguments all_tenv args0 (vs0 ++ dflt_vs0))
+        "IntCall bind_arguments" s6 = (INL env,t6) ∧
+      get_scopes s7 = (INL prev0,t7) ∧
+      lift_option_type (evaluate_type all_tenv ret0) "IntCall eval ret" s8 =
+        (INL rtv,t8) ∧
+      (is_view ⇔ mut0 = View ∨ mut0 = Pure) ∧
+      (if nr0 then
+         case cx.nonreentrant_slot of
+         | NONE => raise (Error (TypeError "nonreentrant slot missing"))
+         | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
+       else return ()) s9 = (INL lk,t9) ∧
+      push_function (src_id_opt,fn) env cx s10 = (INL cx0,t10) ⇒
+      ∀st res st'. eval_stmts cx0 ss0 st = (res,st') ⇒
+        preserves_immutables_dom cx0 st st') ∧
+    type_check (¬MEM (src_id_opt,fn) cx.stk) "recursion" ih_check_s = (INL xrec,srec) ∧
+    lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" ih_mod_s =
+      (INL ts,smod) ∧
+    lift_option_type (lookup_callable_function cx.in_deploy fn ts)
+      "IntCall lookup_function" ih_fun_s = (INL tup,sfun) ∧
+    mut = FST tup ∧ stup = SND tup ∧ (nr ⇔ FST stup) ∧
+    stup2 = SND stup ∧ args = FST stup2 ∧ sstup = SND stup2 ∧
+    dflts = FST sstup ∧ sstup2 = SND sstup ∧ ret = FST sstup2 ∧
+    ss = SND sstup2 ∧
+    type_check
+      (LENGTH es ≤ LENGTH args ∧ LENGTH args ≤ LENGTH es + LENGTH dflts)
+      "IntCall args length" ih_len_s = (INL xlen,slen) ∧
+    eval_exprs cx es ih_args_s = (INL vs,sevl) ∧
+    needed_dflts = DROP (LENGTH dflts − (LENGTH args − LENGTH es)) dflts ∧
+    cxd = cx with stk updated_by CONS (src_id_opt,fn) ∧
+    finally
+      (do
+         set_scopes [FEMPTY];
+         eval_exprs cxd needed_dflts
+       od)
+      (set_scopes prev) sevl = (INL dflt_vs,sdfl) ∧
+    eval_exprs cxd needed_dflts default_s = (INL dflt_vs,sdfl) ∧
+    get_scopes get_scope_s = (INL prev,get_scope_t) ⇒
+    preserves_immutables_dom cxd sevl sdfl ∧
+    intcall_tail_body_provider cx src_id_opt fn mut nr args ret ss vs dflt_vs sdfl
+Proof
+  rpt gen_tac \\
+  strip_tac \\
+  conj_tac
+  >- (match_mp_tac (Q.SPECL
+        [`cx`, `src_id_opt`, `fn`, `es`,
+         `ih_check_s`, `ih_mod_s`, `ih_fun_s`, `ih_len_s`, `ih_args_s`,
+         `xrec`, `srec`, `ts`, `smod`, `tup`, `sfun`, `xlen`, `slen`,
+         `vs`, `sevl`, `needed_dflts`, `cxd`, `prev`, `INL dflt_vs`, `sdfl`]
+        intcall_default_frame_imm_dom_from_generated_ih) \\
+      conj_tac >- FIRST_ASSUM ACCEPT_TAC \\
+      qpat_x_assum
+        `∀s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20
+            args0 sstup0 dflts0 sstup20 ret0 body0 s3 x1 t3 s4 vs0 t4
+            needed_dflts0 cxd0. _` kall_tac \\
+      simp[] \\
+      gvs[type_check_def, assert_def] \\
+      qhdtm_x_assum`type_check`mp_tac >>
+      simp_tac(srw_ss())[type_check_def, assert_def] >>
+      strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+      decide_tac) \\
+  qspecl_then
+    [`cx`, `src_id_opt`, `fn`, `es`,
+     `ih_check_s`, `ih_mod_s`, `ih_fun_s`, `ih_len_s`, `ih_args_s`,
+     `xrec`, `srec`, `ts`, `smod`, `tup`, `sfun`, `xlen`, `slen`,
+     `vs`, `sevl`, `needed_dflts`, `cxd`,
+     `default_s`, `dflt_vs`, `sdfl`, `get_scope_s`, `prev`, `get_scope_t`,
+     `mut`, `stup`, `nr`, `stup2`, `args`, `sstup`, `dflts`, `sstup2`,
+     `ret`, `ss`]
+    mp_tac intcall_tail_body_provider_from_generated_ih \\
+  simp[] \\
+  disch_then irule \\
+  simp[] \\
+  rpt strip_tac \\
+  qpat_assum `∀s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20
+                  args0 sstup0 dflts0 sstup20 ret0 ss0 s3 x1 t3 s4 vs0 t4
+                  needed_dflts0 cxd0 s5 dflt_vs0 t5 all_tenv s6 env0 t6
+                  s7 prev0 t7 s8 rtv0 t8 is_view s9 lk0 t9 s10 cx0 t10.
+                  _ ⇒ ∀st0 res0 st1.
+                    eval_stmts cx0 ss0 st0 = (res0,st1) ⇒
+                    preserves_immutables_dom cx0 st0 st1`
+    (qspecl_then
+      [`s0`, `()`, `t0`, `s1`, `ts0`, `t1`, `s2`, `tup0`, `t2`,
+       `FST tup0`, `SND tup0`, `FST (SND tup0)`, `SND (SND tup0)`,
+       `FST (SND (SND tup0))`, `SND (SND (SND tup0))`,
+       `FST (SND (SND (SND tup0)))`, `SND (SND (SND (SND tup0)))`,
+       `FST (SND (SND (SND (SND tup0))))`,
+       `SND (SND (SND (SND (SND tup0))))`, `s3`, `()`, `t3`,
+       `s4`, `vs0`, `t4`,
+       `DROP
+          (LENGTH (FST (SND (SND (SND tup0)))) −
+           (LENGTH (FST (SND (SND tup0))) − LENGTH es))
+          (FST (SND (SND (SND tup0))))`,
+       `cx with stk updated_by CONS (src_id_opt,fn)`,
+       `s5`, `dflt_vs0`, `t5`, `get_tenv cx`, `s6`, `env`, `t6`,
+       `s7`, `prev0`, `t7`, `s8`, `rtv`, `t8`,
+       `FST tup0 = View ∨ FST tup0 = Pure`, `s9`, `()`, `t9`,
+       `s10`, `cx0`, `t10`] mp_tac) \\
+  simp[] \\
+  disch_then irule \\
+  simp[]
+QED
+
+Theorem finally_set_scopes_eval_exprs_success[local]:
+  ∀cxd es prev sevl vs sdfl.
+    finally
+      (do
+         set_scopes [FEMPTY];
+         eval_exprs cxd es
+       od)
+      (set_scopes prev) sevl = (INL vs,sdfl) ⇒
+    ∃pre.
+      eval_exprs cxd es (sevl with scopes := [FEMPTY]) = (INL vs,pre) ∧
+      sdfl = pre with scopes := prev ∧
+      get_scopes sdfl = (INL prev,sdfl)
+Proof
+  rpt strip_tac \\
+  qpat_x_assum `finally _ _ _ = _` mp_tac \\
+  simp[finally_def, bind_def, ignore_bind_def, set_scopes_def,
+       return_def, raise_def, get_scopes_def] \\
+  Cases_on `eval_exprs cxd es (sevl with scopes := [FEMPTY])` \\
+  Cases_on `q` \\
+  simp[return_def, raise_def, get_scopes_def] \\
+  rpt strip_tac \\
+  gvs[] \\
+  qexists_tac `r` \\
+  simp[get_scopes_def, return_def]
+QED
+
+Theorem type_check_intcall_args_length_sub[local]:
+  type_check (LENGTH es ≤ LENGTH args ∧ LENGTH args ≤ LENGTH es + LENGTH dflts)
+    msg s = (INL x,t) ==>
+  type_check (LENGTH es ≤ LENGTH args ∧ LENGTH args − LENGTH es ≤ LENGTH dflts)
+    msg s = (INL x,t)
+Proof
+  simp[type_check_def, assert_def] \\
+  IF_CASES_TAC \\ simp[] \\
+  decide_tac
+QED
+
+Theorem intcall_live_post_default_setup_from_generated_ih[local]:
+  ∀cx src_id_opt fn es ih_check_s ih_mod_s ih_fun_s ih_len_s ih_args_s
+     xrec srec ts smod tup sfun xlen slen vs sevl needed_dflts cxd
+     dflt_vs sdfl prev mut stup nr stup2 args sstup dflts sstup2 ret ss.
+    (∀s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20
+        args0 sstup0 dflts0 sstup20 ret0 body0 s3 x1 t3 s4 vs0 t4
+        needed_dflts0 cxd0.
+      type_check (¬MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) ∧
+      lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
+        (INL ts0,t1) ∧
+      lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
+        "IntCall lookup_function" s2 = (INL tup0,t2) ∧
+      mut0 = FST tup0 ∧ stup0 = SND tup0 ∧ (nr0 ⇔ FST stup0) ∧
+      stup20 = SND stup0 ∧ args0 = FST stup20 ∧ sstup0 = SND stup20 ∧
+      dflts0 = FST sstup0 ∧ sstup20 = SND sstup0 ∧ ret0 = FST sstup20 ∧
+      body0 = SND sstup20 ∧
+      type_check (LENGTH es ≤ LENGTH args0 ∧ LENGTH args0 − LENGTH es ≤ LENGTH dflts0)
+        "IntCall args length" s3 = (INL x1,t3) ∧
+      eval_exprs cx es s4 = (INL vs0,t4) ∧
+      needed_dflts0 = DROP (LENGTH dflts0 − (LENGTH args0 − LENGTH es)) dflts0 ∧
+      cxd0 = cx with stk updated_by CONS (src_id_opt,fn) ⇒
+      ∀st res st'. eval_exprs cxd0 needed_dflts0 st = (res,st') ⇒
+        preserves_immutables_dom cxd0 st st') ∧
+    (∀s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20
+        args0 sstup0 dflts0 sstup20 ret0 ss0 s3 x1 t3 s4 vs0 t4
+        needed_dflts0 cxd0 s5 dflt_vs0 t5 all_tenv s6 env t6 s7 prev0 t7
+        s8 rtv t8 is_view s9 lk t9 s10 cx0 t10.
+      type_check (¬MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) ∧
+      lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 =
+        (INL ts0,t1) ∧
+      lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
+        "IntCall lookup_function" s2 = (INL tup0,t2) ∧
+      mut0 = FST tup0 ∧ stup0 = SND tup0 ∧ (nr0 ⇔ FST stup0) ∧
+      stup20 = SND stup0 ∧ args0 = FST stup20 ∧ sstup0 = SND stup20 ∧
+      dflts0 = FST sstup0 ∧ sstup20 = SND sstup0 ∧ ret0 = FST sstup20 ∧
+      ss0 = SND sstup20 ∧
+      type_check (LENGTH es ≤ LENGTH args0 ∧ LENGTH args0 − LENGTH es ≤ LENGTH dflts0)
+        "IntCall args length" s3 = (INL x1,t3) ∧
+      eval_exprs cx es s4 = (INL vs0,t4) ∧
+      needed_dflts0 = DROP (LENGTH dflts0 − (LENGTH args0 − LENGTH es)) dflts0 ∧
+      cxd0 = cx with stk updated_by CONS (src_id_opt,fn) ∧
+      eval_exprs cxd0 needed_dflts0 s5 = (INL dflt_vs0,t5) ∧
+      all_tenv = get_tenv cx ∧
+      lift_option_type (bind_arguments all_tenv args0 (vs0 ++ dflt_vs0))
+        "IntCall bind_arguments" s6 = (INL env,t6) ∧
+      get_scopes s7 = (INL prev0,t7) ∧
+      lift_option_type (evaluate_type all_tenv ret0) "IntCall eval ret" s8 =
+        (INL rtv,t8) ∧
+      (is_view ⇔ mut0 = View ∨ mut0 = Pure) ∧
+      (if nr0 then
+         case cx.nonreentrant_slot of
+         | NONE => raise (Error (TypeError "nonreentrant slot missing"))
+         | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
+       else return ()) s9 = (INL lk,t9) ∧
+      push_function (src_id_opt,fn) env cx s10 = (INL cx0,t10) ⇒
+      ∀st res st'. eval_stmts cx0 ss0 st = (res,st') ⇒
+        preserves_immutables_dom cx0 st st') ∧
+    type_check (¬MEM (src_id_opt,fn) cx.stk) "recursion" ih_check_s = (INL xrec,srec) ∧
+    lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" ih_mod_s =
+      (INL ts,smod) ∧
+    lift_option_type (lookup_callable_function cx.in_deploy fn ts)
+      "IntCall lookup_function" ih_fun_s = (INL tup,sfun) ∧
+    mut = FST tup ∧ stup = SND tup ∧ (nr ⇔ FST stup) ∧
+    stup2 = SND stup ∧ args = FST stup2 ∧ sstup = SND stup2 ∧
+    dflts = FST sstup ∧ sstup2 = SND sstup ∧ ret = FST sstup2 ∧
+    ss = SND sstup2 ∧
+    type_check
+      (LENGTH es ≤ LENGTH args ∧ LENGTH args ≤ LENGTH es + LENGTH dflts)
+      "IntCall args length" ih_len_s = (INL xlen,slen) ∧
+    eval_exprs cx es ih_args_s = (INL vs,sevl) ∧
+    needed_dflts = DROP (LENGTH dflts − (LENGTH args − LENGTH es)) dflts ∧
+    cxd = cx with stk updated_by CONS (src_id_opt,fn) ∧
+    finally
+      (do
+         set_scopes [FEMPTY];
+         eval_exprs cxd needed_dflts
+       od)
+      (set_scopes prev) sevl = (INL dflt_vs,sdfl) ⇒
+    preserves_immutables_dom cxd sevl sdfl ∧
+    intcall_tail_body_provider cx src_id_opt fn mut nr args ret ss vs dflt_vs sdfl
+Proof
+  rpt gen_tac \\ strip_tac \\
+  drule finally_set_scopes_eval_exprs_success \\
+  disch_then (qx_choose_then `pre_sdfl` strip_assume_tac) \\
+  conj_tac
+  >- (qspecl_then
+        [`cx`, `src_id_opt`, `fn`, `es`,
+         `ih_check_s`, `ih_mod_s`, `ih_fun_s`, `ih_len_s`, `ih_args_s`,
+         `xrec`, `srec`, `ts`, `smod`, `tup`, `sfun`, `xlen`, `slen`,
+         `vs`, `sevl`, `needed_dflts`, `cxd`, `prev`, `INL dflt_vs`, `sdfl`]
+        irule intcall_default_frame_imm_dom_from_generated_ih \\
+      MAP_EVERY qexists_tac
+        [`cx`, `dflt_vs`, `es`, `fn`, `ih_args_s`, `ih_check_s`, `ih_fun_s`,
+         `ih_len_s`, `ih_mod_s`, `needed_dflts`, `prev`, `sfun`, `slen`,
+         `smod`, `src_id_opt`, `srec`, `ts`, `tup`, `vs`, `xlen`, `xrec`] \\
+      rpt conj_tac \\
+      FIRST [first_assum ACCEPT_TAC,
+        qpat_x_assum `stup = SND tup` (fn h_stup =>
+        qpat_x_assum `stup2 = SND stup` (fn h_stup2 =>
+        qpat_x_assum `args = FST stup2` (fn h_args =>
+        qpat_x_assum `sstup = SND stup2` (fn h_sstup =>
+        qpat_x_assum `dflts = FST sstup` (fn h_dflts =>
+        qpat_x_assum `needed_dflts = DROP _ _` (fn h_needed =>
+          PURE_REWRITE_TAC [GSYM h_stup, GSYM h_stup2, GSYM h_args,
+                            GSYM h_sstup, GSYM h_dflts] \\
+          FIRST [ACCEPT_TAC h_needed, first_assum ACCEPT_TAC]))))))]) \\
+  simp[intcall_tail_body_provider_def] \\
+  rpt strip_tac \\
+  `type_check
+     (LENGTH es ≤ LENGTH args ∧ LENGTH args − LENGTH es ≤ LENGTH dflts)
+     "IntCall args length" ih_len_s = (INL xlen,slen)` by
+    (qpat_x_assum `type_check _ "IntCall args length" ih_len_s = _` mp_tac \\
+     simp[type_check_def, assert_def] \\
+     IF_CASES_TAC \\ simp[] \\
+     decide_tac) \\
+  qpat_assum `∀s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20
+                  args0 sstup0 dflts0 sstup20 ret0 ss0 s3 x1 t3 s4 vs0 t4
+                  needed_dflts0 cxd0 s5 dflt_vs0 t5 all_tenv s6 env0 t6
+                  s7 prev0 t7 s8 rtv0 t8 is_view s9 lk0 t9 s10 cx0 t10.
+                  type_check (¬MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) ∧
+                  _ ⇒ ∀st0 res0 st1.
+                    eval_stmts cx0 ss0 st0 = (res0,st1) ⇒
+                    preserves_immutables_dom cx0 st0 st1`
+    (qspecl_then
+      [`ih_check_s`, `xrec`, `srec`,
+       `ih_mod_s`, `ts`, `smod`,
+       `ih_fun_s`, `tup`, `sfun`,
+       `mut`, `stup`, `nr`, `stup2`, `args`, `sstup`, `dflts`, `sstup2`,
+       `ret`, `ss`, `ih_len_s`, `xlen`, `slen`,
+       `ih_args_s`, `vs`, `sevl`, `needed_dflts`, `cxd`,
+       `sevl with scopes := [FEMPTY]`, `dflt_vs`, `pre_sdfl`, `get_tenv cx`,
+       `sdfl`, `env`, `s_bind`, `sdfl`, `prev`, `sdfl`, `s_bind`, `rtv`,
+       `s_eval`, `mut = View ∨ mut = Pure`, `s_eval`, `lk`, `s_lock`,
+       `s_lock`, `cx'`, `s_push`] mp_tac) \\
+  simp[] \\
+  disch_then irule \\
+  simp[]
+QED
+
+Theorem intcall_case_live_post_default_setup_from_generated_ih[local]:
+  ∀cx src_id_opt fn es ih_check_s ih_mod_s ih_fun_s ih_len_s ih_args_s
+     xrec srec ts smod tup sfun xlen slen vs sevl needed_dflts cxd
+     dflt_vs sdfl prev mut stup nr stup2 args sstup dflts sstup2 ret ss.
+    (∀s'' x t s'³' ts t' s'⁴' tup t'' mut stup nr stup2 args sstup dflts sstup2 ret
+        body' s'⁵' x' t'³' s'⁶' vs t'⁴' es' cx'.
+      type_check (¬MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) ∧
+      lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s'³' =
+      (INL ts,t') ∧
+      lift_option_type (lookup_callable_function cx.in_deploy fn ts)
+        "IntCall lookup_function" s'⁴' = (INL tup,t'') ∧ mut = FST tup ∧
+      stup = SND tup ∧ (nr ⇔ FST stup) ∧ stup2 = SND stup ∧
+      args = FST stup2 ∧ sstup = SND stup2 ∧ dflts = FST sstup ∧
+      sstup2 = SND sstup ∧ ret = FST sstup2 ∧ body' = SND sstup2 ∧
+      type_check (LENGTH es ≤ LENGTH args ∧ LENGTH args − LENGTH es ≤ LENGTH dflts)
+        "IntCall args length" s'⁵' = (INL x',t'³') ∧
+      eval_exprs cx es s'⁶' = (INL vs,t'⁴') ∧
+      es' = DROP (LENGTH dflts − (LENGTH args − LENGTH es)) dflts ∧
+      cx' = cx with stk updated_by CONS (src_id_opt,fn) ⇒
+      ∀st res st'.
+        eval_exprs cx' es' st = (res,st') ⇒ preserves_immutables_dom cx' st st') ⇒
+    (∀s'' x t s'³' ts t' s'⁴' tup t'' mut stup nr stup2 args sstup dflts sstup2 ret
+        ss s'⁵' x' t'³' s'⁶' vs t'⁴' needed_dflts cxd s'⁷' dflt_vs t'⁵'
+        all_tenv s'⁸' env t'⁶' s'⁹' prev t'⁷' s'¹⁰' rtv t'⁸' is_view s'¹¹' lk t'⁹'
+        s'¹²' cx' t'¹⁰'.
+      type_check (¬MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) ∧
+      lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s'³' =
+      (INL ts,t') ∧
+      lift_option_type (lookup_callable_function cx.in_deploy fn ts)
+        "IntCall lookup_function" s'⁴' = (INL tup,t'') ∧ mut = FST tup ∧
+      stup = SND tup ∧ (nr ⇔ FST stup) ∧ stup2 = SND stup ∧
+      args = FST stup2 ∧ sstup = SND stup2 ∧ dflts = FST sstup ∧
+      sstup2 = SND sstup ∧ ret = FST sstup2 ∧ ss = SND sstup2 ∧
+      type_check (LENGTH es ≤ LENGTH args ∧ LENGTH args − LENGTH es ≤ LENGTH dflts)
+        "IntCall args length" s'⁵' = (INL x',t'³') ∧
+      eval_exprs cx es s'⁶' = (INL vs,t'⁴') ∧
+      needed_dflts = DROP (LENGTH dflts − (LENGTH args − LENGTH es)) dflts ∧
+      cxd = cx with stk updated_by CONS (src_id_opt,fn) ∧
+      eval_exprs cxd needed_dflts s'⁷' = (INL dflt_vs,t'⁵') ∧
+      all_tenv = get_tenv cx ∧
+      lift_option_type (bind_arguments all_tenv args (vs ⧺ dflt_vs))
+        "IntCall bind_arguments" s'⁸' = (INL env,t'⁶') ∧
+      get_scopes s'⁹' = (INL prev,t'⁷') ∧
+      lift_option_type (evaluate_type all_tenv ret) "IntCall eval ret" s'¹⁰' =
+      (INL rtv,t'⁸') ∧ (is_view ⇔ mut = View ∨ mut = Pure) ∧
+      (if nr then
+         case cx.nonreentrant_slot of
+         | NONE => raise (Error (TypeError "nonreentrant slot missing"))
+         | SOME slot =>
+           acquire_nonreentrant_lock cx.txn.target slot is_view
+       else return ()) s'¹¹' = (INL lk,t'⁹') ∧
+      push_function (src_id_opt,fn) env cx s'¹²' = (INL cx',t'¹⁰') ⇒
+      ∀st res st'.
+        eval_stmts cx' ss st = (res,st') ⇒ preserves_immutables_dom cx' st st') ⇒
+    type_check (¬MEM (src_id_opt,fn) cx.stk) "recursion" ih_check_s = (INL xrec,srec) ∧
+    lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" ih_mod_s =
+    (INL ts,smod) ∧
+    lift_option_type (lookup_callable_function cx.in_deploy fn ts)
+      "IntCall lookup_function" ih_fun_s = (INL tup,sfun) ∧
+    mut = FST tup ∧ stup = SND tup ∧ (nr ⇔ FST stup) ∧
+    stup2 = SND stup ∧ args = FST stup2 ∧ sstup = SND stup2 ∧
+    dflts = FST sstup ∧ sstup2 = SND sstup ∧ ret = FST sstup2 ∧ ss = SND sstup2 ∧
+    type_check (LENGTH es ≤ LENGTH args ∧ LENGTH args ≤ LENGTH es + LENGTH dflts)
+      "IntCall args length" ih_len_s = (INL xlen,slen) ∧
+    eval_exprs cx es ih_args_s = (INL vs,sevl) ∧
+    needed_dflts = DROP (LENGTH dflts − (LENGTH args − LENGTH es)) dflts ∧
+    cxd = cx with stk updated_by CONS (src_id_opt,fn) ∧
+    finally
+      (do
+         set_scopes [FEMPTY];
+         eval_exprs cxd needed_dflts
+       od)
+      (set_scopes prev) sevl = (INL dflt_vs,sdfl) ⇒
+    preserves_immutables_dom cxd sevl sdfl ∧
+    intcall_tail_body_provider cx src_id_opt fn mut nr args ret ss vs dflt_vs sdfl
+Proof
+  rpt gen_tac \\
+  strip_tac \\
+  pop_assum $ mk_asm "default_case_ih" \\
+  strip_tac \\
+  pop_assum $ mk_asm "body_case_ih" \\
+  strip_tac \\
+  qspecl_then
+    [`cx`, `src_id_opt`, `fn`, `es`,
+     `ih_check_s`, `ih_mod_s`, `ih_fun_s`, `ih_len_s`, `ih_args_s`,
+     `xrec`, `srec`, `ts`, `smod`, `tup`, `sfun`, `xlen`, `slen`,
+     `vs`, `sevl`, `needed_dflts`, `cxd`, `dflt_vs`, `sdfl`, `prev`,
+     `mut`, `stup`, `nr`, `stup2`, `args`, `sstup`, `dflts`, `sstup2`,
+     `ret`, `ss`]
+    mp_tac intcall_live_post_default_setup_from_generated_ih \\
+  (impl_tac >-
+     (conj_tac >- (asm "default_case_ih" mp_tac \\ simp[]) \\
+      conj_tac >- (asm "body_case_ih" mp_tac \\ simp[]) \\
+      simp[])) \\
+  simp[]
+QED
+
+Theorem intcall_default_frame_to_caller_imm_dom[local]:
+  ∀cx src_id_opt fn st0 sevl sdfl.
+    preserves_immutables_dom cx st0 sevl ∧
+    preserves_immutables_dom (cx with stk updated_by CONS (src_id_opt,fn)) sevl sdfl ⇒
+    preserves_immutables_dom cx st0 sdfl
+Proof
+  rpt strip_tac \\
+  irule preserves_immutables_dom_trans \\
+  qexists_tac `sevl` \\
+  conj_tac >- simp[] \\
+  irule (iffLR preserves_immutables_dom_txn_eq) \\
+  qexists_tac `cx with stk updated_by CONS (src_id_opt,fn)` \\
+  simp[]
+QED
+
+Theorem intcall_tail_after_finally_cast_imm_dom[local]:
+  !cx src_id_opt fn mut nr ss prev env st0 sevl r r2 q r' retv res st'.
+    preserves_immutables_dom cx st0 sevl /\
+    preserves_immutables_dom (cx with stk updated_by CONS (src_id_opt,fn)) sevl r /\
+    r2.immutables = r.immutables /\
+    (!st res st'.
+       eval_stmts (cx with stk updated_by CONS (src_id_opt,fn)) ss st = (res,st') ==>
+       preserves_immutables_dom (cx with stk updated_by CONS (src_id_opt,fn)) st st') /\
+    finally
+      (try (do eval_stmts (cx with stk updated_by CONS (src_id_opt,fn)) ss;
+               return NoneV od) handle_function)
+      (do pop_function prev;
+          if nr /\ mut <> View /\ mut <> Pure then
+            case cx.nonreentrant_slot of
+            | NONE => return ()
+            | SOME slot => release_nonreentrant_lock cx.txn.target slot
+          else return () od)
+      (r2 with scopes := [env]) = (q,r') /\
+    (case q of
+     | INL v =>
+         do crv <- lift_option_type (safe_cast retv v) "IntCall cast ret";
+            return (Value crv) od r'
+     | INR e => (INR e,r')) = (res,st') ==>
+    preserves_immutables_dom cx st0 st'
+Proof
+  rpt strip_tac >>
+  `preserves_immutables_dom cx r2 r'` by
+    (qspecl_then [`cx`, `src_id_opt`, `fn`, `mut`, `nr`, `ss`, `prev`, `env`, `r2`, `q`, `r'`]
+       mp_tac intcall_body_finally_release_imm_dom_use >>
+     simp[] >>
+     disch_then irule >>
+     simp[]) >>
+  `preserves_immutables_dom cx st0 r2` by
+    (irule preserves_immutables_dom_trans >>
+     qexists_tac `r` >>
+     conj_tac >- metis_tac[intcall_default_frame_to_caller_imm_dom] >>
+     irule preserves_immutables_dom_eq >> simp[]) >>
+  Cases_on `q` >> gvs[bind_def, return_def] >-
+    (Cases_on `lift_option_type (safe_cast retv x) "IntCall cast ret" r'` >>
+     gvs[] >>
+     imp_res_tac lift_option_type_same_state >>
+     gvs[return_def, raise_def] >>
+     Cases_on `q` >> gvs[] >>
+     irule preserves_immutables_dom_trans >>
+     qexists_tac `r2` >> simp[]) >>
+  irule preserves_immutables_dom_trans >>
+  qexists_tac `r2` >> simp[]
+QED
+
+Theorem post_default_intcall_tail_imm_dom[local]:
+  ∀cx src_id_opt fn mut nr args ret ss vs dflt_vs st0 sevl sdfl prev res st'.
+    preserves_immutables_dom cx st0 sevl ∧
+    preserves_immutables_dom (cx with stk updated_by CONS (src_id_opt,fn)) sevl sdfl ∧
+    intcall_tail_body_provider cx src_id_opt fn mut nr args ret ss vs dflt_vs sdfl ∧
+    post_default_intcall_tail cx src_id_opt fn mut nr args ret ss vs dflt_vs prev sdfl = (res,st') ⇒
+    preserves_immutables_dom cx st0 st'
+Proof
+  rpt strip_tac \\
+  qpat_x_assum `post_default_intcall_tail _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac \\
+  simp[post_default_intcall_tail_unfold, bind_def] \\
+  BasicProvers.TOP_CASE_TAC \\
+  FIRST [drule lift_option_type_same_state, drule lift_option_same_state] \\ strip_tac \\
+  reverse BasicProvers.TOP_CASE_TAC
+  >- (rw[] \\ gvs[] \\
+      metis_tac[intcall_default_frame_to_caller_imm_dom]) \\
+  BasicProvers.TOP_CASE_TAC \\
+  FIRST [drule lift_option_type_same_state, drule lift_option_same_state] \\ strip_tac \\
+  reverse BasicProvers.TOP_CASE_TAC
+  >- (rw[] \\ gvs[] \\
+      metis_tac[intcall_default_frame_to_caller_imm_dom]) \\
+  rewrite_tac[bind_def, ignore_bind_def, COND_RATOR] \\
+  BasicProvers.TOP_CASE_TAC \\
+  `r''.immutables = sdfl.immutables` by
+    (Cases_on `nr` \\ gvs[return_def, raise_def] \\
+     Cases_on `cx.nonreentrant_slot` \\ gvs[return_def, raise_def] \\
+     imp_res_tac acquire_nonreentrant_lock_immutables \\ gvs[]) \\
+  reverse BasicProvers.TOP_CASE_TAC
+  >- (rw[] \\ gvs[] \\
+      irule preserves_immutables_dom_trans \\
+      qexists_tac `r` \\
+      conj_tac
+      >- (irule preserves_immutables_dom_trans \\
+          qexists_tac `sevl` \\
+          conj_tac >- simp[] \\
+          irule (iffLR preserves_immutables_dom_txn_eq) \\
+          qexists_tac `cx with stk updated_by CONS (src_id_opt,fn)` \\
+          simp[]) \\
+      irule preserves_immutables_dom_eq \\ simp[]) \\
+  rewrite_tac[bind_def] \\
+  BasicProvers.TOP_CASE_TAC \\
+  gvs[push_function_def, return_def] \\
+  qpat_x_assum `intcall_tail_body_provider _ _ _ _ _ _ _ _ _ _ _`
+    (mp_tac o SRULE[intcall_tail_body_provider_def]) \\
+  disch_then (qspecl_then
+    [`x`, `r`, `x'`, `r`, `r''`,
+     `cx with stk updated_by CONS (src_id_opt,fn)`, `r'' with scopes := [x]`]
+    mp_tac) \\
+  simp[push_function_def, return_def] \\
+  strip_tac \\
+  BasicProvers.TOP_CASE_TAC \\
+  gvs[] \\
+  strip_tac \\
+  qpat_x_assum `_ ⇒ ∀st res st'. eval_stmts _ _ st = (res,st') ⇒ _` mp_tac \\
+  (impl_tac >- (Cases_on `nr` \\ gvs[return_def, raise_def] \\ Cases_on `cx.nonreentrant_slot` \\ gvs[return_def, raise_def])) \\
+  strip_tac \\
+  qspecl_then [`cx`, `src_id_opt`, `fn`, `mut`, `nr`, `ss`, `prev`, `x`,
+                `st0`, `sevl`, `r`, `r''`, `q`, `r'`, `x'`, `res`, `st'`]
+    mp_tac intcall_tail_after_finally_cast_imm_dom \\
+  simp[] \\
+  disch_then irule \\
+  simp[ignore_bind_def]
+QED
 (* ===== Helper lemmas for ExtCall/IntCall cases ===== *)
 
 Theorem case_IntCall_imm_dom[local]:
@@ -1545,7 +2593,7 @@ Theorem case_IntCall_imm_dom[local]:
   eval_expr cx (Call _ (IntCall (src_id_opt,fn)) es vs) st = (res,st') ⇒
   (∀s'' x t s'³' ts t' s'⁴' tup t'' mut stup nr stup2 args sstup dflts sstup2 ret
       body' s'⁵' x' t'³'.
-    check (¬MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) ∧
+    type_check (¬MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) ∧
     lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s'³' =
     (INL ts,t') ∧
     lift_option_type (lookup_callable_function cx.in_deploy fn ts)
@@ -1559,7 +2607,7 @@ Theorem case_IntCall_imm_dom[local]:
       eval_exprs cx es st = (res,st') ⇒ preserves_immutables_dom cx st st') ⇒
   (∀s'' x t s'³' ts t' s'⁴' tup t'' mut stup nr stup2 args sstup dflts sstup2 ret
       body' s'⁵' x' t'³' s'⁶' vs t'⁴' es' cx'.
-    check (¬MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) ∧
+    type_check (¬MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) ∧
     lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s'³' =
     (INL ts,t') ∧
     lift_option_type (lookup_callable_function cx.in_deploy fn ts)
@@ -1578,7 +2626,7 @@ Theorem case_IntCall_imm_dom[local]:
       ss s'⁵' x' t'³' s'⁶' vs t'⁴' needed_dflts cxd s'⁷' dflt_vs t'⁵'
       all_tenv s'⁸' env t'⁶' s'⁹' prev t'⁷' s'¹⁰' rtv t'⁸' is_view s'¹¹' lk t'⁹'
       s'¹²' cx' t'¹⁰'.
-    check (¬MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) ∧
+    type_check (¬MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) ∧
     lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s'³' =
     (INL ts,t') ∧
     lift_option_type (lookup_callable_function cx.in_deploy fn ts)
@@ -1600,7 +2648,7 @@ Theorem case_IntCall_imm_dom[local]:
     (INL rtv,t'⁸') ∧ (is_view ⇔ mut = View ∨ mut = Pure) ∧
     (if nr then
        case cx.nonreentrant_slot of
-       | NONE => raise (Error (RuntimeError "nonreentrant slot missing"))
+       | NONE => raise (Error (TypeError "nonreentrant slot missing"))
        | SOME slot =>
          acquire_nonreentrant_lock cx.txn.target slot is_view
      else return ()) s'¹¹' = (INL lk,t'⁹') ∧
@@ -1648,91 +2696,636 @@ Proof
   \\ reverse BasicProvers.TOP_CASE_TAC
   >- (rpt(last_x_assum(qspec_then`ARB`kall_tac)) \\ strip_tac \\ gvs[])
   (* eval_exprs cx es succeeded *)
-  \\ BasicProvers.TOP_CASE_TAC
-  \\ last_x_assum $ funpow 2 drule_then drule
-  \\ simp_tac std_ss []
-  \\ disch_then $ funpow 2 drule_then drule
+  \\ simp[get_scopes_def, return_def]
   \\ strip_tac
-  \\ drule_at Any (iffLR preserves_immutables_dom_txn_eq)
-  \\ disch_then(qspec_then`cx`mp_tac)
-  \\ impl_tac >- rw[] \\ strip_tac
-  \\ drule_then drule preserves_immutables_dom_trans
-  \\ strip_tac
-  \\ reverse BasicProvers.TOP_CASE_TAC
-  >- (rpt(last_x_assum(qspec_then`ARB`kall_tac)) \\ strip_tac \\ gvs[])
-  (* INL branch: peel remaining pipeline *)
-  \\ rewrite_tac[bind_def]
-  \\ BasicProvers.TOP_CASE_TAC
-  \\ FIRST [drule lift_option_type_same_state, drule lift_option_same_state] \\ strip_tac
-  \\ reverse BasicProvers.TOP_CASE_TAC
-  >- (rpt(last_x_assum(qspec_then`ARB`kall_tac)) \\ strip_tac \\ gvs[])
-  \\ rewrite_tac[bind_def]
-  \\ BasicProvers.TOP_CASE_TAC
-  \\ first_x_assum $ funpow 2 drule_then drule
-  \\ simp_tac std_ss []
-  \\ disch_then $ funpow 3 drule_then drule
-  \\ strip_tac
-  \\ reverse BasicProvers.TOP_CASE_TAC
-  >- (rpt(last_x_assum(qspec_then`ARB`kall_tac))
-      \\ strip_tac \\ gvs[get_scopes_def, return_def])
-  \\ rewrite_tac[bind_def]
-  \\ BasicProvers.TOP_CASE_TAC
-  \\ FIRST [drule lift_option_type_same_state, drule lift_option_same_state] \\ strip_tac
-  \\ reverse BasicProvers.TOP_CASE_TAC
-  >- (rpt(last_x_assum(qspec_then`ARB`kall_tac))
-      \\ strip_tac \\ gvs[get_scopes_def, return_def])
-  (* Peel lock_acquire *)
-  \\ rewrite_tac[bind_def, ignore_bind_def, COND_RATOR]
+  \\ qpat_x_assum `bind _ _ _ = _` mp_tac
+  \\ simp[bind_def]
   \\ BasicProvers.TOP_CASE_TAC
   \\ reverse BasicProvers.TOP_CASE_TAC
-  >- (rpt(last_x_assum(qspec_then`ARB`kall_tac))
-      \\ strip_tac \\ gvs[get_scopes_def, return_def]
-      \\ Cases_on `FST (SND x'')` \\ gvs[return_def]
-      \\ Cases_on `cx.nonreentrant_slot` \\ gvs[raise_def]
-      \\ imp_res_tac acquire_nonreentrant_lock_immutables
-      \\ irule preserves_immutables_dom_trans
-      \\ first_assum (irule_at Any)
-      \\ irule preserves_immutables_dom_eq \\ gvs[])
-  (* Lock succeeded — undo COND_RATOR so lock assumption matches IH form *)
-  \\ qpat_x_assum `(if _ then _ else _) = _`
-       (assume_tac o ONCE_REWRITE_RULE [GSYM COND_RATOR])
-  (* match IH3: get_scopes, evaluate_type, lock *)
-  \\ first_x_assum $ funpow 2 drule_then drule
-  \\ simp[bind_def, push_function_def, return_def, finally_def, try_def]
-  \\ CASE_TAC
-  \\ disch_then drule
-  \\ qmatch_goalsub_rename_tac`preserves_immutables_dom _ _ s2`
+  >- (rpt strip_tac \\
+      qpat_x_assum `r'⁵' = st'` (SUBST1_TAC o SYM) \\
+      irule preserves_immutables_dom_trans \\
+      qexists_tac `r'⁴'` \\
+      conj_tac >- first_assum ACCEPT_TAC \\
+      irule (iffLR preserves_immutables_dom_txn_eq) \\
+      qexists_tac `cx with stk updated_by CONS (src_id_opt,fn)` \\ simp[] \\
+      irule intcall_default_frame_imm_dom \\
+      qexists_tac `DROP (LENGTH (FST (SND (SND (SND x'')))) -
+                       (LENGTH (FST (SND (SND x''))) - LENGTH es))
+                      (FST (SND (SND (SND x''))))` \\
+      qexists_tac `r'⁴'.scopes` \\
+      qexists_tac `INR y` \\
+      simp[] \\
+      conj_tac
+      >- (rpt strip_tac \\
+          drule type_check_intcall_args_length_sub \\
+          strip_tac \\
+          qpat_x_assum `∀s'' x t s'³' ts t' s'⁴' tup t'' mut stup nr stup2 args sstup dflts sstup2 ret body' s'⁵' x' t'³' s'⁶' vs t'⁴' es' cx'.
+                           _ ⇒ ∀st res st'.
+                             eval_exprs cx' es' st = (res,st') ⇒ _`
+            (qspecl_then
+              [`st`, `x`, `r`, `st`, `x'`, `r'`, `st`, `x''`, `r''`,
+               `FST x''`, `SND x''`, `FST (SND x'')`, `SND (SND x'')`,
+               `FST (SND (SND x''))`, `SND (SND (SND x''))`,
+               `FST (SND (SND (SND x'')))`,
+               `SND (SND (SND (SND x'')))`,
+               `FST (SND (SND (SND (SND x''))))`,
+               `SND (SND (SND (SND (SND x''))))`,
+               `st`, `x'³'`, `r'³'`, `st`, `x'⁴'`, `r'⁴'`,
+               `DROP (LENGTH (FST (SND (SND (SND x'')))) −
+                      (LENGTH (FST (SND (SND x''))) − LENGTH es))
+                     (FST (SND (SND (SND x''))))`,
+               `cx with stk updated_by CONS (src_id_opt,fn)`] mp_tac) \\
+          impl_tac >-
+            (rpt conj_tac \\
+             FIRST [REFL_TAC, first_assum ACCEPT_TAC]) \\
+          disch_then drule \\
+          strip_tac \\
+          first_assum ACCEPT_TAC) \\
+      qpat_x_assum `finally _ _ _ = _` mp_tac \\
+      simp[ignore_bind_def])
+  (* INL branch: fold remaining pipeline through post_default_intcall_tail *)
+  \\ qpat_assum
+       `∀s'' x t s'³' ts t' s'⁴' tup t'' mut stup nr stup2 args sstup dflts sstup2 ret body' s'⁵' x' t'³' s'⁶' vs t'⁴' es' cx'.
+          _ ⇒ ∀st res st'. eval_exprs cx' es' st = (res,st') ⇒ preserves_immutables_dom cx' st st'`
+       (mk_asm "default_imm_ih")
+  \\ qpat_assum
+       `∀s'' x t s'³' ts t' s'⁴' tup t'' mut stup nr stup2 args sstup dflts sstup2 ret ss s'⁵' x' t'³' s'⁶' vs t'⁴' needed_dflts cxd s'⁷' dflt_vs t'⁵' all_tenv s'⁸' env t'⁶' s'⁹' prev t'⁷' s'¹⁰' rtv t'⁸' is_view s'¹¹' lk t'⁹' s'¹²' cx' t'¹⁰'.
+          _ ⇒ ∀st res st'. eval_stmts cx' ss st = (res,st') ⇒ preserves_immutables_dom cx' st st'`
+       (mk_asm "body_imm_ih")
+  \\ qspecl_then
+       [`cx`, `src_id_opt`, `fn`, `es`,
+        `st`, `st`, `st`, `st`, `st`,
+        `x`, `r`, `x'`, `r'`, `x''`, `r''`, `x'³'`, `r'³'`,
+        `x'⁴'`, `r'⁴'`,
+        `DROP (LENGTH (FST (SND (SND (SND x'')))) -
+               (LENGTH (FST (SND (SND x''))) - LENGTH es))
+              (FST (SND (SND (SND x''))))`,
+        `cx with stk updated_by CONS (src_id_opt,fn)`,
+        `x'⁵'`, `r'⁵'`, `r'⁴'.scopes`,
+        `FST x''`, `SND x''`, `FST (SND x'')`, `SND (SND x'')`,
+        `FST (SND (SND x''))`, `SND (SND (SND x''))`,
+        `FST (SND (SND (SND x'')))`, `SND (SND (SND (SND x'')))`,
+        `FST (SND (SND (SND (SND x''))))`,
+        `SND (SND (SND (SND (SND x''))))`]
+       mp_tac intcall_case_live_post_default_setup_from_generated_ih
+  \\ (impl_tac >- (asm "default_imm_ih" mp_tac \\ simp[]))
+  \\ (impl_tac >- (asm "body_imm_ih" mp_tac \\ simp[]))
   \\ strip_tac
-  \\ qmatch_goalsub_rename_tac`preserves_immutables_dom _ _ s3`
-  \\ strip_tac
-  \\ sg `s2.immutables = s3.immutables`
-  >- (
-    gvs[CaseEq"sum",CaseEq"prod", bind_def, pop_function_def, set_scopes_def,
-        return_def, ignore_bind_def]
-    \\ imp_res_tac lift_option_same_state >> imp_res_tac lift_option_type_same_state
-    \\ imp_res_tac handle_function_immutables
-    \\ imp_res_tac release_nonreentrant_lock_immutables
-    \\ imp_res_tac finally_lock_release_immutables
-    \\ gvs[raise_def, return_def]
-    \\ rpt (BasicProvers.TOP_CASE_TAC \\ gvs[return_def]) )
-  \\ gvs[get_scopes_def, return_def]
-  \\ irule preserves_immutables_dom_trans
-  \\ goal_assum drule
-  \\ irule preserves_immutables_dom_trans
-  \\ qexists_tac`s2`
-  \\ reverse conj_tac
-  >- ( rw[preserves_immutables_dom_def] \\ gvs[] )
-  \\ drule_at Any $ iffLR preserves_immutables_dom_txn_eq
-  \\ disch_then(qspec_then`cx`mp_tac)
-  \\ rw[]
-  \\ irule preserves_immutables_dom_trans
-  \\ goal_assum $ drule_at Any
-  \\ rw[preserves_immutables_dom_def]
-  \\ imp_res_tac lock_acquire_cond_immutables
-  \\ gvs[]
+  \\ qpat_x_assum `default_imm_ih :- _` kall_tac
+  \\ qpat_x_assum `body_imm_ih :- _` kall_tac
+  \\ TRY (qpat_x_assum
+       `∀s'' x t s'³' ts t' s'⁴' tup t'' mut stup nr stup2 args sstup dflts sstup2 ret body' s'⁵' x' t'³' s'⁶' vs t'⁴' es' cx'.
+          _ ⇒ ∀st res st'. eval_exprs cx' es' st = (res,st') ⇒ preserves_immutables_dom cx' st st'`
+       kall_tac)
+  \\ TRY (qpat_x_assum
+       `∀s'' x t s'³' ts t' s'⁴' tup t'' mut stup nr stup2 args sstup dflts sstup2 ret ss s'⁵' x' t'³' s'⁶' vs t'⁴' needed_dflts cxd s'⁷' dflt_vs t'⁵' all_tenv s'⁸' env t'⁶' s'⁹' prev t'⁷' s'¹⁰' rtv t'⁸' is_view s'¹¹' lk t'⁹' s'¹²' cx' t'¹⁰'.
+          _ ⇒ ∀st res st'. eval_stmts cx' ss st = (res,st') ⇒ preserves_immutables_dom cx' st st'`
+       kall_tac)
+  \\ `preserves_immutables_dom (cx with stk updated_by CONS (src_id_opt,fn)) r'⁴' r'⁵' ∧
+       intcall_tail_body_provider cx src_id_opt fn (FST x'') (FST (SND x''))
+         (FST (SND (SND x''))) (FST (SND (SND (SND (SND x'')))))
+         (SND (SND (SND (SND (SND x''))))) x'⁴' x'⁵' r'⁵'` by
+       (first_x_assum irule \\ rpt conj_tac \\ simp[ignore_bind_def])
+  \\ simp[GSYM post_default_intcall_tail_unfold]
+  \\ rpt strip_tac
+  \\ qspecl_then
+       [`cx`, `src_id_opt`, `fn`, `FST x''`, `FST (SND x'')`,
+        `FST (SND (SND x''))`, `FST (SND (SND (SND (SND x''))))`,
+        `SND (SND (SND (SND (SND x''))))`, `x'⁴'`, `x'⁵'`,
+        `st`, `r'⁴'`, `r'⁵'`, `r'⁴'.scopes`, `res`, `st'`]
+       mp_tac post_default_intcall_tail_imm_dom
+  \\ simp[]
+  \\ disch_then irule
+  \\ simp[post_default_intcall_tail_unfold, bind_def, ignore_bind_def]
 QED
 
 (* ===== Main Mutual Induction ===== *)
+
+Theorem intcall_mutual_default_frame_imm_dom_from_generated_ih[local]:
+  ∀cx src_id_opt fn es ih_check_s ih_mod_s ih_fun_s ih_len_s ih_args_s
+     xrec srec ts smod tup sfun xlen slen vs sevl needed_dflts cxd prev res sdfl.
+    (∀s'' x t s'³' ts0 t' s'⁴' tup0 t'' mut stup nr stup2 args sstup dflts sstup2 ret
+        body' s'⁵' x' t'³' s'⁶' vs0 t'⁴' es' cx' s'⁷' prev0 t'⁵' s'⁸' x'' t'⁶'.
+      type_check (¬MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) ∧
+      lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s'³' =
+        (INL ts0,t') ∧
+      lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
+        "IntCall lookup_function" s'⁴' = (INL tup0,t'') ∧
+      mut = FST tup0 ∧ stup = SND tup0 ∧ (nr ⇔ FST stup) ∧
+      stup2 = SND stup ∧ args = FST stup2 ∧ sstup = SND stup2 ∧
+      dflts = FST sstup ∧ sstup2 = SND sstup ∧ ret = FST sstup2 ∧
+      body' = SND sstup2 ∧
+      type_check (LENGTH es ≤ LENGTH args ∧ LENGTH args − LENGTH es ≤ LENGTH dflts)
+        "IntCall args length" s'⁵' = (INL x',t'³') ∧
+      eval_exprs cx es s'⁶' = (INL vs0,t'⁴') ∧
+      es' = DROP (LENGTH dflts − (LENGTH args − LENGTH es)) dflts ∧
+      cx' = cx with stk updated_by CONS (src_id_opt,fn) ∧
+      get_scopes s'⁷' = (INL prev0,t'⁵') ∧
+      set_scopes [FEMPTY] s'⁸' = (INL x'',t'⁶') ⇒
+      ∀st res st'. eval_exprs cx' es' st = (res,st') ⇒
+        preserves_immutables_dom cx' st st') ∧
+    type_check (¬MEM (src_id_opt,fn) cx.stk) "recursion" ih_check_s = (INL xrec,srec) ∧
+    lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" ih_mod_s =
+      (INL ts,smod) ∧
+    lift_option_type (lookup_callable_function cx.in_deploy fn ts)
+      "IntCall lookup_function" ih_fun_s = (INL tup,sfun) ∧
+    type_check
+      (LENGTH es ≤ LENGTH (FST (SND (SND tup))) ∧
+       LENGTH (FST (SND (SND tup))) ≤
+         LENGTH es + LENGTH (FST (SND (SND (SND tup)))))
+      "IntCall args length" ih_len_s = (INL xlen,slen) ∧
+    eval_exprs cx es ih_args_s = (INL vs,sevl) ∧
+    needed_dflts =
+      DROP (LENGTH (FST (SND (SND (SND tup)))) −
+            (LENGTH (FST (SND (SND tup))) − LENGTH es))
+           (FST (SND (SND (SND tup)))) ∧
+    cxd = cx with stk updated_by CONS (src_id_opt,fn) ∧
+    get_scopes sevl = (INL prev,sevl) ∧
+    finally
+      (do
+         set_scopes [FEMPTY];
+         eval_exprs cxd needed_dflts
+       od)
+      (set_scopes prev) sevl = (res,sdfl) ⇒
+    preserves_immutables_dom cxd sevl sdfl
+Proof
+  rpt strip_tac \\
+  irule intcall_default_frame_imm_dom \\
+  qexists_tac `needed_dflts` \\
+  qexists_tac `prev` \\
+  qexists_tac `res` \\
+  simp[] \\
+  rpt strip_tac \\
+  `type_check
+     (LENGTH es ≤ LENGTH (FST (SND (SND tup))) ∧
+      LENGTH (FST (SND (SND tup))) − LENGTH es ≤
+        LENGTH (FST (SND (SND (SND tup)))))
+     "IntCall args length" ih_len_s = (INL xlen,slen)` by
+    (qpat_x_assum `type_check _ "IntCall args length" ih_len_s = _` mp_tac \\
+     simp[type_check_def, assert_def] \\
+     IF_CASES_TAC \\ simp[] \\
+     decide_tac) \\
+  first_assum (qspecl_then
+    [`ih_check_s`, `xrec`, `srec`,
+     `ih_mod_s`, `ts`, `smod`,
+     `ih_fun_s`, `tup`, `sfun`,
+     `FST tup`, `SND tup`, `FST (SND tup)`,
+     `SND (SND tup)`, `FST (SND (SND tup))`,
+     `SND (SND (SND tup))`, `FST (SND (SND (SND tup)))`,
+     `SND (SND (SND (SND tup)))`,
+     `FST (SND (SND (SND (SND tup))))`,
+     `SND (SND (SND (SND (SND tup))))`,
+     `ih_len_s`, `xlen`, `slen`,
+     `ih_args_s`, `vs`, `sevl`,
+     `needed_dflts`, `cxd`,
+     `sevl`, `prev`, `sevl`, `sevl`, `()`,
+     `sevl with scopes := [FEMPTY]`] mp_tac) \\
+  simp[get_scopes_def, set_scopes_def, return_def] \\
+  disch_then drule \\
+  simp[]
+QED
+
+Theorem intcall_mutual_tail_body_provider_from_generated_ih[local]:
+  ∀cx src_id_opt fn es ih_check_s ih_mod_s ih_fun_s ih_len_s ih_args_s
+     xrec srec ts smod tup sfun xlen slen vs sevl needed_dflts cxd
+     dflt_vs sdfl prev mut stup nr stup2 args sstup dflts sstup2 ret ss.
+    (∀s'' x t s'³' ts0 t' s'⁴' tup0 t'' mut0 stup0 nr0 stup20
+        args0 sstup0 dflts0 sstup20 ret0 ss0 s'⁵' x' t'³' s'⁶' vs0 t'⁴'
+        needed_dflts0 cxd0 s'⁷' prev0 t'⁵' s'⁸' dflt_vs0 t'⁶'
+        all_tenv s'⁹' env t'⁷' s'¹⁰' rtv t'⁸' is_view s'¹¹' lk t'⁹'
+        s'¹²' cx' t'¹⁰'.
+      type_check (¬MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) ∧
+      lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s'³' =
+        (INL ts0,t') ∧
+      lift_option_type (lookup_callable_function cx.in_deploy fn ts0)
+        "IntCall lookup_function" s'⁴' = (INL tup0,t'') ∧
+      mut0 = FST tup0 ∧ stup0 = SND tup0 ∧ (nr0 ⇔ FST stup0) ∧
+      stup20 = SND stup0 ∧ args0 = FST stup20 ∧ sstup0 = SND stup20 ∧
+      dflts0 = FST sstup0 ∧ sstup20 = SND sstup0 ∧ ret0 = FST sstup20 ∧
+      ss0 = SND sstup20 ∧
+      type_check (LENGTH es ≤ LENGTH args0 ∧ LENGTH args0 − LENGTH es ≤ LENGTH dflts0)
+        "IntCall args length" s'⁵' = (INL x',t'³') ∧
+      eval_exprs cx es s'⁶' = (INL vs0,t'⁴') ∧
+      needed_dflts0 = DROP (LENGTH dflts0 − (LENGTH args0 − LENGTH es)) dflts0 ∧
+      cxd0 = cx with stk updated_by CONS (src_id_opt,fn) ∧
+      get_scopes s'⁷' = (INL prev0,t'⁵') ∧
+      finally
+        (do
+           set_scopes [FEMPTY];
+           eval_exprs cxd0 needed_dflts0
+         od)
+        (set_scopes prev0) s'⁸' = (INL dflt_vs0,t'⁶') ∧
+      all_tenv = get_tenv cx ∧
+      lift_option_type (bind_arguments all_tenv args0 (vs0 ++ dflt_vs0))
+        "IntCall bind_arguments" s'⁹' = (INL env,t'⁷') ∧
+      lift_option_type (evaluate_type all_tenv ret0) "IntCall eval ret" s'¹⁰' =
+        (INL rtv,t'⁸') ∧
+      (is_view ⇔ mut0 = View ∨ mut0 = Pure) ∧
+      (if nr0 then
+         case cx.nonreentrant_slot of
+         | NONE => raise (Error (TypeError "nonreentrant slot missing"))
+         | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
+       else return ()) s'¹¹' = (INL lk,t'⁹') ∧
+      push_function (src_id_opt,fn) env cx s'¹²' = (INL cx',t'¹⁰') ⇒
+      ∀st res st'. eval_stmts cx' ss0 st = (res,st') ⇒
+        preserves_immutables_dom cx' st st') ∧
+    type_check (¬MEM (src_id_opt,fn) cx.stk) "recursion" ih_check_s = (INL xrec,srec) ∧
+    lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" ih_mod_s =
+      (INL ts,smod) ∧
+    lift_option_type (lookup_callable_function cx.in_deploy fn ts)
+      "IntCall lookup_function" ih_fun_s = (INL tup,sfun) ∧
+    mut = FST tup ∧ stup = SND tup ∧ (nr ⇔ FST stup) ∧
+    stup2 = SND stup ∧ args = FST stup2 ∧ sstup = SND stup2 ∧
+    dflts = FST sstup ∧ sstup2 = SND sstup ∧ ret = FST sstup2 ∧
+    ss = SND sstup2 ∧
+    type_check
+      (LENGTH es ≤ LENGTH args ∧ LENGTH args ≤ LENGTH es + LENGTH dflts)
+      "IntCall args length" ih_len_s = (INL xlen,slen) ∧
+    eval_exprs cx es ih_args_s = (INL vs,sevl) ∧
+    needed_dflts = DROP (LENGTH dflts − (LENGTH args − LENGTH es)) dflts ∧
+    cxd = cx with stk updated_by CONS (src_id_opt,fn) ∧
+    get_scopes sevl = (INL prev,sevl) ∧
+    finally
+      (do
+         set_scopes [FEMPTY];
+         eval_exprs cxd needed_dflts
+       od)
+      (set_scopes prev) sevl = (INL dflt_vs,sdfl) ⇒
+    intcall_tail_body_provider cx src_id_opt fn mut nr args ret ss vs dflt_vs sdfl
+Proof
+  rpt strip_tac \\
+  simp[intcall_tail_body_provider_def] \\
+  rpt strip_tac \\
+  `type_check
+     (LENGTH es ≤ LENGTH args ∧ LENGTH args − LENGTH es ≤ LENGTH dflts)
+     "IntCall args length" ih_len_s = (INL xlen,slen)` by
+    (qpat_x_assum `type_check _ "IntCall args length" ih_len_s = _` mp_tac \\
+     simp[type_check_def, assert_def] \\
+     IF_CASES_TAC \\ simp[] \\
+     decide_tac) \\
+  qpat_assum `∀s'' x t s'³' ts0 t' s'⁴' tup0 t'' mut0 stup0 nr0 stup20
+                  args0 sstup0 dflts0 sstup20 ret0 ss0 s'⁵' x' t'³'
+                  s'⁶' vs0 t'⁴' needed_dflts0 cxd0 s'⁷' prev0 t'⁵'
+                  s'⁸' dflt_vs0 t'⁶' all_tenv s'⁹' env0 t'⁷' s'¹⁰'
+                  rtv0 t'⁸' is_view s'¹¹' lk0 t'⁹' s'¹²' cx0 t'¹⁰'.
+                  type_check (¬MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) ∧
+                  _ ⇒ ∀st0 res0 st1.
+                    eval_stmts cx0 ss0 st0 = (res0,st1) ⇒
+                    preserves_immutables_dom cx0 st0 st1`
+    (qspecl_then
+      [`ih_check_s`, `xrec`, `srec`,
+       `ih_mod_s`, `ts`, `smod`,
+       `ih_fun_s`, `tup`, `sfun`,
+       `mut`, `stup`, `nr`, `stup2`, `args`, `sstup`, `dflts`, `sstup2`,
+       `ret`, `ss`, `ih_len_s`, `xlen`, `slen`,
+       `ih_args_s`, `vs`, `sevl`, `needed_dflts`, `cxd`,
+       `sevl`, `prev`, `sevl`, `sevl`, `dflt_vs`, `sdfl`, `get_tenv cx`,
+       `sdfl`, `env`, `s_bind`, `s_bind`, `rtv`, `s_eval`,
+       `mut = View ∨ mut = Pure`, `s_eval`, `lk`, `s_lock`, `s_lock`, `cx'`,
+       `s_push`] mp_tac) \\
+  simp[get_scopes_def, return_def] \\
+  disch_then irule \\
+  simp[]
+QED
+
+
+Theorem intcall_mutual_live_default_frame_imm_dom[local]:
+  ∀cx src_id_opt fn es check_res mod_code fn_tup len_res arg_vs default_vs
+     st0 s_args sdfl.
+    (∀s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0 sstup0 dflts0 sstup20 ret0 body0
+        s3 x1 t3 s4 vs0 t4 es0 cxd0 s5 prev0 t5 s6 x2 t6.
+      type_check (¬MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) ∧
+      lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 = (INL ts0,t1) ∧
+      lift_option_type (lookup_callable_function cx.in_deploy fn ts0) "IntCall lookup_function" s2 = (INL tup0,t2) ∧
+      mut0 = FST tup0 ∧ stup0 = SND tup0 ∧ (nr0 ⇔ FST stup0) ∧ stup20 = SND stup0 ∧
+      args0 = FST stup20 ∧ sstup0 = SND stup20 ∧ dflts0 = FST sstup0 ∧
+      sstup20 = SND sstup0 ∧ ret0 = FST sstup20 ∧ body0 = SND sstup20 ∧
+      type_check (LENGTH es ≤ LENGTH args0 ∧ LENGTH args0 − LENGTH es ≤ LENGTH dflts0)
+        "IntCall args length" s3 = (INL x1,t3) ∧
+      eval_exprs cx es s4 = (INL vs0,t4) ∧
+      es0 = DROP (LENGTH dflts0 − (LENGTH args0 − LENGTH es)) dflts0 ∧
+      cxd0 = cx with stk updated_by CONS (src_id_opt,fn) ∧
+      get_scopes s5 = (INL prev0,t5) ∧
+      set_scopes [FEMPTY] s6 = (INL x2,t6) ⇒
+      ∀st0 res0 st1. eval_exprs cxd0 es0 st0 = (res0,st1) ⇒ preserves_immutables_dom cxd0 st0 st1) ⇒
+    type_check (¬MEM (src_id_opt,fn) cx.stk) "recursion" st0 = (INL check_res,st0) ∧
+    lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" st0 = (INL mod_code,st0) ∧
+    lift_option_type (lookup_callable_function cx.in_deploy fn mod_code) "IntCall lookup_function" st0 =
+      (INL fn_tup,st0) ∧
+    type_check
+      (LENGTH es ≤ LENGTH (FST (SND (SND fn_tup))) ∧
+       LENGTH (FST (SND (SND fn_tup))) ≤ LENGTH es + LENGTH (FST (SND (SND (SND fn_tup)))))
+      "IntCall args length" st0 = (INL len_res,st0) ∧
+    eval_exprs cx es st0 = (INL arg_vs,s_args) ∧
+    finally
+      (do
+         set_scopes [FEMPTY];
+         eval_exprs (cx with stk updated_by CONS (src_id_opt,fn))
+           (DROP (LENGTH (FST (SND (SND (SND fn_tup)))) −
+                  (LENGTH (FST (SND (SND fn_tup))) − LENGTH es))
+                 (FST (SND (SND (SND fn_tup)))))
+       od)
+      (set_scopes s_args.scopes) s_args = (INL default_vs,sdfl) ⇒
+    preserves_immutables_dom (cx with stk updated_by CONS (src_id_opt,fn)) s_args sdfl
+Proof
+  rpt strip_tac \\
+  qspecl_then
+    [`cx`, `src_id_opt`, `fn`, `es`,
+     `st0`, `st0`, `st0`, `st0`, `st0`,
+     `check_res`, `st0`, `mod_code`, `st0`, `fn_tup`, `st0`, `len_res`, `st0`,
+     `arg_vs`, `s_args`,
+     `DROP (LENGTH (FST (SND (SND (SND fn_tup)))) −
+            (LENGTH (FST (SND (SND fn_tup))) − LENGTH es))
+           (FST (SND (SND (SND fn_tup))))`,
+     `cx with stk updated_by CONS (src_id_opt,fn)`,
+     `s_args.scopes`, `INL default_vs`, `sdfl`]
+    irule intcall_mutual_default_frame_imm_dom_from_generated_ih \\
+  conj_tac
+  >- REFL_TAC \\
+  conj_tac
+  >- simp[get_scopes_def, return_def] \\
+  MAP_EVERY qexists_tac
+    [`arg_vs`, `check_res`, `default_vs`, `es`, `fn_tup`, `len_res`,
+     `mod_code`, `st0`] \\
+  rpt conj_tac \\
+  FIRST [REFL_TAC, first_assum ACCEPT_TAC]
+QED
+
+Theorem intcall_mutual_live_tail_body_provider[local]:
+  ∀cx src_id_opt fn es check_res mod_code fn_tup len_res arg_vs default_vs
+     st0 s_args sdfl.
+    (∀s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0 sstup0 dflts0 sstup20 ret0 ss0
+        s3 x1 t3 s4 vs0 t4 needed_dflts0 cxd0 s5 prev0 t5 s6 dflt_vs0 t6 all_tenv s7 env t7
+        s8 rtv t8 is_view s9 lk t9 s10 cx0 t10.
+      type_check (¬MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) ∧
+      lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 = (INL ts0,t1) ∧
+      lift_option_type (lookup_callable_function cx.in_deploy fn ts0) "IntCall lookup_function" s2 = (INL tup0,t2) ∧
+      mut0 = FST tup0 ∧ stup0 = SND tup0 ∧ (nr0 ⇔ FST stup0) ∧ stup20 = SND stup0 ∧
+      args0 = FST stup20 ∧ sstup0 = SND stup20 ∧ dflts0 = FST sstup0 ∧
+      sstup20 = SND sstup0 ∧ ret0 = FST sstup20 ∧ ss0 = SND sstup20 ∧
+      type_check (LENGTH es ≤ LENGTH args0 ∧ LENGTH args0 − LENGTH es ≤ LENGTH dflts0)
+        "IntCall args length" s3 = (INL x1,t3) ∧
+      eval_exprs cx es s4 = (INL vs0,t4) ∧
+      needed_dflts0 = DROP (LENGTH dflts0 − (LENGTH args0 − LENGTH es)) dflts0 ∧
+      cxd0 = cx with stk updated_by CONS (src_id_opt,fn) ∧
+      get_scopes s5 = (INL prev0,t5) ∧
+      finally (do set_scopes [FEMPTY]; eval_exprs cxd0 needed_dflts0 od) (set_scopes prev0) s6 = (INL dflt_vs0,t6) ∧
+      all_tenv = get_tenv cx ∧
+      lift_option_type (bind_arguments all_tenv args0 (vs0 ++ dflt_vs0)) "IntCall bind_arguments" s7 = (INL env,t7) ∧
+      lift_option_type (evaluate_type all_tenv ret0) "IntCall eval ret" s8 = (INL rtv,t8) ∧
+      (is_view ⇔ mut0 = View ∨ mut0 = Pure) ∧
+      (if nr0 then case cx.nonreentrant_slot of NONE => raise (Error (TypeError "nonreentrant slot missing"))
+                 | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
+       else return ()) s9 = (INL lk,t9) ∧
+      push_function (src_id_opt,fn) env cx s10 = (INL cx0,t10) ⇒
+      ∀st0 res0 st1. eval_stmts cx0 ss0 st0 = (res0,st1) ⇒ preserves_immutables_dom cx0 st0 st1) ⇒
+    type_check (¬MEM (src_id_opt,fn) cx.stk) "recursion" st0 = (INL check_res,st0) ∧
+    lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" st0 = (INL mod_code,st0) ∧
+    lift_option_type (lookup_callable_function cx.in_deploy fn mod_code) "IntCall lookup_function" st0 =
+      (INL fn_tup,st0) ∧
+    type_check
+      (LENGTH es ≤ LENGTH (FST (SND (SND fn_tup))) ∧
+       LENGTH (FST (SND (SND fn_tup))) ≤ LENGTH es + LENGTH (FST (SND (SND (SND fn_tup)))))
+      "IntCall args length" st0 = (INL len_res,st0) ∧
+    eval_exprs cx es st0 = (INL arg_vs,s_args) ∧
+    finally
+      (do
+         set_scopes [FEMPTY];
+         eval_exprs (cx with stk updated_by CONS (src_id_opt,fn))
+           (DROP (LENGTH (FST (SND (SND (SND fn_tup)))) −
+                  (LENGTH (FST (SND (SND fn_tup))) − LENGTH es))
+                 (FST (SND (SND (SND fn_tup)))))
+       od)
+      (set_scopes s_args.scopes) s_args = (INL default_vs,sdfl) ⇒
+    intcall_tail_body_provider cx src_id_opt fn (FST fn_tup) (FST (SND fn_tup))
+      (FST (SND (SND fn_tup))) (FST (SND (SND (SND (SND fn_tup)))))
+      (SND (SND (SND (SND (SND fn_tup))))) arg_vs default_vs sdfl
+Proof
+  rpt strip_tac \\
+  qspecl_then
+    [`cx`, `src_id_opt`, `fn`, `es`,
+     `st0`, `st0`, `st0`, `st0`, `st0`,
+     `check_res`, `st0`, `mod_code`, `st0`, `fn_tup`, `st0`, `len_res`, `st0`,
+     `arg_vs`, `s_args`,
+     `DROP (LENGTH (FST (SND (SND (SND fn_tup)))) −
+            (LENGTH (FST (SND (SND fn_tup))) − LENGTH es))
+           (FST (SND (SND (SND fn_tup))))`,
+     `cx with stk updated_by CONS (src_id_opt,fn)`,
+     `default_vs`, `sdfl`, `s_args.scopes`,
+     `FST fn_tup`, `SND fn_tup`, `FST (SND fn_tup)`, `SND (SND fn_tup)`,
+     `FST (SND (SND fn_tup))`, `SND (SND (SND fn_tup))`,
+     `FST (SND (SND (SND fn_tup)))`, `SND (SND (SND (SND fn_tup)))`,
+     `FST (SND (SND (SND (SND fn_tup))))`,
+     `SND (SND (SND (SND (SND fn_tup))))`]
+    mp_tac intcall_mutual_tail_body_provider_from_generated_ih \\
+  simp[get_scopes_def] \\
+  PURE_REWRITE_TAC[return_def] \\
+  (impl_tac >-
+     (qpat_x_assum `∀s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0 sstup0 dflts0 sstup20 ret0 ss0 s3 x1 t3 s4 vs0 t4 needed_dflts0 cxd0 s5 prev0 t5 s6 dflt_vs0 t6 all_tenv s7 env t7 s8 rtv t8 is_view s9 lk t9 s10 cx0 t10. _ ⇒ ∀st0 res0 st1. eval_stmts cx0 ss0 st0 = (res0,st1) ⇒ preserves_immutables_dom cx0 st0 st1`
+        mp_tac \\
+      PURE_REWRITE_TAC[get_scopes_def, return_def] \\
+      simp[])) \\
+  simp[]
+QED
+
+Theorem case_IntCall_imm_dom_from_mutual_ih[local]:
+  ∀cx src_id_opt fn es vs st res st'.
+    eval_expr cx (Call _ (IntCall (src_id_opt,fn)) es vs) st = (res,st') ⇒
+    (∀s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0 sstup0 dflts0 sstup20 ret0 body0 s3 x1 t3.
+      type_check (¬MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) ∧
+      lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 = (INL ts0,t1) ∧
+      lift_option_type (lookup_callable_function cx.in_deploy fn ts0) "IntCall lookup_function" s2 = (INL tup0,t2) ∧
+      mut0 = FST tup0 ∧ stup0 = SND tup0 ∧ (nr0 ⇔ FST stup0) ∧ stup20 = SND stup0 ∧
+      args0 = FST stup20 ∧ sstup0 = SND stup20 ∧ dflts0 = FST sstup0 ∧
+      sstup20 = SND sstup0 ∧ ret0 = FST sstup20 ∧ body0 = SND sstup20 ∧
+      type_check (LENGTH es ≤ LENGTH args0 ∧ LENGTH args0 − LENGTH es ≤ LENGTH dflts0)
+        "IntCall args length" s3 = (INL x1,t3) ⇒
+      ∀st0 res0 st1. eval_exprs cx es st0 = (res0,st1) ⇒ preserves_immutables_dom cx st0 st1) ⇒
+    (∀s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0 sstup0 dflts0 sstup20 ret0 body0
+        s3 x1 t3 s4 vs0 t4 es0 cxd0 s5 prev0 t5 s6 x2 t6.
+      type_check (¬MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) ∧
+      lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 = (INL ts0,t1) ∧
+      lift_option_type (lookup_callable_function cx.in_deploy fn ts0) "IntCall lookup_function" s2 = (INL tup0,t2) ∧
+      mut0 = FST tup0 ∧ stup0 = SND tup0 ∧ (nr0 ⇔ FST stup0) ∧ stup20 = SND stup0 ∧
+      args0 = FST stup20 ∧ sstup0 = SND stup20 ∧ dflts0 = FST sstup0 ∧
+      sstup20 = SND sstup0 ∧ ret0 = FST sstup20 ∧ body0 = SND sstup20 ∧
+      type_check (LENGTH es ≤ LENGTH args0 ∧ LENGTH args0 − LENGTH es ≤ LENGTH dflts0)
+        "IntCall args length" s3 = (INL x1,t3) ∧
+      eval_exprs cx es s4 = (INL vs0,t4) ∧
+      es0 = DROP (LENGTH dflts0 − (LENGTH args0 − LENGTH es)) dflts0 ∧
+      cxd0 = cx with stk updated_by CONS (src_id_opt,fn) ∧
+      get_scopes s5 = (INL prev0,t5) ∧
+      set_scopes [FEMPTY] s6 = (INL x2,t6) ⇒
+      ∀st0 res0 st1. eval_exprs cxd0 es0 st0 = (res0,st1) ⇒ preserves_immutables_dom cxd0 st0 st1) ⇒
+    (∀s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0 sstup0 dflts0 sstup20 ret0 ss0
+        s3 x1 t3 s4 vs0 t4 needed_dflts0 cxd0 s5 prev0 t5 s6 dflt_vs0 t6 all_tenv s7 env t7
+        s8 rtv t8 is_view s9 lk t9 s10 cx0 t10.
+      type_check (¬MEM (src_id_opt,fn) cx.stk) "recursion" s0 = (INL x0,t0) ∧
+      lift_option_type (get_module_code cx src_id_opt) "IntCall get_module_code" s1 = (INL ts0,t1) ∧
+      lift_option_type (lookup_callable_function cx.in_deploy fn ts0) "IntCall lookup_function" s2 = (INL tup0,t2) ∧
+      mut0 = FST tup0 ∧ stup0 = SND tup0 ∧ (nr0 ⇔ FST stup0) ∧ stup20 = SND stup0 ∧
+      args0 = FST stup20 ∧ sstup0 = SND stup20 ∧ dflts0 = FST sstup0 ∧
+      sstup20 = SND sstup0 ∧ ret0 = FST sstup20 ∧ ss0 = SND sstup20 ∧
+      type_check (LENGTH es ≤ LENGTH args0 ∧ LENGTH args0 − LENGTH es ≤ LENGTH dflts0)
+        "IntCall args length" s3 = (INL x1,t3) ∧
+      eval_exprs cx es s4 = (INL vs0,t4) ∧
+      needed_dflts0 = DROP (LENGTH dflts0 − (LENGTH args0 − LENGTH es)) dflts0 ∧
+      cxd0 = cx with stk updated_by CONS (src_id_opt,fn) ∧
+      get_scopes s5 = (INL prev0,t5) ∧
+      finally (do set_scopes [FEMPTY]; eval_exprs cxd0 needed_dflts0 od) (set_scopes prev0) s6 = (INL dflt_vs0,t6) ∧
+      all_tenv = get_tenv cx ∧
+      lift_option_type (bind_arguments all_tenv args0 (vs0 ++ dflt_vs0)) "IntCall bind_arguments" s7 = (INL env,t7) ∧
+      lift_option_type (evaluate_type all_tenv ret0) "IntCall eval ret" s8 = (INL rtv,t8) ∧
+      (is_view ⇔ mut0 = View ∨ mut0 = Pure) ∧
+      (if nr0 then case cx.nonreentrant_slot of NONE => raise (Error (TypeError "nonreentrant slot missing"))
+                 | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
+       else return ()) s9 = (INL lk,t9) ∧
+      push_function (src_id_opt,fn) env cx s10 = (INL cx0,t10) ⇒
+      ∀st0 res0 st1. eval_stmts cx0 ss0 st0 = (res0,st1) ⇒ preserves_immutables_dom cx0 st0 st1) ⇒
+    preserves_immutables_dom cx st st'
+Proof
+  rpt strip_tac
+  \\ qpat_x_assum `eval_expr _ _ _ = _` mp_tac
+  \\ simp[Once evaluate_def, bind_def, LET_THM]
+  \\ rewrite_tac[bind_def, ignore_bind_def]
+  \\ BasicProvers.TOP_CASE_TAC
+  \\ FIRST [drule type_check_same_state, drule check_same_state] \\ strip_tac
+  \\ reverse BasicProvers.TOP_CASE_TAC
+  >- (rw[] \\ rw[preserves_immutables_dom_refl])
+  \\ rewrite_tac[bind_def]
+  \\ BasicProvers.TOP_CASE_TAC
+  \\ FIRST [drule lift_option_type_same_state, drule lift_option_same_state] \\ strip_tac
+  \\ reverse BasicProvers.TOP_CASE_TAC
+  >- (rpt(last_x_assum(qspec_then`ARB`kall_tac)) \\ rw[] \\ gvs[preserves_immutables_dom_refl])
+  \\ rewrite_tac[bind_def]
+  \\ BasicProvers.TOP_CASE_TAC
+  \\ FIRST [drule lift_option_type_same_state, drule lift_option_same_state] \\ strip_tac
+  \\ reverse BasicProvers.TOP_CASE_TAC
+  >- (rpt(last_x_assum(qspec_then`ARB`kall_tac)) \\ gvs[preserves_immutables_dom_refl])
+  \\ rewrite_tac[bind_def]
+  \\ BasicProvers.TOP_CASE_TAC
+  \\ FIRST [drule type_check_same_state, drule check_same_state] \\ strip_tac
+  \\ reverse BasicProvers.TOP_CASE_TAC
+  >- (rpt(last_x_assum(qspec_then`ARB`kall_tac)) \\ rw[] \\ gvs[preserves_immutables_dom_refl])
+  \\ BasicProvers.TOP_CASE_TAC
+  \\ qpat_x_assum
+       `∀s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0 sstup0 dflts0 sstup20 ret0 body0 s3 x1 t3.
+          _ ⇒ ∀st0 res0 st1. eval_exprs cx es st0 = (res0,st1) ⇒ preserves_immutables_dom cx st0 st1`
+       (funpow 2 drule_then drule)
+  \\ simp_tac std_ss []
+  \\ disch_then $ drule_then drule
+  \\ strip_tac
+  \\ reverse BasicProvers.TOP_CASE_TAC
+  >- (rpt(last_x_assum(qspec_then`ARB`kall_tac)) \\ strip_tac \\ gvs[])
+  \\ simp[get_scopes_def, return_def]
+  \\ strip_tac
+  \\ qpat_x_assum `bind _ _ _ = _` mp_tac
+  \\ simp[bind_def]
+  \\ BasicProvers.TOP_CASE_TAC
+  \\ reverse BasicProvers.TOP_CASE_TAC
+  >- (rpt strip_tac \\
+      rpt (qpat_x_assum `_ = st` SUBST_ALL_TAC) \\
+      irule intcall_default_frame_to_caller_imm_dom \\
+      qexists_tac `fn` \\
+      qexists_tac `r'⁴'` \\
+      qexists_tac `src_id_opt` \\
+      simp[] \\
+      qspecl_then
+        [`cx`, `src_id_opt`, `fn`, `es`,
+         `st`, `st`, `st`, `st`, `st`,
+         `()`, `st`, `x'`, `st`, `x''`, `st`, `()`, `st`, `x'⁴'`, `r'⁴'`,
+         `DROP (LENGTH (FST (SND (SND (SND x'')))) -
+                (LENGTH (FST (SND (SND x''))) - LENGTH es))
+               (FST (SND (SND (SND x''))))`,
+         `cx with stk updated_by CONS (src_id_opt,fn)`, `r'⁴'.scopes`,
+         `INR y`, `r'⁵'`]
+        mp_tac intcall_mutual_default_frame_imm_dom_from_generated_ih \\
+      (impl_tac >-
+         (conj_tac >- (qpat_x_assum `∀s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0 sstup0 dflts0 sstup20 ret0 body0 s3 x1 t3 s4 vs0 t4 es0 cxd0 s5 prev0 t5 s6 x2 t6. _ ⇒ ∀st0 res0 st1. eval_exprs cxd0 es0 st0 = (res0,st1) ⇒ preserves_immutables_dom cxd0 st0 st1` mp_tac \\ simp[]) \\
+          TRY (qpat_x_assum `∀s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0 sstup0 dflts0 sstup20 ret0 body0 s3 x1 t3 s4 vs0 t4 es0 cxd0 s5 prev0 t5 s6 x2 t6. _` kall_tac) \\
+          TRY (qpat_x_assum `∀s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0 sstup0 dflts0 sstup20 ret0 ss0 s3 x1 t3 s4 vs0 t4 needed_dflts0 cxd0 s5 prev0 t5 s6 dflt_vs0 t6 all_tenv s7 env t7 s8 rtv t8 is_view s9 lk t9 s10 cx0 t10. _` kall_tac) \\
+          rpt conj_tac \\ simp[get_scopes_def, set_scopes_def, return_def,
+                                type_check_def, assert_def, ignore_bind_def] \\
+          TRY decide_tac)) \\
+      simp[])
+  \\ `preserves_immutables_dom (cx with stk updated_by CONS (src_id_opt,fn)) r'⁴' r'⁵'` by
+       (qspecl_then
+          [`cx`, `src_id_opt`, `fn`, `es`, `()`, `x'`, `x''`, `()`, `x'⁴'`,
+           `x'⁵'`, `st`, `r'⁴'`, `r'⁵'`]
+          mp_tac intcall_mutual_live_default_frame_imm_dom \\
+        (impl_tac >-
+           (qpat_assum `∀s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0 sstup0 dflts0 sstup20 ret0 body0 s3 x1 t3 s4 vs0 t4 es0 cxd0 s5 prev0 t5 s6 x2 t6. _ ⇒ ∀st0 res0 st1. eval_exprs cxd0 es0 st0 = (res0,st1) ⇒ preserves_immutables_dom cxd0 st0 st1`
+              mp_tac \\
+            simp[])) \\
+        (impl_tac >-
+           (simp[get_scopes_def, return_def, type_check_def, assert_def,
+                 ignore_bind_def] \\
+            TRY decide_tac)) \\
+        simp[])
+  \\ `intcall_tail_body_provider cx src_id_opt fn (FST x'') (FST (SND x''))
+        (FST (SND (SND x''))) (FST (SND (SND (SND (SND x'')))))
+        (SND (SND (SND (SND (SND x''))))) x'⁴' x'⁵' r'⁵'` by
+       (qspecl_then
+          [`cx`, `src_id_opt`, `fn`, `es`, `()`, `x'`, `x''`, `()`, `x'⁴'`,
+           `x'⁵'`, `st`, `r'⁴'`, `r'⁵'`]
+          mp_tac intcall_mutual_live_tail_body_provider \\
+        (impl_tac >-
+           (qpat_assum `∀s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0 sstup0 dflts0 sstup20 ret0 ss0 s3 x1 t3 s4 vs0 t4 needed_dflts0 cxd0 s5 prev0 t5 s6 dflt_vs0 t6 all_tenv s7 env t7 s8 rtv t8 is_view s9 lk t9 s10 cx0 t10. _ ⇒ ∀st0 res0 st1. eval_stmts cx0 ss0 st0 = (res0,st1) ⇒ preserves_immutables_dom cx0 st0 st1`
+              mp_tac \\
+            simp[])) \\
+        (impl_tac >-
+           (simp[get_scopes_def, return_def, type_check_def, assert_def,
+                 ignore_bind_def] \\
+            TRY decide_tac)) \\
+        simp[])
+  \\ simp[GSYM post_default_intcall_tail_unfold]
+  \\ rpt strip_tac
+  \\ qspecl_then
+       [`cx`, `src_id_opt`, `fn`, `FST x''`, `FST (SND x'')`,
+        `FST (SND (SND x''))`, `FST (SND (SND (SND (SND x''))))`,
+        `SND (SND (SND (SND (SND x''))))`, `x'⁴'`, `x'⁵'`,
+        `st`, `r'⁴'`, `r'⁵'`, `r'⁴'.scopes`, `res`, `st'`]
+       mp_tac post_default_intcall_tail_imm_dom
+  \\ simp[]
+  \\ disch_then irule
+  \\ simp[post_default_intcall_tail_unfold, bind_def, ignore_bind_def]
+QED
+
+Theorem raw_call_callback_preserves_immutables_dom[local]:
+  ∀cx flags result st res st'.
+    ((λ(success,returnData,accounts',tStorage',emitted_logs).
+        do
+          x <- update_accounts (K accounts');
+          x <- update_transient (K tStorage');
+          x <- append_logs emitted_logs;
+          if flags.rcf_revert_on_failure then
+            do
+              x <- assert success (Error (RuntimeError "raw_call reverted"));
+              if flags.rcf_max_outsize = 0 then return (Value NoneV)
+              else return (Value (BytesV (TAKE flags.rcf_max_outsize returnData)))
+            od
+          else if flags.rcf_max_outsize = 0 then return (Value (BoolV success))
+          else
+            return
+              (Value
+                 (ArrayV (TupleV [BoolV success; BytesV (TAKE flags.rcf_max_outsize returnData)])))
+        od) result st = (res,st')) ⇒
+    preserves_immutables_dom cx st st'
+Proof
+  rpt strip_tac >>
+  PairCases_on `result` >>
+  qpat_x_assum `_ = (res,st')` mp_tac >>
+  simp[update_accounts_def, update_transient_def, append_logs_def,
+      bind_def, ignore_bind_def, return_def, raise_def, assert_def, check_def, type_check_def,
+      AllCaseEqs()] >>
+  rpt IF_CASES_TAC >>
+  simp[update_accounts_def, update_transient_def, append_logs_def,
+      bind_def, ignore_bind_def, return_def, raise_def, assert_def, check_def, type_check_def,
+      AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  irule preserves_immutables_dom_eq >> gvs[]
+QED
 
 Theorem immutables_dom_mutual[local]:
   (∀cx s st res st'. eval_stmt cx s st = (res, st') ⇒ preserves_immutables_dom cx st st') ∧
@@ -1808,19 +3401,12 @@ Proof
   >- gvs[evaluate_def, return_def, preserves_immutables_dom_refl]
   >- (drule_all case_eval_targets_cons_imm_dom >> simp[])
   >- (drule_all case_NameTarget_imm_dom >> simp[])
-  >- (drule_all case_BareGlobalNameTarget_imm_dom >> simp[])
-  >- (qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
-       simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def,
-            get_scopes_def, LET_THM, get_immutables_def, get_address_immutables_def,
-            lift_option_def, lift_option_type_def, lift_sum_def] >>
-       rpt strip_tac >> gvs[preserves_immutables_dom_refl] >>
-       first_x_assum irule >> first_assum (irule_at Any))
+  >- (drule_all case_TopLevelNameTarget_imm_dom >> simp[])
   >- (drule_all case_AttributeTarget_imm_dom >> simp[])
   >- (drule_all case_SubscriptTarget_imm_dom >> simp[])
   >- gvs[evaluate_def, return_def, preserves_immutables_dom_refl]
   >- (drule_all case_eval_for_cons_imm_dom >> simp[])
   >- (drule_all case_Name_imm_dom >> simp[])
-  >- (drule_all case_BareGlobalName_imm_dom >> simp[])
   >- (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
        simp[Once evaluate_def] >> strip_tac >>
        imp_res_tac lookup_global_immutables >>
@@ -1847,22 +3433,29 @@ Proof
   >- (drule_all case_TypeBuiltin_imm_dom >> simp[])
   >- (drule_all case_Send_imm_dom >> simp[])
   >- suspend "ExtCall"
-  >- (drule_all case_IntCall_imm_dom >> simp[])
+  >- (drule_all case_IntCall_imm_dom_from_mutual_ih >> simp[])
   (* ===== Chain interaction builtins (unguarded eval_exprs IH) ===== *)
   (* All 5 cases: eval_exprs first, then pure/state ops that preserve immutables.
      Pattern: unfold, case-split, apply IH via drule, close failure paths,
      use transitivity + _eq for success path. *)
   (* RawCallTarget *)
   >- (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-      simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def,
-           check_def, type_check_def, assert_def, lift_option_def, lift_option_type_def,
-           get_accounts_def, get_transient_storage_def, option_CASE_rator] >>
-      rpt strip_tac >> gvs[AllCaseEqs(), return_def, raise_def] >>
-      first_x_assum drule >> strip_tac >>
+      simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def,
+           raise_def, type_check_def, assert_def, lift_option_type_def,
+           option_CASE_rator] >>
+      rpt strip_tac >> gvs[] >> first_x_assum drule >> strip_tac >>
       TRY (gvs[] >> NO_TAC) >>
-      pairarg_tac >>
-      gvs[update_accounts_def, update_transient_def, bind_def, ignore_bind_def,
-          return_def, raise_def, AllCaseEqs(), assert_def, COND_RATOR, CaseEq"bool"] >>
+      drule eval_raw_call_preserves_non_accounts >> strip_tac >>
+      irule preserves_immutables_dom_trans >> first_assum (irule_at Any) >>
+      irule preserves_immutables_dom_eq >> gvs[])
+  (* RawCallCalldataTarget *)
+  >- (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def,
+           raise_def, type_check_def, assert_def, lift_option_type_def,
+           option_CASE_rator] >>
+      rpt strip_tac >> gvs[] >> first_x_assum drule >> strip_tac >>
+      TRY (gvs[] >> NO_TAC) >>
+      drule eval_raw_call_preserves_non_accounts >> strip_tac >>
       irule preserves_immutables_dom_trans >> first_assum (irule_at Any) >>
       irule preserves_immutables_dom_eq >> gvs[])
   (* RawLog *)
@@ -1894,21 +3487,18 @@ Proof
       irule preserves_immutables_dom_eq >> gvs[])
   (* CreateTarget *)
   >- (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-      simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def,
-           check_def, type_check_def, assert_def, lift_option_def, lift_option_type_def,
-           get_accounts_def, update_accounts_def, option_CASE_rator, COND_RATOR] >>
-      rpt strip_tac >> gvs[AllCaseEqs(), return_def, raise_def] >>
+      simp[Once evaluate_def, bind_def] >>
+      Cases_on `eval_exprs cx es st` >> Cases_on `q` >> simp[] >>
+      strip_tac >>
       first_x_assum drule >> strip_tac >>
-      TRY (gvs[] >> NO_TAC) >>
-      TRY (imp_res_tac transfer_value_immutables >>
-           irule preserves_immutables_dom_trans >> first_assum (irule_at Any) >>
-           irule preserves_immutables_dom_eq >> gvs[] >> NO_TAC) >>
+      drule eval_create_preserves_scopes_immutables >> strip_tac >>
       irule preserves_immutables_dom_trans >> first_assum (irule_at Any) >>
       irule preserves_immutables_dom_eq >> gvs[])
   >- gvs[evaluate_def, return_def, preserves_immutables_dom_refl]
   >- (drule_all case_eval_exprs_cons_imm_dom >> simp[])
 QED
 
+(* TASK032: original concrete-only ExtCall resume retained.
 Resume immutables_dom_mutual[ExtCall]:
   rpt strip_tac
   \\ qpat_x_assum `eval_expr _ _ _ = _` mp_tac
@@ -1922,7 +3512,7 @@ Resume immutables_dom_mutual[ExtCall]:
   \\ last_x_assum drule \\ strip_tac
   \\ rewrite_tac[bind_def, ignore_bind_def]
   \\ BasicProvers.TOP_CASE_TAC
-  \\ drule check_same_state \\ strip_tac
+  \\ drule type_check_same_state \\ strip_tac
   \\ reverse BasicProvers.TOP_CASE_TAC
   >- (rw[] \\ rw[preserves_immutables_dom_refl])
   \\ BasicProvers.TOP_CASE_TAC
@@ -1938,18 +3528,27 @@ Resume immutables_dom_mutual[ExtCall]:
   >- (
     last_x_assum(qspec_then`ARB`kall_tac)
     \\ gvs[CaseEq"bool", return_def, COND_RATOR, bind_def]
-    \\ gvs[CaseEq"sum", CaseEq"prod"]
-    \\ imp_res_tac check_same_state
+    \\ gvs[CaseEq"sum"]
+    \\ gvs[CaseEq"prod"]
+    \\ Cases_on `v` \\ gvs[]
+    \\ TRY BasicProvers.FULL_CASE_TAC \\ gvs[]
+    \\ TRY BasicProvers.FULL_CASE_TAC \\ gvs[]
+    \\ TRY BasicProvers.TOP_CASE_TAC \\ gvs[]
+    \\ TRY BasicProvers.TOP_CASE_TAC \\ gvs[]
+    \\ TRY BasicProvers.TOP_CASE_TAC \\ gvs[]
+    \\ TRY BasicProvers.TOP_CASE_TAC \\ gvs[]
+    \\ imp_res_tac type_check_same_state
     \\ imp_res_tac lift_option_same_state
     \\ imp_res_tac lift_option_type_same_state
     \\ gvs[] )
   \\ reverse BasicProvers.TOP_CASE_TAC
   >- rw[preserves_immutables_dom_refl]
-  \\ pairarg_tac
+  >> qmatch_asmsub_rename_tac`_ = (INL p,_)`
+  \\ PairCases_on`p`
   \\ asm_simp_tac std_ss []
   \\ rewrite_tac[bind_def]
   \\ BasicProvers.TOP_CASE_TAC
-  \\ drule lift_option_same_state
+  \\ drule lift_option_type_same_state
   \\ strip_tac
   \\ reverse BasicProvers.TOP_CASE_TAC
   >- (
@@ -1986,7 +3585,9 @@ Resume immutables_dom_mutual[ExtCall]:
   >- (
     last_x_assum(qspec_then`ARB`kall_tac)
     \\ rw[] \\ gvs[preserves_immutables_dom_refl] )
-  \\ pairarg_tac \\ asm_simp_tac std_ss []
+  >> qmatch_goalsub_rename_tac`_ p _ = _`
+  >> PairCases_on`p`
+  \\ asm_simp_tac std_ss []
   \\ last_x_assum drule \\ strip_tac
   \\ strip_tac
   \\ irule extcall_inner_pipeline_imm_dom
@@ -1998,6 +3599,120 @@ Resume immutables_dom_mutual[ExtCall]:
   \\ gvs[bind_def, CaseEq"prod", CaseEq"sum"]
   \\ gvs[update_accounts_def, update_transient_def, return_def,
          check_def, type_check_def, raise_def, assert_def]
+  \\ strip_tac
+  \\ first_x_assum irule
+  \\ (conj_tac >- (qexists_tac `r` >> simp[append_logs_def, return_def]))
+  \\ simp[]
+QED
+
+*)
+
+Theorem imm_dom_locals[local]:
+  !s t. t.scopes = s.scopes /\ t.immutables = s.immutables ==>
+    preserves_immutables_dom cx s t
+Proof
+  rpt strip_tac >> irule preserves_immutables_dom_eq >> simp[]
+QED
+
+val IMM_DOM_FRAME_PRIMITIVES =
+  MATCH_MP state_rel_frame_locals_primitives imm_dom_locals;
+val IMM_DOM_FRAME_TAKE =
+  MATCH_MP state_rel_frame_locals_take imm_dom_locals;
+
+Theorem imm_dom_frame_append_logs[local]:
+  state_rel_frame (preserves_immutables_dom cx) (append_logs logs)
+Proof
+  simp[state_rel_frame_def, append_logs_def, return_def] >> gen_tac >>
+  irule preserves_immutables_dom_eq >> simp[]
+QED
+
+Theorem imm_dom_frame_bind_guarded[local]:
+  state_rel_frame (preserves_immutables_dom cx) f /\
+  (!s v t. f s = (INL v,t) ==> state_rel_frame (preserves_immutables_dom cx) (g v)) ==>
+  state_rel_frame (preserves_immutables_dom cx) (vyperState$bind f g)
+Proof
+  rpt strip_tac >> irule state_rel_frame_bind_guarded >> simp[] >>
+  metis_tac[preserves_immutables_dom_trans]
+QED
+
+Theorem imm_dom_frame_at[local]:
+  state_rel_frame (preserves_immutables_dom cx) f /\ f st = (res,st') ==>
+  preserves_immutables_dom cx st st'
+Proof
+  simp[state_rel_frame_result]
+QED
+
+(* Match primitive frames directly and decompose the monadic spine before
+   trying depth eta conversion. Avoid repeatedly simplifying the remaining
+   pipeline with the full primitive-frame rewrite set. *)
+val IMM_DOM_FRAME_LEAF_TAC = FIRST (map MATCH_ACCEPT_TAC
+  (imm_dom_frame_append_logs :: IMM_DOM_FRAME_TAKE ::
+   CONJUNCTS IMM_DOM_FRAME_PRIMITIVES));
+
+val IMM_DOM_FRAME_TAC =
+  rpt (FIRST [
+    CHANGED_TAC (simp_tac bool_ss [FORALL_PROD, pair_case_thm, UNCURRY]),
+    gen_tac, strip_tac, conj_tac,
+    first_assum ACCEPT_TAC,
+    irule imm_dom_frame_bind_guarded >> conj_tac,
+    IMM_DOM_FRAME_LEAF_TAC,
+    CONV_TAC (RAND_CONV (REWR_CONV ignore_bind_def)),
+    CHANGED_TAC (CONV_TAC (DEPTH_CONV ETA_CONV)),
+    CHANGED_TAC (fn (asl,w) =>
+      simp_tac bool_ss (pair_case_thm :: UNCURRY ::
+        List.map ASSUME (List.filter is_eq asl)) (asl,w)),
+    CASE_TAC]);
+
+Resume immutables_dom_mutual[ExtCall]:
+  qpat_assum `eval_expr _ _ _ = _` (fn th =>
+    let val result = #1 (pairSyntax.dest_pair (rhs (concl th))) in
+      irule (INST_TYPE [alpha |-> type_of result] imm_dom_frame_at) >>
+      exists_tac (rator (lhs (concl th))) >> exists_tac result
+    end) >>
+  simp[Once evaluate_def] >>
+  RULE_ASSUM_TAC (REWRITE_RULE [GSYM state_rel_frame_result]) >>
+  IMM_DOM_FRAME_TAC >|
+  [suspend "return_path_1", suspend "return_path_2",
+   suspend "return_path_3", suspend "return_path_4"]
+QED
+
+(* Normalise tuple projections and branch substitutions once, then match
+   guards in semantic order. Tuple reconstruction guards close by reflexivity;
+   no context-wide drule search is needed at each monadic step. *)
+fun IMM_DOM_FRAME_IH_TAC (asl,w) =
+  let
+    val normalise = SIMP_RULE bool_ss
+      [oneTheory.one, ignore_bind_def, FST, SND, pair_case_thm, UNCURRY]
+    val raw_facts = List.concat (map (CONJUNCTS o normalise o ASSUME) asl)
+    val substitutions = List.filter (fn th =>
+      is_eq (concl th) andalso
+      (is_var (lhs (concl th)) orelse is_var (rhs (concl th)))) raw_facts
+    val facts = map (SIMP_RULE bool_ss substitutions) raw_facts
+    fun discharge th =
+      if is_imp (snd (strip_forall (concl th))) then
+        discharge (tryfind (MATCH_MP th) facts handle HOL_ERR _ =>
+          let val guard = fst (dest_imp (snd (strip_forall (concl th)))) in
+            MATCH_MP th (REFL (rhs guard))
+          end)
+      else th
+    fun close ih g =
+      ACCEPT_TAC (discharge
+        (PURE_REWRITE_RULE [GSYM AND_IMP_INTRO] ih)) g
+  in
+    FIRST (map close facts) (asl,w)
+  end;
+
+Resume immutables_dom_mutual[return_path_1]:
+  IMM_DOM_FRAME_IH_TAC
+QED
+Resume immutables_dom_mutual[return_path_2]:
+  IMM_DOM_FRAME_IH_TAC
+QED
+Resume immutables_dom_mutual[return_path_3]:
+  IMM_DOM_FRAME_IH_TAC
+QED
+Resume immutables_dom_mutual[return_path_4]:
+  IMM_DOM_FRAME_IH_TAC
 QED
 
 Finalise immutables_dom_mutual

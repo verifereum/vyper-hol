@@ -1,5 +1,0 @@
-# Stack order analysis definitions
-# From stack_order/defs/ relative paths:
-#   ../../../defs  = venom/defs          (venomInst, venomState)
-#   ../../../.. = project root  (syntax/, semantics/)
-INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../../defs ../../../../syntax ../../../../semantics ../../cfg/defs ../../liveness/defs

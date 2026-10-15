@@ -1,9 +1,9 @@
 Theory vyperState
 Ancestors
   arithmetic alist combin option list finite_map pair rich_list
-  cv cv_std vfmState vfmContext vfmExecution[ignore_grammar]
+  cv cv_std vfmTypes vfmState vfmContext vfmExecution[ignore_grammar]
   vyperAST vyperMisc vyperValue vyperValueOperation
-  vyperStorage vyperContext
+  vyperStorage vyperContext extCallOracle[ignore_grammar]
 Libs
   cv_transLib wordsLib monadsyntax
 
@@ -11,9 +11,7 @@ Libs
 
 Datatype:
   subscript
-  = IntSubscript int
-  | StrSubscript string
-  | BytesSubscript (word8 list)
+  = ValueSubscript value
   | AttrSubscript identifier
 End
 
@@ -110,7 +108,8 @@ End
 
 val () = cv_auto_trans find_containing_scope_def;
 
-Type log = “:nsid # (value list)”;
+(* Transaction-level, externally observable EVM event. *)
+Type log = “:event”;
 
 (* Module-aware immutables: keyed by source_id *)
 (* NONE = main contract, SOME n = module with source_id n *)
@@ -129,6 +128,9 @@ Datatype:
   ; scopes: scope list
   ; accounts: evm_accounts
   ; tStorage: transient_storage
+  ; pending_deletions: address list
+  ; outcomes: extCallOracle$call_outcome list option
+  ; requests: extCallOracle$call_request list
   |>
 End
 
@@ -138,7 +140,10 @@ Definition empty_state_def:
     immutables := [];
     logs := [];
     scopes := [];
-    tStorage := empty_transient_storage
+    tStorage := empty_transient_storage;
+    pending_deletions := [];
+    outcomes := NONE;
+    requests := []
   |>
 End
 
@@ -153,6 +158,20 @@ Definition return_def:
 End
 
 val () = cv_auto_trans return_def;
+
+(* writing logs *)
+
+Definition push_log_def:
+  push_log log st = return () $ st with logs := st.logs ++ [log]
+End
+
+val () = cv_auto_trans push_log_def;
+
+Definition append_logs_def:
+  append_logs logs st = return () $ st with logs := st.logs ++ logs
+End
+
+val () = cv_auto_trans append_logs_def;
 
 Definition raise_def:
   raise e s = (INR e, s) : α evaluation_result
@@ -256,15 +275,27 @@ val () = lift_option_type_def
   |> SRULE [FUN_EQ_THM, option_CASE_rator]
   |> cv_auto_trans;
 
+Theorem lift_option_type_SOME[simp]:
+  lift_option_type (SOME v) msg st = (INL v, st)
+Proof
+  simp[lift_option_type_def, return_def]
+QED
+
+Theorem lift_option_type_NONE[simp]:
+  lift_option_type NONE msg st = (INR (Error (TypeError msg)), st)
+Proof
+  simp[lift_option_type_def, raise_def]
+QED
+
 (* reading from the state *)
 
 Definition get_address_immutables_def:
   get_address_immutables cx st =
-    lift_option (ALOOKUP st.immutables cx.txn.target) "get_address_immutables" st
+    lift_option_type (ALOOKUP st.immutables cx.txn.target) "get_address_immutables" st
 End
 
 val () = get_address_immutables_def
-  |> SRULE [lift_option_def, option_CASE_rator]
+  |> SRULE [lift_option_type_def, option_CASE_rator]
   |> cv_auto_trans;
 
 (* Helper: get immutables for a source_id, or empty if not present *)
@@ -342,6 +373,17 @@ Definition update_transient_def:
   update_transient f st = return () (st with tStorage updated_by f)
 End
 
+Definition get_pending_deletions_def:
+  get_pending_deletions st = return st.pending_deletions st
+End
+
+val () = cv_auto_trans get_pending_deletions_def;
+
+Definition update_pending_deletions_def:
+  update_pending_deletions f st =
+    return () (st with pending_deletions updated_by f)
+End
+
 Definition get_storage_backend_def:
   get_storage_backend cx T = do
     tStore <- get_transient_storage;
@@ -388,7 +430,7 @@ val () = read_storage_slot_def
 Definition write_storage_slot_def:
   write_storage_slot cx is_transient slot tv v = do
     storage <- get_storage_backend cx is_transient;
-    writes <- lift_option (encode_value tv v) "write_storage_slot encode";
+    writes <- lift_option_type (encode_value tv v) "write_storage_slot encode";
     storage' <<- apply_writes slot writes storage;
     set_storage_backend cx is_transient storage'
   od
@@ -457,9 +499,7 @@ val () = cv_auto_trans update_immutable_def;
 
 (* Convert subscript back to a value for hashmap key encoding *)
 Definition subscript_to_value_def:
-  subscript_to_value (IntSubscript i) = SOME (IntV i) ∧
-  subscript_to_value (StrSubscript s) = SOME (StringV s) ∧
-  subscript_to_value (BytesSubscript bs) = SOME (BytesV bs) ∧
+  subscript_to_value (ValueSubscript v) = SOME v ∧
   subscript_to_value (AttrSubscript _) = NONE  (* Attributes are not valid hashmap keys *)
 End
 
@@ -672,6 +712,8 @@ Definition toplevel_array_length_def:
   od ∧
   toplevel_array_length cx (Value (ArrayV (DynArrayV vs))) =
     return $ &(LENGTH vs) ∧
+  toplevel_array_length cx (Value (ArrayV (SArrayV sparse))) =
+    return $ &(LENGTH sparse) ∧
   toplevel_array_length cx (Value (ArrayV (TupleV vs))) =
     return $ &(LENGTH vs) ∧
   toplevel_array_length cx (Value (BytesV ls)) =
@@ -685,15 +727,12 @@ val () = toplevel_array_length_def
   |> SRULE [bind_def, FUN_EQ_THM, LET_THM, toplevel_value_CASE_rator]
   |> cv_auto_trans;
 
-Definition value_to_key_def:
-  value_to_key (IntV i) = SOME $ IntSubscript i ∧
-  value_to_key (StringV s) = SOME $ StrSubscript s ∧
-  value_to_key (BytesV bs) = SOME $ BytesSubscript bs ∧
-  value_to_key (FlagV n) = SOME $ IntSubscript $ &n ∧
-  value_to_key _ = NONE
-End
-
-val () = cv_auto_trans value_to_key_def;
+Theorem toplevel_array_length_sarrayv[local]:
+  toplevel_array_length cx (Value (ArrayV (SArrayV sparse))) st =
+    (INL (&LENGTH sparse), st)
+Proof
+  simp[toplevel_array_length_def, return_def]
+QED
 
 Definition evaluate_subscript_def:
   evaluate_subscript tenv tv (Value (ArrayV av)) (IntV i) =
@@ -724,7 +763,7 @@ val () = cv_auto_trans evaluate_subscript_def;
 
 Definition evaluate_subscripts_def:
   evaluate_subscripts tv a [] = INL a ∧
-  evaluate_subscripts tv a ((IntSubscript i)::is) =
+  evaluate_subscripts tv a ((ValueSubscript (IntV i))::is) =
   (case a of ArrayV av =>
    (let elem_tv = (case tv of ArrayTV t _ => t | _ => NoneTV) in
     case array_index tv av i of SOME v =>
@@ -771,13 +810,15 @@ Theorem assign_operation_CASE_rator =
     (Option.valOf (TypeBase.read {Thy="vyperState",Tyop="assign_operation"}));
 
 Definition assign_subscripts_def:
-  assign_subscripts tv a [] (Replace v) = INL v (* TODO: cast to type of a *) ∧
+  (* TODO(semantic-limitation): replacement currently trusts callers/type
+     checks to provide a value castable to the target type. *)
+  assign_subscripts tv a [] (Replace v) = INL v ∧
   assign_subscripts tv a [] (Update ty bop v) =
     (let u = case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0 in
-       evaluate_binop u NoneTV bop a v) ∧
+       evaluate_binop u tv bop a v) ∧
   assign_subscripts tv a [] (AppendOp v) = append_element tv a v ∧
   assign_subscripts tv a [] PopOp = pop_element a ∧
-  assign_subscripts tv a ((IntSubscript i)::is) ao =
+  assign_subscripts tv a ((ValueSubscript (IntV i))::is) ao =
   (case a of ArrayV av =>
    (let elem_tv = (case tv of ArrayTV t _ => t | _ => NoneTV) in
     case array_index tv av i of SOME v =>
@@ -814,8 +855,8 @@ QED
 Datatype:
   location
   = ScopedVar identifier
-  | ImmutableVar identifier
-  | TopLevelVar (num option) identifier  (* source_id (NONE=self), var_name *)
+  | ImmutableVar (num option) identifier  (* source_id, var_name *)
+  | TopLevelVar (num option) identifier   (* source_id, var_name *)
 End
 
 Datatype:
@@ -828,7 +869,7 @@ Type base_target_value = “:location # subscript list”;
 
 (* Walk through nested array subscripts computing the final element slot *)
 Definition resolve_array_element_def:
-  resolve_array_element cx is_transient base_slot (ArrayTV elem_tv bd) ((IntSubscript idx)::rest) = do
+  resolve_array_element cx is_transient base_slot (ArrayTV elem_tv bd) ((ValueSubscript (IntV idx))::rest) = do
     elem_offset <- (case bd of
      | Fixed n => do
          check (0 ≤ idx ∧ Num idx < n) "array fixed oob";
@@ -928,7 +969,6 @@ Definition assign_target_def:
             last_idx <<- stored_len - 1;
             last_slot <<- elem_slot + n2w (1 + last_idx * type_slot_size pop_elem_tv);
             popped <- read_storage_slot cx is_transient last_slot pop_elem_tv;
-            write_storage_slot cx is_transient last_slot pop_elem_tv (default_value pop_elem_tv);
             write_storage_slot cx is_transient elem_slot (BaseTV (UintT 256))
               (IntV &last_idx);
             return $ SOME popped
@@ -951,13 +991,12 @@ Definition assign_target_def:
           od
       od
   od ∧
-  assign_target cx (BaseTargetV (ImmutableVar id) is) ao = do
+  assign_target cx (BaseTargetV (ImmutableVar src_id_opt id) is) ao = do
     ni <<- string_to_num id;
-    src <<- current_module cx;
-    imms <- get_immutables cx src;
+    imms <- get_immutables cx src_id_opt;
     tva <- lift_option_type (FLOOKUP imms ni) "assign_target ImmutableVar";
     a' <- lift_sum $ assign_subscripts (FST tva) (SND tva) (REVERSE is) ao;
-    set_immutable cx src ni (FST tva) a';
+    set_immutable cx src_id_opt ni (FST tva) a';
     assign_result (FST tva) ao (SND tva) (REVERSE is)
   od ∧
   assign_target cx (TupleTargetV gvs) (Replace (ArrayV (TupleV vs))) = do

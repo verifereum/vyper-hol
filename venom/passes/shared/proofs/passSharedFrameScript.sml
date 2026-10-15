@@ -9,7 +9,8 @@
 
 Theory passSharedFrame
 Ancestors
-  passSharedVarFrame passSharedTransfer passSharedField
+  oracleExecProps
+  passSharedVarFrame passSharedTransfer passSharedField passResidualFrame
 
 open venomStateTheory venomInstTheory venomExecSemanticsTheory
      venomEffectsTheory venomInstPropsTheory
@@ -138,7 +139,9 @@ Theorem step_inst_base_no_halt[local]:
     step_inst_base inst s = Halt s' ==>
     is_terminator inst.inst_opcode
 Proof
-  step_base_result_tac
+  rpt strip_tac >>
+  drule opcodeClassTheory.step_inst_base_halt_opcodes >>
+  strip_tac >> gvs[is_terminator_def]
 QED
 
 Theorem step_inst_base_no_intret[local]:
@@ -146,7 +149,9 @@ Theorem step_inst_base_no_intret[local]:
     step_inst_base inst s = IntRet vs s' ==>
     is_terminator inst.inst_opcode
 Proof
-  step_base_result_tac
+  rpt strip_tac >>
+  drule opcodeClassTheory.step_inst_base_intret_opcodes >>
+  strip_tac >> gvs[is_terminator_def]
 QED
 
 (* Non-INVOKE non-terminator step_inst can't produce Halt *)
@@ -178,32 +183,12 @@ QED
 (* ===== commute_equiv definition and helpers ============================ *)
 (* ===================================================================== *)
 
-(* State equivalence ignoring vs_allocas and specified variables.
- * vs_allocas is internal ALLOCA bookkeeping: concrete offsets depend
- * on allocation order but don't affect observable behaviour because
- * ALLOCA output vars are already excluded via the vars parameter.
- * This is state_equiv without the vs_allocas conjunct. *)
+(* Variables agree outside vars. Allocation map and bump pointer were
+ * already unconstrained; all other fields remain in the residual frame. *)
 Definition commute_equiv_def:
   commute_equiv vars s1 s2 <=>
     (!w. w NOTIN vars ==> lookup_var w s1 = lookup_var w s2) /\
-    s1.vs_memory = s2.vs_memory /\
-    s1.vs_transient = s2.vs_transient /\
-    s1.vs_prev_bb = s2.vs_prev_bb /\
-    s1.vs_current_bb = s2.vs_current_bb /\
-    s1.vs_inst_idx = s2.vs_inst_idx /\
-    s1.vs_halted = s2.vs_halted /\
-    s1.vs_returndata = s2.vs_returndata /\
-    s1.vs_accounts = s2.vs_accounts /\
-    s1.vs_call_ctx = s2.vs_call_ctx /\
-    s1.vs_tx_ctx = s2.vs_tx_ctx /\
-    s1.vs_block_ctx = s2.vs_block_ctx /\
-    s1.vs_logs = s2.vs_logs /\
-    s1.vs_immutables = s2.vs_immutables /\
-    s1.vs_data_section = s2.vs_data_section /\
-    s1.vs_labels = s2.vs_labels /\
-    s1.vs_code = s2.vs_code /\
-    s1.vs_params = s2.vs_params /\
-    s1.vs_prev_hashes = s2.vs_prev_hashes
+    commute_frame s1 = commute_frame s2
 End
 
 Theorem state_equiv_imp_commute_equiv[local]:
@@ -273,6 +258,19 @@ Proof
   gvs[lookup_var_def]
 QED
 
+(* Updating the returned FMP in the same way preserves state equivalence. *)
+Theorem adopt_return_fmp_state_equiv[local]:
+  !vars ir s1 s2.
+    state_equiv vars s1 s2 ==>
+    state_equiv vars (adopt_return_fmp ir s1)
+                     (adopt_return_fmp ir s2)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `ir.iret_adopt_fmp` >>
+  gvs[adopt_return_fmp_def, state_equiv_def, execution_equiv_def,
+      lookup_var_def]
+QED
+
 (* Extends execEquivProofs.step_inst_result_equiv (which only covers
    step_inst_base) to handle INVOKE via step_inst. *)
 Theorem execution_equiv_refl[local]:
@@ -315,8 +313,13 @@ Proof
                       (merge_callee_state s2 v)` by
       (irule merge_callee_state_equiv >> gvs[]) >>
     simp[bind_outputs_def] >>
-    IF_CASES_TAC >> gvs[result_equiv_def] >>
-    irule foldl_update_var_state_equiv >> gvs[])
+    IF_CASES_TAC >> gvs[result_equiv_def]
+    >- (`state_equiv vars
+          (adopt_return_fmp i (merge_callee_state s1 v))
+          (adopt_return_fmp i (merge_callee_state s2 v))` by
+          (irule adopt_return_fmp_state_equiv >> gvs[]) >>
+        irule foldl_update_var_state_equiv >> gvs[])
+    >> irule adopt_return_fmp_state_equiv >> gvs[])
   >> (gvs[step_inst_non_invoke] >> irule step_inst_result_equiv >> gvs[])
 QED
 
@@ -436,13 +439,18 @@ Theorem effects_independent_ext_call_empty[local]:
   !op1 op2. is_ext_call_op op1 /\ effects_independent op1 op2 ==>
             write_effects op2 = {}
 Proof
-  Cases >> Cases >> EVAL_TAC
+  Cases_on `op1` >> gvs[is_ext_call_op_def]
+  >- (Cases_on `op2` >> EVAL_TAC)
+  >- (Cases_on `op2` >> EVAL_TAC)
+  >- (Cases_on `op2` >> EVAL_TAC)
+  >- (Cases_on `op2` >> EVAL_TAC)
+  >- (Cases_on `op2` >> EVAL_TAC)
 QED
 
 (* Non-terminator non-INVOKE step_inst_base can only Abort from
    ASSERT (Revert_abort), ASSERT_UNREACHABLE (ExHalt_abort),
    RETURNDATACOPY (ExHalt_abort). All set returndata to []. *)
-Theorem step_inst_base_abort_opcode[local]:
+Theorem step_inst_base_abort_opcode:
   !inst s a s'.
     step_inst_base inst s = Abort a s' /\
     ~is_terminator inst.inst_opcode ==>
@@ -546,7 +554,7 @@ QED
 (* If a non-terminator aborts, it must be ASSERT/ASSERT_UNREACHABLE/RETURNDATACOPY.
    These only read operand values (+ returndata for RETURNDATACOPY).
    If those agree, the same Abort is produced on any state. *)
-Theorem step_inst_base_abort_input_equiv[local]:
+Theorem step_inst_base_abort_input_equiv:
   !inst s1 s2 a s1'.
     step_inst_base inst s1 = Abort a s1' /\
     ~is_terminator inst.inst_opcode /\
@@ -556,8 +564,16 @@ Theorem step_inst_base_abort_input_equiv[local]:
     ?s2'. step_inst_base inst s2 = Abort a s2'
 Proof
   rpt strip_tac >>
+  `inst.inst_opcode = ASSERT \/
+   inst.inst_opcode = ASSERT_UNREACHABLE \/
+   inst.inst_opcode = RETURNDATACOPY` by
+    metis_tac[step_inst_base_abort_opcode] >>
+  gvs[] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  step_base_result_tac >>
+  ONCE_REWRITE_TAC[step_inst_base_def] >>
+  ASM_REWRITE_TAC[opcode_case_def] >> rw[] >>
+  rpt strip_tac >>
+  gvs[AllCaseEqs()] >>
   rpt (first_x_assum (fn th => mp_tac (REWRITE_RULE [eval_operand_def] th))) >>
   rpt (CHANGED_TAC (
     TRY (Cases_on `cond_op` >> gvs[eval_operand_def]) >>
@@ -887,7 +903,12 @@ Theorem extcodecopy_memory_determined[local]:
     s1.vs_memory = s2.vs_memory ==>
     v1.vs_memory = v2.vs_memory
 Proof
-  rw[step_inst_base_def, is_terminator_def] >>
+  rpt strip_tac >>
+  qpat_x_assum `step_inst_base inst s1 = OK v1` mp_tac >>
+  qpat_x_assum `step_inst_base inst s2 = OK v2` mp_tac >>
+  PURE_REWRITE_TAC[step_inst_base_def] >>
+  ASM_REWRITE_TAC[opcode_case_def] >>
+  strip_tac >> strip_tac >>
   Cases_on `inst.inst_operands` >> gvs[] >>
   Cases_on `t` >> gvs[] >>
   Cases_on `t'` >> gvs[] >>
@@ -1271,6 +1292,83 @@ Proof
          metis_tac[cj 13 step_inst_preserves_all])
 QED
 
+(* Frame/FMP commutation boundary for the four base executions in the
+   general OK x OK case. *)
+Theorem ok_ok_frame_fields[local]:
+  !inst1 inst2 s v1 v2 s12 s21.
+    step_inst_base inst1 s = OK v1 /\
+    step_inst_base inst2 s = OK v2 /\
+    step_inst_base inst2 v1 = OK s12 /\
+    step_inst_base inst1 v2 = OK s21 /\
+    effects_independent inst1.inst_opcode inst2.inst_opcode /\
+    ~is_terminator inst1.inst_opcode /\
+    ~is_terminator inst2.inst_opcode /\
+    ~is_alloca_op inst1.inst_opcode /\
+    ~is_alloca_op inst2.inst_opcode /\
+    ~is_ext_call_op inst1.inst_opcode /\
+    ~is_ext_call_op inst2.inst_opcode /\
+    inst1.inst_opcode <> INVOKE /\
+    inst2.inst_opcode <> INVOKE /\
+    (!op. MEM op inst2.inst_operands ==>
+          eval_operand op s = eval_operand op v1) /\
+    (!op. MEM op inst1.inst_operands ==>
+          eval_operand op s = eval_operand op v2) ==>
+    s12.vs_fmp = s21.vs_fmp /\
+    s12.vs_call_entry_fmp = s21.vs_call_entry_fmp /\
+    s12.vs_initial_fmp = s21.vs_initial_fmp /\
+    s12.vs_return_pc_token = s21.vs_return_pc_token
+Proof
+  rpt strip_tac >>
+  `v1.vs_call_entry_fmp = s.vs_call_entry_fmp /\
+   v1.vs_initial_fmp = s.vs_initial_fmp /\
+   v1.vs_return_pc_token = s.vs_return_pc_token` by
+    metis_tac[step_inst_base_preserves_stable_frame_metadata] >>
+  `v2.vs_call_entry_fmp = s.vs_call_entry_fmp /\
+   v2.vs_initial_fmp = s.vs_initial_fmp /\
+   v2.vs_return_pc_token = s.vs_return_pc_token` by
+    metis_tac[step_inst_base_preserves_stable_frame_metadata] >>
+  `s12.vs_call_entry_fmp = v1.vs_call_entry_fmp /\
+   s12.vs_initial_fmp = v1.vs_initial_fmp /\
+   s12.vs_return_pc_token = v1.vs_return_pc_token` by
+    metis_tac[step_inst_base_preserves_stable_frame_metadata] >>
+  `s21.vs_call_entry_fmp = v2.vs_call_entry_fmp /\
+   s21.vs_initial_fmp = v2.vs_initial_fmp /\
+   s21.vs_return_pc_token = v2.vs_return_pc_token` by
+    metis_tac[step_inst_base_preserves_stable_frame_metadata] >>
+  (Cases_on `Eff_FMP IN write_effects inst1.inst_opcode`
+   >- (`Eff_FMP NOTIN write_effects inst2.inst_opcode` by
+         (gvs[effects_independent_def] >>
+          metis_tac[pred_setTheory.IN_DISJOINT, pred_setTheory.IN_UNION]) >>
+       `v2.vs_fmp = s.vs_fmp` by
+         metis_tac[step_inst_base_preserves_fmp_no_write] >>
+       `s12.vs_fmp = v1.vs_fmp` by
+         metis_tac[step_inst_base_preserves_fmp_no_write] >>
+       `v1.vs_fmp = s21.vs_fmp` by
+         metis_tac[step_inst_base_ordinary_fmp_agreement] >>
+       metis_tac[])
+   >- (Cases_on `Eff_FMP IN write_effects inst2.inst_opcode`
+       >- (`Eff_FMP NOTIN write_effects inst1.inst_opcode` by
+             (gvs[effects_independent_def] >>
+              metis_tac[pred_setTheory.IN_DISJOINT,
+                        pred_setTheory.IN_UNION]) >>
+           `v1.vs_fmp = s.vs_fmp` by
+             metis_tac[step_inst_base_preserves_fmp_no_write] >>
+           `s21.vs_fmp = v2.vs_fmp` by
+             metis_tac[step_inst_base_preserves_fmp_no_write] >>
+           `v2.vs_fmp = s12.vs_fmp` by
+             metis_tac[step_inst_base_ordinary_fmp_agreement] >>
+           metis_tac[])
+       >- (`v1.vs_fmp = s.vs_fmp` by
+             metis_tac[step_inst_base_preserves_fmp_no_write] >>
+           `v2.vs_fmp = s.vs_fmp` by
+             metis_tac[step_inst_base_preserves_fmp_no_write] >>
+           `s12.vs_fmp = v1.vs_fmp` by
+             metis_tac[step_inst_base_preserves_fmp_no_write] >>
+           `s21.vs_fmp = v2.vs_fmp` by
+             metis_tac[step_inst_base_preserves_fmp_no_write] >>
+           metis_tac[])))
+QED
+
 (* General OK×OK case: neither INVOKE nor ext_call.
    Both run, both produce OK on the other's output, commute_equiv holds. *)
 Theorem ok_ok_case_general[local]:
@@ -1372,6 +1470,11 @@ Proof
                     `v1`, `v2`, `s12`, `s21`] group_b_fields) >>
   (impl_tac >- fast_conj) >>
   strip_tac >>
+  drule_all ok_ok_frame_fields >> strip_tac >>
+  `inst1.inst_opcode <> CALL /\ inst1.inst_opcode <> STATICCALL /\
+   inst2.inst_opcode <> CALL /\ inst2.inst_opcode <> STATICCALL` by
+    (rpt conj_tac >> strip_tac >> gvs[is_ext_call_op_def]) >>
+  imp_res_tac step_inst_base_oracle >>
   (* Close commute_equiv — all needed equalities are in assumptions.
      Each field is s12.F = X = ... = s21.F via transitivity of 2-4 equalities.
      metis_tac[] handles this since all equalities are in assumptions. *)
@@ -1716,5 +1819,3 @@ Proof
               commute_base_case) >>
       simp[]))
 QED
-
-val _ = export_theory();

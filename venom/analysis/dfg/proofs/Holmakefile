@@ -1,2 +1,0 @@
-# DFG correctness proofs
-INCLUDES = $(VFMDIR)/util $(VFMDIR)/spec ../../.. ../../../../syntax ../../../../semantics ../defs

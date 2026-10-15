@@ -64,7 +64,15 @@ Theorem step_inst_assert_1:
           then Abort Revert_abort (revert_state (set_returndata [] s))
           else OK s
 Proof
-  rpt strip_tac >> simp[step_inst_def, step_inst_base_def]
+  rpt strip_tac >>
+  ONCE_REWRITE_TAC[step_inst_def] >>
+  qpat_x_assum `inst.inst_opcode = ASSERT`
+    (fn th => assume_tac th >> PURE_REWRITE_TAC[th]) >>
+  simp[is_terminator_def] >>
+  ONCE_REWRITE_TAC[step_inst_base_def] >>
+  qpat_x_assum `inst.inst_opcode = ASSERT`
+    (fn th => PURE_REWRITE_TAC[th]) >>
+  simp[]
 QED
 
 Theorem step_inst_assert_bad_arity[local]:
@@ -75,7 +83,15 @@ Theorem step_inst_assert_bad_arity[local]:
     (!a b rest. inst.inst_operands = a::b::rest ==>
        step_inst fuel ctx inst s = Error "assert requires 1 operand")
 Proof
-  rpt strip_tac >> simp[step_inst_def, step_inst_base_def]
+  rpt strip_tac >>
+  ONCE_REWRITE_TAC[step_inst_def] >>
+  qpat_x_assum `inst.inst_opcode = ASSERT`
+    (fn th => assume_tac th >> PURE_REWRITE_TAC[th]) >>
+  simp[is_terminator_def] >>
+  ONCE_REWRITE_TAC[step_inst_base_def] >>
+  qpat_x_assum `inst.inst_opcode = ASSERT`
+    (fn th => PURE_REWRITE_TAC[th]) >>
+  simp[]
 QED
 
 (* in_range_state implies in_range for any looked-up variable *)

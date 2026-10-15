@@ -15,8 +15,12 @@
 
 Theory ssaSimDefs
 Ancestors
-  stateEquiv venomExecSemantics venomExecProofs venomWf venomState venomInst
+  ssaFrame stateEquiv venomExecSemantics venomExecProofs venomWf venomState venomInst
   list rich_list finite_map pred_set
+Libs
+  ssaFrameLib
+
+val _ = augment_srw_ss [ssaFrameLib.frame_ss];
 
 (* ==========================================================================
    Part 0: Utility lemmas
@@ -24,25 +28,10 @@ Ancestors
 
 Theorem execution_equiv_UNIV:
   execution_equiv UNIV s1 s2 <=>
-    s1.vs_memory = s2.vs_memory /\
-    s1.vs_transient = s2.vs_transient /\
-    s1.vs_halted = s2.vs_halted /\
-    s1.vs_returndata = s2.vs_returndata /\
-    s1.vs_accounts = s2.vs_accounts /\
-    s1.vs_call_ctx = s2.vs_call_ctx /\
-    s1.vs_tx_ctx = s2.vs_tx_ctx /\
-    s1.vs_block_ctx = s2.vs_block_ctx /\
-    s1.vs_logs = s2.vs_logs /\
-    s1.vs_immutables = s2.vs_immutables /\
-    s1.vs_data_section = s2.vs_data_section /\
-    s1.vs_labels = s2.vs_labels /\
-    s1.vs_code = s2.vs_code /\
-    s1.vs_params = s2.vs_params /\
-    s1.vs_prev_hashes = s2.vs_prev_hashes /\
-    s1.vs_allocas = s2.vs_allocas /\
-    s1.vs_alloca_next = s2.vs_alloca_next
+    ssa_execution_frame s1 = ssa_execution_frame s2
 Proof
-  simp[execution_equiv_def, IN_UNIV]
+  simp[execution_equiv_def, IN_UNIV, ssa_execution_frame_def,
+       stateFrameTheory.execution_frame_def]
 QED
 
 Theorem result_equiv_UNIV_refl:
@@ -74,6 +63,10 @@ Theorem step_inst_base_var_only_preserves_non_var:
     s'.vs_labels = s.vs_labels /\
     s'.vs_code = s.vs_code /\
     s'.vs_params = s.vs_params /\
+    s'.vs_fmp = s.vs_fmp /\
+    s'.vs_call_entry_fmp = s.vs_call_entry_fmp /\
+    s'.vs_initial_fmp = s.vs_initial_fmp /\
+    s'.vs_return_pc_token = s.vs_return_pc_token /\
     s'.vs_prev_hashes = s.vs_prev_hashes /\
     s'.vs_allocas = s.vs_allocas /\
     s'.vs_alloca_next = s.vs_alloca_next /\
@@ -97,49 +90,31 @@ Definition ssa_sim_def:
   ssa_sim sigma s1 s2 <=>
     (!x v. lookup_var x s1 = SOME v ==>
            lookup_var (sigma x) s2 = SOME v) /\
-    s1.vs_memory = s2.vs_memory /\
-    s1.vs_transient = s2.vs_transient /\
-    (s1.vs_halted <=> s2.vs_halted) /\
-    s1.vs_returndata = s2.vs_returndata /\
-    s1.vs_accounts = s2.vs_accounts /\
-    s1.vs_call_ctx = s2.vs_call_ctx /\
-    s1.vs_tx_ctx = s2.vs_tx_ctx /\
-    s1.vs_block_ctx = s2.vs_block_ctx /\
-    s1.vs_logs = s2.vs_logs /\
-    s1.vs_immutables = s2.vs_immutables /\
-    s1.vs_data_section = s2.vs_data_section /\
-    s1.vs_labels = s2.vs_labels /\
-    s1.vs_code = s2.vs_code /\
-    s1.vs_params = s2.vs_params /\
-    s1.vs_prev_hashes = s2.vs_prev_hashes /\
-    s1.vs_allocas = s2.vs_allocas /\
-    s1.vs_alloca_next = s2.vs_alloca_next /\
-    s1.vs_current_bb = s2.vs_current_bb /\
-    s1.vs_prev_bb = s2.vs_prev_bb
+    ssa_frame s1 = ssa_frame s2
 End
 
 Theorem ssa_sim_implies_exec_equiv_UNIV:
   !sigma s1 s2. ssa_sim sigma s1 s2 ==> execution_equiv UNIV s1 s2
 Proof
-  rw[ssa_sim_def, execution_equiv_UNIV]
+  simp[ssa_sim_def, execution_equiv_UNIV, ssa_frame_execution]
 QED
 
 Theorem ssa_sim_halted:
   !sigma s1 s2. ssa_sim sigma s1 s2 ==> (s1.vs_halted <=> s2.vs_halted)
 Proof
-  simp[ssa_sim_def]
+  simp[ssa_sim_def, ssa_frame_def, venom_state_component_equality]
 QED
 
 Theorem ssa_sim_current_bb:
   !sigma s1 s2. ssa_sim sigma s1 s2 ==> (s1.vs_current_bb = s2.vs_current_bb)
 Proof
-  simp[ssa_sim_def]
+  simp[ssa_sim_def, ssa_frame_def, venom_state_component_equality]
 QED
 
 Theorem ssa_sim_prev_bb:
   !sigma s1 s2. ssa_sim sigma s1 s2 ==> (s1.vs_prev_bb = s2.vs_prev_bb)
 Proof
-  simp[ssa_sim_def]
+  simp[ssa_sim_def, ssa_frame_def, venom_state_component_equality]
 QED
 
 Theorem ssa_sim_identity:
@@ -207,7 +182,8 @@ Theorem eval_operand_renamed:
     eval_operand op s1 = SOME v ==>
     eval_operand (renamed_operand sigma op) s2 = SOME v
 Proof
-  Cases >> simp[renamed_operand_def, eval_operand_def, ssa_sim_def, lookup_var_def] >>
+  Cases >> simp[renamed_operand_def, eval_operand_def, ssa_sim_def,
+                lookup_var_def, ssa_frame_def, venom_state_component_equality] >>
   rw[] >> gvs[]
 QED
 
@@ -239,16 +215,6 @@ Definition inst_renamed_def:
     LENGTH inst2.inst_outputs = LENGTH inst1.inst_outputs
 End
 
-(* Freshness: the output name is not aliased by sigma on any DEFINED variable.
-   State-dependent: only needs non-aliasing for variables with values in s1.
-   This matches ssa_sim_update_var's weakened condition.
-   Provable from pipeline via vars_colon_free + latest_version_no_alias. *)
-Definition output_fresh_def:
-  output_fresh sigma inst1 inst2 s1 <=>
-    (inst1.inst_outputs <> [] ==>
-     !x. ~MEM x inst1.inst_outputs /\ lookup_var x s1 <> NONE ==>
-         sigma x <> HD inst2.inst_outputs)
-End
 (* Opcodes that produce an output variable via update_var.
    Non-output opcodes (MSTORE etc.) only modify memory/storage/logs, not vs_vars.
    Used to expose the specific sigma update in step_inst_base_renamed_sim. *)
@@ -280,6 +246,9 @@ Definition opcode_has_output_def:
   opcode_has_output REVERT = F /\
   opcode_has_output STOP = F /\
   opcode_has_output SINK = F /\
+  (* Extended terminators — no output *)
+  opcode_has_output DRET = F /\
+  opcode_has_output RETFMP = F /\
   (* Has output: arithmetic *)
   opcode_has_output ADD = T /\
   opcode_has_output SUB = T /\
@@ -351,13 +320,118 @@ Definition opcode_has_output_def:
   opcode_has_output ASSIGN = T /\
   opcode_has_output PARAM = T /\
   opcode_has_output ALLOCA = T /\
+  opcode_has_output GETFMP = T /\
+  opcode_has_output SETFMP = F /\
+  opcode_has_output DALLOCA = T /\
+  opcode_has_output INITIAL_FMP = T /\
+  opcode_has_output BUMP = T /\
+  opcode_has_output FMP_PARAM = T /\
+  opcode_has_output RETPC_PARAM = T /\
   opcode_has_output INVOKE = F /\  (* outputs unconstrained; handled separately *)
   opcode_has_output OFFSET = T
 End
 
+(* Build-time exhaustiveness audit: every opcode constructor must reduce to a
+   concrete Boolean under the explicit classification equations above. *)
+val _ = app (fn op_tm =>
+  let
+    val th = SIMP_CONV (srw_ss()) [opcode_has_output_def]
+      (mk_comb(``opcode_has_output``, op_tm));
+    val r = rhs (concl th)
+  in
+    if aconv r T orelse aconv r F then ()
+    else raise Fail "opcode_has_output_def is not constructor-exhaustive"
+  end) (TypeBase.constructors_of ``:opcode``);
+
+Theorem opcode_has_output_extended_terminators[simp]:
+  opcode_has_output DRET = F /\ opcode_has_output RETFMP = F
+Proof
+  simp[opcode_has_output_def]
+QED
+
+(* Number of syntactic outputs that step_inst_base actually binds.  Most
+   producers bind one output; BUMP binds its base and bumped pointer in order. *)
+Definition bound_output_count_def:
+  bound_output_count op =
+    if op = BUMP then (2:num) else if opcode_has_output op then 1 else 0
+End
+
+(* Update the renaming map for exactly the outputs bound by the opcode. *)
+Definition output_sigma_def:
+  output_sigma op outs1 outs2 sigma =
+    FOLDL (\s (o1,o2). (o1 =+ o2) s) sigma
+      (ZIP (TAKE (bound_output_count op) outs1,
+            TAKE (bound_output_count op) outs2))
+End
+
+(* Every semantically bound SSA output is fresh for the variables that existed
+   before the instruction.  Distinct target names make sequential updates safe;
+   the source output names need not be distinct. *)
+Definition output_fresh_def:
+  output_fresh sigma inst1 inst2 s1 <=>
+    let n = bound_output_count inst1.inst_opcode in
+      n <= LENGTH inst1.inst_outputs /\
+      n <= LENGTH inst2.inst_outputs /\
+      ALL_DISTINCT (TAKE n inst2.inst_outputs) /\
+      !i x. i < n /\ lookup_var x s1 <> NONE /\
+            x <> EL i inst1.inst_outputs ==>
+            sigma x <> EL i inst2.inst_outputs
+End
+
+Theorem bound_output_count_BUMP[simp]:
+  bound_output_count BUMP = 2
+Proof
+  simp[bound_output_count_def]
+QED
+
+Theorem bound_output_count_extended[simp]:
+  bound_output_count GETFMP = 1 /\
+  bound_output_count SETFMP = 0 /\
+  bound_output_count DALLOCA = 1 /\
+  bound_output_count INITIAL_FMP = 1 /\
+  bound_output_count BUMP = 2 /\
+  bound_output_count FMP_PARAM = 1 /\
+  bound_output_count RETPC_PARAM = 1 /\
+  bound_output_count LOG = 0
+Proof
+  simp[bound_output_count_def, opcode_has_output_def]
+QED
+
+Theorem output_sigma_zero:
+  bound_output_count op = 0 ==> output_sigma op outs1 outs2 sigma = sigma
+Proof
+  simp[output_sigma_def]
+QED
+
+Theorem output_sigma_one:
+  bound_output_count op = 1 /\ outs1 <> [] /\ outs2 <> [] ==>
+  output_sigma op outs1 outs2 sigma = (HD outs1 =+ HD outs2) sigma
+Proof
+  Cases_on `outs1` >> Cases_on `outs2` >> simp[output_sigma_def]
+QED
+
+Theorem output_sigma_BUMP[simp]:
+  output_sigma BUMP (o1::o1'::outs1) (o2::o2'::outs2) sigma =
+    (o1' =+ o2') ((o1 =+ o2) sigma)
+Proof
+  simp[output_sigma_def, bound_output_count_def]
+QED
+
 (* ==========================================================================
    Part 4: ssa_sim preservation lemmas
    ========================================================================== *)
+
+(* Updating the free-memory pointer to the same value on both sides preserves
+   simulation.  Consumers should use this boundary rather than unfold the
+   full state relation. *)
+Theorem ssa_sim_fmp_update:
+  !sigma s1 s2 fmp.
+    ssa_sim sigma s1 s2 ==>
+    ssa_sim sigma (s1 with vs_fmp := fmp) (s2 with vs_fmp := fmp)
+Proof
+  rw[ssa_sim_def, lookup_var_def, ssa_frame_def,
+     venom_state_component_equality]
+QED
 
 (* ssa_sim is preserved by update_var on corresponding variables,
    provided the new SSA name out2 doesn't alias sigma for any
@@ -375,6 +449,21 @@ Proof
   Cases_on `out1 = x` >> gvs[lookup_var_def, FLOOKUP_UPDATE] >>
   `FLOOKUP s1.vs_vars x <> NONE` by (Cases_on `FLOOKUP s1.vs_vars x` >> gvs[]) >>
   metis_tac[]
+QED
+
+(* DALLOCA-style updates change the common FMP and return a common value in
+   corresponding fresh outputs. *)
+Theorem ssa_sim_fmp_update_var:
+  !sigma s1 s2 out1 out2 value fmp.
+    ssa_sim sigma s1 s2 /\
+    (!x. x <> out1 /\ lookup_var x s1 <> NONE ==> sigma x <> out2) ==>
+    ssa_sim ((out1 =+ out2) sigma)
+      (update_var out1 value (s1 with vs_fmp := fmp))
+      (update_var out2 value (s2 with vs_fmp := fmp))
+Proof
+  rpt strip_tac >> irule ssa_sim_update_var >>
+  simp[lookup_var_def] >>
+  irule ssa_sim_fmp_update >> simp[]
 QED
 
 (* ssa_sim allows replacing sigma when the new sigma agrees on all defined vars *)
@@ -396,7 +485,7 @@ Theorem foldl_update_var_ssa_sim:
   !outs1 outs2 vals sigma s1 s2.
     ssa_sim sigma s1 s2 /\
     LENGTH outs1 = LENGTH vals /\ LENGTH outs2 = LENGTH vals /\
-    ALL_DISTINCT outs1 /\ ALL_DISTINCT outs2 /\
+    ALL_DISTINCT outs2 /\
     (!i. i < LENGTH outs1 ==>
          !x. lookup_var x s1 <> NONE ==>
              x <> EL i outs1 ==> sigma x <> EL i outs2) ==>
@@ -433,25 +522,7 @@ Theorem ssa_sim_non_var_update:
     ssa_sim sigma s1 s2 /\
     (!x. lookup_var x s1' = lookup_var x s1) /\
     (!x. lookup_var x s2' = lookup_var x s2) /\
-    s1'.vs_memory = s2'.vs_memory /\
-    s1'.vs_transient = s2'.vs_transient /\
-    (s1'.vs_halted <=> s2'.vs_halted) /\
-    s1'.vs_returndata = s2'.vs_returndata /\
-    s1'.vs_accounts = s2'.vs_accounts /\
-    s1'.vs_call_ctx = s2'.vs_call_ctx /\
-    s1'.vs_tx_ctx = s2'.vs_tx_ctx /\
-    s1'.vs_block_ctx = s2'.vs_block_ctx /\
-    s1'.vs_logs = s2'.vs_logs /\
-    s1'.vs_immutables = s2'.vs_immutables /\
-    s1'.vs_data_section = s2'.vs_data_section /\
-    s1'.vs_labels = s2'.vs_labels /\
-    s1'.vs_code = s2'.vs_code /\
-    s1'.vs_params = s2'.vs_params /\
-    s1'.vs_prev_hashes = s2'.vs_prev_hashes /\
-    s1'.vs_allocas = s2'.vs_allocas /\
-    s1'.vs_alloca_next = s2'.vs_alloca_next /\
-    s1'.vs_current_bb = s2'.vs_current_bb /\
-    s1'.vs_prev_bb = s2'.vs_prev_bb ==>
+    ssa_frame s1' = ssa_frame s2' ==>
     ssa_sim sigma s1' s2'
 Proof
   rw[ssa_sim_def] >> metis_tac[]
@@ -490,7 +561,8 @@ Theorem jump_to_ssa_sim:
     ssa_sim sigma s1 s2 ==>
     ssa_sim sigma (jump_to lbl s1) (jump_to lbl s2)
 Proof
-  rw[ssa_sim_def, jump_to_def, lookup_var_def]
+  rw[ssa_sim_def, jump_to_def, lookup_var_def, ssa_frame_def,
+     venom_state_component_equality]
 QED
 
 (* halt_state preserves ssa_sim *)
@@ -499,7 +571,8 @@ Theorem halt_state_ssa_sim:
     ssa_sim sigma s1 s2 ==>
     ssa_sim sigma (halt_state s1) (halt_state s2)
 Proof
-  rw[ssa_sim_def, halt_state_def, lookup_var_def]
+  rw[ssa_sim_def, halt_state_def, lookup_var_def, ssa_frame_def,
+     venom_state_component_equality]
 QED
 
 (* set_returndata preserves ssa_sim *)
@@ -508,7 +581,8 @@ Theorem set_returndata_ssa_sim:
     ssa_sim sigma s1 s2 ==>
     ssa_sim sigma (set_returndata rd s1) (set_returndata rd s2)
 Proof
-  rw[ssa_sim_def, set_returndata_def, lookup_var_def]
+  rw[ssa_sim_def, set_returndata_def, lookup_var_def, ssa_frame_def,
+     venom_state_component_equality]
 QED
 
 (* revert_state preserves ssa_sim (revert doesn't change vars) *)
@@ -517,7 +591,8 @@ Theorem revert_state_ssa_sim:
     ssa_sim sigma s1 s2 ==>
     ssa_sim sigma (revert_state s1) (revert_state s2)
 Proof
-  rw[ssa_sim_def, revert_state_def, lookup_var_def]
+  rw[ssa_sim_def, revert_state_def, lookup_var_def, ssa_frame_def,
+     venom_state_component_equality]
 QED
 
 (* General non-terminator peel: for any step_inst result *)

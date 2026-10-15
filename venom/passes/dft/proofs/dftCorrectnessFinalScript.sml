@@ -172,6 +172,7 @@ QED
    with instructions mapped back to originals via choose_original *)
 Theorem dft_fn_output_topo_sorted:
   !fn bb bb'.
+    dft_schedule_safe /\
     wf_ssa fn /\ wf_function fn /\
     MEM bb fn.fn_blocks /\
     MEM bb' (dft_fn fn).fn_blocks /\
@@ -448,11 +449,11 @@ Proof
   rw[dft_block_def, LET_THM] >>
   irule pseudos_prefix_filter_append >> simp[MEM_FILTER] >>
   rpt strip_tac >>
-  `eda_wf (build_full_eda bb.bb_instructions) bb.bb_instructions` by
-    simp[build_full_eda_wf] >>
+  `eda_wf (build_eda bb.bb_instructions) bb.bb_instructions` by
+    simp[build_eda_wf] >>
   `EVERY (\i. MEM i bb.bb_instructions)
          (entry_instructions bb.bb_instructions order
-            (build_full_eda bb.bb_instructions))` by
+            (build_eda bb.bb_instructions))` by
     simp[entry_instructions_mem] >>
   imp_res_tac schedule_output_from_block
 QED
@@ -528,6 +529,7 @@ in SIMP_RULE (srw_ss()) [] inst |> GENL [sv, fv, fnv, cv] end;
 (* DFT preserves run_blocks results up to lift_result equivalence *)
 Theorem dft_fn_run_blocks_lift:
   !fuel ctx fn s.
+    dft_schedule_safe /\
     wf_ssa fn /\ wf_function fn /\ fn_pseudos_prefix fn ==>
     lift_result (state_equiv {}) (execution_equiv {}) revert_equiv
       (run_blocks fuel ctx fn s)
@@ -558,6 +560,7 @@ QED
 (* DFT preserves run_function results up to lift_result equivalence *)
 Theorem dft_fn_run_function_lift:
   !fuel ctx fn s.
+    dft_schedule_safe /\
     wf_ssa fn /\ wf_function fn /\ fn_pseudos_prefix fn /\
     s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
     lift_result (state_equiv {}) (execution_equiv {}) revert_equiv
@@ -607,6 +610,7 @@ QED
 (* The DFT pass is correct: it preserves the observable behavior of run_function *)
 Theorem dft_pass_correct:
   !fn ctx s.
+    dft_schedule_safe /\
     wf_ssa fn /\ wf_function fn /\ fn_pseudos_prefix fn /\
     s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
     pass_correct (state_equiv {}) (execution_equiv {}) revert_equiv

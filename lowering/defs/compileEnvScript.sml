@@ -25,7 +25,7 @@
 
 Theory compileEnv
 Ancestors
-  valueEncoding venomExecSemantics venomInst
+  valueEncoding venomExecSemantics venomInst venomPolicyTypes
   vyperState vyperContext vyperValue vyperABI contractABI
   byte keccak finite_map pred_set
 Libs
@@ -145,6 +145,14 @@ Datatype:
       (* is_dynamic, list of (elem_info, abi_embedded_static_size, mem_size) *)
 End
 
+(* ===== Namespace ID ===== *)
+(* Convert (module_id option, name) to lookup string.
+   Mirrors Python: NamespaceID representation *)
+Definition nsid_to_string_def:
+  nsid_to_string (NONE, name) = name ∧
+  nsid_to_string (SOME (n:num), name) = (toString n) ++ "." ++ name
+End
+
 (* ===== ABI Type Properties ===== *)
 
 (* Whether a Vyper type has dynamic ABI encoding (requires tail section).
@@ -160,8 +168,9 @@ Definition is_abi_dynamic_def:
     is_abi_dynamic sfields elem ∧
   is_abi_dynamic sfields (TupleT tys) =
     EXISTS (is_abi_dynamic sfields) tys ∧
-  is_abi_dynamic sfields (StructT name) =
-    (case FLOOKUP sfields name of
+  is_abi_dynamic sfields (StructT nsid) =
+    (let name = nsid_to_string nsid in
+     case FLOOKUP sfields name of
        SOME fields =>
          EXISTS (is_abi_dynamic (sfields \\ name))
                 (MAP (FST o SND) fields)
@@ -205,8 +214,9 @@ Definition abi_static_size_def:
   abi_static_size sfields (TupleT tys) =
     SUM (MAP (λt. if is_abi_dynamic sfields t then 32
                   else abi_static_size sfields t) tys) ∧
-  abi_static_size sfields (StructT name) =
-    (case FLOOKUP sfields name of
+  abi_static_size sfields (StructT nsid) =
+    (let name = nsid_to_string nsid in
+     case FLOOKUP sfields name of
        SOME fields =>
          SUM (MAP (λt. if is_abi_dynamic (sfields \\ name) t then 32
                        else abi_static_size (sfields \\ name) t)
@@ -252,8 +262,9 @@ Definition abi_size_bound_def:
                   (if is_abi_dynamic sfields t
                    then abi_size_bound sfields t
                    else 0)) tys) ∧
-  abi_size_bound sfields (StructT name) =
-    (case FLOOKUP sfields name of
+  abi_size_bound sfields (StructT nsid) =
+    (let name = nsid_to_string nsid in
+     case FLOOKUP sfields name of
        SOME fields =>
          SUM (MAP (λt. abi_embedded_static_size (sfields \\ name) t +
                        (if is_abi_dynamic (sfields \\ name) t
@@ -275,6 +286,8 @@ End
 (* Static info about the compilation target *)
 Datatype:
   compile_env = <|
+    (* Resolved target capabilities used by target-sensitive raw lowering. *)
+    ce_target : target_capabilities;
     ce_vars : (string, var_location) fmap;
     ce_storage_layout : (string, bytes32) fmap;
     ce_module : num option;
@@ -393,6 +406,15 @@ Definition comp_set_def:
   comp_set (cs':compile_state) (_:compile_state) = ((), cs')
 End
 
+
+Theorem comp_bind_assoc:
+  comp_bind (comp_bind m f) g =
+  comp_bind m (\x. comp_bind (f x) g)
+Proof
+  rw[FUN_EQ_THM]
+  >> Cases_on `m x`
+  >> simp[comp_bind_def]
+QED
 (* Congruence rule for comp_bind — needed for recursive definitions using the monad *)
 Theorem comp_bind_cong[defncong]:
   ∀m1 m2 f1 f2.
@@ -516,17 +538,18 @@ End
 Definition sfields_tenv_consistent_def:
   sfields_tenv_consistent sfields tenv ⇔
     (* Every struct in tenv exists in sfields with matching field types *)
-    (∀ name args.
-       FLOOKUP tenv (string_to_num name) = SOME (StructArgs args) ⇒
+    (∀ nsid args.
+       FLOOKUP tenv (type_key nsid) = SOME (StructArgs args) ⇒
        ∃ fields.
-         FLOOKUP sfields name = SOME fields ∧
+         FLOOKUP sfields (nsid_to_string nsid) = SOME fields ∧
          MAP FST fields = MAP FST args ∧
          MAP (FST o SND) fields = MAP SND args) ∧
     (* Every struct in sfields exists in tenv *)
     (∀ name fields.
        FLOOKUP sfields name = SOME fields ⇒
-       ∃ args.
-         FLOOKUP tenv (string_to_num name) = SOME (StructArgs args) ∧
+       ∃ nsid args.
+         name = nsid_to_string nsid ∧
+         FLOOKUP tenv (type_key nsid) = SOME (StructArgs args) ∧
          MAP FST fields = MAP FST args ∧
          MAP (FST o SND) fields = MAP SND args)
 End
@@ -712,25 +735,13 @@ Definition is_bytestring_type_def:
 End
 
 (* ===== Log Equivalence ===== *)
-(* Single log entry equivalence.
-   Interpreter log: (nsid, value list) where nsid = (num option, string).
-   Venom event: <| logger; topics : bytes32 list; data : byte list |>.
-   The lowering (compile_stmt Log) computes:
-   - event_hash from ce_event_info → first topic
-   - indexed static args → ABI word topics
-   - indexed bytes/string args → keccak256(raw bytes) topics
-   - non-indexed args → ABI-encoded data buffer
-   logger = contract address (cc_address).
-
-   The relation uses ce_event_info to determine which args are indexed. *)
-(* ===== Namespace ID ===== *)
-(* Convert (module_id option, name) to lookup string.
-   Mirrors Python: NamespaceID representation *)
-Definition nsid_to_string_def:
-  nsid_to_string (NONE, name) = name ∧
-  nsid_to_string (SOME (n:num), name) = (toString n) ++ "." ++ name
-End
-
+(* Both the source interpreter and Venom state carry concrete EVM events:
+   <| logger; topics : bytes32 list; data : byte list |>.
+   Event declarations are encoded by the source semantics when Log executes,
+   using the same signature hash, indexed-topic encoding, and ABI data encoding
+   as compile_stmt. Consequently the authoritative state relation below is
+   concrete event equality. The extraction helpers in this section characterize
+   the shared encoder and remain useful to lowering compatibility proofs. *)
 (* Extract indexed values from args based on flags *)
 Definition indexed_values_def:
   indexed_values [] [] = ([] : value list) ∧
@@ -789,28 +800,7 @@ Definition log_non_indexed_types_def:
 End
 
 Definition log_entry_equiv_def:
-  log_entry_equiv cenv (addr:address) ((event_nsid, args) : log) (ev : event) ⇔
-    let event_name = nsid_to_string event_nsid in
-    case cenv.ce_event_info event_name of
-      NONE => F
-    | SOME (event_hash, arg_types, indexed_flags) =>
-        let idx_vals = indexed_values indexed_flags args in
-        let idx_bs = indexed_topic_flags indexed_flags (MAP is_bytestring_type arg_types) in
-        let nidx_vals = log_non_indexed_values indexed_flags args in
-        let nidx_types = log_non_indexed_types indexed_flags arg_types in
-          LENGTH indexed_flags = LENGTH args ∧
-          LENGTH arg_types = LENGTH args ∧
-          ev.logger = addr ∧
-          (* First topic is the event selector hash. Static indexed args match
-             val_to_w256; indexed bytes/string args match keccak256(raw bytes). *)
-          (∃topic_tail.
-             ev.topics = n2w event_hash :: topic_tail ∧
-             log_indexed_topics_equiv idx_bs idx_vals topic_tail) ∧
-          (* Non-indexed args are ABI-encoded into LOG data. *)
-          (?abi_vals.
-             vyper_to_abi_list cenv.ce_type_env nidx_types nidx_vals = SOME abi_vals ∧
-             ev.data = enc (Tuple (vyper_to_abi_types cenv.ce_type_env nidx_types))
-                           (ListV abi_vals))
+  log_entry_equiv _ _ (source_event : log) (ev : event) ⇔ source_event = ev
 End
 
 (* Logs relation: pairwise equivalence *)
@@ -838,8 +828,9 @@ Definition call_ctx_rel_def:
      bc.bc_blobbasefee = n2w txn.blob_base_fee)
 End
 
-(* Top-level state relation.
-   Ties together all sub-relations between interpreter and Venom states. *)
+(* Top-level oracle-mode state relation (PLAN 5.7).
+   Ties together all sub-relations and exactly the current oracle suffix and
+   request prefix. NONE-mode compatibility does not satisfy this relation. *)
 Definition state_rel_def:
   state_rel cenv cx vs ss =
     (vars_rel cenv vs.scopes ss ∧
@@ -849,7 +840,9 @@ Definition state_rel_def:
      transient_vars_rel cenv cx ∧
      immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor vs ss ∧
      logs_rel cenv cx.txn.target vs ss ∧
-     call_ctx_rel cx.txn ss.vs_call_ctx ss.vs_tx_ctx ss.vs_block_ctx)
+     call_ctx_rel cx.txn ss.vs_call_ctx ss.vs_tx_ctx ss.vs_block_ctx ∧
+     vs.outcomes = SOME ss.vs_outcomes ∧
+     vs.requests = ss.vs_requests)
 End
 
 (* ===== Result Relation ===== *)
@@ -894,14 +887,17 @@ Definition result_rel_def:
   (result_rel ret_tv cenv cx (INL (), vs') (OK ss') =
     state_rel cenv cx vs' ss') ∧
   (* Internal return: state + return values *)
-  (result_rel ret_tv cenv cx (INR (ReturnException v), vs') (IntRet vals ss') =
-    (state_rel cenv cx vs' ss' ∧ intret_vals_match ret_tv v vals)) ∧
+  (result_rel ret_tv cenv cx (INR (ReturnException v), vs') (IntRet ir ss') =
+    (state_rel cenv cx vs' ss' ∧
+     intret_vals_match ret_tv v ir.iret_values ∧
+     ir.iret_adopt_fmp = NONE)) ∧
   (* External return → Halt with ABI-encoded data *)
   (result_rel ret_tv cenv cx (INR (ReturnException v), vs') (Halt ss') =
     state_rel cenv cx vs' ss') ∧
-  (* Assert/revert → Abort with revert (normal assert) or halt (UNREACHABLE) *)
+  (* Every reason may REVERT, including an ordinary raise "UNREACHABLE".
+     Only the distinguished UNREACHABLE exception may map to ExHalt_abort. *)
   (result_rel ret_tv cenv cx (INR (AssertException s), vs') (Abort Revert_abort ss') =
-    (s ≠ "UNREACHABLE")) ∧
+    T) ∧
   (result_rel ret_tv cenv cx (INR (AssertException s), vs') (Abort ExHalt_abort ss') =
     (s = "UNREACHABLE")) ∧
   (* Error → Abort (any type) *)
@@ -964,12 +960,12 @@ End
 Definition returns_stack_count_def:
   returns_stack_count (sft : string -> type list) NoneT = (0:num) ∧
   returns_stack_count sft (TupleT tys) = tuple_like_stack_count tys ∧
-  returns_stack_count sft (StructT name) =
+  returns_stack_count sft (StructT nsid) =
     (* Python: field_types = [ft for (_, ft) in struct_t.members]; then
        tuple_like_stack_count(field_types). Structs with ≤2 word fields use stack.
        Uses is_word_type (not just size=32) to exclude compound types like
        uint256[1] that are 32 bytes but not primitive words. *)
-    tuple_like_stack_count (sft name) ∧
+    tuple_like_stack_count (sft (nsid_to_string nsid)) ∧
   returns_stack_count sft ty =
     if is_word_type ty then 1 else (0:num)
 End
@@ -1100,8 +1096,8 @@ Definition type_memory_bytes_def:
     n * type_memory_bytes cenv elem_ty ∧
   type_memory_bytes cenv (ArrayT elem_ty (Dynamic n)) =
     32 + n * type_memory_bytes cenv elem_ty ∧
-  type_memory_bytes cenv (StructT name) =
-    SUM (MAP (SND o SND) (get_struct_fields cenv.ce_struct_fields name)) ∧
+  type_memory_bytes cenv (StructT nsid) =
+    SUM (MAP (SND o SND) (get_struct_fields cenv.ce_struct_fields (nsid_to_string nsid))) ∧
   type_memory_bytes cenv (TupleT tys) =
     SUM (MAP (type_memory_bytes cenv) tys) ∧
   type_memory_bytes cenv NoneT = 0

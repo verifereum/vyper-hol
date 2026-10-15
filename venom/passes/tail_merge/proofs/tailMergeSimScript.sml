@@ -171,12 +171,22 @@ Proof
   Cases_on `op1` >> Cases_on `op2` >>
   simp[canon_operand_def, LET_THM, eval_operand_def] >>
   rpt strip_tac >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[]) >>
+  TRY (BasicProvers.FULL_CASE_TAC >> gvs[]) >>
+  TRY (BasicProvers.FULL_CASE_TAC >> gvs[]) >>
+  TRY (BasicProvers.FULL_CASE_TAC >> gvs[]) >>
+  TRY (BasicProvers.FULL_CASE_TAC >> gvs[]) >>
   gvs[var_corr_def, lookup_var_def, var_map_wf_def,
       alistTheory.ALOOKUP_def] >>
-  rpt strip_tac >> rpt (CASE_TAC >> gvs[]) >>
+  rpt strip_tac >>
+  TRY (CASE_TAC >> gvs[]) >>
+  TRY (CASE_TAC >> gvs[]) >>
+  TRY (CASE_TAC >> gvs[]) >>
+  TRY (CASE_TAC >> gvs[]) >>
   TRY (res_tac >> fs[] >> NO_TAC) >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[]) >>
+  TRY (BasicProvers.FULL_CASE_TAC >> gvs[]) >>
+  TRY (BasicProvers.FULL_CASE_TAC >> gvs[]) >>
+  TRY (BasicProvers.FULL_CASE_TAC >> gvs[]) >>
+  TRY (BasicProvers.FULL_CASE_TAC >> gvs[]) >>
   TRY (res_tac >> fs[] >> NO_TAC)
 QED
 
@@ -498,7 +508,8 @@ Proof
   ASM_REWRITE_TAC[step_inst_base_def] >>
   simp[result_equiv_def] >>
   irule halt_state_ee_UNIV >>
-  ASM_REWRITE_TAC[]
+  PURE_REWRITE_TAC[GSYM set_returndata_def] >>
+  irule set_returndata_ee_UNIV >> ASM_REWRITE_TAC[]
 QED
 
 Theorem invalid_term_sim[local]:
@@ -796,5 +807,3 @@ Proof
   imp_res_tac canon_operands_orig >>
   metis_tac[]
 QED
-
-val _ = export_theory();

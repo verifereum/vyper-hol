@@ -8,36 +8,38 @@ Libs
 (* Mirrors the "type" field in JSON *)
 
 Datatype:
-  json_typeclass
-  = TC_integer
-  | TC_bytes_m
-  | TC_static_array
-  | TC_dynamic_array
-  | TC_struct
-  | TC_flag
-  | TC_tuple
-  | TC_hashmap
-  | TC_interface
-  | TC_contract_function
-  | TC_builtin_function
-  | TC_module
-  | TC_other string  (* catch-all *)
-End
-
-Datatype:
   json_type
-  = JT_Named string                           (* name field only, e.g. "bool", "address" *)
+  = JT_Named (int option) string              (* optional declaration source_id, name *)
   | JT_Integer num bool                       (* bits, is_signed *)
   | JT_BytesM num                             (* m for bytes1..bytes32 *)
   | JT_String num                             (* length *)
   | JT_Bytes num                              (* length *)
+  | JT_StringUnbounded                       (* legacy JSON ABI metadata: length="..." *)
+  | JT_BytesUnbounded                        (* resolve from callsite before translation *)
   | JT_StaticArray json_type num              (* value_type, length *)
   | JT_DynArray json_type num                 (* value_type, length *)
-  | JT_Struct string                          (* name *)
-  | JT_Flag string                            (* name *)
+  | JT_Struct (int option) string             (* optional declaration source_id, name *)
+  | JT_Flag (int option) string               (* optional declaration source_id, name *)
+  | JT_Interface (int option) string          (* optional declaration source_id, name *)
   | JT_Tuple (json_type list)                 (* member_types *)
   | JT_HashMap json_type json_type            (* key_type, value_type *)
   | JT_None                                   (* null type *)
+End
+
+(* Syntactic type annotations are kept distinct from compiler-inferred type
+   metadata. Names and qualified paths are resolved only by jsonToVyper. *)
+Datatype:
+  json_type_annotation
+  = JTA_Named string
+  | JTA_Integer num bool
+  | JTA_BytesM num
+  | JTA_String num
+  | JTA_Bytes num
+  | JTA_StaticArray json_type_annotation num
+  | JTA_DynArray json_type_annotation num
+  | JTA_Qualified (string list) string
+  | JTA_Tuple (json_type_annotation list)
+  | JTA_None
 End
 
 (* ===== Binary/Unary Operators ===== *)
@@ -64,6 +66,14 @@ End
 (* ===== Expressions ===== *)
 (* Only keep type info where needed for translation *)
 
+(* Raw declaration-source metadata: missing field versus an explicit compiler
+   source ID. Interpretation belongs to jsonToVyper. *)
+Datatype:
+  json_source_ref
+  = JMissingSource
+  | JExplicitSource int
+End
+
 Datatype:
   json_expr
   (* Literals - need type for int bounds, string/bytes length *)
@@ -72,17 +82,20 @@ Datatype:
   | JE_Str num string                                  (* length, value *)
   | JE_GenericStr string                               (* generic string, no length *)
   | JE_Bytes num string                                (* length, hex value *)
-  | JE_Hex string                                      (* hex value for fixed bytes *)
+  | JE_Hex string json_type                            (* hex value and compiler type *)
   | JE_Bool bool                                       (* True/False *)
+  | JE_Ellipsis                                        (* interface stub body *)
 
   (* Variables and access *)
-  | JE_Name string (string option) int json_type         (* id, typeclass, source_id, type *)
-  | JE_Attribute json_expr string (string option) (string option) (string option) int json_type  (* value, attr, result_typeclass, base_type_name, base_typeclass, source_id, type *)
+  | JE_Name string (string option) json_source_ref json_type         (* id, typeclass, declaration source, type *)
+  | JE_Folded json_expr json_expr                       (* original expression, compiler-provided folded expression *)
+  | JE_Attribute json_expr string (string option) (string option) (string option) json_source_ref json_type  (* value, attr, result_typeclass, base_type_name, base_typeclass, declaration source, type *)
   | JE_Subscript json_expr json_expr json_type         (* value, slice, type *)
   | JE_NamedExpr json_expr json_expr                   (* target, value - dependency binding in initializes: lib[dep := dep] *)
 
   (* Operators *)
   | JE_BinOp json_expr json_binop json_expr json_type  (* left, op, right, type *)
+  | JE_Compare json_expr json_binop json_expr           (* left, op, right *)
   | JE_BoolOp json_boolop (json_expr list)             (* op, values *)
   | JE_UnaryOp json_unaryop json_expr json_type        (* op, operand, type *)
   | JE_IfExp json_expr json_expr json_expr json_type   (* test, body, orelse, type *)
@@ -93,11 +106,13 @@ Datatype:
 
   (* Calls - need type for builtins like concat/slice that embed return length *)
   (* Last field is source_id for module calls, extracted from func.type.type_decl_node *)
-  | JE_Call json_expr (json_expr list) (json_keyword list) json_type int
+  | JE_Call json_expr (json_expr list) (json_keyword list) json_type json_source_ref
 
-  (* External calls - func_name, arg_types, return_type, args (first is target), keywords *)
-  | JE_ExtCall string (json_type list) json_type (json_expr list) (json_keyword list)
-  | JE_StaticCall string (json_type list) json_type (json_expr list)
+  (* External calls preserve target and ordinary arguments separately. *)
+  | JE_ExtCall string json_source_ref (json_type list) json_type json_expr
+      (json_expr list) (json_keyword list)
+  | JE_StaticCall string json_source_ref (json_type list) json_type json_expr
+      (json_expr list) (json_keyword list)
 ;
   json_keyword = JKeyword string json_expr             (* arg, value *)
 End
@@ -113,11 +128,14 @@ Datatype:
   | JS_Return (json_expr option)
   | JS_Raise (json_expr option)
   | JS_Assert json_expr (json_expr option)             (* test, msg *)
-  | JS_Log (int # string) (json_expr list)      (* (source_id, event name), args *)
+  (* optional qualifier, declaration source, event name, arguments *)
+  | JS_Log (string option # json_source_ref # string) (json_expr list)
   | JS_If json_expr (json_stmt list) (json_stmt list)  (* test, body, orelse *)
-  | JS_For string json_type json_iter (json_stmt list) (* var, var_type, iter, body *)
+  | JS_For string json_type json_type_annotation json_iter (json_stmt list)
+      (* var, inferred type, syntactic annotation, iter, body *)
   | JS_Assign json_target json_expr                    (* target, value *)
-  | JS_AnnAssign string json_type json_expr            (* var name, type, value *)
+  | JS_AnnAssign string json_type json_type_annotation json_expr
+      (* var name, inferred type, syntactic annotation, value *)
   | JS_AugAssign json_base_target json_binop json_expr (* target, op, value *)
   | JS_Append json_base_target json_expr               (* target, value *)
 ;
@@ -130,7 +148,7 @@ Datatype:
   (* Assignment targets *)
   json_base_target
   = JBT_Name string
-  | JBT_TopLevelName (int # string)             (* (source_id, name) - for self.x and module.x *)
+  | JBT_TopLevelName (json_source_ref # string) (* declaration source and name *)
   | JBT_Subscript json_base_target json_expr
   | JBT_Attribute json_base_target string
 ;
@@ -142,11 +160,8 @@ End
 (* ===== Top-level Declarations ===== *)
 
 Datatype:
-  json_decorator = JDec string                         (* decorator name: external, internal, view, etc *)
-End
-
-Datatype:
-  json_arg = JArg string json_type                     (* arg name, type *)
+  json_arg = JArg string json_type json_type_annotation
+    (* arg name, compiler-inferred type, syntactic annotation *)
 End
 
 Datatype:
@@ -162,7 +177,8 @@ End
 
 Datatype:
   json_import_info
-  = JImportInfo string int string                      (* alias, source_id, qualified_module_name *)
+  = JImportInfo string int string string
+    (* alias, source_id, qualified_module_name, resolved_path *)
 End
 
 (* ===== Interface Function Signature ===== *)
@@ -170,16 +186,16 @@ End
 
 Datatype:
   json_interface_func
-  = JInterfaceFunc string (json_arg list) json_type (string list)
+  = JInterfaceFunc string (json_arg list) json_type_annotation (string list)
     (* name, args, return_type, decorators (mutability) *)
 End
 
 Datatype:
   json_toplevel
-  = JTL_FunctionDef string (string list) (json_arg list) (json_expr list) json_func_type (json_stmt list)
-      (* name, decorators, args, defaults, func_type, body *)
-  | JTL_VariableDecl string json_type bool bool bool (json_expr option)
-      (* name, type, is_public, is_immutable, is_transient, value (for constants) *)
+  = JTL_FunctionDef string (string list) (json_arg list) (json_expr list) json_func_type json_type_annotation (json_stmt list)
+      (* name, decorators, args, defaults, func_type, syntactic return annotation, body *)
+  | JTL_VariableDecl string json_type json_type_annotation bool bool bool (json_expr option)
+      (* name, inferred type, syntactic annotation, is_public, is_immutable, is_transient, value (for constants) *)
   | JTL_HashMapDecl string json_type json_value_type bool bool
       (* name, key_type, value_type, is_public, is_transient *)
   | JTL_EventDef string ((json_arg # bool) list)  (* bool = indexed *)
@@ -197,7 +213,8 @@ End
 (* ===== Module ===== *)
 
 Datatype:
-  json_module = JModule int (json_toplevel list)
+  json_module = JModule int bool (json_toplevel list)
+    (* source_id, nonreentrancy_by_default, body *)
 End
 
 (* ===== Imported Module ===== *)
@@ -205,7 +222,8 @@ End
 
 Datatype:
   json_imported_module
-  = JImportedModule int string (json_toplevel list)  (* source_id, path, body *)
+  = JImportedModule int string string bool (json_toplevel list)
+    (* source_id, path, resolved_path, nonreentrancy_by_default, body *)
 End
 
 (* ===== Annotated AST ===== *)

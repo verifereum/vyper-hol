@@ -1,2 +1,0 @@
-# Test infrastructure
-INCLUDES = ../semantics ../frontend ../syntax $(VFMDIR)/util $(VFMDIR)/spec

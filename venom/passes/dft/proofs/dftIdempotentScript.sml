@@ -147,10 +147,10 @@ Triviality dft_block_instructions:
     (dft_block order bb).bb_instructions =
     FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions ++
     schedule_from_entries bb.bb_instructions order
-      (build_full_eda bb.bb_instructions)
+      (build_eda bb.bb_instructions)
       (build_offspring_map bb.bb_instructions order)
       (entry_instructions bb.bb_instructions order
-        (build_full_eda bb.bb_instructions))
+        (build_eda bb.bb_instructions))
 Proof
   rw[dft_block_def, LET_THM]
 QED
@@ -161,10 +161,10 @@ Triviality dft_block_non_pseudos:
     FILTER (\i. ~is_pseudo i.inst_opcode)
       (dft_block order bb).bb_instructions =
     schedule_from_entries bb.bb_instructions order
-      (build_full_eda bb.bb_instructions)
+      (build_eda bb.bb_instructions)
       (build_offspring_map bb.bb_instructions order)
       (entry_instructions bb.bb_instructions order
-        (build_full_eda bb.bb_instructions))
+        (build_eda bb.bb_instructions))
 Proof
   rw[dft_block_instructions, rich_listTheory.FILTER_APPEND] >>
   simp[rich_listTheory.FILTER_FILTER] >>
@@ -174,18 +174,18 @@ Proof
   simp[] >>
   `FILTER (\i. ~is_pseudo i.inst_opcode)
     (schedule_from_entries bb.bb_instructions order
-      (build_full_eda bb.bb_instructions)
+      (build_eda bb.bb_instructions)
       (build_offspring_map bb.bb_instructions order)
       (entry_instructions bb.bb_instructions order
-        (build_full_eda bb.bb_instructions))) =
+        (build_eda bb.bb_instructions))) =
    schedule_from_entries bb.bb_instructions order
-      (build_full_eda bb.bb_instructions)
+      (build_eda bb.bb_instructions)
       (build_offspring_map bb.bb_instructions order)
       (entry_instructions bb.bb_instructions order
-        (build_full_eda bb.bb_instructions))` suffices_by simp[] >>
+        (build_eda bb.bb_instructions))` suffices_by simp[] >>
   simp[FILTER_EQ_ID, EVERY_MEM] >>
   rpt strip_tac >>
-  metis_tac[schedule_output_from_block, build_full_eda_wf, entry_instructions_mem]
+  metis_tac[schedule_output_from_block, build_eda_wf, entry_instructions_mem]
 QED
 
 (* ===== Effect-equivalent instructions ===== *)

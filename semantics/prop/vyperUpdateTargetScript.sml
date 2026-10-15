@@ -23,10 +23,10 @@ Proof
 QED
 
 Theorem update_target_name_update:
-  ∀cx st n ty bop v1 v2 v.
+  ∀cx st n ty bop v2 v entry.
     evaluate_binop (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
-                   NoneTV bop v1 v2 = INL v ∧
-    lookup_name st n = SOME v1 ∧ var_assignable st n ⇒
+                   entry.type bop entry.value v2 = INL v ∧
+    lookup_name_typed st n = SOME entry ∧ var_assignable st n ⇒
     update_target cx st (BaseTargetV (ScopedVar n) []) (Update ty bop v2) =
     update_name st n v
 Proof
@@ -49,10 +49,10 @@ Proof
 QED
 
 Theorem valid_target_name_update:
-  ∀cx st n ty bop v1 v2 v.
-    lookup_name st n = SOME v1 ∧ var_assignable st n ∧
+  ∀cx st n ty bop v2 v entry.
+    lookup_name_typed st n = SOME entry ∧ var_assignable st n ∧
     evaluate_binop (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
-                   NoneTV bop v1 v2 = INL v ⇒
+                   entry.type bop entry.value v2 = INL v ⇒
     valid_target cx st (BaseTargetV (ScopedVar n) []) (Update ty bop v2)
 Proof
   rw[valid_target_def] >>
@@ -85,8 +85,10 @@ Theorem update_target_preserves_toplevel_name_targets:
 Proof
   simp[lookup_toplevel_name_target_def, lookup_base_target_def] >>
   rpt gen_tac >> Cases_on `n` >>
-  simp[Once evaluate_def, return_def] >>
-  simp[Once evaluate_def, return_def]
+  simp[Once evaluate_def, bind_def, lift_option_type_def, return_def, raise_def] >>
+  simp[Once evaluate_def, bind_def, lift_option_type_def, return_def, raise_def] >>
+  Cases_on `get_module_code cx q` >> simp[return_def, raise_def] >>
+  Cases_on `is_immutable_decl (string_to_num r) x` >> simp[return_def]
 QED
 
 Theorem update_target_preserves_name_targets:
@@ -174,12 +176,12 @@ Proof
 QED
 
 Theorem name_lookup_after_update_target_update:
-  ∀cx st n ty bop av v1 v2 v.
-    lookup_name st n = SOME v1 ∧
+  ∀cx st n ty bop av v2 v entry.
+    lookup_name_typed st n = SOME entry ∧
     lookup_name_target cx st n = SOME av ∧
     var_assignable st n ∧
     evaluate_binop (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
-                   NoneTV bop v1 v2 = INL v ⇒
+                   entry.type bop entry.value v2 = INL v ⇒
     lookup_name (update_target cx st av (Update ty bop v2)) n = SOME v
 Proof
   rpt strip_tac >>

@@ -15,7 +15,8 @@
  *   fn' = sccp_function fn
  *       = SOME (fn with block "entry" = [STOP])
  *         (ASSERT(Lit 1w) becomes NOP under SCCP, clear_nops removes it)
- *   s   = ARB with <|vs_inst_idx := 1; vs_current_bb := "entry"|>
+ *   s   = init_venom_state "entry" with
+ *           <|vs_inst_idx := 1; vs_current_bb := "entry"|>
  *   fuel = 1, ctx = ARB
  *
  * With vs_inst_idx = 1:
@@ -47,7 +48,7 @@ Libs
 
 (* The counterexample function *)
 Definition cx_fn_def:
-  cx_fn = ir_function "test_fn"
+  cx_fn = mk_raw_function "test_fn"
     [basic_block "entry"
        [instruction 0 ASSERT [Lit 1w] [];
         instruction 1 STOP [] []]]
@@ -107,7 +108,7 @@ Triviality cx_wl_step[local]:
        df_boundary <|sl_vals := FEMPTY; sl_targets := {} |> old lbl)
     (df_process_block Forward <|sl_vals := FEMPTY; sl_targets := {} |>
       sccp_join sccp_transfer_inst sccp_edge_transfer
-      (ir_function "test_fn"
+      (mk_raw_function "test_fn"
         [basic_block "entry"
           [instruction 0 ASSERT [Lit 1w] []; instruction 1 STOP [] []]])
       (SOME ("entry", <|sl_vals := FEMPTY; sl_targets := {} |>))
@@ -191,7 +192,7 @@ Proof
   qexists_tac `ARB` >>
   qexists_tac `cx_fn` >>
   simp[cx_sccp_function, cx_ssa] >>
-  qexists_tac `(ARB:venom_state) with
+  qexists_tac `(init_venom_state "entry") with
     <|vs_inst_idx := 1; vs_current_bb := "entry"; vs_halted := F|>` >>
   simp[lift_result_def] >>
   EVAL_TAC
@@ -707,39 +708,53 @@ Proof
 QED
 
 (* exec_*_eval: each exec helper returns OK only when operands evaluate *)
+val staged_top_case_fs_tac =
+  TRY BasicProvers.TOP_CASE_TAC >> fs[] >>
+  TRY BasicProvers.TOP_CASE_TAC >> fs[] >>
+  TRY BasicProvers.TOP_CASE_TAC >> fs[] >>
+  TRY BasicProvers.TOP_CASE_TAC >> fs[] >>
+  TRY BasicProvers.TOP_CASE_TAC >> fs[] >>
+  TRY BasicProvers.TOP_CASE_TAC >> fs[] >>
+  TRY BasicProvers.TOP_CASE_TAC >> fs[] >>
+  TRY BasicProvers.TOP_CASE_TAC >> fs[] >>
+  TRY BasicProvers.TOP_CASE_TAC >> fs[] >>
+  TRY BasicProvers.TOP_CASE_TAC >> fs[] >>
+  TRY BasicProvers.TOP_CASE_TAC >> fs[] >>
+  TRY BasicProvers.TOP_CASE_TAC >> fs[];
+
 Triviality exec_pure1_eval[local]:
   exec_pure1 f inst s = OK s' /\ MEM op inst.inst_operands ==>
   eval_operand op s <> NONE
 Proof
-  simp[exec_pure1_def] >> rpt (BasicProvers.TOP_CASE_TAC >> fs[]) >> rw[] >> fs[]
+  simp[exec_pure1_def] >> staged_top_case_fs_tac >> rw[] >> fs[]
 QED
 
 Triviality exec_pure2_eval[local]:
   exec_pure2 f inst s = OK s' /\ MEM op inst.inst_operands ==>
   eval_operand op s <> NONE
 Proof
-  simp[exec_pure2_def] >> rpt (BasicProvers.TOP_CASE_TAC >> fs[]) >> rw[] >> fs[]
+  simp[exec_pure2_def] >> staged_top_case_fs_tac >> rw[] >> fs[]
 QED
 
 Triviality exec_pure3_eval[local]:
   exec_pure3 f inst s = OK s' /\ MEM op inst.inst_operands ==>
   eval_operand op s <> NONE
 Proof
-  simp[exec_pure3_def] >> rpt (BasicProvers.TOP_CASE_TAC >> fs[]) >> rw[] >> fs[]
+  simp[exec_pure3_def] >> staged_top_case_fs_tac >> rw[] >> fs[]
 QED
 
 Triviality exec_read1_eval[local]:
   exec_read1 f inst s = OK s' /\ MEM op inst.inst_operands ==>
   eval_operand op s <> NONE
 Proof
-  simp[exec_read1_def] >> rpt (BasicProvers.TOP_CASE_TAC >> fs[]) >> rw[] >> fs[]
+  simp[exec_read1_def] >> staged_top_case_fs_tac >> rw[] >> fs[]
 QED
 
 Triviality exec_write2_eval[local]:
   exec_write2 f inst s = OK s' /\ MEM op inst.inst_operands ==>
   eval_operand op s <> NONE
 Proof
-  simp[exec_write2_def] >> rpt (BasicProvers.TOP_CASE_TAC >> fs[]) >> rw[] >> fs[]
+  simp[exec_write2_def] >> staged_top_case_fs_tac >> rw[] >> fs[]
 QED
 
 
@@ -1103,7 +1118,18 @@ Proof
   rw[transfer_sound_wf_def] >> rpt strip_tac >>
   simp[sccp_transfer_inst_def] >>
   rpt (IF_CASES_TAC >> gvs[]) >>
-  rpt (BasicProvers.TOP_CASE_TAC >> gvs[]) >>
+  TRY BasicProvers.TOP_CASE_TAC >> gvs[] >>
+  TRY BasicProvers.TOP_CASE_TAC >> gvs[] >>
+  TRY BasicProvers.TOP_CASE_TAC >> gvs[] >>
+  TRY BasicProvers.TOP_CASE_TAC >> gvs[] >>
+  TRY BasicProvers.TOP_CASE_TAC >> gvs[] >>
+  TRY BasicProvers.TOP_CASE_TAC >> gvs[] >>
+  TRY BasicProvers.TOP_CASE_TAC >> gvs[] >>
+  TRY BasicProvers.TOP_CASE_TAC >> gvs[] >>
+  TRY BasicProvers.TOP_CASE_TAC >> gvs[] >>
+  TRY BasicProvers.TOP_CASE_TAC >> gvs[] >>
+  TRY BasicProvers.TOP_CASE_TAC >> gvs[] >>
+  TRY BasicProvers.TOP_CASE_TAC >> gvs[] >>
   rpt (IF_CASES_TAC >> gvs[]) >>
   REWRITE_TAC [FOLDL] >>
   (* Terminator goals *)
@@ -1280,7 +1306,18 @@ Theorem sccp_transfer_fdom_mono:
 Proof
   rpt strip_tac >> simp[sccp_transfer_inst_def] >>
   rpt (IF_CASES_TAC >> gvs[]) >>
-  rpt (BasicProvers.TOP_CASE_TAC >> gvs[]) >>
+  TRY BasicProvers.TOP_CASE_TAC >> gvs[] >>
+  TRY BasicProvers.TOP_CASE_TAC >> gvs[] >>
+  TRY BasicProvers.TOP_CASE_TAC >> gvs[] >>
+  TRY BasicProvers.TOP_CASE_TAC >> gvs[] >>
+  TRY BasicProvers.TOP_CASE_TAC >> gvs[] >>
+  TRY BasicProvers.TOP_CASE_TAC >> gvs[] >>
+  TRY BasicProvers.TOP_CASE_TAC >> gvs[] >>
+  TRY BasicProvers.TOP_CASE_TAC >> gvs[] >>
+  TRY BasicProvers.TOP_CASE_TAC >> gvs[] >>
+  TRY BasicProvers.TOP_CASE_TAC >> gvs[] >>
+  TRY BasicProvers.TOP_CASE_TAC >> gvs[] >>
+  TRY BasicProvers.TOP_CASE_TAC >> gvs[] >>
   rpt (IF_CASES_TAC >> gvs[]) >>
   TRY (simp[FDOM_FUPDATE] >> NO_TAC) >>
   irule foldl_fupdate_fdom >> simp[FDOM_FUPDATE]
@@ -1317,7 +1354,18 @@ Proof
   IF_CASES_TAC >> gvs[]
   >- (irule foldl_fupdate_bottom_non_mem >> simp[])
   >> IF_CASES_TAC >> gvs[]
-  >- (rpt (BasicProvers.TOP_CASE_TAC >> gvs[]))
+  >- (TRY BasicProvers.TOP_CASE_TAC >> gvs[] >>
+      TRY BasicProvers.TOP_CASE_TAC >> gvs[] >>
+      TRY BasicProvers.TOP_CASE_TAC >> gvs[] >>
+      TRY BasicProvers.TOP_CASE_TAC >> gvs[] >>
+      TRY BasicProvers.TOP_CASE_TAC >> gvs[] >>
+      TRY BasicProvers.TOP_CASE_TAC >> gvs[] >>
+      TRY BasicProvers.TOP_CASE_TAC >> gvs[] >>
+      TRY BasicProvers.TOP_CASE_TAC >> gvs[] >>
+      TRY BasicProvers.TOP_CASE_TAC >> gvs[] >>
+      TRY BasicProvers.TOP_CASE_TAC >> gvs[] >>
+      TRY BasicProvers.TOP_CASE_TAC >> gvs[] >>
+      TRY BasicProvers.TOP_CASE_TAC >> gvs[])
   >> Cases_on `inst.inst_outputs` >> gvs[] >>
   Cases_on `inst.inst_opcode = ASSIGN` >> gvs[] >>
   BasicProvers.EVERY_CASE_TAC >> gvs[FLOOKUP_UPDATE] >>
@@ -1410,6 +1458,16 @@ Proof
   \\ irule foldl_bottom_not_top \\ simp[FLOOKUP_UPDATE]
 QED
 
+Triviality sccp_terminator_opcode_cases[local]:
+  !op.
+    is_terminator op ==>
+    op = JMP \/ op = JNZ \/ op = DJMP \/ op = RET \/
+    op = RETURN \/ op = REVERT \/ op = STOP \/ op = SINK \/
+    op = SELFDESTRUCT \/ op = INVALID \/ op = DRET \/ op = RETFMP
+Proof
+  Cases \\ gvs[is_terminator_def]
+QED
+
 (* Terminators don't modify sl_vals *)
 Triviality sccp_transfer_terminator_sl_vals[local]:
   !fn inst lat.
@@ -1417,8 +1475,9 @@ Triviality sccp_transfer_terminator_sl_vals[local]:
     (sccp_transfer_inst fn inst lat).sl_vals = lat.sl_vals
 Proof
   rpt strip_tac
-  \\ simp[sccp_transfer_inst_def]
-  \\ BasicProvers.EVERY_CASE_TAC \\ gvs[is_terminator_def]
+  \\ drule sccp_terminator_opcode_cases \\ strip_tac
+  \\ gvs[sccp_transfer_inst_def]
+  \\ BasicProvers.EVERY_CASE_TAC \\ simp[]
 QED
 
 (* extract_labels ops = SOME labels means all ops are Labels, so
@@ -1470,6 +1529,8 @@ Proof
   >- term_succ_base_tac
   >- term_succ_base_tac
   >- term_succ_base_tac
+  >- term_succ_base_tac
+  >- (term_succ_base_tac >> pairarg_tac >> gvs[])
   >- term_succ_base_tac
   >- term_succ_base_tac
   >- term_succ_base_tac
