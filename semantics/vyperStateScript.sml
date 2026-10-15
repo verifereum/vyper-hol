@@ -2,7 +2,7 @@ Theory vyperState
 Ancestors
   arithmetic alist combin option list finite_map pair rich_list
   cv cv_std cv_string_fmap vfmTypes vfmState vfmContext vfmExecution[ignore_grammar]
-  vyperAST vyperMisc vyperValue vyperValueOperation
+  vyperAST vyperMisc vyperNsidFmap vyperValue vyperValueOperation
   vyperStorage vyperContext extCallOracle[ignore_grammar]
 Libs
   cv_transLib wordsLib monadsyntax
@@ -335,22 +335,6 @@ Definition lookup_var_slot_from_layout_def:
 End
 
 val () = cv_auto_trans lookup_var_slot_from_layout_def;
-
-(* Numeric declaration keys remain in use by namespaced maps until their
-   separate nsid-key migration. *)
-Definition find_var_decl_by_num_def:
-  find_var_decl_by_num n [] = NONE ∧
-  find_var_decl_by_num n (VariableDecl _ mut vid typ _ :: ts) =
-    (if (mut = Storage ∨ mut = Transient) ∧ string_to_num vid = n
-     then SOME (StorageVarDecl (mut = Transient) typ, vid)
-     else find_var_decl_by_num n ts) ∧
-  find_var_decl_by_num n (HashMapDecl _ is_transient vid kt vt _ :: ts) =
-    (if string_to_num vid = n then SOME (HashMapVarDecl is_transient kt vt, vid)
-     else find_var_decl_by_num n ts) ∧
-  find_var_decl_by_num n (_ :: ts) = find_var_decl_by_num n ts
-End
-
-val () = cv_auto_trans find_var_decl_by_num_def;
 
 (* Find a storage or hashmap declaration by its source identifier. *)
 Definition find_var_decl_by_name_def:

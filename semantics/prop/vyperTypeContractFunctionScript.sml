@@ -122,8 +122,8 @@ Proof
   gvs[] >>
   TRY (PairCases_on `p` >> gvs[well_typed_expr_def, vtype_annotation_ok_def]) >>
   gvs[well_typed_expr_def, vtype_annotation_ok_def] >>
-  TRY (rename1 `FLOOKUP env1.toplevel_vtypes (src,string_to_num id) = SOME (Type ty)` >>
-       `FLOOKUP env2.toplevel_vtypes (src,string_to_num id) = SOME (Type ty)` by metis_tac[] >>
+  TRY (rename1 `FLOOKUP env1.toplevel_vtypes (src,id) = SOME (Type ty)` >>
+       `FLOOKUP env2.toplevel_vtypes (src,id) = SOME (Type ty)` by metis_tac[] >>
        gvs[]) >>
   TRY (`static_maps_transfer_env env1 env2` by rw[static_maps_transfer_env_def]) >>
   TRY (rename1 `subscript_vtype base_vt (expr_type idx) = SOME result_vt` >>
@@ -138,7 +138,7 @@ Proof
   TRY (rename1 `type_place_expr env1 e = SOME base_vt` >>
        `type_place_expr env2 e = SOME base_vt` by metis_tac[type_place_expr_static_maps_transfer_env] >>
        gvs[]) >>
-  TRY (rename1 `FLOOKUP env1.bare_globals (src,string_to_num id) = SOME ty` >>
+  TRY (rename1 `FLOOKUP env1.bare_globals (src,id) = SOME ty` >>
        qpat_x_assum `!k ty. FLOOKUP env1.bare_globals k = SOME ty ==> FLOOKUP env1.toplevel_vtypes k = SOME (Type ty)` drule >>
        simp[vtype_annotation_ok_def] >> NO_TAC) >>
   metis_tac[]
@@ -293,14 +293,14 @@ Theorem function_entry_env_static_maps_transfer_initial[local]:
   bare_global_assignable_complete bare_global_assignable (initial_evaluation_context sources layouts tx src) /\
   (!src' id ty. FLOOKUP bare_global_assignable (src',id) = SOME ty ==>
      ?ts. get_module_code (initial_evaluation_context sources layouts tx src) src' = SOME ts /\
-          is_immutable_decl_by_num id ts) /\
+          is_immutable_decl id ts) /\
   toplevel_vtypes_complete toplevel_vtypes (initial_evaluation_context sources layouts tx src) /\
   flag_members_complete flag_members (initial_evaluation_context sources layouts tx src) /\
   (!src' id ty. FLOOKUP bare_globals (src',id) = SOME ty ==>
      ?ts. get_module_code (initial_evaluation_context sources layouts tx src) src' = SOME ts /\
           FLOOKUP toplevel_vtypes (src',id) = SOME (Type ty) /\
           is_bare_global_decl id ts /\
-          find_var_decl_by_num id ts = NONE /\ ty <> NoneT) /\
+          find_var_decl_by_name id ts = NONE /\ ty <> NoneT) /\
   env_body = FOLDL (\env (id,ty). extend_local env id ty T)
     (<| current_src := entry_src;
        var_types := FEMPTY;
@@ -367,14 +367,14 @@ Theorem function_entry_env_static_maps_transfer_initial_explicit[local]:
   bare_global_assignable_complete bare_global_assignable (initial_evaluation_context sources layouts tx src) /\
   (!src' id ty. FLOOKUP bare_global_assignable (src',id) = SOME ty ==>
      ?ts. get_module_code (initial_evaluation_context sources layouts tx src) src' = SOME ts /\
-          is_immutable_decl_by_num id ts) /\
+          is_immutable_decl id ts) /\
   toplevel_vtypes_complete toplevel_vtypes (initial_evaluation_context sources layouts tx src) /\
   flag_members_complete flag_members (initial_evaluation_context sources layouts tx src) /\
   (!src' id ty. FLOOKUP bare_globals (src',id) = SOME ty ==>
      ?ts. get_module_code (initial_evaluation_context sources layouts tx src) src' = SOME ts /\
           FLOOKUP toplevel_vtypes (src',id) = SOME (Type ty) /\
           is_bare_global_decl id ts /\
-          find_var_decl_by_num id ts = NONE /\ ty <> NoneT) ==>
+          find_var_decl_by_name id ts = NONE /\ ty <> NoneT) ==>
   static_maps_transfer_env (function_entry_env art mods entry_src args)
     (FOLDL (\env (id,ty). extend_local env id ty T)
       (<| current_src := entry_src;
@@ -542,7 +542,7 @@ Proof
      gvs[initial_evaluation_context_def]) >>
   `!src' id ty. FLOOKUP bare_global_assignable (src',id) = SOME ty ==>
      ?ts. get_module_code (initial_evaluation_context sources layouts tx src) src' = SOME ts /\
-          is_immutable_decl_by_num id ts` by metis_tac[] >>
+          is_immutable_decl id ts` by metis_tac[] >>
   `static_maps_transfer_env (function_entry_env art mods src_id_opt args)
      (FOLDL (\env (id,ty). extend_local env id ty T)
        (<|current_src := src_id_opt; var_types := FEMPTY; var_assignable := FEMPTY;
@@ -595,10 +595,10 @@ Theorem bare_global_assignable_consistency_deploy_implies_runtime[local]:
      ?ts. get_module_code (cx with in_deploy := T) src' = SOME ts /\
           FLOOKUP bare_globals (src',id) = SOME ty /\
           FLOOKUP toplevel_vtypes (src',id) = SOME (Type ty) /\
-          is_immutable_decl_by_num id ts /\
-          find_var_decl_by_num id ts = NONE /\ ty <> NoneT) ==>
+          is_immutable_decl id ts /\
+          find_var_decl_by_name id ts = NONE /\ ty <> NoneT) ==>
   (!src' id ty. FLOOKUP bare_global_assignable (src',id) = SOME ty ==>
-     ?ts. get_module_code cx src' = SOME ts /\ is_immutable_decl_by_num id ts)
+     ?ts. get_module_code cx src' = SOME ts /\ is_immutable_decl id ts)
 Proof
   simp[get_module_code_def] >> metis_tac[]
 QED
@@ -608,12 +608,12 @@ Theorem bare_globals_consistency_deploy_implies_runtime[local]:
      ?ts. get_module_code (cx with in_deploy := T) src' = SOME ts /\
           FLOOKUP toplevel_vtypes (src',id) = SOME (Type ty) /\
           is_bare_global_decl id ts /\
-          find_var_decl_by_num id ts = NONE /\ ty <> NoneT) ==>
+          find_var_decl_by_name id ts = NONE /\ ty <> NoneT) ==>
   (!src' id ty. FLOOKUP bare_globals (src',id) = SOME ty ==>
      ?ts. get_module_code cx src' = SOME ts /\
           FLOOKUP toplevel_vtypes (src',id) = SOME (Type ty) /\
           is_bare_global_decl id ts /\
-          find_var_decl_by_num id ts = NONE /\ ty <> NoneT)
+          find_var_decl_by_name id ts = NONE /\ ty <> NoneT)
 Proof
   simp[get_module_code_def]
 QED
@@ -664,12 +664,12 @@ Proof
                   fn_sigs := fn_sigs; flag_members := flag_members|>) args)` by
             (`!src' id ty. FLOOKUP bare_global_assignable (src',id) = SOME ty ==>
                 ?ts. get_module_code (initial_evaluation_context sources layouts tx src) src' = SOME ts /\
-                     is_immutable_decl_by_num id ts` by
+                     is_immutable_decl id ts` by
                (drule bare_global_assignable_consistency_deploy_implies_runtime >> simp[]) >>
              `!src' id ty. FLOOKUP bare_globals (src',id) = SOME ty ==>
                 ?ts. get_module_code (initial_evaluation_context sources layouts tx src) src' = SOME ts /\
                      FLOOKUP toplevel_vtypes (src',id) = SOME (Type ty) /\
-                     is_bare_global_decl id ts /\ find_var_decl_by_num id ts = NONE /\ ty <> NoneT` by
+                     is_bare_global_decl id ts /\ find_var_decl_by_name id ts = NONE /\ ty <> NoneT` by
                (drule bare_globals_consistency_deploy_implies_runtime >> simp[]) >>
              irule function_entry_env_static_maps_transfer_initial_explicit >> simp[]) >>
           irule function_entry_env_static_maps_transfer_deploy >>
@@ -734,12 +734,12 @@ Proof
               fn_sigs := fn_sigs; flag_members := flag_members|>) args)` by
         (`!src' id ty. FLOOKUP bare_global_assignable (src',id) = SOME ty ==>
             ?ts. get_module_code (initial_evaluation_context sources layouts tx src) src' = SOME ts /\
-                 is_immutable_decl_by_num id ts` by
+                 is_immutable_decl id ts` by
            (drule bare_global_assignable_consistency_deploy_implies_runtime >> simp[]) >>
          `!src' id ty. FLOOKUP bare_globals (src',id) = SOME ty ==>
             ?ts. get_module_code (initial_evaluation_context sources layouts tx src) src' = SOME ts /\
                  FLOOKUP toplevel_vtypes (src',id) = SOME (Type ty) /\
-                 is_bare_global_decl id ts /\ find_var_decl_by_num id ts = NONE /\ ty <> NoneT` by
+                 is_bare_global_decl id ts /\ find_var_decl_by_name id ts = NONE /\ ty <> NoneT` by
            (drule bare_globals_consistency_deploy_implies_runtime >> simp[]) >>
          irule function_entry_env_static_maps_transfer_initial_explicit >> simp[]) >>
       irule function_entry_env_static_maps_transfer_deploy >>
@@ -793,12 +793,12 @@ Theorem checked_contract_static_maps_transfer_inputs_initial[local]:
   flag_members_complete art.cta_flag_members (initial_evaluation_context sources layouts tx src) /\
   (!src' id ty. FLOOKUP art.cta_bare_global_assignable (src',id) = SOME ty ==>
      ?ts. get_module_code (initial_evaluation_context sources layouts tx src) src' = SOME ts /\
-          is_immutable_decl_by_num id ts) /\
+          is_immutable_decl id ts) /\
   (!src' id ty. FLOOKUP art.cta_bare_globals (src',id) = SOME ty ==>
      ?ts. get_module_code (initial_evaluation_context sources layouts tx src) src' = SOME ts /\
           FLOOKUP art.cta_toplevel_vtypes (src',id) = SOME (Type ty) /\
           is_bare_global_decl id ts /\
-          find_var_decl_by_num id ts = NONE /\ ty <> NoneT)
+          find_var_decl_by_name id ts = NONE /\ ty <> NoneT)
 Proof
   rw[] >> rpt conj_tac
   >- (irule check_contract_fn_sigs_declared_complete_initial >> simp[])
@@ -851,16 +851,16 @@ Proof
    flag_members_complete art.cta_flag_members (initial_evaluation_context am.sources am.layouts tx src) /\
    (!src' id ty. FLOOKUP art.cta_bare_global_assignable (src',id) = SOME ty ==>
       ?ts'. get_module_code (initial_evaluation_context am.sources am.layouts tx src) src' = SOME ts' /\
-            is_immutable_decl_by_num id ts') /\
+            is_immutable_decl id ts') /\
    (!src' id ty. FLOOKUP art.cta_bare_globals (src',id) = SOME ty ==>
       ?ts'. get_module_code (initial_evaluation_context am.sources am.layouts tx src) src' = SOME ts' /\
             FLOOKUP art.cta_toplevel_vtypes (src',id) = SOME (Type ty) /\
             is_bare_global_decl id ts' /\
-            find_var_decl_by_num id ts' = NONE /\ ty <> NoneT)` by
+            find_var_decl_by_name id ts' = NONE /\ ty <> NoneT)` by
     (irule checked_contract_static_maps_transfer_inputs_initial >> simp[]) >>
   `!src' id ty. FLOOKUP art.cta_bare_global_assignable (src',id) = SOME ty ==>
      ?ts'. get_module_code (initial_evaluation_context am.sources am.layouts tx src) src' = SOME ts' /\
-           is_immutable_decl_by_num id ts'` by (
+           is_immutable_decl id ts'` by (
     rpt strip_tac >>
     dxrule check_contract_bare_global_assignable_consistent_initial >>
     simp[] >> strip_tac >>

@@ -86,7 +86,7 @@ QED
 
 Theorem scalar_raw_public_getter_body_typing_annotation_contradiction[local]:
   typ <> NoneT /\
-  FLOOKUP env.toplevel_vtypes (src,string_to_num fn) = SOME (Type typ) ==>
+  FLOOKUP env.toplevel_vtypes (src,fn) = SOME (Type typ) ==>
   type_stmts env typ [Return (SOME (TopLevelName NoneT (src,fn)))] = NONE
 Proof
   rw[type_stmt_def, well_typed_expr_def]
@@ -111,7 +111,7 @@ Theorem checked_scalar_public_getter_body_typing_package_contradiction[local]:
         [Return (SOME (TopLevelName NoneT (src,fn)))] = SOME env_after)
 Proof
   rw[] >>
-  `FLOOKUP art.cta_toplevel_vtypes (src,string_to_num fn) = SOME (Type typ)` by
+  `FLOOKUP art.cta_toplevel_vtypes (src,fn) = SOME (Type typ)` by
     (`toplevel_vtypes_complete art.cta_toplevel_vtypes
         (initial_evaluation_context am.sources am.layouts tx src)` by
        (irule check_contract_toplevel_vtypes_complete_initial >> simp[]) >>
@@ -146,7 +146,7 @@ Proof
   rpt strip_tac >>
   `get_module_code (initial_evaluation_context am.sources am.layouts tx src) src = SOME ts` by
     simp[get_module_code_def, initial_evaluation_context_def] >>
-  `FLOOKUP art.cta_toplevel_vtypes (src,string_to_num fn) = SOME (Type typ)` by
+  `FLOOKUP art.cta_toplevel_vtypes (src,fn) = SOME (Type typ)` by
     (`toplevel_vtypes_complete art.cta_toplevel_vtypes
         (initial_evaluation_context am.sources am.layouts tx src)` by
        (irule check_contract_toplevel_vtypes_complete_initial >> simp[]) >>
@@ -164,13 +164,13 @@ Proof
                         well_formed_type_def]
   >- (`find_var_decl_by_name fn ts = NONE` by
         (irule find_var_decl_by_name_NONE_Constant >> simp[] >> metis_tac[]) >>
-      `FLOOKUP art.cta_bare_globals (src,string_to_num fn) = SOME (expr_type e)` by
+      `FLOOKUP art.cta_bare_globals (src,fn) = SOME (expr_type e)` by
         (`bare_globals_complete art.cta_bare_globals
             (initial_evaluation_context am.sources am.layouts tx src)` by
            (irule check_contract_bare_globals_complete_initial >> simp[]) >>
          gvs[bare_globals_complete_def] >> metis_tac[]) >>
       gvs[immutables_ready_def] >>
-      qpat_x_assum `∀src' id ty. FLOOKUP art.cta_bare_globals (src',string_to_num id) = SOME ty ⇒ _`
+      qpat_x_assum `∀src' id ty. FLOOKUP art.cta_bare_globals (src',id) = SOME ty ⇒ _`
         (qspecl_then [`src`,`fn`,`expr_type e`] mp_tac) >>
       simp[initial_evaluation_context_def] >>
       strip_tac >> gvs[IS_SOME_EXISTS] >>
@@ -181,13 +181,13 @@ Proof
       rpt strip_tac >> gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def])
   >- (`find_var_decl_by_name fn ts = NONE` by
         (irule find_var_decl_by_name_NONE_Immutable >> simp[] >> metis_tac[]) >>
-      `FLOOKUP art.cta_bare_globals (src,string_to_num fn) = SOME typ` by
+      `FLOOKUP art.cta_bare_globals (src,fn) = SOME typ` by
         (`bare_globals_complete art.cta_bare_globals
             (initial_evaluation_context am.sources am.layouts tx src)` by
            (irule check_contract_bare_globals_complete_initial >> simp[]) >>
          gvs[bare_globals_complete_def] >> metis_tac[]) >>
       gvs[immutables_ready_def] >>
-      qpat_x_assum `∀src' id ty. FLOOKUP art.cta_bare_globals (src',string_to_num id) = SOME ty ⇒ _`
+      qpat_x_assum `∀src' id ty. FLOOKUP art.cta_bare_globals (src',id) = SOME ty ⇒ _`
         (qspecl_then [`src`,`fn`,`typ`] mp_tac) >>
       simp[initial_evaluation_context_def] >>
       strip_tac >> gvs[IS_SOME_EXISTS] >>
@@ -240,7 +240,7 @@ Proof
   >- (irule checked_scalar_public_getter_eval_no_type_error >> metis_tac[]) >>
   `get_module_code (initial_evaluation_context am.sources am.layouts tx src) src = SOME ts` by
     simp[get_module_code_def, initial_evaluation_context_def] >>
-  `FLOOKUP art.cta_toplevel_vtypes (src,string_to_num fn) = SOME (Type typ)` by
+  `FLOOKUP art.cta_toplevel_vtypes (src,fn) = SOME (Type typ)` by
     (`toplevel_vtypes_complete art.cta_toplevel_vtypes
         (initial_evaluation_context am.sources am.layouts tx src)` by
        (irule check_contract_toplevel_vtypes_complete_initial >> simp[]) >>
@@ -258,13 +258,13 @@ Proof
                         well_formed_type_def]
   >- (`find_var_decl_by_name fn ts = NONE` by
         (irule find_var_decl_by_name_NONE_Constant >> simp[] >> metis_tac[]) >>
-      `FLOOKUP art.cta_bare_globals (src,string_to_num fn) = SOME (expr_type e)` by
+      `FLOOKUP art.cta_bare_globals (src,fn) = SOME (expr_type e)` by
         (`bare_globals_complete art.cta_bare_globals
             (initial_evaluation_context am.sources am.layouts tx src)` by
            (irule check_contract_bare_globals_complete_initial >> simp[]) >>
          gvs[bare_globals_complete_def] >> metis_tac[]) >>
       gvs[immutables_ready_def] >>
-      qpat_x_assum `∀src' id ty. FLOOKUP art.cta_bare_globals (src',string_to_num id) = SOME ty ⇒ _`
+      qpat_x_assum `∀src' id ty. FLOOKUP art.cta_bare_globals (src',id) = SOME ty ⇒ _`
         (qspecl_then [`src`,`fn`,`expr_type e`] mp_tac) >>
       simp[initial_evaluation_context_def] >>
       strip_tac >> gvs[IS_SOME_EXISTS] >>
@@ -275,13 +275,13 @@ Proof
       rpt strip_tac >> gvs[])
   >- (`find_var_decl_by_name fn ts = NONE` by
         (irule find_var_decl_by_name_NONE_Immutable >> simp[] >> metis_tac[]) >>
-      `FLOOKUP art.cta_bare_globals (src,string_to_num fn) = SOME typ` by
+      `FLOOKUP art.cta_bare_globals (src,fn) = SOME typ` by
         (`bare_globals_complete art.cta_bare_globals
             (initial_evaluation_context am.sources am.layouts tx src)` by
            (irule check_contract_bare_globals_complete_initial >> simp[]) >>
          gvs[bare_globals_complete_def] >> metis_tac[]) >>
       gvs[immutables_ready_def] >>
-      qpat_x_assum `∀src' id ty. FLOOKUP art.cta_bare_globals (src',string_to_num id) = SOME ty ⇒ _`
+      qpat_x_assum `∀src' id ty. FLOOKUP art.cta_bare_globals (src',id) = SOME ty ⇒ _`
         (qspecl_then [`src`,`fn`,`typ`] mp_tac) >>
       simp[initial_evaluation_context_def] >>
       strip_tac >> gvs[IS_SOME_EXISTS] >>
@@ -333,7 +333,7 @@ Proof
   >- (
     `get_module_code (initial_evaluation_context am.sources am.layouts tx src) src = SOME ts` by
       simp[get_module_code_def, initial_evaluation_context_def] >>
-    `FLOOKUP art.cta_toplevel_vtypes (src,string_to_num fn) = SOME (Type typ)` by
+    `FLOOKUP art.cta_toplevel_vtypes (src,fn) = SOME (Type typ)` by
       (`toplevel_vtypes_complete art.cta_toplevel_vtypes
           (initial_evaluation_context am.sources am.layouts tx src)` by
          (irule check_contract_toplevel_vtypes_complete_initial >> simp[]) >>
@@ -351,13 +351,13 @@ Proof
                           well_formed_type_def]
     >- (`find_var_decl_by_name fn ts = NONE` by
           (irule find_var_decl_by_name_NONE_Constant >> simp[] >> metis_tac[]) >>
-        `FLOOKUP art.cta_bare_globals (src,string_to_num fn) = SOME (expr_type e)` by
+        `FLOOKUP art.cta_bare_globals (src,fn) = SOME (expr_type e)` by
           (`bare_globals_complete art.cta_bare_globals
               (initial_evaluation_context am.sources am.layouts tx src)` by
              (irule check_contract_bare_globals_complete_initial >> simp[]) >>
            gvs[bare_globals_complete_def] >> metis_tac[]) >>
         gvs[immutables_ready_def] >>
-        qpat_x_assum `∀src' id ty. FLOOKUP art.cta_bare_globals (src',string_to_num id) = SOME ty ⇒ _`
+        qpat_x_assum `∀src' id ty. FLOOKUP art.cta_bare_globals (src',id) = SOME ty ⇒ _`
           (qspecl_then [`src`,`fn`,`expr_type e`] mp_tac) >>
         simp[initial_evaluation_context_def] >>
         strip_tac >> gvs[IS_SOME_EXISTS] >>
@@ -368,13 +368,13 @@ Proof
         rpt strip_tac >> gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def])
     >- (`find_var_decl_by_name fn ts = NONE` by
           (irule find_var_decl_by_name_NONE_Immutable >> simp[] >> metis_tac[]) >>
-        `FLOOKUP art.cta_bare_globals (src,string_to_num fn) = SOME typ` by
+        `FLOOKUP art.cta_bare_globals (src,fn) = SOME typ` by
           (`bare_globals_complete art.cta_bare_globals
               (initial_evaluation_context am.sources am.layouts tx src)` by
              (irule check_contract_bare_globals_complete_initial >> simp[]) >>
            gvs[bare_globals_complete_def] >> metis_tac[]) >>
         gvs[immutables_ready_def] >>
-        qpat_x_assum `∀src' id ty. FLOOKUP art.cta_bare_globals (src',string_to_num id) = SOME ty ⇒ _`
+        qpat_x_assum `∀src' id ty. FLOOKUP art.cta_bare_globals (src',id) = SOME ty ⇒ _`
           (qspecl_then [`src`,`fn`,`typ`] mp_tac) >>
         simp[initial_evaluation_context_def] >>
         strip_tac >> gvs[IS_SOME_EXISTS] >>
@@ -411,7 +411,7 @@ Proof
     gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def]) >>
   `get_module_code (initial_evaluation_context am.sources am.layouts tx src) src = SOME ts` by
     simp[get_module_code_def, initial_evaluation_context_def] >>
-  `FLOOKUP art.cta_toplevel_vtypes (src,string_to_num fn) = SOME (Type typ)` by
+  `FLOOKUP art.cta_toplevel_vtypes (src,fn) = SOME (Type typ)` by
     (`toplevel_vtypes_complete art.cta_toplevel_vtypes
         (initial_evaluation_context am.sources am.layouts tx src)` by
        (irule check_contract_toplevel_vtypes_complete_initial >> simp[]) >>
@@ -429,13 +429,13 @@ Proof
                         well_formed_type_def]
   >- (`find_var_decl_by_name fn ts = NONE` by
         (irule find_var_decl_by_name_NONE_Constant >> simp[] >> metis_tac[]) >>
-      `FLOOKUP art.cta_bare_globals (src,string_to_num fn) = SOME (expr_type e)` by
+      `FLOOKUP art.cta_bare_globals (src,fn) = SOME (expr_type e)` by
         (`bare_globals_complete art.cta_bare_globals
             (initial_evaluation_context am.sources am.layouts tx src)` by
            (irule check_contract_bare_globals_complete_initial >> simp[]) >>
          gvs[bare_globals_complete_def] >> metis_tac[]) >>
       gvs[immutables_ready_def] >>
-      qpat_x_assum `∀src' id ty. FLOOKUP art.cta_bare_globals (src',string_to_num id) = SOME ty ⇒ _`
+      qpat_x_assum `∀src' id ty. FLOOKUP art.cta_bare_globals (src',id) = SOME ty ⇒ _`
         (qspecl_then [`src`,`fn`,`expr_type e`] mp_tac) >>
       simp[initial_evaluation_context_def] >>
       strip_tac >> gvs[IS_SOME_EXISTS] >>
@@ -446,13 +446,13 @@ Proof
       rpt strip_tac >> gvs[])
   >- (`find_var_decl_by_name fn ts = NONE` by
         (irule find_var_decl_by_name_NONE_Immutable >> simp[] >> metis_tac[]) >>
-      `FLOOKUP art.cta_bare_globals (src,string_to_num fn) = SOME typ` by
+      `FLOOKUP art.cta_bare_globals (src,fn) = SOME typ` by
         (`bare_globals_complete art.cta_bare_globals
             (initial_evaluation_context am.sources am.layouts tx src)` by
            (irule check_contract_bare_globals_complete_initial >> simp[]) >>
          gvs[bare_globals_complete_def] >> metis_tac[]) >>
       gvs[immutables_ready_def] >>
-      qpat_x_assum `∀src' id ty. FLOOKUP art.cta_bare_globals (src',string_to_num id) = SOME ty ⇒ _`
+      qpat_x_assum `∀src' id ty. FLOOKUP art.cta_bare_globals (src',id) = SOME ty ⇒ _`
         (qspecl_then [`src`,`fn`,`typ`] mp_tac) >>
       simp[initial_evaluation_context_def] >>
       strip_tac >> gvs[IS_SOME_EXISTS] >>
@@ -1396,7 +1396,7 @@ Proof
              (initial_evaluation_context [((addr:160 word),mods)] layouts
                (empty_call_txn with target := addr) src)` by
             (irule check_contract_toplevel_vtypes_complete_modules >> simp[]) >>
-          `FLOOKUP art.cta_toplevel_vtypes (src,string_to_num fn) =
+          `FLOOKUP art.cta_toplevel_vtypes (src,fn) =
              SOME (Type t)` by
             (gvs[toplevel_vtypes_complete_def, get_module_code_def,
                  initial_evaluation_context_def] >>
@@ -1419,7 +1419,7 @@ Proof
           gvs[is_ArrayT_def, ArrayT_type_def, subscript_vtype_def,
               vtype_annotation_ok_def]) >>
       gvs[] >>
-      `FLOOKUP art.cta_toplevel_vtypes (src,string_to_num fn) =
+      `FLOOKUP art.cta_toplevel_vtypes (src,fn) =
          SOME (Type ret)` by
         (`toplevel_vtypes_complete art.cta_toplevel_vtypes
              (initial_evaluation_context [((addr:160 word),mods)] layouts
@@ -1448,7 +1448,7 @@ Proof
      (initial_evaluation_context [((addr:160 word),mods)] layouts
        (empty_call_txn with target := addr) src)` by
     (irule check_contract_toplevel_vtypes_complete_modules >> simp[]) >>
-  `FLOOKUP art.cta_toplevel_vtypes (src,string_to_num fn) =
+  `FLOOKUP art.cta_toplevel_vtypes (src,fn) =
      SOME (HashMapT t v0)` by
     (gvs[toplevel_vtypes_complete_def, get_module_code_def,
          initial_evaluation_context_def] >>
@@ -1769,7 +1769,7 @@ Proof
   rpt strip_tac >>
   `get_module_code (initial_evaluation_context am.sources am.layouts tx src) src = SOME ts` by
     simp[get_module_code_def, initial_evaluation_context_def] >>
-  `FLOOKUP art.cta_toplevel_vtypes (src,string_to_num fn) = SOME (Type typ)` by
+  `FLOOKUP art.cta_toplevel_vtypes (src,fn) = SOME (Type typ)` by
     (`toplevel_vtypes_complete art.cta_toplevel_vtypes
         (initial_evaluation_context am.sources am.layouts tx src)` by
        (irule check_contract_toplevel_vtypes_complete_initial >> simp[]) >>
@@ -1788,13 +1788,13 @@ Proof
                         well_formed_type_def]
   >- (`find_var_decl_by_name fn ts = NONE` by
         (irule find_var_decl_by_name_NONE_Constant >> simp[] >> metis_tac[]) >>
-      `FLOOKUP art.cta_bare_globals (src,string_to_num fn) = SOME (ArrayT t b)` by
+      `FLOOKUP art.cta_bare_globals (src,fn) = SOME (ArrayT t b)` by
         (`bare_globals_complete art.cta_bare_globals
             (initial_evaluation_context am.sources am.layouts tx src)` by
            (irule check_contract_bare_globals_complete_initial >> simp[]) >>
          gvs[bare_globals_complete_def] >> metis_tac[]) >>
       gvs[immutables_ready_def] >>
-      qpat_x_assum `∀src' id ty. FLOOKUP art.cta_bare_globals (src',string_to_num id) = SOME ty ⇒ _`
+      qpat_x_assum `∀src' id ty. FLOOKUP art.cta_bare_globals (src',id) = SOME ty ⇒ _`
         (qspecl_then [`src`,`fn`,`ArrayT t b`] mp_tac) >>
       qpat_x_assum `∀src' id ty tv v. _`
         (qspecl_then [`src`,`fn`,`ArrayT t b`] mp_tac) >>
@@ -1820,13 +1820,13 @@ Proof
       metis_tac[])
   >- (`find_var_decl_by_name fn ts = NONE` by
         (irule find_var_decl_by_name_NONE_Immutable >> simp[] >> metis_tac[]) >>
-      `FLOOKUP art.cta_bare_globals (src,string_to_num fn) = SOME (ArrayT t b)` by
+      `FLOOKUP art.cta_bare_globals (src,fn) = SOME (ArrayT t b)` by
         (`bare_globals_complete art.cta_bare_globals
             (initial_evaluation_context am.sources am.layouts tx src)` by
            (irule check_contract_bare_globals_complete_initial >> simp[]) >>
          gvs[bare_globals_complete_def] >> metis_tac[]) >>
       gvs[immutables_ready_def] >>
-      qpat_x_assum `∀src' id ty. FLOOKUP art.cta_bare_globals (src',string_to_num id) = SOME ty ⇒ _`
+      qpat_x_assum `∀src' id ty. FLOOKUP art.cta_bare_globals (src',id) = SOME ty ⇒ _`
         (qspecl_then [`src`,`fn`,`ArrayT t b`] mp_tac) >>
       qpat_x_assum `∀src' id ty tv v. _`
         (qspecl_then [`src`,`fn`,`ArrayT t b`] mp_tac) >>
@@ -1889,7 +1889,7 @@ Proof
   rpt strip_tac >>
   `get_module_code (initial_evaluation_context am.sources am.layouts tx src) src = SOME ts` by
     simp[get_module_code_def, initial_evaluation_context_def] >>
-  `FLOOKUP art.cta_toplevel_vtypes (src,string_to_num fn) = SOME (Type typ)` by
+  `FLOOKUP art.cta_toplevel_vtypes (src,fn) = SOME (Type typ)` by
     (`toplevel_vtypes_complete art.cta_toplevel_vtypes
         (initial_evaluation_context am.sources am.layouts tx src)` by
        (irule check_contract_toplevel_vtypes_complete_initial >> simp[]) >>
@@ -1908,13 +1908,13 @@ Proof
                         well_formed_type_def]
   >- (`find_var_decl_by_name fn ts = NONE` by
         (irule find_var_decl_by_name_NONE_Constant >> simp[] >> metis_tac[]) >>
-      `FLOOKUP art.cta_bare_globals (src,string_to_num fn) = SOME (ArrayT t b)` by
+      `FLOOKUP art.cta_bare_globals (src,fn) = SOME (ArrayT t b)` by
         (`bare_globals_complete art.cta_bare_globals
             (initial_evaluation_context am.sources am.layouts tx src)` by
            (irule check_contract_bare_globals_complete_initial >> simp[]) >>
          gvs[bare_globals_complete_def] >> metis_tac[]) >>
       gvs[immutables_ready_def] >>
-      qpat_x_assum `∀src' id ty. FLOOKUP art.cta_bare_globals (src',string_to_num id) = SOME ty ⇒ _`
+      qpat_x_assum `∀src' id ty. FLOOKUP art.cta_bare_globals (src',id) = SOME ty ⇒ _`
         (qspecl_then [`src`,`fn`,`ArrayT t b`] mp_tac) >>
       qpat_x_assum `∀src' id ty tv v. _`
         (qspecl_then [`src`,`fn`,`ArrayT t b`] mp_tac) >>
@@ -1938,13 +1938,13 @@ Proof
       metis_tac[])
   >- (`find_var_decl_by_name fn ts = NONE` by
         (irule find_var_decl_by_name_NONE_Immutable >> simp[] >> metis_tac[]) >>
-      `FLOOKUP art.cta_bare_globals (src,string_to_num fn) = SOME (ArrayT t b)` by
+      `FLOOKUP art.cta_bare_globals (src,fn) = SOME (ArrayT t b)` by
         (`bare_globals_complete art.cta_bare_globals
             (initial_evaluation_context am.sources am.layouts tx src)` by
            (irule check_contract_bare_globals_complete_initial >> simp[]) >>
          gvs[bare_globals_complete_def] >> metis_tac[]) >>
       gvs[immutables_ready_def] >>
-      qpat_x_assum `∀src' id ty. FLOOKUP art.cta_bare_globals (src',string_to_num id) = SOME ty ⇒ _`
+      qpat_x_assum `∀src' id ty. FLOOKUP art.cta_bare_globals (src',id) = SOME ty ⇒ _`
         (qspecl_then [`src`,`fn`,`ArrayT t b`] mp_tac) >>
       qpat_x_assum `∀src' id ty tv v. _`
         (qspecl_then [`src`,`fn`,`ArrayT t b`] mp_tac) >>
@@ -2030,7 +2030,7 @@ Proof
   rpt strip_tac >>
   `get_module_code (initial_evaluation_context am.sources am.layouts tx src) src = SOME ts` by
     simp[get_module_code_def, initial_evaluation_context_def] >>
-  `FLOOKUP art.cta_toplevel_vtypes (src,string_to_num fn) = SOME (Type typ)` by
+  `FLOOKUP art.cta_toplevel_vtypes (src,fn) = SOME (Type typ)` by
     (`toplevel_vtypes_complete art.cta_toplevel_vtypes
         (initial_evaluation_context am.sources am.layouts tx src)` by
        (irule check_contract_toplevel_vtypes_complete_initial >> simp[]) >>
@@ -2049,13 +2049,13 @@ Proof
                         well_formed_type_def]
   >- (`find_var_decl_by_name fn ts = NONE` by
         (irule find_var_decl_by_name_NONE_Constant >> simp[] >> metis_tac[]) >>
-      `FLOOKUP art.cta_bare_globals (src,string_to_num fn) = SOME (ArrayT t b)` by
+      `FLOOKUP art.cta_bare_globals (src,fn) = SOME (ArrayT t b)` by
         (`bare_globals_complete art.cta_bare_globals
             (initial_evaluation_context am.sources am.layouts tx src)` by
            (irule check_contract_bare_globals_complete_initial >> simp[]) >>
          gvs[bare_globals_complete_def] >> metis_tac[]) >>
       gvs[immutables_ready_def] >>
-      qpat_x_assum `∀src' id ty. FLOOKUP art.cta_bare_globals (src',string_to_num id) = SOME ty ⇒ _`
+      qpat_x_assum `∀src' id ty. FLOOKUP art.cta_bare_globals (src',id) = SOME ty ⇒ _`
         (qspecl_then [`src`,`fn`,`ArrayT t b`] mp_tac) >>
       qpat_x_assum `∀src' id ty tv v. _`
         (qspecl_then [`src`,`fn`,`ArrayT t b`] mp_tac) >>
@@ -2079,13 +2079,13 @@ Proof
       metis_tac[])
   >- (`find_var_decl_by_name fn ts = NONE` by
         (irule find_var_decl_by_name_NONE_Immutable >> simp[] >> metis_tac[]) >>
-      `FLOOKUP art.cta_bare_globals (src,string_to_num fn) = SOME (ArrayT t b)` by
+      `FLOOKUP art.cta_bare_globals (src,fn) = SOME (ArrayT t b)` by
         (`bare_globals_complete art.cta_bare_globals
             (initial_evaluation_context am.sources am.layouts tx src)` by
            (irule check_contract_bare_globals_complete_initial >> simp[]) >>
          gvs[bare_globals_complete_def] >> metis_tac[]) >>
       gvs[immutables_ready_def] >>
-      qpat_x_assum `∀src' id ty. FLOOKUP art.cta_bare_globals (src',string_to_num id) = SOME ty ⇒ _`
+      qpat_x_assum `∀src' id ty. FLOOKUP art.cta_bare_globals (src',id) = SOME ty ⇒ _`
         (qspecl_then [`src`,`fn`,`ArrayT t b`] mp_tac) >>
       qpat_x_assum `∀src' id ty tv v. _`
         (qspecl_then [`src`,`fn`,`ArrayT t b`] mp_tac) >>

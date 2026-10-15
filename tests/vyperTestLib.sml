@@ -393,13 +393,7 @@ val allowed_test_names = [
 
 (* Tests excluded by name - require architectural changes *)
 val excluded_test_names = [
-  (* Null-AST raw deployments now decode and execute, but these ABI-decode
-     cases still hit independent ABI argument/strictness limitations in the
-     source contract call path before or around the raw helper interaction. *)
-  "test_abi_arg_wrapped_complex_member_head",
-  "test_abi_arg_wrapped_dynarray_head",
   (*"test_abi_decode_child_head_points_to_parent",*)
-  "test_abi_decode_complex_arithmetic_overflow",
   (*"test_abi_decode_complex_empty_dynarray",
   "test_abi_decode_empty_toplevel_dynarray",
   "test_abi_decode_extcall_complex_empty_dynarray",

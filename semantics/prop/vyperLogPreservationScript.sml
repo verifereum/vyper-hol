@@ -2632,6 +2632,9 @@ Proof
        vyperStateTheory.type_check_def, vyperStateTheory.assert_def,
        vyperStateTheory.get_accounts_def,
        vyperStateTheory.get_transient_storage_def, AllCaseEqs()] >>
+  TRY (CASE_TAC >> gvs[log_extends_refl]) >>
+  TRY (CASE_TAC >> gvs[log_extends_refl]) >>
+  TRY (CASE_TAC >> gvs[log_extends_refl]) >>
   rpt (CASE_TAC >> gvs[log_extends_refl]) >>
   simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
        vyperStateTheory.return_def, vyperStateTheory.raise_def,

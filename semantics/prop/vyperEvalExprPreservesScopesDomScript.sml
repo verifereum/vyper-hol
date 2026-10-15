@@ -873,7 +873,7 @@ Resume eval_mutual_preserves_scopes_dom[ExtCall]:
 QED
 
 val SCOPES_DOM_IH_TAC =
-  gvs[oneTheory.one, ignore_bind_def] >>
+  simp_tac bool_ss [oneTheory.one, ignore_bind_def] >>
   rpt (FIRST [first_assum ACCEPT_TAC,
     first_x_assum (fn th =>
       if is_imp (snd (strip_forall (concl th))) then
@@ -890,7 +890,13 @@ Resume eval_mutual_preserves_scopes_dom[return_path_1]:
   metis_tac[ignore_bind_def]
 QED
 Resume eval_mutual_preserves_scopes_dom[return_path_2]:
-  SCOPES_DOM_IH_TAC
+  SCOPES_DOM_IH_TAC >>
+  qpat_x_assum ‘∀a b. _ ∧ p_2'.co_returnData = [] ⇒
+      scopes_dom_frame (eval_expr cx (THE drv))’ irule >>
+  simp[] >>
+  simp[ignore_bind_def] >>
+  qexistsl_tac [‘s'³'’, ‘t'³'’] >>
+  asm_simp_tac bool_ss []
 QED
 Resume eval_mutual_preserves_scopes_dom[return_path_3]:
   simp_tac bool_ss [oneTheory.one, ignore_bind_def] >>
@@ -902,7 +908,12 @@ Resume eval_mutual_preserves_scopes_dom[return_path_3]:
   metis_tac[ignore_bind_def]
 QED
 Resume eval_mutual_preserves_scopes_dom[return_path_4]:
-  SCOPES_DOM_IH_TAC
+  SCOPES_DOM_IH_TAC >>
+  qpat_x_assum ‘∀a b. _ ∧ p_2'.co_returnData = [] ⇒
+      scopes_dom_frame (eval_expr cx (THE drv))’ irule >>
+  simp[ignore_bind_def] >>
+  qexistsl_tac [‘s'³'’, ‘t'³'’] >>
+  asm_simp_tac bool_ss []
 QED
 
 (* Oracle sibling for the ExtCall resume. Domain equality, not value or
