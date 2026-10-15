@@ -29,7 +29,8 @@ Theorem well_typed_expr_not_hashmap_place:
     well_typed_expr env e ==>
     type_place_expr env e <> SOME (HashMapT kt vt)
 Proof
-  Induct >>
+  ho_match_mp_tac
+    (expr_induction |> Q.SPEC `P` |> Q.SPEC `λ_. T` |> SIMP_RULE (srw_ss()) []) >>
   rw[well_typed_expr_def, vtype_annotation_ok_def] >>
   gvs[well_typed_expr_def, vtype_annotation_ok_def, AllCaseEqs()] >>
   TRY (PairCases_on `p` >>
