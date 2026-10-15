@@ -952,7 +952,8 @@ Proof
 QED
 
 val acct_frame_finish_tac =
-  fs[step_inst_base_def] >>
+  qpat_x_assum `step_inst_base inst s = _` mp_tac >>
+  ASM_REWRITE_TAC[step_inst_base_def] >> rpt strip_tac >>
   fs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
      exec_read0_def, exec_read1_def, exec_write2_def,
      exec_alloca_def, extract_venom_result_def] >>
