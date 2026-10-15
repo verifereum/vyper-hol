@@ -254,11 +254,12 @@ Before applying a nontrivial tactic:
 
 Use this checklist especially when proving type soundness, preservation, and no-type-error lemmas over monadic evaluators.
 
-## 11. Keep large evaluator cases within a five-second tactic timeout
+## 11. Keep large evaluator cases within a 2.5-second tactic timeout
 
 An `ExtCall` induction case can have dozens of monadic binds and large conditional induction hypotheses. A single `rpt (FIRST [...])`, `gvs[bind_def, ...]`, or `RULE_ASSUM_TAC (REWRITE_RULE [bind_def, ...])` may exceed the tactic timeout even when the proof is valid.
 
-- Isolate constructor cases with `>| [...]` and separate a repeated tactic into a one-step tactic. Apply a few `TRY STEP_TAC >>` fragments before the final `rpt STEP_TAC`; each fragment gets its own timeout.
-- Simplify the goal with `simp_tac bool_ss [...]` instead of rewriting every large induction hypothesis with `gvs[...]`. Discharge the resulting continuation with the matching hypothesis and only then use a small closing tactic.
+- Isolate constructor cases with `>| [...]` and separate a repeated tactic into a one-step tactic. Apply bounded `NTAC 4 (TRY STEP_TAC) >>` fragments before the final `rpt STEP_TAC`; each fragment gets its own timeout. Do not change an existing tactic's definition merely to make one proof faster.
+- Split an `option`-guarded continuation by naming the goal's `case` scrutinee with `qmatch_goalsub_rename_tac`, then `Cases_on` it. Simplify each branch before running the monadic tactic; branch-local work avoids repeatedly traversing both large guarded induction hypotheses.
+- Simplify the goal with `simp_tac bool_ss [...]` instead of rewriting every large induction hypothesis with `gvs[...]`. Discharge the resulting continuation with the matching hypothesis and only then use a small closing tactic. For a direct theorem conclusion, `drule_all lemma >> strip_tac` avoids a context-wide `simp[]`.
 - On error paths where the recursive continuation never runs, discard its large induction hypothesis before simplifying (for example, `qpat_x_assum \`!s'' vs t. _\` kall_tac`). Keep it on success paths.
-- Preserve the theorem statement and all suspended return paths. Build the affected theory and the aggregate target with the same `--tactic-timeout 5`; a cached subtheory alone does not check every dependent proof.
+- Preserve the theorem statement and all suspended return paths. Build the affected theory and the aggregate target with the same `--tactic-timeout 2.5`; a cached subtheory alone does not check every dependent proof.

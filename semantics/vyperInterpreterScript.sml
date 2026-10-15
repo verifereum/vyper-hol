@@ -1412,7 +1412,7 @@ Definition evaluate_def:
     return $ v::vs
   od
 Termination
-  WF_REL_TAC ‘measure (λx. case x of
+  qexists_tac ‘measure (λx. case x of
   | INR (INR (INR (INR (INR (INR (INR (INR (cx, es))))))))
     => exprs_bound (remcode cx) es
   | INR (INR (INR (INR (INR (INR (INR (INL (cx, e))))))))
@@ -1429,6 +1429,9 @@ Termination
     => iterator_bound (remcode cx) it
   | INR (INL (cx, ss)) => stmts_bound (remcode cx) ss
   | INL (cx, s) => stmt_bound (remcode cx) s)’
+  \\ conj_tac >- simp[prim_recTheory.WF_measure]
+  \\ rpt conj_tac
+  \\ simp[prim_recTheory.measure_def, relationTheory.inv_image_def]
   \\ rw[bound_def, MAX_DEF, MULT, IS_SOME_EXISTS] \\ gvs[]
   \\ rpt (FIRST [
     (* For loop: compatible_bound case *)
@@ -1447,7 +1450,10 @@ Termination
     \\ gvs[type_builtin_args_length_ok_def, check_def, type_check_def, assert_def,
            LENGTH_EQ_NUM_compute, bound_def]),
     (* IntCall cases *)
-    (gvs[check_def, type_check_def, assert_def]
+    (qmatch_asmsub_rename_tac
+       `lift_option_type (lookup_callable_function _ _ _) _ _ = (INL callable,_)`
+    \\ PairCases_on `callable`
+    \\ gvs[check_def, type_check_def, assert_def]
     \\ gvs[push_function_def, return_def]
     \\ gvs[lift_option_def, lift_option_type_def, CaseEq"option", CaseEq"prod", option_CASE_rator,
            raise_def, return_def]

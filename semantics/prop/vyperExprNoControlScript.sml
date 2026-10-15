@@ -1126,31 +1126,40 @@ Resume eval_expr_no_control_with_bt[ExtCall]:
   TRY NO_CONTROL_MONAD_STEP_TAC >>
   TRY NO_CONTROL_MONAD_STEP_TAC >>
   TRY NO_CONTROL_MONAD_STEP_TAC >>
-  NO_CONTROL_MONAD_TAC >|
-  [suspend "return_path_1", suspend "return_path_2",
-   suspend "return_path_3", suspend "return_path_4"]
+  NTAC 4 (TRY NO_CONTROL_MONAD_STEP_TAC) >>
+  NTAC 4 (TRY NO_CONTROL_MONAD_STEP_TAC) >>
+  NTAC 4 (TRY NO_CONTROL_MONAD_STEP_TAC) >>
+  NTAC 4 (TRY NO_CONTROL_MONAD_STEP_TAC) >>
+  NTAC 4 (TRY NO_CONTROL_MONAD_STEP_TAC) >>
+  NTAC 4 (TRY NO_CONTROL_MONAD_STEP_TAC) >>
+  NTAC 4 (TRY NO_CONTROL_MONAD_STEP_TAC) >>
+  NTAC 4 (TRY NO_CONTROL_MONAD_STEP_TAC) >>
+  qmatch_goalsub_rename_tac `case outcome_opt of NONE => _ | SOME _ => _` >>
+  Cases_on `outcome_opt` >> simp_tac std_ss [] >|
+  [NO_CONTROL_MONAD_TAC >> suspend "return_path_1",
+   NO_CONTROL_MONAD_TAC >> suspend "return_path_2"]
 QED
 
-(* Match the guarded IH in semantic order.  Searching at Any repeatedly can
-   instantiate unrelated guards and explode on the concrete ExtCall path. *)
-val NO_CONTROL_MONAD_IH_TAC =
-  gvs[oneTheory.one, ignore_bind_def] >>
-  FIRST [first_assum ACCEPT_TAC,
-    first_assum (fn ih =>
-      if is_imp (snd (strip_forall (concl ih))) then
-        mp_tac (REWRITE_RULE [GSYM AND_IMP_INTRO] ih) >>
-        rpt (disch_then drule) >> strip_tac >>
-        first_assum ACCEPT_TAC >> NO_TAC
-      else NO_TAC)];
+(* Discharge guards in semantic order using only matching assumptions.
+   Do not simplify the whole context (including both large guarded IHs), or
+   run drule's context-wide resolution search at every monadic step. *)
+fun NO_CONTROL_MONAD_IH_TAC (asl,w) =
+  let
+    val normalise = PURE_REWRITE_RULE [ignore_bind_def]
+    val facts = List.concat (map (CONJUNCTS o normalise o ASSUME) asl)
+    fun discharge th =
+      if is_imp (snd (strip_forall (concl th))) then
+        discharge (tryfind (MATCH_MP th) facts)
+      else th
+    fun close ih g =
+      ACCEPT_TAC (discharge
+        (PURE_REWRITE_RULE [GSYM AND_IMP_INTRO] ih)) g
+  in
+    FIRST (map close facts) (asl,w)
+  end;
 
 Resume eval_expr_no_control_with_bt[return_path_1]:
-  simp_tac bool_ss [oneTheory.one, ignore_bind_def] >>
-  rpt (FIRST [first_assum ACCEPT_TAC,
-    first_x_assum (fn th =>
-      if is_imp (snd (strip_forall (concl th))) then
-        drule_at Any th >> simp_tac bool_ss [] >> strip_tac
-      else NO_TAC)]) >>
-  metis_tac[ignore_bind_def]
+  NO_CONTROL_MONAD_IH_TAC
 QED
 Resume eval_expr_no_control_with_bt[return_path_2]:
   NO_CONTROL_MONAD_IH_TAC

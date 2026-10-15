@@ -2632,12 +2632,16 @@ Proof
        vyperStateTheory.type_check_def, vyperStateTheory.assert_def,
        vyperStateTheory.get_accounts_def,
        vyperStateTheory.get_transient_storage_def, AllCaseEqs()] >>
+  NTAC 4 (TRY (CASE_TAC >> gvs[log_extends_refl])) >>
+  NTAC 4 (TRY (CASE_TAC >> gvs[log_extends_refl])) >>
   rpt (CASE_TAC >> gvs[log_extends_refl]) >>
   simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
        vyperStateTheory.return_def, vyperStateTheory.raise_def,
        vyperStateTheory.check_def, vyperStateTheory.assert_def,
        vyperStateTheory.get_accounts_def,
        vyperStateTheory.get_transient_storage_def, AllCaseEqs()] >>
+  NTAC 4 (TRY (CASE_TAC >> gvs[log_extends_refl])) >>
+  NTAC 4 (TRY (CASE_TAC >> gvs[log_extends_refl])) >>
   rpt (CASE_TAC >> gvs[log_extends_refl]) >>
   imp_res_tac lift_option_type_state >>
   imp_res_tac run_ext_call_lift_option_state >>
@@ -3268,6 +3272,18 @@ val EXTCALL_LOG_MONAD_TAC =
     CHANGED_TAC (rewrite_tac[vyperStateTheory.ignore_bind_def]),
     gen_tac, strip_tac, conj_tac, CASE_TAC]);
 
+(* Bounded monadic steps keep the ExtCall spine below the tactic timeout. *)
+val EXTCALL_LOG_MONAD_STEP_TAC = FIRST [
+  CHANGED_TAC (CONV_TAC (DEPTH_CONV ETA_CONV)),
+  CHANGED_TAC (simp_tac bool_ss
+    [FORALL_PROD, pair_case_thm, UNCURRY, log_monad_primitives]),
+  first_assum ACCEPT_TAC, MATCH_ACCEPT_TAC log_monad_take,
+  CHANGED_TAC (fn (asl,w) => simp_tac bool_ss
+    (pair_case_thm :: UNCURRY :: List.map ASSUME (List.filter is_eq asl)) (asl,w)),
+  irule log_monad_bind_guarded >> conj_tac,
+  CHANGED_TAC (rewrite_tac[vyperStateTheory.ignore_bind_def]),
+  gen_tac, strip_tac, conj_tac, CASE_TAC];
+
 (* Normalize facts and guarded IHs identically before matching the entire
    success guard. Matching one arbitrary conjunct at a time branches over
    unrelated operational equations and repeatedly revisits both oracle modes. *)
@@ -3323,6 +3339,22 @@ Proof
          (rpt gen_tac >> strip_tac >>
           simp[GSYM log_monad_def, Once vyperInterpreterTheory.evaluate_def] >>
           RULE_ASSUM_TAC (REWRITE_RULE [GSYM log_monad_def]) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
           EXTCALL_LOG_MONAD_TAC >> EXTCALL_LOG_IH_PREP_TAC >>
           EXTCALL_LOG_IH_TAC) >~
        [`_ ==> !st res st'.
@@ -3335,19 +3367,21 @@ Proof
           rpt gen_tac >>
           BasicProvers.TOP_CASE_TAC >>
           reverse BasicProvers.TOP_CASE_TAC >-
-            (rpt strip_tac >> imp_res_tac type_check_state >>
-             gvs[log_extends_refl]) >>
+            (rpt strip_tac >> rpt (qpat_x_assum `!x. _` kall_tac) >>
+             imp_res_tac type_check_state >> gvs[log_extends_refl]) >>
           rewrite_tac[vyperStateTheory.bind_def,
                       vyperStateTheory.ignore_bind_def] >>
           BasicProvers.TOP_CASE_TAC >>
           reverse BasicProvers.TOP_CASE_TAC >-
-            (rpt strip_tac >> imp_res_tac type_check_state >>
+            (rpt strip_tac >> rpt (qpat_x_assum `!x. _` kall_tac) >>
+             imp_res_tac type_check_state >>
              imp_res_tac lift_option_type_state >> gvs[log_extends_refl]) >>
           rewrite_tac[vyperStateTheory.bind_def,
                       vyperStateTheory.ignore_bind_def] >>
           BasicProvers.TOP_CASE_TAC >>
           reverse BasicProvers.TOP_CASE_TAC >-
-            (rpt strip_tac >> imp_res_tac type_check_state >>
+            (rpt strip_tac >> rpt (qpat_x_assum `!x. _` kall_tac) >>
+             imp_res_tac type_check_state >>
              imp_res_tac lift_option_type_state >> gvs[log_extends_refl]) >>
           BasicProvers.LET_ELIM_TAC >>
           qpat_x_assum `_ = _` mp_tac >>
@@ -3355,7 +3389,8 @@ Proof
                       vyperStateTheory.ignore_bind_def] >>
           BasicProvers.TOP_CASE_TAC >>
           reverse BasicProvers.TOP_CASE_TAC >-
-            (rpt strip_tac >> imp_res_tac type_check_state >>
+            (rpt strip_tac >> rpt (qpat_x_assum `!x. _` kall_tac) >>
+             imp_res_tac type_check_state >>
              imp_res_tac lift_option_type_state >> gvs[log_extends_refl]) >>
           pop_assum mp_tac >>
           first_x_assum $ funpow 2 drule_then drule >>

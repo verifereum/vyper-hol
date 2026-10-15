@@ -3827,7 +3827,7 @@ Resume m2v_nonpromoted_mem_dispatch[dload]:
   ho_match_mp_tac m2v_step_nonpromoted_read1 >>
   qexistsl [`\off s. word_of_bytes T 0w
     (TAKE 32 (DROP (w2n off) s.vs_data_section ++ REPLICATE 32 0w))`, `s1`] >>
-  gvs[step_inst_non_invoke, step_inst_base_def] >>
+  ASM_REWRITE_TAC[step_inst_non_invoke, step_inst_base_def] >>
   gvs[m2v_inv_noix_def]
 QED
 

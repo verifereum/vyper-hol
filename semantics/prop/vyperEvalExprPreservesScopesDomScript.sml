@@ -866,28 +866,40 @@ Resume eval_mutual_preserves_scopes_dom[ExtCall]:
   TRY SCOPES_DOM_FRAME_STEP_TAC >>
   TRY SCOPES_DOM_FRAME_STEP_TAC >>
   TRY SCOPES_DOM_FRAME_STEP_TAC >>
-  TRY SCOPES_DOM_FRAME_STEP_TAC >>
-  SCOPES_DOM_FRAME_TAC >|
-  [suspend "return_path_1", suspend "return_path_2",
-   suspend "return_path_3", suspend "return_path_4"]
+  NTAC 4 (TRY SCOPES_DOM_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY SCOPES_DOM_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY SCOPES_DOM_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY SCOPES_DOM_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY SCOPES_DOM_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY SCOPES_DOM_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY SCOPES_DOM_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY SCOPES_DOM_FRAME_STEP_TAC) >>
+  strip_tac >>
+  qmatch_goalsub_rename_tac `case outcome_opt of NONE => _ | SOME _ => _` >>
+  Cases_on `outcome_opt` >> simp_tac std_ss [] >|
+  [SCOPES_DOM_FRAME_TAC >> suspend "return_path_1",
+   SCOPES_DOM_FRAME_TAC >> suspend "return_path_2"]
 QED
 
-val SCOPES_DOM_IH_TAC =
-  gvs[oneTheory.one, ignore_bind_def] >>
-  rpt (FIRST [first_assum ACCEPT_TAC,
-    first_x_assum (fn th =>
+(* Normalize unit values and guard equalities with only bool_ss, then match
+   guards in semantic order without context-wide simplification or drule. *)
+fun SCOPES_DOM_IH_TAC (asl,w) =
+  let
+    val normalise = SIMP_RULE bool_ss [oneTheory.one, ignore_bind_def]
+    val facts = List.concat (map (CONJUNCTS o normalise o ASSUME) asl)
+    fun discharge th =
       if is_imp (snd (strip_forall (concl th))) then
-        drule_at Any th >> simp_tac bool_ss [] >> strip_tac
-      else NO_TAC)]);
+        discharge (tryfind (MATCH_MP th) facts)
+      else th
+    fun close ih g =
+      ACCEPT_TAC (discharge
+        (PURE_REWRITE_RULE [GSYM AND_IMP_INTRO] ih)) g
+  in
+    FIRST (map close facts) (asl,w)
+  end;
 
 Resume eval_mutual_preserves_scopes_dom[return_path_1]:
-  simp_tac bool_ss [oneTheory.one, ignore_bind_def] >>
-  rpt (FIRST [first_assum ACCEPT_TAC,
-    first_x_assum (fn th =>
-      if is_imp (snd (strip_forall (concl th))) then
-        drule_at Any th >> simp_tac bool_ss [] >> strip_tac
-      else NO_TAC)]) >>
-  metis_tac[ignore_bind_def]
+  SCOPES_DOM_IH_TAC
 QED
 Resume eval_mutual_preserves_scopes_dom[return_path_2]:
   SCOPES_DOM_IH_TAC
