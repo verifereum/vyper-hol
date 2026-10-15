@@ -76,13 +76,25 @@ QED
 
 (* ===== Scan characterization ===== *)
 
+(* An OR whose pre-flipped form has a literal at op2 carries that literal at
+   op1 or op2. *)
+Triviality or_pre_flip_lit[local]:
+  !inst op1 n.
+    inst.inst_opcode = OR /\
+    (ao_pre_flip_inst inst).inst_operands = [op1; Lit n] ==>
+    inst.inst_operands = [Lit n; op1] \/ inst.inst_operands = [op1; Lit n]
+Proof
+  rw[ao_pre_flip_inst_def] >> every_case_tac >> gvs[]
+QED
+
 (* Every scanned id belongs to an eligible OR instruction in the list. *)
 Triviality scan_mem_imp[local]:
-  !dfg insts id.
-    MEM id (ao_or_truthy_scan dfg insts) ==>
+  !dfg0 dfg insts id.
+    MEM id (ao_or_truthy_scan dfg0 dfg insts) ==>
     ?inst. MEM inst insts /\ inst.inst_id = id /\
            inst.inst_opcode = OR /\
-           (?op1 n. inst.inst_operands = [Lit n; op1] /\ n <> 0w) /\
+           (?op1 n. (inst.inst_operands = [Lit n; op1] \/
+                     inst.inst_operands = [op1; Lit n]) /\ n <> 0w) /\
            ao_all_truthy dfg inst
 Proof
   Induct_on `insts` >- simp[ao_or_truthy_scan_def] >>
@@ -91,7 +103,8 @@ Proof
   simp[ao_or_truthy_scan_def] >>
   IF_CASES_TAC
   >- (strip_tac >> gvs[]
-      >- (qexists_tac `h` >> gvs[] >> every_case_tac >> gvs[])
+      >- (qexists_tac `h` >> gvs[] >> every_case_tac >> gvs[] >>
+          metis_tac[or_pre_flip_lit])
       >> last_x_assum drule >> strip_tac >> metis_tac[])
   >> strip_tac >> last_x_assum drule >> strip_tac >> metis_tac[]
 QED
@@ -116,10 +129,10 @@ End
 (* A scanned OR has a single output, and every actual use of that output is
    a truthy instruction. *)
 Triviality scan_output_uses_truthy[local]:
-  !fn oinst out use.
+  !dfg0 fn oinst out use.
     fn_inst_ids_distinct fn /\
     MEM oinst (fn_insts fn) /\
-    MEM oinst.inst_id (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn)) /\
+    MEM oinst.inst_id (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn)) /\
     MEM out oinst.inst_outputs /\
     MEM use (fn_insts fn) /\
     MEM (Var out) use.inst_operands ==>
@@ -146,12 +159,12 @@ QED
 
 (* A non-truthy instruction never reads a dead variable. *)
 Triviality nontruthy_operand_not_dead[local]:
-  !fn use x.
+  !dfg0 fn use x.
     fn_inst_ids_distinct fn /\
     MEM use (fn_insts fn) /\
     ~is_truthy_inst use.inst_opcode /\
     MEM (Var x) use.inst_operands ==>
-    x NOTIN ao_or_truthy_dead_vars (dfg_build_function fn) fn
+    x NOTIN ao_or_truthy_dead_vars dfg0 (dfg_build_function fn) fn
 Proof
   rpt strip_tac >>
   gvs[ao_or_truthy_dead_vars_def, pred_setTheory.GSPECIFICATION] >>
@@ -203,12 +216,14 @@ Proof
 QED
 
 Triviality merge_callee_state_equiv[local]:
-  !dead s1 s2 cs.
+  !dead s1 s2 ir cs.
     state_equiv dead s1 s2 ==>
-    state_equiv dead (merge_callee_state s1 cs) (merge_callee_state s2 cs)
+    state_equiv dead (adopt_return_fmp ir (merge_callee_state s1 cs))
+                     (adopt_return_fmp ir (merge_callee_state s2 cs))
 Proof
-  rw[merge_callee_state_def, state_equiv_def, execution_equiv_def,
-     lookup_var_def]
+  rpt strip_tac >> Cases_on `ir.iret_adopt_fmp` >>
+  gvs[adopt_return_fmp_def, merge_callee_state_def, state_equiv_def,
+      execution_equiv_def, lookup_var_def]
 QED
 
 Triviality foldl_update_var_state_equiv[local]:
@@ -276,17 +291,20 @@ Proof
   >- simp[result_equiv_def] >>
   rename1 `SOME callee_s` >> simp[] >>
   Cases_on `run_blocks fuel ctx callee_fn callee_s` >>
-  simp[result_equiv_def] >>
-  `state_equiv dead (merge_callee_state s1 v) (merge_callee_state s2 v)` by
-    (irule merge_callee_state_equiv >> simp[]) >>
-  `case (bind_outputs inst.inst_outputs l (merge_callee_state s1 v),
-         bind_outputs inst.inst_outputs l (merge_callee_state s2 v)) of
+  simp[result_equiv_def, execution_equiv_refl] >>
+  rename1 `adopt_return_fmp ir (merge_callee_state s1 v)` >>
+  qabbrev_tac `m1 = adopt_return_fmp ir (merge_callee_state s1 v)` >>
+  qabbrev_tac `m2 = adopt_return_fmp ir (merge_callee_state s2 v)` >>
+  `state_equiv dead m1 m2` by
+    (simp[Abbr `m1`, Abbr `m2`] >> irule merge_callee_state_equiv >> simp[]) >>
+  `case (bind_outputs inst.inst_outputs ir.iret_values m1,
+         bind_outputs inst.inst_outputs ir.iret_values m2) of
      (SOME s1', SOME s2') => state_equiv dead s1' s2'
    | (NONE, NONE) => T
    | _ => F` by
     (irule bind_outputs_state_equiv >> simp[]) >>
-  Cases_on `bind_outputs inst.inst_outputs l (merge_callee_state s1 v)` >>
-  Cases_on `bind_outputs inst.inst_outputs l (merge_callee_state s2 v)` >>
+  Cases_on `bind_outputs inst.inst_outputs ir.iret_values m1` >>
+  Cases_on `bind_outputs inst.inst_outputs ir.iret_values m2` >>
   gvs[result_equiv_def, state_equiv_def, execution_equiv_def]
 QED
 
@@ -294,12 +312,13 @@ QED
 
 (* A scanned (rewritten) instruction is an eligible OR with a single output. *)
 Triviality scanned_inst_shape[local]:
-  !fn inst.
+  !dfg0 fn inst.
     fn_inst_ids_distinct fn /\
     MEM inst (fn_insts fn) /\
-    MEM inst.inst_id (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn)) ==>
+    MEM inst.inst_id (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn)) ==>
     inst.inst_opcode = OR /\
-    (?op1 n. inst.inst_operands = [Lit n; op1] /\ n <> 0w) /\
+    (?op1 n. (inst.inst_operands = [Lit n; op1] \/
+              inst.inst_operands = [op1; Lit n]) /\ n <> 0w) /\
     (?out. inst.inst_outputs = [out])
 Proof
   rpt gen_tac >> strip_tac >>
@@ -310,16 +329,17 @@ Proof
   `inst2 = inst` by (irule all_distinct_id_unique >> metis_tac[]) >>
   gvs[] >>
   qpat_x_assum `ao_all_truthy _ _` mp_tac >> simp[ao_all_truthy_def] >>
-  Cases_on `inst.inst_outputs` >> simp[] >> Cases_on `t` >> simp[]
+  Cases_on `inst.inst_outputs` >> simp[] >> Cases_on `t` >> simp[] >>
+  metis_tac[]
 QED
 
 (* The output of a scanned instruction is a dead variable. *)
 Triviality scanned_output_dead[local]:
-  !fn inst out.
+  !dfg0 fn inst out.
     MEM inst (fn_insts fn) /\
-    MEM inst.inst_id (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn)) /\
+    MEM inst.inst_id (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn)) /\
     MEM out inst.inst_outputs ==>
-    out IN ao_or_truthy_dead_vars (dfg_build_function fn) fn
+    out IN ao_or_truthy_dead_vars dfg0 (dfg_build_function fn) fn
 Proof
   rpt strip_tac >>
   simp[ao_or_truthy_dead_vars_def, pred_setTheory.GSPECIFICATION] >>
@@ -328,12 +348,12 @@ QED
 
 (* An UNCHANGED instruction never writes a dead variable. *)
 Triviality unchanged_no_dead_output[local]:
-  !fn inst outv.
+  !dfg0 fn inst outv.
     ssa_form fn /\
     MEM inst (fn_insts fn) /\
-    ~MEM inst.inst_id (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn)) /\
+    ~MEM inst.inst_id (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn)) /\
     MEM outv inst.inst_outputs ==>
-    outv NOTIN ao_or_truthy_dead_vars (dfg_build_function fn) fn
+    outv NOTIN ao_or_truthy_dead_vars dfg0 (dfg_build_function fn) fn
 Proof
   rpt strip_tac >>
   gvs[ao_or_truthy_dead_vars_def, pred_setTheory.GSPECIFICATION] >>
@@ -349,13 +369,7 @@ Triviality ok_terminator_preserves_lookup[local]:
     step_inst fuel ctx inst s = OK s' ==>
     lookup_var v s' = lookup_var v s
 Proof
-  rpt strip_tac >>
-  `inst.inst_opcode <> INVOKE` by (strip_tac >> gvs[is_terminator_def]) >>
-  gvs[step_inst_non_invoke] >>
-  qpat_x_assum `is_terminator _` mp_tac >>
-  qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
-  Cases_on `inst.inst_opcode` >> simp[is_terminator_def, step_inst_base_def] >>
-  every_case_tac >> rw[] >> gvs[jump_to_def, lookup_var_def]
+  metis_tac[venomExecProofsTheory.step_terminator_preserves_vars]
 QED
 
 (* ===== Truthy instruction reading a dead operand ===== *)
@@ -364,21 +378,21 @@ QED
    variable: the dead var is nonzero (or undefined) on each side, so the zero/
    abort branch never fires and the two executions agree up to dead vars. *)
 Triviality truthy_dead_step[local]:
-  !fn fuel ctx inst s1 s2 x.
-    state_equiv (ao_or_truthy_dead_vars (dfg_build_function fn) fn) s1 s2 /\
-    or_truthy_inv (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn))
+  !dfg0 fn fuel ctx inst s1 s2 x.
+    state_equiv (ao_or_truthy_dead_vars dfg0 (dfg_build_function fn) fn) s1 s2 /\
+    or_truthy_inv (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn))
                   (fn_insts fn) s1 s2 /\
     is_truthy_inst inst.inst_opcode /\
     MEM (Var x) inst.inst_operands /\
-    x IN ao_or_truthy_dead_vars (dfg_build_function fn) fn ==>
-    result_equiv (ao_or_truthy_dead_vars (dfg_build_function fn) fn)
+    x IN ao_or_truthy_dead_vars dfg0 (dfg_build_function fn) fn ==>
+    result_equiv (ao_or_truthy_dead_vars dfg0 (dfg_build_function fn) fn)
       (step_inst fuel ctx inst s1) (step_inst fuel ctx inst s2)
 Proof
   rpt strip_tac >>
-  qabbrev_tac `dead = ao_or_truthy_dead_vars (dfg_build_function fn) fn` >>
+  qabbrev_tac `dead = ao_or_truthy_dead_vars dfg0 (dfg_build_function fn) fn` >>
   `?jinst. MEM jinst (fn_insts fn) /\
            MEM jinst.inst_id
-             (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn)) /\
+             (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn)) /\
            MEM x jinst.inst_outputs` by
     (qunabbrev_tac `dead` >>
      gvs[ao_or_truthy_dead_vars_def, pred_setTheory.GSPECIFICATION] >>
@@ -446,12 +460,12 @@ QED
    variable: terminators preserve all lookups, others write only their own
    outputs which (under SSA) are never dead. *)
 Triviality step_preserves_dead_lookup[local]:
-  !fn fuel ctx inst s s' out.
+  !dfg0 fn fuel ctx inst s s' out.
     ssa_form fn /\ MEM inst (fn_insts fn) /\
     ~MEM inst.inst_id
-       (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn)) /\
+       (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn)) /\
     step_inst fuel ctx inst s = OK s' /\
-    out IN ao_or_truthy_dead_vars (dfg_build_function fn) fn ==>
+    out IN ao_or_truthy_dead_vars dfg0 (dfg_build_function fn) fn ==>
     lookup_var out s' = lookup_var out s
 Proof
   rpt strip_tac >>
@@ -459,7 +473,7 @@ Proof
   >- metis_tac[ok_terminator_preserves_lookup] >>
   `~MEM out inst.inst_outputs` by
     (strip_tac >>
-     `out NOTIN ao_or_truthy_dead_vars (dfg_build_function fn) fn` by
+     `out NOTIN ao_or_truthy_dead_vars dfg0 (dfg_build_function fn) fn` by
        (irule unchanged_no_dead_output >> metis_tac[]) >>
      gvs[]) >>
   metis_tac[venomInstPropsTheory.step_preserves_non_output_vars]
@@ -468,20 +482,20 @@ QED
 (* or_truthy_inv is preserved when an unchanged instruction steps OK on both
    sides (dead-var lookups are untouched). *)
 Triviality or_truthy_inv_step_unchanged[local]:
-  !fn fuel ctx inst s1 s2 s1' s2'.
+  !dfg0 fn fuel ctx inst s1 s2 s1' s2'.
     ssa_form fn /\ fn_inst_ids_distinct fn /\ MEM inst (fn_insts fn) /\
     ~MEM inst.inst_id
-       (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn)) /\
-    or_truthy_inv (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn))
+       (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn)) /\
+    or_truthy_inv (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn))
                   (fn_insts fn) s1 s2 /\
     step_inst fuel ctx inst s1 = OK s1' /\
     step_inst fuel ctx inst s2 = OK s2' ==>
-    or_truthy_inv (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn))
+    or_truthy_inv (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn))
                   (fn_insts fn) s1' s2'
 Proof
   rpt strip_tac >> simp[or_truthy_inv_def] >> rpt gen_tac >> strip_tac >>
   rename1 `MEM jinst (fn_insts fn)` >>
-  `out IN ao_or_truthy_dead_vars (dfg_build_function fn) fn` by
+  `out IN ao_or_truthy_dead_vars dfg0 (dfg_build_function fn) fn` by
     (irule scanned_output_dead >> metis_tac[]) >>
   `lookup_var out s1' = lookup_var out s1` by
     (irule step_preserves_dead_lookup >> metis_tac[]) >>
@@ -498,44 +512,49 @@ QED
    so the states stay equivalent, and or_truthy_inv is re-established (output
    nonzero on both sides). The original may error if its operand is undefined. *)
 Triviality scanned_or_step[local]:
-  !fn fuel ctx inst s1 s2.
+  !dfg0 fn fuel ctx inst s1 s2.
     ssa_form fn /\ fn_inst_ids_distinct fn /\
     MEM inst (fn_insts fn) /\
     MEM inst.inst_id
-       (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn)) /\
+       (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn)) /\
     inst.inst_opcode = OR /\
-    state_equiv (ao_or_truthy_dead_vars (dfg_build_function fn) fn) s1 s2 /\
-    or_truthy_inv (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn))
+    state_equiv (ao_or_truthy_dead_vars dfg0 (dfg_build_function fn) fn) s1 s2 /\
+    or_truthy_inv (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn))
                   (fn_insts fn) s1 s2 ==>
     (?e. step_inst fuel ctx inst s1 = Error e) \/
     ?s1' s2'.
       step_inst fuel ctx inst s1 = OK s1' /\
       step_inst fuel ctx
         (ao_or_truthy_apply_inst
-           (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn)) inst) s2 =
+           (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn)) inst) s2 =
         OK s2' /\
-      state_equiv (ao_or_truthy_dead_vars (dfg_build_function fn) fn) s1' s2' /\
-      or_truthy_inv (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn))
+      state_equiv (ao_or_truthy_dead_vars dfg0 (dfg_build_function fn) fn) s1' s2' /\
+      or_truthy_inv (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn))
                     (fn_insts fn) s1' s2'
 Proof
   rpt strip_tac >>
-  qabbrev_tac `dead = ao_or_truthy_dead_vars (dfg_build_function fn) fn` >>
-  `?op1 n. inst.inst_operands = [Lit n; op1] /\ n <> 0w` by
+  qabbrev_tac `dead = ao_or_truthy_dead_vars dfg0 (dfg_build_function fn) fn` >>
+  `?op1 n. (inst.inst_operands = [Lit n; op1] \/
+            inst.inst_operands = [op1; Lit n]) /\ n <> 0w` by
     metis_tac[scanned_inst_shape] >>
   `?out. inst.inst_outputs = [out]` by metis_tac[scanned_inst_shape] >>
   `out IN dead` by (qunabbrev_tac `dead` >> irule scanned_output_dead >>
                     qexists_tac `inst` >> simp[]) >>
   `ao_or_truthy_apply_inst
-     (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn)) inst =
+     (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn)) inst =
      inst with <| inst_opcode := ASSIGN; inst_operands := [Lit 1w] |>` by
     simp[ao_or_truthy_apply_inst_def] >>
   `inst.inst_opcode <> INVOKE` by gvs[] >>
+  `!v. word_or n v <> 0w /\ word_or v n <> 0w` by
+    metis_tac[word_or_nonzero, wordsTheory.WORD_OR_COMM] >>
   simp[step_inst_non_invoke, step_inst_base_def, exec_pure2_def,
        eval_operand_def] >>
-  Cases_on `eval_operand op1 s1`
-  >- (DISJ1_TAC >> simp[]) >>
-  rename1 `eval_operand op1 s1 = SOME v` >> simp[] >>
-  `state_equiv dead (update_var out (word_or n v) s1) (update_var out 1w s2)` by
+  (* one goal per operand order; an undefined operand is an Error *)
+  Cases_on `eval_operand op1 s1` >> simp[] >>
+  rename1 `eval_operand op1 s1 = SOME v` >>
+  qmatch_goalsub_abbrev_tac `update_var out w1 s1` >>
+  `w1 <> 0w` by (qunabbrev_tac `w1` >> metis_tac[]) >>
+  `state_equiv dead (update_var out w1 s1) (update_var out 1w s2)` by
     (irule update_dead_var_state_equiv >> simp[]) >>
   simp[] >>
   simp[or_truthy_inv_def] >> rpt gen_tac >> strip_tac >>
@@ -556,26 +575,26 @@ QED
    reads a dead var it is truthy (truthy_dead_step), otherwise its operands all
    avoid dead vars (step_inst_result_equiv / INVOKE variant). *)
 Triviality unchanged_result_equiv[local]:
-  !fn fuel ctx inst s1 s2.
+  !dfg0 fn fuel ctx inst s1 s2.
     fn_inst_ids_distinct fn /\ MEM inst (fn_insts fn) /\
-    state_equiv (ao_or_truthy_dead_vars (dfg_build_function fn) fn) s1 s2 /\
-    or_truthy_inv (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn))
+    state_equiv (ao_or_truthy_dead_vars dfg0 (dfg_build_function fn) fn) s1 s2 /\
+    or_truthy_inv (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn))
                   (fn_insts fn) s1 s2 ==>
-    result_equiv (ao_or_truthy_dead_vars (dfg_build_function fn) fn)
+    result_equiv (ao_or_truthy_dead_vars dfg0 (dfg_build_function fn) fn)
       (step_inst fuel ctx inst s1) (step_inst fuel ctx inst s2)
 Proof
   rpt strip_tac >>
   Cases_on `?x. MEM (Var x) inst.inst_operands /\
-                x IN ao_or_truthy_dead_vars (dfg_build_function fn) fn`
+                x IN ao_or_truthy_dead_vars dfg0 (dfg_build_function fn) fn`
   >- (fs[] >>
       `is_truthy_inst inst.inst_opcode` by
         (CCONTR_TAC >>
-         `x NOTIN ao_or_truthy_dead_vars (dfg_build_function fn) fn` by
+         `x NOTIN ao_or_truthy_dead_vars dfg0 (dfg_build_function fn) fn` by
            (irule nontruthy_operand_not_dead >> metis_tac[]) >>
          gvs[]) >>
       irule truthy_dead_step >> metis_tac[]) >>
   `!x. MEM (Var x) inst.inst_operands ==>
-       x NOTIN ao_or_truthy_dead_vars (dfg_build_function fn) fn` by metis_tac[] >>
+       x NOTIN ao_or_truthy_dead_vars dfg0 (dfg_build_function fn) fn` by metis_tac[] >>
   Cases_on `inst.inst_opcode = INVOKE`
   >- (irule step_inst_invoke_result_equiv >> simp[]) >>
   irule step_inst_result_equiv >> simp[]
@@ -586,33 +605,33 @@ QED
 (* Either the original errors, or both step OK (lifted) and or_truthy_inv is
    preserved. Covers the scanned-OR rewrite and every unchanged instruction. *)
 Triviality or_truthy_inst_step[local]:
-  !fn fuel ctx inst s1 s2.
+  !dfg0 fn fuel ctx inst s1 s2.
     ssa_form fn /\ fn_inst_ids_distinct fn /\ MEM inst (fn_insts fn) /\
-    state_equiv (ao_or_truthy_dead_vars (dfg_build_function fn) fn) s1 s2 /\
-    or_truthy_inv (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn))
+    state_equiv (ao_or_truthy_dead_vars dfg0 (dfg_build_function fn) fn) s1 s2 /\
+    or_truthy_inv (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn))
                   (fn_insts fn) s1 s2 ==>
     (?e. step_inst fuel ctx inst s1 = Error e) \/
     (lift_result
-       (state_equiv (ao_or_truthy_dead_vars (dfg_build_function fn) fn))
-       (execution_equiv (ao_or_truthy_dead_vars (dfg_build_function fn) fn))
-       (execution_equiv (ao_or_truthy_dead_vars (dfg_build_function fn) fn))
+       (state_equiv (ao_or_truthy_dead_vars dfg0 (dfg_build_function fn) fn))
+       (execution_equiv (ao_or_truthy_dead_vars dfg0 (dfg_build_function fn) fn))
+       (execution_equiv (ao_or_truthy_dead_vars dfg0 (dfg_build_function fn) fn))
        (step_inst fuel ctx inst s1)
        (step_inst fuel ctx
           (ao_or_truthy_apply_inst
-             (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn)) inst) s2) /\
+             (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn)) inst) s2) /\
      (!s1'. step_inst fuel ctx inst s1 = OK s1' ==>
         ?s2'. step_inst fuel ctx
                 (ao_or_truthy_apply_inst
-                   (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn)) inst)
+                   (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn)) inst)
                 s2 = OK s2' /\
               or_truthy_inv
-                (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn))
+                (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn))
                 (fn_insts fn) s1' s2'))
 Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode = OR /\
             MEM inst.inst_id
-              (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn))`
+              (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn))`
   >- (fs[] >>
       drule_all scanned_or_step >>
       disch_then (qspecl_then [`fuel`,`ctx`] strip_assume_tac)
@@ -621,14 +640,14 @@ Proof
       >- gvs[lift_result_def] >>
       rpt strip_tac >> gvs[] >> qexists_tac `s2'` >> simp[]) >>
   `~MEM inst.inst_id
-      (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn))` by
+      (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn))` by
     (CCONTR_TAC >> `inst.inst_opcode = OR` by metis_tac[scanned_inst_shape] >>
      gvs[]) >>
   `ao_or_truthy_apply_inst
-     (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn)) inst = inst` by
+     (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn)) inst = inst` by
     simp[ao_or_truthy_apply_inst_def] >>
   simp[] >> DISJ2_TAC >>
-  `result_equiv (ao_or_truthy_dead_vars (dfg_build_function fn) fn)
+  `result_equiv (ao_or_truthy_dead_vars dfg0 (dfg_build_function fn) fn)
      (step_inst fuel ctx inst s1) (step_inst fuel ctx inst s2)` by
     (irule unchanged_result_equiv >> simp[]) >>
   conj_tac
@@ -750,28 +769,28 @@ QED
    preserved on OK. The transform is a length-preserving 1:1 MAP so the two
    walks stay at the same index. *)
 Triviality ao_or_truthy_exec_block_sim[local]:
-  !fn bb bb2 n fuel ctx st1 st2.
+  !dfg0 fn bb bb2 n fuel ctx st1 st2.
     ssa_form fn /\ fn_inst_ids_distinct fn /\
     MEM bb fn.fn_blocks /\
     bb2.bb_instructions =
       MAP (ao_or_truthy_apply_inst
-             (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn)))
+             (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn)))
           bb.bb_instructions /\
-    state_equiv (ao_or_truthy_dead_vars (dfg_build_function fn) fn) st1 st2 /\
-    or_truthy_inv (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn))
+    state_equiv (ao_or_truthy_dead_vars dfg0 (dfg_build_function fn) fn) st1 st2 /\
+    or_truthy_inv (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn))
                   (fn_insts fn) st1 st2 /\
     n = LENGTH bb.bb_instructions - st1.vs_inst_idx ==>
     (?e. exec_block fuel ctx bb st1 = Error e) \/
     (lift_result
-       (state_equiv (ao_or_truthy_dead_vars (dfg_build_function fn) fn))
-       (execution_equiv (ao_or_truthy_dead_vars (dfg_build_function fn) fn))
-       (execution_equiv (ao_or_truthy_dead_vars (dfg_build_function fn) fn))
+       (state_equiv (ao_or_truthy_dead_vars dfg0 (dfg_build_function fn) fn))
+       (execution_equiv (ao_or_truthy_dead_vars dfg0 (dfg_build_function fn) fn))
+       (execution_equiv (ao_or_truthy_dead_vars dfg0 (dfg_build_function fn) fn))
        (exec_block fuel ctx bb st1)
        (exec_block fuel ctx bb2 st2) /\
      (!s1'. exec_block fuel ctx bb st1 = OK s1' ==>
         ?s2'. exec_block fuel ctx bb2 st2 = OK s2' /\
               or_truthy_inv
-                (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn))
+                (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn))
                 (fn_insts fn) s1' s2'))
 Proof
   completeInduct_on `n` >> rpt strip_tac >>
@@ -785,13 +804,13 @@ Proof
      qexists_tac `bb` >> simp[listTheory.EL_MEM]) >>
   `EL st1.vs_inst_idx bb2.bb_instructions =
      ao_or_truthy_apply_inst
-       (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn)) dinst` by
+       (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn)) dinst` by
     simp[Abbr `dinst`, listTheory.EL_MAP] >>
   qabbrev_tac `tinst = ao_or_truthy_apply_inst
-                 (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn)) dinst` >>
+                 (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn)) dinst` >>
   `st2.vs_inst_idx < LENGTH bb2.bb_instructions` by gvs[] >>
   `EL st2.vs_inst_idx bb2.bb_instructions = tinst` by metis_tac[] >>
-  qspecl_then [`fn`,`fuel`,`ctx`,`dinst`,`st1`,`st2`] mp_tac or_truthy_inst_step >>
+  qspecl_then [`dfg0`, `fn`,`fuel`,`ctx`,`dinst`,`st1`,`st2`] mp_tac or_truthy_inst_step >>
   impl_tac >- simp[] >>
   strip_tac >> pop_assum strip_assume_tac
   >- ((* original step errors *)
@@ -815,11 +834,11 @@ Proof
   fs[] >>
   rename1 `step_inst fuel ctx dinst st1 = OK s1` >>
   `?s2. step_inst fuel ctx tinst st2 = OK s2 /\
-        or_truthy_inv (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn))
+        or_truthy_inv (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn))
                       (fn_insts fn) s1 s2` by metis_tac[] >>
-  `state_equiv (ao_or_truthy_dead_vars (dfg_build_function fn) fn) s1 s2` by
+  `state_equiv (ao_or_truthy_dead_vars dfg0 (dfg_build_function fn) fn) s1 s2` by
     (qpat_x_assum `lift_result _ _ _ _ _` mp_tac >> gvs[lift_result_def]) >>
-  `execution_equiv (ao_or_truthy_dead_vars (dfg_build_function fn) fn) s1 s2` by
+  `execution_equiv (ao_or_truthy_dead_vars dfg0 (dfg_build_function fn) fn) s1 s2` by
     metis_tac[state_equiv_implies_execution_equiv] >>
   `s1.vs_halted = s2.vs_halted` by fs[state_equiv_def, execution_equiv_def] >>
   reverse (Cases_on `is_terminator dinst.inst_opcode`)
@@ -835,7 +854,7 @@ Proof
       last_x_assum (qspec_then
         `LENGTH bb.bb_instructions - SUC st1.vs_inst_idx` mp_tac) >>
       impl_tac >- simp[] >>
-      disch_then (qspecl_then [`fn`,`bb`,`bb2`,`fuel`,`ctx`,
+      disch_then (qspecl_then [`dfg0`,`fn`,`bb`,`bb2`,`fuel`,`ctx`,
         `s1 with vs_inst_idx := SUC st1.vs_inst_idx`,
         `s2 with vs_inst_idx := SUC st2.vs_inst_idx`] mp_tac) >>
       impl_tac
@@ -892,14 +911,14 @@ QED
 (* eval_phis writes only PHI outputs, which are never scanned-OR outputs under
    SSA, so the OR-truthy invariant survives PHI evaluation. *)
 Triviality or_truthy_inv_eval_phis[local]:
-  !fn s1 s2 sp1 sp2 insts.
+  !dfg0 fn s1 s2 sp1 sp2 insts.
     ssa_form fn /\ fn_inst_ids_distinct fn /\
     (!inst. MEM inst insts ==> MEM inst (fn_insts fn)) /\
-    or_truthy_inv (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn))
+    or_truthy_inv (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn))
                   (fn_insts fn) s1 s2 /\
     eval_phis s1 insts = OK sp1 /\
     eval_phis s2 insts = OK sp2 ==>
-    or_truthy_inv (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn))
+    or_truthy_inv (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn))
                   (fn_insts fn) sp1 sp2
 Proof
   rpt strip_tac >>
@@ -927,18 +946,18 @@ QED
 
 (* PHI operands are never dead vars (PHI is not a truthy instruction). *)
 Triviality phi_operands_not_dead[local]:
-  !fn bb.
+  !dfg0 fn bb.
     fn_inst_ids_distinct fn /\ MEM bb fn.fn_blocks ==>
     EVERY (\inst. inst.inst_opcode = PHI ==>
              !x. MEM (Var x) inst.inst_operands ==>
-               x NOTIN ao_or_truthy_dead_vars (dfg_build_function fn) fn)
+               x NOTIN ao_or_truthy_dead_vars dfg0 (dfg_build_function fn) fn)
           bb.bb_instructions
 Proof
   rpt strip_tac >> simp[listTheory.EVERY_MEM] >> rpt strip_tac >>
   `MEM inst (fn_insts fn)` by
     (simp[fn_insts_def] >> irule mem_fn_insts_blocks >>
      qexists_tac `bb` >> simp[]) >>
-  `x NOTIN ao_or_truthy_dead_vars (dfg_build_function fn) fn` suffices_by gvs[] >>
+  `x NOTIN ao_or_truthy_dead_vars dfg0 (dfg_build_function fn) fn` suffices_by gvs[] >>
   irule nontruthy_operand_not_dead >> conj_tac >- first_assum ACCEPT_TAC >>
   qexists_tac `inst` >> gvs[is_truthy_inst_def]
 QED
@@ -947,21 +966,21 @@ QED
 
 (* TOP-LEVEL: run_block simulation up to dead vars under or_truthy_inv. *)
 Theorem ao_or_truthy_block_sim:
-  !fn bb bb2 fuel ctx s1 s2.
+  !dfg0 fn bb bb2 fuel ctx s1 s2.
     ssa_form fn /\ fn_inst_ids_distinct fn /\
     MEM bb fn.fn_blocks /\
     bb2.bb_instructions =
       MAP (ao_or_truthy_apply_inst
-             (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn)))
+             (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn)))
           bb.bb_instructions /\
-    state_equiv (ao_or_truthy_dead_vars (dfg_build_function fn) fn) s1 s2 /\
-    or_truthy_inv (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn))
+    state_equiv (ao_or_truthy_dead_vars dfg0 (dfg_build_function fn) fn) s1 s2 /\
+    or_truthy_inv (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn))
                   (fn_insts fn) s1 s2 ==>
     (?e. run_block fuel ctx bb s1 = Error e) \/
     lift_result
-      (state_equiv (ao_or_truthy_dead_vars (dfg_build_function fn) fn))
-      (execution_equiv (ao_or_truthy_dead_vars (dfg_build_function fn) fn))
-      (execution_equiv (ao_or_truthy_dead_vars (dfg_build_function fn) fn))
+      (state_equiv (ao_or_truthy_dead_vars dfg0 (dfg_build_function fn) fn))
+      (execution_equiv (ao_or_truthy_dead_vars dfg0 (dfg_build_function fn) fn))
+      (execution_equiv (ao_or_truthy_dead_vars dfg0 (dfg_build_function fn) fn))
       (run_block fuel ctx bb s1) (run_block fuel ctx bb2 s2)
 Proof
   rpt strip_tac >>
@@ -971,7 +990,7 @@ Proof
     simp[or_truthy_phi_prefix_eq] >>
   `EVERY (\inst. inst.inst_opcode = PHI ==>
             !x. MEM (Var x) inst.inst_operands ==>
-              x NOTIN ao_or_truthy_dead_vars (dfg_build_function fn) fn)
+              x NOTIN ao_or_truthy_dead_vars dfg0 (dfg_build_function fn) fn)
           bb.bb_instructions` by (irule phi_operands_not_dead >> simp[]) >>
   simp[run_block_def] >>
   qpat_x_assum `!s. eval_phis s bb2.bb_instructions = _` (fn th => simp[th]) >>
@@ -982,14 +1001,14 @@ Proof
   pop_assum strip_assume_tac
   >- (rename1 `eval_phis s1 bb.bb_instructions = OK sp1` >>
       qspecl_then [`s1`, `s2`,
-                   `ao_or_truthy_dead_vars (dfg_build_function fn) fn`,
+                   `ao_or_truthy_dead_vars dfg0 (dfg_build_function fn) fn`,
                    `bb.bb_instructions`, `sp1`]
         mp_tac eval_phis_state_equiv >>
       impl_tac >- simp[] >> strip_tac >>
       rename1 `eval_phis s2 bb.bb_instructions = OK sp2` >>
-      `or_truthy_inv (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn))
+      `or_truthy_inv (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn))
                      (fn_insts fn) sp1 sp2` by
-        (qspecl_then [`fn`, `s1`, `s2`, `sp1`, `sp2`, `bb.bb_instructions`]
+        (qspecl_then [`dfg0`, `fn`, `s1`, `s2`, `sp1`, `sp2`, `bb.bb_instructions`]
            mp_tac or_truthy_inv_eval_phis >>
          impl_tac
          >- (simp[] >> rpt strip_tac >> simp[fn_insts_def] >>
@@ -999,7 +1018,7 @@ Proof
         (fn th => simp[th]) >>
       qpat_x_assum `eval_phis s2 bb.bb_instructions = OK sp2`
         (fn th => simp[th]) >>
-      qspecl_then [`fn`, `bb`, `bb2`,
+      qspecl_then [`dfg0`, `fn`, `bb`, `bb2`,
         `LENGTH bb.bb_instructions - phi_prefix_length bb.bb_instructions`,
         `fuel`, `ctx`,
         `sp1 with vs_inst_idx := phi_prefix_length bb.bb_instructions`,
@@ -1017,19 +1036,19 @@ QED
 
 (* TOP-LEVEL: or_truthy_inv preserved across OK run_block. *)
 Theorem ao_or_truthy_block_ok_inv:
-  !fn bb bb2 fuel ctx s1 s2 s1' s2'.
+  !dfg0 fn bb bb2 fuel ctx s1 s2 s1' s2'.
     ssa_form fn /\ fn_inst_ids_distinct fn /\
     MEM bb fn.fn_blocks /\
     bb2.bb_instructions =
       MAP (ao_or_truthy_apply_inst
-             (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn)))
+             (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn)))
           bb.bb_instructions /\
-    state_equiv (ao_or_truthy_dead_vars (dfg_build_function fn) fn) s1 s2 /\
-    or_truthy_inv (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn))
+    state_equiv (ao_or_truthy_dead_vars dfg0 (dfg_build_function fn) fn) s1 s2 /\
+    or_truthy_inv (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn))
                   (fn_insts fn) s1 s2 /\
     run_block fuel ctx bb s1 = OK s1' /\
     run_block fuel ctx bb2 s2 = OK s2' ==>
-    or_truthy_inv (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn))
+    or_truthy_inv (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn))
                   (fn_insts fn) s1' s2'
 Proof
   rpt strip_tac >>
@@ -1039,7 +1058,7 @@ Proof
     simp[or_truthy_phi_prefix_eq] >>
   `EVERY (\inst. inst.inst_opcode = PHI ==>
             !x. MEM (Var x) inst.inst_operands ==>
-              x NOTIN ao_or_truthy_dead_vars (dfg_build_function fn) fn)
+              x NOTIN ao_or_truthy_dead_vars dfg0 (dfg_build_function fn) fn)
           bb.bb_instructions` by (irule phi_operands_not_dead >> simp[]) >>
   `(?sp1. eval_phis s1 bb.bb_instructions = OK sp1) \/
    (?e. eval_phis s1 bb.bb_instructions = Error e)` by
@@ -1050,14 +1069,14 @@ Proof
       simp[run_block_def]] >>
   rename1 `eval_phis s1 bb.bb_instructions = OK sp1` >>
   qspecl_then [`s1`, `s2`,
-               `ao_or_truthy_dead_vars (dfg_build_function fn) fn`,
+               `ao_or_truthy_dead_vars dfg0 (dfg_build_function fn) fn`,
                `bb.bb_instructions`, `sp1`]
     mp_tac eval_phis_state_equiv >>
   impl_tac >- simp[] >> strip_tac >>
   rename1 `eval_phis s2 bb.bb_instructions = OK sp2` >>
-  `or_truthy_inv (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn))
+  `or_truthy_inv (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn))
                  (fn_insts fn) sp1 sp2` by
-    (qspecl_then [`fn`, `s1`, `s2`, `sp1`, `sp2`, `bb.bb_instructions`]
+    (qspecl_then [`dfg0`, `fn`, `s1`, `s2`, `sp1`, `sp2`, `bb.bb_instructions`]
        mp_tac or_truthy_inv_eval_phis >>
      impl_tac
      >- (simp[] >> rpt strip_tac >> simp[fn_insts_def] >>
@@ -1078,7 +1097,7 @@ Proof
        (fn th => simp[th]) >>
      qpat_assum `eval_phis s2 bb.bb_instructions = OK sp2`
        (fn th => simp[th])) >>
-  qspecl_then [`fn`, `bb`, `bb2`,
+  qspecl_then [`dfg0`, `fn`, `bb`, `bb2`,
     `LENGTH bb.bb_instructions - phi_prefix_length bb.bb_instructions`,
     `fuel`, `ctx`,
     `sp1 with vs_inst_idx := phi_prefix_length bb.bb_instructions`,

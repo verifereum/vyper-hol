@@ -120,6 +120,7 @@ Proof
   qabbrev_tac `block_inv = \s:venom_state.
     ao_dfg_inv dfg (s with vs_inst_idx := 0) /\
     strict_dom_iszero_inv fn0 dfg s /\
+    all_iszero_inv fn0 dfg s /\
     ao_chain_defined_prefix targets s /\
     range_sound (df_widen_at NONE ra s.vs_current_bb 0) s /\
     MEM s.vs_current_bb (cfg_analyze fn0).cfg_dfs_pre /\
@@ -210,6 +211,14 @@ Proof
     >- (* block_inv preserved through run_block *)
        (qx_genl_tac [`bb`, `fl`, `cx`, `st`, `vt`] >> strip_tac >>
         full_simp_tac (srw_ss()) [Abbr `block_inv`] >>
+        `all_iszero_inv fn0 dfg vt` by
+          (qspecl_then [`fn0`, `dfg`, `bb`, `fl`, `cx`, `st`, `vt`] mp_tac
+             all_iszero_inv_run_block_preserved >>
+           impl_tac >- (
+             rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+             TRY (simp[Abbr `dfg`] >> NO_TAC) >>
+             fs[fn_inst_wf_def, listTheory.EVERY_MEM] >> metis_tac[]) >>
+           simp[]) >>
         qspecl_then [`fn0`, `dfg`, `ra`, `targets`, `bb`, `fl`, `cx`,
                      `st`, `vt`] mp_tac ao_block_inv_preserved >>
         impl_tac
@@ -230,6 +239,11 @@ Proof
              mp_tac ao_block_inv_state_equiv_compat >>
            simp[Abbr `dfg`, Abbr `ra`, Abbr `targets`, Abbr `fn0`,
                 Abbr `fv`] >> disch_then irule >> metis_tac[]) >>
+        `all_iszero_inv fn0 dfg s2` by
+          (qspecl_then [`fn`, `fn0`, `dfg`, `s1`, `s2`]
+             mp_tac ao_all_iszero_inv_state_equiv_compat >>
+           simp[Abbr `dfg`, Abbr `fn0`, Abbr `fv`] >>
+           disch_then irule >> metis_tac[]) >>
         `dfg_sound dfg s2.vs_vars` by
           (qspecl_then [`fn`, `fn0`, `dfg`, `s1`, `s2`]
              mp_tac ao_dfg_sound_state_equiv_compat >>
@@ -275,6 +289,8 @@ Proof
         `fn_entry_label fn0 = SOME s.vs_current_bb` by
           (simp[Abbr `fn0`, fn0_entry_label] >> fs[]) >>
         simp[])
+    >- (* all_iszero_inv (vacuous: vs_vars empty) *)
+       (irule all_iszero_inv_initial >> simp[])
     >- (* ao_chain_defined_prefix *)
        (irule ao_chain_defined_prefix_initial >> qexistsl_tac [`fn`, `fn0`] >>
         rpt conj_tac >> simp[Abbr `targets`, Abbr `fn0`] >> fs[])

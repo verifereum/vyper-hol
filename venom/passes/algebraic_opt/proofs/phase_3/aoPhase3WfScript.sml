@@ -19,36 +19,6 @@ Libs
 (* ao_resolve_iszero_inst / ao_transform_inst structural properties are
    shared from aoWf; this theory keeps only phase-3-specific lemmas. *)
 
-Triviality resolve_op_label[local]:
-  !targets opc lbl.
-    ao_resolve_iszero_op targets opc (Label lbl) = Label lbl
-Proof
-  simp[ao_resolve_iszero_op_def]
-QED
-
-Triviality resolve_op_get_label[local]:
-  !targets opc op.
-    IS_SOME (get_label op) ==>
-    IS_SOME (get_label (ao_resolve_iszero_op targets opc op))
-Proof
-  Cases_on `op` >>
-  simp[venomStateTheory.get_label_def, ao_resolve_iszero_op_def]
-QED
-
-Triviality ao_resolve_iszero_inst_wf[local]:
-  !targets inst.
-    inst_wf inst /\ inst.inst_opcode <> PHI ==>
-    inst_wf (ao_resolve_iszero_inst targets inst)
-Proof
-  rpt strip_tac >>
-  fs[ao_resolve_iszero_inst_def, inst_wf_def] >>
-  Cases_on `inst.inst_opcode` >> gvs[listTheory.LENGTH_MAP] >>
-  simp[resolve_op_label, ao_resolve_iszero_op_def] >>
-  fs[listTheory.EVERY_MAP, listTheory.EVERY_MEM] >>
-  rpt strip_tac >> res_tac >>
-  irule resolve_op_get_label >> simp[]
-QED
-
 Triviality ao_pre_flip_inst_wf[local]:
   !inst. inst_wf inst ==> inst_wf (ao_pre_flip_inst inst)
 Proof
@@ -776,7 +746,9 @@ Triviality ao_post_flip_inst_wf[local]:
   !inst. inst_wf inst ==> inst_wf (ao_post_flip_inst inst)
 Proof
   rpt strip_tac >> simp[ao_post_flip_inst_def] >>
-  every_case_tac >> gvs[] >> fs[inst_wf_def]
+  every_case_tac >> gvs[] >>
+  Cases_on `inst.inst_opcode` >>
+  gvs[inst_wf_def, is_comparator_def, flip_comparison_opcode_def]
 QED
 
 (* Fix B: post-flipping only the trailing instruction preserves inst_wf. *)

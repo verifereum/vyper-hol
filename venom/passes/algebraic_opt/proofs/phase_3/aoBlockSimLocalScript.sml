@@ -7,7 +7,8 @@
  * preserved across loop back-edges).
  *
  * The per-instruction resolve relation (cond2) is derived freshly at each
- * index via chain_iszero_rel_from_inv from strict_dom + within_block.
+ * index via chain_iszero_rel_from_inv from strict_dom + within_block.  The
+ * PHI resolution post-pass takes it from the block-entry all_iszero_inv.
  *
  * TOP-LEVEL:
  *   ao_per_inst_sim_fn0_local — loop-robust per-instruction simulation
@@ -16,7 +17,7 @@
 
 Theory aoBlockSimLocal
 Ancestors
-  algebraicOptDefs aoPhase1Wf aoWf aoBlockSim aoTransformInstSim
+  algebraicOptDefs aoPhase1Wf aoWf aoBlockSim aoTransformInstSim aoSimCmp
   aoResolveObligation aoStepInvObligation aoStrictDomObligation
   aoChainStruct aoIsZeroInv aoRangeObligation aoTargetProps
   aoBlockInvObligation aoBlockInvPreserved
@@ -74,27 +75,27 @@ Proof
   simp[]
 QED
 
-Triviality fn0_inst_fresh_in_fv[local]:
-  !fn fn0 bb inst.
+(* Phase 1 keeps every inst_id, so the helper names phase 3 draws from
+   fn_max_inst_id fn0 all lie above fn's maximum id. *)
+Triviality fn0_helpers_fresh[local]:
+  !fn fn0.
     fn0 = fn with fn_blocks :=
       MAP (\bb. bb with bb_instructions :=
-        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks /\
-    MEM bb fn0.fn_blocks /\
-    MEM inst bb.bb_instructions ==>
-    ao_fresh_var inst.inst_id "not" IN ao_fn_fresh_vars fn /\
-    ao_fresh_var inst.inst_id "iz" IN ao_fn_fresh_vars fn /\
-    ao_fresh_var inst.inst_id "xor" IN ao_fn_fresh_vars fn
+        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks ==>
+    ao_helpers_fresh (ao_fn_fresh_vars fn) (fn_max_inst_id fn0)
 Proof
-  rpt gen_tac >> strip_tac >> gvs[] >>
-  fs[listTheory.MEM_MAP] >> rename1 `MEM bb0 fn.fn_blocks` >>
-  gvs[] >>
-  fs[listTheory.MEM_MAP] >> rename1 `inst = ao_handle_offset_inst inst'` >>
-  `inst.inst_id = inst'.inst_id` by simp[ao_handle_offset_inst_preserves_id] >>
-  `MEM inst' (fn_insts fn)` by (irule mem_block_mem_fn_insts >> metis_tac[]) >>
-  rpt conj_tac >>
-  simp[ao_fn_fresh_vars_def] >>
-  qexists_tac `inst'.inst_id` >> simp[ao_handle_offset_inst_preserves_id] >>
-  simp[listTheory.MEM_MAP] >> qexists_tac `inst'` >> simp[]
+  rpt strip_tac >>
+  `!bbs. MAP (\i. i.inst_id) (fn_insts_blocks
+           (MAP (\bb. bb with bb_instructions :=
+              MAP ao_handle_offset_inst bb.bb_instructions) bbs)) =
+         MAP (\i. i.inst_id) (fn_insts_blocks bbs)` by
+    (Induct >> simp[fn_insts_blocks_def, listTheory.MAP_MAP_o,
+                    combinTheory.o_DEF, ao_handle_offset_inst_preserves_id]) >>
+  `fn_max_inst_id fn0 = fn_max_inst_id fn` by
+    gvs[algebraicOptDefsTheory.fn_max_inst_id_def, fn_insts_def] >>
+  simp[ao_helpers_fresh_def, ao_fn_fresh_vars_def, ao_fresh_id_def] >>
+  rpt strip_tac >>
+  qexistsl_tac [`fn_max_inst_id fn + 1 + id * 3 + k`, `s`] >> simp[]
 QED
 
 (* ===== Transfer-soundness helpers ===== *)
@@ -240,9 +241,11 @@ Proof
   ho_match_mp_tac (Q.SPEC `ao_fn_fresh_vars fn`
     ao_transform_inst_sim_inst) >> simp[] >>
   `MEM inst bb.bb_instructions` by metis_tac[listTheory.EL_MEM] >>
-  drule_all fn0_inst_fresh_in_fv >> simp[] >> strip_tac >> simp[] >>
+  conj_tac >- (irule fn0_helpers_fresh >> simp[]) >>
   `ao_chains_defined_at targets s` by
     metis_tac[ao_chain_defined_prefix_implies_at] >>
+  `inst.inst_opcode <> PHI` by
+    (strip_tac >> metis_tac[venomExecProofsTheory.step_inst_phi_error]) >>
   (* cond2: the iszero chain relation, derived freshly from invariants *)
   `!v chain k. MEM (Var v) inst.inst_operands /\
                ALOOKUP targets v = SOME chain /\ k + 1 < LENGTH chain ==>
@@ -426,6 +429,33 @@ Proof
   rpt strip_tac >>
   qspecl_then [`fn0`, `dfg`, `ao_fn_fresh_vars fn`, `s1`, `s2`] mp_tac
     strict_dom_iszero_inv_state_equiv_compat >>
+  impl_tac >- (
+    rpt conj_tac
+    >- first_assum ACCEPT_TAC
+    >- first_assum ACCEPT_TAC
+    >- (rpt strip_tac >> drule_all dfg_def_var_not_in_fv >> simp[])
+    >- (rpt strip_tac >> `MEM (Var op) inst.inst_operands` by simp[] >>
+        drule_all dfg_def_iszero_operand_not_in_fv >> simp[])) >>
+  simp[]
+QED
+
+Theorem ao_all_iszero_inv_state_equiv_compat:
+  !fn fn0 dfg s1 s2.
+    fn0 = fn with fn_blocks :=
+      MAP (\bb. bb with bb_instructions :=
+        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks /\
+    dfg = dfg_build_function fn0 /\
+    (!inst v. MEM inst (fn_insts fn) /\ MEM (Var v) inst.inst_operands ==>
+              v NOTIN ao_fn_fresh_vars fn) /\
+    (!inst v. MEM inst (fn_insts fn) /\ MEM v inst.inst_outputs ==>
+              v NOTIN ao_fn_fresh_vars fn) /\
+    all_iszero_inv fn0 dfg s1 /\
+    state_equiv (ao_fn_fresh_vars fn) s1 s2 ==>
+    all_iszero_inv fn0 dfg s2
+Proof
+  rpt strip_tac >>
+  qspecl_then [`fn0`, `dfg`, `ao_fn_fresh_vars fn`, `s1`, `s2`] mp_tac
+    all_iszero_inv_state_equiv_compat >>
   impl_tac >- (
     rpt conj_tac
     >- first_assum ACCEPT_TAC
@@ -650,38 +680,10 @@ Proof
   metis_tac[]
 QED
 
-(* Chain adjacency relation for one prefix instruction's operands, packaged
-   from strict_dom + within_block invariants with canonical (dfg_build /
-   ao_compute) argument forms so the discharge needs no rewriting. *)
-Triviality ao_resolve_chain_rel_local[local]:
-  !fn0 dfg targets bb idx s.
-    wf_function fn0 /\ wf_ssa fn0 /\
-    dfg = dfg_build_function fn0 /\
-    targets = ao_compute_fn_iszero_targets fn0 /\
-    ao_targets_wf targets /\
-    MEM bb fn0.fn_blocks /\
-    idx < LENGTH bb.bb_instructions /\
-    s.vs_current_bb = bb.bb_label /\
-    strict_dom_iszero_inv fn0 dfg s /\
-    within_block_iszero_inv fn0 bb idx s ==>
-    !v chain k. MEM (Var v) (EL idx bb.bb_instructions).inst_operands /\
-      ALOOKUP targets v = SOME chain /\
-      k + 1 < LENGTH chain ==>
-      !val_k val_k1.
-        eval_operand (EL k chain) s = SOME val_k /\
-        eval_operand (EL (k + 1) chain) s = SOME val_k1 ==>
-        val_k1 = bool_to_word (val_k = 0w)
-Proof
-  rpt gen_tac >> strip_tac >>
-  qspecl_then [`fn0`, `dfg`, `targets`, `bb`, `idx`,
-    `EL idx bb.bb_instructions`, `s`] mp_tac chain_iszero_rel_from_inv >>
-  impl_tac >- simp[] >> simp[]
-QED
-
 (* The PHI iszero-resolution post-pass is value-preserving on the transformed
-   block: every prefix PHI's selected operand resolves to the same value, using
-   the local chain invariant (strict_dom + within_block-vacuous-on-PHIs) rather
-   than the global chain invariant. *)
+   block: every prefix PHI's selected operand resolves to the same value.  A
+   PHI may read a chain end over a loop back edge, so the chain relation comes
+   from the block-entry all_iszero_inv. *)
 Triviality ao_resolve_transform_run_block_eq[local]:
   !fn0 mid dfg ra targets bb s fuel ctx s_phi.
     wf_function fn0 /\ wf_ssa fn0 /\
@@ -691,7 +693,7 @@ Triviality ao_resolve_transform_run_block_eq[local]:
     MEM bb fn0.fn_blocks /\
     bb_well_formed bb /\ EVERY inst_wf bb.bb_instructions /\
     s.vs_current_bb = bb.bb_label /\
-    strict_dom_iszero_inv fn0 dfg s /\
+    all_iszero_inv fn0 dfg s /\
     ao_chain_defined_prefix targets s /\
     eval_phis s bb.bb_instructions = OK s_phi ==>
     run_block fuel ctx
@@ -750,9 +752,6 @@ Proof
   `(EL idx bb.bb_instructions).inst_opcode = PHI` by metis_tac[phi_prefix_el_phi] >>
   `?out w. eval_one_phi s (EL idx bb.bb_instructions) = SOME (out, w)` by
     metis_tac[eval_phis_ok_prefix_phi_some] >>
-  `within_block_iszero_inv fn0 bb idx s` by
-    (irule wbiz_mono >> qexists_tac `phi_prefix_length bb.bb_instructions` >>
-     simp[wbiz_phi_prefix]) >>
   (* the three nontrivial antecedents of ao_resolve_eval_one_phi_eq *)
   `!v chain k. ALOOKUP targets v = SOME chain /\ 0 < k /\ k < LENGTH chain ==>
      ?u. EL k chain = Var u` by metis_tac[ao_fn_targets_chain_tail_var] >>
@@ -769,9 +768,10 @@ Proof
        eval_operand (EL k chain) s = SOME val_k /\
        eval_operand (EL (k + 1) chain) s = SOME val_k1 ==>
        val_k1 = bool_to_word (val_k = 0w)` by
-    (qspecl_then [`fn0`, `dfg`, `targets`, `bb`, `idx`, `s`] mp_tac
-       ao_resolve_chain_rel_local >>
-     impl_tac >- simp[] >> disch_then ACCEPT_TAC) >>
+    (rpt strip_tac >>
+     qspecl_then [`fn0`, `dfg`, `targets`, `s`] mp_tac
+       chain_iszero_rel_from_all_inv >>
+     impl_tac >- simp[] >> metis_tac[]) >>
   qpat_x_assum `EL idx tbody.bb_instructions = _` (fn th => REWRITE_TAC[th]) >>
   qpat_assum `eval_one_phi s (EL idx bb.bb_instructions) = _`
     (fn th => REWRITE_TAC[th]) >>
@@ -799,7 +799,7 @@ Theorem ao_block_sim_local:
     !fuel ctx s.
       s.vs_current_bb = bb.bb_label /\
       range_sound (df_widen_at NONE ra bb.bb_label 0) s /\
-      strict_dom_iszero_inv fn0 dfg s /\
+      all_iszero_inv fn0 dfg s /\
       ao_chain_defined_prefix targets s /\
       ao_dfg_inv dfg (s with vs_inst_idx := 0) ==>
       (?e. run_block fuel ctx bb s = Error e) \/
@@ -822,6 +822,7 @@ Proof
       ao_dfg_inv dfg (st with vs_inst_idx := 0) /\
       st.vs_current_bb = bb.bb_label` >>
   rpt gen_tac >> strip_tac >>
+  `strict_dom_iszero_inv fn0 dfg s` by metis_tac[all_iszero_inv_strict_dom] >>
   (* The engine proves sim against the analysis form (analysis_block_transform).
      With the M2 PHI post-pass, ao_transform_block = ao_resolve_phis_block targets
      (analysis form), so we bridge run_block over the post-pass in the OK case via

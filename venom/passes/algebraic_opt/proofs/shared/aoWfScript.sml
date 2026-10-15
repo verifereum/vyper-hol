@@ -81,6 +81,22 @@ Proof
   metis_tac[]
 QED
 
+Triviality foldl_max_le[local]:
+  !(l:num list) a n. a <= n /\ (!x. MEM x l ==> x <= n) ==> FOLDL MAX a l <= n
+Proof
+  Induct >> simp[] >> rpt strip_tac >> first_x_assum irule >>
+  fs[arithmeticTheory.MAX_LE]
+QED
+
+(* fn_max_inst_id is the least upper bound of the ids *)
+Theorem fn_max_inst_id_le:
+  !fn n. (!inst. MEM inst (fn_insts fn) ==> inst.inst_id <= n) ==>
+         fn_max_inst_id fn <= n
+Proof
+  rpt strip_tac >> simp[fn_max_inst_id_def] >> irule foldl_max_le >>
+  simp[listTheory.MEM_MAP, PULL_EXISTS]
+QED
+
 (* ===== Phase 1: offset lemmas (ao_handle_offset_inst_*, term_not_add,
    ao_phase1_preserves_wf/ssa) reused from aoPhase1Wf ancestor. ===== *)
 
@@ -151,12 +167,7 @@ Proof
   every_case_tac >> gvs[]
 QED
 
-(* ao_post_flip preserves opcode *)
-Triviality ao_post_flip_opcode[local]:
-  !inst. (ao_post_flip_inst inst).inst_opcode = inst.inst_opcode
-Proof
-  rw[ao_post_flip_inst_def] >> every_case_tac >> simp[]
-QED
+Theorem ao_post_flip_opcode[local] = ao_post_flip_inst_opcode_class
 
 (* ao_pre_flip preserves the terminator / PHI / INVOKE class.  It either is
    identity or swaps a comparator to another comparator (gt<->lt, sgt<->slt),
@@ -353,7 +364,12 @@ Proof
   simp[resolve_op_label, ao_resolve_iszero_op_def] >>
   fs[listTheory.EVERY_MAP, listTheory.EVERY_MEM] >>
   rpt strip_tac >> res_tac >>
-  irule resolve_op_get_label >> simp[]
+  TRY (irule resolve_op_get_label >> simp[] >> NO_TAC) >>
+  (* DRET: resolve keeps the leading Lit, so the shape is unchanged *)
+  qpat_x_assum `IS_SOME (parse_dret_shape _)` mp_tac >>
+  simp[dretShapeDefsTheory.parse_dret_shape_def] >>
+  Cases_on `inst.inst_operands` >> simp[] >>
+  Cases_on `h` >> simp[ao_resolve_iszero_op_def]
 QED
 
 (* ao_pre_flip_inst preserves inst_wf *)

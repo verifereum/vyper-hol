@@ -278,7 +278,7 @@ Triviality ao_opt_producer_sim[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   gvs[ao_opt_producer_def, AllCaseEqs()] >>
-  simp[ao_post_flip_inst_non_comm, run_insts_singleton] >>
+  simp[ao_post_flip_inst_non_comm, is_comparator_def, run_insts_singleton] >>
   (* Identity cases: lift_result r r *)
   TRY (DISJ2_TAC >>
        irule lift_result_refl >>
@@ -301,9 +301,7 @@ Triviality ao_peephole_path_sim[local]:
     ao_opt_producer dfg (ao_resolve_iszero_inst targets inst) = NONE /\
     step_inst fuel ctx (ao_resolve_iszero_inst targets inst) s =
       step_inst fuel ctx inst s /\
-    ao_fresh_var (ao_resolve_iszero_inst targets inst).inst_id "not" IN fv /\
-    ao_fresh_var (ao_resolve_iszero_inst targets inst).inst_id "iz" IN fv /\
-    ao_fresh_var (ao_resolve_iszero_inst targets inst).inst_id "xor" IN fv /\
+    ao_helpers_fresh fv mid /\
     (!op w. MEM op (ao_resolve_iszero_inst targets inst).inst_operands /\
             eval_operand op s = SOME w ==>
             in_range (range_get_range ra lbl v op) w) ==>
@@ -332,9 +330,7 @@ Theorem ao_transform_inst_sim_inst:
   !fv mid dfg ra lbl targets fuel ctx v inst s.
     inst_wf inst /\
     ao_dfg_inv dfg (s with vs_inst_idx := 0) /\
-    ao_fresh_var inst.inst_id "not" IN fv /\
-    ao_fresh_var inst.inst_id "iz" IN fv /\
-    ao_fresh_var inst.inst_id "xor" IN fv /\
+    ao_helpers_fresh fv mid /\
     (inst_wf inst ==>
       step_inst fuel ctx (ao_resolve_iszero_inst targets inst) s =
       step_inst fuel ctx inst s) /\

@@ -270,56 +270,84 @@ Proof
   metis_tac[ao_phase1_reachable_eq]
 QED
 
+(* A definition available in fn stays available, at the image block and
+   use, after phase 1. *)
+Triviality ao_phase1_def_available_at[local]:
+  !fn bb use v.
+    wf_function fn /\ MEM bb fn.fn_blocks /\ def_available_at fn bb use v ==>
+    def_available_at
+      (function_map_transform (block_map_transform ao_handle_offset_inst) fn)
+      (block_map_transform ao_handle_offset_inst bb)
+      (OPTION_MAP ao_handle_offset_inst use) v
+Proof
+  rpt strip_tac >>
+  `fn_dominates
+     (function_map_transform (block_map_transform ao_handle_offset_inst) fn) =
+   fn_dominates fn` by metis_tac[ao_phase1_dominates_eq] >>
+  fs[def_available_at_def] >>
+  rename1 `MEM def_bb fn.fn_blocks` >>
+  rename1 `MEM def_inst def_bb.bb_instructions` >>
+  qexistsl_tac [`block_map_transform ao_handle_offset_inst def_bb`,
+                `ao_handle_offset_inst def_inst`] >>
+  rpt conj_tac
+  >- (simp[function_map_transform_def, MEM_MAP] >> metis_tac[])
+  >- (simp[block_map_transform_def, MEM_MAP] >> metis_tac[])
+  >- fs[ao_handle_offset_inst_outputs]
+  >- fs[block_map_transform_def] >>
+  strip_tac >>
+  `def_bb.bb_label = bb.bb_label` by
+    (qpat_x_assum
+       `block_map_transform _ def_bb = block_map_transform _ bb` mp_tac >>
+     simp[block_map_transform_def, basic_block_component_equality]) >>
+  `ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks)` by
+    gvs[wf_function_def, fn_labels_def] >>
+  `def_bb = bb` by
+    (qspecl_then [`\b. b.bb_label`, `fn.fn_blocks`, `def_bb`, `bb`]
+       mp_tac all_distinct_map_inj_mem >> simp[]) >>
+  gvs[] >> Cases_on `use` >> gvs[] >>
+  qexistsl_tac [`i`, `j`] >>
+  `i < LENGTH bb.bb_instructions` by metis_tac[arithmeticTheory.LESS_TRANS] >>
+  simp[block_map_transform_def, EL_MAP]
+QED
+
 Theorem ao_phase1_preserves_def_dominates_uses:
   !fn. wf_function fn /\ def_dominates_uses fn ==>
        def_dominates_uses
          (function_map_transform (block_map_transform ao_handle_offset_inst) fn)
 Proof
   rpt strip_tac >>
-  `fn_dominates
-     (function_map_transform (block_map_transform ao_handle_offset_inst) fn) =
-   fn_dominates fn` by metis_tac[ao_phase1_dominates_eq] >>
-  simp[def_dominates_uses_def] >>
-  qpat_x_assum `fn_dominates _ = fn_dominates fn` (fn th => simp[th]) >>
-  simp[function_map_transform_def] >>
-  rpt strip_tac >>
+  simp[def_dominates_uses_def] >> rpt gen_tac >> strip_tac >>
   `?bb_o. bb = block_map_transform ao_handle_offset_inst bb_o /\
-          MEM bb_o fn.fn_blocks` by metis_tac[MEM_MAP] >>
-  pop_assum strip_assume_tac >>
+          MEM bb_o fn.fn_blocks` by
+    (fs[function_map_transform_def] >> metis_tac[MEM_MAP]) >>
   qpat_x_assum `bb = _` SUBST_ALL_TAC >>
   `?inst_o. inst = ao_handle_offset_inst inst_o /\
             MEM inst_o bb_o.bb_instructions` by
-     (fs[block_map_transform_def] >> metis_tac[MEM_MAP]) >>
-  pop_assum strip_assume_tac >>
+    (fs[block_map_transform_def] >> metis_tac[MEM_MAP]) >>
   qpat_x_assum `inst = _` SUBST_ALL_TAC >>
+  qpat_x_assum `def_dominates_uses fn`
+    (mp_tac o REWRITE_RULE[def_dominates_uses_def]) >>
+  disch_then (qspecl_then [`bb_o`, `inst_o`] mp_tac) >> simp[] >>
+  Cases_on `inst_o.inst_opcode = PHI`
+  >- ((* PHIs are unchanged; edges and predecessor availability carry over *)
+      `ao_handle_offset_inst inst_o = inst_o` by
+        simp[ao_handle_offset_inst_def] >>
+      simp[phi_edge_uses_wf_def] >> strip_tac >>
+      `fn_cfg_edge
+         (function_map_transform (block_map_transform ao_handle_offset_inst) fn) =
+       fn_cfg_edge fn` by metis_tac[ao_phase1_cfg_edge_eq] >>
+      simp[block_map_transform_def] >> rpt strip_tac >>
+      first_x_assum drule >> strip_tac >>
+      qexists_tac `block_map_transform ao_handle_offset_inst pred_bb` >>
+      drule_all ao_phase1_def_available_at >>
+      simp[block_map_transform_def, function_map_transform_def, MEM_MAP] >>
+      metis_tac[]) >>
+  `(ao_handle_offset_inst inst_o).inst_opcode <> PHI` by
+    metis_tac[ao_handle_offset_inst_not_phi] >>
+  simp[] >> rpt strip_tac >>
   drule ao_handle_offset_inst_var_operand >> strip_tac >>
-  fs[def_dominates_uses_def] >>
-  first_x_assum (qspecl_then [`bb_o`, `inst_o`, `v`] mp_tac) >>
-  simp[] >> strip_tac >>
-  rename1 `MEM def_bb fn.fn_blocks` >>
-  rename1 `MEM def_inst def_bb.bb_instructions` >>
-  qexistsl_tac [`block_map_transform ao_handle_offset_inst def_bb`,
-                `ao_handle_offset_inst def_inst`] >>
-  rpt conj_tac
-  >- (simp[MEM_MAP] >> qexists_tac `def_bb` >> fs[])
-  >- (simp[block_map_transform_def, MEM_MAP] >> qexists_tac `def_inst` >> fs[])
-  >- fs[ao_handle_offset_inst_outputs]
-  >- fs[block_map_transform_def]
-  >- (strip_tac >>
-      `def_bb.bb_label = bb_o.bb_label` by
-        (qpat_x_assum
-           `block_map_transform _ def_bb = block_map_transform _ bb_o` mp_tac >>
-         simp[block_map_transform_def, basic_block_component_equality]) >>
-      `ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks)` by
-        gvs[wf_function_def, fn_labels_def] >>
-      `def_bb = bb_o` by
-        (qspecl_then [`\b. b.bb_label`, `fn.fn_blocks`, `def_bb`, `bb_o`]
-           mp_tac all_distinct_map_inj_mem >> simp[]) >>
-      gvs[] >>
-      qexistsl_tac [`i`, `j`] >>
-      `i < LENGTH bb_o.bb_instructions` by
-        metis_tac[arithmeticTheory.LESS_TRANS] >>
-      simp[block_map_transform_def, EL_MAP])
+  first_x_assum drule >> strip_tac >>
+  drule_all ao_phase1_def_available_at >> simp[]
 QED
 
 Theorem ao_phase1_preserves_wf_ssa:

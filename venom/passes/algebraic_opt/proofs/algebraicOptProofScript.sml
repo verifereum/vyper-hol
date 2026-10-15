@@ -73,7 +73,7 @@ Proof
      metis_tac[]) >>
   (* cmp iszero fresh-var operand disjointness (phases 1-3) *)
   `!inst v. MEM inst (fn_insts fn1) /\ MEM (Var v) inst.inst_operands ==>
-     v NOTIN ao_cmp_fresh_vars fn1` by
+     v NOTIN ao_cmp_fresh_vars (fn_max_inst_id fn1) fn1` by
     (mp_tac (SIMP_RULE std_ss [LET_THM] ao_phases123_cmp_fresh_disjoint) >>
      disch_then (qspec_then `fn` mp_tac) >>
      simp[Abbr `fn0`, Abbr `fn1`, Abbr `targets`, Abbr `dfg`,
@@ -81,21 +81,21 @@ Proof
      metis_tac[]) >>
   (* Phase 4: fn1 → cmp_flip simulation *)
   qabbrev_tac `dfg1 = dfg_build_function fn1` >>
-  qabbrev_tac `dead = ao_cmp_flip_dead_vars dfg1 fn1` >>
+  qabbrev_tac `dead = ao_cmp_flip_dead_vars (fn_max_inst_id fn1) dfg dfg1 fn1` >>
   `(?e. run_blocks fuel ctx fn1 s = Error e) \/
    lift_result (state_equiv dead) (execution_equiv dead)
      (execution_equiv dead) (run_blocks fuel ctx fn1 s)
      (run_blocks fuel ctx
-        (ao_cmp_flip_function (fn_max_inst_id fn1) dfg1 fn1) s)` by
+        (ao_cmp_flip_function (fn_max_inst_id fn1) dfg dfg1 fn1) s)` by
     (mp_tac (SIMP_RULE std_ss [LET_THM] ao_phase4_correct) >>
-     disch_then (qspecl_then [`fuel`,`ctx`,`fn1`,`s`] mp_tac) >>
+     disch_then (qspecl_then [`fuel`,`ctx`,`dfg`,`fn1`,`s`] mp_tac) >>
      simp[Abbr `dfg1`, Abbr `dead`] >>
      disch_then match_mp_tac >>
      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
   (* Phase-1-4 output (fn2) is wf + ssa, enabling the phase-5 step *)
-  qabbrev_tac `fn2 = ao_cmp_flip_function (fn_max_inst_id fn1) dfg1 fn1` >>
+  qabbrev_tac `fn2 = ao_cmp_flip_function (fn_max_inst_id fn1) dfg dfg1 fn1` >>
   qabbrev_tac `dfg2 = dfg_build_function fn2` >>
-  qabbrev_tac `dead5 = ao_or_truthy_dead_vars dfg2 fn2` >>
+  qabbrev_tac `dead5 = ao_or_truthy_dead_vars dfg dfg2 fn2` >>
   `wf_function fn2 /\ ssa_form fn2` by
     (mp_tac (SIMP_RULE std_ss [LET_THM] ao_phases1234_preserve_wf_ssa) >>
      disch_then (qspec_then `fn` mp_tac) >>
@@ -107,9 +107,9 @@ Proof
   `(?e. run_blocks fuel ctx fn2 s = Error e) \/
    lift_result (state_equiv dead5) (execution_equiv dead5)
      (execution_equiv dead5) (run_blocks fuel ctx fn2 s)
-     (run_blocks fuel ctx (ao_or_truthy_function dfg2 fn2) s)` by
+     (run_blocks fuel ctx (ao_or_truthy_function dfg dfg2 fn2) s)` by
     (mp_tac (SIMP_RULE std_ss [LET_THM] ao_phase5_correct) >>
-     disch_then (qspecl_then [`fuel`,`ctx`,`fn2`,`s`] mp_tac) >>
+     disch_then (qspecl_then [`fuel`,`ctx`,`dfg`,`fn2`,`s`] mp_tac) >>
      simp[Abbr `dfg2`, Abbr `dead5`] >>
      disch_then match_mp_tac >>
      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
@@ -128,7 +128,7 @@ Proof
      Cases_on `run_blocks fuel ctx fn1 s` >> gvs[lift_result_def]) >>
   gvs[] >>
   (* Rewrite goal target *)
-  `ao_transform_function fn = ao_or_truthy_function dfg2 fn2` by
+  `ao_transform_function fn = ao_or_truthy_function dfg dfg2 fn2` by
     simp[ao_transform_function_def, LET_THM,
          Abbr `fn1`, Abbr `fn0`, Abbr `dfg`, Abbr `ra`,
          Abbr `mid`, Abbr `targets`, Abbr `dfg1`, Abbr `fn2`, Abbr `dfg2`] >>

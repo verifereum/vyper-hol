@@ -186,6 +186,7 @@ Triviality def_dom_at_use[local]:
     wf_function fn0 /\ wf_ssa fn0 /\
     MEM bb fn0.fn_blocks /\
     use_idx < LENGTH bb.bb_instructions /\
+    (EL use_idx bb.bb_instructions).inst_opcode <> PHI /\
     MEM (Var v) (EL use_idx bb.bb_instructions).inst_operands ==>
     !def_inst.
       MEM def_inst (fn_insts fn0) /\
@@ -201,13 +202,13 @@ Proof
   `def_dominates_uses fn0` by fs[wf_ssa_def] >>
   `ssa_form fn0` by fs[wf_ssa_def] >>
   `fn_inst_ids_distinct fn0` by fs[wf_function_def] >>
-  qpat_x_assum `def_dominates_uses _`
-    (strip_assume_tac o REWRITE_RULE [def_dominates_uses_def]) >>
-  first_x_assum (qspecl_then [`bb`,
-    `EL use_idx bb.bb_instructions`, `v`] mp_tac) >>
-  impl_tac
-  >- (simp[] >> irule listTheory.EL_MEM >> simp[]) >>
-  strip_tac >>
+  `def_available_at fn0 bb (SOME (EL use_idx bb.bb_instructions)) v` by (
+    qpat_x_assum `def_dominates_uses _`
+      (mp_tac o REWRITE_RULE [def_dominates_uses_def]) >>
+    disch_then (qspecl_then [`bb`, `EL use_idx bb.bb_instructions`]
+      mp_tac) >>
+    simp[listTheory.EL_MEM] >> metis_tac[]) >>
+  pop_assum (strip_assume_tac o REWRITE_RULE [def_available_at_def]) >>
   `MEM def_inst' (fn_insts fn0)` by
     metis_tac[mem_block_mem_fn_insts] >>
   `def_inst = def_inst'` by
@@ -229,6 +230,7 @@ Triviality chain_iszero_placement_base[local]:
     wf_function fn0 /\ wf_ssa fn0 /\
     MEM bb fn0.fn_blocks /\
     idx < LENGTH bb.bb_instructions /\
+    (EL idx bb.bb_instructions).inst_opcode <> PHI /\
     MEM (Var v) (EL idx bb.bb_instructions).inst_operands /\
     ALOOKUP (ao_compute_fn_iszero_targets fn0) v = SOME chain /\
     k + 1 < LENGTH chain /\
@@ -257,6 +259,7 @@ Triviality chain_iszero_placement_ind[local]:
     wf_function fn0 /\ wf_ssa fn0 /\
     MEM bb fn0.fn_blocks /\
     idx < LENGTH bb.bb_instructions /\
+    (EL idx bb.bb_instructions).inst_opcode <> PHI /\
     MEM (Var v) (EL idx bb.bb_instructions).inst_operands /\
     ALOOKUP (ao_compute_fn_iszero_targets fn0) v = SOME chain /\
     k + 1 < LENGTH chain /\
@@ -322,12 +325,15 @@ Proof
           >- (DISJ2_TAC >> qexists_tac `d_bb` >> simp[]))
       >- (* iz2 in strict dominator d_bb2: w used in d_bb2 *)
          (`def_dominates_uses fn0` by fs[wf_ssa_def] >>
-          qpat_x_assum `def_dominates_uses _`
-            (strip_assume_tac o REWRITE_RULE [def_dominates_uses_def]) >>
           `MEM iz2 d_bb2.bb_instructions` by gvs[] >>
           `MEM (Var w) iz2.inst_operands` by gvs[] >>
-          first_x_assum (qspecl_then [`d_bb2`, `iz2`, `w`] mp_tac) >>
-          impl_tac >- simp[] >> strip_tac >>
+          `def_available_at fn0 d_bb2 (SOME iz2) w` by (
+            qpat_x_assum `def_dominates_uses _`
+              (mp_tac o REWRITE_RULE [def_dominates_uses_def]) >>
+            disch_then (qspecl_then [`d_bb2`, `iz2`] mp_tac) >>
+            simp[] >> metis_tac[]) >>
+          pop_assum
+            (strip_assume_tac o REWRITE_RULE [def_available_at_def]) >>
           `fn_inst_ids_distinct fn0` by fs[wf_function_def] >>
           `MEM def_inst (fn_insts fn0)` by
             metis_tac[mem_block_mem_fn_insts] >>
@@ -353,6 +359,7 @@ Triviality chain_iszero_placement[local]:
     wf_function fn0 /\ wf_ssa fn0 /\
     MEM bb fn0.fn_blocks /\
     idx < LENGTH bb.bb_instructions /\
+    (EL idx bb.bb_instructions).inst_opcode <> PHI /\
     MEM (Var v) (EL idx bb.bb_instructions).inst_operands /\
     ALOOKUP (ao_compute_fn_iszero_targets fn0) v = SOME chain /\
     k + 1 < LENGTH chain /\
@@ -384,6 +391,7 @@ Theorem chain_iszero_rel_from_inv:
     MEM bb fn0.fn_blocks /\
     idx < LENGTH bb.bb_instructions /\
     inst = EL idx bb.bb_instructions /\
+    inst.inst_opcode <> PHI /\
     bb.bb_label = s.vs_current_bb /\
     strict_dom_iszero_inv fn0 dfg s /\
     within_block_iszero_inv fn0 bb idx s ==>
@@ -436,3 +444,45 @@ Proof
       simp[])
 QED
 
+(* Chain adjacency relation at a block entry, for any targeted variable:
+   every chain ISZERO is a DFG def in some block, covered by
+   all_iszero_inv. *)
+Theorem chain_iszero_rel_from_all_inv:
+  !fn0 dfg targets s.
+    wf_function fn0 /\ wf_ssa fn0 /\
+    dfg = dfg_build_function fn0 /\
+    targets = ao_compute_fn_iszero_targets fn0 /\
+    ao_targets_wf targets /\
+    all_iszero_inv fn0 dfg s ==>
+    !v chain k. ALOOKUP targets v = SOME chain /\ k + 1 < LENGTH chain ==>
+      !val_k val_k1.
+        eval_operand (EL k chain) s = SOME val_k /\
+        eval_operand (EL (k + 1) chain) s = SOME val_k1 ==>
+        val_k1 = bool_to_word (val_k = 0w)
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  `ssa_form fn0` by fs[wf_ssa_def] >>
+  qpat_x_assum `targets = _` SUBST_ALL_TAC >>
+  `?w. EL (k + 1) chain = Var w` by
+    (qspecl_then [`fn0`, `v`, `chain`, `k + 1`] mp_tac
+       ao_fn_targets_chain_tail_var >>
+     impl_tac >- simp[] >> simp[]) >>
+  qspecl_then [`fn0`, `v`, `chain`, `k`, `w`] mp_tac
+    chain_consecutive_iszero >>
+  impl_tac >- fs[] >> strip_tac >>
+  rename1 `MEM iz_inst (fn_insts fn0)` >>
+  `lookup_var w s = SOME val_k1` by fs[eval_operand_def] >>
+  `?inst'. dfg_get_def (dfg_build_function fn0) w = SOME inst'` by
+    metis_tac[dfgAnalysisPropsTheory.dfg_build_function_defs_complete] >>
+  `MEM w inst'.inst_outputs /\ MEM inst' (fn_insts fn0)` by
+    metis_tac[dfgAnalysisPropsTheory.dfg_build_function_correct] >>
+  `iz_inst = inst'` by metis_tac[ssa_output_unique] >>
+  gvs[] >>
+  `?d_bb. MEM d_bb fn0.fn_blocks /\ MEM inst' d_bb.bb_instructions` by
+    metis_tac[dfgSoundStepTheory.fn_insts_mem_block] >>
+  qpat_x_assum `all_iszero_inv _ _ _`
+    (mp_tac o REWRITE_RULE [all_iszero_inv_def]) >>
+  disch_then (qspecl_then [`w`, `inst'`, `EL k chain`, `d_bb`] mp_tac) >>
+  simp[]
+QED

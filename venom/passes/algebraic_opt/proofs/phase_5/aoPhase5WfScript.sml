@@ -78,13 +78,13 @@ QED
 
 (* ao_or_truthy_function as a function_map_transform (block_map_transform f). *)
 Triviality or_truthy_as_map_transform[local]:
-  !fn.
-    ~NULL (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn)) ==>
-    ao_or_truthy_function (dfg_build_function fn) fn =
+  !dfg0 fn.
+    ~NULL (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn)) ==>
+    ao_or_truthy_function dfg0 (dfg_build_function fn) fn =
     function_map_transform
       (block_map_transform
         (ao_or_truthy_apply_inst
-           (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn)))) fn
+           (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn)))) fn
 Proof
   rpt strip_tac >>
   simp[ao_or_truthy_function_def, LET_THM, function_map_transform_def,
@@ -93,9 +93,9 @@ Proof
 QED
 
 Triviality or_truthy_null_id[local]:
-  !fn.
-    NULL (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn)) ==>
-    ao_or_truthy_function (dfg_build_function fn) fn = fn
+  !dfg0 fn.
+    NULL (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn)) ==>
+    ao_or_truthy_function dfg0 (dfg_build_function fn) fn = fn
 Proof
   rpt strip_tac >> simp[ao_or_truthy_function_def, LET_THM]
 QED
@@ -103,18 +103,18 @@ QED
 (* ===== Top-level preservation ===== *)
 
 Theorem ao_phase5_preserves_wf:
-  !fn. wf_function fn ==>
-    wf_function (ao_or_truthy_function (dfg_build_function fn) fn)
+  !dfg0 fn. wf_function fn ==>
+    wf_function (ao_or_truthy_function dfg0 (dfg_build_function fn) fn)
 Proof
   rpt strip_tac >>
-  Cases_on `NULL (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn))`
-  >- (`ao_or_truthy_function (dfg_build_function fn) fn = fn` by
+  Cases_on `NULL (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn))`
+  >- (`ao_or_truthy_function dfg0 (dfg_build_function fn) fn = fn` by
         (irule or_truthy_null_id >> simp[]) >> simp[]) >>
-  `ao_or_truthy_function (dfg_build_function fn) fn =
+  `ao_or_truthy_function dfg0 (dfg_build_function fn) fn =
    function_map_transform
      (block_map_transform
        (ao_or_truthy_apply_inst
-          (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn)))) fn` by
+          (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn)))) fn` by
     (irule or_truthy_as_map_transform >> simp[]) >>
   pop_assum (fn th => REWRITE_TAC[th]) >>
   irule map_transform_preserves_wf >>
@@ -124,18 +124,18 @@ QED
 (* SSA only depends on FLAT (MAP inst_outputs (fn_insts fn)); the OR-truthy
    rewrite preserves inst_outputs exactly, so no wf_function is required. *)
 Theorem ao_phase5_preserves_ssa:
-  !fn. ssa_form fn ==>
-    ssa_form (ao_or_truthy_function (dfg_build_function fn) fn)
+  !dfg0 fn. ssa_form fn ==>
+    ssa_form (ao_or_truthy_function dfg0 (dfg_build_function fn) fn)
 Proof
   rpt strip_tac >>
-  Cases_on `NULL (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn))`
-  >- (`ao_or_truthy_function (dfg_build_function fn) fn = fn` by
+  Cases_on `NULL (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn))`
+  >- (`ao_or_truthy_function dfg0 (dfg_build_function fn) fn = fn` by
         (irule or_truthy_null_id >> simp[]) >> simp[]) >>
-  `ao_or_truthy_function (dfg_build_function fn) fn =
+  `ao_or_truthy_function dfg0 (dfg_build_function fn) fn =
    function_map_transform
      (block_map_transform
        (ao_or_truthy_apply_inst
-          (ao_or_truthy_scan (dfg_build_function fn) (fn_insts fn)))) fn` by
+          (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn)))) fn` by
     (irule or_truthy_as_map_transform >> simp[]) >>
   pop_assum (fn th => REWRITE_TAC[th]) >>
   fs[ssa_form_def, fn_insts_block_map, listTheory.MAP_MAP_o,

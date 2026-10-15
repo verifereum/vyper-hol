@@ -1121,12 +1121,12 @@ Definition ao_fresh_names_disjoint_def:
 End
 
 Definition ao_cmp_fresh_vars_def:
-  ao_cmp_fresh_vars fn =
+  ao_cmp_fresh_vars mid fn =
     { v | ?id.
         (?i. MEM i (fn_insts fn) /\
              is_comparator i.inst_opcode /\
              i.inst_id = id) /\
-        v = ao_fresh_var (ao_fresh_id (fn_max_inst_id fn) id 0) "iz" }
+        v = ao_fresh_var (ao_fresh_id mid id 0) "iz" }
 End
 
 Definition ao_fn_total_fresh_vars_def:

@@ -1,7 +1,7 @@
 (* Obligation: cmp_flip preserves block execution up to dead variables. *)
 Theory aoCmpFlipObligation
 Ancestors
-  algebraicOptDefs aoCmpFlipSim
+  algebraicOptDefs aoCmpFlipSim aoPeepholeSim
   analysisSimDefs analysisSimProofsBase
   stateEquiv stateEquivProps stateEquivProofs execEquivProps passSimulationProps
   passSharedDefs venomInstProps
@@ -9,72 +9,168 @@ Ancestors
 Libs
   pairLib BasicProvers
 
+(* ===== Pre/post flip helpers ===== *)
+
+(* The scan reads a comparator in its ao_pre_flip_inst form, [x; Lit w]. *)
+Triviality pre_flip_fields[local]:
+  !inst. (ao_pre_flip_inst inst).inst_id = inst.inst_id /\
+         (ao_pre_flip_inst inst).inst_outputs = inst.inst_outputs
+Proof
+  gen_tac >> simp[ao_pre_flip_inst_def] >> every_case_tac >> rw[]
+QED
+
+Triviality pre_flip_is_comparator[local]:
+  !inst. is_comparator (ao_pre_flip_inst inst).inst_opcode <=>
+         is_comparator inst.inst_opcode
+Proof
+  gen_tac >> simp[ao_pre_flip_inst_def] >> every_case_tac >> rw[] >>
+  Cases_on `inst.inst_opcode` >>
+  gvs[is_comparator_def, flip_comparison_opcode_def]
+QED
+
+Triviality pre_flip_with[local]:
+  !inst opc ops.
+    ao_pre_flip_inst inst with <| inst_opcode := opc; inst_operands := ops |> =
+    inst with <| inst_opcode := opc; inst_operands := ops |>
+Proof
+  rpt gen_tac >> simp[ao_pre_flip_inst_def] >> every_case_tac >> rw[] >>
+  simp[instruction_component_equality]
+QED
+
+Triviality pre_flip_mem_operands[local]:
+  !inst x. MEM x (ao_pre_flip_inst inst).inst_operands <=>
+           MEM x inst.inst_operands
+Proof
+  rpt gen_tac >> simp[ao_pre_flip_inst_def] >> every_case_tac >> rw[] >>
+  metis_tac[]
+QED
+
+Triviality post_flip_opcode_cases[local]:
+  !inst. (ao_post_flip_inst inst).inst_opcode = inst.inst_opcode \/
+         (ao_post_flip_inst inst).inst_opcode =
+           flip_comparison_opcode inst.inst_opcode
+Proof
+  gen_tac >> simp[ao_post_flip_inst_def] >> every_case_tac >> rw[]
+QED
+
+Triviality comparator_not_term[local]:
+  !opc. is_comparator opc ==> ~is_terminator opc
+Proof
+  Cases >> simp[is_comparator_def, is_terminator_def]
+QED
+
+(* A comparator steps as its pre-flip form. *)
+Triviality pre_inst_step[local]:
+  !fuel ctx inst s.
+    is_comparator (ao_pre_flip_inst inst).inst_opcode ==>
+    step_inst fuel ctx inst s = step_inst_base (ao_pre_flip_inst inst) s
+Proof
+  rpt strip_tac >>
+  `inst.inst_opcode <> INVOKE` by
+    gvs[pre_flip_is_comparator, is_comparator_def] >>
+  simp[step_inst_non_invoke, ao_pre_flip_step_equiv]
+QED
+
+(* The emitted flip, post-flipped as Python's _flip_inst does, steps as the
+   rewritten pre-flip comparator. *)
+Triviality flip_emit_step[local]:
+  !fuel ctx inst opc ops s.
+    is_comparator opc ==>
+    step_inst fuel ctx
+      (ao_post_flip_inst (inst with <| inst_opcode := opc;
+                                       inst_operands := ops |>)) s =
+    step_inst_base
+      (ao_pre_flip_inst inst with <| inst_opcode := opc;
+                                     inst_operands := ops |>) s
+Proof
+  rpt strip_tac >>
+  qmatch_goalsub_abbrev_tac `ao_post_flip_inst i` >>
+  `(ao_post_flip_inst i).inst_opcode <> INVOKE` by
+    (qspec_then `i` strip_assume_tac post_flip_opcode_cases >>
+     gvs[Abbr `i`, is_comparator_def, flip_comparison_opcode_def]) >>
+  simp[step_inst_non_invoke, ao_post_flip_step_equiv, pre_flip_with,
+       Abbr `i`]
+QED
+
+Triviality uses_ok_single[local]:
+  !dfg v. ao_cmp_flip_uses_ok dfg v ==>
+          ?a. dfg_get_uses dfg v = [a] /\
+              (a.inst_opcode = ASSERT \/ a.inst_opcode = ISZERO)
+Proof
+  rpt gen_tac >> simp[ao_cmp_flip_uses_ok_def] >> every_case_tac >> simp[] >>
+  metis_tac[]
+QED
+
 (* ===== Scan step characterization ===== *)
 
 Triviality scan_step_detail[local]:
-  !dfg h rest fl0 rm0 ins0 fl1 rm1 ins1.
-    ao_cmp_flip_scan dfg rest = (fl0, rm0, ins0) /\
-    ao_cmp_flip_scan dfg (h :: rest) = (fl1, rm1, ins1) ==>
+  !dfg h rest fl0 rm0 ins0 fl1 rm1 ins1 mid dfg0.
+    ao_cmp_flip_scan mid dfg0 dfg rest = (fl0, rm0, ins0) /\
+    ao_cmp_flip_scan mid dfg0 dfg (h :: rest) = (fl1, rm1, ins1) ==>
     (fl1 = fl0 /\ rm1 = rm0 /\ ins1 = ins0) \/
     (?w op1 out_var.
-       is_comparator h.inst_opcode /\
-       h.inst_operands = [op1; Lit w] /\
+       is_comparator (ao_pre_flip_inst h).inst_opcode /\
+       (ao_pre_flip_inst h).inst_operands = [op1; Lit w] /\
        h.inst_outputs = [out_var] /\
-       fl1 = (h.inst_id, flip_comparison_opcode h.inst_opcode,
-              (if h.inst_opcode = GT \/ h.inst_opcode = SGT
+       fl1 = (h.inst_id, flip_comparison_opcode (ao_pre_flip_inst h).inst_opcode,
+              (if (ao_pre_flip_inst h).inst_opcode = GT \/ (ao_pre_flip_inst h).inst_opcode = SGT
                then w + 1w else w - 1w), op1) :: fl0 /\
-       (h.inst_opcode = GT ==> w <> 0w - 1w) /\
-       (h.inst_opcode = LT ==> w <> 0w) /\
-       (h.inst_opcode = SGT ==> w <> i2w INT256_MAX) /\
-       (h.inst_opcode = SLT ==> w <> i2w INT256_MIN) /\
+       ((ao_pre_flip_inst h).inst_opcode = GT ==> w <> 0w - 1w) /\
+       ((ao_pre_flip_inst h).inst_opcode = LT ==> w <> 0w) /\
+       ((ao_pre_flip_inst h).inst_opcode = SGT ==> w <> i2w INT256_MAX) /\
+       ((ao_pre_flip_inst h).inst_opcode = SLT ==> w <> i2w INT256_MIN) /\
        LENGTH (dfg_get_uses dfg out_var) = 1 /\
        ((rm1 = (HD (dfg_get_uses dfg out_var)).inst_id :: rm0 /\
          ins1 = ins0 /\
          (HD (dfg_get_uses dfg out_var)).inst_opcode = ISZERO) \/
         (rm1 = rm0 /\
          ins1 = ((HD (dfg_get_uses dfg out_var)).inst_id, out_var,
-                  ao_fresh_var h.inst_id "iz", h.inst_id) :: ins0 /\
+                  ao_fresh_var (ao_fresh_id mid h.inst_id 0) "iz", h.inst_id) :: ins0 /\
          (HD (dfg_get_uses dfg out_var)).inst_opcode = ASSERT)))
 Proof
   rpt gen_tac >>
+  `(ao_pre_flip_inst h).inst_outputs = h.inst_outputs` by
+    simp[pre_flip_fields] >>
   ONCE_REWRITE_TAC [ao_cmp_flip_scan_def] >>
   simp_tac std_ss [LET_THM] >>
   pairarg_tac >> simp_tac std_ss [] >>
+  qabbrev_tac `v = ao_pre_flip_inst h` >>
   strip_tac >> gvs[] >>
   pop_assum mp_tac >>
   IF_CASES_TAC >> simp[] >>
   every_case_tac >> simp[] >>
   rpt (pairarg_tac >> simp[]) >>
   rpt IF_CASES_TAC >> simp[] >>
-  rpt strip_tac >> gvs[is_comparator_def, flip_comparison_opcode_def,
+  rpt strip_tac >> fs[] >> imp_res_tac uses_ok_single >>
+  gvs[is_comparator_def, flip_comparison_opcode_def,
     ao_unsigned_boundaries_def, ao_signed_boundaries_def, LET_THM]
 QED
 
 (* ===== Helper: NULL flips => scan = ([],[],[]) ===== *)
 
 Theorem scan_null_triple[local]:
-  !dfg insts. NULL (FST (ao_cmp_flip_scan dfg insts)) ==>
-              ao_cmp_flip_scan dfg insts = ([],[],[])
+  !dfg insts mid dfg0. NULL (FST (ao_cmp_flip_scan mid dfg0 dfg insts)) ==>
+              ao_cmp_flip_scan mid dfg0 dfg insts = ([],[],[])
 Proof
   Induct_on `insts`
   >- simp[ao_cmp_flip_scan_def]
   >> rpt strip_tac >>
-  `?f r ins. ao_cmp_flip_scan dfg insts = (f,r,ins)` by
+  `?f r ins. ao_cmp_flip_scan mid dfg0 dfg insts = (f,r,ins)` by
     metis_tac[pairTheory.PAIR] >>
-  `?fl1 rm1 ins1. ao_cmp_flip_scan dfg (h::insts) = (fl1,rm1,ins1)` by
+  `?fl1 rm1 ins1. ao_cmp_flip_scan mid dfg0 dfg (h::insts) = (fl1,rm1,ins1)` by
     metis_tac[pairTheory.PAIR] >>
   drule_all scan_step_detail >>
   disch_then strip_assume_tac >> gvs[] >>
-  first_x_assum (qspec_then `dfg` mp_tac) >> gvs[]
+  first_x_assum (qspecl_then [`dfg`, `mid`, `dfg0`] mp_tac) >> gvs[]
 QED
 
 Triviality dead_empty_when_null[local]:
-  !dfg fn1.
-    NULL (FST (ao_cmp_flip_scan dfg (fn_insts fn1))) ==>
-    ao_cmp_flip_dead_vars dfg fn1 = {}
+  !dfg fn1 mid dfg0.
+    NULL (FST (ao_cmp_flip_scan mid dfg0 dfg (fn_insts fn1))) ==>
+    ao_cmp_flip_dead_vars mid dfg0 dfg fn1 = {}
 Proof
   rpt strip_tac >>
-  `ao_cmp_flip_scan dfg (fn_insts fn1) = ([],[],[])` by
+  `ao_cmp_flip_scan mid dfg0 dfg (fn_insts fn1) = ([],[],[])` by
     metis_tac[scan_null_triple] >>
   simp[ao_cmp_flip_dead_vars_def, LET_THM]
 QED
@@ -289,14 +385,20 @@ Proof
   simp[result_equiv_def] >>
   `state_equiv dead (merge_callee_state s1 v) (merge_callee_state s2 v)` by
     (irule merge_callee_state_equiv >> simp[]) >>
-  `case (bind_outputs inst.inst_outputs l (merge_callee_state s1 v),
-         bind_outputs inst.inst_outputs l (merge_callee_state s2 v)) of
+  qabbrev_tac `m1 = adopt_return_fmp i (merge_callee_state s1 v)` >>
+  qabbrev_tac `m2 = adopt_return_fmp i (merge_callee_state s2 v)` >>
+  `state_equiv dead m1 m2` by
+    (unabbrev_all_tac >> Cases_on `i.iret_adopt_fmp` >>
+     gvs[adopt_return_fmp_def, state_equiv_def, execution_equiv_def,
+         lookup_var_def]) >>
+  `case (bind_outputs inst.inst_outputs i.iret_values m1,
+         bind_outputs inst.inst_outputs i.iret_values m2) of
      (SOME s1', SOME s2') => state_equiv dead s1' s2'
    | (NONE, NONE) => T
    | _ => F` by
     (irule bind_outputs_state_equiv >> simp[]) >>
-  Cases_on `bind_outputs inst.inst_outputs l (merge_callee_state s1 v)` >>
-  Cases_on `bind_outputs inst.inst_outputs l (merge_callee_state s2 v)` >>
+  Cases_on `bind_outputs inst.inst_outputs i.iret_values m1` >>
+  Cases_on `bind_outputs inst.inst_outputs i.iret_values m2` >>
   gvs[result_equiv_def, state_equiv_def, execution_equiv_def]
 QED
 
@@ -421,35 +523,11 @@ Proof
   metis_tac[])
 QED
 
-(* Bridge: the emitted flip (lit-at-op1, opcode flipped back to the original
-   via the double flip) steps identically to the var-at-op1 flipped comparator
-   that per_inst_flip / per_inst_lr_flip reason about.  This is just comparator
-   swap: `a > b` <=> `b < a`. *)
-Triviality flip_emit_step_eq_full[local]:
-  !inst fuel ctx s x2 new_w.
-    is_comparator inst.inst_opcode ==>
-    step_inst fuel ctx
-      (inst with <| inst_opcode :=
-         flip_comparison_opcode (flip_comparison_opcode inst.inst_opcode);
-                    inst_operands := [Lit new_w; x2] |>) s =
-    step_inst fuel ctx
-      (inst with <| inst_opcode := flip_comparison_opcode inst.inst_opcode;
-                    inst_operands := [x2; Lit new_w] |>) s
-Proof
-  rpt strip_tac >> gvs[is_comparator_def] >>
-  simp[step_inst_non_invoke, flip_comparison_opcode_def] >>
-  simp[step_inst_base_def, exec_pure2_def, eval_operand_def] >>
-  Cases_on `eval_operand x2 s` >> simp[] >>
-  Cases_on `inst.inst_outputs` >> simp[] >> Cases_on `t` >> simp[] >>
-  simp[arithmeticTheory.GREATER_DEF, wordsTheory.WORD_GREATER]
-QED
-
 (* Case 2: Flip — flipped comparator output = iszero(original) *)
 Triviality per_inst_flip[local]:
-  !dead flips all_insts inst fuel ctx s1 s2 w out_var x2.
+  !dead flips all_insts inst s1 s2 w out_var x2.
     state_equiv dead s1 s2 /\
     cmp_flip_iszero_inv flips all_insts s1 s2 /\
-    MEM inst all_insts /\
     ~is_terminator inst.inst_opcode /\
     is_comparator inst.inst_opcode /\
     inst.inst_operands = [x2; Lit w] /\
@@ -465,8 +543,8 @@ Triviality per_inst_flip[local]:
           ALOOKUP flips fi.inst_id <> NONE ==>
           !out. MEM out fi.inst_outputs ==> out <> out_var)
     ==>
-    case (step_inst fuel ctx inst s1,
-          step_inst fuel ctx
+    case (step_inst_base inst s1,
+          step_inst_base
             (inst with
               <| inst_opcode := flip_comparison_opcode inst.inst_opcode;
                  inst_operands := [x2; Lit (if inst.inst_opcode = GT \/
@@ -480,18 +558,10 @@ Triviality per_inst_flip[local]:
 Proof
   rpt strip_tac >>
   `inst.inst_opcode <> INVOKE` by (gvs[is_comparator_def]) >>
-  `step_inst fuel ctx inst s1 = step_inst_base inst s1` by
-    (irule step_inst_non_invoke >> simp[]) >>
   qabbrev_tac `flipped = inst with
     <| inst_opcode := flip_comparison_opcode inst.inst_opcode;
        inst_operands := [x2; Lit (if inst.inst_opcode = GT \/
          inst.inst_opcode = SGT then w + 1w else w - 1w)] |>` >>
-  `flipped.inst_opcode <> INVOKE` by
-    (simp[Abbr`flipped`] >>
-     gvs[is_comparator_def] >> simp[flip_comparison_opcode_def]) >>
-  `step_inst fuel ctx flipped s2 = step_inst_base flipped s2` by
-    (irule step_inst_non_invoke >> simp[]) >>
-  gvs[] >>
   `eval_operand x2 s1 = eval_operand x2 s2` by
     (irule eval_operand_equiv >> qexists_tac `dead` >> simp[]) >>
   Cases_on `eval_operand x2 s1`
@@ -798,20 +868,19 @@ Triviality per_inst_sim[local]:
     (!id. ALOOKUP flips id <> NONE ==>
      ~MEM id removes /\ ALOOKUP inserts id = NONE) /\
     (* Flip structural info *)
-    (* Flip structural info *)
     (!new_opc new_w orig_op1.
        ALOOKUP flips inst.inst_id = SOME (new_opc, new_w, orig_op1) ==>
        ?w out_var.
-         is_comparator inst.inst_opcode /\
-         inst.inst_operands = [orig_op1; Lit w] /\
+         is_comparator (ao_pre_flip_inst inst).inst_opcode /\
+         (ao_pre_flip_inst inst).inst_operands = [orig_op1; Lit w] /\
          inst.inst_outputs = [out_var] /\
-         new_opc = flip_comparison_opcode inst.inst_opcode /\
-         new_w = (if inst.inst_opcode = GT \/ inst.inst_opcode = SGT
+         new_opc = flip_comparison_opcode (ao_pre_flip_inst inst).inst_opcode /\
+         new_w = (if (ao_pre_flip_inst inst).inst_opcode = GT \/ (ao_pre_flip_inst inst).inst_opcode = SGT
                   then w + 1w else w - 1w) /\
-         (inst.inst_opcode = GT ==> w <> 0w - 1w) /\
-         (inst.inst_opcode = LT ==> w <> 0w) /\
-         (inst.inst_opcode = SGT ==> w <> i2w INT256_MAX) /\
-         (inst.inst_opcode = SLT ==> w <> i2w INT256_MIN)) /\
+         ((ao_pre_flip_inst inst).inst_opcode = GT ==> w <> 0w - 1w) /\
+         ((ao_pre_flip_inst inst).inst_opcode = LT ==> w <> 0w) /\
+         ((ao_pre_flip_inst inst).inst_opcode = SGT ==> w <> i2w INT256_MAX) /\
+         ((ao_pre_flip_inst inst).inst_opcode = SLT ==> w <> i2w INT256_MIN)) /\
     (* Remove structural info *)
     (MEM inst.inst_id removes ==>
       ?cmp_out iz_out fi.
@@ -889,27 +958,30 @@ Proof
   `~MEM inst.inst_id removes /\ ALOOKUP inserts inst.inst_id = NONE` by
     (first_x_assum (qspec_then `inst.inst_id` mp_tac) >> simp[]) >>
   `ao_cmp_flip_apply_inst mid flips removes inserts inst =
-   [inst with <| inst_opcode :=
-       flip_comparison_opcode (flip_comparison_opcode inst.inst_opcode);
-                 inst_operands := [Lit (if inst.inst_opcode = GT \/
-                   inst.inst_opcode = SGT then w + 1w else w - 1w); x2] |>]` by
+   [ao_post_flip_inst (inst with
+      <| inst_opcode := flip_comparison_opcode (ao_pre_flip_inst inst).inst_opcode;
+         inst_operands := [x2; Lit (if (ao_pre_flip_inst inst).inst_opcode = GT \/
+           (ao_pre_flip_inst inst).inst_opcode = SGT then w + 1w else w - 1w)] |>)]` by
     simp[ao_cmp_flip_apply_inst_def] >>
   pop_assum (fn th => REWRITE_TAC [th]) >>
   REWRITE_TAC [run_insts_singleton] >>
-  simp[flip_emit_step_eq_full] >>
-  irule per_inst_flip_exp >> simp[] >>
+  `is_comparator (flip_comparison_opcode (ao_pre_flip_inst inst).inst_opcode)` by
+    metis_tac[flip_is_comparator] >>
+  simp[flip_emit_step, pre_inst_step] >>
+  irule per_inst_flip_exp >>
+  simp[pre_flip_fields, comparator_not_term] >>
   `ALOOKUP flips inst.inst_id <> NONE` by simp[] >>
-  metis_tac[listTheory.MEM]
+  metis_tac[pre_flip_mem_operands, listTheory.MEM]
 QED
 
 
 (* Block structure: relate bb' to bb1 via ao_cmp_flip_function *)
 Triviality cmp_flip_block_structure[local]:
-  !mid dfg fn1 lbl bb1 bb' flips removes inserts.
+  !mid dfg fn1 lbl bb1 bb' flips removes inserts dfg0.
     ~NULL flips /\
-    ao_cmp_flip_scan dfg (fn_insts fn1) = (flips, removes, inserts) /\
+    ao_cmp_flip_scan mid dfg0 dfg (fn_insts fn1) = (flips, removes, inserts) /\
     lookup_block lbl fn1.fn_blocks = SOME bb1 /\
-    lookup_block lbl (ao_cmp_flip_function mid dfg fn1).fn_blocks = SOME bb'
+    lookup_block lbl (ao_cmp_flip_function mid dfg0 dfg fn1).fn_blocks = SOME bb'
     ==>
     bb'.bb_instructions =
       FLAT (MAP (ao_cmp_flip_apply_inst mid flips removes inserts)
@@ -931,21 +1003,21 @@ Proof
 QED
 
 Triviality scan_step_flips_subset[local]:
-  !dfg h rest flips removes inserts fl0 rm0 ins0.
-    ao_cmp_flip_scan dfg rest = (fl0, rm0, ins0) /\
-    ao_cmp_flip_scan dfg (h :: rest) = (flips, removes, inserts) ==>
+  !dfg h rest flips removes inserts fl0 rm0 ins0 mid dfg0.
+    ao_cmp_flip_scan mid dfg0 dfg rest = (fl0, rm0, ins0) /\
+    ao_cmp_flip_scan mid dfg0 dfg (h :: rest) = (flips, removes, inserts) ==>
     flips = fl0 \/
     (?opc w op1. flips = (h.inst_id, opc, w, op1) :: fl0 /\
                  is_comparator h.inst_opcode)
 Proof
   rpt strip_tac >>
-  drule_all scan_step_detail >> strip_tac >> gvs[]
+  drule_all scan_step_detail >> strip_tac >> gvs[pre_flip_is_comparator]
 QED
 
 Triviality scan_step_removes_subset[local]:
-  !dfg h rest flips removes inserts fl0 rm0 ins0.
-    ao_cmp_flip_scan dfg rest = (fl0, rm0, ins0) /\
-    ao_cmp_flip_scan dfg (h :: rest) = (flips, removes, inserts) ==>
+  !dfg h rest flips removes inserts fl0 rm0 ins0 mid dfg0.
+    ao_cmp_flip_scan mid dfg0 dfg rest = (fl0, rm0, ins0) /\
+    ao_cmp_flip_scan mid dfg0 dfg (h :: rest) = (flips, removes, inserts) ==>
     removes = rm0 \/
     (?v ui. removes = ui.inst_id :: rm0 /\
             MEM ui (dfg_get_uses dfg v) /\ ui.inst_opcode = ISZERO)
@@ -961,12 +1033,12 @@ Proof
 QED
 
 Triviality scan_step_inserts_subset[local]:
-  !dfg h rest flips removes inserts fl0 rm0 ins0.
-    ao_cmp_flip_scan dfg rest = (fl0, rm0, ins0) /\
-    ao_cmp_flip_scan dfg (h :: rest) = (flips, removes, inserts) ==>
+  !dfg h rest flips removes inserts fl0 rm0 ins0 mid dfg0.
+    ao_cmp_flip_scan mid dfg0 dfg rest = (fl0, rm0, ins0) /\
+    ao_cmp_flip_scan mid dfg0 dfg (h :: rest) = (flips, removes, inserts) ==>
     inserts = ins0 \/
     (?v ui.
-       inserts = (ui.inst_id, v, ao_fresh_var h.inst_id "iz",
+       inserts = (ui.inst_id, v, ao_fresh_var (ao_fresh_id mid h.inst_id 0) "iz",
                   h.inst_id) :: ins0 /\
        MEM ui (dfg_get_uses dfg v) /\ ui.inst_opcode = ASSERT)
 Proof
@@ -981,15 +1053,15 @@ QED
 
 (* Flips keys come from comparator instructions in insts *)
 Triviality scan_flips_are_comparators[local]:
-  !dfg insts flips removes inserts id.
-    ao_cmp_flip_scan dfg insts = (flips, removes, inserts) /\
+  !dfg insts flips removes inserts id mid dfg0.
+    ao_cmp_flip_scan mid dfg0 dfg insts = (flips, removes, inserts) /\
     MEM id (MAP FST flips) ==>
     ?i. MEM i insts /\ i.inst_id = id /\ is_comparator i.inst_opcode
 Proof
   Induct_on `insts`
   >- simp[ao_cmp_flip_scan_def]
   >> rpt gen_tac >> strip_tac >>
-  Cases_on `ao_cmp_flip_scan dfg insts` >> Cases_on `r` >>
+  Cases_on `ao_cmp_flip_scan mid dfg0 dfg insts` >> Cases_on `r` >>
   rename1 `_ = (flips', removes', inserts')` >>
   `flips = flips' \/
    (?opc w op1. flips = (h.inst_id, opc, w, op1) :: flips' /\
@@ -1002,8 +1074,8 @@ QED
 
 (* Removes IDs come from ISZERO instructions in dfg_get_uses *)
 Triviality scan_removes_are_iszero[local]:
-  !dfg insts flips removes inserts id.
-    ao_cmp_flip_scan dfg insts = (flips, removes, inserts) /\
+  !dfg insts flips removes inserts id mid dfg0.
+    ao_cmp_flip_scan mid dfg0 dfg insts = (flips, removes, inserts) /\
     MEM id removes ==>
     ?v ui. MEM ui (dfg_get_uses dfg v) /\ ui.inst_id = id /\
            ui.inst_opcode = ISZERO
@@ -1011,7 +1083,7 @@ Proof
   Induct_on `insts`
   >- simp[ao_cmp_flip_scan_def]
   >> rpt gen_tac >> strip_tac >>
-  Cases_on `ao_cmp_flip_scan dfg insts` >> Cases_on `r` >>
+  Cases_on `ao_cmp_flip_scan mid dfg0 dfg insts` >> Cases_on `r` >>
   rename1 `_ = (flips', removes', inserts')` >>
   `removes = removes' \/
    (?v ui. removes = ui.inst_id :: removes' /\
@@ -1022,8 +1094,8 @@ QED
 
 (* Inserts keys come from ASSERT instructions in dfg_get_uses *)
 Triviality scan_inserts_are_assert[local]:
-  !dfg insts flips removes inserts id.
-    ao_cmp_flip_scan dfg insts = (flips, removes, inserts) /\
+  !dfg insts flips removes inserts id mid dfg0.
+    ao_cmp_flip_scan mid dfg0 dfg insts = (flips, removes, inserts) /\
     MEM id (MAP FST inserts) ==>
     ?v ui. MEM ui (dfg_get_uses dfg v) /\ ui.inst_id = id /\
            ui.inst_opcode = ASSERT
@@ -1031,10 +1103,10 @@ Proof
   Induct_on `insts`
   >- simp[ao_cmp_flip_scan_def]
   >> rpt gen_tac >> strip_tac >>
-  Cases_on `ao_cmp_flip_scan dfg insts` >> Cases_on `r` >>
+  Cases_on `ao_cmp_flip_scan mid dfg0 dfg insts` >> Cases_on `r` >>
   rename1 `_ = (flips', removes', inserts')` >>
   `inserts = inserts' \/
-   (?v ui. inserts = (ui.inst_id, v, ao_fresh_var h.inst_id "iz",
+   (?v ui. inserts = (ui.inst_id, v, ao_fresh_var (ao_fresh_id mid h.inst_id 0) "iz",
                       h.inst_id) :: inserts' /\
            MEM ui (dfg_get_uses dfg v) /\ ui.inst_opcode = ASSERT)` by
     metis_tac[scan_step_inserts_subset] >>
@@ -1044,8 +1116,8 @@ QED
 (* Like scan_inserts_are_assert but uses MEM tuple directly,
    connecting the ALOOKUP value field cmp_out to the DFG variable *)
 Triviality scan_insert_mem_assert[local]:
-  !dfg insts flips removes inserts aid cmp_out fresh cmp_id.
-    ao_cmp_flip_scan dfg insts = (flips, removes, inserts) /\
+  !dfg insts flips removes inserts aid cmp_out fresh cmp_id mid dfg0.
+    ao_cmp_flip_scan mid dfg0 dfg insts = (flips, removes, inserts) /\
     MEM (aid, cmp_out, fresh, cmp_id) inserts ==>
     ?ui. MEM ui (dfg_get_uses dfg cmp_out) /\ ui.inst_id = aid /\
          ui.inst_opcode = ASSERT
@@ -1053,31 +1125,31 @@ Proof
   Induct_on `insts`
   >- simp[ao_cmp_flip_scan_def]
   >> rpt gen_tac >> strip_tac >>
-  Cases_on `ao_cmp_flip_scan dfg insts` >> Cases_on `r` >>
+  Cases_on `ao_cmp_flip_scan mid dfg0 dfg insts` >> Cases_on `r` >>
   rename1 `_ = (fl0, rm0, ins0)` >>
   `inserts = ins0 \/
-   (?v ui. inserts = (ui.inst_id, v, ao_fresh_var h.inst_id "iz",
+   (?v ui. inserts = (ui.inst_id, v, ao_fresh_var (ao_fresh_id mid h.inst_id 0) "iz",
                       h.inst_id) :: ins0 /\
            MEM ui (dfg_get_uses dfg v) /\ ui.inst_opcode = ASSERT)` by
     metis_tac[scan_step_inserts_subset] >>
   gvs[] >> metis_tac[]
 QED
 
-(* Insert tuple structure: fresh = ao_fresh_var cmp_id "iz", cmp_id in insts *)
+(* Insert tuple structure: fresh = ao_fresh_var (ao_fresh_id mid cmp_id 0) "iz", cmp_id in insts *)
 Triviality scan_insert_fresh_form[local]:
-  !dfg insts flips removes inserts aid out_var fresh cmp_id.
-    ao_cmp_flip_scan dfg insts = (flips, removes, inserts) /\
+  !dfg insts flips removes inserts aid out_var fresh cmp_id mid dfg0.
+    ao_cmp_flip_scan mid dfg0 dfg insts = (flips, removes, inserts) /\
     MEM (aid, out_var, fresh, cmp_id) inserts ==>
-    fresh = ao_fresh_var cmp_id "iz" /\
+    fresh = ao_fresh_var (ao_fresh_id mid cmp_id 0) "iz" /\
     ?i. MEM i insts /\ i.inst_id = cmp_id /\ is_comparator i.inst_opcode
 Proof
   Induct_on `insts`
   >- simp[ao_cmp_flip_scan_def]
   >> rpt gen_tac >> strip_tac >>
-  Cases_on `ao_cmp_flip_scan dfg insts` >> Cases_on `r` >>
+  Cases_on `ao_cmp_flip_scan mid dfg0 dfg insts` >> Cases_on `r` >>
   rename1 `_ = (fl0, rm0, ins0)` >>
   `inserts = ins0 \/
-   (?v ui. inserts = (ui.inst_id, v, ao_fresh_var h.inst_id "iz",
+   (?v ui. inserts = (ui.inst_id, v, ao_fresh_var (ao_fresh_id mid h.inst_id 0) "iz",
                       h.inst_id) :: ins0 /\
            MEM ui (dfg_get_uses dfg v) /\ ui.inst_opcode = ASSERT)` by
     metis_tac[scan_step_inserts_subset] >>
@@ -1087,14 +1159,14 @@ Proof
   gvs[listTheory.MEM]
   >- (* Head: cmp_id = h.inst_id, need is_comparator h *)
      (drule_all scan_step_detail >>
-      strip_tac >> gvs[] >> metis_tac[])
+      strip_tac >> gvs[] >> metis_tac[pre_flip_is_comparator])
   >- metis_tac[]
 QED
 
 (* Remove entries pair with a flip: removed ISZERO uses flip output *)
 Triviality scan_remove_has_flip[local]:
-  !dfg insts flips removes inserts id.
-    ao_cmp_flip_scan dfg insts = (flips, removes, inserts) /\
+  !dfg insts flips removes inserts id mid dfg0.
+    ao_cmp_flip_scan mid dfg0 dfg insts = (flips, removes, inserts) /\
     MEM id removes ==>
     ?fi out_var.
       MEM fi insts /\ ALOOKUP flips fi.inst_id <> NONE /\
@@ -1106,7 +1178,7 @@ Proof
   Induct_on `insts`
   >- simp[ao_cmp_flip_scan_def]
   >> rpt gen_tac >> strip_tac >>
-  Cases_on `ao_cmp_flip_scan dfg insts` >> Cases_on `r` >>
+  Cases_on `ao_cmp_flip_scan mid dfg0 dfg insts` >> Cases_on `r` >>
   rename1 `_ = (fl0, rm0, ins0)` >>
   `removes = rm0 \/
    (?v ui. removes = ui.inst_id :: rm0 /\
@@ -1133,8 +1205,8 @@ QED
 
 (* Insert entries pair with a flip *)
 Triviality scan_insert_has_flip[local]:
-  !dfg insts flips removes inserts inst_id cmp_out fresh cmp_id.
-    ao_cmp_flip_scan dfg insts = (flips, removes, inserts) /\
+  !dfg insts flips removes inserts inst_id cmp_out fresh cmp_id mid dfg0.
+    ao_cmp_flip_scan mid dfg0 dfg insts = (flips, removes, inserts) /\
     ALOOKUP inserts inst_id = SOME (cmp_out, fresh, cmp_id) ==>
     ?fi.
       MEM fi insts /\ ALOOKUP flips fi.inst_id <> NONE /\
@@ -1144,10 +1216,10 @@ Proof
   Induct_on `insts`
   >- simp[ao_cmp_flip_scan_def]
   >> rpt gen_tac >> strip_tac >>
-  Cases_on `ao_cmp_flip_scan dfg insts` >> Cases_on `r` >>
+  Cases_on `ao_cmp_flip_scan mid dfg0 dfg insts` >> Cases_on `r` >>
   rename1 `_ = (fl0, rm0, ins0)` >>
   `inserts = ins0 \/
-   (?v ui. inserts = (ui.inst_id, v, ao_fresh_var h.inst_id "iz",
+   (?v ui. inserts = (ui.inst_id, v, ao_fresh_var (ao_fresh_id mid h.inst_id 0) "iz",
                       h.inst_id) :: ins0 /\
            MEM ui (dfg_get_uses dfg v) /\ ui.inst_opcode = ASSERT)` by
     metis_tac[scan_step_inserts_subset] >>
@@ -1168,21 +1240,21 @@ QED
 
 (* Single step: full structural info when a flip entry is prepended *)
 Triviality scan_step_flip_info[local]:
-  !dfg h rest flips removes inserts fl0 rm0 ins0.
-    ao_cmp_flip_scan dfg rest = (fl0, rm0, ins0) /\
-    ao_cmp_flip_scan dfg (h :: rest) = (flips, removes, inserts) /\
+  !dfg h rest flips removes inserts fl0 rm0 ins0 mid dfg0.
+    ao_cmp_flip_scan mid dfg0 dfg rest = (fl0, rm0, ins0) /\
+    ao_cmp_flip_scan mid dfg0 dfg (h :: rest) = (flips, removes, inserts) /\
     flips <> fl0 ==>
     ?w op1 out_var.
-      is_comparator h.inst_opcode /\
-      h.inst_operands = [op1; Lit w] /\
+      is_comparator (ao_pre_flip_inst h).inst_opcode /\
+      (ao_pre_flip_inst h).inst_operands = [op1; Lit w] /\
       h.inst_outputs = [out_var] /\
-      flips = (h.inst_id, flip_comparison_opcode h.inst_opcode,
-               (if h.inst_opcode = GT \/ h.inst_opcode = SGT
+      flips = (h.inst_id, flip_comparison_opcode (ao_pre_flip_inst h).inst_opcode,
+               (if (ao_pre_flip_inst h).inst_opcode = GT \/ (ao_pre_flip_inst h).inst_opcode = SGT
                 then w + 1w else w - 1w), op1) :: fl0 /\
-      (h.inst_opcode = GT ==> w <> 0w - 1w) /\
-      (h.inst_opcode = LT ==> w <> 0w) /\
-      (h.inst_opcode = SGT ==> w <> i2w INT256_MAX) /\
-      (h.inst_opcode = SLT ==> w <> i2w INT256_MIN)
+      ((ao_pre_flip_inst h).inst_opcode = GT ==> w <> 0w - 1w) /\
+      ((ao_pre_flip_inst h).inst_opcode = LT ==> w <> 0w) /\
+      ((ao_pre_flip_inst h).inst_opcode = SGT ==> w <> i2w INT256_MAX) /\
+      ((ao_pre_flip_inst h).inst_opcode = SLT ==> w <> i2w INT256_MIN)
 Proof
   rpt strip_tac >>
   drule_all scan_step_detail >>
@@ -1191,27 +1263,27 @@ QED
 
 (* Full structural info for flip entries — by induction using step lemma *)
 Triviality scan_flip_info[local]:
-  !dfg insts flips removes inserts id new_opc new_w op1.
-    ao_cmp_flip_scan dfg insts = (flips, removes, inserts) /\
+  !dfg insts flips removes inserts id new_opc new_w op1 mid dfg0.
+    ao_cmp_flip_scan mid dfg0 dfg insts = (flips, removes, inserts) /\
     ALOOKUP flips id = SOME (new_opc, new_w, op1) ==>
     ?inst w out_var.
       MEM inst insts /\ inst.inst_id = id /\
-      is_comparator inst.inst_opcode /\
-      inst.inst_operands = [op1; Lit w] /\
+      is_comparator (ao_pre_flip_inst inst).inst_opcode /\
+      (ao_pre_flip_inst inst).inst_operands = [op1; Lit w] /\
       inst.inst_outputs = [out_var] /\
-      new_opc = flip_comparison_opcode inst.inst_opcode /\
-      new_w = (if inst.inst_opcode = GT \/ inst.inst_opcode = SGT
+      new_opc = flip_comparison_opcode (ao_pre_flip_inst inst).inst_opcode /\
+      new_w = (if (ao_pre_flip_inst inst).inst_opcode = GT \/ (ao_pre_flip_inst inst).inst_opcode = SGT
                then w + 1w else w - 1w) /\
-      (inst.inst_opcode = GT ==> w <> 0w - 1w) /\
-      (inst.inst_opcode = LT ==> w <> 0w) /\
-      (inst.inst_opcode = SGT ==> w <> i2w INT256_MAX) /\
-      (inst.inst_opcode = SLT ==> w <> i2w INT256_MIN)
+      ((ao_pre_flip_inst inst).inst_opcode = GT ==> w <> 0w - 1w) /\
+      ((ao_pre_flip_inst inst).inst_opcode = LT ==> w <> 0w) /\
+      ((ao_pre_flip_inst inst).inst_opcode = SGT ==> w <> i2w INT256_MAX) /\
+      ((ao_pre_flip_inst inst).inst_opcode = SLT ==> w <> i2w INT256_MIN)
 Proof
   Induct_on `insts`
   >- simp[ao_cmp_flip_scan_def]
   >> rpt gen_tac >> strip_tac >>
   `?flips0 removes0 inserts0.
-     ao_cmp_flip_scan dfg insts = (flips0, removes0, inserts0)` by
+     ao_cmp_flip_scan mid dfg0 dfg insts = (flips0, removes0, inserts0)` by
     metis_tac[pairTheory.PAIR] >>
   Cases_on `flips = flips0`
   >- ( (* Passthrough: IH applies directly *)
@@ -1221,16 +1293,16 @@ Proof
     qexists_tac `out_var` >> gvs[])
   >> (* Flip was prepended — use step info *)
   `?w' op1' out_var'.
-     is_comparator h.inst_opcode /\
-     h.inst_operands = [op1'; Lit w'] /\
+     is_comparator (ao_pre_flip_inst h).inst_opcode /\
+     (ao_pre_flip_inst h).inst_operands = [op1'; Lit w'] /\
      h.inst_outputs = [out_var'] /\
-     flips = (h.inst_id, flip_comparison_opcode h.inst_opcode,
-              (if h.inst_opcode = GT \/ h.inst_opcode = SGT
+     flips = (h.inst_id, flip_comparison_opcode (ao_pre_flip_inst h).inst_opcode,
+              (if (ao_pre_flip_inst h).inst_opcode = GT \/ (ao_pre_flip_inst h).inst_opcode = SGT
                then w' + 1w else w' - 1w), op1') :: flips0 /\
-     (h.inst_opcode = GT ==> w' <> 0w - 1w) /\
-     (h.inst_opcode = LT ==> w' <> 0w) /\
-     (h.inst_opcode = SGT ==> w' <> i2w INT256_MAX) /\
-     (h.inst_opcode = SLT ==> w' <> i2w INT256_MIN)` by
+     ((ao_pre_flip_inst h).inst_opcode = GT ==> w' <> 0w - 1w) /\
+     ((ao_pre_flip_inst h).inst_opcode = LT ==> w' <> 0w) /\
+     ((ao_pre_flip_inst h).inst_opcode = SGT ==> w' <> i2w INT256_MAX) /\
+     ((ao_pre_flip_inst h).inst_opcode = SLT ==> w' <> i2w INT256_MIN)` by
     (irule scan_step_flip_info >> metis_tac[]) >>
   gvs[] >>
   Cases_on `id = h.inst_id`
@@ -1278,8 +1350,8 @@ QED
 (* Scan only adds comparator/ISZERO/ASSERT IDs to lists.
    With unique IDs and dfg-closed, terminators can't collide. *)
 Triviality scan_terminator_untouched[local]:
-  !dfg insts inst flips removes inserts.
-    ao_cmp_flip_scan dfg insts = (flips, removes, inserts) /\
+  !dfg insts inst flips removes inserts mid dfg0.
+    ao_cmp_flip_scan mid dfg0 dfg insts = (flips, removes, inserts) /\
     ALL_DISTINCT (MAP (\i. i.inst_id) insts) /\
     (!v ui. MEM ui (dfg_get_uses dfg v) ==> MEM ui insts) /\
     MEM inst insts /\ is_terminator inst.inst_opcode ==>
@@ -1354,8 +1426,11 @@ Proof
   Cases_on `step_inst_base inst (s with vs_inst_idx := n2)` >>
   gvs[instIdxIndepTheory.exec_result_map_def,
       stateEquivTheory.lift_result_def,
-      stateEquivTheory.execution_equiv_def, lookup_var_def,
-      venomStateTheory.venom_state_component_equality]
+      stateEquivTheory.execution_equiv_def, lookup_var_def] >>
+  qpat_x_assum `_ with vs_inst_idx := 0 = _`
+    (fn th => mp_tac (AP_TERM ``execution_frame`` th) >>
+              mp_tac (AP_TERM ``venom_state_vs_vars`` th)) >>
+  simp[]
 QED
 
 Triviality terminator_ok_idx_zero[local]:
@@ -1364,9 +1439,7 @@ Triviality terminator_ok_idx_zero[local]:
     step_inst_base inst s = OK s' ==>
     s'.vs_inst_idx = 0
 Proof
-  rpt strip_tac >>
-  gvs[step_inst_base_def, is_terminator_def, jump_to_def,
-      AllCaseEqs()]
+  metis_tac[instIdxIndepTheory.terminator_OK_inst_idx_0]
 QED
 
 (* Terminator exec_block simulation with different indices.
@@ -1736,16 +1809,16 @@ Triviality per_inst_lr[local]:
     (!new_opc new_w orig_op1.
        ALOOKUP flips inst.inst_id = SOME (new_opc, new_w, orig_op1) ==>
        ?w out_var.
-         is_comparator inst.inst_opcode /\
-         inst.inst_operands = [orig_op1; Lit w] /\
+         is_comparator (ao_pre_flip_inst inst).inst_opcode /\
+         (ao_pre_flip_inst inst).inst_operands = [orig_op1; Lit w] /\
          inst.inst_outputs = [out_var] /\
-         new_opc = flip_comparison_opcode inst.inst_opcode /\
-         new_w = (if inst.inst_opcode = GT \/ inst.inst_opcode = SGT
+         new_opc = flip_comparison_opcode (ao_pre_flip_inst inst).inst_opcode /\
+         new_w = (if (ao_pre_flip_inst inst).inst_opcode = GT \/ (ao_pre_flip_inst inst).inst_opcode = SGT
                   then w + 1w else w - 1w) /\
-         (inst.inst_opcode = GT ==> w <> 0w - 1w) /\
-         (inst.inst_opcode = LT ==> w <> 0w) /\
-         (inst.inst_opcode = SGT ==> w <> i2w INT256_MAX) /\
-         (inst.inst_opcode = SLT ==> w <> i2w INT256_MIN)) /\
+         ((ao_pre_flip_inst inst).inst_opcode = GT ==> w <> 0w - 1w) /\
+         ((ao_pre_flip_inst inst).inst_opcode = LT ==> w <> 0w) /\
+         ((ao_pre_flip_inst inst).inst_opcode = SGT ==> w <> i2w INT256_MAX) /\
+         ((ao_pre_flip_inst inst).inst_opcode = SLT ==> w <> i2w INT256_MIN)) /\
     (MEM inst.inst_id removes ==>
       ?cmp_out iz_out fi.
         inst.inst_opcode = ISZERO /\
@@ -1841,34 +1914,23 @@ Proof
   PairCases_on `x` >>
   first_x_assum (qspecl_then [`x0`, `x1`, `x2`] mp_tac) >> simp[] >>
   strip_tac >> gvs[] >>
-  `inst.inst_opcode <> INVOKE` by (gvs[is_comparator_def]) >>
   `~MEM inst.inst_id removes /\ ALOOKUP inserts inst.inst_id = NONE` by
     (first_x_assum (qspec_then `inst.inst_id` mp_tac) >> simp[]) >>
   `ao_cmp_flip_apply_inst mid flips removes inserts inst =
-   [inst with <| inst_opcode :=
-       flip_comparison_opcode (flip_comparison_opcode inst.inst_opcode);
-                 inst_operands := [Lit (if inst.inst_opcode = GT \/
-                   inst.inst_opcode = SGT then w + 1w else w - 1w); x2] |>]` by
+   [ao_post_flip_inst (inst with
+      <| inst_opcode := flip_comparison_opcode (ao_pre_flip_inst inst).inst_opcode;
+         inst_operands := [x2; Lit (if (ao_pre_flip_inst inst).inst_opcode = GT \/
+           (ao_pre_flip_inst inst).inst_opcode = SGT then w + 1w else w - 1w)] |>)]` by
     simp[ao_cmp_flip_apply_inst_def] >>
   pop_assum (fn th => REWRITE_TAC [th]) >>
   REWRITE_TAC [run_insts_singleton] >>
-  simp[flip_emit_step_eq_full] >>
-  `step_inst fuel ctx inst s1 = step_inst_base inst s1` by
-    (irule step_inst_non_invoke >> simp[]) >>
-  `step_inst fuel ctx
-     (inst with <| inst_opcode := flip_comparison_opcode inst.inst_opcode;
-                   inst_operands := [x2; Lit (if inst.inst_opcode = GT \/
-                     inst.inst_opcode = SGT then w + 1w else w - 1w)] |>) s2 =
-   step_inst_base
-     (inst with <| inst_opcode := flip_comparison_opcode inst.inst_opcode;
-                   inst_operands := [x2; Lit (if inst.inst_opcode = GT \/
-                     inst.inst_opcode = SGT then w + 1w else w - 1w)] |>) s2` by
-    (irule step_inst_non_invoke >> simp[] >>
-     gvs[is_comparator_def] >> simp[flip_comparison_opcode_def]) >>
-  gvs[] >>
-  irule per_inst_lr_flip >> simp[] >>
+  `is_comparator (flip_comparison_opcode (ao_pre_flip_inst inst).inst_opcode)` by
+    metis_tac[flip_is_comparator] >>
+  simp[flip_emit_step, pre_inst_step] >>
+  irule per_inst_lr_flip >>
+  simp[pre_flip_fields, comparator_not_term] >>
   `ALOOKUP flips inst.inst_id <> NONE` by simp[] >>
-  metis_tac[listTheory.MEM]
+  metis_tac[pre_flip_mem_operands, listTheory.MEM]
 QED
 
 (* Body simulation with lift_result conclusion *)
@@ -1894,16 +1956,16 @@ Triviality body_lr[local]:
        MEM inst body_insts /\
        ALOOKUP flips inst.inst_id = SOME (new_opc, new_w, orig_op1) ==>
        ?w out_var.
-         is_comparator inst.inst_opcode /\
-         inst.inst_operands = [orig_op1; Lit w] /\
+         is_comparator (ao_pre_flip_inst inst).inst_opcode /\
+         (ao_pre_flip_inst inst).inst_operands = [orig_op1; Lit w] /\
          inst.inst_outputs = [out_var] /\
-         new_opc = flip_comparison_opcode inst.inst_opcode /\
-         new_w = (if inst.inst_opcode = GT \/ inst.inst_opcode = SGT
+         new_opc = flip_comparison_opcode (ao_pre_flip_inst inst).inst_opcode /\
+         new_w = (if (ao_pre_flip_inst inst).inst_opcode = GT \/ (ao_pre_flip_inst inst).inst_opcode = SGT
                   then w + 1w else w - 1w) /\
-         (inst.inst_opcode = GT ==> w <> 0w - 1w) /\
-         (inst.inst_opcode = LT ==> w <> 0w) /\
-         (inst.inst_opcode = SGT ==> w <> i2w INT256_MAX) /\
-         (inst.inst_opcode = SLT ==> w <> i2w INT256_MIN)) /\
+         ((ao_pre_flip_inst inst).inst_opcode = GT ==> w <> 0w - 1w) /\
+         ((ao_pre_flip_inst inst).inst_opcode = LT ==> w <> 0w) /\
+         ((ao_pre_flip_inst inst).inst_opcode = SGT ==> w <> i2w INT256_MAX) /\
+         ((ao_pre_flip_inst inst).inst_opcode = SLT ==> w <> i2w INT256_MIN)) /\
     (!inst. MEM inst body_insts /\ MEM inst.inst_id removes ==>
       ?cmp_out iz_out fi.
         inst.inst_opcode = ISZERO /\
@@ -2153,8 +2215,8 @@ QED
 
 (* Terminator of a well-formed block is untouched by cmp_flip_scan *)
 Triviality last_untouched[local]:
-  !dfg fn1 bb1 lbl flips removes inserts.
-    ao_cmp_flip_scan dfg (fn_insts fn1) = (flips, removes, inserts) /\
+  !dfg fn1 bb1 lbl flips removes inserts mid dfg0.
+    ao_cmp_flip_scan mid dfg0 dfg (fn_insts fn1) = (flips, removes, inserts) /\
     fn_inst_ids_distinct fn1 /\
     (!v ui. MEM ui (dfg_get_uses dfg v) ==> MEM ui (fn_insts fn1)) /\
     bb_well_formed bb1 /\
@@ -2242,8 +2304,8 @@ QED
 
 (* Flip outputs are single-use: accumulated from scan *)
 Triviality scan_flip_single_use[local]:
-  !dfg insts flips removes inserts id new_opc new_w op1.
-    ao_cmp_flip_scan dfg insts = (flips, removes, inserts) /\
+  !dfg insts flips removes inserts id new_opc new_w op1 mid dfg0.
+    ao_cmp_flip_scan mid dfg0 dfg insts = (flips, removes, inserts) /\
     ALOOKUP flips id = SOME (new_opc, new_w, op1) ==>
     ?out_var.
       (?inst. MEM inst insts /\ inst.inst_id = id /\
@@ -2253,7 +2315,7 @@ Proof
   Induct_on `insts`
   >- simp[ao_cmp_flip_scan_def]
   >> rpt gen_tac >> strip_tac >>
-  Cases_on `ao_cmp_flip_scan dfg insts` >> Cases_on `r` >>
+  Cases_on `ao_cmp_flip_scan mid dfg0 dfg insts` >> Cases_on `r` >>
   rename1 `_ = (fl0, rm0, ins0)` >>
   Cases_on `flips = fl0`
   >- (gvs[] >>
@@ -2262,8 +2324,8 @@ Proof
       metis_tac[listTheory.MEM])
   >> `?w' op1' out_var'.
        h.inst_outputs = [out_var'] /\
-       flips = (h.inst_id, flip_comparison_opcode h.inst_opcode,
-                (if h.inst_opcode = GT \/ h.inst_opcode = SGT
+       flips = (h.inst_id, flip_comparison_opcode (ao_pre_flip_inst h).inst_opcode,
+                (if (ao_pre_flip_inst h).inst_opcode = GT \/ (ao_pre_flip_inst h).inst_opcode = SGT
                  then w' + 1w else w' - 1w), op1') :: fl0 /\
        LENGTH (dfg_get_uses dfg out_var') = 1` by
     (drule_all scan_step_detail >> strip_tac >> gvs[] >>
@@ -2280,8 +2342,8 @@ QED
 
 (* The single user of a flip's output has its ID in removes or inserts *)
 Triviality flip_output_user_in_scan[local]:
-  !dfg insts flips removes inserts fi out_var.
-    ao_cmp_flip_scan dfg insts = (flips, removes, inserts) /\
+  !dfg insts flips removes inserts fi out_var mid dfg0.
+    ao_cmp_flip_scan mid dfg0 dfg insts = (flips, removes, inserts) /\
     MEM fi insts /\ MEM fi.inst_id (MAP FST flips) /\
     fi.inst_outputs = [out_var] /\
     ALL_DISTINCT (MAP (\i. i.inst_id) insts) ==>
@@ -2291,8 +2353,8 @@ Proof
   Induct_on `insts`
   >- simp[ao_cmp_flip_scan_def]
   >> rpt gen_tac >> strip_tac >>
-  Cases_on `ao_cmp_flip_scan dfg insts` >> Cases_on `r` >>
-  rename1 `ao_cmp_flip_scan dfg insts = (fl0, rm0, ins0)` >>
+  Cases_on `ao_cmp_flip_scan mid dfg0 dfg insts` >> Cases_on `r` >>
+  rename1 `ao_cmp_flip_scan mid dfg0 dfg insts = (fl0, rm0, ins0)` >>
   Cases_on `fi = h`
   >- ((* fi = h: h must be a flip target *)
       `flips = fl0 \/
@@ -2313,7 +2375,7 @@ Proof
           inserts = ins0 \/
           removes = rm0 /\
           inserts = ((HD (dfg_get_uses dfg out')).inst_id, out',
-                     ao_fresh_var fi.inst_id "iz", fi.inst_id) :: ins0)` by
+                     ao_fresh_var (ao_fresh_id mid fi.inst_id 0) "iz", fi.inst_id) :: ins0)` by
         (drule_all scan_step_detail >> strip_tac >> gvs[] >>
          metis_tac[]) >>
       gvs[] >>
@@ -2335,7 +2397,7 @@ Proof
    ?v ui. removes = ui.inst_id :: rm0` by
     metis_tac[scan_step_removes_subset] >>
   `inserts = ins0 \/
-   ?v ui. inserts = (ui.inst_id, v, ao_fresh_var h.inst_id "iz",
+   ?v ui. inserts = (ui.inst_id, v, ao_fresh_var (ao_fresh_id mid h.inst_id 0) "iz",
                      h.inst_id) :: ins0` by
     metis_tac[scan_step_inserts_subset] >>
   gvs[]
@@ -2345,8 +2407,8 @@ QED
    if fi is in the flip list and fn_insts has distinct IDs,
    then fi has single output with single use *)
 Triviality flip_member_outputs_single_use[local]:
-  !dfg fn1 fi flips removes inserts.
-    ao_cmp_flip_scan dfg (fn_insts fn1) = (flips, removes, inserts) /\
+  !dfg fn1 fi flips removes inserts mid dfg0.
+    ao_cmp_flip_scan mid dfg0 dfg (fn_insts fn1) = (flips, removes, inserts) /\
     MEM fi.inst_id (MAP FST flips) /\
     MEM fi (fn_insts fn1) /\
     ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn1)) ==>
@@ -2365,17 +2427,17 @@ QED
 
 (* Insert fresh vars are distinct from flip outputs *)
 Triviality insert_fresh_neq_flip_output[local]:
-  !dfg fn1 flips removes inserts cmp_id fi' out.
-    ao_cmp_flip_scan dfg (fn_insts fn1) = (flips, removes, inserts) /\
+  !dfg fn1 flips removes inserts cmp_id fi' out mid dfg0.
+    ao_cmp_flip_scan mid dfg0 dfg (fn_insts fn1) = (flips, removes, inserts) /\
     dfg = dfg_build_function fn1 /\
     fn_inst_ids_distinct fn1 /\
     (!inst v. MEM inst (fn_insts fn1) /\ MEM (Var v) inst.inst_operands ==>
-      v NOTIN ao_cmp_fresh_vars fn1) /\
+      v NOTIN ao_cmp_fresh_vars mid fn1) /\
     (?i. MEM i (fn_insts fn1) /\ i.inst_id = cmp_id /\
          is_comparator i.inst_opcode) /\
     MEM fi' (fn_insts fn1) /\ ALOOKUP flips fi'.inst_id <> NONE /\
     MEM out fi'.inst_outputs ==>
-    ao_fresh_var cmp_id "iz" <> out
+    ao_fresh_var (ao_fresh_id mid cmp_id 0) "iz" <> out
 Proof
   rpt strip_tac >>
   `ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn1))` by
@@ -2397,8 +2459,8 @@ Proof
     metis_tac[dfgAnalysisPropsTheory.dfg_build_function_uses_sound] >>
   `MEM (Var out_var) (HD (dfg_get_uses dfg out_var)).inst_operands` by
     (irule operand_vars_mem_var >> first_assum ACCEPT_TAC) >>
-  `out_var NOTIN ao_cmp_fresh_vars fn1` by metis_tac[] >>
-  `ao_fresh_var cmp_id "iz" IN ao_cmp_fresh_vars fn1` by
+  `out_var NOTIN ao_cmp_fresh_vars mid fn1` by metis_tac[] >>
+  `ao_fresh_var (ao_fresh_id mid cmp_id 0) "iz" IN ao_cmp_fresh_vars mid fn1` by
     (simp[ao_cmp_fresh_vars_def, pred_setTheory.GSPECIFICATION,
           listTheory.MEM_MAP] >>
      metis_tac[]) >>
@@ -2420,14 +2482,14 @@ Proof
 QED
 
 Triviality non_null_body_sim[local]:
-  !mid dfg fn1 lbl bb1 flips removes inserts dead fuel ctx s1 s2 n.
-    dead = ao_cmp_flip_dead_vars dfg fn1 /\
+  !mid dfg fn1 lbl bb1 flips removes inserts dead fuel ctx s1 s2 n dfg0.
+    dead = ao_cmp_flip_dead_vars mid dfg0 dfg fn1 /\
     dfg = dfg_build_function fn1 /\
-    ao_cmp_flip_scan dfg (fn_insts fn1) = (flips, removes, inserts) /\
+    ao_cmp_flip_scan mid dfg0 dfg (fn_insts fn1) = (flips, removes, inserts) /\
 
     (!inst. MEM inst (fn_insts fn1) ==> inst_wf inst) /\
     (!inst v. MEM inst (fn_insts fn1) /\ MEM (Var v) inst.inst_operands ==>
-      v NOTIN ao_cmp_fresh_vars fn1) /\
+      v NOTIN ao_cmp_fresh_vars mid fn1) /\
     fn_inst_ids_distinct fn1 /\
     ssa_form fn1 /\
     ~NULL flips /\
@@ -2487,7 +2549,7 @@ Proof
           gvs[alistTheory.ALOOKUP_NONE])
       >- (drule_all scan_insert_fresh_form >> strip_tac >> gvs[] >>
           qpat_x_assum `!inst v. _ /\ _ ==> v NOTIN _`
-            (qspecl_then [`inst`, `ao_fresh_var i.inst_id "iz"`] mp_tac) >>
+            (qspecl_then [`inst`, `ao_fresh_var (ao_fresh_id mid i.inst_id 0) "iz"`] mp_tac) >>
           `MEM inst (fn_insts fn1)` by
             metis_tac[rich_listTheory.MEM_DROP_IMP,
                       rich_listTheory.MEM_FRONT_NOT_NIL,
@@ -2593,14 +2655,14 @@ Proof
 QED
 
 Triviality scan_flips_opcode_non_term[local]:
-  !dfg insts flips removes inserts id opc w op.
-    ao_cmp_flip_scan dfg insts = (flips, removes, inserts) ==>
+  !dfg insts flips removes inserts id opc w op mid dfg0.
+    ao_cmp_flip_scan mid dfg0 dfg insts = (flips, removes, inserts) ==>
     ALOOKUP flips id = SOME (opc, w, op) ==>
     ~is_terminator opc /\ opc <> INVOKE
 Proof
   Induct_on `insts` >- simp[ao_cmp_flip_scan_def] >>
   rpt gen_tac >> ntac 2 strip_tac >>
-  Cases_on `ao_cmp_flip_scan dfg insts` >> Cases_on `r` >>
+  Cases_on `ao_cmp_flip_scan mid dfg0 dfg insts` >> Cases_on `r` >>
   rename1 `_ = (fl0, rm0, ins0)` >>
   drule_all scan_step_detail >> strip_tac >> gvs[] >>
   TRY (qpat_x_assum `!dfg flips removes inserts id opc w op. _` drule >>
@@ -2637,14 +2699,17 @@ Proof
   rpt strip_tac >>
   simp[ao_cmp_flip_apply_inst_def] >>
   every_case_tac >> gvs[listTheory.EVERY_DEF] >>
-  TRY (irule flip_preserves_non_term >> res_tac >> gvs[] >> NO_TAC) >>
+  TRY (qmatch_goalsub_abbrev_tac `ao_post_flip_inst pfi` >>
+       qspec_then `pfi` strip_assume_tac post_flip_opcode_cases >>
+       gvs[Abbr `pfi`] >> TRY (irule flip_preserves_non_term) >>
+       res_tac >> gvs[] >> NO_TAC) >>
   TRY (res_tac >> gvs[]) >>
   simp[is_terminator_def]
 QED
 
 Triviality scan_phi_untouched[local]:
-  !dfg insts inst flips removes inserts.
-    ao_cmp_flip_scan dfg insts = (flips, removes, inserts) /\
+  !dfg insts inst flips removes inserts mid dfg0.
+    ao_cmp_flip_scan mid dfg0 dfg insts = (flips, removes, inserts) /\
     ALL_DISTINCT (MAP (\i. i.inst_id) insts) /\
     (!v ui. MEM ui (dfg_get_uses dfg v) ==> MEM ui insts) /\
     MEM inst insts /\ inst.inst_opcode = PHI ==>
@@ -2697,32 +2762,27 @@ Triviality apply_inst_non_phi[local]:
 Proof
   rpt strip_tac >>
   simp[ao_cmp_flip_apply_inst_def] >>
-  Cases_on `ALOOKUP flips inst.inst_id` >>
-  simp[listTheory.EVERY_DEF]
-  >- (Cases_on `MEM inst.inst_id removes` >>
-      simp[listTheory.EVERY_DEF] >>
-      Cases_on `ALOOKUP inserts inst.inst_id` >>
-      simp[listTheory.EVERY_DEF] >>
-      PairCases_on `x` >> simp[listTheory.EVERY_DEF])
-  >- (PairCases_on `x` >> simp[listTheory.EVERY_DEF] >>
-      irule flip_preserves_non_phi >> res_tac)
+  every_case_tac >> res_tac >> gvs[listTheory.EVERY_DEF] >>
+  qmatch_goalsub_abbrev_tac `ao_post_flip_inst pfi` >>
+  qspec_then `pfi` strip_assume_tac post_flip_opcode_cases >>
+  gvs[Abbr `pfi`, flip_preserves_non_phi]
 QED
 
 (* Terminator operands are never dead: dead vars are either flip outputs
    (single-use, consumed by iszero/assert in body) or insert fresh vars
    (which are ao_fresh_var, never in original operands). *)
 Triviality terminator_operands_not_dead[local]:
-  !dfg fn1 flips removes inserts bb1 lbl x.
-    ao_cmp_flip_scan dfg (fn_insts fn1) = (flips, removes, inserts) /\
+  !dfg fn1 flips removes inserts bb1 lbl x mid dfg0.
+    ao_cmp_flip_scan mid dfg0 dfg (fn_insts fn1) = (flips, removes, inserts) /\
     dfg = dfg_build_function fn1 /\
     fn_inst_ids_distinct fn1 /\
     ssa_form fn1 /\
     (!inst v. MEM inst (fn_insts fn1) /\ MEM (Var v) inst.inst_operands ==>
-      v NOTIN ao_cmp_fresh_vars fn1) /\
+      v NOTIN ao_cmp_fresh_vars mid fn1) /\
     bb_well_formed bb1 /\
     lookup_block lbl fn1.fn_blocks = SOME bb1 /\
     MEM (Var x) (LAST bb1.bb_instructions).inst_operands ==>
-    x NOTIN ao_cmp_flip_dead_vars dfg fn1
+    x NOTIN ao_cmp_flip_dead_vars mid dfg0 dfg fn1
 Proof
   rpt strip_tac >>
   `bb1.bb_instructions <> []` by fs[bb_well_formed_def] >>
@@ -2737,7 +2797,7 @@ Proof
   `~MEM (LAST bb1.bb_instructions).inst_id removes /\
    ALOOKUP inserts (LAST bb1.bb_instructions).inst_id = NONE` by
     (qspecl_then [`dfg`, `fn_insts fn1`,
-                  `LAST bb1.bb_instructions`, `flips`, `removes`, `inserts`]
+                  `LAST bb1.bb_instructions`, `flips`, `removes`, `inserts`, `mid`, `dfg0`]
        mp_tac scan_terminator_untouched >>
      impl_tac
      >- (simp[] >> gvs[] >>
@@ -2749,7 +2809,7 @@ Proof
       `inst.inst_outputs = [x] /\
        LENGTH (dfg_get_uses (dfg_build_function fn1) x) = 1` by
         (qspecl_then [`dfg_build_function fn1`, `fn1`, `inst`,
-                      `flips`, `removes`, `inserts`]
+                      `flips`, `removes`, `inserts`, `mid`, `dfg0`]
            mp_tac flip_member_outputs_single_use >>
          simp[] >> strip_tac >> gvs[listTheory.MEM]) >>
       `MEM x (operand_vars (LAST bb1.bb_instructions).inst_operands)` by
@@ -2764,7 +2824,7 @@ Proof
       `MEM (LAST bb1.bb_instructions).inst_id removes \/
        MEM (LAST bb1.bb_instructions).inst_id (MAP FST inserts)` by
         (qspecl_then [`dfg_build_function fn1`, `fn_insts fn1`,
-                      `flips`, `removes`, `inserts`, `inst`, `x`]
+                      `flips`, `removes`, `inserts`, `inst`, `x`, `mid`, `dfg0`]
            mp_tac flip_output_user_in_scan >>
          simp[]) >>
       gvs[alistTheory.ALOOKUP_NONE])
@@ -2774,7 +2834,7 @@ Proof
          qexistsl_tac [`bb1`, `lbl`] >> simp[] >>
          irule rich_listTheory.MEM_LAST_NOT_NIL >> simp[]) >>
       first_x_assum (qspecl_then [`LAST bb1.bb_instructions`,
-                                  `ao_fresh_var i.inst_id "iz"`] mp_tac) >>
+                                  `ao_fresh_var (ao_fresh_id mid i.inst_id 0) "iz"`] mp_tac) >>
       simp[] >>
       simp[ao_cmp_fresh_vars_def, pred_setTheory.GSPECIFICATION,
            listTheory.MEM_MAP] >>
@@ -2829,20 +2889,20 @@ QED
 (* Non-NULL case. Starts exec_block past the PHI prefix (idx n = ppl),
    matching the new run_block semantics where eval_phis handles PHIs. *)
 Theorem non_null_block_sim[local]:
-  !mid dfg fn1 lbl bb1 bb' fuel ctx s1 s2 dead flips removes inserts n.
-    dead = ao_cmp_flip_dead_vars dfg fn1 /\
+  !mid dfg fn1 lbl bb1 bb' fuel ctx s1 s2 dead flips removes inserts n dfg0.
+    dead = ao_cmp_flip_dead_vars mid dfg0 dfg fn1 /\
     dfg = dfg_build_function fn1 /\
-    ao_cmp_flip_scan dfg (fn_insts fn1) = (flips, removes, inserts) /\
+    ao_cmp_flip_scan mid dfg0 dfg (fn_insts fn1) = (flips, removes, inserts) /\
 
     (!inst. MEM inst (fn_insts fn1) ==> inst_wf inst) /\
     (!inst v. MEM inst (fn_insts fn1) /\ MEM (Var v) inst.inst_operands ==>
-      v NOTIN ao_cmp_fresh_vars fn1) /\
+      v NOTIN ao_cmp_fresh_vars mid fn1) /\
     fn_inst_ids_distinct fn1 /\
     ssa_form fn1 /\
     ~NULL flips /\
     bb_well_formed bb1 /\
     lookup_block lbl fn1.fn_blocks = SOME bb1 /\
-    lookup_block lbl (ao_cmp_flip_function mid dfg fn1).fn_blocks = SOME bb' /\
+    lookup_block lbl (ao_cmp_flip_function mid dfg0 dfg fn1).fn_blocks = SOME bb' /\
     state_equiv dead s1 s2 /\
     cmp_flip_iszero_inv flips (fn_insts fn1) s1 s2 /\
     n = phi_prefix_length bb1.bb_instructions /\
@@ -2900,7 +2960,7 @@ Proof
       ~MEM (EL i bb1.bb_instructions).inst_id removes /\
       ALOOKUP inserts (EL i bb1.bb_instructions).inst_id = NONE` by
        (match_mp_tac scan_phi_untouched >>
-        qexistsl_tac [`dfg`, `fn_insts fn1`] >>
+        qexistsl_tac [`dfg`, `fn_insts fn1`, `mid`, `dfg0`] >>
         simp[] >> rpt conj_tac
         >- (irule fn_insts_ids_all_distinct >> simp[])
         >- (rpt strip_tac >> gvs[] >>
@@ -2942,7 +3002,7 @@ Proof
      (run_insts fuel ctx (FLAT (MAP f bdy)) s2)` by
     (qunabbrev_tac `f` >> qunabbrev_tac `bdy` >> qunabbrev_tac `fr` >>
      match_mp_tac non_null_body_sim >>
-     qexistsl_tac [`dfg`, `lbl`] >>
+     qexistsl_tac [`dfg`, `lbl`, `dfg0`] >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `EVERY (\j. ~is_terminator j.inst_opcode)
      (FLAT (MAP f bdy))` by
@@ -3099,16 +3159,16 @@ QED
    dead vars are flip outputs (single-use, consumed by the removed iszero) or
    insert fresh vars (never appear in source operands). *)
 Triviality operand_not_dead[local]:
-  !dfg fn1 flips removes inserts pinst x.
-    ao_cmp_flip_scan dfg (fn_insts fn1) = (flips, removes, inserts) /\
+  !dfg fn1 flips removes inserts pinst x mid dfg0.
+    ao_cmp_flip_scan mid dfg0 dfg (fn_insts fn1) = (flips, removes, inserts) /\
     dfg = dfg_build_function fn1 /\
     fn_inst_ids_distinct fn1 /\
     (!inst v. MEM inst (fn_insts fn1) /\ MEM (Var v) inst.inst_operands ==>
-      v NOTIN ao_cmp_fresh_vars fn1) /\
+      v NOTIN ao_cmp_fresh_vars mid fn1) /\
     MEM pinst (fn_insts fn1) /\
     pinst.inst_opcode = PHI /\
     MEM (Var x) pinst.inst_operands ==>
-    x NOTIN ao_cmp_flip_dead_vars dfg fn1
+    x NOTIN ao_cmp_flip_dead_vars mid dfg0 dfg fn1
 Proof
   rpt strip_tac >>
   `ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn1))` by
@@ -3116,7 +3176,7 @@ Proof
   `~MEM pinst.inst_id removes /\
    ALOOKUP inserts pinst.inst_id = NONE` by
     (qspecl_then [`dfg_build_function fn1`, `fn_insts fn1`,
-                  `pinst`, `flips`, `removes`, `inserts`]
+                  `pinst`, `flips`, `removes`, `inserts`, `mid`, `dfg0`]
        mp_tac scan_phi_untouched >>
      impl_tac
      >- (simp[] >> gvs[] >>
@@ -3128,7 +3188,7 @@ Proof
       `inst.inst_outputs = [x] /\
        LENGTH (dfg_get_uses (dfg_build_function fn1) x) = 1` by
         (qspecl_then [`dfg_build_function fn1`, `fn1`, `inst`,
-                      `flips`, `removes`, `inserts`]
+                      `flips`, `removes`, `inserts`, `mid`, `dfg0`]
            mp_tac flip_member_outputs_single_use >>
          simp[] >> strip_tac >> gvs[listTheory.MEM]) >>
       `MEM x (operand_vars pinst.inst_operands)` by
@@ -3139,12 +3199,12 @@ Proof
         (Cases_on `dfg_get_uses (dfg_build_function fn1) x` >> gvs[]) >>
       `MEM pinst.inst_id removes \/ MEM pinst.inst_id (MAP FST inserts)` by
         (qspecl_then [`dfg_build_function fn1`, `fn_insts fn1`,
-                      `flips`, `removes`, `inserts`, `inst`, `x`]
+                      `flips`, `removes`, `inserts`, `inst`, `x`, `mid`, `dfg0`]
            mp_tac flip_output_user_in_scan >>
          simp[]) >>
       gvs[alistTheory.ALOOKUP_NONE])
   >- (drule_all scan_insert_fresh_form >> strip_tac >> gvs[] >>
-      first_x_assum (qspecl_then [`pinst`, `ao_fresh_var i.inst_id "iz"`] mp_tac) >>
+      first_x_assum (qspecl_then [`pinst`, `ao_fresh_var (ao_fresh_id mid i.inst_id 0) "iz"`] mp_tac) >>
       simp[] >>
       simp[ao_cmp_fresh_vars_def, pred_setTheory.GSPECIFICATION,
            listTheory.MEM_MAP] >>
@@ -3155,8 +3215,8 @@ QED
 (* The cmp_flip transform leaves the PHI prefix untouched, so eval_phis and
    phi_prefix_length agree on the original and transformed instruction lists. *)
 Triviality cmp_flip_eval_phis_eq[local]:
-  !mid dfg fn1 lbl bb1 bb' flips removes inserts.
-    ao_cmp_flip_scan dfg (fn_insts fn1) = (flips, removes, inserts) /\
+  !mid dfg fn1 lbl bb1 bb' flips removes inserts dfg0.
+    ao_cmp_flip_scan mid dfg0 dfg (fn_insts fn1) = (flips, removes, inserts) /\
     dfg = dfg_build_function fn1 /\
     fn_inst_ids_distinct fn1 /\
     bb_well_formed bb1 /\
@@ -3183,7 +3243,7 @@ Proof
      `ALOOKUP flips inst.inst_id = NONE /\ ~MEM inst.inst_id removes /\
       ALOOKUP inserts inst.inst_id = NONE` by
        (qspecl_then [`dfg_build_function fn1`, `fn_insts fn1`, `inst`,
-                     `flips`, `removes`, `inserts`]
+                     `flips`, `removes`, `inserts`, `mid`, `dfg0`]
           mp_tac scan_phi_untouched >>
         impl_tac
         >- (simp[] >> gvs[] >>
@@ -3214,8 +3274,8 @@ QED
    PHI outputs under SSA, so eval_phis (touching only PHI outputs) preserves
    the invariant. *)
 Triviality cmp_flip_iszero_inv_eval_phis[local]:
-  !dfg fn1 flips removes inserts s1 s2 sp1 sp2 insts.
-    ao_cmp_flip_scan dfg (fn_insts fn1) = (flips, removes, inserts) /\
+  !dfg fn1 flips removes inserts s1 s2 sp1 sp2 insts mid dfg0.
+    ao_cmp_flip_scan mid dfg0 dfg (fn_insts fn1) = (flips, removes, inserts) /\
     ssa_form fn1 /\
     fn_inst_ids_distinct fn1 /\
     (!inst. MEM inst insts ==> MEM inst (fn_insts fn1)) /\
@@ -3260,19 +3320,19 @@ QED
 (* ===== Main theorem ===== *)
 
 Theorem ao_cmp_flip_block_sim:
-  !mid dfg fn1 lbl bb1 bb' fuel ctx s1 s2.
-    let dead = ao_cmp_flip_dead_vars dfg fn1 in
-    let flips = FST (ao_cmp_flip_scan dfg (fn_insts fn1)) in
+  !mid dfg fn1 lbl bb1 bb' fuel ctx s1 s2 dfg0.
+    let dead = ao_cmp_flip_dead_vars mid dfg0 dfg fn1 in
+    let flips = FST (ao_cmp_flip_scan mid dfg0 dfg (fn_insts fn1)) in
     dfg = dfg_build_function fn1 /\
 
     (!inst. MEM inst (fn_insts fn1) ==> inst_wf inst) /\
     (!inst v. MEM inst (fn_insts fn1) /\ MEM (Var v) inst.inst_operands ==>
-      v NOTIN ao_cmp_fresh_vars fn1) /\
+      v NOTIN ao_cmp_fresh_vars mid fn1) /\
     fn_inst_ids_distinct fn1 /\
     ssa_form fn1 /\
     bb_well_formed bb1 /\
     lookup_block lbl fn1.fn_blocks = SOME bb1 /\
-    lookup_block lbl (ao_cmp_flip_function mid dfg fn1).fn_blocks = SOME bb' /\
+    lookup_block lbl (ao_cmp_flip_function mid dfg0 dfg fn1).fn_blocks = SOME bb' /\
     state_equiv dead s1 s2 /\
     cmp_flip_iszero_inv flips (fn_insts fn1) s1 s2 ==>
     (?e. run_block fuel ctx bb1 s1 = Error e) \/
@@ -3281,13 +3341,13 @@ Theorem ao_cmp_flip_block_sim:
       (run_block fuel ctx bb1 s1) (run_block fuel ctx bb' s2)
 Proof
   simp[LET_THM] >> rpt gen_tac >> strip_tac >>
-  Cases_on `NULL (FST (ao_cmp_flip_scan (dfg_build_function fn1)
+  Cases_on `NULL (FST (ao_cmp_flip_scan mid dfg0 (dfg_build_function fn1)
                                          (fn_insts fn1)))`
   >- (* NULL: function unchanged, dead={}, s1=s2 *)
-     (`ao_cmp_flip_function mid (dfg_build_function fn1) fn1 = fn1` by
+     (`ao_cmp_flip_function mid dfg0 (dfg_build_function fn1) fn1 = fn1` by
         (irule ao_cmp_flip_null_sim >> simp[]) >>
       `bb' = bb1` by gvs[] >> gvs[] >>
-      `ao_cmp_flip_dead_vars (dfg_build_function fn1) fn1 = {}` by
+      `ao_cmp_flip_dead_vars mid dfg0 (dfg_build_function fn1) fn1 = {}` by
         metis_tac[dead_empty_when_null] >>
       gvs[] >>
       `s1 = s2` by (irule state_equiv_empty_eq >> simp[]) >>
@@ -3295,7 +3355,7 @@ Proof
       irule lift_result_refl >>
       simp[state_equiv_refl, execution_equiv_refl])
   >> (* Non-NULL *)
-  Cases_on `ao_cmp_flip_scan (dfg_build_function fn1) (fn_insts fn1)` >>
+  Cases_on `ao_cmp_flip_scan mid dfg0 (dfg_build_function fn1) (fn_insts fn1)` >>
   Cases_on `r` >> gvs[] >>
   rename1 `_ = (flips, removes, inserts)` >>
   qabbrev_tac `f = ao_cmp_flip_apply_inst mid flips removes inserts` >>
@@ -3308,17 +3368,17 @@ Proof
      phi_prefix_length bb1.bb_instructions` by
     (irule cmp_flip_eval_phis_eq >>
      simp[Abbr `f`] >>
-     qexistsl_tac [`flips`, `fn1`, `inserts`, `lbl`, `mid`, `removes`] >>
+     qexistsl_tac [`dfg0`, `flips`, `fn1`, `inserts`, `lbl`, `mid`, `removes`] >>
      simp[]) >>
   (* PHI operands are never dead, so eval_phis transfers across state_equiv *)
   `EVERY (\inst. inst.inst_opcode = PHI ==>
             !x. MEM (Var x) inst.inst_operands ==>
-              x NOTIN ao_cmp_flip_dead_vars (dfg_build_function fn1) fn1)
+              x NOTIN ao_cmp_flip_dead_vars mid dfg0 (dfg_build_function fn1) fn1)
           bb1.bb_instructions` by
     (simp[listTheory.EVERY_MEM] >> rpt strip_tac >>
      `MEM inst (fn_insts fn1)` by
        (irule block_inst_in_fn_insts >> qexistsl_tac [`bb1`, `lbl`] >> simp[]) >>
-     `x NOTIN ao_cmp_flip_dead_vars (dfg_build_function fn1) fn1`
+     `x NOTIN ao_cmp_flip_dead_vars mid dfg0 (dfg_build_function fn1) fn1`
        suffices_by simp[] >>
      irule operand_not_dead >>
      rpt conj_tac
@@ -3339,21 +3399,21 @@ Proof
   >- ((* eval_phis OK: reduce to exec_block past the PHI prefix *)
       rename1 `eval_phis s1 bb1.bb_instructions = OK sp1` >>
       qspecl_then [`s1`, `s2`,
-                   `ao_cmp_flip_dead_vars (dfg_build_function fn1) fn1`,
+                   `ao_cmp_flip_dead_vars mid dfg0 (dfg_build_function fn1) fn1`,
                    `bb1.bb_instructions`, `sp1`]
         mp_tac venomExecProofsTheory.eval_phis_state_equiv >>
       impl_tac >- simp[] >> strip_tac >>
       rename1 `eval_phis s2 bb1.bb_instructions = OK sp2` >>
       `cmp_flip_iszero_inv flips (fn_insts fn1) sp1 sp2` by
         (qspecl_then [`dfg_build_function fn1`, `fn1`, `flips`, `removes`,
-                      `inserts`, `s1`, `s2`, `sp1`, `sp2`, `bb1.bb_instructions`]
+                      `inserts`, `s1`, `s2`, `sp1`, `sp2`, `bb1.bb_instructions`, `mid`, `dfg0`]
            mp_tac cmp_flip_iszero_inv_eval_phis >>
          impl_tac
          >- (simp[] >> rpt strip_tac >>
              irule block_inst_in_fn_insts >> qexistsl_tac [`bb1`, `lbl`] >>
              simp[])
          >> simp[]) >>
-      `state_equiv (ao_cmp_flip_dead_vars (dfg_build_function fn1) fn1)
+      `state_equiv (ao_cmp_flip_dead_vars mid dfg0 (dfg_build_function fn1) fn1)
          (sp1 with vs_inst_idx := phi_prefix_length bb1.bb_instructions)
          (sp2 with vs_inst_idx := phi_prefix_length bb1.bb_instructions)` by
         (irule state_equiv_idx_update >> simp[]) >>
@@ -3362,9 +3422,9 @@ Proof
          (sp2 with vs_inst_idx := phi_prefix_length bb1.bb_instructions)` by
         (irule iszero_inv_lookup_eq >> qexistsl_tac [`sp1`, `sp2`] >>
          simp[lookup_var_def]) >>
-      `lift_result (state_equiv (ao_cmp_flip_dead_vars (dfg_build_function fn1) fn1))
-         (execution_equiv (ao_cmp_flip_dead_vars (dfg_build_function fn1) fn1))
-         (execution_equiv (ao_cmp_flip_dead_vars (dfg_build_function fn1) fn1))
+      `lift_result (state_equiv (ao_cmp_flip_dead_vars mid dfg0 (dfg_build_function fn1) fn1))
+         (execution_equiv (ao_cmp_flip_dead_vars mid dfg0 (dfg_build_function fn1) fn1))
+         (execution_equiv (ao_cmp_flip_dead_vars mid dfg0 (dfg_build_function fn1) fn1))
          (exec_block fuel ctx bb1
             (sp1 with vs_inst_idx := phi_prefix_length bb1.bb_instructions))
          (exec_block fuel ctx bb'
@@ -3373,9 +3433,9 @@ Proof
                       `fuel`, `ctx`,
                       `sp1 with vs_inst_idx := phi_prefix_length bb1.bb_instructions`,
                       `sp2 with vs_inst_idx := phi_prefix_length bb1.bb_instructions`,
-                      `ao_cmp_flip_dead_vars (dfg_build_function fn1) fn1`,
+                      `ao_cmp_flip_dead_vars mid dfg0 (dfg_build_function fn1) fn1`,
                       `flips`, `removes`, `inserts`,
-                      `phi_prefix_length bb1.bb_instructions`]
+                      `phi_prefix_length bb1.bb_instructions`, `dfg0`]
            mp_tac non_null_block_sim >>
          impl_tac
          >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[])
@@ -3618,8 +3678,8 @@ QED
    the leading PHIs map to singletons, so dropping the prefix on the transformed
    FRONT equals transforming the dropped original FRONT. *)
 Triviality cmp_flip_front_drop_eq[local]:
-  !dfg fn1 lbl bb1 bb' mid flips removes inserts n.
-    ao_cmp_flip_scan dfg (fn_insts fn1) = (flips, removes, inserts) /\
+  !dfg fn1 lbl bb1 bb' mid flips removes inserts n dfg0.
+    ao_cmp_flip_scan mid dfg0 dfg (fn_insts fn1) = (flips, removes, inserts) /\
     dfg = dfg_build_function fn1 /\
     fn_inst_ids_distinct fn1 /\
     bb_well_formed bb1 /\
@@ -3665,7 +3725,7 @@ Proof
       ~MEM (EL i bb1.bb_instructions).inst_id removes /\
       ALOOKUP inserts (EL i bb1.bb_instructions).inst_id = NONE` by
        (match_mp_tac scan_phi_untouched >>
-        qexistsl_tac [`dfg`, `fn_insts fn1`] >>
+        qexistsl_tac [`dfg`, `fn_insts fn1`, `mid`, `dfg0`] >>
         simp[] >> rpt conj_tac
         >- (irule fn_insts_ids_all_distinct >> simp[])
         >- (rpt strip_tac >> gvs[] >>
@@ -3689,19 +3749,19 @@ QED
 (* For OK outputs, iszero_inv is preserved through run_block.
    Uses: body sim gives iszero_inv, terminator preserves all vars. *)
 Theorem ao_cmp_flip_block_ok_inv:
-  !mid dfg fn1 lbl bb1 bb' fuel ctx s1 s2 s1' s2'.
-    let dead = ao_cmp_flip_dead_vars dfg fn1 in
-    let flips = FST (ao_cmp_flip_scan dfg (fn_insts fn1)) in
+  !mid dfg fn1 lbl bb1 bb' fuel ctx s1 s2 s1' s2' dfg0.
+    let dead = ao_cmp_flip_dead_vars mid dfg0 dfg fn1 in
+    let flips = FST (ao_cmp_flip_scan mid dfg0 dfg (fn_insts fn1)) in
     dfg = dfg_build_function fn1 /\
 
     (!inst. MEM inst (fn_insts fn1) ==> inst_wf inst) /\
     (!inst v. MEM inst (fn_insts fn1) /\ MEM (Var v) inst.inst_operands ==>
-      v NOTIN ao_cmp_fresh_vars fn1) /\
+      v NOTIN ao_cmp_fresh_vars mid fn1) /\
     fn_inst_ids_distinct fn1 /\
     ssa_form fn1 /\
     bb_well_formed bb1 /\
     lookup_block lbl fn1.fn_blocks = SOME bb1 /\
-    lookup_block lbl (ao_cmp_flip_function mid dfg fn1).fn_blocks = SOME bb' /\
+    lookup_block lbl (ao_cmp_flip_function mid dfg0 dfg fn1).fn_blocks = SOME bb' /\
     state_equiv dead s1 s2 /\
     cmp_flip_iszero_inv flips (fn_insts fn1) s1 s2 /\
     run_block fuel ctx bb1 s1 = OK s1' /\
@@ -3709,13 +3769,13 @@ Theorem ao_cmp_flip_block_ok_inv:
     cmp_flip_iszero_inv flips (fn_insts fn1) s1' s2'
 Proof
   simp_tac std_ss [LET_THM] >> rpt gen_tac >> strip_tac >>
-  Cases_on `NULL (FST (ao_cmp_flip_scan (dfg_build_function fn1) (fn_insts fn1)))`
-  >- (`FST (ao_cmp_flip_scan (dfg_build_function fn1) (fn_insts fn1)) = []` by
-        (Cases_on `ao_cmp_flip_scan (dfg_build_function fn1) (fn_insts fn1)` >>
+  Cases_on `NULL (FST (ao_cmp_flip_scan mid dfg0 (dfg_build_function fn1) (fn_insts fn1)))`
+  >- (`FST (ao_cmp_flip_scan mid dfg0 (dfg_build_function fn1) (fn_insts fn1)) = []` by
+        (Cases_on `ao_cmp_flip_scan mid dfg0 (dfg_build_function fn1) (fn_insts fn1)` >>
          Cases_on `r` >> gvs[listTheory.NULL_EQ]) >>
       rw[cmp_flip_iszero_inv_def] >> gvs[alistTheory.ALOOKUP_def])
   >>
-  Cases_on `ao_cmp_flip_scan (dfg_build_function fn1) (fn_insts fn1)` >>
+  Cases_on `ao_cmp_flip_scan mid dfg0 (dfg_build_function fn1) (fn_insts fn1)` >>
   Cases_on `r` >> gvs[] >>
   rename1 `_ = (flips', removes, inserts)` >>
   qabbrev_tac `f = ao_cmp_flip_apply_inst mid flips' removes inserts` >>
@@ -3768,7 +3828,7 @@ Proof
            ~MEM inst.inst_id removes /\
            ALOOKUP inserts inst.inst_id = NONE` by
             (match_mp_tac scan_phi_untouched >>
-             qexistsl_tac [`dfg_build_function fn1`, `fn_insts fn1`] >>
+             qexistsl_tac [`dfg_build_function fn1`, `fn_insts fn1`, `mid`, `dfg0`] >>
              simp[] >> rpt conj_tac
              >- (irule fn_insts_ids_all_distinct >> simp[])
              >- (rpt strip_tac >>
@@ -3781,14 +3841,13 @@ Proof
      phi_prefix_length bb1.bb_instructions` by
     (irule cmp_flip_eval_phis_eq >>
      simp[Abbr `f`] >>
-     qexistsl_tac [`flips'`, `fn1`, `inserts`, `lbl`, `mid`, `removes`] >>
+     qexistsl_tac [`dfg0`, `flips'`, `fn1`, `inserts`, `lbl`, `mid`, `removes`] >>
      simp[]) >>
   `DROP (phi_prefix_length bb1.bb_instructions) (FRONT bb'.bb_instructions) =
      FLAT (MAP f (DROP (phi_prefix_length bb1.bb_instructions)
                        (FRONT bb1.bb_instructions)))` by
-    (qunabbrev_tac `f` >> irule cmp_flip_front_drop_eq >>
-     rpt conj_tac >>
-     TRY (qexistsl_tac [`dfg_build_function fn1`, `fn1`, `lbl`]) >>
+    (qunabbrev_tac `f` >> match_mp_tac cmp_flip_front_drop_eq >>
+     qexistsl_tac [`dfg_build_function fn1`, `fn1`, `lbl`, `dfg0`] >>
      simp[]) >>
   `phi_prefix_length bb1.bb_instructions <= LENGTH (FRONT bb1.bb_instructions)` by
     (irule ppl_le_front >> simp[]) >>
@@ -3799,11 +3858,11 @@ Proof
   (* PHI operands are never dead *)
   `EVERY (\inst. inst.inst_opcode = PHI ==>
             !x. MEM (Var x) inst.inst_operands ==>
-              x NOTIN ao_cmp_flip_dead_vars (dfg_build_function fn1) fn1)
+              x NOTIN ao_cmp_flip_dead_vars mid dfg0 (dfg_build_function fn1) fn1)
           bb1.bb_instructions` by
     (simp[listTheory.EVERY_MEM] >> rpt strip_tac >>
      `MEM inst (fn_insts fn1)` by metis_tac[block_inst_in_fn_insts] >>
-     `x NOTIN ao_cmp_flip_dead_vars (dfg_build_function fn1) fn1`
+     `x NOTIN ao_cmp_flip_dead_vars mid dfg0 (dfg_build_function fn1) fn1`
        suffices_by simp[] >>
      irule operand_not_dead >> metis_tac[]) >>
   (* decompose run_block hypotheses *)
@@ -3826,13 +3885,13 @@ Proof
   (* sp-level state_equiv and iszero invariant *)
   `cmp_flip_iszero_inv flips' (fn_insts fn1) sp1 sp2` by
     (qspecl_then [`dfg_build_function fn1`, `fn1`, `flips'`, `removes`,
-                  `inserts`, `s1`, `s2`, `sp1`, `sp2`, `bb1.bb_instructions`]
+                  `inserts`, `s1`, `s2`, `sp1`, `sp2`, `bb1.bb_instructions`, `mid`, `dfg0`]
        mp_tac cmp_flip_iszero_inv_eval_phis >>
      impl_tac
      >- (simp[] >> rpt strip_tac >>
          irule block_inst_in_fn_insts >> qexistsl_tac [`bb1`, `lbl`] >> simp[])
      >> simp[]) >>
-  `state_equiv (ao_cmp_flip_dead_vars (dfg_build_function fn1) fn1)
+  `state_equiv (ao_cmp_flip_dead_vars mid dfg0 (dfg_build_function fn1) fn1)
      (sp1 with vs_inst_idx := phi_prefix_length bb1.bb_instructions)
      (sp2 with vs_inst_idx := phi_prefix_length bb1.bb_instructions)` by
     (irule state_equiv_idx_update >> simp[]) >>
@@ -3858,10 +3917,10 @@ Proof
     (fn th => fs[th]) >>
   sg `lift_result
      (\s1' s2'. state_equiv
-       (ao_cmp_flip_dead_vars (dfg_build_function fn1) fn1) s1' s2' /\
+       (ao_cmp_flip_dead_vars mid dfg0 (dfg_build_function fn1) fn1) s1' s2' /\
        cmp_flip_iszero_inv flips' (fn_insts fn1) s1' s2')
-     (execution_equiv (ao_cmp_flip_dead_vars (dfg_build_function fn1) fn1))
-     (execution_equiv (ao_cmp_flip_dead_vars (dfg_build_function fn1) fn1))
+     (execution_equiv (ao_cmp_flip_dead_vars mid dfg0 (dfg_build_function fn1) fn1))
+     (execution_equiv (ao_cmp_flip_dead_vars mid dfg0 (dfg_build_function fn1) fn1))
      (run_insts fuel ctx
         (DROP (phi_prefix_length bb1.bb_instructions)
               (FRONT bb1.bb_instructions))
@@ -3872,7 +3931,7 @@ Proof
         (sp2 with vs_inst_idx := phi_prefix_length bb1.bb_instructions))`
   >- (qunabbrev_tac `f` >>
       match_mp_tac non_null_body_sim >>
-      qexistsl_tac [`dfg_build_function fn1`, `lbl`] >>
+      qexistsl_tac [`dfg_build_function fn1`, `lbl`, `dfg0`] >>
       rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
   gvs[lift_result_def] >>
   irule iszero_inv_lookup_eq >>

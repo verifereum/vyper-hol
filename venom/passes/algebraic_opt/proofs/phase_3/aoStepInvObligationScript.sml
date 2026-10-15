@@ -265,7 +265,7 @@ Triviality is_terminator_cases:
   !opc. is_terminator opc ==>
     opc = JMP \/ opc = JNZ \/ opc = DJMP \/ opc = RET \/
     opc = RETURN \/ opc = REVERT \/ opc = STOP \/ opc = SINK \/
-    opc = SELFDESTRUCT \/ opc = INVALID
+    opc = SELFDESTRUCT \/ opc = INVALID \/ opc = DRET \/ opc = RETFMP
 Proof
   Cases >> simp[is_terminator_def]
 QED
@@ -290,12 +290,14 @@ Triviality step_term_call_ctx_halt:
     (inst.inst_opcode = RET \/ inst.inst_opcode = RETURN \/
      inst.inst_opcode = REVERT \/ inst.inst_opcode = STOP \/
      inst.inst_opcode = SINK \/ inst.inst_opcode = SELFDESTRUCT \/
-     inst.inst_opcode = INVALID) ==>
+     inst.inst_opcode = INVALID \/ inst.inst_opcode = DRET \/
+     inst.inst_opcode = RETFMP) ==>
     s'.vs_call_ctx = s.vs_call_ctx
 Proof
   rpt strip_tac >> gvs[] >>
   qpat_x_assum `_ = OK _` mp_tac >>
-  simp[step_inst_def, step_inst_base_def, AllCaseEqs()]
+  simp[step_inst_def, step_inst_base_def, AllCaseEqs()] >>
+  rpt strip_tac >> pairarg_tac >> gvs[]
 QED
 
 Triviality step_preserves_call_ctx_any:
@@ -443,11 +445,11 @@ Triviality step_inst_fdom_subset:
 Proof
   rpt strip_tac >>
   Cases_on `is_terminator inst.inst_opcode`
-  >- (drule is_terminator_cases >> strip_tac >> gvs[] >>
-      qpat_x_assum `_ = OK _` mp_tac >>
-      simp[step_inst_def, step_inst_base_def, AllCaseEqs(),
-           jump_to_def] >>
-      rpt strip_tac >> gvs[])
+  >- (`!v. lookup_var v s' = lookup_var v s` by
+        metis_tac[step_terminator_preserves_vars] >>
+      rw[pred_setTheory.SUBSET_DEF] >>
+      first_x_assum (qspec_then `x` mp_tac) >>
+      rw[lookup_var_def, finite_mapTheory.FLOOKUP_DEF])
   >- (`inst.inst_opcode <> PHI` by (strip_tac >> gvs[step_inst_phi_error]) >>
       drule_all step_inst_fdom >> strip_tac >>
       simp[pred_setTheory.SUBSET_DEF])

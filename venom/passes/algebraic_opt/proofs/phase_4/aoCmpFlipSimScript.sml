@@ -25,21 +25,21 @@ Libs
 
 (* When ao_cmp_flip_scan produces no flips, function is unchanged *)
 Theorem ao_cmp_flip_null_sim:
-  !mid dfg fn.
-    NULL (FST (ao_cmp_flip_scan dfg (fn_insts fn))) ==>
-    ao_cmp_flip_function mid dfg fn = fn
+  !mid dfg fn dfg0.
+    NULL (FST (ao_cmp_flip_scan mid dfg0 dfg (fn_insts fn))) ==>
+    ao_cmp_flip_function mid dfg0 dfg fn = fn
 Proof
   rpt strip_tac >>
   simp[ao_cmp_flip_function_def, LET_THM] >>
-  Cases_on `ao_cmp_flip_scan dfg (fn_insts fn)` >>
+  Cases_on `ao_cmp_flip_scan mid dfg0 dfg (fn_insts fn)` >>
   Cases_on `r` >> gvs[]
 QED
 
 (* ===== Label preservation ===== *)
 
 Theorem ao_cmp_flip_function_labels:
-  !mid dfg fn lbl.
-    IS_SOME (lookup_block lbl (ao_cmp_flip_function mid dfg fn).fn_blocks) <=>
+  !mid dfg fn lbl dfg0.
+    IS_SOME (lookup_block lbl (ao_cmp_flip_function mid dfg0 dfg fn).fn_blocks) <=>
     IS_SOME (lookup_block lbl fn.fn_blocks)
 Proof
   rpt gen_tac >>

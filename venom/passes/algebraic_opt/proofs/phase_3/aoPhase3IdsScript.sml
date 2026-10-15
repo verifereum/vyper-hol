@@ -487,3 +487,31 @@ Proof
   disch_then ACCEPT_TAC
 QED
 
+(* Every original id survives on the instruction its expansion keeps *)
+Theorem ao_phase3_keeps_inst_ids:
+  !mid dfg ra targets fn inst.
+    (!i. MEM i (fn_insts fn) ==> i.inst_id <= mid) /\ MEM inst (fn_insts fn) ==>
+    ?i. MEM i (fn_insts
+          (function_map_transform (ao_transform_block mid dfg ra targets) fn)) /\
+        i.inst_id = inst.inst_id
+Proof
+  rpt strip_tac >>
+  `MEM inst.inst_id (MAP (\i. i.inst_id) (fn_insts
+     (function_map_transform (ao_transform_block mid dfg ra targets) fn)))`
+    suffices_by (simp[listTheory.MEM_MAP] >> metis_tac[]) >>
+  simp[map_inst_id_fn_insts, function_map_transform_def,
+       listTheory.MAP_MAP_o, combinTheory.o_DEF] >>
+  qspecl_then [`mid`, `dfg`, `ra`, `targets`, `fn`] mp_tac all_pieces_snd_flat >>
+  disch_then (SUBST1_TAC o SYM) >>
+  `EVERY (\p. idok mid (FST p) (SND p)) (all_pieces mid dfg ra targets fn)` by
+    metis_tac[all_pieces_idok] >>
+  `FILTER (\id. id <= mid) (FLAT (MAP SND (all_pieces mid dfg ra targets fn))) =
+   MAP FST (all_pieces mid dfg ra targets fn)` by
+    (irule pieces_le >> rpt conj_tac >> fs[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  `MEM inst.inst_id (MAP FST (all_pieces mid dfg ra targets fn))` by
+    (rewrite_tac[all_pieces_fst] >> simp[listTheory.MEM_MAP] >> metis_tac[]) >>
+  `MEM inst.inst_id (FILTER (\id. id <= mid)
+     (FLAT (MAP SND (all_pieces mid dfg ra targets fn))))` by metis_tac[] >>
+  fs[listTheory.MEM_FILTER]
+QED
+

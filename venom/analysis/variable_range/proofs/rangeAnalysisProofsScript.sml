@@ -3086,19 +3086,6 @@ Proof
             dfAnalyzeWidenDefsTheory.df_widen_boundary_def]
 QED
 
-Triviality step_terminator_preserves_vars[local]:
-  ∀fuel ctx inst s s'.
-    step_inst fuel ctx inst s = OK s' ∧
-    is_terminator inst.inst_opcode ⇒
-    s'.vs_vars = s.vs_vars
-Proof
-  rpt gen_tac >> strip_tac >>
-  Cases_on `inst.inst_opcode` >>
-  rpt (pop_assum mp_tac) >> simp[is_terminator_def] >>
-  rpt strip_tac >> fs[step_inst_def, step_inst_base_def] >>
-  BasicProvers.every_case_tac >> gvs[jump_to_def]
-QED
-
 Triviality range_process_preserves_dws_inst[local]:
   ∀fn0 lbl st.
     (df_process_block_widen Forward NONE range_join_opt range_widen_opt

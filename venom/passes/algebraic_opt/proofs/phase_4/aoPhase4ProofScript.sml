@@ -36,10 +36,10 @@ QED
 
 (* ao_cmp_flip_function is function_map_transform when non-NULL *)
 Triviality cmp_flip_is_map_transform[local]:
-  !mid dfg fn flips removes inserts.
-    ao_cmp_flip_scan dfg (fn_insts fn) = (flips, removes, inserts) /\
+  !mid dfg fn flips removes inserts dfg0.
+    ao_cmp_flip_scan mid dfg0 dfg (fn_insts fn) = (flips, removes, inserts) /\
     ~NULL flips ==>
-    ao_cmp_flip_function mid dfg fn =
+    ao_cmp_flip_function mid dfg0 dfg fn =
     function_map_transform
       (\bb. bb with bb_instructions :=
         FLAT (MAP (ao_cmp_flip_apply_inst mid flips removes inserts)
@@ -64,38 +64,38 @@ QED
 (* ===== Main theorem ===== *)
 
 Theorem ao_phase4_correct:
-  !fuel ctx fn1 s.
+  !fuel ctx dfg0 fn1 s.
     let dfg1 = dfg_build_function fn1 in
-    let dead = ao_cmp_flip_dead_vars dfg1 fn1 in
+    let dead = ao_cmp_flip_dead_vars (fn_max_inst_id fn1) dfg0 dfg1 fn1 in
     wf_function fn1 /\ ssa_form fn1 /\
     EVERY inst_wf (fn_insts fn1) /\
     (!inst v. MEM inst (fn_insts fn1) /\ MEM (Var v) inst.inst_operands ==>
-      v NOTIN ao_cmp_fresh_vars fn1) /\
+      v NOTIN ao_cmp_fresh_vars (fn_max_inst_id fn1) fn1) /\
     FDOM s.vs_vars = {} ==>
     (?e. run_blocks fuel ctx fn1 s = Error e) \/
     lift_result (state_equiv dead) (execution_equiv dead) (execution_equiv dead)
       (run_blocks fuel ctx fn1 s)
-      (run_blocks fuel ctx (ao_cmp_flip_function (fn_max_inst_id fn1) dfg1 fn1) s)
+      (run_blocks fuel ctx (ao_cmp_flip_function (fn_max_inst_id fn1) dfg0 dfg1 fn1) s)
 Proof
   simp_tac std_ss [LET_THM] >> rpt gen_tac >> strip_tac >>
+  qabbrev_tac `mid = fn_max_inst_id fn1` >>
   (* NULL case: function unchanged *)
-  Cases_on `NULL (FST (ao_cmp_flip_scan (dfg_build_function fn1) (fn_insts fn1)))`
-  >- (`ao_cmp_flip_function (fn_max_inst_id fn1) (dfg_build_function fn1) fn1 = fn1`
-        by (irule ao_cmp_flip_null_sim >> first_assum ACCEPT_TAC) >>
+  Cases_on `NULL (FST (ao_cmp_flip_scan mid dfg0 (dfg_build_function fn1) (fn_insts fn1)))`
+  >- (`ao_cmp_flip_function mid dfg0 (dfg_build_function fn1) fn1 = fn1`
+        by (irule ao_cmp_flip_null_sim >> simp[]) >>
       ASM_REWRITE_TAC[] >> DISJ2_TAC >>
       irule lift_result_refl >>
       simp_tac std_ss [state_equiv_refl, execution_equiv_refl])
   >> (* Non-NULL case: reduce to vs_inst_idx=0 then use framework *)
   ONCE_REWRITE_TAC[run_blocks_inst_idx_irrel] >>
-  Cases_on `ao_cmp_flip_scan (dfg_build_function fn1) (fn_insts fn1)` >>
+  Cases_on `ao_cmp_flip_scan mid dfg0 (dfg_build_function fn1) (fn_insts fn1)` >>
   Cases_on `r` >>
-  rename1 `ao_cmp_flip_scan _ _ = (flips, removes, inserts)` >>
+  rename1 `ao_cmp_flip_scan mid dfg0 _ _ = (flips, removes, inserts)` >>
   `~NULL flips` by gvs[] >>
-  qabbrev_tac `mid = fn_max_inst_id fn1` >>
   qabbrev_tac `bt = \bb:basic_block. bb with bb_instructions :=
     FLAT (MAP (ao_cmp_flip_apply_inst mid flips removes inserts)
               bb.bb_instructions)` >>
-  `ao_cmp_flip_function mid (dfg_build_function fn1) fn1 =
+  `ao_cmp_flip_function mid dfg0 (dfg_build_function fn1) fn1 =
    function_map_transform bt fn1` by
     (simp_tac std_ss [Abbr `bt`] >>
      irule cmp_flip_is_map_transform >> simp[]) >>
@@ -103,8 +103,8 @@ Proof
   qabbrev_tac `s0 = s with vs_inst_idx := 0` >>
   qspecl_then
     [`cmp_flip_iszero_inv flips (fn_insts fn1)`,
-     `state_equiv (ao_cmp_flip_dead_vars (dfg_build_function fn1) fn1)`,
-     `execution_equiv (ao_cmp_flip_dead_vars (dfg_build_function fn1) fn1)`,
+     `state_equiv (ao_cmp_flip_dead_vars mid dfg0 (dfg_build_function fn1) fn1)`,
+     `execution_equiv (ao_cmp_flip_dead_vars mid dfg0 (dfg_build_function fn1) fn1)`,
      `bt`, `fn1`]
     mp_tac (SIMP_RULE std_ss [LET_THM] block_sim_function_with_pred2_bb) >>
   impl_tac
@@ -114,19 +114,19 @@ Proof
       (* 2. R_ok ==> R_term *)
       >- (rpt strip_tac >> gvs[state_equiv_def, execution_equiv_def])
       (* 3. R_ok preserves control state *)
-      >- simp_tac std_ss [state_equiv_def, execution_equiv_def]
+      >- (rpt strip_tac >> fs[state_equiv_def, execution_equiv_def])
       (* 4. bt preserves labels *)
       >- simp[Abbr `bt`]
       (* 5. P-preservation *)
       >- (rpt strip_tac >>
-          `FST (ao_cmp_flip_scan (dfg_build_function fn1) (fn_insts fn1)) =
+          `FST (ao_cmp_flip_scan mid dfg0 (dfg_build_function fn1) (fn_insts fn1)) =
            flips` by gvs[] >>
           `lookup_block bb.bb_label fn1.fn_blocks = SOME bb` by
             (irule lookup_block_mem_some >> simp[]) >>
           mp_tac (SIMP_RULE std_ss [LET_THM] ao_cmp_flip_block_ok_inv) >>
           disch_then (qspecl_then [`mid`, `fn1`,
             `bb.bb_label`, `bb`, `bt bb`, `fuel`, `ctx`,
-            `s1`, `s2`, `s1'`, `s2'`] mp_tac) >>
+            `s1`, `s2`, `s1'`, `s2'`, `dfg0`] mp_tac) >>
           gvs[] >>
           disch_then irule >>
           rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
@@ -140,14 +140,14 @@ Proof
           gvs[])
       (* 6. Block sim *)
       >- (rpt strip_tac >>
-          `FST (ao_cmp_flip_scan (dfg_build_function fn1) (fn_insts fn1)) =
+          `FST (ao_cmp_flip_scan mid dfg0 (dfg_build_function fn1) (fn_insts fn1)) =
            flips` by gvs[] >>
           `lookup_block bb.bb_label fn1.fn_blocks = SOME bb` by
             (irule lookup_block_mem_some >> simp[]) >>
           mp_tac (SIMP_RULE std_ss [LET_THM] ao_cmp_flip_block_sim) >>
           disch_then (qspecl_then [`mid`, `fn1`,
             `bb.bb_label`, `bb`, `bt bb`, `fuel`, `ctx`,
-            `s1`, `s2`] mp_tac) >>
+            `s1`, `s2`, `dfg0`] mp_tac) >>
           impl_tac
           >- (gvs[] >>
               rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>

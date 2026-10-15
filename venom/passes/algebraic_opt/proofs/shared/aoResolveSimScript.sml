@@ -68,18 +68,36 @@ Proof
   Cases_on `t'` >> simp[] >> gvs[is_comparator_def]
 QED
 
-(* post_flip is identity for non-commutative opcodes *)
+(* post_flip is identity for non-flippable opcodes *)
 Theorem ao_post_flip_inst_non_comm:
   !inst.
     inst.inst_opcode <> ADD /\ inst.inst_opcode <> MUL /\
     inst.inst_opcode <> AND /\ inst.inst_opcode <> OR /\
-    inst.inst_opcode <> XOR /\ inst.inst_opcode <> EQ ==>
+    inst.inst_opcode <> XOR /\ inst.inst_opcode <> EQ /\
+    ~is_comparator inst.inst_opcode ==>
     ao_post_flip_inst inst = inst
 Proof
   rpt strip_tac >> simp[ao_post_flip_inst_def] >>
   Cases_on `inst.inst_operands` >> simp[] >>
   Cases_on `t` >> simp[] >>
   Cases_on `t'` >> simp[]
+QED
+
+(* post_flip keeps the opcode class: it either keeps the opcode or turns a
+   comparator into another comparator. *)
+Theorem ao_post_flip_inst_opcode_class:
+  !inst.
+    (is_terminator (ao_post_flip_inst inst).inst_opcode <=>
+     is_terminator inst.inst_opcode) /\
+    ((ao_post_flip_inst inst).inst_opcode = PHI <=>
+     inst.inst_opcode = PHI) /\
+    ((ao_post_flip_inst inst).inst_opcode = INVOKE <=>
+     inst.inst_opcode = INVOKE) /\
+    (is_terminator inst.inst_opcode ==>
+     (ao_post_flip_inst inst).inst_opcode = inst.inst_opcode)
+Proof
+  rw[ao_post_flip_inst_def] >> every_case_tac >>
+  gvs[is_comparator_def, flip_comparison_opcode_def, is_terminator_def]
 QED
 
 (* post_flip preserves opcode *)
@@ -221,7 +239,7 @@ Proof
            ao_resolve_iszero_inst_opcode] >>
       (* post_flip is identity for INVOKE *)
       simp[ao_post_flip_last_def, ao_post_flip_inst_non_comm,
-           ao_resolve_iszero_inst_opcode])
+           ao_resolve_iszero_inst_opcode, is_comparator_def])
 QED
 
 (* ao_cmp_flip_apply_inst structural: non-terminators produce non-terminators

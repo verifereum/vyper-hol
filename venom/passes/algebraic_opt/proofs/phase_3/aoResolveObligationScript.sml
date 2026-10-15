@@ -701,6 +701,22 @@ Proof
   ]
 QED
 
+(* A well-formed DRET starts with a literal, which resolution keeps, and
+   resolution keeps the operand count, so the shape is unchanged. *)
+Triviality parse_dret_shape_resolve[local]:
+  !targets opc inst.
+    IS_SOME (parse_dret_shape inst) ==>
+    parse_dret_shape
+      (inst with inst_operands :=
+         MAP (ao_resolve_iszero_op targets opc) inst.inst_operands) =
+    parse_dret_shape inst
+Proof
+  rpt gen_tac >>
+  Cases_on `inst.inst_operands` >>
+  simp[dretShapeDefsTheory.parse_dret_shape_def] >>
+  Cases_on `h` >> simp[dretShapeDefsTheory.parse_dret_shape_def, resolve_op_lit]
+QED
+
 Theorem ao_resolve_iszero_inst_sim:
   !targets inst fuel ctx st.
     inst_wf inst /\
@@ -716,8 +732,10 @@ Proof
             inst.inst_opcode = ASSERT_UNREACHABLE`
   >- metis_tac[resolve_truthy_step]
   >- (
-    Cases_on `inst.inst_opcode = PARAM`
-    >- (gvs[inst_wf_def] >>
+    Cases_on `inst.inst_opcode = PARAM \/ inst.inst_opcode = FMP_PARAM \/
+              inst.inst_opcode = RETPC_PARAM`
+    >- (`?idx. inst.inst_operands = [Lit idx]` by
+          (Cases_on `inst.inst_opcode` >> gvs[inst_wf_def]) >>
         `ao_resolve_iszero_inst targets inst = inst` suffices_by simp[] >>
         simp[ao_resolve_iszero_inst_def, instruction_component_equality,
              resolve_op_lit]) >>
@@ -732,6 +750,7 @@ Proof
     simp[listTheory.LENGTH_MAP] >> rpt strip_tac >>
     simp[listTheory.EL_MAP, resolve_op_label] >>
     TRY (irule resolve_op_eval_all >> simp[]) >>
+    TRY (irule parse_dret_shape_resolve >> gvs[inst_wf_def] >> NO_TAC) >>
     gvs[inst_wf_def] >> simp[listTheory.MAP, resolve_op_lit]
   )
 QED

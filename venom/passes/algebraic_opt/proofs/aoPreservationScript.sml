@@ -106,7 +106,7 @@ Triviality phase1_fresh_vars[local]:
     ao_fn_fresh_vars fn
 Proof
   gen_tac >>
-  simp[ao_fn_fresh_vars_def, fn_insts_block_map, listTheory.MAP_MAP_o,
+  simp[ao_fn_fresh_vars_def, fn_max_inst_id_def, fn_insts_block_map, listTheory.MAP_MAP_o,
        combinTheory.o_DEF, ao_handle_offset_inst_preserves_id]
 QED
 
@@ -187,8 +187,8 @@ Triviality ao_transform_function_unfold[local]:
                  (ao_transform_block (fn_max_inst_id fn0) (dfg_build_function fn0)
                    (range_analyze fn0) (ao_compute_fn_iszero_targets fn0)) fn0 in
      let fn2 = ao_cmp_flip_function (fn_max_inst_id fn1)
-                 (dfg_build_function fn1) fn1 in
-     ao_or_truthy_function (dfg_build_function fn2) fn2)
+                 (dfg_build_function fn0) (dfg_build_function fn1) fn1 in
+     ao_or_truthy_function (dfg_build_function fn0) (dfg_build_function fn2) fn2)
 Proof
   gen_tac >>
   simp[ao_transform_function_def, LET_THM] >>
@@ -227,7 +227,8 @@ Proof
   qabbrev_tac `targets = ao_compute_fn_iszero_targets fn0` >>
   (* phase 3 facts *)
   `ssa_form (function_map_transform (ao_transform_block mid dfg ra targets) fn0)` by
-    (irule ao_phase3_preserves_ssa >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+    (irule ao_phase3_preserves_ssa >> rpt conj_tac >>
+     TRY (first_assum ACCEPT_TAC) >> simp[Abbr `mid`]) >>
   `fn_inst_ids_distinct
      (function_map_transform (ao_transform_block mid dfg ra targets) fn0)` by
     (irule ao_phase3_inst_ids_distinct >> rpt conj_tac >>
@@ -240,16 +241,12 @@ Proof
   rpt strip_tac >>
   rename1 `MEM (aid, out, f, c) inserts` >>
   drule_all scan_inserts_fresh_form >> strip_tac >>
-  drule_all scan_inserts_cmp_id_comparator >> strip_tac >>
-  `~MEM (ao_fresh_var c "iz")
-     (FLAT (MAP (\i. i.inst_outputs)
-       (fn_insts (function_map_transform
-         (ao_transform_block mid dfg ra targets) fn0))))` by
-    (irule ao_phase3_no_cmp_iz >> rpt conj_tac >>
-     TRY (first_assum ACCEPT_TAC) >> metis_tac[]) >>
   CCONTR_TAC >> gvs[] >>
-  qpat_x_assum `~MEM (ao_fresh_var _ _) _` mp_tac >>
-  simp[listTheory.MEM_FLAT, listTheory.MEM_MAP] >> metis_tac[]
+  qspecl_then [`mid`,`dfg`,`ra`,`targets`,`fn0`] mp_tac
+    ao_phase3_outputs_fresh >>
+  impl_tac >- (conj_tac >- simp[Abbr `mid`] >> first_assum ACCEPT_TAC) >>
+  disch_then drule_all >> simp[] >>
+  irule ao_fresh_id_var_fresh >> simp[]
 QED
 
 (* ===== Phases 1-3 preserve wf + ssa + inst_wf =====
@@ -304,7 +301,8 @@ Proof
      >- fs[fn_insts_def, fn_insts_blocks_every]) >>
   `ssa_form
      (function_map_transform (ao_transform_block mid dfg ra targets) fn0)` by
-    (irule ao_phase3_preserves_ssa >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+    (irule ao_phase3_preserves_ssa >> rpt conj_tac >>
+     TRY (first_assum ACCEPT_TAC) >> simp[Abbr `mid`]) >>
   `EVERY inst_wf (fn_insts
      (function_map_transform (ao_transform_block mid dfg ra targets) fn0))` by
     (simp[Abbr `targets`] >> irule ao_phase3_preserves_inst_wf >>
@@ -317,9 +315,9 @@ QED
    (ao_phase4_correct) in the main composition.  Requires
    ao_fresh_names_disjoint fn since the fact is false if the source program
    already references an ao_<id>_iz name.
-   Proved via ao_phase3_no_cmp_operand_iz applied to the phase-1 result fn0,
-   whose operand/output/target cleanliness is inherited from
-   ao_fresh_names_disjoint fn (phase 1 introduces no new Var operands). *)
+   Phase 4 names its helpers above fn_max_inst_id fn1, inside
+   ao_fn_fresh_vars fn1, and ao_phase3_operands_fresh keeps every fn1
+   operand out of that set. *)
 Theorem ao_phases123_cmp_fresh_disjoint:
   !fn.
     let fn0 = fn with fn_blocks :=
@@ -334,7 +332,7 @@ Theorem ao_phases123_cmp_fresh_disjoint:
     wf_function fn /\ ssa_form fn /\ EVERY inst_wf (fn_insts fn) /\
     ao_fresh_names_disjoint fn ==>
     (!inst v. MEM inst (fn_insts fn1) /\ MEM (Var v) inst.inst_operands ==>
-      v NOTIN ao_cmp_fresh_vars fn1)
+      v NOTIN ao_cmp_fresh_vars (fn_max_inst_id fn1) fn1)
 Proof
   gen_tac >> simp[LET_THM] >> strip_tac >>
   `fn_inst_ids_distinct fn` by fs[wf_function_def] >>
@@ -362,23 +360,22 @@ Proof
     (simp[Abbr `targets`] >> ho_match_mp_tac ao_fn_iszero_targets_clean >>
      rpt strip_tac >> metis_tac[]) >>
   (* the goal body is the record-reduced form of this function_map_transform;
-     prove the latter, which matches ao_phase3_no_cmp_operand_iz directly *)
+     prove the latter, which matches ao_phase3_operands_fresh directly *)
   `!inst v.
      MEM inst (fn_insts
        (function_map_transform (ao_transform_block mid dfg ra targets) fn0)) /\
      MEM (Var v) inst.inst_operands ==>
      v NOTIN ao_cmp_fresh_vars
+       (fn_max_inst_id
+         (function_map_transform (ao_transform_block mid dfg ra targets) fn0))
        (function_map_transform (ao_transform_block mid dfg ra targets) fn0)`
     suffices_by simp[function_map_transform_def, Abbr `fn0`] >>
   rpt strip_tac >> fs[ao_cmp_fresh_vars_def] >>
-  qspecl_then [`mid`,`dfg`,`ra`,`targets`,`fn0`,`i.inst_id`] mp_tac
-    ao_phase3_no_cmp_operand_iz >>
-  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> metis_tac[]) >>
-  `MEM (Var v) (FLAT (MAP (\i. i.inst_operands)
-     (fn_insts (function_map_transform
-        (ao_transform_block mid dfg ra targets) fn0))))` by
-    (simp[listTheory.MEM_FLAT, listTheory.MEM_MAP] >> metis_tac[]) >>
-  gvs[]
+  qspecl_then [`mid`,`dfg`,`ra`,`targets`,`fn0`] mp_tac
+    ao_phase3_operands_fresh >>
+  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[Abbr `mid`]) >>
+  disch_then drule_all >> simp[] >>
+  irule ao_fresh_id_var_fresh >> simp[]
 QED
 
 (* ===== Phases 1-4 preserve wf + ssa =====
@@ -386,7 +383,8 @@ QED
    ssa facts for the main composition (algebraicOptProof), which needs them to
    discharge the phase-5 (OR-truthy) simulation side conditions.
    The ssa proof reuses the phase-4 inserted-fresh-var disjointness argument
-   (scan_inserts_* + ao_phase3_no_cmp_iz), hence ao_fresh_names_disjoint fn. *)
+   (scan_inserts_fresh_form + ao_phase3_outputs_fresh), hence
+   ao_fresh_names_disjoint fn. *)
 Theorem ao_phases1234_preserve_wf_ssa:
   !fn.
     let fn0 = fn with fn_blocks :=
@@ -400,7 +398,7 @@ Theorem ao_phases1234_preserve_wf_ssa:
       MAP (ao_transform_block mid dfg ra targets) fn0.fn_blocks in
     let dfg1 = dfg_build_function fn1 in
     let mid1 = fn_max_inst_id fn1 in
-    let fn2 = ao_cmp_flip_function mid1 dfg1 fn1 in
+    let fn2 = ao_cmp_flip_function mid1 dfg dfg1 fn1 in
     wf_function fn /\ ssa_form fn /\ EVERY inst_wf (fn_insts fn) /\
     ao_fresh_names_disjoint fn ==>
     wf_function fn2 /\ ssa_form fn2
@@ -430,14 +428,15 @@ Proof
   qpat_x_assum `fn0 = function_map_transform _ _` kall_tac >>
   qmatch_goalsub_abbrev_tac `ao_transform_block mid dfg ra targets` >>
   (* rewrite the goal's (collapsed) phase-3 result as a function_map_transform *)
-  qmatch_goalsub_abbrev_tac `ao_cmp_flip_function _ _ fn1c` >>
+  qmatch_goalsub_abbrev_tac `ao_cmp_flip_function _ _ _ fn1c` >>
   `fn1c = function_map_transform (ao_transform_block mid dfg ra targets) fn0` by
     simp[Abbr `fn1c`, Abbr `fn0`, function_map_transform_def] >>
   pop_assum SUBST_ALL_TAC >>
   (* phase 3 facts *)
   `ssa_form
      (function_map_transform (ao_transform_block mid dfg ra targets) fn0)` by
-    (irule ao_phase3_preserves_ssa >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+    (irule ao_phase3_preserves_ssa >> rpt conj_tac >>
+     TRY (first_assum ACCEPT_TAC) >> simp[Abbr `mid`]) >>
   `wf_function
      (function_map_transform (ao_transform_block mid dfg ra targets) fn0)` by
     (irule ao_phase3_preserves_wf >> rpt conj_tac
@@ -457,15 +456,11 @@ Proof
   rpt strip_tac >>
   rename1 `MEM (aid, out, f, c) inserts` >>
   drule_all scan_inserts_fresh_form >> strip_tac >>
-  drule_all scan_inserts_cmp_id_comparator >> strip_tac >>
-  `~MEM (ao_fresh_var c "iz")
-     (FLAT (MAP (\i. i.inst_outputs)
-       (fn_insts (function_map_transform
-         (ao_transform_block mid dfg ra targets) fn0))))` by
-    (irule ao_phase3_no_cmp_iz >> rpt conj_tac >>
-     TRY (first_assum ACCEPT_TAC) >> metis_tac[]) >>
   CCONTR_TAC >> gvs[] >>
-  qpat_x_assum `~MEM (ao_fresh_var _ _) _` mp_tac >>
-  simp[listTheory.MEM_FLAT, listTheory.MEM_MAP] >> metis_tac[]
+  qspecl_then [`mid`,`dfg`,`ra`,`targets`,`fn0`] mp_tac
+    ao_phase3_outputs_fresh >>
+  impl_tac >- (conj_tac >- simp[Abbr `mid`] >> first_assum ACCEPT_TAC) >>
+  disch_then drule_all >> simp[] >>
+  irule ao_fresh_id_var_fresh >> simp[]
 QED
 

@@ -95,8 +95,9 @@ Proof
   Cases_on `inst.inst_operands` >> simp[] >>
   Cases_on `t` >> simp[] >>
   Cases_on `t'` >> simp[] >>
-  IF_CASES_TAC >> simp[] >>
-  gvs[] >> irule comm_swap_step_equiv >> simp[]
+  rpt (IF_CASES_TAC >> simp[]) >> gvs[] >>
+  FIRST [irule comm_swap_step_equiv >> simp[],
+         irule cmp_swap_step_equiv >> simp[]]
 QED
 
 (* MAP ao_post_flip_inst over a list preserves step_inst_base for each element *)
@@ -126,7 +127,8 @@ Proof
   Induct >> simp[run_insts_def] >>
   rpt gen_tac >> strip_tac >>
   `(ao_post_flip_inst h).inst_opcode <> INVOKE`
-    by (simp[ao_post_flip_inst_def] >> every_case_tac >> simp[]) >>
+    by (simp[ao_post_flip_inst_def] >> every_case_tac >>
+        gvs[is_comparator_def, flip_comparison_opcode_def]) >>
   simp[step_inst_non_invoke, ao_post_flip_step_equiv] >>
   Cases_on `step_inst_base h s` >> simp[]
 QED
@@ -413,9 +415,11 @@ QED
 (* ===== Opcode preservation helpers ===== *)
 
 Triviality ao_post_flip_opcode[local]:
-  !inst. (ao_post_flip_inst inst).inst_opcode = inst.inst_opcode
+  !inst. inst.inst_opcode <> INVOKE ==>
+         (ao_post_flip_inst inst).inst_opcode <> INVOKE
 Proof
-  rw[ao_post_flip_inst_def] >> every_case_tac >> simp[]
+  rw[ao_post_flip_inst_def] >> every_case_tac >>
+  gvs[is_comparator_def, flip_comparison_opcode_def]
 QED
 
 (* post_flip preserves step_inst on every instruction (operand swap on a
@@ -427,7 +431,8 @@ Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode = INVOKE`
   >- (`ao_post_flip_inst inst = inst` by
-        (simp[ao_post_flip_inst_def] >> every_case_tac >> gvs[]) >>
+        (simp[ao_post_flip_inst_def] >> every_case_tac >>
+         gvs[is_comparator_def]) >>
       simp[]) >>
   `(ao_post_flip_inst inst).inst_opcode <> INVOKE` by simp[ao_post_flip_opcode] >>
   simp[step_inst_non_invoke, ao_post_flip_step_equiv]
@@ -723,9 +728,7 @@ Theorem ao_cmp_dispatch_full_sim:
     is_comparator inst.inst_opcode /\
     inst.inst_opcode <> INVOKE /\
     inst_wf inst /\
-    ao_fresh_var inst.inst_id "not" IN fv /\
-    ao_fresh_var inst.inst_id "iz" IN fv /\
-    ao_fresh_var inst.inst_id "xor" IN fv /\
+    ao_helpers_fresh fv mid /\
     (!op v. MEM op inst.inst_operands /\
             eval_operand op s = SOME v ==>
             in_range (range_get_range ra lbl idx op) v) ==>
@@ -783,9 +786,7 @@ Theorem ao_peephole_full_sim:
     inst.inst_opcode <> INVOKE /\
     ~is_terminator inst.inst_opcode /\
     inst_wf inst /\
-    ao_fresh_var inst.inst_id "not" IN fv /\
-    ao_fresh_var inst.inst_id "iz" IN fv /\
-    ao_fresh_var inst.inst_id "xor" IN fv /\
+    ao_helpers_fresh fv mid /\
     (* Range analysis soundness for variable operands *)
     (!op v. MEM op inst.inst_operands /\
             eval_operand op s = SOME v ==>

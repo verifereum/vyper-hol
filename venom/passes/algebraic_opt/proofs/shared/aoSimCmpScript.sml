@@ -147,6 +147,22 @@ Triviality bool_to_word_eq_0[local]:
 Proof Cases >> simp[bool_to_word_def]
 QED
 
+(* Every helper name the pass can build from base mid is in fv. *)
+Definition ao_helpers_fresh_def:
+  ao_helpers_fresh fv mid <=>
+    !id k s. MEM s ["not"; "iz"; "xor"] ==>
+             ao_fresh_var (ao_fresh_id mid id k) s IN fv
+End
+
+(* The helper names a rewrite of inst can create, as assumptions. *)
+val fresh_facts_tac =
+  `ao_fresh_var (ao_fresh_id mid inst.inst_id 0) "not" IN fv /\
+   ao_fresh_var (ao_fresh_id mid inst.inst_id 0) "iz" IN fv /\
+   ao_fresh_var (ao_fresh_id mid inst.inst_id 1) "iz" IN fv /\
+   ao_fresh_var (ao_fresh_id mid inst.inst_id 0) "xor" IN fv`
+    by fs[ao_helpers_fresh_def] >>
+  pop_assum strip_assume_tac;
+
 (* ===== EQ simulation ===== *)
 
 (* EQ: all branches of ao_opt_eq produce equivalent run_insts result
@@ -157,14 +173,13 @@ Theorem ao_eq_sim:
     inst.inst_opcode = EQ /\
     LENGTH inst.inst_operands = 2 /\
     LENGTH inst.inst_outputs = 1 /\
-    ao_fresh_var inst.inst_id "not" IN fv /\
-    ao_fresh_var inst.inst_id "xor" IN fv ==>
+    ao_helpers_fresh fv mid ==>
     (?e. step_inst_base inst s = Error e) \/
     lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
       (step_inst_base inst s)
       (run_insts fuel ctx (ao_opt_eq mid dfg inst) s)
 Proof
-  rpt strip_tac >>
+  rpt strip_tac >> fresh_facts_tac >>
   `?op1 op2. inst.inst_operands = [op1; op2]` by (
     Cases_on `inst.inst_operands` >> gvs[] >>
     Cases_on `t` >> gvs[] >> Cases_on `t'` >> gvs[]) >>
@@ -202,7 +217,7 @@ Proof
     (* Original: EQ(op1, -1) → update_var out (bool_to_word (v1 = 0w-1w)) s *)
     simp[step_inst_base_def, exec_pure2_def, eval_operand_def] >>
     (* Replacement: run_insts [NOT, ISZERO] *)
-    qabbrev_tac `tmp = ao_fresh_var inst.inst_id "not"` >>
+    qabbrev_tac `tmp = ao_fresh_var (ao_fresh_id mid inst.inst_id 0) "not"` >>
     simp[Once run_insts_def, step_inst_non_invoke] >>
     simp[Once step_inst_base_def, exec_pure1_def, eval_operand_def] >>
     simp[Once run_insts_def, step_inst_non_invoke] >>
@@ -223,7 +238,7 @@ Proof
     rename1 `eval_operand op2 s = SOME v2` >>
     DISJ2_TAC >>
     simp[step_inst_base_def, exec_pure2_def, eval_operand_def] >>
-    qabbrev_tac `tmp = ao_fresh_var inst.inst_id "xor"` >>
+    qabbrev_tac `tmp = ao_fresh_var (ao_fresh_id mid inst.inst_id 0) "xor"` >>
     simp[Once run_insts_def, step_inst_non_invoke] >>
     simp[Once step_inst_base_def, exec_pure2_def, eval_operand_def] >>
     simp[Once run_insts_def, step_inst_non_invoke] >>
@@ -594,7 +609,7 @@ val iszero_iszero_tac =
   >>
   DISJ2_TAC >>
   simp[step_inst_base_def, exec_pure2_def, eval_operand_def] >>
-  qabbrev_tac `tmp = ao_fresh_var inst.inst_id "iz"` >>
+  qabbrev_tac `tmp = ao_fresh_var (ao_fresh_id mid inst.inst_id 0) "iz"` >>
   simp[Once run_insts_def, step_inst_non_invoke] >>
   simp[Once step_inst_base_def, exec_pure1_def, eval_operand_def] >>
   simp[Once run_insts_def, step_inst_non_invoke] >>
@@ -610,16 +625,14 @@ Triviality ao_cmp_sim_gt[local]:
     inst.inst_opcode = GT /\
     LENGTH inst.inst_operands = 2 /\
     LENGTH inst.inst_outputs = 1 /\
-    ao_fresh_var inst.inst_id "not" IN fv /\
-    ao_fresh_var inst.inst_id "iz" IN fv /\
-    ao_fresh_var inst.inst_id "xor" IN fv /\
+    ao_helpers_fresh fv mid /\
     ao_opt_cmp_range ra lbl idx inst T F = NONE ==>
     (?e. step_inst_base inst s = Error e) \/
     lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
       (step_inst_base inst s)
       (run_insts fuel ctx (ao_opt_comparator mid dfg ra lbl idx inst) s)
 Proof
-  rpt strip_tac >>
+  rpt strip_tac >> fresh_facts_tac >>
   `?op1 op2. inst.inst_operands = [op1; op2]` by (
     Cases_on `inst.inst_operands` >> gvs[] >>
     Cases_on `t` >> gvs[] >> Cases_on `t'` >> gvs[]) >>
@@ -667,7 +680,7 @@ Proof
         simp[step_inst_base_def, exec_pure2_def, eval_operand_def]) >>
     DISJ2_TAC >>
     simp[step_inst_base_def, exec_pure2_def, eval_operand_def] >>
-    qabbrev_tac `tmp = ao_fresh_var inst.inst_id "not"` >>
+    qabbrev_tac `tmp = ao_fresh_var (ao_fresh_id mid inst.inst_id 0) "not"` >>
     simp[Once run_insts_def, step_inst_non_invoke] >>
     simp[Once step_inst_base_def, exec_pure1_def, eval_operand_def] >>
     simp[Once run_insts_def, step_inst_non_invoke] >>
@@ -688,7 +701,7 @@ Proof
         simp[step_inst_base_def, exec_pure2_def, eval_operand_def]) >>
     DISJ2_TAC >>
     simp[step_inst_base_def, exec_pure2_def, eval_operand_def] >>
-    qabbrev_tac `tmp = ao_fresh_var inst.inst_id "iz"` >>
+    qabbrev_tac `tmp = ao_fresh_var (ao_fresh_id mid inst.inst_id 0) "iz"` >>
     simp[Once run_insts_def, step_inst_non_invoke] >>
     simp[Once step_inst_base_def, exec_pure1_def, eval_operand_def] >>
     simp[Once run_insts_def, step_inst_non_invoke] >>
@@ -708,7 +721,7 @@ Proof
         simp[step_inst_base_def, exec_pure2_def, eval_operand_def]) >>
     DISJ2_TAC >>
     simp[step_inst_base_def, exec_pure2_def, eval_operand_def] >>
-    qabbrev_tac `tmp = ao_fresh_var inst.inst_id "iz"` >>
+    qabbrev_tac `tmp = ao_fresh_var (ao_fresh_id mid inst.inst_id 0) "iz"` >>
     simp[Once run_insts_def, step_inst_non_invoke] >>
     simp[Once step_inst_base_def, exec_pure1_def, eval_operand_def] >>
     simp[Once run_insts_def, step_inst_non_invoke] >>
@@ -728,16 +741,14 @@ Triviality ao_cmp_sim_lt[local]:
     inst.inst_opcode = LT /\
     LENGTH inst.inst_operands = 2 /\
     LENGTH inst.inst_outputs = 1 /\
-    ao_fresh_var inst.inst_id "not" IN fv /\
-    ao_fresh_var inst.inst_id "iz" IN fv /\
-    ao_fresh_var inst.inst_id "xor" IN fv /\
+    ao_helpers_fresh fv mid /\
     ao_opt_cmp_range ra lbl idx inst F F = NONE ==>
     (?e. step_inst_base inst s = Error e) \/
     lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
       (step_inst_base inst s)
       (run_insts fuel ctx (ao_opt_comparator mid dfg ra lbl idx inst) s)
 Proof
-  rpt strip_tac >>
+  rpt strip_tac >> fresh_facts_tac >>
   `?op1 op2. inst.inst_operands = [op1; op2]` by (
     Cases_on `inst.inst_operands` >> gvs[] >>
     Cases_on `t` >> gvs[] >> Cases_on `t'` >> gvs[]) >>
@@ -797,8 +808,8 @@ Proof
         simp[step_inst_base_def, exec_pure2_def, eval_operand_def]) >>
     DISJ2_TAC >>
     simp[step_inst_base_def, exec_pure2_def, eval_operand_def] >>
-    qabbrev_tac `tmp_not = ao_fresh_var inst.inst_id "not"` >>
-    qabbrev_tac `tmp_iz = ao_fresh_var inst.inst_id "iz"` >>
+    qabbrev_tac `tmp_not = ao_fresh_var (ao_fresh_id mid inst.inst_id 0) "not"` >>
+    qabbrev_tac `tmp_iz = ao_fresh_var (ao_fresh_id mid inst.inst_id 1) "iz"` >>
     simp[Once run_insts_def, step_inst_non_invoke] >>
     simp[Once step_inst_base_def, exec_pure1_def, eval_operand_def] >>
     simp[Once run_insts_def, step_inst_non_invoke] >>
@@ -822,16 +833,14 @@ Triviality ao_cmp_sim_sgt[local]:
     inst.inst_opcode = SGT /\
     LENGTH inst.inst_operands = 2 /\
     LENGTH inst.inst_outputs = 1 /\
-    ao_fresh_var inst.inst_id "not" IN fv /\
-    ao_fresh_var inst.inst_id "iz" IN fv /\
-    ao_fresh_var inst.inst_id "xor" IN fv /\
+    ao_helpers_fresh fv mid /\
     ao_opt_cmp_range ra lbl idx inst T T = NONE ==>
     (?e. step_inst_base inst s = Error e) \/
     lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
       (step_inst_base inst s)
       (run_insts fuel ctx (ao_opt_comparator mid dfg ra lbl idx inst) s)
 Proof
-  rpt strip_tac >>
+  rpt strip_tac >> fresh_facts_tac >>
   `?op1 op2. inst.inst_operands = [op1; op2]` by (
     Cases_on `inst.inst_operands` >> gvs[] >>
     Cases_on `t` >> gvs[] >> Cases_on `t'` >> gvs[]) >>
@@ -898,8 +907,8 @@ Proof
         simp[step_inst_base_def, exec_pure2_def, eval_operand_def]) >>
     DISJ2_TAC >>
     simp[step_inst_base_def, exec_pure2_def, eval_operand_def] >>
-    qabbrev_tac `tmp_xor = ao_fresh_var inst.inst_id "xor"` >>
-    qabbrev_tac `tmp_iz = ao_fresh_var inst.inst_id "iz"` >>
+    qabbrev_tac `tmp_xor = ao_fresh_var (ao_fresh_id mid inst.inst_id 0) "xor"` >>
+    qabbrev_tac `tmp_iz = ao_fresh_var (ao_fresh_id mid inst.inst_id 1) "iz"` >>
     simp[Once run_insts_def, step_inst_non_invoke] >>
     simp[Once step_inst_base_def, exec_pure2_def, eval_operand_def] >>
     simp[Once run_insts_def, step_inst_non_invoke] >>
@@ -923,16 +932,14 @@ Triviality ao_cmp_sim_slt[local]:
     inst.inst_opcode = SLT /\
     LENGTH inst.inst_operands = 2 /\
     LENGTH inst.inst_outputs = 1 /\
-    ao_fresh_var inst.inst_id "not" IN fv /\
-    ao_fresh_var inst.inst_id "iz" IN fv /\
-    ao_fresh_var inst.inst_id "xor" IN fv /\
+    ao_helpers_fresh fv mid /\
     ao_opt_cmp_range ra lbl idx inst F T = NONE ==>
     (?e. step_inst_base inst s = Error e) \/
     lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
       (step_inst_base inst s)
       (run_insts fuel ctx (ao_opt_comparator mid dfg ra lbl idx inst) s)
 Proof
-  rpt strip_tac >>
+  rpt strip_tac >> fresh_facts_tac >>
   `?op1 op2. inst.inst_operands = [op1; op2]` by (
     Cases_on `inst.inst_operands` >> gvs[] >>
     Cases_on `t` >> gvs[] >> Cases_on `t'` >> gvs[]) >>
@@ -1000,8 +1007,8 @@ Proof
         simp[step_inst_base_def, exec_pure2_def, eval_operand_def]) >>
     DISJ2_TAC >>
     simp[step_inst_base_def, exec_pure2_def, eval_operand_def] >>
-    qabbrev_tac `tmp_xor = ao_fresh_var inst.inst_id "xor"` >>
-    qabbrev_tac `tmp_iz = ao_fresh_var inst.inst_id "iz"` >>
+    qabbrev_tac `tmp_xor = ao_fresh_var (ao_fresh_id mid inst.inst_id 0) "xor"` >>
+    qabbrev_tac `tmp_iz = ao_fresh_var (ao_fresh_id mid inst.inst_id 1) "iz"` >>
     simp[Once run_insts_def, step_inst_non_invoke] >>
     simp[Once step_inst_base_def, exec_pure2_def, eval_operand_def] >>
     simp[Once run_insts_def, step_inst_non_invoke] >>
@@ -1027,9 +1034,7 @@ Theorem ao_cmp_sim:
      inst.inst_opcode = SGT \/ inst.inst_opcode = SLT) /\
     LENGTH inst.inst_operands = 2 /\
     LENGTH inst.inst_outputs = 1 /\
-    ao_fresh_var inst.inst_id "not" IN fv /\
-    ao_fresh_var inst.inst_id "iz" IN fv /\
-    ao_fresh_var inst.inst_id "xor" IN fv /\
+    ao_helpers_fresh fv mid /\
     ao_opt_cmp_range ra lbl idx inst
       (inst.inst_opcode = GT \/ inst.inst_opcode = SGT)
       (inst.inst_opcode = SGT \/ inst.inst_opcode = SLT) = NONE ==>
@@ -1242,9 +1247,7 @@ Theorem ao_cmp_sim_full:
      inst.inst_opcode = SGT \/ inst.inst_opcode = SLT) /\
     LENGTH inst.inst_operands = 2 /\
     LENGTH inst.inst_outputs = 1 /\
-    ao_fresh_var inst.inst_id "not" IN fv /\
-    ao_fresh_var inst.inst_id "iz" IN fv /\
-    ao_fresh_var inst.inst_id "xor" IN fv /\
+    ao_helpers_fresh fv mid /\
     (!op v. MEM op inst.inst_operands /\
             eval_operand op s = SOME v ==>
             in_range (range_get_range ra lbl idx op) v) ==>
