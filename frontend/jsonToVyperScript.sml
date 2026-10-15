@@ -732,9 +732,17 @@ Definition json_type_supertype_def:
     (m ≤ n ∧ json_type_supertype ty ty')) ∧
   (json_type_supertype (JT_StaticArray ty n) (JT_StaticArray ty' m) =
     (n = m ∧ json_type_supertype ty ty')) ∧
-  (json_type_supertype ty ty' = (ty = ty'))
+  (json_type_supertype (JT_Tuple tys) (JT_Tuple tys') =
+    json_types_supertype tys tys') ∧
+  (json_type_supertype ty ty' = (ty = ty')) ∧
+  (json_types_supertype [] [] = T) ∧
+  (json_types_supertype (ty::tys) (ty'::tys') =
+    (json_type_supertype ty ty' ∧ json_types_supertype tys tys')) ∧
+  (json_types_supertype _ _ = F)
 Termination
-  WF_REL_TAC `measure (json_type_size o FST)` >> simp[]
+  WF_REL_TAC `measure (λx. case x of
+    | INL (ty,_) => json_type_size ty
+    | INR (tys,_) => list_size json_type_size tys)` >> simp[]
 End
 
 Definition attach_param_defaults_def:
@@ -803,6 +811,65 @@ Definition override_function_compatible_def:
      (MEM "nonreentrant" override_decs =
       MEM "nonreentrant" abstract_decs)) ∧
   override_function_compatible _ _ = F
+End
+
+(* Defaults retain source syntax rather than folded values. Resolve aliases
+   and local constants by module identity; inferred expression metadata is
+   irrelevant to structural equivalence. *)
+Definition canonical_default_aux_def:
+  canonical_default_aux 0 imports nsid consts e = e ∧
+  canonical_default_aux (SUC fuel) imports nsid consts e =
+    let recur = canonical_default_aux fuel imports nsid consts in
+    case e of
+    | JE_Folded original _ => recur original
+    | JE_Name name tc src ty =>
+        (case ALOOKUP imports name of
+         | SOME sid =>
+             JE_Name "" (SOME "module") (JExplicitSource (&sid)) JT_None
+         | NONE =>
+             JE_Name name NONE
+               (if MEM name consts then JExplicitSource nsid
+                else JMissingSource) JT_None)
+    | JE_Attribute base name tc btn btc src ty =>
+        JE_Attribute (recur base) name NONE NONE NONE JMissingSource JT_None
+    | JE_Subscript base idx _ => JE_Subscript (recur base) (recur idx) JT_None
+    | JE_NamedExpr lhs rhs => JE_NamedExpr (recur lhs) (recur rhs)
+    | JE_BinOp lhs op rhs _ => JE_BinOp (recur lhs) op (recur rhs) JT_None
+    | JE_Compare lhs op rhs => JE_Compare (recur lhs) op (recur rhs)
+    | JE_BoolOp op es => JE_BoolOp op (MAP recur es)
+    | JE_UnaryOp op arg _ => JE_UnaryOp op (recur arg) JT_None
+    | JE_IfExp test yes no _ =>
+        JE_IfExp (recur test) (recur yes) (recur no) JT_None
+    | JE_Tuple es => JE_Tuple (MAP recur es)
+    | JE_List es _ => JE_List (MAP recur es) JT_None
+    | JE_Call func args kws _ _ =>
+        JE_Call (recur func) (MAP recur args)
+          (MAP (λkw. case kw of JKeyword k v => JKeyword k (recur v)) kws)
+          JT_None JMissingSource
+    | JE_ExtCall name src tys ret target args kws =>
+        JE_ExtCall name src tys ret (recur target) (MAP recur args)
+          (MAP (λkw. case kw of JKeyword k v => JKeyword k (recur v)) kws)
+    | JE_StaticCall name src tys ret target args kws =>
+        JE_StaticCall name src tys ret (recur target) (MAP recur args)
+          (MAP (λkw. case kw of JKeyword k v => JKeyword k (recur v)) kws)
+    | JE_Int n _ => JE_Int n JT_None
+    | JE_Hex n _ => JE_Hex n JT_None
+    | _ => e
+End
+
+Definition canonical_default_def:
+  canonical_default imports nsid consts e =
+    canonical_default_aux (json_expr_size e + 1) imports nsid consts e
+End
+
+Definition canonical_override_function_def:
+  canonical_override_function nsid body
+      (JTL_FunctionDef name decs aliases args defaults ty ann stmts) =
+    JTL_FunctionDef name decs aliases args
+      (MAP (canonical_default
+        (build_import_map (collect_imports body)) nsid
+        (collect_consts_and_immutables body)) defaults) ty ann stmts ∧
+  canonical_override_function _ _ top = top
 End
 
 Definition collect_function_entries_def:
@@ -875,8 +942,17 @@ End
 Definition abstract_overrides_valid_def:
   abstract_overrides_valid toplevels imports override_map =
     let entries =
-      collect_function_entries NONE toplevels ++
-      collect_imported_function_entries imports in
+      MAP (λ(nsid,top).
+        let body =
+          case nsid of
+          | NONE => toplevels
+          | SOME sid =>
+              FLAT (MAP (λimp. case imp of JImportedModule src _ _ _ body =>
+                if source_id_to_module_id src = sid then body else []) imports) in
+        (nsid, canonical_override_function
+          (case nsid of NONE => -1 | SOME sid => &sid) body top))
+        (collect_function_entries NONE toplevels ++
+         collect_imported_function_entries imports) in
     LENGTH override_map =
       override_alias_count toplevels + imported_override_alias_count imports ∧
     override_links_valid entries override_map

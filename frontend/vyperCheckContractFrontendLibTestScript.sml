@@ -172,6 +172,88 @@ val _ = assert_translation "parameter-name mismatch" false
 val _ = assert_translation "unimplemented abstract function" false
   (abstract_link_ast ``[^import_base]`` ``[^abstract_u256_fn]``);
 
+(* Override variance is recursive, including tuple members and nested arrays. *)
+Theorem abstract_override_tuple_variance:
+  json_type_supertype
+    (JT_Tuple [JT_String 10; JT_DynArray (JT_Tuple [JT_Bytes 8]) 4])
+    (JT_Tuple [JT_String 5; JT_DynArray (JT_Tuple [JT_Bytes 4]) 2]) ∧
+  ¬json_type_supertype
+    (JT_Tuple [JT_String 5]) (JT_Tuple [JT_String 10]) ∧
+  ¬json_type_supertype
+    (JT_Tuple [JT_String 10]) (JT_Tuple [JT_String 5; JT_Integer 256 F])
+Proof
+  EVAL_TAC
+QED
+
+fun tuple_return_fn decs aliases bound =
+  ``JTL_FunctionDef "compute" ^decs ^aliases [] []
+      (JFuncType [] (JT_Tuple [JT_String ^bound; JT_Integer 256 F]))
+      (JTA_Tuple [JTA_String ^bound; JTA_Integer 256 F])
+      [JS_Return (SOME (JE_Tuple [JE_Str 1 "x";
+        JE_Int 1 (JT_Integer 256 F)]))]``;
+val tuple_abstract = tuple_return_fn ``["abstract"]`` ``[] : string list`` ``10``;
+val tuple_override = tuple_return_fn ``["override"]`` ``["base"]`` ``5``;
+val _ = assert_translation "covariant tuple return" true
+  (abstract_link_ast ``[^import_base; ^initialize_base; ^tuple_override]``
+    ``[^tuple_abstract]``);
+val _ = assert_translation "incompatible tuple return" false
+  (abstract_link_ast
+    ``[^import_base; ^initialize_base;
+       ^(tuple_return_fn ``["override"]`` ``["base"]`` ``20``)]``
+    ``[^tuple_abstract]``);
+
+fun default_u256_fn decs aliases default =
+  ``JTL_FunctionDef "compute" ^decs ^aliases
+      [JArg "x" (JT_Integer 256 F) (JTA_Integer 256 F)] [^default]
+      (JFuncType [JT_Integer 256 F] (JT_Integer 256 F))
+      (JTA_Integer 256 F)
+      [JS_Return (SOME (JE_Name "x" NONE JMissingSource
+        (JT_Integer 256 F)))]``;
+fun constant_default alias =
+  ``JE_Attribute
+      (JE_Name ^alias (SOME "module") JMissingSource JT_None)
+      "VALUE" NONE NONE NONE JMissingSource (JT_Integer 256 F)``;
+val default_constants =
+  ``[JTL_VariableDecl "VALUE" (JT_Integer 256 F) (JTA_Integer 256 F)
+      F F F (SOME (JE_Int 7 (JT_Integer 256 F)))]``;
+val alias_abstract = default_u256_fn ``["abstract"]`` ``[] : string list``
+  (constant_default ``"c1"``);
+val alias_override = default_u256_fn ``["override"]`` ``["base"]``
+  (constant_default ``"c2"``);
+fun alias_default_ast override_constant_src =
+  ``JAnnotatedAST
+      (JModule (-1) F
+        [JTL_Import [JImportInfo "base" 1 "base" "base.vy";
+          JImportInfo "c2" ^override_constant_src "constants"
+            (if ^override_constant_src = 0 then "constants.vy" else "other.vy")];
+         ^initialize_base; ^alias_override])
+      [JImportedModule 0 "constants.vy" "constants.vy" F ^default_constants;
+       JImportedModule 2 "other.vy" "other.vy" F ^default_constants;
+       JImportedModule 1 "base.vy" "base.vy" F
+         [JTL_Import [JImportInfo "c1" 0 "constants" "constants.vy"];
+          ^alias_abstract]]``;
+val _ = assert_translation "same default declaration through different aliases"
+  true (alias_default_ast ``0 : int``);
+val _ = assert_translation "different declarations with identical default spelling"
+  false (alias_default_ast ``2 : int``);
+val expression_default =
+  ``JE_BinOp (JE_Int 1 (JT_Integer 256 F)) JBop_Add
+      (JE_Int 1 (JT_Integer 256 F)) (JT_Integer 256 F)``;
+val folded_default_abstract = default_u256_fn ``["abstract"]`` ``[] : string list``
+  ``JE_Folded ^expression_default (JE_Int 2 (JT_Integer 256 F))``;
+val expression_default_override = default_u256_fn ``["override"]`` ``["base"]``
+  expression_default;
+val literal_default_override = default_u256_fn ``["override"]`` ``["base"]``
+  ``JE_Int 2 (JT_Integer 256 F)``;
+val _ = assert_translation "folding metadata preserves original default structure"
+  true (abstract_link_ast
+    ``[^import_base; ^initialize_base; ^expression_default_override]``
+    ``[^folded_default_abstract]``);
+val _ = assert_translation "equal default values with different syntax"
+  false (abstract_link_ast
+    ``[^import_base; ^initialize_base; ^literal_default_override]``
+    ``[^folded_default_abstract]``);
+
 Theorem abstract_override_resolution_is_transitive:
   resolve_override_aux 3
     [((SOME 2,"compute"),(SOME 1,"compute"));
