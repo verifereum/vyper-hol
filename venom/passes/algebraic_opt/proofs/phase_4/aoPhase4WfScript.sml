@@ -835,23 +835,6 @@ Proof
   >> gvs[] >> metis_tac[]
 QED
 
-Theorem scan_inserts_cmp_id_comparator:
-  !dfg insts flips removes inserts id out_var fresh cmp_id mid dfg0.
-    ao_cmp_flip_scan mid dfg0 dfg insts = (flips, removes, inserts) /\
-    MEM (id, out_var, fresh, cmp_id) inserts ==>
-    ?i. MEM i insts /\ i.inst_id = cmp_id /\ is_comparator i.inst_opcode
-Proof
-  Induct_on `insts`
-  >- simp[ao_cmp_flip_scan_def]
-  >> rpt gen_tac >> strip_tac >>
-  Cases_on `ao_cmp_flip_scan mid dfg0 dfg insts` >> Cases_on `r` >>
-  rename1 `_ = (flips', removes', inserts')` >>
-  drule_all scan_step_detail >>
-  disch_then strip_assume_tac >> gvs[] >>
-  TRY (first_x_assum drule_all >> strip_tac >> metis_tac[]) >>
-  metis_tac[listTheory.MEM]
-QED
-
 Theorem scan_inserts_cmp_ids_distinct:
   !dfg insts flips removes inserts mid dfg0.
     ao_cmp_flip_scan mid dfg0 dfg insts = (flips, removes, inserts) /\

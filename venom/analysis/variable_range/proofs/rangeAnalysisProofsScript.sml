@@ -3003,22 +3003,6 @@ Proof
   metis_tac[pred_setTheory.SUBSET_DEF]
 QED
 
-Triviality fold_final_fdom_bound[local]:
-  !fn0 lbl instrs entry final_val inst_map.
-    df_fold_block Forward (range_transfer_opt (dfg_build_function fn0, fn0.fn_blocks))
-      lbl instrs entry = (final_val, inst_map) /\
-    FDOM (range_unwrap entry) SUBSET fn_all_vars fn0 /\
-    (!inst. MEM inst instrs ==> MEM inst (fn_insts fn0)) ==>
-    FDOM (range_unwrap final_val) SUBSET fn_all_vars fn0
-Proof
-  rpt strip_tac >>
-  drule dfAnalyzePropsTheory.df_fold_block_forward_invariant >>
-  disch_then (qspec_then `\v. FDOM (range_unwrap v) SUBSET fn_all_vars fn0` mp_tac) >>
-  impl_tac >- (rpt conj_tac >> fs[] >>
-    rpt strip_tac >> irule range_transfer_fdom_fn_all_vars >> fs[]) >>
-  simp[]
-QED
-
 Triviality range_process_preserves_fdom[local]:
   !fn0 lbl st.
     (∀l. FDOM (range_unwrap (df_widen_boundary NONE st l)) SUBSET fn_all_vars fn0) /\
@@ -3098,28 +3082,6 @@ Proof
   simp[dfAnalyzeWidenDefsTheory.df_process_block_widen_def, LET_THM] >>
   pairarg_tac >> simp[] >>
   IF_CASES_TAC >> simp[]
-QED
-
-Triviality foldl_funion_inst_bound[local]:
-  !(ls:string list) acc f P k v.
-    (∀k' v'. FLOOKUP acc k' = SOME v' ⇒ P v') ∧
-    (∀x k' v'. MEM x ls ∧ FLOOKUP (f x) k' = SOME v' ⇒ P v') ∧
-    FLOOKUP (FOLDL (λa x. (f x) ⊌ a) acc ls) k = SOME v ⇒
-    P v
-Proof
-  Induct_on `ls`
-  >- (rw[] >> metis_tac[])
-  >>
-  rpt gen_tac >> strip_tac >>
-  fs[listTheory.FOLDL, listTheory.MEM] >>
-  first_x_assum (qspecl_then [`f h ⊌ acc`, `f`, `P`, `k`, `v`] mp_tac) >>
-  impl_tac >- (
-    rpt conj_tac
-    >- (rw[finite_mapTheory.FLOOKUP_FUNION] >>
-        Cases_on `FLOOKUP (f h) k'` >> gvs[] >> metis_tac[])
-    >- metis_tac[]
-    >- fs[]) >>
-  simp[]
 QED
 
 Triviality fold_inst_map_fdom_bound[local]:
@@ -3356,22 +3318,6 @@ Proof
       rpt conj_tac >> fs[dfAnalyzeWidenDefsTheory.df_widen_boundary_def,
         dfAnalyzeWidenDefsTheory.df_widen_entry_def,
         finite_mapTheory.FLOOKUP_DEF])
-QED
-
-Triviality range_analyze_boundary_fdom[local]:
-  !fn0 lbl.
-    FDOM (range_unwrap (df_widen_boundary NONE (range_analyze fn0) lbl))
-      SUBSET fn_all_vars fn0
-Proof
-  metis_tac[range_analyze_wl_fdom]
-QED
-
-Triviality range_analyze_entry_fdom[local]:
-  !fn0 lbl.
-    FDOM (range_unwrap (df_widen_entry NONE (range_analyze fn0) lbl))
-      SUBSET fn_all_vars fn0
-Proof
-  metis_tac[range_analyze_wl_fdom]
 QED
 
 Theorem range_at_inst_fdom_outputs:

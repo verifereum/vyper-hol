@@ -734,34 +734,6 @@ Proof
   rpt strip_tac >> simp[Once exec_block_def, get_instruction_def]
 QED
 
-(* Two-state non-OK lift: if the (matching) step results are lifted and the
-   original is non-OK, both exec_blocks pass through and remain lifted. *)
-Triviality nonOK_exec_block_lift2[local]:
-  !fuel ctx bb1 bb2 st1 st2 R_ok R_term.
-    st1.vs_inst_idx < LENGTH bb1.bb_instructions /\
-    st2.vs_inst_idx < LENGTH bb2.bb_instructions /\
-    (!s. step_inst fuel ctx (EL st1.vs_inst_idx bb1.bb_instructions) st1 <> OK s) /\
-    lift_result R_ok R_term R_term
-      (step_inst fuel ctx (EL st1.vs_inst_idx bb1.bb_instructions) st1)
-      (step_inst fuel ctx (EL st2.vs_inst_idx bb2.bb_instructions) st2) ==>
-    lift_result R_ok R_term R_term
-      (exec_block fuel ctx bb1 st1) (exec_block fuel ctx bb2 st2) /\
-    (!s. exec_block fuel ctx bb1 st1 <> OK s)
-Proof
-  rpt gen_tac >> strip_tac >>
-  `exec_block fuel ctx bb1 st1 =
-     step_inst fuel ctx (EL st1.vs_inst_idx bb1.bb_instructions) st1` by
-    (irule exec_block_nonOK_passthrough >> simp[]) >>
-  `!s. step_inst fuel ctx (EL st2.vs_inst_idx bb2.bb_instructions) st2 <> OK s` by
-    (rpt strip_tac >>
-     Cases_on `step_inst fuel ctx (EL st1.vs_inst_idx bb1.bb_instructions) st1` >>
-     gvs[lift_result_def]) >>
-  `exec_block fuel ctx bb2 st2 =
-     step_inst fuel ctx (EL st2.vs_inst_idx bb2.bb_instructions) st2` by
-    (irule exec_block_nonOK_passthrough >> simp[]) >>
-  gvs[]
-QED
-
 (* ===== exec_block two-state simulation (measure induction) ===== *)
 
 (* Walking a block and its rewritten image in lockstep: either the original

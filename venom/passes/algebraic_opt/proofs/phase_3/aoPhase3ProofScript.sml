@@ -46,18 +46,6 @@ Proof
   simp[ao_transform_block_def, ao_resolve_phis_block_def]
 QED
 
-Triviality range_sound_in_range_at_inst[local]:
-  !ra lbl s.
-    range_sound (df_widen_at NONE ra lbl 0) s ==>
-    in_range_state (range_at_inst ra lbl 0) s.vs_vars
-Proof
-  rw[range_at_inst_def] >>
-  Cases_on `df_widen_at NONE ra lbl 0` >>
-  fs[range_sound_def, range_unwrap_def, in_range_state_def,
-     finite_mapTheory.FLOOKUP_EMPTY] >>
-  metis_tac[]
-QED
-
 Triviality MEM_fn_insts_blocks_local[local]:
   !bbs inst bb.
     MEM bb bbs /\ MEM inst bb.bb_instructions ==>
