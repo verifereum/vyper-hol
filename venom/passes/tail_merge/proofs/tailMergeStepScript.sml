@@ -14,7 +14,7 @@ Ancestors
 Libs
   stateEquivTheory stateEquivProofsTheory
   venomExecSemanticsTheory venomInstTheory venomStateTheory
-  execEquivProofsTheory
+  execEquivProofsTheory stepInstBaseLib
 
 Theorem update_var_ee_UNIV:
   !x1 x2 v1 v2 s1 s2.
@@ -473,20 +473,8 @@ val exec_write2_step_sim = prove(
   drule_all exec_write2_sim >> strip_tac >> fs[pair_case_simp]);
 
 (* ================================================================
-   Pre-computed conditional rewrites
-   step_base_expanded: generic 88-way case expansion (computed once)
-   mk_cond_rewrite_fast: per-opcode specialization via SUBS + REWRITE
+   Per-opcode conditional rewrites, from stepInstBaseLib
    ================================================================ *)
-
-val step_base_expanded = PURE_ONCE_REWRITE_CONV [step_inst_base_def]
-  ``step_inst_base inst s``;
-
-fun mk_cond_rewrite_fast opc = let
-  val eq_asm = ASSUME (mk_eq(``inst.inst_opcode``, opc))
-  val subst_th = SUBS [eq_asm] step_base_expanded
-  val resolved = CONV_RULE (RAND_CONV
-    (REWRITE_CONV [TypeBase.case_def_of ``:opcode``])) subst_th
-  in DISCH (concl eq_asm) resolved end;
 
 (* Classify each opcode by its exec category *)
 val all_opcodes = TypeBase.constructors_of ``:opcode``;
@@ -495,7 +483,7 @@ val excluded = [``JMP``, ``JNZ``, ``DJMP``, ``RET``, ``DRET``, ``RETFMP``,
   ``PHI``, ``PARAM``];
 val target_opcodes = filter (fn t => not (exists (aconv t) excluded)) all_opcodes;
 
-val fast_crs = map mk_cond_rewrite_fast target_opcodes;
+val fast_crs = map (SPEC_ALL o opcode_clause) target_opcodes;
 
 fun find_index _ [] _ = NONE
   | find_index x (y::ys) n = if aconv x y then SOME n
@@ -590,7 +578,8 @@ val split_outputs =
    CASE_TAC splits the operand only multiplies the branches. *)
 fun split_outputs_for cr = let
   val step = concl cr
-  val reads_outputs = free_in ``inst.inst_outputs`` step
+  val reads_outputs = can (find_term (fn t =>
+    is_comb t andalso same_const (rator t) ``instruction_inst_outputs``)) step
   val matches_operand =
     can (find_term (same_const (TypeBase.case_const_of ``:operand``))) step
   in if reads_outputs andalso not matches_operand then split_outputs

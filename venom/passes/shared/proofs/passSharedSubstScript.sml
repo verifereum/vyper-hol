@@ -17,7 +17,7 @@ Theory passSharedSubst
 Ancestors
   passSharedDefs venomExecSemantics venomWf venomState venomInst
 Libs
-  listTheory rich_listTheory
+  listTheory rich_listTheory stepInstBaseLib
 
 (* ===================================================================== *)
 (* ===== Operand eval preservation ===================================== *)
@@ -337,24 +337,8 @@ Proof
   gvs[]
 QED
 
-(* Cache each opcode branch once, rather than rewriting the full dispatch
-   separately in every operand-shape case. *)
-val step_inst_base_opcode_rewrites = let
-  val expanded = PURE_ONCE_REWRITE_CONV [step_inst_base_def]
-    ``step_inst_base inst s``
-  fun specialize opc = let
-    val eq_asm = ASSUME (mk_eq (``inst.inst_opcode``, opc))
-    val resolved = CONV_RULE (RAND_CONV (REWRITE_CONV [opcode_case_def]))
-      (SUBS [eq_asm] expanded)
-  in GEN_ALL (DISCH (concl eq_asm) resolved) end
-in map specialize (TypeBase.constructors_of ``:opcode``) end;
-
-fun rewrite_step_inst_base_opcode eq = let
-  val opc = rhs (concl eq)
-  val rewrite = valOf (List.find
-    (fn th => aconv (rhs (fst (dest_imp (concl (SPEC_ALL th))))) opc)
-    step_inst_base_opcode_rewrites)
-in simp[rewrite, eq] end;
+fun rewrite_step_inst_base_opcode eq =
+  simp[opcode_clause (rhs (concl eq)), eq];
 
 Theorem step_inst_base_operands_irrelevant_safe[local]:
   !g inst s.
@@ -807,14 +791,9 @@ val wf_opcode_contra_tac =
   ASM_REWRITE_TAC[] >>
   gvs[is_alloca_op_def];
 
-(* The record rules expose the opcode behind `inst with inst_operands := _`
-   so opcode_case_def picks its branch before simp, which would otherwise
-   simplify every branch of the case. *)
 val pos_opcode_finish_tac =
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  ASM_REWRITE_TAC[instruction_accfupds, instruction_accessors,
-                  opcode_case_def] >>
-  simp (exec_pos_thms @ exec_inst_operands_thms) >>
+  with_opcode_clause (fn ths =>
+    simp (ths @ exec_pos_thms @ exec_inst_operands_thms)) >>
   rpt (BasicProvers.EVERY_CASE_TAC >> gvs[]);
 
 Triviality step_inst_base_pos_safe[local]:

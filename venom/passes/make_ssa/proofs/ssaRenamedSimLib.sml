@@ -21,34 +21,8 @@ open HolKernel boolLib bossLib
 open venomInstTheory venomExecSemanticsTheory
 open stepInstBaseLib
 
-(* Generate per-opcode CONDITIONAL reduction of step_inst_base.
-   Result: inst.inst_opcode = OPC ==> step_inst_base inst s = exec_xxx ... *)
-fun mk_cond_step_base_thm opc_tm =
-  let
-    val inst_var = mk_var("inst", ``:instruction``)
-    val s_var = mk_var("s", ``:venom_state``)
-    (* Build: inst.inst_opcode = OPC ==> (inst with inst_opcode updated_by (\_.OPC)) = inst *)
-    val opc_eq = mk_eq(mk_comb(``instruction_inst_opcode``, inst_var), opc_tm)
-    val update_eq = mk_eq(
-      mk_comb(mk_comb(``instruction_inst_opcode_fupd``,
-                       mk_abs(mk_var("_", ``:opcode``), opc_tm)), inst_var),
-      inst_var)
-    val identity = EQT_ELIM (SIMP_CONV (srw_ss())
-      [instruction_component_equality] (mk_imp(opc_eq, update_eq)))
-    (* Build unconditional: step_inst_base (inst with inst_opcode := OPC) s = ... *)
-    val inst_tm = mk_comb(
-      mk_comb(``instruction_inst_opcode_fupd``,
-              mk_abs(mk_var("_", ``:opcode``), opc_tm)),
-      inst_var)
-    val lhs = list_mk_comb(``step_inst_base``, [inst_tm, s_var])
-    val unconditional = (STEP_INST_BASE_OPCODE_CONV THENC
-      RAND_CONV (QCONV (SIMP_CONV (srw_ss()) []))) lhs
-    (* Compose: replace (inst with inst_opcode := OPC) with inst under hypothesis *)
-    val conditional = REWRITE_RULE [UNDISCH identity] unconditional
-  in DISCH_ALL conditional end
-
-val opc_constructors = TypeBase.constructors_of ``:opcode``
-val step_base_reduces = map mk_cond_step_base_thm opc_constructors
+val step_base_reduces =
+  map (SPEC_ALL o simp_opcode_clause) (TypeBase.constructors_of ``:opcode``)
 
 (* Tactic: rewrite step_inst_base using assumptions for the opcode.
    After Cases_on `inst.inst_opcode`, each goal has inst.inst_opcode = OPC

@@ -41,6 +41,8 @@ Ancestors
   venomInst venomState venomInstProps passSharedTransfer
   allocaRemapSSA stateEquiv passSharedField passSharedFrame opcodeClass
   list rich_list byte arithmetic finite_map alist words pred_set
+Libs
+  stepInstBaseLib
 
 (* Make is_immutable_op reduce automatically in simp/gvs/fs *)
 val _ = augment_srw_ss [rewrites [is_immutable_op_def]];
@@ -3879,18 +3881,9 @@ Proof
   simp[]
 QED
 
-(* Pre-compute step_inst_base per opcode at ML level to avoid
-   large opcode-case expansion in each proof branch. *)
-fun step_base_for opc_tm = let
-  val inst_var = mk_var("inst", ``:instruction``)
-  val s_var = mk_var("s", ``:venom_state``)
-  val lhs_tm = list_mk_comb(``step_inst_base``, [inst_var, s_var])
-  val opc_eq = ASSUME (mk_eq(mk_comb(``instruction_inst_opcode``, inst_var),
-                              opc_tm))
-  val th = REWRITE_CONV [step_inst_base_def] lhs_tm
-  val th2 = CONV_RULE (RHS_CONV
-    (REWRITE_CONV [opc_eq, TypeBase.case_def_of ``:opcode``])) th
-in DISCH (concl opc_eq) th2 end;
+(* step_inst_base per opcode, to avoid the opcode-case expansion in each
+   proof branch. *)
+val step_base_for = SPEC_ALL o opcode_clause;
 
 val step_all_thms = map step_base_for (TypeBase.constructors_of ``:opcode``);
 val step_ordinary_rw : tactic = fn (asl,g) => let

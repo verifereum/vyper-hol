@@ -554,21 +554,11 @@ Theorem terminator_OK_inst_idx_0:
     step_inst_base inst s = OK v ==> v.vs_inst_idx = 0
 Proof
   rpt strip_tac >>
-  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def]
-  >- with_opcode_clause (fn ths => gvs (ths @ [AllCaseEqs(), jump_to_def]))  (* JMP *)
-  >- with_opcode_clause (fn ths => gvs (ths @ [AllCaseEqs(), jump_to_def]))  (* JNZ *)
-  >- with_opcode_clause (fn ths => gvs (ths @ [AllCaseEqs(), jump_to_def]))  (* DJMP *)
-  >- with_opcode_clause (fn ths => gvs (ths @ [AllCaseEqs(), jump_to_def]))  (* RET *)
-  >- with_opcode_clause (fn ths => gvs (ths @ [AllCaseEqs(), jump_to_def]))  (* RETURN *)
-  >- with_opcode_clause (fn ths => gvs (ths @ [AllCaseEqs(), jump_to_def]))  (* REVERT *)
-  >- with_opcode_clause (fn ths => gvs (ths @ [AllCaseEqs(), jump_to_def]))  (* STOP *)
-  >- with_opcode_clause (fn ths => gvs (ths @ [AllCaseEqs(), jump_to_def]))  (* SINK *)
-  >- (with_opcode_clause (fn ths => gvs (ths @ [AllCaseEqs(), jump_to_def])) >>
-      Cases_on `pack_dret_dynamic s.vs_call_entry_fmp pairs s` >>
-      Cases_on `r` >> gvs[])  (* DRET *)
-  >- with_opcode_clause (fn ths => gvs (ths @ [AllCaseEqs(), jump_to_def]))  (* RETFMP *)
-  >- with_opcode_clause (fn ths => gvs (ths @ [AllCaseEqs(), jump_to_def]))  (* SELFDESTRUCT *)
-  >- with_opcode_clause (fn ths => gvs (ths @ [AllCaseEqs(), jump_to_def]))  (* INVALID *)
+  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
+  with_opcode_clause (fn ths => gvs (ths @ [AllCaseEqs(), jump_to_def])) >>
+  (* only DRET is left *)
+  Cases_on `pack_dret_dynamic s.vs_call_entry_fmp pairs s` >>
+  Cases_on `r` >> gvs[]
 QED
 
 

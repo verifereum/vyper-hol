@@ -2648,8 +2648,7 @@ local
   val non_abort_ops = List.filter (fn op_tm =>
     not (List.exists (fn t => aconv t op_tm) abort_ops)) nt_nec_na_ops;
   val base_clauses = map (fn op_tm =>
-    (STEP_INST_BASE_OPCODE_CONV THENC
-       RAND_CONV (QCONV (SIMP_CONV (srw_ss()) [])))
+    STEP_INST_BASE_OPCODE_SIMP_CONV
       ``step_inst_base (inst with inst_opcode := ^op_tm) st``
   ) non_abort_ops;
   val exec_helper_defs = [
