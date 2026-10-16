@@ -405,7 +405,9 @@ Proof
   reverse conj_asm2_tac >- (
     rpt strip_tac >>
     drule_then irule (cj 1 eval_expr_no_control_with_bt)  ) >>
-  ho_match_mp_tac (TypeBase.induction_of``:assignment_target``) >>
+  ho_match_mp_tac
+    (legacyInduction.mutual_ind_from_ops
+       (TypeBase.induction_of``:assignment_target``)) >>
   simp[evaluate_def, bind_apply, ignore_bind_apply, AllCaseEqs(),
        EXISTS_PROD, bind_def] >>
   rpt strip_tac >> gvs[return_def] >>
