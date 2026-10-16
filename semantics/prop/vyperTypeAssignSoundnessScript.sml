@@ -165,7 +165,10 @@ Theorem eval_base_target_scoped_root_assignable:
     ?ty. FLOOKUP env.var_types s = SOME ty /\
          FLOOKUP env.var_assignable s = SOME T
 Proof
-  Induct >> rpt gen_tac >> strip_tac >>
+  ho_match_mp_tac
+    (expr_induction |> Q.SPEC `λ_. T` |> Q.SPEC `P` |>
+     SIMP_RULE (srw_ss()) []) >>
+  rpt conj_tac >> rpt strip_tac >>
   gvs[Once evaluate_def, return_def, raise_def, bind_apply,
       type_check_def, assert_def, lift_option_type_def]
   >- (
