@@ -37,19 +37,6 @@ QED
 
 (* ===== Label preservation ===== *)
 
-Theorem ao_cmp_flip_function_labels:
-  !mid dfg fn lbl dfg0.
-    IS_SOME (lookup_block lbl (ao_cmp_flip_function mid dfg0 dfg fn).fn_blocks) <=>
-    IS_SOME (lookup_block lbl fn.fn_blocks)
-Proof
-  rpt gen_tac >>
-  simp[ao_cmp_flip_function_def, LET_THM] >>
-  pairarg_tac >> gvs[] >>
-  IF_CASES_TAC >> simp[] >>
-  simp[lookup_block_map] >>
-  Cases_on `lookup_block lbl fn.fn_blocks` >> simp[]
-QED
-
 (* ===== Signed comparison flip semantics ===== *)
 
 (* Helper: bool_to_word equivalences *)

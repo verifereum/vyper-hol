@@ -211,33 +211,6 @@ QED
 
 (* Chain definedness holds for empty targets *)
 
-(* Chain invariant preserved by step_inst that doesn't modify chain vars.
-   In SSA form, a variable is written at most once, so once the chain
-   invariant is established, it is maintained by all subsequent instructions
-   (which write different variables). *)
-Theorem ao_iszero_chain_inv_step_preserved:
-  !targets inst fuel ctx st st'.
-    ao_iszero_chain_inv targets st /\
-    step_inst fuel ctx inst st = OK st' /\
-    (* SSA: inst doesn't overwrite any chain variable *)
-    (!v chain k. ALOOKUP targets v = SOME chain /\
-                 k < LENGTH chain ==>
-                 eval_operand (EL k chain) st' =
-                 eval_operand (EL k chain) st) ==>
-    ao_iszero_chain_inv targets st'
-Proof
-  simp[ao_iszero_chain_inv_def] >> rpt strip_tac >>
-  `eval_operand (EL k chain) st' = eval_operand (EL k chain) st` by
-    (qpat_x_assum `!v chain k. _` irule >> simp[] >>
-     qexists_tac `v` >> simp[]) >>
-  `eval_operand (EL (k + 1) chain) st' = eval_operand (EL (k + 1) chain) st` by
-    (qpat_x_assum `!v chain k. _` irule >> simp[] >>
-     qexists_tac `v` >> simp[]) >>
-  gvs[] >>
-  qpat_x_assum `!v chain. ALOOKUP _ _ = SOME _ ==> _` drule >>
-  disch_then (qspec_then `k` mp_tac) >> simp[]
-QED
-
 (* Chain definedness preserved similarly *)
 
 (* Chain invariant compatible with state_equiv on fresh vars:

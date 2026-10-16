@@ -98,42 +98,6 @@ Proof
   simp[range_unwrap_transfer]
 QED
 
-(* Entry state equals range_at_inst at index 0 *)
-Theorem range_entry_eq_at_inst:
-  !fn0 lbl bb.
-    wf_function fn0 /\
-    MEM lbl (cfg_analyze fn0).cfg_dfs_pre /\
-    lookup_block lbl fn0.fn_blocks = SOME bb ==>
-    range_at_inst (range_analyze fn0) lbl 0 =
-    range_entry_state (range_analyze fn0) lbl
-Proof
-  rpt strip_tac >>
-  simp[range_at_inst_def, range_entry_state_def] >>
-  mp_tac (SIMP_RULE std_ss [LET_THM]
-    (REWRITE_RULE [GSYM (SIMP_RULE std_ss [LET_THM] range_analyze_def)]
-    (ISPECL [
-      ``Forward``,
-      ``NONE : (string |-> value_range) option``,
-      ``range_join_opt``,
-      ``range_widen_opt : (string |-> value_range) option
-          -> (string |-> value_range) option
-          -> (string |-> value_range) option``,
-      ``WIDEN_THRESHOLD``,
-      ``range_transfer_opt``,
-      ``range_edge_transfer_opt``,
-      ``(dfg_build_function fn0, fn0.fn_blocks)``,
-      ``OPTION_MAP (\lbl. (lbl, SOME (FEMPTY : string |-> value_range)))
-          (fn_entry_label fn0)``,
-      ``fn0 : ir_function``,
-      ``lbl : string``,
-      ``bb : basic_block``]
-    df_widen_at_inter_transfer))) >>
-  impl_tac >- (
-    conj_tac >- first_assum ACCEPT_TAC >>
-    mp_tac (SIMP_RULE std_ss [LET_THM] range_fixpoint) >> simp[]) >>
-  simp[]
-QED
-
 (* step_inst preserves in_range_state for the next instruction.
    Requires that inst is the actual instruction at (lbl, idx). *)
 Theorem range_step_inv:

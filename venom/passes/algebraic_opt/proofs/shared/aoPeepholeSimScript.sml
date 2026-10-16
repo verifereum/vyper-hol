@@ -7,8 +7,6 @@
  * TOP-LEVEL:
  *   ao_pre_flip_step_equiv   — pre-flip preserves step_inst_base
  *   ao_post_flip_step_equiv  — post-flip preserves step_inst_base
- *   ao_peephole_identity_sim — identity case (returns [inst])
- *   ao_peephole_1to1_sim     — 1-to-1 replacement case
  *
  * For 1-to-N cases, see aoSimCmpScript.sml (state_equiv_1to3 and the
  * per-expansion sims) and aoTransformInstSimScript.sml.
@@ -16,7 +14,7 @@
 Theory aoPeepholeSim
 Ancestors
   algebraicOptDefs aoRules aoRules2
-  aoSegSim analysisSimDefs aoSimArith aoSimPow2
+  execEquivProps analysisSimDefs aoSimArith aoSimPow2
   aoSimCmp valueRangeDefs
   venomExecSemantics venomState venomInst venomWf stateEquiv stateEquivProps
   passSharedDefs
@@ -104,7 +102,7 @@ QED
 
 (* ===== run_insts helpers ===== *)
 
-(* run_insts_def imported from analysisSimDefs (via aoSegSim) *)
+(* run_insts_def imported from analysisSimDefs *)
 
 Theorem run_insts_singleton:
   !fuel ctx inst s.
@@ -146,34 +144,6 @@ QED
 (* When two exec_results are EQUAL, lift_result holds *)
 
 (* ===== Per-opcode peephole simulation ===== *)
-
-(* Identity case: when ao_peephole_inst returns [inst] unchanged.
-   step_inst on the same state gives identical results. *)
-Theorem ao_peephole_identity_sim:
-  !fv inst fuel ctx s.
-    ao_peephole_inst mid dfg ra lbl idx inst = [inst] ==>
-    lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
-      (step_inst fuel ctx inst s)
-      (run_insts fuel ctx [inst] s)
-Proof
-  rw[run_insts_singleton, lift_result_same]
-QED
-
-(* 1-to-1 case: when ao_peephole_inst returns [inst'] where
-   step_inst_base inst' s = step_inst_base inst s.
-   Since both operate on the same state, the results are identical. *)
-Theorem ao_peephole_1to1_sim:
-  !fv inst inst' fuel ctx s.
-    inst.inst_opcode <> INVOKE /\
-    inst'.inst_opcode <> INVOKE /\
-    step_inst_base inst' s = step_inst_base inst s ==>
-    lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
-      (step_inst fuel ctx inst s)
-      (run_insts fuel ctx [inst'] s)
-Proof
-  rw[run_insts_singleton, step_inst_non_invoke] >>
-  simp[lift_result_same]
-QED
 
 (* ===== Structural properties of ao_peephole_inst ===== *)
 
@@ -486,24 +456,6 @@ Proof
   simp[lift_result_same]
 QED
 
-(* Helper: if replacement singleton has equiv step_inst_base OR original errors,
-   the simulation disjunction holds. *)
-Triviality sim_or_error[local]:
-  !fv fuel ctx inst inst' s.
-    inst'.inst_opcode <> INVOKE /\
-    (step_inst_base inst' s = step_inst_base inst s \/
-     ?e. step_inst_base inst s = Error e) ==>
-    (?e. step_inst_base inst s = Error e) \/
-    lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
-      (step_inst_base inst s)
-      (run_insts fuel ctx [ao_post_flip_inst inst'] s)
-Proof
-  rpt strip_tac >- (
-    DISJ2_TAC >> irule singleton_post_flip_sim >> simp[]
-  ) >>
-  DISJ1_TAC >> metis_tac[]
-QED
-
 (* When an operand evaluates to NONE in a binary op, step_inst_base errors *)
 
 (* For binary opcodes, step_inst_base = exec_pure2 of appropriate function.
@@ -571,27 +523,6 @@ QED
 
 
 (* Combining: for binary opcodes with a NONE operand, step_inst_base errors *)
-
-(* 1-to-1 replacement sim via sim_or_error: if the rule theorem gives
-   equality conditional on IS_SOME, the binary op errors when NONE.
-   Works for binary opcodes (ADD,SUB,MUL,AND,OR,XOR,EQ,GT,LT,...).
-   Usage: irule binary_1to1_sim >> simp[] >> conj_tac
-          >- (rule proof or error proof)  *)
-Triviality binary_1to1_sim[local]:
-  !fv fuel ctx inst inst' inst0 s.
-    inst'.inst_opcode <> INVOKE /\
-    step_inst_base inst0 s = step_inst_base inst s /\
-    (step_inst_base inst' s = step_inst_base inst0 s \/
-     ?e. step_inst_base inst0 s = Error e) ==>
-    (?e. step_inst_base inst s = Error e) \/
-    lift_result (state_equiv fv) (execution_equiv fv) (execution_equiv fv)
-      (step_inst_base inst s)
-      (run_insts fuel ctx [ao_post_flip_inst inst'] s)
-Proof
-  rpt gen_tac >> strip_tac >> fs[]
-  >- (DISJ2_TAC >> irule singleton_post_flip_sim >> fs[])
-  >- metis_tac[]
-QED
 
 (* ===== Per-opcode simulation helpers ===== *)
 

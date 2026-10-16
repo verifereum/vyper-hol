@@ -760,31 +760,6 @@ Proof
       fs[strict_dom_iszero_inv_def] >> metis_tac[])
 QED
 
-(* idx=0 specialisation (within_block holds initially). *)
-Theorem strict_dom_iszero_inv_preserved:
-  !fn0 dfg bb fuel ctx s s'.
-    wf_function fn0 /\ wf_ssa fn0 /\
-    dfg = dfg_build_function fn0 /\
-    MEM bb fn0.fn_blocks /\
-    bb.bb_label = s.vs_current_bb /\
-    exec_block fuel ctx bb s = OK s' /\
-    s.vs_inst_idx = 0 /\
-    ~s'.vs_halted /\
-    EVERY inst_wf bb.bb_instructions /\
-    fn_reachable fn0 s.vs_current_bb /\
-    strict_dom_iszero_inv fn0 dfg s ==>
-    strict_dom_iszero_inv fn0 dfg s'
-Proof
-  rpt gen_tac >> strip_tac >>
-  `bb_well_formed bb` by fs[wf_function_def] >>
-  qspecl_then [`fn0`, `dfg`, `bb`, `fuel`, `ctx`, `s`, `s'`]
-    mp_tac strict_dom_iszero_inv_exec_preserved >>
-  impl_tac
-  >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-      gvs[wbiz_initial, bb_well_formed_def]) >>
-  simp[]
-QED
-
 (* exec_block starting at the PHI-prefix boundary preserves strict_dom_iszero_inv,
    given the invariant holds at the post-eval_phis state. *)
 Theorem strict_dom_iszero_inv_exec_from_phi_prefix:

@@ -22,20 +22,6 @@ Libs
 
 (* ===== Block-level preservation helpers ===== *)
 
-Triviality mem_bb_mem_fn_insts[local]:
-  !inst bb fn0.
-    MEM inst bb.bb_instructions /\ MEM bb fn0.fn_blocks ==>
-    MEM inst (fn_insts fn0)
-Proof
-  rpt strip_tac >> simp[fn_insts_def] >>
-  Induct_on `fn0.fn_blocks` >> simp[fn_insts_blocks_def] >>
-  rpt strip_tac >>
-  qpat_x_assum `_ = fn0.fn_blocks` (SUBST_ALL_TAC o SYM) >>
-  gvs[fn_insts_blocks_def, listTheory.MEM_APPEND] >>
-  first_x_assum (qspec_then `fn0 with fn_blocks := v` mp_tac) >>
-  simp[]
-QED
-
 (* ===== Chain structure helpers ===== *)
 
 Triviality chain_last_step[local]:
@@ -123,74 +109,6 @@ QED
 
 (* ===== Successor CFG ===== *)
 
-Triviality cfg_successor_in_dfs_pre[local]:
-  !fn0 bb fuel ctx s v.
-    wf_function fn0 /\
-    EVERY inst_wf bb.bb_instructions /\
-    MEM bb fn0.fn_blocks /\
-    MEM bb.bb_label (cfg_analyze fn0).cfg_dfs_pre /\
-    s.vs_inst_idx = 0 /\
-    exec_block fuel ctx bb s = OK v ==>
-    MEM v.vs_current_bb (cfg_analyze fn0).cfg_dfs_pre
-Proof
-  rpt strip_tac >>
-  `bb_well_formed bb` by fs[wf_function_def] >>
-  `MEM v.vs_current_bb (bb_succs bb)` by
-    (qspecl_then [`fuel`, `ctx`, `bb`, `s`, `v`]
-       mp_tac exec_block_current_bb_in_succs >>
-     disch_then match_mp_tac >>
-     simp[] >>
-     fs[bb_well_formed_def] >> rpt strip_tac >>
-     CCONTR_TAC >>
-     `i < LENGTH bb.bb_instructions` by DECIDE_TAC >>
-     res_tac >> gvs[]) >>
-  `ALL_DISTINCT (fn_labels fn0)` by fs[wf_function_def] >>
-  `MEM v.vs_current_bb (cfg_succs_of (cfg_analyze fn0) bb.bb_label)` by
-    (irule bb_succs_in_cfg_succs >> simp[]) >>
-  `set (cfg_analyze fn0).cfg_dfs_pre =
-   {lbl | cfg_reachable_of (cfg_analyze fn0) lbl}` by
-    metis_tac[cfg_analyze_reachable_sets] >>
-  `cfg_reachable_of (cfg_analyze fn0) bb.bb_label` by
-    (fs[pred_setTheory.EXTENSION] >> metis_tac[]) >>
-  `?entry_bb. entry_block fn0 = SOME entry_bb` by
-    (Cases_on `fn0.fn_blocks` >>
-     gvs[wf_function_def, fn_has_entry_def, entry_block_def]) >>
-  `cfg_path (cfg_analyze fn0) entry_bb.bb_label bb.bb_label` by
-    metis_tac[cfg_analyze_semantic_reachability] >>
-  `cfg_path (cfg_analyze fn0) entry_bb.bb_label v.vs_current_bb` by
-    (simp[cfg_path_def] >>
-     match_mp_tac (CONJUNCT2 (SPEC_ALL relationTheory.RTC_RULES_RIGHT1)) >>
-     qexists_tac `bb.bb_label` >>
-     fs[cfg_path_def]) >>
-  `cfg_reachable_of (cfg_analyze fn0) v.vs_current_bb` by
-    metis_tac[cfg_analyze_semantic_reachability] >>
-  fs[pred_setTheory.EXTENSION] >> metis_tac[]
-QED
-
-Theorem ao_block_inv_successor:
-  !fn0 dfg ra bb fuel ctx s v.
-    dfg = dfg_build_function fn0 /\
-    ra = range_analyze fn0 /\
-    wf_function fn0 /\
-    ssa_form fn0 /\
-    EVERY inst_wf (fn_insts fn0) /\
-    MEM bb fn0.fn_blocks /\
-    MEM bb.bb_label (cfg_analyze fn0).cfg_dfs_pre /\
-    s.vs_inst_idx = 0 /\ s.vs_current_bb = bb.bb_label /\
-    range_sound (df_widen_at NONE ra bb.bb_label 0) s /\
-    ao_dfg_inv dfg (s with vs_inst_idx := 0) /\
-    exec_block fuel ctx bb s = OK v /\
-    range_sound (df_widen_at NONE ra v.vs_current_bb 0) v ==>
-    range_sound (df_widen_at NONE ra v.vs_current_bb 0) v /\
-    MEM v.vs_current_bb (cfg_analyze fn0).cfg_dfs_pre
-Proof
-  rpt strip_tac
-  >- simp[]
-  >- (`EVERY inst_wf bb.bb_instructions` by
-        metis_tac[mem_bb_mem_fn_insts, listTheory.EVERY_MEM] >>
-      metis_tac[cfg_successor_in_dfs_pre])
-QED
-
 (* ===== Initial state ===== *)
 
 Triviality chain_el_step_output[local]:
@@ -265,33 +183,6 @@ Proof
       qexists_tac `inst'` >> simp[listTheory.MEM_APPEND])
 QED
 
-Theorem ao_chain_inv_initial:
-  !fn fn0 targets s.
-    fn0 = fn with fn_blocks :=
-      MAP (\bb. bb with bb_instructions :=
-        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks /\
-    targets = ao_compute_fn_iszero_targets fn0 /\
-    ssa_form fn /\ wf_function fn /\
-    (!x inst. MEM inst (fn_insts fn) /\ MEM x inst.inst_outputs ==>
-      lookup_var x s = NONE) ==>
-    ao_iszero_chain_inv targets s
-Proof
-  rpt strip_tac >> gvs[] >>
-  simp[ao_iszero_chain_inv_def] >> rpt strip_tac >>
-  `0 < k + 1 /\ k + 1 < LENGTH chain` by simp[] >>
-  qpat_x_assum `ALOOKUP _ v = SOME chain` mp_tac >>
-  simp[ao_compute_fn_iszero_targets_def, ao_compute_iszero_targets_def] >>
-  strip_tac >>
-  drule_all chain_el_foldl_output >> strip_tac
-  >> fs[fn_insts_def] >>
-  drule fn0_output_is_fn_output_helper >>
-  disch_then drule >>
-  strip_tac >>
-  first_x_assum drule_all >> strip_tac >>
-  qpat_x_assum `eval_operand (Var _) _ = _` mp_tac >>
-  REWRITE_TAC[eval_operand_def] >> gvs[]
-QED
-
 Triviality chain_el_is_output[local]:
   !fn fn0 targets v chain k.
     fn0 = fn with fn_blocks :=
@@ -355,17 +246,5 @@ Proof
    HD (SND (dfs_pre_walk (build_succs (h::t)) [] h.bb_label)) = h.bb_label` by
     (irule dfs_pre_walk_entry_hd >> simp[]) >>
   Cases_on `SND (dfs_pre_walk (build_succs (h::t)) [] h.bb_label)` >> gvs[]
-QED
-
-Theorem ao_range_sound_initial:
-  !fn0 ra s.
-    ra = range_analyze fn0 /\
-    wf_function fn0 /\
-    fn_entry_label fn0 = SOME s.vs_current_bb /\
-    (df_widen_at NONE ra s.vs_current_bb 0 = NONE \/
-     df_widen_at NONE ra s.vs_current_bb 0 = SOME FEMPTY) ==>
-    range_sound (df_widen_at NONE ra s.vs_current_bb 0) s
-Proof
-  rpt strip_tac >> gvs[range_sound_fempty, range_sound_bottom]
 QED
 

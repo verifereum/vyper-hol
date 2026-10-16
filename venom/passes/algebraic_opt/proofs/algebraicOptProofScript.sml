@@ -5,7 +5,7 @@
 Theory algebraicOptProof
 Ancestors
   algebraicOptDefs
-  aoPhase1Proof aoPhase2Proof aoPhase3Proof aoPhase4Proof aoPhase5Proof
+  aoPhase1Proof aoPhase3Proof aoPhase4Proof aoPhase5Proof
   aoPreservation aoTargetProps
   stateEquiv stateEquivProps execEquivProps
   venomExecSemantics venomExecProofs venomWf venomState venomInst

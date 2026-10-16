@@ -104,17 +104,6 @@ QED
 
 (* ===== CMP Flip Structural Properties ===== *)
 
-(* When instruction is not in any of the three lists, cmp_flip is identity *)
-Theorem ao_cmp_flip_identity:
-  !mid flips removes inserts inst.
-    ALOOKUP flips inst.inst_id = NONE /\
-    ~MEM inst.inst_id removes /\
-    ALOOKUP inserts inst.inst_id = NONE ==>
-    ao_cmp_flip_apply_inst mid flips removes inserts inst = [inst]
-Proof
-  rw[ao_cmp_flip_apply_inst_def]
-QED
-
 (* Flip case: produces a singleton *)
 
 (* Remove case: produces a singleton with ASSIGN *)

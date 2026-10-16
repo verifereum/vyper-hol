@@ -26,12 +26,6 @@ End
 
 val _ = delsimps ["within_block_iszero_inv_def"]
 
-Theorem wbiz_initial:
-  !fn0 bb s. within_block_iszero_inv fn0 bb 0 s
-Proof
-  simp[within_block_iszero_inv_def]
-QED
-
 (* Every instruction in the PHI prefix is a PHI. *)
 Theorem phi_prefix_el_phi:
   !insts j. j < phi_prefix_length insts ==> (EL j insts).inst_opcode = PHI
@@ -50,15 +44,6 @@ Proof
   rw[within_block_iszero_inv_def] >>
   `(EL j bb.bb_instructions).inst_opcode = PHI` by metis_tac[phi_prefix_el_phi] >>
   gvs[]
-QED
-
-Theorem wbiz_mono:
-  !fn0 bb idx idx' s.
-    within_block_iszero_inv fn0 bb idx s /\ idx' <= idx ==>
-    within_block_iszero_inv fn0 bb idx' s
-Proof
-  rw[within_block_iszero_inv_def] >> rpt strip_tac >>
-  `j < idx` by DECIDE_TAC >> metis_tac[]
 QED
 
 Theorem wbiz_inst_idx:

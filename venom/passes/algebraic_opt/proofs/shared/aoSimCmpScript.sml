@@ -7,12 +7,11 @@
  *
  * Helper:
  *   state_equiv_extra_var   — inserting a fresh var preserves state_equiv
- *   run_insts_2step         — run_insts for 2-instruction sequences
  *)
 Theory aoSimCmp
 Ancestors
   algebraicOptDefs aoRules
-  aoSegSim analysisSimDefs valueRangeDefs rangeAnalysisDefs
+  execEquivProps analysisSimDefs valueRangeDefs rangeAnalysisDefs
   venomExecSemantics venomState venomInst venomWf
   stateEquiv stateEquivProps passSharedDefs
   passSimulationDefs
@@ -72,24 +71,6 @@ Proof
 QED
 
 (* ===== run_insts helpers ===== *)
-
-(* 2-step run_insts: expand and simplify for non-INVOKE instructions *)
-Theorem run_insts_2step:
-  !fuel ctx i1 i2 s.
-    i1.inst_opcode <> INVOKE /\
-    i2.inst_opcode <> INVOKE ==>
-    run_insts fuel ctx [i1; i2] s =
-      case step_inst_base i1 s of
-        OK s' => step_inst_base i2 s'
-      | err => err
-Proof
-  rpt strip_tac >>
-  simp[Once run_insts_def, step_inst_non_invoke] >>
-  simp[Once run_insts_def, step_inst_non_invoke] >>
-  simp[Once run_insts_def] >>
-  Cases_on `step_inst_base i1 s` >> simp[] >>
-  Cases_on `step_inst_base i2 v` >> simp[]
-QED
 
 (* 3-step run_insts *)
 
