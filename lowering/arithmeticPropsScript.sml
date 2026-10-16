@@ -383,6 +383,27 @@ Definition in_type_range_def:
       0 ≤ v ∧ v < &(2 ** bits)
 End
 
+(* Signed bounds roundtrip independently of the compiler/evaluation context. *)
+Theorem w2i_i2w_neg_pow2:
+  ∀bits. bits ≤ 255 ⇒
+    w2i (i2w (-&(2 ** bits)) : bytes32) = -&(2 ** bits)
+Proof
+  rpt strip_tac >>
+  `2 ** bits ≤ 2 ** 255` by simp[bitTheory.TWOEXP_MONO2] >>
+  irule integer_wordTheory.w2i_i2w_neg >>
+  simp[wordsTheory.INT_MIN_def]
+QED
+
+Theorem w2i_i2w_pow2_sub1:
+  ∀bits. bits ≤ 255 ⇒
+    w2i (i2w (&(2 ** bits - 1)) : bytes32) = &(2 ** bits - 1)
+Proof
+  rpt strip_tac >>
+  `2 ** bits ≤ 2 ** 255` by simp[bitTheory.TWOEXP_MONO2] >>
+  irule integer_wordTheory.w2i_i2w_pos >>
+  simp[wordsTheory.INT_MIN_def, integer_wordTheory.INT_MAX_def]
+QED
+
 Theorem unsigned_in_range_not_gt_hi[local]:
   ∀ty v lo hi.
     in_type_range ty (math_val ty v) ∧
@@ -863,15 +884,12 @@ Resume compile_clamp_ok[signed]:
     gvs[type_bounds_def, in_type_range_def, math_val_def, LET_THM,
         integer_wordTheory.WORD_LTi, integer_wordTheory.WORD_GTi] >>
     `type_bits ty − 1 ≤ 255` by simp[] >>
-    `2 ** (type_bits ty − 1) ≤ 2 ** 255` by simp[bitTheory.TWOEXP_MONO2] >>
     `w2i (i2w (-&(2 ** (type_bits ty − 1))) : bytes32) =
        -&(2 ** (type_bits ty − 1))` by (
-      irule integer_wordTheory.w2i_i2w_neg >>
-      simp[wordsTheory.INT_MIN_def]) >>
+      irule w2i_i2w_neg_pow2 >> first_assum ACCEPT_TAC) >>
     `w2i (i2w (&(2 ** (type_bits ty − 1) − 1)) : bytes32) =
        &(2 ** (type_bits ty − 1) − 1)` by (
-      irule integer_wordTheory.w2i_i2w_pos >>
-      simp[wordsTheory.INT_MIN_def, integer_wordTheory.INT_MAX_def]) >>
+      irule w2i_i2w_pow2_sub1 >> first_assum ACCEPT_TAC) >>
     asm_rewrite_tac[] >> intLib.COOPER_TAC) >>
   `bool_to_word (bool_to_word (v < lo) = 0w) &&
    bool_to_word (bool_to_word (v > hi) = 0w) ≠ 0w` by gvs[] >>

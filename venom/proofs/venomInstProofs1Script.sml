@@ -361,7 +361,8 @@ Proof
 QED
 
 val effect_free_opcode_tac =
-  fs[step_inst_base_def] >>
+  qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
+  simp[Once step_inst_base_def] >> strip_tac >>
   FIRST [
     drule exec_pure1_state_equiv >> simp[],
     drule exec_pure2_state_equiv >> simp[],

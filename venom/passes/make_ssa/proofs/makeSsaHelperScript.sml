@@ -868,15 +868,19 @@ Proof
   ONCE_REWRITE_TAC[step_inst_base_def] >>
   Cases_on `inst.inst_opcode` >>
   PURE_REWRITE_TAC[venomInstTheory.opcode_case_def] >>
-  gvs[exec_pure1_def] >>
-  gvs[exec_pure2_def] >>
-  gvs[exec_pure3_def] >>
-  gvs[exec_read0_def, exec_read1_def] >>
-  gvs[exec_write2_def, exec_alloca_def] >>
-  gvs[exec_ext_call_def] >>
-  gvs[exec_delegatecall_def] >>
-  gvs[exec_create_def] >>
-  gvs[extract_venom_result_def] >>
+  (* Reuse helper preservation rather than unfolding pure computations. *)
+  TRY (strip_tac >>
+    FIRST [drule venomInstProofs1Theory.exec_pure1_state_equiv,
+           drule venomInstProofs1Theory.exec_pure2_state_equiv,
+           drule venomInstProofs1Theory.exec_pure3_state_equiv,
+           drule venomInstProofs1Theory.exec_read0_state_equiv,
+           drule venomInstProofs1Theory.exec_read1_state_equiv] >>
+    simp_tac std_ss [state_equiv_def, execution_equiv_def] >>
+    strip_tac >> first_x_assum (qspec_then `x` mp_tac) >>
+    asm_simp_tac std_ss [IN_DEF] >> NO_TAC) >>
+  (* Unfold only the goal, without the ambient SSA/frame simpset. *)
+  simp_tac std_ss [exec_write2_def, exec_alloca_def, exec_ext_call_def,
+    exec_delegatecall_def, exec_create_def, extract_venom_result_def] >>
   gvs[AllCaseEqs(), LET_THM] >>
   gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
   gvs[jump_to_def, mcopy_def, mstore_def, istore_def, mstore8_def] >>
