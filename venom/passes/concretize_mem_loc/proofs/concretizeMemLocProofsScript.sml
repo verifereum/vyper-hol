@@ -6618,8 +6618,11 @@ Proof
   pop_assum strip_assume_tac >>
   Cases_on `step_inst fuel ctx inst s1` >>
   Cases_on `step_inst fuel ctx (concretize_inst amap inst) s2` >>
-  gvs[lift_result_def] >>
-  (* All non-matching constructor pairs eliminated by F in assumptions.
+  (* Simplify the step relation only: rewriting the whole context also
+     unfolds lift_result throughout the large induction hypothesis. *)
+  qpat_x_assum `lift_result _ _ _ _ _` mp_tac >>
+  simp[lift_result_def] >> strip_tac >>
+  (* Non-matching constructor pairs have a false step relation and close.
      Remaining same-constructor pairs: OK/OK needs terminator handling,
      Halt/Halt, Abort/Abort, IntRet/IntRet just witness with init'. *)
   TRY (qexists `init'` >> simp[lift_result_def] >> NO_TAC) >>

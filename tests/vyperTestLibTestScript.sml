@@ -59,7 +59,7 @@ val _ = expect_scripts "unresolved fixture dependency" true
   [("t", JSON.OBJECT [item_type "test",
                       ("deps", JSON.ARRAY [JSON.STRING "missing"])])];
 val _ = expect_scripts "excluded test with an unresolved dependency" false
-  [("test_abi_arg_wrapped_complex_member_head",
+  [("test_ecrecover_oog_handling",
     JSON.OBJECT [item_type "test",
                  ("deps", JSON.ARRAY [JSON.STRING "missing"])])];
 val _ = expect_scripts "fixture whose traces fail to decode" true
