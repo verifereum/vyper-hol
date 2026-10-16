@@ -692,7 +692,7 @@ Theorem no_fallthrough_eval_no_success:
       stmts_no_fallthrough ss ==>
       eval_stmts cx ss st <> (INL (), st'))
 Proof
-  ho_match_mp_tac stmt_induction >>
+  ho_match_mp_tac (legacyInduction.mutual_ind_from_ops stmt_induction) >>
   rw[stmt_no_fallthrough_def, evaluate_def, bind_def, return_def, raise_def,
      pairTheory.UNCURRY, finally_def, ignore_bind_def, switch_BoolV_def, AllCaseEqs()] >>
   TRY (rename1 `eval_stmt cx (Raise reason) st <> _` >>
@@ -809,7 +809,7 @@ Theorem stmt_no_control_escape_eval_no_loop_control:
      eval_stmts cx ss st = (INR exn,st') ==>
      exn <> BreakException /\ exn <> ContinueException)
 Proof
-  ho_match_mp_tac stmt_induction >>
+  ho_match_mp_tac (legacyInduction.mutual_ind_from_ops stmt_induction) >>
   rw[stmt_no_control_escape_def, evaluate_def, bind_def, ignore_bind_def,
      finally_def, try_def, switch_BoolV_def, return_def, raise_def,
      pairTheory.UNCURRY, AllCaseEqs()] >>
