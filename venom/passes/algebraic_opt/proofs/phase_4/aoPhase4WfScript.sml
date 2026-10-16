@@ -727,7 +727,7 @@ QED
 
 (* ===== fn_inst_ids_distinct helpers ===== *)
 
-Triviality ao_fresh_id_inj[local]:
+Triviality ao_fresh_id_inj_slot[local]:
   !mid id1 id2 s. ao_fresh_id mid id1 s = ao_fresh_id mid id2 s ==> id1 = id2
 Proof
   simp[ao_fresh_id_def]
@@ -875,7 +875,7 @@ Proof
    ?cmp_id. yi.inst_id = ao_fresh_id mid cmp_id 0`
     by metis_tac[apply_inst_id_cases]
   >- (`ao_fresh_id mid x2 0 > mid` by simp[ao_fresh_id_gt] >> decide_tac)
-  >> `cmp_id = x2` by metis_tac[ao_fresh_id_inj] >>
+  >> `cmp_id = x2` by metis_tac[ao_fresh_id_inj_slot] >>
   `ao_fresh_id mid x2 0 > mid` by simp[ao_fresh_id_gt] >>
   `yi.inst_id > mid` by metis_tac[] >>
   `yi.inst_id <> inst.inst_id` by decide_tac >>
@@ -883,7 +883,7 @@ Proof
      ALOOKUP inserts inst.inst_id = SOME (cmp_out, fresh_v, cmp_id') /\
      yi.inst_id = ao_fresh_id mid cmp_id' 0`
     by metis_tac[apply_inst_fresh_has_insert] >>
-  `cmp_id' = x2` by metis_tac[ao_fresh_id_inj] >>
+  `cmp_id' = x2` by metis_tac[ao_fresh_id_inj_slot] >>
   `ALOOKUP inserts inst.inst_id = SOME (cmp_out, fresh_v, x2)` by
     metis_tac[] >>
   mp_tac (Q.SPECL [`inserts`, `h_id`, `inst.inst_id`,
