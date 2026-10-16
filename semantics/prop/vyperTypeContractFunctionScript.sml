@@ -142,11 +142,11 @@ Proof
   TRY (rename1 `FLOOKUP env1.bare_globals (src,id) = SOME ty` >>
        qpat_x_assum `!k ty. FLOOKUP env1.bare_globals k = SOME ty ==> FLOOKUP env1.toplevel_vtypes k = SOME (Type ty)` drule >>
        simp[vtype_annotation_ok_def] >> NO_TAC) >>
-  TRY (metis_tac[] >> NO_TAC) >>
   (* Subscript: the induction hypothesis has static_maps_transfer_env unfolded *)
-  qpat_x_assum `!env1 env2 vt. well_typed_expr env1 e /\ _ ==> _`
-    (qspecl_then [`env1`,`env2`,`vt'`] mp_tac) >>
-  impl_tac >- gvs[static_maps_transfer_env_def] >>
+  TRY (qpat_x_assum `!env1 env2 vt. well_typed_expr env1 e /\ _ ==> _`
+         (qspecl_then [`env1`,`env2`,`vt'`] mp_tac) >>
+       impl_tac >- gvs[static_maps_transfer_env_def] >>
+       metis_tac[] >> NO_TAC) >>
   metis_tac[]
 QED
 
