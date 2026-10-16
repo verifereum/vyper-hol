@@ -1011,8 +1011,14 @@ Proof
       ?ety. vt = Type ety /\
         well_typed_expr (artifact_env artifact mods current_src) e /\
         well_formed_type (type_env_all_modules mods) ety` by
-    (Induct_on `e` >>
-     rw[constant_expr_def, Once well_typed_expr_def]
+    (ho_match_mp_tac
+       (expr_induction |> Q.SPEC `P` |> Q.SPEC `λ_. T` |>
+        SIMP_RULE (srw_ss()) []) >>
+     rw[constant_expr_def, Once well_typed_expr_def] >>
+     (* the non-place constructors have type_place_expr = NONE *)
+     TRY (qpat_x_assum `type_place_expr _ _ = SOME _`
+            (mp_tac o ONCE_REWRITE_RULE [well_typed_expr_def]) >>
+          simp[] >> NO_TAC)
      >- (PairCases_on `p` >>
          gvs[constant_expr_def, declared_constant_def] >>
          `contract_namespaces_ok F mods` by
@@ -1037,7 +1043,10 @@ Proof
          Cases_on `t` >> gvs[assignable_type_def] >>
          Cases_on `FLOOKUP (type_env_all_modules mods) p` >>
          gvs[] >> Cases_on `x` >> gvs[])
-     >- (Cases_on
+     >- (qpat_x_assum `type_place_expr _ (Subscript _ _ _) = SOME _`
+           (mp_tac o ONCE_REWRITE_RULE [well_typed_expr_def]) >>
+         rw[] >>
+         Cases_on
            `type_place_expr (artifact_env artifact mods current_src) e` >>
          gvs[] >>
          Cases_on `ety` >>
