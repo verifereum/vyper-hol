@@ -9701,7 +9701,8 @@ Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result_nonstatic]:
   qpat_x_assum `if F then _ else _` mp_tac >>
   pure_rewrite_tac[boolTheory.COND_CLAUSES] >> strip_tac >>
   drule_all extcall_nonstatic_args_runtime_typed_dest >> strip_tac >>
-  `x <> [] /\ TL x <> []` by (drule_all extcall_nonstatic_args_runtime_typed_nonempty >> simp[]) >>
+  `x <> [] /\ TL x <> []` by
+    drule_all_then ACCEPT_TAC extcall_nonstatic_args_runtime_typed_nonempty >>
   reverse(Cases_on `args_st.outcomes`) >- suspend "Expr_Call_ExtCall_nonstatic_oracle" >>
   POP_ASSUM_LIST (fn ths => MAP_EVERY ASSUME_TAC (List.filter
     (fn th => not (is_forall (concl th) andalso

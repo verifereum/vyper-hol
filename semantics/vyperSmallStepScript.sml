@@ -832,13 +832,23 @@ val apply_vals_pre_def = apply_vals_def
             UNCURRY, sum_CASE_rator, option_CASE_rator, COND_RATOR]
   |> cv_auto_trans_pre "apply_vals_pre";
 
+val APPLY_VALS_PRE_CASE_TAC =
+  simp[Once apply_vals_pre_def] >>
+  gvs[check_def, type_check_def, assert_def] >>
+  strip_tac >> gvs[];
+
 Theorem apply_vals_pre[cv_pre]:
   ∀a b c d. apply_vals_pre a b c d
 Proof
-  ho_match_mp_tac apply_vals_ind \\ rw[]
-  \\ rw[Once apply_vals_pre_def]
-  \\ gvs[check_def, type_check_def, assert_def]
-  \\ strip_tac \\ gvs[]
+  ho_match_mp_tac apply_vals_ind \\ rw[] >|
+  [APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC,
+   APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC,
+   APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC,
+   APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC,
+   APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC,
+   APPLY_VALS_PRE_CASE_TAC] >>
+  TRY (Cases_on `vs` >> simp[]) >>
+  rpt strip_tac >> gvs[optionTheory.IS_SOME_DEF]
 QED
 
 Definition nextk_def[simp]:
@@ -1666,8 +1676,8 @@ Proof
       CASE_TAC >> simp[return_def, raise_def] >>
       CASE_TAC >> simp[] >>
       CASE_TAC >> simp[] >>
-      CASE_TAC >> simp[] >>
-      CASE_TAC >> simp[] >>
+      ALL_TAC >| [CASE_TAC, CASE_TAC, CASE_TAC, CASE_TAC, CASE_TAC] >> simp[] >>
+      ALL_TAC >| [CASE_TAC, CASE_TAC, CASE_TAC, CASE_TAC, CASE_TAC, CASE_TAC] >> simp[] >>
       CASE_TAC >> simp[])
   (* ===== Chain interaction builtins ===== *)
   (* All 5 new cases: CPS eval_exprs then continuation matches big-step body.
@@ -1821,16 +1831,22 @@ Resume eval_cps_eq[static_some_value]:
 QED
 Resume eval_cps_eq[nonstatic_none_noneT]:
   EXT_CALL_CPS_PREP_TAC >>
-  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
-  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
-  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  ntac 2 EXT_CALL_CPS_CASES_TAC >> ntac 2 EXT_CALL_CPS_CASES_TAC >>
+  ntac 2 EXT_CALL_CPS_CASES_TAC >> ntac 2 EXT_CALL_CPS_CASES_TAC >>
+  ntac 2 EXT_CALL_CPS_CASES_TAC >> ntac 2 EXT_CALL_CPS_CASES_TAC >>
+  ntac 2 EXT_CALL_CPS_CASES_TAC >> ntac 2 EXT_CALL_CPS_CASES_TAC >>
+  ntac 2 EXT_CALL_CPS_CASES_TAC >> ntac 2 EXT_CALL_CPS_CASES_TAC >>
+  ntac 2 EXT_CALL_CPS_CASES_TAC >> ntac 2 EXT_CALL_CPS_CASES_TAC >>
   EXT_CALL_CPS_FINISH_TAC
 QED
 Resume eval_cps_eq[nonstatic_none_value]:
   EXT_CALL_CPS_PREP_TAC >>
-  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
-  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
-  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  ntac 2 EXT_CALL_CPS_CASES_TAC >> ntac 2 EXT_CALL_CPS_CASES_TAC >>
+  ntac 2 EXT_CALL_CPS_CASES_TAC >> ntac 2 EXT_CALL_CPS_CASES_TAC >>
+  ntac 2 EXT_CALL_CPS_CASES_TAC >> ntac 2 EXT_CALL_CPS_CASES_TAC >>
+  ntac 2 EXT_CALL_CPS_CASES_TAC >> ntac 2 EXT_CALL_CPS_CASES_TAC >>
+  ntac 2 EXT_CALL_CPS_CASES_TAC >> ntac 2 EXT_CALL_CPS_CASES_TAC >>
+  ntac 2 EXT_CALL_CPS_CASES_TAC >> ntac 2 EXT_CALL_CPS_CASES_TAC >>
   EXT_CALL_CPS_FINISH_TAC
 QED
 Resume eval_cps_eq[nonstatic_some_noneT]:
