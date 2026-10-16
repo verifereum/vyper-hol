@@ -2,7 +2,7 @@
  *
  * Combines the per-component preservation obligations:
  *   ao_dc_exec_block               (ao_dfg_inv, ao_chain_defined_prefix)
- *   strict_dom_iszero_inv_preserved (strict_dom_iszero_inv)
+ *   strict_dom_iszero_inv_run_block_preserved (strict_dom_iszero_inv)
  *   range_successor_obligation     (range_sound, cfg membership,
  *                                   dfg_sound, ops-defined)
  *   fn_reachable_step              (fn_reachable)

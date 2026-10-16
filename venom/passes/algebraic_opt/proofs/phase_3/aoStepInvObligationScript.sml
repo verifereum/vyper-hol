@@ -23,21 +23,6 @@ Libs
 
 (* ===== Chain variable source lemmas ===== *)
 
-Triviality fn_insts_blocks_map_offset:
-  !bbs inst.
-    MEM inst (fn_insts_blocks
-      (MAP (\b. b with bb_instructions :=
-        MAP ao_handle_offset_inst b.bb_instructions) bbs)) ==>
-    ?inst0. MEM inst0 (fn_insts_blocks bbs) /\
-            inst = ao_handle_offset_inst inst0
-Proof
-  Induct >> rpt strip_tac
-  >- fs[fn_insts_blocks_def, listTheory.MAP]
-  >- (fs[fn_insts_blocks_def, listTheory.MAP,
-         listTheory.MEM_APPEND, listTheory.MEM_MAP] >>
-      metis_tac[])
-QED
-
 Triviality chain_el_step:
   !acc inst v chain k x.
     ALOOKUP (ao_compute_iszero_step acc inst) v = SOME chain /\
@@ -553,8 +538,7 @@ Proof
 QED
 
 (* Block-level preservation of ao_dfg_inv and ao_chain_defined_prefix across a
-   whole exec_block.  ao_iszero_chain_inv / freshness are NOT needed for these
-   two conjuncts, so this avoids the baggage of ao_sinv_step_preserved. *)
+   whole exec_block.  Neither needs ao_iszero_chain_inv or freshness. *)
 Theorem ao_dc_exec_block:
   !fn0 dfg targets bb fuel ctx s v.
     ssa_form fn0 /\

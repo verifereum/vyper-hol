@@ -323,7 +323,7 @@ Definition ao_opt_signextend_def:
       [n_op; x] =>
         (case n_op of
            Lit w =>
-             if w >= 31w then
+             if 31w <=+ w then
                [inst with <| inst_opcode := ASSIGN; inst_operands := [x] |>]
              else
                let n = w2n w in
@@ -1095,8 +1095,9 @@ End
    which is above fn_max_inst_id fn (phase 4's ids are above phase 3's).
    Names the pass leaves behind carry ids of instructions in its output, so
    they are at most the output's fn_max_inst_id and fall outside this set for
-   the next run; ao_fresh_names_disjoint therefore carries over from one run
-   to the next. *)
+   a run on that output.  Nothing proves that ao_fresh_names_disjoint holds
+   for a later run: the passes in between can delete instructions and lower
+   fn_max_inst_id below a surviving name's id. *)
 Definition ao_fn_fresh_vars_def:
   ao_fn_fresh_vars fn =
     { ao_fresh_var n s | fn_max_inst_id fn < n /\ MEM s ["not"; "iz"; "xor"] }
@@ -1107,9 +1108,8 @@ End
    naming constraint); carried as an explicit precondition, matching the
    convention of every other insertion pass (m2v_fresh_names_disjoint,
    branch_opt's bo_fresh_vars_fn).  Satisfiable because real Venom variable
-   names never use the synthetic "ao_<id>_<suffix>" scheme, and carried over
-   by the pass itself (see ao_fn_fresh_vars), so it can hold for every run
-   in the pipeline.
+   names never use the synthetic "ao_<id>_<suffix>" scheme.  Whether it holds
+   for the second and third O2 runs is not proved (see ao_fn_fresh_vars).
    Stronger than output-only disjointness (the operand clause is needed by
    the phase-3 simulation proof); implies the output-only fact used by the
    WF/SSA preservation proofs. *)

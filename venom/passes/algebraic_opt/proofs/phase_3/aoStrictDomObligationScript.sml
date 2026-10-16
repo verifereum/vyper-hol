@@ -4,8 +4,7 @@
  *   strict_dom_iszero_inv  — ISZERO defs in strict dominators are consistent
  *   (within_block_iszero_inv lives in aoIsZeroInv)
  *
- * All lemmas here are ported verbatim from the (deleted) monolith proof;
- * they are SSA/dominance facts independent of the transform itself.
+ * These are SSA/dominance facts independent of the transform itself.
  *)
 Theory aoStrictDomObligation
 Ancestors

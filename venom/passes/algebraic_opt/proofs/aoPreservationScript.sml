@@ -1,9 +1,12 @@
 (* Top-level WF & SSA preservation for ao_transform_function.
  *
  * TOP-LEVEL:
- *   ao_preserves_wf_function  — wf_function preserved
- *   ao_preserves_ssa_form     — ssa_form preserved
- *   ao_phases123_preserve_wf  — phases 1-3 preserve wf + ssa + inst_wf
+ *   ao_transform_preserves_wf  — wf_function preserved
+ *   ao_transform_preserves_ssa — ssa_form preserved, given output freshness
+ *   fn_inst_wf_fn_insts        — fn_inst_wf as EVERY over fn_insts
+ *   ao_phases123_preserve_wf, ao_phases123_cmp_fresh_disjoint,
+ *   ao_phases1234_preserve_wf_ssa
+ *                              — side conditions of the phase 4/5 lemmas
  *)
 
 Theory aoPreservation
@@ -13,9 +16,6 @@ Ancestors
   passSimulationDefs passSimulationProps venomWf venomInst
 Libs
   BasicProvers
-
-(* ao_fresh_id_{gt,ge,inj}, foldl_max_*, fn_max_inst_id_bound,
-   all_distinct_{bound,pred}_split reused from aoWf (transitive ancestor). *)
 
 (* ao_fresh_var is injective on our suffixes *)
 Theorem ao_fresh_var_full_inj:
@@ -37,9 +37,15 @@ Proof
   Induct >> simp[fn_insts_blocks_def, listTheory.EVERY_APPEND]
 QED
 
+Theorem fn_inst_wf_fn_insts:
+  !fn. fn_inst_wf fn <=> EVERY inst_wf (fn_insts fn)
+Proof
+  simp[fn_inst_wf_compute, fn_insts_def, fn_insts_blocks_every]
+QED
+
 (* ===== Top-level WF preservation ===== *)
 
-Theorem ao_preserves_wf_function:
+Theorem ao_transform_preserves_wf:
   !fn. wf_function fn /\ EVERY inst_wf (fn_insts fn) ==>
     wf_function (ao_transform_function fn)
 Proof
@@ -71,9 +77,6 @@ Proof
       CONV_TAC (DEPTH_CONV ETA_CONV) >>
       fs[Abbr `fn0`, function_map_transform_def])
 QED
-
-(* ===== Top-level SSA preservation ===== *)
-
 
 (* ===== Phase 1 instruction-level facts ===== *)
 
@@ -198,7 +201,7 @@ QED
 
 (* ===== Top-level SSA preservation ===== *)
 
-Theorem ao_preserves_ssa_form:
+Theorem ao_transform_preserves_ssa:
   !fn. ssa_form fn /\ wf_function fn /\
     (!inst v. MEM inst (fn_insts fn) /\
               MEM v inst.inst_outputs ==>
@@ -250,7 +253,7 @@ Proof
 QED
 
 (* ===== Phases 1-3 preserve wf + ssa + inst_wf =====
-   Used by the main composition theorem (algebraicOptProof) to discharge the
+   Used by the main composition theorem (algebraicOptCorrectness) to discharge the
    well-formedness side conditions of the phase-4 simulation lemma.
    The ssa preservation requires ao_fresh_names_disjoint fn, matching the
    public-API precondition (mirrors mem2var's m2v_fresh_names_disjoint). *)

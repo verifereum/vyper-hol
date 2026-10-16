@@ -7,10 +7,10 @@
  *
  * TOP-LEVEL:
  *   ao_cmp_flip_null_sim        — NULL flips case: function unchanged → trivial
- *   ao_cmp_flip_function_labels — label preservation
  *   cmp_flip_sgt_slt            — signed GT→LT flip identity
  *   cmp_flip_slt_sgt            — signed LT→GT flip identity
- *   ao_cmp_flip_pair_equiv      — flip+remove pair produces same final value
+ *   cmp_flip_iszero_equiv_{gt,lt,sgt,slt}
+ *                               — iszero of the flipped comparator
  *)
 
 Theory aoCmpFlipSim

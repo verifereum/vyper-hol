@@ -4,9 +4,6 @@
  *   ao_resolve_iszero_inst_sim_local from the loop-robust invariants
  *   strict_dom_iszero_inv (aoStrictDomObligation) and
  *   within_block_iszero_inv (aoIsZeroInv), via chain_iszero_placement.
- *
- * Ported verbatim from the (deleted) monolith proof. The exported
- * ao_fn_targets_* facts live in aoTargetProps and are reused from there.
  *)
 Theory aoChainStruct
 Ancestors

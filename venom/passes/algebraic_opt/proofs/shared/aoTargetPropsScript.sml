@@ -2,8 +2,6 @@
  *
  * TOP-LEVEL:
  *   ao_fn_targets_chain_tail_var
- *   ao_fn_targets_chain_var_is_key
- *   ao_fn_targets_key_is_output
  *   fn_insts_blocks_map_offset
  *)
 

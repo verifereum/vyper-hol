@@ -2,7 +2,7 @@
  *
  * TOP-LEVEL:
  *   within_block_iszero_inv — ISZEROs at positions < idx have correct values
- *   wbiz_initial, wbiz_mono, wbiz_inst_idx — basic properties
+ *   wbiz_phi_prefix, wbiz_inst_idx — basic properties
  *)
 Theory aoIsZeroInv
 Ancestors

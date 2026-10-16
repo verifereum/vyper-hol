@@ -1,15 +1,14 @@
 (* Phase 3: Main rewrite pass correctness.
  *
- * Uses block_sim_function_error_bb with:
- *   block_inv = ao_dfg_inv ∧ ao_iszero_chain_inv ∧ ao_chain_defined_prefix
- *               ∧ range_sound ∧ cfg_membership
+ * Lifts ao_block_sim_local to run_blocks via block_sim_function_error_bb.
+ * The block invariant is spelled out at block_inv in the proof.
  *
  * TOP-LEVEL: ao_phase3_correct
  *)
 
 Theory aoPhase3Proof
 Ancestors
-  algebraicOptDefs aoBlockSim aoTargetProps
+  algebraicOptDefs aoTargetProps
   aoResolveObligation aoRangeObligation
   aoStepInvObligation aoBlockInvObligation aoPhase1Wf
   aoBlockSimLocal aoStrictDomObligation
@@ -36,8 +35,6 @@ Proof
   simp[fn_entry_label_def, entry_block_def] >>
   gen_tac >> Cases_on `fn.fn_blocks` >> simp[]
 QED
-
-(* run_blocks_inst_idx_irrel hoisted to passSimulationProps *)
 
 Triviality ao_transform_block_label[local]:
   !mid dfg ra targets bb.

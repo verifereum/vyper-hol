@@ -20,9 +20,6 @@ val _ = delsimps ["ao_cmp_flip_dead_vars_def",
                   "cmp_flip_iszero_inv_def",
                   "ao_cmp_flip_scan_def"]
 
-(* run_blocks does not depend on vs_inst_idx *)
-(* run_blocks_inst_idx_irrel is provided by passSimulationProps *)
-
 (* cmp_flip_iszero_inv reflexive when no vars defined *)
 Triviality iszero_inv_refl_empty[local]:
   !flips insts s.

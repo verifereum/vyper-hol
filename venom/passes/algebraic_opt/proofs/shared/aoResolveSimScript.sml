@@ -5,8 +5,11 @@
  *   ao_resolve_iszero_inst_opcode    — iszero resolution preserves opcode
  *   ao_resolve_iszero_inst_outputs   — iszero resolution preserves outputs
  *   ao_resolve_iszero_inst_id        — iszero resolution preserves inst_id
- *   ao_cmp_flip_apply_inst_structural — cmp_flip structural properties
- *   ao_cmp_flip_identity             — most instructions pass through unchanged
+ *   ao_pre_flip_inst_non_comm,
+ *   ao_post_flip_inst_non_comm       — flips leave non-commutative ops alone
+ *   ao_post_flip_inst_opcode_class   — post-flip keeps the opcode class
+ *   cmp_flip_gt_lt, cmp_flip_lt_gt   — unsigned flip identities
+ *   ao_transform_inst_invoke         — INVOKE passes through unchanged
  *)
 
 Theory aoResolveSim

@@ -2,11 +2,8 @@
  * Algebraic Optimization — Additional Per-Rule step_inst_base Equivalence
  *
  * TOP-LEVEL: ao_rule_* theorems for opcodes not covered by aoRules:
- *   - signextend identity (w >= 31w)
- *   - exp rules (x**0=1, x**1=x, 1**x=1, 0**x=iszero)
- *   - safe_sdiv / safe_smod identities
+ *   - signextend identity (31w <=+ w)
  *   - power-of-two reductions (mul↔shl, div↔shr, mod↔and)
- *   - comparator boundary rules (GT x MAX=0, LT x 0=0, etc.)
  *)
 Theory aoRules2
 Ancestors
@@ -14,74 +11,30 @@ Ancestors
 Libs
   pairLib wordsLib
 
-(* ===== Signextend identity: w >= 31w ===== *)
-
-(* w >= 31w (signed comparison on bytes32) implies w2n w > 30.
-   Proof: w >= 31w iff w2i w >= w2i 31w = 31 (by WORD_GEi).
-   w2i w >= 31 > 0 means ~word_msb w, so w2i w = &(w2n w),
-   hence w2n w >= 31 > 30. *)
-Triviality ge_31w_implies_w2n_gt_30[local]:
-  !w : bytes32. w >= 31w ==> w2n w > 30
-Proof
-  rpt strip_tac >>
-  gvs[integer_wordTheory.WORD_GEi, integer_wordTheory.w2i_def] >>
-  Cases_on `word_msb w` >> Cases_on `word_msb (31w:bytes32)` >>
-  gvs[] >> intLib.ARITH_TAC
-QED
+(* ===== Signextend identity: 31w <=+ w ===== *)
 
 Theorem ao_rule_signextend_ge31:
   !inst x out s w.
     inst.inst_opcode = SIGNEXTEND /\
     inst.inst_operands = [Lit w; x] /\
     inst.inst_outputs = [out] /\
-    w >= 31w ==>
+    31w <=+ w ==>
     step_inst_base
       (inst with <| inst_opcode := ASSIGN; inst_operands := [x] |>) s =
     step_inst_base inst s
 Proof
   rw[step_inst_base_def, exec_pure2_def, eval_operand_def] >>
   Cases_on `eval_operand x s` >> simp[] >>
-  imp_res_tac ge_31w_implies_w2n_gt_30 >>
+  `w2n w > 30` by fs[wordsTheory.WORD_LS] >>
   simp[sign_extend_def]
 QED
 
-(* ===== Exp rules ===== *)
+(* ===== Power-of-two reductions ===== *)
 
-(* Helper: word_exp identities from nat EXP *)
+(* is_power_of_two_exp is in passSharedPow2Theory, away from the
+   integerTheory ancestors whose ** overloading gets in the way. *)
 
-
-(* ===== Safe sdiv / smod identities ===== *)
-
-
-(* ===== Power-of-two bridge ===== *)
-
-(* Helper: BIT h (n-1) when 2^h < n < 2^(h+1) *)
-Triviality bit_h_pred[local]:
-  !h n. 2 ** h < n /\ n < 2 ** SUC h ==> BIT h (n - 1)
-Proof
-  rpt strip_tac >>
-  `0 < 2 ** h` by simp[] >>
-  `1 <= 2 ** h` by simp[] >>
-  `1 < n` by
-    (imp_res_tac arithmeticTheory.LESS_EQ_LESS_TRANS >> fs[]) >>
-  `n - 1 <> 0` by simp[] >>
-  `LOG2 (n - 1) = h` suffices_by metis_tac[bitTheory.BIT_LOG2] >>
-  irule bitTheory.LOG2_UNIQUE >>
-  conj_tac >| [
-    `0 < 2 ** h` by simp[] >> decide_tac,
-    fs[arithmeticTheory.EXP] >>
-    `0 < 2 ** h` by simp[] >> decide_tac
-  ]
-QED
-
-val log2_w2n_lt_256 = SIMP_RULE (srw_ss()) []
-  (INST_TYPE [alpha |-> ``:256``] wordsTheory.LOG2_w2n_lt);
-
-(* is_power_of_two_exp imported from passSharedPow2Theory — proved there
-   to avoid ** overloading issues from integerTheory ancestors. *)
-
-(* Power-of-two reductions using explicit k. The bridge above
-   connects is_power_of_two w to the k precondition. *)
+(* Each takes the exponent k explicitly; is_power_of_two_exp supplies it. *)
 Theorem ao_rule_mul_pow2:
   !inst op out s w k.
     inst.inst_opcode = MUL /\

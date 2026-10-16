@@ -1,9 +1,13 @@
 (* Algebraic Optimization — Well-formedness & SSA Preservation
  *
- * Key lemmas:
- *   ao_fresh_id_gt_mid     — fresh IDs are > max_id
- *   ao_fresh_id_inj        — fresh IDs are injective in (id, slot)
- *   ao_transform_function preserves wf_function and ssa_form
+ * TOP-LEVEL:
+ *   ao_fresh_id_gt, ao_fresh_id_inj — fresh ids exceed mid and are injective
+ *   fn_max_inst_id_bound, fn_max_inst_id_le
+ *   ao_transform_inst_structural    — ids, outputs and opcode classes of
+ *                                     ao_transform_inst's output
+ *   ao_resolve_iszero_inst_wf, ao_transform_inst_{phi,term,non_term,non_phi}
+ *
+ * The function-level wf/ssa results are in aoPreservation.
  *)
 
 Theory aoWf
@@ -97,38 +101,12 @@ Proof
   simp[listTheory.MEM_MAP, PULL_EXISTS]
 QED
 
-(* ===== Phase 1: offset lemmas (ao_handle_offset_inst_*, term_not_add,
-   ao_phase1_preserves_wf/ssa) reused from aoPhase1Wf ancestor. ===== *)
-
 (* Well-formed terminators have no outputs *)
 Triviality terminator_no_outputs[local]:
   !inst. inst_wf inst /\ is_terminator inst.inst_opcode ==>
     inst.inst_outputs = []
 Proof
   rw[inst_wf_def] >> Cases_on `inst.inst_opcode` >> gvs[is_terminator_def]
-QED
-
-(* ===== ao_resolve_iszero_inst properties ===== *)
-
-Theorem ao_resolve_iszero_inst_opcode:
-  !targets inst.
-    (ao_resolve_iszero_inst targets inst).inst_opcode = inst.inst_opcode
-Proof
-  simp[ao_resolve_iszero_inst_def]
-QED
-
-Theorem ao_resolve_iszero_inst_id:
-  !targets inst.
-    (ao_resolve_iszero_inst targets inst).inst_id = inst.inst_id
-Proof
-  simp[ao_resolve_iszero_inst_def]
-QED
-
-Theorem ao_resolve_iszero_inst_outputs:
-  !targets inst.
-    (ao_resolve_iszero_inst targets inst).inst_outputs = inst.inst_outputs
-Proof
-  simp[ao_resolve_iszero_inst_def]
 QED
 
 (* ===== ao_transform_inst structural properties ===== *)

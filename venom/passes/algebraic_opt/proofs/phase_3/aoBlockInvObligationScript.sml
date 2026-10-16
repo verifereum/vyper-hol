@@ -1,13 +1,9 @@
 (* Block-level invariant obligations for algebraic optimization.
  *
- * Helpers for ao_phase3_correct:
- *   - chain_var_is_iszero_output: chain structure lemma
- *   - ao_block_inv_successor: CFG successor in DFS pre
- *   - ao_chain_inv_initial, ao_chain_defined_prefix_initial: initial state
- *   - ao_cfg_initial, ao_range_sound_initial: initial state
- *
- * The exec_block preservation (ao_sinv_exec_block_preserved) is in
- * aoPhase3ProofScript.sml since it needs aoStepInvObligation.
+ * TOP-LEVEL (helpers for ao_phase3_correct):
+ *   chain_var_is_iszero_output       — chain structure lemma
+ *   ao_chain_defined_prefix_initial  — chain-definedness at function entry
+ *   ao_cfg_initial                   — entry block is in the DFS order
  *)
 
 Theory aoBlockInvObligation

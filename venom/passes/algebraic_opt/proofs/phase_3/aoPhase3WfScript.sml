@@ -5,12 +5,11 @@
  *
  * Helper:
  *   ao_transform_block_bb_wf, ao_transform_block_bb_succs
- *   (ao_transform_inst structural properties now live in aoWf)
  *)
 
 Theory aoPhase3Wf
 Ancestors
-  algebraicOptDefs aoPeepholeSim aoPhase1Wf aoPhase3Ids aoWf
+  algebraicOptDefs aoPeepholeSim aoPhase1Wf aoPhase3Ids aoWf aoResolveSim
   venomState venomWf venomInst passSimulationProps passSimulationDefs
   passSharedDefs
 Libs

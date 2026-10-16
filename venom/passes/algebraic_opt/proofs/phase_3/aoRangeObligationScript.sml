@@ -1,14 +1,10 @@
 (* Range analysis soundness for algebraic optimization.
  *
- * All theorems fully proved (no cheats).
- *
  * range_analyze_sound: if in_range_state holds at program point (lbl, idx),
  *   then any operand that evaluates to v has v in the computed range.
  *
  * range_intra_transfer: range_at_inst at SUC idx equals the transfer
  *   function applied at idx (connects fixpoint to per-instruction state).
- *
- * range_entry_eq_at_inst: range_at_inst at index 0 equals range_entry_state.
  *
  * range_step_inv: step_inst preserves in_range_state for the next
  *   instruction, given that inst is the actual instruction at (lbl, idx).

@@ -17,7 +17,7 @@
 
 Theory aoBlockSimLocal
 Ancestors
-  algebraicOptDefs aoPhase1Wf aoWf aoBlockSim aoTransformInstSim aoSimCmp
+  algebraicOptDefs aoPhase1Wf aoWf aoResolveSim aoTransformInstSim aoSimCmp
   aoResolveObligation aoStepInvObligation aoStrictDomObligation
   aoChainStruct aoIsZeroInv aoRangeObligation aoTargetProps
   aoBlockInvObligation aoBlockInvPreserved
@@ -31,6 +31,14 @@ Libs
   pairLib BasicProvers
 
 (* ===== Small structural helpers ===== *)
+
+(* A df_state where ds_inst (lbl, i) = i for i < n *)
+Definition idx_df_state_def:
+  idx_df_state lbl n : num df_state =
+    <| ds_inst := FUN_FMAP (\p. SND p)
+         (IMAGE (\i. (lbl, i)) (count n));
+       ds_boundary := FEMPTY |>
+End
 
 Triviality idx_df_state_at2[local]:
   !lbl n i. i < n ==>
