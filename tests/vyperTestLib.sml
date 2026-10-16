@@ -721,8 +721,7 @@ fun trydecode_with_fixtures fixtures
               ::failures,
             name_skips,source_skips,non_tests)
 
-fun read_test_json json_path = let
-  val test_jsons = decodeFile rawObject json_path
+fun decode_test_items test_jsons = let
   val fixtures = List.foldl collect_fixture [] test_jsons
   val (selected,failures,name_skips,source_skips,non_tests) =
     List.foldl (trydecode_with_fixtures fixtures) ([],[],[],[],0) test_jsons
@@ -735,6 +734,8 @@ in
    fixtures = List.length fixtures,
    non_tests = non_tests}
 end
+
+fun read_test_json json_path = decode_test_items (decodeFile rawObject json_path)
 
 val trace_ty = mk_thy_type{Thy="vyperTestRunner",Tyop="trace",Args=[]}
 val traces_ty = mk_list_type trace_ty
@@ -1209,24 +1210,24 @@ in
   Lib.appi define_traces tests
 end
 
-(* A file with no selected tests would still build both of its theories, so
-   it gets no scripts, unless an item would fail to decode: its Defs theory
-   is where that failure is reported. *)
-fun generates_scripts items = let
-  val report = coverage_of_items items
-in
-  #selected report > 0 orelse
-  not (List.null (#malformed report)) orelse
-  not (List.null (#unresolved_deps report))
-end
+(* A file whose Defs build would select no test and raise nothing would
+   build two empty theories, so it gets no scripts.  The coverage count
+   answers cheaply for most files; the rest run the Defs build's own
+   decode, so a file is skipped only when that decode succeeds with no
+   tests.  An exception from it means the Defs build would fail, which is
+   where that failure is reported, so the file keeps its scripts. *)
+fun generates_scripts items =
+  #selected (coverage_of_items items) > 0 orelse
+  let val report = decode_test_items items
+  in not (List.null (#selected report) andalso List.null (#failures report))
+  end
+  handle _ => true
 
 fun selected_test_files () =
   List.filter (fn (_, path) => generates_scripts (decodeFile rawObject path))
     (test_files ())
 
-fun generate_defn_scripts () = let
-  val () = check_generate_dirs ()
-  val files = selected_test_files ()
+fun write_defn_scripts files = let
   val gen_dir = generated_dir
   val () = cleanup_generated_scripts files
   val () = List.app (fn (id, jsonp) => let
@@ -1246,9 +1247,7 @@ in
   ()
 end
 
-fun generate_test_scripts () = let
-  val () = check_generate_dirs ()
-  val files = selected_test_files ()
+fun write_test_scripts files = let
   val gen_dir = generated_dir
   val () = cleanup_generated_scripts files
   val () = List.app (fn (id, _) => let
@@ -1267,9 +1266,18 @@ in
   ()
 end
 
-fun generate_tests () = (
-  generate_defn_scripts ();
-  generate_test_scripts ()
-)
+fun generate_defn_scripts () =
+  (check_generate_dirs (); write_defn_scripts (selected_test_files ()))
+
+fun generate_test_scripts () =
+  (check_generate_dirs (); write_test_scripts (selected_test_files ()))
+
+fun generate_tests () = let
+  val () = check_generate_dirs ()
+  val files = selected_test_files ()
+in
+  write_defn_scripts files;
+  write_test_scripts files
+end
 
 end

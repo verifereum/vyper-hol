@@ -48,11 +48,23 @@ fun expect_scripts label expected items =
 val _ = expect_scripts "selected test" true
   [("t", JSON.OBJECT [item_type "test",
                       ("source_code", JSON.STRING "return 1")])];
+val no_deps = ("deps", JSON.ARRAY []);
+val no_traces = ("traces", JSON.ARRAY []);
 val _ = expect_scripts "no selected test" false
-  [("t", JSON.OBJECT [item_type "test"]),
-   ("f", JSON.OBJECT [item_type "fixture"])];
+  [("t", JSON.OBJECT [item_type "test", no_deps]),
+   ("f", JSON.OBJECT [item_type "fixture", no_traces])];
 val _ = expect_scripts "malformed item" true
-  [("t", JSON.OBJECT [item_type "test"]), ("m", JSON.OBJECT [])];
+  [("t", JSON.OBJECT [item_type "test", no_deps]), ("m", JSON.OBJECT [])];
 val _ = expect_scripts "unresolved fixture dependency" true
   [("t", JSON.OBJECT [item_type "test",
                       ("deps", JSON.ARRAY [JSON.STRING "missing"])])];
+val _ = expect_scripts "excluded test with an unresolved dependency" false
+  [("test_abi_arg_wrapped_complex_member_head",
+    JSON.OBJECT [item_type "test",
+                 ("deps", JSON.ARRAY [JSON.STRING "missing"])])];
+val _ = expect_scripts "fixture whose traces fail to decode" true
+  [("t", JSON.OBJECT [item_type "test", no_deps]),
+   ("f", JSON.OBJECT [item_type "fixture",
+                      ("traces", JSON.ARRAY [JSON.STRING "bad"])])];
+val _ = expect_scripts "test without deps" true
+  [("t", JSON.OBJECT [item_type "test"])];

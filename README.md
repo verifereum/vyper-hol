@@ -130,7 +130,7 @@ Then run individual generated test theories with `holbuild`, for example:
 holbuild -j"$(nproc)" build vyperTest_functional_builtins_codegen_test_abi_decodeTheory
 ```
 
-Only exported files with at least one selected test, a malformed item, or an unresolved fixture dependency get generated theories; the last two fail their Defs build.
+Only exported files whose Defs build would select a test or fail to decode an item get generated theories; the failing ones fail that build.
 
 The CI workflow runs the generated tests in parallel groups; see `.github/workflows/holbuild.yml` for that full setup.
 
