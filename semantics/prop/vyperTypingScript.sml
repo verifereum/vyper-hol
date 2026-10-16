@@ -296,46 +296,37 @@ Proof
   rpt strip_tac >> rw[] >> simp[value_has_type_def]
 QED
 
-Theorem default_values_have_types[local]:
-  ∀tvs. EVERY (λtv. well_formed_type_value tv ⇒
-    value_has_type tv (default_value tv)) tvs ⇒
-    EVERY well_formed_type_value tvs ⇒
-    values_have_types tvs (MAP default_value tvs)
-Proof
-  Induct >> simp[value_has_type_def]
-QED
-
-Theorem default_fields_have_types[local]:
-  ∀ftypes. EVERY (λp. well_formed_type_value (SND p) ⇒
-    value_has_type (SND p) (default_value (SND p))) ftypes ⇒
-    EVERY (well_formed_type_value o SND) ftypes ⇒
-    struct_has_type ftypes (MAP (λ(id,t). (id, default_value t)) ftypes)
-Proof
-  Induct >> simp[value_has_type_def] >>
-  Cases >> simp[value_has_type_def]
-QED
-
 Theorem default_value_has_type[local]:
-  ∀tv. well_formed_type_value tv ⇒ value_has_type tv (default_value tv)
+  (∀tv. well_formed_type_value tv ⇒ value_has_type tv (default_value tv)) ∧
+  (∀tvs. EVERY well_formed_type_value tvs ⇒
+    values_have_types tvs (MAP default_value tvs)) ∧
+  (∀ftypes. EVERY (well_formed_type_value o SND) ftypes ⇒
+    struct_has_type ftypes (MAP (λ(id,t). (id, default_value t)) ftypes)) ∧
+  (∀p : string # type_value. well_formed_type_value (SND p) ⇒
+    value_has_type (SND p) (default_value (SND p)))
 Proof
-  ho_match_mp_tac (TypeBase.induction_of ``:type_value``) >>
+  ho_match_mp_tac
+    (legacyInduction.mutual_ind_from_ops
+       (TypeBase.induction_of ``:type_value``)) >>
   simp[default_value_def, default_value_tuple_MAP,
        default_value_struct_MAP, value_has_type_def,
        well_formed_type_value_def, within_int_bound_def] >>
-  rpt conj_tac >> rpt gen_tac >> simp[] >>
-  FIRST [
-    Cases_on `b` >> simp[default_value_def, value_has_type_def,
-      well_formed_type_value_def, within_int_bound_def] >>
-    TRY (Cases_on `b'` >> simp[default_value_def, value_has_type_def,
-         well_formed_type_value_def]) >> NO_TAC,
-    strip_tac >> Cases_on `b` >>
-      simp[default_value_def, value_has_type_def, all_have_type_EVERY] >> NO_TAC,
-    rpt strip_tac >>
-      FIRST [irule default_values_have_types,
-             irule default_fields_have_types] >>
-      gvs[EVERY_MEM] >> rpt strip_tac >>
-      first_x_assum irule >> simp[] >>
-      qexists_tac `p` >> simp[pairTheory.setSND_def]]
+  rpt conj_tac >> rpt gen_tac >> simp[] >|
+  [(* BaseTV b *)
+   Cases_on `b` >> simp[default_value_def, value_has_type_def,
+     well_formed_type_value_def, within_int_bound_def] >>
+   TRY (Cases_on `b'` >> simp[default_value_def, value_has_type_def,
+        well_formed_type_value_def]) ,
+   (* TupleTV tvs - IH *)
+   strip_tac >> metis_tac[] ,
+   (* ArrayTV tv b *)
+   strip_tac >> Cases_on `b` >>
+   simp[default_value_def, value_has_type_def, all_have_type_EVERY] ,
+   (* StructTV ftypes - IH *)
+   strip_tac >> metis_tac[] ,
+   (* struct cons: p::ftypes *)
+   PairCases_on `p` >> simp[value_has_type_def]
+  ]
 QED
 
 Theorem default_value_well_typed:

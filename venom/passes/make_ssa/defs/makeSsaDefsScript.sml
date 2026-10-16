@@ -44,12 +44,9 @@ Theorem dom_tree_list_induction:
     (∀tree. P tree) ∧ (∀children. Q children)
 Proof
   rpt gen_tac >> strip_tac >>
-  `∀children. EVERY P children ⇒ Q children` by
-    (Induct >> simp[] >> metis_tac[]) >>
-  `∀tree. P tree` by
-    (ho_match_mp_tac (TypeBase.induction_of ``:dom_tree``) >>
-     simp[GSYM listTheory.EVERY_MEM] >> metis_tac[]) >>
-  simp[] >> metis_tac[listTheory.EVERY_MEM]
+  ho_match_mp_tac
+    (legacyInduction.mutual_ind_from_ops (TypeBase.induction_of ``:dom_tree``)) >>
+  metis_tac[]
 QED
 
 (* All labels in a dominator tree. *)

@@ -221,23 +221,13 @@ Proof
   ]
 QED
 
-Theorem expr_list_leq_trans_helper[local]:
-  ∀l1. (∀x. MEM x l1 ⇒ ∀y z.
-    expr_leq x y ∧ expr_leq y z ⇒ expr_leq x z) ⇒
-    ∀l2 l3. expr_list_leq l1 l2 ∧ expr_list_leq l2 l3 ⇒
-      expr_list_leq l1 l3
-Proof
-  Induct >> simp[expr_leq_def] >> rpt gen_tac >> strip_tac >>
-  Cases_on `l2` >> Cases_on `l3` >> simp[expr_leq_def] >>
-  rpt strip_tac >> gvs[] >>
-  metis_tac[CONJUNCT1 expr_leq_antisym]
-QED
-
 (* expr_leq is transitive *)
-Theorem expr_leq_trans_expr[local]:
-  ∀x y z. expr_leq x y ∧ expr_leq y z ⇒ expr_leq x z
+Theorem expr_leq_trans[local]:
+  (∀x y z. expr_leq x y ∧ expr_leq y z ⇒ expr_leq x z) ∧
+  (∀l1 l2 l3. expr_list_leq l1 l2 ∧ expr_list_leq l2 l3 ⇒ expr_list_leq l1 l3)
 Proof
-  ho_match_mp_tac avail_expr_induction >> rpt conj_tac >| [
+  ho_match_mp_tac (legacyInduction.mutual_ind_from_ops avail_expr_induction) >>
+  rpt conj_tac >| [
     (* ExprVar *)
     Cases_on `y` >> Cases_on `z` >> simp[expr_leq_def] >>
     rw[stringTheory.string_le_def] >>
@@ -252,23 +242,19 @@ Proof
       `opcode2num o'' < opcode2num o'³' ∨
        opcode2num o'' = opcode2num o'³'` by DECIDE_TAC >| [
         DISJ1_TAC >> DECIDE_TAC,
-        DISJ2_TAC >> irule expr_list_leq_trans_helper >>
-        simp[] >> rename1 `expr_list_leq l middle` >>
-        conj_tac >- first_assum ACCEPT_TAC >>
-        qexists_tac `middle` >> simp[]
+        DISJ2_TAC >> metis_tac[]
       ]
-    ]
+    ],
+    (* [] *)
+    simp[expr_leq_def],
+    (* x::l1 *)
+    rw[] >> Cases_on `l2` >> Cases_on `l3` >> fs[expr_leq_def] >>
+    Cases_on `x = h` >> Cases_on `h = h'` >> fs[] >-
+      (first_x_assum (qspecl_then [`t`, `t'`] mp_tac) >> simp[]) >>
+    `expr_leq x h'` by (first_x_assum (qspecl_then [`h`, `h'`] mp_tac) >> simp[]) >>
+    Cases_on `x = h'` >> fs[] >>
+    `h = h'` by metis_tac[CONJUNCT1 expr_leq_antisym] >> fs[]
   ]
-QED
-
-Theorem expr_leq_trans[local]:
-  (∀x y z. expr_leq x y ∧ expr_leq y z ⇒ expr_leq x z) ∧
-  (∀l1 l2 l3. expr_list_leq l1 l2 ∧ expr_list_leq l2 l3 ⇒ expr_list_leq l1 l3)
-Proof
-  conj_tac >- ACCEPT_TAC expr_leq_trans_expr >>
-  rpt gen_tac >> strip_tac >> irule expr_list_leq_trans_helper >>
-  conj_tac >- metis_tac[expr_leq_trans_expr] >>
-  qexists_tac `l2` >> simp[]
 QED
 
 (* ===== Canonicalization ===== *)
