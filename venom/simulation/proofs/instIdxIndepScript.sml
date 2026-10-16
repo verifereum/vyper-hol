@@ -466,12 +466,16 @@ Proof
   >- opcode_idx_tac  (* BLOBHASH *)
   >- opcode_idx_tac  (* BLOBBASEFEE *)
   >- opcode_idx_tac  (* SHA3 *)
-  >- opcode_idx_tac  (* CALL *)
-  >- opcode_idx_tac  (* STATICCALL *)
+  >- (simp[step_inst_base_def, eval_op_inst_idx, exec_ext_call_idx] >>
+      EVERY_CASE_TAC >> simp[exec_result_map_def])  (* CALL *)
+  >- (simp[step_inst_base_def, eval_op_inst_idx, exec_ext_call_idx] >>
+      EVERY_CASE_TAC >> simp[exec_result_map_def])  (* STATICCALL *)
   >- (simp[step_inst_base_def, eval_op_inst_idx, exec_delegatecall_idx] >>
       EVERY_CASE_TAC >> simp[exec_result_map_def])  (* DELEGATECALL *)
-  >- opcode_idx_tac  (* CREATE *)
-  >- opcode_idx_tac  (* CREATE2 *)
+  >- (simp[step_inst_base_def, eval_op_inst_idx, exec_create_idx] >>
+      EVERY_CASE_TAC >> simp[exec_result_map_def])  (* CREATE *)
+  >- (simp[step_inst_base_def, eval_op_inst_idx, exec_create_idx] >>
+      EVERY_CASE_TAC >> simp[exec_result_map_def])  (* CREATE2 *)
   >- opcode_idx_tac  (* LOG *)
   >- opcode_idx_tac  (* ASSERT *)
   >- opcode_idx_tac  (* ASSERT_UNREACHABLE *)

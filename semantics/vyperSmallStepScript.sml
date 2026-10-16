@@ -1822,11 +1822,17 @@ Resume eval_cps_eq[static_some_value]:
   ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
   EXT_CALL_CPS_FINISH_TAC
 QED
+(* A failed value conversion already determines the whole call.  Reduce
+   the exception/case spine in the goal before the general progress tactic
+   rewrites the guarded default-expression IH and the dead call bodies. *)
+val EXT_CALL_CPS_VALUE_CASES_TAC =
+  FIRST [CHANGED_TAC (simp_tac std_ss [raise_def]), EXT_CALL_CPS_CASES_TAC];
+
 Resume eval_cps_eq[nonstatic_none_noneT]:
   EXT_CALL_CPS_PREP_TAC >>
-  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
-  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
-  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  ntac 4 EXT_CALL_CPS_VALUE_CASES_TAC >> ntac 4 EXT_CALL_CPS_VALUE_CASES_TAC >>
+  ntac 4 EXT_CALL_CPS_VALUE_CASES_TAC >> ntac 4 EXT_CALL_CPS_VALUE_CASES_TAC >>
+  ntac 4 EXT_CALL_CPS_VALUE_CASES_TAC >> ntac 4 EXT_CALL_CPS_VALUE_CASES_TAC >>
   EXT_CALL_CPS_FINISH_TAC
 QED
 Resume eval_cps_eq[nonstatic_none_value]:

@@ -1273,11 +1273,14 @@ Triviality step_inst_getfmp_equiv:
     result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt gen_tac >> strip_tac >> gvs[] >>
-  simp[step_inst_base_def] >>
-  rpt CASE_TAC >> gvs[result_equiv_def, revert_equiv_def] >>
   `s1.vs_fmp = s2.vs_fmp` by
     fs[state_equiv_def, execution_equiv_def] >>
-  gvs[] >> irule update_var_preserves >> simp[]
+  simp[step_inst_base_def] >>
+  Cases_on `inst.inst_operands` >> simp[result_equiv_def] >>
+  Cases_on `inst.inst_outputs` >> simp[result_equiv_def] >>
+  rename1 `(out : string) :: outs` >>
+  Cases_on `outs` >> simp[result_equiv_def] >>
+  irule update_var_preserves >> simp[]
 QED
 
 Triviality step_inst_initial_fmp_equiv:
@@ -1288,11 +1291,14 @@ Triviality step_inst_initial_fmp_equiv:
     result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt gen_tac >> strip_tac >> gvs[] >>
-  simp[step_inst_base_def] >>
-  rpt CASE_TAC >> gvs[result_equiv_def, revert_equiv_def] >>
   `s1.vs_initial_fmp = s2.vs_initial_fmp` by
     fs[state_equiv_def, execution_equiv_def] >>
-  gvs[] >> irule update_var_preserves >> simp[]
+  simp[step_inst_base_def] >>
+  Cases_on `inst.inst_operands` >> simp[result_equiv_def] >>
+  Cases_on `inst.inst_outputs` >> simp[result_equiv_def] >>
+  rename1 `(out : string) :: outs` >>
+  Cases_on `outs` >> simp[result_equiv_def] >>
+  irule update_var_preserves >> simp[]
 QED
 
 Triviality step_inst_retpc_param_equiv:
@@ -1303,11 +1309,18 @@ Triviality step_inst_retpc_param_equiv:
     result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt gen_tac >> strip_tac >> gvs[] >>
-  simp[step_inst_base_def] >>
-  rpt CASE_TAC >> gvs[result_equiv_def, revert_equiv_def] >>
   `s1.vs_return_pc_token = s2.vs_return_pc_token` by
     fs[state_equiv_def, execution_equiv_def] >>
-  gvs[] >> irule update_var_preserves >> simp[]
+  simp[step_inst_base_def] >>
+  Cases_on `inst.inst_operands` >>
+  simp[result_equiv_def] >>
+  rename1 `(op : operand) :: ops` >>
+  Cases_on `ops` >> simp[result_equiv_def] >>
+  Cases_on `op` >> simp[result_equiv_def] >>
+  Cases_on `inst.inst_outputs` >> simp[result_equiv_def] >>
+  rename1 `(out : string) :: outs` >>
+  Cases_on `outs` >> simp[result_equiv_def] >>
+  irule update_var_preserves >> simp[]
 QED
 
 Triviality step_inst_fmp_param_equiv:
@@ -1320,8 +1333,16 @@ Proof
   rpt gen_tac >> strip_tac >> gvs[] >>
   `s1.vs_params = s2.vs_params` by
     fs[state_equiv_def, execution_equiv_def] >>
-  gvs[] >> simp[step_inst_base_def] >>
-  rpt CASE_TAC >> gvs[result_equiv_def, revert_equiv_def] >>
+  simp[step_inst_base_def] >>
+  Cases_on `inst.inst_operands` >> simp[result_equiv_def] >>
+  rename1 `(op : operand) :: ops` >>
+  Cases_on `ops` >> simp[result_equiv_def] >>
+  Cases_on `op` >> simp[result_equiv_def] >>
+  Cases_on `inst.inst_outputs` >> simp[result_equiv_def] >>
+  rename1 `(out : string) :: outs` >>
+  Cases_on `outs` >> simp[result_equiv_def] >>
+  rename1 `w2n idx < LENGTH s2.vs_params` >>
+  Cases_on `w2n idx < LENGTH s2.vs_params` >> simp[result_equiv_def] >>
   irule update_var_preserves >> simp[]
 QED
 
