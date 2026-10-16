@@ -8,6 +8,7 @@ version = "0.2.3"
 [build]
 roots = ["vyperHolScript.sml",
          "semantics/type/vyperCheckContractLibTestScript.sml",
+         "tests/vyperStringScopeTestScript.sml",
          "frontend/vyperCheckContractFrontendLibTestScript.sml",
          "tests/vyperCheckContractTraceLibTestScript.sml",
          "tests/vyperCreateSelfdestructScript.sml",
