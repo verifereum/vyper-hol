@@ -5,6 +5,24 @@ Theory oracleExecProps
 Ancestors
   venomState venomInst venomExecSemantics oracleStateProps
 
+(* Index the exported equations once; rewrite only the known opcode branch. *)
+val step_inst_base_opcode_rewrites = let
+  fun key th = let
+    val (_, body) = strip_forall (concl th)
+    val (guard, _) = dest_imp body
+  in rhs guard end
+in map (fn th => (key th, th))
+  (CONJUNCTS venomExecSemanticsTheory.step_inst_base_opcode_eqs) end;
+
+fun rewrite_step_inst_base_opcode eq = let
+  val (_, rewrite) = valOf (List.find
+    (fn (key, _) => aconv key (rhs (concl eq)))
+    step_inst_base_opcode_rewrites)
+in PURE_ONCE_REWRITE_TAC [MATCH_MP rewrite eq] end;
+
+val step_inst_base_opcode_tac =
+  qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode;
+
 Theorem step_inst_base_oracle:
   inst.inst_opcode <> CALL /\ inst.inst_opcode <> STATICCALL /\
   step_inst_base inst s = OK s' ==>
@@ -13,8 +31,7 @@ Proof
   strip_tac >>
   Cases_on `inst.inst_opcode` >> gvs[] >>
   qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
-  PURE_REWRITE_TAC[step_inst_base_def] >>
-  PURE_ASM_REWRITE_TAC[opcode_case_def] >>
+  step_inst_base_opcode_tac >>
   gvs[AllCaseEqs()] >>
   fs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
      exec_read0_def, exec_read1_def, exec_write2_def,

@@ -332,22 +332,11 @@ Triviality step_inst_base_dret_map[local]:
     step_inst_base inst s
 Proof
   rpt strip_tac >>
-  CONV_TAC (LHS_CONV (ONCE_REWRITE_CONV [step_inst_base_def])) >>
-  CONV_TAC (RHS_CONV (ONCE_REWRITE_CONV [step_inst_base_def])) >>
-  gvs[]
+  simp[step_inst_base_DRET]
 QED
 
-(* Cache each opcode branch once, rather than rewriting the full dispatch
-   separately in every operand-shape case. *)
-val step_inst_base_opcode_rewrites = let
-  val expanded = PURE_ONCE_REWRITE_CONV [step_inst_base_def]
-    ``step_inst_base inst s``
-  fun specialize opc = let
-    val eq_asm = ASSUME (mk_eq (``inst.inst_opcode``, opc))
-    val resolved = CONV_RULE (RAND_CONV (REWRITE_CONV [opcode_case_def]))
-      (SUBS [eq_asm] expanded)
-  in GEN_ALL (DISCH (concl eq_asm) resolved) end
-in map specialize (TypeBase.constructors_of ``:opcode``) end;
+(* Reuse the exported branches rather than rebuilding the full dispatch. *)
+val step_inst_base_opcode_rewrites = CONJUNCTS step_inst_base_opcode_eqs;
 
 fun rewrite_step_inst_base_opcode eq = let
   val opc = rhs (concl eq)

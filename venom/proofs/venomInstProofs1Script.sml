@@ -134,9 +134,27 @@ QED
 (* ===== Section 3: Main Preservation Theorems ========================= *)
 (* ===================================================================== *)
 
+(* Index the exported equations once; rewrite only the known opcode branch. *)
+val step_inst_base_opcode_rewrites = let
+  fun key th = let
+    val (_, body) = strip_forall (concl th)
+    val (guard, _) = dest_imp body
+  in rhs guard end
+in map (fn th => (key th, th))
+  (CONJUNCTS venomExecSemanticsTheory.step_inst_base_opcode_eqs) end;
+
+fun rewrite_step_inst_base_opcode eq = let
+  val (_, rewrite) = valOf (List.find
+    (fn (key, _) => aconv key (rhs (concl eq)))
+    step_inst_base_opcode_rewrites)
+in PURE_ONCE_REWRITE_TAC [MATCH_MP rewrite eq] end;
+
+val step_inst_base_opcode_tac =
+  qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode;
+
 (* NOP is identity: produces OK with unchanged state *)
 val reduce_to_base_tac =
-  rw[Once step_inst_def] >> simp[step_inst_base_def];
+  rw[Once step_inst_def] >> step_inst_base_opcode_tac >> simp[];
 
 Theorem step_nop_identity:
   !fuel ctx inst s. inst.inst_opcode = NOP ==> step_inst fuel ctx inst s = OK s
@@ -149,7 +167,10 @@ Theorem step_assert_identity:
     step_inst fuel ctx inst s = OK s' /\ inst.inst_opcode = ASSERT ==>
     s' = s
 Proof
-  rw[Once step_inst_def, step_inst_base_def] >> gvs[AllCaseEqs()]
+  simp[Once step_inst_def] >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  qhdtm_x_assum `step_inst_base` mp_tac >>
+  step_inst_base_opcode_tac >> strip_tac >> gvs[AllCaseEqs()]
 QED
 
 Theorem step_assert_unreachable_identity:
@@ -161,7 +182,7 @@ Proof
   simp[Once step_inst_def] >>
   rpt gen_tac >> strip_tac >> gvs[] >>
   qhdtm_x_assum `step_inst_base` mp_tac >>
-  simp[Once step_inst_base_def] >> gvs[AllCaseEqs()] >> metis_tac[]
+  step_inst_base_opcode_tac >> gvs[AllCaseEqs()] >> metis_tac[]
 QED
 
 (* ===================================================================== *)
@@ -186,7 +207,7 @@ Proof
   simp[Once step_inst_def] >>
   rpt gen_tac >> strip_tac >> gvs[] >>
   qhdtm_x_assum`step_inst_base`mp_tac >>
-  simp[Once step_inst_base_def] >>
+  step_inst_base_opcode_tac >>
   strip_tac >> gvs[exec_write2_def,AllCaseEqs()] >>
   simp[mstore_def, lookup_var_def]
 QED
@@ -209,7 +230,7 @@ Proof
   simp[Once step_inst_def] >>
   rpt gen_tac >> strip_tac >> gvs[] >>
   qhdtm_x_assum`step_inst_base`mp_tac >>
-  simp[Once step_inst_base_def] >>
+  step_inst_base_opcode_tac >>
   strip_tac >> gvs[exec_write2_def,AllCaseEqs()] >>
   simp[mstore8_def, lookup_var_def]
 QED
@@ -232,7 +253,7 @@ Proof
   simp[Once step_inst_def] >>
   rpt gen_tac >> strip_tac >> gvs[] >>
   qhdtm_x_assum`step_inst_base`mp_tac >>
-  simp[Once step_inst_base_def] >>
+  step_inst_base_opcode_tac >>
   strip_tac >> gvs[exec_write2_def,AllCaseEqs()] >>
   simp[sstore_def, lookup_var_def]
 QED
@@ -255,7 +276,7 @@ Proof
   simp[Once step_inst_def] >>
   rpt gen_tac >> strip_tac >> gvs[] >>
   qhdtm_x_assum`step_inst_base`mp_tac >>
-  simp[Once step_inst_base_def] >>
+  step_inst_base_opcode_tac >>
   strip_tac >> gvs[exec_write2_def,AllCaseEqs()] >>
   simp[tstore_def, lookup_var_def]
 QED
@@ -277,7 +298,7 @@ Proof
   simp[Once step_inst_def] >>
   rpt gen_tac >> strip_tac >> gvs[] >>
   qhdtm_x_assum`step_inst_base`mp_tac >>
-  simp[Once step_inst_base_def] >>
+  step_inst_base_opcode_tac >>
   strip_tac >> gvs[exec_write2_def,AllCaseEqs()] >>
   simp[istore_def, mstore_def, lookup_var_def]
 QED
@@ -300,7 +321,7 @@ Proof
   simp[Once step_inst_def] >>
   rpt gen_tac >> strip_tac >> gvs[] >>
   qhdtm_x_assum`step_inst_base`mp_tac >>
-  simp[Once step_inst_base_def] >>
+  step_inst_base_opcode_tac >>
   strip_tac >> gvs[exec_write2_def,AllCaseEqs()] >>
   simp[lookup_var_def]
 QED
@@ -347,6 +368,10 @@ val step_base_field_finish_tac =
 val step_base_field_tac =
   rw[step_inst_base_def] >> step_base_field_finish_tac;
 
+val step_base_field_opcode_tac =
+  qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
+  step_inst_base_opcode_tac >> strip_tac >> step_base_field_finish_tac;
+
 Triviality nonterminator_opcode_class:
   !op. ~is_terminator op ==>
     is_effect_free_op op \/
@@ -362,7 +387,7 @@ QED
 
 val effect_free_opcode_tac =
   qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
-  simp[Once step_inst_base_def] >> strip_tac >>
+  step_inst_base_opcode_tac >> strip_tac >>
   FIRST [
     drule exec_pure1_state_equiv >> simp[],
     drule exec_pure2_state_equiv >> simp[],
@@ -498,7 +523,7 @@ QED
 
 val mem_write_opcode_tac =
   qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
-  simp[Once step_inst_base_def] >>
+  step_inst_base_opcode_tac >>
   strip_tac >>
   fs[exec_write2_def] >>
   gvs[AllCaseEqs()] >>
@@ -606,18 +631,17 @@ Proof
   >- (drule_all step_inst_base_mem_write_preserves_all >> simp[])
   >- (Cases_on `inst.inst_opcode` >>
       gvs[is_alloca_op_def] >>
-      gvs[step_inst_base_def] >>
-      step_base_field_finish_tac)
+      step_base_field_opcode_tac)
   >- suspend"g1"
-  >- (gvs[step_inst_base_def] >> step_base_field_finish_tac)
-  >- (gvs[step_inst_base_def] >> step_base_field_finish_tac)
-  >- (gvs[step_inst_base_def] >> step_base_field_finish_tac)
-  >- (gvs[step_inst_base_def] >> step_base_field_finish_tac)
-  >- (gvs[step_inst_base_def] >> step_base_field_finish_tac)
-  >- (gvs[step_inst_base_def] >> step_base_field_finish_tac)
-  >- (gvs[step_inst_base_def] >> step_base_field_finish_tac)
-  >- (gvs[step_inst_base_def] >> step_base_field_finish_tac)
-  >- gvs[step_inst_base_def]
+  >- step_base_field_opcode_tac
+  >- step_base_field_opcode_tac
+  >- step_base_field_opcode_tac
+  >- step_base_field_opcode_tac
+  >- step_base_field_opcode_tac
+  >- step_base_field_opcode_tac
+  >- step_base_field_opcode_tac
+  >- step_base_field_opcode_tac
+  >- step_base_field_opcode_tac
 QED
 
 Resume step_inst_base_preserves_all[g1]:
@@ -625,8 +649,7 @@ Resume step_inst_base_preserves_all[g1]:
       gvs[is_ext_call_op_def, is_terminator_def, is_alloca_op_def,
           write_effects_def, all_effects_def] >>
       qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
-      PURE_REWRITE_TAC[step_inst_base_def] >>
-      ASM_REWRITE_TAC[opcode_case_def] >>
+      step_inst_base_opcode_tac >>
       gvs[exec_ext_call_def, exec_delegatecall_def, AllCaseEqs(),
           extract_venom_result_def, update_var_def,
           pairTheory.UNCURRY, lookup_var_def] >>

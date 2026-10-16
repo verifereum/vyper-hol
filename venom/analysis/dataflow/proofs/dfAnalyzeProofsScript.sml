@@ -857,7 +857,8 @@ Proof
     mp_tac >>
   CONV_TAC (LAND_CONV (LHS_CONV
     (ONCE_REWRITE_CONV [df_fold_forward_def]))) >>
-  simp[LET_THM] >> strip_tac >>
+  (* Reduce the lets without turning the quantified IH into a simp rule. *)
+  simp_tac bool_ss [LET_THM] >> strip_tac >>
   (* Inductive: apply the IH to the recursive fold call. *)
   first_x_assum (qspecl_then [`transfer`, `lbl`, `idx+1`,
     `transfer h acc`, `inst_map |+ ((lbl,idx),acc)`,

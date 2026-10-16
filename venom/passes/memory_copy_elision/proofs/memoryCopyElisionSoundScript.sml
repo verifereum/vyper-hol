@@ -2276,9 +2276,8 @@ Resume copy_fact_transfer_sound_thm[is_copy]:
         mp_tac bp_ptrs_bounded_write_loc >>
         disch_then (qspecl_then [`ctx.ce_bp`,`fn`,`s`,`bb`,`inst`] mp_tac) >>
         (impl_tac >- (
-          simp[] >> Cases_on `inst.inst_opcode` >>
-          gvs[is_copy_opcode_def, opcode2num_thm, write_effects_def,
-              is_raw_fmp_opcode_def])) >>
+          simp[] >> drule copy_opcode_cases >> strip_tac >>
+          gvs[write_effects_def, is_raw_fmp_opcode_def])) >>
         simp[]) >>
       mp_tac (Q.SPECL [`ctx.ce_bp`, `dst`, `sz`, `s`, `dst_val`]
                 ce_memloc_runtime_w2n) >>

@@ -90,6 +90,14 @@ Proof
   simp[dse_frame_def, dse_all_frame_def]
 QED
 
+(* Project fields once before splitting address spaces.  A precompiled,
+   projection-only simpset avoids the standard record-update normalizer. *)
+val dse_frame_eq_reconstruct_simp = let
+  val ss = bool_ss ++ rewrites
+    [dse_frame_def, venom_state_component_equality, venom_state_accfupds,
+     combinTheory.K_THM, TypeBase.distinct_of ``:addr_space``]
+in simp_tac ss [] end;
+
 Theorem dse_frame_eq_reconstruct:
   dse_frame space s1 = dse_frame space s2 <=>
   (s1 with <|
@@ -102,8 +110,8 @@ Theorem dse_frame_eq_reconstruct:
     vs_transient := (if space = AddrSp_Transient then s2.vs_transient else s1.vs_transient);
     vs_accounts := (if space = AddrSp_Storage then s2.vs_accounts else s1.vs_accounts) |>) = s2
 Proof
-  Cases_on `space` >>
-  simp[dse_frame_def, venom_state_component_equality]
+  dse_frame_eq_reconstruct_simp >>
+  Cases_on `space` >> dse_frame_eq_reconstruct_simp
 QED
 
 Theorem dse_all_frame_eq_reconstruct:

@@ -2503,19 +2503,76 @@ Proof
   metis_tac[preserves_tv_trans]
 QED
 
+(* Cache primitive and structural matches without traversing continuations. *)
+val TV_FRAME_LEAF_TAC =
+  let
+    val structural = Net.insert
+      (concl tv_frame_bind_guarded |> dest_imp |> snd,
+       MATCH_MP_TAC tv_frame_bind_guarded >> conj_tac) Net.empty
+    val read = MATCH_MP
+      (state_rel_frame_read |> Q.INST [`R` |-> `preserves_tv cx`])
+      (preserves_tv_refl |> Q.SPEC `cx`)
+    val reads = Net.insert (concl read, MATCH_ACCEPT_TAC read) structural
+    val leaves = List.foldl (fn (th,net) =>
+      Net.insert (concl th, MATCH_ACCEPT_TAC th) net) reads
+      (tv_frame_take :: CONJUNCTS tv_frame_primitives)
+  in
+    fn (asl,w) => FIRST (Net.match w leaves) (asl,w)
+  end;
+
+(* Reduce exposed applications only, never their continuation arguments. *)
+val tv_frame_head_conv =
+  let
+    val reduce = FIRST_CONV
+      [BETA_CONV, REWR_CONV pair_case_thm, REWR_CONV UNCURRY]
+    fun head tm = (reduce ORELSEC RATOR_CONV head) tm
+  in head end;
+
+(* Preserve CASE_TAC branch order, using only fresh branch facts as rewrites. *)
+fun TV_FRAME_CASE_TAC (g as (old,_)) =
+  let
+    fun simplify (asl,w) =
+      let
+        val fresh = List.filter (fn a => not (is_forall a) andalso
+          not (List.exists (aconv a) old)) asl
+        val rules = map ASSUME fresh
+      in
+        simp_tac bool_ss
+          (optionTheory.option_CLAUSES :: pair_case_thm :: UNCURRY :: rules) >>
+        RULE_ASSUM_TAC (REWRITE_RULE rules) >> MAP_EVERY assume_tac rules
+      end (asl,w)
+  in
+    (BasicProvers.PURE_CASE_TAC >> simplify) g
+  end;
+
 val TV_FRAME_TAC =
-  rpt (FIRST [CHANGED_TAC (CONV_TAC (DEPTH_CONV ETA_CONV)),
-    CHANGED_TAC (simp_tac bool_ss
-      [FORALL_PROD, pair_case_thm, UNCURRY, tv_frame_primitives]),
+  rpt (FIRST [
     first_assum ACCEPT_TAC,
-    irule state_rel_frame_read >> simp[],
-    MATCH_ACCEPT_TAC tv_frame_take,
+    TV_FRAME_LEAF_TAC,
+    CHANGED_TAC (CONV_TAC
+      (RATOR_CONV (RAND_CONV (DEPTH_CONV ETA_CONV)))),
+    CONV_TAC (HO_REWR_CONV FORALL_PROD),
+    CONV_TAC (RAND_CONV tv_frame_head_conv),
+    gen_tac, strip_tac, conj_tac,
+    CONV_TAC (RAND_CONV (REWR_CONV ignore_bind_def)),
+    CONV_TAC (RAND_CONV ETA_CONV),
     CHANGED_TAC (fn (asl,w) =>
       simp_tac bool_ss (pair_case_thm :: UNCURRY ::
         List.map ASSUME (List.filter is_eq asl)) (asl,w)),
-    irule tv_frame_bind_guarded >> conj_tac,
-    CHANGED_TAC (rewrite_tac[ignore_bind_def]),
-    gen_tac, strip_tac, conj_tac, CASE_TAC]);
+    TV_FRAME_CASE_TAC]) >>
+  (* Restore the old residual-fact normal form without rewriting guarded IHs. *)
+  POP_ASSUM_LIST (fn ths => let
+    val normalise = PURE_REWRITE_RULE [FST, SND, pair_case_thm, UNCURRY]
+    val normalised = map (fn th => if is_forall (concl th) then th
+      else normalise th) ths
+    val facts = List.concat (map CONJUNCTS
+      (List.filter (not o is_forall o concl) normalised))
+    val substitutions = List.filter (fn th =>
+      is_eq (concl th) andalso
+      (is_var (lhs (concl th)) orelse is_var (rhs (concl th)))) facts
+    val restored = map (fn th => if is_forall (concl th) then th
+      else PURE_REWRITE_RULE substitutions th) normalised
+  in MAP_EVERY assume_tac (rev restored) end);
 
 Resume eval_preserves_tv[ExtCall]:
   rpt gen_tac >> strip_tac >>

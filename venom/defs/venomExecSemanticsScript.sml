@@ -1109,12 +1109,36 @@ Definition step_inst_base_def:
     | _ => Error "unknown opcode"
 End
 
+(* Resolve the opcode dispatch once per constructor, not once per proof goal. *)
+val step_inst_base_opcode_rewrites = let
+  val expanded = PURE_ONCE_REWRITE_CONV [step_inst_base_def]
+    ``step_inst_base inst s``
+  fun specialize opc = let
+    val eq_asm = ASSUME (mk_eq (``inst.inst_opcode``, opc))
+    val resolved = CONV_RULE (RAND_CONV (REWRITE_CONV [opcode_case_def]))
+      (SUBS [eq_asm] expanded)
+  in (opc, GEN_ALL (DISCH (concl eq_asm) resolved)) end
+in map specialize (TypeBase.constructors_of ``:opcode``) end;
+
+(* Export the proved branch equations so clients need not rebuild dispatch. *)
+val step_inst_base_opcode_eqs = save_thm
+  ("step_inst_base_opcode_eqs",
+   LIST_CONJ (map #2 step_inst_base_opcode_rewrites));
+
+fun step_inst_base_for opc =
+  #2 (valOf (List.find
+    (fn (key, _) => aconv key opc) step_inst_base_opcode_rewrites));
+
+fun rewrite_step_inst_base_opcode eq =
+  PURE_ONCE_REWRITE_TAC [MATCH_MP (step_inst_base_for (rhs (concl eq))) eq] >>
+  TRY REFL_TAC;
+
 Theorem step_inst_base_ILOAD:
   eval_operand op s = SOME off ==>
   step_inst_base (instruction id ILOAD [op] [out]) s =
     OK (update_var out (mload (w2n off) s) s)
 Proof
-  simp[step_inst_base_def, exec_read1_def]
+  simp[step_inst_base_for ``ILOAD``, exec_read1_def]
 QED
 
 Theorem step_inst_base_ISTORE:
@@ -1123,14 +1147,14 @@ Theorem step_inst_base_ISTORE:
   step_inst_base (instruction id ISTORE [offset_op; value_op] []) s =
     OK (istore (w2n off) value s)
 Proof
-  simp[step_inst_base_def, exec_write2_def]
+  simp[step_inst_base_for ``ISTORE``, exec_write2_def]
 QED
 
 Theorem step_inst_base_NOT:
   inst.inst_opcode = NOT ==>
   step_inst_base inst s = exec_pure1 word_1comp inst s
 Proof
-  Cases_on `inst` >> gvs[step_inst_base_def]
+  strip_tac >> qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode
 QED
 
 Theorem step_inst_base_ISZERO:
@@ -1138,7 +1162,7 @@ Theorem step_inst_base_ISZERO:
   step_inst_base inst s =
     exec_pure1 (\x. bool_to_word (x = 0w)) inst s
 Proof
-  Cases_on `inst` >> gvs[step_inst_base_def]
+  strip_tac >> qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode
 QED
 
 Theorem step_inst_base_RETFMP:
@@ -1151,7 +1175,7 @@ Theorem step_inst_base_RETFMP:
                   iret_adopt_fmp := SOME s.vs_fmp |> s
     | NONE => Error "retfmp: undefined return value"
 Proof
-  Cases_on `inst` >> gvs[step_inst_base_def]
+  strip_tac >> qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode
 QED
 
 Theorem step_inst_base_DRET:
@@ -1177,12 +1201,48 @@ Theorem step_inst_base_DRET:
                       <| iret_values := ordinary_vals ++ ptrs;
                          iret_adopt_fmp := SOME final_cursor |> s''
 Proof
-  Cases_on `inst` >> gvs[step_inst_base_def]
+  strip_tac >> qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode
 QED
 
 (* --------------------------------------------------------------------------
    Block and Function Execution
    -------------------------------------------------------------------------- *)
+
+Theorem update_var_inst_idx:
+  (update_var x v s).vs_inst_idx = s.vs_inst_idx
+Proof
+  simp[update_var_def]
+QED
+
+(* Value-producing helpers only update variables, regardless of computation. *)
+Theorem exec_value_preserves_inst_idx:
+  (exec_pure1 f1 inst s = OK s' ==> s'.vs_inst_idx = s.vs_inst_idx) /\
+  (exec_pure2 f2 inst s = OK s' ==> s'.vs_inst_idx = s.vs_inst_idx) /\
+  (exec_pure3 f3 inst s = OK s' ==> s'.vs_inst_idx = s.vs_inst_idx) /\
+  (exec_read0 r0 inst s = OK s' ==> s'.vs_inst_idx = s.vs_inst_idx) /\
+  (exec_read1 r1 inst s = OK s' ==> s'.vs_inst_idx = s.vs_inst_idx)
+Proof
+  rpt conj_tac >>
+  simp[exec_pure1_def, exec_pure2_def, exec_pure3_def,
+       exec_read0_def, exec_read1_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[update_var_inst_idx]
+QED
+
+(* Call helpers preserve the instruction index despite their state changes. *)
+Theorem exec_call_preserves_inst_idx:
+  (exec_ext_call inst s gas addr value ao az ro rz static = OK s' ==>
+     s'.vs_inst_idx = s.vs_inst_idx) /\
+  (exec_delegatecall inst s gas addr ao az ro rz = OK s' ==>
+     s'.vs_inst_idx = s.vs_inst_idx) /\
+  (exec_create inst s value off sz salt = OK s' ==>
+     s'.vs_inst_idx = s.vs_inst_idx)
+Proof
+  rpt conj_tac >>
+  simp[exec_ext_call_def, consume_call_outcome_eq, exec_delegatecall_def,
+       exec_create_def, extract_venom_result_def, pairTheory.ELIM_UNCURRY,
+       AllCaseEqs()] >>
+  rpt strip_tac >> gvs[update_var_inst_idx]
+QED
 
 (* Non-terminator instructions preserve inst_idx.
    Co-located with run_block definition because run_block's
@@ -1196,19 +1256,20 @@ Proof
   Cases_on `inst.inst_opcode` >>
   gvs[is_terminator_def] >>
   qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
-  PURE_REWRITE_TAC[step_inst_base_def] >>
-  ASM_REWRITE_TAC[opcode_case_def] >>
+  qpat_x_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode >>
+  TRY (FIRST (map MATCH_ACCEPT_TAC (CONJUNCTS exec_value_preserves_inst_idx))) >>
   simp_tac std_ss
-    [AllCaseEqs(), exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def,
-     exec_ext_call_def, consume_call_outcome_eq, exec_delegatecall_def,
-     exec_create_def, exec_alloca_def, extract_venom_result_def,
-     pairTheory.ELIM_UNCURRY] >>
+    [AllCaseEqs(), exec_write2_def, exec_alloca_def,
+     pairTheory.ELIM_UNCURRY,
+     TypeBase.one_one_of ``:exec_result``,
+     TypeBase.distinct_of ``:exec_result``] >>
   rpt strip_tac >> gvs[] >>
-  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
-  fs[update_var_def, mstore_def, mstore8_def, sstore_def, tstore_def,
+  TRY (FIRST (map (fn th => drule th >> simp[])
+                 (CONJUNCTS exec_call_preserves_inst_idx))) >>
+  fs[update_var_inst_idx, mstore_def, mstore8_def, sstore_def, tstore_def,
      istore_def, write_memory_with_expansion_def, mcopy_def,
-     revert_state_def, eval_operands_def] >> gvs[AllCaseEqs()]
+     revert_state_def, eval_operands_def] >>
+  gvs[AllCaseEqs(), update_var_inst_idx]
 QED
 
 (* --------------------------------------------------------------------------
@@ -1368,12 +1429,6 @@ Theorem adopt_return_fmp_inst_idx[simp]:
   (adopt_return_fmp ir s).vs_inst_idx = s.vs_inst_idx
 Proof
   Cases_on `ir.iret_adopt_fmp` >> simp[adopt_return_fmp_def]
-QED
-
-Theorem update_var_inst_idx:
-  (update_var x v s).vs_inst_idx = s.vs_inst_idx
-Proof
-  simp[update_var_def]
 QED
 
 Theorem foldl_update_var_inst_idx:
@@ -1624,6 +1679,29 @@ Proof
   rw[Once step_inst_def]
 QED
 
+(* Test the result once, then push the test through operand/output dispatch.
+   Constant-true branches collapse without enumerating constructor shapes. *)
+val param_result_cases = prove (
+  ``!r. ((?s. r = OK s) \/ (?e. r = Error e)) =
+        (case r of OK _ => T | Error _ => T | _ => F)``,
+  Cases >> simp[]);
+val param_result_shape_simp = let
+  val test = ``\r:exec_result.
+    case r of OK _ => T | Error _ => T | _ => F``
+  val shapes = [``:operand list``, ``:operand``,
+                ``:operand list # string list``]
+  val distribute = map (fn ty =>
+    BETA_RULE (ISPEC test (TypeBase.case_rand_of ty))) shapes
+  val constants = map (fn ty => Prim_rec.prove_case_const_thm
+    {case_def = TypeBase.case_def_of ty,
+     nchotomy = TypeBase.nchotomy_of ty}) shapes
+  val conditional = BETA_RULE
+    (PART_MATCH (rator o lhs) COND_RAND test)
+  val ss = bool_ss ++ rewrites
+    (distribute @ constants @
+     [conditional, TypeBase.case_def_of ``:exec_result``, LET_THM])
+in simp_tac ss [] end;
+
 Theorem step_inst_param_ok_or_error:
   !inst fuel ctx s.
     is_param_opcode inst.inst_opcode ==>
@@ -1633,14 +1711,9 @@ Proof
   rpt strip_tac >>
   fs[is_param_opcode_iff] >>
   simp[step_inst_non_invoke] >>
-  PURE_REWRITE_TAC[step_inst_base_def] >>
-  ASM_REWRITE_TAC[opcode_case_def] >>
-  rpt (BasicProvers.PURE_TOP_CASE_TAC >>
-       asm_simp_tac std_ss
-         [listTheory.list_case_def, operand_case_def,
-          pairTheory.pair_case_thm, LET_THM,
-          TypeBase.one_one_of ``:exec_result``,
-          TypeBase.distinct_of ``:exec_result``])
+  qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode >>
+  PURE_ONCE_REWRITE_TAC [param_result_cases] >>
+  param_result_shape_simp
 QED
 
 (* --------------------------------------------------------------------------

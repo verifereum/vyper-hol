@@ -456,21 +456,28 @@ Proof
     `w2i w2 = 0` by metis_tac[integerTheory.INT_LE_ANTISYM] >>
     fs[integer_wordTheory.w2i_eq_0, wordsTheory.WORD_MULT_CLAUSES,
        integer_wordTheory.word_0_w2i] >> NO_TAC)
-  (* general range case: both non-negative.
-     Remove the division assumption that makes ARITH_TAC diverge. *)
+  (* General range case: use monotonicity and transitivity directly. *)
   >> Q.PAT_X_ASSUM `~(_ /\ _ > _ / _)` kall_tac
   >> Q.PAT_X_ASSUM `~(_ > RANGE_WIDTH_LIMIT \/ _)` kall_tac
   >> qabbrev_tac `a = w2i w1` >> qabbrev_tac `b = w2i w2`
-  >> `0 <= a /\ 0 <= b` by intLib.ARITH_TAC
+  >> `0 <= a /\ 0 <= b` by
+    (conj_tac >> irule integerTheory.INT_LE_TRANS
+     >- (qexists_tac `i` >> fs[integerTheory.INT_NOT_LT])
+     >- (qexists_tac `i'` >> fs[integerTheory.INT_NOT_LT]))
   >> `a * b <= i0 * i0'` by
-    (irule int_le_mul_mono >> intLib.ARITH_TAC)
+    (irule int_le_mul_mono >> fs[])
   >> `i * i' <= a * b` by
-    (irule int_le_mul_mono >> intLib.ARITH_TAC)
-  >> `0 <= a * b` by metis_tac[integerTheory.INT_LE_MUL]
-  >> `INT256_MIN <= a * b` by (mp_tac int256_min_neg >> intLib.ARITH_TAC)
-  >> `a * b <= INT256_MAX` by intLib.ARITH_TAC
+    (irule int_le_mul_mono >> fs[integerTheory.INT_NOT_LT])
+  >> `0 <= a * b` by (irule integerTheory.INT_LE_MUL >> fs[])
+  >> `INT256_MIN <= a * b` by
+    (irule integerTheory.INT_LE_TRANS >> qexists_tac `0` >> conj_tac
+     >- (irule integerTheory.INT_LT_IMP_LE >> ACCEPT_TAC int256_min_neg)
+     >> fs[])
+  >> `a * b <= INT256_MAX` by
+    (irule integerTheory.INT_LE_TRANS >> qexists_tac `i0 * i0'` >>
+     fs[integerTheory.int_gt, integerTheory.INT_NOT_LT])
   >> `w2i (w1 * w2) = a * b` by simp[Abbr `a`, Abbr `b`, w2i_mul_id]
-  >> intLib.ARITH_TAC
+  >> fs[]
 QED
 
 (* ===== Comparison soundness ===== *)
@@ -662,6 +669,17 @@ Proof
   simp[integer_wordTheory.w2i_eq_w2n]
 QED
 
+(* A small unsigned byte index has the same signed value.  Keep this
+   arithmetic independent of the shifted/masked result and range bounds. *)
+Triviality w2n_byte_index_signed[local]:
+  ∀w:256 word. w2n w < 32 ⇒ ¬(w2i w < 0 ∨ w2i w ≥ 32)
+Proof
+  gen_tac >> disch_tac >>
+  `w2n w < INT_MIN(:256)` by
+    (simp[wordsTheory.INT_MIN_def, dim256] >> DECIDE_TAC) >>
+  simp[integer_wordTheory.w2i_eq_w2n, integerTheory.int_ge]
+QED
+
 Theorem eval_range_byte_sound:
   ∀r1 r2 (w1:256 word) (w2:256 word) lit1.
     in_range r1 w1 ∧ in_range r2 w2 ∧
@@ -671,21 +689,21 @@ Theorem eval_range_byte_sound:
        else word_and (word_lsr w2 ((31 − w2n w1) * 8)) (n2w 255))
 Proof
   rpt strip_tac >>
+  Cases_on `w2n w1 ≥ 32`
+  >- (Cases_on `r1` >> Cases_on `r2` >>
+      fs[in_range_bottom, eval_range_byte_def] >>
+      Cases_on `lit1` >>
+      simp[in_range_vr_bytes_range_0w, in_range_constant,
+           integer_wordTheory.word_0_w2i] >>
+      rpt IF_CASES_TAC >>
+      simp[in_range_vr_bytes_range_0w, in_range_constant,
+           integer_wordTheory.word_0_w2i]) >>
+  `¬(w2i w1 < 0 ∨ w2i w1 ≥ 32)` by
+    (irule w2n_byte_index_signed >> fs[arithmeticTheory.GREATER_EQ]) >>
   Cases_on `r1` >> Cases_on `r2` >>
-  fs[in_range_bottom, eval_range_byte_def, in_range_top] >>
-  CASE_TAC >> simp[in_range_top] >>
-  rpt IF_CASES_TAC >> gvs[in_range_top, in_range_constant] >>
-  (* All remaining goals: vr_bytes_range 1 or vr_constant 0 applied to
-     0w or (shift && 255w). Handle COND + close contradictions + prove range. *)
-  rpt (pop_assum mp_tac) >>
-  simp[in_range_vr_bytes_range_0w, in_range_vr_bytes_range_and_255,
-       integer_wordTheory.word_0_w2i, in_range_constant] >>
-  (* Close w2i/w2n contradictions *)
-  REWRITE_TAC[integer_wordTheory.w2i_eq_w2n] >>
-  mp_tac (Q.SPEC `w1` (INST_TYPE [alpha |-> ``:256``] wordsTheory.w2n_lt)) >>
-  mp_tac (INST_TYPE [alpha |-> ``:256``] wordsTheory.dimword_IS_TWICE_INT_MIN) >>
-  simp[wordsTheory.INT_MIN_def, dim256] >>
-  rpt IF_CASES_TAC >> rpt strip_tac >> intLib.ARITH_TAC
+  fs[in_range_bottom, eval_range_byte_def] >>
+  Cases_on `lit1` >>
+  gvs[in_range_vr_bytes_range_and_255]
 QED
 
 (* ===== Int division toolkit ===== *)

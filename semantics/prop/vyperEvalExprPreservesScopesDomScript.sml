@@ -839,19 +839,71 @@ Proof
   simp[evaluation_state_component_equality] >> strip_tac >> simp[]
 QED
 
+(* Cache primitive and bind matches; decompose only the monadic head, never
+   traverse continuations or the large guarded IHs to recognise a leaf. *)
+val SCOPES_DOM_FRAME_LEAF_TAC =
+  let
+    val structural = Net.insert
+      (concl scopes_dom_frame_bind_guarded |> dest_imp |> snd,
+       MATCH_MP_TAC scopes_dom_frame_bind_guarded >> conj_tac) Net.empty
+    val leaves = List.foldl (fn (th,net) =>
+      Net.insert (concl th, MATCH_ACCEPT_TAC th) net) structural
+      (scopes_dom_frame_read :: scopes_dom_frame_take ::
+       CONJUNCTS scopes_dom_frame_primitives)
+  in
+    fn (asl,w) => FIRST (Net.match w leaves) (asl,w)
+  end;
+
+val scopes_dom_head_conv =
+  let
+    val reduce = FIRST_CONV
+      [BETA_CONV, REWR_CONV pair_case_thm, REWR_CONV UNCURRY]
+    fun head tm = (reduce ORELSEC RATOR_CONV head) tm
+  in head end;
+
+(* Preserve CASE_TAC branch order with only fresh branch facts as rewrites. *)
+fun SCOPES_DOM_FRAME_CASE_TAC (g as (old,_)) =
+  let
+    fun simplify (asl,w) =
+      let
+        val fresh = List.filter (fn a => not (is_forall a) andalso
+          not (List.exists (aconv a) old)) asl
+        val rules = map ASSUME fresh
+      in
+        simp_tac bool_ss
+          (optionTheory.option_CLAUSES :: pair_case_thm :: UNCURRY :: rules) >>
+        RULE_ASSUM_TAC (REWRITE_RULE rules) >> MAP_EVERY assume_tac rules
+      end (asl,w)
+  in
+    (BasicProvers.PURE_CASE_TAC >> simplify) g
+  end;
+
 val SCOPES_DOM_FRAME_TAC =
-  rpt (FIRST [CHANGED_TAC (CONV_TAC (DEPTH_CONV ETA_CONV)),
-    CHANGED_TAC (simp_tac bool_ss
-      [ETA_AX, FORALL_PROD, pair_case_thm, UNCURRY, scopes_dom_frame_primitives]),
+  rpt (FIRST [
     first_assum ACCEPT_TAC,
-    MATCH_ACCEPT_TAC scopes_dom_frame_read,
-    MATCH_ACCEPT_TAC scopes_dom_frame_take,
+    SCOPES_DOM_FRAME_LEAF_TAC,
+    CONV_TAC (HO_REWR_CONV FORALL_PROD),
+    CONV_TAC (RAND_CONV scopes_dom_head_conv),
+    gen_tac, strip_tac, conj_tac,
+    CONV_TAC (RAND_CONV (REWR_CONV ignore_bind_def)),
+    CONV_TAC (RAND_CONV ETA_CONV),
     CHANGED_TAC (fn (asl,w) =>
       simp_tac bool_ss (pair_case_thm :: UNCURRY ::
         List.map ASSUME (List.filter is_eq asl)) (asl,w)),
-    irule scopes_dom_frame_bind_guarded >> conj_tac,
-    CHANGED_TAC (rewrite_tac[ignore_bind_def]),
-    gen_tac, strip_tac, conj_tac, CASE_TAC]);
+    SCOPES_DOM_FRAME_CASE_TAC]) >>
+  (* Keep the residual guards in the old tactic's projection/beta normal form
+     for the unchanged guarded-IH discharge below. *)
+  (fn (asl,w) =>
+    let
+      val normalise = PURE_REWRITE_RULE [FST, SND, pair_case_thm, UNCURRY]
+      val facts = List.concat (map (CONJUNCTS o normalise o ASSUME)
+        (List.filter (not o is_forall) asl))
+      val substitutions = List.filter (fn th =>
+        is_eq (concl th) andalso is_var (lhs (concl th))) facts
+    in
+      RULE_ASSUM_TAC (fn th => if is_forall (concl th) then th else
+        PURE_REWRITE_RULE substitutions (normalise th)) (asl,w)
+    end);
 
 Resume eval_mutual_preserves_scopes_dom[ExtCall]:
   rpt gen_tac >> strip_tac >>

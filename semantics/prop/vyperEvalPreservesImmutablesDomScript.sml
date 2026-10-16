@@ -3642,26 +3642,60 @@ Proof
   simp[state_rel_frame_result]
 QED
 
-(* Match primitive frames directly and decompose the monadic spine before
-   trying depth eta conversion. Avoid repeatedly simplifying the remaining
-   pipeline with the full primitive-frame rewrite set. *)
-val IMM_DOM_FRAME_LEAF_TAC = FIRST (map MATCH_ACCEPT_TAC
-  (imm_dom_frame_append_logs :: IMM_DOM_FRAME_TAKE ::
-   CONJUNCTS IMM_DOM_FRAME_PRIMITIVES));
+(* Index primitive frames and bind decomposition once; recognition never
+   traverses continuation arguments or the large guarded IHs. *)
+val IMM_DOM_FRAME_LEAF_TAC =
+  let
+    val structural = Net.insert
+      (concl imm_dom_frame_bind_guarded |> dest_imp |> snd,
+       MATCH_MP_TAC imm_dom_frame_bind_guarded >> conj_tac) Net.empty
+    val leaves = List.foldl (fn (th,net) =>
+      Net.insert (concl th, MATCH_ACCEPT_TAC th) net) structural
+      (imm_dom_frame_append_logs :: IMM_DOM_FRAME_TAKE ::
+       CONJUNCTS IMM_DOM_FRAME_PRIMITIVES)
+  in
+    fn (asl,w) => FIRST (Net.match w leaves) (asl,w)
+  end;
+
+(* Reduce only exposed applications, never their continuation arguments. *)
+val imm_dom_frame_head_conv =
+  let
+    val reduce = FIRST_CONV
+      [BETA_CONV, REWR_CONV pair_case_thm, REWR_CONV UNCURRY]
+    fun head tm = (reduce ORELSEC RATOR_CONV head) tm
+  in head end;
+
+(* Preserve CASE_TAC branch order using only fresh branch facts, rather
+   than rebuilding its broad datatype rewrite set. *)
+fun IMM_DOM_FRAME_CASE_TAC (g as (old,_)) =
+  let
+    fun simplify (asl,w) =
+      let
+        val fresh = List.filter (fn a => not (is_forall a) andalso
+          not (List.exists (aconv a) old)) asl
+        val rules = map ASSUME fresh
+      in
+        simp_tac bool_ss
+          (optionTheory.option_CLAUSES :: pair_case_thm :: UNCURRY :: rules) >>
+        RULE_ASSUM_TAC (REWRITE_RULE rules) >> MAP_EVERY assume_tac rules
+      end (asl,w)
+  in
+    (BasicProvers.PURE_CASE_TAC >> simplify) g
+  end;
 
 val IMM_DOM_FRAME_TAC =
   rpt (FIRST [
-    CHANGED_TAC (simp_tac bool_ss [FORALL_PROD, pair_case_thm, UNCURRY]),
-    gen_tac, strip_tac, conj_tac,
     first_assum ACCEPT_TAC,
-    irule imm_dom_frame_bind_guarded >> conj_tac,
     IMM_DOM_FRAME_LEAF_TAC,
+    CONV_TAC (HO_REWR_CONV FORALL_PROD),
+    CONV_TAC (RAND_CONV imm_dom_frame_head_conv),
+    gen_tac, strip_tac, conj_tac,
     CONV_TAC (RAND_CONV (REWR_CONV ignore_bind_def)),
-    CHANGED_TAC (CONV_TAC (DEPTH_CONV ETA_CONV)),
+    CONV_TAC (RAND_CONV ETA_CONV),
     CHANGED_TAC (fn (asl,w) =>
       simp_tac bool_ss (pair_case_thm :: UNCURRY ::
         List.map ASSUME (List.filter is_eq asl)) (asl,w)),
-    CASE_TAC]);
+    IMM_DOM_FRAME_CASE_TAC]);
 
 Resume immutables_dom_mutual[ExtCall]:
   qpat_assum `eval_expr _ _ _ = _` (fn th =>

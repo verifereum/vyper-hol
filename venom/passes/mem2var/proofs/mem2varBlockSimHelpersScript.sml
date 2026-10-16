@@ -21,6 +21,22 @@ Libs
 
 val _ = augment_srw_ss [mem2varFrameLib.frame_ss];
 
+(* Cache the exported branches; never expand the whole opcode case here. *)
+val step_inst_base_opcode_rewrites = let
+  fun key th = let
+    val (_, body) = strip_forall (concl th)
+    val (guard, _) = dest_imp body
+  in rhs guard end
+in map (fn th => (key th, th))
+  (CONJUNCTS venomExecSemanticsTheory.step_inst_base_opcode_eqs) end;
+
+fun with_step_inst_base_opcode tac =
+  qpat_assum `inst.inst_opcode = _` (fn eq => let
+    val (_, branch) = valOf (List.find
+      (fn (key, _) => aconv key (rhs (concl eq)))
+      step_inst_base_opcode_rewrites)
+  in tac [MATCH_MP branch eq] end);
+
 (* ================================================================
    FLAT MAP INDEX LEMMAS
    ================================================================ *)
@@ -3675,7 +3691,7 @@ Theorem m2v_step_nonpromoted_log:
     ?v2. step_inst fuel ctx inst s2 = OK v2 /\ m2v_inv_noix fn v1 v2
 Proof
   rpt strip_tac >> gvs[step_inst_non_invoke] >>
-  gvs[step_inst_base_def, AllCaseEqs()] >>
+  with_step_inst_base_opcode (fn eqs => gvs (AllCaseEqs() :: eqs)) >>
   (* Operand agreement for rest elements *)
   `!op. MEM op rest ==> eval_operand op s1 = eval_operand op s2`
     by (rpt strip_tac >> first_x_assum irule >> simp[]) >>
@@ -3874,8 +3890,9 @@ Resume m2v_nonpromoted_mem_dispatch[extcodecopy]:
 QED
 
 Resume m2v_nonpromoted_mem_dispatch[mstore8]:
-  gvs[step_inst_non_invoke, step_inst_base_def, AllCaseEqs(),
-      mstore8_eq_wmwe, exec_write2_def] >>
+  gvs[step_inst_non_invoke] >>
+  with_step_inst_base_opcode (fn eqs =>
+    gvs (AllCaseEqs() :: mstore8_eq_wmwe :: exec_write2_def :: eqs)) >>
   `eval_operand op1 s1 = SOME addr` by gvs[] >>
   irule m2v_inv_noix_both_sides_wmwe >> simp[] >>
   rpt strip_tac >> `addr' = w2n addr` by simp[] >> gvs[] >>
@@ -3911,7 +3928,7 @@ Resume m2v_nonpromoted_mem_dispatch[mstore]:
 QED
 
 Resume m2v_nonpromoted_mem_dispatch[mstore_base]:
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> ASM_REWRITE_TAC[] >>
+  with_step_inst_base_opcode PURE_ONCE_REWRITE_TAC >> ASM_REWRITE_TAC[] >>
   suspend "mstore_exec"
 QED
 

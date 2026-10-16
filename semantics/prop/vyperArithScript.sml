@@ -22,10 +22,13 @@ Libs
 Theorem lt_dimword_256:
   ∀n k. k < 2 ** n ∧ n ≤ 256 ⇒ k < dimword (:256)
 Proof
-  simp[dimword_def, EVAL ``dimindex(:256)``]
-  \\ rpt strip_tac
+  rpt strip_tac
   \\ irule arithmeticTheory.LESS_LESS_EQ_TRANS
-  \\ qexists_tac `2 ** n` \\ simp[bitTheory.TWOEXP_MONO2]
+  \\ qexists_tac `2 ** n`
+  \\ conj_tac >- first_assum ACCEPT_TAC
+  \\ REWRITE_TAC [dimword_def]
+  \\ irule bitTheory.TWOEXP_MONO2
+  \\ simp[EVAL ``dimindex(:256)``]
 QED
 
 Theorem word_size_le:
@@ -61,6 +64,16 @@ Proof
   \\ gvs[integerTheory.INT_LT, integerTheory.NUM_OF_INT]
 QED
 
+(* Helper: establish the symbolic power bound before numeral normalization. *)
+Theorem pow2_pred_le_int_min_256:
+  n ≤ 256 ⇒ 2 ** (n − 1) ≤ words$INT_MIN (:256)
+Proof
+  strip_tac
+  \\ REWRITE_TAC [wordsTheory.INT_MIN_def]
+  \\ irule bitTheory.TWOEXP_MONO2
+  \\ simp[EVAL ``dimindex(:256)``]
+QED
+
 (* ===== Signed word round-trip ===== *)
 
 Theorem w2i_i2w_within_signed:
@@ -68,7 +81,12 @@ Theorem w2i_i2w_within_signed:
     within_int_bound (Signed n) x ∧ n ≤ 256 ⇒
     w2i ((i2w x):bytes32) = x
 Proof
-  rpt strip_tac >> gvs[within_int_bound_def] >>
+  rpt strip_tac >>
+  `2 ** (n − 1) ≤ words$INT_MIN (:256)` by
+    (irule pow2_pred_le_int_min_256 >> first_assum ACCEPT_TAC) >>
+  (* Keep the bound outside gvs, which otherwise simplifies it away. *)
+  qpat_x_assum `2 ** (n − 1) ≤ words$INT_MIN (:256)` (fn bound =>
+  gvs[within_int_bound_def] >>
   Cases_on`n = 0` >> gvs[] >- EVAL_TAC >>
   Cases_on `0 ≤ x` >> gvs[] >- (
     `¬(x < 0)` by intLib.ARITH_TAC >> gvs[] >>
@@ -97,9 +115,8 @@ Proof
     irule arithmeticTheory.LESS_EQ_TRANS >>
     qexists_tac `2 ** (n - 1)` >>
     conj_tac >- first_assum ACCEPT_TAC >>
-    simp[wordsTheory.INT_MIN_def, EVAL ``dimindex(:256)``] >>
-    irule bitTheory.TWOEXP_MONO2 >> simp[]
-  )
+    ACCEPT_TAC (CONV_RULE (RAND_CONV EVAL) bound)
+  ))
 QED
 
 (* ===== Signed word range ===== *)
@@ -109,44 +126,11 @@ Theorem within_int_bound_in_word_range:
     INT_MIN (:256) ≤ i ∧ i ≤ INT_MAX (:256)
 Proof
   rpt gen_tac \\ strip_tac
-  \\ gvs[within_int_bound_def, LET_THM]
-  \\ Cases_on`n = 0` >> gvs[]
-  \\ `2 ** (n − 1) ≤ words$INT_MIN (:256)` by
-       simp[wordsTheory.INT_MIN_def, arithmeticTheory.EXP_BASE_LE_MONO]
-  \\ Cases_on `i < 0`
-  >- (* i < 0 *)
-     (qpat_x_assum `(if i < 0 then _ else _)` mp_tac
-      \\ simp[] \\ strip_tac
-      \\ `Num (-i) ≤ words$INT_MIN (:256)` by
-        (irule arithmeticTheory.LESS_EQ_TRANS
-         \\ qexists_tac `2 ** (n − 1)` \\ simp[])
-      \\ `0 ≤ -i` by simp[]
-      \\ `-i = &(Num (-i))` by fs[INT_OF_NUM]
-      \\ `i = -&(Num (-i))` by
-           (qpat_x_assum `-i = _` (SUBST1_TAC o SYM)
-            \\ simp[integerTheory.INT_NEG_NEG])
-      \\ pop_assum SUBST_ALL_TAC
-      \\ gvs[integer_wordTheory.INT_MIN_def, integer_wordTheory.INT_MAX_def,
-             INT_LE_NEG, INT_OF_NUM_LE, wordsTheory.INT_MIN_def])
-  (* i ≥ 0 *)
-  \\ qpat_x_assum `(if i < 0 then _ else _)` mp_tac
-  \\ simp[] \\ strip_tac
-  \\ `Num i < words$INT_MIN (:256)` by
-       (irule arithmeticTheory.LESS_LESS_EQ_TRANS
-        \\ qexists_tac `2 ** (n − 1)` \\ simp[])
-  \\ `0 ≤ i` by fs[integerTheory.INT_NOT_LT]
-  \\ `i = &(Num i)` by fs[INT_OF_NUM]
-  \\ conj_tac
-  >- (simp[integer_wordTheory.INT_MIN_def, integer_wordTheory.INT_MAX_def]
-      \\ qpat_x_assum `i = _` SUBST1_TAC
-      \\ simp[INT_OF_NUM_LE])
-  \\ qpat_x_assum `i = _` SUBST1_TAC
-  \\ irule INT_LE_TRANS
-  \\ qexists_tac `&(words$INT_MIN (:256) - 1)`
-  \\ conj_tac
-  >- simp[INT_OF_NUM_LE, arithmeticTheory.SUB_LESS_OR]
-  \\ `1 ≤ words$INT_MIN (:256)` by simp[wordsTheory.INT_MIN_def]
-  \\ simp[integer_wordTheory.INT_MAX_def, GSYM INT_SUB]
+  \\ drule_all w2i_i2w_within_signed
+  \\ disch_then (fn roundtrip =>
+       ACCEPT_TAC (PURE_REWRITE_RULE [roundtrip]
+         (CONJ (ISPEC ``(i2w i):bytes32`` integer_wordTheory.w2i_ge)
+               (ISPEC ``(i2w i):bytes32`` integer_wordTheory.w2i_le))))
 QED
 
 (* ===== Bound preservation ===== *)

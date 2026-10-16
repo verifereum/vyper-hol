@@ -12,6 +12,24 @@ Ancestors
 Libs
   BasicProvers
 
+(* Index the exported equations once; rewrite only the known opcode branch. *)
+val step_inst_base_opcode_rewrites = let
+  fun key th = let
+    val (_, body) = strip_forall (concl th)
+    val (guard, _) = dest_imp body
+  in rhs guard end
+in map (fn th => (key th, th))
+  (CONJUNCTS venomExecSemanticsTheory.step_inst_base_opcode_eqs) end;
+
+fun rewrite_step_inst_base_opcode eq = let
+  val (_, rewrite) = valOf (List.find
+    (fn (key, _) => aconv key (rhs (concl eq)))
+    step_inst_base_opcode_rewrites)
+in PURE_ONCE_REWRITE_TAC [MATCH_MP rewrite eq] end;
+
+val step_inst_base_opcode_tac =
+  qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode;
+
 (* ===== exec_* result type lemmas ===== *)
 (* Each exec wrapper only returns OK or Error — never Halt/Abort/IntRet.
    Proving these individually is fast; using them as [simp] makes the
@@ -182,7 +200,7 @@ Proof
   rpt strip_tac >>
   drule terminator_opcode_cases >> strip_tac >> gvs[] >>
   qpat_x_assum `step_inst_base inst vs = Halt vs'` mp_tac >>
-  ASM_REWRITE_TAC[step_inst_base_def]
+  step_inst_base_opcode_tac
   >- gvs[AllCaseEqs()]
   >- gvs[AllCaseEqs()]
   >- gvs[AllCaseEqs()]
@@ -202,7 +220,7 @@ Proof
   rpt strip_tac >>
   drule terminator_opcode_cases >> strip_tac >> gvs[] >>
   qpat_x_assum `step_inst_base inst vs = Abort a vs'` mp_tac >>
-  ASM_REWRITE_TAC[step_inst_base_def] >>
+  step_inst_base_opcode_tac >>
   gvs[] >>
   gvs[AllCaseEqs()] >>
   rpt strip_tac >> pairarg_tac >> gvs[]
@@ -310,31 +328,31 @@ Proof
   rpt strip_tac >>
   drule effect_free_group_cases >> strip_tac
   >- (gvs[ef_pure1_def] >> qpat_x_assum `step_inst_base inst s = IntRet vals vs'` mp_tac >>
-      ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >>
+      step_inst_base_opcode_tac >> simp[] >>
       every_case_tac >> gvs[extract_venom_result_def])
   >- (gvs[ef_arith1_def] >> qpat_x_assum `step_inst_base inst s = IntRet vals vs'` mp_tac >>
-      ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >>
+      step_inst_base_opcode_tac >> simp[] >>
       every_case_tac >> gvs[extract_venom_result_def])
   >- (gvs[ef_arith2_def] >> qpat_x_assum `step_inst_base inst s = IntRet vals vs'` mp_tac >>
-      ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >>
+      step_inst_base_opcode_tac >> simp[] >>
       every_case_tac >> gvs[extract_venom_result_def])
   >- (gvs[ef_cmp_def] >> qpat_x_assum `step_inst_base inst s = IntRet vals vs'` mp_tac >>
-      ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >>
+      step_inst_base_opcode_tac >> simp[] >>
       every_case_tac >> gvs[extract_venom_result_def])
   >- (gvs[ef_bits_def] >> qpat_x_assum `step_inst_base inst s = IntRet vals vs'` mp_tac >>
-      ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >>
+      step_inst_base_opcode_tac >> simp[] >>
       every_case_tac >> gvs[extract_venom_result_def])
   >- (gvs[ef_pure3_def] >> qpat_x_assum `step_inst_base inst s = IntRet vals vs'` mp_tac >>
-      ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >>
+      step_inst_base_opcode_tac >> simp[] >>
       every_case_tac >> gvs[extract_venom_result_def])
   >- (gvs[ef_read0_def] >> qpat_x_assum `step_inst_base inst s = IntRet vals vs'` mp_tac >>
-      ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >>
+      step_inst_base_opcode_tac >> simp[] >>
       every_case_tac >> gvs[extract_venom_result_def])
   >- (gvs[ef_read1_def] >> qpat_x_assum `step_inst_base inst s = IntRet vals vs'` mp_tac >>
-      ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >>
+      step_inst_base_opcode_tac >> simp[] >>
       every_case_tac >> gvs[extract_venom_result_def])
   >- (gvs[ef_misc_def] >> qpat_x_assum `step_inst_base inst s = IntRet vals vs'` mp_tac >>
-      ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >>
+      step_inst_base_opcode_tac >> simp[] >>
       gvs[AllCaseEqs(), extract_venom_result_def])
 QED
 
@@ -346,7 +364,7 @@ Triviality effect_free_pure1_result_class[local]:
 Proof
   rpt strip_tac >> gvs[] >>
   qpat_x_assum `step_inst_base inst s = _` mp_tac >>
-  ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >>
+  step_inst_base_opcode_tac >> simp[] >>
   every_case_tac >> gvs[]
 QED
 
@@ -359,7 +377,7 @@ Triviality effect_free_pure2_arith1_result_class[local]:
 Proof
   rpt strip_tac >> gvs[] >>
   qpat_x_assum `step_inst_base inst s = _` mp_tac >>
-  ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >>
+  step_inst_base_opcode_tac >> simp[] >>
   every_case_tac >> gvs[]
 QED
 
@@ -372,7 +390,7 @@ Triviality effect_free_pure2_arith2_result_class[local]:
 Proof
   rpt strip_tac >> gvs[] >>
   qpat_x_assum `step_inst_base inst s = _` mp_tac >>
-  ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >>
+  step_inst_base_opcode_tac >> simp[] >>
   every_case_tac >> gvs[]
 QED
 
@@ -385,7 +403,7 @@ Triviality effect_free_pure2_cmp_result_class[local]:
 Proof
   rpt strip_tac >> gvs[] >>
   qpat_x_assum `step_inst_base inst s = _` mp_tac >>
-  ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >>
+  step_inst_base_opcode_tac >> simp[] >>
   every_case_tac >> gvs[]
 QED
 
@@ -400,7 +418,7 @@ Triviality effect_free_pure2_bits_result_class[local]:
 Proof
   rpt strip_tac >> gvs[] >>
   qpat_x_assum `step_inst_base inst s = _` mp_tac >>
-  ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >>
+  step_inst_base_opcode_tac >> simp[] >>
   every_case_tac >> gvs[]
 QED
 
@@ -412,7 +430,7 @@ Triviality effect_free_pure3_result_class[local]:
 Proof
   rpt strip_tac >> gvs[] >>
   qpat_x_assum `step_inst_base inst s = _` mp_tac >>
-  ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >>
+  step_inst_base_opcode_tac >> simp[] >>
   every_case_tac >> gvs[]
 QED
 
@@ -433,7 +451,7 @@ Triviality effect_free_read0_result_class[local]:
 Proof
   rpt strip_tac >> gvs[] >>
   qpat_x_assum `step_inst_base inst s = _` mp_tac >>
-  ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >>
+  step_inst_base_opcode_tac >> simp[] >>
   every_case_tac >> gvs[]
 QED
 
@@ -451,11 +469,11 @@ Proof
   rpt gen_tac >> strip_tac >> conj_tac
   >- (strip_tac >>
       first_x_assum mp_tac >> gvs[] >>
-      ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >>
+      step_inst_base_opcode_tac >> simp[] >>
       every_case_tac >> gvs[]) >>
   strip_tac >>
   first_x_assum mp_tac >> gvs[] >>
-  ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >>
+  step_inst_base_opcode_tac >> simp[] >>
   every_case_tac >> gvs[]
 QED
 
@@ -471,7 +489,7 @@ Triviality effect_free_misc_result_class[local]:
 Proof
   rpt strip_tac >> gvs[] >>
   qpat_x_assum `step_inst_base inst s = _` mp_tac >>
-  ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >>
+  step_inst_base_opcode_tac >> simp[] >>
   gvs[AllCaseEqs()]
 QED
 
@@ -523,7 +541,7 @@ Proof
   rpt strip_tac >>
   drule mem_write_opcode_cases >> strip_tac >> gvs[] >>
   qpat_x_assum `step_inst_base inst s = Halt vs'` mp_tac >>
-  ASM_REWRITE_TAC[step_inst_base_def] >>
+  step_inst_base_opcode_tac >>
   gvs[AllCaseEqs()] >>
   rpt strip_tac >> pairarg_tac >> gvs[]
 QED
@@ -537,7 +555,7 @@ Proof
   rpt strip_tac >>
   drule mem_write_opcode_cases >> strip_tac >> gvs[] >>
   qpat_x_assum `step_inst_base inst s = Abort a vs'` mp_tac >>
-  ASM_REWRITE_TAC[step_inst_base_def] >>
+  step_inst_base_opcode_tac >>
   gvs[AllCaseEqs()] >>
   rpt strip_tac >> pairarg_tac >> gvs[]
 QED
@@ -561,12 +579,12 @@ Proof
   >- (strip_tac >>
       Cases_on `inst.inst_opcode` >> gvs[is_alloca_op_def] >>
       qpat_x_assum `step_inst_base inst s = Halt vs'` mp_tac >>
-      ASM_REWRITE_TAC[step_inst_base_def] >>
+      step_inst_base_opcode_tac >>
       gvs[AllCaseEqs()]) >>
   strip_tac >>
   Cases_on `inst.inst_opcode` >> gvs[is_alloca_op_def] >>
   qpat_x_assum `step_inst_base inst s = Abort a vs'` mp_tac >>
-  ASM_REWRITE_TAC[step_inst_base_def] >>
+  step_inst_base_opcode_tac >>
   gvs[AllCaseEqs()]
 QED
 
@@ -586,8 +604,9 @@ Triviality ext_call_not_halt_abort[local]:
 Proof
   rpt gen_tac >> strip_tac >> conj_tac
   >> (strip_tac >>
-      drule ext_call_opcode_cases >>
-      gvs[step_inst_base_def, AllCaseEqs()])
+      drule ext_call_opcode_cases >> strip_tac >>
+      qpat_x_assum `step_inst_base inst s = _` mp_tac >>
+      step_inst_base_opcode_tac >> gvs[AllCaseEqs()])
 QED
 
 Triviality storage_imm_log_assert_not_halt[local]:
@@ -601,7 +620,7 @@ Triviality storage_imm_log_assert_not_halt[local]:
 Proof
   rpt strip_tac >> gvs[] >>
   qpat_x_assum `step_inst_base inst s = Halt vs'` mp_tac >>
-  ASM_REWRITE_TAC[step_inst_base_def] >>
+  step_inst_base_opcode_tac >>
   gvs[AllCaseEqs()]
 QED
 
@@ -615,7 +634,7 @@ Triviality nofail_storage_imm_log_not_abort[local]:
 Proof
   rpt strip_tac >> gvs[] >>
   qpat_x_assum `step_inst_base inst s = Abort a vs'` mp_tac >>
-  ASM_REWRITE_TAC[step_inst_base_def] >>
+  step_inst_base_opcode_tac >>
   gvs[AllCaseEqs()]
 QED
 
@@ -631,18 +650,18 @@ Proof
   >- (drule mem_write_opcode_cases >> strip_tac >>
       gvs[is_terminator_def] >>
       qpat_x_assum `step_inst_base inst s = IntRet vals vs'` mp_tac >>
-      ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >>
+      step_inst_base_opcode_tac >> simp[] >>
       every_case_tac >> gvs[extract_venom_result_def])
   >- (Cases_on `inst.inst_opcode` >> gvs[is_alloca_op_def] >>
       qpat_x_assum `step_inst_base inst s = IntRet vals vs'` mp_tac >>
-      ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >>
+      step_inst_base_opcode_tac >> simp[] >>
       every_case_tac >> gvs[extract_venom_result_def])
   >- (drule ext_call_opcode_cases >> strip_tac >> gvs[] >>
       qpat_x_assum `step_inst_base inst s = IntRet vals vs'` mp_tac >>
-      ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >>
+      step_inst_base_opcode_tac >> simp[] >>
       every_case_tac >> gvs[extract_venom_result_def])
   >> (gvs[] >> qpat_x_assum `step_inst_base inst s = IntRet vals vs'` mp_tac >>
-      ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >>
+      step_inst_base_opcode_tac >> simp[] >>
       every_case_tac >> gvs[extract_venom_result_def])
 QED
 
@@ -657,7 +676,7 @@ Proof
   Cases_on `is_terminator inst.inst_opcode`
   >- (drule terminator_opcode_cases >> strip_tac >> gvs[] >>
       qpat_x_assum `step_inst_base inst vs = IntRet vals vs'` mp_tac >>
-      ASM_REWRITE_TAC[step_inst_base_def] >> simp[] >>
+      step_inst_base_opcode_tac >> simp[] >>
       gvs[AllCaseEqs(), extract_venom_result_def]) >>
   metis_tac[step_inst_base_nonterminator_not_intret]
 QED

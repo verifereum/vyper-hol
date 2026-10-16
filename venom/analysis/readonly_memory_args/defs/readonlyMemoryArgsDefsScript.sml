@@ -184,11 +184,18 @@ Definition root_param_indices_def:
     root_param_indices dfg param_idx all_count visited cv UNION
     root_param_indices_list dfg param_idx all_count visited cvs
 Termination
-  WF_REL_TAC `inv_image ($< LEX $<) (\x. case x of
+  (* Avoid WF_REL_TAC's global datatype/size simplifier: only the sum
+     cases and lexicographic comparison are needed for these calls. *)
+  qexists_tac `inv_image ($< LEX $<) (\x. case x of
     INL (dfg, param_idx, all_count, visited, v) =>
       (CARD (FDOM dfg.dfg_defs DIFF visited), 0)
   | INR (dfg, param_idx, all_count, visited, cvs) =>
       (CARD (FDOM dfg.dfg_defs DIFF visited), SUC (LENGTH cvs)))`
+  >> conj_tac
+  >- (irule relationTheory.WF_inv_image
+      >> irule pairTheory.WF_LEX
+      >> simp[prim_recTheory.WF_LESS])
+  >> simp[relationTheory.inv_image_def, pairTheory.LEX_DEF]
   >> rw[]
   >> irule pred_setTheory.CARD_PSUBSET >> conj_tac
   >- simp[pred_setTheory.FINITE_DIFF, finite_mapTheory.FDOM_FINITE]
