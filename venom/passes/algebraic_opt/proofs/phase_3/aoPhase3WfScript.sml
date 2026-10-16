@@ -18,18 +18,6 @@ Libs
 (* ao_resolve_iszero_inst / ao_transform_inst structural properties are
    shared from aoWf; this theory keeps only phase-3-specific lemmas. *)
 
-Triviality ao_pre_flip_inst_wf[local]:
-  !inst. inst_wf inst ==> inst_wf (ao_pre_flip_inst inst)
-Proof
-  rpt strip_tac >>
-  simp[ao_pre_flip_inst_def] >>
-  Cases_on `inst.inst_operands` >> gvs[] >>
-  Cases_on `t` >> gvs[] >>
-  Cases_on `t'` >> gvs[] >>
-  rpt (IF_CASES_TAC >> gvs[]) >>
-  gvs[is_comparator_def, flip_comparison_opcode_def, inst_wf_def]
-QED
-
 (* ===== Iszero chain invariant: internal positions are Vars ===== *)
 
 (* A single forward step keeps the "positions >= 1 are Var" invariant. *)
@@ -538,7 +526,7 @@ Proof
   irule get_succ_last_map >> fs[]
 QED
 
-Triviality ao_transform_block_label[local]:
+Theorem ao_transform_block_label:
   !mid dfg ra targets bb.
     (ao_transform_block mid dfg ra targets bb).bb_label = bb.bb_label
 Proof

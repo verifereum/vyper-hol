@@ -131,12 +131,12 @@ QED
    This is the core semantic identity behind cmp_flip. *)
 
 (* Helper: bool_to_word b = 0w iff ~b, bool_to_word b = 1w iff b *)
-Triviality btw_0[local]:
+Theorem btw_0:
   !b. (bool_to_word b = 0w) <=> ~b
 Proof Cases >> simp[bool_to_word_def]
 QED
 
-Triviality btw_1[local]:
+Theorem btw_1:
   !b. (bool_to_word b = 1w) <=> b
 Proof Cases >> simp[bool_to_word_def]
 QED

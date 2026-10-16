@@ -39,17 +39,6 @@ QED
 
 (* ===== Signed comparison flip semantics ===== *)
 
-(* Helper: bool_to_word equivalences *)
-Triviality btw_0[local]:
-  !b. (bool_to_word b = 0w) <=> ~b
-Proof Cases >> simp[bool_to_word_def]
-QED
-
-Triviality btw_1[local]:
-  !b. (bool_to_word b = 1w) <=> b
-Proof Cases >> simp[bool_to_word_def]
-QED
-
 (* word_gt x y = w2i x > w2i y (signed greater-than) *)
 (* word_lt x y = w2i x < w2i y (signed less-than) *)
 

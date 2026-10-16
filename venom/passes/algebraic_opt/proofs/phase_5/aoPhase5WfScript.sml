@@ -19,7 +19,7 @@ Libs
 val _ = delsimps ["ao_or_truthy_scan_def", "ao_or_truthy_apply_inst_def"]
 
 (* fn_insts commutes with a 1:1 block map. *)
-Triviality fn_insts_block_map[local]:
+Theorem fn_insts_block_map:
   !f fn.
     fn_insts (function_map_transform (block_map_transform f) fn) =
     MAP f (fn_insts fn)
@@ -39,14 +39,14 @@ Proof
   rw[ao_or_truthy_apply_inst_def]
 QED
 
-Triviality apply_term_id[local]:
+Theorem apply_term_id:
   !ids inst.
     is_terminator inst.inst_opcode ==> ao_or_truthy_apply_inst ids inst = inst
 Proof
   rw[ao_or_truthy_apply_inst_def] >> gvs[is_terminator_def]
 QED
 
-Triviality apply_nonterm[local]:
+Theorem apply_nonterm:
   !ids inst.
     ~is_terminator inst.inst_opcode ==>
     ~is_terminator (ao_or_truthy_apply_inst ids inst).inst_opcode
@@ -92,7 +92,7 @@ Proof
        block_map_transform_def]
 QED
 
-Triviality or_truthy_null_id[local]:
+Theorem or_truthy_null_id:
   !dfg0 fn.
     NULL (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn)) ==>
     ao_or_truthy_function dfg0 (dfg_build_function fn) fn = fn

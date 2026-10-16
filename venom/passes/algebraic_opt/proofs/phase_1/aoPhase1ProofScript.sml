@@ -62,15 +62,6 @@ Proof
   >- (imp_res_tac ao_handle_offset_inst_id >> simp[])
 QED
 
-Theorem ao_handle_offset_inst_outputs:
-  !inst. (ao_handle_offset_inst inst).inst_outputs = inst.inst_outputs
-Proof
-  gen_tac >>
-  Cases_on `inst.inst_opcode = ADD /\ ?l v. inst.inst_operands = [Label l; Lit v]`
-  >- (fs[] >> simp[ao_handle_offset_inst_def])
-  >- (imp_res_tac ao_handle_offset_inst_id >> simp[])
-QED
-
 Theorem step_inst_offset_eq[local]:
   !fuel ctx inst s.
     step_inst fuel ctx (ao_handle_offset_inst inst) s =

@@ -14,7 +14,7 @@ Theory aoWf
 Ancestors
   algebraicOptDefs aoPhase1Wf aoPeepholeSim aoResolveSim
   venomState venomWf venomInst passSimulationProps passSimulationDefs
-  passSharedDefs analysisSimDefs
+  passSharedDefs analysisSimDefs venomExecProofs aoResolveObligation
 Libs
   pairLib BasicProvers
 
@@ -101,14 +101,6 @@ Proof
   simp[listTheory.MEM_MAP, PULL_EXISTS]
 QED
 
-(* Well-formed terminators have no outputs *)
-Triviality terminator_no_outputs[local]:
-  !inst. inst_wf inst /\ is_terminator inst.inst_opcode ==>
-    inst.inst_outputs = []
-Proof
-  rw[inst_wf_def] >> Cases_on `inst.inst_opcode` >> gvs[is_terminator_def]
-QED
-
 (* ===== ao_transform_inst structural properties ===== *)
 
 (* When inst has empty outputs (terminators), ao_transform_inst returns
@@ -161,14 +153,6 @@ QED
 Triviality ao_pre_flip_not_phi[local]:
   !inst. inst.inst_opcode <> PHI ==>
          (ao_pre_flip_inst inst).inst_opcode <> PHI
-Proof
-  rw[ao_pre_flip_inst_def] >> every_case_tac >>
-  gvs[is_comparator_def, flip_comparison_opcode_def]
-QED
-
-Triviality ao_pre_flip_not_invoke[local]:
-  !inst. inst.inst_opcode <> INVOKE ==>
-         (ao_pre_flip_inst inst).inst_opcode <> INVOKE
 Proof
   rw[ao_pre_flip_inst_def] >> every_case_tac >>
   gvs[is_comparator_def, flip_comparison_opcode_def]
@@ -307,14 +291,6 @@ Proof
   every_case_tac >> gvs[listTheory.EVERY_DEF]
 QED
 
-(* resolve preserves Label operands *)
-Triviality resolve_op_label[local]:
-  !targets opc lbl.
-    ao_resolve_iszero_op targets opc (Label lbl) = Label lbl
-Proof
-  simp[ao_resolve_iszero_op_def]
-QED
-
 (* resolve_op preserves get_label *)
 Triviality resolve_op_get_label[local]:
   !targets opc op.
@@ -351,7 +327,7 @@ Proof
 QED
 
 (* ao_pre_flip_inst preserves inst_wf *)
-Triviality ao_pre_flip_inst_wf[local]:
+Theorem ao_pre_flip_inst_wf:
   !inst. inst_wf inst ==> inst_wf (ao_pre_flip_inst inst)
 Proof
   rpt strip_tac >>

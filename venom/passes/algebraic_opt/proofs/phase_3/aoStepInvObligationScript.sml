@@ -18,6 +18,7 @@ Ancestors
   venomInst venomInstProofs venomInstProps
   analysisSimDefs rangeAnalysisProofs rangeAnalysisDefs rangeEvalDefs
   dfgAnalysisProps dfAnalyzeWidenDefs passSimulationProps
+  allocaRemapSSA instIdxIndep
 Libs
   pairLib BasicProvers
 
@@ -82,7 +83,7 @@ Proof
       >- (DISJ2_TAC >> DISJ2_TAC >> metis_tac[]))
 QED
 
-Triviality handle_offset_preserves_operands:
+Theorem handle_offset_preserves_operands:
   !inst. (ao_handle_offset_inst inst).inst_operands = inst.inst_operands \/
          ?l v. inst.inst_opcode = ADD /\
                inst.inst_operands = [Label l; Lit v] /\
@@ -171,16 +172,6 @@ QED
 
 (* ===== sinv step preservation ===== *)
 
-(* mem_fn_insts_blocks shared from passSimulationProps *)
-
-Triviality mem_block_mem_fn_insts:
-  !fn bb inst.
-    MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions ==>
-    MEM inst (fn_insts fn)
-Proof
-  simp[fn_insts_def] >> metis_tac[mem_fn_insts_blocks]
-QED
-
 (* A Var operand of a (handle-offset) block instruction in fn0 is a Var
    operand of the corresponding source instruction in fn, hence not fresh. *)
 Theorem ao_fn0_operand_not_in_fv:
@@ -204,20 +195,8 @@ Proof
   qspecl_then [`inst_orig`] strip_assume_tac handle_offset_preserves_operands >>
   gvs[] >>
   first_x_assum irule >> qexists_tac `inst_orig` >>
-  simp[] >> irule mem_block_mem_fn_insts >>
+  simp[] >> irule mem_fn_insts_intro >>
   qexists_tac `bb0` >> simp[]
-QED
-
-Triviality handle_offset_preserves_outputs[local]:
-  !inst. (ao_handle_offset_inst inst).inst_outputs = inst.inst_outputs
-Proof
-  gen_tac >> simp[ao_handle_offset_inst_def] >>
-  Cases_on `inst.inst_opcode = ADD` >> simp[] >>
-  Cases_on `inst.inst_operands` >> simp[] >>
-  Cases_on `t` >> simp[] >>
-  Cases_on `h` >> simp[] >>
-  Cases_on `h'` >> simp[] >>
-  Cases_on `t'` >> simp[]
 QED
 
 Theorem ao_fn0_output_not_in_fv:
@@ -238,13 +217,11 @@ Proof
   qpat_x_assum `MEM inst _` mp_tac >>
   simp[listTheory.MEM_MAP] >> strip_tac >> gvs[] >>
   rename1 `MEM inst_orig bb0.bb_instructions` >>
-  gvs[handle_offset_preserves_outputs] >>
+  gvs[ao_handle_offset_inst_outputs] >>
   first_x_assum irule >> qexists_tac `inst_orig` >>
-  simp[] >> irule mem_block_mem_fn_insts >>
+  simp[] >> irule mem_fn_insts_intro >>
   qexists_tac `bb0` >> simp[]
 QED
-
-(* all_distinct_flat_map_unique shared from passSimulationProps *)
 
 Triviality is_terminator_cases:
   !opc. is_terminator opc ==>
@@ -297,7 +274,7 @@ Proof
       metis_tac[step_term_call_ctx_tac, step_term_call_ctx_halt])
 QED
 
-Triviality ao_dfg_inv_inst_idx_irrel:
+Theorem ao_dfg_inv_inst_idx_irrel:
   !dfg s n. ao_dfg_inv dfg (s with vs_inst_idx := n) = ao_dfg_inv dfg s
 Proof
   simp[ao_dfg_inv_def, lookup_var_def]
@@ -308,7 +285,7 @@ Triviality ao_chain_defined_prefix_inst_idx_irrel:
     ao_chain_defined_prefix targets (s with vs_inst_idx := n) =
     ao_chain_defined_prefix targets s
 Proof
-  simp[ao_chain_defined_prefix_def, eval_operand_inst_idx_irrel]
+  simp[ao_chain_defined_prefix_def, eval_op_inst_idx]
 QED
 
 Triviality ao_dfg_inv_step_non_output:
@@ -385,7 +362,7 @@ Proof
   rename1 `lookup_var y s' = SOME val` >>
   Cases_on `MEM y inst.inst_outputs`
   >- (`inst = inst_def` by
-        (`MEM inst (fn_insts fn0)` by metis_tac[mem_block_mem_fn_insts] >>
+        (`MEM inst (fn_insts fn0)` by metis_tac[mem_fn_insts_intro] >>
          `MEM inst_def (fn_insts fn0) /\ MEM y inst_def.inst_outputs` by
            metis_tac[dfg_build_function_correct] >>
          qspecl_then [`fn_insts fn0`, `\i. i.inst_outputs`,
@@ -568,7 +545,7 @@ Proof
   `MEM (EL idx bb.bb_instructions) bb.bb_instructions` by
     (irule listTheory.EL_MEM >> simp[]) >>
   `MEM (EL idx bb.bb_instructions) (fn_insts fn0)` by
-    metis_tac[mem_block_mem_fn_insts] >>
+    metis_tac[mem_fn_insts_intro] >>
   `inst_wf (EL idx bb.bb_instructions)` by fs[listTheory.EVERY_EL] >>
   qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
   ONCE_REWRITE_TAC[exec_block_def] >> simp[get_instruction_def] >>

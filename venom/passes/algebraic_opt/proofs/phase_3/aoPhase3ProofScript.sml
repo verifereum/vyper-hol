@@ -18,6 +18,7 @@ Ancestors
   stateEquiv stateEquivProps execEquivProps
   passSimulationProps passSimulationDefs
   analysisSimDefs rangeAnalysisDefs rangeAnalysisProofs rangeEvalDefs
+  aoPhase3Wf
 Libs
   pairLib BasicProvers
 
@@ -34,13 +35,6 @@ Triviality fn0_entry_label[local]:
 Proof
   simp[fn_entry_label_def, entry_block_def] >>
   gen_tac >> Cases_on `fn.fn_blocks` >> simp[]
-QED
-
-Triviality ao_transform_block_label[local]:
-  !mid dfg ra targets bb.
-    (ao_transform_block mid dfg ra targets bb).bb_label = bb.bb_label
-Proof
-  simp[ao_transform_block_def, ao_resolve_phis_block_def]
 QED
 
 Triviality MEM_fn_insts_blocks_local[local]:

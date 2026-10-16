@@ -44,13 +44,6 @@ Proof
   rpt strip_tac >> gvs[step_inst_base_def]
 QED
 
-Triviality neg1_is_max[local]:
-  (0w : 'a word) - 1w = UINT_MAXw
-Proof
-  rewrite_tac[GSYM wordsTheory.WORD_NOT_0] >>
-  simp[wordsTheory.WORD_NOT, wordsTheory.word_sub_def, wordsTheory.WORD_NEG_0]
-QED
-
 (* ===== MUL simulation ===== *)
 
 Theorem ao_mul_sim:

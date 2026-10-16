@@ -3,7 +3,7 @@
  * range_analyze_sound: if in_range_state holds at program point (lbl, idx),
  *   then any operand that evaluates to v has v in the computed range.
  *
- * range_intra_transfer: range_at_inst at SUC idx equals the transfer
+ * ao_range_intra_transfer: range_at_inst at SUC idx equals the transfer
  *   function applied at idx (connects fixpoint to per-instruction state).
  *
  * range_step_inv: step_inst preserves in_range_state for the next
@@ -50,7 +50,7 @@ QED
 
 (* Intra-block transfer for range analysis: range_at_inst at SUC idx
    equals the transfer function applied at idx. *)
-Theorem range_intra_transfer:
+Theorem ao_range_intra_transfer:
   !fn0 lbl bb idx.
     wf_function fn0 /\
     MEM lbl (cfg_analyze fn0).cfg_dfs_pre /\
@@ -112,7 +112,7 @@ Proof
   `range_at_inst (range_analyze fn0) lbl (SUC idx) =
    range_evaluate_inst (dfg_build_function fn0) inst
      (range_at_inst (range_analyze fn0) lbl idx)` by (
-    gvs[] >> irule range_intra_transfer >> simp[]) >>
+    gvs[] >> irule ao_range_intra_transfer >> simp[]) >>
   gvs[] >>
   irule per_inst_range_sound >>
   qexistsl_tac [`ctx`, `fuel`, `s`] >> simp[]

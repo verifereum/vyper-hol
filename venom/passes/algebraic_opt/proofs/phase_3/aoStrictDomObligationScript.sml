@@ -11,22 +11,11 @@ Ancestors
   algebraicOptDefs aoIsZeroInv
   venomWf venomState venomInst venomExecSemantics
   venomInstProps venomExecProps venomExecProofs
-  stateEquiv dfgAnalysisProps passSimulationProps dfgSoundStep
+  stateEquiv dfgAnalysisProps passSimulationProps dfgSoundStep allocaRemapSSA
 Libs
   pairLib BasicProvers
 
 (* ===== SSA / membership helpers ===== *)
-(* all_distinct_flat_map_unique and mem_fn_insts_blocks shared from
-   passSimulationProps *)
-
-Theorem mem_block_mem_fn_insts:
-  !fn bb inst.
-    MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions ==>
-    MEM inst (fn_insts fn)
-Proof
-  simp[fn_insts_def] >> metis_tac[mem_fn_insts_blocks]
-QED
-
 (* Two function instructions sharing an inst_id live in the same block. *)
 Theorem mem_two_blocks_eq:
   !fn bb1 bb2 inst.
@@ -41,20 +30,6 @@ Proof
   impl_tac
   >- (fs[wf_function_def, fn_inst_ids_distinct_def] >>
       simp[listTheory.MEM_MAP] >> metis_tac[]) >>
-  simp[]
-QED
-
-(* SSA: a variable is the output of at most one function instruction. *)
-Theorem ssa_output_unique:
-  !fn i1 i2 v.
-    ssa_form fn /\ MEM i1 (fn_insts fn) /\ MEM i2 (fn_insts fn) /\
-    MEM v i1.inst_outputs /\ MEM v i2.inst_outputs ==>
-    i1 = i2
-Proof
-  rpt strip_tac >>
-  qspecl_then [`fn_insts fn`, `\i:instruction. i.inst_outputs`, `i1`, `i2`, `v`]
-    mp_tac all_distinct_flat_map_unique >>
-  impl_tac >- fs[ssa_form_def] >>
   simp[]
 QED
 
@@ -88,8 +63,8 @@ Proof
   rpt strip_tac >>
   `MEM x inst.inst_outputs /\ MEM inst (fn_insts fn0)` by
     metis_tac[dfgAnalysisPropsTheory.dfg_build_function_correct] >>
-  `MEM p (fn_insts fn0)` by metis_tac[mem_block_mem_fn_insts] >>
-  `inst = p` by metis_tac[ssa_output_unique] >>
+  `MEM p (fn_insts fn0)` by metis_tac[mem_fn_insts_intro] >>
+  `inst = p` by metis_tac[ssa_unique_output] >>
   gvs[]
 QED
 
@@ -106,7 +81,7 @@ Theorem iszero_operand_not_bb_phi:
     !p. MEM p bb.bb_instructions /\ p.inst_opcode = PHI ==> ~MEM w p.inst_outputs
 Proof
   rpt strip_tac >>
-  `MEM p (fn_insts fn0)` by metis_tac[mem_block_mem_fn_insts] >>
+  `MEM p (fn_insts fn0)` by metis_tac[mem_fn_insts_intro] >>
   `?inst_u. dfg_get_def (dfg_build_function fn0) w = SOME inst_u` by
     metis_tac[dfgAnalysisPropsTheory.dfg_build_function_defs_complete] >>
   `dfg_tracked_opcode inst.inst_opcode` by
@@ -118,7 +93,7 @@ Proof
      simp[] >> disch_then (qspec_then `d_bb` mp_tac) >> simp[]) >>
   `MEM w inst_u.inst_outputs /\ MEM inst_u (fn_insts fn0)` by
     metis_tac[dfgAnalysisPropsTheory.dfg_build_function_correct] >>
-  `inst_u = p` by metis_tac[ssa_output_unique] >>
+  `inst_u = p` by metis_tac[ssa_unique_output] >>
   `bb = d_bb` by metis_tac[mem_two_blocks_eq] >>
   gvs[]
 QED
@@ -225,7 +200,7 @@ Proof
   fs[listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
   rename1 `MEM inst' bb.bb_instructions` >>
   `MEM inst (fn_insts fn0) /\ MEM inst' (fn_insts fn0)` by
-    metis_tac[mem_block_mem_fn_insts] >>
+    metis_tac[mem_fn_insts_intro] >>
   `ssa_form fn0` by simp[] >>
   `ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) (fn_insts fn0)))` by
     fs[ssa_form_def] >>
@@ -298,9 +273,9 @@ Proof
     first_x_assum (qspecl_then [`bb`, `EL j bb.bb_instructions`] mp_tac) >>
     simp[]) >>
   pop_assum (strip_assume_tac o REWRITE_RULE[def_available_at_def]) >>
-  `MEM def_inst (fn_insts fn0)` by metis_tac[mem_block_mem_fn_insts] >>
+  `MEM def_inst (fn_insts fn0)` by metis_tac[mem_fn_insts_intro] >>
   `MEM (EL idx bb.bb_instructions) (fn_insts fn0)` by
-    metis_tac[mem_block_mem_fn_insts] >>
+    metis_tac[mem_fn_insts_intro] >>
   `def_inst = EL idx bb.bb_instructions` by
     (qspecl_then [`fn_insts fn0`, `\i. i.inst_outputs`,
                   `def_inst`, `EL idx bb.bb_instructions`, `v`]
@@ -404,7 +379,7 @@ Proof
   `ssa_form fn0` by fs[wf_ssa_def] >>
   `MEM (EL j bb.bb_instructions) (fn_insts fn0) /\
    MEM inst (fn_insts fn0)` by
-    metis_tac[mem_block_mem_fn_insts, listTheory.EL_MEM] >>
+    metis_tac[mem_fn_insts_intro, listTheory.EL_MEM] >>
   `~MEM x inst.inst_outputs` by
     (strip_tac >>
      `EL j bb.bb_instructions = inst` by
@@ -905,13 +880,13 @@ Triviality iszero_other_block_vars[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   `MEM p (fn_insts fn0) /\ MEM inst (fn_insts fn0)` by
-    metis_tac[mem_block_mem_fn_insts] >>
+    metis_tac[mem_fn_insts_intro] >>
   `bb <> d_bb` by (strip_tac >> gvs[]) >>
   conj_tac
   >- (strip_tac >>
       `MEM x inst.inst_outputs` by
         metis_tac[dfgAnalysisPropsTheory.dfg_build_function_correct] >>
-      `inst = p` by metis_tac[ssa_output_unique] >>
+      `inst = p` by metis_tac[ssa_unique_output] >>
       metis_tac[mem_two_blocks_eq]) >>
   rpt strip_tac >>
   `?inst_u. dfg_get_def (dfg_build_function fn0) w = SOME inst_u` by
@@ -925,7 +900,7 @@ Proof
      simp[] >> disch_then (qspec_then `d_bb` mp_tac) >> simp[]) >>
   `MEM w inst_u.inst_outputs /\ MEM inst_u (fn_insts fn0)` by
     metis_tac[dfgAnalysisPropsTheory.dfg_build_function_correct] >>
-  `inst_u = p` by metis_tac[ssa_output_unique] >>
+  `inst_u = p` by metis_tac[ssa_unique_output] >>
   metis_tac[mem_two_blocks_eq]
 QED
 

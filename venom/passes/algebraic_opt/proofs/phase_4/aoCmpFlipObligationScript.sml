@@ -6,27 +6,11 @@ Ancestors
   stateEquiv stateEquivProps stateEquivProofs execEquivProps passSimulationProps
   passSharedDefs venomInstProps
   venomExecSemantics venomState venomInst venomWf
+  aoPhase4Wf allocaRemapSSA
 Libs
   pairLib BasicProvers
 
 (* ===== Pre/post flip helpers ===== *)
-
-(* The scan reads a comparator in its ao_pre_flip_inst form, [x; Lit w]. *)
-Triviality pre_flip_fields[local]:
-  !inst. (ao_pre_flip_inst inst).inst_id = inst.inst_id /\
-         (ao_pre_flip_inst inst).inst_outputs = inst.inst_outputs
-Proof
-  gen_tac >> simp[ao_pre_flip_inst_def] >> every_case_tac >> rw[]
-QED
-
-Triviality pre_flip_is_comparator[local]:
-  !inst. is_comparator (ao_pre_flip_inst inst).inst_opcode <=>
-         is_comparator inst.inst_opcode
-Proof
-  gen_tac >> simp[ao_pre_flip_inst_def] >> every_case_tac >> rw[] >>
-  Cases_on `inst.inst_opcode` >>
-  gvs[is_comparator_def, flip_comparison_opcode_def]
-QED
 
 Triviality pre_flip_with[local]:
   !inst opc ops.
@@ -43,14 +27,6 @@ Triviality pre_flip_mem_operands[local]:
 Proof
   rpt gen_tac >> simp[ao_pre_flip_inst_def] >> every_case_tac >> rw[] >>
   metis_tac[]
-QED
-
-Triviality post_flip_opcode_cases[local]:
-  !inst. (ao_post_flip_inst inst).inst_opcode = inst.inst_opcode \/
-         (ao_post_flip_inst inst).inst_opcode =
-           flip_comparison_opcode inst.inst_opcode
-Proof
-  gen_tac >> simp[ao_post_flip_inst_def] >> every_case_tac >> rw[]
 QED
 
 Triviality comparator_not_term[local]:
@@ -90,15 +66,6 @@ Proof
      gvs[Abbr `i`, is_comparator_def, flip_comparison_opcode_def]) >>
   simp[step_inst_non_invoke, ao_post_flip_step_equiv, pre_flip_with,
        Abbr `i`]
-QED
-
-Triviality uses_ok_single[local]:
-  !dfg v. ao_cmp_flip_uses_ok dfg v ==>
-          ?a. dfg_get_uses dfg v = [a] /\
-              (a.inst_opcode = ASSERT \/ a.inst_opcode = ISZERO)
-Proof
-  rpt gen_tac >> simp[ao_cmp_flip_uses_ok_def] >> every_case_tac >> simp[] >>
-  metis_tac[]
 QED
 
 (* ===== Scan step characterization ===== *)
@@ -193,14 +160,6 @@ Proof
   Cases_on `step_inst fuel ctx h s` >> simp[]
 QED
 
-(* run_insts on singleton = step_inst *)
-Triviality run_insts_singleton[local]:
-  !fuel ctx x s. run_insts fuel ctx [x] s = step_inst fuel ctx x s
-Proof
-  simp[run_insts_def] >> rpt gen_tac >>
-  Cases_on `step_inst fuel ctx x s` >> simp[run_insts_def]
-QED
-
 Triviality run_insts_pair_base[local]:
   !fuel ctx i1 i2 s.
     i1.inst_opcode <> INVOKE /\ i2.inst_opcode <> INVOKE ==>
@@ -292,7 +251,7 @@ QED
 (* INVOKE step_inst preserves result_equiv: callee gets identical state
    because setup_callee zeroes vs_vars and all other fields are equal
    under state_equiv, so run_blocks produces identical results. *)
-Triviality eval_operands_equiv[local]:
+Theorem eval_operands_equiv:
   !ops dead s1 s2.
     state_equiv dead s1 s2 /\
     (!x. MEM (Var x) ops ==> x NOTIN dead) ==>
@@ -317,7 +276,7 @@ Proof
      lookup_var_def]
 QED
 
-Triviality foldl_update_var_state_equiv[local]:
+Theorem foldl_update_var_state_equiv:
   !pairs dead s1 s2.
     state_equiv dead s1 s2 ==>
     state_equiv dead
@@ -332,7 +291,7 @@ Proof
   rpt strip_tac >> IF_CASES_TAC >> gvs[]
 QED
 
-Triviality bind_outputs_state_equiv[local]:
+Theorem bind_outputs_state_equiv:
   !outs vals dead s1 s2.
     state_equiv dead s1 s2 ==>
     case (bind_outputs outs vals s1, bind_outputs outs vals s2) of
@@ -345,7 +304,7 @@ Proof
   irule foldl_update_var_state_equiv >> simp[]
 QED
 
-Triviality step_inst_invoke_result_equiv[local]:
+Theorem step_inst_invoke_result_equiv:
   !fuel ctx dead inst s1 s2.
     state_equiv dead s1 s2 /\
     inst.inst_opcode = INVOKE /\
@@ -442,7 +401,7 @@ Proof
 QED
 
 (* update_var on dead variable preserves state_equiv *)
-Triviality update_dead_var_state_equiv[local]:
+Theorem update_dead_var_state_equiv:
   !dead x v1 v2 s1 s2.
     state_equiv dead s1 s2 /\ x IN dead ==>
     state_equiv dead (update_var x v1 s1) (update_var x v2 s2)
@@ -461,17 +420,6 @@ Proof
   rw[state_equiv_def, execution_equiv_def, update_var_def, lookup_var_def] >>
   simp[finite_mapTheory.FLOOKUP_UPDATE] >>
   rpt strip_tac >> IF_CASES_TAC >> gvs[]
-QED
-
-(* Instructions not in any scan list are unchanged *)
-Triviality apply_inst_unchanged[local]:
-  !mid flips removes inserts inst.
-    ALOOKUP flips inst.inst_id = NONE /\
-    ~MEM inst.inst_id removes /\
-    ALOOKUP inserts inst.inst_id = NONE ==>
-    ao_cmp_flip_apply_inst mid flips removes inserts inst = [inst]
-Proof
-  simp[ao_cmp_flip_apply_inst_def]
 QED
 
 (* Helper: comparator with NONE first operand always errors *)
@@ -934,7 +882,7 @@ Proof
     >> Cases_on `ALOOKUP inserts inst.inst_id`
     >- ( (* NONE: Unchanged *)
       `ao_cmp_flip_apply_inst mid flips removes inserts inst = [inst]` by
-        (irule apply_inst_unchanged >> simp[]) >>
+        (irule ao_cmp_flip_apply_untouched >> simp[]) >>
       pop_assum (fn th => REWRITE_TAC [th]) >>
       REWRITE_TAC [run_insts_singleton] >>
       irule per_inst_unchanged >> gvs[] >>
@@ -1002,55 +950,6 @@ Proof
   gvs[Abbr `bt`]
 QED
 
-Triviality scan_step_flips_subset[local]:
-  !dfg h rest flips removes inserts fl0 rm0 ins0 mid dfg0.
-    ao_cmp_flip_scan mid dfg0 dfg rest = (fl0, rm0, ins0) /\
-    ao_cmp_flip_scan mid dfg0 dfg (h :: rest) = (flips, removes, inserts) ==>
-    flips = fl0 \/
-    (?opc w op1. flips = (h.inst_id, opc, w, op1) :: fl0 /\
-                 is_comparator h.inst_opcode)
-Proof
-  rpt strip_tac >>
-  drule_all scan_step_detail >> strip_tac >> gvs[pre_flip_is_comparator]
-QED
-
-Triviality scan_step_removes_subset[local]:
-  !dfg h rest flips removes inserts fl0 rm0 ins0 mid dfg0.
-    ao_cmp_flip_scan mid dfg0 dfg rest = (fl0, rm0, ins0) /\
-    ao_cmp_flip_scan mid dfg0 dfg (h :: rest) = (flips, removes, inserts) ==>
-    removes = rm0 \/
-    (?v ui. removes = ui.inst_id :: rm0 /\
-            MEM ui (dfg_get_uses dfg v) /\ ui.inst_opcode = ISZERO)
-Proof
-  rpt strip_tac >>
-  drule_all scan_step_detail >>
-  disch_then strip_assume_tac >> gvs[] >>
-  qexists_tac `out_var` >>
-  qexists_tac `HD (dfg_get_uses dfg out_var)` >>
-  `dfg_get_uses dfg out_var <> []` by
-    (Cases_on `dfg_get_uses dfg out_var` >> gvs[]) >>
-  simp[rich_listTheory.HEAD_MEM]
-QED
-
-Triviality scan_step_inserts_subset[local]:
-  !dfg h rest flips removes inserts fl0 rm0 ins0 mid dfg0.
-    ao_cmp_flip_scan mid dfg0 dfg rest = (fl0, rm0, ins0) /\
-    ao_cmp_flip_scan mid dfg0 dfg (h :: rest) = (flips, removes, inserts) ==>
-    inserts = ins0 \/
-    (?v ui.
-       inserts = (ui.inst_id, v, ao_fresh_var (ao_fresh_id mid h.inst_id 0) "iz",
-                  h.inst_id) :: ins0 /\
-       MEM ui (dfg_get_uses dfg v) /\ ui.inst_opcode = ASSERT)
-Proof
-  rpt strip_tac >>
-  drule_all scan_step_detail >>
-  disch_then strip_assume_tac >> gvs[] >>
-  qexists_tac `HD (dfg_get_uses dfg out_var)` >>
-  `dfg_get_uses dfg out_var <> []` by
-    (Cases_on `dfg_get_uses dfg out_var` >> gvs[]) >>
-  simp[rich_listTheory.HEAD_MEM]
-QED
-
 (* Flips keys come from comparator instructions in insts *)
 Triviality scan_flips_are_comparators[local]:
   !dfg insts flips removes inserts id mid dfg0.
@@ -1070,26 +969,6 @@ Proof
   gvs[]
   >- (first_x_assum drule_all >> metis_tac[])
   >> metis_tac[]
-QED
-
-(* Removes IDs come from ISZERO instructions in dfg_get_uses *)
-Triviality scan_removes_are_iszero[local]:
-  !dfg insts flips removes inserts id mid dfg0.
-    ao_cmp_flip_scan mid dfg0 dfg insts = (flips, removes, inserts) /\
-    MEM id removes ==>
-    ?v ui. MEM ui (dfg_get_uses dfg v) /\ ui.inst_id = id /\
-           ui.inst_opcode = ISZERO
-Proof
-  Induct_on `insts`
-  >- simp[ao_cmp_flip_scan_def]
-  >> rpt gen_tac >> strip_tac >>
-  Cases_on `ao_cmp_flip_scan mid dfg0 dfg insts` >> Cases_on `r` >>
-  rename1 `_ = (flips', removes', inserts')` >>
-  `removes = removes' \/
-   (?v ui. removes = ui.inst_id :: removes' /\
-           MEM ui (dfg_get_uses dfg v) /\ ui.inst_opcode = ISZERO)` by
-    metis_tac[scan_step_removes_subset] >>
-  gvs[] >> metis_tac[]
 QED
 
 (* Inserts keys come from ASSERT instructions in dfg_get_uses *)
@@ -1314,13 +1193,6 @@ Proof
   qexists_tac `out_var` >> gvs[]
 QED
 
-(* Terminators are disjoint from comparators/ISZERO/ASSERT *)
-Triviality terminator_not_comparator[local]:
-  !opc. is_terminator opc ==> ~is_comparator opc
-Proof
-  Cases >> simp[is_terminator_def, is_comparator_def]
-QED
-
 Triviality terminator_not_iszero[local]:
   !opc. is_terminator opc ==> opc <> ISZERO
 Proof
@@ -1331,20 +1203,6 @@ Triviality terminator_not_assert[local]:
   !opc. is_terminator opc ==> opc <> ASSERT
 Proof
   Cases >> simp[is_terminator_def]
-QED
-
-(* Key: ALL_DISTINCT IDs + same ID in list => same element *)
-Triviality all_distinct_id_unique[local]:
-  !insts x y.
-    ALL_DISTINCT (MAP (\i. i.inst_id) insts) /\
-    MEM x insts /\ MEM y insts /\
-    x.inst_id = y.inst_id ==>
-    x = y
-Proof
-  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
-  rpt strip_tac >> gvs[] >>
-  TRY (first_x_assum irule >> gvs[] >> NO_TAC) >>
-  fs[listTheory.MEM_MAP] >> metis_tac[]
 QED
 
 (* Scan only adds comparator/ISZERO/ASSERT IDs to lists.
@@ -1364,36 +1222,25 @@ Proof
   >- (* flips *)
      (CCONTR_TAC >> gvs[] >>
       drule_all scan_flips_are_comparators >> strip_tac >>
-      `i = inst` by (irule all_distinct_id_unique >> metis_tac[]) >>
+      `i = inst` by (irule all_distinct_id_eq >> metis_tac[]) >>
       gvs[] >> metis_tac[terminator_not_comparator])
   >- (* removes *)
      (CCONTR_TAC >> gvs[] >>
       drule_all scan_removes_are_iszero >> strip_tac >>
       `MEM ui insts` by metis_tac[] >>
-      `ui = inst` by (irule all_distinct_id_unique >> metis_tac[]) >>
+      `ui = inst` by (irule all_distinct_id_eq >> metis_tac[]) >>
       gvs[] >> metis_tac[terminator_not_iszero])
   >- (* inserts *)
      (CCONTR_TAC >> gvs[] >>
       drule_all scan_inserts_are_assert >> strip_tac >>
       `MEM ui insts` by metis_tac[] >>
-      `ui = inst` by (irule all_distinct_id_unique >> metis_tac[]) >>
+      `ui = inst` by (irule all_distinct_id_eq >> metis_tac[]) >>
       gvs[] >> metis_tac[terminator_not_assert])
 QED
 
 (* exec_block on same instruction from state_equiv states at terminator *)
 
 (* ===== Non-NULL case: helpers + main proof ===== *)
-
-Triviality find_mem_local[local]:
-  !P l x. FIND P l = SOME x ==> MEM x l
-Proof
-  Induct_on `l`
-  >- simp[listTheory.FIND_thm]
-  >> rpt gen_tac >> simp[listTheory.FIND_thm] >>
-     IF_CASES_TAC >> gvs[] >> strip_tac >> res_tac >> simp[]
-QED
-
-(* mem_fn_insts_blocks shared from passSimulationProps *)
 
 Triviality block_inst_in_fn_insts[local]:
   !lbl fn bb inst.
@@ -1403,7 +1250,7 @@ Triviality block_inst_in_fn_insts[local]:
 Proof
   rpt strip_tac >> simp[fn_insts_def] >>
   irule mem_fn_insts_blocks >> qexists_tac `bb` >> simp[] >>
-  gvs[lookup_block_def] >> irule find_mem_local >> metis_tac[]
+  gvs[lookup_block_def] >> irule venomExecProofsTheory.FIND_MEM >> metis_tac[]
 QED
 
 (* For a terminator, step_inst_base at different idx values gives
@@ -1431,15 +1278,6 @@ Proof
     (fn th => mp_tac (AP_TERM ``execution_frame`` th) >>
               mp_tac (AP_TERM ``venom_state_vs_vars`` th)) >>
   simp[]
-QED
-
-Triviality terminator_ok_idx_zero[local]:
-  !inst s s'.
-    is_terminator inst.inst_opcode /\
-    step_inst_base inst s = OK s' ==>
-    s'.vs_inst_idx = 0
-Proof
-  metis_tac[instIdxIndepTheory.terminator_OK_inst_idx_0]
 QED
 
 (* Terminator exec_block simulation with different indices.
@@ -1495,11 +1333,11 @@ Proof
   (* OK-OK-OK case: have state_equiv dead v v', execution_equiv dead v' v''.
      Need state_equiv dead v v'' for the lift_result goal. *)
   `v'.vs_inst_idx = 0` by
-    (irule terminator_ok_idx_zero >>
+    (irule instIdxIndepTheory.terminator_OK_inst_idx_0 >>
      qexistsl_tac [`bb1.bb_instructions❲n1❳`, `s2 with vs_inst_idx := n1`] >>
      simp[]) >>
   `v''.vs_inst_idx = 0` by
-    (irule terminator_ok_idx_zero >>
+    (irule instIdxIndepTheory.terminator_OK_inst_idx_0 >>
      qexistsl_tac [`bb1.bb_instructions❲n1❳`, `s2 with vs_inst_idx := n2`] >>
      simp[]) >>
   `v'.vs_current_bb = v''.vs_current_bb /\
@@ -1551,14 +1389,6 @@ Triviality revert_set_rd_execution_equiv[local]:
 Proof
   rw[execution_equiv_def, revert_state_def, set_returndata_def,
      lookup_var_def]
-QED
-
-(* state_equiv implies execution_equiv *)
-Triviality state_equiv_imp_execution_equiv[local]:
-  !dead s1 s2.
-    state_equiv dead s1 s2 ==> execution_equiv dead s1 s2
-Proof
-  rw[state_equiv_def]
 QED
 
 (* update_var on dead variable preserves execution_equiv *)
@@ -1696,7 +1526,7 @@ Proof
        stateEquivTheory.lift_result_def] >>
   irule revert_set_rd_execution_equiv >>
   irule update_dead_var_right_execution_equiv >> simp[] >>
-  irule state_equiv_imp_execution_equiv >> simp[]
+  irule state_equiv_implies_execution_equiv >> simp[]
 QED
 
 (* Insert v1<>0w case: both OK *)
@@ -1873,7 +1703,7 @@ Proof
     >> Cases_on `ALOOKUP inserts inst.inst_id`
     >- ( (* NONE: Unchanged *)
       `ao_cmp_flip_apply_inst mid flips removes inserts inst = [inst]` by
-        (irule apply_inst_unchanged >> simp[]) >>
+        (irule ao_cmp_flip_apply_untouched >> simp[]) >>
       pop_assum (fn th => REWRITE_TAC [th]) >>
       REWRITE_TAC [run_insts_singleton] >>
       irule per_inst_lr_unchanged >> gvs[] >>
@@ -2200,18 +2030,6 @@ Proof
   >- (first_x_assum irule >> metis_tac[])
 QED
 
-(* Bridge: fn_inst_ids_distinct => ALL_DISTINCT on fn_insts *)
-Triviality fn_insts_ids_all_distinct[local]:
-  !fn. fn_inst_ids_distinct fn ==>
-       ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn))
-Proof
-  simp[fn_inst_ids_distinct_def, fn_insts_def] >> gen_tac >>
-  `FLAT (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions) fn.fn_blocks) =
-   MAP (\i. i.inst_id) (fn_insts_blocks fn.fn_blocks)` suffices_by simp[] >>
-  qspec_tac (`fn.fn_blocks`, `bbs`) >>
-  Induct >> simp[fn_insts_blocks_def]
-QED
-
 
 (* Terminator of a well-formed block is untouched by cmp_flip_scan *)
 Triviality last_untouched[local]:
@@ -2234,19 +2052,8 @@ Proof
   `MEM (LAST bb1.bb_instructions) (fn_insts fn1)` by
     metis_tac[block_inst_in_fn_insts] >>
   `ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn1))` by
-    metis_tac[fn_insts_ids_all_distinct] >>
+    metis_tac[fn_inst_ids_to_fn_insts] >>
   metis_tac[scan_terminator_untouched]
-QED
-
-(* Structural: apply on untouched instruction is singleton *)
-Triviality apply_untouched[local]:
-  !mid flips removes inserts inst.
-    ALOOKUP flips inst.inst_id = NONE /\
-    ~MEM inst.inst_id removes /\
-    ALOOKUP inserts inst.inst_id = NONE ==>
-    ao_cmp_flip_apply_inst mid flips removes inserts inst = [inst]
-Proof
-  rpt strip_tac >> simp[ao_cmp_flip_apply_inst_def]
 QED
 
 (* Structural: FRONT/LAST of transformed block *)
@@ -2266,7 +2073,7 @@ Proof
   `insts = SNOC (LAST insts) (FRONT insts)` by
     metis_tac[listTheory.SNOC_LAST_FRONT] >>
   `ao_cmp_flip_apply_inst mid flips removes inserts (LAST insts) =
-   [LAST insts]` by (irule apply_untouched >> simp[]) >>
+   [LAST insts]` by (irule ao_cmp_flip_apply_untouched >> simp[]) >>
   qabbrev_tac `f = ao_cmp_flip_apply_inst mid flips removes inserts` >>
   `MAP f insts = SNOC (f (LAST insts)) (MAP f (FRONT insts))` by
     (pop_assum kall_tac >> pop_assum kall_tac >>
@@ -2403,7 +2210,7 @@ Proof
   gvs[]
 QED
 
-(* Combines scan_flip_single_use + all_distinct_id_unique:
+(* Combines scan_flip_single_use + all_distinct_id_eq:
    if fi is in the flip list and fn_insts has distinct IDs,
    then fi has single output with single use *)
 Triviality flip_member_outputs_single_use[local]:
@@ -2421,7 +2228,7 @@ Proof
   >> rename1 `_ = SOME trip` >>
   Cases_on `trip` >> Cases_on `r` >>
   drule_all scan_flip_single_use >> strip_tac >>
-  `inst = fi` by (irule all_distinct_id_unique >> metis_tac[]) >>
+  `inst = fi` by (irule all_distinct_id_eq >> metis_tac[]) >>
   gvs[]
 QED
 
@@ -2441,7 +2248,7 @@ Triviality insert_fresh_neq_flip_output[local]:
 Proof
   rpt strip_tac >>
   `ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn1))` by
-    metis_tac[fn_insts_ids_all_distinct] >>
+    metis_tac[fn_inst_ids_to_fn_insts] >>
   `MEM fi'.inst_id (MAP FST flips)` by
     metis_tac[alistTheory.ALOOKUP_NONE, optionTheory.NOT_NONE_SOME,
               listTheory.MEM_MAP] >>
@@ -2527,7 +2334,7 @@ Proof
       rpt strip_tac >> CCONTR_TAC >> gvs[]
       >- (rename1 `MEM fi (fn_insts fn1)` >>
           `ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn1))` by
-            metis_tac[fn_insts_ids_all_distinct] >>
+            metis_tac[fn_inst_ids_to_fn_insts] >>
           drule_all flip_member_outputs_single_use >> strip_tac >>
           gvs[listTheory.MEM] >>
           `MEM inst (fn_insts fn1)` by
@@ -2577,7 +2384,7 @@ Proof
       `MEM id (MAP FST flips)` by
         metis_tac[alistTheory.ALOOKUP_NONE, optionTheory.NOT_NONE_SOME] >>
       `ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn1))` by
-        metis_tac[fn_insts_ids_all_distinct] >>
+        metis_tac[fn_inst_ids_to_fn_insts] >>
       drule_all scan_flips_are_comparators >> strip_tac >>
       conj_tac
       >- (strip_tac >>
@@ -2585,7 +2392,7 @@ Proof
           `MEM ui (fn_insts fn1)` by
             metis_tac[dfgAnalysisPropsTheory.dfg_build_function_uses_sound] >>
           `i = ui` by
-            (irule all_distinct_id_unique >> metis_tac[]) >>
+            (irule all_distinct_id_eq >> metis_tac[]) >>
           fs[is_comparator_def])
       >- (CCONTR_TAC >> gvs[] >>
           `MEM i.inst_id (MAP FST inserts)` by
@@ -2594,14 +2401,14 @@ Proof
           `MEM ui (fn_insts fn1)` by
             metis_tac[dfgAnalysisPropsTheory.dfg_build_function_uses_sound] >>
           `i = ui` by
-            (irule all_distinct_id_unique >> metis_tac[]) >>
+            (irule all_distinct_id_eq >> metis_tac[]) >>
           fs[is_comparator_def]))
   >- (rpt strip_tac >> drule_all scan_flip_info >> strip_tac >>
       `MEM inst (fn_insts fn1)` by
         metis_tac[rich_listTheory.MEM_DROP_IMP, rich_listTheory.MEM_FRONT_NOT_NIL, block_inst_in_fn_insts] >>
       `inst' = inst` by
-        (irule all_distinct_id_unique >>
-         metis_tac[fn_insts_ids_all_distinct]) >>
+        (irule all_distinct_id_eq >>
+         metis_tac[fn_inst_ids_to_fn_insts]) >>
       gvs[] >> qexistsl_tac [`w`, `out_var`] >> gvs[])
   >- (rpt strip_tac >>
       drule_all scan_remove_has_flip >> strip_tac >>
@@ -2611,9 +2418,9 @@ Proof
       `MEM inst (fn_insts fn1)` by
         metis_tac[rich_listTheory.MEM_DROP_IMP, rich_listTheory.MEM_FRONT_NOT_NIL, block_inst_in_fn_insts] >>
       `ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn1))` by
-        metis_tac[fn_insts_ids_all_distinct] >>
+        metis_tac[fn_inst_ids_to_fn_insts] >>
       `HD (dfg_get_uses dfg out_var) = inst` by
-        (irule all_distinct_id_unique >> metis_tac[]) >>
+        (irule all_distinct_id_eq >> metis_tac[]) >>
       pop_assum SUBST_ALL_TAC >>
       `inst_wf inst` by (first_x_assum irule >> first_assum ACCEPT_TAC) >>
       drule_all iszero_inst_wf_lengths >> strip_tac >>
@@ -2634,8 +2441,8 @@ Proof
        MEM cmp_out (operand_vars ui.inst_operands)` by
         metis_tac[dfgAnalysisPropsTheory.dfg_build_function_uses_sound] >>
       `ui = inst` by
-        (irule all_distinct_id_unique >>
-         metis_tac[fn_insts_ids_all_distinct]) >>
+        (irule all_distinct_id_eq >>
+         metis_tac[fn_inst_ids_to_fn_insts]) >>
       pop_assum SUBST_ALL_TAC >>
       `inst_wf inst` by (first_x_assum irule >> first_assum ACCEPT_TAC) >>
       drule_all assert_inst_wf_lengths >> strip_tac >>
@@ -2680,14 +2487,6 @@ Proof
      disch_then drule >> simp[]
 QED
 
-(* flip_comparison_opcode never turns a non-terminator into a terminator
-   (it only permutes GT/LT/SGT/SLT, all non-terminators). *)
-Triviality flip_preserves_non_term[local]:
-  !opc. ~is_terminator opc ==> ~is_terminator (flip_comparison_opcode opc)
-Proof
-  Cases >> simp[flip_comparison_opcode_def, is_terminator_def]
-QED
-
 Triviality apply_inst_every_non_term_non_invoke[local]:
   !mid flips removes inserts inst.
     ~is_terminator inst.inst_opcode /\
@@ -2721,12 +2520,12 @@ Proof
   simp[alistTheory.ALOOKUP_NONE]
   >- (CCONTR_TAC >> gvs[] >>
       drule_all scan_flips_are_comparators >> strip_tac >>
-      `i = inst` by (irule all_distinct_id_unique >> metis_tac[]) >>
+      `i = inst` by (irule all_distinct_id_eq >> metis_tac[]) >>
       gvs[is_comparator_def])
   >- (CCONTR_TAC >> gvs[] >>
       drule_all scan_removes_are_iszero >> strip_tac >>
       `MEM ui insts` by metis_tac[] >>
-      `ui = inst` by (irule all_distinct_id_unique >> metis_tac[]) >>
+      `ui = inst` by (irule all_distinct_id_eq >> metis_tac[]) >>
       gvs[])
   >- (CCONTR_TAC >> gvs[] >>
       Cases_on `ALOOKUP inserts inst.inst_id` >> gvs[] >>
@@ -2735,7 +2534,7 @@ Proof
         (simp[listTheory.MEM_MAP] >> metis_tac[pairTheory.FST]) >>
       drule_all scan_inserts_are_assert >> strip_tac >>
       `MEM ui insts` by metis_tac[] >>
-      `ui = inst` by (irule all_distinct_id_unique >> metis_tac[]) >>
+      `ui = inst` by (irule all_distinct_id_eq >> metis_tac[]) >>
       gvs[])
 QED
 
@@ -2744,13 +2543,6 @@ Triviality flip_comparison_not_phi[local]:
   !opc. is_comparator opc ==> flip_comparison_opcode opc <> PHI
 Proof
   Cases >> simp[is_comparator_def, flip_comparison_opcode_def]
-QED
-
-(* flip_comparison_opcode never produces PHI from a non-PHI opcode. *)
-Triviality flip_preserves_non_phi[local]:
-  !opc. opc <> PHI ==> flip_comparison_opcode opc <> PHI
-Proof
-  Cases >> simp[flip_comparison_opcode_def]
 QED
 
 Triviality apply_inst_non_phi[local]:
@@ -2793,7 +2585,7 @@ Proof
      qexistsl_tac [`bb1`, `lbl`] >> simp[] >>
      irule rich_listTheory.MEM_LAST_NOT_NIL >> simp[]) >>
   `ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn1))` by
-    metis_tac[fn_insts_ids_all_distinct] >>
+    metis_tac[fn_inst_ids_to_fn_insts] >>
   `~MEM (LAST bb1.bb_instructions).inst_id removes /\
    ALOOKUP inserts (LAST bb1.bb_instructions).inst_id = NONE` by
     (qspecl_then [`dfg`, `fn_insts fn1`,
@@ -2962,11 +2754,11 @@ Proof
        (match_mp_tac scan_phi_untouched >>
         qexistsl_tac [`dfg`, `fn_insts fn1`, `mid`, `dfg0`] >>
         simp[] >> rpt conj_tac
-        >- (irule fn_insts_ids_all_distinct >> simp[])
+        >- (irule fn_inst_ids_to_fn_insts >> simp[])
         >- (rpt strip_tac >> gvs[] >>
             drule_all dfgAnalysisPropsTheory.dfg_build_function_uses_sound >>
             simp[])) >>
-     simp[Abbr `f`] >> irule apply_untouched >> simp[]) >>
+     simp[Abbr `f`] >> irule ao_cmp_flip_apply_untouched >> simp[]) >>
   `LENGTH (TAKE n fr) = n` by simp[listTheory.LENGTH_TAKE_EQ] >>
   `FRONT bb'.bb_instructions = TAKE n fr ++ FLAT (MAP f bdy)` by
     (qpat_x_assum `FRONT bb'.bb_instructions = FLAT (MAP f fr)`
@@ -3146,15 +2938,6 @@ QED
 
 (* ===== eval_phis bridges for run_block ===== *)
 
-(* Equal vs_inst_idx update preserves state_equiv *)
-Triviality state_equiv_idx_update[local]:
-  !dead s1 s2 k.
-    state_equiv dead s1 s2 ==>
-    state_equiv dead (s1 with vs_inst_idx := k) (s2 with vs_inst_idx := k)
-Proof
-  rw[state_equiv_def, execution_equiv_def, lookup_var_def]
-QED
-
 (* An operand of any source instruction is never a dead var:
    dead vars are flip outputs (single-use, consumed by the removed iszero) or
    insert fresh vars (never appear in source operands). *)
@@ -3172,7 +2955,7 @@ Triviality operand_not_dead[local]:
 Proof
   rpt strip_tac >>
   `ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn1))` by
-    metis_tac[fn_insts_ids_all_distinct] >>
+    metis_tac[fn_inst_ids_to_fn_insts] >>
   `~MEM pinst.inst_id removes /\
    ALOOKUP inserts pinst.inst_id = NONE` by
     (qspecl_then [`dfg_build_function fn1`, `fn_insts fn1`,
@@ -3230,7 +3013,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   qabbrev_tac `f = ao_cmp_flip_apply_inst mid flips removes inserts` >>
   `ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn1))` by
-    metis_tac[fn_insts_ids_all_distinct] >>
+    metis_tac[fn_inst_ids_to_fn_insts] >>
   `!v ui. MEM ui (dfg_get_uses (dfg_build_function fn1) v) ==>
           MEM ui (fn_insts fn1)` by
     metis_tac[dfgAnalysisPropsTheory.dfg_build_function_uses_sound] >>
@@ -3249,7 +3032,7 @@ Proof
         >- (simp[] >> gvs[] >>
             metis_tac[dfgAnalysisPropsTheory.dfg_build_function_uses_sound])
         >> simp[]) >>
-     simp[Abbr `f`] >> irule apply_untouched >> simp[]) >>
+     simp[Abbr `f`] >> irule ao_cmp_flip_apply_untouched >> simp[]) >>
   `!idx inst. idx < LENGTH bb1.bb_instructions /\
               EL idx bb1.bb_instructions = inst /\ inst.inst_opcode <> PHI ==>
               EVERY (\i. i.inst_opcode <> PHI) (f inst)` by
@@ -3286,7 +3069,7 @@ Triviality cmp_flip_iszero_inv_eval_phis[local]:
 Proof
   rpt strip_tac >>
   `ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn1))` by
-    metis_tac[fn_insts_ids_all_distinct] >>
+    metis_tac[fn_inst_ids_to_fn_insts] >>
   simp[cmp_flip_iszero_inv_def] >> rpt gen_tac >> strip_tac >>
   rename1 `MEM fi (fn_insts fn1)` >>
   `!phi. MEM phi insts /\ phi.inst_opcode = PHI ==> ~MEM out phi.inst_outputs` by
@@ -3295,7 +3078,7 @@ Proof
      `MEM fi.inst_id (MAP FST flips)` by
        metis_tac[alistTheory.ALOOKUP_NONE, optionTheory.NOT_NONE_SOME] >>
      drule_all scan_flips_are_comparators >> strip_tac >>
-     `i = fi` by (irule all_distinct_id_unique >> metis_tac[]) >>
+     `i = fi` by (irule all_distinct_id_eq >> metis_tac[]) >>
      gvs[] >>
      `MEM phi (fn_insts fn1)` by metis_tac[] >>
      `fi = phi` by
@@ -3416,7 +3199,7 @@ Proof
       `state_equiv (ao_cmp_flip_dead_vars mid dfg0 (dfg_build_function fn1) fn1)
          (sp1 with vs_inst_idx := phi_prefix_length bb1.bb_instructions)
          (sp2 with vs_inst_idx := phi_prefix_length bb1.bb_instructions)` by
-        (irule state_equiv_idx_update >> simp[]) >>
+        (irule execEquivProofsTheory.state_equiv_inst_idx >> simp[]) >>
       `cmp_flip_iszero_inv flips (fn_insts fn1)
          (sp1 with vs_inst_idx := phi_prefix_length bb1.bb_instructions)
          (sp2 with vs_inst_idx := phi_prefix_length bb1.bb_instructions)` by
@@ -3727,11 +3510,11 @@ Proof
        (match_mp_tac scan_phi_untouched >>
         qexistsl_tac [`dfg`, `fn_insts fn1`, `mid`, `dfg0`] >>
         simp[] >> rpt conj_tac
-        >- (irule fn_insts_ids_all_distinct >> simp[])
+        >- (irule fn_inst_ids_to_fn_insts >> simp[])
         >- (rpt strip_tac >> gvs[] >>
             drule_all dfgAnalysisPropsTheory.dfg_build_function_uses_sound >>
             simp[])) >>
-     simp[Abbr `f`] >> irule apply_untouched >> simp[]) >>
+     simp[Abbr `f`] >> irule ao_cmp_flip_apply_untouched >> simp[]) >>
   `fr = TAKE n fr ++ DROP n fr` by simp[listTheory.TAKE_DROP] >>
   `FLAT (MAP f fr) = TAKE n fr ++ FLAT (MAP f (DROP n fr))` by
     (pop_assum (fn th => CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV[th]))) >>
@@ -3830,11 +3613,11 @@ Proof
             (match_mp_tac scan_phi_untouched >>
              qexistsl_tac [`dfg_build_function fn1`, `fn_insts fn1`, `mid`, `dfg0`] >>
              simp[] >> rpt conj_tac
-             >- (irule fn_insts_ids_all_distinct >> simp[])
+             >- (irule fn_inst_ids_to_fn_insts >> simp[])
              >- (rpt strip_tac >>
                  drule_all dfgAnalysisPropsTheory.dfg_build_function_uses_sound >>
                  simp[])) >>
-          simp[Abbr `f`] >> irule apply_untouched >> simp[])) >>
+          simp[Abbr `f`] >> irule ao_cmp_flip_apply_untouched >> simp[])) >>
   (* eval_phis / ppl bridge *)
   `(!s. eval_phis s bb'.bb_instructions = eval_phis s bb1.bb_instructions) /\
    phi_prefix_length bb'.bb_instructions =
@@ -3894,7 +3677,7 @@ Proof
   `state_equiv (ao_cmp_flip_dead_vars mid dfg0 (dfg_build_function fn1) fn1)
      (sp1 with vs_inst_idx := phi_prefix_length bb1.bb_instructions)
      (sp2 with vs_inst_idx := phi_prefix_length bb1.bb_instructions)` by
-    (irule state_equiv_idx_update >> simp[]) >>
+    (irule execEquivProofsTheory.state_equiv_inst_idx >> simp[]) >>
   `cmp_flip_iszero_inv flips' (fn_insts fn1)
      (sp1 with vs_inst_idx := phi_prefix_length bb1.bb_instructions)
      (sp2 with vs_inst_idx := phi_prefix_length bb1.bb_instructions)` by

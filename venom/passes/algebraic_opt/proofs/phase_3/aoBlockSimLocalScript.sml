@@ -26,7 +26,7 @@ Ancestors
   venomExecSemantics venomExecProofs venomExecProps
   venomState venomInst venomInstProofs venomInstProps venomWf
   dfgAnalysisProps rangeAnalysisDefs rangeAnalysisProofs dfgSoundStep dfAnalyzeDefs
-  indexedLists finite_map
+  indexedLists finite_map instIdxIndep allocaRemapSSA
 Libs
   pairLib BasicProvers
 
@@ -337,27 +337,6 @@ QED
 
 (* ===== Block-lift helpers ===== *)
 
-Triviality ao_dfg_inv_idx0[local]:
-  !dfg s n. ao_dfg_inv dfg (s with vs_inst_idx := n) = ao_dfg_inv dfg s
-Proof
-  simp[ao_dfg_inv_def, lookup_var_def]
-QED
-
-Triviality local_offset_operands[local]:
-  !inst. (ao_handle_offset_inst inst).inst_operands = inst.inst_operands \/
-         ?l v. inst.inst_opcode = ADD /\
-               inst.inst_operands = [Label l; Lit v] /\
-               (ao_handle_offset_inst inst).inst_operands = [Lit v; Label l]
-Proof
-  gen_tac >> simp[ao_handle_offset_inst_def] >>
-  Cases_on `inst.inst_opcode = ADD` >> simp[] >>
-  Cases_on `inst.inst_operands` >> simp[] >>
-  Cases_on `t` >> simp[] >>
-  Cases_on `h` >> simp[] >>
-  Cases_on `h'` >> simp[] >>
-  Cases_on `t'` >> simp[]
-QED
-
 Triviality fn0_blocks_inst_wf[local]:
   !fn fn0 bb.
     fn0 = fn with fn_blocks :=
@@ -372,7 +351,7 @@ Proof
   simp[listTheory.EVERY_MAP, listTheory.EVERY_MEM] >> rpt strip_tac >>
   irule ao_handle_offset_inst_wf >>
   fs[listTheory.EVERY_MEM] >> first_x_assum irule >>
-  irule mem_block_mem_fn_insts >> metis_tac[]
+  irule mem_fn_insts_intro >> metis_tac[]
 QED
 
 Triviality dfg_def_var_not_in_fv[local]:
@@ -413,7 +392,7 @@ Proof
   qpat_x_assum `MEM inst (fn_insts _)` mp_tac >>
   simp[fn_insts_def] >> strip_tac >>
   drule fn_insts_blocks_map_offset >> strip_tac >> gvs[] >>
-  qspecl_then [`inst0`] strip_assume_tac local_offset_operands >> gvs[] >>
+  qspecl_then [`inst0`] strip_assume_tac handle_offset_preserves_operands >> gvs[] >>
   first_x_assum irule >> qexists_tac `inst0` >>
   simp[fn_insts_def]
 QED
@@ -745,7 +724,7 @@ Proof
      (\idx inst. ao_transform_inst mid dfg ra bb.bb_label idx targets inst)
        idx (EL idx bb.bb_instructions) = [EL idx bb.bb_instructions]` by
     (rpt strip_tac >> simp[] >> irule ao_transform_inst_phi >>
-     metis_tac[phi_prefix_el_phi]) >>
+     metis_tac[phi_prefix_length_el_phi]) >>
   `ao_chains_defined_at targets s` by
     metis_tac[ao_chain_defined_prefix_implies_at] >>
   irule run_block_resolve_phis_bridge >>
@@ -757,7 +736,7 @@ Proof
   `EL idx tbody.bb_instructions = EL idx bb.bb_instructions` by
     (qpat_x_assum `tbody.bb_instructions = _` SUBST1_TAC >>
      irule prefix_el_flat_mapi >> simp[]) >>
-  `(EL idx bb.bb_instructions).inst_opcode = PHI` by metis_tac[phi_prefix_el_phi] >>
+  `(EL idx bb.bb_instructions).inst_opcode = PHI` by metis_tac[phi_prefix_length_el_phi] >>
   `?out w. eval_one_phi s (EL idx bb.bb_instructions) = SOME (out, w)` by
     metis_tac[eval_phis_ok_prefix_phi_some] >>
   (* the three nontrivial antecedents of ao_resolve_eval_one_phi_eq *)
@@ -895,7 +874,7 @@ Proof
           `MEM (EL idx bb.bb_instructions) bb.bb_instructions` by
             (irule listTheory.EL_MEM >> simp[]) >>
           `MEM (EL idx bb.bb_instructions) (fn_insts fn0)` by
-            metis_tac[mem_block_mem_fn_insts] >>
+            metis_tac[mem_fn_insts_intro] >>
           rpt conj_tac
           >- metis_tac[wbiz_step_any]
           >- (qpat_x_assum `ra = _` SUBST_ALL_TAC >>
@@ -911,8 +890,8 @@ Proof
           >- (`ssa_form fn0` by fs[wf_ssa_def] >>
               `inst_wf (EL idx bb.bb_instructions)` by
                 (fs[listTheory.EVERY_EL] >> rfs[]) >>
-              `ao_dfg_inv dfg sp` by fs[ao_dfg_inv_idx0] >>
-              simp[ao_dfg_inv_idx0] >>
+              `ao_dfg_inv dfg sp` by fs[ao_dfg_inv_inst_idx_irrel] >>
+              simp[ao_dfg_inv_inst_idx_irrel] >>
               drule_all ao_dfg_inv_step_any >> simp[])
           >- metis_tac[step_preserves_control_flow])
       (* sound preserved by R_ok *)
@@ -1008,7 +987,7 @@ Proof
                 eval_phis_ao_chain_defined_prefix >>
               impl_tac >- gvs[] >> simp[]) >>
             `ao_dfg_inv (dfg_build_function fn0) s_phi` by (
-              `ao_dfg_inv dfg s` by fs[ao_dfg_inv_idx0] >>
+              `ao_dfg_inv dfg s` by fs[ao_dfg_inv_inst_idx_irrel] >>
               qspecl_then [`fn0`, `bb`, `s`, `s_phi`] mp_tac eval_phis_ao_dfg_inv >>
               impl_tac >- gvs[] >> simp[]) >>
             `lookup_block bb.bb_label fn0.fn_blocks = SOME bb` by
@@ -1030,10 +1009,10 @@ Proof
             `ao_chain_defined_prefix targets (s_phi with vs_inst_idx := 0)` by
               (qpat_x_assum `ao_chain_defined_prefix targets s_phi` mp_tac >>
                rw[ao_chain_defined_prefix_def] >>
-               metis_tac[eval_operand_inst_idx_irrel]) >>
+               metis_tac[eval_op_inst_idx]) >>
             `ao_dfg_inv dfg (s_phi with vs_inst_idx := 0)` by
-              (simp[ao_dfg_inv_idx0] >> gvs[]) >>
-            gvs[ao_dfg_inv_idx0])
+              (simp[ao_dfg_inv_inst_idx_irrel] >> gvs[]) >>
+            gvs[ao_dfg_inv_inst_idx_irrel])
         >- simp[]) >>
       (* Bridge run_block over the M2 PHI post-pass back to the analysis form,
          which is what the engine result is stated against. *)

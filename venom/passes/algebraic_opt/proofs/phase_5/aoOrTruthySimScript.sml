@@ -20,6 +20,7 @@ Ancestors
   stateEquiv stateEquivProps stateEquivProofs execEquivProps passSimulationProps
   passSharedDefs venomInstProps
   venomExecSemantics venomExecProofs venomState venomInst venomWf
+  aoCmpFlipObligation aoPhase4Wf aoPhase5Wf allocaRemapSSA
 Libs
   pairLib BasicProvers
 
@@ -50,29 +51,6 @@ Proof
 QED
 
 (* ===== Distinct-id helpers ===== *)
-
-Triviality all_distinct_id_unique[local]:
-  !insts x y.
-    ALL_DISTINCT (MAP (\i. i.inst_id) insts) /\
-    MEM x insts /\ MEM y insts /\ x.inst_id = y.inst_id ==>
-    x = y
-Proof
-  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
-  rpt strip_tac >> gvs[] >>
-  TRY (first_x_assum irule >> gvs[] >> NO_TAC) >>
-  fs[listTheory.MEM_MAP] >> metis_tac[]
-QED
-
-Triviality fn_insts_ids_all_distinct[local]:
-  !fn. fn_inst_ids_distinct fn ==>
-       ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn))
-Proof
-  simp[fn_inst_ids_distinct_def, fn_insts_def] >> gen_tac >>
-  `FLAT (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions) fn.fn_blocks) =
-   MAP (\i. i.inst_id) (fn_insts_blocks fn.fn_blocks)` suffices_by simp[] >>
-  qspec_tac (`fn.fn_blocks`, `bbs`) >>
-  Induct >> simp[fn_insts_blocks_def]
-QED
 
 (* ===== Scan characterization ===== *)
 
@@ -140,10 +118,10 @@ Triviality scan_output_uses_truthy[local]:
 Proof
   rpt strip_tac >>
   `ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn))` by
-    metis_tac[fn_insts_ids_all_distinct] >>
+    metis_tac[fn_inst_ids_to_fn_insts] >>
   drule scan_mem_imp >> strip_tac >>
   rename1 `MEM oinst2 (fn_insts fn)` >>
-  `oinst2 = oinst` by (irule all_distinct_id_unique >> metis_tac[]) >>
+  `oinst2 = oinst` by (irule all_distinct_id_eq >> metis_tac[]) >>
   gvs[] >>
   `oinst.inst_outputs = [out] /\
    EVERY (\u. is_truthy_inst u.inst_opcode)
@@ -175,138 +153,7 @@ QED
 
 (* ===== State-equivalence update helpers ===== *)
 
-(* Updating a dead var (possibly to different values) preserves state_equiv. *)
-Triviality update_dead_var_state_equiv[local]:
-  !dead x v1 v2 s1 s2.
-    state_equiv dead s1 s2 /\ x IN dead ==>
-    state_equiv dead (update_var x v1 s1) (update_var x v2 s2)
-Proof
-  rw[state_equiv_def, execution_equiv_def, update_var_def, lookup_var_def] >>
-  simp[finite_mapTheory.FLOOKUP_UPDATE] >>
-  rpt strip_tac >> IF_CASES_TAC >> gvs[]
-QED
-
-(* Updating any var to the SAME value preserves state_equiv. *)
-Triviality update_same_state_equiv[local]:
-  !dead x v s1 s2.
-    state_equiv dead s1 s2 ==>
-    state_equiv dead (update_var x v s1) (update_var x v s2)
-Proof
-  rw[state_equiv_def, execution_equiv_def, update_var_def, lookup_var_def] >>
-  simp[finite_mapTheory.FLOOKUP_UPDATE] >>
-  rpt strip_tac >> IF_CASES_TAC >> gvs[]
-QED
-
 (* ===== INVOKE result equivalence (operands avoid dead) ===== *)
-
-Triviality eval_operands_equiv[local]:
-  !ops dead s1 s2.
-    state_equiv dead s1 s2 /\
-    (!x. MEM (Var x) ops ==> x NOTIN dead) ==>
-    eval_operands ops s1 = eval_operands ops s2
-Proof
-  Induct >> simp[eval_operands_def] >> rpt strip_tac >>
-  `eval_operand h s1 = eval_operand h s2` by
-    (irule eval_operand_equiv >> qexists_tac `dead` >> simp[] >>
-     Cases_on `h` >> simp[] >> metis_tac[]) >>
-  gvs[] >> Cases_on `eval_operand h s2` >> gvs[] >>
-  `eval_operands ops s1 = eval_operands ops s2` by
-    (first_x_assum irule >> qexists_tac `dead` >> simp[]) >>
-  gvs[]
-QED
-
-Triviality merge_callee_state_equiv[local]:
-  !dead s1 s2 ir cs.
-    state_equiv dead s1 s2 ==>
-    state_equiv dead (adopt_return_fmp ir (merge_callee_state s1 cs))
-                     (adopt_return_fmp ir (merge_callee_state s2 cs))
-Proof
-  rpt strip_tac >> Cases_on `ir.iret_adopt_fmp` >>
-  gvs[adopt_return_fmp_def, merge_callee_state_def, state_equiv_def,
-      execution_equiv_def, lookup_var_def]
-QED
-
-Triviality foldl_update_var_state_equiv[local]:
-  !pairs dead s1 s2.
-    state_equiv dead s1 s2 ==>
-    state_equiv dead
-      (FOLDL (\s' (out, val). update_var out val s') s1 pairs)
-      (FOLDL (\s' (out, val). update_var out val s') s2 pairs)
-Proof
-  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
-  PairCases_on `h` >> simp[] >>
-  first_x_assum irule >>
-  gvs[state_equiv_def, execution_equiv_def, update_var_def,
-      lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
-  rpt strip_tac >> IF_CASES_TAC >> gvs[]
-QED
-
-Triviality bind_outputs_state_equiv[local]:
-  !outs vals dead s1 s2.
-    state_equiv dead s1 s2 ==>
-    case (bind_outputs outs vals s1, bind_outputs outs vals s2) of
-      (SOME s1', SOME s2') => state_equiv dead s1' s2'
-    | (NONE, NONE) => T
-    | _ => F
-Proof
-  rpt strip_tac >> simp[bind_outputs_def] >>
-  IF_CASES_TAC >> simp[] >>
-  irule foldl_update_var_state_equiv >> simp[]
-QED
-
-Triviality step_inst_invoke_result_equiv[local]:
-  !fuel ctx dead inst s1 s2.
-    state_equiv dead s1 s2 /\
-    inst.inst_opcode = INVOKE /\
-    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN dead) ==>
-    result_equiv dead (step_inst fuel ctx inst s1) (step_inst fuel ctx inst s2)
-Proof
-  rpt strip_tac >>
-  simp_tac std_ss [Once step_inst_def] >>
-  simp_tac std_ss [Once step_inst_def] >>
-  Cases_on `decode_invoke inst`
-  >- simp[result_equiv_def] >>
-  PairCases_on `x` >>
-  rename1 `SOME (cname, arg_ops)` >>
-  `inst.inst_operands = Label cname :: arg_ops` by
-    (qpat_x_assum `decode_invoke _ = _` mp_tac >>
-     simp[decode_invoke_def, AllCaseEqs()] >>
-     Cases_on `inst.inst_operands` >> simp[]) >>
-  simp[] >>
-  Cases_on `lookup_function cname ctx.ctx_functions`
-  >- simp[result_equiv_def] >>
-  rename1 `SOME callee_fn` >>
-  `eval_operands arg_ops s1 = eval_operands arg_ops s2` by
-    (irule eval_operands_equiv >> qexists_tac `dead` >> simp[]) >>
-  simp[] >>
-  Cases_on `eval_operands arg_ops s2`
-  >- simp[result_equiv_def] >>
-  rename1 `SOME args` >> simp[] >>
-  `setup_callee callee_fn args s1 = setup_callee callee_fn args s2` by
-    (simp[setup_callee_def] >> IF_CASES_TAC >> simp[] >>
-     simp[venomStateTheory.venom_state_component_equality] >>
-     fs[state_equiv_def, execution_equiv_def]) >>
-  simp[] >>
-  Cases_on `setup_callee callee_fn args s2`
-  >- simp[result_equiv_def] >>
-  rename1 `SOME callee_s` >> simp[] >>
-  Cases_on `run_blocks fuel ctx callee_fn callee_s` >>
-  simp[result_equiv_def, execution_equiv_refl] >>
-  rename1 `adopt_return_fmp ir (merge_callee_state s1 v)` >>
-  qabbrev_tac `m1 = adopt_return_fmp ir (merge_callee_state s1 v)` >>
-  qabbrev_tac `m2 = adopt_return_fmp ir (merge_callee_state s2 v)` >>
-  `state_equiv dead m1 m2` by
-    (simp[Abbr `m1`, Abbr `m2`] >> irule merge_callee_state_equiv >> simp[]) >>
-  `case (bind_outputs inst.inst_outputs ir.iret_values m1,
-         bind_outputs inst.inst_outputs ir.iret_values m2) of
-     (SOME s1', SOME s2') => state_equiv dead s1' s2'
-   | (NONE, NONE) => T
-   | _ => F` by
-    (irule bind_outputs_state_equiv >> simp[]) >>
-  Cases_on `bind_outputs inst.inst_outputs ir.iret_values m1` >>
-  Cases_on `bind_outputs inst.inst_outputs ir.iret_values m2` >>
-  gvs[result_equiv_def, state_equiv_def, execution_equiv_def]
-QED
 
 (* ===== Scanned-instruction shape and dead-output bridges ===== *)
 
@@ -323,10 +170,10 @@ Triviality scanned_inst_shape[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   `ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn))` by
-    metis_tac[fn_insts_ids_all_distinct] >>
+    metis_tac[fn_inst_ids_to_fn_insts] >>
   drule scan_mem_imp >> strip_tac >>
   rename1 `MEM inst2 (fn_insts fn)` >>
-  `inst2 = inst` by (irule all_distinct_id_unique >> metis_tac[]) >>
+  `inst2 = inst` by (irule all_distinct_id_eq >> metis_tac[]) >>
   gvs[] >>
   qpat_x_assum `ao_all_truthy _ _` mp_tac >> simp[ao_all_truthy_def] >>
   Cases_on `inst.inst_outputs` >> simp[] >> Cases_on `t` >> simp[] >>
@@ -358,7 +205,7 @@ Proof
   rpt strip_tac >>
   gvs[ao_or_truthy_dead_vars_def, pred_setTheory.GSPECIFICATION] >>
   rename1 `MEM jinst (fn_insts fn)` >>
-  `inst = jinst` by (irule ssa_output_unique >> metis_tac[]) >>
+  `inst = jinst` by (irule ssa_unique_output >> metis_tac[]) >>
   gvs[]
 QED
 
@@ -420,7 +267,7 @@ Proof
         rename1 `(outv:string)::outs` >>
         Cases_on `outs` >> simp[result_equiv_def] >>
         gvs[result_equiv_def, bool_to_word_def] >>
-        irule update_same_state_equiv >> simp[])
+        irule update_var_preserves >> simp[])
      ]),
     (* JNZ *)
     (qpat_x_assum `inst.inst_opcode = JNZ`
@@ -664,31 +511,6 @@ QED
 
 (* ===== exec_block structural helpers ===== *)
 
-(* The rewrite leaves terminators unchanged (terminators are never ORs). *)
-Triviality apply_terminator_id[local]:
-  !ids inst. is_terminator inst.inst_opcode ==>
-    ao_or_truthy_apply_inst ids inst = inst
-Proof
-  rw[ao_or_truthy_apply_inst_def] >> gvs[is_terminator_def]
-QED
-
-(* The rewrite preserves non-terminatorness (ASSIGN is not a terminator). *)
-Triviality apply_nonterm[local]:
-  !ids inst. ~is_terminator inst.inst_opcode ==>
-    ~is_terminator (ao_or_truthy_apply_inst ids inst).inst_opcode
-Proof
-  rw[ao_or_truthy_apply_inst_def] >> gvs[is_terminator_def]
-QED
-
-(* Updating vs_inst_idx on both sides preserves state_equiv. *)
-Triviality state_equiv_idx_update[local]:
-  !dead s1 s2 k.
-    state_equiv dead s1 s2 ==>
-    state_equiv dead (s1 with vs_inst_idx := k) (s2 with vs_inst_idx := k)
-Proof
-  rw[state_equiv_def, execution_equiv_def, lookup_var_def]
-QED
-
 (* or_truthy_inv ignores vs_inst_idx (only reads vs_vars). *)
 Triviality or_truthy_inv_idx_irrel[local]:
   !ids insts s1 s2 k m.
@@ -831,11 +653,11 @@ Proof
         `s2 with vs_inst_idx := SUC st2.vs_inst_idx`] mp_tac) >>
       impl_tac
       >- (simp[] >> rpt conj_tac
-          >- (irule state_equiv_idx_update >> simp[])
+          >- (irule execEquivProofsTheory.state_equiv_inst_idx >> simp[])
           >- simp[or_truthy_inv_idx_irrel]) >>
       simp[]) >>
   (* terminator: halt or OK, both sides agree *)
-  `tinst = dinst` by metis_tac[apply_terminator_id] >>
+  `tinst = dinst` by metis_tac[apply_term_id] >>
   `exec_block fuel ctx bb st1 = if s1.vs_halted then Halt s1 else OK s1` by
     (irule exec_block_terminator_OK >> simp[Abbr `dinst`]) >>
   `exec_block fuel ctx bb2 st2 = if s2.vs_halted then Halt s2 else OK s2` by
@@ -899,7 +721,7 @@ Proof
   `!phi. MEM phi insts /\ phi.inst_opcode = PHI ==> ~MEM out phi.inst_outputs` by
     (rpt strip_tac >>
      `MEM phi (fn_insts fn)` by metis_tac[] >>
-     `oinst = phi` by metis_tac[ssa_output_unique] >>
+     `oinst = phi` by metis_tac[ssa_unique_output] >>
      `oinst.inst_opcode = OR` by metis_tac[scanned_inst_shape] >>
      gvs[]) >>
   `FLOOKUP sp1.vs_vars out = FLOOKUP s1.vs_vars out` by
@@ -998,7 +820,7 @@ Proof
         mp_tac ao_or_truthy_exec_block_sim >>
       impl_tac
       >- (simp[] >> rpt conj_tac
-          >- (irule state_equiv_idx_update >> simp[])
+          >- (irule execEquivProofsTheory.state_equiv_inst_idx >> simp[])
           >- gvs[or_truthy_inv_idx_irrel]) >>
       strip_tac >> pop_assum strip_assume_tac
       >- (DISJ1_TAC >> metis_tac[])
@@ -1077,7 +899,7 @@ Proof
     mp_tac ao_or_truthy_exec_block_sim >>
   impl_tac
   >- (simp[] >> rpt conj_tac
-      >- (irule state_equiv_idx_update >> simp[])
+      >- (irule execEquivProofsTheory.state_equiv_inst_idx >> simp[])
       >- gvs[or_truthy_inv_idx_irrel]) >>
   strip_tac >> pop_assum strip_assume_tac
   >- gvs[] >>

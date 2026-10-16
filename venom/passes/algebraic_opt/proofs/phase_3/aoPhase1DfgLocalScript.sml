@@ -12,23 +12,11 @@
 Theory aoPhase1DfgLocal
 Ancestors
   algebraicOptDefs dfgSoundStep dfgDefs dfgAnalysisProps
-  venomInst venomWf list rich_list finite_map
+  venomInst venomWf list rich_list finite_map aoPhase1Wf
 Libs
   pairLib BasicProvers
 
 (* ===== ao_handle_offset_inst structural facts ===== *)
-
-Triviality ho_outputs[local]:
-  !inst. (ao_handle_offset_inst inst).inst_outputs = inst.inst_outputs
-Proof
-  gen_tac >> simp[ao_handle_offset_inst_def] >> every_case_tac >> simp[]
-QED
-
-Triviality ho_id[local]:
-  !inst. (ao_handle_offset_inst inst).inst_id = inst.inst_id
-Proof
-  gen_tac >> simp[ao_handle_offset_inst_def] >> every_case_tac >> simp[]
-QED
 
 (* A tracked-opcode instruction is never the OFFSET-rewritten one. *)
 Triviality ho_tracked_id[local]:
@@ -77,7 +65,7 @@ Triviality add_inst_corr[local]:
           (FLOOKUP (dfg_add_inst dfg1 inst).dfg_defs w)
 Proof
   rpt gen_tac >> strip_tac >> gen_tac >>
-  simp[dfg_add_inst_def, ho_outputs, add_uses_defs] >>
+  simp[dfg_add_inst_def, ao_handle_offset_inst_outputs, add_uses_defs] >>
   qspecl_then [`inst.inst_outputs`, `inst`,
     `dfg_add_uses dfg1 (operand_vars inst.inst_operands) inst`,
     `dfg_add_uses dfg2 (operand_vars (ao_handle_offset_inst inst).inst_operands)
@@ -256,14 +244,14 @@ Proof
       mp_tac >> gvs[listTheory.EL_MAP]) >>
   `(EL i bb0.bb_instructions).inst_id = inst_u0.inst_id` by (
     `(ao_handle_offset_inst (EL i bb0.bb_instructions)).inst_id =
-     (ao_handle_offset_inst inst_u0).inst_id` suffices_by fs[ho_id] >>
+     (ao_handle_offset_inst inst_u0).inst_id` suffices_by fs[ao_handle_offset_inst_preserves_id] >>
     AP_TERM_TAC >>
     qpat_x_assum
       `ao_handle_offset_inst (EL i bb0.bb_instructions) = ao_handle_offset_inst inst_u0`
       ACCEPT_TAC) >>
   `(EL j bb0.bb_instructions).inst_id = inst_v0.inst_id` by (
     `(ao_handle_offset_inst (EL j bb0.bb_instructions)).inst_id = inst_v0.inst_id`
-       suffices_by fs[ho_id] >>
+       suffices_by fs[ao_handle_offset_inst_preserves_id] >>
     qpat_x_assum `ao_handle_offset_inst (EL j bb0.bb_instructions) = inst_v0`
       (fn th => simp[th])) >>
   `EL i bb0.bb_instructions = inst_u0` by metis_tac[distinct_id_eq] >>

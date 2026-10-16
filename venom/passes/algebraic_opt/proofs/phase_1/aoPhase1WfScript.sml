@@ -132,7 +132,7 @@ QED
 
 (* ===== Phase 1 preserves EVERY inst_wf ===== *)
 
-Triviality fn_insts_blocks_every[local]:
+Theorem fn_insts_blocks_every:
   !blocks p. EVERY p (fn_insts_blocks blocks) <=>
     EVERY (\bb. EVERY p bb.bb_instructions) blocks
 Proof

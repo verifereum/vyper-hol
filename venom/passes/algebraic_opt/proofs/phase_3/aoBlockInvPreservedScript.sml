@@ -18,42 +18,11 @@ Ancestors
   allocaRemapSSA dfgAnalysisProps
   venomExecSemantics venomExecProofs venomExecProps instIdxIndep
   venomWf venomState venomInst
-  finite_map pred_set
+  finite_map pred_set passSimulationProps
 Libs
   pairLib BasicProvers
 
 (* ===== vs_inst_idx irrelevance of run_block (re-derived locally) ===== *)
-
-Triviality eval_one_phi_inst_idx:
-  !inst s n. eval_one_phi (s with vs_inst_idx := n) inst = eval_one_phi s inst
-Proof
-  simp[eval_one_phi_def, eval_op_inst_idx]
-QED
-
-Triviality eval_phis_inst_idx:
-  !insts s n.
-    eval_phis (s with vs_inst_idx := n) insts =
-    exec_result_map (\s'. s' with vs_inst_idx := n) (eval_phis s insts)
-Proof
-  Induct >> simp[eval_phis_def, exec_result_map_def, eval_one_phi_inst_idx] >>
-  rpt gen_tac >> Cases_on `h.inst_opcode = PHI` >> simp[] >>
-  Cases_on `eval_one_phi s h` >> gvs[eval_one_phi_inst_idx]
-  >- simp[exec_result_map_def] >>
-  Q.SPEC_THEN `x` STRIP_ASSUME_TAC pairTheory.pair_CASES >>
-  Cases_on `eval_phis s insts` >>
-  gvs[exec_result_map_def, update_var_def]
-QED
-
-Triviality run_block_inst_idx_irrel:
-  !fuel ctx bb s.
-    run_block fuel ctx bb s =
-    run_block fuel ctx bb (s with vs_inst_idx := 0)
-Proof
-  ONCE_REWRITE_TAC[run_block_def] >>
-  simp[eval_phis_inst_idx] >>
-  Cases_on `eval_phis s bb.bb_instructions` >>
-  simp[exec_result_map_def]
-QED
 
 (* ===== eval_phis preserves the ao invariants ===== *)
 
@@ -119,8 +88,8 @@ Proof
       `!p. MEM p bb.bb_instructions /\ p.inst_opcode = PHI ==>
            ~MEM w p.inst_outputs` by
         (rpt strip_tac >>
-         `MEM p (fn_insts fn0)` by metis_tac[mem_block_mem_fn_insts] >>
-         `p = inst` by metis_tac[ssa_output_unique] >> gvs[]) >>
+         `MEM p (fn_insts fn0)` by metis_tac[mem_fn_insts_intro] >>
+         `p = inst` by metis_tac[ssa_unique_output] >> gvs[]) >>
       metis_tac[eval_phis_lookup_not_bb_phi]) >>
   qpat_x_assum `s' = _` (fn th => simp[Once th])
 QED

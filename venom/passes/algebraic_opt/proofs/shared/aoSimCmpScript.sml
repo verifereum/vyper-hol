@@ -14,7 +14,7 @@ Ancestors
   execEquivProps analysisSimDefs valueRangeDefs rangeAnalysisDefs
   venomExecSemantics venomState venomInst venomWf
   stateEquiv stateEquivProps passSharedDefs
-  passSimulationDefs
+  passSimulationDefs aoResolveSim
 Libs
   pairLib BasicProvers intLib wordsLib
 
@@ -121,11 +121,6 @@ Proof
       rewrite_tac[wordsTheory.WORD_XOR_ASSOC, wordsTheory.WORD_XOR_CLAUSES] >>
       simp[])
   >- simp[wordsTheory.WORD_XOR_CLAUSES]
-QED
-
-Triviality bool_to_word_eq_0[local]:
-  !b. (bool_to_word b = 0w) <=> ~b
-Proof Cases >> simp[bool_to_word_def]
 QED
 
 (* Every helper name the pass can build from base mid is in fv. *)
@@ -596,7 +591,7 @@ val iszero_iszero_tac =
   simp[Once run_insts_def, step_inst_non_invoke] >>
   simp[Once step_inst_base_def, exec_pure1_def,
        eval_operand_update_same] >>
-  simp[Once run_insts_def, bool_to_word_eq_0, lift_result_def] >>
+  simp[Once run_insts_def, btw_0, lift_result_def] >>
   irule state_equiv_1to2 >> simp[];
 
 (* ===== GT simulation ===== *)
@@ -688,7 +683,7 @@ Proof
     simp[Once run_insts_def, step_inst_non_invoke] >>
     simp[Once step_inst_base_def, exec_pure1_def,
          eval_operand_update_same] >>
-    simp[Once run_insts_def, bool_to_word_eq_0, gt_zero_eval, lift_result_def] >>
+    simp[Once run_insts_def, btw_0, gt_zero_eval, lift_result_def] >>
     irule state_equiv_1to2 >> simp[]
   ) >>
   (* GT + lit_eq op2 0w → ISZERO(ISZERO(x)) *)
@@ -708,7 +703,7 @@ Proof
     simp[Once run_insts_def, step_inst_non_invoke] >>
     simp[Once step_inst_base_def, exec_pure1_def,
          eval_operand_update_same] >>
-    simp[Once run_insts_def, bool_to_word_eq_0, gt_zero_eval, lift_result_def] >>
+    simp[Once run_insts_def, btw_0, gt_zero_eval, lift_result_def] >>
     irule state_equiv_1to2 >> simp[]
   ) >>
   (* Fallback → identity *)
@@ -799,7 +794,7 @@ Proof
     simp[Once run_insts_def, step_inst_non_invoke] >>
     simp[Once step_inst_base_def, exec_pure1_def,
          eval_operand_def, lookup_var_update] >>
-    simp[Once run_insts_def, word_1comp_eq_0_eval,bool_to_word_eq_0,
+    simp[Once run_insts_def, word_1comp_eq_0_eval,btw_0,
          lt_max_eval, lift_result_def] >>
     irule state_equiv_1to3 >> simp[]
   ) >>
@@ -898,7 +893,7 @@ Proof
     simp[Once run_insts_def, step_inst_non_invoke] >>
     simp[Once step_inst_base_def, exec_pure1_def,
          eval_operand_def, lookup_var_update] >>
-    simp[Once run_insts_def, word_xor_eq_0_eval,bool_to_word_eq_0,
+    simp[Once run_insts_def, word_xor_eq_0_eval,btw_0,
          sgt_almost_always_eval, lift_result_def] >>
     irule state_equiv_1to3 >> simp[]
   ) >>
@@ -998,7 +993,7 @@ Proof
     simp[Once run_insts_def, step_inst_non_invoke] >>
     simp[Once step_inst_base_def, exec_pure1_def,
          eval_operand_def, lookup_var_update] >>
-    simp[Once run_insts_def, word_xor_eq_0_eval,bool_to_word_eq_0,
+    simp[Once run_insts_def, word_xor_eq_0_eval,btw_0,
          slt_almost_always_eval, lift_result_def] >>
     irule state_equiv_1to3 >> simp[]
   ) >>

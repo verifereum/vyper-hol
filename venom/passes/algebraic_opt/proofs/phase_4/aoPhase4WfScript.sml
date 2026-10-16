@@ -12,7 +12,7 @@ Theory aoPhase4Wf
 Ancestors
   algebraicOptDefs aoPhase3Wf
   venomState venomWf venomInst passSimulationProps
-  passSharedDefs alist
+  passSharedDefs alist allocaRemapSSA aoPhase3Ids aoWf
 Libs
   pairLib BasicProvers
 
@@ -27,21 +27,21 @@ Proof
   every_case_tac
 QED
 
-Triviality flip_preserves_non_term[local]:
+Theorem flip_preserves_non_term:
   !opc. ~is_terminator opc ==> ~is_terminator (flip_comparison_opcode opc)
 Proof
   Cases >> simp[flip_comparison_opcode_def, is_terminator_def]
 QED
 
 (* The scan reads a comparator in its ao_pre_flip_inst form, [x; Lit w]. *)
-Triviality pre_flip_fields[local]:
+Theorem pre_flip_fields:
   !inst. (ao_pre_flip_inst inst).inst_id = inst.inst_id /\
          (ao_pre_flip_inst inst).inst_outputs = inst.inst_outputs
 Proof
   gen_tac >> simp[ao_pre_flip_inst_def] >> every_case_tac >> rw[]
 QED
 
-Triviality pre_flip_is_comparator[local]:
+Theorem pre_flip_is_comparator:
   !inst. is_comparator (ao_pre_flip_inst inst).inst_opcode <=>
          is_comparator inst.inst_opcode
 Proof
@@ -50,7 +50,7 @@ Proof
   gvs[is_comparator_def, flip_comparison_opcode_def]
 QED
 
-Triviality post_flip_opcode_cases[local]:
+Theorem post_flip_opcode_cases:
   !inst. (ao_post_flip_inst inst).inst_opcode = inst.inst_opcode \/
          (ao_post_flip_inst inst).inst_opcode =
            flip_comparison_opcode inst.inst_opcode
@@ -88,7 +88,7 @@ QED
 (* ===== ao_cmp_flip_scan characterization ===== *)
 
 
-Triviality uses_ok_single[local]:
+Theorem uses_ok_single:
   !dfg v. ao_cmp_flip_uses_ok dfg v ==>
           ?a. dfg_get_uses dfg v = [a] /\
               (a.inst_opcode = ASSERT \/ a.inst_opcode = ISZERO)
@@ -139,7 +139,7 @@ Proof
     ao_unsigned_boundaries_def, ao_signed_boundaries_def, LET_THM]
 QED
 
-Triviality scan_step_flips_subset[local]:
+Theorem scan_step_flips_subset:
   !dfg h rest flips removes inserts fl0 rm0 ins0 mid dfg0.
     ao_cmp_flip_scan mid dfg0 dfg rest = (fl0, rm0, ins0) /\
     ao_cmp_flip_scan mid dfg0 dfg (h :: rest) = (flips, removes, inserts) ==>
@@ -151,7 +151,7 @@ Proof
   drule_all scan_step_detail >> strip_tac >> gvs[]
 QED
 
-Triviality scan_step_removes_subset[local]:
+Theorem scan_step_removes_subset:
   !dfg h rest flips removes inserts fl0 rm0 ins0 mid dfg0.
     ao_cmp_flip_scan mid dfg0 dfg rest = (fl0, rm0, ins0) /\
     ao_cmp_flip_scan mid dfg0 dfg (h :: rest) = (flips, removes, inserts) ==>
@@ -258,7 +258,7 @@ Proof
   >> metis_tac[]
 QED
 
-Triviality scan_removes_are_iszero[local]:
+Theorem scan_removes_are_iszero:
   !dfg insts flips removes inserts id mid dfg0.
     ao_cmp_flip_scan mid dfg0 dfg insts = (flips, removes, inserts) /\
     MEM id removes ==>
@@ -300,14 +300,14 @@ QED
 
 (* ===== Untouched properties ===== *)
 
-Triviality terminator_not_comparator[local]:
+Theorem terminator_not_comparator:
   !opc. is_terminator opc ==> ~is_comparator opc
 Proof
   Cases >> simp[is_terminator_def, is_comparator_def]
 QED
 
 
-Triviality all_distinct_id_eq[local]:
+Theorem all_distinct_id_eq:
   !l x y. ALL_DISTINCT (MAP (\i. i.inst_id) l) /\
            MEM x l /\ MEM y l /\ x.inst_id = y.inst_id ==> x = y
 Proof
@@ -393,7 +393,7 @@ Proof
 QED
 
 (* Untouched instruction maps to singleton *)
-Triviality ao_cmp_flip_apply_untouched[local]:
+Theorem ao_cmp_flip_apply_untouched:
   !mid flips removes inserts inst.
     ALOOKUP flips inst.inst_id = NONE /\
     ~MEM inst.inst_id removes /\
@@ -405,7 +405,7 @@ Proof
   gvs[]
 QED
 
-Triviality flip_preserves_non_phi[local]:
+Theorem flip_preserves_non_phi:
   !opc. opc <> PHI ==> flip_comparison_opcode opc <> PHI
 Proof
   Cases >> simp[flip_comparison_opcode_def]
@@ -455,13 +455,6 @@ Proof
   simp[rich_listTheory.LAST_APPEND_NOT_NIL]
 QED
 
-Triviality fn_insts_blocks_mem[local]:
-  !bbs bb inst. MEM bb bbs /\ MEM inst bb.bb_instructions ==>
-    MEM inst (fn_insts_blocks bbs)
-Proof
-  Induct >> simp[fn_insts_blocks_def] >> metis_tac[]
-QED
-
 Triviality map_id_fn_insts_blocks[local]:
   !bbs. MAP (\i. i.inst_id) (fn_insts_blocks bbs) =
     FLAT (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions) bbs)
@@ -476,26 +469,6 @@ Proof
   simp[fn_inst_ids_distinct_def, fn_insts_def, map_id_fn_insts_blocks]
 QED
 
-
-Triviality all_distinct_flat_mem[local]:
-  !bbs (bb:'a list). ALL_DISTINCT (FLAT bbs) /\ MEM bb bbs ==>
-    ALL_DISTINCT bb
-Proof
-  Induct >> simp[] >> rpt strip_tac >> gvs[] >>
-  gvs[listTheory.ALL_DISTINCT_APPEND]
-QED
-
-Triviality block_inst_ids_distinct[local]:
-  !fn bb. fn_inst_ids_distinct fn /\ MEM bb fn.fn_blocks ==>
-    ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)
-Proof
-  rpt strip_tac >> fs[fn_inst_ids_distinct_def] >>
-  irule all_distinct_flat_mem >>
-  qexists_tac `MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions)
-                 fn.fn_blocks` >>
-  simp[listTheory.MEM_MAP] >>
-  metis_tac[]
-QED
 
 Triviality last_flat_map[local]:
   !(l:'a list) f.
@@ -754,12 +727,6 @@ QED
 
 (* ===== fn_inst_ids_distinct helpers ===== *)
 
-Triviality ao_fresh_id_gt[local]:
-  !mid id slot. ao_fresh_id mid id slot > mid
-Proof
-  simp[ao_fresh_id_def]
-QED
-
 Triviality ao_fresh_id_inj[local]:
   !mid id1 id2 s. ao_fresh_id mid id1 s = ao_fresh_id mid id2 s ==> id1 = id2
 Proof
@@ -777,19 +744,6 @@ Proof
   every_case_tac >> gvs[ao_post_flip_fields] >> metis_tac[]
 QED
 
-
-Triviality all_distinct_pred_split_local[local]:
-  !(l:num list) mid.
-    ALL_DISTINCT (FILTER (\id. id <= mid) l) /\
-    ALL_DISTINCT (FILTER (\id. ~(id <= mid)) l) ==>
-    ALL_DISTINCT l
-Proof
-  Induct >> simp[] >> rpt strip_tac >>
-  Cases_on `h <= mid` >> gvs[listTheory.MEM_FILTER] >>
-  first_x_assum irule >>
-  qexists_tac `mid` >> simp[] >>
-  metis_tac[listTheory.FILTER_ALL_DISTINCT]
-QED
 
 Theorem scan_inserts_cmp_id_mem:
   !dfg insts flips removes inserts id out_var fresh cmp_id mid dfg0.
@@ -1080,7 +1034,7 @@ Proof
       simp[] >>
       conj_tac
       >- (rpt strip_tac >>
-          simp[fn_insts_def] >> irule fn_insts_blocks_mem >>
+          simp[fn_insts_def] >> irule mem_fn_insts_blocks >>
           qexists_tac `bb0` >> simp[])
       >- metis_tac[])
   (* fn_succs_closed *)
@@ -1098,7 +1052,7 @@ Proof
          simp[] >>
          conj_tac
          >- (rpt strip_tac >>
-             simp[fn_insts_def] >> irule fn_insts_blocks_mem >>
+             simp[fn_insts_def] >> irule mem_fn_insts_blocks >>
              qexists_tac `bb0` >> simp[])
          >- metis_tac[]) >>
       gvs[] >>
@@ -1132,7 +1086,7 @@ Proof
            simp[fn_insts_def] >> metis_tac[]) >>
         simp[] >>
         fs[fn_inst_ids_distinct_def, fn_insts_def]) >>
-     irule all_distinct_pred_split_local >>
+     irule all_distinct_le_split >>
      qexists_tac `mid` >> simp[]
 QED
 

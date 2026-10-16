@@ -11,22 +11,13 @@ Ancestors
   algebraicOptDefs aoOrTruthySim
   venomExecSemantics venomWf venomState venomInst
   stateEquiv stateEquivProps execEquivProps
-  passSimulationProps passSimulationDefs
+  passSimulationProps passSimulationDefs aoPhase5Wf
 Libs
   pairLib BasicProvers
 
 val _ = delsimps ["ao_or_truthy_dead_vars_def",
                   "ao_or_truthy_scan_def",
                   "ao_or_truthy_apply_inst_def"]
-
-(* ao_or_truthy_function is the identity when the scan finds nothing. *)
-Triviality or_truthy_null_id[local]:
-  !dfg0 fn.
-    NULL (ao_or_truthy_scan dfg0 (dfg_build_function fn) (fn_insts fn)) ==>
-    ao_or_truthy_function dfg0 (dfg_build_function fn) fn = fn
-Proof
-  rpt strip_tac >> simp[ao_or_truthy_function_def, LET_THM]
-QED
 
 (* When non-NULL, ao_or_truthy_function is a function_map_transform. *)
 Triviality or_truthy_is_map_transform[local]:

@@ -17,26 +17,6 @@ Ancestors
 Libs
   BasicProvers
 
-(* ao_fresh_var is injective on our suffixes *)
-Theorem ao_fresh_var_full_inj:
-  !id1 s1 id2 s2.
-    (s1 = "not" \/ s1 = "iz" \/ s1 = "xor") /\
-    (s2 = "not" \/ s2 = "iz" \/ s2 = "xor") /\
-    ao_fresh_var id1 s1 = ao_fresh_var id2 s2 ==>
-    id1 = id2 /\ s1 = s2
-Proof
-  rpt strip_tac >> gvs[] >>
-  fs[ao_fresh_var_def, stringTheory.STRCAT_11,
-     ASCIInumbersTheory.toString_inj]
-QED
-
-Triviality fn_insts_blocks_every[local]:
-  !blocks p. EVERY p (fn_insts_blocks blocks) <=>
-    EVERY (\bb. EVERY p bb.bb_instructions) blocks
-Proof
-  Induct >> simp[fn_insts_blocks_def, listTheory.EVERY_APPEND]
-QED
-
 Theorem fn_inst_wf_fn_insts:
   !fn. fn_inst_wf fn <=> EVERY inst_wf (fn_insts fn)
 Proof
@@ -80,27 +60,6 @@ QED
 
 (* ===== Phase 1 instruction-level facts ===== *)
 
-Triviality fn_insts_block_map[local]:
-  !f fn.
-    fn_insts (function_map_transform (block_map_transform f) fn) =
-    MAP f (fn_insts fn)
-Proof
-  rpt gen_tac >>
-  simp[function_map_transform_def, fn_insts_def] >>
-  qspec_tac (`fn.fn_blocks`,`bbs`) >>
-  Induct >>
-  simp[fn_insts_blocks_def, block_map_transform_def, listTheory.MAP_APPEND]
-QED
-
-Triviality map_inst_id_fn_insts[local]:
-  !fn. MAP (\i. i.inst_id) (fn_insts fn) =
-       FLAT (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions) fn.fn_blocks)
-Proof
-  gen_tac >> simp[fn_insts_def] >>
-  qspec_tac (`fn.fn_blocks`,`bbs`) >>
-  Induct >> simp[fn_insts_blocks_def]
-QED
-
 (* phase 1 keeps every instruction id, hence the fresh-var namespace *)
 Triviality phase1_fresh_vars[local]:
   !fn.
@@ -142,14 +101,6 @@ Proof
   metis_tac[]
 QED
 
-(* phase 1 introduces no new Var operand: it only reorders ADD's [Label;Lit] *)
-Triviality ao_handle_offset_inst_operand_var[local]:
-  !inst w. MEM (Var w) (ao_handle_offset_inst inst).inst_operands ==>
-           MEM (Var w) inst.inst_operands
-Proof
-  rw[ao_handle_offset_inst_def] >> every_case_tac >> gvs[]
-QED
-
 Triviality phase1_operand_freshness[local]:
   !fn.
     (!inst v. MEM inst (fn_insts fn) /\ MEM (Var v) inst.inst_operands ==>
@@ -163,7 +114,7 @@ Triviality phase1_operand_freshness[local]:
 Proof
   rpt strip_tac >>
   gvs[fn_insts_block_map, listTheory.MEM_MAP, phase1_fresh_vars] >>
-  drule ao_handle_offset_inst_operand_var >> metis_tac[]
+  drule ao_handle_offset_inst_var_operand >> metis_tac[]
 QED
 
 (* function_map_transform of a 1:1 block map, in record-with form *)

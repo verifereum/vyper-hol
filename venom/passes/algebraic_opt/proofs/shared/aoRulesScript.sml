@@ -21,7 +21,7 @@ Libs
 (* Relate ASSIGN to exec_pure1 with identity *)
 
 (* 0w - 1w = UINT_MAXw (all-ones word) *)
-Triviality neg1_is_max[local]:
+Theorem neg1_is_max:
   (0w : 'a word) - 1w = UINT_MAXw
 Proof
   rewrite_tac[GSYM wordsTheory.WORD_NOT_0] >>

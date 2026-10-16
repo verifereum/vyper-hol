@@ -351,13 +351,6 @@ Proof
   simp[step_inst_base_def]
 QED
 
-Triviality step_base_iszero[local]:
-  inst.inst_opcode = ISZERO ==>
-  step_inst_base inst s = exec_pure1 (\x. bool_to_word (x = 0w)) inst s
-Proof
-  simp[step_inst_base_def]
-QED
-
 Triviality step_base_assign[local]:
   inst.inst_opcode = ASSIGN ==>
   step_inst_base inst s =
@@ -403,7 +396,7 @@ Proof
   TRY (simp[] >> NO_TAC) >>
   (* Resolve step_inst_base via per-opcode rewrites (tiny RHS) to avoid
      rebuilding the full opcode case in each of the many subgoals. *)
-  simp[step_base_exp, step_base_assign, step_base_iszero] >>
+  simp[step_base_exp, step_base_assign, step_inst_base_ISZERO] >>
   simp[exec_pure2_def, exec_pure1_def, eval_operand_def] >>
   every_case_tac >> gvs[wordsTheory.word_exp_def,
     arithmeticTheory.EXP_1, arithmeticTheory.ZERO_EXP] >>

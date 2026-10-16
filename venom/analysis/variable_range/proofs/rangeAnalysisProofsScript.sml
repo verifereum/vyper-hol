@@ -10,7 +10,7 @@ Ancestors
   rangeAnalysisDefs rangeEvalDefs rangeEvalProofs valueRangeDefs valueRangeProofs
   venomExecSemantics venomExecProofs venomExecProps venomState venomInst venomInstProps venomWf dfAnalyzeWidenDefs
   dfAnalyzeWidenProofs dfAnalyzeWidenProps cfgAnalysisProps
-  dfgAnalysisProps dfgCorrectnessProof
+  dfgAnalysisProps dfgCorrectnessProof allocaRemapSSA
 
 (* ===== rs_write helper ===== *)
 
@@ -2855,33 +2855,6 @@ Proof
   simp[range_unwrap_def, finite_mapTheory.FDOM_FEMPTY]
 QED
 
-Triviality lookup_block_MEM_local[local]:
-  !lbl bbs bb. lookup_block lbl bbs = SOME bb ==> MEM bb bbs
-Proof
-  Induct_on `bbs` >>
-  simp[venomInstTheory.lookup_block_def, listTheory.FIND_thm] >>
-  rpt gen_tac >> IF_CASES_TAC >> simp[] >>
-  rpt strip_tac >>
-  fs[GSYM venomInstTheory.lookup_block_def] >>
-  res_tac >> simp[]
-QED
-
-Triviality MEM_fn_insts_blocks_local[local]:
-  !bbs bb inst.
-    MEM bb bbs /\ MEM inst bb.bb_instructions ==>
-    MEM inst (fn_insts_blocks bbs)
-Proof
-  Induct >> rw[fn_insts_blocks_def] >> metis_tac[]
-QED
-
-Triviality MEM_fn_insts_local[local]:
-  !fn bb inst.
-    MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions ==>
-    MEM inst (fn_insts fn)
-Proof
-  rw[fn_insts_def] >> metis_tac[MEM_fn_insts_blocks_local]
-QED
-
 Triviality range_transfer_fdom_fn_all_vars[local]:
   !fn0 inst v.
     MEM inst (fn_insts fn0) /\
@@ -3052,8 +3025,8 @@ Proof
   `!inst. MEM inst instrs ==> MEM inst (fn_insts fn0)` by
     (qunabbrev_tac `instrs` >>
      Cases_on `lookup_block lbl fn0.fn_blocks` >> simp[] >>
-     rpt strip_tac >> irule MEM_fn_insts_local >>
-     metis_tac[lookup_block_MEM_local]) >>
+     rpt strip_tac >> irule mem_fn_insts_intro >>
+     metis_tac[lookup_block_MEM]) >>
   pairarg_tac >> gvs[] >>
   drule dfAnalyzePropsTheory.df_fold_block_forward_invariant >>
   disch_then (qspec_then `\v. FDOM (range_unwrap v) SUBSET fn_all_vars fn0` mp_tac) >>
@@ -3141,8 +3114,8 @@ Proof
   `∀inst. MEM inst instrs ⇒ MEM inst (fn_insts fn0)` by
     (qunabbrev_tac `instrs` >>
      Cases_on `lookup_block lbl' fn0.fn_blocks` >> simp[] >>
-     rpt strip_tac >> irule MEM_fn_insts_local >>
-     metis_tac[lookup_block_MEM_local]) >>
+     rpt strip_tac >> irule mem_fn_insts_intro >>
+     metis_tac[lookup_block_MEM]) >>
   drule dfAnalyzePropsTheory.df_fold_block_forward_invariant >>
   disch_then (qspec_then `λv. FDOM (range_unwrap v) ⊆ fn_all_vars fn0` mp_tac) >>
   impl_tac

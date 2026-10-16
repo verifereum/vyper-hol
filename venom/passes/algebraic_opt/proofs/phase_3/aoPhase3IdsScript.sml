@@ -14,7 +14,7 @@
 Theory aoPhase3Ids
 Ancestors
   algebraicOptDefs venomInst venomWf passSimulationDefs passSimulationProps
-  indexedLists rich_list
+  indexedLists rich_list allocaRemapSSA aoResolveSim
 Libs
   pairLib BasicProvers
 
@@ -35,19 +35,13 @@ QED
 
 (* ===== id preservation for resolve / flips ===== *)
 
-Triviality resolve_id[local]:
-  !targets inst. (ao_resolve_iszero_inst targets inst).inst_id = inst.inst_id
-Proof
-  rw[ao_resolve_iszero_inst_def]
-QED
-
-Triviality pre_flip_id[local]:
+Theorem pre_flip_id:
   !inst. (ao_pre_flip_inst inst).inst_id = inst.inst_id
 Proof
   rw[ao_pre_flip_inst_def] >> every_case_tac >> gvs[]
 QED
 
-Triviality post_flip_id[local]:
+Theorem post_flip_id:
   !inst. (ao_post_flip_inst inst).inst_id = inst.inst_id
 Proof
   rw[ao_post_flip_inst_def] >> every_case_tac >> gvs[]
@@ -220,18 +214,18 @@ Triviality transform_inst_idok[local]:
         (ao_transform_inst mid dfg ra lbl idx targets inst))
 Proof
   rpt strip_tac >>
-  simp[ao_transform_inst_def, LET_THM, resolve_id, post_flip_last_ids] >>
+  simp[ao_transform_inst_def, LET_THM, ao_resolve_iszero_inst_id, post_flip_last_ids] >>
   rpt (FIRST [CASE_TAC, IF_CASES_TAC] >>
-       simp[resolve_id, post_flip_last_ids]) >>
+       simp[ao_resolve_iszero_inst_id, post_flip_last_ids]) >>
   FIRST [
     irule idok_single >> simp[],
     (drule producer_ids >> strip_tac >>
-     gvs[post_flip_last_ids, resolve_id] >> irule idok_single >> simp[]),
+     gvs[post_flip_last_ids, ao_resolve_iszero_inst_id] >> irule idok_single >> simp[]),
     (qspecl_then [`mid`, `dfg`, `ra`, `lbl`, `idx`,
        `ao_pre_flip_inst (ao_resolve_iszero_inst targets inst)`]
        mp_tac peephole_idok >>
-     impl_tac >- gvs[pre_flip_id, resolve_id] >>
-     simp[pre_flip_id, resolve_id, post_flip_last_ids])
+     impl_tac >- gvs[pre_flip_id, ao_resolve_iszero_inst_id] >>
+     simp[pre_flip_id, ao_resolve_iszero_inst_id, post_flip_last_ids])
   ]
 QED
 
@@ -407,8 +401,6 @@ Proof
   Induct >> simp[block_pieces_snd_flat]
 QED
 
-(* mem_fn_insts_blocks shared from passSimulationProps *)
-
 Triviality all_pieces_idok[local]:
   !mid dfg ra targets fn.
     (!inst. MEM inst (fn_insts fn) ==> inst.inst_id <= mid) ==>
@@ -427,7 +419,7 @@ QED
 
 (* ===== top-level ===== *)
 
-Triviality all_distinct_le_split[local]:
+Theorem all_distinct_le_split:
   !(l:num list) mid.
     ALL_DISTINCT (FILTER (\id. id <= mid) l) /\
     ALL_DISTINCT (FILTER (\id. ~(id <= mid)) l) ==>
@@ -440,7 +432,7 @@ Proof
   metis_tac[listTheory.FILTER_ALL_DISTINCT]
 QED
 
-Triviality map_inst_id_fn_insts[local]:
+Theorem map_inst_id_fn_insts:
   !fn. MAP (\i. i.inst_id) (fn_insts fn) =
        FLAT (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions) fn.fn_blocks)
 Proof

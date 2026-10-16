@@ -24,13 +24,13 @@ Theory aoPhase3Ssa
 Ancestors
   algebraicOptDefs aoPhase3Wf aoPhase3Ids aoWf venomInst venomWf
   passSimulationDefs passSimulationProps passSharedDefs indexedLists rich_list
-  string ASCIInumbers
+  string ASCIInumbers allocaRemapSSA aoResolveSim
 Libs
   pairLib BasicProvers
 
 (* ===== fresh-var injectivity ===== *)
 
-Triviality ao_fresh_var_full_inj[local]:
+Theorem ao_fresh_var_full_inj:
   !id1 s1 id2 s2.
     (s1 = "not" \/ s1 = "iz" \/ s1 = "xor") /\
     (s2 = "not" \/ s2 = "iz" \/ s2 = "xor") /\
@@ -126,25 +126,6 @@ Proof
 QED
 
 (* ===== output preservation for resolve / flips ===== *)
-
-Triviality resolve_id[local]:
-  !targets inst. (ao_resolve_iszero_inst targets inst).inst_id = inst.inst_id
-Proof
-  rw[ao_resolve_iszero_inst_def]
-QED
-
-Triviality resolve_outputs[local]:
-  !targets inst.
-    (ao_resolve_iszero_inst targets inst).inst_outputs = inst.inst_outputs
-Proof
-  rw[ao_resolve_iszero_inst_def]
-QED
-
-Triviality pre_flip_id[local]:
-  !inst. (ao_pre_flip_inst inst).inst_id = inst.inst_id
-Proof
-  rw[ao_pre_flip_inst_def] >> every_case_tac >> gvs[]
-QED
 
 Triviality pre_flip_outputs[local]:
   !inst. (ao_pre_flip_inst inst).inst_outputs = inst.inst_outputs
@@ -319,29 +300,23 @@ Proof
   rpt strip_tac >>
   simp[ao_transform_inst_def, LET_THM, post_flip_last_outputs] >>
   rpt (FIRST [CASE_TAC, IF_CASES_TAC] >>
-       simp[post_flip_last_outputs, resolve_outputs]) >>
-  TRY (irule outok_clean >> simp[resolve_outputs] >> fs[] >> NO_TAC) >>
+       simp[post_flip_last_outputs, ao_resolve_iszero_inst_outputs]) >>
+  TRY (irule outok_clean >> simp[ao_resolve_iszero_inst_outputs] >> fs[] >> NO_TAC) >>
   FIRST [
     (drule producer_outs >> strip_tac >>
-     gvs[post_flip_last_outputs, resolve_outputs] >>
+     gvs[post_flip_last_outputs, ao_resolve_iszero_inst_outputs] >>
      irule outok_clean >> fs[]),
     (qspecl_then [`g`, `mid`, `dfg`, `ra`, `lbl`, `idx`,
        `ao_pre_flip_inst (ao_resolve_iszero_inst targets inst)`]
        mp_tac peephole_outok >>
      impl_tac
-     >- (gvs[pre_flip_id, resolve_id, pre_flip_outputs, resolve_outputs])
-     >- simp[pre_flip_id, resolve_id, pre_flip_outputs, resolve_outputs,
+     >- (gvs[pre_flip_id, ao_resolve_iszero_inst_id, pre_flip_outputs, ao_resolve_iszero_inst_outputs])
+     >- simp[pre_flip_id, ao_resolve_iszero_inst_id, pre_flip_outputs, ao_resolve_iszero_inst_outputs,
              post_flip_last_outputs])
   ]
 QED
 
 (* ===== post-flip: ids, outputs and operands ===== *)
-
-Triviality post_flip_id[local]:
-  !inst. (ao_post_flip_inst inst).inst_id = inst.inst_id
-Proof
-  rw[ao_post_flip_inst_def] >> every_case_tac >> gvs[]
-QED
 
 Triviality post_flip_operand_mem[local]:
   !x inst. MEM x (ao_post_flip_inst inst).inst_operands ==> MEM x inst.inst_operands
@@ -575,15 +550,6 @@ Proof
 QED
 
 (* ===== top-level ===== *)
-
-Triviality map_inst_id_fn_insts[local]:
-  !fn. MAP (\i. i.inst_id) (fn_insts fn) =
-       FLAT (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions) fn.fn_blocks)
-Proof
-  gen_tac >> simp[fn_insts_def] >>
-  qspec_tac (`fn.fn_blocks`,`bbs`) >>
-  Induct >> simp[fn_insts_blocks_def]
-QED
 
 Triviality all_distinct_split_fv[local]:
   !(l:string list) fv.
@@ -993,12 +959,12 @@ Proof
   rpt strip_tac >>
   simp[ao_transform_inst_def, LET_THM] >>
   rpt (FIRST [CASE_TAC, IF_CASES_TAC] >> simp[]) >>
-  TRY (irule selfout_flat_clean >> simp[resolve_outputs] >> fs[] >> NO_TAC) >>
+  TRY (irule selfout_flat_clean >> simp[ao_resolve_iszero_inst_outputs] >> fs[] >> NO_TAC) >>
   irule selfout_post_flip_last >>
   FIRST [
     (irule selfout_flat_clean >> drule producer_outs >>
-     simp[resolve_outputs] >> fs[]),
-    (irule peephole_selfout >> simp[pre_flip_outputs, resolve_outputs] >> fs[])
+     simp[ao_resolve_iszero_inst_outputs] >> fs[]),
+    (irule peephole_selfout >> simp[pre_flip_outputs, ao_resolve_iszero_inst_outputs] >> fs[])
   ]
 QED
 

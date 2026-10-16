@@ -11,7 +11,7 @@ Ancestors
   aoTargetProps aoResolveObligation
   venomWf venomState venomInst venomExecSemantics
   venomInstProps venomExecProps venomExecProofs
-  stateEquiv dfgAnalysisProps passSimulationProps
+  stateEquiv dfgAnalysisProps passSimulationProps allocaRemapSSA
 Libs
   pairLib BasicProvers
 
@@ -207,7 +207,7 @@ Proof
     simp[listTheory.EL_MEM] >> metis_tac[]) >>
   pop_assum (strip_assume_tac o REWRITE_RULE [def_available_at_def]) >>
   `MEM def_inst' (fn_insts fn0)` by
-    metis_tac[mem_block_mem_fn_insts] >>
+    metis_tac[mem_fn_insts_intro] >>
   `def_inst = def_inst'` by
     metis_tac[all_distinct_flat_map_unique, ssa_form_def] >>
   gvs[] >>
@@ -333,7 +333,7 @@ Proof
             (strip_assume_tac o REWRITE_RULE [def_available_at_def]) >>
           `fn_inst_ids_distinct fn0` by fs[wf_function_def] >>
           `MEM def_inst (fn_insts fn0)` by
-            metis_tac[mem_block_mem_fn_insts] >>
+            metis_tac[mem_fn_insts_intro] >>
           `iz_inst = def_inst` by
             metis_tac[all_distinct_flat_map_unique, ssa_form_def] >>
           gvs[] >>
@@ -474,7 +474,7 @@ Proof
     metis_tac[dfgAnalysisPropsTheory.dfg_build_function_defs_complete] >>
   `MEM w inst'.inst_outputs /\ MEM inst' (fn_insts fn0)` by
     metis_tac[dfgAnalysisPropsTheory.dfg_build_function_correct] >>
-  `iz_inst = inst'` by metis_tac[ssa_output_unique] >>
+  `iz_inst = inst'` by metis_tac[ssa_unique_output] >>
   gvs[] >>
   `?d_bb. MEM d_bb fn0.fn_blocks /\ MEM inst' d_bb.bb_instructions` by
     metis_tac[dfgSoundStepTheory.fn_insts_mem_block] >>

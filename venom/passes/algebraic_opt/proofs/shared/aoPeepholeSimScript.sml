@@ -423,7 +423,7 @@ QED
 
 (* pre_flip preserves non-INVOKE-ness: comparators flip to comparators,
    everything else keeps its opcode. *)
-Triviality ao_pre_flip_not_invoke[local]:
+Theorem ao_pre_flip_not_invoke:
   !inst. inst.inst_opcode <> INVOKE ==>
          (ao_pre_flip_inst inst).inst_opcode <> INVOKE
 Proof
@@ -525,13 +525,6 @@ QED
 (* Combining: for binary opcodes with a NONE operand, step_inst_base errors *)
 
 (* ===== Per-opcode simulation helpers ===== *)
-
-Triviality neg1_is_max[local]:
-  (0w : 'a word) - 1w = UINT_MAXw
-Proof
-  simp[wordsTheory.word_sub_def, wordsTheory.WORD_NEG_1,
-       wordsTheory.WORD_ADD_0]
-QED
 
 (* UINT_MAXw - w = NOT w: subtraction from all-1s = bitwise complement *)
 Triviality neg1_sub_is_not[local]:

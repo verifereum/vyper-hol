@@ -7,7 +7,7 @@
 Theory aoIsZeroInv
 Ancestors
   venomWf venomInstProps stateEquiv stateEquivProps
-  venomState venomExecSemantics
+  venomState venomExecSemantics rangeAnalysisProofs
 Libs
   pairLib
 
@@ -26,15 +26,6 @@ End
 
 val _ = delsimps ["within_block_iszero_inv_def"]
 
-(* Every instruction in the PHI prefix is a PHI. *)
-Theorem phi_prefix_el_phi:
-  !insts j. j < phi_prefix_length insts ==> (EL j insts).inst_opcode = PHI
-Proof
-  Induct >> simp[phi_prefix_length_def] >> rpt strip_tac >>
-  Cases_on `h.inst_opcode = PHI` >> gvs[] >>
-  Cases_on `j` >> gvs[]
-QED
-
 (* within_block_iszero_inv holds vacuously at the PHI prefix boundary:
    positions before phi_prefix_length are all PHIs, never ISZERO. *)
 Theorem wbiz_phi_prefix:
@@ -42,7 +33,7 @@ Theorem wbiz_phi_prefix:
     within_block_iszero_inv fn0 bb (phi_prefix_length bb.bb_instructions) s
 Proof
   rw[within_block_iszero_inv_def] >>
-  `(EL j bb.bb_instructions).inst_opcode = PHI` by metis_tac[phi_prefix_el_phi] >>
+  `(EL j bb.bb_instructions).inst_opcode = PHI` by metis_tac[phi_prefix_length_el_phi] >>
   gvs[]
 QED
 

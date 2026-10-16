@@ -12,7 +12,7 @@ Ancestors
   stateEquiv venomWf venomExecSemantics venomExecProofs
   analysisSimDefs rangeAnalysisProofs
   passSharedDefs cfgDefs cfgHelpers cfgAnalysisProps
-  venomInst venomInstProps venomState
+  venomInst venomInstProps venomState aoPhase1Wf
 Libs
   pairLib BasicProvers
 
@@ -153,13 +153,6 @@ Proof
       strip_tac
       >- (DISJ1_TAC >> metis_tac[listTheory.MEM])
       >- (metis_tac[chain_el_step_output, listTheory.MEM]))
-QED
-
-Triviality ao_handle_offset_inst_outputs[local]:
-  !inst. (ao_handle_offset_inst inst).inst_outputs = inst.inst_outputs
-Proof
-  rpt strip_tac >> simp[ao_handle_offset_inst_def] >>
-  every_case_tac >> simp[]
 QED
 
 Triviality fn0_output_is_fn_output_helper[local]:

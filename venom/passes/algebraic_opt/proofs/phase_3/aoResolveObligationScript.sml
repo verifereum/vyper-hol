@@ -13,7 +13,7 @@
 Theory aoResolveObligation
 Ancestors
   algebraicOptDefs venomExecSemantics venomInst venomState venomWf
-  stateEquiv passSharedSubst
+  stateEquiv passSharedSubst venomExecProofs
 Libs
   pairLib BasicProvers
 
@@ -165,12 +165,6 @@ Proof
      impl_tac >- (simp[] >> `j1 < LENGTH chain` by simp[] >> metis_tac[]) >>
      simp[]) >>
   metis_tac[]
-QED
-
-Theorem eval_operand_inst_idx_irrel:
-  !op s n. eval_operand op (s with vs_inst_idx := n) = eval_operand op s
-Proof
-  Cases >> simp[eval_operand_def, lookup_var_def]
 QED
 
 
@@ -419,7 +413,7 @@ QED
 
 (* ===== Operand resolution lemmas ===== *)
 
-Theorem resolve_op_iszero:
+Theorem ao_resolve_iszero_op_iszero:
   !targets op. ao_resolve_iszero_op targets ISZERO op = op
 Proof
   rpt gen_tac >> Cases_on `op` >>
@@ -583,7 +577,7 @@ Triviality resolve_op_eval_all[local]:
 Proof
   rpt strip_tac >>
   Cases_on `opc = ISZERO`
-  >- simp[resolve_op_iszero]
+  >- simp[ao_resolve_iszero_op_iszero]
   >- metis_tac[resolve_op_eval_eq]
 QED
 
@@ -972,13 +966,6 @@ QED
 
 (* ===== Small step helpers (loop-robust per-inst sim support) ===== *)
 
-Theorem ao_resolve_iszero_op_iszero:
-  !targets op. ao_resolve_iszero_op targets ISZERO op = op
-Proof
-  rpt gen_tac >> Cases_on `op` >> simp[ao_resolve_iszero_op_def] >>
-  BasicProvers.EVERY_CASE_TAC >> simp[]
-QED
-
 Theorem invoke_operand_defined:
   !fuel ctx inst s v.
     inst.inst_opcode = INVOKE /\
@@ -1185,12 +1172,6 @@ QED
 
 (* ===== Generic FLAT/MAPi prefix helpers ===== *)
 
-Triviality phi_prefix_len_le[local]:
-  !l. phi_prefix_length l <= LENGTH l
-Proof
-  Induct >> rw[phi_prefix_length_def]
-QED
-
 (* eval_phis OK means every prefix PHI evaluates to SOME. *)
 Theorem eval_phis_ok_prefix_phi_some:
   !insts s s'.
@@ -1242,7 +1223,7 @@ Theorem prefix_el_flat_mapi:
     EL idx (FLAT (MAPi f l)) = EL idx l
 Proof
   rpt strip_tac >>
-  `phi_prefix_length l <= LENGTH l` by simp[phi_prefix_len_le] >>
+  `phi_prefix_length l <= LENGTH l` by simp[phi_prefix_length_le] >>
   `FLAT (TAKE (phi_prefix_length l) (MAPi f l)) = TAKE (phi_prefix_length l) l` by
     (irule flat_take_phi_prefix_eq >> simp[]) >>
   `MAPi f l = TAKE (phi_prefix_length l) (MAPi f l) ++
