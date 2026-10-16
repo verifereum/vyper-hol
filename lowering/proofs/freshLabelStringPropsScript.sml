@@ -35,9 +35,14 @@ Theorem separator_prefix_inj:
     d ++ sep::a = e ++ sep::b ==>
     d = e /\ a = b
 Proof
-  Induct_on `d` >> rpt gen_tac >> Cases_on `e` >> simp[] >>
-  rpt strip_tac >> gvs[] >>
-  first_x_assum drule_all >> simp[]
+  Induct_on `d` >> rpt gen_tac >> Cases_on `e` >>
+  asm_simp_tac bool_ss
+    [MEM, APPEND, CONS_11, NOT_CONS_NIL, NOT_NIL_CONS, EQ_SYM_EQ] >>
+  rpt strip_tac >>
+  rename1 `d ++ sep::a = rest ++ sep::b` >>
+  qpat_x_assum `!e a b sep. _`
+    (qspecl_then [`rest`, `a`, `b`, `sep`] mp_tac) >>
+  asm_simp_tac bool_ss []
 QED
 
 Theorem decimal_suffix_inj:

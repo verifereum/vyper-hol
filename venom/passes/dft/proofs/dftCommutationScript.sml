@@ -651,6 +651,16 @@ val base_frame_tac =
        rpt (CHANGED_TAC (BasicProvers.TOP_CASE_TAC >>
                           gvs(all_rwts2 @ custom_defs))));
 
+(* Call/create dispatch only needs operand evaluation and its helper frame.
+   Keep the large state-operation rewrite set out of the nested list/option
+   splits, and leave the execution helpers abstract. *)
+fun call_operand_frame_tac frame =
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  ASM_REWRITE_TAC[opcode_case_def] >>
+  gvs[eval_operand_update_var, map_result_state_def, update_var_fields, frame] >>
+  rpt (CHANGED_TAC (BasicProvers.TOP_CASE_TAC >>
+       gvs[eval_operand_update_var, map_result_state_def, frame]));
+
 Theorem step_inst_base_frame:
   !inst s x v.
   (!y. MEM (Var y) inst.inst_operands ==> x <> y) /\
@@ -728,7 +738,11 @@ Proof
   >- (base_frame_tac >> gvs[update_var_def]) (* INITIAL_FMP *)
   >- base_frame_tac (* BUMP *)
   >- base_frame_tac (* INVOKE *)
-  >- base_frame_tac (* FMP_PARAM *)
+  >- (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+      ASM_REWRITE_TAC[opcode_case_def] >>
+      simp[update_var_fields] >>
+      rpt (BasicProvers.TOP_CASE_TAC >>
+           gvs[map_result_state_def, update_var_commutes])) (* FMP_PARAM *)
   >- (base_frame_tac >> gvs[update_var_def]) (* RETPC_PARAM *)
   >- base_frame_tac (* CALLER *)
   >- base_frame_tac (* CALLVALUE *)
@@ -759,26 +773,11 @@ Proof
   >- base_frame_tac (* BLOBHASH *)
   >- base_frame_tac (* BLOBBASEFEE *)
   >- base_frame_tac (* SHA3 *)
-  >- (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-      ASM_REWRITE_TAC[opcode_case_def] >>
-      gvs all_rwts2 >>
-      rpt (CHANGED_TAC (BasicProvers.TOP_CASE_TAC >> gvs all_rwts2)))
-  >- (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-      ASM_REWRITE_TAC[opcode_case_def] >>
-      gvs all_rwts2 >>
-      rpt (CHANGED_TAC (BasicProvers.TOP_CASE_TAC >> gvs all_rwts2)))
-  >- (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-      ASM_REWRITE_TAC[opcode_case_def] >>
-      gvs all_rwts2 >>
-      rpt (CHANGED_TAC (BasicProvers.TOP_CASE_TAC >> gvs all_rwts2)))
-  >- (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-      ASM_REWRITE_TAC[opcode_case_def] >>
-      gvs all_rwts2 >>
-      rpt (CHANGED_TAC (BasicProvers.TOP_CASE_TAC >> gvs all_rwts2)))
-  >- (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-      ASM_REWRITE_TAC[opcode_case_def] >>
-      gvs all_rwts2 >>
-      rpt (CHANGED_TAC (BasicProvers.TOP_CASE_TAC >> gvs all_rwts2)))
+  >- call_operand_frame_tac exec_ext_call_frame (* CALL *)
+  >- call_operand_frame_tac exec_ext_call_frame (* STATICCALL *)
+  >- call_operand_frame_tac exec_delegatecall_frame (* DELEGATECALL *)
+  >- call_operand_frame_tac exec_create_frame (* CREATE *)
+  >- call_operand_frame_tac exec_create_frame (* CREATE2 *)
   >- base_frame_tac (* LOG *)
   >- base_frame_tac (* SELFDESTRUCT *)
   >- base_frame_tac (* INVALID *)
