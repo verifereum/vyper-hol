@@ -5,7 +5,7 @@
  * but never reads or writes vs_inst_idx. So the result differs from the
  * original only in vs_inst_idx, captured by exec_result_map.
  *
- * Built as a separate theory because of its 93-opcode case split.
+ * Built as a separate theory because of its 101-opcode case split.
  *
  * TOP-LEVEL:
  *   exec_result_map            — map function over state in exec_result

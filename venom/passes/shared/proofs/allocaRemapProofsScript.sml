@@ -3883,19 +3883,17 @@ QED
 
 (* step_inst_base per opcode, to avoid the opcode-case expansion in each
    proof branch. *)
-val step_base_for = SPEC_ALL o opcode_clause;
-
-val step_all_thms = map step_base_for (TypeBase.constructors_of ``:opcode``);
-val step_ordinary_rw : tactic = fn (asl,g) => let
+fun assumed_step_base asl = let
   fun is_opc_eq a =
     let val (l,r) = dest_eq a
     in l ~~ ``(inst:instruction).inst_opcode`` andalso is_const r
     end handle HOL_ERR _ => false
   val opc_eq = first is_opc_eq asl
-  val th = first (fn th => rhs (fst (dest_imp (concl th))) ~~ rhs opc_eq)
-                 step_all_thms
-  val th' = MP th (ASSUME opc_eq)
-in (RULE_ASSUM_TAC (REWRITE_RULE [th']) >> PURE_REWRITE_TAC [th']) (asl,g) end;
+in MP (SPEC_ALL (opcode_clause (rhs opc_eq))) (ASSUME opc_eq) end;
+
+val step_ordinary_rw : tactic = fn (asl,g) => let
+  val th = assumed_step_base asl
+in (RULE_ASSUM_TAC (REWRITE_RULE [th]) >> PURE_REWRITE_TAC [th]) (asl,g) end;
 
 val error_inline_tac : tactic =
   rpt (BasicProvers.FULL_CASE_TAC >> gvs[] >>
@@ -4299,24 +4297,10 @@ Proof
   simp[]
 QED
 
-(* Reuse the per-opcode equations from the error-transfer boundary. *)
-val step_base_thms = map step_base_for
-  [``JMP``, ``JNZ``, ``DJMP``, ``RET``, ``RETURN``, ``REVERT``,
-   ``STOP``, ``SINK``, ``SELFDESTRUCT``, ``INVALID``, ``RETFMP``, ``DRET``];
-
 (* Tactic: given inst.inst_opcode = OPC in assumptions, rewrite
-   step_inst_base inst _ using the pre-computed per-opcode theorem. *)
-val step_term_rw : tactic = fn (asl, g) => let
-  fun is_opc_eq a =
-    let val (l,r) = dest_eq a
-    in l ~~ ``(inst:instruction).inst_opcode`` andalso is_const r
-    end handle HOL_ERR _ => false
-  val opc_eq = first is_opc_eq asl
-  val opc = rhs opc_eq
-  val th = first (fn th => rhs (fst (dest_imp (concl th))) ~~ opc)
-                 step_base_thms
-  val th' = MP th (ASSUME opc_eq)
-in PURE_REWRITE_TAC [th'] (asl, g) end;
+   step_inst_base inst _ using that opcode's clause. *)
+val step_term_rw : tactic = fn (asl, g) =>
+  PURE_REWRITE_TAC [assumed_step_base asl] (asl, g);
 
 (* Standalone: complete non-INVOKE terminator enumeration. *)
 val is_terminator_cases = prove(
