@@ -55,7 +55,7 @@ val booltm = JSONDecode.map mk_bool bool
 val negbooltm = JSONDecode.map (mk_bool o not) bool
 
 val address : term decoder = JSONDecode.map address_from_hex string
-val bytes : term decoder = JSONDecode.map cached_bytes_from_hex string
+val bytes : term decoder = JSONDecode.map cached_flat_bytes_from_hex string
 
 val Call_tm = prim_mk_const{Thy="vyperTestRunner",Name="Call"}
 val call_trace_ty = #1 $ dom_rng $ type_of Call_tm
@@ -526,7 +526,7 @@ val raw_deployment : term decoder =
     tuple2 (
       tuple4 (field "initcode" bytes,
               field "calldata" $
-                JSONDecode.map (cached_bytes_from_hex o theoptstring)
+                JSONDecode.map (cached_flat_bytes_from_hex o theoptstring)
                   (nullable string),
               tuple4 (field "env" $ field "tx" $ field "origin" address,
                       field "env" $ field "block" $ field "timestamp" numtm,
@@ -546,7 +546,7 @@ val raw_deployment : term decoder =
                 case bc of
                   SOME "" => optionSyntax.mk_none bytes_ty
                 | SOME hex => from_term_option bytes_ty
-                                (SOME (cached_bytes_from_hex hex))
+                                (SOME (cached_flat_bytes_from_hex hex))
                 | NONE => optionSyntax.mk_none bytes_ty) $
                nullable string)))
 
@@ -589,7 +589,7 @@ val deployment : term decoder =
                                    field "deployed_address" address,
                                    field "env" $ field "tx" $ field "gas_price" numtm),
                            tuple4 (field "calldata" $
-                                   JSONDecode.map (cached_bytes_from_hex o theoptstring)
+                                   JSONDecode.map (cached_flat_bytes_from_hex o theoptstring)
                                      (nullable string),
                                    field "env" $ field "block" $ field "number" numtm,
                                    field "env" $ field "block" $ field "blob_basefee" numtm,
