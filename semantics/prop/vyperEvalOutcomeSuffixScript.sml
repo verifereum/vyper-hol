@@ -136,20 +136,21 @@ Proof
     acquire_nonreentrant_lock_def, release_nonreentrant_lock_def,
     get_transient_storage_def, push_function_def, pop_function_def,
     bind_def, ignore_bind_def, return_def, raise_def, AllCaseEqs()] >>
-  rpt strip_tac >> rpt CASE_TAC >>
+  rpt strip_tac >>
+  rpt (CASE_TAC >>
   gvs[set_scopes_def, update_accounts_def, update_transient_def,
       set_address_immutables_def, get_storage_backend_def,
       set_storage_backend_def, write_storage_slot_def,
       lift_option_type_def, lift_option_def, lift_sum_def,
       get_accounts_def, get_transient_storage_def, check_def,
       type_check_def, assert_def,
-      bind_def, ignore_bind_def, return_def, raise_def, AllCaseEqs()] >>
+      bind_def, ignore_bind_def, return_def, raise_def, AllCaseEqs()]) >>
   gvs[get_storage_backend_eq, set_storage_backend_eq,
       option_CASE_rator, prod_CASE_rator, COND_RATOR,
       return_def, raise_def, AllCaseEqs()] >>
-  rpt CASE_TAC >>
+  rpt (CASE_TAC >>
   gvs[get_storage_backend_eq, set_storage_backend_eq, set_storage_def,
-      return_def, raise_def, AllCaseEqs()] >>
+      return_def, raise_def, AllCaseEqs()]) >>
   qmatch_goalsub_abbrev_tac `set_storage _ _ backend _` >>
   Cases_on `backend` >> simp[set_storage_def]
 QED
@@ -216,13 +217,7 @@ Theorem outcomes_frame_assignment:
   (!cx tgts vs. outcomes_frame (assign_targets cx tgts vs))
 Proof
   ho_match_mp_tac assign_target_ind >> rpt conj_tac >> rpt gen_tac >>
-  simp[Once assign_target_def, FORALL_PROD] >> rpt strip_tac
-  >- rpt ASSIGN_OUTCOMES_FRAME_STEP >>
-  NTAC 6 ASSIGN_OUTCOMES_FRAME_STEP >>
-  qmatch_goalsub_rename_tac `toplevel_value_CASE tv _ _ _` >>
-  Cases_on `tv` >> simp_tac std_ss [toplevel_value_case_def]
-  >- rpt ASSIGN_OUTCOMES_FRAME_STEP
-  >- rpt ASSIGN_OUTCOMES_FRAME_STEP >>
+  simp[Once assign_target_def, FORALL_PROD] >> rpt strip_tac >>
   rpt ASSIGN_OUTCOMES_FRAME_STEP
 QED
 
@@ -306,7 +301,7 @@ Proof
     let val result = #1 (pairSyntax.dest_pair (rhs (concl th))) in
       irule (INST_TYPE [alpha |-> type_of result] outcomes_frame_result) >>
       exists_tac (rator (lhs (concl th))) >> exists_tac result
-    end) >> simp[]
+    end) >> simp[outcomes_frame_primitives]
 QED
 
 Definition outcome_suffix_def:
