@@ -590,14 +590,20 @@ End
 (* NOTE: compile_load_by_loc deleted — duplicate of compile_ptr_load *)
 
 (* ===== With Byte Offset ===== *)
-(* Add byte offset to base pointer. Mirrors Python: context.py _with_byte_offset *)
-(* A single equation rather than clauses on 0 and SUC, so EVAL reduces it on
-   a numeral offset. *)
+(* Add byte offset to base pointer. Mirrors Python: context.py _with_byte_offset
+   (one equation, not clauses on 0 and SUC, so EVAL reduces it on a numeral). *)
 Definition compile_with_byte_offset_def:
   compile_with_byte_offset base offset =
     if offset = 0 then return base
     else emit_op ADD [base; Lit (n2w offset)]
 End
+
+Theorem compile_with_byte_offset_clauses:
+  compile_with_byte_offset op 0 = return op /\
+  compile_with_byte_offset op (SUC n) = emit_op ADD [op; Lit (n2w (SUC n))]
+Proof
+  rw[compile_with_byte_offset_def]
+QED
 
 (* ===== Store Memory for Bytestrings ===== *)
 (* Compute 32 + ceil32(actual_length), the exact memory range occupied by an
