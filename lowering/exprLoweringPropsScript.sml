@@ -362,7 +362,7 @@ Theorem compile_name_correct:
     lower_value compile_expr cenv ty (Name ann id) st = (op, st') ∧
     FLOOKUP cenv.ce_vars id = SOME (MemLoc offset size) ∧
     offset < dimword (:256) ∧
-    lookup_scopes (string_to_num id) es.scopes = SOME entry ∧
+    lookup_scopes id es.scopes = SOME entry ∧
     entry.value = v ∧
     v ≠ NoneV ∧
     value_has_type entry.type v ∧

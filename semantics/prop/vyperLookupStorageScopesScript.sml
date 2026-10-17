@@ -98,7 +98,7 @@ Proof
        return_def, raise_def, ignore_bind_def] >>
   Cases_on `get_module_code cx mid` >> simp[return_def, raise_def] >>
   rename1 `SOME modcode` >>
-  Cases_on `find_var_decl_by_num id modcode` >> simp[] >- (
+  Cases_on `find_var_decl_by_name id modcode` >> simp[] >- (
     simp[bind_def, get_immutables_scopes, fst_case_fst] >>
     Cases_on `get_immutables cx mid st` >>
     `r = st` by (
@@ -157,10 +157,10 @@ Theorem lookup_toplevel_name_scopes:
 Proof
   rpt gen_tac >>
   simp[lookup_toplevel_name_def] >>
-  Cases_on `lookup_global cx mid (string_to_num m) (st with scopes := s)` >>
-  Cases_on `lookup_global cx mid (string_to_num m) st` >> simp[] >>
+  Cases_on `lookup_global cx mid m (st with scopes := s)` >>
+  Cases_on `lookup_global cx mid m st` >> simp[] >>
   `q = q'` by (
-    qspecl_then [`cx`, `mid`, `string_to_num m`, `st`, `s`]
+    qspecl_then [`cx`, `mid`, `m`, `st`, `s`]
       mp_tac lookup_global_scopes_fst >> simp[]) >>
   simp[]
 QED
@@ -173,7 +173,7 @@ Theorem lookup_toplevel_name_update_name:
 Proof
   rpt gen_tac >>
   simp[update_name_def, LET_THM] >>
-  Cases_on `find_containing_scope (string_to_num n) st.scopes` >> simp[] >-
+  Cases_on `find_containing_scope n st.scopes` >> simp[] >-
     (Cases_on `st.scopes` >> simp[lookup_toplevel_name_scopes]) >>
   PairCases_on `x` >> simp[lookup_toplevel_name_scopes]
 QED
@@ -195,7 +195,7 @@ Theorem update_toplevel_name_preserves_scopes:
     (update_toplevel_name cx st mid n v).scopes = st.scopes
 Proof
   rw[update_toplevel_name_def] >>
-  Cases_on `set_global cx mid (string_to_num n) v st` >>
+  Cases_on `set_global cx mid n v st` >>
   imp_res_tac set_global_scopes >> simp[]
 QED
 

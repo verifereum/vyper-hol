@@ -58,7 +58,7 @@ Theorem functions_well_typed_body:
      ?ts. get_module_code cx src = SOME ts /\
           FLOOKUP bare_globals (src,id) = SOME ty /\
           FLOOKUP toplevel_vtypes (src,id) = SOME (Type ty) /\
-          is_immutable_decl id ts /\ find_var_decl_by_num id ts = NONE /\
+          is_immutable_decl_by_num id ts /\ find_var_decl_by_num id ts = NONE /\
           ty <> NoneT) /\
   (!src id vt ts.
      FLOOKUP toplevel_vtypes (src,id) = SOME vt /\ get_module_code cx src = SOME ts ==>
@@ -89,8 +89,8 @@ Theorem functions_well_typed_body:
     stmts_no_control_escape fn_body /\
     well_typed_exprs (defaults_env env_body) dflts /\
     (!id typ. MEM (id,typ) args ==>
-       FLOOKUP env_body.var_types (string_to_num id) = SOME typ /\
-       FLOOKUP env_body.var_assignable (string_to_num id) = SOME T)
+       FLOOKUP env_body.var_types id = SOME typ /\
+       FLOOKUP env_body.var_assignable id = SOME T)
 Proof
   rw[functions_well_typed_def] >> first_x_assum drule_all >>
   rw[] >> qexists_tac`env_body` >> gvs[] >> rw[] >>
