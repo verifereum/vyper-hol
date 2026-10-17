@@ -1020,11 +1020,18 @@ Proof
   simp[contextTheory.compile_ensure_in_memory_def, LET_THM]
   (* LocMemory *)
   >- simp[comp_return_def, ci_mono_def]
-  (* LocStorage: blocks grow *)
-  >- (blocks_grew_tac >>
+  (* A one-slot aggregate uses a straight-line load/store. *)
+  >- (Cases_on `word_count = 1`
+      >- (simp (ci_mono_def :: isPREFIX_prim_rws) >>
+          rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
+          simp[rich_listTheory.IS_PREFIX_APPEND3]) >>
+      simp[] >> blocks_grew_tac >>
       simp (contextTheory.compile_storage_to_memory_def :: blocks_grew_rws))
-  (* LocTransient: blocks grow *)
-  >- (blocks_grew_tac >>
+  >- (Cases_on `word_count = 1`
+      >- (simp (ci_mono_def :: isPREFIX_prim_rws) >>
+          rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
+          simp[rich_listTheory.IS_PREFIX_APPEND3]) >>
+      simp[] >> blocks_grew_tac >>
       simp (contextTheory.compile_transient_to_memory_def :: blocks_grew_rws))
   (* LocCode: case split on word_count *)
   >- (simp[ci_mono_def, comp_bind_def, comp_ignore_bind_def,
