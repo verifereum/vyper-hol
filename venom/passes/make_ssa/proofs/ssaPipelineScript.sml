@@ -697,7 +697,7 @@ Triviality rename_blocks_preserves_rel:
       blocks_rel R bbs (SND (rename_children ctrs stacks bbs succ_map children)))
 Proof
   gen_tac >> strip_tac >>
-  ho_match_mp_tac dom_tree_induction >> rpt conj_tac
+  ho_match_mp_tac dom_tree_list_induction >> rpt conj_tac
   >- (
     rw[] >> rw[Once rename_blocks_def] >>
     Cases_on `lookup_block s bbs`

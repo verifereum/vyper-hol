@@ -725,9 +725,12 @@ Theorem foldl_update_mem_writes[local]:
     MEM pred preds ⇒
     FLOOKUP (FOLDL (\ft p. ft |+ ((p,lbl),v)) ft preds) (pred,lbl) = SOME v
 Proof
-  Induct >> rw[FOLDL, FLOOKUP_UPDATE] >>
-  Cases_on `pred = h` >> gvs[] >>
-  Cases_on `MEM h preds` >> gvs[] >>
+  Induct >- simp[] >>
+  rpt gen_tac >> rename1 `head::tail` >>
+  simp[FOLDL] >> disch_tac >>
+  Cases_on `MEM pred tail`
+  >- (first_x_assum irule >> simp[]) >>
+  `pred = head` by gvs[] >>
   simp[foldl_update_other_fst, FLOOKUP_UPDATE]
 QED
 

@@ -97,23 +97,17 @@ Proof
   simp[expr_size_def]
 QED
 
-Theorem expr_list_size_eq[simp]:
-  ∀es. expr4_size es = list_size expr_size es
-Proof
-  Induct >> simp[expr_size_def, list_size_def]
-QED
-
 Theorem expr_builtin_dispatch_bound:
   list_size expr_size args < expr_size (Builtin ann bi args) ∧
   list_size expr_size args < expr_size (TypeBuiltin ann tb ret_ty args)
 Proof
-  simp[expr_size_def]
+  simp[expr_size_def, ETA_AX]
 QED
 
 Theorem expr_call_arg_bound:
   MEM child args ⇒ expr_size child < expr_size (Call ann target args default_ret)
 Proof
-  strip_tac >> drule expr_list_member_bound >> simp[expr_size_def]
+  strip_tac >> drule expr_list_member_bound >> simp[expr_size_def, ETA_AX]
 QED
 
 Theorem expr_call_default_bound:
@@ -122,19 +116,14 @@ Proof
   simp[expr_size_def]
 QED
 
-Theorem expr_fields_size_eq[simp]:
-  ∀fields. expr1_size fields =
-    list_size (pair_size (list_size char_size) expr_size) fields
-Proof
-  Induct >> simp[expr_size_def, list_size_def] >>
-  Cases_on `h` >> simp[expr_size_def, pair_size_def]
-QED
-
 Theorem expr_struct_field_bound:
   ∀fields name child.
     MEM (name,child) fields ⇒ expr_size child < expr_size (StructLit ann nsid fields)
 Proof
-  Induct >> simp[expr_size_def] >>
-  Cases_on `h` >> simp[expr_size_def, list_size_def, pair_size_def] >>
+  `(λx. pair_size (list_size char_size) (λx. x) ((I ## expr_size) x)) =
+    pair_size (list_size char_size) expr_size`
+    by simp[FUN_EQ_THM, pairTheory.FORALL_PROD, pair_size_def] >>
+  Induct >> simp[expr_size_def, ETA_AX] >>
+  Cases_on `h` >> simp[expr_size_def, list_size_def, pair_size_def, ETA_AX] >>
   rpt strip_tac >> gvs[] >> res_tac >> simp[]
 QED

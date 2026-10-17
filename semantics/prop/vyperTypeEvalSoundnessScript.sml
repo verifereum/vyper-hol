@@ -372,7 +372,9 @@ Proof
   reverse conj_asm2_tac >- (
     rpt strip_tac >>
     drule_then irule (cj 1 eval_expr_no_control_with_bt)  ) >>
-  ho_match_mp_tac (TypeBase.induction_of``:assignment_target``) >>
+  ho_match_mp_tac
+    (legacyInduction.mutual_ind_from_ops
+       (TypeBase.induction_of``:assignment_target``)) >>
   simp[evaluate_def, bind_apply, ignore_bind_apply, AllCaseEqs(),
        EXISTS_PROD, bind_def] >>
   rpt strip_tac >> gvs[return_def] >>
@@ -690,7 +692,7 @@ Theorem no_fallthrough_eval_no_success:
       stmts_no_fallthrough ss ==>
       eval_stmts cx ss st <> (INL (), st'))
 Proof
-  ho_match_mp_tac stmt_induction >>
+  ho_match_mp_tac (legacyInduction.mutual_ind_from_ops stmt_induction) >>
   rw[stmt_no_fallthrough_def, evaluate_def, bind_def, return_def, raise_def,
      pairTheory.UNCURRY, finally_def, ignore_bind_def, switch_BoolV_def, AllCaseEqs()] >>
   TRY (rename1 `eval_stmt cx (Raise reason) st <> _` >>
@@ -807,7 +809,7 @@ Theorem stmt_no_control_escape_eval_no_loop_control:
      eval_stmts cx ss st = (INR exn,st') ==>
      exn <> BreakException /\ exn <> ContinueException)
 Proof
-  ho_match_mp_tac stmt_induction >>
+  ho_match_mp_tac (legacyInduction.mutual_ind_from_ops stmt_induction) >>
   rw[stmt_no_control_escape_def, evaluate_def, bind_def, ignore_bind_def,
      finally_def, try_def, switch_BoolV_def, return_def, raise_def,
      pairTheory.UNCURRY, AllCaseEqs()] >>

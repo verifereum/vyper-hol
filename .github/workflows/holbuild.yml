@@ -111,7 +111,9 @@ jobs:
           holbuild --verbose -j"$(nproc)" build --skip-checkpoints --skip-proof-steps
 
       - name: Save holbuild project snapshot
+        if: ${{ always() && steps.cache-key.outcome == 'success' }}
         uses: actions/cache/save@v6
+        continue-on-error: true
         with:
           path: ~/.cache/holbuild
           key: ${{ steps.cache-key.outputs.snapshot-key }}
