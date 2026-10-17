@@ -47,14 +47,20 @@ Libs
    Type helpers (is_signed_type, is_decimal_type, decimal_divisor,
    type_bits, type_bounds) in compileEnv. *)
 
-(* Bytelike literals are lowered at their actual length, independently of
-   the annotated destination bound. Other values retain their AST type. *)
+(* Bytelike literals and ABI encoding results carry their produced bound,
+   independently of the annotated destination bound. *)
 Definition lowered_value_type_def:
-  lowered_value_type (Literal (BaseT (StringT _)) (StringL s)) =
+  lowered_value_type cenv (Literal (BaseT (StringT _)) (StringL s)) =
     BaseT (StringT (LENGTH s)) ∧
-  lowered_value_type (Literal (BaseT (BytesT (Dynamic _))) (BytesL bs)) =
+  lowered_value_type cenv (Literal (BaseT (BytesT (Dynamic _))) (BytesL bs)) =
     BaseT (BytesT (Dynamic (LENGTH bs))) ∧
-  lowered_value_type e = expr_type e
+  lowered_value_type cenv (TypeBuiltin _ (AbiEncode ensure method_id) _ args) =
+    (let enc_ty = if LENGTH args = 1 ∧ ¬ensure then expr_type (HD args)
+                  else TupleT (MAP expr_type args) in
+     BaseT (BytesT (Dynamic
+       (abi_size_bound cenv.ce_struct_fields enc_ty +
+        if IS_SOME method_id then 4 else 0)))) ∧
+  lowered_value_type cenv e = expr_type e
 End
 
 (* ===== Array Location Inference ===== *)

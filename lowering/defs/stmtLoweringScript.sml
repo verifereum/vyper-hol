@@ -871,7 +871,7 @@ Definition compile_stmt_def:
      These may differ for subtype assignments (e.g. Bytes[540] → Bytes[704]).
      Mirrors Python: vyper/codegen_venom/stmt.py:lower_AnnAssign → _assign_value *)
   compile_stmt cenv lctx ty (AnnAssign id vtyp e) =
-    (let src_ty = lowered_value_type e in
+    (let src_ty = lowered_value_type cenv e in
      let empty_value = (has_length_word vtyp ∧ is_empty_value_expr e) in
      do emit_local_alloca cenv id;
         src_vv <- compile_expr cenv (expr_type e) e;
@@ -920,7 +920,7 @@ Definition compile_stmt_def:
           compile_store_at_loc (FST tgt_result) (Lit 0w) (FST (SND tgt_result))
        od
      else
-     let src_ty = lowered_value_type e in
+     let src_ty = lowered_value_type cenv e in
      do tgt_result <- compile_get_target_ptr cenv bt;
         dst_op <- return (FST tgt_result);
         dst_loc_opt <- return (FST (SND tgt_result));
@@ -1168,10 +1168,10 @@ Definition compile_stmt_def:
              let mem_sz = type_memory_bytes cenv elem_ty in
              do tmp_alloc <- compile_alloc_buffer mem_sz;
                 compile_store_memory cenv val_op_raw tmp_alloc.buf_operand
-                                     elem_ty (lowered_value_type val_e);
+                                     elem_ty (lowered_value_type cenv val_e);
                 return tmp_alloc.buf_operand
              od);
-        src_elem_ty <- return (if is_prim then lowered_value_type val_e
+        src_elem_ty <- return (if is_prim then lowered_value_type cenv val_e
                                else elem_ty);
         compile_dynarray_append cenv target_op staged_val ws elem_size
                                      elem_ty src_elem_ty
