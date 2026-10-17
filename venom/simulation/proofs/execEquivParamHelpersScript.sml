@@ -22,10 +22,13 @@ open execEquivParamLib
 fun vsr_eval_ops_tac () =
   `!op. MEM op inst.inst_operands ==>
      eval_operand op s1 = eval_operand op s2` by (
-    rw[] >> vsr_irule vsr_eval_operand >> simp[] >> metis_tac[])
+    rw[] >> vsr_irule vsr_eval_operand >> simp[] >>
+    rpt strip_tac >> gvs[])
 
 fun vsr_eval_rewrite_tac () =
-  imp_res_tac vsr_R_ok_fields >> vsr_eval_ops_tac () >> simp[step_inst_base_def]
+  vsr_eval_ops_tac () >>
+  drule_all_then strip_assume_tac vsr_R_ok_fields >>
+  ASM_REWRITE_TAC[step_inst_base_def] >> simp[]
 
 (* ==========================================================================
    step_inst_base-level helpers
@@ -385,8 +388,19 @@ Theorem vsr_step_inst_param:
     lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt strip_tac >> gvs[] >>
-  imp_res_tac vsr_R_ok_fields >> simp[step_inst_base_def] >>
-  rpt (CASE_TAC >> gvs[lift_result_def]) >>
+  `s1.vs_params = s2.vs_params` by
+    (drule_all vsr_R_ok_fields >> simp[]) >>
+  simp[step_inst_base_def] >>
+  Cases_on `inst.inst_operands` >- simp[lift_result_def] >>
+  rename1 `inst.inst_operands = op_idx::ops` >>
+  Cases_on `op_idx` >> simp[lift_result_def] >>
+  reverse (Cases_on `ops`) >- simp[lift_result_def] >>
+  rename1 `inst.inst_operands = [Lit idx]` >>
+  Cases_on `w2n idx < LENGTH s2.vs_params` >> simp[lift_result_def] >>
+  Cases_on `inst.inst_outputs` >- simp[lift_result_def] >>
+  rename1 `inst.inst_outputs = out::outs` >>
+  reverse (Cases_on `outs`) >- simp[lift_result_def] >>
+  simp[lift_result_def] >>
   vsr_irule vsr_update_var_R_ok >> simp[]
 QED
 
@@ -398,13 +412,14 @@ Theorem vsr_step_inst_ret:
     lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt strip_tac >> gvs[] >>
-  imp_res_tac vsr_R_ok_fields >> vsr_eval_ops_tac () >>
   `eval_operands inst.inst_operands s1 =
-   eval_operands inst.inst_operands s2` by (
-    vsr_irule vsr_eval_operands >> metis_tac[]) >>
+   eval_operands inst.inst_operands s2` by
+    (vsr_irule vsr_eval_operands >> simp[]) >>
   simp[step_inst_base_def] >>
-  rpt (CASE_TAC >> gvs[lift_result_def]) >>
-  imp_res_tac vsr_R_ok_R_term >> simp[]
+  Cases_on `eval_operands inst.inst_operands s2` >> simp[lift_result_def] >>
+  rename1 `eval_operands inst.inst_operands s2 = SOME ret_vals` >>
+  Cases_on `ret_vals` >> simp[lift_result_def] >>
+  vsr_irule vsr_R_ok_R_term >> simp[]
 QED
 
 Theorem vsr_step_inst_log:

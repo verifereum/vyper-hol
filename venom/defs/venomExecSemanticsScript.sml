@@ -1198,11 +1198,12 @@ Proof
   qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
   PURE_REWRITE_TAC[step_inst_base_def] >>
   ASM_REWRITE_TAC[opcode_case_def] >>
-  gvs[AllCaseEqs(), exec_pure1_def, exec_pure2_def, exec_pure3_def,
-      exec_read0_def, exec_read1_def, exec_write2_def,
-      exec_ext_call_def, consume_call_outcome_def, exec_delegatecall_def,
-      exec_create_def, exec_alloca_def,
-      extract_venom_result_def] >>
+  simp_tac std_ss
+    [AllCaseEqs(), exec_pure1_def, exec_pure2_def, exec_pure3_def,
+     exec_read0_def, exec_read1_def, exec_write2_def,
+     exec_ext_call_def, consume_call_outcome_eq, exec_delegatecall_def,
+     exec_create_def, exec_alloca_def, extract_venom_result_def,
+     pairTheory.ELIM_UNCURRY] >>
   rpt strip_tac >> gvs[] >>
   rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
   fs[update_var_def, mstore_def, mstore8_def, sstore_def, tstore_def,
@@ -1632,9 +1633,14 @@ Proof
   rpt strip_tac >>
   fs[is_param_opcode_iff] >>
   simp[step_inst_non_invoke] >>
-  Cases_on `inst` >>
-  simp[step_inst_base_def] >>
-  rpt (BasicProvers.PURE_FULL_CASE_TAC >> gvs[step_inst_base_def])
+  PURE_REWRITE_TAC[step_inst_base_def] >>
+  ASM_REWRITE_TAC[opcode_case_def] >>
+  rpt (BasicProvers.PURE_TOP_CASE_TAC >>
+       asm_simp_tac std_ss
+         [listTheory.list_case_def, operand_case_def,
+          pairTheory.pair_case_thm, LET_THM,
+          TypeBase.one_one_of ``:exec_result``,
+          TypeBase.distinct_of ``:exec_result``])
 QED
 
 (* --------------------------------------------------------------------------

@@ -324,3 +324,249 @@ val set_membership_input = ``(1 : num) IN {1; 2}``
 val (set_membership_result, _) =
   timed_checker_conv "predicate-set membership" set_membership_input
 val () = assert_closed_result set_membership_input ``T`` set_membership_result
+
+(* One contract per builtin and type-builtin constructor, per account item,
+   and per raw_create argument shape, each returning the builtin's result from
+   an external function. The checker must decide each one; an unevaluated
+   result means checker_defs lacks an auxiliary definition of that
+   constructor's typing rule. *)
+fun builtin_modules mutability params ret_ty result =
+  ``[(NONE,
+      [FunctionDecl External ^mutability F F "f" ^params ([] : expr list)
+         ^ret_ty [Return (SOME ^result)]])]
+    : (num option # toplevel list) list``
+
+val no_params = ``[] : (string # type) list``
+val u256_params = ``[("a", BaseT (UintT 256)); ("b", BaseT (UintT 256))]``
+val u256x3_params =
+  ``[("a", BaseT (UintT 256)); ("b", BaseT (UintT 256));
+     ("c", BaseT (UintT 256))]``
+val address_params = ``[("a", BaseT AddressT)]``
+val bytes10_params = ``[("b", BaseT (BytesT (Dynamic 10)))]``
+val point_ty = ``ArrayT (BaseT (UintT 256)) (Fixed 2)``
+
+val builtin_cases = [
+  ("Len", ``Pure``, bytes10_params, ``BaseT (UintT 256)``,
+   ``Builtin (BaseT (UintT 256)) Len [Name (BaseT (BytesT (Dynamic 10))) "b"]``),
+  ("CalldataLen", ``View``, no_params, ``BaseT (UintT 256)``,
+   ``Builtin (BaseT (UintT 256)) CalldataLen []``),
+  ("CalldataSlice", ``View``, no_params, ``BaseT (BytesT (Dynamic 4))``,
+   ``Builtin (BaseT (BytesT (Dynamic 4))) (CalldataSlice 4)
+       [Literal (BaseT (UintT 256)) (IntL 0)]``),
+  ("Not", ``Pure``, ``[("x", BaseT BoolT)]``, ``BaseT BoolT``,
+   ``Builtin (BaseT BoolT) Not [Name (BaseT BoolT) "x"]``),
+  ("Neg", ``Pure``, ``[("x", BaseT (IntT 256))]``, ``BaseT (IntT 256)``,
+   ``Builtin (BaseT (IntT 256)) Neg [Name (BaseT (IntT 256)) "x"]``),
+  ("Abs", ``Pure``, ``[("x", BaseT (IntT 256))]``, ``BaseT (IntT 256)``,
+   ``Builtin (BaseT (IntT 256)) Abs [Name (BaseT (IntT 256)) "x"]``),
+  ("Keccak256", ``Pure``, bytes10_params, ``BaseT (BytesT (Fixed 32))``,
+   ``Builtin (BaseT (BytesT (Fixed 32))) Keccak256
+       [Name (BaseT (BytesT (Dynamic 10))) "b"]``),
+  ("Sha256", ``Pure``, bytes10_params, ``BaseT (BytesT (Fixed 32))``,
+   ``Builtin (BaseT (BytesT (Fixed 32))) Sha256
+       [Name (BaseT (BytesT (Dynamic 10))) "b"]``),
+  ("AsWeiValue", ``Pure``, ``[("x", BaseT (UintT 256))]``, ``BaseT (UintT 256)``,
+   ``Builtin (BaseT (UintT 256)) (AsWeiValue Gwei) [Name (BaseT (UintT 256)) "x"]``),
+  ("Concat", ``Pure``,
+   ``[("a", BaseT (BytesT (Dynamic 4))); ("b", BaseT (BytesT (Dynamic 6)))]``,
+   ``BaseT (BytesT (Dynamic 10))``,
+   ``Builtin (BaseT (BytesT (Dynamic 10))) (Concat 10)
+       [Name (BaseT (BytesT (Dynamic 4))) "a";
+        Name (BaseT (BytesT (Dynamic 6))) "b"]``),
+  ("Slice", ``Pure``, bytes10_params, ``BaseT (BytesT (Dynamic 2))``,
+   ``Builtin (BaseT (BytesT (Dynamic 2))) (Slice 2)
+       [Name (BaseT (BytesT (Dynamic 10))) "b";
+        Literal (BaseT (UintT 256)) (IntL 1);
+        Literal (BaseT (UintT 256)) (IntL 2)]``),
+  ("Uint2Str", ``Pure``, ``[("x", BaseT (UintT 256))]``, ``BaseT (StringT 78)``,
+   ``Builtin (BaseT (StringT 78)) (Uint2Str 78) [Name (BaseT (UintT 256)) "x"]``),
+  ("MakeArray array", ``Pure``, ``[("x", BaseT (UintT 256))]``, point_ty,
+   ``Builtin ^point_ty (MakeArray (SOME (BaseT (UintT 256))) (Fixed 2))
+       [Name (BaseT (UintT 256)) "x"; Literal (BaseT (UintT 256)) (IntL 2)]``),
+  ("MakeArray tuple", ``Pure``, ``[("x", BaseT (UintT 256))]``,
+   ``TupleT [BaseT (UintT 256); BaseT BoolT]``,
+   ``Builtin (TupleT [BaseT (UintT 256); BaseT BoolT]) (MakeArray NONE (Fixed 2))
+       [Name (BaseT (UintT 256)) "x"; Literal (BaseT BoolT) (BoolL T)]``),
+  ("Ceil", ``Pure``, ``[("x", BaseT DecimalT)]``, ``BaseT (IntT 256)``,
+   ``Builtin (BaseT (IntT 256)) Ceil [Name (BaseT DecimalT) "x"]``),
+  ("Floor", ``Pure``, ``[("x", BaseT DecimalT)]``, ``BaseT (IntT 256)``,
+   ``Builtin (BaseT (IntT 256)) Floor [Name (BaseT DecimalT) "x"]``),
+  ("AddMod", ``Pure``, u256x3_params, ``BaseT (UintT 256)``,
+   ``Builtin (BaseT (UintT 256)) AddMod
+       [Name (BaseT (UintT 256)) "a"; Name (BaseT (UintT 256)) "b";
+        Name (BaseT (UintT 256)) "c"]``),
+  ("MulMod", ``Pure``, u256x3_params, ``BaseT (UintT 256)``,
+   ``Builtin (BaseT (UintT 256)) MulMod
+       [Name (BaseT (UintT 256)) "a"; Name (BaseT (UintT 256)) "b";
+        Name (BaseT (UintT 256)) "c"]``),
+  ("Bop", ``Pure``, u256_params, ``BaseT (UintT 256)``,
+   ``Builtin (BaseT (UintT 256)) (Bop Add)
+       [Name (BaseT (UintT 256)) "a"; Name (BaseT (UintT 256)) "b"]``),
+  ("BlockHash", ``View``, no_params, ``BaseT (BytesT (Fixed 32))``,
+   ``Builtin (BaseT (BytesT (Fixed 32))) BlockHash
+       [Builtin (BaseT (UintT 256)) (Bop Sub)
+          [Builtin (BaseT (UintT 256)) (Env BlockNumber) [];
+           Literal (BaseT (UintT 256)) (IntL 1)]]``),
+  ("BlobHash", ``View``, no_params, ``BaseT (BytesT (Fixed 32))``,
+   ``Builtin (BaseT (BytesT (Fixed 32))) BlobHash
+       [Literal (BaseT (UintT 256)) (IntL 0)]``),
+  ("Env", ``View``, no_params, ``BaseT AddressT``,
+   ``Builtin (BaseT AddressT) (Env Sender) []``),
+  ("Acc Balance", ``View``, address_params, ``BaseT (UintT 256)``,
+   ``Builtin (BaseT (UintT 256)) (Acc Balance) [Name (BaseT AddressT) "a"]``),
+  ("Acc Codehash", ``View``, address_params, ``BaseT (BytesT (Fixed 32))``,
+   ``Builtin (BaseT (BytesT (Fixed 32))) (Acc Codehash)
+       [Name (BaseT AddressT) "a"]``),
+  ("Acc Codesize", ``View``, address_params, ``BaseT (UintT 256)``,
+   ``Builtin (BaseT (UintT 256)) (Acc Codesize) [Name (BaseT AddressT) "a"]``),
+  ("Acc IsContract", ``View``, address_params, ``BaseT BoolT``,
+   ``Builtin (BaseT BoolT) (Acc IsContract) [Name (BaseT AddressT) "a"]``),
+  ("Acc Code", ``View``, address_params, ``BaseT (BytesT (Dynamic 10))``,
+   ``Builtin (BaseT (BytesT (Dynamic 10))) (Slice 10)
+       [Builtin (BaseT (BytesT (Dynamic 24576))) (Acc Code)
+          [Name (BaseT AddressT) "a"];
+        Literal (BaseT (UintT 256)) (IntL 0);
+        Literal (BaseT (UintT 256)) (IntL 10)]``),
+  ("MethodId", ``Pure``, no_params, ``BaseT (BytesT (Dynamic 4))``,
+   ``Builtin (BaseT (BytesT (Dynamic 4))) MethodId
+       [Literal (BaseT (StringT 3)) (StringL "g()")]``),
+  ("ECRecover", ``View``,
+   ``[("h", BaseT (BytesT (Fixed 32))); ("v", BaseT (UintT 256));
+      ("r", BaseT (UintT 256)); ("s", BaseT (UintT 256))]``,
+   ``BaseT AddressT``,
+   ``Builtin (BaseT AddressT) ECRecover
+       [Name (BaseT (BytesT (Fixed 32))) "h"; Name (BaseT (UintT 256)) "v";
+        Name (BaseT (UintT 256)) "r"; Name (BaseT (UintT 256)) "s"]``),
+  ("ECAdd", ``View``, ``[("a", ^point_ty); ("b", ^point_ty)]``, point_ty,
+   ``Builtin ^point_ty ECAdd [Name ^point_ty "a"; Name ^point_ty "b"]``),
+  ("ECMul", ``View``, ``[("a", ^point_ty); ("s", BaseT (UintT 256))]``, point_ty,
+   ``Builtin ^point_ty ECMul [Name ^point_ty "a"; Name (BaseT (UintT 256)) "s"]``),
+  ("PowMod256", ``Pure``, u256_params, ``BaseT (UintT 256)``,
+   ``Builtin (BaseT (UintT 256)) PowMod256
+       [Name (BaseT (UintT 256)) "a"; Name (BaseT (UintT 256)) "b"]``),
+  ("Empty", ``Pure``, no_params, ``BaseT (UintT 256)``,
+   ``TypeBuiltin (BaseT (UintT 256)) Empty (BaseT (UintT 256)) []``),
+  ("MaxValue", ``Pure``, no_params, ``BaseT (UintT 256)``,
+   ``TypeBuiltin (BaseT (UintT 256)) MaxValue (BaseT (UintT 256)) []``),
+  ("MinValue", ``Pure``, no_params, ``BaseT (IntT 128)``,
+   ``TypeBuiltin (BaseT (IntT 128)) MinValue (BaseT (IntT 128)) []``),
+  ("Epsilon", ``Pure``, no_params, ``BaseT DecimalT``,
+   ``TypeBuiltin (BaseT DecimalT) Epsilon (BaseT DecimalT) []``),
+  ("Convert", ``Pure``, ``[("x", BaseT (UintT 8))]``, ``BaseT (UintT 256)``,
+   ``TypeBuiltin (BaseT (UintT 256)) Convert (BaseT (UintT 256))
+       [Name (BaseT (UintT 8)) "x"]``),
+  ("Extract32", ``Pure``, ``[("b", BaseT (BytesT (Dynamic 64)))]``,
+   ``BaseT (BytesT (Fixed 32))``,
+   ``TypeBuiltin (BaseT (BytesT (Fixed 32))) Extract32 (BaseT (BytesT (Fixed 32)))
+       [Name (BaseT (BytesT (Dynamic 64))) "b";
+        Literal (BaseT (UintT 256)) (IntL 0)]``),
+  ("AbiEncode", ``Pure``, ``[("x", BaseT (UintT 256))]``,
+   ``BaseT (BytesT (Dynamic 64))``,
+   ``TypeBuiltin (BaseT (BytesT (Dynamic 64))) (AbiEncode F NONE)
+       (TupleT [BaseT (UintT 256)]) [Name (BaseT (UintT 256)) "x"]``),
+  ("AbiDecode", ``Pure``, ``[("b", BaseT (BytesT (Dynamic 32)))]``,
+   ``BaseT (UintT 256)``,
+   ``TypeBuiltin (BaseT (UintT 256)) (AbiDecode F) (BaseT (UintT 256))
+       [Name (BaseT (BytesT (Dynamic 32))) "b"]``),
+  ("RawCreate", ``Nonpayable``, ``[("b", BaseT (BytesT (Dynamic 100)))]``,
+   ``BaseT AddressT``,
+   ``Call (BaseT AddressT) (CreateTarget RawCreate F T)
+       [Name (BaseT (BytesT (Dynamic 100))) "b";
+        Literal (BaseT (UintT 256)) (IntL 0)] NONE``),
+  ("RawCreate salt", ``Nonpayable``,
+   ``[("b", BaseT (BytesT (Dynamic 100))); ("s", BaseT (BytesT (Fixed 32)))]``,
+   ``BaseT AddressT``,
+   ``Call (BaseT AddressT) (CreateTarget RawCreate T T)
+       [Name (BaseT (BytesT (Dynamic 100))) "b";
+        Literal (BaseT (UintT 256)) (IntL 0);
+        Name (BaseT (BytesT (Fixed 32))) "s"] NONE``),
+  ("RawCreate ctor args and salt", ``Nonpayable``,
+   ``[("b", BaseT (BytesT (Dynamic 100))); ("a", BaseT (UintT 256));
+      ("s", BaseT (BytesT (Fixed 32)))]``,
+   ``BaseT AddressT``,
+   ``Call (BaseT AddressT) (CreateTarget RawCreate T T)
+       [Name (BaseT (BytesT (Dynamic 100))) "b";
+        Literal (BaseT (UintT 256)) (IntL 0);
+        Name (BaseT (UintT 256)) "a";
+        Name (BaseT (BytesT (Fixed 32))) "s"] NONE``)]
+
+fun check_accepts label in_deploy layouts modules =
+  ignore (vyperCheckContractLib.check_contract
+    {in_deploy = in_deploy, layouts = layouts,
+     address = zero_address, modules = modules})
+  handle e => raise Fail (label ^ ": " ^ General.exnMessage e)
+
+val () = List.app (fn (label, mutability, params, ret_ty, result) =>
+    check_accepts label false empty_layouts
+      (builtin_modules mutability params ret_ty result))
+  builtin_cases
+
+(* An interface value has type address, so `i.address` on an interface
+   parameter i is Acc Address applied to an address-typed name. *)
+val () = check_accepts "Acc Address" false empty_layouts
+  ``[(NONE,
+      [FunctionDecl External Pure F F "f" [("i", BaseT AddressT)]
+         ([] : expr list) (BaseT AddressT)
+         [Return (SOME
+            (Builtin (BaseT AddressT) (Acc Address)
+               [Name (BaseT AddressT) "i"]))]])]
+    : (num option # toplevel list) list``
+
+(* Account items in __init__ are typed only in deployment mode. *)
+val () = check_accepts "Acc Balance in __init__" true storage_layouts
+  ``[(NONE,
+      [VariableDecl Private Storage "stored" (BaseT (UintT 256)) (SOME 0);
+       FunctionDecl Deploy Payable F F "__init__" [] [] NoneT
+         [Assign (BaseTarget (TopLevelNameTarget (NONE, "stored")))
+            (Builtin (BaseT (UintT 256)) (Acc Balance)
+               [Builtin (BaseT AddressT) (Env SelfAddr) []])]])]
+    : (num option # toplevel list) list``
+
+(* Nested HashMap reads keyed by internal calls: typing the inner subscript
+   looks up the call's signature inside the outer subscript's place type. *)
+val nested_map_layouts =
+  ``([((0w : address),
+       ([((NONE, "m"), 0); ((NONE, "c"), 1)] : storage_layout,
+        [] : storage_layout))]
+      : (address # (storage_layout # storage_layout)) list)``
+val nested_map_modules =
+  ``[(NONE,
+      [HashMapDecl Private F "m" (BaseT (UintT 256))
+         (HashMapT (BaseT (UintT 256)) (Type (BaseT (UintT 256)))) (SOME 0);
+       VariableDecl Private Storage "c" (BaseT (UintT 256)) (SOME 1);
+       FunctionDecl Internal Nonpayable F F "g" [] [] (BaseT (UintT 256))
+         [AugAssign (BaseT (UintT 256)) (TopLevelNameTarget (NONE, "c")) Add
+            (Literal (BaseT (UintT 256)) (IntL 1));
+          Return (SOME (TopLevelName (BaseT (UintT 256)) (NONE, "c")))];
+       FunctionDecl External Nonpayable F F "f" [] [] (BaseT (UintT 256))
+         [AnnAssign "x" (BaseT (UintT 256))
+            (Subscript (BaseT (UintT 256))
+               (Subscript NoneT (TopLevelName NoneT (NONE, "m"))
+                  (Call (BaseT (UintT 256)) (IntCall (NONE, "g")) [] NONE))
+               (Literal (BaseT (UintT 256)) (IntL 1)));
+          Return (SOME (Name (BaseT (UintT 256)) "x"))]])]
+    : (num option # toplevel list) list``
+val () = check_accepts "nested map read, runtime" false nested_map_layouts
+  nested_map_modules
+val () = check_accepts "nested map read, deployment" true nested_map_layouts
+  nested_map_modules
+
+val nested_map_both_keys_modules =
+  ``[(NONE,
+      [HashMapDecl Private F "m" (BaseT (UintT 256))
+         (HashMapT (BaseT (UintT 256)) (Type (BaseT (UintT 256)))) (SOME 0);
+       VariableDecl Private Storage "c" (BaseT (UintT 256)) (SOME 1);
+       FunctionDecl Internal Nonpayable F F "g" [] [] (BaseT (UintT 256))
+         [AugAssign (BaseT (UintT 256)) (TopLevelNameTarget (NONE, "c")) Add
+            (Literal (BaseT (UintT 256)) (IntL 1));
+          Return (SOME (TopLevelName (BaseT (UintT 256)) (NONE, "c")))];
+       FunctionDecl External Nonpayable F F "f" [] [] (BaseT (UintT 256))
+         [AnnAssign "x" (BaseT (UintT 256))
+            (Subscript (BaseT (UintT 256))
+               (Subscript NoneT (TopLevelName NoneT (NONE, "m"))
+                  (Call (BaseT (UintT 256)) (IntCall (NONE, "g")) [] NONE))
+               (Call (BaseT (UintT 256)) (IntCall (NONE, "g")) [] NONE));
+          Return (SOME (Name (BaseT (UintT 256)) "x"))]])]
+    : (num option # toplevel list) list``
+val () = check_accepts "nested map read, calls in both keys" false
+  nested_map_layouts nested_map_both_keys_modules

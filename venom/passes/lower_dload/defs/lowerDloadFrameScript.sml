@@ -76,7 +76,9 @@ Theorem ld_frame_execution:
   s1.vs_current_bb = s2.vs_current_bb /\ s1.vs_inst_idx = s2.vs_inst_idx /\
   s1.vs_prev_bb = s2.vs_prev_bb
 Proof
-  simp[ld_frame_def, ld_execution_frame_def, venom_state_component_equality] >>
+  (* Expand equality before unfolding the inner frame at every projection. *)
+  simp[ld_execution_frame_def, venom_state_component_equality] >>
+  simp[ld_frame_def] >>
   metis_tac[]
 QED
 

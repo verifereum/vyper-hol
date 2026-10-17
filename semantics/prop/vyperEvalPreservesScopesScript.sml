@@ -2526,13 +2526,22 @@ Resume eval_preserves_tv[ExtCall]:
    suspend "return_path_3", suspend "return_path_4"]
 QED
 
-val TV_FRAME_IH_TAC =
-  gvs[oneTheory.one, ignore_bind_def] >>
-  rpt (FIRST [first_assum ACCEPT_TAC,
-    first_x_assum (fn th =>
+(* Match guards in semantic order without simplifying the large guarded IHs
+   or searching the entire context with drule at every monadic step. *)
+fun TV_FRAME_IH_TAC (asl,w) =
+  let
+    val normalise = SIMP_RULE bool_ss [oneTheory.one, ignore_bind_def]
+    val facts = List.concat (map (CONJUNCTS o normalise o ASSUME) asl)
+    fun discharge th =
       if is_imp (snd (strip_forall (concl th))) then
-        drule_at Any th >> simp[] >> strip_tac
-      else NO_TAC)]);
+        discharge (tryfind (MATCH_MP th) facts)
+      else th
+    fun close ih g =
+      ACCEPT_TAC (discharge
+        (PURE_REWRITE_RULE [GSYM AND_IMP_INTRO] ih)) g
+  in
+    FIRST (map close facts) (asl,w)
+  end;
 
 Resume eval_preserves_tv[return_path_1]:
   TV_FRAME_IH_TAC

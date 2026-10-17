@@ -24,16 +24,13 @@ Libs
 Theorem may_overlap_sym:
   ∀m1 m2. may_overlap m1 m2 ⇔ may_overlap m2 m1
 Proof
-  rw[may_overlap_def] >>
-  Cases_on `m1.ml_size = SOME 0` >> simp[] >>
-  Cases_on `m2.ml_size = SOME 0` >> simp[] >>
-  Cases_on `IS_SOME m1.ml_alloca` >>
-  Cases_on `IS_SOME m2.ml_alloca` >> simp[] >>
-  Cases_on `m1.ml_alloca = m2.ml_alloca` >> simp[] >>
-  Cases_on `m1.ml_offset` >> simp[] >>
-  Cases_on `m2.ml_offset` >> simp[] >>
-  Cases_on `m1.ml_size` >> Cases_on `m2.ml_size` >> simp[] >>
-  rw[LET_THM] >> DECIDE_TAC
+  (* Only sizes need cases; all remaining tests are symmetric Boolean terms.
+     Keep inequalities opaque rather than invoking arithmetic automation. *)
+  rpt gen_tac >>
+  Cases_on `m1.ml_size` >> Cases_on `m2.ml_size` >>
+  asm_simp_tac bool_ss
+    [may_overlap_def, pairTheory.pair_case_thm, optionTheory.option_CLAUSES, LET_THM,
+     AC CONJ_ASSOC CONJ_COMM, AC DISJ_ASSOC DISJ_COMM, EQ_SYM_EQ]
 QED
 
 Theorem may_overlap_comm:

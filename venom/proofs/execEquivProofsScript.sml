@@ -1273,11 +1273,14 @@ Triviality step_inst_getfmp_equiv:
     result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt gen_tac >> strip_tac >> gvs[] >>
-  simp[step_inst_base_def] >>
-  rpt CASE_TAC >> gvs[result_equiv_def, revert_equiv_def] >>
   `s1.vs_fmp = s2.vs_fmp` by
     fs[state_equiv_def, execution_equiv_def] >>
-  gvs[] >> irule update_var_preserves >> simp[]
+  simp[step_inst_base_def] >>
+  Cases_on `inst.inst_operands` >> simp[result_equiv_def] >>
+  Cases_on `inst.inst_outputs` >> simp[result_equiv_def] >>
+  rename1 `(out : string) :: outs` >>
+  Cases_on `outs` >> simp[result_equiv_def] >>
+  irule update_var_preserves >> simp[]
 QED
 
 Triviality step_inst_initial_fmp_equiv:
@@ -1288,11 +1291,14 @@ Triviality step_inst_initial_fmp_equiv:
     result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt gen_tac >> strip_tac >> gvs[] >>
-  simp[step_inst_base_def] >>
-  rpt CASE_TAC >> gvs[result_equiv_def, revert_equiv_def] >>
   `s1.vs_initial_fmp = s2.vs_initial_fmp` by
     fs[state_equiv_def, execution_equiv_def] >>
-  gvs[] >> irule update_var_preserves >> simp[]
+  simp[step_inst_base_def] >>
+  Cases_on `inst.inst_operands` >> simp[result_equiv_def] >>
+  Cases_on `inst.inst_outputs` >> simp[result_equiv_def] >>
+  rename1 `(out : string) :: outs` >>
+  Cases_on `outs` >> simp[result_equiv_def] >>
+  irule update_var_preserves >> simp[]
 QED
 
 Triviality step_inst_retpc_param_equiv:
@@ -1303,11 +1309,18 @@ Triviality step_inst_retpc_param_equiv:
     result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt gen_tac >> strip_tac >> gvs[] >>
-  simp[step_inst_base_def] >>
-  rpt CASE_TAC >> gvs[result_equiv_def, revert_equiv_def] >>
   `s1.vs_return_pc_token = s2.vs_return_pc_token` by
     fs[state_equiv_def, execution_equiv_def] >>
-  gvs[] >> irule update_var_preserves >> simp[]
+  simp[step_inst_base_def] >>
+  Cases_on `inst.inst_operands` >>
+  simp[result_equiv_def] >>
+  rename1 `(op : operand) :: ops` >>
+  Cases_on `ops` >> simp[result_equiv_def] >>
+  Cases_on `op` >> simp[result_equiv_def] >>
+  Cases_on `inst.inst_outputs` >> simp[result_equiv_def] >>
+  rename1 `(out : string) :: outs` >>
+  Cases_on `outs` >> simp[result_equiv_def] >>
+  irule update_var_preserves >> simp[]
 QED
 
 Triviality step_inst_fmp_param_equiv:
@@ -1320,8 +1333,16 @@ Proof
   rpt gen_tac >> strip_tac >> gvs[] >>
   `s1.vs_params = s2.vs_params` by
     fs[state_equiv_def, execution_equiv_def] >>
-  gvs[] >> simp[step_inst_base_def] >>
-  rpt CASE_TAC >> gvs[result_equiv_def, revert_equiv_def] >>
+  simp[step_inst_base_def] >>
+  Cases_on `inst.inst_operands` >> simp[result_equiv_def] >>
+  rename1 `(op : operand) :: ops` >>
+  Cases_on `ops` >> simp[result_equiv_def] >>
+  Cases_on `op` >> simp[result_equiv_def] >>
+  Cases_on `inst.inst_outputs` >> simp[result_equiv_def] >>
+  rename1 `(out : string) :: outs` >>
+  Cases_on `outs` >> simp[result_equiv_def] >>
+  rename1 `w2n idx < LENGTH s2.vs_params` >>
+  Cases_on `w2n idx < LENGTH s2.vs_params` >> simp[result_equiv_def] >>
   irule update_var_preserves >> simp[]
 QED
 
@@ -1510,83 +1531,28 @@ Theorem step_inst_result_equiv:
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `inst.inst_opcode` >>
-  (* Dispatch: derive MEM for the opcode's category, then use helper *)
+  (* Apply each category helper directly, without forward-searching the
+     assumptions or constructing a separate membership theorem. *)
   FIRST [
-    `MEM inst.inst_opcode [ADD;SUB;MUL;Div;SDIV;Mod;SMOD;Exp;
-       AND;OR;XOR;SHL;SHR;SAR;SIGNEXTEND;BYTE;EQ;LT;GT;SLT;SGT;OFFSET]`
-       by simp[] >>
-      drule_all step_inst_pure2_equiv >> simp[],
-    `MEM inst.inst_opcode [NOT;ISZERO]` by simp[] >>
-      drule_all step_inst_pure1_equiv >> simp[],
-    `MEM inst.inst_opcode [ADDMOD;MULMOD]` by simp[] >>
-      drule_all step_inst_pure3_equiv >> simp[],
-    `MEM inst.inst_opcode
-       [CALLER;ADDRESS;CALLVALUE;GAS;ORIGIN;GASPRICE;CHAINID;
-        COINBASE;TIMESTAMP;NUMBER;PREVRANDAO;GASLIMIT;BASEFEE;
-        BLOBBASEFEE;SELFBALANCE;CALLDATASIZE;RETURNDATASIZE;MEMTOP;
-        CODESIZE]`
-      by simp[] >> drule_all step_inst_read0_equiv >> simp[],
-    `MEM inst.inst_opcode
-       [MLOAD;SLOAD;TLOAD;BLOCKHASH;BALANCE;CALLDATALOAD;
-        EXTCODESIZE;BLOBHASH;ILOAD;DLOAD]`
-      by simp[] >> drule_all step_inst_read1_equiv >> simp[],
-    `inst.inst_opcode = EXTCODEHASH` by simp[] >>
-      drule_all step_inst_extcodehash_equiv >> simp[],
-    `MEM inst.inst_opcode [MSTORE;MSTORE8;SSTORE;TSTORE]` by simp[] >>
-      drule_all step_inst_write2_equiv >> simp[],
-    `MEM inst.inst_opcode [STOP;SINK]` by simp[] >>
-      drule_all step_inst_terminator_equiv >> simp[],
-    `inst.inst_opcode = RETURN` by simp[] >>
-      drule_all step_inst_return_equiv >> simp[],
-    `inst.inst_opcode = REVERT` by simp[] >>
-      drule_all step_inst_revert_equiv >> simp[],
-    `MEM inst.inst_opcode [JMP;JNZ]` by simp[] >>
-      drule_all step_inst_control_equiv >> simp[],
-    `MEM inst.inst_opcode [PHI;ASSIGN;NOP]` by simp[] >>
-      drule_all step_inst_ssa_equiv >> simp[],
-    `MEM inst.inst_opcode [ASSERT;ASSERT_UNREACHABLE]` by simp[] >>
-      drule_all step_inst_assert_equiv >> simp[],
-    `inst.inst_opcode = SHA3` by simp[] >>
-      drule_all step_inst_sha3_equiv >> simp[],
-    `MEM inst.inst_opcode [CALLDATACOPY;RETURNDATACOPY]` by simp[] >>
-      drule_all step_inst_copy_equiv >> simp[],
-    `inst.inst_opcode = MCOPY` by simp[] >>
-      drule_all step_inst_mcopy_equiv >> simp[],
-    `inst.inst_opcode = INVALID` by simp[] >>
-      drule_all step_inst_invalid_equiv >> simp[],
-    `inst.inst_opcode = LOG` by simp[] >>
-      drule_all step_inst_log_equiv >> simp[],
-    `inst.inst_opcode = SELFDESTRUCT` by simp[] >>
-      drule_all step_inst_selfdestruct_equiv >> simp[],
-    `inst.inst_opcode = DJMP` by simp[] >>
-      drule_all step_inst_djmp_equiv >> simp[],
-    `inst.inst_opcode = ISTORE` by simp[] >>
-      drule_all step_inst_istore_equiv >> simp[],
-    `MEM inst.inst_opcode [DLOADBYTES;CODECOPY]` by simp[] >>
-      drule_all step_inst_data_copy_equiv >> simp[],
-    `inst.inst_opcode = EXTCODECOPY` by simp[] >>
-      drule_all step_inst_extcodecopy_equiv >> simp[],
-    `inst.inst_opcode = PARAM` by simp[] >>
-      drule_all step_inst_param_equiv >> simp[],
-    `inst.inst_opcode = RET` by simp[] >>
-      drule_all step_inst_ret_equiv >> simp[],
-    `MEM inst.inst_opcode [CALL;STATICCALL]` by simp[] >>
-      drule_all step_inst_ext_call_equiv >> simp[],
-    `inst.inst_opcode = DELEGATECALL` by simp[] >>
-      drule_all step_inst_delegatecall_equiv >> simp[],
-    `MEM inst.inst_opcode [CREATE;CREATE2]` by simp[] >>
-      drule_all step_inst_create_equiv >> simp[],
-    `MEM inst.inst_opcode
-       [DALLOCA; GETFMP; SETFMP; INITIAL_FMP; BUMP; FMP_PARAM; RETPC_PARAM]`
-      by simp[] >> drule_all step_inst_fmp_opcode_equiv >> simp[],
-    `inst.inst_opcode = DRET` by simp[] >>
-      drule_all step_inst_dret_equiv >> simp[],
-    `inst.inst_opcode = RETFMP` by simp[] >>
-      drule_all step_inst_retfmp_equiv >> simp[],
-    `inst.inst_opcode = ALLOCA` by simp[] >>
-      drule_all step_inst_alloca_equiv >> simp[],
-    (* INVOKE: handled in module sem, falls to Error in step_inst_base.
-       Explicit so new opcode additions cause proof failure here. *)
+    FIRST (map (fn th => irule th >> simp[] >> NO_TAC)
+      [step_inst_pure2_equiv, step_inst_pure1_equiv,
+       step_inst_pure3_equiv, step_inst_read0_equiv,
+       step_inst_read1_equiv, step_inst_extcodehash_equiv,
+       step_inst_write2_equiv, step_inst_terminator_equiv,
+       step_inst_return_equiv, step_inst_revert_equiv,
+       step_inst_control_equiv, step_inst_ssa_equiv,
+       step_inst_assert_equiv, step_inst_sha3_equiv,
+       step_inst_copy_equiv, step_inst_mcopy_equiv,
+       step_inst_invalid_equiv, step_inst_log_equiv,
+       step_inst_selfdestruct_equiv, step_inst_djmp_equiv,
+       step_inst_istore_equiv, step_inst_data_copy_equiv,
+       step_inst_extcodecopy_equiv, step_inst_param_equiv,
+       step_inst_ret_equiv, step_inst_ext_call_equiv,
+       step_inst_delegatecall_equiv, step_inst_create_equiv,
+       step_inst_fmp_opcode_equiv, step_inst_dret_equiv,
+       step_inst_retfmp_equiv, step_inst_alloca_equiv]),
+    (* INVOKE is handled in module sem. Keep this case explicit so that
+       adding an opcode without an equivalence helper fails here. *)
     `inst.inst_opcode = INVOKE` by simp[] >>
       simp[step_inst_base_def, result_equiv_def, revert_equiv_def]
   ]

@@ -128,8 +128,9 @@ Theorem dse_frame_all:
   (space <> AddrSp_Storage ==> s1.vs_accounts = s2.vs_accounts)
 Proof
   Cases_on `space` >>
-  simp[dse_frame_def, dse_all_frame_def, venom_state_component_equality] >>
-  metis_tac[]
+  REWRITE_TAC[dse_frame_def, dse_all_frame_def,
+              venom_state_component_equality] >>
+  simp[] >> metis_tac[]
 QED
 
 Theorem dse_frame_projection:
