@@ -278,3 +278,12 @@ Definition internal_call_arg_program_def:
           (Call (BaseT (UintT 256)) (IntCall (NONE, "bar"))
              [Name (BaseT (UintT 256)) "x"] NONE))]]
 End
+
+(* EVAL reduces compile_with_byte_offset on a nonzero numeral offset, as the
+   second member of every typed struct or tuple memory copy needs. *)
+Theorem compile_with_byte_offset_numeral_eval:
+  compile_with_byte_offset (Var "p") 32 (initial_compile_state "entry") =
+  emit_op ADD [Var "p"; Lit 32w] (initial_compile_state "entry")
+Proof
+  EVAL_TAC
+QED

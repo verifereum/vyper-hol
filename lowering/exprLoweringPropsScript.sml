@@ -2062,8 +2062,7 @@ QED
 Theorem ci_mono_compile_with_byte_offset[local]:
   ∀ base offset sa. ci_mono sa (SND (compile_with_byte_offset base offset sa))
 Proof
-  rpt gen_tac >> Cases_on `offset` >>
-  rewrite_tac[contextTheory.compile_with_byte_offset_def] >>
+  rw[contextTheory.compile_with_byte_offset_def] >>
   simp[ci_mono_comp_return, ci_mono_emit_op]
 QED
 
