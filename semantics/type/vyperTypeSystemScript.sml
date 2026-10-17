@@ -539,7 +539,7 @@ QED
 
 (* create_arg_types_ok with the RawCreate clause in its decidable form, for
    EVAL-based checking. *)
-Theorem create_arg_types_ok_eval =
+Theorem create_arg_types_ok_compute =
   LIST_CONJ
     (List.filter (not o can (find_term (same_const ``RawCreate``)) o concl)
        (CONJUNCTS create_arg_types_ok_def) @
@@ -693,6 +693,19 @@ Termination
   \\ Cases
   \\ simp[expr_size_def, basicSizeTheory.option_size_def]
 End
+
+Theorem exists_some_option_case[local]:
+  (?x. opt = SOME x /\ P x) <=> option_CASE opt F P
+Proof
+  Cases_on `opt` >> simp[]
+QED
+
+(* well_typed_expr with each `?x. opt = SOME x /\ P x` as a case split on opt,
+   for EVAL-based checking: the split reduces once opt does, so the checker
+   needs no quantifier instantiation for it, also where it is nested in
+   another existential's body (a call as the key of a nested HashMap read). *)
+Theorem well_typed_expr_compute =
+  Ho_Rewrite.PURE_REWRITE_RULE [exists_some_option_case] well_typed_expr_def
 
 Definition well_typed_target_def:
   well_typed_target env bt ty = (type_place_target env bt = SOME (Type ty))

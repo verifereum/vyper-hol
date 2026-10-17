@@ -325,10 +325,11 @@ val (set_membership_result, _) =
   timed_checker_conv "predicate-set membership" set_membership_input
 val () = assert_closed_result set_membership_input ``T`` set_membership_result
 
-(* One contract per builtin and type-builtin constructor, and per account item,
-   each returning the builtin's result from an external function. The checker
-   must decide each one; an unevaluated result means checker_defs lacks an
-   auxiliary definition of that constructor's typing rule. *)
+(* One contract per builtin and type-builtin constructor, per account item,
+   and per raw_create argument shape, each returning the builtin's result from
+   an external function. The checker must decide each one; an unevaluated
+   result means checker_defs lacks an auxiliary definition of that
+   constructor's typing rule. *)
 fun builtin_modules mutability params ret_ty result =
   ``[(NONE,
       [FunctionDecl External ^mutability F F "f" ^params ([] : expr list)
@@ -459,12 +460,34 @@ val builtin_cases = [
    ``TypeBuiltin (BaseT (BytesT (Fixed 32))) Extract32 (BaseT (BytesT (Fixed 32)))
        [Name (BaseT (BytesT (Dynamic 64))) "b";
         Literal (BaseT (UintT 256)) (IntL 0)]``),
+  ("AbiEncode", ``Pure``, ``[("x", BaseT (UintT 256))]``,
+   ``BaseT (BytesT (Dynamic 64))``,
+   ``TypeBuiltin (BaseT (BytesT (Dynamic 64))) (AbiEncode F NONE)
+       (TupleT [BaseT (UintT 256)]) [Name (BaseT (UintT 256)) "x"]``),
+  ("AbiDecode", ``Pure``, ``[("b", BaseT (BytesT (Dynamic 32)))]``,
+   ``BaseT (UintT 256)``,
+   ``TypeBuiltin (BaseT (UintT 256)) (AbiDecode F) (BaseT (UintT 256))
+       [Name (BaseT (BytesT (Dynamic 32))) "b"]``),
+  ("RawCreate", ``Nonpayable``, ``[("b", BaseT (BytesT (Dynamic 100)))]``,
+   ``BaseT AddressT``,
+   ``Call (BaseT AddressT) (CreateTarget RawCreate F T)
+       [Name (BaseT (BytesT (Dynamic 100))) "b";
+        Literal (BaseT (UintT 256)) (IntL 0)] NONE``),
   ("RawCreate salt", ``Nonpayable``,
    ``[("b", BaseT (BytesT (Dynamic 100))); ("s", BaseT (BytesT (Fixed 32)))]``,
    ``BaseT AddressT``,
    ``Call (BaseT AddressT) (CreateTarget RawCreate T T)
        [Name (BaseT (BytesT (Dynamic 100))) "b";
         Literal (BaseT (UintT 256)) (IntL 0);
+        Name (BaseT (BytesT (Fixed 32))) "s"] NONE``),
+  ("RawCreate ctor args and salt", ``Nonpayable``,
+   ``[("b", BaseT (BytesT (Dynamic 100))); ("a", BaseT (UintT 256));
+      ("s", BaseT (BytesT (Fixed 32)))]``,
+   ``BaseT AddressT``,
+   ``Call (BaseT AddressT) (CreateTarget RawCreate T T)
+       [Name (BaseT (BytesT (Dynamic 100))) "b";
+        Literal (BaseT (UintT 256)) (IntL 0);
+        Name (BaseT (UintT 256)) "a";
         Name (BaseT (BytesT (Fixed 32))) "s"] NONE``)]
 
 fun check_accepts label in_deploy layouts modules =
@@ -478,11 +501,11 @@ val () = List.app (fn (label, mutability, params, ret_ty, result) =>
       (builtin_modules mutability params ret_ty result))
   builtin_cases
 
-(* Acc Address applies to an interface value, so it needs an interface. *)
+(* An interface value has type address, so `i.address` on an interface
+   parameter i is Acc Address applied to an address-typed name. *)
 val () = check_accepts "Acc Address" false empty_layouts
   ``[(NONE,
-      [InterfaceDecl "I" [("g", [] : (string # type) list, NoneT, Nonpayable)];
-       FunctionDecl External Pure F F "f" [("i", BaseT AddressT)]
+      [FunctionDecl External Pure F F "f" [("i", BaseT AddressT)]
          ([] : expr list) (BaseT AddressT)
          [Return (SOME
             (Builtin (BaseT AddressT) (Acc Address)
@@ -499,9 +522,8 @@ val () = check_accepts "Acc Balance in __init__" true storage_layouts
                [Builtin (BaseT AddressT) (Env SelfAddr) []])]])]
     : (num option # toplevel list) list``
 
-(* A nested HashMap read keyed by an internal call: typing the inner subscript
-   nests the call's existential over its signature in the body of the outer
-   subscript's existential over the place type. *)
+(* Nested HashMap reads keyed by internal calls: typing the inner subscript
+   looks up the call's signature inside the outer subscript's place type. *)
 val nested_map_layouts =
   ``([((0w : address),
        ([((NONE, "m"), 0); ((NONE, "c"), 1)] : storage_layout,
@@ -528,3 +550,23 @@ val () = check_accepts "nested map read, runtime" false nested_map_layouts
   nested_map_modules
 val () = check_accepts "nested map read, deployment" true nested_map_layouts
   nested_map_modules
+
+val nested_map_both_keys_modules =
+  ``[(NONE,
+      [HashMapDecl Private F "m" (BaseT (UintT 256))
+         (HashMapT (BaseT (UintT 256)) (Type (BaseT (UintT 256)))) (SOME 0);
+       VariableDecl Private Storage "c" (BaseT (UintT 256)) (SOME 1);
+       FunctionDecl Internal Nonpayable F F "g" [] [] (BaseT (UintT 256))
+         [AugAssign (BaseT (UintT 256)) (TopLevelNameTarget (NONE, "c")) Add
+            (Literal (BaseT (UintT 256)) (IntL 1));
+          Return (SOME (TopLevelName (BaseT (UintT 256)) (NONE, "c")))];
+       FunctionDecl External Nonpayable F F "f" [] [] (BaseT (UintT 256))
+         [AnnAssign "x" (BaseT (UintT 256))
+            (Subscript (BaseT (UintT 256))
+               (Subscript NoneT (TopLevelName NoneT (NONE, "m"))
+                  (Call (BaseT (UintT 256)) (IntCall (NONE, "g")) [] NONE))
+               (Call (BaseT (UintT 256)) (IntCall (NONE, "g")) [] NONE));
+          Return (SOME (Name (BaseT (UintT 256)) "x"))]])]
+    : (num option # toplevel list) list``
+val () = check_accepts "nested map read, calls in both keys" false
+  nested_map_layouts nested_map_both_keys_modules
