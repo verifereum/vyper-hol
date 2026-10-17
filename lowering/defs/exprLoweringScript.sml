@@ -2830,8 +2830,8 @@ Definition compile_builtin_dispatch_body_def:
           | SOME elem_ty =>
               let elem_sz = type_memory_bytes cenv elem_ty in
               let has_lw = (case bnd of Dynamic _ => T | _ => F) in
-              let total_size = (if has_lw then 32 else 0) +
-                               LENGTH args * elem_sz in
+              (* Reserve the declared capacity, including for an empty list. *)
+              let total_size = type_memory_bytes cenv ret_ty in
               let (buf_op_alloc, st2) = compile_alloc_buffer total_size st in
               let buf_op = buf_op_alloc.buf_operand in
               as_ptr_val ret_ty LocMemory
