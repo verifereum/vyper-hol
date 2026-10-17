@@ -182,6 +182,19 @@ Datatype:
   |>
 End
 
+(* The generated size equation is stated over the record constructor, but the
+   frontend builds the flags with record-update syntax, which CBV cannot match
+   against it; this accessor form computes on both. *)
+Theorem raw_call_flags_size_accessors[compute]:
+  !r. raw_call_flags_size r =
+        1 + (r.rcf_max_outsize + (bool_size r.rcf_is_delegate +
+             (bool_size r.rcf_is_static + bool_size r.rcf_revert_on_failure)))
+Proof
+  Cases >>
+  REWRITE_TAC [DB.fetch "-" "raw_call_flags_size_def",
+               DB.fetch "-" "raw_call_flags_accessors"]
+QED
+
 (* Which variant of CREATE to use *)
 Datatype:
   create_kind
