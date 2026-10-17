@@ -724,10 +724,26 @@ fun d_json_expr () : term decoder = achoose "expr" [
                             succeed JMissingSource_tm))),
             orElse(field "type" json_type, succeed JT_None_tm)),
 
-  (* Subscript *)
+  (* Tuple indices must translate to integer literals. Preserve compiler-folded
+     constant expressions and fall back to the slice's type when the folded
+     value has no type annotation, without folding array/hashmap indices. *)
   check_ast_type "Subscript" $
     JSONDecode.map (fn ((e1, e2), ty) => mk_JE_Subscript(e1, e2, ty)) $
-    tuple2 (tuple2 (field "value" (delay d_json_expr), field "slice" (delay d_json_expr)),
+    tuple2 (tuple2 (field "value" (delay d_json_expr),
+      achoose "subscript index" [
+        check (field "value" $ field "type" $ field "typeclass" string)
+          (fn tc => tc = "tuple") "not tuple" $
+        JSONDecode.map mk_JE_Folded $
+          tuple2 (field "slice" (delay d_json_expr),
+            field "slice" $
+              JSONDecode.map mk_JE_Int $
+                tuple2 (field "folded_value" $ check_ast_type "Int" $ field "value" inttm,
+                  orElse (andThen (field "folded_value" $ field "type" json_type)
+                            (fn ty => if aconv ty JT_None_tm
+                              then fail "missing folded index type" else succeed ty),
+                    orElse (field "type" json_type, succeed JT_None_tm)))),
+        field "slice" (delay d_json_expr)
+      ]),
             orElse(field "type" json_type, succeed JT_None_tm)),
 
   (* NamedExpr - dependency binding in initializes: lib[dep := dep] *)

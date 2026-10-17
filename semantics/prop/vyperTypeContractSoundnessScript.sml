@@ -1051,33 +1051,27 @@ Proof
 QED
 
 Theorem evaluate_subscript_value_selected_typed_local[local]:
-  !tenv arr_tv v1 v2 out ct it ty.
+  !tenv arr_tv v1 v2 out ct ie ty.
     evaluate_subscript tenv arr_tv (Value v1) v2 = INL out /\
     value_has_type arr_tv v1 /\
-    subscript_type_ok ct it ty /\
+    subscript_type_ok ct ie ty /\
+    subscript_index_matches ct ie v2 /\
     evaluate_type tenv ct = SOME arr_tv ==>
     ?rtv v. evaluate_type tenv ty = SOME rtv /\
              out = INL (Value v) /\ value_has_type rtv v
 Proof
   rpt gen_tac >> Cases_on `ct` >> simp[subscript_type_ok_def] >>
   rpt strip_tac >> gvs[] >> Cases_on `v1` >> Cases_on `v2` >>
-  gvs[evaluate_subscript_def, AllCaseEqs()]
-  >- (gvs[Once evaluate_type_def, AllCaseEqs(),
-           evaluate_types_OPT_MMAP, OPT_MMAP_SOME_IFF] >>
+  gvs[evaluate_subscript_def,
+      vyperTypeExprResultTheory.subscript_index_matches_def, AllCaseEqs()]
+  >- (drule evaluate_type_TupleT_cases >> strip_tac >> gvs[] >>
       Cases_on `a` >>
       gvs[vyperTypingTheory.value_has_type_inv,
           vyperValueOperationTheory.array_index_def, AllCaseEqs()] >>
-      gvs[oEL_EQ_EL] >>
-      gvs[vyperTypeDefaultsTheory.values_have_types_LIST_REL,
+      gvs[oEL_EQ_EL,
+          vyperTypeDefaultsTheory.values_have_types_LIST_REL,
           LIST_REL_EL_EQN] >>
-      first_x_assum (qspec_then `Num i` mp_tac) >> simp[EL_MAP] >>
-      `EL (Num i) l = ty` by (gvs[EVERY_EL] >> res_tac) >>
-      strip_tac >>
-      `IS_SOME (evaluate_type tenv (EL (Num i) l))` by
-        (qpat_x_assum `EVERY IS_SOME (MAP _ l)` mp_tac >>
-         simp[EVERY_EL] >>
-         disch_then (qspec_then `Num i` mp_tac) >> simp[EL_MAP]) >>
-      Cases_on `evaluate_type tenv (EL (Num i) l)` >> gvs[])
+      metis_tac[])
   >> (gvs[Once evaluate_type_def, AllCaseEqs()] >>
       imp_res_tac (cj 1 vyperTypingTheory.evaluate_type_well_formed) >>
       irule vyperAssignPreservesTypeTheory.array_index_has_type >>
@@ -1100,7 +1094,7 @@ Proof
     (gvs[vyperTypeExprResultTheory.expr_result_typed_def,
          vyperTypeExprSoundnessTheory.expr_runtime_typed_def,
          toplevel_value_typed_def]) >>
-  `subscript_type_ok (expr_type e1) (expr_type e2) ty` by
+  `subscript_type_ok (expr_type e1) e2 ty` by
     (qpat_x_assum `well_typed_expr env (Subscript _ _ _)` mp_tac >>
      simp[Once well_typed_expr_def] >> strip_tac >>
      `vtype_annotation_ok vt (expr_type e1)` by
@@ -1114,6 +1108,12 @@ Proof
          gvs[vtype_annotation_ok_def, subscript_vtype_def,
              subscript_type_ok_def]) >>
      metis_tac[vyperTypeExprResultTheory.well_typed_expr_not_hashmap_place]) >>
+  `subscript_index_matches (expr_type e1) e2 v2` by
+    (Cases_on `expr_type e1` >>
+     simp[vyperTypeExprResultTheory.subscript_index_matches_def] >>
+     fs[vyperTypeExprResultTheory.subscript_type_ok_tuple] >>
+     gvs[Once eval_pure_expr_def,
+         vyperValueOperationTheory.evaluate_literal_def]) >>
   qpat_x_assum `eval_pure_expr _ _ (Subscript _ _ _) = _` mp_tac >>
   simp[Once eval_pure_expr_def] >> gvs[AllCaseEqs()] >> strip_tac >>
   drule_all evaluate_subscript_value_selected_typed_local >>
