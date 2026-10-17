@@ -591,10 +591,12 @@ End
 
 (* ===== With Byte Offset ===== *)
 (* Add byte offset to base pointer. Mirrors Python: context.py _with_byte_offset *)
+(* A single equation rather than clauses on 0 and SUC, so EVAL reduces it on
+   a numeral offset. *)
 Definition compile_with_byte_offset_def:
-  compile_with_byte_offset base 0 = return base ∧
   compile_with_byte_offset base offset =
-    emit_op ADD [base; Lit (n2w offset)]
+    if offset = 0 then return base
+    else emit_op ADD [base; Lit (n2w offset)]
 End
 
 (* ===== Store Memory for Bytestrings ===== *)

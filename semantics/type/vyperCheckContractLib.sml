@@ -86,6 +86,8 @@ val checker_defs =
    is_bytes_or_string_type_def,
    is_comparable_type_def,
    env_item_type_def,
+   account_item_type_def,
+   extract32_result_base_ok_def,
    assignable_type_def,
    valid_conversion_def,
    hashmap_key_type_def,
@@ -126,7 +128,7 @@ val checker_defs =
    vyperABITheory.vyper_is_dynamic_def,
    contractABITheory.ceil32_def,
    raw_call_return_type_def,
-   create_arg_types_ok_def,
+   create_arg_types_ok_eval,
    optionTheory.option_case_lazily,
    optionTheory.IS_SOME_DEF,
    optionTheory.THE_DEF,
@@ -192,10 +194,28 @@ in
 end
 
 val check_contract_compset = let
-  (* These inner conversions have no call-graph or quantifier hooks, avoiding
-     recursive invocation while certificates and quantified bodies compute. *)
+  (* The call-graph conversion has no hooks, avoiding recursive invocation
+     while certificates compute. Quantified bodies get the existential hook,
+     so an existential nested in another quantifier's body is instantiated
+     too; the guard stops the hook re-entering on a quantifier it is already
+     converting, which would otherwise loop when instantiation fails. *)
   val call_graph_base_conv = computeLib.CBV_CONV (build_checker_base ())
-  val quantifier_body_conv = computeLib.CBV_CONV (build_checker_base ())
+  val nested_existential_conv = ref (fn (_ : term) => (raise UNCHANGED) : thm)
+  val active_existentials = ref ([] : term list)
+  fun guarded_existential_conv tm =
+    if List.exists (aconv tm) (!active_existentials) then raise UNCHANGED
+    else let
+      val () = active_existentials := tm :: !active_existentials
+      val th = (!nested_existential_conv) tm
+        handle e => (active_existentials := tl (!active_existentials);
+                     raise e)
+    in
+      active_existentials := tl (!active_existentials); th
+    end
+  val quantifier_body_conv = computeLib.CBV_CONV
+    (build_checker_base ()
+     |> computeLib.add_conv
+          (boolSyntax.existential, 1, guarded_existential_conv))
   val call_graph_const = prim_mk_const
     {Thy = "vyperTypeCallGraph", Name = "contract_call_graph_acyclic"}
   val call_edges_const = prim_mk_const
@@ -306,6 +326,7 @@ val check_contract_compset = let
      TRY_CONV eta_expand_quantifier_predicate THENC
      TRY_CONV quantHeuristicsLib.SIMPLE_QUANT_INSTANTIATE_CONV THENC
      quantifier_body_conv) tm
+  val () = nested_existential_conv := determined_quantifier_conv
   fun normalized_universal_conv tm =
     (RAND_CONV (ABS_CONV quantifier_body_conv) THENC
      SIMP_CONV bool_ss [vyperASTTheory.type_distinct]) tm

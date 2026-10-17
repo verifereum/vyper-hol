@@ -521,6 +521,30 @@ Definition create_arg_types_ok_def:
          if has_salt then [BaseT (BytesT (Fixed 32))] else [])
 End
 
+(* The RawCreate clause hides the salt behind an existential list split, which
+   EVAL cannot decide; this form splits the salt off with LAST/FRONT. *)
+Theorem create_arg_types_ok_raw_create:
+  create_arg_types_ok RawCreate has_salt tys <=>
+    if has_salt then
+      tys <> [] /\ LAST tys = BaseT (BytesT (Fixed 32)) /\
+      ?bd ctor_tys. FRONT tys = [BaseT (BytesT bd); BaseT (UintT 256)] ++ ctor_tys
+    else ?bd ctor_tys. tys = [BaseT (BytesT bd); BaseT (UintT 256)] ++ ctor_tys
+Proof
+  Cases_on `has_salt` >> simp[create_arg_types_ok_def] >> eq_tac >> strip_tac
+  >- simp[listTheory.LAST_CONS_cond, listTheory.FRONT_DEF,
+          rich_listTheory.FRONT_APPEND]
+  >- (qexistsl [`bd`, `ctor_tys`] >>
+      qspec_then `tys` mp_tac listTheory.APPEND_FRONT_LAST >> simp[])
+QED
+
+(* create_arg_types_ok with the RawCreate clause in its decidable form, for
+   EVAL-based checking. *)
+Theorem create_arg_types_ok_eval =
+  LIST_CONJ
+    (List.filter (not o can (find_term (same_const ``RawCreate``)) o concl)
+       (CONJUNCTS create_arg_types_ok_def) @
+     [GEN_ALL create_arg_types_ok_raw_create])
+
 Definition well_typed_expr_def:
   well_typed_expr env (Name ty id) =
     (FLOOKUP env.var_types (string_to_num id) = SOME ty) /\
