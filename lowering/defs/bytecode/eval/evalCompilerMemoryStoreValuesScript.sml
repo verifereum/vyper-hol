@@ -97,3 +97,11 @@ Theorem storage_one_word_array_matches_python_oracle:
 Proof
   CONV_TAC (LAND_CONV (K (#evaluation storage_one_word_array))) >> EVAL_TAC
 QED
+
+val enc_in_assign = memoryStoreWitnessLib.evaluate fixture_root "enc_in_assign"
+Theorem enc_in_assign_matches_python_oracle:
+  ^(#term enc_in_assign) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "enc_in_assign")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation enc_in_assign))) >> EVAL_TAC
+QED

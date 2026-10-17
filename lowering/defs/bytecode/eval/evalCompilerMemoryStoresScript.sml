@@ -1,4 +1,4 @@
-(* Exact pinned-Python bytecode comparisons for all 28 memory-store fixtures. *)
+(* Exact pinned-Python bytecode comparisons for all memory-store fixtures. *)
 Theory evalCompilerMemoryStores
 Ancestors
   evalCompilerMemoryStoreControls

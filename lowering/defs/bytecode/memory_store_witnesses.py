@@ -96,6 +96,8 @@ def prepare(repo: Path, output: Path, *, check: bool) -> None:
 
 def probe(repo: Path, fixtures: Path, output: Path, selected: list[str]) -> None:
     """Evaluate stock checker/compiler libraries and retain every outcome."""
+    if output.resolve() == fixtures.resolve():
+        raise ValueError("probe output must differ from the oracle fixture directory")
     output.mkdir(parents=True, exist_ok=True)
     if not selected:
         available = {path.stem for path in fixtures.glob("*.json")
@@ -104,6 +106,13 @@ def probe(repo: Path, fixtures: Path, output: Path, selected: list[str]) -> None
                        "parity-fixtures.txt")
         selected = [stem for stem in parity if stem in available]
         selected += sorted(available - set(selected))
+    for stem in selected:
+        if not stem or Path(stem).name != stem:
+            raise ValueError(f"witness name must be a file stem: {stem}")
+        for extension in (".hex", ".term", ".residual"):
+            (output / (stem + extension)).unlink(missing_ok=True)
+    for filename in ("status.json", "summary.txt"):
+        (output / filename).unlink(missing_ok=True)
     metadata = {
         "commit": run(["git", "rev-parse", "HEAD"], cwd=repo).strip(),
         "dirty_diff_sha256": hashlib.sha256(
@@ -118,7 +127,8 @@ def probe(repo: Path, fixtures: Path, output: Path, selected: list[str]) -> None
     }
     (output / "run.json").write_text(json.dumps(metadata, indent=2) + "\n")
     helper = Path(__file__).with_name("eval")
-    script = repo / ".memory_store_witnesses.sml"
+    script_id = hashlib.sha256(str(output.resolve()).encode()).hexdigest()
+    script = repo / f".memory_store_{script_id}.sml"
     script.write_text(
         'fun loading name = (TextIO.output (TextIO.stdErr, "LOAD " ^ name ^ "\\n");\n'
         ' TextIO.flushOut TextIO.stdErr; load name);\n'

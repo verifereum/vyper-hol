@@ -1,7 +1,7 @@
 # Memory-store witnesses
 
 These sources exercise memory copies, empty initializers, tuple unpacking and
-assertion reasons. `parity-fixtures.txt` selects 28 exact bytecode comparisons;
+assertion reasons. `parity-fixtures.txt` selects 29 exact bytecode comparisons;
 the other sources retain the remaining issue witnesses and cross-area controls
 for diagnostic comparison.
 The existing 101-fixture corpus is unchanged.

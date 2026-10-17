@@ -26,3 +26,4 @@ long_string_literal
 long_bytes_literal
 t11_tuple_onew_decode_mem
 storage_one_word_array
+enc_in_assign

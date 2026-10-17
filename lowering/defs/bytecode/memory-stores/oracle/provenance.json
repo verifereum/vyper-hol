@@ -34,6 +34,8 @@
     "dec_from_memory2.json": "1f6cf72965b762630abe733a717b34b42838b73e21758c56cd2db34146482171",
     "e70_noData_live_mem2.hex": "7badc2718e0852368ba87f862d88fb389ae1f98724536ddabefd5f66ce306f48",
     "e70_noData_live_mem2.json": "bca8dbc3fa1fbba24e16d1a4da756cbd4c1b88baef8ce8c65bf11085714525c4",
+    "enc_in_assign.hex": "d313157039e460765737f5862f12548918eaf96183bae510cbcd04f62c2d2313",
+    "enc_in_assign.json": "7a87dd8e7b318ba8e2dd0735c69a6556b0c858c34eee3514b15aee39ab0ca86e",
     "long_bytes_literal.hex": "a957946149dcb09f903f19c2c34576e6711f5b74bb4be975fffa9870f7e8d609",
     "long_bytes_literal.json": "f66cd9abec8026f62fd5f91fac517f96b82123ec63739b56650340683db21719",
     "long_string_literal.hex": "a957946149dcb09f903f19c2c34576e6711f5b74bb4be975fffa9870f7e8d609",
