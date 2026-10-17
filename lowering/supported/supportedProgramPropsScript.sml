@@ -113,13 +113,27 @@ Theorem supported_local_type_environment:
      If expr_test_uint [AnnAssign "local" (BaseT (UintT 256)) expr_test_uint] [];
      Assign (BaseTarget (NameTarget "local")) expr_test_uint;
      program_test_range [Assign (BaseTarget (NameTarget "i")) expr_test_uint]] /\
-  ~supported_function_body [] Deploy [("arg",TupleT [BaseT (UintT 256)])]
+  supported_function_body [] Deploy [("arg",TupleT [BaseT (UintT 256)])]
     [Assign (BaseTarget (NameTarget "arg")) expr_test_uint] /\
-  ~supported_function_body [] Deploy []
+  supported_function_body [] Deploy []
     [AnnAssign "local" (ArrayT (BaseT (UintT 256)) (Fixed 2)) expr_test_uint;
      Assign (BaseTarget (NameTarget "local")) expr_test_uint] /\
   ~supported_function_body [] Deploy []
     [Assign (BaseTarget (NameTarget "missing")) expr_test_uint]
+Proof
+  EVAL_TAC
+QED
+
+Theorem supported_local_bytestring_assignment_and_reasons:
+  supported_function_body [] Deploy
+    [("s",BaseT (StringT 10)); ("b",BaseT (BytesT (Dynamic 40)))]
+    [Assign (BaseTarget (NameTarget "s"))
+       (Literal (BaseT (StringT 3)) (StringL "abc"));
+     Assign (BaseTarget (NameTarget "b"))
+       (Name (BaseT (BytesT (Dynamic 40))) "b");
+     Assert (Literal (BaseT BoolT) (BoolL T))
+       (AssertReason (Name (BaseT (StringT 10)) "s"));
+     Raise (RaiseReason (Name (BaseT (StringT 10)) "s"))]
 Proof
   EVAL_TAC
 QED

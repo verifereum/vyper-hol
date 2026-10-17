@@ -972,7 +972,9 @@ Theorem compile_internal_return_fixed_tuple:
        emit_inst RET [return_pc] []
     od
 Proof
+  Cases_on `dst_tys = src_tys` >>
   simp[stmtLoweringTheory.compile_internal_return_def,
+       contextTheory.compile_store_memory_def,
        Once contextTheory.compile_store_memory_typed_def,
        compileEnvTheory.is_word_type_def,
        compileEnvTheory.is_bytestring_type_def]
