@@ -449,7 +449,8 @@ End
 (* ===== Expression translation context and name helpers ===== *)
 
 (* Expression translation carries the root source ID, current module
-   namespace, current module import map, and names of constants/immutables. *)
+   namespace, current module import map, constants/immutables, local and
+   top-level types, and the compile-time abstract override map. *)
 Definition expr_main_src_id_def:
   expr_main_src_id ctx = FST ctx
 End
@@ -471,7 +472,11 @@ Definition expr_local_types_def:
 End
 
 Definition expr_toplevel_types_def:
-  expr_toplevel_types ctx = SND (SND (SND (SND (SND ctx))))
+  expr_toplevel_types ctx = FST (SND (SND (SND (SND (SND ctx)))))
+End
+
+Definition expr_override_map_def:
+  expr_override_map ctx = SND (SND (SND (SND (SND (SND ctx)))))
 End
 
 Definition expr_with_local_types_def:
@@ -479,7 +484,8 @@ Definition expr_with_local_types_def:
     (expr_main_src_id ctx,
      (expr_current_nsid ctx,
       (expr_import_map ctx,
-       (expr_const_names ctx, (local_types, expr_toplevel_types ctx)))))
+       (expr_const_names ctx,
+        (local_types, (expr_toplevel_types ctx, expr_override_map ctx))))))
 End
 
 Definition lookup_local_type_def:
@@ -524,6 +530,20 @@ Definition resolve_func_module_ref_def:
     (if tc = SOME "module" then resolve_module_alias ctx alias src
      else resolve_source_ref ctx fallback) ∧
   resolve_func_module_ref ctx _ fallback = resolve_source_ref ctx fallback
+End
+
+Definition resolve_override_aux_def:
+  resolve_override_aux 0 override_map fn_key = fn_key ∧
+  resolve_override_aux (SUC fuel) override_map fn_key =
+    case ALOOKUP override_map fn_key of
+    | NONE => fn_key
+    | SOME next => resolve_override_aux fuel override_map next
+End
+
+Definition resolve_override_def:
+  resolve_override ctx fn_key =
+    resolve_override_aux (LENGTH (expr_override_map ctx))
+      (expr_override_map ctx) fn_key
 End
 
 (* External signature metadata omits source IDs on nested nominal types.  Use
@@ -746,10 +766,10 @@ Definition translate_module_call_def:
                   StructLit (StructT (mod_nsid, fname)) (mod_nsid, fname) kwargs'
                 else
                   (* Function call that returns a struct: library.foo() *)
-                  Call rty (IntCall (nsid, fname)) args' NONE
+                  Call rty (IntCall (resolve_override ctx (nsid, fname))) args' NONE
             | _ =>
               (* Module call: use source_id from type_decl_node *)
-              Call rty (IntCall (nsid, fname)) args' NONE)
+              Call rty (IntCall (resolve_override ctx (nsid, fname))) args' NONE)
 End
 
 Definition translate_call_def:
@@ -781,7 +801,9 @@ Definition translate_call_def:
           (case base of
            | JE_Name id _ _ _ =>
                if id = "self" then
-                 Call rty (IntCall (resolve_source_ref ctx src_id_opt, fname)) args' NONE
+                 Call rty
+                   (IntCall (resolve_override ctx
+                     (resolve_source_ref ctx src_id_opt, fname))) args' NONE
                else translate_module_call ctx func args' kwargs' ret_ty src_id_opt rty
            | _ => translate_module_call ctx func args' kwargs' ret_ty src_id_opt rty)
     | _ => translate_module_call ctx func args' kwargs' ret_ty src_id_opt rty

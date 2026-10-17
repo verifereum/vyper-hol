@@ -362,9 +362,6 @@ val allowed_test_patterns = [
 
 (* Path exclusions carry reportable reasons and tracking issues. *)
 val excluded_test_file_rules = [
-  ("*/functional/codegen/abstract/*",
-   "abstract and override semantics",
-   "https://github.com/verifereum/vyper-hol/issues/487"),
   (* The clean export contains a top-level ErrorDef, for which
      frontend/jsonASTLib.sml's json_toplevel decoder has no branch. *)
   ("vyper-test-exports/functional/codegen/features/test_custom_errors.json",

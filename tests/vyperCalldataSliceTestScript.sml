@@ -82,7 +82,7 @@ val data_expr = ``JE_Attribute
 val start_expr = ``JE_Int 0 (JT_Integer 256 F)``;
 val length_expr = ``JE_Int 4 (JT_Integer 256 F)``;
 fun translate_slice args kwargs = rhs (concl (bossLib.EVAL
-  ``translate_expr (0, NONE, [], [], [], [])
+  ``translate_expr (0, NONE, [], [], [], [], [])
     (JE_Call (JE_Name "slice" NONE JMissingSource JT_None)
       ^args ^kwargs (JT_Bytes 4) JMissingSource)``));
 fun check_slice_expr expression =
