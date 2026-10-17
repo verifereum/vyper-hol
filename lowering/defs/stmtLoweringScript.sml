@@ -840,8 +840,8 @@ Definition is_empty_value_expr_def:
 End
 
 Definition has_length_word_def:
-  has_length_word ty ⇔
-    is_bytestring_type ty ∨ (∃elem n. ty = ArrayT elem (Dynamic n))
+  has_length_word (ArrayT elem (Dynamic n)) = T ∧
+  has_length_word ty = is_bytestring_type ty
 End
 
 (* Reduced Name/Attribute/Subscript expressions can alias tuple targets. *)
