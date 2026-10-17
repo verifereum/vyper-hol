@@ -10,6 +10,8 @@
 Theory venomInstProps
 Ancestors
   venomInstProofs1 venomInstProofs2 venomInstProofs3 venomInstProofs venomWf
+Libs
+  stepInstBaseLib
 
 (* ===== Effect-free classification ===== *)
 
@@ -643,8 +645,7 @@ Proof
   simp[]
 QED
 val effect_free_ok_tac =
-  fs[venomExecSemanticsTheory.step_inst_base_def,
-     venomStateTheory.eval_operand_def] >>
+  with_opcode_clause (fn ths => fs (ths @ [venomStateTheory.eval_operand_def])) >>
   TRY (irule exec_pure2_ok >> fs[] >> NO_TAC) >>
   TRY (irule exec_pure1_ok >> fs[] >> NO_TAC) >>
   TRY (irule exec_pure3_ok >> fs[] >> NO_TAC) >>

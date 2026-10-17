@@ -12,6 +12,8 @@ Ancestors
   venomInstProofs3 stateEquiv stateEquivProofs finite_map venomState
   venomExecSemantics venomInst venomEffects pred_set
   venomInstProofs1 venomInstProofs2
+Libs
+  stepInstBaseLib
 
 (* MERGE NOTE: resolved in favor of the eval-phis branch's split-file
    structure. origin/main had the older monolithic preservation proofs here;
@@ -289,7 +291,7 @@ val step_class_write_tac =
 val mem_write_class_opcode_tac =
   gvs[Once step_inst_def, AllCaseEqs()] >>
   qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
-  simp[Once step_inst_base_def] >>
+  with_opcode_clause simp >>
   strip_tac >>
   gvs[exec_write2_def, AllCaseEqs()] >>
   gvs[mstore_def, mstore8_def, mcopy_def,
@@ -305,7 +307,7 @@ val alloca_class_opcode_tac =
 
 val ext_call_class_opcode_tac =
   qpat_x_assum `step_inst fuel ctx inst s = OK s'` mp_tac >>
-  simp[Once step_inst_def, Once step_inst_base_def] >>
+  with_opcode_clause (fn ths => simp (Once step_inst_def :: ths)) >>
   strip_tac >>
   gvs[exec_ext_call_def, exec_delegatecall_def, exec_create_def,
       extract_venom_result_def, AllCaseEqs(),
@@ -459,7 +461,7 @@ QED
 (* ===================================================================== *)
 
 val effect_free_opcode_tac =
-  fs[step_inst_base_def] >>
+  with_opcode_clause fs >>
   FIRST [
     drule exec_pure1_state_equiv >> simp[],
     drule exec_pure2_state_equiv >> simp[],

@@ -12,6 +12,8 @@ Ancestors
   cfgTransform venomState venomExecSemantics venomInst
   venomWf cfgTransformProofs execEquivProofs stateEquivProofs
   venomInstProps venomExecProps execEquivParamProps
+Libs
+  stepInstBaseLib
 
 (* ================================================================
    Section 1: lookup_block in transformed function
@@ -2109,8 +2111,7 @@ val non_jump_term_tac =
   simp[subst_block_labels_inst_def, is_block_label_opcode_def,
        is_terminator_def, subst_label_map_inst_def,
        parse_dret_shape_subst_label_map] >>
-  simp[Once step_inst_base_def] >>
-  simp[Once step_inst_base_def] >>
+  with_opcode_clause simp >>
   `eval_operands (MAP (subst_label_map_op m) inst.inst_operands) st =
    eval_operands inst.inst_operands st` by (
     irule eval_operands_subst_label_map >> fs[]) >>
@@ -2354,8 +2355,8 @@ QED
 
 val term_ok_jump_tac =
   qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
-  simp[step_inst_base_def, eval_operands_def, eval_operand_def,
-       AllCaseEqs()] >>
+  with_opcode_clause (fn ths =>
+    simp (ths @ [eval_operands_def, eval_operand_def, AllCaseEqs()])) >>
   rpt CASE_TAC >> gvs[] >> TRY pairarg_tac >> gvs[];
 
 Theorem step_inst_base_ok_terminator_jump[local]:

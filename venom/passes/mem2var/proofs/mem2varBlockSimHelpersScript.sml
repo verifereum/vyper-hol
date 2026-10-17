@@ -18,6 +18,7 @@ Ancestors
   finite_map list rich_list pred_set pair
 Libs
   HolKernel boolLib bossLib BasicProvers dep_rewrite markerLib mem2varFrameLib
+  stepInstBaseLib
 
 val _ = augment_srw_ss [mem2varFrameLib.frame_ss];
 
@@ -724,7 +725,8 @@ Resume m2v_ao_undef_sync_preserved_step[pvar_in_outputs]:
                m2v_rewrite_pvar_in_outputs) >> simp[]) >>
   `eval_operand (Var ao) s1 = NONE` by simp[eval_operand_def] >>
   qpat_x_assum `step_inst _ _ inst _ = OK _` mp_tac >>
-  simp[step_inst_non_invoke, step_inst_base_def, exec_write2_def] >>
+  with_opcode_clause (fn ths =>
+    simp (ths @ [step_inst_non_invoke, exec_write2_def])) >>
   EVERY_CASE_TAC >> gvs[MEM]
 QED
 
@@ -1063,9 +1065,9 @@ Resume m2v_inv_noix_step_nonpromoted[g1]:
   Cases_on `MEM v inst.inst_outputs`
   >- (Cases_on `is_effect_free_op inst.inst_opcode`
       >- (Cases_on `inst.inst_opcode = NOP`
-          >- gvs[step_inst_base_def, AllCaseEqs()] >>
+          >- with_opcode_clause (fn ths => gvs (ths @ [AllCaseEqs()])) >>
           Cases_on `inst.inst_opcode = PHI`
-          >- gvs[step_inst_base_def, AllCaseEqs()] >>
+          >- with_opcode_clause (fn ths => gvs (ths @ [AllCaseEqs()])) >>
           metis_tac[])
       >> gvs[])
   >> metis_tac[]
@@ -1784,7 +1786,8 @@ Theorem m2v_step_nonpromoted_dalloca:
 Proof
   rpt strip_tac >>
   `s1.vs_fmp = s2.vs_fmp` by gvs[m2v_inv_noix_def] >>
-  gvs[step_inst_non_invoke, step_inst_base_def, AllCaseEqs()] >>
+  with_opcode_clause (fn ths =>
+    gvs (ths @ [step_inst_non_invoke, AllCaseEqs()])) >>
   qabbrev_tac `t1 = s1 with vs_fmp :=
     s2.vs_fmp + n2w (ceil32 (w2n sz))` >>
   qabbrev_tac `t2 = s2 with vs_fmp :=
@@ -2133,8 +2136,9 @@ Theorem m2v_step_promoted_mstore:
          m2v_inv_noix fn v1 v2
 Proof
   rpt strip_tac >>
-  gvs[step_inst_non_invoke, step_inst_base_def, exec_write2_def,
-      eval_operand_def, AllCaseEqs()] >>
+  with_opcode_clause (fn ths =>
+    gvs (ths @ [opcode_clause ``ASSIGN``, step_inst_non_invoke,
+                exec_write2_def, eval_operand_def, AllCaseEqs()])) >>
   rename1 `eval_operand val_op s1 = SOME val_w` >>
   `eval_operand val_op s2 = SOME val_w` by
     metis_tac[m2v_inv_noix_eval_operand] >>
@@ -2171,7 +2175,8 @@ Proof
 QED
 
 Resume m2v_step_promoted_mload[base]:
-  gvs[step_inst_base_def] >> suspend "exec"
+  with_opcode_clause (fn ths => gvs (opcode_clause ``ASSIGN`` :: ths)) >>
+  suspend "exec"
 QED
 
 Resume m2v_step_promoted_mload[exec]:
@@ -3300,8 +3305,8 @@ QED
 
 Resume m2v_nonterminal_step_dispatch[mload_unchanged]:
   (* Unfold step_inst for MLOAD — derive operand structure *)
-  gvs[step_inst_non_invoke, step_inst_base_def, exec_read1_def,
-      AllCaseEqs()] >>
+  with_opcode_clause (fn ths =>
+    gvs (ths @ [step_inst_non_invoke, exec_read1_def, AllCaseEqs()])) >>
   rename1 `inst.inst_outputs = [out]` >>
   (* operands = [Var ao] from MEM + singleton *)
   `inst.inst_operands = [Var ao]` by (
@@ -3335,8 +3340,9 @@ Resume m2v_nonterminal_step_dispatch[mstore_unchanged]:
   drule_all m2v_pointer_confined_mstore_ao_is_offset >> strip_tac >>
   drule_all m2v_promote_mstore_unchanged_neq32 >> strip_tac >>
   (* 2. Unfold step_inst for MSTORE *)
-  gvs[step_inst_non_invoke, step_inst_base_def, exec_write2_def,
-      AllCaseEqs(), eval_operand_def] >>
+  with_opcode_clause (fn ths =>
+    gvs (ths @ [step_inst_non_invoke, exec_write2_def, AllCaseEqs(),
+                eval_operand_def])) >>
   rename1 `lookup_var ao s1 = SOME addr` >>
   rename1 `eval_operand val_op s1 = SOME val` >>
   (* 3. Operand agreement: ao not fresh *)
@@ -3385,7 +3391,7 @@ Resume m2v_nonterminal_step_dispatch[alloca]:
   gvs[inst_wf_def] >> rename1 `inst.inst_operands = [Lit alloc_sz]` >>
   Cases_on `inst.inst_outputs` >> gvs[] >>
   rename1 `inst.inst_outputs = [out]` >>
-  gvs[step_inst_base_def, exec_alloca_def] >>
+  with_opcode_clause (fn ths => gvs (ths @ [exec_alloca_def])) >>
   `s1.vs_allocas = s2.vs_allocas` by gvs[m2v_inv_noix_def] >>
   `s1.vs_alloca_next = s2.vs_alloca_next` by gvs[m2v_inv_noix_def] >>
   (* vs_alloca_next agreement from dispatch precondition *)
@@ -3599,7 +3605,7 @@ Theorem m2v_step_nonpromoted_istore:
     ?v2. step_inst fuel ctx inst s2 = OK v2 /\ m2v_inv_noix fn v1 v2
 Proof
   rpt strip_tac >> gvs[step_inst_non_invoke] >>
-  gvs[step_inst_base_def, AllCaseEqs()] >>
+  with_opcode_clause (fn ths => gvs (ths @ [AllCaseEqs()])) >>
   irule m2v_inv_noix_both_sides_istore >> simp[] >>
   metis_tac[]
 QED
@@ -3625,7 +3631,7 @@ Theorem m2v_step_nonpromoted_sha3:
     ?v2. step_inst fuel ctx inst s2 = OK v2 /\ m2v_inv_noix fn v1 v2
 Proof
   rpt strip_tac >> gvs[step_inst_non_invoke] >>
-  gvs[step_inst_base_def, AllCaseEqs()] >>
+  with_opcode_clause (fn ths => gvs (ths @ [AllCaseEqs()])) >>
   rename1 `inst.inst_outputs = [out]` >>
   (* Memory data agrees: extract from nonpromoted_access_safe *)
   `!addr. w2n offset <= addr /\ addr < w2n offset + w2n size_val ==>
@@ -3675,7 +3681,7 @@ Theorem m2v_step_nonpromoted_log:
     ?v2. step_inst fuel ctx inst s2 = OK v2 /\ m2v_inv_noix fn v1 v2
 Proof
   rpt strip_tac >> gvs[step_inst_non_invoke] >>
-  gvs[step_inst_base_def, AllCaseEqs()] >>
+  with_opcode_clause (fn ths => gvs (ths @ [AllCaseEqs()])) >>
   (* Operand agreement for rest elements *)
   `!op. MEM op rest ==> eval_operand op s1 = eval_operand op s2`
     by (rpt strip_tac >> first_x_assum irule >> simp[]) >>
@@ -3827,7 +3833,7 @@ Resume m2v_nonpromoted_mem_dispatch[dload]:
   ho_match_mp_tac m2v_step_nonpromoted_read1 >>
   qexistsl [`\off s. word_of_bytes T 0w
     (TAKE 32 (DROP (w2n off) s.vs_data_section ++ REPLICATE 32 0w))`, `s1`] >>
-  ASM_REWRITE_TAC[step_inst_non_invoke, step_inst_base_def] >>
+  with_opcode_clause (fn ths => gvs (ths @ [step_inst_non_invoke])) >>
   gvs[m2v_inv_noix_def]
 QED
 
@@ -3847,7 +3853,8 @@ QED
 (* Shared wmwe pattern: unfold step_inst_base, show source bytes equal
    from inv field equality, apply both_sides_wmwe, discharge NAS. *)
 fun wmwe_nas_tac field_eq =
-  gvs[step_inst_non_invoke, step_inst_base_def, AllCaseEqs()] >>
+  with_opcode_clause (fn ths =>
+    gvs (ths @ [step_inst_non_invoke, AllCaseEqs()])) >>
   field_eq by gvs[m2v_inv_noix_def] >>
   gvs[] >> irule m2v_inv_noix_both_sides_wmwe >> simp[] >>
   ho_match_mp_tac nas_write_range_disjoint >>
@@ -3874,8 +3881,9 @@ Resume m2v_nonpromoted_mem_dispatch[extcodecopy]:
 QED
 
 Resume m2v_nonpromoted_mem_dispatch[mstore8]:
-  gvs[step_inst_non_invoke, step_inst_base_def, AllCaseEqs(),
-      mstore8_eq_wmwe, exec_write2_def] >>
+  with_opcode_clause (fn ths =>
+    gvs (ths @ [step_inst_non_invoke, AllCaseEqs(), mstore8_eq_wmwe,
+                exec_write2_def])) >>
   `eval_operand op1 s1 = SOME addr` by gvs[] >>
   irule m2v_inv_noix_both_sides_wmwe >> simp[] >>
   rpt strip_tac >> `addr' = w2n addr` by simp[] >> gvs[] >>
@@ -3885,8 +3893,8 @@ Resume m2v_nonpromoted_mem_dispatch[mstore8]:
 QED
 
 Resume m2v_nonpromoted_mem_dispatch[mcopy]:
-  gvs[step_inst_non_invoke, step_inst_base_def, AllCaseEqs(),
-      mcopy_def, LET_THM] >>
+  with_opcode_clause (fn ths =>
+    gvs (ths @ [step_inst_non_invoke, AllCaseEqs(), mcopy_def, LET_THM])) >>
   (* Source bytes agree: inv memory clause + NAS read range disjointness *)
   `TAKE (w2n sz) (DROP (w2n src) s1.vs_memory ++ REPLICATE (w2n sz) 0w) =
    TAKE (w2n sz) (DROP (w2n src) s2.vs_memory ++ REPLICATE (w2n sz) 0w)`

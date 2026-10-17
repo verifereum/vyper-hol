@@ -11,6 +11,8 @@ Theory venomInstProofs1
 Ancestors
   venomExecSemantics venomEffects stateEquiv stateEquivProofs
   vfmStaticCalls finite_map venomState venomInst pred_set
+Libs
+  stepInstBaseLib
 
 (* ===================================================================== *)
 (* ===== Section 1: Opcode Classification Properties ================== *)
@@ -361,8 +363,7 @@ Proof
 QED
 
 val effect_free_opcode_tac =
-  qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
-  simp[Once step_inst_base_def] >> strip_tac >>
+  with_opcode_clause fs >>
   FIRST [
     drule exec_pure1_state_equiv >> simp[],
     drule exec_pure2_state_equiv >> simp[],
@@ -498,7 +499,7 @@ QED
 
 val mem_write_opcode_tac =
   qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
-  simp[Once step_inst_base_def] >>
+  with_opcode_clause simp >>
   strip_tac >>
   fs[exec_write2_def] >>
   gvs[AllCaseEqs()] >>

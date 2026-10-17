@@ -55,7 +55,7 @@ val booltm = JSONDecode.map mk_bool bool
 val negbooltm = JSONDecode.map (mk_bool o not) bool
 
 val address : term decoder = JSONDecode.map address_from_hex string
-val bytes : term decoder = JSONDecode.map cached_bytes_from_hex string
+val bytes : term decoder = JSONDecode.map cached_flat_bytes_from_hex string
 
 val Call_tm = prim_mk_const{Thy="vyperTestRunner",Name="Call"}
 val call_trace_ty = #1 $ dom_rng $ type_of Call_tm
@@ -526,7 +526,7 @@ val raw_deployment : term decoder =
     tuple2 (
       tuple4 (field "initcode" bytes,
               field "calldata" $
-                JSONDecode.map (cached_bytes_from_hex o theoptstring)
+                JSONDecode.map (cached_flat_bytes_from_hex o theoptstring)
                   (nullable string),
               tuple4 (field "env" $ field "tx" $ field "origin" address,
                       field "env" $ field "block" $ field "timestamp" numtm,
@@ -546,7 +546,7 @@ val raw_deployment : term decoder =
                 case bc of
                   SOME "" => optionSyntax.mk_none bytes_ty
                 | SOME hex => from_term_option bytes_ty
-                                (SOME (cached_bytes_from_hex hex))
+                                (SOME (cached_flat_bytes_from_hex hex))
                 | NONE => optionSyntax.mk_none bytes_ty) $
                nullable string)))
 
@@ -589,7 +589,7 @@ val deployment : term decoder =
                                    field "deployed_address" address,
                                    field "env" $ field "tx" $ field "gas_price" numtm),
                            tuple4 (field "calldata" $
-                                   JSONDecode.map (cached_bytes_from_hex o theoptstring)
+                                   JSONDecode.map (cached_flat_bytes_from_hex o theoptstring)
                                      (nullable string),
                                    field "env" $ field "block" $ field "number" numtm,
                                    field "env" $ field "block" $ field "blob_basefee" numtm,
@@ -705,8 +705,7 @@ fun trydecode_with_fixtures fixtures
               ::failures,
             name_skips,source_skips,non_tests)
 
-fun read_test_json json_path = let
-  val test_jsons = decodeFile rawObject json_path
+fun decode_test_items test_jsons = let
   val fixtures = List.foldl collect_fixture [] test_jsons
   val (selected,failures,name_skips,source_skips,non_tests) =
     List.foldl (trydecode_with_fixtures fixtures) ([],[],[],[],0) test_jsons
@@ -719,6 +718,8 @@ in
    fixtures = List.length fixtures,
    non_tests = non_tests}
 end
+
+fun read_test_json json_path = decode_test_items (decodeFile rawObject json_path)
 
 val trace_ty = mk_thy_type{Thy="vyperTestRunner",Tyop="trace",Args=[]}
 val traces_ty = mk_list_type trace_ty
@@ -855,8 +856,7 @@ fun test_file_suite path =
   | [first] => first
   | [] => "unknown"
 
-fun read_coverage_json json_path = let
-  val items = decodeFile rawObject json_path
+fun coverage_of_items items = let
   val fixtures = List.mapPartial (fn (name,json) =>
     if raw_string_field "item_type" json = SOME "fixture"
     then SOME (name,json) else NONE) items
@@ -962,6 +962,9 @@ in
    unreferenced_traced_fixtures = unreferenced_traced_fixtures,
    malformed = malformed}
 end
+
+fun read_coverage_json json_path =
+  coverage_of_items (decodeFile rawObject json_path)
 
 fun print_raw_coverage output json_path report = let
   fun emit text = TextIO.output(output,text)
@@ -1191,9 +1194,24 @@ in
   Lib.appi define_traces tests
 end
 
-fun generate_defn_scripts () = let
-  val () = check_generate_dirs ()
-  val files = test_files ()
+(* A file whose Defs build would select no test and raise nothing would
+   build two empty theories, so it gets no scripts.  The coverage count
+   answers cheaply for most files; the rest run the Defs build's own
+   decode, so a file is skipped only when that decode succeeds with no
+   tests.  An exception from it means the Defs build would fail, which is
+   where that failure is reported, so the file keeps its scripts. *)
+fun generates_scripts items =
+  #selected (coverage_of_items items) > 0 orelse
+  let val report = decode_test_items items
+  in not (List.null (#selected report) andalso List.null (#failures report))
+  end
+  handle _ => true
+
+fun selected_test_files () =
+  List.filter (fn (_, path) => generates_scripts (decodeFile rawObject path))
+    (test_files ())
+
+fun write_defn_scripts files = let
   val gen_dir = generated_dir
   val () = cleanup_generated_scripts files
   val () = List.app (fn (id, jsonp) => let
@@ -1213,9 +1231,7 @@ in
   ()
 end
 
-fun generate_test_scripts () = let
-  val () = check_generate_dirs ()
-  val files = test_files ()
+fun write_test_scripts files = let
   val gen_dir = generated_dir
   val () = cleanup_generated_scripts files
   val () = List.app (fn (id, _) => let
@@ -1234,9 +1250,18 @@ in
   ()
 end
 
-fun generate_tests () = (
-  generate_defn_scripts ();
-  generate_test_scripts ()
-)
+fun generate_defn_scripts () =
+  (check_generate_dirs (); write_defn_scripts (selected_test_files ()))
+
+fun generate_test_scripts () =
+  (check_generate_dirs (); write_test_scripts (selected_test_files ()))
+
+fun generate_tests () = let
+  val () = check_generate_dirs ()
+  val files = selected_test_files ()
+in
+  write_defn_scripts files;
+  write_test_scripts files
+end
 
 end
