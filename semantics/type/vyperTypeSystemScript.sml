@@ -251,11 +251,10 @@ Definition assignable_type_def:
   assignable_type tenv (ArrayT elem bd) =
     (well_formed_type tenv (ArrayT elem bd) /\ assignable_type tenv elem) /\
   assignable_type tenv (StructT nsid) =
-    (let key = type_key nsid in
-     case FLOOKUP tenv key of
+    (case FLOOKUP tenv nsid of
      | SOME (StructArgs args) =>
          well_formed_type tenv (StructT nsid) /\
-         EVERY (assignable_type (tenv \\ key) o SND) args
+         EVERY (assignable_type (tenv \\ nsid) o SND) args
      | _ => F) /\
   assignable_type tenv (FlagT nsid) = well_formed_type tenv (FlagT nsid) /\
   assignable_type tenv NoneT = F
@@ -277,7 +276,7 @@ Theorem assignable_type_well_formed:
   !tenv ty. assignable_type tenv ty ==> well_formed_type tenv ty
 Proof
   recInduct assignable_type_ind >> rw[assignable_type_def, well_formed_type_def] >>
-  Cases_on `FLOOKUP tenv (type_key nsid)` >> gvs[] >>
+  Cases_on `FLOOKUP tenv nsid` >> gvs[] >>
   Cases_on `x` >> gvs[]
 QED
 
@@ -288,10 +287,10 @@ Proof
   >- (Cases_on `b` >> gvs[] >> TRY (Cases_on `b'` >> gvs[]))
   >- (Cases_on `evaluate_types tenv l []` >> gvs[])
   >- (Cases_on `evaluate_type tenv t` >> gvs[])
-  >- (Cases_on `FLOOKUP tenv (type_key p)` >> gvs[] >>
+  >- (Cases_on `FLOOKUP tenv p` >> gvs[] >>
       Cases_on `x` >> gvs[] >>
-      Cases_on `evaluate_types (tenv \\ type_key p) (MAP SND l) []` >> gvs[])
-  >- (Cases_on `FLOOKUP tenv (type_key p)` >> gvs[] >> Cases_on `x` >> gvs[])
+      Cases_on `evaluate_types (tenv \\ p) (MAP SND l) []` >> gvs[])
+  >- (Cases_on `FLOOKUP tenv p` >> gvs[] >> Cases_on `x` >> gvs[])
 QED
 
 Theorem assignable_type_evaluate_not_NoneTV:
@@ -351,7 +350,7 @@ End
 
 Definition attribute_type_def:
   attribute_type tenv (StructT nsid) field_id =
-    (case FLOOKUP tenv (type_key nsid) of
+    (case FLOOKUP tenv nsid of
        SOME (StructArgs fields) => ALOOKUP fields field_id
      | _ => NONE) /\
   attribute_type _ (BaseT _) _ = NONE /\
@@ -375,14 +374,14 @@ End
 Datatype:
   typing_env = <|
     current_src     : num option;
-    var_types       : (num |-> type);
-    var_assignable          : (num |-> bool);
-    bare_globals            : ((num option # num) |-> type);
-    bare_global_assignable  : ((num option # num) |-> type);
-    toplevel_vtypes         : ((num option # num) |-> value_type);
-    type_defs       : (num |-> type_args);
-    fn_sigs         : ((num option # string) |-> fn_sig);
-    flag_members    : ((num option # string) |-> string list)
+    var_types       : (string |-> type);
+    var_assignable          : (string |-> bool);
+    bare_globals            : (nsid |-> type);
+    bare_global_assignable  : (nsid |-> type);
+    toplevel_vtypes         : (nsid |-> value_type);
+    type_defs       : (nsid |-> type_args);
+    fn_sigs         : (nsid |-> fn_sig);
+    flag_members    : (nsid |-> string list)
   |>
 End
 
@@ -547,10 +546,10 @@ Theorem create_arg_types_ok_compute =
 
 Definition well_typed_expr_def:
   well_typed_expr env (Name ty id) =
-    (FLOOKUP env.var_types (string_to_num id) = SOME ty) /\
+    (FLOOKUP env.var_types id = SOME ty) /\
   well_typed_expr env (TopLevelName ty (src_id_opt, id)) =
-    ((FLOOKUP env.toplevel_vtypes (src_id_opt, string_to_num id) = SOME (Type ty) \/
-      FLOOKUP env.bare_globals (src_id_opt, string_to_num id) = SOME ty) /\
+    ((FLOOKUP env.toplevel_vtypes (src_id_opt, id) = SOME (Type ty) \/
+      FLOOKUP env.bare_globals (src_id_opt, id) = SOME ty) /\
      well_formed_type env.type_defs ty /\ ty <> NoneT) /\
   well_typed_expr env (FlagMember ty nsid mid) =
     (ty = FlagT nsid /\ well_formed_type env.type_defs ty /\
@@ -564,7 +563,7 @@ Definition well_typed_expr_def:
   well_typed_expr env (StructLit ty nsid kes) =
     (well_typed_named_exprs env kes /\ well_formed_type env.type_defs ty /\
      ?args. ty = StructT nsid /\
-       FLOOKUP env.type_defs (type_key nsid) = SOME (StructArgs args) /\
+       FLOOKUP env.type_defs nsid = SOME (StructArgs args) /\
        MAP FST kes = MAP FST args /\ MAP (expr_type o SND) kes = MAP SND args) /\
   well_typed_expr env (Subscript ty e1 e2) =
     (well_typed_expr env e2 /\ well_formed_type env.type_defs ty /\
@@ -625,7 +624,7 @@ Definition well_typed_expr_def:
      create_arg_types_ok kind has_salt (MAP expr_type args)) /\
 
   type_place_expr env (TopLevelName ty (src_id_opt, id)) =
-    (case FLOOKUP env.toplevel_vtypes (src_id_opt, string_to_num id) of
+    (case FLOOKUP env.toplevel_vtypes (src_id_opt, id) of
      | SOME vt => if vtype_annotation_ok vt ty then SOME vt else NONE
      | NONE => NONE) /\
   type_place_expr env (Subscript ty e1 e2) =
@@ -640,17 +639,15 @@ Definition well_typed_expr_def:
   type_place_expr env _ = NONE /\
 
   type_place_target env (NameTarget id) =
-    (let n = string_to_num id in
-     case (FLOOKUP env.var_types n, FLOOKUP env.var_assignable n) of
+    (case (FLOOKUP env.var_types id, FLOOKUP env.var_assignable id) of
      | (SOME ty, SOME T) => SOME (Type ty)
      | _ => NONE) /\
   type_place_target env (TopLevelNameTarget (src_id_opt, id)) =
-    (let n = string_to_num id in
-     case FLOOKUP env.bare_global_assignable (src_id_opt,n) of
+    (case FLOOKUP env.bare_global_assignable (src_id_opt,id) of
      | SOME ty => SOME (Type ty)
      | NONE =>
-         if IS_SOME (FLOOKUP env.bare_globals (src_id_opt,n)) then NONE
-         else FLOOKUP env.toplevel_vtypes (src_id_opt,n)) /\
+         if IS_SOME (FLOOKUP env.bare_globals (src_id_opt,id)) then NONE
+         else FLOOKUP env.toplevel_vtypes (src_id_opt,id)) /\
   type_place_target env (SubscriptTarget tgt e) =
     (if well_typed_expr env e then
        case type_place_target env tgt of
@@ -754,8 +751,8 @@ Definition type_stmt_def:
     (if well_typed_exprs env es then SOME env else NONE) /\
   type_stmt env ret_ty (AnnAssign id typ e) =
     (if well_typed_expr env e /\ assignable_type env.type_defs typ /\
-        expr_type e = typ /\ string_to_num id NOTIN FDOM env.var_types
-     then SOME (extend_local env (string_to_num id) typ T)
+        expr_type e = typ /\ id NOTIN FDOM env.var_types
+     then SOME (extend_local env id typ T)
      else NONE) /\
   type_stmt env ret_ty (Append bt e) =
     (case type_place_target env bt of
@@ -778,8 +775,8 @@ Definition type_stmt_def:
      then SOME env else NONE) /\
   type_stmt env ret_ty (For id typ it n body) =
     (if assignable_type env.type_defs typ /\ well_typed_iterator env typ it /\
-        string_to_num id NOTIN FDOM env.var_types /\
-        IS_SOME (type_stmts (extend_local env (string_to_num id) typ F) ret_ty body)
+        id NOTIN FDOM env.var_types /\
+        IS_SOME (type_stmts (extend_local env id typ F) ret_ty body)
      then SOME env else NONE) /\
   type_stmts env ret_ty [] = SOME env /\
   type_stmts env ret_ty (s::ss) =

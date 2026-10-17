@@ -108,21 +108,22 @@ Definition toplevel_vtypes_complete_def:
     (!src ts vis mut id ty init.
        get_module_code cx src = SOME ts /\
        MEM (VariableDecl vis mut id ty init) ts ==>
-       FLOOKUP toplevel_vtypes (src,string_to_num id) = SOME (Type ty)) /\
+       FLOOKUP toplevel_vtypes (src,id) = SOME (Type ty)) /\
     (!src ts vis is_transient id kt vt init.
        get_module_code cx src = SOME ts /\
        MEM (HashMapDecl vis is_transient id kt vt init) ts ==>
-       FLOOKUP toplevel_vtypes (src,string_to_num id) = SOME (HashMapT kt vt))
+       FLOOKUP toplevel_vtypes (src,id) = SOME (HashMapT kt vt))
 End
 
 Definition is_bare_global_decl_def:
-  is_bare_global_decl n [] = F /\
-  is_bare_global_decl n (VariableDecl _ Immutable vid _ _ :: ts) =
-    (if string_to_num vid = n then T else is_bare_global_decl n ts) /\
-  is_bare_global_decl n (VariableDecl _ (Constant e) vid _ _ :: ts) =
-    (if string_to_num vid = n then T else is_bare_global_decl n ts) /\
-  is_bare_global_decl n (_ :: ts) = is_bare_global_decl n ts
+  is_bare_global_decl id [] = F /\
+  is_bare_global_decl id (VariableDecl _ Immutable vid _ _ :: ts) =
+    (if vid = id then T else is_bare_global_decl id ts) /\
+  is_bare_global_decl id (VariableDecl _ (Constant e) vid _ _ :: ts) =
+    (if vid = id then T else is_bare_global_decl id ts) /\
+  is_bare_global_decl id (_ :: ts) = is_bare_global_decl id ts
 End
+
 
 Theorem is_immutable_decl_imp_is_bare_global_decl:
   is_immutable_decl id ts ==> is_bare_global_decl id ts
@@ -134,13 +135,14 @@ Proof
   TRY (Cases_on `v0` >> gvs[is_immutable_decl_def, is_bare_global_decl_def])
 QED
 
+
 Definition bare_globals_complete_def:
   bare_globals_complete bare_globals cx <=>
     !src ts vis mut id ty init.
       get_module_code cx src = SOME ts /\
       MEM (VariableDecl vis mut id ty init) ts /\
       (mut = Immutable \/ ?e. mut = Constant e) ==>
-      FLOOKUP bare_globals (src,string_to_num id) = SOME ty
+      FLOOKUP bare_globals (src,id) = SOME ty
 End
 
 Definition bare_global_assignable_complete_def:
@@ -148,7 +150,7 @@ Definition bare_global_assignable_complete_def:
     !src ts vis id ty init.
       get_module_code cx src = SOME ts /\
       MEM (VariableDecl vis Immutable id ty init) ts ==>
-      FLOOKUP bare_global_assignable (src,string_to_num id) = SOME ty
+      FLOOKUP bare_global_assignable (src,id) = SOME ty
 End
 
 Definition flag_members_complete_def:
@@ -173,14 +175,14 @@ Definition env_context_consistent_def:
        ?ts. get_module_code cx src = SOME ts /\
             FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\
             is_bare_global_decl id ts /\
-            find_var_decl_by_num id ts = NONE /\
+            find_var_decl_by_name id ts = NONE /\
             ty <> NoneT) /\
     (!src id ty. FLOOKUP env.bare_global_assignable (src,id) = SOME ty ==>
        ?ts. get_module_code cx src = SOME ts /\
             FLOOKUP env.bare_globals (src,id) = SOME ty /\
             FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\
             is_immutable_decl id ts /\
-            find_var_decl_by_num id ts = NONE /\
+            find_var_decl_by_name id ts = NONE /\
             ty <> NoneT) /\
     (!src id vt. FLOOKUP env.toplevel_vtypes (src,id) = SOME vt ==>
        well_formed_vtype env.type_defs vt) /\
@@ -189,7 +191,7 @@ Definition env_context_consistent_def:
        FLOOKUP env.bare_globals (src,id) = NONE ==>
        ?ts is_transient typ id_str.
          get_module_code cx src = SOME ts /\
-         find_var_decl_by_num id ts = SOME (StorageVarDecl is_transient typ,id_str) /\
+         find_var_decl_by_name id ts = SOME (StorageVarDecl is_transient typ,id_str) /\
          typ = ty /\
          IS_SOME (evaluate_type (get_tenv cx) typ) /\
          IS_SOME (lookup_var_slot_from_layout cx is_transient src id_str)) /\
@@ -197,12 +199,12 @@ Definition env_context_consistent_def:
        FLOOKUP env.toplevel_vtypes (src,id) = SOME (HashMapT kt vt) ==>
        ?ts is_transient id_str.
          get_module_code cx src = SOME ts /\
-         find_var_decl_by_num id ts = SOME (HashMapVarDecl is_transient kt vt,id_str) /\
+         find_var_decl_by_name id ts = SOME (HashMapVarDecl is_transient kt vt,id_str) /\
          IS_SOME (lookup_var_slot_from_layout cx is_transient src id_str)) /\
     (!src fid ls.
        FLOOKUP env.flag_members (src, fid) = SOME ls ==>
        ?ts. get_module_code cx src = SOME ts /\ lookup_flag fid ts = SOME ls /\
-            FLOOKUP (get_tenv cx) (type_key (src,fid)) = SOME (FlagArgs (LENGTH ls)))
+            FLOOKUP (get_tenv cx) (src,fid) = SOME (FlagArgs (LENGTH ls)))
 End
 
 Theorem env_context_consistent_static_completeness:
@@ -232,7 +234,7 @@ Theorem env_context_consistent_bare_global_find_NONE:
     ?ts. get_module_code cx src = SOME ts /\
          FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\
          is_bare_global_decl id ts /\
-         find_var_decl_by_num id ts = NONE /\
+         find_var_decl_by_name id ts = NONE /\
          ty <> NoneT
 Proof
   rw[env_context_consistent_def] >>
@@ -246,7 +248,7 @@ Theorem env_context_consistent_bare_global_assignable_find_NONE:
          FLOOKUP env.bare_globals (src,id) = SOME ty /\
          FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\
          is_immutable_decl id ts /\
-         find_var_decl_by_num id ts = NONE /\
+         find_var_decl_by_name id ts = NONE /\
          ty <> NoneT
 Proof
   rw[env_context_consistent_def] >>
@@ -281,13 +283,15 @@ Definition env_immutables_consistent_def:
     (!src id ty ts.
        FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\ get_module_code cx src = SOME ts ==>
        (!is_transient typ id_str.
-          find_var_decl_by_num id ts = SOME (StorageVarDecl is_transient typ,id_str) ==> typ = ty) /\
+          find_var_decl_by_name id ts = SOME (StorageVarDecl is_transient typ,id_str) ==> typ = ty) /\
        (!is_transient kt vt id_str.
-          find_var_decl_by_num id ts = SOME (HashMapVarDecl is_transient kt vt,id_str) ==> F) /\
-       (find_var_decl_by_num id ts = NONE ==>
-         !tv v. FLOOKUP (get_source_immutables src
-           (case ALOOKUP st.immutables cx.txn.target of SOME m => m | NONE => [])) id = SOME (tv,v) ==>
-         evaluate_type (get_tenv cx) ty = SOME tv))
+          find_var_decl_by_name id ts = SOME (HashMapVarDecl is_transient kt vt,id_str) ==> F) /\
+       (find_var_decl_by_name id ts = NONE ==>
+         !tv v.
+           FLOOKUP (get_source_immutables src
+             (case ALOOKUP st.immutables cx.txn.target of SOME m => m | NONE => []))
+             id = SOME (tv,v) ==>
+           evaluate_type (get_tenv cx) ty = SOME tv))
 End
 
 Definition env_consistent_def:
@@ -303,7 +307,7 @@ Theorem env_consistent_bare_global_find_NONE:
     ?ts. get_module_code cx src = SOME ts /\
          FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\
          is_bare_global_decl id ts /\
-         find_var_decl_by_num id ts = NONE /\
+         find_var_decl_by_name id ts = NONE /\
          ty <> NoneT
 Proof
   rw[env_consistent_def] >>
@@ -324,30 +328,30 @@ Definition functions_well_typed_def:
          ?ts. get_module_code cx src = SOME ts /\
               FLOOKUP toplevel_vtypes (src,id) = SOME (Type ty) /\
               is_bare_global_decl id ts /\
-              find_var_decl_by_num id ts = NONE /\
+              find_var_decl_by_name id ts = NONE /\
               ty <> NoneT) /\
       (!src id ty. FLOOKUP bare_global_assignable (src,id) = SOME ty ==>
          ?ts. get_module_code cx src = SOME ts /\
               FLOOKUP bare_globals (src,id) = SOME ty /\
               FLOOKUP toplevel_vtypes (src,id) = SOME (Type ty) /\
               is_immutable_decl id ts /\
-              find_var_decl_by_num id ts = NONE /\
+              find_var_decl_by_name id ts = NONE /\
               ty <> NoneT) /\
       (!src id vt ts.
          FLOOKUP toplevel_vtypes (src,id) = SOME vt /\ get_module_code cx src = SOME ts ==>
          ((?ty. vt = Type ty /\
              ((!is_transient typ id_str.
-                 find_var_decl_by_num id ts = SOME (StorageVarDecl is_transient typ,id_str) ==> typ = ty) /\
+                 find_var_decl_by_name id ts = SOME (StorageVarDecl is_transient typ,id_str) ==> typ = ty) /\
               (!is_transient kt hv id_str.
-                 find_var_decl_by_num id ts = SOME (HashMapVarDecl is_transient kt hv,id_str) ==> F) /\
-              (find_var_decl_by_num id ts = NONE ==> IS_SOME (evaluate_type (get_tenv cx) ty)))) \/
+                 find_var_decl_by_name id ts = SOME (HashMapVarDecl is_transient kt hv,id_str) ==> F) /\
+              (find_var_decl_by_name id ts = NONE ==> IS_SOME (evaluate_type (get_tenv cx) ty)))) \/
           (?kt hv. vt = HashMapT kt hv /\
              ?is_transient id_str.
-               find_var_decl_by_num id ts = SOME (HashMapVarDecl is_transient kt hv,id_str)))) /\
+               find_var_decl_by_name id ts = SOME (HashMapVarDecl is_transient kt hv,id_str)))) /\
       (!src fid ls.
          FLOOKUP flag_members (src,fid) = SOME ls ==>
          ?ts. get_module_code cx src = SOME ts /\ lookup_flag fid ts = SOME ls /\
-              FLOOKUP (get_tenv cx) (type_key (src,fid)) = SOME (FlagArgs (LENGTH ls))) ==>
+              FLOOKUP (get_tenv cx) (src,fid) = SOME (FlagArgs (LENGTH ls))) ==>
       !src_id_opt fn ts fm nr args dflts ret body.
         get_module_code cx src_id_opt = SOME ts /\
         lookup_callable_function cx.in_deploy fn ts = SOME (fm,nr,args,dflts,ret,body) ==>
@@ -366,12 +370,12 @@ Definition functions_well_typed_def:
           stmts_no_control_escape body /\
           well_typed_exprs (defaults_env env_body) dflts /\
           (!id typ. MEM (id,typ) args ==>
-             FLOOKUP env_body.var_types (string_to_num id) = SOME typ /\
-             FLOOKUP env_body.var_assignable (string_to_num id) = SOME T) /\
+             FLOOKUP env_body.var_types id = SOME typ /\
+             FLOOKUP env_body.var_assignable id = SOME T) /\
           (!n ty. FLOOKUP env_body.var_types n = SOME ty ==>
-             ?id. MEM (id,ty) args /\ n = string_to_num id) /\
+             ?id. MEM (id,ty) args /\ n = id) /\
           (!n b. FLOOKUP env_body.var_assignable n = SOME b ==>
-             ?id typ. MEM (id,typ) args /\ n = string_to_num id /\ b = T) /\
+             ?id typ. MEM (id,typ) args /\ n = id /\ b = T) /\
           MAP expr_type dflts = MAP SND (DROP (LENGTH args - LENGTH dflts) args)
 End
 

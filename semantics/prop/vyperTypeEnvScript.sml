@@ -38,12 +38,12 @@ QED
 
 Theorem well_typed_Name_lookup:
   well_typed_expr env (Name ty id) /\ env_consistent env cx st /\ state_well_typed st ==>
-  ?entry tv. lookup_scopes (string_to_num id) st.scopes = SOME entry /\
+  ?entry tv. lookup_scopes id st.scopes = SOME entry /\
              evaluate_type env.type_defs ty = SOME tv /\ entry.type = tv /\
              value_has_type tv entry.value
 Proof
   rw[well_typed_expr_def]
-  >> `∃entry. lookup_scopes (string_to_num id) st.scopes = SOME entry`
+  >> `∃entry. lookup_scopes id st.scopes = SOME entry`
   by (
     gvs[env_consistent_def, env_context_consistent_def, env_scopes_consistent_def, env_immutables_consistent_def, env_scopes_consistent_def] >> last_x_assum drule
     >> rw[IS_SOME_EXISTS] )
@@ -67,8 +67,8 @@ QED
 Theorem type_place_target_NameTarget:
   type_place_target env (NameTarget id) = SOME vt <=>
   ?ty. vt = Type ty /\
-       FLOOKUP env.var_types (string_to_num id) = SOME ty /\
-       FLOOKUP env.var_assignable (string_to_num id) = SOME T
+       FLOOKUP env.var_types id = SOME ty /\
+       FLOOKUP env.var_assignable id = SOME T
 Proof
   CONV_TAC(LAND_CONV(ONCE_REWRITE_CONV[well_typed_expr_def])) >>
   simp[LET_THM, AllCaseEqs(), PULL_EXISTS] >>
@@ -110,6 +110,7 @@ Proof
   gvs[env_consistent_def, env_context_consistent_def]
 QED
 
+
 Theorem env_consistent_bare_global_assignable_ready:
   !env cx st id ty.
     env_consistent env cx st /\
@@ -119,7 +120,7 @@ Theorem env_consistent_bare_global_assignable_ready:
       ty <> NoneT /\
       (?ts. get_module_code cx (current_module cx) = SOME ts /\
             is_immutable_decl id ts /\
-            find_var_decl_by_num id ts = NONE) /\
+            find_var_decl_by_name id ts = NONE) /\
       IS_SOME (FLOOKUP (get_source_immutables (current_module cx)
         (case ALOOKUP st.immutables cx.txn.target of SOME m => m | NONE => [])) id)
 Proof
@@ -129,20 +130,20 @@ Proof
     (drule_then strip_assume_tac) >>
   qpat_x_assum `!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty ==> IS_SOME _`
     drule >>
-  rw[]
+  strip_tac >> gvs[]
 QED
 Theorem type_place_target_TopLevelNameTarget_ASSIGNABLE:
-  FLOOKUP env.bare_global_assignable (src_id_opt,string_to_num id) = SOME ty ==>
+  FLOOKUP env.bare_global_assignable (src_id_opt,id) = SOME ty ==>
   type_place_target env (TopLevelNameTarget (src_id_opt, id)) = SOME (Type ty)
 Proof
   simp[well_typed_expr_def]
 QED
 
 Theorem type_place_target_TopLevelNameTarget_NOT_BARE:
-  FLOOKUP env.bare_global_assignable (src_id_opt,string_to_num id) = NONE /\
-  FLOOKUP env.bare_globals (src_id_opt,string_to_num id) = NONE ==>
+  FLOOKUP env.bare_global_assignable (src_id_opt,id) = NONE /\
+  FLOOKUP env.bare_globals (src_id_opt,id) = NONE ==>
   type_place_target env (TopLevelNameTarget (src_id_opt, id)) =
-  FLOOKUP env.toplevel_vtypes (src_id_opt,string_to_num id)
+  FLOOKUP env.toplevel_vtypes (src_id_opt,id)
 Proof
   simp[well_typed_expr_def]
 QED
@@ -150,10 +151,10 @@ QED
 Theorem type_place_target_TopLevelNameTarget:
   type_place_target env (TopLevelNameTarget (src_id_opt, id)) = SOME vt <=>
   (?ty. vt = Type ty /\
-        FLOOKUP env.bare_global_assignable (src_id_opt, string_to_num id) = SOME ty) \/
-  (FLOOKUP env.bare_global_assignable (src_id_opt, string_to_num id) = NONE /\
-   FLOOKUP env.bare_globals (src_id_opt, string_to_num id) = NONE /\
-   FLOOKUP env.toplevel_vtypes (src_id_opt, string_to_num id) = SOME vt)
+        FLOOKUP env.bare_global_assignable (src_id_opt, id) = SOME ty) \/
+  (FLOOKUP env.bare_global_assignable (src_id_opt, id) = NONE /\
+   FLOOKUP env.bare_globals (src_id_opt, id) = NONE /\
+   FLOOKUP env.toplevel_vtypes (src_id_opt, id) = SOME vt)
 Proof
   CONV_TAC(LAND_CONV(ONCE_REWRITE_CONV[well_typed_expr_def])) >>
   simp[LET_THM, AllCaseEqs(), PULL_EXISTS] >>
@@ -185,7 +186,7 @@ QED
 Theorem NameTarget_sound:
   type_place_target env (NameTarget id) = SOME (Type ty) /\
   env_consistent env cx st ==>
-  ?entry. lookup_scopes (string_to_num id) st.scopes = SOME entry /\ entry.assignable
+  ?entry. lookup_scopes id st.scopes = SOME entry /\ entry.assignable
 Proof
   rw[well_typed_expr_def, env_consistent_def, env_context_consistent_def, env_scopes_consistent_def, env_immutables_consistent_def]
   >> gvs[well_typed_expr_def, AllCaseEqs(), LET_THM]
@@ -201,9 +202,9 @@ QED
 Theorem extend_local_env_consistent_after_new_variable:
   env_consistent env cx st /\ state_well_typed st /\
   evaluate_type (get_tenv cx) typ = SOME tv /\ value_has_type tv v /\
-  string_to_num id NOTIN FDOM env.var_types /\
+  id NOTIN FDOM env.var_types /\
   new_variable id tv v st = (INL u, st') ==>
-  env_consistent (extend_local env (string_to_num id) typ T) cx st'
+  env_consistent (extend_local env id typ T) cx st'
 Proof
   strip_tac >>
   simp[env_consistent_def, env_context_consistent_def, env_scopes_consistent_def, env_immutables_consistent_def, extend_local_def] >>
@@ -212,7 +213,11 @@ Proof
       type_check_def, list_CASE_rator, raise_def, assert_def,
       set_scopes_def, return_def, get_scopes_def] >>
   gvs[lookup_scopes_def, FLOOKUP_UPDATE,AllCaseEqs()] >>
-  rw[] >> TRY(first_x_assum drule_all >> simp[]) >> TRY(res_tac >> gvs[])
+  rw[] >> TRY(first_x_assum drule_all >> simp[]) >> TRY(res_tac >> gvs[]) >>
+  strip_tac >>
+  qpat_x_assum `∀id_str' tv v. _`
+    (qspecl_then [`id_str`, `tv'`, `v'`] mp_tac) >>
+  simp[]
 QED
 
 
@@ -259,11 +264,11 @@ QED
 
 Theorem top_level_bare_global_lookup_sound:
   well_typed_expr env (TopLevelName ty (src,id)) /\
-  FLOOKUP env.bare_globals (src,string_to_num id) = SOME ty /\
+  FLOOKUP env.bare_globals (src,id) = SOME ty /\
   env_consistent env cx st /\ state_well_typed st ==>
   ?tv v. FLOOKUP (get_source_immutables src
             (case ALOOKUP st.immutables cx.txn.target of SOME m => m | NONE => []))
-            (string_to_num id) = SOME (tv,v) /\
+            id = SOME (tv,v) /\
          evaluate_type env.type_defs ty = SOME tv /\ value_has_type tv v
 Proof
   simp[well_typed_expr_def, env_consistent_def, env_context_consistent_def, env_scopes_consistent_def, env_immutables_consistent_def] >>
@@ -290,7 +295,8 @@ QED
 Theorem toplevel_vtype_Type_immutable_sound:
   env_consistent env cx st /\ state_well_typed st /\
   FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\
-  get_module_code cx src = SOME ts /\ find_var_decl_by_num id ts = NONE /\
+  get_module_code cx src = SOME ts /\
+  find_var_decl_by_name id ts = NONE /\
   FLOOKUP (get_source_immutables src
     (case ALOOKUP st.immutables cx.txn.target of SOME m => m | NONE => [])) id = SOME (tv,v) ==>
   evaluate_type env.type_defs ty = SOME tv /\ value_has_type tv v
@@ -301,6 +307,11 @@ Proof
   >> drule current_immutables_well_typed
   >> disch_then (qspec_then `cx.txn.target` assume_tac)
   >> drule_all imms_well_typed_get_source_immutables
+  >> simp[]
+  >> strip_tac
+  >> qpat_x_assum `find_var_decl_by_name id ts = NONE ⇒ _` mp_tac
+  >> simp[]
+  >> disch_then (qspecl_then [`id`, `tv`, `v`] mp_tac)
   >> simp[]
 QED
 
@@ -319,8 +330,8 @@ QED
 
 Theorem TopLevelName_expr_source:
   well_typed_expr env (TopLevelName ty nsid) ==>
-  FLOOKUP env.toplevel_vtypes (FST nsid, string_to_num (SND nsid)) = SOME (Type ty) \/
-  FLOOKUP env.bare_globals (FST nsid, string_to_num (SND nsid)) = SOME ty
+  FLOOKUP env.toplevel_vtypes nsid = SOME (Type ty) \/
+  FLOOKUP env.bare_globals nsid = SOME ty
 Proof
   Cases_on `nsid` >> rw[well_typed_expr_def]
 QED
@@ -343,7 +354,7 @@ Theorem env_consistent_toplevel_storage_static:
     FLOOKUP env.bare_globals (src, id) = NONE ==>
     ?ts is_transient typ id_str.
       get_module_code cx src = SOME ts /\
-      find_var_decl_by_num id ts = SOME (StorageVarDecl is_transient typ, id_str) /\
+      find_var_decl_by_name id ts = SOME (StorageVarDecl is_transient typ, id_str) /\
       typ = ty /\
       IS_SOME (evaluate_type (get_tenv cx) typ) /\
       IS_SOME (lookup_var_slot_from_layout cx is_transient src id_str)
@@ -360,7 +371,7 @@ Theorem env_consistent_toplevel_hashmap_static:
     FLOOKUP env.toplevel_vtypes (src, id) = SOME (HashMapT kt vt) ==>
     ?ts is_transient id_str.
       get_module_code cx src = SOME ts /\
-      find_var_decl_by_num id ts = SOME (HashMapVarDecl is_transient kt vt, id_str) /\
+      find_var_decl_by_name id ts = SOME (HashMapVarDecl is_transient kt vt, id_str) /\
       IS_SOME (lookup_var_slot_from_layout cx is_transient src id_str)
 Proof
   rpt strip_tac >>

@@ -314,7 +314,7 @@ Datatype:
        as hash-0/no-arg events. *)
     ce_event_info : string -> (num # type list # bool list) option;
     (* Type environment used by ABI conversion for structs/flags/interfaces. *)
-    ce_type_env : (num, type_args) fmap;
+    ce_type_env : (nsid, type_args) fmap;
     (* Internal return: how many return values passed on stack (0 = memory return).
        Set from func_t.returns_stack_count() at function entry. *)
     ce_returns_count : num;
@@ -539,7 +539,7 @@ Definition sfields_tenv_consistent_def:
   sfields_tenv_consistent sfields tenv ⇔
     (* Every struct in tenv exists in sfields with matching field types *)
     (∀ nsid args.
-       FLOOKUP tenv (type_key nsid) = SOME (StructArgs args) ⇒
+       FLOOKUP tenv nsid = SOME (StructArgs args) ⇒
        ∃ fields.
          FLOOKUP sfields (nsid_to_string nsid) = SOME fields ∧
          MAP FST fields = MAP FST args ∧
@@ -549,7 +549,7 @@ Definition sfields_tenv_consistent_def:
        FLOOKUP sfields name = SOME fields ⇒
        ∃ nsid args.
          name = nsid_to_string nsid ∧
-         FLOOKUP tenv (type_key nsid) = SOME (StructArgs args) ∧
+         FLOOKUP tenv nsid = SOME (StructArgs args) ∧
          MAP FST fields = MAP FST args ∧
          MAP (FST o SND) fields = MAP SND args)
 End
@@ -628,7 +628,7 @@ End
 Definition vars_rel_def:
   vars_rel cenv scopes ss =
     ∀ name entry offset size.
-      lookup_scopes (string_to_num name) scopes = SOME entry ∧
+      lookup_scopes name scopes = SOME entry ∧
       FLOOKUP cenv.ce_vars name = SOME (MemLoc offset size)
       ⇒
       (* entry.type from scope provides correct type for val_in_memory dispatch
@@ -656,36 +656,34 @@ End
 (* Interpreter immutables ↔ Venom code/data section.
    During constructor: interpreter writes to st.immutables, Venom uses ISTORE/ILOAD.
    At runtime: interpreter reads from st.immutables, Venom uses DLOAD from data section.
-   The relation ties per-slot interpreter values to their Venom representation.
+   The relation ties each interpreter name to its Venom representation.
 
    Interpreter: st.immutables : (address, module_immutables) alist
-     where module_immutables = (num option, num |-> value) alist
-     Keyed by (source_id_opt, slot_num) → value.
+     where module_immutables = (num option, string |-> (type_value # value)) alist
+     Keyed by (source_id_opt, immutable_name) → typed value.
    Venom (ctor): ss.vs_immutables : (num, bytes32) fmap  (ILOAD/ISTORE slot → word)
    Venom (runtime): ss.vs_data_section : byte list  (DLOAD offset → 32 bytes)
 
    ce_vars maps immutable names to ImmutableLoc byte_offset.
-   The interpreter stores by slot number (num); the lowering stores by byte offset. *)
+   The interpreter stores by name (string); Venom stores by byte offset. *)
 Definition immutables_rel_def:
   immutables_rel cenv (addr:address) src_id_opt is_ctor vs ss ⇔
     let interp_imms = (case ALOOKUP vs.immutables addr of
                          NONE => FEMPTY
                        | SOME mod_imms => get_source_immutables src_id_opt mod_imms) in
     if is_ctor then
-      (* Constructor: each interpreter immutable slot maps to vs_immutables entry *)
-      ∀ name slot_num tv v byte_offset.
+      (* Constructor: each interpreter immutable maps to vs_immutables entry *)
+      ∀ name tv v byte_offset.
         FLOOKUP cenv.ce_vars name = SOME (ImmutableLoc byte_offset) ∧
-        FLOOKUP interp_imms slot_num = SOME (tv, v) ∧
-        slot_num = string_to_num name
+        FLOOKUP interp_imms name = SOME (tv, v)
         ⇒
         (* tv from scope provides correct type for typed_val_to_w256 *)
         FLOOKUP ss.vs_immutables (byte_offset DIV 32) = SOME (typed_val_to_w256 tv v)
     else
       (* Runtime: interpreter immutables encoded in data section *)
-      ∀ name slot_num tv v byte_offset.
+      ∀ name tv v byte_offset.
         FLOOKUP cenv.ce_vars name = SOME (ImmutableLoc byte_offset) ∧
-        FLOOKUP interp_imms slot_num = SOME (tv, v) ∧
-        slot_num = string_to_num name
+        FLOOKUP interp_imms name = SOME (tv, v)
         ⇒
         (* DLOAD reads 32 bytes from data section at byte_offset *)
         byte_offset + 32 ≤ LENGTH ss.vs_data_section ∧
