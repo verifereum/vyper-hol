@@ -2959,7 +2959,7 @@ Theorem hashmapref_leaf_write_preserves_contract_storage_well_formed:
   contract_storage_well_formed cx st /\
   storage_layout_safe cx /\
   get_module_code cx mid = SOME code /\
-  find_var_decl_by_num (string_to_num n) code =
+  find_var_decl_by_name n code =
     SOME (HashMapVarDecl b kt vt,id) /\
   lookup_var_slot_from_layout cx b mid id = SOME off /\
   split_hashmap_subscripts vt rest_subs = SOME (final_type,kts,[]) /\

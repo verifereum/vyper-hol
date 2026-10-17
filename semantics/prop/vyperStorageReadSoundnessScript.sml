@@ -39,7 +39,7 @@ Theorem storage_var_info_components[local]:
   storage_var_info cx mid n = SOME (b,off,tv) ==>
   ?code typ id.
     get_module_code cx mid = SOME code /\
-    find_var_decl_by_num (string_to_num n) code =
+    find_var_decl_by_name n code =
       SOME (StorageVarDecl b typ,id) /\
     lookup_var_slot_from_layout cx b mid id = SOME off /\
     evaluate_type (get_tenv cx) typ = SOME tv
@@ -54,7 +54,7 @@ Theorem current_storage_lookup_typed:
   contract_storage_well_formed cx st /\
   storage_var_info cx mid n = SOME (b,off,tv) /\
   (!elem bd. tv <> ArrayTV elem bd) ==>
-  ?v. lookup_global cx mid (string_to_num n) st = (INL (Value v),st) /\
+  ?v. lookup_global cx mid n st = (INL (Value v),st) /\
       value_has_type tv v
 Proof
   rpt strip_tac >>
@@ -73,7 +73,7 @@ QED
 Theorem current_storage_array_materialise_typed:
   contract_storage_well_formed cx st /\
   storage_var_info cx mid n = SOME (b,off,ArrayTV elem_tv bd) ==>
-  ?v. lookup_global cx mid (string_to_num n) st =
+  ?v. lookup_global cx mid n st =
         (INL (ArrayRef b (n2w off) elem_tv bd),st) /\
       materialise cx (ArrayRef b (n2w off) elem_tv bd) st = (INL v,st) /\
       value_has_type (ArrayTV elem_tv bd) v
@@ -92,7 +92,7 @@ Theorem current_storage_non_array_materialise_typed:
   contract_storage_well_formed cx st /\
   storage_var_info cx mid n = SOME (b,off,tv) /\
   (!elem bd. tv <> ArrayTV elem bd) ==>
-  ?ref v. lookup_global cx mid (string_to_num n) st = (INL ref,st) /\
+  ?ref v. lookup_global cx mid n st = (INL ref,st) /\
           materialise cx ref st = (INL v,st) /\
           value_has_type tv v
 Proof
@@ -107,7 +107,7 @@ QED
 Theorem current_storage_materialise_typed:
   contract_storage_well_formed cx st /\
   storage_var_info cx mid n = SOME (b,off,tv) ==>
-  ?ref v. lookup_global cx mid (string_to_num n) st = (INL ref,st) /\
+  ?ref v. lookup_global cx mid n st = (INL ref,st) /\
           materialise cx ref st = (INL v,st) /\
           value_has_type tv v
 Proof
@@ -174,7 +174,7 @@ QED
 Theorem current_hashmap_leaf_read_typed:
   contract_storage_well_formed cx st /\
   get_module_code cx mid = SOME code /\
-  find_var_decl_by_num (string_to_num n) code =
+  find_var_decl_by_name n code =
     SOME (HashMapVarDecl b kt vt,id) /\
   lookup_var_slot_from_layout cx b mid id = SOME off /\
   split_hashmap_subscripts vt rest_subs = SOME (final_type,kts,[]) /\

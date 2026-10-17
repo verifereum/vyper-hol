@@ -10,7 +10,7 @@
 Theory vyperTypeInitialState
 Ancestors
   list rich_list pred_set arithmetic finite_map option pair
-  vyperAST vyperValue vyperTyping vyperState vyperInterpreter vyperContext
+  vyperAST vyperValue vyperMisc vyperTyping vyperState vyperInterpreter vyperContext
   vyperTypeSystem vyperTypeInvariants vyperTypeBindArguments
   vyperTypeExprSoundness vyperTypeStmtSoundness
 Libs
@@ -106,13 +106,13 @@ End
  * any stored type tags agree with the current combined type environment. *)
 Definition immutables_ready_def:
   immutables_ready bare_globals toplevel_vtypes cx imms <=>
-    (!src id ty. FLOOKUP bare_globals (src,id) = SOME ty ==>
+    (!src id ty. FLOOKUP bare_globals (src,string_to_num id) = SOME ty ==>
        IS_SOME (FLOOKUP
          (get_source_immutables src
            (case ALOOKUP imms cx.txn.target of SOME m => m | NONE => []))
          id)) /\
     (!src id ty tv v.
-       FLOOKUP bare_globals (src,id) = SOME ty /\
+       FLOOKUP bare_globals (src,string_to_num id) = SOME ty /\
        FLOOKUP
          (get_source_immutables src
            (case ALOOKUP imms cx.txn.target of SOME m => m | NONE => []))
@@ -128,11 +128,11 @@ Definition immutables_ready_def:
           find_var_decl_by_num id ts =
             SOME (HashMapVarDecl is_transient kt vt,id_str) ==> F) /\
        (find_var_decl_by_num id ts = NONE ==>
-        !tv v.
+        !id_str tv v. string_to_num id_str = id /\
           FLOOKUP
             (get_source_immutables src
               (case ALOOKUP imms cx.txn.target of SOME m => m | NONE => []))
-            id = SOME (tv,v) ==>
+            id_str = SOME (tv,v) ==>
           evaluate_type (get_tenv cx) ty = SOME tv))
 End
 
@@ -277,7 +277,7 @@ Proof
   TRY (Cases_on `v0` >> gvs[initial_immutables_module_def, AllCaseEqs()]) >>
   first_x_assum drule >>
   disch_then irule >>
-  Cases_on `string_to_num s = id` >>
+  Cases_on `s = id` >>
   gvs[update_immutable_lookup_same] >>
   gvs[update_immutable_def, get_source_immutables_set_same,
       finite_mapTheory.FLOOKUP_UPDATE]
@@ -299,7 +299,7 @@ Proof
   disch_then irule >>
   Cases_on `init_src = query_src` >>
   gvs[update_immutable_preserves_other_source] >>
-  Cases_on `string_to_num s = id` >>
+  Cases_on `s = id` >>
   gvs[update_immutable_lookup_same] >>
   gvs[update_immutable_def, get_source_immutables_set_same,
       finite_mapTheory.FLOOKUP_UPDATE]
@@ -324,7 +324,7 @@ QED
 Theorem initial_immutables_module_contains_immutable:
   initial_immutables_module tenv src ts acc = SOME imms /\
   is_immutable_decl id ts /\
-  find_var_decl_by_num id ts = NONE ==>
+  find_var_decl_by_num (string_to_num id) ts = NONE ==>
   IS_SOME (FLOOKUP (get_source_immutables src imms) id)
 Proof
   qid_spec_tac `acc` >>
@@ -350,7 +350,7 @@ Theorem initial_immutables_contains_decl:
   initial_immutables tenv mods = SOME imms /\
   ALOOKUP mods src = SOME ts /\
   is_immutable_decl id ts /\
-  find_var_decl_by_num id ts = NONE ==>
+  find_var_decl_by_num (string_to_num id) ts = NONE ==>
   IS_SOME (FLOOKUP (get_source_immutables src imms) id)
 Proof
   qid_spec_tac `imms` >>
@@ -378,7 +378,7 @@ Theorem initial_immutables_contains_bare_global:
   ALOOKUP cx.sources cx.txn.target = SOME mods /\
   ALOOKUP mods src = SOME ts /\
   initial_immutables (get_tenv cx) mods = SOME imms /\
-  FLOOKUP env_base.bare_globals (src,id) = SOME ty /\
+  FLOOKUP env_base.bare_globals (src,string_to_num id) = SOME ty /\
   is_immutable_decl id ts ==>
   IS_SOME (FLOOKUP (get_source_immutables src imms) id)
 Proof
@@ -401,7 +401,7 @@ QED
 Theorem initial_immutables_module_bare_global_type_acc:
   (!vis vid typ slot.
      MEM (VariableDecl vis Immutable vid typ slot) ts /\
-     string_to_num vid = id ==> typ = ty) /\
+     string_to_num vid = string_to_num id ==> typ = ty) /\
   initial_immutables_module tenv src ts acc = SOME imms /\
   FLOOKUP (get_source_immutables src imms) id = SOME (tv,v) /\
   (is_immutable_decl id ts \/
@@ -420,7 +420,7 @@ Proof
   conj_tac >- (rw[] >> metis_tac[]) >>
   TRY (goal_assum (drule_at Any)) >>
   rw[] >>
-  Cases_on `string_to_num s = id` >>
+  Cases_on `s = id` >>
   gvs[update_immutable_lookup_same] >>
   gvs[update_immutable_def, get_source_immutables_set_same,
       finite_mapTheory.FLOOKUP_UPDATE] >>
@@ -431,7 +431,7 @@ QED
 Theorem initial_immutables_module_bare_global_type:
   (!vis vid typ slot.
      MEM (VariableDecl vis Immutable vid typ slot) ts /\
-     string_to_num vid = id ==> typ = ty) /\
+     string_to_num vid = string_to_num id ==> typ = ty) /\
   initial_immutables_module tenv src ts acc = SOME imms /\
   FLOOKUP (get_source_immutables src imms) id = SOME (tv,v) /\
   is_immutable_decl id ts ==>
@@ -447,7 +447,7 @@ QED
 Theorem initial_immutables_all_bare_global_type:
   (!vis vid typ slot.
      MEM (VariableDecl vis Immutable vid typ slot) ts /\
-     string_to_num vid = id ==> typ = ty) /\
+     string_to_num vid = string_to_num id ==> typ = ty) /\
   ALOOKUP mods src = SOME ts /\
   initial_immutables tenv mods = SOME imms /\
   is_immutable_decl id ts /\
@@ -485,7 +485,7 @@ Theorem initial_immutables_bare_global_type:
   ALOOKUP cx.sources cx.txn.target = SOME mods /\
   ALOOKUP mods src = SOME ts /\
   initial_immutables (get_tenv cx) mods = SOME imms /\
-  FLOOKUP env_base.bare_globals (src,id) = SOME ty /\
+  FLOOKUP env_base.bare_globals (src,string_to_num id) = SOME ty /\
   is_immutable_decl id ts /\
   FLOOKUP (get_source_immutables src imms) id = SOME (tv,v) ==>
   evaluate_type (get_tenv cx) ty = SOME tv
@@ -509,7 +509,7 @@ Theorem constants_env_lookup_origin:
   FLOOKUP acc id = SOME x \/
   ?vis e id_str typ slot.
     MEM (VariableDecl vis (Constant e) id_str typ slot) ts /\
-    string_to_num id_str = id
+    id_str = id
 Proof
   qid_spec_tac `x` >>
   qid_spec_tac `id` >>
@@ -530,7 +530,7 @@ Theorem constants_env_no_bare_global_lookup_MEM:
   constants_do_not_clobber_bare_globals mods bare_globals /\
   MEM (src,ts) mods /\
   constants_env cx am addr src ts FEMPTY = SOME cenv /\
-  FLOOKUP bare_globals (src,id) = SOME ty ==>
+  FLOOKUP bare_globals (src,string_to_num id) = SOME ty ==>
   FLOOKUP cenv id = NONE
 Proof
   rw[] >>
@@ -551,7 +551,7 @@ Theorem constants_env_no_bare_global_lookup:
   constants_do_not_clobber_bare_globals mods bare_globals /\
   ALOOKUP mods src = SOME ts /\
   constants_env cx am addr src ts FEMPTY = SOME cenv /\
-  FLOOKUP bare_globals (src,id) = SOME ty ==>
+  FLOOKUP bare_globals (src,string_to_num id) = SOME ty ==>
   FLOOKUP cenv id = NONE
 Proof
   rw[] >>
@@ -563,18 +563,18 @@ QED
 
 Theorem is_bare_global_decl_cases[local]:
   is_bare_global_decl id ts ==>
-  is_immutable_decl id ts \/
+  is_immutable_decl_by_num id ts \/
   ?vis e vid typ slot.
     MEM (VariableDecl vis (Constant e) vid typ slot) ts /\
     string_to_num vid = id
 Proof
   qid_spec_tac `id` >>
   Induct_on `ts` >>
-  rw[is_bare_global_decl_def, is_immutable_decl_def] >>
+  rw[is_bare_global_decl_def, is_immutable_decl_by_num_def, is_immutable_decl_def] >>
   Cases_on `h` >>
-  gvs[is_bare_global_decl_def, is_immutable_decl_def] >>
+  gvs[is_bare_global_decl_def, is_immutable_decl_by_num_def, is_immutable_decl_def] >>
   TRY (Cases_on `v0` >>
-       gvs[is_bare_global_decl_def, is_immutable_decl_def] >>
+       gvs[is_bare_global_decl_def, is_immutable_decl_by_num_def, is_immutable_decl_def] >>
        metis_tac[])
 QED
 
@@ -583,7 +583,7 @@ Theorem constants_do_not_clobber_bare_global_decl_is_immutable[local]:
   ALOOKUP mods src = SOME ts /\
   FLOOKUP bare_globals (src,id) = SOME ty /\
   is_bare_global_decl id ts ==>
-  is_immutable_decl id ts
+  is_immutable_decl_by_num id ts
 Proof
   rw[constants_do_not_clobber_bare_globals_def] >>
   drule is_bare_global_decl_cases >>
@@ -617,7 +617,7 @@ QED
 
 Theorem evaluate_all_constants_preserves_bare_global_lookup_MEM[local]:
   constants_do_not_clobber_bare_globals mods bare_globals /\
-  FLOOKUP bare_globals (src,id) = SOME ty /\
+  FLOOKUP bare_globals (src,string_to_num id) = SOME ty /\
   evaluate_all_constants cx am addr mods = SOME am_c /\
   FLOOKUP
     (get_source_immutables src
@@ -653,7 +653,7 @@ QED
 Theorem evaluate_all_constants_preserves_bare_global_lookup:
   constants_do_not_clobber_bare_globals mods bare_globals /\
   ALOOKUP mods src = SOME ts /\
-  FLOOKUP bare_globals (src,id) = SOME ty /\
+  FLOOKUP bare_globals (src,string_to_num id) = SOME ty /\
   evaluate_all_constants cx am addr mods = SOME am_c /\
   FLOOKUP
     (get_source_immutables src
@@ -672,7 +672,7 @@ QED
 Theorem evaluate_all_constants_preserves_bare_global_lookup_type:
   constants_do_not_clobber_bare_globals mods (bare_globals:num option # num |-> type) /\
   ALOOKUP mods src = SOME ts /\
-  FLOOKUP bare_globals (src,id) = SOME ty /\
+  FLOOKUP bare_globals (src,string_to_num id) = SOME ty /\
   evaluate_all_constants cx am addr mods = SOME am_c /\
   FLOOKUP
     (get_source_immutables src
@@ -698,7 +698,7 @@ Theorem evaluate_all_constants_preserves_bare_global_type:
   env_context_consistent env_base cx /\
   ALOOKUP cx.sources cx.txn.target = SOME mods /\
   ALOOKUP mods src = SOME ts /\
-  FLOOKUP env_base.bare_globals (src,id) = SOME ty /\
+  FLOOKUP env_base.bare_globals (src,string_to_num id) = SOME ty /\
   evaluate_all_constants cx am cx.txn.target mods = SOME am_c /\
   FLOOKUP
     (get_source_immutables src
@@ -735,7 +735,8 @@ Proof
       strip_tac >>
       gvs[get_module_code_def] >>
       `is_immutable_decl id ts` by
-        metis_tac[constants_do_not_clobber_bare_global_decl_is_immutable] >>
+        metis_tac[constants_do_not_clobber_bare_global_decl_is_immutable,
+                  is_immutable_decl_by_num_def, string_to_num_inj] >>
       `?x. FLOOKUP (get_source_immutables src imms) id = SOME x` by
         metis_tac[initial_immutables_contains_bare_global, IS_SOME_EXISTS] >>
       gvs[IS_SOME_EXISTS] >>
@@ -751,7 +752,8 @@ Proof
       strip_tac >>
       gvs[get_module_code_def] >>
       `is_immutable_decl id ts` by
-        metis_tac[constants_do_not_clobber_bare_global_decl_is_immutable] >>
+        metis_tac[constants_do_not_clobber_bare_global_decl_is_immutable,
+                  is_immutable_decl_by_num_def, string_to_num_inj] >>
       `?x. FLOOKUP (get_source_immutables src imms) id = SOME x` by
         metis_tac[initial_immutables_contains_bare_global, IS_SOME_EXISTS] >>
       `FLOOKUP
@@ -782,27 +784,29 @@ Proof
       qpat_x_assum `!src id ty. FLOOKUP env_base.bare_globals (src,id) = SOME ty ==> _`
         (qspecl_then [`src`,`id`,`x`] mp_tac) >>
       simp[] >> rw[] >> gvs[])
-  >- (Cases_on `FLOOKUP env_base.bare_globals (src,id)`
+  >- (Cases_on `FLOOKUP env_base.bare_globals (src,string_to_num id_str)`
       >- (gvs[env_context_consistent_def] >>
           qpat_x_assum `!src' id' ty'. FLOOKUP env_base.toplevel_vtypes (src',id') = SOME (Type ty') /\ FLOOKUP env_base.bare_globals (src',id') = NONE ==> _`
-            (qspecl_then [`src`,`id`,`ty`] mp_tac) >>
+            (qspecl_then [`src`,`string_to_num id_str`,`ty`] mp_tac) >>
           simp[] >> rw[] >> gvs[]) >>
-      rename1 `FLOOKUP env_base.bare_globals (src,id) = SOME bare_ty` >>
-      `FLOOKUP env_base.toplevel_vtypes (src,id) = SOME (Type bare_ty)` by
+      rename1 `FLOOKUP env_base.bare_globals (src,string_to_num id_str) = SOME bare_ty` >>
+      `FLOOKUP env_base.toplevel_vtypes (src,string_to_num id_str) = SOME (Type bare_ty)` by
         metis_tac[env_context_consistent_bare_global_find_NONE] >>
       gvs[] >>
       drule env_context_consistent_bare_global_find_NONE >>
       disch_then drule >>
       strip_tac >>
       gvs[get_module_code_def] >>
-      `is_immutable_decl id ts` by
+      `is_immutable_decl_by_num (string_to_num id_str) ts` by
         metis_tac[constants_do_not_clobber_bare_global_decl_is_immutable] >>
-      `?x. FLOOKUP (get_source_immutables src imms) id = SOME x` by
+      `is_immutable_decl id_str ts` by
+        (fs[is_immutable_decl_by_num_def] >> metis_tac[string_to_num_inj]) >>
+      `?x. FLOOKUP (get_source_immutables src imms) id_str = SOME x` by
         metis_tac[initial_immutables_contains_bare_global, IS_SOME_EXISTS] >>
       `FLOOKUP
          (get_source_immutables src
           (case ALOOKUP am_c.immutables cx.txn.target of SOME m => m | NONE => []))
-         id = SOME x` by
+         id_str = SOME x` by
         (irule evaluate_all_constants_preserves_bare_global_lookup_type >>
          goal_assum (drule_at Any) >>
          goal_assum (drule_at Any) >>
@@ -945,12 +949,12 @@ Theorem functions_well_typed_callable_body_env_base:
     env_body.flag_members = env_base.flag_members /\
     type_stmts env_body ret body = SOME env_after /\
     (!id typ. MEM (id,typ) args ==>
-       FLOOKUP env_body.var_types (string_to_num id) = SOME typ /\
-       FLOOKUP env_body.var_assignable (string_to_num id) = SOME T) /\
+       FLOOKUP env_body.var_types id = SOME typ /\
+       FLOOKUP env_body.var_assignable id = SOME T) /\
     (!n ty. FLOOKUP env_body.var_types n = SOME ty ==>
-       ?id. MEM (id,ty) args /\ n = string_to_num id) /\
+       ?id. MEM (id,ty) args /\ n = id) /\
     (!n b. FLOOKUP env_body.var_assignable n = SOME b ==>
-       ?id typ. MEM (id,typ) args /\ n = string_to_num id /\ b = T)
+       ?id typ. MEM (id,typ) args /\ n = id /\ b = T)
 Proof
   rw[functions_well_typed_def] >>
   first_x_assum

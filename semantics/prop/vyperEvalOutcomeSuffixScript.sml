@@ -4,7 +4,7 @@ Theory vyperEvalOutcomeSuffix
 Ancestors
   list pair option vyperMisc vyperState vyperInterpreter vyperCreate
   vyperStatePreservation vyperCallFrame vyperStorageBackend vyperCallOutcome
-Libs monadsyntax
+Libs monadsyntax pairLib
 
 Definition outcomes_frame_def:
   outcomes_frame f <=> !st. (SND (f st)).outcomes = st.outcomes
@@ -136,7 +136,14 @@ Proof
     acquire_nonreentrant_lock_def, release_nonreentrant_lock_def,
     get_transient_storage_def, push_function_def, pop_function_def,
     bind_def, ignore_bind_def, return_def, raise_def, AllCaseEqs()] >>
-  rpt strip_tac >> rpt CASE_TAC >>
+  rpt strip_tac
+  >- (Cases_on `st.scopes` >> simp[])
+  >- (Cases_on `lookup_scopes id st.scopes` >>
+      Cases_on `st.scopes` >>
+      simp[set_scopes_def, return_def, raise_def]) >>
+  TRY CASE_TAC >> TRY CASE_TAC >> TRY CASE_TAC >>
+  TRY CASE_TAC >> TRY CASE_TAC >> TRY CASE_TAC >>
+  TRY CASE_TAC >> TRY CASE_TAC >>
   gvs[set_scopes_def, update_accounts_def, update_transient_def,
       set_address_immutables_def, get_storage_backend_def,
       set_storage_backend_def, write_storage_slot_def,
@@ -219,10 +226,14 @@ Proof
   simp[Once assign_target_def, FORALL_PROD] >> rpt strip_tac
   >- rpt ASSIGN_OUTCOMES_FRAME_STEP >>
   NTAC 6 ASSIGN_OUTCOMES_FRAME_STEP >>
-  qmatch_goalsub_rename_tac `toplevel_value_CASE tv _ _ _` >>
-  Cases_on `tv` >> simp_tac std_ss [toplevel_value_case_def]
+  TRY (Cases_on `v` >> simp_tac std_ss [toplevel_value_case_def])
   >- rpt ASSIGN_OUTCOMES_FRAME_STEP
-  >- rpt ASSIGN_OUTCOMES_FRAME_STEP >>
+  >- rpt ASSIGN_OUTCOMES_FRAME_STEP
+  >- (NTAC 3 ASSIGN_OUTCOMES_FRAME_STEP >>
+      Cases_on `FST (SND v)` >>
+      simp_tac std_ss [vyperValueTheory.type_value_case_def,
+                       vyperASTTheory.bound_case_def] >>
+      rpt ASSIGN_OUTCOMES_FRAME_STEP) >>
   rpt ASSIGN_OUTCOMES_FRAME_STEP
 QED
 
@@ -262,6 +273,19 @@ Theorem outcomes_frame_create[simp]:
   outcomes_frame (eval_create cx kind has_salt rof arg_tys vs)
 Proof
   simp[eval_create_def, create_soft_failure_def] >>
+  NTAC 6 (FIRST [MATCH_MP_TAC outcomes_frame_cond >> conj_tac,
+                 ASSIGN_OUTCOMES_FRAME_STEP]) >>
+  NTAC 6 (FIRST [MATCH_MP_TAC outcomes_frame_cond >> conj_tac,
+                 ASSIGN_OUTCOMES_FRAME_STEP]) >>
+  NTAC 6 (FIRST [MATCH_MP_TAC outcomes_frame_cond >> conj_tac,
+                 ASSIGN_OUTCOMES_FRAME_STEP]) >>
+  simp[outcomes_frame_return, outcomes_frame_raise, outcomes_frame_reads] >>
+  NTAC 6 (FIRST [MATCH_MP_TAC outcomes_frame_cond >> conj_tac,
+                 ASSIGN_OUTCOMES_FRAME_STEP]) >>
+  CASE_TAC >>
+  simp[outcomes_frame_bind, outcomes_frame_primitives,
+       outcomes_frame_return, outcomes_frame_raise] >>
+  PairCases_on `x` >>
   rpt (FIRST [MATCH_MP_TAC outcomes_frame_cond >> conj_tac,
               ASSIGN_OUTCOMES_FRAME_STEP])
 QED

@@ -143,7 +143,7 @@ Theorem lookup_global_scopes:
 Proof
   rw[lookup_global_def, bind_def, return_def, lift_option_def, lift_option_type_def] >>
   Cases_on `get_module_code cx src` >> gvs[return_def, raise_def] >>
-  Cases_on `find_var_decl_by_num n x` >> gvs[return_def, raise_def] >-
+  Cases_on `find_var_decl_by_name n x` >> gvs[return_def, raise_def] >-
   (qpat_x_assum `_ = (res, st')` mp_tac >>
    simp[get_immutables_def, get_address_immutables_def, bind_def,
         lift_option_def, lift_option_type_def, return_def, raise_def] >>
@@ -167,7 +167,7 @@ Proof
   rw[set_global_def, bind_def, return_def, lift_option_def, lift_option_type_def] >>
   Cases_on `get_module_code cx src` >> gvs[return_def, raise_def] >>
   rename1 `SOME ts` >>
-  Cases_on `find_var_decl_by_num n ts` >> gvs[return_def, raise_def] >>
+  Cases_on `find_var_decl_by_name n ts` >> gvs[return_def, raise_def] >>
   rename1 `SOME decl_id` >> PairCases_on `decl_id` >> gvs[] >>
   Cases_on `decl_id0` >> gvs[return_def, raise_def, bind_def] >>
   rename1 `StorageVarDecl is_tr typ` >>
@@ -443,7 +443,7 @@ Proof
   >> conj_tac >- (
     rpt gen_tac >> strip_tac >>
     gvs[assign_target_def, bind_def, get_scopes_def, return_def, lift_option_def] >>
-    Cases_on `find_containing_scope (string_to_num id) st.scopes` >> gvs[return_def, raise_def] >>
+    Cases_on `find_containing_scope id st.scopes` >> gvs[return_def, raise_def] >>
     PairCases_on `x` >>
     gvs[assign_target_def, bind_def, get_scopes_def, return_def, raise_def,
         lift_option_def, type_check_def, assert_def, lift_sum_def,

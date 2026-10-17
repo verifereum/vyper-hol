@@ -403,7 +403,7 @@ Proof
        vyperStateTheory.raise_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
   imp_res_tac lift_option_type_state >> gvs[] >>
-  Cases_on `find_var_decl_by_num n ts` >>
+  Cases_on `find_var_decl_by_name n ts` >>
   gvs[vyperStateTheory.raise_def] >>
   PairCases_on `x` >> Cases_on `x0` >>
   gvs[vyperStateTheory.bind_def, vyperStateTheory.raise_def,
@@ -797,7 +797,7 @@ Theorem assign_target_toplevel_logs[local]:
   st'.logs = st.logs
 Proof
   rpt strip_tac >>
-  Cases_on `lookup_global cx src (string_to_num id) st` >>
+  Cases_on `lookup_global cx src id st` >>
   Cases_on `q` >>
   imp_res_tac lookup_global_state >>
   pop_assum SUBST_ALL_TAC
@@ -868,7 +868,7 @@ Proof
       gvs[vyperStateTheory.assign_target_def, vyperStateTheory.bind_def,
           vyperStateTheory.get_scopes_def, vyperStateTheory.return_def,
           vyperStateTheory.lift_option_def] >>
-      Cases_on `find_containing_scope (string_to_num id) st.scopes` >>
+      Cases_on `find_containing_scope id st.scopes` >>
       gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
       PairCases_on `x` >>
       Cases_on `assign_subscripts x2.type x2.value (REVERSE is) ao` >>
@@ -1220,7 +1220,7 @@ Theorem case_stmt_for_logs[local]:
      eval_iterator cx it s2 = (INL vs,s3) /\
      check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s4 =
        (INL x,s5) ==>
-     !st res st'. eval_for cx tyv (string_to_num id) body vs st = (res,st') ==>
+     !st res st'. eval_for cx tyv id body vs st = (res,st') ==>
        log_extends st st') /\
   (!tenv s0 tyv s1.
      tenv = get_tenv cx /\
@@ -1363,7 +1363,7 @@ Proof
        vyperStateTheory.return_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
   imp_res_tac lift_option_type_state >> gvs[] >>
-  Cases_on `is_immutable_decl (string_to_num sid1) ts` >>
+  Cases_on `is_immutable_decl sid1 ts` >>
   gvs[vyperStateTheory.return_def, log_extends_refl]
 QED
 
@@ -2602,6 +2602,8 @@ Proof
        vyperStateTheory.type_check_def, vyperStateTheory.assert_def,
        vyperStateTheory.get_accounts_def,
        vyperStateTheory.get_transient_storage_def, AllCaseEqs()] >>
+  TRY (CASE_TAC >> gvs[log_extends_refl]) >>
+  TRY (CASE_TAC >> gvs[log_extends_refl]) >>
   rpt (CASE_TAC >> gvs[log_extends_refl]) >>
   simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
        vyperStateTheory.return_def, vyperStateTheory.raise_def,
@@ -2630,12 +2632,16 @@ Proof
        vyperStateTheory.type_check_def, vyperStateTheory.assert_def,
        vyperStateTheory.get_accounts_def,
        vyperStateTheory.get_transient_storage_def, AllCaseEqs()] >>
+  NTAC 4 (TRY (CASE_TAC >> gvs[log_extends_refl])) >>
+  NTAC 4 (TRY (CASE_TAC >> gvs[log_extends_refl])) >>
   rpt (CASE_TAC >> gvs[log_extends_refl]) >>
   simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
        vyperStateTheory.return_def, vyperStateTheory.raise_def,
        vyperStateTheory.check_def, vyperStateTheory.assert_def,
        vyperStateTheory.get_accounts_def,
        vyperStateTheory.get_transient_storage_def, AllCaseEqs()] >>
+  NTAC 4 (TRY (CASE_TAC >> gvs[log_extends_refl])) >>
+  NTAC 4 (TRY (CASE_TAC >> gvs[log_extends_refl])) >>
   rpt (CASE_TAC >> gvs[log_extends_refl]) >>
   imp_res_tac lift_option_type_state >>
   imp_res_tac run_ext_call_lift_option_state >>
@@ -3266,6 +3272,18 @@ val EXTCALL_LOG_MONAD_TAC =
     CHANGED_TAC (rewrite_tac[vyperStateTheory.ignore_bind_def]),
     gen_tac, strip_tac, conj_tac, CASE_TAC]);
 
+(* Bounded monadic steps keep the ExtCall spine below the tactic timeout. *)
+val EXTCALL_LOG_MONAD_STEP_TAC = FIRST [
+  CHANGED_TAC (CONV_TAC (DEPTH_CONV ETA_CONV)),
+  CHANGED_TAC (simp_tac bool_ss
+    [FORALL_PROD, pair_case_thm, UNCURRY, log_monad_primitives]),
+  first_assum ACCEPT_TAC, MATCH_ACCEPT_TAC log_monad_take,
+  CHANGED_TAC (fn (asl,w) => simp_tac bool_ss
+    (pair_case_thm :: UNCURRY :: List.map ASSUME (List.filter is_eq asl)) (asl,w)),
+  irule log_monad_bind_guarded >> conj_tac,
+  CHANGED_TAC (rewrite_tac[vyperStateTheory.ignore_bind_def]),
+  gen_tac, strip_tac, conj_tac, CASE_TAC];
+
 (* Normalize facts and guarded IHs identically before matching the entire
    success guard. Matching one arbitrary conjunct at a time branches over
    unrelated operational equations and repeatedly revisits both oracle modes. *)
@@ -3321,6 +3339,22 @@ Proof
          (rpt gen_tac >> strip_tac >>
           simp[GSYM log_monad_def, Once vyperInterpreterTheory.evaluate_def] >>
           RULE_ASSUM_TAC (REWRITE_RULE [GSYM log_monad_def]) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
           EXTCALL_LOG_MONAD_TAC >> EXTCALL_LOG_IH_PREP_TAC >>
           EXTCALL_LOG_IH_TAC) >~
        [`_ ==> !st res st'.

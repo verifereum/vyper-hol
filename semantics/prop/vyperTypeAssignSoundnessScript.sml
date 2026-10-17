@@ -162,8 +162,8 @@ Theorem eval_base_target_scoped_root_assignable:
   !bt cx st0 s sbs st1 env vt.
     eval_base_target cx bt st0 = (INL (ScopedVar s, sbs), st1) /\
     type_place_target env bt = SOME vt ==>
-    ?ty. FLOOKUP env.var_types (string_to_num s) = SOME ty /\
-         FLOOKUP env.var_assignable (string_to_num s) = SOME T
+    ?ty. FLOOKUP env.var_types s = SOME ty /\
+         FLOOKUP env.var_assignable s = SOME T
 Proof
   Induct >> rpt gen_tac >> strip_tac >>
   gvs[Once evaluate_def, return_def, raise_def, bind_apply,
@@ -172,7 +172,7 @@ Proof
     qpat_x_assum `(case get_scopes _ of _ => _) = _` mp_tac >>
     Cases_on `get_scopes st0` >> Cases_on `q` >>
     simp[bind_apply, return_def, raise_def, type_check_def, assert_def] >>
-    Cases_on `IS_SOME (lookup_scopes (string_to_num s) x)` >> gvs[] >>
+    Cases_on `IS_SOME (lookup_scopes s x)` >> gvs[] >>
     qpat_x_assum `do _ od _ = _` mp_tac >>
     simp[bind_apply, ignore_bind_apply, return_def, raise_def,
          type_check_def, assert_def, LET_THM] >>
@@ -187,7 +187,7 @@ Proof
     Cases_on`p` >>
     gvs[Once evaluate_def, bind_apply, lift_option_type_def, return_def, raise_def] >>
     Cases_on `get_module_code cx q` >> gvs[return_def, raise_def] >>
-    Cases_on `is_immutable_decl (string_to_num r) x` >> gvs[return_def])
+    Cases_on `is_immutable_decl r x` >> gvs[return_def])
   >- (
     gvs[bind_apply,AllCaseEqs(),bind_def] >>
     pairarg_tac >>
@@ -396,10 +396,10 @@ QED
    if lookup_global returns INR, bind passes it through as INR. *)
 Theorem assign_target_TopLevelVar_success_imp_lookup_global_INL:
   assign_target cx (BaseTargetV (TopLevelVar src id) sbs) op st = (INL res, st') ==>
-  ?tv r. lookup_global cx src (string_to_num id) st = (INL tv, r)
+  ?tv r. lookup_global cx src id st = (INL tv, r)
 Proof
   rpt gen_tac >> CCONTR_TAC >> fs[] >>
-  Cases_on `lookup_global cx src (string_to_num id) st` >> gvs[] >>
+  Cases_on `lookup_global cx src id st` >> gvs[] >>
   Cases_on `q` >> gvs[] >>
   qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
   simp[assign_target_def, bind_def, LET_THM] >>
@@ -430,7 +430,7 @@ Theorem well_typed_target_ScopedVar_imp_var_assignable[local]:
     base_target_value_shape env bt loc sbs ==>
     type_place_target env bt = SOME vt ==>
     !id. loc = ScopedVar id ==>
-    FLOOKUP env.var_assignable (string_to_num id) = SOME T
+    FLOOKUP env.var_assignable id = SOME T
 Proof
   recInduct base_target_value_shape_ind >>
   rw[] >>
@@ -446,7 +446,7 @@ QED
 Theorem target_runtime_typed_ScopedVar_imp_var_assignable[local]:
   !env cx st tgt ty v sbs.
     target_runtime_typed env cx st tgt ty (BaseTargetV (ScopedVar v) sbs) ==>
-    FLOOKUP env.var_assignable (string_to_num v) = SOME T
+    FLOOKUP env.var_assignable v = SOME T
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `tgt` >> gvs[target_runtime_typed_def] >>
@@ -467,7 +467,7 @@ Theorem target_runtime_typed_ScopedVar_imp_assignable_context:
 Proof
   rpt strip_tac >>
   simp[assign_target_assignable_context_def, assign_target_assignable_def] >>
-  `FLOOKUP env.var_assignable (string_to_num v) = SOME T` by
+  `FLOOKUP env.var_assignable v = SOME T` by
     metis_tac[target_runtime_typed_ScopedVar_imp_var_assignable] >>
   metis_tac[env_scopes_consistent_var_assignable_imp,
     lookup_scopes_find_containing_scope, env_consistent_def]
@@ -483,7 +483,7 @@ QED
 (* ===== Component lemmas for TopLevelVar assignable context ===== *)
 
 (* If lookup_global for a var returns INL, then get_module_code is SOME
-   and find_var_decl_by_num is SOME (because lookup_global binds both
+   and find_var_decl_by_name is SOME (because lookup_global binds both
    in sequence, and INL means no TypeError was raised). *)
 Theorem lookup_global_INL_imp_decl_facts:
   !cx src n st tv r.
@@ -501,7 +501,7 @@ QED
 (* ===== C5.2.4: INL success implies assignable context ===== *)
 
 (* If lookup_global returns INL with a non-Value constructor (HashMapRef or ArrayRef),
-   then find_var_decl_by_num must return SOME. This follows from lookup_global_def:
+   then find_var_decl_by_name must return SOME. This follows from lookup_global_def:
    the NONE branch of find_decl goes through immutables and can only produce Value or
    TypeError; HashMapRef/ArrayRef only come from SOME declarations. *)
 Theorem lookup_global_INL_not_Value_imp_find_decl_SOME:
@@ -509,11 +509,11 @@ Theorem lookup_global_INL_not_Value_imp_find_decl_SOME:
     get_module_code cx src = SOME code /\
     lookup_global cx src n st = (INL tv, r) /\
     ¬is_Value tv ==>
-    ?p. find_var_decl_by_num n code = SOME p
+    ?p. find_var_decl_by_name n code = SOME p
 Proof
   rpt gen_tac >> strip_tac >> CCONTR_TAC >> fs[] >>
-  (* CCONTR_TAC gives us find_var_decl_by_num n code = NONE *)
-  Cases_on `find_var_decl_by_num n code` >> gvs[]
+  (* CCONTR_TAC gives us find_var_decl_by_name n code = NONE *)
+  Cases_on `find_var_decl_by_name n code` >> gvs[]
   >- (
     (* NONE case: lookup_global goes to immutable path, returns only Value or INR *)
     qpat_x_assum `lookup_global _ _ _ _ = _` mp_tac >>
@@ -523,7 +523,7 @@ Proof
     Cases_on `tv` >> gvs[is_Value_def])
 QED
 
-(* If assign_target TopLevelVar returns INL, find_var_decl_by_num must return SOME.
+(* If assign_target TopLevelVar returns INL, find_var_decl_by_name must return SOME.
    Proof: Case split on lookup_global's tv result.
    - If tv is Value: assign_target's Value branch does OPTION_BIND (find_decl ...) which
      with NONE gives NONE → lift_option_type NONE = INR TypeError. Contradiction.
@@ -533,7 +533,7 @@ Theorem assign_target_TopLevelVar_INL_imp_find_decl_SOME:
   !cx src id sbs op st res st' code.
     get_module_code cx src = SOME code /\
     assign_target cx (BaseTargetV (TopLevelVar src id) sbs) op st = (INL res, st') ==>
-    ?p. find_var_decl_by_num (string_to_num id) code = SOME p
+    ?p. find_var_decl_by_name id code = SOME p
 Proof
   rpt gen_tac >> strip_tac >> CCONTR_TAC >> fs[] >>
   drule assign_target_TopLevelVar_success_imp_lookup_global_INL >> strip_tac >>
@@ -562,7 +562,7 @@ Theorem lookup_global_INL_StorageVarDecl_imp_IS_SOME:
   !cx src n st code is_transient typ id_str tv r.
     get_module_code cx src = SOME code /\
     lookup_global cx src n st = (INL tv, r) /\
-    find_var_decl_by_num n code = SOME (StorageVarDecl is_transient typ, id_str) ==>
+    find_var_decl_by_name n code = SOME (StorageVarDecl is_transient typ, id_str) ==>
     IS_SOME (evaluate_type (get_tenv cx) typ) /\
     IS_SOME (lookup_var_slot_from_layout cx is_transient src id_str)
 Proof
@@ -581,7 +581,7 @@ Theorem lookup_global_INL_HashMapVarDecl_imp_IS_SOME:
   !cx src n st code is_transient kt vt id_str tv r.
     get_module_code cx src = SOME code /\
     lookup_global cx src n st = (INL tv, r) /\
-    find_var_decl_by_num n code = SOME (HashMapVarDecl is_transient kt vt, id_str) ==>
+    find_var_decl_by_name n code = SOME (HashMapVarDecl is_transient kt vt, id_str) ==>
     IS_SOME (lookup_var_slot_from_layout cx is_transient src id_str)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -598,7 +598,7 @@ Theorem assign_target_TopLevelVar_INL_HashMapVarDecl_imp_sbs_ne:
   !cx src id sbs op st res st' code is_transient kt vt id_str.
     get_module_code cx src = SOME code /\
     assign_target cx (BaseTargetV (TopLevelVar src id) sbs) op st = (INL res, st') /\
-    find_var_decl_by_num (string_to_num id) code = SOME (HashMapVarDecl is_transient kt vt, id_str) ==>
+    find_var_decl_by_name id code = SOME (HashMapVarDecl is_transient kt vt, id_str) ==>
     sbs ≠ []
 Proof
   rpt gen_tac >> strip_tac >> CCONTR_TAC >> fs[] >>
