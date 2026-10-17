@@ -10,3 +10,4 @@ Ancestors
   vyperCompiler
   vyperLoweringCorrect
   configuredE2ECorrectness
+  evalCompilerMemoryStores
