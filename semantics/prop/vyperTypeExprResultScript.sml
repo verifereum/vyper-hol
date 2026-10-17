@@ -24,6 +24,23 @@ Definition place_expr_result_typed_def:
     | HashMapT kt vt' => ?is_t slot. tv = HashMapRef is_t slot kt vt'
 End
 
+(* The value of a literal index must agree with its syntax; ordinary result
+   typing alone cannot identify the selected component of a heterogeneous tuple. *)
+Definition subscript_index_matches_def:
+  subscript_index_matches (TupleT _) ie idx =
+    (?ity n. ie = Literal ity (IntL n) /\ idx = IntV n) /\
+  subscript_index_matches _ _ _ = T
+End
+
+Theorem subscript_type_ok_tuple:
+  subscript_type_ok (TupleT ts) ie rt <=>
+  ?ity n. ie = Literal ity (IntL n) /\ is_int_type ity /\
+          0 <= n /\ Num n < LENGTH ts /\ EL (Num n) ts = rt
+Proof
+  Cases_on `ie` >> simp[subscript_type_ok_def] >>
+  CASE_TAC >> simp[]
+QED
+
 Theorem well_typed_expr_not_hashmap_place:
   !e env kt vt.
     well_typed_expr env e ==>
