@@ -2,6 +2,7 @@ structure vyperCheckContractFrontendLib :> vyperCheckContractFrontendLib = struc
 
 open HolKernel boolLib
 open jsonToVyperTheory
+open jsonConstEvalTheory
 
  type frontend_input =
   {in_deploy : bool,
@@ -142,5 +143,20 @@ fun check_contract_file {in_deploy, address, path} =
      address = address,
      annotated_ast = JSONDecode.decodeFile jsonASTLib.annotated_ast path,
      storage_layout = JSONDecode.decodeFile jsonASTLib.storage_layout path}
+
+fun check_constant_contract_file {address, path} = let
+  val declarations = JSONDecode.decodeFile jsonConstASTLib.annotated_ast path
+  val translation = eval_closed "constant module translation"
+    (mk_comb (``translate_constant_module``, declarations))
+  val modules = optionSyntax.dest_some translation
+    handle HOL_ERR _ => raise Fail
+      "vyperCheckContractFrontendLib: constant module translation rejected"
+  val layout = ``([] : storage_layout, [] : storage_layout)``
+  val entry = pairSyntax.mk_pair (address, layout)
+in
+  vyperCheckContractLib.check_contract
+    {in_deploy = false, address = address, modules = modules,
+     layouts = listSyntax.mk_list ([entry], type_of entry)}
+end
 
 end
