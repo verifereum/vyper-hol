@@ -22,7 +22,7 @@
 Theory venomMemProofs
 Ancestors
   venomMemDefs venomExecSemantics venomState venomInst venomInstProofs
-  venomExecProofs stateEquiv finite_map list rich_list words byte arithmetic divides
+  venomExecProofs stateEquiv opcodeClass finite_map list rich_list words byte arithmetic divides
 Libs
   wordsLib dep_rewrite
 
@@ -556,19 +556,16 @@ val alloca_field_finish_tac =
       alloca_field_solve_tac >> NO_TAC
   ];
 
+(* Classify terminal results once, without unfolding instruction semantics. *)
 val effect_free_not_terminal_tac =
-  rpt strip_tac >>
-  gvs[] >>
-  qpat_x_assum `step_inst_base inst s = _` mp_tac >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  ASM_REWRITE_TAC[] >>
-  simp[exec_pure1_not_terminal, exec_pure2_not_terminal,
-       exec_pure3_not_terminal, exec_read0_not_terminal,
-       exec_read1_not_terminal] >>
-  BasicProvers.every_case_tac >>
-  simp[exec_pure1_not_terminal, exec_pure2_not_terminal,
-       exec_pure3_not_terminal, exec_read0_not_terminal,
-       exec_read1_not_terminal];
+  rpt gen_tac >> DISCH_TAC >>
+  rpt conj_tac >> rpt gen_tac >> DISCH_TAC >>
+  FIRST [
+    drule opcodeClassTheory.step_inst_base_halt_opcodes,
+    drule opcodeClassTheory.step_inst_base_abort_opcodes,
+    drule opcodeClassTheory.step_inst_base_intret_opcodes
+  ] >>
+  strip_tac >> gvs[is_effect_free_op_def];
 
 Triviality effect_free_pure1_not_terminal[local]:
   !inst (s:venom_state).
@@ -673,13 +670,7 @@ Triviality effect_free_direct_not_terminal[local]:
     (!a s'. step_inst_base inst s <> Abort a s') /\
     (!v s'. step_inst_base inst s <> IntRet v s')
 Proof
-  rpt gen_tac >> strip_tac >> gvs[] >>
-  ASM_REWRITE_TAC[step_inst_base_def]
-  >- simp[AllCaseEqs()]
-  >- simp[AllCaseEqs()]
-  >- simp[AllCaseEqs()]
-  >- simp[AllCaseEqs()]
-  >- simp[AllCaseEqs()]
+  effect_free_not_terminal_tac
 QED
 
 Triviality effect_free_fmp_not_terminal[local]:
@@ -691,13 +682,7 @@ Triviality effect_free_fmp_not_terminal[local]:
     (!a s'. step_inst_base inst s <> Abort a s') /\
     (!v s'. step_inst_base inst s <> IntRet v s')
 Proof
-  rpt gen_tac >> strip_tac >> gvs[] >>
-  ASM_REWRITE_TAC[step_inst_base_def]
-  >- simp[AllCaseEqs()]
-  >- simp[AllCaseEqs()]
-  >- simp[AllCaseEqs()]
-  >- simp[AllCaseEqs()]
-  >- simp[AllCaseEqs()]
+  effect_free_not_terminal_tac
 QED
 
 Triviality effect_free_opcode_cases[local]:
@@ -733,19 +718,7 @@ Triviality effect_free_step_not_terminal[local]:
     (!a s'. step_inst_base inst s <> Abort a s') /\
     (!v s'. step_inst_base inst s <> IntRet v s')
 Proof
-  rpt strip_tac >>
-  drule_all effect_free_opcode_cases >> strip_tac >>
-  FIRST [
-    qspecl_then [`inst`, `s`] mp_tac effect_free_pure1_not_terminal >> gvs[] >> NO_TAC,
-    qspecl_then [`inst`, `s`] mp_tac effect_free_pure2_arith_not_terminal >> gvs[] >> NO_TAC,
-    qspecl_then [`inst`, `s`] mp_tac effect_free_pure2_cmp_not_terminal >> gvs[] >> NO_TAC,
-    qspecl_then [`inst`, `s`] mp_tac effect_free_pure2_bits_not_terminal >> gvs[] >> NO_TAC,
-    qspecl_then [`inst`, `s`] mp_tac effect_free_pure3_not_terminal >> gvs[] >> NO_TAC,
-    qspecl_then [`inst`, `s`] mp_tac effect_free_read0_not_terminal >> gvs[] >> NO_TAC,
-    qspecl_then [`inst`, `s`] mp_tac effect_free_read1_not_terminal >> gvs[] >> NO_TAC,
-    qspecl_then [`inst`, `s`] mp_tac effect_free_direct_not_terminal >> gvs[] >> NO_TAC,
-    qspecl_then [`inst`, `s`] mp_tac effect_free_fmp_not_terminal >> gvs[] >> NO_TAC
-  ]
+  effect_free_not_terminal_tac
 QED
 
 Triviality pack_dret_dynamic_preserves_alloca_fields[local]:

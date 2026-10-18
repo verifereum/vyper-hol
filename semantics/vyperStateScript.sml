@@ -524,7 +524,9 @@ Theorem compute_hashmap_slot_pre[cv_pre]:
   ∀x y z. compute_hashmap_slot_pre x y z
 Proof
   ho_match_mp_tac compute_hashmap_slot_ind
-  \\ rw[] \\ rw[Once compute_hashmap_slot_pre_def]
+  \\ rw[]
+  \\ CONV_TAC (ONCE_REWRITE_CONV [compute_hashmap_slot_pre_def])
+  \\ rw[]
 QED
 
 (* Get the final value type after traversing hashmap keys.
@@ -784,15 +786,43 @@ End
 val evaluate_subscripts_pre_def =
   cv_auto_trans_pre "evaluate_subscripts_pre" evaluate_subscripts_def;
 
+(* Cache only the constructor/boolean rules needed by the CV preconditions;
+   avoid traversing the large semantic context with the ambient simpset. *)
+val subscript_pre_ss = boolSimps.bool_ss ++ rewrites [LET_THM, value_11];
+
+(* Unwind translator-generated equalities before descending into their bodies.
+   In particular, an impossible constructor premise discards its whole branch. *)
+val pre_constructor_rewrites = Rewrite.add_rewrites Rewrite.bool_rewrites
+  (GSYM AND_IMP_INTRO ::
+   List.concat (map (fn ty => #rewrs (TypeBase.simpls_of ty))
+    [``:value``, ``:array_value``, ``:type_value``, ``:subscript``,
+     ``:value option``, ``:subscript list``, ``:num # num``]));
+fun mk_pre_cleanup_conv rewrites =
+  let
+    val root = CHANGED_CONV (FIRST_CONV
+      [Rewrite.REWRITES_CONV rewrites, Unwind.UNWIND_FORALL_CONV])
+    (* Only traverse logical structure: semantic expressions in equality
+       premises are opaque. Reduce a false premise before visiting its body. *)
+    fun cleanup tm =
+      ((root THENC cleanup) ORELSEC
+       (if is_forall tm then
+          QUANT_CONV cleanup THENC TRY_CONV (root THENC cleanup)
+        else if is_imp tm orelse is_conj tm then
+          RATOR_CONV (RAND_CONV cleanup) THENC
+          ((root THENC cleanup) ORELSEC
+           (RAND_CONV cleanup THENC TRY_CONV (root THENC cleanup)))
+        else ALL_CONV)) tm
+  in cleanup end;
+
+(* List induction keeps the IH universal in every non-subscript argument.
+   Only this unconditional IH is added to the goal-only cleanup rules. *)
 Theorem evaluate_subscripts_pre[cv_pre]:
   !a b c. evaluate_subscripts_pre a b c
 Proof
-  ho_match_mp_tac evaluate_subscripts_ind
-  \\ rw[Once evaluate_subscripts_pre_def]
-  \\ rw[Once evaluate_subscripts_pre_def]
-  \\ gvs[] \\ rw[]
-  \\ qmatch_asmsub_rename_tac`0i ≤ w`
-  \\ Cases_on`w` \\ gs[]
+  Induct_on `c` \\ rpt gen_tac
+  \\ CONV_TAC (ONCE_REWRITE_CONV [evaluate_subscripts_pre_def])
+  \\ ASSUM_LIST (fn ihs => CONV_TAC (mk_pre_cleanup_conv
+       (Rewrite.add_rewrites pre_constructor_rewrites ihs)))
 QED
 
 (* mutating inside arrays, structs, hashmaps *)
@@ -844,12 +874,10 @@ val assign_subscripts_pre_def =
 Theorem assign_subscripts_pre[cv_pre]:
   !a b c d. assign_subscripts_pre a b c d
 Proof
-  ho_match_mp_tac assign_subscripts_ind
-  \\ rw[Once assign_subscripts_pre_def]
-  \\ rw[Once assign_subscripts_pre_def]
-  \\ gvs[] \\ rw[]
-  \\ qmatch_asmsub_rename_tac`0i ≤ w`
-  \\ Cases_on`w` \\ gs[]
+  Induct_on `c` \\ rpt gen_tac
+  \\ CONV_TAC (ONCE_REWRITE_CONV [assign_subscripts_pre_def])
+  \\ ASSUM_LIST (fn ihs => CONV_TAC (mk_pre_cleanup_conv
+       (Rewrite.add_rewrites pre_constructor_rewrites ihs)))
 QED
 
 Datatype:
@@ -898,8 +926,10 @@ val resolve_array_element_pre_def = resolve_array_element_def
 Theorem resolve_array_element_pre[cv_pre]:
   ∀a b c d e f. resolve_array_element_pre a b c d e f
 Proof
-  ho_match_mp_tac resolve_array_element_ind \\ rw[]
-  \\ rw[Once resolve_array_element_pre_def]
+  Induct_on `e` \\ rpt gen_tac
+  \\ CONV_TAC (ONCE_REWRITE_CONV [resolve_array_element_pre_def])
+  \\ ASSUM_LIST (fn ihs => CONV_TAC (mk_pre_cleanup_conv
+       (Rewrite.add_rewrites pre_constructor_rewrites ihs)))
 QED
 
 Definition assign_result_def:
@@ -1021,10 +1051,19 @@ val assign_target_pre_def = assign_target_def
             assign_operation_CASE_rator]
   |> cv_auto_trans_pre "assign_target_pre assign_targets_pre";
 
+val target_pre_cleanup_conv = mk_pre_cleanup_conv
+  (Rewrite.add_rewrites pre_constructor_rewrites
+    (List.concat (map (fn ty => #rewrs (TypeBase.simpls_of ty))
+      [``:assignment_value``, ``:location``, ``:assign_operation``])));
+
 Theorem assign_target_pre[cv_pre]:
   (∀w x y z. assign_target_pre w x y z) ∧
   (∀w x y z. assign_targets_pre w x y z)
 Proof
-  ho_match_mp_tac assign_target_ind \\ rw[]
-  \\ rw[Once assign_target_pre_def]
+  ho_match_mp_tac assign_target_ind \\ rpt strip_tac
+  \\ CONV_TAC (ONCE_REWRITE_CONV [assign_target_pre_def])
+  \\ CONV_TAC target_pre_cleanup_conv
+  \\ rpt strip_tac
+  \\ first_x_assum irule
+  \\ ASM_SIMP_TAC subscript_pre_ss []
 QED

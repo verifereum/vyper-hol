@@ -35,8 +35,13 @@ val step_inst_base_opcode_tac =
    Proving these individually is fast; using them as [simp] makes the
    opcode case split in the main theorems fast. *)
 
-(* Reusable tactic for exec_* not_halt/not_abort proofs *)
-val exec_case_tac = rpt gen_tac >> simp[] >> every_case_tac >> simp[];
+(* Case equations expose result constructors; discard impossible branches before
+   inspecting their guards or state arguments. Keep the ambient simpset out. *)
+val exec_case_tac =
+  simp_tac pure_ss [AllCaseEqs(), exec_result_distinct,
+                    boolTheory.NOT_CLAUSES, boolTheory.AND_CLAUSES,
+                    boolTheory.OR_CLAUSES, boolTheory.EXISTS_SIMP,
+                    boolTheory.FORALL_SIMP];
 
 (* --- Not Halt --- *)
 
@@ -477,6 +482,14 @@ Proof
   every_case_tac >> gvs[]
 QED
 
+(* Cache only case/constructor rules: in particular, never normalize SHA3's
+   hash computation or the state arguments of impossible result constructors. *)
+val misc_result_class_ss = pure_ss ++ rewrites
+  [AllCaseEqs(), exec_result_distinct, LET_THM,
+   boolTheory.NOT_CLAUSES, boolTheory.AND_CLAUSES,
+   boolTheory.OR_CLAUSES, boolTheory.IMP_CLAUSES,
+   boolTheory.EXISTS_SIMP, boolTheory.FORALL_SIMP];
+
 Triviality effect_free_misc_result_class[local]:
   !inst s vs' a.
     (inst.inst_opcode = SHA3 \/ inst.inst_opcode = PHI \/
@@ -487,10 +500,9 @@ Triviality effect_free_misc_result_class[local]:
     step_inst_base inst s <> Halt vs' /\
     step_inst_base inst s <> Abort a vs'
 Proof
-  rpt strip_tac >> gvs[] >>
-  qpat_x_assum `step_inst_base inst s = _` mp_tac >>
-  step_inst_base_opcode_tac >> simp[] >>
-  gvs[AllCaseEqs()]
+  rpt gen_tac >> strip_tac >>
+  step_inst_base_opcode_tac >>
+  simp_tac misc_result_class_ss []
 QED
 
 Triviality effect_free_not_halt_abort[local]:
@@ -499,29 +511,26 @@ Triviality effect_free_not_halt_abort[local]:
     step_inst_base inst s <> Halt vs' /\
     step_inst_base inst s <> Abort a vs'
 Proof
-  rpt gen_tac >> strip_tac >> conj_tac
-  >- (strip_tac >>
-      drule effect_free_group_cases >> strip_tac
-      >- (gvs[ef_pure1_def] >> metis_tac[effect_free_pure1_result_class])
-      >- (gvs[ef_arith1_def] >> metis_tac[effect_free_pure2_arith1_result_class])
-      >- (gvs[ef_arith2_def] >> metis_tac[effect_free_pure2_arith2_result_class])
-      >- (gvs[ef_cmp_def] >> metis_tac[effect_free_pure2_cmp_result_class])
-      >- (gvs[ef_bits_def] >> metis_tac[effect_free_pure2_bits_result_class])
-      >- (gvs[ef_pure3_def] >> metis_tac[effect_free_pure3_result_class])
-      >- (gvs[ef_read0_def] >> metis_tac[effect_free_read0_result_class])
-      >- (gvs[ef_read1_def] >> metis_tac[effect_free_read1_result_class])
-      >- (gvs[ef_misc_def] >> metis_tac[effect_free_misc_result_class])) >>
-  strip_tac >>
+  rpt gen_tac >> strip_tac >>
   drule effect_free_group_cases >> strip_tac
-  >- (gvs[ef_pure1_def] >> metis_tac[effect_free_pure1_result_class])
-  >- (gvs[ef_arith1_def] >> metis_tac[effect_free_pure2_arith1_result_class])
-  >- (gvs[ef_arith2_def] >> metis_tac[effect_free_pure2_arith2_result_class])
-  >- (gvs[ef_cmp_def] >> metis_tac[effect_free_pure2_cmp_result_class])
-  >- (gvs[ef_bits_def] >> metis_tac[effect_free_pure2_bits_result_class])
-  >- (gvs[ef_pure3_def] >> metis_tac[effect_free_pure3_result_class])
-  >- (gvs[ef_read0_def] >> metis_tac[effect_free_read0_result_class])
-  >- (gvs[ef_read1_def] >> metis_tac[effect_free_read1_result_class])
-  >- (gvs[ef_misc_def] >> metis_tac[effect_free_misc_result_class])
+  >- (match_mp_tac effect_free_pure1_result_class >>
+      PURE_ASM_REWRITE_TAC [GSYM ef_pure1_def])
+  >- (match_mp_tac effect_free_pure2_arith1_result_class >>
+      PURE_ASM_REWRITE_TAC [GSYM ef_arith1_def])
+  >- (match_mp_tac effect_free_pure2_arith2_result_class >>
+      PURE_ASM_REWRITE_TAC [GSYM ef_arith2_def])
+  >- (match_mp_tac effect_free_pure2_cmp_result_class >>
+      PURE_ASM_REWRITE_TAC [GSYM ef_cmp_def])
+  >- (match_mp_tac effect_free_pure2_bits_result_class >>
+      PURE_ASM_REWRITE_TAC [GSYM ef_bits_def])
+  >- (match_mp_tac effect_free_pure3_result_class >>
+      PURE_ASM_REWRITE_TAC [GSYM ef_pure3_def])
+  >- (match_mp_tac effect_free_read0_result_class >>
+      PURE_ASM_REWRITE_TAC [GSYM ef_read0_def])
+  >- (match_mp_tac effect_free_read1_result_class >>
+      PURE_ASM_REWRITE_TAC [GSYM ef_read1_def])
+  >- (match_mp_tac effect_free_misc_result_class >>
+      PURE_ASM_REWRITE_TAC [GSYM ef_misc_def])
 QED
 
 Triviality mem_write_opcode_cases[local]:
@@ -566,7 +575,9 @@ Triviality mem_write_result_class[local]:
     step_inst_base inst s <> Halt vs' /\
     (step_inst_base inst s = Abort a vs' ==> inst.inst_opcode = RETURNDATACOPY)
 Proof
-  metis_tac[mem_write_not_halt, mem_write_abort_opcode]
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (match_mp_tac mem_write_not_halt >> simp[]) >>
+  strip_tac >> drule_all mem_write_abort_opcode >> simp[]
 QED
 
 Triviality alloca_not_halt_abort[local]:
@@ -646,23 +657,24 @@ Triviality step_inst_base_nonterminator_not_intret[local]:
 Proof
   rpt strip_tac >>
   drule nonterminator_opcode_class >> strip_tac
-  >- metis_tac[effect_free_not_intret]
+  >- (qspecl_then [`inst`, `s`, `vals`, `vs'`] mp_tac
+        effect_free_not_intret >> simp[])
   >- (drule mem_write_opcode_cases >> strip_tac >>
       gvs[is_terminator_def] >>
       qpat_x_assum `step_inst_base inst s = IntRet vals vs'` mp_tac >>
-      step_inst_base_opcode_tac >> simp[] >>
-      every_case_tac >> gvs[extract_venom_result_def])
+      step_inst_base_opcode_tac >>
+      gvs[AllCaseEqs(), extract_venom_result_def])
   >- (Cases_on `inst.inst_opcode` >> gvs[is_alloca_op_def] >>
       qpat_x_assum `step_inst_base inst s = IntRet vals vs'` mp_tac >>
-      step_inst_base_opcode_tac >> simp[] >>
-      every_case_tac >> gvs[extract_venom_result_def])
+      step_inst_base_opcode_tac >>
+      gvs[AllCaseEqs(), extract_venom_result_def])
   >- (drule ext_call_opcode_cases >> strip_tac >> gvs[] >>
       qpat_x_assum `step_inst_base inst s = IntRet vals vs'` mp_tac >>
-      step_inst_base_opcode_tac >> simp[] >>
-      every_case_tac >> gvs[extract_venom_result_def])
+      step_inst_base_opcode_tac >>
+      gvs[AllCaseEqs(), extract_venom_result_def])
   >> (gvs[] >> qpat_x_assum `step_inst_base inst s = IntRet vals vs'` mp_tac >>
-      step_inst_base_opcode_tac >> simp[] >>
-      every_case_tac >> gvs[extract_venom_result_def])
+      step_inst_base_opcode_tac >>
+      gvs[AllCaseEqs(), extract_venom_result_def])
 QED
 
 Theorem step_inst_base_intret_opcodes:
@@ -678,7 +690,8 @@ Proof
       qpat_x_assum `step_inst_base inst vs = IntRet vals vs'` mp_tac >>
       step_inst_base_opcode_tac >> simp[] >>
       gvs[AllCaseEqs(), extract_venom_result_def]) >>
-  metis_tac[step_inst_base_nonterminator_not_intret]
+  qspecl_then [`inst`, `vs`, `vals`, `vs'`] mp_tac
+    step_inst_base_nonterminator_not_intret >> simp[]
 QED
 Theorem step_inst_base_halt_opcodes:
   !inst vs vs'.
@@ -691,10 +704,17 @@ Proof
   rpt strip_tac >>
   Cases_on `is_terminator inst.inst_opcode`
   >- (drule_all step_inst_base_halt_terminator_opcodes >> strip_tac >> simp[]) >>
-  drule nonterminator_opcode_class >> strip_tac >>
-  metis_tac[effect_free_not_halt_abort, mem_write_result_class,
-            alloca_not_halt_abort, ext_call_not_halt_abort,
-            storage_imm_log_assert_not_halt]
+  drule nonterminator_opcode_class >> strip_tac
+  >- (qspecl_then [`inst`, `vs`, `vs'`, `ARB`] mp_tac
+        effect_free_not_halt_abort >> gvs[])
+  >- (qspecl_then [`inst`, `vs`, `vs'`] mp_tac
+        mem_write_not_halt >> gvs[])
+  >- (qspecl_then [`inst`, `vs`, `vs'`, `ARB`] mp_tac
+        alloca_not_halt_abort >> gvs[])
+  >- (qspecl_then [`inst`, `vs`, `vs'`, `ARB`] mp_tac
+        ext_call_not_halt_abort >> gvs[]) >>
+  qspecl_then [`inst`, `vs`, `vs'`] mp_tac
+    storage_imm_log_assert_not_halt >> gvs[]
 QED
 
 Theorem step_inst_halt_opcodes:
@@ -725,10 +745,17 @@ Proof
   rpt strip_tac >>
   Cases_on `is_terminator inst.inst_opcode`
   >- (drule_all step_inst_base_abort_terminator_opcodes >> strip_tac >> simp[]) >>
-  drule nonterminator_opcode_class >> strip_tac >>
-  metis_tac[effect_free_not_halt_abort, mem_write_result_class,
-            alloca_not_halt_abort, ext_call_not_halt_abort,
-            nofail_storage_imm_log_not_abort]
+  drule nonterminator_opcode_class >> strip_tac
+  >- (qspecl_then [`inst`, `vs`, `vs'`, `a`] mp_tac
+        effect_free_not_halt_abort >> gvs[])
+  >- (drule_all mem_write_abort_opcode >> simp[])
+  >- (qspecl_then [`inst`, `vs`, `vs'`, `a`] mp_tac
+        alloca_not_halt_abort >> gvs[])
+  >- (qspecl_then [`inst`, `vs`, `vs'`, `a`] mp_tac
+        ext_call_not_halt_abort >> gvs[]) >>
+  gvs[] >>
+  qspecl_then [`inst`, `vs`, `a`, `vs'`] mp_tac
+    nofail_storage_imm_log_not_abort >> gvs[]
 QED
 
 Theorem step_inst_abort_opcodes:

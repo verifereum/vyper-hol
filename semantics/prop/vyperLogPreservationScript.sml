@@ -1233,18 +1233,35 @@ Theorem case_stmt_for_logs[local]:
 Proof
   rpt strip_tac >>
   qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
-  simp[vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def,
-       vyperStateTheory.ignore_bind_def, AllCaseEqs()] >>
-  strip_tac >> gvs[] >>
-  TRY (imp_res_tac lift_option_type_state >> gvs[log_extends_refl] >> NO_TAC) >>
-  first_x_assum drule_all >> strip_tac >>
-  imp_res_tac lift_option_type_state >> gvs[] >>
-  TRY (first_x_assum drule >> simp[] >> NO_TAC) >>
-  imp_res_tac check_state >> imp_res_tac type_check_state >> gvs[] >>
-  TRY (first_x_assum drule >> simp[] >> NO_TAC) >>
-  first_x_assum drule_all >> strip_tac >>
-  irule log_extends_trans >> goal_assum drule >>
-  first_assum MATCH_ACCEPT_TAC
+  simp[Once vyperInterpreterTheory.evaluate_def] >> strip_tac >>
+  drule bind_log_extends_forward >> disch_then MATCH_MP_TAC >>
+  conj_tac
+  >- (rpt strip_tac >> drule lift_option_type_state >>
+      disch_then SUBST1_TAC >> irule log_extends_refl) >>
+  rpt strip_tac >> pop_assum (assume_tac o BETA_RULE) >>
+  rename1 `lift_option_type _ _ st = (INL tyv,s_type)` >>
+  qpat_x_assum `!tenv s0 tyv s1. _`
+    (qspecl_then [`get_tenv cx`, `st`, `tyv`, `s_type`] mp_tac) >>
+  qpat_assum `lift_option_type _ _ st = (INL tyv,s_type)`
+    (fn th => simp_tac bool_ss [th]) >> strip_tac >>
+  qpat_x_assum `!tenv s0 tyv s1 s2 vs s3 s4 x s5. _`
+    (qspecl_then [`get_tenv cx`, `st`, `tyv`, `s_type`] mp_tac) >>
+  qpat_assum `lift_option_type _ _ st = (INL tyv,s_type)`
+    (fn th => simp_tac bool_ss [th]) >> strip_tac >>
+  drule bind_log_extends_forward >> disch_then MATCH_MP_TAC >>
+  conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!st res st'. eval_iterator _ _ _ = _ ==> _` drule >>
+      simp[]) >>
+  rpt strip_tac >>
+  pop_assum (assume_tac o BETA_RULE o
+             REWRITE_RULE [vyperStateTheory.ignore_bind_def]) >>
+  drule bind_log_extends_forward >> disch_then MATCH_MP_TAC >>
+  conj_tac
+  >- (rpt strip_tac >> drule check_state >>
+      disch_then SUBST1_TAC >> irule log_extends_refl) >>
+  rpt strip_tac >> pop_assum (assume_tac o BETA_RULE) >>
+  first_x_assum drule_all >> simp[]
 QED
 
 

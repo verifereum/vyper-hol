@@ -15,7 +15,12 @@ Theorem translate_calldata_len_test:
       [] ret_ty call_src) =
   Builtin (BaseT (UintT 256)) CalldataLen []
 Proof
-  simp[Once translate_expr_def, is_calldata_len_call_def]
+  CONV_TAC (LAND_CONV (REWR_CONV
+    (valOf (List.find
+      (fn th => can (find_term (same_const ``JE_Call``))
+        (lhs (concl (SPEC_ALL th))))
+      (CONJUNCTS translate_expr_def))))) >>
+  SIMP_TAC bool_ss [is_calldata_len_call_def]
 QED
 
 (* Neither other attributes nor malformed arities/keywords are special forms. *)
@@ -38,7 +43,12 @@ QED
 Theorem ordinary_len_translation_test:
   make_builtin_call ty "len" args kwargs ret_ty = Builtin ty Len args
 Proof
-  simp[make_builtin_call_def]
+  (* Reduce only the first dispatch condition; leave all AST payloads opaque. *)
+  CONV_TAC (LAND_CONV
+    (REWR_CONV make_builtin_call_def THENC
+     RATOR_CONV (RATOR_CONV (RAND_CONV (REWR_CONV REFL_CLAUSE))) THENC
+     REWR_CONV (CONJUNCT1 (SPEC_ALL COND_CLAUSES)))) >>
+  REFL_TAC
 QED
 
 (* Complete raw calldata is observed: selector, ABI bytes, and trailing bytes. *)

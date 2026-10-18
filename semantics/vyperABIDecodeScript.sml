@@ -106,14 +106,23 @@ val pre = cv_trans_pre_rec
   \\ Cases_on`p` \\ gs[]
 );
 
+(* Unfold preconditions only in the goal. Keep recursive schemas and semantic
+   definitions out of cleanup; only constructor/logical rules and IHs are needed. *)
+val abi_pre_ss = boolSimps.bool_ss ++ rewrites
+  (LET_THM :: GSYM AND_IMP_INTRO ::
+   List.concat (map (fn ty => #rewrs (TypeBase.simpls_of ty))
+     [``:abi_type``, ``:num``, ``:num option``, ``:abi_type list``,
+      ``:num # num option``]));
+
 Theorem vyper_abi_dec_pre[cv_pre]:
   (∀v bs off. vyper_abi_dec_pre v bs off) ∧
   (∀v0 v v1 v2 v3 v4 acc. vyper_abi_dec_array_pre v0 v v1 v2 v3 v4 acc) ∧
   (∀v v4 v5 v6 acc. vyper_abi_dec_tuple_pre v v4 v5 v6 acc)
 Proof
   ho_match_mp_tac vyper_abi_dec_ind
-  \\ rw[]
-  \\ rw[Once pre]
+  \\ rpt strip_tac
+  \\ CONV_TAC (ONCE_REWRITE_CONV [pre])
+  \\ ASM_SIMP_TAC abi_pre_ss []
 QED
 
 (* TOP-LEVEL: the acceptance gate for vyper_abi_dec.  Mirrors contractABI's
@@ -227,8 +236,8 @@ Theorem vyper_abi_valid_enc_pre[cv_pre]:
 Proof
   ho_match_mp_tac vyper_abi_valid_enc_ind
   \\ rpt strip_tac
-  \\ once_rewrite_tac [pre]
-  \\ simp []
+  \\ CONV_TAC (ONCE_REWRITE_CONV [pre])
+  \\ ASM_SIMP_TAC abi_pre_ss []
 QED
 
 (* Helper: without 2**256 wrap-around, the head target is plain addition,
@@ -431,8 +440,9 @@ Theorem vyper_abi_dec_fast_pre[cv_pre]:
   (∀v v4 v5 v6 acc. vyper_abi_dec_tuple_fast_pre v v4 v5 v6 acc)
 Proof
   ho_match_mp_tac vyper_abi_dec_fast_ind
-  \\ rw[]
-  \\ rw[Once pre]
+  \\ rpt strip_tac
+  \\ CONV_TAC (ONCE_REWRITE_CONV [pre])
+  \\ ASM_SIMP_TAC abi_pre_ss []
 QED
 
 (* TOP-LEVEL: the acceptance gate with the same recursive fast paths. *)
@@ -521,8 +531,8 @@ Theorem vyper_abi_valid_enc_fast_pre[cv_pre]:
 Proof
   ho_match_mp_tac vyper_abi_valid_enc_fast_ind
   \\ rpt strip_tac
-  \\ once_rewrite_tac [pre]
-  \\ simp []
+  \\ CONV_TAC (ONCE_REWRITE_CONV [pre])
+  \\ ASM_SIMP_TAC abi_pre_ss []
 QED
 
 (* Helper: a static scalar array is its sequential scalar decoding. *)

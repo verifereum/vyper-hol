@@ -320,23 +320,80 @@ Definition inst_wf_exec_def:
         IS_SOME (get_label (HD inst.inst_operands))
 End
 
+(* Cache the two projections for each opcode.  In particular, do not run
+ * the guarded opcode-case congruence over both 101-branch definitions in
+ * every case.  None of these simpsets consults the ambient simpset. *)
+val inst_wf_compute_ss =
+  pure_ss ++ boolSimps.BOOL_ss ++
+  simpLib.rewrites [TypeBase.case_def_of ``:opcode``];
+
+val inst_wf_opcode_projections =
+  map (fn opc =>
+    let
+      val eq = mk_eq (``inst.inst_opcode``, opc)
+      fun project def =
+        DISCH eq (CONV_RULE
+          (RAND_CONV (SIMP_CONV inst_wf_compute_ss [ASSUME eq]))
+          (SPEC_ALL def))
+    in (fst (dest_const opc), map project [inst_wf_def, inst_wf_exec_def]) end)
+    (TypeBase.constructors_of ``:opcode``);
+
+(* Only the fixed arities used by the nontrivial shape cases are needed.
+ * Avoid list_ss's general length/equality search and case congruences. *)
+val inst_wf_list_arity =
+  map (fn tm => prove (tm,
+    SIMP_TAC arith_ss [listTheory.LENGTH, listTheory.LENGTH_NIL]))
+    [``(LENGTH (h::t) = 1) <=> t = []``,
+     ``(LENGTH (h::t) = 2) <=> LENGTH t = 1``,
+     ``(LENGTH (h::t) = 3) <=> LENGTH t = 2``,
+     ``(LENGTH ([]:'a list) = 1) <=> F``,
+     ``(LENGTH ([]:'a list) = 2) <=> F``,
+     ``(LENGTH ([]:'a list) = 3) <=> F``];
+
+val inst_wf_list_index =
+  map (fn tm => prove (tm, SIMP_TAC list_ss []))
+    [``EL 1 (h::t) = HD t``, ``EL 2 (h::t) = EL 1 t``];
+
+val inst_wf_shape_ss =
+  pure_ss ++ boolSimps.BOOL_ss ++ boolSimps.UNWIND_ss ++
+  simpLib.rewrites
+    (inst_wf_list_arity @ inst_wf_list_index @
+     [listTheory.HD, listTheory.TL,
+      listTheory.NOT_CONS_NIL, listTheory.NOT_NIL_CONS, listTheory.CONS_11,
+      get_label_def, operand_lit_value_def, optionTheory.IS_SOME_DEF,
+      TypeBase.case_def_of ``:'a option``,
+      TypeBase.distinct_of ``:'a option``,
+      TypeBase.distinct_of ``:operand``, TypeBase.one_one_of ``:operand``]);
+
+fun inst_wf_project_tac (asl, goal) =
+  let
+    val eq = hd asl
+    val projections =
+      assoc (fst (dest_const (rhs eq))) inst_wf_opcode_projections
+    val ths = map (fn th => MATCH_MP th (ASSUME eq)) projections
+  in
+    (CONV_TAC (LAND_CONV (REWR_CONV (hd ths)) THENC
+               RAND_CONV (REWR_CONV (hd (tl ths)))) >>
+     TRY REFL_TAC) (asl, goal)
+  end;
+
 val inst_wf_compute_case_tac =
-  gvs[inst_wf_def, inst_wf_exec_def, get_label_def,
-      operand_lit_value_def] >>
+  inst_wf_project_tac >>
+  pop_assum kall_tac >>
   Cases_on `inst.inst_operands` >>
-  gvs[AllCaseEqs(), get_label_def, operand_lit_value_def] >>
+  ASM_SIMP_TAC inst_wf_shape_ss [] >>
   Cases_on `h` >>
-  gvs[AllCaseEqs(), get_label_def, operand_lit_value_def] >>
+  ASM_SIMP_TAC inst_wf_shape_ss [] >>
   Cases_on `t` >>
-  gvs[AllCaseEqs(), get_label_def, operand_lit_value_def] >>
+  ASM_SIMP_TAC inst_wf_shape_ss [] >>
   Cases_on `h` >>
-  gvs[AllCaseEqs(), get_label_def, operand_lit_value_def] >>
+  ASM_SIMP_TAC inst_wf_shape_ss [] >>
   Cases_on `t'` >>
-  gvs[AllCaseEqs(), get_label_def, operand_lit_value_def] >>
+  ASM_SIMP_TAC inst_wf_shape_ss [] >>
   Cases_on `h` >>
-  gvs[AllCaseEqs(), get_label_def, operand_lit_value_def] >>
+  ASM_SIMP_TAC inst_wf_shape_ss [] >>
   Cases_on `t` >>
-  gvs[];
+  ASM_SIMP_TAC inst_wf_shape_ss [];
 
 Theorem inst_wf_compute[compute]:
   inst_wf inst <=> inst_wf_exec inst

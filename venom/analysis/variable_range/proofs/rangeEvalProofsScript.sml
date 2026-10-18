@@ -495,6 +495,9 @@ Theorem eval_range_compare_sound:
               | _ => ARB)
 Proof
   rpt gen_tac >> strip_tac
+  (* Resolve comparison dispatch before multiplying goals by range cases. *)
+  >> qpat_x_assum `op = _` SUBST_ALL_TAC
+  >> PURE_ONCE_REWRITE_TAC [venomInstTheory.opcode_case_def]
   >> Cases_on `r1` >> Cases_on `r2`
   >> fs[eval_range_compare_def, in_range_def, LET_THM,
         vr_spans_sign_boundary_def, vr_lo_def, vr_hi_def,
@@ -1240,12 +1243,13 @@ Triviality sdiv_range_nonneg[local]:
     lo ≥ 0 ∧ d > 0 ⇒
     lo / d ≤ w2i (w1 / w2) ∧ w2i (w1 / w2) ≤ hi / d
 Proof
-  rpt gen_tac >> strip_tac >> gvs[] >>
+  rpt gen_tac >> strip_tac >> gvs[int_ge, int_gt] >>
+  `0 ≤ w2i w1` by
+    (irule integerTheory.INT_LE_TRANS >> qexists_tac `lo` >> simp[int_ge]) >>
+  `0 < w2i w2` by simp[int_gt] >>
   mp_tac (Q.SPECL [`w1`, `w2`] w2i_word_quot) >>
   impl_tac >- (conj_tac >- simp[] >> sdiv_not_overflow_tac) >>
   strip_tac >> gvs[] >>
-  `0 ≤ w2i w1` by intLib.ARITH_TAC >>
-  `0 < w2i w2` by intLib.ARITH_TAC >>
   simp[nonneg_quot_eq] >>
   conj_tac >> irule int_div_le_mono >> simp[]
 QED
@@ -1256,22 +1260,19 @@ Triviality sdiv_range_neg[local]:
     hi < 0 ∧ d > 0 ⇒
     -(ABS lo / d) ≤ w2i (w1 / w2) ∧ w2i (w1 / w2) ≤ -(ABS hi / d)
 Proof
-  rpt gen_tac >> strip_tac >> gvs[] >>
+  rpt gen_tac >> strip_tac >> gvs[int_ge, int_gt] >>
+  `w2i w1 < 0` by
+    (irule integerTheory.INT_LET_TRANS >> qexists_tac `hi` >> simp[]) >>
+  `lo < 0` by
+    (irule integerTheory.INT_LET_TRANS >> qexists_tac `w2i w1` >> simp[]) >>
+  `0 < w2i w2` by simp[int_gt] >>
+  (* Bound quotients before introducing the word bridge. *)
+  `lo quot w2i w2 ≤ w2i w1 quot w2i w2 ∧
+   w2i w1 quot w2i w2 ≤ hi quot w2i w2` by
+    (conj_tac >> irule quot_mono_pos_denom >> simp[]) >>
   mp_tac (Q.SPECL [`w1`, `w2`] w2i_word_quot) >>
   impl_tac >- (conj_tac >- simp[] >> sdiv_not_overflow_tac) >>
-  strip_tac >> gvs[] >>
-  `w2i w1 < 0` by intLib.ARITH_TAC >>
-  `lo < 0` by intLib.ARITH_TAC >>
-  `0 < w2i w2` by intLib.ARITH_TAC >>
-  simp[neg_quot_eq] >>
-  conj_tac >| [
-    `ABS (w2i w1) / w2i w2 ≤ ABS lo / w2i w2` suffices_by intLib.ARITH_TAC >>
-    irule int_div_le_mono >> simp[] >>
-    simp[integerTheory.INT_ABS_LE] >> intLib.ARITH_TAC,
-    `ABS hi / w2i w2 ≤ ABS (w2i w1) / w2i w2` suffices_by intLib.ARITH_TAC >>
-    irule int_div_le_mono >> simp[] >>
-    simp[integerTheory.INT_ABS_LE] >> intLib.ARITH_TAC
-  ]
+  strip_tac >> gvs[neg_quot_eq]
 QED
 
 Triviality sdiv_range_mixed[local]:
@@ -1280,22 +1281,15 @@ Triviality sdiv_range_mixed[local]:
     lo < 0 ∧ hi ≥ 0 ∧ d > 0 ⇒
     -(ABS lo / d) ≤ w2i (w1 / w2) ∧ w2i (w1 / w2) ≤ hi / d
 Proof
-  rpt gen_tac >> strip_tac >> gvs[] >>
+  rpt gen_tac >> strip_tac >> gvs[int_ge, int_gt] >>
+  `0 < w2i w2` by simp[int_gt] >>
+  `0 ≤ hi` by simp[int_ge] >>
+  `lo quot w2i w2 ≤ w2i w1 quot w2i w2 ∧
+   w2i w1 quot w2i w2 ≤ hi quot w2i w2` by
+    (conj_tac >> irule quot_mono_pos_denom >> simp[]) >>
   mp_tac (Q.SPECL [`w1`, `w2`] w2i_word_quot) >>
   impl_tac >- (conj_tac >- simp[] >> sdiv_not_overflow_tac) >>
-  strip_tac >> gvs[] >>
-  `0 < w2i w2` by intLib.ARITH_TAC >>
-  `lo < 0` by intLib.ARITH_TAC >>
-  `lo quot w2i w2 ≤ w2i w1 quot w2i w2` by
-    (match_mp_tac quot_mono_pos_denom >> simp[]) >>
-  `lo quot w2i w2 = -(ABS lo / w2i w2)` by
-    (match_mp_tac neg_quot_eq >> simp[]) >>
-  `0 ≤ hi` by intLib.ARITH_TAC >>
-  `w2i w1 quot w2i w2 ≤ hi quot w2i w2` by
-    (match_mp_tac quot_mono_pos_denom >> simp[]) >>
-  `hi quot w2i w2 = hi / w2i w2` by
-    (match_mp_tac nonneg_quot_eq >> simp[]) >>
-  intLib.ARITH_TAC
+  strip_tac >> gvs[neg_quot_eq, nonneg_quot_eq]
 QED
 
 Theorem eval_range_sdiv_sound:
@@ -1340,37 +1334,33 @@ Triviality rem_nonneg_le[local]:
   ∀(a:int) d. d ≠ 0 ∧ 0 ≤ a ⇒ a rem d ≤ a
 Proof
   rpt strip_tac >>
-  (* Reduce to d > 0 case: a rem (-d) = a rem d by INT_REM_NEG *)
-  `a rem d = a rem (ABS d)` by (
-    Cases_on `0 < d` >- (`ABS d = d` by intLib.ARITH_TAC >> simp[]) >>
-    `d < 0` by intLib.ARITH_TAC >>
-    `ABS d = -d` by intLib.ARITH_TAC >>
-    mp_tac (Q.SPECL [`a`, `d`] integerTheory.INT_REM_NEG) >>
-    simp[]) >>
-  `0 < ABS d` by intLib.ARITH_TAC >>
-  `ABS d ≠ 0` by intLib.ARITH_TAC >>
-  (* Now prove a rem (ABS d) ≤ a when 0 ≤ a and ABS d > 0 *)
-  `a quot (ABS d) = a / (ABS d)` by
-    (match_mp_tac nonneg_quot_eq >> simp[]) >>
-  `0 ≤ a / (ABS d)` by
-    (match_mp_tac int_div_nonneg >> simp[]) >>
-  mp_tac (Q.SPEC `ABS d` integerTheory.INT_REMQUOT) >>
-  impl_tac >- simp[] >>
-  disch_then (qspec_then `a` strip_assume_tac) >>
-  `0 ≤ a quot (ABS d) * (ABS d)` by
-    (match_mp_tac integerTheory.INT_LE_MUL >> simp[] >> intLib.ARITH_TAC) >>
-  intLib.ARITH_TAC
+  drule integerTheory.NUM_POSINT_EXISTS >>
+  disch_then (qx_choose_then `n` SUBST_ALL_TAC) >>
+  Cases_on `d` >>
+  gvs[integerTheory.INT_REM_NEG, integerTheory.INT_REM,
+      arithmeticTheory.MOD_LESS_EQ]
 QED
 
 Triviality rem_nonpos_ge[local]:
   ∀(a:int) d. d ≠ 0 ∧ a ≤ 0 ⇒ a ≤ a rem d
 Proof
   rpt strip_tac >>
-  `0 ≤ -a` by intLib.ARITH_TAC >>
-  `(-a) rem d ≤ -a` by (match_mp_tac rem_nonneg_le >> simp[]) >>
-  `-(a rem d) = (-a) rem d` by (
-    mp_tac (Q.SPECL [`a`, `d`] integerTheory.INT_REM_NEG) >> simp[]) >>
-  intLib.ARITH_TAC
+  mp_tac (Q.SPECL [`-a`, `d`] rem_nonneg_le) >>
+  simp[integerTheory.INT_NEG_GE0, integerTheory.INT_REM_NEG,
+       integerTheory.INT_LE_NEG]
+QED
+
+(* Discard the quotient equation before using remainder bounds. *)
+Triviality rem_abs_bounds[local]:
+  ∀(a:int) d. d ≠ 0 ⇒
+    1 - ABS d ≤ a rem d ∧ a rem d ≤ ABS d - 1
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule integerTheory.INT_REMQUOT >>
+  disch_then (qspec_then `a` (mp_tac o CONJUNCT2 o CONJUNCT2)) >>
+  PURE_ONCE_REWRITE_TAC [CONJUNCT1 (SPEC_ALL integerTheory.INT_ABS_LT)] >>
+  MATCH_ACCEPT_TAC (intLib.ARITH_PROVE
+    ``∀(r:int) b. r < b ∧ -b < r ⇒ 1 - b ≤ r ∧ r ≤ b - 1``)
 QED
 
 (* Shared tactic: bridge word_rem to int rem, abstract to pure ints *)
@@ -1392,19 +1382,18 @@ Triviality smod_range_nonneg[local]:
     w2i (word_rem w1 w2) ≤ int_min (ABS d - 1) hi
 Proof
   rpt gen_tac >> strip_tac >> smod_bridge_tac >>
-  `0 ≤ a` by intLib.ARITH_TAC >>
-  (* 0 ≤ a rem b *)
-  mp_tac (Q.SPEC `b` integerTheory.INT_REMQUOT) >>
-  impl_tac >- simp[] >>
-  disch_then (qspec_then `a` strip_assume_tac) >>
-  `0 ≤ a rem b` by (Cases_on `0 < a` >> fs[] >>
-    `a = 0` by intLib.ARITH_TAC >> gvs[integerTheory.INT_REM0]) >>
-  (* a rem b ≤ ABS b - 1 (from ABS(a rem b) < ABS b) *)
-  `a rem b ≤ ABS b - 1` by intLib.ARITH_TAC >>
-  (* a rem b ≤ a ≤ hi *)
+  `0 ≤ a` by
+    (irule integerTheory.INT_LE_TRANS >> qexists_tac `lo` >> fs[int_ge]) >>
+  `0 ≤ a rem b` by
+    (Cases_on `a = 0` >- simp[integerTheory.INT_REM0] >>
+     `0 < a` by gvs[integerTheory.INT_LE_LT] >>
+     qpat_x_assum `b ≠ 0` (mp_tac o MATCH_MP integerTheory.INT_REMQUOT) >>
+     disch_then (qspec_then `a` (mp_tac o CONJUNCT1 o CONJUNCT2)) >> simp[]) >>
+  drule rem_abs_bounds >> disch_then (qspec_then `a` strip_assume_tac) >>
   `a rem b ≤ a` by (match_mp_tac rem_nonneg_le >> simp[]) >>
-  (* Combine: a rem b ≤ int_min (ABS b - 1) hi *)
-  simp[integerTheory.INT_MIN] >> intLib.ARITH_TAC
+  `a rem b ≤ hi` by
+    (irule integerTheory.INT_LE_TRANS >> qexists_tac `a` >> simp[]) >>
+  simp[integerTheory.INT_MIN] >> IF_CASES_TAC >> simp[]
 QED
 
 (* Helper: nonpos dividend *)
@@ -1416,17 +1405,17 @@ Triviality smod_range_neg[local]:
     w2i (word_rem w1 w2) ≤ 0
 Proof
   rpt gen_tac >> strip_tac >> smod_bridge_tac >>
-  `a ≤ 0` by intLib.ARITH_TAC >>
-  (* a rem b ≤ 0 *)
-  mp_tac (Q.SPEC `b` integerTheory.INT_REMQUOT) >>
-  impl_tac >- simp[] >>
-  disch_then (qspec_then `a` strip_assume_tac) >>
-  `a rem b ≤ 0` by (Cases_on `0 < a` >> fs[] >> intLib.ARITH_TAC) >>
-  (* -(ABS b - 1) ≤ a rem b (from ABS(a rem b) < ABS b) *)
-  `1 - ABS b ≤ a rem b` by intLib.ARITH_TAC >>
-  (* a ≤ a rem b (from rem_nonpos_ge) *)
+  `a ≤ 0` by
+    (irule integerTheory.INT_LE_TRANS >> qexists_tac `hi` >> simp[]) >>
+  `a rem b ≤ 0` by
+    (`¬(0 < a)` by simp[integerTheory.INT_NOT_LT] >>
+     drule integerTheory.INT_REMQUOT >>
+     disch_then (qspec_then `a` (mp_tac o CONJUNCT1 o CONJUNCT2)) >> simp[]) >>
+  drule rem_abs_bounds >> disch_then (qspec_then `a` strip_assume_tac) >>
   `a ≤ a rem b` by (match_mp_tac rem_nonpos_ge >> simp[]) >>
-  simp[integerTheory.INT_MAX] >> intLib.ARITH_TAC
+  `lo ≤ a rem b` by
+    (irule integerTheory.INT_LE_TRANS >> qexists_tac `a` >> simp[]) >>
+  simp[integerTheory.INT_MAX] >> IF_CASES_TAC >> simp[]
 QED
 
 (* Helper: mixed sign dividend *)
@@ -1437,10 +1426,7 @@ Triviality smod_range_mixed[local]:
     w2i (word_rem w1 w2) ≤ ABS d - 1
 Proof
   rpt gen_tac >> strip_tac >> smod_bridge_tac >>
-  mp_tac (Q.SPEC `b` integerTheory.INT_REMQUOT) >>
-  impl_tac >- simp[] >>
-  disch_then (qspec_then `a` strip_assume_tac) >>
-  intLib.ARITH_TAC
+  irule rem_abs_bounds >> simp[]
 QED
 
 Theorem eval_range_smod_sound:
@@ -1481,10 +1467,11 @@ Triviality w2i_n2w_pow2[local]:
 Proof
   rpt strip_tac >>
   irule integer_wordTheory.w2i_n2w_pos >>
-  simp[wordsTheory.INT_MIN_def, dim256] >>
-  irule arithmeticTheory.LESS_LESS_EQ_TRANS >>
-  qexists_tac `2 ** 255` >>
-  simp[logrootTheory.LT_EXP_ISO]
+  REWRITE_TAC [wordsTheory.INT_MIN_def] >>
+  (* Compare exponents before normalizing the 256-bit bound. *)
+  irule (iffRL (SPEC_ALL (MATCH_MP arithmeticTheory.EXP_BASE_LT_MONO
+    (DECIDE ``1n < 2``)))) >>
+  simp[dim256]
 QED
 
 (* SHL bridge for nonneg shift < 255:
@@ -1608,27 +1595,33 @@ Triviality shl_core_sound[local]:
       (w2 ≪ w2n w1)
 Proof
   rpt gen_tac >> strip_tac >>
-  `0 ≤ w2i w1` by intLib.ARITH_TAC >>
+  `0 ≤ w2i w1` by simp[] >>
   imp_res_tac w2i_nonneg_eq_w2n >>
   `Num sh < 256` by (
     `Num sh < Num (&256:int)` suffices_by simp[integerTheory.NUM_OF_INT] >>
     simp[integerTheory.NUM_LT]) >>
   gvs[integerTheory.NUM_OF_INT] >>
+  `0 < &(2 ** w2n w1):int` by simp[] >>
+  `0 ≤ lo * &(2 ** w2n w1)` by
+    (irule integerTheory.INT_LE_MUL >> simp[]) >>
+  `lo * &(2 ** w2n w1) ≤ w2i w2 * &(2 ** w2n w1) ∧
+   w2i w2 * &(2 ** w2n w1) ≤ hi * &(2 ** w2n w1)` by
+    (ONCE_REWRITE_TAC[integerTheory.INT_MUL_COMM] >>
+     simp[integerTheory.INT_LE_MONO]) >>
+  `hi * &(2 ** w2n w1) ≤ UINT256_MAX_int` by
+    (irule integerTheory.INT_LE_TRANS >>
+     qexists_tac `UINT256_MAX_int / &(2 ** w2n w1) * &(2 ** w2n w1)` >>
+     conj_tac
+     >- (ONCE_REWRITE_TAC[integerTheory.INT_MUL_COMM] >>
+         simp[integerTheory.INT_LE_MONO]) >>
+     irule int_div_mul_le >> simp[]) >>
+  `hi * &(2 ** w2n w1) < &dimword(:256)` by
+    (irule integerTheory.INT_LET_TRANS >> qexists_tac `UINT256_MAX_int` >>
+     simp[UINT256_MAX_def, integer_wordTheory.UINT_MAX_def,
+          wordsTheory.dimword_def, dim256]) >>
   simp[in_range_def, w2i_lsl_wrap256] >>
   irule wrap256_signed_mono_nonneg >>
-  `0 < &(2 ** w2n w1):int` by simp[] >>
-  ONCE_REWRITE_TAC[integerTheory.INT_MUL_COMM] >>
-  simp[integerTheory.INT_LE_MONO, integerTheory.INT_LE_MUL,
-       integerTheory.INT_NOT_LT, int_gt] >>
-  `hi * &(2 ** w2n w1) ≤ UINT256_MAX_int` suffices_by (
-    simp[UINT256_MAX_def, integer_wordTheory.UINT_MAX_def,
-         wordsTheory.dimword_def, dim256] >> intLib.ARITH_TAC) >>
-  irule integerTheory.INT_LE_TRANS >>
-  qexists_tac `UINT256_MAX_int / &(2 ** w2n w1) * &(2 ** w2n w1)` >>
-  ONCE_REWRITE_TAC[integerTheory.INT_MUL_COMM] >>
-  simp[integerTheory.INT_LE_MONO] >>
-  ONCE_REWRITE_TAC[integerTheory.INT_MUL_COMM] >>
-  match_mp_tac int_div_mul_le >> simp[]
+  fs[integerTheory.INT_NOT_LT, int_gt]
 QED
 
 Triviality eval_range_shl_single[local]:

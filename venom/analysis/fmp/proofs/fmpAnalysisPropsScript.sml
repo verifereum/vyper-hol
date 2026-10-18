@@ -1344,8 +1344,14 @@ Proof
   strip_tac
   >> `!callee. MEM callee ctx.ctx_functions ==>
         ?ci. FLOOKUP infos callee.fn_name = SOME ci` by
-       metis_tac[seed_fmp_context_distinct, seed_fmp_context_coverage,
-                 fmp_option_rounds_coverage]
+       (drule seed_fmp_context_distinct >> strip_tac
+        >> `!callee. MEM callee ctx.ctx_functions ==>
+              ?ci. FLOOKUP seed callee.fn_name = SOME ci` by
+             (rpt strip_tac >> drule_all seed_fmp_context_coverage >> simp[])
+        >> rpt strip_tac
+        >> irule fmp_option_rounds_coverage
+        >> qexistsl [`ctx`, `LENGTH ctx.ctx_functions`, `seed`]
+        >> simp[])
   >> `!callee ci. MEM callee ctx.ctx_functions /\
         FLOOKUP infos callee.fn_name = SOME ci ==>
         (ci.fi_needs_fmp <=>

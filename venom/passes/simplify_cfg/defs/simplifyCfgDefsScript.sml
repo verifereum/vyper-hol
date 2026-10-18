@@ -259,8 +259,20 @@ Theorem try_bypass_failed_unchanged:
     func' = func /\ label_map' = label_map
 Proof
   Induct_on `succs` >> simp[try_bypass_def] >>
-  rpt gen_tac >> simp[Once try_bypass_def] >>
-  rpt (CASE_TAC >> gvs[]) >> metis_tac[]
+  rpt gen_tac >>
+  first_x_assum (qspecl_then [`func`, `label_map`, `bb`, `func'`, `label_map'`]
+    assume_tac) >>
+  simp[Once try_bypass_def] >>
+  Cases_on `lookup_block h func.fn_blocks` >> simp[] >>
+  rename1 `lookup_block h func.fn_blocks = SOME next_bb` >>
+  Cases_on `can_bypass_jump func bb next_bb` >> simp[] >>
+  Cases_on `lookup_block (HD (bb_succs next_bb)) func.fn_blocks` >> simp[] >>
+  rename1 `lookup_block (HD (bb_succs next_bb)) _ = SOME target` >>
+  Cases_on `phi_values_agree bb.bb_label next_bb.bb_label
+              target.bb_instructions` >> simp[] >>
+  Cases_on `do_merge_jump func bb next_bb label_map` >> simp[] >>
+  rename1 `do_merge_jump _ _ _ _ = SOME result` >>
+  PairCases_on `result` >> simp[]
 QED
 
 Theorem remove_block_length_less:
@@ -306,7 +318,7 @@ Theorem update_succ_phi_labels_length:
 Proof
   Induct_on `succs` >>
   simp[update_succ_phi_labels_def, listTheory.FOLDL] >>
-  rpt gen_tac >> CASE_TAC >>
+  rpt gen_tac >> Cases_on `lookup_block h bbs` >>
   fs[update_succ_phi_labels_def,
      cfgTransformTheory.replace_block_def]
 QED
@@ -337,9 +349,11 @@ Proof
         metis_tac[]) >>
   qpat_x_assum `do_merge_jump _ _ _ _ = _` mp_tac >>
   simp[do_merge_jump_def] >>
-  rpt (CASE_TAC >> gvs[update_succ_phi_labels_length,
-                       cfgTransformTheory.replace_block_def]) >>
-  strip_tac >> gvs[]
+  Cases_on `bb_succs b` >> simp[] >>
+  rename1 `bb_succs b = target_lbl::rest` >>
+  Cases_on `rest` >> simp[] >>
+  Cases_on `lookup_block target_lbl func.fn_blocks` >> simp[] >>
+  strip_tac >> gvs[cfgTransformTheory.replace_block_def]
 QED
 
 Theorem try_bypass_success_shrinks:
@@ -348,9 +362,25 @@ Theorem try_bypass_success_shrinks:
     LENGTH func'.fn_blocks < LENGTH func.fn_blocks
 Proof
   Induct_on `succs` >> simp[try_bypass_def] >>
-  rpt gen_tac >> simp[Once try_bypass_def] >>
-  rpt (CASE_TAC >> gvs[]) >>
-  metis_tac[do_merge_jump_shrinks, lookup_block_member_label]
+  rpt gen_tac >>
+  first_x_assum (qspecl_then [`func`, `label_map`, `bb`, `func'`, `label_map'`]
+    assume_tac) >>
+  simp[Once try_bypass_def] >>
+  Cases_on `lookup_block h func.fn_blocks` >> simp[] >>
+  rename1 `lookup_block h func.fn_blocks = SOME next_bb` >>
+  Cases_on `can_bypass_jump func bb next_bb` >> simp[] >>
+  Cases_on `lookup_block (HD (bb_succs next_bb)) func.fn_blocks` >> simp[] >>
+  rename1 `lookup_block (HD (bb_succs next_bb)) _ = SOME target` >>
+  Cases_on `phi_values_agree bb.bb_label next_bb.bb_label
+              target.bb_instructions` >> simp[] >>
+  Cases_on `do_merge_jump func bb next_bb label_map` >> simp[] >>
+  rename1 `do_merge_jump _ _ _ _ = SOME result` >>
+  PairCases_on `result` >> simp[] >> strip_tac >> gvs[] >>
+  qpat_assum `lookup_block h _ = SOME next_bb`
+    (strip_assume_tac o MATCH_MP lookup_block_member_label) >>
+  `lookup_block next_bb.bb_label func.fn_blocks = SOME next_bb`
+    by gvs[] >>
+  drule_all do_merge_jump_shrinks >> simp[]
 QED
 
 (* Result invariant for the threaded DFS: with no removed blocks the list of

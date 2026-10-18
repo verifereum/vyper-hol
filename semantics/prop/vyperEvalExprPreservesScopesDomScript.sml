@@ -261,6 +261,61 @@ Proof
   imp_res_tac get_Value_scopes >> imp_res_tac lift_sum_scopes >> imp_res_tac lift_sum_runtime_scopes >> gvs[]
 QED
 
+(* Pure builtin tails need only the state projection, not their result cases. *)
+Theorem builtin_dom_frames[local]:
+  state_rel_frame (λs t. MAP FDOM s.scopes = MAP FDOM t.scopes) (lift_sum rs) ∧
+  state_rel_frame (λs t. MAP FDOM s.scopes = MAP FDOM t.scopes)
+    (toplevel_array_length cx tv)
+Proof
+  simp[state_rel_frame_result] >> rpt strip_tac >>
+  FIRST [drule lift_sum_state, drule toplevel_array_length_state] >> simp[]
+QED
+
+local
+  val relation = ``λ(s:evaluation_state) t. MAP FDOM s.scopes = MAP FDOM t.scopes``;
+  fun specialise th =
+    ISPEC relation (GEN (first (fn v => fst (dest_var v) = "R")
+      (free_vars (concl th))) th) |> SRULE [];
+  val result = specialise state_rel_frame_result;
+  val bind = specialise state_rel_frame_bind_guarded;
+  val leaves = List.foldl (fn (th,net) =>
+      Net.insert (concl th, MATCH_ACCEPT_TAC th) net) Net.empty
+    (CONJUNCTS (specialise state_rel_frame_locals_primitives) @
+     CONJUNCTS builtin_dom_frames);
+  fun leaf (asl,w) = FIRST (Net.match w leaves) (asl,w);
+  (* Discharge only the actual success guard; never simplify an IH. *)
+  fun ih (asl,w) =
+    if not (is_comb w andalso
+      List.exists (fn name =>
+        total (fst o dest_const o fst o strip_comb o rand) w = SOME name)
+        ["eval_expr", "eval_exprs"]) then NO_TAC (asl,w)
+    else let
+      val normalise = SIMP_RULE bool_ss [oneTheory.one, ignore_bind_def];
+      val facts = List.concat (map (CONJUNCTS o normalise o ASSUME) asl);
+      fun discharge th =
+        if is_imp (snd (strip_forall (concl th))) then
+          discharge (tryfind (MATCH_MP th) facts)
+        else th;
+    in
+      FIRST (map (fn th => fn g => ACCEPT_TAC (discharge
+        (PURE_REWRITE_RULE [GSYM AND_IMP_INTRO] th)) g) facts) (asl,w)
+    end;
+in
+  val BUILTIN_DOM_TAC =
+    rpt gen_tac >> strip_tac >>
+    CONV_TAC (REWR_CONV (GSYM result)) >>
+    CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [evaluate_def])) >>
+    RULE_ASSUM_TAC (PURE_REWRITE_RULE [GSYM result]) >>
+    rpt (FIRST [leaf, ih,
+      MATCH_MP_TAC bind >> conj_tac,
+      CONV_TAC (RAND_CONV BETA_CONV),
+      CONV_TAC (RAND_CONV (REWR_CONV ignore_bind_def)),
+      gen_tac, strip_tac,
+      CHANGED_TAC (fn (asl,w) => simp_tac bool_ss
+        (map ASSUME (List.filter (not o is_forall) asl)) (asl,w)),
+      BasicProvers.PURE_CASE_TAC]);
+end;
+
 (* Goal 13: Builtin (guarded P8 IH) *)
 Theorem case_Builtin_dom[local]:
   ∀cx ty bt es.
@@ -278,13 +333,7 @@ Theorem case_Builtin_dom[local]:
       eval_expr cx (Builtin ty bt es) st = (res,st') ⇒
       MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
-  rpt strip_tac >>
-  gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def, ignore_bind_def,
-      check_def, type_check_def, assert_def, get_accounts_def, lift_sum_def] >>
-  Cases_on `bt = Len` >> gvs[bind_def, AllCaseEqs(), return_def, raise_def]
-  >> TRY (imp_res_tac toplevel_array_length_state >> gvs[] >>
-          res_tac >> gvs[] >> NO_TAC)
-  >> gvs[get_accounts_def, return_def, sum_CASE_rator, CaseEq"sum", raise_def]
+  BUILTIN_DOM_TAC
 QED
 
 (* Goal 14: Pop (unguarded IH for eval_base_target) *)
@@ -316,10 +365,7 @@ Theorem case_TypeBuiltin_dom[local]:
       eval_expr cx (TypeBuiltin ty tb typ es) st = (res,st') ⇒
       MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
-  rpt strip_tac >>
-  gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def, ignore_bind_def,
-      check_def, type_check_def, assert_def, lift_sum_def] >>
-  TRY (Cases_on `evaluate_type_builtin cx tb typ vs` >> gvs[return_def, raise_def])
+  BUILTIN_DOM_TAC
 QED
 
 Theorem Send_outcome_preserves_locals:

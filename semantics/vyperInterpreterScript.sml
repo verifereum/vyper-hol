@@ -481,13 +481,23 @@ End
 * to "see through" the state-exception monad when constructing the termination
 * conditions *)
 
+(* Keep these small monadic congruences independent of the large ambient
+   interpreter simpset, and split only the result being sequenced. *)
+val monad_cong_ss = bool_ss ++ rewrites
+  [pairTheory.pair_case_thm, sumTheory.sum_case_def, pairTheory.PAIR_EQ,
+   sumTheory.INL_11, sumTheory.INR_11, sumTheory.sum_distinct];
+
 Theorem bind_cong_implicit[defncong]:
   (f = f') ∧
   (∀s x t. f' s = (INL x, t) ==> g x t = g' x t)
   ⇒
   bind f g = bind f' g'
 Proof
-  rw[bind_def, FUN_EQ_THM] \\ CASE_TAC \\ CASE_TAC \\ gs[]
+  disch_then (CONJUNCTS_THEN2 SUBST1_TAC ASSUME_TAC)
+  \\ CONV_TAC FUN_EQ_CONV \\ qx_gen_tac `s`
+  \\ Cases_on `f' s` \\ rename1 `f' s = (result, st)`
+  \\ Cases_on `result`
+  \\ asm_simp_tac monad_cong_ss [bind_def]
   \\ first_x_assum irule \\ goal_assum drule
 QED
 
@@ -497,11 +507,10 @@ Theorem ignore_bind_cong_implicit[defncong]:
   ⇒
   ignore_bind f g = ignore_bind f' g'
 Proof
-  rw[ignore_bind_def]
-  \\ irule bind_cong_implicit
-  \\ rw[]
-  \\ first_x_assum irule
-  \\ goal_assum drule
+  REWRITE_TAC [ignore_bind_def]
+  \\ strip_tac \\ irule bind_cong_implicit
+  \\ asm_simp_tac monad_cong_ss []
+  \\ first_assum ACCEPT_TAC
 QED
 
 Theorem try_cong[defncong]:
@@ -511,7 +520,11 @@ Theorem try_cong[defncong]:
   ⇒
   try f h s = try f' h' s'
 Proof
-  rw[try_def] \\ CASE_TAC \\ CASE_TAC \\ gs[]
+  disch_then (CONJUNCTS_THEN2 ASSUME_TAC
+    (CONJUNCTS_THEN2 ASSUME_TAC (SUBST_ALL_TAC o SYM)))
+  \\ Cases_on `f' s` \\ rename1 `f' s = (result, st)`
+  \\ Cases_on `result`
+  \\ asm_simp_tac monad_cong_ss [try_def]
 QED
 
 Theorem try_cong_implicit[defncong]:
@@ -520,10 +533,12 @@ Theorem try_cong_implicit[defncong]:
   ⇒
   try f h = try f' h'
 Proof
-  rw[FUN_EQ_THM]
-  \\ irule try_cong \\ rw[]
-  \\ first_x_assum irule
-  \\ metis_tac[]
+  disch_then (CONJUNCTS_THEN2 SUBST1_TAC ASSUME_TAC)
+  \\ CONV_TAC FUN_EQ_CONV \\ qx_gen_tac `s`
+  \\ Cases_on `f' s` \\ rename1 `f' s = (result, st)`
+  \\ Cases_on `result`
+  \\ asm_simp_tac monad_cong_ss [try_def]
+  \\ first_x_assum irule \\ goal_assum drule
 QED
 
 Theorem bind_cong[defncong]:
@@ -533,7 +548,11 @@ Theorem bind_cong[defncong]:
   ⇒
   bind f g s = bind f' g' s'
 Proof
-  rw[bind_def] \\ CASE_TAC \\ CASE_TAC \\ gs[]
+  disch_then (CONJUNCTS_THEN2 ASSUME_TAC
+    (CONJUNCTS_THEN2 ASSUME_TAC (SUBST_ALL_TAC o SYM)))
+  \\ Cases_on `f' s` \\ rename1 `f' s = (result, st)`
+  \\ Cases_on `result`
+  \\ asm_simp_tac monad_cong_ss [bind_def]
 QED
 
 Theorem ignore_bind_cong[defncong]:
@@ -543,9 +562,9 @@ Theorem ignore_bind_cong[defncong]:
   ⇒
   ignore_bind f g s = ignore_bind f' g' s'
 Proof
-  rw[ignore_bind_def]
-  \\ irule bind_cong
-  \\ rw[]
+  REWRITE_TAC [ignore_bind_def]
+  \\ strip_tac \\ irule bind_cong
+  \\ asm_simp_tac monad_cong_ss []
 QED
 
 Theorem finally_cong[defncong]:
@@ -555,9 +574,13 @@ Theorem finally_cong[defncong]:
   ⇒
   finally f g s = finally f' g' s'
 Proof
-  rw[finally_def]
-  \\ CASE_TAC \\ CASE_TAC
-  \\ irule ignore_bind_cong \\ gs[]
+  disch_then (CONJUNCTS_THEN2 ASSUME_TAC
+    (CONJUNCTS_THEN2 ASSUME_TAC (SUBST_ALL_TAC o SYM)))
+  \\ Cases_on `f' s` \\ rename1 `f' s = (result, st)`
+  \\ Cases_on `result`
+  \\ asm_simp_tac monad_cong_ss [finally_def]
+  \\ irule ignore_bind_cong
+  \\ asm_simp_tac monad_cong_ss []
 QED
 
 (* lookup_function with Internal finds body via ALOOKUP on dest_Internal_Fn *)

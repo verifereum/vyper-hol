@@ -426,6 +426,11 @@ QED
 val assign_subscripts_int_sub_clause = cj 5 assign_subscripts_def;
 val assign_subscripts_update_clause = cj 2 assign_subscripts_def;
 
+(* Only reduce result heads; leave binops, element types and array payloads opaque. *)
+val assign_subscripts_update_ss =
+  boolSimps.bool_ss ++ optionSimps.OPTION_ss ++ sumSimps.SUM_ss ++
+  rewrites (LET_THM :: #rewrs (TypeBase.simpls_of ``:value``));
+
 Theorem assign_subscripts_update_INL:
   ∀tv a k ty bop v.
     array_is_mutable a ∧ valid_index tv a k ∧
@@ -441,12 +446,18 @@ Theorem assign_subscripts_update_INL:
 Proof
   rpt strip_tac >>
   `IS_SOME (array_index tv a k)` by simp[array_index_valid] >>
+  Cases_on `array_index tv a k` >>
+  full_simp_tac assign_subscripts_update_ss [] >>
+  rename1 `array_index tv a k = SOME elem` >>
+  Cases_on `type_to_int_bound ty` >>
+  full_simp_tac assign_subscripts_update_ss [] >>
+  rename1 `type_to_int_bound ty = SOME bound` >>
+  Cases_on `evaluate_binop bound
+    (case tv of ArrayTV t _ => t | _ => NoneTV) bop elem v` >>
+  full_simp_tac assign_subscripts_update_ss [] >>
   ONCE_REWRITE_TAC [assign_subscripts_int_sub_clause] >>
-  REWRITE_TAC [assign_subscripts_update_clause] >>
-  simp[LET_THM, array_set_index_INL] >>
-  Cases_on `array_index tv a k` >> fs[] >>
-  Cases_on `type_to_int_bound ty` >> fs[] >>
-  CASE_TAC >> fs[] >> CASE_TAC >> fs[]
+  asm_simp_tac assign_subscripts_update_ss
+    [assign_subscripts_update_clause, array_set_index_INL]
 QED
 
 (* ============================================================

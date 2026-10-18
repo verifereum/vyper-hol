@@ -182,21 +182,26 @@ Proof
   rpt strip_tac >> gvs[] >> Cases_on `b` >> simp[get_storage_def]
 QED
 
+(* Follow only the lookup/assignment result spine; keep the type/value pair
+   intact and transport storage across the two stateful endpoints. *)
 Theorem assign_target_immutable_storage_frame:
   assign_target cx (BaseTargetV (ImmutableVar src_id id) sbs) op st =
     (res,st') ==>
   !b. get_storage cx st' b = get_storage cx st b
 Proof
-  rpt strip_tac >>
-  qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
-  simp[Once assign_target_def, bind_def, ignore_bind_def, return_def, raise_def,
-       lift_option_def, lift_option_type_def, lift_sum_def, get_immutables_def,
-       get_address_immutables_def, AllCaseEqs()] >>
-  rpt (CASE_TAC >> gvs[return_def, raise_def, bind_def, AllCaseEqs()]) >>
-  rpt strip_tac >>
-  imp_res_tac set_immutable_storage_frame >>
-  imp_res_tac assign_result_preserves_state >>
-  gvs[]
+  Cases_on `ALOOKUP st.immutables cx.txn.target` >>
+  simp[Once assign_target_def, get_immutables_def,
+       get_address_immutables_def, bind_def, ignore_bind_def,
+       lift_option_type_def, lift_sum_def, return_def, raise_def] >>
+  rename1 `ALOOKUP st.immutables cx.txn.target = SOME imms` >>
+  Cases_on `FLOOKUP (get_source_immutables src_id imms) (string_to_num id)` >>
+  simp[return_def, raise_def, bind_def] >>
+  rename1 `FLOOKUP _ _ = SOME tva` >>
+  Cases_on `assign_subscripts (FST tva) (SND tva) (REVERSE sbs) op` >>
+  simp[return_def, raise_def, bind_def, CaseEq "prod", CaseEq "sum"] >>
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac assign_result_preserves_state >> gvs[] >>
+  drule set_immutable_storage_frame >> simp[]
 QED
 
 Theorem assign_target_immutable_preserves_contract_storage_well_formed:

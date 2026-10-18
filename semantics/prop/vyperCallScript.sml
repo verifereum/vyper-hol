@@ -135,13 +135,31 @@ QED
 
 (* ===== Error Rollback Properties (issue #180) ===== *)
 
+(* Keep monadic calls opaque: only inspect the result spine, using a small
+   cached set of constructor rewrites rather than decomposing the context. *)
+local
+  val rollback_ss = bool_ss ++ rewrites
+    [LET_THM, pairTheory.pair_case_thm, pairTheory.UNCURRY_DEF,
+     pairTheory.PAIR_EQ,
+     sumTheory.sum_case_def, sumTheory.INL_11, sumTheory.INR_11,
+     sumTheory.sum_distinct, optionTheory.option_case_def,
+     exception_case_def];
+in
+  val call_rollback_simp_tac = simp_tac rollback_ss;
+  fun call_rollback_step (goal as (asl,_)) =
+    (BasicProvers.PURE_TOP_CASE_TAC >>
+     (fn (next as (asl',_)) =>
+       simp_tac rollback_ss
+         (map ASSUME (filter (fn tm => not (tmem tm asl)) asl')) next)) goal;
+  val call_rollback_cases_tac = rpt call_rollback_step;
+end;
+
 Theorem call_external_function_error_rollback:
   call_external_function orc am cx nr mut ts all_mods args dflts vals body ret = (INR e, am', rqs) ⇒
   am' = am
 Proof
-  simp[Once call_external_function_def, vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def] >>
-  rpt strip_tac >>
-  gvs[pairTheory.ELIM_UNCURRY, AllCaseEqs()]
+  call_rollback_simp_tac [Once call_external_function_def] >>
+  call_rollback_cases_tac
 QED
 
 Theorem call_external_error_rollback:

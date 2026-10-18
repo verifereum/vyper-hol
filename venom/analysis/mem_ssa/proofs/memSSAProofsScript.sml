@@ -4935,12 +4935,16 @@ Triviality process_frontiers_ids_ge:
     (∀a. a ∈ FDOM ms.ms_nodes ⇒ lb ≤ a) ∧ lb ≤ ms.ms_next_id ⇒
     (∀a. a ∈ FDOM ms'.ms_nodes ⇒ lb ≤ a) ∧ lb ≤ ms'.ms_next_id
 Proof
-  Induct >> simp[mem_ssa_process_frontiers_def] >>
-  rpt gen_tac >> pairarg_tac >> gvs[] >>
-  pairarg_tac >> gvs[] >> strip_tac >>
-  first_x_assum match_mp_tac >>
-  qexists_tac `ms1` >> simp[] >>
-  metis_tac[insert_phi_at_ids_ge]
+  Induct >- simp[mem_ssa_process_frontiers_def] >>
+  (* Keep the guarded IH out of contextual simplification. *)
+  pop_assum (fn ih =>
+    rpt gen_tac >> simp[Once mem_ssa_process_frontiers_def] >>
+    pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+    strip_tac >> gvs[] >>
+    match_mp_tac (Q.SPECL [`ms1`, `cfg`, `dom`, `fuel`,
+                          `ms'`, `rest`, `lb`] ih) >>
+    simp[] >>
+    drule_all insert_phi_at_ids_ge >> simp[])
 QED
 
 Triviality insert_phis_ids_ge:

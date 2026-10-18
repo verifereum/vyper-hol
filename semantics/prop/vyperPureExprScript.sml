@@ -304,9 +304,14 @@ Theorem expr_state_mutual[local]:
 Proof
   MP_TAC expr_state_ind_principle >> impl_tac >- (
     rpt conj_tac >>
-    (* Close trivially-T subgoals (P0-P6) and all Call/Pop cases
-       (pure_expr (Call _ _ _) = F makes conclusion vacuous) *)
-    TRY (simp[pure_expr_def] >> NO_TAC) >-
+    (* Do not simplify purity inside the guarded IHs: internal calls have
+       large default-argument guards. Unfold only the conclusion's purity
+       assumption, once, and leave the case-lemma IHs unchanged. *)
+    TRY (rpt (gen_tac ORELSE disch_tac) >> ACCEPT_TAC TRUTH) >>
+    TRY (rpt strip_tac >>
+         qpat_x_assum `pure_expr _` mp_tac >>
+         CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [pure_expr_def])) >>
+         simp_tac bool_ss [] >> NO_TAC) >-
     metis_tac[case_Name] >-
     metis_tac[case_TopLevelName] >-
     metis_tac[case_FlagMember] >-

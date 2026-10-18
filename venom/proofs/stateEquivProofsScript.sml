@@ -198,13 +198,22 @@ QED
    Mutations Preserve state_equiv
    ========================================================================== *)
 
+(* Keep memory arithmetic opaque: only Boolean structure and record
+   projections are needed, not the global simplifier's memory/list rules. *)
+val memory_equiv_ss = bool_ss ++ rewrites
+  [state_equiv_def, execution_equiv_def,
+   stateFrameTheory.execution_frame_def, lookup_var_def,
+   venom_state_component_equality, venom_state_accfupds,
+   venom_state_fupdfupds, combinTheory.K_THM, LET_THM];
+
 Theorem update_var_preserves:
   !vars x v s1 s2.
     state_equiv vars s1 s2 ==>
     state_equiv vars (update_var x v s1) (update_var x v s2)
 Proof
-  rw[state_equiv_def, execution_equiv_def,
-     update_var_def, lookup_var_def, FLOOKUP_UPDATE]
+  rpt gen_tac >>
+  simp_tac memory_equiv_ss [] >> strip_tac >>
+  asm_simp_tac memory_equiv_ss [update_var_def, FLOOKUP_UPDATE]
 QED
 
 Theorem mstore_preserves:
@@ -212,7 +221,9 @@ Theorem mstore_preserves:
     state_equiv vars s1 s2 ==>
     state_equiv vars (mstore offset v s1) (mstore offset v s2)
 Proof
-  rw[state_equiv_def, execution_equiv_def, mstore_def, lookup_var_def]
+  rpt gen_tac >>
+  simp_tac memory_equiv_ss [] >> strip_tac >>
+  asm_simp_tac memory_equiv_ss [mstore_def]
 QED
 
 Theorem mstore8_preserves:
@@ -220,7 +231,9 @@ Theorem mstore8_preserves:
     state_equiv vars s1 s2 ==>
     state_equiv vars (mstore8 offset v s1) (mstore8 offset v s2)
 Proof
-  rw[state_equiv_def, execution_equiv_def, mstore8_def, lookup_var_def]
+  rpt gen_tac >>
+  simp_tac memory_equiv_ss [] >> strip_tac >>
+  asm_simp_tac memory_equiv_ss [mstore8_def]
 QED
 
 Theorem sstore_preserves:
@@ -228,8 +241,9 @@ Theorem sstore_preserves:
     state_equiv vars s1 s2 ==>
     state_equiv vars (sstore key v s1) (sstore key v s2)
 Proof
-  rw[state_equiv_def, execution_equiv_def, sstore_def,
-     contract_storage_def, lookup_var_def, LET_THM]
+  rpt gen_tac >>
+  simp_tac memory_equiv_ss [] >> strip_tac >>
+  asm_simp_tac memory_equiv_ss [sstore_def]
 QED
 
 Theorem tstore_preserves:
@@ -237,8 +251,9 @@ Theorem tstore_preserves:
     state_equiv vars s1 s2 ==>
     state_equiv vars (tstore key v s1) (tstore key v s2)
 Proof
-  rw[state_equiv_def, execution_equiv_def, tstore_def,
-     contract_transient_def, lookup_var_def, LET_THM]
+  rpt gen_tac >>
+  simp_tac memory_equiv_ss [] >> strip_tac >>
+  asm_simp_tac memory_equiv_ss [tstore_def]
 QED
 
 Theorem write_memory_with_expansion_preserves:
@@ -248,8 +263,9 @@ Theorem write_memory_with_expansion_preserves:
       (write_memory_with_expansion offset bytes s1)
       (write_memory_with_expansion offset bytes s2)
 Proof
-  rw[state_equiv_def, execution_equiv_def,
-     write_memory_with_expansion_def, lookup_var_def]
+  rpt gen_tac >>
+  simp_tac memory_equiv_ss [] >> strip_tac >>
+  asm_simp_tac memory_equiv_ss [write_memory_with_expansion_def]
 QED
 
 Theorem jump_to_preserves:
@@ -257,7 +273,9 @@ Theorem jump_to_preserves:
     state_equiv vars s1 s2 ==>
     state_equiv vars (jump_to lbl s1) (jump_to lbl s2)
 Proof
-  rw[state_equiv_def, execution_equiv_def, jump_to_def, lookup_var_def]
+  rpt gen_tac >>
+  simp_tac memory_equiv_ss [] >> strip_tac >>
+  asm_simp_tac memory_equiv_ss [jump_to_def]
 QED
 
 Theorem halt_state_preserves:
@@ -265,7 +283,9 @@ Theorem halt_state_preserves:
     state_equiv vars s1 s2 ==>
     state_equiv vars (halt_state s1) (halt_state s2)
 Proof
-  rw[state_equiv_def, execution_equiv_def, halt_state_def, lookup_var_def]
+  rpt gen_tac >>
+  simp_tac memory_equiv_ss [] >> strip_tac >>
+  asm_simp_tac memory_equiv_ss [halt_state_def]
 QED
 
 Theorem revert_state_preserves:
@@ -273,7 +293,9 @@ Theorem revert_state_preserves:
     state_equiv vars s1 s2 ==>
     state_equiv vars (revert_state s1) (revert_state s2)
 Proof
-  rw[state_equiv_def, execution_equiv_def, revert_state_def, lookup_var_def]
+  rpt gen_tac >>
+  simp_tac memory_equiv_ss [] >> strip_tac >>
+  asm_simp_tac memory_equiv_ss [revert_state_def]
 QED
 
 (* ==========================================================================
@@ -318,7 +340,9 @@ Theorem update_var_execution_preserves[local]:
     execution_equiv vars s1 s2 ==>
     execution_equiv vars (update_var x v s1) (update_var x v s2)
 Proof
-  rw[execution_equiv_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE]
+  rpt gen_tac >>
+  simp_tac memory_equiv_ss [] >> strip_tac >>
+  asm_simp_tac memory_equiv_ss [update_var_def, FLOOKUP_UPDATE]
 QED
 
 Theorem mstore_execution_preserves[local]:
@@ -326,7 +350,9 @@ Theorem mstore_execution_preserves[local]:
     execution_equiv vars s1 s2 ==>
     execution_equiv vars (mstore addr val s1) (mstore addr val s2)
 Proof
-  rw[execution_equiv_def, mstore_def, lookup_var_def]
+  rpt gen_tac >>
+  simp_tac memory_equiv_ss [] >> strip_tac >>
+  asm_simp_tac memory_equiv_ss [mstore_def]
 QED
 
 Theorem sstore_execution_preserves[local]:
@@ -334,8 +360,9 @@ Theorem sstore_execution_preserves[local]:
     execution_equiv vars s1 s2 ==>
     execution_equiv vars (sstore key val s1) (sstore key val s2)
 Proof
-  rw[execution_equiv_def, sstore_def, contract_storage_def,
-     lookup_var_def, LET_THM]
+  rpt gen_tac >>
+  simp_tac memory_equiv_ss [] >> strip_tac >>
+  asm_simp_tac memory_equiv_ss [sstore_def]
 QED
 
 Theorem tstore_execution_preserves[local]:
@@ -343,8 +370,9 @@ Theorem tstore_execution_preserves[local]:
     execution_equiv vars s1 s2 ==>
     execution_equiv vars (tstore key val s1) (tstore key val s2)
 Proof
-  rw[execution_equiv_def, tstore_def, contract_transient_def,
-     lookup_var_def, LET_THM]
+  rpt gen_tac >>
+  simp_tac memory_equiv_ss [] >> strip_tac >>
+  asm_simp_tac memory_equiv_ss [tstore_def]
 QED
 
 Theorem halt_state_execution_preserves[local]:
@@ -352,7 +380,9 @@ Theorem halt_state_execution_preserves[local]:
     execution_equiv vars s1 s2 ==>
     execution_equiv vars (halt_state s1) (halt_state s2)
 Proof
-  rw[execution_equiv_def, halt_state_def, lookup_var_def]
+  rpt gen_tac >>
+  simp_tac memory_equiv_ss [] >> strip_tac >>
+  asm_simp_tac memory_equiv_ss [halt_state_def]
 QED
 
 Theorem revert_state_execution_preserves[local]:
@@ -360,7 +390,9 @@ Theorem revert_state_execution_preserves[local]:
     execution_equiv vars s1 s2 ==>
     execution_equiv vars (revert_state s1) (revert_state s2)
 Proof
-  rw[execution_equiv_def, revert_state_def, lookup_var_def]
+  rpt gen_tac >>
+  simp_tac memory_equiv_ss [] >> strip_tac >>
+  asm_simp_tac memory_equiv_ss [revert_state_def]
 QED
 
 Theorem write_memory_with_expansion_execution_preserves[local]:
@@ -370,7 +402,9 @@ Theorem write_memory_with_expansion_execution_preserves[local]:
       (write_memory_with_expansion offset bytes s1)
       (write_memory_with_expansion offset bytes s2)
 Proof
-  rw[execution_equiv_def, write_memory_with_expansion_def, lookup_var_def]
+  rpt gen_tac >>
+  simp_tac memory_equiv_ss [] >> strip_tac >>
+  asm_simp_tac memory_equiv_ss [write_memory_with_expansion_def]
 QED
 
 Theorem mload_execution_same[local]:

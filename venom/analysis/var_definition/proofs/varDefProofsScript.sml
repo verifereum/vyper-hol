@@ -662,8 +662,18 @@ Proof
       Cases_on `(lbl,idx) = k` >> fs[] >> rw[] >> metis_tac[])
   (* Inductive case: h::instrs *)
   >> rpt gen_tac >> strip_tac >>
-  fs[dfAnalyzeDefsTheory.df_fold_forward_def, LET_THM] >>
-  first_x_assum
+  (* Unfold the two concrete calls, not the quantified relational IH. *)
+  qpat_x_assum `df_fold_forward transfer lbl (h::instrs) idx a im_a = _`
+    mp_tac >>
+  CONV_TAC (LAND_CONV (LHS_CONV
+    (ONCE_REWRITE_CONV [dfAnalyzeDefsTheory.df_fold_forward_def]))) >>
+  PURE_REWRITE_TAC [LET_THM] >> BETA_TAC >> strip_tac >>
+  qpat_x_assum `df_fold_forward transfer lbl (h::instrs) idx b im_b = _`
+    mp_tac >>
+  CONV_TAC (LAND_CONV (LHS_CONV
+    (ONCE_REWRITE_CONV [dfAnalyzeDefsTheory.df_fold_forward_def]))) >>
+  PURE_REWRITE_TAC [LET_THM] >> BETA_TAC >> strip_tac >>
+  qpat_x_assum `!transfer lbl idx a b im_a im_b fva fvb ima imb. _`
     (qspecl_then [`transfer`, `lbl`, `idx + 1`,
       `transfer h a`, `transfer h b`,
       `im_a |+ ((lbl,idx),a)`, `im_b |+ ((lbl,idx),b)`,

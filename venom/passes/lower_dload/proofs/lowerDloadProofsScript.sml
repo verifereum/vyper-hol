@@ -27,6 +27,10 @@ val dim256 = fcpLib.INDEX_CONV ``dimindex(:256)``;
 val dimword_256_ss = simpLib.rewrites
   [dim256, dimword_def];
 
+(* Evaluate only the fixed allocation size, not symbolic offset arithmetic. *)
+val alloca_size_32 = SIMP_CONV (srw_ss() ++ dimword_256_ss) []
+  ``32 MOD dimword (:256)``;
+
 (* Index the exported equations once; rewrite only the known opcode branch. *)
 val step_inst_base_opcode_rewrites = let
   fun key th = let
@@ -843,6 +847,14 @@ Proof
   simp[write_memory_with_expansion_def, LET_THM]
 QED
 
+(* Cache write projections rather than normalize the expanded memory record
+   at every field of ld_ok. *)
+val wmwe_projections = let
+  val accessors = map (rator o lhs o concl o SPEC_ALL)
+    (CONJUNCTS venom_state_accessors)
+in map (fn acc => SIMP_RULE (srw_ss()) [LET_THM]
+  (AP_TERM acc (SPEC_ALL write_memory_with_expansion_def))) accessors end;
+
 (* Fresh variable names are distinct *)
 Theorem ld_vars_distinct[local,simp]:
   ld_add_var id <> ld_alloca_var id /\
@@ -920,35 +932,29 @@ Proof
   (* Step through all 4 instructions with dimword and var distinctness *)
   ONCE_REWRITE_TAC[run_insts_def] >>
   simp[step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  ASM_REWRITE_TAC[opcode_case_def] >>
-  simp[LET_THM, exec_alloca_def, eval_operand_def] >>
+  simp[step_inst_base_opcode_eq ``ALLOCA``, LET_THM,
+       exec_alloca_def, eval_operand_def] >>
   BasicProvers.EVERY_CASE_TAC >> gvs[] >>
   ONCE_REWRITE_TAC[run_insts_def] >>
   simp[step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  ASM_REWRITE_TAC[opcode_case_def] >>
-  simp[] >>
-  simp[LET_THM, exec_pure2_def, eval_operand_def, lookup_var_def,
+  simp[step_inst_base_opcode_eq ``ADD``, LET_THM,
+       exec_pure2_def, eval_operand_def, lookup_var_def,
        update_var_def, FLOOKUP_UPDATE] >>
   ONCE_REWRITE_TAC[run_insts_def] >>
   simp[step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  ASM_REWRITE_TAC[opcode_case_def] >>
-  simp[LET_THM, eval_operand_def, lookup_var_def,
+  simp[step_inst_base_opcode_eq ``CODECOPY``, LET_THM,
+       eval_operand_def, lookup_var_def,
        update_var_def, FLOOKUP_UPDATE] >>
   ONCE_REWRITE_TAC[run_insts_def] >>
   qmatch_goalsub_abbrev_tac `step_inst fuel ctx _ mload_state` >>
   simp[step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  ASM_REWRITE_TAC[opcode_case_def] >>
-  simp[] >>
-  simp[LET_THM, exec_read1_def, eval_operand_def, run_insts_def] >>
+  simp[step_inst_base_opcode_eq ``MLOAD``, LET_THM,
+       exec_read1_def, eval_operand_def, run_insts_def] >>
   qunabbrev_tac `mload_state` >>
   simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
   simp[FLOOKUP_UPDATE] >>
   (* Step 1: Simplify 32 MOD dimword(:256) -> 32 *)
-  simp_tac (srw_ss() ++ dimword_256_ss) [] >>
+  PURE_REWRITE_TAC[alloca_size_32] >>
   (* Step 2: Simplify code offset arithmetic *)
   `s2.vs_code = s1.vs_code /\ s2.vs_data_section = s1.vs_data_section /\
    s2.vs_labels = s1.vs_labels` by fs[ld_ok_def] >>
@@ -978,8 +984,8 @@ Proof
     (rpt gen_tac >> irule write_then_mload >> simp[]) >>
   ASM_REWRITE_TAC[] >>
   (* Step 4: Close ld_ok — wmwe only changes vs_memory *)
-  simp[ld_ok_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
-       write_memory_with_expansion_def, LET_THM] >>
+  simp (wmwe_projections @
+    [ld_ok_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
   fs[ld_ok_def, lookup_var_def] >>
   rpt strip_tac >>
   Cases_on `out = v'` >- simp[] >>

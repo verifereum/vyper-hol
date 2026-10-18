@@ -18,6 +18,14 @@ Libs
 
 val rveq = VAR_EQ_TAC;
 
+(* Select proved opcode equations without expanding the full dispatch. *)
+fun rta_step_inst_base_for opc = let
+  fun matches th = let
+    val (_, body) = strip_forall (concl th)
+    val (guard, _) = dest_imp body
+  in aconv (rhs guard) opc end
+in valOf (List.find matches (CONJUNCTS step_inst_base_opcode_eqs)) end;
+
 (* ===== Easy helpers ===== *)
 
 (* lift_result implies resolving_block_sim (avoids unfolding defs in rich contexts) *)
@@ -171,7 +179,8 @@ Proof
   simp[Once exec_block_def, get_instruction_def] >>
   `EL 0 bb.bb_instructions = HD bb.bb_instructions` by
     (Cases_on `bb.bb_instructions` >> fs[]) >>
-  simp[step_inst_non_invoke, step_inst_base_def, eval_operand_def]
+  simp[step_inst_non_invoke, rta_step_inst_base_for ``REVERT``,
+       eval_operand_def]
 QED
 
 (* Combined bridge: run_block_entry directly to Abort result.
@@ -351,7 +360,7 @@ Triviality step_jnz_general:
     step_inst_base inst st =
       if cond <> 0w then OK (jump_to if_nz st) else OK (jump_to if_z st)
 Proof
-  rw[step_inst_base_def, eval_operand_def]
+  rpt strip_tac >> simp[rta_step_inst_base_for ``JNZ``]
 QED
 
 (* step_inst_base for JNZ when eval_operand fails *)
@@ -363,7 +372,7 @@ Triviality step_jnz_eval_none:
   ==>
     ?e. step_inst_base inst st = Error e
 Proof
-  rw[step_inst_base_def, eval_operand_def]
+  rpt strip_tac >> simp[rta_step_inst_base_for ``JNZ``]
 QED
 
 (* step_inst_base for ISZERO when eval_operand fails *)
@@ -373,7 +382,8 @@ Triviality step_iszero_eval_none:
   ==>
     ?e. step_inst_base (mk_iszero_inst id cond_op out) st = Error e
 Proof
-  rw[step_inst_base_def, mk_iszero_inst_def, exec_pure1_def, eval_operand_def]
+  rpt strip_tac >>
+  simp[mk_iszero_inst_def, step_inst_base_ISZERO, exec_pure1_def]
 QED
 
 (* step_inst_base for ASSERT when eval_operand fails *)
@@ -383,7 +393,8 @@ Triviality step_assert_eval_none:
   ==>
     ?e. step_inst_base (mk_assert_inst id cond_op) st = Error e
 Proof
-  rw[step_inst_base_def, mk_assert_inst_def, eval_operand_def]
+  rpt strip_tac >>
+  simp[mk_assert_inst_def, rta_step_inst_base_for ``ASSERT``]
 QED
 
 (* OK/OK simulation when states differ only by a fresh variable update.

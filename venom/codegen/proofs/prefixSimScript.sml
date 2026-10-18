@@ -55,6 +55,21 @@ val all_handler_defs = dispatch_ss @
   [asm_pop_def, asm_mstore_def, asm_mload_def,
    asm_dup_def, asm_swap_def, LET_THM, asm_next_def];
 
+(* Resolve only the memory-group dispatch, once per known opcode.  Handler
+   payloads are deliberately not part of this simplification. *)
+val prefix_memory_dispatch = map
+  (fn name => SIMP_CONV (srw_ss())
+    [asm_step_def, asm_step_op_def, asm_step_arith_def,
+     asm_step_compare_def, asm_step_bitwise_def, asm_step_memory_def]
+    ``asm_step lo o2pc (AsmOp ^name) st``)
+  [``"POP"``, ``"MSTORE"``, ``"MLOAD"``];
+
+(* No word/list computation: only result constructors and state projections.
+   In particular, MLOAD's word_of_bytes and expanded memory stay opaque. *)
+val prefix_side_ss = bool_ss ++ simpLib.rewrites
+  [asm_result_11, asm_result_distinct, list_case_def,
+   asm_state_accfupds, combinTheory.K_THM, LET_THM, asm_next_def];
+
 val prefix_swap_tac =
   rw(dispatch_ss @ [asm_swap_def, LET_THM, asm_next_def]) >>
   gvs[];
@@ -97,35 +112,33 @@ Theorem prefix_pop_preserves[local]:
   !lo o2pc st st'.
     asm_step lo o2pc (AsmOp "POP") st = AsmOK st' ==> ^side_fields
 Proof
-  rpt strip_tac \\
-  fs(all_handler_defs) \\
-  every_case_tac \\ gvs[]
+  rpt gen_tac \\
+  Cases_on `st.as_stack` \\
+  asm_simp_tac prefix_side_ss (asm_pop_def :: prefix_memory_dispatch) \\
+  disch_then (SUBST1_TAC o SYM) \\ simp_tac prefix_side_ss []
 QED
 
 Theorem prefix_mstore_preserves[local]:
   !lo o2pc st st'.
     asm_step lo o2pc (AsmOp "MSTORE") st = AsmOK st' ==> ^side_fields
 Proof
-  rpt strip_tac \\
-  qpat_x_assum `asm_step _ _ _ _ = AsmOK _` mp_tac \\
-  PURE_ONCE_REWRITE_TAC[asm_step_def] \\
-  simp_tac std_ss [] \\
-  PURE_ONCE_REWRITE_TAC[asm_step_op_def] \\
-  simp[asm_step_arith_def] \\
-  simp[asm_step_compare_def] \\
-  simp[asm_step_bitwise_def] \\
-  simp[asm_step_memory_def] \\
-  simp[asm_mstore_def, LET_THM, asm_next_def] \\
-  every_case_tac \\ rpt strip_tac \\ gvs[]
+  rpt gen_tac \\
+  Cases_on `st.as_stack` \\
+  asm_simp_tac prefix_side_ss (asm_mstore_def :: prefix_memory_dispatch) \\
+  rename1 `st.as_stack = offset :: rest` \\
+  Cases_on `rest` \\
+  asm_simp_tac prefix_side_ss [] \\
+  disch_then (SUBST1_TAC o SYM) \\ simp_tac prefix_side_ss []
 QED
 
 Theorem prefix_mload_preserves[local]:
   !lo o2pc st st'.
     asm_step lo o2pc (AsmOp "MLOAD") st = AsmOK st' ==> ^side_fields
 Proof
-  rpt strip_tac \\
-  fs(all_handler_defs) \\
-  every_case_tac \\ gvs[]
+  rpt gen_tac \\
+  Cases_on `st.as_stack` \\
+  asm_simp_tac prefix_side_ss (asm_mload_def :: prefix_memory_dispatch) \\
+  disch_then (SUBST1_TAC o SYM) \\ simp_tac prefix_side_ss []
 QED
 
 Theorem prefix_swap_preserves[local]:

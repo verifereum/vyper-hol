@@ -1050,7 +1050,12 @@ Definition translate_base_target_def:
   (translate_base_target ctx (JBT_Attribute tgt attr) =
     AttributeTarget (translate_base_target ctx tgt) attr)
 Termination
-  WF_REL_TAC `measure (json_base_target_size o SND)` >> simp[]
+  (* Select the relation directly; avoid WF_REL_TAC's global size rewrites. *)
+  qexists_tac `measure (json_base_target_size o SND)` >>
+  conj_tac >- MATCH_ACCEPT_TAC prim_recTheory.WF_measure >>
+  PURE_REWRITE_TAC [prim_recTheory.measure_thm, combinTheory.o_DEF,
+                    pairTheory.SND] >>
+  simp[json_base_target_size_def]
 End
 
 
@@ -1058,7 +1063,13 @@ Definition translate_target_def:
   (translate_target ctx (JTgt_Base bt) = BaseTarget (translate_base_target ctx bt)) /\
   (translate_target ctx (JTgt_Tuple tgts) = TupleTarget (MAP (translate_target ctx) tgts))
 Termination
-  WF_REL_TAC `measure (json_target_size o SND)` >> simp[]
+  qexists_tac `measure (json_target_size o SND)` >>
+  conj_tac >- MATCH_ACCEPT_TAC prim_recTheory.WF_measure >>
+  PURE_REWRITE_TAC [prim_recTheory.measure_thm, combinTheory.o_DEF,
+                    pairTheory.SND] >>
+  simp[json_target_size_def] >>
+  Induct_on `tgts` >> rw[json_target_size_def] >>
+  res_tac >> simp[]
 End
 
 
@@ -1180,8 +1191,15 @@ Definition translate_stmt_def:
   (translate_stmt ctx (JS_Append tgt val) =
     Append (translate_base_target ctx tgt) (translate_expr ctx val))
 Termination
-  WF_REL_TAC `measure (json_stmt_size o SND)` >>
-  rw[] >> simp[json_stmt_size_def]
+  qexists_tac `measure (json_stmt_size o SND)` >>
+  conj_tac >- MATCH_ACCEPT_TAC prim_recTheory.WF_measure >>
+  PURE_REWRITE_TAC [prim_recTheory.measure_thm, combinTheory.o_DEF,
+                    pairTheory.SND] >>
+  rw[] >> simp[json_stmt_size_def] >>
+  qpat_x_assum `MEM a _` mp_tac >>
+  rename1 `MEM a stmts` >>
+  Induct_on `stmts` >> rw[json_stmt_size_def] >>
+  res_tac >> simp[]
 End
 
 

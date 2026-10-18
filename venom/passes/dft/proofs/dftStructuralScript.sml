@@ -11,6 +11,15 @@ Ancestors
 
 (* ===== flip_operands basic properties ===== *)
 
+(* Compile only the opcode and record rewrites needed by the flip proofs;
+   avoid redispatching the ambient simpset across every opcode constructor. *)
+val flip_opcode_ss =
+  bool_ss ++ simpLib.type_ssfrag ``:opcode`` ++
+  simpLib.type_ssfrag ``:instruction`` ++
+  simpLib.rewrites
+    [combinTheory.K_THM, flip_comparison_opcode_def, is_pseudo_def, is_barrier_def,
+     is_volatile_def, is_alloca_op_def, is_raw_fmp_opcode_def];
+
 Theorem flip_operands_inst_id[simp]:
   !i. (flip_operands i).inst_id = i.inst_id
 Proof
@@ -40,8 +49,9 @@ Proof
   Cases_on `t` >> simp[] >>
   Cases_on `t'` >> simp[LET_THM] >>
   Cases_on `is_comparator i.inst_opcode` >> simp[] >>
-  Cases_on `i.inst_opcode` >>
-  fs[is_comparator_def, flip_comparison_opcode_def, is_pseudo_def]
+  qpat_x_assum `is_comparator _`
+    (strip_assume_tac o REWRITE_RULE [is_comparator_def]) >>
+  ASM_SIMP_TAC flip_opcode_ss []
 QED
 
 (* Flipping operands does not change barrier-ness *)
@@ -52,10 +62,11 @@ Proof
   Cases_on `i.inst_operands` >> simp[] >>
   Cases_on `t` >> simp[] >>
   Cases_on `t'` >> simp[LET_THM] >>
-  Cases_on `is_comparator i.inst_opcode` >> simp[] >>
-  Cases_on `i.inst_opcode` >>
-  fs[is_comparator_def, flip_comparison_opcode_def, is_barrier_def,
-     is_volatile_def, is_alloca_op_def, is_raw_fmp_opcode_def]
+  Cases_on `is_comparator i.inst_opcode` >>
+  ASM_SIMP_TAC flip_opcode_ss [] >>
+  qpat_x_assum `is_comparator _`
+    (strip_assume_tac o REWRITE_RULE [is_comparator_def]) >>
+  ASM_SIMP_TAC flip_opcode_ss []
 QED
 
 (* ===== Helper lemmas ===== *)
@@ -155,8 +166,9 @@ Proof
   TRY (simp[instruction_component_equality] >> NO_TAC) >>
   Cases_on `is_comparator (flip_comparison_opcode i.inst_opcode)` >>
   simp[LET_THM, instruction_component_equality] >>
-  Cases_on `i.inst_opcode` >>
-  gvs[is_comparator_def, flip_comparison_opcode_def]
+  qpat_x_assum `is_comparator (i.inst_opcode)`
+    (strip_assume_tac o REWRITE_RULE [is_comparator_def]) >>
+  FULL_SIMP_TAC flip_opcode_ss [is_comparator_def]
 QED
 
 (* from_block is transitive: if every non-pseudo in L1 satisfies from_block L0,
@@ -273,6 +285,17 @@ Definition et_wf_def:
                 MEM r block_insts /\ ~is_pseudo r.inst_opcode)
 End
 
+(* Cache only the list, option, record and lookup rewrites used below.
+   Head-update cases must not inspect cases inside the remaining FOLDL. *)
+val effect_fold_ss =
+  bool_ss ++ simpLib.type_ssfrag ``:effect_track`` ++
+  simpLib.type_ssfrag ``:'a list`` ++
+  simpLib.type_ssfrag ``:'a option`` ++
+  simpLib.rewrites
+    [combinTheory.K_THM, listTheory.FOLDL, listTheory.APPEND,
+     listTheory.MEM, listTheory.MEM_APPEND,
+     finite_mapTheory.FLOOKUP_UPDATE];
+
 (* Helper: second FOLDL (reads) preserves et_last_write *)
 Theorem read_foldl_last_write:
   !effs acc inst.
@@ -281,7 +304,7 @@ Theorem read_foldl_last_write:
          acc.et_all_reads |+ (reff, et_get_reads acc reff ++ [inst]))
        acc effs).et_last_write = acc.et_last_write
 Proof
-  Induct >> simp[]
+  Induct >> ASM_SIMP_TAC effect_fold_ss []
 QED
 
 (* Helper: write FOLDL stores inst in last_write, everything else from et *)
@@ -293,13 +316,14 @@ Theorem write_foldl_last_write:
        et effs).et_last_write eff = SOME w ==>
     w = inst \/ FLOOKUP et.et_last_write eff = SOME w
 Proof
-  Induct >> simp[] >> rpt strip_tac >>
+  Induct >> SIMP_TAC effect_fold_ss [] >> rpt strip_tac >>
   first_x_assum (qspecl_then
     [`<| et_last_write := et.et_last_write |+ (h, inst);
          et_all_reads := et.et_all_reads |+ (h, []) |>`,
      `inst`, `eff`, `w`] mp_tac) >>
-  simp[] >> strip_tac >> gvs[finite_mapTheory.FLOOKUP_UPDATE] >>
-  BasicProvers.every_case_tac >> gvs[]
+  ASM_SIMP_TAC effect_fold_ss [] >> strip_tac >>
+  ASM_SIMP_TAC effect_fold_ss [] >>
+  Cases_on `h = eff` >> FULL_SIMP_TAC effect_fold_ss []
 QED
 
 (* Helper: write FOLDL clears reads *)
@@ -311,13 +335,14 @@ Theorem write_foldl_all_reads:
        et effs).et_all_reads eff = SOME rs ==>
     rs = [] \/ FLOOKUP et.et_all_reads eff = SOME rs
 Proof
-  Induct >> simp[] >> rpt strip_tac >>
+  Induct >> SIMP_TAC effect_fold_ss [] >> rpt strip_tac >>
   first_x_assum (qspecl_then
     [`<| et_last_write := et.et_last_write |+ (h, inst);
          et_all_reads := et.et_all_reads |+ (h, []) |>`,
      `inst`, `eff`, `rs`] mp_tac) >>
-  simp[] >> strip_tac >> gvs[finite_mapTheory.FLOOKUP_UPDATE] >>
-  BasicProvers.every_case_tac >> gvs[]
+  ASM_SIMP_TAC effect_fold_ss [] >> strip_tac >>
+  ASM_SIMP_TAC effect_fold_ss [] >>
+  Cases_on `h = eff` >> FULL_SIMP_TAC effect_fold_ss []
 QED
 
 (* Helper: read FOLDL stores inst in reads, rest from input *)
@@ -329,13 +354,18 @@ Theorem read_foldl_all_reads:
        acc effs).et_all_reads eff = SOME rs /\ MEM r rs ==>
     r = inst \/ (?rs0. FLOOKUP acc.et_all_reads eff = SOME rs0 /\ MEM r rs0)
 Proof
-  Induct >> simp[] >> rpt strip_tac >>
+  Induct >> SIMP_TAC effect_fold_ss [] >> rpt strip_tac >>
   first_x_assum (qspecl_then
     [`acc with et_all_reads :=
         acc.et_all_reads |+ (h, et_get_reads acc h ++ [inst])`,
      `inst`, `eff`, `rs`, `r`] mp_tac) >>
-  simp[] >> strip_tac >> gvs[finite_mapTheory.FLOOKUP_UPDATE, et_get_reads_def] >>
-  BasicProvers.every_case_tac >> gvs[listTheory.MEM_APPEND]
+  ASM_SIMP_TAC effect_fold_ss [] >> strip_tac >>
+  ASM_SIMP_TAC effect_fold_ss [] >>
+  Cases_on `h = eff` >> FULL_SIMP_TAC effect_fold_ss [] >>
+  Cases_on `FLOOKUP acc.et_all_reads eff` >>
+  FULL_SIMP_TAC effect_fold_ss [et_get_reads_def] >>
+  rpt BasicProvers.VAR_EQ_TAC >>
+  FULL_SIMP_TAC effect_fold_ss [DISJ_COMM]
 QED
 
 (* compute_effect_deps: deps come from et, and et' stores inst.
@@ -357,7 +387,8 @@ Proof
       gvs[listTheory.MEM_FLAT, listTheory.MEM_MAP, listTheory.MEM_nub,
           listTheory.MEM_APPEND, et_get_reads_def,
           listTheory.MEM_FILTER, optionTheory.IS_SOME_EXISTS] \\
-      BasicProvers.every_case_tac \\ gvs[] \\ metis_tac[])
+      (* Close impossible branches before inspecting another lookup. *)
+      rpt (BasicProvers.PURE_FULL_CASE_TAC \\ gvs[]) \\ metis_tac[])
   \\ rpt strip_tac \\ rpt BasicProvers.VAR_EQ_TAC
   \\ fs[read_foldl_last_write]
   \\ TRY (drule write_foldl_last_write \\ strip_tac \\ gvs[] \\ metis_tac[])

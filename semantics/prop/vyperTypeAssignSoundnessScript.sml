@@ -368,6 +368,11 @@ QED
 
 (* ===== Bridge lemmas: execution success => shape and assignable context ===== *)
 
+(* Cache just the TopLevelVar equation; keep monadic continuations folded. *)
+val assign_target_TopLevelVar_head =
+  PURE_REWRITE_CONV [cj 2 assign_target_def, LET_THM]
+    ``assign_target cx (BaseTargetV (TopLevelVar src id) sbs) op``;
+
 (* When get_module_code is NONE, lookup_global returns TypeError
    because lookup_global calls lift_option_type (get_module_code ...) FIRST. *)
 Theorem get_module_code_NONE_lookup_global_TypeError:
@@ -542,10 +547,17 @@ Proof
   >- (
     (* tv = Value v. The Value branch does find_var_decl AGAIN via OPTION_BIND.
        With find_decl = NONE, OPTION_BIND NONE _ = NONE -> lift_option_type NONE -> TypeError *)
+    `find_var_decl_by_num (string_to_num id) code = NONE` by
+      (Cases_on `find_var_decl_by_num (string_to_num id) code` >> gvs[]) >>
     qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
-    simp[assign_target_def, bind_def, LET_THM, lift_option_type_def,
-         return_def, raise_def, OPTION_BIND_def] >>
-    CASE_TAC >> gvs[raise_def, AllCaseEqs()])
+    PURE_ONCE_REWRITE_TAC [assign_target_TopLevelVar_head] >>
+    PURE_ONCE_REWRITE_TAC [bind_def] >>
+    asm_simp_tac (srw_ss()) [] >>
+    PURE_ONCE_REWRITE_TAC [bind_def] >>
+    asm_simp_tac (srw_ss()) [lift_option_type_def, return_def] >>
+    PURE_ONCE_REWRITE_TAC [bind_def] >>
+    asm_simp_tac (srw_ss()) [OPTION_BIND_def, lift_option_type_def, return_def] >>
+    PURE_ONCE_REWRITE_TAC [bind_def] >> simp[raise_def])
   >- (
     (* tv = HashMapRef. ¬is_Value HashMapRef, so lemma gives ∃p; contradicts ∀p.≠ *)
     metis_tac[lookup_global_INL_not_Value_imp_find_decl_SOME, is_Value_def])

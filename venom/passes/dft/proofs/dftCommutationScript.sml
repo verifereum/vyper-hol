@@ -432,10 +432,9 @@ QED
    threads through step_inst_base
    ================================================================ *)
 
-(* ML tactic for step_inst_base_frame: process 92 opcodes.
-   Strategy: unfold step_inst_base_def once on each side, case-split the opcode,
-   then for helper cases use per-helper frame lemmas, for custom cases use
-   eval_operand_update_var + commute lemmas + case splitting. *)
+(* ML tactics for step_inst_base_frame: select the cached opcode equation,
+   apply helper frames directly, and use focused operand/result envelopes
+   for custom branches. Keep arithmetic and state-operation payloads opaque. *)
 
 (* Frame lemmas for the exec_* helpers *)
 val helper_frames = [
@@ -628,8 +627,7 @@ val ext_call_frames = [
 
 val all_rwts2 = all_rwts @ ext_call_frames;
 
-(* Per-opcode tactic: helper frames + ext_call frames + custom defs.
-   Uses TRY/NO_TAC safety net to prevent partial application. *)
+(* PHI infrastructure retained for consumers of the operand frame lemmas. *)
 (* PHI-specific: resolve_phi result's eval_operand ignores update_var *)
 Theorem resolve_phi_eval_operand_update_var[local]:
   !prev ops val_op x v s.
@@ -643,23 +641,97 @@ Proof
   imp_res_tac resolve_phi_MEM >> gvs[]
 QED
 
+(* Preservation of fields (venomInstProofs1/2/3) does not imply this
+   two-run commutation property, including non-OK results. Reuse the guarded
+   opcode interface, and apply helper frames without simplifying their
+   arithmetic payloads (notably the shift/sign-extension functions). *)
+val base_frame_opcode_rewrites = map (fn th => let
+  val (guard, _) = dest_imp (snd (strip_forall (concl th)))
+  in (rhs guard, th) end)
+  (CONJUNCTS venomExecSemanticsTheory.step_inst_base_opcode_eqs);
+
+val base_frame_opcode_tac =
+  qpat_assum `inst.inst_opcode = _` (fn eq => let
+    val (_, th) = valOf (List.find
+      (fn (key, _) => aconv key (rhs (concl eq)))
+      base_frame_opcode_rewrites)
+    in PURE_ONCE_REWRITE_TAC [MATCH_MP th eq] end);
+
+(* Push the result map through shared control, rather than enumerating
+   every option/conditional on both runs. Cache these typed projections. *)
+val frame_result_projections = let
+  fun case_type tm = type_of (#2 (TypeBase.dest_case tm))
+  val shapes = mk_set (List.concat (map
+    (map case_type o find_terms TypeBase.is_case o concl)
+    (step_inst_base_def :: custom_defs)))
+  val project = ``\r:exec_result. map_result_state (update_var x v) r``
+  fun constant ty = Prim_rec.prove_case_const_thm
+    {case_def = TypeBase.case_def_of ty,
+     nchotomy = TypeBase.nchotomy_of ty}
+  fun through ty = BETA_RULE (ISPEC project (TypeBase.case_rand_of ty))
+ in map through shapes @ map constant shapes @
+    [BETA_RULE (PART_MATCH (rator o lhs) COND_RAND project)]
+ end;
+
+(* Only reduce the operand/result envelopes and the frame operations.
+   In particular, do not import the word simplifier into payloads. *)
+val frame_envelope_ss = bool_ss ++
+  simpLib.type_ssfrag ``:exec_result`` ++
+  simpLib.type_ssfrag ``:operand`` ++
+  simpLib.type_ssfrag ``:'a list`` ++
+  simpLib.type_ssfrag ``:'a option`` ++
+  simpLib.type_ssfrag ``:'a # 'b`` ++ rewrites
+  (frame_result_projections @
+   [LET_THM, MEM, pairTheory.FST, pairTheory.SND,
+    pairTheory.ELIM_UNCURRY, combinTheory.K_THM]);
+
+val base_frame_ss = frame_envelope_ss ++ numSimps.ARITH_ss ++
+  rewrites (all_rwts2 @ [MEM_REVERSE, LENGTH_REVERSE]);
+
+val base_frame_custom_ss = base_frame_ss ++ rewrites custom_defs;
+
+(* Follow only the active dispatch spine on the left. Never case-split
+   conditionals buried in a value, state record, or helper argument. *)
+fun frame_head_scrutinee tm =
+  if boolSyntax.is_cond tm then #1 (boolSyntax.dest_cond tm)
+  else let
+    val (_, scrut, _) = TypeBase.dest_case tm
+  in
+    if boolSyntax.is_cond scrut orelse TypeBase.is_case scrut
+    then frame_head_scrutinee scrut else scrut
+  end;
+
+fun frame_head_case_tac (g as (_, w)) =
+  Cases_on [QUOTE "", ANTIQUOTE (frame_head_scrutinee (lhs w))] g;
+
+fun frame_simp_tac ss =
+  RULE_ASSUM_TAC (SIMP_RULE frame_envelope_ss []) >> asm_simp_tac ss [];
+
+(* Normalize the generic preconditions once, while the read/arithmetic
+   functions are still variables. Discharge instances with the restricted
+   frame simpset, not the global word/byte evaluation simpset. *)
+val helper_frame_rules = map (SIMP_RULE (srw_ss()) []) helper_frames;
+
 val base_frame_tac =
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  ASM_REWRITE_TAC[opcode_case_def] >>
-  gvs all_rwts2 >>
-  TRY (gvs(all_rwts2 @ custom_defs) >>
-       rpt (CHANGED_TAC (BasicProvers.TOP_CASE_TAC >>
-                          gvs(all_rwts2 @ custom_defs))));
+  base_frame_opcode_tac >>
+  FIRST [
+    MAP_FIRST (fn th => irule th >>
+      asm_simp_tac base_frame_ss [] >> NO_TAC) helper_frame_rules,
+    frame_simp_tac base_frame_custom_ss >>
+    rpt (CHANGED_TAC (frame_head_case_tac >>
+                       frame_simp_tac base_frame_custom_ss))
+  ];
 
 (* Call/create dispatch only needs operand evaluation and its helper frame.
    Keep the large state-operation rewrite set out of the nested list/option
    splits, and leave the execution helpers abstract. *)
-fun call_operand_frame_tac frame =
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  ASM_REWRITE_TAC[opcode_case_def] >>
-  gvs[eval_operand_update_var, map_result_state_def, update_var_fields, frame] >>
-  rpt (CHANGED_TAC (BasicProvers.TOP_CASE_TAC >>
-       gvs[eval_operand_update_var, map_result_state_def, frame]));
+fun call_operand_frame_tac frame = let
+  val ss = frame_envelope_ss ++ rewrites
+    [eval_operand_update_var, map_result_state_def, update_var_fields, frame]
+ in
+  base_frame_opcode_tac >> frame_simp_tac ss >>
+  rpt (CHANGED_TAC (frame_head_case_tac >> frame_simp_tac ss))
+ end;
 
 Theorem step_inst_base_frame:
   !inst s x v.
@@ -669,6 +741,8 @@ Theorem step_inst_base_frame:
   map_result_state (update_var x v) (step_inst_base inst s)
 Proof
   rpt strip_tac >>
+  `~MEM (Var x) inst.inst_operands` by
+    (strip_tac >> first_x_assum drule >> simp[]) >>
   Cases_on `inst.inst_opcode`
   >- base_frame_tac (* ADD *)
   >- base_frame_tac (* SUB *)
@@ -738,11 +812,7 @@ Proof
   >- (base_frame_tac >> gvs[update_var_def]) (* INITIAL_FMP *)
   >- base_frame_tac (* BUMP *)
   >- base_frame_tac (* INVOKE *)
-  >- (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-      ASM_REWRITE_TAC[opcode_case_def] >>
-      simp[update_var_fields] >>
-      rpt (BasicProvers.TOP_CASE_TAC >>
-           gvs[map_result_state_def, update_var_commutes])) (* FMP_PARAM *)
+  >- base_frame_tac (* FMP_PARAM *)
   >- (base_frame_tac >> gvs[update_var_def]) (* RETPC_PARAM *)
   >- base_frame_tac (* CALLER *)
   >- base_frame_tac (* CALLVALUE *)

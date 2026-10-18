@@ -785,7 +785,8 @@ Theorem vyper_to_abi_pre[cv_pre]:
 Proof
   ho_match_mp_tac vyper_to_abi_ind
   \\ rw[]
-  \\ rw[Once vyper_to_abi_pre_def]
+  \\ CONV_TAC (ONCE_REWRITE_CONV [vyper_to_abi_pre_def])
+  \\ rw[] \\ gvs[]
 QED
 
 (* ===== Roundtrip Theorems ===== *)

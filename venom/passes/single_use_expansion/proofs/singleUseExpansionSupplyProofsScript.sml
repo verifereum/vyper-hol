@@ -267,36 +267,37 @@ Theorem sue_expand_ops_supply_covered:
     EVERY (\i. MEM i.inst_id s'.irs_used_inst_ids) assigns
 Proof
   Induct_on `ops`
-  >- (rpt strip_tac >>
-      gvs[sue_expand_ops_supply_def,
-          venomInstTheory.operand_vars_def])
-  >> rpt strip_tac >>
+  >- simp[sue_expand_ops_supply_def, venomInstTheory.operand_vars_def] >>
+  rpt gen_tac >> strip_tac >>
   Cases_on `sue_expand_ops_supply dfg inst s ops (op_idx + 1)` >>
   PairCases_on `r` >>
   rename1 `sue_expand_ops_supply dfg inst s ops (op_idx + 1) =
            (more_assigns,more_ops,s1)` >>
+  `EVERY (\v. MEM v s.irs_used_vars) (venomInst$operand_vars [h]) /\
+   EVERY (\v. MEM v s.irs_used_vars) (venomInst$operand_vars ops)` by
+    (qpat_x_assum `EVERY _ (venomInst$operand_vars (h::ops))` mp_tac >>
+     Cases_on `venomInst$operand_var h` >>
+     simp[venomInstTheory.operand_vars_def]) >>
+  (* Consume the guarded IH before any context simplification. *)
+  qpat_x_assum `!dfg inst s op_idx assigns new_ops s'. _`
+    (qspecl_then [`dfg`,`inst`,`s`,`op_idx + 1`,
+                  `more_assigns`,`more_ops`,`s1`] mp_tac) >>
+  impl_tac >- simp[] >> strip_tac >>
   `sue_supply_extends s s1` by
     metis_tac[sue_expand_ops_supply_extends] >>
   `ir_supply_inst_ok s1` by gvs[sue_supply_extends_def] >>
-  `EVERY (\v. MEM v s.irs_used_vars) (venomInst$operand_vars ops)` by
-    (Cases_on `h` >>
-     gvs[venomInstTheory.operand_vars_def,
-         venomInstTheory.operand_var_def]) >>
-  `EVERY (\v. MEM v s1.irs_used_vars)
-     (FLAT (MAP inst_ir_vars more_assigns) ++
-      venomInst$operand_vars more_ops) /\
-   EVERY (\i. MEM i.inst_id s1.irs_used_inst_ids) more_assigns` by
-    metis_tac[] >>
-  `!v. MEM v s.irs_used_vars ==> MEM v s1.irs_used_vars` by
-    metis_tac[sue_supply_extends_members] >>
   `EVERY (\v. MEM v s1.irs_used_vars)
      (venomInst$operand_vars [h])` by
-    (Cases_on `h` >>
-     gvs[venomInstTheory.operand_vars_def,
-         venomInstTheory.operand_var_def] >>
-     qpat_assum `!v. MEM v s.irs_used_vars ==>
-                      MEM v s1.irs_used_vars`
-       (qspec_then `s''` irule) >> simp[]) >>
+    (qpat_assum `EVERY _ (venomInst$operand_vars [h])` mp_tac >>
+     drule sue_supply_extends_members >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp_tac bool_ss [listTheory.EVERY_MEM] >> metis_tac[]) >>
+  `EVERY (\v. MEM v s1.irs_used_vars)
+      (FLAT (MAP inst_ir_vars more_assigns) ++
+       venomInst$operand_vars (h::more_ops)) /\
+   EVERY (\i. MEM i.inst_id s1.irs_used_inst_ids) more_assigns` by
+    (Cases_on `venomInst$operand_var h` >>
+     fs[venomInstTheory.operand_vars_def]) >>
   Cases_on `sue_alloc_assign_supply s1 h` >>
   PairCases_on `r` >>
   rename1 `sue_alloc_assign_supply s1 h = (a,newop,s2)` >>
@@ -306,72 +307,46 @@ Proof
      (inst_ir_vars a ++ venomInst$operand_vars [newop]) /\
    MEM a.inst_id s2.irs_used_inst_ids` by
     metis_tac[sue_alloc_assign_supply_covered] >>
-  `!v. MEM v s1.irs_used_vars ==> MEM v s2.irs_used_vars` by
-    metis_tac[sue_supply_extends_members] >>
-  `!id. MEM id s1.irs_used_inst_ids ==> MEM id s2.irs_used_inst_ids` by
-    metis_tac[sue_supply_extends_members] >>
-  `EVERY (\i. MEM i.inst_id s2.irs_used_inst_ids) more_assigns` by
-    (gvs[listTheory.EVERY_MEM] >> rpt strip_tac >>
-     qpat_assum `!i. MEM i more_assigns ==>
-                      MEM i.inst_id s1.irs_used_inst_ids`
-       (qspec_then `i` mp_tac) >> simp[] >> strip_tac >>
-     qpat_assum `!id. MEM id s1.irs_used_inst_ids ==>
-                       MEM id s2.irs_used_inst_ids`
-       (qspec_then `i.inst_id` irule) >> simp[]) >>
+  `EVERY (\v. MEM v s2.irs_used_vars)
+      (FLAT (MAP inst_ir_vars more_assigns) ++
+       venomInst$operand_vars more_ops) /\
+   EVERY (\i. MEM i.inst_id s2.irs_used_inst_ids) more_assigns` by
+    (qpat_assum `EVERY _ (FLAT (MAP inst_ir_vars more_assigns) ++
+                          venomInst$operand_vars more_ops)` mp_tac >>
+     qpat_assum `EVERY _ more_assigns` mp_tac >>
+     qpat_assum `sue_supply_extends s1 s2`
+       (mp_tac o MATCH_MP sue_supply_extends_members) >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp_tac bool_ss [listTheory.EVERY_MEM] >> metis_tac[]) >>
+  `EVERY (\v. MEM v s2.irs_used_vars)
+      (FLAT (MAP inst_ir_vars (a::more_assigns)) ++
+       venomInst$operand_vars (newop::more_ops)) /\
+   EVERY (\i. MEM i.inst_id s2.irs_used_inst_ids) (a::more_assigns)` by
+    (Cases_on `venomInst$operand_var newop` >>
+     fs[venomInstTheory.operand_vars_def]) >>
+  (* Keep only the two possible output contracts and the evaluation equations. *)
+  qpat_x_assum `sue_expand_ops_supply dfg inst s (h::ops) op_idx = _`
+    mp_tac >>
+  qpat_assum `sue_expand_ops_supply dfg inst s ops (op_idx + 1) = _`
+    mp_tac >>
+  qpat_assum `sue_alloc_assign_supply s1 h = _` mp_tac >>
+  qpat_assum `EVERY _ (FLAT (MAP inst_ir_vars (a::more_assigns)) ++ _)`
+    mp_tac >>
+  qpat_assum `EVERY _ (a::more_assigns)` mp_tac >>
+  qpat_assum `EVERY _ (FLAT (MAP inst_ir_vars more_assigns) ++
+                       venomInst$operand_vars (h::more_ops))` mp_tac >>
+  qpat_assum `EVERY (\i. MEM i.inst_id s1.irs_used_inst_ids) more_assigns`
+    mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >> rpt disch_tac >>
+  qpat_x_assum `sue_expand_ops_supply dfg inst s (h::ops) op_idx = _`
+    mp_tac >>
+  simp[Once sue_expand_ops_supply_def] >> disch_tac >>
   Cases_on `~sue_needs_assign dfg inst op_idx`
-  >- (gvs[sue_expand_ops_supply_def] >>
-      Cases_on `h` >>
-      gvs[venomInstTheory.operand_vars_def,
-          venomInstTheory.operand_var_def]) >>
-  Cases_on `h`
-  >- (gvs[sue_expand_ops_supply_def, listTheory.EVERY_MEM,
-          venomInstTheory.operand_vars_def] >>
-      rpt strip_tac >> Cases_on `venomInst$operand_var newop` >>
-      FIRST_PROVE
-        [qpat_x_assum `MEM v (inst_ir_vars a)` mp_tac >>
-         qpat_assum `!x. MEM x (inst_ir_vars a) ==> MEM x _` mp_tac >>
-         POP_ASSUM_LIST (K all_tac) >> simp[],
-         qpat_x_assum `MEM v _` mp_tac >>
-         qpat_assum
-           `!x. MEM x (case _ of NONE => [] | SOME y => [y]) ==> MEM x _`
-           mp_tac >>
-         qpat_assum
-           `!x. MEM x (venomInst$operand_vars more_ops) ==> MEM x _`
-           mp_tac >>
-         qpat_assum
-           `!x. MEM x (FLAT (MAP inst_ir_vars more_assigns)) ==> MEM x _`
-           mp_tac >>
-         qpat_assum `!x. MEM x s1.irs_used_vars ==> MEM x _` mp_tac >>
-         POP_ASSUM_LIST (K all_tac) >> simp[] >> metis_tac[]])
-  >- (Cases_on `LENGTH (dfg_get_uses dfg s'') = 1 /\
-                 sue_count_remaining (Var s'') ops = 0`
-      >- (gvs[sue_expand_ops_supply_def,
-              venomInstTheory.operand_vars_def,
-              venomInstTheory.operand_var_def])
-      >> gvs[sue_expand_ops_supply_def, listTheory.EVERY_MEM,
-             venomInstTheory.operand_vars_def,
-             venomInstTheory.operand_var_def] >>
-         rpt strip_tac >> Cases_on `venomInst$operand_var newop` >>
-         FIRST_PROVE
-           [qpat_x_assum `MEM v (inst_ir_vars a)` mp_tac >>
-            qpat_assum `!x. MEM x (inst_ir_vars a) ==> MEM x _` mp_tac >>
-            POP_ASSUM_LIST (K all_tac) >> simp[],
-            qpat_x_assum `MEM v _` mp_tac >>
-            qpat_assum
-              `!x. MEM x (case _ of NONE => [] | SOME y => [y]) ==> MEM x _`
-              mp_tac >>
-            qpat_assum
-              `!x. MEM x (venomInst$operand_vars more_ops) ==> MEM x _`
-              mp_tac >>
-            qpat_assum
-              `!x. MEM x (FLAT (MAP inst_ir_vars more_assigns)) ==> MEM x _`
-              mp_tac >>
-            qpat_assum `!x. MEM x s1.irs_used_vars ==> MEM x _` mp_tac >>
-            POP_ASSUM_LIST (K all_tac) >> simp[] >> metis_tac[]])
-  >> gvs[sue_expand_ops_supply_def,
-         venomInstTheory.operand_vars_def,
-         venomInstTheory.operand_var_def] >>
-  gvs[AllCaseEqs()]
+  >- gvs[] >>
+  Cases_on `h` >> gvs[] >>
+  rename1 `sue_alloc_assign_supply s1 (Var v) = _` >>
+  Cases_on `LENGTH (dfg_get_uses dfg v) = 1 /\
+            sue_count_remaining (Var v) ops = 0` >> gvs[]
 QED
 
 
@@ -419,13 +394,17 @@ Theorem sue_expand_insts_supply_covered:
     EVERY (\i. MEM i.inst_id s'.irs_used_inst_ids) outs
 Proof
   Induct_on `insts`
-  >- simp[sue_expand_insts_supply_def]
-  >> rpt strip_tac >>
+  >- simp[sue_expand_insts_supply_def] >>
+  rpt gen_tac >> strip_tac >>
   Cases_on `sue_expand_inst_supply dfg s h` >>
   rename1 `sue_expand_inst_supply dfg s h = (head_out,s1)` >>
   Cases_on `sue_expand_insts_supply dfg s1 insts` >>
   rename1 `sue_expand_insts_supply dfg s1 insts = (tail_out,s2)` >>
-  gvs[sue_expand_insts_supply_def, listTheory.EVERY_APPEND] >>
+  qpat_x_assum `!dfg s outs s'. _`
+    (qspecl_then [`dfg`,`s1`,`tail_out`,`s2`] assume_tac) >>
+  qpat_x_assum `sue_expand_insts_supply dfg s (h::insts) = _` mp_tac >>
+  simp[Once sue_expand_insts_supply_def] >> strip_tac >>
+  gvs[listTheory.EVERY_APPEND] >>
   `sue_supply_extends s s1` by
     metis_tac[sue_expand_inst_supply_extends] >>
   `ir_supply_inst_ok s1` by gvs[sue_supply_extends_def] >>
@@ -438,7 +417,13 @@ Proof
   `EVERY (\v. MEM v s1.irs_used_vars)
       (FLAT (MAP inst_ir_vars insts)) /\
    EVERY (\i. MEM i.inst_id s1.irs_used_inst_ids) insts` by
-    (gvs[listTheory.EVERY_MEM] >> metis_tac[]) >>
+    (qpat_assum `EVERY _ (FLAT (MAP inst_ir_vars insts))` mp_tac >>
+     qpat_assum `EVERY _ insts` mp_tac >>
+     qpat_assum `!v. MEM v s.irs_used_vars ==> MEM v s1.irs_used_vars` mp_tac >>
+     qpat_assum `!id. MEM id s.irs_used_inst_ids ==>
+                       MEM id s1.irs_used_inst_ids` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp_tac bool_ss [listTheory.EVERY_MEM] >> metis_tac[]) >>
   `EVERY (\v. MEM v s'.irs_used_vars) (FLAT (MAP inst_ir_vars tail_out)) /\
    EVERY (\i. MEM i.inst_id s'.irs_used_inst_ids) tail_out` by
     metis_tac[] >>
@@ -447,7 +432,15 @@ Proof
   `(!v. MEM v s1.irs_used_vars ==> MEM v s'.irs_used_vars) /\
    (!id. MEM id s1.irs_used_inst_ids ==> MEM id s'.irs_used_inst_ids)` by
     metis_tac[sue_supply_extends_members] >>
-  gvs[listTheory.EVERY_MEM] >> metis_tac[]
+  qpat_assum `EVERY _ (FLAT (MAP inst_ir_vars head_out))` mp_tac >>
+  qpat_assum `EVERY _ head_out` mp_tac >>
+  qpat_assum `EVERY _ (FLAT (MAP inst_ir_vars tail_out))` mp_tac >>
+  qpat_assum `EVERY _ tail_out` mp_tac >>
+  qpat_assum `!v. MEM v s1.irs_used_vars ==> MEM v s'.irs_used_vars` mp_tac >>
+  qpat_assum `!id. MEM id s1.irs_used_inst_ids ==>
+                    MEM id s'.irs_used_inst_ids` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
+  simp_tac bool_ss [listTheory.EVERY_MEM] >> metis_tac[]
 QED
 
 
@@ -480,13 +473,17 @@ Theorem sue_expand_blocks_supply_covered:
       (FLAT (MAP block_ir_inst_ids bbs'))
 Proof
   Induct_on `bbs`
-  >- simp[sue_expand_blocks_supply_def]
-  >> rpt strip_tac >>
+  >- simp[sue_expand_blocks_supply_def] >>
+  rpt gen_tac >> strip_tac >>
   Cases_on `sue_expand_block_supply dfg s h` >>
   rename1 `sue_expand_block_supply dfg s h = (bb1,s1)` >>
   Cases_on `sue_expand_blocks_supply dfg s1 bbs` >>
   rename1 `sue_expand_blocks_supply dfg s1 bbs = (bbs1,s2)` >>
-  gvs[sue_expand_blocks_supply_def, listTheory.EVERY_APPEND] >>
+  qpat_x_assum `!dfg s bbs' s'. _`
+    (qspecl_then [`dfg`,`s1`,`bbs1`,`s2`] assume_tac) >>
+  qpat_x_assum `sue_expand_blocks_supply dfg s (h::bbs) = _` mp_tac >>
+  simp[Once sue_expand_blocks_supply_def] >> strip_tac >>
+  gvs[listTheory.EVERY_APPEND] >>
   `sue_supply_extends s s1` by
     metis_tac[sue_expand_block_supply_extends] >>
   `ir_supply_inst_ok s1` by gvs[sue_supply_extends_def] >>
@@ -499,7 +496,13 @@ Proof
   `EVERY (\v. MEM v s1.irs_used_vars) (FLAT (MAP block_ir_vars bbs)) /\
    EVERY (\id. MEM id s1.irs_used_inst_ids)
       (FLAT (MAP block_ir_inst_ids bbs))` by
-    (gvs[listTheory.EVERY_MEM] >> metis_tac[]) >>
+    (qpat_assum `EVERY _ (FLAT (MAP block_ir_vars bbs))` mp_tac >>
+     qpat_assum `EVERY _ (FLAT (MAP block_ir_inst_ids bbs))` mp_tac >>
+     qpat_assum `!v. MEM v s.irs_used_vars ==> MEM v s1.irs_used_vars` mp_tac >>
+     qpat_assum `!id. MEM id s.irs_used_inst_ids ==>
+                       MEM id s1.irs_used_inst_ids` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp_tac bool_ss [listTheory.EVERY_MEM] >> metis_tac[]) >>
   `EVERY (\v. MEM v s'.irs_used_vars)
       (FLAT (MAP block_ir_vars bbs1)) /\
    EVERY (\id. MEM id s'.irs_used_inst_ids)
@@ -509,7 +512,15 @@ Proof
   `(!v. MEM v s1.irs_used_vars ==> MEM v s'.irs_used_vars) /\
    (!id. MEM id s1.irs_used_inst_ids ==> MEM id s'.irs_used_inst_ids)` by
     metis_tac[sue_supply_extends_members] >>
-  gvs[listTheory.EVERY_MEM] >> metis_tac[]
+  qpat_assum `EVERY _ (block_ir_vars bb1)` mp_tac >>
+  qpat_assum `EVERY _ (block_ir_inst_ids bb1)` mp_tac >>
+  qpat_assum `EVERY _ (FLAT (MAP block_ir_vars bbs1))` mp_tac >>
+  qpat_assum `EVERY _ (FLAT (MAP block_ir_inst_ids bbs1))` mp_tac >>
+  qpat_assum `!v. MEM v s1.irs_used_vars ==> MEM v s'.irs_used_vars` mp_tac >>
+  qpat_assum `!id. MEM id s1.irs_used_inst_ids ==>
+                    MEM id s'.irs_used_inst_ids` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
+  simp_tac bool_ss [listTheory.EVERY_MEM] >> metis_tac[]
 QED
 
 
@@ -540,13 +551,17 @@ Theorem sue_expand_functions_supply_covered:
       (FLAT (MAP fn_ir_inst_ids fns'))
 Proof
   Induct_on `fns`
-  >- simp[sue_expand_functions_supply_def]
-  >> rpt strip_tac >>
+  >- simp[sue_expand_functions_supply_def] >>
+  rpt gen_tac >> strip_tac >>
   Cases_on `sue_expand_function_supply s h` >>
   rename1 `sue_expand_function_supply s h = (fn1,s1)` >>
   Cases_on `sue_expand_functions_supply s1 fns` >>
   rename1 `sue_expand_functions_supply s1 fns = (fns1,s2)` >>
-  gvs[sue_expand_functions_supply_def, listTheory.EVERY_APPEND] >>
+  qpat_x_assum `!s fns' s'. _`
+    (qspecl_then [`s1`,`fns1`,`s2`] assume_tac) >>
+  qpat_x_assum `sue_expand_functions_supply s (h::fns) = _` mp_tac >>
+  simp[Once sue_expand_functions_supply_def] >> strip_tac >>
+  gvs[listTheory.EVERY_APPEND] >>
   `sue_supply_extends s s1` by
     metis_tac[sue_expand_function_supply_extends] >>
   `ir_supply_inst_ok s1` by gvs[sue_supply_extends_def] >>
@@ -559,7 +574,13 @@ Proof
   `EVERY (\v. MEM v s1.irs_used_vars) (FLAT (MAP fn_ir_vars fns)) /\
    EVERY (\id. MEM id s1.irs_used_inst_ids)
       (FLAT (MAP fn_ir_inst_ids fns))` by
-    (gvs[listTheory.EVERY_MEM] >> metis_tac[]) >>
+    (qpat_assum `EVERY _ (FLAT (MAP fn_ir_vars fns))` mp_tac >>
+     qpat_assum `EVERY _ (FLAT (MAP fn_ir_inst_ids fns))` mp_tac >>
+     qpat_assum `!v. MEM v s.irs_used_vars ==> MEM v s1.irs_used_vars` mp_tac >>
+     qpat_assum `!id. MEM id s.irs_used_inst_ids ==>
+                       MEM id s1.irs_used_inst_ids` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp_tac bool_ss [listTheory.EVERY_MEM] >> metis_tac[]) >>
   `EVERY (\v. MEM v s'.irs_used_vars) (FLAT (MAP fn_ir_vars fns1)) /\
    EVERY (\id. MEM id s'.irs_used_inst_ids)
       (FLAT (MAP fn_ir_inst_ids fns1))` by metis_tac[] >>
@@ -568,7 +589,16 @@ Proof
   `(!v. MEM v s1.irs_used_vars ==> MEM v s'.irs_used_vars) /\
    (!id. MEM id s1.irs_used_inst_ids ==> MEM id s'.irs_used_inst_ids)` by
     metis_tac[sue_supply_extends_members] >>
-  gvs[listTheory.EVERY_MEM] >> metis_tac[]
+  (* Only coverage and membership transport remain; do not rewrite the IH. *)
+  qpat_assum `EVERY _ (fn_ir_vars fn1)` mp_tac >>
+  qpat_assum `EVERY _ (fn_ir_inst_ids fn1)` mp_tac >>
+  qpat_assum `EVERY _ (FLAT (MAP fn_ir_vars fns1))` mp_tac >>
+  qpat_assum `EVERY _ (FLAT (MAP fn_ir_inst_ids fns1))` mp_tac >>
+  qpat_assum `!v. MEM v s1.irs_used_vars ==> MEM v s'.irs_used_vars` mp_tac >>
+  qpat_assum `!id. MEM id s1.irs_used_inst_ids ==>
+                    MEM id s'.irs_used_inst_ids` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
+  simp_tac bool_ss [listTheory.EVERY_MEM] >> metis_tac[]
 QED
 
 Theorem sue_expand_context_supply_covered:
@@ -1028,7 +1058,9 @@ Theorem sue_get_invoke_targets_cons:
   MAP FST (get_invoke_targets [inst]) ++
   MAP FST (get_invoke_targets insts)
 Proof
-  simp[get_invoke_targets_def] >> rpt CASE_TAC >> gvs[]
+  Cases_on `inst.inst_opcode = INVOKE` >> simp[get_invoke_targets_def] >>
+  Cases_on `inst.inst_operands` >> simp[] >>
+  rename1 `inst.inst_operands = op::ops` >> Cases_on `op` >> simp[]
 QED
 
 Theorem sue_get_invoke_targets_append:
@@ -1117,11 +1149,15 @@ Proof
    MAP sue_operand_label inst.inst_operands` by
     metis_tac[sue_expand_ops_supply_operand_labels] >>
   rewrite_tac[sue_get_invoke_targets_append] >> simp[] >>
+  (* Only the label map matters here: do not case-split supply equations. *)
+  qpat_x_assum `MAP sue_operand_label new_ops = _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >> strip_tac >>
   Cases_on `inst.inst_opcode = INVOKE`
-  >- (Cases_on `inst.inst_operands` >> Cases_on `new_ops` >>
-      gvs[get_invoke_targets_def, sue_operand_label_def] >>
-      Cases_on `h` >> gvs[sue_operand_label_def] >>
-      rpt CASE_TAC >> gvs[get_invoke_targets_def, sue_operand_label_def])
+  >- (Cases_on `inst.inst_operands` >> gvs[get_invoke_targets_def] >>
+      Cases_on `new_ops` >> gvs[get_invoke_targets_def] >>
+      rename1 `sue_operand_label new_op = sue_operand_label old_op` >>
+      Cases_on `old_op` >> gvs[sue_operand_label_def] >>
+      Cases_on `new_op` >> gvs[])
   >> gvs[get_invoke_targets_def]
 QED
 
