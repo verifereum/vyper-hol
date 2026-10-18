@@ -1100,8 +1100,8 @@ Proof
   drule take_call_outcome_error >> rw[no_control_exc_def]
 QED
 
-val NO_CONTROL_MONAD_TAC =
-  rpt (FIRST [CHANGED_TAC (CONV_TAC (DEPTH_CONV ETA_CONV)),
+val NO_CONTROL_MONAD_STEP_TAC =
+  FIRST [CHANGED_TAC (CONV_TAC (DEPTH_CONV ETA_CONV)),
     CHANGED_TAC (simp_tac bool_ss
       [FORALL_PROD, pair_case_thm, UNCURRY, no_control_monad_primitives]),
     first_assum ACCEPT_TAC, MATCH_ACCEPT_TAC no_control_monad_take,
@@ -1110,15 +1110,34 @@ val NO_CONTROL_MONAD_TAC =
         List.map ASSUME (List.filter is_eq asl)) (asl,w)),
     irule no_control_monad_bind_guarded >> conj_tac,
     CHANGED_TAC (rewrite_tac[ignore_bind_def]),
-    gen_tac, strip_tac, conj_tac, CASE_TAC]);
+    gen_tac, strip_tac, conj_tac, CASE_TAC];
+
+val NO_CONTROL_MONAD_TAC = rpt NO_CONTROL_MONAD_STEP_TAC;
 
 Resume eval_expr_no_control_with_bt[ExtCall]:
   rpt gen_tac >> strip_tac >>
   simp[GSYM no_control_monad_def, Once evaluate_def] >>
   RULE_ASSUM_TAC (REWRITE_RULE [GSYM no_control_monad_def]) >>
-  NO_CONTROL_MONAD_TAC >|
-  [suspend "return_path_1", suspend "return_path_2",
-   suspend "return_path_3", suspend "return_path_4"]
+  TRY NO_CONTROL_MONAD_STEP_TAC >>
+  TRY NO_CONTROL_MONAD_STEP_TAC >>
+  TRY NO_CONTROL_MONAD_STEP_TAC >>
+  TRY NO_CONTROL_MONAD_STEP_TAC >>
+  TRY NO_CONTROL_MONAD_STEP_TAC >>
+  TRY NO_CONTROL_MONAD_STEP_TAC >>
+  TRY NO_CONTROL_MONAD_STEP_TAC >>
+  TRY NO_CONTROL_MONAD_STEP_TAC >>
+  NTAC 4 (TRY NO_CONTROL_MONAD_STEP_TAC) >>
+  NTAC 4 (TRY NO_CONTROL_MONAD_STEP_TAC) >>
+  NTAC 4 (TRY NO_CONTROL_MONAD_STEP_TAC) >>
+  NTAC 4 (TRY NO_CONTROL_MONAD_STEP_TAC) >>
+  NTAC 4 (TRY NO_CONTROL_MONAD_STEP_TAC) >>
+  NTAC 4 (TRY NO_CONTROL_MONAD_STEP_TAC) >>
+  NTAC 4 (TRY NO_CONTROL_MONAD_STEP_TAC) >>
+  NTAC 4 (TRY NO_CONTROL_MONAD_STEP_TAC) >>
+  qmatch_goalsub_rename_tac `case outcome_opt of NONE => _ | SOME _ => _` >>
+  Cases_on `outcome_opt` >> simp_tac std_ss [] >|
+  [NO_CONTROL_MONAD_TAC >> suspend "return_path_1",
+   NO_CONTROL_MONAD_TAC >> suspend "return_path_2"]
 QED
 
 (* Discharge guards in semantic order using only matching assumptions.
@@ -1146,7 +1165,13 @@ Resume eval_expr_no_control_with_bt[return_path_2]:
   NO_CONTROL_MONAD_IH_TAC
 QED
 Resume eval_expr_no_control_with_bt[return_path_3]:
-  NO_CONTROL_MONAD_IH_TAC
+  simp_tac bool_ss [oneTheory.one, ignore_bind_def] >>
+  rpt (FIRST [first_assum ACCEPT_TAC,
+    first_x_assum (fn th =>
+      if is_imp (snd (strip_forall (concl th))) then
+        drule_at Any th >> simp_tac bool_ss [] >> strip_tac
+      else NO_TAC)]) >>
+  metis_tac[ignore_bind_def]
 QED
 Resume eval_expr_no_control_with_bt[return_path_4]:
   NO_CONTROL_MONAD_IH_TAC

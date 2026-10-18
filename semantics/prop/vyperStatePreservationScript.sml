@@ -93,7 +93,7 @@ Theorem lookup_global_state:
 Proof
   rw[lookup_global_def, bind_def, return_def, lift_option_def, lift_option_type_def] >>
   Cases_on `get_module_code cx src` >> gvs[return_def, raise_def] >>
-  Cases_on `find_var_decl_by_num n x` >> gvs[return_def, raise_def] >-
+  Cases_on `find_var_decl_by_name n x` >> gvs[return_def, raise_def] >-
   (qpat_x_assum `_ = (res, st')` mp_tac >>
    simp[get_immutables_def, get_address_immutables_def, bind_def,
         lift_option_def, lift_option_type_def, return_def, raise_def] >>

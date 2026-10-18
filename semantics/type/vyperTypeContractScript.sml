@@ -54,7 +54,7 @@ End
 
 Definition function_entry_env_def:
   function_entry_env art mods src args =
-    FOLDL (\env (id,ty). extend_local env (string_to_num id) ty T)
+    FOLDL (\env (id,ty). extend_local env id ty T)
       (artifact_env art mods src) args
 End
 
@@ -160,7 +160,7 @@ End
 
 Definition params_ok_def:
   params_ok tenv args <=>
-    ALL_DISTINCT (MAP (string_to_num o FST) args) /\
+    ALL_DISTINCT (MAP FST args) /\
     EVERY (\(_,ty). assignable_type tenv ty) args
 End
 

@@ -4,7 +4,7 @@ Theory vyperEvalOutcomeSuffix
 Ancestors
   list pair option vyperMisc vyperState vyperInterpreter vyperCreate
   vyperStatePreservation vyperCallFrame vyperStorageBackend vyperCallOutcome
-Libs monadsyntax
+Libs monadsyntax pairLib
 
 Definition outcomes_frame_def:
   outcomes_frame f <=> !st. (SND (f st)).outcomes = st.outcomes
@@ -217,7 +217,17 @@ Theorem outcomes_frame_assignment:
   (!cx tgts vs. outcomes_frame (assign_targets cx tgts vs))
 Proof
   ho_match_mp_tac assign_target_ind >> rpt conj_tac >> rpt gen_tac >>
-  simp[Once assign_target_def, FORALL_PROD] >> rpt strip_tac >>
+  simp[Once assign_target_def, FORALL_PROD] >> rpt strip_tac
+  >- rpt ASSIGN_OUTCOMES_FRAME_STEP >>
+  NTAC 6 ASSIGN_OUTCOMES_FRAME_STEP >>
+  TRY (Cases_on `v` >> simp_tac std_ss [toplevel_value_case_def])
+  >- rpt ASSIGN_OUTCOMES_FRAME_STEP
+  >- rpt ASSIGN_OUTCOMES_FRAME_STEP
+  >- (NTAC 3 ASSIGN_OUTCOMES_FRAME_STEP >>
+      Cases_on `FST (SND v)` >>
+      simp_tac std_ss [vyperValueTheory.type_value_case_def,
+                       vyperASTTheory.bound_case_def] >>
+      rpt ASSIGN_OUTCOMES_FRAME_STEP) >>
   rpt ASSIGN_OUTCOMES_FRAME_STEP
 QED
 
@@ -257,6 +267,19 @@ Theorem outcomes_frame_create[simp]:
   outcomes_frame (eval_create cx kind has_salt rof arg_tys vs)
 Proof
   simp[eval_create_def, create_soft_failure_def] >>
+  NTAC 6 (FIRST [MATCH_MP_TAC outcomes_frame_cond >> conj_tac,
+                 ASSIGN_OUTCOMES_FRAME_STEP]) >>
+  NTAC 6 (FIRST [MATCH_MP_TAC outcomes_frame_cond >> conj_tac,
+                 ASSIGN_OUTCOMES_FRAME_STEP]) >>
+  NTAC 6 (FIRST [MATCH_MP_TAC outcomes_frame_cond >> conj_tac,
+                 ASSIGN_OUTCOMES_FRAME_STEP]) >>
+  simp[outcomes_frame_return, outcomes_frame_raise, outcomes_frame_reads] >>
+  NTAC 6 (FIRST [MATCH_MP_TAC outcomes_frame_cond >> conj_tac,
+                 ASSIGN_OUTCOMES_FRAME_STEP]) >>
+  CASE_TAC >>
+  simp[outcomes_frame_bind, outcomes_frame_primitives,
+       outcomes_frame_return, outcomes_frame_raise] >>
+  PairCases_on `x` >>
   rpt (FIRST [MATCH_MP_TAC outcomes_frame_cond >> conj_tac,
               ASSIGN_OUTCOMES_FRAME_STEP])
 QED

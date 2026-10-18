@@ -381,8 +381,8 @@ End
 Datatype:
   typing_env = <|
     current_src     : num option;
-    var_types       : (num |-> type);
-    var_assignable          : (num |-> bool);
+    var_types       : (string |-> type);
+    var_assignable          : (string |-> bool);
     bare_globals            : ((num option # num) |-> type);
     bare_global_assignable  : ((num option # num) |-> type);
     toplevel_vtypes         : ((num option # num) |-> value_type);
@@ -553,7 +553,7 @@ Theorem create_arg_types_ok_compute =
 
 Definition well_typed_expr_def:
   well_typed_expr env (Name ty id) =
-    (FLOOKUP env.var_types (string_to_num id) = SOME ty) /\
+    (FLOOKUP env.var_types id = SOME ty) /\
   well_typed_expr env (TopLevelName ty (src_id_opt, id)) =
     ((FLOOKUP env.toplevel_vtypes (src_id_opt, string_to_num id) = SOME (Type ty) \/
       FLOOKUP env.bare_globals (src_id_opt, string_to_num id) = SOME ty) /\
@@ -646,8 +646,7 @@ Definition well_typed_expr_def:
   type_place_expr env _ = NONE /\
 
   type_place_target env (NameTarget id) =
-    (let n = string_to_num id in
-     case (FLOOKUP env.var_types n, FLOOKUP env.var_assignable n) of
+    (case (FLOOKUP env.var_types id, FLOOKUP env.var_assignable id) of
      | (SOME ty, SOME T) => SOME (Type ty)
      | _ => NONE) /\
   type_place_target env (TopLevelNameTarget (src_id_opt, id)) =
@@ -760,8 +759,8 @@ Definition type_stmt_def:
     (if well_typed_exprs env es then SOME env else NONE) /\
   type_stmt env ret_ty (AnnAssign id typ e) =
     (if well_typed_expr env e /\ assignable_type env.type_defs typ /\
-        expr_type e = typ /\ string_to_num id NOTIN FDOM env.var_types
-     then SOME (extend_local env (string_to_num id) typ T)
+        expr_type e = typ /\ id NOTIN FDOM env.var_types
+     then SOME (extend_local env id typ T)
      else NONE) /\
   type_stmt env ret_ty (Append bt e) =
     (case type_place_target env bt of
@@ -784,8 +783,8 @@ Definition type_stmt_def:
      then SOME env else NONE) /\
   type_stmt env ret_ty (For id typ it n body) =
     (if assignable_type env.type_defs typ /\ well_typed_iterator env typ it /\
-        string_to_num id NOTIN FDOM env.var_types /\
-        IS_SOME (type_stmts (extend_local env (string_to_num id) typ F) ret_ty body)
+        id NOTIN FDOM env.var_types /\
+        IS_SOME (type_stmts (extend_local env id typ F) ret_ty body)
      then SOME env else NONE) /\
   type_stmts env ret_ty [] = SOME env /\
   type_stmts env ret_ty (s::ss) =

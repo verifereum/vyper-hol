@@ -50,7 +50,7 @@ local
   val p3 = ``\(cx:evaluation_context) (g:assignment_target). T``
   val p4 = ``\(cx:evaluation_context) (gs:assignment_target list). T``
   val p5 = ``\cx bt. !st res st'. eval_base_target cx bt st = (res, st') ==> MAP FDOM st.scopes = MAP FDOM st'.scopes``
-  val p6 = ``\(cx:evaluation_context) (tyv:type_value) (nm:num) (body:stmt list) (vs:value list). T``
+  val p6 = ``\(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:value list). T``
   val p7 = ``\cx e. !st res st'. eval_expr cx e st = (res, st') ==> MAP FDOM st.scopes = MAP FDOM st'.scopes``
   val p8 = ``\cx es. !st res st'. eval_exprs cx es st = (res, st') ==> MAP FDOM st.scopes = MAP FDOM st'.scopes``
   val spec_ind = SPECL [p0, p1, p2, p3, p4, p5, p6, p7, p8] evaluate_ind
@@ -75,7 +75,7 @@ Proof
   simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
        check_def, type_check_def, assert_def, ignore_bind_def, raise_def] >>
   rpt strip_tac >>
-  Cases_on `IS_SOME (lookup_scopes (string_to_num nm) st.scopes)` >> gvs[return_def, raise_def]
+  Cases_on `IS_SOME (lookup_scopes nm st.scopes)` >> gvs[return_def, raise_def]
 QED
 
 (* Goal 2: TopLevelNameTarget (no IH) *)
@@ -88,7 +88,7 @@ Proof
   qpat_x_assum `_ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, lift_option_type_def, return_def, raise_def] >>
   Cases_on `get_module_code cx src_id_opt` >> simp[return_def, raise_def] >>
-  Cases_on `is_immutable_decl (string_to_num id) x` >> simp[return_def]
+  Cases_on `is_immutable_decl id x` >> simp[return_def]
 QED
 
 (* Goal 3: AttributeTarget (unguarded IH for eval_base_target on t) *)
@@ -140,7 +140,7 @@ Proof
   simp[evaluate_def, bind_def, get_scopes_def, return_def,
        lift_option_def, lift_option_type_def] >>
   rpt strip_tac >>
-  Cases_on `lookup_scopes_val (string_to_num id) st.scopes` >> gvs[return_def, raise_def]
+  Cases_on `lookup_scopes_val id st.scopes` >> gvs[return_def, raise_def]
 QED
 
 (* Goal 6: TopLevelName (no IH) *)
@@ -839,8 +839,8 @@ Proof
   simp[evaluation_state_component_equality] >> strip_tac >> simp[]
 QED
 
-val SCOPES_DOM_FRAME_TAC =
-  rpt (FIRST [CHANGED_TAC (CONV_TAC (DEPTH_CONV ETA_CONV)),
+val SCOPES_DOM_FRAME_STEP_TAC =
+  FIRST [CHANGED_TAC (CONV_TAC (DEPTH_CONV ETA_CONV)),
     CHANGED_TAC (simp_tac bool_ss
       [ETA_AX, FORALL_PROD, pair_case_thm, UNCURRY, scopes_dom_frame_primitives]),
     first_assum ACCEPT_TAC,
@@ -851,15 +851,34 @@ val SCOPES_DOM_FRAME_TAC =
         List.map ASSUME (List.filter is_eq asl)) (asl,w)),
     irule scopes_dom_frame_bind_guarded >> conj_tac,
     CHANGED_TAC (rewrite_tac[ignore_bind_def]),
-    gen_tac, strip_tac, conj_tac, CASE_TAC]);
+    gen_tac, strip_tac, conj_tac, CASE_TAC];
+
+val SCOPES_DOM_FRAME_TAC = rpt SCOPES_DOM_FRAME_STEP_TAC;
 
 Resume eval_mutual_preserves_scopes_dom[ExtCall]:
   rpt gen_tac >> strip_tac >>
   simp[GSYM scopes_dom_frame_result, Once evaluate_def] >>
   RULE_ASSUM_TAC (REWRITE_RULE [GSYM scopes_dom_frame_result]) >>
-  SCOPES_DOM_FRAME_TAC >|
-  [suspend "return_path_1", suspend "return_path_2",
-   suspend "return_path_3", suspend "return_path_4"]
+  TRY SCOPES_DOM_FRAME_STEP_TAC >>
+  TRY SCOPES_DOM_FRAME_STEP_TAC >>
+  TRY SCOPES_DOM_FRAME_STEP_TAC >>
+  TRY SCOPES_DOM_FRAME_STEP_TAC >>
+  TRY SCOPES_DOM_FRAME_STEP_TAC >>
+  TRY SCOPES_DOM_FRAME_STEP_TAC >>
+  TRY SCOPES_DOM_FRAME_STEP_TAC >>
+  NTAC 4 (TRY SCOPES_DOM_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY SCOPES_DOM_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY SCOPES_DOM_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY SCOPES_DOM_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY SCOPES_DOM_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY SCOPES_DOM_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY SCOPES_DOM_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY SCOPES_DOM_FRAME_STEP_TAC) >>
+  strip_tac >>
+  qmatch_goalsub_rename_tac `case outcome_opt of NONE => _ | SOME _ => _` >>
+  Cases_on `outcome_opt` >> simp_tac std_ss [] >|
+  [SCOPES_DOM_FRAME_TAC >> suspend "return_path_1",
+   SCOPES_DOM_FRAME_TAC >> suspend "return_path_2"]
 QED
 
 (* Normalize unit values and guard equalities with only bool_ss, then match
@@ -886,7 +905,13 @@ Resume eval_mutual_preserves_scopes_dom[return_path_2]:
   SCOPES_DOM_IH_TAC
 QED
 Resume eval_mutual_preserves_scopes_dom[return_path_3]:
-  SCOPES_DOM_IH_TAC
+  simp_tac bool_ss [oneTheory.one, ignore_bind_def] >>
+  rpt (FIRST [first_assum ACCEPT_TAC,
+    first_x_assum (fn th =>
+      if is_imp (snd (strip_forall (concl th))) then
+        drule_at Any th >> simp_tac bool_ss [] >> strip_tac
+      else NO_TAC)]) >>
+  metis_tac[ignore_bind_def]
 QED
 Resume eval_mutual_preserves_scopes_dom[return_path_4]:
   SCOPES_DOM_IH_TAC

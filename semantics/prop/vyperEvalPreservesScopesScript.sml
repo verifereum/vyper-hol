@@ -339,7 +339,7 @@ Theorem case_For_dom[local]:
        lift_option_type (evaluate_type tenv typ) "For evaluate_type" s'' = (INL tyv, t) ∧
        eval_iterator cx it s'³' = (INL vs, t') ∧
        check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s'⁴' = (INL x, t'') ⇒
-       ∀st res st'. eval_for cx tyv (string_to_num id) body vs st = (res, st') ⇒
+       ∀st res st'. eval_for cx tyv id body vs st = (res, st') ⇒
          preserves_scopes_dom st st') ∧
     (* IH for iterator: guarded by lift_option_type *)
     (∀tenv s'' tyv t.
@@ -1723,7 +1723,7 @@ Proof
     rpt gen_tac >> strip_tac >>
     gvs[Once evaluate_def, bind_def, lift_option_type_def, return_def, raise_def] >>
     Cases_on `get_module_code cx src_id_opt` >> gvs[return_def, raise_def] >>
-    Cases_on `is_immutable_decl (string_to_num id) x` >> gvs[return_def]) >>
+    Cases_on `is_immutable_decl id x` >> gvs[return_def]) >>
   (* AttributeTarget *)
   conj_tac >- (
     rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
@@ -2503,8 +2503,8 @@ Proof
   metis_tac[preserves_tv_trans]
 QED
 
-val TV_FRAME_TAC =
-  rpt (FIRST [CHANGED_TAC (CONV_TAC (DEPTH_CONV ETA_CONV)),
+val TV_FRAME_STEP_TAC =
+  FIRST [CHANGED_TAC (CONV_TAC (DEPTH_CONV ETA_CONV)),
     CHANGED_TAC (simp_tac bool_ss
       [FORALL_PROD, pair_case_thm, UNCURRY, tv_frame_primitives]),
     first_assum ACCEPT_TAC,
@@ -2515,15 +2515,34 @@ val TV_FRAME_TAC =
         List.map ASSUME (List.filter is_eq asl)) (asl,w)),
     irule tv_frame_bind_guarded >> conj_tac,
     CHANGED_TAC (rewrite_tac[ignore_bind_def]),
-    gen_tac, strip_tac, conj_tac, CASE_TAC]);
+    gen_tac, strip_tac, conj_tac, CASE_TAC];
+
+val TV_FRAME_TAC = rpt TV_FRAME_STEP_TAC;
 
 Resume eval_preserves_tv[ExtCall]:
   rpt gen_tac >> strip_tac >>
   simp[GSYM state_rel_frame_result, Once evaluate_def] >>
   RULE_ASSUM_TAC (REWRITE_RULE [GSYM state_rel_frame_result]) >>
-  TV_FRAME_TAC >|
-  [suspend "return_path_1", suspend "return_path_2",
-   suspend "return_path_3", suspend "return_path_4"]
+  TRY TV_FRAME_STEP_TAC >>
+  TRY TV_FRAME_STEP_TAC >>
+  TRY TV_FRAME_STEP_TAC >>
+  TRY TV_FRAME_STEP_TAC >>
+  TRY TV_FRAME_STEP_TAC >>
+  TRY TV_FRAME_STEP_TAC >>
+  TRY TV_FRAME_STEP_TAC >>
+  TRY TV_FRAME_STEP_TAC >>
+  NTAC 4 (TRY TV_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY TV_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY TV_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY TV_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY TV_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY TV_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY TV_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY TV_FRAME_STEP_TAC) >>
+  qmatch_goalsub_rename_tac `case outcome_opt of NONE => _ | SOME _ => _` >>
+  Cases_on `outcome_opt` >> simp_tac std_ss [] >|
+  [TV_FRAME_TAC >> suspend "return_path_1",
+   TV_FRAME_TAC >> suspend "return_path_2"]
 QED
 
 (* Match guards in semantic order without simplifying the large guarded IHs

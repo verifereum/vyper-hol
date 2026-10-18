@@ -83,12 +83,12 @@ Theorem checked_constructor_body_typing_package:
     env_body.flag_members = art.cta_flag_members /\
     type_stmts env_body ret body = SOME env_after /\
     (!id typ. MEM (id,typ) args ==>
-       FLOOKUP env_body.var_types (string_to_num id) = SOME typ /\
-       FLOOKUP env_body.var_assignable (string_to_num id) = SOME T) /\
+       FLOOKUP env_body.var_types id = SOME typ /\
+       FLOOKUP env_body.var_assignable id = SOME T) /\
     (!n ty. FLOOKUP env_body.var_types n = SOME ty ==>
-       ?id. MEM (id,ty) args /\ n = string_to_num id) /\
+       ?id. MEM (id,ty) args /\ n = id) /\
     (!n b. FLOOKUP env_body.var_assignable n = SOME b ==>
-       ?id typ. MEM (id,typ) args /\ n = string_to_num id /\ b = T)
+       ?id typ. MEM (id,typ) args /\ n = id /\ b = T)
 Proof
   strip_tac >>
   drule lookup_function_Deploy_SOME_cases >> strip_tac >> gvs[]
@@ -120,7 +120,7 @@ Theorem checked_constructor_body_setup:
   cx = (initial_evaluation_context sources layouts tx NONE
           with in_deploy := T) /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
-  ALL_DISTINCT (MAP (string_to_num o FST) args) /\
+  ALL_DISTINCT (MAP FST args) /\
   st.scopes = [scope] /\ state_well_typed st /\
   env_immutables_consistent (artifact_env deploy_art mods NONE) cx st /\
   context_well_typed cx ==>
@@ -187,7 +187,7 @@ Theorem checked_constructor_body_preserves_components:
   cx = (initial_evaluation_context sources layouts tx NONE
           with in_deploy := T) /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
-  ALL_DISTINCT (MAP (string_to_num o FST) args) /\
+  ALL_DISTINCT (MAP FST args) /\
   st.scopes = [scope] /\ state_well_typed st /\
   accounts_well_typed st.accounts /\
   env_immutables_consistent (artifact_env deploy_art mods NONE) cx st /\
@@ -225,7 +225,7 @@ Theorem checked_constructor_run_from_states_preserves_machine_well_typed:
   cx = (initial_evaluation_context sources layouts tx NONE
           with in_deploy := T) /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
-  ALL_DISTINCT (MAP (string_to_num o FST) args) /\
+  ALL_DISTINCT (MAP FST args) /\
   body_st.scopes = [scope] /\ state_well_typed body_st /\
   accounts_well_typed body_st.accounts /\
   env_immutables_consistent (artifact_env deploy_art mods NONE) cx body_st /\
@@ -262,12 +262,12 @@ Theorem checked_deployment_constants_establish_immutables_ready:
 Proof
   strip_tac >>
   `(!src id ty.
-      FLOOKUP art.cta_bare_globals (src,id) = SOME ty ==>
+      FLOOKUP art.cta_bare_globals (src,string_to_num id) = SOME ty ==>
       IS_SOME (FLOOKUP
         (get_source_immutables src
           (case ALOOKUP am_c.immutables target of SOME m => m | NONE => [])) id)) /\
    (!src id ty tv v.
-      FLOOKUP art.cta_bare_globals (src,id) = SOME ty /\
+      FLOOKUP art.cta_bare_globals (src,string_to_num id) = SOME ty /\
       FLOOKUP
         (get_source_immutables src
           (case ALOOKUP am_c.immutables target of SOME m => m | NONE => [])) id =
@@ -328,20 +328,20 @@ Proof
       simp[get_module_code_def, initial_evaluation_context_def] >>
       rw[] >> gvs[get_module_code_def, initial_evaluation_context_def])
   >> rpt strip_tac >>
-     Cases_on `FLOOKUP art.cta_bare_globals (src,id)` >> gvs[]
+     Cases_on `FLOOKUP art.cta_bare_globals (src,string_to_num id_str)` >> gvs[]
      >- (qpat_x_assum `!src id ty. FLOOKUP art.cta_toplevel_vtypes (src,id) = SOME (Type ty) /\ FLOOKUP art.cta_bare_globals (src,id) = NONE ==> _`
-           (qspecl_then [`src`,`id`,`ty`] mp_tac) >>
+           (qspecl_then [`src`,`string_to_num id_str`,`ty`] mp_tac) >>
          simp[get_module_code_def, initial_evaluation_context_def] >>
          rw[] >> gvs[get_module_code_def, initial_evaluation_context_def]) >>
-     rename1 `FLOOKUP art.cta_bare_globals (src,id) = SOME bare_ty` >>
+     rename1 `FLOOKUP art.cta_bare_globals (src,string_to_num id_str) = SOME bare_ty` >>
      `bare_ty = ty` by
        (drule check_contract_bare_globals_consistent_initial >>
-        disch_then (qspecl_then [`tx`,`sources`,`src`,`id`,`bare_ty`] mp_tac) >>
+        disch_then (qspecl_then [`tx`,`sources`,`src`,`string_to_num id_str`,`bare_ty`] mp_tac) >>
         simp[get_module_code_def, initial_evaluation_context_def] >>
         rw[] >> gvs[get_module_code_def, initial_evaluation_context_def]) >>
      gvs[get_tenv_def, initial_evaluation_context_def] >>
      qpat_x_assum `!src' id' ty' tv' v'. _`
-       (qspecl_then [`src`,`id`,`bare_ty`,`tv`,`v`] mp_tac) >> simp[]
+       (qspecl_then [`src`,`id_str`,`bare_ty`,`tv`,`v`] mp_tac) >> simp[]
 QED
 
 Theorem checked_deployment_constants_establish_initial_env_immutables_consistent:
@@ -441,7 +441,7 @@ Proof
     (irule (iffLR env_immutables_consistent_immutables_cong) >>
      qexists `initial_state am_c [scope] with <|outcomes := orc; requests := rqs|>` >>
      simp[initial_state_def]) >>
-  `ALL_DISTINCT (MAP (string_to_num o FST) args)` by
+  `ALL_DISTINCT (MAP FST args)` by
     (drule lookup_function_Deploy_SOME_cases >> strip_tac >> gvs[] >>
      `check_function_body layouts tx.target mods deploy_art NONE mut nr
         args dflts ret body` by
