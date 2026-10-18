@@ -357,7 +357,9 @@ val allowed_test_prefixes = [
 ]
 
 val allowed_test_patterns = [
-  "vyper-test-exports/functional/builtins/codegen/test_blobhash.json"
+  "vyper-test-exports/functional/builtins/codegen/test_blobhash.json",
+  (* Tuple-return traces exercise literal subscripts of internal/external calls. *)
+  "vyper-test-exports/functional/syntax/test_return_tuple.json"
 ]
 
 (* Path exclusions carry reportable reasons and tracking issues. *)
