@@ -194,18 +194,18 @@ Definition supported_storage_field_read_def:
     | _ => F
 End
 
+(* The lowering allocates the result with the return type's memory size and
+   decodes into it, so every admitted value type may be returned. *)
 Definition supported_external_return_type_def:
-  supported_external_return_type ty <=>
-    supported_word_type ty \/
-    case ty of
-      TupleT ts => ~NULL ts /\ EVERY supported_word_type ts
-    | _ => F
+  supported_external_return_type tops ty <=> supported_value_type tops ty
 End
 
 Theorem supported_external_none_rejected:
-  ~supported_external_return_type NoneT
+  ~supported_external_return_type tops NoneT
 Proof
-  simp[supported_external_return_type_def, supported_word_type_def]
+  simp[supported_external_return_type_def, supported_value_type_def,
+       supported_scalar_type_def, supported_word_type_def,
+       supported_string_type_def]
 QED
 
 Theorem supported_shift_contract:
