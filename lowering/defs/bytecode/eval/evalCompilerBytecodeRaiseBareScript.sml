@@ -11,6 +11,10 @@ val () = computeLib.upd_compset (computeLib.add_thms [fmap_to_alist_FEMPTY])
 val () = computeLib.upd_compset (computeLib.add_thms [i2w_pos])
 val () = Globals.max_print_depth := 20
 
+val raise_bare_compile_eval = EVAL
+  ``compile_vyper (K SOME) (o1_policy all_capabilities) raise_bare_program``
+val () = evalCompilerBytecodeLib.add_compile_eval raise_bare_compile_eval
+
 Theorem raise_bare_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     raise_bare_program =

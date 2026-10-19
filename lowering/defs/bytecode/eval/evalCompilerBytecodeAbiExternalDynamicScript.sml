@@ -2,13 +2,14 @@
 
 Theory evalCompilerBytecodeAbiExternalDynamic
 Ancestors evalCompilerBytecodeAbiExternalDynamicPipeline evalCompilerSubsetAbiExternal compileVyper concretizeMemLocDefs alist byte integer_word option cv_std
-Libs evalCompilerBytecodeLib finite_mapLib computeLib wordsLib
+Libs evalCompilerBytecodeLib finite_mapLib computeLib wordsLib intReduce
 
 fun holbuild_extra_deps (_ : string list) = ()
 val () = holbuild_extra_deps [".."]
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms [fmap_to_alist_FEMPTY])
 val () = computeLib.upd_compset (computeLib.add_thms [i2w_pos])
+val () = computeLib.upd_compset intReduce.add_int_compset
 val () = Globals.max_print_depth := 20
 val () = computeLib.upd_compset
   (computeLib.add_thms
@@ -93,56 +94,15 @@ val external_dynamic_context_plan_step1 = SIMP_CONV (srw_ss())
   ``generate_context_plan (^external_dynamic_unit).cu_context``
 val external_dynamic_context_plan_step2 =
   EVAL (rhs (concl external_dynamic_context_plan_step1))
-val external_dynamic_actual_plan_call = find_term
-  (can (match_term ``generate_fn_plan f spill labels``))
-  (rhs (concl external_dynamic_context_plan_step2))
-val external_dynamic_actual_plan_args = #2 (strip_comb external_dynamic_actual_plan_call)
-val external_dynamic_actual_fn = hd external_dynamic_actual_plan_args
-val external_dynamic_actual_liveness_eval =
-  EVAL ``liveness_analyze ^external_dynamic_actual_fn``
-val external_dynamic_actual_dfg_eval =
-  EVAL ``dfg_build_function ^external_dynamic_actual_fn``
-val external_dynamic_actual_cfg_eval =
-  EVAL ``cfg_analyze ^external_dynamic_actual_fn``
-val external_dynamic_actual_liveness =
-  rhs (concl external_dynamic_actual_liveness_eval)
-val external_dynamic_actual_dfg = rhs (concl external_dynamic_actual_dfg_eval)
-val external_dynamic_actual_cfg = rhs (concl external_dynamic_actual_cfg_eval)
-val external_dynamic_actual_plan_eval = EVAL
-  ``generate_fn_plan_analyzed ^external_dynamic_actual_liveness
-      ^external_dynamic_actual_dfg ^external_dynamic_actual_cfg
-      ^external_dynamic_actual_fn ^external_dynamic_max_eom 0``
-val external_dynamic_actual_plan = rhs (concl external_dynamic_actual_plan_eval)
-val external_dynamic_actual_generate_step1 =
-  REWR_CONV stackPlanGenTheory.generate_fn_plan_def
-    ``generate_fn_plan ^external_dynamic_actual_fn
-        ^external_dynamic_max_eom 0``
-val external_dynamic_actual_generate_step2 = PURE_REWRITE_CONV
-  [external_dynamic_actual_liveness_eval,
-   external_dynamic_actual_dfg_eval,
-   external_dynamic_actual_cfg_eval]
-  (rhs (concl external_dynamic_actual_generate_step1))
-val external_dynamic_actual_generate_step3 =
-  REWR_CONV external_dynamic_actual_plan_eval
-    (rhs (concl external_dynamic_actual_generate_step2))
-val external_dynamic_actual_generate_fn_plan =
-  TRANS external_dynamic_actual_generate_step1
-    (TRANS external_dynamic_actual_generate_step2
-      external_dynamic_actual_generate_step3)
-val external_dynamic_context_plan_step3 = PURE_REWRITE_CONV
-  [external_dynamic_actual_generate_fn_plan]
-  (rhs (concl external_dynamic_context_plan_step2))
 val external_dynamic_context_plan_eval =
-  TRANS external_dynamic_context_plan_step1
-    (TRANS external_dynamic_context_plan_step2
-      (TRANS external_dynamic_context_plan_step3
-        (EVAL (rhs (concl external_dynamic_context_plan_step3)))))
+  TRANS external_dynamic_context_plan_step1 external_dynamic_context_plan_step2
 val external_dynamic_context_plan = optionSyntax.dest_some
   (rhs (concl external_dynamic_context_plan_eval))
-val external_dynamic_plan = external_dynamic_actual_plan
-val external_dynamic_plan_value = optionSyntax.dest_some external_dynamic_plan
-val external_dynamic_plan_pair = pairSyntax.dest_pair external_dynamic_plan_value
-val external_dynamic_plan_ops = #1 external_dynamic_plan_pair
+val external_dynamic_all_plan_ops_eval = EVAL
+  ``context_plan_ops ^external_dynamic_context_plan``
+val external_dynamic_all_plan_ops =
+  rhs (concl external_dynamic_all_plan_ops_eval)
+val external_dynamic_plan_ops = external_dynamic_all_plan_ops
 val external_dynamic_ops = #1 (listSyntax.dest_list external_dynamic_plan_ops)
 val external_dynamic_sopush = #1 (dest_comb
   ``SOPush (Lit (0w : bytes32))``)
@@ -195,10 +155,6 @@ in
 end
 val external_dynamic_encode_evals =
   map external_dynamic_encode_eval external_dynamic_w2n_evals
-val external_dynamic_all_plan_ops_eval = EVAL
-  ``context_plan_ops ^external_dynamic_context_plan``
-val external_dynamic_all_plan_ops =
-  rhs (concl external_dynamic_all_plan_ops_eval)
 val external_dynamic_initial_fmp_eval = EVAL
   ``(^external_dynamic_context_plan).cp_initial_fmp``
 val external_dynamic_initial_fmp =
@@ -267,6 +223,9 @@ val external_dynamic_codegen_assembly_eval =
 val external_dynamic_runtime_accessors =
   CONJUNCTS venomCompilerTypesTheory.pipeline_output_accessors @
   CONJUNCTS venomCompilerTypesTheory.resolved_compiler_policy_accessors
+val external_dynamic_finalize_eval = EVAL
+  ``finalize_codegen (K SOME) ^external_dynamic_rpolicy ^external_dynamic_unit``
+
 Theorem external_dynamic_runtime_matches_python_oracle:
   external_dynamic_runtime_compile task090_external_dynamic_program =
     SOME (SND ^(evalCompilerBytecodeLib.read_hex_bytes "external_dynamic.hex"))
@@ -282,8 +241,7 @@ Proof
       external_dynamic_out_final_assembly_eval,
       external_dynamic_rpolicy_final_assembly_eval] @
      external_dynamic_runtime_accessors) >>
-  PURE_REWRITE_TAC [codegenTheory.finalize_codegen_identity] >>
-  PURE_REWRITE_TAC [external_dynamic_codegen_assembly_eval] >>
+  PURE_REWRITE_TAC [external_dynamic_finalize_eval] >>
   EVAL_TAC
 QED
 
@@ -308,7 +266,21 @@ Proof
        external_dynamic_runtime_pipeline_def,
        external_dynamic_deploy_compile_def,
        checked_unit_pipeline_def] >>
-  rpt CASE_TAC >> gvs[]
+  Cases_on `resolve_o1_policy (o1_policy all_capabilities)` >> gvs[] >>
+  rename1 `SOME policy` >>
+  Cases_on `lower_vyper_runtime_unit tops policy` >> gvs[] >>
+  rename1 `SOME unit` >>
+  Cases_on `run_venom_pipeline (K T) (K T) (K T) policy o1_pipeline_spec unit` >> gvs[] >>
+  rename1 `SOME out` >>
+  Cases_on `out.po_final_assembly <> policy.rpol_final_assembly` >> gvs[] >>
+  Cases_on `finalize_codegen (K SOME) policy out.po_unit` >> gvs[] >>
+  rename1 `SOME runtime` >>
+  Cases_on `lower_vyper_deploy_unit tops policy runtime` >> gvs[] >>
+  rename1 `SOME deploy_unit` >>
+  Cases_on `run_venom_pipeline (K T) (K T) (K T) policy o1_pipeline_spec deploy_unit` >> gvs[] >>
+  rename1 `SOME deploy_out` >>
+  Cases_on `deploy_out.po_final_assembly <> policy.rpol_final_assembly` >> gvs[] >>
+  Cases_on `finalize_codegen (K SOME) policy deploy_out.po_unit` >> gvs[]
 QED
 
 val () = evalCompilerBytecodeLib.add_staged_compile_eval

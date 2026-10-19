@@ -12,6 +12,10 @@ val () = computeLib.upd_compset
   (computeLib.add_thms [i2w_pos, byteTheory.set_byte_bit_field_insert])
 val () = Globals.max_print_depth := 20
 
+val scalar_widths_uint_low_compile_eval = EVAL
+  ``compile_vyper (K SOME) (o1_policy all_capabilities) scalar_widths_uint_low_program``
+val () = evalCompilerBytecodeLib.add_compile_eval scalar_widths_uint_low_compile_eval
+
 Theorem scalar_widths_uint_low_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_widths_uint_low_program =
@@ -19,6 +23,10 @@ Theorem scalar_widths_uint_low_matches_python_oracle:
 Proof
   EVAL_TAC
 QED
+
+val scalar_widths_uint_high_compile_eval = EVAL
+  ``compile_vyper (K SOME) (o1_policy all_capabilities) scalar_widths_uint_high_program``
+val () = evalCompilerBytecodeLib.add_compile_eval scalar_widths_uint_high_compile_eval
 
 Theorem scalar_widths_uint_high_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
@@ -28,6 +36,10 @@ Proof
   EVAL_TAC
 QED
 
+val scalar_widths_int_low_compile_eval = EVAL
+  ``compile_vyper (K SOME) (o1_policy all_capabilities) scalar_widths_int_low_program``
+val () = evalCompilerBytecodeLib.add_compile_eval scalar_widths_int_low_compile_eval
+
 Theorem scalar_widths_int_low_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_widths_int_low_program =
@@ -35,6 +47,10 @@ Theorem scalar_widths_int_low_matches_python_oracle:
 Proof
   EVAL_TAC
 QED
+
+val scalar_widths_int_high_compile_eval = EVAL
+  ``compile_vyper (K SOME) (o1_policy all_capabilities) scalar_widths_int_high_program``
+val () = evalCompilerBytecodeLib.add_compile_eval scalar_widths_int_high_compile_eval
 
 Theorem scalar_widths_int_high_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)

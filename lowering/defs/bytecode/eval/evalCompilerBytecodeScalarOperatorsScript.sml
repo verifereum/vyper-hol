@@ -12,6 +12,10 @@ val () = computeLib.upd_compset
   (computeLib.add_thms [i2w_pos, byteTheory.set_byte_bit_field_insert])
 val () = Globals.max_print_depth := 20
 
+val scalar_bits_compile_eval = EVAL
+  ``compile_vyper (K SOME) (o1_policy all_capabilities) scalar_bits_program``
+val () = evalCompilerBytecodeLib.add_compile_eval scalar_bits_compile_eval
+
 Theorem scalar_bits_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities) scalar_bits_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "scalar_bits.hex")
@@ -19,12 +23,20 @@ Proof
   EVAL_TAC
 QED
 
+val scalar_shifts_compile_eval = EVAL
+  ``compile_vyper (K SOME) (o1_policy all_capabilities) scalar_shifts_program``
+val () = evalCompilerBytecodeLib.add_compile_eval scalar_shifts_compile_eval
+
 Theorem scalar_shifts_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities) scalar_shifts_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "scalar_shifts.hex")
 Proof
   EVAL_TAC
 QED
+
+val scalar_compare_eq_compile_eval = EVAL
+  ``compile_vyper (K SOME) (o1_policy all_capabilities) scalar_compare_eq_program``
+val () = evalCompilerBytecodeLib.add_compile_eval scalar_compare_eq_compile_eval
 
 Theorem scalar_compare_eq_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
@@ -34,6 +46,10 @@ Proof
   EVAL_TAC
 QED
 
+val scalar_compare_order_uint_compile_eval = EVAL
+  ``compile_vyper (K SOME) (o1_policy all_capabilities) scalar_compare_order_uint_program``
+val () = evalCompilerBytecodeLib.add_compile_eval scalar_compare_order_uint_compile_eval
+
 Theorem scalar_compare_order_uint_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_compare_order_uint_program =
@@ -41,6 +57,10 @@ Theorem scalar_compare_order_uint_matches_python_oracle:
 Proof
   EVAL_TAC
 QED
+
+val scalar_compare_order_int_compile_eval = EVAL
+  ``compile_vyper (K SOME) (o1_policy all_capabilities) scalar_compare_order_int_program``
+val () = evalCompilerBytecodeLib.add_compile_eval scalar_compare_order_int_compile_eval
 
 Theorem scalar_compare_order_int_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
@@ -50,6 +70,10 @@ Proof
   EVAL_TAC
 QED
 
+val scalar_minmax_uint_compile_eval = EVAL
+  ``compile_vyper (K SOME) (o1_policy all_capabilities) scalar_minmax_uint_program``
+val () = evalCompilerBytecodeLib.add_compile_eval scalar_minmax_uint_compile_eval
+
 Theorem scalar_minmax_uint_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_minmax_uint_program =
@@ -57,6 +81,10 @@ Theorem scalar_minmax_uint_matches_python_oracle:
 Proof
   EVAL_TAC
 QED
+
+val scalar_minmax_int_compile_eval = EVAL
+  ``compile_vyper (K SOME) (o1_policy all_capabilities) scalar_minmax_int_program``
+val () = evalCompilerBytecodeLib.add_compile_eval scalar_minmax_int_compile_eval
 
 Theorem scalar_minmax_int_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)

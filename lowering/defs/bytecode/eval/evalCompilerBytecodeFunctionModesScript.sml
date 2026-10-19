@@ -13,6 +13,10 @@ val () = computeLib.upd_compset (computeLib.add_thms [i2w_pos])
 
 val () = Globals.max_print_depth := 20
 
+val function_modes_compile_eval = EVAL
+  ``compile_vyper (K SOME) (o1_policy all_capabilities) function_modes_program``
+val () = evalCompilerBytecodeLib.add_compile_eval function_modes_compile_eval
+
 Theorem function_modes_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     function_modes_program =

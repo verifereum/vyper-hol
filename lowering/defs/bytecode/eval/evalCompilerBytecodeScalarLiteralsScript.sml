@@ -29,6 +29,10 @@ QED
 val () = computeLib.upd_compset
   (computeLib.add_thms [word_of_bytes_be_bytes32])
 
+val scalar_literals_bool_compile_eval = EVAL
+  ``compile_vyper (K SOME) (o1_policy all_capabilities) scalar_literals_bool_program``
+val () = evalCompilerBytecodeLib.add_compile_eval scalar_literals_bool_compile_eval
+
 Theorem scalar_literals_bool_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_literals_bool_program =
@@ -36,6 +40,10 @@ Theorem scalar_literals_bool_matches_python_oracle:
 Proof
   EVAL_TAC
 QED
+
+val scalar_literals_int_small_compile_eval = EVAL
+  ``compile_vyper (K SOME) (o1_policy all_capabilities) scalar_literals_int_small_program``
+val () = evalCompilerBytecodeLib.add_compile_eval scalar_literals_int_small_compile_eval
 
 Theorem scalar_literals_int_small_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
@@ -45,6 +53,10 @@ Proof
   EVAL_TAC
 QED
 
+val scalar_literals_int_wide_compile_eval = EVAL
+  ``compile_vyper (K SOME) (o1_policy all_capabilities) scalar_literals_int_wide_program``
+val () = evalCompilerBytecodeLib.add_compile_eval scalar_literals_int_wide_compile_eval
+
 Theorem scalar_literals_int_wide_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_literals_int_wide_program =
@@ -52,6 +64,10 @@ Theorem scalar_literals_int_wide_matches_python_oracle:
 Proof
   EVAL_TAC
 QED
+
+val scalar_literal_decimal_compile_eval = EVAL
+  ``compile_vyper (K SOME) (o1_policy all_capabilities) scalar_literal_decimal_program``
+val () = evalCompilerBytecodeLib.add_compile_eval scalar_literal_decimal_compile_eval
 
 Theorem scalar_literal_decimal_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
