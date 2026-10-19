@@ -4,7 +4,7 @@ Theory vyperEvalOutcomeSuffix
 Ancestors
   list pair option vyperMisc vyperState vyperInterpreter vyperCreate
   vyperStatePreservation vyperCallFrame vyperStorageBackend vyperCallOutcome
-Libs monadsyntax
+Libs monadsyntax pairLib
 
 Definition outcomes_frame_def:
   outcomes_frame f <=> !st. (SND (f st)).outcomes = st.outcomes
@@ -137,20 +137,20 @@ Proof
     get_transient_storage_def, push_function_def, pop_function_def,
     bind_def, ignore_bind_def, return_def, raise_def, AllCaseEqs()] >>
   rpt strip_tac >>
-  rpt (BasicProvers.PURE_CASE_TAC >> asm_simp_tac (srw_ss()) []) >>
-  gvs[set_scopes_def, update_accounts_def, update_transient_def,
-      set_address_immutables_def, get_storage_backend_def,
-      set_storage_backend_def, write_storage_slot_def,
-      lift_option_type_def, lift_option_def, lift_sum_def,
-      get_accounts_def, get_transient_storage_def, check_def,
-      type_check_def, assert_def,
-      bind_def, ignore_bind_def, return_def, raise_def, AllCaseEqs()] >>
+  rpt (BasicProvers.PURE_CASE_TAC >> asm_simp_tac (srw_ss()) [] >>
+    gvs[set_scopes_def, update_accounts_def, update_transient_def,
+        set_address_immutables_def, get_storage_backend_def,
+        set_storage_backend_def, write_storage_slot_def,
+        lift_option_type_def, lift_option_def, lift_sum_def,
+        get_accounts_def, get_transient_storage_def, check_def,
+        type_check_def, assert_def,
+        bind_def, ignore_bind_def, return_def, raise_def, AllCaseEqs()]) >>
   gvs[get_storage_backend_eq, set_storage_backend_eq,
       option_CASE_rator, prod_CASE_rator, COND_RATOR,
       return_def, raise_def, AllCaseEqs()] >>
-  rpt (BasicProvers.PURE_CASE_TAC >> asm_simp_tac (srw_ss()) []) >>
-  gvs[get_storage_backend_eq, set_storage_backend_eq, set_storage_def,
-      return_def, raise_def, AllCaseEqs()] >>
+  rpt (BasicProvers.PURE_CASE_TAC >> asm_simp_tac (srw_ss()) [] >>
+    gvs[get_storage_backend_eq, set_storage_backend_eq, set_storage_def,
+        return_def, raise_def, AllCaseEqs()]) >>
   qmatch_goalsub_abbrev_tac `set_storage _ _ backend _` >>
   Cases_on `backend` >> simp[set_storage_def]
 QED
@@ -249,6 +249,8 @@ Theorem outcomes_frame_assignment:
 Proof
   ho_match_mp_tac assign_target_ind >> rpt conj_tac >> rpt gen_tac >>
   simp_tac bool_ss [Once assign_target_def, FORALL_PROD, LET_THM] >> rpt strip_tac >>
+  (* Exposed-case splitting covers Value/HashMapRef/ArrayRef and the nested
+     type/bound cases without depending on names from string-key lookup. *)
   rpt ASSIGN_OUTCOMES_FRAME_STEP
 QED
 
@@ -290,6 +292,8 @@ Theorem outcomes_frame_create[simp]:
   outcomes_frame (eval_create cx kind has_salt rof arg_tys vs)
 Proof
   simp_tac bool_ss [eval_create_def, create_soft_failure_def, LET_THM] >>
+  (* Split the exposed run_create_evm option and result tuple incrementally;
+     the head conversion reduces pair cases without generated variable names. *)
   rpt (FIRST [MATCH_MP_TAC outcomes_frame_cond >> conj_tac,
               ASSIGN_OUTCOMES_FRAME_STEP])
 QED
@@ -334,7 +338,7 @@ Proof
     let val result = #1 (pairSyntax.dest_pair (rhs (concl th))) in
       irule (INST_TYPE [alpha |-> type_of result] outcomes_frame_result) >>
       exists_tac (rator (lhs (concl th))) >> exists_tac result
-    end) >> simp[]
+    end) >> simp[outcomes_frame_primitives]
 QED
 
 Definition outcome_suffix_def:

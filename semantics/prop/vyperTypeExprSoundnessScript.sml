@@ -251,13 +251,13 @@ End
 Definition location_runtime_typed_def:
   (location_runtime_typed env cx st (ScopedVar id) vt <=>
     (?entry ty. vt = Type ty /\
-                lookup_scopes (string_to_num id) st.scopes = SOME entry /\
-                FLOOKUP env.var_types (string_to_num id) = SOME ty /\
+                lookup_scopes id st.scopes = SOME entry /\
+                FLOOKUP env.var_types id = SOME ty /\
                 evaluate_type env.type_defs ty = SOME entry.type)) /\
   (location_runtime_typed env cx st (ImmutableVar src id) vt <=>
     (?imms v ty tv. vt = Type ty /\
                     get_immutables cx src st = (INL imms, st) /\
-                    FLOOKUP imms (string_to_num id) = SOME (tv, v) /\
+                    FLOOKUP imms id = SOME (tv, v) /\
                     FLOOKUP env.bare_globals (src, string_to_num id) = SOME ty /\
                     evaluate_type env.type_defs ty = SOME tv)) /\
   (location_runtime_typed env cx st (TopLevelVar src_id_opt id) vt <=>
@@ -712,7 +712,7 @@ End
 
 
 Theorem assign_target_TopLevelVar_lookup_global_INR_propagate:
-  lookup_global cx src (string_to_num id) st = (INR e, st) ==>
+  lookup_global cx src (id) st = (INR e, st) ==>
   assign_target cx (BaseTargetV (TopLevelVar src id) is) op st = (INR e, st)
 Proof
   simp[assign_target_def, bind_def, return_def, LET_THM, pairTheory.PAIR]

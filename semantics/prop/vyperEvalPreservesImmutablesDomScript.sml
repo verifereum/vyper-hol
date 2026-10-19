@@ -222,7 +222,7 @@ Proof
   Cases_on `ALOOKUP st.immutables cx.txn.target` >>
   simp[return_def, raise_def] >-
   (strip_tac >> gvs[preserves_immutables_dom_refl]) >>
-  Cases_on `FLOOKUP (get_source_immutables src_id_opt x) (string_to_num id)` >>
+  Cases_on `FLOOKUP (get_source_immutables src_id_opt x) id` >>
   simp[return_def, raise_def] >-
   (strip_tac >> gvs[preserves_immutables_dom_refl]) >>
   PairCases_on `x'` >> simp[] >>
@@ -231,7 +231,7 @@ Proof
   strip_tac >> gvs[preserves_immutables_dom_refl] >>
   TRY (qpat_x_assum `lift_option_type (SOME _) _ _ = (INR _,_)` mp_tac >>
        simp[lift_option_type_def, return_def, raise_def] >> NO_TAC) >>
-  Cases_on `set_immutable cx src_id_opt (string_to_num id) x'0 x' st` >>
+  Cases_on `set_immutable cx src_id_opt id x'0 x' st` >>
   Cases_on `q` >> gvs[lift_option_type_def, return_def, raise_def] >-
   (TRY (qpat_x_assum `lift_option_type (SOME x) _ _ = (INR _,_)` mp_tac >>
         simp[lift_option_type_def, return_def, raise_def] >> NO_TAC) >>
@@ -250,7 +250,7 @@ Proof
       rpt gen_tac >>
       TRY (rename1 `IS_SOME (FLOOKUP (get_source_immutables src _) n)`) >>
       TRY (Cases_on `src = src_id_opt` >> gvs[]) >>
-      Cases_on `n = string_to_num id` >>
+      Cases_on `n = id` >>
       gvs[get_source_immutables_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
   gvs[set_immutable_def, bind_def, get_address_immutables_def,
       lift_option_type_def, lift_option_def, set_address_immutables_def,
@@ -943,7 +943,7 @@ Theorem case_For_imm_dom[local]:
        eval_iterator cx it s'³' = (INL vs, t') ∧
        check (compatible_bound (Dynamic n) (LENGTH vs))
              "For too long" s'⁴' = (INL x, t'') ⇒
-       ∀st res st'. eval_for cx tyv (string_to_num id) body vs st = (res,st') ⇒
+       ∀st res st'. eval_for cx tyv id body vs st = (res,st') ⇒
          preserves_immutables_dom cx st st') ⇒
     ∀st res st'.
       eval_stmt cx (For id typ it n body) st = (res, st') ⇒
@@ -1561,7 +1561,7 @@ Proof
   simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
        check_def, type_check_def, assert_def, ignore_bind_def, raise_def] >>
   rpt strip_tac >>
-  Cases_on `IS_SOME (lookup_scopes (string_to_num id) st.scopes)` >>
+  Cases_on `IS_SOME (lookup_scopes id st.scopes)` >>
   gvs[return_def, raise_def]
 QED
 
@@ -1576,7 +1576,7 @@ Proof
   qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, lift_option_type_def, return_def, raise_def] >>
   Cases_on `get_module_code cx src_id_opt` >> simp[return_def, raise_def] >>
-  Cases_on `is_immutable_decl (string_to_num id) x` >> simp[return_def]
+  Cases_on `is_immutable_decl id x` >> simp[return_def]
 QED
 
 (* ----- Case: eval_base_target (AttributeTarget bt id) ----- *)
@@ -1607,7 +1607,7 @@ Proof
   simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
        lift_option_def, lift_option_type_def] >>
   rpt strip_tac >>
-  Cases_on `lookup_scopes_val (string_to_num id) st.scopes` >>
+  Cases_on `lookup_scopes_val id st.scopes` >>
   gvs[return_def, raise_def]
 QED
 
@@ -3662,6 +3662,20 @@ val IMM_DOM_FRAME_TAC =
         List.map ASSUME (List.filter is_eq asl)) (asl,w)),
     IMM_DOM_FRAME_CASE_TAC]);
 
+(* A bounded step exposes checkpoints without changing the existing frame tactic. *)
+val IMM_DOM_FRAME_STEP_TAC = FIRST [
+  CHANGED_TAC (simp_tac bool_ss [FORALL_PROD, pair_case_thm, UNCURRY]),
+  gen_tac, strip_tac, conj_tac,
+  first_assum ACCEPT_TAC,
+  irule imm_dom_frame_bind_guarded >> conj_tac,
+  IMM_DOM_FRAME_LEAF_TAC,
+  CONV_TAC (RAND_CONV (REWR_CONV ignore_bind_def)),
+  CHANGED_TAC (CONV_TAC (DEPTH_CONV ETA_CONV)),
+  CHANGED_TAC (fn (asl,w) =>
+    simp_tac bool_ss (pair_case_thm :: UNCURRY ::
+      List.map ASSUME (List.filter is_eq asl)) (asl,w)),
+  CASE_TAC];
+
 Resume immutables_dom_mutual[ExtCall]:
   qpat_assum `eval_expr _ _ _ = _` (fn th =>
     let val result = #1 (pairSyntax.dest_pair (rhs (concl th))) in
@@ -3670,6 +3684,22 @@ Resume immutables_dom_mutual[ExtCall]:
     end) >>
   simp[Once evaluate_def] >>
   RULE_ASSUM_TAC (REWRITE_RULE [GSYM state_rel_frame_result]) >>
+  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
   IMM_DOM_FRAME_TAC >|
   [suspend "return_path_1", suspend "return_path_2",
    suspend "return_path_3", suspend "return_path_4"]

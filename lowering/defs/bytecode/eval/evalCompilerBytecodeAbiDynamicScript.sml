@@ -12,7 +12,8 @@ fun holbuild_extra_deps (_ : string list) = ()
 val () = holbuild_extra_deps [".."]
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms [fmap_to_alist_FEMPTY])
-val () = computeLib.upd_compset (computeLib.add_thms [i2w_pos])
+val () = computeLib.upd_compset
+  (computeLib.add_thms [i2w_pos, byteTheory.set_byte_bit_field_insert])
 val () = computeLib.upd_compset
   (fn cs => cs
     |> (fn cs' => computeLib.scrub_const cs' ``reduce_depth_plan``)
@@ -219,108 +220,67 @@ fun abi_dynamic_available_slice n =
 Theorem abi_dynamic_available_00:
   ^(abi_dynamic_available_slice 0)
 Proof
-  EVAL_TAC
+  rpt conj_tac >> EVAL_TAC
 QED
 Theorem abi_dynamic_available_01:
   ^(abi_dynamic_available_slice 1)
 Proof
-  (* Original proof: EVAL_TAC. Compute each site independently instead of
-     retaining the normalizer's work for forty large graph calls at once. *)
-  conj_tac >- EVAL_TAC >>
-  conj_tac >- EVAL_TAC >>
-  conj_tac >- EVAL_TAC >>
-  conj_tac >- EVAL_TAC >>
-  conj_tac >- EVAL_TAC >>
-  conj_tac >- EVAL_TAC >>
-  conj_tac >- EVAL_TAC >>
-  conj_tac >- EVAL_TAC >>
-  conj_tac >- EVAL_TAC >>
-  conj_tac >- EVAL_TAC >>
-  conj_tac >- EVAL_TAC >>
-  conj_tac >- EVAL_TAC >>
-  conj_tac >- EVAL_TAC >>
-  conj_tac >- EVAL_TAC >>
-  conj_tac >- EVAL_TAC >>
-  conj_tac >- EVAL_TAC >>
-  conj_tac >- EVAL_TAC >>
-  conj_tac >- EVAL_TAC >>
-  conj_tac >- EVAL_TAC >>
-  conj_tac >- EVAL_TAC >>
-  conj_tac >- EVAL_TAC >>
-  conj_tac >- EVAL_TAC >>
-  conj_tac >- EVAL_TAC >>
-  conj_tac >- EVAL_TAC >>
-  conj_tac >- EVAL_TAC >>
-  conj_tac >- EVAL_TAC >>
-  conj_tac >- EVAL_TAC >>
-  conj_tac >- EVAL_TAC >>
-  conj_tac >- EVAL_TAC >>
-  conj_tac >- EVAL_TAC >>
-  conj_tac >- EVAL_TAC >>
-  conj_tac >- EVAL_TAC >>
-  conj_tac >- EVAL_TAC >>
-  conj_tac >- EVAL_TAC >>
-  conj_tac >- EVAL_TAC >>
-  conj_tac >- EVAL_TAC >>
-  conj_tac >- EVAL_TAC >>
-  conj_tac >- EVAL_TAC >>
-  conj_tac >- EVAL_TAC >>
-  EVAL_TAC
+  rpt conj_tac >> EVAL_TAC
 QED
 Theorem abi_dynamic_available_02:
   ^(abi_dynamic_available_slice 2)
 Proof
-  EVAL_TAC
+  rpt conj_tac >> EVAL_TAC
 QED
 Theorem abi_dynamic_available_03:
   ^(abi_dynamic_available_slice 3)
 Proof
-  EVAL_TAC
+  rpt conj_tac >> EVAL_TAC
 QED
 Theorem abi_dynamic_available_04:
   ^(abi_dynamic_available_slice 4)
 Proof
-  EVAL_TAC
+  rpt conj_tac >> EVAL_TAC
 QED
 Theorem abi_dynamic_available_05:
   ^(abi_dynamic_available_slice 5)
 Proof
-  EVAL_TAC
+  rpt conj_tac >> EVAL_TAC
 QED
 Theorem abi_dynamic_available_06:
   ^(abi_dynamic_available_slice 6)
 Proof
-  EVAL_TAC
+  rpt conj_tac >> EVAL_TAC
 QED
 Theorem abi_dynamic_available_07:
   ^(abi_dynamic_available_slice 7)
 Proof
-  EVAL_TAC
+  rpt conj_tac >> EVAL_TAC
 QED
 Theorem abi_dynamic_available_08:
   ^(abi_dynamic_available_slice 8)
 Proof
-  EVAL_TAC
+  rpt conj_tac >> EVAL_TAC
 QED
 Theorem abi_dynamic_available_09:
   ^(abi_dynamic_available_slice 9)
 Proof
-  EVAL_TAC
+  rpt conj_tac >> EVAL_TAC
 QED
 Theorem abi_dynamic_available_10:
   ^(abi_dynamic_available_slice 10)
 Proof
-  EVAL_TAC
+  rpt conj_tac >> EVAL_TAC
 QED
 Theorem abi_dynamic_available_11:
   ^(abi_dynamic_available_slice 11)
 Proof
-  EVAL_TAC
+  rpt conj_tac >> EVAL_TAC
 QED
 Theorem abi_dynamic_available_12:
   ^(abi_dynamic_available_slice 12)
 Proof
-  EVAL_TAC
+  rpt conj_tac >> EVAL_TAC
 QED
 
 val abi_dynamic_ready_available_evals = map EQT_INTRO

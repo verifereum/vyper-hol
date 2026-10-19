@@ -329,11 +329,17 @@ Definition vtype_annotation_ok_def:
   vtype_annotation_ok (HashMapT _ _) ann_ty = (ann_ty = NoneT)
 End
 
+(* Tuple selection is syntactic: only an in-range integer literal determines
+   the result type. Arrays retain ordinary integer expression indices. *)
 Definition subscript_type_ok_def:
-  subscript_type_ok (ArrayT elem_ty _) idx_ty result_ty =
-    (result_ty = elem_ty /\ is_int_type idx_ty) /\
-  subscript_type_ok (TupleT ts) idx_ty result_ty =
-    (is_int_type idx_ty /\ ts <> [] /\ EVERY ($= result_ty) ts) /\
+  subscript_type_ok (ArrayT elem_ty _) idx result_ty =
+    (result_ty = elem_ty /\ is_int_type (expr_type idx)) /\
+  subscript_type_ok (TupleT ts) idx result_ty =
+    (case idx of
+     | Literal idx_ty (IntL n) =>
+         is_int_type idx_ty /\ 0 <= n /\ Num n < LENGTH ts /\
+         EL (Num n) ts = result_ty
+     | _ => F) /\
   subscript_type_ok (BaseT _) _ _ = F /\
   subscript_type_ok (StructT _) _ _ = F /\
   subscript_type_ok (FlagT _) _ _ = F /\
@@ -375,8 +381,8 @@ End
 Datatype:
   typing_env = <|
     current_src     : num option;
-    var_types       : (num |-> type);
-    var_assignable          : (num |-> bool);
+    var_types       : (string |-> type);
+    var_assignable          : (string |-> bool);
     bare_globals            : ((num option # num) |-> type);
     bare_global_assignable  : ((num option # num) |-> type);
     toplevel_vtypes         : ((num option # num) |-> value_type);
@@ -521,9 +527,33 @@ Definition create_arg_types_ok_def:
          if has_salt then [BaseT (BytesT (Fixed 32))] else [])
 End
 
+(* The RawCreate clause hides the salt behind an existential list split, which
+   EVAL cannot decide; this form splits the salt off with LAST/FRONT. *)
+Theorem create_arg_types_ok_raw_create:
+  create_arg_types_ok RawCreate has_salt tys <=>
+    if has_salt then
+      tys <> [] /\ LAST tys = BaseT (BytesT (Fixed 32)) /\
+      ?bd ctor_tys. FRONT tys = [BaseT (BytesT bd); BaseT (UintT 256)] ++ ctor_tys
+    else ?bd ctor_tys. tys = [BaseT (BytesT bd); BaseT (UintT 256)] ++ ctor_tys
+Proof
+  Cases_on `has_salt` >> simp[create_arg_types_ok_def] >> eq_tac >> strip_tac
+  >- simp[listTheory.LAST_CONS_cond, listTheory.FRONT_DEF,
+          rich_listTheory.FRONT_APPEND]
+  >- (qexistsl [`bd`, `ctor_tys`] >>
+      qspec_then `tys` mp_tac listTheory.APPEND_FRONT_LAST >> simp[])
+QED
+
+(* create_arg_types_ok with the RawCreate clause in its decidable form, for
+   EVAL-based checking. *)
+Theorem create_arg_types_ok_compute =
+  LIST_CONJ
+    (List.filter (not o can (find_term (same_const ``RawCreate``)) o concl)
+       (CONJUNCTS create_arg_types_ok_def) @
+     [GEN_ALL create_arg_types_ok_raw_create])
+
 Definition well_typed_expr_def:
   well_typed_expr env (Name ty id) =
-    (FLOOKUP env.var_types (string_to_num id) = SOME ty) /\
+    (FLOOKUP env.var_types id = SOME ty) /\
   well_typed_expr env (TopLevelName ty (src_id_opt, id)) =
     ((FLOOKUP env.toplevel_vtypes (src_id_opt, string_to_num id) = SOME (Type ty) \/
       FLOOKUP env.bare_globals (src_id_opt, string_to_num id) = SOME ty) /\
@@ -544,7 +574,7 @@ Definition well_typed_expr_def:
        MAP FST kes = MAP FST args /\ MAP (expr_type o SND) kes = MAP SND args) /\
   well_typed_expr env (Subscript ty e1 e2) =
     (well_typed_expr env e2 /\ well_formed_type env.type_defs ty /\
-     ((well_typed_expr env e1 /\ subscript_type_ok (expr_type e1) (expr_type e2) ty) \/
+     ((well_typed_expr env e1 /\ subscript_type_ok (expr_type e1) e2 ty) \/
       (?vt. type_place_expr env e1 = SOME vt /\
             subscript_vtype vt (expr_type e2) = SOME (Type ty)))) /\
   well_typed_expr env (Attribute ty e id) =
@@ -616,8 +646,7 @@ Definition well_typed_expr_def:
   type_place_expr env _ = NONE /\
 
   type_place_target env (NameTarget id) =
-    (let n = string_to_num id in
-     case (FLOOKUP env.var_types n, FLOOKUP env.var_assignable n) of
+    (case (FLOOKUP env.var_types id, FLOOKUP env.var_assignable id) of
      | (SOME ty, SOME T) => SOME (Type ty)
      | _ => NONE) /\
   type_place_target env (TopLevelNameTarget (src_id_opt, id)) =
@@ -670,6 +699,19 @@ Termination
   \\ simp[expr_size_def, basicSizeTheory.option_size_def]
 End
 
+Theorem exists_some_option_case[local]:
+  (?x. opt = SOME x /\ P x) <=> option_CASE opt F P
+Proof
+  Cases_on `opt` >> simp[]
+QED
+
+(* well_typed_expr with each `?x. opt = SOME x /\ P x` as a case split on opt,
+   for EVAL-based checking: the split reduces once opt does, so the checker
+   needs no quantifier instantiation for it, also where it is nested in
+   another existential's body (a call as the key of a nested HashMap read). *)
+Theorem well_typed_expr_compute =
+  Ho_Rewrite.PURE_REWRITE_RULE [exists_some_option_case] well_typed_expr_def
+
 Definition well_typed_target_def:
   well_typed_target env bt ty = (type_place_target env bt = SOME (Type ty))
 End
@@ -717,8 +759,8 @@ Definition type_stmt_def:
     (if well_typed_exprs env es then SOME env else NONE) /\
   type_stmt env ret_ty (AnnAssign id typ e) =
     (if well_typed_expr env e /\ assignable_type env.type_defs typ /\
-        expr_type e = typ /\ string_to_num id NOTIN FDOM env.var_types
-     then SOME (extend_local env (string_to_num id) typ T)
+        expr_type e = typ /\ id NOTIN FDOM env.var_types
+     then SOME (extend_local env id typ T)
      else NONE) /\
   type_stmt env ret_ty (Append bt e) =
     (case type_place_target env bt of
@@ -741,8 +783,8 @@ Definition type_stmt_def:
      then SOME env else NONE) /\
   type_stmt env ret_ty (For id typ it n body) =
     (if assignable_type env.type_defs typ /\ well_typed_iterator env typ it /\
-        string_to_num id NOTIN FDOM env.var_types /\
-        IS_SOME (type_stmts (extend_local env (string_to_num id) typ F) ret_ty body)
+        id NOTIN FDOM env.var_types /\
+        IS_SOME (type_stmts (extend_local env id typ F) ret_ty body)
      then SOME env else NONE) /\
   type_stmts env ret_ty [] = SOME env /\
   type_stmts env ret_ty (s::ss) =

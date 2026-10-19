@@ -396,32 +396,20 @@ val internal_tuple_call_state16 =
   #2 (pairSyntax.dest_pair internal_tuple_call_copy_field1_pair)
 val internal_tuple_call_elem_type2_word_eval =
   EVAL ``is_word_type ^internal_tuple_call_elem_type2``
-val internal_tuple_call_field2_dst_step1 = RATOR_CONV (FIRST_CONV
-  (map REWR_CONV (CONJUNCTS contextTheory.compile_with_byte_offset_def)))
-  ``compile_with_byte_offset ^internal_tuple_call_ret_buf_operand (SUC 31)
-      ^internal_tuple_call_state16``
-val internal_tuple_call_field2_dst_step2 =
-  EVAL (rhs (concl internal_tuple_call_field2_dst_step1))
 val internal_tuple_call_field2_dst_eval = save_thm
   ("internal_tuple_call_field2_dst_eval",
-   TRANS internal_tuple_call_field2_dst_step1
-     internal_tuple_call_field2_dst_step2)
+   EVAL ``compile_with_byte_offset ^internal_tuple_call_ret_buf_operand (SUC 31)
+      ^internal_tuple_call_state16``)
 val internal_tuple_call_field2_dst_pair =
   rhs (concl internal_tuple_call_field2_dst_eval)
 val internal_tuple_call_field2_dst =
   #1 (pairSyntax.dest_pair internal_tuple_call_field2_dst_pair)
 val internal_tuple_call_field2_state1 =
   #2 (pairSyntax.dest_pair internal_tuple_call_field2_dst_pair)
-val internal_tuple_call_field2_src_step1 = RATOR_CONV (FIRST_CONV
-  (map REWR_CONV (CONJUNCTS contextTheory.compile_with_byte_offset_def)))
-  ``compile_with_byte_offset ^internal_tuple_call_return_value (SUC 31)
-      ^internal_tuple_call_field2_state1``
-val internal_tuple_call_field2_src_step2 =
-  EVAL (rhs (concl internal_tuple_call_field2_src_step1))
 val internal_tuple_call_field2_src_eval = save_thm
   ("internal_tuple_call_field2_src_eval",
-   TRANS internal_tuple_call_field2_src_step1
-     internal_tuple_call_field2_src_step2)
+   EVAL ``compile_with_byte_offset ^internal_tuple_call_return_value (SUC 31)
+      ^internal_tuple_call_field2_state1``)
 val internal_tuple_call_field2_src_pair =
   rhs (concl internal_tuple_call_field2_src_eval)
 val internal_tuple_call_field2_src =
@@ -475,32 +463,20 @@ val internal_tuple_call_copy_field2_eval = save_thm
      internal_tuple_call_copy_field2_step2)
 val internal_tuple_call_elem_type3_word_eval =
   EVAL ``is_word_type ^internal_tuple_call_elem_type3``
-val internal_tuple_call_field3_dst_step1 = RATOR_CONV (FIRST_CONV
-  (map REWR_CONV (CONJUNCTS contextTheory.compile_with_byte_offset_def)))
-  ``compile_with_byte_offset ^internal_tuple_call_ret_buf_operand (SUC 63)
-      ^internal_tuple_call_state17``
-val internal_tuple_call_field3_dst_step2 =
-  EVAL (rhs (concl internal_tuple_call_field3_dst_step1))
 val internal_tuple_call_field3_dst_eval = save_thm
   ("internal_tuple_call_field3_dst_eval",
-   TRANS internal_tuple_call_field3_dst_step1
-     internal_tuple_call_field3_dst_step2)
+   EVAL ``compile_with_byte_offset ^internal_tuple_call_ret_buf_operand (SUC 63)
+      ^internal_tuple_call_state17``)
 val internal_tuple_call_field3_dst_pair =
   rhs (concl internal_tuple_call_field3_dst_eval)
 val internal_tuple_call_field3_dst =
   #1 (pairSyntax.dest_pair internal_tuple_call_field3_dst_pair)
 val internal_tuple_call_field3_state1 =
   #2 (pairSyntax.dest_pair internal_tuple_call_field3_dst_pair)
-val internal_tuple_call_field3_src_step1 = RATOR_CONV (FIRST_CONV
-  (map REWR_CONV (CONJUNCTS contextTheory.compile_with_byte_offset_def)))
-  ``compile_with_byte_offset ^internal_tuple_call_return_value (SUC 63)
-      ^internal_tuple_call_field3_state1``
-val internal_tuple_call_field3_src_step2 =
-  EVAL (rhs (concl internal_tuple_call_field3_src_step1))
 val internal_tuple_call_field3_src_eval = save_thm
   ("internal_tuple_call_field3_src_eval",
-   TRANS internal_tuple_call_field3_src_step1
-     internal_tuple_call_field3_src_step2)
+   EVAL ``compile_with_byte_offset ^internal_tuple_call_return_value (SUC 63)
+      ^internal_tuple_call_field3_state1``)
 val internal_tuple_call_field3_src_pair =
   rhs (concl internal_tuple_call_field3_src_eval)
 val internal_tuple_call_field3_src =
@@ -996,7 +972,9 @@ Theorem compile_internal_return_fixed_tuple:
        emit_inst RET [return_pc] []
     od
 Proof
+  Cases_on `dst_tys = src_tys` >>
   simp[stmtLoweringTheory.compile_internal_return_def,
+       contextTheory.compile_store_memory_def,
        Once contextTheory.compile_store_memory_typed_def,
        compileEnvTheory.is_word_type_def,
        compileEnvTheory.is_bytestring_type_def]

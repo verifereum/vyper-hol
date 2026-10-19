@@ -362,7 +362,7 @@ Theorem compile_name_correct:
     lower_value compile_expr cenv ty (Name ann id) st = (op, st') ∧
     FLOOKUP cenv.ce_vars id = SOME (MemLoc offset size) ∧
     offset < dimword (:256) ∧
-    lookup_scopes (string_to_num id) es.scopes = SOME entry ∧
+    lookup_scopes id es.scopes = SOME entry ∧
     entry.value = v ∧
     v ≠ NoneV ∧
     value_has_type entry.type v ∧
@@ -1020,11 +1020,18 @@ Proof
   simp[contextTheory.compile_ensure_in_memory_def, LET_THM]
   (* LocMemory *)
   >- simp[comp_return_def, ci_mono_def]
-  (* LocStorage: blocks grow *)
-  >- (blocks_grew_tac >>
+  (* A one-slot aggregate uses a straight-line load/store. *)
+  >- (Cases_on `word_count = 1`
+      >- (simp (ci_mono_def :: isPREFIX_prim_rws) >>
+          rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
+          simp[rich_listTheory.IS_PREFIX_APPEND3]) >>
+      simp[] >> blocks_grew_tac >>
       simp (contextTheory.compile_storage_to_memory_def :: blocks_grew_rws))
-  (* LocTransient: blocks grow *)
-  >- (blocks_grew_tac >>
+  >- (Cases_on `word_count = 1`
+      >- (simp (ci_mono_def :: isPREFIX_prim_rws) >>
+          rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
+          simp[rich_listTheory.IS_PREFIX_APPEND3]) >>
+      simp[] >> blocks_grew_tac >>
       simp (contextTheory.compile_transient_to_memory_def :: blocks_grew_rws))
   (* LocCode: case split on word_count *)
   >- (simp[ci_mono_def, comp_bind_def, comp_ignore_bind_def,
@@ -2062,8 +2069,7 @@ QED
 Theorem ci_mono_compile_with_byte_offset[local]:
   ∀ base offset sa. ci_mono sa (SND (compile_with_byte_offset base offset sa))
 Proof
-  rpt gen_tac >> Cases_on `offset` >>
-  rewrite_tac[contextTheory.compile_with_byte_offset_def] >>
+  rw[contextTheory.compile_with_byte_offset_def] >>
   simp[ci_mono_comp_return, ci_mono_emit_op]
 QED
 

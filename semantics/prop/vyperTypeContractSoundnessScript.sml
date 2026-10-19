@@ -17,6 +17,7 @@ Ancestors
   vyperTypeCallGraphSoundness vyperTypeCallStackSoundness
   vyperTypeContractStaticMaps vyperTypeContractContext
   vyperTypeContractFunction vyperTypeContractGetter vyperTypeEntryReadiness
+  vyperTypeStatePreservation
 Libs
   wordsLib
 
@@ -279,7 +280,7 @@ QED
 
 Theorem constants_env_preserves_lookup_not_key[local]:
   constants_env cx am addr src ts acc = SOME cenv /\
-  ~(MEM (src,id) (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))) /\
+  ~(MEM (src,string_to_num id) (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))) /\
   FLOOKUP acc id = SOME x ==>
   FLOOKUP cenv id = SOME x
 Proof
@@ -290,9 +291,7 @@ Proof
   TRY (Cases_on `v0` >>
        gvs[constants_env_def, toplevel_vtype_keys_toplevel_def]) >>
   gvs[AllCaseEqs(), FLOOKUP_UPDATE] >>
-  TRY (first_x_assum (qspecl_then [`acc |+ (string_to_num s,(tv,v))`,`cenv`] mp_tac) >>
-       simp[FLOOKUP_UPDATE] >> NO_TAC) >>
-  first_x_assum (qspecl_then [`acc`,`cenv`] mp_tac) >> simp[]
+  metis_tac[FLOOKUP_UPDATE]
 QED
 
 
@@ -301,7 +300,7 @@ Theorem constants_env_head_constant_type[local]:
     ((VariableDecl vis (Constant e) id ty init)::ts))) /\
   constants_env cx am addr src
     ((VariableDecl vis (Constant e) id ty init)::ts) acc = SOME cenv ==>
-  ?tv v. FLOOKUP cenv (string_to_num id) = SOME (tv,v) /\
+  ?tv v. FLOOKUP cenv id = SOME (tv,v) /\
          evaluate_type (get_tenv cx) ty = SOME tv
 Proof
   rw[constants_env_def, toplevel_vtype_keys_toplevel_def] >>
@@ -313,7 +312,7 @@ Theorem constants_env_contains_constant_type[local]:
   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts)) /\
   constants_env cx am addr src ts acc = SOME cenv /\
   MEM (VariableDecl vis (Constant e) id ty init) ts ==>
-  ?tv v. FLOOKUP cenv (string_to_num id) = SOME (tv,v) /\
+  ?tv v. FLOOKUP cenv id = SOME (tv,v) /\
          evaluate_type (get_tenv cx) ty = SOME tv
 Proof
   qid_spec_tac `init` >> qid_spec_tac `ty` >> qid_spec_tac `id` >>
@@ -383,7 +382,7 @@ Theorem evaluate_all_constants_contains_constant_type[local]:
   evaluate_all_constants cx am addr mods = SOME am_c ==>
   ?tv v. FLOOKUP (get_source_immutables src
     (case ALOOKUP am_c.immutables addr of SOME m => m | NONE => []))
-    (string_to_num id) = SOME (tv,v) /\
+    id = SOME (tv,v) /\
     evaluate_type (get_tenv cx) ty = SOME tv
 Proof
   qid_spec_tac `am_c` >> qid_spec_tac `am` >>
@@ -400,7 +399,7 @@ Proof
      strip_tac >>
      `FLOOKUP (get_source_immutables h0
         (case ALOOKUP am_c.immutables addr of SOME m => m | NONE => []))
-        (string_to_num id) = SOME (tv,v)` by
+        id = SOME (tv,v)` by
        (gvs[contract_namespaces_ok_def] >>
         drule evaluate_all_constants_preserves_merged_lookup_not_source >>
         disch_then drule >>
@@ -502,12 +501,12 @@ Theorem deploy_constants_setup_bare_globals_ready:
   evaluate_all_constants cx
     (am with immutables updated_by CONS (target,imms)) target mods = SOME am_c ==>
   (!src id ty.
-     FLOOKUP call_art.cta_bare_globals (src,id) = SOME ty ==>
+     FLOOKUP call_art.cta_bare_globals (src,string_to_num id) = SOME ty ==>
      IS_SOME (FLOOKUP
        (get_source_immutables src
          (case ALOOKUP am_c.immutables target of SOME m => m | NONE => [])) id)) /\
   (!src id ty tv v.
-     FLOOKUP call_art.cta_bare_globals (src,id) = SOME ty /\
+     FLOOKUP call_art.cta_bare_globals (src,string_to_num id) = SOME ty /\
      FLOOKUP
        (get_source_immutables src
          (case ALOOKUP am_c.immutables target of SOME m => m | NONE => [])) id = SOME (tv,v) ==>
@@ -519,8 +518,8 @@ Proof
       drule build_contract_type_artifact_bare_globals_sound >>
       disch_then drule >>
       strip_tac >>
-      gvs[]
-      >- (`IS_SOME (FLOOKUP (get_source_immutables src imms) (string_to_num id_str))` by
+      gvs[string_to_num_inj]
+      >- (`IS_SOME (FLOOKUP (get_source_immutables src imms) id_str)` by
             (irule initial_immutables_contains_decl >>
              qexists `mods` >> qexists `type_env_all_modules mods` >> qexists `ts` >>
              simp[] >>
@@ -540,20 +539,23 @@ Proof
                    `cx`, `mods`, `ts`, `ty`] >>
           gvs[FLOOKUP_UPDATE, initial_target_immutables_lookup] >>
           gvs[] >>
-          metis_tac[constants_do_not_clobber_single_immutable]) >>
-      metis_tac[evaluate_all_constants_contains_constant_type, IS_SOME_EXISTS]) >>
+          metis_tac[constants_do_not_clobber_single_immutable, string_to_num_inj]) >>
+      `id = id_str` by metis_tac[string_to_num_inj] >>
+      gvs[] >>
+      drule_all evaluate_all_constants_contains_constant_type >>
+      strip_tac >> simp[IS_SOME_EXISTS]) >>
   rw[] >>
   `(?ts vis id_str init.
       ALOOKUP mods src = SOME ts /\
       MEM (VariableDecl vis Immutable id_str ty init) ts /\
-      id = string_to_num id_str) \/
+      string_to_num id = string_to_num id_str) \/
    (?ts vis e id_str init.
       ALOOKUP mods src = SOME ts /\
       MEM (VariableDecl vis (Constant e) id_str ty init) ts /\
-      id = string_to_num id_str)` by
+      string_to_num id = string_to_num id_str)` by
     metis_tac[build_contract_type_artifact_bare_globals_sound] >>
-  gvs[]
-  >- (`IS_SOME (FLOOKUP (get_source_immutables src imms) (string_to_num id_str))` by
+  gvs[string_to_num_inj]
+  >- (`IS_SOME (FLOOKUP (get_source_immutables src imms) id_str)` by
         (irule initial_immutables_contains_decl >>
          qexists `mods` >> qexists `type_env_all_modules mods` >> qexists `ts` >>
          simp[] >>
@@ -569,7 +571,7 @@ Proof
       `FLOOKUP
          (get_source_immutables src
             (case ALOOKUP am_c.immutables tx.target of NONE => [] | SOME m => m))
-         (string_to_num id_str) = SOME x` by
+         id_str = SOME x` by
         (irule evaluate_all_constants_preserves_bare_global_lookup_type >>
          qexistsl [`am with immutables updated_by CONS (tx.target,imms)`,
                    `FEMPTY |+ ((src,string_to_num id_str),ty)`,
@@ -580,10 +582,11 @@ Proof
       `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))` by
         (irule contract_namespaces_ok_module_toplevel_vtype_keys >>
          metis_tac[alistTheory.ALOOKUP_MEM]) >>
-      `is_immutable_decl (string_to_num id_str) ts` by
+      `is_immutable_decl id_str ts` by
         metis_tac[is_immutable_decl_MEM] >>
       irule initial_immutables_all_bare_global_type >>
-      qexistsl [`string_to_num id_str`, `imms`, `mods`, `src`, `ts`, `v`] >>
+      qexistsl [`id_str`, `imms`, `mods`, `src`, `ts`, `v`] >>
+      `id = id_str` by metis_tac[string_to_num_inj] >>
       gvs[] >>
       metis_tac[module_immutable_string_num_type_unique]) >>
   drule evaluate_all_constants_contains_constant_type >>
@@ -591,7 +594,8 @@ Proof
   disch_then drule >>
   disch_then drule >>
   strip_tac >>
-      gvs[]
+  `id = id_str` by metis_tac[string_to_num_inj] >>
+  gvs[]
 QED
 
 Theorem checked_constant_decl_typed[local]:
@@ -619,7 +623,7 @@ Theorem initial_immutables_module_lookup_origin[local]:
   init_src = query_src /\
   ?vis id_str ty init.
     MEM (VariableDecl vis Immutable id_str ty init) ts /\
-    string_to_num id_str = id /\
+    id_str = id /\
     evaluate_type tenv ty = SOME tv
 Proof
   recInduct initial_immutables_module_ind >>
@@ -631,7 +635,7 @@ Proof
   Cases_on `src_id_opt = query_src` >>
   gvs[update_immutable_def, get_source_immutables_set_same,
       get_source_immutables_set_other, FLOOKUP_UPDATE] >>
-  Cases_on `string_to_num id = id'` >>
+  Cases_on `id = id'` >>
   gvs[update_immutable_def, get_source_immutables_set_same,
       FLOOKUP_UPDATE] >>
   metis_tac[]
@@ -645,7 +649,7 @@ Theorem initial_immutables_lookup_origin[local]:
   ?ts vis id_str ty init.
     MEM (src,ts) mods /\
     MEM (VariableDecl vis Immutable id_str ty init) ts /\
-    string_to_num id_str = id /\
+    id_str = id /\
     evaluate_type tenv ty = SOME tv
 Proof
   gen_tac >> Induct_on `mods`
@@ -658,8 +662,8 @@ Proof
   disch_then drule >>
   strip_tac
   >- (first_x_assum drule_all >> strip_tac >>
-      qexistsl [`ts`,`vis`,`id_str`,`ty`,`init`] >> simp[]) >>
-  qexistsl [`h1`,`vis`,`id_str`,`ty`,`init`] >> simp[]
+      qexistsl [`ts`,`vis`,`ty`,`init`] >> gvs[]) >>
+  qexistsl [`h1`,`vis`,`ty`,`init`] >> gvs[]
 QED
 
 (* TOP-LEVEL: The ordinary freshly initialized immutable table satisfies the
@@ -717,7 +721,7 @@ Definition deployment_constant_cells_typed_def[local]:
           (case ALOOKUP am.immutables addr of
            | SOME imms => imms
            | NONE => []))
-        (string_to_num id) = SOME (tv,v) ==>
+        id = SOME (tv,v) ==>
       evaluate_type tenv ty = SOME tv /\ value_has_type tv v
 End
 
@@ -753,7 +757,7 @@ Theorem deployment_constant_cells_typed_lookup[local]:
       (case ALOOKUP am.immutables addr of
        | SOME imms => imms
        | NONE => []))
-    (string_to_num id) = SOME (tv,v) ==>
+    id = SOME (tv,v) ==>
   evaluate_type tenv ty = SOME tv /\ value_has_type tv v
 Proof
   metis_tac[deployment_constant_cells_typed_def]
@@ -782,13 +786,14 @@ Proof
      gvs[contract_namespaces_ok_def]) >>
   `get_module_code cx src = SOME tls` by
     simp[get_module_code_def] >>
-  `find_var_decl_by_num (string_to_num id) tls = NONE` by
-    (irule find_var_decl_by_num_NONE_Constant >> simp[] >>
+  `find_var_decl_by_name id tls = NONE` by
+    (simp[find_var_decl_by_name_num_agree] >>
+     irule find_var_decl_by_num_NONE_Constant >> simp[] >>
      metis_tac[contract_namespaces_ok_module_toplevel_vtype_keys]) >>
   `eval_expr cx (TopLevelName ann (src,id)) (initial_state am [FEMPTY]) =
      (INL tvl, initial_state am [FEMPTY])` by
     metis_tac[eval_pure_expr_to_eval_expr_some] >>
-  `lookup_global cx src (string_to_num id) (initial_state am [FEMPTY]) =
+  `lookup_global cx src id (initial_state am [FEMPTY]) =
      (INL tvl, initial_state am [FEMPTY])` by
     (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
      simp[Once evaluate_def]) >>
@@ -797,14 +802,14 @@ Proof
         (get_source_immutables src
           (case ALOOKUP am.immutables cx.txn.target of
            | NONE => [] | SOME imms => imms))
-        (string_to_num id) = SOME (stored_tv,v) /\
+        id = SOME (stored_tv,v) /\
       tvl = Value v` by
     (qpat_x_assum `lookup_global _ _ _ _ = _` mp_tac >>
      simp[lookup_global_def, bind_def, lift_option_type_def,
           return_def, raise_def] >>
      Cases_on `get_immutables cx src (initial_state am [FEMPTY])` >>
      Cases_on `q` >> gvs[bind_def, return_def, raise_def] >>
-     Cases_on `FLOOKUP x (string_to_num id)`
+     Cases_on `FLOOKUP x id`
      >- gvs[raise_def] >>
      gvs[return_def] >> PairCases_on `x'` >> gvs[] >>
      qpat_x_assum `get_immutables _ _ _ = _` mp_tac >>
@@ -1051,33 +1056,27 @@ Proof
 QED
 
 Theorem evaluate_subscript_value_selected_typed_local[local]:
-  !tenv arr_tv v1 v2 out ct it ty.
+  !tenv arr_tv v1 v2 out ct ie ty.
     evaluate_subscript tenv arr_tv (Value v1) v2 = INL out /\
     value_has_type arr_tv v1 /\
-    subscript_type_ok ct it ty /\
+    subscript_type_ok ct ie ty /\
+    subscript_index_matches ct ie v2 /\
     evaluate_type tenv ct = SOME arr_tv ==>
     ?rtv v. evaluate_type tenv ty = SOME rtv /\
              out = INL (Value v) /\ value_has_type rtv v
 Proof
   rpt gen_tac >> Cases_on `ct` >> simp[subscript_type_ok_def] >>
   rpt strip_tac >> gvs[] >> Cases_on `v1` >> Cases_on `v2` >>
-  gvs[evaluate_subscript_def, AllCaseEqs()]
-  >- (gvs[Once evaluate_type_def, AllCaseEqs(),
-           evaluate_types_OPT_MMAP, OPT_MMAP_SOME_IFF] >>
+  gvs[evaluate_subscript_def,
+      vyperTypeExprResultTheory.subscript_index_matches_def, AllCaseEqs()]
+  >- (drule evaluate_type_TupleT_cases >> strip_tac >> gvs[] >>
       Cases_on `a` >>
       gvs[vyperTypingTheory.value_has_type_inv,
           vyperValueOperationTheory.array_index_def, AllCaseEqs()] >>
-      gvs[oEL_EQ_EL] >>
-      gvs[vyperTypeDefaultsTheory.values_have_types_LIST_REL,
+      gvs[oEL_EQ_EL,
+          vyperTypeDefaultsTheory.values_have_types_LIST_REL,
           LIST_REL_EL_EQN] >>
-      first_x_assum (qspec_then `Num i` mp_tac) >> simp[EL_MAP] >>
-      `EL (Num i) l = ty` by (gvs[EVERY_EL] >> res_tac) >>
-      strip_tac >>
-      `IS_SOME (evaluate_type tenv (EL (Num i) l))` by
-        (qpat_x_assum `EVERY IS_SOME (MAP _ l)` mp_tac >>
-         simp[EVERY_EL] >>
-         disch_then (qspec_then `Num i` mp_tac) >> simp[EL_MAP]) >>
-      Cases_on `evaluate_type tenv (EL (Num i) l)` >> gvs[])
+      metis_tac[])
   >> (gvs[Once evaluate_type_def, AllCaseEqs()] >>
       imp_res_tac (cj 1 vyperTypingTheory.evaluate_type_well_formed) >>
       irule vyperAssignPreservesTypeTheory.array_index_has_type >>
@@ -1100,7 +1099,7 @@ Proof
     (gvs[vyperTypeExprResultTheory.expr_result_typed_def,
          vyperTypeExprSoundnessTheory.expr_runtime_typed_def,
          toplevel_value_typed_def]) >>
-  `subscript_type_ok (expr_type e1) (expr_type e2) ty` by
+  `subscript_type_ok (expr_type e1) e2 ty` by
     (qpat_x_assum `well_typed_expr env (Subscript _ _ _)` mp_tac >>
      simp[Once well_typed_expr_def] >> strip_tac >>
      `vtype_annotation_ok vt (expr_type e1)` by
@@ -1114,6 +1113,12 @@ Proof
          gvs[vtype_annotation_ok_def, subscript_vtype_def,
              subscript_type_ok_def]) >>
      metis_tac[vyperTypeExprResultTheory.well_typed_expr_not_hashmap_place]) >>
+  `subscript_index_matches (expr_type e1) e2 v2` by
+    (Cases_on `expr_type e1` >>
+     simp[vyperTypeExprResultTheory.subscript_index_matches_def] >>
+     fs[vyperTypeExprResultTheory.subscript_type_ok_tuple] >>
+     gvs[Once eval_pure_expr_def,
+         vyperValueOperationTheory.evaluate_literal_def]) >>
   qpat_x_assum `eval_pure_expr _ _ (Subscript _ _ _) = _` mp_tac >>
   simp[Once eval_pure_expr_def] >> gvs[AllCaseEqs()] >> strip_tac >>
   drule_all evaluate_subscript_value_selected_typed_local >>
@@ -1387,7 +1392,7 @@ Proof
               within_int_bound_def])
 QED
 Definition constant_fmap_well_typed_def[local]:
-  constant_fmap_well_typed (m : (num, type_value # value) fmap) <=>
+  constant_fmap_well_typed (m : (string, type_value # value) fmap) <=>
     !id tv v. FLOOKUP m id = SOME (tv,v) ==>
       value_has_type tv v /\ well_formed_type_value tv
 End
@@ -1442,11 +1447,11 @@ QED
 
 Definition constant_fmap_declared_typed_def[local]:
   constant_fmap_declared_typed tenv ts
-      (m : (num, type_value # value) fmap) <=>
+      (m : (string, type_value # value) fmap) <=>
     !id tv v. FLOOKUP m id = SOME (tv,v) ==>
       ?vis e id_str ty init.
         MEM (VariableDecl vis (Constant e) id_str ty init) ts /\
-        string_to_num id_str = id /\
+        id_str = id /\
         evaluate_type tenv ty = SOME tv /\ value_has_type tv v
 End
 
@@ -1455,7 +1460,7 @@ Theorem constant_fmap_declared_typed_lookup[local]:
   FLOOKUP m id = SOME (tv,v) ==>
   ?vis e id_str ty init.
     MEM (VariableDecl vis (Constant e) id_str ty init) ts /\
-    string_to_num id_str = id /\
+    id_str = id /\
     evaluate_type tenv ty = SOME tv /\ value_has_type tv v
 Proof
   metis_tac[constant_fmap_declared_typed_def]
@@ -1476,7 +1481,7 @@ Proof
   Cases_on `src' = src` >>
   gvs[get_source_immutables_set_same, get_source_immutables_set_other,
       FLOOKUP_FUNION]
-  >- (Cases_on `FLOOKUP cenv (string_to_num id)` >> gvs[]
+  >- (Cases_on `FLOOKUP cenv id` >> gvs[]
       >- (gvs[empty_immutables_def] >>
           drule_all deployment_constant_cells_typed_lookup >> simp[]) >>
       drule_all constant_fmap_declared_typed_lookup >> strip_tac >>
@@ -1491,7 +1496,7 @@ Proof
       `ty' = ty` by
         (gvs[] >> qspecl_then
            [`src`,`ts`,`vis`,`e`,`id`,`ty`,`init`,
-            `vis'`,`e'`,`id_str`,`ty'`,`init'`] mp_tac
+            `vis'`,`e'`,`id`,`ty'`,`init'`] mp_tac
            module_constant_string_num_type_unique >> simp[]) >>
       gvs[]) >>
   gvs[empty_immutables_def] >>
@@ -1574,15 +1579,15 @@ Proof
       `well_formed_type_value eval_tv` by
         metis_tac[vyperTypeValuesTheory.evaluate_type_well_formed_type_value] >>
       first_x_assum (qspecl_then
-        [`acc |+ (string_to_num s,(eval_tv,eval_v))`,`cenv`] mp_tac) >>
+        [`acc |+ (s,(eval_tv,eval_v))`,`cenv`] mp_tac) >>
       simp[] >> impl_tac
       >- (conj_tac
           >- (rw[constant_fmap_well_typed_def, FLOOKUP_UPDATE] >>
-          Cases_on `id = string_to_num s` >> gvs[] >>
+          Cases_on `id = s` >> gvs[] >>
               metis_tac[constant_fmap_well_typed_def]) >>
           rw[constant_fmap_declared_typed_def, FLOOKUP_UPDATE] >>
-          Cases_on `id = string_to_num s` >> gvs[]
-          >- (qexistsl [`v`,`e`,`s`,`expr_type e`,`o'`] >> gvs[]) >>
+          Cases_on `id = s` >> gvs[]
+          >- (qexistsl [`v`,`e`,`expr_type e`,`o'`] >> gvs[]) >>
           metis_tac[constant_fmap_declared_typed_def]) >>
       simp[])
       >- (first_x_assum (qspecl_then [`acc`,`cenv`] mp_tac) >> simp[])
@@ -1692,7 +1697,7 @@ Proof
        (get_source_immutables src
          (case ALOOKUP am_c.immutables cx.txn.target of
           | SOME m => m | NONE => []))
-       (string_to_num id) = SOME (tv,v) /\
+       id = SOME (tv,v) /\
      evaluate_type (get_tenv cx) ty = SOME tv` by
     (irule evaluate_all_constants_contains_constant_type >>
      qexistsl [`am`,`e`,`init`,`mods`,`ts`,`vis`] >>
@@ -2421,7 +2426,7 @@ Proof
   rpt strip_tac >>
   `scope_well_typed scope` by
     metis_tac[bind_arguments_scope_well_typed_from_success] >>
-  `ALL_DISTINCT (MAP (string_to_num o FST) args)` by
+  `ALL_DISTINCT (MAP FST args)` by
     (`check_function_body am.layouts tx.target mods art src mut nr args dflts ret body` by
        (irule check_contract_runtime_function_body_MEM >> simp[] >>
         qexistsl [`tx.function_name`, `raw`, `External`] >> simp[]) >>
@@ -2865,13 +2870,13 @@ Theorem deploy_call_success_transports_bare_global_readiness_clause[local]:
     (INL v, am_out, rqs) /\
   evaluate_all_constants cx am cx.txn.target all_mods = SOME am_c /\
   (!src id ty tv v.
-     FLOOKUP call_art.cta_bare_globals (src,id) = SOME ty /\
+     FLOOKUP call_art.cta_bare_globals (src,string_to_num id) = SOME ty /\
      FLOOKUP
        (get_source_immutables src
          (case ALOOKUP am_c.immutables cx.txn.target of SOME m => m | NONE => [])) id = SOME (tv,v) ==>
      evaluate_type (type_env_all_modules all_mods) ty = SOME tv) ==>
   !src id ty tv v.
-    FLOOKUP call_art.cta_bare_globals (src,id) = SOME ty /\
+    FLOOKUP call_art.cta_bare_globals (src,string_to_num id) = SOME ty /\
     FLOOKUP
       (get_source_immutables src
         (case ALOOKUP am_out.immutables cx.txn.target of SOME m => m | NONE => [])) id = SOME (tv,v) ==>
@@ -2897,7 +2902,7 @@ Theorem deploy_context_constants_bare_globals_type_ready[local]:
     (am with <|immutables updated_by CONS (deploy_tx.target,imms);
                exports updated_by CONS (deploy_tx.target,exps)|>)
     deploy_tx.target mods = SOME am_c /\
-  FLOOKUP call_art.cta_bare_globals (src,id) = SOME ty /\
+  FLOOKUP call_art.cta_bare_globals (src,string_to_num id) = SOME ty /\
   FLOOKUP
     (get_source_immutables src
       (case ALOOKUP am_c.immutables deploy_tx.target of SOME m => m | NONE => [])) id = SOME (tv,v) ==>
@@ -2925,12 +2930,12 @@ Theorem deploy_call_success_scalar_bare_global_type_from_constants[local]:
   call_external_function orc am cx nr mut ts all_mods args dflts vals body ret = (INL v_out,am_out,rqs) /\
   evaluate_all_constants cx am cx.txn.target all_mods = SOME am_c /\
   (!src id ty tv v.
-     FLOOKUP call_art.cta_bare_globals (src,id) = SOME ty /\
+     FLOOKUP call_art.cta_bare_globals (src,string_to_num id) = SOME ty /\
      FLOOKUP
        (get_source_immutables src
          (case ALOOKUP am_c.immutables cx.txn.target of SOME m => m | NONE => [])) id = SOME (tv,v) ==>
      evaluate_type (type_env_all_modules all_mods) ty = SOME tv) /\
-  FLOOKUP call_art.cta_bare_globals (src,id) = SOME ty /\
+  FLOOKUP call_art.cta_bare_globals (src,string_to_num id) = SOME ty /\
   FLOOKUP
     (get_source_immutables src
       (case ALOOKUP am_out.immutables cx.txn.target of SOME m => m | NONE => [])) id = SOME (tv,v) ==>
@@ -2968,7 +2973,7 @@ Theorem deploy_constructor_success_bare_global_type_from_constants[local]:
     (am with <|immutables updated_by CONS (deploy_tx.target,imms);
                exports updated_by CONS (deploy_tx.target,exps)|>)
     deploy_tx.target mods = SOME am_c /\
-  FLOOKUP call_art.cta_bare_globals (src,id) = SOME ty /\
+  FLOOKUP call_art.cta_bare_globals (src,string_to_num id) = SOME ty /\
   FLOOKUP
     (get_source_immutables src
       (case ALOOKUP am_ctor.immutables deploy_tx.target of SOME m => m | NONE => [])) id =
@@ -2993,7 +2998,7 @@ Proof
      cx0.txn.target mods = SOME am_c` by
     gvs[Abbr `cx0`, initial_evaluation_context_def] >>
   `!src id ty tv v.
-      FLOOKUP call_art.cta_bare_globals (src,id) = SOME ty /\
+      FLOOKUP call_art.cta_bare_globals (src,string_to_num id) = SOME ty /\
       FLOOKUP
         (get_source_immutables src
           (case ALOOKUP am_c.immutables deploy_tx.target of SOME m => m | NONE => [])) id = SOME (tv,v) ==>
@@ -3105,7 +3110,7 @@ Theorem load_contract_constructor_context_bare_global_type_from_constants[local]
     (am with <|immutables updated_by CONS (deploy_tx.target,imms);
                exports updated_by CONS (deploy_tx.target,exps)|>)
     deploy_tx.target mods = SOME am_c /\
-  FLOOKUP call_art.cta_bare_globals (src,id) = SOME ty /\
+  FLOOKUP call_art.cta_bare_globals (src,string_to_num id) = SOME ty /\
   FLOOKUP
     (get_source_immutables src
       (case ALOOKUP am_ctor.immutables deploy_tx.target of SOME m => m | NONE => [])) id = SOME (tv,v) ==>
@@ -3130,7 +3135,7 @@ Proof
      cx0.txn.target mods = SOME am_c` by
     gvs[Abbr `cx0`, initial_evaluation_context_def] >>
   `!src id ty tv v.
-      FLOOKUP call_art.cta_bare_globals (src,id) = SOME ty /\
+      FLOOKUP call_art.cta_bare_globals (src,string_to_num id) = SOME ty /\
       FLOOKUP
         (get_source_immutables src
           (case ALOOKUP am_c.immutables deploy_tx.target of SOME m => m | NONE => [])) id = SOME (tv,v) ==>
@@ -3147,7 +3152,7 @@ Theorem load_contract_deployed_bare_globals_immutables_ready_clause[local]:
   check_contract F am_deployed.layouts call_tx.target mods = SOME call_art /\
   call_tx.target = deploy_tx.target ==>
   !src id ty tv v.
-    FLOOKUP call_art.cta_bare_globals (src,id) = SOME ty /\
+    FLOOKUP call_art.cta_bare_globals (src,string_to_num id) = SOME ty /\
     FLOOKUP
       (get_source_immutables src
         (case ALOOKUP am_deployed.immutables call_tx.target of SOME m => m | NONE => [])) id = SOME (tv,v) ==>
@@ -3173,7 +3178,7 @@ Theorem deployed_toplevel_vtypes_immutables_ready_clause[local]:
   check_contract F am_deployed.layouts call_tx.target mods = SOME call_art /\
   call_tx.target = deploy_tx.target /\
   (!src id ty tv v.
-     FLOOKUP call_art.cta_bare_globals (src,id) = SOME ty /\
+     FLOOKUP call_art.cta_bare_globals (src,string_to_num id) = SOME ty /\
      FLOOKUP
        (get_source_immutables src
          (case ALOOKUP am_deployed.immutables call_tx.target of SOME m => m | NONE => [])) id = SOME (tv,v) ==>
@@ -3191,10 +3196,11 @@ Theorem deployed_toplevel_vtypes_immutables_ready_clause[local]:
        find_var_decl_by_num id ts = SOME (HashMapVarDecl is_transient kt vt,id_str) ==>
        F) /\
     (find_var_decl_by_num id ts = NONE ==>
-     !tv v.
+     !id_str tv v. string_to_num id_str = id /\
        FLOOKUP
          (get_source_immutables src
-           (case ALOOKUP am_deployed.immutables call_tx.target of SOME m => m | NONE => [])) id = SOME (tv,v) ==>
+           (case ALOOKUP am_deployed.immutables call_tx.target of SOME m => m | NONE => []))
+         id_str = SOME (tv,v) ==>
        evaluate_type
          (get_tenv (initial_evaluation_context am_deployed.sources am_deployed.layouts call_tx NONE))
          ty = SOME tv)
@@ -3253,20 +3259,20 @@ Proof
       simp[get_module_code_def, initial_evaluation_context_def] >>
       rw[] >> gvs[get_module_code_def, initial_evaluation_context_def])
   >> rpt strip_tac >>
-     Cases_on `FLOOKUP call_art.cta_bare_globals (src,id)` >> gvs[]
+     Cases_on `FLOOKUP call_art.cta_bare_globals (src,string_to_num id_str)` >> gvs[]
      >- (qpat_x_assum `!src id ty. FLOOKUP call_art.cta_toplevel_vtypes (src,id) = SOME (Type ty) /\ FLOOKUP call_art.cta_bare_globals (src,id) = NONE ==> _`
-           (qspecl_then [`src`,`id`,`ty`] mp_tac) >>
+           (qspecl_then [`src`,`string_to_num id_str`,`ty`] mp_tac) >>
             simp[get_module_code_def, initial_evaluation_context_def] >>
             rw[] >> gvs[get_module_code_def, initial_evaluation_context_def]) >>
-     rename1 `FLOOKUP call_art.cta_bare_globals (src,id) = SOME bare_ty` >>
+     rename1 `FLOOKUP call_art.cta_bare_globals (src,string_to_num id_str) = SOME bare_ty` >>
      `bare_ty = ty` by
        (drule check_contract_bare_globals_consistent_initial >>
-        disch_then (qspecl_then [`call_tx`,`(deploy_tx.target,mods)::am_ctor.sources`,`src`,`id`,`bare_ty`] mp_tac) >>
+        disch_then (qspecl_then [`call_tx`,`(deploy_tx.target,mods)::am_ctor.sources`,`src`,`string_to_num id_str`,`bare_ty`] mp_tac) >>
         simp[get_module_code_def, initial_evaluation_context_def] >>
         rw[] >> gvs[get_module_code_def, initial_evaluation_context_def]) >>
      gvs[] >>
-     qpat_x_assum `!src' id' ty' tv' v'. FLOOKUP call_art.cta_bare_globals (src',id') = SOME ty' /\ FLOOKUP _ id' = SOME (tv',v') ==> _`
-       (qspecl_then [`src`,`id`,`bare_ty`,`tv`,`v`] mp_tac) >>
+     qpat_x_assum `!src' id' ty' tv' v'. FLOOKUP call_art.cta_bare_globals (src',string_to_num id') = SOME ty' /\ FLOOKUP _ id' = SOME (tv',v') ==> _`
+       (qspecl_then [`src`,`id_str`,`bare_ty`,`tv`,`v`] mp_tac) >>
      simp[]
 QED
 
@@ -3279,7 +3285,7 @@ Theorem deploy_context_constants_bare_globals_lookup_exists[local]:
     (am with <|immutables updated_by CONS (deploy_tx.target,imms);
                exports updated_by CONS (deploy_tx.target,exps)|>)
     deploy_tx.target mods = SOME am_c /\
-  FLOOKUP call_art.cta_bare_globals (src,id) = SOME ty ==>
+  FLOOKUP call_art.cta_bare_globals (src,string_to_num id) = SOME ty ==>
   ?tv v.
     FLOOKUP
       (get_source_immutables src
@@ -3321,7 +3327,7 @@ Theorem load_contract_deployed_bare_globals_immutables_ready_exists_clause[local
   check_contract F am_deployed.layouts call_tx.target mods = SOME call_art /\
   call_tx.target = deploy_tx.target ==>
   !src id ty.
-    FLOOKUP call_art.cta_bare_globals (src,id) = SOME ty ==>
+    FLOOKUP call_art.cta_bare_globals (src,string_to_num id) = SOME ty ==>
     IS_SOME (FLOOKUP
       (get_source_immutables src
         (case ALOOKUP am_deployed.immutables call_tx.target of SOME m => m | NONE => [])) id)
@@ -3367,10 +3373,10 @@ Proof
                 `id`, `id_str`, `is_transient`, `mods`, `orc`, `rqs`, `src`, `ts`] >>
       simp[] >>
       rpt strip_tac >>
-      rename1 `FLOOKUP call_art.cta_bare_globals (bg_src,bg_id) = SOME bg_ty` >>
-      rename1 `FLOOKUP _ bg_id = SOME (bg_tv,bg_v)` >>
+      rename1 `FLOOKUP call_art.cta_bare_globals (bg_src,string_to_num bg_id_str) = SOME bg_ty` >>
+      rename1 `FLOOKUP _ bg_id_str = SOME (bg_tv,bg_v)` >>
       irule load_contract_deployed_bare_globals_immutables_ready_clause >>
-      qexistsl [`am`, `call_art`, `deploy_tx`, `exps`, `bg_id`, `mods`, `orc`, `rqs`, `bg_src`, `bg_v`] >>
+      qexistsl [`am`, `call_art`, `deploy_tx`, `exps`, `bg_id_str`, `mods`, `orc`, `rqs`, `bg_src`, `bg_v`] >>
       gvs[initial_evaluation_context_def])
   >- (strip_tac >>
       irule (cj 2 deployed_toplevel_vtypes_immutables_ready_clause) >>
@@ -3378,23 +3384,28 @@ Proof
                 `id`, `id_str`, `is_transient`, `kt`, `mods`, `orc`, `rqs`, `src`, `ts`, `ty`, `vt`] >>
       simp[] >>
       rpt strip_tac >>
-      rename1 `FLOOKUP call_art.cta_bare_globals (bg_src,bg_id) = SOME bg_ty` >>
-      rename1 `FLOOKUP _ bg_id = SOME (bg_tv,bg_v)` >>
+      rename1 `FLOOKUP call_art.cta_bare_globals (bg_src,string_to_num bg_id_str) = SOME bg_ty` >>
+      rename1 `FLOOKUP _ bg_id_str = SOME (bg_tv,bg_v)` >>
       irule load_contract_deployed_bare_globals_immutables_ready_clause >>
-      qexistsl [`am`, `call_art`, `deploy_tx`, `exps`, `bg_id`, `mods`, `orc`, `rqs`, `bg_src`, `bg_v`] >>
+      qexistsl [`am`, `call_art`, `deploy_tx`, `exps`, `bg_id_str`, `mods`, `orc`, `rqs`, `bg_src`, `bg_v`] >>
       gvs[initial_evaluation_context_def])
   >> irule (cj 3 deployed_toplevel_vtypes_immutables_ready_clause) >>
-     qexistsl [`am`, `call_art`, `deploy_tx`, `exps`, `id`, `mods`, `orc`, `rqs`, `src`, `ts`, `v`] >>
-     simp[] >>
+     qexistsl [`am`, `call_art`, `deploy_tx`, `exps`, `string_to_num id_str`, `id_str`, `mods`, `orc`, `rqs`, `src`, `ts`, `v`] >>
+     gvs[initial_evaluation_context_def] >>
      rpt strip_tac >>
      drule load_contract_deployed_bare_globals_immutables_ready_clause >>
-     simp[] >>
-     disch_then drule >>
-     simp[] >>
-     disch_then (qspecl_then [`src'`, `id'`, `ty'`, `tv'`, `v'`] mp_tac) >>
+     strip_tac >>
+     pop_assum (qspec_then `call_tx` mp_tac) >>
      simp[initial_evaluation_context_def] >>
      strip_tac >>
-     gvs[initial_evaluation_context_def]
+     qmatch_assum_rename_tac
+       `FLOOKUP call_art.cta_bare_globals (_,string_to_num bg_id) = SOME _` >>
+     pop_assum (qspec_then `src'` assume_tac) >>
+     pop_assum (qspec_then `bg_id` assume_tac) >>
+     pop_assum (qspec_then `ty'` assume_tac) >>
+     pop_assum (qspec_then `tv'` assume_tac) >>
+     pop_assum (qspec_then `v'` mp_tac) >>
+     simp[]
 QED
 
 Theorem load_contract_establishes_checked_contract_runtime_ready:
@@ -3908,7 +3919,7 @@ Proof
               (initial_evaluation_context am.sources am.layouts tx src) _`
            mp_tac >>
          simp[immutables_ready_def] >> strip_tac >>
-         first_x_assum drule_all >> simp[])) >>
+         metis_tac[])) >>
   `getter_context_equiv
      (initial_evaluation_context am.sources am.layouts tx src)
      (initial_evaluation_context am.sources am.layouts
@@ -4208,9 +4219,9 @@ QED
 Theorem bind_arguments_success_flookup_safe_cast:
   !tenv params vals scope id ty raw sv.
     bind_arguments tenv params vals = SOME scope /\
-    ALL_DISTINCT (MAP (string_to_num o FST) params) /\
+    ALL_DISTINCT (MAP FST params) /\
     MEM ((id,ty),raw) (ZIP (params, vals)) /\
-    FLOOKUP scope (string_to_num id) = SOME sv ==>
+    FLOOKUP scope id = SOME sv ==>
       sv.assignable /\
       ?tv.
         evaluate_type tenv ty = SOME tv /\
@@ -4344,7 +4355,7 @@ Theorem checked_explicit_external_body_setup:
   MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
   cx = initial_evaluation_context am.sources am.layouts tx src /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
-  ALL_DISTINCT (MAP (string_to_num o FST) args) /\
+  ALL_DISTINCT (MAP FST args) /\
   st.scopes = [scope] /\ st.immutables = am.immutables /\
   state_well_typed st /\ accounts_well_typed st.accounts ==>
   ?env_body env_after.
@@ -4385,6 +4396,9 @@ Proof
       simp[immutables_ready_def] >>
       strip_tac >>
       first_x_assum drule_all >>
+      simp[] >>
+      strip_tac >>
+      first_x_assum (qspecl_then [`id_str`, `tv`, `v`] mp_tac) >>
       simp[])
 QED
 
@@ -4397,7 +4411,7 @@ Theorem checked_explicit_external_body_no_type_error_selected[local]:
   MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
   cx = initial_evaluation_context am.sources am.layouts tx src /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
-  ALL_DISTINCT (MAP (string_to_num o FST) args) /\
+  ALL_DISTINCT (MAP FST args) /\
   st.scopes = [scope] /\ st.immutables = am.immutables /\
   state_well_typed st /\ accounts_well_typed st.accounts /\
   eval_stmts cx body st = (res,st') ==>
@@ -4425,7 +4439,7 @@ Theorem checked_explicit_external_body_preserves_machine_components:
   MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts /\
   cx = initial_evaluation_context am.sources am.layouts tx src /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
-  ALL_DISTINCT (MAP (string_to_num o FST) args) /\
+  ALL_DISTINCT (MAP FST args) /\
   st.scopes = [scope] /\ st.immutables = am.immutables /\
   state_well_typed st /\ accounts_well_typed st.accounts /\
   eval_stmts cx body st = (res,st') ==>

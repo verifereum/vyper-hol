@@ -8,6 +8,7 @@ version = "0.2.3"
 [build]
 roots = ["vyperHolScript.sml",
          "semantics/type/vyperCheckContractLibTestScript.sml",
+         "tests/vyperStringScopeTestScript.sml",
          "frontend/vyperCheckContractFrontendLibTestScript.sml",
          "tests/vyperCheckContractTraceLibTestScript.sml",
          "tests/vyperCreateSelfdestructScript.sml",
@@ -15,7 +16,8 @@ roots = ["vyperHolScript.sml",
          "tests/vyperCalldataLenTestScript.sml",
          "tests/vyperInvertTestScript.sml",
          "tests/vyperCalldataSliceTestScript.sml",
-         "tests/vyperRawCallCalldataTestScript.sml"]
+         "tests/vyperRawCallCalldataTestScript.sml",
+         "tests/vyperTupleSubscriptTestScript.sml"]
 
 [dependencies.verifereum]
 git = "https://github.com/verifereum/verifereum.git"

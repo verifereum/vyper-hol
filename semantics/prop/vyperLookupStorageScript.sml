@@ -9,14 +9,14 @@ Libs
 
 Definition lookup_toplevel_name_def:
   lookup_toplevel_name cx st mid n =
-  case lookup_global cx mid (string_to_num n) st of
+  case lookup_global cx mid n st of
   | (INL v, st) => SOME v
   | _ => NONE
 End
 
 Definition update_toplevel_name_def:
   update_toplevel_name cx st mid n v =
-  SND (set_global cx mid (string_to_num n) v st)
+  SND (set_global cx mid n v st)
 End
 
 Definition lookup_toplevel_name_target_def:
@@ -27,7 +27,7 @@ Definition var_in_storage_def:
   var_in_storage cx mid n ⇔
   ∃code b t id offset tv.
     get_module_code cx mid = SOME code ∧
-    find_var_decl_by_num (string_to_num n) code = SOME (StorageVarDecl b t, id) ∧
+    find_var_decl_by_name n code = SOME (StorageVarDecl b t, id) ∧
     lookup_var_slot_from_layout cx b mid id = SOME offset ∧
     offset < dimword(:256) ∧
     evaluate_type (get_tenv cx) t = SOME tv ∧
@@ -39,7 +39,7 @@ Definition storage_var_info_def:
     case get_module_code cx mid of
     | NONE => NONE
     | SOME code =>
-        case find_var_decl_by_num (string_to_num n) code of
+        case find_var_decl_by_name n code of
         | SOME (StorageVarDecl b t, id) =>
             (case (lookup_var_slot_from_layout cx b mid id,
                    evaluate_type (get_tenv cx) t) of
@@ -1245,10 +1245,10 @@ QED
 Theorem lookup_toplevel_name_lookup_global:
   ∀cx st src_id_opt n href0.
     lookup_toplevel_name cx st src_id_opt n = SOME href0 ⇒
-    lookup_global cx src_id_opt (string_to_num n) st = (INL href0, st)
+    lookup_global cx src_id_opt n st = (INL href0, st)
 Proof
   rw[lookup_toplevel_name_def] >>
-  Cases_on `lookup_global cx src_id_opt (string_to_num n) st` >>
+  Cases_on `lookup_global cx src_id_opt n st` >>
   Cases_on `q` >> gvs[] >>
   drule lookup_global_state >> simp[]
 QED

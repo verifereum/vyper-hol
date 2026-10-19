@@ -47,6 +47,22 @@ Libs
    Type helpers (is_signed_type, is_decimal_type, decimal_divisor,
    type_bits, type_bounds) in compileEnv. *)
 
+(* Bytelike literals and ABI encoding results carry their produced bound,
+   independently of the annotated destination bound. *)
+Definition lowered_value_type_def:
+  lowered_value_type cenv (Literal (BaseT (StringT _)) (StringL s)) =
+    BaseT (StringT (LENGTH s)) ∧
+  lowered_value_type cenv (Literal (BaseT (BytesT (Dynamic _))) (BytesL bs)) =
+    BaseT (BytesT (Dynamic (LENGTH bs))) ∧
+  lowered_value_type cenv (TypeBuiltin _ (AbiEncode ensure method_id) _ args) =
+    (let enc_ty = if LENGTH args = 1 ∧ ¬ensure then expr_type (HD args)
+                  else TupleT (MAP expr_type args) in
+     BaseT (BytesT (Dynamic
+       (abi_size_bound cenv.ce_struct_fields enc_ty +
+        if IS_SOME method_id then 4 else 0)))) ∧
+  lowered_value_type cenv e = expr_type e
+End
+
 (* ===== Array Location Inference ===== *)
 (* Infer array data location from expression AST + compile_env.
    Attribute(Name "self", field) → look up field in ce_vars → StorageLoc/TransientLoc.
@@ -967,8 +983,8 @@ Definition compile_dynarray_append_def:
         if is_prim then emit_void store_opc [elem_ptr; val_op]
         else
           if dst_loc = LocMemory then
-            do compile_store_memory_typed cenv elem_ptr dst_elem_ty
-                                          val_op src_elem_ty;
+            do compile_store_memory cenv val_op elem_ptr
+                                    dst_elem_ty src_elem_ty;
                return ()
             od
           else
@@ -2820,8 +2836,8 @@ Definition compile_builtin_dispatch_body_def:
           | SOME elem_ty =>
               let elem_sz = type_memory_bytes cenv elem_ty in
               let has_lw = (case bnd of Dynamic _ => T | _ => F) in
-              let total_size = (if has_lw then 32 else 0) +
-                               LENGTH args * elem_sz in
+              (* Reserve the declared capacity, including for an empty list. *)
+              let total_size = type_memory_bytes cenv ret_ty in
               let (buf_op_alloc, st2) = compile_alloc_buffer total_size st in
               let buf_op = buf_op_alloc.buf_operand in
               as_ptr_val ret_ty LocMemory
