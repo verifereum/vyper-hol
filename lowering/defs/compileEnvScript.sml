@@ -318,9 +318,16 @@ Datatype:
     (* Internal return: how many return values passed on stack (0 = memory return).
        Set from func_t.returns_stack_count() at function entry. *)
     ce_returns_count : num;
-    (* Return buffer offset (for memory returns when returns_count = 0).
-       NONE for stack returns, SOME offset for memory returns. *)
-    ce_return_buf : num option;
+    (* Internal functions only: where the caller's return buffer pointer is
+       (memory returns, returns_count = 0). NONE for external functions and
+       stack returns. Kept out of ce_vars so user names cannot collide with it.
+       Mirrors Python: FunctionContext.return_buffer *)
+    ce_return_buf : var_location option;
+    (* Where the return PC is; NONE for external functions. `Return` decides
+       "internal or external?" from this field.
+       Mirrors Python: FunctionContext.return_pc, tested by lower_Return as
+       `ctx.return_pc is not None` *)
+    ce_return_pc : var_location option;
     (* External function: T for external functions, F for internal *)
     ce_is_external : bool;
     (* ABI encoding info for external return type.

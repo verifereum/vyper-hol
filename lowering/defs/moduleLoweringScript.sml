@@ -697,15 +697,13 @@ Definition compile_internal_function_def:
           Python records them directly instead of round-tripping through the
           abstract memory slots used while constructing the compile env. *)
        cenv1 <- return
-         (cenv with ce_vars updated_by (λvars.
-            let vars1 = case return_buf_var of
-                  SOME param_op =>
-                    (case FLOOKUP vars "__return_buf__" of
-                       SOME (MemLoc _ sz) =>
-                         vars |+ ("__return_buf__", PtrVar param_op sz)
-                     | _ => vars)
-                | NONE => vars in
-            vars1 |+ ("__return_pc__", PtrVar return_pc 0)));
+         (cenv with
+            <| ce_return_buf :=
+                 (case (return_buf_var, cenv.ce_return_buf) of
+                    (SOME param_op, SOME (MemLoc _ sz)) =>
+                      SOME (PtrVar param_op sz)
+                  | _ => cenv.ce_return_buf);
+               ce_return_pc := SOME (PtrVar return_pc 0) |>);
        (* Stack-passed user parameters are materialized before the temporary
           stack-return region, matching Context.new_variable ordering. *)
        cenv2 <- materialize_internal_params cenv1 captured_params;

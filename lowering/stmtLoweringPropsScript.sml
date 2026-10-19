@@ -243,7 +243,7 @@ QED
 Theorem compile_return_none_external_correct:
   ∀ cenv lctx ty ss st st'.
     compile_stmt cenv lctx ty (Return NONE) st = ((), st') ∧
-    FLOOKUP cenv.ce_vars "__return_pc__" = NONE
+    cenv.ce_return_pc = NONE
     ⇒
     ∃ ss'.
       run_inst_seq (emitted_insts st st') ss = Halt ss'
@@ -257,7 +257,7 @@ QED
 Theorem compile_return_none_internal_correct:
   ∀ cenv lctx ty ss st st' rpc_off sz.
     compile_stmt cenv lctx ty (Return NONE) st = ((), st') ∧
-    FLOOKUP cenv.ce_vars "__return_pc__" = SOME (MemLoc rpc_off sz)
+    cenv.ce_return_pc = SOME (MemLoc rpc_off sz)
     ⇒
     ∃ ss' vals.
       run_inst_seq (emitted_insts st st') ss = IntRet vals ss'
@@ -284,7 +284,7 @@ Theorem compile_return_some_internal_correct:
   ∀ cenv cx lctx ty e es ss st st' v es' rpc_off sz.
     state_rel cenv cx es ss ∧
     ¬cenv.ce_is_external ∧
-    FLOOKUP cenv.ce_vars "__return_pc__" = SOME (MemLoc rpc_off sz) ∧
+    cenv.ce_return_pc = SOME (MemLoc rpc_off sz) ∧
     eval_expr cx e es = (INL (Value v), es') ∧
     compile_stmt cenv lctx ty (Return (SOME e)) st = ((), st')
     ⇒
