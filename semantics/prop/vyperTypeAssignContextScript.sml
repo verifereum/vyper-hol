@@ -34,7 +34,7 @@ QED
 (* This predicate captures exactly the cx-dependent (non-dynamic, non-st-dependent)
    part of assign_target_assignable_context for already-evaluated assignment values.
    For ScopedVar/ImmutableVar it is trivial. For TopLevelVar it requires
-   get_module_code, find_var_decl_by_num, evaluate_type, and lookup_var_slot_from_layout
+   get_module_code, find_var_decl_by_name, evaluate_type, and lookup_var_slot_from_layout
    to return SOME — these are the preconditions that assign_target checks before
    proceeding, so they hold at INL-success sites and must be supplied as a premise
    at INR/no-TypeError sites. *)
@@ -159,7 +159,7 @@ Theorem base_target_value_shape_TopLevelVar_imp_bare_globals_none:
     base_target_value_shape env bt loc sbs ==>
     type_place_target env bt = SOME vt ==>
     !src id. loc = TopLevelVar src id ==>
-    FLOOKUP env.bare_globals (src, string_to_num id) = NONE
+    FLOOKUP env.bare_globals (src, id) = NONE
 Proof
   recInduct base_target_value_shape_ind >>
   rw[] >>
@@ -178,7 +178,7 @@ Theorem base_target_value_shape_TopLevelVar_imp_bare_globals_none_spec:
   !env bt src id sbs vt.
     base_target_value_shape env bt (TopLevelVar src id) sbs ==>
     type_place_target env bt = SOME vt ==>
-    FLOOKUP env.bare_globals (src, string_to_num id) = NONE
+    FLOOKUP env.bare_globals (src, id) = NONE
 Proof
   metis_tac[base_target_value_shape_TopLevelVar_imp_bare_globals_none]
 QED
@@ -193,7 +193,7 @@ Proof
   fs[target_runtime_typed_def] >>
   fs[target_value_shape_def, well_typed_atarget_def] >>
   fs[well_typed_target_def] >>
-  `FLOOKUP env.bare_globals (src, string_to_num id) = NONE`
+  `FLOOKUP env.bare_globals (src, id) = NONE`
     by metis_tac[base_target_value_shape_TopLevelVar_imp_bare_globals_none_spec] >>
   (* Expand location_runtime_typed to expose the FLOOKUP for drule/metis *)
   fs[location_runtime_typed_def] >>
@@ -202,13 +202,13 @@ Proof
      (drule_all env_consistent_toplevel_storage_static >> strip_tac >>
       rw[assignment_value_static_assignable_context_TopLevelVar] >>
       qexists_tac `(StorageVarDecl is_transient t, id_str)` >>
-      gvs[GSYM find_var_decl_by_name_num_agree])
+      gvs[])
   >- (* HashMapT: similar but sbs <> [] from target_path_type *)
      (drule_all env_consistent_toplevel_hashmap_static >> strip_tac >>
       rw[assignment_value_static_assignable_context_TopLevelVar] >>
       `sbs ≠ []` by metis_tac[target_path_type_HashMapT_not_nil] >>
       qexists_tac `(HashMapVarDecl is_transient t v, id_str)` >>
-      gvs[GSYM find_var_decl_by_name_num_agree])
+      gvs[])
 QED
 
 Theorem target_runtime_typed_imp_static_assignable_context_mutual:
@@ -370,7 +370,7 @@ Proof
   drule lookup_global_INL_imp_decl_facts >> strip_tac >>
   (* Now have: get_module_code cx src = SOME code *)
   qexists `code` >>
-  (* Now need ∃p. find_var_decl_by_num ... = SOME p ∧ (case FST p of ...)
+  (* Now need ∃p. find_var_decl_by_name id code = SOME p ∧ (case FST p of ...)
      Use metis_tac to resolve the universally quantified helper lemma against assumptions *)
   `?p. find_var_decl_by_name id code = SOME p`
     by metis_tac[assign_target_TopLevelVar_INL_imp_find_decl_SOME] >>

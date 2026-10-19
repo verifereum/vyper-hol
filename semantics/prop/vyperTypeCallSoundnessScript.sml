@@ -52,29 +52,29 @@ Theorem functions_well_typed_body:
   (!src id ty. FLOOKUP bare_globals (src,id) = SOME ty ==>
      ?ts. get_module_code cx src = SOME ts /\
           FLOOKUP toplevel_vtypes (src,id) = SOME (Type ty) /\
-          is_bare_global_decl id ts /\ find_var_decl_by_num id ts = NONE /\
+          is_bare_global_decl id ts /\ find_var_decl_by_name id ts = NONE /\
           ty <> NoneT) /\
   (!src id ty. FLOOKUP bare_global_assignable (src,id) = SOME ty ==>
      ?ts. get_module_code cx src = SOME ts /\
           FLOOKUP bare_globals (src,id) = SOME ty /\
           FLOOKUP toplevel_vtypes (src,id) = SOME (Type ty) /\
-          is_immutable_decl_by_num id ts /\ find_var_decl_by_num id ts = NONE /\
+          is_immutable_decl id ts /\ find_var_decl_by_name id ts = NONE /\
           ty <> NoneT) /\
   (!src id vt ts.
      FLOOKUP toplevel_vtypes (src,id) = SOME vt /\ get_module_code cx src = SOME ts ==>
      ((?ty. vt = Type ty /\
          ((!is_transient typ id_str.
-             find_var_decl_by_num id ts = SOME (StorageVarDecl is_transient typ,id_str) ==> typ = ty) /\
+             find_var_decl_by_name id ts = SOME (StorageVarDecl is_transient typ,id_str) ==> typ = ty) /\
           (!is_transient kt hv id_str.
-             find_var_decl_by_num id ts = SOME (HashMapVarDecl is_transient kt hv,id_str) ==> F) /\
-          (find_var_decl_by_num id ts = NONE ==> IS_SOME (evaluate_type (get_tenv cx) ty)))) \/
+             find_var_decl_by_name id ts = SOME (HashMapVarDecl is_transient kt hv,id_str) ==> F) /\
+          (find_var_decl_by_name id ts = NONE ==> IS_SOME (evaluate_type (get_tenv cx) ty)))) \/
       (?kt hv. vt = HashMapT kt hv /\
          ?is_transient id_str.
-           find_var_decl_by_num id ts = SOME (HashMapVarDecl is_transient kt hv,id_str)))) /\
+           find_var_decl_by_name id ts = SOME (HashMapVarDecl is_transient kt hv,id_str)))) /\
   (!src fid ls.
      FLOOKUP flag_members (src,fid) = SOME ls ==>
      ?ts. get_module_code cx src = SOME ts /\ lookup_flag fid ts = SOME ls /\
-          FLOOKUP (get_tenv cx) (type_key (src,fid)) = SOME (FlagArgs (LENGTH ls))) ==>
+          FLOOKUP (get_tenv cx) ((src,fid)) = SOME (FlagArgs (LENGTH ls))) ==>
   ?env_body ret_tv env_after.
     env_body.current_src = src /\
     env_body.type_defs = get_tenv cx /\

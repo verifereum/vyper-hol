@@ -1968,10 +1968,10 @@ Proof
   strip_tac >>
   gvs[simplify_cfg_fn_invoke_labels_mem,
       cfgTransformTheory.replace_block_def, MEM_MAP] >>
-  rename [`MEM old (FILTER _ func.fn_blocks)`,
-          `MEM callinst
-             (if old.bb_label = bb.bb_label then merged else old).bb_instructions`,
-          `callinst.inst_operands = Label callee :: callops`] >>
+  rename1 `MEM old (FILTER _ func.fn_blocks)` >>
+  rename1 `MEM callinst
+             (if old.bb_label = bb.bb_label then merged else old).bb_instructions` >>
+  rename1 `callinst.inst_operands = Label callee :: callops` >>
   Cases_on `old.bb_label = bb.bb_label`
   >- (`MEM callee (simplify_cfg_block_invoke_labels merged)` by
         (simp[simplify_cfg_block_invoke_labels_def,

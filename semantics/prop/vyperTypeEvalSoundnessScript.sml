@@ -571,15 +571,13 @@ Proof
               `!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty ==> ?ts. _`
               (qspecl_then [`src`,`id`,`bare_ty`] mp_tac) >>
             simp[] >> rw[]) >>
-          `?id_str. string_to_num id_str = id` by
-            metis_tac[is_bare_global_decl_has_name] >>
           qpat_x_assum
-            `!src id ty. FLOOKUP env.bare_globals (src,string_to_num id) = SOME ty ==> IS_SOME _`
-            (qspecl_then [`src`,`id_str`,`bare_ty`] mp_tac) >>
+            `!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty ==> IS_SOME _`
+            (qspecl_then [`src`,`id`,`bare_ty`] mp_tac) >>
           simp[IS_SOME_EXISTS] >> strip_tac >> PairCases_on `x` >>
           qpat_x_assum
-            `!src id ty tv v. FLOOKUP env.bare_globals (src,string_to_num id) = SOME ty /\ FLOOKUP _ id = SOME (tv,v) ==> _`
-            (qspecl_then [`src`,`id_str`,`bare_ty`,`x0`,`x1`] mp_tac) >>
+            `!src id ty tv v. FLOOKUP env.bare_globals (src,id) = SOME ty /\ FLOOKUP _ id = SOME (tv,v) ==> _`
+            (qspecl_then [`src`,`id`,`bare_ty`,`x0`,`x1`] mp_tac) >>
           simp[]) >>
       rename1 `FLOOKUP env.toplevel_vtypes (src,id) = SOME (HashMapT kt hv)` >>
       qpat_x_assum
@@ -607,15 +605,13 @@ Proof
           `!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty ==> ?ts. _`
           (qspecl_then [`src`,`id`,`bare_ty`] mp_tac) >>
         simp[] >> rw[]) >>
-      `?id_str. string_to_num id_str = id` by
-        metis_tac[is_bare_global_decl_has_name] >>
       qpat_x_assum
-        `!src id ty. FLOOKUP env.bare_globals (src,string_to_num id) = SOME ty ==> IS_SOME _`
-        (qspecl_then [`src`,`id_str`,`bare_ty`] mp_tac) >>
+        `!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty ==> IS_SOME _`
+        (qspecl_then [`src`,`id`,`bare_ty`] mp_tac) >>
       simp[IS_SOME_EXISTS] >> strip_tac >> PairCases_on `x` >>
       qpat_x_assum
-        `!src id ty tv v. FLOOKUP env.bare_globals (src,string_to_num id) = SOME ty /\ FLOOKUP _ id = SOME (tv,v) ==> _`
-        (qspecl_then [`src`,`id_str`,`bare_ty`,`x0`,`x1`] mp_tac) >>
+        `!src id ty tv v. FLOOKUP env.bare_globals (src,id) = SOME ty /\ FLOOKUP _ id = SOME (tv,v) ==> _`
+        (qspecl_then [`src`,`id`,`bare_ty`,`x0`,`x1`] mp_tac) >>
       simp[]) >>
   rename1 `FLOOKUP env.toplevel_vtypes (src,id) = SOME (HashMapT kt hv)` >>
   qpat_x_assum
@@ -1116,7 +1112,7 @@ Proof
     `evaluate_type (get_tenv cx) var_ty = SOME entry'.type` by metis_tac[] >>
     `entry'.type = entry.type` by gvs[] >>
     qexists_tac `entry'` >> simp[]) >>
-  rename1 `FLOOKUP env.bare_globals (src_id_opt,string_to_num s) = SOME imm_ty` >>
+  rename1 `FLOOKUP env.bare_globals (src_id_opt,s) = SOME imm_ty` >>
   `?pair. FLOOKUP (get_source_immutables src_id_opt
       (case ALOOKUP st'.immutables cx.txn.target of NONE => [] | SOME m => m))
       s = SOME pair` by metis_tac[IS_SOME_EXISTS] >>
@@ -3577,11 +3573,10 @@ Theorem nonbare_toplevel_not_immutable[local]:
   env_consistent env cx st /\
   FLOOKUP env.bare_globals (src,n) = NONE /\
   get_module_code cx src = SOME ts /\
-  is_immutable_decl_by_num n ts ==>
+  is_immutable_decl n ts ==>
   F
 Proof
   rpt strip_tac >>
-  gvs[is_immutable_decl_by_num_def] >>
   drule_all is_immutable_decl_MEM_Immutable_exists >> strip_tac >>
   gvs[env_consistent_def, env_context_consistent_def,
       bare_globals_complete_def] >>
@@ -3591,17 +3586,17 @@ Proof
 QED
 
 Theorem bare_global_immutable_value_and_type[local]:
-  (!src id ty. FLOOKUP bare_globals (src,string_to_num id) = SOME ty ==>
+  (!src id ty. FLOOKUP bare_globals (src,id) = SOME ty ==>
      ?tv v. FLOOKUP (get_source_immutables src imms) id = SOME (tv,v)) /\
-  (!src id ty tv v. FLOOKUP bare_globals (src,string_to_num id) = SOME ty /\
+  (!src id ty tv v. FLOOKUP bare_globals (src,id) = SOME ty /\
      FLOOKUP (get_source_immutables src imms) id = SOME (tv,v) ==>
      evaluate_type tenv ty = SOME tv) /\
-  FLOOKUP bare_globals (src,string_to_num n) = SOME ty ==>
+  FLOOKUP bare_globals (src,n) = SOME ty ==>
   ?tv v. FLOOKUP (get_source_immutables src imms) n = SOME (tv,v) /\
          evaluate_type tenv ty = SOME tv
 Proof
   rpt strip_tac >>
-  qpat_x_assum `!src id ty. FLOOKUP bare_globals (src,string_to_num id) = SOME ty ==> ?tv v. _`
+  qpat_x_assum `!src id ty. FLOOKUP bare_globals (src,id) = SOME ty ==> ?tv v. _`
     (drule_then strip_assume_tac) >>
   goal_assum drule >> simp[] >>
   qpat_x_assum `!src id ty tv v. _` drule_all >> simp[]
@@ -3613,7 +3608,7 @@ Resume eval_all_type_sound_mutual[BaseTarget_TopLevel]:
   simp[type_place_target_TopLevelNameTarget] >> strip_tac >> gvs[] >>
   TRY (drule eval_base_target_TopLevelNameTarget_preserves_state >> simp[]) >|
   [
-    `FLOOKUP env.bare_globals (src_id_opt,string_to_num id) = SOME ty /\
+    `FLOOKUP env.bare_globals (src_id_opt,id) = SOME ty /\
      ?ts. get_module_code cx src_id_opt = SOME ts /\
           is_immutable_decl id ts /\
           IS_SOME (FLOOKUP (get_source_immutables src_id_opt
@@ -3623,10 +3618,7 @@ Resume eval_all_type_sound_mutual[BaseTarget_TopLevel]:
           env_immutables_consistent_def] >>
       qpat_x_assum `!src id ty. FLOOKUP env.bare_global_assignable (src,id) = SOME ty ==> _`
         drule >> simp[] >> strip_tac >>
-      fs[is_immutable_decl_by_num_def] >>
-      `id' = id` by metis_tac[string_to_num_inj] >>
-      gvs[] >>
-      qpat_x_assum `!src id ty. FLOOKUP env.bare_globals (src,string_to_num id) = SOME ty ==> _`
+      qpat_x_assum `!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty ==> _`
         (qspecl_then [`src_id_opt`, `id`, `ty`] mp_tac) >>
       simp[]) >>
     qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
@@ -3658,8 +3650,6 @@ Resume eval_all_type_sound_mutual[BaseTarget_TopLevel]:
          get_immutables_def, get_address_immutables_def] >>
     Cases_on `get_module_code cx src_id_opt` >> gvs[return_def, raise_def] >>
     Cases_on `is_immutable_decl id code` >- (
-      `is_immutable_decl_by_num (string_to_num id) code` by
-        (simp[is_immutable_decl_by_num_def] >> qexists_tac `id` >> simp[]) >>
       drule_all nonbare_toplevel_not_immutable >> simp[]) >>
     gvs[return_def] >>
     simp[no_type_error_result_def, base_target_value_shape_def] >>
@@ -4099,7 +4089,7 @@ Proof
 QED
 Theorem struct_lit_expr_result_typed[local]:
   well_formed_type env.type_defs (StructT nsid) /\
-  FLOOKUP env.type_defs (type_key nsid) = SOME (StructArgs args) /\
+  FLOOKUP env.type_defs (nsid) = SOME (StructArgs args) /\
   MAP FST kes = MAP FST args /\
   MAP (expr_type o SND) kes = MAP SND args /\
   exprs_runtime_typed env (MAP SND kes) vs ==>

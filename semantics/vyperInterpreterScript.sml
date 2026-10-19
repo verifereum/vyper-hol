@@ -4,7 +4,7 @@ Ancestors
   arithmetic alist combin option list finite_map pair
   rich_list cv cv_std vfmState vfmContext vfmCompute[ignore_grammar]
   vfmExecution[ignore_grammar] vyperAST vyperABI
-  vyperMisc vyperValue vyperValueOperation vyperStorage vyperContext vyperState
+  vyperMisc vyperNsidFmap vyperValue vyperValueOperation vyperStorage vyperContext vyperState
   vyperEvent vyperEvmBoundary vyperCreate vyperRuntimeAccounts
 Libs
   cv_transLib wordsLib monadsyntax
