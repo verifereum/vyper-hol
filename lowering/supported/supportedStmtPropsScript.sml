@@ -59,11 +59,18 @@ Proof
   EVAL_TAC
 QED
 
+Theorem supported_local_aggregate_assignment_forms:
+  supported_stmt expr_test_tops stmt_test_bindings
+    (Assign (BaseTarget (NameTarget "aggregate")) expr_test_uint) /\
+  supported_stmt expr_test_tops stmt_test_bindings
+    (Assign (BaseTarget (NameTarget "array")) expr_test_uint)
+Proof
+  EVAL_TAC
+QED
+
 Theorem supported_target_exclusions:
   EVERY (\s. ~supported_stmt expr_test_tops stmt_test_bindings s)
     [Assign (BaseTarget (NameTarget "missing")) expr_test_uint;
-     Assign (BaseTarget (NameTarget "aggregate")) expr_test_uint;
-     Assign (BaseTarget (NameTarget "array")) expr_test_uint;
      Assign (TupleTarget [BaseTarget (NameTarget "word")]) expr_test_uint;
      Assign (BaseTarget (TopLevelNameTarget (NONE,"fixed"))) expr_test_uint;
      Assign (BaseTarget (TopLevelNameTarget (NONE,"record"))) expr_test_uint;
@@ -128,17 +135,29 @@ Proof
   EVAL_TAC
 QED
 
+Theorem supported_control_reason_probe:
+  MAP (supported_stmt expr_test_tops stmt_test_bindings)
+    [If expr_test_internal [] []; Assert expr_test_pop AssertBare;
+     Assert expr_test_uint (AssertReason expr_test_internal);
+     Assert expr_test_uint (AssertReason (Name (BaseT (StringT 16)) "reason"));
+     Raise (RaiseReason expr_test_uint);
+     Raise (RaiseReason (Builtin (BaseT (StringT 16)) (Concat 16) []))] =
+  [F; F; F; T; F; F]
+Proof
+  EVAL_TAC
+QED
+
 Theorem supported_control_reason_rows:
   supported_stmts expr_test_tops stmt_test_bindings
     [If expr_test_uint [Expr expr_test_internal] [Return (SOME expr_test_pop)];
      Assert expr_test_uint AssertBare; Assert expr_test_uint AssertUnreachable;
      Assert expr_test_uint (AssertReason (Literal (BaseT (StringT 16)) (StringL "why")));
      Raise RaiseBare; Raise RaiseUnreachable;
-     Raise (RaiseReason (Literal (BaseT (StringT 16)) (StringL "UNREACHABLE")))] /\
+     Raise (RaiseReason (Literal (BaseT (StringT 16)) (StringL "UNREACHABLE")));
+     Assert expr_test_uint (AssertReason (Name (BaseT (StringT 16)) "reason"))] /\
   EVERY (\s. ~supported_stmt expr_test_tops stmt_test_bindings s)
     [If expr_test_internal [] []; Assert expr_test_pop AssertBare;
      Assert expr_test_uint (AssertReason expr_test_internal);
-     Assert expr_test_uint (AssertReason (Name (BaseT (StringT 16)) "reason"));
      Raise (RaiseReason expr_test_uint);
      Raise (RaiseReason (Builtin (BaseT (StringT 16)) (Concat 16) []))]
 Proof
