@@ -78,7 +78,7 @@ Proof
     (qspecl_then [`src`, `id`, `ty`, `ts`] mp_tac) >>
   simp[] >> strip_tac >> gvs[] >>
   qpat_x_assum `!src id ty ts. FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\ _ ==> _`
-    (qspecl_then [`src`, `string_to_num id_str`, `ty`, `ts`] mp_tac) >>
+    (qspecl_then [`src`, `id_str`, `ty`, `ts`] mp_tac) >>
   simp[] >> strip_tac >>
   first_x_assum (qspecl_then [`id_str`, `tv`, `v`] mp_tac) >>
   simp[]

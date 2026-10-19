@@ -47,7 +47,7 @@ QED
 
 Theorem singleton_flag_env:
   type_env_all_modules [(NONE, [FlagDecl "Color" ["red"; "blue"]])] =
-    FEMPTY |+ (type_key (NONE, "Color"), FlagArgs 2)
+    FEMPTY |+ ((NONE, "Color"), FlagArgs 2)
 Proof
   simp[type_env_all_modules_single, type_env_def, type_env_for_module_def]
 QED

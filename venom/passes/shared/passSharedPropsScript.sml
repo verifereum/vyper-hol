@@ -100,7 +100,9 @@ Theorem mk_nop_inst_correct:
   !fuel ctx inst s.
     step_inst fuel ctx (mk_nop_inst inst) s = OK s
 Proof
-  rw[mk_nop_inst_def, step_inst_def, step_inst_base_def]
+  rpt gen_tac >>
+  `(mk_nop_inst inst).inst_opcode <> INVOKE` by simp[mk_nop_inst_def] >>
+  simp[step_inst_non_invoke, step_inst_base_def, mk_nop_inst_def]
 QED
 
 Theorem mk_assign_inst_correct:
