@@ -2860,7 +2860,14 @@ Definition compile_type_builtin_dispatch_body_def:
                 (ConvToFlag (cenv.ce_flag_n_members (nsid_to_string flag_nsid))) st1)
           | _ => as_stack_val vv_ty (compile_type_convert v
                    (mk_convert_op src_ty ret_ty) st1))
-     | Empty => (StackValue vv_ty (Lit 0w), st)
+     | Empty =>
+         if is_word_type ret_ty then (StackValue vv_ty (Lit 0w), st)
+         else
+           (let is_bs = (is_bytestring_type ret_ty ∨
+                         (case ret_ty of ArrayT _ (Dynamic _) => T | _ => F)) in
+            let (buf, st1) = compile_builtin_empty_complex
+                               (type_memory_bytes cenv ret_ty) is_bs st in
+            (LocatedValue ret_ty (mk_ptr buf LocMemory), st1))
      | MaxValue =>
          (let (_, hi) = type_bounds ret_ty in (StackValue vv_ty (Lit hi), st))
      | MinValue =>
@@ -2956,3 +2963,24 @@ val _ = save_thm ("compile_builtin_dispatch_component_eq",
 val _ = save_thm ("compile_type_builtin_dispatch_component_eq",
                   compile_type_builtin_dispatch_component_eq);
 
+
+(* Empty construction preserves the value-location boundary. *)
+Theorem compile_empty_word_dispatch:
+  is_word_type ret_ty ==>
+  compile_type_builtin_dispatch_body cfn cenv vv_ty ty Empty ret_ty args st =
+    (StackValue vv_ty (Lit 0w), st)
+Proof
+  simp[compile_type_builtin_dispatch_body_def]
+QED
+
+Theorem compile_empty_memory_dispatch:
+  ~is_word_type ret_ty ==>
+  compile_type_builtin_dispatch_body cfn cenv vv_ty ty Empty ret_ty args st =
+    let (buf, st1) = compile_builtin_empty_complex
+      (type_memory_bytes cenv ret_ty)
+      (is_bytestring_type ret_ty \/
+       (case ret_ty of ArrayT _ (Dynamic _) => T | _ => F)) st in
+    (LocatedValue ret_ty (mk_ptr buf LocMemory), st1)
+Proof
+  simp[compile_type_builtin_dispatch_body_def]
+QED
