@@ -2312,7 +2312,7 @@ Definition compile_call_def:
        let return_abi_size = abi_size_bound cenv.ce_struct_fields wrapped_return in
        let min_return_size = abi_static_size cenv.ce_struct_fields wrapped_return in
        let ret_mem_bytes = type_memory_bytes cenv return_type in
-       let method_id_val = cenv.ce_method_id func_name in
+       let method_id_val = cenv.ce_method_id func_name arg_types in
        let (has_default, default_op, st4) =
          case default_ret of
            SOME def_e =>
