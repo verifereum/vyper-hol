@@ -1994,46 +1994,44 @@ Definition compile_make_tuple_def:
   compile_make_tuple cfn cenv (e::es) buf_op cur_offset =
     let e_ty = expr_type e in
     let elem_size = type_memory_bytes cenv e_ty in
-    let is_prim = is_word_type e_ty in
-    do v <- lower_value cfn cenv e_ty e;
+    do vv <- cfn cenv e_ty e;
        dst <- emit_op ADD [buf_op; Lit (n2w cur_offset)];
-       (if is_prim then emit_void MSTORE [dst; v]
-        else if is_bytestring_type e_ty then compile_store_bytestring v dst
-        else emit_void MCOPY [dst; v; Lit (n2w elem_size)]);
+       v <- unwrap_value cenv vv;
+       compile_store_memory cenv v dst e_ty e_ty;
        compile_make_tuple cfn cenv es buf_op (cur_offset + elem_size)
     od
 Termination
   WF_REL_TAC `measure (LENGTH o (FST o SND o SND))`
 End
 
-Definition compile_make_array_def:
-  compile_make_array cfn cenv [] elem_size has_length_word alloca_size
-                     buf_op cur_idx =
-    (if has_length_word then
-       do emit_void MSTORE [buf_op; Lit (n2w cur_idx)];
-          return buf_op
-       od
-     else
-       return buf_op) ∧
-  compile_make_array cfn cenv (e::es) elem_size has_length_word alloca_size
-                     buf_op cur_idx =
+Definition compile_make_array_elems_def:
+  compile_make_array_elems cfn cenv [] elem_ty elem_size has_length_word
+                           buf_op cur_idx = return buf_op ∧
+  compile_make_array_elems cfn cenv (e::es) elem_ty elem_size has_length_word
+                           buf_op cur_idx =
     let e_ty = expr_type e in
-    let is_prim = is_word_type e_ty in
     let data_offset = if has_length_word then 32 + cur_idx * elem_size
                       else cur_idx * elem_size in
-    do v <- lower_value cfn cenv e_ty e;
-       (* Python lower_List/lower_Tuple always materializes the element
-          pointer, including the first element's zero displacement. *)
+    do vv <- cfn cenv e_ty e;
+       (* Materialize the destination before unwrapping the child value. *)
        dst <- emit_op ADD [buf_op; Lit (n2w data_offset)];
-       (if is_prim then emit_void MSTORE [dst; v]
-        else if is_bytestring_type e_ty then
-          compile_store_bytestring v dst
-        else emit_void MCOPY [dst; v; Lit (n2w elem_size)]);
-       compile_make_array cfn cenv es elem_size has_length_word alloca_size
-                          buf_op (cur_idx + 1)
+       v <- unwrap_value cenv vv;
+       compile_store_memory cenv v dst elem_ty e_ty;
+       compile_make_array_elems cfn cenv es elem_ty elem_size has_length_word
+                                buf_op (cur_idx + 1)
     od
 Termination
   WF_REL_TAC `measure (LENGTH o (FST o SND o SND))`
+End
+
+Definition compile_make_array_def:
+  compile_make_array cfn cenv es elem_ty elem_size has_length_word buf_op =
+    do (if has_length_word then
+          emit_void MSTORE [buf_op; Lit (n2w (LENGTH es))]
+        else return ());
+       compile_make_array_elems cfn cenv es elem_ty elem_size has_length_word
+                                buf_op 0
+    od
 End
 
 (* Compile list of expressions, unwrapping each to get usable operands.
@@ -2187,17 +2185,16 @@ Definition compile_struct_lit_def:
   compile_struct_lit cfn cenv ty [] buf_op cur_offset = return buf_op ∧
   compile_struct_lit cfn cenv ty ((fname, e)::rest) buf_op cur_offset =
     let e_ty = expr_type e in
-    let is_prim = is_word_type e_ty in
     let struct_name = (case ty of StructT n => nsid_to_string n | _ => "") in
     let fld_info = get_struct_fields cenv.ce_struct_fields struct_name in
     let field_size = (case ALOOKUP fld_info fname of
         SOME (fty, sz) => sz | NONE => 32) in
-    do v <- lower_value cfn cenv e_ty e;
+    let field_ty = (case ALOOKUP fld_info fname of
+        SOME (fty, sz) => fty | NONE => e_ty) in
+    do vv <- cfn cenv e_ty e;
        dst <- emit_op ADD [buf_op; Lit (n2w cur_offset)];
-       (if is_prim then emit_void MSTORE [dst; v]
-        else if is_bytestring_type e_ty then
-          compile_store_bytestring v dst
-        else emit_void MCOPY [dst; v; Lit (n2w field_size)]);
+       v <- unwrap_value cenv vv;
+       compile_store_memory cenv v dst field_ty e_ty;
        compile_struct_lit cfn cenv ty rest buf_op (cur_offset + field_size)
     od
 Termination
@@ -2841,8 +2838,8 @@ Definition compile_builtin_dispatch_body_def:
               let (buf_op_alloc, st2) = compile_alloc_buffer total_size st in
               let buf_op = buf_op_alloc.buf_operand in
               as_ptr_val ret_ty LocMemory
-                (compile_make_array compile_expr cenv args elem_sz has_lw
-                   total_size buf_op 0 st2))
+                (compile_make_array compile_expr cenv args elem_ty elem_sz has_lw
+                   buf_op st2))
      (* Chain interaction builtins (raw_call, raw_log, selfdestruct, create)
         are handled via call_target, not builtin - see Call cases *))
 End
@@ -2983,4 +2980,115 @@ Theorem compile_empty_memory_dispatch:
     (LocatedValue ret_ty (mk_ptr buf LocMemory), st1)
 Proof
   simp[compile_type_builtin_dispatch_body_def]
+QED
+
+Theorem compile_make_array_empty_length:
+  MAP (\i. (i.inst_opcode, i.inst_operands))
+    (SND (compile_make_array cfn cenv [] elem_ty stride T buf
+      (st with cs_current_insts := []))).cs_current_insts =
+  [(MSTORE, [buf; Lit 0w])]
+Proof
+  simp[compile_make_array_def, compile_make_array_elems_def,
+       emit_void_def, fresh_id_def, emit_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def, mk_inst_def]
+QED
+
+Theorem compile_make_array_word_order:
+  expr_type e = BaseT BoolT ==>
+  MAP (\i. i.inst_opcode)
+    (SND (compile_make_array
+      (\c t x. comp_return (LocatedValue (BaseT BoolT) (mk_ptr src LocMemory)))
+      cenv [e; e] (BaseT BoolT) 32 T buf
+      (st with cs_current_insts := []))).cs_current_insts =
+  [MSTORE; ADD; MLOAD; MSTORE; ADD; MLOAD; MSTORE]
+Proof
+  simp[compile_make_array_def, compile_make_array_elems_def,
+       unwrap_value_def, mk_ptr_def, is_word_type_def, compile_ptr_load_def,
+       compile_store_memory_def, emit_op_def, emit_void_def,
+       fresh_id_def, fresh_var_def, emit_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def, mk_inst_def]
+QED
+
+Theorem compile_make_fixed_array_word_order:
+  expr_type e = BaseT BoolT ==>
+  MAP (\i. i.inst_opcode)
+    (SND (compile_make_array
+      (\c t x. comp_return (LocatedValue (BaseT BoolT) (mk_ptr src LocMemory)))
+      cenv [e] (BaseT BoolT) 32 F buf
+      (st with cs_current_insts := []))).cs_current_insts =
+  [ADD; MLOAD; MSTORE]
+Proof
+  simp[compile_make_array_def, compile_make_array_elems_def,
+       unwrap_value_def, mk_ptr_def, is_word_type_def, compile_ptr_load_def,
+       compile_store_memory_def, emit_op_def, emit_void_def,
+       fresh_id_def, fresh_var_def, emit_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def, mk_inst_def]
+QED
+
+Theorem compile_make_tuple_word_order:
+  expr_type e = BaseT BoolT ==>
+  MAP (\i. i.inst_opcode)
+    (SND (compile_make_tuple
+      (\c t x. comp_return (LocatedValue (BaseT BoolT) (mk_ptr src LocMemory)))
+      cenv [e] buf 0
+      (st with cs_current_insts := []))).cs_current_insts =
+  [ADD; MLOAD; MSTORE]
+Proof
+  simp[compile_make_tuple_def, unwrap_value_def, mk_ptr_def,
+       is_word_type_def, compile_ptr_load_def, compile_store_memory_def,
+       emit_op_def, emit_void_def, fresh_id_def, fresh_var_def, emit_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def, mk_inst_def]
+QED
+
+Theorem compile_struct_lit_word_order:
+  expr_type e = BaseT BoolT /\
+  ALOOKUP (get_struct_fields cenv.ce_struct_fields
+    (case ty of StructT n => nsid_to_string n | _ => "")) fname =
+    SOME (BaseT BoolT, 32) ==>
+  MAP (\i. i.inst_opcode)
+    (SND (compile_struct_lit
+      (\c t x. comp_return (LocatedValue (BaseT BoolT) (mk_ptr src LocMemory)))
+      cenv ty [(fname,e)] buf 0
+      (st with cs_current_insts := []))).cs_current_insts =
+  [ADD; MLOAD; MSTORE]
+Proof
+  simp[compile_struct_lit_def, unwrap_value_def, mk_ptr_def,
+       is_word_type_def, compile_ptr_load_def, compile_store_memory_def,
+       emit_op_def, emit_void_def, fresh_id_def, fresh_var_def, emit_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def, mk_inst_def]
+QED
+
+Theorem compile_make_array_empty_full_capacity:
+  MAP (\i. (i.inst_opcode, if i.inst_opcode = ALLOCA then i.inst_operands else []))
+    (SND (compile_builtin_dispatch_body cfn cenv
+      (ArrayT (BaseT BoolT) (Dynamic 4))
+      (ArrayT (BaseT BoolT) (Dynamic 4))
+      (MakeArray (SOME (BaseT BoolT)) (Dynamic 4)) []
+      (st with cs_current_insts := []))).cs_current_insts =
+  [(ALLOCA, [Lit 160w]); (MSTORE, [])]
+Proof
+  simp[compile_builtin_dispatch_body_def, compile_make_array_def,
+       compile_make_array_elems_def, type_memory_bytes_def,
+       compile_alloc_buffer_def, as_ptr_val_def,
+       emit_op_def, emit_void_def, fresh_id_def, fresh_var_def, emit_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def, mk_inst_def]
+QED
+
+(* Unequal aggregate types must enter typed copying, not flat MCOPY. *)
+Theorem compile_make_array_typed_tuple_order:
+  expr_type e = TupleT [BaseT BoolT; BaseT BoolT] /\
+  acyclic_struct_metadata cenv.ce_struct_fields ==>
+  MAP (\i. i.inst_opcode)
+    (SND (compile_make_array
+      (\c t x. comp_return (LocatedValue t (mk_ptr src LocMemory)))
+      cenv [e] (TupleT [BaseT BoolT]) 32 F buf
+      (st with cs_current_insts := []))).cs_current_insts =
+  [ADD; MLOAD; MSTORE]
+Proof
+  simp[compile_make_array_def, compile_make_array_elems_def,
+       unwrap_value_def, mk_ptr_def, is_word_type_def, is_bytestring_type_def,
+       compile_store_memory_def, compile_store_memory_typed_def,
+       compile_with_byte_offset_def,
+       emit_op_def, emit_void_def, fresh_id_def, fresh_var_def, emit_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def, mk_inst_def]
 QED
