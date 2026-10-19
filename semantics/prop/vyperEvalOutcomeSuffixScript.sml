@@ -136,27 +136,21 @@ Proof
     acquire_nonreentrant_lock_def, release_nonreentrant_lock_def,
     get_transient_storage_def, push_function_def, pop_function_def,
     bind_def, ignore_bind_def, return_def, raise_def, AllCaseEqs()] >>
-  rpt strip_tac
-  >- (Cases_on `st.scopes` >> simp[])
-  >- (Cases_on `lookup_scopes id st.scopes` >>
-      Cases_on `st.scopes` >>
-      simp[set_scopes_def, return_def, raise_def]) >>
-  TRY CASE_TAC >> TRY CASE_TAC >> TRY CASE_TAC >>
-  TRY CASE_TAC >> TRY CASE_TAC >> TRY CASE_TAC >>
-  TRY CASE_TAC >> TRY CASE_TAC >>
+  rpt strip_tac >>
+  rpt (CASE_TAC >>
   gvs[set_scopes_def, update_accounts_def, update_transient_def,
       set_address_immutables_def, get_storage_backend_def,
       set_storage_backend_def, write_storage_slot_def,
       lift_option_type_def, lift_option_def, lift_sum_def,
       get_accounts_def, get_transient_storage_def, check_def,
       type_check_def, assert_def,
-      bind_def, ignore_bind_def, return_def, raise_def, AllCaseEqs()] >>
+      bind_def, ignore_bind_def, return_def, raise_def, AllCaseEqs()]) >>
   gvs[get_storage_backend_eq, set_storage_backend_eq,
       option_CASE_rator, prod_CASE_rator, COND_RATOR,
       return_def, raise_def, AllCaseEqs()] >>
-  rpt CASE_TAC >>
+  rpt (CASE_TAC >>
   gvs[get_storage_backend_eq, set_storage_backend_eq, set_storage_def,
-      return_def, raise_def, AllCaseEqs()] >>
+      return_def, raise_def, AllCaseEqs()]) >>
   qmatch_goalsub_abbrev_tac `set_storage _ _ backend _` >>
   Cases_on `backend` >> simp[set_storage_def]
 QED
@@ -330,7 +324,7 @@ Proof
     let val result = #1 (pairSyntax.dest_pair (rhs (concl th))) in
       irule (INST_TYPE [alpha |-> type_of result] outcomes_frame_result) >>
       exists_tac (rator (lhs (concl th))) >> exists_tac result
-    end) >> simp[]
+    end) >> simp[outcomes_frame_primitives]
 QED
 
 Definition outcome_suffix_def:

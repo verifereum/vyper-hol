@@ -328,11 +328,17 @@ Definition vtype_annotation_ok_def:
   vtype_annotation_ok (HashMapT _ _) ann_ty = (ann_ty = NoneT)
 End
 
+(* Tuple selection is syntactic: only an in-range integer literal determines
+   the result type. Arrays retain ordinary integer expression indices. *)
 Definition subscript_type_ok_def:
-  subscript_type_ok (ArrayT elem_ty _) idx_ty result_ty =
-    (result_ty = elem_ty /\ is_int_type idx_ty) /\
-  subscript_type_ok (TupleT ts) idx_ty result_ty =
-    (is_int_type idx_ty /\ ts <> [] /\ EVERY ($= result_ty) ts) /\
+  subscript_type_ok (ArrayT elem_ty _) idx result_ty =
+    (result_ty = elem_ty /\ is_int_type (expr_type idx)) /\
+  subscript_type_ok (TupleT ts) idx result_ty =
+    (case idx of
+     | Literal idx_ty (IntL n) =>
+         is_int_type idx_ty /\ 0 <= n /\ Num n < LENGTH ts /\
+         EL (Num n) ts = result_ty
+     | _ => F) /\
   subscript_type_ok (BaseT _) _ _ = F /\
   subscript_type_ok (StructT _) _ _ = F /\
   subscript_type_ok (FlagT _) _ _ = F /\
@@ -567,7 +573,7 @@ Definition well_typed_expr_def:
        MAP FST kes = MAP FST args /\ MAP (expr_type o SND) kes = MAP SND args) /\
   well_typed_expr env (Subscript ty e1 e2) =
     (well_typed_expr env e2 /\ well_formed_type env.type_defs ty /\
-     ((well_typed_expr env e1 /\ subscript_type_ok (expr_type e1) (expr_type e2) ty) \/
+     ((well_typed_expr env e1 /\ subscript_type_ok (expr_type e1) e2 ty) \/
       (?vt. type_place_expr env e1 = SOME vt /\
             subscript_vtype vt (expr_type e2) = SOME (Type ty)))) /\
   well_typed_expr env (Attribute ty e id) =

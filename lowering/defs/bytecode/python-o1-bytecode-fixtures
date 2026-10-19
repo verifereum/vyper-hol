@@ -135,6 +135,15 @@ fi
   echo "$mismatches fixture mismatch(es)" >&2
   exit 1
 }
+
+if [ "$mode" != update ]; then
+  env -u PYTHONPATH -u PYTHONHOME -u PYTHONSTARTUP \
+    PATH="$venv/bin:$PATH" PYTHONSAFEPATH=1 \
+    "$venv/bin/python" -I "$script_dir/memory_store_witnesses.py" prepare \
+    --repo "$repo_dir" --fixtures "$stage/memory-stores" --check
+  echo "memory-store Python oracle fixtures reproduce from VYPER_PIN"
+fi
+
 case "$mode" in
   update)
     echo "updated $source_count independent Python O1/no-assembly-opt oracle fixtures"

@@ -4166,15 +4166,25 @@ QED
 (* ===== Subscript expression helpers and Resume block ===== *)
 
 Theorem subscript_type_ok_evaluate_stmt[local]:
-  !ct it rt tenv atv.
-    subscript_type_ok ct it rt /\
+  !ct ie rt tenv atv.
+    subscript_type_ok ct ie rt /\
     evaluate_type tenv ct = SOME atv ==>
     ?rtv. evaluate_type tenv rt = SOME rtv
 Proof
-  Cases >> simp[subscript_type_ok_def] >>
-  rpt strip_tac >> gvs[Once evaluate_type_def, AllCaseEqs()] >>
-  gvs[evaluate_types_OPT_MMAP, OPT_MMAP_SOME_IFF] >>
-  Cases_on `l` >> gvs[IS_SOME_EXISTS]
+  rpt gen_tac >> Cases_on `ct` >> simp[subscript_type_ok_tuple] >>
+  simp[subscript_type_ok_def] >> rpt strip_tac
+  >- (gvs[] >>
+      drule evaluate_type_TupleT_cases >> strip_tac >>
+      gvs[LIST_REL_EL_EQN] >> metis_tac[]) >>
+  gvs[Once evaluate_type_def, AllCaseEqs()]
+QED
+
+Theorem subscript_type_ok_index_is_int_stmt[local]:
+  !base_ty ie result_ty.
+    subscript_type_ok base_ty ie result_ty ==> is_int_type (expr_type ie)
+Proof
+  Cases >> simp[subscript_type_ok_tuple] >> simp[subscript_type_ok_def] >>
+  rpt gen_tac >> strip_tac >> gvs[expr_type_def]
 QED
 
 Theorem evaluate_subscript_success_not_HashMapRef_stmt[local]:
@@ -4198,8 +4208,9 @@ Proof
 QED
 
 Theorem evaluate_subscript_value_well_typed_stmt[local]:
-  !tenv arr_tv av idx v ct it ty rtv.
-    subscript_type_ok ct it ty /\
+  !tenv arr_tv av idx v ct ie ty rtv.
+    subscript_type_ok ct ie ty /\
+    subscript_index_matches ct ie (IntV idx) /\
     evaluate_type tenv ct = SOME arr_tv /\
     evaluate_type tenv ty = SOME rtv /\
     value_has_type arr_tv (ArrayV av) /\
@@ -4207,28 +4218,27 @@ Theorem evaluate_subscript_value_well_typed_stmt[local]:
     value_has_type rtv v
 Proof
   rpt gen_tac >>
-  Cases_on `ct` >> simp[subscript_type_ok_def] >>
+  Cases_on `ct` >>
+  simp[subscript_type_ok_def, subscript_index_matches_def] >>
   rpt strip_tac >> gvs[]
-  >- (gvs[Once evaluate_type_def, AllCaseEqs()] >>
-      gvs[evaluate_types_OPT_MMAP, OPT_MMAP_SOME_IFF] >>
+  >- (gvs[AllCaseEqs()] >>
+      drule evaluate_type_TupleT_cases >> strip_tac >> gvs[] >>
       Cases_on `av` >> gvs[value_has_type_inv] >>
-      gvs[array_index_def, AllCaseEqs()] >>
-      gvs[oEL_EQ_EL] >>
+      gvs[array_index_def, AllCaseEqs(), oEL_EQ_EL] >>
       gvs[values_have_types_LIST_REL_stmt, LIST_REL_EL_EQN] >>
-      first_x_assum (qspec_then `Num idx` mp_tac) >> simp[EL_MAP] >>
-      `EL (Num idx) l = ty` by (gvs[EVERY_EL] >> res_tac) >>
-      gvs[])
+      metis_tac[])
   >> (gvs[Once evaluate_type_def, AllCaseEqs()] >>
       imp_res_tac (cj 1 evaluate_type_well_formed) >>
       metis_tac[array_index_has_type])
 QED
 
 Theorem evaluate_subscript_typed_stmt[local]:
-  !tenv arr_tv x idx x' ct it result_ty.
+  !tenv arr_tv x idx x' ct ie result_ty.
     evaluate_subscript tenv arr_tv x idx = INL x' /\
     toplevel_value_typed x arr_tv /\
     ~is_HashMapRef x /\
-    subscript_type_ok ct it result_ty /\
+    subscript_type_ok ct ie result_ty /\
+    subscript_index_matches ct ie idx /\
     evaluate_type tenv ct = SOME arr_tv ==>
     ?rtv. evaluate_type tenv result_ty = SOME rtv /\
           (case x' of
@@ -4243,7 +4253,7 @@ Proof
       imp_res_tac subscript_type_ok_evaluate_stmt >>
       Cases_on `evaluate_type tenv result_ty` >> gvs[toplevel_value_typed_def] >>
       irule evaluate_subscript_value_well_typed_stmt >>
-      qexistsl [`arr_tv`,`a`,`ct`,`i`,`it`,`tenv`,`result_ty`] >>
+      qexistsl [`arr_tv`,`a`,`ct`,`i`,`ie`,`tenv`,`result_ty`] >>
       asm_rewrite_tac[])
   >> (Cases_on `idx` >>
       simp[evaluate_subscript_def, AllCaseEqs(), LET_THM] >>
@@ -4280,20 +4290,24 @@ Proof
 QED
 
 Theorem evaluate_subscript_error_not_TypeError_stmt[local]:
-  !tenv arr_tv x idx err ct it result_ty idx_tv.
+  !tenv arr_tv x idx err ct ie result_ty idx_tv.
     evaluate_subscript tenv arr_tv x idx = INR err /\
     toplevel_value_typed x arr_tv /\
     ~is_HashMapRef x /\
-    subscript_type_ok ct it result_ty /\
+    subscript_type_ok ct ie result_ty /\
     evaluate_type tenv ct = SOME arr_tv /\
-    evaluate_type tenv it = SOME idx_tv /\
+    evaluate_type tenv (expr_type ie) = SOME idx_tv /\
     value_has_type idx_tv idx ==>
     !msg. err <> TypeError msg
 Proof
-  rpt gen_tac >> Cases_on `ct` >> simp[subscript_type_ok_def] >>
-  rpt strip_tac >> gvs[Once evaluate_type_def, AllCaseEqs()] >>
-  Cases_on `it` >> gvs[is_int_type_def, Once evaluate_type_def, AllCaseEqs()] >>
-  TRY (Cases_on `b` >> gvs[is_int_type_def, Once evaluate_type_def]) >>
+  rpt gen_tac >> strip_tac >>
+  `is_int_type (expr_type ie)` by
+    metis_tac[subscript_type_ok_index_is_int_stmt] >>
+  Cases_on `expr_type ie` >> gvs[is_int_type_def] >>
+  rename1 `expr_type ie = BaseT idx_bt` >>
+  Cases_on `idx_bt` >> gvs[is_int_type_def, Once evaluate_type_def] >>
+  Cases_on `ct` >> gvs[subscript_type_ok_def] >>
+  gvs[Once evaluate_type_def, AllCaseEqs()] >>
   Cases_on `x` >> gvs[toplevel_value_typed_def, is_HashMapRef_def] >>
   TRY (drule value_has_type_TupleTV_dest_stmt >> strip_tac >> gvs[]) >>
   TRY (drule value_has_type_ArrayTV_dest_stmt >> strip_tac >> gvs[]) >>
@@ -4468,8 +4482,10 @@ Proof
       Cases_on `evaluate_subscript (get_tenv cx) tyv base_tv idx` >> gvs[return_def, raise_def]
       >- (
         rename1 `evaluate_subscript (get_tenv cx) tyv base_tv idx = INL sub_res` >>
-        `subscript_type_ok (ArrayT t b) (expr_type e') t` by
+        `subscript_type_ok (ArrayT t b) e' t` by
           simp[subscript_type_ok_def] >>
+        `subscript_index_matches (ArrayT t b) e' idx` by
+          simp[subscript_index_matches_def] >>
         drule_all evaluate_subscript_typed_stmt >> strip_tac >>
         Cases_on `sub_res` >> gvs[return_def, bind_def]
         >- (
@@ -4499,7 +4515,7 @@ Proof
         simp[expr_result_typed_def, expr_runtime_typed_def] >> strip_tac >>
         Cases_on `idx_tv` >>
         gvs[get_Value_def, return_def, raise_def, toplevel_value_typed_def]) >>
-      `subscript_type_ok (ArrayT t b) (expr_type e') t` by
+      `subscript_type_ok (ArrayT t b) e' t` by
         simp[subscript_type_ok_def] >>
       drule_all evaluate_subscript_error_not_TypeError_stmt >>
       strip_tac >> simp[no_type_error_result_def]) >>
@@ -4624,7 +4640,8 @@ Theorem expr_subscript_ordinary_tail_sound_stmt[local]:
     env_consistent env cx st /\
     accounts_well_typed st.accounts /\
     well_formed_type env.type_defs v9 /\
-    subscript_type_ok (expr_type e) (expr_type e') v9 /\
+    subscript_type_ok (expr_type e) e' v9 /\
+    subscript_index_matches (expr_type e) e' idx /\
     expr_result_typed env e base_tv /\
     expr_result_typed env e' idx_tv /\
     get_Value idx_tv st = (INL idx,st) /\
@@ -4697,17 +4714,11 @@ Proof
   strip_tac >> simp[no_type_error_result_def]
 QED
 
-Theorem subscript_type_ok_index_is_int_stmt[local]:
-  !base_ty idx_ty result_ty.
-    subscript_type_ok base_ty idx_ty result_ty ==> is_int_type idx_ty
-Proof
-  Cases >> simp[subscript_type_ok_def]
-QED
 
 Theorem expr_subscript_index_get_Value_INR_no_type_error_stmt[local]:
   !env e e' v9 tv st y st'.
     expr_result_typed env e' tv /\
-    subscript_type_ok (expr_type e) (expr_type e') v9 /\
+    subscript_type_ok (expr_type e) e' v9 /\
     get_Value tv st = (INR y, st') ==>
     no_type_error_result (INR y)
 Proof
@@ -4720,13 +4731,26 @@ Proof
   simp[]
 QED
 
+Theorem eval_expr_subscript_index_matches_stmt[local]:
+  !ct ie rt cx st tv st1 idx st2.
+    subscript_type_ok ct ie rt /\
+    eval_expr cx ie st = (INL tv,st1) /\
+    get_Value tv st1 = (INL idx,st2) ==>
+    subscript_index_matches ct ie idx
+Proof
+  rpt gen_tac >> Cases_on `ct` >> simp[subscript_index_matches_def] >>
+  rpt strip_tac >>
+  gvs[subscript_type_ok_tuple] >>
+  gvs[Once evaluate_def, evaluate_literal_def, return_def, get_Value_def]
+QED
+
 Theorem expr_subscript_ordinary_base_success_sound_stmt[local]:
   !cx env e e' v9 base_tv st st1 res st'.
     env_consistent env cx st /\ state_well_typed st /\ context_well_typed cx /\
     accounts_well_typed st.accounts /\ functions_well_typed cx /\
     well_typed_expr env e' /\
     well_formed_type env.type_defs v9 /\
-    subscript_type_ok (expr_type e) (expr_type e') v9 /\
+    subscript_type_ok (expr_type e) e' v9 /\
     eval_expr cx e st = (INL base_tv,st1) /\
     state_well_typed st1 /\ env_consistent env cx st1 /\
     accounts_well_typed st1.accounts /\
@@ -4777,6 +4801,8 @@ Proof
       simp_tac(srw_ss())[] >> strip_tac >> gvs[] >>
       rename1 `get_Value x st2 = (INL idx,st3)` >>
       drule get_Value_state >> strip_tac >> gvs[] >>
+      `subscript_index_matches (expr_type e) e' idx` by
+        (drule_all eval_expr_subscript_index_matches_stmt >> simp[]) >>
       qspecl_then [`cx`,`env`,`e`,`e'`,`v9`,`base_tv`,`x`,`idx`,`st2`,`res`,`st'`]
         mp_tac expr_subscript_ordinary_tail_sound_stmt >>
       (impl_tac >- simp[]) >>
@@ -4801,7 +4827,7 @@ Theorem expr_subscript_ordinary_static_branch_sound_stmt[local]:
     call_evaluation_safe cx (int_calls_expr (Subscript v9 e e')) /\
     well_typed_expr env e /\ well_typed_expr env e' /\
     well_formed_type env.type_defs v9 /\
-    subscript_type_ok (expr_type e) (expr_type e') v9 /\
+    subscript_type_ok (expr_type e) e' v9 /\
     eval_expr cx (Subscript v9 e e') st = (res,st') /\
     (!env0 st0 res0 st0'.
       env_consistent env0 cx st0 /\ state_well_typed st0 /\ context_well_typed cx /\

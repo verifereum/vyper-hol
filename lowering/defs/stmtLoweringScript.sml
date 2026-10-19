@@ -125,19 +125,8 @@ End
    Buffer layout: buf+0: selector word, buf+32: ABI-encoded (string,) tuple.
    Final revert from buf+28 with length 4 + encoded_len.
    Mirrors Python: vyper/codegen_venom/stmt.py:_revert_with_reason *)
-  (* KNOWN LIMITATION: Manual ABI encoding. Assumes msg_op is a memory pointer
-     to [length][data] layout (correct for in-memory string literals).
-     Python uses abi_encode_to_buf which handles storage/transient unwrap.
-     Vyper only allows string literals as assert/revert reasons, so this is
-     correct in practice. *)
-(* Revert with Error(string) encoding using shared ABI encoder.
-   Wraps message in TupleT((msg_typ,)) and uses compile_abi_encode_to_buf.
-   Mirrors Python: vyper/codegen_venom/stmt.py:_revert_with_reason.
-   msg_op: pointer to message in memory.
-   msg_type: type of the message (usually StringT).
-   msg_enc_info: ABI encoding info for the message type. *)
 Definition compile_revert_with_reason_def:
-  compile_revert_with_reason cenv msg_op msg_type msg_mem_size =
+  compile_revert_with_reason cenv msg_vv msg_type msg_mem_size =
     (* Vyper restricts reasons to strings.  Spell out the pinned encoder's
        singleton-dynamic-tuple path instead of evaluating the full recursive
        ABI encoder: Error(string) is selector || abi_encode((message,)). *)
@@ -148,7 +137,8 @@ Definition compile_revert_with_reason_def:
           payload_buf <- emit_op ADD [buf_op; Lit 32w];
           tuple_alloc <- compile_alloc_buffer msg_mem_size;
           let tuple_buf = tuple_alloc.buf_operand in
-          do msg_copy_len <- emit_op MLOAD [msg_op];
+          do msg_op <- unwrap_value cenv msg_vv;
+             msg_copy_len <- emit_op MLOAD [msg_op];
              msg_copy_rounded0 <- emit_op ADD [msg_copy_len; Lit 31w];
              msg_copy_rounded <- emit_op AND
                [msg_copy_rounded0;
@@ -189,16 +179,15 @@ Definition compile_revert_with_reason_def:
     od
 End
 
-(* Reasons are syntactically restricted to string literals by Vyper.  Taking
-   that path directly avoids invoking the general expression recursor while
-   emitting the same bytelike-literal IR as Expr.lower. *)
+(* Preserve the location until the Error tuple buffer has been allocated.
+   The literal shortcut emits the same bytelike-literal IR as Expr.lower. *)
 Definition compile_reason_message_def:
   compile_reason_message cenv (Literal (BaseT (StringT max_len)) (StringL s)) =
     do buf <- compile_bytelike_literal (MAP (n2w o ORD) s) max_len;
-       return (buf.buf_operand : operand)
+       return (LocatedValue (BaseT (StringT (LENGTH s))) (base_ptr buf))
     od /\
   compile_reason_message cenv reason_e =
-    lower_value compile_expr cenv (expr_type reason_e) reason_e
+    compile_expr cenv (expr_type reason_e) reason_e
 End
 
 (* ===== Internal Return ===== *)
@@ -327,13 +316,7 @@ Definition compile_internal_return_def:
           (case ret_val of
              NONE => emit_inst RET [return_pc] []
            | SOME val_op =>
-               do (if ret_type = src_type /\
-                       ¬is_bytestring_type ret_type then
-                     compile_copy_memory buf_op val_op
-                       (type_memory_bytes cenv ret_type)
-                   else
-                     compile_store_memory_typed cenv buf_op ret_type
-                                                   val_op src_type);
+               do compile_store_memory cenv val_op buf_op ret_type src_type;
                   emit_inst RET [return_pc] []
                od)
       | NONE => emit_inst RET [return_pc] []
@@ -530,20 +513,10 @@ Definition compile_assign_value_def:
              tmp_op <- return tmp_op_alloc.buf_operand;
              (* Step 1: flat copy src→tmp (preserving src layout) *)
              compile_copy_memory tmp_op val_op src_mem_size;
-             (* Step 2: typed copy or flat copy tmp→dst *)
-             if dst_ty ≠ src_ty then
-               compile_store_memory_typed cenv dst_op dst_ty tmp_op src_ty
-             else
-               compile_copy_memory dst_op tmp_op mem_size
+             compile_store_memory cenv tmp_op dst_op dst_ty src_ty
           od
-        else if dst_ty ≠ src_ty then
-          (* Different layouts: use typed copy (no staging needed — src is
-             from a fresh buffer or non-memory source).
-             Mirrors Python: vyper/codegen_venom/context.py:Context.store_memory *)
-          compile_store_memory_typed cenv dst_op dst_ty val_op src_ty
         else
-          (* Same layout, non-aliasing → flat copy *)
-          compile_copy_memory dst_op val_op mem_size
+          compile_store_memory cenv val_op dst_op dst_ty src_ty
     | LocStorage =>
         (* Normalize source layout when types differ (non-bytestring).
            Storage/transient only understand destination layout, so convert
@@ -630,10 +603,8 @@ Definition compile_tuple_load_all_def:
   compile_tuple_load_all cenv src_op [] offset = return [] ∧
   compile_tuple_load_all cenv src_op (ty :: tys) offset =
     (let mem_size = type_memory_bytes cenv ty in
-     do src_elem <-
-          (if offset = 0 then return src_op
-           else emit_op ADD [src_op; Lit (n2w offset)]);
-        elem_op <- compile_load_memory src_elem (is_word_type ty) mem_size;
+     do src_elem <- emit_op ADD [src_op; Lit (n2w offset)];
+        elem_op <- compile_load_memory src_elem (is_word_type ty);
         rest_ops <- compile_tuple_load_all cenv src_op tys
                       (offset + mem_size);
         return (elem_op :: rest_ops)
@@ -682,18 +653,19 @@ Definition compile_tuple_store_all_def:
        dst_ty <- return (case dst_ty_opt of SOME t => t | NONE => src_ty);
        is_prim <- return (is_word_type dst_ty);
        mem_sz <- return (type_memory_bytes cenv dst_ty);
-       src_mem_sz <- return (type_memory_bytes cenv src_ty);
-       src_is_word <- return (is_word_type src_ty \/ src_mem_sz = 32);
-       dst_is_word <- return (is_prim \/ mem_sz = 32);
-       (* Pass 1 materializes primitive and exactly-one-word complex values.
-          Consume that representation directly; larger complex values remain
-          pointers into the staged tuple. *)
+       src_is_word <- return (is_word_type src_ty);
+       dst_is_word <- return is_prim;
+       da_info <- return (case dst_ty of
+          ArrayT elem_ty (Dynamic _) =>
+            let ems = type_memory_bytes cenv elem_ty in
+            SOME ((ems + 31) DIV 32, ems)
+        | _ => NONE);
        (if src_is_word then
           if dst_is_word then compile_store_at_loc dst_op val_op loc_opt
           else emit_void INVALID []
         else
           compile_assign_value cenv dst_op dst_loc val_op is_prim
-                        NONE dst_ty src_ty NONE mem_sz);
+                        NONE dst_ty src_ty da_info mem_sz);
        compile_tuple_store_all cenv src_tys targets vals
     od ∧
   (* Non-BaseTarget element: emit INVALID (shouldn't occur in valid AST) *)
@@ -706,20 +678,16 @@ End
 
 (* Two-pass tuple unpack: load ALL values first, then store ALL.
    This ensures a, b = b, a works correctly (no aliasing issues).
-   When any member is complex (!is_word_type), stage entire source
-   tuple to temp buffer first to prevent aliasing corruption.
+   Stage memory views with complex members to prevent aliasing corruption.
    Mirrors Python: vyper/codegen_venom/stmt.py:_lower_tuple_unpack *)
 Definition compile_tuple_unpack_def:
-  compile_tuple_unpack cenv ty targets src_op =
+  compile_tuple_unpack cenv ty may_stage targets src_op =
     let elem_types = (case ty of
         TupleT tys => tys
       | StructT nsid =>
           MAP (FST o SND) (get_struct_fields cenv.ce_struct_fields (nsid_to_string nsid))
       | _ => REPLICATE (LENGTH targets) (BaseT (UintT 256))) in
-    (* Stage source tuple to prevent aliasing when complex members present.
-       Python stages when source_is_memory_view ∧ any(!_is_prim_word).
-       We always stage when complex members exist (conservative but correct). *)
-    let has_complex = EXISTS (λt. ¬is_word_type t) elem_types in
+    let has_complex = (may_stage ∧ EXISTS (λt. ¬is_word_type t) elem_types) in
     let total_mem = SUM (MAP (type_memory_bytes cenv) elem_types) in
     if has_complex /\ total_mem > 0 /\
        ~cenv.ce_target CapMcopy then
@@ -820,19 +788,8 @@ Definition compile_iter_elem_copy_def:
       do val_op <- emit_op MLOAD [elem_ptr];
          emit_void MSTORE [item_ptr; val_op]
       od
-    else if target_ty ≠ elem_ty then
-      (* Memory, complex, type mismatch: layout-aware copy.
-         Handles cases like DynArray[Bytes[540]] → Bytes[704].
-         Mirrors Python: self.ctx.store_memory(elem_addr, dst, target_type,
-                          src_typ=array_typ.value_type) *)
-      compile_store_memory_typed cenv item_ptr target_ty elem_ptr elem_ty
-    else if is_bytestring_type target_ty then
-      (* Memory, bytestring, same type: copy actual runtime length.
-         Mirrors Python: store_memory → _BytestringT branch *)
-      compile_store_bytestring elem_ptr item_ptr
     else
-      (* Memory, complex, same type: flat copy *)
-      compile_copy_memory item_ptr elem_ptr elem_size
+      compile_store_memory cenv elem_ptr item_ptr target_ty elem_ty
 End
 
 (* infer_array_location, infer_array_is_dynamic defined in exprLoweringScript.
@@ -873,6 +830,29 @@ Definition compile_internal_return_from_env_def:
     od
 End
 
+(* Empty bytes and dynamic arrays need only a zero length word. Empty string
+   literals still use the ordinary bytelike copy, as in _is_empty_value. *)
+Definition is_empty_value_expr_def:
+  is_empty_value_expr (Builtin _ (MakeArray (SOME _) _) []) = T ∧
+  is_empty_value_expr (Literal _ (BytesL [])) = T ∧
+  is_empty_value_expr (TypeBuiltin _ Empty _ _) = T ∧
+  is_empty_value_expr _ = F
+End
+
+Definition has_length_word_def:
+  has_length_word (ArrayT elem (Dynamic n)) = T ∧
+  has_length_word ty = is_bytestring_type ty
+End
+
+(* Reduced Name/Attribute/Subscript expressions can alias tuple targets. *)
+Definition is_memory_view_def:
+  is_memory_view (Name _ _) = T ∧
+  is_memory_view (TopLevelName _ _) = T ∧
+  is_memory_view (Attribute _ _ _) = T ∧
+  is_memory_view (Subscript _ _ _) = T ∧
+  is_memory_view _ = F
+End
+
 Definition compile_stmt_def:
   (* Pass: no-op *)
   compile_stmt cenv lctx ty (Pass : stmt) = return () ∧
@@ -891,13 +871,17 @@ Definition compile_stmt_def:
      These may differ for subtype assignments (e.g. Bytes[540] → Bytes[704]).
      Mirrors Python: vyper/codegen_venom/stmt.py:lower_AnnAssign → _assign_value *)
   compile_stmt cenv lctx ty (AnnAssign id vtyp e) =
-    (let src_ty = expr_type e in
+    (let src_ty = lowered_value_type cenv e in
+     let empty_value = (has_length_word vtyp ∧ is_empty_value_expr e) in
      do emit_local_alloca cenv id;
-        vlwl_result <- lower_value_with_loc compile_expr cenv vtyp e;
-        val_op <- return (FST vlwl_result);
-        src_loc <- return (SND vlwl_result);
+        src_vv <- compile_expr cenv (expr_type e) e;
+        val_op <- (if empty_value then return (Lit 0w)
+                   else unwrap_value cenv src_vv);
+        src_loc <- return (vv_location src_vv);
         (case FLOOKUP cenv.ce_vars id of
            SOME (MemLoc offset _) =>
+             if empty_value then emit_void MSTORE [Lit (n2w offset); Lit 0w]
+             else
              let is_prim = is_word_type vtyp in
              let mem_size = type_memory_bytes cenv vtyp in
              let da_info = (case vtyp of
@@ -908,6 +892,8 @@ Definition compile_stmt_def:
              compile_assign_value cenv (Lit (n2w offset)) LocMemory val_op
                                   is_prim src_loc vtyp src_ty da_info mem_size
          | SOME (PtrVar ptr_op _) =>
+             if empty_value then emit_void MSTORE [ptr_op; Lit 0w]
+             else
              let is_prim = is_word_type vtyp in
              let mem_size = type_memory_bytes cenv vtyp in
              let da_info = (case vtyp of
@@ -929,12 +915,17 @@ Definition compile_stmt_def:
      for subtype assignments (e.g., DynArray[Bytes[540]] → DynArray[Bytes[704]]).
      Mirrors Python: vyper/codegen_venom/stmt.py:lower_Assign with _assign_value *)
   compile_stmt cenv lctx ty (Assign (BaseTarget bt) e) =
-    (let src_ty = expr_type e in
+    (if has_length_word (expr_type e) ∧ is_empty_value_expr e then
+       do tgt_result <- compile_get_target_ptr cenv bt;
+          compile_store_at_loc (FST tgt_result) (Lit 0w) (FST (SND tgt_result))
+       od
+     else
+     let src_ty = lowered_value_type cenv e in
      do tgt_result <- compile_get_target_ptr cenv bt;
         dst_op <- return (FST tgt_result);
         dst_loc_opt <- return (FST (SND tgt_result));
         dst_ty_opt <- return (SND (SND tgt_result));
-        vlwl_result <- lower_value_with_loc compile_expr cenv src_ty e;
+        vlwl_result <- lower_value_with_loc compile_expr cenv (expr_type e) e;
         val_op <- return (FST vlwl_result);
         src_loc <- return (SND vlwl_result);
         (* dst_ty: target's declared type. Falls back to src_ty if unknown. *)
@@ -1176,31 +1167,14 @@ Definition compile_stmt_def:
            else
              let mem_sz = type_memory_bytes cenv elem_ty in
              do tmp_alloc <- compile_alloc_buffer mem_sz;
-                compile_copy_memory tmp_alloc.buf_operand val_op_raw mem_sz;
+                compile_store_memory cenv val_op_raw tmp_alloc.buf_operand
+                                     elem_ty (lowered_value_type cenv val_e);
                 return tmp_alloc.buf_operand
              od);
-        src_elem_ty <- return (expr_type val_e);
-        (* For storage/transient destination with type mismatch,
-           normalize source layout to destination layout in memory first.
-           Without this, word_copy_loop reads source-layout bytes into
-           destination-layout storage slots, corrupting data.
-           Mirrors Python: if data_loc in (STORAGE, TRANSIENT) and
-           elem_src_typ != elem_typ: normalize through store_memory *)
-        norm_result <-
-          (if is_prim ∨ loc = LocMemory ∨ src_elem_ty = elem_ty then
-             return (staged_val, src_elem_ty)
-           else
-             let norm_sz = type_memory_bytes cenv elem_ty in
-             do norm_alloc <- compile_alloc_buffer norm_sz;
-                compile_store_memory_typed cenv
-                  norm_alloc.buf_operand elem_ty
-                  staged_val src_elem_ty;
-                return (norm_alloc.buf_operand, elem_ty)
-             od);
-        final_val <- return (FST norm_result);
-        final_src_ty <- return (SND norm_result);
-        compile_dynarray_append cenv target_op final_val ws elem_size
-                                     elem_ty final_src_ty
+        src_elem_ty <- return (if is_prim then lowered_value_type cenv val_e
+                               else elem_ty);
+        compile_dynarray_append cenv target_op staged_val ws elem_size
+                                     elem_ty src_elem_ty
                                      capacity is_prim
                                      load_opc store_opc
      od) ∧
@@ -1209,9 +1183,12 @@ Definition compile_stmt_def:
      Mirrors Python: vyper/codegen_venom/stmt.py:_lower_tuple_unpack
      First evaluate RHS, then assign each element to its target. *)
   compile_stmt cenv lctx ty (Assign (TupleTarget targets) e) =
-    do src_op <- lower_value compile_expr cenv ty e;
-       compile_tuple_unpack cenv ty targets src_op
-    od ∧
+    (let src_ty = expr_type e in
+     do src_vv <- compile_expr cenv src_ty e;
+        src_op <- unwrap_value cenv src_vv;
+        compile_tuple_unpack cenv src_ty
+          (is_memory_view e ∧ vv_location src_vv = SOME LocMemory) targets src_op
+     od) ∧
 
   (* If: multi-block control flow *)
   compile_stmt cenv lctx ty (If cond_e then_body else_body) =
