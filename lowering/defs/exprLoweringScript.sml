@@ -926,11 +926,13 @@ Definition compile_external_call_kwargs_def:
           od;
           new_block cont_lbl;
           (* Return value handling *)
+          (* Python's new_temporary_value(wrapped_return_t) allocates the
+             memory size of the return type, not its ABI size bound. *)
           if return_abi_size = 0 then
             comp_return (Lit 0w)
           else if has_default then
             do (* Allocate result, use default_return_path *)
-               result_op_alloc <- compile_alloc_buffer return_abi_size;
+               result_op_alloc <- compile_alloc_buffer ret_mem_bytes;
                let result_op = result_op_alloc.buf_operand in
                compile_default_return_path buf_op result_op default_op addr_op
                                            skip_check min_return_size return_abi_size
@@ -938,7 +940,7 @@ Definition compile_external_call_kwargs_def:
             od
           else
             do (* Simple decode path *)
-               result_op_alloc <- compile_alloc_buffer return_abi_size;
+               result_op_alloc <- compile_alloc_buffer ret_mem_bytes;
                let result_op = result_op_alloc.buf_operand in
                do hi_op <- compile_return_value_decode buf_op min_return_size
                                                         return_abi_size;
