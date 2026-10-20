@@ -109,9 +109,62 @@ Definition liveness_edge_transfer_def:
 End
 
 (* ==========================================================================
-   Top-level analysis (backward, set union lattice)
+   Block recomputation and staged Python-ordered drivers
    ========================================================================== *)
 
+(* Python OrderedSet equality ignores order. *)
+Definition same_vars_def:
+  same_vars (xs : string list) ys <=>
+    EVERY (λv. MEM v ys) xs ∧ EVERY (λv. MEM v xs) ys
+End
+
+Theorem same_vars_set:
+  same_vars xs ys <=> set xs = set ys
+Proof
+  simp[same_vars_def, EVERY_MEM, EXTENSION, SUBSET_DEF] >> metis_tac[]
+QED
+
+Definition liveness_block_def:
+  liveness_block bbs cfg lbl (st : string list df_state) =
+    let out = FOLDL list_union []
+          (MAP (λs. liveness_edge_transfer bbs s lbl (df_at [] st s 0))
+               (cfg_succs_of cfg lbl)) in
+    let instrs = (case lookup_block lbl bbs of
+                    NONE => [] | SOME bb => bb.bb_instructions) in
+    let (entry, inst_map) =
+          df_fold_block Backward (liveness_transfer bbs) lbl instrs out in
+    st with <| ds_inst := FUNION inst_map st.ds_inst;
+               ds_boundary := st.ds_boundary |+ (lbl, entry) |>
+End
+
+Definition liveness_changed_def:
+  liveness_changed bbs lbl (old : string list df_state) new <=>
+    let n = (case lookup_block lbl bbs of
+               NONE => 0 | SOME bb => LENGTH bb.bb_instructions) in
+    ¬(same_vars (df_at [] new lbl n) (df_at [] old lbl n) ∧
+      same_vars (df_at [] new lbl 0) (df_at [] old lbl 0))
+End
+
+Definition liveness_recompute_def:
+  liveness_recompute fn =
+    let cfg = cfg_analyze fn in
+    SND (wl_iterate (liveness_changed fn.fn_blocks)
+           (liveness_block fn.fn_blocks cfg) (cfg_preds_of cfg)
+           cfg.cfg_dfs_post
+           (init_df_state [] (MAP (λbb. bb.bb_label) fn.fn_blocks)))
+End
+
+Definition liveness_recompute_fuel_def:
+  liveness_recompute_fuel fuel fn =
+    let cfg = cfg_analyze fn in
+    SND (wl_iterate_fuel fuel (liveness_changed fn.fn_blocks)
+           (liveness_block fn.fn_blocks cfg) (cfg_preds_of cfg)
+           cfg.cfg_dfs_post
+           (init_df_state [] (MAP (λbb. bb.bb_label) fn.fn_blocks)))
+End
+
+(* Public drivers remain legacy during proof preparation. C1.8 switches them
+   together with their proof consumers; no ordered equivalence is asserted. *)
 Definition liveness_analyze_def:
   liveness_analyze fn =
     df_analyze Backward [] list_union liveness_transfer
@@ -220,3 +273,77 @@ Proof
   simp[mk_inst_def, inst_uses_def, inst_defs_def, operand_vars_def,
        operand_var_def]
 QED
+
+(* Computational interface probes: overwrite, empty blocks and set scheduling. *)
+Theorem liveness_recompute_probe[local]:
+  let cfg = <| cfg_succs := FEMPTY |+ ("b", ["s"]);
+               cfg_preds := FEMPTY; cfg_reachable := FEMPTY;
+               cfg_dfs_post := []; cfg_dfs_pre := [] |> in
+  let bbs = [<| bb_label := "b";
+                bb_instructions := [mk_inst 0 ADD [Var "x"; Var "y"] ["z"]] |>] in
+  let old = <| ds_inst := FEMPTY |+ (("b",0),["stale"])
+                               |+ (("b",1),["stale"])
+                               |+ (("s",0),["z";"w"]);
+               ds_boundary := FEMPTY |+ ("b",["stale"]) |> in
+  let new = liveness_block bbs cfg "b" old in
+  df_at [] new "b" 1 = ["z";"w"] /\
+  df_at [] new "b" 0 = ["w";"y";"x"] /\
+  df_boundary [] new "b" = ["w";"y";"x"] /\
+  df_at [] new "s" 0 = ["z";"w"] /\
+  liveness_changed bbs "b" old new
+Proof
+  EVAL_TAC
+QED
+
+Theorem liveness_empty_order_probe[local]:
+  let cfg = <| cfg_succs := FEMPTY |+ ("b", ["s"]);
+               cfg_preds := FEMPTY |+ ("b", ["p"]);
+               cfg_reachable := FEMPTY;
+               cfg_dfs_post := []; cfg_dfs_pre := [] |> in
+  let bbs = [<| bb_label := "b"; bb_instructions := [] |>] in
+  let old = <| ds_inst := FEMPTY |+ (("b",0),["x";"y"])
+                               |+ (("s",0),["y";"x"]);
+               ds_boundary := FEMPTY |+ ("b",["x";"y"]) |> in
+  let new = liveness_block bbs cfg "b" old in
+  df_at [] new "b" 0 = ["y";"x"] /\
+  df_boundary [] new "b" = ["y";"x"] /\
+  ~liveness_changed bbs "b" old new /\
+  FST (wl_step (liveness_changed bbs) (liveness_block bbs cfg)
+               (cfg_preds_of cfg) (["b"],old)) = []
+Proof
+  EVAL_TAC
+QED
+
+Theorem liveness_cycle_probe[local]:
+  let fn = mk_raw_function "cycle"
+    [<| bb_label := "b";
+        bb_instructions := [mk_inst 0 ADD [Var "x"; Var "y"] ["z"];
+                            mk_inst 1 JMP [Label "b"] []] |>] in
+  let st = liveness_recompute_fuel 4 fn in
+  df_at [] st "b" 0 = ["y";"x"] /\
+  df_at [] st "b" 2 = ["y";"x"] /\
+  df_boundary [] st "b" = ["y";"x"]
+Proof
+  EVAL_TAC
+QED
+
+Theorem liveness_acyclic_probe[local]:
+  let fn = mk_raw_function "acyclic"
+    [<| bb_label := "b";
+        bb_instructions := [mk_inst 0 JMP [Label "s"] []] |>;
+     <| bb_label := "s";
+        bb_instructions := [mk_inst 1 SINK [Var "x"] []] |>] in
+  let st = liveness_recompute_fuel 4 fn in
+  df_at [] st "b" 0 = ["x"] /\
+  df_at [] st "b" 1 = ["x"] /\
+  df_at [] st "s" 0 = ["x"] /\
+  df_boundary [] st "b" = ["x"] /\
+  df_at [] (liveness_recompute_fuel 0 fn) "s" 0 = []
+Proof
+  EVAL_TAC
+QED
+
+val _ = List.app (fn (_,th) =>
+  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
+  then () else raise Fail "oracle in staged liveness definitions")
+  (DB.thms "livenessDefs");
