@@ -1,4 +1,4 @@
-(* Independent Python Vyper fixture generation, not a proof oracle. *)
+(* Independent pinned Python generation of manifest fixtures, not a proof oracle. *)
 Theory prepareMemoryConstruction
 Ancestors bool
 fun repository_root dir =

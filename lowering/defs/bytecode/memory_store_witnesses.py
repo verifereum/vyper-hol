@@ -97,6 +97,14 @@ def prepare(repo: Path, output: Path, *, check: bool) -> None:
         }
         if provenance != expected:
             raise ValueError("independent oracle provenance changed")
+    # The canonical oracle directory retains only manifest fixtures; other
+    # generated probes belong in an explicit scratch output directory.
+    if output.resolve() == (corpus / "oracle").resolve():
+        retained = set(names(corpus / "parity-fixtures.txt"))
+        for source in (corpus / "sources").glob("*.vy"):
+            if source.stem not in retained:
+                for suffix in (".json", ".hex"):
+                    (output / (source.stem + suffix)).unlink(missing_ok=True)
 
 
 def probe(repo: Path, fixtures: Path, output: Path, selected: list[str]) -> None:
