@@ -1,7 +1,7 @@
 # Name-collision witnesses (#557)
 
 These sources use identifiers that the HOL lowering used to keep in the same
-`compile_env.ce_vars` table as compiler-internal entries. Each has an exact
+`compile_env.ce_vars` table as compiler-internal entries or module variables. Each has an exact
 bytecode comparison in `eval/evalCompilerNameCollisionsScript.sml`, included in
 the default lowering rollup.
 
@@ -9,6 +9,9 @@ the default lowering rollup.
 |---|---|---|
 | `nm_arg_return_pc` | a04-04 | an internal argument named `__return_pc__` is the user's value, not the return address |
 | `nm_ext_arg_return_pc` | a04-04 | an external argument named `__return_pc__` keeps `return` on the external (ABI `RETURN`) path |
+| `nm_arg_storage` | a04-03 | an external argument `stored` and storage `self.stored` stay distinct |
+| `nm_local_storage_types` | a04-03 | a `uint256` local `x` and a `DynArray` storage `self.x` keep separate locations and types |
+| `nm_transient_local` | a04-03 | a local `t` does not hide transient `self.t` |
 
 `oracle/` holds the annotated AST/layout JSON and deployment/runtime bytecode
 from the pinned Python Vyper (`VYPER_PIN`), with the same settings as the

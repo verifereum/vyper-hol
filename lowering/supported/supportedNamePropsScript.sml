@@ -52,14 +52,19 @@ Proof
   EVAL_TAC
 QED
 
-Theorem supported_module_binding_collisions_reject:
-  ~supported_function_bindings supported_test_declarations
+(* Module variables are keyed "self." ++ name in compile_env, so locals may
+   shadow them as in Python Vyper (#557, a04-03). *)
+Theorem supported_module_binding_shadowing_accept:
+  supported_function_bindings supported_test_declarations
     [("number", BaseT (UintT 256))] [] [] /\
-  ~supported_function_bindings supported_test_declarations [] ["scratch"] [] /\
-  ~supported_function_bindings supported_test_declarations [] [] ["items"] /\
-  ~supported_function_bindings supported_test_declarations [("map", BaseT BoolT)] [] [] /\
-  ~supported_function_bindings supported_test_declarations [] ["map"] [] /\
-  ~supported_function_bindings supported_test_declarations [] [] ["map"]
+  supported_function_bindings supported_test_declarations [] ["scratch"] [] /\
+  supported_function_bindings supported_test_declarations [] [] ["items"] /\
+  supported_function_bindings supported_test_declarations [("map", BaseT BoolT)] [] [] /\
+  supported_function_bindings supported_test_declarations [] ["map"] [] /\
+  supported_function_bindings supported_test_declarations [] [] ["map"] /\
+  supported_declaration_names
+    [VariableDecl Private Storage "x" (BaseT (UintT 256)) (SOME 0);
+     FunctionDecl External View F F "f" [("x", BaseT BoolT)] [] NoneT []]
 Proof
   EVAL_TAC
 QED
@@ -124,9 +129,6 @@ Theorem supported_declaration_name_checks_reject:
     [FunctionDecl Internal Pure F F "return_label_42" [] [] NoneT []] /\
   ~supported_declaration_names
     [FunctionDecl External Payable F F "__default__" [("x", BaseT BoolT)] [] NoneT []] /\
-  ~supported_declaration_names
-    [VariableDecl Private Storage "x" (BaseT (UintT 256)) (SOME 0);
-     FunctionDecl External View F F "f" [("x", BaseT BoolT)] [] NoneT []] /\
   ~supported_declaration_names
     [HashMapDecl Private F "m" (BaseT BoolT) (Type (BaseT (UintT 256))) (SOME 0);
      StructDecl "S" [("m", BaseT (UintT 256))]]

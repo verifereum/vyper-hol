@@ -100,10 +100,11 @@ Termination
   WF_REL_TAC `measure (λ(cenv,ops,buf,off). LENGTH ops)`
 End
 
-(* Extract target name as string for metadata lookup *)
+(* Key of the target's root variable in the name-keyed compile_env tables:
+   the plain name for a local/argument, module_var_key for a module variable. *)
 Definition target_to_string_def:
   target_to_string (NameTarget id) = id ∧
-  target_to_string (TopLevelNameTarget nsid) = nsid_to_string nsid ∧
+  target_to_string (TopLevelNameTarget nsid) = module_var_key nsid ∧
   target_to_string (SubscriptTarget bt _) = target_to_string bt ∧
   target_to_string (AttributeTarget bt _) = target_to_string bt
 End
@@ -380,7 +381,7 @@ Definition compile_get_target_ptr_def:
      | _ => return (Lit 0w, NONE, NONE)) ∧
   (* TopLevelName: storage, transient, or immutable variable *)
   compile_get_target_ptr cenv (TopLevelNameTarget nsid) =
-    (let name = nsid_to_string nsid in
+    (let name = module_var_key nsid in
      case FLOOKUP cenv.ce_vars name of
        SOME (StorageLoc slot) =>
          return (Lit slot, SOME LocStorage, cenv.ce_var_type name)
