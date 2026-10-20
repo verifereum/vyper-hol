@@ -79,7 +79,8 @@ def prepare(repo: Path, output: Path, *, check: bool) -> None:
         "outputs": {
             path.name: hashlib.sha256(path.read_bytes()).hexdigest()
             for path in sorted(output.iterdir())
-            if path.suffix in (".hex", ".json") and path.name != "provenance.json"
+            if path.suffix in (".hex", ".json")
+            and path.stem in set(names(corpus / "parity-fixtures.txt"))
         },
     }
     (output / "provenance.json").write_text(json.dumps(provenance, indent=2) + "\n")
@@ -88,6 +89,10 @@ def prepare(repo: Path, output: Path, *, check: bool) -> None:
         retained = set(names(corpus / "parity-fixtures.txt"))
         provenance["outputs"] = {
             name: digest for name, digest in provenance["outputs"].items()
+            if Path(name).stem in retained
+        }
+        expected["outputs"] = {
+            name: digest for name, digest in expected["outputs"].items()
             if Path(name).stem in retained
         }
         if provenance != expected:
