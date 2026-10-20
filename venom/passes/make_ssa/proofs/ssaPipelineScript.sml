@@ -270,37 +270,14 @@ Proof
   metis_tac[EVERY_MEM]
 QED
 
-Triviality alist_update_or_prepend_preserves_fst:
-  !k f d acc.
-    P k /\ EVERY (\p. P (FST p)) acc ==>
-    EVERY (\p. P (FST p)) (alist_update_or_prepend k f d acc)
-Proof
-  Induct_on `acc` >> simp[alist_update_or_prepend_def] >>
-  rpt gen_tac >> strip_tac >>
-  PairCases_on `h` >> gvs[alist_update_or_prepend_def] >>
-  Cases_on `h0 = k` >> gvs[]
-QED
-
-Triviality foldr_aup_preserves_fst:
-  !vars f d acc.
-    EVERY P vars /\ EVERY (\p. P (FST p)) acc ==>
-    EVERY (\p. P (FST p))
-      (FOLDR (\var acc. alist_update_or_prepend var f d acc) acc vars)
-Proof
-  Induct >> simp[] >> rpt strip_tac >>
-  irule alist_update_or_prepend_preserves_fst >> simp[] >>
-  first_x_assum irule >> simp[]
-QED
-
 Theorem compute_defs_colon_free:
   !bbs.
     EVERY (\bb. EVERY (\i. EVERY colon_free i.inst_outputs) bb.bb_instructions)
       bbs ==>
     EVERY (\p. colon_free (FST p)) (compute_defs bbs)
 Proof
-  Induct >> simp[compute_defs_def] >> rpt strip_tac >> simp[LET_THM] >>
-  irule foldr_aup_preserves_fst >> simp[] >>
-  irule block_assignments_colon_free >> simp[]
+  rpt strip_tac >> irule compute_defs_every_key >> rpt strip_tac >>
+  irule block_assignments_colon_free >> fs[EVERY_MEM] >> metis_tac[]
 QED
 
 (* ==========================================================================
