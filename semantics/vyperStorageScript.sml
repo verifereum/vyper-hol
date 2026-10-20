@@ -388,7 +388,8 @@ Termination
   rw[type_value_size_def] >>
   ‘type_value1_size ftypes ≤
    list_size (pair_size (list_size char_size) type_value_size) ftypes’
-   by rw[type_value1_size_le] >> simp[MIN_DEF]
+    by simp[type_value1_size_le] >>
+  simp[MIN_DEF] >> decide_tac
 End
 
 val decode_value_pre_def =
@@ -409,6 +410,11 @@ val decode_value_pre_def =
      \\ rpt strip_tac
      \\ Cases_on `cv_v`
      >> gvs[cv_ispair_def, c2b_def]
+     \\ TRY (qmatch_goalsub_rename_tac `cv_size (cv_snd pair)` \\
+             irule LESS_EQ_LESS_TRANS \\
+             qexists_tac `cv_size pair` \\
+             simp[cv_size_cv_snd_le] \\
+             decide_tac \\ NO_TAC)
      \\ rename1 `cv_size (cv_fst rest1)`
      \\ Cases_on `rest1`
      >> gvs[cv_ispair_def, c2b_def, cv_lt_def, cv_fst_def, cv_snd_def, cv_size_def]

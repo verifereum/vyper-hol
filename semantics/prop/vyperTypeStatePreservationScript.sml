@@ -756,7 +756,7 @@ QED
 
 Theorem set_immutable_preserves_env_consistent:
   env_consistent env cx st /\
-  FLOOKUP env.bare_globals (src,string_to_num n) = SOME ty /\
+  FLOOKUP env.bare_globals (src,n) = SOME ty /\
   evaluate_type (get_tenv cx) ty = SOME tv /\
   set_immutable cx src n tv v st = (res, st') ==>
   env_consistent env cx st'
@@ -920,7 +920,7 @@ Proof
     `entry'.type = entry.type` by gvs[] >>
     qexists_tac `Type var_ty` >> simp[])
   >- (
-    rename1 `FLOOKUP env.bare_globals (src_id_opt,string_to_num s) = SOME imm_ty` >>
+    rename1 `FLOOKUP env.bare_globals (src_id_opt,s) = SOME imm_ty` >>
     `?pair. FLOOKUP (get_source_immutables src_id_opt
         (case ALOOKUP st'.immutables cx.txn.target of NONE => [] | SOME m => m))
         s = SOME pair` by metis_tac[IS_SOME_EXISTS] >>
@@ -1410,49 +1410,41 @@ Proof
   Cases_on `get_module_code cx src` >> gvs[return_def, raise_def]
 QED
 
-Theorem find_var_decl_by_name_num_agree:
-  !ts id. find_var_decl_by_name id ts =
-          find_var_decl_by_num (string_to_num id) ts
-Proof
-  Induct_on `ts` >- rw[find_var_decl_by_name_def, find_var_decl_by_num_def] >>
-  Cases_on `h` >>
-  rw[find_var_decl_by_name_def, find_var_decl_by_num_def] >>
-  TRY (Cases_on `v0` >> gvs[find_var_decl_by_name_def, find_var_decl_by_num_def]) >>
-  metis_tac[string_to_num_inj]
-QED
-
 Theorem top_level_Type_storage_decl:
   runtime_consistent env cx st /\
-  FLOOKUP env.toplevel_vtypes (src,string_to_num n) = SOME (Type base_ty) /\
+  FLOOKUP env.toplevel_vtypes (src,n) = SOME (Type base_ty) /\
   get_module_code cx src = SOME ts /\
   find_var_decl_by_name n ts = SOME (StorageVarDecl is_transient typ,id_str) ==>
   typ = base_ty
 Proof
   rw[runtime_consistent_def, env_consistent_def, env_immutables_consistent_def] >>
-  metis_tac[find_var_decl_by_name_num_agree]
+  metis_tac[]
 QED
 
 Theorem top_level_Type_not_hashmap_decl:
   runtime_consistent env cx st /\
-  FLOOKUP env.toplevel_vtypes (src,string_to_num n) = SOME (Type base_ty) /\
+  FLOOKUP env.toplevel_vtypes (src,n) = SOME (Type base_ty) /\
   get_module_code cx src = SOME ts /\
   find_var_decl_by_name n ts = SOME (HashMapVarDecl is_transient kt vt,id_str) ==>
   F
 Proof
   rw[runtime_consistent_def, env_consistent_def, env_immutables_consistent_def] >>
-  metis_tac[find_var_decl_by_name_num_agree]
+  metis_tac[]
 QED
 
 Theorem top_level_HashMap_decl:
   runtime_consistent env cx st /\
-  FLOOKUP env.toplevel_vtypes (src,string_to_num n) = SOME (HashMapT kt vt) /\
+  FLOOKUP env.toplevel_vtypes (src,n) = SOME (HashMapT kt vt) /\
   get_module_code cx src = SOME ts ==>
   ?is_transient id_str.
     find_var_decl_by_name n ts = SOME (HashMapVarDecl is_transient kt vt,id_str)
 Proof
   rw[runtime_consistent_def, env_consistent_def, env_context_consistent_def] >>
   qpat_x_assum `(!src id kt vt. FLOOKUP _ _ = SOME (HashMapT kt vt) ==> _)` drule >>
-  rw[] >> fs[find_var_decl_by_name_num_agree]
+  rw[] >>
+  rename1 `find_var_decl_by_name n ts =
+    SOME (HashMapVarDecl transient kt vt,decl_name)` >>
+  qexistsl_tac [`transient`, `decl_name`] >> simp[]
 QED
 
 Theorem top_level_vtype_well_formed:
@@ -1466,7 +1458,7 @@ QED
 
 Theorem target_runtime_typed_top_level_Type:
   target_runtime_typed env cx st tgt ty (BaseTargetV (TopLevelVar src id) sbs) /\
-  FLOOKUP env.toplevel_vtypes (src,string_to_num id) = SOME (Type base_ty) ==>
+  FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type base_ty) ==>
   target_path_type env (Type base_ty) sbs (Type ty)
 Proof
   Cases_on `tgt` >> rw[target_runtime_typed_def, location_runtime_typed_def] >> gvs[]
@@ -1693,7 +1685,7 @@ QED
 
 Theorem top_level_vtype_Type_storage_decl:
   runtime_consistent env cx st /\
-  FLOOKUP env.toplevel_vtypes (src,string_to_num n) = SOME (Type root_ty) /\
+  FLOOKUP env.toplevel_vtypes (src,n) = SOME (Type root_ty) /\
   get_module_code cx src = SOME code /\
   find_var_decl_by_name n code = SOME (StorageVarDecl is_transient typ,id_str) ==>
   typ = root_ty
@@ -1704,7 +1696,7 @@ Proof
   strip_tac >>
   qpat_x_assum `!is_transient typ id_str. _`
     (qspecl_then [`is_transient`, `typ`, `id_str`] mp_tac) >>
-  simp[GSYM find_var_decl_by_name_num_agree]
+  simp[]
 QED
 
 Theorem top_level_storage_value_leaf_evaluate_type:
@@ -1719,7 +1711,7 @@ Proof
   `?loc_vt. location_runtime_typed env cx st (TopLevelVar src id) loc_vt /\
             target_path_type env loc_vt sbs (Type ty)` by
     (Cases_on `tgt` >> gvs[target_runtime_typed_def] >> metis_tac[]) >>
-  `FLOOKUP env.toplevel_vtypes (src,string_to_num id) = SOME loc_vt` by
+  `FLOOKUP env.toplevel_vtypes (src,id) = SOME loc_vt` by
     gvs[location_runtime_typed_def] >>
   Cases_on `loc_vt` >> gvs[]
   >- (
@@ -3129,7 +3121,7 @@ QED
 
 Theorem assign_target_TopLevelVar_ArrayRef_branch_no_type_error:
   runtime_consistent env cx st ==>
-  FLOOKUP env.toplevel_vtypes (src_id_opt,string_to_num id) = SOME (Type t) ==>
+  FLOOKUP env.toplevel_vtypes (src_id_opt,id) = SOME (Type t) ==>
   target_path_type env (Type t) sbs (Type ty) ==>
   assignable_type (get_tenv cx) ty ==>
   assign_operation_runtime_typed env ty op ==>
@@ -3301,7 +3293,7 @@ QED
 
 Theorem assign_target_TopLevelVar_Type_StorageVarDecl_no_type_error:
   runtime_consistent env cx st ==>
-  FLOOKUP env.toplevel_vtypes (src_id_opt,string_to_num id) = SOME (Type t) ==>
+  FLOOKUP env.toplevel_vtypes (src_id_opt,id) = SOME (Type t) ==>
   target_path_type env (Type t) sbs (Type ty) ==>
   assignable_type (get_tenv cx) ty ==>
   assign_operation_runtime_typed env ty op ==>
@@ -3346,7 +3338,7 @@ QED
 
 Theorem top_level_HashMapT_not_storage_decl:
   runtime_consistent env cx st ==>
-  FLOOKUP env.toplevel_vtypes (src,string_to_num n) = SOME (HashMapT kt vt) ==>
+  FLOOKUP env.toplevel_vtypes (src,n) = SOME (HashMapT kt vt) ==>
   get_module_code cx src = SOME ts ==>
   find_var_decl_by_name n ts = SOME (StorageVarDecl is_transient typ,id_str) ==>
   F
@@ -3360,7 +3352,7 @@ QED
 
 Theorem top_level_HashMapRef_assign_no_type_error:
   runtime_consistent env cx st ==>
-  FLOOKUP env.toplevel_vtypes (src_id_opt,string_to_num id) = SOME (HashMapT kt vt) ==>
+  FLOOKUP env.toplevel_vtypes (src_id_opt,id) = SOME (HashMapT kt vt) ==>
   target_path_type env (HashMapT kt vt) sbs (Type ty) ==>
   assignable_type (get_tenv cx) ty ==>
   assign_operation_runtime_typed env ty op ==>

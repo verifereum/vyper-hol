@@ -417,15 +417,15 @@ Proof
   strip_tac >> gvs[] >>
   `?old_pair. FLOOKUP (get_source_immutables src
       (case ALOOKUP st.immutables cx.txn.target of SOME m => m | NONE => []))
-      id_str = SOME old_pair` by (
+      id = SOME old_pair` by (
     qpat_x_assum `!src n. IS_SOME (FLOOKUP (get_source_immutables src _) n) ==> _`
-      (qspecl_then [`src`, `id_str`] mp_tac) >>
-    simp[IS_SOME_EXISTS] >> metis_tac[]) >>
+      (qspecl_then [`src`, `id`] mp_tac) >>
+    simp[IS_SOME_EXISTS]) >>
   PairCases_on `old_pair` >>
   drule_all preserves_tv_immutables_type_preserved >>
   strip_tac >> gvs[] >>
-  qpat_x_assum `!id_str' tv v. _`
-    (qspecl_then [`id_str`, `old_pair0`, `old_pair1`] mp_tac) >>
+  qpat_x_assum `!tv v. _`
+    (qspecl_then [`old_pair0`, `old_pair1`] mp_tac) >>
   simp[]
 QED
 

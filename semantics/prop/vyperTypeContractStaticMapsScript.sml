@@ -994,10 +994,10 @@ Theorem add_toplevel_static_maps_toplevel_vtypes_sound:
   FLOOKUP art.cta_toplevel_vtypes k = SOME vt \/
   (?vis mut id ty init.
      tl = VariableDecl vis mut id ty init /\
-     k = (src,string_to_num id) /\ vt = Type ty) \/
+     k = (src,id) /\ vt = Type ty) \/
   (?vis is_transient id kt vty init.
      tl = HashMapDecl vis is_transient id kt vty init /\
-     k = (src,string_to_num id) /\ vt = HashMapT kt vty)
+     k = (src,id) /\ vt = HashMapT kt vty)
 Proof
   Cases_on `tl` >>
   rw[add_toplevel_static_maps_def, FLOOKUP_UPDATE] >>
@@ -1011,10 +1011,10 @@ Theorem add_toplevel_static_maps_bare_globals_sound:
   FLOOKUP art.cta_bare_globals k = SOME ty \/
   (?vis id typ init.
      tl = VariableDecl vis Immutable id typ init /\
-     k = (src,string_to_num id) /\ ty = typ) \/
+     k = (src,id) /\ ty = typ) \/
   (?vis e id typ init.
      tl = VariableDecl vis (Constant e) id typ init /\
-     k = (src,string_to_num id) /\ ty = typ)
+     k = (src,id) /\ ty = typ)
 Proof
   Cases_on `tl` >>
   rw[add_toplevel_static_maps_def, FLOOKUP_UPDATE] >>
@@ -1028,7 +1028,7 @@ Theorem add_toplevel_static_maps_bare_global_assignable_sound:
   FLOOKUP art.cta_bare_global_assignable k = SOME ty \/
   ?vis id typ init.
     tl = VariableDecl vis Immutable id typ init /\
-    k = (src,string_to_num id) /\ ty = typ
+    k = (src,id) /\ ty = typ
 Proof
   Cases_on `tl` >>
   rw[add_toplevel_static_maps_def, FLOOKUP_UPDATE] >>
@@ -1055,10 +1055,10 @@ Theorem add_module_static_maps_toplevel_vtypes_sound:
   FLOOKUP art.cta_toplevel_vtypes k = SOME vt \/
   (?tl vis mut id ty init.
      MEM tl tls /\ tl = VariableDecl vis mut id ty init /\
-     k = (src,string_to_num id) /\ vt = Type ty) \/
+     k = (src,id) /\ vt = Type ty) \/
   (?tl vis is_transient id kt vty init.
      MEM tl tls /\ tl = HashMapDecl vis is_transient id kt vty init /\
-     k = (src,string_to_num id) /\ vt = HashMapT kt vty)
+     k = (src,id) /\ vt = HashMapT kt vty)
 Proof
   qid_spec_tac `art` >> Induct_on `tls` >- rw[add_module_static_maps_def] >>
   rw[add_module_static_maps_def] >>
@@ -1073,10 +1073,10 @@ Theorem add_module_static_maps_bare_globals_sound:
   FLOOKUP art.cta_bare_globals k = SOME ty \/
   (?tl vis id typ init.
      MEM tl tls /\ tl = VariableDecl vis Immutable id typ init /\
-     k = (src,string_to_num id) /\ ty = typ) \/
+     k = (src,id) /\ ty = typ) \/
   (?tl vis e id typ init.
      MEM tl tls /\ tl = VariableDecl vis (Constant e) id typ init /\
-     k = (src,string_to_num id) /\ ty = typ)
+     k = (src,id) /\ ty = typ)
 Proof
   qid_spec_tac `art` >> Induct_on `tls` >- rw[add_module_static_maps_def] >>
   rw[add_module_static_maps_def] >>
@@ -1091,7 +1091,7 @@ Theorem add_module_static_maps_bare_global_assignable_sound:
   FLOOKUP art.cta_bare_global_assignable k = SOME ty \/
   ?tl vis id typ init.
     MEM tl tls /\ tl = VariableDecl vis Immutable id typ init /\
-    k = (src,string_to_num id) /\ ty = typ
+    k = (src,id) /\ ty = typ
 Proof
   qid_spec_tac `art` >> Induct_on `tls` >- rw[add_module_static_maps_def] >>
   rw[add_module_static_maps_def] >>
@@ -1120,10 +1120,10 @@ Theorem add_contract_static_maps_toplevel_vtypes_sound:
   FLOOKUP art.cta_toplevel_vtypes k = SOME vt \/
   (?src tls tl vis mut id ty init.
      MEM (src,tls) mods /\ MEM tl tls /\ tl = VariableDecl vis mut id ty init /\
-     k = (src,string_to_num id) /\ vt = Type ty) \/
+     k = (src,id) /\ vt = Type ty) \/
   (?src tls tl vis is_transient id kt vty init.
      MEM (src,tls) mods /\ MEM tl tls /\ tl = HashMapDecl vis is_transient id kt vty init /\
-     k = (src,string_to_num id) /\ vt = HashMapT kt vty)
+     k = (src,id) /\ vt = HashMapT kt vty)
 Proof
   qid_spec_tac `art` >> Induct_on `mods` >- rw[] >>
   gen_tac >> PairCases_on `h` >> rw[] >>
@@ -1138,10 +1138,10 @@ Theorem add_contract_static_maps_bare_globals_sound:
   FLOOKUP art.cta_bare_globals k = SOME ty \/
   (?src tls tl vis id typ init.
      MEM (src,tls) mods /\ MEM tl tls /\ tl = VariableDecl vis Immutable id typ init /\
-     k = (src,string_to_num id) /\ ty = typ) \/
+     k = (src,id) /\ ty = typ) \/
   (?src tls tl vis e id typ init.
      MEM (src,tls) mods /\ MEM tl tls /\ tl = VariableDecl vis (Constant e) id typ init /\
-     k = (src,string_to_num id) /\ ty = typ)
+     k = (src,id) /\ ty = typ)
 Proof
   qid_spec_tac `art` >> Induct_on `mods` >- rw[] >>
   gen_tac >> PairCases_on `h` >> rw[] >>
@@ -1156,7 +1156,7 @@ Theorem add_contract_static_maps_bare_global_assignable_sound:
   FLOOKUP art.cta_bare_global_assignable k = SOME ty \/
   ?src tls tl vis id typ init.
     MEM (src,tls) mods /\ MEM tl tls /\ tl = VariableDecl vis Immutable id typ init /\
-    k = (src,string_to_num id) /\ ty = typ
+    k = (src,id) /\ ty = typ
 Proof
   qid_spec_tac `art` >> Induct_on `mods` >- rw[] >>
   gen_tac >> PairCases_on `h` >> rw[] >>
@@ -1186,10 +1186,10 @@ Theorem build_contract_type_artifact_toplevel_vtypes_sound:
   FLOOKUP (build_contract_type_artifact F mods).cta_toplevel_vtypes (src,id) = SOME vt ==>
   (?ts vis mut id_str ty init.
      ALOOKUP mods src = SOME ts /\ MEM (VariableDecl vis mut id_str ty init) ts /\
-     id = string_to_num id_str /\ vt = Type ty) \/
+     id = id_str /\ vt = Type ty) \/
   (?ts vis is_transient id_str kt vty init.
      ALOOKUP mods src = SOME ts /\ MEM (HashMapDecl vis is_transient id_str kt vty init) ts /\
-     id = string_to_num id_str /\ vt = HashMapT kt vty)
+     id = id_str /\ vt = HashMapT kt vty)
 Proof
   rw[build_contract_type_artifact_def] >>
   drule add_contract_static_maps_toplevel_vtypes_sound >> rw[] >> gvs[empty_contract_type_artifact_def] >>
@@ -1201,10 +1201,10 @@ Theorem build_contract_type_artifact_bare_globals_sound:
   FLOOKUP (build_contract_type_artifact F mods).cta_bare_globals (src,id) = SOME ty ==>
   (?ts vis id_str init.
      ALOOKUP mods src = SOME ts /\ MEM (VariableDecl vis Immutable id_str ty init) ts /\
-     id = string_to_num id_str) \/
+     id = id_str) \/
   (?ts vis e id_str init.
      ALOOKUP mods src = SOME ts /\ MEM (VariableDecl vis (Constant e) id_str ty init) ts /\
-     id = string_to_num id_str)
+     id = id_str)
 Proof
   rw[build_contract_type_artifact_def] >>
   drule add_contract_static_maps_bare_globals_sound >> rw[] >> gvs[empty_contract_type_artifact_def] >>
@@ -1216,11 +1216,11 @@ Theorem build_contract_type_artifact_bare_global_assignable_sound:
   FLOOKUP (build_contract_type_artifact F mods).cta_bare_global_assignable (src,id) = SOME ty ==>
   ?ts vis id_str init.
     ALOOKUP mods src = SOME ts /\ MEM (VariableDecl vis Immutable id_str ty init) ts /\
-    id = string_to_num id_str
+    id = id_str
 Proof
   rw[build_contract_type_artifact_def] >>
   drule add_contract_static_maps_bare_global_assignable_sound >> rw[] >> gvs[empty_contract_type_artifact_def] >>
-  qexistsl [`tls`,`vis`,`id'`,`init`] >> simp[] >>
+  qexistsl [`tls`,`vis`,`init`] >> simp[] >>
   metis_tac[ALOOKUP_ALL_DISTINCT_MEM, contract_namespaces_ok_def]
 QED
 
@@ -1256,123 +1256,6 @@ Proof
   gen_tac >> PairCases_on `h` >> rw[] >> gvs[ALL_DISTINCT_APPEND]
 QED
 
-Theorem square_lt[local]:
-  a < b ==> a ** 2 < b ** 2
-Proof
-  rw[EXP_2]
-QED
-
-Theorem square_suc_expand[local]:
-  (SUC n) ** 2 = SUC (n + (n + n ** 2))
-Proof
-  rewrite_tac [EXP_2] >> simp[MULT_CLAUSES, ADD_CLAUSES]
-QED
-
-Theorem square_suc_bound[local]:
-  b <= n ==> n ** 2 + b < (SUC n) ** 2
-Proof
-  rw[square_suc_expand] >> decide_tac
-QED
-
-Theorem square_le[local]:
-  a <= b ==> a ** 2 <= b ** 2
-Proof
-  metis_tac[LESS_OR_EQ, square_lt]
-QED
-
-Theorem pair_num_mixed_lt_left[local]:
-  b <= n /\ n < a ==> n + n ** 2 + b < n + a ** 2
-Proof
-  rw[] >>
-  `n ** 2 + b < (SUC n) ** 2` by metis_tac[square_suc_bound] >>
-  `(SUC n) ** 2 <= a ** 2` by metis_tac[square_le, LESS_EQ] >>
-  decide_tac
-QED
-
-Theorem pair_num_same_left_11[local]:
-  pair_num n a = pair_num n b ==> a = b
-Proof
-  rw[pair_num_def]
-  >- (`b <= n` by decide_tac >>
-      drule_all pair_num_mixed_lt_left >> decide_tac)
-  >- (`a < b` by decide_tac >>
-      `n + n ** 2 + a < n + b ** 2` by
-        (irule pair_num_mixed_lt_left >> simp[]) >>
-      decide_tac)
-QED
-
-Theorem square_suc_bound_sum[local]:
-  b <= n ==> n + n ** 2 + b < (SUC n) ** 2
-Proof
-  rw[square_suc_expand] >> decide_tac
-QED
-
-Theorem pair_num_square_bounds[local]:
-  MAX x y ** 2 <= pair_num x y /\
-  pair_num x y < (SUC (MAX x y)) ** 2
-Proof
-  Cases_on `x < y` >> simp[pair_num_def, MAX_DEF]
-  >- (`y ** 2 + x < (SUC y) ** 2` by
-        (irule square_suc_bound >> simp[]) >>
-      decide_tac) >>
-  `x + x ** 2 + y < (SUC x) ** 2` by
-    (irule square_suc_bound_sum >> simp[]) >>
-  decide_tac
-QED
-
-Theorem square_interval_unique[local]:
-  m ** 2 <= p /\ p < (SUC m) ** 2 /\
-  n ** 2 <= p /\ p < (SUC n) ** 2 ==> m = n
-Proof
-  rw[] >>
-  Cases_on `m < n`
-  >- (`SUC m <= n` by decide_tac >>
-      `(SUC m) ** 2 <= n ** 2` by metis_tac[square_le] >>
-      decide_tac) >>
-  Cases_on `n < m`
-  >- (`SUC n <= m` by decide_tac >>
-      `(SUC n) ** 2 <= m ** 2` by metis_tac[square_le] >>
-      decide_tac) >>
-  decide_tac
-QED
-
-Theorem pair_num_11[local]:
-  pair_num a b = pair_num c d <=> a = c /\ b = d
-Proof
-  eq_tac >- (
-    strip_tac >>
-    `MAX a b = MAX c d` by
-      (irule square_interval_unique >>
-       qexists `pair_num a b` >>
-       metis_tac[pair_num_square_bounds]) >>
-    Cases_on `a < b` >> Cases_on `c < d` >>
-    gvs[pair_num_def, MAX_DEF] >> decide_tac) >>
-  rw[]
-QED
-
-Theorem type_key_same_src_11[local]:
-  type_key (src,a) = type_key (src,b) <=> a = b
-Proof
-  Cases_on `src` >> simp[type_key_def] >>
-  metis_tac[pair_num_same_left_11, string_to_num_inj]
-QED
-
-Theorem type_key_even_odd[local]:
-  2 * m <> 2 * n + 1
-Proof
-  strip_tac >>
-  `EVEN (2 * m)` by simp[EVEN_DOUBLE] >>
-  `ODD (2 * n + 1)` by simp[GSYM ADD1, ODD_DOUBLE] >>
-  metis_tac[EVEN_ODD]
-QED
-
-Theorem type_key_11[local]:
-  type_key (src1,a) = type_key (src2,b) <=> src1 = src2 /\ a = b
-Proof
-  Cases_on `src1` >> Cases_on `src2` >> simp[type_key_def, type_key_even_odd]
-  >- metis_tac[string_to_num_inj]
-  >- (eq_tac >> rw[] >> gvs[] >> metis_tac[pair_num_11, string_to_num_inj])
-QED
 
 Theorem type_def_key_MEM_FlagDecl:
   MEM (FlagDecl fid members) ts ==>
@@ -1409,33 +1292,32 @@ QED
 Theorem flag_decl_type_env_for_module:
   MEM (FlagDecl fid members) ts /\
   ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel src) ts)) ==>
-  FLOOKUP (type_env_for_module src ts) (type_key (src,fid)) =
+  FLOOKUP (type_env_for_module src ts) (src,fid) =
     SOME (FlagArgs (LENGTH members))
 Proof
   Induct_on `ts` >- rw[type_env_for_module_def] >>
   gen_tac >> Cases_on `h` >>
   rw[type_env_for_module_def, type_def_keys_toplevel_def, FLOOKUP_UPDATE] >>
-  gvs[type_env_for_module_def, type_def_keys_toplevel_def, FLOOKUP_UPDATE,
-      type_key_same_src_11] >>
+  gvs[type_env_for_module_def, type_def_keys_toplevel_def, FLOOKUP_UPDATE] >>
   metis_tac[type_def_key_MEM_FlagDecl]
 QED
 
 Theorem type_env_for_module_lookup_type_def_key[local]:
-  FLOOKUP (type_env_for_module src ts) (type_key (src',id)) = SOME v ==>
+  FLOOKUP (type_env_for_module src ts) (src',id) = SOME v ==>
   MEM (src',id) (FLAT (MAP (type_def_keys_toplevel src) ts))
 Proof
   qid_spec_tac `src'` >> qid_spec_tac `id` >> qid_spec_tac `v` >>
   Induct_on `ts` >- rw[type_env_for_module_def] >>
   gen_tac >> Cases_on `h` >>
   rw[type_env_for_module_def, type_def_keys_toplevel_def, FLOOKUP_UPDATE] >>
-  gvs[type_key_11]
+  gvs[]
 QED
 
 Theorem flag_decl_type_env_all_modules:
   contract_namespaces_ok F mods /\
   ALOOKUP mods src = SOME ts /\
   MEM (FlagDecl fid members) ts ==>
-  FLOOKUP (type_env_all_modules mods) (type_key (src,fid)) =
+  FLOOKUP (type_env_all_modules mods) (src,fid) =
     SOME (FlagArgs (LENGTH members))
 Proof
   rw[contract_namespaces_ok_def] >>
@@ -1452,11 +1334,11 @@ Proof
   gen_tac >> gen_tac >> gen_tac >> gen_tac >> PairCases_on `h` >>
   rw[type_env_all_modules_def, contract_keys_def, ALL_DISTINCT_APPEND, FLOOKUP_FUNION] >>
   gvs[]
-  >- (`FLOOKUP (type_env_for_module h0 h1) (type_key (h0,fid)) =
+  >- (`FLOOKUP (type_env_for_module h0 h1) (h0,fid) =
          SOME (FlagArgs (LENGTH members))` by
         (irule flag_decl_type_env_for_module >> simp[]) >>
       simp[]) >>
-  Cases_on `FLOOKUP (type_env_for_module h0 h1) (type_key (src,fid))` >> simp[]
+  Cases_on `FLOOKUP (type_env_for_module h0 h1) (src,fid)` >> simp[]
   >- (first_x_assum irule >> simp[contract_keys_def]) >>
   `MEM (src,fid) (FLAT (MAP (type_def_keys_toplevel h0) h1))` by
     metis_tac[type_env_for_module_lookup_type_def_key] >>
@@ -1479,7 +1361,7 @@ QED
 
 Theorem is_bare_global_decl_MEM_Immutable[local]:
   MEM (VariableDecl vis Immutable id ty init) ts ==>
-  is_bare_global_decl (string_to_num id) ts
+  is_bare_global_decl id ts
 Proof
   Induct_on `ts` >- rw[is_bare_global_decl_def] >>
   gen_tac >> Cases_on `h` >> gvs[is_bare_global_decl_def] >>
@@ -1489,7 +1371,7 @@ QED
 
 Theorem is_bare_global_decl_MEM_Constant[local]:
   MEM (VariableDecl vis (Constant e) id ty init) ts ==>
-  is_bare_global_decl (string_to_num id) ts
+  is_bare_global_decl id ts
 Proof
   Induct_on `ts` >- rw[is_bare_global_decl_def] >>
   gen_tac >> Cases_on `h` >> gvs[is_bare_global_decl_def] >>
@@ -1507,94 +1389,48 @@ Proof
   metis_tac[]
 QED
 
-Theorem find_var_decl_by_num_NONE_not_toplevel_key[local]:
-  ~MEM ((src : num option),n) (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts)) ==>
-  find_var_decl_by_num n ts = NONE
-Proof
-  Induct_on `ts` >- rw[find_var_decl_by_num_def] >>
-  gen_tac >> Cases_on `h` >>
-  rw[find_var_decl_by_num_def, toplevel_vtype_keys_toplevel_def] >>
-  TRY (Cases_on `v0` >> gvs[find_var_decl_by_num_def])
-QED
-
-Theorem find_var_decl_by_num_NONE_not_toplevel_string_key[local]:
-  ~MEM ((src : num option),string_to_num id)
-      (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts)) ==>
-  find_var_decl_by_num (string_to_num id) ts = NONE
-Proof
-  metis_tac[find_var_decl_by_num_NONE_not_toplevel_key]
-QED
 
 Theorem module_toplevel_vtype_key_MEM:
   (MEM (VariableDecl vis mut id ty init) ts \/
    MEM (HashMapDecl vis is_transient id kt vty init2) ts) ==>
-  MEM ((src : num option),string_to_num id)
+  MEM ((src : num option),id)
     (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))
 Proof
   rw[MEM_FLAT, MEM_MAP] >-
-    (qexists `[(src,string_to_num id)]` >> simp[] >>
+    (qexists `[(src,id)]` >> simp[] >>
      qexists `VariableDecl vis mut id ty init` >>
      simp[toplevel_vtype_keys_toplevel_def]) >>
-  qexists `[(src,string_to_num id)]` >> simp[] >>
+  qexists `[(src,id)]` >> simp[] >>
   qexists `HashMapDecl vis is_transient id kt vty init2` >>
   simp[toplevel_vtype_keys_toplevel_def]
 QED
 
 Theorem module_toplevel_vtype_key_MEM_Variable:
   MEM (VariableDecl vis mut id ty init) ts ==>
-  MEM ((src : num option),string_to_num id)
+  MEM ((src : num option),id)
     (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))
 Proof
   rw[MEM_FLAT, MEM_MAP] >>
-  qexists `[(src,string_to_num id)]` >> simp[] >>
+  qexists `[(src,id)]` >> simp[] >>
   qexists `VariableDecl vis mut id ty init` >>
   simp[toplevel_vtype_keys_toplevel_def]
 QED
 
-
-Theorem find_var_decl_by_num_NONE_after_variable_head_key[local]:
-  ALL_DISTINCT
-    (FLAT (MAP (toplevel_vtype_keys_toplevel (src : num option))
-       (VariableDecl vis mut id ty init :: ts))) ==>
-  find_var_decl_by_num (string_to_num id) ts = NONE
-Proof
-  rw[] >>
-  `~MEM ((src : num option),string_to_num id)
-      (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))` by
-    gvs[toplevel_vtype_keys_toplevel_def] >>
-  metis_tac[find_var_decl_by_num_NONE_not_toplevel_string_key]
-QED
 
 
 Theorem distinct_toplevel_keys_no_tail_Immutable_same_id[local]:
   ALL_DISTINCT
     (FLAT (MAP (toplevel_vtype_keys_toplevel (src : num option)) (h::ts))) /\
   MEM (VariableDecl vis Immutable id ty init) ts /\
-  MEM ((src : num option),string_to_num id)
+  MEM ((src : num option),id)
       (toplevel_vtype_keys_toplevel src h) ==>
   F
 Proof
   rpt strip_tac >>
-  `MEM ((src : num option),string_to_num id)
+  `MEM ((src : num option),id)
       (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))` by
     metis_tac[module_toplevel_vtype_key_MEM_Variable] >>
   gvs[ALL_DISTINCT_APPEND]
-QED
-
-
-Theorem find_var_decl_by_num_NONE_Immutable:
-  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (src : num option)) ts)) /\
-  MEM (VariableDecl vis Immutable id ty init) ts ==>
-  find_var_decl_by_num (string_to_num id) ts = NONE
-Proof
-  Induct_on `ts` >- rw[find_var_decl_by_num_def] >>
-  gen_tac >> Cases_on `h` >>
-  rw[find_var_decl_by_num_def, toplevel_vtype_keys_toplevel_def] >>
-  TRY (Cases_on `v0` >> gvs[find_var_decl_by_num_def, toplevel_vtype_keys_toplevel_def]) >>
-  metis_tac[find_var_decl_by_num_NONE_after_variable_head_key,
-            find_var_decl_by_num_NONE_not_toplevel_string_key,
-            distinct_toplevel_keys_no_tail_Immutable_same_id,
-            module_toplevel_vtype_key_MEM_Variable]
 QED
 
 
@@ -1602,35 +1438,19 @@ Theorem distinct_toplevel_keys_no_tail_Constant_same_id[local]:
   ALL_DISTINCT
     (FLAT (MAP (toplevel_vtype_keys_toplevel (src : num option)) (h::ts))) /\
   MEM (VariableDecl vis (Constant e) id ty init) ts /\
-  MEM ((src : num option),string_to_num id)
+  MEM ((src : num option),id)
       (toplevel_vtype_keys_toplevel src h) ==>
   F
 Proof
   rpt strip_tac >>
-  `MEM ((src : num option),string_to_num id)
+  `MEM ((src : num option),id)
       (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))` by
     metis_tac[module_toplevel_vtype_key_MEM_Variable] >>
   gvs[ALL_DISTINCT_APPEND]
 QED
 
-
-Theorem find_var_decl_by_num_NONE_Constant:
-  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (src : num option)) ts)) /\
-  MEM (VariableDecl vis (Constant e) id ty init) ts ==>
-  find_var_decl_by_num (string_to_num id) ts = NONE
-Proof
-  Induct_on `ts` >- rw[find_var_decl_by_num_def] >>
-  gen_tac >> Cases_on `h` >>
-  rw[find_var_decl_by_num_def, toplevel_vtype_keys_toplevel_def] >>
-  TRY (Cases_on `v0` >> gvs[find_var_decl_by_num_def, toplevel_vtype_keys_toplevel_def]) >>
-  metis_tac[find_var_decl_by_num_NONE_after_variable_head_key,
-            find_var_decl_by_num_NONE_not_toplevel_string_key,
-            distinct_toplevel_keys_no_tail_Constant_same_id,
-            module_toplevel_vtype_key_MEM_Variable]
-QED
-
 Theorem find_var_decl_by_name_NONE_not_toplevel_key[local]:
-  ~MEM ((src : num option),string_to_num id)
+  ~MEM ((src : num option),id)
       (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts)) ==>
   find_var_decl_by_name id ts = NONE
 Proof
@@ -1648,7 +1468,7 @@ Theorem find_var_decl_by_name_NONE_after_variable_head[local]:
   find_var_decl_by_name id ts = NONE
 Proof
   rw[] >>
-  `~MEM ((src : num option),string_to_num id)
+  `~MEM ((src : num option),id)
       (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))` by
     gvs[toplevel_vtype_keys_toplevel_def] >>
   metis_tac[find_var_decl_by_name_NONE_not_toplevel_key]
@@ -1685,27 +1505,16 @@ Proof
 QED
 
 
-Theorem find_var_decl_by_num_NONE_non_storage_var[local]:
-  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (src : num option)) ts)) /\
-  MEM (VariableDecl vis mut id ty init) ts /\
-  (mut = Immutable \/ (?e. mut = Constant e)) ==>
-  find_var_decl_by_num (string_to_num id) ts = NONE
-Proof
-  rw[] >-
-   metis_tac[find_var_decl_by_num_NONE_Immutable] >>
-  metis_tac[find_var_decl_by_num_NONE_Constant]
-QED
-
 Theorem add_toplevel_static_maps_toplevel_vtypes_complete_Variable[local]:
   FLOOKUP (add_toplevel_static_maps F src (VariableDecl vis mut id ty init) art).cta_toplevel_vtypes
-    (src,string_to_num id) = SOME (Type ty)
+    (src,id) = SOME (Type ty)
 Proof
   Cases_on `mut` >> rw[add_toplevel_static_maps_def, FLOOKUP_UPDATE]
 QED
 
 Theorem add_toplevel_static_maps_toplevel_vtypes_complete_HashMap[local]:
   FLOOKUP (add_toplevel_static_maps F src (HashMapDecl vis is_transient id kt vt init) art).cta_toplevel_vtypes
-    (src,string_to_num id) = SOME (HashMapT kt vt)
+    (src,id) = SOME (HashMapT kt vt)
 Proof
   rw[add_toplevel_static_maps_def, FLOOKUP_UPDATE]
 QED
@@ -1738,7 +1547,7 @@ QED
 Theorem add_module_static_maps_toplevel_vtypes_complete_Variable[local]:
   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (src : num option)) tls)) /\
   MEM (VariableDecl vis mut id ty init) tls ==>
-  FLOOKUP (add_module_static_maps F src tls art).cta_toplevel_vtypes (src,string_to_num id) = SOME (Type ty)
+  FLOOKUP (add_module_static_maps F src tls art).cta_toplevel_vtypes (src,id) = SOME (Type ty)
 Proof
   qid_spec_tac `art` >>
   Induct_on `tls` >- rw[add_module_static_maps_def] >>
@@ -1759,7 +1568,7 @@ QED
 Theorem add_module_static_maps_toplevel_vtypes_complete_HashMap[local]:
   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (src : num option)) tls)) /\
   MEM (HashMapDecl vis is_transient id kt vt init) tls ==>
-  FLOOKUP (add_module_static_maps F src tls art).cta_toplevel_vtypes (src,string_to_num id) = SOME (HashMapT kt vt)
+  FLOOKUP (add_module_static_maps F src tls art).cta_toplevel_vtypes (src,id) = SOME (HashMapT kt vt)
 Proof
   qid_spec_tac `art` >>
   Induct_on `tls` >- rw[add_module_static_maps_def] >>
@@ -1795,7 +1604,7 @@ Theorem add_contract_static_maps_toplevel_vtypes_complete_MEM_Variable[local]:
   contract_namespaces_ok F mods /\ MEM (src,tls) mods /\
   MEM (VariableDecl vis mut id ty init) tls ==>
   FLOOKUP (FOLDL (\art (src,tls). add_module_static_maps F src tls art) art mods).cta_toplevel_vtypes
-    (src,string_to_num id) = SOME (Type ty)
+    (src,id) = SOME (Type ty)
 Proof
   qid_spec_tac `art` >>
   Induct_on `mods` >- rw[] >>
@@ -1821,7 +1630,7 @@ Theorem add_contract_static_maps_toplevel_vtypes_complete_MEM_HashMap[local]:
   contract_namespaces_ok F mods /\ MEM (src,tls) mods /\
   MEM (HashMapDecl vis is_transient id kt vt init) tls ==>
   FLOOKUP (FOLDL (\art (src,tls). add_module_static_maps F src tls art) art mods).cta_toplevel_vtypes
-    (src,string_to_num id) = SOME (HashMapT kt vt)
+    (src,id) = SOME (HashMapT kt vt)
 Proof
   qid_spec_tac `art` >>
   Induct_on `mods` >- rw[] >>
@@ -1847,9 +1656,9 @@ Theorem build_contract_type_artifact_toplevel_vtypes_complete[local]:
   contract_namespaces_ok F mods /\
   ALOOKUP mods src = SOME ts /\
   ((?vis mut id ty init. MEM (VariableDecl vis mut id ty init) ts /\
-      k = (src,string_to_num id) /\ vt = Type ty) \/
+      k = (src,id) /\ vt = Type ty) \/
    (?vis is_transient id kt vty init. MEM (HashMapDecl vis is_transient id kt vty init) ts /\
-      k = (src,string_to_num id) /\ vt = HashMapT kt vty)) ==>
+      k = (src,id) /\ vt = HashMapT kt vty)) ==>
   FLOOKUP (build_contract_type_artifact F mods).cta_toplevel_vtypes k = SOME vt
 Proof
   rw[build_contract_type_artifact_def] >>
@@ -1860,14 +1669,14 @@ QED
 
 Theorem add_toplevel_static_maps_bare_globals_complete_Immutable[local]:
   FLOOKUP (add_toplevel_static_maps F src (VariableDecl vis Immutable id ty init) art).cta_bare_globals
-    (src,string_to_num id) = SOME ty
+    (src,id) = SOME ty
 Proof
   rw[add_toplevel_static_maps_def, FLOOKUP_UPDATE]
 QED
 
 Theorem add_toplevel_static_maps_bare_globals_complete_Constant[local]:
   FLOOKUP (add_toplevel_static_maps F src (VariableDecl vis (Constant e) id ty init) art).cta_bare_globals
-    (src,string_to_num id) = SOME ty
+    (src,id) = SOME ty
 Proof
   rw[add_toplevel_static_maps_def, FLOOKUP_UPDATE]
 QED
@@ -1900,7 +1709,7 @@ QED
 Theorem add_module_static_maps_bare_globals_complete_Immutable[local]:
   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (src : num option)) tls)) /\
   MEM (VariableDecl vis Immutable id ty init) tls ==>
-  FLOOKUP (add_module_static_maps F src tls art).cta_bare_globals (src,string_to_num id) = SOME ty
+  FLOOKUP (add_module_static_maps F src tls art).cta_bare_globals (src,id) = SOME ty
 Proof
   qid_spec_tac `art` >>
   Induct_on `tls` >- rw[add_module_static_maps_def] >>
@@ -1921,7 +1730,7 @@ QED
 Theorem add_module_static_maps_bare_globals_complete_Constant[local]:
   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (src : num option)) tls)) /\
   MEM (VariableDecl vis (Constant e) id ty init) tls ==>
-  FLOOKUP (add_module_static_maps F src tls art).cta_bare_globals (src,string_to_num id) = SOME ty
+  FLOOKUP (add_module_static_maps F src tls art).cta_bare_globals (src,id) = SOME ty
 Proof
   qid_spec_tac `art` >>
   Induct_on `tls` >- rw[add_module_static_maps_def] >>
@@ -1957,7 +1766,7 @@ Theorem add_contract_static_maps_bare_globals_complete_MEM_Immutable[local]:
   contract_namespaces_ok F mods /\ MEM (src,tls) mods /\
   MEM (VariableDecl vis Immutable id ty init) tls ==>
   FLOOKUP (FOLDL (\art (src,tls). add_module_static_maps F src tls art) art mods).cta_bare_globals
-    (src,string_to_num id) = SOME ty
+    (src,id) = SOME ty
 Proof
   qid_spec_tac `art` >>
   Induct_on `mods` >- rw[] >>
@@ -1983,7 +1792,7 @@ Theorem add_contract_static_maps_bare_globals_complete_MEM_Constant[local]:
   contract_namespaces_ok F mods /\ MEM (src,tls) mods /\
   MEM (VariableDecl vis (Constant e) id ty init) tls ==>
   FLOOKUP (FOLDL (\art (src,tls). add_module_static_maps F src tls art) art mods).cta_bare_globals
-    (src,string_to_num id) = SOME ty
+    (src,id) = SOME ty
 Proof
   qid_spec_tac `art` >>
   Induct_on `mods` >- rw[] >>
@@ -2011,7 +1820,7 @@ Theorem build_contract_type_artifact_bare_globals_complete:
   MEM (VariableDecl vis mut id ty init) ts /\
   (mut = Immutable \/ ?e. mut = Constant e) ==>
   FLOOKUP (build_contract_type_artifact F mods).cta_bare_globals
-    (src,string_to_num id) = SOME ty
+    (src,id) = SOME ty
 Proof
   rw[build_contract_type_artifact_def] >>
   drule ALOOKUP_MEM >> strip_tac >> gvs[] >-
@@ -2021,7 +1830,7 @@ QED
 
 Theorem add_toplevel_static_maps_bare_global_assignable_complete_Immutable[local]:
   FLOOKUP (add_toplevel_static_maps F src (VariableDecl vis Immutable id ty init) art).cta_bare_global_assignable
-    (src,string_to_num id) = SOME ty
+    (src,id) = SOME ty
 Proof
   rw[add_toplevel_static_maps_def, FLOOKUP_UPDATE]
 QED
@@ -2054,7 +1863,7 @@ QED
 Theorem add_module_static_maps_bare_global_assignable_complete_Immutable[local]:
   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (src : num option)) tls)) /\
   MEM (VariableDecl vis Immutable id ty init) tls ==>
-  FLOOKUP (add_module_static_maps F src tls art).cta_bare_global_assignable (src,string_to_num id) = SOME ty
+  FLOOKUP (add_module_static_maps F src tls art).cta_bare_global_assignable (src,id) = SOME ty
 Proof
   qid_spec_tac `art` >>
   Induct_on `tls` >- rw[add_module_static_maps_def] >>
@@ -2090,7 +1899,7 @@ Theorem add_contract_static_maps_bare_global_assignable_complete_MEM_Immutable[l
   contract_namespaces_ok F mods /\ MEM (src,tls) mods /\
   MEM (VariableDecl vis Immutable id ty init) tls ==>
   FLOOKUP (FOLDL (\art (src,tls). add_module_static_maps F src tls art) art mods).cta_bare_global_assignable
-    (src,string_to_num id) = SOME ty
+    (src,id) = SOME ty
 Proof
   qid_spec_tac `art` >>
   Induct_on `mods` >- rw[] >>
@@ -2117,7 +1926,7 @@ Theorem build_contract_type_artifact_bare_global_assignable_complete[local]:
   ALOOKUP mods src = SOME ts /\
   MEM (VariableDecl vis Immutable id ty init) ts ==>
   FLOOKUP (build_contract_type_artifact F mods).cta_bare_global_assignable
-    (src,string_to_num id) = SOME ty
+    (src,id) = SOME ty
 Proof
   rw[build_contract_type_artifact_def] >>
   drule ALOOKUP_MEM >> strip_tac >> gvs[] >>
@@ -2365,66 +2174,6 @@ Proof
   metis_tac[assignable_type_well_formed]
 QED
 
-Theorem find_var_decl_by_num_SOME_storage_var:
-  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (src : num option)) ts)) /\
-  MEM (VariableDecl vis mut id ty init) ts /\
-  (mut = Storage \/ mut = Transient) ==>
-  find_var_decl_by_num (string_to_num id) ts =
-    SOME (StorageVarDecl (mut = Transient) ty,id)
-Proof
-  Induct_on `ts` >- rw[find_var_decl_by_num_def] >>
-  gen_tac >> Cases_on `h` >>
-  rw[find_var_decl_by_num_def, toplevel_vtype_keys_toplevel_def] >>
-  TRY (Cases_on `v0` >> gvs[find_var_decl_by_num_def, toplevel_vtype_keys_toplevel_def]) >>
-  gvs[ALL_DISTINCT_APPEND] >>
-  metis_tac[module_toplevel_vtype_key_MEM_Variable]
-QED
-
-
-Theorem find_var_decl_by_num_SOME_storage_var_Storage:
-  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (src : num option)) ts)) /\
-  MEM (VariableDecl vis mut id ty init) ts /\
-  mut = Storage ==>
-  find_var_decl_by_num (string_to_num id) ts =
-    SOME (StorageVarDecl F ty,id)
-Proof
-  Induct_on `ts` >- rw[find_var_decl_by_num_def] >>
-  gen_tac >> Cases_on `h` >>
-  rw[find_var_decl_by_num_def, toplevel_vtype_keys_toplevel_def] >>
-  TRY (Cases_on `v0` >> gvs[find_var_decl_by_num_def, toplevel_vtype_keys_toplevel_def]) >>
-  gvs[ALL_DISTINCT_APPEND] >>
-  metis_tac[module_toplevel_vtype_key_MEM_Variable]
-QED
-
-Theorem find_var_decl_by_num_SOME_storage_var_Transient:
-  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (src : num option)) ts)) /\
-  MEM (VariableDecl vis mut id ty init) ts /\
-  mut = Transient ==>
-  find_var_decl_by_num (string_to_num id) ts =
-    SOME (StorageVarDecl T ty,id)
-Proof
-  Induct_on `ts` >- rw[find_var_decl_by_num_def] >>
-  gen_tac >> Cases_on `h` >>
-  rw[find_var_decl_by_num_def, toplevel_vtype_keys_toplevel_def] >>
-  TRY (Cases_on `v0` >> gvs[find_var_decl_by_num_def, toplevel_vtype_keys_toplevel_def]) >>
-  gvs[ALL_DISTINCT_APPEND] >>
-  metis_tac[module_toplevel_vtype_key_MEM_Variable]
-QED
-
-Theorem find_var_decl_by_num_SOME_hashmap:
-  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (src : num option)) ts)) /\
-  MEM (HashMapDecl vis is_transient id kt vt init) ts ==>
-  find_var_decl_by_num (string_to_num id) ts =
-    SOME (HashMapVarDecl is_transient kt vt,id)
-Proof
-  Induct_on `ts` >- rw[find_var_decl_by_num_def] >>
-  gen_tac >> Cases_on `h` >>
-  rw[find_var_decl_by_num_def, toplevel_vtype_keys_toplevel_def] >>
-  TRY (Cases_on `v0` >> gvs[find_var_decl_by_num_def, toplevel_vtype_keys_toplevel_def]) >>
-  gvs[ALL_DISTINCT_APPEND] >>
-  metis_tac[module_toplevel_vtype_key_MEM]
-QED
-
 Theorem find_var_decl_by_name_SOME_storage_var_Storage:
   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (src : num option)) ts)) /\
   MEM (VariableDecl vis Storage id ty init) ts ==>
@@ -2474,7 +2223,7 @@ Theorem check_contract_bare_globals_consistent_initial:
     ?ts. get_module_code (initial_evaluation_context sources layouts tx src) src = SOME ts /\
          FLOOKUP art.cta_toplevel_vtypes (src,id) = SOME (Type ty) /\
          is_bare_global_decl id ts /\
-         find_var_decl_by_num id ts = NONE /\
+         find_var_decl_by_name id ts = NONE /\
          ty <> NoneT
 Proof
   rw[check_contract_def] >> gvs[] >>
@@ -2491,14 +2240,14 @@ Proof
         simp[get_module_code_def, initial_evaluation_context_def] >> metis_tac[]) >>
       conj_tac >- metis_tac[is_bare_global_decl_MEM_Immutable] >>
       conj_tac >-
-       (irule find_var_decl_by_num_NONE_non_storage_var >>
+       (irule find_var_decl_by_name_NONE_Immutable >>
         conj_tac >-
          (qexists `src` >>
           irule contract_namespaces_ok_module_toplevel_vtype_keys >>
           metis_tac[ALOOKUP_MEM]) >>
         metis_tac[]) >>
       `check_toplevel_decl layouts tx.target mods (build_contract_type_artifact F mods) src
-         (VariableDecl vis Immutable id_str ty init)` by
+         (VariableDecl vis Immutable id ty init)` by
         (irule check_contract_toplevel_decl_MEM >> simp[check_contract_def] >>
          metis_tac[]) >>
       gvs[check_toplevel_decl_def] >>
@@ -2515,14 +2264,14 @@ Proof
         simp[get_module_code_def, initial_evaluation_context_def] >> metis_tac[]) >>
   conj_tac >- metis_tac[is_bare_global_decl_MEM_Constant] >>
   conj_tac >-
-   (irule find_var_decl_by_num_NONE_non_storage_var >>
+   (irule find_var_decl_by_name_NONE_Constant >>
     conj_tac >-
      (qexists `src` >>
       irule contract_namespaces_ok_module_toplevel_vtype_keys >>
       metis_tac[ALOOKUP_MEM]) >>
     metis_tac[]) >>
   `check_toplevel_decl layouts tx.target mods (build_contract_type_artifact F mods) src
-     (VariableDecl vis (Constant e) id_str ty init)` by
+     (VariableDecl vis (Constant e) id ty init)` by
     (irule check_contract_toplevel_decl_MEM >> simp[check_contract_def] >>
      metis_tac[]) >>
   gvs[check_toplevel_decl_def] >>
@@ -2538,8 +2287,8 @@ Theorem check_contract_bare_global_assignable_consistent_initial:
     ?ts. get_module_code (initial_evaluation_context sources layouts tx src) src = SOME ts /\
          FLOOKUP art.cta_bare_globals (src,id) = SOME ty /\
          FLOOKUP art.cta_toplevel_vtypes (src,id) = SOME (Type ty) /\
-         is_immutable_decl_by_num id ts /\
-         find_var_decl_by_num id ts = NONE /\
+         is_immutable_decl id ts /\
+         find_var_decl_by_name id ts = NONE /\
          ty <> NoneT
 Proof
   rw[check_contract_def] >> gvs[] >>
@@ -2560,17 +2309,16 @@ Proof
     gvs[toplevel_vtypes_complete_def] >>
     qpat_x_assum `!src ts vis mut id ty init. _` irule >>
     simp[get_module_code_def, initial_evaluation_context_def] >> metis_tac[]) >>
-  conj_tac >- (rw[is_immutable_decl_by_num_def] >>
-                metis_tac[is_immutable_decl_MEM]) >>
+  conj_tac >- metis_tac[is_immutable_decl_MEM] >>
   conj_tac >-
-   (irule find_var_decl_by_num_NONE_non_storage_var >>
+   (irule find_var_decl_by_name_NONE_Immutable >>
     conj_tac >-
      (qexists `src` >>
       irule contract_namespaces_ok_module_toplevel_vtype_keys >>
       metis_tac[ALOOKUP_MEM]) >>
     metis_tac[]) >>
   `check_toplevel_decl layouts tx.target mods (build_contract_type_artifact F mods) src
-     (VariableDecl vis Immutable id_str ty init)` by
+     (VariableDecl vis Immutable id ty init)` by
     (irule check_contract_toplevel_decl_MEM >> simp[check_contract_def] >>
      metis_tac[]) >>
   gvs[check_toplevel_decl_def] >>
@@ -2589,7 +2337,7 @@ Theorem check_contract_toplevel_vtypes_consistent_initial:
      FLOOKUP art.cta_bare_globals (src,id) = NONE ==>
      ?ts is_transient typ id_str.
        get_module_code (initial_evaluation_context sources layouts tx src) src = SOME ts /\
-       find_var_decl_by_num id ts = SOME (StorageVarDecl is_transient typ,id_str) /\
+       find_var_decl_by_name id ts = SOME (StorageVarDecl is_transient typ,id_str) /\
        typ = ty /\
        IS_SOME (evaluate_type (type_env_all_modules mods) typ) /\
        IS_SOME (lookup_var_slot_from_layout
@@ -2598,7 +2346,7 @@ Theorem check_contract_toplevel_vtypes_consistent_initial:
      FLOOKUP art.cta_toplevel_vtypes (src,id) = SOME (HashMapT kt vt) ==>
      ?ts is_transient id_str.
        get_module_code (initial_evaluation_context sources layouts tx src) src = SOME ts /\
-       find_var_decl_by_num id ts = SOME (HashMapVarDecl is_transient kt vt,id_str) /\
+       find_var_decl_by_name id ts = SOME (HashMapVarDecl is_transient kt vt,id_str) /\
        IS_SOME (lookup_var_slot_from_layout
          (initial_evaluation_context sources layouts tx src) is_transient src id_str))
 Proof
@@ -2606,12 +2354,12 @@ Proof
   >- (rpt strip_tac >>
       drule_all build_contract_type_artifact_toplevel_vtypes_sound >> rw[]
       >- (`check_toplevel_decl layouts tx.target mods (build_contract_type_artifact F mods) src
-             (VariableDecl vis mut id_str ty init)` by
+             (VariableDecl vis mut id ty init)` by
             (irule check_contract_toplevel_decl_MEM >> simp[check_contract_def] >> metis_tac[]) >>
           Cases_on `mut` >> gvs[check_toplevel_decl_def, well_formed_vtype_def] >>
           metis_tac[assignable_type_well_formed]) >>
       `check_toplevel_decl layouts tx.target mods (build_contract_type_artifact F mods) src
-         (HashMapDecl vis is_transient id_str kt vty init)` by
+         (HashMapDecl vis is_transient id kt vty init)` by
         (irule check_contract_toplevel_decl_MEM >> simp[check_contract_def] >> metis_tac[]) >>
       gvs[check_toplevel_decl_def, well_formed_vtype_def] >>
       metis_tac[check_value_type_well_formed_vtype])
@@ -2624,42 +2372,42 @@ Proof
                (irule check_contract_bare_globals_complete_initial >> simp[check_contract_def]) >>
              gvs[bare_globals_complete_def] >>
              qpat_x_assum `!src ts vis mut id ty init. _`
-               (qspecl_then [`src`,`ts`,`vis`,`Constant e`,`id_str`,`ty`,`init`] mp_tac) >>
+               (qspecl_then [`src`,`ts`,`vis`,`Constant e`,`id`,`ty`,`init`] mp_tac) >>
              simp[get_module_code_def, initial_evaluation_context_def]) >>
          `bare_globals_complete (build_contract_type_artifact F mods).cta_bare_globals
             (initial_evaluation_context sources layouts tx src)` by
            (irule check_contract_bare_globals_complete_initial >> simp[check_contract_def]) >>
          gvs[bare_globals_complete_def] >>
          qpat_x_assum `!src ts vis mut id ty init. _`
-           (qspecl_then [`src`,`ts`,`vis`,`Immutable`,`id_str`,`ty`,`init`] mp_tac) >>
+           (qspecl_then [`src`,`ts`,`vis`,`Immutable`,`id`,`ty`,`init`] mp_tac) >>
          simp[get_module_code_def, initial_evaluation_context_def]) >>
-      qexistsl [`ts`,`mut = Transient`,`id_str`] >>
+      qexistsl [`ts`,`mut = Transient`,`id`] >>
       simp[get_module_code_def, initial_evaluation_context_def,
            lookup_var_slot_from_layout_def, lookup_var_slot_in_layouts_def] >>
       conj_tac >-
-       metis_tac[find_var_decl_by_num_SOME_storage_var_Storage,
-                 find_var_decl_by_num_SOME_storage_var_Transient,
+       metis_tac[find_var_decl_by_name_SOME_storage_var_Storage,
+                 find_var_decl_by_name_SOME_storage_var_Transient,
                  contract_namespaces_ok_module_toplevel_vtype_keys, ALOOKUP_MEM] >>
       `check_toplevel_decl layouts tx.target mods (build_contract_type_artifact F mods) src
-         (VariableDecl vis mut id_str ty init)` by
+         (VariableDecl vis mut id ty init)` by
         (irule check_contract_toplevel_decl_MEM >> simp[check_contract_def] >> metis_tac[]) >>
       Cases_on `mut` >>
       gvs[check_toplevel_decl_def,
           lookup_var_slot_in_layouts_def, lookup_var_slot_from_layout_def] >>
       metis_tac[assignable_type_well_formed, well_formed_type_def,
-                find_var_decl_by_num_SOME_storage_var_Storage,
-                find_var_decl_by_num_SOME_storage_var_Transient,
+                find_var_decl_by_name_SOME_storage_var_Storage,
+                find_var_decl_by_name_SOME_storage_var_Transient,
                 contract_namespaces_ok_module_toplevel_vtype_keys, ALOOKUP_MEM]) >>
   rpt strip_tac >>
   drule_all build_contract_type_artifact_toplevel_vtypes_sound >> rw[] >> gvs[] >>
-  qexistsl [`ts`,`is_transient`,`id_str`] >>
+  qexistsl [`ts`,`is_transient`,`id`] >>
   simp[get_module_code_def, initial_evaluation_context_def,
        lookup_var_slot_from_layout_def, lookup_var_slot_in_layouts_def] >>
   conj_tac >-
-   metis_tac[find_var_decl_by_num_SOME_hashmap,
+   metis_tac[find_var_decl_by_name_SOME_hashmap,
              contract_namespaces_ok_module_toplevel_vtype_keys, ALOOKUP_MEM] >>
   `check_toplevel_decl layouts tx.target mods (build_contract_type_artifact F mods) src
-     (HashMapDecl vis is_transient id_str kt vt init)` by
+     (HashMapDecl vis is_transient id kt vt init)` by
     (irule check_contract_toplevel_decl_MEM >> simp[check_contract_def] >> metis_tac[]) >>
   gvs[check_toplevel_decl_def, lookup_var_slot_in_layouts_def,
       lookup_var_slot_from_layout_def]
@@ -2673,7 +2421,7 @@ Theorem check_contract_flag_members_consistent_initial:
     FLOOKUP art.cta_flag_members (src,fid) = SOME ls ==>
     ?ts. get_module_code (initial_evaluation_context sources layouts tx src) src = SOME ts /\
          lookup_flag fid ts = SOME ls /\
-         FLOOKUP (type_env_all_modules mods) (type_key (src,fid)) =
+         FLOOKUP (type_env_all_modules mods) (src,fid) =
            SOME (FlagArgs (LENGTH ls))
 Proof
   rw[check_contract_def] >> gvs[] >>

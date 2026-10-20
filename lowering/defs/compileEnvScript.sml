@@ -314,13 +314,20 @@ Datatype:
        as hash-0/no-arg events. *)
     ce_event_info : string -> (num # type list # bool list) option;
     (* Type environment used by ABI conversion for structs/flags/interfaces. *)
-    ce_type_env : (num, type_args) fmap;
+    ce_type_env : (nsid, type_args) fmap;
     (* Internal return: how many return values passed on stack (0 = memory return).
        Set from func_t.returns_stack_count() at function entry. *)
     ce_returns_count : num;
-    (* Return buffer offset (for memory returns when returns_count = 0).
-       NONE for stack returns, SOME offset for memory returns. *)
-    ce_return_buf : num option;
+    (* Internal functions only: where the caller's return buffer pointer is
+       (memory returns, returns_count = 0). NONE for external functions and
+       stack returns. Kept out of ce_vars so user names cannot collide with it.
+       Mirrors Python: FunctionContext.return_buffer *)
+    ce_return_buf : var_location option;
+    (* Where the return PC is; NONE for external functions. `Return` decides
+       "internal or external?" from this field.
+       Mirrors Python: FunctionContext.return_pc, tested by lower_Return as
+       `ctx.return_pc is not None` *)
+    ce_return_pc : var_location option;
     (* External function: T for external functions, F for internal *)
     ce_is_external : bool;
     (* ABI encoding info for external return type.
@@ -539,7 +546,7 @@ Definition sfields_tenv_consistent_def:
   sfields_tenv_consistent sfields tenv ⇔
     (* Every struct in tenv exists in sfields with matching field types *)
     (∀ nsid args.
-       FLOOKUP tenv (type_key nsid) = SOME (StructArgs args) ⇒
+       FLOOKUP tenv nsid = SOME (StructArgs args) ⇒
        ∃ fields.
          FLOOKUP sfields (nsid_to_string nsid) = SOME fields ∧
          MAP FST fields = MAP FST args ∧
@@ -549,7 +556,7 @@ Definition sfields_tenv_consistent_def:
        FLOOKUP sfields name = SOME fields ⇒
        ∃ nsid args.
          name = nsid_to_string nsid ∧
-         FLOOKUP tenv (type_key nsid) = SOME (StructArgs args) ∧
+         FLOOKUP tenv nsid = SOME (StructArgs args) ∧
          MAP FST fields = MAP FST args ∧
          MAP (FST o SND) fields = MAP SND args)
 End
