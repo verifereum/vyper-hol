@@ -174,14 +174,18 @@ End
    Mirrors Python make_ssa._compute_defs: blocks in the given (dominator
    post-) order, variables in first-seen order (dict insertion order). Each
    variable's labels are in reverse block order, because
-   insert_phis_for_var takes the head where Python's worklist pops the last. *)
+   insert_phis_for_var takes the head where Python's worklist pops the last.
+   The fold runs over the raw outputs rather than block_assignments, whose
+   nub keeps the last occurrence of a repeated variable. A variable assigned
+   twice in a block gets that block's label twice; the repeat is a no-op in
+   insert_phis_for_var, since all its frontiers are then in has_phi. *)
 Definition compute_defs_acc_def:
   compute_defs_acc acc [] = acc ∧
   compute_defs_acc acc (bb::bbs) =
     compute_defs_acc
       (FOLDL (λacc var.
          alist_update_or_append var (CONS bb.bb_label) [bb.bb_label] acc)
-       acc (block_assignments bb))
+       acc (FLAT (MAP (λinst. inst.inst_outputs) bb.bb_instructions)))
       bbs
 End
 
@@ -281,7 +285,10 @@ Theorem compute_defs_acc_keys:
     MEM v (MAP FST (compute_defs_acc acc bbs)) ⇔
     MEM v (MAP FST acc) ∨ MEM v (FLAT (MAP block_assignments bbs))
 Proof
-  Induct >> simp[compute_defs_acc_def, foldl_update_keys] >> metis_tac[]
+  Induct >>
+  simp[compute_defs_acc_def, foldl_update_keys, block_assignments_def,
+       MEM_nub] >>
+  metis_tac[]
 QED
 
 Theorem compute_defs_acc_all_distinct:
@@ -301,7 +308,8 @@ Triviality compute_defs_acc_preserves:
 Proof
   Induct >- (simp[compute_defs_acc_def] >> metis_tac[]) >>
   rpt strip_tac >> simp[compute_defs_acc_def] >>
-  drule_then (qspecl_then [`block_assignments h`, `h.bb_label`]
+  drule_then (qspecl_then [`FLAT (MAP (λinst. inst.inst_outputs)
+                                      h.bb_instructions)`, `h.bb_label`]
     strip_assume_tac) foldl_update_preserves >>
   first_x_assum drule >> metis_tac[]
 QED
@@ -316,6 +324,7 @@ Proof
   rpt gen_tac >> strip_tac >> simp[compute_defs_acc_def] >>
   Cases_on `MEM bb bbs` >- (first_x_assum irule >> simp[]) >>
   `bb = h` by gvs[] >> pop_assum SUBST_ALL_TAC >>
+  gvs[block_assignments_def, MEM_nub] >>
   drule_then (qspecl_then [`acc`, `h.bb_label`] strip_assume_tac)
     foldl_update_records >>
   drule compute_defs_acc_preserves >> metis_tac[]
@@ -366,6 +375,19 @@ Theorem compute_defs_first_seen_order:
         bb_instructions := [mk_inst 2 ASSIGN [] ["z"];
                             mk_inst 3 ASSIGN [] ["x"]] |>] =
   [("x", ["b2"; "b1"]); ("y", ["b1"]); ("z", ["b2"])]
+Proof
+  EVAL_TAC
+QED
+
+(* A variable reassigned in its block keeps its first position, as in
+   Python; nub would keep the last and give [y; x]. *)
+Theorem compute_defs_first_seen_in_block:
+  compute_defs
+    [<| bb_label := "b1";
+        bb_instructions := [mk_inst 0 ASSIGN [] ["x"];
+                            mk_inst 1 ASSIGN [] ["y"];
+                            mk_inst 2 ASSIGN [] ["x"]] |>] =
+  [("x", ["b1"; "b1"]); ("y", ["b1"])]
 Proof
   EVAL_TAC
 QED
