@@ -1,0 +1,4 @@
+Theory vyperRegression_finding_25_forward_nonscalar_constants[no_sig_docs]
+Ancestors vyperRegressionDefs_finding_25_forward_nonscalar_constants
+Libs vyperTestRunnerLib
+val () = List.app run_test_on_traces $ all_traces "vyperRegressionDefs_finding_25_forward_nonscalar_constants";

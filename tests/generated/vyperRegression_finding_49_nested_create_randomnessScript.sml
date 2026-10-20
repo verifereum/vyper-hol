@@ -1,0 +1,4 @@
+Theory vyperRegression_finding_49_nested_create_randomness[no_sig_docs]
+Ancestors vyperRegressionDefs_finding_49_nested_create_randomness
+Libs vyperTestRunnerLib
+val () = List.app run_test_on_traces $ all_traces "vyperRegressionDefs_finding_49_nested_create_randomness";

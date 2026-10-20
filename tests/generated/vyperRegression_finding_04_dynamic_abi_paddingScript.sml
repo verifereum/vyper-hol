@@ -1,0 +1,4 @@
+Theory vyperRegression_finding_04_dynamic_abi_padding[no_sig_docs]
+Ancestors vyperRegressionDefs_finding_04_dynamic_abi_padding
+Libs vyperTestRunnerLib
+val () = List.app run_test_on_traces $ all_traces "vyperRegressionDefs_finding_04_dynamic_abi_padding";

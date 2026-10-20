@@ -1,0 +1,10 @@
+{
+  "compiler_commit": "cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c",
+  "compiler_version": "0.5.0a4",
+  "evm_version": "prague",
+  "experimental_codegen": false,
+  "finding": 1,
+  "optimize": "gas",
+  "pytest_node": "test_01_integer_to_fixed_bytes.py::test_integer_bytes_are_not_taken_from_the_zero_or_sign_extended_end",
+  "state_comparison": "full-world-state-v1"
+}

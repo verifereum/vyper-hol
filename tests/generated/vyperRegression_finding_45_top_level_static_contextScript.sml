@@ -1,0 +1,4 @@
+Theory vyperRegression_finding_45_top_level_static_context[no_sig_docs]
+Ancestors vyperRegressionDefs_finding_45_top_level_static_context
+Libs vyperTestRunnerLib
+val () = List.app run_test_on_traces $ all_traces "vyperRegressionDefs_finding_45_top_level_static_context";

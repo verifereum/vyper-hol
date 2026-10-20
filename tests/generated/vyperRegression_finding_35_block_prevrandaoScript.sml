@@ -1,0 +1,4 @@
+Theory vyperRegression_finding_35_block_prevrandao[no_sig_docs]
+Ancestors vyperRegressionDefs_finding_35_block_prevrandao
+Libs vyperTestRunnerLib
+val () = List.app run_test_on_traces $ all_traces "vyperRegressionDefs_finding_35_block_prevrandao";

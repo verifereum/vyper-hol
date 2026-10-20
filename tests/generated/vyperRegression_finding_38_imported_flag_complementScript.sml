@@ -1,0 +1,4 @@
+Theory vyperRegression_finding_38_imported_flag_complement[no_sig_docs]
+Ancestors vyperRegressionDefs_finding_38_imported_flag_complement
+Libs vyperTestRunnerLib
+val () = List.app run_test_on_traces $ all_traces "vyperRegressionDefs_finding_38_imported_flag_complement";

@@ -1,0 +1,354 @@
+{
+  "finding_50_constructor_selfdestruct": {
+    "deps": [],
+    "item_type": "test",
+    "traces": [
+      {
+        "annotated_ast": {
+          "ast": {
+            "ast_type": "Module",
+            "body": [
+              {
+                "args": {
+                  "args": [],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 28,
+                  "end_lineno": 4,
+                  "lineno": 3,
+                  "node_id": 2,
+                  "src": "9:44:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "Expr",
+                    "col_offset": 4,
+                    "end_col_offset": 28,
+                    "end_lineno": 4,
+                    "lineno": 4,
+                    "node_id": 3,
+                    "src": "29:24:-1",
+                    "value": {
+                      "args": [
+                        {
+                          "ast_type": "Attribute",
+                          "attr": "sender",
+                          "col_offset": 17,
+                          "end_col_offset": 27,
+                          "end_lineno": 4,
+                          "lineno": 4,
+                          "node_id": 7,
+                          "src": "42:10:-1",
+                          "type": {
+                            "name": "address"
+                          },
+                          "value": {
+                            "ast_type": "Name",
+                            "col_offset": 17,
+                            "end_col_offset": 20,
+                            "end_lineno": 4,
+                            "id": "msg",
+                            "lineno": 4,
+                            "node_id": 8,
+                            "src": "42:3:-1",
+                            "type": {
+                              "name": "msg"
+                            }
+                          }
+                        }
+                      ],
+                      "ast_type": "Call",
+                      "col_offset": 4,
+                      "end_col_offset": 28,
+                      "end_lineno": 4,
+                      "func": {
+                        "ast_type": "Name",
+                        "col_offset": 4,
+                        "end_col_offset": 16,
+                        "end_lineno": 4,
+                        "id": "selfdestruct",
+                        "lineno": 4,
+                        "node_id": 5,
+                        "src": "29:12:-1",
+                        "type": {
+                          "name": "selfdestruct",
+                          "typeclass": "builtin_function"
+                        }
+                      },
+                      "keywords": [],
+                      "lineno": 4,
+                      "node_id": 4,
+                      "src": "29:24:-1",
+                      "type": {
+                        "name": "(void)"
+                      }
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 7,
+                    "end_lineno": 2,
+                    "id": "deploy",
+                    "lineno": 2,
+                    "node_id": 11,
+                    "src": "2:6:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 28,
+                "end_lineno": 4,
+                "func_type": {
+                  "argument_types": [],
+                  "name": "__init__",
+                  "return_type": null,
+                  "type_decl_node": {
+                    "node_id": 1,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                },
+                "lineno": 3,
+                "name": "__init__",
+                "node_id": 1,
+                "returns": null,
+                "src": "9:44:-1"
+              },
+              {
+                "args": {
+                  "args": [],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 12,
+                  "end_lineno": 9,
+                  "lineno": 8,
+                  "node_id": 14,
+                  "src": "71:37:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "Return",
+                    "col_offset": 4,
+                    "end_col_offset": 12,
+                    "end_lineno": 9,
+                    "lineno": 9,
+                    "node_id": 15,
+                    "src": "100:8:-1",
+                    "value": {
+                      "ast_type": "Int",
+                      "col_offset": 11,
+                      "end_col_offset": 12,
+                      "end_lineno": 9,
+                      "folded_value": {
+                        "ast_type": "Int",
+                        "col_offset": 11,
+                        "end_col_offset": 12,
+                        "end_lineno": 9,
+                        "lineno": 9,
+                        "node_id": 16,
+                        "src": "107:1:-1",
+                        "type": {
+                          "bits": 256,
+                          "is_signed": false,
+                          "name": "uint256",
+                          "typeclass": "integer"
+                        },
+                        "value": 7
+                      },
+                      "lineno": 9,
+                      "node_id": 16,
+                      "src": "107:1:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      },
+                      "value": 7
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 9,
+                    "end_lineno": 6,
+                    "id": "external",
+                    "lineno": 6,
+                    "node_id": 17,
+                    "src": "56:8:-1"
+                  },
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 5,
+                    "end_lineno": 7,
+                    "id": "view",
+                    "lineno": 7,
+                    "node_id": 19,
+                    "src": "66:4:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 12,
+                "end_lineno": 9,
+                "func_type": {
+                  "argument_types": [],
+                  "name": "marker",
+                  "return_type": {
+                    "bits": 256,
+                    "is_signed": false,
+                    "name": "uint256",
+                    "typeclass": "integer"
+                  },
+                  "type_decl_node": {
+                    "node_id": 13,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                },
+                "lineno": 8,
+                "name": "marker",
+                "node_id": 13,
+                "returns": {
+                  "ast_type": "Name",
+                  "col_offset": 16,
+                  "end_col_offset": 23,
+                  "end_lineno": 8,
+                  "id": "uint256",
+                  "lineno": 8,
+                  "node_id": 21,
+                  "src": "87:7:-1"
+                },
+                "src": "71:37:-1"
+              }
+            ],
+            "col_offset": 0,
+            "doc_string": null,
+            "end_col_offset": 13,
+            "end_lineno": 9,
+            "is_interface": false,
+            "lineno": 1,
+            "name": null,
+            "node_id": 0,
+            "path": "tests/fixtures/regression/finding_50_constructor_selfdestruct/unknown_0.vy",
+            "resolved_path": "tests/fixtures/regression/finding_50_constructor_selfdestruct/unknown_0.vy",
+            "settings": {},
+            "source_id": -1,
+            "source_sha256sum": "99978ba8f02557051471fb52d630b654ffc8a9288aedd7e02bd26dbbea3b699c",
+            "src": "0:109:-1",
+            "type": {
+              "name": "tests/fixtures/regression/finding_50_constructor_selfdestruct/unknown_0.vy",
+              "type_decl_node": {
+                "node_id": 0,
+                "source_id": -1
+              },
+              "typeclass": "module"
+            }
+          },
+          "contract_name": "tests/fixtures/regression/finding_50_constructor_selfdestruct/unknown_0.vy",
+          "imports": []
+        },
+        "blueprint_initcode_prefix": null,
+        "calldata": null,
+        "compiler_settings": {
+          "debug": false,
+          "enable_decimals": true,
+          "evm_version": "prague",
+          "experimental_codegen": false,
+          "optimize": "gas"
+        },
+        "contract_abi": [
+          {
+            "gas": 317,
+            "inputs": [],
+            "name": "marker",
+            "outputs": [
+              {
+                "name": "",
+                "type": "uint256"
+              }
+            ],
+            "stateMutability": "view",
+            "type": "function"
+          },
+          {
+            "inputs": [],
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "constructor"
+          }
+        ],
+        "deployed_address": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+        "deployment_succeeded": true,
+        "deployment_type": "source",
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "constructor",
+        "initcode": "346100145733ff602761001860193960276019f35b5f80fd5f3560e01c633acddfc1811861001f573461002357600760405260206040f35b5f5ffd5b5f80fd855820c12b02eded510c6f8351445f83c79e8827c467c8a11a259d09358abdeb18261918278000a1657679706572830005000034",
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "raw_ir": null,
+        "runtime_bytecode": "",
+        "solc_json": {
+          "compiler_version": "v0.5.0a4+commit.cd74ce4f",
+          "integrity": "c12b02eded510c6f8351445f83c79e8827c467c8a11a259d09358abdeb182619",
+          "language": "Vyper",
+          "settings": {
+            "debug": false,
+            "evmVersion": "prague",
+            "experimentalCodegen": false,
+            "optimize": "gas",
+            "outputSelection": {
+              "unknown_0.vy": [
+                "*"
+              ]
+            },
+            "search_paths": [
+              "."
+            ]
+          },
+          "sources": {
+            "unknown_0.vy": {
+              "content": "\n@deploy\ndef __init__():\n    selfdestruct(msg.sender)\n\n@external\n@view\ndef marker() -> uint256:\n    return 7\n",
+              "sha256sum": "99978ba8f02557051471fb52d630b654ffc8a9288aedd7e02bd26dbbea3b699c"
+            }
+          }
+        },
+        "source_code": "\n@deploy\ndef __init__():\n    selfdestruct(msg.sender)\n\n@external\n@view\ndef marker() -> uint256:\n    return 7\n",
+        "storage_layout": {},
+        "trace_type": "deployment",
+        "value": 0
+      }
+    ]
+  }
+}

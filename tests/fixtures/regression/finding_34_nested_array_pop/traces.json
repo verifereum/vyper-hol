@@ -1,0 +1,3206 @@
+{
+  "finding_34_nested_array_pop": {
+    "deps": [],
+    "item_type": "test",
+    "traces": [
+      {
+        "annotated_ast": {
+          "ast": {
+            "ast_type": "Module",
+            "body": [
+              {
+                "annotation": {
+                  "ast_type": "Subscript",
+                  "col_offset": 8,
+                  "end_col_offset": 41,
+                  "end_lineno": 2,
+                  "lineno": 2,
+                  "node_id": 4,
+                  "slice": {
+                    "ast_type": "Tuple",
+                    "col_offset": 17,
+                    "elements": [
+                      {
+                        "ast_type": "Subscript",
+                        "col_offset": 17,
+                        "end_col_offset": 37,
+                        "end_lineno": 2,
+                        "lineno": 2,
+                        "node_id": 8,
+                        "slice": {
+                          "ast_type": "Tuple",
+                          "col_offset": 26,
+                          "elements": [
+                            {
+                              "ast_type": "Name",
+                              "col_offset": 26,
+                              "end_col_offset": 33,
+                              "end_lineno": 2,
+                              "id": "uint256",
+                              "lineno": 2,
+                              "node_id": 12,
+                              "src": "27:7:-1"
+                            },
+                            {
+                              "ast_type": "Int",
+                              "col_offset": 35,
+                              "end_col_offset": 36,
+                              "end_lineno": 2,
+                              "folded_value": {
+                                "ast_type": "Int",
+                                "col_offset": 35,
+                                "end_col_offset": 36,
+                                "end_lineno": 2,
+                                "lineno": 2,
+                                "node_id": 14,
+                                "src": "36:1:-1",
+                                "value": 3
+                              },
+                              "lineno": 2,
+                              "node_id": 14,
+                              "src": "36:1:-1",
+                              "value": 3
+                            }
+                          ],
+                          "end_col_offset": 36,
+                          "end_lineno": 2,
+                          "lineno": 2,
+                          "node_id": 11,
+                          "src": "27:10:-1"
+                        },
+                        "src": "18:20:-1",
+                        "value": {
+                          "ast_type": "Name",
+                          "col_offset": 17,
+                          "end_col_offset": 25,
+                          "end_lineno": 2,
+                          "id": "DynArray",
+                          "lineno": 2,
+                          "node_id": 9,
+                          "src": "18:8:-1"
+                        }
+                      },
+                      {
+                        "ast_type": "Int",
+                        "col_offset": 39,
+                        "end_col_offset": 40,
+                        "end_lineno": 2,
+                        "folded_value": {
+                          "ast_type": "Int",
+                          "col_offset": 39,
+                          "end_col_offset": 40,
+                          "end_lineno": 2,
+                          "lineno": 2,
+                          "node_id": 17,
+                          "src": "40:1:-1",
+                          "value": 2
+                        },
+                        "lineno": 2,
+                        "node_id": 17,
+                        "src": "40:1:-1",
+                        "value": 2
+                      }
+                    ],
+                    "end_col_offset": 40,
+                    "end_lineno": 2,
+                    "lineno": 2,
+                    "node_id": 7,
+                    "src": "18:23:-1"
+                  },
+                  "src": "9:33:-1",
+                  "value": {
+                    "ast_type": "Name",
+                    "col_offset": 8,
+                    "end_col_offset": 16,
+                    "end_lineno": 2,
+                    "id": "DynArray",
+                    "lineno": 2,
+                    "node_id": 5,
+                    "src": "9:8:-1"
+                  }
+                },
+                "ast_type": "VariableDecl",
+                "col_offset": 0,
+                "end_col_offset": 41,
+                "end_lineno": 2,
+                "is_constant": false,
+                "is_immutable": false,
+                "is_public": false,
+                "is_reentrant": false,
+                "is_transient": false,
+                "lineno": 2,
+                "node_id": 1,
+                "src": "1:41:-1",
+                "target": {
+                  "ast_type": "Name",
+                  "col_offset": 0,
+                  "end_col_offset": 6,
+                  "end_lineno": 2,
+                  "id": "stored",
+                  "lineno": 2,
+                  "node_id": 2,
+                  "src": "1:6:-1",
+                  "type": {
+                    "length": 2,
+                    "name": "DynArray",
+                    "typeclass": "dynamic_array",
+                    "value_type": {
+                      "length": 3,
+                      "name": "DynArray",
+                      "typeclass": "dynamic_array",
+                      "value_type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      }
+                    }
+                  }
+                },
+                "type": {
+                  "length": 2,
+                  "name": "DynArray",
+                  "typeclass": "dynamic_array",
+                  "value_type": {
+                    "length": 3,
+                    "name": "DynArray",
+                    "typeclass": "dynamic_array",
+                    "value_type": {
+                      "bits": 256,
+                      "is_signed": false,
+                      "name": "uint256",
+                      "typeclass": "integer"
+                    }
+                  }
+                },
+                "value": null
+              },
+              {
+                "args": {
+                  "args": [
+                    {
+                      "annotation": {
+                        "ast_type": "Name",
+                        "col_offset": 22,
+                        "end_col_offset": 29,
+                        "end_lineno": 5,
+                        "id": "uint256",
+                        "lineno": 5,
+                        "node_id": 23,
+                        "src": "76:7:-1"
+                      },
+                      "arg": "index",
+                      "ast_type": "arg",
+                      "col_offset": 15,
+                      "end_col_offset": 29,
+                      "end_lineno": 5,
+                      "lineno": 5,
+                      "node_id": 22,
+                      "src": "69:14:-1"
+                    }
+                  ],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 58,
+                  "end_lineno": 9,
+                  "lineno": 5,
+                  "node_id": 21,
+                  "src": "54:245:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "annotation": {
+                      "ast_type": "Subscript",
+                      "col_offset": 12,
+                      "end_col_offset": 45,
+                      "end_lineno": 6,
+                      "lineno": 6,
+                      "node_id": 28,
+                      "slice": {
+                        "ast_type": "Tuple",
+                        "col_offset": 21,
+                        "elements": [
+                          {
+                            "ast_type": "Subscript",
+                            "col_offset": 21,
+                            "end_col_offset": 41,
+                            "end_lineno": 6,
+                            "lineno": 6,
+                            "node_id": 32,
+                            "slice": {
+                              "ast_type": "Tuple",
+                              "col_offset": 30,
+                              "elements": [
+                                {
+                                  "ast_type": "Name",
+                                  "col_offset": 30,
+                                  "end_col_offset": 37,
+                                  "end_lineno": 6,
+                                  "id": "uint256",
+                                  "lineno": 6,
+                                  "node_id": 36,
+                                  "src": "130:7:-1"
+                                },
+                                {
+                                  "ast_type": "Int",
+                                  "col_offset": 39,
+                                  "end_col_offset": 40,
+                                  "end_lineno": 6,
+                                  "folded_value": {
+                                    "ast_type": "Int",
+                                    "col_offset": 39,
+                                    "end_col_offset": 40,
+                                    "end_lineno": 6,
+                                    "lineno": 6,
+                                    "node_id": 38,
+                                    "src": "139:1:-1",
+                                    "value": 3
+                                  },
+                                  "lineno": 6,
+                                  "node_id": 38,
+                                  "src": "139:1:-1",
+                                  "value": 3
+                                }
+                              ],
+                              "end_col_offset": 40,
+                              "end_lineno": 6,
+                              "lineno": 6,
+                              "node_id": 35,
+                              "src": "130:10:-1"
+                            },
+                            "src": "121:20:-1",
+                            "value": {
+                              "ast_type": "Name",
+                              "col_offset": 21,
+                              "end_col_offset": 29,
+                              "end_lineno": 6,
+                              "id": "DynArray",
+                              "lineno": 6,
+                              "node_id": 33,
+                              "src": "121:8:-1"
+                            }
+                          },
+                          {
+                            "ast_type": "Int",
+                            "col_offset": 43,
+                            "end_col_offset": 44,
+                            "end_lineno": 6,
+                            "folded_value": {
+                              "ast_type": "Int",
+                              "col_offset": 43,
+                              "end_col_offset": 44,
+                              "end_lineno": 6,
+                              "lineno": 6,
+                              "node_id": 41,
+                              "src": "143:1:-1",
+                              "value": 2
+                            },
+                            "lineno": 6,
+                            "node_id": 41,
+                            "src": "143:1:-1",
+                            "value": 2
+                          }
+                        ],
+                        "end_col_offset": 44,
+                        "end_lineno": 6,
+                        "lineno": 6,
+                        "node_id": 31,
+                        "src": "121:23:-1"
+                      },
+                      "src": "112:33:-1",
+                      "value": {
+                        "ast_type": "Name",
+                        "col_offset": 12,
+                        "end_col_offset": 20,
+                        "end_lineno": 6,
+                        "id": "DynArray",
+                        "lineno": 6,
+                        "node_id": 29,
+                        "src": "112:8:-1"
+                      }
+                    },
+                    "ast_type": "AnnAssign",
+                    "col_offset": 4,
+                    "end_col_offset": 68,
+                    "end_lineno": 6,
+                    "lineno": 6,
+                    "node_id": 25,
+                    "src": "104:64:-1",
+                    "target": {
+                      "ast_type": "Name",
+                      "col_offset": 4,
+                      "end_col_offset": 10,
+                      "end_lineno": 6,
+                      "id": "values",
+                      "lineno": 6,
+                      "node_id": 26,
+                      "src": "104:6:-1",
+                      "type": {
+                        "length": 2,
+                        "name": "DynArray",
+                        "typeclass": "dynamic_array",
+                        "value_type": {
+                          "length": 3,
+                          "name": "DynArray",
+                          "typeclass": "dynamic_array",
+                          "value_type": {
+                            "bits": 256,
+                            "is_signed": false,
+                            "name": "uint256",
+                            "typeclass": "integer"
+                          }
+                        }
+                      },
+                      "variable_reads": [
+                        {
+                          "access_path": [],
+                          "decl_node": {
+                            "node_id": 25,
+                            "source_id": -1
+                          },
+                          "name": "values"
+                        }
+                      ]
+                    },
+                    "value": {
+                      "ast_type": "List",
+                      "col_offset": 48,
+                      "elements": [
+                        {
+                          "ast_type": "List",
+                          "col_offset": 49,
+                          "elements": [
+                            {
+                              "ast_type": "Int",
+                              "col_offset": 50,
+                              "end_col_offset": 52,
+                              "end_lineno": 6,
+                              "folded_value": {
+                                "ast_type": "Int",
+                                "col_offset": 50,
+                                "end_col_offset": 52,
+                                "end_lineno": 6,
+                                "lineno": 6,
+                                "node_id": 46,
+                                "src": "150:2:-1",
+                                "type": {
+                                  "bits": 256,
+                                  "is_signed": false,
+                                  "name": "uint256",
+                                  "typeclass": "integer"
+                                },
+                                "value": 11
+                              },
+                              "lineno": 6,
+                              "node_id": 46,
+                              "src": "150:2:-1",
+                              "type": {
+                                "bits": 256,
+                                "is_signed": false,
+                                "name": "uint256",
+                                "typeclass": "integer"
+                              },
+                              "value": 11
+                            },
+                            {
+                              "ast_type": "Int",
+                              "col_offset": 54,
+                              "end_col_offset": 56,
+                              "end_lineno": 6,
+                              "folded_value": {
+                                "ast_type": "Int",
+                                "col_offset": 54,
+                                "end_col_offset": 56,
+                                "end_lineno": 6,
+                                "lineno": 6,
+                                "node_id": 47,
+                                "src": "154:2:-1",
+                                "type": {
+                                  "bits": 256,
+                                  "is_signed": false,
+                                  "name": "uint256",
+                                  "typeclass": "integer"
+                                },
+                                "value": 22
+                              },
+                              "lineno": 6,
+                              "node_id": 47,
+                              "src": "154:2:-1",
+                              "type": {
+                                "bits": 256,
+                                "is_signed": false,
+                                "name": "uint256",
+                                "typeclass": "integer"
+                              },
+                              "value": 22
+                            }
+                          ],
+                          "end_col_offset": 57,
+                          "end_lineno": 6,
+                          "folded_value": {
+                            "ast_type": "List",
+                            "col_offset": 49,
+                            "elements": [
+                              {
+                                "ast_type": "Int",
+                                "col_offset": 50,
+                                "end_col_offset": 52,
+                                "end_lineno": 6,
+                                "lineno": 6,
+                                "node_id": 46,
+                                "src": "150:2:-1",
+                                "type": {
+                                  "bits": 256,
+                                  "is_signed": false,
+                                  "name": "uint256",
+                                  "typeclass": "integer"
+                                },
+                                "value": 11
+                              },
+                              {
+                                "ast_type": "Int",
+                                "col_offset": 54,
+                                "end_col_offset": 56,
+                                "end_lineno": 6,
+                                "lineno": 6,
+                                "node_id": 47,
+                                "src": "154:2:-1",
+                                "type": {
+                                  "bits": 256,
+                                  "is_signed": false,
+                                  "name": "uint256",
+                                  "typeclass": "integer"
+                                },
+                                "value": 22
+                              }
+                            ],
+                            "end_col_offset": 57,
+                            "end_lineno": 6,
+                            "lineno": 6,
+                            "node_id": 45,
+                            "src": "149:8:-1",
+                            "type": {
+                              "length": 3,
+                              "name": "DynArray",
+                              "typeclass": "dynamic_array",
+                              "value_type": {
+                                "bits": 256,
+                                "is_signed": false,
+                                "name": "uint256",
+                                "typeclass": "integer"
+                              }
+                            }
+                          },
+                          "lineno": 6,
+                          "node_id": 45,
+                          "src": "149:8:-1",
+                          "type": {
+                            "length": 3,
+                            "name": "DynArray",
+                            "typeclass": "dynamic_array",
+                            "value_type": {
+                              "bits": 256,
+                              "is_signed": false,
+                              "name": "uint256",
+                              "typeclass": "integer"
+                            }
+                          }
+                        },
+                        {
+                          "ast_type": "List",
+                          "col_offset": 59,
+                          "elements": [
+                            {
+                              "ast_type": "Int",
+                              "col_offset": 60,
+                              "end_col_offset": 62,
+                              "end_lineno": 6,
+                              "folded_value": {
+                                "ast_type": "Int",
+                                "col_offset": 60,
+                                "end_col_offset": 62,
+                                "end_lineno": 6,
+                                "lineno": 6,
+                                "node_id": 50,
+                                "src": "160:2:-1",
+                                "type": {
+                                  "bits": 256,
+                                  "is_signed": false,
+                                  "name": "uint256",
+                                  "typeclass": "integer"
+                                },
+                                "value": 33
+                              },
+                              "lineno": 6,
+                              "node_id": 50,
+                              "src": "160:2:-1",
+                              "type": {
+                                "bits": 256,
+                                "is_signed": false,
+                                "name": "uint256",
+                                "typeclass": "integer"
+                              },
+                              "value": 33
+                            },
+                            {
+                              "ast_type": "Int",
+                              "col_offset": 64,
+                              "end_col_offset": 66,
+                              "end_lineno": 6,
+                              "folded_value": {
+                                "ast_type": "Int",
+                                "col_offset": 64,
+                                "end_col_offset": 66,
+                                "end_lineno": 6,
+                                "lineno": 6,
+                                "node_id": 51,
+                                "src": "164:2:-1",
+                                "type": {
+                                  "bits": 256,
+                                  "is_signed": false,
+                                  "name": "uint256",
+                                  "typeclass": "integer"
+                                },
+                                "value": 44
+                              },
+                              "lineno": 6,
+                              "node_id": 51,
+                              "src": "164:2:-1",
+                              "type": {
+                                "bits": 256,
+                                "is_signed": false,
+                                "name": "uint256",
+                                "typeclass": "integer"
+                              },
+                              "value": 44
+                            }
+                          ],
+                          "end_col_offset": 67,
+                          "end_lineno": 6,
+                          "folded_value": {
+                            "ast_type": "List",
+                            "col_offset": 59,
+                            "elements": [
+                              {
+                                "ast_type": "Int",
+                                "col_offset": 60,
+                                "end_col_offset": 62,
+                                "end_lineno": 6,
+                                "lineno": 6,
+                                "node_id": 50,
+                                "src": "160:2:-1",
+                                "type": {
+                                  "bits": 256,
+                                  "is_signed": false,
+                                  "name": "uint256",
+                                  "typeclass": "integer"
+                                },
+                                "value": 33
+                              },
+                              {
+                                "ast_type": "Int",
+                                "col_offset": 64,
+                                "end_col_offset": 66,
+                                "end_lineno": 6,
+                                "lineno": 6,
+                                "node_id": 51,
+                                "src": "164:2:-1",
+                                "type": {
+                                  "bits": 256,
+                                  "is_signed": false,
+                                  "name": "uint256",
+                                  "typeclass": "integer"
+                                },
+                                "value": 44
+                              }
+                            ],
+                            "end_col_offset": 67,
+                            "end_lineno": 6,
+                            "lineno": 6,
+                            "node_id": 49,
+                            "src": "159:8:-1",
+                            "type": {
+                              "length": 3,
+                              "name": "DynArray",
+                              "typeclass": "dynamic_array",
+                              "value_type": {
+                                "bits": 256,
+                                "is_signed": false,
+                                "name": "uint256",
+                                "typeclass": "integer"
+                              }
+                            }
+                          },
+                          "lineno": 6,
+                          "node_id": 49,
+                          "src": "159:8:-1",
+                          "type": {
+                            "length": 3,
+                            "name": "DynArray",
+                            "typeclass": "dynamic_array",
+                            "value_type": {
+                              "bits": 256,
+                              "is_signed": false,
+                              "name": "uint256",
+                              "typeclass": "integer"
+                            }
+                          }
+                        }
+                      ],
+                      "end_col_offset": 68,
+                      "end_lineno": 6,
+                      "folded_value": {
+                        "ast_type": "List",
+                        "col_offset": 48,
+                        "elements": [
+                          {
+                            "ast_type": "List",
+                            "col_offset": 49,
+                            "elements": [
+                              {
+                                "ast_type": "Int",
+                                "col_offset": 50,
+                                "end_col_offset": 52,
+                                "end_lineno": 6,
+                                "lineno": 6,
+                                "node_id": 46,
+                                "src": "150:2:-1",
+                                "type": {
+                                  "bits": 256,
+                                  "is_signed": false,
+                                  "name": "uint256",
+                                  "typeclass": "integer"
+                                },
+                                "value": 11
+                              },
+                              {
+                                "ast_type": "Int",
+                                "col_offset": 54,
+                                "end_col_offset": 56,
+                                "end_lineno": 6,
+                                "lineno": 6,
+                                "node_id": 47,
+                                "src": "154:2:-1",
+                                "type": {
+                                  "bits": 256,
+                                  "is_signed": false,
+                                  "name": "uint256",
+                                  "typeclass": "integer"
+                                },
+                                "value": 22
+                              }
+                            ],
+                            "end_col_offset": 57,
+                            "end_lineno": 6,
+                            "lineno": 6,
+                            "node_id": 45,
+                            "src": "149:8:-1",
+                            "type": {
+                              "length": 3,
+                              "name": "DynArray",
+                              "typeclass": "dynamic_array",
+                              "value_type": {
+                                "bits": 256,
+                                "is_signed": false,
+                                "name": "uint256",
+                                "typeclass": "integer"
+                              }
+                            }
+                          },
+                          {
+                            "ast_type": "List",
+                            "col_offset": 59,
+                            "elements": [
+                              {
+                                "ast_type": "Int",
+                                "col_offset": 60,
+                                "end_col_offset": 62,
+                                "end_lineno": 6,
+                                "lineno": 6,
+                                "node_id": 50,
+                                "src": "160:2:-1",
+                                "type": {
+                                  "bits": 256,
+                                  "is_signed": false,
+                                  "name": "uint256",
+                                  "typeclass": "integer"
+                                },
+                                "value": 33
+                              },
+                              {
+                                "ast_type": "Int",
+                                "col_offset": 64,
+                                "end_col_offset": 66,
+                                "end_lineno": 6,
+                                "lineno": 6,
+                                "node_id": 51,
+                                "src": "164:2:-1",
+                                "type": {
+                                  "bits": 256,
+                                  "is_signed": false,
+                                  "name": "uint256",
+                                  "typeclass": "integer"
+                                },
+                                "value": 44
+                              }
+                            ],
+                            "end_col_offset": 67,
+                            "end_lineno": 6,
+                            "lineno": 6,
+                            "node_id": 49,
+                            "src": "159:8:-1",
+                            "type": {
+                              "length": 3,
+                              "name": "DynArray",
+                              "typeclass": "dynamic_array",
+                              "value_type": {
+                                "bits": 256,
+                                "is_signed": false,
+                                "name": "uint256",
+                                "typeclass": "integer"
+                              }
+                            }
+                          }
+                        ],
+                        "end_col_offset": 68,
+                        "end_lineno": 6,
+                        "lineno": 6,
+                        "node_id": 44,
+                        "src": "148:20:-1",
+                        "type": {
+                          "length": 2,
+                          "name": "DynArray",
+                          "typeclass": "dynamic_array",
+                          "value_type": {
+                            "length": 3,
+                            "name": "DynArray",
+                            "typeclass": "dynamic_array",
+                            "value_type": {
+                              "bits": 256,
+                              "is_signed": false,
+                              "name": "uint256",
+                              "typeclass": "integer"
+                            }
+                          }
+                        }
+                      },
+                      "lineno": 6,
+                      "node_id": 44,
+                      "src": "148:20:-1",
+                      "type": {
+                        "length": 2,
+                        "name": "DynArray",
+                        "typeclass": "dynamic_array",
+                        "value_type": {
+                          "length": 3,
+                          "name": "DynArray",
+                          "typeclass": "dynamic_array",
+                          "value_type": {
+                            "bits": 256,
+                            "is_signed": false,
+                            "name": "uint256",
+                            "typeclass": "integer"
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "annotation": {
+                      "ast_type": "Name",
+                      "col_offset": 13,
+                      "end_col_offset": 20,
+                      "end_lineno": 7,
+                      "id": "uint256",
+                      "lineno": 7,
+                      "node_id": 57,
+                      "src": "182:7:-1"
+                    },
+                    "ast_type": "AnnAssign",
+                    "col_offset": 4,
+                    "end_col_offset": 42,
+                    "end_lineno": 7,
+                    "lineno": 7,
+                    "node_id": 54,
+                    "src": "173:38:-1",
+                    "target": {
+                      "ast_type": "Name",
+                      "col_offset": 4,
+                      "end_col_offset": 11,
+                      "end_lineno": 7,
+                      "id": "removed",
+                      "lineno": 7,
+                      "node_id": 55,
+                      "src": "173:7:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      },
+                      "variable_reads": [
+                        {
+                          "access_path": [],
+                          "decl_node": {
+                            "node_id": 54,
+                            "source_id": -1
+                          },
+                          "name": "removed"
+                        }
+                      ]
+                    },
+                    "value": {
+                      "args": [],
+                      "ast_type": "Call",
+                      "col_offset": 23,
+                      "end_col_offset": 42,
+                      "end_lineno": 7,
+                      "func": {
+                        "ast_type": "Attribute",
+                        "attr": "pop",
+                        "col_offset": 23,
+                        "end_col_offset": 40,
+                        "end_lineno": 7,
+                        "lineno": 7,
+                        "node_id": 60,
+                        "src": "192:17:-1",
+                        "type": {
+                          "name": "pop",
+                          "typeclass": "member_function"
+                        },
+                        "value": {
+                          "ast_type": "Subscript",
+                          "col_offset": 23,
+                          "end_col_offset": 36,
+                          "end_lineno": 7,
+                          "lineno": 7,
+                          "node_id": 61,
+                          "slice": {
+                            "ast_type": "Name",
+                            "col_offset": 30,
+                            "end_col_offset": 35,
+                            "end_lineno": 7,
+                            "id": "index",
+                            "lineno": 7,
+                            "node_id": 64,
+                            "src": "199:5:-1",
+                            "type": {
+                              "bits": 256,
+                              "is_signed": false,
+                              "name": "uint256",
+                              "typeclass": "integer"
+                            },
+                            "variable_reads": [
+                              {
+                                "access_path": [],
+                                "decl_node": {
+                                  "node_id": 22,
+                                  "source_id": -1
+                                },
+                                "name": "index"
+                              }
+                            ]
+                          },
+                          "src": "192:13:-1",
+                          "type": {
+                            "length": 3,
+                            "name": "DynArray",
+                            "typeclass": "dynamic_array",
+                            "value_type": {
+                              "bits": 256,
+                              "is_signed": false,
+                              "name": "uint256",
+                              "typeclass": "integer"
+                            }
+                          },
+                          "value": {
+                            "ast_type": "Name",
+                            "col_offset": 23,
+                            "end_col_offset": 29,
+                            "end_lineno": 7,
+                            "id": "values",
+                            "lineno": 7,
+                            "node_id": 62,
+                            "src": "192:6:-1",
+                            "type": {
+                              "length": 2,
+                              "name": "DynArray",
+                              "typeclass": "dynamic_array",
+                              "value_type": {
+                                "length": 3,
+                                "name": "DynArray",
+                                "typeclass": "dynamic_array",
+                                "value_type": {
+                                  "bits": 256,
+                                  "is_signed": false,
+                                  "name": "uint256",
+                                  "typeclass": "integer"
+                                }
+                              }
+                            },
+                            "variable_reads": [
+                              {
+                                "access_path": [],
+                                "decl_node": {
+                                  "node_id": 25,
+                                  "source_id": -1
+                                },
+                                "name": "values"
+                              }
+                            ]
+                          },
+                          "variable_reads": [
+                            {
+                              "access_path": [
+                                "$subscript_access"
+                              ],
+                              "decl_node": {
+                                "node_id": 25,
+                                "source_id": -1
+                              },
+                              "name": "values"
+                            }
+                          ],
+                          "variable_writes": [
+                            {
+                              "access_path": [
+                                "$subscript_access"
+                              ],
+                              "decl_node": {
+                                "node_id": 25,
+                                "source_id": -1
+                              },
+                              "name": "values"
+                            }
+                          ]
+                        },
+                        "variable_reads": [
+                          {
+                            "access_path": [
+                              "$subscript_access",
+                              "pop"
+                            ],
+                            "decl_node": {
+                              "node_id": 25,
+                              "source_id": -1
+                            },
+                            "name": "values"
+                          }
+                        ]
+                      },
+                      "keywords": [],
+                      "lineno": 7,
+                      "node_id": 59,
+                      "src": "192:19:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      }
+                    }
+                  },
+                  {
+                    "ast_type": "Expr",
+                    "col_offset": 4,
+                    "end_col_offset": 28,
+                    "end_lineno": 8,
+                    "lineno": 8,
+                    "node_id": 68,
+                    "src": "216:24:-1",
+                    "value": {
+                      "args": [
+                        {
+                          "ast_type": "Int",
+                          "col_offset": 25,
+                          "end_col_offset": 27,
+                          "end_lineno": 8,
+                          "folded_value": {
+                            "ast_type": "Int",
+                            "col_offset": 25,
+                            "end_col_offset": 27,
+                            "end_lineno": 8,
+                            "lineno": 8,
+                            "node_id": 78,
+                            "src": "237:2:-1",
+                            "type": {
+                              "bits": 256,
+                              "is_signed": false,
+                              "name": "uint256",
+                              "typeclass": "integer"
+                            },
+                            "value": 55
+                          },
+                          "lineno": 8,
+                          "node_id": 78,
+                          "src": "237:2:-1",
+                          "type": {
+                            "bits": 256,
+                            "is_signed": false,
+                            "name": "uint256",
+                            "typeclass": "integer"
+                          },
+                          "value": 55
+                        }
+                      ],
+                      "ast_type": "Call",
+                      "col_offset": 4,
+                      "end_col_offset": 28,
+                      "end_lineno": 8,
+                      "func": {
+                        "ast_type": "Attribute",
+                        "attr": "append",
+                        "col_offset": 4,
+                        "end_col_offset": 24,
+                        "end_lineno": 8,
+                        "lineno": 8,
+                        "node_id": 70,
+                        "src": "216:20:-1",
+                        "type": {
+                          "name": "append",
+                          "typeclass": "member_function"
+                        },
+                        "value": {
+                          "ast_type": "Subscript",
+                          "col_offset": 4,
+                          "end_col_offset": 17,
+                          "end_lineno": 8,
+                          "lineno": 8,
+                          "node_id": 71,
+                          "slice": {
+                            "ast_type": "Name",
+                            "col_offset": 11,
+                            "end_col_offset": 16,
+                            "end_lineno": 8,
+                            "id": "index",
+                            "lineno": 8,
+                            "node_id": 74,
+                            "src": "223:5:-1",
+                            "type": {
+                              "bits": 256,
+                              "is_signed": false,
+                              "name": "uint256",
+                              "typeclass": "integer"
+                            },
+                            "variable_reads": [
+                              {
+                                "access_path": [],
+                                "decl_node": {
+                                  "node_id": 22,
+                                  "source_id": -1
+                                },
+                                "name": "index"
+                              }
+                            ]
+                          },
+                          "src": "216:13:-1",
+                          "type": {
+                            "length": 3,
+                            "name": "DynArray",
+                            "typeclass": "dynamic_array",
+                            "value_type": {
+                              "bits": 256,
+                              "is_signed": false,
+                              "name": "uint256",
+                              "typeclass": "integer"
+                            }
+                          },
+                          "value": {
+                            "ast_type": "Name",
+                            "col_offset": 4,
+                            "end_col_offset": 10,
+                            "end_lineno": 8,
+                            "id": "values",
+                            "lineno": 8,
+                            "node_id": 72,
+                            "src": "216:6:-1",
+                            "type": {
+                              "length": 2,
+                              "name": "DynArray",
+                              "typeclass": "dynamic_array",
+                              "value_type": {
+                                "length": 3,
+                                "name": "DynArray",
+                                "typeclass": "dynamic_array",
+                                "value_type": {
+                                  "bits": 256,
+                                  "is_signed": false,
+                                  "name": "uint256",
+                                  "typeclass": "integer"
+                                }
+                              }
+                            },
+                            "variable_reads": [
+                              {
+                                "access_path": [],
+                                "decl_node": {
+                                  "node_id": 25,
+                                  "source_id": -1
+                                },
+                                "name": "values"
+                              }
+                            ]
+                          },
+                          "variable_reads": [
+                            {
+                              "access_path": [
+                                "$subscript_access"
+                              ],
+                              "decl_node": {
+                                "node_id": 25,
+                                "source_id": -1
+                              },
+                              "name": "values"
+                            }
+                          ],
+                          "variable_writes": [
+                            {
+                              "access_path": [
+                                "$subscript_access"
+                              ],
+                              "decl_node": {
+                                "node_id": 25,
+                                "source_id": -1
+                              },
+                              "name": "values"
+                            }
+                          ]
+                        },
+                        "variable_reads": [
+                          {
+                            "access_path": [
+                              "$subscript_access",
+                              "append"
+                            ],
+                            "decl_node": {
+                              "node_id": 25,
+                              "source_id": -1
+                            },
+                            "name": "values"
+                          }
+                        ]
+                      },
+                      "keywords": [],
+                      "lineno": 8,
+                      "node_id": 69,
+                      "src": "216:24:-1",
+                      "type": {
+                        "name": "(void)"
+                      }
+                    }
+                  },
+                  {
+                    "ast_type": "Return",
+                    "col_offset": 4,
+                    "end_col_offset": 58,
+                    "end_lineno": 9,
+                    "lineno": 9,
+                    "node_id": 79,
+                    "src": "245:54:-1",
+                    "value": {
+                      "ast_type": "List",
+                      "col_offset": 11,
+                      "elements": [
+                        {
+                          "ast_type": "Name",
+                          "col_offset": 12,
+                          "end_col_offset": 19,
+                          "end_lineno": 9,
+                          "id": "removed",
+                          "lineno": 9,
+                          "node_id": 81,
+                          "src": "253:7:-1",
+                          "type": {
+                            "bits": 256,
+                            "is_signed": false,
+                            "name": "uint256",
+                            "typeclass": "integer"
+                          },
+                          "variable_reads": [
+                            {
+                              "access_path": [],
+                              "decl_node": {
+                                "node_id": 54,
+                                "source_id": -1
+                              },
+                              "name": "removed"
+                            }
+                          ]
+                        },
+                        {
+                          "args": [
+                            {
+                              "ast_type": "Subscript",
+                              "col_offset": 25,
+                              "end_col_offset": 38,
+                              "end_lineno": 9,
+                              "lineno": 9,
+                              "node_id": 86,
+                              "slice": {
+                                "ast_type": "Name",
+                                "col_offset": 32,
+                                "end_col_offset": 37,
+                                "end_lineno": 9,
+                                "id": "index",
+                                "lineno": 9,
+                                "node_id": 89,
+                                "src": "273:5:-1",
+                                "type": {
+                                  "bits": 256,
+                                  "is_signed": false,
+                                  "name": "uint256",
+                                  "typeclass": "integer"
+                                },
+                                "variable_reads": [
+                                  {
+                                    "access_path": [],
+                                    "decl_node": {
+                                      "node_id": 22,
+                                      "source_id": -1
+                                    },
+                                    "name": "index"
+                                  }
+                                ]
+                              },
+                              "src": "266:13:-1",
+                              "type": {
+                                "length": 3,
+                                "name": "DynArray",
+                                "typeclass": "dynamic_array",
+                                "value_type": {
+                                  "bits": 256,
+                                  "is_signed": false,
+                                  "name": "uint256",
+                                  "typeclass": "integer"
+                                }
+                              },
+                              "value": {
+                                "ast_type": "Name",
+                                "col_offset": 25,
+                                "end_col_offset": 31,
+                                "end_lineno": 9,
+                                "id": "values",
+                                "lineno": 9,
+                                "node_id": 87,
+                                "src": "266:6:-1",
+                                "type": {
+                                  "length": 2,
+                                  "name": "DynArray",
+                                  "typeclass": "dynamic_array",
+                                  "value_type": {
+                                    "length": 3,
+                                    "name": "DynArray",
+                                    "typeclass": "dynamic_array",
+                                    "value_type": {
+                                      "bits": 256,
+                                      "is_signed": false,
+                                      "name": "uint256",
+                                      "typeclass": "integer"
+                                    }
+                                  }
+                                },
+                                "variable_reads": [
+                                  {
+                                    "access_path": [],
+                                    "decl_node": {
+                                      "node_id": 25,
+                                      "source_id": -1
+                                    },
+                                    "name": "values"
+                                  }
+                                ]
+                              },
+                              "variable_reads": [
+                                {
+                                  "access_path": [
+                                    "$subscript_access"
+                                  ],
+                                  "decl_node": {
+                                    "node_id": 25,
+                                    "source_id": -1
+                                  },
+                                  "name": "values"
+                                }
+                              ]
+                            }
+                          ],
+                          "ast_type": "Call",
+                          "col_offset": 21,
+                          "end_col_offset": 39,
+                          "end_lineno": 9,
+                          "func": {
+                            "ast_type": "Name",
+                            "col_offset": 21,
+                            "end_col_offset": 24,
+                            "end_lineno": 9,
+                            "id": "len",
+                            "lineno": 9,
+                            "node_id": 84,
+                            "src": "262:3:-1",
+                            "type": {
+                              "name": "len",
+                              "typeclass": "builtin_function"
+                            }
+                          },
+                          "keywords": [],
+                          "lineno": 9,
+                          "node_id": 83,
+                          "src": "262:18:-1",
+                          "type": {
+                            "bits": 256,
+                            "is_signed": false,
+                            "name": "uint256",
+                            "typeclass": "integer"
+                          }
+                        },
+                        {
+                          "ast_type": "Subscript",
+                          "col_offset": 41,
+                          "end_col_offset": 57,
+                          "end_lineno": 9,
+                          "lineno": 9,
+                          "node_id": 92,
+                          "slice": {
+                            "ast_type": "Int",
+                            "col_offset": 55,
+                            "end_col_offset": 56,
+                            "end_lineno": 9,
+                            "folded_value": {
+                              "ast_type": "Int",
+                              "col_offset": 55,
+                              "end_col_offset": 56,
+                              "end_lineno": 9,
+                              "lineno": 9,
+                              "node_id": 99,
+                              "src": "296:1:-1",
+                              "type": {
+                                "bits": 8,
+                                "is_signed": true,
+                                "name": "int8",
+                                "typeclass": "integer"
+                              },
+                              "value": 1
+                            },
+                            "lineno": 9,
+                            "node_id": 99,
+                            "src": "296:1:-1",
+                            "type": {
+                              "bits": 8,
+                              "is_signed": true,
+                              "name": "int8",
+                              "typeclass": "integer"
+                            },
+                            "value": 1
+                          },
+                          "src": "282:16:-1",
+                          "type": {
+                            "bits": 256,
+                            "is_signed": false,
+                            "name": "uint256",
+                            "typeclass": "integer"
+                          },
+                          "value": {
+                            "ast_type": "Subscript",
+                            "col_offset": 41,
+                            "end_col_offset": 54,
+                            "end_lineno": 9,
+                            "lineno": 9,
+                            "node_id": 93,
+                            "slice": {
+                              "ast_type": "Name",
+                              "col_offset": 48,
+                              "end_col_offset": 53,
+                              "end_lineno": 9,
+                              "id": "index",
+                              "lineno": 9,
+                              "node_id": 96,
+                              "src": "289:5:-1",
+                              "type": {
+                                "bits": 256,
+                                "is_signed": false,
+                                "name": "uint256",
+                                "typeclass": "integer"
+                              },
+                              "variable_reads": [
+                                {
+                                  "access_path": [],
+                                  "decl_node": {
+                                    "node_id": 22,
+                                    "source_id": -1
+                                  },
+                                  "name": "index"
+                                }
+                              ]
+                            },
+                            "src": "282:13:-1",
+                            "type": {
+                              "length": 3,
+                              "name": "DynArray",
+                              "typeclass": "dynamic_array",
+                              "value_type": {
+                                "bits": 256,
+                                "is_signed": false,
+                                "name": "uint256",
+                                "typeclass": "integer"
+                              }
+                            },
+                            "value": {
+                              "ast_type": "Name",
+                              "col_offset": 41,
+                              "end_col_offset": 47,
+                              "end_lineno": 9,
+                              "id": "values",
+                              "lineno": 9,
+                              "node_id": 94,
+                              "src": "282:6:-1",
+                              "type": {
+                                "length": 2,
+                                "name": "DynArray",
+                                "typeclass": "dynamic_array",
+                                "value_type": {
+                                  "length": 3,
+                                  "name": "DynArray",
+                                  "typeclass": "dynamic_array",
+                                  "value_type": {
+                                    "bits": 256,
+                                    "is_signed": false,
+                                    "name": "uint256",
+                                    "typeclass": "integer"
+                                  }
+                                }
+                              },
+                              "variable_reads": [
+                                {
+                                  "access_path": [],
+                                  "decl_node": {
+                                    "node_id": 25,
+                                    "source_id": -1
+                                  },
+                                  "name": "values"
+                                }
+                              ]
+                            },
+                            "variable_reads": [
+                              {
+                                "access_path": [
+                                  "$subscript_access"
+                                ],
+                                "decl_node": {
+                                  "node_id": 25,
+                                  "source_id": -1
+                                },
+                                "name": "values"
+                              }
+                            ]
+                          },
+                          "variable_reads": [
+                            {
+                              "access_path": [
+                                "$subscript_access",
+                                "$subscript_access"
+                              ],
+                              "decl_node": {
+                                "node_id": 25,
+                                "source_id": -1
+                              },
+                              "name": "values"
+                            }
+                          ]
+                        }
+                      ],
+                      "end_col_offset": 58,
+                      "end_lineno": 9,
+                      "lineno": 9,
+                      "node_id": 80,
+                      "src": "252:47:-1",
+                      "type": {
+                        "length": 3,
+                        "name": "$SArray",
+                        "typeclass": "static_array",
+                        "value_type": {
+                          "bits": 256,
+                          "is_signed": false,
+                          "name": "uint256",
+                          "typeclass": "integer"
+                        }
+                      }
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 9,
+                    "end_lineno": 4,
+                    "id": "external",
+                    "lineno": 4,
+                    "node_id": 102,
+                    "src": "45:8:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 58,
+                "end_lineno": 9,
+                "func_type": {
+                  "argument_types": [
+                    {
+                      "bits": 256,
+                      "is_signed": false,
+                      "name": "uint256",
+                      "typeclass": "integer"
+                    }
+                  ],
+                  "name": "memory_pop",
+                  "return_type": {
+                    "length": 3,
+                    "name": "$SArray",
+                    "typeclass": "static_array",
+                    "value_type": {
+                      "bits": 256,
+                      "is_signed": false,
+                      "name": "uint256",
+                      "typeclass": "integer"
+                    }
+                  },
+                  "type_decl_node": {
+                    "node_id": 20,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                },
+                "lineno": 5,
+                "name": "memory_pop",
+                "node_id": 20,
+                "returns": {
+                  "ast_type": "Subscript",
+                  "col_offset": 34,
+                  "end_col_offset": 44,
+                  "end_lineno": 5,
+                  "lineno": 5,
+                  "node_id": 104,
+                  "slice": {
+                    "ast_type": "Int",
+                    "col_offset": 42,
+                    "end_col_offset": 43,
+                    "end_lineno": 5,
+                    "folded_value": {
+                      "ast_type": "Int",
+                      "col_offset": 42,
+                      "end_col_offset": 43,
+                      "end_lineno": 5,
+                      "lineno": 5,
+                      "node_id": 107,
+                      "src": "96:1:-1",
+                      "value": 3
+                    },
+                    "lineno": 5,
+                    "node_id": 107,
+                    "src": "96:1:-1",
+                    "value": 3
+                  },
+                  "src": "88:10:-1",
+                  "value": {
+                    "ast_type": "Name",
+                    "col_offset": 34,
+                    "end_col_offset": 41,
+                    "end_lineno": 5,
+                    "id": "uint256",
+                    "lineno": 5,
+                    "node_id": 105,
+                    "src": "88:7:-1"
+                  }
+                },
+                "src": "54:245:-1"
+              },
+              {
+                "args": {
+                  "args": [
+                    {
+                      "annotation": {
+                        "ast_type": "Name",
+                        "col_offset": 23,
+                        "end_col_offset": 30,
+                        "end_lineno": 12,
+                        "id": "uint256",
+                        "lineno": 12,
+                        "node_id": 112,
+                        "src": "334:7:-1"
+                      },
+                      "arg": "index",
+                      "ast_type": "arg",
+                      "col_offset": 16,
+                      "end_col_offset": 30,
+                      "end_lineno": 12,
+                      "lineno": 12,
+                      "node_id": 111,
+                      "src": "327:14:-1"
+                    }
+                  ],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 68,
+                  "end_lineno": 16,
+                  "lineno": 12,
+                  "node_id": 110,
+                  "src": "311:236:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "Assign",
+                    "col_offset": 4,
+                    "end_col_offset": 38,
+                    "end_lineno": 13,
+                    "lineno": 13,
+                    "node_id": 114,
+                    "src": "362:34:-1",
+                    "target": {
+                      "ast_type": "Attribute",
+                      "attr": "stored",
+                      "col_offset": 4,
+                      "end_col_offset": 15,
+                      "end_lineno": 13,
+                      "lineno": 13,
+                      "node_id": 115,
+                      "src": "362:11:-1",
+                      "type": {
+                        "length": 2,
+                        "name": "DynArray",
+                        "typeclass": "dynamic_array",
+                        "value_type": {
+                          "length": 3,
+                          "name": "DynArray",
+                          "typeclass": "dynamic_array",
+                          "value_type": {
+                            "bits": 256,
+                            "is_signed": false,
+                            "name": "uint256",
+                            "typeclass": "integer"
+                          }
+                        }
+                      },
+                      "value": {
+                        "ast_type": "Name",
+                        "col_offset": 4,
+                        "end_col_offset": 8,
+                        "end_lineno": 13,
+                        "id": "self",
+                        "lineno": 13,
+                        "node_id": 116,
+                        "src": "362:4:-1",
+                        "type": {
+                          "name": "self"
+                        }
+                      },
+                      "variable_reads": [
+                        {
+                          "access_path": [],
+                          "decl_node": {
+                            "node_id": 1,
+                            "source_id": -1
+                          },
+                          "name": "stored"
+                        }
+                      ],
+                      "variable_writes": [
+                        {
+                          "access_path": [],
+                          "decl_node": {
+                            "node_id": 1,
+                            "source_id": -1
+                          },
+                          "name": "stored"
+                        }
+                      ]
+                    },
+                    "value": {
+                      "ast_type": "List",
+                      "col_offset": 18,
+                      "elements": [
+                        {
+                          "ast_type": "List",
+                          "col_offset": 19,
+                          "elements": [
+                            {
+                              "ast_type": "Int",
+                              "col_offset": 20,
+                              "end_col_offset": 22,
+                              "end_lineno": 13,
+                              "folded_value": {
+                                "ast_type": "Int",
+                                "col_offset": 20,
+                                "end_col_offset": 22,
+                                "end_lineno": 13,
+                                "lineno": 13,
+                                "node_id": 121,
+                                "src": "378:2:-1",
+                                "type": {
+                                  "bits": 256,
+                                  "is_signed": false,
+                                  "name": "uint256",
+                                  "typeclass": "integer"
+                                },
+                                "value": 11
+                              },
+                              "lineno": 13,
+                              "node_id": 121,
+                              "src": "378:2:-1",
+                              "type": {
+                                "bits": 256,
+                                "is_signed": false,
+                                "name": "uint256",
+                                "typeclass": "integer"
+                              },
+                              "value": 11
+                            },
+                            {
+                              "ast_type": "Int",
+                              "col_offset": 24,
+                              "end_col_offset": 26,
+                              "end_lineno": 13,
+                              "folded_value": {
+                                "ast_type": "Int",
+                                "col_offset": 24,
+                                "end_col_offset": 26,
+                                "end_lineno": 13,
+                                "lineno": 13,
+                                "node_id": 122,
+                                "src": "382:2:-1",
+                                "type": {
+                                  "bits": 256,
+                                  "is_signed": false,
+                                  "name": "uint256",
+                                  "typeclass": "integer"
+                                },
+                                "value": 22
+                              },
+                              "lineno": 13,
+                              "node_id": 122,
+                              "src": "382:2:-1",
+                              "type": {
+                                "bits": 256,
+                                "is_signed": false,
+                                "name": "uint256",
+                                "typeclass": "integer"
+                              },
+                              "value": 22
+                            }
+                          ],
+                          "end_col_offset": 27,
+                          "end_lineno": 13,
+                          "folded_value": {
+                            "ast_type": "List",
+                            "col_offset": 19,
+                            "elements": [
+                              {
+                                "ast_type": "Int",
+                                "col_offset": 20,
+                                "end_col_offset": 22,
+                                "end_lineno": 13,
+                                "lineno": 13,
+                                "node_id": 121,
+                                "src": "378:2:-1",
+                                "type": {
+                                  "bits": 256,
+                                  "is_signed": false,
+                                  "name": "uint256",
+                                  "typeclass": "integer"
+                                },
+                                "value": 11
+                              },
+                              {
+                                "ast_type": "Int",
+                                "col_offset": 24,
+                                "end_col_offset": 26,
+                                "end_lineno": 13,
+                                "lineno": 13,
+                                "node_id": 122,
+                                "src": "382:2:-1",
+                                "type": {
+                                  "bits": 256,
+                                  "is_signed": false,
+                                  "name": "uint256",
+                                  "typeclass": "integer"
+                                },
+                                "value": 22
+                              }
+                            ],
+                            "end_col_offset": 27,
+                            "end_lineno": 13,
+                            "lineno": 13,
+                            "node_id": 120,
+                            "src": "377:8:-1",
+                            "type": {
+                              "length": 3,
+                              "name": "DynArray",
+                              "typeclass": "dynamic_array",
+                              "value_type": {
+                                "bits": 256,
+                                "is_signed": false,
+                                "name": "uint256",
+                                "typeclass": "integer"
+                              }
+                            }
+                          },
+                          "lineno": 13,
+                          "node_id": 120,
+                          "src": "377:8:-1",
+                          "type": {
+                            "length": 3,
+                            "name": "DynArray",
+                            "typeclass": "dynamic_array",
+                            "value_type": {
+                              "bits": 256,
+                              "is_signed": false,
+                              "name": "uint256",
+                              "typeclass": "integer"
+                            }
+                          }
+                        },
+                        {
+                          "ast_type": "List",
+                          "col_offset": 29,
+                          "elements": [
+                            {
+                              "ast_type": "Int",
+                              "col_offset": 30,
+                              "end_col_offset": 32,
+                              "end_lineno": 13,
+                              "folded_value": {
+                                "ast_type": "Int",
+                                "col_offset": 30,
+                                "end_col_offset": 32,
+                                "end_lineno": 13,
+                                "lineno": 13,
+                                "node_id": 125,
+                                "src": "388:2:-1",
+                                "type": {
+                                  "bits": 256,
+                                  "is_signed": false,
+                                  "name": "uint256",
+                                  "typeclass": "integer"
+                                },
+                                "value": 33
+                              },
+                              "lineno": 13,
+                              "node_id": 125,
+                              "src": "388:2:-1",
+                              "type": {
+                                "bits": 256,
+                                "is_signed": false,
+                                "name": "uint256",
+                                "typeclass": "integer"
+                              },
+                              "value": 33
+                            },
+                            {
+                              "ast_type": "Int",
+                              "col_offset": 34,
+                              "end_col_offset": 36,
+                              "end_lineno": 13,
+                              "folded_value": {
+                                "ast_type": "Int",
+                                "col_offset": 34,
+                                "end_col_offset": 36,
+                                "end_lineno": 13,
+                                "lineno": 13,
+                                "node_id": 126,
+                                "src": "392:2:-1",
+                                "type": {
+                                  "bits": 256,
+                                  "is_signed": false,
+                                  "name": "uint256",
+                                  "typeclass": "integer"
+                                },
+                                "value": 44
+                              },
+                              "lineno": 13,
+                              "node_id": 126,
+                              "src": "392:2:-1",
+                              "type": {
+                                "bits": 256,
+                                "is_signed": false,
+                                "name": "uint256",
+                                "typeclass": "integer"
+                              },
+                              "value": 44
+                            }
+                          ],
+                          "end_col_offset": 37,
+                          "end_lineno": 13,
+                          "folded_value": {
+                            "ast_type": "List",
+                            "col_offset": 29,
+                            "elements": [
+                              {
+                                "ast_type": "Int",
+                                "col_offset": 30,
+                                "end_col_offset": 32,
+                                "end_lineno": 13,
+                                "lineno": 13,
+                                "node_id": 125,
+                                "src": "388:2:-1",
+                                "type": {
+                                  "bits": 256,
+                                  "is_signed": false,
+                                  "name": "uint256",
+                                  "typeclass": "integer"
+                                },
+                                "value": 33
+                              },
+                              {
+                                "ast_type": "Int",
+                                "col_offset": 34,
+                                "end_col_offset": 36,
+                                "end_lineno": 13,
+                                "lineno": 13,
+                                "node_id": 126,
+                                "src": "392:2:-1",
+                                "type": {
+                                  "bits": 256,
+                                  "is_signed": false,
+                                  "name": "uint256",
+                                  "typeclass": "integer"
+                                },
+                                "value": 44
+                              }
+                            ],
+                            "end_col_offset": 37,
+                            "end_lineno": 13,
+                            "lineno": 13,
+                            "node_id": 124,
+                            "src": "387:8:-1",
+                            "type": {
+                              "length": 3,
+                              "name": "DynArray",
+                              "typeclass": "dynamic_array",
+                              "value_type": {
+                                "bits": 256,
+                                "is_signed": false,
+                                "name": "uint256",
+                                "typeclass": "integer"
+                              }
+                            }
+                          },
+                          "lineno": 13,
+                          "node_id": 124,
+                          "src": "387:8:-1",
+                          "type": {
+                            "length": 3,
+                            "name": "DynArray",
+                            "typeclass": "dynamic_array",
+                            "value_type": {
+                              "bits": 256,
+                              "is_signed": false,
+                              "name": "uint256",
+                              "typeclass": "integer"
+                            }
+                          }
+                        }
+                      ],
+                      "end_col_offset": 38,
+                      "end_lineno": 13,
+                      "folded_value": {
+                        "ast_type": "List",
+                        "col_offset": 18,
+                        "elements": [
+                          {
+                            "ast_type": "List",
+                            "col_offset": 19,
+                            "elements": [
+                              {
+                                "ast_type": "Int",
+                                "col_offset": 20,
+                                "end_col_offset": 22,
+                                "end_lineno": 13,
+                                "lineno": 13,
+                                "node_id": 121,
+                                "src": "378:2:-1",
+                                "type": {
+                                  "bits": 256,
+                                  "is_signed": false,
+                                  "name": "uint256",
+                                  "typeclass": "integer"
+                                },
+                                "value": 11
+                              },
+                              {
+                                "ast_type": "Int",
+                                "col_offset": 24,
+                                "end_col_offset": 26,
+                                "end_lineno": 13,
+                                "lineno": 13,
+                                "node_id": 122,
+                                "src": "382:2:-1",
+                                "type": {
+                                  "bits": 256,
+                                  "is_signed": false,
+                                  "name": "uint256",
+                                  "typeclass": "integer"
+                                },
+                                "value": 22
+                              }
+                            ],
+                            "end_col_offset": 27,
+                            "end_lineno": 13,
+                            "lineno": 13,
+                            "node_id": 120,
+                            "src": "377:8:-1",
+                            "type": {
+                              "length": 3,
+                              "name": "DynArray",
+                              "typeclass": "dynamic_array",
+                              "value_type": {
+                                "bits": 256,
+                                "is_signed": false,
+                                "name": "uint256",
+                                "typeclass": "integer"
+                              }
+                            }
+                          },
+                          {
+                            "ast_type": "List",
+                            "col_offset": 29,
+                            "elements": [
+                              {
+                                "ast_type": "Int",
+                                "col_offset": 30,
+                                "end_col_offset": 32,
+                                "end_lineno": 13,
+                                "lineno": 13,
+                                "node_id": 125,
+                                "src": "388:2:-1",
+                                "type": {
+                                  "bits": 256,
+                                  "is_signed": false,
+                                  "name": "uint256",
+                                  "typeclass": "integer"
+                                },
+                                "value": 33
+                              },
+                              {
+                                "ast_type": "Int",
+                                "col_offset": 34,
+                                "end_col_offset": 36,
+                                "end_lineno": 13,
+                                "lineno": 13,
+                                "node_id": 126,
+                                "src": "392:2:-1",
+                                "type": {
+                                  "bits": 256,
+                                  "is_signed": false,
+                                  "name": "uint256",
+                                  "typeclass": "integer"
+                                },
+                                "value": 44
+                              }
+                            ],
+                            "end_col_offset": 37,
+                            "end_lineno": 13,
+                            "lineno": 13,
+                            "node_id": 124,
+                            "src": "387:8:-1",
+                            "type": {
+                              "length": 3,
+                              "name": "DynArray",
+                              "typeclass": "dynamic_array",
+                              "value_type": {
+                                "bits": 256,
+                                "is_signed": false,
+                                "name": "uint256",
+                                "typeclass": "integer"
+                              }
+                            }
+                          }
+                        ],
+                        "end_col_offset": 38,
+                        "end_lineno": 13,
+                        "lineno": 13,
+                        "node_id": 119,
+                        "src": "376:20:-1",
+                        "type": {
+                          "length": 2,
+                          "name": "DynArray",
+                          "typeclass": "dynamic_array",
+                          "value_type": {
+                            "length": 3,
+                            "name": "DynArray",
+                            "typeclass": "dynamic_array",
+                            "value_type": {
+                              "bits": 256,
+                              "is_signed": false,
+                              "name": "uint256",
+                              "typeclass": "integer"
+                            }
+                          }
+                        }
+                      },
+                      "lineno": 13,
+                      "node_id": 119,
+                      "src": "376:20:-1",
+                      "type": {
+                        "length": 2,
+                        "name": "DynArray",
+                        "typeclass": "dynamic_array",
+                        "value_type": {
+                          "length": 3,
+                          "name": "DynArray",
+                          "typeclass": "dynamic_array",
+                          "value_type": {
+                            "bits": 256,
+                            "is_signed": false,
+                            "name": "uint256",
+                            "typeclass": "integer"
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "annotation": {
+                      "ast_type": "Name",
+                      "col_offset": 13,
+                      "end_col_offset": 20,
+                      "end_lineno": 14,
+                      "id": "uint256",
+                      "lineno": 14,
+                      "node_id": 132,
+                      "src": "410:7:-1"
+                    },
+                    "ast_type": "AnnAssign",
+                    "col_offset": 4,
+                    "end_col_offset": 47,
+                    "end_lineno": 14,
+                    "lineno": 14,
+                    "node_id": 129,
+                    "src": "401:43:-1",
+                    "target": {
+                      "ast_type": "Name",
+                      "col_offset": 4,
+                      "end_col_offset": 11,
+                      "end_lineno": 14,
+                      "id": "removed",
+                      "lineno": 14,
+                      "node_id": 130,
+                      "src": "401:7:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      },
+                      "variable_reads": [
+                        {
+                          "access_path": [],
+                          "decl_node": {
+                            "node_id": 129,
+                            "source_id": -1
+                          },
+                          "name": "removed"
+                        }
+                      ]
+                    },
+                    "value": {
+                      "args": [],
+                      "ast_type": "Call",
+                      "col_offset": 23,
+                      "end_col_offset": 47,
+                      "end_lineno": 14,
+                      "func": {
+                        "ast_type": "Attribute",
+                        "attr": "pop",
+                        "col_offset": 23,
+                        "end_col_offset": 45,
+                        "end_lineno": 14,
+                        "lineno": 14,
+                        "node_id": 135,
+                        "src": "420:22:-1",
+                        "type": {
+                          "name": "pop",
+                          "typeclass": "member_function"
+                        },
+                        "value": {
+                          "ast_type": "Subscript",
+                          "col_offset": 23,
+                          "end_col_offset": 41,
+                          "end_lineno": 14,
+                          "lineno": 14,
+                          "node_id": 136,
+                          "slice": {
+                            "ast_type": "Name",
+                            "col_offset": 35,
+                            "end_col_offset": 40,
+                            "end_lineno": 14,
+                            "id": "index",
+                            "lineno": 14,
+                            "node_id": 141,
+                            "src": "432:5:-1",
+                            "type": {
+                              "bits": 256,
+                              "is_signed": false,
+                              "name": "uint256",
+                              "typeclass": "integer"
+                            },
+                            "variable_reads": [
+                              {
+                                "access_path": [],
+                                "decl_node": {
+                                  "node_id": 111,
+                                  "source_id": -1
+                                },
+                                "name": "index"
+                              }
+                            ]
+                          },
+                          "src": "420:18:-1",
+                          "type": {
+                            "length": 3,
+                            "name": "DynArray",
+                            "typeclass": "dynamic_array",
+                            "value_type": {
+                              "bits": 256,
+                              "is_signed": false,
+                              "name": "uint256",
+                              "typeclass": "integer"
+                            }
+                          },
+                          "value": {
+                            "ast_type": "Attribute",
+                            "attr": "stored",
+                            "col_offset": 23,
+                            "end_col_offset": 34,
+                            "end_lineno": 14,
+                            "lineno": 14,
+                            "node_id": 137,
+                            "src": "420:11:-1",
+                            "type": {
+                              "length": 2,
+                              "name": "DynArray",
+                              "typeclass": "dynamic_array",
+                              "value_type": {
+                                "length": 3,
+                                "name": "DynArray",
+                                "typeclass": "dynamic_array",
+                                "value_type": {
+                                  "bits": 256,
+                                  "is_signed": false,
+                                  "name": "uint256",
+                                  "typeclass": "integer"
+                                }
+                              }
+                            },
+                            "value": {
+                              "ast_type": "Name",
+                              "col_offset": 23,
+                              "end_col_offset": 27,
+                              "end_lineno": 14,
+                              "id": "self",
+                              "lineno": 14,
+                              "node_id": 138,
+                              "src": "420:4:-1",
+                              "type": {
+                                "name": "self"
+                              }
+                            },
+                            "variable_reads": [
+                              {
+                                "access_path": [],
+                                "decl_node": {
+                                  "node_id": 1,
+                                  "source_id": -1
+                                },
+                                "name": "stored"
+                              }
+                            ]
+                          },
+                          "variable_reads": [
+                            {
+                              "access_path": [
+                                "$subscript_access"
+                              ],
+                              "decl_node": {
+                                "node_id": 1,
+                                "source_id": -1
+                              },
+                              "name": "stored"
+                            }
+                          ],
+                          "variable_writes": [
+                            {
+                              "access_path": [
+                                "$subscript_access"
+                              ],
+                              "decl_node": {
+                                "node_id": 1,
+                                "source_id": -1
+                              },
+                              "name": "stored"
+                            }
+                          ]
+                        },
+                        "variable_reads": [
+                          {
+                            "access_path": [
+                              "$subscript_access",
+                              "pop"
+                            ],
+                            "decl_node": {
+                              "node_id": 1,
+                              "source_id": -1
+                            },
+                            "name": "stored"
+                          }
+                        ]
+                      },
+                      "keywords": [],
+                      "lineno": 14,
+                      "node_id": 134,
+                      "src": "420:24:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      }
+                    }
+                  },
+                  {
+                    "ast_type": "Expr",
+                    "col_offset": 4,
+                    "end_col_offset": 33,
+                    "end_lineno": 15,
+                    "lineno": 15,
+                    "node_id": 145,
+                    "src": "449:29:-1",
+                    "value": {
+                      "args": [
+                        {
+                          "ast_type": "Int",
+                          "col_offset": 30,
+                          "end_col_offset": 32,
+                          "end_lineno": 15,
+                          "folded_value": {
+                            "ast_type": "Int",
+                            "col_offset": 30,
+                            "end_col_offset": 32,
+                            "end_lineno": 15,
+                            "lineno": 15,
+                            "node_id": 157,
+                            "src": "475:2:-1",
+                            "type": {
+                              "bits": 256,
+                              "is_signed": false,
+                              "name": "uint256",
+                              "typeclass": "integer"
+                            },
+                            "value": 55
+                          },
+                          "lineno": 15,
+                          "node_id": 157,
+                          "src": "475:2:-1",
+                          "type": {
+                            "bits": 256,
+                            "is_signed": false,
+                            "name": "uint256",
+                            "typeclass": "integer"
+                          },
+                          "value": 55
+                        }
+                      ],
+                      "ast_type": "Call",
+                      "col_offset": 4,
+                      "end_col_offset": 33,
+                      "end_lineno": 15,
+                      "func": {
+                        "ast_type": "Attribute",
+                        "attr": "append",
+                        "col_offset": 4,
+                        "end_col_offset": 29,
+                        "end_lineno": 15,
+                        "lineno": 15,
+                        "node_id": 147,
+                        "src": "449:25:-1",
+                        "type": {
+                          "name": "append",
+                          "typeclass": "member_function"
+                        },
+                        "value": {
+                          "ast_type": "Subscript",
+                          "col_offset": 4,
+                          "end_col_offset": 22,
+                          "end_lineno": 15,
+                          "lineno": 15,
+                          "node_id": 148,
+                          "slice": {
+                            "ast_type": "Name",
+                            "col_offset": 16,
+                            "end_col_offset": 21,
+                            "end_lineno": 15,
+                            "id": "index",
+                            "lineno": 15,
+                            "node_id": 153,
+                            "src": "461:5:-1",
+                            "type": {
+                              "bits": 256,
+                              "is_signed": false,
+                              "name": "uint256",
+                              "typeclass": "integer"
+                            },
+                            "variable_reads": [
+                              {
+                                "access_path": [],
+                                "decl_node": {
+                                  "node_id": 111,
+                                  "source_id": -1
+                                },
+                                "name": "index"
+                              }
+                            ]
+                          },
+                          "src": "449:18:-1",
+                          "type": {
+                            "length": 3,
+                            "name": "DynArray",
+                            "typeclass": "dynamic_array",
+                            "value_type": {
+                              "bits": 256,
+                              "is_signed": false,
+                              "name": "uint256",
+                              "typeclass": "integer"
+                            }
+                          },
+                          "value": {
+                            "ast_type": "Attribute",
+                            "attr": "stored",
+                            "col_offset": 4,
+                            "end_col_offset": 15,
+                            "end_lineno": 15,
+                            "lineno": 15,
+                            "node_id": 149,
+                            "src": "449:11:-1",
+                            "type": {
+                              "length": 2,
+                              "name": "DynArray",
+                              "typeclass": "dynamic_array",
+                              "value_type": {
+                                "length": 3,
+                                "name": "DynArray",
+                                "typeclass": "dynamic_array",
+                                "value_type": {
+                                  "bits": 256,
+                                  "is_signed": false,
+                                  "name": "uint256",
+                                  "typeclass": "integer"
+                                }
+                              }
+                            },
+                            "value": {
+                              "ast_type": "Name",
+                              "col_offset": 4,
+                              "end_col_offset": 8,
+                              "end_lineno": 15,
+                              "id": "self",
+                              "lineno": 15,
+                              "node_id": 150,
+                              "src": "449:4:-1",
+                              "type": {
+                                "name": "self"
+                              }
+                            },
+                            "variable_reads": [
+                              {
+                                "access_path": [],
+                                "decl_node": {
+                                  "node_id": 1,
+                                  "source_id": -1
+                                },
+                                "name": "stored"
+                              }
+                            ]
+                          },
+                          "variable_reads": [
+                            {
+                              "access_path": [
+                                "$subscript_access"
+                              ],
+                              "decl_node": {
+                                "node_id": 1,
+                                "source_id": -1
+                              },
+                              "name": "stored"
+                            }
+                          ],
+                          "variable_writes": [
+                            {
+                              "access_path": [
+                                "$subscript_access"
+                              ],
+                              "decl_node": {
+                                "node_id": 1,
+                                "source_id": -1
+                              },
+                              "name": "stored"
+                            }
+                          ]
+                        },
+                        "variable_reads": [
+                          {
+                            "access_path": [
+                              "$subscript_access",
+                              "append"
+                            ],
+                            "decl_node": {
+                              "node_id": 1,
+                              "source_id": -1
+                            },
+                            "name": "stored"
+                          }
+                        ]
+                      },
+                      "keywords": [],
+                      "lineno": 15,
+                      "node_id": 146,
+                      "src": "449:29:-1",
+                      "type": {
+                        "name": "(void)"
+                      }
+                    }
+                  },
+                  {
+                    "ast_type": "Return",
+                    "col_offset": 4,
+                    "end_col_offset": 68,
+                    "end_lineno": 16,
+                    "lineno": 16,
+                    "node_id": 158,
+                    "src": "483:64:-1",
+                    "value": {
+                      "ast_type": "List",
+                      "col_offset": 11,
+                      "elements": [
+                        {
+                          "ast_type": "Name",
+                          "col_offset": 12,
+                          "end_col_offset": 19,
+                          "end_lineno": 16,
+                          "id": "removed",
+                          "lineno": 16,
+                          "node_id": 160,
+                          "src": "491:7:-1",
+                          "type": {
+                            "bits": 256,
+                            "is_signed": false,
+                            "name": "uint256",
+                            "typeclass": "integer"
+                          },
+                          "variable_reads": [
+                            {
+                              "access_path": [],
+                              "decl_node": {
+                                "node_id": 129,
+                                "source_id": -1
+                              },
+                              "name": "removed"
+                            }
+                          ]
+                        },
+                        {
+                          "args": [
+                            {
+                              "ast_type": "Subscript",
+                              "col_offset": 25,
+                              "end_col_offset": 43,
+                              "end_lineno": 16,
+                              "lineno": 16,
+                              "node_id": 165,
+                              "slice": {
+                                "ast_type": "Name",
+                                "col_offset": 37,
+                                "end_col_offset": 42,
+                                "end_lineno": 16,
+                                "id": "index",
+                                "lineno": 16,
+                                "node_id": 170,
+                                "src": "516:5:-1",
+                                "type": {
+                                  "bits": 256,
+                                  "is_signed": false,
+                                  "name": "uint256",
+                                  "typeclass": "integer"
+                                },
+                                "variable_reads": [
+                                  {
+                                    "access_path": [],
+                                    "decl_node": {
+                                      "node_id": 111,
+                                      "source_id": -1
+                                    },
+                                    "name": "index"
+                                  }
+                                ]
+                              },
+                              "src": "504:18:-1",
+                              "type": {
+                                "length": 3,
+                                "name": "DynArray",
+                                "typeclass": "dynamic_array",
+                                "value_type": {
+                                  "bits": 256,
+                                  "is_signed": false,
+                                  "name": "uint256",
+                                  "typeclass": "integer"
+                                }
+                              },
+                              "value": {
+                                "ast_type": "Attribute",
+                                "attr": "stored",
+                                "col_offset": 25,
+                                "end_col_offset": 36,
+                                "end_lineno": 16,
+                                "lineno": 16,
+                                "node_id": 166,
+                                "src": "504:11:-1",
+                                "type": {
+                                  "length": 2,
+                                  "name": "DynArray",
+                                  "typeclass": "dynamic_array",
+                                  "value_type": {
+                                    "length": 3,
+                                    "name": "DynArray",
+                                    "typeclass": "dynamic_array",
+                                    "value_type": {
+                                      "bits": 256,
+                                      "is_signed": false,
+                                      "name": "uint256",
+                                      "typeclass": "integer"
+                                    }
+                                  }
+                                },
+                                "value": {
+                                  "ast_type": "Name",
+                                  "col_offset": 25,
+                                  "end_col_offset": 29,
+                                  "end_lineno": 16,
+                                  "id": "self",
+                                  "lineno": 16,
+                                  "node_id": 167,
+                                  "src": "504:4:-1",
+                                  "type": {
+                                    "name": "self"
+                                  }
+                                },
+                                "variable_reads": [
+                                  {
+                                    "access_path": [],
+                                    "decl_node": {
+                                      "node_id": 1,
+                                      "source_id": -1
+                                    },
+                                    "name": "stored"
+                                  }
+                                ]
+                              },
+                              "variable_reads": [
+                                {
+                                  "access_path": [
+                                    "$subscript_access"
+                                  ],
+                                  "decl_node": {
+                                    "node_id": 1,
+                                    "source_id": -1
+                                  },
+                                  "name": "stored"
+                                }
+                              ]
+                            }
+                          ],
+                          "ast_type": "Call",
+                          "col_offset": 21,
+                          "end_col_offset": 44,
+                          "end_lineno": 16,
+                          "func": {
+                            "ast_type": "Name",
+                            "col_offset": 21,
+                            "end_col_offset": 24,
+                            "end_lineno": 16,
+                            "id": "len",
+                            "lineno": 16,
+                            "node_id": 163,
+                            "src": "500:3:-1",
+                            "type": {
+                              "name": "len",
+                              "typeclass": "builtin_function"
+                            }
+                          },
+                          "keywords": [],
+                          "lineno": 16,
+                          "node_id": 162,
+                          "src": "500:23:-1",
+                          "type": {
+                            "bits": 256,
+                            "is_signed": false,
+                            "name": "uint256",
+                            "typeclass": "integer"
+                          }
+                        },
+                        {
+                          "ast_type": "Subscript",
+                          "col_offset": 46,
+                          "end_col_offset": 67,
+                          "end_lineno": 16,
+                          "lineno": 16,
+                          "node_id": 173,
+                          "slice": {
+                            "ast_type": "Int",
+                            "col_offset": 65,
+                            "end_col_offset": 66,
+                            "end_lineno": 16,
+                            "folded_value": {
+                              "ast_type": "Int",
+                              "col_offset": 65,
+                              "end_col_offset": 66,
+                              "end_lineno": 16,
+                              "lineno": 16,
+                              "node_id": 182,
+                              "src": "544:1:-1",
+                              "type": {
+                                "bits": 8,
+                                "is_signed": true,
+                                "name": "int8",
+                                "typeclass": "integer"
+                              },
+                              "value": 1
+                            },
+                            "lineno": 16,
+                            "node_id": 182,
+                            "src": "544:1:-1",
+                            "type": {
+                              "bits": 8,
+                              "is_signed": true,
+                              "name": "int8",
+                              "typeclass": "integer"
+                            },
+                            "value": 1
+                          },
+                          "src": "525:21:-1",
+                          "type": {
+                            "bits": 256,
+                            "is_signed": false,
+                            "name": "uint256",
+                            "typeclass": "integer"
+                          },
+                          "value": {
+                            "ast_type": "Subscript",
+                            "col_offset": 46,
+                            "end_col_offset": 64,
+                            "end_lineno": 16,
+                            "lineno": 16,
+                            "node_id": 174,
+                            "slice": {
+                              "ast_type": "Name",
+                              "col_offset": 58,
+                              "end_col_offset": 63,
+                              "end_lineno": 16,
+                              "id": "index",
+                              "lineno": 16,
+                              "node_id": 179,
+                              "src": "537:5:-1",
+                              "type": {
+                                "bits": 256,
+                                "is_signed": false,
+                                "name": "uint256",
+                                "typeclass": "integer"
+                              },
+                              "variable_reads": [
+                                {
+                                  "access_path": [],
+                                  "decl_node": {
+                                    "node_id": 111,
+                                    "source_id": -1
+                                  },
+                                  "name": "index"
+                                }
+                              ]
+                            },
+                            "src": "525:18:-1",
+                            "type": {
+                              "length": 3,
+                              "name": "DynArray",
+                              "typeclass": "dynamic_array",
+                              "value_type": {
+                                "bits": 256,
+                                "is_signed": false,
+                                "name": "uint256",
+                                "typeclass": "integer"
+                              }
+                            },
+                            "value": {
+                              "ast_type": "Attribute",
+                              "attr": "stored",
+                              "col_offset": 46,
+                              "end_col_offset": 57,
+                              "end_lineno": 16,
+                              "lineno": 16,
+                              "node_id": 175,
+                              "src": "525:11:-1",
+                              "type": {
+                                "length": 2,
+                                "name": "DynArray",
+                                "typeclass": "dynamic_array",
+                                "value_type": {
+                                  "length": 3,
+                                  "name": "DynArray",
+                                  "typeclass": "dynamic_array",
+                                  "value_type": {
+                                    "bits": 256,
+                                    "is_signed": false,
+                                    "name": "uint256",
+                                    "typeclass": "integer"
+                                  }
+                                }
+                              },
+                              "value": {
+                                "ast_type": "Name",
+                                "col_offset": 46,
+                                "end_col_offset": 50,
+                                "end_lineno": 16,
+                                "id": "self",
+                                "lineno": 16,
+                                "node_id": 176,
+                                "src": "525:4:-1",
+                                "type": {
+                                  "name": "self"
+                                }
+                              },
+                              "variable_reads": [
+                                {
+                                  "access_path": [],
+                                  "decl_node": {
+                                    "node_id": 1,
+                                    "source_id": -1
+                                  },
+                                  "name": "stored"
+                                }
+                              ]
+                            },
+                            "variable_reads": [
+                              {
+                                "access_path": [
+                                  "$subscript_access"
+                                ],
+                                "decl_node": {
+                                  "node_id": 1,
+                                  "source_id": -1
+                                },
+                                "name": "stored"
+                              }
+                            ]
+                          },
+                          "variable_reads": [
+                            {
+                              "access_path": [
+                                "$subscript_access",
+                                "$subscript_access"
+                              ],
+                              "decl_node": {
+                                "node_id": 1,
+                                "source_id": -1
+                              },
+                              "name": "stored"
+                            }
+                          ]
+                        }
+                      ],
+                      "end_col_offset": 68,
+                      "end_lineno": 16,
+                      "lineno": 16,
+                      "node_id": 159,
+                      "src": "490:57:-1",
+                      "type": {
+                        "length": 3,
+                        "name": "$SArray",
+                        "typeclass": "static_array",
+                        "value_type": {
+                          "bits": 256,
+                          "is_signed": false,
+                          "name": "uint256",
+                          "typeclass": "integer"
+                        }
+                      }
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 9,
+                    "end_lineno": 11,
+                    "id": "external",
+                    "lineno": 11,
+                    "node_id": 185,
+                    "src": "302:8:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 68,
+                "end_lineno": 16,
+                "func_type": {
+                  "argument_types": [
+                    {
+                      "bits": 256,
+                      "is_signed": false,
+                      "name": "uint256",
+                      "typeclass": "integer"
+                    }
+                  ],
+                  "name": "storage_pop",
+                  "return_type": {
+                    "length": 3,
+                    "name": "$SArray",
+                    "typeclass": "static_array",
+                    "value_type": {
+                      "bits": 256,
+                      "is_signed": false,
+                      "name": "uint256",
+                      "typeclass": "integer"
+                    }
+                  },
+                  "type_decl_node": {
+                    "node_id": 109,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                },
+                "lineno": 12,
+                "name": "storage_pop",
+                "node_id": 109,
+                "returns": {
+                  "ast_type": "Subscript",
+                  "col_offset": 35,
+                  "end_col_offset": 45,
+                  "end_lineno": 12,
+                  "lineno": 12,
+                  "node_id": 187,
+                  "slice": {
+                    "ast_type": "Int",
+                    "col_offset": 43,
+                    "end_col_offset": 44,
+                    "end_lineno": 12,
+                    "folded_value": {
+                      "ast_type": "Int",
+                      "col_offset": 43,
+                      "end_col_offset": 44,
+                      "end_lineno": 12,
+                      "lineno": 12,
+                      "node_id": 190,
+                      "src": "354:1:-1",
+                      "value": 3
+                    },
+                    "lineno": 12,
+                    "node_id": 190,
+                    "src": "354:1:-1",
+                    "value": 3
+                  },
+                  "src": "346:10:-1",
+                  "value": {
+                    "ast_type": "Name",
+                    "col_offset": 35,
+                    "end_col_offset": 42,
+                    "end_lineno": 12,
+                    "id": "uint256",
+                    "lineno": 12,
+                    "node_id": 188,
+                    "src": "346:7:-1"
+                  }
+                },
+                "src": "311:236:-1"
+              }
+            ],
+            "col_offset": 0,
+            "doc_string": null,
+            "end_col_offset": 69,
+            "end_lineno": 16,
+            "is_interface": false,
+            "lineno": 1,
+            "name": null,
+            "node_id": 0,
+            "path": "tests/fixtures/regression/finding_34_nested_array_pop/unknown_0.vy",
+            "resolved_path": "tests/fixtures/regression/finding_34_nested_array_pop/unknown_0.vy",
+            "settings": {},
+            "source_id": -1,
+            "source_sha256sum": "bf79f3ca7a50d121967b9d35355fe7013a7fb189b5081f137ad898ee6c91fba5",
+            "src": "0:548:-1",
+            "type": {
+              "name": "tests/fixtures/regression/finding_34_nested_array_pop/unknown_0.vy",
+              "type_decl_node": {
+                "node_id": 0,
+                "source_id": -1
+              },
+              "typeclass": "module"
+            }
+          },
+          "contract_name": "tests/fixtures/regression/finding_34_nested_array_pop/unknown_0.vy",
+          "imports": []
+        },
+        "blueprint_initcode_prefix": null,
+        "calldata": null,
+        "compiler_settings": {
+          "debug": false,
+          "enable_decimals": true,
+          "evm_version": "prague",
+          "experimental_codegen": false,
+          "optimize": "gas"
+        },
+        "contract_abi": [
+          {
+            "gas": 2269,
+            "inputs": [
+              {
+                "name": "index",
+                "type": "uint256"
+              }
+            ],
+            "name": "memory_pop",
+            "outputs": [
+              {
+                "name": "",
+                "type": "uint256[3]"
+              }
+            ],
+            "stateMutability": "nonpayable",
+            "type": "function"
+          },
+          {
+            "gas": 373512,
+            "inputs": [
+              {
+                "name": "index",
+                "type": "uint256"
+              }
+            ],
+            "name": "storage_pop",
+            "outputs": [
+              {
+                "name": "",
+                "type": "uint256[3]"
+              }
+            ],
+            "stateMutability": "nonpayable",
+            "type": "function"
+          }
+        ],
+        "deployed_address": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+        "deployment_succeeded": true,
+        "deployment_type": "source",
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "constructor",
+        "initcode": "6101f461000d5f396101f45ff35f3560e01c60026001821660011b6101f001601e395f51565b63e17dda7781186101e8576024361034176101ec57600b608052601660a0526002606052602161010052602c61012052600260e05260026040526004356040518110156101ec5760071b6060016001815180156101ec57038082528060051b60208301019050905051610160526004356040518110156101ec5760071b6060018051600281116101ec5760378160051b602084010152600181018252505061016051610180526004356040518110156101ec5760071b606001516101a0526004356040518110156101ec5760071b6060016001815111156101ec57600160051b60208201019050516101c0526060610180f35b63d61829f681186101e8576024361034176101ec57600b600255601660035560026001556021600655602c600755600260055560025f556004355f548110156101ec5760021b6001016001815480156101ec570380825580600183010190509050546040526004355f548110156101ec5760021b6001018054600281116101ec5760378160018401015560018101825550506040516060526004355f548110156101ec5760021b600101546080526004355f548110156101ec5760021b6001016001815411156101ec576001600182010190505460a05260606060f35b5f5ffd5b5f80fd010b0018855820df9e73689997be2156925f38eb7cb1b674784a65ddd3483a59080bd68dc8f71f1901f4810400a1657679706572830005000036",
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "raw_ir": null,
+        "runtime_bytecode": "5f3560e01c60026001821660011b6101f001601e395f51565b63e17dda7781186101e8576024361034176101ec57600b608052601660a0526002606052602161010052602c61012052600260e05260026040526004356040518110156101ec5760071b6060016001815180156101ec57038082528060051b60208301019050905051610160526004356040518110156101ec5760071b6060018051600281116101ec5760378160051b602084010152600181018252505061016051610180526004356040518110156101ec5760071b606001516101a0526004356040518110156101ec5760071b6060016001815111156101ec57600160051b60208201019050516101c0526060610180f35b63d61829f681186101e8576024361034176101ec57600b600255601660035560026001556021600655602c600755600260055560025f556004355f548110156101ec5760021b6001016001815480156101ec570380825580600183010190509050546040526004355f548110156101ec5760021b6001018054600281116101ec5760378160018401015560018101825550506040516060526004355f548110156101ec5760021b600101546080526004355f548110156101ec5760021b6001016001815411156101ec576001600182010190505460a05260606060f35b5f5ffd5b5f80fd010b0018",
+        "solc_json": {
+          "compiler_version": "v0.5.0a4+commit.cd74ce4f",
+          "integrity": "df9e73689997be2156925f38eb7cb1b674784a65ddd3483a59080bd68dc8f71f",
+          "language": "Vyper",
+          "settings": {
+            "debug": false,
+            "evmVersion": "prague",
+            "experimentalCodegen": false,
+            "optimize": "gas",
+            "outputSelection": {
+              "unknown_0.vy": [
+                "*"
+              ]
+            },
+            "search_paths": [
+              "."
+            ]
+          },
+          "sources": {
+            "unknown_0.vy": {
+              "content": "\nstored: DynArray[DynArray[uint256, 3], 2]\n\n@external\ndef memory_pop(index: uint256) -> uint256[3]:\n    values: DynArray[DynArray[uint256, 3], 2] = [[11, 22], [33, 44]]\n    removed: uint256 = values[index].pop()\n    values[index].append(55)\n    return [removed, len(values[index]), values[index][1]]\n\n@external\ndef storage_pop(index: uint256) -> uint256[3]:\n    self.stored = [[11, 22], [33, 44]]\n    removed: uint256 = self.stored[index].pop()\n    self.stored[index].append(55)\n    return [removed, len(self.stored[index]), self.stored[index][1]]\n",
+              "sha256sum": "bf79f3ca7a50d121967b9d35355fe7013a7fb189b5081f137ad898ee6c91fba5"
+            }
+          }
+        },
+        "source_code": "\nstored: DynArray[DynArray[uint256, 3], 2]\n\n@external\ndef memory_pop(index: uint256) -> uint256[3]:\n    values: DynArray[DynArray[uint256, 3], 2] = [[11, 22], [33, 44]]\n    removed: uint256 = values[index].pop()\n    values[index].append(55)\n    return [removed, len(values[index]), values[index][1]]\n\n@external\ndef storage_pop(index: uint256) -> uint256[3]:\n    self.stored = [[11, 22], [33, 44]]\n    removed: uint256 = self.stored[index].pop()\n    self.stored[index].append(55)\n    return [removed, len(self.stored[index]), self.stored[index][1]]\n",
+        "storage_layout": {
+          "storage_layout": {
+            "stored": {
+              "n_slots": 9,
+              "slot": 0,
+              "type": "DynArray[DynArray[uint256, 3], 2]"
+            }
+          }
+        },
+        "trace_type": "deployment",
+        "value": 0
+      },
+      {
+        "call_args": {
+          "calldata": "d61829f60000000000000000000000000000000000000000000000000000000000000000",
+          "is_modifying": true,
+          "to": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+          "value": 0
+        },
+        "call_succeeded": true,
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "storage_pop",
+        "output": "000000000000000000000000000000000000000000000000000000000000001600000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000037",
+        "python_args": {
+          "args": [
+            0
+          ],
+          "kwargs": {}
+        },
+        "trace_type": "call"
+      }
+    ]
+  }
+}

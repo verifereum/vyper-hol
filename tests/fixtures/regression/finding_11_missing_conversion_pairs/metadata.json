@@ -1,0 +1,10 @@
+{
+  "compiler_commit": "cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c",
+  "compiler_version": "0.5.0a4",
+  "evm_version": "prague",
+  "experimental_codegen": false,
+  "finding": 11,
+  "optimize": "gas",
+  "pytest_node": "test_11_missing_conversion_pairs.py::test_compiler_accepted_conversions[bool_to_decimal-True-10000000000]",
+  "state_comparison": "full-world-state-v1"
+}

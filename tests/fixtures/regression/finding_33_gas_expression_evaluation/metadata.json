@@ -1,0 +1,10 @@
+{
+  "compiler_commit": "cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c",
+  "compiler_version": "0.5.0a4",
+  "evm_version": "prague",
+  "experimental_codegen": false,
+  "finding": 33,
+  "optimize": "gas",
+  "pytest_node": "test_33_gas_expression_evaluation.py::test_gas_expression_storage_effect_is_not_discarded",
+  "state_comparison": "full-world-state-v1"
+}

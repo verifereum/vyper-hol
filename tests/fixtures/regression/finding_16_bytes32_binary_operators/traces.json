@@ -1,0 +1,1286 @@
+{
+  "finding_16_bytes32_binary_operators": {
+    "deps": [],
+    "item_type": "test",
+    "traces": [
+      {
+        "annotated_ast": {
+          "ast": {
+            "ast_type": "Module",
+            "body": [
+              {
+                "args": {
+                  "args": [
+                    {
+                      "annotation": {
+                        "ast_type": "Name",
+                        "col_offset": 18,
+                        "end_col_offset": 25,
+                        "end_lineno": 4,
+                        "id": "bytes32",
+                        "lineno": 4,
+                        "node_id": 4,
+                        "src": "35:7:-1"
+                      },
+                      "arg": "left",
+                      "ast_type": "arg",
+                      "col_offset": 12,
+                      "end_col_offset": 25,
+                      "end_lineno": 4,
+                      "lineno": 4,
+                      "node_id": 3,
+                      "src": "29:13:-1"
+                    },
+                    {
+                      "annotation": {
+                        "ast_type": "Name",
+                        "col_offset": 34,
+                        "end_col_offset": 41,
+                        "end_lineno": 4,
+                        "id": "bytes32",
+                        "lineno": 4,
+                        "node_id": 7,
+                        "src": "51:7:-1"
+                      },
+                      "arg": "right",
+                      "ast_type": "arg",
+                      "col_offset": 27,
+                      "end_col_offset": 41,
+                      "end_lineno": 4,
+                      "lineno": 4,
+                      "node_id": 6,
+                      "src": "44:14:-1"
+                    }
+                  ],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 23,
+                  "end_lineno": 5,
+                  "lineno": 4,
+                  "node_id": 2,
+                  "src": "17:78:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "Return",
+                    "col_offset": 4,
+                    "end_col_offset": 23,
+                    "end_lineno": 5,
+                    "lineno": 5,
+                    "node_id": 9,
+                    "src": "76:19:-1",
+                    "value": {
+                      "ast_type": "BinOp",
+                      "col_offset": 11,
+                      "end_col_offset": 23,
+                      "end_lineno": 5,
+                      "left": {
+                        "ast_type": "Name",
+                        "col_offset": 11,
+                        "end_col_offset": 15,
+                        "end_lineno": 5,
+                        "id": "left",
+                        "lineno": 5,
+                        "node_id": 11,
+                        "src": "83:4:-1",
+                        "type": {
+                          "m": 32,
+                          "name": "bytes32",
+                          "typeclass": "bytes_m"
+                        },
+                        "variable_reads": [
+                          {
+                            "access_path": [],
+                            "decl_node": {
+                              "node_id": 3,
+                              "source_id": -1
+                            },
+                            "name": "left"
+                          }
+                        ]
+                      },
+                      "lineno": 5,
+                      "node_id": 10,
+                      "op": {
+                        "ast_type": "BitAnd",
+                        "col_offset": 11,
+                        "end_col_offset": 23,
+                        "end_lineno": 5,
+                        "lineno": 5,
+                        "node_id": 13,
+                        "src": "83:12:-1"
+                      },
+                      "right": {
+                        "ast_type": "Name",
+                        "col_offset": 18,
+                        "end_col_offset": 23,
+                        "end_lineno": 5,
+                        "id": "right",
+                        "lineno": 5,
+                        "node_id": 14,
+                        "src": "90:5:-1",
+                        "type": {
+                          "m": 32,
+                          "name": "bytes32",
+                          "typeclass": "bytes_m"
+                        },
+                        "variable_reads": [
+                          {
+                            "access_path": [],
+                            "decl_node": {
+                              "node_id": 6,
+                              "source_id": -1
+                            },
+                            "name": "right"
+                          }
+                        ]
+                      },
+                      "src": "83:12:-1",
+                      "type": {
+                        "m": 32,
+                        "name": "bytes32",
+                        "typeclass": "bytes_m"
+                      }
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 9,
+                    "end_lineno": 2,
+                    "id": "external",
+                    "lineno": 2,
+                    "node_id": 16,
+                    "src": "2:8:-1"
+                  },
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 5,
+                    "end_lineno": 3,
+                    "id": "pure",
+                    "lineno": 3,
+                    "node_id": 18,
+                    "src": "12:4:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 23,
+                "end_lineno": 5,
+                "func_type": {
+                  "argument_types": [
+                    {
+                      "m": 32,
+                      "name": "bytes32",
+                      "typeclass": "bytes_m"
+                    },
+                    {
+                      "m": 32,
+                      "name": "bytes32",
+                      "typeclass": "bytes_m"
+                    }
+                  ],
+                  "name": "bit_and",
+                  "return_type": {
+                    "m": 32,
+                    "name": "bytes32",
+                    "typeclass": "bytes_m"
+                  },
+                  "type_decl_node": {
+                    "node_id": 1,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                },
+                "lineno": 4,
+                "name": "bit_and",
+                "node_id": 1,
+                "returns": {
+                  "ast_type": "Name",
+                  "col_offset": 46,
+                  "end_col_offset": 53,
+                  "end_lineno": 4,
+                  "id": "bytes32",
+                  "lineno": 4,
+                  "node_id": 20,
+                  "src": "63:7:-1"
+                },
+                "src": "17:78:-1"
+              },
+              {
+                "args": {
+                  "args": [
+                    {
+                      "annotation": {
+                        "ast_type": "Name",
+                        "col_offset": 17,
+                        "end_col_offset": 24,
+                        "end_lineno": 9,
+                        "id": "bytes32",
+                        "lineno": 9,
+                        "node_id": 25,
+                        "src": "130:7:-1"
+                      },
+                      "arg": "left",
+                      "ast_type": "arg",
+                      "col_offset": 11,
+                      "end_col_offset": 24,
+                      "end_lineno": 9,
+                      "lineno": 9,
+                      "node_id": 24,
+                      "src": "124:13:-1"
+                    },
+                    {
+                      "annotation": {
+                        "ast_type": "Name",
+                        "col_offset": 33,
+                        "end_col_offset": 40,
+                        "end_lineno": 9,
+                        "id": "bytes32",
+                        "lineno": 9,
+                        "node_id": 28,
+                        "src": "146:7:-1"
+                      },
+                      "arg": "right",
+                      "ast_type": "arg",
+                      "col_offset": 26,
+                      "end_col_offset": 40,
+                      "end_lineno": 9,
+                      "lineno": 9,
+                      "node_id": 27,
+                      "src": "139:14:-1"
+                    }
+                  ],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 23,
+                  "end_lineno": 10,
+                  "lineno": 9,
+                  "node_id": 23,
+                  "src": "113:77:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "Return",
+                    "col_offset": 4,
+                    "end_col_offset": 23,
+                    "end_lineno": 10,
+                    "lineno": 10,
+                    "node_id": 30,
+                    "src": "171:19:-1",
+                    "value": {
+                      "ast_type": "BinOp",
+                      "col_offset": 11,
+                      "end_col_offset": 23,
+                      "end_lineno": 10,
+                      "left": {
+                        "ast_type": "Name",
+                        "col_offset": 11,
+                        "end_col_offset": 15,
+                        "end_lineno": 10,
+                        "id": "left",
+                        "lineno": 10,
+                        "node_id": 32,
+                        "src": "178:4:-1",
+                        "type": {
+                          "m": 32,
+                          "name": "bytes32",
+                          "typeclass": "bytes_m"
+                        },
+                        "variable_reads": [
+                          {
+                            "access_path": [],
+                            "decl_node": {
+                              "node_id": 24,
+                              "source_id": -1
+                            },
+                            "name": "left"
+                          }
+                        ]
+                      },
+                      "lineno": 10,
+                      "node_id": 31,
+                      "op": {
+                        "ast_type": "BitOr",
+                        "col_offset": 11,
+                        "end_col_offset": 23,
+                        "end_lineno": 10,
+                        "lineno": 10,
+                        "node_id": 34,
+                        "src": "178:12:-1"
+                      },
+                      "right": {
+                        "ast_type": "Name",
+                        "col_offset": 18,
+                        "end_col_offset": 23,
+                        "end_lineno": 10,
+                        "id": "right",
+                        "lineno": 10,
+                        "node_id": 35,
+                        "src": "185:5:-1",
+                        "type": {
+                          "m": 32,
+                          "name": "bytes32",
+                          "typeclass": "bytes_m"
+                        },
+                        "variable_reads": [
+                          {
+                            "access_path": [],
+                            "decl_node": {
+                              "node_id": 27,
+                              "source_id": -1
+                            },
+                            "name": "right"
+                          }
+                        ]
+                      },
+                      "src": "178:12:-1",
+                      "type": {
+                        "m": 32,
+                        "name": "bytes32",
+                        "typeclass": "bytes_m"
+                      }
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 9,
+                    "end_lineno": 7,
+                    "id": "external",
+                    "lineno": 7,
+                    "node_id": 37,
+                    "src": "98:8:-1"
+                  },
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 5,
+                    "end_lineno": 8,
+                    "id": "pure",
+                    "lineno": 8,
+                    "node_id": 39,
+                    "src": "108:4:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 23,
+                "end_lineno": 10,
+                "func_type": {
+                  "argument_types": [
+                    {
+                      "m": 32,
+                      "name": "bytes32",
+                      "typeclass": "bytes_m"
+                    },
+                    {
+                      "m": 32,
+                      "name": "bytes32",
+                      "typeclass": "bytes_m"
+                    }
+                  ],
+                  "name": "bit_or",
+                  "return_type": {
+                    "m": 32,
+                    "name": "bytes32",
+                    "typeclass": "bytes_m"
+                  },
+                  "type_decl_node": {
+                    "node_id": 22,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                },
+                "lineno": 9,
+                "name": "bit_or",
+                "node_id": 22,
+                "returns": {
+                  "ast_type": "Name",
+                  "col_offset": 45,
+                  "end_col_offset": 52,
+                  "end_lineno": 9,
+                  "id": "bytes32",
+                  "lineno": 9,
+                  "node_id": 41,
+                  "src": "158:7:-1"
+                },
+                "src": "113:77:-1"
+              },
+              {
+                "args": {
+                  "args": [
+                    {
+                      "annotation": {
+                        "ast_type": "Name",
+                        "col_offset": 18,
+                        "end_col_offset": 25,
+                        "end_lineno": 14,
+                        "id": "bytes32",
+                        "lineno": 14,
+                        "node_id": 46,
+                        "src": "226:7:-1"
+                      },
+                      "arg": "left",
+                      "ast_type": "arg",
+                      "col_offset": 12,
+                      "end_col_offset": 25,
+                      "end_lineno": 14,
+                      "lineno": 14,
+                      "node_id": 45,
+                      "src": "220:13:-1"
+                    },
+                    {
+                      "annotation": {
+                        "ast_type": "Name",
+                        "col_offset": 34,
+                        "end_col_offset": 41,
+                        "end_lineno": 14,
+                        "id": "bytes32",
+                        "lineno": 14,
+                        "node_id": 49,
+                        "src": "242:7:-1"
+                      },
+                      "arg": "right",
+                      "ast_type": "arg",
+                      "col_offset": 27,
+                      "end_col_offset": 41,
+                      "end_lineno": 14,
+                      "lineno": 14,
+                      "node_id": 48,
+                      "src": "235:14:-1"
+                    }
+                  ],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 23,
+                  "end_lineno": 15,
+                  "lineno": 14,
+                  "node_id": 44,
+                  "src": "208:78:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "Return",
+                    "col_offset": 4,
+                    "end_col_offset": 23,
+                    "end_lineno": 15,
+                    "lineno": 15,
+                    "node_id": 51,
+                    "src": "267:19:-1",
+                    "value": {
+                      "ast_type": "BinOp",
+                      "col_offset": 11,
+                      "end_col_offset": 23,
+                      "end_lineno": 15,
+                      "left": {
+                        "ast_type": "Name",
+                        "col_offset": 11,
+                        "end_col_offset": 15,
+                        "end_lineno": 15,
+                        "id": "left",
+                        "lineno": 15,
+                        "node_id": 53,
+                        "src": "274:4:-1",
+                        "type": {
+                          "m": 32,
+                          "name": "bytes32",
+                          "typeclass": "bytes_m"
+                        },
+                        "variable_reads": [
+                          {
+                            "access_path": [],
+                            "decl_node": {
+                              "node_id": 45,
+                              "source_id": -1
+                            },
+                            "name": "left"
+                          }
+                        ]
+                      },
+                      "lineno": 15,
+                      "node_id": 52,
+                      "op": {
+                        "ast_type": "BitXor",
+                        "col_offset": 11,
+                        "end_col_offset": 23,
+                        "end_lineno": 15,
+                        "lineno": 15,
+                        "node_id": 55,
+                        "src": "274:12:-1"
+                      },
+                      "right": {
+                        "ast_type": "Name",
+                        "col_offset": 18,
+                        "end_col_offset": 23,
+                        "end_lineno": 15,
+                        "id": "right",
+                        "lineno": 15,
+                        "node_id": 56,
+                        "src": "281:5:-1",
+                        "type": {
+                          "m": 32,
+                          "name": "bytes32",
+                          "typeclass": "bytes_m"
+                        },
+                        "variable_reads": [
+                          {
+                            "access_path": [],
+                            "decl_node": {
+                              "node_id": 48,
+                              "source_id": -1
+                            },
+                            "name": "right"
+                          }
+                        ]
+                      },
+                      "src": "274:12:-1",
+                      "type": {
+                        "m": 32,
+                        "name": "bytes32",
+                        "typeclass": "bytes_m"
+                      }
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 9,
+                    "end_lineno": 12,
+                    "id": "external",
+                    "lineno": 12,
+                    "node_id": 58,
+                    "src": "193:8:-1"
+                  },
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 5,
+                    "end_lineno": 13,
+                    "id": "pure",
+                    "lineno": 13,
+                    "node_id": 60,
+                    "src": "203:4:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 23,
+                "end_lineno": 15,
+                "func_type": {
+                  "argument_types": [
+                    {
+                      "m": 32,
+                      "name": "bytes32",
+                      "typeclass": "bytes_m"
+                    },
+                    {
+                      "m": 32,
+                      "name": "bytes32",
+                      "typeclass": "bytes_m"
+                    }
+                  ],
+                  "name": "bit_xor",
+                  "return_type": {
+                    "m": 32,
+                    "name": "bytes32",
+                    "typeclass": "bytes_m"
+                  },
+                  "type_decl_node": {
+                    "node_id": 43,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                },
+                "lineno": 14,
+                "name": "bit_xor",
+                "node_id": 43,
+                "returns": {
+                  "ast_type": "Name",
+                  "col_offset": 46,
+                  "end_col_offset": 53,
+                  "end_lineno": 14,
+                  "id": "bytes32",
+                  "lineno": 14,
+                  "node_id": 62,
+                  "src": "254:7:-1"
+                },
+                "src": "208:78:-1"
+              },
+              {
+                "args": {
+                  "args": [
+                    {
+                      "annotation": {
+                        "ast_type": "Name",
+                        "col_offset": 21,
+                        "end_col_offset": 28,
+                        "end_lineno": 19,
+                        "id": "bytes32",
+                        "lineno": 19,
+                        "node_id": 67,
+                        "src": "325:7:-1"
+                      },
+                      "arg": "item",
+                      "ast_type": "arg",
+                      "col_offset": 15,
+                      "end_col_offset": 28,
+                      "end_lineno": 19,
+                      "lineno": 19,
+                      "node_id": 66,
+                      "src": "319:13:-1"
+                    },
+                    {
+                      "annotation": {
+                        "ast_type": "Name",
+                        "col_offset": 38,
+                        "end_col_offset": 45,
+                        "end_lineno": 19,
+                        "id": "uint256",
+                        "lineno": 19,
+                        "node_id": 70,
+                        "src": "342:7:-1"
+                      },
+                      "arg": "amount",
+                      "ast_type": "arg",
+                      "col_offset": 30,
+                      "end_col_offset": 45,
+                      "end_lineno": 19,
+                      "lineno": 19,
+                      "node_id": 69,
+                      "src": "334:15:-1"
+                    }
+                  ],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 25,
+                  "end_lineno": 20,
+                  "lineno": 19,
+                  "node_id": 65,
+                  "src": "304:84:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "Return",
+                    "col_offset": 4,
+                    "end_col_offset": 25,
+                    "end_lineno": 20,
+                    "lineno": 20,
+                    "node_id": 72,
+                    "src": "367:21:-1",
+                    "value": {
+                      "ast_type": "BinOp",
+                      "col_offset": 11,
+                      "end_col_offset": 25,
+                      "end_lineno": 20,
+                      "left": {
+                        "ast_type": "Name",
+                        "col_offset": 11,
+                        "end_col_offset": 15,
+                        "end_lineno": 20,
+                        "id": "item",
+                        "lineno": 20,
+                        "node_id": 74,
+                        "src": "374:4:-1",
+                        "type": {
+                          "m": 32,
+                          "name": "bytes32",
+                          "typeclass": "bytes_m"
+                        },
+                        "variable_reads": [
+                          {
+                            "access_path": [],
+                            "decl_node": {
+                              "node_id": 66,
+                              "source_id": -1
+                            },
+                            "name": "item"
+                          }
+                        ]
+                      },
+                      "lineno": 20,
+                      "node_id": 73,
+                      "op": {
+                        "ast_type": "LShift",
+                        "col_offset": 11,
+                        "end_col_offset": 25,
+                        "end_lineno": 20,
+                        "lineno": 20,
+                        "node_id": 76,
+                        "src": "374:14:-1"
+                      },
+                      "right": {
+                        "ast_type": "Name",
+                        "col_offset": 19,
+                        "end_col_offset": 25,
+                        "end_lineno": 20,
+                        "id": "amount",
+                        "lineno": 20,
+                        "node_id": 77,
+                        "src": "382:6:-1",
+                        "type": {
+                          "bits": 256,
+                          "is_signed": false,
+                          "name": "uint256",
+                          "typeclass": "integer"
+                        },
+                        "variable_reads": [
+                          {
+                            "access_path": [],
+                            "decl_node": {
+                              "node_id": 69,
+                              "source_id": -1
+                            },
+                            "name": "amount"
+                          }
+                        ]
+                      },
+                      "src": "374:14:-1",
+                      "type": {
+                        "m": 32,
+                        "name": "bytes32",
+                        "typeclass": "bytes_m"
+                      }
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 9,
+                    "end_lineno": 17,
+                    "id": "external",
+                    "lineno": 17,
+                    "node_id": 79,
+                    "src": "289:8:-1"
+                  },
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 5,
+                    "end_lineno": 18,
+                    "id": "pure",
+                    "lineno": 18,
+                    "node_id": 81,
+                    "src": "299:4:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 25,
+                "end_lineno": 20,
+                "func_type": {
+                  "argument_types": [
+                    {
+                      "m": 32,
+                      "name": "bytes32",
+                      "typeclass": "bytes_m"
+                    },
+                    {
+                      "bits": 256,
+                      "is_signed": false,
+                      "name": "uint256",
+                      "typeclass": "integer"
+                    }
+                  ],
+                  "name": "shift_left",
+                  "return_type": {
+                    "m": 32,
+                    "name": "bytes32",
+                    "typeclass": "bytes_m"
+                  },
+                  "type_decl_node": {
+                    "node_id": 64,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                },
+                "lineno": 19,
+                "name": "shift_left",
+                "node_id": 64,
+                "returns": {
+                  "ast_type": "Name",
+                  "col_offset": 50,
+                  "end_col_offset": 57,
+                  "end_lineno": 19,
+                  "id": "bytes32",
+                  "lineno": 19,
+                  "node_id": 83,
+                  "src": "354:7:-1"
+                },
+                "src": "304:84:-1"
+              },
+              {
+                "args": {
+                  "args": [
+                    {
+                      "annotation": {
+                        "ast_type": "Name",
+                        "col_offset": 22,
+                        "end_col_offset": 29,
+                        "end_lineno": 24,
+                        "id": "bytes32",
+                        "lineno": 24,
+                        "node_id": 88,
+                        "src": "428:7:-1"
+                      },
+                      "arg": "item",
+                      "ast_type": "arg",
+                      "col_offset": 16,
+                      "end_col_offset": 29,
+                      "end_lineno": 24,
+                      "lineno": 24,
+                      "node_id": 87,
+                      "src": "422:13:-1"
+                    },
+                    {
+                      "annotation": {
+                        "ast_type": "Name",
+                        "col_offset": 39,
+                        "end_col_offset": 46,
+                        "end_lineno": 24,
+                        "id": "uint256",
+                        "lineno": 24,
+                        "node_id": 91,
+                        "src": "445:7:-1"
+                      },
+                      "arg": "amount",
+                      "ast_type": "arg",
+                      "col_offset": 31,
+                      "end_col_offset": 46,
+                      "end_lineno": 24,
+                      "lineno": 24,
+                      "node_id": 90,
+                      "src": "437:15:-1"
+                    }
+                  ],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 25,
+                  "end_lineno": 25,
+                  "lineno": 24,
+                  "node_id": 86,
+                  "src": "406:85:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "Return",
+                    "col_offset": 4,
+                    "end_col_offset": 25,
+                    "end_lineno": 25,
+                    "lineno": 25,
+                    "node_id": 93,
+                    "src": "470:21:-1",
+                    "value": {
+                      "ast_type": "BinOp",
+                      "col_offset": 11,
+                      "end_col_offset": 25,
+                      "end_lineno": 25,
+                      "left": {
+                        "ast_type": "Name",
+                        "col_offset": 11,
+                        "end_col_offset": 15,
+                        "end_lineno": 25,
+                        "id": "item",
+                        "lineno": 25,
+                        "node_id": 95,
+                        "src": "477:4:-1",
+                        "type": {
+                          "m": 32,
+                          "name": "bytes32",
+                          "typeclass": "bytes_m"
+                        },
+                        "variable_reads": [
+                          {
+                            "access_path": [],
+                            "decl_node": {
+                              "node_id": 87,
+                              "source_id": -1
+                            },
+                            "name": "item"
+                          }
+                        ]
+                      },
+                      "lineno": 25,
+                      "node_id": 94,
+                      "op": {
+                        "ast_type": "RShift",
+                        "col_offset": 11,
+                        "end_col_offset": 25,
+                        "end_lineno": 25,
+                        "lineno": 25,
+                        "node_id": 97,
+                        "src": "477:14:-1"
+                      },
+                      "right": {
+                        "ast_type": "Name",
+                        "col_offset": 19,
+                        "end_col_offset": 25,
+                        "end_lineno": 25,
+                        "id": "amount",
+                        "lineno": 25,
+                        "node_id": 98,
+                        "src": "485:6:-1",
+                        "type": {
+                          "bits": 256,
+                          "is_signed": false,
+                          "name": "uint256",
+                          "typeclass": "integer"
+                        },
+                        "variable_reads": [
+                          {
+                            "access_path": [],
+                            "decl_node": {
+                              "node_id": 90,
+                              "source_id": -1
+                            },
+                            "name": "amount"
+                          }
+                        ]
+                      },
+                      "src": "477:14:-1",
+                      "type": {
+                        "m": 32,
+                        "name": "bytes32",
+                        "typeclass": "bytes_m"
+                      }
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 9,
+                    "end_lineno": 22,
+                    "id": "external",
+                    "lineno": 22,
+                    "node_id": 100,
+                    "src": "391:8:-1"
+                  },
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 5,
+                    "end_lineno": 23,
+                    "id": "pure",
+                    "lineno": 23,
+                    "node_id": 102,
+                    "src": "401:4:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 25,
+                "end_lineno": 25,
+                "func_type": {
+                  "argument_types": [
+                    {
+                      "m": 32,
+                      "name": "bytes32",
+                      "typeclass": "bytes_m"
+                    },
+                    {
+                      "bits": 256,
+                      "is_signed": false,
+                      "name": "uint256",
+                      "typeclass": "integer"
+                    }
+                  ],
+                  "name": "shift_right",
+                  "return_type": {
+                    "m": 32,
+                    "name": "bytes32",
+                    "typeclass": "bytes_m"
+                  },
+                  "type_decl_node": {
+                    "node_id": 85,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                },
+                "lineno": 24,
+                "name": "shift_right",
+                "node_id": 85,
+                "returns": {
+                  "ast_type": "Name",
+                  "col_offset": 51,
+                  "end_col_offset": 58,
+                  "end_lineno": 24,
+                  "id": "bytes32",
+                  "lineno": 24,
+                  "node_id": 104,
+                  "src": "457:7:-1"
+                },
+                "src": "406:85:-1"
+              }
+            ],
+            "col_offset": 0,
+            "doc_string": null,
+            "end_col_offset": 26,
+            "end_lineno": 25,
+            "is_interface": false,
+            "lineno": 1,
+            "name": null,
+            "node_id": 0,
+            "path": "tests/fixtures/regression/finding_16_bytes32_binary_operators/unknown_0.vy",
+            "resolved_path": "tests/fixtures/regression/finding_16_bytes32_binary_operators/unknown_0.vy",
+            "settings": {},
+            "source_id": -1,
+            "source_sha256sum": "9e76a2c1f7ab29eabb0adb2cb0014d5f0380451bc30a09b23792f234a2f86793",
+            "src": "0:492:-1",
+            "type": {
+              "name": "tests/fixtures/regression/finding_16_bytes32_binary_operators/unknown_0.vy",
+              "type_decl_node": {
+                "node_id": 0,
+                "source_id": -1
+              },
+              "typeclass": "module"
+            }
+          },
+          "contract_name": "tests/fixtures/regression/finding_16_bytes32_binary_operators/unknown_0.vy",
+          "imports": []
+        },
+        "blueprint_initcode_prefix": null,
+        "calldata": null,
+        "compiler_settings": {
+          "debug": false,
+          "enable_decimals": true,
+          "evm_version": "prague",
+          "experimental_codegen": false,
+          "optimize": "gas"
+        },
+        "contract_abi": [
+          {
+            "gas": 341,
+            "inputs": [
+              {
+                "name": "left",
+                "type": "bytes32"
+              },
+              {
+                "name": "right",
+                "type": "bytes32"
+              }
+            ],
+            "name": "bit_and",
+            "outputs": [
+              {
+                "name": "",
+                "type": "bytes32"
+              }
+            ],
+            "stateMutability": "pure",
+            "type": "function"
+          },
+          {
+            "gas": 341,
+            "inputs": [
+              {
+                "name": "left",
+                "type": "bytes32"
+              },
+              {
+                "name": "right",
+                "type": "bytes32"
+              }
+            ],
+            "name": "bit_or",
+            "outputs": [
+              {
+                "name": "",
+                "type": "bytes32"
+              }
+            ],
+            "stateMutability": "pure",
+            "type": "function"
+          },
+          {
+            "gas": 341,
+            "inputs": [
+              {
+                "name": "left",
+                "type": "bytes32"
+              },
+              {
+                "name": "right",
+                "type": "bytes32"
+              }
+            ],
+            "name": "bit_xor",
+            "outputs": [
+              {
+                "name": "",
+                "type": "bytes32"
+              }
+            ],
+            "stateMutability": "pure",
+            "type": "function"
+          },
+          {
+            "gas": 341,
+            "inputs": [
+              {
+                "name": "item",
+                "type": "bytes32"
+              },
+              {
+                "name": "amount",
+                "type": "uint256"
+              }
+            ],
+            "name": "shift_left",
+            "outputs": [
+              {
+                "name": "",
+                "type": "bytes32"
+              }
+            ],
+            "stateMutability": "pure",
+            "type": "function"
+          },
+          {
+            "gas": 341,
+            "inputs": [
+              {
+                "name": "item",
+                "type": "bytes32"
+              },
+              {
+                "name": "amount",
+                "type": "uint256"
+              }
+            ],
+            "name": "shift_right",
+            "outputs": [
+              {
+                "name": "",
+                "type": "bytes32"
+              }
+            ],
+            "stateMutability": "pure",
+            "type": "function"
+          }
+        ],
+        "deployed_address": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+        "deployment_succeeded": true,
+        "deployment_type": "source",
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "constructor",
+        "initcode": "60e161000b5f3960e15ff35f3560e01c60026003821660011b6100d901601e395f51565b636fd672b081186100d1576044361034176100d5576024356004351660405260206040f35b636ff4b1d68118610062576044361034176100d5576024356004351760405260206040f35b63c0a1acfe81186100d1576044361034176100d5576004356024351b60405260206040f35b63c80b5d8f81186100d1576044361034176100d5576024356004351860405260206040f35b63c066808981186100d1576044361034176100d5576004356024351c60405260206040f35b5f5ffd5b5f80fd001800ac003d0087855820c2b64e7bcbda1482ea75dc2508fcfdeadd1a86ebbb01674d464cdc40fb226ddc18e1810800a1657679706572830005000035",
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "raw_ir": null,
+        "runtime_bytecode": "5f3560e01c60026003821660011b6100d901601e395f51565b636fd672b081186100d1576044361034176100d5576024356004351660405260206040f35b636ff4b1d68118610062576044361034176100d5576024356004351760405260206040f35b63c0a1acfe81186100d1576044361034176100d5576004356024351b60405260206040f35b63c80b5d8f81186100d1576044361034176100d5576024356004351860405260206040f35b63c066808981186100d1576044361034176100d5576004356024351c60405260206040f35b5f5ffd5b5f80fd001800ac003d0087",
+        "solc_json": {
+          "compiler_version": "v0.5.0a4+commit.cd74ce4f",
+          "integrity": "c2b64e7bcbda1482ea75dc2508fcfdeadd1a86ebbb01674d464cdc40fb226ddc",
+          "language": "Vyper",
+          "settings": {
+            "debug": false,
+            "evmVersion": "prague",
+            "experimentalCodegen": false,
+            "optimize": "gas",
+            "outputSelection": {
+              "unknown_0.vy": [
+                "*"
+              ]
+            },
+            "search_paths": [
+              "."
+            ]
+          },
+          "sources": {
+            "unknown_0.vy": {
+              "content": "\n@external\n@pure\ndef bit_and(left: bytes32, right: bytes32) -> bytes32:\n    return left & right\n\n@external\n@pure\ndef bit_or(left: bytes32, right: bytes32) -> bytes32:\n    return left | right\n\n@external\n@pure\ndef bit_xor(left: bytes32, right: bytes32) -> bytes32:\n    return left ^ right\n\n@external\n@pure\ndef shift_left(item: bytes32, amount: uint256) -> bytes32:\n    return item << amount\n\n@external\n@pure\ndef shift_right(item: bytes32, amount: uint256) -> bytes32:\n    return item >> amount\n",
+              "sha256sum": "9e76a2c1f7ab29eabb0adb2cb0014d5f0380451bc30a09b23792f234a2f86793"
+            }
+          }
+        },
+        "source_code": "\n@external\n@pure\ndef bit_and(left: bytes32, right: bytes32) -> bytes32:\n    return left & right\n\n@external\n@pure\ndef bit_or(left: bytes32, right: bytes32) -> bytes32:\n    return left | right\n\n@external\n@pure\ndef bit_xor(left: bytes32, right: bytes32) -> bytes32:\n    return left ^ right\n\n@external\n@pure\ndef shift_left(item: bytes32, amount: uint256) -> bytes32:\n    return item << amount\n\n@external\n@pure\ndef shift_right(item: bytes32, amount: uint256) -> bytes32:\n    return item >> amount\n",
+        "storage_layout": {},
+        "trace_type": "deployment",
+        "value": 0
+      },
+      {
+        "call_args": {
+          "calldata": "6fd672b0a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a53c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c",
+          "is_modifying": false,
+          "to": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+          "value": 0
+        },
+        "call_succeeded": true,
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "bit_and",
+        "output": "2424242424242424242424242424242424242424242424242424242424242424",
+        "python_args": {
+          "args": [
+            "0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+            "0x3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c"
+          ],
+          "kwargs": {}
+        },
+        "trace_type": "call"
+      }
+    ]
+  }
+}

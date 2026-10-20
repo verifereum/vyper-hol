@@ -1,0 +1,4 @@
+Theory vyperRegression_finding_20_self_account_properties[no_sig_docs]
+Ancestors vyperRegressionDefs_finding_20_self_account_properties
+Libs vyperTestRunnerLib
+val () = List.app run_test_on_traces $ all_traces "vyperRegressionDefs_finding_20_self_account_properties";

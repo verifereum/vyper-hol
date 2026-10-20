@@ -1,0 +1,4 @@
+Theory vyperRegression_finding_27_decimal_mapping_keys[no_sig_docs]
+Ancestors vyperRegressionDefs_finding_27_decimal_mapping_keys
+Libs vyperTestRunnerLib
+val () = List.app run_test_on_traces $ all_traces "vyperRegressionDefs_finding_27_decimal_mapping_keys";

@@ -1,0 +1,4 @@
+Theory vyperRegression_finding_37_pure_function_nonreentrancy[no_sig_docs]
+Ancestors vyperRegressionDefs_finding_37_pure_function_nonreentrancy
+Libs vyperTestRunnerLib
+val () = List.app run_test_on_traces $ all_traces "vyperRegressionDefs_finding_37_pure_function_nonreentrancy";

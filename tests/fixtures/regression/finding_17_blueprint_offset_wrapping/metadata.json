@@ -1,0 +1,10 @@
+{
+  "compiler_commit": "cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c",
+  "compiler_version": "0.5.0a4",
+  "evm_version": "prague",
+  "experimental_codegen": false,
+  "finding": 17,
+  "optimize": "gas",
+  "pytest_node": "test_17_blueprint_offset_wrapping.py::test_maximum_offset_copies_two_wrapped_zero_bytes",
+  "state_comparison": "full-world-state-v1"
+}

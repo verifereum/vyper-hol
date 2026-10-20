@@ -1,0 +1,10 @@
+{
+  "compiler_commit": "cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c",
+  "compiler_version": "0.5.0a4",
+  "evm_version": "prague",
+  "experimental_codegen": false,
+  "finding": 39,
+  "optimize": "gas",
+  "pytest_node": "test_39_constructor_self_code.py::test_constructor_reads_its_initialization_code",
+  "state_comparison": "full-world-state-v1"
+}

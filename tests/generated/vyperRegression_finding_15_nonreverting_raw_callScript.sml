@@ -1,0 +1,4 @@
+Theory vyperRegression_finding_15_nonreverting_raw_call[no_sig_docs]
+Ancestors vyperRegressionDefs_finding_15_nonreverting_raw_call
+Libs vyperTestRunnerLib
+val () = List.app run_test_on_traces $ all_traces "vyperRegressionDefs_finding_15_nonreverting_raw_call";

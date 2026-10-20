@@ -1,0 +1,4 @@
+Theory vyperRegression_finding_26_folded_builtin_keywords[no_sig_docs]
+Ancestors vyperRegressionDefs_finding_26_folded_builtin_keywords
+Libs vyperTestRunnerLib
+val () = List.app run_test_on_traces $ all_traces "vyperRegressionDefs_finding_26_folded_builtin_keywords";

@@ -1,0 +1,4 @@
+Theory vyperRegression_finding_02_short_bytes_to_signed[no_sig_docs]
+Ancestors vyperRegressionDefs_finding_02_short_bytes_to_signed
+Libs vyperTestRunnerLib
+val () = List.app run_test_on_traces $ all_traces "vyperRegressionDefs_finding_02_short_bytes_to_signed";

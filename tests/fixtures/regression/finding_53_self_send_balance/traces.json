@@ -1,0 +1,503 @@
+{
+  "finding_53_self_send_balance": {
+    "deps": [],
+    "item_type": "test",
+    "traces": [
+      {
+        "annotated_ast": {
+          "ast": {
+            "ast_type": "Module",
+            "body": [
+              {
+                "annotation": {
+                  "ast_type": "Name",
+                  "col_offset": 15,
+                  "end_col_offset": 22,
+                  "end_lineno": 2,
+                  "id": "uint256",
+                  "lineno": 2,
+                  "node_id": 7,
+                  "src": "16:7:-1"
+                },
+                "ast_type": "VariableDecl",
+                "col_offset": 0,
+                "end_col_offset": 23,
+                "end_lineno": 2,
+                "is_constant": false,
+                "is_immutable": false,
+                "is_public": true,
+                "is_reentrant": false,
+                "is_transient": false,
+                "lineno": 2,
+                "node_id": 1,
+                "src": "1:23:-1",
+                "target": {
+                  "ast_type": "Name",
+                  "col_offset": 0,
+                  "end_col_offset": 6,
+                  "end_lineno": 2,
+                  "id": "marker",
+                  "lineno": 2,
+                  "node_id": 2,
+                  "src": "1:6:-1",
+                  "type": {
+                    "bits": 256,
+                    "is_signed": false,
+                    "name": "uint256",
+                    "typeclass": "integer"
+                  }
+                },
+                "type": {
+                  "bits": 256,
+                  "is_signed": false,
+                  "name": "uint256",
+                  "typeclass": "integer"
+                },
+                "value": null
+              },
+              {
+                "args": {
+                  "args": [
+                    {
+                      "annotation": {
+                        "ast_type": "Name",
+                        "col_offset": 29,
+                        "end_col_offset": 36,
+                        "end_lineno": 5,
+                        "id": "uint256",
+                        "lineno": 5,
+                        "node_id": 12,
+                        "src": "65:7:-1"
+                      },
+                      "arg": "amount",
+                      "ast_type": "arg",
+                      "col_offset": 21,
+                      "end_col_offset": 36,
+                      "end_lineno": 5,
+                      "lineno": 5,
+                      "node_id": 11,
+                      "src": "57:15:-1"
+                    }
+                  ],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 19,
+                  "end_lineno": 7,
+                  "lineno": 5,
+                  "node_id": 10,
+                  "src": "36:81:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "Expr",
+                    "col_offset": 4,
+                    "end_col_offset": 22,
+                    "end_lineno": 6,
+                    "lineno": 6,
+                    "node_id": 14,
+                    "src": "79:18:-1",
+                    "value": {
+                      "args": [
+                        {
+                          "ast_type": "Name",
+                          "col_offset": 9,
+                          "end_col_offset": 13,
+                          "end_lineno": 6,
+                          "id": "self",
+                          "lineno": 6,
+                          "node_id": 18,
+                          "src": "84:4:-1",
+                          "type": {
+                            "name": "address"
+                          }
+                        },
+                        {
+                          "ast_type": "Name",
+                          "col_offset": 15,
+                          "end_col_offset": 21,
+                          "end_lineno": 6,
+                          "id": "amount",
+                          "lineno": 6,
+                          "node_id": 20,
+                          "src": "90:6:-1",
+                          "type": {
+                            "bits": 256,
+                            "is_signed": false,
+                            "name": "uint256",
+                            "typeclass": "integer"
+                          },
+                          "variable_reads": [
+                            {
+                              "access_path": [],
+                              "decl_node": {
+                                "node_id": 11,
+                                "source_id": -1
+                              },
+                              "name": "amount"
+                            }
+                          ]
+                        }
+                      ],
+                      "ast_type": "Call",
+                      "col_offset": 4,
+                      "end_col_offset": 22,
+                      "end_lineno": 6,
+                      "func": {
+                        "ast_type": "Name",
+                        "col_offset": 4,
+                        "end_col_offset": 8,
+                        "end_lineno": 6,
+                        "id": "send",
+                        "lineno": 6,
+                        "node_id": 16,
+                        "src": "79:4:-1",
+                        "type": {
+                          "name": "send",
+                          "typeclass": "builtin_function"
+                        }
+                      },
+                      "keywords": [],
+                      "lineno": 6,
+                      "node_id": 15,
+                      "src": "79:18:-1",
+                      "type": {
+                        "name": "(void)"
+                      }
+                    }
+                  },
+                  {
+                    "ast_type": "Assign",
+                    "col_offset": 4,
+                    "end_col_offset": 19,
+                    "end_lineno": 7,
+                    "lineno": 7,
+                    "node_id": 22,
+                    "src": "102:15:-1",
+                    "target": {
+                      "ast_type": "Attribute",
+                      "attr": "marker",
+                      "col_offset": 4,
+                      "end_col_offset": 15,
+                      "end_lineno": 7,
+                      "lineno": 7,
+                      "node_id": 23,
+                      "src": "102:11:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      },
+                      "value": {
+                        "ast_type": "Name",
+                        "col_offset": 4,
+                        "end_col_offset": 8,
+                        "end_lineno": 7,
+                        "id": "self",
+                        "lineno": 7,
+                        "node_id": 24,
+                        "src": "102:4:-1",
+                        "type": {
+                          "name": "self"
+                        }
+                      },
+                      "variable_reads": [
+                        {
+                          "access_path": [],
+                          "decl_node": {
+                            "node_id": 1,
+                            "source_id": -1
+                          },
+                          "name": "marker"
+                        }
+                      ],
+                      "variable_writes": [
+                        {
+                          "access_path": [],
+                          "decl_node": {
+                            "node_id": 1,
+                            "source_id": -1
+                          },
+                          "name": "marker"
+                        }
+                      ]
+                    },
+                    "value": {
+                      "ast_type": "Int",
+                      "col_offset": 18,
+                      "end_col_offset": 19,
+                      "end_lineno": 7,
+                      "folded_value": {
+                        "ast_type": "Int",
+                        "col_offset": 18,
+                        "end_col_offset": 19,
+                        "end_lineno": 7,
+                        "lineno": 7,
+                        "node_id": 27,
+                        "src": "116:1:-1",
+                        "type": {
+                          "bits": 256,
+                          "is_signed": false,
+                          "name": "uint256",
+                          "typeclass": "integer"
+                        },
+                        "value": 1
+                      },
+                      "lineno": 7,
+                      "node_id": 27,
+                      "src": "116:1:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      },
+                      "value": 1
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 9,
+                    "end_lineno": 4,
+                    "id": "external",
+                    "lineno": 4,
+                    "node_id": 28,
+                    "src": "27:8:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 19,
+                "end_lineno": 7,
+                "func_type": {
+                  "argument_types": [
+                    {
+                      "bits": 256,
+                      "is_signed": false,
+                      "name": "uint256",
+                      "typeclass": "integer"
+                    }
+                  ],
+                  "name": "transfer_to_self",
+                  "return_type": null,
+                  "type_decl_node": {
+                    "node_id": 9,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                },
+                "lineno": 5,
+                "name": "transfer_to_self",
+                "node_id": 9,
+                "returns": null,
+                "src": "36:81:-1"
+              }
+            ],
+            "col_offset": 0,
+            "doc_string": null,
+            "end_col_offset": 20,
+            "end_lineno": 7,
+            "is_interface": false,
+            "lineno": 1,
+            "name": null,
+            "node_id": 0,
+            "path": "tests/fixtures/regression/finding_53_self_send_balance/unknown_0.vy",
+            "resolved_path": "tests/fixtures/regression/finding_53_self_send_balance/unknown_0.vy",
+            "settings": {},
+            "source_id": -1,
+            "source_sha256sum": "ccf0252e0a267ae4504862900a6bd2476dfb81f5d1a32f0cb62ee3d3667f435b",
+            "src": "0:118:-1",
+            "type": {
+              "name": "tests/fixtures/regression/finding_53_self_send_balance/unknown_0.vy",
+              "type_decl_node": {
+                "node_id": 0,
+                "source_id": -1
+              },
+              "typeclass": "module"
+            }
+          },
+          "contract_name": "tests/fixtures/regression/finding_53_self_send_balance/unknown_0.vy",
+          "imports": []
+        },
+        "blueprint_initcode_prefix": null,
+        "calldata": null,
+        "compiler_settings": {
+          "debug": false,
+          "enable_decimals": true,
+          "evm_version": "prague",
+          "experimental_codegen": false,
+          "optimize": "gas"
+        },
+        "contract_abi": [
+          {
+            "gas": 71537,
+            "inputs": [
+              {
+                "name": "amount",
+                "type": "uint256"
+              }
+            ],
+            "name": "transfer_to_self",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
+          },
+          {
+            "inputs": [],
+            "name": "marker",
+            "outputs": [
+              {
+                "name": "",
+                "type": "uint256"
+              }
+            ],
+            "stateMutability": "view",
+            "type": "function"
+          }
+        ],
+        "deployed_address": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+        "deployment_succeeded": true,
+        "deployment_type": "source",
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "constructor",
+        "initcode": "606b61000b5f39606b5ff35f3560e01c60026003820660011b61006501601e395f51565b635b00bbcf811861005d57602436103417610061575f5f5f5f600435305ff1156100615760015f55005b633acddfc1811861005d5734610061575f5460405260206040f35b5f5ffd5b5f80fd005d004200188558200725e9e50737c29613c51bca6ff0ecb3529b3f53a3ebf1df04a5e682bb1a4fe7186b810600a1657679706572830005000035",
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "raw_ir": null,
+        "runtime_bytecode": "5f3560e01c60026003820660011b61006501601e395f51565b635b00bbcf811861005d57602436103417610061575f5f5f5f600435305ff1156100615760015f55005b633acddfc1811861005d5734610061575f5460405260206040f35b5f5ffd5b5f80fd005d00420018",
+        "solc_json": {
+          "compiler_version": "v0.5.0a4+commit.cd74ce4f",
+          "integrity": "0725e9e50737c29613c51bca6ff0ecb3529b3f53a3ebf1df04a5e682bb1a4fe7",
+          "language": "Vyper",
+          "settings": {
+            "debug": false,
+            "evmVersion": "prague",
+            "experimentalCodegen": false,
+            "optimize": "gas",
+            "outputSelection": {
+              "unknown_0.vy": [
+                "*"
+              ]
+            },
+            "search_paths": [
+              "."
+            ]
+          },
+          "sources": {
+            "unknown_0.vy": {
+              "content": "\nmarker: public(uint256)\n\n@external\ndef transfer_to_self(amount: uint256):\n    send(self, amount)\n    self.marker = 1\n",
+              "sha256sum": "ccf0252e0a267ae4504862900a6bd2476dfb81f5d1a32f0cb62ee3d3667f435b"
+            }
+          }
+        },
+        "source_code": "\nmarker: public(uint256)\n\n@external\ndef transfer_to_self(amount: uint256):\n    send(self, amount)\n    self.marker = 1\n",
+        "storage_layout": {
+          "storage_layout": {
+            "marker": {
+              "n_slots": 1,
+              "slot": 0,
+              "type": "uint256"
+            }
+          }
+        },
+        "trace_type": "deployment",
+        "value": 0
+      },
+      {
+        "call_args": {
+          "calldata": "5b00bbcf0000000000000000000000000000000000000000000000000000000000000001",
+          "is_modifying": true,
+          "to": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+          "value": 0
+        },
+        "call_succeeded": false,
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "transfer_to_self",
+        "output": null,
+        "python_args": {
+          "args": [
+            1
+          ],
+          "kwargs": {}
+        },
+        "trace_type": "call"
+      },
+      {
+        "call_args": {
+          "calldata": "3acddfc1",
+          "is_modifying": false,
+          "to": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+          "value": 0
+        },
+        "call_succeeded": true,
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "marker",
+        "output": "0000000000000000000000000000000000000000000000000000000000000000",
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "trace_type": "call"
+      }
+    ]
+  }
+}

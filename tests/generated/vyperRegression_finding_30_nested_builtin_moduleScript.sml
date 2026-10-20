@@ -1,0 +1,4 @@
+Theory vyperRegression_finding_30_nested_builtin_module[no_sig_docs]
+Ancestors vyperRegressionDefs_finding_30_nested_builtin_module
+Libs vyperTestRunnerLib
+val () = List.app run_test_on_traces $ all_traces "vyperRegressionDefs_finding_30_nested_builtin_module";

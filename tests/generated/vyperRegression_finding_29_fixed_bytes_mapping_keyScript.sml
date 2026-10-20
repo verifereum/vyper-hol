@@ -1,0 +1,4 @@
+Theory vyperRegression_finding_29_fixed_bytes_mapping_key[no_sig_docs]
+Ancestors vyperRegressionDefs_finding_29_fixed_bytes_mapping_key
+Libs vyperTestRunnerLib
+val () = List.app run_test_on_traces $ all_traces "vyperRegressionDefs_finding_29_fixed_bytes_mapping_key";

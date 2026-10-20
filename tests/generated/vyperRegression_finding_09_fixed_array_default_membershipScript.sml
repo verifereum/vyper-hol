@@ -1,0 +1,4 @@
+Theory vyperRegression_finding_09_fixed_array_default_membership[no_sig_docs]
+Ancestors vyperRegressionDefs_finding_09_fixed_array_default_membership
+Libs vyperTestRunnerLib
+val () = List.app run_test_on_traces $ all_traces "vyperRegressionDefs_finding_09_fixed_array_default_membership";

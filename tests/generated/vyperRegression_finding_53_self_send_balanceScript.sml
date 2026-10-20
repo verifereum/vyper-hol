@@ -1,0 +1,4 @@
+Theory vyperRegression_finding_53_self_send_balance[no_sig_docs]
+Ancestors vyperRegressionDefs_finding_53_self_send_balance
+Libs vyperTestRunnerLib
+val () = List.app run_test_on_traces $ all_traces "vyperRegressionDefs_finding_53_self_send_balance";

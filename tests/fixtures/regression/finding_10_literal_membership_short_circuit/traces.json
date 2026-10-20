@@ -1,0 +1,531 @@
+{
+  "finding_10_literal_membership_short_circuit": {
+    "deps": [],
+    "item_type": "test",
+    "traces": [
+      {
+        "annotated_ast": {
+          "ast": {
+            "ast_type": "Module",
+            "body": [
+              {
+                "args": {
+                  "args": [
+                    {
+                      "annotation": {
+                        "ast_type": "Name",
+                        "col_offset": 22,
+                        "end_col_offset": 29,
+                        "end_lineno": 4,
+                        "id": "uint256",
+                        "lineno": 4,
+                        "node_id": 4,
+                        "src": "39:7:-1"
+                      },
+                      "arg": "divisor",
+                      "ast_type": "arg",
+                      "col_offset": 13,
+                      "end_col_offset": 29,
+                      "end_lineno": 4,
+                      "lineno": 4,
+                      "node_id": 3,
+                      "src": "30:16:-1"
+                    }
+                  ],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 33,
+                  "end_lineno": 5,
+                  "lineno": 4,
+                  "node_id": 2,
+                  "src": "17:73:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "Return",
+                    "col_offset": 4,
+                    "end_col_offset": 33,
+                    "end_lineno": 5,
+                    "lineno": 5,
+                    "node_id": 6,
+                    "src": "61:29:-1",
+                    "value": {
+                      "ast_type": "Compare",
+                      "col_offset": 11,
+                      "end_col_offset": 33,
+                      "end_lineno": 5,
+                      "left": {
+                        "ast_type": "Int",
+                        "col_offset": 11,
+                        "end_col_offset": 12,
+                        "end_lineno": 5,
+                        "folded_value": {
+                          "ast_type": "Int",
+                          "col_offset": 11,
+                          "end_col_offset": 12,
+                          "end_lineno": 5,
+                          "lineno": 5,
+                          "node_id": 8,
+                          "src": "68:1:-1",
+                          "type": {
+                            "bits": 256,
+                            "is_signed": false,
+                            "name": "uint256",
+                            "typeclass": "integer"
+                          },
+                          "value": 1
+                        },
+                        "lineno": 5,
+                        "node_id": 8,
+                        "src": "68:1:-1",
+                        "type": {
+                          "bits": 256,
+                          "is_signed": false,
+                          "name": "uint256",
+                          "typeclass": "integer"
+                        },
+                        "value": 1
+                      },
+                      "lineno": 5,
+                      "node_id": 7,
+                      "op": {
+                        "ast_type": "In",
+                        "col_offset": 11,
+                        "end_col_offset": 33,
+                        "end_lineno": 5,
+                        "lineno": 5,
+                        "node_id": 9,
+                        "src": "68:22:-1"
+                      },
+                      "right": {
+                        "ast_type": "List",
+                        "col_offset": 16,
+                        "elements": [
+                          {
+                            "ast_type": "Int",
+                            "col_offset": 17,
+                            "end_col_offset": 18,
+                            "end_lineno": 5,
+                            "folded_value": {
+                              "ast_type": "Int",
+                              "col_offset": 17,
+                              "end_col_offset": 18,
+                              "end_lineno": 5,
+                              "lineno": 5,
+                              "node_id": 11,
+                              "src": "74:1:-1",
+                              "type": {
+                                "bits": 256,
+                                "is_signed": false,
+                                "name": "uint256",
+                                "typeclass": "integer"
+                              },
+                              "value": 1
+                            },
+                            "lineno": 5,
+                            "node_id": 11,
+                            "src": "74:1:-1",
+                            "type": {
+                              "bits": 256,
+                              "is_signed": false,
+                              "name": "uint256",
+                              "typeclass": "integer"
+                            },
+                            "value": 1
+                          },
+                          {
+                            "ast_type": "BinOp",
+                            "col_offset": 20,
+                            "end_col_offset": 32,
+                            "end_lineno": 5,
+                            "left": {
+                              "ast_type": "Int",
+                              "col_offset": 20,
+                              "end_col_offset": 21,
+                              "end_lineno": 5,
+                              "folded_value": {
+                                "ast_type": "Int",
+                                "col_offset": 20,
+                                "end_col_offset": 21,
+                                "end_lineno": 5,
+                                "lineno": 5,
+                                "node_id": 13,
+                                "src": "77:1:-1",
+                                "type": {
+                                  "bits": 256,
+                                  "is_signed": false,
+                                  "name": "uint256",
+                                  "typeclass": "integer"
+                                },
+                                "value": 1
+                              },
+                              "lineno": 5,
+                              "node_id": 13,
+                              "src": "77:1:-1",
+                              "type": {
+                                "bits": 256,
+                                "is_signed": false,
+                                "name": "uint256",
+                                "typeclass": "integer"
+                              },
+                              "value": 1
+                            },
+                            "lineno": 5,
+                            "node_id": 12,
+                            "op": {
+                              "ast_type": "FloorDiv",
+                              "col_offset": 20,
+                              "end_col_offset": 32,
+                              "end_lineno": 5,
+                              "lineno": 5,
+                              "node_id": 14,
+                              "src": "77:12:-1"
+                            },
+                            "right": {
+                              "ast_type": "Name",
+                              "col_offset": 25,
+                              "end_col_offset": 32,
+                              "end_lineno": 5,
+                              "id": "divisor",
+                              "lineno": 5,
+                              "node_id": 15,
+                              "src": "82:7:-1",
+                              "type": {
+                                "bits": 256,
+                                "is_signed": false,
+                                "name": "uint256",
+                                "typeclass": "integer"
+                              },
+                              "variable_reads": [
+                                {
+                                  "access_path": [],
+                                  "decl_node": {
+                                    "node_id": 3,
+                                    "source_id": -1
+                                  },
+                                  "name": "divisor"
+                                }
+                              ]
+                            },
+                            "src": "77:12:-1",
+                            "type": {
+                              "bits": 256,
+                              "is_signed": false,
+                              "name": "uint256",
+                              "typeclass": "integer"
+                            }
+                          }
+                        ],
+                        "end_col_offset": 33,
+                        "end_lineno": 5,
+                        "lineno": 5,
+                        "node_id": 10,
+                        "src": "73:17:-1",
+                        "type": {
+                          "length": 2,
+                          "name": "$SArray",
+                          "typeclass": "static_array",
+                          "value_type": {
+                            "bits": 256,
+                            "is_signed": false,
+                            "name": "uint256",
+                            "typeclass": "integer"
+                          }
+                        }
+                      },
+                      "src": "68:22:-1",
+                      "type": {
+                        "name": "bool"
+                      }
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 9,
+                    "end_lineno": 2,
+                    "id": "external",
+                    "lineno": 2,
+                    "node_id": 18,
+                    "src": "2:8:-1"
+                  },
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 5,
+                    "end_lineno": 3,
+                    "id": "pure",
+                    "lineno": 3,
+                    "node_id": 20,
+                    "src": "12:4:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 33,
+                "end_lineno": 5,
+                "func_type": {
+                  "argument_types": [
+                    {
+                      "bits": 256,
+                      "is_signed": false,
+                      "name": "uint256",
+                      "typeclass": "integer"
+                    }
+                  ],
+                  "name": "contains",
+                  "return_type": {
+                    "name": "bool"
+                  },
+                  "type_decl_node": {
+                    "node_id": 1,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                },
+                "lineno": 4,
+                "name": "contains",
+                "node_id": 1,
+                "returns": {
+                  "ast_type": "Name",
+                  "col_offset": 34,
+                  "end_col_offset": 38,
+                  "end_lineno": 4,
+                  "id": "bool",
+                  "lineno": 4,
+                  "node_id": 22,
+                  "src": "51:4:-1"
+                },
+                "src": "17:73:-1"
+              }
+            ],
+            "col_offset": 0,
+            "doc_string": null,
+            "end_col_offset": 34,
+            "end_lineno": 5,
+            "is_interface": false,
+            "lineno": 1,
+            "name": null,
+            "node_id": 0,
+            "path": "tests/fixtures/regression/finding_10_literal_membership_short_circuit/unknown_0.vy",
+            "resolved_path": "tests/fixtures/regression/finding_10_literal_membership_short_circuit/unknown_0.vy",
+            "settings": {},
+            "source_id": -1,
+            "source_sha256sum": "385138d7d3379febef74202fcf78e511aa9c7011879b3374aa73ceb3dfb9aadd",
+            "src": "0:91:-1",
+            "type": {
+              "name": "tests/fixtures/regression/finding_10_literal_membership_short_circuit/unknown_0.vy",
+              "type_decl_node": {
+                "node_id": 0,
+                "source_id": -1
+              },
+              "typeclass": "module"
+            }
+          },
+          "contract_name": "tests/fixtures/regression/finding_10_literal_membership_short_circuit/unknown_0.vy",
+          "imports": []
+        },
+        "blueprint_initcode_prefix": null,
+        "calldata": null,
+        "compiler_settings": {
+          "debug": false,
+          "enable_decimals": true,
+          "evm_version": "prague",
+          "experimental_codegen": false,
+          "optimize": "gas"
+        },
+        "contract_abi": [
+          {
+            "gas": 619,
+            "inputs": [
+              {
+                "name": "divisor",
+                "type": "uint256"
+              }
+            ],
+            "name": "contains",
+            "outputs": [
+              {
+                "name": "",
+                "type": "bool"
+              }
+            ],
+            "stateMutability": "pure",
+            "type": "function"
+          }
+        ],
+        "deployed_address": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+        "deployment_succeeded": true,
+        "deployment_type": "source",
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "constructor",
+        "initcode": "602c61000b5f39602c5ff35f3560e01c63c34052e081186100245760243610341761002857600160605260206060f35b5f5ffd5b5f80fd8558200c29e9a620af7484bed38a0e6f6a6cc8ad2bafd4ecbcbd780a1e2781fefccbae182c8000a1657679706572830005000034",
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "raw_ir": null,
+        "runtime_bytecode": "5f3560e01c63c34052e081186100245760243610341761002857600160605260206060f35b5f5ffd5b5f80fd",
+        "solc_json": {
+          "compiler_version": "v0.5.0a4+commit.cd74ce4f",
+          "integrity": "0c29e9a620af7484bed38a0e6f6a6cc8ad2bafd4ecbcbd780a1e2781fefccbae",
+          "language": "Vyper",
+          "settings": {
+            "debug": false,
+            "evmVersion": "prague",
+            "experimentalCodegen": false,
+            "optimize": "gas",
+            "outputSelection": {
+              "unknown_0.vy": [
+                "*"
+              ]
+            },
+            "search_paths": [
+              "."
+            ]
+          },
+          "sources": {
+            "unknown_0.vy": {
+              "content": "\n@external\n@pure\ndef contains(divisor: uint256) -> bool:\n    return 1 in [1, 1 // divisor]\n",
+              "sha256sum": "385138d7d3379febef74202fcf78e511aa9c7011879b3374aa73ceb3dfb9aadd"
+            }
+          }
+        },
+        "source_code": "\n@external\n@pure\ndef contains(divisor: uint256) -> bool:\n    return 1 in [1, 1 // divisor]\n",
+        "storage_layout": {},
+        "trace_type": "deployment",
+        "value": 0
+      },
+      {
+        "call_args": {
+          "calldata": "c34052e00000000000000000000000000000000000000000000000000000000000000000",
+          "is_modifying": false,
+          "to": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+          "value": 0
+        },
+        "call_succeeded": true,
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "contains",
+        "output": "0000000000000000000000000000000000000000000000000000000000000001",
+        "python_args": {
+          "args": [
+            0
+          ],
+          "kwargs": {}
+        },
+        "trace_type": "call"
+      },
+      {
+        "call_args": {
+          "calldata": "c34052e00000000000000000000000000000000000000000000000000000000000000001",
+          "is_modifying": false,
+          "to": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+          "value": 0
+        },
+        "call_succeeded": true,
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "contains",
+        "output": "0000000000000000000000000000000000000000000000000000000000000001",
+        "python_args": {
+          "args": [
+            1
+          ],
+          "kwargs": {}
+        },
+        "trace_type": "call"
+      },
+      {
+        "call_args": {
+          "calldata": "c34052e00000000000000000000000000000000000000000000000000000000000000002",
+          "is_modifying": false,
+          "to": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+          "value": 0
+        },
+        "call_succeeded": true,
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "contains",
+        "output": "0000000000000000000000000000000000000000000000000000000000000001",
+        "python_args": {
+          "args": [
+            2
+          ],
+          "kwargs": {}
+        },
+        "trace_type": "call"
+      }
+    ]
+  }
+}

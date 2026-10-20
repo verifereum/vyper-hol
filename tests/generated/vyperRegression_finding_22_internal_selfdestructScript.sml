@@ -1,0 +1,4 @@
+Theory vyperRegression_finding_22_internal_selfdestruct[no_sig_docs]
+Ancestors vyperRegressionDefs_finding_22_internal_selfdestruct
+Libs vyperTestRunnerLib
+val () = List.app run_test_on_traces $ all_traces "vyperRegressionDefs_finding_22_internal_selfdestruct";

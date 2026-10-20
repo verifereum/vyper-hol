@@ -1,0 +1,10 @@
+{
+  "compiler_commit": "cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c",
+  "compiler_version": "0.5.0a4",
+  "evm_version": "prague",
+  "experimental_codegen": false,
+  "finding": 3,
+  "optimize": "gas",
+  "pytest_node": "test_03_indexed_bytes20_topic.py::test_indexed_bytes20_is_right_padded_but_address_is_left_padded",
+  "state_comparison": "full-world-state-v1"
+}

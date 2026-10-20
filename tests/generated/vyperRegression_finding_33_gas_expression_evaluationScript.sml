@@ -1,0 +1,4 @@
+Theory vyperRegression_finding_33_gas_expression_evaluation[no_sig_docs]
+Ancestors vyperRegressionDefs_finding_33_gas_expression_evaluation
+Libs vyperTestRunnerLib
+val () = List.app run_test_on_traces $ all_traces "vyperRegressionDefs_finding_33_gas_expression_evaluation";

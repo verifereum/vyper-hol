@@ -1,0 +1,273 @@
+{
+  "finding_37_pure_function_nonreentrancy": {
+    "deps": [],
+    "item_type": "test",
+    "traces": [
+      {
+        "annotated_ast": {
+          "ast": {
+            "ast_type": "Module",
+            "body": [
+              {
+                "args": {
+                  "args": [],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 13,
+                  "end_lineno": 7,
+                  "lineno": 6,
+                  "node_id": 2,
+                  "src": "44:37:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "Return",
+                    "col_offset": 4,
+                    "end_col_offset": 13,
+                    "end_lineno": 7,
+                    "lineno": 7,
+                    "node_id": 3,
+                    "src": "72:9:-1",
+                    "value": {
+                      "ast_type": "Int",
+                      "col_offset": 11,
+                      "end_col_offset": 13,
+                      "end_lineno": 7,
+                      "folded_value": {
+                        "ast_type": "Int",
+                        "col_offset": 11,
+                        "end_col_offset": 13,
+                        "end_lineno": 7,
+                        "lineno": 7,
+                        "node_id": 4,
+                        "src": "79:2:-1",
+                        "type": {
+                          "bits": 256,
+                          "is_signed": false,
+                          "name": "uint256",
+                          "typeclass": "integer"
+                        },
+                        "value": 42
+                      },
+                      "lineno": 7,
+                      "node_id": 4,
+                      "src": "79:2:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      },
+                      "value": 42
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 9,
+                    "end_lineno": 4,
+                    "id": "external",
+                    "lineno": 4,
+                    "node_id": 5,
+                    "src": "29:8:-1"
+                  },
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 5,
+                    "end_lineno": 5,
+                    "id": "pure",
+                    "lineno": 5,
+                    "node_id": 7,
+                    "src": "39:4:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 13,
+                "end_lineno": 7,
+                "func_type": {
+                  "argument_types": [],
+                  "name": "value",
+                  "return_type": {
+                    "bits": 256,
+                    "is_signed": false,
+                    "name": "uint256",
+                    "typeclass": "integer"
+                  },
+                  "type_decl_node": {
+                    "node_id": 1,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                },
+                "lineno": 6,
+                "name": "value",
+                "node_id": 1,
+                "returns": {
+                  "ast_type": "Name",
+                  "col_offset": 15,
+                  "end_col_offset": 22,
+                  "end_lineno": 6,
+                  "id": "uint256",
+                  "lineno": 6,
+                  "node_id": 9,
+                  "src": "59:7:-1"
+                },
+                "src": "44:37:-1"
+              }
+            ],
+            "col_offset": 0,
+            "doc_string": null,
+            "end_col_offset": 14,
+            "end_lineno": 7,
+            "is_interface": false,
+            "lineno": 1,
+            "name": null,
+            "node_id": 0,
+            "path": "tests/fixtures/regression/finding_37_pure_function_nonreentrancy/unknown_0.vy",
+            "resolved_path": "tests/fixtures/regression/finding_37_pure_function_nonreentrancy/unknown_0.vy",
+            "settings": {
+              "nonreentrancy_by_default": true
+            },
+            "source_id": -1,
+            "source_sha256sum": "481b9a119ca3e204f08736332d0f910de970af153ef9ef638a32a34759205534",
+            "src": "0:82:-1",
+            "type": {
+              "name": "tests/fixtures/regression/finding_37_pure_function_nonreentrancy/unknown_0.vy",
+              "type_decl_node": {
+                "node_id": 0,
+                "source_id": -1
+              },
+              "typeclass": "module"
+            }
+          },
+          "contract_name": "tests/fixtures/regression/finding_37_pure_function_nonreentrancy/unknown_0.vy",
+          "imports": []
+        },
+        "blueprint_initcode_prefix": null,
+        "calldata": null,
+        "compiler_settings": {
+          "debug": false,
+          "enable_decimals": true,
+          "evm_version": "prague",
+          "experimental_codegen": false,
+          "nonreentrancy_by_default": true,
+          "optimize": "gas"
+        },
+        "contract_abi": [
+          {
+            "gas": 317,
+            "inputs": [],
+            "name": "value",
+            "outputs": [
+              {
+                "name": "",
+                "type": "uint256"
+              }
+            ],
+            "stateMutability": "pure",
+            "type": "function"
+          }
+        ],
+        "deployed_address": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+        "deployment_succeeded": true,
+        "deployment_type": "source",
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "constructor",
+        "initcode": "602761000b5f3960275ff35f3560e01c633fa4f245811861001f573461002357602a60405260206040f35b5f5ffd5b5f80fd855820113f09e867cbbd2d108ed0466ef0030b2c88b6ebd8d3a461ba1ba05aa0a1011918278000a1657679706572830005000034",
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "raw_ir": null,
+        "runtime_bytecode": "5f3560e01c633fa4f245811861001f573461002357602a60405260206040f35b5f5ffd5b5f80fd",
+        "solc_json": {
+          "compiler_version": "v0.5.0a4+commit.cd74ce4f",
+          "integrity": "113f09e867cbbd2d108ed0466ef0030b2c88b6ebd8d3a461ba1ba05aa0a10119",
+          "language": "Vyper",
+          "settings": {
+            "debug": false,
+            "evmVersion": "prague",
+            "experimentalCodegen": false,
+            "optimize": "gas",
+            "outputSelection": {
+              "unknown_0.vy": [
+                "*"
+              ]
+            },
+            "search_paths": [
+              "."
+            ]
+          },
+          "sources": {
+            "unknown_0.vy": {
+              "content": "\n# pragma nonreentrancy on\n\n@external\n@pure\ndef value() -> uint256:\n    return 42\n",
+              "sha256sum": "481b9a119ca3e204f08736332d0f910de970af153ef9ef638a32a34759205534"
+            }
+          }
+        },
+        "source_code": "\n# pragma nonreentrancy on\n\n@external\n@pure\ndef value() -> uint256:\n    return 42\n",
+        "storage_layout": {},
+        "trace_type": "deployment",
+        "value": 0
+      },
+      {
+        "call_args": {
+          "calldata": "3fa4f245",
+          "is_modifying": false,
+          "to": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+          "value": 0
+        },
+        "call_succeeded": true,
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "value",
+        "output": "000000000000000000000000000000000000000000000000000000000000002a",
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "trace_type": "call"
+      }
+    ]
+  }
+}

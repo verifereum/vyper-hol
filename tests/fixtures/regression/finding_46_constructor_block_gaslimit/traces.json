@@ -1,0 +1,537 @@
+{
+  "finding_46_constructor_block_gaslimit": {
+    "deps": [],
+    "item_type": "test",
+    "traces": [
+      {
+        "annotated_ast": {
+          "ast": {
+            "ast_type": "Module",
+            "body": [
+              {
+                "annotation": {
+                  "ast_type": "Name",
+                  "col_offset": 23,
+                  "end_col_offset": 30,
+                  "end_lineno": 2,
+                  "id": "uint256",
+                  "lineno": 2,
+                  "node_id": 7,
+                  "src": "24:7:-1"
+                },
+                "ast_type": "VariableDecl",
+                "col_offset": 0,
+                "end_col_offset": 31,
+                "end_lineno": 2,
+                "is_constant": false,
+                "is_immutable": false,
+                "is_public": true,
+                "is_reentrant": false,
+                "is_transient": false,
+                "lineno": 2,
+                "node_id": 1,
+                "src": "1:31:-1",
+                "target": {
+                  "ast_type": "Name",
+                  "col_offset": 0,
+                  "end_col_offset": 14,
+                  "end_lineno": 2,
+                  "id": "saved_gaslimit",
+                  "lineno": 2,
+                  "node_id": 2,
+                  "src": "1:14:-1",
+                  "type": {
+                    "bits": 256,
+                    "is_signed": false,
+                    "name": "uint256",
+                    "typeclass": "integer"
+                  }
+                },
+                "type": {
+                  "bits": 256,
+                  "is_signed": false,
+                  "name": "uint256",
+                  "typeclass": "integer"
+                },
+                "value": null
+              },
+              {
+                "annotation": {
+                  "ast_type": "Name",
+                  "col_offset": 24,
+                  "end_col_offset": 31,
+                  "end_lineno": 3,
+                  "id": "uint256",
+                  "lineno": 3,
+                  "node_id": 15,
+                  "src": "57:7:-1"
+                },
+                "ast_type": "VariableDecl",
+                "col_offset": 0,
+                "end_col_offset": 32,
+                "end_lineno": 3,
+                "is_constant": false,
+                "is_immutable": false,
+                "is_public": true,
+                "is_reentrant": false,
+                "is_transient": false,
+                "lineno": 3,
+                "node_id": 9,
+                "src": "33:32:-1",
+                "target": {
+                  "ast_type": "Name",
+                  "col_offset": 0,
+                  "end_col_offset": 15,
+                  "end_lineno": 3,
+                  "id": "saved_timestamp",
+                  "lineno": 3,
+                  "node_id": 10,
+                  "src": "33:15:-1",
+                  "type": {
+                    "bits": 256,
+                    "is_signed": false,
+                    "name": "uint256",
+                    "typeclass": "integer"
+                  }
+                },
+                "type": {
+                  "bits": 256,
+                  "is_signed": false,
+                  "name": "uint256",
+                  "typeclass": "integer"
+                },
+                "value": null
+              },
+              {
+                "args": {
+                  "args": [],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 42,
+                  "end_lineno": 8,
+                  "lineno": 6,
+                  "node_id": 18,
+                  "src": "75:99:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "Assign",
+                    "col_offset": 4,
+                    "end_col_offset": 40,
+                    "end_lineno": 7,
+                    "lineno": 7,
+                    "node_id": 19,
+                    "src": "95:36:-1",
+                    "target": {
+                      "ast_type": "Attribute",
+                      "attr": "saved_gaslimit",
+                      "col_offset": 4,
+                      "end_col_offset": 23,
+                      "end_lineno": 7,
+                      "lineno": 7,
+                      "node_id": 20,
+                      "src": "95:19:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      },
+                      "value": {
+                        "ast_type": "Name",
+                        "col_offset": 4,
+                        "end_col_offset": 8,
+                        "end_lineno": 7,
+                        "id": "self",
+                        "lineno": 7,
+                        "node_id": 21,
+                        "src": "95:4:-1",
+                        "type": {
+                          "name": "self"
+                        }
+                      },
+                      "variable_reads": [
+                        {
+                          "access_path": [],
+                          "decl_node": {
+                            "node_id": 1,
+                            "source_id": -1
+                          },
+                          "name": "saved_gaslimit"
+                        }
+                      ],
+                      "variable_writes": [
+                        {
+                          "access_path": [],
+                          "decl_node": {
+                            "node_id": 1,
+                            "source_id": -1
+                          },
+                          "name": "saved_gaslimit"
+                        }
+                      ]
+                    },
+                    "value": {
+                      "ast_type": "Attribute",
+                      "attr": "gaslimit",
+                      "col_offset": 26,
+                      "end_col_offset": 40,
+                      "end_lineno": 7,
+                      "lineno": 7,
+                      "node_id": 24,
+                      "src": "117:14:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      },
+                      "value": {
+                        "ast_type": "Name",
+                        "col_offset": 26,
+                        "end_col_offset": 31,
+                        "end_lineno": 7,
+                        "id": "block",
+                        "lineno": 7,
+                        "node_id": 25,
+                        "src": "117:5:-1",
+                        "type": {
+                          "name": "block"
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "ast_type": "Assign",
+                    "col_offset": 4,
+                    "end_col_offset": 42,
+                    "end_lineno": 8,
+                    "lineno": 8,
+                    "node_id": 28,
+                    "src": "136:38:-1",
+                    "target": {
+                      "ast_type": "Attribute",
+                      "attr": "saved_timestamp",
+                      "col_offset": 4,
+                      "end_col_offset": 24,
+                      "end_lineno": 8,
+                      "lineno": 8,
+                      "node_id": 29,
+                      "src": "136:20:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      },
+                      "value": {
+                        "ast_type": "Name",
+                        "col_offset": 4,
+                        "end_col_offset": 8,
+                        "end_lineno": 8,
+                        "id": "self",
+                        "lineno": 8,
+                        "node_id": 30,
+                        "src": "136:4:-1",
+                        "type": {
+                          "name": "self"
+                        }
+                      },
+                      "variable_reads": [
+                        {
+                          "access_path": [],
+                          "decl_node": {
+                            "node_id": 9,
+                            "source_id": -1
+                          },
+                          "name": "saved_timestamp"
+                        }
+                      ],
+                      "variable_writes": [
+                        {
+                          "access_path": [],
+                          "decl_node": {
+                            "node_id": 9,
+                            "source_id": -1
+                          },
+                          "name": "saved_timestamp"
+                        }
+                      ]
+                    },
+                    "value": {
+                      "ast_type": "Attribute",
+                      "attr": "timestamp",
+                      "col_offset": 27,
+                      "end_col_offset": 42,
+                      "end_lineno": 8,
+                      "lineno": 8,
+                      "node_id": 33,
+                      "src": "159:15:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      },
+                      "value": {
+                        "ast_type": "Name",
+                        "col_offset": 27,
+                        "end_col_offset": 32,
+                        "end_lineno": 8,
+                        "id": "block",
+                        "lineno": 8,
+                        "node_id": 34,
+                        "src": "159:5:-1",
+                        "type": {
+                          "name": "block"
+                        }
+                      }
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 7,
+                    "end_lineno": 5,
+                    "id": "deploy",
+                    "lineno": 5,
+                    "node_id": 37,
+                    "src": "68:6:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 42,
+                "end_lineno": 8,
+                "func_type": {
+                  "argument_types": [],
+                  "name": "__init__",
+                  "return_type": null,
+                  "type_decl_node": {
+                    "node_id": 17,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                },
+                "lineno": 6,
+                "name": "__init__",
+                "node_id": 17,
+                "returns": null,
+                "src": "75:99:-1"
+              }
+            ],
+            "col_offset": 0,
+            "doc_string": null,
+            "end_col_offset": 43,
+            "end_lineno": 8,
+            "is_interface": false,
+            "lineno": 1,
+            "name": null,
+            "node_id": 0,
+            "path": "tests/fixtures/regression/finding_46_constructor_block_gaslimit/unknown_0.vy",
+            "resolved_path": "tests/fixtures/regression/finding_46_constructor_block_gaslimit/unknown_0.vy",
+            "settings": {},
+            "source_id": -1,
+            "source_sha256sum": "68532222a2cda5c23053c9fd448040958109d9d01ecd38619c4dab3a2c955d95",
+            "src": "0:175:-1",
+            "type": {
+              "name": "tests/fixtures/regression/finding_46_constructor_block_gaslimit/unknown_0.vy",
+              "type_decl_node": {
+                "node_id": 0,
+                "source_id": -1
+              },
+              "typeclass": "module"
+            }
+          },
+          "contract_name": "tests/fixtures/regression/finding_46_constructor_block_gaslimit/unknown_0.vy",
+          "imports": []
+        },
+        "blueprint_initcode_prefix": null,
+        "calldata": null,
+        "compiler_settings": {
+          "debug": false,
+          "enable_decimals": true,
+          "evm_version": "prague",
+          "experimental_codegen": false,
+          "optimize": "gas"
+        },
+        "contract_abi": [
+          {
+            "inputs": [],
+            "name": "saved_gaslimit",
+            "outputs": [
+              {
+                "name": "",
+                "type": "uint256"
+              }
+            ],
+            "stateMutability": "view",
+            "type": "function"
+          },
+          {
+            "inputs": [],
+            "name": "saved_timestamp",
+            "outputs": [
+              {
+                "name": "",
+                "type": "uint256"
+              }
+            ],
+            "stateMutability": "view",
+            "type": "function"
+          },
+          {
+            "inputs": [],
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "constructor"
+          }
+        ],
+        "deployed_address": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+        "deployment_succeeded": true,
+        "deployment_type": "source",
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "constructor",
+        "initcode": "3461001757455f5542600155605d61001b5f39605d5ff35b5f80fd5f3560e01c60026003820660011b61005701601e395f51565b63c1337f40811861004f5734610053575f5460405260206040f35b63341349a6811861004f57346100535760015460405260206040f35b5f5ffd5b5f80fd00180033004f8558206344ab2e5a76deb57bbeb8088d97ad68da935fefcc8a4bc7f43a478024a0b446185d810600a1657679706572830005000035",
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "raw_ir": null,
+        "runtime_bytecode": "5f3560e01c60026003820660011b61005701601e395f51565b63c1337f40811861004f5734610053575f5460405260206040f35b63341349a6811861004f57346100535760015460405260206040f35b5f5ffd5b5f80fd00180033004f",
+        "solc_json": {
+          "compiler_version": "v0.5.0a4+commit.cd74ce4f",
+          "integrity": "6344ab2e5a76deb57bbeb8088d97ad68da935fefcc8a4bc7f43a478024a0b446",
+          "language": "Vyper",
+          "settings": {
+            "debug": false,
+            "evmVersion": "prague",
+            "experimentalCodegen": false,
+            "optimize": "gas",
+            "outputSelection": {
+              "unknown_0.vy": [
+                "*"
+              ]
+            },
+            "search_paths": [
+              "."
+            ]
+          },
+          "sources": {
+            "unknown_0.vy": {
+              "content": "\nsaved_gaslimit: public(uint256)\nsaved_timestamp: public(uint256)\n\n@deploy\ndef __init__():\n    self.saved_gaslimit = block.gaslimit\n    self.saved_timestamp = block.timestamp\n",
+              "sha256sum": "68532222a2cda5c23053c9fd448040958109d9d01ecd38619c4dab3a2c955d95"
+            }
+          }
+        },
+        "source_code": "\nsaved_gaslimit: public(uint256)\nsaved_timestamp: public(uint256)\n\n@deploy\ndef __init__():\n    self.saved_gaslimit = block.gaslimit\n    self.saved_timestamp = block.timestamp\n",
+        "storage_layout": {
+          "storage_layout": {
+            "saved_gaslimit": {
+              "n_slots": 1,
+              "slot": 0,
+              "type": "uint256"
+            },
+            "saved_timestamp": {
+              "n_slots": 1,
+              "slot": 1,
+              "type": "uint256"
+            }
+          }
+        },
+        "trace_type": "deployment",
+        "value": 0
+      },
+      {
+        "call_args": {
+          "calldata": "c1337f40",
+          "is_modifying": false,
+          "to": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+          "value": 0
+        },
+        "call_succeeded": true,
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "saved_gaslimit",
+        "output": "00000000000000000000000000000000000000000000000000000002540be400",
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "trace_type": "call"
+      },
+      {
+        "call_args": {
+          "calldata": "341349a6",
+          "is_modifying": false,
+          "to": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+          "value": 0
+        },
+        "call_succeeded": true,
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "saved_timestamp",
+        "output": "0000000000000000000000000000000000000000000000000000000000000001",
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "trace_type": "call"
+      }
+    ]
+  }
+}

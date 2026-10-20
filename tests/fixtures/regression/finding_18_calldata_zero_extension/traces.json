@@ -1,0 +1,352 @@
+{
+  "finding_18_calldata_zero_extension": {
+    "deps": [],
+    "item_type": "test",
+    "traces": [
+      {
+        "annotated_ast": {
+          "ast": {
+            "ast_type": "Module",
+            "body": [
+              {
+                "args": {
+                  "args": [
+                    {
+                      "annotation": {
+                        "ast_type": "Subscript",
+                        "col_offset": 15,
+                        "end_col_offset": 24,
+                        "end_lineno": 4,
+                        "lineno": 4,
+                        "node_id": 4,
+                        "slice": {
+                          "ast_type": "Int",
+                          "col_offset": 21,
+                          "end_col_offset": 23,
+                          "end_lineno": 4,
+                          "folded_value": {
+                            "ast_type": "Int",
+                            "col_offset": 21,
+                            "end_col_offset": 23,
+                            "end_lineno": 4,
+                            "lineno": 4,
+                            "node_id": 7,
+                            "src": "38:2:-1",
+                            "value": 64
+                          },
+                          "lineno": 4,
+                          "node_id": 7,
+                          "src": "38:2:-1",
+                          "value": 64
+                        },
+                        "src": "32:9:-1",
+                        "value": {
+                          "ast_type": "Name",
+                          "col_offset": 15,
+                          "end_col_offset": 20,
+                          "end_lineno": 4,
+                          "id": "Bytes",
+                          "lineno": 4,
+                          "node_id": 5,
+                          "src": "32:5:-1"
+                        }
+                      },
+                      "arg": "data",
+                      "ast_type": "arg",
+                      "col_offset": 9,
+                      "end_col_offset": 24,
+                      "end_lineno": 4,
+                      "lineno": 4,
+                      "node_id": 3,
+                      "src": "26:15:-1"
+                    }
+                  ],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 15,
+                  "end_lineno": 5,
+                  "lineno": 4,
+                  "node_id": 2,
+                  "src": "17:55:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "Return",
+                    "col_offset": 4,
+                    "end_col_offset": 15,
+                    "end_lineno": 5,
+                    "lineno": 5,
+                    "node_id": 9,
+                    "src": "61:11:-1",
+                    "value": {
+                      "ast_type": "Name",
+                      "col_offset": 11,
+                      "end_col_offset": 15,
+                      "end_lineno": 5,
+                      "id": "data",
+                      "lineno": 5,
+                      "node_id": 10,
+                      "src": "68:4:-1",
+                      "type": {
+                        "length": 64,
+                        "name": "Bytes",
+                        "typeclass": "bytes"
+                      },
+                      "variable_reads": [
+                        {
+                          "access_path": [],
+                          "decl_node": {
+                            "node_id": 3,
+                            "source_id": -1
+                          },
+                          "name": "data"
+                        }
+                      ]
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 9,
+                    "end_lineno": 2,
+                    "id": "external",
+                    "lineno": 2,
+                    "node_id": 12,
+                    "src": "2:8:-1"
+                  },
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 5,
+                    "end_lineno": 3,
+                    "id": "pure",
+                    "lineno": 3,
+                    "node_id": 14,
+                    "src": "12:4:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 15,
+                "end_lineno": 5,
+                "func_type": {
+                  "argument_types": [
+                    {
+                      "length": 64,
+                      "name": "Bytes",
+                      "typeclass": "bytes"
+                    }
+                  ],
+                  "name": "echo",
+                  "return_type": {
+                    "length": 64,
+                    "name": "Bytes",
+                    "typeclass": "bytes"
+                  },
+                  "type_decl_node": {
+                    "node_id": 1,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                },
+                "lineno": 4,
+                "name": "echo",
+                "node_id": 1,
+                "returns": {
+                  "ast_type": "Subscript",
+                  "col_offset": 29,
+                  "end_col_offset": 38,
+                  "end_lineno": 4,
+                  "lineno": 4,
+                  "node_id": 16,
+                  "slice": {
+                    "ast_type": "Int",
+                    "col_offset": 35,
+                    "end_col_offset": 37,
+                    "end_lineno": 4,
+                    "folded_value": {
+                      "ast_type": "Int",
+                      "col_offset": 35,
+                      "end_col_offset": 37,
+                      "end_lineno": 4,
+                      "lineno": 4,
+                      "node_id": 19,
+                      "src": "52:2:-1",
+                      "value": 64
+                    },
+                    "lineno": 4,
+                    "node_id": 19,
+                    "src": "52:2:-1",
+                    "value": 64
+                  },
+                  "src": "46:9:-1",
+                  "value": {
+                    "ast_type": "Name",
+                    "col_offset": 29,
+                    "end_col_offset": 34,
+                    "end_lineno": 4,
+                    "id": "Bytes",
+                    "lineno": 4,
+                    "node_id": 17,
+                    "src": "46:5:-1"
+                  }
+                },
+                "src": "17:55:-1"
+              }
+            ],
+            "col_offset": 0,
+            "doc_string": null,
+            "end_col_offset": 16,
+            "end_lineno": 5,
+            "is_interface": false,
+            "lineno": 1,
+            "name": null,
+            "node_id": 0,
+            "path": "tests/fixtures/regression/finding_18_calldata_zero_extension/unknown_0.vy",
+            "resolved_path": "tests/fixtures/regression/finding_18_calldata_zero_extension/unknown_0.vy",
+            "settings": {},
+            "source_id": -1,
+            "source_sha256sum": "008c82023d241ebac5951256a5da498ca58a29bd6984d8dba9dd5f1898e7fb4b",
+            "src": "0:73:-1",
+            "type": {
+              "name": "tests/fixtures/regression/finding_18_calldata_zero_extension/unknown_0.vy",
+              "type_decl_node": {
+                "node_id": 0,
+                "source_id": -1
+              },
+              "typeclass": "module"
+            }
+          },
+          "contract_name": "tests/fixtures/regression/finding_18_calldata_zero_extension/unknown_0.vy",
+          "imports": []
+        },
+        "blueprint_initcode_prefix": null,
+        "calldata": null,
+        "compiler_settings": {
+          "debug": false,
+          "enable_decimals": true,
+          "evm_version": "prague",
+          "experimental_codegen": false,
+          "optimize": "gas"
+        },
+        "contract_abi": [
+          {
+            "gas": 3879,
+            "inputs": [
+              {
+                "name": "data",
+                "type": "bytes"
+              }
+            ],
+            "name": "echo",
+            "outputs": [
+              {
+                "name": "",
+                "type": "bytes"
+              }
+            ],
+            "stateMutability": "pure",
+            "type": "function"
+          }
+        ],
+        "deployed_address": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+        "deployment_succeeded": true,
+        "deployment_type": "source",
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "constructor",
+        "initcode": "607261000b5f3960725ff35f3560e01c63624fbfdc811861006a5760243610341761006e5760043560040180356040811161006e57506060816040375060208060a0528060a00160606040825e8051806020830101601f825f03163682375050601f19601f8251602001011690508101905060a0f35b5f5ffd5b5f80fd855820cb49561b497b772f3a0c02c48a94ca86199f0a9fa3ce65a022376d6cedd8576018728000a1657679706572830005000034",
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "raw_ir": null,
+        "runtime_bytecode": "5f3560e01c63624fbfdc811861006a5760243610341761006e5760043560040180356040811161006e57506060816040375060208060a0528060a00160606040825e8051806020830101601f825f03163682375050601f19601f8251602001011690508101905060a0f35b5f5ffd5b5f80fd",
+        "solc_json": {
+          "compiler_version": "v0.5.0a4+commit.cd74ce4f",
+          "integrity": "cb49561b497b772f3a0c02c48a94ca86199f0a9fa3ce65a022376d6cedd85760",
+          "language": "Vyper",
+          "settings": {
+            "debug": false,
+            "evmVersion": "prague",
+            "experimentalCodegen": false,
+            "optimize": "gas",
+            "outputSelection": {
+              "unknown_0.vy": [
+                "*"
+              ]
+            },
+            "search_paths": [
+              "."
+            ]
+          },
+          "sources": {
+            "unknown_0.vy": {
+              "content": "\n@external\n@pure\ndef echo(data: Bytes[64]) -> Bytes[64]:\n    return data\n",
+              "sha256sum": "008c82023d241ebac5951256a5da498ca58a29bd6984d8dba9dd5f1898e7fb4b"
+            }
+          }
+        },
+        "source_code": "\n@external\n@pure\ndef echo(data: Bytes[64]) -> Bytes[64]:\n    return data\n",
+        "storage_layout": {},
+        "trace_type": "deployment",
+        "value": 0
+      },
+      {
+        "call_args": {
+          "calldata": "624fbfdc0000000000000000000000000000000000000000000000000000000000000080",
+          "is_modifying": true,
+          "to": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+          "value": 0
+        },
+        "call_succeeded": true,
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": null,
+        "output": "00000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000000",
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "trace_type": "call"
+      }
+    ]
+  }
+}

@@ -1,0 +1,4 @@
+Theory vyperRegression_finding_18_calldata_zero_extension[no_sig_docs]
+Ancestors vyperRegressionDefs_finding_18_calldata_zero_extension
+Libs vyperTestRunnerLib
+val () = List.app run_test_on_traces $ all_traces "vyperRegressionDefs_finding_18_calldata_zero_extension";

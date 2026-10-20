@@ -1,0 +1,488 @@
+{
+  "finding_23_created_child_lifetime": {
+    "deps": [],
+    "item_type": "test",
+    "traces": [
+      {
+        "annotated_ast": {
+          "ast": {
+            "ast_type": "Module",
+            "body": [
+              {
+                "args": {
+                  "args": [],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 16,
+                  "end_lineno": 9,
+                  "lineno": 3,
+                  "node_id": 2,
+                  "src": "11:212:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "annotation": {
+                      "ast_type": "Name",
+                      "col_offset": 11,
+                      "end_col_offset": 18,
+                      "end_lineno": 4,
+                      "id": "address",
+                      "lineno": 4,
+                      "node_id": 6,
+                      "src": "59:7:-1"
+                    },
+                    "ast_type": "AnnAssign",
+                    "col_offset": 4,
+                    "end_col_offset": 5,
+                    "end_lineno": 7,
+                    "lineno": 4,
+                    "node_id": 3,
+                    "src": "52:129:-1",
+                    "target": {
+                      "ast_type": "Name",
+                      "col_offset": 4,
+                      "end_col_offset": 9,
+                      "end_lineno": 4,
+                      "id": "child",
+                      "lineno": 4,
+                      "node_id": 4,
+                      "src": "52:5:-1",
+                      "type": {
+                        "name": "address"
+                      },
+                      "variable_reads": [
+                        {
+                          "access_path": [],
+                          "decl_node": {
+                            "node_id": 3,
+                            "source_id": -1
+                          },
+                          "name": "child"
+                        }
+                      ]
+                    },
+                    "value": {
+                      "args": [
+                        {
+                          "ast_type": "Bytes",
+                          "col_offset": 8,
+                          "end_col_offset": 75,
+                          "end_lineno": 5,
+                          "folded_value": {
+                            "ast_type": "Bytes",
+                            "col_offset": 8,
+                            "end_col_offset": 75,
+                            "end_lineno": 5,
+                            "lineno": 5,
+                            "node_id": 11,
+                            "src": "89:67:-1",
+                            "type": {
+                              "length": 49152,
+                              "name": "Bytes",
+                              "typeclass": "bytes"
+                            },
+                            "value": "0x6004600c60003960046000f3610123ff"
+                          },
+                          "lineno": 5,
+                          "node_id": 11,
+                          "src": "89:67:-1",
+                          "type": {
+                            "length": 49152,
+                            "name": "Bytes",
+                            "typeclass": "bytes"
+                          },
+                          "value": "0x6004600c60003960046000f3610123ff"
+                        }
+                      ],
+                      "ast_type": "Call",
+                      "col_offset": 21,
+                      "end_col_offset": 5,
+                      "end_lineno": 7,
+                      "func": {
+                        "ast_type": "Name",
+                        "col_offset": 21,
+                        "end_col_offset": 31,
+                        "end_lineno": 4,
+                        "id": "raw_create",
+                        "lineno": 4,
+                        "node_id": 9,
+                        "src": "69:10:-1",
+                        "type": {
+                          "name": "raw_create",
+                          "typeclass": "builtin_function"
+                        }
+                      },
+                      "keywords": [
+                        {
+                          "arg": "value",
+                          "ast_type": "keyword",
+                          "col_offset": 8,
+                          "end_col_offset": 16,
+                          "end_lineno": 6,
+                          "lineno": 6,
+                          "node_id": 12,
+                          "src": "166:8:-1",
+                          "value": {
+                            "ast_type": "Int",
+                            "col_offset": 14,
+                            "end_col_offset": 16,
+                            "end_lineno": 6,
+                            "folded_value": {
+                              "ast_type": "Int",
+                              "col_offset": 14,
+                              "end_col_offset": 16,
+                              "end_lineno": 6,
+                              "lineno": 6,
+                              "node_id": 13,
+                              "src": "172:2:-1",
+                              "type": {
+                                "bits": 256,
+                                "is_signed": false,
+                                "name": "uint256",
+                                "typeclass": "integer"
+                              },
+                              "value": 10
+                            },
+                            "lineno": 6,
+                            "node_id": 13,
+                            "src": "172:2:-1",
+                            "type": {
+                              "bits": 256,
+                              "is_signed": false,
+                              "name": "uint256",
+                              "typeclass": "integer"
+                            },
+                            "value": 10
+                          }
+                        }
+                      ],
+                      "lineno": 4,
+                      "node_id": 8,
+                      "src": "69:112:-1",
+                      "type": {
+                        "name": "address"
+                      }
+                    }
+                  },
+                  {
+                    "ast_type": "Expr",
+                    "col_offset": 4,
+                    "end_col_offset": 24,
+                    "end_lineno": 8,
+                    "lineno": 8,
+                    "node_id": 14,
+                    "src": "186:20:-1",
+                    "value": {
+                      "args": [
+                        {
+                          "ast_type": "Name",
+                          "col_offset": 13,
+                          "end_col_offset": 18,
+                          "end_lineno": 8,
+                          "id": "child",
+                          "lineno": 8,
+                          "node_id": 18,
+                          "src": "195:5:-1",
+                          "type": {
+                            "name": "address"
+                          },
+                          "variable_reads": [
+                            {
+                              "access_path": [],
+                              "decl_node": {
+                                "node_id": 3,
+                                "source_id": -1
+                              },
+                              "name": "child"
+                            }
+                          ]
+                        },
+                        {
+                          "ast_type": "Bytes",
+                          "col_offset": 20,
+                          "end_col_offset": 23,
+                          "end_lineno": 8,
+                          "folded_value": {
+                            "ast_type": "Bytes",
+                            "col_offset": 20,
+                            "end_col_offset": 23,
+                            "end_lineno": 8,
+                            "lineno": 8,
+                            "node_id": 20,
+                            "src": "202:3:-1",
+                            "type": {
+                              "length": 0,
+                              "name": "Bytes",
+                              "typeclass": "bytes"
+                            },
+                            "value": "0x"
+                          },
+                          "lineno": 8,
+                          "node_id": 20,
+                          "src": "202:3:-1",
+                          "type": {
+                            "length": 0,
+                            "name": "Bytes",
+                            "typeclass": "bytes"
+                          },
+                          "value": "0x"
+                        }
+                      ],
+                      "ast_type": "Call",
+                      "col_offset": 4,
+                      "end_col_offset": 24,
+                      "end_lineno": 8,
+                      "func": {
+                        "ast_type": "Name",
+                        "col_offset": 4,
+                        "end_col_offset": 12,
+                        "end_lineno": 8,
+                        "id": "raw_call",
+                        "lineno": 8,
+                        "node_id": 16,
+                        "src": "186:8:-1",
+                        "type": {
+                          "name": "raw_call",
+                          "typeclass": "builtin_function"
+                        }
+                      },
+                      "keywords": [],
+                      "lineno": 8,
+                      "node_id": 15,
+                      "src": "186:20:-1",
+                      "type": {
+                        "name": "(void)"
+                      }
+                    }
+                  },
+                  {
+                    "ast_type": "Return",
+                    "col_offset": 4,
+                    "end_col_offset": 16,
+                    "end_lineno": 9,
+                    "lineno": 9,
+                    "node_id": 21,
+                    "src": "211:12:-1",
+                    "value": {
+                      "ast_type": "Name",
+                      "col_offset": 11,
+                      "end_col_offset": 16,
+                      "end_lineno": 9,
+                      "id": "child",
+                      "lineno": 9,
+                      "node_id": 22,
+                      "src": "218:5:-1",
+                      "type": {
+                        "name": "address"
+                      },
+                      "variable_reads": [
+                        {
+                          "access_path": [],
+                          "decl_node": {
+                            "node_id": 3,
+                            "source_id": -1
+                          },
+                          "name": "child"
+                        }
+                      ]
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 9,
+                    "end_lineno": 2,
+                    "id": "external",
+                    "lineno": 2,
+                    "node_id": 24,
+                    "src": "2:8:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 16,
+                "end_lineno": 9,
+                "func_type": {
+                  "argument_types": [],
+                  "name": "create_and_destroy",
+                  "return_type": {
+                    "name": "address"
+                  },
+                  "type_decl_node": {
+                    "node_id": 1,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                },
+                "lineno": 3,
+                "name": "create_and_destroy",
+                "node_id": 1,
+                "returns": {
+                  "ast_type": "Name",
+                  "col_offset": 28,
+                  "end_col_offset": 35,
+                  "end_lineno": 3,
+                  "id": "address",
+                  "lineno": 3,
+                  "node_id": 26,
+                  "src": "39:7:-1"
+                },
+                "src": "11:212:-1"
+              }
+            ],
+            "col_offset": 0,
+            "doc_string": null,
+            "end_col_offset": 17,
+            "end_lineno": 9,
+            "is_interface": false,
+            "lineno": 1,
+            "name": null,
+            "node_id": 0,
+            "path": "tests/fixtures/regression/finding_23_created_child_lifetime/unknown_0.vy",
+            "resolved_path": "tests/fixtures/regression/finding_23_created_child_lifetime/unknown_0.vy",
+            "settings": {},
+            "source_id": -1,
+            "source_sha256sum": "722b8eb7135a0e4e7824c0029a77ef37c22de6f372d8f6c39b2334e1cc353f28",
+            "src": "0:224:-1",
+            "type": {
+              "name": "tests/fixtures/regression/finding_23_created_child_lifetime/unknown_0.vy",
+              "type_decl_node": {
+                "node_id": 0,
+                "source_id": -1
+              },
+              "typeclass": "module"
+            }
+          },
+          "contract_name": "tests/fixtures/regression/finding_23_created_child_lifetime/unknown_0.vy",
+          "imports": []
+        },
+        "blueprint_initcode_prefix": null,
+        "calldata": null,
+        "compiler_settings": {
+          "debug": false,
+          "enable_decimals": true,
+          "evm_version": "prague",
+          "experimental_codegen": false,
+          "optimize": "gas"
+        },
+        "contract_abi": [
+          {
+            "gas": 34951,
+            "inputs": [],
+            "name": "create_and_destroy",
+            "outputs": [
+              {
+                "name": "",
+                "type": "address"
+              }
+            ],
+            "stateMutability": "nonpayable",
+            "type": "function"
+          }
+        ],
+        "deployed_address": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+        "deployment_succeeded": true,
+        "deployment_type": "source",
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "constructor",
+        "initcode": "60a061000b5f3960a05ff35f3560e01c63a012a81e8118610098573461009c5760106060527f6004600c60003960046000f3610123ff000000000000000000000000000000006080526060805160208201805160a052508060a001505f810160a0600af080610065573d5f5f3e3d5ffd5b905090506040526040515a5f6060526060505f5f60605160805f8686f190509050610092573d5f5f3e3d5ffd5b60206040f35b5f5ffd5b5f80fd85582018e529400ba6f2e71b04477ed9c2575c5ee8af190218d012c38a41e36741bf7e18a08000a1657679706572830005000034",
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "raw_ir": null,
+        "runtime_bytecode": "5f3560e01c63a012a81e8118610098573461009c5760106060527f6004600c60003960046000f3610123ff000000000000000000000000000000006080526060805160208201805160a052508060a001505f810160a0600af080610065573d5f5f3e3d5ffd5b905090506040526040515a5f6060526060505f5f60605160805f8686f190509050610092573d5f5f3e3d5ffd5b60206040f35b5f5ffd5b5f80fd",
+        "solc_json": {
+          "compiler_version": "v0.5.0a4+commit.cd74ce4f",
+          "integrity": "18e529400ba6f2e71b04477ed9c2575c5ee8af190218d012c38a41e36741bf7e",
+          "language": "Vyper",
+          "settings": {
+            "debug": false,
+            "evmVersion": "prague",
+            "experimentalCodegen": false,
+            "optimize": "gas",
+            "outputSelection": {
+              "unknown_0.vy": [
+                "*"
+              ]
+            },
+            "search_paths": [
+              "."
+            ]
+          },
+          "sources": {
+            "unknown_0.vy": {
+              "content": "\n@external\ndef create_and_destroy() -> address:\n    child: address = raw_create(\n        b\"\\x60\\x04\\x60\\x0c\\x60\\x00\\x39\\x60\\x04\\x60\\x00\\xf3\\x61\\x01\\x23\\xff\",\n        value=10,\n    )\n    raw_call(child, b\"\")\n    return child\n",
+              "sha256sum": "722b8eb7135a0e4e7824c0029a77ef37c22de6f372d8f6c39b2334e1cc353f28"
+            }
+          }
+        },
+        "source_code": "\n@external\ndef create_and_destroy() -> address:\n    child: address = raw_create(\n        b\"\\x60\\x04\\x60\\x0c\\x60\\x00\\x39\\x60\\x04\\x60\\x00\\xf3\\x61\\x01\\x23\\xff\",\n        value=10,\n    )\n    raw_call(child, b\"\")\n    return child\n",
+        "storage_layout": {},
+        "trace_type": "deployment",
+        "value": 0
+      },
+      {
+        "address": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+        "trace_type": "set_balance",
+        "value": 100
+      },
+      {
+        "call_args": {
+          "calldata": "a012a81e",
+          "is_modifying": true,
+          "to": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+          "value": 0
+        },
+        "call_succeeded": true,
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "create_and_destroy",
+        "output": "0000000000000000000000001076676756f7b54fdedabf0c24eaec735af6ad6b",
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "trace_type": "call"
+      }
+    ]
+  }
+}

@@ -1,0 +1,4 @@
+Theory vyperRegression_finding_19_extract32_full_window[no_sig_docs]
+Ancestors vyperRegressionDefs_finding_19_extract32_full_window
+Libs vyperTestRunnerLib
+val () = List.app run_test_on_traces $ all_traces "vyperRegressionDefs_finding_19_extract32_full_window";

@@ -1,0 +1,3033 @@
+{
+  "finding_27_decimal_mapping_keys": {
+    "deps": [],
+    "item_type": "test",
+    "traces": [
+      {
+        "annotated_ast": {
+          "ast": {
+            "ast_type": "Module",
+            "body": [
+              {
+                "annotation": {
+                  "ast_type": "Subscript",
+                  "col_offset": 8,
+                  "end_col_offset": 33,
+                  "end_lineno": 2,
+                  "lineno": 2,
+                  "node_id": 4,
+                  "slice": {
+                    "ast_type": "Tuple",
+                    "col_offset": 16,
+                    "elements": [
+                      {
+                        "ast_type": "Name",
+                        "col_offset": 16,
+                        "end_col_offset": 23,
+                        "end_lineno": 2,
+                        "id": "decimal",
+                        "lineno": 2,
+                        "node_id": 8,
+                        "src": "17:7:-1"
+                      },
+                      {
+                        "ast_type": "Name",
+                        "col_offset": 25,
+                        "end_col_offset": 32,
+                        "end_lineno": 2,
+                        "id": "uint256",
+                        "lineno": 2,
+                        "node_id": 10,
+                        "src": "26:7:-1"
+                      }
+                    ],
+                    "end_col_offset": 32,
+                    "end_lineno": 2,
+                    "lineno": 2,
+                    "node_id": 7,
+                    "src": "17:16:-1"
+                  },
+                  "src": "9:25:-1",
+                  "value": {
+                    "ast_type": "Name",
+                    "col_offset": 8,
+                    "end_col_offset": 15,
+                    "end_lineno": 2,
+                    "id": "HashMap",
+                    "lineno": 2,
+                    "node_id": 5,
+                    "src": "9:7:-1"
+                  }
+                },
+                "ast_type": "VariableDecl",
+                "col_offset": 0,
+                "end_col_offset": 33,
+                "end_lineno": 2,
+                "is_constant": false,
+                "is_immutable": false,
+                "is_public": false,
+                "is_reentrant": false,
+                "is_transient": false,
+                "lineno": 2,
+                "node_id": 1,
+                "src": "1:33:-1",
+                "target": {
+                  "ast_type": "Name",
+                  "col_offset": 0,
+                  "end_col_offset": 6,
+                  "end_lineno": 2,
+                  "id": "values",
+                  "lineno": 2,
+                  "node_id": 2,
+                  "src": "1:6:-1",
+                  "type": {
+                    "key_type": {
+                      "name": "decimal",
+                      "typeclass": "decimal"
+                    },
+                    "name": "HashMap",
+                    "typeclass": "hashmap",
+                    "value_type": {
+                      "bits": 256,
+                      "is_signed": false,
+                      "name": "uint256",
+                      "typeclass": "integer"
+                    }
+                  }
+                },
+                "type": {
+                  "key_type": {
+                    "name": "decimal",
+                    "typeclass": "decimal"
+                  },
+                  "name": "HashMap",
+                  "typeclass": "hashmap",
+                  "value_type": {
+                    "bits": 256,
+                    "is_signed": false,
+                    "name": "uint256",
+                    "typeclass": "integer"
+                  }
+                },
+                "value": null
+              },
+              {
+                "annotation": {
+                  "ast_type": "Subscript",
+                  "col_offset": 8,
+                  "end_col_offset": 51,
+                  "end_lineno": 3,
+                  "lineno": 3,
+                  "node_id": 17,
+                  "slice": {
+                    "ast_type": "Tuple",
+                    "col_offset": 16,
+                    "elements": [
+                      {
+                        "ast_type": "Name",
+                        "col_offset": 16,
+                        "end_col_offset": 23,
+                        "end_lineno": 3,
+                        "id": "uint256",
+                        "lineno": 3,
+                        "node_id": 21,
+                        "src": "51:7:-1"
+                      },
+                      {
+                        "ast_type": "Subscript",
+                        "col_offset": 25,
+                        "end_col_offset": 50,
+                        "end_lineno": 3,
+                        "lineno": 3,
+                        "node_id": 23,
+                        "slice": {
+                          "ast_type": "Tuple",
+                          "col_offset": 33,
+                          "elements": [
+                            {
+                              "ast_type": "Name",
+                              "col_offset": 33,
+                              "end_col_offset": 40,
+                              "end_lineno": 3,
+                              "id": "decimal",
+                              "lineno": 3,
+                              "node_id": 27,
+                              "src": "68:7:-1"
+                            },
+                            {
+                              "ast_type": "Name",
+                              "col_offset": 42,
+                              "end_col_offset": 49,
+                              "end_lineno": 3,
+                              "id": "uint256",
+                              "lineno": 3,
+                              "node_id": 29,
+                              "src": "77:7:-1"
+                            }
+                          ],
+                          "end_col_offset": 49,
+                          "end_lineno": 3,
+                          "lineno": 3,
+                          "node_id": 26,
+                          "src": "68:16:-1"
+                        },
+                        "src": "60:25:-1",
+                        "value": {
+                          "ast_type": "Name",
+                          "col_offset": 25,
+                          "end_col_offset": 32,
+                          "end_lineno": 3,
+                          "id": "HashMap",
+                          "lineno": 3,
+                          "node_id": 24,
+                          "src": "60:7:-1"
+                        }
+                      }
+                    ],
+                    "end_col_offset": 50,
+                    "end_lineno": 3,
+                    "lineno": 3,
+                    "node_id": 20,
+                    "src": "51:34:-1"
+                  },
+                  "src": "43:43:-1",
+                  "value": {
+                    "ast_type": "Name",
+                    "col_offset": 8,
+                    "end_col_offset": 15,
+                    "end_lineno": 3,
+                    "id": "HashMap",
+                    "lineno": 3,
+                    "node_id": 18,
+                    "src": "43:7:-1"
+                  }
+                },
+                "ast_type": "VariableDecl",
+                "col_offset": 0,
+                "end_col_offset": 51,
+                "end_lineno": 3,
+                "is_constant": false,
+                "is_immutable": false,
+                "is_public": false,
+                "is_reentrant": false,
+                "is_transient": false,
+                "lineno": 3,
+                "node_id": 14,
+                "src": "35:51:-1",
+                "target": {
+                  "ast_type": "Name",
+                  "col_offset": 0,
+                  "end_col_offset": 6,
+                  "end_lineno": 3,
+                  "id": "nested",
+                  "lineno": 3,
+                  "node_id": 15,
+                  "src": "35:6:-1",
+                  "type": {
+                    "key_type": {
+                      "bits": 256,
+                      "is_signed": false,
+                      "name": "uint256",
+                      "typeclass": "integer"
+                    },
+                    "name": "HashMap",
+                    "typeclass": "hashmap",
+                    "value_type": {
+                      "key_type": {
+                        "name": "decimal",
+                        "typeclass": "decimal"
+                      },
+                      "name": "HashMap",
+                      "typeclass": "hashmap",
+                      "value_type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      }
+                    }
+                  }
+                },
+                "type": {
+                  "key_type": {
+                    "bits": 256,
+                    "is_signed": false,
+                    "name": "uint256",
+                    "typeclass": "integer"
+                  },
+                  "name": "HashMap",
+                  "typeclass": "hashmap",
+                  "value_type": {
+                    "key_type": {
+                      "name": "decimal",
+                      "typeclass": "decimal"
+                    },
+                    "name": "HashMap",
+                    "typeclass": "hashmap",
+                    "value_type": {
+                      "bits": 256,
+                      "is_signed": false,
+                      "name": "uint256",
+                      "typeclass": "integer"
+                    }
+                  }
+                },
+                "value": null
+              },
+              {
+                "args": {
+                  "args": [],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 84,
+                  "end_lineno": 10,
+                  "lineno": 6,
+                  "node_id": 36,
+                  "src": "98:191:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "Assign",
+                    "col_offset": 4,
+                    "end_col_offset": 25,
+                    "end_lineno": 7,
+                    "lineno": 7,
+                    "node_id": 37,
+                    "src": "130:21:-1",
+                    "target": {
+                      "ast_type": "Subscript",
+                      "col_offset": 4,
+                      "end_col_offset": 20,
+                      "end_lineno": 7,
+                      "lineno": 7,
+                      "node_id": 38,
+                      "slice": {
+                        "ast_type": "Decimal",
+                        "col_offset": 16,
+                        "end_col_offset": 19,
+                        "end_lineno": 7,
+                        "folded_value": {
+                          "ast_type": "Decimal",
+                          "col_offset": 16,
+                          "end_col_offset": 19,
+                          "end_lineno": 7,
+                          "lineno": 7,
+                          "node_id": 43,
+                          "src": "142:3:-1",
+                          "type": {
+                            "name": "decimal",
+                            "typeclass": "decimal"
+                          },
+                          "value": "1.0"
+                        },
+                        "lineno": 7,
+                        "node_id": 43,
+                        "src": "142:3:-1",
+                        "type": {
+                          "name": "decimal",
+                          "typeclass": "decimal"
+                        },
+                        "value": "1.0"
+                      },
+                      "src": "130:16:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      },
+                      "value": {
+                        "ast_type": "Attribute",
+                        "attr": "values",
+                        "col_offset": 4,
+                        "end_col_offset": 15,
+                        "end_lineno": 7,
+                        "lineno": 7,
+                        "node_id": 39,
+                        "src": "130:11:-1",
+                        "type": {
+                          "key_type": {
+                            "name": "decimal",
+                            "typeclass": "decimal"
+                          },
+                          "name": "HashMap",
+                          "typeclass": "hashmap",
+                          "value_type": {
+                            "bits": 256,
+                            "is_signed": false,
+                            "name": "uint256",
+                            "typeclass": "integer"
+                          }
+                        },
+                        "value": {
+                          "ast_type": "Name",
+                          "col_offset": 4,
+                          "end_col_offset": 8,
+                          "end_lineno": 7,
+                          "id": "self",
+                          "lineno": 7,
+                          "node_id": 40,
+                          "src": "130:4:-1",
+                          "type": {
+                            "name": "self"
+                          }
+                        },
+                        "variable_reads": [
+                          {
+                            "access_path": [],
+                            "decl_node": {
+                              "node_id": 1,
+                              "source_id": -1
+                            },
+                            "name": "values"
+                          }
+                        ]
+                      },
+                      "variable_reads": [
+                        {
+                          "access_path": [
+                            "$subscript_access"
+                          ],
+                          "decl_node": {
+                            "node_id": 1,
+                            "source_id": -1
+                          },
+                          "name": "values"
+                        }
+                      ],
+                      "variable_writes": [
+                        {
+                          "access_path": [
+                            "$subscript_access"
+                          ],
+                          "decl_node": {
+                            "node_id": 1,
+                            "source_id": -1
+                          },
+                          "name": "values"
+                        }
+                      ]
+                    },
+                    "value": {
+                      "ast_type": "Int",
+                      "col_offset": 23,
+                      "end_col_offset": 25,
+                      "end_lineno": 7,
+                      "folded_value": {
+                        "ast_type": "Int",
+                        "col_offset": 23,
+                        "end_col_offset": 25,
+                        "end_lineno": 7,
+                        "lineno": 7,
+                        "node_id": 45,
+                        "src": "149:2:-1",
+                        "type": {
+                          "bits": 256,
+                          "is_signed": false,
+                          "name": "uint256",
+                          "typeclass": "integer"
+                        },
+                        "value": 11
+                      },
+                      "lineno": 7,
+                      "node_id": 45,
+                      "src": "149:2:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      },
+                      "value": 11
+                    }
+                  },
+                  {
+                    "ast_type": "Assign",
+                    "col_offset": 4,
+                    "end_col_offset": 25,
+                    "end_lineno": 8,
+                    "lineno": 8,
+                    "node_id": 46,
+                    "src": "156:21:-1",
+                    "target": {
+                      "ast_type": "Subscript",
+                      "col_offset": 4,
+                      "end_col_offset": 20,
+                      "end_lineno": 8,
+                      "lineno": 8,
+                      "node_id": 47,
+                      "slice": {
+                        "ast_type": "Decimal",
+                        "col_offset": 16,
+                        "end_col_offset": 19,
+                        "end_lineno": 8,
+                        "folded_value": {
+                          "ast_type": "Decimal",
+                          "col_offset": 16,
+                          "end_col_offset": 19,
+                          "end_lineno": 8,
+                          "lineno": 8,
+                          "node_id": 52,
+                          "src": "168:3:-1",
+                          "type": {
+                            "name": "decimal",
+                            "typeclass": "decimal"
+                          },
+                          "value": "2.0"
+                        },
+                        "lineno": 8,
+                        "node_id": 52,
+                        "src": "168:3:-1",
+                        "type": {
+                          "name": "decimal",
+                          "typeclass": "decimal"
+                        },
+                        "value": "2.0"
+                      },
+                      "src": "156:16:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      },
+                      "value": {
+                        "ast_type": "Attribute",
+                        "attr": "values",
+                        "col_offset": 4,
+                        "end_col_offset": 15,
+                        "end_lineno": 8,
+                        "lineno": 8,
+                        "node_id": 48,
+                        "src": "156:11:-1",
+                        "type": {
+                          "key_type": {
+                            "name": "decimal",
+                            "typeclass": "decimal"
+                          },
+                          "name": "HashMap",
+                          "typeclass": "hashmap",
+                          "value_type": {
+                            "bits": 256,
+                            "is_signed": false,
+                            "name": "uint256",
+                            "typeclass": "integer"
+                          }
+                        },
+                        "value": {
+                          "ast_type": "Name",
+                          "col_offset": 4,
+                          "end_col_offset": 8,
+                          "end_lineno": 8,
+                          "id": "self",
+                          "lineno": 8,
+                          "node_id": 49,
+                          "src": "156:4:-1",
+                          "type": {
+                            "name": "self"
+                          }
+                        },
+                        "variable_reads": [
+                          {
+                            "access_path": [],
+                            "decl_node": {
+                              "node_id": 1,
+                              "source_id": -1
+                            },
+                            "name": "values"
+                          }
+                        ]
+                      },
+                      "variable_reads": [
+                        {
+                          "access_path": [
+                            "$subscript_access"
+                          ],
+                          "decl_node": {
+                            "node_id": 1,
+                            "source_id": -1
+                          },
+                          "name": "values"
+                        }
+                      ],
+                      "variable_writes": [
+                        {
+                          "access_path": [
+                            "$subscript_access"
+                          ],
+                          "decl_node": {
+                            "node_id": 1,
+                            "source_id": -1
+                          },
+                          "name": "values"
+                        }
+                      ]
+                    },
+                    "value": {
+                      "ast_type": "Int",
+                      "col_offset": 23,
+                      "end_col_offset": 25,
+                      "end_lineno": 8,
+                      "folded_value": {
+                        "ast_type": "Int",
+                        "col_offset": 23,
+                        "end_col_offset": 25,
+                        "end_lineno": 8,
+                        "lineno": 8,
+                        "node_id": 54,
+                        "src": "175:2:-1",
+                        "type": {
+                          "bits": 256,
+                          "is_signed": false,
+                          "name": "uint256",
+                          "typeclass": "integer"
+                        },
+                        "value": 22
+                      },
+                      "lineno": 8,
+                      "node_id": 54,
+                      "src": "175:2:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      },
+                      "value": 22
+                    }
+                  },
+                  {
+                    "ast_type": "Assign",
+                    "col_offset": 4,
+                    "end_col_offset": 26,
+                    "end_lineno": 9,
+                    "lineno": 9,
+                    "node_id": 55,
+                    "src": "182:22:-1",
+                    "target": {
+                      "ast_type": "Subscript",
+                      "col_offset": 4,
+                      "end_col_offset": 21,
+                      "end_lineno": 9,
+                      "lineno": 9,
+                      "node_id": 56,
+                      "slice": {
+                        "ast_type": "Decimal",
+                        "col_offset": 16,
+                        "end_col_offset": 20,
+                        "end_lineno": 9,
+                        "folded_value": {
+                          "ast_type": "Decimal",
+                          "col_offset": 16,
+                          "end_col_offset": 20,
+                          "end_lineno": 9,
+                          "lineno": 9,
+                          "node_id": 63,
+                          "src": "195:3:-1",
+                          "type": {
+                            "name": "decimal",
+                            "typeclass": "decimal"
+                          },
+                          "value": "-1.5"
+                        },
+                        "lineno": 9,
+                        "node_id": 63,
+                        "src": "195:3:-1",
+                        "type": {
+                          "name": "decimal",
+                          "typeclass": "decimal"
+                        },
+                        "value": "-1.5"
+                      },
+                      "src": "182:17:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      },
+                      "value": {
+                        "ast_type": "Attribute",
+                        "attr": "values",
+                        "col_offset": 4,
+                        "end_col_offset": 15,
+                        "end_lineno": 9,
+                        "lineno": 9,
+                        "node_id": 57,
+                        "src": "182:11:-1",
+                        "type": {
+                          "key_type": {
+                            "name": "decimal",
+                            "typeclass": "decimal"
+                          },
+                          "name": "HashMap",
+                          "typeclass": "hashmap",
+                          "value_type": {
+                            "bits": 256,
+                            "is_signed": false,
+                            "name": "uint256",
+                            "typeclass": "integer"
+                          }
+                        },
+                        "value": {
+                          "ast_type": "Name",
+                          "col_offset": 4,
+                          "end_col_offset": 8,
+                          "end_lineno": 9,
+                          "id": "self",
+                          "lineno": 9,
+                          "node_id": 58,
+                          "src": "182:4:-1",
+                          "type": {
+                            "name": "self"
+                          }
+                        },
+                        "variable_reads": [
+                          {
+                            "access_path": [],
+                            "decl_node": {
+                              "node_id": 1,
+                              "source_id": -1
+                            },
+                            "name": "values"
+                          }
+                        ]
+                      },
+                      "variable_reads": [
+                        {
+                          "access_path": [
+                            "$subscript_access"
+                          ],
+                          "decl_node": {
+                            "node_id": 1,
+                            "source_id": -1
+                          },
+                          "name": "values"
+                        }
+                      ],
+                      "variable_writes": [
+                        {
+                          "access_path": [
+                            "$subscript_access"
+                          ],
+                          "decl_node": {
+                            "node_id": 1,
+                            "source_id": -1
+                          },
+                          "name": "values"
+                        }
+                      ]
+                    },
+                    "value": {
+                      "ast_type": "Int",
+                      "col_offset": 24,
+                      "end_col_offset": 26,
+                      "end_lineno": 9,
+                      "folded_value": {
+                        "ast_type": "Int",
+                        "col_offset": 24,
+                        "end_col_offset": 26,
+                        "end_lineno": 9,
+                        "lineno": 9,
+                        "node_id": 65,
+                        "src": "202:2:-1",
+                        "type": {
+                          "bits": 256,
+                          "is_signed": false,
+                          "name": "uint256",
+                          "typeclass": "integer"
+                        },
+                        "value": 33
+                      },
+                      "lineno": 9,
+                      "node_id": 65,
+                      "src": "202:2:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      },
+                      "value": 33
+                    }
+                  },
+                  {
+                    "ast_type": "Return",
+                    "col_offset": 4,
+                    "end_col_offset": 84,
+                    "end_lineno": 10,
+                    "lineno": 10,
+                    "node_id": 66,
+                    "src": "209:80:-1",
+                    "value": {
+                      "ast_type": "List",
+                      "col_offset": 11,
+                      "elements": [
+                        {
+                          "ast_type": "Subscript",
+                          "col_offset": 12,
+                          "end_col_offset": 28,
+                          "end_lineno": 10,
+                          "lineno": 10,
+                          "node_id": 68,
+                          "slice": {
+                            "ast_type": "Decimal",
+                            "col_offset": 24,
+                            "end_col_offset": 27,
+                            "end_lineno": 10,
+                            "folded_value": {
+                              "ast_type": "Decimal",
+                              "col_offset": 24,
+                              "end_col_offset": 27,
+                              "end_lineno": 10,
+                              "lineno": 10,
+                              "node_id": 73,
+                              "src": "229:3:-1",
+                              "type": {
+                                "name": "decimal",
+                                "typeclass": "decimal"
+                              },
+                              "value": "1.0"
+                            },
+                            "lineno": 10,
+                            "node_id": 73,
+                            "src": "229:3:-1",
+                            "type": {
+                              "name": "decimal",
+                              "typeclass": "decimal"
+                            },
+                            "value": "1.0"
+                          },
+                          "src": "217:16:-1",
+                          "type": {
+                            "bits": 256,
+                            "is_signed": false,
+                            "name": "uint256",
+                            "typeclass": "integer"
+                          },
+                          "value": {
+                            "ast_type": "Attribute",
+                            "attr": "values",
+                            "col_offset": 12,
+                            "end_col_offset": 23,
+                            "end_lineno": 10,
+                            "lineno": 10,
+                            "node_id": 69,
+                            "src": "217:11:-1",
+                            "type": {
+                              "key_type": {
+                                "name": "decimal",
+                                "typeclass": "decimal"
+                              },
+                              "name": "HashMap",
+                              "typeclass": "hashmap",
+                              "value_type": {
+                                "bits": 256,
+                                "is_signed": false,
+                                "name": "uint256",
+                                "typeclass": "integer"
+                              }
+                            },
+                            "value": {
+                              "ast_type": "Name",
+                              "col_offset": 12,
+                              "end_col_offset": 16,
+                              "end_lineno": 10,
+                              "id": "self",
+                              "lineno": 10,
+                              "node_id": 70,
+                              "src": "217:4:-1",
+                              "type": {
+                                "name": "self"
+                              }
+                            },
+                            "variable_reads": [
+                              {
+                                "access_path": [],
+                                "decl_node": {
+                                  "node_id": 1,
+                                  "source_id": -1
+                                },
+                                "name": "values"
+                              }
+                            ]
+                          },
+                          "variable_reads": [
+                            {
+                              "access_path": [
+                                "$subscript_access"
+                              ],
+                              "decl_node": {
+                                "node_id": 1,
+                                "source_id": -1
+                              },
+                              "name": "values"
+                            }
+                          ]
+                        },
+                        {
+                          "ast_type": "Subscript",
+                          "col_offset": 30,
+                          "end_col_offset": 46,
+                          "end_lineno": 10,
+                          "lineno": 10,
+                          "node_id": 75,
+                          "slice": {
+                            "ast_type": "Decimal",
+                            "col_offset": 42,
+                            "end_col_offset": 45,
+                            "end_lineno": 10,
+                            "folded_value": {
+                              "ast_type": "Decimal",
+                              "col_offset": 42,
+                              "end_col_offset": 45,
+                              "end_lineno": 10,
+                              "lineno": 10,
+                              "node_id": 80,
+                              "src": "247:3:-1",
+                              "type": {
+                                "name": "decimal",
+                                "typeclass": "decimal"
+                              },
+                              "value": "2.0"
+                            },
+                            "lineno": 10,
+                            "node_id": 80,
+                            "src": "247:3:-1",
+                            "type": {
+                              "name": "decimal",
+                              "typeclass": "decimal"
+                            },
+                            "value": "2.0"
+                          },
+                          "src": "235:16:-1",
+                          "type": {
+                            "bits": 256,
+                            "is_signed": false,
+                            "name": "uint256",
+                            "typeclass": "integer"
+                          },
+                          "value": {
+                            "ast_type": "Attribute",
+                            "attr": "values",
+                            "col_offset": 30,
+                            "end_col_offset": 41,
+                            "end_lineno": 10,
+                            "lineno": 10,
+                            "node_id": 76,
+                            "src": "235:11:-1",
+                            "type": {
+                              "key_type": {
+                                "name": "decimal",
+                                "typeclass": "decimal"
+                              },
+                              "name": "HashMap",
+                              "typeclass": "hashmap",
+                              "value_type": {
+                                "bits": 256,
+                                "is_signed": false,
+                                "name": "uint256",
+                                "typeclass": "integer"
+                              }
+                            },
+                            "value": {
+                              "ast_type": "Name",
+                              "col_offset": 30,
+                              "end_col_offset": 34,
+                              "end_lineno": 10,
+                              "id": "self",
+                              "lineno": 10,
+                              "node_id": 77,
+                              "src": "235:4:-1",
+                              "type": {
+                                "name": "self"
+                              }
+                            },
+                            "variable_reads": [
+                              {
+                                "access_path": [],
+                                "decl_node": {
+                                  "node_id": 1,
+                                  "source_id": -1
+                                },
+                                "name": "values"
+                              }
+                            ]
+                          },
+                          "variable_reads": [
+                            {
+                              "access_path": [
+                                "$subscript_access"
+                              ],
+                              "decl_node": {
+                                "node_id": 1,
+                                "source_id": -1
+                              },
+                              "name": "values"
+                            }
+                          ]
+                        },
+                        {
+                          "ast_type": "Subscript",
+                          "col_offset": 48,
+                          "end_col_offset": 65,
+                          "end_lineno": 10,
+                          "lineno": 10,
+                          "node_id": 82,
+                          "slice": {
+                            "ast_type": "Decimal",
+                            "col_offset": 60,
+                            "end_col_offset": 64,
+                            "end_lineno": 10,
+                            "folded_value": {
+                              "ast_type": "Decimal",
+                              "col_offset": 60,
+                              "end_col_offset": 64,
+                              "end_lineno": 10,
+                              "lineno": 10,
+                              "node_id": 89,
+                              "src": "266:3:-1",
+                              "type": {
+                                "name": "decimal",
+                                "typeclass": "decimal"
+                              },
+                              "value": "-1.5"
+                            },
+                            "lineno": 10,
+                            "node_id": 89,
+                            "src": "266:3:-1",
+                            "type": {
+                              "name": "decimal",
+                              "typeclass": "decimal"
+                            },
+                            "value": "-1.5"
+                          },
+                          "src": "253:17:-1",
+                          "type": {
+                            "bits": 256,
+                            "is_signed": false,
+                            "name": "uint256",
+                            "typeclass": "integer"
+                          },
+                          "value": {
+                            "ast_type": "Attribute",
+                            "attr": "values",
+                            "col_offset": 48,
+                            "end_col_offset": 59,
+                            "end_lineno": 10,
+                            "lineno": 10,
+                            "node_id": 83,
+                            "src": "253:11:-1",
+                            "type": {
+                              "key_type": {
+                                "name": "decimal",
+                                "typeclass": "decimal"
+                              },
+                              "name": "HashMap",
+                              "typeclass": "hashmap",
+                              "value_type": {
+                                "bits": 256,
+                                "is_signed": false,
+                                "name": "uint256",
+                                "typeclass": "integer"
+                              }
+                            },
+                            "value": {
+                              "ast_type": "Name",
+                              "col_offset": 48,
+                              "end_col_offset": 52,
+                              "end_lineno": 10,
+                              "id": "self",
+                              "lineno": 10,
+                              "node_id": 84,
+                              "src": "253:4:-1",
+                              "type": {
+                                "name": "self"
+                              }
+                            },
+                            "variable_reads": [
+                              {
+                                "access_path": [],
+                                "decl_node": {
+                                  "node_id": 1,
+                                  "source_id": -1
+                                },
+                                "name": "values"
+                              }
+                            ]
+                          },
+                          "variable_reads": [
+                            {
+                              "access_path": [
+                                "$subscript_access"
+                              ],
+                              "decl_node": {
+                                "node_id": 1,
+                                "source_id": -1
+                              },
+                              "name": "values"
+                            }
+                          ]
+                        },
+                        {
+                          "ast_type": "Subscript",
+                          "col_offset": 67,
+                          "end_col_offset": 83,
+                          "end_lineno": 10,
+                          "lineno": 10,
+                          "node_id": 91,
+                          "slice": {
+                            "ast_type": "Decimal",
+                            "col_offset": 79,
+                            "end_col_offset": 82,
+                            "end_lineno": 10,
+                            "folded_value": {
+                              "ast_type": "Decimal",
+                              "col_offset": 79,
+                              "end_col_offset": 82,
+                              "end_lineno": 10,
+                              "lineno": 10,
+                              "node_id": 96,
+                              "src": "284:3:-1",
+                              "type": {
+                                "name": "decimal",
+                                "typeclass": "decimal"
+                              },
+                              "value": "0.0"
+                            },
+                            "lineno": 10,
+                            "node_id": 96,
+                            "src": "284:3:-1",
+                            "type": {
+                              "name": "decimal",
+                              "typeclass": "decimal"
+                            },
+                            "value": "0.0"
+                          },
+                          "src": "272:16:-1",
+                          "type": {
+                            "bits": 256,
+                            "is_signed": false,
+                            "name": "uint256",
+                            "typeclass": "integer"
+                          },
+                          "value": {
+                            "ast_type": "Attribute",
+                            "attr": "values",
+                            "col_offset": 67,
+                            "end_col_offset": 78,
+                            "end_lineno": 10,
+                            "lineno": 10,
+                            "node_id": 92,
+                            "src": "272:11:-1",
+                            "type": {
+                              "key_type": {
+                                "name": "decimal",
+                                "typeclass": "decimal"
+                              },
+                              "name": "HashMap",
+                              "typeclass": "hashmap",
+                              "value_type": {
+                                "bits": 256,
+                                "is_signed": false,
+                                "name": "uint256",
+                                "typeclass": "integer"
+                              }
+                            },
+                            "value": {
+                              "ast_type": "Name",
+                              "col_offset": 67,
+                              "end_col_offset": 71,
+                              "end_lineno": 10,
+                              "id": "self",
+                              "lineno": 10,
+                              "node_id": 93,
+                              "src": "272:4:-1",
+                              "type": {
+                                "name": "self"
+                              }
+                            },
+                            "variable_reads": [
+                              {
+                                "access_path": [],
+                                "decl_node": {
+                                  "node_id": 1,
+                                  "source_id": -1
+                                },
+                                "name": "values"
+                              }
+                            ]
+                          },
+                          "variable_reads": [
+                            {
+                              "access_path": [
+                                "$subscript_access"
+                              ],
+                              "decl_node": {
+                                "node_id": 1,
+                                "source_id": -1
+                              },
+                              "name": "values"
+                            }
+                          ]
+                        }
+                      ],
+                      "end_col_offset": 84,
+                      "end_lineno": 10,
+                      "lineno": 10,
+                      "node_id": 67,
+                      "src": "216:73:-1",
+                      "type": {
+                        "length": 4,
+                        "name": "$SArray",
+                        "typeclass": "static_array",
+                        "value_type": {
+                          "bits": 256,
+                          "is_signed": false,
+                          "name": "uint256",
+                          "typeclass": "integer"
+                        }
+                      }
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 9,
+                    "end_lineno": 5,
+                    "id": "external",
+                    "lineno": 5,
+                    "node_id": 99,
+                    "src": "89:8:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 84,
+                "end_lineno": 10,
+                "func_type": {
+                  "argument_types": [],
+                  "name": "direct",
+                  "return_type": {
+                    "length": 4,
+                    "name": "$SArray",
+                    "typeclass": "static_array",
+                    "value_type": {
+                      "bits": 256,
+                      "is_signed": false,
+                      "name": "uint256",
+                      "typeclass": "integer"
+                    }
+                  },
+                  "type_decl_node": {
+                    "node_id": 35,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                },
+                "lineno": 6,
+                "name": "direct",
+                "node_id": 35,
+                "returns": {
+                  "ast_type": "Subscript",
+                  "col_offset": 16,
+                  "end_col_offset": 26,
+                  "end_lineno": 6,
+                  "lineno": 6,
+                  "node_id": 101,
+                  "slice": {
+                    "ast_type": "Int",
+                    "col_offset": 24,
+                    "end_col_offset": 25,
+                    "end_lineno": 6,
+                    "folded_value": {
+                      "ast_type": "Int",
+                      "col_offset": 24,
+                      "end_col_offset": 25,
+                      "end_lineno": 6,
+                      "lineno": 6,
+                      "node_id": 104,
+                      "src": "122:1:-1",
+                      "value": 4
+                    },
+                    "lineno": 6,
+                    "node_id": 104,
+                    "src": "122:1:-1",
+                    "value": 4
+                  },
+                  "src": "114:10:-1",
+                  "value": {
+                    "ast_type": "Name",
+                    "col_offset": 16,
+                    "end_col_offset": 23,
+                    "end_lineno": 6,
+                    "id": "uint256",
+                    "lineno": 6,
+                    "node_id": 102,
+                    "src": "114:7:-1"
+                  }
+                },
+                "src": "98:191:-1"
+              },
+              {
+                "args": {
+                  "args": [],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 95,
+                  "end_lineno": 17,
+                  "lineno": 13,
+                  "node_id": 107,
+                  "src": "301:221:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "Assign",
+                    "col_offset": 4,
+                    "end_col_offset": 28,
+                    "end_lineno": 14,
+                    "lineno": 14,
+                    "node_id": 108,
+                    "src": "344:24:-1",
+                    "target": {
+                      "ast_type": "Subscript",
+                      "col_offset": 4,
+                      "end_col_offset": 23,
+                      "end_lineno": 14,
+                      "lineno": 14,
+                      "node_id": 109,
+                      "slice": {
+                        "ast_type": "Decimal",
+                        "col_offset": 19,
+                        "end_col_offset": 22,
+                        "end_lineno": 14,
+                        "folded_value": {
+                          "ast_type": "Decimal",
+                          "col_offset": 19,
+                          "end_col_offset": 22,
+                          "end_lineno": 14,
+                          "lineno": 14,
+                          "node_id": 117,
+                          "src": "359:3:-1",
+                          "type": {
+                            "name": "decimal",
+                            "typeclass": "decimal"
+                          },
+                          "value": "1.0"
+                        },
+                        "lineno": 14,
+                        "node_id": 117,
+                        "src": "359:3:-1",
+                        "type": {
+                          "name": "decimal",
+                          "typeclass": "decimal"
+                        },
+                        "value": "1.0"
+                      },
+                      "src": "344:19:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      },
+                      "value": {
+                        "ast_type": "Subscript",
+                        "col_offset": 4,
+                        "end_col_offset": 18,
+                        "end_lineno": 14,
+                        "lineno": 14,
+                        "node_id": 110,
+                        "slice": {
+                          "ast_type": "Int",
+                          "col_offset": 16,
+                          "end_col_offset": 17,
+                          "end_lineno": 14,
+                          "folded_value": {
+                            "ast_type": "Int",
+                            "col_offset": 16,
+                            "end_col_offset": 17,
+                            "end_lineno": 14,
+                            "lineno": 14,
+                            "node_id": 115,
+                            "src": "356:1:-1",
+                            "type": {
+                              "bits": 256,
+                              "is_signed": false,
+                              "name": "uint256",
+                              "typeclass": "integer"
+                            },
+                            "value": 7
+                          },
+                          "lineno": 14,
+                          "node_id": 115,
+                          "src": "356:1:-1",
+                          "type": {
+                            "bits": 256,
+                            "is_signed": false,
+                            "name": "uint256",
+                            "typeclass": "integer"
+                          },
+                          "value": 7
+                        },
+                        "src": "344:14:-1",
+                        "type": {
+                          "key_type": {
+                            "name": "decimal",
+                            "typeclass": "decimal"
+                          },
+                          "name": "HashMap",
+                          "typeclass": "hashmap",
+                          "value_type": {
+                            "bits": 256,
+                            "is_signed": false,
+                            "name": "uint256",
+                            "typeclass": "integer"
+                          }
+                        },
+                        "value": {
+                          "ast_type": "Attribute",
+                          "attr": "nested",
+                          "col_offset": 4,
+                          "end_col_offset": 15,
+                          "end_lineno": 14,
+                          "lineno": 14,
+                          "node_id": 111,
+                          "src": "344:11:-1",
+                          "type": {
+                            "key_type": {
+                              "bits": 256,
+                              "is_signed": false,
+                              "name": "uint256",
+                              "typeclass": "integer"
+                            },
+                            "name": "HashMap",
+                            "typeclass": "hashmap",
+                            "value_type": {
+                              "key_type": {
+                                "name": "decimal",
+                                "typeclass": "decimal"
+                              },
+                              "name": "HashMap",
+                              "typeclass": "hashmap",
+                              "value_type": {
+                                "bits": 256,
+                                "is_signed": false,
+                                "name": "uint256",
+                                "typeclass": "integer"
+                              }
+                            }
+                          },
+                          "value": {
+                            "ast_type": "Name",
+                            "col_offset": 4,
+                            "end_col_offset": 8,
+                            "end_lineno": 14,
+                            "id": "self",
+                            "lineno": 14,
+                            "node_id": 112,
+                            "src": "344:4:-1",
+                            "type": {
+                              "name": "self"
+                            }
+                          },
+                          "variable_reads": [
+                            {
+                              "access_path": [],
+                              "decl_node": {
+                                "node_id": 14,
+                                "source_id": -1
+                              },
+                              "name": "nested"
+                            }
+                          ]
+                        },
+                        "variable_reads": [
+                          {
+                            "access_path": [
+                              "$subscript_access"
+                            ],
+                            "decl_node": {
+                              "node_id": 14,
+                              "source_id": -1
+                            },
+                            "name": "nested"
+                          }
+                        ]
+                      },
+                      "variable_reads": [
+                        {
+                          "access_path": [
+                            "$subscript_access",
+                            "$subscript_access"
+                          ],
+                          "decl_node": {
+                            "node_id": 14,
+                            "source_id": -1
+                          },
+                          "name": "nested"
+                        }
+                      ],
+                      "variable_writes": [
+                        {
+                          "access_path": [
+                            "$subscript_access",
+                            "$subscript_access"
+                          ],
+                          "decl_node": {
+                            "node_id": 14,
+                            "source_id": -1
+                          },
+                          "name": "nested"
+                        }
+                      ]
+                    },
+                    "value": {
+                      "ast_type": "Int",
+                      "col_offset": 26,
+                      "end_col_offset": 28,
+                      "end_lineno": 14,
+                      "folded_value": {
+                        "ast_type": "Int",
+                        "col_offset": 26,
+                        "end_col_offset": 28,
+                        "end_lineno": 14,
+                        "lineno": 14,
+                        "node_id": 119,
+                        "src": "366:2:-1",
+                        "type": {
+                          "bits": 256,
+                          "is_signed": false,
+                          "name": "uint256",
+                          "typeclass": "integer"
+                        },
+                        "value": 11
+                      },
+                      "lineno": 14,
+                      "node_id": 119,
+                      "src": "366:2:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      },
+                      "value": 11
+                    }
+                  },
+                  {
+                    "ast_type": "Assign",
+                    "col_offset": 4,
+                    "end_col_offset": 28,
+                    "end_lineno": 15,
+                    "lineno": 15,
+                    "node_id": 120,
+                    "src": "373:24:-1",
+                    "target": {
+                      "ast_type": "Subscript",
+                      "col_offset": 4,
+                      "end_col_offset": 23,
+                      "end_lineno": 15,
+                      "lineno": 15,
+                      "node_id": 121,
+                      "slice": {
+                        "ast_type": "Decimal",
+                        "col_offset": 19,
+                        "end_col_offset": 22,
+                        "end_lineno": 15,
+                        "folded_value": {
+                          "ast_type": "Decimal",
+                          "col_offset": 19,
+                          "end_col_offset": 22,
+                          "end_lineno": 15,
+                          "lineno": 15,
+                          "node_id": 129,
+                          "src": "388:3:-1",
+                          "type": {
+                            "name": "decimal",
+                            "typeclass": "decimal"
+                          },
+                          "value": "2.0"
+                        },
+                        "lineno": 15,
+                        "node_id": 129,
+                        "src": "388:3:-1",
+                        "type": {
+                          "name": "decimal",
+                          "typeclass": "decimal"
+                        },
+                        "value": "2.0"
+                      },
+                      "src": "373:19:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      },
+                      "value": {
+                        "ast_type": "Subscript",
+                        "col_offset": 4,
+                        "end_col_offset": 18,
+                        "end_lineno": 15,
+                        "lineno": 15,
+                        "node_id": 122,
+                        "slice": {
+                          "ast_type": "Int",
+                          "col_offset": 16,
+                          "end_col_offset": 17,
+                          "end_lineno": 15,
+                          "folded_value": {
+                            "ast_type": "Int",
+                            "col_offset": 16,
+                            "end_col_offset": 17,
+                            "end_lineno": 15,
+                            "lineno": 15,
+                            "node_id": 127,
+                            "src": "385:1:-1",
+                            "type": {
+                              "bits": 256,
+                              "is_signed": false,
+                              "name": "uint256",
+                              "typeclass": "integer"
+                            },
+                            "value": 7
+                          },
+                          "lineno": 15,
+                          "node_id": 127,
+                          "src": "385:1:-1",
+                          "type": {
+                            "bits": 256,
+                            "is_signed": false,
+                            "name": "uint256",
+                            "typeclass": "integer"
+                          },
+                          "value": 7
+                        },
+                        "src": "373:14:-1",
+                        "type": {
+                          "key_type": {
+                            "name": "decimal",
+                            "typeclass": "decimal"
+                          },
+                          "name": "HashMap",
+                          "typeclass": "hashmap",
+                          "value_type": {
+                            "bits": 256,
+                            "is_signed": false,
+                            "name": "uint256",
+                            "typeclass": "integer"
+                          }
+                        },
+                        "value": {
+                          "ast_type": "Attribute",
+                          "attr": "nested",
+                          "col_offset": 4,
+                          "end_col_offset": 15,
+                          "end_lineno": 15,
+                          "lineno": 15,
+                          "node_id": 123,
+                          "src": "373:11:-1",
+                          "type": {
+                            "key_type": {
+                              "bits": 256,
+                              "is_signed": false,
+                              "name": "uint256",
+                              "typeclass": "integer"
+                            },
+                            "name": "HashMap",
+                            "typeclass": "hashmap",
+                            "value_type": {
+                              "key_type": {
+                                "name": "decimal",
+                                "typeclass": "decimal"
+                              },
+                              "name": "HashMap",
+                              "typeclass": "hashmap",
+                              "value_type": {
+                                "bits": 256,
+                                "is_signed": false,
+                                "name": "uint256",
+                                "typeclass": "integer"
+                              }
+                            }
+                          },
+                          "value": {
+                            "ast_type": "Name",
+                            "col_offset": 4,
+                            "end_col_offset": 8,
+                            "end_lineno": 15,
+                            "id": "self",
+                            "lineno": 15,
+                            "node_id": 124,
+                            "src": "373:4:-1",
+                            "type": {
+                              "name": "self"
+                            }
+                          },
+                          "variable_reads": [
+                            {
+                              "access_path": [],
+                              "decl_node": {
+                                "node_id": 14,
+                                "source_id": -1
+                              },
+                              "name": "nested"
+                            }
+                          ]
+                        },
+                        "variable_reads": [
+                          {
+                            "access_path": [
+                              "$subscript_access"
+                            ],
+                            "decl_node": {
+                              "node_id": 14,
+                              "source_id": -1
+                            },
+                            "name": "nested"
+                          }
+                        ]
+                      },
+                      "variable_reads": [
+                        {
+                          "access_path": [
+                            "$subscript_access",
+                            "$subscript_access"
+                          ],
+                          "decl_node": {
+                            "node_id": 14,
+                            "source_id": -1
+                          },
+                          "name": "nested"
+                        }
+                      ],
+                      "variable_writes": [
+                        {
+                          "access_path": [
+                            "$subscript_access",
+                            "$subscript_access"
+                          ],
+                          "decl_node": {
+                            "node_id": 14,
+                            "source_id": -1
+                          },
+                          "name": "nested"
+                        }
+                      ]
+                    },
+                    "value": {
+                      "ast_type": "Int",
+                      "col_offset": 26,
+                      "end_col_offset": 28,
+                      "end_lineno": 15,
+                      "folded_value": {
+                        "ast_type": "Int",
+                        "col_offset": 26,
+                        "end_col_offset": 28,
+                        "end_lineno": 15,
+                        "lineno": 15,
+                        "node_id": 131,
+                        "src": "395:2:-1",
+                        "type": {
+                          "bits": 256,
+                          "is_signed": false,
+                          "name": "uint256",
+                          "typeclass": "integer"
+                        },
+                        "value": 22
+                      },
+                      "lineno": 15,
+                      "node_id": 131,
+                      "src": "395:2:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      },
+                      "value": 22
+                    }
+                  },
+                  {
+                    "ast_type": "Assign",
+                    "col_offset": 4,
+                    "end_col_offset": 28,
+                    "end_lineno": 16,
+                    "lineno": 16,
+                    "node_id": 132,
+                    "src": "402:24:-1",
+                    "target": {
+                      "ast_type": "Subscript",
+                      "col_offset": 4,
+                      "end_col_offset": 23,
+                      "end_lineno": 16,
+                      "lineno": 16,
+                      "node_id": 133,
+                      "slice": {
+                        "ast_type": "Decimal",
+                        "col_offset": 19,
+                        "end_col_offset": 22,
+                        "end_lineno": 16,
+                        "folded_value": {
+                          "ast_type": "Decimal",
+                          "col_offset": 19,
+                          "end_col_offset": 22,
+                          "end_lineno": 16,
+                          "lineno": 16,
+                          "node_id": 141,
+                          "src": "417:3:-1",
+                          "type": {
+                            "name": "decimal",
+                            "typeclass": "decimal"
+                          },
+                          "value": "1.0"
+                        },
+                        "lineno": 16,
+                        "node_id": 141,
+                        "src": "417:3:-1",
+                        "type": {
+                          "name": "decimal",
+                          "typeclass": "decimal"
+                        },
+                        "value": "1.0"
+                      },
+                      "src": "402:19:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      },
+                      "value": {
+                        "ast_type": "Subscript",
+                        "col_offset": 4,
+                        "end_col_offset": 18,
+                        "end_lineno": 16,
+                        "lineno": 16,
+                        "node_id": 134,
+                        "slice": {
+                          "ast_type": "Int",
+                          "col_offset": 16,
+                          "end_col_offset": 17,
+                          "end_lineno": 16,
+                          "folded_value": {
+                            "ast_type": "Int",
+                            "col_offset": 16,
+                            "end_col_offset": 17,
+                            "end_lineno": 16,
+                            "lineno": 16,
+                            "node_id": 139,
+                            "src": "414:1:-1",
+                            "type": {
+                              "bits": 256,
+                              "is_signed": false,
+                              "name": "uint256",
+                              "typeclass": "integer"
+                            },
+                            "value": 8
+                          },
+                          "lineno": 16,
+                          "node_id": 139,
+                          "src": "414:1:-1",
+                          "type": {
+                            "bits": 256,
+                            "is_signed": false,
+                            "name": "uint256",
+                            "typeclass": "integer"
+                          },
+                          "value": 8
+                        },
+                        "src": "402:14:-1",
+                        "type": {
+                          "key_type": {
+                            "name": "decimal",
+                            "typeclass": "decimal"
+                          },
+                          "name": "HashMap",
+                          "typeclass": "hashmap",
+                          "value_type": {
+                            "bits": 256,
+                            "is_signed": false,
+                            "name": "uint256",
+                            "typeclass": "integer"
+                          }
+                        },
+                        "value": {
+                          "ast_type": "Attribute",
+                          "attr": "nested",
+                          "col_offset": 4,
+                          "end_col_offset": 15,
+                          "end_lineno": 16,
+                          "lineno": 16,
+                          "node_id": 135,
+                          "src": "402:11:-1",
+                          "type": {
+                            "key_type": {
+                              "bits": 256,
+                              "is_signed": false,
+                              "name": "uint256",
+                              "typeclass": "integer"
+                            },
+                            "name": "HashMap",
+                            "typeclass": "hashmap",
+                            "value_type": {
+                              "key_type": {
+                                "name": "decimal",
+                                "typeclass": "decimal"
+                              },
+                              "name": "HashMap",
+                              "typeclass": "hashmap",
+                              "value_type": {
+                                "bits": 256,
+                                "is_signed": false,
+                                "name": "uint256",
+                                "typeclass": "integer"
+                              }
+                            }
+                          },
+                          "value": {
+                            "ast_type": "Name",
+                            "col_offset": 4,
+                            "end_col_offset": 8,
+                            "end_lineno": 16,
+                            "id": "self",
+                            "lineno": 16,
+                            "node_id": 136,
+                            "src": "402:4:-1",
+                            "type": {
+                              "name": "self"
+                            }
+                          },
+                          "variable_reads": [
+                            {
+                              "access_path": [],
+                              "decl_node": {
+                                "node_id": 14,
+                                "source_id": -1
+                              },
+                              "name": "nested"
+                            }
+                          ]
+                        },
+                        "variable_reads": [
+                          {
+                            "access_path": [
+                              "$subscript_access"
+                            ],
+                            "decl_node": {
+                              "node_id": 14,
+                              "source_id": -1
+                            },
+                            "name": "nested"
+                          }
+                        ]
+                      },
+                      "variable_reads": [
+                        {
+                          "access_path": [
+                            "$subscript_access",
+                            "$subscript_access"
+                          ],
+                          "decl_node": {
+                            "node_id": 14,
+                            "source_id": -1
+                          },
+                          "name": "nested"
+                        }
+                      ],
+                      "variable_writes": [
+                        {
+                          "access_path": [
+                            "$subscript_access",
+                            "$subscript_access"
+                          ],
+                          "decl_node": {
+                            "node_id": 14,
+                            "source_id": -1
+                          },
+                          "name": "nested"
+                        }
+                      ]
+                    },
+                    "value": {
+                      "ast_type": "Int",
+                      "col_offset": 26,
+                      "end_col_offset": 28,
+                      "end_lineno": 16,
+                      "folded_value": {
+                        "ast_type": "Int",
+                        "col_offset": 26,
+                        "end_col_offset": 28,
+                        "end_lineno": 16,
+                        "lineno": 16,
+                        "node_id": 143,
+                        "src": "424:2:-1",
+                        "type": {
+                          "bits": 256,
+                          "is_signed": false,
+                          "name": "uint256",
+                          "typeclass": "integer"
+                        },
+                        "value": 33
+                      },
+                      "lineno": 16,
+                      "node_id": 143,
+                      "src": "424:2:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      },
+                      "value": 33
+                    }
+                  },
+                  {
+                    "ast_type": "Return",
+                    "col_offset": 4,
+                    "end_col_offset": 95,
+                    "end_lineno": 17,
+                    "lineno": 17,
+                    "node_id": 144,
+                    "src": "431:91:-1",
+                    "value": {
+                      "ast_type": "List",
+                      "col_offset": 11,
+                      "elements": [
+                        {
+                          "ast_type": "Subscript",
+                          "col_offset": 12,
+                          "end_col_offset": 31,
+                          "end_lineno": 17,
+                          "lineno": 17,
+                          "node_id": 146,
+                          "slice": {
+                            "ast_type": "Decimal",
+                            "col_offset": 27,
+                            "end_col_offset": 30,
+                            "end_lineno": 17,
+                            "folded_value": {
+                              "ast_type": "Decimal",
+                              "col_offset": 27,
+                              "end_col_offset": 30,
+                              "end_lineno": 17,
+                              "lineno": 17,
+                              "node_id": 154,
+                              "src": "454:3:-1",
+                              "type": {
+                                "name": "decimal",
+                                "typeclass": "decimal"
+                              },
+                              "value": "1.0"
+                            },
+                            "lineno": 17,
+                            "node_id": 154,
+                            "src": "454:3:-1",
+                            "type": {
+                              "name": "decimal",
+                              "typeclass": "decimal"
+                            },
+                            "value": "1.0"
+                          },
+                          "src": "439:19:-1",
+                          "type": {
+                            "bits": 256,
+                            "is_signed": false,
+                            "name": "uint256",
+                            "typeclass": "integer"
+                          },
+                          "value": {
+                            "ast_type": "Subscript",
+                            "col_offset": 12,
+                            "end_col_offset": 26,
+                            "end_lineno": 17,
+                            "lineno": 17,
+                            "node_id": 147,
+                            "slice": {
+                              "ast_type": "Int",
+                              "col_offset": 24,
+                              "end_col_offset": 25,
+                              "end_lineno": 17,
+                              "folded_value": {
+                                "ast_type": "Int",
+                                "col_offset": 24,
+                                "end_col_offset": 25,
+                                "end_lineno": 17,
+                                "lineno": 17,
+                                "node_id": 152,
+                                "src": "451:1:-1",
+                                "type": {
+                                  "bits": 256,
+                                  "is_signed": false,
+                                  "name": "uint256",
+                                  "typeclass": "integer"
+                                },
+                                "value": 7
+                              },
+                              "lineno": 17,
+                              "node_id": 152,
+                              "src": "451:1:-1",
+                              "type": {
+                                "bits": 256,
+                                "is_signed": false,
+                                "name": "uint256",
+                                "typeclass": "integer"
+                              },
+                              "value": 7
+                            },
+                            "src": "439:14:-1",
+                            "type": {
+                              "key_type": {
+                                "name": "decimal",
+                                "typeclass": "decimal"
+                              },
+                              "name": "HashMap",
+                              "typeclass": "hashmap",
+                              "value_type": {
+                                "bits": 256,
+                                "is_signed": false,
+                                "name": "uint256",
+                                "typeclass": "integer"
+                              }
+                            },
+                            "value": {
+                              "ast_type": "Attribute",
+                              "attr": "nested",
+                              "col_offset": 12,
+                              "end_col_offset": 23,
+                              "end_lineno": 17,
+                              "lineno": 17,
+                              "node_id": 148,
+                              "src": "439:11:-1",
+                              "type": {
+                                "key_type": {
+                                  "bits": 256,
+                                  "is_signed": false,
+                                  "name": "uint256",
+                                  "typeclass": "integer"
+                                },
+                                "name": "HashMap",
+                                "typeclass": "hashmap",
+                                "value_type": {
+                                  "key_type": {
+                                    "name": "decimal",
+                                    "typeclass": "decimal"
+                                  },
+                                  "name": "HashMap",
+                                  "typeclass": "hashmap",
+                                  "value_type": {
+                                    "bits": 256,
+                                    "is_signed": false,
+                                    "name": "uint256",
+                                    "typeclass": "integer"
+                                  }
+                                }
+                              },
+                              "value": {
+                                "ast_type": "Name",
+                                "col_offset": 12,
+                                "end_col_offset": 16,
+                                "end_lineno": 17,
+                                "id": "self",
+                                "lineno": 17,
+                                "node_id": 149,
+                                "src": "439:4:-1",
+                                "type": {
+                                  "name": "self"
+                                }
+                              },
+                              "variable_reads": [
+                                {
+                                  "access_path": [],
+                                  "decl_node": {
+                                    "node_id": 14,
+                                    "source_id": -1
+                                  },
+                                  "name": "nested"
+                                }
+                              ]
+                            },
+                            "variable_reads": [
+                              {
+                                "access_path": [
+                                  "$subscript_access"
+                                ],
+                                "decl_node": {
+                                  "node_id": 14,
+                                  "source_id": -1
+                                },
+                                "name": "nested"
+                              }
+                            ]
+                          },
+                          "variable_reads": [
+                            {
+                              "access_path": [
+                                "$subscript_access",
+                                "$subscript_access"
+                              ],
+                              "decl_node": {
+                                "node_id": 14,
+                                "source_id": -1
+                              },
+                              "name": "nested"
+                            }
+                          ]
+                        },
+                        {
+                          "ast_type": "Subscript",
+                          "col_offset": 33,
+                          "end_col_offset": 52,
+                          "end_lineno": 17,
+                          "lineno": 17,
+                          "node_id": 156,
+                          "slice": {
+                            "ast_type": "Decimal",
+                            "col_offset": 48,
+                            "end_col_offset": 51,
+                            "end_lineno": 17,
+                            "folded_value": {
+                              "ast_type": "Decimal",
+                              "col_offset": 48,
+                              "end_col_offset": 51,
+                              "end_lineno": 17,
+                              "lineno": 17,
+                              "node_id": 164,
+                              "src": "475:3:-1",
+                              "type": {
+                                "name": "decimal",
+                                "typeclass": "decimal"
+                              },
+                              "value": "2.0"
+                            },
+                            "lineno": 17,
+                            "node_id": 164,
+                            "src": "475:3:-1",
+                            "type": {
+                              "name": "decimal",
+                              "typeclass": "decimal"
+                            },
+                            "value": "2.0"
+                          },
+                          "src": "460:19:-1",
+                          "type": {
+                            "bits": 256,
+                            "is_signed": false,
+                            "name": "uint256",
+                            "typeclass": "integer"
+                          },
+                          "value": {
+                            "ast_type": "Subscript",
+                            "col_offset": 33,
+                            "end_col_offset": 47,
+                            "end_lineno": 17,
+                            "lineno": 17,
+                            "node_id": 157,
+                            "slice": {
+                              "ast_type": "Int",
+                              "col_offset": 45,
+                              "end_col_offset": 46,
+                              "end_lineno": 17,
+                              "folded_value": {
+                                "ast_type": "Int",
+                                "col_offset": 45,
+                                "end_col_offset": 46,
+                                "end_lineno": 17,
+                                "lineno": 17,
+                                "node_id": 162,
+                                "src": "472:1:-1",
+                                "type": {
+                                  "bits": 256,
+                                  "is_signed": false,
+                                  "name": "uint256",
+                                  "typeclass": "integer"
+                                },
+                                "value": 7
+                              },
+                              "lineno": 17,
+                              "node_id": 162,
+                              "src": "472:1:-1",
+                              "type": {
+                                "bits": 256,
+                                "is_signed": false,
+                                "name": "uint256",
+                                "typeclass": "integer"
+                              },
+                              "value": 7
+                            },
+                            "src": "460:14:-1",
+                            "type": {
+                              "key_type": {
+                                "name": "decimal",
+                                "typeclass": "decimal"
+                              },
+                              "name": "HashMap",
+                              "typeclass": "hashmap",
+                              "value_type": {
+                                "bits": 256,
+                                "is_signed": false,
+                                "name": "uint256",
+                                "typeclass": "integer"
+                              }
+                            },
+                            "value": {
+                              "ast_type": "Attribute",
+                              "attr": "nested",
+                              "col_offset": 33,
+                              "end_col_offset": 44,
+                              "end_lineno": 17,
+                              "lineno": 17,
+                              "node_id": 158,
+                              "src": "460:11:-1",
+                              "type": {
+                                "key_type": {
+                                  "bits": 256,
+                                  "is_signed": false,
+                                  "name": "uint256",
+                                  "typeclass": "integer"
+                                },
+                                "name": "HashMap",
+                                "typeclass": "hashmap",
+                                "value_type": {
+                                  "key_type": {
+                                    "name": "decimal",
+                                    "typeclass": "decimal"
+                                  },
+                                  "name": "HashMap",
+                                  "typeclass": "hashmap",
+                                  "value_type": {
+                                    "bits": 256,
+                                    "is_signed": false,
+                                    "name": "uint256",
+                                    "typeclass": "integer"
+                                  }
+                                }
+                              },
+                              "value": {
+                                "ast_type": "Name",
+                                "col_offset": 33,
+                                "end_col_offset": 37,
+                                "end_lineno": 17,
+                                "id": "self",
+                                "lineno": 17,
+                                "node_id": 159,
+                                "src": "460:4:-1",
+                                "type": {
+                                  "name": "self"
+                                }
+                              },
+                              "variable_reads": [
+                                {
+                                  "access_path": [],
+                                  "decl_node": {
+                                    "node_id": 14,
+                                    "source_id": -1
+                                  },
+                                  "name": "nested"
+                                }
+                              ]
+                            },
+                            "variable_reads": [
+                              {
+                                "access_path": [
+                                  "$subscript_access"
+                                ],
+                                "decl_node": {
+                                  "node_id": 14,
+                                  "source_id": -1
+                                },
+                                "name": "nested"
+                              }
+                            ]
+                          },
+                          "variable_reads": [
+                            {
+                              "access_path": [
+                                "$subscript_access",
+                                "$subscript_access"
+                              ],
+                              "decl_node": {
+                                "node_id": 14,
+                                "source_id": -1
+                              },
+                              "name": "nested"
+                            }
+                          ]
+                        },
+                        {
+                          "ast_type": "Subscript",
+                          "col_offset": 54,
+                          "end_col_offset": 73,
+                          "end_lineno": 17,
+                          "lineno": 17,
+                          "node_id": 166,
+                          "slice": {
+                            "ast_type": "Decimal",
+                            "col_offset": 69,
+                            "end_col_offset": 72,
+                            "end_lineno": 17,
+                            "folded_value": {
+                              "ast_type": "Decimal",
+                              "col_offset": 69,
+                              "end_col_offset": 72,
+                              "end_lineno": 17,
+                              "lineno": 17,
+                              "node_id": 174,
+                              "src": "496:3:-1",
+                              "type": {
+                                "name": "decimal",
+                                "typeclass": "decimal"
+                              },
+                              "value": "1.0"
+                            },
+                            "lineno": 17,
+                            "node_id": 174,
+                            "src": "496:3:-1",
+                            "type": {
+                              "name": "decimal",
+                              "typeclass": "decimal"
+                            },
+                            "value": "1.0"
+                          },
+                          "src": "481:19:-1",
+                          "type": {
+                            "bits": 256,
+                            "is_signed": false,
+                            "name": "uint256",
+                            "typeclass": "integer"
+                          },
+                          "value": {
+                            "ast_type": "Subscript",
+                            "col_offset": 54,
+                            "end_col_offset": 68,
+                            "end_lineno": 17,
+                            "lineno": 17,
+                            "node_id": 167,
+                            "slice": {
+                              "ast_type": "Int",
+                              "col_offset": 66,
+                              "end_col_offset": 67,
+                              "end_lineno": 17,
+                              "folded_value": {
+                                "ast_type": "Int",
+                                "col_offset": 66,
+                                "end_col_offset": 67,
+                                "end_lineno": 17,
+                                "lineno": 17,
+                                "node_id": 172,
+                                "src": "493:1:-1",
+                                "type": {
+                                  "bits": 256,
+                                  "is_signed": false,
+                                  "name": "uint256",
+                                  "typeclass": "integer"
+                                },
+                                "value": 8
+                              },
+                              "lineno": 17,
+                              "node_id": 172,
+                              "src": "493:1:-1",
+                              "type": {
+                                "bits": 256,
+                                "is_signed": false,
+                                "name": "uint256",
+                                "typeclass": "integer"
+                              },
+                              "value": 8
+                            },
+                            "src": "481:14:-1",
+                            "type": {
+                              "key_type": {
+                                "name": "decimal",
+                                "typeclass": "decimal"
+                              },
+                              "name": "HashMap",
+                              "typeclass": "hashmap",
+                              "value_type": {
+                                "bits": 256,
+                                "is_signed": false,
+                                "name": "uint256",
+                                "typeclass": "integer"
+                              }
+                            },
+                            "value": {
+                              "ast_type": "Attribute",
+                              "attr": "nested",
+                              "col_offset": 54,
+                              "end_col_offset": 65,
+                              "end_lineno": 17,
+                              "lineno": 17,
+                              "node_id": 168,
+                              "src": "481:11:-1",
+                              "type": {
+                                "key_type": {
+                                  "bits": 256,
+                                  "is_signed": false,
+                                  "name": "uint256",
+                                  "typeclass": "integer"
+                                },
+                                "name": "HashMap",
+                                "typeclass": "hashmap",
+                                "value_type": {
+                                  "key_type": {
+                                    "name": "decimal",
+                                    "typeclass": "decimal"
+                                  },
+                                  "name": "HashMap",
+                                  "typeclass": "hashmap",
+                                  "value_type": {
+                                    "bits": 256,
+                                    "is_signed": false,
+                                    "name": "uint256",
+                                    "typeclass": "integer"
+                                  }
+                                }
+                              },
+                              "value": {
+                                "ast_type": "Name",
+                                "col_offset": 54,
+                                "end_col_offset": 58,
+                                "end_lineno": 17,
+                                "id": "self",
+                                "lineno": 17,
+                                "node_id": 169,
+                                "src": "481:4:-1",
+                                "type": {
+                                  "name": "self"
+                                }
+                              },
+                              "variable_reads": [
+                                {
+                                  "access_path": [],
+                                  "decl_node": {
+                                    "node_id": 14,
+                                    "source_id": -1
+                                  },
+                                  "name": "nested"
+                                }
+                              ]
+                            },
+                            "variable_reads": [
+                              {
+                                "access_path": [
+                                  "$subscript_access"
+                                ],
+                                "decl_node": {
+                                  "node_id": 14,
+                                  "source_id": -1
+                                },
+                                "name": "nested"
+                              }
+                            ]
+                          },
+                          "variable_reads": [
+                            {
+                              "access_path": [
+                                "$subscript_access",
+                                "$subscript_access"
+                              ],
+                              "decl_node": {
+                                "node_id": 14,
+                                "source_id": -1
+                              },
+                              "name": "nested"
+                            }
+                          ]
+                        },
+                        {
+                          "ast_type": "Subscript",
+                          "col_offset": 75,
+                          "end_col_offset": 94,
+                          "end_lineno": 17,
+                          "lineno": 17,
+                          "node_id": 176,
+                          "slice": {
+                            "ast_type": "Decimal",
+                            "col_offset": 90,
+                            "end_col_offset": 93,
+                            "end_lineno": 17,
+                            "folded_value": {
+                              "ast_type": "Decimal",
+                              "col_offset": 90,
+                              "end_col_offset": 93,
+                              "end_lineno": 17,
+                              "lineno": 17,
+                              "node_id": 184,
+                              "src": "517:3:-1",
+                              "type": {
+                                "name": "decimal",
+                                "typeclass": "decimal"
+                              },
+                              "value": "0.0"
+                            },
+                            "lineno": 17,
+                            "node_id": 184,
+                            "src": "517:3:-1",
+                            "type": {
+                              "name": "decimal",
+                              "typeclass": "decimal"
+                            },
+                            "value": "0.0"
+                          },
+                          "src": "502:19:-1",
+                          "type": {
+                            "bits": 256,
+                            "is_signed": false,
+                            "name": "uint256",
+                            "typeclass": "integer"
+                          },
+                          "value": {
+                            "ast_type": "Subscript",
+                            "col_offset": 75,
+                            "end_col_offset": 89,
+                            "end_lineno": 17,
+                            "lineno": 17,
+                            "node_id": 177,
+                            "slice": {
+                              "ast_type": "Int",
+                              "col_offset": 87,
+                              "end_col_offset": 88,
+                              "end_lineno": 17,
+                              "folded_value": {
+                                "ast_type": "Int",
+                                "col_offset": 87,
+                                "end_col_offset": 88,
+                                "end_lineno": 17,
+                                "lineno": 17,
+                                "node_id": 182,
+                                "src": "514:1:-1",
+                                "type": {
+                                  "bits": 256,
+                                  "is_signed": false,
+                                  "name": "uint256",
+                                  "typeclass": "integer"
+                                },
+                                "value": 8
+                              },
+                              "lineno": 17,
+                              "node_id": 182,
+                              "src": "514:1:-1",
+                              "type": {
+                                "bits": 256,
+                                "is_signed": false,
+                                "name": "uint256",
+                                "typeclass": "integer"
+                              },
+                              "value": 8
+                            },
+                            "src": "502:14:-1",
+                            "type": {
+                              "key_type": {
+                                "name": "decimal",
+                                "typeclass": "decimal"
+                              },
+                              "name": "HashMap",
+                              "typeclass": "hashmap",
+                              "value_type": {
+                                "bits": 256,
+                                "is_signed": false,
+                                "name": "uint256",
+                                "typeclass": "integer"
+                              }
+                            },
+                            "value": {
+                              "ast_type": "Attribute",
+                              "attr": "nested",
+                              "col_offset": 75,
+                              "end_col_offset": 86,
+                              "end_lineno": 17,
+                              "lineno": 17,
+                              "node_id": 178,
+                              "src": "502:11:-1",
+                              "type": {
+                                "key_type": {
+                                  "bits": 256,
+                                  "is_signed": false,
+                                  "name": "uint256",
+                                  "typeclass": "integer"
+                                },
+                                "name": "HashMap",
+                                "typeclass": "hashmap",
+                                "value_type": {
+                                  "key_type": {
+                                    "name": "decimal",
+                                    "typeclass": "decimal"
+                                  },
+                                  "name": "HashMap",
+                                  "typeclass": "hashmap",
+                                  "value_type": {
+                                    "bits": 256,
+                                    "is_signed": false,
+                                    "name": "uint256",
+                                    "typeclass": "integer"
+                                  }
+                                }
+                              },
+                              "value": {
+                                "ast_type": "Name",
+                                "col_offset": 75,
+                                "end_col_offset": 79,
+                                "end_lineno": 17,
+                                "id": "self",
+                                "lineno": 17,
+                                "node_id": 179,
+                                "src": "502:4:-1",
+                                "type": {
+                                  "name": "self"
+                                }
+                              },
+                              "variable_reads": [
+                                {
+                                  "access_path": [],
+                                  "decl_node": {
+                                    "node_id": 14,
+                                    "source_id": -1
+                                  },
+                                  "name": "nested"
+                                }
+                              ]
+                            },
+                            "variable_reads": [
+                              {
+                                "access_path": [
+                                  "$subscript_access"
+                                ],
+                                "decl_node": {
+                                  "node_id": 14,
+                                  "source_id": -1
+                                },
+                                "name": "nested"
+                              }
+                            ]
+                          },
+                          "variable_reads": [
+                            {
+                              "access_path": [
+                                "$subscript_access",
+                                "$subscript_access"
+                              ],
+                              "decl_node": {
+                                "node_id": 14,
+                                "source_id": -1
+                              },
+                              "name": "nested"
+                            }
+                          ]
+                        }
+                      ],
+                      "end_col_offset": 95,
+                      "end_lineno": 17,
+                      "lineno": 17,
+                      "node_id": 145,
+                      "src": "438:84:-1",
+                      "type": {
+                        "length": 4,
+                        "name": "$SArray",
+                        "typeclass": "static_array",
+                        "value_type": {
+                          "bits": 256,
+                          "is_signed": false,
+                          "name": "uint256",
+                          "typeclass": "integer"
+                        }
+                      }
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 9,
+                    "end_lineno": 12,
+                    "id": "external",
+                    "lineno": 12,
+                    "node_id": 187,
+                    "src": "292:8:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 95,
+                "end_lineno": 17,
+                "func_type": {
+                  "argument_types": [],
+                  "name": "through_outer_key",
+                  "return_type": {
+                    "length": 4,
+                    "name": "$SArray",
+                    "typeclass": "static_array",
+                    "value_type": {
+                      "bits": 256,
+                      "is_signed": false,
+                      "name": "uint256",
+                      "typeclass": "integer"
+                    }
+                  },
+                  "type_decl_node": {
+                    "node_id": 106,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                },
+                "lineno": 13,
+                "name": "through_outer_key",
+                "node_id": 106,
+                "returns": {
+                  "ast_type": "Subscript",
+                  "col_offset": 27,
+                  "end_col_offset": 37,
+                  "end_lineno": 13,
+                  "lineno": 13,
+                  "node_id": 189,
+                  "slice": {
+                    "ast_type": "Int",
+                    "col_offset": 35,
+                    "end_col_offset": 36,
+                    "end_lineno": 13,
+                    "folded_value": {
+                      "ast_type": "Int",
+                      "col_offset": 35,
+                      "end_col_offset": 36,
+                      "end_lineno": 13,
+                      "lineno": 13,
+                      "node_id": 192,
+                      "src": "336:1:-1",
+                      "value": 4
+                    },
+                    "lineno": 13,
+                    "node_id": 192,
+                    "src": "336:1:-1",
+                    "value": 4
+                  },
+                  "src": "328:10:-1",
+                  "value": {
+                    "ast_type": "Name",
+                    "col_offset": 27,
+                    "end_col_offset": 34,
+                    "end_lineno": 13,
+                    "id": "uint256",
+                    "lineno": 13,
+                    "node_id": 190,
+                    "src": "328:7:-1"
+                  }
+                },
+                "src": "301:221:-1"
+              }
+            ],
+            "col_offset": 0,
+            "doc_string": null,
+            "end_col_offset": 96,
+            "end_lineno": 17,
+            "is_interface": false,
+            "lineno": 1,
+            "name": null,
+            "node_id": 0,
+            "path": "tests/fixtures/regression/finding_27_decimal_mapping_keys/unknown_0.vy",
+            "resolved_path": "tests/fixtures/regression/finding_27_decimal_mapping_keys/unknown_0.vy",
+            "settings": {},
+            "source_id": -1,
+            "source_sha256sum": "baf180c206b4e8c62d3ead4c378478569e8dec97903e390d362b29cd527c9aa9",
+            "src": "0:523:-1",
+            "type": {
+              "name": "tests/fixtures/regression/finding_27_decimal_mapping_keys/unknown_0.vy",
+              "type_decl_node": {
+                "node_id": 0,
+                "source_id": -1
+              },
+              "typeclass": "module"
+            }
+          },
+          "contract_name": "tests/fixtures/regression/finding_27_decimal_mapping_keys/unknown_0.vy",
+          "imports": []
+        },
+        "blueprint_initcode_prefix": null,
+        "calldata": null,
+        "compiler_settings": {
+          "debug": false,
+          "enable_decimals": true,
+          "evm_version": "prague",
+          "experimental_codegen": false,
+          "optimize": "gas"
+        },
+        "contract_abi": [
+          {
+            "gas": 114869,
+            "inputs": [],
+            "name": "direct",
+            "outputs": [
+              {
+                "name": "",
+                "type": "uint256[4]"
+              }
+            ],
+            "stateMutability": "nonpayable",
+            "type": "function"
+          },
+          {
+            "gas": 115730,
+            "inputs": [],
+            "name": "through_outer_key",
+            "outputs": [
+              {
+                "name": "",
+                "type": "uint256[4]"
+              }
+            ],
+            "stateMutability": "nonpayable",
+            "type": "function"
+          }
+        ],
+        "deployed_address": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+        "deployment_succeeded": true,
+        "deployment_type": "source",
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "constructor",
+        "initcode": "6101f761000d5f396101f75ff35f3560e01c60026001821660011b6101f301601e395f51565b63222b140781186101eb57346101ef57600b5f6402540be4006020525f5260405f205560165f6404a817c8006020525f5260405f205560215f7ffffffffffffffffffffffffffffffffffffffffffffffffffffffffc81ee2a006020525f5260405f20555f6402540be4006020525f5260405f20546040525f6404a817c8006020525f5260405f20546060525f7ffffffffffffffffffffffffffffffffffffffffffffffffffffffffc81ee2a006020525f5260405f20546080525f5f6020525f5260405f205460a05260806040f35b631e0a193481186101eb57346101ef57600b600160076020525f5260405f20806402540be4006020525f5260405f209050556016600160076020525f5260405f20806404a817c8006020525f5260405f209050556021600160086020525f5260405f20806402540be4006020525f5260405f20905055600160076020525f5260405f20806402540be4006020525f5260405f20905054604052600160076020525f5260405f20806404a817c8006020525f5260405f20905054606052600160086020525f5260405f20806402540be4006020525f5260405f20905054608052600160086020525f5260405f20805f6020525f5260405f2090505460a05260806040f35b5f5ffd5b5f80fd00e80018855820a8b8a3adcb0625f6242adf3a75a6218c0a5364638d35b6cfc581186878be8d591901f7810400a1657679706572830005000036",
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "raw_ir": null,
+        "runtime_bytecode": "5f3560e01c60026001821660011b6101f301601e395f51565b63222b140781186101eb57346101ef57600b5f6402540be4006020525f5260405f205560165f6404a817c8006020525f5260405f205560215f7ffffffffffffffffffffffffffffffffffffffffffffffffffffffffc81ee2a006020525f5260405f20555f6402540be4006020525f5260405f20546040525f6404a817c8006020525f5260405f20546060525f7ffffffffffffffffffffffffffffffffffffffffffffffffffffffffc81ee2a006020525f5260405f20546080525f5f6020525f5260405f205460a05260806040f35b631e0a193481186101eb57346101ef57600b600160076020525f5260405f20806402540be4006020525f5260405f209050556016600160076020525f5260405f20806404a817c8006020525f5260405f209050556021600160086020525f5260405f20806402540be4006020525f5260405f20905055600160076020525f5260405f20806402540be4006020525f5260405f20905054604052600160076020525f5260405f20806404a817c8006020525f5260405f20905054606052600160086020525f5260405f20806402540be4006020525f5260405f20905054608052600160086020525f5260405f20805f6020525f5260405f2090505460a05260806040f35b5f5ffd5b5f80fd00e80018",
+        "solc_json": {
+          "compiler_version": "v0.5.0a4+commit.cd74ce4f",
+          "integrity": "a8b8a3adcb0625f6242adf3a75a6218c0a5364638d35b6cfc581186878be8d59",
+          "language": "Vyper",
+          "settings": {
+            "debug": false,
+            "enable_decimals": true,
+            "evmVersion": "prague",
+            "experimentalCodegen": false,
+            "optimize": "gas",
+            "outputSelection": {
+              "unknown_0.vy": [
+                "*"
+              ]
+            },
+            "search_paths": [
+              "."
+            ]
+          },
+          "sources": {
+            "unknown_0.vy": {
+              "content": "\nvalues: HashMap[decimal, uint256]\nnested: HashMap[uint256, HashMap[decimal, uint256]]\n\n@external\ndef direct() -> uint256[4]:\n    self.values[1.0] = 11\n    self.values[2.0] = 22\n    self.values[-1.5] = 33\n    return [self.values[1.0], self.values[2.0], self.values[-1.5], self.values[0.0]]\n\n@external\ndef through_outer_key() -> uint256[4]:\n    self.nested[7][1.0] = 11\n    self.nested[7][2.0] = 22\n    self.nested[8][1.0] = 33\n    return [self.nested[7][1.0], self.nested[7][2.0], self.nested[8][1.0], self.nested[8][0.0]]\n",
+              "sha256sum": "baf180c206b4e8c62d3ead4c378478569e8dec97903e390d362b29cd527c9aa9"
+            }
+          }
+        },
+        "source_code": "\nvalues: HashMap[decimal, uint256]\nnested: HashMap[uint256, HashMap[decimal, uint256]]\n\n@external\ndef direct() -> uint256[4]:\n    self.values[1.0] = 11\n    self.values[2.0] = 22\n    self.values[-1.5] = 33\n    return [self.values[1.0], self.values[2.0], self.values[-1.5], self.values[0.0]]\n\n@external\ndef through_outer_key() -> uint256[4]:\n    self.nested[7][1.0] = 11\n    self.nested[7][2.0] = 22\n    self.nested[8][1.0] = 33\n    return [self.nested[7][1.0], self.nested[7][2.0], self.nested[8][1.0], self.nested[8][0.0]]\n",
+        "storage_layout": {
+          "storage_layout": {
+            "nested": {
+              "n_slots": 1,
+              "slot": 1,
+              "type": "HashMap[uint256, HashMap[decimal, uint256]]"
+            },
+            "values": {
+              "n_slots": 1,
+              "slot": 0,
+              "type": "HashMap[decimal, uint256]"
+            }
+          }
+        },
+        "trace_type": "deployment",
+        "value": 0
+      },
+      {
+        "call_args": {
+          "calldata": "222b1407",
+          "is_modifying": true,
+          "to": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+          "value": 0
+        },
+        "call_succeeded": true,
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "direct",
+        "output": "000000000000000000000000000000000000000000000000000000000000000b000000000000000000000000000000000000000000000000000000000000001600000000000000000000000000000000000000000000000000000000000000210000000000000000000000000000000000000000000000000000000000000000",
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "trace_type": "call"
+      },
+      {
+        "call_args": {
+          "calldata": "1e0a1934",
+          "is_modifying": true,
+          "to": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+          "value": 0
+        },
+        "call_succeeded": true,
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "through_outer_key",
+        "output": "000000000000000000000000000000000000000000000000000000000000000b000000000000000000000000000000000000000000000000000000000000001600000000000000000000000000000000000000000000000000000000000000210000000000000000000000000000000000000000000000000000000000000000",
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "trace_type": "call"
+      }
+    ]
+  }
+}

@@ -1,0 +1,4 @@
+Theory vyperRegression_finding_34_nested_array_pop[no_sig_docs]
+Ancestors vyperRegressionDefs_finding_34_nested_array_pop
+Libs vyperTestRunnerLib
+val () = List.app run_test_on_traces $ all_traces "vyperRegressionDefs_finding_34_nested_array_pop";

@@ -1,0 +1,834 @@
+{
+  "finding_43_nested_creation_deletion": {
+    "deps": [],
+    "item_type": "test",
+    "traces": [
+      {
+        "annotated_ast": {
+          "ast": {
+            "ast_type": "Module",
+            "body": [
+              {
+                "args": {
+                  "args": [],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 16,
+                  "end_lineno": 8,
+                  "lineno": 3,
+                  "node_id": 2,
+                  "src": "11:192:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "annotation": {
+                      "ast_type": "Name",
+                      "col_offset": 11,
+                      "end_col_offset": 18,
+                      "end_lineno": 4,
+                      "id": "address",
+                      "lineno": 4,
+                      "node_id": 6,
+                      "src": "58:7:-1"
+                    },
+                    "ast_type": "AnnAssign",
+                    "col_offset": 4,
+                    "end_col_offset": 5,
+                    "end_lineno": 6,
+                    "lineno": 4,
+                    "node_id": 3,
+                    "src": "51:110:-1",
+                    "target": {
+                      "ast_type": "Name",
+                      "col_offset": 4,
+                      "end_col_offset": 9,
+                      "end_lineno": 4,
+                      "id": "child",
+                      "lineno": 4,
+                      "node_id": 4,
+                      "src": "51:5:-1",
+                      "type": {
+                        "name": "address"
+                      },
+                      "variable_reads": [
+                        {
+                          "access_path": [],
+                          "decl_node": {
+                            "node_id": 3,
+                            "source_id": -1
+                          },
+                          "name": "child"
+                        }
+                      ]
+                    },
+                    "value": {
+                      "args": [
+                        {
+                          "ast_type": "Bytes",
+                          "col_offset": 8,
+                          "end_col_offset": 75,
+                          "end_lineno": 5,
+                          "folded_value": {
+                            "ast_type": "Bytes",
+                            "col_offset": 8,
+                            "end_col_offset": 75,
+                            "end_lineno": 5,
+                            "lineno": 5,
+                            "node_id": 11,
+                            "src": "88:67:-1",
+                            "type": {
+                              "length": 49152,
+                              "name": "Bytes",
+                              "typeclass": "bytes"
+                            },
+                            "value": "0x6004600c60003960046000f3610123ff"
+                          },
+                          "lineno": 5,
+                          "node_id": 11,
+                          "src": "88:67:-1",
+                          "type": {
+                            "length": 49152,
+                            "name": "Bytes",
+                            "typeclass": "bytes"
+                          },
+                          "value": "0x6004600c60003960046000f3610123ff"
+                        }
+                      ],
+                      "ast_type": "Call",
+                      "col_offset": 21,
+                      "end_col_offset": 5,
+                      "end_lineno": 6,
+                      "func": {
+                        "ast_type": "Name",
+                        "col_offset": 21,
+                        "end_col_offset": 31,
+                        "end_lineno": 4,
+                        "id": "raw_create",
+                        "lineno": 4,
+                        "node_id": 9,
+                        "src": "68:10:-1",
+                        "type": {
+                          "name": "raw_create",
+                          "typeclass": "builtin_function"
+                        }
+                      },
+                      "keywords": [],
+                      "lineno": 4,
+                      "node_id": 8,
+                      "src": "68:93:-1",
+                      "type": {
+                        "name": "address"
+                      }
+                    }
+                  },
+                  {
+                    "ast_type": "Expr",
+                    "col_offset": 4,
+                    "end_col_offset": 24,
+                    "end_lineno": 7,
+                    "lineno": 7,
+                    "node_id": 12,
+                    "src": "166:20:-1",
+                    "value": {
+                      "args": [
+                        {
+                          "ast_type": "Name",
+                          "col_offset": 13,
+                          "end_col_offset": 18,
+                          "end_lineno": 7,
+                          "id": "child",
+                          "lineno": 7,
+                          "node_id": 16,
+                          "src": "175:5:-1",
+                          "type": {
+                            "name": "address"
+                          },
+                          "variable_reads": [
+                            {
+                              "access_path": [],
+                              "decl_node": {
+                                "node_id": 3,
+                                "source_id": -1
+                              },
+                              "name": "child"
+                            }
+                          ]
+                        },
+                        {
+                          "ast_type": "Bytes",
+                          "col_offset": 20,
+                          "end_col_offset": 23,
+                          "end_lineno": 7,
+                          "folded_value": {
+                            "ast_type": "Bytes",
+                            "col_offset": 20,
+                            "end_col_offset": 23,
+                            "end_lineno": 7,
+                            "lineno": 7,
+                            "node_id": 18,
+                            "src": "182:3:-1",
+                            "type": {
+                              "length": 0,
+                              "name": "Bytes",
+                              "typeclass": "bytes"
+                            },
+                            "value": "0x"
+                          },
+                          "lineno": 7,
+                          "node_id": 18,
+                          "src": "182:3:-1",
+                          "type": {
+                            "length": 0,
+                            "name": "Bytes",
+                            "typeclass": "bytes"
+                          },
+                          "value": "0x"
+                        }
+                      ],
+                      "ast_type": "Call",
+                      "col_offset": 4,
+                      "end_col_offset": 24,
+                      "end_lineno": 7,
+                      "func": {
+                        "ast_type": "Name",
+                        "col_offset": 4,
+                        "end_col_offset": 12,
+                        "end_lineno": 7,
+                        "id": "raw_call",
+                        "lineno": 7,
+                        "node_id": 14,
+                        "src": "166:8:-1",
+                        "type": {
+                          "name": "raw_call",
+                          "typeclass": "builtin_function"
+                        }
+                      },
+                      "keywords": [],
+                      "lineno": 7,
+                      "node_id": 13,
+                      "src": "166:20:-1",
+                      "type": {
+                        "name": "(void)"
+                      }
+                    }
+                  },
+                  {
+                    "ast_type": "Return",
+                    "col_offset": 4,
+                    "end_col_offset": 16,
+                    "end_lineno": 8,
+                    "lineno": 8,
+                    "node_id": 19,
+                    "src": "191:12:-1",
+                    "value": {
+                      "ast_type": "Name",
+                      "col_offset": 11,
+                      "end_col_offset": 16,
+                      "end_lineno": 8,
+                      "id": "child",
+                      "lineno": 8,
+                      "node_id": 20,
+                      "src": "198:5:-1",
+                      "type": {
+                        "name": "address"
+                      },
+                      "variable_reads": [
+                        {
+                          "access_path": [],
+                          "decl_node": {
+                            "node_id": 3,
+                            "source_id": -1
+                          },
+                          "name": "child"
+                        }
+                      ]
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 9,
+                    "end_lineno": 2,
+                    "id": "external",
+                    "lineno": 2,
+                    "node_id": 22,
+                    "src": "2:8:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 16,
+                "end_lineno": 8,
+                "func_type": {
+                  "argument_types": [],
+                  "name": "spawn_and_destroy",
+                  "return_type": {
+                    "name": "address"
+                  },
+                  "type_decl_node": {
+                    "node_id": 1,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                },
+                "lineno": 3,
+                "name": "spawn_and_destroy",
+                "node_id": 1,
+                "returns": {
+                  "ast_type": "Name",
+                  "col_offset": 27,
+                  "end_col_offset": 34,
+                  "end_lineno": 3,
+                  "id": "address",
+                  "lineno": 3,
+                  "node_id": 24,
+                  "src": "38:7:-1"
+                },
+                "src": "11:192:-1"
+              }
+            ],
+            "col_offset": 0,
+            "doc_string": null,
+            "end_col_offset": 17,
+            "end_lineno": 8,
+            "is_interface": false,
+            "lineno": 1,
+            "name": null,
+            "node_id": 0,
+            "path": "tests/fixtures/regression/finding_43_nested_creation_deletion/unknown_0.vy",
+            "resolved_path": "tests/fixtures/regression/finding_43_nested_creation_deletion/unknown_0.vy",
+            "settings": {},
+            "source_id": -1,
+            "source_sha256sum": "368501b26dc5e2177d47c581f9c51280fedba589625ad714b3c86cb978dffb75",
+            "src": "0:204:-1",
+            "type": {
+              "name": "tests/fixtures/regression/finding_43_nested_creation_deletion/unknown_0.vy",
+              "type_decl_node": {
+                "node_id": 0,
+                "source_id": -1
+              },
+              "typeclass": "module"
+            }
+          },
+          "contract_name": "tests/fixtures/regression/finding_43_nested_creation_deletion/unknown_0.vy",
+          "imports": []
+        },
+        "blueprint_initcode_prefix": null,
+        "calldata": null,
+        "compiler_settings": {
+          "debug": false,
+          "enable_decimals": true,
+          "evm_version": "prague",
+          "experimental_codegen": false,
+          "optimize": "gas"
+        },
+        "contract_abi": [
+          {
+            "gas": 34951,
+            "inputs": [],
+            "name": "spawn_and_destroy",
+            "outputs": [
+              {
+                "name": "",
+                "type": "address"
+              }
+            ],
+            "stateMutability": "nonpayable",
+            "type": "function"
+          }
+        ],
+        "deployed_address": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+        "deployment_succeeded": true,
+        "deployment_type": "source",
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "constructor",
+        "initcode": "609f61000b5f39609f5ff35f3560e01c63e4ba17bd8118610097573461009b5760106060527f6004600c60003960046000f3610123ff000000000000000000000000000000006080526060805160208201805160a052508060a001505f810160a05ff080610064573d5f5f3e3d5ffd5b905090506040526040515a5f6060526060505f5f60605160805f8686f190509050610091573d5f5f3e3d5ffd5b60206040f35b5f5ffd5b5f80fd855820f0eb2b799d3439db54a401e81ddeb27fbe1203065bed7b8a8e50211fde96142e189f8000a1657679706572830005000034",
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "raw_ir": null,
+        "runtime_bytecode": "5f3560e01c63e4ba17bd8118610097573461009b5760106060527f6004600c60003960046000f3610123ff000000000000000000000000000000006080526060805160208201805160a052508060a001505f810160a05ff080610064573d5f5f3e3d5ffd5b905090506040526040515a5f6060526060505f5f60605160805f8686f190509050610091573d5f5f3e3d5ffd5b60206040f35b5f5ffd5b5f80fd",
+        "solc_json": {
+          "compiler_version": "v0.5.0a4+commit.cd74ce4f",
+          "integrity": "f0eb2b799d3439db54a401e81ddeb27fbe1203065bed7b8a8e50211fde96142e",
+          "language": "Vyper",
+          "settings": {
+            "debug": false,
+            "evmVersion": "prague",
+            "experimentalCodegen": false,
+            "optimize": "gas",
+            "outputSelection": {
+              "unknown_0.vy": [
+                "*"
+              ]
+            },
+            "search_paths": [
+              "."
+            ]
+          },
+          "sources": {
+            "unknown_0.vy": {
+              "content": "\n@external\ndef spawn_and_destroy() -> address:\n    child: address = raw_create(\n        b\"\\x60\\x04\\x60\\x0c\\x60\\x00\\x39\\x60\\x04\\x60\\x00\\xf3\\x61\\x01\\x23\\xff\"\n    )\n    raw_call(child, b\"\")\n    return child\n",
+              "sha256sum": "368501b26dc5e2177d47c581f9c51280fedba589625ad714b3c86cb978dffb75"
+            }
+          }
+        },
+        "source_code": "\n@external\ndef spawn_and_destroy() -> address:\n    child: address = raw_create(\n        b\"\\x60\\x04\\x60\\x0c\\x60\\x00\\x39\\x60\\x04\\x60\\x00\\xf3\\x61\\x01\\x23\\xff\"\n    )\n    raw_call(child, b\"\")\n    return child\n",
+        "storage_layout": {},
+        "trace_type": "deployment",
+        "value": 0
+      },
+      {
+        "annotated_ast": {
+          "ast": {
+            "ast_type": "Module",
+            "body": [
+              {
+                "ast_type": "InterfaceDef",
+                "body": [
+                  {
+                    "args": {
+                      "args": [],
+                      "ast_type": "arguments",
+                      "col_offset": 4,
+                      "default": null,
+                      "defaults": [],
+                      "end_col_offset": 50,
+                      "end_lineno": 3,
+                      "lineno": 3,
+                      "node_id": 3,
+                      "src": "23:46:-1"
+                    },
+                    "ast_type": "FunctionDef",
+                    "body": [
+                      {
+                        "ast_type": "Expr",
+                        "col_offset": 40,
+                        "end_col_offset": 50,
+                        "end_lineno": 3,
+                        "lineno": 3,
+                        "node_id": 4,
+                        "src": "59:10:-1",
+                        "value": {
+                          "ast_type": "Name",
+                          "col_offset": 40,
+                          "end_col_offset": 50,
+                          "end_lineno": 3,
+                          "id": "nonpayable",
+                          "lineno": 3,
+                          "node_id": 5,
+                          "src": "59:10:-1"
+                        }
+                      }
+                    ],
+                    "col_offset": 4,
+                    "decorator_list": [],
+                    "doc_string": null,
+                    "end_col_offset": 50,
+                    "end_lineno": 3,
+                    "lineno": 3,
+                    "name": "spawn_and_destroy",
+                    "node_id": 2,
+                    "returns": {
+                      "ast_type": "Name",
+                      "col_offset": 31,
+                      "end_col_offset": 38,
+                      "end_lineno": 3,
+                      "id": "address",
+                      "lineno": 3,
+                      "node_id": 7,
+                      "src": "50:7:-1"
+                    },
+                    "src": "23:46:-1"
+                  }
+                ],
+                "col_offset": 0,
+                "doc_string": null,
+                "end_col_offset": 50,
+                "end_lineno": 3,
+                "lineno": 2,
+                "name": "Helper",
+                "node_id": 1,
+                "src": "1:68:-1"
+              },
+              {
+                "args": {
+                  "args": [
+                    {
+                      "annotation": {
+                        "ast_type": "Name",
+                        "col_offset": 16,
+                        "end_col_offset": 23,
+                        "end_lineno": 6,
+                        "id": "address",
+                        "lineno": 6,
+                        "node_id": 12,
+                        "src": "97:7:-1"
+                      },
+                      "arg": "helper",
+                      "ast_type": "arg",
+                      "col_offset": 8,
+                      "end_col_offset": 23,
+                      "end_lineno": 6,
+                      "lineno": 6,
+                      "node_id": 11,
+                      "src": "89:15:-1"
+                    }
+                  ],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 53,
+                  "end_lineno": 7,
+                  "lineno": 6,
+                  "node_id": 10,
+                  "src": "81:90:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "Return",
+                    "col_offset": 4,
+                    "end_col_offset": 53,
+                    "end_lineno": 7,
+                    "lineno": 7,
+                    "node_id": 14,
+                    "src": "122:49:-1",
+                    "value": {
+                      "ast_type": "ExtCall",
+                      "col_offset": 11,
+                      "end_col_offset": 53,
+                      "end_lineno": 7,
+                      "lineno": 7,
+                      "node_id": 15,
+                      "src": "129:42:-1",
+                      "type": {
+                        "name": "address"
+                      },
+                      "value": {
+                        "args": [],
+                        "ast_type": "Call",
+                        "col_offset": 19,
+                        "end_col_offset": 53,
+                        "end_lineno": 7,
+                        "func": {
+                          "ast_type": "Attribute",
+                          "attr": "spawn_and_destroy",
+                          "col_offset": 19,
+                          "end_col_offset": 51,
+                          "end_lineno": 7,
+                          "lineno": 7,
+                          "node_id": 17,
+                          "src": "137:32:-1",
+                          "type": {
+                            "argument_types": [],
+                            "name": "spawn_and_destroy",
+                            "return_type": {
+                              "name": "address"
+                            },
+                            "type_decl_node": {
+                              "node_id": 2,
+                              "source_id": -1
+                            },
+                            "typeclass": "contract_function"
+                          },
+                          "value": {
+                            "args": [
+                              {
+                                "ast_type": "Name",
+                                "col_offset": 26,
+                                "end_col_offset": 32,
+                                "end_lineno": 7,
+                                "id": "helper",
+                                "lineno": 7,
+                                "node_id": 21,
+                                "src": "144:6:-1",
+                                "type": {
+                                  "name": "address"
+                                },
+                                "variable_reads": [
+                                  {
+                                    "access_path": [],
+                                    "decl_node": {
+                                      "node_id": 11,
+                                      "source_id": -1
+                                    },
+                                    "name": "helper"
+                                  }
+                                ]
+                              }
+                            ],
+                            "ast_type": "Call",
+                            "col_offset": 19,
+                            "end_col_offset": 33,
+                            "end_lineno": 7,
+                            "func": {
+                              "ast_type": "Name",
+                              "col_offset": 19,
+                              "end_col_offset": 25,
+                              "end_lineno": 7,
+                              "id": "Helper",
+                              "lineno": 7,
+                              "node_id": 19,
+                              "src": "137:6:-1",
+                              "type": {
+                                "type_t": {
+                                  "name": "Helper",
+                                  "type_decl_node": {
+                                    "node_id": 1,
+                                    "source_id": -1
+                                  },
+                                  "typeclass": "interface"
+                                }
+                              }
+                            },
+                            "keywords": [],
+                            "lineno": 7,
+                            "node_id": 18,
+                            "src": "137:14:-1",
+                            "type": {
+                              "name": "Helper",
+                              "type_decl_node": {
+                                "node_id": 1,
+                                "source_id": -1
+                              },
+                              "typeclass": "interface"
+                            }
+                          }
+                        },
+                        "keywords": [],
+                        "lineno": 7,
+                        "node_id": 16,
+                        "src": "137:34:-1",
+                        "type": {
+                          "name": "address"
+                        }
+                      }
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 9,
+                    "end_lineno": 5,
+                    "id": "external",
+                    "lineno": 5,
+                    "node_id": 24,
+                    "src": "72:8:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 53,
+                "end_lineno": 7,
+                "func_type": {
+                  "argument_types": [
+                    {
+                      "name": "address"
+                    }
+                  ],
+                  "name": "run",
+                  "return_type": {
+                    "name": "address"
+                  },
+                  "type_decl_node": {
+                    "node_id": 9,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                },
+                "lineno": 6,
+                "name": "run",
+                "node_id": 9,
+                "returns": {
+                  "ast_type": "Name",
+                  "col_offset": 28,
+                  "end_col_offset": 35,
+                  "end_lineno": 6,
+                  "id": "address",
+                  "lineno": 6,
+                  "node_id": 26,
+                  "src": "109:7:-1"
+                },
+                "src": "81:90:-1"
+              }
+            ],
+            "col_offset": 0,
+            "doc_string": null,
+            "end_col_offset": 54,
+            "end_lineno": 7,
+            "is_interface": false,
+            "lineno": 1,
+            "name": null,
+            "node_id": 0,
+            "path": "tests/fixtures/regression/finding_43_nested_creation_deletion/unknown_1.vy",
+            "resolved_path": "tests/fixtures/regression/finding_43_nested_creation_deletion/unknown_1.vy",
+            "settings": {},
+            "source_id": -1,
+            "source_sha256sum": "6bdf5adea0ffefea73916ff5941939d889c43a9312f619d91310ffe6dd656599",
+            "src": "0:172:-1",
+            "type": {
+              "name": "tests/fixtures/regression/finding_43_nested_creation_deletion/unknown_1.vy",
+              "type_decl_node": {
+                "node_id": 0,
+                "source_id": -1
+              },
+              "typeclass": "module"
+            }
+          },
+          "contract_name": "tests/fixtures/regression/finding_43_nested_creation_deletion/unknown_1.vy",
+          "imports": []
+        },
+        "blueprint_initcode_prefix": null,
+        "calldata": null,
+        "compiler_settings": {
+          "debug": false,
+          "enable_decimals": true,
+          "evm_version": "prague",
+          "experimental_codegen": false,
+          "optimize": "gas"
+        },
+        "contract_abi": [
+          {
+            "gas": 3054,
+            "inputs": [
+              {
+                "name": "helper",
+                "type": "address"
+              }
+            ],
+            "name": "run",
+            "outputs": [
+              {
+                "name": "",
+                "type": "address"
+              }
+            ],
+            "stateMutability": "nonpayable",
+            "type": "function"
+          }
+        ],
+        "deployed_address": "0x86bA2C4c8A9Af3008a6262B02cC0FF76746BE098",
+        "deployment_succeeded": true,
+        "deployment_type": "source",
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "constructor",
+        "initcode": "607f61000b5f39607f5ff35f3560e01c63522bb70481186100775760243610341761007b576004358060a01c61007b57604052602060405163e4ba17bd606052602060606004607c5f855af161004c573d5f5f3e3d5ffd5b3d602081183d60201002188060600160801161007b576060518060a01c61007b5760a0525060a09050f35b5f5ffd5b5f80fd8558208a944a56e55ee6dffbc77629f097ac43bda1160f1991f2da5365662ca114de0c187f8000a1657679706572830005000034",
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "raw_ir": null,
+        "runtime_bytecode": "5f3560e01c63522bb70481186100775760243610341761007b576004358060a01c61007b57604052602060405163e4ba17bd606052602060606004607c5f855af161004c573d5f5f3e3d5ffd5b3d602081183d60201002188060600160801161007b576060518060a01c61007b5760a0525060a09050f35b5f5ffd5b5f80fd",
+        "solc_json": {
+          "compiler_version": "v0.5.0a4+commit.cd74ce4f",
+          "integrity": "8a944a56e55ee6dffbc77629f097ac43bda1160f1991f2da5365662ca114de0c",
+          "language": "Vyper",
+          "settings": {
+            "debug": false,
+            "evmVersion": "prague",
+            "experimentalCodegen": false,
+            "optimize": "gas",
+            "outputSelection": {
+              "unknown_1.vy": [
+                "*"
+              ]
+            },
+            "search_paths": [
+              "."
+            ]
+          },
+          "sources": {
+            "unknown_1.vy": {
+              "content": "\ninterface Helper:\n    def spawn_and_destroy() -> address: nonpayable\n\n@external\ndef run(helper: address) -> address:\n    return extcall Helper(helper).spawn_and_destroy()\n",
+              "sha256sum": "6bdf5adea0ffefea73916ff5941939d889c43a9312f619d91310ffe6dd656599"
+            }
+          }
+        },
+        "source_code": "\ninterface Helper:\n    def spawn_and_destroy() -> address: nonpayable\n\n@external\ndef run(helper: address) -> address:\n    return extcall Helper(helper).spawn_and_destroy()\n",
+        "storage_layout": {},
+        "trace_type": "deployment",
+        "value": 0
+      },
+      {
+        "call_args": {
+          "calldata": "522bb704000000000000000000000000ed4efeaed8057c619a6d7aacc0459874eaf3c166",
+          "is_modifying": true,
+          "to": "0x86bA2C4c8A9Af3008a6262B02cC0FF76746BE098",
+          "value": 0
+        },
+        "call_succeeded": true,
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "run",
+        "output": "0000000000000000000000001076676756f7b54fdedabf0c24eaec735af6ad6b",
+        "python_args": {
+          "args": [
+            "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166"
+          ],
+          "kwargs": {}
+        },
+        "trace_type": "call"
+      }
+    ]
+  }
+}

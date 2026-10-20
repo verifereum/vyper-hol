@@ -235,10 +235,10 @@ jobs:
         env:
           TMPDIR: ${{ runner.temp }}
         run: |
-          tests=$(find tests/generated -maxdepth 1 -type f -name 'vyperTest_*Script.sml' -printf '%f\n' | sort -V)
+          tests=$(find tests/generated -maxdepth 1 -type f \( -name 'vyperTest_*Script.sml' -o -name 'vyperRegression_*Script.sml' \) -printf '%f\n' | sort -V)
           total=$(printf "%s\n" "$tests" | sed '/^$/d' | wc -l)
           if [ "$total" -eq 0 ]; then
-            echo "No vyperTest_* scripts found in tests/generated/."
+            echo "No Vyper generated or regression test scripts found in tests/generated/."
             exit 1
           fi
           splits=10

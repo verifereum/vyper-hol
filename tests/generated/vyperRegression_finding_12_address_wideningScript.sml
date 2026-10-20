@@ -1,0 +1,4 @@
+Theory vyperRegression_finding_12_address_widening[no_sig_docs]
+Ancestors vyperRegressionDefs_finding_12_address_widening
+Libs vyperTestRunnerLib
+val () = List.app run_test_on_traces $ all_traces "vyperRegressionDefs_finding_12_address_widening";

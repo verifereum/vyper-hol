@@ -1,0 +1,747 @@
+{
+  "finding_06_augmented_assignment_snapshot": {
+    "deps": [],
+    "item_type": "test",
+    "traces": [
+      {
+        "annotated_ast": {
+          "ast": {
+            "ast_type": "Module",
+            "body": [
+              {
+                "annotation": {
+                  "ast_type": "Name",
+                  "col_offset": 8,
+                  "end_col_offset": 15,
+                  "end_lineno": 2,
+                  "id": "uint256",
+                  "lineno": 2,
+                  "node_id": 4,
+                  "src": "9:7:-1"
+                },
+                "ast_type": "VariableDecl",
+                "col_offset": 0,
+                "end_col_offset": 15,
+                "end_lineno": 2,
+                "is_constant": false,
+                "is_immutable": false,
+                "is_public": false,
+                "is_reentrant": false,
+                "is_transient": false,
+                "lineno": 2,
+                "node_id": 1,
+                "src": "1:15:-1",
+                "target": {
+                  "ast_type": "Name",
+                  "col_offset": 0,
+                  "end_col_offset": 6,
+                  "end_lineno": 2,
+                  "id": "stored",
+                  "lineno": 2,
+                  "node_id": 2,
+                  "src": "1:6:-1",
+                  "type": {
+                    "bits": 256,
+                    "is_signed": false,
+                    "name": "uint256",
+                    "typeclass": "integer"
+                  }
+                },
+                "type": {
+                  "bits": 256,
+                  "is_signed": false,
+                  "name": "uint256",
+                  "typeclass": "integer"
+                },
+                "value": null
+              },
+              {
+                "args": {
+                  "args": [],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 12,
+                  "end_lineno": 7,
+                  "lineno": 5,
+                  "node_id": 7,
+                  "src": "28:77:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "Assign",
+                    "col_offset": 4,
+                    "end_col_offset": 21,
+                    "end_lineno": 6,
+                    "lineno": 6,
+                    "node_id": 8,
+                    "src": "75:17:-1",
+                    "target": {
+                      "ast_type": "Attribute",
+                      "attr": "stored",
+                      "col_offset": 4,
+                      "end_col_offset": 15,
+                      "end_lineno": 6,
+                      "lineno": 6,
+                      "node_id": 9,
+                      "src": "75:11:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      },
+                      "value": {
+                        "ast_type": "Name",
+                        "col_offset": 4,
+                        "end_col_offset": 8,
+                        "end_lineno": 6,
+                        "id": "self",
+                        "lineno": 6,
+                        "node_id": 10,
+                        "src": "75:4:-1",
+                        "type": {
+                          "name": "self"
+                        }
+                      },
+                      "variable_reads": [
+                        {
+                          "access_path": [],
+                          "decl_node": {
+                            "node_id": 1,
+                            "source_id": -1
+                          },
+                          "name": "stored"
+                        }
+                      ],
+                      "variable_writes": [
+                        {
+                          "access_path": [],
+                          "decl_node": {
+                            "node_id": 1,
+                            "source_id": -1
+                          },
+                          "name": "stored"
+                        }
+                      ]
+                    },
+                    "value": {
+                      "ast_type": "Int",
+                      "col_offset": 18,
+                      "end_col_offset": 21,
+                      "end_lineno": 6,
+                      "folded_value": {
+                        "ast_type": "Int",
+                        "col_offset": 18,
+                        "end_col_offset": 21,
+                        "end_lineno": 6,
+                        "lineno": 6,
+                        "node_id": 13,
+                        "src": "89:3:-1",
+                        "type": {
+                          "bits": 256,
+                          "is_signed": false,
+                          "name": "uint256",
+                          "typeclass": "integer"
+                        },
+                        "value": 100
+                      },
+                      "lineno": 6,
+                      "node_id": 13,
+                      "src": "89:3:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      },
+                      "value": 100
+                    }
+                  },
+                  {
+                    "ast_type": "Return",
+                    "col_offset": 4,
+                    "end_col_offset": 12,
+                    "end_lineno": 7,
+                    "lineno": 7,
+                    "node_id": 14,
+                    "src": "97:8:-1",
+                    "value": {
+                      "ast_type": "Int",
+                      "col_offset": 11,
+                      "end_col_offset": 12,
+                      "end_lineno": 7,
+                      "folded_value": {
+                        "ast_type": "Int",
+                        "col_offset": 11,
+                        "end_col_offset": 12,
+                        "end_lineno": 7,
+                        "lineno": 7,
+                        "node_id": 15,
+                        "src": "104:1:-1",
+                        "type": {
+                          "bits": 256,
+                          "is_signed": false,
+                          "name": "uint256",
+                          "typeclass": "integer"
+                        },
+                        "value": 1
+                      },
+                      "lineno": 7,
+                      "node_id": 15,
+                      "src": "104:1:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      },
+                      "value": 1
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 9,
+                    "end_lineno": 4,
+                    "id": "internal",
+                    "lineno": 4,
+                    "node_id": 16,
+                    "src": "19:8:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 12,
+                "end_lineno": 7,
+                "func_type": {
+                  "argument_types": [],
+                  "name": "overwrite_and_return_one",
+                  "return_type": {
+                    "bits": 256,
+                    "is_signed": false,
+                    "name": "uint256",
+                    "typeclass": "integer"
+                  },
+                  "type_decl_node": {
+                    "node_id": 6,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                },
+                "lineno": 5,
+                "name": "overwrite_and_return_one",
+                "node_id": 6,
+                "returns": {
+                  "ast_type": "Name",
+                  "col_offset": 34,
+                  "end_col_offset": 41,
+                  "end_lineno": 5,
+                  "id": "uint256",
+                  "lineno": 5,
+                  "node_id": 18,
+                  "src": "62:7:-1"
+                },
+                "src": "28:77:-1"
+              },
+              {
+                "args": {
+                  "args": [],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 22,
+                  "end_lineno": 16,
+                  "lineno": 10,
+                  "node_id": 21,
+                  "src": "117:261:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "Assign",
+                    "col_offset": 4,
+                    "end_col_offset": 20,
+                    "end_lineno": 11,
+                    "lineno": 11,
+                    "node_id": 22,
+                    "src": "143:16:-1",
+                    "target": {
+                      "ast_type": "Attribute",
+                      "attr": "stored",
+                      "col_offset": 4,
+                      "end_col_offset": 15,
+                      "end_lineno": 11,
+                      "lineno": 11,
+                      "node_id": 23,
+                      "src": "143:11:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      },
+                      "value": {
+                        "ast_type": "Name",
+                        "col_offset": 4,
+                        "end_col_offset": 8,
+                        "end_lineno": 11,
+                        "id": "self",
+                        "lineno": 11,
+                        "node_id": 24,
+                        "src": "143:4:-1",
+                        "type": {
+                          "name": "self"
+                        }
+                      },
+                      "variable_reads": [
+                        {
+                          "access_path": [],
+                          "decl_node": {
+                            "node_id": 1,
+                            "source_id": -1
+                          },
+                          "name": "stored"
+                        }
+                      ],
+                      "variable_writes": [
+                        {
+                          "access_path": [],
+                          "decl_node": {
+                            "node_id": 1,
+                            "source_id": -1
+                          },
+                          "name": "stored"
+                        }
+                      ]
+                    },
+                    "value": {
+                      "ast_type": "Int",
+                      "col_offset": 18,
+                      "end_col_offset": 20,
+                      "end_lineno": 11,
+                      "folded_value": {
+                        "ast_type": "Int",
+                        "col_offset": 18,
+                        "end_col_offset": 20,
+                        "end_lineno": 11,
+                        "lineno": 11,
+                        "node_id": 27,
+                        "src": "157:2:-1",
+                        "type": {
+                          "bits": 256,
+                          "is_signed": false,
+                          "name": "uint256",
+                          "typeclass": "integer"
+                        },
+                        "value": 10
+                      },
+                      "lineno": 11,
+                      "node_id": 27,
+                      "src": "157:2:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      },
+                      "value": 10
+                    }
+                  },
+                  {
+                    "ast_type": "AugAssign",
+                    "col_offset": 4,
+                    "end_col_offset": 50,
+                    "end_lineno": 15,
+                    "lineno": 15,
+                    "node_id": 28,
+                    "op": {
+                      "ast_type": "Add",
+                      "col_offset": 4,
+                      "end_col_offset": 50,
+                      "end_lineno": 15,
+                      "lineno": 15,
+                      "node_id": 33,
+                      "src": "309:46:-1"
+                    },
+                    "src": "309:46:-1",
+                    "target": {
+                      "ast_type": "Attribute",
+                      "attr": "stored",
+                      "col_offset": 4,
+                      "end_col_offset": 15,
+                      "end_lineno": 15,
+                      "lineno": 15,
+                      "node_id": 29,
+                      "src": "309:11:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      },
+                      "value": {
+                        "ast_type": "Name",
+                        "col_offset": 4,
+                        "end_col_offset": 8,
+                        "end_lineno": 15,
+                        "id": "self",
+                        "lineno": 15,
+                        "node_id": 30,
+                        "src": "309:4:-1",
+                        "type": {
+                          "name": "self"
+                        }
+                      },
+                      "variable_reads": [
+                        {
+                          "access_path": [],
+                          "decl_node": {
+                            "node_id": 1,
+                            "source_id": -1
+                          },
+                          "name": "stored"
+                        }
+                      ],
+                      "variable_writes": [
+                        {
+                          "access_path": [],
+                          "decl_node": {
+                            "node_id": 1,
+                            "source_id": -1
+                          },
+                          "name": "stored"
+                        }
+                      ]
+                    },
+                    "value": {
+                      "args": [],
+                      "ast_type": "Call",
+                      "col_offset": 19,
+                      "end_col_offset": 50,
+                      "end_lineno": 15,
+                      "func": {
+                        "ast_type": "Attribute",
+                        "attr": "overwrite_and_return_one",
+                        "col_offset": 19,
+                        "end_col_offset": 48,
+                        "end_lineno": 15,
+                        "lineno": 15,
+                        "node_id": 35,
+                        "src": "324:29:-1",
+                        "type": {
+                          "argument_types": [],
+                          "name": "overwrite_and_return_one",
+                          "return_type": {
+                            "bits": 256,
+                            "is_signed": false,
+                            "name": "uint256",
+                            "typeclass": "integer"
+                          },
+                          "type_decl_node": {
+                            "node_id": 6,
+                            "source_id": -1
+                          },
+                          "typeclass": "contract_function"
+                        },
+                        "value": {
+                          "ast_type": "Name",
+                          "col_offset": 19,
+                          "end_col_offset": 23,
+                          "end_lineno": 15,
+                          "id": "self",
+                          "lineno": 15,
+                          "node_id": 36,
+                          "src": "324:4:-1",
+                          "type": {
+                            "name": "self"
+                          }
+                        },
+                        "variable_reads": [
+                          {
+                            "access_path": [],
+                            "decl_node": {
+                              "node_id": 1,
+                              "source_id": -1
+                            },
+                            "name": "stored"
+                          }
+                        ],
+                        "variable_writes": [
+                          {
+                            "access_path": [],
+                            "decl_node": {
+                              "node_id": 1,
+                              "source_id": -1
+                            },
+                            "name": "stored"
+                          }
+                        ]
+                      },
+                      "keywords": [],
+                      "lineno": 15,
+                      "node_id": 34,
+                      "src": "324:31:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      }
+                    }
+                  },
+                  {
+                    "ast_type": "Return",
+                    "col_offset": 4,
+                    "end_col_offset": 22,
+                    "end_lineno": 16,
+                    "lineno": 16,
+                    "node_id": 39,
+                    "src": "360:18:-1",
+                    "value": {
+                      "ast_type": "Attribute",
+                      "attr": "stored",
+                      "col_offset": 11,
+                      "end_col_offset": 22,
+                      "end_lineno": 16,
+                      "lineno": 16,
+                      "node_id": 40,
+                      "src": "367:11:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      },
+                      "value": {
+                        "ast_type": "Name",
+                        "col_offset": 11,
+                        "end_col_offset": 15,
+                        "end_lineno": 16,
+                        "id": "self",
+                        "lineno": 16,
+                        "node_id": 41,
+                        "src": "367:4:-1",
+                        "type": {
+                          "name": "self"
+                        }
+                      },
+                      "variable_reads": [
+                        {
+                          "access_path": [],
+                          "decl_node": {
+                            "node_id": 1,
+                            "source_id": -1
+                          },
+                          "name": "stored"
+                        }
+                      ]
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 9,
+                    "end_lineno": 9,
+                    "id": "external",
+                    "lineno": 9,
+                    "node_id": 44,
+                    "src": "108:8:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 22,
+                "end_lineno": 16,
+                "func_type": {
+                  "argument_types": [],
+                  "name": "run",
+                  "return_type": {
+                    "bits": 256,
+                    "is_signed": false,
+                    "name": "uint256",
+                    "typeclass": "integer"
+                  },
+                  "type_decl_node": {
+                    "node_id": 20,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                },
+                "lineno": 10,
+                "name": "run",
+                "node_id": 20,
+                "returns": {
+                  "ast_type": "Name",
+                  "col_offset": 13,
+                  "end_col_offset": 20,
+                  "end_lineno": 10,
+                  "id": "uint256",
+                  "lineno": 10,
+                  "node_id": 46,
+                  "src": "130:7:-1"
+                },
+                "src": "117:261:-1"
+              }
+            ],
+            "col_offset": 0,
+            "doc_string": null,
+            "end_col_offset": 23,
+            "end_lineno": 16,
+            "is_interface": false,
+            "lineno": 1,
+            "name": null,
+            "node_id": 0,
+            "path": "tests/fixtures/regression/finding_06_augmented_assignment_snapshot/unknown_0.vy",
+            "resolved_path": "tests/fixtures/regression/finding_06_augmented_assignment_snapshot/unknown_0.vy",
+            "settings": {},
+            "source_id": -1,
+            "source_sha256sum": "d97709570aec37559932e3c674bf3d06f9b19af95431665c8a8aec7af6576f4d",
+            "src": "0:379:-1",
+            "type": {
+              "name": "tests/fixtures/regression/finding_06_augmented_assignment_snapshot/unknown_0.vy",
+              "type_decl_node": {
+                "node_id": 0,
+                "source_id": -1
+              },
+              "typeclass": "module"
+            }
+          },
+          "contract_name": "tests/fixtures/regression/finding_06_augmented_assignment_snapshot/unknown_0.vy",
+          "imports": []
+        },
+        "blueprint_initcode_prefix": null,
+        "calldata": null,
+        "compiler_settings": {
+          "debug": false,
+          "enable_decimals": true,
+          "evm_version": "prague",
+          "experimental_codegen": false,
+          "optimize": "gas"
+        },
+        "contract_abi": [
+          {
+            "gas": 110163,
+            "inputs": [],
+            "name": "run",
+            "outputs": [
+              {
+                "name": "",
+                "type": "uint256"
+              }
+            ],
+            "stateMutability": "nonpayable",
+            "type": "function"
+          }
+        ],
+        "deployed_address": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+        "deployment_succeeded": true,
+        "deployment_type": "source",
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "constructor",
+        "initcode": "605561000b5f3960555ff35f3560e01c63c04062268118610042573461005157600a5f555f546100246040610046565b60405180820182811061005157905090505f555f5460405260206040f35b5f5ffd5b60645f556001815250565b5f80fd8558209f1de0fd565f04f5950b2f71fc42a3d3385aae50b96664db35059366664008d218558000a1657679706572830005000034",
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "raw_ir": null,
+        "runtime_bytecode": "5f3560e01c63c04062268118610042573461005157600a5f555f546100246040610046565b60405180820182811061005157905090505f555f5460405260206040f35b5f5ffd5b60645f556001815250565b5f80fd",
+        "solc_json": {
+          "compiler_version": "v0.5.0a4+commit.cd74ce4f",
+          "integrity": "9f1de0fd565f04f5950b2f71fc42a3d3385aae50b96664db35059366664008d2",
+          "language": "Vyper",
+          "settings": {
+            "debug": false,
+            "evmVersion": "prague",
+            "experimentalCodegen": false,
+            "optimize": "gas",
+            "outputSelection": {
+              "unknown_0.vy": [
+                "*"
+              ]
+            },
+            "search_paths": [
+              "."
+            ]
+          },
+          "sources": {
+            "unknown_0.vy": {
+              "content": "\nstored: uint256\n\n@internal\ndef overwrite_and_return_one() -> uint256:\n    self.stored = 100\n    return 1\n\n@external\ndef run() -> uint256:\n    self.stored = 10\n\n    # The addition uses the old value 10. The RHS changes storage to 100,\n    # but the final assignment stores the previously computed 10 + 1.\n    self.stored += self.overwrite_and_return_one()\n    return self.stored\n",
+              "sha256sum": "d97709570aec37559932e3c674bf3d06f9b19af95431665c8a8aec7af6576f4d"
+            }
+          }
+        },
+        "source_code": "\nstored: uint256\n\n@internal\ndef overwrite_and_return_one() -> uint256:\n    self.stored = 100\n    return 1\n\n@external\ndef run() -> uint256:\n    self.stored = 10\n\n    # The addition uses the old value 10. The RHS changes storage to 100,\n    # but the final assignment stores the previously computed 10 + 1.\n    self.stored += self.overwrite_and_return_one()\n    return self.stored\n",
+        "storage_layout": {
+          "storage_layout": {
+            "stored": {
+              "n_slots": 1,
+              "slot": 0,
+              "type": "uint256"
+            }
+          }
+        },
+        "trace_type": "deployment",
+        "value": 0
+      },
+      {
+        "call_args": {
+          "calldata": "c0406226",
+          "is_modifying": true,
+          "to": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+          "value": 0
+        },
+        "call_succeeded": true,
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "run",
+        "output": "000000000000000000000000000000000000000000000000000000000000000b",
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "trace_type": "call"
+      }
+    ]
+  }
+}

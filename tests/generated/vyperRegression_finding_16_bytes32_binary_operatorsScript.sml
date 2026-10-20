@@ -1,0 +1,4 @@
+Theory vyperRegression_finding_16_bytes32_binary_operators[no_sig_docs]
+Ancestors vyperRegressionDefs_finding_16_bytes32_binary_operators
+Libs vyperTestRunnerLib
+val () = List.app run_test_on_traces $ all_traces "vyperRegressionDefs_finding_16_bytes32_binary_operators";

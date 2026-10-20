@@ -1,0 +1,4 @@
+Theory vyperRegression_finding_39_constructor_self_code[no_sig_docs]
+Ancestors vyperRegressionDefs_finding_39_constructor_self_code
+Libs vyperTestRunnerLib
+val () = List.app run_test_on_traces $ all_traces "vyperRegressionDefs_finding_39_constructor_self_code";

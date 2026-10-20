@@ -1,0 +1,425 @@
+{
+  "finding_51_create_balance_overflow": {
+    "deps": [],
+    "item_type": "test",
+    "traces": [
+      {
+        "annotated_ast": {
+          "ast": {
+            "ast_type": "Module",
+            "body": [
+              {
+                "args": {
+                  "args": [
+                    {
+                      "annotation": {
+                        "ast_type": "Name",
+                        "col_offset": 18,
+                        "end_col_offset": 25,
+                        "end_lineno": 3,
+                        "id": "bytes32",
+                        "lineno": 3,
+                        "node_id": 4,
+                        "src": "29:7:-1"
+                      },
+                      "arg": "salt",
+                      "ast_type": "arg",
+                      "col_offset": 12,
+                      "end_col_offset": 25,
+                      "end_lineno": 3,
+                      "lineno": 3,
+                      "node_id": 3,
+                      "src": "23:13:-1"
+                    }
+                  ],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 5,
+                  "end_lineno": 9,
+                  "lineno": 3,
+                  "node_id": 2,
+                  "src": "11:163:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "Return",
+                    "col_offset": 4,
+                    "end_col_offset": 5,
+                    "end_lineno": 9,
+                    "lineno": 4,
+                    "node_id": 6,
+                    "src": "54:120:-1",
+                    "value": {
+                      "args": [
+                        {
+                          "ast_type": "Name",
+                          "col_offset": 8,
+                          "end_col_offset": 12,
+                          "end_lineno": 5,
+                          "id": "self",
+                          "lineno": 5,
+                          "node_id": 10,
+                          "src": "94:4:-1",
+                          "type": {
+                            "name": "address"
+                          }
+                        }
+                      ],
+                      "ast_type": "Call",
+                      "col_offset": 11,
+                      "end_col_offset": 5,
+                      "end_lineno": 9,
+                      "func": {
+                        "ast_type": "Name",
+                        "col_offset": 11,
+                        "end_col_offset": 34,
+                        "end_lineno": 4,
+                        "id": "create_minimal_proxy_to",
+                        "lineno": 4,
+                        "node_id": 8,
+                        "src": "61:23:-1",
+                        "type": {
+                          "name": "create_minimal_proxy_to",
+                          "typeclass": "builtin_function"
+                        }
+                      },
+                      "keywords": [
+                        {
+                          "arg": "value",
+                          "ast_type": "keyword",
+                          "col_offset": 8,
+                          "end_col_offset": 15,
+                          "end_lineno": 6,
+                          "lineno": 6,
+                          "node_id": 12,
+                          "src": "108:7:-1",
+                          "value": {
+                            "ast_type": "Int",
+                            "col_offset": 14,
+                            "end_col_offset": 15,
+                            "end_lineno": 6,
+                            "folded_value": {
+                              "ast_type": "Int",
+                              "col_offset": 14,
+                              "end_col_offset": 15,
+                              "end_lineno": 6,
+                              "lineno": 6,
+                              "node_id": 13,
+                              "src": "114:1:-1",
+                              "type": {
+                                "bits": 256,
+                                "is_signed": false,
+                                "name": "uint256",
+                                "typeclass": "integer"
+                              },
+                              "value": 1
+                            },
+                            "lineno": 6,
+                            "node_id": 13,
+                            "src": "114:1:-1",
+                            "type": {
+                              "bits": 256,
+                              "is_signed": false,
+                              "name": "uint256",
+                              "typeclass": "integer"
+                            },
+                            "value": 1
+                          }
+                        },
+                        {
+                          "arg": "salt",
+                          "ast_type": "keyword",
+                          "col_offset": 8,
+                          "end_col_offset": 17,
+                          "end_lineno": 7,
+                          "lineno": 7,
+                          "node_id": 14,
+                          "src": "125:9:-1",
+                          "value": {
+                            "ast_type": "Name",
+                            "col_offset": 13,
+                            "end_col_offset": 17,
+                            "end_lineno": 7,
+                            "id": "salt",
+                            "lineno": 7,
+                            "node_id": 15,
+                            "src": "130:4:-1",
+                            "type": {
+                              "m": 32,
+                              "name": "bytes32",
+                              "typeclass": "bytes_m"
+                            },
+                            "variable_reads": [
+                              {
+                                "access_path": [],
+                                "decl_node": {
+                                  "node_id": 3,
+                                  "source_id": -1
+                                },
+                                "name": "salt"
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "arg": "revert_on_failure",
+                          "ast_type": "keyword",
+                          "col_offset": 8,
+                          "end_col_offset": 31,
+                          "end_lineno": 8,
+                          "lineno": 8,
+                          "node_id": 17,
+                          "src": "144:23:-1",
+                          "value": {
+                            "ast_type": "NameConstant",
+                            "col_offset": 26,
+                            "end_col_offset": 31,
+                            "end_lineno": 8,
+                            "folded_value": {
+                              "ast_type": "NameConstant",
+                              "col_offset": 26,
+                              "end_col_offset": 31,
+                              "end_lineno": 8,
+                              "lineno": 8,
+                              "node_id": 18,
+                              "src": "162:5:-1",
+                              "type": {
+                                "name": "bool"
+                              },
+                              "value": false
+                            },
+                            "lineno": 8,
+                            "node_id": 18,
+                            "src": "162:5:-1",
+                            "type": {
+                              "name": "bool"
+                            },
+                            "value": false
+                          }
+                        }
+                      ],
+                      "lineno": 4,
+                      "node_id": 7,
+                      "src": "61:113:-1",
+                      "type": {
+                        "name": "address"
+                      }
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 9,
+                    "end_lineno": 2,
+                    "id": "external",
+                    "lineno": 2,
+                    "node_id": 19,
+                    "src": "2:8:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 5,
+                "end_lineno": 9,
+                "func_type": {
+                  "argument_types": [
+                    {
+                      "m": 32,
+                      "name": "bytes32",
+                      "typeclass": "bytes_m"
+                    }
+                  ],
+                  "name": "attempt",
+                  "return_type": {
+                    "name": "address"
+                  },
+                  "type_decl_node": {
+                    "node_id": 1,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                },
+                "lineno": 3,
+                "name": "attempt",
+                "node_id": 1,
+                "returns": {
+                  "ast_type": "Name",
+                  "col_offset": 30,
+                  "end_col_offset": 37,
+                  "end_lineno": 3,
+                  "id": "address",
+                  "lineno": 3,
+                  "node_id": 21,
+                  "src": "41:7:-1"
+                },
+                "src": "11:163:-1"
+              }
+            ],
+            "col_offset": 0,
+            "doc_string": null,
+            "end_col_offset": 6,
+            "end_lineno": 9,
+            "is_interface": false,
+            "lineno": 1,
+            "name": null,
+            "node_id": 0,
+            "path": "tests/fixtures/regression/finding_51_create_balance_overflow/unknown_0.vy",
+            "resolved_path": "tests/fixtures/regression/finding_51_create_balance_overflow/unknown_0.vy",
+            "settings": {},
+            "source_id": -1,
+            "source_sha256sum": "c0491b19cacc0e807da6805b70d5cd7d9110e278540cd11878099f8064289808",
+            "src": "0:175:-1",
+            "type": {
+              "name": "tests/fixtures/regression/finding_51_create_balance_overflow/unknown_0.vy",
+              "type_decl_node": {
+                "node_id": 0,
+                "source_id": -1
+              },
+              "typeclass": "module"
+            }
+          },
+          "contract_name": "tests/fixtures/regression/finding_51_create_balance_overflow/unknown_0.vy",
+          "imports": []
+        },
+        "blueprint_initcode_prefix": null,
+        "calldata": null,
+        "compiler_settings": {
+          "debug": false,
+          "enable_decimals": true,
+          "evm_version": "prague",
+          "experimental_codegen": false,
+          "optimize": "gas"
+        },
+        "contract_abi": [
+          {
+            "gas": 41463,
+            "inputs": [
+              {
+                "name": "salt",
+                "type": "bytes32"
+              }
+            ],
+            "name": "attempt",
+            "outputs": [
+              {
+                "name": "",
+                "type": "address"
+              }
+            ],
+            "stateMutability": "nonpayable",
+            "type": "function"
+          }
+        ],
+        "deployed_address": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+        "deployment_succeeded": true,
+        "deployment_type": "source",
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "constructor",
+        "initcode": "608361000b5f3960835ff35f3560e01c639ca2eb7e811861007b5760243610341761007f577f602d3d8160093d39f3363d3d373d3d3d363d73000000000000000000000000006040523060601b6053527f5af43d82803e903d91602b57fd5bf30000000000000000000000000000000000606752600435603660406001f560c052602060c0f35b5f5ffd5b5f80fd855820e192dccba33dcca12755e3a9dd83f252638058423c561ed32b90a018b8ed4ede18838000a1657679706572830005000034",
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "raw_ir": null,
+        "runtime_bytecode": "5f3560e01c639ca2eb7e811861007b5760243610341761007f577f602d3d8160093d39f3363d3d373d3d3d363d73000000000000000000000000006040523060601b6053527f5af43d82803e903d91602b57fd5bf30000000000000000000000000000000000606752600435603660406001f560c052602060c0f35b5f5ffd5b5f80fd",
+        "solc_json": {
+          "compiler_version": "v0.5.0a4+commit.cd74ce4f",
+          "integrity": "e192dccba33dcca12755e3a9dd83f252638058423c561ed32b90a018b8ed4ede",
+          "language": "Vyper",
+          "settings": {
+            "debug": false,
+            "evmVersion": "prague",
+            "experimentalCodegen": false,
+            "optimize": "gas",
+            "outputSelection": {
+              "unknown_0.vy": [
+                "*"
+              ]
+            },
+            "search_paths": [
+              "."
+            ]
+          },
+          "sources": {
+            "unknown_0.vy": {
+              "content": "\n@external\ndef attempt(salt: bytes32) -> address:\n    return create_minimal_proxy_to(\n        self,\n        value=1,\n        salt=salt,\n        revert_on_failure=False,\n    )\n",
+              "sha256sum": "c0491b19cacc0e807da6805b70d5cd7d9110e278540cd11878099f8064289808"
+            }
+          }
+        },
+        "source_code": "\n@external\ndef attempt(salt: bytes32) -> address:\n    return create_minimal_proxy_to(\n        self,\n        value=1,\n        salt=salt,\n        revert_on_failure=False,\n    )\n",
+        "storage_layout": {},
+        "trace_type": "deployment",
+        "value": 0
+      },
+      {
+        "address": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+        "trace_type": "set_balance",
+        "value": 1
+      },
+      {
+        "address": "0xA42A3c8E733a7451aC2CADe9581301c5aC91513B",
+        "trace_type": "set_balance",
+        "value": 115792089237316195423570985008687907853269984665640564039457584007913129639935
+      },
+      {
+        "call_args": {
+          "calldata": "9ca2eb7e0000000000000000000000000000000000000000000000000000000000000007",
+          "is_modifying": true,
+          "to": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+          "value": 0
+        },
+        "call_succeeded": true,
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "attempt",
+        "output": "0000000000000000000000000000000000000000000000000000000000000000",
+        "python_args": {
+          "args": [
+            "0x0000000000000000000000000000000000000000000000000000000000000007"
+          ],
+          "kwargs": {}
+        },
+        "trace_type": "call"
+      }
+    ]
+  }
+}

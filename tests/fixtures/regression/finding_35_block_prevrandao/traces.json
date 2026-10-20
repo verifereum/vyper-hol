@@ -1,0 +1,579 @@
+{
+  "finding_35_block_prevrandao": {
+    "deps": [],
+    "item_type": "test",
+    "traces": [
+      {
+        "annotated_ast": {
+          "ast": {
+            "ast_type": "Module",
+            "body": [
+              {
+                "args": {
+                  "args": [],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 27,
+                  "end_lineno": 5,
+                  "lineno": 4,
+                  "node_id": 2,
+                  "src": "17:52:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "Return",
+                    "col_offset": 4,
+                    "end_col_offset": 27,
+                    "end_lineno": 5,
+                    "lineno": 5,
+                    "node_id": 3,
+                    "src": "46:23:-1",
+                    "value": {
+                      "ast_type": "Attribute",
+                      "attr": "prevrandao",
+                      "col_offset": 11,
+                      "end_col_offset": 27,
+                      "end_lineno": 5,
+                      "lineno": 5,
+                      "node_id": 4,
+                      "src": "53:16:-1",
+                      "type": {
+                        "m": 32,
+                        "name": "bytes32",
+                        "typeclass": "bytes_m"
+                      },
+                      "value": {
+                        "ast_type": "Name",
+                        "col_offset": 11,
+                        "end_col_offset": 16,
+                        "end_lineno": 5,
+                        "id": "block",
+                        "lineno": 5,
+                        "node_id": 5,
+                        "src": "53:5:-1",
+                        "type": {
+                          "name": "block"
+                        }
+                      }
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 9,
+                    "end_lineno": 2,
+                    "id": "external",
+                    "lineno": 2,
+                    "node_id": 8,
+                    "src": "2:8:-1"
+                  },
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 5,
+                    "end_lineno": 3,
+                    "id": "view",
+                    "lineno": 3,
+                    "node_id": 10,
+                    "src": "12:4:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 27,
+                "end_lineno": 5,
+                "func_type": {
+                  "argument_types": [],
+                  "name": "modern",
+                  "return_type": {
+                    "m": 32,
+                    "name": "bytes32",
+                    "typeclass": "bytes_m"
+                  },
+                  "type_decl_node": {
+                    "node_id": 1,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                },
+                "lineno": 4,
+                "name": "modern",
+                "node_id": 1,
+                "returns": {
+                  "ast_type": "Name",
+                  "col_offset": 16,
+                  "end_col_offset": 23,
+                  "end_lineno": 4,
+                  "id": "bytes32",
+                  "lineno": 4,
+                  "node_id": 12,
+                  "src": "33:7:-1"
+                },
+                "src": "17:52:-1"
+              },
+              {
+                "args": {
+                  "args": [],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 27,
+                  "end_lineno": 10,
+                  "lineno": 9,
+                  "node_id": 15,
+                  "src": "87:52:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "Return",
+                    "col_offset": 4,
+                    "end_col_offset": 27,
+                    "end_lineno": 10,
+                    "lineno": 10,
+                    "node_id": 16,
+                    "src": "116:23:-1",
+                    "value": {
+                      "ast_type": "Attribute",
+                      "attr": "difficulty",
+                      "col_offset": 11,
+                      "end_col_offset": 27,
+                      "end_lineno": 10,
+                      "lineno": 10,
+                      "node_id": 17,
+                      "src": "123:16:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      },
+                      "value": {
+                        "ast_type": "Name",
+                        "col_offset": 11,
+                        "end_col_offset": 16,
+                        "end_lineno": 10,
+                        "id": "block",
+                        "lineno": 10,
+                        "node_id": 18,
+                        "src": "123:5:-1",
+                        "type": {
+                          "name": "block"
+                        }
+                      }
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 9,
+                    "end_lineno": 7,
+                    "id": "external",
+                    "lineno": 7,
+                    "node_id": 21,
+                    "src": "72:8:-1"
+                  },
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 5,
+                    "end_lineno": 8,
+                    "id": "view",
+                    "lineno": 8,
+                    "node_id": 23,
+                    "src": "82:4:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 27,
+                "end_lineno": 10,
+                "func_type": {
+                  "argument_types": [],
+                  "name": "legacy",
+                  "return_type": {
+                    "bits": 256,
+                    "is_signed": false,
+                    "name": "uint256",
+                    "typeclass": "integer"
+                  },
+                  "type_decl_node": {
+                    "node_id": 14,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                },
+                "lineno": 9,
+                "name": "legacy",
+                "node_id": 14,
+                "returns": {
+                  "ast_type": "Name",
+                  "col_offset": 16,
+                  "end_col_offset": 23,
+                  "end_lineno": 9,
+                  "id": "uint256",
+                  "lineno": 9,
+                  "node_id": 25,
+                  "src": "103:7:-1"
+                },
+                "src": "87:52:-1"
+              },
+              {
+                "args": {
+                  "args": [],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 23,
+                  "end_lineno": 15,
+                  "lineno": 14,
+                  "node_id": 28,
+                  "src": "157:56:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "Return",
+                    "col_offset": 4,
+                    "end_col_offset": 23,
+                    "end_lineno": 15,
+                    "lineno": 15,
+                    "node_id": 29,
+                    "src": "194:19:-1",
+                    "value": {
+                      "ast_type": "Attribute",
+                      "attr": "number",
+                      "col_offset": 11,
+                      "end_col_offset": 23,
+                      "end_lineno": 15,
+                      "lineno": 15,
+                      "node_id": 30,
+                      "src": "201:12:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      },
+                      "value": {
+                        "ast_type": "Name",
+                        "col_offset": 11,
+                        "end_col_offset": 16,
+                        "end_lineno": 15,
+                        "id": "block",
+                        "lineno": 15,
+                        "node_id": 31,
+                        "src": "201:5:-1",
+                        "type": {
+                          "name": "block"
+                        }
+                      }
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 9,
+                    "end_lineno": 12,
+                    "id": "external",
+                    "lineno": 12,
+                    "node_id": 34,
+                    "src": "142:8:-1"
+                  },
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 5,
+                    "end_lineno": 13,
+                    "id": "view",
+                    "lineno": 13,
+                    "node_id": 36,
+                    "src": "152:4:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 23,
+                "end_lineno": 15,
+                "func_type": {
+                  "argument_types": [],
+                  "name": "number_control",
+                  "return_type": {
+                    "bits": 256,
+                    "is_signed": false,
+                    "name": "uint256",
+                    "typeclass": "integer"
+                  },
+                  "type_decl_node": {
+                    "node_id": 27,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                },
+                "lineno": 14,
+                "name": "number_control",
+                "node_id": 27,
+                "returns": {
+                  "ast_type": "Name",
+                  "col_offset": 24,
+                  "end_col_offset": 31,
+                  "end_lineno": 14,
+                  "id": "uint256",
+                  "lineno": 14,
+                  "node_id": 38,
+                  "src": "181:7:-1"
+                },
+                "src": "157:56:-1"
+              }
+            ],
+            "col_offset": 0,
+            "doc_string": null,
+            "end_col_offset": 24,
+            "end_lineno": 15,
+            "is_interface": false,
+            "lineno": 1,
+            "name": null,
+            "node_id": 0,
+            "path": "tests/fixtures/regression/finding_35_block_prevrandao/unknown_0.vy",
+            "resolved_path": "tests/fixtures/regression/finding_35_block_prevrandao/unknown_0.vy",
+            "settings": {},
+            "source_id": -1,
+            "source_sha256sum": "cdf855803eba17685d6a351249738b0e9801ccb37ab7a18e1e52cf4409b62724",
+            "src": "0:214:-1",
+            "type": {
+              "name": "tests/fixtures/regression/finding_35_block_prevrandao/unknown_0.vy",
+              "type_decl_node": {
+                "node_id": 0,
+                "source_id": -1
+              },
+              "typeclass": "module"
+            }
+          },
+          "contract_name": "tests/fixtures/regression/finding_35_block_prevrandao/unknown_0.vy",
+          "imports": []
+        },
+        "blueprint_initcode_prefix": null,
+        "calldata": null,
+        "compiler_settings": {
+          "debug": false,
+          "enable_decimals": true,
+          "evm_version": "prague",
+          "experimental_codegen": false,
+          "optimize": "gas"
+        },
+        "contract_abi": [
+          {
+            "gas": 316,
+            "inputs": [],
+            "name": "modern",
+            "outputs": [
+              {
+                "name": "",
+                "type": "bytes32"
+              }
+            ],
+            "stateMutability": "view",
+            "type": "function"
+          },
+          {
+            "gas": 316,
+            "inputs": [],
+            "name": "legacy",
+            "outputs": [
+              {
+                "name": "",
+                "type": "uint256"
+              }
+            ],
+            "stateMutability": "view",
+            "type": "function"
+          },
+          {
+            "gas": 316,
+            "inputs": [],
+            "name": "number_control",
+            "outputs": [
+              {
+                "name": "",
+                "type": "uint256"
+              }
+            ],
+            "stateMutability": "view",
+            "type": "function"
+          }
+        ],
+        "deployed_address": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+        "deployment_succeeded": true,
+        "deployment_type": "source",
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "constructor",
+        "initcode": "607261000b5f3960725ff35f3560e01c60026001821660011b61006e01601e395f51565b63ecb4ebe58118610032573461006a574460405260206040f35b63392697b58118610066573461006a574360405260206040f35b63a7f3f0d28118610066573461006a574460405260206040f35b5f5ffd5b5f80fd004c0018855820cf98767ea06f99e6931195c62ff5aef78b3edf9c78a5d628f2b952ede9a2b7c91872810400a1657679706572830005000035",
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "raw_ir": null,
+        "runtime_bytecode": "5f3560e01c60026001821660011b61006e01601e395f51565b63ecb4ebe58118610032573461006a574460405260206040f35b63392697b58118610066573461006a574360405260206040f35b63a7f3f0d28118610066573461006a574460405260206040f35b5f5ffd5b5f80fd004c0018",
+        "solc_json": {
+          "compiler_version": "v0.5.0a4+commit.cd74ce4f",
+          "integrity": "cf98767ea06f99e6931195c62ff5aef78b3edf9c78a5d628f2b952ede9a2b7c9",
+          "language": "Vyper",
+          "settings": {
+            "debug": false,
+            "evmVersion": "prague",
+            "experimentalCodegen": false,
+            "optimize": "gas",
+            "outputSelection": {
+              "unknown_0.vy": [
+                "*"
+              ]
+            },
+            "search_paths": [
+              "."
+            ]
+          },
+          "sources": {
+            "unknown_0.vy": {
+              "content": "\n@external\n@view\ndef modern() -> bytes32:\n    return block.prevrandao\n\n@external\n@view\ndef legacy() -> uint256:\n    return block.difficulty\n\n@external\n@view\ndef number_control() -> uint256:\n    return block.number\n",
+              "sha256sum": "cdf855803eba17685d6a351249738b0e9801ccb37ab7a18e1e52cf4409b62724"
+            }
+          }
+        },
+        "source_code": "\n@external\n@view\ndef modern() -> bytes32:\n    return block.prevrandao\n\n@external\n@view\ndef legacy() -> uint256:\n    return block.difficulty\n\n@external\n@view\ndef number_control() -> uint256:\n    return block.number\n",
+        "storage_layout": {},
+        "trace_type": "deployment",
+        "value": 0
+      },
+      {
+        "call_args": {
+          "calldata": "ecb4ebe5",
+          "is_modifying": false,
+          "to": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+          "value": 0
+        },
+        "call_succeeded": true,
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "modern",
+        "output": "0000000000000000000000000000000000000000000000000000000000000000",
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "trace_type": "call"
+      },
+      {
+        "call_args": {
+          "calldata": "a7f3f0d2",
+          "is_modifying": false,
+          "to": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+          "value": 0
+        },
+        "call_succeeded": true,
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "legacy",
+        "output": "0000000000000000000000000000000000000000000000000000000000000000",
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "trace_type": "call"
+      },
+      {
+        "call_args": {
+          "calldata": "392697b5",
+          "is_modifying": false,
+          "to": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+          "value": 0
+        },
+        "call_succeeded": true,
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "number_control",
+        "output": "0000000000000000000000000000000000000000000000000000000000000001",
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "trace_type": "call"
+      }
+    ]
+  }
+}

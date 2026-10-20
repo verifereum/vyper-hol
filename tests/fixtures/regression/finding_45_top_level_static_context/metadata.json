@@ -1,0 +1,10 @@
+{
+  "compiler_commit": "cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c",
+  "compiler_version": "0.5.0a4",
+  "evm_version": "prague",
+  "experimental_codegen": false,
+  "finding": 45,
+  "optimize": "gas",
+  "pytest_node": "test_45_top_level_static_context.py::test_static_call_rejects_state_write",
+  "state_comparison": "full-world-state-v1"
+}

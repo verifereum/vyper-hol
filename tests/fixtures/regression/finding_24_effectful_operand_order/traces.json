@@ -1,0 +1,1918 @@
+{
+  "finding_24_effectful_operand_order": {
+    "deps": [],
+    "item_type": "test",
+    "traces": [
+      {
+        "annotated_ast": {
+          "ast": {
+            "ast_type": "Module",
+            "body": [
+              {
+                "annotation": {
+                  "ast_type": "Name",
+                  "col_offset": 9,
+                  "end_col_offset": 15,
+                  "end_lineno": 2,
+                  "id": "int256",
+                  "lineno": 2,
+                  "node_id": 4,
+                  "src": "10:6:-1"
+                },
+                "ast_type": "VariableDecl",
+                "col_offset": 0,
+                "end_col_offset": 15,
+                "end_lineno": 2,
+                "is_constant": false,
+                "is_immutable": false,
+                "is_public": false,
+                "is_reentrant": false,
+                "is_transient": false,
+                "lineno": 2,
+                "node_id": 1,
+                "src": "1:15:-1",
+                "target": {
+                  "ast_type": "Name",
+                  "col_offset": 0,
+                  "end_col_offset": 7,
+                  "end_lineno": 2,
+                  "id": "counter",
+                  "lineno": 2,
+                  "node_id": 2,
+                  "src": "1:7:-1",
+                  "type": {
+                    "bits": 256,
+                    "is_signed": true,
+                    "name": "int256",
+                    "typeclass": "integer"
+                  }
+                },
+                "type": {
+                  "bits": 256,
+                  "is_signed": true,
+                  "name": "int256",
+                  "typeclass": "integer"
+                },
+                "value": null
+              },
+              {
+                "args": {
+                  "args": [],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 23,
+                  "end_lineno": 7,
+                  "lineno": 5,
+                  "node_id": 7,
+                  "src": "28:67:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "AugAssign",
+                    "col_offset": 4,
+                    "end_col_offset": 21,
+                    "end_lineno": 6,
+                    "lineno": 6,
+                    "node_id": 8,
+                    "op": {
+                      "ast_type": "Add",
+                      "col_offset": 4,
+                      "end_col_offset": 21,
+                      "end_lineno": 6,
+                      "lineno": 6,
+                      "node_id": 13,
+                      "src": "54:17:-1"
+                    },
+                    "src": "54:17:-1",
+                    "target": {
+                      "ast_type": "Attribute",
+                      "attr": "counter",
+                      "col_offset": 4,
+                      "end_col_offset": 16,
+                      "end_lineno": 6,
+                      "lineno": 6,
+                      "node_id": 9,
+                      "src": "54:12:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": true,
+                        "name": "int256",
+                        "typeclass": "integer"
+                      },
+                      "value": {
+                        "ast_type": "Name",
+                        "col_offset": 4,
+                        "end_col_offset": 8,
+                        "end_lineno": 6,
+                        "id": "self",
+                        "lineno": 6,
+                        "node_id": 10,
+                        "src": "54:4:-1",
+                        "type": {
+                          "name": "self"
+                        }
+                      },
+                      "variable_reads": [
+                        {
+                          "access_path": [],
+                          "decl_node": {
+                            "node_id": 1,
+                            "source_id": -1
+                          },
+                          "name": "counter"
+                        }
+                      ],
+                      "variable_writes": [
+                        {
+                          "access_path": [],
+                          "decl_node": {
+                            "node_id": 1,
+                            "source_id": -1
+                          },
+                          "name": "counter"
+                        }
+                      ]
+                    },
+                    "value": {
+                      "ast_type": "Int",
+                      "col_offset": 20,
+                      "end_col_offset": 21,
+                      "end_lineno": 6,
+                      "folded_value": {
+                        "ast_type": "Int",
+                        "col_offset": 20,
+                        "end_col_offset": 21,
+                        "end_lineno": 6,
+                        "lineno": 6,
+                        "node_id": 14,
+                        "src": "70:1:-1",
+                        "type": {
+                          "bits": 256,
+                          "is_signed": true,
+                          "name": "int256",
+                          "typeclass": "integer"
+                        },
+                        "value": 1
+                      },
+                      "lineno": 6,
+                      "node_id": 14,
+                      "src": "70:1:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": true,
+                        "name": "int256",
+                        "typeclass": "integer"
+                      },
+                      "value": 1
+                    }
+                  },
+                  {
+                    "ast_type": "Return",
+                    "col_offset": 4,
+                    "end_col_offset": 23,
+                    "end_lineno": 7,
+                    "lineno": 7,
+                    "node_id": 15,
+                    "src": "76:19:-1",
+                    "value": {
+                      "ast_type": "Attribute",
+                      "attr": "counter",
+                      "col_offset": 11,
+                      "end_col_offset": 23,
+                      "end_lineno": 7,
+                      "lineno": 7,
+                      "node_id": 16,
+                      "src": "83:12:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": true,
+                        "name": "int256",
+                        "typeclass": "integer"
+                      },
+                      "value": {
+                        "ast_type": "Name",
+                        "col_offset": 11,
+                        "end_col_offset": 15,
+                        "end_lineno": 7,
+                        "id": "self",
+                        "lineno": 7,
+                        "node_id": 17,
+                        "src": "83:4:-1",
+                        "type": {
+                          "name": "self"
+                        }
+                      },
+                      "variable_reads": [
+                        {
+                          "access_path": [],
+                          "decl_node": {
+                            "node_id": 1,
+                            "source_id": -1
+                          },
+                          "name": "counter"
+                        }
+                      ]
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 9,
+                    "end_lineno": 4,
+                    "id": "internal",
+                    "lineno": 4,
+                    "node_id": 20,
+                    "src": "19:8:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 23,
+                "end_lineno": 7,
+                "func_type": {
+                  "argument_types": [],
+                  "name": "bump",
+                  "return_type": {
+                    "bits": 256,
+                    "is_signed": true,
+                    "name": "int256",
+                    "typeclass": "integer"
+                  },
+                  "type_decl_node": {
+                    "node_id": 6,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                },
+                "lineno": 5,
+                "name": "bump",
+                "node_id": 6,
+                "returns": {
+                  "ast_type": "Name",
+                  "col_offset": 14,
+                  "end_col_offset": 20,
+                  "end_lineno": 5,
+                  "id": "int256",
+                  "lineno": 5,
+                  "node_id": 22,
+                  "src": "42:6:-1"
+                },
+                "src": "28:67:-1"
+              },
+              {
+                "args": {
+                  "args": [],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 36,
+                  "end_lineno": 12,
+                  "lineno": 10,
+                  "node_id": 25,
+                  "src": "107:83:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "Assign",
+                    "col_offset": 4,
+                    "end_col_offset": 20,
+                    "end_lineno": 11,
+                    "lineno": 11,
+                    "node_id": 26,
+                    "src": "137:16:-1",
+                    "target": {
+                      "ast_type": "Attribute",
+                      "attr": "counter",
+                      "col_offset": 4,
+                      "end_col_offset": 16,
+                      "end_lineno": 11,
+                      "lineno": 11,
+                      "node_id": 27,
+                      "src": "137:12:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": true,
+                        "name": "int256",
+                        "typeclass": "integer"
+                      },
+                      "value": {
+                        "ast_type": "Name",
+                        "col_offset": 4,
+                        "end_col_offset": 8,
+                        "end_lineno": 11,
+                        "id": "self",
+                        "lineno": 11,
+                        "node_id": 28,
+                        "src": "137:4:-1",
+                        "type": {
+                          "name": "self"
+                        }
+                      },
+                      "variable_reads": [
+                        {
+                          "access_path": [],
+                          "decl_node": {
+                            "node_id": 1,
+                            "source_id": -1
+                          },
+                          "name": "counter"
+                        }
+                      ],
+                      "variable_writes": [
+                        {
+                          "access_path": [],
+                          "decl_node": {
+                            "node_id": 1,
+                            "source_id": -1
+                          },
+                          "name": "counter"
+                        }
+                      ]
+                    },
+                    "value": {
+                      "ast_type": "Int",
+                      "col_offset": 19,
+                      "end_col_offset": 20,
+                      "end_lineno": 11,
+                      "folded_value": {
+                        "ast_type": "Int",
+                        "col_offset": 19,
+                        "end_col_offset": 20,
+                        "end_lineno": 11,
+                        "lineno": 11,
+                        "node_id": 31,
+                        "src": "152:1:-1",
+                        "type": {
+                          "bits": 256,
+                          "is_signed": true,
+                          "name": "int256",
+                          "typeclass": "integer"
+                        },
+                        "value": 0
+                      },
+                      "lineno": 11,
+                      "node_id": 31,
+                      "src": "152:1:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": true,
+                        "name": "int256",
+                        "typeclass": "integer"
+                      },
+                      "value": 0
+                    }
+                  },
+                  {
+                    "ast_type": "Return",
+                    "col_offset": 4,
+                    "end_col_offset": 36,
+                    "end_lineno": 12,
+                    "lineno": 12,
+                    "node_id": 32,
+                    "src": "158:32:-1",
+                    "value": {
+                      "ast_type": "Compare",
+                      "col_offset": 11,
+                      "end_col_offset": 36,
+                      "end_lineno": 12,
+                      "left": {
+                        "args": [],
+                        "ast_type": "Call",
+                        "col_offset": 11,
+                        "end_col_offset": 22,
+                        "end_lineno": 12,
+                        "func": {
+                          "ast_type": "Attribute",
+                          "attr": "bump",
+                          "col_offset": 11,
+                          "end_col_offset": 20,
+                          "end_lineno": 12,
+                          "lineno": 12,
+                          "node_id": 35,
+                          "src": "165:9:-1",
+                          "type": {
+                            "argument_types": [],
+                            "name": "bump",
+                            "return_type": {
+                              "bits": 256,
+                              "is_signed": true,
+                              "name": "int256",
+                              "typeclass": "integer"
+                            },
+                            "type_decl_node": {
+                              "node_id": 6,
+                              "source_id": -1
+                            },
+                            "typeclass": "contract_function"
+                          },
+                          "value": {
+                            "ast_type": "Name",
+                            "col_offset": 11,
+                            "end_col_offset": 15,
+                            "end_lineno": 12,
+                            "id": "self",
+                            "lineno": 12,
+                            "node_id": 36,
+                            "src": "165:4:-1",
+                            "type": {
+                              "name": "self"
+                            }
+                          },
+                          "variable_reads": [
+                            {
+                              "access_path": [],
+                              "decl_node": {
+                                "node_id": 1,
+                                "source_id": -1
+                              },
+                              "name": "counter"
+                            }
+                          ],
+                          "variable_writes": [
+                            {
+                              "access_path": [],
+                              "decl_node": {
+                                "node_id": 1,
+                                "source_id": -1
+                              },
+                              "name": "counter"
+                            }
+                          ]
+                        },
+                        "keywords": [],
+                        "lineno": 12,
+                        "node_id": 34,
+                        "src": "165:11:-1",
+                        "type": {
+                          "bits": 256,
+                          "is_signed": true,
+                          "name": "int256",
+                          "typeclass": "integer"
+                        }
+                      },
+                      "lineno": 12,
+                      "node_id": 33,
+                      "op": {
+                        "ast_type": "Lt",
+                        "col_offset": 11,
+                        "end_col_offset": 36,
+                        "end_lineno": 12,
+                        "lineno": 12,
+                        "node_id": 39,
+                        "src": "165:25:-1"
+                      },
+                      "right": {
+                        "args": [],
+                        "ast_type": "Call",
+                        "col_offset": 25,
+                        "end_col_offset": 36,
+                        "end_lineno": 12,
+                        "func": {
+                          "ast_type": "Attribute",
+                          "attr": "bump",
+                          "col_offset": 25,
+                          "end_col_offset": 34,
+                          "end_lineno": 12,
+                          "lineno": 12,
+                          "node_id": 41,
+                          "src": "179:9:-1",
+                          "type": {
+                            "argument_types": [],
+                            "name": "bump",
+                            "return_type": {
+                              "bits": 256,
+                              "is_signed": true,
+                              "name": "int256",
+                              "typeclass": "integer"
+                            },
+                            "type_decl_node": {
+                              "node_id": 6,
+                              "source_id": -1
+                            },
+                            "typeclass": "contract_function"
+                          },
+                          "value": {
+                            "ast_type": "Name",
+                            "col_offset": 25,
+                            "end_col_offset": 29,
+                            "end_lineno": 12,
+                            "id": "self",
+                            "lineno": 12,
+                            "node_id": 42,
+                            "src": "179:4:-1",
+                            "type": {
+                              "name": "self"
+                            }
+                          },
+                          "variable_reads": [
+                            {
+                              "access_path": [],
+                              "decl_node": {
+                                "node_id": 1,
+                                "source_id": -1
+                              },
+                              "name": "counter"
+                            }
+                          ],
+                          "variable_writes": [
+                            {
+                              "access_path": [],
+                              "decl_node": {
+                                "node_id": 1,
+                                "source_id": -1
+                              },
+                              "name": "counter"
+                            }
+                          ]
+                        },
+                        "keywords": [],
+                        "lineno": 12,
+                        "node_id": 40,
+                        "src": "179:11:-1",
+                        "type": {
+                          "bits": 256,
+                          "is_signed": true,
+                          "name": "int256",
+                          "typeclass": "integer"
+                        }
+                      },
+                      "src": "165:25:-1",
+                      "type": {
+                        "name": "bool"
+                      }
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 9,
+                    "end_lineno": 9,
+                    "id": "external",
+                    "lineno": 9,
+                    "node_id": 45,
+                    "src": "98:8:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 36,
+                "end_lineno": 12,
+                "func_type": {
+                  "argument_types": [],
+                  "name": "comparison",
+                  "return_type": {
+                    "name": "bool"
+                  },
+                  "type_decl_node": {
+                    "node_id": 24,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                },
+                "lineno": 10,
+                "name": "comparison",
+                "node_id": 24,
+                "returns": {
+                  "ast_type": "Name",
+                  "col_offset": 20,
+                  "end_col_offset": 24,
+                  "end_lineno": 10,
+                  "id": "bool",
+                  "lineno": 10,
+                  "node_id": 47,
+                  "src": "127:4:-1"
+                },
+                "src": "107:83:-1"
+              },
+              {
+                "args": {
+                  "args": [],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 47,
+                  "end_lineno": 17,
+                  "lineno": 15,
+                  "node_id": 50,
+                  "src": "202:104:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "Assign",
+                    "col_offset": 4,
+                    "end_col_offset": 20,
+                    "end_lineno": 16,
+                    "lineno": 16,
+                    "node_id": 51,
+                    "src": "242:16:-1",
+                    "target": {
+                      "ast_type": "Attribute",
+                      "attr": "counter",
+                      "col_offset": 4,
+                      "end_col_offset": 16,
+                      "end_lineno": 16,
+                      "lineno": 16,
+                      "node_id": 52,
+                      "src": "242:12:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": true,
+                        "name": "int256",
+                        "typeclass": "integer"
+                      },
+                      "value": {
+                        "ast_type": "Name",
+                        "col_offset": 4,
+                        "end_col_offset": 8,
+                        "end_lineno": 16,
+                        "id": "self",
+                        "lineno": 16,
+                        "node_id": 53,
+                        "src": "242:4:-1",
+                        "type": {
+                          "name": "self"
+                        }
+                      },
+                      "variable_reads": [
+                        {
+                          "access_path": [],
+                          "decl_node": {
+                            "node_id": 1,
+                            "source_id": -1
+                          },
+                          "name": "counter"
+                        }
+                      ],
+                      "variable_writes": [
+                        {
+                          "access_path": [],
+                          "decl_node": {
+                            "node_id": 1,
+                            "source_id": -1
+                          },
+                          "name": "counter"
+                        }
+                      ]
+                    },
+                    "value": {
+                      "ast_type": "Int",
+                      "col_offset": 19,
+                      "end_col_offset": 20,
+                      "end_lineno": 16,
+                      "folded_value": {
+                        "ast_type": "Int",
+                        "col_offset": 19,
+                        "end_col_offset": 20,
+                        "end_lineno": 16,
+                        "lineno": 16,
+                        "node_id": 56,
+                        "src": "257:1:-1",
+                        "type": {
+                          "bits": 256,
+                          "is_signed": true,
+                          "name": "int256",
+                          "typeclass": "integer"
+                        },
+                        "value": 0
+                      },
+                      "lineno": 16,
+                      "node_id": 56,
+                      "src": "257:1:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": true,
+                        "name": "int256",
+                        "typeclass": "integer"
+                      },
+                      "value": 0
+                    }
+                  },
+                  {
+                    "ast_type": "Return",
+                    "col_offset": 4,
+                    "end_col_offset": 47,
+                    "end_lineno": 17,
+                    "lineno": 17,
+                    "node_id": 57,
+                    "src": "263:43:-1",
+                    "value": {
+                      "args": [
+                        {
+                          "args": [],
+                          "ast_type": "Call",
+                          "col_offset": 22,
+                          "end_col_offset": 33,
+                          "end_lineno": 17,
+                          "func": {
+                            "ast_type": "Attribute",
+                            "attr": "bump",
+                            "col_offset": 22,
+                            "end_col_offset": 31,
+                            "end_lineno": 17,
+                            "lineno": 17,
+                            "node_id": 62,
+                            "src": "281:9:-1",
+                            "type": {
+                              "argument_types": [],
+                              "name": "bump",
+                              "return_type": {
+                                "bits": 256,
+                                "is_signed": true,
+                                "name": "int256",
+                                "typeclass": "integer"
+                              },
+                              "type_decl_node": {
+                                "node_id": 6,
+                                "source_id": -1
+                              },
+                              "typeclass": "contract_function"
+                            },
+                            "value": {
+                              "ast_type": "Name",
+                              "col_offset": 22,
+                              "end_col_offset": 26,
+                              "end_lineno": 17,
+                              "id": "self",
+                              "lineno": 17,
+                              "node_id": 63,
+                              "src": "281:4:-1",
+                              "type": {
+                                "name": "self"
+                              }
+                            },
+                            "variable_reads": [
+                              {
+                                "access_path": [],
+                                "decl_node": {
+                                  "node_id": 1,
+                                  "source_id": -1
+                                },
+                                "name": "counter"
+                              }
+                            ],
+                            "variable_writes": [
+                              {
+                                "access_path": [],
+                                "decl_node": {
+                                  "node_id": 1,
+                                  "source_id": -1
+                                },
+                                "name": "counter"
+                              }
+                            ]
+                          },
+                          "keywords": [],
+                          "lineno": 17,
+                          "node_id": 61,
+                          "src": "281:11:-1",
+                          "type": {
+                            "bits": 256,
+                            "is_signed": true,
+                            "name": "int256",
+                            "typeclass": "integer"
+                          }
+                        },
+                        {
+                          "args": [],
+                          "ast_type": "Call",
+                          "col_offset": 35,
+                          "end_col_offset": 46,
+                          "end_lineno": 17,
+                          "func": {
+                            "ast_type": "Attribute",
+                            "attr": "bump",
+                            "col_offset": 35,
+                            "end_col_offset": 44,
+                            "end_lineno": 17,
+                            "lineno": 17,
+                            "node_id": 67,
+                            "src": "294:9:-1",
+                            "type": {
+                              "argument_types": [],
+                              "name": "bump",
+                              "return_type": {
+                                "bits": 256,
+                                "is_signed": true,
+                                "name": "int256",
+                                "typeclass": "integer"
+                              },
+                              "type_decl_node": {
+                                "node_id": 6,
+                                "source_id": -1
+                              },
+                              "typeclass": "contract_function"
+                            },
+                            "value": {
+                              "ast_type": "Name",
+                              "col_offset": 35,
+                              "end_col_offset": 39,
+                              "end_lineno": 17,
+                              "id": "self",
+                              "lineno": 17,
+                              "node_id": 68,
+                              "src": "294:4:-1",
+                              "type": {
+                                "name": "self"
+                              }
+                            },
+                            "variable_reads": [
+                              {
+                                "access_path": [],
+                                "decl_node": {
+                                  "node_id": 1,
+                                  "source_id": -1
+                                },
+                                "name": "counter"
+                              }
+                            ],
+                            "variable_writes": [
+                              {
+                                "access_path": [],
+                                "decl_node": {
+                                  "node_id": 1,
+                                  "source_id": -1
+                                },
+                                "name": "counter"
+                              }
+                            ]
+                          },
+                          "keywords": [],
+                          "lineno": 17,
+                          "node_id": 66,
+                          "src": "294:11:-1",
+                          "type": {
+                            "bits": 256,
+                            "is_signed": true,
+                            "name": "int256",
+                            "typeclass": "integer"
+                          }
+                        }
+                      ],
+                      "ast_type": "Call",
+                      "col_offset": 11,
+                      "end_col_offset": 47,
+                      "end_lineno": 17,
+                      "func": {
+                        "ast_type": "Name",
+                        "col_offset": 11,
+                        "end_col_offset": 21,
+                        "end_lineno": 17,
+                        "id": "unsafe_sub",
+                        "lineno": 17,
+                        "node_id": 59,
+                        "src": "270:10:-1",
+                        "type": {
+                          "name": "unsafe_sub",
+                          "typeclass": "builtin_function"
+                        }
+                      },
+                      "keywords": [],
+                      "lineno": 17,
+                      "node_id": 58,
+                      "src": "270:36:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": true,
+                        "name": "int256",
+                        "typeclass": "integer"
+                      }
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 9,
+                    "end_lineno": 14,
+                    "id": "external",
+                    "lineno": 14,
+                    "node_id": 71,
+                    "src": "193:8:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 47,
+                "end_lineno": 17,
+                "func_type": {
+                  "argument_types": [],
+                  "name": "unsafe_subtraction",
+                  "return_type": {
+                    "bits": 256,
+                    "is_signed": true,
+                    "name": "int256",
+                    "typeclass": "integer"
+                  },
+                  "type_decl_node": {
+                    "node_id": 49,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                },
+                "lineno": 15,
+                "name": "unsafe_subtraction",
+                "node_id": 49,
+                "returns": {
+                  "ast_type": "Name",
+                  "col_offset": 28,
+                  "end_col_offset": 34,
+                  "end_lineno": 15,
+                  "id": "int256",
+                  "lineno": 15,
+                  "node_id": 73,
+                  "src": "230:6:-1"
+                },
+                "src": "202:104:-1"
+              },
+              {
+                "args": {
+                  "args": [],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 47,
+                  "end_lineno": 22,
+                  "lineno": 20,
+                  "node_id": 76,
+                  "src": "318:101:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "Assign",
+                    "col_offset": 4,
+                    "end_col_offset": 20,
+                    "end_lineno": 21,
+                    "lineno": 21,
+                    "node_id": 77,
+                    "src": "355:16:-1",
+                    "target": {
+                      "ast_type": "Attribute",
+                      "attr": "counter",
+                      "col_offset": 4,
+                      "end_col_offset": 16,
+                      "end_lineno": 21,
+                      "lineno": 21,
+                      "node_id": 78,
+                      "src": "355:12:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": true,
+                        "name": "int256",
+                        "typeclass": "integer"
+                      },
+                      "value": {
+                        "ast_type": "Name",
+                        "col_offset": 4,
+                        "end_col_offset": 8,
+                        "end_lineno": 21,
+                        "id": "self",
+                        "lineno": 21,
+                        "node_id": 79,
+                        "src": "355:4:-1",
+                        "type": {
+                          "name": "self"
+                        }
+                      },
+                      "variable_reads": [
+                        {
+                          "access_path": [],
+                          "decl_node": {
+                            "node_id": 1,
+                            "source_id": -1
+                          },
+                          "name": "counter"
+                        }
+                      ],
+                      "variable_writes": [
+                        {
+                          "access_path": [],
+                          "decl_node": {
+                            "node_id": 1,
+                            "source_id": -1
+                          },
+                          "name": "counter"
+                        }
+                      ]
+                    },
+                    "value": {
+                      "ast_type": "Int",
+                      "col_offset": 19,
+                      "end_col_offset": 20,
+                      "end_lineno": 21,
+                      "folded_value": {
+                        "ast_type": "Int",
+                        "col_offset": 19,
+                        "end_col_offset": 20,
+                        "end_lineno": 21,
+                        "lineno": 21,
+                        "node_id": 82,
+                        "src": "370:1:-1",
+                        "type": {
+                          "bits": 256,
+                          "is_signed": true,
+                          "name": "int256",
+                          "typeclass": "integer"
+                        },
+                        "value": 0
+                      },
+                      "lineno": 21,
+                      "node_id": 82,
+                      "src": "370:1:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": true,
+                        "name": "int256",
+                        "typeclass": "integer"
+                      },
+                      "value": 0
+                    }
+                  },
+                  {
+                    "ast_type": "Return",
+                    "col_offset": 4,
+                    "end_col_offset": 47,
+                    "end_lineno": 22,
+                    "lineno": 22,
+                    "node_id": 83,
+                    "src": "376:43:-1",
+                    "value": {
+                      "args": [
+                        {
+                          "args": [],
+                          "ast_type": "Call",
+                          "col_offset": 22,
+                          "end_col_offset": 33,
+                          "end_lineno": 22,
+                          "func": {
+                            "ast_type": "Attribute",
+                            "attr": "bump",
+                            "col_offset": 22,
+                            "end_col_offset": 31,
+                            "end_lineno": 22,
+                            "lineno": 22,
+                            "node_id": 88,
+                            "src": "394:9:-1",
+                            "type": {
+                              "argument_types": [],
+                              "name": "bump",
+                              "return_type": {
+                                "bits": 256,
+                                "is_signed": true,
+                                "name": "int256",
+                                "typeclass": "integer"
+                              },
+                              "type_decl_node": {
+                                "node_id": 6,
+                                "source_id": -1
+                              },
+                              "typeclass": "contract_function"
+                            },
+                            "value": {
+                              "ast_type": "Name",
+                              "col_offset": 22,
+                              "end_col_offset": 26,
+                              "end_lineno": 22,
+                              "id": "self",
+                              "lineno": 22,
+                              "node_id": 89,
+                              "src": "394:4:-1",
+                              "type": {
+                                "name": "self"
+                              }
+                            },
+                            "variable_reads": [
+                              {
+                                "access_path": [],
+                                "decl_node": {
+                                  "node_id": 1,
+                                  "source_id": -1
+                                },
+                                "name": "counter"
+                              }
+                            ],
+                            "variable_writes": [
+                              {
+                                "access_path": [],
+                                "decl_node": {
+                                  "node_id": 1,
+                                  "source_id": -1
+                                },
+                                "name": "counter"
+                              }
+                            ]
+                          },
+                          "keywords": [],
+                          "lineno": 22,
+                          "node_id": 87,
+                          "src": "394:11:-1",
+                          "type": {
+                            "bits": 256,
+                            "is_signed": true,
+                            "name": "int256",
+                            "typeclass": "integer"
+                          }
+                        },
+                        {
+                          "args": [],
+                          "ast_type": "Call",
+                          "col_offset": 35,
+                          "end_col_offset": 46,
+                          "end_lineno": 22,
+                          "func": {
+                            "ast_type": "Attribute",
+                            "attr": "bump",
+                            "col_offset": 35,
+                            "end_col_offset": 44,
+                            "end_lineno": 22,
+                            "lineno": 22,
+                            "node_id": 93,
+                            "src": "407:9:-1",
+                            "type": {
+                              "argument_types": [],
+                              "name": "bump",
+                              "return_type": {
+                                "bits": 256,
+                                "is_signed": true,
+                                "name": "int256",
+                                "typeclass": "integer"
+                              },
+                              "type_decl_node": {
+                                "node_id": 6,
+                                "source_id": -1
+                              },
+                              "typeclass": "contract_function"
+                            },
+                            "value": {
+                              "ast_type": "Name",
+                              "col_offset": 35,
+                              "end_col_offset": 39,
+                              "end_lineno": 22,
+                              "id": "self",
+                              "lineno": 22,
+                              "node_id": 94,
+                              "src": "407:4:-1",
+                              "type": {
+                                "name": "self"
+                              }
+                            },
+                            "variable_reads": [
+                              {
+                                "access_path": [],
+                                "decl_node": {
+                                  "node_id": 1,
+                                  "source_id": -1
+                                },
+                                "name": "counter"
+                              }
+                            ],
+                            "variable_writes": [
+                              {
+                                "access_path": [],
+                                "decl_node": {
+                                  "node_id": 1,
+                                  "source_id": -1
+                                },
+                                "name": "counter"
+                              }
+                            ]
+                          },
+                          "keywords": [],
+                          "lineno": 22,
+                          "node_id": 92,
+                          "src": "407:11:-1",
+                          "type": {
+                            "bits": 256,
+                            "is_signed": true,
+                            "name": "int256",
+                            "typeclass": "integer"
+                          }
+                        }
+                      ],
+                      "ast_type": "Call",
+                      "col_offset": 11,
+                      "end_col_offset": 47,
+                      "end_lineno": 22,
+                      "func": {
+                        "ast_type": "Name",
+                        "col_offset": 11,
+                        "end_col_offset": 21,
+                        "end_lineno": 22,
+                        "id": "unsafe_div",
+                        "lineno": 22,
+                        "node_id": 85,
+                        "src": "383:10:-1",
+                        "type": {
+                          "name": "unsafe_div",
+                          "typeclass": "builtin_function"
+                        }
+                      },
+                      "keywords": [],
+                      "lineno": 22,
+                      "node_id": 84,
+                      "src": "383:36:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": true,
+                        "name": "int256",
+                        "typeclass": "integer"
+                      }
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 9,
+                    "end_lineno": 19,
+                    "id": "external",
+                    "lineno": 19,
+                    "node_id": 97,
+                    "src": "309:8:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 47,
+                "end_lineno": 22,
+                "func_type": {
+                  "argument_types": [],
+                  "name": "unsafe_division",
+                  "return_type": {
+                    "bits": 256,
+                    "is_signed": true,
+                    "name": "int256",
+                    "typeclass": "integer"
+                  },
+                  "type_decl_node": {
+                    "node_id": 75,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                },
+                "lineno": 20,
+                "name": "unsafe_division",
+                "node_id": 75,
+                "returns": {
+                  "ast_type": "Name",
+                  "col_offset": 25,
+                  "end_col_offset": 31,
+                  "end_lineno": 20,
+                  "id": "int256",
+                  "lineno": 20,
+                  "node_id": 99,
+                  "src": "343:6:-1"
+                },
+                "src": "318:101:-1"
+              },
+              {
+                "args": {
+                  "args": [],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 83,
+                  "end_lineno": 27,
+                  "lineno": 25,
+                  "node_id": 102,
+                  "src": "431:136:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "Assign",
+                    "col_offset": 4,
+                    "end_col_offset": 20,
+                    "end_lineno": 26,
+                    "lineno": 26,
+                    "node_id": 103,
+                    "src": "467:16:-1",
+                    "target": {
+                      "ast_type": "Attribute",
+                      "attr": "counter",
+                      "col_offset": 4,
+                      "end_col_offset": 16,
+                      "end_lineno": 26,
+                      "lineno": 26,
+                      "node_id": 104,
+                      "src": "467:12:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": true,
+                        "name": "int256",
+                        "typeclass": "integer"
+                      },
+                      "value": {
+                        "ast_type": "Name",
+                        "col_offset": 4,
+                        "end_col_offset": 8,
+                        "end_lineno": 26,
+                        "id": "self",
+                        "lineno": 26,
+                        "node_id": 105,
+                        "src": "467:4:-1",
+                        "type": {
+                          "name": "self"
+                        }
+                      },
+                      "variable_reads": [
+                        {
+                          "access_path": [],
+                          "decl_node": {
+                            "node_id": 1,
+                            "source_id": -1
+                          },
+                          "name": "counter"
+                        }
+                      ],
+                      "variable_writes": [
+                        {
+                          "access_path": [],
+                          "decl_node": {
+                            "node_id": 1,
+                            "source_id": -1
+                          },
+                          "name": "counter"
+                        }
+                      ]
+                    },
+                    "value": {
+                      "ast_type": "Int",
+                      "col_offset": 19,
+                      "end_col_offset": 20,
+                      "end_lineno": 26,
+                      "folded_value": {
+                        "ast_type": "Int",
+                        "col_offset": 19,
+                        "end_col_offset": 20,
+                        "end_lineno": 26,
+                        "lineno": 26,
+                        "node_id": 108,
+                        "src": "482:1:-1",
+                        "type": {
+                          "bits": 256,
+                          "is_signed": true,
+                          "name": "int256",
+                          "typeclass": "integer"
+                        },
+                        "value": 0
+                      },
+                      "lineno": 26,
+                      "node_id": 108,
+                      "src": "482:1:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": true,
+                        "name": "int256",
+                        "typeclass": "integer"
+                      },
+                      "value": 0
+                    }
+                  },
+                  {
+                    "ast_type": "Return",
+                    "col_offset": 4,
+                    "end_col_offset": 83,
+                    "end_lineno": 27,
+                    "lineno": 27,
+                    "node_id": 109,
+                    "src": "488:79:-1",
+                    "value": {
+                      "args": [
+                        {
+                          "args": [
+                            {
+                              "args": [],
+                              "ast_type": "Call",
+                              "col_offset": 30,
+                              "end_col_offset": 41,
+                              "end_lineno": 27,
+                              "func": {
+                                "ast_type": "Attribute",
+                                "attr": "bump",
+                                "col_offset": 30,
+                                "end_col_offset": 39,
+                                "end_lineno": 27,
+                                "lineno": 27,
+                                "node_id": 117,
+                                "src": "514:9:-1",
+                                "type": {
+                                  "argument_types": [],
+                                  "name": "bump",
+                                  "return_type": {
+                                    "bits": 256,
+                                    "is_signed": true,
+                                    "name": "int256",
+                                    "typeclass": "integer"
+                                  },
+                                  "type_decl_node": {
+                                    "node_id": 6,
+                                    "source_id": -1
+                                  },
+                                  "typeclass": "contract_function"
+                                },
+                                "value": {
+                                  "ast_type": "Name",
+                                  "col_offset": 30,
+                                  "end_col_offset": 34,
+                                  "end_lineno": 27,
+                                  "id": "self",
+                                  "lineno": 27,
+                                  "node_id": 118,
+                                  "src": "514:4:-1",
+                                  "type": {
+                                    "name": "self"
+                                  }
+                                },
+                                "variable_reads": [
+                                  {
+                                    "access_path": [],
+                                    "decl_node": {
+                                      "node_id": 1,
+                                      "source_id": -1
+                                    },
+                                    "name": "counter"
+                                  }
+                                ],
+                                "variable_writes": [
+                                  {
+                                    "access_path": [],
+                                    "decl_node": {
+                                      "node_id": 1,
+                                      "source_id": -1
+                                    },
+                                    "name": "counter"
+                                  }
+                                ]
+                              },
+                              "keywords": [],
+                              "lineno": 27,
+                              "node_id": 116,
+                              "src": "514:11:-1",
+                              "type": {
+                                "bits": 256,
+                                "is_signed": true,
+                                "name": "int256",
+                                "typeclass": "integer"
+                              }
+                            },
+                            {
+                              "ast_type": "Name",
+                              "col_offset": 43,
+                              "end_col_offset": 50,
+                              "end_lineno": 27,
+                              "id": "uint256",
+                              "lineno": 27,
+                              "node_id": 121,
+                              "src": "527:7:-1",
+                              "type": {
+                                "type_t": {
+                                  "bits": 256,
+                                  "is_signed": false,
+                                  "name": "uint256",
+                                  "typeclass": "integer"
+                                }
+                              }
+                            }
+                          ],
+                          "ast_type": "Call",
+                          "col_offset": 22,
+                          "end_col_offset": 51,
+                          "end_lineno": 27,
+                          "func": {
+                            "ast_type": "Name",
+                            "col_offset": 22,
+                            "end_col_offset": 29,
+                            "end_lineno": 27,
+                            "id": "convert",
+                            "lineno": 27,
+                            "node_id": 114,
+                            "src": "506:7:-1",
+                            "type": {
+                              "name": "convert",
+                              "typeclass": "builtin_function"
+                            }
+                          },
+                          "keywords": [],
+                          "lineno": 27,
+                          "node_id": 113,
+                          "src": "506:29:-1",
+                          "type": {
+                            "bits": 256,
+                            "is_signed": false,
+                            "name": "uint256",
+                            "typeclass": "integer"
+                          }
+                        },
+                        {
+                          "args": [
+                            {
+                              "args": [],
+                              "ast_type": "Call",
+                              "col_offset": 61,
+                              "end_col_offset": 72,
+                              "end_lineno": 27,
+                              "func": {
+                                "ast_type": "Attribute",
+                                "attr": "bump",
+                                "col_offset": 61,
+                                "end_col_offset": 70,
+                                "end_lineno": 27,
+                                "lineno": 27,
+                                "node_id": 127,
+                                "src": "545:9:-1",
+                                "type": {
+                                  "argument_types": [],
+                                  "name": "bump",
+                                  "return_type": {
+                                    "bits": 256,
+                                    "is_signed": true,
+                                    "name": "int256",
+                                    "typeclass": "integer"
+                                  },
+                                  "type_decl_node": {
+                                    "node_id": 6,
+                                    "source_id": -1
+                                  },
+                                  "typeclass": "contract_function"
+                                },
+                                "value": {
+                                  "ast_type": "Name",
+                                  "col_offset": 61,
+                                  "end_col_offset": 65,
+                                  "end_lineno": 27,
+                                  "id": "self",
+                                  "lineno": 27,
+                                  "node_id": 128,
+                                  "src": "545:4:-1",
+                                  "type": {
+                                    "name": "self"
+                                  }
+                                },
+                                "variable_reads": [
+                                  {
+                                    "access_path": [],
+                                    "decl_node": {
+                                      "node_id": 1,
+                                      "source_id": -1
+                                    },
+                                    "name": "counter"
+                                  }
+                                ],
+                                "variable_writes": [
+                                  {
+                                    "access_path": [],
+                                    "decl_node": {
+                                      "node_id": 1,
+                                      "source_id": -1
+                                    },
+                                    "name": "counter"
+                                  }
+                                ]
+                              },
+                              "keywords": [],
+                              "lineno": 27,
+                              "node_id": 126,
+                              "src": "545:11:-1",
+                              "type": {
+                                "bits": 256,
+                                "is_signed": true,
+                                "name": "int256",
+                                "typeclass": "integer"
+                              }
+                            },
+                            {
+                              "ast_type": "Name",
+                              "col_offset": 74,
+                              "end_col_offset": 81,
+                              "end_lineno": 27,
+                              "id": "uint256",
+                              "lineno": 27,
+                              "node_id": 131,
+                              "src": "558:7:-1",
+                              "type": {
+                                "type_t": {
+                                  "bits": 256,
+                                  "is_signed": false,
+                                  "name": "uint256",
+                                  "typeclass": "integer"
+                                }
+                              }
+                            }
+                          ],
+                          "ast_type": "Call",
+                          "col_offset": 53,
+                          "end_col_offset": 82,
+                          "end_lineno": 27,
+                          "func": {
+                            "ast_type": "Name",
+                            "col_offset": 53,
+                            "end_col_offset": 60,
+                            "end_lineno": 27,
+                            "id": "convert",
+                            "lineno": 27,
+                            "node_id": 124,
+                            "src": "537:7:-1",
+                            "type": {
+                              "name": "convert",
+                              "typeclass": "builtin_function"
+                            }
+                          },
+                          "keywords": [],
+                          "lineno": 27,
+                          "node_id": 123,
+                          "src": "537:29:-1",
+                          "type": {
+                            "bits": 256,
+                            "is_signed": false,
+                            "name": "uint256",
+                            "typeclass": "integer"
+                          }
+                        }
+                      ],
+                      "ast_type": "Call",
+                      "col_offset": 11,
+                      "end_col_offset": 83,
+                      "end_lineno": 27,
+                      "func": {
+                        "ast_type": "Name",
+                        "col_offset": 11,
+                        "end_col_offset": 21,
+                        "end_lineno": 27,
+                        "id": "pow_mod256",
+                        "lineno": 27,
+                        "node_id": 111,
+                        "src": "495:10:-1",
+                        "type": {
+                          "name": "pow_mod256",
+                          "typeclass": "builtin_function"
+                        }
+                      },
+                      "keywords": [],
+                      "lineno": 27,
+                      "node_id": 110,
+                      "src": "495:72:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      }
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 9,
+                    "end_lineno": 24,
+                    "id": "external",
+                    "lineno": 24,
+                    "node_id": 133,
+                    "src": "422:8:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 83,
+                "end_lineno": 27,
+                "func_type": {
+                  "argument_types": [],
+                  "name": "modular_power",
+                  "return_type": {
+                    "bits": 256,
+                    "is_signed": false,
+                    "name": "uint256",
+                    "typeclass": "integer"
+                  },
+                  "type_decl_node": {
+                    "node_id": 101,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                },
+                "lineno": 25,
+                "name": "modular_power",
+                "node_id": 101,
+                "returns": {
+                  "ast_type": "Name",
+                  "col_offset": 23,
+                  "end_col_offset": 30,
+                  "end_lineno": 25,
+                  "id": "uint256",
+                  "lineno": 25,
+                  "node_id": 135,
+                  "src": "454:7:-1"
+                },
+                "src": "431:136:-1"
+              }
+            ],
+            "col_offset": 0,
+            "doc_string": null,
+            "end_col_offset": 84,
+            "end_lineno": 27,
+            "is_interface": false,
+            "lineno": 1,
+            "name": null,
+            "node_id": 0,
+            "path": "tests/fixtures/regression/finding_24_effectful_operand_order/unknown_0.vy",
+            "resolved_path": "tests/fixtures/regression/finding_24_effectful_operand_order/unknown_0.vy",
+            "settings": {},
+            "source_id": -1,
+            "source_sha256sum": "dce00a2671f8034772055df15f78dc0bc2d0355cb9db2a303da5c0efe74c31e9",
+            "src": "0:568:-1",
+            "type": {
+              "name": "tests/fixtures/regression/finding_24_effectful_operand_order/unknown_0.vy",
+              "type_decl_node": {
+                "node_id": 0,
+                "source_id": -1
+              },
+              "typeclass": "module"
+            }
+          },
+          "contract_name": "tests/fixtures/regression/finding_24_effectful_operand_order/unknown_0.vy",
+          "imports": []
+        },
+        "blueprint_initcode_prefix": null,
+        "calldata": null,
+        "compiler_settings": {
+          "debug": false,
+          "enable_decimals": true,
+          "evm_version": "prague",
+          "experimental_codegen": false,
+          "optimize": "gas"
+        },
+        "contract_abi": [
+          {
+            "gas": 99811,
+            "inputs": [],
+            "name": "comparison",
+            "outputs": [
+              {
+                "name": "",
+                "type": "bool"
+              }
+            ],
+            "stateMutability": "nonpayable",
+            "type": "function"
+          },
+          {
+            "gas": 99811,
+            "inputs": [],
+            "name": "unsafe_subtraction",
+            "outputs": [
+              {
+                "name": "",
+                "type": "int256"
+              }
+            ],
+            "stateMutability": "nonpayable",
+            "type": "function"
+          },
+          {
+            "gas": 99813,
+            "inputs": [],
+            "name": "unsafe_division",
+            "outputs": [
+              {
+                "name": "",
+                "type": "int256"
+              }
+            ],
+            "stateMutability": "nonpayable",
+            "type": "function"
+          },
+          {
+            "gas": 100098,
+            "inputs": [],
+            "name": "modular_power",
+            "outputs": [
+              {
+                "name": "",
+                "type": "uint256"
+              }
+            ],
+            "stateMutability": "nonpayable",
+            "type": "function"
+          }
+        ],
+        "deployed_address": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+        "deployment_succeeded": true,
+        "deployment_type": "source",
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "constructor",
+        "initcode": "61012861000d5f396101285ff35f3560e01c60026003820660011b61012201601e395f51565b63aae103ad811861004f573461011e575f5f556100356060610106565b6060516100426040610106565b6040511260805260206080f35b634e68632f8118610102573461011e575f5f5561006c6060610106565b6060516100796040610106565b6040510360805260206080f35b639f6d48708118610102573461011e575f5f556100a36060610106565b6060516100b06040610106565b6040510560805260206080f35b636d2849818118610102573461011e575f5f556100da6060610106565b6060515f811261011e576100ee6040610106565b6040515f811261011e570a60805260206080f35b5f5ffd5b5f546001810181811261011e5790505f555f54815250565b5f80fd00bd00180086855820e994c17ee9a41eceeb1b58f1a8b572e266fb097bbe0bd82fa6d8b6d91bf63f8c190128810600a1657679706572830005000036",
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "raw_ir": null,
+        "runtime_bytecode": "5f3560e01c60026003820660011b61012201601e395f51565b63aae103ad811861004f573461011e575f5f556100356060610106565b6060516100426040610106565b6040511260805260206080f35b634e68632f8118610102573461011e575f5f5561006c6060610106565b6060516100796040610106565b6040510360805260206080f35b639f6d48708118610102573461011e575f5f556100a36060610106565b6060516100b06040610106565b6040510560805260206080f35b636d2849818118610102573461011e575f5f556100da6060610106565b6060515f811261011e576100ee6040610106565b6040515f811261011e570a60805260206080f35b5f5ffd5b5f546001810181811261011e5790505f555f54815250565b5f80fd00bd00180086",
+        "solc_json": {
+          "compiler_version": "v0.5.0a4+commit.cd74ce4f",
+          "integrity": "e994c17ee9a41eceeb1b58f1a8b572e266fb097bbe0bd82fa6d8b6d91bf63f8c",
+          "language": "Vyper",
+          "settings": {
+            "debug": false,
+            "evmVersion": "prague",
+            "experimentalCodegen": false,
+            "optimize": "gas",
+            "outputSelection": {
+              "unknown_0.vy": [
+                "*"
+              ]
+            },
+            "search_paths": [
+              "."
+            ]
+          },
+          "sources": {
+            "unknown_0.vy": {
+              "content": "\ncounter: int256\n\n@internal\ndef bump() -> int256:\n    self.counter += 1\n    return self.counter\n\n@external\ndef comparison() -> bool:\n    self.counter = 0\n    return self.bump() < self.bump()\n\n@external\ndef unsafe_subtraction() -> int256:\n    self.counter = 0\n    return unsafe_sub(self.bump(), self.bump())\n\n@external\ndef unsafe_division() -> int256:\n    self.counter = 0\n    return unsafe_div(self.bump(), self.bump())\n\n@external\ndef modular_power() -> uint256:\n    self.counter = 0\n    return pow_mod256(convert(self.bump(), uint256), convert(self.bump(), uint256))\n",
+              "sha256sum": "dce00a2671f8034772055df15f78dc0bc2d0355cb9db2a303da5c0efe74c31e9"
+            }
+          }
+        },
+        "source_code": "\ncounter: int256\n\n@internal\ndef bump() -> int256:\n    self.counter += 1\n    return self.counter\n\n@external\ndef comparison() -> bool:\n    self.counter = 0\n    return self.bump() < self.bump()\n\n@external\ndef unsafe_subtraction() -> int256:\n    self.counter = 0\n    return unsafe_sub(self.bump(), self.bump())\n\n@external\ndef unsafe_division() -> int256:\n    self.counter = 0\n    return unsafe_div(self.bump(), self.bump())\n\n@external\ndef modular_power() -> uint256:\n    self.counter = 0\n    return pow_mod256(convert(self.bump(), uint256), convert(self.bump(), uint256))\n",
+        "storage_layout": {
+          "storage_layout": {
+            "counter": {
+              "n_slots": 1,
+              "slot": 0,
+              "type": "int256"
+            }
+          }
+        },
+        "trace_type": "deployment",
+        "value": 0
+      },
+      {
+        "call_args": {
+          "calldata": "aae103ad",
+          "is_modifying": true,
+          "to": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+          "value": 0
+        },
+        "call_succeeded": true,
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "comparison",
+        "output": "0000000000000000000000000000000000000000000000000000000000000000",
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "trace_type": "call"
+      }
+    ]
+  }
+}

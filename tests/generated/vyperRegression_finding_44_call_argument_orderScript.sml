@@ -1,0 +1,4 @@
+Theory vyperRegression_finding_44_call_argument_order[no_sig_docs]
+Ancestors vyperRegressionDefs_finding_44_call_argument_order
+Libs vyperTestRunnerLib
+val () = List.app run_test_on_traces $ all_traces "vyperRegressionDefs_finding_44_call_argument_order";

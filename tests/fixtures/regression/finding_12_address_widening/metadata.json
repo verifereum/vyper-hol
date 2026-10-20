@@ -1,0 +1,10 @@
+{
+  "compiler_commit": "cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c",
+  "compiler_version": "0.5.0a4",
+  "evm_version": "prague",
+  "experimental_codegen": false,
+  "finding": 12,
+  "optimize": "gas",
+  "pytest_node": "test_12_address_widening.py::test_address_and_fixed_bytes_use_different_widening",
+  "state_comparison": "full-world-state-v1"
+}

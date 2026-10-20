@@ -1,0 +1,380 @@
+{
+  "finding_52_genesis_prevhash": {
+    "deps": [],
+    "item_type": "test",
+    "traces": [
+      {
+        "annotated_ast": {
+          "ast": {
+            "ast_type": "Module",
+            "body": [
+              {
+                "annotation": {
+                  "ast_type": "Name",
+                  "col_offset": 14,
+                  "end_col_offset": 21,
+                  "end_lineno": 2,
+                  "id": "bytes32",
+                  "lineno": 2,
+                  "node_id": 7,
+                  "src": "15:7:-1"
+                },
+                "ast_type": "VariableDecl",
+                "col_offset": 0,
+                "end_col_offset": 22,
+                "end_lineno": 2,
+                "is_constant": false,
+                "is_immutable": false,
+                "is_public": true,
+                "is_reentrant": false,
+                "is_transient": false,
+                "lineno": 2,
+                "node_id": 1,
+                "src": "1:22:-1",
+                "target": {
+                  "ast_type": "Name",
+                  "col_offset": 0,
+                  "end_col_offset": 5,
+                  "end_lineno": 2,
+                  "id": "saved",
+                  "lineno": 2,
+                  "node_id": 2,
+                  "src": "1:5:-1",
+                  "type": {
+                    "m": 32,
+                    "name": "bytes32",
+                    "typeclass": "bytes_m"
+                  }
+                },
+                "type": {
+                  "m": 32,
+                  "name": "bytes32",
+                  "typeclass": "bytes_m"
+                },
+                "value": null
+              },
+              {
+                "args": {
+                  "args": [],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 31,
+                  "end_lineno": 6,
+                  "lineno": 5,
+                  "node_id": 10,
+                  "src": "35:46:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "Assign",
+                    "col_offset": 4,
+                    "end_col_offset": 31,
+                    "end_lineno": 6,
+                    "lineno": 6,
+                    "node_id": 11,
+                    "src": "54:27:-1",
+                    "target": {
+                      "ast_type": "Attribute",
+                      "attr": "saved",
+                      "col_offset": 4,
+                      "end_col_offset": 14,
+                      "end_lineno": 6,
+                      "lineno": 6,
+                      "node_id": 12,
+                      "src": "54:10:-1",
+                      "type": {
+                        "m": 32,
+                        "name": "bytes32",
+                        "typeclass": "bytes_m"
+                      },
+                      "value": {
+                        "ast_type": "Name",
+                        "col_offset": 4,
+                        "end_col_offset": 8,
+                        "end_lineno": 6,
+                        "id": "self",
+                        "lineno": 6,
+                        "node_id": 13,
+                        "src": "54:4:-1",
+                        "type": {
+                          "name": "self"
+                        }
+                      },
+                      "variable_reads": [
+                        {
+                          "access_path": [],
+                          "decl_node": {
+                            "node_id": 1,
+                            "source_id": -1
+                          },
+                          "name": "saved"
+                        }
+                      ],
+                      "variable_writes": [
+                        {
+                          "access_path": [],
+                          "decl_node": {
+                            "node_id": 1,
+                            "source_id": -1
+                          },
+                          "name": "saved"
+                        }
+                      ]
+                    },
+                    "value": {
+                      "ast_type": "Attribute",
+                      "attr": "prevhash",
+                      "col_offset": 17,
+                      "end_col_offset": 31,
+                      "end_lineno": 6,
+                      "lineno": 6,
+                      "node_id": 16,
+                      "src": "67:14:-1",
+                      "type": {
+                        "m": 32,
+                        "name": "bytes32",
+                        "typeclass": "bytes_m"
+                      },
+                      "value": {
+                        "ast_type": "Name",
+                        "col_offset": 17,
+                        "end_col_offset": 22,
+                        "end_lineno": 6,
+                        "id": "block",
+                        "lineno": 6,
+                        "node_id": 17,
+                        "src": "67:5:-1",
+                        "type": {
+                          "name": "block"
+                        }
+                      }
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 9,
+                    "end_lineno": 4,
+                    "id": "external",
+                    "lineno": 4,
+                    "node_id": 20,
+                    "src": "26:8:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 31,
+                "end_lineno": 6,
+                "func_type": {
+                  "argument_types": [],
+                  "name": "capture",
+                  "return_type": null,
+                  "type_decl_node": {
+                    "node_id": 9,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                },
+                "lineno": 5,
+                "name": "capture",
+                "node_id": 9,
+                "returns": null,
+                "src": "35:46:-1"
+              }
+            ],
+            "col_offset": 0,
+            "doc_string": null,
+            "end_col_offset": 32,
+            "end_lineno": 6,
+            "is_interface": false,
+            "lineno": 1,
+            "name": null,
+            "node_id": 0,
+            "path": "tests/fixtures/regression/finding_52_genesis_prevhash/unknown_0.vy",
+            "resolved_path": "tests/fixtures/regression/finding_52_genesis_prevhash/unknown_0.vy",
+            "settings": {},
+            "source_id": -1,
+            "source_sha256sum": "ab1f355e12a7e5b03c17892d3774e51265bfc86e237513d5cab4952bbb3928f5",
+            "src": "0:82:-1",
+            "type": {
+              "name": "tests/fixtures/regression/finding_52_genesis_prevhash/unknown_0.vy",
+              "type_decl_node": {
+                "node_id": 0,
+                "source_id": -1
+              },
+              "typeclass": "module"
+            }
+          },
+          "contract_name": "tests/fixtures/regression/finding_52_genesis_prevhash/unknown_0.vy",
+          "imports": []
+        },
+        "blueprint_initcode_prefix": null,
+        "calldata": null,
+        "compiler_settings": {
+          "debug": false,
+          "enable_decimals": true,
+          "evm_version": "prague",
+          "experimental_codegen": false,
+          "optimize": "gas"
+        },
+        "contract_abi": [
+          {
+            "gas": 35318,
+            "inputs": [],
+            "name": "capture",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
+          },
+          {
+            "inputs": [],
+            "name": "saved",
+            "outputs": [
+              {
+                "name": "",
+                "type": "bytes32"
+              }
+            ],
+            "stateMutability": "view",
+            "type": "function"
+          }
+        ],
+        "deployed_address": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+        "deployment_succeeded": true,
+        "deployment_type": "source",
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "constructor",
+        "initcode": "605861000b5f3960585ff35f3560e01c60026001821660011b61005401601e395f51565b63d4a3e9d7811861004c57346100505760014303405f55005b63164b045a811861004c5734610050575f5460405260206040f35b5f5ffd5b5f80fd003100188558205be02baa5acd12aabeec9c4a42025d092d73e8a82e5adb5bbe59ebf2e167c32a1858810400a1657679706572830005000035",
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "raw_ir": null,
+        "runtime_bytecode": "5f3560e01c60026001821660011b61005401601e395f51565b63d4a3e9d7811861004c57346100505760014303405f55005b63164b045a811861004c5734610050575f5460405260206040f35b5f5ffd5b5f80fd00310018",
+        "solc_json": {
+          "compiler_version": "v0.5.0a4+commit.cd74ce4f",
+          "integrity": "5be02baa5acd12aabeec9c4a42025d092d73e8a82e5adb5bbe59ebf2e167c32a",
+          "language": "Vyper",
+          "settings": {
+            "debug": false,
+            "evmVersion": "prague",
+            "experimentalCodegen": false,
+            "optimize": "gas",
+            "outputSelection": {
+              "unknown_0.vy": [
+                "*"
+              ]
+            },
+            "search_paths": [
+              "."
+            ]
+          },
+          "sources": {
+            "unknown_0.vy": {
+              "content": "\nsaved: public(bytes32)\n\n@external\ndef capture():\n    self.saved = block.prevhash\n",
+              "sha256sum": "ab1f355e12a7e5b03c17892d3774e51265bfc86e237513d5cab4952bbb3928f5"
+            }
+          }
+        },
+        "source_code": "\nsaved: public(bytes32)\n\n@external\ndef capture():\n    self.saved = block.prevhash\n",
+        "storage_layout": {
+          "storage_layout": {
+            "saved": {
+              "n_slots": 1,
+              "slot": 0,
+              "type": "bytes32"
+            }
+          }
+        },
+        "trace_type": "deployment",
+        "value": 0
+      },
+      {
+        "call_args": {
+          "calldata": "d4a3e9d7",
+          "is_modifying": true,
+          "to": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+          "value": 0
+        },
+        "call_succeeded": true,
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {},
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 0,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "capture",
+        "output": "",
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "trace_type": "call"
+      },
+      {
+        "call_args": {
+          "calldata": "164b045a",
+          "is_modifying": false,
+          "to": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+          "value": 0
+        },
+        "call_succeeded": true,
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {},
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 0,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "saved",
+        "output": "0000000000000000000000000000000000000000000000000000000000000000",
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "trace_type": "call"
+      }
+    ]
+  }
+}

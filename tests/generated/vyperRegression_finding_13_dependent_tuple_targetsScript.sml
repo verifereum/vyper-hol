@@ -1,0 +1,4 @@
+Theory vyperRegression_finding_13_dependent_tuple_targets[no_sig_docs]
+Ancestors vyperRegressionDefs_finding_13_dependent_tuple_targets
+Libs vyperTestRunnerLib
+val () = List.app run_test_on_traces $ all_traces "vyperRegressionDefs_finding_13_dependent_tuple_targets";

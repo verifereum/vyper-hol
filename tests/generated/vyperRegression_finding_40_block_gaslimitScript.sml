@@ -1,0 +1,4 @@
+Theory vyperRegression_finding_40_block_gaslimit[no_sig_docs]
+Ancestors vyperRegressionDefs_finding_40_block_gaslimit
+Libs vyperTestRunnerLib
+val () = List.app run_test_on_traces $ all_traces "vyperRegressionDefs_finding_40_block_gaslimit";

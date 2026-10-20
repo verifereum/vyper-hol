@@ -1,0 +1,4 @@
+Theory vyperRegression_finding_17_blueprint_offset_wrapping[no_sig_docs]
+Ancestors vyperRegressionDefs_finding_17_blueprint_offset_wrapping
+Libs vyperTestRunnerLib
+val () = List.app run_test_on_traces $ all_traces "vyperRegressionDefs_finding_17_blueprint_offset_wrapping";

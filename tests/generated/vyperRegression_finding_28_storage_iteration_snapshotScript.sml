@@ -1,0 +1,4 @@
+Theory vyperRegression_finding_28_storage_iteration_snapshot[no_sig_docs]
+Ancestors vyperRegressionDefs_finding_28_storage_iteration_snapshot
+Libs vyperTestRunnerLib
+val () = List.app run_test_on_traces $ all_traces "vyperRegressionDefs_finding_28_storage_iteration_snapshot";

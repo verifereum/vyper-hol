@@ -1,0 +1,4 @@
+Theory vyperRegression_finding_48_nested_create_chain_id[no_sig_docs]
+Ancestors vyperRegressionDefs_finding_48_nested_create_chain_id
+Libs vyperTestRunnerLib
+val () = List.app run_test_on_traces $ all_traces "vyperRegressionDefs_finding_48_nested_create_chain_id";

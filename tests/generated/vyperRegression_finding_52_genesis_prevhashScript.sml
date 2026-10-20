@@ -1,0 +1,4 @@
+Theory vyperRegression_finding_52_genesis_prevhash[no_sig_docs]
+Ancestors vyperRegressionDefs_finding_52_genesis_prevhash
+Libs vyperTestRunnerLib
+val () = List.app run_test_on_traces $ all_traces "vyperRegressionDefs_finding_52_genesis_prevhash";

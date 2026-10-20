@@ -1,0 +1,10 @@
+{
+  "compiler_commit": "cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c",
+  "compiler_version": "0.5.0a4",
+  "evm_version": "prague",
+  "experimental_codegen": false,
+  "finding": 4,
+  "optimize": "gas",
+  "pytest_node": "test_04_dynamic_abi_padding.py::test_nonzero_dynamic_padding_does_not_change_the_decoded_value",
+  "state_comparison": "full-world-state-v1"
+}

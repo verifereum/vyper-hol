@@ -1,0 +1,1356 @@
+{
+  "finding_38_imported_flag_complement": {
+    "deps": [],
+    "item_type": "test",
+    "traces": [
+      {
+        "annotated_ast": {
+          "ast": {
+            "ast_type": "Module",
+            "body": [
+              {
+                "ast_type": "Import",
+                "col_offset": 0,
+                "end_col_offset": 23,
+                "end_lineno": 2,
+                "import_infos": [
+                  {
+                    "alias": "library",
+                    "file_sha256sum": "3133fe38388612700bbce552ad31a1c29b92f7d0db17a3d1cfb9a5f2e091f367",
+                    "path": "flags.vy",
+                    "qualified_module_name": "flags",
+                    "resolved_path": "tests/fixtures/regression/finding_38_imported_flag_complement/flags.vy",
+                    "source_id": 0
+                  }
+                ],
+                "lineno": 2,
+                "names": [
+                  {
+                    "asname": "library",
+                    "ast_type": "alias",
+                    "col_offset": 7,
+                    "end_col_offset": 23,
+                    "end_lineno": 2,
+                    "lineno": 2,
+                    "name": "flags",
+                    "node_id": 2,
+                    "src": "8:16:-1"
+                  }
+                ],
+                "node_id": 1,
+                "src": "1:23:-1"
+              },
+              {
+                "ast_type": "Import",
+                "col_offset": 0,
+                "end_col_offset": 23,
+                "end_lineno": 3,
+                "import_infos": [
+                  {
+                    "alias": "bridge",
+                    "file_sha256sum": "377e53ff4d0ff3ac1a155fe57d08054377c82041205d491e516006008cc0b9bb",
+                    "path": "bridge.vy",
+                    "qualified_module_name": "bridge",
+                    "resolved_path": "tests/fixtures/regression/finding_38_imported_flag_complement/bridge.vy",
+                    "source_id": 1
+                  }
+                ],
+                "lineno": 3,
+                "names": [
+                  {
+                    "asname": "bridge",
+                    "ast_type": "alias",
+                    "col_offset": 7,
+                    "end_col_offset": 23,
+                    "end_lineno": 3,
+                    "lineno": 3,
+                    "name": "bridge",
+                    "node_id": 4,
+                    "src": "32:16:-1"
+                  }
+                ],
+                "node_id": 3,
+                "src": "25:23:-1"
+              },
+              {
+                "ast_type": "FlagDef",
+                "body": [
+                  {
+                    "ast_type": "Expr",
+                    "col_offset": 4,
+                    "end_col_offset": 6,
+                    "end_lineno": 6,
+                    "lineno": 6,
+                    "node_id": 6,
+                    "src": "62:2:-1",
+                    "value": {
+                      "ast_type": "Name",
+                      "col_offset": 4,
+                      "end_col_offset": 6,
+                      "end_lineno": 6,
+                      "id": "M0",
+                      "lineno": 6,
+                      "node_id": 7,
+                      "src": "62:2:-1"
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "doc_string": null,
+                "end_col_offset": 6,
+                "end_lineno": 6,
+                "lineno": 5,
+                "name": "F",
+                "node_id": 5,
+                "src": "50:14:-1"
+              },
+              {
+                "args": {
+                  "args": [],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 41,
+                  "end_lineno": 11,
+                  "lineno": 10,
+                  "node_id": 10,
+                  "src": "82:73:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "Return",
+                    "col_offset": 4,
+                    "end_col_offset": 41,
+                    "end_lineno": 11,
+                    "lineno": 11,
+                    "node_id": 11,
+                    "src": "118:37:-1",
+                    "value": {
+                      "args": [
+                        {
+                          "ast_type": "Attribute",
+                          "attr": "M2",
+                          "col_offset": 19,
+                          "end_col_offset": 31,
+                          "end_lineno": 11,
+                          "lineno": 11,
+                          "node_id": 15,
+                          "src": "133:12:-1",
+                          "type": {
+                            "name": "F",
+                            "typeclass": "flag"
+                          },
+                          "value": {
+                            "ast_type": "Attribute",
+                            "attr": "F",
+                            "col_offset": 19,
+                            "end_col_offset": 28,
+                            "end_lineno": 11,
+                            "lineno": 11,
+                            "node_id": 16,
+                            "src": "133:9:-1",
+                            "type": {
+                              "type_t": {
+                                "name": "F",
+                                "typeclass": "flag"
+                              }
+                            },
+                            "value": {
+                              "ast_type": "Name",
+                              "col_offset": 19,
+                              "end_col_offset": 26,
+                              "end_lineno": 11,
+                              "id": "library",
+                              "lineno": 11,
+                              "node_id": 17,
+                              "src": "133:7:-1",
+                              "type": {
+                                "name": ".tmp/pytest-l7rl9eow/pytest/test_complement_keeps_imported0/flags.vy",
+                                "type_decl_node": {
+                                  "node_id": 0,
+                                  "source_id": 0
+                                },
+                                "typeclass": "module"
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "ast_type": "Name",
+                          "col_offset": 33,
+                          "end_col_offset": 40,
+                          "end_lineno": 11,
+                          "id": "uint256",
+                          "lineno": 11,
+                          "node_id": 21,
+                          "src": "147:7:-1",
+                          "type": {
+                            "type_t": {
+                              "bits": 256,
+                              "is_signed": false,
+                              "name": "uint256",
+                              "typeclass": "integer"
+                            }
+                          }
+                        }
+                      ],
+                      "ast_type": "Call",
+                      "col_offset": 11,
+                      "end_col_offset": 41,
+                      "end_lineno": 11,
+                      "func": {
+                        "ast_type": "Name",
+                        "col_offset": 11,
+                        "end_col_offset": 18,
+                        "end_lineno": 11,
+                        "id": "convert",
+                        "lineno": 11,
+                        "node_id": 13,
+                        "src": "125:7:-1",
+                        "type": {
+                          "name": "convert",
+                          "typeclass": "builtin_function"
+                        }
+                      },
+                      "keywords": [],
+                      "lineno": 11,
+                      "node_id": 12,
+                      "src": "125:30:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      }
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 9,
+                    "end_lineno": 8,
+                    "id": "external",
+                    "lineno": 8,
+                    "node_id": 23,
+                    "src": "67:8:-1"
+                  },
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 5,
+                    "end_lineno": 9,
+                    "id": "pure",
+                    "lineno": 9,
+                    "node_id": 25,
+                    "src": "77:4:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 41,
+                "end_lineno": 11,
+                "func_type": {
+                  "argument_types": [],
+                  "name": "direct_member",
+                  "return_type": {
+                    "bits": 256,
+                    "is_signed": false,
+                    "name": "uint256",
+                    "typeclass": "integer"
+                  },
+                  "type_decl_node": {
+                    "node_id": 9,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                },
+                "lineno": 10,
+                "name": "direct_member",
+                "node_id": 9,
+                "returns": {
+                  "ast_type": "Name",
+                  "col_offset": 23,
+                  "end_col_offset": 30,
+                  "end_lineno": 10,
+                  "id": "uint256",
+                  "lineno": 10,
+                  "node_id": 27,
+                  "src": "105:7:-1"
+                },
+                "src": "82:73:-1"
+              },
+              {
+                "args": {
+                  "args": [],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 46,
+                  "end_lineno": 16,
+                  "lineno": 15,
+                  "node_id": 30,
+                  "src": "173:78:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "Return",
+                    "col_offset": 4,
+                    "end_col_offset": 46,
+                    "end_lineno": 16,
+                    "lineno": 16,
+                    "node_id": 31,
+                    "src": "209:42:-1",
+                    "value": {
+                      "args": [
+                        {
+                          "ast_type": "Attribute",
+                          "attr": "M2",
+                          "col_offset": 19,
+                          "end_col_offset": 36,
+                          "end_lineno": 16,
+                          "lineno": 16,
+                          "node_id": 35,
+                          "src": "224:17:-1",
+                          "type": {
+                            "name": "F",
+                            "typeclass": "flag"
+                          },
+                          "value": {
+                            "ast_type": "Attribute",
+                            "attr": "F",
+                            "col_offset": 19,
+                            "end_col_offset": 33,
+                            "end_lineno": 16,
+                            "lineno": 16,
+                            "node_id": 36,
+                            "src": "224:14:-1",
+                            "type": {
+                              "type_t": {
+                                "name": "F",
+                                "typeclass": "flag"
+                              }
+                            },
+                            "value": {
+                              "ast_type": "Attribute",
+                              "attr": "flags",
+                              "col_offset": 19,
+                              "end_col_offset": 31,
+                              "end_lineno": 16,
+                              "lineno": 16,
+                              "node_id": 37,
+                              "src": "224:12:-1",
+                              "type": {
+                                "name": ".tmp/pytest-l7rl9eow/pytest/test_complement_keeps_imported0/flags.vy",
+                                "type_decl_node": {
+                                  "node_id": 0,
+                                  "source_id": 0
+                                },
+                                "typeclass": "module"
+                              },
+                              "value": {
+                                "ast_type": "Name",
+                                "col_offset": 19,
+                                "end_col_offset": 25,
+                                "end_lineno": 16,
+                                "id": "bridge",
+                                "lineno": 16,
+                                "node_id": 38,
+                                "src": "224:6:-1",
+                                "type": {
+                                  "name": ".tmp/pytest-l7rl9eow/pytest/test_complement_keeps_imported0/bridge.vy",
+                                  "type_decl_node": {
+                                    "node_id": 0,
+                                    "source_id": 1
+                                  },
+                                  "typeclass": "module"
+                                }
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "ast_type": "Name",
+                          "col_offset": 38,
+                          "end_col_offset": 45,
+                          "end_lineno": 16,
+                          "id": "uint256",
+                          "lineno": 16,
+                          "node_id": 43,
+                          "src": "243:7:-1",
+                          "type": {
+                            "type_t": {
+                              "bits": 256,
+                              "is_signed": false,
+                              "name": "uint256",
+                              "typeclass": "integer"
+                            }
+                          }
+                        }
+                      ],
+                      "ast_type": "Call",
+                      "col_offset": 11,
+                      "end_col_offset": 46,
+                      "end_lineno": 16,
+                      "func": {
+                        "ast_type": "Name",
+                        "col_offset": 11,
+                        "end_col_offset": 18,
+                        "end_lineno": 16,
+                        "id": "convert",
+                        "lineno": 16,
+                        "node_id": 33,
+                        "src": "216:7:-1",
+                        "type": {
+                          "name": "convert",
+                          "typeclass": "builtin_function"
+                        }
+                      },
+                      "keywords": [],
+                      "lineno": 16,
+                      "node_id": 32,
+                      "src": "216:35:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      }
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 9,
+                    "end_lineno": 13,
+                    "id": "external",
+                    "lineno": 13,
+                    "node_id": 45,
+                    "src": "158:8:-1"
+                  },
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 5,
+                    "end_lineno": 14,
+                    "id": "pure",
+                    "lineno": 14,
+                    "node_id": 47,
+                    "src": "168:4:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 46,
+                "end_lineno": 16,
+                "func_type": {
+                  "argument_types": [],
+                  "name": "nested_member",
+                  "return_type": {
+                    "bits": 256,
+                    "is_signed": false,
+                    "name": "uint256",
+                    "typeclass": "integer"
+                  },
+                  "type_decl_node": {
+                    "node_id": 29,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                },
+                "lineno": 15,
+                "name": "nested_member",
+                "node_id": 29,
+                "returns": {
+                  "ast_type": "Name",
+                  "col_offset": 23,
+                  "end_col_offset": 30,
+                  "end_lineno": 15,
+                  "id": "uint256",
+                  "lineno": 15,
+                  "node_id": 49,
+                  "src": "196:7:-1"
+                },
+                "src": "173:78:-1"
+              },
+              {
+                "args": {
+                  "args": [],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 42,
+                  "end_lineno": 21,
+                  "lineno": 20,
+                  "node_id": 52,
+                  "src": "269:76:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "Return",
+                    "col_offset": 4,
+                    "end_col_offset": 42,
+                    "end_lineno": 21,
+                    "lineno": 21,
+                    "node_id": 53,
+                    "src": "307:38:-1",
+                    "value": {
+                      "args": [
+                        {
+                          "ast_type": "UnaryOp",
+                          "col_offset": 19,
+                          "end_col_offset": 32,
+                          "end_lineno": 21,
+                          "lineno": 21,
+                          "node_id": 57,
+                          "op": {
+                            "ast_type": "Invert",
+                            "col_offset": 19,
+                            "end_col_offset": 32,
+                            "end_lineno": 21,
+                            "lineno": 21,
+                            "node_id": 58,
+                            "src": "322:13:-1"
+                          },
+                          "operand": {
+                            "ast_type": "Attribute",
+                            "attr": "M0",
+                            "col_offset": 20,
+                            "end_col_offset": 32,
+                            "end_lineno": 21,
+                            "lineno": 21,
+                            "node_id": 59,
+                            "src": "323:12:-1",
+                            "type": {
+                              "name": "F",
+                              "typeclass": "flag"
+                            },
+                            "value": {
+                              "ast_type": "Attribute",
+                              "attr": "F",
+                              "col_offset": 20,
+                              "end_col_offset": 29,
+                              "end_lineno": 21,
+                              "lineno": 21,
+                              "node_id": 60,
+                              "src": "323:9:-1",
+                              "type": {
+                                "type_t": {
+                                  "name": "F",
+                                  "typeclass": "flag"
+                                }
+                              },
+                              "value": {
+                                "ast_type": "Name",
+                                "col_offset": 20,
+                                "end_col_offset": 27,
+                                "end_lineno": 21,
+                                "id": "library",
+                                "lineno": 21,
+                                "node_id": 61,
+                                "src": "323:7:-1",
+                                "type": {
+                                  "name": ".tmp/pytest-l7rl9eow/pytest/test_complement_keeps_imported0/flags.vy",
+                                  "type_decl_node": {
+                                    "node_id": 0,
+                                    "source_id": 0
+                                  },
+                                  "typeclass": "module"
+                                }
+                              }
+                            }
+                          },
+                          "src": "322:13:-1",
+                          "type": {
+                            "name": "F",
+                            "typeclass": "flag"
+                          }
+                        },
+                        {
+                          "ast_type": "Name",
+                          "col_offset": 34,
+                          "end_col_offset": 41,
+                          "end_lineno": 21,
+                          "id": "uint256",
+                          "lineno": 21,
+                          "node_id": 65,
+                          "src": "337:7:-1",
+                          "type": {
+                            "type_t": {
+                              "bits": 256,
+                              "is_signed": false,
+                              "name": "uint256",
+                              "typeclass": "integer"
+                            }
+                          }
+                        }
+                      ],
+                      "ast_type": "Call",
+                      "col_offset": 11,
+                      "end_col_offset": 42,
+                      "end_lineno": 21,
+                      "func": {
+                        "ast_type": "Name",
+                        "col_offset": 11,
+                        "end_col_offset": 18,
+                        "end_lineno": 21,
+                        "id": "convert",
+                        "lineno": 21,
+                        "node_id": 55,
+                        "src": "314:7:-1",
+                        "type": {
+                          "name": "convert",
+                          "typeclass": "builtin_function"
+                        }
+                      },
+                      "keywords": [],
+                      "lineno": 21,
+                      "node_id": 54,
+                      "src": "314:31:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      }
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 9,
+                    "end_lineno": 18,
+                    "id": "external",
+                    "lineno": 18,
+                    "node_id": 67,
+                    "src": "254:8:-1"
+                  },
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 5,
+                    "end_lineno": 19,
+                    "id": "pure",
+                    "lineno": 19,
+                    "node_id": 69,
+                    "src": "264:4:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 42,
+                "end_lineno": 21,
+                "func_type": {
+                  "argument_types": [],
+                  "name": "inverted_member",
+                  "return_type": {
+                    "bits": 256,
+                    "is_signed": false,
+                    "name": "uint256",
+                    "typeclass": "integer"
+                  },
+                  "type_decl_node": {
+                    "node_id": 51,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                },
+                "lineno": 20,
+                "name": "inverted_member",
+                "node_id": 51,
+                "returns": {
+                  "ast_type": "Name",
+                  "col_offset": 25,
+                  "end_col_offset": 32,
+                  "end_lineno": 20,
+                  "id": "uint256",
+                  "lineno": 20,
+                  "node_id": 71,
+                  "src": "294:7:-1"
+                },
+                "src": "269:76:-1"
+              },
+              {
+                "args": {
+                  "args": [
+                    {
+                      "annotation": {
+                        "ast_type": "Attribute",
+                        "attr": "F",
+                        "col_offset": 28,
+                        "end_col_offset": 37,
+                        "end_lineno": 25,
+                        "lineno": 25,
+                        "node_id": 76,
+                        "src": "391:9:-1",
+                        "value": {
+                          "ast_type": "Name",
+                          "col_offset": 28,
+                          "end_col_offset": 35,
+                          "end_lineno": 25,
+                          "id": "library",
+                          "lineno": 25,
+                          "node_id": 77,
+                          "src": "391:7:-1"
+                        }
+                      },
+                      "arg": "item",
+                      "ast_type": "arg",
+                      "col_offset": 22,
+                      "end_col_offset": 37,
+                      "end_lineno": 25,
+                      "lineno": 25,
+                      "node_id": 75,
+                      "src": "385:15:-1"
+                    }
+                  ],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 34,
+                  "end_lineno": 26,
+                  "lineno": 25,
+                  "node_id": 74,
+                  "src": "363:85:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "Return",
+                    "col_offset": 4,
+                    "end_col_offset": 34,
+                    "end_lineno": 26,
+                    "lineno": 26,
+                    "node_id": 80,
+                    "src": "418:30:-1",
+                    "value": {
+                      "args": [
+                        {
+                          "ast_type": "UnaryOp",
+                          "col_offset": 19,
+                          "end_col_offset": 24,
+                          "end_lineno": 26,
+                          "lineno": 26,
+                          "node_id": 84,
+                          "op": {
+                            "ast_type": "Invert",
+                            "col_offset": 19,
+                            "end_col_offset": 24,
+                            "end_lineno": 26,
+                            "lineno": 26,
+                            "node_id": 85,
+                            "src": "433:5:-1"
+                          },
+                          "operand": {
+                            "ast_type": "Name",
+                            "col_offset": 20,
+                            "end_col_offset": 24,
+                            "end_lineno": 26,
+                            "id": "item",
+                            "lineno": 26,
+                            "node_id": 86,
+                            "src": "434:4:-1",
+                            "type": {
+                              "name": "F",
+                              "typeclass": "flag"
+                            },
+                            "variable_reads": [
+                              {
+                                "access_path": [],
+                                "decl_node": {
+                                  "node_id": 75,
+                                  "source_id": -1
+                                },
+                                "name": "item"
+                              }
+                            ]
+                          },
+                          "src": "433:5:-1",
+                          "type": {
+                            "name": "F",
+                            "typeclass": "flag"
+                          }
+                        },
+                        {
+                          "ast_type": "Name",
+                          "col_offset": 26,
+                          "end_col_offset": 33,
+                          "end_lineno": 26,
+                          "id": "uint256",
+                          "lineno": 26,
+                          "node_id": 88,
+                          "src": "440:7:-1",
+                          "type": {
+                            "type_t": {
+                              "bits": 256,
+                              "is_signed": false,
+                              "name": "uint256",
+                              "typeclass": "integer"
+                            }
+                          }
+                        }
+                      ],
+                      "ast_type": "Call",
+                      "col_offset": 11,
+                      "end_col_offset": 34,
+                      "end_lineno": 26,
+                      "func": {
+                        "ast_type": "Name",
+                        "col_offset": 11,
+                        "end_col_offset": 18,
+                        "end_lineno": 26,
+                        "id": "convert",
+                        "lineno": 26,
+                        "node_id": 82,
+                        "src": "425:7:-1",
+                        "type": {
+                          "name": "convert",
+                          "typeclass": "builtin_function"
+                        }
+                      },
+                      "keywords": [],
+                      "lineno": 26,
+                      "node_id": 81,
+                      "src": "425:23:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      }
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 9,
+                    "end_lineno": 23,
+                    "id": "external",
+                    "lineno": 23,
+                    "node_id": 90,
+                    "src": "348:8:-1"
+                  },
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 5,
+                    "end_lineno": 24,
+                    "id": "pure",
+                    "lineno": 24,
+                    "node_id": 92,
+                    "src": "358:4:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 34,
+                "end_lineno": 26,
+                "func_type": {
+                  "argument_types": [
+                    {
+                      "name": "F",
+                      "typeclass": "flag"
+                    }
+                  ],
+                  "name": "inverted_argument",
+                  "return_type": {
+                    "bits": 256,
+                    "is_signed": false,
+                    "name": "uint256",
+                    "typeclass": "integer"
+                  },
+                  "type_decl_node": {
+                    "node_id": 73,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                },
+                "lineno": 25,
+                "name": "inverted_argument",
+                "node_id": 73,
+                "returns": {
+                  "ast_type": "Name",
+                  "col_offset": 42,
+                  "end_col_offset": 49,
+                  "end_lineno": 25,
+                  "id": "uint256",
+                  "lineno": 25,
+                  "node_id": 94,
+                  "src": "405:7:-1"
+                },
+                "src": "363:85:-1"
+              }
+            ],
+            "col_offset": 0,
+            "doc_string": null,
+            "end_col_offset": 35,
+            "end_lineno": 26,
+            "is_interface": false,
+            "lineno": 1,
+            "name": null,
+            "node_id": 0,
+            "path": "tests/fixtures/regression/finding_38_imported_flag_complement/unknown_0.vy",
+            "resolved_path": "tests/fixtures/regression/finding_38_imported_flag_complement/unknown_0.vy",
+            "settings": {},
+            "source_id": -1,
+            "source_sha256sum": "f5849e8219927b63db38371c8809bad19de7111b52e19fb51270fce32d63cf35",
+            "src": "0:449:-1",
+            "type": {
+              "name": "tests/fixtures/regression/finding_38_imported_flag_complement/unknown_0.vy",
+              "type_decl_node": {
+                "node_id": 0,
+                "source_id": -1
+              },
+              "typeclass": "module"
+            }
+          },
+          "contract_name": "tests/fixtures/regression/finding_38_imported_flag_complement/unknown_0.vy",
+          "imports": [
+            {
+              "ast_type": "Module",
+              "body": [
+                {
+                  "ast_type": "FlagDef",
+                  "body": [
+                    {
+                      "ast_type": "Expr",
+                      "col_offset": 4,
+                      "end_col_offset": 6,
+                      "end_lineno": 3,
+                      "lineno": 3,
+                      "node_id": 2,
+                      "src": "13:2:0",
+                      "value": {
+                        "ast_type": "Name",
+                        "col_offset": 4,
+                        "end_col_offset": 6,
+                        "end_lineno": 3,
+                        "id": "M0",
+                        "lineno": 3,
+                        "node_id": 3,
+                        "src": "13:2:0"
+                      }
+                    },
+                    {
+                      "ast_type": "Expr",
+                      "col_offset": 4,
+                      "end_col_offset": 6,
+                      "end_lineno": 4,
+                      "lineno": 4,
+                      "node_id": 5,
+                      "src": "20:2:0",
+                      "value": {
+                        "ast_type": "Name",
+                        "col_offset": 4,
+                        "end_col_offset": 6,
+                        "end_lineno": 4,
+                        "id": "M1",
+                        "lineno": 4,
+                        "node_id": 6,
+                        "src": "20:2:0"
+                      }
+                    },
+                    {
+                      "ast_type": "Expr",
+                      "col_offset": 4,
+                      "end_col_offset": 6,
+                      "end_lineno": 5,
+                      "lineno": 5,
+                      "node_id": 8,
+                      "src": "27:2:0",
+                      "value": {
+                        "ast_type": "Name",
+                        "col_offset": 4,
+                        "end_col_offset": 6,
+                        "end_lineno": 5,
+                        "id": "M2",
+                        "lineno": 5,
+                        "node_id": 9,
+                        "src": "27:2:0"
+                      }
+                    }
+                  ],
+                  "col_offset": 0,
+                  "doc_string": null,
+                  "end_col_offset": 6,
+                  "end_lineno": 5,
+                  "lineno": 2,
+                  "name": "F",
+                  "node_id": 1,
+                  "src": "1:28:0"
+                }
+              ],
+              "col_offset": 0,
+              "doc_string": null,
+              "end_col_offset": 7,
+              "end_lineno": 5,
+              "is_interface": false,
+              "lineno": 1,
+              "name": null,
+              "node_id": 0,
+              "path": ".tmp/pytest-l7rl9eow/pytest/test_complement_keeps_imported0/flags.vy",
+              "resolved_path": "tests/fixtures/regression/finding_38_imported_flag_complement/flags.vy",
+              "settings": {},
+              "source_id": 0,
+              "source_sha256sum": "3133fe38388612700bbce552ad31a1c29b92f7d0db17a3d1cfb9a5f2e091f367",
+              "src": "0:30:0",
+              "type": {
+                "name": ".tmp/pytest-l7rl9eow/pytest/test_complement_keeps_imported0/flags.vy",
+                "type_decl_node": {
+                  "node_id": 0,
+                  "source_id": 0
+                },
+                "typeclass": "module"
+              }
+            },
+            {
+              "ast_type": "Module",
+              "body": [
+                {
+                  "ast_type": "Import",
+                  "col_offset": 0,
+                  "end_col_offset": 21,
+                  "end_lineno": 2,
+                  "import_infos": [
+                    {
+                      "alias": "flags",
+                      "file_sha256sum": "3133fe38388612700bbce552ad31a1c29b92f7d0db17a3d1cfb9a5f2e091f367",
+                      "path": "flags.vy",
+                      "qualified_module_name": "flags",
+                      "resolved_path": "tests/fixtures/regression/finding_38_imported_flag_complement/flags.vy",
+                      "source_id": 0
+                    }
+                  ],
+                  "lineno": 2,
+                  "names": [
+                    {
+                      "asname": "flags",
+                      "ast_type": "alias",
+                      "col_offset": 7,
+                      "end_col_offset": 21,
+                      "end_lineno": 2,
+                      "lineno": 2,
+                      "name": "flags",
+                      "node_id": 2,
+                      "src": "8:14:1"
+                    }
+                  ],
+                  "node_id": 1,
+                  "src": "1:21:1"
+                }
+              ],
+              "col_offset": 0,
+              "doc_string": null,
+              "end_col_offset": 22,
+              "end_lineno": 2,
+              "is_interface": false,
+              "lineno": 1,
+              "name": null,
+              "node_id": 0,
+              "path": ".tmp/pytest-l7rl9eow/pytest/test_complement_keeps_imported0/bridge.vy",
+              "resolved_path": "tests/fixtures/regression/finding_38_imported_flag_complement/bridge.vy",
+              "settings": {},
+              "source_id": 1,
+              "source_sha256sum": "377e53ff4d0ff3ac1a155fe57d08054377c82041205d491e516006008cc0b9bb",
+              "src": "0:23:1",
+              "type": {
+                "name": ".tmp/pytest-l7rl9eow/pytest/test_complement_keeps_imported0/bridge.vy",
+                "type_decl_node": {
+                  "node_id": 0,
+                  "source_id": 1
+                },
+                "typeclass": "module"
+              }
+            }
+          ]
+        },
+        "blueprint_initcode_prefix": null,
+        "calldata": null,
+        "compiler_settings": {
+          "debug": false,
+          "enable_decimals": true,
+          "evm_version": "prague",
+          "experimental_codegen": false,
+          "optimize": "gas"
+        },
+        "contract_abi": [
+          {
+            "gas": 317,
+            "inputs": [],
+            "name": "direct_member",
+            "outputs": [
+              {
+                "name": "",
+                "type": "uint256"
+              }
+            ],
+            "stateMutability": "pure",
+            "type": "function"
+          },
+          {
+            "gas": 317,
+            "inputs": [],
+            "name": "nested_member",
+            "outputs": [
+              {
+                "name": "",
+                "type": "uint256"
+              }
+            ],
+            "stateMutability": "pure",
+            "type": "function"
+          },
+          {
+            "gas": 323,
+            "inputs": [],
+            "name": "inverted_member",
+            "outputs": [
+              {
+                "name": "",
+                "type": "uint256"
+              }
+            ],
+            "stateMutability": "pure",
+            "type": "function"
+          },
+          {
+            "gas": 483,
+            "inputs": [
+              {
+                "name": "item",
+                "type": "uint256"
+              }
+            ],
+            "name": "inverted_argument",
+            "outputs": [
+              {
+                "name": "",
+                "type": "uint256"
+              }
+            ],
+            "stateMutability": "pure",
+            "type": "function"
+          }
+        ],
+        "deployed_address": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+        "deployment_succeeded": true,
+        "deployment_type": "source",
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "constructor",
+        "initcode": "60a961000b5f3960a95ff35f3560e01c60026003820660011b6100a301601e395f51565b63655cc4498118610033573461009f57600460405260206040f35b63f8136e79811861009b5760243610341761009f576004358060031c61009f5760405260405160071860605260206060f35b6350f1bbbb811861009b573461009f57600460405260206040f35b63443dc62b811861009b573461009f57600660405260206040f35b5f5ffd5b5f80fd001800800065855820784a74bab78d905e3a4d4398fdbfe7538a70840c108d8b50c25607a6d826142318a9810600a1657679706572830005000035",
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "raw_ir": null,
+        "runtime_bytecode": "5f3560e01c60026003820660011b6100a301601e395f51565b63655cc4498118610033573461009f57600460405260206040f35b63f8136e79811861009b5760243610341761009f576004358060031c61009f5760405260405160071860605260206060f35b6350f1bbbb811861009b573461009f57600460405260206040f35b63443dc62b811861009b573461009f57600660405260206040f35b5f5ffd5b5f80fd001800800065",
+        "solc_json": {
+          "compiler_version": "v0.5.0a4+commit.cd74ce4f",
+          "integrity": "784a74bab78d905e3a4d4398fdbfe7538a70840c108d8b50c25607a6d8261423",
+          "language": "Vyper",
+          "settings": {
+            "debug": false,
+            "evmVersion": "prague",
+            "experimentalCodegen": false,
+            "optimize": "gas",
+            "outputSelection": {
+              ".tmp/pytest-l7rl9eow/pytest/test_complement_keeps_imported0/unknown_0.vy": [
+                "*"
+              ]
+            },
+            "search_paths": [
+              ".tmp/pytest-l7rl9eow/pytest/test_complement_keeps_imported0"
+            ]
+          },
+          "sources": {
+            ".tmp/pytest-l7rl9eow/pytest/test_complement_keeps_imported0/bridge.vy": {
+              "content": "\nimport flags as flags\n",
+              "sha256sum": "377e53ff4d0ff3ac1a155fe57d08054377c82041205d491e516006008cc0b9bb"
+            },
+            ".tmp/pytest-l7rl9eow/pytest/test_complement_keeps_imported0/flags.vy": {
+              "content": "\nflag F:\n    M0\n    M1\n    M2\n",
+              "sha256sum": "3133fe38388612700bbce552ad31a1c29b92f7d0db17a3d1cfb9a5f2e091f367"
+            },
+            ".tmp/pytest-l7rl9eow/pytest/test_complement_keeps_imported0/unknown_0.vy": {
+              "content": "\nimport flags as library\nimport bridge as bridge\n\nflag F:\n    M0\n\n@external\n@pure\ndef direct_member() -> uint256:\n    return convert(library.F.M2, uint256)\n\n@external\n@pure\ndef nested_member() -> uint256:\n    return convert(bridge.flags.F.M2, uint256)\n\n@external\n@pure\ndef inverted_member() -> uint256:\n    return convert(~library.F.M0, uint256)\n\n@external\n@pure\ndef inverted_argument(item: library.F) -> uint256:\n    return convert(~item, uint256)\n",
+              "sha256sum": "f5849e8219927b63db38371c8809bad19de7111b52e19fb51270fce32d63cf35"
+            }
+          }
+        },
+        "source_code": "\nimport flags as library\nimport bridge as bridge\n\nflag F:\n    M0\n\n@external\n@pure\ndef direct_member() -> uint256:\n    return convert(library.F.M2, uint256)\n\n@external\n@pure\ndef nested_member() -> uint256:\n    return convert(bridge.flags.F.M2, uint256)\n\n@external\n@pure\ndef inverted_member() -> uint256:\n    return convert(~library.F.M0, uint256)\n\n@external\n@pure\ndef inverted_argument(item: library.F) -> uint256:\n    return convert(~item, uint256)\n",
+        "storage_layout": {},
+        "trace_type": "deployment",
+        "value": 0
+      },
+      {
+        "call_args": {
+          "calldata": "655cc449",
+          "is_modifying": false,
+          "to": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+          "value": 0
+        },
+        "call_succeeded": true,
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "direct_member",
+        "output": "0000000000000000000000000000000000000000000000000000000000000004",
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "trace_type": "call"
+      },
+      {
+        "call_args": {
+          "calldata": "50f1bbbb",
+          "is_modifying": false,
+          "to": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+          "value": 0
+        },
+        "call_succeeded": true,
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "nested_member",
+        "output": "0000000000000000000000000000000000000000000000000000000000000004",
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "trace_type": "call"
+      },
+      {
+        "call_args": {
+          "calldata": "443dc62b",
+          "is_modifying": false,
+          "to": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+          "value": 0
+        },
+        "call_succeeded": true,
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "inverted_member",
+        "output": "0000000000000000000000000000000000000000000000000000000000000006",
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "trace_type": "call"
+      },
+      {
+        "call_args": {
+          "calldata": "f8136e790000000000000000000000000000000000000000000000000000000000000005",
+          "is_modifying": false,
+          "to": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+          "value": 0
+        },
+        "call_succeeded": true,
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "inverted_argument",
+        "output": "0000000000000000000000000000000000000000000000000000000000000002",
+        "python_args": {
+          "args": [
+            5
+          ],
+          "kwargs": {}
+        },
+        "trace_type": "call"
+      }
+    ]
+  }
+}

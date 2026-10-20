@@ -1,0 +1,10 @@
+{
+  "compiler_commit": "cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c",
+  "compiler_version": "0.5.0a4",
+  "evm_version": "prague",
+  "experimental_codegen": false,
+  "finding": 44,
+  "optimize": "gas",
+  "pytest_node": "test_44_call_argument_order.py::test_typed_call_packs_arguments_before_value",
+  "state_comparison": "full-world-state-v1"
+}

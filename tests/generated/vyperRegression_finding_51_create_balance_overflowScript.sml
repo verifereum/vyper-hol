@@ -1,0 +1,4 @@
+Theory vyperRegression_finding_51_create_balance_overflow[no_sig_docs]
+Ancestors vyperRegressionDefs_finding_51_create_balance_overflow
+Libs vyperTestRunnerLib
+val () = List.app run_test_on_traces $ all_traces "vyperRegressionDefs_finding_51_create_balance_overflow";

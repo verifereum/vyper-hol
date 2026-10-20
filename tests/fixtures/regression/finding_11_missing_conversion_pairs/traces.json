@@ -1,0 +1,1142 @@
+{
+  "finding_11_missing_conversion_pairs": {
+    "deps": [],
+    "item_type": "test",
+    "traces": [
+      {
+        "annotated_ast": {
+          "ast": {
+            "ast_type": "Module",
+            "body": [
+              {
+                "args": {
+                  "args": [
+                    {
+                      "annotation": {
+                        "ast_type": "Name",
+                        "col_offset": 26,
+                        "end_col_offset": 30,
+                        "end_lineno": 4,
+                        "id": "bool",
+                        "lineno": 4,
+                        "node_id": 4,
+                        "src": "43:4:-1"
+                      },
+                      "arg": "item",
+                      "ast_type": "arg",
+                      "col_offset": 20,
+                      "end_col_offset": 30,
+                      "end_lineno": 4,
+                      "lineno": 4,
+                      "node_id": 3,
+                      "src": "37:10:-1"
+                    }
+                  ],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 33,
+                  "end_lineno": 5,
+                  "lineno": 4,
+                  "node_id": 2,
+                  "src": "17:77:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "Return",
+                    "col_offset": 4,
+                    "end_col_offset": 33,
+                    "end_lineno": 5,
+                    "lineno": 5,
+                    "node_id": 6,
+                    "src": "65:29:-1",
+                    "value": {
+                      "args": [
+                        {
+                          "ast_type": "Name",
+                          "col_offset": 19,
+                          "end_col_offset": 23,
+                          "end_lineno": 5,
+                          "id": "item",
+                          "lineno": 5,
+                          "node_id": 10,
+                          "src": "80:4:-1",
+                          "type": {
+                            "name": "bool"
+                          },
+                          "variable_reads": [
+                            {
+                              "access_path": [],
+                              "decl_node": {
+                                "node_id": 3,
+                                "source_id": -1
+                              },
+                              "name": "item"
+                            }
+                          ]
+                        },
+                        {
+                          "ast_type": "Name",
+                          "col_offset": 25,
+                          "end_col_offset": 32,
+                          "end_lineno": 5,
+                          "id": "decimal",
+                          "lineno": 5,
+                          "node_id": 12,
+                          "src": "86:7:-1",
+                          "type": {
+                            "type_t": {
+                              "name": "decimal",
+                              "typeclass": "decimal"
+                            }
+                          }
+                        }
+                      ],
+                      "ast_type": "Call",
+                      "col_offset": 11,
+                      "end_col_offset": 33,
+                      "end_lineno": 5,
+                      "func": {
+                        "ast_type": "Name",
+                        "col_offset": 11,
+                        "end_col_offset": 18,
+                        "end_lineno": 5,
+                        "id": "convert",
+                        "lineno": 5,
+                        "node_id": 8,
+                        "src": "72:7:-1",
+                        "type": {
+                          "name": "convert",
+                          "typeclass": "builtin_function"
+                        }
+                      },
+                      "keywords": [],
+                      "lineno": 5,
+                      "node_id": 7,
+                      "src": "72:22:-1",
+                      "type": {
+                        "name": "decimal",
+                        "typeclass": "decimal"
+                      }
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 9,
+                    "end_lineno": 2,
+                    "id": "external",
+                    "lineno": 2,
+                    "node_id": 14,
+                    "src": "2:8:-1"
+                  },
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 5,
+                    "end_lineno": 3,
+                    "id": "pure",
+                    "lineno": 3,
+                    "node_id": 16,
+                    "src": "12:4:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 33,
+                "end_lineno": 5,
+                "func_type": {
+                  "argument_types": [
+                    {
+                      "name": "bool"
+                    }
+                  ],
+                  "name": "bool_to_decimal",
+                  "return_type": {
+                    "name": "decimal",
+                    "typeclass": "decimal"
+                  },
+                  "type_decl_node": {
+                    "node_id": 1,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                },
+                "lineno": 4,
+                "name": "bool_to_decimal",
+                "node_id": 1,
+                "returns": {
+                  "ast_type": "Name",
+                  "col_offset": 35,
+                  "end_col_offset": 42,
+                  "end_lineno": 4,
+                  "id": "decimal",
+                  "lineno": 4,
+                  "node_id": 18,
+                  "src": "52:7:-1"
+                },
+                "src": "17:77:-1"
+              },
+              {
+                "args": {
+                  "args": [
+                    {
+                      "annotation": {
+                        "ast_type": "Name",
+                        "col_offset": 24,
+                        "end_col_offset": 28,
+                        "end_lineno": 9,
+                        "id": "bool",
+                        "lineno": 9,
+                        "node_id": 23,
+                        "src": "136:4:-1"
+                      },
+                      "arg": "item",
+                      "ast_type": "arg",
+                      "col_offset": 18,
+                      "end_col_offset": 28,
+                      "end_lineno": 9,
+                      "lineno": 9,
+                      "node_id": 22,
+                      "src": "130:10:-1"
+                    }
+                  ],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 32,
+                  "end_lineno": 10,
+                  "lineno": 9,
+                  "node_id": 21,
+                  "src": "112:73:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "Return",
+                    "col_offset": 4,
+                    "end_col_offset": 32,
+                    "end_lineno": 10,
+                    "lineno": 10,
+                    "node_id": 25,
+                    "src": "157:28:-1",
+                    "value": {
+                      "args": [
+                        {
+                          "ast_type": "Name",
+                          "col_offset": 19,
+                          "end_col_offset": 23,
+                          "end_lineno": 10,
+                          "id": "item",
+                          "lineno": 10,
+                          "node_id": 29,
+                          "src": "172:4:-1",
+                          "type": {
+                            "name": "bool"
+                          },
+                          "variable_reads": [
+                            {
+                              "access_path": [],
+                              "decl_node": {
+                                "node_id": 22,
+                                "source_id": -1
+                              },
+                              "name": "item"
+                            }
+                          ]
+                        },
+                        {
+                          "ast_type": "Name",
+                          "col_offset": 25,
+                          "end_col_offset": 31,
+                          "end_lineno": 10,
+                          "id": "bytes1",
+                          "lineno": 10,
+                          "node_id": 31,
+                          "src": "178:6:-1",
+                          "type": {
+                            "type_t": {
+                              "m": 1,
+                              "name": "bytes1",
+                              "typeclass": "bytes_m"
+                            }
+                          }
+                        }
+                      ],
+                      "ast_type": "Call",
+                      "col_offset": 11,
+                      "end_col_offset": 32,
+                      "end_lineno": 10,
+                      "func": {
+                        "ast_type": "Name",
+                        "col_offset": 11,
+                        "end_col_offset": 18,
+                        "end_lineno": 10,
+                        "id": "convert",
+                        "lineno": 10,
+                        "node_id": 27,
+                        "src": "164:7:-1",
+                        "type": {
+                          "name": "convert",
+                          "typeclass": "builtin_function"
+                        }
+                      },
+                      "keywords": [],
+                      "lineno": 10,
+                      "node_id": 26,
+                      "src": "164:21:-1",
+                      "type": {
+                        "m": 1,
+                        "name": "bytes1",
+                        "typeclass": "bytes_m"
+                      }
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 9,
+                    "end_lineno": 7,
+                    "id": "external",
+                    "lineno": 7,
+                    "node_id": 33,
+                    "src": "97:8:-1"
+                  },
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 5,
+                    "end_lineno": 8,
+                    "id": "pure",
+                    "lineno": 8,
+                    "node_id": 35,
+                    "src": "107:4:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 32,
+                "end_lineno": 10,
+                "func_type": {
+                  "argument_types": [
+                    {
+                      "name": "bool"
+                    }
+                  ],
+                  "name": "bool_to_bytes",
+                  "return_type": {
+                    "m": 1,
+                    "name": "bytes1",
+                    "typeclass": "bytes_m"
+                  },
+                  "type_decl_node": {
+                    "node_id": 20,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                },
+                "lineno": 9,
+                "name": "bool_to_bytes",
+                "node_id": 20,
+                "returns": {
+                  "ast_type": "Name",
+                  "col_offset": 33,
+                  "end_col_offset": 39,
+                  "end_lineno": 9,
+                  "id": "bytes1",
+                  "lineno": 9,
+                  "node_id": 37,
+                  "src": "145:6:-1"
+                },
+                "src": "112:73:-1"
+              },
+              {
+                "args": {
+                  "args": [
+                    {
+                      "annotation": {
+                        "ast_type": "Name",
+                        "col_offset": 26,
+                        "end_col_offset": 33,
+                        "end_lineno": 14,
+                        "id": "decimal",
+                        "lineno": 14,
+                        "node_id": 42,
+                        "src": "229:7:-1"
+                      },
+                      "arg": "item",
+                      "ast_type": "arg",
+                      "col_offset": 20,
+                      "end_col_offset": 33,
+                      "end_lineno": 14,
+                      "lineno": 14,
+                      "node_id": 41,
+                      "src": "223:13:-1"
+                    }
+                  ],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 30,
+                  "end_lineno": 15,
+                  "lineno": 14,
+                  "node_id": 40,
+                  "src": "203:74:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "Return",
+                    "col_offset": 4,
+                    "end_col_offset": 30,
+                    "end_lineno": 15,
+                    "lineno": 15,
+                    "node_id": 44,
+                    "src": "251:26:-1",
+                    "value": {
+                      "args": [
+                        {
+                          "ast_type": "Name",
+                          "col_offset": 19,
+                          "end_col_offset": 23,
+                          "end_lineno": 15,
+                          "id": "item",
+                          "lineno": 15,
+                          "node_id": 48,
+                          "src": "266:4:-1",
+                          "type": {
+                            "name": "decimal",
+                            "typeclass": "decimal"
+                          },
+                          "variable_reads": [
+                            {
+                              "access_path": [],
+                              "decl_node": {
+                                "node_id": 41,
+                                "source_id": -1
+                              },
+                              "name": "item"
+                            }
+                          ]
+                        },
+                        {
+                          "ast_type": "Name",
+                          "col_offset": 25,
+                          "end_col_offset": 29,
+                          "end_lineno": 15,
+                          "id": "bool",
+                          "lineno": 15,
+                          "node_id": 50,
+                          "src": "272:4:-1",
+                          "type": {
+                            "type_t": {
+                              "name": "bool"
+                            }
+                          }
+                        }
+                      ],
+                      "ast_type": "Call",
+                      "col_offset": 11,
+                      "end_col_offset": 30,
+                      "end_lineno": 15,
+                      "func": {
+                        "ast_type": "Name",
+                        "col_offset": 11,
+                        "end_col_offset": 18,
+                        "end_lineno": 15,
+                        "id": "convert",
+                        "lineno": 15,
+                        "node_id": 46,
+                        "src": "258:7:-1",
+                        "type": {
+                          "name": "convert",
+                          "typeclass": "builtin_function"
+                        }
+                      },
+                      "keywords": [],
+                      "lineno": 15,
+                      "node_id": 45,
+                      "src": "258:19:-1",
+                      "type": {
+                        "name": "bool"
+                      }
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 9,
+                    "end_lineno": 12,
+                    "id": "external",
+                    "lineno": 12,
+                    "node_id": 52,
+                    "src": "188:8:-1"
+                  },
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 5,
+                    "end_lineno": 13,
+                    "id": "pure",
+                    "lineno": 13,
+                    "node_id": 54,
+                    "src": "198:4:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 30,
+                "end_lineno": 15,
+                "func_type": {
+                  "argument_types": [
+                    {
+                      "name": "decimal",
+                      "typeclass": "decimal"
+                    }
+                  ],
+                  "name": "decimal_to_bool",
+                  "return_type": {
+                    "name": "bool"
+                  },
+                  "type_decl_node": {
+                    "node_id": 39,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                },
+                "lineno": 14,
+                "name": "decimal_to_bool",
+                "node_id": 39,
+                "returns": {
+                  "ast_type": "Name",
+                  "col_offset": 38,
+                  "end_col_offset": 42,
+                  "end_lineno": 14,
+                  "id": "bool",
+                  "lineno": 14,
+                  "node_id": 56,
+                  "src": "241:4:-1"
+                },
+                "src": "203:74:-1"
+              },
+              {
+                "args": {
+                  "args": [
+                    {
+                      "annotation": {
+                        "ast_type": "Name",
+                        "col_offset": 27,
+                        "end_col_offset": 34,
+                        "end_lineno": 19,
+                        "id": "decimal",
+                        "lineno": 19,
+                        "node_id": 61,
+                        "src": "322:7:-1"
+                      },
+                      "arg": "item",
+                      "ast_type": "arg",
+                      "col_offset": 21,
+                      "end_col_offset": 34,
+                      "end_lineno": 19,
+                      "lineno": 19,
+                      "node_id": 60,
+                      "src": "316:13:-1"
+                    }
+                  ],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 33,
+                  "end_lineno": 20,
+                  "lineno": 19,
+                  "node_id": 59,
+                  "src": "295:81:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "Return",
+                    "col_offset": 4,
+                    "end_col_offset": 33,
+                    "end_lineno": 20,
+                    "lineno": 20,
+                    "node_id": 63,
+                    "src": "347:29:-1",
+                    "value": {
+                      "args": [
+                        {
+                          "ast_type": "Name",
+                          "col_offset": 19,
+                          "end_col_offset": 23,
+                          "end_lineno": 20,
+                          "id": "item",
+                          "lineno": 20,
+                          "node_id": 67,
+                          "src": "362:4:-1",
+                          "type": {
+                            "name": "decimal",
+                            "typeclass": "decimal"
+                          },
+                          "variable_reads": [
+                            {
+                              "access_path": [],
+                              "decl_node": {
+                                "node_id": 60,
+                                "source_id": -1
+                              },
+                              "name": "item"
+                            }
+                          ]
+                        },
+                        {
+                          "ast_type": "Name",
+                          "col_offset": 25,
+                          "end_col_offset": 32,
+                          "end_lineno": 20,
+                          "id": "bytes21",
+                          "lineno": 20,
+                          "node_id": 69,
+                          "src": "368:7:-1",
+                          "type": {
+                            "type_t": {
+                              "m": 21,
+                              "name": "bytes21",
+                              "typeclass": "bytes_m"
+                            }
+                          }
+                        }
+                      ],
+                      "ast_type": "Call",
+                      "col_offset": 11,
+                      "end_col_offset": 33,
+                      "end_lineno": 20,
+                      "func": {
+                        "ast_type": "Name",
+                        "col_offset": 11,
+                        "end_col_offset": 18,
+                        "end_lineno": 20,
+                        "id": "convert",
+                        "lineno": 20,
+                        "node_id": 65,
+                        "src": "354:7:-1",
+                        "type": {
+                          "name": "convert",
+                          "typeclass": "builtin_function"
+                        }
+                      },
+                      "keywords": [],
+                      "lineno": 20,
+                      "node_id": 64,
+                      "src": "354:22:-1",
+                      "type": {
+                        "m": 21,
+                        "name": "bytes21",
+                        "typeclass": "bytes_m"
+                      }
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 9,
+                    "end_lineno": 17,
+                    "id": "external",
+                    "lineno": 17,
+                    "node_id": 71,
+                    "src": "280:8:-1"
+                  },
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 5,
+                    "end_lineno": 18,
+                    "id": "pure",
+                    "lineno": 18,
+                    "node_id": 73,
+                    "src": "290:4:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 33,
+                "end_lineno": 20,
+                "func_type": {
+                  "argument_types": [
+                    {
+                      "name": "decimal",
+                      "typeclass": "decimal"
+                    }
+                  ],
+                  "name": "decimal_to_bytes",
+                  "return_type": {
+                    "m": 21,
+                    "name": "bytes21",
+                    "typeclass": "bytes_m"
+                  },
+                  "type_decl_node": {
+                    "node_id": 58,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                },
+                "lineno": 19,
+                "name": "decimal_to_bytes",
+                "node_id": 58,
+                "returns": {
+                  "ast_type": "Name",
+                  "col_offset": 39,
+                  "end_col_offset": 46,
+                  "end_lineno": 19,
+                  "id": "bytes21",
+                  "lineno": 19,
+                  "node_id": 75,
+                  "src": "334:7:-1"
+                },
+                "src": "295:81:-1"
+              },
+              {
+                "args": {
+                  "args": [
+                    {
+                      "annotation": {
+                        "ast_type": "Subscript",
+                        "col_offset": 25,
+                        "end_col_offset": 34,
+                        "end_lineno": 24,
+                        "lineno": 24,
+                        "node_id": 80,
+                        "slice": {
+                          "ast_type": "Int",
+                          "col_offset": 32,
+                          "end_col_offset": 33,
+                          "end_lineno": 24,
+                          "folded_value": {
+                            "ast_type": "Int",
+                            "col_offset": 32,
+                            "end_col_offset": 33,
+                            "end_lineno": 24,
+                            "lineno": 24,
+                            "node_id": 83,
+                            "src": "426:1:-1",
+                            "value": 8
+                          },
+                          "lineno": 24,
+                          "node_id": 83,
+                          "src": "426:1:-1",
+                          "value": 8
+                        },
+                        "src": "419:9:-1",
+                        "value": {
+                          "ast_type": "Name",
+                          "col_offset": 25,
+                          "end_col_offset": 31,
+                          "end_lineno": 24,
+                          "id": "String",
+                          "lineno": 24,
+                          "node_id": 81,
+                          "src": "419:6:-1"
+                        }
+                      },
+                      "arg": "item",
+                      "ast_type": "arg",
+                      "col_offset": 19,
+                      "end_col_offset": 34,
+                      "end_lineno": 24,
+                      "lineno": 24,
+                      "node_id": 79,
+                      "src": "413:15:-1"
+                    }
+                  ],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 30,
+                  "end_lineno": 25,
+                  "lineno": 24,
+                  "node_id": 78,
+                  "src": "394:75:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "Return",
+                    "col_offset": 4,
+                    "end_col_offset": 30,
+                    "end_lineno": 25,
+                    "lineno": 25,
+                    "node_id": 85,
+                    "src": "443:26:-1",
+                    "value": {
+                      "args": [
+                        {
+                          "ast_type": "Name",
+                          "col_offset": 19,
+                          "end_col_offset": 23,
+                          "end_lineno": 25,
+                          "id": "item",
+                          "lineno": 25,
+                          "node_id": 89,
+                          "src": "458:4:-1",
+                          "type": {
+                            "length": 8,
+                            "name": "String",
+                            "typeclass": "string"
+                          },
+                          "variable_reads": [
+                            {
+                              "access_path": [],
+                              "decl_node": {
+                                "node_id": 79,
+                                "source_id": -1
+                              },
+                              "name": "item"
+                            }
+                          ]
+                        },
+                        {
+                          "ast_type": "Name",
+                          "col_offset": 25,
+                          "end_col_offset": 29,
+                          "end_lineno": 25,
+                          "id": "bool",
+                          "lineno": 25,
+                          "node_id": 91,
+                          "src": "464:4:-1",
+                          "type": {
+                            "type_t": {
+                              "name": "bool"
+                            }
+                          }
+                        }
+                      ],
+                      "ast_type": "Call",
+                      "col_offset": 11,
+                      "end_col_offset": 30,
+                      "end_lineno": 25,
+                      "func": {
+                        "ast_type": "Name",
+                        "col_offset": 11,
+                        "end_col_offset": 18,
+                        "end_lineno": 25,
+                        "id": "convert",
+                        "lineno": 25,
+                        "node_id": 87,
+                        "src": "450:7:-1",
+                        "type": {
+                          "name": "convert",
+                          "typeclass": "builtin_function"
+                        }
+                      },
+                      "keywords": [],
+                      "lineno": 25,
+                      "node_id": 86,
+                      "src": "450:19:-1",
+                      "type": {
+                        "name": "bool"
+                      }
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 9,
+                    "end_lineno": 22,
+                    "id": "external",
+                    "lineno": 22,
+                    "node_id": 93,
+                    "src": "379:8:-1"
+                  },
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 5,
+                    "end_lineno": 23,
+                    "id": "pure",
+                    "lineno": 23,
+                    "node_id": 95,
+                    "src": "389:4:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 30,
+                "end_lineno": 25,
+                "func_type": {
+                  "argument_types": [
+                    {
+                      "length": 8,
+                      "name": "String",
+                      "typeclass": "string"
+                    }
+                  ],
+                  "name": "string_to_bool",
+                  "return_type": {
+                    "name": "bool"
+                  },
+                  "type_decl_node": {
+                    "node_id": 77,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                },
+                "lineno": 24,
+                "name": "string_to_bool",
+                "node_id": 77,
+                "returns": {
+                  "ast_type": "Name",
+                  "col_offset": 39,
+                  "end_col_offset": 43,
+                  "end_lineno": 24,
+                  "id": "bool",
+                  "lineno": 24,
+                  "node_id": 97,
+                  "src": "433:4:-1"
+                },
+                "src": "394:75:-1"
+              }
+            ],
+            "col_offset": 0,
+            "doc_string": null,
+            "end_col_offset": 31,
+            "end_lineno": 25,
+            "is_interface": false,
+            "lineno": 1,
+            "name": null,
+            "node_id": 0,
+            "path": "tests/fixtures/regression/finding_11_missing_conversion_pairs/unknown_0.vy",
+            "resolved_path": "tests/fixtures/regression/finding_11_missing_conversion_pairs/unknown_0.vy",
+            "settings": {},
+            "source_id": -1,
+            "source_sha256sum": "1a78da5789c97b66f1c7562aeee623ade67cc51469c2e490361ab6b70664d2f7",
+            "src": "0:470:-1",
+            "type": {
+              "name": "tests/fixtures/regression/finding_11_missing_conversion_pairs/unknown_0.vy",
+              "type_decl_node": {
+                "node_id": 0,
+                "source_id": -1
+              },
+              "typeclass": "module"
+            }
+          },
+          "contract_name": "tests/fixtures/regression/finding_11_missing_conversion_pairs/unknown_0.vy",
+          "imports": []
+        },
+        "blueprint_initcode_prefix": null,
+        "calldata": null,
+        "compiler_settings": {
+          "debug": false,
+          "enable_decimals": true,
+          "evm_version": "prague",
+          "experimental_codegen": false,
+          "optimize": "gas"
+        },
+        "contract_abi": [
+          {
+            "gas": 496,
+            "inputs": [
+              {
+                "name": "item",
+                "type": "bool"
+              }
+            ],
+            "name": "bool_to_decimal",
+            "outputs": [
+              {
+                "internalType": "decimal",
+                "name": "",
+                "type": "int168"
+              }
+            ],
+            "stateMutability": "pure",
+            "type": "function"
+          },
+          {
+            "gas": 494,
+            "inputs": [
+              {
+                "name": "item",
+                "type": "bool"
+              }
+            ],
+            "name": "bool_to_bytes",
+            "outputs": [
+              {
+                "name": "",
+                "type": "bytes1"
+              }
+            ],
+            "stateMutability": "pure",
+            "type": "function"
+          },
+          {
+            "gas": 497,
+            "inputs": [
+              {
+                "internalType": "decimal",
+                "name": "item",
+                "type": "int168"
+              }
+            ],
+            "name": "decimal_to_bool",
+            "outputs": [
+              {
+                "name": "",
+                "type": "bool"
+              }
+            ],
+            "stateMutability": "pure",
+            "type": "function"
+          },
+          {
+            "gas": 497,
+            "inputs": [
+              {
+                "internalType": "decimal",
+                "name": "item",
+                "type": "int168"
+              }
+            ],
+            "name": "decimal_to_bytes",
+            "outputs": [
+              {
+                "name": "",
+                "type": "bytes21"
+              }
+            ],
+            "stateMutability": "pure",
+            "type": "function"
+          },
+          {
+            "gas": 554,
+            "inputs": [
+              {
+                "name": "item",
+                "type": "string"
+              }
+            ],
+            "name": "string_to_bool",
+            "outputs": [
+              {
+                "name": "",
+                "type": "bool"
+              }
+            ],
+            "stateMutability": "pure",
+            "type": "function"
+          }
+        ],
+        "deployed_address": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+        "deployment_succeeded": true,
+        "deployment_type": "source",
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "constructor",
+        "initcode": "61014a61000d5f3961014a5ff35f3560e01c60026005820660011b61014001601e395f51565b63c6086e9d81186101385760243610341761013c576004358060011c61013c576040526040516402540be4008102905060605260206060f35b638a8f409a81186101385760243610341761013c576004358060011c61013c576040526040518060f81b905060605260206060f35b63e7dce79081186100bc5760243610341761013c576004358060140b811861013c57604052604051801515905060605260206060f35b631533de8481186101385760243610341761013c5760043560040180356008811161013c57506028816040375060605160405160200360031b1c151560805260206080f35b63caf623c081186101385760243610341761013c576004358060140b811861013c576040526040518060581b905060605260206060f35b5f5ffd5b5f80fd010100860138001800518558207fe1b98f544ffb8c8cacbf7deb4e954a020d2ce3db6c9b89a8475b97efc3466019014a810a00a1657679706572830005000036",
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "raw_ir": null,
+        "runtime_bytecode": "5f3560e01c60026005820660011b61014001601e395f51565b63c6086e9d81186101385760243610341761013c576004358060011c61013c576040526040516402540be4008102905060605260206060f35b638a8f409a81186101385760243610341761013c576004358060011c61013c576040526040518060f81b905060605260206060f35b63e7dce79081186100bc5760243610341761013c576004358060140b811861013c57604052604051801515905060605260206060f35b631533de8481186101385760243610341761013c5760043560040180356008811161013c57506028816040375060605160405160200360031b1c151560805260206080f35b63caf623c081186101385760243610341761013c576004358060140b811861013c576040526040518060581b905060605260206060f35b5f5ffd5b5f80fd01010086013800180051",
+        "solc_json": {
+          "compiler_version": "v0.5.0a4+commit.cd74ce4f",
+          "integrity": "7fe1b98f544ffb8c8cacbf7deb4e954a020d2ce3db6c9b89a8475b97efc34660",
+          "language": "Vyper",
+          "settings": {
+            "debug": false,
+            "enable_decimals": true,
+            "evmVersion": "prague",
+            "experimentalCodegen": false,
+            "optimize": "gas",
+            "outputSelection": {
+              "unknown_0.vy": [
+                "*"
+              ]
+            },
+            "search_paths": [
+              "."
+            ]
+          },
+          "sources": {
+            "unknown_0.vy": {
+              "content": "\n@external\n@pure\ndef bool_to_decimal(item: bool) -> decimal:\n    return convert(item, decimal)\n\n@external\n@pure\ndef bool_to_bytes(item: bool) -> bytes1:\n    return convert(item, bytes1)\n\n@external\n@pure\ndef decimal_to_bool(item: decimal) -> bool:\n    return convert(item, bool)\n\n@external\n@pure\ndef decimal_to_bytes(item: decimal) -> bytes21:\n    return convert(item, bytes21)\n\n@external\n@pure\ndef string_to_bool(item: String[8]) -> bool:\n    return convert(item, bool)\n",
+              "sha256sum": "1a78da5789c97b66f1c7562aeee623ade67cc51469c2e490361ab6b70664d2f7"
+            }
+          }
+        },
+        "source_code": "\n@external\n@pure\ndef bool_to_decimal(item: bool) -> decimal:\n    return convert(item, decimal)\n\n@external\n@pure\ndef bool_to_bytes(item: bool) -> bytes1:\n    return convert(item, bytes1)\n\n@external\n@pure\ndef decimal_to_bool(item: decimal) -> bool:\n    return convert(item, bool)\n\n@external\n@pure\ndef decimal_to_bytes(item: decimal) -> bytes21:\n    return convert(item, bytes21)\n\n@external\n@pure\ndef string_to_bool(item: String[8]) -> bool:\n    return convert(item, bool)\n",
+        "storage_layout": {},
+        "trace_type": "deployment",
+        "value": 0
+      },
+      {
+        "call_args": {
+          "calldata": "c6086e9d0000000000000000000000000000000000000000000000000000000000000001",
+          "is_modifying": false,
+          "to": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+          "value": 0
+        },
+        "call_succeeded": true,
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "bool_to_decimal",
+        "output": "00000000000000000000000000000000000000000000000000000002540be400",
+        "python_args": {
+          "args": [
+            true
+          ],
+          "kwargs": {}
+        },
+        "trace_type": "call"
+      }
+    ]
+  }
+}

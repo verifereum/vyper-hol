@@ -1,0 +1,467 @@
+{
+  "finding_04_dynamic_abi_padding": {
+    "deps": [],
+    "item_type": "test",
+    "traces": [
+      {
+        "annotated_ast": {
+          "ast": {
+            "ast_type": "Module",
+            "body": [
+              {
+                "args": {
+                  "args": [
+                    {
+                      "annotation": {
+                        "ast_type": "Subscript",
+                        "col_offset": 20,
+                        "end_col_offset": 29,
+                        "end_lineno": 4,
+                        "lineno": 4,
+                        "node_id": 4,
+                        "slice": {
+                          "ast_type": "Int",
+                          "col_offset": 26,
+                          "end_col_offset": 28,
+                          "end_lineno": 4,
+                          "folded_value": {
+                            "ast_type": "Int",
+                            "col_offset": 26,
+                            "end_col_offset": 28,
+                            "end_lineno": 4,
+                            "lineno": 4,
+                            "node_id": 7,
+                            "src": "43:2:-1",
+                            "value": 96
+                          },
+                          "lineno": 4,
+                          "node_id": 7,
+                          "src": "43:2:-1",
+                          "value": 96
+                        },
+                        "src": "37:9:-1",
+                        "value": {
+                          "ast_type": "Name",
+                          "col_offset": 20,
+                          "end_col_offset": 25,
+                          "end_lineno": 4,
+                          "id": "Bytes",
+                          "lineno": 4,
+                          "node_id": 5,
+                          "src": "37:5:-1"
+                        }
+                      },
+                      "arg": "payload",
+                      "ast_type": "arg",
+                      "col_offset": 11,
+                      "end_col_offset": 29,
+                      "end_lineno": 4,
+                      "lineno": 4,
+                      "node_id": 3,
+                      "src": "28:18:-1"
+                    }
+                  ],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 41,
+                  "end_lineno": 5,
+                  "lineno": 4,
+                  "node_id": 2,
+                  "src": "17:86:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "Return",
+                    "col_offset": 4,
+                    "end_col_offset": 41,
+                    "end_lineno": 5,
+                    "lineno": 5,
+                    "node_id": 9,
+                    "src": "66:37:-1",
+                    "value": {
+                      "args": [
+                        {
+                          "ast_type": "Name",
+                          "col_offset": 22,
+                          "end_col_offset": 29,
+                          "end_lineno": 5,
+                          "id": "payload",
+                          "lineno": 5,
+                          "node_id": 13,
+                          "src": "84:7:-1",
+                          "type": {
+                            "length": 96,
+                            "name": "Bytes",
+                            "typeclass": "bytes"
+                          },
+                          "variable_reads": [
+                            {
+                              "access_path": [],
+                              "decl_node": {
+                                "node_id": 3,
+                                "source_id": -1
+                              },
+                              "name": "payload"
+                            }
+                          ]
+                        },
+                        {
+                          "ast_type": "Subscript",
+                          "col_offset": 31,
+                          "end_col_offset": 40,
+                          "end_lineno": 5,
+                          "lineno": 5,
+                          "node_id": 15,
+                          "slice": {
+                            "ast_type": "Int",
+                            "col_offset": 37,
+                            "end_col_offset": 39,
+                            "end_lineno": 5,
+                            "folded_value": {
+                              "ast_type": "Int",
+                              "col_offset": 37,
+                              "end_col_offset": 39,
+                              "end_lineno": 5,
+                              "lineno": 5,
+                              "node_id": 18,
+                              "src": "99:2:-1",
+                              "value": 32
+                            },
+                            "lineno": 5,
+                            "node_id": 18,
+                            "src": "99:2:-1",
+                            "value": 32
+                          },
+                          "src": "93:9:-1",
+                          "type": {
+                            "type_t": {
+                              "length": 32,
+                              "name": "Bytes",
+                              "typeclass": "bytes"
+                            }
+                          },
+                          "value": {
+                            "ast_type": "Name",
+                            "col_offset": 31,
+                            "end_col_offset": 36,
+                            "end_lineno": 5,
+                            "id": "Bytes",
+                            "lineno": 5,
+                            "node_id": 16,
+                            "src": "93:5:-1"
+                          }
+                        }
+                      ],
+                      "ast_type": "Call",
+                      "col_offset": 11,
+                      "end_col_offset": 41,
+                      "end_lineno": 5,
+                      "func": {
+                        "ast_type": "Name",
+                        "col_offset": 11,
+                        "end_col_offset": 21,
+                        "end_lineno": 5,
+                        "id": "abi_decode",
+                        "lineno": 5,
+                        "node_id": 11,
+                        "src": "73:10:-1",
+                        "type": {
+                          "name": "abi_decode",
+                          "typeclass": "builtin_function"
+                        }
+                      },
+                      "keywords": [],
+                      "lineno": 5,
+                      "node_id": 10,
+                      "src": "73:30:-1",
+                      "type": {
+                        "length": 32,
+                        "name": "Bytes",
+                        "typeclass": "bytes"
+                      }
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 9,
+                    "end_lineno": 2,
+                    "id": "external",
+                    "lineno": 2,
+                    "node_id": 20,
+                    "src": "2:8:-1"
+                  },
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 5,
+                    "end_lineno": 3,
+                    "id": "pure",
+                    "lineno": 3,
+                    "node_id": 22,
+                    "src": "12:4:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 41,
+                "end_lineno": 5,
+                "func_type": {
+                  "argument_types": [
+                    {
+                      "length": 96,
+                      "name": "Bytes",
+                      "typeclass": "bytes"
+                    }
+                  ],
+                  "name": "decode",
+                  "return_type": {
+                    "length": 32,
+                    "name": "Bytes",
+                    "typeclass": "bytes"
+                  },
+                  "type_decl_node": {
+                    "node_id": 1,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                },
+                "lineno": 4,
+                "name": "decode",
+                "node_id": 1,
+                "returns": {
+                  "ast_type": "Subscript",
+                  "col_offset": 34,
+                  "end_col_offset": 43,
+                  "end_lineno": 4,
+                  "lineno": 4,
+                  "node_id": 24,
+                  "slice": {
+                    "ast_type": "Int",
+                    "col_offset": 40,
+                    "end_col_offset": 42,
+                    "end_lineno": 4,
+                    "folded_value": {
+                      "ast_type": "Int",
+                      "col_offset": 40,
+                      "end_col_offset": 42,
+                      "end_lineno": 4,
+                      "lineno": 4,
+                      "node_id": 27,
+                      "src": "57:2:-1",
+                      "value": 32
+                    },
+                    "lineno": 4,
+                    "node_id": 27,
+                    "src": "57:2:-1",
+                    "value": 32
+                  },
+                  "src": "51:9:-1",
+                  "value": {
+                    "ast_type": "Name",
+                    "col_offset": 34,
+                    "end_col_offset": 39,
+                    "end_lineno": 4,
+                    "id": "Bytes",
+                    "lineno": 4,
+                    "node_id": 25,
+                    "src": "51:5:-1"
+                  }
+                },
+                "src": "17:86:-1"
+              }
+            ],
+            "col_offset": 0,
+            "doc_string": null,
+            "end_col_offset": 42,
+            "end_lineno": 5,
+            "is_interface": false,
+            "lineno": 1,
+            "name": null,
+            "node_id": 0,
+            "path": "tests/fixtures/regression/finding_04_dynamic_abi_padding/unknown_0.vy",
+            "resolved_path": "tests/fixtures/regression/finding_04_dynamic_abi_padding/unknown_0.vy",
+            "settings": {},
+            "source_id": -1,
+            "source_sha256sum": "8f151f76b1449108eeb6928a7d9f9b38062d65ec4e01edc4a852a0394988636f",
+            "src": "0:104:-1",
+            "type": {
+              "name": "tests/fixtures/regression/finding_04_dynamic_abi_padding/unknown_0.vy",
+              "type_decl_node": {
+                "node_id": 0,
+                "source_id": -1
+              },
+              "typeclass": "module"
+            }
+          },
+          "contract_name": "tests/fixtures/regression/finding_04_dynamic_abi_padding/unknown_0.vy",
+          "imports": []
+        },
+        "blueprint_initcode_prefix": null,
+        "calldata": null,
+        "compiler_settings": {
+          "debug": false,
+          "enable_decimals": true,
+          "evm_version": "prague",
+          "experimental_codegen": false,
+          "optimize": "gas"
+        },
+        "contract_abi": [
+          {
+            "gas": 4808,
+            "inputs": [
+              {
+                "name": "payload",
+                "type": "bytes"
+              }
+            ],
+            "name": "decode",
+            "outputs": [
+              {
+                "name": "",
+                "type": "bytes"
+              }
+            ],
+            "stateMutability": "pure",
+            "type": "function"
+          }
+        ],
+        "deployed_address": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+        "deployment_succeeded": true,
+        "deployment_type": "source",
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "constructor",
+        "initcode": "60ce61000b5f3960ce5ff35f3560e01c63e5c5e9a381186100c6576024361034176100ca576004356004018035606081116100ca5750608081604037506020806101005260405160618110601f821116156100ca57506040516060016080116100ca576060606051606001106100ca57606051606001805160405160600182516020018301116100ca57602081116100ca575060408160c05e5060c08161010001604082825e8051806020830101601f825f03163682375050601f19601f825160200101169050905081019050610100f35b5f5ffd5b5f80fd85582063fa40b924806088e924561c3fef2b8bb2d8e0954931e96ccf0ed1d8e3f1f13518ce8000a1657679706572830005000034",
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "raw_ir": null,
+        "runtime_bytecode": "5f3560e01c63e5c5e9a381186100c6576024361034176100ca576004356004018035606081116100ca5750608081604037506020806101005260405160618110601f821116156100ca57506040516060016080116100ca576060606051606001106100ca57606051606001805160405160600182516020018301116100ca57602081116100ca575060408160c05e5060c08161010001604082825e8051806020830101601f825f03163682375050601f19601f825160200101169050905081019050610100f35b5f5ffd5b5f80fd",
+        "solc_json": {
+          "compiler_version": "v0.5.0a4+commit.cd74ce4f",
+          "integrity": "63fa40b924806088e924561c3fef2b8bb2d8e0954931e96ccf0ed1d8e3f1f135",
+          "language": "Vyper",
+          "settings": {
+            "debug": false,
+            "evmVersion": "prague",
+            "experimentalCodegen": false,
+            "optimize": "gas",
+            "outputSelection": {
+              "unknown_0.vy": [
+                "*"
+              ]
+            },
+            "search_paths": [
+              "."
+            ]
+          },
+          "sources": {
+            "unknown_0.vy": {
+              "content": "\n@external\n@pure\ndef decode(payload: Bytes[96]) -> Bytes[32]:\n    return abi_decode(payload, Bytes[32])\n",
+              "sha256sum": "8f151f76b1449108eeb6928a7d9f9b38062d65ec4e01edc4a852a0394988636f"
+            }
+          }
+        },
+        "source_code": "\n@external\n@pure\ndef decode(payload: Bytes[96]) -> Bytes[32]:\n    return abi_decode(payload, Bytes[32])\n",
+        "storage_layout": {},
+        "trace_type": "deployment",
+        "value": 0
+      },
+      {
+        "call_args": {
+          "calldata": "e5c5e9a3000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000600000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000161ff000000000000000000000000000000000000000000000000000000000000",
+          "is_modifying": false,
+          "to": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+          "value": 0
+        },
+        "call_succeeded": true,
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "decode",
+        "output": "000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000016100000000000000000000000000000000000000000000000000000000000000",
+        "python_args": {
+          "args": [
+            "0x0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000161ff000000000000000000000000000000000000000000000000000000000000"
+          ],
+          "kwargs": {}
+        },
+        "trace_type": "call"
+      },
+      {
+        "call_args": {
+          "calldata": "e5c5e9a300000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000060000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000016100000000000000000000000000000000000000000000000000000000000000",
+          "is_modifying": false,
+          "to": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+          "value": 0
+        },
+        "call_succeeded": true,
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "decode",
+        "output": "000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000016100000000000000000000000000000000000000000000000000000000000000",
+        "python_args": {
+          "args": [
+            "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000016100000000000000000000000000000000000000000000000000000000000000"
+          ],
+          "kwargs": {}
+        },
+        "trace_type": "call"
+      }
+    ]
+  }
+}

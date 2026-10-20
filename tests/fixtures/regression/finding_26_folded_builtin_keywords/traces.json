@@ -1,0 +1,771 @@
+{
+  "finding_26_folded_builtin_keywords": {
+    "deps": [],
+    "item_type": "test",
+    "traces": [
+      {
+        "annotated_ast": {
+          "ast": {
+            "ast_type": "Module",
+            "body": [
+              {
+                "annotation": {
+                  "ast_type": "Subscript",
+                  "col_offset": 15,
+                  "end_col_offset": 24,
+                  "end_lineno": 2,
+                  "lineno": 2,
+                  "node_id": 7,
+                  "slice": {
+                    "ast_type": "Int",
+                    "col_offset": 22,
+                    "end_col_offset": 23,
+                    "end_lineno": 2,
+                    "folded_value": {
+                      "ast_type": "Int",
+                      "col_offset": 22,
+                      "end_col_offset": 23,
+                      "end_lineno": 2,
+                      "lineno": 2,
+                      "node_id": 10,
+                      "src": "23:1:-1",
+                      "value": 5
+                    },
+                    "lineno": 2,
+                    "node_id": 10,
+                    "src": "23:1:-1",
+                    "value": 5
+                  },
+                  "src": "16:9:-1",
+                  "value": {
+                    "ast_type": "Name",
+                    "col_offset": 15,
+                    "end_col_offset": 21,
+                    "end_lineno": 2,
+                    "id": "String",
+                    "lineno": 2,
+                    "node_id": 8,
+                    "src": "16:6:-1"
+                  }
+                },
+                "ast_type": "VariableDecl",
+                "col_offset": 0,
+                "end_col_offset": 35,
+                "end_lineno": 2,
+                "is_constant": true,
+                "is_immutable": false,
+                "is_public": false,
+                "is_reentrant": false,
+                "is_transient": false,
+                "lineno": 2,
+                "node_id": 1,
+                "src": "1:35:-1",
+                "target": {
+                  "ast_type": "Name",
+                  "col_offset": 0,
+                  "end_col_offset": 4,
+                  "end_lineno": 2,
+                  "folded_value": {
+                    "ast_type": "Str",
+                    "col_offset": 28,
+                    "end_col_offset": 35,
+                    "end_lineno": 2,
+                    "lineno": 2,
+                    "node_id": 12,
+                    "src": "29:7:-1",
+                    "value": "ether"
+                  },
+                  "id": "UNIT",
+                  "lineno": 2,
+                  "node_id": 2,
+                  "src": "1:4:-1",
+                  "type": {
+                    "length": 5,
+                    "name": "String",
+                    "typeclass": "string"
+                  }
+                },
+                "type": {
+                  "length": 5,
+                  "name": "String",
+                  "typeclass": "string"
+                },
+                "value": {
+                  "ast_type": "Str",
+                  "col_offset": 28,
+                  "end_col_offset": 35,
+                  "end_lineno": 2,
+                  "folded_value": {
+                    "ast_type": "Str",
+                    "col_offset": 28,
+                    "end_col_offset": 35,
+                    "end_lineno": 2,
+                    "lineno": 2,
+                    "node_id": 12,
+                    "src": "29:7:-1",
+                    "type": {
+                      "length": 5,
+                      "name": "String",
+                      "typeclass": "string"
+                    },
+                    "value": "ether"
+                  },
+                  "lineno": 2,
+                  "node_id": 12,
+                  "src": "29:7:-1",
+                  "type": {
+                    "length": 5,
+                    "name": "String",
+                    "typeclass": "string"
+                  },
+                  "value": "ether"
+                }
+              },
+              {
+                "args": {
+                  "args": [
+                    {
+                      "annotation": {
+                        "ast_type": "Name",
+                        "col_offset": 18,
+                        "end_col_offset": 25,
+                        "end_lineno": 6,
+                        "id": "uint256",
+                        "lineno": 6,
+                        "node_id": 16,
+                        "src": "72:7:-1"
+                      },
+                      "arg": "amount",
+                      "ast_type": "arg",
+                      "col_offset": 10,
+                      "end_col_offset": 25,
+                      "end_lineno": 6,
+                      "lineno": 6,
+                      "node_id": 15,
+                      "src": "64:15:-1"
+                    }
+                  ],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 37,
+                  "end_lineno": 7,
+                  "lineno": 6,
+                  "node_id": 14,
+                  "src": "54:76:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "Return",
+                    "col_offset": 4,
+                    "end_col_offset": 37,
+                    "end_lineno": 7,
+                    "lineno": 7,
+                    "node_id": 18,
+                    "src": "97:33:-1",
+                    "value": {
+                      "args": [
+                        {
+                          "ast_type": "Name",
+                          "col_offset": 24,
+                          "end_col_offset": 30,
+                          "end_lineno": 7,
+                          "id": "amount",
+                          "lineno": 7,
+                          "node_id": 22,
+                          "src": "117:6:-1",
+                          "type": {
+                            "bits": 256,
+                            "is_signed": false,
+                            "name": "uint256",
+                            "typeclass": "integer"
+                          },
+                          "variable_reads": [
+                            {
+                              "access_path": [],
+                              "decl_node": {
+                                "node_id": 15,
+                                "source_id": -1
+                              },
+                              "name": "amount"
+                            }
+                          ]
+                        },
+                        {
+                          "ast_type": "Name",
+                          "col_offset": 32,
+                          "end_col_offset": 36,
+                          "end_lineno": 7,
+                          "folded_value": {
+                            "ast_type": "Str",
+                            "col_offset": 28,
+                            "end_col_offset": 35,
+                            "end_lineno": 2,
+                            "lineno": 2,
+                            "node_id": 12,
+                            "src": "29:7:-1",
+                            "type": {
+                              "length": 5,
+                              "name": "String",
+                              "typeclass": "string"
+                            },
+                            "value": "ether"
+                          },
+                          "id": "UNIT",
+                          "lineno": 7,
+                          "node_id": 24,
+                          "src": "125:4:-1",
+                          "type": {
+                            "length": 5,
+                            "name": "String",
+                            "typeclass": "string"
+                          },
+                          "variable_reads": [
+                            {
+                              "access_path": [],
+                              "decl_node": {
+                                "node_id": 1,
+                                "source_id": -1
+                              },
+                              "name": "UNIT"
+                            }
+                          ]
+                        }
+                      ],
+                      "ast_type": "Call",
+                      "col_offset": 11,
+                      "end_col_offset": 37,
+                      "end_lineno": 7,
+                      "func": {
+                        "ast_type": "Name",
+                        "col_offset": 11,
+                        "end_col_offset": 23,
+                        "end_lineno": 7,
+                        "id": "as_wei_value",
+                        "lineno": 7,
+                        "node_id": 20,
+                        "src": "104:12:-1",
+                        "type": {
+                          "name": "as_wei_value",
+                          "typeclass": "builtin_function"
+                        }
+                      },
+                      "keywords": [],
+                      "lineno": 7,
+                      "node_id": 19,
+                      "src": "104:26:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      }
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 9,
+                    "end_lineno": 4,
+                    "id": "external",
+                    "lineno": 4,
+                    "node_id": 26,
+                    "src": "39:8:-1"
+                  },
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 5,
+                    "end_lineno": 5,
+                    "id": "pure",
+                    "lineno": 5,
+                    "node_id": 28,
+                    "src": "49:4:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 37,
+                "end_lineno": 7,
+                "func_type": {
+                  "argument_types": [
+                    {
+                      "bits": 256,
+                      "is_signed": false,
+                      "name": "uint256",
+                      "typeclass": "integer"
+                    }
+                  ],
+                  "name": "named",
+                  "return_type": {
+                    "bits": 256,
+                    "is_signed": false,
+                    "name": "uint256",
+                    "typeclass": "integer"
+                  },
+                  "type_decl_node": {
+                    "node_id": 13,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                },
+                "lineno": 6,
+                "name": "named",
+                "node_id": 13,
+                "returns": {
+                  "ast_type": "Name",
+                  "col_offset": 30,
+                  "end_col_offset": 37,
+                  "end_lineno": 6,
+                  "id": "uint256",
+                  "lineno": 6,
+                  "node_id": 30,
+                  "src": "84:7:-1"
+                },
+                "src": "54:76:-1"
+              },
+              {
+                "args": {
+                  "args": [
+                    {
+                      "annotation": {
+                        "ast_type": "Name",
+                        "col_offset": 20,
+                        "end_col_offset": 27,
+                        "end_lineno": 11,
+                        "id": "uint256",
+                        "lineno": 11,
+                        "node_id": 35,
+                        "src": "168:7:-1"
+                      },
+                      "arg": "amount",
+                      "ast_type": "arg",
+                      "col_offset": 12,
+                      "end_col_offset": 27,
+                      "end_lineno": 11,
+                      "lineno": 11,
+                      "node_id": 34,
+                      "src": "160:15:-1"
+                    }
+                  ],
+                  "ast_type": "arguments",
+                  "col_offset": 0,
+                  "default": null,
+                  "defaults": [],
+                  "end_col_offset": 40,
+                  "end_lineno": 12,
+                  "lineno": 11,
+                  "node_id": 33,
+                  "src": "148:81:-1"
+                },
+                "ast_type": "FunctionDef",
+                "body": [
+                  {
+                    "ast_type": "Return",
+                    "col_offset": 4,
+                    "end_col_offset": 40,
+                    "end_lineno": 12,
+                    "lineno": 12,
+                    "node_id": 37,
+                    "src": "193:36:-1",
+                    "value": {
+                      "args": [
+                        {
+                          "ast_type": "Name",
+                          "col_offset": 24,
+                          "end_col_offset": 30,
+                          "end_lineno": 12,
+                          "id": "amount",
+                          "lineno": 12,
+                          "node_id": 41,
+                          "src": "213:6:-1",
+                          "type": {
+                            "bits": 256,
+                            "is_signed": false,
+                            "name": "uint256",
+                            "typeclass": "integer"
+                          },
+                          "variable_reads": [
+                            {
+                              "access_path": [],
+                              "decl_node": {
+                                "node_id": 34,
+                                "source_id": -1
+                              },
+                              "name": "amount"
+                            }
+                          ]
+                        },
+                        {
+                          "ast_type": "Str",
+                          "col_offset": 32,
+                          "end_col_offset": 39,
+                          "end_lineno": 12,
+                          "folded_value": {
+                            "ast_type": "Str",
+                            "col_offset": 32,
+                            "end_col_offset": 39,
+                            "end_lineno": 12,
+                            "lineno": 12,
+                            "node_id": 43,
+                            "src": "221:7:-1",
+                            "type": {
+                              "length": 5,
+                              "name": "String",
+                              "typeclass": "string"
+                            },
+                            "value": "ether"
+                          },
+                          "lineno": 12,
+                          "node_id": 43,
+                          "src": "221:7:-1",
+                          "type": {
+                            "length": 5,
+                            "name": "String",
+                            "typeclass": "string"
+                          },
+                          "value": "ether"
+                        }
+                      ],
+                      "ast_type": "Call",
+                      "col_offset": 11,
+                      "end_col_offset": 40,
+                      "end_lineno": 12,
+                      "func": {
+                        "ast_type": "Name",
+                        "col_offset": 11,
+                        "end_col_offset": 23,
+                        "end_lineno": 12,
+                        "id": "as_wei_value",
+                        "lineno": 12,
+                        "node_id": 39,
+                        "src": "200:12:-1",
+                        "type": {
+                          "name": "as_wei_value",
+                          "typeclass": "builtin_function"
+                        }
+                      },
+                      "keywords": [],
+                      "lineno": 12,
+                      "node_id": 38,
+                      "src": "200:29:-1",
+                      "type": {
+                        "bits": 256,
+                        "is_signed": false,
+                        "name": "uint256",
+                        "typeclass": "integer"
+                      }
+                    }
+                  }
+                ],
+                "col_offset": 0,
+                "decorator_list": [
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 9,
+                    "end_lineno": 9,
+                    "id": "external",
+                    "lineno": 9,
+                    "node_id": 44,
+                    "src": "133:8:-1"
+                  },
+                  {
+                    "ast_type": "Name",
+                    "col_offset": 1,
+                    "end_col_offset": 5,
+                    "end_lineno": 10,
+                    "id": "pure",
+                    "lineno": 10,
+                    "node_id": 46,
+                    "src": "143:4:-1"
+                  }
+                ],
+                "doc_string": null,
+                "end_col_offset": 40,
+                "end_lineno": 12,
+                "func_type": {
+                  "argument_types": [
+                    {
+                      "bits": 256,
+                      "is_signed": false,
+                      "name": "uint256",
+                      "typeclass": "integer"
+                    }
+                  ],
+                  "name": "literal",
+                  "return_type": {
+                    "bits": 256,
+                    "is_signed": false,
+                    "name": "uint256",
+                    "typeclass": "integer"
+                  },
+                  "type_decl_node": {
+                    "node_id": 32,
+                    "source_id": -1
+                  },
+                  "typeclass": "contract_function"
+                },
+                "lineno": 11,
+                "name": "literal",
+                "node_id": 32,
+                "returns": {
+                  "ast_type": "Name",
+                  "col_offset": 32,
+                  "end_col_offset": 39,
+                  "end_lineno": 11,
+                  "id": "uint256",
+                  "lineno": 11,
+                  "node_id": 48,
+                  "src": "180:7:-1"
+                },
+                "src": "148:81:-1"
+              }
+            ],
+            "col_offset": 0,
+            "doc_string": null,
+            "end_col_offset": 41,
+            "end_lineno": 12,
+            "is_interface": false,
+            "lineno": 1,
+            "name": null,
+            "node_id": 0,
+            "path": "tests/fixtures/regression/finding_26_folded_builtin_keywords/unknown_0.vy",
+            "resolved_path": "tests/fixtures/regression/finding_26_folded_builtin_keywords/unknown_0.vy",
+            "settings": {},
+            "source_id": -1,
+            "source_sha256sum": "5ba58886e6442efc4b7b6b3417c6905a2d3117745235261a7dbc807bead7d010",
+            "src": "0:230:-1",
+            "type": {
+              "name": "tests/fixtures/regression/finding_26_folded_builtin_keywords/unknown_0.vy",
+              "type_decl_node": {
+                "node_id": 0,
+                "source_id": -1
+              },
+              "typeclass": "module"
+            }
+          },
+          "contract_name": "tests/fixtures/regression/finding_26_folded_builtin_keywords/unknown_0.vy",
+          "imports": []
+        },
+        "blueprint_initcode_prefix": null,
+        "calldata": null,
+        "compiler_settings": {
+          "debug": false,
+          "enable_decimals": true,
+          "evm_version": "prague",
+          "experimental_codegen": false,
+          "optimize": "gas"
+        },
+        "contract_abi": [
+          {
+            "gas": 497,
+            "inputs": [
+              {
+                "name": "amount",
+                "type": "uint256"
+              }
+            ],
+            "name": "named",
+            "outputs": [
+              {
+                "name": "",
+                "type": "uint256"
+              }
+            ],
+            "stateMutability": "pure",
+            "type": "function"
+          },
+          {
+            "gas": 497,
+            "inputs": [
+              {
+                "name": "amount",
+                "type": "uint256"
+              }
+            ],
+            "name": "literal",
+            "outputs": [
+              {
+                "name": "",
+                "type": "uint256"
+              }
+            ],
+            "stateMutability": "pure",
+            "type": "function"
+          }
+        ],
+        "deployed_address": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+        "deployment_succeeded": true,
+        "deployment_type": "source",
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "constructor",
+        "initcode": "609261000b5f3960925ff35f3560e01c6380812f2781186100475760243610341761008e57600435670de0b6b3a764000081028115670de0b6b3a764000083830414171561008e57905060805260206080f35b6341d012fd811861008a5760243610341761008e57600435670de0b6b3a764000081028115670de0b6b3a764000083830414171561008e57905060805260206080f35b5f5ffd5b5f80fd855820663641242bbe1215120bb28b54d20df6eef92e78af28003a7cf5ccbeef34766b18928000a1657679706572830005000034",
+        "python_args": {
+          "args": [],
+          "kwargs": {}
+        },
+        "raw_ir": null,
+        "runtime_bytecode": "5f3560e01c6380812f2781186100475760243610341761008e57600435670de0b6b3a764000081028115670de0b6b3a764000083830414171561008e57905060805260206080f35b6341d012fd811861008a5760243610341761008e57600435670de0b6b3a764000081028115670de0b6b3a764000083830414171561008e57905060805260206080f35b5f5ffd5b5f80fd",
+        "solc_json": {
+          "compiler_version": "v0.5.0a4+commit.cd74ce4f",
+          "integrity": "663641242bbe1215120bb28b54d20df6eef92e78af28003a7cf5ccbeef34766b",
+          "language": "Vyper",
+          "settings": {
+            "debug": false,
+            "evmVersion": "prague",
+            "experimentalCodegen": false,
+            "optimize": "gas",
+            "outputSelection": {
+              "unknown_0.vy": [
+                "*"
+              ]
+            },
+            "search_paths": [
+              "."
+            ]
+          },
+          "sources": {
+            "unknown_0.vy": {
+              "content": "\nUNIT: constant(String[5]) = \"ether\"\n\n@external\n@pure\ndef named(amount: uint256) -> uint256:\n    return as_wei_value(amount, UNIT)\n\n@external\n@pure\ndef literal(amount: uint256) -> uint256:\n    return as_wei_value(amount, \"ether\")\n",
+              "sha256sum": "5ba58886e6442efc4b7b6b3417c6905a2d3117745235261a7dbc807bead7d010"
+            }
+          }
+        },
+        "source_code": "\nUNIT: constant(String[5]) = \"ether\"\n\n@external\n@pure\ndef named(amount: uint256) -> uint256:\n    return as_wei_value(amount, UNIT)\n\n@external\n@pure\ndef literal(amount: uint256) -> uint256:\n    return as_wei_value(amount, \"ether\")\n",
+        "storage_layout": {},
+        "trace_type": "deployment",
+        "value": 0
+      },
+      {
+        "call_args": {
+          "calldata": "80812f270000000000000000000000000000000000000000000000000000000000000002",
+          "is_modifying": false,
+          "to": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+          "value": 0
+        },
+        "call_succeeded": true,
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "named",
+        "output": "0000000000000000000000000000000000000000000000001bc16d674ec80000",
+        "python_args": {
+          "args": [
+            2
+          ],
+          "kwargs": {}
+        },
+        "trace_type": "call"
+      },
+      {
+        "call_args": {
+          "calldata": "80812f270000000000000000000000000000000000000000000000000000000000000002",
+          "is_modifying": false,
+          "to": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+          "value": 0
+        },
+        "call_succeeded": true,
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "named",
+        "output": "0000000000000000000000000000000000000000000000001bc16d674ec80000",
+        "python_args": {
+          "args": [
+            2
+          ],
+          "kwargs": {}
+        },
+        "trace_type": "call"
+      },
+      {
+        "call_args": {
+          "calldata": "41d012fd0000000000000000000000000000000000000000000000000000000000000002",
+          "is_modifying": false,
+          "to": "0xED4efEAEd8057C619a6D7aACC0459874Eaf3C166",
+          "value": 0
+        },
+        "call_succeeded": true,
+        "env": {
+          "block": {
+            "blob_basefee": 1,
+            "block_hashes": {
+              "0": "044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d"
+            },
+            "excess_blob_gas": 0,
+            "gas_limit": 10000000000,
+            "number": 1,
+            "timestamp": 1
+          },
+          "tx": {
+            "blob_hashes": [],
+            "gas": 10000000000,
+            "gas_price": 0,
+            "origin": "0xC28B8a66397691f40C92271a9EBC04Cabc1ACcA1"
+          }
+        },
+        "function_name": "literal",
+        "output": "0000000000000000000000000000000000000000000000001bc16d674ec80000",
+        "python_args": {
+          "args": [
+            2
+          ],
+          "kwargs": {}
+        },
+        "trace_type": "call"
+      }
+    ]
+  }
+}
