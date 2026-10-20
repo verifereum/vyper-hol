@@ -28,6 +28,11 @@ byte for byte with `prepare --check`. Diagnostic probes used holbuild 0.11.4;
 CI proof builds used the repository-pinned holbuild 0.11.3. Tuple execution used
 py-evm 0.12.1b1 (PragueVM) and eth-abi 6.0.0.
 
+Since this comparison, `p16_return_tuple_bytes_widen` from #542 has been added
+as a 30th retained fixture; its bytecode matches the oracle. The
+`set_byte_bit_field_insert` rule is no longer needed: `word_of_bytes_T_0w_256` in
+`vyperMiscScript.sml` lets EVAL compute 256-bit words built from bytes.
+
 `MATCH` means both deployment and runtime bytes are identical. Difference cells
 show HOL/Vyper runtime lengths and the first differing byte (zero-based).
 `NONE` means the checker accepted but `compile_vyper` returned `NONE`.
