@@ -145,6 +145,8 @@ Definition liveness_changed_def:
       same_vars (df_at [] new lbl 0) (df_at [] old lbl 0))
 End
 
+(* Staged implementation: the public driver switches together with its
+   iteration proofs and consumers, after the preparation theories integrate. *)
 Definition liveness_recompute_def:
   liveness_recompute fn =
     let cfg = cfg_analyze fn in
