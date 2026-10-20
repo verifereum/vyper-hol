@@ -16,41 +16,6 @@ Ancestors
   makeSsaSsaForm
   ssaPipelineProps
 
-(* alist_update_or_prepend preserves ALL_DISTINCT (MAP FST ...) *)
-Triviality alist_update_or_prepend_all_distinct_keys:
-  !k f d alist.
-    ALL_DISTINCT (MAP FST alist) ==>
-    ALL_DISTINCT (MAP FST (alist_update_or_prepend k f d alist))
-Proof
-  Induct_on `alist` >> simp[makeSsaDefsTheory.alist_update_or_prepend_def] >>
-rpt gen_tac >> PairCases_on `h` >> simp[makeSsaDefsTheory.alist_update_or_prepend_def] >>
-strip_tac >> IF_CASES_TAC >> gvs[] >>
-`MEM h0 (MAP FST (alist_update_or_prepend k f d alist)) ==>
- MEM h0 (MAP FST alist) \/ (h0 = k)` suffices_by
-  (rpt strip_tac >> res_tac >> gvs[]) >>
-pop_assum kall_tac >> pop_assum kall_tac >>
-qid_spec_tac `alist` >> Induct >> simp[makeSsaDefsTheory.alist_update_or_prepend_def] >>
-rpt gen_tac >> PairCases_on `h` >> simp[makeSsaDefsTheory.alist_update_or_prepend_def] >>
-IF_CASES_TAC >> gvs[] >> metis_tac[]
-QED
-
-(* FOLDR of alist_update_or_prepend preserves ALL_DISTINCT (MAP FST ...) *)
-Triviality foldr_alist_update_all_distinct_keys:
-  !vars lbl acc.
-    ALL_DISTINCT (MAP FST acc) ==>
-    ALL_DISTINCT (MAP FST
-      (FOLDR (\var a. alist_update_or_prepend var (CONS lbl) [lbl] a) acc vars))
-Proof
-  Induct >> simp[] >> rpt strip_tac >> first_x_assum drule >> strip_tac >> irule alist_update_or_prepend_all_distinct_keys >> simp[]
-QED
-
-(* compute_defs always produces ALL_DISTINCT keys *)
-Triviality compute_defs_all_distinct:
-  !bbs. ALL_DISTINCT (MAP FST (compute_defs bbs))
-Proof
-  Induct >> simp[Once makeSsaDefsTheory.compute_defs_def] >> rpt strip_tac >> simp[LET_THM] >> irule foldr_alist_update_all_distinct_keys >> gvs[]
-QED
-
 (* Clean top-level correctness theorem — no pipeline-derivable assumptions *)
 Theorem make_ssa_pass_correct:
   !dom_frontiers dtree dom_post_order pred_map succ_map live_in
@@ -112,7 +77,7 @@ simp[LET_DEF] >> strip_tac >>
 mp_tac (Q.SPECL [`dom_frontiers`, `pred_map`, `live_in`, `func.fn_blocks`,
   `compute_defs (MAP THE (FILTER IS_SOME (MAP (\lbl. lookup_block lbl func.fn_blocks) dom_post_order)))`] phi_outputs_all_distinct) >>
 (impl_tac >- (
-  conj_tac >- simp[compute_defs_all_distinct] >>
+  conj_tac >- simp[makeSsaDefsTheory.compute_defs_all_distinct] >>
   metis_tac[]
 )) >>
 simp[LET_DEF]
