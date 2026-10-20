@@ -281,6 +281,32 @@ val encode_value_pre_def =
     "encode_value_pre encode_tuple_pre encode_static_array_pre encode_dyn_array_pre encode_struct_pre"
     encode_value_def;
 
+(* Keep recursive precondition schemas out of the ambient simplifier. Unfold
+   only the goal, then clean up with cached logical/constructor rules and IHs. *)
+val storage_pre_rules = GSYM AND_IMP_INTRO ::
+  List.concat (map (fn ty => #rewrs (TypeBase.simpls_of ty))
+    [``:value``, ``:array_value``, ``:type_value``, ``:base_type``,
+     ``:bound``, ``:num``, ``:value option``, ``:value list``, ``:num # value``]);
+val storage_pre_ss = boolSimps.bool_ss ++ rewrites (LET_THM :: storage_pre_rules);
+val storage_pre_rewrites =
+  Rewrite.add_rewrites Rewrite.bool_rewrites storage_pre_rules;
+val storage_pre_cleanup_conv =
+  let
+    val root = CHANGED_CONV (FIRST_CONV
+      [Rewrite.REWRITES_CONV storage_pre_rewrites, Unwind.UNWIND_FORALL_CONV])
+    (* Discard impossible constructor premises before visiting their bodies;
+       semantic expressions inside equalities remain opaque. *)
+    fun cleanup tm =
+      ((root THENC cleanup) ORELSEC
+       (if is_forall tm then
+          QUANT_CONV cleanup THENC TRY_CONV (root THENC cleanup)
+        else if is_imp tm orelse is_conj tm then
+          RATOR_CONV (RAND_CONV cleanup) THENC
+          ((root THENC cleanup) ORELSEC
+           (RAND_CONV cleanup THENC TRY_CONV (root THENC cleanup)))
+        else ALL_CONV)) tm
+  in cleanup end;
+
 Theorem encode_value_pre[cv_pre]:
   (∀tv v. encode_value_pre tv v) ∧
   (∀offset tvs vs. encode_tuple_pre offset tvs vs) ∧
@@ -289,8 +315,10 @@ Theorem encode_value_pre[cv_pre]:
   (∀offset ftypes fields. encode_struct_pre offset ftypes fields)
 Proof
   ho_match_mp_tac encode_value_ind
-  \\ rw[]
-  \\ rw[Once encode_value_pre_def]
+  \\ rpt strip_tac
+  \\ CONV_TAC (ONCE_REWRITE_CONV [encode_value_pre_def])
+  \\ CONV_TAC storage_pre_cleanup_conv
+  \\ ASM_SIMP_TAC storage_pre_ss []
 QED
 
 (* ===== Full Value Decoding (First-Order) ===== *)
@@ -399,6 +427,11 @@ val decode_value_pre_def =
      \\ rpt strip_tac
      \\ Cases_on `cv_v`
      >> gvs[cv_ispair_def, c2b_def]
+     \\ TRY (qmatch_goalsub_rename_tac `cv_size (cv_snd pair)` \\
+             irule LESS_EQ_LESS_TRANS \\
+             qexists_tac `cv_size pair` \\
+             simp[cv_size_cv_snd_le] \\
+             decide_tac \\ NO_TAC)
      \\ rename1 `cv_size (cv_fst rest1)`
      \\ Cases_on `rest1`
      >> gvs[cv_ispair_def, c2b_def, cv_lt_def, cv_fst_def, cv_snd_def, cv_size_def]
@@ -428,9 +461,10 @@ Theorem decode_value_pre[cv_pre]:
   (∀storage offset ftypes. decode_struct_pre storage offset ftypes)
 Proof
   ho_match_mp_tac decode_value_ind
-  \\ rw[]
-  \\ rw[Once decode_value_pre_def]
-  \\ gvs[]
+  \\ rpt strip_tac
+  \\ CONV_TAC (ONCE_REWRITE_CONV [decode_value_pre_def])
+  \\ CONV_TAC storage_pre_cleanup_conv
+  \\ ASM_SIMP_TAC storage_pre_ss []
 QED
 
 (* ===== HashMap Slot Computation ===== *)

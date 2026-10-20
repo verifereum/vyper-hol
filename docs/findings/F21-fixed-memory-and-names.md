@@ -40,10 +40,15 @@ reference compiler executions. They instantiate PLAN's four categories:
    `Return NONE`, `compile_stmt` emits MLOAD0 then **RET**, not external STOP;
    for a value return it selects internal RET, not ABI RETURN. Reserved
    `__return_buf__` can also collide with compiler-generated bindings.
+   **The reserved-name part is fixed** (#557, a04-04): the return PC and return
+   buffer now live in `ce_return_pc`/`ce_return_buf`, `Return` decides
+   internal/external from `ce_return_pc`, and both names are ordinary user
+   identifiers. **Module-name shadowing is fixed** (#557, a04-03): module
+   variables are keyed `module_var_key` = `"self." ++ name` in `ce_vars`, so
+   a local `stored` no longer replaces `StorageLoc 5w`.
 
 The whitelist rejects internal AnnAssign/For/IntCall, calls in loop bodies,
-fallback arguments, all duplicate arg/local/loop bindings, module collisions
-and reserved local names. **Exclusion is not a proof these lowering bugs are
+fallback arguments and all duplicate arg/local/loop bindings. **Exclusion is not a proof these lowering bugs are
 fixed for arbitrary source programs.** Some malformed AST examples would also
 be rejected by source/reference typing; syntax support and typing are separate.
 
@@ -58,11 +63,11 @@ be rejected by source/reference typing; syntax support and typing are separate.
 - [Name whitelist](../../lowering/supported/supportedNamesScript.sml),
   [program boundary](../../lowering/supported/supportedProgramScript.sml).
 - [Name regressions](../../lowering/supported/supportedNamePropsScript.sml):
-  `supported_binding_duplicates_reject`, `supported_reserved_bindings_reject`,
-  `supported_module_binding_collisions_reject`, `supported_fallback_header_names_contract`.
+  `supported_binding_duplicates_reject`, `supported_compiler_slot_names_accept`,
+  `supported_module_binding_shadowing_accept`, `supported_fallback_header_names_contract`.
 - [Program regressions](../../lowering/supported/supportedProgramPropsScript.sml):
   `supported_internal_context_rejections`, `supported_loop_internal_call_rejections`,
-  `supported_reserved_and_module_bindings_rejected`, `supported_binding_duplicates_rejected`.
+  `supported_module_bindings_accepted`, `supported_binding_duplicates_rejected`.
 - All101 exact membership owners are not assumed: see the actual
   [manifest](../../lowering/defs/bytecode/supported-fixtures.txt).
   No original fixture exercises the overlapping internal-local path; membership

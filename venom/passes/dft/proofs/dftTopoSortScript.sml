@@ -575,13 +575,14 @@ Theorem topo_inv_emit[local]:
                      ds_output := state.ds_output ++ [inst] |>)
 Proof
   rpt strip_tac >>
+  (* Inspect only the good-state stack invariant, before expanding topo facts. *)
+  `from_block bi inst /\ ~is_pseudo inst.inst_opcode` by
+    (qpat_x_assum `dfs_good_state _ _` mp_tac >>
+     simp[dfs_good_state_def]) >>
   qpat_x_assum `dfs_topo_inv _ _ _ _` mp_tac >>
   simp[dfs_topo_inv_def, stack_well_ordered_def,
        stack_emit_ids_def, stack_pos_ordered_def] >>
   strip_tac >>
-  `from_block bi inst /\ ~is_pseudo inst.inst_opcode` by
-    (gvs[dfs_good_state_def, EVERY_MEM] >>
-     first_x_assum (qspec_then `DfsEmit inst` mp_tac) >> simp[]) >>
   `?orig. MEM orig bi /\ inst.inst_id = orig.inst_id` by
     metis_tac[from_block_inst_id] >>
   rpt conj_tac
@@ -770,8 +771,8 @@ Proof
       (* Pseudo: drop + mark visited *)
       >- (simp[dfs_step_def] >>
           irule topo_inv_drop_pseudo >> simp[] >>
-          gvs[dfs_good_state_def, EVERY_MEM] >>
-          first_x_assum (qspec_then `DfsProcess inst` mp_tac) >> simp[])
+          qpat_x_assum `dfs_good_state _ _` mp_tac >>
+          simp[dfs_good_state_def])
       (* New non-pseudo: push children + DfsEmit + rest *)
       >> simp[dfs_step_def, LET_THM] >>
          qabbrev_tac `children = inst_all_deps bi order eda inst` >>
@@ -826,8 +827,8 @@ QED
    Establishes MEM inst bi and inst'.inst_id = inst.inst_id *)
 val non_pseudo_setup_tac =
   `MEM inst bi` by
-    (fs[dfs_good_state_def, EVERY_MEM] >>
-     first_x_assum (qspec_then `DfsProcess inst` mp_tac) >> simp[]) >>
+    (qpat_x_assum `dfs_good_state _ _` mp_tac >>
+     simp[dfs_good_state_def]) >>
   `inst'.inst_id = inst.inst_id` by
     (simp[Abbr `inst'`] >> IF_CASES_TAC >> simp[flip_operands_inst_id]);
 

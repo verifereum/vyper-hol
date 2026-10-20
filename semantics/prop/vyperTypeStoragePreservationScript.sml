@@ -143,7 +143,7 @@ Proof
   simp[Once assign_target_def, bind_def, get_scopes_def, return_def,
        lift_option_def, lift_sum_def, type_check_def, assert_def,
        ignore_bind_def, set_scopes_def, AllCaseEqs()] >>
-  Cases_on `find_containing_scope (string_to_num id) st.scopes` >>
+  Cases_on `find_containing_scope id st.scopes` >>
   simp[return_def, raise_def] >>
   PairCases_on `x` >> simp[] >>
   Cases_on `assign_subscripts x2.type x2.value (REVERSE sbs) op` >>
@@ -182,21 +182,26 @@ Proof
   rpt strip_tac >> gvs[] >> Cases_on `b` >> simp[get_storage_def]
 QED
 
+(* Follow only the lookup/assignment result spine; keep the type/value pair
+   intact and transport storage across the two stateful endpoints. *)
 Theorem assign_target_immutable_storage_frame:
   assign_target cx (BaseTargetV (ImmutableVar src_id id) sbs) op st =
     (res,st') ==>
   !b. get_storage cx st' b = get_storage cx st b
 Proof
-  rpt strip_tac >>
-  qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
-  simp[Once assign_target_def, bind_def, ignore_bind_def, return_def, raise_def,
-       lift_option_def, lift_option_type_def, lift_sum_def, get_immutables_def,
-       get_address_immutables_def, AllCaseEqs()] >>
-  rpt (CASE_TAC >> gvs[return_def, raise_def, bind_def, AllCaseEqs()]) >>
-  rpt strip_tac >>
-  imp_res_tac set_immutable_storage_frame >>
-  imp_res_tac assign_result_preserves_state >>
-  gvs[]
+  Cases_on `ALOOKUP st.immutables cx.txn.target` >>
+  simp[Once assign_target_def, get_immutables_def,
+       get_address_immutables_def, bind_def, ignore_bind_def,
+       lift_option_type_def, lift_sum_def, return_def, raise_def] >>
+  rename1 `ALOOKUP st.immutables cx.txn.target = SOME imms` >>
+  Cases_on `FLOOKUP (get_source_immutables src_id imms) id` >>
+  simp[return_def, raise_def, bind_def] >>
+  rename1 `FLOOKUP _ _ = SOME tva` >>
+  Cases_on `assign_subscripts (FST tva) (SND tva) (REVERSE sbs) op` >>
+  simp[return_def, raise_def, bind_def, CaseEq "prod", CaseEq "sum"] >>
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac assign_result_preserves_state >> gvs[] >>
+  drule set_immutable_storage_frame >> simp[]
 QED
 
 Theorem assign_target_immutable_preserves_contract_storage_well_formed:
@@ -241,7 +246,7 @@ Theorem set_global_preserves_contract_storage_well_formed:
   storage_layout_safe cx /\
   storable_value cx src id v /\
   var_in_storage cx src id /\
-  set_global cx src (string_to_num id) v st = (res,st') ==>
+  set_global cx src id v st = (res,st') ==>
   contract_storage_well_formed cx st'
 Proof
   rpt strip_tac >>
@@ -265,7 +270,7 @@ Proof
 QED
 Theorem set_global_typed_result_success:
   get_module_code cx src = SOME code /\
-  find_var_decl_by_num n code = SOME (StorageVarDecl b typ,id) /\
+  find_var_decl_by_name n code = SOME (StorageVarDecl b typ,id) /\
   lookup_var_slot_from_layout cx b src id = SOME off /\
   evaluate_type (get_tenv cx) typ = SOME tv /\
   value_has_type tv v ==>
@@ -288,7 +293,7 @@ Theorem assign_target_toplevel_value_preserves_contract_storage_well_formed:
   assign_operation_runtime_typed env ty op /\
   assign_target_assignable_context cx
     (BaseTargetV (TopLevelVar src id) sbs) st /\
-  lookup_global cx src (string_to_num id) st = (INL (Value old_v),st) /\
+  lookup_global cx src id st = (INL (Value old_v),st) /\
   assign_target cx (BaseTargetV (TopLevelVar src id) sbs) op st = (res,st') ==>
   contract_storage_well_formed cx st'
 Proof
@@ -316,7 +321,7 @@ Proof
     metis_tac[top_level_storage_value_leaf_evaluate_type] >>
   `value_has_type x' x''` by
     metis_tac[assign_subscripts_preserves_type_runtime_typed] >>
-  `?sg. set_global cx src (string_to_num id) x'' st = (INL (),sg)` by
+  `?sg. set_global cx src id x'' st = (INL (),sg)` by
     metis_tac[set_global_typed_result_success] >>
   gvs[] >>
   `x'³' + type_slot_size x' <= dimword(:256)` by
@@ -343,10 +348,10 @@ Proof
   qexists `st` >> simp[]
 QED
 Theorem lookup_global_ArrayRef_declared_region:
-  lookup_global cx src (string_to_num id) st =
+  lookup_global cx src id st =
     (INL (ArrayRef b root_slot elem_tv bd),st) /\
   get_module_code cx src = SOME code /\
-  find_var_decl_by_num (string_to_num id) code =
+  find_var_decl_by_name id code =
     SOME (StorageVarDecl b typ,decl_id) ==>
   declared_storage_region cx src id [] =
     SOME (b,root_slot,ArrayTV elem_tv bd)
@@ -360,10 +365,10 @@ QED
 
 Theorem array_ref_ordinary_write_endpoint_preserves_contract_storage_well_formed:
   runtime_storage_consistent env cx st /\
-  lookup_global cx src (string_to_num id) st =
+  lookup_global cx src id st =
     (INL (ArrayRef b root_slot elem_tv bd),st) /\
   get_module_code cx src = SOME code /\
-  find_var_decl_by_num (string_to_num id) code =
+  find_var_decl_by_name id code =
     SOME (StorageVarDecl b typ,decl_id) /\
   evaluate_type (get_tenv cx) typ = SOME (ArrayTV elem_tv bd) /\
   resolve_array_element cx b root_slot (ArrayTV elem_tv bd) subs st =
@@ -417,10 +422,10 @@ Proof
 QED
 Theorem array_ref_dynamic_append_final_endpoint_preserves_contract_storage_well_formed:
   runtime_storage_consistent env cx st /\
-  lookup_global cx src (string_to_num id) st =
+  lookup_global cx src id st =
     (INL (ArrayRef b root_slot root_elem_tv root_bd),st) /\
   get_module_code cx src = SOME code /\
-  find_var_decl_by_num (string_to_num id) code =
+  find_var_decl_by_name id code =
     SOME (StorageVarDecl b typ,decl_id) /\
   evaluate_type (get_tenv cx) typ = SOME (ArrayTV root_elem_tv root_bd) /\
   resolve_array_element cx b root_slot (ArrayTV root_elem_tv root_bd) subs st =
@@ -478,10 +483,10 @@ Proof
 QED
 Theorem array_ref_dynamic_pop_final_endpoint_preserves_contract_storage_well_formed:
   runtime_storage_consistent env cx st /\
-  lookup_global cx src (string_to_num id) st =
+  lookup_global cx src id st =
     (INL (ArrayRef b root_slot root_elem_tv root_bd),st) /\
   get_module_code cx src = SOME code /\
-  find_var_decl_by_num (string_to_num id) code =
+  find_var_decl_by_name id code =
     SOME (StorageVarDecl b typ,decl_id) /\
   evaluate_type (get_tenv cx) typ = SOME (ArrayTV root_elem_tv root_bd) /\
   resolve_array_element cx b root_slot (ArrayTV root_elem_tv root_bd) subs st =
@@ -529,11 +534,11 @@ QED
 Theorem assignable_context_ArrayRef_metadata:
   assign_target_assignable_context cx
     (BaseTargetV (TopLevelVar src id) sbs) st /\
-  lookup_global cx src (string_to_num id) st =
+  lookup_global cx src id st =
     (INL (ArrayRef b root_slot elem_tv bd),st) ==>
   ?code typ decl_id.
     get_module_code cx src = SOME code /\
-    find_var_decl_by_num (string_to_num id) code =
+    find_var_decl_by_name id code =
       SOME (StorageVarDecl b typ,decl_id) /\
     evaluate_type (get_tenv cx) typ = SOME (ArrayTV elem_tv bd)
 Proof
@@ -555,11 +560,11 @@ QED
 Theorem assignable_context_HashMapRef_metadata:
   assign_target_assignable_context cx
     (BaseTargetV (TopLevelVar src id) sbs) st /\
-  lookup_global cx src (string_to_num id) st =
+  lookup_global cx src id st =
     (INL (HashMapRef b root_slot kt vt),st) ==>
   ?code decl_id off.
     get_module_code cx src = SOME code /\
-    find_var_decl_by_num (string_to_num id) code =
+    find_var_decl_by_name id code =
       SOME (HashMapVarDecl b kt vt,decl_id) /\
     lookup_var_slot_from_layout cx b src decl_id = SOME off /\
     root_slot = n2w off
@@ -581,10 +586,10 @@ Proof
 QED
 Theorem assign_target_ArrayRef_dynamic_append_preserves_contract_storage_well_formed:
   runtime_storage_consistent env cx st /\
-  lookup_global cx src (string_to_num id) st =
+  lookup_global cx src id st =
     (INL (ArrayRef b root_slot root_elem_tv root_bd),st) /\
   get_module_code cx src = SOME code /\
-  find_var_decl_by_num (string_to_num id) code =
+  find_var_decl_by_name id code =
     SOME (StorageVarDecl b typ,decl_id) /\
   evaluate_type (get_tenv cx) typ = SOME (ArrayTV root_elem_tv root_bd) /\
   resolve_array_element cx b root_slot (ArrayTV root_elem_tv root_bd)
@@ -656,10 +661,10 @@ QED
 
 Theorem assign_target_ArrayRef_dynamic_pop_preserves_contract_storage_well_formed:
   runtime_storage_consistent env cx st /\
-  lookup_global cx src (string_to_num id) st =
+  lookup_global cx src id st =
     (INL (ArrayRef b root_slot root_elem_tv root_bd),st) /\
   get_module_code cx src = SOME code /\
-  find_var_decl_by_num (string_to_num id) code =
+  find_var_decl_by_name id code =
     SOME (StorageVarDecl b typ,decl_id) /\
   evaluate_type (get_tenv cx) typ = SOME (ArrayTV root_elem_tv root_bd) /\
   resolve_array_element cx b root_slot (ArrayTV root_elem_tv root_bd)
@@ -712,7 +717,7 @@ Proof
 QED
 
 Theorem assign_target_ArrayRef_replace_transition_cases:
-  lookup_global cx src (string_to_num id) st =
+  lookup_global cx src id st =
     (INL (ArrayRef b root_slot root_elem_tv root_bd),st) /\
   get_module_code cx src = SOME code /\
   resolve_array_element cx b root_slot (ArrayTV root_elem_tv root_bd)
@@ -744,7 +749,7 @@ Proof
 QED
 
 Theorem assign_target_ArrayRef_update_transition_cases:
-  lookup_global cx src (string_to_num id) st =
+  lookup_global cx src id st =
     (INL (ArrayRef b root_slot root_elem_tv root_bd),st) /\
   get_module_code cx src = SOME code /\
   resolve_array_element cx b root_slot (ArrayTV root_elem_tv root_bd)
@@ -779,7 +784,7 @@ QED
 
 
 Theorem assign_target_ArrayRef_append_ordinary_transition_cases:
-  lookup_global cx src (string_to_num id) st =
+  lookup_global cx src id st =
     (INL (ArrayRef b root_slot root_elem_tv root_bd),st) /\
   get_module_code cx src = SOME code /\
   resolve_array_element cx b root_slot (ArrayTV root_elem_tv root_bd)
@@ -813,7 +818,7 @@ QED
 
 (* Storage-aware read adapters carry the combined invariant directly. *)
 Theorem assign_target_ArrayRef_pop_ordinary_transition_cases:
-  lookup_global cx src (string_to_num id) st =
+  lookup_global cx src id st =
     (INL (ArrayRef b root_slot root_elem_tv root_bd),st) /\
   get_module_code cx src = SOME code /\
   resolve_array_element cx b root_slot (ArrayTV root_elem_tv root_bd)
@@ -845,7 +850,7 @@ Proof
   metis_tac[]
 QED
 Theorem assign_target_ArrayRef_ordinary_transition_cases:
-  lookup_global cx src (string_to_num id) st =
+  lookup_global cx src id st =
     (INL (ArrayRef b root_slot root_elem_tv root_bd),st) /\
   get_module_code cx src = SOME code /\
   resolve_array_element cx b root_slot (ArrayTV root_elem_tv root_bd)
@@ -869,7 +874,7 @@ Proof
 QED
 Theorem assign_target_ArrayRef_ordinary_preserves_contract_storage_well_formed:
   runtime_storage_consistent env cx st /\
-  lookup_global cx src (string_to_num id) st =
+  lookup_global cx src id st =
     (INL (ArrayRef b root_slot root_elem_tv root_bd),st) /\
   resolve_array_element cx b root_slot (ArrayTV root_elem_tv root_bd)
     (REVERSE sbs) st = (INL (slot,final_tv,remaining),st) /\
@@ -902,7 +907,7 @@ Theorem assign_target_ArrayRef_preserves_contract_storage_well_formed:
   assign_operation_runtime_typed env ty op /\
   assign_target_assignable_context cx
     (BaseTargetV (TopLevelVar src id) sbs) st /\
-  lookup_global cx src (string_to_num id) st =
+  lookup_global cx src id st =
     (INL (ArrayRef b root_slot root_elem_tv root_bd),st) /\
   resolve_array_element cx b root_slot (ArrayTV root_elem_tv root_bd)
     (REVERSE sbs) st = (INL (slot,final_tv,remaining),st) /\
@@ -976,7 +981,7 @@ Proof
 QED
 
 Theorem assign_target_HashMapRef_transition_cases:
-  lookup_global cx src (string_to_num id) st =
+  lookup_global cx src id st =
     (INL (HashMapRef b root_slot kt vt),st) /\
   REVERSE sbs = first_sub :: rest_subs /\
   split_hashmap_subscripts vt rest_subs =
@@ -1017,7 +1022,7 @@ Theorem target_runtime_typed_HashMapRef_path[local]:
   target_runtime_typed env cx st tgt ty
     (BaseTargetV (TopLevelVar src id) sbs) /\
   get_module_code cx src = SOME code /\
-  find_var_decl_by_num (string_to_num id) code =
+  find_var_decl_by_name id code =
     SOME (HashMapVarDecl b kt vt,decl_id) ==>
   well_formed_vtype env.type_defs (HashMapT kt vt) /\
   target_path_type env (HashMapT kt vt) sbs (Type ty)
@@ -1043,7 +1048,7 @@ Theorem assign_target_HashMapRef_preserves_contract_storage_well_formed:
   assign_operation_runtime_typed env ty op /\
   assign_target_assignable_context cx
     (BaseTargetV (TopLevelVar src id) sbs) st /\
-  lookup_global cx src (string_to_num id) st =
+  lookup_global cx src id st =
     (INL (HashMapRef b root_slot kt vt),st) /\
   assign_target cx (BaseTargetV (TopLevelVar src id) sbs) op st =
     (res,st') ==>
@@ -1129,7 +1134,7 @@ Theorem assign_target_TopLevelVar_preserves_contract_storage_well_formed:
   contract_storage_well_formed cx st'
 Proof
   rpt strip_tac >>
-  Cases_on `lookup_global cx src (string_to_num id) st` >>
+  Cases_on `lookup_global cx src id st` >>
   Cases_on `q` >>
   imp_res_tac vyperStatePreservationTheory.lookup_global_state >>
   pop_assum SUBST_ALL_TAC
@@ -1147,7 +1152,7 @@ Proof
               metis_tac[vyperStatePreservationTheory.lookup_global_state,
                         vyperStatePreservationTheory.resolve_array_element_state,
                         assign_target_ArrayRef_preserves_contract_storage_well_formed]) >>
-          `lookup_global cx src (string_to_num id) st =
+          `lookup_global cx src id st =
              (INL (ArrayRef b c t b0),st)` by
             metis_tac[vyperStatePreservationTheory.lookup_global_state] >>
           `resolve_array_element cx b c (ArrayTV t b0) (REVERSE sbs) st =
@@ -1177,7 +1182,7 @@ QED
 Theorem runtime_storage_consistent_hashmap_leaf_read_typed:
   runtime_storage_consistent env cx st /\
   get_module_code cx mid = SOME code /\
-  find_var_decl_by_num (string_to_num n) code =
+  find_var_decl_by_name n code =
     SOME (HashMapVarDecl b kt vt,id) /\
   lookup_var_slot_from_layout cx b mid id = SOME off /\
   split_hashmap_subscripts vt rest_subs = SOME (final_type,kts,[]) /\

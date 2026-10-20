@@ -300,12 +300,33 @@ QED
 
 (* ===== Pure step characterization ===== *)
 
+(* Normalize only INVOKE's two effect entries, not the whole opcode tables. *)
+val invoke_effect_rewrites = map
+  (REWRITE_CONV [write_effects_def, read_effects_def])
+  [``write_effects INVOKE``, ``read_effects INVOKE``];
+
+Triviality all_effects_univ:
+  all_effects = UNIV
+Proof
+  PURE_REWRITE_TAC [all_effects_def, EXTENSION] >> Cases >> simp[]
+QED
+
+(* Filter by the call classifier before evaluating the five effect entries. *)
+Triviality empty_write_not_ext_call:
+  !op. write_effects op = {} ==> ~is_ext_call_op op
+Proof
+  Cases >> PURE_REWRITE_TAC [is_ext_call_op_def] >> simp[] >> EVAL_TAC
+QED
+
 (* effects_independent with INVOKE implies the other op has empty effects *)
 Triviality effects_independent_invoke_empty:
   !op. effects_independent INVOKE op ==>
        write_effects op = {} /\ read_effects op = {} /\ op <> INVOKE
 Proof
-  Cases >> EVAL_TAC
+  gen_tac >>
+  simp ([effects_independent_def, all_effects_univ, DISJOINT_DEF] @
+        invoke_effect_rewrites) >>
+  rpt strip_tac >> gvs (all_effects_univ :: invoke_effect_rewrites)
 QED
 
 (* Given effects_independent between INVOKE and op, derive all useful facts:
@@ -318,9 +339,9 @@ Triviality invoke_implies_pure:
     read_effects op = {} /\
     ~is_ext_call_op op
 Proof
-  Cases >>
-  simp[effects_independent_def, write_effects_def, read_effects_def,
-       is_ext_call_op_def, all_effects_def] >> EVAL_TAC
+  gen_tac >> strip_tac >>
+  drule effects_independent_invoke_empty >> strip_tac >>
+  simp[] >> irule empty_write_not_ext_call >> simp[]
 QED
 
 (* A non-INVOKE, non-terminator, non-alloca, non-ext_call instruction with
@@ -370,10 +391,8 @@ Proof
   rpt strip_tac >>
   qspecl_then [`a`, `s`, `sa`, `sb`] mp_tac step_inst_base_ok_transfer >>
   (* Discharge side conditions *)
-  `~is_ext_call_op a.inst_opcode` by (
-    spose_not_then strip_assume_tac >>
-    Cases_on `a.inst_opcode` >>
-    gvs[is_ext_call_op_def, write_effects_def, all_effects_def]) >>
+  `~is_ext_call_op a.inst_opcode` by
+    (irule empty_write_not_ext_call >> simp[]) >>
   `!op. MEM op a.inst_operands ==>
         eval_operand op s = eval_operand op sb` by (
     rpt strip_tac >> Cases_on `op` >> simp[eval_operand_def]

@@ -91,6 +91,14 @@ val step_base_result_tac =
   gvs[AllCaseEqs()] >>
   rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[])));
 
+(* Classify only result heads, as in opcodeClass's local exec_* facts.
+   No ambient rewrites: callback results, words and memory stay opaque. *)
+val exec_result_head_ss = pure_ss ++ boolSimps.BOOL_ss ++ rewrites
+  [LET_THM, pairTheory.ELIM_UNCURRY, AllCaseEqs(), exec_result_distinct];
+
+val exec_call_result_head_ss = exec_result_head_ss ++ rewrites
+  [exec_ext_call_def, exec_delegatecall_def, exec_create_def];
+
 Triviality exec_result_helpers_not_intret[simp]:
   (!f inst s vs s'. exec_pure1 f inst s <> IntRet vs s') /\
   (!f inst s vs s'. exec_pure2 f inst s <> IntRet vs s') /\
@@ -100,10 +108,9 @@ Triviality exec_result_helpers_not_intret[simp]:
   (!f inst s vs s'. exec_write2 f inst s <> IntRet vs s') /\
   (!inst s alloc_size vs s'. exec_alloca inst s alloc_size <> IntRet vs s')
 Proof
-  rw[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def,
-     exec_alloca_def] >>
-  gvs[AllCaseEqs()]
+  simp_tac exec_result_head_ss
+    [exec_pure1_def, exec_pure2_def, exec_pure3_def,
+     exec_read0_def, exec_read1_def, exec_write2_def, exec_alloca_def]
 QED
 
 Triviality exec_call_helpers_not_intret[simp]:
@@ -114,9 +121,7 @@ Triviality exec_call_helpers_not_intret[simp]:
   (!inst s v off sz salt vs s'.
      exec_create inst s v off sz salt <> IntRet vs s')
 Proof
-  rw[exec_ext_call_def, exec_delegatecall_def, exec_create_def,
-     extract_venom_result_def] >>
-  gvs[AllCaseEqs()]
+  simp_tac exec_call_result_head_ss []
 QED
 
 Triviality exec_call_helpers_no_halt_abort[simp]:
@@ -133,9 +138,7 @@ Triviality exec_call_helpers_no_halt_abort[simp]:
   (!inst s v off sz salt ab s'.
      exec_create inst s v off sz salt <> Abort ab s')
 Proof
-  rw[exec_ext_call_def, exec_delegatecall_def, exec_create_def,
-     extract_venom_result_def] >>
-  gvs[AllCaseEqs()]
+  simp_tac exec_call_result_head_ss []
 QED
 
 Theorem step_inst_base_no_halt[local]:

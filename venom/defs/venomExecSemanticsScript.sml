@@ -91,10 +91,18 @@ Definition istore_def:
        vs_immutables := s.vs_immutables |+ (offset, value))
 End
 
+(* Cache only record projections and binding reduction.  In particular, do
+   not normalize the memory/word payloads of updates to unrelated fields. *)
+val record_projection_ss = pure_ss ++ boolSimps.BOOL_ss ++ rewrites
+  [venom_state_accfupds, combinTheory.K_THM, LET_THM];
+
+val istore_projection_ss = record_projection_ss ++ rewrites
+  [istore_def, mstore_def];
+
 Theorem istore_memory[simp]:
   (istore offset value s).vs_memory = (mstore offset value s).vs_memory
 Proof
-  simp[istore_def]
+  simp_tac istore_projection_ss []
 QED
 
 Theorem istore_shared_fields[simp]:
@@ -108,7 +116,7 @@ Theorem istore_shared_fields[simp]:
   (istore offset value s).vs_code = s.vs_code /\
   (istore offset value s).vs_prev_hashes = s.vs_prev_hashes
 Proof
-  simp[istore_def, mstore_def]
+  simp_tac istore_projection_ss []
 QED
 
 
@@ -134,12 +142,15 @@ Proof
   simp[pack_dret_dynamic_def]
 QED
 
+val mcopy_projection_ss = record_projection_ss ++ rewrites
+  [mcopy_def, write_memory_with_expansion_def];
+
 Theorem mcopy_preserves_frame_metadata[simp]:
   (mcopy dst src sz s).vs_fmp = s.vs_fmp /\
   (mcopy dst src sz s).vs_call_entry_fmp = s.vs_call_entry_fmp /\
   (mcopy dst src sz s).vs_return_pc_token = s.vs_return_pc_token
 Proof
-  simp[mcopy_def, write_memory_with_expansion_def]
+  simp_tac mcopy_projection_ss []
 QED
 
 (* Boolean to word *)
@@ -1109,12 +1120,36 @@ Definition step_inst_base_def:
     | _ => Error "unknown opcode"
 End
 
+(* Resolve the opcode dispatch once per constructor, not once per proof goal. *)
+val step_inst_base_opcode_rewrites = let
+  val expanded = PURE_ONCE_REWRITE_CONV [step_inst_base_def]
+    ``step_inst_base inst s``
+  fun specialize opc = let
+    val eq_asm = ASSUME (mk_eq (``inst.inst_opcode``, opc))
+    val resolved = CONV_RULE (RAND_CONV (REWRITE_CONV [opcode_case_def]))
+      (SUBS [eq_asm] expanded)
+  in (opc, GEN_ALL (DISCH (concl eq_asm) resolved)) end
+in map specialize (TypeBase.constructors_of ``:opcode``) end;
+
+(* Export the proved branch equations so clients need not rebuild dispatch. *)
+val step_inst_base_opcode_eqs = save_thm
+  ("step_inst_base_opcode_eqs",
+   LIST_CONJ (map #2 step_inst_base_opcode_rewrites));
+
+fun step_inst_base_for opc =
+  #2 (valOf (List.find
+    (fn (key, _) => aconv key opc) step_inst_base_opcode_rewrites));
+
+fun rewrite_step_inst_base_opcode eq =
+  PURE_ONCE_REWRITE_TAC [MATCH_MP (step_inst_base_for (rhs (concl eq))) eq] >>
+  TRY REFL_TAC;
+
 Theorem step_inst_base_ILOAD:
   eval_operand op s = SOME off ==>
   step_inst_base (instruction id ILOAD [op] [out]) s =
     OK (update_var out (mload (w2n off) s) s)
 Proof
-  simp[step_inst_base_def, exec_read1_def]
+  simp[step_inst_base_for ``ILOAD``, exec_read1_def]
 QED
 
 Theorem step_inst_base_ISTORE:
@@ -1123,14 +1158,14 @@ Theorem step_inst_base_ISTORE:
   step_inst_base (instruction id ISTORE [offset_op; value_op] []) s =
     OK (istore (w2n off) value s)
 Proof
-  simp[step_inst_base_def, exec_write2_def]
+  simp[step_inst_base_for ``ISTORE``, exec_write2_def]
 QED
 
 Theorem step_inst_base_NOT:
   inst.inst_opcode = NOT ==>
   step_inst_base inst s = exec_pure1 word_1comp inst s
 Proof
-  Cases_on `inst` >> gvs[step_inst_base_def]
+  strip_tac >> qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode
 QED
 
 Theorem step_inst_base_ISZERO:
@@ -1138,7 +1173,7 @@ Theorem step_inst_base_ISZERO:
   step_inst_base inst s =
     exec_pure1 (\x. bool_to_word (x = 0w)) inst s
 Proof
-  Cases_on `inst` >> gvs[step_inst_base_def]
+  strip_tac >> qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode
 QED
 
 Theorem step_inst_base_RETFMP:
@@ -1151,7 +1186,7 @@ Theorem step_inst_base_RETFMP:
                   iret_adopt_fmp := SOME s.vs_fmp |> s
     | NONE => Error "retfmp: undefined return value"
 Proof
-  Cases_on `inst` >> gvs[step_inst_base_def]
+  strip_tac >> qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode
 QED
 
 Theorem step_inst_base_DRET:
@@ -1177,12 +1212,142 @@ Theorem step_inst_base_DRET:
                       <| iret_values := ordinary_vals ++ ptrs;
                          iret_adopt_fmp := SOME final_cursor |> s''
 Proof
-  Cases_on `inst` >> gvs[step_inst_base_def]
+  strip_tac >> qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode
 QED
 
 (* --------------------------------------------------------------------------
    Block and Function Execution
    -------------------------------------------------------------------------- *)
+
+val update_var_projection_ss = record_projection_ss ++ rewrites
+  [update_var_def];
+
+Theorem update_var_inst_idx:
+  (update_var x v s).vs_inst_idx = s.vs_inst_idx
+Proof
+  simp_tac update_var_projection_ss []
+QED
+
+(* Project the result before splitting dispatch: successful values and
+   unrelated state updates must disappear before their internal cases split. *)
+val preserves_idx_result = prove (
+  ``!r s s'. r = OK s' ==>
+    ((case r of OK t => t.vs_inst_idx = s.vs_inst_idx | _ => T) ==>
+     s'.vs_inst_idx = s.vs_inst_idx)``,
+  rpt strip_tac >> gvs[]);
+
+(* Keep operand evaluation and computed values opaque.  Only split exposed
+   dispatch cases in the goal; never simplify the whole assumption context. *)
+val preserves_idx_projection_rewrites = let
+  val defs = [exec_pure1_def, exec_pure2_def, exec_pure3_def,
+    exec_read0_def, exec_read1_def, exec_ext_call_def,
+    consume_call_outcome_eq, exec_delegatecall_def, exec_create_def,
+    extract_venom_result_def, exec_write2_def, exec_alloca_def,
+    step_inst_base_def]
+  fun case_type tm = let val (_, arg, _) = TypeBase.dest_case tm
+                     in type_of arg end
+  val shapes = mk_set (List.concat (map
+    (map case_type o find_terms TypeBase.is_case o concl) defs))
+  val tests =
+    [``\r:exec_result.
+       case r of OK t => t.vs_inst_idx = s.vs_inst_idx | _ => T``,
+     ``\r:(bytes32 # venom_state) option.
+       case r of NONE => T | SOME p => (SND p).vs_inst_idx = s.vs_inst_idx``,
+     ``\r:(bytes32 # venom_state) option.
+       case r of NONE => T | SOME p =>
+         case inst.inst_outputs of
+           [out] => (SND p).vs_inst_idx = s.vs_inst_idx | _ => T``]
+  fun project test ty = BETA_RULE (ISPEC test (TypeBase.case_rand_of ty))
+  fun constant ty = Prim_rec.prove_case_const_thm
+    {case_def = TypeBase.case_def_of ty,
+     nchotomy = TypeBase.nchotomy_of ty}
+in List.concat (map (fn test => map (project test) shapes @
+     [BETA_RULE (PART_MATCH (rator o lhs) COND_RAND test)]) tests) @
+   map constant shapes end;
+
+val preserves_idx_ss = pure_ss ++ boolSimps.BOOL_ss ++ rewrites
+  [listTheory.list_case_def, pairTheory.pair_CASE_def,
+   optionTheory.option_case_def,
+   pairTheory.ELIM_UNCURRY, pairTheory.FST, pairTheory.SND, LET_THM,
+   TypeBase.one_one_of ``:exec_result``,
+   TypeBase.distinct_of ``:exec_result``,
+   TypeBase.case_def_of ``:exec_result``,
+   venom_state_accfupds, combinTheory.K_THM, update_var_inst_idx] ++
+  rewrites preserves_idx_projection_rewrites;
+
+fun preserves_idx_cases_tac ss =
+  strip_tac >>
+  qpat_x_assum `_ = OK _`
+    (fn eq => MATCH_MP_TAC (MATCH_MP preserves_idx_result eq)) >>
+  simp_tac ss [] >>
+  REPEAT (BasicProvers.PURE_TOP_CASE_TAC >> simp_tac ss []);
+
+val value_preserves_idx_ss = preserves_idx_ss ++ rewrites
+  [exec_pure1_def, exec_pure2_def, exec_pure3_def,
+   exec_read0_def, exec_read1_def];
+
+(* Value-producing helpers only update variables, regardless of computation. *)
+Theorem exec_value_preserves_inst_idx:
+  (exec_pure1 f1 inst s = OK s' ==> s'.vs_inst_idx = s.vs_inst_idx) /\
+  (exec_pure2 f2 inst s = OK s' ==> s'.vs_inst_idx = s.vs_inst_idx) /\
+  (exec_pure3 f3 inst s = OK s' ==> s'.vs_inst_idx = s.vs_inst_idx) /\
+  (exec_read0 r0 inst s = OK s' ==> s'.vs_inst_idx = s.vs_inst_idx) /\
+  (exec_read1 r1 inst s = OK s' ==> s'.vs_inst_idx = s.vs_inst_idx)
+Proof
+  rpt conj_tac >> preserves_idx_cases_tac value_preserves_idx_ss
+QED
+
+val call_preserves_idx_ss = preserves_idx_ss ++ rewrites
+  [exec_ext_call_def, consume_call_outcome_eq, exec_delegatecall_def,
+   exec_create_def, extract_venom_result_def];
+
+(* Call helpers preserve the instruction index despite their state changes. *)
+Theorem exec_call_preserves_inst_idx:
+  (exec_ext_call inst s gas addr value ao az ro rz static = OK s' ==>
+     s'.vs_inst_idx = s.vs_inst_idx) /\
+  (exec_delegatecall inst s gas addr ao az ro rz = OK s' ==>
+     s'.vs_inst_idx = s.vs_inst_idx) /\
+  (exec_create inst s value off sz salt = OK s' ==>
+     s'.vs_inst_idx = s.vs_inst_idx)
+Proof
+  rpt conj_tac >> preserves_idx_cases_tac call_preserves_idx_ss
+QED
+
+(* Project writes once, without normalizing the bytes, storage or arithmetic
+   used to compute unrelated fields.  Dispatch only needs these equations. *)
+Theorem write_state_inst_idx:
+  (mstore off value s).vs_inst_idx = s.vs_inst_idx /\
+  (mstore8 off value s).vs_inst_idx = s.vs_inst_idx /\
+  (sstore key value s).vs_inst_idx = s.vs_inst_idx /\
+  (tstore key value s).vs_inst_idx = s.vs_inst_idx /\
+  (istore off value s).vs_inst_idx = s.vs_inst_idx /\
+  (write_memory_with_expansion off bytes s).vs_inst_idx = s.vs_inst_idx /\
+  (mcopy dst src sz s).vs_inst_idx = s.vs_inst_idx
+Proof
+  simp_tac preserves_idx_ss
+    [mstore_def, mstore8_def, sstore_def, tstore_def, istore_def,
+     write_memory_with_expansion_def, mcopy_def]
+QED
+
+(* Reuse the call interface under the result projection; do not reopen call
+   implementations for every operand envelope in the opcode dispatch. *)
+val preserves_idx_projection = prove (
+  ``!r s. (!t. r = OK t ==> t.vs_inst_idx = s.vs_inst_idx) =
+    (case r of OK t => t.vs_inst_idx = s.vs_inst_idx | _ => T)``,
+  Cases >> simp[]);
+
+val call_idx_projection_rewrites = map
+  (REWRITE_RULE [preserves_idx_projection] o GEN ``s':venom_state``)
+  (CONJUNCTS exec_call_preserves_inst_idx);
+
+val dispatch_preserves_idx_ss = preserves_idx_ss ++ rewrites
+  ([exec_write2_def, exec_alloca_def, operand_case_def, write_state_inst_idx] @
+   call_idx_projection_rewrites);
+
+val accept_value_idx_tac = FIRST
+  (map MATCH_ACCEPT_TAC (CONJUNCTS exec_value_preserves_inst_idx));
+
+val terminator_idx_ss = bool_ss ++ rewrites [is_terminator_def];
 
 (* Non-terminator instructions preserve inst_idx.
    Co-located with run_block definition because run_block's
@@ -1192,22 +1357,12 @@ Theorem step_inst_base_preserves_inst_idx:
     step_inst_base inst s = OK s' /\ ~is_terminator inst.inst_opcode ==>
     s'.vs_inst_idx = s.vs_inst_idx
 Proof
-  rpt strip_tac >>
+  rpt gen_tac >>
   Cases_on `inst.inst_opcode` >>
-  gvs[is_terminator_def] >>
-  qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
-  PURE_REWRITE_TAC[step_inst_base_def] >>
-  ASM_REWRITE_TAC[opcode_case_def] >>
-  gvs[AllCaseEqs(), exec_pure1_def, exec_pure2_def, exec_pure3_def,
-      exec_read0_def, exec_read1_def, exec_write2_def,
-      exec_ext_call_def, consume_call_outcome_def, exec_delegatecall_def,
-      exec_create_def, exec_alloca_def,
-      extract_venom_result_def] >>
-  rpt strip_tac >> gvs[] >>
-  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
-  fs[update_var_def, mstore_def, mstore8_def, sstore_def, tstore_def,
-     istore_def, write_memory_with_expansion_def, mcopy_def,
-     revert_state_def, eval_operands_def] >> gvs[AllCaseEqs()]
+  asm_simp_tac terminator_idx_ss [] >>
+  qpat_x_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode >>
+  TRY accept_value_idx_tac >>
+  preserves_idx_cases_tac dispatch_preserves_idx_ss
 QED
 
 (* --------------------------------------------------------------------------
@@ -1307,10 +1462,26 @@ End
    Preservation lemmas (needed by run_block/run_function termination proof)
    -------------------------------------------------------------------------- *)
 
+val merge_callee_projection_ss = record_projection_ss ++ rewrites
+  [merge_callee_state_def];
+
+val setup_callee_projection_ss = record_projection_ss ++ rewrites
+  [setup_callee_def, TypeBase.one_one_of ``:venom_state option``,
+   TypeBase.distinct_of ``:venom_state option``];
+
+val adopt_return_projection_ss = record_projection_ss ++ rewrites
+  [adopt_return_fmp_def, fetch "-" "internal_return_accfupds",
+   fetch "-" "internal_return_accessors", optionTheory.option_case_def];
+
+val adopt_return_projection_tac =
+  Cases_on `ir.iret_adopt_fmp` >>
+  qpat_x_assum `ir.iret_adopt_fmp = _`
+    (fn eq => simp_tac adopt_return_projection_ss [eq]);
+
 Theorem merge_callee_state_inst_idx:
   (merge_callee_state c e).vs_inst_idx = c.vs_inst_idx
 Proof
-  simp[merge_callee_state_def]
+  simp_tac merge_callee_projection_ss []
 QED
 
 
@@ -1321,7 +1492,9 @@ Theorem setup_callee_frame:
   callee.vs_return_pc_token = (if NULL args then 0w else LAST args) /\
   callee.vs_params = args
 Proof
-  rw[setup_callee_def] >> gvs[]
+  PURE_REWRITE_TAC [setup_callee_def] >> IF_CASES_TAC >>
+  simp_tac setup_callee_projection_ss [] >> strip_tac >>
+  pop_assum (SUBST1_TAC o SYM) >> simp_tac record_projection_ss []
 QED
 
 Theorem merge_callee_state_frame[simp]:
@@ -1329,64 +1502,68 @@ Theorem merge_callee_state_frame[simp]:
   (merge_callee_state caller callee).vs_call_entry_fmp = caller.vs_call_entry_fmp /\
   (merge_callee_state caller callee).vs_return_pc_token = caller.vs_return_pc_token
 Proof
-  simp[merge_callee_state_def]
+  simp_tac merge_callee_projection_ss []
 QED
 
 Theorem adopt_return_fmp_frame[simp]:
   (adopt_return_fmp ir s).vs_call_entry_fmp = s.vs_call_entry_fmp /\
   (adopt_return_fmp ir s).vs_return_pc_token = s.vs_return_pc_token
 Proof
-  Cases_on `ir.iret_adopt_fmp` >> simp[adopt_return_fmp_def]
+  adopt_return_projection_tac
 QED
 
 Theorem adopt_return_fmp_allocas[simp]:
   !ir s. (adopt_return_fmp ir s).vs_allocas = s.vs_allocas
 Proof
-  rpt strip_tac >> Cases_on `ir.iret_adopt_fmp` >> simp[adopt_return_fmp_def]
+  rpt gen_tac >> adopt_return_projection_tac
 QED
 
 Theorem adopt_return_fmp_halted[simp]:
   (adopt_return_fmp ir s).vs_halted = s.vs_halted
 Proof
-  Cases_on `ir.iret_adopt_fmp` >> simp[adopt_return_fmp_def]
+  adopt_return_projection_tac
 QED
 
 Theorem adopt_return_fmp_NONE[simp]:
   adopt_return_fmp <| iret_values := vals; iret_adopt_fmp := NONE |> s = s
 Proof
-  simp[adopt_return_fmp_def]
+  simp_tac adopt_return_projection_ss []
 QED
 
 Theorem adopt_return_fmp_SOME[simp]:
   adopt_return_fmp <| iret_values := vals; iret_adopt_fmp := SOME p |> s =
     s with vs_fmp := p
 Proof
-  simp[adopt_return_fmp_def]
+  simp_tac adopt_return_projection_ss []
 QED
 Theorem adopt_return_fmp_inst_idx[simp]:
   (adopt_return_fmp ir s).vs_inst_idx = s.vs_inst_idx
 Proof
-  Cases_on `ir.iret_adopt_fmp` >> simp[adopt_return_fmp_def]
+  adopt_return_projection_tac
 QED
 
-Theorem update_var_inst_idx:
-  (update_var x v s).vs_inst_idx = s.vs_inst_idx
-Proof
-  simp[update_var_def]
-QED
+val foldl_update_var_projection_ss = record_projection_ss ++ rewrites
+  [listTheory.FOLDL, pairTheory.FORALL_PROD, pairTheory.UNCURRY_DEF,
+   update_var_inst_idx];
 
 Theorem foldl_update_var_inst_idx:
   !kvs s. (FOLDL (\s' (k,v). update_var k v s') s kvs).vs_inst_idx =
           s.vs_inst_idx
 Proof
-  Induct >> simp[pairTheory.FORALL_PROD] >>
-  rw[Once update_var_def] >> simp[update_var_inst_idx]
+  Induct >> asm_simp_tac foldl_update_var_projection_ss []
 QED
+
+val bind_outputs_projection_ss = record_projection_ss ++ rewrites
+  [bind_outputs_def, foldl_update_var_inst_idx,
+   TypeBase.one_one_of ``:venom_state option``,
+   TypeBase.distinct_of ``:venom_state option``];
 
 Theorem bind_outputs_inst_idx:
   bind_outputs outs vals s = SOME s' ==> s'.vs_inst_idx = s.vs_inst_idx
 Proof
-  rw[bind_outputs_def] >> gvs[foldl_update_var_inst_idx]
+  PURE_REWRITE_TAC [bind_outputs_def] >> IF_CASES_TAC >>
+  simp_tac bind_outputs_projection_ss [] >> strip_tac >>
+  pop_assum (SUBST1_TAC o SYM) >> simp_tac bind_outputs_projection_ss []
 QED
 
 (* --------------------------------------------------------------------------
@@ -1519,12 +1696,20 @@ Definition run_defs:
                 | IntRet vals s' => IntRet vals s'
                 | other => other)
 Termination
-  WF_REL_TAC `inv_image ($< LEX $<)
+  (* Avoid WF_REL_TAC's global datatype/termination simpset: reduce only
+     the selected relation, sum tags and tuple projections. *)
+  qexists_tac `inv_image ($< LEX $<)
     (\x. case x of
       | INL (fuel, ctx, inst, s) => (fuel, 1)
       | INR (INL (fuel, ctx, bb, s)) =>
           (fuel, 2 + (LENGTH bb.bb_instructions - s.vs_inst_idx))
       | INR (INR (fuel, ctx, fn, s)) => (fuel, 0))` >>
+  conj_tac >-
+    (irule relationTheory.WF_inv_image >>
+     MATCH_ACCEPT_TAC (MATCH_MP pairTheory.WF_LEX
+       (CONJ prim_recTheory.WF_LESS prim_recTheory.WF_LESS))) >>
+  simp_tac bool_ss [relationTheory.inv_image_thm, sumTheory.sum_case_def,
+    pairTheory.pair_case_def, pairTheory.LEX_DEF_THM] >>
   rpt strip_tac >> gvs[get_instruction_def]
 End
 
@@ -1623,6 +1808,29 @@ Proof
   rw[Once step_inst_def]
 QED
 
+(* Test the result once, then push the test through operand/output dispatch.
+   Constant-true branches collapse without enumerating constructor shapes. *)
+val param_result_cases = prove (
+  ``!r. ((?s. r = OK s) \/ (?e. r = Error e)) =
+        (case r of OK _ => T | Error _ => T | _ => F)``,
+  Cases >> simp[]);
+val param_result_shape_simp = let
+  val test = ``\r:exec_result.
+    case r of OK _ => T | Error _ => T | _ => F``
+  val shapes = [``:operand list``, ``:operand``,
+                ``:operand list # string list``]
+  val distribute = map (fn ty =>
+    BETA_RULE (ISPEC test (TypeBase.case_rand_of ty))) shapes
+  val constants = map (fn ty => Prim_rec.prove_case_const_thm
+    {case_def = TypeBase.case_def_of ty,
+     nchotomy = TypeBase.nchotomy_of ty}) shapes
+  val conditional = BETA_RULE
+    (PART_MATCH (rator o lhs) COND_RAND test)
+  val ss = bool_ss ++ rewrites
+    (distribute @ constants @
+     [conditional, TypeBase.case_def_of ``:exec_result``, LET_THM])
+in simp_tac ss [] end;
+
 Theorem step_inst_param_ok_or_error:
   !inst fuel ctx s.
     is_param_opcode inst.inst_opcode ==>
@@ -1632,9 +1840,9 @@ Proof
   rpt strip_tac >>
   fs[is_param_opcode_iff] >>
   simp[step_inst_non_invoke] >>
-  PURE_REWRITE_TAC[step_inst_base_def] >>
-  ASM_REWRITE_TAC[opcode_case_def] >>
-  rpt (BasicProvers.PURE_FULL_CASE_TAC >> gvs[])
+  qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode >>
+  PURE_ONCE_REWRITE_TAC [param_result_cases] >>
+  param_result_shape_simp
 QED
 
 (* --------------------------------------------------------------------------

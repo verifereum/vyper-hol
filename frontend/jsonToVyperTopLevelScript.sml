@@ -97,7 +97,10 @@ Termination
 End
 
 Definition translate_toplevel_def:
-  (translate_toplevel nominal_index all_import_maps expr_ctx type_ctx nr_default (JTL_FunctionDef name decs args defaults (JFuncType arg_tys ret_ty) ret_ann body) =
+  (translate_toplevel nominal_index all_import_maps expr_ctx type_ctx nr_default
+      (JTL_FunctionDef name decs override_aliases args defaults
+        (JFuncType arg_tys ret_ty) ret_ann body) =
+    if MEM "abstract" decs then NONE else
     let decs = effective_decorators nr_default decs in
     let args' = translate_args_with_types nominal_index all_import_maps type_ctx args arg_tys in
     let local_types = args' ++

@@ -442,7 +442,9 @@ Theorem step_inst_base_no_intret[local]:
   !inst s vs s'. step_inst_base inst s = IntRet vs s' ==>
                  is_terminator inst.inst_opcode
 Proof
-  step_base_result_tac
+  rpt strip_tac >>
+  drule opcodeClassTheory.step_inst_base_intret_opcodes >>
+  strip_tac >> gvs[is_terminator_def]
 QED
 
 Theorem step_inst_base_no_abort[local]:

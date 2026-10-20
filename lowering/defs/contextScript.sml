@@ -203,24 +203,6 @@ Definition compile_word_copy_loop_def:
     od
 End
 
-(* ===== Store Memory ===== *)
-(* Store value to memory pointer.
-   Mirrors Python: context.py store_memory
-   Primitive word types: direct mstore.
-   Complex types: memory copy (val is src ptr).
-   Bytestring case handled separately in compile_store_bytestring.
-   Callers must dispatch bytestrings to compile_store_bytestring. *)
-(* Simple store memory (no typed copy). Used when src_typ = dst_typ.
-   For layout-aware copy when src_typ ≠ dst_typ, see
-   compile_store_memory_typed and compile_assign_value. *)
-Definition compile_store_memory_def:
-  compile_store_memory val_op dst_op is_prim_word mem_size =
-    if is_prim_word then
-      emit_void MSTORE [dst_op; val_op]
-    else
-      compile_copy_memory dst_op val_op mem_size
-End
-
 (* ===== Load from Storage/Transient to Memory ===== *)
 (* Mirrors Python: context.py _load_storage_to_memory *)
 Definition compile_storage_to_memory_def:
@@ -497,23 +479,33 @@ Definition compile_ensure_in_memory_def:
     case loc of
       LocMemory => return ptr_op
     | LocStorage =>
-        do buf_op_alloc <- compile_alloc_buffer (mem_bytes + 32);
+        do buf_op_alloc <- compile_alloc_buffer mem_bytes;
            let buf_op = buf_op_alloc.buf_operand in
-           do compile_storage_to_memory ptr_op buf_op word_count;
+           do (if word_count = 1 then
+                 do loaded <- emit_op SLOAD [ptr_op];
+                    emit_void MSTORE [buf_op; loaded]
+                 od
+               else do compile_storage_to_memory ptr_op buf_op word_count;
+                       return () od);
               return buf_op
            od
         od
     | LocTransient =>
-        do buf_op_alloc <- compile_alloc_buffer (mem_bytes + 32);
+        do buf_op_alloc <- compile_alloc_buffer mem_bytes;
            let buf_op = buf_op_alloc.buf_operand in
-           do compile_transient_to_memory ptr_op buf_op word_count;
+           do (if word_count = 1 then
+                 do loaded <- emit_op TLOAD [ptr_op];
+                    emit_void MSTORE [buf_op; loaded]
+                 od
+               else do compile_transient_to_memory ptr_op buf_op word_count;
+                       return () od);
               return buf_op
            od
         od
     | LocCode =>
         (* Always DLOAD: code_to_memory reads from code section.
            Mirrors Python: ensure_bytestring_in_memory → code_to_memory → dload. *)
-        do buf_op_alloc <- compile_alloc_buffer (mem_bytes + 32);
+        do buf_op_alloc <- compile_alloc_buffer mem_bytes;
            let buf_op = buf_op_alloc.buf_operand in
            do compile_code_to_memory ptr_op buf_op word_count;
               return buf_op
@@ -590,12 +582,20 @@ End
 (* NOTE: compile_load_by_loc deleted — duplicate of compile_ptr_load *)
 
 (* ===== With Byte Offset ===== *)
-(* Add byte offset to base pointer. Mirrors Python: context.py _with_byte_offset *)
+(* Add byte offset to base pointer. Mirrors Python: context.py _with_byte_offset
+   (one equation, not clauses on 0 and SUC, so EVAL reduces it on a numeral). *)
 Definition compile_with_byte_offset_def:
-  compile_with_byte_offset base 0 = return base ∧
   compile_with_byte_offset base offset =
-    emit_op ADD [base; Lit (n2w offset)]
+    if offset = 0 then return base
+    else emit_op ADD [base; Lit (n2w offset)]
 End
+
+Theorem compile_with_byte_offset_clauses:
+  compile_with_byte_offset op 0 = return op /\
+  compile_with_byte_offset op (SUC n) = emit_op ADD [op; Lit (n2w (SUC n))]
+Proof
+  rw[compile_with_byte_offset_def]
+QED
 
 (* ===== Store Memory for Bytestrings ===== *)
 (* Compute 32 + ceil32(actual_length), the exact memory range occupied by an
@@ -800,6 +800,18 @@ Termination
    CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[] >> decide_tac
 End
 
+(* Store a primitive value or a complex memory pointer, with the source layout.
+   Bytestrings always copy their runtime length, even when the types agree.
+   Mirrors Python: context.py Context.store_memory. *)
+Definition compile_store_memory_def:
+  compile_store_memory cenv src dst dst_ty src_ty =
+    if is_word_type dst_ty then emit_void MSTORE [dst; src]
+    else if is_bytestring_type dst_ty then compile_store_bytestring src dst
+    else if dst_ty ≠ src_ty then
+      compile_store_memory_typed cenv dst dst_ty src src_ty
+    else compile_copy_memory dst src (type_memory_bytes cenv dst_ty)
+End
+
 (* NOTE: compile_store_complex_type and compile_copy_complex_type deleted —
    dead code. Actual callers use compile_word_copy_loop / compile_ptr_load
    directly with explicit is_ctor from cenv.ce_is_ctor. *)
@@ -821,14 +833,11 @@ End
 (* compile_store_bytestring moved before typed copy defs (forward ref) *)
 
 (* ===== Load Memory ===== *)
-(* Pinned convention (VYPER_PIN cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c;
-   introduced by vyperlang/vyper@61507a045f34ab8ee5776de04c5b40ee1d1310e4,
-   vyper/codegen_venom/context.py:VenomCodegenContext.load_memory): MLOAD
-   primitive words and complex values whose memory representation is exactly
-   one 32-byte word; retain a pointer for larger complex values. *)
+(* Context.load_memory retains pointers for every complex type, including
+   single-word arrays and structs. *)
 Definition compile_load_memory_def:
-  compile_load_memory ptr_op is_prim_word mem_size =
-    if is_prim_word \/ mem_size = 32 then
+  compile_load_memory ptr_op is_prim_word =
+    if is_prim_word then
       emit_op MLOAD [ptr_op]
     else
       return ptr_op

@@ -1,6 +1,6 @@
 Theory vyperABI
 Ancestors
-  contractABI vyperAST vyperValue vyperMisc
+  contractABI vyperAST vyperValue vyperMisc vyperNsidFmap
   arithmetic byte combin cv cv_std divides
   finite_map list option pair rich_list string words
 Libs
@@ -28,9 +28,8 @@ Definition vyper_to_abi_type_def[simp]:
   vyper_to_abi_type env (ArrayT t (Dynamic _)) = Array NONE (vyper_to_abi_type env t) ∧
   vyper_to_abi_type env (ArrayT t (Fixed n)) = Array (SOME n) (vyper_to_abi_type env t) ∧
   vyper_to_abi_type env (StructT nsid) =
-    (let key = type_key nsid in
-     case FLOOKUP env key of
-     | SOME (StructArgs args) => Tuple (vyper_to_abi_types (env \\ key) (MAP SND args))
+    (case FLOOKUP env nsid of
+     | SOME (StructArgs args) => Tuple (vyper_to_abi_types (env \\ nsid) (MAP SND args))
      | _ => Tuple []) ∧
   vyper_to_abi_type env (FlagT _) = Uint 256 ∧
   vyper_to_abi_type env NoneT = Tuple [] ∧
@@ -40,7 +39,7 @@ Termination
   WF_REL_TAC ‘inv_image ($< LEX $<) (λx. case x of
       INL (env, t) => (CARD (FDOM env), type_size t)
     | INR (env, ts) => (CARD (FDOM env), list_size type_size ts))’
-  \\ rw[FLOOKUP_DEF] >> gvs[type_key_def]
+  \\ rw[FLOOKUP_DEF] >> gvs[]
   \\ disj1_tac
   \\ CCONTR_TAC
   \\ fs[]
@@ -48,53 +47,16 @@ End
 
 val () = cv_auto_trans_rec vyper_to_abi_type_def (
   WF_REL_TAC ‘inv_image ($< LEX $<) (λx. case x of
-      INL (env, t) => (cv$c2n $ cv_size' env, cv_size t)
-    | INR (env, ts) => (cv$c2n $ cv_size' env, cv_size ts))’
+      INL (env, t) => (cv_nsid_count env, cv_size t)
+    | INR (env, ts) => (cv_nsid_count env, cv_size ts))’
   \\ rw[]
   \\ TRY (Cases_on `cv_v` \\ gvs[cv_size_def] \\ NO_TAC)
   \\ TRY (Cases_on `cv_v` \\ gvs[cv_size_def]
           \\ qmatch_goalsub_rename_tac `cv_fst cv_v`
           \\ Cases_on `cv_v` \\ gvs[cv_size_def] \\ NO_TAC)
   \\ disj1_tac
-  \\ pop_assum mp_tac
-  \\ qmatch_goalsub_abbrev_tac `cv_lookup ck`
-  >> gvs[cv_type_key_def]
-  \\ `cv_ispair ck = cv$Num 0`
-  by (
-    rw[Abbr`ck`, cv_string_to_num_def]
-    \\ rw[Once keccakTheory.cv_l2n_def]
-    \\ rw[cv_ispair_cv_add,cv_ispair_cv_mul] )
-  \\ pop_assum mp_tac
-  \\ qid_spec_tac `cv_env`
-  \\ qid_spec_tac `ck`
-  \\ rpt (pop_assum kall_tac)
-  \\ ho_match_mp_tac cv_delete_ind
-  \\ rpt gen_tac \\ strip_tac
-  \\ simp[Once cv_lookup_def]
-  \\ IF_CASES_TAC \\ gs[]
-  \\ strip_tac \\ gs[]
-  \\ reverse (IF_CASES_TAC \\ gs[])
-  >- (
-    Cases_on `ck` \\ gs[]
-    \\ Cases_on `cv_env` \\ gs[Once cv_delete_def]
-    \\ rw[] \\  rw[Once cv_size'_def])
-  \\ Cases_on `cv_env` \\ gs[]
-  \\ Cases_on`ck` \\ gvs[]
-  \\ Cases_on`g` \\ gvs[cv_repTheory.cv_eval,CaseEq"bool"]
-  \\ Cases_on`m=0` \\ gvs[]
-  >- (
-    rw[]
-    \\ simp[Once cv_delete_def]
-    \\ simp[Once cv_size'_def]
-    \\ simp[Once(Q.SPEC`cv$Pair x y`cv_size'_def)])
-  \\ Cases_on`m` \\ gvs[]
-  \\ qmatch_goalsub_rename_tac`2 < p`
-  \\ Cases_on`p=2` \\ gvs[]
-  \\ rw[] \\ gvs[]
-  \\ rw[Once cv_delete_def]
-  \\ rw[Once cv_size'_def, SimpR``prim_rec$<``]
-  \\ gvs[iffRL SUB_EQ_0]
-  \\ Cases_on`1 - SUC n MOD 2` \\ gvs[]
+  \\ irule cv_nsid_delete_count
+  \\ gvs[cv_nsid_ispair_bool]
 );
 
 Definition check_IntV_def:
@@ -129,14 +91,13 @@ Definition abi_to_vyper_def[simp]:
       else NONE ) ∧
   abi_to_vyper env NoneT (ListV ls) = (if NULL ls then SOME NoneV else NONE) ∧
   abi_to_vyper env (StructT nsid) (ListV vs) =
-    (let key = type_key nsid in
-      case FLOOKUP env key of
+    (case FLOOKUP env nsid of
        | SOME (StructArgs args) =>
-         (case abi_to_vyper_list (env \\ key) (MAP SND args) vs of NONE => NONE
+         (case abi_to_vyper_list (env \\ nsid) (MAP SND args) vs of NONE => NONE
           | SOME vs => SOME $ StructV $ ZIP (MAP FST args, vs))
        | _ => NONE) ∧
   abi_to_vyper env (FlagT nsid) (NumV n) =
-    (case FLOOKUP env (type_key nsid) of
+    (case FLOOKUP env nsid of
       | SOME (FlagArgs m) =>
         if m ≤ 256 ∧ n < 2 ** m then SOME $ FlagV (&n) else NONE
       | _ => NONE) ∧
@@ -176,9 +137,8 @@ Definition vyper_is_dynamic_def:
   vyper_is_dynamic env (ArrayT t (Dynamic _)) = T ∧
   vyper_is_dynamic env (ArrayT t (Fixed _)) = vyper_is_dynamic env t ∧
   vyper_is_dynamic env (StructT nsid) =
-    (let key = type_key nsid in
-     case FLOOKUP env key of
-     | SOME (StructArgs args) => vyper_any_dynamic (env \\ key) (MAP SND args)
+    (case FLOOKUP env nsid of
+     | SOME (StructArgs args) => vyper_any_dynamic (env \\ nsid) (MAP SND args)
      | _ => F) ∧
   vyper_is_dynamic env (FlagT _) = F ∧
   vyper_is_dynamic env NoneT = F ∧
@@ -189,7 +149,7 @@ Termination
   WF_REL_TAC ‘inv_image ($< LEX $<) (λx. case x of
       INL (env, t) => (CARD (FDOM env), type_size t)
     | INR (env, ts) => (CARD (FDOM env), list_size type_size ts))’
-  \\ rw[FLOOKUP_DEF] >> gvs[type_key_def]
+  \\ rw[FLOOKUP_DEF] >> gvs[]
   \\ disj1_tac
   \\ CCONTR_TAC
   \\ fs[]
@@ -197,8 +157,8 @@ End
 
 val () = cv_auto_trans_rec vyper_is_dynamic_def (
   WF_REL_TAC `inv_image ($< LEX $<) (λx. case x of
-      INL (env, t) => (cv$c2n $ cv_size' env, cv_size t)
-    | INR (env, ts) => (cv$c2n $ cv_size' env, cv_size ts))`
+      INL (env, t) => (cv_nsid_count env, cv_size t)
+    | INR (env, ts) => (cv_nsid_count env, cv_size ts))`
   \\ reverse $ rw[]
   \\ TRY (Cases_on `cv_v` \\ gvs[cv_size_def] \\ NO_TAC)
   >- (
@@ -207,45 +167,8 @@ val () = cv_auto_trans_rec vyper_is_dynamic_def (
     \\ qmatch_goalsub_rename_tac`cv_fst cv_v`
     \\ Cases_on`cv_v` \\ gvs[] )
   \\ disj1_tac
-  \\ pop_assum mp_tac
-  \\ qmatch_goalsub_abbrev_tac `cv_lookup ck`
-  >> gvs[cv_type_key_def]
-  \\ `cv_ispair ck = cv$Num 0`
-  by (
-    rw[Abbr`ck`, cv_string_to_num_def]
-    \\ rw[Once keccakTheory.cv_l2n_def]
-    \\ rw[cv_ispair_cv_add,cv_ispair_cv_mul] )
-  \\ pop_assum mp_tac
-  \\ qid_spec_tac `cv_env`
-  \\ qid_spec_tac `ck`
-  \\ rpt (pop_assum kall_tac)
-  \\ ho_match_mp_tac cv_delete_ind
-  \\ rpt gen_tac \\ strip_tac
-  \\ simp[Once cv_lookup_def]
-  \\ IF_CASES_TAC \\ gs[]
-  \\ strip_tac \\ gs[]
-  \\ reverse (IF_CASES_TAC \\ gs[])
-  >- (
-    Cases_on `ck` \\ gs[]
-    \\ Cases_on `cv_env` \\ gs[Once cv_delete_def]
-    \\ rw[] \\ rw[Once cv_size'_def])
-  \\ Cases_on `cv_env` \\ gs[]
-  \\ Cases_on`ck` \\ gvs[]
-  \\ Cases_on`g` \\ gvs[cv_repTheory.cv_eval,CaseEq"bool"]
-  \\ Cases_on`m=0` \\ gvs[]
-  >- (
-    rw[]
-    \\ simp[Once cv_delete_def]
-    \\ simp[Once cv_size'_def]
-    \\ simp[Once(Q.SPEC`cv$Pair x y`cv_size'_def)])
-  \\ Cases_on`m` \\ gvs[]
-  \\ qmatch_goalsub_rename_tac`2 < p`
-  \\ Cases_on`p=2` \\ gvs[]
-  \\ rw[] \\ gvs[]
-  \\ rw[Once cv_delete_def]
-  \\ rw[Once cv_size'_def, SimpR``prim_rec$<``]
-  \\ gvs[iffRL SUB_EQ_0]
-  \\ Cases_on`1 - SUC n MOD 2` \\ gvs[]
+  \\ irule cv_nsid_delete_count
+  \\ gvs[cv_nsid_ispair_bool]
 );
 
 (* Maximum encoding size for a Vyper type, matching Vyper's abi_type.size_bound().
@@ -263,10 +186,9 @@ Definition vyper_abi_size_bound_def:
   vyper_abi_size_bound env (ArrayT t (Fixed n)) =
     n * vyper_abi_embedded_size env t ∧
   vyper_abi_size_bound env (StructT nsid) =
-    (let key = type_key nsid in
-     case FLOOKUP env key of
+    (case FLOOKUP env nsid of
      | SOME (StructArgs args) =>
-         vyper_abi_size_bound_list (env \\ key) (MAP SND args)
+         vyper_abi_size_bound_list (env \\ nsid) (MAP SND args)
      | _ => 0) ∧
   vyper_abi_size_bound env (FlagT _) = 32 ∧
   vyper_abi_size_bound env NoneT = 0 ∧
@@ -285,61 +207,24 @@ Termination
     | INR (INL (env, t)) => (CARD (FDOM env), 2 * type_size t + 1)
     (* vyper_abi_size_bound_list *)
     | INR (INR (env, ts)) => (CARD (FDOM env), 2 * list_size type_size ts))’
-  \\ rw[FLOOKUP_DEF] >> gvs[type_key_def]
+  \\ rw[FLOOKUP_DEF] >> gvs[]
   \\ TRY (disj1_tac \\ CCONTR_TAC \\ fs[] \\ NO_TAC)
   \\ simp[type_size_def]
 End
 
 val () = cv_auto_trans_rec vyper_abi_size_bound_def (
   WF_REL_TAC `inv_image ($< LEX $<) (λx. case x of
-      INL (env, t) => (cv$c2n $ cv_size' env, 2 * cv_size t)
-    | INR (INL (env, t)) => (cv$c2n $ cv_size' env, 2 * cv_size t + 1)
-    | INR (INR (env, ts)) => (cv$c2n $ cv_size' env, 2 * cv_size ts))`
+      INL (env, t) => (cv_nsid_count env, 2 * cv_size t)
+    | INR (INL (env, t)) => (cv_nsid_count env, 2 * cv_size t + 1)
+    | INR (INR (env, ts)) => (cv_nsid_count env, 2 * cv_size ts))`
   \\ rw[]
   \\ TRY (Cases_on `cv_v` \\ gvs[cv_size_def] \\ NO_TAC)
   \\ TRY (Cases_on `cv_v` \\ gvs[cv_size_def]
           \\ qmatch_goalsub_rename_tac `cv_fst cv_v`
           \\ Cases_on `cv_v` \\ gvs[cv_size_def] \\ NO_TAC)
   \\ disj1_tac
-  \\ pop_assum mp_tac
-  \\ qmatch_goalsub_abbrev_tac `cv_lookup ck`
-  >> gvs[cv_type_key_def]
-  \\ `cv_ispair ck = cv$Num 0`
-  by (
-    rw[Abbr`ck`, cv_string_to_num_def]
-    \\ rw[Once keccakTheory.cv_l2n_def]
-    \\ rw[cv_ispair_cv_add,cv_ispair_cv_mul] )
-  \\ pop_assum mp_tac
-  \\ qid_spec_tac `cv_env`
-  \\ qid_spec_tac `ck`
-  \\ rpt (pop_assum kall_tac)
-  \\ ho_match_mp_tac cv_delete_ind
-  \\ rpt gen_tac \\ strip_tac
-  \\ simp[Once cv_lookup_def]
-  \\ IF_CASES_TAC \\ gs[]
-  \\ strip_tac \\ gs[]
-  \\ reverse (IF_CASES_TAC \\ gs[])
-  >- (
-    Cases_on `ck` \\ gs[]
-    \\ Cases_on `cv_env` \\ gs[Once cv_delete_def]
-    \\ rw[] \\ rw[Once cv_size'_def])
-  \\ Cases_on `cv_env` \\ gs[]
-  \\ Cases_on`ck` \\ gvs[]
-  \\ Cases_on`g` \\ gvs[cv_repTheory.cv_eval,CaseEq"bool"]
-  \\ Cases_on`m=0` \\ gvs[]
-  >- (
-    rw[]
-    \\ simp[Once cv_delete_def]
-    \\ simp[Once cv_size'_def]
-    \\ simp[Once(Q.SPEC`cv$Pair x y`cv_size'_def)])
-  \\ Cases_on`m` \\ gvs[]
-  \\ qmatch_goalsub_rename_tac`2 < p`
-  \\ Cases_on`p=2` \\ gvs[]
-  \\ rw[] \\ gvs[]
-  \\ rw[Once cv_delete_def]
-  \\ rw[Once cv_size'_def, SimpR``prim_rec$<``]
-  \\ gvs[iffRL SUB_EQ_0]
-  \\ Cases_on`1 - SUC n MOD 2` \\ gvs[]
+  \\ irule cv_nsid_delete_count
+  \\ gvs[cv_nsid_ispair_bool]
 );
 
 (* ===== Vyper's stricter ABI decode validation =====
@@ -534,10 +419,9 @@ Definition vyper_to_abi_def[simp]:
   vyper_to_abi env (FlagT _) (FlagV n) = SOME (NumV n) ∧
   vyper_to_abi env NoneT NoneV = SOME (ListV []) ∧
   vyper_to_abi env (StructT nsid) (StructV fields) =
-    (let key = type_key nsid in
-     case FLOOKUP env key of
+    (case FLOOKUP env nsid of
      | SOME (StructArgs args) =>
-         (case vyper_to_abi_list (env \\ key) (MAP SND args) (MAP SND fields) of
+         (case vyper_to_abi_list (env \\ nsid) (MAP SND args) (MAP SND fields) of
           | SOME avs => SOME (ListV avs)
           | NONE => NONE)
      | _ => NONE) ∧
@@ -608,9 +492,20 @@ Proof
   >- rw[Once cv_ALOOKUP_def]
   >- (rw[Once cv_ALOOKUP_def]
       >- (simp[Once cv_ALOOKUP_def, cv_if_def0]
-          \\ gvs[cv_repTheory.cv_termination_simp, cv_size_def])
+          \\ Cases_on `sparse`
+          \\ gvs[cv_repTheory.cv_termination_simp, cv_ispair_def,
+                 cv_snd_def, cv_size_def])
       >- (simp[Once cv_ALOOKUP_def, cv_if_def0]
-          \\ first_x_assum drule \\ simp[]))
+          \\ qpat_x_assum `∀k. cv$c2b (cv_ispair (cv_ALOOKUP sparse' k)) ⇒ _`
+               (qspec_then `k` mp_tac)
+          \\ gvs[cv_nsid_ispair_bool]))
+QED
+
+Theorem cv_ALOOKUP_snd_size_pair:
+  !sparse k. cv_ispair (cv_ALOOKUP sparse k) = cv$Num 1 ==>
+    cv_size (cv_snd (cv_ALOOKUP sparse k)) < cv_size sparse
+Proof
+  rpt strip_tac \\ irule cv_ALOOKUP_snd_size \\ simp[cv_nsid_ispair_bool]
 QED
 
 (* Helper tactic: find cv_fst/cv_snd subterms in the goal and add bounds as assumptions.
@@ -666,11 +561,11 @@ val vyper_to_abi_pre_def = cv_auto_trans_pre_rec
   vyper_to_abi_def (
   WF_REL_TAC `inv_image ($< LEX $< LEX $<)
     (λx. case x of
-      | INL (env, t, v) => (cv$c2n (cv_size' env), cv_size t + cv_size v, 0)
-      | INR (INL (env, ts, vs)) => (cv$c2n (cv_size' env), cv_size ts + cv_size vs, 0)
-      | INR (INR (INL (env, t, vs))) => (cv$c2n (cv_size' env), cv_size t + cv_size vs, 0)
+      | INL (env, t, v) => (cv_nsid_count env, cv_size t + cv_size v, 0)
+      | INR (INL (env, ts, vs)) => (cv_nsid_count env, cv_size ts + cv_size vs, 0)
+      | INR (INR (INL (env, t, vs))) => (cv_nsid_count env, cv_size t + cv_size vs, 0)
       | INR (INR (INR (env, t, tv, n, sparse))) =>
-          (cv$c2n (cv_size' env), cv_size t + cv_size sparse + cv$c2n n, cv$c2n n))`
+          (cv_nsid_count env, cv_size t + cv_size sparse + cv$c2n n, cv$c2n n))`
   \\ rw[]
   (* Handle simple cv_snd cases *)
   \\ TRY (gvs[cv_repTheory.cv_termination_simp, cv_size_def, cv_snd_def]
@@ -678,7 +573,7 @@ val vyper_to_abi_pre_def = cv_auto_trans_pre_rec
   (* Handle cv_sub for sparse n-1 *)
   \\ TRY (gvs[cv_repTheory.cv_termination_simp, cv_sub_def, c2n_def] \\ NO_TAC)
   (* Handle ALOOKUP result *)
-  \\ TRY (drule cv_ALOOKUP_snd_size
+  \\ TRY (drule cv_ALOOKUP_snd_size_pair
           \\ gvs[cv_repTheory.cv_termination_simp, c2n_def] \\ NO_TAC)
   (* Handle StructT list projection (second lex component) - these are direct inequalities
      (not disjunctions), so we can't use disj1_tac. Use cv_size bounds and arithmetic. *)
@@ -693,55 +588,15 @@ val vyper_to_abi_pre_def = cv_auto_trans_pre_rec
           >> irule LESS_EQ_TRANS >> qexists_tac `cv_size (cv_snd x)` >> rw[cv_size_cv_fst_le, cv_size_cv_snd_le])
       \\ gvs[]
       \\ NO_TAC)
-  (* Handle StructT cv_delete - first try the disjunction case *)
-  >> gvs[cv_type_key_def]
-  \\ TRY (
-      disj1_tac
-      \\ pop_assum mp_tac
-      \\ qmatch_goalsub_abbrev_tac `cv_lookup ck`
-      \\ `cv_ispair ck = cv$Num 0`
-         by (rw[Abbr`ck`, cv_string_to_num_def]
-             \\ rw[Once keccakTheory.cv_l2n_def]
-             \\ rw[cv_ispair_cv_add, cv_ispair_cv_mul])
-      \\ pop_assum mp_tac
-      \\ qid_spec_tac `cv_env`
-      \\ qid_spec_tac `ck`
-      \\ rpt (pop_assum kall_tac)
-      \\ ho_match_mp_tac cv_delete_ind
-      \\ rpt gen_tac \\ strip_tac
-      \\ simp[Once cv_lookup_def]
-      \\ IF_CASES_TAC \\ gs[]
-      \\ strip_tac \\ gs[]
-      \\ reverse(IF_CASES_TAC \\ gs[])
-      >- (Cases_on `ck` \\ gs[]
-          \\ IF_CASES_TAC \\ gs[]
-          \\ Cases_on `cv_env` \\ gs[]
-          \\ Cases_on `0 < m` \\ gs[]
-          \\ simp[Once cv_delete_def]
-          \\ rw[Once cv_size'_def]
-          \\ rw[Once cv_size'_def])
-      \\ Cases_on `cv_env` \\ gs[]
-      \\ Cases_on `ck` \\ gs[]
-      \\ strip_tac
-      \\ simp[Once cv_delete_def]
-      \\ Cases_on `g` \\ gs[]
-      \\ Cases_on `m=0` \\ gs[]
-      >- (rw[] \\ gs[]
-          \\ rw[Once cv_size'_def]
-          \\ rw[Once cv_size'_def, SimpR ``prim_rec$<``]
-          \\ rw[])
-      \\ simp[Once cv_size'_def, SimpR ``prim_rec$<``]
-      \\ qmatch_goalsub_rename_tac `2 < p`
-      \\ Cases_on `p=0` \\ gs[]
-      \\ Cases_on `p=1` \\ gs[]
-      \\ Cases_on `p=2` \\ gvs[]
-      >- (IF_CASES_TAC \\ gs[cv_size'_cv_mk_BN])
-      \\ IF_CASES_TAC \\ gs[]
-      \\ NO_TAC)
+  (* A resolved struct field deletes its type definition before recursion. *)
+  \\ TRY (disj1_tac
+          \\ irule cv_nsid_delete_count
+          \\ gvs[cv_nsid_ispair_bool]
+          \\ NO_TAC)
   (* DynArrayV/SArrayV cases: expose Pair overhead via case splits. *)
   \\ rpt strip_tac
   \\ Cases_on `cv_v` >> fs[cv_ispair_def, c2b_def]
-  \\ Cases_on `cv_v0` >> fs[cv_ispair_def, c2b_def]
+  \\ TRY (Cases_on `cv_v0` >> fs[cv_ispair_def, c2b_def])
   \\ simp[cv_size_def, cv_snd_def, cv_fst_def]
   \\ cv_bounds_tac
   \\ TRY decide_tac
@@ -751,21 +606,21 @@ val vyper_to_abi_pre_def = cv_auto_trans_pre_rec
      then inner pair split, to get enough overhead for decide_tac. *)
   (* SArrayV case: c2n(cv_fst(cv_snd v)) needs 2 splits to expose Pair overhead.
      Split v (Num dismissed by cv_lt contradiction), then split inner of Pair. *)
-  \\ let
+  \\ TRY (let
        val c2n_tm = ``cv$c2n``
        fun fc tm =
          if is_comb tm then let val (f,a) = dest_comb tm in
            if f ~~ c2n_tm then SOME a
            else case fc a of SOME x => SOME x | NONE => fc f end
          else NONE
-       fun split_c2n_parent (asl, g) = let
-         val SOME ca = fc g
-         val v = rand (rand ca)
-       in Cases_on [ANTIQUOTE v] (asl, g) end
-       fun split_c2n_arg (asl, g) = let
-         val SOME ca = fc g
-         val v = rand ca
-       in Cases_on [ANTIQUOTE v] (asl, g) end
+       fun split_c2n_parent (asl, g) =
+         (case fc g of
+          | NONE => ALL_TAC (asl, g)
+          | SOME ca => Cases_on [ANTIQUOTE (rand (rand ca))] (asl, g))
+       fun split_c2n_arg (asl, g) =
+         (case fc g of
+          | NONE => ALL_TAC (asl, g)
+          | SOME ca => Cases_on [ANTIQUOTE (rand ca)] (asl, g))
      in
        split_c2n_parent
        >> fs[cv_fst_def, cv_snd_def, cv_size_def, c2n_def, cv_lt_def]
@@ -774,7 +629,7 @@ val vyper_to_abi_pre_def = cv_auto_trans_pre_rec
        >> cv_bounds_tac
        >> fs[cv_fst_def, cv_snd_def, cv_size_def]
        >> decide_tac
-     end
+     end)
 );
 
 Theorem vyper_to_abi_pre[cv_pre]:
@@ -785,7 +640,8 @@ Theorem vyper_to_abi_pre[cv_pre]:
 Proof
   ho_match_mp_tac vyper_to_abi_ind
   \\ rw[]
-  \\ rw[Once vyper_to_abi_pre_def]
+  \\ CONV_TAC (ONCE_REWRITE_CONV [vyper_to_abi_pre_def])
+  \\ rw[] \\ gvs[]
 QED
 
 (* ===== Roundtrip Theorems ===== *)

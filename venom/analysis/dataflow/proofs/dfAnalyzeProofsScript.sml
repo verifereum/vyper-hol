@@ -857,7 +857,8 @@ Proof
     mp_tac >>
   CONV_TAC (LAND_CONV (LHS_CONV
     (ONCE_REWRITE_CONV [df_fold_forward_def]))) >>
-  simp[LET_THM] >> strip_tac >>
+  (* Reduce the lets without turning the quantified IH into a simp rule. *)
+  simp_tac bool_ss [LET_THM] >> strip_tac >>
   (* Inductive: apply the IH to the recursive fold call. *)
   first_x_assum (qspecl_then [`transfer`, `lbl`, `idx+1`,
     `transfer h acc`, `inst_map |+ ((lbl,idx),acc)`,
@@ -1530,7 +1531,13 @@ Proof
       Cases_on `k = (lbl,idx)` >>
       fs[finite_mapTheory.FLOOKUP_UPDATE] >>
       metis_tac[])
-  >> fs[dfAnalyzeDefsTheory.df_fold_forward_def, LET_THM] >>
+  >> qpat_x_assum
+       `df_fold_forward transfer lbl (h::instrs) idx acc inst_map = (fv,im)`
+       mp_tac >>
+     CONV_TAC (LAND_CONV (LHS_CONV
+       (ONCE_REWRITE_CONV [dfAnalyzeDefsTheory.df_fold_forward_def]))) >>
+     (* Unfold only the fold equation; leave the guarded IH untouched. *)
+     PURE_REWRITE_TAC [LET_THM] >> BETA_TAC >> strip_tac >>
      qpat_x_assum `!transfer lbl idx acc inst_map fv im. _`
        (qspecl_then [`transfer`, `lbl`, `idx + 1`, `transfer h acc`,
                      `inst_map |+ ((lbl,idx),acc)`, `fv`, `im`] mp_tac) >>
@@ -1568,18 +1575,15 @@ Proof
        mp_tac >>
      CONV_TAC (LAND_CONV (LHS_CONV
        (ONCE_REWRITE_CONV [dfAnalyzeDefsTheory.df_fold_backward_def]))) >>
-     strip_tac >> fs[LET_THM] >> pairarg_tac >> fs[] >> rw[]
-     (* P (transfer h acc') *)
-     >- (qpat_x_assum `!transfer lbl idx acc inst_map fv im. _`
-           (qspecl_then [`transfer`, `lbl`, `idx+1`, `acc`, `inst_map`,
-                         `acc'`, `inst_map'`] mp_tac) >>
-         rw[] >> res_tac >> fs[])
-     (* FLOOKUP (inst_map' |+ ...) k = SOME v ⇒ P v *)
-     >> qpat_x_assum `!transfer lbl idx acc inst_map fv im. _`
-          (qspecl_then [`transfer`, `lbl`, `idx+1`, `acc`, `inst_map`,
-                        `acc'`, `inst_map'`] mp_tac) >>
-        rw[] >> Cases_on `k = (lbl,idx)` >>
-        fs[finite_mapTheory.FLOOKUP_UPDATE] >> res_tac >> metis_tac[]
+     (* Reduce the let in the fold equation, not the quantified IH. *)
+     PURE_REWRITE_TAC [LET_THM] >>
+     strip_tac >> pairarg_tac >>
+     (* Specialize and remove the IH before simplifying either conclusion. *)
+     qpat_x_assum `!transfer lbl idx acc inst_map fv im. _`
+       (qspecl_then [`transfer`, `lbl`, `idx+1`, `acc`, `inst_map`,
+                     `acc'`, `inst_map'`] mp_tac) >>
+     (impl_tac >- ASM_REWRITE_TAC[]) >> strip_tac >> gvs[] >>
+     rw[finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]
 QED
 
 (* Fold block P-preservation: unified forward/backward *)

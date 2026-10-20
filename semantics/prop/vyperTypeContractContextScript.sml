@@ -257,86 +257,86 @@ QED
 
 Theorem FOLDL_extend_local_args_not_mem[local]:
   !args (base : typing_env) n.
-    ~MEM n (MAP (string_to_num o FST) args) ==>
-    FLOOKUP (FOLDL (\env (id,ty). extend_local env (string_to_num id) ty T) base args).var_types n =
+    ~MEM n (MAP FST args) ==>
+    FLOOKUP (FOLDL (\env (id,ty). extend_local env (id) ty T) base args).var_types n =
       FLOOKUP base.var_types n /\
-    FLOOKUP (FOLDL (\env (id,ty). extend_local env (string_to_num id) ty T) base args).var_assignable n =
+    FLOOKUP (FOLDL (\env (id,ty). extend_local env (id) ty T) base args).var_assignable n =
       FLOOKUP base.var_assignable n
 Proof
   Induct >- rw[] >>
   gen_tac >> PairCases_on `h` >> rw[extend_local_def] >>
-  qpat_x_assum `!base n. _` (qspecl_then [`extend_local base' (string_to_num h0) h1 T`,`n`] mp_tac) >>
+  qpat_x_assum `!base n. _` (qspecl_then [`extend_local base' (h0) h1 T`,`n`] mp_tac) >>
   simp[extend_local_def, FLOOKUP_UPDATE]
 QED
 
 Theorem FOLDL_extend_local_args_formal_lookup:
   !args (base : typing_env) id typ.
-    ALL_DISTINCT (MAP (string_to_num o FST) args) /\
+    ALL_DISTINCT (MAP FST args) /\
     MEM (id,typ) args ==>
-    FLOOKUP (FOLDL (\env (id,ty). extend_local env (string_to_num id) ty T) base args).var_types
-      (string_to_num id) = SOME typ /\
-    FLOOKUP (FOLDL (\env (id,ty). extend_local env (string_to_num id) ty T) base args).var_assignable
-      (string_to_num id) = SOME T
+    FLOOKUP (FOLDL (\env (id,ty). extend_local env (id) ty T) base args).var_types
+      (id) = SOME typ /\
+    FLOOKUP (FOLDL (\env (id,ty). extend_local env (id) ty T) base args).var_assignable
+      (id) = SOME T
 Proof
   Induct >- rw[] >>
   gen_tac >> PairCases_on `h` >> rw[] >> gvs[extend_local_def, FLOOKUP_UPDATE] >-
-    (qspecl_then [`args`,`extend_local base' (string_to_num h0) h1 T`,`string_to_num h0`]
+    (qspecl_then [`args`,`extend_local base' (h0) h1 T`,`h0`]
        mp_tac FOLDL_extend_local_args_not_mem >>
      simp[extend_local_def, FLOOKUP_UPDATE] >>
      strip_tac >> gvs[]) >-
-    (qspecl_then [`args`,`extend_local base' (string_to_num h0) h1 T`,`string_to_num h0`]
+    (qspecl_then [`args`,`extend_local base' (h0) h1 T`,`h0`]
        mp_tac FOLDL_extend_local_args_not_mem >>
      simp[extend_local_def, FLOOKUP_UPDATE] >>
      strip_tac >> gvs[]) >>
   qpat_x_assum `!base id typ. _`
-    (qspecl_then [`extend_local base' (string_to_num h0) h1 T`,`id`,`typ`] mp_tac) >>
+    (qspecl_then [`extend_local base' (h0) h1 T`,`id`,`typ`] mp_tac) >>
   simp[extend_local_def]
 QED
 
 Theorem FOLDL_extend_local_args_var_types_range:
   !args (base : typing_env) n ty.
-    ALL_DISTINCT (MAP (string_to_num o FST) args) /\
-    FLOOKUP (FOLDL (\env (id,ty). extend_local env (string_to_num id) ty T) base args).var_types n = SOME ty ==>
+    ALL_DISTINCT (MAP FST args) /\
+    FLOOKUP (FOLDL (\env (id,ty). extend_local env (id) ty T) base args).var_types n = SOME ty ==>
     FLOOKUP base.var_types n = SOME ty \/
-    ?id. MEM (id,ty) args /\ n = string_to_num id
+    ?id. MEM (id,ty) args /\ n = id
 Proof
   Induct >- rw[] >>
   gen_tac >> PairCases_on `h` >> rw[] >> gvs[extend_local_def] >>
   last_x_assum drule >>
   simp[extend_local_def, FLOOKUP_UPDATE] >>
   strip_tac >> gvs[] >>
-  Cases_on `string_to_num h0 = n` >> gvs[] >>
+  Cases_on `h0 = n` >> gvs[] >>
   metis_tac[]
 QED
 
 Theorem FOLDL_extend_local_args_var_assignable_range:
   !args (base : typing_env) n b.
-    ALL_DISTINCT (MAP (string_to_num o FST) args) /\
-    FLOOKUP (FOLDL (\env (id,ty). extend_local env (string_to_num id) ty T) base args).var_assignable n = SOME b ==>
+    ALL_DISTINCT (MAP FST args) /\
+    FLOOKUP (FOLDL (\env (id,ty). extend_local env (id) ty T) base args).var_assignable n = SOME b ==>
     FLOOKUP base.var_assignable n = SOME b \/
-    ?id typ. MEM (id,typ) args /\ n = string_to_num id /\ b = T
+    ?id typ. MEM (id,typ) args /\ n = id /\ b = T
 Proof
   Induct >- rw[] >>
   gen_tac >> PairCases_on `h` >> rw[] >> gvs[extend_local_def] >>
   last_x_assum drule >>
   simp[extend_local_def, FLOOKUP_UPDATE] >>
   strip_tac >> gvs[] >>
-  Cases_on `string_to_num h0 = n` >> gvs[] >>
+  Cases_on `h0 = n` >> gvs[] >>
   metis_tac[]
 QED
 
 Theorem FOLDL_extend_local_args_lookup[local]:
   !args (base : typing_env) env.
-  ALL_DISTINCT (MAP (string_to_num o FST) args) /\
-  env = FOLDL (\env (id,ty). extend_local env (string_to_num id) ty T) base args /\
+  ALL_DISTINCT (MAP FST args) /\
+  env = FOLDL (\env (id,ty). extend_local env (id) ty T) base args /\
   base.var_types = FEMPTY /\ base.var_assignable = FEMPTY ==>
   (!id typ. MEM (id,typ) args ==>
-     FLOOKUP env.var_types (string_to_num id) = SOME typ /\
-     FLOOKUP env.var_assignable (string_to_num id) = SOME T) /\
+     FLOOKUP env.var_types (id) = SOME typ /\
+     FLOOKUP env.var_assignable (id) = SOME T) /\
   (!n ty. FLOOKUP env.var_types n = SOME ty ==>
-     ?id. MEM (id,ty) args /\ n = string_to_num id) /\
+     ?id. MEM (id,ty) args /\ n = id) /\
   (!n b. FLOOKUP env.var_assignable n = SOME b ==>
-     ?id typ. MEM (id,typ) args /\ n = string_to_num id /\ b = T)
+     ?id typ. MEM (id,typ) args /\ n = id /\ b = T)
 Proof
   rw[] >-
     (drule_all FOLDL_extend_local_args_formal_lookup >> simp[])
@@ -347,13 +347,13 @@ QED
 
 Theorem FOLDL_extend_local_args_static:
   !args (base : typing_env).
-    (FOLDL (\env (id,ty). extend_local env (string_to_num id) ty T) base args).current_src = base.current_src /\
-    (FOLDL (\env (id,ty). extend_local env (string_to_num id) ty T) base args).bare_globals = base.bare_globals /\
-    (FOLDL (\env (id,ty). extend_local env (string_to_num id) ty T) base args).bare_global_assignable = base.bare_global_assignable /\
-    (FOLDL (\env (id,ty). extend_local env (string_to_num id) ty T) base args).toplevel_vtypes = base.toplevel_vtypes /\
-    (FOLDL (\env (id,ty). extend_local env (string_to_num id) ty T) base args).type_defs = base.type_defs /\
-    (FOLDL (\env (id,ty). extend_local env (string_to_num id) ty T) base args).fn_sigs = base.fn_sigs /\
-    (FOLDL (\env (id,ty). extend_local env (string_to_num id) ty T) base args).flag_members = base.flag_members
+    (FOLDL (\env (id,ty). extend_local env (id) ty T) base args).current_src = base.current_src /\
+    (FOLDL (\env (id,ty). extend_local env (id) ty T) base args).bare_globals = base.bare_globals /\
+    (FOLDL (\env (id,ty). extend_local env (id) ty T) base args).bare_global_assignable = base.bare_global_assignable /\
+    (FOLDL (\env (id,ty). extend_local env (id) ty T) base args).toplevel_vtypes = base.toplevel_vtypes /\
+    (FOLDL (\env (id,ty). extend_local env (id) ty T) base args).type_defs = base.type_defs /\
+    (FOLDL (\env (id,ty). extend_local env (id) ty T) base args).fn_sigs = base.fn_sigs /\
+    (FOLDL (\env (id,ty). extend_local env (id) ty T) base args).flag_members = base.flag_members
 Proof
   Induct >> simp[] >>
   gen_tac >> PairCases_on `h` >>
@@ -458,7 +458,7 @@ QED
 
 Theorem is_immutable_decl_MEM_Immutable_exists[local]:
   !n ts. is_immutable_decl n ts ==>
-  ?vis id ty init. MEM (VariableDecl vis Immutable id ty init) ts /\ string_to_num id = n
+  ?vis ty init. MEM (VariableDecl vis Immutable n ty init) ts
 Proof
   Induct_on `ts` >> rw[is_immutable_decl_def] >>
   Cases_on `h` >> gvs[is_immutable_decl_def] >>
@@ -512,7 +512,7 @@ Theorem artifact_toplevel_non_bare_globals_NONE_transfer_initial:
      ?ts. get_module_code (initial_evaluation_context sources layouts tx cx_src) src' = SOME ts /\
           FLOOKUP toplevel_vtypes (src',id) = SOME (Type ty) /\
           is_bare_global_decl id ts /\
-          find_var_decl_by_num id ts = NONE /\ ty <> NoneT) /\
+          find_var_decl_by_name id ts = NONE /\ ty <> NoneT) /\
   FLOOKUP (function_entry_env art mods entry_src args).toplevel_vtypes (src,id) = SOME vt /\
   FLOOKUP (function_entry_env art mods entry_src args).bare_globals (src,id) = NONE ==>
   FLOOKUP bare_globals (src,id) = NONE
@@ -529,34 +529,34 @@ Proof
    (Cases_on `mut` >> gvs[] >-
      (rw[] >>
       `FLOOKUP (build_contract_type_artifact F mods).cta_bare_globals
-         (src,string_to_num id_str) = SOME ty` by
+         (src,id) = SOME ty` by
         (irule build_contract_type_artifact_bare_globals_complete >> simp[] >> metis_tac[]) >>
       gvs[]) >-
      (rw[] >>
       `FLOOKUP (build_contract_type_artifact F mods).cta_bare_globals
-         (src,string_to_num id_str) = SOME ty` by
+         (src,id) = SOME ty` by
         (irule build_contract_type_artifact_bare_globals_complete >> simp[] >> metis_tac[]) >>
       gvs[]) >-
      (rw[] >>
       `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))` by
         metis_tac[contract_namespaces_ok_module_toplevel_vtype_keys, ALOOKUP_MEM] >>
-      `find_var_decl_by_num (string_to_num id_str) ts =
-         SOME (StorageVarDecl T ty,id_str)` by
-        metis_tac[find_var_decl_by_num_SOME_storage_var_Transient] >>
+      `find_var_decl_by_name id ts =
+         SOME (StorageVarDecl T ty,id)` by
+        metis_tac[find_var_decl_by_name_SOME_storage_var_Transient] >>
       gvs[]) >>
      rw[] >>
      `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))` by
         metis_tac[contract_namespaces_ok_module_toplevel_vtype_keys, ALOOKUP_MEM] >>
-     `find_var_decl_by_num (string_to_num id_str) ts =
-        SOME (StorageVarDecl F ty,id_str)` by
-       metis_tac[find_var_decl_by_num_SOME_storage_var_Storage] >>
+     `find_var_decl_by_name id ts =
+        SOME (StorageVarDecl F ty,id)` by
+       metis_tac[find_var_decl_by_name_SOME_storage_var_Storage] >>
      gvs[]) >>
   rw[] >>
   `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))` by
      metis_tac[contract_namespaces_ok_module_toplevel_vtype_keys, ALOOKUP_MEM] >>
-  `find_var_decl_by_num (string_to_num id_str) ts =
-     SOME (HashMapVarDecl is_transient kt vty,id_str)` by
-    metis_tac[find_var_decl_by_num_SOME_hashmap] >>
+  `find_var_decl_by_name id ts =
+     SOME (HashMapVarDecl is_transient kt vty,id)` by
+    metis_tac[find_var_decl_by_name_SOME_hashmap] >>
   gvs[]
 QED
 Theorem well_typed_static_maps_transfer:

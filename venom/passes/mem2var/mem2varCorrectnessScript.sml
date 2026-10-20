@@ -326,13 +326,28 @@ Proof
   >> irule m2v_rewrite_inst_front_nonterm >> simp[]
 QED
 
+(* Project to opcodes before splitting the result spine: instruction equality
+   would expand all record fields, none of which matter for PHI preservation.
+   Cache the small rewrite set instead of rebuilding the ambient simpset. *)
+val m2v_phi_ss = std_ss ++ rewrites
+  [listTheory.MAP, listTheory.MEM, listTheory.list_case_def, LET_THM,
+   instruction_accfupds, instruction_accessors,
+   SIMP_CONV (srw_ss()) [] ``ASSIGN = PHI``,
+   SIMP_CONV (srw_ss()) [] ``MSTORE = PHI``,
+   SIMP_CONV (srw_ss()) [] ``PHI = MLOAD``,
+   SIMP_CONV (srw_ss()) [] ``PHI = RETURN``];
+
 (* m2v_promote_inst never introduces PHI opcodes *)
 Theorem m2v_promote_inst_preserves_phi[local]:
   !pvar ao sz inst x. MEM x (m2v_promote_inst pvar ao sz inst) ==>
     x.inst_opcode = PHI ==> inst.inst_opcode = PHI
 Proof
-  rpt gen_tac >> simp[Once m2v_promote_inst_def] >>
-  rpt (CASE_TAC >> simp[]) >> rpt strip_tac >> gvs[]
+  rpt gen_tac >> Cases_on `inst.inst_opcode = PHI` >> simp[] >>
+  qsuff_tac
+    `~MEM PHI (MAP (\i. i.inst_opcode) (m2v_promote_inst pvar ao sz inst))`
+  >- (simp[MEM_MAP] >> metis_tac[]) >>
+  PURE_REWRITE_TAC [m2v_promote_inst_def] >>
+  rpt (BasicProvers.PURE_TOP_CASE_TAC >> asm_simp_tac m2v_phi_ss [])
 QED
 
 (* m2v_rewrite_inst never introduces PHI opcodes *)

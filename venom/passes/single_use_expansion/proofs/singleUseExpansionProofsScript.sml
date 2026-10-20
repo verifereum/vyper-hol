@@ -1758,7 +1758,10 @@ Proof
   >- (
     (* R_term idx change — first conjunct *)
     rpt strip_tac >>
-    fs[execEquivParamDefsTheory.valid_state_rel_def] >>
+    (* Unpack only the relation contract, keeping residual frames opaque. *)
+    qpat_x_assum `valid_state_rel _ _`
+      (strip_assume_tac o
+       PURE_REWRITE_RULE [execEquivParamDefsTheory.valid_state_rel_def]) >>
     qpat_x_assum `!s1 s2. execution_equiv (sue_fresh_vars_fn fn) s1 s2 ==> _`
       (fn fields => mp_tac (Q.SPECL [`v1`, `v2`] fields)) >>
     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
@@ -1767,7 +1770,8 @@ Proof
     disch_then match_mp_tac >>
     PURE_REWRITE_TAC (CONJUNCTS venomStateTheory.venom_state_accfupds @
       [combinTheory.K_THM]) >>
-    rpt conj_tac >> TRY (FIRST_ASSUM ACCEPT_TAC) >> ASM_REWRITE_TAC[])
+    rpt conj_tac >> TRY (FIRST_ASSUM ACCEPT_TAC) >>
+    ASM_SIMP_TAC std_ss [execEquivParamDefsTheory.vsr_term_frame_control])
   >>
   (* OK/OK continuation — second conjunct *)
   rpt strip_tac >>

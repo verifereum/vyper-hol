@@ -7,7 +7,7 @@ Ancestors
 Definition lookup_immutable_def:
   lookup_immutable cx (st:evaluation_state) mid n =
   case ALOOKUP st.immutables cx.txn.target of
-  | SOME imms => FLOOKUP (get_source_immutables mid imms) (string_to_num n)
+  | SOME imms => FLOOKUP (get_source_immutables mid imms) n
   | NONE => NONE
 End
 
@@ -19,7 +19,7 @@ Definition is_immutable_def:
   is_immutable cx n =
     case get_module_code cx (current_module cx) of
       NONE => F
-    | SOME ts => is_immutable_decl (string_to_num n) ts
+    | SOME ts => is_immutable_decl n ts
 End
 
 Definition update_bare_global_name_def:
@@ -27,7 +27,7 @@ Definition update_bare_global_name_def:
     case lookup_bare_global_name cx st n of
     | NONE => st
     | SOME (tv, _) =>
-      SND (set_immutable cx (current_module cx) (string_to_num n) tv v st)
+      SND (set_immutable cx (current_module cx) n tv v st)
 End
 
 (********************************************************)
@@ -38,14 +38,14 @@ Theorem immutables_preserved_after_update:
   ∀st n v. (update_name st n v).immutables = st.immutables
 Proof
   rw[update_name_def, LET_THM] >>
-  Cases_on `find_containing_scope (string_to_num n) st.scopes` >-
+  Cases_on `find_containing_scope n st.scopes` >-
    (Cases_on `st.scopes` >> simp[evaluation_state_accfupds]) >>
   PairCases_on `x` >> simp[evaluation_state_accfupds]
 QED
 
 Theorem lookup_immutable_after_set_immutable:
   ∀cx n tv v st st'.
-    set_immutable cx (current_module cx) (string_to_num n) tv v st = (INL (), st') ⇒
+    set_immutable cx (current_module cx) n tv v st = (INL (), st') ⇒
     lookup_immutable cx st' (current_module cx) n = SOME (tv, v)
 Proof
   rw[set_immutable_def, lookup_immutable_def,
@@ -93,7 +93,7 @@ Proof
   simp[update_bare_global_name_def] >>
   Cases_on `lookup_bare_global_name cx st n` >> simp[] >>
   PairCases_on `x` >> simp[] >>
-  Cases_on `set_immutable cx (current_module cx) (string_to_num n) x0 v st` >>
+  Cases_on `set_immutable cx (current_module cx) n x0 v st` >>
   simp[] >>
   irule set_immutable_scopes >> metis_tac[]
 QED
@@ -193,7 +193,6 @@ Theorem lookup_bare_global_name_update_bare_global_name_neq:
     lookup_bare_global_name cx st n1
 Proof
   rpt strip_tac >>
-  `string_to_num n1 ≠ string_to_num n2` by metis_tac[string_to_num_inj] >>
   simp[update_bare_global_name_def] >>
   Cases_on `lookup_bare_global_name cx st n2` >> simp[] >>
   PairCases_on `x` >> simp[] >>
@@ -247,7 +246,7 @@ Proof
   rpt gen_tac >>
   simp[lookup_bare_global_name_def, lookup_immutable_def,
        update_toplevel_name_def] >>
-  Cases_on `set_global cx mid (string_to_num id) v st` >>
+  Cases_on `set_global cx mid id v st` >>
   `r.immutables = st.immutables` by
     (irule set_global_immutables >> metis_tac[]) >>
   simp[]

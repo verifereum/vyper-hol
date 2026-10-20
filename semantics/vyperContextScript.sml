@@ -2,7 +2,7 @@ Theory vyperContext
 Ancestors
   arithmetic alist combin option list finite_map pair rich_list
   cv cv_std vfmState vfmCompute[ignore_grammar] sha2
-  vyperAST vyperABI vyperMisc vyperValue vyperValueOperation vyperStorage
+  vyperAST vyperABI vyperMisc vyperNsidFmap vyperValue vyperValueOperation vyperStorage
 Libs
   cv_transLib wordsLib intLib
 
@@ -181,13 +181,13 @@ End
 val () = cv_auto_trans get_self_code_def;
 
 Definition type_env_for_module_def:
-  type_env_for_module src_id [] = FEMPTY ∧
+  type_env_for_module src_id [] = (FEMPTY : nsid |-> type_args) ∧
   type_env_for_module src_id (StructDecl id args :: ts) =
-    type_env_for_module src_id ts |+ (type_key (src_id, id), StructArgs args) ∧
+    type_env_for_module src_id ts |+ ((src_id, id), StructArgs args) ∧
   type_env_for_module src_id (FlagDecl id ls :: ts) =
-    type_env_for_module src_id ts |+ (type_key (src_id, id), FlagArgs (LENGTH ls)) ∧
+    type_env_for_module src_id ts |+ ((src_id, id), FlagArgs (LENGTH ls)) ∧
   type_env_for_module src_id (InterfaceDecl id funcs :: ts) =
-    type_env_for_module src_id ts |+ (type_key (src_id, id), InterfaceArgs funcs) ∧
+    type_env_for_module src_id ts |+ ((src_id, id), InterfaceArgs funcs) ∧
   type_env_for_module src_id (_ :: ts) = type_env_for_module src_id ts
 End
 
@@ -202,7 +202,7 @@ val () = cv_auto_trans type_env_def;
 (* Build combined type_env from all modules for a contract.
    This is needed because a function in one module can return a type from another. *)
 Definition type_env_all_modules_def:
-  type_env_all_modules [] = FEMPTY ∧
+  type_env_all_modules [] = (FEMPTY : nsid |-> type_args) ∧
   type_env_all_modules ((src_id, ts) :: rest) =
     FUNION (type_env_for_module src_id ts) (type_env_all_modules rest)
 End
@@ -225,7 +225,7 @@ Definition lookup_interface_def:
     case get_module_code cx src_id_opt of
     | NONE => NONE
     | SOME ts =>
-        case FLOOKUP (type_env_for_module src_id_opt ts) (type_key (src_id_opt, iface_name)) of
+        case FLOOKUP (type_env_for_module src_id_opt ts) (src_id_opt, iface_name) of
         | SOME (InterfaceArgs funcs) => SOME funcs
         | _ => NONE
 End

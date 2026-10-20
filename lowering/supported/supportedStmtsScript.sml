@@ -32,7 +32,9 @@ Definition supported_assignment_def:
   supported_assignment tops bindings target e <=>
     case target of
       BaseTarget (NameTarget name) =>
-        supported_local_word bindings name /\ supported_expr tops e
+        (case ALOOKUP bindings name of
+           SOME ty => supported_value_type tops ty
+         | NONE => F) /\ supported_expr tops e
     | BaseTarget (TopLevelNameTarget id) =>
         supported_scalar_target tops id /\ supported_pure_expr tops e
     | BaseTarget (SubscriptTarget (TopLevelNameTarget id) key) =>
@@ -61,20 +63,22 @@ Definition supported_append_target_def:
 End
 
 Definition supported_string_reason_def:
-  supported_string_reason (Literal _ (StringL text)) = T /\
-  supported_string_reason _ = F
+  supported_string_reason tops (Literal _ (StringL text)) = T /\
+  supported_string_reason tops e =
+    (supported_pure_expr tops e /\
+     case expr_type e of BaseT (StringT _) => T | _ => F)
 End
 
 Definition supported_assert_reason_def:
-  supported_assert_reason AssertBare = T /\
-  supported_assert_reason AssertUnreachable = T /\
-  supported_assert_reason (AssertReason e) = supported_string_reason e
+  supported_assert_reason tops AssertBare = T /\
+  supported_assert_reason tops AssertUnreachable = T /\
+  supported_assert_reason tops (AssertReason e) = supported_string_reason tops e
 End
 
 Definition supported_raise_reason_def:
-  supported_raise_reason RaiseBare = T /\
-  supported_raise_reason RaiseUnreachable = T /\
-  supported_raise_reason (RaiseReason e) = supported_string_reason e
+  supported_raise_reason tops RaiseBare = T /\
+  supported_raise_reason tops RaiseUnreachable = T /\
+  supported_raise_reason tops (RaiseReason e) = supported_string_reason tops e
 End
 
 Definition supported_log_def:
@@ -121,8 +125,8 @@ Definition supported_stmt_def:
     (supported_pure_expr tops c /\ supported_stmts tops bindings yes /\
      supported_stmts tops bindings no) /\
   supported_stmt tops bindings (Assert c reason) =
-    (supported_pure_expr tops c /\ supported_assert_reason reason) /\
-  supported_stmt tops bindings (Raise reason) = supported_raise_reason reason /\
+    (supported_pure_expr tops c /\ supported_assert_reason tops reason) /\
+  supported_stmt tops bindings (Raise reason) = supported_raise_reason tops reason /\
   supported_stmt tops bindings (Log id es) = supported_log tops id es /\
   supported_stmt tops bindings (For name ty iter n body) =
     (supported_type_namespace ty /\ supported_iterator tops ty iter n /\

@@ -22,11 +22,11 @@ Libs
 
 Datatype:
   contract_type_artifact = <|
-    cta_fn_sigs                  : ((num option # string) |-> fn_sig);
-    cta_bare_globals             : ((num option # num) |-> type);
-    cta_bare_global_assignable   : ((num option # num) |-> type);
-    cta_toplevel_vtypes          : ((num option # num) |-> value_type);
-    cta_flag_members    : ((num option # string) |-> string list)
+    cta_fn_sigs                  : (nsid |-> fn_sig);
+    cta_bare_globals             : (nsid |-> type);
+    cta_bare_global_assignable   : (nsid |-> type);
+    cta_toplevel_vtypes          : (nsid |-> value_type);
+    cta_flag_members    : (nsid |-> string list)
   |>
 End
 
@@ -54,7 +54,7 @@ End
 
 Definition function_entry_env_def:
   function_entry_env art mods src args =
-    FOLDL (\env (id,ty). extend_local env (string_to_num id) ty T)
+    FOLDL (\env (id,ty). extend_local env id ty T)
       (artifact_env art mods src) args
 End
 
@@ -83,25 +83,25 @@ Definition add_toplevel_static_maps_def:
         else art
     | VariableDecl _ Immutable id typ _ =>
         art with <| cta_bare_globals updated_by
-                    (flip FUPDATE ((src,string_to_num id), typ));
+                    (flip FUPDATE ((src,id), typ));
                     cta_bare_global_assignable updated_by
-                    (flip FUPDATE ((src,string_to_num id), typ));
+                    (flip FUPDATE ((src,id), typ));
                     cta_toplevel_vtypes updated_by
-                    (flip FUPDATE ((src,string_to_num id), Type typ)) |>
+                    (flip FUPDATE ((src,id), Type typ)) |>
     | VariableDecl _ (Constant e) id typ _ =>
         art with <| cta_bare_globals updated_by
-                    (flip FUPDATE ((src,string_to_num id), typ));
+                    (flip FUPDATE ((src,id), typ));
                     cta_toplevel_vtypes updated_by
-                    (flip FUPDATE ((src,string_to_num id), Type typ)) |>
+                    (flip FUPDATE ((src,id), Type typ)) |>
     | VariableDecl _ Storage id typ _ =>
         art with cta_toplevel_vtypes updated_by
-          (flip FUPDATE ((src,string_to_num id), Type typ))
+          (flip FUPDATE ((src,id), Type typ))
     | VariableDecl _ Transient id typ _ =>
         art with cta_toplevel_vtypes updated_by
-          (flip FUPDATE ((src,string_to_num id), Type typ))
+          (flip FUPDATE ((src,id), Type typ))
     | HashMapDecl _ _ id kt vt _ =>
         art with cta_toplevel_vtypes updated_by
-          (flip FUPDATE ((src,string_to_num id), HashMapT kt vt))
+          (flip FUPDATE ((src,id), HashMapT kt vt))
     | FlagDecl fid members =>
         art with cta_flag_members updated_by
           (flip FUPDATE ((src,fid), members))
@@ -128,8 +128,8 @@ Definition fn_sig_keys_toplevel_def:
 End
 
 Definition toplevel_vtype_keys_toplevel_def:
-  toplevel_vtype_keys_toplevel src (VariableDecl _ _ id _ _) = [(src,string_to_num id)] /\
-  toplevel_vtype_keys_toplevel src (HashMapDecl _ _ id _ _ _) = [(src,string_to_num id)] /\
+  toplevel_vtype_keys_toplevel src (VariableDecl _ _ id _ _) = [(src,id)] /\
+  toplevel_vtype_keys_toplevel src (HashMapDecl _ _ id _ _ _) = [(src,id)] /\
   toplevel_vtype_keys_toplevel _ _ = []
 End
 
@@ -160,7 +160,7 @@ End
 
 Definition params_ok_def:
   params_ok tenv args <=>
-    ALL_DISTINCT (MAP (string_to_num o FST) args) /\
+    ALL_DISTINCT (MAP FST args) /\
     EVERY (\(_,ty). assignable_type tenv ty) args
 End
 

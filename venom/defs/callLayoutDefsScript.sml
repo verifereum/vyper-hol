@@ -311,9 +311,8 @@ Theorem no_param_insts_queries:
     FIND (\inst. inst.inst_opcode = FMP_PARAM) insts = NONE /\
     FIND (\inst. inst.inst_opcode = RETPC_PARAM) insts = NONE
 Proof
-  Induct >> simp[no_param_insts_def, listTheory.FIND_thm]
-  >> rpt gen_tac >> Cases_on `h.inst_opcode`
-  >> simp[is_param_opcode_def]
+  Induct
+  >> simp[no_param_insts_def, is_param_opcode_iff, listTheory.FIND_thm]
 QED
 Theorem canonical_phase_queries:
   !insts users fmp retpc body.

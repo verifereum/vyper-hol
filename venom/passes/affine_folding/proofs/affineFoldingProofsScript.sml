@@ -491,6 +491,34 @@ Proof
   rpt strip_tac >> ONCE_REWRITE_TAC[af_effective_base_def] >> simp[]
 QED
 
+(* Project only the input shape and lattice lookup, not the result's
+   opcode/operand alternatives or any arithmetic conditions. *)
+Theorem af_rewrite_inst_operand_projection[local]:
+  !dfg vi inst result.
+    af_rewrite_inst dfg vi inst = SOME result ==>
+    ?out_var vi_b offset op1 op2.
+      inst.inst_outputs = [out_var] /\
+      inst.inst_operands = [op1; op2] /\
+      ALOOKUP vi out_var = SOME (VarInfo (SOME vi_b) offset)
+Proof
+  rpt strip_tac >> drule af_rewrite_inst_cases >> strip_tac >>
+  qexistsl_tac [`out_var`, `vi_b`, `offset`, `op1`, `op2`] >> simp[]
+QED
+
+(* Keep the arithmetic payload opaque: a Label immediate base cannot move,
+   so the rewrite exits before computing any effective offset. *)
+val af_label_fixed = prove (
+  ``!dfg visited l target.
+      af_effective_base dfg visited (Label l) target = Label l``,
+  rpt gen_tac >> rw[af_effective_base_label]);
+
+val af_label_branch_ss = bool_ss ++ rewrites
+  [LET_THM, vi_base_def, af_rewrite_inst_def,
+   af_extract_val_lit_def, af_extract_sub_val_lit_def, is_lit_op_def,
+   af_label_fixed, operand_case_def, operand_distinct,
+   optionTheory.option_case_def, optionTheory.option_CLAUSES,
+   pairTheory.pair_case_thm, listTheory.list_case_def];
+
 (* af_rewrite_inst only succeeds for non-Label operands *)
 Theorem af_rewrite_inst_no_labels[local]:
   !dfg vi inst result.
@@ -498,9 +526,15 @@ Theorem af_rewrite_inst_no_labels[local]:
     !l. ~MEM (Label l) inst.inst_operands
 Proof
   rpt strip_tac >>
-  gvs[af_rewrite_inst_def, vi_base_def, vi_offset_def,
-      af_extract_val_lit_def, af_extract_sub_val_lit_def,
-      is_lit_op_def, af_effective_base_label, AllCaseEqs()]
+  drule af_rewrite_inst_operand_projection >> strip_tac >>
+  gvs[listTheory.MEM] >>
+  FIRST [rename1 `inst.inst_operands = [Label l; op]`,
+         rename1 `inst.inst_operands = [op; Label l]`] >>
+  Cases_on `op` >>
+  full_simp_tac af_label_branch_ss [] >>
+  Cases_on `vi_b` >> full_simp_tac af_label_branch_ss [] >>
+  Cases_on `inst.inst_opcode = ADD` >>
+  full_simp_tac af_label_branch_ss []
 QED
 
 (* Helper: non-label operands evaluate when Var operands are defined *)

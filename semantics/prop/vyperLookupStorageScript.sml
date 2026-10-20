@@ -9,14 +9,14 @@ Libs
 
 Definition lookup_toplevel_name_def:
   lookup_toplevel_name cx st mid n =
-  case lookup_global cx mid (string_to_num n) st of
+  case lookup_global cx mid n st of
   | (INL v, st) => SOME v
   | _ => NONE
 End
 
 Definition update_toplevel_name_def:
   update_toplevel_name cx st mid n v =
-  SND (set_global cx mid (string_to_num n) v st)
+  SND (set_global cx mid n v st)
 End
 
 Definition lookup_toplevel_name_target_def:
@@ -27,7 +27,7 @@ Definition var_in_storage_def:
   var_in_storage cx mid n ⇔
   ∃code b t id offset tv.
     get_module_code cx mid = SOME code ∧
-    find_var_decl_by_num (string_to_num n) code = SOME (StorageVarDecl b t, id) ∧
+    find_var_decl_by_name n code = SOME (StorageVarDecl b t, id) ∧
     lookup_var_slot_from_layout cx b mid id = SOME offset ∧
     offset < dimword(:256) ∧
     evaluate_type (get_tenv cx) t = SOME tv ∧
@@ -39,7 +39,7 @@ Definition storage_var_info_def:
     case get_module_code cx mid of
     | NONE => NONE
     | SOME code =>
-        case find_var_decl_by_num (string_to_num n) code of
+        case find_var_decl_by_name n code of
         | SOME (StorageVarDecl b t, id) =>
             (case (lookup_var_slot_from_layout cx b mid id,
                    evaluate_type (get_tenv cx) t) of
@@ -526,75 +526,63 @@ Proof
          conj_tac >- gvs[type_slot_size_def] >>
          qexists_tac `sz1` >> gvs[type_slot_size_def]) >>
       gvs[slots_in_range_def])
-  >- (rpt strip_tac >> gvs[slots_in_range_def] >>
-      first_x_assum (qspecl_then [`off1`, `sz1`, `writes`] mp_tac) >> simp[])
-  >- (rpt strip_tac >> gvs[slots_in_range_def] >>
-      first_x_assum (qspecl_then [`off1`, `sz1`, `writes`] mp_tac) >> simp[])
   >- (rpt strip_tac >>
+      qpat_x_assum `slots_in_range _ _ (TupleTV _)`
+        (assume_tac o PURE_ONCE_REWRITE_RULE [slots_in_range_def]) >>
+      qpat_x_assum `_ ⇒ ∀off1 sz1 writes. _` (fn ih =>
+        first_assum (fn range => match_mp_tac
+          (Q.SPECL [`off1`, `sz1`, `writes`] (MP ih range)))) >> simp[])
+  >- (rpt strip_tac >>
+      qpat_x_assum `slots_in_range _ _ (ArrayTV _ (Fixed _))`
+        (assume_tac o PURE_ONCE_REWRITE_RULE [slots_in_range_def]) >>
+      qpat_x_assum `_ ⇒ ∀off1 sz1 writes. _` (fn ih =>
+        first_assum (fn range => match_mp_tac
+          (Q.SPECL [`off1`, `sz1`, `writes`] (MP ih range)))) >> simp[])
+  >- (rpt strip_tac >>
+      RULE_ASSUM_TAC (PURE_REWRITE_RULE [type_slot_size_def]) >>
       `read_slot (apply_writes (n2w off1) writes storage) off2 =
        read_slot storage off2` by
         (irule read_slot_disjoint_apply_writes >>
-         conj_tac >- gvs[type_slot_size_def] >>
-         qexists_tac `sz1` >> gvs[type_slot_size_def]) >>
-      gvs[slots_in_range_def]
-      >- (`MIN (w2n (read_slot storage off2)) max * type_slot_size tv ≤
-           max * type_slot_size tv` by
-            (irule arithmeticTheory.LESS_MONO_MULT >> simp[]) >>
-          first_x_assum (qspecl_then [`off1`, `sz1`, `writes`] mp_tac) >>
-          simp[arithmeticTheory.MIN_DEF, arithmeticTheory.MULT_COMM] >>
-          disch_then irule >>
-          irule arithmeticTheory.LESS_EQ_TRANS >>
-          qexists_tac `off2 + (max * type_slot_size tv + 1)` >>
-          conj_tac
-          >- (simp[] >>
-              CONV_TAC (LAND_CONV (REWR_CONV arithmeticTheory.MULT_COMM)) >>
-              irule arithmeticTheory.LESS_MONO_MULT >>
-              simp[arithmeticTheory.MIN_DEF]) >>
-          first_assum ACCEPT_TAC)
-      >> `MIN (w2n (read_slot storage off2)) max * type_slot_size tv ≤
-           max * type_slot_size tv` by
-            (irule arithmeticTheory.LESS_MONO_MULT >> simp[]) >>
+         conj_tac >- simp[] >>
+         qexists_tac `sz1` >> simp[]) >>
+      qpat_x_assum `slots_in_range _ _ (ArrayTV _ (Dynamic _))`
+        (strip_assume_tac o SIMP_RULE (srw_ss()) [slots_in_range_def, LET_THM]) >>
+      qpat_x_assum `∀len. len = _ ∧ _ ⇒ _`
+        (qspec_then `w2n (read_slot storage off2)` mp_tac) >>
+      asm_rewrite_tac[] >> strip_tac >> asm_rewrite_tac[] >>
       first_x_assum (qspecl_then [`off1`, `sz1`, `writes`] mp_tac) >>
-      simp[arithmeticTheory.MIN_DEF, arithmeticTheory.MULT_COMM] >>
-      disch_then irule >>
-      conj_tac
-      >- (irule arithmeticTheory.LESS_EQ_TRANS >>
-          qexists_tac `off2 + (max * type_slot_size tv + 1)` >>
-          conj_tac
-          >- (simp[] >>
-              CONV_TAC (LAND_CONV (REWR_CONV arithmeticTheory.MULT_COMM)) >>
-              irule arithmeticTheory.LESS_MONO_MULT >>
-              simp[arithmeticTheory.MIN_DEF]) >>
-          gvs[])
-      >> disj2_tac >>
-      irule arithmeticTheory.LESS_EQ_TRANS >>
-      qexists_tac `off2 + (max * type_slot_size tv + 1)` >>
-      conj_tac
-      >- (simp[] >>
-          CONV_TAC (LAND_CONV (REWR_CONV arithmeticTheory.MULT_COMM)) >>
-          irule arithmeticTheory.LESS_MONO_MULT >>
-          simp[arithmeticTheory.MIN_DEF]) >>
-      first_assum ACCEPT_TAC)
+      disch_then match_mp_tac >>
+      `w2n (read_slot storage off2) * type_slot_size tv ≤
+       max * type_slot_size tv` by
+        (irule arithmeticTheory.LESS_MONO_MULT >> simp[]) >>
+      asm_rewrite_tac[arithmeticTheory.MIN_DEF, EVAL ``dimword(:256)``] >>
+      POP_ASSUM_LIST (MAP_EVERY assume_tac o filter (numSyntax.is_leq o concl)) >>
+      decide_tac)
 
-  >- (rpt strip_tac >> gvs[slots_in_range_def] >>
-      first_x_assum (qspecl_then [`off1`, `sz1`, `writes`] mp_tac) >> simp[])
-  >- (rpt strip_tac >> gvs[slots_in_range_def] >>
-      first_assum irule >>
-      TRY (conj_tac >- gvs[arithmeticTheory.MULT]) >>
-      qexists_tac `sz1` >> gvs[arithmeticTheory.MULT])
-  >- (rpt strip_tac >> gvs[slots_in_range_def] >>
-      first_assum irule >>
-      TRY (conj_tac >- gvs[arithmeticTheory.MULT]) >>
-      qexists_tac `sz1` >> gvs[arithmeticTheory.MULT])
-  >- (rpt strip_tac >> gvs[slots_in_range_def] >>
-      first_assum irule >>
-      TRY (conj_tac >- gvs[arithmeticTheory.MULT]) >>
-      qexists_tac `sz1` >> gvs[arithmeticTheory.MULT])
-  >> (rpt strip_tac >> gvs[slots_in_range_def] >>
-
-      first_assum irule >>
-      TRY (conj_tac >- gvs[arithmeticTheory.MULT]) >>
-      qexists_tac `sz1` >> gvs[arithmeticTheory.MULT])
+  >- (rpt strip_tac >>
+      qpat_x_assum `slots_in_range _ _ (StructTV _)`
+        (assume_tac o PURE_ONCE_REWRITE_RULE [slots_in_range_def]) >>
+      qpat_x_assum `_ ⇒ ∀off1 sz1 writes. _` (fn ih =>
+        first_assum (fn range => match_mp_tac
+          (Q.SPECL [`off1`, `sz1`, `writes`] (MP ih range)))) >> simp[])
+  (* Unfold only the concrete range fact, then specialize the matching IH
+     before simplifying the resulting numeric bounds. *)
+  >> (rpt strip_tac >>
+      FIRST (map (fn pat => qpat_x_assum pat
+        (strip_assume_tac o PURE_ONCE_REWRITE_RULE [slots_in_range_def]))
+        [`tuple_slots_in_range _ _ (_::_)`,
+         `static_slots_in_range _ _ _ (SUC _)`,
+         `dyn_slots_in_range _ _ _ (SUC _)`,
+         `struct_slots_in_range _ _ (_::_)`]) >>
+      qpat_x_assum `_ ∧ _` (fn ihs =>
+        FIRST (map (fn ih => first_assum (fn range =>
+          match_mp_tac (Q.SPECL [`off1`, `sz1`, `writes`] (MP ih range))))
+          (CONJUNCTS ihs))) >>
+      RULE_ASSUM_TAC (PURE_REWRITE_RULE [arithmeticTheory.MULT]) >>
+      asm_rewrite_tac[arithmeticTheory.MULT, EVAL ``dimword(:256)``] >>
+      (* Coverage is discharged; arithmetic needs only the numeric bounds. *)
+      POP_ASSUM_LIST (MAP_EVERY assume_tac o filter (numSyntax.is_leq o concl)) >>
+      decide_tac)
 QED
 
 Theorem slots_in_range_disjoint_apply_writes:
@@ -1257,10 +1245,10 @@ QED
 Theorem lookup_toplevel_name_lookup_global:
   ∀cx st src_id_opt n href0.
     lookup_toplevel_name cx st src_id_opt n = SOME href0 ⇒
-    lookup_global cx src_id_opt (string_to_num n) st = (INL href0, st)
+    lookup_global cx src_id_opt n st = (INL href0, st)
 Proof
   rw[lookup_toplevel_name_def] >>
-  Cases_on `lookup_global cx src_id_opt (string_to_num n) st` >>
+  Cases_on `lookup_global cx src_id_opt n st` >>
   Cases_on `q` >> gvs[] >>
   drule lookup_global_state >> simp[]
 QED

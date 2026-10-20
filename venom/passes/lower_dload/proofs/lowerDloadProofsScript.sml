@@ -27,6 +27,35 @@ val dim256 = fcpLib.INDEX_CONV ``dimindex(:256)``;
 val dimword_256_ss = simpLib.rewrites
   [dim256, dimword_def];
 
+(* Evaluate only the fixed allocation size, not symbolic offset arithmetic. *)
+val alloca_size_32 = SIMP_CONV (srw_ss() ++ dimword_256_ss) []
+  ``32 MOD dimword (:256)``;
+
+(* Index the exported equations once; rewrite only the known opcode branch. *)
+val step_inst_base_opcode_rewrites = let
+  fun key th = let
+    val (_, body) = strip_forall (concl th)
+    val (guard, _) = dest_imp body
+  in rhs guard end
+in map (fn th => (key th, th))
+  (CONJUNCTS venomExecSemanticsTheory.step_inst_base_opcode_eqs) end;
+
+fun step_inst_base_opcode_eq opcode = let
+  val (_, rewrite) = valOf (List.find
+    (fn (key, _) => aconv key opcode) step_inst_base_opcode_rewrites)
+in rewrite end;
+
+fun rewrite_step_inst_base_opcode eq =
+  PURE_ONCE_REWRITE_TAC
+    [MATCH_MP (step_inst_base_opcode_eq (rhs (concl eq))) eq];
+
+fun gvs_step_inst_base_opcode thms =
+  qpat_assum `inst.inst_opcode = _` (fn eq =>
+    gvs (MATCH_MP (step_inst_base_opcode_eq (rhs (concl eq))) eq :: thms));
+
+val step_inst_base_opcode_tac =
+  qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode;
+
 (* ===== Transform structure ===== *)
 
 Theorem lower_dload_block_label[local]:
@@ -566,7 +595,7 @@ QED
 val ld_terminator_tac =
   rpt strip_tac >>
   ld_derive_agree_tac >> ld_derive_fields_tac >>
-  simp[step_inst_base_def, LET_THM] >>
+  step_inst_base_opcode_tac >> simp[LET_THM] >>
   rpt (BasicProvers.PURE_FULL_CASE_TAC >>
        gvs[] >> TRY (res_tac >> gvs[])) >>
   TRY (`eval_operands inst.inst_operands s1 =
@@ -588,7 +617,7 @@ Theorem step_inst_base_ld_ok_jnz:
 Proof
   rpt strip_tac >>
   ld_derive_agree_tac >> ld_derive_fields_tac >>
-  simp[step_inst_base_def, LET_THM] >>
+  step_inst_base_opcode_tac >> simp[LET_THM] >>
   BasicProvers.PURE_FULL_CASE_TAC >> gvs[lift_result_def] >>
   TRY (res_tac >> gvs[]) >>
   BasicProvers.PURE_FULL_CASE_TAC >> gvs[lift_result_def] >>
@@ -739,7 +768,7 @@ Proof
   `?out. inst.inst_outputs = [out]` by
     (Cases_on `inst.inst_outputs` >> fs[] >>
      Cases_on `t` >> fs[]) >>
-  gvs[step_inst_base_def, LET_THM, exec_alloca_def, eval_operand_def] >>
+  gvs_step_inst_base_opcode [LET_THM, exec_alloca_def, eval_operand_def] >>
   Cases_on `FLOOKUP s1.vs_allocas inst.inst_id` >> gvs[] >>
   Cases_on `FLOOKUP s2.vs_allocas inst.inst_id` >> gvs[] >>
   TRY (Cases_on `x` >> gvs[]) >> TRY (Cases_on `x'` >> gvs[]) >>
@@ -818,6 +847,14 @@ Proof
   simp[write_memory_with_expansion_def, LET_THM]
 QED
 
+(* Cache write projections rather than normalize the expanded memory record
+   at every field of ld_ok. *)
+val wmwe_projections = let
+  val accessors = map (rator o lhs o concl o SPEC_ALL)
+    (CONJUNCTS venom_state_accessors)
+in map (fn acc => SIMP_RULE (srw_ss()) [LET_THM]
+  (AP_TERM acc (SPEC_ALL write_memory_with_expansion_def))) accessors end;
+
 (* Fresh variable names are distinct *)
 Theorem ld_vars_distinct[local,simp]:
   ld_add_var id <> ld_alloca_var id /\
@@ -885,7 +922,7 @@ Proof
   `?out. inst.inst_outputs = [out]` by
     (Cases_on `inst.inst_outputs` >> fs[] >>
      Cases_on `t` >> fs[]) >>
-  gvs[step_inst_base_def, LET_THM, exec_read1_def, eval_operand_def] >>
+  gvs_step_inst_base_opcode [LET_THM, exec_read1_def, eval_operand_def] >>
   (* Unfold s2 side: lower_dload_inst produces 4 instructions *)
   simp[lower_dload_inst_def, LET_THM] >>
   (* eval_operand (Label "code_end") via code_layout_valid *)
@@ -895,35 +932,29 @@ Proof
   (* Step through all 4 instructions with dimword and var distinctness *)
   ONCE_REWRITE_TAC[run_insts_def] >>
   simp[step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  ASM_REWRITE_TAC[opcode_case_def] >>
-  simp[LET_THM, exec_alloca_def, eval_operand_def] >>
+  simp[step_inst_base_opcode_eq ``ALLOCA``, LET_THM,
+       exec_alloca_def, eval_operand_def] >>
   BasicProvers.EVERY_CASE_TAC >> gvs[] >>
   ONCE_REWRITE_TAC[run_insts_def] >>
   simp[step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  ASM_REWRITE_TAC[opcode_case_def] >>
-  simp[] >>
-  simp[LET_THM, exec_pure2_def, eval_operand_def, lookup_var_def,
+  simp[step_inst_base_opcode_eq ``ADD``, LET_THM,
+       exec_pure2_def, eval_operand_def, lookup_var_def,
        update_var_def, FLOOKUP_UPDATE] >>
   ONCE_REWRITE_TAC[run_insts_def] >>
   simp[step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  ASM_REWRITE_TAC[opcode_case_def] >>
-  simp[LET_THM, eval_operand_def, lookup_var_def,
+  simp[step_inst_base_opcode_eq ``CODECOPY``, LET_THM,
+       eval_operand_def, lookup_var_def,
        update_var_def, FLOOKUP_UPDATE] >>
   ONCE_REWRITE_TAC[run_insts_def] >>
   qmatch_goalsub_abbrev_tac `step_inst fuel ctx _ mload_state` >>
   simp[step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  ASM_REWRITE_TAC[opcode_case_def] >>
-  simp[] >>
-  simp[LET_THM, exec_read1_def, eval_operand_def, run_insts_def] >>
+  simp[step_inst_base_opcode_eq ``MLOAD``, LET_THM,
+       exec_read1_def, eval_operand_def, run_insts_def] >>
   qunabbrev_tac `mload_state` >>
   simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
   simp[FLOOKUP_UPDATE] >>
   (* Step 1: Simplify 32 MOD dimword(:256) -> 32 *)
-  simp_tac (srw_ss() ++ dimword_256_ss) [] >>
+  PURE_REWRITE_TAC[alloca_size_32] >>
   (* Step 2: Simplify code offset arithmetic *)
   `s2.vs_code = s1.vs_code /\ s2.vs_data_section = s1.vs_data_section /\
    s2.vs_labels = s1.vs_labels` by fs[ld_ok_def] >>
@@ -953,8 +984,8 @@ Proof
     (rpt gen_tac >> irule write_then_mload >> simp[]) >>
   ASM_REWRITE_TAC[] >>
   (* Step 4: Close ld_ok — wmwe only changes vs_memory *)
-  simp[ld_ok_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
-       write_memory_with_expansion_def, LET_THM] >>
+  simp (wmwe_projections @
+    [ld_ok_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
   fs[ld_ok_def, lookup_var_def] >>
   rpt strip_tac >>
   Cases_on `out = v'` >- simp[] >>
@@ -995,7 +1026,7 @@ Proof
   `inst.inst_opcode <> INVOKE` by simp[] >>
   fs[step_inst_non_invoke] >>
   `inst.inst_outputs = []` by gvs[inst_wf_def] >>
-  gvs[step_inst_base_def, LET_THM, eval_operand_def] >>
+  gvs_step_inst_base_opcode [LET_THM, eval_operand_def] >>
   (* Extract operand evaluations on s1 *)
   `?dst_val. eval_operand dst_op s1 = SOME dst_val` by
     (Cases_on `eval_operand dst_op s1` >> gvs[AllCaseEqs()]) >>
@@ -1016,7 +1047,7 @@ Proof
     fs[code_layout_valid_def] >>
   (* Step through ADD *)
   ONCE_REWRITE_TAC[run_insts_def] >>
-  simp[step_inst_non_invoke, step_inst_base_def, LET_THM,
+  simp[step_inst_non_invoke, step_inst_base_opcode_eq ``ADD``, LET_THM,
        exec_pure2_def, eval_operand_def, lookup_var_def, update_var_def,
        FLOOKUP_UPDATE] >>
   (* Derive that dst_op and size_op eval unchanged after update_var add_v *)
@@ -1044,7 +1075,7 @@ Proof
   ONCE_REWRITE_TAC[run_insts_def] >>
   simp[step_inst_non_invoke, LET_THM, run_insts_def] >>
   (* Unfold step_inst_base for CODECOPY *)
-  simp[step_inst_base_def, LET_THM,
+  simp[step_inst_base_opcode_eq ``CODECOPY``, LET_THM,
        eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
   (* Fold record updates back to update_var, then resolve eval_operand *)
   REWRITE_TAC[GSYM update_var_def] >>
@@ -1134,7 +1165,7 @@ Theorem step_inst_base_dload_ok:
           s.vs_data_section ++ REPLICATE 32 0w))) s)
 Proof
   rpt strip_tac >>
-  simp[step_inst_base_def, exec_read1_def] >>
+  step_inst_base_opcode_tac >> simp[exec_read1_def] >>
   `LENGTH inst.inst_outputs = 1` by gvs[inst_wf_def] >>
   Cases_on `inst.inst_outputs` >> gvs[] >>
   simp[eval_operand_def]
@@ -1148,7 +1179,7 @@ Theorem step_inst_base_alloca_ok:
 Proof
   rpt strip_tac >>
   gvs[inst_wf_def] >>
-  simp[step_inst_base_def, eval_operand_def, exec_alloca_def] >>
+  step_inst_base_opcode_tac >> simp[eval_operand_def, exec_alloca_def] >>
   Cases_on `inst.inst_outputs` >> gvs[] >>
   BasicProvers.EVERY_CASE_TAC
 QED
@@ -1161,7 +1192,8 @@ Theorem step_inst_base_dloadbytes_no_halt:
     (!w v. step_inst_base inst s <> IntRet w v) /\
     (!a v. step_inst_base inst s <> Abort a v)
 Proof
-  rpt strip_tac >> gvs[step_inst_base_def] >>
+  rpt gen_tac >> strip_tac >> step_inst_base_opcode_tac >>
+  rpt strip_tac >> gvs[] >>
   Cases_on `inst.inst_operands` >> gvs[] >>
   Cases_on `t` >> gvs[] >>
   Cases_on `t'` >> gvs[] >>

@@ -805,16 +805,48 @@ QED
    Per-opcode reduction of step_inst_base to update_var form
    ================================================================ *)
 
+(* Reuse the proved dispatch equations rather than traversing every opcode. *)
+val step_inst_base_opcode_rewrites = let
+  fun key th = let
+    val (_, body) = strip_forall (concl th)
+    val (guard, _) = dest_imp body
+  in rhs guard end
+in map (fn th => (key th, th))
+  (CONJUNCTS venomExecSemanticsTheory.step_inst_base_opcode_eqs) end;
+
+fun step_inst_base_for opc =
+  #2 (valOf (List.find (fn (key, _) => aconv key opc)
+    step_inst_base_opcode_rewrites));
+
+(* Only the operand/result spine reduces: computed words, comparisons and
+   updated states must remain opaque, including in the EQ/SLT/SGT branches. *)
+val pure_step_ss = pure_ss ++ boolSimps.BOOL_ss ++
+  simpLib.type_ssfrag ``:operand list`` ++
+  simpLib.type_ssfrag ``:string list`` ++
+  simpLib.type_ssfrag ``:bytes32 option`` ++
+  simpLib.type_ssfrag ``:bytes32 option # bytes32 option`` ++
+  simpLib.type_ssfrag ``:exec_result``;
+
+val step_inst_base_opcode_tac =
+  qpat_assum `inst.inst_opcode = _` (fn eq =>
+    PURE_ONCE_REWRITE_TAC
+      [MATCH_MP (step_inst_base_for (rhs (concl eq))) eq]);
+
+val step_inst_base_value_tac =
+  strip_tac >>
+  qpat_x_assum `step_inst_base inst st = OK st'` mp_tac >>
+  step_inst_base_opcode_tac >>
+  asm_simp_tac pure_step_ss
+    [exec_pure1_def, exec_pure2_def, CaseEq "option"] >>
+  strip_tac >> gvs[];
+
 Theorem step_inst_base_assign:
   inst.inst_opcode = ASSIGN /\ inst.inst_operands = [op] /\
   inst.inst_outputs = [out] /\ step_inst_base inst st = OK st' ==>
   ?w. eval_operand op st = SOME w /\
       st' = update_var out w st
 Proof
-  strip_tac >>
-  qpat_x_assum `step_inst_base inst st = OK st'` mp_tac >>
-  ASM_REWRITE_TAC[step_inst_base_def] >>
-  simp[AllCaseEqs()] >> strip_tac >> gvs[]
+  step_inst_base_value_tac
 QED
 
 Theorem step_inst_base_iszero:
@@ -823,7 +855,7 @@ Theorem step_inst_base_iszero:
   ?w. eval_operand op st = SOME w /\
       st' = update_var out (bool_to_word (w = 0w)) st
 Proof
-  strip_tac >> gvs[step_inst_base_def, exec_pure1_def, AllCaseEqs()]
+  step_inst_base_value_tac
 QED
 
 Theorem step_inst_base_add:
@@ -832,7 +864,7 @@ Theorem step_inst_base_add:
   ?w1 w2. eval_operand op1 st = SOME w1 /\ eval_operand op2 st = SOME w2 /\
            st' = update_var out (w1 + w2) st
 Proof
-  strip_tac >> gvs[step_inst_base_def, exec_pure2_def, AllCaseEqs()]
+  step_inst_base_value_tac
 QED
 
 Theorem step_inst_base_sub:
@@ -841,7 +873,7 @@ Theorem step_inst_base_sub:
   ?w1 w2. eval_operand op1 st = SOME w1 /\ eval_operand op2 st = SOME w2 /\
            st' = update_var out (w1 - w2) st
 Proof
-  strip_tac >> gvs[step_inst_base_def, exec_pure2_def, AllCaseEqs()]
+  step_inst_base_value_tac
 QED
 
 Theorem step_inst_base_lt:
@@ -850,11 +882,7 @@ Theorem step_inst_base_lt:
   ?w1 w2. eval_operand op1 st = SOME w1 /\ eval_operand op2 st = SOME w2 /\
            st' = update_var out (bool_to_word (w2n w1 < w2n w2)) st
 Proof
-  strip_tac >>
-  qpat_x_assum `step_inst_base inst st = OK st'` mp_tac >>
-  ASM_REWRITE_TAC[step_inst_base_def] >>
-  simp[exec_pure2_def, AllCaseEqs()] >>
-  strip_tac >> gvs[]
+  step_inst_base_value_tac
 QED
 
 Theorem step_inst_base_gt:
@@ -863,11 +891,7 @@ Theorem step_inst_base_gt:
   ?w1 w2. eval_operand op1 st = SOME w1 /\ eval_operand op2 st = SOME w2 /\
            st' = update_var out (bool_to_word (w2n w1 > w2n w2)) st
 Proof
-  strip_tac >>
-  qpat_x_assum `step_inst_base inst st = OK st'` mp_tac >>
-  ASM_REWRITE_TAC[step_inst_base_def] >>
-  simp[exec_pure2_def, AllCaseEqs()] >>
-  strip_tac >> gvs[]
+  step_inst_base_value_tac
 QED
 
 Theorem step_inst_base_eq:
@@ -876,11 +900,7 @@ Theorem step_inst_base_eq:
   ?w1 w2. eval_operand op1 st = SOME w1 /\ eval_operand op2 st = SOME w2 /\
            st' = update_var out (bool_to_word (w1 = w2)) st
 Proof
-  strip_tac >>
-  qpat_x_assum `step_inst_base inst st = OK st'` mp_tac >>
-  ASM_REWRITE_TAC[step_inst_base_def] >>
-  simp[exec_pure2_def, AllCaseEqs()] >>
-  strip_tac >> gvs[]
+  step_inst_base_value_tac
 QED
 
 Theorem step_inst_base_slt:
@@ -889,11 +909,7 @@ Theorem step_inst_base_slt:
   ?w1 w2. eval_operand op1 st = SOME w1 /\ eval_operand op2 st = SOME w2 /\
            st' = update_var out (bool_to_word (word_lt w1 w2)) st
 Proof
-  strip_tac >>
-  qpat_x_assum `step_inst_base inst st = OK st'` mp_tac >>
-  ASM_REWRITE_TAC[step_inst_base_def] >>
-  simp[exec_pure2_def, AllCaseEqs()] >>
-  strip_tac >> gvs[]
+  step_inst_base_value_tac
 QED
 
 Theorem step_inst_base_sgt:
@@ -902,11 +918,7 @@ Theorem step_inst_base_sgt:
   ?w1 w2. eval_operand op1 st = SOME w1 /\ eval_operand op2 st = SOME w2 /\
            st' = update_var out (bool_to_word (word_gt w1 w2)) st
 Proof
-  strip_tac >>
-  qpat_x_assum `step_inst_base inst st = OK st'` mp_tac >>
-  ASM_REWRITE_TAC[step_inst_base_def] >>
-  simp[exec_pure2_def, AllCaseEqs()] >>
-  strip_tac >> gvs[]
+  step_inst_base_value_tac
 QED
 
 
@@ -1053,17 +1065,17 @@ QED
    then every operand evaluates in the pre-state. *)
 val tracked_assign_eval_tac =
   qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
-  fs[step_inst_base_def] >>
+  step_inst_base_opcode_tac >> asm_simp_tac pure_step_ss [] >>
   BasicProvers.every_case_tac >> gvs[] >> metis_tac[];
 
 val tracked_pure1_eval_tac =
   qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
-  fs[step_inst_base_def] >> strip_tac >>
+  step_inst_base_opcode_tac >> strip_tac >>
   imp_res_tac exec_pure1_flookup >> gvs[];
 
 val tracked_pure2_eval_tac =
   qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
-  fs[step_inst_base_def] >> strip_tac >>
+  step_inst_base_opcode_tac >> strip_tac >>
   imp_res_tac exec_pure2_flookup >> gvs[];
 
 Theorem tracked_step_operand_evaluable:

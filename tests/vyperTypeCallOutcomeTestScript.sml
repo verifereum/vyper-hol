@@ -76,7 +76,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule_at Any (ExtCall_outcome_return_type_sound |> Q.INST [`drv` |-> `NONE`]
     |> SRULE [IS_SOME_DEF, THE_DEF, Once well_typed_expr_def]) >>
-  disch_then (qspecl_then [`stat`,`ret_tv`,`fsig`,`es`,`env`] mp_tac) >> simp[]
+  disch_then (qspecl_then [`stat`,`skc`,`ret_tv`,`fsig`,`es`,`env`] mp_tac) >> simp[]
 QED
 
 Theorem ExtCall_decode_no_control:

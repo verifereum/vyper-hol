@@ -100,7 +100,8 @@ Definition build_var_type_map_def:
   build_var_type_map (top :: rest) =
     case top of
       VariableDecl _ _ vname ty _ =>
-        (λn. if n = vname then SOME ty else build_var_type_map rest n)
+        (λn. if n = module_var_key (NONE, vname) then SOME ty
+             else build_var_type_map rest n)
     | _ => build_var_type_map rest
 End
 
@@ -120,7 +121,8 @@ Definition build_is_hashmap_def:
   build_is_hashmap (top :: rest) =
     case top of
       HashMapDecl _ _ hname _ _ _ =>
-        (λn. if n = hname then T else build_is_hashmap rest n)
+        (λn. if n = module_var_key (NONE, hname) then T
+             else build_is_hashmap rest n)
     | _ => build_is_hashmap rest
 End
 
@@ -243,13 +245,14 @@ Definition allocate_args_def:
       (vars |+ (name, MemLoc offset sz))
 End
 
+(* Slots of an internal function's return buffer pointer (if it has one) and
+   return PC, after its locals. They go to ce_return_buf / ce_return_pc, not
+   ce_vars, so they cannot collide with user identifiers. *)
 Definition allocate_internal_special_vars_def:
-  allocate_internal_special_vars has_return_buf offset vars =
-    let (vars1, off1) =
-      if has_return_buf then
-        (vars |+ ("__return_buf__", MemLoc offset 32), offset + 32)
-      else (vars, offset) in
-    (vars1 |+ ("__return_pc__", MemLoc off1 32), off1 + 32)
+  allocate_internal_special_vars has_return_buf offset =
+    if has_return_buf then
+      (SOME (MemLoc offset 32), SOME (MemLoc (offset + 32) 32))
+    else (NONE, SOME (MemLoc offset 32))
 End
 
 Definition add_module_var_locations_def:
@@ -258,11 +261,11 @@ Definition add_module_var_locations_def:
     let vars' =
       case top of
         VariableDecl _ Storage name _ (SOME slot) =>
-          vars |+ (name, StorageLoc (n2w slot))
+          vars |+ (module_var_key (NONE, name), StorageLoc (n2w slot))
       | VariableDecl _ Transient name _ (SOME slot) =>
-          vars |+ (name, TransientLoc (n2w slot))
+          vars |+ (module_var_key (NONE, name), TransientLoc (n2w slot))
       | HashMapDecl _ transient name _ _ (SOME slot) =>
-          vars |+ (name,
+          vars |+ (module_var_key (NONE, name),
             if transient then TransientLoc (n2w slot)
             else StorageLoc (n2w slot))
       | _ => vars in
@@ -289,7 +292,7 @@ Definition collect_module_vars_def:
   collect_module_vars ([] : toplevel list) = ([] : (string # type) list) ∧
   collect_module_vars (top :: rest) =
     (case top of
-       VariableDecl _ _ vname ty _ => [(vname, ty)]
+       VariableDecl _ _ vname ty _ => [(module_var_key (NONE, vname), ty)]
      | _ => []) ++ collect_module_vars rest
 End
 
@@ -427,10 +430,9 @@ Definition build_compile_env_def:
     let (arg_vars, args_end) = allocate_args sft_fn args 0 module_vars in
     let locals = collect_locals body in
     let (local_vars, locals_end) = allocate_args sft_fn locals args_end arg_vars in
-    let (all_vars, total_mem) =
-      if is_external then (local_vars, locals_end)
-      else allocate_internal_special_vars has_return_buf locals_end local_vars in
-    let ret_buf = if has_return_buf then SOME (total_mem : num) else NONE in
+    let (ret_buf, ret_pc) =
+      if is_external then (NONE, NONE)
+      else allocate_internal_special_vars has_return_buf locals_end in
     let all_decls = collect_module_vars tops ++ args ++ locals in
     let dynarray_cap = build_dynarray_capacity all_decls in
     let method_id_map = build_method_id_map tenv tops in
@@ -440,7 +442,7 @@ Definition build_compile_env_def:
             SOME ty => SOME ty
           | NONE => var_type_map n) in
     <| ce_target := all_capabilities;
-       ce_vars := all_vars;
+       ce_vars := local_vars;
        ce_storage_layout := storage_layout;
        (* TODO: NONE = main module. For multi-module (imports), should
           be SOME src_id. Currently single-module only. *)
@@ -456,6 +458,7 @@ Definition build_compile_env_def:
        ce_type_env := tenv;
        ce_returns_count := rc;
        ce_return_buf := ret_buf;
+       ce_return_pc := ret_pc;
        ce_is_external := is_external;
        ce_ret_enc_info := AbiPrimWord;
        ce_ret_dec_info := DecPrimWord NoClamp;
@@ -515,21 +518,15 @@ Proof
   >> EVAL_TAC
 QED
 
-Theorem build_compile_env_external_single_uint_arg_no_return_pc:
-  !tops mut func_name arg_name ret_type (body : stmt list) use_trans.
-    add_module_var_locations tops FEMPTY = FEMPTY /\
-    collect_locals body = [] /\
-    arg_name <> "__return_pc__" ==>
-    FLOOKUP
-      (build_compile_env tops External mut func_name
-         [(arg_name, BaseT (UintT 256))] ret_type body use_trans).ce_vars
-      "__return_pc__" = NONE
+(* External functions have no return PC, whatever their argument names. *)
+Theorem build_compile_env_external_no_return_pc:
+  !tops mut func_name args ret_type (body : stmt list) use_trans.
+    (build_compile_env tops External mut func_name args ret_type body
+       use_trans).ce_return_pc = NONE
 Proof
   rpt strip_tac
   >> simp[build_compile_env_def]
-  >> rpt (pairarg_tac >> gvs[allocate_args_def, type_mem_bytes_def])
-  >> EVAL_TAC
-  >> gvs[]
+  >> rpt (pairarg_tac >> gvs[])
 QED
 
 

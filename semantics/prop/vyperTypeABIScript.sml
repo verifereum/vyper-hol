@@ -910,6 +910,14 @@ Proof
   simp[Once contractABITheory.enc_def, LENGTH_TAKE_EQ]
 QED
 
+Theorem evaluate_type_BaseT_result[local]:
+  evaluate_type tenv (BaseT bt) = SOME tv ==> tv = BaseTV bt
+Proof
+  Cases_on `bt` >> TRY (rename1 `BytesT bd` >> Cases_on `bd`) >>
+  simp[Once evaluate_type_def, CaseEq "bool", LET_THM] >>
+  rpt strip_tac >> gvs[]
+QED
+
 Theorem vyper_to_abi_base_enc_length_bound[local]:
   !tenv bt v av tv.
     vyper_to_abi_base bt v = SOME av /\
@@ -918,19 +926,13 @@ Theorem vyper_to_abi_base_enc_length_bound[local]:
     LENGTH (enc (vyper_base_to_abi_type bt) av) <=
     vyper_abi_size_bound tenv (BaseT bt)
 Proof
-  rpt gen_tac >> Cases_on `bt` >> Cases_on `v` >>
-  simp[evaluate_type_def, vyper_to_abi_type_def,
-       vyper_to_abi_base_def, vyper_abi_size_bound_def,
-       value_has_type_def, within_int_bound_def, compatible_bound_def,
-       AllCaseEqs(), LET_THM, LENGTH_MAP] >>
-  rpt strip_tac >> gvs[value_has_type_def, vyper_abi_size_bound_def] >>
-  simp[Once contractABITheory.enc_def, LENGTH_TAKE_EQ,
-       byteTheory.LENGTH_word_to_bytes] >>
-  TRY (`ceil32 (STRLEN s) <= ceil32 n` by (irule ceil32_mono >> simp[]) >>
-       `STRLEN s <= ceil32 (STRLEN s)` by simp[] >> decide_tac >> NO_TAC) >>
-  TRY (`ceil32 (LENGTH l) <= ceil32 n'` by (irule ceil32_mono >> simp[]) >>
-       `LENGTH l <= ceil32 (LENGTH l)` by simp[] >> decide_tac >> NO_TAC) >>
-  decide_tac
+  rpt strip_tac >> drule evaluate_type_BaseT_result >> strip_tac >> gvs[] >>
+  Cases_on `v` >> gvs[value_has_type_inv, value_has_type_def] >>
+  gvs[vyper_to_abi_base_def, vyper_abi_size_bound_def] >>
+  TRY (drule ceil32_mono >> strip_tac >>
+       qmatch_goalsub_abbrev_tac `ceil32 len - len` >>
+       `len <= ceil32 len` by simp[] >> decide_tac >> NO_TAC) >>
+  simp[LENGTH_TAKE_EQ]
 QED
 
 Definition abi_av_bound_rel_def[local]:
@@ -1052,16 +1054,16 @@ QED
 Theorem abi_av_list_struct_bound_from_eval_vht[local]:
   !tenv nsid args fields avs tv.
     (!tvs.
-       LIST_REL (\ty tv. evaluate_type (tenv \\ type_key nsid) ty = SOME tv)
+       LIST_REL (\ty tv. evaluate_type (tenv \\ nsid) ty = SOME tv)
          (MAP SND args) tvs /\
        values_have_types tvs (MAP SND fields) ==>
-       abi_av_list_bound_rel (tenv \\ type_key nsid) (MAP SND args) avs tvs) /\
-    FLOOKUP tenv (type_key nsid) = SOME (StructArgs args) /\
+       abi_av_list_bound_rel (tenv \\ nsid) (MAP SND args) avs tvs) /\
+    FLOOKUP tenv nsid = SOME (StructArgs args) /\
     evaluate_type tenv (StructT nsid) = SOME tv /\
     value_has_type tv (StructV fields) ==>
     LENGTH
-      (enc_tuple (head_lengths (vyper_to_abi_types (tenv \\ type_key nsid) (MAP SND args)) 0) 0
-         (vyper_to_abi_types (tenv \\ type_key nsid) (MAP SND args)) avs [] []) <=
+      (enc_tuple (head_lengths (vyper_to_abi_types (tenv \\ nsid) (MAP SND args)) 0) 0
+         (vyper_to_abi_types (tenv \\ nsid) (MAP SND args)) avs [] []) <=
     vyper_abi_size_bound tenv (StructT nsid)
 Proof
   rpt strip_tac >>
@@ -1074,7 +1076,7 @@ Proof
      imp_res_tac OPT_MMAP_LENGTH >> simp[LENGTH_MAP]) >>
   `values_have_types tvs (MAP SND fields)` by
     (drule_all struct_has_type_values_have_types >> simp[MAP_ZIP]) >>
-  `abi_av_list_bound_rel (tenv \\ type_key nsid) (MAP SND args) avs tvs` by
+  `abi_av_list_bound_rel (tenv \\ nsid) (MAP SND args) avs tvs` by
     (qpat_x_assum `!tvs. _ ==> abi_av_list_bound_rel _ _ _ _`
        (qspec_then `tvs` irule) >>
      simp[] >> irule evaluate_types_LIST_REL >> simp[]) >>
@@ -1198,6 +1200,31 @@ Proof
   simp[sparse_values_have_type_def] >> metis_tac[]
 QED
 
+Theorem vyper_to_abi_base_total[local]:
+  evaluate_type tenv (BaseT bt) = SOME tv /\ value_has_type tv v ==>
+  ?av. vyper_to_abi_base bt v = SOME av
+Proof
+  strip_tac >> drule evaluate_type_BaseT_result >> strip_tac >> gvs[] >>
+  Cases_on `v` >> gvs[value_has_type_inv, value_has_type_def] >>
+  simp[vyper_to_abi_base_def]
+QED
+
+Theorem evaluate_type_StructT_result[local]:
+  evaluate_type tenv (StructT nsid) = SOME tv ==>
+  ?args tvs.
+    FLOOKUP tenv nsid = SOME (StructArgs args) /\
+    evaluate_types (tenv \\ nsid) (MAP SND args) [] = SOME tvs /\
+    tv = StructTV (ZIP (MAP FST args, tvs))
+Proof
+  rw[Once evaluate_type_def, AllCaseEqs(), LET_THM] >> simp[]
+QED
+
+Theorem evaluate_type_FlagT_result[local]:
+  evaluate_type tenv (FlagT nsid) = SOME tv ==> ?m. tv = FlagTV m
+Proof
+  rw[Once evaluate_type_def, AllCaseEqs(), LET_THM]
+QED
+
 (* Typed values are always representable by the ABI conversion functions. *)
 Theorem vyper_to_abi_total:
   (!tenv typ v tv.
@@ -1218,35 +1245,55 @@ Theorem vyper_to_abi_total:
      ?avs. vyper_to_abi_sparse tenv typ tv n sparse = SOME avs)
 Proof
   ho_match_mp_tac vyper_to_abi_ind >>
-  rpt conj_tac >> rpt gen_tac >>
-  simp[vyper_to_abi_def] >>
-  simp[evaluate_type_def] >>
-  simp[value_has_type_def] >>
-  simp[AllCaseEqs(), PULL_EXISTS] >>
-  rpt strip_tac >> gvs[value_has_type_def, AllCaseEqs(), PULL_EXISTS] >>
-  TRY (Cases_on `v` >> gvs[value_has_type_def, vyper_to_abi_base_def] >> NO_TAC) >>
-  TRY (drule evaluate_types_LIST_REL >> strip_tac >>
-       qpat_x_assum `!tvs. LIST_REL _ _ tvs /\ _ ==> _` drule_all >>
-       simp[] >> NO_TAC) >>
-  TRY (`LENGTH tvs = LENGTH args` by
+  rpt conj_tac >> rpt gen_tac >> rpt strip_tac >>
+  (* Project the typed constructor, then specialize its IH before unfolding
+     the encoder.  Global case/exists rewriting also expands the IHs. *)
+  TRY (drule_all vyper_to_abi_base_total >>
+       simp[Once vyper_to_abi_def] >> NO_TAC) >>
+  TRY (drule evaluate_type_TupleT_cases >> strip_tac >>
+       gvs[value_has_type_def] >>
+       first_x_assum drule_all >> strip_tac >> simp[] >> NO_TAC) >>
+  TRY (drule evaluate_type_ArrayT_cases >> strip_tac >>
+       gvs[value_has_type_def] >>
+       TRY (qmatch_asmsub_rename_tac
+              `value_has_type (ArrayTV elem_tv bd) (ArrayV (DynArrayV vs))` >>
+            Cases_on `bd` >> gvs[value_has_type_def]) >>
+       TRY (drule sparse_has_type_values_have_type >> strip_tac) >>
+       first_x_assum drule_all >> strip_tac >> simp[] >> NO_TAC) >>
+  TRY (drule evaluate_type_StructT_result >>
+       disch_then (qx_choose_then `args`
+         (qx_choose_then `tvs` strip_assume_tac)) >>
+       gvs[value_has_type_def] >>
+       `LENGTH tvs = LENGTH args` by
          (qpat_x_assum `evaluate_types _ _ [] = SOME tvs` mp_tac >>
           simp[evaluate_types_OPT_MMAP] >> strip_tac >>
           imp_res_tac OPT_MMAP_LENGTH >> simp[LENGTH_MAP]) >>
        `values_have_types tvs (MAP SND fields)` by
          (drule_all struct_has_type_values_have_types >> simp[MAP_ZIP]) >>
        drule evaluate_types_LIST_REL >> strip_tac >>
-       first_x_assum drule_all >> simp[] >> NO_TAC) >>
-  TRY (qmatch_asmsub_rename_tac
-         `value_has_type (ArrayTV elem_tv bd) (ArrayV (DynArrayV vs))` >>
-       Cases_on `bd` >> gvs[value_has_type_def] >> NO_TAC) >>
-  TRY (first_x_assum irule >>
-       drule sparse_has_type_values_have_type >> simp[] >> NO_TAC) >>
+       first_x_assum drule_all >> strip_tac >> simp[] >> NO_TAC) >>
+  TRY (drule evaluate_type_FlagT_result >> strip_tac >>
+       gvs[value_has_type_def] >> NO_TAC) >>
+  gvs[value_has_type_def] >>
   TRY (first_x_assum drule_all >> strip_tac >> gvs[] >> NO_TAC) >>
-  TRY (Cases_on `ALOOKUP sparse n` >> gvs[] >>
-       drule_all sparse_values_have_type_ALOOKUP >> strip_tac >>
-       first_x_assum drule_all >> strip_tac >> gvs[] >> NO_TAC) >>
-  Cases_on `tvs` >> gvs[value_has_type_def]
+  Cases_on `ALOOKUP sparse n` >> gvs[] >>
+  drule_all sparse_values_have_type_ALOOKUP >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >> gvs[]
 QED
+
+(* Cache success equations one constructor at a time.  Rewriting a conversion
+   premise must not also unfold recursive calls in the induction hypotheses. *)
+val vyper_to_abi_success =
+  map (fn th =>
+    let
+      val th = SPEC_ALL th
+      val tm = lhs (concl th)
+      val av = variant (free_vars tm)
+        (mk_var ("av", hd (snd (dest_type (type_of tm)))))
+    in
+      SIMP_CONV (srw_ss()) [Once th, AllCaseEqs(), PULL_EXISTS, LET_THM]
+        (mk_eq (tm, optionSyntax.mk_some av))
+    end) (CONJUNCTS vyper_to_abi_def);
 
 Theorem vyper_to_abi_bound_rel_strong[local]:
   (!tenv typ v av tv.
@@ -1271,10 +1318,14 @@ Theorem vyper_to_abi_bound_rel_strong[local]:
      EVERY (abi_av_bound_rel tenv typ tv) avs /\ LENGTH avs = n)
 Proof
   ho_match_mp_tac vyper_to_abi_ind >> rpt conj_tac >> rpt gen_tac >>
-  simp[vyper_to_abi_def, AllCaseEqs(), PULL_EXISTS] >>
   rpt strip_tac >>
-  gvs[abi_av_bound_rel_def, abi_av_list_bound_rel_def,
-      value_has_type_def, AllCaseEqs(), LET_THM] >>
+  FIRST [qpat_x_assum `vyper_to_abi _ _ _ = SOME _` mp_tac,
+         qpat_x_assum `vyper_to_abi_list _ _ _ = SOME _` mp_tac,
+         qpat_x_assum `vyper_to_abi_same _ _ _ = SOME _` mp_tac,
+         qpat_x_assum `vyper_to_abi_sparse _ _ _ _ _ = SOME _` mp_tac] >>
+  PURE_ONCE_REWRITE_TAC vyper_to_abi_success >> rpt strip_tac >>
+  gvs[value_has_type_def] >>
+  gvs[abi_av_bound_rel_def, abi_av_list_bound_rel_def, LET_THM] >>
   TRY (drule_all vyper_to_abi_base_enc_length_bound >> simp[] >> NO_TAC) >>
   TRY (drule_all abi_av_list_tuple_bound_from_eval_vht >> simp[] >> NO_TAC) >>
   TRY (drule_all abi_av_list_struct_bound_from_eval_vht >> simp[] >> NO_TAC) >>

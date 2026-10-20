@@ -431,6 +431,11 @@ QED
    pointer-derived set and remains confined.
    ========================================================================= *)
 
+(* Cache the proved ASSIGN branch without unfolding the full opcode dispatch. *)
+val step_inst_base_assign = valOf (List.find (fn th =>
+  aconv (rhs (fst (dest_imp (snd (strip_forall (concl th)))))) ``ASSIGN``)
+  (CONJUNCTS venomExecSemanticsTheory.step_inst_base_opcode_eqs));
+
 Theorem assign_transparent:
   ∀inst s s' out v.
     inst.inst_opcode = ASSIGN ∧
@@ -440,7 +445,7 @@ Theorem assign_transparent:
     lookup_var out s' = lookup_var v s
 Proof
   rpt strip_tac >>
-  gvs[step_inst_base_def, eval_operand_def, lookup_var_def] >>
+  gvs[step_inst_base_assign, eval_operand_def, lookup_var_def] >>
   Cases_on `FLOOKUP s.vs_vars v` >> gvs[update_var_def, FLOOKUP_UPDATE]
 QED
 

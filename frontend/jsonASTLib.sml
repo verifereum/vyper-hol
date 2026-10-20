@@ -295,10 +295,12 @@ fun mk_JFuncType (argtys, retty) =
   list_mk_comb(JFuncType_tm, [mk_list(argtys, json_type_ty), retty])
 fun mk_JVT_Type ty = mk_comb(JVT_Type_tm, ty)
 fun mk_JVT_HashMap (kt, vt) = list_mk_comb(JVT_HashMap_tm, [kt, vt])
-fun mk_JTL_FunctionDef (name, decs, args, defaults, func_type, ret_ann, body) =
+fun mk_JTL_FunctionDef
+    (name, decs, override_aliases, args, defaults, func_type, ret_ann, body) =
   list_mk_comb(JTL_FunctionDef_tm,
     [fromMLstring name,
      mk_list(List.map fromMLstring decs, string_ty),
+     mk_list(List.map fromMLstring override_aliases, string_ty),
      mk_list(args, json_arg_ty),
      mk_list(defaults, json_expr_ty),
      func_type,
@@ -724,10 +726,26 @@ fun d_json_expr () : term decoder = achoose "expr" [
                             succeed JMissingSource_tm))),
             orElse(field "type" json_type, succeed JT_None_tm)),
 
-  (* Subscript *)
+  (* Tuple indices must translate to integer literals. Preserve compiler-folded
+     constant expressions and fall back to the slice's type when the folded
+     value has no type annotation, without folding array/hashmap indices. *)
   check_ast_type "Subscript" $
     JSONDecode.map (fn ((e1, e2), ty) => mk_JE_Subscript(e1, e2, ty)) $
-    tuple2 (tuple2 (field "value" (delay d_json_expr), field "slice" (delay d_json_expr)),
+    tuple2 (tuple2 (field "value" (delay d_json_expr),
+      achoose "subscript index" [
+        check (field "value" $ field "type" $ field "typeclass" string)
+          (fn tc => tc = "tuple") "not tuple" $
+        JSONDecode.map mk_JE_Folded $
+          tuple2 (field "slice" (delay d_json_expr),
+            field "slice" $
+              JSONDecode.map mk_JE_Int $
+                tuple2 (field "folded_value" $ check_ast_type "Int" $ field "value" inttm,
+                  orElse (andThen (field "folded_value" $ field "type" json_type)
+                            (fn ty => if aconv ty JT_None_tm
+                              then fail "missing folded index type" else succeed ty),
+                    orElse (field "type" json_type, succeed JT_None_tm)))),
+        field "slice" (delay d_json_expr)
+      ]),
             orElse(field "type" json_type, succeed JT_None_tm)),
 
   (* NamedExpr - dependency binding in initializes: lib[dep := dep] *)
@@ -1164,6 +1182,18 @@ val decorator_name : string decoder =
   orElse (field "id" string,
           field "func" $ field "id" string)
 
+(* Function decorators retain the module argument of @override(module).
+   Ordinary decorators have no module target. *)
+val function_decorator : (string * string option) decoder = achoose "decorator" [
+  check_ast_type "Name" $
+    JSONDecode.map (fn name => (name, NONE)) (field "id" string),
+  check_ast_type "Call" $
+    check (field "func" $ field "id" string)
+      (fn name => name = "override") "call decorator not override" $
+    JSONDecode.map (fn alias => ("override", SOME alias)) $
+      field "args" $ sub 0 $ check_ast_type "Name" $ field "id" string
+]
+
 (* Interface function signature parser
  * Parses FunctionDef nodes within InterfaceDef body.
  * Mutability comes from either decorator_list or body (as Expr > Name > id).
@@ -1282,16 +1312,19 @@ val json_toplevel : term decoder = achoose "toplevel" [
   check_ast_type "FunctionDef" $
     andThen (tuple3 (
       tuple2 (field "name" string,
-              field "decorator_list" (array decorator_name)),
+              field "decorator_list" (array function_decorator)),
       tuple2 (tuple2 (field "args" $ check_ast_type "arguments" $
                         tuple2 (field "args" (array json_arg),
                                 orElse(field "defaults" (array json_expr), succeed [])),
                       field "func_type" json_func_type),
               orElse(field "returns" ast_type, succeed JTA_None_tm)),
       field "body" (array json_stmt)))
-    (fn ((n, d), (((a, df), f), ret_ann), b) =>
+    (fn ((n, decorators), (((a, df), f), ret_ann), b) =>
       let
-        val decoded = mk_JTL_FunctionDef(n, d, a, df, f, ret_ann, b)
+        val decs = List.map #1 decorators
+        val override_aliases = List.mapPartial #2 decorators
+        val decoded =
+          mk_JTL_FunctionDef(n, decs, override_aliases, a, df, f, ret_ann, b)
         fun valid_with decls = List.all (validate_legacy_calls decls) b
       in
         if valid_with [] then succeed decoded

@@ -485,8 +485,10 @@ Proof
   Cases_on `v.vs_halted` >> gvs[result_equiv_def] >-
   fs[state_equiv_def, execution_equiv_def] >>
   (* OK/OK, not halted — apply IH *)
-  (* Successor is in safe *)
-  `bb.bb_instructions <> []` by fs[bb_well_formed_def] >>
+  (* Successor is in safe; unfold only this block's well-formedness. *)
+  `bb.bb_instructions <> []` by (
+    qpat_assum `bb_well_formed bb`
+      (ACCEPT_TAC o CONJUNCT1 o PURE_REWRITE_RULE [bb_well_formed_def])) >>
   `!i. i < LENGTH bb.bb_instructions - 1 ==>
        ~is_terminator (EL i bb.bb_instructions).inst_opcode` by (
     rpt strip_tac >> spose_not_then strip_assume_tac >>
@@ -844,6 +846,13 @@ Proof
   (simp[Once run_blocks_def, result_equiv_def] >>
    simp[Once run_blocks_def, result_equiv_def]) >>
   rpt strip_tac >>
+  (* Specialize the IH and discharge the fixed block invariant before
+     context rewrites; retain only the state-dependent guards. *)
+  qpat_x_assum `!ctx vars fn s1 s2 safe. _` (fn ih =>
+    qpat_assum `!lbl bb. _` (fn blocks =>
+      ASSUME_TAC (Q.GENL [`s1`, `s2`]
+        (SIMP_RULE bool_ss [EQT_INTRO blocks]
+          (Q.SPECL [`ctx`, `vars`, `fn`, `s1`, `s2`, `safe`] ih))))) >>
   `s1.vs_current_bb = s2.vs_current_bb` by fs[state_equiv_def] >>
   CONV_TAC (RATOR_CONV (RAND_CONV (ONCE_REWRITE_CONV [run_blocks_unfold]))) >>
   CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [run_blocks_unfold])) >>
@@ -860,31 +869,48 @@ Proof
              prev_lbl IN safe /\
              resolve_phi prev_lbl inst.inst_operands = SOME (Var v) ==>
              v NOTIN vars) /\
-   (!s. MEM s (bb_succs bb) ==> s IN safe)` by metis_tac[] >>
+   (!s. MEM s (bb_succs bb) ==> s IN safe)` by (
+    qpat_assum `!lbl bb. lbl IN safe /\
+      lookup_block lbl fn.fn_blocks = SOME bb ==> _`
+      (qspecl_then [`s2.vs_current_bb`, `bb`] mp_tac) >>
+    impl_tac >- (conj_tac >- metis_tac[] >> first_assum ACCEPT_TAC) >>
+    simp[]) >>
   `result_equiv vars (run_block fuel ctx bb s1) (run_block fuel ctx bb s2)` by (
     irule run_block_se_phi >> simp[] >>
     rpt gen_tac >> strip_tac >> conj_tac
     >- (
       rpt strip_tac >>
-      Cases_on `s1.vs_prev_bb` >> gvs[] >>
+      Cases_on `s1.vs_prev_bb`
+      >- (qpat_x_assum `NONE <> NONE` mp_tac >> simp[]) >>
       rename1 `s1.vs_prev_bb = SOME prev_lbl` >>
       `prev_lbl IN safe` by metis_tac[] >>
       first_x_assum (qspecl_then [`inst`, `prev_lbl`, `v`] mp_tac) >>
-      simp[])
+      fs[])
     >- metis_tac[]) >>
   Cases_on `run_block fuel ctx bb s1` >>
   Cases_on `run_block fuel ctx bb s2` >>
-  gvs[result_equiv_def] >>
+  qpat_x_assum `result_equiv vars _ _`
+    (STRIP_ASSUME_TAC o PURE_REWRITE_RULE [result_equiv_def]) >>
+  simp[result_equiv_def] >>
   `v.vs_halted <=> v'.vs_halted` by
     fs[state_equiv_def, execution_equiv_def] >>
-  Cases_on `v.vs_halted` >> gvs[result_equiv_def] >-
+  Cases_on `v.vs_halted` >>
+  qpat_x_assum `v.vs_halted <=> v'.vs_halted` mp_tac >>
+  simp[] >> strip_tac >> simp[result_equiv_def] >-
   fs[state_equiv_def, execution_equiv_def] >>
-  (* OK/OK, not halted — apply IH *)
-  `bb.bb_instructions <> []` by fs[bb_well_formed_def] >>
+  (* OK/OK, not halted — use only the concrete block's wf facts. *)
+  `bb.bb_instructions <> []` by (
+    qpat_assum `bb_well_formed bb`
+      (ACCEPT_TAC o CONJUNCT1 o PURE_REWRITE_RULE [bb_well_formed_def])) >>
   `!i. i < LENGTH bb.bb_instructions - 1 ==>
        ~is_terminator (EL i bb.bb_instructions).inst_opcode` by (
     rpt strip_tac >> spose_not_then strip_assume_tac >>
-    gvs[bb_well_formed_def] >> res_tac >> DECIDE_TAC) >>
+    qpat_assum `bb_well_formed bb`
+      (mp_tac o CONJUNCT1 o CONJUNCT2 o CONJUNCT2 o
+       PURE_REWRITE_RULE [bb_well_formed_def]) >>
+    disch_then (qspec_then `i` mp_tac) >>
+    `i < LENGTH bb.bb_instructions` by DECIDE_TAC >>
+    simp[] >> DECIDE_TAC) >>
   `MEM v.vs_current_bb (bb_succs bb)` by (
     mp_tac run_block_current_bb_in_succs >>
     disch_then (qspecl_then [`fuel`, `ctx`, `bb`, `s1`, `v`] mp_tac) >>
@@ -893,10 +919,9 @@ Proof
     mp_tac run_block_ok_prev_bb >>
     disch_then (qspecl_then [`fuel`, `ctx`, `bb`, `s1`, `v`] mp_tac) >>
     impl_tac >- simp[] >> simp[]) >>
-  first_x_assum irule >> simp[] >>
-  qexists_tac `safe` >> simp[] >>
-  rpt conj_tac >>
-  TRY (first_assum ACCEPT_TAC)
+  qpat_x_assum `!s1 s2. _ ==> result_equiv _ _ _`
+    (qspecl_then [`v`, `v'`] match_mp_tac) >>
+  simp[] >> metis_tac[]
 QED
 
 Theorem run_function_stale_equiv_phi:

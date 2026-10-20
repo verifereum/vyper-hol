@@ -153,6 +153,16 @@ Definition nsid_to_string_def:
   nsid_to_string (SOME (n:num), name) = (toString n) ++ "." ++ name
 End
 
+(* Key of a module-level variable (storage, transient, HashMap, immutable) in
+   the name-keyed compile_env tables. Arguments and locals use their plain
+   names; no Vyper identifier contains ".", so a local can never shadow a
+   module variable. Mirrors Python, which keeps module variables behind
+   self.<name> (codegen_venom/expr.py lower_Attribute) and locals in
+   ctx.variables (codegen_venom/context.py). *)
+Definition module_var_key_def:
+  module_var_key nsid = "self." ++ nsid_to_string nsid
+End
+
 (* ===== ABI Type Properties ===== *)
 
 (* Whether a Vyper type has dynamic ABI encoding (requires tail section).
@@ -314,13 +324,20 @@ Datatype:
        as hash-0/no-arg events. *)
     ce_event_info : string -> (num # type list # bool list) option;
     (* Type environment used by ABI conversion for structs/flags/interfaces. *)
-    ce_type_env : (num, type_args) fmap;
+    ce_type_env : (nsid, type_args) fmap;
     (* Internal return: how many return values passed on stack (0 = memory return).
        Set from func_t.returns_stack_count() at function entry. *)
     ce_returns_count : num;
-    (* Return buffer offset (for memory returns when returns_count = 0).
-       NONE for stack returns, SOME offset for memory returns. *)
-    ce_return_buf : num option;
+    (* Internal functions only: where the caller's return buffer pointer is
+       (memory returns, returns_count = 0). NONE for external functions and
+       stack returns. Kept out of ce_vars so user names cannot collide with it.
+       Mirrors Python: FunctionContext.return_buffer *)
+    ce_return_buf : var_location option;
+    (* Where the return PC is; NONE for external functions. `Return` decides
+       "internal or external?" from this field.
+       Mirrors Python: FunctionContext.return_pc, tested by lower_Return as
+       `ctx.return_pc is not None` *)
+    ce_return_pc : var_location option;
     (* External function: T for external functions, F for internal *)
     ce_is_external : bool;
     (* ABI encoding info for external return type.
@@ -539,7 +556,7 @@ Definition sfields_tenv_consistent_def:
   sfields_tenv_consistent sfields tenv ⇔
     (* Every struct in tenv exists in sfields with matching field types *)
     (∀ nsid args.
-       FLOOKUP tenv (type_key nsid) = SOME (StructArgs args) ⇒
+       FLOOKUP tenv nsid = SOME (StructArgs args) ⇒
        ∃ fields.
          FLOOKUP sfields (nsid_to_string nsid) = SOME fields ∧
          MAP FST fields = MAP FST args ∧
@@ -549,7 +566,7 @@ Definition sfields_tenv_consistent_def:
        FLOOKUP sfields name = SOME fields ⇒
        ∃ nsid args.
          name = nsid_to_string nsid ∧
-         FLOOKUP tenv (type_key nsid) = SOME (StructArgs args) ∧
+         FLOOKUP tenv nsid = SOME (StructArgs args) ∧
          MAP FST fields = MAP FST args ∧
          MAP (FST o SND) fields = MAP SND args)
 End
@@ -628,7 +645,7 @@ End
 Definition vars_rel_def:
   vars_rel cenv scopes ss =
     ∀ name entry offset size.
-      lookup_scopes (string_to_num name) scopes = SOME entry ∧
+      lookup_scopes name scopes = SOME entry ∧
       FLOOKUP cenv.ce_vars name = SOME (MemLoc offset size)
       ⇒
       (* entry.type from scope provides correct type for val_in_memory dispatch
@@ -656,36 +673,36 @@ End
 (* Interpreter immutables ↔ Venom code/data section.
    During constructor: interpreter writes to st.immutables, Venom uses ISTORE/ILOAD.
    At runtime: interpreter reads from st.immutables, Venom uses DLOAD from data section.
-   The relation ties per-slot interpreter values to their Venom representation.
+   The relation ties each interpreter name to its Venom representation.
 
    Interpreter: st.immutables : (address, module_immutables) alist
-     where module_immutables = (num option, num |-> value) alist
-     Keyed by (source_id_opt, slot_num) → value.
+     where module_immutables = (num option, string |-> (type_value # value)) alist
+     Keyed by (source_id_opt, immutable_name) → typed value.
    Venom (ctor): ss.vs_immutables : (num, bytes32) fmap  (ILOAD/ISTORE slot → word)
    Venom (runtime): ss.vs_data_section : byte list  (DLOAD offset → 32 bytes)
 
-   ce_vars maps immutable names to ImmutableLoc byte_offset.
-   The interpreter stores by slot number (num); the lowering stores by byte offset. *)
+   ce_vars maps module_var_key (src_id_opt, name) to ImmutableLoc byte_offset.
+   The interpreter stores by name (string); Venom stores by byte offset. *)
 Definition immutables_rel_def:
   immutables_rel cenv (addr:address) src_id_opt is_ctor vs ss ⇔
     let interp_imms = (case ALOOKUP vs.immutables addr of
                          NONE => FEMPTY
                        | SOME mod_imms => get_source_immutables src_id_opt mod_imms) in
     if is_ctor then
-      (* Constructor: each interpreter immutable slot maps to vs_immutables entry *)
-      ∀ name slot_num tv v byte_offset.
-        FLOOKUP cenv.ce_vars name = SOME (ImmutableLoc byte_offset) ∧
-        FLOOKUP interp_imms slot_num = SOME (tv, v) ∧
-        slot_num = string_to_num name
+      (* Constructor: each interpreter immutable maps to vs_immutables entry *)
+      ∀ name tv v byte_offset.
+        FLOOKUP cenv.ce_vars (module_var_key (src_id_opt, name)) =
+          SOME (ImmutableLoc byte_offset) ∧
+        FLOOKUP interp_imms name = SOME (tv, v)
         ⇒
         (* tv from scope provides correct type for typed_val_to_w256 *)
         FLOOKUP ss.vs_immutables (byte_offset DIV 32) = SOME (typed_val_to_w256 tv v)
     else
       (* Runtime: interpreter immutables encoded in data section *)
-      ∀ name slot_num tv v byte_offset.
-        FLOOKUP cenv.ce_vars name = SOME (ImmutableLoc byte_offset) ∧
-        FLOOKUP interp_imms slot_num = SOME (tv, v) ∧
-        slot_num = string_to_num name
+      ∀ name tv v byte_offset.
+        FLOOKUP cenv.ce_vars (module_var_key (src_id_opt, name)) =
+          SOME (ImmutableLoc byte_offset) ∧
+        FLOOKUP interp_imms name = SOME (tv, v)
         ⇒
         (* DLOAD reads 32 bytes from data section at byte_offset *)
         byte_offset + 32 ≤ LENGTH ss.vs_data_section ∧
@@ -697,20 +714,22 @@ End
 (* Per-variable mapping between interpreter layout slots and cenv StorageLoc.
    The interpreter uses lookup_var_slot_from_layout to get a slot number,
    then read_storage_slot/write_storage_slot to access it.
-   The lowering uses FLOOKUP ce_vars name → StorageLoc slot → SLOAD/SSTORE.
+   The lowering uses FLOOKUP ce_vars (module_var_key (ce_module, name))
+   → StorageLoc slot → SLOAD/SSTORE.
    This relation ensures both reference the same storage slot.
 
    cx.layouts : (address, (layout # layout)) alist
      where layout = ((num option # string), bytes32) alist
      Maps (source_id_opt, var_name) → slot.
    cenv.ce_vars : (string, var_location) fmap
-     Maps var_name → StorageLoc slot.
+     Maps module_var_key (ce_module, var_name) → StorageLoc slot.
    cenv.ce_storage_layout : (string, bytes32) fmap
      Maps var_name → slot (redundant with ce_vars for StorageLoc). *)
 Definition storage_vars_rel_def:
   storage_vars_rel cenv (cx:evaluation_context) ⇔
     ∀ name (slot:bytes32).
-      FLOOKUP cenv.ce_vars name = SOME (StorageLoc slot) ⇒
+      FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module, name)) =
+        SOME (StorageLoc slot) ⇒
       (* Interpreter layout maps (src_id_opt, name) → slot_num : num.
          Compile env stores slot as bytes32. Relation: n2w slot_num = slot. *)
       ∃ slot_num. lookup_var_slot_from_layout cx F cenv.ce_module name = SOME slot_num ∧
@@ -721,7 +740,8 @@ End
 Definition transient_vars_rel_def:
   transient_vars_rel cenv (cx:evaluation_context) ⇔
     ∀ name (slot:bytes32).
-      FLOOKUP cenv.ce_vars name = SOME (TransientLoc slot) ⇒
+      FLOOKUP cenv.ce_vars (module_var_key (cenv.ce_module, name)) =
+        SOME (TransientLoc slot) ⇒
       ∃ slot_num. lookup_var_slot_from_layout cx T cenv.ce_module name = SOME slot_num ∧
                   n2w slot_num = slot
 End

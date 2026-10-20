@@ -216,7 +216,7 @@ Definition var_is_hashmap_def:
   var_is_hashmap cx mid n ⇔
   ∃code is_transient kt vt id offset.
     get_module_code cx mid = SOME code ∧
-    find_var_decl_by_num (string_to_num n) code =
+    find_var_decl_by_name n code =
       SOME (HashMapVarDecl is_transient kt vt, id) ∧
     lookup_var_slot_from_layout cx is_transient mid id = SOME offset ∧
     offset < dimword(:256)
@@ -226,7 +226,7 @@ Definition is_leaf_hashmap_def:
   is_leaf_hashmap cx mid n ⇔
   ∃code is_transient kt t id offset tv.
     get_module_code cx mid = SOME code ∧
-    find_var_decl_by_num (string_to_num n) code =
+    find_var_decl_by_name n code =
       SOME (HashMapVarDecl is_transient kt (Type t), id) ∧
     lookup_var_slot_from_layout cx is_transient mid id = SOME offset ∧
     offset < dimword(:256) ∧

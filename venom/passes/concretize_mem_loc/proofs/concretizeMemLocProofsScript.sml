@@ -34,6 +34,25 @@ Libs
 (* Batch-safe dimindex(:256) = 256 via fcpLib.INDEX_CONV *)
 val dim256 = fcpLib.INDEX_CONV ``dimindex(:256)``;
 
+(* Index the exported equations, then instantiate only the selected branch
+   at each known-opcode site. *)
+val step_inst_base_opcode_rewrites = let
+  fun key th = let
+    val (_, body) = strip_forall (concl th)
+    val (guard, _) = dest_imp body
+  in rhs guard end
+in map (fn th => (key th, th)) (CONJUNCTS step_inst_base_opcode_eqs) end;
+
+fun step_inst_base_for opc =
+  #2 (valOf (List.find
+    (fn (key, _) => aconv key opc) step_inst_base_opcode_rewrites));
+
+fun step_inst_base_opcode_eq eq =
+  MATCH_MP (step_inst_base_for (rhs (concl eq))) eq;
+
+fun rewrite_step_inst_base_opcode eq =
+  PURE_ONCE_REWRITE_TAC [step_inst_base_opcode_eq eq];
+
 (* ===== Bridge: amap ↔ alloca inst_id ===== *)
 
 (* Map alloca inst_id to its concrete address from amap. *)
@@ -2025,7 +2044,8 @@ Proof
         (CCONTR_TAC >>
          `inst.inst_opcode = PHI` by metis_tac[] >>
          qpat_x_assum `step_inst_base inst s1 = OK v1` mp_tac >>
-         simp[step_inst_base_def]) >>
+         qpat_assum `inst.inst_opcode = PHI`
+           rewrite_step_inst_base_opcode >> simp[]) >>
       qspecl_then [`inst`, `s1`, `s2`, `v1`, `v2`]
         mp_tac step_inst_base_effect_free_output_determined_vars >>
       simp[]
@@ -2198,7 +2218,8 @@ Triviality pp_empty_outputs_error:
 Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode` >> fs[is_pointer_preserving_op_def] >>
-  simp[step_inst_base_def] >>
+  qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode >>
+  simp[] >>
   qpat_x_assum `inst.inst_outputs = []`
     (fn th => PURE_REWRITE_TAC[exec_pure2_def, th]) >>
   Cases_on `inst.inst_operands` >> simp[] >>
@@ -2267,7 +2288,7 @@ Proof
       [`bb`, `inst`, `s1`, `update_var h (w1 + x) s1`,
        `h`, `w1 + x`, `v'`, `w1`, `aid`, `orig_off`, `sz`] mp_tac) >>
     simp[is_pointer_preserving_op_def,
-         step_inst_base_def, exec_pure2_def, eval_operand_def,
+         step_inst_base_for ``ADD``, exec_pure2_def, eval_operand_def,
          update_var_def, lookup_var_def, FLOOKUP_UPDATE]
   ) >>
   simp[] >> metis_tac[word_displ_add]
@@ -2332,7 +2353,7 @@ Proof
       [`bb`, `inst`, `s1`, `update_var h (x + w1) s1`,
        `h`, `x + w1`, `v'`, `w1`, `aid`, `orig_off`, `sz`] mp_tac) >>
     simp[is_pointer_preserving_op_def,
-         step_inst_base_def, exec_pure2_def, eval_operand_def,
+         step_inst_base_for ``ADD``, exec_pure2_def, eval_operand_def,
          update_var_def, lookup_var_def, FLOOKUP_UPDATE]
   ) >>
   simp[] >> metis_tac[word_displ_add, WORD_ADD_COMM]
@@ -2397,7 +2418,7 @@ Proof
       [`bb`, `inst`, `s1`, `update_var h (w1 - x) s1`,
        `h`, `w1 - x`, `v'`, `w1`, `aid`, `orig_off`, `sz`] mp_tac) >>
     simp[is_pointer_preserving_op_def,
-         step_inst_base_def, exec_pure2_def, eval_operand_def,
+         step_inst_base_for ``SUB``, exec_pure2_def, eval_operand_def,
          update_var_def, lookup_var_def, FLOOKUP_UPDATE]
   ) >>
   simp[] >>
@@ -2548,7 +2569,8 @@ Proof
   )
   >- (
     (* PHI pv case: sequential PHI execution is impossible under final semantics. *)
-    simp[step_inst_base_def, lift_result_def]
+    qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode >>
+    simp[lift_result_def]
   )
   >- (
     (* ASSIGN pv case *)
@@ -2658,8 +2680,8 @@ Proof
         eval_operand op s1 = eval_operand op s2` by
     metis_tac[cr_non_mem_eval_operand_agree] >>
   `s1.vs_fmp = s2.vs_fmp` by fs[concretize_rel_def, LET_THM] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  ASM_REWRITE_TAC[venomInstTheory.opcode_case_def] >>
+  qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode >>
+  ASM_REWRITE_TAC[] >>
   Cases_on `inst.inst_operands` >> gvs[lift_result_def] >>
   Cases_on `t` >> gvs[lift_result_def] >>
   Cases_on `inst.inst_outputs` >> gvs[lift_result_def] >>
@@ -2753,8 +2775,9 @@ Proof
       venomEffectsTheory.write_effects_def,
       venomEffectsTheory.all_effects_def,
       venomEffectsTheory.empty_effects_def] >>
-  (* Expand step_inst_base and case split operands *)
-  asm_rewrite_tac[step_inst_base_def] >>
+  (* Expand only the selected opcode and case split operands. *)
+  qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode >>
+  asm_rewrite_tac[] >>
   simp[exec_write2_def, lift_result_def] >>
   TRY BasicProvers.TOP_CASE_TAC >> gvs[lift_result_def] >>
   TRY BasicProvers.TOP_CASE_TAC >> gvs[lift_result_def] >>
@@ -2816,7 +2839,8 @@ Proof
     `!op. MEM op inst.inst_operands ==>
           eval_operand op s1 = eval_operand op s2` by
       metis_tac[cr_non_mem_eval_operand_agree] >>
-    ASM_REWRITE_TAC[step_inst_base_def] >> gvs[] >>
+    qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode >>
+    ASM_REWRITE_TAC[] >> gvs[] >>
     TRY BasicProvers.TOP_CASE_TAC >> gvs[lift_result_def] >>
     TRY BasicProvers.TOP_CASE_TAC >> gvs[lift_result_def] >>
     TRY BasicProvers.TOP_CASE_TAC >> gvs[lift_result_def] >>
@@ -2946,7 +2970,8 @@ Proof
     simp[memLocDefsTheory.mem_read_ops_def, is_immutable_op_def]) >>
   gvs[] >>
   (* Unfold step_inst_base for MLOAD *)
-  simp[step_inst_base_def, exec_read1_def] >>
+  qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode >>
+  simp[exec_read1_def] >>
   (* eval_operand (Var v) = lookup_var v *)
   simp[eval_operand_def] >>
   (* From CR clause 2: lookup_var v agrees or both NONE *)
@@ -3129,7 +3154,8 @@ Proof
            iao_max_size := SOME (Lit 32w) |>`] mp_tac) >>
      simp[memLocDefsTheory.mem_read_ops_def]) >>
   gvs[] >>
-  simp[step_inst_base_def, exec_read1_def, eval_operand_def] >>
+  qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode >>
+  simp[exec_read1_def, eval_operand_def] >>
   `lookup_var v s1 = NONE /\ lookup_var v s2 = NONE \/
    ?w1 w2 aid orig_off sz addr.
      FLOOKUP s1.vs_allocas aid = SOME (orig_off, sz) /\
@@ -3363,8 +3389,8 @@ Resume concretize_step_sha3[sha3_sz]:
   `eval_operand op_sz s1 = eval_operand op_sz s2` by (
     drule cr_eval_operand_non_pv >>
     disch_then (qspec_then `op_sz` mp_tac) >> simp[]) >>
-  (* Unfold step_inst_base for SHA3 *)
-  simp[step_inst_base_def, eval_operand_def] >>
+  (* Unfold only the SHA3 branch. *)
+  simp[step_inst_base_for ``SHA3``, eval_operand_def] >>
   Cases_on `lookup_var v s1`
   >- (drule cr_pv_var_none >> disch_then drule >>
       simp[] >> gvs[] >> simp[lift_result_def]) >>
@@ -3482,7 +3508,7 @@ Resume concretize_step_return[ret_bytes]:
   `eval_operand op_sz s1 = eval_operand op_sz s2` by (
     drule cr_eval_operand_non_pv >>
     disch_then (qspec_then `op_sz` mp_tac) >> simp[]) >>
-  simp[step_inst_base_def, eval_operand_def] >>
+  simp[step_inst_base_for ``RETURN``, eval_operand_def] >>
   Cases_on `lookup_var v s1`
   >- (drule cr_pv_var_none >> disch_then drule >>
       simp[] >> gvs[] >> simp[lift_result_def]) >>
@@ -3595,7 +3621,7 @@ Resume concretize_step_revert[rev_bytes]:
   `eval_operand op_sz s1 = eval_operand op_sz s2` by (
     drule cr_eval_operand_non_pv >>
     disch_then (qspec_then `op_sz` mp_tac) >> simp[]) >>
-  simp[step_inst_base_def, eval_operand_def] >>
+  simp[step_inst_base_for ``REVERT``, eval_operand_def] >>
   Cases_on `lookup_var v s1`
   >- (drule cr_pv_var_none >> disch_then drule >>
       simp[] >> gvs[] >> simp[lift_result_def]) >>
@@ -4414,14 +4440,15 @@ Proof
       qpat_x_assum `concretize_rel _ _ _ _ _ _` mp_tac >>
       ONCE_REWRITE_TAC[concretize_rel_def] >> simp[LET_THM] >>
       strip_tac >> first_x_assum (qspec_then `v_addr` mp_tac) >> simp[]) >>
-    simp[step_inst_base_def, exec_write2_def, eval_operand_def,
+    qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode >>
+    simp[exec_write2_def, eval_operand_def,
          lookup_var_def, lift_result_def]) >>
   rename1 `lookup_var v_addr s1 = SOME w1` >>
   `lookup_var v_addr s1 <> NONE` by simp[] >>
   drule_all cr_pv_var_displacement >> strip_tac >>
   gvs[] >>
   (* Evaluate step_inst_base for MSTORE *)
-  ONCE_REWRITE_TAC[step_inst_base_def] >>
+  qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode >>
   simp[exec_write2_def, eval_operand_def, lookup_var_def] >>
   Cases_on `eval_operand op_val s1` >>
   gvs[lift_result_def] >>
@@ -4599,13 +4626,14 @@ Proof
       qpat_x_assum `concretize_rel _ _ _ _ _ _` mp_tac >>
       ONCE_REWRITE_TAC[concretize_rel_def] >> simp[LET_THM] >>
       strip_tac >> first_x_assum (qspec_then `v_addr` mp_tac) >> simp[]) >>
-    simp[step_inst_base_def, exec_write2_def, eval_operand_def,
+    qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode >>
+    simp[exec_write2_def, eval_operand_def,
          lookup_var_def, lift_result_def]) >>
   rename1 `lookup_var v_addr s1 = SOME w1` >>
   `lookup_var v_addr s1 <> NONE` by simp[] >>
   drule_all cr_pv_var_displacement >> strip_tac >>
   gvs[] >>
-  ONCE_REWRITE_TAC[step_inst_base_def] >>
+  qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode >>
   simp[exec_write2_def, eval_operand_def, lookup_var_def] >>
   Cases_on `eval_operand op_val s1` >>
   gvs[lift_result_def] >>
@@ -4755,14 +4783,15 @@ Proof
       qpat_x_assum `concretize_rel _ _ _ _ _ _` mp_tac >>
       ONCE_REWRITE_TAC[concretize_rel_def] >> simp[LET_THM] >>
       strip_tac >> first_x_assum (qspec_then `v_addr` mp_tac) >> simp[]) >>
-    simp[step_inst_base_def, exec_write2_def, eval_operand_def,
+    qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode >>
+    simp[exec_write2_def, eval_operand_def,
          lookup_var_def, lift_result_def]) >>
   rename1 `lookup_var v_addr s1 = SOME w1` >>
   `lookup_var v_addr s1 <> NONE` by simp[] >>
   drule_all cr_pv_var_displacement >> strip_tac >>
   gvs[] >>
   (* Evaluate step_inst_base for MSTORE8 *)
-  ONCE_REWRITE_TAC[step_inst_base_def] >>
+  qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode >>
   simp[exec_write2_def, eval_operand_def, lookup_var_def] >>
   Cases_on `eval_operand op_val s1` >>
   gvs[lift_result_def] >>
@@ -4931,14 +4960,14 @@ Proof
       qpat_x_assum `concretize_rel _ _ _ _ _ _` mp_tac >>
       ONCE_REWRITE_TAC[concretize_rel_def] >> simp[LET_THM] >>
       strip_tac >> first_x_assum (qspec_then `v_dst` mp_tac) >> simp[]) >>
-    simp[step_inst_base_def, eval_operand_def,
+    simp[step_inst_base_for ``CALLDATACOPY``, eval_operand_def,
          lookup_var_def, lift_result_def]) >>
   rename1 `lookup_var v_dst s1 = SOME w1` >>
   `lookup_var v_dst s1 <> NONE` by simp[] >>
   drule_all cr_pv_var_displacement >> strip_tac >>
   gvs[] >>
-  (* Unfold step_inst_base for CALLDATACOPY *)
-  ONCE_REWRITE_TAC[step_inst_base_def] >>
+  (* Unfold only the CALLDATACOPY branch. *)
+  qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode >>
   simp[eval_operand_def, lookup_var_def] >>
   (* Substitute s2 evals with s1 evals to unify both sides *)
   qpat_x_assum `eval_operand op_src s1 = eval_operand op_src s2`
@@ -5082,13 +5111,13 @@ Proof
       qpat_x_assum `concretize_rel _ _ _ _ _ _` mp_tac >>
       ONCE_REWRITE_TAC[concretize_rel_def] >> simp[LET_THM] >>
       strip_tac >> first_x_assum (qspec_then `v_dst` mp_tac) >> simp[]) >>
-    simp[step_inst_base_def, eval_operand_def,
+    simp[step_inst_base_for ``CODECOPY``, eval_operand_def,
          lookup_var_def, lift_result_def]) >>
   rename1 `lookup_var v_dst s1 = SOME w1` >>
   `lookup_var v_dst s1 <> NONE` by simp[] >>
   drule_all cr_pv_var_displacement >> strip_tac >>
   gvs[] >>
-  ONCE_REWRITE_TAC[step_inst_base_def] >>
+  qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode >>
   simp[eval_operand_def, lookup_var_def] >>
   qpat_x_assum `eval_operand op_src s1 = eval_operand op_src s2`
     (fn th => REWRITE_TAC[SYM th]) >>
@@ -5225,13 +5254,13 @@ Proof
       qpat_x_assum `concretize_rel _ _ _ _ _ _` mp_tac >>
       ONCE_REWRITE_TAC[concretize_rel_def] >> simp[LET_THM] >>
       strip_tac >> first_x_assum (qspec_then `v_dst` mp_tac) >> simp[]) >>
-    simp[step_inst_base_def, eval_operand_def,
+    simp[step_inst_base_for ``DLOADBYTES``, eval_operand_def,
          lookup_var_def, lift_result_def]) >>
   rename1 `lookup_var v_dst s1 = SOME w1` >>
   `lookup_var v_dst s1 <> NONE` by simp[] >>
   drule_all cr_pv_var_displacement >> strip_tac >>
   gvs[] >>
-  ONCE_REWRITE_TAC[step_inst_base_def] >>
+  qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode >>
   simp[eval_operand_def, lookup_var_def] >>
   qpat_x_assum `eval_operand op_src s1 = eval_operand op_src s2`
     (fn th => REWRITE_TAC[SYM th]) >>
@@ -5662,10 +5691,10 @@ Theorem concretize_step_alloca_assign:
 Proof
   rpt strip_tac >>
   `step_inst_base inst s1 = exec_alloca inst s1 alloc_size` by
-    simp[step_inst_base_def] >>
+    simp[step_inst_base_for ``ALLOCA``] >>
   `step_inst_base (mk_assign_inst inst (Lit addr)) s2 =
      OK (update_var out addr s2)` by
-    simp[step_inst_base_def, mk_assign_inst_def, eval_operand_def] >>
+    simp[step_inst_base_for ``ASSIGN``, mk_assign_inst_def, eval_operand_def] >>
   rewrite_tac[] >>
   (* Case split on FLOOKUP vs_allocas inst.inst_id *)
   Cases_on `FLOOKUP s1.vs_allocas inst.inst_id`
@@ -6444,7 +6473,8 @@ Proof
     drule_all alloca_inst_shape >> strip_tac >> gvs[] >>
     `get_alloca_size fn (Allocation inst.inst_id) = w2n sz` by
       (irule get_alloca_size_from_inst >> metis_tac[]) >>
-    fs[step_inst_base_def] >>
+    qpat_assum `inst.inst_opcode = _`
+      (fn eq => fs[step_inst_base_opcode_eq eq]) >>
     gvs[exec_alloca_def, AllCaseEqs(), update_var_def] >>
     rw[alloca_sizes_match_def] >> rpt strip_tac >>
     gvs[alloca_sizes_match_def, FLOOKUP_UPDATE, AllCaseEqs()] >>
@@ -6611,8 +6641,11 @@ Proof
   pop_assum strip_assume_tac >>
   Cases_on `step_inst fuel ctx inst s1` >>
   Cases_on `step_inst fuel ctx (concretize_inst amap inst) s2` >>
-  gvs[lift_result_def] >>
-  (* All non-matching constructor pairs eliminated by F in assumptions.
+  (* Simplify the step relation only: rewriting the whole context also
+     unfolds lift_result throughout the large induction hypothesis. *)
+  qpat_x_assum `lift_result _ _ _ _ _` mp_tac >>
+  simp[lift_result_def] >> strip_tac >>
+  (* Non-matching constructor pairs have a false step relation and close.
      Remaining same-constructor pairs: OK/OK needs terminator handling,
      Halt/Halt, Abort/Abort, IntRet/IntRet just witness with init'. *)
   TRY (qexists `init'` >> simp[lift_result_def] >> NO_TAC) >>
@@ -6815,10 +6848,10 @@ Proof
 QED
 
 val terminator_alloca_frame_tac =
-  gvs[step_inst_base_def, LET_THM] >>
-  rpt (BasicProvers.PURE_FULL_CASE_TAC >>
-       gvs[jump_to_def, halt_state_def, revert_state_def,
-           set_returndata_def]);
+  qpat_assum `inst.inst_opcode = _`
+    (fn eq => gvs[step_inst_base_opcode_eq eq, LET_THM]) >>
+  gvs[AllCaseEqs(), jump_to_def, halt_state_def, revert_state_def,
+      set_returndata_def];
 
 Triviality step_terminator_ok_preserves_alloca_overflow_safe:
   !fuel ctx inst s s' fn amap.

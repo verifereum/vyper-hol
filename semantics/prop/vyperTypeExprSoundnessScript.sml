@@ -207,10 +207,10 @@ Definition base_target_value_shape_def:
   base_target_value_shape env (NameTarget id) _ _ = F /\
   base_target_value_shape env (TopLevelNameTarget nsid) (ImmutableVar src id) sbs =
     (nsid = (src,id) /\ sbs = [] /\
-     IS_SOME (FLOOKUP env.bare_global_assignable (src,string_to_num id))) /\
+     IS_SOME (FLOOKUP env.bare_global_assignable (src,id))) /\
   base_target_value_shape env (TopLevelNameTarget nsid) (TopLevelVar src id) sbs =
     (nsid = (src,id) /\ sbs = [] /\
-     FLOOKUP env.bare_globals (src,string_to_num id) = NONE) /\
+     FLOOKUP env.bare_globals (src,id) = NONE) /\
   base_target_value_shape env (TopLevelNameTarget nsid) _ _ = F /\
   base_target_value_shape env (AttributeTarget tgt id) loc sbs =
     (?rest. sbs = AttrSubscript id :: rest /\
@@ -251,17 +251,17 @@ End
 Definition location_runtime_typed_def:
   (location_runtime_typed env cx st (ScopedVar id) vt <=>
     (?entry ty. vt = Type ty /\
-                lookup_scopes (string_to_num id) st.scopes = SOME entry /\
-                FLOOKUP env.var_types (string_to_num id) = SOME ty /\
+                lookup_scopes id st.scopes = SOME entry /\
+                FLOOKUP env.var_types id = SOME ty /\
                 evaluate_type env.type_defs ty = SOME entry.type)) /\
   (location_runtime_typed env cx st (ImmutableVar src id) vt <=>
     (?imms v ty tv. vt = Type ty /\
                     get_immutables cx src st = (INL imms, st) /\
-                    FLOOKUP imms (string_to_num id) = SOME (tv, v) /\
-                    FLOOKUP env.bare_globals (src, string_to_num id) = SOME ty /\
+                    FLOOKUP imms id = SOME (tv, v) /\
+                    FLOOKUP env.bare_globals (src, id) = SOME ty /\
                     evaluate_type env.type_defs ty = SOME tv)) /\
   (location_runtime_typed env cx st (TopLevelVar src_id_opt id) vt <=>
-    FLOOKUP env.toplevel_vtypes (src_id_opt, string_to_num id) = SOME vt)
+    FLOOKUP env.toplevel_vtypes (src_id_opt, id) = SOME vt)
 End
 
 Definition target_path_step_type_def:
@@ -712,7 +712,7 @@ End
 
 
 Theorem assign_target_TopLevelVar_lookup_global_INR_propagate:
-  lookup_global cx src (string_to_num id) st = (INR e, st) ==>
+  lookup_global cx src (id) st = (INR e, st) ==>
   assign_target cx (BaseTargetV (TopLevelVar src id) is) op st = (INR e, st)
 Proof
   simp[assign_target_def, bind_def, return_def, LET_THM, pairTheory.PAIR]

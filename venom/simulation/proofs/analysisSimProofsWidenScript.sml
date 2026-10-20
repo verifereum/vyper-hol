@@ -78,6 +78,21 @@ Proof
   metis_tac[vsr_R_ok_fields]
 QED
 
+(* Specialize the function before the execution arguments: backward matching
+   otherwise leaves Metis to discover an existential function witness. *)
+val widen_preserves_R_tac =
+  mp_tac (Q.SPECL [`R_ok`, `R_term`, `fn`] run_block_preserves_R_helper) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then (qspecl_then [`fuel`, `run_ctx`, `bb`, `s1`, `s2`] mp_tac) >>
+  impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then ACCEPT_TAC;
+
+val widen_state_inv_tac =
+  qpat_assum `!s1 s2. R_ok s1 s2 /\ state_inv s1 ==> state_inv s2`
+    (qspecl_then [`s1`, `s2`] mp_tac) >>
+  impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then ACCEPT_TAC;
+
 (* Widening variant. Uses widen_to_df bridge to reduce to non-widen case.
  * The caller must establish is_fixpoint for the WIDEN process. *)
 Theorem df_analysis_pass_correct_widen_sound_proof:
@@ -198,8 +213,8 @@ Proof
         (fn th => irule th) >>
       qexists_tac `s1` >> simp[]) >>
   `lift_result R_ok R_term R_term (run_block fuel run_ctx bb s1)
-                            (run_block fuel run_ctx bb s2)` by (
-    irule run_block_preserves_R_helper >> metis_tac[]) >>
+                            (run_block fuel run_ctx bb s2)` by
+    widen_preserves_R_tac >>
   (* Intra-block transfer for widen *)
   `(!idx. SUC idx <= LENGTH bb.bb_instructions ==>
       df_at bottom result bb.bb_label (SUC idx) =
@@ -477,10 +492,10 @@ Proof
       (fn th => irule th) >>
     qexists_tac `s1` >> simp[]) >>
   sg `state_inv s2`
-  >- metis_tac[] >>
+  >- widen_state_inv_tac >>
   `lift_result R_ok R_term R_term (run_block fuel run_ctx bb s1)
-                            (run_block fuel run_ctx bb s2)` by (
-    irule run_block_preserves_R_helper >> metis_tac[]) >>
+                            (run_block fuel run_ctx bb s2)` by
+    widen_preserves_R_tac >>
   (* Block sim - from hypothesis *)
   `(?e. run_block fuel run_ctx bb s2 = Error e) \/
    lift_result R_ok R_term R_term (run_block fuel run_ctx bb s2)
@@ -681,10 +696,10 @@ Proof
       (fn th => irule th) >>
     qexists_tac `s1` >> simp[]) >>
   sg `state_inv s2`
-  >- metis_tac[] >>
+  >- widen_state_inv_tac >>
   `lift_result R_ok R_term R_term (run_block fuel run_ctx bb s1)
-                            (run_block fuel run_ctx bb s2)` by (
-    irule run_block_preserves_R_helper >> metis_tac[]) >>
+                            (run_block fuel run_ctx bb s2)` by
+    widen_preserves_R_tac >>
   (* Block sim — from hypothesis *)
   `(?e. run_block fuel run_ctx bb s2 = Error e) \/
    lift_result R_ok R_term R_term (run_block fuel run_ctx bb s2)

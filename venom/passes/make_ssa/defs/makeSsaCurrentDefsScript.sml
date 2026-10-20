@@ -521,7 +521,12 @@ End
 Theorem simplify_current_phi_raw_id[simp]:
   (simplify_current_phi_raw inst).inst_id = inst.inst_id
 Proof
-  simp[simplify_current_phi_raw_def] >> rpt CASE_TAC >> gvs[]
+  Cases_on `inst.inst_opcode <> PHI` >> simp[simplify_current_phi_raw_def] >>
+  Cases_on `current_phi_output inst.inst_outputs` >> simp[] >>
+  rename1 `current_phi_output inst.inst_outputs = SOME out` >>
+  Cases_on `current_phi_values (remove_current_phi_self out inst.inst_operands)` >>
+  simp[] >> rename1 `current_phi_values _ = SOME values` >>
+  Cases_on `values` >> simp[] >> IF_CASES_TAC >> simp[]
 QED
 
 Theorem simplify_current_phi_id[simp]:
@@ -648,7 +653,6 @@ Theorem simplify_current_phi_prefix_vars:
   MEM v (FLAT (MAP inst_ir_vars insts))
 Proof
   simp[simplify_current_phi_prefix_def] >> pairarg_tac >> gvs[] >>
-  rename [`simplify_current_phi_prefix_parts insts = (phis,ordinary)`] >>
   `LENGTH (MAP (\inst. inst.inst_id) insts) =
    LENGTH (phis ++ ordinary)` by
     (drule simplify_current_phi_prefix_parts_length >> simp[]) >>

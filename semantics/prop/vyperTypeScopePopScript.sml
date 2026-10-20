@@ -74,8 +74,14 @@ Proof
   rw[env_immutables_consistent_def]
   >- (qpat_x_assum `preserves_tv _ _ _` mp_tac >> simp[preserves_tv_def] >> metis_tac[])
   >- (qpat_x_assum `preserves_tv _ _ _` mp_tac >> simp[preserves_tv_def] >> metis_tac[]) >>
+  qpat_assum `!src id ty ts. FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\ _ ==> _`
+    (qspecl_then [`src`, `id`, `ty`, `ts`] mp_tac) >>
+  simp[] >> strip_tac >> gvs[] >>
   qpat_x_assum `!src id ty ts. FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type ty) /\ _ ==> _`
-    (qspecl_then [`src`, `id`, `ty`, `ts`] mp_tac) >> simp[] >> metis_tac[]
+    (qspecl_then [`src`, `id_str`, `ty`, `ts`] mp_tac) >>
+  simp[] >> strip_tac >>
+  first_x_assum (qspecl_then [`id_str`, `tv`, `v`] mp_tac) >>
+  simp[]
 QED
 
 Theorem type_stmts_env_consistent_after_pop:

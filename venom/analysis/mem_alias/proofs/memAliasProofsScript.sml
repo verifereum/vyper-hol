@@ -1003,8 +1003,12 @@ Theorem ma_mark_volatile_is_volatile:
     ma_mark_volatile sets loc = (vloc, sets') ⇒
     vloc.ml_volatile
 Proof
-  rw[ma_mark_volatile_def, mk_volatile_def, LET_THM] >>
-  BasicProvers.EVERY_CASE_TAC >> gvs[]
+  rpt gen_tac >>
+  (* Discard the alias-map result before unfolding its computation. *)
+  disch_then (mp_tac o AP_TERM ``FST : mem_loc # alias_sets -> mem_loc``) >>
+  Cases_on `FLOOKUP sets loc` >>
+  asm_simp_tac std_ss [ma_mark_volatile_def, LET_THM, FST] >>
+  disch_then (SUBST1_TAC o SYM) >> simp[mk_volatile_def]
 QED
 
 (* ===== Soundness helpers ===== *)

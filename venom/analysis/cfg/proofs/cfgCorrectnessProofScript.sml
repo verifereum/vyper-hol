@@ -426,6 +426,34 @@ Proof
   ]
 QED
 
+(* Evaluate only the preorder projection: no predecessor construction,
+   postorder traversal or reachability map is needed for the two indices.
+   Compile the small evaluator once rather than extending srw_ss per goal. *)
+val ce_pre_cs = reduceLib.num_compset |> computeLib.copy
+  (* Install literal equality before compiling MEM/nub and map lookups. *)
+  |> computeLib.add_conv (boolSyntax.equality, 2,
+       stringLib.string_EQ_CONV ORELSEC stringLib.char_EQ_CONV)
+  |> listLib.list_rws
+  |> stringLib.add_string_compset
+  |> pairLib.add_pair_compset
+  |> computeLib.add_thms [combinTheory.K_THM, optionTheory.IS_SOME_DEF,
+       optionTheory.THE_DEF, ce_fn3_def, mk_raw_function_def,
+       build_succs_def, init_succs_def, entry_block_def, bb_succs_def,
+       get_successors_def, is_terminator_def, get_label_def,
+       dfs_pre_walk_def, set_insert_def, fmap_lookup_list_def,
+       FLOOKUP_UPDATE, FLOOKUP_EMPTY]
+  |> (fn cs => List.foldl (fn (ty, cs) =>
+       computeLib.add_datatype_info cs (valOf (TypeBase.fetch ty))) cs
+       [``:ir_function``, ``:basic_block``, ``:instruction``, ``:opcode``,
+        ``:operand``, ``:string option``, ``:string list # string list``]);
+
+Triviality ce_fn3_preorder[local]:
+  (cfg_analyze ce_fn3).cfg_dfs_pre = ["entry"; "s"; "b"; "a"]
+Proof
+  REWRITE_TAC [cfg_analyze_dfs_pre] >>
+  CONV_TAC (computeLib.CBV_CONV ce_pre_cs)
+QED
+
 (* Preorder does not have the analogous ordering property: cross edges
    can cause a successor to appear before its predecessor in preorder. *)
 Theorem ce_preorder_order_false:
@@ -436,6 +464,7 @@ Theorem ce_preorder_order_false:
   INDEX_OF "b" (cfg_dfs_pre (cfg_analyze ce_fn3)) = SOME 2 /\
   ~(3 < 2)
 Proof
+  simp[ce_fn3_preorder, INDEX_OF_def, INDEX_FIND_def] >>
   simp[ce_fn3_def] >> rpt conj_tac
   >- cfg_eval_tac
   >- cfg_eval_tac
@@ -444,8 +473,6 @@ Proof
       rpt strip_tac >>
       qpat_x_assum `(λa b. _)^* "b" "a"` mp_tac >>
       simp[Once relationTheory.RTC_CASES1])
-  >- cfg_eval_tac
-  >- cfg_eval_tac
 QED
 
 (* ==========================================================================

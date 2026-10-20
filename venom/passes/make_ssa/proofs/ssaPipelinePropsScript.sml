@@ -565,12 +565,18 @@ Triviality add_phi_nodes_phi_inj_aux:
 Proof
   simp_tac std_ss [LET_THM] >>
   Induct >- simp[FOLDL] >>
-  rpt gen_tac >> PairCases_on `h` >> simp[FOLDL] >> rpt strip_tac >>
+  rpt gen_tac >> PairCases_on `h` >>
+  (* Unfold only the goal's outer fold, leaving the guarded IH untouched. *)
+  PURE_ONCE_REWRITE_TAC [FOLDL] >>
+  PURE_REWRITE_TAC [MAP, pairTheory.FST, ALL_DISTINCT, MEM, DE_MORGAN_THM] >>
+  BETA_TAC >> CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV) >> rpt strip_tac >>
   `phi_extends bbs
     (insert_phis_for_var h0 dom_frontiers pred_map live_in bbs h1 [])` by
-    (irule insert_phis_for_var_phi_extends >> simp[phi_extends_refl]) >>
+    (irule insert_phis_for_var_phi_extends >> MATCH_ACCEPT_TAC phi_extends_refl) >>
   `LENGTH (insert_phis_for_var h0 dom_frontiers pred_map live_in bbs h1
-     []) = LENGTH bbs` by gvs[phi_extends_def] >>
+     []) = LENGTH bbs` by
+    (qpat_x_assum `phi_extends _ _`
+      (ACCEPT_TAC o CONJUNCT1 o REWRITE_RULE [phi_extends_def])) >>
   (* Inv1 + Inv2 via step lemmas *)
   mp_tac (Q.SPECL [`h0`,`dom_frontiers`,`pred_map`,`live_in`,`bbs`,`h1`]
     (INST_TYPE [``:'a`` |-> ``:string list``]
@@ -584,15 +590,16 @@ Proof
   impl_tac
   >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   strip_tac >>
-  (* Apply IH — rewrite LENGTH bbs to LENGTH acc for matching *)
-  first_x_assum (qspecl_then
+  (* Specialize the IH, normalizing only the accumulator's length. *)
+  qpat_x_assum `!df pm li acc. _` (qspecl_then
     [`dom_frontiers`,`pred_map`,`live_in`,
      `insert_phis_for_var h0 dom_frontiers pred_map live_in bbs h1 []`]
     mp_tac) >>
-  impl_tac
-  >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE
-      (gvs[] >> first_assum ACCEPT_TAC))) >>
-  strip_tac >> metis_tac[]
+  qpat_x_assum `LENGTH _ = LENGTH bbs`
+    (fn len => PURE_REWRITE_TAC [len]) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then (qspecl_then [`j`,`inst1`,`inst2`] MATCH_MP_TAC) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 (* process_frontiers: at each block, either unchanged or one PHI prepended *)

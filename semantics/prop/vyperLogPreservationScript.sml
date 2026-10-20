@@ -403,7 +403,7 @@ Proof
        vyperStateTheory.raise_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
   imp_res_tac lift_option_type_state >> gvs[] >>
-  Cases_on `find_var_decl_by_num n ts` >>
+  Cases_on `find_var_decl_by_name n ts` >>
   gvs[vyperStateTheory.raise_def] >>
   PairCases_on `x` >> Cases_on `x0` >>
   gvs[vyperStateTheory.bind_def, vyperStateTheory.raise_def,
@@ -797,7 +797,7 @@ Theorem assign_target_toplevel_logs[local]:
   st'.logs = st.logs
 Proof
   rpt strip_tac >>
-  Cases_on `lookup_global cx src (string_to_num id) st` >>
+  Cases_on `lookup_global cx src id st` >>
   Cases_on `q` >>
   imp_res_tac lookup_global_state >>
   pop_assum SUBST_ALL_TAC
@@ -868,7 +868,7 @@ Proof
       gvs[vyperStateTheory.assign_target_def, vyperStateTheory.bind_def,
           vyperStateTheory.get_scopes_def, vyperStateTheory.return_def,
           vyperStateTheory.lift_option_def] >>
-      Cases_on `find_containing_scope (string_to_num id) st.scopes` >>
+      Cases_on `find_containing_scope id st.scopes` >>
       gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
       PairCases_on `x` >>
       Cases_on `assign_subscripts x2.type x2.value (REVERSE is) ao` >>
@@ -1220,7 +1220,7 @@ Theorem case_stmt_for_logs[local]:
      eval_iterator cx it s2 = (INL vs,s3) /\
      check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long" s4 =
        (INL x,s5) ==>
-     !st res st'. eval_for cx tyv (string_to_num id) body vs st = (res,st') ==>
+     !st res st'. eval_for cx tyv id body vs st = (res,st') ==>
        log_extends st st') /\
   (!tenv s0 tyv s1.
      tenv = get_tenv cx /\
@@ -1233,18 +1233,35 @@ Theorem case_stmt_for_logs[local]:
 Proof
   rpt strip_tac >>
   qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
-  simp[vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def,
-       vyperStateTheory.ignore_bind_def, AllCaseEqs()] >>
-  strip_tac >> gvs[] >>
-  TRY (imp_res_tac lift_option_type_state >> gvs[log_extends_refl] >> NO_TAC) >>
-  first_x_assum drule_all >> strip_tac >>
-  imp_res_tac lift_option_type_state >> gvs[] >>
-  TRY (first_x_assum drule >> simp[] >> NO_TAC) >>
-  imp_res_tac check_state >> imp_res_tac type_check_state >> gvs[] >>
-  TRY (first_x_assum drule >> simp[] >> NO_TAC) >>
-  first_x_assum drule_all >> strip_tac >>
-  irule log_extends_trans >> goal_assum drule >>
-  first_assum MATCH_ACCEPT_TAC
+  simp[Once vyperInterpreterTheory.evaluate_def] >> strip_tac >>
+  drule bind_log_extends_forward >> disch_then MATCH_MP_TAC >>
+  conj_tac
+  >- (rpt strip_tac >> drule lift_option_type_state >>
+      disch_then SUBST1_TAC >> irule log_extends_refl) >>
+  rpt strip_tac >> pop_assum (assume_tac o BETA_RULE) >>
+  rename1 `lift_option_type _ _ st = (INL tyv,s_type)` >>
+  qpat_x_assum `!tenv s0 tyv s1. _`
+    (qspecl_then [`get_tenv cx`, `st`, `tyv`, `s_type`] mp_tac) >>
+  qpat_assum `lift_option_type _ _ st = (INL tyv,s_type)`
+    (fn th => simp_tac bool_ss [th]) >> strip_tac >>
+  qpat_x_assum `!tenv s0 tyv s1 s2 vs s3 s4 x s5. _`
+    (qspecl_then [`get_tenv cx`, `st`, `tyv`, `s_type`] mp_tac) >>
+  qpat_assum `lift_option_type _ _ st = (INL tyv,s_type)`
+    (fn th => simp_tac bool_ss [th]) >> strip_tac >>
+  drule bind_log_extends_forward >> disch_then MATCH_MP_TAC >>
+  conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!st res st'. eval_iterator _ _ _ = _ ==> _` drule >>
+      simp[]) >>
+  rpt strip_tac >>
+  pop_assum (assume_tac o BETA_RULE o
+             REWRITE_RULE [vyperStateTheory.ignore_bind_def]) >>
+  drule bind_log_extends_forward >> disch_then MATCH_MP_TAC >>
+  conj_tac
+  >- (rpt strip_tac >> drule check_state >>
+      disch_then SUBST1_TAC >> irule log_extends_refl) >>
+  rpt strip_tac >> pop_assum (assume_tac o BETA_RULE) >>
+  first_x_assum drule_all >> simp[]
 QED
 
 
@@ -1363,7 +1380,7 @@ Proof
        vyperStateTheory.return_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
   imp_res_tac lift_option_type_state >> gvs[] >>
-  Cases_on `is_immutable_decl (string_to_num sid1) ts` >>
+  Cases_on `is_immutable_decl sid1 ts` >>
   gvs[vyperStateTheory.return_def, log_extends_refl]
 QED
 
@@ -2602,6 +2619,8 @@ Proof
        vyperStateTheory.type_check_def, vyperStateTheory.assert_def,
        vyperStateTheory.get_accounts_def,
        vyperStateTheory.get_transient_storage_def, AllCaseEqs()] >>
+  TRY (CASE_TAC >> gvs[log_extends_refl]) >>
+  TRY (CASE_TAC >> gvs[log_extends_refl]) >>
   rpt (CASE_TAC >> gvs[log_extends_refl]) >>
   simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
        vyperStateTheory.return_def, vyperStateTheory.raise_def,
@@ -2630,12 +2649,16 @@ Proof
        vyperStateTheory.type_check_def, vyperStateTheory.assert_def,
        vyperStateTheory.get_accounts_def,
        vyperStateTheory.get_transient_storage_def, AllCaseEqs()] >>
+  NTAC 4 (TRY (CASE_TAC >> gvs[log_extends_refl])) >>
+  NTAC 4 (TRY (CASE_TAC >> gvs[log_extends_refl])) >>
   rpt (CASE_TAC >> gvs[log_extends_refl]) >>
   simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
        vyperStateTheory.return_def, vyperStateTheory.raise_def,
        vyperStateTheory.check_def, vyperStateTheory.assert_def,
        vyperStateTheory.get_accounts_def,
        vyperStateTheory.get_transient_storage_def, AllCaseEqs()] >>
+  NTAC 4 (TRY (CASE_TAC >> gvs[log_extends_refl])) >>
+  NTAC 4 (TRY (CASE_TAC >> gvs[log_extends_refl])) >>
   rpt (CASE_TAC >> gvs[log_extends_refl]) >>
   imp_res_tac lift_option_type_state >>
   imp_res_tac run_ext_call_lift_option_state >>
@@ -3255,34 +3278,96 @@ Proof
        rich_listTheory.IS_PREFIX_REFL]
 QED
 
-val EXTCALL_LOG_MONAD_TAC =
-  rpt (FIRST [CHANGED_TAC (CONV_TAC (DEPTH_CONV ETA_CONV)),
-    CHANGED_TAC (simp_tac bool_ss
-      [FORALL_PROD, pair_case_thm, UNCURRY, log_monad_primitives]),
-    first_assum ACCEPT_TAC, MATCH_ACCEPT_TAC log_monad_take,
-    CHANGED_TAC (fn (asl,w) => simp_tac bool_ss
-      (pair_case_thm :: UNCURRY :: List.map ASSUME (List.filter is_eq asl)) (asl,w)),
-    irule log_monad_bind_guarded >> conj_tac,
-    CHANGED_TAC (rewrite_tac[vyperStateTheory.ignore_bind_def]),
-    gen_tac, strip_tac, conj_tac, CASE_TAC]);
+(* Index primitive leaves once; never traverse their continuations or the
+   large guarded IHs just to recognise a primitive computation. *)
+val EXTCALL_LOG_MONAD_LEAF_TAC =
+  let
+    val structural = Net.insert
+      (concl log_monad_bind_guarded |> dest_imp |> snd,
+       MATCH_MP_TAC log_monad_bind_guarded >> conj_tac) Net.empty
+    val leaves = List.foldl (fn (th,net) =>
+      Net.insert (concl th, MATCH_ACCEPT_TAC th) net) structural
+      (log_monad_take :: CONJUNCTS log_monad_primitives)
+  in
+    fn (asl,w) => FIRST (Net.match w leaves) (asl,w)
+  end;
 
-(* Normalize facts and guarded IHs identically before matching the entire
-   success guard. Matching one arbitrary conjunct at a time branches over
-   unrelated operational equations and repeatedly revisits both oracle modes. *)
-val EXTCALL_LOG_IH_PREP_TAC =
-  POP_ASSUM_LIST (fn ths =>
-    let val (ihs, facts) = List.partition (is_forall o concl) ths in
-      MAP_EVERY ASSUME_TAC (List.rev facts) >>
-      gvs[oneTheory.one, vyperStateTheory.ignore_bind_def,
-          vyperStateTheory.return_def, append_logs_def] >>
-      MAP_EVERY (ASSUME_TAC o SIMP_RULE (srw_ss())
-        [oneTheory.one, vyperStateTheory.ignore_bind_def,
-         vyperStateTheory.return_def, append_logs_def]) (List.rev ihs)
-    end);
+(* Reduce exposed applications only, not continuation arguments. *)
+val extcall_log_head_conv =
+  let
+    val reduce = FIRST_CONV
+      [BETA_CONV, REWR_CONV pair_case_thm, REWR_CONV UNCURRY]
+    fun head tm = (reduce ORELSEC RATOR_CONV head) tm
+  in head end;
 
-val EXTCALL_LOG_IH_TAC =
-  FIRST [first_assum ACCEPT_TAC,
-    first_x_assum (fn th => drule_all th >> simp[] >> NO_TAC)];
+(* Preserve CASE_TAC branch order without its broad datatype rewrite set.
+   Only fresh branch facts, never guarded IHs, become rewrite rules. *)
+fun EXTCALL_LOG_MONAD_CASE_TAC (g as (old,_)) =
+  let
+    fun simplify (asl,w) =
+      let
+        val fresh = List.filter (fn a => not (is_forall a) andalso
+          not (List.exists (aconv a) old)) asl
+        val rules = map ASSUME fresh
+      in
+        simp_tac bool_ss
+          (optionTheory.option_CLAUSES :: pair_case_thm :: UNCURRY :: rules) >>
+        RULE_ASSUM_TAC (fn th =>
+          if is_forall (concl th) then th else REWRITE_RULE rules th) >>
+        MAP_EVERY assume_tac rules
+      end (asl,w)
+  in
+    (BasicProvers.PURE_CASE_TAC >> simplify) g
+  end;
+
+val EXTCALL_LOG_MONAD_STEP_TAC =
+  FIRST [
+    first_assum ACCEPT_TAC,
+    EXTCALL_LOG_MONAD_LEAF_TAC,
+    CONV_TAC (HO_REWR_CONV FORALL_PROD),
+    CONV_TAC (RAND_CONV extcall_log_head_conv),
+    gen_tac, strip_tac, conj_tac,
+    CONV_TAC (RAND_CONV (REWR_CONV vyperStateTheory.ignore_bind_def)),
+    CONV_TAC (RAND_CONV ETA_CONV),
+    CHANGED_TAC (fn (asl,w) =>
+      simp_tac bool_ss (pair_case_thm :: UNCURRY ::
+        List.map ASSUME (List.filter is_eq asl)) (asl,w)),
+    EXTCALL_LOG_MONAD_CASE_TAC];
+
+val EXTCALL_LOG_MONAD_TAC = rpt EXTCALL_LOG_MONAD_STEP_TAC;
+
+(* Discharge guards in semantic order using matching facts, without
+   context-wide simplification or drule_all's search through both oracle IHs. *)
+fun EXTCALL_LOG_IH_TAC (asl,w) =
+  let
+    val branch_rules = map ASSUME (List.filter (not o is_forall) asl)
+    val normalise = SIMP_RULE bool_ss
+      [oneTheory.one, vyperStateTheory.ignore_bind_def,
+       vyperStateTheory.return_def, append_logs_def,
+       FST, SND, pair_case_thm, UNCURRY]
+    val raw_facts = List.concat (map (fn a =>
+      CONJUNCTS (normalise
+        (if is_forall a then REWRITE_RULE branch_rules (ASSUME a)
+         else ASSUME a))) asl)
+    val substitutions = List.filter (fn th =>
+      let val tm = concl th in
+        is_var tm orelse (is_neg tm andalso is_var (dest_neg tm)) orelse
+        (is_eq tm andalso (is_var (lhs tm) orelse is_var (rhs tm)))
+      end) raw_facts
+    val facts = map (SIMP_RULE bool_ss substitutions) raw_facts
+    fun discharge th =
+      if is_imp (snd (strip_forall (concl th))) then
+        discharge (tryfind (MATCH_MP th) facts handle HOL_ERR _ =>
+          let val guard = fst (dest_imp (snd (strip_forall (concl th)))) in
+            MATCH_MP th (REFL (rhs guard))
+          end)
+      else th
+    fun close ih g =
+      ACCEPT_TAC (discharge
+        (PURE_REWRITE_RULE [GSYM AND_IMP_INTRO] ih)) g
+  in
+    FIRST (map close facts) (asl,w)
+  end;
 
 Theorem eval_mutual_log_extends[local]:
   (!cx s st res st'. eval_stmt cx s st = (res,st') ==> log_extends st st') /\
@@ -3321,8 +3406,23 @@ Proof
          (rpt gen_tac >> strip_tac >>
           simp[GSYM log_monad_def, Once vyperInterpreterTheory.evaluate_def] >>
           RULE_ASSUM_TAC (REWRITE_RULE [GSYM log_monad_def]) >>
-          EXTCALL_LOG_MONAD_TAC >> EXTCALL_LOG_IH_PREP_TAC >>
-          EXTCALL_LOG_IH_TAC) >~
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          NTAC 4 (TRY EXTCALL_LOG_MONAD_STEP_TAC) >>
+          EXTCALL_LOG_MONAD_TAC >> EXTCALL_LOG_IH_TAC) >~
        [`_ ==> !st res st'.
            eval_expr _ (Call _ (IntCall _) _ _) st = (res,st') ==>
            log_extends st st'`] >-
