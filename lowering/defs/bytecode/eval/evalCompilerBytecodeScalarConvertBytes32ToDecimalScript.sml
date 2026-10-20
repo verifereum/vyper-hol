@@ -289,7 +289,21 @@ Proof
        scalar_convert_bytes32_to_decimal_runtime_pipeline_def,
        scalar_convert_bytes32_to_decimal_deploy_compile_def,
        checked_unit_pipeline_def] >>
-  rpt CASE_TAC >> gvs[]
+  Cases_on `resolve_o1_policy (o1_policy all_capabilities)` >> gvs[] >>
+  rename1 `SOME policy` >>
+  Cases_on `lower_vyper_runtime_unit tops policy` >> gvs[] >>
+  rename1 `SOME unit` >>
+  Cases_on `run_venom_pipeline (K T) (K T) (K T) policy o1_pipeline_spec unit` >> gvs[] >>
+  rename1 `SOME out` >>
+  Cases_on `out.po_final_assembly <> policy.rpol_final_assembly` >> gvs[] >>
+  Cases_on `finalize_codegen (K SOME) policy out.po_unit` >> gvs[] >>
+  rename1 `SOME runtime` >>
+  Cases_on `lower_vyper_deploy_unit tops policy runtime` >> gvs[] >>
+  rename1 `SOME deploy_unit` >>
+  Cases_on `run_venom_pipeline (K T) (K T) (K T) policy o1_pipeline_spec deploy_unit` >> gvs[] >>
+  rename1 `SOME deploy_out` >>
+  Cases_on `deploy_out.po_final_assembly <> policy.rpol_final_assembly` >> gvs[] >>
+  Cases_on `finalize_codegen (K SOME) policy deploy_out.po_unit` >> gvs[]
 QED
 
 val () = evalCompilerBytecodeLib.add_staged_compile_eval

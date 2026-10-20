@@ -29,6 +29,10 @@ Proof
   EVAL_TAC
 QED
 
+val noop_compile_eval = EVAL
+  ``compile_vyper (K SOME) (o1_policy all_capabilities) noop_program``
+val () = evalCompilerBytecodeLib.add_compile_eval noop_compile_eval
+
 Theorem noop_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     noop_program =
@@ -36,6 +40,10 @@ Theorem noop_matches_python_oracle:
 Proof
   EVAL_TAC
 QED
+
+val return_uint_compile_eval = EVAL
+  ``compile_vyper (K SOME) (o1_policy all_capabilities) return_uint_program``
+val () = evalCompilerBytecodeLib.add_compile_eval return_uint_compile_eval
 
 Theorem return_uint_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
@@ -45,6 +53,10 @@ Proof
   EVAL_TAC
 QED
 
+val return_arg_compile_eval = EVAL
+  ``compile_vyper (K SOME) (o1_policy all_capabilities) return_arg_program``
+val () = evalCompilerBytecodeLib.add_compile_eval return_arg_compile_eval
+
 Theorem return_arg_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     return_arg_program =
@@ -52,6 +64,10 @@ Theorem return_arg_matches_python_oracle:
 Proof
   EVAL_TAC
 QED
+
+val local_uint_compile_eval = EVAL
+  ``compile_vyper (K SOME) (o1_policy all_capabilities) local_uint_program``
+val () = evalCompilerBytecodeLib.add_compile_eval local_uint_compile_eval
 
 Theorem local_uint_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
@@ -61,6 +77,10 @@ Proof
   EVAL_TAC
 QED
 
+val add_arg_compile_eval = EVAL
+  ``compile_vyper (K SOME) (o1_policy all_capabilities) add_arg_program``
+val () = evalCompilerBytecodeLib.add_compile_eval add_arg_compile_eval
+
 Theorem add_arg_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     add_arg_program =
@@ -68,6 +88,10 @@ Theorem add_arg_matches_python_oracle:
 Proof
   EVAL_TAC
 QED
+
+val two_external_compile_eval = EVAL
+  ``compile_vyper (K SOME) (o1_policy all_capabilities) two_external_program``
+val () = evalCompilerBytecodeLib.add_compile_eval two_external_compile_eval
 
 Theorem two_external_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
@@ -77,6 +101,10 @@ Proof
   EVAL_TAC
 QED
 
+val storage_read_compile_eval = EVAL
+  ``compile_vyper (K SOME) (o1_policy all_capabilities) storage_read_program``
+val () = evalCompilerBytecodeLib.add_compile_eval storage_read_compile_eval
+
 Theorem storage_read_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     storage_read_program =
@@ -84,6 +112,10 @@ Theorem storage_read_matches_python_oracle:
 Proof
   EVAL_TAC
 QED
+
+val storage_write_compile_eval = EVAL
+  ``compile_vyper (K SOME) (o1_policy all_capabilities) storage_write_program``
+val () = evalCompilerBytecodeLib.add_compile_eval storage_write_compile_eval
 
 Theorem storage_write_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
@@ -93,6 +125,10 @@ Proof
   EVAL_TAC
 QED
 
+val deploy_storage_compile_eval = EVAL
+  ``compile_vyper (K SOME) (o1_policy all_capabilities) deploy_storage_program``
+val () = evalCompilerBytecodeLib.add_compile_eval deploy_storage_compile_eval
+
 Theorem deploy_storage_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     deploy_storage_program =
@@ -101,6 +137,10 @@ Proof
   EVAL_TAC
 QED
 
+val event_log_compile_eval = EVAL
+  ``compile_vyper (K SOME) (o1_policy all_capabilities) event_log_program``
+val () = evalCompilerBytecodeLib.add_compile_eval event_log_compile_eval
+
 Theorem event_log_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     event_log_program =
@@ -108,6 +148,10 @@ Theorem event_log_matches_python_oracle:
 Proof
   EVAL_TAC
 QED
+
+val indexed_event_log_compile_eval = EVAL
+  ``compile_vyper (K SOME) (o1_policy all_capabilities) indexed_event_log_program``
+val () = evalCompilerBytecodeLib.add_compile_eval indexed_event_log_compile_eval
 
 Theorem indexed_event_log_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)

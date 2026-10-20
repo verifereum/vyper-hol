@@ -15,6 +15,10 @@ val () = computeLib.upd_compset (computeLib.add_thms [i2w_pos])
 
 val () = Globals.max_print_depth := 20
 
+val storage_scalar_loop_compile_eval = EVAL
+  ``compile_vyper (K SOME) (o1_policy all_capabilities) storage_scalar_loop_program``
+val () = evalCompilerBytecodeLib.add_compile_eval storage_scalar_loop_compile_eval
+
 Theorem storage_scalar_loop_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     storage_scalar_loop_program =
@@ -22,6 +26,10 @@ Theorem storage_scalar_loop_matches_python_oracle:
 Proof
   EVAL_TAC
 QED
+
+val storage_array_compile_eval = EVAL
+  ``compile_vyper (K SOME) (o1_policy all_capabilities) storage_array_program``
+val () = evalCompilerBytecodeLib.add_compile_eval storage_array_compile_eval
 
 Theorem storage_array_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
@@ -31,6 +39,10 @@ Proof
   EVAL_TAC
 QED
 
+val storage_dynarray_compile_eval = EVAL
+  ``compile_vyper (K SOME) (o1_policy all_capabilities) storage_dynarray_program``
+val () = evalCompilerBytecodeLib.add_compile_eval storage_dynarray_compile_eval
+
 Theorem storage_dynarray_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     storage_dynarray_program =
@@ -38,6 +50,10 @@ Theorem storage_dynarray_matches_python_oracle:
 Proof
   EVAL_TAC
 QED
+
+val storage_mapping_compile_eval = EVAL
+  ``compile_vyper (K SOME) (o1_policy all_capabilities) storage_mapping_program``
+val () = evalCompilerBytecodeLib.add_compile_eval storage_mapping_compile_eval
 
 Theorem storage_mapping_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
@@ -47,6 +63,10 @@ Proof
   EVAL_TAC
 QED
 
+val storage_struct_compile_eval = EVAL
+  ``compile_vyper (K SOME) (o1_policy all_capabilities) storage_struct_program``
+val () = evalCompilerBytecodeLib.add_compile_eval storage_struct_compile_eval
+
 Theorem storage_struct_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     storage_struct_program =
@@ -54,6 +74,10 @@ Theorem storage_struct_matches_python_oracle:
 Proof
   EVAL_TAC
 QED
+
+val transient_scalar_compile_eval = EVAL
+  ``compile_vyper (K SOME) (o1_policy all_capabilities) transient_scalar_program``
+val () = evalCompilerBytecodeLib.add_compile_eval transient_scalar_compile_eval
 
 Theorem transient_scalar_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
