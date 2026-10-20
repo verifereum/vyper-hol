@@ -42,10 +42,10 @@ Theorem selected_entry_module_code:
     ALOOKUP mods src = SOME ts
 Proof
   rw[selected_entry_def] >>
-  gvs[get_module_code_initial_evaluation_context] >>
+  simp[get_module_code_def, initial_evaluation_context_def] >>
   gvs[lookup_exported_function_def, find_function_module_def,
-      get_self_code_def, AllCaseEqs()] >>
-  gvs[get_module_code_initial_evaluation_context]
+      get_self_code_def, get_module_code_def,
+      initial_evaluation_context_def, AllCaseEqs()]
 QED
 
 Theorem call_external_selected_entry:
@@ -61,13 +61,8 @@ Theorem call_external_selected_entry:
 Proof
   rw[selected_entry_def] >>
   simp[Once call_external_def] >>
-  `get_module_code
-     (initial_evaluation_context am.sources am.layouts tx
-        (find_function_module am tx.target tx.function_name))
-     (find_function_module am tx.target tx.function_name) = SOME ts`
-    by simp[get_module_code_initial_evaluation_context] >>
   Cases_on `find_function_module am tx.target tx.function_name` >>
-  gvs[get_self_code_def]
+  gvs[get_self_code_def, get_module_code_def, initial_evaluation_context_def]
 QED
 
 (* Outside the boundary call_external is a setup failure: a RuntimeError with
