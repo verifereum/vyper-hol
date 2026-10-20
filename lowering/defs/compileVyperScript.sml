@@ -100,7 +100,8 @@ Definition build_var_type_map_def:
   build_var_type_map (top :: rest) =
     case top of
       VariableDecl _ _ vname ty _ =>
-        (λn. if n = vname then SOME ty else build_var_type_map rest n)
+        (λn. if n = module_var_key (NONE, vname) then SOME ty
+             else build_var_type_map rest n)
     | _ => build_var_type_map rest
 End
 
@@ -120,7 +121,8 @@ Definition build_is_hashmap_def:
   build_is_hashmap (top :: rest) =
     case top of
       HashMapDecl _ _ hname _ _ _ =>
-        (λn. if n = hname then T else build_is_hashmap rest n)
+        (λn. if n = module_var_key (NONE, hname) then T
+             else build_is_hashmap rest n)
     | _ => build_is_hashmap rest
 End
 
@@ -259,11 +261,11 @@ Definition add_module_var_locations_def:
     let vars' =
       case top of
         VariableDecl _ Storage name _ (SOME slot) =>
-          vars |+ (name, StorageLoc (n2w slot))
+          vars |+ (module_var_key (NONE, name), StorageLoc (n2w slot))
       | VariableDecl _ Transient name _ (SOME slot) =>
-          vars |+ (name, TransientLoc (n2w slot))
+          vars |+ (module_var_key (NONE, name), TransientLoc (n2w slot))
       | HashMapDecl _ transient name _ _ (SOME slot) =>
-          vars |+ (name,
+          vars |+ (module_var_key (NONE, name),
             if transient then TransientLoc (n2w slot)
             else StorageLoc (n2w slot))
       | _ => vars in
@@ -290,7 +292,7 @@ Definition collect_module_vars_def:
   collect_module_vars ([] : toplevel list) = ([] : (string # type) list) ∧
   collect_module_vars (top :: rest) =
     (case top of
-       VariableDecl _ _ vname ty _ => [(vname, ty)]
+       VariableDecl _ _ vname ty _ => [(module_var_key (NONE, vname), ty)]
      | _ => []) ++ collect_module_vars rest
 End
 
