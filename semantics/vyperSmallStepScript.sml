@@ -1763,6 +1763,8 @@ val EXT_CALL_CPS_PREP_TAC =
    specialization independently visible to holbuild's tactic budget. *)
 val EXT_CALL_CPS_CASES_TAC =
   TRY (FIRST [first_assum MATCH_ACCEPT_TAC,
+    (* Collapse a failed operand before rewriting the guarded IH/dead call body. *)
+    CHANGED_TAC (simp_tac (srw_ss()) [raise_def]),
     CHANGED_TAC (gvs[bind_def, ignore_bind_def, return_def, UNCURRY,
       type_check_def, check_def, assert_def, lift_option_type_def,
       get_accounts_def, get_transient_storage_def, update_accounts_def,

@@ -10059,7 +10059,7 @@ Resume eval_all_type_sound_mutual[Expr_Call_RawCallTarget]:
     drule rawcall_call_evaluation_safe_args >> strip_tac >>
     qpat_x_assum `well_typed_expr env (Call _ (RawCallTarget _) _ _)` mp_tac >>
     rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
-    qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+    (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
     simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
                          type_check_def, assert_def, return_def, raise_def,
                          lift_option_type_def] >>
@@ -10068,18 +10068,26 @@ Resume eval_all_type_sound_mutual[Expr_Call_RawCallTarget]:
     rename1 `eval_exprs cx es st = (args_res,args_st)` >>
     first_x_assum drule_all >> strip_tac >>
     Cases_on `args_res` >> gvs[no_type_error_result_def]
-    >- (
+    >> FIRST [(
       rename1 `exprs_runtime_typed env es vs` >>
       mp_tac raw_call_args_runtime_typed_dest >>
       impl_tac >- simp[] >>
       strip_tac >> gvs[] >>
       `LENGTH vs = 3` by (gvs[exprs_runtime_typed_def] >> metis_tac[listTheory.LIST_REL_LENGTH]) >>
+      `((flags.rcf_is_delegate \/ flags.rcf_is_static) ==> amount = 0)` by (
+        strip_tac >>
+        `EL 2 es = Literal (BaseT (UintT 256)) (IntL 0)` by simp[] >>
+        `2 < LENGTH es` by simp[] >>
+        drule_all eval_exprs_EL_literal >> strip_tac >>
+        gvs[evaluate_literal_def, dest_NumV_def]) >>
       simp[bind_def, return_def] >> strip_tac >>
       `runtime_consistent env cx args_st` by simp[runtime_consistent_def] >>
-      drule_all (SRULE [] eval_raw_call_result_sound) >> strip_tac >>
+      mp_tac (Q.INST [`st` |-> `args_st`, `calldata` |-> `data`]
+        eval_raw_call_result_sound) >>
+      impl_tac >- simp[] >> strip_tac >>
       Cases_on `res` >>
-      gvs[runtime_consistent_def, no_type_error_result_def, expr_type_def]) >>
-    strip_tac >> gvs[]) >>
+      gvs[runtime_consistent_def, no_type_error_result_def, expr_type_def]),
+      strip_tac >> gvs[]])) >>
   rpt strip_tac >> gvs[Once well_typed_expr_def]
 QED
 
@@ -10092,21 +10100,32 @@ Resume eval_all_type_sound_mutual[Expr_Call_RawCallCalldataTarget]:
     simp[int_calls_expr_def] >> strip_tac >>
     qpat_x_assum `well_typed_expr env (Call _ (RawCallCalldataTarget _) _ _)` mp_tac >>
     rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
-    qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+    (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
     simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
       type_check_def, assert_def, return_def, raise_def, lift_option_type_def] >>
     Cases_on `eval_exprs cx es st` >>
     rename1 `eval_exprs cx es st = (args_res,args_st)` >>
     first_x_assum drule_all >> strip_tac >>
     Cases_on `args_res` >> gvs[no_type_error_result_def]
-    >- (
+    >> FIRST [(
       drule_all raw_call_calldata_args_runtime_typed_dest >> strip_tac >>
+      `((flags.rcf_is_delegate \/ flags.rcf_is_static) ==> amount = 0)` by (
+        strip_tac >>
+        `EL 1 es = Literal (BaseT (UintT 256)) (IntL 0)` by simp[] >>
+        `1 < LENGTH es` by (
+          Cases_on `es` >> gvs[] >>
+          rename1 `MAP expr_type rest = [_]` >>
+          Cases_on `rest` >> gvs[]) >>
+        drule_all eval_exprs_EL_literal >> strip_tac >>
+        gvs[evaluate_literal_def, dest_NumV_def]) >>
       gvs[bind_def, return_def] >> strip_tac >>
       `runtime_consistent env cx args_st` by simp[runtime_consistent_def] >>
-      drule_all (SRULE [] eval_raw_call_result_sound) >> strip_tac >>
+      mp_tac (Q.INST [`st` |-> `args_st`, `calldata` |-> `cx.txn.calldata`]
+        eval_raw_call_result_sound) >>
+      impl_tac >- simp[] >> strip_tac >>
       Cases_on `res` >>
-      gvs[runtime_consistent_def, no_type_error_result_def, expr_type_def]) >>
-    strip_tac >> gvs[]) >>
+      gvs[runtime_consistent_def, no_type_error_result_def, expr_type_def]),
+      strip_tac >> gvs[]])) >>
   rpt strip_tac >> gvs[Once well_typed_expr_def]
 QED
 
