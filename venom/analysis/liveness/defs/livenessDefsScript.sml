@@ -165,18 +165,13 @@ Definition liveness_recompute_fuel_def:
            (init_df_state [] (MAP (λbb. bb.bb_label) fn.fn_blocks)))
 End
 
-(* Public drivers remain legacy during proof preparation. C1.8 switches them
-   together with their proof consumers; no ordered equivalence is asserted. *)
+(* Public drivers recompute and overwrite each block, without a final refold. *)
 Definition liveness_analyze_def:
-  liveness_analyze fn =
-    df_analyze Backward [] list_union liveness_transfer
-              liveness_edge_transfer fn.fn_blocks NONE fn
+  liveness_analyze fn = liveness_recompute fn
 End
 
 Definition liveness_analyze_fuel_def:
-  liveness_analyze_fuel fuel fn =
-    df_analyze_fuel fuel Backward [] list_union liveness_transfer
-                    liveness_edge_transfer fn.fn_blocks NONE fn
+  liveness_analyze_fuel fuel fn = liveness_recompute_fuel fuel fn
 End
 
 (* ==========================================================================
