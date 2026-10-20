@@ -109,7 +109,7 @@ Definition liveness_edge_transfer_def:
 End
 
 (* ==========================================================================
-   Top-level analysis (recompute each block; schedule by set changes)
+   Block recomputation and staged Python-ordered drivers
    ========================================================================== *)
 
 (* Python OrderedSet equality ignores order. *)
@@ -165,8 +165,8 @@ Definition liveness_recompute_fuel_def:
            (init_df_state [] (MAP (λbb. bb.bb_label) fn.fn_blocks)))
 End
 
-(* Public compatibility driver during preparation of the recomputation proofs.
-   This is removed at the atomic public algorithm switch. *)
+(* Public drivers remain legacy during proof preparation. C1.8 switches them
+   together with their proof consumers; no ordered equivalence is asserted. *)
 Definition liveness_analyze_def:
   liveness_analyze fn =
     df_analyze Backward [] list_union liveness_transfer
@@ -344,3 +344,8 @@ Theorem liveness_acyclic_probe[local]:
 Proof
   EVAL_TAC
 QED
+
+val _ = List.app (fn (_,th) =>
+  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
+  then () else raise Fail "oracle in staged liveness definitions")
+  (DB.thms "livenessDefs");
