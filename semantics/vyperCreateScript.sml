@@ -754,6 +754,116 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
+(* Reduce only the executed monadic head. In particular, never simplify a
+   continuation or the context containing the guarded operand equations. *)
+local
+  val head_rules = map (REWR_CONV o CONV_RULE (DEPTH_CONV ETA_CONV))
+    (List.concat (map (CONJUNCTS o SPEC_ALL)
+    [eval_create_def, bind_apply, ignore_bind_apply, lift_option_type_def,
+     get_accounts_def, check_def, assert_def, return_def, raise_def,
+     update_accounts_def, get_transient_storage_def,
+     get_pending_deletions_def, create_soft_failure_def,
+     pairTheory.pair_case_thm, sumTheory.sum_case_def,
+     optionTheory.option_case_def, LET_THM, COND_RATOR, COND_CLAUSES]));
+  val guard_ss = bool_ss;
+  val frame_ss = bool_ss ++ rewrites [evaluation_state_accfupds];
+  val log_ss = frame_ss ++ rewrites [rich_listTheory.IS_PREFIX_REFL];
+  val error_ss = bool_ss ++ rewrites
+    [sumTheory.INR_11, sumTheory.sum_distinct, exception_11,
+     vyperValueOperationTheory.error_distinct];
+
+  fun create_head_conv facts tm =
+    let
+      fun equation th =
+        if is_eq (concl th) then th
+        else if is_neg (concl th) then EQF_INTRO th else EQT_INTRO th;
+      val root = FIRST_CONV
+        (BETA_CONV :: map (REWR_CONV o equation) facts @ head_rules);
+      fun step tm =
+        (CHANGED_CONV root ORELSEC
+         (fn tm =>
+           let val (h,args) = strip_comb tm in
+             if is_const h andalso
+                ((fst (dest_const h) = "pair_CASE" andalso length args = 2) orelse
+                 (mem (fst (dest_const h)) ["sum_CASE", "option_CASE"] andalso
+                  length args = 3))
+             then funpow (length args - 1) RATOR_CONV
+                    (RAND_CONV (CHANGED_CONV (create_head_conv facts))) tm
+             else if is_cond tm then
+               RATOR_CONV (RATOR_CONV
+                 (RAND_CONV (CHANGED_CONV (SIMP_CONV guard_ss facts)))) tm
+             else RATOR_CONV (CHANGED_CONV (create_head_conv facts)) tm
+           end)) tm;
+    in REPEATC step tm end;
+
+  fun create_guard tm =
+    if is_cond tm then #1 (dest_cond tm)
+    else
+      let val (h,args) = strip_comb tm in
+        if is_const h andalso
+           ((fst (dest_const h) = "pair_CASE" andalso length args = 2) orelse
+            (mem (fst (dest_const h)) ["sum_CASE", "option_CASE"] andalso
+             length args = 3))
+        then create_guard (hd args)
+        else create_guard (rator tm)
+      end;
+
+  fun create_paths tail finish (asl,w) =
+    let
+      val cv = create_head_conv (map ASSUME asl);
+      val tm = lhs (fst (dest_imp w));
+      val th = cv tm;
+      val next = rhs (concl th);
+      val reduce = CONV_TAC (LAND_CONV (LAND_CONV (K th)));
+    in
+      (reduce >>
+       (case total create_guard next of
+          SOME guard => ASM_CASES_TAC guard >> create_paths tail finish
+        | NONE =>
+            DISCH_THEN (fn result =>
+              if pairSyntax.is_pair next then finish (SOME result)
+              else mp_tac (MATCH_MP tail result) >> finish NONE))) (asl,w)
+    end;
+
+  (* Only substitute the final-state equation in the goal; leave the
+     guarded decode and check facts untouched. A tail lemma already supplies
+     the conclusion, so only its accessor updates need simplifying. *)
+  fun create_state_finish ss result =
+    (case result of
+       NONE => ALL_TAC
+     | SOME result =>
+         let
+           val snd = rator (pairSyntax.mk_snd (lhs (concl result)));
+           val state = REWRITE_RULE [pairTheory.SND] (AP_TERM snd result);
+         in SUBST1_TAC (SYM state) end) >> simp_tac ss [];
+
+  (* Outcome properties need only the result projection, not the state or
+     any decode/check assumptions. *)
+  fun create_error_finish result =
+    (case result of
+       NONE => ALL_TAC
+     | SOME result =>
+         let
+           val fst = rator (pairSyntax.mk_fst (lhs (concl result)));
+           val outcome = SIMP_RULE error_ss []
+             (REWRITE_RULE [pairTheory.FST] (AP_TERM fst result));
+         in
+           if aconv (concl outcome) F then CONTR_TAC outcome
+           else SUBST1_TAC (SYM outcome)
+         end) >> simp_tac error_ss [];
+
+in
+  fun create_result_tac tail finish =
+    qpat_x_assum `eval_create _ _ _ _ _ _ _ = _` mp_tac >>
+    create_paths (REWRITE_RULE [GSYM ignore_bind_def] tail) finish;
+  val create_frame_tac =
+    create_result_tac create_tail_preserves_scopes (create_state_finish frame_ss);
+  val create_logs_tac =
+    create_result_tac create_tail_log_extends (create_state_finish log_ss);
+  fun create_outcome_tac tail = create_result_tac tail create_error_finish;
+  val create_exception_tac = create_outcome_tac create_tail_exception_is_error;
+end;
+
 (* Constructor events extend, rather than preserve, the log sequence. *)
 Theorem eval_create_logs_extend:
   eval_create cx kind has_salt rof arg_tys vs st = (res, st') ==>
@@ -761,40 +871,13 @@ Theorem eval_create_logs_extend:
 Proof
   strip_tac >>
   Cases_on `dest_create_args kind has_salt vs`
-  >- gvs[eval_create_def, bind_def, lift_option_type_def, return_def, raise_def] >>
+  >- create_logs_tac >>
   rename1 `dest_create_args kind has_salt vs = SOME ops` >>
   Cases_on `create_arg_ctor_types kind has_salt arg_tys`
-  >- gvs[eval_create_def, bind_def, lift_option_type_def, return_def, raise_def] >>
+  >- create_logs_tac >>
   rename1 `create_arg_ctor_types kind has_salt arg_tys = SOME ctor_tys` >>
   Cases_on `build_create_code (get_tenv cx) kind ops st.accounts ctor_tys` >>
-  gvs[eval_create_def, bind_def, ignore_bind_def, lift_option_type_def,
-      get_accounts_def, check_def, return_def, raise_def, AllCaseEqs()] >>
-  rename1 `build_create_code (get_tenv cx) kind ops st.accounts ctor_tys =
-            SOME code_info` >>
-  gvs[eval_create_def, bind_apply, ignore_bind_apply, lift_option_type_def,
-      get_accounts_def, update_accounts_def, get_transient_storage_def,
-      get_pending_deletions_def, update_transient_def, check_def, assert_def, return_def,
-      raise_def, AllCaseEqs(), COND_RATOR] >>
-  (* The pre-creation checks touch only accounts, so they append nothing; the
-     EVM-backed tail is handed to create_tail_log_extends. *)
-  gvs[COND_RATOR] >|
-  [(* balance / nonce limit: soft failure *)
-   (Cases_on `rof` >> gvs[create_soft_failure_def, return_def, raise_def]),
-   (* balance / nonce limit: soft failure *)
-   (Cases_on `rof` >> gvs[create_soft_failure_def, return_def, raise_def]),
-   (* address collision: nonce bump, then soft failure *)
-   (Cases_on `rof` >>
-    gvs[ignore_bind_apply, update_accounts_def, create_soft_failure_def,
-        return_def, raise_def, evaluation_state_accounts_tStorage_acc]),
-   (* EVM-backed creation *)
-   (gvs[assert_def, bind_apply, get_transient_storage_def,
-         get_pending_deletions_def, get_accounts_def, update_accounts_def, return_def,
-         raise_def, AllCaseEqs()] >>
-    qpat_x_assum `(case run_create_evm _ _ _ _ _ _ _ _ of _ => _) _`
-      (fn tm => mp_tac tm) >>
-    strip_tac >>
-    drule create_tail_log_extends >>
-    simp[evaluation_state_accfupds])]
+  create_logs_tac
 QED
 
 Theorem eval_create_preserves_scopes_immutables:
@@ -803,42 +886,13 @@ Theorem eval_create_preserves_scopes_immutables:
 Proof
   strip_tac >>
   Cases_on `dest_create_args kind has_salt vs`
-  >- gvs[eval_create_def, bind_def, lift_option_type_def, return_def, raise_def] >>
+  >- create_frame_tac >>
   rename1 `dest_create_args kind has_salt vs = SOME ops` >>
   Cases_on `create_arg_ctor_types kind has_salt arg_tys`
-  >- gvs[eval_create_def, bind_def, lift_option_type_def, return_def, raise_def] >>
+  >- create_frame_tac >>
   rename1 `create_arg_ctor_types kind has_salt arg_tys = SOME ctor_tys` >>
   Cases_on `build_create_code (get_tenv cx) kind ops st.accounts ctor_tys` >>
-  gvs[eval_create_def, bind_def, ignore_bind_def, lift_option_type_def,
-      get_accounts_def, check_def, return_def,
-      raise_def, AllCaseEqs()] >>
-  rename1 `build_create_code (get_tenv cx) kind ops st.accounts ctor_tys =
-            SOME code_info` >>
-  (* The pre-conditions are conditionals applied to arguments, which gvs
-     cannot case-split.  COND_RATOR eta-expands both of them so that the
-     following gvs splits them, leaving four goals in the order
-     (balance, collision) = (T,T), (T,F), (F,T), (F,F). *)
-  gvs[eval_create_def, bind_apply, ignore_bind_apply, lift_option_type_def,
-      get_accounts_def, update_accounts_def, get_transient_storage_def,
-      get_pending_deletions_def, update_transient_def, check_def, assert_def, return_def,
-      raise_def, AllCaseEqs(), COND_RATOR,
-      evaluation_state_accounts_tStorage_acc] >|
-  [(* insufficient balance or nonce limit: soft failure *)
-   (Cases_on `rof` >> gvs[create_soft_failure_def, return_def, raise_def]),
-   (* insufficient balance or nonce limit: soft failure *)
-   (Cases_on `rof` >> gvs[create_soft_failure_def, return_def, raise_def]),
-   (* address collision: nonce bump, then soft failure *)
-   (Cases_on `rof` >>
-    gvs[create_soft_failure_def, return_def, raise_def,
-        evaluation_state_accfupds]),
-   (* EVM-backed creation *)
-   gvs[bind_apply, get_transient_storage_def, get_pending_deletions_def,
-       update_accounts_def, get_accounts_def, return_def, evaluation_state_accfupds,
-       AllCaseEqs()] >>
-   qpat_x_assum `(case run_create_evm _ _ _ _ _ _ _ _ of _ => _) _`
-     (fn tm => mp_tac tm) >>
-   drule create_tail_preserves_scopes >>
-   simp[]]
+  create_frame_tac
 QED
 
 (* Storage is NOT preserved across creation in general: the constructor runs
@@ -913,42 +967,13 @@ Theorem eval_create_exception_is_error:
 Proof
   strip_tac >>
   Cases_on `dest_create_args kind has_salt vs`
-  >- gvs[eval_create_def, bind_def, lift_option_type_def, return_def, raise_def] >>
+  >- create_exception_tac >>
   rename1 `dest_create_args kind has_salt vs = SOME ops` >>
   Cases_on `create_arg_ctor_types kind has_salt arg_tys`
-  >- gvs[eval_create_def, bind_def, lift_option_type_def, return_def, raise_def] >>
+  >- create_exception_tac >>
   rename1 `create_arg_ctor_types kind has_salt arg_tys = SOME ctor_tys` >>
   Cases_on `build_create_code (get_tenv cx) kind ops st.accounts ctor_tys` >>
-  (* Only the EVM-backed tail can produce an exception: the pre-creation
-     checks raise via create_soft_failure or assert, and both are covered by
-     their own lemmas.  create_soft_failure is left unfolded in the tail so
-     that the tail still matches create_tail_exception_is_error. *)
-  gvs[eval_create_def, bind_apply, ignore_bind_apply, lift_option_type_def,
-      get_accounts_def, get_transient_storage_def, get_pending_deletions_def, update_accounts_def,
-      check_def, assert_def, return_def, raise_def, AllCaseEqs(),
-      COND_RATOR] >|
-  [(* insufficient balance or nonce limit: soft failure *)
-   (Cases_on `rof` >> gvs[create_soft_failure_def, return_def, raise_def]),
-   (* insufficient balance or nonce limit: soft failure *)
-   (Cases_on `rof` >> gvs[create_soft_failure_def, return_def, raise_def]),
-   (* address collision: nonce bump, then soft failure *)
-   (Cases_on `rof` >>
-    gvs[ignore_bind_apply, update_accounts_def, create_soft_failure_def,
-        return_def, raise_def]),
-   (* every EVM-backed tail failure raises an Error *)
-   (Cases_on `run_create_evm cx.txn.target
-       (create_address cx.txn.target
-          (lookup_account cx.txn.target st.accounts).nonce
-          ops.co_salt x.cc_initcode) x.cc_initcode ops.co_value
-       st.accounts st.tStorage st.pending_deletions (vyper_to_tx_params cx.txn)`
-    >- (Cases_on `rof` >>
-        gvs[bind_apply, ignore_bind_apply, update_accounts_def,
-            create_soft_failure_def, return_def, raise_def] >>
-        rpt strip_tac >> gvs[]) >>
-    PairCases_on `x'` >> Cases_on `x'0` >> Cases_on `rof` >>
-    gvs[bind_apply, ignore_bind_apply, update_accounts_def,
-        update_transient_def, update_pending_deletions_def, append_logs_def, create_soft_failure_def,
-        return_def, raise_def, AllCaseEqs()])]
+  create_exception_tac
 QED
 
 Theorem eval_create_no_type_error:
@@ -959,23 +984,5 @@ Theorem eval_create_no_type_error:
   eval_create cx kind has_salt rof arg_tys vs st = (res, st') ==>
   !msg. res <> INR (Error (TypeError msg))
 Proof
-  strip_tac >>
-  qpat_x_assum `eval_create _ _ _ _ _ _ st = _` mp_tac >>
-  gvs[eval_create_def, bind_def, ignore_bind_def, lift_option_type_def,
-      get_accounts_def, update_accounts_def, get_transient_storage_def,
-      get_pending_deletions_def, update_transient_def, check_def, return_def, raise_def, AllCaseEqs()] >>
-  gvs[eval_create_def, bind_apply, ignore_bind_apply, lift_option_type_def,
-      get_accounts_def, update_accounts_def, get_transient_storage_def,
-      get_pending_deletions_def, update_transient_def, check_def, assert_def,
-      return_def, raise_def, AllCaseEqs(), COND_RATOR] >>
-  gvs[COND_RATOR] >>
-  (* Every remaining exceptional result is a non-TypeError Error: either a
-     Vyper-side soft failure or an EVM-backed constructor failure. *)
-  strip_tac >>
-  FIRST [drule_all create_soft_failure_no_type_error >> simp[],
-         drule_all create_tail_no_type_error >> simp[],
-         gvs[bind_apply, ignore_bind_apply, update_accounts_def,
-             update_transient_def, update_pending_deletions_def,
-             append_logs_def, create_soft_failure_def,
-             return_def, raise_def, AllCaseEqs()]]
+  strip_tac >> create_outcome_tac create_tail_no_type_error
 QED

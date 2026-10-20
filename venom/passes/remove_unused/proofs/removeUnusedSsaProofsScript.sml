@@ -382,7 +382,8 @@ QED
 Theorem phi_pairs_mem_var[local]:
   !ops l v. MEM (l, v) (phi_pairs ops) ==> MEM (Var v) ops
 Proof
-  ho_match_mp_tac phi_pairs_ind >> rw[phi_pairs_def] >> gvs[] >> metis_tac[]
+  ho_match_mp_tac phi_pairs_ind >> rw[phi_pairs_def] >> gvs[] >>
+  qpat_x_assum `!l v. _` (drule_then assume_tac) >> simp[]
 QED
 
 Theorem phi_well_formed_var_pair[local]:

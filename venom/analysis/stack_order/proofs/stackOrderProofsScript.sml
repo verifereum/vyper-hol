@@ -236,7 +236,8 @@ QED
 Theorem stack_swap_length[local]:
   ∀stack op. LENGTH (stack_swap stack op) = LENGTH stack
 Proof
-  rw[stack_swap_def, LET_THM] >> CASE_TAC >> simp[]
+  rpt gen_tac >> Cases_on `stack_find op stack` >>
+  simp[stack_swap_def, LET_THM, LENGTH_LUPDATE]
 QED
 
 Theorem stack_swap_to_length[local]:

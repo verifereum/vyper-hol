@@ -15,6 +15,27 @@ Ancestors
   dfgAnalysisProps venomState venomWf venomExecSemantics venomExecProofs
   pred_set arithmetic list rich_list finite_map
 
+(* Select only the proved dispatch equations used by this pass. *)
+val step_inst_base_opcode_rewrites = let
+  fun key th = let
+    val (_, body) = strip_forall (concl th)
+    val (guard, _) = dest_imp body
+  in rhs guard end
+in map (fn th => (key th, th))
+  (CONJUNCTS venomExecSemanticsTheory.step_inst_base_opcode_eqs) end;
+
+fun step_inst_base_for opc =
+  #2 (valOf (List.find (fn (key, _) => aconv key opc)
+    step_inst_base_opcode_rewrites));
+
+(* Dispatch/shape reduction only: word and state payloads stay opaque. *)
+val branch_step_ss = pure_ss ++ boolSimps.BOOL_ss ++
+  simpLib.type_ssfrag ``:instruction`` ++
+  simpLib.type_ssfrag ``:operand`` ++
+  simpLib.type_ssfrag ``:operand list`` ++
+  simpLib.type_ssfrag ``:bytes32 option`` ++ rewrites
+    [venomInstTheory.instruction_accfupds, combinTheory.K_THM, LET_THM];
+
 (* ===== Label Preservation ===== *)
 
 Theorem branch_opt_block_label[local]:
@@ -77,7 +98,7 @@ Theorem jnz_iszero_equiv[local]:
     step_inst_base inst1 st = step_inst_base inst2 st
 Proof
   rpt strip_tac >>
-  simp[step_inst_base_def, eval_operand_def] >>
+  asm_simp_tac branch_step_ss [step_inst_base_for ``JNZ``, eval_operand_def] >>
   Cases_on `input_val = 0w` >> gvs[bool_to_word_def]
 QED
 
@@ -374,9 +395,10 @@ Proof
   gvs[venomInstTheory.get_instruction_def, step_inst_non_invoke,
       venomInstTheory.is_terminator_def, EL_APPEND1, EL_APPEND2,
       listTheory.LENGTH_FRONT] >>
-  (* Expand step_inst_base for JNZ and ISZERO, case split on v *)
-  simp[step_inst_base_def, exec_pure1_def,
-       eval_operand_def, lookup_var_def] >>
+  (* Resolve only JNZ/ISZERO and operand shapes, then case split on v. *)
+  asm_simp_tac branch_step_ss
+    [step_inst_base_for ``JNZ``, step_inst_base_for ``ISZERO``,
+     exec_pure1_def, eval_operand_def, lookup_var_def] >>
   Cases_on `FLOOKUP st.vs_vars v` >>
   simp[lift_result_def, update_var_def] >>
   (* SOME case: simplify original's case expression *)
@@ -387,14 +409,14 @@ Proof
   ONCE_REWRITE_TAC[exec_block_def]
   >- (gvs[venomInstTheory.get_instruction_def, step_inst_non_invoke,
           venomInstTheory.is_terminator_def, EL_APPEND2,
-          listTheory.LENGTH_FRONT, step_inst_base_def, eval_operand_def,
+          listTheory.LENGTH_FRONT, step_inst_base_for ``JNZ``, eval_operand_def,
           lookup_var_def, FLOOKUP_UPDATE, bool_to_word_def, jump_to_def] >>
       IF_CASES_TAC >>
       simp[lift_result_def, state_equiv_def, execution_equiv_def,
            lookup_var_def, FLOOKUP_UPDATE])
   >- (gvs[venomInstTheory.get_instruction_def, step_inst_non_invoke,
           venomInstTheory.is_terminator_def, EL_APPEND2,
-          listTheory.LENGTH_FRONT, step_inst_base_def, eval_operand_def,
+          listTheory.LENGTH_FRONT, step_inst_base_for ``JNZ``, eval_operand_def,
           lookup_var_def, FLOOKUP_UPDATE, bool_to_word_def, jump_to_def] >>
       IF_CASES_TAC >>
       simp[lift_result_def, state_equiv_def, execution_equiv_def,

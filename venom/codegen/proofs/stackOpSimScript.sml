@@ -319,27 +319,77 @@ val asm_next_pc_tac =
   every_case_tac >> gvs[asm_next_def, LET_THM] >>
   every_case_tac >> gvs[];
 
+(* Prune errors after each result-spine split, then project only the PC.
+   AsmOK's state is opaque until projection, so memory/value conditionals
+   never become case-split candidates. *)
+local
+  val pc_ss = bool_ss ++ simpLib.rewrites
+    [Cong (REFL ``AsmOK s``), Cong (REFL ``AsmError e``),
+     Cong (REFL ``AsmHalt s``), Cong (REFL ``AsmRevert s``),
+     Cong (REFL ``AsmFault s``), listTheory.list_case_def,
+     pairTheory.pair_CASE_def, pairTheory.UNCURRY,
+     optionTheory.option_case_def, asm_result_case_def,
+     asm_result_distinct, optionTheory.SOME_11,
+     optionTheory.NOT_NONE_SOME, optionTheory.NOT_SOME_NONE,
+     asm_state_accfupds, asm_next_def, combinTheory.K_THM, LET_THM]
+  val result_ty = ``:asm_result``
+  val state_ty = ``:asm_state``
+  val project = ``\r. case r of AsmOK s => SOME s.as_pc | _ => NONE``
+  fun pc_eq t = is_eq t andalso
+    (type_of (lhs t) = result_ty orelse type_of (lhs t) = state_ty)
+in
+fun asm_result_pc_tac (g as (asl, _)) =
+  let
+    val eq = valOf (List.find pc_eq asl)
+    val result = lhs eq
+  in
+    if type_of result = state_ty then
+      ACCEPT_TAC (SYM (simpLib.SIMP_RULE pc_ss []
+        (AP_TERM ``\s:asm_state. s.as_pc`` (ASSUME eq)))) g
+    else case total TypeBase.dest_case result of
+      SOME (_, scrutinee, _) =>
+        (Cases_on [ANTIQUOTE scrutinee] >>
+         FULL_SIMP_TAC pc_ss [] >> asm_result_pc_tac) g
+    | NONE => if is_cond result then
+        (BOOL_CASES_TAC (#1 (dest_cond result)) >>
+         FULL_SIMP_TAC pc_ss [] >> asm_result_pc_tac) g
+      else
+        ACCEPT_TAC (SYM (simpLib.SIMP_RULE pc_ss []
+          (AP_TERM project (ASSUME eq)))) g
+  end;
+fun asm_result_pc_simp_tac ths =
+  POP_ASSUM_LIST (fn asl =>
+    MAP_EVERY ASSUME_TAC (List.filter (pc_eq o concl) asl)) >>
+  FULL_SIMP_TAC pc_ss ths;
+(* Dispatch with the same small simpset: word comparisons in binop/unop
+   arguments stay opaque, as do values inside successful result states. *)
+fun asm_group_pc_tac dispatch ths =
+  rpt gen_tac >> SIMP_TAC pc_ss [dispatch] >>
+  rpt IF_CASES_TAC >> SIMP_TAC pc_ss [] >> strip_tac >>
+  asm_result_pc_simp_tac ths >> asm_result_pc_tac;
+end;
+
 (* Per-group PC advance lemmas (local — only used to compose asm_step_pc) *)
 Theorem asm_step_arith_pc[local]:
   !name s1 s2. asm_step_arith name s1 = SOME (AsmOK s2) ==>
     s2.as_pc = s1.as_pc + 1
 Proof
-  rw[asm_step_arith_def, asm_binop_def, asm_unop_def, asm_ternop_def] >>
-  asm_next_pc_tac
+  asm_group_pc_tac asm_step_arith_def
+    [asm_binop_def, asm_unop_def, asm_ternop_def]
 QED
 
 Theorem asm_step_compare_pc[local]:
   !name s1 s2. asm_step_compare name s1 = SOME (AsmOK s2) ==>
     s2.as_pc = s1.as_pc + 1
 Proof
-  rw[asm_step_compare_def, asm_binop_def, asm_unop_def] >> asm_next_pc_tac
+  asm_group_pc_tac asm_step_compare_def [asm_binop_def, asm_unop_def]
 QED
 
 Theorem asm_step_bitwise_pc[local]:
   !name s1 s2. asm_step_bitwise name s1 = SOME (AsmOK s2) ==>
     s2.as_pc = s1.as_pc + 1
 Proof
-  rw[asm_step_bitwise_def, asm_binop_def, asm_unop_def] >> asm_next_pc_tac
+  asm_group_pc_tac asm_step_bitwise_def [asm_binop_def, asm_unop_def]
 QED
 
 Theorem asm_step_memory_pc[local]:
@@ -348,12 +398,11 @@ Theorem asm_step_memory_pc[local]:
 Proof
   rpt gen_tac >> simp[asm_step_memory_def] >>
   rpt IF_CASES_TAC >> simp[] >> strip_tac >>
-  gvs[asm_mload_def, asm_mstore_def, asm_mstore8_def,
-      asm_sload_def, asm_sstore_def,
-      asm_tload_def, asm_tstore_def, asm_sha3_def, asm_state_unop_def,
-      asm_binop_def, asm_pop_def, asm_push_val_def, asm_copy_to_mem_def,
-      asm_mcopy_def, asm_next_def, LET_THM] >>
-  every_case_tac >> gvs[]
+  asm_result_pc_simp_tac
+    [asm_mload_def, asm_mstore_def, asm_mstore8_def,
+     asm_sload_def, asm_sstore_def, asm_tload_def, asm_tstore_def,
+     asm_sha3_def, asm_pop_def, asm_push_val_def, asm_mcopy_def] >>
+  asm_result_pc_tac
 QED
 
 Theorem asm_step_control_pc[local]:
@@ -361,9 +410,82 @@ Theorem asm_step_control_pc[local]:
     name <> "JUMP" /\ name <> "JUMPI" ==>
     s2.as_pc = s1.as_pc + 1
 Proof
-  rw[asm_step_control_def, asm_return_op_def, asm_revert_op_def] >>
-  asm_next_pc_tac
+  asm_group_pc_tac asm_step_control_def
+    [asm_return_op_def, asm_revert_op_def]
 QED
+
+Theorem asm_consume_call_outcome_pc[local]:
+  !rq ro rs stk s s2.
+    asm_consume_call_outcome rq ro rs stk s = AsmOK s2 ==>
+    s2.as_pc = s.as_pc + 1
+Proof
+  simp[asm_consume_call_outcome_def, pairTheory.pair_CASE_def,
+       pairTheory.UNCURRY, asm_next_def, LET_THM] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem extract_asm_result_pc[local]:
+  !rr s v ro rs result.
+    extract_asm_result s v ro rs rr = SOME result ==>
+    (SND result).as_pc = s.as_pc
+Proof
+  rpt gen_tac >> Cases_on `rr`
+  >- simp[extract_asm_result_def] >>
+  rename1 `extract_asm_result _ _ _ _ (SOME pair)` >>
+  PairCases_on `pair` >> simp[extract_asm_result_def] >>
+  rename1 `estate.contexts` >>
+  Cases_on `estate.contexts` >> simp[] >>
+  rename1 `estate.contexts = ctxt::rest` >>
+  Cases_on `rest` >>
+  simp[pairTheory.pair_CASE_def, pairTheory.UNCURRY, LET_THM] >>
+  rpt strip_tac >> gvs[]
+QED
+
+(* Only inspect cases selecting the result constructor.  In particular, never
+   split conditionals buried in stack values, accounts, logs or memory. *)
+val asm_pc_ss =
+  bool_ss ++ simpLib.rewrites
+    [Cong (REFL ``AsmOK s``),
+     listTheory.list_case_def, pairTheory.pair_CASE_def,
+     pairTheory.UNCURRY, pairTheory.FST, pairTheory.SND,
+     optionTheory.option_case_def,
+     asm_result_case_def, asm_result_distinct,
+     optionTheory.SOME_11, optionTheory.NOT_NONE_SOME,
+     optionTheory.NOT_SOME_NONE, pairTheory.PAIR_EQ,
+     asm_state_accfupds, combinTheory.K_THM, LET_THM,
+     boolTheory.COND_CLAUSES];
+
+local
+  val result_ty = ``:asm_result``
+  val extract = ``extract_asm_result``
+  val consume = ``asm_consume_call_outcome``
+  val project = ``\r. case r of AsmOK s => SOME s.as_pc | _ => NONE``
+in
+fun asm_extcall_pc_tac (g as (asl, _)) =
+  let
+    val eq = valOf (List.find
+      (fn t => is_eq t andalso type_of (lhs t) = result_ty) asl)
+    val result = lhs eq
+  in
+    case total TypeBase.dest_case result of
+      SOME (_, scrutinee, _) =>
+      let
+        val extract_pc =
+          if same_const (#1 (strip_comb scrutinee)) extract then
+            TRY (drule extract_asm_result_pc >> strip_tac)
+          else ALL_TAC
+      in
+        (Cases_on [ANTIQUOTE scrutinee] >> extract_pc >>
+         FULL_SIMP_TAC asm_pc_ss [] >> asm_extcall_pc_tac) g
+      end
+    | NONE => if same_const (#1 (strip_comb result)) consume then
+      ACCEPT_TAC (simpLib.SIMP_RULE asm_pc_ss []
+        (MATCH_MP asm_consume_call_outcome_pc (ASSUME eq))) g
+    else
+      ACCEPT_TAC (SYM (simpLib.SIMP_RULE asm_pc_ss (map ASSUME asl)
+        (AP_TERM project (ASSUME eq)))) g
+  end;
+end;
 
 Theorem asm_step_extcall_pc[local]:
   !name s1 s2. asm_step_extcall name s1 = SOME (AsmOK s2) ==>
@@ -371,47 +493,52 @@ Theorem asm_step_extcall_pc[local]:
 Proof
   rw[asm_step_extcall_def, asm_exec_call_def, asm_exec_staticcall_def,
      asm_exec_delegatecall_def, asm_exec_create_def, asm_exec_create2_def,
-     asm_selfdestruct_def, extract_asm_result_def, asm_to_tx_params_def,
-     asm_consume_call_outcome_def,
+     asm_selfdestruct_def,
      asm_next_def, LET_THM] >>
-  asm_next_pc_tac >> rpt (pairarg_tac >> gvs[])
+  asm_extcall_pc_tac
 QED
 
 Theorem asm_step_copy_pc[local]:
   !name s1 s2. asm_step_copy name s1 = SOME (AsmOK s2) ==>
     s2.as_pc = s1.as_pc + 1
 Proof
-  rw[asm_step_copy_def, asm_copy_to_mem_def, asm_returndatacopy_def,
-     asm_extcodecopy_def, asm_next_def, LET_THM] >>
-  asm_next_pc_tac
+  rpt gen_tac >> simp[asm_step_copy_def] >>
+  rpt IF_CASES_TAC >> simp[] >> strip_tac >>
+  asm_result_pc_simp_tac
+    [asm_copy_to_mem_def, asm_returndatacopy_def, asm_extcodecopy_def] >>
+  asm_result_pc_tac
 QED
 
 Theorem asm_step_context_pc[local]:
   !name s1 s2. asm_step_context name s1 = SOME (AsmOK s2) ==>
     s2.as_pc = s1.as_pc + 1
 Proof
-  rw[asm_step_context_def, asm_gas_def, asm_push_val_def, asm_state_unop_def,
-     asm_next_def, LET_THM] >>
-  simp[] >>
-  every_case_tac >> gvs[]
+  rpt gen_tac >> simp[asm_step_context_def] >>
+  rpt IF_CASES_TAC >> simp[] >> strip_tac >>
+  asm_result_pc_simp_tac
+    [asm_gas_def, asm_push_val_def, asm_state_unop_def] >>
+  asm_result_pc_tac
 QED
 
 Theorem asm_dup_pc[local]:
   !n s1 s2. asm_dup n s1 = AsmOK s2 ==> s2.as_pc = s1.as_pc + 1
 Proof
-  rw[asm_dup_def, asm_next_def] >> asm_next_pc_tac
+  rpt gen_tac >> strip_tac >>
+  asm_result_pc_simp_tac [asm_dup_def] >> asm_result_pc_tac
 QED
 
 Theorem asm_swap_pc[local]:
   !n s1 s2. asm_swap n s1 = AsmOK s2 ==> s2.as_pc = s1.as_pc + 1
 Proof
-  rw[asm_swap_def, asm_next_def, LET_THM] >> asm_next_pc_tac
+  rpt gen_tac >> strip_tac >>
+  asm_result_pc_simp_tac [asm_swap_def] >> asm_result_pc_tac
 QED
 
 Theorem asm_log_pc[local]:
   !n s1 s2. asm_log n s1 = AsmOK s2 ==> s2.as_pc = s1.as_pc + 1
 Proof
-  rw[asm_log_def, asm_next_def, LET_THM] >> asm_next_pc_tac
+  rpt gen_tac >> strip_tac >>
+  asm_result_pc_simp_tac [asm_log_def] >> asm_result_pc_tac
 QED
 
 (* Main per-step PC advance theorem *)
@@ -449,8 +576,8 @@ Proof
       reverse (Cases_on `ALOOKUP log_table s`) >-
         (gvs[] >> imp_res_tac asm_log_pc >> gvs[]) >>
       gvs[])
-  (* Non-AsmOp cases: FLOOKUP + asm_next *)
-  >> every_case_tac >> gvs[]
+  (* Non-AsmOp cases: inspect FLOOKUP results, not pushed values. *)
+  >> asm_result_pc_simp_tac [] >> asm_result_pc_tac
 QED
 
 (* Multi-step PC advance: if we execute n AsmOK steps over instructions

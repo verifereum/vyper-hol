@@ -2382,12 +2382,16 @@ Proof
   gvs[] >>
   Cases_on `stack_get_unfixed_depth op
     (LENGTH pending - (idx + 1)) (LENGTH pending) ps1.ps_stack` >> simp[]
-  >- (strip_tac >> gvs[pending_inventory_wf_def] >> gen_tac >>
-      Cases_on `MEM op' pending`
+  >- (strip_tac >> gvs[] >> rewrite_tac[pending_inventory_wf_def] >>
+      gen_tac >> Cases_on `MEM op' pending`
       >- (qpat_assum `!x. MEM x pending ==> _`
             (qspec_then `op'` (drule_then assume_tac)) >>
-          qpat_assum `!op. LIST_ELEM_COUNT op pending <= _`
-            (qspec_then `op'` assume_tac) >> metis_tac[LESS_EQ_TRANS])
+          qpat_assum `pending_inventory_wf pending ps`
+            (assume_tac o Q.SPEC `op'` o
+             REWRITE_RULE [pending_inventory_wf_def]) >>
+          irule LESS_EQ_TRANS >>
+          qexists_tac `LIST_ELEM_COUNT op' ps.ps_stack +
+            (if op' IN FDOM ps.ps_spilled then 1 else 0)` >> simp[])
       >> fs[GSYM LIST_ELEM_COUNT_MEM] >> decide_tac) >>
   pairarg_tac >> simp[] >>
   `residual_budget_wf base' pending ps2` by
@@ -2412,14 +2416,23 @@ Proof
        `reduce_ops`, `ps2`] mp_tac reduce_depth_plan_length_floor >>
      simp[] >> decide_tac) >>
   `pending_inventory_wf pending ps2` by
-    (fs[pending_inventory_wf_def] >> gen_tac >>
+    (rewrite_tac[pending_inventory_wf_def] >> gen_tac >>
      Cases_on `MEM op' pending`
      >- (qpat_assum `!y. MEM y pending ==> _`
            (qspec_then `op'` (drule_then assume_tac)) >>
          qpat_assum `!x. MEM x pending ==> _`
            (qspec_then `op'` (drule_then assume_tac)) >>
-         qpat_assum `!op. LIST_ELEM_COUNT op pending <= _`
-           (qspec_then `op'` assume_tac) >> metis_tac[LESS_EQ_TRANS])
+         qpat_assum `pending_inventory_wf pending ps`
+           (assume_tac o Q.SPEC `op'` o
+            REWRITE_RULE [pending_inventory_wf_def]) >>
+         irule LESS_EQ_TRANS >>
+         qexists_tac `LIST_ELEM_COUNT op' ps1.ps_stack +
+           (if op' IN FDOM ps1.ps_spilled then 1 else 0)` >>
+         conj_tac
+         >- (irule LESS_EQ_TRANS >>
+             qexists_tac `LIST_ELEM_COUNT op' ps.ps_stack +
+               (if op' IN FDOM ps.ps_spilled then 1 else 0)` >> simp[])
+         >> simp[])
      >> fs[GSYM LIST_ELEM_COUNT_MEM] >> decide_tac) >>
   Cases_on `stack_get_unfixed_depth op
     (LENGTH pending - (idx + 1)) (LENGTH pending) ps2.ps_stack` >> simp[]
@@ -2455,13 +2468,15 @@ Proof
     (qspecl_then [`LENGTH pending - (idx + 1)`, `ps3`,
        `swap2_ops`, `ps4`] mp_tac do_swap_multiplicity_layout >>
      `spill_alloc_layout_wf ps3.ps_alloc ps3.ps_spilled` by
-       metis_tac[residual_budget_wf_do_swap, residual_budget_wf_def] >>
+       (qspecl_then [`base'`, `pending`, `dist'`, `ps2`,
+          `swap1_ops`, `ps3`] mp_tac residual_budget_wf_do_swap >>
+        impl_tac >- simp[] >>
+        disch_then (ACCEPT_TAC o CONJUNCT1 o CONJUNCT2 o
+          REWRITE_RULE [residual_budget_wf_def])) >>
      simp[]) >>
-  strip_tac >> gvs[pending_inventory_wf_def] >> gen_tac >>
-  first_x_assum (qspec_then `op'` assume_tac) >>
-  first_x_assum (qspec_then `op'` assume_tac) >>
-  qpat_assum `!op. LIST_ELEM_COUNT op pending <= _`
-    (qspec_then `op'` assume_tac) >> decide_tac
+  strip_tac >> gvs[] >>
+  qpat_x_assum `pending_inventory_wf pending ps2` mp_tac >>
+  simp[pending_inventory_wf_def]
 QED
 
 Theorem reorder_one_structural_wf:

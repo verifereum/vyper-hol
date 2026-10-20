@@ -1100,44 +1100,65 @@ Proof
   drule take_call_outcome_error >> rw[no_control_exc_def]
 QED
 
-val NO_CONTROL_MONAD_STEP_TAC =
-  FIRST [CHANGED_TAC (CONV_TAC (DEPTH_CONV ETA_CONV)),
-    CHANGED_TAC (simp_tac bool_ss
-      [FORALL_PROD, pair_case_thm, UNCURRY, no_control_monad_primitives]),
-    first_assum ACCEPT_TAC, MATCH_ACCEPT_TAC no_control_monad_take,
+(* Decompose only the goal's monadic spine; keep the large guarded IHs
+   out of rewriting. Match primitive leaves before traversing terms for eta. *)
+val NO_CONTROL_MONAD_LEAF_TAC =
+  let
+    val leaves = List.foldl (fn (th,net) =>
+      Net.insert (concl th, MATCH_ACCEPT_TAC th) net) Net.empty
+      (no_control_monad_take :: CONJUNCTS no_control_monad_primitives)
+  in
+    fn (asl,w) => FIRST (Net.match w leaves) (asl,w)
+  end;
+
+(* Reduce only exposed applications, never their continuation arguments. *)
+val no_control_head_conv =
+  let
+    val reduce = FIRST_CONV
+      [BETA_CONV, REWR_CONV pair_case_thm, REWR_CONV UNCURRY]
+    fun head tm = (reduce ORELSEC RATOR_CONV head) tm
+  in head end;
+
+(* Keep CASE_TAC's branch order, but avoid rebuilding its broad datatype
+   rewrite set. Only fresh branch facts, never guarded IHs, become rewrites. *)
+fun NO_CONTROL_MONAD_CASE_TAC (g as (old,_)) =
+  let
+    fun simplify (asl,w) =
+      let
+        val fresh = List.filter (fn a => not (is_forall a) andalso
+          not (List.exists (aconv a) old)) asl
+        val rules = map ASSUME fresh
+      in
+        simp_tac bool_ss
+          (optionTheory.option_CLAUSES :: pair_case_thm :: UNCURRY :: rules) >>
+        RULE_ASSUM_TAC (REWRITE_RULE rules) >> MAP_EVERY assume_tac rules
+      end (asl,w)
+  in
+    (BasicProvers.PURE_CASE_TAC >> simplify) g
+  end;
+
+val NO_CONTROL_MONAD_TAC =
+  rpt (FIRST [
+    CONV_TAC (HO_REWR_CONV FORALL_PROD),
+    CONV_TAC (RAND_CONV no_control_head_conv),
+    gen_tac, strip_tac, conj_tac,
+    first_assum ACCEPT_TAC,
+    NO_CONTROL_MONAD_LEAF_TAC,
+    MATCH_MP_TAC no_control_monad_bind_guarded >> conj_tac,
+    CONV_TAC (RAND_CONV (REWR_CONV ignore_bind_def)),
+    CONV_TAC (RAND_CONV ETA_CONV),
     CHANGED_TAC (fn (asl,w) =>
       simp_tac bool_ss (pair_case_thm :: UNCURRY ::
         List.map ASSUME (List.filter is_eq asl)) (asl,w)),
-    irule no_control_monad_bind_guarded >> conj_tac,
-    CHANGED_TAC (rewrite_tac[ignore_bind_def]),
-    gen_tac, strip_tac, conj_tac, CASE_TAC];
-
-val NO_CONTROL_MONAD_TAC = rpt NO_CONTROL_MONAD_STEP_TAC;
+    NO_CONTROL_MONAD_CASE_TAC]);
 
 Resume eval_expr_no_control_with_bt[ExtCall]:
   rpt gen_tac >> strip_tac >>
   simp[GSYM no_control_monad_def, Once evaluate_def] >>
   RULE_ASSUM_TAC (REWRITE_RULE [GSYM no_control_monad_def]) >>
-  TRY NO_CONTROL_MONAD_STEP_TAC >>
-  TRY NO_CONTROL_MONAD_STEP_TAC >>
-  TRY NO_CONTROL_MONAD_STEP_TAC >>
-  TRY NO_CONTROL_MONAD_STEP_TAC >>
-  TRY NO_CONTROL_MONAD_STEP_TAC >>
-  TRY NO_CONTROL_MONAD_STEP_TAC >>
-  TRY NO_CONTROL_MONAD_STEP_TAC >>
-  TRY NO_CONTROL_MONAD_STEP_TAC >>
-  NTAC 4 (TRY NO_CONTROL_MONAD_STEP_TAC) >>
-  NTAC 4 (TRY NO_CONTROL_MONAD_STEP_TAC) >>
-  NTAC 4 (TRY NO_CONTROL_MONAD_STEP_TAC) >>
-  NTAC 4 (TRY NO_CONTROL_MONAD_STEP_TAC) >>
-  NTAC 4 (TRY NO_CONTROL_MONAD_STEP_TAC) >>
-  NTAC 4 (TRY NO_CONTROL_MONAD_STEP_TAC) >>
-  NTAC 4 (TRY NO_CONTROL_MONAD_STEP_TAC) >>
-  NTAC 4 (TRY NO_CONTROL_MONAD_STEP_TAC) >>
-  qmatch_goalsub_rename_tac `case outcome_opt of NONE => _ | SOME _ => _` >>
-  Cases_on `outcome_opt` >> simp_tac std_ss [] >|
-  [NO_CONTROL_MONAD_TAC >> suspend "return_path_1",
-   NO_CONTROL_MONAD_TAC >> suspend "return_path_2"]
+  NO_CONTROL_MONAD_TAC >|
+  [suspend "return_path_1", suspend "return_path_2",
+   suspend "return_path_3", suspend "return_path_4"]
 QED
 
 (* Discharge guards in semantic order using only matching assumptions.
@@ -1145,11 +1166,19 @@ QED
    run drule's context-wide resolution search at every monadic step. *)
 fun NO_CONTROL_MONAD_IH_TAC (asl,w) =
   let
-    val normalise = PURE_REWRITE_RULE [ignore_bind_def]
-    val facts = List.concat (map (CONJUNCTS o normalise o ASSUME) asl)
+    val normalise = SIMP_RULE bool_ss
+      [oneTheory.one, ignore_bind_def, FST, SND, pair_case_thm, UNCURRY]
+    val raw_facts = List.concat (map (CONJUNCTS o normalise o ASSUME) asl)
+    val substitutions = List.filter (fn th =>
+      is_eq (concl th) andalso
+      (is_var (lhs (concl th)) orelse is_var (rhs (concl th)))) raw_facts
+    val facts = map (SIMP_RULE bool_ss substitutions) raw_facts
     fun discharge th =
       if is_imp (snd (strip_forall (concl th))) then
-        discharge (tryfind (MATCH_MP th) facts)
+        discharge (tryfind (MATCH_MP th) facts handle HOL_ERR _ =>
+          let val guard = fst (dest_imp (snd (strip_forall (concl th)))) in
+            MATCH_MP th (REFL (rhs guard))
+          end)
       else th
     fun close ih g =
       ACCEPT_TAC (discharge
@@ -1165,13 +1194,7 @@ Resume eval_expr_no_control_with_bt[return_path_2]:
   NO_CONTROL_MONAD_IH_TAC
 QED
 Resume eval_expr_no_control_with_bt[return_path_3]:
-  simp_tac bool_ss [oneTheory.one, ignore_bind_def] >>
-  rpt (FIRST [first_assum ACCEPT_TAC,
-    first_x_assum (fn th =>
-      if is_imp (snd (strip_forall (concl th))) then
-        drule_at Any th >> simp_tac bool_ss [] >> strip_tac
-      else NO_TAC)]) >>
-  metis_tac[ignore_bind_def]
+  NO_CONTROL_MONAD_IH_TAC
 QED
 Resume eval_expr_no_control_with_bt[return_path_4]:
   NO_CONTROL_MONAD_IH_TAC

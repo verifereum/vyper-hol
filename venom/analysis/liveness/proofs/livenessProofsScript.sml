@@ -2161,8 +2161,7 @@ Proof
     gvs[])
   >- (
     (* Step: n = SUC n', so idx < LENGTH instrs *)
-    `idx < LENGTH instrs` by (
-      Cases_on `idx = LENGTH instrs` >> gvs[]) >>
+    `idx < LENGTH instrs` by DECIDE_TAC >>
     (* Get fold characterization without consuming df_fold_block assumption *)
     `df_fold_backward (liveness_transfer bbs) lbl instrs 0 joined FEMPTY =
      (fv, im)` by fs[df_fold_block_def] >>
@@ -2176,7 +2175,8 @@ Proof
     (* MEM v (live_update ...) → disjunction *)
     drule mem_live_update_cases >> strip_tac
     >- (
-      (* Case 1: v is used by instrs[idx] *)
+      (* Case 1: v is used by instrs[idx]; no recursive witness is needed. *)
+      qpat_x_assum `∀fn bb idx joined im fv v. _` kall_tac >>
       irule use_in_block_path >>
       qexistsl_tac [`bb`, `idx`] >> gvs[])
     >- (

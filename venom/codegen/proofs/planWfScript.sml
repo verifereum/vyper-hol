@@ -1590,9 +1590,10 @@ Theorem optimistic_swap_plan_prefix_op:
     EVERY is_prefix_op ops
 Proof
   rpt gen_tac >>
-  simp[optimistic_swap_plan_def] >>
-  rpt (CASE_TAC >> simp[]) >>
-  strip_tac >> imp_res_tac do_swap_prefix_op
+  simp_tac bool_ss [optimistic_swap_plan_def, LET_THM] >>
+  rpt (IF_CASES_TAC >> simp[]) >>
+  Cases_on `stack_get_depth (Var (LAST next_liveness)) ps.ps_stack` >>
+  simp[] >> strip_tac >> drule do_swap_prefix_op >> simp[]
 QED
 
 Theorem regular_plan_prefix_wf_gen:

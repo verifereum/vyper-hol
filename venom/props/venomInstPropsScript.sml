@@ -642,14 +642,33 @@ Proof
   pure_once_rewrite_tac[venomExecSemanticsTheory.step_inst_base_def] >>
   simp[]
 QED
+(* Index the exported dispatch equations; keep operand evaluation abstract. *)
+val effect_free_step_rewrites = let
+  fun key th = let
+    val (_, body) = strip_forall (concl th)
+    val (guard, _) = dest_imp body
+  in rhs guard end
+in map (fn th => (key th, th))
+  (CONJUNCTS venomExecSemanticsTheory.step_inst_base_opcode_eqs) end;
+
+fun effect_free_rewrite_opcode eq = let
+  val (_, rewrite) = valOf (List.find
+    (fn (key, _) => aconv key (rhs (concl eq))) effect_free_step_rewrites)
+in PURE_ONCE_REWRITE_TAC [MATCH_MP rewrite eq] end;
+
 val effect_free_ok_tac =
-  fs[venomExecSemanticsTheory.step_inst_base_def,
-     venomStateTheory.eval_operand_def] >>
-  TRY (irule exec_pure2_ok >> fs[] >> NO_TAC) >>
-  TRY (irule exec_pure1_ok >> fs[] >> NO_TAC) >>
-  TRY (irule exec_pure3_ok >> fs[] >> NO_TAC) >>
-  TRY (irule exec_read0_ok >> fs[] >> NO_TAC) >>
-  TRY (irule exec_read1_ok >> fs[] >> NO_TAC) >>
+  qpat_assum `inst.inst_opcode = _` effect_free_rewrite_opcode >>
+  TRY (irule exec_pure2_ok >>
+       asm_simp_tac std_ss [listTheory.LENGTH, listTheory.MEM] >> NO_TAC) >>
+  TRY (irule exec_pure1_ok >>
+       asm_simp_tac std_ss [listTheory.LENGTH, listTheory.MEM] >> NO_TAC) >>
+  TRY (irule exec_pure3_ok >>
+       asm_simp_tac std_ss [listTheory.LENGTH, listTheory.MEM] >> NO_TAC) >>
+  TRY (irule exec_read0_ok >>
+       asm_simp_tac std_ss [listTheory.LENGTH, listTheory.MEM] >> NO_TAC) >>
+  TRY (irule exec_read1_ok >>
+       asm_simp_tac std_ss [listTheory.LENGTH, listTheory.MEM] >> NO_TAC) >>
+  fs[venomStateTheory.eval_operand_def] >>
   TRY (simp[] >> NO_TAC) >>
   TRY (Cases_on `inst.inst_outputs` >> fs[] >>
        Cases_on `t` >> fs[] >> NO_TAC) >>

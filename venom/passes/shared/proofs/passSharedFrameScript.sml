@@ -130,9 +130,24 @@ Proof
   gvs[AllCaseEqs()]
 QED
 
-val step_base_result_tac =
-  rw[step_inst_base_def] >>
-  gvs[AllCaseEqs(), is_terminator_def];
+(* Index the guarded equations once; never expand the full opcode case
+   when the opcode is already known. Shared by all result/frame proofs. *)
+val step_inst_base_opcode_rewrites = let
+  fun key th = let
+    val (_, body) = strip_forall (concl th)
+    val (guard, _) = dest_imp body
+  in rhs guard end
+in map (fn th => (key th, th))
+  (CONJUNCTS venomExecSemanticsTheory.step_inst_base_opcode_eqs) end;
+
+fun rewrite_step_inst_base_opcode eq = let
+  val (_, rewrite) = valOf (List.find
+    (fn (key, _) => aconv key (rhs (concl eq)))
+    step_inst_base_opcode_rewrites)
+in PURE_ONCE_REWRITE_TAC [MATCH_MP rewrite eq] end;
+
+val step_inst_base_opcode_tac =
+  qpat_assum `i.inst_opcode = _` rewrite_step_inst_base_opcode;
 
 Theorem step_inst_base_no_halt[local]:
   !inst s s'.
@@ -375,7 +390,9 @@ Theorem step_inst_base_assert_ok[local]:
     (inst.inst_opcode = ASSERT \/ inst.inst_opcode = ASSERT_UNREACHABLE) ==>
     s' = s
 Proof
-  rw[step_inst_base_def] >> gvs[AllCaseEqs()]
+  rpt strip_tac >> gvs[] >>
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  step_inst_base_opcode_tac >> rw[AllCaseEqs()]
 QED
 
 (* For non-terminator non-alloca OK results with empty write_effects:
@@ -458,7 +475,9 @@ Theorem step_inst_base_abort_opcode:
     inst.inst_opcode = ASSERT_UNREACHABLE \/
     inst.inst_opcode = RETURNDATACOPY
 Proof
-  step_base_result_tac
+  rpt strip_tac >>
+  drule opcodeClassTheory.step_inst_base_abort_opcodes >>
+  strip_tac >> gvs[is_terminator_def]
 QED
 
 Theorem step_inst_base_abort_returndata[local]:
@@ -470,16 +489,16 @@ Proof
   rpt strip_tac >>
   imp_res_tac step_inst_base_abort_opcode >> gvs[]
   >- (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-      rw[step_inst_base_def, set_returndata_def,
-         revert_state_def, is_terminator_def,
+      step_inst_base_opcode_tac >>
+      rw[set_returndata_def, revert_state_def, is_terminator_def,
          venom_state_component_equality, AllCaseEqs()])
   >- (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-      rw[step_inst_base_def, set_returndata_def,
-         halt_state_def, is_terminator_def,
+      step_inst_base_opcode_tac >>
+      rw[set_returndata_def, halt_state_def, is_terminator_def,
          venom_state_component_equality, AllCaseEqs()])
   >- (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-      rw[step_inst_base_def, set_returndata_def,
-         halt_state_def, is_terminator_def,
+      step_inst_base_opcode_tac >>
+      rw[set_returndata_def, halt_state_def, is_terminator_def,
          venom_state_component_equality, AllCaseEqs()])
 QED
 
@@ -494,7 +513,8 @@ Proof
   rpt strip_tac >>
   gvs[] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  rw[step_inst_base_def, is_terminator_def, AllCaseEqs()]
+  step_inst_base_opcode_tac >>
+  rw[is_terminator_def, AllCaseEqs()]
 QED
 
 (* Non-INVOKE aborters (ASSERT, ASSERT_UNREACHABLE, RETURNDATACOPY) are all
@@ -570,8 +590,7 @@ Proof
     metis_tac[step_inst_base_abort_opcode] >>
   gvs[] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  ONCE_REWRITE_TAC[step_inst_base_def] >>
-  ASM_REWRITE_TAC[opcode_case_def] >> rw[] >>
+  step_inst_base_opcode_tac >> rw[] >>
   rpt strip_tac >>
   gvs[AllCaseEqs()] >>
   rpt (first_x_assum (fn th => mp_tac (REWRITE_RULE [eval_operand_def] th))) >>
@@ -615,7 +634,7 @@ Proof
   >- (
     (* ASSERT *)
     qpat_x_assum `step_inst_base inst_b s = _` mp_tac >>
-    simp[step_inst_base_def] >>
+    step_inst_base_opcode_tac >> simp[] >>
     gvs[AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
     `eval_operand cond_op v = SOME 0w` by (
       Cases_on `cond_op` >> gvs[eval_operand_def]) >>
@@ -623,7 +642,7 @@ Proof
   >- (
     (* ASSERT_UNREACHABLE *)
     qpat_x_assum `step_inst_base inst_b s = _` mp_tac >>
-    simp[step_inst_base_def] >>
+    step_inst_base_opcode_tac >> simp[] >>
     gvs[AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
     `eval_operand cond_op v = SOME 0w` by (
       Cases_on `cond_op` >> gvs[eval_operand_def]) >>
@@ -637,7 +656,7 @@ Proof
     `v.vs_returndata = s.vs_returndata` by
       metis_tac[write_effects_sound_returndata] >>
     qpat_x_assum `step_inst_base inst_b s = _` mp_tac >>
-    simp[step_inst_base_def] >>
+    step_inst_base_opcode_tac >> simp[] >>
     gvs[AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
     `eval_operand op_destOffset v = SOME destOffset` by (
       Cases_on `op_destOffset` >> gvs[eval_operand_def]) >>
@@ -877,7 +896,9 @@ Proof
       gvs[write_effects_def, is_terminator_def, is_alloca_op_def,
           is_ext_call_op_def, all_effects_def, empty_effects_def] >>
       gvs[pred_setTheory.EXTENSION]) >>
-    gvs[step_inst_base_def, AllCaseEqs(), exec_write2_def] >>
+    qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+    step_inst_base_opcode_tac >>
+    rw[AllCaseEqs(), exec_write2_def] >>
     gvs[AllCaseEqs()] >>
     metis_tac[sstore_preserves_code])
   >- (
@@ -906,8 +927,7 @@ Proof
   rpt strip_tac >>
   qpat_x_assum `step_inst_base inst s1 = OK v1` mp_tac >>
   qpat_x_assum `step_inst_base inst s2 = OK v2` mp_tac >>
-  PURE_REWRITE_TAC[step_inst_base_def] >>
-  ASM_REWRITE_TAC[opcode_case_def] >>
+  step_inst_base_opcode_tac >>
   strip_tac >> strip_tac >>
   Cases_on `inst.inst_operands` >> gvs[] >>
   Cases_on `t` >> gvs[] >>

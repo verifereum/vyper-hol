@@ -94,13 +94,16 @@ QED
 Theorem n2w_add_mod_l[local]:
   n2w (a MOD dimword(:256) + b) = n2w (a + b) : bytes32
 Proof
-  simp[wordsTheory.n2w_11, bitTheory.MOD_PLUS_RIGHT, arithmeticTheory.MOD_PLUS]
+  REWRITE_TAC [GSYM wordsTheory.word_add_n2w, wordsTheory.n2w_mod]
 QED
 
 Theorem n2w_add_rearrange[local]:
   n2w (a + (b + c MOD dimword(:256))) = n2w (b + (a + c) MOD dimword(:256)) : bytes32
 Proof
-  simp[wordsTheory.n2w_11, arithmeticTheory.MOD_PLUS, bitTheory.MOD_PLUS_RIGHT]
+  REWRITE_TAC [GSYM wordsTheory.word_add_n2w, wordsTheory.n2w_mod] >>
+  CONV_TAC (AC_CONV
+    (INST_TYPE [alpha |-> ``:256``] wordsTheory.WORD_ADD_ASSOC,
+     INST_TYPE [alpha |-> ``:256``] wordsTheory.WORD_ADD_COMM))
 QED
 
 Theorem apply_writes_shift[local]:
@@ -113,7 +116,10 @@ Proof
   simp_tac bool_ss [MAP, apply_writes_def, pairTheory.UNCURRY_DEF, LET_THM] >>
   `n2w (w2n (n2w base : bytes32) + (q + k)) =
    n2w (w2n (n2w (base + k) : bytes32) + q) : bytes32` by
-    simp[wordsTheory.n2w_11, arithmeticTheory.MOD_PLUS, bitTheory.MOD_PLUS_RIGHT] >>
+    (REWRITE_TAC [GSYM wordsTheory.word_add_n2w, wordsTheory.n2w_w2n] >>
+     CONV_TAC (AC_CONV
+       (INST_TYPE [alpha |-> ``:256``] wordsTheory.WORD_ADD_ASSOC,
+        INST_TYPE [alpha |-> ``:256``] wordsTheory.WORD_ADD_COMM))) >>
   pop_assum SUBST1_TAC >>
   first_x_assum MATCH_ACCEPT_TAC
 QED
@@ -987,6 +993,17 @@ Proof
   Cases_on `b` >> simp[type_slot_size_def]
 QED
 
+(* Unfold only one encoder layer, with no word-evaluation simps. *)
+val encode_bounds_step_conv = ONCE_REWRITE_CONV [encode_value_def];
+val encode_bounds_ss = std_ss ++ listSimps.LIST_ss ++
+  rewrites [AllCaseEqs(), PULL_EXISTS, MEM_MAP];
+val encode_bounds_cleanup_ss = encode_bounds_ss ++ rewrites
+  (LET_THM :: MEM_APPEND :: EXISTS_PROD :: MEM_GENLIST :: type_slot_size_def ::
+   value_has_type_def :: encode_dyn_bytes_slots_def ::
+   indexedListsTheory.MEM_MAPi :: MULT_CLAUSES ::
+   List.concat (map (fn ty => #rewrs (TypeBase.simpls_of ty))
+     [``:type_value``, ``:value``, ``:array_value``, ``:base_type``, ``:bound``]));
+
 (* All write offsets from encode functions are bounded by type_slot_size *)
 Theorem encode_writes_bounded:
   (∀tv v writes.
@@ -1012,11 +1029,11 @@ Theorem encode_writes_bounded:
        offset ≤ off ∧ off < offset + type_slot_size_fields ftypes)
 Proof
   ho_match_mp_tac encode_value_ind >> rpt conj_tac >> rpt gen_tac >>
-  simp[encode_value_def, AllCaseEqs(), PULL_EXISTS] >>
-  rpt strip_tac >> gvs[MEM_MAP, MEM_APPEND, EXISTS_PROD, MEM_GENLIST,
-    type_slot_size_def, value_has_type_def,
-    encode_dyn_bytes_slots_def, AllCaseEqs(),
-    indexedListsTheory.MEM_MAPi, MULT_CLAUSES] >>
+  CONV_TAC encode_bounds_step_conv >>
+  simp_tac encode_bounds_ss [] >>
+  rpt strip_tac >>
+  simpLib.global_simp_tac {elimvars = true, droptrues = true, strip = true,
+    oldestfirst = false} encode_bounds_cleanup_ss [] >>
   (* word_size: i < word_size max *)
   TRY (
     fs[LENGTH_bytes_to_slots] >>
@@ -1024,44 +1041,19 @@ Proof
     simp[vfmConstantsTheory.word_size_def] >>
     irule DIV_LE_MONOTONE >> simp[] >> NO_TAC
   ) >>
-  (* Static array shifted: p_1' + k * sz < n * sz via (k+1) * sz *)
-  TRY (
-    first_x_assum (qspec_then `p_1'` mp_tac) >>
-    (impl_tac >- (qexists_tac `p_2` >> simp[])) >> strip_tac >>
+  (* Specialize only the matching write-bound IHs before doing arithmetic. *)
+  rpt (FIRST [
+    qpat_x_assum `∀y. MEM y _ ⇒ _`
+      (fn th => drule_all th >> strip_tac),
+    qpat_x_assum `∀n. sparse_has_type _ n _ ⇒ _`
+      (fn th => drule_all th >> strip_tac)
+  ]) >> gvs[] >>
+  FIRST [
     irule LESS_LESS_EQ_TRANS >>
-    qexists_tac `(k + 1) * type_slot_size tv` >> simp[] >> NO_TAC
-  ) >>
-  (* ∀n' sparse_has_type IH: specialize + instantiate *)
-  TRY (
-    qpat_x_assum `∀n'. sparse_has_type _ _ _ ⇒ _` (qspec_then `n` mp_tac) >>
-    simp[] >> strip_tac >>
-    first_x_assum (qspec_then `off` mp_tac) >>
-    (impl_tac >- (qexists_tac `p_2` >> simp[])) >> simp[] >> NO_TAC
-  ) >>
-  (* DynArrayV top-level: IH + transitivity + mult monotonicity *)
-  TRY (
-    first_x_assum (qspec_then `off` mp_tac) >>
-    (impl_tac >- (qexists_tac `p_2` >> simp[])) >> strip_tac >>
+    qexists_tac `(k + 1) * type_slot_size tv` >> simp[] >> NO_TAC,
     irule LESS_LESS_EQ_TRANS >> first_assum (irule_at Any) >>
-    simp[LE_MULT_RCANCEL] >> NO_TAC
-  ) >>
-  (* Direct IH: off or p_1' in writes *)
-  TRY (
-    first_x_assum (qspec_then `off` mp_tac) >>
-    (impl_tac >- (qexists_tac `p_2` >> simp[])) >>
-    strip_tac >> gvs[] >> NO_TAC
-  ) >>
-  TRY (
-    first_x_assum (qspec_then `p_1'` mp_tac) >>
-    (impl_tac >- (qexists_tac `p_2` >> simp[])) >>
-    strip_tac >> gvs[] >> NO_TAC
-  ) >>
-  (* Sparse array case: different IH shape *)
-  first_x_assum (qspec_then `m` mp_tac) >>
-  simp[] >> strip_tac >>
-  first_x_assum (qspec_then `off` mp_tac) >>
-  (impl_tac >- (qexists_tac `p_2` >> simp[])) >>
-  simp[]
+    simp[LE_MULT_RCANCEL]
+  ]
 QED
 
 (* ===== Storage Agreement (decode depends only on relevant slots) ===== *)

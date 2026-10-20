@@ -766,9 +766,30 @@ Proof
   rw[exec_read0_def]
 QED
 
+(* These opcodes never inspect operands. Cache just their proved dispatch
+   equations; do not unfold the full semantics or use the global simpset. *)
+val ops_irrel_dispatch = let
+  val rules = CONJUNCTS step_inst_base_opcode_eqs
+  fun key th = rhs (fst (dest_imp (concl (SPEC_ALL th))))
+  val projection_ss = bool_ss ++ rewrites
+    [instruction_accfupds, combinTheory.K_THM, exec_read0_ops_irrel]
+  fun selected opc =
+    (opc, projection_ss ++ rewrites
+      [valOf (List.find (fn th => aconv (key th) opc) rules)])
+in
+  map selected [``NOP``, ``STOP``, ``SINK``, ``INVALID``,
+    ``CALLER``, ``ADDRESS``, ``CALLVALUE``, ``GAS``, ``GASLIMIT``,
+    ``ORIGIN``, ``GASPRICE``, ``COINBASE``, ``TIMESTAMP``, ``NUMBER``,
+    ``PREVRANDAO``, ``CHAINID``, ``SELFBALANCE``, ``BASEFEE``,
+    ``BLOBBASEFEE``, ``CALLDATASIZE``, ``RETURNDATASIZE``, ``CODESIZE``,
+    ``MEMTOP``]
+end;
+
 val ops_irrel_tac =
-  simp[Once step_inst_base_def, exec_read0_ops_irrel] >>
-  simp[Once step_inst_base_def, exec_read0_ops_irrel];
+  qpat_assum `inst.inst_opcode = _` (fn eq =>
+    simp_tac (#2 (valOf (List.find
+      (fn (opc, _) => aconv opc (rhs (concl eq))) ops_irrel_dispatch)))
+      [eq]);
 
 Triviality step_inst_base_ops_irrel[local]:
   !inst s ops.
@@ -780,31 +801,7 @@ Triviality step_inst_base_ops_irrel[local]:
     step_inst_base (inst with inst_operands := ops) s =
     step_inst_base inst s
 Proof
-  Cases_on `inst` >>
-  rpt strip_tac >> gvs[MEM]
-  >- ops_irrel_tac
-  >- ops_irrel_tac
-  >- ops_irrel_tac
-  >- ops_irrel_tac
-  >- ops_irrel_tac
-  >- ops_irrel_tac
-  >- ops_irrel_tac
-  >- ops_irrel_tac
-  >- ops_irrel_tac
-  >- ops_irrel_tac
-  >- ops_irrel_tac
-  >- ops_irrel_tac
-  >- ops_irrel_tac
-  >- ops_irrel_tac
-  >- ops_irrel_tac
-  >- ops_irrel_tac
-  >- ops_irrel_tac
-  >- ops_irrel_tac
-  >- ops_irrel_tac
-  >- ops_irrel_tac
-  >- ops_irrel_tac
-  >- ops_irrel_tac
-  >- ops_irrel_tac
+  rpt strip_tac >> fs[MEM] >> ops_irrel_tac
 QED
 
 (* Helper: eval_operands SOME implies all Var operands in FDOM *)

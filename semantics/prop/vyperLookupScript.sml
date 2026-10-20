@@ -1124,11 +1124,10 @@ Proof
             find_containing_scope_def]
     >> PairCases_on `x` >> simp[] >>
        simp[find_containing_scope_def, evaluation_state_component_equality],
-    (* n2 in head scope *)
-    simp[Once find_containing_scope_def, finite_mapTheory.FLOOKUP_DEF,
-         evaluation_state_component_equality,
-         finite_mapTheory.FUPDATE_COMMUTES,
-         find_containing_scope_def]
+    (* Resolve the head hit before simplifying the surrounding record updates. *)
+    `find_containing_scope n2 (h :: t) =
+       SOME ([], h, x, t)` by simp[Once find_containing_scope_def] >>
+    simp[finite_mapTheory.FUPDATE_COMMUTES]
   ]
 QED
 

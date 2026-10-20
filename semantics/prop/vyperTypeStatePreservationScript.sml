@@ -1216,18 +1216,23 @@ Resume assign_target_preserves_state_well_typed_mutual[TopLevelVar]:
     goal_assum drule )
   >> pairarg_tac >> gvs[]
   >- (
-    gvs[bind_apply, AllCaseEqs(), return_def, raise_def,
-        option_CASE_rator, sum_CASE_rator] >>
+    qpat_x_assum `_ = (res, st')` mp_tac >>
+    simp[bind_apply, AllCaseEqs(), return_def, raise_def,
+         option_CASE_rator, sum_CASE_rator] >> strip_tac >>
     imp_res_tac assign_result_preserves_state >>
     imp_res_tac read_storage_slot_state >> gvs[] >>
     drule_at(Pat`write_storage_slot`) write_storage_slot_preserves_accounts_well_typed >>
     drule write_storage_slot_preserves_env_consistent >>
     drule write_storage_slot_preserves_state_well_typed_any >>
     gvs[runtime_consistent_def])
-  >> gvs[bind_apply, return_def, raise_def, lift_option_type_def,
-         lift_sum_def, ignore_bind_def, assert_def, check_def, AllCaseEqs(),
-         option_CASE_rator, type_value_CASE_rator, sum_CASE_rator,
-         bound_CASE_rator, assign_operation_CASE_rator]
+  (* Split only the execution head: global case/rator simplification also
+     expands guarded typing facts and duplicates the monadic continuations. *)
+  >> qpat_x_assum `_ = (res, st')` mp_tac
+  >> simp [bind_apply, return_def, raise_def, lift_option_type_def,
+           lift_sum_def, ignore_bind_def, assert_def, check_def, AllCaseEqs(),
+           option_CASE_rator, type_value_CASE_rator, sum_CASE_rator,
+           bound_CASE_rator, assign_operation_CASE_rator]
+  >> strip_tac >> gvs[]
   >> imp_res_tac assign_result_preserves_state
   >> imp_res_tac read_storage_slot_state
   >> imp_res_tac get_storage_backend_state

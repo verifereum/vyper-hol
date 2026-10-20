@@ -121,6 +121,12 @@ Proof
   rw[transform_block_def, transform_insts_length]
 QED
 
+Triviality terminator_not_pseudo:
+  !op. is_terminator op ==> ~is_pseudo op
+Proof
+  Cases >> simp_tac std_ss [is_terminator_def, is_pseudo_def]
+QED
+
 Triviality transform_partition_perm:
   !insts.
     PERM insts
@@ -131,8 +137,8 @@ Triviality transform_partition_perm:
 Proof
   Induct >> simp[PERM_REFL] >> rpt strip_tac >>
   Cases_on `is_pseudo h.inst_opcode` >> fs[PERM_CONS_IFF] >-
-    (Cases_on `h.inst_opcode` >>
-     fs[is_pseudo_def, is_terminator_def, PERM_CONS_IFF]) >>
+    (`~is_terminator h.inst_opcode` by metis_tac[terminator_not_pseudo] >>
+     simp[]) >>
   Cases_on `is_terminator h.inst_opcode` >> fs[]
   >- (simp[PERM_CONS_EQ_APPEND] >>
       qexists_tac `FILTER (\inst. is_pseudo inst.inst_opcode) insts ++
@@ -152,12 +158,6 @@ Theorem transform_insts_perm:
   !dfg insts. PERM (MAP (transform_inst dfg) insts) (transform_insts dfg insts)
 Proof
   rw[transform_insts_def, transform_partition_perm]
-QED
-
-Triviality terminator_not_pseudo:
-  !op. is_terminator op ==> ~is_pseudo op
-Proof
-  Cases >> simp[is_terminator_def, is_pseudo_def]
 QED
 
 Triviality append_pred_prefix:
@@ -467,6 +467,9 @@ Proof
   sg `FILTER (\inst. is_pseudo inst.inst_opcode) (MAP (transform_inst dfg) insts) = phis ++ params`
   >- (unabbrev_all_tac >> irule filter_pseudo_transform_phi_prefix >>
       rpt strip_tac >> metis_tac[]) >>
+  (* The original prefix and terminator guards are no longer needed. *)
+  qpat_x_assum `!i j. i < j /\ j < LENGTH insts /\ _ ==> _` kall_tac >>
+  qpat_x_assum `!i. i < LENGTH insts /\ _ ==> _` kall_tac >>
   sg `transform_insts dfg insts = phis ++ params ++ regulars ++ terms`
   >- simp[transform_insts_def, Abbr `regulars`, Abbr `terms`] >>
   sg `EVERY (\inst. inst.inst_opcode = PHI) phis`
@@ -475,7 +478,7 @@ Proof
   >- (simp[EVERY_APPEND, Abbr `params`, Abbr `regulars`, Abbr `terms`,
            EVERY_MEM, MEM_FILTER] >>
       conj_tac
-      >- (rpt strip_tac >> Cases_on `inst.inst_opcode` >> fs[is_pseudo_def, is_param_opcode_def]) >>
+      >- (rpt strip_tac >> gvs[is_pseudo_def, is_param_opcode_def]) >>
       rpt strip_tac >> metis_tac[terminator_opcode_not_phi]) >>
   gvs[APPEND_ASSOC] >>
   qspecl_then [`\inst. inst.inst_opcode = PHI`, `phis`,
@@ -483,7 +486,11 @@ Proof
     mp_tac append_pred_prefix >>
   simp_tac std_ss [combinTheory.o_DEF] >>
   asm_simp_tac std_ss [EVERY_APPEND] >>
-  disch_then (qspecl_then [`i`, `j`] mp_tac) >> simp[]
+  disch_then (qspecl_then [`i`, `j`]
+    (MATCH_MP_TAC o REWRITE_RULE [APPEND_ASSOC])) >>
+  conj_tac >- FIRST_ASSUM ACCEPT_TAC >>
+  conj_tac >- (rewrite_tac[LENGTH_APPEND] >> decide_tac) >>
+  FIRST_ASSUM ACCEPT_TAC
 QED
 
 
@@ -642,7 +649,7 @@ Proof
     (simp[EVERY_APPEND, Abbr `params`, Abbr `regulars`, Abbr `terms`,
           EVERY_MEM, MEM_FILTER] >>
      conj_tac
-     >- (rpt strip_tac >> Cases_on `inst.inst_opcode` >> fs[is_pseudo_def, is_param_opcode_def]) >>
+     >- (rpt strip_tac >> gvs[is_pseudo_def, is_param_opcode_def]) >>
      rpt strip_tac >> metis_tac[terminator_opcode_not_phi]) >>
   rpt conj_tac
   >- (qpat_x_assum `transform_insts dfg insts = _` (fn th => rewrite_tac[th]) >>

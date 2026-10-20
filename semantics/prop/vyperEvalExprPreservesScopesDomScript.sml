@@ -261,6 +261,61 @@ Proof
   imp_res_tac get_Value_scopes >> imp_res_tac lift_sum_scopes >> imp_res_tac lift_sum_runtime_scopes >> gvs[]
 QED
 
+(* Pure builtin tails need only the state projection, not their result cases. *)
+Theorem builtin_dom_frames[local]:
+  state_rel_frame (λs t. MAP FDOM s.scopes = MAP FDOM t.scopes) (lift_sum rs) ∧
+  state_rel_frame (λs t. MAP FDOM s.scopes = MAP FDOM t.scopes)
+    (toplevel_array_length cx tv)
+Proof
+  simp[state_rel_frame_result] >> rpt strip_tac >>
+  FIRST [drule lift_sum_state, drule toplevel_array_length_state] >> simp[]
+QED
+
+local
+  val relation = ``λ(s:evaluation_state) t. MAP FDOM s.scopes = MAP FDOM t.scopes``;
+  fun specialise th =
+    ISPEC relation (GEN (first (fn v => fst (dest_var v) = "R")
+      (free_vars (concl th))) th) |> SRULE [];
+  val result = specialise state_rel_frame_result;
+  val bind = specialise state_rel_frame_bind_guarded;
+  val leaves = List.foldl (fn (th,net) =>
+      Net.insert (concl th, MATCH_ACCEPT_TAC th) net) Net.empty
+    (CONJUNCTS (specialise state_rel_frame_locals_primitives) @
+     CONJUNCTS builtin_dom_frames);
+  fun leaf (asl,w) = FIRST (Net.match w leaves) (asl,w);
+  (* Discharge only the actual success guard; never simplify an IH. *)
+  fun ih (asl,w) =
+    if not (is_comb w andalso
+      List.exists (fn name =>
+        total (fst o dest_const o fst o strip_comb o rand) w = SOME name)
+        ["eval_expr", "eval_exprs"]) then NO_TAC (asl,w)
+    else let
+      val normalise = SIMP_RULE bool_ss [oneTheory.one, ignore_bind_def];
+      val facts = List.concat (map (CONJUNCTS o normalise o ASSUME) asl);
+      fun discharge th =
+        if is_imp (snd (strip_forall (concl th))) then
+          discharge (tryfind (MATCH_MP th) facts)
+        else th;
+    in
+      FIRST (map (fn th => fn g => ACCEPT_TAC (discharge
+        (PURE_REWRITE_RULE [GSYM AND_IMP_INTRO] th)) g) facts) (asl,w)
+    end;
+in
+  val BUILTIN_DOM_TAC =
+    rpt gen_tac >> strip_tac >>
+    CONV_TAC (REWR_CONV (GSYM result)) >>
+    CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [evaluate_def])) >>
+    RULE_ASSUM_TAC (PURE_REWRITE_RULE [GSYM result]) >>
+    rpt (FIRST [leaf, ih,
+      MATCH_MP_TAC bind >> conj_tac,
+      CONV_TAC (RAND_CONV BETA_CONV),
+      CONV_TAC (RAND_CONV (REWR_CONV ignore_bind_def)),
+      gen_tac, strip_tac,
+      CHANGED_TAC (fn (asl,w) => simp_tac bool_ss
+        (map ASSUME (List.filter (not o is_forall) asl)) (asl,w)),
+      BasicProvers.PURE_CASE_TAC]);
+end;
+
 (* Goal 13: Builtin (guarded P8 IH) *)
 Theorem case_Builtin_dom[local]:
   ∀cx ty bt es.
@@ -278,13 +333,7 @@ Theorem case_Builtin_dom[local]:
       eval_expr cx (Builtin ty bt es) st = (res,st') ⇒
       MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
-  rpt strip_tac >>
-  gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def, ignore_bind_def,
-      check_def, type_check_def, assert_def, get_accounts_def, lift_sum_def] >>
-  Cases_on `bt = Len` >> gvs[bind_def, AllCaseEqs(), return_def, raise_def]
-  >> TRY (imp_res_tac toplevel_array_length_state >> gvs[] >>
-          res_tac >> gvs[] >> NO_TAC)
-  >> gvs[get_accounts_def, return_def, sum_CASE_rator, CaseEq"sum", raise_def]
+  BUILTIN_DOM_TAC
 QED
 
 (* Goal 14: Pop (unguarded IH for eval_base_target) *)
@@ -316,10 +365,7 @@ Theorem case_TypeBuiltin_dom[local]:
       eval_expr cx (TypeBuiltin ty tb typ es) st = (res,st') ⇒
       MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
-  rpt strip_tac >>
-  gvs[evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def, ignore_bind_def,
-      check_def, type_check_def, assert_def, lift_sum_def] >>
-  TRY (Cases_on `evaluate_type_builtin cx tb typ vs` >> gvs[return_def, raise_def])
+  BUILTIN_DOM_TAC
 QED
 
 Theorem Send_outcome_preserves_locals:
@@ -839,46 +885,79 @@ Proof
   simp[evaluation_state_component_equality] >> strip_tac >> simp[]
 QED
 
-val SCOPES_DOM_FRAME_STEP_TAC =
-  FIRST [CHANGED_TAC (CONV_TAC (DEPTH_CONV ETA_CONV)),
-    CHANGED_TAC (simp_tac bool_ss
-      [ETA_AX, FORALL_PROD, pair_case_thm, UNCURRY, scopes_dom_frame_primitives]),
+(* Cache primitive and bind matches; decompose only the monadic head, never
+   traverse continuations or the large guarded IHs to recognise a leaf. *)
+val SCOPES_DOM_FRAME_LEAF_TAC =
+  let
+    val structural = Net.insert
+      (concl scopes_dom_frame_bind_guarded |> dest_imp |> snd,
+       MATCH_MP_TAC scopes_dom_frame_bind_guarded >> conj_tac) Net.empty
+    val leaves = List.foldl (fn (th,net) =>
+      Net.insert (concl th, MATCH_ACCEPT_TAC th) net) structural
+      (scopes_dom_frame_read :: scopes_dom_frame_take ::
+       CONJUNCTS scopes_dom_frame_primitives)
+  in
+    fn (asl,w) => FIRST (Net.match w leaves) (asl,w)
+  end;
+
+val scopes_dom_head_conv =
+  let
+    val reduce = FIRST_CONV
+      [BETA_CONV, REWR_CONV pair_case_thm, REWR_CONV UNCURRY]
+    fun head tm = (reduce ORELSEC RATOR_CONV head) tm
+  in head end;
+
+(* Preserve CASE_TAC branch order with only fresh branch facts as rewrites. *)
+fun SCOPES_DOM_FRAME_CASE_TAC (g as (old,_)) =
+  let
+    fun simplify (asl,w) =
+      let
+        val fresh = List.filter (fn a => not (is_forall a) andalso
+          not (List.exists (aconv a) old)) asl
+        val rules = map ASSUME fresh
+      in
+        simp_tac bool_ss
+          (optionTheory.option_CLAUSES :: pair_case_thm :: UNCURRY :: rules) >>
+        RULE_ASSUM_TAC (REWRITE_RULE rules) >> MAP_EVERY assume_tac rules
+      end (asl,w)
+  in
+    (BasicProvers.PURE_CASE_TAC >> simplify) g
+  end;
+
+val SCOPES_DOM_FRAME_TAC =
+  rpt (FIRST [
     first_assum ACCEPT_TAC,
-    MATCH_ACCEPT_TAC scopes_dom_frame_read,
-    MATCH_ACCEPT_TAC scopes_dom_frame_take,
+    SCOPES_DOM_FRAME_LEAF_TAC,
+    CONV_TAC (HO_REWR_CONV FORALL_PROD),
+    CONV_TAC (RAND_CONV scopes_dom_head_conv),
+    gen_tac, strip_tac, conj_tac,
+    CONV_TAC (RAND_CONV (REWR_CONV ignore_bind_def)),
+    CONV_TAC (RAND_CONV ETA_CONV),
     CHANGED_TAC (fn (asl,w) =>
       simp_tac bool_ss (pair_case_thm :: UNCURRY ::
         List.map ASSUME (List.filter is_eq asl)) (asl,w)),
-    irule scopes_dom_frame_bind_guarded >> conj_tac,
-    CHANGED_TAC (rewrite_tac[ignore_bind_def]),
-    gen_tac, strip_tac, conj_tac, CASE_TAC];
-
-val SCOPES_DOM_FRAME_TAC = rpt SCOPES_DOM_FRAME_STEP_TAC;
+    SCOPES_DOM_FRAME_CASE_TAC]) >>
+  (* Keep the residual guards in the old tactic's projection/beta normal form
+     for the unchanged guarded-IH discharge below. *)
+  (fn (asl,w) =>
+    let
+      val normalise = PURE_REWRITE_RULE [FST, SND, pair_case_thm, UNCURRY]
+      val facts = List.concat (map (CONJUNCTS o normalise o ASSUME)
+        (List.filter (not o is_forall) asl))
+      val substitutions = List.filter (fn th =>
+        is_eq (concl th) andalso is_var (lhs (concl th))) facts
+    in
+      RULE_ASSUM_TAC (fn th => if is_forall (concl th) then th else
+        PURE_REWRITE_RULE substitutions (normalise th)) (asl,w)
+    end);
 
 Resume eval_mutual_preserves_scopes_dom[ExtCall]:
   rpt gen_tac >> strip_tac >>
   simp[GSYM scopes_dom_frame_result, Once evaluate_def] >>
   RULE_ASSUM_TAC (REWRITE_RULE [GSYM scopes_dom_frame_result]) >>
-  TRY SCOPES_DOM_FRAME_STEP_TAC >>
-  TRY SCOPES_DOM_FRAME_STEP_TAC >>
-  TRY SCOPES_DOM_FRAME_STEP_TAC >>
-  TRY SCOPES_DOM_FRAME_STEP_TAC >>
-  TRY SCOPES_DOM_FRAME_STEP_TAC >>
-  TRY SCOPES_DOM_FRAME_STEP_TAC >>
-  TRY SCOPES_DOM_FRAME_STEP_TAC >>
-  NTAC 4 (TRY SCOPES_DOM_FRAME_STEP_TAC) >>
-  NTAC 4 (TRY SCOPES_DOM_FRAME_STEP_TAC) >>
-  NTAC 4 (TRY SCOPES_DOM_FRAME_STEP_TAC) >>
-  NTAC 4 (TRY SCOPES_DOM_FRAME_STEP_TAC) >>
-  NTAC 4 (TRY SCOPES_DOM_FRAME_STEP_TAC) >>
-  NTAC 4 (TRY SCOPES_DOM_FRAME_STEP_TAC) >>
-  NTAC 4 (TRY SCOPES_DOM_FRAME_STEP_TAC) >>
-  NTAC 4 (TRY SCOPES_DOM_FRAME_STEP_TAC) >>
-  strip_tac >>
-  qmatch_goalsub_rename_tac `case outcome_opt of NONE => _ | SOME _ => _` >>
-  Cases_on `outcome_opt` >> simp_tac std_ss [] >|
-  [SCOPES_DOM_FRAME_TAC >> suspend "return_path_1",
-   SCOPES_DOM_FRAME_TAC >> suspend "return_path_2"]
+  SCOPES_DOM_FRAME_TAC >|
+  [suspend "return_path_1", suspend "return_path_2",
+   suspend "return_path_3", suspend "return_path_4"]
 QED
 
 (* Normalize unit values and guard equalities with only bool_ss, then match
@@ -905,13 +984,7 @@ Resume eval_mutual_preserves_scopes_dom[return_path_2]:
   SCOPES_DOM_IH_TAC
 QED
 Resume eval_mutual_preserves_scopes_dom[return_path_3]:
-  simp_tac bool_ss [oneTheory.one, ignore_bind_def] >>
-  rpt (FIRST [first_assum ACCEPT_TAC,
-    first_x_assum (fn th =>
-      if is_imp (snd (strip_forall (concl th))) then
-        drule_at Any th >> simp_tac bool_ss [] >> strip_tac
-      else NO_TAC)]) >>
-  metis_tac[ignore_bind_def]
+  SCOPES_DOM_IH_TAC
 QED
 Resume eval_mutual_preserves_scopes_dom[return_path_4]:
   SCOPES_DOM_IH_TAC

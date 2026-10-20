@@ -624,8 +624,7 @@ Theorem dom_inv_preserved[local]:
 Proof
   rpt strip_tac >>
   qpat_assum `dom_state_inv fn st`
-    (fn th => assume_tac th >>
-     strip_assume_tac (SIMP_RULE std_ss [dom_state_inv_def] th)) >>
+    (strip_assume_tac o SIMP_RULE std_ss [dom_state_inv_def]) >>
   simp_tac std_ss [LET_THM] >>
   rewrite_tac[dom_process_eq] >>
   simp_tac std_ss [LET_THM] >> pairarg_tac >> simp[] >>
@@ -643,19 +642,33 @@ Proof
 QED
 
 Resume dom_inv_preserved[C1]:
-  rpt gen_tac >> IF_CASES_TAC >> gvs[]
-  >- (strip_tac >> pop_assum (SUBST_ALL_TAC o SYM) >>
-      conj_tac
+  (* Keep quantified lookup invariants out of the simplifier. *)
+  `ALL_DISTINCT (df_boundary (fn_labels fn) st lbl)` by
+    (match_mp_tac dfAnalyzeProofsTheory.df_boundary_all_distinct >> conj_tac
+     >- (qpat_assum `wf_function fn` mp_tac >>
+         simp_tac std_ss [venomWfTheory.wf_function_def] >>
+         strip_tac >> first_assum ACCEPT_TAC)
+     >> first_assum ACCEPT_TAC) >>
+  qspecl_then [`fn`, `lbl`, `st`] mp_tac dom_joined_invariant >>
+  impl_tac
+  >- (conj_tac
+      >- (qpat_assum `wf_function fn` ACCEPT_TAC)
+      >> qpat_assum `dom_state_inv fn st` ACCEPT_TAC) >>
+  strip_tac >> rpt gen_tac >> IF_CASES_TAC
+  >- (qpat_x_assum `lbl = lbl'` (SUBST1_TAC o SYM) >>
+      PURE_REWRITE_TAC [optionTheory.SOME_11] >>
+      DISCH_THEN (SUBST1_TAC o SYM) >> conj_tac
       >- (irule dfHelperPropsTheory.list_intersect_all_distinct >>
-          irule dfAnalyzeProofsTheory.df_boundary_all_distinct >>
-          fs[venomWfTheory.wf_function_def] >>
           first_assum ACCEPT_TAC)
-      >> simp[dfHelperPropsTheory.list_intersect_set] >>
-         drule_all dom_joined_invariant >> strip_tac >>
+      >> PURE_REWRITE_TAC [dfHelperPropsTheory.list_intersect_set] >>
          irule SUBSET_TRANS >>
-         qexists `set (dom_joined fn st lbl)` >>
-         simp[INTER_SUBSET])
-  >> strip_tac >> res_tac >> simp[]
+         qexists `set (dom_joined fn st lbl)` >> conj_tac
+         >- REWRITE_TAC [INTER_SUBSET]
+         >> first_assum ACCEPT_TAC)
+  >> strip_tac >>
+     qpat_x_assum `!l v. FLOOKUP st.ds_boundary l = SOME v ==> _`
+       (qspecl_then [`lbl'`, `v`] match_mp_tac) >>
+     first_assum ACCEPT_TAC
 QED
 
 Resume dom_inv_preserved[C2]:
@@ -667,8 +680,11 @@ Resume dom_inv_preserved[C3]:
   irule SUBSET_TRANS >>
   qexists `set (dom_joined fn st lbl')` >> conj_tac
   >- (irule dom_joined_boundary_mono >>
-      simp[dfHelperPropsTheory.list_intersect_set, INTER_SUBSET])
-  >> res_tac
+      REWRITE_TAC [dfHelperPropsTheory.list_intersect_set, INTER_SUBSET])
+  >> qpat_x_assum
+       `!l v0. FLOOKUP st.ds_inst (l, 0n) = SOME v0 ==> _`
+       (qspecl_then [`lbl'`, `v0`] match_mp_tac) >>
+     first_assum ACCEPT_TAC
 QED
 
 Resume dom_inv_preserved[C4]:
@@ -684,16 +700,28 @@ Resume dom_inv_preserved[C6]:
 QED
 
 Resume dom_inv_preserved[C7]:
-  rpt gen_tac >> strip_tac >>
-  simp[dfAnalyzeDefsTheory.df_boundary_def, FLOOKUP_UPDATE] >>
-  IF_CASES_TAC
-  >- (simp[dfHelperPropsTheory.list_intersect_mem] >>
+  rpt gen_tac >> strip_tac >> Cases_on `lbl = lbl'`
+  >- (qpat_x_assum `lbl = lbl'` (SUBST1_TAC o SYM) >>
+      simp_tac (srw_ss()) [dfAnalyzeDefsTheory.df_boundary_def,
+                          FLOOKUP_UPDATE,
+                          dfHelperPropsTheory.list_intersect_mem] >>
       conj_tac
-      >- (first_x_assum (qspec_then `lbl` mp_tac) >>
-          simp[dfAnalyzeDefsTheory.df_boundary_def])
-      >> gvs[] >> irule (GEN_ALL dom_joined_contains_self) >> simp[])
-  >> first_x_assum (qspec_then `lbl'` mp_tac) >> simp[] >>
-     simp[dfAnalyzeDefsTheory.df_boundary_def, FLOOKUP_UPDATE]
+      >- (qpat_assum
+            `!l. MEM l (fn_labels fn) ==>
+                 MEM l (df_boundary (fn_labels fn) st l)`
+            (qspec_then `lbl` mp_tac) >>
+          impl_tac >- first_assum ACCEPT_TAC >>
+          simp_tac std_ss [dfAnalyzeDefsTheory.df_boundary_def])
+      >> irule (GEN_ALL dom_joined_contains_self) >>
+         first_assum ACCEPT_TAC)
+  >> qpat_assum
+       `!l. MEM l (fn_labels fn) ==>
+            MEM l (df_boundary (fn_labels fn) st l)`
+       (qspec_then `lbl'` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     qpat_x_assum `lbl <> lbl'`
+       (fn th => simp_tac (srw_ss())
+         [dfAnalyzeDefsTheory.df_boundary_def, FLOOKUP_UPDATE, th])
 QED
 
 Finalise dom_inv_preserved

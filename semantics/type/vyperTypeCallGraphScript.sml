@@ -52,7 +52,9 @@ Definition int_calls_expr_def:
   int_calls_named_exprs ((_,e)::kes) =
     int_calls_expr e ++ int_calls_named_exprs kes
 Termination
-  WF_REL_TAC `measure (\(x : expr + base_assignment_target + expr list +
+  (* Avoid WF_REL_TAC's global datatype/termination simpset: only the
+     measure and sum cases are needed to expose these size obligations. *)
+  qexists_tac `measure (\(x : expr + base_assignment_target + expr list +
                                       expr option + (identifier # expr) list).
     case x of
     | INL e => expr_size e
@@ -60,17 +62,9 @@ Termination
     | INR (INR (INL es)) => expr4_size es
     | INR (INR (INR (INL opt))) => expr3_size opt
     | INR (INR (INR (INR kes))) => expr1_size kes)` >>
-  simp[expr_size_def] >>
-  qsuff_tac
-    `(!es. expr4_size es = list_size expr_size es) /\
-     (!opt. expr3_size opt = option_size expr_size opt) /\
-     (!kes. expr1_size kes =
-       list_size (pair_size (list_size char_size) expr_size) kes)`
-  >- (strip_tac >> asm_rewrite_tac[] >> DECIDE_TAC) >>
-  rpt conj_tac >>
-  TRY (Induct >> simp[expr_size_def, listTheory.list_size_def,
-        basicSizeTheory.pair_size_def]) >>
-  Cases >> simp[expr_size_def, basicSizeTheory.option_size_def]
+  conj_tac >- MATCH_ACCEPT_TAC prim_recTheory.WF_measure >>
+  PURE_REWRITE_TAC [prim_recTheory.measure_thm, sumTheory.sum_case_def] >>
+  simp[expr_size_def]
 End
 
 (* ===== Internal calls in statements ===== *)

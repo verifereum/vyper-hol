@@ -2734,13 +2734,26 @@ Proof
   irule ci_mono_lower_value_cfn >> simp[]
 QED
 
+(* Cache only the INVALID branches: never normalize the large IntCall /
+   ExtCall bodies while speculatively closing these primitive cases. *)
+val ci_mono_invalid_call_tac =
+  let
+    val invalid_calls = map
+      (SIMP_RULE pure_ss [LET_THM, pairTheory.UNCURRY, pairTheory.SND])
+      (map (fn n => cj n compile_call_def) [4, 6, 7, 8, 9])
+  in
+    CONV_TAC
+      (RAND_CONV (RAND_CONV (FIRST_CONV (map REWR_CONV invalid_calls)))) >>
+    REWRITE_TAC [pairTheory.SND] >> irule ci_mono_emit_inst
+  end;
+
 Theorem ci_mono_compile_call[local]:
   ∀ cfn cenv ret_ty ty target args default_ret sa.
     (∀ cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
     ci_mono sa (SND (compile_call cfn cenv ret_ty ty target args default_ret sa))
 Proof
   rpt gen_tac >> strip_tac >> Cases_on `target` >>
-  TRY (simp[compile_call_def, LET_THM, pairTheory.UNCURRY, ci_mono_emit_inst] >> NO_TAC) >>
+  TRY (ci_mono_invalid_call_tac >> NO_TAC) >>
   TRY (irule ci_mono_compile_raw_call_calldata >> simp[] >> NO_TAC)
   >- ( (* IntCall *)
     simp[compile_call_def, LET_THM, pairTheory.UNCURRY] >>

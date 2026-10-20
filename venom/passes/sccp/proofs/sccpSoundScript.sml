@@ -20,6 +20,35 @@ Ancestors
 Libs
   BasicProvers
 
+(* Cache the exported dispatch equations; never unfold unrelated opcodes. *)
+val sccp_step_rewrites = let
+  fun key th = let
+    val (_, body) = strip_forall (concl th)
+    val (guard, _) = dest_imp body
+  in rhs guard end
+in map (fn th => (key th, th))
+  (CONJUNCTS venomExecSemanticsTheory.step_inst_base_opcode_eqs) end;
+
+fun sccp_step_for opc =
+  #2 (valOf (List.find (fn (key, _) => aconv key opc)
+    sccp_step_rewrites));
+
+val sccp_step_opcode_tac =
+  qpat_assum `inst.inst_opcode = _` (fn eq =>
+    PURE_ONCE_REWRITE_TAC
+      [MATCH_MP (sccp_step_for (rhs (concl eq))) eq]);
+
+(* Keep state computations opaque: only dispatch, projections and operand/result
+   constructors are needed by the known-opcode folding proofs. *)
+val sccp_step_ss = pure_ss ++ boolSimps.BOOL_ss ++
+  simpLib.type_ssfrag ``:instruction`` ++
+  simpLib.type_ssfrag ``:opcode`` ++
+  simpLib.type_ssfrag ``:operand`` ++
+  simpLib.type_ssfrag ``:operand list`` ++
+  simpLib.type_ssfrag ``:bytes32 option`` ++
+  simpLib.type_ssfrag ``:operand list # string list`` ++ rewrites
+    [instruction_accfupds, combinTheory.K_THM, LET_THM];
+
 (* ===== const_sound properties ===== *)
 
 Theorem const_sound_sccp_bottom:
@@ -203,12 +232,10 @@ Theorem jnz_const_fold_correct[local]:
       (inst with inst_operands := [Lit cond; Label t_lbl; Label f_lbl]) s
 Proof
   rpt strip_tac >>
-  IF_CASES_TAC >> gvs[] >> (
-    simp[step_inst_non_invoke] >>
-    simp[Once step_inst_base_def] >>
-    simp[eval_operand_def] >>
-    simp[Once step_inst_base_def] >>
-    simp[eval_operand_def])
+  IF_CASES_TAC >> gvs[] >>
+  asm_simp_tac sccp_step_ss
+    [step_inst_non_invoke, sccp_step_for ``JMP``,
+     sccp_step_for ``JNZ``, eval_operand_def]
 QED
 
 (* Main theorem: sccp_inst with sound lattice = original instruction *)
@@ -246,7 +273,8 @@ Proof
     IF_CASES_TAC >> gvs[] >>
     simp[mk_nop_inst_def, step_nop_identity] >>
     gvs[step_inst_non_invoke] >>
-    simp[Once step_inst_base_def] >>
+    asm_simp_tac sccp_step_ss
+      [sccp_step_for ``ASSERT``, sccp_step_for ``ASSERT_UNREACHABLE``] >>
     drule_all const_subst_op_lit >> gvs[])
   >>
   simp[]
@@ -414,7 +442,7 @@ Proof
   `inst.inst_opcode <> INVOKE` by simp[] >>
   `step_inst_base inst s = OK s'` by metis_tac[step_inst_non_invoke] >>
   pop_assum mp_tac >>
-  simp_tac std_ss [Once step_inst_base_def] >>
+  asm_simp_tac sccp_step_ss [sccp_step_for ``ASSIGN``] >>
   Cases_on `eval_operand src_op s` >> simp[]
 QED
 
@@ -472,7 +500,7 @@ Proof
     TRY (Cases_on `t'` >> gvs[const_eval_arith_def]) >>
     (* step_inst_base: rewrite with opcode eq to get exec_pureN *)
     qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-    asm_rewrite_tac [Once step_inst_base_def] >> simp[] >> strip_tac >>
+    sccp_step_opcode_tac >> simp[] >> strip_tac >>
     (* Apply exec_pureN_map_result to close *)
     TRY (drule exec_pure1_map_result >> simp[] >> NO_TAC) >>
     TRY (drule exec_pure2_map_result >> simp[] >> NO_TAC) >>

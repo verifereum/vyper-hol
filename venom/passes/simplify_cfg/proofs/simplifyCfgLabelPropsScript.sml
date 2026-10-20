@@ -1086,6 +1086,17 @@ Proof
        fn_insts_blocks_mem] >>
   metis_tac[]
 QED
+(* Lift block membership without exposing instruction witnesses in consumers. *)
+Theorem simplify_cfg_fn_invoke_labels_blocks_mem[local]:
+  MEM callee (simplify_cfg_fn_invoke_labels func) <=>
+  ?bb. MEM bb func.fn_blocks /\
+       MEM callee (simplify_cfg_block_invoke_labels bb)
+Proof
+  simp[simplify_cfg_fn_invoke_labels_mem,
+       simplify_cfg_block_invoke_labels_def,
+       fcgBridgeTheory.mem_get_invoke_targets, PULL_EXISTS]
+QED
+
 Theorem fn_blocks_update_metadata[local]:
   fn_identity_metadata_eq (func with fn_blocks := blocks) func /\
   fn_static_input_eq (func with fn_blocks := blocks) func /\
@@ -1173,10 +1184,8 @@ Theorem fix_all_phis_invoke_labels:
   MEM callee (simplify_cfg_fn_invoke_labels (fix_all_phis func)) <=>
   MEM callee (simplify_cfg_fn_invoke_labels func)
 Proof
-  simp[simplify_cfg_fn_invoke_labels_mem, fix_all_phis_def, MEM_MAP] >>
-  metis_tac[fix_phis_in_block_invoke_labels,
-            simplify_cfg_block_invoke_labels_def,
-            fcgBridgeTheory.mem_get_invoke_targets]
+  simp[simplify_cfg_fn_invoke_labels_blocks_mem, fix_all_phis_def,
+       MEM_MAP, PULL_EXISTS, fix_phis_in_block_invoke_labels]
 QED
 
 Theorem subst_block_labels_fn_invoke_labels:
@@ -1184,11 +1193,9 @@ Theorem subst_block_labels_fn_invoke_labels:
     (simplify_cfg_fn_invoke_labels (subst_block_labels_fn label_map func)) <=>
   MEM callee (simplify_cfg_fn_invoke_labels func)
 Proof
-  simp[simplify_cfg_fn_invoke_labels_mem,
-       cfgTransformTheory.subst_block_labels_fn_def, MEM_MAP] >>
-  metis_tac[subst_block_labels_block_invoke_labels,
-            simplify_cfg_block_invoke_labels_def,
-            fcgBridgeTheory.mem_get_invoke_targets]
+  simp[simplify_cfg_fn_invoke_labels_blocks_mem,
+       cfgTransformTheory.subst_block_labels_fn_def,
+       MEM_MAP, PULL_EXISTS, subst_block_labels_block_invoke_labels]
 QED
 
 

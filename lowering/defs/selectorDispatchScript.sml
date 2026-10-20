@@ -227,7 +227,9 @@ Theorem rho_w64_shifts_explicit[local]:
     [63;2;36;37;28;20;58;9;44;61;54;21;
      39;25;23;19;49;43;56;46;62;3;8;50]
 Proof
-  EVAL_TAC
+  CONV_TAC (LAND_CONV
+    (REWRITE_CONV [rho_w64_shifts_def, MAP] THENC numLib.REDUCE_CONV)
+    THENC REWRITE_CONV [])
 QED
 
 Theorem keccak_theta25_eq:
@@ -304,7 +306,8 @@ QED
 Theorem keccak_round_constants_eq:
   keccak_round_constants = iota_w64_RCz
 Proof
-  EVAL_TAC
+  PURE_REWRITE_TAC
+    [keccak_round_constants_def, iota_w64_RCz_def, MAP, REFL_CLAUSE]
 QED
 
 Theorem FOLDL_keccak_round25_eq:

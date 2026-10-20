@@ -111,6 +111,25 @@ QED
    log fields. STATICCALL is the only such opcode that touches these
    fields, and static mode ensures preservation. *)
 
+(* Keep the step opaque during classification, then select just its opcode
+   equation from the exported guarded branch interface. *)
+val step_inst_base_opcode_rewrites = let
+  fun key th = let
+    val (_, body) = strip_forall (concl th)
+    val (guard, _) = dest_imp body
+  in rhs guard end
+in map (fn th => (key th, th))
+  (CONJUNCTS venomExecSemanticsTheory.step_inst_base_opcode_eqs) end;
+
+fun rewrite_step_inst_base_opcode eq = let
+  val (_, rewrite) = valOf (List.find
+    (fn (key, _) => aconv key (rhs (concl eq)))
+    step_inst_base_opcode_rewrites)
+in PURE_ONCE_REWRITE_TAC [MATCH_MP rewrite eq] end;
+
+val step_inst_base_opcode_tac =
+  qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode;
+
 Theorem step_inst_base_preserves_static_fields:
   !inst s s'. step_inst_base inst s = OK s' /\
     ~is_terminator inst.inst_opcode /\
@@ -123,23 +142,31 @@ Theorem step_inst_base_preserves_static_fields:
      s'.vs_logs = s.vs_logs)
 Proof
   rpt gen_tac >> strip_tac >>
-  RULE_ASSUM_TAC (SIMP_RULE std_ss [Once step_inst_base_def]) >>
   Cases_on `inst.inst_opcode` >>
-  gvs[is_terminator_def, is_alloca_op_def,
-      write_effects_def, empty_effects_def] >>
-  imp_res_tac exec_pure1_static_preserves >>
-  imp_res_tac exec_read0_static_preserves >>
-  imp_res_tac exec_read1_static_preserves >>
-  imp_res_tac exec_pure2_static_preserves >>
-  imp_res_tac exec_ext_call_static_preserves >>
-  imp_res_tac exec_pure3_static_preserves >> gvs[] >>
-  gvs[exec_write2_def, AllCaseEqs(), update_var_def,
-      contract_storage_def,
-      mcopy_def, mstore_def, mstore8_def,
-      write_memory_with_expansion_def,
-      sstore_def, tstore_def, all_effects_def] >>
-  drule exec_ext_call_static_preserves >>
-  simp[contract_storage_def]
+  FIRST [
+    (* Discard excluded/vacuous cases before exposing their semantics. *)
+    gvs[is_terminator_def, is_alloca_op_def] >>
+    PURE_REWRITE_TAC [write_effects_def, IN_DIFF, all_effects_def,
+                      empty_effects_def, IN_INSERT, NOT_IN_EMPTY] >>
+    simp[] >> NO_TAC,
+    qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
+    step_inst_base_opcode_tac >> strip_tac >>
+    FIRST [
+      drule exec_pure1_static_preserves >> simp[contract_storage_def],
+      drule exec_read0_static_preserves >> simp[contract_storage_def],
+      drule exec_read1_static_preserves >> simp[contract_storage_def],
+      drule exec_pure2_static_preserves >> simp[contract_storage_def],
+      drule exec_pure3_static_preserves >> simp[contract_storage_def],
+      gvs[write_effects_def, empty_effects_def,
+          exec_write2_def, AllCaseEqs(), update_var_def,
+          contract_storage_def,
+          mcopy_def, mstore_def, mstore8_def,
+          write_memory_with_expansion_def,
+          sstore_def, tstore_def] >>
+      drule exec_ext_call_static_preserves >>
+      simp[contract_storage_def]
+    ]
+  ]
 QED
 
 Theorem step_inst_base_preserves_storage:
