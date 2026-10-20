@@ -262,7 +262,7 @@ Proof
   gvs[MEM_APPEND] >> metis_tac[MEM]
 QED
 
-Theorem foldl_passthrough[local]:
+Theorem foldl_passthrough:
   !base acc placed op_map matching w.
     MEM w base /\ FLOOKUP op_map w = NONE ==>
     MEM w (FST (FOLDL (\(acc, placed) w.
