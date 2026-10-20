@@ -15,6 +15,13 @@
  * TOP-LEVEL:
  * - checked_selected_entry_defaults_cases
  * - checked_selected_entry_bind_arguments
+ *
+ * Helper:
+ * - evaluate_defaults_NONE_stop
+ * - evaluate_defaults_typed_cases
+ * - defaults_env_function_entry_env
+ * - checked_entry_defaults_env_consistent
+ * - checked_public_getter_args_well_formed
  *)
 
 Theory vyperTypeEntryDefaults
@@ -33,57 +40,109 @@ val _ = Parse.hide "body";
 
 (* ===== Evaluating a list of well-typed defaults ===== *)
 
-(* Each default is evaluated from the same entry state.  A failing default
- * either raises a non-TypeError exception or yields a storage array
- * reference; HashMap references are excluded by the types. *)
-Theorem evaluate_defaults_typed_cases:
+(* evaluate_defaults stops at the first default whose own evaluation is not a
+ * value; every default before it evaluated to one. *)
+Theorem evaluate_defaults_NONE_stop:
   !es.
-    well_typed_exprs env es /\
-    (!e tyv. MEM e es /\ evaluate_type env.type_defs (expr_type e) = SOME tyv ==>
-       tyv <> NoneTV) /\
-    env_consistent env cx (initial_state am [FEMPTY]) /\
-    state_well_typed (initial_state am [FEMPTY]) /\
-    context_well_typed cx /\
-    accounts_well_typed am.accounts /\
-    functions_well_typed cx /\
-    (!e. MEM e es ==> call_evaluation_safe cx (int_calls_expr e)) ==>
-    (?vs.
-       evaluate_defaults cx am es = SOME vs /\
-       LIST_REL
-         (\v e. ?tv. evaluate_type env.type_defs (expr_type e) = SOME tv /\
-                     value_has_type tv v)
-         vs es) \/
-    (evaluate_defaults cx am es = NONE /\
-     ?e. MEM e es /\
-       ((?err. FST (eval_expr cx e (initial_state am [FEMPTY])) = INR err /\
-               no_type_error_result (INR err : toplevel_value + exception)) \/
-        (?is_transient slot elem_tv bd.
-           FST (eval_expr cx e (initial_state am [FEMPTY])) =
-             INL (ArrayRef is_transient slot elem_tv bd))))
+    evaluate_defaults cx am es = NONE ==>
+    ?pre e post.
+      es = pre ++ e::post /\
+      EVERY (\e'. ?v. FST (eval_expr cx e' (initial_state am [FEMPTY])) =
+                        INL (Value v)) pre /\
+      !v. FST (eval_expr cx e (initial_state am [FEMPTY])) <> INL (Value v)
 Proof
   Induct >- simp[evaluate_defaults_def] >>
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `_ ==> _` mp_tac >>
-  impl_tac >- (gvs[well_typed_expr_def] >> metis_tac[]) >>
-  rpt strip_tac >> gvs[well_typed_expr_def] >>
+  rpt strip_tac >>
+  Cases_on `?v. FST (eval_expr cx h (initial_state am [FEMPTY])) = INL (Value v)`
+  >- (gvs[evaluate_defaults_def, AllCaseEqs()] >>
+      qexistsl [`h::pre`, `e`, `post`] >> simp[]) >>
+  qexistsl [`[]`, `h`, `es`] >> gvs[]
+QED
+
+(* A well-typed default whose evaluation is not a value either raised a
+ * non-TypeError exception or yielded a storage array reference; HashMap
+ * references are excluded by its type. *)
+Theorem default_eval_not_value_cases[local]:
+  well_typed_expr env e /\
+  (!tyv. evaluate_type env.type_defs (expr_type e) = SOME tyv ==> tyv <> NoneTV) /\
+  env_consistent env cx (initial_state am [FEMPTY]) /\
+  state_well_typed (initial_state am [FEMPTY]) /\
+  context_well_typed cx /\
+  accounts_well_typed am.accounts /\
+  functions_well_typed cx /\
+  call_evaluation_safe cx (int_calls_expr e) /\
+  (!v. FST (eval_expr cx e (initial_state am [FEMPTY])) <> INL (Value v)) ==>
+  (?err. FST (eval_expr cx e (initial_state am [FEMPTY])) = INR err /\
+         no_type_error_result (INR err : toplevel_value + exception)) \/
+  (?is_transient slot elem_tv bd.
+     FST (eval_expr cx e (initial_state am [FEMPTY])) =
+       INL (ArrayRef is_transient slot elem_tv bd))
+Proof
+  strip_tac >>
   `accounts_well_typed (initial_state am [FEMPTY]).accounts` by
     simp[initial_state_def] >>
-  `call_evaluation_safe cx (int_calls_expr h)` by simp[] >>
-  Cases_on `eval_expr cx h (initial_state am [FEMPTY])` >>
-  rename1 `eval_expr cx h _ = (res1,st1)` >>
+  Cases_on `eval_expr cx e (initial_state am [FEMPTY])` >>
+  rename1 `eval_expr cx e _ = (res1,st1)` >>
   drule_all (cj 8 eval_all_type_sound_mutual) >> strip_tac >>
-  (Cases_on `res1` >> gvs[evaluate_defaults_def]
-   >- (rename1 `expr_result_typed env h tv` >>
-       Cases_on `tv` >>
-       gvs[expr_result_typed_def, expr_runtime_typed_def,
-           toplevel_value_typed_def] >>
-       metis_tac[pairTheory.FST]) >>
-   metis_tac[pairTheory.FST])
+  Cases_on `res1` >> gvs[] >>
+  rename1 `expr_result_typed env e tv` >>
+  Cases_on `tv` >>
+  gvs[expr_result_typed_def, expr_runtime_typed_def, toplevel_value_typed_def]
+QED
+
+Theorem well_typed_exprs_MEM[local]:
+  !es. well_typed_exprs env es /\ MEM e es ==> well_typed_expr env e
+Proof
+  Induct >> rw[well_typed_expr_def] >> gvs[]
+QED
+
+(* Defaults dichotomy for a list of well-typed defaults evaluated from the
+ * same entry state: they all evaluate to values of their types, or
+ * evaluation stops at a default whose own evaluation raised a non-TypeError
+ * exception or yielded a storage array reference. *)
+Theorem evaluate_defaults_typed_cases:
+  well_typed_exprs env es /\
+  (!e tyv. MEM e es /\ evaluate_type env.type_defs (expr_type e) = SOME tyv ==>
+     tyv <> NoneTV) /\
+  env_consistent env cx (initial_state am [FEMPTY]) /\
+  state_well_typed (initial_state am [FEMPTY]) /\
+  context_well_typed cx /\
+  accounts_well_typed am.accounts /\
+  functions_well_typed cx /\
+  (!e. MEM e es ==> call_evaluation_safe cx (int_calls_expr e)) ==>
+  (?vs.
+     evaluate_defaults cx am es = SOME vs /\
+     LIST_REL
+       (\v e. ?tv. evaluate_type env.type_defs (expr_type e) = SOME tv /\
+                   value_has_type tv v)
+       vs es) \/
+  (evaluate_defaults cx am es = NONE /\
+   ?pre e post.
+     es = pre ++ e::post /\
+     EVERY (\e'. ?v. FST (eval_expr cx e' (initial_state am [FEMPTY])) =
+                       INL (Value v)) pre /\
+     ((?err. FST (eval_expr cx e (initial_state am [FEMPTY])) = INR err /\
+             no_type_error_result (INR err : toplevel_value + exception)) \/
+      (?is_transient slot elem_tv bd.
+         FST (eval_expr cx e (initial_state am [FEMPTY])) =
+           INL (ArrayRef is_transient slot elem_tv bd))))
+Proof
+  strip_tac >>
+  Cases_on `evaluate_defaults cx am es`
+  >- (disj2_tac >> simp[] >>
+      drule evaluate_defaults_NONE_stop >> strip_tac >>
+      qexistsl [`pre`, `e`, `post`] >> simp[] >>
+      `MEM e es` by simp[] >>
+      irule default_eval_not_value_cases >> simp[] >>
+      qexists_tac `env` >> simp[] >>
+      metis_tac[well_typed_exprs_MEM]) >>
+  disj1_tac >> simp[] >>
+  drule_all evaluate_defaults_success_values_typed >> simp[]
 QED
 
 (* The typed values of the needed defaults are typed against the parameters
  * they fill. *)
-Theorem defaults_values_typed_args:
+Theorem defaults_values_typed_args[local]:
   LIST_REL
     (\v e. ?tv. evaluate_type tenv (expr_type e) = SOME tv /\
                 value_has_type tv v)
@@ -100,7 +159,9 @@ Proof
   gvs[]
 QED
 
-Theorem needed_defaults_param_types:
+(* As intcall_needed_defaults_param_types, but for provided arguments of any
+ * type (an external entry's are values, not expressions). *)
+Theorem needed_defaults_param_types[local]:
   MAP expr_type dflts =
     MAP SND (DROP (LENGTH params - LENGTH dflts) (params:argument list)) /\
   LENGTH vals <= LENGTH params /\
@@ -205,7 +266,7 @@ Proof
   simp[initial_evaluation_context_def]
 QED
 
-Theorem checked_explicit_external_defaults_typed:
+Theorem checked_explicit_external_defaults_typed[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\
   ALOOKUP mods src = SOME ts /\
@@ -290,7 +351,7 @@ QED
 
 (* ===== The selected external entry ===== *)
 
-Theorem lookup_exported_function_initial_module_code:
+Theorem lookup_exported_function_initial_module_code[local]:
   src = find_function_module am tx.target tx.function_name /\
   lookup_exported_function
     (initial_evaluation_context am.sources am.layouts tx src) am
@@ -304,7 +365,7 @@ QED
 
 (* Everything the default-evaluation and binding lemmas need, established for
  * the entry call_external selects. *)
-Theorem checked_selected_entry_defaults_setup:
+Theorem checked_selected_entry_defaults_setup[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\
   src = find_function_module am tx.target tx.function_name /\
@@ -344,9 +405,10 @@ QED
 
 (* Defaults dichotomy: under a checked contract, the needed default suffix of
  * the selected entry either evaluates to values of the remaining parameters'
- * types, or evaluation stops at a default whose own evaluation fails with a
- * runtime error that is not a TypeError, or yields a storage array reference
- * (which `evaluate_defaults` does not materialise). *)
+ * types, or `evaluate_defaults` stops at a default `e`: every default before
+ * it evaluated to a value, and `e`'s own evaluation fails with a runtime error
+ * that is not a TypeError, or yields a storage array reference (which
+ * `evaluate_defaults` does not materialise). *)
 Theorem checked_selected_entry_defaults_cases:
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\
@@ -365,7 +427,11 @@ Theorem checked_selected_entry_defaults_cases:
        (DROP (LENGTH tx.args) args) vs) \/
   (evaluate_defaults cx am
      (DROP (LENGTH dflts - (LENGTH args - LENGTH tx.args)) dflts) = NONE /\
-   ?e. MEM e (DROP (LENGTH dflts - (LENGTH args - LENGTH tx.args)) dflts) /\
+   ?pre e post.
+     DROP (LENGTH dflts - (LENGTH args - LENGTH tx.args)) dflts =
+       pre ++ e::post /\
+     EVERY (\e'. ?v. FST (eval_expr cx e' (initial_state am [FEMPTY])) =
+                       INL (Value v)) pre /\
      ((?err. FST (eval_expr cx e (initial_state am [FEMPTY])) = INR err /\
              no_type_error_result (INR err : toplevel_value + exception)) \/
       (?is_transient slot elem_tv bd.
@@ -378,9 +444,8 @@ Proof
   qabbrev_tac `needed = DROP (LENGTH dflts - (LENGTH args - LENGTH tx.args)) dflts` >>
   `MAP expr_type needed = MAP SND (DROP (LENGTH tx.args) args)` by
     (qunabbrev_tac `needed` >> irule needed_defaults_param_types >> simp[]) >>
-  qspecl_then [`needed`] mp_tac
-    (Q.INST [`env` |-> `artifact_env art mods src`]
-       evaluate_defaults_typed_cases) >>
+  mp_tac (Q.INST [`env` |-> `artifact_env art mods src`, `es` |-> `needed`]
+            evaluate_defaults_typed_cases) >>
   impl_tac
   >- (simp[Abbr `needed`, well_typed_exprs_DROP] >>
       simp[artifact_env_def] >>
