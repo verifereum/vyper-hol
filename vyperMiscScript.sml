@@ -4,7 +4,7 @@ Ancestors
   int_bitwise numposrep list rich_list words
   cv cv_std vfmTypes
 Libs
-  cv_transLib blastLib
+  cv_transLib blastLib dep_rewrite
 
 (* Miscellaneous definitions/theorems/translations that need to be organised
  * and upstreamed to HOL where appropriate *)
@@ -406,3 +406,20 @@ Theorem list_CASE_rator =
 Theorem prod_CASE_rator =
   DatatypeSimps.mk_case_rator_thm_tyinfo
     (Option.valOf (TypeBase.read {Thy="pair",Tyop="prod"}));
+
+(* EVAL unfolds word_of_bytes into set_byte, which byteTheory only computes
+   for word32 and word64, so a 256-bit word built from bytes got stuck. This
+   computes the big-endian 256-bit case as a numeral. It leaves out the byte
+   list so that computeLib, which tries rules with fewer arguments first,
+   uses it before word_of_bytes_def. Stopgap until HOL computes this itself:
+   the generic word_of_bytes_be_eq_num_of_bytes is conditional, and
+   computeLib only uses conditional rules at the top of a term (HOL #2100). *)
+Theorem word_of_bytes_T_0w_256[compute]:
+  word_of_bytes T (0w : 256 word) =
+  λbs. n2w (num_of_bytes (be_bytes 32 [] bs))
+Proof
+  simp[FUN_EQ_THM, GSYM word_of_bytes_be_def] >> gen_tac >>
+  DEP_REWRITE_TAC
+    [INST_TYPE [alpha |-> “:256”] word_of_bytes_be_eq_num_of_bytes] >>
+  EVAL_TAC
+QED

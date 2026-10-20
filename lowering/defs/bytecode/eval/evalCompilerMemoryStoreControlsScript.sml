@@ -7,7 +7,7 @@ fun holbuild_extra_deps (_ : string list) = ()
 val () = holbuild_extra_deps ["../memory-stores"]
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms
-  [fmap_to_alist_FEMPTY, i2w_pos, byteTheory.set_byte_bit_field_insert])
+  [fmap_to_alist_FEMPTY, i2w_pos])
 val fixture_root = "../memory-stores/oracle"
 
 val c01_ctrl_str_local_decl = memoryStoreWitnessLib.evaluate fixture_root "c01_ctrl_str_local_decl"
