@@ -870,6 +870,75 @@ End
 
 val () = cv_auto_trans run_ext_call_def;
 
+(* DELEGATECALL loads code from target_addr but retains the current message's
+   address, caller and value. In particular there is no entry value transfer. *)
+Definition make_delegate_call_state_def:
+  make_delegate_call_state cx target_addr calldata accounts tStorage =
+    let tx = make_evm_tx cx.txn.sender cx.txn.target cx.txn.value calldata
+                         default_evm_gas_limit in
+    let accesses =
+      <| addresses := fINSERT cx.txn.target (fINSERT target_addr fEMPTY);
+         storageKeys := fEMPTY |> in
+    (* Native EIP-7702 resolution is one hop and warms the designated address.
+       Only code lookup uses the target; the message still belongs to the proxy. *)
+    let (code, accesses) =
+      code_from_tx accounts accesses (tx with to := SOME target_addr) in
+    let ctxt = initial_context cx.txn.target code F empty_return_destination tx in
+    let rollback =
+      <| accounts := accounts; tStorage := tStorage; accesses := accesses;
+         toDelete := [] |> in
+    <| contexts := [(ctxt, rollback)];
+       txParams := vyper_to_tx_params cx.txn; rollback := rollback;
+       msdomain := Collect empty_domain |>
+End
+
+val () = cv_auto_trans make_delegate_call_state_def;
+
+(* EVM exceptional halts are failed subcalls; model/domain failures remain NONE.
+   Only REVERT exposes its return bytes; all failed calls discard effects. *)
+Definition extract_delegate_call_result_def:
+  extract_delegate_call_result accounts tStorage (result, final_state) =
+    case final_state.contexts of
+    | [(ctxt, _)] =>
+        (case result of
+         | INR (SOME ex) =>
+             if vfmExecution$vfm_abort (SOME ex) then NONE else
+               SOME (F, if ex = vfmExecution$Reverted then ctxt.returnData else [],
+                     accounts, tStorage, [])
+         | _ => extract_call_result accounts tStorage (result, final_state))
+    | _ => NONE
+End
+
+val () = cv_auto_trans extract_delegate_call_result_def;
+
+Definition run_delegate_call_def:
+  run_delegate_call cx target_addr calldata accounts tStorage =
+    let s0 = make_delegate_call_state cx target_addr calldata accounts tStorage in
+    let outcome =
+      if fIN target_addr precompile_addresses then
+        SOME (vfmExecution$dispatch_precompiles target_addr s0)
+      else vfmExecution$run_call s0 in
+    case outcome of
+    | NONE => NONE
+    | SOME result =>
+        if ext_call_success_accounts_ok result then
+          extract_delegate_call_result accounts tStorage result
+        else NONE
+End
+
+val () = cv_auto_trans run_delegate_call_def;
+
+Definition run_raw_call_def:
+  run_raw_call cx flags target_addr calldata amount accounts tStorage =
+    if flags.rcf_is_delegate then
+      run_delegate_call cx target_addr calldata accounts tStorage
+    else run_ext_call cx.txn.target target_addr calldata
+      (if flags.rcf_is_static then NONE else SOME amount)
+      accounts tStorage (vyper_to_tx_params cx.txn)
+End
+
+val () = cv_auto_trans run_raw_call_def;
+
 (* Vyper's EXTCODESIZE check (vyper/codegen/external_call.py): before the
    call only when no return data is expected; calls with a return type rely
    on the returndatasize check instead.  skip_contract_check disables it. *)
@@ -893,13 +962,15 @@ val () = cv_auto_trans ext_call_precheck_ok_def;
    Both input forms retain the same static/revert/output and state effects. *)
 Definition eval_raw_call_def:
   eval_raw_call cx flags target_addr calldata amount = do
-    value_opt <<- if flags.rcf_is_static then NONE else SOME amount;
-    type_check (¬flags.rcf_is_delegate) "raw_call delegate unsupported";
+    type_check
+      (¬(flags.rcf_is_delegate ∧ flags.rcf_is_static) ∧
+       ((flags.rcf_is_delegate ∨ flags.rcf_is_static) ⇒ amount = 0))
+      "raw_call flags/value";
     accounts <- get_accounts;
     tStorage <- get_transient_storage;
     result <- lift_option
-      (run_ext_call cx.txn.target target_addr calldata value_opt accounts tStorage
-        (vyper_to_tx_params cx.txn)) "raw_call run failed";
+      (run_raw_call cx flags target_addr calldata amount accounts tStorage)
+      "raw_call run failed";
     success <<- FST result; result1 <<- SND result;
     returnData <<- FST result1; result2 <<- SND result1;
     accounts' <<- FST result2; result3 <<- SND result2;
@@ -928,16 +999,17 @@ Theorem eval_raw_call_preserves_non_accounts:
   eval_raw_call cx flags target_addr calldata amount st = (res, st') ==>
   st'.scopes = st.scopes /\ st'.immutables = st.immutables
 Proof
-  Cases_on `flags.rcf_is_delegate` >>
-  simp[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
-       assert_def, return_def, raise_def, get_accounts_def,
-       get_transient_storage_def] >>
-  Cases_on `run_ext_call cx.txn.target target_addr calldata
-    (if flags.rcf_is_static then NONE else SOME amount)
-    st.accounts st.tStorage (vyper_to_tx_params cx.txn)` >>
+  Cases_on `¬(flags.rcf_is_delegate ∧ flags.rcf_is_static) ∧
+    ((flags.rcf_is_delegate ∨ flags.rcf_is_static) ⇒ amount = 0)` >>
+  fs[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
+     assert_def, return_def, raise_def, get_accounts_def,
+     get_transient_storage_def] >>
+  Cases_on `run_raw_call cx flags target_addr calldata amount
+    st.accounts st.tStorage` >>
   simp[lift_option_def, bind_def, return_def, raise_def] >>
-  PairCases_on `x` >>
-  Cases_on `flags.rcf_revert_on_failure` >> Cases_on `x0` >>
+  rename1 `run_raw_call _ _ _ _ _ _ _ = SOME call_result` >>
+  PairCases_on `call_result` >>
+  Cases_on `flags.rcf_revert_on_failure` >> Cases_on `call_result0` >>
   Cases_on `flags.rcf_max_outsize = 0` >>
   simp[update_accounts_def, update_transient_def, append_logs_def,
        check_def, assert_def, bind_def, ignore_bind_def, return_def, raise_def] >>

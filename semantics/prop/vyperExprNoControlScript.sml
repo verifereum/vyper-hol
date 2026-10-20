@@ -862,16 +862,17 @@ Theorem eval_raw_call_no_control:
   eval_raw_call cx flags target_addr calldata amount st = (INR exc, st') ==>
   no_control_exc exc
 Proof
-  Cases_on `flags.rcf_is_delegate` >>
-  simp[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
+  Cases_on `~(flags.rcf_is_delegate /\ flags.rcf_is_static) /\
+    ((flags.rcf_is_delegate \/ flags.rcf_is_static) ==> amount = 0)` >>
+  fs[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, get_accounts_def,
        get_transient_storage_def, no_control_exc_def] >>
-  Cases_on `run_ext_call cx.txn.target target_addr calldata
-    (if flags.rcf_is_static then NONE else SOME amount)
-    st.accounts st.tStorage (vyper_to_tx_params cx.txn)` >>
+  Cases_on `run_raw_call cx flags target_addr calldata amount
+    st.accounts st.tStorage` >>
   simp[lift_option_def, bind_def, return_def, raise_def, no_control_exc_def] >>
-  PairCases_on `x` >>
-  Cases_on `flags.rcf_revert_on_failure` >> Cases_on `x0` >>
+  rename1 `run_raw_call _ _ _ _ _ _ _ = SOME call_result` >>
+  PairCases_on `call_result` >>
+  Cases_on `flags.rcf_revert_on_failure` >> Cases_on `call_result0` >>
   Cases_on `flags.rcf_max_outsize = 0` >>
   simp[update_accounts_def, update_transient_def, append_logs_def,
        check_def, assert_def, bind_def, ignore_bind_def, return_def, raise_def,
