@@ -157,18 +157,13 @@ Proof
   EVAL_TAC
 QED
 
-Theorem supported_reserved_and_module_bindings_rejected:
+Theorem supported_module_bindings_rejected:
   ~supported_program
     [VariableDecl Private Storage "x" (BaseT (UintT 256)) (SOME 0);
      program_test_deploy [AnnAssign "x" (BaseT (UintT 256)) expr_test_uint]] /\
   ~supported_program
     [HashMapDecl Private F "i" (BaseT AddressT) (Type (BaseT (UintT 256))) (SOME 0);
-     program_test_deploy [program_test_range []]] /\
-  ~supported_function_body [] Deploy []
-    [AnnAssign "__return_buf__" (BaseT (UintT 256)) expr_test_uint] /\
-  ~supported_function_body [] Deploy []
-    [For "__return_pc__" (BaseT (UintT 256))
-      (Range expr_test_uint (Name (BaseT (UintT 256)) "end")) 1 []]
+     program_test_deploy [program_test_range []]]
 Proof
   EVAL_TAC
 QED

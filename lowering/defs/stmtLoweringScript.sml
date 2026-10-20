@@ -812,7 +812,7 @@ End
 Definition compile_internal_return_from_env_def:
   compile_internal_return_from_env cenv ty src_ty val_op rpc =
     do ret_buf <-
-         (case FLOOKUP cenv.ce_vars "__return_buf__" of
+         (case cenv.ce_return_buf of
             SOME (MemLoc rbuf_off _) =>
               do buf_ptr <- emit_op MLOAD [Lit (n2w rbuf_off)];
                  return (SOME buf_ptr)
@@ -1078,7 +1078,7 @@ Definition compile_stmt_def:
   (* Return NONE: emit STOP for external (with unlock), RET for internal.
      Mirrors Python: vyper/codegen_venom/stmt.py:lower_Return → _lower_external_return (unlocks first) *)
   compile_stmt cenv lctx ty (Return NONE) =
-    (case FLOOKUP cenv.ce_vars "__return_pc__" of
+    (case cenv.ce_return_pc of
        SOME (MemLoc rpc_off _) =>
          (* Internal: ret to return_pc *)
          do rpc <- emit_op MLOAD [Lit (n2w rpc_off)];
@@ -1101,7 +1101,7 @@ Definition compile_stmt_def:
      External functions: uses compile_external_return with ABI encoding. *)
   compile_stmt cenv lctx ty (Return (SOME e)) =
     do val_op <- lower_value compile_expr cenv ty e;
-       (case FLOOKUP cenv.ce_vars "__return_pc__" of
+       (case cenv.ce_return_pc of
           SOME (MemLoc rpc_off _) =>
             do rpc <- emit_op MLOAD [Lit (n2w rpc_off)];
                compile_internal_return_from_env cenv ty (expr_type e)

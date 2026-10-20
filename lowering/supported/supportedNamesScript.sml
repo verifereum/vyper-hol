@@ -42,8 +42,7 @@ End
 
 Definition supported_local_name_def:
   supported_local_name tops name <=>
-    ~MEM name (supported_module_names tops) /\
-    name <> "__return_buf__" /\ name <> "__return_pc__"
+    ~MEM name (supported_module_names tops)
 End
 
 (* Lists, not sets: repeated names in different branches/loops must fail.
@@ -103,8 +102,7 @@ QED
 Theorem supported_bindings_name:
   supported_function_bindings tops args locals loops /\
   MEM name (MAP FST args ++ locals ++ loops) ==>
-  ~MEM name (supported_module_names tops) /\
-  name <> "__return_buf__" /\ name <> "__return_pc__"
+  ~MEM name (supported_module_names tops)
 Proof
   simp[supported_function_bindings_def, EVERY_MEM,
        supported_local_name_def] >> metis_tac[]
