@@ -109,7 +109,7 @@ Definition liveness_edge_transfer_def:
 End
 
 (* ==========================================================================
-   Top-level analysis (recompute each block; schedule by set changes)
+   Block recomputation and staged Python-ordered drivers
    ========================================================================== *)
 
 (* Python OrderedSet equality ignores order. *)
@@ -145,8 +145,10 @@ Definition liveness_changed_def:
       same_vars (df_at [] new lbl 0) (df_at [] old lbl 0))
 End
 
-Definition liveness_analyze_def:
-  liveness_analyze fn =
+(* Staged implementation: the public driver switches together with its
+   iteration proofs and consumers, after the preparation theories integrate. *)
+Definition liveness_recompute_def:
+  liveness_recompute fn =
     let cfg = cfg_analyze fn in
     SND (wl_iterate (liveness_changed fn.fn_blocks)
            (liveness_block fn.fn_blocks cfg) (cfg_preds_of cfg)
@@ -154,13 +156,27 @@ Definition liveness_analyze_def:
            (init_df_state [] (MAP (λbb. bb.bb_label) fn.fn_blocks)))
 End
 
-Definition liveness_analyze_fuel_def:
-  liveness_analyze_fuel fuel fn =
+Definition liveness_recompute_fuel_def:
+  liveness_recompute_fuel fuel fn =
     let cfg = cfg_analyze fn in
     SND (wl_iterate_fuel fuel (liveness_changed fn.fn_blocks)
            (liveness_block fn.fn_blocks cfg) (cfg_preds_of cfg)
            cfg.cfg_dfs_post
            (init_df_state [] (MAP (λbb. bb.bb_label) fn.fn_blocks)))
+End
+
+(* Public drivers remain legacy during proof preparation. C1.8 switches them
+   together with their proof consumers; no ordered equivalence is asserted. *)
+Definition liveness_analyze_def:
+  liveness_analyze fn =
+    df_analyze Backward [] list_union liveness_transfer
+              liveness_edge_transfer fn.fn_blocks NONE fn
+End
+
+Definition liveness_analyze_fuel_def:
+  liveness_analyze_fuel fuel fn =
+    df_analyze_fuel fuel Backward [] list_union liveness_transfer
+                    liveness_edge_transfer fn.fn_blocks NONE fn
 End
 
 (* ==========================================================================
@@ -305,7 +321,7 @@ Theorem liveness_cycle_probe[local]:
     [<| bb_label := "b";
         bb_instructions := [mk_inst 0 ADD [Var "x"; Var "y"] ["z"];
                             mk_inst 1 JMP [Label "b"] []] |>] in
-  let st = liveness_analyze_fuel 4 fn in
+  let st = liveness_recompute_fuel 4 fn in
   df_at [] st "b" 0 = ["y";"x"] /\
   df_at [] st "b" 2 = ["y";"x"] /\
   df_boundary [] st "b" = ["y";"x"]
@@ -319,12 +335,17 @@ Theorem liveness_acyclic_probe[local]:
         bb_instructions := [mk_inst 0 JMP [Label "s"] []] |>;
      <| bb_label := "s";
         bb_instructions := [mk_inst 1 SINK [Var "x"] []] |>] in
-  let st = liveness_analyze_fuel 4 fn in
+  let st = liveness_recompute_fuel 4 fn in
   df_at [] st "b" 0 = ["x"] /\
   df_at [] st "b" 1 = ["x"] /\
   df_at [] st "s" 0 = ["x"] /\
   df_boundary [] st "b" = ["x"] /\
-  df_at [] (liveness_analyze_fuel 0 fn) "s" 0 = []
+  df_at [] (liveness_recompute_fuel 0 fn) "s" 0 = []
 Proof
   EVAL_TAC
 QED
+
+val _ = List.app (fn (_,th) =>
+  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
+  then () else raise Fail "oracle in staged liveness definitions")
+  (DB.thms "livenessDefs");
