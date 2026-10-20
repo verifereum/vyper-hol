@@ -194,15 +194,14 @@ val internal_tuple_call_state9 =
 val internal_tuple_call_cenv1_eval = save_thm
   ("internal_tuple_call_cenv1_eval",
    EVAL
-     ``^internal_tuple_call_cenv with ce_vars updated_by (λvars.
-          let vars1 = case ^internal_tuple_call_return_buf of
-                SOME param_op =>
-                  (case FLOOKUP vars "__return_buf__" of
-                     SOME (MemLoc _ sz) =>
-                       vars |+ ("__return_buf__", PtrVar param_op sz)
-                   | _ => vars)
-              | NONE => vars in
-          vars1 |+ ("__return_pc__", PtrVar ^internal_tuple_call_retpc 0))``)
+     ``^internal_tuple_call_cenv with
+          <| ce_return_buf :=
+               (case (^internal_tuple_call_return_buf,
+                      (^internal_tuple_call_cenv).ce_return_buf) of
+                  (SOME param_op, SOME (MemLoc _ sz)) =>
+                    SOME (PtrVar param_op sz)
+                | _ => (^internal_tuple_call_cenv).ce_return_buf);
+             ce_return_pc := SOME (PtrVar ^internal_tuple_call_retpc 0) |>``)
 val internal_tuple_call_cenv1 = rhs (concl internal_tuple_call_cenv1_eval)
 val internal_tuple_call_materialize_eval = save_thm
   ("internal_tuple_call_materialize_eval",
@@ -286,7 +285,7 @@ val internal_tuple_call_state14 =
   #2 (pairSyntax.dest_pair internal_tuple_call_return_value_pair)
 val internal_tuple_call_rpc_lookup_eval = save_thm
   ("internal_tuple_call_rpc_lookup_eval",
-   EVAL ``FLOOKUP (^internal_tuple_call_cenv2).ce_vars "__return_pc__"``)
+   EVAL ``(^internal_tuple_call_cenv2).ce_return_pc``)
 val internal_tuple_call_rpc_lookup = optionSyntax.dest_some
   (rhs (concl internal_tuple_call_rpc_lookup_eval))
 val internal_tuple_call_rpc =
@@ -294,7 +293,7 @@ val internal_tuple_call_rpc =
 val internal_tuple_call_ret_buf_eval = save_thm
   ("internal_tuple_call_ret_buf_eval",
    EVAL
-     ``(case FLOOKUP (^internal_tuple_call_cenv2).ce_vars "__return_buf__" of
+     ``(case (^internal_tuple_call_cenv2).ce_return_buf of
           SOME (MemLoc rbuf_off _) =>
             do buf_ptr <- emit_op MLOAD [Lit (n2w rbuf_off)];
                return (SOME buf_ptr)
@@ -772,12 +771,6 @@ val internal_tuple_call_return_from_env_pair =
   rhs (concl internal_tuple_call_return_from_env_eval)
 val internal_tuple_call_return_from_env_state =
   #2 (pairSyntax.dest_pair internal_tuple_call_return_from_env_pair)
-val internal_tuple_call_cenv2_vars_eval =
-  EVAL ``(^internal_tuple_call_cenv2).ce_vars``
-val internal_tuple_call_cenv2_vars =
-  rhs (concl internal_tuple_call_cenv2_vars_eval)
-val internal_tuple_call_rpc_direct_eval =
-  EVAL ``FLOOKUP ^internal_tuple_call_cenv2_vars "__return_pc__"``
 fun internal_tuple_call_eq_lhs th =
   fst (dest_eq (snd (strip_forall (concl th))))
 val internal_tuple_call_return_some_pat =
@@ -1019,7 +1012,7 @@ val internal_tuple_call_internal_return_clean_eval = save_thm
        internal_tuple_call_internal_return_clean_step2))
 
 Theorem compile_internal_return_from_ptr_env:
-  FLOOKUP cenv.ce_vars "__return_buf__" = SOME (PtrVar buf_op sz) ⇒
+  cenv.ce_return_buf = SOME (PtrVar buf_op sz) ⇒
   compile_internal_return_from_env cenv (TupleT tys) src_ty val_op return_pc =
     compile_internal_return cenv (SOME val_op) return_pc
       cenv.ce_returns_count (TupleT tys) src_ty tys (SOME buf_op)
@@ -1031,7 +1024,7 @@ Proof
 QED
 
 val internal_tuple_call_ret_buf_lookup_eval =
-  EVAL ``FLOOKUP (^internal_tuple_call_cenv2).ce_vars "__return_buf__"``
+  EVAL ``(^internal_tuple_call_cenv2).ce_return_buf``
 val internal_tuple_call_return_from_env_clean_step0 = QCONV
   (PURE_REWRITE_CONV [internal_tuple_call_src_ty_eval])
   ``compile_internal_return_from_env ^internal_tuple_call_cenv2
@@ -1053,7 +1046,7 @@ val internal_tuple_call_return_from_env_clean_eval = save_thm
        internal_tuple_call_return_from_env_clean_step2))
 
 Theorem compile_stmt_return_ptr:
-  FLOOKUP cenv.ce_vars "__return_pc__" = SOME (PtrVar return_pc sz) ⇒
+  cenv.ce_return_pc = SOME (PtrVar return_pc sz) ⇒
   compile_stmt cenv lctx ty (Return (SOME e)) =
     do val_op <- lower_value compile_expr cenv ty e;
        compile_internal_return_from_env cenv ty (expr_type e)

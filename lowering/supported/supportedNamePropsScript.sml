@@ -39,13 +39,15 @@ Proof
   EVAL_TAC
 QED
 
-Theorem supported_reserved_bindings_reject:
-  ~supported_function_bindings [] [("__return_buf__", BaseT BoolT)] [] [] /\
-  ~supported_function_bindings [] [("__return_pc__", BaseT BoolT)] [] [] /\
-  ~supported_function_bindings [] [] ["__return_buf__"] [] /\
-  ~supported_function_bindings [] [] ["__return_pc__"] [] /\
-  ~supported_function_bindings [] [] [] ["__return_buf__"] /\
-  ~supported_function_bindings [] [] [] ["__return_pc__"]
+(* The return PC and return buffer live in dedicated compile_env fields, so
+   their Python attribute names are ordinary user identifiers (#557, a04-04). *)
+Theorem supported_compiler_slot_names_accept:
+  supported_function_bindings [] [("__return_buf__", BaseT BoolT)] [] [] /\
+  supported_function_bindings [] [("__return_pc__", BaseT BoolT)] [] [] /\
+  supported_function_bindings [] [] ["__return_buf__"] [] /\
+  supported_function_bindings [] [] ["__return_pc__"] [] /\
+  supported_function_bindings [] [] [] ["__return_buf__"] /\
+  supported_function_bindings [] [] [] ["__return_pc__"]
 Proof
   EVAL_TAC
 QED
@@ -78,9 +80,9 @@ Theorem supported_function_header_names_contract:
     (FunctionDecl External View F F "revert" [] [] NoneT []) /\
   ~supported_function_header_names []
     (FunctionDecl Internal Pure F F "revert" [] [] NoneT []) /\
-  ~supported_function_header_names []
+  supported_function_header_names []
     (FunctionDecl External View F F "f" [("__return_pc__", BaseT BoolT)] [] NoneT []) /\
-  ~supported_function_header_names []
+  supported_function_header_names []
     (FunctionDecl Deploy Payable F F "__init__" [("__return_buf__", BaseT BoolT)] [] NoneT [])
 Proof
   EVAL_TAC

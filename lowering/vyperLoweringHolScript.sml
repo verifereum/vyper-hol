@@ -11,3 +11,4 @@ Ancestors
   vyperLoweringCorrect
   configuredE2ECorrectness
   evalCompilerMemoryStores
+  evalCompilerNameCollisions
