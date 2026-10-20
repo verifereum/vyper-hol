@@ -32,4 +32,8 @@ signature vyperCheckContractFrontendLib = sig
   val check_contract_file :
     {in_deploy : bool, address : Term.term, path : string} -> Thm.thm
 
+  (* Strict first-stage constant frontend; no compiler folding metadata. *)
+  val check_constant_contract_file :
+    {address : Term.term, path : string} -> Thm.thm
+
 end
