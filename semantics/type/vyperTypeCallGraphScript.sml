@@ -68,7 +68,9 @@ Termination
   conj_tac >- MATCH_ACCEPT_TAC prim_recTheory.WF_measure >>
   PURE_REWRITE_TAC [prim_recTheory.measure_thm, sumTheory.sum_case_def] >>
   simp[expr_size_def, listTheory.list_size_def,
-       basicSizeTheory.pair_size_def, basicSizeTheory.option_size_def]
+       basicSizeTheory.pair_size_def, basicSizeTheory.option_size_def,
+       bnfPrelimsTheory.option_size_map, bnfPrelimsTheory.pair_size_map,
+       listTheory.list_size_map, SF ETA_ss]
 End
 
 (* ===== Internal calls in statements ===== *)
