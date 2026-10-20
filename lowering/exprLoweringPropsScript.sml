@@ -3225,3 +3225,36 @@ Proof
     by (irule ci_mono_same_blocks_isPREFIX >> simp[]) >>
   gvs[GSYM prefix_drop_equiv, emitted_insts_def]
 QED
+
+(* Issue #560 integrity gate, including local proof-interface helpers. *)
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles then ()
+     else raise Fail "admitted memory-construction proof interface"
+  end)
+  [ci_mono_typed_memory_family, ci_mono_compile_store_memory,
+   ci_mono_compile_struct_lit_cfn, ci_mono_compile_make_array_elems_cfn,
+   ci_mono_compile_make_array_cfn, ci_mono_compile_zero_words,
+   ci_mono_compile_builtin_empty_complex,
+   builtinSimpleTheory.compile_zero_words_zero,
+   builtinSimpleTheory.compile_zero_words_one_order,
+   builtinSimpleTheory.compile_zero_words_two_order,
+   builtinSimpleTheory.compile_builtin_empty_complex_length_order,
+   builtinSimpleTheory.compile_builtin_empty_complex_fixed_order];
+
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles then ()
+     else raise Fail "admitted memory-construction regression theorem"
+  end)
+  [exprLoweringTheory.compile_empty_word_dispatch,
+   exprLoweringTheory.compile_empty_memory_dispatch,
+   exprLoweringTheory.compile_make_array_empty_length,
+   exprLoweringTheory.compile_make_array_word_order,
+   exprLoweringTheory.compile_make_fixed_array_word_order,
+   exprLoweringTheory.compile_make_tuple_word_order,
+   exprLoweringTheory.compile_struct_lit_word_order,
+   exprLoweringTheory.compile_make_array_empty_full_capacity,
+   exprLoweringTheory.compile_make_array_typed_tuple_order];
