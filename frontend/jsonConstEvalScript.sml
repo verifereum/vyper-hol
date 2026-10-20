@@ -1,7 +1,40 @@
 Theory jsonConstEval
 Ancestors
   jsonConstAST jsonToVyperExpr vyperConstEval vyperValue vyperValueOperation
-  alist
+  alist int_bitwise
+
+(* Literals and substituted constants are polymorphic here. A local operand
+   fixes the type of its arithmetic expression; a shift's count does not fix
+   the type of the shifted value. *)
+Definition integer_local_type_def:
+  integer_local_type locals (JE_Name name _ _ _) = ALOOKUP locals name /\
+  integer_local_type locals (JE_Folded original _) =
+    integer_local_type locals original /\
+  integer_local_type locals (JE_BinOp left bop right _) =
+    (case integer_local_type locals left of
+     | SOME ty => SOME ty
+     | NONE => if bop = JBop_LShift \/ bop = JBop_RShift then NONE
+               else integer_local_type locals right) /\
+  integer_local_type locals _ = NONE
+Termination
+  WF_REL_TAC `measure (\(_,e). json_expr_size e)` >> simp[]
+End
+
+(* Runtime left shifts wrap, but source constant shifts do not. Reject a
+   closed shift unless its unwrapped result fits; do not replace evaluation
+   with this check. The source folder also limits constant counts to 256. *)
+Definition constant_shift_ok_def:
+  constant_shift_ok ty bop left right =
+    if closed_integer left /\ closed_integer right then
+      case (eval_integer_constant left, eval_integer_constant right,
+            type_to_int_bound ty) of
+      | (SOME i, SOME n, SOME bounds) =>
+          0 <= n /\ n <= 256 /\
+          (bop = JBop_LShift ==>
+           within_int_bound bounds (int_shift_left (Num n) i))
+      | _ => F
+    else T
+End
 
 (* Elaborate integer expressions with declaration types, before resolving
    array bounds. Constants are substituted from the already evaluated prefix;
@@ -24,9 +57,18 @@ Definition elaborate_integer_def:
   elaborate_integer constants locals ty (JE_Folded original _) =
     elaborate_integer constants locals ty original /\
   elaborate_integer constants locals ty (JE_BinOp left bop right _) =
-    (case (elaborate_integer constants locals ty left,
-           elaborate_integer constants locals ty right) of
-     | (SOME l, SOME r) => SOME (Builtin ty (Bop (translate_binop bop)) [l; r])
+    (let shift = (bop = JBop_LShift \/ bop = JBop_RShift);
+         right_ty = if shift then
+           (case integer_local_type locals right of
+            | SOME t => t | NONE => BaseT (UintT 256))
+           else ty in
+     if shift /\ ~(case right_ty of BaseT (UintT _) => T | _ => F)
+     then NONE else
+     case (elaborate_integer constants locals ty left,
+           elaborate_integer constants locals right_ty right) of
+     | (SOME l, SOME r) =>
+         if shift /\ ~constant_shift_ok ty bop l r then NONE
+         else SOME (Builtin ty (Bop (translate_binop bop)) [l; r])
      | _ => NONE) /\
   elaborate_integer constants locals ty _ = NONE
 Termination
@@ -59,7 +101,7 @@ QED
 
 Definition resolve_constant_annotation_def:
   resolve_constant_annotation constants (CA_Integer bits signed) =
-    (if (if signed then 1 < bits else 0 < bits) /\ bits <= 256
+    (if 0 < bits /\ bits <= 256 /\ bits MOD 8 = 0
      then SOME (BaseT (if signed then IntT bits else UintT bits)) else NONE) /\
   resolve_constant_annotation constants (CA_Array element bound) =
     (case (resolve_constant_annotation constants element,
@@ -111,12 +153,12 @@ Definition translate_constant_declarations_def:
      | (SOME params, SOME ty) =>
        if EXISTS (\(name,_). IS_SOME (ALOOKUP constants name)) params \/
           ~ALL_DISTINCT (MAP FST params) then NONE else
-       case elaborate_integer constants params ty source of
+       (case elaborate_integer constants params ty source of
        | NONE => NONE
        | SOME e => OPTION_MAP
            (CONS (FunctionDecl External Pure F F name params [] ty
              [Return (SOME e)]))
-           (translate_constant_declarations constants rest)
+           (translate_constant_declarations constants rest))
      | _ => NONE)
 End
 
