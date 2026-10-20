@@ -1212,8 +1212,8 @@ QED
 Theorem evaluate_type_StructT_result[local]:
   evaluate_type tenv (StructT nsid) = SOME tv ==>
   ?args tvs.
-    FLOOKUP tenv (type_key nsid) = SOME (StructArgs args) /\
-    evaluate_types (tenv \\ type_key nsid) (MAP SND args) [] = SOME tvs /\
+    FLOOKUP tenv nsid = SOME (StructArgs args) /\
+    evaluate_types (tenv \\ nsid) (MAP SND args) [] = SOME tvs /\
     tv = StructTV (ZIP (MAP FST args, tvs))
 Proof
   rw[Once evaluate_type_def, AllCaseEqs(), LET_THM] >> simp[]
