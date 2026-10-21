@@ -3,8 +3,10 @@
  * call_external has selected an entry and the raw arguments fit its
  * parameters, the call ends in one of two ways.
  *
- * - Default failure: a needed default's own eval_expr fails, and call_external
- *   returns a RuntimeError with the machine unchanged and no requests.
+ * - Default failure: evaluate_defaults stops at a needed default whose own
+ *   eval_expr fails with a runtime error that is not a TypeError, or yields a
+ *   storage array reference, and call_external returns a RuntimeError with the
+ *   machine unchanged and no requests.
  * - Body run: the needed defaults evaluate to typed values, the arguments bind
  *   to a scope, and call_external is call_external_body from that scope with
  *   pending deletions finalised on success; its result is not a TypeError and
@@ -16,6 +18,9 @@
  *
  * TOP-LEVEL: call_external_body_def, call_external_function_body,
  *            checked_selected_entry_no_static_error.
+ *
+ * Helper: call_external_selected_entry_body,
+ *         call_external_selected_entry_defaults_fail, finalize_case_FST.
  *)
 
 Theory vyperTypeSelectedEntrySoundness
@@ -144,8 +149,10 @@ Proof
 QED
 
 (* The ABI premise is the length fit plus provided_args_typed: bind_arguments
-   casts every provided value to its parameter type.  The two cases are
-   exclusive (evaluate_defaults is NONE in one and SOME in the other). *)
+   casts every provided value to its parameter type.  provided_args_typed
+   already implies LENGTH tx.args <= LENGTH args; the bound is kept to match
+   checked_selected_entry_bind_arguments.  The two cases are exclusive
+   (evaluate_defaults is NONE in one and SOME in the other). *)
 Theorem checked_selected_entry_no_static_error:
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\
