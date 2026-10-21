@@ -623,5 +623,23 @@ Theorem checked_load_contract_no_static_error:
              scope body ret) = INR exc ==>
       exc <> BreakException /\ exc <> ContinueException
 Proof
-  cheat
+  strip_tac >>
+  drule_all checked_constructor_bind_arguments >> strip_tac >>
+  qpat_x_assum `dflts = []` SUBST_ALL_TAC >>
+  drule check_contract_initial_immutables >> strip_tac >>
+  drule_all checked_constructor_constants_exist >>
+  disch_then (qspec_then `exps` strip_assume_tac) >>
+  drule_all checked_constructor_body_no_static_error >>
+  disch_then (qspec_then `orc` strip_assume_tac) >>
+  drule_all load_contract_constructor_body >>
+  disch_then (qspec_then `orc` assume_tac) >>
+  qexistsl [`imms`,`am_c`,`scope`] >> simp[]
 QED
+
+(* Audit the complete dependency chain of the frozen result. *)
+val _ = let
+  val (oracles,axioms) = Tag.dest_tag (Thm.tag checked_load_contract_no_static_error)
+in
+  if List.all (fn s => s = "DISK_THM") oracles andalso null axioms
+  then () else raise Fail "unchecked oracle or axiom in checked deployment theorem"
+end;
