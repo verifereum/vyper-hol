@@ -549,18 +549,28 @@ Theorem load_contract_establishes_machine_well_typed:
   context_well_typed
     (initial_evaluation_context ((tx.target,mods)::am.sources)
        am.layouts tx NONE with in_deploy := T) /\
-  (!imms.
+  load_contract orc am tx mods exps = INL (am_deployed,rqs) ==>
+  machine_well_typed am_deployed
+Proof
+  strip_tac >>
+  `!imms.
      initial_immutables (type_env_all_modules mods) mods = SOME imms ==>
      checked_deployment_constants_ready
        (initial_evaluation_context ((tx.target,mods)::am.sources)
           am.layouts tx NONE with in_deploy := T)
        (am with <|immutables updated_by CONS (tx.target,imms);
                   exports updated_by CONS (tx.target,exps)|>)
-       tx.target mods) /\
-  load_contract orc am tx mods exps = INL (am_deployed,rqs) ==>
-  machine_well_typed am_deployed
-Proof
-  strip_tac >>
+       tx.target mods` by
+    (rpt strip_tac >>
+     irule checked_deployment_constants_ready_from_check >>
+     simp[initial_evaluation_context_def] >>
+     conj_tac
+     >- (drule_all deployment_initial_machine_well_typed >>
+         disch_then (qspecl_then [`exps`,`tx.target`] mp_tac) >> simp[]) >>
+     drule_all checked_initial_immutables_constants_input_tags_agree >>
+     disch_then (qspec_then `am with exports updated_by CONS (tx.target,exps)`
+       mp_tac) >>
+     simp[]) >>
   drule load_contract_success_cases >> strip_tac >> gvs[] >>
   `machine_well_typed
      (am with <|immutables updated_by CONS (tx.target,imms);

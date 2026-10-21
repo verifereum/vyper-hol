@@ -499,8 +499,10 @@ Definition check_toplevel_decl_def:
           params_ok tenv args /\ well_formed_type tenv ret) funcs
     | EventDecl id fields =>
         EVERY (\((_,ty),indexed). assignable_type tenv ty) fields
-    | FunctionDecl _ _ _ _ _ args dflts ret _ =>
-        params_ok tenv args /\ well_formed_type tenv ret
+    | FunctionDecl vis _ _ _ _ args dflts ret _ =>
+        params_ok tenv args /\ well_formed_type tenv ret /\
+        (* Vyper: "Constructor may not use default arguments" *)
+        (vis = Deploy ==> dflts = [])
 End
 
 (* ===== Callable-body checks ===== *)
