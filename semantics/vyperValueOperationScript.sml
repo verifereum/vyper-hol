@@ -599,7 +599,9 @@ Definition evaluate_convert_def:
      then INL $ IntV i
      else INR (RuntimeError "convert BytesV uint bound")) ∧
   evaluate_convert _ (BytesV bs) (BaseT (IntT n)) =
-    (let i = w2i $ (word_of_bytes_be (PAD_LEFT 0w 32 bs) : bytes32) in
+    (let i =
+       w2i ((word_of_bytes_be (PAD_RIGHT 0w 32 bs) : bytes32) >>
+            (8 * (32 - LENGTH bs))) in
      if within_int_bound (Signed n) i
      then INL $ IntV i
      else INR (RuntimeError "convert BytesV int bound")) ∧
