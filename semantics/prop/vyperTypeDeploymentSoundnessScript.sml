@@ -15,7 +15,15 @@
  *            checked_load_contract_no_static_error.
  *
  * Helper: check_contract_initial_immutables,
- *         check_contract_constructor_no_defaults.
+ *         check_contract_constructor_no_defaults,
+ *         checked_constructor_{args_distinct, nonreentrant_slot,
+ *           no_control_escape, call_evaluation_safe} (static facts),
+ *         checked_constructor_{constants_ready, constants_exist,
+ *           initial_immutables_consistent} (constants setup),
+ *         checked_constructor_prefix_{typing, no_type_error, return_typed,
+ *           no_loop_control} (lock, value transfer and body run),
+ *         call_external_body_no_{type_error, loop_control}_from_prefix,
+ *         checked_constructor_body_no_static_error.
  *)
 
 Theory vyperTypeDeploymentSoundness
@@ -239,17 +247,6 @@ Proof
      qexists `mods` >> simp[]) >>
   drule_all checked_deployment_constants_establish_machine_well_typed >>
   strip_tac >> qexists `am_c` >> simp[]
-QED
-
-Theorem checked_constructor_constants_machine_well_typed:
-  machine_well_typed installed_am /\
-  checked_deployment_constants_ready cx installed_am target mods /\
-  evaluate_all_constants cx installed_am target mods = SOME am_c ==>
-  machine_well_typed am_c
-Proof
-  strip_tac >>
-  drule_all checked_deployment_constants_establish_machine_well_typed >>
-  strip_tac >> gvs[]
 QED
 
 Theorem checked_constructor_initial_immutables_consistent:
