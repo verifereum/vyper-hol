@@ -12,3 +12,4 @@ Ancestors
   configuredE2ECorrectness
   evalCompilerMemoryStores
   evalCompilerNameCollisions
+  evalCompilerSliceBuffers
