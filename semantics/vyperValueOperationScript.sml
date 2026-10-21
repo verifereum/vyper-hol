@@ -356,7 +356,7 @@ Definition evaluate_binop_def:
               once available/factored. *)
            INL $ BoolV (int_and (&n1) (&n2) ≠ 0)
            | _ => INR (TypeError "binop"))
-       | ArrayV av => INL $ BoolV $ evaluate_in_array NoneTV v1 av
+       | ArrayV av => INL $ BoolV $ evaluate_in_array tv v1 av
        | _ => INR (TypeError "binop"))
      | Eq => (case v1 of
          IntV i1 => (case v2 of IntV i2 =>

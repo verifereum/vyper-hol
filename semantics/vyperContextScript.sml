@@ -663,6 +663,29 @@ Proof
   rw[evaluate_builtin_pre_def]
 QED
 
+Definition evaluate_builtin_typed_def:
+  evaluate_builtin_typed cx acc ty [lhs_ty; rhs_ty] (Bop bop) [v1; v2] =
+    (if bop = In ∨ bop = NotIn then
+       let u =
+         case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0;
+           rhs_tv =
+         case rhs_ty of
+         | ArrayT elem_ty bd =>
+             (case evaluate_type (get_tenv cx) elem_ty of
+              | SOME elem_tv => ArrayTV elem_tv bd
+              | NONE => NoneTV)
+         | _ =>
+             (case evaluate_type (get_tenv cx) rhs_ty of
+              | SOME tv => tv
+              | NONE => NoneTV)
+       in evaluate_binop u rhs_tv bop v1 v2
+     else evaluate_builtin cx acc ty (Bop bop) [v1; v2]) ∧
+  evaluate_builtin_typed cx acc ty arg_tys bt vs =
+    evaluate_builtin cx acc ty bt vs
+End
+
+val () = cv_auto_trans evaluate_builtin_typed_def;
+
 Definition type_builtin_args_length_ok_def:
   type_builtin_args_length_ok Empty n = (n = 0n) ∧
   type_builtin_args_length_ok MaxValue n = (n = 0) ∧

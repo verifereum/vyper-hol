@@ -58,7 +58,7 @@ Datatype:
   | SubscriptK type expr eval_continuation
   | SubscriptK1 type toplevel_value eval_continuation
   | AttributeK identifier eval_continuation
-  | BuiltinK type builtin eval_continuation
+  | BuiltinK (type list) type builtin eval_continuation
   | LenK eval_continuation
   | TypeBuiltinK type_builtin type eval_continuation
   | CallSendK eval_continuation
@@ -161,7 +161,8 @@ Definition eval_expr_cps_def:
     (case type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" st of
        (INR ex, st) => AK cx8 (ApplyExc ex) st k
      | (INL (), st) => if bt = Len then eval_expr_cps cx8 (HD es) st (LenK k)
-                       else eval_exprs_cps cx8 es st (BuiltinK ty bt k)) ∧
+                       else eval_exprs_cps cx8 es st
+                         (BuiltinK (MAP expr_type es) ty bt k)) ∧
   eval_expr_cps cx8 (Pop _ bt) st k =
     eval_base_target_cps cx8 bt st (PopK k) ∧
   eval_expr_cps cx8 (TypeBuiltin _ tb typ es) st k =
@@ -394,7 +395,7 @@ Definition apply_exc_def:
   apply_exc cx ex st (SubscriptK1 _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (AttributeK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (PopK k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (BuiltinK _ _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (BuiltinK _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (LenK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (TypeBuiltinK _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (CallSendK k) = AK cx (ApplyExc ex) st k ∧
@@ -637,10 +638,10 @@ Definition apply_vals_def:
       | (INL vs, st) => eval_for_cps cx tyv id body vs st k) ∧
   apply_vals cx vs st (StructLitK ks k) =
     apply_tv cx (Value $ StructV (ZIP (ks, vs))) st k ∧
-  apply_vals cx vs st (BuiltinK ty bt k) =
+  apply_vals cx vs st (BuiltinK arg_tys ty bt k) =
     liftk cx ApplyTv (do
       acc <- get_accounts;
-      v <- lift_sum $ evaluate_builtin cx acc ty bt vs;
+      v <- lift_sum $ evaluate_builtin_typed cx acc ty arg_tys bt vs;
       return $ Value v
     od st) k ∧
   apply_vals cx vs st (TypeBuiltinK tb typ k) =
