@@ -13,7 +13,7 @@ fun holbuild_extra_deps (_ : string list) = ()
 val () = holbuild_extra_deps ["../slice-buffers"]
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms
-  [fmap_to_alist_FEMPTY, i2w_pos, byteTheory.set_byte_bit_field_insert])
+  [fmap_to_alist_FEMPTY, i2w_pos])
 val fixture_root = "../slice-buffers/oracle"
 
 (* slice(msg.data, 0, 4): the output buffer is 32 + ceil32(4) bytes,
