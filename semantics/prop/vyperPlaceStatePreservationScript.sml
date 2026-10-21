@@ -1,7 +1,7 @@
 Theory vyperPlaceStatePreservation
 Ancestors
   list rich_list option alist vyperValue vyperTyping vyperState
-  vyperTypeStatePreservation
+  vyperTypeStatePreservation vyperPlaceInvariants
 
 Theorem subscripts_type_append:
   !xs tv ys.
@@ -97,6 +97,36 @@ Theorem evaluate_subscripts_type:
     evaluate_subscripts tv a path = INL v ==> value_has_type ptv v
 Proof
   metis_tac[evaluate_subscripts_type_metadata]
+QED
+
+Theorem read_popped_type:
+  !history tv path ptv v.
+    popped_history_typed tv history /\
+    subscripts_type tv path = SOME ptv /\
+    read_popped tv path history = SOME v ==> value_has_type ptv v
+Proof
+  Induct >> simp[read_popped_def] >>
+  gen_tac >> PairCases_on `h` >> rpt gen_tac >>
+  simp[popped_history_typed_cons, read_popped_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  TRY (first_x_assum irule >> goal_assum (drule_at Any) >> simp[] >> NO_TAC) >>
+  `path = h0 ++ DROP (LENGTH h0) path` by
+    (gvs[IS_PREFIX_APPEND] >> simp[DROP_LENGTH_APPEND]) >>
+  `subscripts_type ptv' (DROP (LENGTH h0) path) = SOME ptv` by
+    (qpat_x_assum `subscripts_type tv path = SOME ptv` mp_tac >>
+     once_asm_rewrite_tac[] >> simp[subscripts_type_append, DROP_LENGTH_APPEND]) >>
+  metis_tac[evaluate_subscripts_type]
+QED
+
+Theorem read_memory_path_type:
+  value_has_type entry.type entry.value /\
+  well_formed_type_value entry.type /\
+  popped_history_typed entry.type entry.popped /\
+  subscripts_type entry.type path = SOME ptv /\
+  read_memory_path entry path = INL v ==> value_has_type ptv v
+Proof
+  rw[read_memory_path_def, AllCaseEqs()] >>
+  metis_tac[evaluate_subscripts_type, read_popped_type]
 QED
 
 val () = List.app (fn (name,th) =>
