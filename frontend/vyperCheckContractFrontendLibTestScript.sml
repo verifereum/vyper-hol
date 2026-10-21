@@ -277,6 +277,8 @@ in
 end;
 
 val _ = check_fixture false "simple.json";
+val _ = check_fixture false "address_bytes20.json";
+val _ = check_fixture true "address_bytes20.json";
 val _ = check_fixture false "storage.json";
 val _ = check_fixture false "imported_struct/main.json";
 val _ = check_fixture false "imported_flag/main.json";
