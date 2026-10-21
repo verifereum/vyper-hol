@@ -496,7 +496,7 @@ QED
 Theorem push_scope_with_var_creates_singleton_hd:
   ∀nm tv v st res st'.
     push_scope_with_var nm tv v st = (INL (), st') ⇒
-    HD st'.scopes = FEMPTY |+ (nm, <| assignable := F; type := tv; value := v |>) ∧
+    HD st'.scopes = FEMPTY |+ (nm, <| assignable := F; type := tv; value := v; popped := [] |>) ∧
     TL st'.scopes = st.scopes
 Proof
   rw[push_scope_with_var_def, return_def] >> simp[]

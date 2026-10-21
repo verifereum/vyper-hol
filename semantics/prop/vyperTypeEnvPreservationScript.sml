@@ -219,7 +219,7 @@ Theorem push_scope_with_var_env_consistent:
   evaluate_type (get_tenv cx) typ = SOME tyv /\
   nm NOTIN FDOM env.var_types ==>
   env_consistent (extend_local env nm typ F) cx
-    (st with scopes updated_by CONS (FEMPTY |+ (nm, <| assignable := F; type := tyv; value := v |>)))
+    (st with scopes updated_by CONS (FEMPTY |+ (nm, <| assignable := F; type := tyv; value := v; popped := [] |>)))
 Proof
   simp[env_consistent_def, env_context_consistent_def, env_scopes_consistent_def,
        env_immutables_consistent_def, extend_local_def, FLOOKUP_UPDATE] >>
@@ -232,7 +232,7 @@ Proof
     FULL_SIMP_TAC std_ss [lookup_scopes_def, FLOOKUP_UPDATE, FLOOKUP_DEF,
                           FDOM_FEMPTY, NOT_IN_EMPTY] >>
     TRY (qpat_x_assum
-           `<|assignable := F; type := tyv; value := v|> = entry`
+           `<|assignable := F; type := tyv; value := v; popped := []|> = entry`
            (SUBST_ALL_TAC o SYM) >> simp[]) >>
     res_tac >>
     TRY (qpat_x_assum `env.var_types ' id = ty`
@@ -510,7 +510,7 @@ Proof
     `lookup_scopes id (x0 ++ x1::x3) = SOME x2` by
       metis_tac[lookup_scopes_append_cons] >>
     gvs[] >>
-    qexists_tac `entry with value := v` >>
+    qexists_tac `entry with <|value := v; popped := []|>` >>
     simp[lookup_scopes_update]) >>
   qexists_tac `entry` >>
   simp[lookup_scopes_append_fupdate_other]
@@ -558,7 +558,9 @@ Proof
     `lookup_scopes id (x0 ++ x1::x3) = SOME x2` by
       metis_tac[lookup_scopes_append_cons] >>
     gvs[] >>
-    qexists_tac `entry with value := x` >>
+    qexists_tac `entry with <|value := x; popped :=
+      case result of NONE => [] | SOME p =>
+        record_pop entry.type entry.value (REVERSE sbs) p entry.popped|>` >>
     simp[lookup_scopes_update]) >>
   qexists_tac `entry` >>
   simp[lookup_scopes_append_fupdate_other]

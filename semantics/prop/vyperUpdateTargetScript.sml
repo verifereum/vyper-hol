@@ -61,7 +61,7 @@ QED
 
 Theorem update_target_name_subscripts:
   ∀cx st n sbs ao entry a'.
-    lookup_name_typed st n = SOME entry ∧ entry.assignable ∧
+    lookup_name_typed st n = SOME entry ∧ entry.assignable ∧ ao <> PopOp ∧
     assign_subscripts entry.type entry.value (REVERSE sbs) ao = INL a' ⇒
     update_target cx st (BaseTargetV (ScopedVar n) sbs) ao = update_name st n a'
 Proof
