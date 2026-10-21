@@ -187,6 +187,88 @@ Proof
   qexistsl [`args`,`art`,`dflts`,`mods`,`mut`,`nr`,`raw`,`ret`,`ts`] >> simp[]
 QED
 
+(* ===== Constants setup boundary ===== *)
+
+Theorem checked_constructor_constants_ready:
+  check_contract T am.layouts tx.target mods = SOME deploy_art /\
+  check_contract F am.layouts tx.target mods = SOME runtime_art /\
+  machine_well_typed am /\
+  cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts tx
+          NONE with in_deploy := T) /\
+  context_well_typed cx /\
+  initial_immutables (type_env_all_modules mods) mods = SOME imms ==>
+  checked_deployment_constants_ready cx
+    (am with <|immutables updated_by CONS (tx.target,imms);
+               exports updated_by CONS (tx.target,exps)|>) tx.target mods
+Proof
+  rpt strip_tac >>
+  irule checked_deployment_constants_ready_from_check >>
+  simp[initial_evaluation_context_def] >>
+  conj_tac
+  >- (drule_all deployment_initial_machine_well_typed >>
+      disch_then (qspecl_then [`exps`,`tx.target`] mp_tac) >> simp[]) >>
+  drule_all checked_initial_immutables_constants_input_tags_agree >>
+  disch_then (qspec_then `am with exports updated_by CONS (tx.target,exps)`
+    mp_tac) >> simp[]
+QED
+
+Theorem checked_constructor_constants_exist:
+  check_contract T am.layouts tx.target mods = SOME deploy_art /\
+  check_contract F am.layouts tx.target mods = SOME runtime_art /\
+  machine_well_typed am /\
+  cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts tx
+          NONE with in_deploy := T) /\
+  context_well_typed cx /\
+  initial_immutables (type_env_all_modules mods) mods = SOME imms ==>
+  ?am_c.
+    evaluate_all_constants cx
+      (am with <|immutables updated_by CONS (tx.target,imms);
+                 exports updated_by CONS (tx.target,exps)|>)
+      tx.target mods = SOME am_c /\ machine_well_typed am_c
+Proof
+  strip_tac >>
+  drule_all checked_constructor_constants_ready >>
+  disch_then (qspec_then `exps` assume_tac) >>
+  `machine_well_typed
+     (am with <|immutables updated_by CONS (tx.target,imms);
+                exports updated_by CONS (tx.target,exps)|>)` by
+    (irule deployment_initial_machine_well_typed >> simp[] >>
+     qexists `mods` >> simp[]) >>
+  drule_all checked_deployment_constants_establish_machine_well_typed >>
+  strip_tac >> qexists `am_c` >> simp[]
+QED
+
+Theorem checked_constructor_constants_machine_well_typed:
+  machine_well_typed installed_am /\
+  checked_deployment_constants_ready cx installed_am target mods /\
+  evaluate_all_constants cx installed_am target mods = SOME am_c ==>
+  machine_well_typed am_c
+Proof
+  strip_tac >>
+  drule_all checked_deployment_constants_establish_machine_well_typed >>
+  strip_tac >> gvs[]
+QED
+
+Theorem checked_constructor_initial_immutables_consistent:
+  check_contract T am.layouts tx.target mods = SOME deploy_art /\
+  check_contract F am.layouts tx.target mods = SOME runtime_art /\
+  cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts tx
+          NONE with in_deploy := T) /\
+  initial_immutables (type_env_all_modules mods) mods = SOME imms /\
+  evaluate_all_constants cx
+    (am with <|immutables updated_by CONS (tx.target,imms);
+               exports updated_by CONS (tx.target,exps)|>)
+    tx.target mods = SOME am_c ==>
+  env_immutables_consistent (artifact_env deploy_art mods NONE) cx
+    (initial_state am_c [scope] with <|outcomes := orc; requests := rqs|>)
+Proof
+  strip_tac >>
+  irule checked_deployment_constants_establish_initial_env_immutables_consistent >>
+  qexistsl [`am with exports updated_by CONS (tx.target,exps)`,`imms`,
+    `am.layouts`,`runtime_art`,`(tx.target,mods)::am.sources`,`tx.target`,`tx`] >>
+  simp[]
+QED
+
 (* ===== Composition ===== *)
 
 (* TOP-LEVEL: deployment analogue of checked_selected_entry_no_static_error.
