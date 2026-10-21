@@ -1398,7 +1398,7 @@ Proof
 QED
 
 (* Place reads are observations, even when lookup or decoding fails. *)
-Theorem read_storage_slot_state:
+Theorem read_storage_slot_state_snd:
   SND (read_storage_slot cx tr slot tv st) = st
 Proof
   Cases_on `tr` >>
@@ -1416,7 +1416,7 @@ Proof
        get_address_immutables_def, bind_def, return_def,
        lift_option_type_def, lift_sum_def, raise_def] >>
   rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]) >>
-  metis_tac[read_storage_slot_state, SND]
+  metis_tac[read_storage_slot_state_snd, SND]
 QED
 
 Theorem place_type_value_state:
@@ -1429,20 +1429,20 @@ Proof
   rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def])
 QED
 
-Theorem materialise_state:
+Theorem materialise_state_snd:
   SND (materialise cx tv st) = st
 Proof
   Cases_on `tv` >>
   simp[materialise_def, bind_def, return_def, raise_def] >>
   rpt (BasicProvers.FULL_CASE_TAC >> gvs[]) >>
-  metis_tac[read_storage_slot_state, SND]
+  metis_tac[read_storage_slot_state_snd, SND]
 QED
 
 Theorem read_place_or_value_state:
   read_place_or_value cx pv st = (r,st') ==> st' = st
 Proof
   Cases_on `pv` >> simp[read_place_or_value_def] >>
-  metis_tac[read_place_state, materialise_state, SND]
+  metis_tac[read_place_state, materialise_state_snd, SND]
 QED
 
 Theorem place_nested_pop_sequence[local]:
