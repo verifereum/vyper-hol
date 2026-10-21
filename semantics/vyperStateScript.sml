@@ -1396,3 +1396,152 @@ Theorem place_pop_then_delayed_read[local]:
 Proof
   EVAL_TAC >> simp[] >> EVAL_TAC >> simp[]
 QED
+
+(* Place reads are observations, even when lookup or decoding fails. *)
+Theorem read_storage_slot_state:
+  SND (read_storage_slot cx tr slot tv st) = st
+Proof
+  Cases_on `tr` >>
+  simp[read_storage_slot_def, get_storage_backend_def, get_accounts_def,
+       get_transient_storage_def, bind_def, return_def, lift_option_def,
+       raise_def, AllCaseEqs()] >>
+  rpt BasicProvers.TOP_CASE_TAC >> simp[return_def, raise_def]
+QED
+
+Theorem read_place_state:
+  read_place cx p st = (r,st') ==> st' = st
+Proof
+  Cases_on `p` >>
+  simp[read_place_def, get_scopes_def, get_immutables_def,
+       get_address_immutables_def, bind_def, return_def,
+       lift_option_type_def, lift_sum_def, raise_def] >>
+  rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]) >>
+  metis_tac[read_storage_slot_state, SND]
+QED
+
+Theorem place_type_value_state:
+  place_type_value cx p st = (r,st') ==> st' = st
+Proof
+  Cases_on `p` >>
+  simp[place_type_value_def, get_scopes_def, get_immutables_def,
+       get_address_immutables_def, bind_def, return_def,
+       lift_option_type_def, raise_def] >>
+  rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def])
+QED
+
+Theorem materialise_state:
+  SND (materialise cx tv st) = st
+Proof
+  Cases_on `tv` >>
+  simp[materialise_def, bind_def, return_def, raise_def] >>
+  rpt (BasicProvers.FULL_CASE_TAC >> gvs[]) >>
+  metis_tac[read_storage_slot_state, SND]
+QED
+
+Theorem read_place_or_value_state:
+  read_place_or_value cx pv st = (r,st') ==> st' = st
+Proof
+  Cases_on `pv` >> simp[read_place_or_value_def] >>
+  metis_tac[read_place_state, materialise_state, SND]
+QED
+
+Theorem place_nested_pop_sequence[local]:
+  !cx.
+  let entry = <|assignable := T;
+      type := ArrayTV (ArrayTV (BaseTV (UintT 256)) (Dynamic 3)) (Dynamic 3);
+      value := ArrayV (DynArrayV [ArrayV (DynArrayV [IntV 1; IntV 2])]);
+      popped := []|>;
+      st = empty_state with scopes := [FEMPTY |+ ("d",entry)]
+  in FST ((do
+      assign_target cx (BaseTargetV (ScopedVar "d") [ValueSubscript (IntV 0)]) PopOp;
+      assign_target cx (BaseTargetV (ScopedVar "d") []) PopOp;
+      a <- read_place cx (MemoryPlace "d" [ValueSubscript (IntV 0)]);
+      b <- read_place cx (MemoryPlace "d" [ValueSubscript (IntV 0); ValueSubscript (IntV 0)]);
+      c <- read_place cx (MemoryPlace "d" [ValueSubscript (IntV 0); ValueSubscript (IntV 1)]);
+      return (a,b,c)
+    od) st) = INL (ArrayV (DynArrayV [IntV 1]),IntV 1,IntV 2)
+Proof
+  rpt (CHANGED_TAC (EVAL_TAC >>
+    simp[lookup_scopes_def, FLOOKUP_UPDATE, FLOOKUP_EMPTY,
+         subscript_type_def, return_def]))
+QED
+
+Theorem place_repeated_pop_sequence[local]:
+  !cx.
+  let entry = <|assignable := T;
+      type := ArrayTV (BaseTV (UintT 256)) (Dynamic 3);
+      value := ArrayV (DynArrayV [IntV 1; IntV 2]); popped := []|>;
+      st = empty_state with scopes := [FEMPTY |+ ("d",entry)]
+  in FST ((do
+      assign_target cx (BaseTargetV (ScopedVar "d") []) PopOp;
+      assign_target cx (BaseTargetV (ScopedVar "d") []) PopOp;
+      a <- read_place cx (MemoryPlace "d" [ValueSubscript (IntV 0)]);
+      b <- read_place cx (MemoryPlace "d" [ValueSubscript (IntV 1)]);
+      return (a,b)
+    od) st) = INL (IntV 1,IntV 2)
+Proof
+  EVAL_TAC >> simp[] >> EVAL_TAC >> simp[return_def]
+QED
+
+Theorem place_memory_write_reset[local]:
+  !cx.
+  let entry = <|assignable := T;
+      type := ArrayTV (BaseTV (UintT 256)) (Dynamic 3);
+      value := ArrayV (DynArrayV [IntV 1]);
+      popped := [([ValueSubscript (IntV 1)],IntV 2)]|>;
+      st = empty_state with scopes := [FEMPTY |+ ("d",entry)]
+  in FST ((do
+      write_place cx (MemoryPlace "d" [ValueSubscript (IntV 0)]) (IntV 7);
+      a <- read_place cx (MemoryPlace "d" [ValueSubscript (IntV 0)]);
+      sc <- get_scopes;
+      return (a, OPTION_MAP (\e. e.popped) (lookup_scopes "d" sc))
+    od) st) = INL (IntV 7,SOME [])
+Proof
+  rpt (CHANGED_TAC (EVAL_TAC >>
+    simp[lookup_scopes_def, FLOOKUP_UPDATE, FLOOKUP_EMPTY, return_def]))
+QED
+
+Theorem place_storage_raw_write[local]:
+  !cx.
+  FST ((do
+      write_place cx (StoragePlace T 7w (BaseTV (UintT 256))) (IntV 10);
+      read_place cx (StoragePlace T 7w (BaseTV (UintT 256)))
+    od) empty_state) = INL (IntV 10)
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Theorem place_memory_extension_bounds[local]:
+  !cx.
+  let entry = <|assignable := T;
+      type := ArrayTV (BaseTV (UintT 256)) (Dynamic 3);
+      value := ArrayV (DynArrayV [IntV 5]); popped := []|>;
+      st = empty_state with scopes := [FEMPTY |+ ("d",entry)]
+  in extend_place cx (BaseTV (UintT 256)) (PlaceR (MemoryPlace "d" []))
+       (ValueSubscript (IntV 0)) st =
+       (INL (PlaceR (MemoryPlace "d" [ValueSubscript (IntV 0)])),st) /\
+     ISL (FST (extend_place cx (BaseTV (UintT 256)) (PlaceR (MemoryPlace "d" []))
+       (ValueSubscript (IntV 1)) st)) = F
+Proof
+  rpt (CHANGED_TAC (EVAL_TAC >>
+    simp[lookup_scopes_def, FLOOKUP_UPDATE, FLOOKUP_EMPTY, return_def]))
+QED
+
+Theorem place_struct_fixed_path[local]:
+  !cx.
+  let entry = <|assignable := T;
+      type := StructTV [("a",ArrayTV (BaseTV (UintT 256)) (Fixed 2))];
+      value := StructV [("a",ArrayV (DynArrayV [IntV 3; IntV 4]))]; popped := []|>;
+      st = empty_state with scopes := [FEMPTY |+ ("s",entry)]
+  in FST ((do
+      pv <- extend_place cx (ArrayTV (BaseTV (UintT 256)) (Fixed 2))
+        (PlaceR (MemoryPlace "s" [])) (AttrSubscript "a");
+      pv' <- extend_place cx (BaseTV (UintT 256)) pv (ValueSubscript (IntV 1));
+      read_place_or_value cx pv'
+    od) st) = INL (IntV 4)
+Proof
+  rpt (CHANGED_TAC (EVAL_TAC >>
+    simp[lookup_scopes_def, FLOOKUP_UPDATE, FLOOKUP_EMPTY,
+         subscript_type_def, return_def]))
+QED
+
