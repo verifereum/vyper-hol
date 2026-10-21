@@ -158,6 +158,11 @@ fun build_checker_base () =
   |> computeLib.copy
   |> listSimps.list_rws
   |> pred_setLib.add_pred_set_compset
+  (* INSERT_CONV dedups every INSERT node with an IN_CONV over the tail, which
+     makes each FDOM freshness check quadratic in the declared locals
+     (HOL-Theorem-Prover/HOL#2101). Scrub it before anything else is added:
+     a compiled rule such as FDOM_FUPDATE keeps the INSERT entry it saw. *)
+  |> (fn cs => computeLib.scrub_const cs pred_setSyntax.insert_tm)
   |> combinLib.add_combin_compset
   |> numposrepLib.add_numposrep_compset
   |> ASCIInumbersLib.add_ASCIInumbers_compset
