@@ -1075,6 +1075,11 @@ Definition evaluate_def:
     assign_target cx (BaseTargetV loc sbs) (AppendOp v);
     return ()
   od ∧
+  eval_stmt cx (Assign (TupleTarget gs) e) = do
+    tv <- eval_expr cx e;
+    v <- materialise cx tv;
+    eval_assign_target_value cx (TupleTarget gs) v
+  od ∧
   eval_stmt cx (Assign g e) = do
     tv <- eval_expr cx e;
     v <- materialise cx tv;
@@ -1142,6 +1147,24 @@ Definition evaluate_def:
     gvs <- eval_targets cx gs;
     return $ TupleTargetV gvs
   od ∧
+  eval_assign_target_value cx (BaseTarget t) v = do
+    (loc, sbs) <- eval_base_target cx t;
+    assign_target cx (BaseTargetV loc sbs) (Replace v);
+    return ()
+  od ∧
+  eval_assign_target_value cx (TupleTarget gs) (ArrayV (TupleV vs)) =
+    (if LENGTH gs = LENGTH vs
+     then eval_assign_target_values cx gs vs
+     else raise $ Error $ TypeError "TupleTarget length") ∧
+  eval_assign_target_value cx (TupleTarget gs) v =
+    raise $ Error $ TypeError "TupleTarget value" ∧
+  eval_assign_target_values cx [] [] = return () ∧
+  eval_assign_target_values cx (g::gs) (v::vs) = do
+    eval_assign_target_value cx g v;
+    eval_assign_target_values cx gs vs
+  od ∧
+  eval_assign_target_values cx gs vs =
+    raise $ Error $ TypeError "TupleTarget length" ∧
   eval_targets cx [] = return [] ∧
   eval_targets cx (g::gs) = do
     gv <- eval_target cx g;
@@ -1442,16 +1465,20 @@ Definition evaluate_def:
   od
 Termination
   qexists_tac ‘measure (λx. case x of
-  | INR (INR (INR (INR (INR (INR (INR (INR (cx, es))))))))
+  | INR (INR (INR (INR (INR (INR (INR (INR (INR (INR (cx, es))))))))))
     => exprs_bound (remcode cx) es
-  | INR (INR (INR (INR (INR (INR (INR (INL (cx, e))))))))
+  | INR (INR (INR (INR (INR (INR (INR (INR (INR (INL (cx, e))))))))))
     => expr_bound (remcode cx) e
-  | INR (INR (INR (INR (INR (INR (INL (cx, tyv, nm, body, vs)))))))
+  | INR (INR (INR (INR (INR (INR (INR (INR (INL (cx, tyv, nm, body, vs)))))))))
     => 1 + LENGTH vs + (LENGTH vs) * (stmts_bound (remcode cx) body)
-  | INR (INR (INR (INR (INR (INL (cx, t))))))
+  | INR (INR (INR (INR (INR (INR (INR (INL (cx, t))))))))
     => base_target_bound (remcode cx) t
-  | INR (INR (INR (INR (INL (cx, gs)))))
+  | INR (INR (INR (INR (INR (INR (INL (cx, gs)))))))
     => targets_bound (remcode cx) gs
+  | INR (INR (INR (INR (INR (INL (cx, gs, vs))))))
+    => targets_bound (remcode cx) gs
+  | INR (INR (INR (INR (INL (cx, g, v)))))
+    => target_bound (remcode cx) g
   | INR (INR (INR (INL (cx, g))))
     => target_bound (remcode cx) g
   | INR (INR (INL (cx, it)))
