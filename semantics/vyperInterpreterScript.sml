@@ -1075,19 +1075,26 @@ Definition evaluate_def:
     assign_target cx (BaseTargetV loc sbs) (AppendOp v);
     return ()
   od ∧
-  eval_stmt cx (Assign g e) = do
-    gv <- eval_target cx g;
+  eval_stmt cx (Assign (BaseTarget t) e) = do
+    pv <- eval_place cx e;
+    p <- eval_target_place cx t;
+    v <- read_place_or_value cx pv;
+    write_place cx p v
+  od ∧
+  eval_stmt cx (Assign (TupleTarget gs) e) = do
     tv <- eval_expr cx e;
     v <- materialise cx tv;
-    assign_target cx gv (Replace v);
-    return ()
+    assign_tuple_targets cx (TupleTarget gs) v
   od ∧
   eval_stmt cx (AugAssign ty t bop e) = do
-    (loc, sbs) <- eval_base_target cx t;
+    p <- eval_target_place cx t;
+    cur <- read_place cx p;
+    ptv <- place_type_value cx p;
     tv <- eval_expr cx e;
     v <- get_Value tv;
-    assign_target cx (BaseTargetV loc sbs) (Update ty bop v);
-    return ()
+    u <<- (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0);
+    res <- lift_sum (evaluate_binop u ptv bop cur v);
+    write_place cx p res
   od ∧
   eval_stmt cx (If e ss1 ss2) = do
     tv <- eval_expr cx e;
