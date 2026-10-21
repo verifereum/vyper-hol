@@ -18,6 +18,7 @@ t08_tuple_assign_ret_type_mismatch
 r07_assert_storage_string_reason
 p06_local_append_struct
 p15_local_append_bytes
+p16_return_tuple_bytes_widen
 p64_string_annassign_call
 e70_noData_live_mem2
 dec_from_memory2

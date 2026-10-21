@@ -7,7 +7,7 @@ fun holbuild_extra_deps (_ : string list) = ()
 val () = holbuild_extra_deps ["../memory-stores"]
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms
-  [fmap_to_alist_FEMPTY, i2w_pos, byteTheory.set_byte_bit_field_insert])
+  [fmap_to_alist_FEMPTY, i2w_pos])
 val fixture_root = "../memory-stores/oracle"
 
 val t01_tuple_assign_intcall = memoryStoreWitnessLib.evaluate fixture_root "t01_tuple_assign_intcall"
@@ -72,4 +72,14 @@ Theorem t11_tuple_onew_decode_mem_matches_python_oracle:
     SOME ^(memoryStoreWitnessLib.oracle fixture_root "t11_tuple_onew_decode_mem")
 Proof
   CONV_TAC (LAND_CONV (K (#evaluation t11_tuple_onew_decode_mem))) >> EVAL_TAC
+QED
+
+(* The b"ab" member is stored as a 256-bit word built by word_of_bytes, which
+   EVAL computes with word_of_bytes_T_0w_256 in vyperMisc (#542). *)
+val p16_return_tuple_bytes_widen = memoryStoreWitnessLib.evaluate fixture_root "p16_return_tuple_bytes_widen"
+Theorem p16_return_tuple_bytes_widen_matches_python_oracle:
+  ^(#term p16_return_tuple_bytes_widen) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "p16_return_tuple_bytes_widen")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation p16_return_tuple_bytes_widen))) >> EVAL_TAC
 QED

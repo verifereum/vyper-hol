@@ -18,6 +18,7 @@ roots = ["vyperHolScript.sml",
          "tests/vyperInvertTestScript.sml",
          "tests/vyperCalldataSliceTestScript.sml",
          "tests/vyperRawCallCalldataTestScript.sml",
+         "tests/vyperDelegateRawCallTestScript.sml",
          "tests/vyperTupleSubscriptTestScript.sml"]
 
 [dependencies.verifereum]

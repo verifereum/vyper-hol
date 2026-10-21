@@ -13,7 +13,7 @@ fun holbuild_extra_deps (_ : string list) = ()
 val () = holbuild_extra_deps ["../name-collisions"]
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms
-  [fmap_to_alist_FEMPTY, i2w_pos, byteTheory.set_byte_bit_field_insert])
+  [fmap_to_alist_FEMPTY, i2w_pos])
 val fixture_root = "../name-collisions/oracle"
 
 (* a04-04: an internal argument named __return_pc__ is the user's value, not

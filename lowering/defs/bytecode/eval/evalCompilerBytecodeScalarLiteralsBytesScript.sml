@@ -11,13 +11,7 @@ val () = computeLib.upd_compset (computeLib.add_thms [fmap_to_alist_FEMPTY])
 val () = computeLib.upd_compset (computeLib.add_thms [i2w_pos])
 val () = Globals.max_print_depth := 20
 val () = computeLib.upd_compset
-  (computeLib.add_thms
-    [word_of_bytes_be_bytes32_scalar_literals_bytes,
-     word_of_bytes_bytes32_scalar_literals_bytes,
-     w2n_scalar_literals_bytes_n2w,
-     scalar_literals_bytes_n2w_eq_word,
-     word_eq_scalar_literals_bytes_n2w,
-     contextTheory.compile_copy_memory_def])
+  (computeLib.add_thms [contextTheory.compile_copy_memory_def])
 
 (* Stage the three analyses consumed again by stack planning.  Each theorem is
    kernel-produced from the checked pipeline result; no oracle data is used. *)
@@ -34,52 +28,7 @@ val scalar_literals_bytes_rpolicy_final_assembly_eval =
   EVAL ``(^scalar_literals_bytes_rpolicy).rpol_final_assembly``
 val scalar_literals_bytes_fn = rhs (concl (EVAL
   ``HD (^scalar_literals_bytes_unit).cu_context.ctx_functions``))
-fun scalar_literals_bytes_w2n_eval w =
-  if same_const (#1 (strip_comb w)) ``set_byte`` then let
-    val bytes_th = SIMP_CONV (srw_ss())
-      [word_to_bytes_be_bytes32_genlist_scalar_literals_bytes,
-       get_byte_set_byte_bytes32_scalar_literals_bytes,
-       get_byte_set_byte_irrelevant_bytes32_scalar_literals_bytes]
-      ``word_to_bytes_be ^w``
-    val roundtrip = INST [``w:bytes32`` |-> w]
-      word_of_bytes_be_word_to_bytes_be_scalar_literals_bytes
-    val step1 = BETA_RULE (AP_TERM ``λx:bytes32. w2n x``
-      (SYM roundtrip))
-    val step2 = BETA_RULE (AP_TERM
-      ``λbs. w2n (word_of_bytes_be bs : bytes32)`` bytes_th)
-    val decoded = TRANS step1 step2
-    val expose = SIMP_CONV bool_ss
-      [word_of_bytes_be_bytes32_scalar_literals_bytes,
-       w2n_scalar_literals_bytes_n2w] (rhs (concl decoded))
-    val numeral = EVAL (rhs (concl expose))
-  in
-    TRANS decoded (TRANS expose numeral)
-  end else
-    EVAL ``w2n ^w``
-fun scalar_literals_bytes_normalize_word w = let
-  val w2n_th = scalar_literals_bytes_w2n_eval w
-  val numeral = rhs (concl w2n_th)
-  val normalized = ``scalar_literals_bytes_n2w ^numeral``
-  val normalized_w2n_step = INST [``n:num`` |-> numeral]
-    w2n_scalar_literals_bytes_n2w
-  val normalized_w2n = TRANS normalized_w2n_step
-    (EVAL (rhs (concl normalized_w2n_step)))
-  val same_num = TRANS w2n_th (SYM normalized_w2n)
-  val injective = ISPECL [w, normalized] wordsTheory.w2n_11
-in
-  EQ_MP injective same_num
-end
-val scalar_literals_bytes_literal_terms = find_terms
-  (can (match_term ``Lit (set_byte a b w be : bytes32)``))
-  scalar_literals_bytes_fn
-val scalar_literals_bytes_literal_words =
-  List.foldl (fn (lit,ws) => let val w = #2 (dest_comb lit) in
-      if List.exists (aconv w) ws then ws else w::ws end)
-    [] scalar_literals_bytes_literal_terms
-val scalar_literals_bytes_word_normalizations =
-  map scalar_literals_bytes_normalize_word scalar_literals_bytes_literal_words
-val () = computeLib.upd_compset
-  (computeLib.add_thms scalar_literals_bytes_word_normalizations)
+fun scalar_literals_bytes_w2n_eval w = EVAL ``w2n ^w``
 val scalar_literals_bytes_liveness_eval = save_thm
   ("scalar_literals_bytes_liveness_eval", EVAL ``liveness_analyze ^scalar_literals_bytes_fn``)
 val scalar_literals_bytes_dfg_eval = save_thm
@@ -139,58 +88,11 @@ val scalar_literals_bytes_context_plan_step1 = SIMP_CONV (srw_ss())
    stackPlanGenTheory.generate_context_regions_def,
    stackPlanGenTheory.finish_context_plan_def]
   ``generate_context_plan (^scalar_literals_bytes_unit).cu_context``
-val scalar_literals_bytes_context_plan_step2 =
-  EVAL (rhs (concl scalar_literals_bytes_context_plan_step1))
-val scalar_literals_bytes_actual_plan_call = find_term
-  (can (match_term ``generate_fn_plan f spill labels``))
-  (rhs (concl scalar_literals_bytes_context_plan_step2))
-val scalar_literals_bytes_actual_plan_args = #2 (strip_comb scalar_literals_bytes_actual_plan_call)
-val scalar_literals_bytes_actual_fn = hd scalar_literals_bytes_actual_plan_args
-val scalar_literals_bytes_actual_liveness_eval =
-  EVAL ``liveness_analyze ^scalar_literals_bytes_actual_fn``
-val scalar_literals_bytes_actual_dfg_eval =
-  EVAL ``dfg_build_function ^scalar_literals_bytes_actual_fn``
-val scalar_literals_bytes_actual_cfg_eval =
-  EVAL ``cfg_analyze ^scalar_literals_bytes_actual_fn``
-val scalar_literals_bytes_actual_liveness =
-  rhs (concl scalar_literals_bytes_actual_liveness_eval)
-val scalar_literals_bytes_actual_dfg = rhs (concl scalar_literals_bytes_actual_dfg_eval)
-val scalar_literals_bytes_actual_cfg = rhs (concl scalar_literals_bytes_actual_cfg_eval)
-val scalar_literals_bytes_actual_plan_eval = EVAL
-  ``generate_fn_plan_analyzed ^scalar_literals_bytes_actual_liveness
-      ^scalar_literals_bytes_actual_dfg ^scalar_literals_bytes_actual_cfg
-      ^scalar_literals_bytes_actual_fn ^scalar_literals_bytes_max_eom 0``
-val scalar_literals_bytes_actual_plan = rhs (concl scalar_literals_bytes_actual_plan_eval)
-val scalar_literals_bytes_actual_generate_step1 =
-  REWR_CONV stackPlanGenTheory.generate_fn_plan_def
-    ``generate_fn_plan ^scalar_literals_bytes_actual_fn
-        ^scalar_literals_bytes_max_eom 0``
-val scalar_literals_bytes_actual_generate_step2 = PURE_REWRITE_CONV
-  [scalar_literals_bytes_actual_liveness_eval,
-   scalar_literals_bytes_actual_dfg_eval,
-   scalar_literals_bytes_actual_cfg_eval]
-  (rhs (concl scalar_literals_bytes_actual_generate_step1))
-val scalar_literals_bytes_actual_generate_step3 =
-  REWR_CONV scalar_literals_bytes_actual_plan_eval
-    (rhs (concl scalar_literals_bytes_actual_generate_step2))
-val scalar_literals_bytes_actual_generate_fn_plan =
-  TRANS scalar_literals_bytes_actual_generate_step1
-    (TRANS scalar_literals_bytes_actual_generate_step2
-      scalar_literals_bytes_actual_generate_step3)
-val scalar_literals_bytes_context_plan_step3 = PURE_REWRITE_CONV
-  [scalar_literals_bytes_actual_generate_fn_plan]
-  (rhs (concl scalar_literals_bytes_context_plan_step2))
 val scalar_literals_bytes_context_plan_eval =
   TRANS scalar_literals_bytes_context_plan_step1
-    (TRANS scalar_literals_bytes_context_plan_step2
-      (TRANS scalar_literals_bytes_context_plan_step3
-        (EVAL (rhs (concl scalar_literals_bytes_context_plan_step3)))))
+    (EVAL (rhs (concl scalar_literals_bytes_context_plan_step1)))
 val scalar_literals_bytes_context_plan = optionSyntax.dest_some
   (rhs (concl scalar_literals_bytes_context_plan_eval))
-val scalar_literals_bytes_plan = scalar_literals_bytes_actual_plan
-val scalar_literals_bytes_plan_value = optionSyntax.dest_some scalar_literals_bytes_plan
-val scalar_literals_bytes_plan_pair = pairSyntax.dest_pair scalar_literals_bytes_plan_value
-val scalar_literals_bytes_plan_ops = #1 scalar_literals_bytes_plan_pair
 val scalar_literals_bytes_ops = #1 (listSyntax.dest_list scalar_literals_bytes_plan_ops)
 val scalar_literals_bytes_sopush = #1 (dest_comb
   ``SOPush (Lit (0w : bytes32))``)
