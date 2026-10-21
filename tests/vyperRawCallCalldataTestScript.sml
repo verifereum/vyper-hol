@@ -116,9 +116,19 @@ val () = app (fn args =>
   else raise Fail "malformed calldata raw_call accepted")
   [``[] : expr list``, ``[^addr_e]``, ``[^addr_e; ^zero_e; ^zero_e]``,
    ``[^zero_e; ^zero_e]``, ``[^addr_e; Literal (BaseT BoolT) (BoolL T)]``];
-val () = if optionSyntax.is_none (rhs (concl (check_raw_call
-    ``[^addr_e; ^zero_e]`` ``^flags with rcf_is_delegate := T``))) then ()
-  else raise Fail "delegate calldata raw_call accepted";
+val () = app (fn valid_flags =>
+  if optionSyntax.is_some (rhs (concl (check_raw_call
+    ``[^addr_e; ^zero_e]`` valid_flags))) then ()
+  else raise Fail "valid delegate/static calldata raw_call rejected")
+  [``^flags with rcf_is_delegate := T``, ``^flags with rcf_is_static := T``];
+val one_e = ``Literal (BaseT (UintT 256)) (IntL 1)``;
+val () = app (fn (amount, invalid_flags) =>
+  if optionSyntax.is_none (rhs (concl (check_raw_call
+    ``[^addr_e; ^amount]`` invalid_flags))) then ()
+  else raise Fail "invalid calldata raw_call flags/value accepted")
+  [(zero_e, ``^flags with <|rcf_is_delegate := T; rcf_is_static := T|>``),
+   (one_e, ``^flags with rcf_is_delegate := T``),
+   (one_e, ``^flags with rcf_is_static := T``)];
 
 (* Arbitrary side effects: target runs first, value sees its resulting state;
    execution receives the original transaction input without stripping a selector
@@ -191,13 +201,12 @@ Proof
        assert_def, raise_def]
 QED
 
-(* All existing output/revert/static variants use the same original bytes. *)
+(* All output/revert/static/delegate variants use the same original bytes. *)
 Theorem raw_call_calldata_original_input_test:
-  ~flags.rcf_is_delegate /\
+  ~(flags.rcf_is_delegate /\ flags.rcf_is_static) /\
+  ((flags.rcf_is_delegate \/ flags.rcf_is_static) ==> amount = 0) /\
   cx.txn.calldata = [1w; 2w; 3w; 4w; 10w; 11w; 99w] /\
-  run_ext_call cx.txn.target to cx.txn.calldata
-    (if flags.rcf_is_static then NONE else SOME amount)
-    st.accounts st.tStorage (vyper_to_tx_params cx.txn) =
+  run_raw_call cx flags to cx.txn.calldata amount st.accounts st.tStorage =
       SOME (success, retdata, accounts', transient', logs') ==>
   eval_raw_call cx flags to cx.txn.calldata amount st =
     (if flags.rcf_revert_on_failure then

@@ -7,3 +7,4 @@ Ancestors
   vyperABIValid
   vyperTypeDeploymentMachine
   vyperTypeSelectedEntry
+  vyperTypeEntryDefaults

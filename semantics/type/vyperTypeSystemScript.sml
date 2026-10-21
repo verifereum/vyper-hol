@@ -606,13 +606,19 @@ Definition well_typed_expr_def:
      HD (MAP expr_type args) = BaseT AddressT /\ EL 1 (MAP expr_type args) = BaseT (UintT 256)) /\
   well_typed_expr env (Call ty (RawCallTarget flags) args drv) =
     (well_typed_exprs env args /\ drv = NONE /\ ty = raw_call_return_type flags /\
-     flags.rcf_max_outsize < dimword(:256) /\ ¬flags.rcf_is_delegate /\ LENGTH args = 3 /\
+     flags.rcf_max_outsize < dimword(:256) /\
+     ~(flags.rcf_is_delegate /\ flags.rcf_is_static) /\ LENGTH args = 3 /\
+     ((flags.rcf_is_delegate \/ flags.rcf_is_static) ==>
+       EL 2 args = Literal (BaseT (UintT 256)) (IntL 0)) /\
      EL 0 (MAP expr_type args) = BaseT AddressT /\
      (?bd. EL 1 (MAP expr_type args) = BaseT (BytesT bd)) /\
      EL 2 (MAP expr_type args) = BaseT (UintT 256)) /\
   well_typed_expr env (Call ty (RawCallCalldataTarget flags) args drv) =
     (well_typed_exprs env args /\ drv = NONE /\ ty = raw_call_return_type flags /\
-     flags.rcf_max_outsize < dimword(:256) /\ ¬flags.rcf_is_delegate /\
+     flags.rcf_max_outsize < dimword(:256) /\
+     ~(flags.rcf_is_delegate /\ flags.rcf_is_static) /\
+     ((flags.rcf_is_delegate \/ flags.rcf_is_static) ==>
+       EL 1 args = Literal (BaseT (UintT 256)) (IntL 0)) /\
      MAP expr_type args = [BaseT AddressT; BaseT (UintT 256)]) /\
   well_typed_expr env (Call ty RawLog args drv) =
     (well_typed_exprs env args /\ drv = NONE /\ ty = NoneT /\ LENGTH args = 2 /\
