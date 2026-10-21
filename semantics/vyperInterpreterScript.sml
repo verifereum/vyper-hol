@@ -1076,9 +1076,9 @@ Definition evaluate_def:
     return ()
   od ∧
   eval_stmt cx (Assign g e) = do
-    gv <- eval_target cx g;
     tv <- eval_expr cx e;
     v <- materialise cx tv;
+    gv <- eval_target cx g;
     assign_target cx gv (Replace v);
     return ()
   od ∧

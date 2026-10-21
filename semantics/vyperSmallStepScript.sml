@@ -31,8 +31,8 @@ Datatype:
   | AppendK expr eval_continuation
   | AppendK1 base_target_value eval_continuation
   | AnnAssignK identifier type_value eval_continuation
-  | AssignK expr eval_continuation
-  | AssignK1 assignment_value eval_continuation
+  | AssignK assignment_target eval_continuation
+  | AssignK1 value eval_continuation
   | AugAssignK type binop expr eval_continuation
   | AugAssignK1 type base_target_value binop eval_continuation
   | IfK (stmt list) (stmt list) eval_continuation
@@ -279,7 +279,7 @@ Definition eval_stmt_cps_def:
   eval_stmt_cps cx (Append t e) st k =
     eval_base_target_cps cx t st (AppendK e k) ∧
   eval_stmt_cps cx (Assign g e) st k =
-    eval_target_cps cx g st (AssignK e k) ∧
+    eval_expr_cps cx e st (AssignK g k) ∧
   eval_stmt_cps cx (AugAssign ty t bop e) st k =
     eval_base_target_cps cx t st (AugAssignK ty bop e k) ∧
   eval_stmt_cps cx (If e ss1 ss2) st k =
@@ -470,15 +470,17 @@ val () = apply_base_target_def
   |> cv_auto_trans;
 
 Definition apply_target_def:
-  apply_target cx gv st (AssignK e k) =
-    eval_expr_cps cx e st (AssignK1 gv k) ∧
+  apply_target cx gv st (AssignK1 v k) =
+    liftk cx (K Apply) (assign_target cx gv (Replace v) st) k ∧
   apply_target cx gv st (TargetsK gs k) =
     eval_targets_cps cx gs st (TargetsK1 gv k) ∧
   apply_target cx gv st _ =
     AK cx (ApplyExc $ Error (TypeError "apply_target k")) st DoneK
 End
 
-val () = cv_auto_trans apply_target_def;
+val () = apply_target_def
+  |> SRULE [liftk1, prod_CASE_rator, sum_CASE_rator]
+  |> cv_auto_trans;
 
 Definition apply_tv_def:
   apply_tv cx tv st (SubscriptK arr_typ e k) =
@@ -500,8 +502,8 @@ Definition apply_tv_def:
     liftk cx ApplyVal (materialise cx tv st) (AnnAssignK id tyv k) ∧
   apply_tv cx tv st (AppendK1 btv k) =
     liftk cx ApplyVal (materialise cx tv st) (AppendK1 btv k) ∧
-  apply_tv cx tv st (AssignK1 gv k) =
-    liftk cx ApplyVal (materialise cx tv st) (AssignK1 gv k) ∧
+  apply_tv cx tv st (AssignK g k) =
+    liftk cx ApplyVal (materialise cx tv st) (AssignK g k) ∧
   apply_tv cx tv st (ArrayK arr_typ k) =
     liftk cx ApplyVal (materialise cx tv st) (ArrayK arr_typ k) ∧
   apply_tv cx tv st (ExprsK es k) =
@@ -577,8 +579,8 @@ Definition apply_val_def:
      | _ => apply_exc cx (Error (TypeError "not StringV")) st k) ∧
   apply_val cx v st (AnnAssignK id tyv k) =
     liftk cx (K Apply) (new_variable id tyv v st) k ∧
-  apply_val cx v st (AssignK1 gv k) =
-    liftk cx (K Apply) (assign_target cx gv (Replace v) st) k ∧
+  apply_val cx v st (AssignK g k) =
+    eval_target_cps cx g st (AssignK1 v k) ∧
   apply_val cx v st (AugAssignK1 ty (loc, sbs) bop k) =
     liftk cx (K Apply) (assign_target cx (BaseTargetV loc sbs) (Update ty bop v) st) k ∧
   apply_val cx v st (AppendK1 (loc, sbs) k) =
@@ -1144,19 +1146,20 @@ Proof
     >> rw[Once OWHILE_THM, stepk_def, apply_val_def, liftk1]
     \\ CASE_TAC \\ reverse CASE_TAC
     \\ rw[return_def] )
-  \\ conj_tac >- ( (* Assign g e — target→expr→materialise→assign *)
+  \\ conj_tac >- ( (* Assign g e — expr→materialise→target→assign *)
     rw[eval_stmt_cps_def, evaluate_def, bind_def]
     \\ CASE_TAC \\ rw[cont_def] \\ reverse CASE_TAC
-    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-    >> rw[Once OWHILE_THM, stepk_def, apply_target_def]
-    \\ gvs[cont_def]
-    \\ first_x_assum drule \\ rw[]
-    \\ CASE_TAC \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     >> rw[Once OWHILE_THM, stepk_def, apply_tv_def, liftk1]
     \\ CASE_TAC \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-    >> rw[Once OWHILE_THM, stepk_def, apply_val_def, liftk1,
+    >> rw[Once OWHILE_THM, stepk_def, apply_val_def]
+    \\ gvs[cont_def]
+    \\ first_x_assum drule \\ rw[]
+    \\ first_x_assum drule \\ rw[]
+    \\ CASE_TAC \\ reverse CASE_TAC
+    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+    >> rw[Once OWHILE_THM, stepk_def, apply_target_def, liftk1,
           ignore_bind_def, bind_def]
     \\ CASE_TAC \\ reverse CASE_TAC
     \\ rw[return_def])
