@@ -28,6 +28,7 @@ Ancestors
   vyperTypeSelectedEntrySoundness vyperTypeDeploymentMachine
   vyperTypeCallGraph vyperTypeCallGraphSoundness vyperTypeCallStackSoundness
   vyperTypeExternalCallMachine vyperTypeInvariants vyperTypeBindArguments
+  vyperTypeStmtSoundness vyperTypeStmtResult vyperTypeEvalSoundness
 
 val _ = Parse.hide "body";
 
@@ -330,6 +331,132 @@ Proof
   irule checked_constructor_call_evaluation_safe >>
   qexistsl [`args`,`deploy_art`,`dflts`,`am.layouts`,`mods`,`mut`,`nr`,
     `ret`,`(tx.target,mods)::am.sources`,`ts`,`tx`] >> simp[]
+QED
+
+Theorem checked_constructor_prefix_no_type_error:
+  check_contract T am.layouts tx.target mods = SOME deploy_art /\
+  check_contract F am.layouts tx.target mods = SOME runtime_art /\
+  machine_well_typed am /\ ALOOKUP mods NONE = SOME ts /\
+  lookup_function NONE tx.function_name Deploy ts =
+    SOME (mut,nr,args,dflts,ret,body) /\
+  cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts tx
+          NONE with in_deploy := T) /\ context_well_typed cx /\
+  initial_immutables (type_env_all_modules mods) mods = SOME imms /\
+  evaluate_all_constants cx
+    (am with <|immutables updated_by CONS (tx.target,imms);
+               exports updated_by CONS (tx.target,exps)|>)
+    tx.target mods = SOME am_c /\
+  bind_arguments (type_env_all_modules mods) args vals = SOME scope ==>
+  no_type_error_eval
+    (do
+       (if nr then
+          case cx.nonreentrant_slot of
+            NONE => raise (Error (TypeError "nonreentrant slot missing"))
+          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
+                           (mut = View \/ mut = Pure)
+        else return ());
+       send_call_value mut cx;
+       eval_stmts cx body
+     od (initial_state am_c [scope] with <|outcomes := orc; requests := []|>))
+Proof
+  strip_tac >>
+  `nr ==> cx.nonreentrant_slot <> NONE` by
+    (strip_tac >> drule_all checked_constructor_nonreentrant_slot >> simp[]) >>
+  qmatch_goalsub_abbrev_tac `ignore_bind lock_action
+     (ignore_bind (send_call_value mut cx) (eval_stmts cx body))` >>
+  `no_type_error_eval
+     (lock_action (initial_state am_c [scope] with <|outcomes := orc; requests := []|>))` by
+    (qunabbrev_tac `lock_action` >>
+     irule call_lock_action_no_type_error_c53 >> first_assum ACCEPT_TAC) >>
+  qpat_x_assum `cx = _` (assume_tac o GSYM) >>
+  simp[no_type_error_eval_def, bind_def, ignore_bind_def] >>
+  Cases_on `lock_action (initial_state am_c [scope] with <|outcomes := orc; requests := []|>)` >>
+  rename1 `_ = (lock_res,lock_st)` >> Cases_on `lock_res` >> fs[no_type_error_eval_def]
+  >- (Cases_on `send_call_value mut cx lock_st` >>
+      rename1 `_ = (send_res,body_st)` >> Cases_on `send_res` >> fs[]
+      >- (qunabbrev_tac `lock_action` >>
+          qpat_x_assum `_ = cx` (assume_tac o GSYM) >>
+          drule_all (SRULE [] checked_constructor_prefix_typing) >>
+          strip_tac >> gvs[] >>
+          drule_all eval_stmts_no_type_error >>
+          simp[no_type_error_eval_def]) >>
+      `no_type_error_eval (send_call_value mut cx lock_st)` by
+        simp[send_call_value_no_type_error_c53] >>
+      gvs[no_type_error_eval_def])
+QED
+
+Theorem checked_constructor_prefix_return_typed:
+  check_contract T am.layouts tx.target mods = SOME deploy_art /\
+  check_contract F am.layouts tx.target mods = SOME runtime_art /\
+  machine_well_typed am /\ ALOOKUP mods NONE = SOME ts /\
+  lookup_function NONE tx.function_name Deploy ts =
+    SOME (mut,nr,args,dflts,ret,body) /\
+  cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts tx
+          NONE with in_deploy := T) /\ context_well_typed cx /\
+  initial_immutables (type_env_all_modules mods) mods = SOME imms /\
+  evaluate_all_constants cx
+    (am with <|immutables updated_by CONS (tx.target,imms);
+               exports updated_by CONS (tx.target,exps)|>)
+    tx.target mods = SOME am_c /\
+  bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
+  (do
+     (if nr then
+        case cx.nonreentrant_slot of
+          NONE => raise (Error (TypeError "nonreentrant slot missing"))
+        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
+                         (mut = View \/ mut = Pure)
+      else return ());
+     send_call_value mut cx;
+     eval_stmts cx body
+   od (initial_state am_c [scope] with <|outcomes := orc; requests := []|>)) =
+     (INR (ReturnException v),st') ==>
+  ?tv. evaluate_type (type_env_all_modules mods) ret = SOME tv /\ value_has_type tv v
+Proof
+  strip_tac >>
+  qpat_x_assum `cx = _` (assume_tac o GSYM) >>
+  `?lock_st body_st res.
+     (if nr then
+        case cx.nonreentrant_slot of
+          NONE => raise (Error (TypeError "nonreentrant slot missing"))
+        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
+                         (mut = View \/ mut = Pure)
+      else return ())
+       (initial_state am_c [scope] with <|outcomes := orc; requests := []|>) =
+         (INL (),lock_st) /\
+     send_call_value mut cx lock_st = (INL (),body_st) /\
+     eval_stmts cx body body_st = (res,st')` by
+    (irule constructor_call_prefix_body_result_cases >>
+     conj_tac
+     >- (rpt strip_tac >> drule call_lock_action_no_control_c53 >> simp[]) >>
+     disj2_tac >> qexists `v` >> first_assum ACCEPT_TAC) >>
+  qpat_x_assum `_ = cx` (assume_tac o GSYM) >>
+  drule_all checked_constructor_prefix_typing >> strip_tac >>
+  gvs[bind_def, ignore_bind_def] >>
+  drule_all eval_stmts_type_preservation_exception >>
+  simp[stmt_error_ok_def, return_exception_typed_def, value_runtime_typed_def]
+QED
+
+Theorem checked_constructor_prefix_no_loop_control:
+  check_contract T layouts tx.target mods = SOME art /\
+  ALOOKUP mods NONE = SOME ts /\
+  lookup_function NONE tx.function_name Deploy ts =
+    SOME (mut,nr,args,dflts,ret,body) /\
+  (do
+     (if nr then
+        case cx.nonreentrant_slot of
+          NONE => raise (Error (TypeError "nonreentrant slot missing"))
+        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
+                         (mut = View \/ mut = Pure)
+      else return ());
+     send_call_value mut cx;
+     eval_stmts cx body
+   od st) = (INR exc,st') ==>
+  exc <> BreakException /\ exc <> ContinueException
+Proof
+  strip_tac >>
+  `stmts_no_control_escape body` by
+    (drule_all checked_constructor_no_control_escape >> simp[]) >>
+  drule_all call_lock_send_eval_no_loop_control_c53 >> simp[]
 QED
 
 (* ===== Composition ===== *)
