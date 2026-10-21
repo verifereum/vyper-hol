@@ -315,6 +315,18 @@ End
 
 val () = cv_auto_trans evaluate_type_builtin_def;
 
+Definition evaluate_type_builtin_typed_def:
+  evaluate_type_builtin_typed cx Convert (BaseT (BytesT (Fixed m)))
+                              [BaseT AddressT] [BytesV bs] =
+    (if LENGTH bs ≤ m ∧ m ≤ 32
+     then INL $ BytesV (PAD_LEFT 0w m bs)
+     else INR (RuntimeError "convert address to bytes")) ∧
+  evaluate_type_builtin_typed cx tb typ arg_tys vs =
+    evaluate_type_builtin cx tb typ vs
+End
+
+val () = cv_auto_trans evaluate_type_builtin_typed_def;
+
 Definition ecrecover_arg_to_num_def:
 (* Convert an ecrecover argument to a natural number.
    Accepts both IntV (uint) and BytesV (bytes32). *)

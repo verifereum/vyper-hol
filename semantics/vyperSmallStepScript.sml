@@ -60,7 +60,7 @@ Datatype:
   | AttributeK identifier eval_continuation
   | BuiltinK (type list) type builtin eval_continuation
   | LenK eval_continuation
-  | TypeBuiltinK type_builtin type eval_continuation
+  | TypeBuiltinK type_builtin type (type list) eval_continuation
   | CallSendK eval_continuation
   | ExtCallK bool bool identifier (type list) type (expr option) eval_continuation
   (* Chain interaction builtin continuations *)
@@ -169,7 +169,8 @@ Definition eval_expr_cps_def:
     (case type_check (type_builtin_args_length_ok tb (LENGTH es))
             "TypeBuiltin args" st of
         (INR ex, st) => AK cx8 (ApplyExc ex) st k
-      | (INL tv, st) => eval_exprs_cps cx8 es st (TypeBuiltinK tb typ k)) ∧
+      | (INL tv, st) => eval_exprs_cps cx8 es st
+          (TypeBuiltinK tb typ (MAP expr_type es) k)) ∧
   eval_expr_cps cx9 (Call _ Send es _) st k =
     (case type_check (LENGTH es = 2) "Send args" st of
        (INR ex, st) => AK cx9 (ApplyExc ex) st k
@@ -397,7 +398,7 @@ Definition apply_exc_def:
   apply_exc cx ex st (PopK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (BuiltinK _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (LenK k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (TypeBuiltinK _ _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (TypeBuiltinK _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (CallSendK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (ExtCallK _ _ _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (RawCallK _ _ k) = AK cx (ApplyExc ex) st k ∧
@@ -644,9 +645,9 @@ Definition apply_vals_def:
       v <- lift_sum $ evaluate_builtin_typed cx acc ty arg_tys bt vs;
       return $ Value v
     od st) k ∧
-  apply_vals cx vs st (TypeBuiltinK tb typ k) =
+  apply_vals cx vs st (TypeBuiltinK tb typ arg_tys k) =
     liftk cx ApplyTv (do
-      v <- lift_sum $ evaluate_type_builtin cx tb typ vs;
+      v <- lift_sum $ evaluate_type_builtin_typed cx tb typ arg_tys vs;
       return $ Value v
     od st) k ∧
   apply_vals cx vs st (LogK id k) =

@@ -224,7 +224,8 @@ Proof
   rpt strip_tac >>
   gvs[evaluate_def, bind_def, AllCaseEqs(), pure_expr_def, ignore_bind_def,
       check_def, type_check_def, assert_def, return_def, raise_def, lift_sum_def] >>
-  TRY (Cases_on `evaluate_type_builtin cx tb typ vs` >> gvs[return_def, raise_def]) >>
+  TRY (Cases_on `evaluate_type_builtin_typed cx tb typ
+                   (MAP expr_type es) vs` >> gvs[return_def, raise_def]) >>
   first_x_assum drule >> gvs[ETA_THM]
 QED
 

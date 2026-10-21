@@ -1242,7 +1242,8 @@ Definition evaluate_def:
   eval_expr cx (TypeBuiltin _ tb typ es) = do
     type_check (type_builtin_args_length_ok tb (LENGTH es)) "TypeBuiltin args";
     vs <- eval_exprs cx es;
-    v <- lift_sum $ evaluate_type_builtin cx tb typ vs;
+    v <- lift_sum $ evaluate_type_builtin_typed cx tb typ
+      (MAP expr_type es) vs;
     return $ Value v
   od ∧
   eval_expr cx (Call _ Send es _) = do
