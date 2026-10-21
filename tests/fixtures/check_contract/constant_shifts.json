@@ -1,0 +1,1171 @@
+{
+  "contract_name": "tests/fixtures/check_contract/constant_shifts.vy",
+  "ast": {
+    "source_sha256sum": "06d7dfd88d6b6723831318386729651107b7593753d5b9f139b4807ba1d89796",
+    "ast_type": "Module",
+    "body": [
+      {
+        "annotation": {
+          "ast_type": "Name",
+          "col_offset": 12,
+          "end_col_offset": 19,
+          "end_lineno": 1,
+          "id": "uint256",
+          "lineno": 1,
+          "node_id": 7,
+          "src": "12:7:0"
+        },
+        "ast_type": "VariableDecl",
+        "col_offset": 0,
+        "end_col_offset": 29,
+        "end_lineno": 1,
+        "is_constant": true,
+        "is_immutable": false,
+        "is_public": false,
+        "is_reentrant": false,
+        "is_transient": false,
+        "lineno": 1,
+        "node_id": 1,
+        "src": "0:29:0",
+        "target": {
+          "ast_type": "Name",
+          "col_offset": 0,
+          "end_col_offset": 1,
+          "end_lineno": 1,
+          "id": "N",
+          "lineno": 1,
+          "node_id": 2,
+          "src": "0:1:0",
+          "type": {
+            "bits": 256,
+            "is_signed": false,
+            "name": "uint256",
+            "typeclass": "integer"
+          },
+          "folded_value": {
+            "ast_type": "Int",
+            "col_offset": 23,
+            "end_col_offset": 29,
+            "end_lineno": 1,
+            "lineno": 1,
+            "node_id": 9,
+            "src": "23:6:0",
+            "value": 2
+          }
+        },
+        "value": {
+          "ast_type": "BinOp",
+          "col_offset": 23,
+          "end_col_offset": 29,
+          "end_lineno": 1,
+          "left": {
+            "ast_type": "Int",
+            "col_offset": 23,
+            "end_col_offset": 24,
+            "end_lineno": 1,
+            "lineno": 1,
+            "node_id": 10,
+            "src": "23:1:0",
+            "value": 1,
+            "type": {
+              "bits": 256,
+              "is_signed": false,
+              "name": "uint256",
+              "typeclass": "integer"
+            },
+            "folded_value": {
+              "ast_type": "Int",
+              "col_offset": 23,
+              "end_col_offset": 24,
+              "end_lineno": 1,
+              "lineno": 1,
+              "node_id": 10,
+              "src": "23:1:0",
+              "value": 1,
+              "type": {
+                "bits": 256,
+                "is_signed": false,
+                "name": "uint256",
+                "typeclass": "integer"
+              }
+            }
+          },
+          "lineno": 1,
+          "node_id": 9,
+          "op": {
+            "ast_type": "LShift",
+            "col_offset": 23,
+            "end_col_offset": 29,
+            "end_lineno": 1,
+            "lineno": 1,
+            "node_id": 11,
+            "src": "23:6:0"
+          },
+          "right": {
+            "ast_type": "Int",
+            "col_offset": 28,
+            "end_col_offset": 29,
+            "end_lineno": 1,
+            "lineno": 1,
+            "node_id": 12,
+            "src": "28:1:0",
+            "value": 1,
+            "type": {
+              "bits": 8,
+              "is_signed": true,
+              "name": "int8",
+              "typeclass": "integer"
+            },
+            "folded_value": {
+              "ast_type": "Int",
+              "col_offset": 28,
+              "end_col_offset": 29,
+              "end_lineno": 1,
+              "lineno": 1,
+              "node_id": 12,
+              "src": "28:1:0",
+              "value": 1,
+              "type": {
+                "bits": 8,
+                "is_signed": true,
+                "name": "int8",
+                "typeclass": "integer"
+              }
+            }
+          },
+          "src": "23:6:0",
+          "type": {
+            "bits": 256,
+            "is_signed": false,
+            "name": "uint256",
+            "typeclass": "integer"
+          },
+          "folded_value": {
+            "ast_type": "Int",
+            "col_offset": 23,
+            "end_col_offset": 29,
+            "end_lineno": 1,
+            "lineno": 1,
+            "node_id": 9,
+            "src": "23:6:0",
+            "value": 2,
+            "type": {
+              "bits": 256,
+              "is_signed": false,
+              "name": "uint256",
+              "typeclass": "integer"
+            }
+          }
+        },
+        "type": {
+          "bits": 256,
+          "is_signed": false,
+          "name": "uint256",
+          "typeclass": "integer"
+        }
+      },
+      {
+        "annotation": {
+          "ast_type": "Name",
+          "col_offset": 12,
+          "end_col_offset": 18,
+          "end_lineno": 2,
+          "id": "int256",
+          "lineno": 2,
+          "node_id": 19,
+          "src": "42:6:0"
+        },
+        "ast_type": "VariableDecl",
+        "col_offset": 0,
+        "end_col_offset": 34,
+        "end_lineno": 2,
+        "is_constant": true,
+        "is_immutable": false,
+        "is_public": false,
+        "is_reentrant": false,
+        "is_transient": false,
+        "lineno": 2,
+        "node_id": 13,
+        "src": "30:34:0",
+        "target": {
+          "ast_type": "Name",
+          "col_offset": 0,
+          "end_col_offset": 1,
+          "end_lineno": 2,
+          "id": "M",
+          "lineno": 2,
+          "node_id": 14,
+          "src": "30:1:0",
+          "type": {
+            "bits": 256,
+            "is_signed": true,
+            "name": "int256",
+            "typeclass": "integer"
+          },
+          "folded_value": {
+            "ast_type": "Int",
+            "col_offset": 22,
+            "end_col_offset": 34,
+            "end_lineno": 2,
+            "lineno": 2,
+            "node_id": 21,
+            "src": "52:12:0",
+            "value": -4
+          }
+        },
+        "value": {
+          "ast_type": "BinOp",
+          "col_offset": 22,
+          "end_col_offset": 34,
+          "end_lineno": 2,
+          "left": {
+            "ast_type": "BinOp",
+            "col_offset": 23,
+            "end_col_offset": 28,
+            "end_lineno": 2,
+            "left": {
+              "ast_type": "Int",
+              "col_offset": 23,
+              "end_col_offset": 24,
+              "end_lineno": 2,
+              "lineno": 2,
+              "node_id": 23,
+              "src": "53:1:0",
+              "value": 0,
+              "type": {
+                "bits": 256,
+                "is_signed": true,
+                "name": "int256",
+                "typeclass": "integer"
+              },
+              "folded_value": {
+                "ast_type": "Int",
+                "col_offset": 23,
+                "end_col_offset": 24,
+                "end_lineno": 2,
+                "lineno": 2,
+                "node_id": 23,
+                "src": "53:1:0",
+                "value": 0,
+                "type": {
+                  "bits": 256,
+                  "is_signed": true,
+                  "name": "int256",
+                  "typeclass": "integer"
+                }
+              }
+            },
+            "lineno": 2,
+            "node_id": 22,
+            "op": {
+              "ast_type": "Sub",
+              "col_offset": 23,
+              "end_col_offset": 28,
+              "end_lineno": 2,
+              "lineno": 2,
+              "node_id": 24,
+              "src": "53:5:0"
+            },
+            "right": {
+              "ast_type": "Int",
+              "col_offset": 27,
+              "end_col_offset": 28,
+              "end_lineno": 2,
+              "lineno": 2,
+              "node_id": 25,
+              "src": "57:1:0",
+              "value": 8,
+              "type": {
+                "bits": 256,
+                "is_signed": true,
+                "name": "int256",
+                "typeclass": "integer"
+              },
+              "folded_value": {
+                "ast_type": "Int",
+                "col_offset": 27,
+                "end_col_offset": 28,
+                "end_lineno": 2,
+                "lineno": 2,
+                "node_id": 25,
+                "src": "57:1:0",
+                "value": 8,
+                "type": {
+                  "bits": 256,
+                  "is_signed": true,
+                  "name": "int256",
+                  "typeclass": "integer"
+                }
+              }
+            },
+            "src": "53:5:0",
+            "type": {
+              "bits": 256,
+              "is_signed": true,
+              "name": "int256",
+              "typeclass": "integer"
+            },
+            "folded_value": {
+              "ast_type": "Int",
+              "col_offset": 23,
+              "end_col_offset": 28,
+              "end_lineno": 2,
+              "lineno": 2,
+              "node_id": 22,
+              "src": "53:5:0",
+              "value": -8,
+              "type": {
+                "bits": 256,
+                "is_signed": true,
+                "name": "int256",
+                "typeclass": "integer"
+              }
+            }
+          },
+          "lineno": 2,
+          "node_id": 21,
+          "op": {
+            "ast_type": "RShift",
+            "col_offset": 22,
+            "end_col_offset": 34,
+            "end_lineno": 2,
+            "lineno": 2,
+            "node_id": 26,
+            "src": "52:12:0"
+          },
+          "right": {
+            "ast_type": "Int",
+            "col_offset": 33,
+            "end_col_offset": 34,
+            "end_lineno": 2,
+            "lineno": 2,
+            "node_id": 27,
+            "src": "63:1:0",
+            "value": 1,
+            "type": {
+              "bits": 8,
+              "is_signed": true,
+              "name": "int8",
+              "typeclass": "integer"
+            },
+            "folded_value": {
+              "ast_type": "Int",
+              "col_offset": 33,
+              "end_col_offset": 34,
+              "end_lineno": 2,
+              "lineno": 2,
+              "node_id": 27,
+              "src": "63:1:0",
+              "value": 1,
+              "type": {
+                "bits": 8,
+                "is_signed": true,
+                "name": "int8",
+                "typeclass": "integer"
+              }
+            }
+          },
+          "src": "52:12:0",
+          "type": {
+            "bits": 256,
+            "is_signed": true,
+            "name": "int256",
+            "typeclass": "integer"
+          },
+          "folded_value": {
+            "ast_type": "Int",
+            "col_offset": 22,
+            "end_col_offset": 34,
+            "end_lineno": 2,
+            "lineno": 2,
+            "node_id": 21,
+            "src": "52:12:0",
+            "value": -4,
+            "type": {
+              "bits": 256,
+              "is_signed": true,
+              "name": "int256",
+              "typeclass": "integer"
+            }
+          }
+        },
+        "type": {
+          "bits": 256,
+          "is_signed": true,
+          "name": "int256",
+          "typeclass": "integer"
+        }
+      },
+      {
+        "args": {
+          "args": [
+            {
+              "annotation": {
+                "ast_type": "Name",
+                "col_offset": 12,
+                "end_col_offset": 18,
+                "end_lineno": 6,
+                "id": "int256",
+                "lineno": 6,
+                "node_id": 31,
+                "src": "94:6:0"
+              },
+              "arg": "x",
+              "ast_type": "arg",
+              "col_offset": 9,
+              "end_col_offset": 18,
+              "end_lineno": 6,
+              "lineno": 6,
+              "node_id": 30,
+              "src": "91:9:0"
+            },
+            {
+              "annotation": {
+                "ast_type": "Name",
+                "col_offset": 23,
+                "end_col_offset": 28,
+                "end_lineno": 6,
+                "id": "uint8",
+                "lineno": 6,
+                "node_id": 34,
+                "src": "105:5:0"
+              },
+              "arg": "n",
+              "ast_type": "arg",
+              "col_offset": 20,
+              "end_col_offset": 28,
+              "end_lineno": 6,
+              "lineno": 6,
+              "node_id": 33,
+              "src": "102:8:0"
+            },
+            {
+              "annotation": {
+                "ast_type": "Subscript",
+                "col_offset": 38,
+                "end_col_offset": 48,
+                "end_lineno": 6,
+                "lineno": 6,
+                "node_id": 37,
+                "slice": {
+                  "ast_type": "Name",
+                  "col_offset": 46,
+                  "end_col_offset": 47,
+                  "end_lineno": 6,
+                  "id": "N",
+                  "lineno": 6,
+                  "node_id": 40,
+                  "src": "128:1:0",
+                  "folded_value": {
+                    "ast_type": "Int",
+                    "col_offset": 23,
+                    "end_col_offset": 29,
+                    "end_lineno": 1,
+                    "lineno": 1,
+                    "node_id": 9,
+                    "src": "23:6:0",
+                    "value": 2
+                  }
+                },
+                "src": "120:10:0",
+                "value": {
+                  "ast_type": "Name",
+                  "col_offset": 38,
+                  "end_col_offset": 45,
+                  "end_lineno": 6,
+                  "id": "uint256",
+                  "lineno": 6,
+                  "node_id": 38,
+                  "src": "120:7:0"
+                }
+              },
+              "arg": "values",
+              "ast_type": "arg",
+              "col_offset": 30,
+              "end_col_offset": 48,
+              "end_lineno": 6,
+              "lineno": 6,
+              "node_id": 36,
+              "src": "112:18:0"
+            }
+          ],
+          "ast_type": "arguments",
+          "col_offset": 0,
+          "default": null,
+          "defaults": [],
+          "end_col_offset": 17,
+          "end_lineno": 7,
+          "lineno": 6,
+          "node_id": 29,
+          "src": "82:78:0"
+        },
+        "ast_type": "FunctionDef",
+        "body": [
+          {
+            "ast_type": "Return",
+            "col_offset": 4,
+            "end_col_offset": 17,
+            "end_lineno": 7,
+            "lineno": 7,
+            "node_id": 43,
+            "src": "147:13:0",
+            "value": {
+              "ast_type": "BinOp",
+              "col_offset": 11,
+              "end_col_offset": 17,
+              "end_lineno": 7,
+              "left": {
+                "ast_type": "Name",
+                "col_offset": 11,
+                "end_col_offset": 12,
+                "end_lineno": 7,
+                "id": "x",
+                "lineno": 7,
+                "node_id": 45,
+                "src": "154:1:0",
+                "type": {
+                  "bits": 256,
+                  "is_signed": true,
+                  "name": "int256",
+                  "typeclass": "integer"
+                },
+                "variable_reads": [
+                  {
+                    "name": "x",
+                    "decl_node": {
+                      "node_id": 30,
+                      "source_id": 0
+                    },
+                    "access_path": []
+                  }
+                ]
+              },
+              "lineno": 7,
+              "node_id": 44,
+              "op": {
+                "ast_type": "LShift",
+                "col_offset": 11,
+                "end_col_offset": 17,
+                "end_lineno": 7,
+                "lineno": 7,
+                "node_id": 47,
+                "src": "154:6:0"
+              },
+              "right": {
+                "ast_type": "Name",
+                "col_offset": 16,
+                "end_col_offset": 17,
+                "end_lineno": 7,
+                "id": "n",
+                "lineno": 7,
+                "node_id": 48,
+                "src": "159:1:0",
+                "type": {
+                  "bits": 8,
+                  "is_signed": false,
+                  "name": "uint8",
+                  "typeclass": "integer"
+                },
+                "variable_reads": [
+                  {
+                    "name": "n",
+                    "decl_node": {
+                      "node_id": 33,
+                      "source_id": 0
+                    },
+                    "access_path": []
+                  }
+                ]
+              },
+              "src": "154:6:0",
+              "type": {
+                "bits": 256,
+                "is_signed": true,
+                "name": "int256",
+                "typeclass": "integer"
+              }
+            }
+          }
+        ],
+        "col_offset": 0,
+        "decorator_list": [
+          {
+            "ast_type": "Name",
+            "col_offset": 1,
+            "end_col_offset": 9,
+            "end_lineno": 4,
+            "id": "external",
+            "lineno": 4,
+            "node_id": 50,
+            "src": "67:8:0"
+          },
+          {
+            "ast_type": "Name",
+            "col_offset": 1,
+            "end_col_offset": 5,
+            "end_lineno": 5,
+            "id": "pure",
+            "lineno": 5,
+            "node_id": 52,
+            "src": "77:4:0"
+          }
+        ],
+        "doc_string": null,
+        "end_col_offset": 17,
+        "end_lineno": 7,
+        "lineno": 6,
+        "name": "left",
+        "node_id": 28,
+        "returns": {
+          "ast_type": "Name",
+          "col_offset": 53,
+          "end_col_offset": 59,
+          "end_lineno": 6,
+          "id": "int256",
+          "lineno": 6,
+          "node_id": 54,
+          "src": "135:6:0"
+        },
+        "src": "82:78:0",
+        "func_type": {
+          "argument_types": [
+            {
+              "bits": 256,
+              "is_signed": true,
+              "name": "int256",
+              "typeclass": "integer"
+            },
+            {
+              "bits": 8,
+              "is_signed": false,
+              "name": "uint8",
+              "typeclass": "integer"
+            },
+            {
+              "length": 2,
+              "value_type": {
+                "bits": 256,
+                "is_signed": false,
+                "name": "uint256",
+                "typeclass": "integer"
+              },
+              "name": "$SArray",
+              "typeclass": "static_array"
+            }
+          ],
+          "return_type": {
+            "bits": 256,
+            "is_signed": true,
+            "name": "int256",
+            "typeclass": "integer"
+          },
+          "name": "left",
+          "type_decl_node": {
+            "node_id": 28,
+            "source_id": 0
+          },
+          "typeclass": "contract_function"
+        }
+      },
+      {
+        "args": {
+          "args": [
+            {
+              "annotation": {
+                "ast_type": "Name",
+                "col_offset": 13,
+                "end_col_offset": 19,
+                "end_lineno": 11,
+                "id": "int256",
+                "lineno": 11,
+                "node_id": 59,
+                "src": "191:6:0"
+              },
+              "arg": "x",
+              "ast_type": "arg",
+              "col_offset": 10,
+              "end_col_offset": 19,
+              "end_lineno": 11,
+              "lineno": 11,
+              "node_id": 58,
+              "src": "188:9:0"
+            },
+            {
+              "annotation": {
+                "ast_type": "Name",
+                "col_offset": 24,
+                "end_col_offset": 31,
+                "end_lineno": 11,
+                "id": "uint256",
+                "lineno": 11,
+                "node_id": 62,
+                "src": "202:7:0"
+              },
+              "arg": "n",
+              "ast_type": "arg",
+              "col_offset": 21,
+              "end_col_offset": 31,
+              "end_lineno": 11,
+              "lineno": 11,
+              "node_id": 61,
+              "src": "199:10:0"
+            }
+          ],
+          "ast_type": "arguments",
+          "col_offset": 0,
+          "default": null,
+          "defaults": [],
+          "end_col_offset": 17,
+          "end_lineno": 12,
+          "lineno": 11,
+          "node_id": 57,
+          "src": "178:61:0"
+        },
+        "ast_type": "FunctionDef",
+        "body": [
+          {
+            "ast_type": "Return",
+            "col_offset": 4,
+            "end_col_offset": 17,
+            "end_lineno": 12,
+            "lineno": 12,
+            "node_id": 64,
+            "src": "226:13:0",
+            "value": {
+              "ast_type": "BinOp",
+              "col_offset": 11,
+              "end_col_offset": 17,
+              "end_lineno": 12,
+              "left": {
+                "ast_type": "Name",
+                "col_offset": 11,
+                "end_col_offset": 12,
+                "end_lineno": 12,
+                "id": "x",
+                "lineno": 12,
+                "node_id": 66,
+                "src": "233:1:0",
+                "type": {
+                  "bits": 256,
+                  "is_signed": true,
+                  "name": "int256",
+                  "typeclass": "integer"
+                },
+                "variable_reads": [
+                  {
+                    "name": "x",
+                    "decl_node": {
+                      "node_id": 58,
+                      "source_id": 0
+                    },
+                    "access_path": []
+                  }
+                ]
+              },
+              "lineno": 12,
+              "node_id": 65,
+              "op": {
+                "ast_type": "RShift",
+                "col_offset": 11,
+                "end_col_offset": 17,
+                "end_lineno": 12,
+                "lineno": 12,
+                "node_id": 68,
+                "src": "233:6:0"
+              },
+              "right": {
+                "ast_type": "Name",
+                "col_offset": 16,
+                "end_col_offset": 17,
+                "end_lineno": 12,
+                "id": "n",
+                "lineno": 12,
+                "node_id": 69,
+                "src": "238:1:0",
+                "type": {
+                  "bits": 256,
+                  "is_signed": false,
+                  "name": "uint256",
+                  "typeclass": "integer"
+                },
+                "variable_reads": [
+                  {
+                    "name": "n",
+                    "decl_node": {
+                      "node_id": 61,
+                      "source_id": 0
+                    },
+                    "access_path": []
+                  }
+                ]
+              },
+              "src": "233:6:0",
+              "type": {
+                "bits": 256,
+                "is_signed": true,
+                "name": "int256",
+                "typeclass": "integer"
+              }
+            }
+          }
+        ],
+        "col_offset": 0,
+        "decorator_list": [
+          {
+            "ast_type": "Name",
+            "col_offset": 1,
+            "end_col_offset": 9,
+            "end_lineno": 9,
+            "id": "external",
+            "lineno": 9,
+            "node_id": 71,
+            "src": "163:8:0"
+          },
+          {
+            "ast_type": "Name",
+            "col_offset": 1,
+            "end_col_offset": 5,
+            "end_lineno": 10,
+            "id": "pure",
+            "lineno": 10,
+            "node_id": 73,
+            "src": "173:4:0"
+          }
+        ],
+        "doc_string": null,
+        "end_col_offset": 17,
+        "end_lineno": 12,
+        "lineno": 11,
+        "name": "right",
+        "node_id": 56,
+        "returns": {
+          "ast_type": "Name",
+          "col_offset": 36,
+          "end_col_offset": 42,
+          "end_lineno": 11,
+          "id": "int256",
+          "lineno": 11,
+          "node_id": 75,
+          "src": "214:6:0"
+        },
+        "src": "178:61:0",
+        "func_type": {
+          "argument_types": [
+            {
+              "bits": 256,
+              "is_signed": true,
+              "name": "int256",
+              "typeclass": "integer"
+            },
+            {
+              "bits": 256,
+              "is_signed": false,
+              "name": "uint256",
+              "typeclass": "integer"
+            }
+          ],
+          "return_type": {
+            "bits": 256,
+            "is_signed": true,
+            "name": "int256",
+            "typeclass": "integer"
+          },
+          "name": "right",
+          "type_decl_node": {
+            "node_id": 56,
+            "source_id": 0
+          },
+          "typeclass": "contract_function"
+        }
+      },
+      {
+        "args": {
+          "args": [
+            {
+              "annotation": {
+                "ast_type": "Name",
+                "col_offset": 24,
+                "end_col_offset": 30,
+                "end_lineno": 16,
+                "id": "int256",
+                "lineno": 16,
+                "node_id": 80,
+                "src": "281:6:0"
+              },
+              "arg": "x",
+              "ast_type": "arg",
+              "col_offset": 21,
+              "end_col_offset": 30,
+              "end_lineno": 16,
+              "lineno": 16,
+              "node_id": 79,
+              "src": "278:9:0"
+            },
+            {
+              "annotation": {
+                "ast_type": "Name",
+                "col_offset": 35,
+                "end_col_offset": 40,
+                "end_lineno": 16,
+                "id": "uint8",
+                "lineno": 16,
+                "node_id": 83,
+                "src": "292:5:0"
+              },
+              "arg": "n",
+              "ast_type": "arg",
+              "col_offset": 32,
+              "end_col_offset": 40,
+              "end_lineno": 16,
+              "lineno": 16,
+              "node_id": 82,
+              "src": "289:8:0"
+            }
+          ],
+          "ast_type": "arguments",
+          "col_offset": 0,
+          "default": null,
+          "defaults": [],
+          "end_col_offset": 23,
+          "end_lineno": 17,
+          "lineno": 16,
+          "node_id": 78,
+          "src": "257:76:0"
+        },
+        "ast_type": "FunctionDef",
+        "body": [
+          {
+            "ast_type": "Return",
+            "col_offset": 4,
+            "end_col_offset": 23,
+            "end_lineno": 17,
+            "lineno": 17,
+            "node_id": 85,
+            "src": "314:19:0",
+            "value": {
+              "ast_type": "BinOp",
+              "col_offset": 11,
+              "end_col_offset": 23,
+              "end_lineno": 17,
+              "left": {
+                "ast_type": "Name",
+                "col_offset": 11,
+                "end_col_offset": 12,
+                "end_lineno": 17,
+                "id": "x",
+                "lineno": 17,
+                "node_id": 87,
+                "src": "321:1:0",
+                "type": {
+                  "bits": 256,
+                  "is_signed": true,
+                  "name": "int256",
+                  "typeclass": "integer"
+                },
+                "variable_reads": [
+                  {
+                    "name": "x",
+                    "decl_node": {
+                      "node_id": 79,
+                      "source_id": 0
+                    },
+                    "access_path": []
+                  }
+                ]
+              },
+              "lineno": 17,
+              "node_id": 86,
+              "op": {
+                "ast_type": "RShift",
+                "col_offset": 11,
+                "end_col_offset": 23,
+                "end_lineno": 17,
+                "lineno": 17,
+                "node_id": 89,
+                "src": "321:12:0"
+              },
+              "right": {
+                "ast_type": "BinOp",
+                "col_offset": 17,
+                "end_col_offset": 22,
+                "end_lineno": 17,
+                "left": {
+                  "ast_type": "Int",
+                  "col_offset": 17,
+                  "end_col_offset": 18,
+                  "end_lineno": 17,
+                  "lineno": 17,
+                  "node_id": 91,
+                  "src": "327:1:0",
+                  "value": 1,
+                  "type": {
+                    "bits": 8,
+                    "is_signed": false,
+                    "name": "uint8",
+                    "typeclass": "integer"
+                  },
+                  "folded_value": {
+                    "ast_type": "Int",
+                    "col_offset": 17,
+                    "end_col_offset": 18,
+                    "end_lineno": 17,
+                    "lineno": 17,
+                    "node_id": 91,
+                    "src": "327:1:0",
+                    "value": 1,
+                    "type": {
+                      "bits": 8,
+                      "is_signed": false,
+                      "name": "uint8",
+                      "typeclass": "integer"
+                    }
+                  }
+                },
+                "lineno": 17,
+                "node_id": 90,
+                "op": {
+                  "ast_type": "Add",
+                  "col_offset": 17,
+                  "end_col_offset": 22,
+                  "end_lineno": 17,
+                  "lineno": 17,
+                  "node_id": 92,
+                  "src": "327:5:0"
+                },
+                "right": {
+                  "ast_type": "Name",
+                  "col_offset": 21,
+                  "end_col_offset": 22,
+                  "end_lineno": 17,
+                  "id": "n",
+                  "lineno": 17,
+                  "node_id": 93,
+                  "src": "331:1:0",
+                  "type": {
+                    "bits": 8,
+                    "is_signed": false,
+                    "name": "uint8",
+                    "typeclass": "integer"
+                  },
+                  "variable_reads": [
+                    {
+                      "name": "n",
+                      "decl_node": {
+                        "node_id": 82,
+                        "source_id": 0
+                      },
+                      "access_path": []
+                    }
+                  ]
+                },
+                "src": "327:5:0",
+                "type": {
+                  "bits": 8,
+                  "is_signed": false,
+                  "name": "uint8",
+                  "typeclass": "integer"
+                }
+              },
+              "src": "321:12:0",
+              "type": {
+                "bits": 256,
+                "is_signed": true,
+                "name": "int256",
+                "typeclass": "integer"
+              }
+            }
+          }
+        ],
+        "col_offset": 0,
+        "decorator_list": [
+          {
+            "ast_type": "Name",
+            "col_offset": 1,
+            "end_col_offset": 9,
+            "end_lineno": 14,
+            "id": "external",
+            "lineno": 14,
+            "node_id": 95,
+            "src": "242:8:0"
+          },
+          {
+            "ast_type": "Name",
+            "col_offset": 1,
+            "end_col_offset": 5,
+            "end_lineno": 15,
+            "id": "pure",
+            "lineno": 15,
+            "node_id": 97,
+            "src": "252:4:0"
+          }
+        ],
+        "doc_string": null,
+        "end_col_offset": 23,
+        "end_lineno": 17,
+        "lineno": 16,
+        "name": "count_expression",
+        "node_id": 77,
+        "returns": {
+          "ast_type": "Name",
+          "col_offset": 45,
+          "end_col_offset": 51,
+          "end_lineno": 16,
+          "id": "int256",
+          "lineno": 16,
+          "node_id": 99,
+          "src": "302:6:0"
+        },
+        "src": "257:76:0",
+        "func_type": {
+          "argument_types": [
+            {
+              "bits": 256,
+              "is_signed": true,
+              "name": "int256",
+              "typeclass": "integer"
+            },
+            {
+              "bits": 8,
+              "is_signed": false,
+              "name": "uint8",
+              "typeclass": "integer"
+            }
+          ],
+          "return_type": {
+            "bits": 256,
+            "is_signed": true,
+            "name": "int256",
+            "typeclass": "integer"
+          },
+          "name": "count_expression",
+          "type_decl_node": {
+            "node_id": 77,
+            "source_id": 0
+          },
+          "typeclass": "contract_function"
+        }
+      }
+    ],
+    "col_offset": 0,
+    "doc_string": null,
+    "end_col_offset": 24,
+    "end_lineno": 17,
+    "is_interface": false,
+    "lineno": 1,
+    "name": null,
+    "node_id": 0,
+    "path": "tests/fixtures/check_contract/constant_shifts.vy",
+    "settings": {},
+    "source_id": 0,
+    "src": "0:334:0",
+    "type": {
+      "name": "tests/fixtures/check_contract/constant_shifts.vy",
+      "type_decl_node": {
+        "node_id": 0,
+        "source_id": 0
+      },
+      "typeclass": "module"
+    }
+  },
+  "imports": []
+}

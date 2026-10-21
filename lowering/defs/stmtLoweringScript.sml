@@ -100,10 +100,11 @@ Termination
   WF_REL_TAC `measure (λ(cenv,ops,buf,off). LENGTH ops)`
 End
 
-(* Extract target name as string for metadata lookup *)
+(* Key of the target's root variable in the name-keyed compile_env tables:
+   the plain name for a local/argument, module_var_key for a module variable. *)
 Definition target_to_string_def:
   target_to_string (NameTarget id) = id ∧
-  target_to_string (TopLevelNameTarget nsid) = nsid_to_string nsid ∧
+  target_to_string (TopLevelNameTarget nsid) = module_var_key nsid ∧
   target_to_string (SubscriptTarget bt _) = target_to_string bt ∧
   target_to_string (AttributeTarget bt _) = target_to_string bt
 End
@@ -380,7 +381,7 @@ Definition compile_get_target_ptr_def:
      | _ => return (Lit 0w, NONE, NONE)) ∧
   (* TopLevelName: storage, transient, or immutable variable *)
   compile_get_target_ptr cenv (TopLevelNameTarget nsid) =
-    (let name = nsid_to_string nsid in
+    (let name = module_var_key nsid in
      case FLOOKUP cenv.ce_vars name of
        SOME (StorageLoc slot) =>
          return (Lit slot, SOME LocStorage, cenv.ce_var_type name)
@@ -812,7 +813,7 @@ End
 Definition compile_internal_return_from_env_def:
   compile_internal_return_from_env cenv ty src_ty val_op rpc =
     do ret_buf <-
-         (case FLOOKUP cenv.ce_vars "__return_buf__" of
+         (case cenv.ce_return_buf of
             SOME (MemLoc rbuf_off _) =>
               do buf_ptr <- emit_op MLOAD [Lit (n2w rbuf_off)];
                  return (SOME buf_ptr)
@@ -1078,7 +1079,7 @@ Definition compile_stmt_def:
   (* Return NONE: emit STOP for external (with unlock), RET for internal.
      Mirrors Python: vyper/codegen_venom/stmt.py:lower_Return → _lower_external_return (unlocks first) *)
   compile_stmt cenv lctx ty (Return NONE) =
-    (case FLOOKUP cenv.ce_vars "__return_pc__" of
+    (case cenv.ce_return_pc of
        SOME (MemLoc rpc_off _) =>
          (* Internal: ret to return_pc *)
          do rpc <- emit_op MLOAD [Lit (n2w rpc_off)];
@@ -1101,7 +1102,7 @@ Definition compile_stmt_def:
      External functions: uses compile_external_return with ABI encoding. *)
   compile_stmt cenv lctx ty (Return (SOME e)) =
     do val_op <- lower_value compile_expr cenv ty e;
-       (case FLOOKUP cenv.ce_vars "__return_pc__" of
+       (case cenv.ce_return_pc of
           SOME (MemLoc rpc_off _) =>
             do rpc <- emit_op MLOAD [Lit (n2w rpc_off)];
                compile_internal_return_from_env cenv ty (expr_type e)

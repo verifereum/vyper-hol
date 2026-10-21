@@ -1,7 +1,7 @@
 (* PLAN 5.6 name whitelist. TOP-LEVEL: supported_declaration_names,
    supported_function_bindings, supported_selectors_distinct.
    Helpers: supported_module_names, supported_function_names,
-   supported_event_names, supported_internal_name, supported_local_name,
+   supported_event_names, supported_internal_name,
    supported_function_header_names, supported_struct_field_names.
    TASK_021 supplies ALL AnnAssign and For names (including nested branches)
    to supported_function_bindings. No body traversal or body placeholder. *)
@@ -40,18 +40,13 @@ Definition supported_internal_name_def:
     ~isPREFIX "return_label_" name /\ ~isPREFIX "reachable_" name
 End
 
-Definition supported_local_name_def:
-  supported_local_name tops name <=>
-    ~MEM name (supported_module_names tops) /\
-    name <> "__return_buf__" /\ name <> "__return_pc__"
-End
-
 (* Lists, not sets: repeated names in different branches/loops must fail.
-   Concatenating catches cross-class collisions as well as duplicates. *)
+   Concatenating catches cross-class collisions as well as duplicates.
+   Module variables need no check: compile_env keys them by module_var_key
+   ("self." ++ name), which no local binding can produce. *)
 Definition supported_function_bindings_def:
   supported_function_bindings tops (args : argument list) locals loops <=>
-    let names = MAP FST args ++ locals ++ loops in
-      ALL_DISTINCT names /\ EVERY (supported_local_name tops) names
+    ALL_DISTINCT (MAP FST args ++ locals ++ loops)
 End
 
 Definition supported_function_header_names_def:
@@ -98,16 +93,6 @@ Theorem supported_bindings_distinct:
     ALL_DISTINCT (MAP FST args ++ locals ++ loops)
 Proof
   simp[supported_function_bindings_def]
-QED
-
-Theorem supported_bindings_name:
-  supported_function_bindings tops args locals loops /\
-  MEM name (MAP FST args ++ locals ++ loops) ==>
-  ~MEM name (supported_module_names tops) /\
-  name <> "__return_buf__" /\ name <> "__return_pc__"
-Proof
-  simp[supported_function_bindings_def, EVERY_MEM,
-       supported_local_name_def] >> metis_tac[]
 QED
 
 Theorem supported_fallback_no_arguments:

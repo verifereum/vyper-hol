@@ -704,8 +704,8 @@ Proof
   pop_assum $ mk_asm "ih" >> rpt gen_tac >>
   simp[rename_current_outputs_def] >>
   pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >> rpt strip_tac >>
-  rename [`push_current_name s rs h = (rs1,s1,name)`,
-          `rename_current_outputs s1 rs1 vs = (rs2,s2,rest)`] >>
+  rename1 `push_current_name s rs h = (rs1,s1,name)` >>
+  rename1 `rename_current_outputs s1 rs1 vs = (rs2,s2,rest)` >>
   `MEM h s.irs_used_vars` by gvs[ssa_vars_covered_def] >>
   `ssa_stacks_covered s1 (SND rs1) /\
    MEM name s1.irs_used_vars /\
@@ -831,8 +831,8 @@ Proof
   pop_assum $ mk_asm "ih" >> rpt gen_tac >>
   simp[rename_current_block_insts_def] >>
   pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >> rpt strip_tac >>
-  rename [`rename_current_inst s rs h = (rs1,s1,inst1)`,
-          `rename_current_block_insts s1 rs1 insts = (rs2,s2,rest)`] >>
+  rename1 `rename_current_inst s rs h = (rs1,s1,inst1)` >>
+  rename1 `rename_current_block_insts s1 rs1 insts = (rs2,s2,rest)` >>
   `ssa_vars_covered s (inst_ir_vars h)` by
     gvs[ssa_vars_covered_def, listTheory.EVERY_APPEND] >>
   `ssa_vars_covered s1 (inst_ir_vars inst1) /\
@@ -1849,42 +1849,16 @@ Proof
      metis_tac[]
 QED
 
-Theorem alist_update_or_prepend_key_MEM[local]:
-  !alist k f d v.
-    MEM v (MAP FST (alist_update_or_prepend k f d alist)) ==>
-    v = k \/ MEM v (MAP FST alist)
-Proof
-  Induct >> simp[makeSsaDefsTheory.alist_update_or_prepend_def] >>
-  rpt gen_tac >> PairCases_on `h` >>
-  simp[makeSsaDefsTheory.alist_update_or_prepend_def] >>
-  IF_CASES_TAC >> gvs[] >> metis_tac[]
-QED
-
-Theorem foldr_alist_update_key_MEM[local]:
-  !vars lbl acc v.
-    MEM v (MAP FST
-      (FOLDR (\var a.
-        alist_update_or_prepend var (CONS lbl) [lbl] a) acc vars)) ==>
-    MEM v vars \/ MEM v (MAP FST acc)
-Proof
-  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
-  drule alist_update_or_prepend_key_MEM >>
-  metis_tac[]
-QED
-
 Theorem compute_defs_key_MEM_block_ir_vars:
   MEM v (MAP FST (compute_defs bbs)) ==>
   MEM v (FLAT (MAP block_ir_vars bbs))
 Proof
-  Induct_on `bbs` >- simp[makeSsaDefsTheory.compute_defs_def] >>
-  simp[Once makeSsaDefsTheory.compute_defs_def] >> rpt strip_tac >>
-  drule foldr_alist_update_key_MEM >> strip_tac
-  >- (gvs[makeSsaDefsTheory.block_assignments_def, block_ir_vars_def, inst_ir_vars_def,
-          listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
-      disj1_tac >>
-      qexists `inst.inst_outputs ++ inst_uses inst` >> simp[] >>
-      metis_tac[])
-  >> gvs[]
+  rw[makeSsaDefsTheory.compute_defs_keys, listTheory.MEM_FLAT,
+     listTheory.MEM_MAP, PULL_EXISTS] >>
+  gvs[makeSsaDefsTheory.block_assignments_def, block_ir_vars_def,
+      inst_ir_vars_def, listTheory.MEM_FLAT, listTheory.MEM_MAP,
+      listTheory.MEM_nub, PULL_EXISTS] >>
+  metis_tac[listTheory.MEM_APPEND]
 QED
 
 Theorem lookup_blocks_filter_MEM:
@@ -2709,9 +2683,9 @@ Proof
   ho_match_mp_tac current_dom_tree_induction >> rpt conj_tac
   >- (rpt strip_tac >> gvs[rename_current_blocks_def, AllCaseEqs()] >>
       pairarg_tac >> gvs[] >>
-      rename [`lookup_block lbl bbs = SOME bb`,
-              `rename_current_block_insts s rs bb.bb_instructions =
-                 (rs1,s1,insts')`] >>
+      rename1 `lookup_block lbl bbs = SOME bb` >>
+      rename1 `rename_current_block_insts s rs bb.bb_instructions =
+                 (rs1,s1,insts')` >>
       `EVERY (\inst. ~is_raw_fmp_opcode inst.inst_opcode)
              insts'` by
         (drule rename_current_block_insts_no_raw >>

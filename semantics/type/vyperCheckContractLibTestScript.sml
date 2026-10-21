@@ -325,6 +325,18 @@ val (set_membership_result, _) =
   timed_checker_conv "predicate-set membership" set_membership_input
 val () = assert_closed_result set_membership_input ``T`` set_membership_result
 
+(* The compset leaves INSERT chains undeduplicated, so FDOM of a map with a
+   re-inserted key keeps the duplicate; membership must still decide. *)
+val reinserted_fdom = ``FDOM (FEMPTY |+ ("x", 1n) |+ ("y", 2n) |+ ("x", 3n))``
+val fresh_input = ``"z" NOTIN ^reinserted_fdom``
+val (fresh_result, _) =
+  timed_checker_conv "fresh key, re-inserted domain" fresh_input
+val () = assert_closed_result fresh_input ``T`` fresh_result
+val stale_input = ``"x" NOTIN ^reinserted_fdom``
+val (stale_result, _) =
+  timed_checker_conv "declared key, re-inserted domain" stale_input
+val () = assert_closed_result stale_input ``F`` stale_result
+
 (* One contract per builtin and type-builtin constructor, per account item,
    and per raw_create argument shape, each returning the builtin's result from
    an external function. The checker must decide each one; an unevaluated

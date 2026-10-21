@@ -10,6 +10,7 @@ roots = ["vyperHolScript.sml",
          "semantics/type/vyperCheckContractLibTestScript.sml",
          "tests/vyperStringScopeTestScript.sml",
          "frontend/vyperCheckContractFrontendLibTestScript.sml",
+         "frontend/jsonConstEvalWitnessScript.sml",
          "tests/vyperCheckContractTraceLibTestScript.sml",
          "tests/vyperCreateSelfdestructScript.sml",
          "tests/vyperTestLibTestScript.sml",
@@ -17,6 +18,7 @@ roots = ["vyperHolScript.sml",
          "tests/vyperInvertTestScript.sml",
          "tests/vyperCalldataSliceTestScript.sml",
          "tests/vyperRawCallCalldataTestScript.sml",
+         "tests/vyperDelegateRawCallTestScript.sml",
          "tests/vyperTupleSubscriptTestScript.sml"]
 
 [dependencies.verifereum]

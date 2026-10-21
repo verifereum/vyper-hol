@@ -1520,16 +1520,23 @@ QED
 
 
 (* This is independent of call_evaluation_safe: it constrains the exact
-   external transition returned to the protected transaction target. *)
+   external or delegate transition returned to the protected transaction target.
+   Delegate code can write arbitrary proxy slots, so it needs its own premise. *)
 Definition protected_storage_calls_preserve_def:
   protected_storage_calls_preserve cx <=>
-    !callee calldata value_opt st txp success returndata accounts' tStorage' emitted_logs.
-      run_ext_call cx.txn.target callee calldata value_opt
-        st.accounts st.tStorage txp =
-        SOME (success,returndata,accounts',tStorage',emitted_logs) /\
-      contract_storage_well_formed cx st ==>
-      contract_storage_well_formed cx
-        (st with <| accounts := accounts'; tStorage := tStorage' |>)
+    (!callee calldata value_opt st txp success returndata accounts' tStorage' emitted_logs.
+       run_ext_call cx.txn.target callee calldata value_opt
+         st.accounts st.tStorage txp =
+         SOME (success,returndata,accounts',tStorage',emitted_logs) /\
+       contract_storage_well_formed cx st ==>
+       contract_storage_well_formed cx
+         (st with <| accounts := accounts'; tStorage := tStorage' |>)) /\
+    (!callee calldata st success returndata accounts' tStorage' emitted_logs.
+       run_delegate_call cx callee calldata st.accounts st.tStorage =
+         SOME (success,returndata,accounts',tStorage',emitted_logs) /\
+       contract_storage_well_formed cx st ==>
+       contract_storage_well_formed cx
+         (st with <| accounts := accounts'; tStorage := tStorage' |>))
 End
 
 Theorem protected_storage_calls_preserve_run_ext_call:
@@ -1542,6 +1549,30 @@ Theorem protected_storage_calls_preserve_run_ext_call:
     (st with <| accounts := accounts'; tStorage := tStorage' |>)
 Proof
   simp[protected_storage_calls_preserve_def] >> metis_tac[]
+QED
+
+Theorem protected_storage_calls_preserve_run_delegate_call:
+  protected_storage_calls_preserve cx /\
+  run_delegate_call cx callee calldata st.accounts st.tStorage =
+    SOME (success,returndata,accounts',tStorage',emitted_logs) /\
+  contract_storage_well_formed cx st ==>
+  contract_storage_well_formed cx
+    (st with <| accounts := accounts'; tStorage := tStorage' |>)
+Proof
+  simp[protected_storage_calls_preserve_def] >> metis_tac[]
+QED
+
+Theorem protected_storage_calls_preserve_run_raw_call:
+  protected_storage_calls_preserve cx /\
+  run_raw_call cx flags callee calldata amount st.accounts st.tStorage =
+    SOME (success,returndata,accounts',tStorage',emitted_logs) /\
+  contract_storage_well_formed cx st ==>
+  contract_storage_well_formed cx
+    (st with <| accounts := accounts'; tStorage := tStorage' |>)
+Proof
+  rw[run_raw_call_def] >>
+  metis_tac[protected_storage_calls_preserve_run_delegate_call,
+            protected_storage_calls_preserve_run_ext_call]
 QED
 
 Theorem protected_storage_calls_preserve_success:

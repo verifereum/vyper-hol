@@ -3232,7 +3232,7 @@ Proof
   TRY (rename1 `evaluate_builtin _ _ (BaseT BoolT) Not [BoolV b] = INL v` >>
        gvs[evaluate_builtin_def, value_has_type_def] >> NO_TAC) >>
   TRY (rename1 `evaluate_builtin _ _ (FlagT fid) Not [_] = INL _` >>
-       Cases_on `FLOOKUP (get_tenv cx) (type_key fid)` >> gvs[] >>
+       Cases_on `FLOOKUP (get_tenv cx) fid` >> gvs[] >>
        Cases_on `x` >> gvs[] >>
        gvs[value_has_type_def, evaluate_builtin_def, evaluate_type_def] >>
        rewrite_tac[wordsTheory.WORD_NEG_1, GSYM wordsTheory.WORD_NOT_0] >>

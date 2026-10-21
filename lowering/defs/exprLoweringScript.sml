@@ -65,19 +65,13 @@ End
 
 (* ===== Array Location Inference ===== *)
 (* Infer array data location from expression AST + compile_env.
-   Attribute(Name "self", field) → look up field in ce_vars → StorageLoc/TransientLoc.
-   Name var → look up in ce_vars.
+   TopLevelName → look up the module_var_key in ce_vars → StorageLoc/TransientLoc/ImmutableLoc.
+   Name var → look up the plain name in ce_vars.
    Otherwise → LocMemory (default).
    Mirrors Python: array_vv.location or node.iter._expr_info.location
    Note: CalldataLoc not in var_location. Calldata params are ABI-decoded
    to memory at function entry, so LocMemory is correct for them. *)
 Definition infer_array_location_def:
-  infer_array_location cenv (Attribute _ (Name _ "self") field_name) =
-    (case FLOOKUP cenv.ce_vars field_name of
-       SOME (StorageLoc _) => LocStorage
-     | SOME (TransientLoc _) => LocTransient
-     | SOME (ImmutableLoc _) => LocCode
-     | _ => LocMemory) ∧
   infer_array_location cenv (Name _ var_name) =
     (case FLOOKUP cenv.ce_vars var_name of
        SOME (StorageLoc _) => LocStorage
@@ -85,7 +79,7 @@ Definition infer_array_location_def:
      | SOME (ImmutableLoc _) => LocCode
      | _ => LocMemory) ∧
   infer_array_location cenv (TopLevelName _ nsid) =
-    (case FLOOKUP cenv.ce_vars (nsid_to_string nsid) of
+    (case FLOOKUP cenv.ce_vars (module_var_key nsid) of
        SOME (StorageLoc _) => LocStorage
      | SOME (TransientLoc _) => LocTransient
      | SOME (ImmutableLoc _) => LocCode
@@ -100,12 +94,8 @@ Definition infer_array_is_dynamic_def:
     (case cenv.ce_var_type var_name of
        SOME (ArrayT _ (Dynamic _)) => T
      | _ => F) ∧
-  infer_array_is_dynamic cenv (Attribute _ (Name _ "self") field_name) =
-    (case cenv.ce_var_type field_name of
-       SOME (ArrayT _ (Dynamic _)) => T
-     | _ => F) ∧
   infer_array_is_dynamic cenv (TopLevelName _ nsid) =
-    (case cenv.ce_var_type (nsid_to_string nsid) of
+    (case cenv.ce_var_type (module_var_key nsid) of
        SOME (ArrayT _ (Dynamic _)) => T
      | _ => F) ∧
   infer_array_is_dynamic cenv _ = T  (* default: assume dynamic for safety *)
@@ -1415,7 +1405,7 @@ Definition compile_target_base_def:
      | SOME (PtrVar ptr_op _) => ptr_op
      | _ => Lit 0w) ∧
   compile_target_base cenv (TopLevelNameTarget nsid) =
-    (let name = nsid_to_string nsid in
+    (let name = module_var_key nsid in
      case FLOOKUP cenv.ce_vars name of
        SOME (StorageLoc slot) => Lit slot
      | SOME (TransientLoc slot) => Lit slot
@@ -2076,8 +2066,7 @@ Definition compile_subscript_def:
   compile_subscript cfn cenv ret_ty ty base_e idx_e =
     let var_name = (case base_e of
                       Name _ id => id
-                    | Attribute _ (Name _ "self") fld => fld
-                    | TopLevelName _ nsid => nsid_to_string nsid
+                    | TopLevelName _ nsid => module_var_key nsid
                     | _ => "") in
     if cenv.ce_is_hashmap var_name then
       let base_slot = (case FLOOKUP cenv.ce_vars var_name of
@@ -2151,33 +2140,25 @@ End
 Definition compile_attribute_def:
   compile_attribute cfn cenv ret_ty ty base_e field =
     do base_vv <- cfn cenv ty base_e;
-       case FLOOKUP cenv.ce_vars field of
-         SOME (StorageLoc slot) =>
-           return (LocatedValue ret_ty (mk_ptr (Lit slot) LocStorage))
-       | SOME (TransientLoc slot) =>
-           return (LocatedValue ret_ty (mk_ptr (Lit slot) LocTransient))
-       | SOME (ImmutableLoc offset) =>
-           return (LocatedValue ret_ty (mk_ptr (Lit (n2w offset)) LocCode))
-       | _ =>
-           let base_op = vv_operand base_vv in
-           let base_loc = (case vv_location base_vv of
-                             SOME l => l | NONE => LocMemory) in
-           let struct_name = (case base_e of
-                                Name _ id => (case cenv.ce_var_type id of
-                                                SOME (StructT sn) => nsid_to_string sn
-                                              | _ => "")
-                              | _ => "") in
-           let is_storage_loc = (case base_loc of
-                                   LocStorage => T
-                                 | LocTransient => T
-                                 | _ => F) in
-           let fields = get_struct_fields cenv.ce_struct_fields struct_name in
-           let field_offset =
-             if is_storage_loc then struct_field_offset_slots fields field
-             else struct_field_offset fields field in
-           do p <- emit_op ADD [base_op; Lit (n2w field_offset)];
-              return (LocatedValue ret_ty (mk_ptr p base_loc))
-           od
+       let base_op = vv_operand base_vv in
+       let base_loc = (case vv_location base_vv of
+                         SOME l => l | NONE => LocMemory) in
+       let struct_name = (case base_e of
+                            Name _ id => (case cenv.ce_var_type id of
+                                            SOME (StructT sn) => nsid_to_string sn
+                                          | _ => "")
+                          | _ => "") in
+       let is_storage_loc = (case base_loc of
+                               LocStorage => T
+                             | LocTransient => T
+                             | _ => F) in
+       let fields = get_struct_fields cenv.ce_struct_fields struct_name in
+       let field_offset =
+         if is_storage_loc then struct_field_offset_slots fields field
+         else struct_field_offset fields field in
+       do p <- emit_op ADD [base_op; Lit (n2w field_offset)];
+          return (LocatedValue ret_ty (mk_ptr p base_loc))
+       od
     od
 End
 
@@ -2551,7 +2532,7 @@ Definition compile_expr_body_def:
         let flag_id = cenv.ce_flag_member_id flag_name mem_name in
         (StackValue ret_ty (Lit (n2w (2 ** flag_id))), st))
    | TopLevelName _ nsid =>
-       (let name = nsid_to_string nsid in
+       (let name = module_var_key nsid in
         case FLOOKUP cenv.ce_vars name of
           SOME (StorageLoc slot) =>
             (LocatedValue ret_ty (mk_ptr (Lit slot) LocStorage), st)
@@ -2569,7 +2550,7 @@ Definition compile_expr_body_def:
         let (loc, arr_name) = (case target of
             NameTarget id => (infer_array_location cenv (Name ARB id), id)
           | TopLevelNameTarget nsid =>
-              (infer_array_location cenv (TopLevelName ARB nsid), nsid_to_string nsid)
+              (infer_array_location cenv (TopLevelName ARB nsid), module_var_key nsid)
           | _ => (LocMemory, "")) in
         let ws = word_scale loc in
         let fty_opt = cenv.ce_var_type arr_name in

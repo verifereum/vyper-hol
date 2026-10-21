@@ -74,8 +74,6 @@ val checker_defs =
    lookup_function_def,
    lookup_callable_function_def,
    well_formed_type_def,
-   pair_num_def,
-   type_key_def,
    is_numeric_type_def,
    is_uint_type_def,
    is_bool_type_def,
@@ -102,7 +100,6 @@ val checker_defs =
    well_typed_stmts_def,
    stmt_no_fallthrough_def,
    stmt_no_control_escape_def,
-   vyperMiscTheory.string_to_num_def,
    vyperValueTheory.evaluate_type_def,
    vyperValueTheory.type_slot_size_def,
    vfmConstantsTheory.word_size_def,
@@ -161,6 +158,11 @@ fun build_checker_base () =
   |> computeLib.copy
   |> listSimps.list_rws
   |> pred_setLib.add_pred_set_compset
+  (* INSERT_CONV dedups every INSERT node with an IN_CONV over the tail, which
+     makes each FDOM freshness check quadratic in the declared locals
+     (HOL-Theorem-Prover/HOL#2101). Scrub it before anything else is added:
+     a compiled rule such as FDOM_FUPDATE keeps the INSERT entry it saw. *)
+  |> (fn cs => computeLib.scrub_const cs pred_setSyntax.insert_tm)
   |> combinLib.add_combin_compset
   |> numposrepLib.add_numposrep_compset
   |> ASCIInumbersLib.add_ASCIInumbers_compset

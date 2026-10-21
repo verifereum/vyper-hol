@@ -1,7 +1,7 @@
 Theory vyperSmallStep
 Ancestors
   arithmetic combin pair list While
-  vyperMisc vyperValue vyperContext vyperState vyperCreate vyperInterpreter vyperABI
+  vyperMisc vyperNsidFmap vyperValue vyperContext vyperState vyperCreate vyperInterpreter vyperABI
   vyperCallOutcome[ignore_grammar]
 Libs
   cv_transLib wordsLib
@@ -69,8 +69,8 @@ Datatype:
   | RawRevertK eval_continuation
   | SelfDestructK eval_continuation
   | CreateK (type list) create_kind bool bool eval_continuation
-  | IntCallK (num |-> type_args) (num option # identifier) ((identifier # type) list) (expr list) type (stmt list) bool function_mutability eval_continuation
-  | IntCallK1 (num |-> type_args) (num option # identifier) ((identifier # type) list) (value list) (scope list) type (stmt list) bool function_mutability eval_continuation
+  | IntCallK (nsid |-> type_args) nsid ((identifier # type) list) (expr list) type (stmt list) bool function_mutability eval_continuation
+  | IntCallK1 (nsid |-> type_args) nsid ((identifier # type) list) (value list) (scope list) type (stmt list) bool function_mutability eval_continuation
   | IntCallK2 (scope list) type_value bool bool eval_continuation
   | ExprsK (expr list) eval_continuation
   | ExprsK1 value eval_continuation
@@ -1763,6 +1763,8 @@ val EXT_CALL_CPS_PREP_TAC =
    specialization independently visible to holbuild's tactic budget. *)
 val EXT_CALL_CPS_CASES_TAC =
   TRY (FIRST [first_assum MATCH_ACCEPT_TAC,
+    (* Collapse a failed operand before rewriting the guarded IH/dead call body. *)
+    CHANGED_TAC (simp_tac (srw_ss()) [raise_def]),
     CHANGED_TAC (gvs[bind_def, ignore_bind_def, return_def, UNCURRY,
       type_check_def, check_def, assert_def, lift_option_type_def,
       get_accounts_def, get_transient_storage_def, update_accounts_def,

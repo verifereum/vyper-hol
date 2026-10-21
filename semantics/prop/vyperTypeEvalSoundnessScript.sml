@@ -571,15 +571,13 @@ Proof
               `!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty ==> ?ts. _`
               (qspecl_then [`src`,`id`,`bare_ty`] mp_tac) >>
             simp[] >> rw[]) >>
-          `?id_str. string_to_num id_str = id` by
-            metis_tac[is_bare_global_decl_has_name] >>
           qpat_x_assum
-            `!src id ty. FLOOKUP env.bare_globals (src,string_to_num id) = SOME ty ==> IS_SOME _`
-            (qspecl_then [`src`,`id_str`,`bare_ty`] mp_tac) >>
+            `!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty ==> IS_SOME _`
+            (qspecl_then [`src`,`id`,`bare_ty`] mp_tac) >>
           simp[IS_SOME_EXISTS] >> strip_tac >> PairCases_on `x` >>
           qpat_x_assum
-            `!src id ty tv v. FLOOKUP env.bare_globals (src,string_to_num id) = SOME ty /\ FLOOKUP _ id = SOME (tv,v) ==> _`
-            (qspecl_then [`src`,`id_str`,`bare_ty`,`x0`,`x1`] mp_tac) >>
+            `!src id ty tv v. FLOOKUP env.bare_globals (src,id) = SOME ty /\ FLOOKUP _ id = SOME (tv,v) ==> _`
+            (qspecl_then [`src`,`id`,`bare_ty`,`x0`,`x1`] mp_tac) >>
           simp[]) >>
       rename1 `FLOOKUP env.toplevel_vtypes (src,id) = SOME (HashMapT kt hv)` >>
       qpat_x_assum
@@ -607,15 +605,13 @@ Proof
           `!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty ==> ?ts. _`
           (qspecl_then [`src`,`id`,`bare_ty`] mp_tac) >>
         simp[] >> rw[]) >>
-      `?id_str. string_to_num id_str = id` by
-        metis_tac[is_bare_global_decl_has_name] >>
       qpat_x_assum
-        `!src id ty. FLOOKUP env.bare_globals (src,string_to_num id) = SOME ty ==> IS_SOME _`
-        (qspecl_then [`src`,`id_str`,`bare_ty`] mp_tac) >>
+        `!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty ==> IS_SOME _`
+        (qspecl_then [`src`,`id`,`bare_ty`] mp_tac) >>
       simp[IS_SOME_EXISTS] >> strip_tac >> PairCases_on `x` >>
       qpat_x_assum
-        `!src id ty tv v. FLOOKUP env.bare_globals (src,string_to_num id) = SOME ty /\ FLOOKUP _ id = SOME (tv,v) ==> _`
-        (qspecl_then [`src`,`id_str`,`bare_ty`,`x0`,`x1`] mp_tac) >>
+        `!src id ty tv v. FLOOKUP env.bare_globals (src,id) = SOME ty /\ FLOOKUP _ id = SOME (tv,v) ==> _`
+        (qspecl_then [`src`,`id`,`bare_ty`,`x0`,`x1`] mp_tac) >>
       simp[]) >>
   rename1 `FLOOKUP env.toplevel_vtypes (src,id) = SOME (HashMapT kt hv)` >>
   qpat_x_assum
@@ -1116,7 +1112,7 @@ Proof
     `evaluate_type (get_tenv cx) var_ty = SOME entry'.type` by metis_tac[] >>
     `entry'.type = entry.type` by gvs[] >>
     qexists_tac `entry'` >> simp[]) >>
-  rename1 `FLOOKUP env.bare_globals (src_id_opt,string_to_num s) = SOME imm_ty` >>
+  rename1 `FLOOKUP env.bare_globals (src_id_opt,s) = SOME imm_ty` >>
   `?pair. FLOOKUP (get_source_immutables src_id_opt
       (case ALOOKUP st'.immutables cx.txn.target of NONE => [] | SOME m => m))
       s = SOME pair` by metis_tac[IS_SOME_EXISTS] >>
@@ -3577,11 +3573,10 @@ Theorem nonbare_toplevel_not_immutable[local]:
   env_consistent env cx st /\
   FLOOKUP env.bare_globals (src,n) = NONE /\
   get_module_code cx src = SOME ts /\
-  is_immutable_decl_by_num n ts ==>
+  is_immutable_decl n ts ==>
   F
 Proof
   rpt strip_tac >>
-  gvs[is_immutable_decl_by_num_def] >>
   drule_all is_immutable_decl_MEM_Immutable_exists >> strip_tac >>
   gvs[env_consistent_def, env_context_consistent_def,
       bare_globals_complete_def] >>
@@ -3591,17 +3586,17 @@ Proof
 QED
 
 Theorem bare_global_immutable_value_and_type[local]:
-  (!src id ty. FLOOKUP bare_globals (src,string_to_num id) = SOME ty ==>
+  (!src id ty. FLOOKUP bare_globals (src,id) = SOME ty ==>
      ?tv v. FLOOKUP (get_source_immutables src imms) id = SOME (tv,v)) /\
-  (!src id ty tv v. FLOOKUP bare_globals (src,string_to_num id) = SOME ty /\
+  (!src id ty tv v. FLOOKUP bare_globals (src,id) = SOME ty /\
      FLOOKUP (get_source_immutables src imms) id = SOME (tv,v) ==>
      evaluate_type tenv ty = SOME tv) /\
-  FLOOKUP bare_globals (src,string_to_num n) = SOME ty ==>
+  FLOOKUP bare_globals (src,n) = SOME ty ==>
   ?tv v. FLOOKUP (get_source_immutables src imms) n = SOME (tv,v) /\
          evaluate_type tenv ty = SOME tv
 Proof
   rpt strip_tac >>
-  qpat_x_assum `!src id ty. FLOOKUP bare_globals (src,string_to_num id) = SOME ty ==> ?tv v. _`
+  qpat_x_assum `!src id ty. FLOOKUP bare_globals (src,id) = SOME ty ==> ?tv v. _`
     (drule_then strip_assume_tac) >>
   goal_assum drule >> simp[] >>
   qpat_x_assum `!src id ty tv v. _` drule_all >> simp[]
@@ -3613,7 +3608,7 @@ Resume eval_all_type_sound_mutual[BaseTarget_TopLevel]:
   simp[type_place_target_TopLevelNameTarget] >> strip_tac >> gvs[] >>
   TRY (drule eval_base_target_TopLevelNameTarget_preserves_state >> simp[]) >|
   [
-    `FLOOKUP env.bare_globals (src_id_opt,string_to_num id) = SOME ty /\
+    `FLOOKUP env.bare_globals (src_id_opt,id) = SOME ty /\
      ?ts. get_module_code cx src_id_opt = SOME ts /\
           is_immutable_decl id ts /\
           IS_SOME (FLOOKUP (get_source_immutables src_id_opt
@@ -3623,10 +3618,7 @@ Resume eval_all_type_sound_mutual[BaseTarget_TopLevel]:
           env_immutables_consistent_def] >>
       qpat_x_assum `!src id ty. FLOOKUP env.bare_global_assignable (src,id) = SOME ty ==> _`
         drule >> simp[] >> strip_tac >>
-      fs[is_immutable_decl_by_num_def] >>
-      `id' = id` by metis_tac[string_to_num_inj] >>
-      gvs[] >>
-      qpat_x_assum `!src id ty. FLOOKUP env.bare_globals (src,string_to_num id) = SOME ty ==> _`
+      qpat_x_assum `!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty ==> _`
         (qspecl_then [`src_id_opt`, `id`, `ty`] mp_tac) >>
       simp[]) >>
     qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
@@ -3658,8 +3650,6 @@ Resume eval_all_type_sound_mutual[BaseTarget_TopLevel]:
          get_immutables_def, get_address_immutables_def] >>
     Cases_on `get_module_code cx src_id_opt` >> gvs[return_def, raise_def] >>
     Cases_on `is_immutable_decl id code` >- (
-      `is_immutable_decl_by_num (string_to_num id) code` by
-        (simp[is_immutable_decl_by_num_def] >> qexists_tac `id` >> simp[]) >>
       drule_all nonbare_toplevel_not_immutable >> simp[]) >>
     gvs[return_def] >>
     simp[no_type_error_result_def, base_target_value_shape_def] >>
@@ -4099,7 +4089,7 @@ Proof
 QED
 Theorem struct_lit_expr_result_typed[local]:
   well_formed_type env.type_defs (StructT nsid) /\
-  FLOOKUP env.type_defs (type_key nsid) = SOME (StructArgs args) /\
+  FLOOKUP env.type_defs (nsid) = SOME (StructArgs args) /\
   MAP FST kes = MAP FST args /\
   MAP (expr_type o SND) kes = MAP SND args /\
   exprs_runtime_typed env (MAP SND kes) vs ==>
@@ -10069,7 +10059,7 @@ Resume eval_all_type_sound_mutual[Expr_Call_RawCallTarget]:
     drule rawcall_call_evaluation_safe_args >> strip_tac >>
     qpat_x_assum `well_typed_expr env (Call _ (RawCallTarget _) _ _)` mp_tac >>
     rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
-    qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+    (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
     simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
                          type_check_def, assert_def, return_def, raise_def,
                          lift_option_type_def] >>
@@ -10078,18 +10068,26 @@ Resume eval_all_type_sound_mutual[Expr_Call_RawCallTarget]:
     rename1 `eval_exprs cx es st = (args_res,args_st)` >>
     first_x_assum drule_all >> strip_tac >>
     Cases_on `args_res` >> gvs[no_type_error_result_def]
-    >- (
+    >> FIRST [(
       rename1 `exprs_runtime_typed env es vs` >>
       mp_tac raw_call_args_runtime_typed_dest >>
       impl_tac >- simp[] >>
       strip_tac >> gvs[] >>
       `LENGTH vs = 3` by (gvs[exprs_runtime_typed_def] >> metis_tac[listTheory.LIST_REL_LENGTH]) >>
+      `((flags.rcf_is_delegate \/ flags.rcf_is_static) ==> amount = 0)` by (
+        strip_tac >>
+        `EL 2 es = Literal (BaseT (UintT 256)) (IntL 0)` by simp[] >>
+        `2 < LENGTH es` by simp[] >>
+        drule_all eval_exprs_EL_literal >> strip_tac >>
+        gvs[evaluate_literal_def, dest_NumV_def]) >>
       simp[bind_def, return_def] >> strip_tac >>
       `runtime_consistent env cx args_st` by simp[runtime_consistent_def] >>
-      drule_all (SRULE [] eval_raw_call_result_sound) >> strip_tac >>
+      mp_tac (Q.INST [`st` |-> `args_st`, `calldata` |-> `data`]
+        eval_raw_call_result_sound) >>
+      impl_tac >- simp[] >> strip_tac >>
       Cases_on `res` >>
-      gvs[runtime_consistent_def, no_type_error_result_def, expr_type_def]) >>
-    strip_tac >> gvs[]) >>
+      gvs[runtime_consistent_def, no_type_error_result_def, expr_type_def]),
+      strip_tac >> gvs[]])) >>
   rpt strip_tac >> gvs[Once well_typed_expr_def]
 QED
 
@@ -10102,21 +10100,32 @@ Resume eval_all_type_sound_mutual[Expr_Call_RawCallCalldataTarget]:
     simp[int_calls_expr_def] >> strip_tac >>
     qpat_x_assum `well_typed_expr env (Call _ (RawCallCalldataTarget _) _ _)` mp_tac >>
     rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
-    qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+    (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
     simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
       type_check_def, assert_def, return_def, raise_def, lift_option_type_def] >>
     Cases_on `eval_exprs cx es st` >>
     rename1 `eval_exprs cx es st = (args_res,args_st)` >>
     first_x_assum drule_all >> strip_tac >>
     Cases_on `args_res` >> gvs[no_type_error_result_def]
-    >- (
+    >> FIRST [(
       drule_all raw_call_calldata_args_runtime_typed_dest >> strip_tac >>
+      `((flags.rcf_is_delegate \/ flags.rcf_is_static) ==> amount = 0)` by (
+        strip_tac >>
+        `EL 1 es = Literal (BaseT (UintT 256)) (IntL 0)` by simp[] >>
+        `1 < LENGTH es` by (
+          Cases_on `es` >> gvs[] >>
+          rename1 `MAP expr_type rest = [_]` >>
+          Cases_on `rest` >> gvs[]) >>
+        drule_all eval_exprs_EL_literal >> strip_tac >>
+        gvs[evaluate_literal_def, dest_NumV_def]) >>
       gvs[bind_def, return_def] >> strip_tac >>
       `runtime_consistent env cx args_st` by simp[runtime_consistent_def] >>
-      drule_all (SRULE [] eval_raw_call_result_sound) >> strip_tac >>
+      mp_tac (Q.INST [`st` |-> `args_st`, `calldata` |-> `cx.txn.calldata`]
+        eval_raw_call_result_sound) >>
+      impl_tac >- simp[] >> strip_tac >>
       Cases_on `res` >>
-      gvs[runtime_consistent_def, no_type_error_result_def, expr_type_def]) >>
-    strip_tac >> gvs[]) >>
+      gvs[runtime_consistent_def, no_type_error_result_def, expr_type_def]),
+      strip_tac >> gvs[]])) >>
   rpt strip_tac >> gvs[Once well_typed_expr_def]
 QED
 

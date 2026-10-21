@@ -1054,16 +1054,16 @@ QED
 Theorem abi_av_list_struct_bound_from_eval_vht[local]:
   !tenv nsid args fields avs tv.
     (!tvs.
-       LIST_REL (\ty tv. evaluate_type (tenv \\ type_key nsid) ty = SOME tv)
+       LIST_REL (\ty tv. evaluate_type (tenv \\ nsid) ty = SOME tv)
          (MAP SND args) tvs /\
        values_have_types tvs (MAP SND fields) ==>
-       abi_av_list_bound_rel (tenv \\ type_key nsid) (MAP SND args) avs tvs) /\
-    FLOOKUP tenv (type_key nsid) = SOME (StructArgs args) /\
+       abi_av_list_bound_rel (tenv \\ nsid) (MAP SND args) avs tvs) /\
+    FLOOKUP tenv nsid = SOME (StructArgs args) /\
     evaluate_type tenv (StructT nsid) = SOME tv /\
     value_has_type tv (StructV fields) ==>
     LENGTH
-      (enc_tuple (head_lengths (vyper_to_abi_types (tenv \\ type_key nsid) (MAP SND args)) 0) 0
-         (vyper_to_abi_types (tenv \\ type_key nsid) (MAP SND args)) avs [] []) <=
+      (enc_tuple (head_lengths (vyper_to_abi_types (tenv \\ nsid) (MAP SND args)) 0) 0
+         (vyper_to_abi_types (tenv \\ nsid) (MAP SND args)) avs [] []) <=
     vyper_abi_size_bound tenv (StructT nsid)
 Proof
   rpt strip_tac >>
@@ -1076,7 +1076,7 @@ Proof
      imp_res_tac OPT_MMAP_LENGTH >> simp[LENGTH_MAP]) >>
   `values_have_types tvs (MAP SND fields)` by
     (drule_all struct_has_type_values_have_types >> simp[MAP_ZIP]) >>
-  `abi_av_list_bound_rel (tenv \\ type_key nsid) (MAP SND args) avs tvs` by
+  `abi_av_list_bound_rel (tenv \\ nsid) (MAP SND args) avs tvs` by
     (qpat_x_assum `!tvs. _ ==> abi_av_list_bound_rel _ _ _ _`
        (qspec_then `tvs` irule) >>
      simp[] >> irule evaluate_types_LIST_REL >> simp[]) >>
@@ -1212,8 +1212,8 @@ QED
 Theorem evaluate_type_StructT_result[local]:
   evaluate_type tenv (StructT nsid) = SOME tv ==>
   ?args tvs.
-    FLOOKUP tenv (type_key nsid) = SOME (StructArgs args) /\
-    evaluate_types (tenv \\ type_key nsid) (MAP SND args) [] = SOME tvs /\
+    FLOOKUP tenv nsid = SOME (StructArgs args) /\
+    evaluate_types (tenv \\ nsid) (MAP SND args) [] = SOME tvs /\
     tv = StructTV (ZIP (MAP FST args, tvs))
 Proof
   rw[Once evaluate_type_def, AllCaseEqs(), LET_THM] >> simp[]

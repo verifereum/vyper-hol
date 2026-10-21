@@ -1491,10 +1491,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   rewrite_tac[compile_attribute_def] >> BETA_TAC >>
   irule ci_mono_bind >> conj_tac
-  >- (rpt gen_tac >>
-      Cases_on `FLOOKUP (compile_env_ce_vars cenv) field'` >>
-      simp[LET_THM, ci_mono_comp_return] >>
-      BasicProvers.every_case_tac >> simp[ci_mono_comp_return] >>
+  >- (rpt gen_tac >> simp[LET_THM] >>
       irule ci_mono_bind >> conj_tac >>
       simp[ci_mono_emit_op, ci_mono_comp_return] >>
       rpt gen_tac >> simp[ci_mono_comp_return])
