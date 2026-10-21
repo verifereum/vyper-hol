@@ -96,7 +96,8 @@ Theorem calldata_slice_dispatch:
   compile_builtin_dispatch_body cfn cenv ret_ty ty (CalldataSlice n) [start] st =
     (let (start_op, st1) = lower_value cfn cenv (expr_type start) start st in
      as_ptr_val ret_ty LocMemory
-       (compile_slice_calldata start_op (Lit (n2w n)) (n + 32) st1))
+       (compile_slice_calldata start_op (Lit (n2w n))
+          (type_memory_bytes cenv ret_ty) st1))
 Proof
   simp[compile_builtin_dispatch_body_def]
 QED

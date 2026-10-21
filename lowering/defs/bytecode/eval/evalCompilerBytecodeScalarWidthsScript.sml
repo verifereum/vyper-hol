@@ -8,7 +8,8 @@ fun holbuild_extra_deps (_ : string list) = ()
 val () = holbuild_extra_deps [".."]
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms [fmap_to_alist_FEMPTY])
-val () = computeLib.upd_compset (computeLib.add_thms [i2w_pos])
+val () = computeLib.upd_compset
+  (computeLib.add_thms [i2w_pos])
 val () = Globals.max_print_depth := 20
 
 Theorem scalar_widths_uint_low_matches_python_oracle:

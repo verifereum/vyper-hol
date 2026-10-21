@@ -222,7 +222,7 @@ Proof
   Cases_on `ALOOKUP st.immutables cx.txn.target` >>
   simp[return_def, raise_def] >-
   (strip_tac >> gvs[preserves_immutables_dom_refl]) >>
-  Cases_on `FLOOKUP (get_source_immutables src_id_opt x) (string_to_num id)` >>
+  Cases_on `FLOOKUP (get_source_immutables src_id_opt x) id` >>
   simp[return_def, raise_def] >-
   (strip_tac >> gvs[preserves_immutables_dom_refl]) >>
   PairCases_on `x'` >> simp[] >>
@@ -231,7 +231,7 @@ Proof
   strip_tac >> gvs[preserves_immutables_dom_refl] >>
   TRY (qpat_x_assum `lift_option_type (SOME _) _ _ = (INR _,_)` mp_tac >>
        simp[lift_option_type_def, return_def, raise_def] >> NO_TAC) >>
-  Cases_on `set_immutable cx src_id_opt (string_to_num id) x'0 x' st` >>
+  Cases_on `set_immutable cx src_id_opt id x'0 x' st` >>
   Cases_on `q` >> gvs[lift_option_type_def, return_def, raise_def] >-
   (TRY (qpat_x_assum `lift_option_type (SOME x) _ _ = (INR _,_)` mp_tac >>
         simp[lift_option_type_def, return_def, raise_def] >> NO_TAC) >>
@@ -250,7 +250,7 @@ Proof
       rpt gen_tac >>
       TRY (rename1 `IS_SOME (FLOOKUP (get_source_immutables src _) n)`) >>
       TRY (Cases_on `src = src_id_opt` >> gvs[]) >>
-      Cases_on `n = string_to_num id` >>
+      Cases_on `n = id` >>
       gvs[get_source_immutables_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
   gvs[set_immutable_def, bind_def, get_address_immutables_def,
       lift_option_type_def, lift_option_def, set_address_immutables_def,
@@ -943,7 +943,7 @@ Theorem case_For_imm_dom[local]:
        eval_iterator cx it s'³' = (INL vs, t') ∧
        check (compatible_bound (Dynamic n) (LENGTH vs))
              "For too long" s'⁴' = (INL x, t'') ⇒
-       ∀st res st'. eval_for cx tyv (string_to_num id) body vs st = (res,st') ⇒
+       ∀st res st'. eval_for cx tyv id body vs st = (res,st') ⇒
          preserves_immutables_dom cx st st') ⇒
     ∀st res st'.
       eval_stmt cx (For id typ it n body) st = (res, st') ⇒
@@ -1561,7 +1561,7 @@ Proof
   simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
        check_def, type_check_def, assert_def, ignore_bind_def, raise_def] >>
   rpt strip_tac >>
-  Cases_on `IS_SOME (lookup_scopes (string_to_num id) st.scopes)` >>
+  Cases_on `IS_SOME (lookup_scopes id st.scopes)` >>
   gvs[return_def, raise_def]
 QED
 
@@ -1576,7 +1576,7 @@ Proof
   qpat_x_assum `eval_base_target _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, lift_option_type_def, return_def, raise_def] >>
   Cases_on `get_module_code cx src_id_opt` >> simp[return_def, raise_def] >>
-  Cases_on `is_immutable_decl (string_to_num id) x` >> simp[return_def]
+  Cases_on `is_immutable_decl id x` >> simp[return_def]
 QED
 
 (* ----- Case: eval_base_target (AttributeTarget bt id) ----- *)
@@ -1607,7 +1607,7 @@ Proof
   simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
        lift_option_def, lift_option_type_def] >>
   rpt strip_tac >>
-  Cases_on `lookup_scopes_val (string_to_num id) st.scopes` >>
+  Cases_on `lookup_scopes_val id st.scopes` >>
   gvs[return_def, raise_def]
 QED
 
@@ -2004,18 +2004,13 @@ Theorem intcall_tail_body_provider_from_generated_ih[local]:
     intcall_tail_body_provider cx src_id_opt fn mut nr args ret ss vs dflt_vs sdfl
 Proof
   rpt strip_tac \\
-  simp[intcall_tail_body_provider_def] \\
+  PURE_REWRITE_TAC[intcall_tail_body_provider_def] \\
   rpt strip_tac \\
   `type_check
      (LENGTH es ≤ LENGTH args ∧ LENGTH args − LENGTH es ≤ LENGTH dflts)
      "IntCall args length" ih_len_s = (INL xlen,slen)` by
-    (`(LENGTH es ≤ LENGTH args ∧
-       LENGTH args − LENGTH es ≤ LENGTH dflts) =
-      (LENGTH es ≤ LENGTH args ∧
-       LENGTH args ≤ LENGTH es + LENGTH dflts)` by
-       simp[intcall_args_length_sub] \\
-     pop_assum SUBST1_TAC \\
-     qpat_x_assum `type_check _ "IntCall args length" ih_len_s = _` ACCEPT_TAC) \\
+    (qpat_x_assum `type_check _ "IntCall args length" ih_len_s = _` mp_tac \\
+     simp_tac (srw_ss()) [intcall_args_length_sub]) \\
   qpat_assum `∀s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20
                   args0 sstup0 dflts0 sstup20 ret0 ss0 s3 x1 t3 s4 vs0 t4
                   needed_dflts0 cxd0 s5 dflt_vs0 t5 all_tenv s6 env0 t6
@@ -2034,10 +2029,12 @@ Proof
        `default_s`, `dflt_vs`, `sdfl`, `get_tenv cx`, `sdfl`, `env`, `s_bind`,
        `get_scope_s`, `prev`, `get_scope_t`, `s_bind`, `rtv`, `s_eval`,
        `mut = View ∨ mut = Pure`, `s_eval`, `lk`, `s_lock`, `s_lock`, `cx'`,
-       `s_push`] mp_tac) \\
-  simp[] \\
-  disch_then irule \\
-  simp[]
+       `s_push`] (fn ih =>
+         SUBGOAL_THEN (lhand (concl ih))
+           (fn guard => first_assum (fn ev =>
+             ACCEPT_TAC (MP (Q.SPECL [`st`, `res`, `st'`] (MP ih guard)) ev))))) \\
+  rpt conj_tac \\
+  FIRST [first_assum ACCEPT_TAC, REFL_TAC]
 QED
 
 Theorem intcall_post_default_setup_from_generated_ih[local]:
@@ -2127,23 +2124,23 @@ Proof
   rpt gen_tac \\
   strip_tac \\
   conj_tac
-  >- (match_mp_tac (Q.SPECL
+  >- (qspecl_then
         [`cx`, `src_id_opt`, `fn`, `es`,
          `ih_check_s`, `ih_mod_s`, `ih_fun_s`, `ih_len_s`, `ih_args_s`,
          `xrec`, `srec`, `ts`, `smod`, `tup`, `sfun`, `xlen`, `slen`,
          `vs`, `sevl`, `needed_dflts`, `cxd`, `prev`, `INL dflt_vs`, `sdfl`]
-        intcall_default_frame_imm_dom_from_generated_ih) \\
-      conj_tac >- FIRST_ASSUM ACCEPT_TAC \\
-      qpat_x_assum
-        `∀s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20
-            args0 sstup0 dflts0 sstup20 ret0 body0 s3 x1 t3 s4 vs0 t4
-            needed_dflts0 cxd0. _` kall_tac \\
-      simp[] \\
-      gvs[type_check_def, assert_def] \\
-      qhdtm_x_assum`type_check`mp_tac >>
-      simp_tac(srw_ss())[type_check_def, assert_def] >>
-      strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-      decide_tac) \\
+        (fn th => SUBGOAL_THEN (lhand (concl th)) (ACCEPT_TAC o MP th))
+        intcall_default_frame_imm_dom_from_generated_ih \\
+      rpt conj_tac \\
+      FIRST [first_assum ACCEPT_TAC,
+        qpat_x_assum `stup = SND tup` (fn h_stup =>
+        qpat_x_assum `stup2 = SND stup` (fn h_stup2 =>
+        qpat_x_assum `args = FST stup2` (fn h_args =>
+        qpat_x_assum `sstup = SND stup2` (fn h_sstup =>
+        qpat_x_assum `dflts = FST sstup` (fn h_dflts =>
+          PURE_REWRITE_TAC [GSYM h_stup, GSYM h_stup2, GSYM h_args,
+                            GSYM h_sstup, GSYM h_dflts] \\
+          first_assum ACCEPT_TAC)))))]) \\
   qspecl_then
     [`cx`, `src_id_opt`, `fn`, `es`,
      `ih_check_s`, `ih_mod_s`, `ih_fun_s`, `ih_len_s`, `ih_args_s`,
@@ -2152,38 +2149,10 @@ Proof
      `default_s`, `dflt_vs`, `sdfl`, `get_scope_s`, `prev`, `get_scope_t`,
      `mut`, `stup`, `nr`, `stup2`, `args`, `sstup`, `dflts`, `sstup2`,
      `ret`, `ss`]
-    mp_tac intcall_tail_body_provider_from_generated_ih \\
-  simp[] \\
-  disch_then irule \\
-  simp[] \\
-  rpt strip_tac \\
-  qpat_assum `∀s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20
-                  args0 sstup0 dflts0 sstup20 ret0 ss0 s3 x1 t3 s4 vs0 t4
-                  needed_dflts0 cxd0 s5 dflt_vs0 t5 all_tenv s6 env0 t6
-                  s7 prev0 t7 s8 rtv0 t8 is_view s9 lk0 t9 s10 cx0 t10.
-                  _ ⇒ ∀st0 res0 st1.
-                    eval_stmts cx0 ss0 st0 = (res0,st1) ⇒
-                    preserves_immutables_dom cx0 st0 st1`
-    (qspecl_then
-      [`s0`, `()`, `t0`, `s1`, `ts0`, `t1`, `s2`, `tup0`, `t2`,
-       `FST tup0`, `SND tup0`, `FST (SND tup0)`, `SND (SND tup0)`,
-       `FST (SND (SND tup0))`, `SND (SND (SND tup0))`,
-       `FST (SND (SND (SND tup0)))`, `SND (SND (SND (SND tup0)))`,
-       `FST (SND (SND (SND (SND tup0))))`,
-       `SND (SND (SND (SND (SND tup0))))`, `s3`, `()`, `t3`,
-       `s4`, `vs0`, `t4`,
-       `DROP
-          (LENGTH (FST (SND (SND (SND tup0)))) −
-           (LENGTH (FST (SND (SND tup0))) − LENGTH es))
-          (FST (SND (SND (SND tup0))))`,
-       `cx with stk updated_by CONS (src_id_opt,fn)`,
-       `s5`, `dflt_vs0`, `t5`, `get_tenv cx`, `s6`, `env`, `t6`,
-       `s7`, `prev0`, `t7`, `s8`, `rtv`, `t8`,
-       `FST tup0 = View ∨ FST tup0 = Pure`, `s9`, `()`, `t9`,
-       `s10`, `cx0`, `t10`] mp_tac) \\
-  simp[] \\
-  disch_then irule \\
-  simp[]
+    (fn th => SUBGOAL_THEN (lhand (concl th)) (ACCEPT_TAC o MP th))
+    intcall_tail_body_provider_from_generated_ih \\
+  rpt conj_tac \\
+  first_assum ACCEPT_TAC
 QED
 
 Theorem finally_set_scopes_eval_exprs_success[local]:
@@ -2329,15 +2298,13 @@ Proof
           PURE_REWRITE_TAC [GSYM h_stup, GSYM h_stup2, GSYM h_args,
                             GSYM h_sstup, GSYM h_dflts] \\
           FIRST [ACCEPT_TAC h_needed, first_assum ACCEPT_TAC]))))))]) \\
-  simp[intcall_tail_body_provider_def] \\
+  PURE_REWRITE_TAC[intcall_tail_body_provider_def] \\
   rpt strip_tac \\
   `type_check
      (LENGTH es ≤ LENGTH args ∧ LENGTH args − LENGTH es ≤ LENGTH dflts)
      "IntCall args length" ih_len_s = (INL xlen,slen)` by
     (qpat_x_assum `type_check _ "IntCall args length" ih_len_s = _` mp_tac \\
-     simp[type_check_def, assert_def] \\
-     IF_CASES_TAC \\ simp[] \\
-     decide_tac) \\
+     simp_tac (srw_ss()) [intcall_args_length_sub]) \\
   qpat_assum `∀s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20
                   args0 sstup0 dflts0 sstup20 ret0 ss0 s3 x1 t3 s4 vs0 t4
                   needed_dflts0 cxd0 s5 dflt_vs0 t5 all_tenv s6 env0 t6
@@ -2356,10 +2323,12 @@ Proof
        `sevl with scopes := [FEMPTY]`, `dflt_vs`, `pre_sdfl`, `get_tenv cx`,
        `sdfl`, `env`, `s_bind`, `sdfl`, `prev`, `sdfl`, `s_bind`, `rtv`,
        `s_eval`, `mut = View ∨ mut = Pure`, `s_eval`, `lk`, `s_lock`,
-       `s_lock`, `cx'`, `s_push`] mp_tac) \\
-  simp[] \\
-  disch_then irule \\
-  simp[]
+       `s_lock`, `cx'`, `s_push`] (fn ih =>
+         SUBGOAL_THEN (lhand (concl ih))
+           (fn guard => first_assum (fn ev =>
+             ACCEPT_TAC (MP (Q.SPECL [`st`, `res`, `st'`] (MP ih guard)) ev))))) \\
+  rpt conj_tac \\
+  FIRST [first_assum ACCEPT_TAC, REFL_TAC]
 QED
 
 Theorem intcall_case_live_post_default_setup_from_generated_ih[local]:
@@ -2955,15 +2924,13 @@ Theorem intcall_mutual_tail_body_provider_from_generated_ih[local]:
     intcall_tail_body_provider cx src_id_opt fn mut nr args ret ss vs dflt_vs sdfl
 Proof
   rpt strip_tac \\
-  simp[intcall_tail_body_provider_def] \\
+  PURE_REWRITE_TAC[intcall_tail_body_provider_def] \\
   rpt strip_tac \\
   `type_check
      (LENGTH es ≤ LENGTH args ∧ LENGTH args − LENGTH es ≤ LENGTH dflts)
      "IntCall args length" ih_len_s = (INL xlen,slen)` by
     (qpat_x_assum `type_check _ "IntCall args length" ih_len_s = _` mp_tac \\
-     simp[type_check_def, assert_def] \\
-     IF_CASES_TAC \\ simp[] \\
-     decide_tac) \\
+     simp_tac (srw_ss()) [intcall_args_length_sub]) \\
   qpat_assum `∀s'' x t s'³' ts0 t' s'⁴' tup0 t'' mut0 stup0 nr0 stup20
                   args0 sstup0 dflts0 sstup20 ret0 ss0 s'⁵' x' t'³'
                   s'⁶' vs0 t'⁴' needed_dflts0 cxd0 s'⁷' prev0 t'⁵'
@@ -2983,10 +2950,12 @@ Proof
        `sevl`, `prev`, `sevl`, `sevl`, `dflt_vs`, `sdfl`, `get_tenv cx`,
        `sdfl`, `env`, `s_bind`, `s_bind`, `rtv`, `s_eval`,
        `mut = View ∨ mut = Pure`, `s_eval`, `lk`, `s_lock`, `s_lock`, `cx'`,
-       `s_push`] mp_tac) \\
-  simp[get_scopes_def, return_def] \\
-  disch_then irule \\
-  simp[]
+       `s_push`] (fn ih =>
+         SUBGOAL_THEN (lhand (concl ih))
+           (fn guard => first_assum (fn ev =>
+             ACCEPT_TAC (MP (Q.SPECL [`st`, `res`, `st'`] (MP ih guard)) ev))))) \\
+  rpt conj_tac \\
+  FIRST [first_assum ACCEPT_TAC, REFL_TAC]
 QED
 
 
@@ -3118,15 +3087,11 @@ Proof
      `FST (SND (SND (SND fn_tup)))`, `SND (SND (SND (SND fn_tup)))`,
      `FST (SND (SND (SND (SND fn_tup))))`,
      `SND (SND (SND (SND (SND fn_tup))))`]
-    mp_tac intcall_mutual_tail_body_provider_from_generated_ih \\
-  simp[get_scopes_def] \\
-  PURE_REWRITE_TAC[return_def] \\
-  (impl_tac >-
-     (qpat_x_assum `∀s0 x0 t0 s1 ts0 t1 s2 tup0 t2 mut0 stup0 nr0 stup20 args0 sstup0 dflts0 sstup20 ret0 ss0 s3 x1 t3 s4 vs0 t4 needed_dflts0 cxd0 s5 prev0 t5 s6 dflt_vs0 t6 all_tenv s7 env t7 s8 rtv t8 is_view s9 lk t9 s10 cx0 t10. _ ⇒ ∀st0 res0 st1. eval_stmts cx0 ss0 st0 = (res0,st1) ⇒ preserves_immutables_dom cx0 st0 st1`
-        mp_tac \\
-      PURE_REWRITE_TAC[get_scopes_def, return_def] \\
-      simp[])) \\
-  simp[]
+    (fn th => SUBGOAL_THEN (lhand (concl th)) (ACCEPT_TAC o MP th))
+    intcall_mutual_tail_body_provider_from_generated_ih \\
+  rpt conj_tac \\
+  FIRST [REFL_TAC, first_assum ACCEPT_TAC,
+         PURE_REWRITE_TAC[get_scopes_def, return_def] \\ REFL_TAC]
 QED
 
 Theorem case_IntCall_imm_dom_from_mutual_ih[local]:
@@ -3642,26 +3607,74 @@ Proof
   simp[state_rel_frame_result]
 QED
 
-(* Match primitive frames directly and decompose the monadic spine before
-   trying depth eta conversion. Avoid repeatedly simplifying the remaining
-   pipeline with the full primitive-frame rewrite set. *)
-val IMM_DOM_FRAME_LEAF_TAC = FIRST (map MATCH_ACCEPT_TAC
-  (imm_dom_frame_append_logs :: IMM_DOM_FRAME_TAKE ::
-   CONJUNCTS IMM_DOM_FRAME_PRIMITIVES));
+(* Index primitive frames and bind decomposition once; recognition never
+   traverses continuation arguments or the large guarded IHs. *)
+val IMM_DOM_FRAME_LEAF_TAC =
+  let
+    val structural = Net.insert
+      (concl imm_dom_frame_bind_guarded |> dest_imp |> snd,
+       MATCH_MP_TAC imm_dom_frame_bind_guarded >> conj_tac) Net.empty
+    val leaves = List.foldl (fn (th,net) =>
+      Net.insert (concl th, MATCH_ACCEPT_TAC th) net) structural
+      (imm_dom_frame_append_logs :: IMM_DOM_FRAME_TAKE ::
+       CONJUNCTS IMM_DOM_FRAME_PRIMITIVES)
+  in
+    fn (asl,w) => FIRST (Net.match w leaves) (asl,w)
+  end;
+
+(* Reduce only exposed applications, never their continuation arguments. *)
+val imm_dom_frame_head_conv =
+  let
+    val reduce = FIRST_CONV
+      [BETA_CONV, REWR_CONV pair_case_thm, REWR_CONV UNCURRY]
+    fun head tm = (reduce ORELSEC RATOR_CONV head) tm
+  in head end;
+
+(* Preserve CASE_TAC branch order using only fresh branch facts, rather
+   than rebuilding its broad datatype rewrite set. *)
+fun IMM_DOM_FRAME_CASE_TAC (g as (old,_)) =
+  let
+    fun simplify (asl,w) =
+      let
+        val fresh = List.filter (fn a => not (is_forall a) andalso
+          not (List.exists (aconv a) old)) asl
+        val rules = map ASSUME fresh
+      in
+        simp_tac bool_ss
+          (optionTheory.option_CLAUSES :: pair_case_thm :: UNCURRY :: rules) >>
+        RULE_ASSUM_TAC (REWRITE_RULE rules) >> MAP_EVERY assume_tac rules
+      end (asl,w)
+  in
+    (BasicProvers.PURE_CASE_TAC >> simplify) g
+  end;
 
 val IMM_DOM_FRAME_TAC =
   rpt (FIRST [
-    CHANGED_TAC (simp_tac bool_ss [FORALL_PROD, pair_case_thm, UNCURRY]),
-    gen_tac, strip_tac, conj_tac,
     first_assum ACCEPT_TAC,
-    irule imm_dom_frame_bind_guarded >> conj_tac,
     IMM_DOM_FRAME_LEAF_TAC,
+    CONV_TAC (HO_REWR_CONV FORALL_PROD),
+    CONV_TAC (RAND_CONV imm_dom_frame_head_conv),
+    gen_tac, strip_tac, conj_tac,
     CONV_TAC (RAND_CONV (REWR_CONV ignore_bind_def)),
-    CHANGED_TAC (CONV_TAC (DEPTH_CONV ETA_CONV)),
+    CONV_TAC (RAND_CONV ETA_CONV),
     CHANGED_TAC (fn (asl,w) =>
       simp_tac bool_ss (pair_case_thm :: UNCURRY ::
         List.map ASSUME (List.filter is_eq asl)) (asl,w)),
-    CASE_TAC]);
+    IMM_DOM_FRAME_CASE_TAC]);
+
+(* A bounded step exposes checkpoints without changing the existing frame tactic. *)
+val IMM_DOM_FRAME_STEP_TAC = FIRST [
+  CHANGED_TAC (simp_tac bool_ss [FORALL_PROD, pair_case_thm, UNCURRY]),
+  gen_tac, strip_tac, conj_tac,
+  first_assum ACCEPT_TAC,
+  irule imm_dom_frame_bind_guarded >> conj_tac,
+  IMM_DOM_FRAME_LEAF_TAC,
+  CONV_TAC (RAND_CONV (REWR_CONV ignore_bind_def)),
+  CHANGED_TAC (CONV_TAC (DEPTH_CONV ETA_CONV)),
+  CHANGED_TAC (fn (asl,w) =>
+    simp_tac bool_ss (pair_case_thm :: UNCURRY ::
+      List.map ASSUME (List.filter is_eq asl)) (asl,w)),
+  CASE_TAC];
 
 Resume immutables_dom_mutual[ExtCall]:
   qpat_assum `eval_expr _ _ _ = _` (fn th =>
@@ -3671,6 +3684,22 @@ Resume immutables_dom_mutual[ExtCall]:
     end) >>
   simp[Once evaluate_def] >>
   RULE_ASSUM_TAC (REWRITE_RULE [GSYM state_rel_frame_result]) >>
+  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
+  NTAC 4 (TRY IMM_DOM_FRAME_STEP_TAC) >>
   IMM_DOM_FRAME_TAC >|
   [suspend "return_path_1", suspend "return_path_2",
    suspend "return_path_3", suspend "return_path_4"]

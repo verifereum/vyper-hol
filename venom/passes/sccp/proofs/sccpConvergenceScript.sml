@@ -614,6 +614,29 @@ Proof
   Cases >> simp[SUBSET_DEF] >> Cases_on `h` >> simp[]
 QED
 
+(* Project through the result spine before inspecting any operand values. *)
+Triviality sccp_targets_list_case[local]:
+  !(xs : 'a list) (nil : sccp_lattice) cons.
+    (case xs of [] => nil | h::t => cons h t).sl_targets =
+    (case xs of [] => nil.sl_targets | h::t => (cons h t).sl_targets)
+Proof
+  Cases >> simp_tac std_ss [list_case_def]
+QED
+
+Triviality sccp_targets_cond[local]:
+  !b (x : sccp_lattice) y.
+    (if b then x else y).sl_targets =
+    if b then x.sl_targets else y.sl_targets
+Proof
+  Cases >> simp_tac std_ss []
+QED
+
+(* Keep the global simpset (and value/lattice evaluation) out of this frame
+   proof. PURE_TOP_CASE_TAC below splits only the projected result spine. *)
+val sccp_targets_ss = std_ss ++ rewrites
+  [sccp_lattice_accfupds, pairTheory.pair_case_thm, list_case_def, LET_THM,
+   sccp_targets_list_case, sccp_targets_cond];
+
 (* Helper: sccp_transfer_inst for non-terminators doesn't change sl_targets *)
 Triviality sccp_transfer_inst_non_term_targets[local]:
   !fn inst lat.
@@ -621,9 +644,8 @@ Triviality sccp_transfer_inst_non_term_targets[local]:
     (sccp_transfer_inst fn inst lat).sl_targets = lat.sl_targets
 Proof
   rpt strip_tac >>
-  simp[sccp_transfer_inst_def] >>
-  rpt IF_CASES_TAC >> fs[is_terminator_def] >>
-  rpt (BasicProvers.TOP_CASE_TAC >> simp[])
+  asm_simp_tac sccp_targets_ss [sccp_transfer_inst_def] >>
+  rpt (BasicProvers.PURE_TOP_CASE_TAC >> asm_simp_tac sccp_targets_ss [])
 QED
 
 (* Helper: sccp_transfer_inst for terminators adds only successors *)

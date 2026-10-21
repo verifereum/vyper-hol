@@ -13,6 +13,47 @@ Ancestors
 Libs
   pairLib
 
+(* Select proved dispatch equations; never unfold the all-opcode dispatcher. *)
+val step_inst_base_opcode_rewrites = let
+  fun key th = let
+    val (_, body) = strip_forall (concl th)
+  in rhs (fst (dest_imp body)) end
+in map (fn th => (key th, th))
+  (CONJUNCTS venomExecSemanticsTheory.step_inst_base_opcode_eqs) end;
+
+fun step_inst_base_for opc =
+  #2 (valOf (List.find (fn (key, _) => aconv key opc)
+    step_inst_base_opcode_rewrites));
+
+val param_behavior_ss = pure_ss ++ boolSimps.BOOL_ss ++
+  simpLib.type_ssfrag ``:instruction`` ++
+  simpLib.type_ssfrag ``:operand`` ++
+  simpLib.type_ssfrag ``:operand list`` ++
+  simpLib.type_ssfrag ``:string list`` ++
+  simpLib.type_ssfrag ``:exec_result`` ++
+  simpLib.type_ssfrag ``:operand list # string list`` ++ rewrites [LET_THM];
+
+val param_dispatch_tac =
+  qpat_assum `inst.inst_opcode = _` (fn eq =>
+    PURE_ONCE_REWRITE_TAC
+      [MATCH_MP (step_inst_base_for (rhs (concl eq))) eq]);
+
+(* PARAM checks its index before outputs; hidden parameters check it after.
+   Split only those exposed tests, not arbitrary cases in the context. *)
+fun param_shape_tac defs = let
+  val reduce = asm_simp_tac param_behavior_ss defs
+in
+  Cases_on `inst.inst_operands` >> reduce >>
+  rename1 `inst.inst_operands = op :: ops` >>
+  Cases_on `op` >> reduce >>
+  Cases_on `ops` >> reduce >>
+  TRY (IF_CASES_TAC >> reduce) >>
+  Cases_on `inst.inst_outputs` >> reduce >>
+  rename1 `inst.inst_outputs = out :: outs` >>
+  Cases_on `outs` >> reduce >>
+  TRY (IF_CASES_TAC >> reduce)
+end;
+
 (* ==========================================================================
    Instruction Step Lemmas
    ========================================================================== *)
@@ -28,7 +69,7 @@ Theorem step_inst_assign_eval:
         SOME v => OK (update_var out v s)
       | NONE => Error "undefined operand"
 Proof
-  rw[step_inst_base_def]
+  rpt strip_tac >> simp[step_inst_base_for ``ASSIGN``]
 QED
 
 Theorem step_inst_phi_resolves_var_ok:
@@ -44,8 +85,7 @@ Proof
   rpt strip_tac >>
   fs[is_phi_inst_def] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  simp[step_inst_base_def, eval_operand_def] >>
-  Cases_on `lookup_var src_var s` >> simp[]
+  simp[venomExecProofsTheory.step_inst_base_phi_error]
 QED
 
 (* ==========================================================================
@@ -65,8 +105,10 @@ Theorem transform_inst_correct:
           state_equiv {} s' s''
 Proof
   rpt strip_tac >>
-  `is_phi_inst inst` by metis_tac[phi_single_origin_is_phi] >>
-  fs[is_phi_inst_def, step_inst_base_def]
+  drule phi_single_origin_is_phi >>
+  simp[is_phi_inst_def] >> strip_tac >>
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  simp[venomExecProofsTheory.step_inst_base_phi_error]
 QED
 
 (* ==========================================================================
@@ -194,15 +236,7 @@ Theorem phi_single_origin_has_output[local]:
     phi_single_origin dfg inst = SOME origin ==>
     ?v. origin.inst_outputs = [v] /\ dfg_lookup dfg v = SOME origin
 Proof
-  rw[phi_single_origin_def] >> gvs[AllCaseEqs()] >>
-  `compute_origins dfg inst DELETE inst <> {}` by
-    (strip_tac >> gvs[]) >>
-  `CHOICE (compute_origins dfg inst DELETE inst) IN
-   (compute_origins dfg inst DELETE inst)` by
-    metis_tac[pred_setTheory.CHOICE_DEF] >>
-  fs[pred_setTheory.IN_DELETE] >>
-  drule_all compute_origins_non_self_in_dfg >> strip_tac >>
-  metis_tac[dfg_lookup_single_output]
+  ACCEPT_TAC phiTransformTheory.phi_single_origin_has_output
 QED
 
 (* When a PHI step succeeds, resolve_phi must have returned SOME *)
@@ -213,8 +247,10 @@ Triviality phi_step_ok_resolve:
     step_inst_base inst s = OK s' ==>
     ?op. resolve_phi prev inst.inst_operands = SOME op
 Proof
-  rw[is_phi_inst_def, step_inst_base_def] >>
-  gvs[AllCaseEqs()]
+  rpt strip_tac >>
+  fs[is_phi_inst_def] >>
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  simp[venomExecProofsTheory.step_inst_base_phi_error]
 QED
 
 Triviality all_distinct_flat_mem:
@@ -318,28 +354,10 @@ Triviality step_param_ok_same_vs_params:
     ?s2'. step_inst fuel ctx inst s2 = OK s2'
 Proof
   rpt strip_tac >>
-  fs[is_param_opcode_iff]
-  >- (qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
-      simp[Once step_inst_def, step_inst_base_def] >>
-      rpt (BasicProvers.PURE_FULL_CASE_TAC >> gvs[]) >>
-      rpt strip_tac >>
-      rename [`inst.inst_outputs = [out]`, `inst.inst_operands = [Lit idx]`] >>
-      qexists_tac `update_var out (EL (w2n idx) s2.vs_params) s2` >>
-      simp[Once step_inst_def, step_inst_base_def])
-  >- (qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
-      simp[Once step_inst_def, step_inst_base_def] >>
-      rpt (BasicProvers.PURE_FULL_CASE_TAC >> gvs[]) >>
-      rpt strip_tac >>
-      rename [`inst.inst_outputs = [out]`, `inst.inst_operands = [Lit idx]`] >>
-      qexists_tac `update_var out (EL (w2n idx) s2.vs_params) s2` >>
-      simp[Once step_inst_def, step_inst_base_def])
-  >- (qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
-      simp[Once step_inst_def, step_inst_base_def] >>
-      rpt (BasicProvers.PURE_FULL_CASE_TAC >> gvs[]) >>
-      rpt strip_tac >>
-      rename [`inst.inst_outputs = [out]`, `inst.inst_operands = [Lit idx]`] >>
-      qexists_tac `update_var out s2.vs_return_pc_token s2` >>
-      simp[Once step_inst_def, step_inst_base_def])
+  fs[is_param_opcode_iff] >>
+  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+  simp[step_inst_non_invoke] >> param_dispatch_tac >>
+  param_shape_tac []
 QED
 
 Triviality step_param_preserves_input_fields:
@@ -349,15 +367,15 @@ Triviality step_param_preserves_input_fields:
     s'.vs_params = s.vs_params /\
     s'.vs_return_pc_token = s.vs_return_pc_token
 Proof
-  rpt strip_tac >>
+  rpt gen_tac >> strip_tac >>
   fs[is_param_opcode_iff] >>
   qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
-  simp[step_inst_non_invoke] >>
-  Cases_on `inst` >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  ASM_REWRITE_TAC[opcode_case_def] >>
-  rpt (BasicProvers.PURE_FULL_CASE_TAC >> gvs[update_var_def]) >>
-  rpt strip_tac >> gvs[update_var_def]
+  simp[step_inst_non_invoke] >> param_dispatch_tac >>
+  param_shape_tac [] >>
+  rpt strip_tac >>
+  qpat_x_assum `update_var _ _ _ = s'` (SUBST1_TAC o SYM) >>
+  simp_tac (param_behavior_ss ++ rewrites
+    [update_var_def, venom_state_accfupds, combinTheory.K_THM]) []
 QED
 
 Triviality run_insts_params_ok_same_vs_params:
@@ -388,6 +406,21 @@ Proof
   disch_then ACCEPT_TAC
 QED
 
+(* Project just the two inputs used by parameter instructions from the frame. *)
+Triviality state_equiv_param_fields:
+  !vars s1 s2.
+    state_equiv vars s1 s2 ==>
+    s1.vs_params = s2.vs_params /\
+    s1.vs_return_pc_token = s2.vs_return_pc_token
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `state_equiv _ _ _`
+    (strip_assume_tac o PURE_REWRITE_RULE [state_equiv_def, execution_equiv_def]) >>
+  qpat_x_assum `stateFrame$execution_frame _ = _`
+    (mp_tac o AP_TERM ``\s:venom_state. (s.vs_params, s.vs_return_pc_token)``) >>
+  simp[stateFrameTheory.execution_frame_def]
+QED
+
 Triviality step_param_lift_result:
   !inst fuel ctx vars s1 s2.
     is_param_opcode inst.inst_opcode /\
@@ -397,16 +430,11 @@ Triviality step_param_lift_result:
       (step_inst fuel ctx inst s2)
 Proof
   rpt strip_tac >>
-  `s2.vs_params = s1.vs_params` by
-    fs[state_equiv_def, execution_equiv_def] >>
-  `s2.vs_return_pc_token = s1.vs_return_pc_token` by
-    fs[state_equiv_def, execution_equiv_def] >>
+  drule state_equiv_param_fields >> strip_tac >>
   fs[is_param_opcode_iff] >>
-  simp[step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  ASM_REWRITE_TAC[opcode_case_def] >> simp[lift_result_def] >>
-  rpt (BasicProvers.PURE_FULL_CASE_TAC >> gvs[lift_result_def]) >>
-  metis_tac[stateEquivPropsTheory.update_var_preserves]
+  simp[step_inst_non_invoke] >> param_dispatch_tac >>
+  param_shape_tac [lift_result_def] >>
+  irule stateEquivPropsTheory.update_var_preserves >> first_assum ACCEPT_TAC
 QED
 
 Triviality step_param_state_equiv:
@@ -2106,9 +2134,8 @@ Proof
   `?var. op = Var var` by
     metis_tac[resolve_phi_well_formed] >>
   gvs[eval_operand_def] >>
-  `dfg_lookup dfg var = SOME origin` by
-    metis_tac[phi_operands_direct_lookup] >>
-  `origin.inst_outputs = [var]` by metis_tac[dfg_lookup_single_output] >>
+  drule_all phi_operands_direct_lookup >> strip_tac >>
+  drule dfg_lookup_single_output >> simp[] >> strip_tac >>
   gvs[]
 QED
 
@@ -2145,7 +2172,7 @@ Proof
   `transform_inst dfg inst =
      inst with <| inst_opcode := ASSIGN; inst_operands := [Var src_var] |>` by
     metis_tac[transform_inst_phi_to_assign] >>
-  simp[step_inst_base_def, eval_operand_def]
+  simp[step_inst_base_for ``ASSIGN``, eval_operand_def]
 QED
 
 Triviality transform_single_origin_phi_assign_step_stable_lookup:
@@ -2163,7 +2190,7 @@ Proof
   `transform_inst dfg inst =
      inst with <| inst_opcode := ASSIGN; inst_operands := [Var src_var] |>` by
     metis_tac[transform_inst_phi_to_assign] >>
-  simp[step_inst_base_def, eval_operand_def]
+  simp[step_inst_base_for ``ASSIGN``, eval_operand_def]
 QED
 
 Triviality transform_single_origin_phi_assign_step_after_prefix:
@@ -2797,11 +2824,11 @@ Triviality transform_single_origin_phi_assign_run_insts_error:
     ?e. run_insts fuel ctx [transform_inst dfg inst] s = Error e
 Proof
   rpt strip_tac >>
-  fs[transform_inst_def] >>
-  Cases_on `inst.inst_outputs` >>
-  simp[run_insts_def, step_inst_def, step_inst_base_def, eval_operand_def] >>
-  Cases_on `t` >>
-  simp[run_insts_def, step_inst_def, step_inst_base_def, eval_operand_def]
+  drule_all transform_inst_phi_to_assign >> strip_tac >>
+  simp[run_insts_def, step_inst_non_invoke] >>
+  simp[step_inst_base_for ``ASSIGN``, eval_operand_def] >>
+  Cases_on `inst.inst_outputs` >> simp[] >>
+  Cases_on `t` >> simp[]
 QED
 
 Triviality eliminated_phi_static_info:
@@ -3555,12 +3582,13 @@ Proof
   rpt strip_tac >>
   `is_phi_inst inst` by metis_tac[phi_single_origin_is_phi] >>
   `step_inst_base inst s = Error "phi outside prefix"` by
-    fs[is_phi_inst_def, step_inst_base_def] >>
+    (irule venomExecProofsTheory.step_inst_base_phi_error >>
+     fs[is_phi_inst_def]) >>
   `lookup_var src_var s = NONE` by metis_tac[] >>
   `transform_inst dfg inst =
      inst with <| inst_opcode := ASSIGN; inst_operands := [Var src_var] |>` by
     metis_tac[transform_inst_phi_to_assign] >>
-  simp[lift_result_def, step_inst_base_def, eval_operand_def] >>
+  simp[lift_result_def, step_inst_base_for ``ASSIGN``, eval_operand_def] >>
   Cases_on `inst.inst_outputs` >> simp[lift_result_def] >>
   Cases_on `t` >> simp[lift_result_def]
 QED

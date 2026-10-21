@@ -2468,30 +2468,34 @@ Proof
   irule ac_chain_inv_transfer >> simp[] >>
   rpt conj_tac
   (* 1. SSA cand preds *)
-  >- (fs[ac_chain_inv_def] >> metis_tac[MEM])
+  >- metis_tac[ci_output_no_clobber_cand, MEM]
   (* 2. output no clobber mp' *)
   >- (rpt strip_tac >> Cases_on `h.inst_id = id` >> gvs[]
-      >- (fs[ac_chain_inv_def] >> metis_tac[MEM])
-      >- (fs[ac_chain_inv_def] >> metis_tac[MEM]))
+      >- metis_tac[ci_output_fresh_ac, MEM]
+      >- metis_tac[ci_output_no_clobber_mp, MEM])
   (* 3. operand evaluability in s' *)
   >- (rpt strip_tac >>
       `eval_operand op s' = eval_operand op s` by (
         first_x_assum irule >> rpt strip_tac >>
-        fs[ac_chain_inv_def] >> metis_tac[MEM]) >>
-      fs[ac_chain_inv_def] >> metis_tac[MEM])
+        metis_tac[ci_operand_fresh_ac, MEM]) >>
+      metis_tac[ci_operand_eval, MEM])
   (* 4. mp' disjoint from rest *)
   >- (rpt strip_tac >>
-      fs[ac_chain_inv_def, ac_cands_ordered_def, ALL_DISTINCT, MAP, MEM_MAP] >>
-      metis_tac[])
+      `~MEM h.inst_id (MAP (\i. i.inst_id) rest)` by
+        (drule ci_cands_ordered >>
+         disch_then (mp_tac o CONJUNCT2 o REWRITE_RULE [ac_cands_ordered_def]) >>
+         simp[]) >>
+      `h.inst_id <> i.inst_id` by metis_tac[MEM_MAP] >>
+      simp[] >> metis_tac[ci_mp_disjoint, MEM])
   (* 5. cand pred evaluability in s' *)
   >- (rpt strip_tac >>
       `eval_operand mc'.mc_second_pred s' = eval_operand mc'.mc_second_pred s` by (
         first_x_assum irule >> rpt strip_tac >>
-        fs[ac_chain_inv_def] >> metis_tac[MEM]) >>
+        metis_tac[ci_cand_pred_fresh_ac]) >>
       `eval_operand mc'.mc_first_pred s' = eval_operand mc'.mc_first_pred s` by (
         first_x_assum irule >> rpt strip_tac >>
-        fs[ac_chain_inv_def] >> metis_tac[MEM]) >>
-      fs[ac_chain_inv_def] >> metis_tac[])
+        metis_tac[ci_cand_pred_fresh_ac]) >>
+      metis_tac[ci_cand_preds_eval])
   (* 6. mp' pred evaluability *)
   >- (rpt strip_tac >> reverse (Cases_on `h.inst_id = id`) >> gvs[] >>
       `IS_SOME (eval_operand p s)` by

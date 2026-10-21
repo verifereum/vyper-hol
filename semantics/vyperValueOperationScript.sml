@@ -3,7 +3,7 @@ Ancestors
   arithmetic alist combin option list finite_map pair rich_list
   cv cv_std words integer[ignore_grammar]
   integer_word[ignore_grammar, qualified]
-  vyperAST vyperMisc vyperValue
+  vyperAST vyperMisc vyperNsidFmap vyperValue
 Libs
   cv_transLib wordsLib intSimps
 
@@ -635,7 +635,7 @@ Definition evaluate_convert_def:
      then INL $ BytesV (word_to_bytes_be ((n2w m) : bytes32))
      else INR (TypeError "convert")) ∧
   evaluate_convert tenv (IntV i) (FlagT nsid) =
-    (case FLOOKUP tenv (type_key nsid) of SOME (FlagArgs m) =>
+    (case FLOOKUP tenv nsid of SOME (FlagArgs m) =>
        if 0 ≤ i ∧ Num i < 2 ** m then INL $ FlagV (Num i)
        else INR (RuntimeError "convert int flag bound")
      | _ => INR (TypeError "convert to unknown flag")) ∧

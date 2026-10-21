@@ -36,7 +36,7 @@ Proof
   simp[evaluate_def, bind_def, get_scopes_def, return_def,
        lift_option_def, lift_option_type_def] >>
   rpt strip_tac >>
-  Cases_on `lookup_scopes_val (string_to_num id) st.scopes` >> gvs[return_def, raise_def]
+  Cases_on `lookup_scopes_val id st.scopes` >> gvs[return_def, raise_def]
 QED
 
 Theorem case_TopLevelName[local]:
@@ -286,7 +286,7 @@ local
   val p3 = ``\(cx:evaluation_context) (g:assignment_target). T``
   val p4 = ``\(cx:evaluation_context) (gs:assignment_target list). T``
   val p5 = ``\(cx:evaluation_context) (t:base_assignment_target). T``
-  val p6 = ``\(cx:evaluation_context) (tyv:type_value) (nm:num) (body:stmt list) (vs:value list). T``
+  val p6 = ``\(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:value list). T``
   val p7 = ``\cx e. !st res st'. eval_expr cx e st = (res, st') ==> pure_expr e ==> st = st'``
   val p8 = ``\cx es. !st res st'. eval_exprs cx es st = (res, st') ==> EVERY pure_expr es ==> st = st'``
   val spec_ind = SPECL [p0, p1, p2, p3, p4, p5, p6, p7, p8] evaluate_ind
@@ -304,9 +304,14 @@ Theorem expr_state_mutual[local]:
 Proof
   MP_TAC expr_state_ind_principle >> impl_tac >- (
     rpt conj_tac >>
-    (* Close trivially-T subgoals (P0-P6) and all Call/Pop cases
-       (pure_expr (Call _ _ _) = F makes conclusion vacuous) *)
-    TRY (simp[pure_expr_def] >> NO_TAC) >-
+    (* Do not simplify purity inside the guarded IHs: internal calls have
+       large default-argument guards. Unfold only the conclusion's purity
+       assumption, once, and leave the case-lemma IHs unchanged. *)
+    TRY (rpt (gen_tac ORELSE disch_tac) >> ACCEPT_TAC TRUTH) >>
+    TRY (rpt strip_tac >>
+         qpat_x_assum `pure_expr _` mp_tac >>
+         CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [pure_expr_def])) >>
+         simp_tac bool_ss [] >> NO_TAC) >-
     metis_tac[case_Name] >-
     metis_tac[case_TopLevelName] >-
     metis_tac[case_FlagMember] >-

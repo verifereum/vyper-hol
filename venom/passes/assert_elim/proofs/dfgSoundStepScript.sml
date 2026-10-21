@@ -390,12 +390,17 @@ Theorem dfg_sound_fupdate:
   ==>
     dfg_sound dfg (env |+ (k, nv))
 Proof
-  rpt strip_tac >> fs[dfg_sound_def] >> rpt conj_tac >>
-  (irule dfg_assign_sound_fupdate ORELSE
-   irule dfg_iszero_sound_fupdate ORELSE
-   irule dfg_eq_sound_fupdate ORELSE
-   irule dfg_compare_sound_fupdate) >>
-  rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE metis_tac[])
+  rpt gen_tac >> PURE_REWRITE_TAC[dfg_sound_def] >> strip_tac >>
+  rpt conj_tac >|
+  [irule dfg_assign_sound_fupdate,
+   irule dfg_iszero_sound_fupdate,
+   irule dfg_eq_sound_fupdate,
+   irule dfg_compare_sound_fupdate] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  rpt gen_tac >> DISCH_THEN (MAP_EVERY ASSUME_TAC o CONJUNCTS) >>
+  qpat_x_assum `!dinst. dfg_get_def dfg k = SOME dinst ==> _`
+    (drule_then strip_assume_tac) >>
+  first_x_assum drule_all >> disch_then ACCEPT_TAC
 QED
 
 

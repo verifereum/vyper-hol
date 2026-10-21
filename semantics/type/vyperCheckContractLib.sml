@@ -23,6 +23,10 @@ val checker_defs =
    constant_builtin_def,
    constant_type_builtin_def,
    declared_constant_def,
+   declared_immutable_def,
+   runtime_constant_expr_def,
+   runtime_constant_builtin_def,
+   bool_literal_expr_def,
    check_value_type_def,
    artifact_env_def,
    function_entry_env_def,
@@ -74,8 +78,6 @@ val checker_defs =
    lookup_function_def,
    lookup_callable_function_def,
    well_formed_type_def,
-   pair_num_def,
-   type_key_def,
    is_numeric_type_def,
    is_uint_type_def,
    is_bool_type_def,
@@ -86,12 +88,14 @@ val checker_defs =
    is_bytes_or_string_type_def,
    is_comparable_type_def,
    env_item_type_def,
+   account_item_type_def,
+   extract32_result_base_ok_def,
    assignable_type_def,
    valid_conversion_def,
    hashmap_key_type_def,
    defaults_env_def,
    extend_local_def,
-   well_typed_expr_def,
+   well_typed_expr_compute,
    well_typed_target_def,
    well_typed_atarget_def,
    well_typed_iterator_def,
@@ -100,7 +104,6 @@ val checker_defs =
    well_typed_stmts_def,
    stmt_no_fallthrough_def,
    stmt_no_control_escape_def,
-   vyperMiscTheory.string_to_num_def,
    vyperValueTheory.evaluate_type_def,
    vyperValueTheory.type_slot_size_def,
    vfmConstantsTheory.word_size_def,
@@ -126,7 +129,7 @@ val checker_defs =
    vyperABITheory.vyper_is_dynamic_def,
    contractABITheory.ceil32_def,
    raw_call_return_type_def,
-   create_arg_types_ok_def,
+   create_arg_types_ok_compute,
    optionTheory.option_case_lazily,
    optionTheory.IS_SOME_DEF,
    optionTheory.THE_DEF,
@@ -159,6 +162,11 @@ fun build_checker_base () =
   |> computeLib.copy
   |> listSimps.list_rws
   |> pred_setLib.add_pred_set_compset
+  (* INSERT_CONV dedups every INSERT node with an IN_CONV over the tail, which
+     makes each FDOM freshness check quadratic in the declared locals
+     (HOL-Theorem-Prover/HOL#2101). Scrub it before anything else is added:
+     a compiled rule such as FDOM_FUPDATE keeps the INSERT entry it saw. *)
+  |> (fn cs => computeLib.scrub_const cs pred_setSyntax.insert_tm)
   |> combinLib.add_combin_compset
   |> numposrepLib.add_numposrep_compset
   |> ASCIInumbersLib.add_ASCIInumbers_compset

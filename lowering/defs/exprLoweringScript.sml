@@ -47,21 +47,31 @@ Libs
    Type helpers (is_signed_type, is_decimal_type, decimal_divisor,
    type_bits, type_bounds) in compileEnv. *)
 
+(* Bytelike literals and ABI encoding results carry their produced bound,
+   independently of the annotated destination bound. *)
+Definition lowered_value_type_def:
+  lowered_value_type cenv (Literal (BaseT (StringT _)) (StringL s)) =
+    BaseT (StringT (LENGTH s)) ∧
+  lowered_value_type cenv (Literal (BaseT (BytesT (Dynamic _))) (BytesL bs)) =
+    BaseT (BytesT (Dynamic (LENGTH bs))) ∧
+  lowered_value_type cenv (TypeBuiltin _ (AbiEncode ensure method_id) _ args) =
+    (let enc_ty = if LENGTH args = 1 ∧ ¬ensure then expr_type (HD args)
+                  else TupleT (MAP expr_type args) in
+     BaseT (BytesT (Dynamic
+       (abi_size_bound cenv.ce_struct_fields enc_ty +
+        if IS_SOME method_id then 4 else 0)))) ∧
+  lowered_value_type cenv e = expr_type e
+End
+
 (* ===== Array Location Inference ===== *)
 (* Infer array data location from expression AST + compile_env.
-   Attribute(Name "self", field) → look up field in ce_vars → StorageLoc/TransientLoc.
-   Name var → look up in ce_vars.
+   TopLevelName → look up the module_var_key in ce_vars → StorageLoc/TransientLoc/ImmutableLoc.
+   Name var → look up the plain name in ce_vars.
    Otherwise → LocMemory (default).
    Mirrors Python: array_vv.location or node.iter._expr_info.location
    Note: CalldataLoc not in var_location. Calldata params are ABI-decoded
    to memory at function entry, so LocMemory is correct for them. *)
 Definition infer_array_location_def:
-  infer_array_location cenv (Attribute _ (Name _ "self") field_name) =
-    (case FLOOKUP cenv.ce_vars field_name of
-       SOME (StorageLoc _) => LocStorage
-     | SOME (TransientLoc _) => LocTransient
-     | SOME (ImmutableLoc _) => LocCode
-     | _ => LocMemory) ∧
   infer_array_location cenv (Name _ var_name) =
     (case FLOOKUP cenv.ce_vars var_name of
        SOME (StorageLoc _) => LocStorage
@@ -69,7 +79,7 @@ Definition infer_array_location_def:
      | SOME (ImmutableLoc _) => LocCode
      | _ => LocMemory) ∧
   infer_array_location cenv (TopLevelName _ nsid) =
-    (case FLOOKUP cenv.ce_vars (nsid_to_string nsid) of
+    (case FLOOKUP cenv.ce_vars (module_var_key nsid) of
        SOME (StorageLoc _) => LocStorage
      | SOME (TransientLoc _) => LocTransient
      | SOME (ImmutableLoc _) => LocCode
@@ -84,12 +94,8 @@ Definition infer_array_is_dynamic_def:
     (case cenv.ce_var_type var_name of
        SOME (ArrayT _ (Dynamic _)) => T
      | _ => F) ∧
-  infer_array_is_dynamic cenv (Attribute _ (Name _ "self") field_name) =
-    (case cenv.ce_var_type field_name of
-       SOME (ArrayT _ (Dynamic _)) => T
-     | _ => F) ∧
   infer_array_is_dynamic cenv (TopLevelName _ nsid) =
-    (case cenv.ce_var_type (nsid_to_string nsid) of
+    (case cenv.ce_var_type (module_var_key nsid) of
        SOME (ArrayT _ (Dynamic _)) => T
      | _ => F) ∧
   infer_array_is_dynamic cenv _ = T  (* default: assume dynamic for safety *)
@@ -967,8 +973,8 @@ Definition compile_dynarray_append_def:
         if is_prim then emit_void store_opc [elem_ptr; val_op]
         else
           if dst_loc = LocMemory then
-            do compile_store_memory_typed cenv elem_ptr dst_elem_ty
-                                          val_op src_elem_ty;
+            do compile_store_memory cenv val_op elem_ptr
+                                    dst_elem_ty src_elem_ty;
                return ()
             od
           else
@@ -1399,7 +1405,7 @@ Definition compile_target_base_def:
      | SOME (PtrVar ptr_op _) => ptr_op
      | _ => Lit 0w) ∧
   compile_target_base cenv (TopLevelNameTarget nsid) =
-    (let name = nsid_to_string nsid in
+    (let name = module_var_key nsid in
      case FLOOKUP cenv.ce_vars name of
        SOME (StorageLoc slot) => Lit slot
      | SOME (TransientLoc slot) => Lit slot
@@ -2062,8 +2068,7 @@ Definition compile_subscript_def:
   compile_subscript cfn cenv ret_ty ty base_e idx_e =
     let var_name = (case base_e of
                       Name _ id => id
-                    | Attribute _ (Name _ "self") fld => fld
-                    | TopLevelName _ nsid => nsid_to_string nsid
+                    | TopLevelName _ nsid => module_var_key nsid
                     | _ => "") in
     if cenv.ce_is_hashmap var_name then
       let base_slot = (case FLOOKUP cenv.ce_vars var_name of
@@ -2137,33 +2142,25 @@ End
 Definition compile_attribute_def:
   compile_attribute cfn cenv ret_ty ty base_e field =
     do base_vv <- cfn cenv ty base_e;
-       case FLOOKUP cenv.ce_vars field of
-         SOME (StorageLoc slot) =>
-           return (LocatedValue ret_ty (mk_ptr (Lit slot) LocStorage))
-       | SOME (TransientLoc slot) =>
-           return (LocatedValue ret_ty (mk_ptr (Lit slot) LocTransient))
-       | SOME (ImmutableLoc offset) =>
-           return (LocatedValue ret_ty (mk_ptr (Lit (n2w offset)) LocCode))
-       | _ =>
-           let base_op = vv_operand base_vv in
-           let base_loc = (case vv_location base_vv of
-                             SOME l => l | NONE => LocMemory) in
-           let struct_name = (case base_e of
-                                Name _ id => (case cenv.ce_var_type id of
-                                                SOME (StructT sn) => nsid_to_string sn
-                                              | _ => "")
-                              | _ => "") in
-           let is_storage_loc = (case base_loc of
-                                   LocStorage => T
-                                 | LocTransient => T
-                                 | _ => F) in
-           let fields = get_struct_fields cenv.ce_struct_fields struct_name in
-           let field_offset =
-             if is_storage_loc then struct_field_offset_slots fields field
-             else struct_field_offset fields field in
-           do p <- emit_op ADD [base_op; Lit (n2w field_offset)];
-              return (LocatedValue ret_ty (mk_ptr p base_loc))
-           od
+       let base_op = vv_operand base_vv in
+       let base_loc = (case vv_location base_vv of
+                         SOME l => l | NONE => LocMemory) in
+       let struct_name = (case base_e of
+                            Name _ id => (case cenv.ce_var_type id of
+                                            SOME (StructT sn) => nsid_to_string sn
+                                          | _ => "")
+                          | _ => "") in
+       let is_storage_loc = (case base_loc of
+                               LocStorage => T
+                             | LocTransient => T
+                             | _ => F) in
+       let fields = get_struct_fields cenv.ce_struct_fields struct_name in
+       let field_offset =
+         if is_storage_loc then struct_field_offset_slots fields field
+         else struct_field_offset fields field in
+       do p <- emit_op ADD [base_op; Lit (n2w field_offset)];
+          return (LocatedValue ret_ty (mk_ptr p base_loc))
+       od
     od
 End
 
@@ -2538,7 +2535,7 @@ Definition compile_expr_body_def:
         let flag_id = cenv.ce_flag_member_id flag_name mem_name in
         (StackValue ret_ty (Lit (n2w (2 ** flag_id))), st))
    | TopLevelName _ nsid =>
-       (let name = nsid_to_string nsid in
+       (let name = module_var_key nsid in
         case FLOOKUP cenv.ce_vars name of
           SOME (StorageLoc slot) =>
             (LocatedValue ret_ty (mk_ptr (Lit slot) LocStorage), st)
@@ -2556,7 +2553,7 @@ Definition compile_expr_body_def:
         let (loc, arr_name) = (case target of
             NameTarget id => (infer_array_location cenv (Name ARB id), id)
           | TopLevelNameTarget nsid =>
-              (infer_array_location cenv (TopLevelName ARB nsid), nsid_to_string nsid)
+              (infer_array_location cenv (TopLevelName ARB nsid), module_var_key nsid)
           | _ => (LocMemory, "")) in
         let ws = word_scale loc in
         let fty_opt = cenv.ce_var_type arr_name in
@@ -2674,7 +2671,8 @@ Definition compile_builtin_dispatch_body_def:
           let (start_op, st1) = lower_value compile_expr cenv
                                   (expr_type start_e) start_e st in
           as_ptr_val ret_ty LocMemory
-            (compile_slice_calldata start_op (Lit (n2w n)) (n + 32) st1))
+            (compile_slice_calldata start_op (Lit (n2w n))
+               (type_memory_bytes cenv ret_ty) st1))
      | Len =>
          (let e1 = HD args in
           if is_msg_data e1 then
@@ -2759,7 +2757,7 @@ Definition compile_builtin_dispatch_body_def:
           (LocatedValue ret_ty (base_ptr buf_op_alloc), st5))
      | Slice max_len =>
          (let src_e = HD args in let start_e = EL 1 args in let len_e = EL 2 args in
-          let out_size = max_len + 32 in
+          let out_size = type_memory_bytes cenv ret_ty in
           if is_msg_data src_e then
             (let (start_op, st1) = lower_value compile_expr cenv ty start_e st in
              let (len_op, st2) = lower_value compile_expr cenv ty len_e st1 in
@@ -2773,16 +2771,22 @@ Definition compile_builtin_dispatch_body_def:
              let (addr_op, st1) = lower_value compile_expr cenv ty addr_e st in
              let (start_op, st2) = lower_value compile_expr cenv ty start_e st1 in
              let (len_op, st3) = lower_value compile_expr cenv ty len_e st2 in
-             as_ptr_val ret_ty LocMemory (compile_slice_extcode addr_op start_op len_op out_size st3))
+             let ((out_buf, out_data), st4) = compile_slice_out_buf out_size st3 in
+             as_ptr_val ret_ty LocMemory
+               (compile_slice_extcode addr_op start_op len_op out_buf out_data st4))
           else
             let src_ty = expr_type src_e in
             (* lower_value handles ensure_in_memory for bytestrings *)
             (let (src_op, st1) = lower_value compile_expr cenv src_ty src_e st in
-             let (start_op, st2) = lower_value compile_expr cenv ty start_e st1 in
-             let (len_op, st3) = lower_value compile_expr cenv ty len_e st2 in
              if is_bytestring_type src_ty then
-               as_ptr_val ret_ty LocMemory (compile_slice_memory src_op start_op len_op out_size st3)
+               let ((src_len, src_data), st2) = compile_bytestring_src src_op st1 in
+               let (start_op, st3) = lower_value compile_expr cenv ty start_e st2 in
+               let (len_op, st4) = lower_value compile_expr cenv ty len_e st3 in
+               as_ptr_val ret_ty LocMemory
+                 (compile_slice_data src_len src_data start_op len_op out_size st4)
              else
+               let (start_op, st2) = lower_value compile_expr cenv ty start_e st1 in
+               let (len_op, st3) = lower_value compile_expr cenv ty len_e st2 in
                let m = fixed_bytes_size src_ty in
                               let (tmp_buf_alloc, st5) = compile_alloc_buffer 64 st3 in
                               let tmp_buf = tmp_buf_alloc.buf_operand in
@@ -2793,7 +2797,8 @@ Definition compile_builtin_dispatch_body_def:
      | Uint2Str max_len =>
          (let e1 = HD args in
           let (v, st1) = lower_value compile_expr cenv ty e1 st in
-          as_ptr_val ret_ty LocMemory (compile_uint2str v max_len st1))
+          as_ptr_val ret_ty LocMemory
+            (compile_uint2str v max_len (type_memory_bytes cenv ret_ty) st1))
      | AsWeiValue denom =>
          (let e1 = HD args in
           let arg_ty = expr_type e1 in
@@ -2820,8 +2825,8 @@ Definition compile_builtin_dispatch_body_def:
           | SOME elem_ty =>
               let elem_sz = type_memory_bytes cenv elem_ty in
               let has_lw = (case bnd of Dynamic _ => T | _ => F) in
-              let total_size = (if has_lw then 32 else 0) +
-                               LENGTH args * elem_sz in
+              (* Reserve the declared capacity, including for an empty list. *)
+              let total_size = type_memory_bytes cenv ret_ty in
               let (buf_op_alloc, st2) = compile_alloc_buffer total_size st in
               let buf_op = buf_op_alloc.buf_operand in
               as_ptr_val ret_ty LocMemory

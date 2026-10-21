@@ -203,6 +203,18 @@ Proof
   >- (qexistsl_tac [`run_ctx`, `fuel`, `s`] >> simp[])
 QED
 
+(* Restrict transfer soundness once, outside the lifting proofs' contexts. *)
+Theorem range_transfer_sound_wf[local]:
+  !fn. transfer_sound_wf range_sound range_transfer_opt
+         (dfg_build_function fn, fn.fn_blocks)
+Proof
+  gen_tac >> PURE_REWRITE_TAC [transfer_sound_wf_def] >> rpt strip_tac >>
+  mp_tac (Q.SPECL [`fuel`, `run_ctx`, `v`, `inst`, `s`, `s'`]
+    (REWRITE_RULE [transfer_sound_def] (Q.SPEC `fn` range_transfer_sound))) >>
+  impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then ACCEPT_TAC
+QED
+
 (* range_sound stable under state_equiv {} *)
 Theorem range_sound_state_equiv:
   !v s1 s2. state_equiv {} s1 s2 /\ range_sound v s1 ==>
@@ -546,11 +558,8 @@ Proof
     >- metis_tac[execution_equiv_trans]
     (* is_fixpoint *)
     >- (mp_tac (SIMP_RULE std_ss [LET_THM] range_fixpoint) >> simp[])
-    (* transfer_sound_wf: from range_transfer_sound (transfer_sound => _wf) *)
-    >- (simp[analysisSimDefsTheory.transfer_sound_wf_def] >>
-        mp_tac (SPEC_ALL range_transfer_sound) >>
-        simp[analysisSimDefsTheory.transfer_sound_def] >>
-        metis_tac[])
+    (* transfer_sound_wf *)
+    >- ACCEPT_TAC (Q.SPEC `fn` range_transfer_sound_wf)
     (* successor *)
     >- first_assum ACCEPT_TAC
     (* per-inst sim *)
@@ -674,10 +683,7 @@ Proof
     (* is_fixpoint *)
     >- (mp_tac (SIMP_RULE std_ss [LET_THM] range_fixpoint) >> simp[])
     (* transfer_sound_wf *)
-    >- (simp[analysisSimDefsTheory.transfer_sound_wf_def] >>
-        mp_tac (SPEC_ALL range_transfer_sound) >>
-        simp[analysisSimDefsTheory.transfer_sound_def] >>
-        metis_tac[])
+    >- ACCEPT_TAC (Q.SPEC `fn` range_transfer_sound_wf)
     (* successor *)
     >- first_assum ACCEPT_TAC
     (* per-inst sim *)
@@ -979,9 +985,7 @@ Proof
   impl_tac >- (
     rpt conj_tac
     >- simp[execEquivParamPropsTheory.state_equiv_execution_equiv_valid_state_rel]
-    >- (simp[analysisSimDefsTheory.transfer_sound_wf_def] >>
-        mp_tac (SPEC_ALL range_transfer_sound) >>
-        simp[analysisSimDefsTheory.transfer_sound_def] >> metis_tac[])
+    >- ACCEPT_TAC (Q.SPEC `fn` range_transfer_sound_wf)
     >- first_assum ACCEPT_TAC
     >- first_assum ACCEPT_TAC
     >- metis_tac[range_sound_state_equiv]

@@ -424,7 +424,11 @@ Triviality run_blocks_never_ok:
 Proof
   Induct >- simp[Once run_blocks_def] >>
   simp[Once run_blocks_unfold] >>
-  rpt gen_tac >> rpt (CASE_TAC >> fs[])
+  rpt gen_tac >>
+  Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >> simp[] >>
+  rename1 `run_block fuel ctx bb s` >>
+  Cases_on `run_block fuel ctx bb s` >> simp[] >>
+  IF_CASES_TAC >> simp[]
 QED
 
 (* ================================================================== *)

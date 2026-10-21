@@ -6,3 +6,6 @@ Ancestors
   vyperTypeSoundness
   vyperABIValid
   vyperTypeDeploymentMachine
+  vyperTypeSelectedEntry
+  vyperTypeEntryDefaults
+  vyperTypeSelectedEntrySoundness

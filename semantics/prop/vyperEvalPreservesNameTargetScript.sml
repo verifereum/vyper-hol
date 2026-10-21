@@ -28,7 +28,7 @@ Proof
   qpat_x_assum `_ = SOME _` mp_tac >>
   simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
        check_def, type_check_def, assert_def, ignore_bind_def, raise_def] >>
-  Cases_on `IS_SOME (lookup_scopes (string_to_num n) st.scopes)` >>
+  Cases_on `IS_SOME (lookup_scopes n st.scopes)` >>
   gvs[return_def, raise_def]
 QED
 

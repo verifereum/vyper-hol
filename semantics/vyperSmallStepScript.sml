@@ -1,7 +1,7 @@
 Theory vyperSmallStep
 Ancestors
   arithmetic combin pair list While
-  vyperMisc vyperValue vyperContext vyperState vyperCreate vyperInterpreter vyperABI
+  vyperMisc vyperNsidFmap vyperValue vyperContext vyperState vyperCreate vyperInterpreter vyperABI
   vyperCallOutcome[ignore_grammar]
 Libs
   cv_transLib wordsLib
@@ -39,7 +39,7 @@ Datatype:
   | IfK1 toplevel_value (stmt list) (stmt list) eval_continuation
   | IfK2 eval_continuation
   | ForK identifier type_value num (stmt list) eval_continuation
-  | ForK1 type_value num (stmt list) (value list) eval_continuation
+  | ForK1 type_value identifier (stmt list) (value list) eval_continuation
   | ExprK eval_continuation
   | StmtsK (stmt list) eval_continuation
   | ArrayK type eval_continuation
@@ -69,8 +69,8 @@ Datatype:
   | RawRevertK eval_continuation
   | SelfDestructK eval_continuation
   | CreateK (type list) create_kind bool bool eval_continuation
-  | IntCallK (num |-> type_args) (num option # identifier) ((identifier # type) list) (expr list) type (stmt list) bool function_mutability eval_continuation
-  | IntCallK1 (num |-> type_args) (num option # identifier) ((identifier # type) list) (value list) (scope list) type (stmt list) bool function_mutability eval_continuation
+  | IntCallK (nsid |-> type_args) nsid ((identifier # type) list) (expr list) type (stmt list) bool function_mutability eval_continuation
+  | IntCallK1 (nsid |-> type_args) nsid ((identifier # type) list) (value list) (scope list) type (stmt list) bool function_mutability eval_continuation
   | IntCallK2 (scope list) type_value bool bool eval_continuation
   | ExprsK (expr list) eval_continuation
   | ExprsK1 value eval_continuation
@@ -112,17 +112,15 @@ Definition eval_base_target_cps_def:
   eval_base_target_cps cx (NameTarget id) st k =
     (let r = do
         sc <- get_scopes;
-        n <<- string_to_num id;
-        type_check (IS_SOME (lookup_scopes n sc)) "NameTarget not in scope";
+        type_check (IS_SOME (lookup_scopes id sc)) "NameTarget not in scope";
         return $ (ScopedVar id, []) od st in
      liftk cx ApplyBaseTarget r k) ∧
   eval_base_target_cps cx (TopLevelNameTarget (src_id_opt, id)) st k =
     (let r = do
-        n <<- string_to_num id;
         ts <- lift_option_type
                 (get_module_code cx src_id_opt)
                 "TopLevelNameTarget get_module_code";
-        if is_immutable_decl n ts then return $ (ImmutableVar src_id_opt id, [])
+        if is_immutable_decl id ts then return $ (ImmutableVar src_id_opt id, [])
         else return $ (TopLevelVar src_id_opt id, []) od st in
      liftk cx ApplyBaseTarget r k) ∧
   eval_base_target_cps cx (AttributeTarget t id) st k =
@@ -142,11 +140,10 @@ Definition eval_expr_cps_def:
   eval_expr_cps cx1 (Name _ id) st k =
     liftk cx1 ApplyTv
       (do env <- get_scopes;
-          n <<- string_to_num id;
-          v <- lift_option_type (lookup_scopes_val n env) "Name not in scope";
+          v <- lift_option_type (lookup_scopes_val id env) "Name not in scope";
           return $ Value v od st) k ∧
   eval_expr_cps cx2 (TopLevelName _ (src_id_opt, id)) st k =
-    liftk cx2 ApplyTv (lookup_global cx2 src_id_opt (string_to_num id) st) k ∧
+    liftk cx2 ApplyTv (lookup_global cx2 src_id_opt id st) k ∧
   eval_expr_cps cx2 (FlagMember _ nsid mid) st k =
     liftk cx2 ApplyTv (lookup_flag_mem cx2 nsid mid st) k ∧
   eval_expr_cps cx3 (IfExp _ e1 e2 e3) st k =
@@ -620,7 +617,7 @@ Definition apply_vals_def:
     (case do check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long";
              return vs od st
      of (INR ex, st) => apply_exc cx ex st k
-      | (INL vs, st) => eval_for_cps cx tyv (string_to_num id) body vs st k) ∧
+      | (INL vs, st) => eval_for_cps cx tyv id body vs st k) ∧
   apply_vals cx vs st (StructLitK ks k) =
     apply_tv cx (Value $ StructV (ZIP (ks, vs))) st k ∧
   apply_vals cx vs st (BuiltinK ty bt k) =
@@ -835,13 +832,23 @@ val apply_vals_pre_def = apply_vals_def
             UNCURRY, sum_CASE_rator, option_CASE_rator, COND_RATOR]
   |> cv_auto_trans_pre "apply_vals_pre";
 
+val APPLY_VALS_PRE_CASE_TAC =
+  simp[Once apply_vals_pre_def] >>
+  gvs[check_def, type_check_def, assert_def] >>
+  strip_tac >> gvs[];
+
 Theorem apply_vals_pre[cv_pre]:
   ∀a b c d. apply_vals_pre a b c d
 Proof
-  ho_match_mp_tac apply_vals_ind \\ rw[]
-  \\ rw[Once apply_vals_pre_def]
-  \\ gvs[check_def, type_check_def, assert_def]
-  \\ strip_tac \\ gvs[]
+  ho_match_mp_tac apply_vals_ind \\ rw[] >|
+  [APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC,
+   APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC,
+   APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC,
+   APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC,
+   APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC,
+   APPLY_VALS_PRE_CASE_TAC] >>
+  TRY (Cases_on `vs` >> simp[]) >>
+  rpt strip_tac >> gvs[optionTheory.IS_SOME_DEF]
 QED
 
 Definition nextk_def[simp]:
@@ -1669,8 +1676,8 @@ Proof
       CASE_TAC >> simp[return_def, raise_def] >>
       CASE_TAC >> simp[] >>
       CASE_TAC >> simp[] >>
-      CASE_TAC >> simp[] >>
-      CASE_TAC >> simp[] >>
+      ALL_TAC >| [CASE_TAC, CASE_TAC, CASE_TAC, CASE_TAC, CASE_TAC] >> simp[] >>
+      ALL_TAC >| [CASE_TAC, CASE_TAC, CASE_TAC, CASE_TAC, CASE_TAC, CASE_TAC] >> simp[] >>
       CASE_TAC >> simp[])
   (* ===== Chain interaction builtins ===== *)
   (* All 5 new cases: CPS eval_exprs then continuation matches big-step body.
@@ -1756,6 +1763,8 @@ val EXT_CALL_CPS_PREP_TAC =
    specialization independently visible to holbuild's tactic budget. *)
 val EXT_CALL_CPS_CASES_TAC =
   TRY (FIRST [first_assum MATCH_ACCEPT_TAC,
+    (* Collapse a failed operand before rewriting the guarded IH/dead call body. *)
+    CHANGED_TAC (simp_tac (srw_ss()) [raise_def]),
     CHANGED_TAC (gvs[bind_def, ignore_bind_def, return_def, UNCURRY,
       type_check_def, check_def, assert_def, lift_option_type_def,
       get_accounts_def, get_transient_storage_def, update_accounts_def,
@@ -1830,16 +1839,22 @@ val EXT_CALL_CPS_VALUE_CASES_TAC =
 
 Resume eval_cps_eq[nonstatic_none_noneT]:
   EXT_CALL_CPS_PREP_TAC >>
-  ntac 4 EXT_CALL_CPS_VALUE_CASES_TAC >> ntac 4 EXT_CALL_CPS_VALUE_CASES_TAC >>
-  ntac 4 EXT_CALL_CPS_VALUE_CASES_TAC >> ntac 4 EXT_CALL_CPS_VALUE_CASES_TAC >>
-  ntac 4 EXT_CALL_CPS_VALUE_CASES_TAC >> ntac 4 EXT_CALL_CPS_VALUE_CASES_TAC >>
+  ntac 2 EXT_CALL_CPS_VALUE_CASES_TAC >> ntac 2 EXT_CALL_CPS_VALUE_CASES_TAC >>
+  ntac 2 EXT_CALL_CPS_VALUE_CASES_TAC >> ntac 2 EXT_CALL_CPS_VALUE_CASES_TAC >>
+  ntac 2 EXT_CALL_CPS_VALUE_CASES_TAC >> ntac 2 EXT_CALL_CPS_VALUE_CASES_TAC >>
+  ntac 2 EXT_CALL_CPS_VALUE_CASES_TAC >> ntac 2 EXT_CALL_CPS_VALUE_CASES_TAC >>
+  ntac 2 EXT_CALL_CPS_VALUE_CASES_TAC >> ntac 2 EXT_CALL_CPS_VALUE_CASES_TAC >>
+  ntac 2 EXT_CALL_CPS_VALUE_CASES_TAC >> ntac 2 EXT_CALL_CPS_VALUE_CASES_TAC >>
   EXT_CALL_CPS_FINISH_TAC
 QED
 Resume eval_cps_eq[nonstatic_none_value]:
   EXT_CALL_CPS_PREP_TAC >>
-  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
-  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
-  ntac 4 EXT_CALL_CPS_CASES_TAC >> ntac 4 EXT_CALL_CPS_CASES_TAC >>
+  ntac 2 EXT_CALL_CPS_CASES_TAC >> ntac 2 EXT_CALL_CPS_CASES_TAC >>
+  ntac 2 EXT_CALL_CPS_CASES_TAC >> ntac 2 EXT_CALL_CPS_CASES_TAC >>
+  ntac 2 EXT_CALL_CPS_CASES_TAC >> ntac 2 EXT_CALL_CPS_CASES_TAC >>
+  ntac 2 EXT_CALL_CPS_CASES_TAC >> ntac 2 EXT_CALL_CPS_CASES_TAC >>
+  ntac 2 EXT_CALL_CPS_CASES_TAC >> ntac 2 EXT_CALL_CPS_CASES_TAC >>
+  ntac 2 EXT_CALL_CPS_CASES_TAC >> ntac 2 EXT_CALL_CPS_CASES_TAC >>
   EXT_CALL_CPS_FINISH_TAC
 QED
 Resume eval_cps_eq[nonstatic_some_noneT]:

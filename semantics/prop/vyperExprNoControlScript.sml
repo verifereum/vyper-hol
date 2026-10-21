@@ -862,16 +862,17 @@ Theorem eval_raw_call_no_control:
   eval_raw_call cx flags target_addr calldata amount st = (INR exc, st') ==>
   no_control_exc exc
 Proof
-  Cases_on `flags.rcf_is_delegate` >>
-  simp[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
+  Cases_on `~(flags.rcf_is_delegate /\ flags.rcf_is_static) /\
+    ((flags.rcf_is_delegate \/ flags.rcf_is_static) ==> amount = 0)` >>
+  fs[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, get_accounts_def,
        get_transient_storage_def, no_control_exc_def] >>
-  Cases_on `run_ext_call cx.txn.target target_addr calldata
-    (if flags.rcf_is_static then NONE else SOME amount)
-    st.accounts st.tStorage (vyper_to_tx_params cx.txn)` >>
+  Cases_on `run_raw_call cx flags target_addr calldata amount
+    st.accounts st.tStorage` >>
   simp[lift_option_def, bind_def, return_def, raise_def, no_control_exc_def] >>
-  PairCases_on `x` >>
-  Cases_on `flags.rcf_revert_on_failure` >> Cases_on `x0` >>
+  rename1 `run_raw_call _ _ _ _ _ _ _ = SOME call_result` >>
+  PairCases_on `call_result` >>
+  Cases_on `flags.rcf_revert_on_failure` >> Cases_on `call_result0` >>
   Cases_on `flags.rcf_max_outsize = 0` >>
   simp[update_accounts_def, update_transient_def, append_logs_def,
        check_def, assert_def, bind_def, ignore_bind_def, return_def, raise_def,
@@ -1100,17 +1101,57 @@ Proof
   drule take_call_outcome_error >> rw[no_control_exc_def]
 QED
 
+(* Decompose only the goal's monadic spine; keep the large guarded IHs
+   out of rewriting. Match primitive leaves before traversing terms for eta. *)
+val NO_CONTROL_MONAD_LEAF_TAC =
+  let
+    val leaves = List.foldl (fn (th,net) =>
+      Net.insert (concl th, MATCH_ACCEPT_TAC th) net) Net.empty
+      (no_control_monad_take :: CONJUNCTS no_control_monad_primitives)
+  in
+    fn (asl,w) => FIRST (Net.match w leaves) (asl,w)
+  end;
+
+(* Reduce only exposed applications, never their continuation arguments. *)
+val no_control_head_conv =
+  let
+    val reduce = FIRST_CONV
+      [BETA_CONV, REWR_CONV pair_case_thm, REWR_CONV UNCURRY]
+    fun head tm = (reduce ORELSEC RATOR_CONV head) tm
+  in head end;
+
+(* Keep CASE_TAC's branch order, but avoid rebuilding its broad datatype
+   rewrite set. Only fresh branch facts, never guarded IHs, become rewrites. *)
+fun NO_CONTROL_MONAD_CASE_TAC (g as (old,_)) =
+  let
+    fun simplify (asl,w) =
+      let
+        val fresh = List.filter (fn a => not (is_forall a) andalso
+          not (List.exists (aconv a) old)) asl
+        val rules = map ASSUME fresh
+      in
+        simp_tac bool_ss
+          (optionTheory.option_CLAUSES :: pair_case_thm :: UNCURRY :: rules) >>
+        RULE_ASSUM_TAC (REWRITE_RULE rules) >> MAP_EVERY assume_tac rules
+      end (asl,w)
+  in
+    (BasicProvers.PURE_CASE_TAC >> simplify) g
+  end;
+
 val NO_CONTROL_MONAD_TAC =
-  rpt (FIRST [CHANGED_TAC (CONV_TAC (DEPTH_CONV ETA_CONV)),
-    CHANGED_TAC (simp_tac bool_ss
-      [FORALL_PROD, pair_case_thm, UNCURRY, no_control_monad_primitives]),
-    first_assum ACCEPT_TAC, MATCH_ACCEPT_TAC no_control_monad_take,
+  rpt (FIRST [
+    CONV_TAC (HO_REWR_CONV FORALL_PROD),
+    CONV_TAC (RAND_CONV no_control_head_conv),
+    gen_tac, strip_tac, conj_tac,
+    first_assum ACCEPT_TAC,
+    NO_CONTROL_MONAD_LEAF_TAC,
+    MATCH_MP_TAC no_control_monad_bind_guarded >> conj_tac,
+    CONV_TAC (RAND_CONV (REWR_CONV ignore_bind_def)),
+    CONV_TAC (RAND_CONV ETA_CONV),
     CHANGED_TAC (fn (asl,w) =>
       simp_tac bool_ss (pair_case_thm :: UNCURRY ::
         List.map ASSUME (List.filter is_eq asl)) (asl,w)),
-    irule no_control_monad_bind_guarded >> conj_tac,
-    CHANGED_TAC (rewrite_tac[ignore_bind_def]),
-    gen_tac, strip_tac, conj_tac, CASE_TAC]);
+    NO_CONTROL_MONAD_CASE_TAC]);
 
 Resume eval_expr_no_control_with_bt[ExtCall]:
   rpt gen_tac >> strip_tac >>
@@ -1126,11 +1167,19 @@ QED
    run drule's context-wide resolution search at every monadic step. *)
 fun NO_CONTROL_MONAD_IH_TAC (asl,w) =
   let
-    val normalise = PURE_REWRITE_RULE [ignore_bind_def]
-    val facts = List.concat (map (CONJUNCTS o normalise o ASSUME) asl)
+    val normalise = SIMP_RULE bool_ss
+      [oneTheory.one, ignore_bind_def, FST, SND, pair_case_thm, UNCURRY]
+    val raw_facts = List.concat (map (CONJUNCTS o normalise o ASSUME) asl)
+    val substitutions = List.filter (fn th =>
+      is_eq (concl th) andalso
+      (is_var (lhs (concl th)) orelse is_var (rhs (concl th)))) raw_facts
+    val facts = map (SIMP_RULE bool_ss substitutions) raw_facts
     fun discharge th =
       if is_imp (snd (strip_forall (concl th))) then
-        discharge (tryfind (MATCH_MP th) facts)
+        discharge (tryfind (MATCH_MP th) facts handle HOL_ERR _ =>
+          let val guard = fst (dest_imp (snd (strip_forall (concl th)))) in
+            MATCH_MP th (REFL (rhs guard))
+          end)
       else th
     fun close ih g =
       ACCEPT_TAC (discharge

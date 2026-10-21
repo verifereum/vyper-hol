@@ -449,7 +449,8 @@ End
 (* ===== Expression translation context and name helpers ===== *)
 
 (* Expression translation carries the root source ID, current module
-   namespace, current module import map, and names of constants/immutables. *)
+   namespace, current module import map, constants/immutables, local and
+   top-level types, and the compile-time abstract override map. *)
 Definition expr_main_src_id_def:
   expr_main_src_id ctx = FST ctx
 End
@@ -471,7 +472,11 @@ Definition expr_local_types_def:
 End
 
 Definition expr_toplevel_types_def:
-  expr_toplevel_types ctx = SND (SND (SND (SND (SND ctx))))
+  expr_toplevel_types ctx = FST (SND (SND (SND (SND (SND ctx)))))
+End
+
+Definition expr_override_map_def:
+  expr_override_map ctx = SND (SND (SND (SND (SND (SND ctx)))))
 End
 
 Definition expr_with_local_types_def:
@@ -479,7 +484,8 @@ Definition expr_with_local_types_def:
     (expr_main_src_id ctx,
      (expr_current_nsid ctx,
       (expr_import_map ctx,
-       (expr_const_names ctx, (local_types, expr_toplevel_types ctx)))))
+       (expr_const_names ctx,
+        (local_types, (expr_toplevel_types ctx, expr_override_map ctx))))))
 End
 
 Definition lookup_local_type_def:
@@ -524,6 +530,20 @@ Definition resolve_func_module_ref_def:
     (if tc = SOME "module" then resolve_module_alias ctx alias src
      else resolve_source_ref ctx fallback) ∧
   resolve_func_module_ref ctx _ fallback = resolve_source_ref ctx fallback
+End
+
+Definition resolve_override_aux_def:
+  resolve_override_aux 0 override_map fn_key = fn_key ∧
+  resolve_override_aux (SUC fuel) override_map fn_key =
+    case ALOOKUP override_map fn_key of
+    | NONE => fn_key
+    | SOME next => resolve_override_aux fuel override_map next
+End
+
+Definition resolve_override_def:
+  resolve_override ctx fn_key =
+    resolve_override_aux (LENGTH (expr_override_map ctx))
+      (expr_override_map ctx) fn_key
 End
 
 (* External signature metadata omits source IDs on nested nominal types.  Use
@@ -746,10 +766,10 @@ Definition translate_module_call_def:
                   StructLit (StructT (mod_nsid, fname)) (mod_nsid, fname) kwargs'
                 else
                   (* Function call that returns a struct: library.foo() *)
-                  Call rty (IntCall (nsid, fname)) args' NONE
+                  Call rty (IntCall (resolve_override ctx (nsid, fname))) args' NONE
             | _ =>
               (* Module call: use source_id from type_decl_node *)
-              Call rty (IntCall (nsid, fname)) args' NONE)
+              Call rty (IntCall (resolve_override ctx (nsid, fname))) args' NONE)
 End
 
 Definition translate_call_def:
@@ -781,7 +801,9 @@ Definition translate_call_def:
           (case base of
            | JE_Name id _ _ _ =>
                if id = "self" then
-                 Call rty (IntCall (resolve_source_ref ctx src_id_opt, fname)) args' NONE
+                 Call rty
+                   (IntCall (resolve_override ctx
+                     (resolve_source_ref ctx src_id_opt, fname))) args' NONE
                else translate_module_call ctx func args' kwargs' ret_ty src_id_opt rty
            | _ => translate_module_call ctx func args' kwargs' ret_ty src_id_opt rty)
     | _ => translate_module_call ctx func args' kwargs' ret_ty src_id_opt rty
@@ -1050,7 +1072,12 @@ Definition translate_base_target_def:
   (translate_base_target ctx (JBT_Attribute tgt attr) =
     AttributeTarget (translate_base_target ctx tgt) attr)
 Termination
-  WF_REL_TAC `measure (json_base_target_size o SND)` >> simp[]
+  (* Select the relation directly; avoid WF_REL_TAC's global size rewrites. *)
+  qexists_tac `measure (json_base_target_size o SND)` >>
+  conj_tac >- MATCH_ACCEPT_TAC prim_recTheory.WF_measure >>
+  PURE_REWRITE_TAC [prim_recTheory.measure_thm, combinTheory.o_DEF,
+                    pairTheory.SND] >>
+  simp[json_base_target_size_def]
 End
 
 
@@ -1058,7 +1085,13 @@ Definition translate_target_def:
   (translate_target ctx (JTgt_Base bt) = BaseTarget (translate_base_target ctx bt)) /\
   (translate_target ctx (JTgt_Tuple tgts) = TupleTarget (MAP (translate_target ctx) tgts))
 Termination
-  WF_REL_TAC `measure (json_target_size o SND)` >> simp[]
+  qexists_tac `measure (json_target_size o SND)` >>
+  conj_tac >- MATCH_ACCEPT_TAC prim_recTheory.WF_measure >>
+  PURE_REWRITE_TAC [prim_recTheory.measure_thm, combinTheory.o_DEF,
+                    pairTheory.SND] >>
+  simp[json_target_size_def] >>
+  Induct_on `tgts` >> rw[json_target_size_def] >>
+  res_tac >> simp[]
 End
 
 
@@ -1138,50 +1171,69 @@ End
 
 (* ===== Statement Translation ===== *)
 
+(* Local bindings enter the context after their initializer and stay within
+   their block; loop binders are visible only in the loop body. *)
 Definition translate_stmt_def:
-  (translate_stmt ctx JS_Pass = Pass) /\
-  (translate_stmt ctx JS_Break = Break) /\
-  (translate_stmt ctx JS_Continue = Continue) /\
-  (translate_stmt ctx (JS_Expr e) = Expr (translate_expr ctx e)) /\
-  (translate_stmt ctx (JS_Return NONE) = Return NONE) /\
-  (translate_stmt ctx (JS_Return (SOME e)) = Return (SOME (translate_expr ctx e))) /\
-  (translate_stmt ctx (JS_Raise NONE) = Raise RaiseBare) /\
-  (translate_stmt ctx (JS_Raise (SOME e)) = Raise (RaiseReason (translate_expr ctx e))) /\
-  (translate_stmt ctx (JS_Assert test NONE) =
+  (translate_stmt nominal_index all_import_maps ctx JS_Pass = Pass) /\
+  (translate_stmt nominal_index all_import_maps ctx JS_Break = Break) /\
+  (translate_stmt nominal_index all_import_maps ctx JS_Continue = Continue) /\
+  (translate_stmt nominal_index all_import_maps ctx (JS_Expr e) = Expr (translate_expr ctx e)) /\
+  (translate_stmt nominal_index all_import_maps ctx (JS_Return NONE) = Return NONE) /\
+  (translate_stmt nominal_index all_import_maps ctx (JS_Return (SOME e)) = Return (SOME (translate_expr ctx e))) /\
+  (translate_stmt nominal_index all_import_maps ctx (JS_Raise NONE) = Raise RaiseBare) /\
+  (translate_stmt nominal_index all_import_maps ctx (JS_Raise (SOME e)) = Raise (RaiseReason (translate_expr ctx e))) /\
+  (translate_stmt nominal_index all_import_maps ctx (JS_Assert test NONE) =
     Assert (translate_expr ctx test) AssertBare) /\
-  (translate_stmt ctx (JS_Assert test (SOME msg)) =
+  (translate_stmt nominal_index all_import_maps ctx (JS_Assert test (SOME msg)) =
     Assert (translate_expr ctx test) (AssertReason (translate_expr ctx msg))) /\
-  (translate_stmt ctx (JS_Log (alias_opt, src, name) args) =
+  (translate_stmt nominal_index all_import_maps ctx (JS_Log (alias_opt, src, name) args) =
     let nsid =
       case alias_opt of
         NONE => resolve_source_ref ctx src
       | SOME alias => resolve_module_alias ctx alias src
     in
       Log (nsid, name) (MAP (translate_expr ctx) args)) /\
-  (translate_stmt ctx (JS_If test body orelse) =
+  (translate_stmt nominal_index all_import_maps ctx (JS_If test body orelse) =
     If (translate_expr ctx test)
-       (MAP (translate_stmt ctx) body)
-       (MAP (translate_stmt ctx) orelse)) /\
-  (translate_stmt ctx (JS_For var ty ann iter body) =
-    let fallback_ty = translate_decl_type (expr_type_ctx ctx) ty ann in
-    let var_ty = lookup_local_type ctx var fallback_ty in
+       (translate_stmts nominal_index all_import_maps ctx body)
+       (translate_stmts nominal_index all_import_maps ctx orelse)) /\
+  (translate_stmt nominal_index all_import_maps ctx (JS_For var ty ann iter body) =
+    let var_ty = canonical_decl_type nominal_index all_import_maps
+      (expr_type_ctx ctx) ty ann in
+    let body_ctx = expr_with_local_types ctx
+      ((var, var_ty) :: expr_local_types ctx) in
     For var var_ty (translate_iter ctx var_ty iter)
-        (get_iter_bound iter) (MAP (translate_stmt ctx) body)) /\
-  (translate_stmt ctx (JS_Assign tgt val) =
+        (get_iter_bound iter)
+        (translate_stmts nominal_index all_import_maps body_ctx body)) /\
+  (translate_stmt nominal_index all_import_maps ctx (JS_Assign tgt val) =
     Assign (translate_target ctx tgt) (translate_expr ctx val)) /\
-  (translate_stmt ctx (JS_AnnAssign var ty ann val) =
+  (translate_stmt nominal_index all_import_maps ctx (JS_AnnAssign var ty ann val) =
     AnnAssign var
-      (lookup_local_type ctx var
-        (translate_decl_type (expr_type_ctx ctx) ty ann))
+      (canonical_decl_type nominal_index all_import_maps
+        (expr_type_ctx ctx) ty ann)
       (translate_expr ctx val)) /\
-  (translate_stmt ctx (JS_AugAssign tgt op val) =
+  (translate_stmt nominal_index all_import_maps ctx (JS_AugAssign tgt op val) =
     AugAssign (expr_type (translate_expr ctx val))
       (translate_base_target ctx tgt) (translate_binop op) (translate_expr ctx val)) /\
-  (translate_stmt ctx (JS_Append tgt val) =
-    Append (translate_base_target ctx tgt) (translate_expr ctx val))
+  (translate_stmt nominal_index all_import_maps ctx (JS_Append tgt val) =
+    Append (translate_base_target ctx tgt) (translate_expr ctx val)) /\
+  (translate_stmts nominal_index all_import_maps ctx [] = []) /\
+  (translate_stmts nominal_index all_import_maps ctx (stmt :: rest) =
+    let next_ctx =
+      case stmt of
+        JS_AnnAssign var ty ann _ =>
+          expr_with_local_types ctx
+            ((var, canonical_decl_type nominal_index all_import_maps
+              (expr_type_ctx ctx) ty ann) :: expr_local_types ctx)
+      | _ => ctx
+    in
+      translate_stmt nominal_index all_import_maps ctx stmt ::
+      translate_stmts nominal_index all_import_maps next_ctx rest)
 Termination
-  WF_REL_TAC `measure (json_stmt_size o SND)` >>
-  rw[] >> simp[json_stmt_size_def]
+  WF_REL_TAC `measure (λitem. case item of
+      INL (_,_,_,stmt) => json_stmt_size stmt
+    | INR (_,_,_,stmts) => list_size json_stmt_size stmts)` >>
+  simp[json_stmt_size_def]
 End
 
 

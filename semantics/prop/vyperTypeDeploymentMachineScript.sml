@@ -83,12 +83,12 @@ Theorem checked_constructor_body_typing_package:
     env_body.flag_members = art.cta_flag_members /\
     type_stmts env_body ret body = SOME env_after /\
     (!id typ. MEM (id,typ) args ==>
-       FLOOKUP env_body.var_types (string_to_num id) = SOME typ /\
-       FLOOKUP env_body.var_assignable (string_to_num id) = SOME T) /\
+       FLOOKUP env_body.var_types id = SOME typ /\
+       FLOOKUP env_body.var_assignable id = SOME T) /\
     (!n ty. FLOOKUP env_body.var_types n = SOME ty ==>
-       ?id. MEM (id,ty) args /\ n = string_to_num id) /\
+       ?id. MEM (id,ty) args /\ n = id) /\
     (!n b. FLOOKUP env_body.var_assignable n = SOME b ==>
-       ?id typ. MEM (id,typ) args /\ n = string_to_num id /\ b = T)
+       ?id typ. MEM (id,typ) args /\ n = id /\ b = T)
 Proof
   strip_tac >>
   drule lookup_function_Deploy_SOME_cases >> strip_tac >> gvs[]
@@ -120,7 +120,7 @@ Theorem checked_constructor_body_setup:
   cx = (initial_evaluation_context sources layouts tx NONE
           with in_deploy := T) /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
-  ALL_DISTINCT (MAP (string_to_num o FST) args) /\
+  ALL_DISTINCT (MAP FST args) /\
   st.scopes = [scope] /\ state_well_typed st /\
   env_immutables_consistent (artifact_env deploy_art mods NONE) cx st /\
   context_well_typed cx ==>
@@ -187,7 +187,7 @@ Theorem checked_constructor_body_preserves_components:
   cx = (initial_evaluation_context sources layouts tx NONE
           with in_deploy := T) /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
-  ALL_DISTINCT (MAP (string_to_num o FST) args) /\
+  ALL_DISTINCT (MAP FST args) /\
   st.scopes = [scope] /\ state_well_typed st /\
   accounts_well_typed st.accounts /\
   env_immutables_consistent (artifact_env deploy_art mods NONE) cx st /\
@@ -225,7 +225,7 @@ Theorem checked_constructor_run_from_states_preserves_machine_well_typed:
   cx = (initial_evaluation_context sources layouts tx NONE
           with in_deploy := T) /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
-  ALL_DISTINCT (MAP (string_to_num o FST) args) /\
+  ALL_DISTINCT (MAP FST args) /\
   body_st.scopes = [scope] /\ state_well_typed body_st /\
   accounts_well_typed body_st.accounts /\
   env_immutables_consistent (artifact_env deploy_art mods NONE) cx body_st /\
@@ -286,7 +286,7 @@ Proof
       FLOOKUP art.cta_bare_globals (src,id) = NONE ==>
       ?ts is_transient typ id_str.
         get_module_code (initial_evaluation_context sources layouts tx src) src = SOME ts /\
-        find_var_decl_by_num id ts = SOME (StorageVarDecl is_transient typ,id_str) /\
+        find_var_decl_by_name id ts = SOME (StorageVarDecl is_transient typ,id_str) /\
         typ = ty /\
         IS_SOME (evaluate_type (type_env_all_modules mods) typ) /\
         IS_SOME (lookup_var_slot_from_layout
@@ -296,7 +296,7 @@ Proof
       FLOOKUP art.cta_toplevel_vtypes (src,id) = SOME (HashMapT kt vt) ==>
       ?ts is_transient id_str.
         get_module_code (initial_evaluation_context sources layouts tx src) src = SOME ts /\
-        find_var_decl_by_num id ts = SOME (HashMapVarDecl is_transient kt vt,id_str) /\
+        find_var_decl_by_name id ts = SOME (HashMapVarDecl is_transient kt vt,id_str) /\
         IS_SOME (lookup_var_slot_from_layout
           (initial_evaluation_context sources layouts tx src)
           is_transient src id_str))` by
@@ -441,7 +441,7 @@ Proof
     (irule (iffLR env_immutables_consistent_immutables_cong) >>
      qexists `initial_state am_c [scope] with <|outcomes := orc; requests := rqs|>` >>
      simp[initial_state_def]) >>
-  `ALL_DISTINCT (MAP (string_to_num o FST) args)` by
+  `ALL_DISTINCT (MAP FST args)` by
     (drule lookup_function_Deploy_SOME_cases >> strip_tac >> gvs[] >>
      `check_function_body layouts tx.target mods deploy_art NONE mut nr
         args dflts ret body` by

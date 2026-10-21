@@ -27,7 +27,14 @@ Libs
 
 open execEquivParamLib
 
-fun analysis_lift_result_case_tac () = gvs[lift_result_def]
+(* Keep unknown executions and quantified comparison/IH facts opaque. *)
+val analysis_lift_result_constructor_eqs =
+  List.take (CONJUNCTS lift_result_def, 5)
+
+fun analysis_lift_result_case_tac () =
+  qpat_x_assum `lift_result R_ok R_term R_term _ _`
+    (mp_tac o SIMP_RULE (srw_ss()) [lift_result_def]) >>
+  simp_tac (srw_ss()) analysis_lift_result_constructor_eqs >> strip_tac
 
 (* ===== Helpers ===== *)
 
@@ -95,7 +102,8 @@ Proof
     (irule step_inst_preserves_R_proof >> simp[] >> metis_tac[]) >>
   Cases_on `step_inst fuel ctx h s1` >>
   Cases_on `step_inst fuel ctx h s2` >>
-  gvs[lift_result_def, run_insts_def] >>
+  simp_tac (srw_ss()) [run_insts_def] >>
+  analysis_lift_result_case_tac () >>
   first_x_assum irule >> simp[] >> metis_tac[]
 QED
 
@@ -134,35 +142,36 @@ Triviality run_insts_compare_step:
         (run_insts fuel ctx (g1 ++ FLAT g1s') s)
         (run_insts fuel ctx (g2 ++ FLAT g2s') s)
 Proof
-  rpt strip_tac >> simp[run_insts_append] >>
-  `(?e. run_insts fuel ctx g1 s = Error e) \/
-   lift_result R_ok R_term R_term (run_insts fuel ctx g1 s)
-     (run_insts fuel ctx g2 s)` by metis_tac[]
-  >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  qpat_x_assum `!fuel ctx s. _ \/
+      lift_result _ _ _ (run_insts fuel ctx g1 s) _`
+    (qspecl_then [`fuel`, `ctx`, `s`] strip_assume_tac)
+  >- (pop_assum (fn th => simp_tac (srw_ss()) [run_insts_append, th])) >>
+  simp_tac (srw_ss()) [run_insts_append] >>
   Cases_on `run_insts fuel ctx g1 s` >>
   Cases_on `run_insts fuel ctx g2 s` >>
-  gvs[lift_result_def]
-  >>
+  analysis_lift_result_case_tac () >>
   rename1 `R_ok v1 v2` >>
   `lift_result R_ok R_term R_term (run_insts fuel ctx (FLAT g1s') v1)
      (run_insts fuel ctx (FLAT g1s') v2)` by (
     irule run_insts_preserves_R >>
     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
     rpt strip_tac >>
-    qpat_assum `!inst x. (_ \/ _) /\ _ ==> _`
+    qpat_assum `!inst x. MEM inst (FLAT (g1 :: g1s')) /\ _ ==> _`
       (qspecl_then [`inst`, `x`] mp_tac) >>
-    simp[])
-  >>
-  `(?e. run_insts fuel ctx (FLAT g1s') v2 = Error e) \/
-   lift_result R_ok R_term R_term (run_insts fuel ctx (FLAT g1s') v2)
-     (run_insts fuel ctx (FLAT g2s') v2)` by metis_tac[]
-  >>
-  Cases_on `run_insts fuel ctx (FLAT g1s') v1` >>
-  Cases_on `run_insts fuel ctx (FLAT g1s') v2` >>
-  gvs[lift_result_def] >>
-  Cases_on `run_insts fuel ctx (FLAT g2s') v2` >>
-  gvs[lift_result_def] >>
-  metis_tac[]
+    simp[]) >>
+  qpat_x_assum `!fuel ctx s. _ \/
+      lift_result _ _ _ (run_insts fuel ctx (FLAT g1s') s) _`
+    (qspecl_then [`fuel`, `ctx`, `v2`] strip_assume_tac)
+  >- (pop_assum (fn th =>
+        qpat_x_assum `lift_result _ _ _ _ _`
+          (mp_tac o PURE_REWRITE_RULE [th])) >>
+      Cases_on `run_insts fuel ctx (FLAT g1s') v1` >>
+      simp_tac (srw_ss()) [lift_result_def]) >>
+  DISJ2_TAC >> irule lift_result_trans_proof >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  qexists_tac `run_insts fuel ctx (FLAT g1s') v2` >>
+  conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem run_insts_compare:
@@ -190,72 +199,42 @@ Theorem run_insts_compare:
         (run_insts fuel ctx (FLAT g2s) s)
 Proof
   ntac 2 gen_tac >> Induct
-  >- (rpt strip_tac >> gvs[run_insts_def, lift_result_def] >>
-      metis_tac[vsr_R_ok_refl])
-  >> strip_tac >> Cases_on `g2s` >> fs[]
-  >> rpt strip_tac
-  >> simp[run_insts_append]
-  >> `(?e. run_insts fuel ctx h s = Error e) \/
+  >- (gen_tac >> strip_tac >>
+      `g2s = []` by fs[] >> pop_assum SUBST1_TAC >>
+      simp_tac (srw_ss()) [FLAT, run_insts_def, lift_result_def] >>
+      irule vsr_R_ok_refl >> qexists_tac `R_term` >>
+      first_assum ACCEPT_TAC) >>
+  gen_tac >> Cases_on `g2s` >> simp_tac (srw_ss()) [LENGTH] >>
+  strip_tac >>
+  rename1 `lift_result _ _ _ _ (run_insts _ _ (h2 ++ FLAT g2tail) _)` >>
+  `!fuel ctx s.
+     (?e. run_insts fuel ctx h s = Error e) \/
      lift_result R_ok R_term R_term (run_insts fuel ctx h s)
-       (run_insts fuel ctx h' s)` by (
-    first_x_assum (qspecl_then [`0`, `fuel`, `ctx`, `s`] mp_tac) >> simp[])
-  >>
-  Cases_on `run_insts fuel ctx h s` >>
-  Cases_on `run_insts fuel ctx h' s` >|
-  [analysis_lift_result_case_tac (), analysis_lift_result_case_tac (),
-   analysis_lift_result_case_tac (), analysis_lift_result_case_tac (),
-   analysis_lift_result_case_tac (), analysis_lift_result_case_tac (),
-   analysis_lift_result_case_tac (), analysis_lift_result_case_tac (),
-   analysis_lift_result_case_tac (), analysis_lift_result_case_tac (),
-   analysis_lift_result_case_tac (), analysis_lift_result_case_tac (),
-   analysis_lift_result_case_tac (), analysis_lift_result_case_tac (),
-   analysis_lift_result_case_tac (), analysis_lift_result_case_tac (),
-   analysis_lift_result_case_tac (), analysis_lift_result_case_tac (),
-   analysis_lift_result_case_tac (), analysis_lift_result_case_tac (),
-   analysis_lift_result_case_tac (), analysis_lift_result_case_tac (),
-   analysis_lift_result_case_tac (), analysis_lift_result_case_tac (),
-   analysis_lift_result_case_tac (), analysis_lift_result_case_tac (),
-   analysis_lift_result_case_tac (), analysis_lift_result_case_tac (),
-   analysis_lift_result_case_tac (), analysis_lift_result_case_tac (),
-   analysis_lift_result_case_tac (), analysis_lift_result_case_tac (),
-   analysis_lift_result_case_tac (), analysis_lift_result_case_tac (),
-   analysis_lift_result_case_tac (), analysis_lift_result_case_tac (),
-   analysis_lift_result_case_tac (), analysis_lift_result_case_tac (),
-   analysis_lift_result_case_tac (), analysis_lift_result_case_tac (),
-   analysis_lift_result_case_tac (), analysis_lift_result_case_tac (),
-   analysis_lift_result_case_tac (), analysis_lift_result_case_tac (),
-   analysis_lift_result_case_tac (), analysis_lift_result_case_tac (),
-   analysis_lift_result_case_tac (), analysis_lift_result_case_tac (),
-   analysis_lift_result_case_tac (), analysis_lift_result_case_tac ()]
-  >>
-  rename1 `R_ok v1 v2` >>
-  `lift_result R_ok R_term R_term (run_insts fuel ctx (FLAT g1s) v1)
-     (run_insts fuel ctx (FLAT g1s) v2)` by (
-    irule run_insts_preserves_R >>
-    rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-    rpt strip_tac >> res_tac)
-  >>
-  `!i fuel' ctx' s''. i < LENGTH t ==>
-     (?e. run_insts fuel' ctx' (EL i g1s) s'' = Error e) \/
-     lift_result R_ok R_term R_term (run_insts fuel' ctx' (EL i g1s) s'')
-       (run_insts fuel' ctx' (EL i t) s'')` by (
-    rpt strip_tac >>
-    first_x_assum (qspecl_then [`SUC i`, `fuel'`, `ctx'`, `s''`] mp_tac) >>
-    simp[])
-  >>
-  `(?e. run_insts fuel ctx (FLAT g1s) v2 = Error e) \/
-   lift_result R_ok R_term R_term (run_insts fuel ctx (FLAT g1s) v2)
-     (run_insts fuel ctx (FLAT t) v2)` by (
-    qpat_x_assum `!g2s. _` (qspec_then `t` mp_tac) >>
-    impl_tac >> TRY (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> fs[]) >>
-    metis_tac[])
-  >>
-  Cases_on `run_insts fuel ctx (FLAT g1s) v1` >>
-  Cases_on `run_insts fuel ctx (FLAT g1s) v2` >>
-  gvs[lift_result_def] >>
-  Cases_on `run_insts fuel ctx (FLAT t) v2` >>
-  gvs[lift_result_def] >>
-  metis_tac[]
+       (run_insts fuel ctx h2 s)` by
+    (rpt gen_tac >>
+     qpat_assum `!i fuel ctx s. i < SUC (LENGTH g1s) ==> _`
+       (qspecl_then [`0`, `fuel`, `ctx`, `s`] mp_tac) >>
+     simp_tac (srw_ss()) [] >> disch_then ACCEPT_TAC) >>
+  `!i fuel ctx s. i < LENGTH g1s ==>
+     (?e. run_insts fuel ctx (EL i g1s) s = Error e) \/
+     lift_result R_ok R_term R_term (run_insts fuel ctx (EL i g1s) s)
+       (run_insts fuel ctx (EL i g2tail) s)` by
+    (rpt strip_tac >>
+     qpat_assum `!i fuel ctx s. i < SUC (LENGTH g1s) ==> _`
+       (qspecl_then [`SUC i`, `fuel`, `ctx`, `s`] mp_tac) >>
+     simp_tac (srw_ss()) [] >> impl_tac
+     >- first_assum ACCEPT_TAC >> disch_then ACCEPT_TAC) >>
+  (* Specialize and discharge the list IH before any result decomposition. *)
+  qpat_x_assum `!g2s. _` (qspec_then `g2tail` mp_tac) >>
+  impl_tac
+  >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      rpt strip_tac >>
+      qpat_assum `!inst x. (_ \/ _) /\ _ ==> _`
+        (qspecl_then [`inst`, `x`] mp_tac) >> simp[]) >>
+  strip_tac >> rpt gen_tac >> simp_tac (srw_ss()) [FLAT] >>
+  irule run_insts_compare_step >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  simp_tac (srw_ss()) [FLAT] >> first_assum ACCEPT_TAC
 QED
 
 Theorem abt_label:
@@ -3060,23 +3039,18 @@ Proof
   >- gvs[lift_result_def]
   >>
   rename1 `lookup_block _ _ = SOME bb` >>
+  simp_tac (srw_ss()) [] >>
   `MEM bb fn.fn_blocks` by metis_tac[venomExecProofsTheory.lookup_block_MEM] >>
-  (* Same-code R_ok preservation *)
-  `lift_result R_ok R_term R_term (run_block fuel ctx bb s1)
-                            (run_block fuel ctx bb s2)` by metis_tac[] >>
-  (* Per-block sim: bb s2 ~ bt bb s2 (with error disjunct) *)
-  `(?e. run_block fuel ctx bb s2 = Error e) \/
-   lift_result R_ok R_term R_term (run_block fuel ctx bb s2)
-     (run_block fuel ctx (bt bb) s2)` by (
-    qpat_assum `!lbl bb. lookup_block _ _ = SOME _ ==> _`
-      (qspecl_then [`s2.vs_current_bb`, `bb`] mp_tac) >> simp[]) >>
-  Cases_on `?e. run_block fuel ctx bb s2 = Error e`
-  >- (
-    fs[] >> imp_res_tac lift_result_error_left >> gvs[]
-  )
-  >>
-  `lift_result R_ok R_term R_term (run_block fuel ctx bb s2)
-                            (run_block fuel ctx (bt bb) s2)` by metis_tac[] >>
+  (* Consume the quantified comparisons before rewriting or splitting results. *)
+  qpat_x_assum `!fuel ctx bb s1 s2.
+       MEM bb fn.fn_blocks /\ R_ok s1 s2 ==> _`
+    (qspecl_then [`fuel`, `ctx`, `bb`, `s1`, `s2`] mp_tac) >>
+  impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
+  qpat_x_assum `!lbl bb. lookup_block _ _ = SOME _ ==> _`
+    (qspecl_then [`s2.vs_current_bb`, `bb`] mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >>
+  disch_then (qspecl_then [`fuel`, `ctx`, `s2`] strip_assume_tac)
+  >- (fs[] >> imp_res_tac lift_result_error_left >> gvs[]) >>
   (* Triangle via transitivity *)
   `lift_result R_ok R_term R_term (run_block fuel ctx bb s1)
                             (run_block fuel ctx (bt bb) s2)` by (
@@ -3086,12 +3060,17 @@ Proof
     conj_tac >- first_assum ACCEPT_TAC >>
     qexists_tac `run_block fuel ctx bb s2` >>
     conj_tac >> first_assum ACCEPT_TAC) >>
+  qpat_x_assum `lift_result _ _ _ (run_block fuel ctx bb s1)
+    (run_block fuel ctx bb s2)` kall_tac >>
+  qpat_x_assum `lift_result _ _ _ (run_block fuel ctx bb s2)
+    (run_block fuel ctx (bt bb) s2)` kall_tac >>
   Cases_on `run_block fuel ctx bb s1` >>
   Cases_on `run_block fuel ctx (bt bb) s2` >>
-  gvs[lift_result_def]
-  >>
-  (* Only OK-OK case survives *)
+  analysis_lift_result_case_tac () >>
+  (* Only OK-OK case survives; specialize the field and continuation facts. *)
   rename1 `R_ok v1 v2` >>
+  qpat_assum `!s1 s2. R_ok s1 s2 ==> (_ /\ _ /\ _)`
+    (qspecl_then [`v1`, `v2`] (drule_then strip_assume_tac)) >>
   Cases_on `v1.vs_halted`
   >- (
     (* v1 halted *)

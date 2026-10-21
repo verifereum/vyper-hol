@@ -22,11 +22,11 @@ Libs
 
 Datatype:
   contract_type_artifact = <|
-    cta_fn_sigs                  : ((num option # string) |-> fn_sig);
-    cta_bare_globals             : ((num option # num) |-> type);
-    cta_bare_global_assignable   : ((num option # num) |-> type);
-    cta_toplevel_vtypes          : ((num option # num) |-> value_type);
-    cta_flag_members    : ((num option # string) |-> string list)
+    cta_fn_sigs                  : (nsid |-> fn_sig);
+    cta_bare_globals             : (nsid |-> type);
+    cta_bare_global_assignable   : (nsid |-> type);
+    cta_toplevel_vtypes          : (nsid |-> value_type);
+    cta_flag_members    : (nsid |-> string list)
   |>
 End
 
@@ -54,7 +54,7 @@ End
 
 Definition function_entry_env_def:
   function_entry_env art mods src args =
-    FOLDL (\env (id,ty). extend_local env (string_to_num id) ty T)
+    FOLDL (\env (id,ty). extend_local env id ty T)
       (artifact_env art mods src) args
 End
 
@@ -83,25 +83,25 @@ Definition add_toplevel_static_maps_def:
         else art
     | VariableDecl _ Immutable id typ _ =>
         art with <| cta_bare_globals updated_by
-                    (flip FUPDATE ((src,string_to_num id), typ));
+                    (flip FUPDATE ((src,id), typ));
                     cta_bare_global_assignable updated_by
-                    (flip FUPDATE ((src,string_to_num id), typ));
+                    (flip FUPDATE ((src,id), typ));
                     cta_toplevel_vtypes updated_by
-                    (flip FUPDATE ((src,string_to_num id), Type typ)) |>
+                    (flip FUPDATE ((src,id), Type typ)) |>
     | VariableDecl _ (Constant e) id typ _ =>
         art with <| cta_bare_globals updated_by
-                    (flip FUPDATE ((src,string_to_num id), typ));
+                    (flip FUPDATE ((src,id), typ));
                     cta_toplevel_vtypes updated_by
-                    (flip FUPDATE ((src,string_to_num id), Type typ)) |>
+                    (flip FUPDATE ((src,id), Type typ)) |>
     | VariableDecl _ Storage id typ _ =>
         art with cta_toplevel_vtypes updated_by
-          (flip FUPDATE ((src,string_to_num id), Type typ))
+          (flip FUPDATE ((src,id), Type typ))
     | VariableDecl _ Transient id typ _ =>
         art with cta_toplevel_vtypes updated_by
-          (flip FUPDATE ((src,string_to_num id), Type typ))
+          (flip FUPDATE ((src,id), Type typ))
     | HashMapDecl _ _ id kt vt _ =>
         art with cta_toplevel_vtypes updated_by
-          (flip FUPDATE ((src,string_to_num id), HashMapT kt vt))
+          (flip FUPDATE ((src,id), HashMapT kt vt))
     | FlagDecl fid members =>
         art with cta_flag_members updated_by
           (flip FUPDATE ((src,fid), members))
@@ -128,8 +128,8 @@ Definition fn_sig_keys_toplevel_def:
 End
 
 Definition toplevel_vtype_keys_toplevel_def:
-  toplevel_vtype_keys_toplevel src (VariableDecl _ _ id _ _) = [(src,string_to_num id)] /\
-  toplevel_vtype_keys_toplevel src (HashMapDecl _ _ id _ _ _) = [(src,string_to_num id)] /\
+  toplevel_vtype_keys_toplevel src (VariableDecl _ _ id _ _) = [(src,id)] /\
+  toplevel_vtype_keys_toplevel src (HashMapDecl _ _ id _ _ _) = [(src,id)] /\
   toplevel_vtype_keys_toplevel _ _ = []
 End
 
@@ -160,7 +160,7 @@ End
 
 Definition params_ok_def:
   params_ok tenv args <=>
-    ALL_DISTINCT (MAP (string_to_num o FST) args) /\
+    ALL_DISTINCT (MAP FST args) /\
     EVERY (\(_,ty). assignable_type tenv ty) args
 End
 
@@ -251,6 +251,66 @@ Termination
   res_tac >> simp[]
 End
 
+(* Vyper accepts a default argument only from its RUNTIME_CONSTANT class
+   (check_modifiability in vyper/semantics/analysis/utils.py, required by
+   _parse_args in vyper/semantics/types/function.py).  Folded values arrive as
+   literals.  It admits operators (BinOp/Compare/UnaryOp, and BoolOp, which the
+   frontend turns into an IfExp with a literal branch), tuple, list and struct
+   literals, environment reads other than `self`, account reads of such an
+   address, constants, immutables and their subscripts and fields, and
+   empty(T).  Storage, transient and HashMap reads, flag members, ternaries and
+   all other calls are excluded; for example `self.x`, `self.balance`,
+   `len(msg.data)`, `max(block.number, 3)` and
+   `block.number if msg.value > 0 else 2` are rejected by Vyper and here. *)
+Definition declared_immutable_def:
+  declared_immutable mods src id <=>
+    ?tls vis ty init.
+      MEM (src,tls) mods /\
+      MEM (VariableDecl vis Immutable id ty init) tls
+End
+
+Definition runtime_constant_builtin_def:
+  runtime_constant_builtin Not = T /\
+  runtime_constant_builtin Neg = T /\
+  runtime_constant_builtin (MakeArray _ _) = T /\
+  runtime_constant_builtin (Bop op) =
+    (constant_binop op /\ op <> Min /\ op <> Max) /\
+  runtime_constant_builtin (Env item) = (item <> SelfAddr) /\
+  runtime_constant_builtin (Acc item) = (item <> Code) /\
+  runtime_constant_builtin _ = F
+End
+
+Definition bool_literal_expr_def:
+  bool_literal_expr (Literal _ (BoolL _)) = T /\
+  bool_literal_expr _ = F
+End
+
+Definition runtime_constant_expr_def:
+  runtime_constant_expr mods (TopLevelName _ (src,id)) =
+    (declared_constant mods src id \/ declared_immutable mods src id) /\
+  runtime_constant_expr mods (Literal _ _) = T /\
+  runtime_constant_expr mods (StructLit _ _ kes) =
+    EVERY (runtime_constant_expr mods) (MAP SND kes) /\
+  runtime_constant_expr mods (Subscript _ e1 e2) =
+    (runtime_constant_expr mods e1 /\ runtime_constant_expr mods e2) /\
+  runtime_constant_expr mods (Attribute _ e _) = runtime_constant_expr mods e /\
+  runtime_constant_expr mods (IfExp _ c a b) =
+    ((bool_literal_expr a \/ bool_literal_expr b) /\
+     runtime_constant_expr mods c /\ runtime_constant_expr mods a /\
+     runtime_constant_expr mods b) /\
+  runtime_constant_expr mods (Builtin _ bt es) =
+    (runtime_constant_builtin bt /\ EVERY (runtime_constant_expr mods) es) /\
+  runtime_constant_expr mods (TypeBuiltin _ tb _ es) =
+    (constant_type_builtin tb /\ EVERY (runtime_constant_expr mods) es) /\
+  runtime_constant_expr mods _ = F
+Termination
+  WF_REL_TAC `measure (\(_,e). expr_size e)` >>
+  rw[] >>
+  Induct_on `kes` >> rw[] >>
+  PairCases_on `h` >> rw[] >>
+  res_tac >> simp[]
+End
+
 Definition lookup_var_slot_in_layouts_def:
   lookup_var_slot_in_layouts layouts addr is_transient src var_name =
     case ALOOKUP layouts addr of
@@ -313,6 +373,7 @@ Definition check_function_body_def:
       (ret = NoneT \/ stmts_no_fallthrough body) /\
       stmts_no_control_escape body /\
       well_typed_exprs (defaults_env env) dflts /\
+      EVERY (runtime_constant_expr mods) dflts /\
       MAP expr_type dflts = MAP SND (DROP (LENGTH args - LENGTH dflts) args)
 End
 

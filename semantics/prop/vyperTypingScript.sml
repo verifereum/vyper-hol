@@ -274,10 +274,13 @@ Theorem value_has_type_equiv:
      IS_SOME (encode_struct 0 ftypes fields))
 Proof
   ho_match_mp_tac value_has_type_ind >> rpt conj_tac >> rpt gen_tac >>
-  simp[value_has_type_def, encode_value_def, encode_base_to_slot_def,
-       encode_dyn_bytes_slots_def, AllCaseEqs(), COND_RAND, COND_RATOR,
-       LET_THM] >>
-  TRY (strip_tac >> metis_tac[])
+  (* Unfold one layer only; the narrow simpset keeps word operations opaque
+     and avoids ambient guarded rewrites on the induction hypotheses. *)
+  PURE_ONCE_REWRITE_TAC [value_has_type_def] >>
+  simp_tac (bool_ss ++ optionSimps.OPTION_ss ++ listSimps.LIST_ss)
+    [Once encode_value_def, encode_base_to_slot_def,
+     encode_dyn_bytes_slots_def, IS_SOME_option_CASE,
+     encode_IS_SOME_at_0, COND_RAND, COND_RATOR, LET_THM]
 QED
 
 (* ===== Derived typing properties ===== *)

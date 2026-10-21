@@ -12,8 +12,6 @@ Ancestors
   venomInstProofs3 stateEquiv stateEquivProofs finite_map venomState
   venomExecSemantics venomInst venomEffects pred_set
   venomInstProofs1 venomInstProofs2
-Libs
-  stepInstBaseLib
 
 (* MERGE NOTE: resolved in favor of the eval-phis branch's split-file
    structure. origin/main had the older monolithic preservation proofs here;
@@ -288,33 +286,153 @@ val step_class_write_tac =
       is_ext_call_op_def, is_terminator_def] >>
   write_finish_tac;
 
+(* Cache the guarded interface: never unfold the global opcode dispatch. *)
+val step_inst_base_opcode_rewrites = let
+  fun key th = let
+    val (_, body) = strip_forall (concl th)
+    val (guard, _) = dest_imp body
+  in rhs guard end
+in map (fn th => (key th, th))
+  (CONJUNCTS venomExecSemanticsTheory.step_inst_base_opcode_eqs) end;
+
+fun rewrite_step_inst_base_opcode eq = let
+  val (_, rewrite) = valOf (List.find
+    (fn (key, _) => aconv key (rhs (concl eq)))
+    step_inst_base_opcode_rewrites)
+in PURE_ONCE_REWRITE_TAC [MATCH_MP rewrite eq] end;
+
+val step_inst_base_opcode_tac =
+  qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode;
+
+(* Prune using just the class hypothesis, not the large frame conclusion. *)
+fun class_opcode_filter_tac pat def =
+  qpat_x_assum pat (CHECK_ASSUME_TAC o SIMP_RULE bool_ss [def]);
+
+val class_projection_ss = pure_ss ++ boolSimps.BOOL_ss ++
+  simpLib.type_ssfrag ``:exec_result`` ++
+  simpLib.type_ssfrag ``:operand`` ++
+  simpLib.type_ssfrag ``:'a list`` ++ simpLib.type_ssfrag ``:'a option`` ++
+  simpLib.type_ssfrag ``:'a # 'b`` ++ rewrites
+    [venom_state_accfupds, combinTheory.K_THM, LET_THM,
+     update_var_def, lookup_var_def, FLOOKUP_UPDATE, listTheory.MEM,
+     exec_write2_def, exec_alloca_def, mcopy_def, mstore_def, mstore8_def,
+     write_memory_with_expansion_def];
+
+val class_step_opcode_tac =
+  qpat_x_assum `step_inst fuel ctx inst s = OK s'` mp_tac >>
+  asm_simp_tac (bool_ss ++ simpLib.type_ssfrag ``:opcode``)
+    [step_inst_non_invoke] >>
+  step_inst_base_opcode_tac;
+
 val mem_write_class_opcode_tac =
-  gvs[Once step_inst_def, AllCaseEqs()] >>
-  qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
-  with_opcode_clause simp >>
-  strip_tac >>
-  gvs[exec_write2_def, AllCaseEqs()] >>
-  gvs[mstore_def, mstore8_def, mcopy_def,
-      write_memory_with_expansion_def,
-      update_var_def, lookup_var_def] >>
+  class_step_opcode_tac >>
+  simp_tac class_projection_ss [AllCaseEqs()] >> strip_tac >>
+  BasicProvers.VAR_EQ_TAC >> asm_simp_tac class_projection_ss [] >>
   TRY (pairarg_tac >> gvs[] >>
        drule pack_dret_dynamic_preserves_non_memory >> simp[lookup_var_def]);
 
 val alloca_class_opcode_tac =
-  fs[Once step_inst_def] >>
-  fs[Once step_inst_base_def] >>
-  gvs[exec_alloca_def, AllCaseEqs(), update_var_def, lookup_var_def];
+  class_step_opcode_tac >>
+  simp_tac class_projection_ss [AllCaseEqs()] >> strip_tac >>
+  BasicProvers.VAR_EQ_TAC >> asm_simp_tac class_projection_ss [] >>
+  rpt strip_tac >> asm_simp_tac bool_ss [boolTheory.EQ_SYM_EQ];
 
-val ext_call_class_opcode_tac =
-  qpat_x_assum `step_inst fuel ctx inst s = OK s'` mp_tac >>
-  with_opcode_clause (fn ths => simp (Once step_inst_def :: ths)) >>
-  strip_tac >>
-  gvs[exec_ext_call_def, exec_delegatecall_def, exec_create_def,
-      extract_venom_result_def, AllCaseEqs(),
-      update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
-  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
-  TRY (Cases_on `result` >> gvs[]) >>
-  TRY (Cases_on `y` >> gvs[]);
+(* Push the preserved-frame test through result cases before inspecting
+   them. Memory, account, call-outcome and EVM computations stay opaque. *)
+val ext_call_class_frame = ``\t:venom_state.
+  t.vs_immutables = s.vs_immutables /\
+  t.vs_allocas = s.vs_allocas /\
+  t.vs_halted = s.vs_halted /\
+  t.vs_call_ctx = s.vs_call_ctx /\
+  t.vs_tx_ctx = s.vs_tx_ctx /\
+  t.vs_block_ctx = s.vs_block_ctx /\
+  t.vs_code = s.vs_code /\
+  t.vs_data_section = s.vs_data_section /\
+  t.vs_labels = s.vs_labels /\
+  t.vs_params = s.vs_params /\
+  t.vs_prev_hashes = s.vs_prev_hashes /\
+  t.vs_current_bb = s.vs_current_bb /\
+  t.vs_inst_idx = s.vs_inst_idx /\
+  t.vs_prev_bb = s.vs_prev_bb /\
+  (!v. ~MEM v inst.inst_outputs ==> lookup_var v t = lookup_var v s)``;
+
+val ext_call_class_frame_result = BETA_RULE (prove (
+  ``!r s'. r = OK s' ==>
+    ((case r of OK t => ^ext_call_class_frame t | _ => T) ==>
+     ^ext_call_class_frame s')``,
+  rpt strip_tac >> gvs[]));
+
+val ext_call_class_projection_rewrites = let
+  val defs = [exec_ext_call_def,
+    venomCallOracleDefsTheory.consume_call_outcome_eq,
+    exec_delegatecall_def, exec_create_def, extract_venom_result_def,
+    step_inst_base_def]
+  fun case_type tm = let val (_, arg, _) = TypeBase.dest_case tm
+                     in type_of arg end
+  val shapes = mk_set (List.concat (map
+    (map case_type o find_terms TypeBase.is_case o concl) defs))
+  val tests = map (rhs o concl o
+    (DEPTH_CONV BETA_CONV THENC REWRITE_CONV
+      [lookup_var_def, update_var_def, venom_state_accfupds,
+       combinTheory.K_THM, FLOOKUP_UPDATE]))
+    [``\r:exec_result. case r of OK t => ^ext_call_class_frame t | _ => T``,
+     ``\r:(bytes32 # venom_state) option.
+       case r of NONE => T | SOME p => ^ext_call_class_frame (SND p)``,
+     ``\r:(bytes32 # venom_state) option.
+       case r of NONE => T | SOME p =>
+         ^ext_call_class_frame (update_var out (FST p) (SND p))``,
+     ``\r:(bytes32 # venom_state) option.
+       case r of NONE => T | SOME p =>
+         case inst.inst_outputs of
+           [out] => ^ext_call_class_frame (update_var out (FST p) (SND p))
+         | _ => T``]
+  fun project test ty = BETA_RULE (ISPEC test (TypeBase.case_rand_of ty))
+  fun constant ty = Prim_rec.prove_case_const_thm
+    {case_def = TypeBase.case_def_of ty,
+     nchotomy = TypeBase.nchotomy_of ty}
+in List.concat (map (fn test => map (project test) shapes @
+     [BETA_RULE (PART_MATCH (rator o lhs) COND_RAND test)]) tests) @
+   map constant shapes end;
+
+val ext_call_class_projection_ss = pure_ss ++ boolSimps.BOOL_ss ++ rewrites
+  ([listTheory.list_case_def, pairTheory.pair_CASE_def,
+    optionTheory.option_case_def, pairTheory.ELIM_UNCURRY,
+    pairTheory.FST, pairTheory.SND, LET_THM, listTheory.MEM,
+    TypeBase.one_one_of ``:exec_result``,
+    TypeBase.distinct_of ``:exec_result``,
+    TypeBase.case_def_of ``:exec_result``,
+    venom_state_accfupds, combinTheory.K_THM,
+    update_var_def, lookup_var_def, FLOOKUP_UPDATE] @
+   ext_call_class_projection_rewrites);
+
+fun ext_call_class_frame_cases_tac ss =
+  asm_simp_tac ss [] >>
+  REPEAT (BasicProvers.PURE_TOP_CASE_TAC >> asm_simp_tac ss []) >>
+  rpt strip_tac >> asm_simp_tac bool_ss [boolTheory.EQ_SYM_EQ];
+
+(* Prove helper frames once, not once per operand envelope or opcode. *)
+val ext_call_class_helper_rewrites = let
+  val ss = ext_call_class_projection_ss ++ rewrites
+    [exec_ext_call_def, venomCallOracleDefsTheory.consume_call_outcome_eq,
+     exec_delegatecall_def, exec_create_def, extract_venom_result_def]
+  val tests =
+    [``case exec_ext_call inst s gas addr value ao az ro rz static of
+         OK t => ^ext_call_class_frame t | _ => T``,
+     ``case exec_delegatecall inst s gas addr ao az ro rz of
+         OK t => ^ext_call_class_frame t | _ => T``,
+     ``case exec_create inst s value off sz salt of
+         OK t => ^ext_call_class_frame t | _ => T``]
+in map (fn tm => REWRITE_RULE [lookup_var_def]
+  (BETA_RULE (prove (tm, ext_call_class_frame_cases_tac ss)))) tests end;
+
+val ext_call_class_opcode_tac = let
+  val ss = ext_call_class_projection_ss ++ rewrites ext_call_class_helper_rewrites
+in
+  class_step_opcode_tac >> strip_tac >>
+  qpat_x_assum `_ = OK _`
+    (fn eq => MATCH_MP_TAC (MATCH_MP ext_call_class_frame_result eq)) >>
+  ext_call_class_frame_cases_tac ss
+end;
 
 Theorem step_mem_write_preserves:
   !fuel ctx inst s s'.
@@ -340,7 +458,8 @@ Theorem step_mem_write_preserves:
     (!v. lookup_var v s' = lookup_var v s)
 Proof
   rpt gen_tac >> strip_tac >>
-  Cases_on `inst.inst_opcode` >> gvs[is_mem_write_op_def]
+  Cases_on `inst.inst_opcode` >>
+  class_opcode_filter_tac `is_mem_write_op _` is_mem_write_op_def
   >- mem_write_class_opcode_tac
   >- mem_write_class_opcode_tac
   >- mem_write_class_opcode_tac
@@ -376,12 +495,9 @@ Theorem step_alloca_preserves:
     (!v. ~MEM v inst.inst_outputs ==> lookup_var v s' = lookup_var v s)
 Proof
   rpt gen_tac >> strip_tac >>
-  Cases_on `inst.inst_opcode` >> gvs[is_alloca_op_def]
-  >- (qpat_x_assum `step_inst fuel ctx inst s = OK s'` mp_tac >>
-      simp[Once step_inst_def, step_inst_base_def] >>
-      strip_tac >>
-      gvs[exec_alloca_def, AllCaseEqs(), update_var_def, lookup_var_def,
-          FLOOKUP_UPDATE])
+  Cases_on `inst.inst_opcode` >>
+  class_opcode_filter_tac `is_alloca_op _` is_alloca_op_def >>
+  alloca_class_opcode_tac
 QED
 
 Theorem step_ext_call_preserves:
@@ -404,7 +520,8 @@ Theorem step_ext_call_preserves:
     (!v. ~MEM v inst.inst_outputs ==> lookup_var v s' = lookup_var v s)
 Proof
   rpt gen_tac >> strip_tac >>
-  Cases_on `inst.inst_opcode` >> gvs[is_ext_call_op_def]
+  Cases_on `inst.inst_opcode` >>
+  class_opcode_filter_tac `is_ext_call_op _` is_ext_call_op_def
   >- ext_call_class_opcode_tac
   >- ext_call_class_opcode_tac
   >- ext_call_class_opcode_tac
@@ -461,7 +578,8 @@ QED
 (* ===================================================================== *)
 
 val effect_free_opcode_tac =
-  with_opcode_clause fs >>
+  qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
+  step_inst_base_opcode_tac >> strip_tac >>
   FIRST [
     drule exec_pure1_state_equiv >> simp[],
     drule exec_pure2_state_equiv >> simp[],
@@ -484,7 +602,8 @@ Theorem step_inst_base_effect_free_state_equiv:
     state_equiv (set inst.inst_outputs) s s'
 Proof
   rpt strip_tac >>
-  Cases_on `inst.inst_opcode` >> gvs[is_effect_free_op_def]
+  Cases_on `inst.inst_opcode` >>
+  class_opcode_filter_tac `is_effect_free_op _` is_effect_free_op_def
   >- effect_free_opcode_tac
   >- effect_free_opcode_tac
   >- effect_free_opcode_tac

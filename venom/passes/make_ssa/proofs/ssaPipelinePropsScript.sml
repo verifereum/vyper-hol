@@ -563,12 +563,18 @@ Triviality add_phi_nodes_phi_inj_aux:
 Proof
   simp_tac std_ss [LET_THM] >>
   Induct >- simp[FOLDL] >>
-  rpt gen_tac >> PairCases_on `h` >> simp[FOLDL] >> rpt strip_tac >>
+  rpt gen_tac >> PairCases_on `h` >>
+  (* Unfold only the goal's outer fold, leaving the guarded IH untouched. *)
+  PURE_ONCE_REWRITE_TAC [FOLDL] >>
+  PURE_REWRITE_TAC [MAP, pairTheory.FST, ALL_DISTINCT, MEM, DE_MORGAN_THM] >>
+  BETA_TAC >> CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV) >> rpt strip_tac >>
   `phi_extends bbs
     (insert_phis_for_var h0 dom_frontiers pred_map live_in bbs h1 [])` by
-    (irule insert_phis_for_var_phi_extends >> simp[phi_extends_refl]) >>
+    (irule insert_phis_for_var_phi_extends >> MATCH_ACCEPT_TAC phi_extends_refl) >>
   `LENGTH (insert_phis_for_var h0 dom_frontiers pred_map live_in bbs h1
-     []) = LENGTH bbs` by gvs[phi_extends_def] >>
+     []) = LENGTH bbs` by
+    (qpat_x_assum `phi_extends _ _`
+      (ACCEPT_TAC o CONJUNCT1 o REWRITE_RULE [phi_extends_def])) >>
   (* Inv1 + Inv2 via step lemmas *)
   mp_tac (Q.SPECL [`h0`,`dom_frontiers`,`pred_map`,`live_in`,`bbs`,`h1`]
     (INST_TYPE [``:'a`` |-> ``:string list``]
@@ -582,15 +588,16 @@ Proof
   impl_tac
   >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   strip_tac >>
-  (* Apply IH — rewrite LENGTH bbs to LENGTH acc for matching *)
-  first_x_assum (qspecl_then
+  (* Specialize the IH, normalizing only the accumulator's length. *)
+  qpat_x_assum `!df pm li acc. _` (qspecl_then
     [`dom_frontiers`,`pred_map`,`live_in`,
      `insert_phis_for_var h0 dom_frontiers pred_map live_in bbs h1 []`]
     mp_tac) >>
-  impl_tac
-  >- (rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE
-      (gvs[] >> first_assum ACCEPT_TAC))) >>
-  strip_tac >> metis_tac[]
+  qpat_x_assum `LENGTH _ = LENGTH bbs`
+    (fn len => PURE_REWRITE_TAC [len]) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then (qspecl_then [`j`,`inst1`,`inst2`] MATCH_MP_TAC) >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 (* process_frontiers: at each block, either unchanged or one PHI prepended *)
@@ -2287,86 +2294,6 @@ Proof
       qexists_tac `inst` >> simp[MEM_APPEND])
     >- ( (* f not in has_phi': use IH *)
       first_x_assum (qspecl_then [`d'`, `j`] mp_tac) >> simp[]))
-QED
-
-(* ALOOKUP on alist_update_or_prepend: same key *)
-Triviality alist_update_or_prepend_alookup_same:
-  !alist k f d.
-    ALOOKUP (alist_update_or_prepend k f d alist) k =
-    SOME (case ALOOKUP alist k of SOME v => f v | NONE => d)
-Proof
-  Induct >> simp[alist_update_or_prepend_def] >>
-  rpt gen_tac >> PairCases_on `h` >> simp[alist_update_or_prepend_def] >>
-  Cases_on `h0 = k` >> simp[]
-QED
-
-(* ALOOKUP on alist_update_or_prepend: different key *)
-Triviality alist_update_or_prepend_alookup_other:
-  !alist k k' f d.
-    k' <> k ==>
-    ALOOKUP (alist_update_or_prepend k f d alist) k' = ALOOKUP alist k'
-Proof
-  Induct >> simp[alist_update_or_prepend_def] >>
-  rpt gen_tac >> PairCases_on `h` >> simp[alist_update_or_prepend_def] >>
-  Cases_on `h0 = k` >> simp[]
-QED
-
-(* FOLDR alist_update_or_prepend: if var is in the list, result has lbl *)
-Triviality foldr_update_mem_result:
-  !vars var lbl acc.
-    MEM var vars ==>
-    ?dbs. ALOOKUP (FOLDR (\v a. alist_update_or_prepend v (CONS lbl) [lbl] a)
-                         acc vars) var = SOME dbs /\
-          MEM lbl dbs
-Proof
-  Induct >> simp[] >> rpt gen_tac >> strip_tac >> gvs[]
-  >- ( (* var = h: alist_update_or_prepend at same key *)
-    simp[alist_update_or_prepend_alookup_same] >>
-    Cases_on `ALOOKUP (FOLDR (\v a. alist_update_or_prepend v (CONS lbl)
-      [lbl] a) acc vars) h` >> simp[])
-  >- ( (* MEM var vars: IH gives result in FOLDR, then alist_update preserves *)
-    first_x_assum (qspecl_then [`var`, `lbl`, `acc`] mp_tac) >> simp[] >>
-    strip_tac >>
-    Cases_on `h = var`
-    >- (simp[alist_update_or_prepend_alookup_same] >> metis_tac[MEM])
-    >- (simp[alist_update_or_prepend_alookup_other] >> metis_tac[]))
-QED
-
-(* FOLDR alist_update_or_prepend preserves existing ALOOKUP results *)
-Triviality foldr_update_preserves:
-  !vars var lbl acc dbs.
-    ALOOKUP acc var = SOME dbs ==>
-    ?dbs'. ALOOKUP (FOLDR (\v a. alist_update_or_prepend v (CONS lbl) [lbl] a)
-                          acc vars) var = SOME dbs' /\
-           !x. MEM x dbs ==> MEM x dbs'
-Proof
-  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
-  first_x_assum (drule_then strip_assume_tac) >>
-  Cases_on `h = var`
-  >- (gvs[] >> simp[alist_update_or_prepend_alookup_same] >>
-      first_x_assum (qspec_then `lbl` strip_assume_tac) >> gvs[] >>
-      qexists_tac `lbl :: dbs'` >> simp[] >> metis_tac[MEM])
-  >- (simp[alist_update_or_prepend_alookup_other] >>
-      first_x_assum (qspec_then `lbl` strip_assume_tac) >> metis_tac[])
-QED
-
-(* compute_defs: if var is in block_assignments of a block in the list,
-   then ALOOKUP compute_defs gives SOME dbs with the block's label in dbs *)
-Triviality compute_defs_complete:
-  !bbs var bb.
-    MEM bb bbs /\ MEM var (block_assignments bb) ==>
-    ?dbs. ALOOKUP (compute_defs bbs) var = SOME dbs /\
-          MEM bb.bb_label dbs
-Proof
-  Induct >> simp[compute_defs_def] >> rpt gen_tac >> strip_tac
-  >- ( (* bb is the head *)
-    gvs[] >>
-    irule foldr_update_mem_result >> simp[])
-  >- ( (* bb in tail: IH + FOLDR preserves *)
-    first_x_assum (drule_all_then strip_assume_tac) >>
-    drule foldr_update_preserves >>
-    disch_then (qspecl_then [`block_assignments h`, `h.bb_label`] strip_assume_tac) >>
-    metis_tac[])
 QED
 
 Triviality phi_extends_trans:

@@ -4,7 +4,7 @@ Ancestors
   arithmetic alist combin option list finite_map pair
   rich_list cv cv_std vfmState vfmContext vfmCompute[ignore_grammar]
   vfmExecution[ignore_grammar] vyperAST vyperABI
-  vyperMisc vyperValue vyperValueOperation vyperStorage vyperContext vyperState
+  vyperMisc vyperNsidFmap vyperValue vyperValueOperation vyperStorage vyperContext vyperState
   vyperEvent vyperEvmBoundary vyperCreate vyperRuntimeAccounts
 Libs
   cv_transLib wordsLib monadsyntax
@@ -239,7 +239,7 @@ Definition bind_arguments_def:
   bind_arguments tenv ((id, typ)::params) (v::vs) =
     (case evaluate_type tenv typ of NONE => NONE | SOME tv =>
      case safe_cast tv v of NONE => NONE | SOME v =>
-      OPTION_MAP (λm. m |+ (string_to_num id,
+      OPTION_MAP (λm. m |+ (id,
         <| assignable := T; type := tv; value := v |>))
         (bind_arguments tenv params vs)) ∧
   bind_arguments _ _ _ = NONE
@@ -481,13 +481,23 @@ End
 * to "see through" the state-exception monad when constructing the termination
 * conditions *)
 
+(* Keep these small monadic congruences independent of the large ambient
+   interpreter simpset, and split only the result being sequenced. *)
+val monad_cong_ss = bool_ss ++ rewrites
+  [pairTheory.pair_case_thm, sumTheory.sum_case_def, pairTheory.PAIR_EQ,
+   sumTheory.INL_11, sumTheory.INR_11, sumTheory.sum_distinct];
+
 Theorem bind_cong_implicit[defncong]:
   (f = f') ∧
   (∀s x t. f' s = (INL x, t) ==> g x t = g' x t)
   ⇒
   bind f g = bind f' g'
 Proof
-  rw[bind_def, FUN_EQ_THM] \\ CASE_TAC \\ CASE_TAC \\ gs[]
+  disch_then (CONJUNCTS_THEN2 SUBST1_TAC ASSUME_TAC)
+  \\ CONV_TAC FUN_EQ_CONV \\ qx_gen_tac `s`
+  \\ Cases_on `f' s` \\ rename1 `f' s = (result, st)`
+  \\ Cases_on `result`
+  \\ asm_simp_tac monad_cong_ss [bind_def]
   \\ first_x_assum irule \\ goal_assum drule
 QED
 
@@ -497,11 +507,10 @@ Theorem ignore_bind_cong_implicit[defncong]:
   ⇒
   ignore_bind f g = ignore_bind f' g'
 Proof
-  rw[ignore_bind_def]
-  \\ irule bind_cong_implicit
-  \\ rw[]
-  \\ first_x_assum irule
-  \\ goal_assum drule
+  REWRITE_TAC [ignore_bind_def]
+  \\ strip_tac \\ irule bind_cong_implicit
+  \\ asm_simp_tac monad_cong_ss []
+  \\ first_assum ACCEPT_TAC
 QED
 
 Theorem try_cong[defncong]:
@@ -511,7 +520,11 @@ Theorem try_cong[defncong]:
   ⇒
   try f h s = try f' h' s'
 Proof
-  rw[try_def] \\ CASE_TAC \\ CASE_TAC \\ gs[]
+  disch_then (CONJUNCTS_THEN2 ASSUME_TAC
+    (CONJUNCTS_THEN2 ASSUME_TAC (SUBST_ALL_TAC o SYM)))
+  \\ Cases_on `f' s` \\ rename1 `f' s = (result, st)`
+  \\ Cases_on `result`
+  \\ asm_simp_tac monad_cong_ss [try_def]
 QED
 
 Theorem try_cong_implicit[defncong]:
@@ -520,10 +533,12 @@ Theorem try_cong_implicit[defncong]:
   ⇒
   try f h = try f' h'
 Proof
-  rw[FUN_EQ_THM]
-  \\ irule try_cong \\ rw[]
-  \\ first_x_assum irule
-  \\ metis_tac[]
+  disch_then (CONJUNCTS_THEN2 SUBST1_TAC ASSUME_TAC)
+  \\ CONV_TAC FUN_EQ_CONV \\ qx_gen_tac `s`
+  \\ Cases_on `f' s` \\ rename1 `f' s = (result, st)`
+  \\ Cases_on `result`
+  \\ asm_simp_tac monad_cong_ss [try_def]
+  \\ first_x_assum irule \\ goal_assum drule
 QED
 
 Theorem bind_cong[defncong]:
@@ -533,7 +548,11 @@ Theorem bind_cong[defncong]:
   ⇒
   bind f g s = bind f' g' s'
 Proof
-  rw[bind_def] \\ CASE_TAC \\ CASE_TAC \\ gs[]
+  disch_then (CONJUNCTS_THEN2 ASSUME_TAC
+    (CONJUNCTS_THEN2 ASSUME_TAC (SUBST_ALL_TAC o SYM)))
+  \\ Cases_on `f' s` \\ rename1 `f' s = (result, st)`
+  \\ Cases_on `result`
+  \\ asm_simp_tac monad_cong_ss [bind_def]
 QED
 
 Theorem ignore_bind_cong[defncong]:
@@ -543,9 +562,9 @@ Theorem ignore_bind_cong[defncong]:
   ⇒
   ignore_bind f g s = ignore_bind f' g' s'
 Proof
-  rw[ignore_bind_def]
-  \\ irule bind_cong
-  \\ rw[]
+  REWRITE_TAC [ignore_bind_def]
+  \\ strip_tac \\ irule bind_cong
+  \\ asm_simp_tac monad_cong_ss []
 QED
 
 Theorem finally_cong[defncong]:
@@ -555,9 +574,13 @@ Theorem finally_cong[defncong]:
   ⇒
   finally f g s = finally f' g' s'
 Proof
-  rw[finally_def]
-  \\ CASE_TAC \\ CASE_TAC
-  \\ irule ignore_bind_cong \\ gs[]
+  disch_then (CONJUNCTS_THEN2 ASSUME_TAC
+    (CONJUNCTS_THEN2 ASSUME_TAC (SUBST_ALL_TAC o SYM)))
+  \\ Cases_on `f' s` \\ rename1 `f' s = (result, st)`
+  \\ Cases_on `result`
+  \\ asm_simp_tac monad_cong_ss [finally_def]
+  \\ irule ignore_bind_cong
+  \\ asm_simp_tac monad_cong_ss []
 QED
 
 (* lookup_function with Internal finds body via ALOOKUP on dest_Internal_Fn *)
@@ -695,18 +718,18 @@ End
 
 val () = cv_auto_trans exactly_one_option_def;
 
-(* Check whether variable n is declared as Immutable (not Constant) in toplevels *)
+(* Check whether an identifier is declared Immutable (not Constant). *)
 Definition is_immutable_decl_def:
   is_immutable_decl n [] = F ∧
   is_immutable_decl n (VariableDecl _ Immutable vid _ _ :: ts) =
-    (if string_to_num vid = n then T else is_immutable_decl n ts) ∧
+    (if vid = n then T else is_immutable_decl n ts) ∧
   is_immutable_decl n (_ :: ts) = is_immutable_decl n ts
 End
 
 val () = cv_auto_trans is_immutable_decl_def;
 
 Definition immutable_target_def:
-  immutable_target (imms: num |-> (type_value # value)) src_id_opt id n =
+  immutable_target (imms: string |-> (type_value # value)) src_id_opt id n =
   case FLOOKUP imms n of SOME _ => SOME $ ImmutableVar src_id_opt id
      | _ => NONE
 End
@@ -847,6 +870,75 @@ End
 
 val () = cv_auto_trans run_ext_call_def;
 
+(* DELEGATECALL loads code from target_addr but retains the current message's
+   address, caller and value. In particular there is no entry value transfer. *)
+Definition make_delegate_call_state_def:
+  make_delegate_call_state cx target_addr calldata accounts tStorage =
+    let tx = make_evm_tx cx.txn.sender cx.txn.target cx.txn.value calldata
+                         default_evm_gas_limit in
+    let accesses =
+      <| addresses := fINSERT cx.txn.target (fINSERT target_addr fEMPTY);
+         storageKeys := fEMPTY |> in
+    (* Native EIP-7702 resolution is one hop and warms the designated address.
+       Only code lookup uses the target; the message still belongs to the proxy. *)
+    let (code, accesses) =
+      code_from_tx accounts accesses (tx with to := SOME target_addr) in
+    let ctxt = initial_context cx.txn.target code F empty_return_destination tx in
+    let rollback =
+      <| accounts := accounts; tStorage := tStorage; accesses := accesses;
+         toDelete := [] |> in
+    <| contexts := [(ctxt, rollback)];
+       txParams := vyper_to_tx_params cx.txn; rollback := rollback;
+       msdomain := Collect empty_domain |>
+End
+
+val () = cv_auto_trans make_delegate_call_state_def;
+
+(* EVM exceptional halts are failed subcalls; model/domain failures remain NONE.
+   Only REVERT exposes its return bytes; all failed calls discard effects. *)
+Definition extract_delegate_call_result_def:
+  extract_delegate_call_result accounts tStorage (result, final_state) =
+    case final_state.contexts of
+    | [(ctxt, _)] =>
+        (case result of
+         | INR (SOME ex) =>
+             if vfmExecution$vfm_abort (SOME ex) then NONE else
+               SOME (F, if ex = vfmExecution$Reverted then ctxt.returnData else [],
+                     accounts, tStorage, [])
+         | _ => extract_call_result accounts tStorage (result, final_state))
+    | _ => NONE
+End
+
+val () = cv_auto_trans extract_delegate_call_result_def;
+
+Definition run_delegate_call_def:
+  run_delegate_call cx target_addr calldata accounts tStorage =
+    let s0 = make_delegate_call_state cx target_addr calldata accounts tStorage in
+    let outcome =
+      if fIN target_addr precompile_addresses then
+        SOME (vfmExecution$dispatch_precompiles target_addr s0)
+      else vfmExecution$run_call s0 in
+    case outcome of
+    | NONE => NONE
+    | SOME result =>
+        if ext_call_success_accounts_ok result then
+          extract_delegate_call_result accounts tStorage result
+        else NONE
+End
+
+val () = cv_auto_trans run_delegate_call_def;
+
+Definition run_raw_call_def:
+  run_raw_call cx flags target_addr calldata amount accounts tStorage =
+    if flags.rcf_is_delegate then
+      run_delegate_call cx target_addr calldata accounts tStorage
+    else run_ext_call cx.txn.target target_addr calldata
+      (if flags.rcf_is_static then NONE else SOME amount)
+      accounts tStorage (vyper_to_tx_params cx.txn)
+End
+
+val () = cv_auto_trans run_raw_call_def;
+
 (* Vyper's EXTCODESIZE check (vyper/codegen/external_call.py): before the
    call only when no return data is expected; calls with a return type rely
    on the returndatasize check instead.  skip_contract_check disables it. *)
@@ -870,13 +962,15 @@ val () = cv_auto_trans ext_call_precheck_ok_def;
    Both input forms retain the same static/revert/output and state effects. *)
 Definition eval_raw_call_def:
   eval_raw_call cx flags target_addr calldata amount = do
-    value_opt <<- if flags.rcf_is_static then NONE else SOME amount;
-    type_check (¬flags.rcf_is_delegate) "raw_call delegate unsupported";
+    type_check
+      (¬(flags.rcf_is_delegate ∧ flags.rcf_is_static) ∧
+       ((flags.rcf_is_delegate ∨ flags.rcf_is_static) ⇒ amount = 0))
+      "raw_call flags/value";
     accounts <- get_accounts;
     tStorage <- get_transient_storage;
     result <- lift_option
-      (run_ext_call cx.txn.target target_addr calldata value_opt accounts tStorage
-        (vyper_to_tx_params cx.txn)) "raw_call run failed";
+      (run_raw_call cx flags target_addr calldata amount accounts tStorage)
+      "raw_call run failed";
     success <<- FST result; result1 <<- SND result;
     returnData <<- FST result1; result2 <<- SND result1;
     accounts' <<- FST result2; result3 <<- SND result2;
@@ -905,16 +999,17 @@ Theorem eval_raw_call_preserves_non_accounts:
   eval_raw_call cx flags target_addr calldata amount st = (res, st') ==>
   st'.scopes = st.scopes /\ st'.immutables = st.immutables
 Proof
-  Cases_on `flags.rcf_is_delegate` >>
-  simp[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
-       assert_def, return_def, raise_def, get_accounts_def,
-       get_transient_storage_def] >>
-  Cases_on `run_ext_call cx.txn.target target_addr calldata
-    (if flags.rcf_is_static then NONE else SOME amount)
-    st.accounts st.tStorage (vyper_to_tx_params cx.txn)` >>
+  Cases_on `¬(flags.rcf_is_delegate ∧ flags.rcf_is_static) ∧
+    ((flags.rcf_is_delegate ∨ flags.rcf_is_static) ⇒ amount = 0)` >>
+  fs[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
+     assert_def, return_def, raise_def, get_accounts_def,
+     get_transient_storage_def] >>
+  Cases_on `run_raw_call cx flags target_addr calldata amount
+    st.accounts st.tStorage` >>
   simp[lift_option_def, bind_def, return_def, raise_def] >>
-  PairCases_on `x` >>
-  Cases_on `flags.rcf_revert_on_failure` >> Cases_on `x0` >>
+  rename1 `run_raw_call _ _ _ _ _ _ _ = SOME call_result` >>
+  PairCases_on `call_result` >>
+  Cases_on `flags.rcf_revert_on_failure` >> Cases_on `call_result0` >>
   Cases_on `flags.rcf_max_outsize = 0` >>
   simp[update_accounts_def, update_transient_def, append_logs_def,
        check_def, assert_def, bind_def, ignore_bind_def, return_def, raise_def] >>
@@ -1080,7 +1175,7 @@ Definition evaluate_def:
     tyv <- lift_option_type (evaluate_type tenv typ) "For evaluate_type";
     vs <- eval_iterator cx it;
     check (compatible_bound (Dynamic n) (LENGTH vs)) "For too long";
-    eval_for cx tyv (string_to_num id) body vs
+    eval_for cx tyv id body vs
   od ∧
   eval_stmt cx (Expr e) = do
     tv <- eval_expr cx e;
@@ -1122,16 +1217,14 @@ Definition evaluate_def:
   od ∧
   eval_base_target cx (NameTarget id) = do
     sc <- get_scopes;
-    n <<- string_to_num id;
-    type_check (IS_SOME (lookup_scopes n sc)) "NameTarget not in scope";
+    type_check (IS_SOME (lookup_scopes id sc)) "NameTarget not in scope";
     return $ (ScopedVar id, [])
   od ∧
   eval_base_target cx (TopLevelNameTarget (src_id_opt, id)) = do
-    n <<- string_to_num id;
     ts <- lift_option_type
             (get_module_code cx src_id_opt)
             "TopLevelNameTarget get_module_code";
-    if is_immutable_decl n ts then return $ (ImmutableVar src_id_opt id, [])
+    if is_immutable_decl id ts then return $ (ImmutableVar src_id_opt id, [])
     else return $ (TopLevelVar src_id_opt id, [])
   od ∧
   eval_base_target cx (AttributeTarget t id) = do
@@ -1154,12 +1247,11 @@ Definition evaluate_def:
   od ∧
   eval_expr cx (Name _ id) = do
     env <- get_scopes;
-    n <<- string_to_num id;
-    v <- lift_option_type (lookup_scopes_val n env) "Name not in scope";
+    v <- lift_option_type (lookup_scopes_val id env) "Name not in scope";
     return $ Value v
   od ∧
   eval_expr cx (TopLevelName _ (src_id_opt, id)) =
-    lookup_global cx src_id_opt (string_to_num id) ∧
+    lookup_global cx src_id_opt id ∧
   eval_expr cx (FlagMember _ nsid mid) = lookup_flag_mem cx nsid mid ∧
   eval_expr cx (IfExp _ e1 e2 e3) = do
     tv <- eval_expr cx e1;
@@ -1512,10 +1604,9 @@ Definition initial_immutables_module_def:
   (case evaluate_type env typ of
    | NONE => NONE
    | SOME tv =>
-     let key = string_to_num id in
      let iv = default_value tv in
        initial_immutables_module env src_id_opt ts
-         (update_immutable src_id_opt key tv iv acc)) ∧
+         (update_immutable src_id_opt id tv iv acc)) ∧
   initial_immutables_module env src_id_opt (_ :: ts) acc =
     initial_immutables_module env src_id_opt ts acc
 End
@@ -1644,7 +1735,7 @@ Definition constants_env_def:
        case FST $ eval_expr cx e
          (initial_state (merge_constants addr src_id_opt acc am) [FEMPTY]) of
        | INL (Value v) => constants_env cx am addr src_id_opt ts $
-                          acc |+ (string_to_num id, (tv, v))
+                          acc |+ (id, (tv, v))
        | _ => NONE) ∧
   constants_env cx am addr src_id_opt (t::ts) acc =
     constants_env cx am addr src_id_opt ts acc

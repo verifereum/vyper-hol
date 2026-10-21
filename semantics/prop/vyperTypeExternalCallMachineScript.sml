@@ -107,7 +107,7 @@ Proof
    state_well_typed body_st /\ accounts_well_typed body_st.accounts` by
     (irule call_lock_send_success_components >> simp[] >>
      qexistsl [`cx`, `lock_st`, `mut`, `nr`, `orc`, `rqs`] >> simp[]) >>
-  `ALL_DISTINCT (MAP (string_to_num o FST) args)` by
+  `ALL_DISTINCT (MAP FST args)` by
     (`check_function_body am.layouts tx.target mods art src mut nr
        args dflts ret body` by
        (irule check_contract_runtime_function_body_MEM >> simp[] >>

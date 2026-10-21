@@ -101,7 +101,7 @@ Proof
   (simp[Once assign_target_def, bind_def, get_scopes_def, return_def,
         lift_option_def, lift_option_type_def, lift_sum_def, AllCaseEqs(), raise_def, LET_THM,
         ignore_bind_def, set_scopes_def] >> strip_tac >>
-   Cases_on `find_containing_scope (string_to_num id) st.scopes` >>
+   Cases_on `find_containing_scope id st.scopes` >>
    gvs[return_def, raise_def] >>
    rename1 `find_containing_scope _ _.scopes = SOME fcs_result` >>
    PairCases_on `fcs_result` >>
@@ -146,7 +146,7 @@ Proof
     qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
     simp[Once assign_target_def, bind_def, get_immutables_def, get_address_immutables_def,
          lift_option_def, lift_option_type_def, LET_THM, return_def, raise_def] >>
-    Cases_on `FLOOKUP (get_source_immutables src_id_opt x) (string_to_num id)` >>
+    Cases_on `FLOOKUP (get_source_immutables src_id_opt x) id` >>
     simp[return_def, raise_def] >>
     PairCases_on `x'` >>
     simp[] >>
@@ -272,7 +272,7 @@ Proof
   (simp[Once assign_target_def, bind_def, get_scopes_def, return_def,
         lift_option_def, lift_option_type_def, lift_sum_def, AllCaseEqs(), raise_def, LET_THM,
         ignore_bind_def, set_scopes_def] >> strip_tac >> gvs[] >>
-   Cases_on `find_containing_scope (string_to_num id) st.scopes` >>
+   Cases_on `find_containing_scope id st.scopes` >>
    gvs[return_def, raise_def] >>
    rename1 `find_containing_scope _ _.scopes = SOME fcs_result` >>
    PairCases_on `fcs_result` >>
@@ -403,13 +403,13 @@ Proof
        assign_subscripts_def, lift_sum_def,
        ignore_bind_def, assign_result_def] >>
   gvs[AllCaseEqs()] >>
-  `ISL (FST (set_global cx src_id_opt (string_to_num n) v st))` by (
+  `ISL (FST (set_global cx src_id_opt n v st))` by (
     simp[Once set_global_def, bind_def, return_def, LET_THM,
          lift_option_type_def, write_storage_slot_def, lift_option_def] >>
     Cases_on `b` >>
     gvs[set_storage_backend_def, bind_def, return_def,
         update_transient_def, get_accounts_def, update_accounts_def, LET_THM]) >>
-  Cases_on `set_global cx src_id_opt (string_to_num n) v st` >>
+  Cases_on `set_global cx src_id_opt n v st` >>
   Cases_on `q` >> gvs[update_toplevel_name_def]
 QED
 
@@ -438,13 +438,13 @@ Proof
        assign_subscripts_def, lift_sum_def,
        ignore_bind_def, assign_result_def] >>
   gvs[AllCaseEqs()] >>
-  `ISL (FST (set_global cx src_id_opt (string_to_num n) v st))` by (
+  `ISL (FST (set_global cx src_id_opt n v st))` by (
     simp[Once set_global_def, bind_def, return_def, LET_THM,
          lift_option_type_def, write_storage_slot_def, lift_option_def] >>
     Cases_on `b` >>
     gvs[set_storage_backend_def, bind_def, return_def,
         update_transient_def, get_accounts_def, update_accounts_def, LET_THM]) >>
-  Cases_on `set_global cx src_id_opt (string_to_num n) v st` >>
+  Cases_on `set_global cx src_id_opt n v st` >>
   Cases_on `q` >> gvs[update_toplevel_name_def]
 QED
 
@@ -460,7 +460,7 @@ Theorem assign_target_leaf_replace:
     (INL NONE, update_hashmap cx st src_id_opt n kv v)
 Proof
   rw[is_leaf_hashmap_def] >>
-  `lookup_global cx src_id_opt (string_to_num n) st =
+  `lookup_global cx src_id_opt n st =
    (INL (HashMapRef is_transient (n2w offset) kt (Type t)), st)` by
     (simp[Once lookup_global_def, bind_def, return_def, LET_THM,
           lift_option_type_def, raise_def]) >>
@@ -493,7 +493,7 @@ QED
 Theorem assign_target_leaf_update:
   ∀cx st src_id_opt n kv v v_old v_new ty bop code is_transient kt t id offset tv.
     get_module_code cx src_id_opt = SOME code ∧
-    find_var_decl_by_num (string_to_num n) code = SOME (HashMapVarDecl is_transient kt (Type t), id) ∧
+    find_var_decl_by_name n code = SOME (HashMapVarDecl is_transient kt (Type t), id) ∧
     lookup_var_slot_from_layout cx is_transient src_id_opt id = SOME offset ∧
     offset < dimword(:256) ∧
     evaluate_type (get_tenv cx) t = SOME tv ∧
@@ -507,7 +507,7 @@ Theorem assign_target_leaf_update:
     (INL NONE, update_hashmap cx st src_id_opt n kv v_new)
 Proof
   rpt strip_tac >>
-  `lookup_global cx src_id_opt (string_to_num n) st =
+  `lookup_global cx src_id_opt n st =
    (INL (HashMapRef is_transient (n2w offset) kt (Type t)), st)` by
     (simp[Once lookup_global_def, bind_def, return_def, LET_THM,
           lift_option_type_def, raise_def]) >>

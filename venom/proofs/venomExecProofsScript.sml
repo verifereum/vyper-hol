@@ -46,6 +46,35 @@ QED
    step_inst_base Behavior Lemmas (specific opcodes)
    ========================================================================== *)
 
+(* Select an already proved dispatch equation; never expand unrelated opcodes. *)
+val step_inst_base_opcode_rewrites = let
+  fun key th = let
+    val (_, body) = strip_forall (concl th)
+    val (guard, _) = dest_imp body
+  in rhs guard end
+in map (fn th => (key th, th))
+  (CONJUNCTS venomExecSemanticsTheory.step_inst_base_opcode_eqs) end;
+
+fun step_inst_base_for opc =
+  #2 (valOf (List.find (fn (key, _) => aconv key opc)
+    step_inst_base_opcode_rewrites));
+
+val step_inst_base_opcode_tac =
+  qpat_assum `inst.inst_opcode = _` (fn eq => let
+    val th = MATCH_MP (step_inst_base_for (rhs (concl eq))) eq
+  in RULE_ASSUM_TAC (PURE_ONCE_REWRITE_RULE [th]) >>
+     PURE_ONCE_REWRITE_TAC [th] end);
+
+(* Only dispatch, operand/result constructors and record projections simplify.
+   In particular, REVERT's memory slice and state computations stay opaque. *)
+val behavior_ss = pure_ss ++ boolSimps.BOOL_ss ++
+  simpLib.type_ssfrag ``:instruction`` ++
+  simpLib.type_ssfrag ``:operand`` ++
+  simpLib.type_ssfrag ``:operand list`` ++
+  simpLib.type_ssfrag ``:bytes32 option`` ++
+  simpLib.type_ssfrag ``:bytes32 option # bytes32 option`` ++ rewrites
+    [instruction_accfupds, combinTheory.K_THM, LET_THM];
+
 Theorem step_iszero_value:
   !s cond_op out id cond.
     eval_operand cond_op s = SOME cond ==>
@@ -54,8 +83,8 @@ Theorem step_iszero_value:
     OK (update_var out (bool_to_word (cond = 0w)) s)
 Proof
   rpt strip_tac >>
-  simp[step_inst_base_def] >>
-  simp[exec_pure1_def]
+  asm_simp_tac behavior_ss
+    [step_inst_base_for ``ISZERO``, exec_pure1_def]
 QED
 
 Theorem step_assert_behavior:
@@ -67,7 +96,8 @@ Theorem step_assert_behavior:
       Abort Revert_abort (revert_state (set_returndata [] s))
     else OK s
 Proof
-  rw[step_inst_base_def]
+  rpt strip_tac >>
+  asm_simp_tac behavior_ss [step_inst_base_for ``ASSERT``]
 QED
 
 Theorem step_revert_behavior:
@@ -82,7 +112,8 @@ Theorem step_revert_behavior:
           (TAKE (w2n sz) (DROP (w2n off) s.vs_memory ++ REPLICATE (w2n sz) 0w))
           s))
 Proof
-  rw[step_inst_base_def]
+  rpt strip_tac >>
+  asm_simp_tac behavior_ss [step_inst_base_for ``REVERT``]
 QED
 
 Theorem step_jmp_behavior:
@@ -91,7 +122,8 @@ Theorem step_jmp_behavior:
                  inst_operands := [Label lbl]; inst_outputs := [] |> s =
     OK (jump_to lbl s)
 Proof
-  rw[step_inst_base_def]
+  rpt gen_tac >>
+  simp_tac behavior_ss [step_inst_base_for ``JMP``]
 QED
 
 Theorem step_jnz_behavior:
@@ -104,8 +136,7 @@ Theorem step_jnz_behavior:
     else OK (jump_to if_zero s)
 Proof
   rpt strip_tac >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  simp[opcode_case_def]
+  asm_simp_tac behavior_ss [step_inst_base_for ``JNZ``]
 QED
 
 (* ==========================================================================
@@ -144,7 +175,8 @@ QED
 
 val step_term_ok_jump_fields_tac =
   qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
-  simp[Once step_inst_def, step_inst_base_def, jump_to_def] >>
+  simp[Once step_inst_def] >>
+  step_inst_base_opcode_tac >> simp[jump_to_def] >>
   gvs[AllCaseEqs(), PULL_EXISTS] >>
   rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
   rw[] >> gvs[lookup_var_def] >> NO_TAC;
@@ -169,7 +201,8 @@ Proof
   >- step_term_ok_jump_fields_tac
   >- step_term_ok_jump_fields_tac
   >- (qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
-      simp[Once step_inst_def, step_inst_base_def, jump_to_def] >>
+      simp[Once step_inst_def] >>
+      step_inst_base_opcode_tac >> simp[jump_to_def] >>
       gvs[AllCaseEqs(), PULL_EXISTS] >> rpt gen_tac >> strip_tac >>
       pairarg_tac >> gvs[])
   >- step_term_ok_jump_fields_tac
@@ -245,25 +278,25 @@ QED
 Theorem step_inst_base_OK_not_INVOKE:
   step_inst_base inst s = OK s' ==> inst.inst_opcode <> INVOKE
 Proof
-  strip_tac >> strip_tac >> gvs[step_inst_base_def]
+  strip_tac >> strip_tac >> gvs[step_inst_base_for ``INVOKE``]
 QED
 
 Theorem step_inst_base_Halt_not_INVOKE:
   step_inst_base inst s = Halt v ==> inst.inst_opcode <> INVOKE
 Proof
-  strip_tac >> strip_tac >> gvs[step_inst_base_def]
+  strip_tac >> strip_tac >> gvs[step_inst_base_for ``INVOKE``]
 QED
 
 Theorem step_inst_base_Abort_not_INVOKE:
   step_inst_base inst s = Abort a v ==> inst.inst_opcode <> INVOKE
 Proof
-  strip_tac >> strip_tac >> gvs[step_inst_base_def]
+  strip_tac >> strip_tac >> gvs[step_inst_base_for ``INVOKE``]
 QED
 
 Theorem step_inst_base_IntRet_not_INVOKE:
   step_inst_base inst s = IntRet vals v ==> inst.inst_opcode <> INVOKE
 Proof
-  strip_tac >> strip_tac >> gvs[step_inst_base_def]
+  strip_tac >> strip_tac >> gvs[step_inst_base_for ``INVOKE``]
 QED
 
 (* Backward compat aliases (about step_inst_base, not the new step_inst) *)
@@ -536,7 +569,8 @@ QED
 (* After a well-formed terminator executes OK without halting,
    vs_current_bb is in get_successors of that instruction. *)
 val term_succ_basic_tac =
-  fs[step_inst_base_def, inst_wf_def, get_successors_def,
+  step_inst_base_opcode_tac >>
+  fs[inst_wf_def, get_successors_def,
      get_label_def, jump_to_def, is_terminator_def] >>
   gvs[AllCaseEqs()] >>
   rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
@@ -1198,7 +1232,7 @@ Proof
 QED
 
 val operands_none_wrapper_tac =
-  gvs[inst_wf_def, step_inst_base_def] >>
+  step_inst_base_opcode_tac >> gvs[inst_wf_def] >>
   FIRST [
     drule_all exec_pure1_operands_none_error >> simp[] >> NO_TAC,
     drule_all exec_pure2_operands_none_error >> simp[] >> NO_TAC,
@@ -1265,8 +1299,8 @@ Proof
 QED
 
 val operands_none_custom_tac =
+  step_inst_base_opcode_tac >>
   gvs[inst_wf_def, LENGTH_EQ_NUM_compute,
-      step_inst_base_def,
       eval_operands_def, eval_operand_def, lookup_var_def] >>
   BasicProvers.every_case_tac >> gvs[];
 
@@ -1344,7 +1378,7 @@ Proof
   `?h1 h2 tl. REVERSE rest = h1 :: h2 :: tl` by
     (Cases_on `REVERSE rest` >> gvs[] >>
      Cases_on `t` >> gvs[]) >>
-  gvs[step_inst_base_def, eval_operands_def] >>
+  gvs[step_inst_base_for ``LOG``, eval_operands_def] >>
   BasicProvers.every_case_tac >> gvs[]
 QED
 
@@ -1390,7 +1424,7 @@ Proof
   Cases_on `inst.inst_opcode = DJMP` >-
     (gvs[inst_wf_def] >>
      (* gvs splits MEM: subgoals with sel=Var x close via step_inst_base *)
-     TRY (gvs[step_inst_base_def, eval_operand_def, lookup_var_def] >> NO_TAC) >>
+     TRY (gvs[step_inst_base_for ``DJMP``, eval_operand_def, lookup_var_def] >> NO_TAC) >>
      (* remaining: MEM Var x label_ops contradicts EVERY IS_SOME get_label *)
      gvs[listTheory.EVERY_MEM] >> res_tac >> fs[get_label_def]) >>
   (* JMP/PARAM/ALLOCA: no Var operands possible *)
@@ -1402,11 +1436,11 @@ Proof
     gvs[inst_wf_def, LENGTH_EQ_NUM_compute, MEM] >>
   (* OFFSET: Var x must be offset_op, eval_operand NONE => Error *)
   Cases_on `inst.inst_opcode = OFFSET` >-
-    gvs[inst_wf_def, LENGTH_EQ_NUM_compute, MEM, step_inst_base_def,
+    gvs[inst_wf_def, LENGTH_EQ_NUM_compute, MEM, step_inst_base_for ``OFFSET``,
         exec_pure2_def] >>
   (* JNZ: ops = [c; Label l1; Label l2], only Var is c, eval_operand c NONE => Error *)
   Cases_on `inst.inst_opcode = JNZ` >-
-    (gvs[inst_wf_def, LENGTH_EQ_NUM_compute, MEM, step_inst_base_def,
+    (gvs[inst_wf_def, LENGTH_EQ_NUM_compute, MEM, step_inst_base_for ``JNZ``,
         eval_operand_def, lookup_var_def] >>
      BasicProvers.every_case_tac >> gvs[]) >>
   (* All other opcodes: use step_inst_base_operands_none *)
@@ -1471,7 +1505,7 @@ fun prove_fdom_group opcode_list = prove(
   rpt strip_tac >> gvs[MEM] >>
   gvs[inst_wf_def, LENGTH_EQ_NUM_compute] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  ASM_REWRITE_TAC[step_inst_base_def] >>
+  step_inst_base_opcode_tac >>
   simp[exec_pure2_def, exec_pure1_def, exec_pure3_def,
       exec_read0_def, exec_read1_def, exec_write2_def,
       exec_alloca_def,
@@ -1512,7 +1546,8 @@ val step_inst_base_fdom_no_output = prove(
      inst_wf inst /\ step_inst_base inst s = OK s' ==>
      FDOM s'.vs_vars = FDOM s.vs_vars UNION set inst.inst_outputs``,
   rpt strip_tac >> gvs[MEM] >>
-  gvs[inst_wf_def, LENGTH_EQ_NUM_compute, step_inst_base_def] >>
+  step_inst_base_opcode_tac >>
+  gvs[inst_wf_def, LENGTH_EQ_NUM_compute] >>
   BasicProvers.every_case_tac >>
   gvs[mstore_def, sstore_def, tstore_def,
       mcopy_def, write_memory_with_expansion_def]);
@@ -1528,7 +1563,8 @@ val step_inst_base_fdom_external = prove(
      inst_wf inst /\ step_inst_base inst s = OK s' ==>
      FDOM s'.vs_vars = FDOM s.vs_vars UNION set inst.inst_outputs``,
   rpt strip_tac >> gvs[MEM] >>
-  gvs[inst_wf_def, LENGTH_EQ_NUM_compute, step_inst_base_def] >>
+  step_inst_base_opcode_tac >>
+  gvs[inst_wf_def, LENGTH_EQ_NUM_compute] >>
   BasicProvers.every_case_tac >>
   gvs[exec_ext_call_def, exec_delegatecall_def, exec_create_def] >>
   BasicProvers.every_case_tac >> gvs[] >>
@@ -1542,7 +1578,7 @@ val step_inst_base_fdom_invoke = prove(
      inst.inst_opcode = INVOKE /\
      inst_wf inst /\ step_inst_base inst s = OK s' ==>
      FDOM s'.vs_vars = FDOM s.vs_vars UNION set inst.inst_outputs``,
-  rpt strip_tac >> gvs[step_inst_base_def]);
+  rpt strip_tac >> gvs[step_inst_base_for ``INVOKE``]);
 
 (* Main theorem: combine all parts *)
 Theorem step_inst_base_fdom:
@@ -1639,7 +1675,7 @@ Theorem step_inst_base_phi_error:
   !inst s. inst.inst_opcode = PHI ==>
             step_inst_base inst s = Error "phi outside prefix"
 Proof
-  rpt strip_tac >> simp[step_inst_base_def]
+  rpt strip_tac >> simp[step_inst_base_for ``PHI``]
 QED
 
 (* step_inst on PHI always gives Error *)

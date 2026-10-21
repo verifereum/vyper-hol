@@ -183,6 +183,44 @@ Proof
   gvs[]
 QED
 
+Theorem extract_delegate_call_result_accounts_well_typed:
+  accounts_well_typed accounts /\
+  (case result of
+   | INR NONE => accounts_well_typed final_state.rollback.accounts
+   | _ => T) /\
+  extract_delegate_call_result accounts tStorage (result, final_state) =
+    SOME (success,retData,accounts',tStorage',emitted_logs) ==>
+  accounts_well_typed accounts'
+Proof
+  rw[extract_delegate_call_result_def, extract_call_result_def] >>
+  gvs[AllCaseEqs()]
+QED
+
+Theorem run_delegate_call_accounts_well_typed:
+  accounts_well_typed accounts /\
+  run_delegate_call cx target_addr calldata accounts tStorage =
+    SOME (success,retData,accounts',tStorage',emitted_logs) ==>
+  accounts_well_typed accounts'
+Proof
+  rw[run_delegate_call_def] >> gvs[AllCaseEqs()] >>
+  qmatch_asmsub_abbrev_tac `extract_delegate_call_result _ _ outcome = SOME _` >>
+  PairCases_on `outcome` >>
+  drule ext_call_success_accounts_ok_imp_extract_premise >> strip_tac >>
+  fs[] >>
+  drule_all extract_delegate_call_result_accounts_well_typed >> simp[]
+QED
+
+Theorem run_raw_call_accounts_well_typed:
+  accounts_well_typed accounts /\
+  run_raw_call cx flags target_addr calldata amount accounts tStorage =
+    SOME (success,retData,accounts',tStorage',emitted_logs) ==>
+  accounts_well_typed accounts'
+Proof
+  rw[run_raw_call_def] >>
+  FIRST [drule_all run_delegate_call_accounts_well_typed,
+         drule_all run_ext_call_accounts_well_typed] >> simp[]
+QED
+
 (* ===== Creation adapter well-typedness =====
 
    Mirrors the ext-call chain above, but for run_create_evm.  The creation
@@ -1856,9 +1894,28 @@ Proof
   `~(i < 0:int)` by intLib.ARITH_TAC >> qexists_tac `Num i` >> simp[]
 QED
 
+(* Literal operands have their stated value even when earlier operands change
+   the state. This discharges the zero-value restriction on delegate/static calls. *)
+Theorem eval_exprs_EL_literal:
+  !es st vs st' n ty l.
+    eval_exprs cx es st = (INL vs,st') /\
+    n < LENGTH es /\ EL n es = Literal ty l ==>
+    EL n vs = evaluate_literal l
+Proof
+  Induct >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `eval_exprs _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
+  Cases_on `n` >> simp[] >> rpt strip_tac >>
+  gvs[evaluate_def, return_def, materialise_def] >>
+  first_x_assum drule_all >> simp[]
+QED
+
 (* Shared execution is independent of how the input bytes were obtained. *)
 Theorem eval_raw_call_result_sound:
-  runtime_consistent env cx st /\ ¬flags.rcf_is_delegate /\
+  runtime_consistent env cx st /\
+  ~(flags.rcf_is_delegate /\ flags.rcf_is_static) /\
+  ((flags.rcf_is_delegate \/ flags.rcf_is_static) ==> amount = 0) /\
   flags.rcf_max_outsize < dimword(:256) /\
   eval_raw_call cx flags target_addr calldata amount st = (res,st') ==>
   runtime_consistent env cx st' /\ no_type_error_result res /\
@@ -1866,16 +1923,15 @@ Theorem eval_raw_call_result_sound:
     expr_result_typed env e tv)
 Proof
   strip_tac >> qpat_x_assum `eval_raw_call _ _ _ _ _ _ = _` mp_tac >>
-  simp[eval_raw_call_def, type_check_def, assert_def, bind_def, ignore_bind_def,
+  fs[eval_raw_call_def, type_check_def, assert_def, bind_def, ignore_bind_def,
        return_def, get_accounts_def, get_transient_storage_def] >>
-  Cases_on `run_ext_call cx.txn.target target_addr calldata
-    (if flags.rcf_is_static then NONE else SOME amount)
-    st.accounts st.tStorage (vyper_to_tx_params cx.txn)` >>
-  simp[lift_option_def, bind_def, return_def, raise_def]
-  >- (strip_tac >> gvs[no_type_error_result_def]) >>
+  Cases_on `run_raw_call cx flags target_addr calldata amount
+    st.accounts st.tStorage` >>
+  simp[lift_option_def, bind_def, return_def, raise_def] >>
+  TRY (strip_tac >> gvs[no_type_error_result_def] >> NO_TAC) >>
   PairCases_on `x` >> simp[] >>
   `accounts_well_typed x2` by (
-    fs[runtime_consistent_def] >> drule_all run_ext_call_accounts_well_typed >> simp[]) >>
+    fs[runtime_consistent_def] >> drule_all run_raw_call_accounts_well_typed >> simp[]) >>
   `runtime_consistent env cx (st with <|accounts := x2; tStorage := x3|>)` by
     (drule_all update_accounts_transient_runtime_consistent >> simp[]) >>
   `runtime_consistent env cx

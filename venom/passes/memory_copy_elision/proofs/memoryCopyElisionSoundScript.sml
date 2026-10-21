@@ -252,6 +252,15 @@ Proof
   simp[cf_alloca_ok_opt_def, cf_alloca_ok_fempty]
 QED
 
+(* Absolute locations need no alloca bound, regardless of offset or size. *)
+Triviality memloc_within_alloca_none[local]:
+  !ml s. ml.ml_alloca = NONE ==> memloc_within_alloca ml s
+Proof
+  rpt strip_tac >>
+  Cases_on `ml.ml_offset` >> Cases_on `ml.ml_size` >>
+  simp[memloc_within_alloca_def]
+QED
+
 (* cf_alloca_ok depends only on vs_allocas — preserved by memory writes *)
 (* memloc_within_alloca depends only on vs_allocas *)
 Triviality memloc_within_alloca_allocas_eq[local]:
@@ -356,6 +365,60 @@ Proof
   rw[allocas_in_word_def]
 QED
 
+(* Cache the three relevant projections without splitting size operands or
+   runtime alloca lookups.  Consumers need only the projected fields. *)
+Triviality ce_memloc_projections[local]:
+  !bp op sz.
+    (ce_memloc_from_ops bp op sz).ml_size =
+      (case op of Label _ => NONE
+       | _ => case sz of Lit n => SOME (w2n n) | _ => NONE) /\
+    (ce_memloc_from_ops bp op sz).ml_offset =
+      (case op of Lit n => SOME (w2n n)
+       | Var v => (case bp_ptr_from_op bp (Var v) of
+                     NONE => NONE | SOME (Ptr alloc off) => off)
+       | Label _ => NONE) /\
+    (ce_memloc_from_ops bp op sz).ml_alloca =
+      (case op of Var v =>
+         (case bp_ptr_from_op bp (Var v) of
+            NONE => NONE | SOME (Ptr alloc off) => SOME alloc)
+       | _ => NONE)
+Proof
+  rpt gen_tac >> Cases_on `op` >>
+  simp[ce_memloc_from_ops_def, bp_segment_from_ops_def, ml_undefined_def] >>
+  rename1 `Var v` >>
+  Cases_on `bp_ptr_from_op bp (Var v)` >> simp[] >>
+  rename1 `SOME p` >> Cases_on `p` >> simp[]
+QED
+
+val ce_memloc_size_projection = CONJUNCT1 (SPEC_ALL ce_memloc_projections);
+
+(* With no alloca, a resolved runtime address is the projected offset. *)
+Triviality memloc_runtime_offset_none[local]:
+  !ml s addr sz.
+    ml.ml_alloca = NONE /\
+    memloc_runtime_region ml s = SOME (addr, sz) ==>
+    ml.ml_offset = SOME addr
+Proof
+  rpt strip_tac >>
+  Cases_on `ml.ml_offset` >> gvs[memloc_runtime_region_def] >>
+  Cases_on `ml.ml_size` >> gvs[memloc_runtime_region_def]
+QED
+
+(* A resolved absolute copy location must come from a literal operand. *)
+Triviality ce_memloc_absolute_region[local]:
+  !bp op sz s addr n.
+    (ce_memloc_from_ops bp op sz).ml_alloca = NONE /\
+    memloc_runtime_region (ce_memloc_from_ops bp op sz) s = SOME (addr, n) ==>
+    ?lit. op = Lit lit /\ addr = w2n lit
+Proof
+  rpt strip_tac >>
+  drule_all memloc_runtime_offset_none >> strip_tac >>
+  Cases_on `op` >> gvs[ce_memloc_projections] >>
+  rename1 `Var v` >>
+  Cases_on `bp_ptr_from_op bp (Var v)` >> gvs[] >>
+  rename1 `SOME p` >> Cases_on `p` >> gvs[]
+QED
+
 (* allocas_in_word + alloca-backed memloc → addr + sz < dimword.
    For ml_alloca = NONE, addr comes from w2n (Lit n) which is < dimword
    automatically — handle that case separately at use sites. *)
@@ -367,10 +430,17 @@ Triviality runtime_region_in_word[local]:
     memloc_runtime_region ml s = SOME (addr, sz) ==>
     addr + sz < dimword(:256)
 Proof
-  rw[allocas_in_word_def, memloc_within_alloca_def,
-     memloc_runtime_region_def] >>
-  BasicProvers.every_case_tac >> gvs[] >>
-  first_x_assum (qspecl_then [`n`, `FST x`, `SND x`] mp_tac) >> gvs[]
+  rpt strip_tac >>
+  Cases_on `ml.ml_offset` >> gvs[memloc_runtime_region_def] >>
+  Cases_on `ml.ml_size` >> gvs[memloc_runtime_region_def] >>
+  Cases_on `ml.ml_alloca` >> gvs[] >>
+  rename1 `ml.ml_alloca = SOME alloc` >> Cases_on `alloc` >>
+  gvs[memloc_runtime_region_def, memloc_within_alloca_def] >>
+  rename1 `FLOOKUP s.vs_allocas aid` >>
+  Cases_on `FLOOKUP s.vs_allocas aid` >> gvs[] >>
+  rename1 `FLOOKUP s.vs_allocas aid = SOME p` >>
+  fs[allocas_in_word_def] >>
+  first_x_assum (qspecl_then [`aid`, `FST p`, `SND p`] mp_tac) >> simp[]
 QED
 
 (* Combined helper: copy fact entry addr fits in a word.
@@ -397,11 +467,10 @@ Proof
     mp_tac (Q.SPECL [`ce_memloc_from_ops bp op sz`, `s`, `addr`, `sz_num`]
               runtime_region_in_word) >> simp[] >> decide_tac)
   >>
-  gvs[ce_memloc_from_ops_def, bp_segment_from_ops_def, LET_THM] >>
-  Cases_on `op` >> gvs[ml_undefined_def, memloc_runtime_region_def] >>
-  BasicProvers.every_case_tac >> gvs[] >>
-  mp_tac (INST_TYPE [``:'a`` |-> ``:256``] wordsTheory.w2n_lt) >>
-  disch_then (qspec_then `c` mp_tac) >> simp[]
+  `(ce_memloc_from_ops bp op sz).ml_alloca = NONE` by
+    gvs[quantHeuristicsTheory.IS_SOME_EQ_NOT_NONE] >>
+  drule_all ce_memloc_absolute_region >> strip_tac >>
+  gvs[wordsTheory.w2n_lt]
 QED
 
 (* BP analysis at fixpoint: ASSIGN propagates pointer sets.
@@ -464,9 +533,8 @@ Proof
    bp_ptr_from_op bp op` by (irule bp_ptr_from_op_normalize >> simp[]) >>
   Cases_on `normalize_operand dfg [] op`
   >- ((* Lit → ml_alloca = NONE → trivially T *)
-      simp[ce_memloc_from_ops_def, bp_segment_from_ops_def,
-           memloc_within_alloca_def] >>
-      BasicProvers.every_case_tac >> simp[])
+      irule memloc_within_alloca_none >>
+      simp[ce_memloc_from_ops_def, bp_segment_from_ops_def])
   >> ((* Var/Label: same bp_ptr_from_op as op *)
       Cases_on `op` >>
       gvs[ce_memloc_from_ops_def, bp_segment_from_ops_def,
@@ -483,10 +551,7 @@ Theorem ce_memloc_ml_size_only_sz:
     (ce_memloc_from_ops bp op sz).ml_size =
     (case sz of Lit n => SOME (w2n n) | _ => NONE)
 Proof
-  rpt strip_tac >>
-  Cases_on `op` >>
-  gvs[ce_memloc_from_ops_def, bp_segment_from_ops_def, LET_THM] >>
-  BasicProvers.every_case_tac >> simp[]
+  rpt strip_tac >> Cases_on `op` >> gvs[ce_memloc_size_projection]
 QED
 
 (* memloc_within_alloca depends on ml_offset, ml_size, ml_alloca.
@@ -500,10 +565,7 @@ Triviality memloc_within_alloca_change_sz[local]:
      memloc_within_alloca (ce_memloc_from_ops bp op sz2) s)
 Proof
   rpt strip_tac >>
-  simp[ce_memloc_from_ops_def, bp_segment_from_ops_def, LET_THM,
-       memloc_within_alloca_def] >>
-  Cases_on `op` >> simp[] >>
-  BasicProvers.every_case_tac >> gvs[]
+  simp[memloc_within_alloca_def, ce_memloc_projections]
 QED
 
 (* Label offsets produce ml_undefined, which is trivially within alloca *)
@@ -529,10 +591,8 @@ Proof
   Cases_on `IS_SOME (bp_segment_from_ops bp ops).ml_alloca`
   >- (first_x_assum (qspecl_then [`bb`,`inst`,`ops`] mp_tac) >>
       simp[Abbr `ops`, mem_read_ops_def])
-  >> gvs[quantHeuristicsTheory.IS_SOME_EQ_NOT_NONE, Abbr `ops`,
-         memloc_within_alloca_def, bp_segment_from_ops_def, LET_THM] >>
-     Cases_on `src` >> simp[] >>
-     BasicProvers.every_case_tac >> gvs[]
+  >> irule memloc_within_alloca_none >>
+     gvs[quantHeuristicsTheory.IS_SOME_EQ_NOT_NONE]
 QED
 
 (* Combined extraction: get all per-entry facts from cf_keys_ok + cf_alloca_ok
@@ -708,10 +768,8 @@ Triviality ce_memloc_fixed_sz_lit[local]:
   !bp op sz.
     ml_is_fixed (ce_memloc_from_ops bp op sz) ==> ?n. sz = Lit n
 Proof
-  rw[ce_memloc_from_ops_def, bp_segment_from_ops_def, LET_THM,
-     ml_is_fixed_def, ml_undefined_def] >>
-  Cases_on `op` >> Cases_on `sz` >> gvs[] >>
-  BasicProvers.every_case_tac >> gvs[]
+  simp[ml_is_fixed_def, ce_memloc_size_projection] >>
+  Cases_on `op` >> Cases_on `sz` >> simp[]
 QED
 
 (* When sz = Lit n and op is non-Label, ml_size = SOME (w2n n) *)
@@ -720,9 +778,7 @@ Triviality ce_memloc_lit_size[local]:
     (!l. op <> Label l) ==>
     (ce_memloc_from_ops bp op (Lit n)).ml_size = SOME (w2n n)
 Proof
-  rw[ce_memloc_from_ops_def, bp_segment_from_ops_def, LET_THM] >>
-  Cases_on `op` >> gvs[] >>
-  BasicProvers.every_case_tac >> gvs[]
+  simp[ce_memloc_ml_size_only_sz]
 QED
 
 (* Wrapper for bp_segment_from_ops_runtime_region_proof that works
@@ -770,12 +826,8 @@ Proof
 QED
 
 Resume ce_memloc_runtime_w2n[none_case]:
-  gvs[ce_memloc_from_ops_def, bp_segment_from_ops_def, LET_THM] >>
-  Cases_on `op` >> gvs[ml_is_fixed_def, ml_undefined_def] >>
-  gvs[memloc_runtime_region_def] >>
-  BasicProvers.every_case_tac >> gvs[] >>
-  mp_tac (INST_TYPE [``:'a`` |-> ``:256``] wordsTheory.w2n_lt) >>
-  disch_then (qspec_then `c` mp_tac) >> simp[]
+  drule_all ce_memloc_absolute_region >> strip_tac >>
+  gvs[wordsTheory.w2n_lt]
 QED
 
 Resume ce_memloc_runtime_w2n[some_case]:
@@ -1228,7 +1280,7 @@ Proof
   >- terminator_tuple_tac (* SELFDESTRUCT *)
   >- terminator_tuple_tac (* INVALID *)
   >- fs[write_effects_def] (* DRET excluded by no-memory premise *)
-  >- terminator_tuple_tac (* RETFMP *)
+  >- fs[step_inst_base_RETFMP, AllCaseEqs()] (* RETFMP never returns OK *)
 QED
 
 Triviality step_terminator_preserves_fields[local]:
@@ -1505,10 +1557,9 @@ Triviality ml_is_fixed_eval_size[local]:
     THE (ce_memloc_from_ops bp dst sz).ml_size = w2n sz_val
 Proof
   rpt strip_tac >>
-  Cases_on `sz` >>
-  gvs[ce_memloc_from_ops_def, bp_segment_from_ops_def, LET_THM,
-      ml_is_fixed_def, ml_undefined_def, eval_operand_def] >>
-  BasicProvers.every_case_tac >> gvs[]
+  drule ce_memloc_fixed_sz_lit >> strip_tac >>
+  drule ce_memloc_fixed_not_label >> strip_tac >>
+  gvs[ce_memloc_ml_size_only_sz, eval_operand_def]
 QED
 
 Triviality cf_source_data_wmwe[local]:
@@ -1609,9 +1660,7 @@ Triviality ce_memloc_size_same[local]:
     (!l. op1 <> Label l) /\ (!l. op2 <> Label l) ==>
     (ce_memloc_from_ops bp op1 sz).ml_size = (ce_memloc_from_ops bp op2 sz).ml_size
 Proof
-  rw[ce_memloc_from_ops_def, bp_segment_from_ops_def, LET_THM] >>
-  Cases_on `op1` >> Cases_on `op2` >> gvs[] >>
-  BasicProvers.every_case_tac >> gvs[]
+  simp[ce_memloc_ml_size_only_sz]
 QED
 
 (* cf_key_size_ok when both key and value use same size and non-Label offsets *)
@@ -1858,9 +1907,7 @@ QED
 Triviality ce_memloc_var_ml_size[local,simp]:
   THE (ce_memloc_from_ops bp (Var v) (Lit 32w)).ml_size = 32
 Proof
-  simp[ce_memloc_from_ops_def, bp_segment_from_ops_def, LET_THM,
-       bp_ptr_from_op_def] >>
-  BasicProvers.every_case_tac >> simp[Once wordsTheory.dimword_def]
+  simp[ce_memloc_size_projection, wordsTheory.dimword_def]
 QED
 
 (* For Var write location: ml_is_fixed → IS_SOME ml_alloca *)
@@ -1868,9 +1915,9 @@ Triviality ce_memloc_var_has_alloca[local]:
   ml_is_fixed (ce_memloc_from_ops bp (Var v) sz) ==>
   IS_SOME (ce_memloc_from_ops bp (Var v) sz).ml_alloca
 Proof
-  simp[ml_is_fixed_def, ce_memloc_from_ops_def, bp_segment_from_ops_def,
-       bp_ptr_from_op_def, LET_THM] >>
-  BasicProvers.every_case_tac >> simp[]
+  simp[ml_is_fixed_def, ce_memloc_projections] >>
+  Cases_on `bp_ptr_from_op bp (Var v)` >> simp[] >>
+  rename1 `SOME p` >> Cases_on `p` >> simp[]
 QED
 
 (* For Var write location with runtime region: addr < dimword *)
@@ -2136,10 +2183,8 @@ Proof
   >> simp[] >>
      Cases_on `IS_SOME (bp_segment_from_ops bp x).ml_alloca`
      >- (first_x_assum irule >> metis_tac[])
-     >> gvs[quantHeuristicsTheory.IS_SOME_EQ_NOT_NONE,
-            memloc_within_alloca_def] >>
-        Cases_on `(bp_segment_from_ops bp x).ml_offset` >> simp[] >>
-        Cases_on `(bp_segment_from_ops bp x).ml_size` >> simp[]
+     >> irule memloc_within_alloca_none >>
+        gvs[quantHeuristicsTheory.IS_SOME_EQ_NOT_NONE]
 QED
 
 Theorem copy_fact_transfer_sound_thm:
@@ -2277,9 +2322,8 @@ Resume copy_fact_transfer_sound_thm[is_copy]:
         mp_tac bp_ptrs_bounded_write_loc >>
         disch_then (qspecl_then [`ctx.ce_bp`,`fn`,`s`,`bb`,`inst`] mp_tac) >>
         (impl_tac >- (
-          simp[] >> Cases_on `inst.inst_opcode` >>
-          gvs[is_copy_opcode_def, opcode2num_thm, write_effects_def,
-              is_raw_fmp_opcode_def])) >>
+          simp[] >> drule copy_opcode_cases >> strip_tac >>
+          gvs[write_effects_def, is_raw_fmp_opcode_def])) >>
         simp[]) >>
       mp_tac (Q.SPECL [`ctx.ce_bp`, `dst`, `sz`, `s`, `dst_val`]
                 ce_memloc_runtime_w2n) >>

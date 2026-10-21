@@ -2658,7 +2658,7 @@ QED
 (* Helper: Not with uint256 type preserves the statically computed result type.
    Narrow unsigned types are excluded: the checker rejects them, matching the
    compiler, which refuses `~` below uint256. *)
-Theorem uint_not_success_type[local]:
+Theorem uint_not_success_type:
   is_uint256_type ty ∧
   evaluate_type (get_tenv cx) ty = SOME tv ∧
   value_has_type tv v ∧
@@ -2675,7 +2675,7 @@ Proof
 QED
 
 (* Helper: Not with bool type preserves the statically computed result type. *)
-Theorem bool_not_success_type[local]:
+Theorem bool_not_success_type:
   is_bool_type ty ∧
   evaluate_type (get_tenv cx) ty = SOME tv ∧
   value_has_type tv v ∧
@@ -2772,6 +2772,24 @@ Proof
   gvs[] >>
   imp_res_tac evaluate_type_BaseT_SOME >> gvs[] >>
   simp[evaluate_builtin_def, bounded_decimal_op_def]
+QED
+
+(* Neg on a numeric type preserves the statically computed result type: a
+   success is the bounded negation. *)
+Theorem neg_success_type:
+  is_numeric_type ty ∧
+  evaluate_type (get_tenv cx) ty = SOME tv ∧
+  value_has_type tv v ∧
+  evaluate_builtin cx acc ty Neg [v] = INL out ==>
+  value_has_type tv out
+Proof
+  strip_tac >>
+  qpat_x_assum `is_numeric_type _` mp_tac >>
+  REWRITE_TAC[is_numeric_type_inv, is_int_type_inv] >> strip_tac >>
+  gvs[] >> imp_res_tac evaluate_type_BaseT_SOME >> gvs[] >>
+  gvs[evaluate_builtin_def, type_to_int_bound_def, AllCaseEqs()] >>
+  imp_res_tac bounded_int_op_INL >> imp_res_tac bounded_decimal_op_INL >>
+  gvs[within_int_bound_def]
 QED
 
 (* Helper: Keccak256 with bytes or string input *)
@@ -3232,7 +3250,7 @@ Proof
   TRY (rename1 `evaluate_builtin _ _ (BaseT BoolT) Not [BoolV b] = INL v` >>
        gvs[evaluate_builtin_def, value_has_type_def] >> NO_TAC) >>
   TRY (rename1 `evaluate_builtin _ _ (FlagT fid) Not [_] = INL _` >>
-       Cases_on `FLOOKUP (get_tenv cx) (type_key fid)` >> gvs[] >>
+       Cases_on `FLOOKUP (get_tenv cx) fid` >> gvs[] >>
        Cases_on `x` >> gvs[] >>
        gvs[value_has_type_def, evaluate_builtin_def, evaluate_type_def] >>
        rewrite_tac[wordsTheory.WORD_NEG_1, GSYM wordsTheory.WORD_NOT_0] >>

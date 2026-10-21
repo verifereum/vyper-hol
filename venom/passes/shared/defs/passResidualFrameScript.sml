@@ -47,34 +47,53 @@ Definition icf_frame_def:
     vs_initial_fmp := 0w; vs_return_pc_token := 0w |>
 End
 
+(* Goal-only projection avoids the global mask-equality conversion and
+   record-update normalizer. Cache the datatype-derived selector rules. *)
+val residual_frame_ss = bool_ss ++ rewrites
+  [venom_state_component_equality, venom_state_accfupds,
+   combinTheory.K_THM];
+
+(* Project each mask equality once, before substituting updated states.
+   Erased updates then traverse just one update per retained selector. *)
+val residual_frame_update_ss = residual_frame_ss ++ rewrites
+  (update_var_def :: map
+    (SIMP_CONV residual_frame_ss
+      [commute_frame_def, alloca_remap_frame_def, concretize_frame_def,
+       copy_fwd_frame_def, icf_frame_def])
+    [``commute_frame s1 = commute_frame s2``,
+     ``alloca_remap_frame s1 = alloca_remap_frame s2``,
+     ``concretize_frame s1 = concretize_frame s2``,
+     ``copy_fwd_frame s1 = copy_fwd_frame s2``,
+     ``icf_frame s1 = icf_frame s2``]);
+
 Theorem commute_frame_idempotent[simp]:
   commute_frame (commute_frame s) = commute_frame s
 Proof
-  simp[commute_frame_def]
+  simp_tac residual_frame_ss [commute_frame_def]
 QED
 
 Theorem alloca_remap_frame_idempotent[simp]:
   alloca_remap_frame (alloca_remap_frame s) = alloca_remap_frame s
 Proof
-  simp[alloca_remap_frame_def]
+  simp_tac residual_frame_ss [alloca_remap_frame_def]
 QED
 
 Theorem concretize_frame_idempotent[simp]:
   concretize_frame (concretize_frame s) = concretize_frame s
 Proof
-  simp[concretize_frame_def]
+  simp_tac residual_frame_ss [concretize_frame_def]
 QED
 
 Theorem copy_fwd_frame_idempotent[simp]:
   copy_fwd_frame (copy_fwd_frame s) = copy_fwd_frame s
 Proof
-  simp[copy_fwd_frame_def]
+  simp_tac residual_frame_ss [copy_fwd_frame_def]
 QED
 
 Theorem icf_frame_idempotent[simp]:
   icf_frame (icf_frame s) = icf_frame s
 Proof
-  simp[icf_frame_def]
+  simp_tac residual_frame_ss [icf_frame_def]
 QED
 
 Theorem commute_frame_erased_updates[simp]:
@@ -83,7 +102,7 @@ Theorem commute_frame_erased_updates[simp]:
   commute_frame (s with vs_alloca_next := next) = commute_frame s /\
   commute_frame (update_var x v s) = commute_frame s
 Proof
-  simp[commute_frame_def, update_var_def]
+  simp_tac residual_frame_update_ss []
 QED
 
 Theorem alloca_remap_frame_erased_updates[simp]:
@@ -93,7 +112,7 @@ Theorem alloca_remap_frame_erased_updates[simp]:
   alloca_remap_frame (s with vs_alloca_next := next) = alloca_remap_frame s /\
   alloca_remap_frame (update_var x v s) = alloca_remap_frame s
 Proof
-  simp[alloca_remap_frame_def, update_var_def]
+  simp_tac residual_frame_update_ss []
 QED
 
 Theorem concretize_frame_erased_updates[simp]:
@@ -105,7 +124,7 @@ Theorem concretize_frame_erased_updates[simp]:
   concretize_frame (s with vs_alloca_next := next) = concretize_frame s /\
   concretize_frame (update_var x v s) = concretize_frame s
 Proof
-  simp[concretize_frame_def, update_var_def]
+  simp_tac residual_frame_update_ss []
 QED
 
 Theorem copy_fwd_frame_erased_updates[simp]:
@@ -123,7 +142,7 @@ Theorem copy_fwd_frame_erased_updates[simp]:
   copy_fwd_frame (s with vs_return_pc_token := token) = copy_fwd_frame s /\
   copy_fwd_frame (update_var x v s) = copy_fwd_frame s
 Proof
-  simp[copy_fwd_frame_def, update_var_def]
+  simp_tac residual_frame_update_ss []
 QED
 
 Theorem icf_frame_erased_updates[simp]:
@@ -136,7 +155,7 @@ Theorem icf_frame_erased_updates[simp]:
   icf_frame (s with vs_return_pc_token := token) = icf_frame s /\
   icf_frame (update_var x v s) = icf_frame s
 Proof
-  simp[icf_frame_def, update_var_def]
+  simp_tac residual_frame_update_ss []
 QED
 
 (* Restore exactly the erased components. No retained-field inventory. *)
@@ -144,14 +163,14 @@ Theorem commute_frame_reconstruct:
   (commute_frame s with <| vs_vars := s.vs_vars;
     vs_allocas := s.vs_allocas; vs_alloca_next := s.vs_alloca_next |>) = s
 Proof
-  simp[commute_frame_def]
+  simp_tac residual_frame_ss [commute_frame_def]
 QED
 
 Theorem alloca_remap_frame_reconstruct:
   (alloca_remap_frame s with <| vs_vars := s.vs_vars; vs_memory := s.vs_memory;
     vs_allocas := s.vs_allocas; vs_alloca_next := s.vs_alloca_next |>) = s
 Proof
-  simp[alloca_remap_frame_def]
+  simp_tac residual_frame_ss [alloca_remap_frame_def]
 QED
 
 Theorem concretize_frame_reconstruct:
@@ -159,7 +178,7 @@ Theorem concretize_frame_reconstruct:
     vs_allocas := s.vs_allocas; vs_inst_idx := s.vs_inst_idx;
     vs_immutables := s.vs_immutables; vs_alloca_next := s.vs_alloca_next |>) = s
 Proof
-  simp[concretize_frame_def]
+  simp_tac residual_frame_ss [concretize_frame_def]
 QED
 
 Theorem copy_fwd_frame_reconstruct:
@@ -171,7 +190,7 @@ Theorem copy_fwd_frame_reconstruct:
     vs_initial_fmp := s.vs_initial_fmp;
     vs_return_pc_token := s.vs_return_pc_token |>) = s
 Proof
-  simp[copy_fwd_frame_def]
+  simp_tac residual_frame_ss [copy_fwd_frame_def]
 QED
 
 Theorem icf_frame_reconstruct:
@@ -181,7 +200,7 @@ Theorem icf_frame_reconstruct:
     vs_initial_fmp := s.vs_initial_fmp;
     vs_return_pc_token := s.vs_return_pc_token |>) = s
 Proof
-  simp[icf_frame_def]
+  simp_tac residual_frame_ss [icf_frame_def]
 QED
 
 Theorem commute_frame_eq_reconstruct:
@@ -189,7 +208,7 @@ Theorem commute_frame_eq_reconstruct:
   (s1 with <| vs_vars := s2.vs_vars; vs_allocas := s2.vs_allocas;
     vs_alloca_next := s2.vs_alloca_next |>) = s2
 Proof
-  simp[commute_frame_def, venom_state_component_equality]
+  simp_tac residual_frame_ss [commute_frame_def]
 QED
 
 Theorem alloca_remap_frame_eq_reconstruct:
@@ -197,7 +216,7 @@ Theorem alloca_remap_frame_eq_reconstruct:
   (s1 with <| vs_vars := s2.vs_vars; vs_memory := s2.vs_memory;
     vs_allocas := s2.vs_allocas; vs_alloca_next := s2.vs_alloca_next |>) = s2
 Proof
-  simp[alloca_remap_frame_def, venom_state_component_equality]
+  simp_tac residual_frame_ss [alloca_remap_frame_def]
 QED
 
 Theorem concretize_frame_eq_reconstruct:
@@ -206,7 +225,7 @@ Theorem concretize_frame_eq_reconstruct:
     vs_allocas := s2.vs_allocas; vs_inst_idx := s2.vs_inst_idx;
     vs_immutables := s2.vs_immutables; vs_alloca_next := s2.vs_alloca_next |>) = s2
 Proof
-  simp[concretize_frame_def, venom_state_component_equality]
+  simp_tac residual_frame_ss [concretize_frame_def]
 QED
 
 Theorem copy_fwd_frame_eq_reconstruct:
@@ -219,7 +238,7 @@ Theorem copy_fwd_frame_eq_reconstruct:
     vs_initial_fmp := s2.vs_initial_fmp;
     vs_return_pc_token := s2.vs_return_pc_token |>) = s2
 Proof
-  simp[copy_fwd_frame_def, venom_state_component_equality]
+  simp_tac residual_frame_ss [copy_fwd_frame_def]
 QED
 
 Theorem icf_frame_eq_reconstruct:
@@ -230,7 +249,7 @@ Theorem icf_frame_eq_reconstruct:
     vs_initial_fmp := s2.vs_initial_fmp;
     vs_return_pc_token := s2.vs_return_pc_token |>) = s2
 Proof
-  simp[icf_frame_def, venom_state_component_equality]
+  simp_tac residual_frame_ss [icf_frame_def]
 QED
 
 (* Full equality requires exactly the erased components as well. *)
@@ -239,7 +258,7 @@ Theorem commute_frame_eq:
   s1.vs_vars = s2.vs_vars /\ s1.vs_allocas = s2.vs_allocas /\
   s1.vs_alloca_next = s2.vs_alloca_next <=> s1 = s2
 Proof
-  simp[commute_frame_def, venom_state_component_equality] >> metis_tac[]
+  simp_tac residual_frame_ss [commute_frame_def] >> metis_tac[]
 QED
 
 (* Selector-parametric elimination and frame-respecting update transport. *)

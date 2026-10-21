@@ -408,35 +408,44 @@ Proof
   simp[IN_UNION]
 QED
 
+(* Select cached dispatch equations without expanding unrelated opcodes. *)
+val make_ssa_opcode_rewrites = map (fn th => let
+  val (_, body) = strip_forall (concl th)
+  val (guard, _) = dest_imp body
+in (rhs guard, th) end) (CONJUNCTS step_inst_base_opcode_eqs);
+
+fun make_ssa_step_base_for opc =
+  #2 (valOf (List.find (fn (key, _) => aconv key opc)
+    make_ssa_opcode_rewrites));
+
+(* Only expose result constructors: return values, memory slices and DRET's
+   packed state are irrelevant to the impossibility of an OK result. *)
+val make_ssa_term_result_ss = pure_ss ++ boolSimps.BOOL_ss ++ rewrites
+  [AllCaseEqs(), exec_result_distinct, LET_THM, pairTheory.ELIM_UNCURRY];
+
+val make_ssa_term_ok_jump_tac =
+  qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
+  qpat_assum `inst.inst_opcode = _` (fn eq =>
+    PURE_ONCE_REWRITE_TAC
+      [MATCH_MP (make_ssa_step_base_for (rhs (concl eq))) eq]) >>
+  simp_tac make_ssa_term_result_ss [];
+
 Theorem step_inst_base_DRET_not_OK_local[local]:
   !inst s r. inst.inst_opcode = DRET ==>
     step_inst_base inst s <> OK r
 Proof
-  rpt strip_tac >>
-  gvs[step_inst_base_def] >>
-  Cases_on `inst.inst_outputs = []` >> gvs[] >>
-  Cases_on `parse_dret_shape inst` >> gvs[] >>
-  PairCases_on `x` >> gvs[] >>
-  Cases_on `eval_operands inst.inst_operands s` >> gvs[] >>
-  Cases_on `pair_dret_words
-    (TAKE (2 * x1) (DROP (1 + x0) x))` >> gvs[] >>
-  pairarg_tac >> gvs[]
+  rpt strip_tac >> make_ssa_term_ok_jump_tac
 QED
 
 Theorem step_inst_base_RETFMP_not_OK_local[local]:
   !inst s r. inst.inst_opcode = RETFMP ==>
     step_inst_base inst s <> OK r
 Proof
-  rpt strip_tac >> gvs[step_inst_base_def] >>
-  Cases_on `eval_operands inst.inst_operands s` >> gvs[] >>
-  Cases_on `x` >> gvs[]
+  rpt strip_tac >> make_ssa_term_ok_jump_tac
 QED
 
-val make_ssa_term_ok_jump_tac =
-  qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
-  simp[step_inst_base_def, eval_operands_def, eval_operand_def,
-       AllCaseEqs()] >>
-  rpt CASE_TAC >> gvs[] >> rpt strip_tac >> pairarg_tac >> gvs[];
+val make_ssa_term_class_ss = bool_ss ++
+  simpLib.type_ssfrag ``:opcode`` ++ rewrites [is_terminator_def];
 
 Theorem step_inst_base_ok_terminator_jump_local[local]:
   !inst s s'.
@@ -446,18 +455,11 @@ Theorem step_inst_base_ok_terminator_jump_local[local]:
     inst.inst_opcode = DJMP
 Proof
   rpt strip_tac >>
-  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
-  TRY (rename1 `inst.inst_opcode = DRET` >>
-       metis_tac[step_inst_base_DRET_not_OK_local]) >>
-  TRY (rename1 `inst.inst_opcode = RETFMP` >>
-       metis_tac[step_inst_base_RETFMP_not_OK_local]) >>
-  TRY (rename1 `inst.inst_opcode = RET` >> make_ssa_term_ok_jump_tac) >>
-  TRY (rename1 `inst.inst_opcode = RETURN` >> make_ssa_term_ok_jump_tac) >>
-  TRY (rename1 `inst.inst_opcode = REVERT` >> make_ssa_term_ok_jump_tac) >>
-  TRY (rename1 `inst.inst_opcode = STOP` >> make_ssa_term_ok_jump_tac) >>
-  TRY (rename1 `inst.inst_opcode = SINK` >> make_ssa_term_ok_jump_tac) >>
-  TRY (rename1 `inst.inst_opcode = SELFDESTRUCT` >> make_ssa_term_ok_jump_tac) >>
-  TRY (rename1 `inst.inst_opcode = INVALID` >> make_ssa_term_ok_jump_tac)
+  Cases_on `inst.inst_opcode` >>
+  (* Filter the terminator assumption before touching the execution result. *)
+  qpat_x_assum `is_terminator _` mp_tac >>
+  asm_simp_tac make_ssa_term_class_ss [] >>
+  make_ssa_term_ok_jump_tac
 QED
 
 Theorem step_inst_base_as_step_inst_local[local]:
@@ -864,34 +866,13 @@ Theorem step_inst_base_lookup_preserved[local]:
     step_inst_base inst s = OK s' /\ ~MEM x inst.inst_outputs ==>
     lookup_var x s' = lookup_var x s
 Proof
-  rpt gen_tac >>
-  ONCE_REWRITE_TAC[step_inst_base_def] >>
-  Cases_on `inst.inst_opcode` >>
-  PURE_REWRITE_TAC[venomInstTheory.opcode_case_def] >>
-  (* Reuse helper preservation rather than unfolding pure computations. *)
-  TRY (strip_tac >>
-    FIRST [drule venomInstProofs1Theory.exec_pure1_state_equiv,
-           drule venomInstProofs1Theory.exec_pure2_state_equiv,
-           drule venomInstProofs1Theory.exec_pure3_state_equiv,
-           drule venomInstProofs1Theory.exec_read0_state_equiv,
-           drule venomInstProofs1Theory.exec_read1_state_equiv] >>
-    simp_tac std_ss [state_equiv_def, execution_equiv_def] >>
-    strip_tac >> first_x_assum (qspec_then `x` mp_tac) >>
-    asm_simp_tac std_ss [IN_DEF] >> NO_TAC) >>
-  (* Unfold only the goal, without the ambient SSA/frame simpset. *)
-  simp_tac std_ss [exec_write2_def, exec_alloca_def, exec_ext_call_def,
-    exec_delegatecall_def, exec_create_def, extract_venom_result_def] >>
-  gvs[AllCaseEqs(), LET_THM] >>
-  gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
-  gvs[jump_to_def, mcopy_def, mstore_def, istore_def, mstore8_def] >>
-  gvs[sstore_def, tstore_def] >>
-  gvs[halt_state_def, revert_state_def, set_returndata_def] >>
-  rpt strip_tac >> gvs[FLOOKUP_UPDATE] >>
-  TRY (gvs[write_memory_with_expansion_def, LET_THM] >> NO_TAC) >>
-  TRY (pairarg_tac >> gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >> NO_TAC) >>
-  TRY (Cases_on `result` >> gvs[AllCaseEqs()]) >>
-  TRY (Cases_on `y` >> gvs[AllCaseEqs()]) >>
-  gvs[lookup_var_def]
+  rpt strip_tac >>
+  `inst.inst_opcode <> INVOKE` by
+    (CCONTR_TAC >> gvs[make_ssa_step_base_for ``INVOKE``]) >>
+  `step_inst 0 ARB inst s = OK s'` by simp[step_inst_non_invoke] >>
+  Cases_on `is_terminator inst.inst_opcode`
+  >- (drule_all step_terminator_preserves_vars >> simp[]) >>
+  drule_all venomInstProofsTheory.step_preserves_non_output_vars >> simp[]
 QED
 
 (* vars_colon_free preservation through step_inst_base *)

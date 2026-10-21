@@ -5,7 +5,7 @@
  * but never reads or writes vs_inst_idx. So the result differs from the
  * original only in vs_inst_idx, captured by exec_result_map.
  *
- * Built as a separate theory because of its 101-opcode case split.
+ * Kept separate to isolate the opcode-wide commutation proofs.
  *
  * TOP-LEVEL:
  *   exec_result_map            — map function over state in exec_result
@@ -16,7 +16,7 @@ Theory instIdxIndep
 Ancestors
   venomExecSemantics venomState venomInst venomCallOracleDefs
 Libs
-  finite_mapTheory listTheory BasicProvers pairTheory stepInstBaseLib
+  finite_mapTheory listTheory BasicProvers pairTheory
 
 (* ================================================================
    exec_result_map — exported
@@ -156,15 +156,31 @@ QED
    exec_pure/read/write helpers — all local
    ================================================================ *)
 
+(* Only split the exposed envelope/evaluation case, pruning error branches
+   immediately.  Do not traverse every nested case or rewrite the context. *)
+val idx_case_ss = pure_ss ++ boolSimps.BOOL_ss ++ rewrites
+  [list_case_def, pair_case_thm, pairTheory.UNCURRY,
+   pairTheory.FST, pairTheory.SND, optionTheory.option_case_def,
+   operand_case_def, venom_state_accfupds, venom_state_fupdcanon,
+   venom_state_fupdfupds, combinTheory.K_THM, combinTheory.o_DEF, LET_THM,
+   eval_op_inst_idx, update_var_idx, exec_result_map_def];
+
+fun idx_cases_tac ss =
+  asm_simp_tac ss [] >>
+  REPEAT (PURE_TOP_CASE_TAC >> asm_simp_tac ss []);
+
+val exec_idx_ss = idx_case_ss ++ rewrites
+  [exec_pure1_def, exec_pure2_def, exec_pure3_def,
+   exec_read0_def, exec_read1_def, exec_write2_def];
+
+val exec_idx_tac = idx_cases_tac exec_idx_ss;
+
 Theorem exec_pure1_idx[local]:
   !f inst s n.
     exec_pure1 f inst (s with vs_inst_idx := n) =
     exec_result_map (\s'. s' with vs_inst_idx := n) (exec_pure1 f inst s)
 Proof
-  rpt gen_tac >>
-  simp[exec_pure1_def, eval_op_inst_idx, update_var_idx,
-       exec_result_map_def] >>
-  EVERY_CASE_TAC >> simp[exec_result_map_def]
+  rpt gen_tac >> exec_idx_tac
 QED
 
 Theorem exec_pure2_idx[local]:
@@ -172,10 +188,7 @@ Theorem exec_pure2_idx[local]:
     exec_pure2 f inst (s with vs_inst_idx := n) =
     exec_result_map (\s'. s' with vs_inst_idx := n) (exec_pure2 f inst s)
 Proof
-  rpt gen_tac >>
-  simp[exec_pure2_def, eval_op_inst_idx, update_var_idx,
-       exec_result_map_def] >>
-  EVERY_CASE_TAC >> simp[exec_result_map_def]
+  rpt gen_tac >> exec_idx_tac
 QED
 
 Theorem exec_pure3_idx[local]:
@@ -183,10 +196,7 @@ Theorem exec_pure3_idx[local]:
     exec_pure3 f inst (s with vs_inst_idx := n) =
     exec_result_map (\s'. s' with vs_inst_idx := n) (exec_pure3 f inst s)
 Proof
-  rpt gen_tac >>
-  simp[exec_pure3_def, eval_op_inst_idx, update_var_idx,
-       exec_result_map_def] >>
-  EVERY_CASE_TAC >> simp[exec_result_map_def]
+  rpt gen_tac >> exec_idx_tac
 QED
 
 Theorem exec_read0_idx[local]:
@@ -195,9 +205,7 @@ Theorem exec_read0_idx[local]:
     exec_read0 g inst (s with vs_inst_idx := n) =
     exec_result_map (\s'. s' with vs_inst_idx := n) (exec_read0 g inst s)
 Proof
-  rpt strip_tac >>
-  simp[exec_read0_def, update_var_idx, exec_result_map_def] >>
-  EVERY_CASE_TAC >> simp[exec_result_map_def]
+  rpt strip_tac >> exec_idx_tac
 QED
 
 Theorem exec_read1_idx[local]:
@@ -206,10 +214,7 @@ Theorem exec_read1_idx[local]:
     exec_read1 g inst (s with vs_inst_idx := n) =
     exec_result_map (\s'. s' with vs_inst_idx := n) (exec_read1 g inst s)
 Proof
-  rpt strip_tac >>
-  simp[exec_read1_def, eval_op_inst_idx, update_var_idx,
-       exec_result_map_def] >>
-  EVERY_CASE_TAC >> simp[exec_result_map_def]
+  rpt strip_tac >> exec_idx_tac
 QED
 
 Theorem exec_write2_idx[local]:
@@ -219,14 +224,14 @@ Theorem exec_write2_idx[local]:
     exec_write2 f inst (s with vs_inst_idx := n) =
     exec_result_map (\s'. s' with vs_inst_idx := n) (exec_write2 f inst s)
 Proof
-  rpt strip_tac >>
-  simp[exec_write2_def, eval_op_inst_idx, exec_result_map_def] >>
-  EVERY_CASE_TAC >> simp[exec_result_map_def]
+  rpt strip_tac >> exec_idx_tac
 QED
 
 (* ================================================================
    Allocation helper — local
    ================================================================ *)
+
+val alloca_idx_ss = idx_case_ss ++ rewrites [exec_alloca_def];
 
 Theorem exec_alloca_idx[local]:
   !inst s alloc_size n.
@@ -234,9 +239,7 @@ Theorem exec_alloca_idx[local]:
     exec_result_map (\s'. s' with vs_inst_idx := n)
                     (exec_alloca inst s alloc_size)
 Proof
-  rpt gen_tac >> simp[exec_alloca_def, LET_THM] >>
-  EVERY_CASE_TAC >> simp[exec_result_map_def] >>
-  simp[update_var_def, venom_state_component_equality]
+  rpt gen_tac >> idx_cases_tac alloca_idx_ss
 QED
 
 (* ================================================================
@@ -277,6 +280,10 @@ Proof
 
 QED
 
+val extract_idx_ss = idx_case_ss ++ rewrites
+  [extract_venom_result_def, optionTheory.OPTION_MAP_DEF,
+   sumTheory.sum_case_def, write_mem_idx];
+
 Theorem extract_venom_result_idx[local]:
   !s output_val retOff retSize run_result n.
     extract_venom_result (s with vs_inst_idx := n) output_val retOff retSize
@@ -284,29 +291,24 @@ Theorem extract_venom_result_idx[local]:
     OPTION_MAP (\p. (FST p, (SND p) with vs_inst_idx := n))
                (extract_venom_result s output_val retOff retSize run_result)
 Proof
-  rpt gen_tac >> simp[extract_venom_result_def, LET_THM] >>
-  Cases_on `run_result` >> simp[] >>
-  PairCases_on `x` >> simp[] >>
-  Cases_on `x1.contexts` >> simp[] >>
-  Cases_on `h` >> Cases_on `t` >> simp[] >>
-  Cases_on `x0` >>
-  simp[write_memory_with_expansion_def, LET_THM,
-       venom_state_component_equality] >>
-  Cases_on `y` >>
-  simp[write_memory_with_expansion_def, LET_THM,
-       venom_state_component_equality]
+  rpt gen_tac >> idx_cases_tac extract_idx_ss
 QED
 
 (* ================================================================
    exec_ext_call / exec_delegatecall / exec_create — local
 
-   Pattern: unfold def, apply idx helpers + option_case_OPTION_MAP,
-   then EVERY_CASE_TAC handles the remaining structure.
+   Normalize state updates once, then prune exposed envelope cases.
    ================================================================ *)
 
 val ext_call_rw =
   [LET_THM, read_mem_idx, extract_venom_result_idx,
    option_case_OPTION_MAP, update_var_idx];
+
+val ext_call_idx_ss = idx_case_ss ++ rewrites
+  (ext_call_rw @ [exec_ext_call_def, venom_call_request_def,
+                 consume_call_outcome_eq, write_mem_idx, update_var_def,
+                 exec_delegatecall_def, make_venom_delegatecall_state_idx,
+                 exec_create_def, make_venom_create_state_idx]);
 
 Theorem exec_ext_call_idx[local]:
   !inst s gas addr value ao as_ ro rs is_static n.
@@ -315,11 +317,7 @@ Theorem exec_ext_call_idx[local]:
     exec_result_map (\s'. s' with vs_inst_idx := n)
       (exec_ext_call inst s gas addr value ao as_ ro rs is_static)
 Proof
-  rpt gen_tac >>
-  simp([exec_ext_call_def, venom_call_request_def,
-        write_memory_with_expansion_def, make_venom_call_state_idx] @ ext_call_rw) >>
-  EVERY_CASE_TAC >>
-  simp[exec_result_map_def, update_var_def, update_var_idx, venom_state_component_equality]
+  rpt gen_tac >> idx_cases_tac ext_call_idx_ss
 QED
 
 Theorem exec_delegatecall_idx[local]:
@@ -328,11 +326,7 @@ Theorem exec_delegatecall_idx[local]:
     exec_result_map (\s'. s' with vs_inst_idx := n)
       (exec_delegatecall inst s gas addr ao as_ ro rs)
 Proof
-  rpt gen_tac >>
-  simp([exec_delegatecall_def, make_venom_delegatecall_state_idx]
-       @ ext_call_rw) >>
-  EVERY_CASE_TAC >>
-  simp[exec_result_map_def, update_var_idx, venom_state_component_equality]
+  rpt gen_tac >> idx_cases_tac ext_call_idx_ss
 QED
 
 Theorem exec_create_idx[local]:
@@ -341,11 +335,7 @@ Theorem exec_create_idx[local]:
     exec_result_map (\s'. s' with vs_inst_idx := n)
       (exec_create inst s value offset sz salt_opt)
 Proof
-  rpt gen_tac >>
-  simp([exec_create_def, make_venom_create_state_idx] @ ext_call_rw) >>
-  Cases_on `salt_opt` >> simp[] >>
-  EVERY_CASE_TAC >>
-  simp[exec_result_map_def, update_var_idx, venom_state_component_equality]
+  rpt gen_tac >> idx_cases_tac ext_call_idx_ss
 QED
 
 (* ================================================================
@@ -358,23 +348,61 @@ val idx_rw = [eval_op_inst_idx, eval_ops_inst_idx, update_var_idx,
               mstore_idx, istore_idx, mstore8_idx, sstore_idx, tstore_idx, mcopy_idx, mload_idx,
               sload_idx, tload_idx, exec_result_map_def];
 
-val opcode_idx_tac =
-  with_opcode_clause (fn ths => simp (ths @
-    [exec_pure1_idx, exec_pure2_idx, exec_pure3_idx, exec_alloca_idx])) >>
-  TRY (irule exec_read0_idx >> simp idx_rw >> NO_TAC) >>
-  TRY (irule exec_read1_idx >> simp idx_rw >> NO_TAC) >>
-  TRY (irule exec_write2_idx >> simp idx_rw >> NO_TAC) >>
-  simp[eval_op_inst_idx, eval_ops_inst_idx,
-       exec_ext_call_idx, exec_delegatecall_idx, exec_create_idx] >>
-  EVERY_CASE_TAC >>
-  simp(idx_rw @ [venom_state_component_equality]);
+(* Cache guarded equations once; select only the known opcode branch. *)
+val step_inst_base_opcode_rewrites = let
+  fun key th = let
+    val (_, body) = strip_forall (concl th)
+    val (guard, _) = dest_imp body
+  in rhs guard end
+in map (fn th => (key th, th))
+  (CONJUNCTS venomExecSemanticsTheory.step_inst_base_opcode_eqs) end;
 
-(* Isolate the expensive opcode dispatch once for the MUL branch. *)
+fun rewrite_step_inst_base_opcode eq = let
+  val (_, rewrite) = valOf (List.find
+    (fn (key, _) => aconv key (rhs (concl eq)))
+    step_inst_base_opcode_rewrites)
+in PURE_ONCE_REWRITE_TAC [MATCH_MP rewrite eq] end;
+
+val step_inst_base_opcode_tac =
+  qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode;
+
+val opcode_idx_ss = idx_case_ss ++ rewrites
+  (idx_rw @ [exec_pure1_idx, exec_pure2_idx, exec_pure3_idx, exec_alloca_idx,
+             exec_ext_call_idx, exec_delegatecall_idx, exec_create_idx]);
+
+(* Direct envelopes do not need the exec_read/exec_write rule probes. *)
+val envelope_idx_tac =
+  step_inst_base_opcode_tac >> idx_cases_tac opcode_idx_ss;
+
+val opcode_idx_tac =
+  step_inst_base_opcode_tac >>
+  simp_tac opcode_idx_ss [] >>
+  TRY (irule exec_read0_idx >> simp_tac opcode_idx_ss [] >> NO_TAC) >>
+  TRY (irule exec_read1_idx >> simp_tac opcode_idx_ss [] >> NO_TAC) >>
+  TRY (irule exec_write2_idx >> simp_tac opcode_idx_ss [] >> NO_TAC) >>
+  idx_cases_tac opcode_idx_ss;
+
+(* Parameter access only inspects the operand/output envelope.  Keep EL and
+   its bounds opaque: the global simpset uses bounds from conditional context
+   to rewrite the lookup, although the same lookup occurs on both sides.
+   Split only head cases in the conclusion, using cached envelope rewrites
+   without arithmetic procedures or conditional-context congruences. *)
+val param_idx_ss = pure_ss ++ boolSimps.BOOL_ss ++ rewrites
+  [list_case_def, pair_case_thm, operand_case_def,
+   venom_state_accfupds, combinTheory.K_THM, LET_THM,
+   update_var_idx, exec_result_map_def];
+
+val param_idx_tac =
+  step_inst_base_opcode_tac >>
+  simp_tac param_idx_ss [] >>
+  REPEAT (PURE_TOP_CASE_TAC >> asm_simp_tac param_idx_ss []);
+
+(* Retain the specialized MUL helper without unfolding opcode dispatch. *)
 Theorem step_inst_base_MUL[local]:
   !inst s. inst.inst_opcode = MUL ==>
     step_inst_base inst s = exec_pure2 $* inst s
 Proof
-  simp[step_inst_base_def]
+  rpt strip_tac >> step_inst_base_opcode_tac >> simp[]
 QED
 
 (* ================================================================
@@ -425,7 +453,7 @@ Proof
   >- opcode_idx_tac  (* ILOAD *)
   >- opcode_idx_tac  (* ISTORE *)
   >- opcode_idx_tac  (* PHI *)
-  >- opcode_idx_tac  (* PARAM *)
+  >- param_idx_tac  (* PARAM *)
   >- opcode_idx_tac  (* ASSIGN *)
   >- opcode_idx_tac  (* NOP *)
   >- opcode_idx_tac  (* ALLOCA *)
@@ -435,8 +463,8 @@ Proof
   >- opcode_idx_tac  (* INITIAL_FMP *)
   >- opcode_idx_tac  (* BUMP *)
   >- opcode_idx_tac  (* INVOKE *)
-  >- opcode_idx_tac  (* FMP_PARAM *)
-  >- opcode_idx_tac  (* RETPC_PARAM *)
+  >- param_idx_tac  (* FMP_PARAM *)
+  >- param_idx_tac  (* RETPC_PARAM *)
   >- opcode_idx_tac  (* CALLER *)
   >- opcode_idx_tac  (* CALLVALUE *)
   >- opcode_idx_tac  (* CALLDATALOAD *)
@@ -466,21 +494,11 @@ Proof
   >- opcode_idx_tac  (* BLOBHASH *)
   >- opcode_idx_tac  (* BLOBBASEFEE *)
   >- opcode_idx_tac  (* SHA3 *)
-  >- (with_opcode_clause (fn ths => simp (ths @
-        [eval_op_inst_idx, exec_ext_call_idx])) >>
-      EVERY_CASE_TAC >> simp[exec_result_map_def])  (* CALL *)
-  >- (with_opcode_clause (fn ths => simp (ths @
-        [eval_op_inst_idx, exec_ext_call_idx])) >>
-      EVERY_CASE_TAC >> simp[exec_result_map_def])  (* STATICCALL *)
-  >- (with_opcode_clause (fn ths => simp (ths @
-        [eval_op_inst_idx, exec_delegatecall_idx])) >>
-      EVERY_CASE_TAC >> simp[exec_result_map_def])  (* DELEGATECALL *)
-  >- (with_opcode_clause (fn ths => simp (ths @
-        [eval_op_inst_idx, exec_create_idx])) >>
-      EVERY_CASE_TAC >> simp[exec_result_map_def])  (* CREATE *)
-  >- (with_opcode_clause (fn ths => simp (ths @
-        [eval_op_inst_idx, exec_create_idx])) >>
-      EVERY_CASE_TAC >> simp[exec_result_map_def])  (* CREATE2 *)
+  >- envelope_idx_tac  (* CALL *)
+  >- envelope_idx_tac  (* STATICCALL *)
+  >- envelope_idx_tac  (* DELEGATECALL *)
+  >- envelope_idx_tac  (* CREATE *)
+  >- envelope_idx_tac  (* CREATE2 *)
   >- opcode_idx_tac  (* LOG *)
   >- opcode_idx_tac  (* ASSERT *)
   >- opcode_idx_tac  (* ASSERT_UNREACHABLE *)
@@ -516,13 +534,10 @@ QED
    TERMINATOR idx-indep: normalizing idx to 0 yields same result
    ================================================================ *)
 
+val terminator_idx_ss = opcode_idx_ss ++ rewrites [combinTheory.K_DEF];
+
 val terminator_idx_tac =
-  with_opcode_clause (fn ths => simp (ths @
-    [eval_op_inst_idx, eval_ops_inst_idx,
-     jump_to_idx, halt_state_idx, revert_state_idx,
-     set_returndata_idx, read_mem_idx, write_mem_idx])) >>
-  EVERY_CASE_TAC >>
-  simp[exec_result_map_def, venom_state_component_equality];
+  envelope_idx_tac >> simp_tac terminator_idx_ss [];
 
 Theorem terminator_step_inst_base_idx_norm0:
   !inst s n. is_terminator inst.inst_opcode ==>
@@ -541,10 +556,10 @@ Proof
   >- terminator_idx_tac  (* REVERT *)
   >- terminator_idx_tac  (* STOP *)
   >- terminator_idx_tac  (* SINK *)
-  >- (with_opcode_clause (fn ths => simp (ths @
-        [eval_op_inst_idx, eval_ops_inst_idx,
-         jump_to_idx, halt_state_idx, revert_state_idx,
-         set_returndata_idx, read_mem_idx, write_mem_idx])) >>
+  >- (step_inst_base_opcode_tac >>
+      simp[eval_op_inst_idx, eval_ops_inst_idx,
+           jump_to_idx, halt_state_idx, revert_state_idx,
+           set_returndata_idx, read_mem_idx, write_mem_idx] >>
       EVERY_CASE_TAC >>
       Cases_on `pack_dret_dynamic s.vs_call_entry_fmp x' s` >>
       Cases_on `r'` >>
@@ -563,8 +578,9 @@ Theorem terminator_OK_inst_idx_0:
 Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
-  with_opcode_clause (fn ths => gvs (ths @ [AllCaseEqs(), jump_to_def])) >>
-  (* only DRET is left *)
+  qpat_x_assum `step_inst_base inst s = OK v` mp_tac >>
+  step_inst_base_opcode_tac >> strip_tac >>
+  gvs[AllCaseEqs(), jump_to_def] >>
   Cases_on `pack_dret_dynamic s.vs_call_entry_fmp pairs s` >>
   Cases_on `r` >> gvs[]
 QED

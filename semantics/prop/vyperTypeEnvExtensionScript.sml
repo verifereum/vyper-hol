@@ -137,7 +137,7 @@ Proof
   TRY (rename1 `Raise r` >> Cases_on `r` >> gvs[type_stmt_def]) >>
   TRY (rename1 `Return r` >> Cases_on `r` >> gvs[type_stmt_def]) >>
   TRY (rw[env_maps_wf_def, extend_local_def, FLOOKUP_UPDATE] >>
-       Cases_on `string_to_num s'' = id` >> gvs[FLOOKUP_UPDATE]) >>
+       Cases_on `s'' = id` >> gvs[FLOOKUP_UPDATE]) >>
   strip_tac >> gvs[]
 QED
 
@@ -170,7 +170,7 @@ Proof
   TRY (rename1 `Raise r` >> Cases_on `r` >> gvs[type_stmt_def]) >>
   TRY (rename1 `Return r` >> Cases_on `r` >> gvs[type_stmt_def]) >>
   rw[] >> gvs[FLOOKUP_UPDATE] >>
-  Cases_on `string_to_num s'' = id` >> gvs[] >>
+  Cases_on `s'' = id` >> gvs[] >>
   fs[TO_FLOOKUP]
 QED
 
@@ -202,7 +202,7 @@ Proof
   TRY (rename1 `Raise r` >> Cases_on `r` >> gvs[type_stmt_def]) >>
   TRY (rename1 `Return r` >> Cases_on `r` >> gvs[type_stmt_def]) >>
   rw[] >> gvs[FLOOKUP_UPDATE] >>
-  Cases_on `string_to_num s'' = id` >> gvs[] >>
+  Cases_on `s'' = id` >> gvs[] >>
   fs[env_maps_wf_def, TO_FLOOKUP]
 QED
 

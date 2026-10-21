@@ -289,7 +289,7 @@ Proof
   TRY (rename1 `Return r` >> Cases_on `r` >> gvs[type_stmt_def]) >>
   rpt strip_tac >> gvs[] >>
   irule extend_local_env_consistent_weaken >> simp[] >>
-  qexists_tac `T` >> qexists_tac `string_to_num s''` >>
+  qexists_tac `T` >> qexists_tac `s''` >>
   qexists_tac `expr_type e` >>
   gvs[extend_local_def, FLOOKUP_UPDATE] >>
   first_x_assum irule >> simp[FLOOKUP_DEF]
@@ -415,18 +415,18 @@ Proof
   rpt strip_tac >>
   first_x_assum drule_all >>
   strip_tac >> gvs[] >>
-  rw[] >>
   `?old_pair. FLOOKUP (get_source_immutables src
-      (case ALOOKUP st.immutables cx.txn.target of SOME m => m | NONE => [])) id = SOME old_pair` by (
+      (case ALOOKUP st.immutables cx.txn.target of SOME m => m | NONE => []))
+      id = SOME old_pair` by (
     qpat_x_assum `!src n. IS_SOME (FLOOKUP (get_source_immutables src _) n) ==> _`
       (qspecl_then [`src`, `id`] mp_tac) >>
-    metis_tac[IS_SOME_EXISTS]) >>
+    simp[IS_SOME_EXISTS]) >>
   PairCases_on `old_pair` >>
-  `evaluate_type (get_tenv cx) ty = SOME old_pair0` by
-    metis_tac[] >>
   drule_all preserves_tv_immutables_type_preserved >>
-  strip_tac >>
-  gvs[]
+  strip_tac >> gvs[] >>
+  qpat_x_assum `!tv v. _`
+    (qspecl_then [`old_pair0`, `old_pair1`] mp_tac) >>
+  simp[]
 QED
 
 (* ===== Assignability preservation for expression evaluation ===== *)
@@ -495,9 +495,9 @@ Theorem update_name_preserves_assignable_lookup:
            entry'.assignable
 Proof
   rw[update_name_def] >>
-  Cases_on `find_containing_scope (string_to_num nm) st.scopes` >> gvs[]
+  Cases_on `find_containing_scope nm st.scopes` >> gvs[]
   >- (
-    Cases_on `id = string_to_num nm` >- (
+    Cases_on `id = nm` >- (
       drule find_containing_scope_none_lookup_scopes_none >> gvs[]) >>
     qexists_tac `entry` >>
     Cases_on `st.scopes` >> gvs[lookup_scopes_def, FLOOKUP_UPDATE, AllCaseEqs()]) >>
@@ -505,7 +505,7 @@ Proof
   drule find_containing_scope_structure >>
   drule find_containing_scope_pre_none >>
   rpt strip_tac >> gvs[] >>
-  Cases_on `id = string_to_num nm` >- (
+  Cases_on `id = nm` >- (
     `lookup_scopes id x0 = NONE` by gvs[] >>
     `lookup_scopes id (x0 ++ x1::x3) = SOME x2` by
       metis_tac[lookup_scopes_append_cons] >>
@@ -542,7 +542,7 @@ Proof
   simp[Once assign_target_def, bind_def, get_scopes_def, return_def,
        lift_option_def, lift_sum_def, type_check_def, assert_def,
        ignore_bind_def, set_scopes_def, AllCaseEqs()] >>
-  Cases_on `find_containing_scope (string_to_num nm) st.scopes` >> simp[return_def, raise_def] >- metis_tac[] >>
+  Cases_on `find_containing_scope nm st.scopes` >> simp[return_def, raise_def] >- metis_tac[] >>
   PairCases_on `x` >> simp[] >>
   Cases_on `assign_subscripts x2.type x2.value (REVERSE sbs) ao` >>
   simp[return_def, raise_def] >>
@@ -553,7 +553,7 @@ Proof
   drule find_containing_scope_structure >>
   drule find_containing_scope_pre_none >>
   rpt strip_tac >> gvs[] >>
-  Cases_on `id = string_to_num nm` >- (
+  Cases_on `id = nm` >- (
     `lookup_scopes id x0 = NONE` by gvs[] >>
     `lookup_scopes id (x0 ++ x1::x3) = SOME x2` by
       metis_tac[lookup_scopes_append_cons] >>
@@ -585,7 +585,7 @@ Proof
        set_address_immutables_def, lift_option_def, lift_option_type_def,
        lift_sum_def, ignore_bind_def] >>
   Cases_on `ALOOKUP st.immutables cx.txn.target` >> simp[return_def, raise_def] >>
-  Cases_on `FLOOKUP (get_source_immutables src_id_opt x) (string_to_num nm)` >>
+  Cases_on `FLOOKUP (get_source_immutables src_id_opt x) nm` >>
   simp[return_def, raise_def] >>
   PairCases_on `x'` >> simp[] >>
   Cases_on `assign_subscripts x'0 x'1 (REVERSE sbs) ao` >> simp[return_def, raise_def] >>

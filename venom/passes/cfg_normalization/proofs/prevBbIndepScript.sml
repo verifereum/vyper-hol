@@ -152,15 +152,36 @@ Definition exec_result_map_prev_bb_def:
   (exec_result_map_prev_bb f (Error e) = Error e)
 End
 
+(* Normalize only state projections and exposed envelope cases.  Keeping
+   arithmetic and conditional-context congruences out leaves payloads opaque. *)
+val prev_bb_state_rw =
+  List.filter (free_in ``vs_prev_bb_fupd`` o concl)
+    (CONJUNCTS venom_state_accfupds) @
+  [venom_state_fupdcanon, venom_state_fupdfupds];
+
+val prev_bb_case_ss = pure_ss ++ boolSimps.BOOL_ss ++ rewrites
+  (prev_bb_state_rw @
+   [list_case_def, pair_case_thm, pairTheory.UNCURRY,
+    pairTheory.FST, pairTheory.SND, optionTheory.option_case_def,
+    operand_case_def, combinTheory.K_THM, combinTheory.o_DEF, LET_THM,
+    eval_op_prev_bb, update_var_prev_bb, exec_result_map_prev_bb_def]);
+
+fun prev_bb_cases_tac ss =
+  asm_simp_tac ss [] >>
+  REPEAT (PURE_TOP_CASE_TAC >> asm_simp_tac ss []);
+
+val exec_prev_bb_ss = prev_bb_case_ss ++ rewrites
+  [exec_pure1_def, exec_pure2_def, exec_pure3_def,
+   exec_read0_def, exec_read1_def, exec_write2_def];
+
+val exec_prev_bb_tac = prev_bb_cases_tac exec_prev_bb_ss;
+
 Theorem exec_pure1_prev_bb[local]:
   !f inst s p.
     exec_pure1 f inst (s with vs_prev_bb := p) =
     exec_result_map_prev_bb (\s'. s' with vs_prev_bb := p) (exec_pure1 f inst s)
 Proof
-  rpt gen_tac >>
-  simp[exec_pure1_def, eval_op_prev_bb, update_var_prev_bb,
-       exec_result_map_prev_bb_def] >>
-  BasicProvers.EVERY_CASE_TAC >> simp[exec_result_map_prev_bb_def]
+  rpt gen_tac >> exec_prev_bb_tac
 QED
 
 Theorem exec_pure2_prev_bb[local]:
@@ -168,10 +189,7 @@ Theorem exec_pure2_prev_bb[local]:
     exec_pure2 f inst (s with vs_prev_bb := p) =
     exec_result_map_prev_bb (\s'. s' with vs_prev_bb := p) (exec_pure2 f inst s)
 Proof
-  rpt gen_tac >>
-  simp[exec_pure2_def, eval_op_prev_bb, update_var_prev_bb,
-       exec_result_map_prev_bb_def] >>
-  BasicProvers.EVERY_CASE_TAC >> simp[exec_result_map_prev_bb_def]
+  rpt gen_tac >> exec_prev_bb_tac
 QED
 
 Theorem exec_pure3_prev_bb[local]:
@@ -179,10 +197,7 @@ Theorem exec_pure3_prev_bb[local]:
     exec_pure3 f inst (s with vs_prev_bb := p) =
     exec_result_map_prev_bb (\s'. s' with vs_prev_bb := p) (exec_pure3 f inst s)
 Proof
-  rpt gen_tac >>
-  simp[exec_pure3_def, eval_op_prev_bb, update_var_prev_bb,
-       exec_result_map_prev_bb_def] >>
-  BasicProvers.EVERY_CASE_TAC >> simp[exec_result_map_prev_bb_def]
+  rpt gen_tac >> exec_prev_bb_tac
 QED
 
 Theorem exec_read0_prev_bb[local]:
@@ -191,9 +206,7 @@ Theorem exec_read0_prev_bb[local]:
     exec_read0 g inst (s with vs_prev_bb := p) =
     exec_result_map_prev_bb (\s'. s' with vs_prev_bb := p) (exec_read0 g inst s)
 Proof
-  rpt strip_tac >>
-  simp[exec_read0_def, update_var_prev_bb, exec_result_map_prev_bb_def] >>
-  BasicProvers.EVERY_CASE_TAC >> simp[exec_result_map_prev_bb_def]
+  rpt strip_tac >> exec_prev_bb_tac
 QED
 
 Theorem exec_read1_prev_bb[local]:
@@ -202,10 +215,7 @@ Theorem exec_read1_prev_bb[local]:
     exec_read1 g inst (s with vs_prev_bb := p) =
     exec_result_map_prev_bb (\s'. s' with vs_prev_bb := p) (exec_read1 g inst s)
 Proof
-  rpt strip_tac >>
-  simp[exec_read1_def, eval_op_prev_bb, update_var_prev_bb,
-       exec_result_map_prev_bb_def] >>
-  BasicProvers.EVERY_CASE_TAC >> simp[exec_result_map_prev_bb_def]
+  rpt strip_tac >> exec_prev_bb_tac
 QED
 
 Theorem exec_write2_prev_bb[local]:
@@ -215,10 +225,10 @@ Theorem exec_write2_prev_bb[local]:
     exec_write2 f inst (s with vs_prev_bb := p) =
     exec_result_map_prev_bb (\s'. s' with vs_prev_bb := p) (exec_write2 f inst s)
 Proof
-  rpt strip_tac >>
-  simp[exec_write2_def, eval_op_prev_bb, exec_result_map_prev_bb_def] >>
-  BasicProvers.EVERY_CASE_TAC >> simp[exec_result_map_prev_bb_def]
+  rpt strip_tac >> exec_prev_bb_tac
 QED
+
+val alloca_prev_bb_ss = prev_bb_case_ss ++ rewrites [exec_alloca_def];
 
 Theorem exec_alloca_prev_bb[local]:
   !inst s alloc_size p.
@@ -226,9 +236,7 @@ Theorem exec_alloca_prev_bb[local]:
     exec_result_map_prev_bb (\s'. s' with vs_prev_bb := p)
                     (exec_alloca inst s alloc_size)
 Proof
-  rpt gen_tac >> simp[exec_alloca_def, LET_THM] >>
-  BasicProvers.EVERY_CASE_TAC >> simp[exec_result_map_prev_bb_def] >>
-  simp[update_var_def, venom_state_component_equality]
+  rpt gen_tac >> prev_bb_cases_tac alloca_prev_bb_ss
 QED
 
 (* ================================================================
@@ -279,6 +287,10 @@ Proof
   simp[make_venom_create_state_def, LET_THM, venom_to_tx_params_prev_bb]
 QED
 
+val extract_prev_bb_ss = prev_bb_case_ss ++ rewrites
+  [extract_venom_result_def, optionTheory.OPTION_MAP_DEF,
+   sumTheory.sum_case_def, write_mem_prev_bb];
+
 Theorem extract_venom_result_prev_bb[local]:
   !s output_val retOff retSize run_result p.
     extract_venom_result (s with vs_prev_bb := p) output_val retOff retSize
@@ -286,22 +298,20 @@ Theorem extract_venom_result_prev_bb[local]:
     OPTION_MAP (\q. (FST q, (SND q) with vs_prev_bb := p))
                (extract_venom_result s output_val retOff retSize run_result)
 Proof
-  rpt gen_tac >> simp[extract_venom_result_def, LET_THM] >>
-  Cases_on `run_result` >> simp[] >>
-  PairCases_on `x` >> simp[] >>
-  Cases_on `x1.contexts` >> simp[] >>
-  Cases_on `h` >> Cases_on `t` >> simp[] >>
-  Cases_on `x0` >>
-  simp[write_memory_with_expansion_def, LET_THM,
-       venom_state_component_equality] >>
-  Cases_on `y` >>
-  simp[write_memory_with_expansion_def, LET_THM,
-       venom_state_component_equality]
+  rpt gen_tac >> prev_bb_cases_tac extract_prev_bb_ss
 QED
 
 val ext_call_rw_prev_bb =
   [LET_THM, read_mem_prev_bb, extract_venom_result_prev_bb,
    option_case_OPTION_MAP_prev_bb, update_var_prev_bb];
+
+val ext_call_prev_bb_ss = prev_bb_case_ss ++ rewrites
+  (ext_call_rw_prev_bb @
+   [exec_ext_call_def, venom_call_request_def, consume_call_outcome_eq,
+    write_mem_prev_bb, update_var_def, venom_state_accfupds,
+    exec_delegatecall_def,
+    make_venom_delegatecall_state_prev_bb, exec_create_def,
+    make_venom_create_state_prev_bb]);
 
 Theorem exec_ext_call_prev_bb[local]:
   !inst s gas addr value ao as_ ro rs is_static p.
@@ -310,11 +320,7 @@ Theorem exec_ext_call_prev_bb[local]:
     exec_result_map_prev_bb (\s'. s' with vs_prev_bb := p)
       (exec_ext_call inst s gas addr value ao as_ ro rs is_static)
 Proof
-  rpt gen_tac >>
-  simp([exec_ext_call_def, venom_call_request_def,
-        write_memory_with_expansion_def, make_venom_call_state_prev_bb] @ ext_call_rw_prev_bb) >>
-  BasicProvers.EVERY_CASE_TAC >>
-  simp[exec_result_map_prev_bb_def, update_var_def, update_var_prev_bb, venom_state_component_equality]
+  rpt gen_tac >> prev_bb_cases_tac ext_call_prev_bb_ss
 QED
 
 Theorem exec_delegatecall_prev_bb[local]:
@@ -323,11 +329,7 @@ Theorem exec_delegatecall_prev_bb[local]:
     exec_result_map_prev_bb (\s'. s' with vs_prev_bb := p)
       (exec_delegatecall inst s gas addr ao as_ ro rs)
 Proof
-  rpt gen_tac >>
-  simp([exec_delegatecall_def, make_venom_delegatecall_state_prev_bb]
-       @ ext_call_rw_prev_bb) >>
-  BasicProvers.EVERY_CASE_TAC >>
-  simp[exec_result_map_prev_bb_def, update_var_prev_bb, venom_state_component_equality]
+  rpt gen_tac >> prev_bb_cases_tac ext_call_prev_bb_ss
 QED
 
 Theorem exec_create_prev_bb[local]:
@@ -336,11 +338,7 @@ Theorem exec_create_prev_bb[local]:
     exec_result_map_prev_bb (\s'. s' with vs_prev_bb := p)
       (exec_create inst s value offset sz salt_opt)
 Proof
-  rpt gen_tac >>
-  simp([exec_create_def, make_venom_create_state_prev_bb] @ ext_call_rw_prev_bb) >>
-  Cases_on `salt_opt` >> simp[] >>
-  BasicProvers.EVERY_CASE_TAC >>
-  simp[exec_result_map_prev_bb_def, update_var_prev_bb, venom_state_component_equality]
+  rpt gen_tac >> prev_bb_cases_tac ext_call_prev_bb_ss
 QED
 
 (* ================================================================
@@ -360,25 +358,82 @@ val prev_bb_rw = [eval_op_prev_bb, eval_ops_prev_bb, update_var_prev_bb,
    step_inst_base commutes with vs_prev_bb update.
    ================================================================ *)
 
+(* Cache guarded equations, then rewrite only the selected opcode branch. *)
+val prev_bb_opcode_rewrites = let
+  fun key th = let
+    val (_, body) = strip_forall (concl th)
+    val (guard, _) = dest_imp body
+  in rhs guard end
+in map (fn th => (key th, th))
+  (CONJUNCTS venomExecSemanticsTheory.step_inst_base_opcode_eqs) end;
+
+fun rewrite_prev_bb_opcode eq = let
+  val (_, rewrite) = valOf (List.find
+    (fn (key, _) => aconv key (rhs (concl eq))) prev_bb_opcode_rewrites)
+in PURE_ONCE_REWRITE_TAC [MATCH_MP rewrite eq] end;
+
+(* The opcode equation has served its purpose after dispatch.  Do not feed
+   it to every subsequent envelope-case simplification. *)
+val prev_bb_dispatch_tac =
+  qpat_x_assum `inst.inst_opcode = _` rewrite_prev_bb_opcode;
+
+val opcode_prev_bb_ss = prev_bb_case_ss ++ rewrites
+  (prev_bb_rw @ [exec_pure1_prev_bb, exec_pure2_prev_bb,
+                exec_pure3_prev_bb, exec_alloca_prev_bb,
+                exec_ext_call_prev_bb, exec_delegatecall_prev_bb,
+                exec_create_prev_bb]);
+
+(* Direct envelopes need no exec_read/exec_write rule probes. *)
+val envelope_prev_bb_ss = prev_bb_case_ss ++ rewrites
+  [eval_ops_prev_bb, jump_to_prev_bb, exec_ext_call_prev_bb,
+   exec_delegatecall_prev_bb, exec_create_prev_bb];
+
+val prev_bb_envelope_tac =
+  prev_bb_dispatch_tac >> prev_bb_cases_tac envelope_prev_bb_ss;
+
+(* Probe only the helper actually exposed by the selected opcode. *)
+fun prev_bb_exec_tac (goal as (_, w)) = let
+  val head = fst (strip_comb (lhs w))
+  val rule = List.find (fn (c, _) => same_const c head)
+    [(``exec_read0``, exec_read0_prev_bb),
+     (``exec_read1``, exec_read1_prev_bb),
+     (``exec_write2``, exec_write2_prev_bb)]
+in
+  (case rule of
+     SOME (_, th) => irule th >> simp_tac opcode_prev_bb_ss []
+   | NONE => prev_bb_cases_tac opcode_prev_bb_ss) goal
+end;
+
 val prev_bb_opcode_tac =
-  strip_tac >> gvs[] >>
-  ASM_REWRITE_TAC[step_inst_base_def] >>
-  gvs[is_terminator_def,
-      exec_pure1_prev_bb, exec_pure2_prev_bb, exec_pure3_prev_bb,
-      exec_alloca_prev_bb] >>
-  TRY (irule exec_read0_prev_bb >> simp prev_bb_rw) >>
-  TRY (irule exec_read1_prev_bb >> simp prev_bb_rw) >>
-  TRY (irule exec_write2_prev_bb >> simp prev_bb_rw) >>
-  simp[eval_op_prev_bb, eval_ops_prev_bb,
-       exec_ext_call_prev_bb, exec_delegatecall_prev_bb,
-       exec_create_prev_bb] >>
-  TRY (BasicProvers.TOP_CASE_TAC >> simp(prev_bb_rw @ [venom_state_component_equality])) >>
-  TRY (BasicProvers.TOP_CASE_TAC >> simp(prev_bb_rw @ [venom_state_component_equality])) >>
-  TRY (BasicProvers.TOP_CASE_TAC >> simp(prev_bb_rw @ [venom_state_component_equality])) >>
-  TRY (BasicProvers.TOP_CASE_TAC >> simp(prev_bb_rw @ [venom_state_component_equality])) >>
-  TRY (BasicProvers.TOP_CASE_TAC >> simp(prev_bb_rw @ [venom_state_component_equality])) >>
-  TRY (BasicProvers.TOP_CASE_TAC >> simp(prev_bb_rw @ [venom_state_component_equality])) >>
-  simp(prev_bb_rw @ [venom_state_component_equality]);
+  prev_bb_dispatch_tac >>
+  simp_tac opcode_prev_bb_ss [] >> prev_bb_exec_tac;
+
+(* Keep EL, its bounds, and conditional payloads opaque in parameter access. *)
+val param_prev_bb_ss = pure_ss ++ boolSimps.BOOL_ss ++ rewrites
+  (prev_bb_state_rw @
+   [list_case_def, pair_case_thm, operand_case_def,
+    combinTheory.K_THM, LET_THM, update_var_prev_bb,
+    exec_result_map_prev_bb_def]);
+
+val prev_bb_param_tac =
+  prev_bb_dispatch_tac >>
+  simp_tac param_prev_bb_ss [] >>
+  REPEAT (PURE_TOP_CASE_TAC >> asm_simp_tac param_prev_bb_ss []);
+
+(* Cache classification once per constructor; only the implication guard is
+   rewritten at proof time, leaving the execution equality opaque. *)
+val prev_bb_classifications = map (fn (opcode, _) =>
+  SIMP_CONV (srw_ss()) [is_terminator_def]
+    (subst [``op:opcode`` |-> opcode]
+      ``op <> PHI /\ ~is_terminator op``)) prev_bb_opcode_rewrites;
+
+val prev_bb_classify_conv = PURE_REWRITE_CONV prev_bb_classifications;
+
+val prev_bb_classify_tac =
+  qpat_assum `inst.inst_opcode = _` (fn eq =>
+    CONV_TAC (LAND_CONV
+      (PURE_REWRITE_CONV [eq] THENC prev_bb_classify_conv))) >>
+  PURE_REWRITE_TAC [boolTheory.IMP_CLAUSES];
 
 Theorem step_inst_base_prev_bb_indep:
   !inst s p.
@@ -387,7 +442,8 @@ Theorem step_inst_base_prev_bb_indep:
     exec_result_map_prev_bb (\s'. s' with vs_prev_bb := p)
       (step_inst_base inst s)
 Proof
-  rpt gen_tac >> Cases_on `inst.inst_opcode`
+  rpt gen_tac >> Cases_on `inst.inst_opcode` >>
+  prev_bb_classify_tac
   >- prev_bb_opcode_tac (* ADD *)
   >- prev_bb_opcode_tac (* SUB *)
   >- prev_bb_opcode_tac (* MUL *)
@@ -416,11 +472,7 @@ Proof
   >- prev_bb_opcode_tac (* MLOAD *)
   >- prev_bb_opcode_tac (* MSTORE *)
   >- prev_bb_opcode_tac (* MSTORE8 *)
-  >- (strip_tac >>
-      ASM_REWRITE_TAC[step_inst_base_def] >>
-      simp[eval_op_prev_bb, mcopy_prev_bb] >>
-      BasicProvers.EVERY_CASE_TAC >>
-      simp(prev_bb_rw @ [venom_state_component_equality])) (* MCOPY *)
+  >- prev_bb_opcode_tac (* MCOPY *)
   >- prev_bb_opcode_tac (* MEMTOP *)
   >- prev_bb_opcode_tac (* SLOAD *)
   >- prev_bb_opcode_tac (* SSTORE *)
@@ -428,43 +480,23 @@ Proof
   >- prev_bb_opcode_tac (* TSTORE *)
   >- prev_bb_opcode_tac (* ILOAD *)
   >- prev_bb_opcode_tac (* ISTORE *)
-  >- prev_bb_opcode_tac (* JMP *)
-  >- prev_bb_opcode_tac (* JNZ *)
-  >- prev_bb_opcode_tac (* DJMP *)
-  >- prev_bb_opcode_tac (* RET *)
-  >- prev_bb_opcode_tac (* RETURN *)
-  >- prev_bb_opcode_tac (* REVERT *)
-  >- prev_bb_opcode_tac (* STOP *)
-  >- prev_bb_opcode_tac (* SINK *)
-  >- prev_bb_opcode_tac (* PHI *)
-  >- prev_bb_opcode_tac (* PARAM *)
+  >- prev_bb_param_tac (* PARAM *)
   >- prev_bb_opcode_tac (* ASSIGN *)
   >- prev_bb_opcode_tac (* NOP *)
   >- prev_bb_opcode_tac (* ALLOCA *)
   >- prev_bb_opcode_tac (* DALLOCA *)
-  >- prev_bb_opcode_tac (* DRET *)
   >- prev_bb_opcode_tac (* GETFMP *)
   >- prev_bb_opcode_tac (* SETFMP *)
-  >- prev_bb_opcode_tac (* RETFMP *)
   >- prev_bb_opcode_tac (* INITIAL_FMP *)
-  >- (strip_tac >> gvs[] >>
-      ASM_REWRITE_TAC[step_inst_base_def] >>
-      simp[eval_op_prev_bb, exec_result_map_prev_bb_def] >>
-      BasicProvers.EVERY_CASE_TAC >>
-      simp[update_var_def, exec_result_map_prev_bb_def]) (* BUMP *)
+  >- prev_bb_opcode_tac (* BUMP *)
   >- prev_bb_opcode_tac (* INVOKE *)
-  >- prev_bb_opcode_tac (* FMP_PARAM *)
-  >- prev_bb_opcode_tac (* RETPC_PARAM *)
+  >- prev_bb_param_tac (* FMP_PARAM *)
+  >- prev_bb_param_tac (* RETPC_PARAM *)
   >- prev_bb_opcode_tac (* CALLER *)
   >- prev_bb_opcode_tac (* CALLVALUE *)
   >- prev_bb_opcode_tac (* CALLDATALOAD *)
   >- prev_bb_opcode_tac (* CALLDATASIZE *)
-  >- (strip_tac >>
-      ASM_REWRITE_TAC[step_inst_base_def] >>
-      simp[eval_op_prev_bb, write_mem_prev_bb,
-           exec_result_map_prev_bb_def] >>
-      BasicProvers.EVERY_CASE_TAC >>
-      simp(prev_bb_rw @ [venom_state_component_equality])) (* CALLDATACOPY *)
+  >- prev_bb_opcode_tac (* CALLDATACOPY *)
   >- prev_bb_opcode_tac (* ADDRESS *)
   >- prev_bb_opcode_tac (* ORIGIN *)
   >- prev_bb_opcode_tac (* GASPRICE *)
@@ -480,77 +512,25 @@ Proof
   >- prev_bb_opcode_tac (* BLOCKHASH *)
   >- prev_bb_opcode_tac (* BASEFEE *)
   >- prev_bb_opcode_tac (* CODESIZE *)
-  >- (strip_tac >>
-      ASM_REWRITE_TAC[step_inst_base_def] >>
-      simp[eval_op_prev_bb, write_mem_prev_bb,
-           exec_result_map_prev_bb_def] >>
-      BasicProvers.EVERY_CASE_TAC >>
-      simp(prev_bb_rw @ [venom_state_component_equality])) (* CODECOPY *)
+  >- prev_bb_opcode_tac (* CODECOPY *)
   >- prev_bb_opcode_tac (* EXTCODESIZE *)
   >- prev_bb_opcode_tac (* EXTCODEHASH *)
-  >- (strip_tac >>
-      ASM_REWRITE_TAC[step_inst_base_def] >>
-      simp[eval_op_prev_bb, write_mem_prev_bb,
-           exec_result_map_prev_bb_def] >>
-      BasicProvers.EVERY_CASE_TAC >>
-      simp(prev_bb_rw @ [venom_state_component_equality])) (* EXTCODECOPY *)
+  >- prev_bb_opcode_tac (* EXTCODECOPY *)
   >- prev_bb_opcode_tac (* RETURNDATASIZE *)
-  >- (strip_tac >>
-      ASM_REWRITE_TAC[step_inst_base_def] >>
-      simp[eval_op_prev_bb, write_mem_prev_bb, halt_state_prev_bb,
-           set_returndata_prev_bb, exec_result_map_prev_bb_def] >>
-      BasicProvers.EVERY_CASE_TAC >>
-      simp(prev_bb_rw @ [venom_state_component_equality])) (* RETURNDATACOPY *)
+  >- prev_bb_opcode_tac (* RETURNDATACOPY *)
   >- prev_bb_opcode_tac (* BLOBHASH *)
   >- prev_bb_opcode_tac (* BLOBBASEFEE *)
-  >- (strip_tac >>
-      ASM_REWRITE_TAC[step_inst_base_def] >>
-      simp[eval_op_prev_bb, read_mem_prev_bb, update_var_prev_bb,
-           exec_result_map_prev_bb_def] >>
-      BasicProvers.EVERY_CASE_TAC >>
-      simp(prev_bb_rw @ [venom_state_component_equality])) (* SHA3 *)
-  >- (strip_tac >>
-      ASM_REWRITE_TAC[step_inst_base_def] >>
-      simp[eval_op_prev_bb, exec_ext_call_prev_bb] >>
-      BasicProvers.EVERY_CASE_TAC >>
-      simp(prev_bb_rw @ [venom_state_component_equality])) (* CALL *)
-  >- (strip_tac >>
-      ASM_REWRITE_TAC[step_inst_base_def] >>
-      simp[eval_op_prev_bb, exec_ext_call_prev_bb] >>
-      BasicProvers.EVERY_CASE_TAC >>
-      simp(prev_bb_rw @ [venom_state_component_equality])) (* STATICCALL *)
-  >- (strip_tac >>
-      ASM_REWRITE_TAC[step_inst_base_def] >>
-      simp[eval_op_prev_bb, exec_delegatecall_prev_bb] >>
-      BasicProvers.EVERY_CASE_TAC >>
-      simp(prev_bb_rw @ [venom_state_component_equality])) (* DELEGATECALL *)
-  >- (strip_tac >>
-      ASM_REWRITE_TAC[step_inst_base_def] >>
-      simp[eval_op_prev_bb, exec_create_prev_bb] >>
-      BasicProvers.EVERY_CASE_TAC >>
-      simp(prev_bb_rw @ [venom_state_component_equality])) (* CREATE *)
-  >- (strip_tac >>
-      ASM_REWRITE_TAC[step_inst_base_def] >>
-      simp[eval_op_prev_bb, exec_create_prev_bb] >>
-      BasicProvers.EVERY_CASE_TAC >>
-      simp(prev_bb_rw @ [venom_state_component_equality])) (* CREATE2 *)
-  >- (strip_tac >>
-      ASM_REWRITE_TAC[step_inst_base_def] >>
-      simp[eval_op_prev_bb, eval_ops_prev_bb, read_mem_prev_bb,
-           exec_result_map_prev_bb_def] >>
-      BasicProvers.EVERY_CASE_TAC >>
-      simp(prev_bb_rw @ [venom_state_component_equality])) (* LOG *)
-  >- prev_bb_opcode_tac (* SELFDESTRUCT *)
-  >- prev_bb_opcode_tac (* INVALID *)
+  >- prev_bb_opcode_tac (* SHA3 *)
+  >- prev_bb_envelope_tac (* CALL *)
+  >- prev_bb_envelope_tac (* STATICCALL *)
+  >- prev_bb_envelope_tac (* DELEGATECALL *)
+  >- prev_bb_envelope_tac (* CREATE *)
+  >- prev_bb_envelope_tac (* CREATE2 *)
+  >- prev_bb_opcode_tac (* LOG *)
   >- prev_bb_opcode_tac (* ASSERT *)
   >- prev_bb_opcode_tac (* ASSERT_UNREACHABLE *)
   >- prev_bb_opcode_tac (* DLOAD *)
-  >- (strip_tac >>
-      ASM_REWRITE_TAC[step_inst_base_def] >>
-      simp[eval_op_prev_bb, write_mem_prev_bb,
-           exec_result_map_prev_bb_def] >>
-      BasicProvers.EVERY_CASE_TAC >>
-      simp(prev_bb_rw @ [venom_state_component_equality])) (* DLOADBYTES *)
+  >- prev_bb_opcode_tac (* DLOADBYTES *)
   >- prev_bb_opcode_tac (* OFFSET *)
 QED
 
@@ -566,10 +546,6 @@ Theorem step_inst_base_jump_prev_bb:
     step_inst_base inst (s with vs_prev_bb := p) =
     step_inst_base inst s
 Proof
-  rpt strip_tac >> gvs[] >>
-  ASM_REWRITE_TAC[step_inst_base_def] >>
-  simp[eval_op_prev_bb, eval_ops_prev_bb] >>
-  BasicProvers.EVERY_CASE_TAC >>
-  simp[jump_to_prev_bb]
+  rpt strip_tac >> prev_bb_envelope_tac
 QED
 

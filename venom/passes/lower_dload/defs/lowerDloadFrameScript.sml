@@ -17,11 +17,28 @@ Definition ld_execution_frame_def:
     vs_current_bb := ""; vs_inst_idx := 0; vs_prev_bb := NONE |>
 End
 
+(* Cache field projections and simplify only the goal.  Expanding state
+   equality first avoids the standard record-update normalizer, including
+   for nested frames, reconstruction and erased updates. *)
+val ld_frame_simp = let
+  val projection_ss = bool_ss ++ rewrites
+    [venom_state_accfupds, combinTheory.K_THM]
+  val accessors = map (rator o lhs o concl o SPEC_ALL)
+    (CONJUNCTS venom_state_accessors)
+  fun projections def = map
+    (SIMP_RULE projection_ss [] o (fn acc => AP_TERM acc (SPEC_ALL def)))
+    accessors
+  val ss = bool_ss ++ rewrites
+    (projections ld_frame_def @ projections ld_execution_frame_def @
+     [update_var_def, venom_state_component_equality, venom_state_accfupds,
+      combinTheory.K_THM])
+in simp_tac ss [] end;
+
 Theorem ld_frame_idempotent[simp]:
   ld_frame (ld_frame s) = ld_frame s /\
   ld_execution_frame (ld_execution_frame s) = ld_execution_frame s
 Proof
-  simp[ld_frame_def, ld_execution_frame_def]
+  ld_frame_simp
 QED
 
 Theorem ld_frame_erased_updates[simp]:
@@ -41,7 +58,7 @@ Theorem ld_frame_erased_updates[simp]:
   ld_execution_frame (s with vs_prev_bb := prev) = ld_execution_frame s /\
   ld_execution_frame (update_var x v s) = ld_execution_frame s
 Proof
-  simp[ld_frame_def, ld_execution_frame_def, update_var_def]
+  ld_frame_simp
 QED
 
 Theorem ld_frame_reconstruct:
@@ -53,7 +70,7 @@ Theorem ld_frame_reconstruct:
     vs_alloca_next := s.vs_alloca_next; vs_current_bb := s.vs_current_bb;
     vs_inst_idx := s.vs_inst_idx; vs_prev_bb := s.vs_prev_bb |>) = s
 Proof
-  simp[ld_frame_def, ld_execution_frame_def]
+  ld_frame_simp
 QED
 
 Theorem ld_frame_eq_reconstruct:
@@ -67,7 +84,7 @@ Theorem ld_frame_eq_reconstruct:
       vs_alloca_next := s2.vs_alloca_next; vs_current_bb := s2.vs_current_bb;
       vs_inst_idx := s2.vs_inst_idx; vs_prev_bb := s2.vs_prev_bb |>) = s2)
 Proof
-  simp[ld_frame_def, ld_execution_frame_def, venom_state_component_equality]
+  ld_frame_simp
 QED
 
 Theorem ld_frame_execution:
@@ -76,10 +93,8 @@ Theorem ld_frame_execution:
   s1.vs_current_bb = s2.vs_current_bb /\ s1.vs_inst_idx = s2.vs_inst_idx /\
   s1.vs_prev_bb = s2.vs_prev_bb
 Proof
-  (* Expand equality before unfolding the inner frame at every projection. *)
-  simp[ld_execution_frame_def, venom_state_component_equality] >>
-  simp[ld_frame_def] >>
-  metis_tac[]
+  ld_frame_simp >>
+  EQ_TAC >> strip_tac >> rpt conj_tac >> FIRST_ASSUM ACCEPT_TAC
 QED
 
 Theorem ld_frame_projection:

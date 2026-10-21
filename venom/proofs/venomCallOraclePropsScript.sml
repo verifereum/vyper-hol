@@ -8,6 +8,13 @@ Ancestors
   venomCallOracleDefs venomState extCallOracle stateFrame
   arithmetic list pair words
 
+(* Frame proofs need only record projections/equality. Keep oracle calls and
+ * memory/list arithmetic opaque rather than invoking the global simpset. *)
+val call_frame_ss = bool_ss ++ rewrites
+  [state_frame_def, execution_frame_def,
+   venom_state_component_equality, venom_state_accfupds,
+   venom_state_fupdfupds, combinTheory.K_THM, LET_THM, FST, SND, PAIR_EQ];
+
 (* Exact input agreement, not a new observability hypothesis on a pass.
  * Memory may differ outside the calldata slice; gas is not an input.
  *)
@@ -30,8 +37,7 @@ Theorem venom_call_request_frame[simp]:
   venom_call_request (execution_frame s) addr value ao sz st =
     venom_call_request s addr value ao sz st
 Proof
-  simp[venom_call_request_def, read_memory_def,
-       state_frame_def, execution_frame_def]
+  simp_tac call_frame_ss [venom_call_request_def, read_memory_def]
 QED
 
 (* This single tuple boundary is enough for all relation families. Neither
@@ -59,13 +65,20 @@ Theorem consume_call_outcome_oracle_transport:
   (SND (consume_call_outcome rq1 ro1 rs1 s1)).vs_requests =
     (SND (consume_call_outcome rq2 ro2 rs2 s2)).vs_requests
 Proof
-  strip_tac >>
-  map_every assume_tac
-    [Q.INST [`rq` |-> `rq1`, `ro` |-> `ro1`, `rs` |-> `rs1`, `s` |-> `s1`]
-       consume_call_outcome_observation,
-     Q.INST [`rq` |-> `rq2`, `ro` |-> `ro2`, `rs` |-> `rs2`, `s` |-> `s2`]
-       consume_call_outcome_observation] >>
-  gvs[PAIR_EQ]
+  let
+    (* Split the tuple once, then rewrite only the six exact observations.
+     * Keep input equalities separate so they cannot disturb those matches. *)
+    val projections = CONJUNCTS
+      (SIMP_RULE bool_ss [PAIR_EQ] consume_call_outcome_observation)
+    val left = Q.INST
+      [`rq` |-> `rq1`, `ro` |-> `ro1`, `rs` |-> `rs1`, `s` |-> `s1`]
+    val right = Q.INST
+      [`rq` |-> `rq2`, `ro` |-> `ro2`, `rs` |-> `rs2`, `s` |-> `s2`]
+  in
+    strip_tac >>
+    simp_tac bool_ss (map left projections @ map right projections) >>
+    asm_simp_tac bool_ss []
+  end
 QED
 
 Theorem consume_call_outcome_frame:
@@ -76,10 +89,8 @@ Theorem consume_call_outcome_frame:
     (FST (consume_call_outcome rq ro rs s),
      execution_frame (SND (consume_call_outcome rq ro rs s)))
 Proof
-  simp[consume_call_outcome_def, state_frame_def, execution_frame_def,
-       write_memory_with_expansion_def] >>
-  Cases_on `take_outcome rq s.vs_outcomes` >> simp[] >>
-  pairarg_tac >> simp[]
+  simp_tac call_frame_ss
+    [consume_call_outcome_eq, write_memory_with_expansion_def]
 QED
 
 (* Reuse the existing residual masks, not a retained-selector matrix.
@@ -118,5 +129,5 @@ Theorem consume_call_outcome_bind_frame:
     (SND (consume_call_outcome rq ro rs s))) =
     execution_frame (SND (consume_call_outcome rq ro rs s))
 Proof
-  simp[]
+  simp_tac bool_ss [frame_update_var]
 QED

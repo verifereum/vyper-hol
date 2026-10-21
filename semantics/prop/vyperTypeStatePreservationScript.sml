@@ -79,7 +79,7 @@ Proof
 QED
 
 Theorem new_variable_no_type_error:
-  env_consistent env cx st /\ string_to_num id NOTIN FDOM env.var_types /\
+  env_consistent env cx st /\ id NOTIN FDOM env.var_types /\
   new_variable id tv v st = (INR (Error e), st') ==>
   !msg. e <> TypeError msg
 Proof
@@ -87,9 +87,9 @@ Proof
      get_scopes_def, set_scopes_def, type_check_def, assert_def, AllCaseEqs(),
      LET_THM, list_CASE_rator] >>
   gvs[env_consistent_def, env_scopes_consistent_def, optionTheory.IS_SOME_EXISTS, TO_FLOOKUP] >>
-  Cases_on `lookup_scopes (string_to_num id) st.scopes` >> gvs[] >>
+  Cases_on `lookup_scopes id st.scopes` >> gvs[] >>
   qpat_x_assum `!id entry. lookup_scopes id st.scopes = SOME entry ==> _`
-    (qspecl_then [`string_to_num id`, `x`] mp_tac) >> simp[TO_FLOOKUP]
+    (qspecl_then [`id`, `x`] mp_tac) >> simp[TO_FLOOKUP]
 QED
 
 (* ===== Storage/account/immutable operations ===== *)
@@ -335,12 +335,12 @@ QED
 
 
 Theorem update_name_preserves_state_well_typed:
-  state_well_typed st /\ lookup_scopes (string_to_num id) st.scopes = SOME entry /\
+  state_well_typed st /\ lookup_scopes id st.scopes = SOME entry /\
   value_has_type entry.type v ==>
   state_well_typed (update_name st id v)
 Proof
   rw[update_name_def] >>
-  Cases_on `find_containing_scope (string_to_num id) st.scopes` >> gvs[]
+  Cases_on `find_containing_scope id st.scopes` >> gvs[]
   >- (drule find_containing_scope_none_lookup_scopes_none >> gvs[]) >>
   PairCases_on `x` >>
   drule find_containing_scope_structure >> strip_tac >> gvs[] >>
@@ -658,7 +658,7 @@ Theorem set_global_preserves_accounts_well_typed:
 Proof
   rw[set_global_def, bind_def, return_def, lift_option_def, lift_option_type_def] >>
   Cases_on `get_module_code cx src` >> gvs[return_def, raise_def] >>
-  Cases_on `find_var_decl_by_num n x` >> gvs[return_def, raise_def] >>
+  Cases_on `find_var_decl_by_name n x` >> gvs[return_def, raise_def] >>
   PairCases_on `x'` >> gvs[] >>
   Cases_on `x'0` >> gvs[return_def, raise_def, bind_def] >>
   Cases_on `lookup_var_slot_from_layout cx b src x'1` >> gvs[return_def, raise_def] >>
@@ -692,7 +692,7 @@ Theorem set_global_preserves_env_consistent:
 Proof
   rw[set_global_def, bind_def, return_def, lift_option_def, lift_option_type_def] >>
   Cases_on `get_module_code cx src` >> gvs[return_def, raise_def] >>
-  Cases_on `find_var_decl_by_num n x` >> gvs[return_def, raise_def] >>
+  Cases_on `find_var_decl_by_name n x` >> gvs[return_def, raise_def] >>
   PairCases_on `x'` >> gvs[] >>
   Cases_on `x'0` >> gvs[return_def, raise_def, bind_def] >>
   Cases_on `lookup_var_slot_from_layout cx b src x'1` >> gvs[return_def, raise_def] >>
@@ -913,17 +913,17 @@ Proof
   Cases_on `loc` >> gvs[location_runtime_typed_def, runtime_consistent_def, env_consistent_def,
                          env_scopes_consistent_def, env_immutables_consistent_def]
   >- (
-    rename1 `FLOOKUP env.var_types (string_to_num s) = SOME var_ty` >>
-    `?entry'. lookup_scopes (string_to_num s) st'.scopes = SOME entry'` by metis_tac[IS_SOME_EXISTS] >>
+    rename1 `FLOOKUP env.var_types s = SOME var_ty` >>
+    `?entry'. lookup_scopes s st'.scopes = SOME entry'` by metis_tac[IS_SOME_EXISTS] >>
     `env.type_defs = get_tenv cx` by fs[env_context_consistent_def] >>
     `evaluate_type (get_tenv cx) var_ty = SOME entry'.type` by metis_tac[] >>
     `entry'.type = entry.type` by gvs[] >>
     qexists_tac `Type var_ty` >> simp[])
   >- (
-    rename1 `FLOOKUP env.bare_globals (src_id_opt,string_to_num s) = SOME imm_ty` >>
+    rename1 `FLOOKUP env.bare_globals (src_id_opt,s) = SOME imm_ty` >>
     `?pair. FLOOKUP (get_source_immutables src_id_opt
         (case ALOOKUP st'.immutables cx.txn.target of NONE => [] | SOME m => m))
-        (string_to_num s) = SOME pair` by metis_tac[IS_SOME_EXISTS] >>
+        s = SOME pair` by metis_tac[IS_SOME_EXISTS] >>
     PairCases_on `pair` >>
     `env.type_defs = get_tenv cx` by fs[env_context_consistent_def] >>
     `evaluate_type (get_tenv cx) imm_ty = SOME pair0` by metis_tac[] >>
@@ -1007,7 +1007,7 @@ Definition assign_target_assignable_def:
     (case loc of
      | ScopedVar id =>
          ?pre env entry rest.
-           find_containing_scope (string_to_num id) st.scopes =
+           find_containing_scope id st.scopes =
              SOME (pre, env, entry, rest) /\
            entry.assignable
      | _ => T) /\
@@ -1021,7 +1021,7 @@ Definition assign_target_assignable_context_def:
      case loc of
      | TopLevelVar src id =>
          ?code p. get_module_code cx src = SOME code /\
-                  find_var_decl_by_num (string_to_num id) code = SOME p /\
+                  find_var_decl_by_name id code = SOME p /\
                   (case FST p of
                    | StorageVarDecl is_transient typ =>
                        IS_SOME (evaluate_type (get_tenv cx) typ) /\
@@ -1216,18 +1216,23 @@ Resume assign_target_preserves_state_well_typed_mutual[TopLevelVar]:
     goal_assum drule )
   >> pairarg_tac >> gvs[]
   >- (
-    gvs[bind_apply, AllCaseEqs(), return_def, raise_def,
-        option_CASE_rator, sum_CASE_rator] >>
+    qpat_x_assum `_ = (res, st')` mp_tac >>
+    simp[bind_apply, AllCaseEqs(), return_def, raise_def,
+         option_CASE_rator, sum_CASE_rator] >> strip_tac >>
     imp_res_tac assign_result_preserves_state >>
     imp_res_tac read_storage_slot_state >> gvs[] >>
     drule_at(Pat`write_storage_slot`) write_storage_slot_preserves_accounts_well_typed >>
     drule write_storage_slot_preserves_env_consistent >>
     drule write_storage_slot_preserves_state_well_typed_any >>
     gvs[runtime_consistent_def])
-  >> gvs[bind_apply, return_def, raise_def, lift_option_type_def,
-         lift_sum_def, ignore_bind_def, assert_def, check_def, AllCaseEqs(),
-         option_CASE_rator, type_value_CASE_rator, sum_CASE_rator,
-         bound_CASE_rator, assign_operation_CASE_rator]
+  (* Split only the execution head: global case/rator simplification also
+     expands guarded typing facts and duplicates the monadic continuations. *)
+  >> qpat_x_assum `_ = (res, st')` mp_tac
+  >> simp [bind_apply, return_def, raise_def, lift_option_type_def,
+           lift_sum_def, ignore_bind_def, assert_def, check_def, AllCaseEqs(),
+           option_CASE_rator, type_value_CASE_rator, sum_CASE_rator,
+           bound_CASE_rator, assign_operation_CASE_rator]
+  >> strip_tac >> gvs[]
   >> imp_res_tac assign_result_preserves_state
   >> imp_res_tac read_storage_slot_state
   >> imp_res_tac get_storage_backend_state
@@ -1268,7 +1273,7 @@ Resume assign_target_preserves_state_well_typed_mutual[ImmutableVar]:
   gvs[Once assign_target_def, bind_def, ignore_bind_def, return_def, raise_def,
       lift_option_def, lift_option_type_def, lift_sum_def, type_check_def,
       assert_def, check_def, AllCaseEqs()] >>
-  rename1 `FLOOKUP imms (string_to_num id) = SOME tva` >>
+  rename1 `FLOOKUP imms id = SOME tva` >>
   PairCases_on `tva` >>
   gvs[AllCaseEqs(), return_def, raise_def, sum_CASE_rator] >>
   gvs[runtime_consistent_def] >>
@@ -1285,14 +1290,14 @@ Resume assign_target_preserves_state_well_typed_mutual[ImmutableVar]:
   imp_res_tac assign_result_preserves_state >> gvs[] >>
   conj_tac >- (
     irule set_immutable_preserves_env_consistent >>
-    qexists_tac `string_to_num id` >> qexists_tac `INL ()` >> qexists_tac `src_id_opt` >>
+    qexists_tac `id` >> qexists_tac `INL ()` >> qexists_tac `src_id_opt` >>
     qexists_tac `s''` >> qexists_tac `tv` >> qexists_tac `ty'` >>
     qexists_tac `a'` >>
     gvs[env_consistent_def, env_context_consistent_def] >>
     rpt strip_tac >> first_x_assum drule_all >> simp[])
   >- (conj_tac >- (
         irule set_immutable_preserves_state_well_typed >>
-        qexists_tac `cx` >> qexists_tac `string_to_num id` >>
+        qexists_tac `cx` >> qexists_tac `id` >>
         qexists_tac `INL ()` >> qexists_tac `src_id_opt` >>
         qexists_tac `s''` >> qexists_tac `tv` >> qexists_tac `a'` >>
         simp[]) >>
@@ -1306,7 +1311,7 @@ Resume assign_target_preserves_state_well_typed_mutual[ImmutableVar]:
       Cases_on `ALOOKUP s''.immutables cx.txn.target` >>
       gvs[return_def, raise_def] >> strip_tac >> gvs[])
   >- (irule set_immutable_preserves_env_consistent >>
-      qexists_tac `string_to_num id` >> qexists_tac `INR e` >> qexists_tac `src_id_opt` >>
+      qexists_tac `id` >> qexists_tac `INR e` >> qexists_tac `src_id_opt` >>
       qexists_tac `s''` >> qexists_tac `tv` >> qexists_tac `ty'` >>
       qexists_tac `a'` >>
       gvs[env_consistent_def, env_context_consistent_def] >>
@@ -1414,7 +1419,7 @@ Theorem top_level_Type_storage_decl:
   runtime_consistent env cx st /\
   FLOOKUP env.toplevel_vtypes (src,n) = SOME (Type base_ty) /\
   get_module_code cx src = SOME ts /\
-  find_var_decl_by_num n ts = SOME (StorageVarDecl is_transient typ,id_str) ==>
+  find_var_decl_by_name n ts = SOME (StorageVarDecl is_transient typ,id_str) ==>
   typ = base_ty
 Proof
   rw[runtime_consistent_def, env_consistent_def, env_immutables_consistent_def] >>
@@ -1425,7 +1430,7 @@ Theorem top_level_Type_not_hashmap_decl:
   runtime_consistent env cx st /\
   FLOOKUP env.toplevel_vtypes (src,n) = SOME (Type base_ty) /\
   get_module_code cx src = SOME ts /\
-  find_var_decl_by_num n ts = SOME (HashMapVarDecl is_transient kt vt,id_str) ==>
+  find_var_decl_by_name n ts = SOME (HashMapVarDecl is_transient kt vt,id_str) ==>
   F
 Proof
   rw[runtime_consistent_def, env_consistent_def, env_immutables_consistent_def] >>
@@ -1437,11 +1442,14 @@ Theorem top_level_HashMap_decl:
   FLOOKUP env.toplevel_vtypes (src,n) = SOME (HashMapT kt vt) /\
   get_module_code cx src = SOME ts ==>
   ?is_transient id_str.
-    find_var_decl_by_num n ts = SOME (HashMapVarDecl is_transient kt vt,id_str)
+    find_var_decl_by_name n ts = SOME (HashMapVarDecl is_transient kt vt,id_str)
 Proof
   rw[runtime_consistent_def, env_consistent_def, env_context_consistent_def] >>
   qpat_x_assum `(!src id kt vt. FLOOKUP _ _ = SOME (HashMapT kt vt) ==> _)` drule >>
-  rw[] >> fs[]
+  rw[] >>
+  rename1 `find_var_decl_by_name n ts =
+    SOME (HashMapVarDecl transient kt vt,decl_name)` >>
+  qexistsl_tac [`transient`, `decl_name`] >> simp[]
 QED
 
 Theorem top_level_vtype_well_formed:
@@ -1455,7 +1463,7 @@ QED
 
 Theorem target_runtime_typed_top_level_Type:
   target_runtime_typed env cx st tgt ty (BaseTargetV (TopLevelVar src id) sbs) /\
-  FLOOKUP env.toplevel_vtypes (src,string_to_num id) = SOME (Type base_ty) ==>
+  FLOOKUP env.toplevel_vtypes (src,id) = SOME (Type base_ty) ==>
   target_path_type env (Type base_ty) sbs (Type ty)
 Proof
   Cases_on `tgt` >> rw[target_runtime_typed_def, location_runtime_typed_def] >> gvs[]
@@ -1464,7 +1472,7 @@ QED
 Theorem lookup_global_Value_not_HashMapVarDecl:
   lookup_global cx src n st = (INL (Value v), st') /\
   get_module_code cx src = SOME code /\
-  find_var_decl_by_num n code = SOME p /\
+  find_var_decl_by_name n code = SOME p /\
   FST p = HashMapVarDecl is_t kt vt ==>
   F
 Proof
@@ -1478,7 +1486,7 @@ QED
 Theorem lookup_global_ArrayRef_not_HashMapVarDecl:
   lookup_global cx src n st = (INL (ArrayRef is_t bs etv ebd), st') ==>
   get_module_code cx src = SOME code ==>
-  find_var_decl_by_num n code = SOME p ==>
+  find_var_decl_by_name n code = SOME p ==>
   FST p = HashMapVarDecl is_transient' kt vt ==>
   F
 Proof
@@ -1492,7 +1500,7 @@ QED
 Theorem lookup_global_ArrayRef_not_StorageVarDecl:
   lookup_global cx src n st = (INL (ArrayRef is_t bs etv ebd), st') ==>
   get_module_code cx src = SOME code ==>
-  find_var_decl_by_num n code = SOME (StorageVarDecl is_transient' typ, id) ==>
+  find_var_decl_by_name n code = SOME (StorageVarDecl is_transient' typ, id) ==>
   evaluate_type (get_tenv cx) typ = SOME root_tv ==>
   root_tv ≠ ArrayTV etv ebd ==>
   F
@@ -1508,7 +1516,7 @@ QED
 Theorem lookup_global_HashMapRef_not_StorageVarDecl:
   lookup_global cx src n st = (INL (HashMapRef is_t bs kt vt), st') ==>
   get_module_code cx src = SOME code ==>
-  find_var_decl_by_num n code = SOME (StorageVarDecl is_transient' typ, id) ==>
+  find_var_decl_by_name n code = SOME (StorageVarDecl is_transient' typ, id) ==>
   F
 Proof
   rpt strip_tac >>
@@ -1523,7 +1531,7 @@ Theorem lookup_global_ArrayRef[local]:
   !cx src n st is_t bs etv ebd st'.
     lookup_global cx src n st = (INL (ArrayRef is_t bs etv ebd), st') ==>
     ?ts id_str typ. get_module_code cx src = SOME ts /\
-                    find_var_decl_by_num n ts = SOME (StorageVarDecl is_t typ,id_str) /\
+                    find_var_decl_by_name n ts = SOME (StorageVarDecl is_t typ,id_str) /\
                     evaluate_type (get_tenv cx) typ = SOME (ArrayTV etv ebd)
 Proof
   rpt strip_tac >>
@@ -1541,7 +1549,7 @@ Theorem lookup_global_HashMapRef:
   lookup_global cx src n st = (INL (HashMapRef is_t bs kt vt), st') ==>
   ?code id_str.
     get_module_code cx src = SOME code /\
-    find_var_decl_by_num n code = SOME (HashMapVarDecl is_t kt vt, id_str)
+    find_var_decl_by_name n code = SOME (HashMapVarDecl is_t kt vt, id_str)
 Proof
   rpt strip_tac >>
   qpat_x_assum `lookup_global _ _ _ _ = _` mp_tac >>
@@ -1554,14 +1562,14 @@ QED
 Theorem lookup_global_top_level_assignable_no_type_error:
   assign_target_assignable_context cx
     (BaseTargetV (TopLevelVar src id) sbs) st /\
-  lookup_global cx src (string_to_num id) st =
+  lookup_global cx src id st =
     (INR (Error (TypeError msg)), st') ==>
   F
 Proof
   strip_tac >>
   gvs[assign_target_assignable_context_def, assign_target_assignable_def] >>
   rename1 `get_module_code cx src = SOME code` >>
-  rename1 `find_var_decl_by_num (string_to_num id) code = SOME p` >>
+  rename1 `find_var_decl_by_name id code = SOME p` >>
   qpat_x_assum `lookup_global _ _ _ _ = _` mp_tac >>
   simp[lookup_global_def, bind_def, return_def, raise_def,
        lift_option_type_def, option_CASE_rator,
@@ -1601,7 +1609,7 @@ QED
 Theorem lookup_global_storage_Value_typed:
   lookup_global cx src n st = (INL (Value old_v), st') /\
   get_module_code cx src = SOME code /\
-  find_var_decl_by_num n code = SOME (StorageVarDecl is_transient typ,id_str) /\
+  find_var_decl_by_name n code = SOME (StorageVarDecl is_transient typ,id_str) /\
   lookup_var_slot_from_layout cx is_transient src id_str = SOME slot /\
   evaluate_type (get_tenv cx) typ = SOME tv ==>
   value_has_type tv old_v
@@ -1649,7 +1657,7 @@ QED
 
 Theorem set_global_storage_no_type_error:
   get_module_code cx src = SOME code /\
-  find_var_decl_by_num n code = SOME (StorageVarDecl is_transient typ,id_str) /\
+  find_var_decl_by_name n code = SOME (StorageVarDecl is_transient typ,id_str) /\
   lookup_var_slot_from_layout cx is_transient src id_str = SOME slot /\
   evaluate_type (get_tenv cx) typ = SOME tv /\
   value_has_type tv v ==>
@@ -1684,21 +1692,23 @@ Theorem top_level_vtype_Type_storage_decl:
   runtime_consistent env cx st /\
   FLOOKUP env.toplevel_vtypes (src,n) = SOME (Type root_ty) /\
   get_module_code cx src = SOME code /\
-  find_var_decl_by_num n code = SOME (StorageVarDecl is_transient typ,id_str) ==>
+  find_var_decl_by_name n code = SOME (StorageVarDecl is_transient typ,id_str) ==>
   typ = root_ty
 Proof
   strip_tac >>
   gvs[runtime_consistent_def, env_consistent_def, env_immutables_consistent_def] >>
   first_x_assum $ drule_then drule >>
-  strip_tac >> first_x_assum drule >>
-  rw[]
+  strip_tac >>
+  qpat_x_assum `!is_transient typ id_str. _`
+    (qspecl_then [`is_transient`, `typ`, `id_str`] mp_tac) >>
+  simp[]
 QED
 
 Theorem top_level_storage_value_leaf_evaluate_type:
   runtime_consistent env cx st /\
   target_runtime_typed env cx st tgt ty (BaseTargetV (TopLevelVar src id) sbs) /\
   get_module_code cx src = SOME code /\
-  find_var_decl_by_num (string_to_num id) code = SOME (StorageVarDecl is_transient typ,id_str) /\
+  find_var_decl_by_name id code = SOME (StorageVarDecl is_transient typ,id_str) /\
   evaluate_type (get_tenv cx) typ = SOME tv ==>
   evaluate_type env.type_defs ty = SOME (leaf_type tv (REVERSE sbs))
 Proof
@@ -1706,7 +1716,7 @@ Proof
   `?loc_vt. location_runtime_typed env cx st (TopLevelVar src id) loc_vt /\
             target_path_type env loc_vt sbs (Type ty)` by
     (Cases_on `tgt` >> gvs[target_runtime_typed_def] >> metis_tac[]) >>
-  `FLOOKUP env.toplevel_vtypes (src,string_to_num id) = SOME loc_vt` by
+  `FLOOKUP env.toplevel_vtypes (src,id) = SOME loc_vt` by
     gvs[location_runtime_typed_def] >>
   Cases_on `loc_vt` >> gvs[]
   >- (
@@ -1728,7 +1738,7 @@ QED
 Theorem top_level_storage_value_set_global_no_type_error:
   lookup_global cx src n st = (INL (Value old_v), st) /\
   get_module_code cx src = SOME code /\
-  find_var_decl_by_num n code = SOME (StorageVarDecl is_transient typ,id_str) /\
+  find_var_decl_by_name n code = SOME (StorageVarDecl is_transient typ,id_str) /\
   lookup_var_slot_from_layout cx is_transient src id_str = SOME slot /\
   evaluate_type (get_tenv cx) typ = SOME tv /\
   evaluate_type env.type_defs leaf_ty = SOME (leaf_type tv subs) /\
@@ -1749,7 +1759,7 @@ QED
 Theorem top_level_storage_value_set_global_no_type_error_pair:
   lookup_global cx src n st = (INL (Value old_v), st) /\
   get_module_code cx src = SOME code /\
-  find_var_decl_by_num n code = SOME p /\
+  find_var_decl_by_name n code = SOME p /\
   FST p = StorageVarDecl is_transient typ /\
   lookup_var_slot_from_layout cx is_transient src (SND p) = SOME slot /\
   evaluate_type (get_tenv cx) typ = SOME tv /\
@@ -1768,15 +1778,15 @@ Theorem top_level_storage_value_assign_success_no_type_error:
   target_runtime_typed env cx st tgt ty
     (BaseTargetV (TopLevelVar src id) sbs) /\
   assign_operation_runtime_typed env ty op /\
-  lookup_global cx src (string_to_num id) st =
+  lookup_global cx src id st =
     (INL (Value old_v), st) /\
   get_module_code cx src = SOME code /\
-  find_var_decl_by_num (string_to_num id) code =
+  find_var_decl_by_name id code =
     SOME (StorageVarDecl is_transient typ,id_str) /\
   lookup_var_slot_from_layout cx is_transient src id_str = SOME slot /\
   evaluate_type (get_tenv cx) typ = SOME root_tv /\
   assign_subscripts root_tv old_v (REVERSE sbs) op = INL new_v /\
-  set_global cx src (string_to_num id) new_v st =
+  set_global cx src id new_v st =
     (INR (Error (TypeError msg)), st') ==>
   F
 Proof
@@ -2012,10 +2022,10 @@ Theorem top_level_storage_value_assign_subscripts_no_type_error:
     (BaseTargetV (TopLevelVar src id) sbs) /\
   assignable_type env.type_defs ty /\
   assign_operation_runtime_typed env ty op /\
-  lookup_global cx src (string_to_num id) st =
+  lookup_global cx src id st =
     (INL (Value old_v), st) /\
   get_module_code cx src = SOME code /\
-  find_var_decl_by_num (string_to_num id) code =
+  find_var_decl_by_name id code =
     SOME (StorageVarDecl is_transient typ,id_str) /\
   lookup_var_slot_from_layout cx is_transient src id_str = SOME slot /\
   evaluate_type (get_tenv cx) typ = SOME root_tv ==>
@@ -2453,7 +2463,7 @@ QED
 
 Theorem lookup_global_HashMapVarDecl_returns_HashMapRef:
   get_module_code cx src = SOME code ==>
-  find_var_decl_by_num n code = SOME (HashMapVarDecl is_t kt vt, id) ==>
+  find_var_decl_by_name n code = SOME (HashMapVarDecl is_t kt vt, id) ==>
   lookup_var_slot_from_layout cx is_t src id = SOME slot ==>
   lookup_global cx src n st = (INL (HashMapRef is_t (n2w slot) kt vt), st)
 Proof
@@ -2542,7 +2552,7 @@ Proof
 QED
 
 Theorem assign_target_HashMapRef_branch_no_type_error:
-  lookup_global cx src_id_opt (string_to_num id) st =
+  lookup_global cx src_id_opt id st =
     (INL (HashMapRef is_transient (n2w slot) kt vt), st) ==>
   get_module_code cx src_id_opt = SOME code ==>
   env.type_defs = get_tenv cx ==>
@@ -2602,10 +2612,10 @@ QED
 
 Theorem lookup_global_StorageVarDecl_ArrayTV_returns_ArrayRef:
   get_module_code cx src_id_opt = SOME code ==>
-  find_var_decl_by_num (string_to_num id) code = SOME (StorageVarDecl is_transient typ, id_str) ==>
+  find_var_decl_by_name id code = SOME (StorageVarDecl is_transient typ, id_str) ==>
   lookup_var_slot_from_layout cx is_transient src_id_opt id_str = SOME slot ==>
   evaluate_type (get_tenv cx) typ = SOME (ArrayTV elem_tv bd) ==>
-  lookup_global cx src_id_opt (string_to_num id) st =
+  lookup_global cx src_id_opt id st =
     (INL (ArrayRef is_transient (n2w slot) elem_tv bd), st)
 Proof
   rpt strip_tac >>
@@ -2616,7 +2626,7 @@ QED
 
 Theorem lookup_global_StorageVarDecl_non_ArrayTV_no_TypeError:
   get_module_code cx src_id_opt = SOME code ==>
-  find_var_decl_by_num n code = SOME (StorageVarDecl is_transient typ, id_str) ==>
+  find_var_decl_by_name n code = SOME (StorageVarDecl is_transient typ, id_str) ==>
   lookup_var_slot_from_layout cx is_transient src_id_opt id_str = SOME slot ==>
   evaluate_type (get_tenv cx) typ = SOME root_tv ==>
   root_tv ≠ ArrayTV elem_tv bd ==>
@@ -2794,7 +2804,7 @@ QED
 
 
 Theorem assign_target_TopLevelVar_ArrayRef_AppendOp_dynamic_no_type_error[local]:
-  lookup_global cx src_id_opt (string_to_num id) st =
+  lookup_global cx src_id_opt id st =
     (INL (ArrayRef is_transient base_slot elem_tv bd), st) ==>
   get_module_code cx src_id_opt = SOME code ==>
   resolve_array_element cx is_transient base_slot (ArrayTV elem_tv bd) (REVERSE sbs) st =
@@ -2854,7 +2864,7 @@ QED
 
 
 Theorem assign_target_TopLevelVar_ArrayRef_PopOp_dynamic_no_type_error[local]:
-  lookup_global cx src_id_opt (string_to_num id) st =
+  lookup_global cx src_id_opt id st =
     (INL (ArrayRef is_transient base_slot elem_tv bd), st) ==>
   get_module_code cx src_id_opt = SOME code ==>
   resolve_array_element cx is_transient base_slot (ArrayTV elem_tv bd) (REVERSE sbs) st =
@@ -2987,7 +2997,7 @@ Theorem assign_target_ArrayRef_ordinary_ntr[local]:
      Handles the _ wildcard in the evaluator's case(ao,final_tv) pair-match.
      The Dynamic exclusion premise eliminates the AppendOp/PopOp+Dynamic pair-arms;
      for Replace/Update it is trivially satisfied since those ops go through _ anyway. *)
-  lookup_global cx src_id_opt (string_to_num id) st =
+  lookup_global cx src_id_opt id st =
     (INL (ArrayRef is_transient (n2w slot) elem_tv bd), st) ==>
   get_module_code cx src_id_opt = SOME code ==>
   resolve_array_element cx is_transient (n2w slot) (ArrayTV elem_tv bd) (REVERSE sbs) st =
@@ -3023,7 +3033,7 @@ Theorem assign_target_ArrayRef_Replace_ordinary_ntr[local]:
      specialized to Replace v. Without Dynamic exclusion: when op = Replace v,
      assign_operation_distinct eliminates PopOp/AppendOp pair-arms in gvs blast,
      so the _ wildcard handles ALL final_tv constructors including ArrayTV Dynamic. *)
-  lookup_global cx src_id_opt (string_to_num id) st =
+  lookup_global cx src_id_opt id st =
     (INL (ArrayRef is_transient (n2w slot) elem_tv bd), st) ==>
   get_module_code cx src_id_opt = SOME code ==>
   resolve_array_element cx is_transient (n2w slot) (ArrayTV elem_tv bd) (REVERSE sbs) st =
@@ -3056,7 +3066,7 @@ QED
 Theorem assign_target_ArrayRef_Update_ordinary_ntr[local]:
   (* Same as Replace variant but for Update. assign_operation_distinct eliminates
      PopOp/AppendOp pair-arms, so _ wildcard handles all final_tv. *)
-  lookup_global cx src_id_opt (string_to_num id) st =
+  lookup_global cx src_id_opt id st =
     (INL (ArrayRef is_transient (n2w slot) elem_tv bd), st) ==>
   get_module_code cx src_id_opt = SOME code ==>
   resolve_array_element cx is_transient (n2w slot) (ArrayTV elem_tv bd) (REVERSE sbs) st =
@@ -3093,7 +3103,7 @@ Theorem assign_target_TopLevelVar_ArrayRef_resolve_error_no_type_error[local]:
      is never TypeError under well-typed subscripts, we get
      no_type_error_result. *)
   get_module_code cx src_id_opt = SOME code ==>
-  lookup_global cx src_id_opt (string_to_num id) st =
+  lookup_global cx src_id_opt id st =
     (INL (ArrayRef is_transient (n2w slot) elem_tv bd), st) ==>
   leaf_type (ArrayTV elem_tv bd) (REVERSE sbs) <> NoneTV ==>
   resolve_array_element cx is_transient (n2w slot) (ArrayTV elem_tv bd) (REVERSE sbs) st =
@@ -3116,16 +3126,16 @@ QED
 
 Theorem assign_target_TopLevelVar_ArrayRef_branch_no_type_error:
   runtime_consistent env cx st ==>
-  FLOOKUP env.toplevel_vtypes (src_id_opt,string_to_num id) = SOME (Type t) ==>
+  FLOOKUP env.toplevel_vtypes (src_id_opt,id) = SOME (Type t) ==>
   target_path_type env (Type t) sbs (Type ty) ==>
   assignable_type (get_tenv cx) ty ==>
   assign_operation_runtime_typed env ty op ==>
   env.type_defs = get_tenv cx ==>
   get_module_code cx src_id_opt = SOME code ==>
-  find_var_decl_by_num (string_to_num id) code = SOME (StorageVarDecl is_transient typ, id_str) ==>
+  find_var_decl_by_name id code = SOME (StorageVarDecl is_transient typ, id_str) ==>
   lookup_var_slot_from_layout cx is_transient src_id_opt id_str = SOME slot ==>
   evaluate_type (get_tenv cx) typ = SOME (ArrayTV elem_tv bd) ==>
-  lookup_global cx src_id_opt (string_to_num id) st =
+  lookup_global cx src_id_opt id st =
     (INL (ArrayRef is_transient (n2w slot) elem_tv bd), st) ==>
   assign_target cx (BaseTargetV (TopLevelVar src_id_opt id) sbs) op st = (res, st') ==>
   no_type_error_result res
@@ -3247,11 +3257,11 @@ Theorem assign_target_TopLevelVar_Value_branch_ntr:
        1) assign_subscripts INL + set_global INL + assign_result: success path
        2) assign_subscripts INL + set_global INR: TypeError from set_global
        3) assign_subscripts INR: error from assign_subscripts *)
-  lookup_global cx src_id_opt (string_to_num id) st = (INL (Value v), st0) ==>
+  lookup_global cx src_id_opt id st = (INL (Value v), st0) ==>
   value_has_type root_tv v ==>
   get_module_code cx src_id_opt = SOME code ==>
   env.type_defs = get_tenv cx ==>
-  find_var_decl_by_num (string_to_num id) code = SOME (StorageVarDecl is_transient typ, id_str) ==>
+  find_var_decl_by_name id code = SOME (StorageVarDecl is_transient typ, id_str) ==>
   lookup_var_slot_from_layout cx is_transient src_id_opt id_str = SOME slot ==>
   evaluate_type (get_tenv cx) typ = SOME root_tv ==>
   well_formed_type_value root_tv ==>
@@ -3275,7 +3285,7 @@ Proof
    simp[no_type_error_result_def] >> gen_tac >>
    spose_not_then strip_assume_tac >>
    (* Now: e = Error (TypeError msg), goal is F *)
-   `set_global cx src_id_opt (string_to_num id) v'' s'' =
+   `set_global cx src_id_opt id v'' s'' =
      (INR (Error (TypeError msg)),s'³')` by simp[] >>
    metis_tac[set_global_storage_no_type_error]) >-
   (* Goal 3: assign_subscripts returns INR *)
@@ -3288,14 +3298,14 @@ QED
 
 Theorem assign_target_TopLevelVar_Type_StorageVarDecl_no_type_error:
   runtime_consistent env cx st ==>
-  FLOOKUP env.toplevel_vtypes (src_id_opt,string_to_num id) = SOME (Type t) ==>
+  FLOOKUP env.toplevel_vtypes (src_id_opt,id) = SOME (Type t) ==>
   target_path_type env (Type t) sbs (Type ty) ==>
   assignable_type (get_tenv cx) ty ==>
   assign_operation_runtime_typed env ty op ==>
   assign_operation_matches_target_shape (BaseTargetV (TopLevelVar src_id_opt id) sbs) op ==>
   env.type_defs = get_tenv cx ==>
   get_module_code cx src_id_opt = SOME code ==>
-  find_var_decl_by_num (string_to_num id) code = SOME (StorageVarDecl is_transient typ, id_str) ==>
+  find_var_decl_by_name id code = SOME (StorageVarDecl is_transient typ, id_str) ==>
   lookup_var_slot_from_layout cx is_transient src_id_opt id_str = SOME slot ==>
   evaluate_type (get_tenv cx) typ = SOME root_tv ==>
   well_formed_type_value root_tv ==>
@@ -3311,7 +3321,7 @@ Proof
     by metis_tac[target_path_type_Type_evaluate_leaf] >>
   `leaf_type root_tv (REVERSE sbs) <> NoneTV`
     by metis_tac[assignable_type_evaluate_not_NoneTV, target_path_type_Type_evaluate_leaf_not_NoneTV] >>
-  Cases_on `lookup_global cx src_id_opt (string_to_num id) st` >>
+  Cases_on `lookup_global cx src_id_opt id st` >>
   Cases_on `q` >> gvs[] >-
   (* INL: toplevel_value *)
   (Cases_on `x` >> gvs[] >-
@@ -3335,11 +3345,11 @@ Theorem top_level_HashMapT_not_storage_decl:
   runtime_consistent env cx st ==>
   FLOOKUP env.toplevel_vtypes (src,n) = SOME (HashMapT kt vt) ==>
   get_module_code cx src = SOME ts ==>
-  find_var_decl_by_num n ts = SOME (StorageVarDecl is_transient typ,id_str) ==>
+  find_var_decl_by_name n ts = SOME (StorageVarDecl is_transient typ,id_str) ==>
   F
 Proof
   rpt strip_tac >>
-  `?is_tr ids. find_var_decl_by_num n ts = SOME (HashMapVarDecl is_tr kt vt, ids)`
+  `?is_tr ids. find_var_decl_by_name n ts = SOME (HashMapVarDecl is_tr kt vt, ids)`
     by metis_tac[top_level_HashMap_decl] >>
   pop_assum strip_assume_tac >>
   gvs[optionTheory.SOME_11, pairTheory.PAIR_EQ, var_decl_info_distinct]
@@ -3347,7 +3357,7 @@ QED
 
 Theorem top_level_HashMapRef_assign_no_type_error:
   runtime_consistent env cx st ==>
-  FLOOKUP env.toplevel_vtypes (src_id_opt,string_to_num id) = SOME (HashMapT kt vt) ==>
+  FLOOKUP env.toplevel_vtypes (src_id_opt,id) = SOME (HashMapT kt vt) ==>
   target_path_type env (HashMapT kt vt) sbs (Type ty) ==>
   assignable_type (get_tenv cx) ty ==>
   assign_operation_runtime_typed env ty op ==>
@@ -3355,14 +3365,14 @@ Theorem top_level_HashMapRef_assign_no_type_error:
   assign_target_assignable (BaseTargetV (TopLevelVar src_id_opt id) sbs) st ==>
   well_formed_vtype (get_tenv cx) (HashMapT kt vt) ==>
   get_module_code cx src_id_opt = SOME code ==>
-  find_var_decl_by_num (string_to_num id) code = SOME (HashMapVarDecl is_transient kt vt, id_str) ==>
+  find_var_decl_by_name id code = SOME (HashMapVarDecl is_transient kt vt, id_str) ==>
   lookup_var_slot_from_layout cx is_transient src_id_opt id_str = SOME slot ==>
   assign_target cx (BaseTargetV (TopLevelVar src_id_opt id) sbs) op st = (res, st') ==>
   no_type_error_result res
 Proof
   rpt strip_tac >>
   `env.type_defs = get_tenv cx` by fs[runtime_consistent_def, env_consistent_def, env_context_consistent_def] >>
-  `lookup_global cx src_id_opt (string_to_num id) st = (INL (HashMapRef is_transient (n2w slot) kt vt), st)` by
+  `lookup_global cx src_id_opt id st = (INL (HashMapRef is_transient (n2w slot) kt vt), st)` by
     metis_tac[lookup_global_HashMapVarDecl_returns_HashMapRef] >>
   `well_formed_vtype env.type_defs (HashMapT kt vt)` by metis_tac[] >>
   drule_all target_path_type_HashMapT_assign_target_decomp >> strip_tac >>
@@ -3387,7 +3397,7 @@ Resume assign_target_sound_mutual[sound_TopLevelVar]:
    simp[assign_target_assignable_context_def, assign_target_assignable_def,
         PULL_EXISTS, FORALL_PROD] >>
    rpt strip_tac >>
-   rename1 `find_var_decl_by_num _ _ = SOME (vi, id_str)` >>
+   rename1 `find_var_decl_by_name _ _ = SOME (vi, id_str)` >>
    Cases_on `vi` >> gvs[] >-
    (* StorageVarDecl: resolve IS_SOME facts then dispatch by root_tv *)
    (rename1 `StorageVarDecl is_transient typ` >>
@@ -3405,7 +3415,7 @@ Resume assign_target_sound_mutual[sound_TopLevelVar]:
     metis_tac[assign_target_TopLevelVar_Type_StorageVarDecl_no_type_error,
               type_value_distinct] >-
     (* ArrayTV: derive lookup_global then use ArrayRef boundary lemma *)
-    (`lookup_global cx src_id_opt (string_to_num id) st =
+    (`lookup_global cx src_id_opt id st =
        (INL (ArrayRef is_transient (n2w slot) t' b'),st)`
        by metis_tac[lookup_global_StorageVarDecl_ArrayTV_returns_ArrayRef] >>
      metis_tac[assign_target_TopLevelVar_ArrayRef_branch_no_type_error]) >-
@@ -3426,7 +3436,7 @@ Resume assign_target_sound_mutual[sound_TopLevelVar]:
    simp[assign_target_assignable_context_def, assign_target_assignable_def,
         PULL_EXISTS, FORALL_PROD] >>
    rpt strip_tac >>
-   rename1 `find_var_decl_by_num _ _ = SOME (vi, id_str)` >>
+   rename1 `find_var_decl_by_name _ _ = SOME (vi, id_str)` >>
    Cases_on `vi` >> gvs[] >-
    (* StorageVarDecl: contradiction with vt = HashMapT *)
    metis_tac[top_level_HashMapT_not_storage_decl] >>
@@ -3635,7 +3645,7 @@ Proof
                    place_leaf_typed env vt sbs (ArrayT elem_ty (Dynamic n)) final_tv` by
       metis_tac[target_runtime_typed_place_leaf_typed] >>
     gvs[location_runtime_typed_def, place_leaf_typed_def, place_leaf_path_typed_def] >>
-    `lookup_scopes (string_to_num s) s''.scopes = SOME entry` by
+    `lookup_scopes s s''.scopes = SOME entry` by
       metis_tac[find_containing_scope_lookup] >>
     gvs[] >>
     `value_has_type entry.type entry.value /\ well_formed_type_value entry.type` by (

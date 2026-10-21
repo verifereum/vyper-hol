@@ -379,6 +379,28 @@ Proof
 QED
 
 
+(* Label coverage follows the operand pair spine; variable replacement
+   has no effect on the label projection, regardless of lookup results. *)
+Theorem EVERY_operand_ir_labels_cons[local]:
+  EVERY P (operand_ir_labels (op :: ops)) <=>
+  (!l. op = Label l ==> P l) /\ EVERY P (operand_ir_labels ops)
+Proof
+  Cases_on `op` >> simp[operand_ir_labels_def]
+QED
+
+Theorem operand_ir_labels_phi_value[local]:
+  operand_ir_labels
+    ((case op of
+        Var v => (case ALOOKUP repls v of
+                    SOME w => Var w | NONE => Var v)
+      | other => other) :: ops) =
+  operand_ir_labels (op :: ops)
+Proof
+  Cases_on `op` >>
+  simp[optionTheory.option_case_compute,COND_RAND,COND_RATOR,
+       operand_ir_labels_def]
+QED
+
 Theorem operand_ir_labels_update_phi_ops_covered:
   !old new repls ops s.
     EVERY (\l. MEM l s.irs_used_labels) (operand_ir_labels ops) /\
@@ -386,13 +408,9 @@ Theorem operand_ir_labels_update_phi_ops_covered:
     EVERY (\l. MEM l s.irs_used_labels)
       (operand_ir_labels (update_phi_ops old new repls ops))
 Proof
-  recInduct update_phi_ops_ind >>
-  rpt strip_tac >>
-  TRY (Cases_on `l = old_label`) >>
-  TRY (Cases_on `val_op`) >>
-  TRY (Cases_on `y`) >>
-  TRY (Cases_on `ALOOKUP var_repls s'`) >>
-  gvs[update_phi_ops_def,operand_ir_labels_def]
+  recInduct update_phi_ops_ind >> rpt strip_tac >>
+  fs[Once update_phi_ops_def,COND_RAND,operand_ir_labels_phi_value,
+     EVERY_operand_ir_labels_cons,operand_ir_labels_def]
 QED
 
 Theorem operand_ir_labels_subst_label_ops_covered:
@@ -2426,8 +2444,8 @@ Proof
         (strip_tac >> gvs[venomInstTheory.is_terminator_def]) >>
       simp[Once get_invoke_targets_def] >>
       once_rewrite_tac[get_invoke_targets_def] >> simp[])
-  >> simp[Once get_invoke_targets_def] >>
-     once_rewrite_tac[get_invoke_targets_def] >> rpt CASE_TAC >> gvs[]
+  >> simp[Once listTheory.MAP] >>
+     once_rewrite_tac[cfg_invoke_labels_cons] >> simp[]
 QED
 
 Theorem subst_label_terminator_invoke_labels:
@@ -2451,8 +2469,8 @@ Proof
   Cases_on `h.inst_opcode = PHI`
   >- (gvs[] >> simp[Once get_invoke_targets_def] >>
       once_rewrite_tac[get_invoke_targets_def] >> simp[])
-  >> simp[Once get_invoke_targets_def] >>
-     once_rewrite_tac[get_invoke_targets_def] >> rpt CASE_TAC >> gvs[]
+  >> simp[Once listTheory.MAP] >>
+     once_rewrite_tac[cfg_invoke_labels_cons] >> simp[]
 QED
 
 Theorem update_phis_for_split_invoke_labels:

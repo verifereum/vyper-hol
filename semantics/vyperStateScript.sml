@@ -1,8 +1,8 @@
 Theory vyperState
 Ancestors
   arithmetic alist combin option list finite_map pair rich_list
-  cv cv_std vfmTypes vfmState vfmContext vfmExecution[ignore_grammar]
-  vyperAST vyperMisc vyperValue vyperValueOperation
+  cv cv_std cv_string_fmap vfmTypes vfmState vfmContext vfmExecution[ignore_grammar]
+  vyperAST vyperMisc vyperNsidFmap vyperValue vyperValueOperation
   vyperStorage vyperContext extCallOracle[ignore_grammar]
 Libs
   cv_transLib wordsLib monadsyntax
@@ -62,9 +62,7 @@ End
 (* Machinery for managing variables (local, top-level, mutable, immutable), and
 * other stateful data during execution (e.g., EVM account states, logs)*)
 
-(*
-We don't use identifiers directly because cv compute prefers num keys
-*)
+(* Local identifiers are the keys of runtime scopes. *)
 
 Datatype:
   scope_entry = <|
@@ -74,7 +72,7 @@ Datatype:
   |>
 End
 
-Type scope = “:num |-> scope_entry”;
+Type scope = “:string |-> scope_entry”;
 
 (* find a variable in a list of nested scopes *)
 Definition lookup_scopes_def:
@@ -113,7 +111,7 @@ Type log = “:event”;
 
 (* Module-aware immutables: keyed by source_id *)
 (* NONE = main contract, SOME n = module with source_id n *)
-Type module_immutables = “:(num option, num |-> (type_value # value)) alist”
+Type module_immutables = “:(num option, string |-> (type_value # value)) alist”
 
 Definition empty_immutables_def:
   empty_immutables : module_immutables = []
@@ -338,20 +336,20 @@ End
 
 val () = cv_auto_trans lookup_var_slot_from_layout_def;
 
-(* Find var decl by num key (comparing string_to_num of each id) *)
-Definition find_var_decl_by_num_def:
-  find_var_decl_by_num n [] = NONE ∧
-  find_var_decl_by_num n (VariableDecl _ mut vid typ _ :: ts) =
-    (if (mut = Storage ∨ mut = Transient) ∧ string_to_num vid = n
+(* Find a storage or hashmap declaration by its source identifier. *)
+Definition find_var_decl_by_name_def:
+  find_var_decl_by_name name [] = NONE ∧
+  find_var_decl_by_name name (VariableDecl _ mut vid typ _ :: ts) =
+    (if (mut = Storage ∨ mut = Transient) ∧ vid = name
      then SOME (StorageVarDecl (mut = Transient) typ, vid)
-     else find_var_decl_by_num n ts) ∧
-  find_var_decl_by_num n (HashMapDecl _ is_transient vid kt vt _ :: ts) =
-    (if string_to_num vid = n then SOME (HashMapVarDecl is_transient kt vt, vid)
-     else find_var_decl_by_num n ts) ∧
-  find_var_decl_by_num n (_ :: ts) = find_var_decl_by_num n ts
+     else find_var_decl_by_name name ts) ∧
+  find_var_decl_by_name name (HashMapDecl _ is_transient vid kt vt _ :: ts) =
+    (if vid = name then SOME (HashMapVarDecl is_transient kt vt, vid)
+     else find_var_decl_by_name name ts) ∧
+  find_var_decl_by_name name (_ :: ts) = find_var_decl_by_name name ts
 End
 
-val () = cv_auto_trans find_var_decl_by_num_def;
+val () = cv_auto_trans find_var_decl_by_name_def;
 
 Definition get_accounts_def:
   get_accounts st = return st.accounts st
@@ -453,12 +451,12 @@ val () = get_immutables_def
   |> SRULE [bind_def, FUN_EQ_THM, LET_THM]
   |> cv_auto_trans;
 
-(* Module-aware global lookup: look up variable n in module src_id_opt *)
+(* Module-aware global lookup: look up identifier n in module src_id_opt. *)
 Definition lookup_global_def:
   lookup_global cx src_id_opt n = do
     ts <- lift_option_type (get_module_code cx src_id_opt) "lookup_global get_module_code";
     tenv <<- get_tenv cx;
-    case find_var_decl_by_num n ts of
+    case find_var_decl_by_name n ts of
     | NONE => do
         (* Not a storage/hashmap var - check immutables *)
         imms <- get_immutables cx src_id_opt;
@@ -524,7 +522,9 @@ Theorem compute_hashmap_slot_pre[cv_pre]:
   ∀x y z. compute_hashmap_slot_pre x y z
 Proof
   ho_match_mp_tac compute_hashmap_slot_ind
-  \\ rw[] \\ rw[Once compute_hashmap_slot_pre_def]
+  \\ rw[]
+  \\ CONV_TAC (ONCE_REWRITE_CONV [compute_hashmap_slot_pre_def])
+  \\ rw[]
 QED
 
 (* Get the final value type after traversing hashmap keys.
@@ -588,7 +588,7 @@ Definition set_global_def:
   set_global cx src_id_opt n v = do
     ts <- lift_option_type (get_module_code cx src_id_opt) "set_global get_module_code";
     tenv <<- get_tenv cx;
-    case find_var_decl_by_num n ts of
+    case find_var_decl_by_name n ts of
     | NONE => raise $ Error (TypeError "set_global: var not found")
     | SOME (StorageVarDecl is_transient typ, id) => do
         var_slot <- lift_option_type (lookup_var_slot_from_layout cx is_transient src_id_opt id) "set_global var_slot";
@@ -650,11 +650,10 @@ val () = cv_auto_trans pop_scope_def;
 
 Definition new_variable_def:
   new_variable id tv v = do
-    n <<- string_to_num id;
     env <- get_scopes;
-    type_check (IS_NONE (lookup_scopes n env)) "new_variable bound";
+    type_check (IS_NONE (lookup_scopes id env)) "new_variable bound";
     case env of [] => raise $ Error (TypeError "new_variable null")
-    | e::es => set_scopes ((e |+ (n, <| assignable := T; type := tv; value := v |>))::es)
+    | e::es => set_scopes ((e |+ (id, <| assignable := T; type := tv; value := v |>))::es)
   od
 End
 
@@ -665,12 +664,11 @@ val () = new_variable_def
 
 Definition set_variable_def:
   set_variable id v = do
-    n <<- string_to_num id;
     sc <- get_scopes;
     (pre, env, entry, rest) <-
-      lift_option_type (find_containing_scope n sc) "set_variable not found";
+      lift_option_type (find_containing_scope id sc) "set_variable not found";
     type_check entry.assignable "set_variable not assignable";
-    set_scopes (pre ++ (env |+ (n, entry with value := v))::rest)
+    set_scopes (pre ++ (env |+ (id, entry with value := v))::rest)
   od
 End
 
@@ -784,15 +782,43 @@ End
 val evaluate_subscripts_pre_def =
   cv_auto_trans_pre "evaluate_subscripts_pre" evaluate_subscripts_def;
 
+(* Cache only the constructor/boolean rules needed by the CV preconditions;
+   avoid traversing the large semantic context with the ambient simpset. *)
+val subscript_pre_ss = boolSimps.bool_ss ++ rewrites [LET_THM, value_11];
+
+(* Unwind translator-generated equalities before descending into their bodies.
+   In particular, an impossible constructor premise discards its whole branch. *)
+val pre_constructor_rewrites = Rewrite.add_rewrites Rewrite.bool_rewrites
+  (GSYM AND_IMP_INTRO ::
+   List.concat (map (fn ty => #rewrs (TypeBase.simpls_of ty))
+    [``:value``, ``:array_value``, ``:type_value``, ``:subscript``,
+     ``:value option``, ``:subscript list``, ``:num # num``]));
+fun mk_pre_cleanup_conv rewrites =
+  let
+    val root = CHANGED_CONV (FIRST_CONV
+      [Rewrite.REWRITES_CONV rewrites, Unwind.UNWIND_FORALL_CONV])
+    (* Only traverse logical structure: semantic expressions in equality
+       premises are opaque. Reduce a false premise before visiting its body. *)
+    fun cleanup tm =
+      ((root THENC cleanup) ORELSEC
+       (if is_forall tm then
+          QUANT_CONV cleanup THENC TRY_CONV (root THENC cleanup)
+        else if is_imp tm orelse is_conj tm then
+          RATOR_CONV (RAND_CONV cleanup) THENC
+          ((root THENC cleanup) ORELSEC
+           (RAND_CONV cleanup THENC TRY_CONV (root THENC cleanup)))
+        else ALL_CONV)) tm
+  in cleanup end;
+
+(* List induction keeps the IH universal in every non-subscript argument.
+   Only this unconditional IH is added to the goal-only cleanup rules. *)
 Theorem evaluate_subscripts_pre[cv_pre]:
   !a b c. evaluate_subscripts_pre a b c
 Proof
-  ho_match_mp_tac evaluate_subscripts_ind
-  \\ rw[Once evaluate_subscripts_pre_def]
-  \\ rw[Once evaluate_subscripts_pre_def]
-  \\ gvs[] \\ rw[]
-  \\ qmatch_asmsub_rename_tac`0i ≤ w`
-  \\ Cases_on`w` \\ gs[]
+  Induct_on `c` \\ rpt gen_tac
+  \\ CONV_TAC (ONCE_REWRITE_CONV [evaluate_subscripts_pre_def])
+  \\ ASSUM_LIST (fn ihs => CONV_TAC (mk_pre_cleanup_conv
+       (Rewrite.add_rewrites pre_constructor_rewrites ihs)))
 QED
 
 (* mutating inside arrays, structs, hashmaps *)
@@ -844,12 +870,10 @@ val assign_subscripts_pre_def =
 Theorem assign_subscripts_pre[cv_pre]:
   !a b c d. assign_subscripts_pre a b c d
 Proof
-  ho_match_mp_tac assign_subscripts_ind
-  \\ rw[Once assign_subscripts_pre_def]
-  \\ rw[Once assign_subscripts_pre_def]
-  \\ gvs[] \\ rw[]
-  \\ qmatch_asmsub_rename_tac`0i ≤ w`
-  \\ Cases_on`w` \\ gs[]
+  Induct_on `c` \\ rpt gen_tac
+  \\ CONV_TAC (ONCE_REWRITE_CONV [assign_subscripts_pre_def])
+  \\ ASSUM_LIST (fn ihs => CONV_TAC (mk_pre_cleanup_conv
+       (Rewrite.add_rewrites pre_constructor_rewrites ihs)))
 QED
 
 Datatype:
@@ -898,8 +922,10 @@ val resolve_array_element_pre_def = resolve_array_element_def
 Theorem resolve_array_element_pre[cv_pre]:
   ∀a b c d e f. resolve_array_element_pre a b c d e f
 Proof
-  ho_match_mp_tac resolve_array_element_ind \\ rw[]
-  \\ rw[Once resolve_array_element_pre_def]
+  Induct_on `e` \\ rpt gen_tac
+  \\ CONV_TAC (ONCE_REWRITE_CONV [resolve_array_element_pre_def])
+  \\ ASSUM_LIST (fn ihs => CONV_TAC (mk_pre_cleanup_conv
+       (Rewrite.add_rewrites pre_constructor_rewrites ihs)))
 QED
 
 Definition assign_result_def:
@@ -917,23 +943,22 @@ val () = assign_result_def
 
 Definition assign_target_def:
   assign_target cx (BaseTargetV (ScopedVar id) is) ao = do
-    ni <<- string_to_num id;
     sc <- get_scopes;
-    (pre, env, entry, rest) <- lift_option (find_containing_scope ni sc) "assign_target lookup";
+    (pre, env, entry, rest) <- lift_option (find_containing_scope id sc) "assign_target lookup";
     type_check entry.assignable "assign_target not assignable";
     a' <- lift_sum $ assign_subscripts entry.type entry.value (REVERSE is) ao;
-    set_scopes $ pre ++ env |+ (ni, entry with value := a') :: rest;
+    set_scopes $ pre ++ env |+ (id, entry with value := a') :: rest;
     assign_result entry.type ao entry.value (REVERSE is)
   od ∧
   assign_target cx (BaseTargetV (TopLevelVar src_id_opt id) is) ao = do
-    ni <<- string_to_num id;
+    ni <<- id;
     tv <- lookup_global cx src_id_opt ni;
     ts <- lift_option_type (get_module_code cx src_id_opt) "assign_target get_module_code";
     tenv <<- get_tenv cx;
     case tv of
     | Value v => do
         var_tv <- lift_option_type
-          (OPTION_BIND (find_var_decl_by_num ni ts)
+          (OPTION_BIND (find_var_decl_by_name ni ts)
              (λp. case FST p of StorageVarDecl _ typ => evaluate_type tenv typ | _ => NONE))
           "assign_target TopLevelVar type";
         v' <- lift_sum $ assign_subscripts var_tv v (REVERSE is) ao;
@@ -992,11 +1017,10 @@ Definition assign_target_def:
       od
   od ∧
   assign_target cx (BaseTargetV (ImmutableVar src_id_opt id) is) ao = do
-    ni <<- string_to_num id;
     imms <- get_immutables cx src_id_opt;
-    tva <- lift_option_type (FLOOKUP imms ni) "assign_target ImmutableVar";
+    tva <- lift_option_type (FLOOKUP imms id) "assign_target ImmutableVar";
     a' <- lift_sum $ assign_subscripts (FST tva) (SND tva) (REVERSE is) ao;
-    set_immutable cx src_id_opt ni (FST tva) a';
+    set_immutable cx src_id_opt id (FST tva) a';
     assign_result (FST tva) ao (SND tva) (REVERSE is)
   od ∧
   assign_target cx (TupleTargetV gvs) (Replace (ArrayV (TupleV vs))) = do
@@ -1021,10 +1045,19 @@ val assign_target_pre_def = assign_target_def
             assign_operation_CASE_rator]
   |> cv_auto_trans_pre "assign_target_pre assign_targets_pre";
 
+val target_pre_cleanup_conv = mk_pre_cleanup_conv
+  (Rewrite.add_rewrites pre_constructor_rewrites
+    (List.concat (map (fn ty => #rewrs (TypeBase.simpls_of ty))
+      [``:assignment_value``, ``:location``, ``:assign_operation``])));
+
 Theorem assign_target_pre[cv_pre]:
   (∀w x y z. assign_target_pre w x y z) ∧
   (∀w x y z. assign_targets_pre w x y z)
 Proof
-  ho_match_mp_tac assign_target_ind \\ rw[]
-  \\ rw[Once assign_target_pre_def]
+  ho_match_mp_tac assign_target_ind \\ rpt strip_tac
+  \\ CONV_TAC (ONCE_REWRITE_CONV [assign_target_pre_def])
+  \\ CONV_TAC target_pre_cleanup_conv
+  \\ rpt strip_tac
+  \\ first_x_assum irule
+  \\ ASM_SIMP_TAC subscript_pre_ss []
 QED

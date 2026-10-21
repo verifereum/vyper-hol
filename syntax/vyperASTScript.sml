@@ -9,19 +9,6 @@ Type identifier = “:string”;
 (* Namespaced identifier: (source_id, name) where NONE = self, SOME n = module *)
 Type nsid = “:num option # identifier”;
 
-Definition pair_num_def:
-  pair_num (x:num) y = if x < y then y * y + x else x * x + x + y
-End
-
-val () = cv_auto_trans pair_num_def;
-
-Definition type_key_def:
-  type_key (NONE, name) = 2 * vyperMisc$string_to_num name ∧
-  type_key (SOME n, name) = 2 * pair_num n (vyperMisc$string_to_num name) + 1
-End
-
-val () = cv_auto_trans type_key_def;
-
 Datatype:
   bound
   = Fixed num
@@ -181,6 +168,19 @@ Datatype:
   ; rcf_revert_on_failure: bool
   |>
 End
+
+(* The generated size equation is stated over the record constructor, but the
+   frontend builds the flags with record-update syntax, which CBV cannot match
+   against it; this accessor form computes on both. *)
+Theorem raw_call_flags_size_accessors[compute]:
+  !r. raw_call_flags_size r =
+        1 + (r.rcf_max_outsize + (bool_size r.rcf_is_delegate +
+             (bool_size r.rcf_is_static + bool_size r.rcf_revert_on_failure)))
+Proof
+  Cases >>
+  REWRITE_TAC [DB.fetch "-" "raw_call_flags_size_def",
+               DB.fetch "-" "raw_call_flags_accessors"]
+QED
 
 (* Which variant of CREATE to use *)
 Datatype:

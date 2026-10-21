@@ -39,7 +39,7 @@ Definition deployment_constants_input_tags_agree_def:
           (case ALOOKUP am.immutables addr of
            | SOME imms => imms
            | NONE => []))
-        (string_to_num id) = SOME (tv,v) ==>
+        id = SOME (tv,v) ==>
       evaluate_type tenv ty = SOME tv
 End
 
@@ -57,7 +57,7 @@ Definition deployment_constants_output_typed_def:
             (case ALOOKUP am.immutables addr of
              | SOME imms => imms
              | NONE => []))
-          (string_to_num id) = SOME (tv,v) /\
+          id = SOME (tv,v) /\
         evaluate_type tenv ty = SOME tv /\
         value_has_type tv v
 End

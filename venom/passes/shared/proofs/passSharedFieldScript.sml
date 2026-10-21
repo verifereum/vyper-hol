@@ -6,8 +6,24 @@ Theory passSharedField
 Ancestors
   passSharedDefs venomExecSemantics venomEffects venomInstProps
   venomState venomInst
-Libs
-  stepInstBaseLib
+
+(* Cache the guarded equations; only rewrite the already-known opcode. *)
+val step_inst_base_opcode_rewrites = let
+  fun key th = let
+    val (_, body) = strip_forall (concl th)
+    val (guard, _) = dest_imp body
+  in rhs guard end
+in map (fn th => (key th, th))
+  (CONJUNCTS venomExecSemanticsTheory.step_inst_base_opcode_eqs) end;
+
+fun rewrite_step_inst_base_opcode eq = let
+  val (_, rewrite) = valOf (List.find
+    (fn (key, _) => aconv key (rhs (concl eq)))
+    step_inst_base_opcode_rewrites)
+in PURE_ONCE_REWRITE_TAC [MATCH_MP rewrite eq] end;
+
+val step_inst_base_opcode_tac =
+  qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode;
 
 (* Upstream-style tactic *)
 val field_tac =
@@ -290,16 +306,31 @@ Proof
   simp[tstore_def, LET_THM, contract_transient_def]
 QED
 
+(* Error results from pure binary operations are memory-independent. *)
+Theorem exec_pure2_mem_error[local]:
+  !f inst s e m.
+    exec_pure2 f inst s = Error e ==>
+    exec_pure2 f inst (s with vs_memory := m) = Error e
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `exec_pure2 f inst s = Error e` mp_tac >>
+  simp[exec_pure2_def, AllCaseEqs()]
+QED
+
 (* Frame tactic: like field_tac but rewrites eval_operand/update_var
    plus state-access functions that don't depend on vs_memory *)
 val mem_frame_finish_tac =
-  with_opcode_clause fs >>
-  fs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def,
-     exec_alloca_def, extract_venom_result_def] >>
-  gvs[AllCaseEqs()] >>
-  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
-  fs[update_var_def, vfmStateTheory.lookup_account_def];
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  step_inst_base_opcode_tac >>
+  strip_tac >>
+  FIRST [irule exec_pure2_mem_error >> first_assum ACCEPT_TAC,
+    fs[] >>
+    fs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
+       exec_read0_def, exec_read1_def, exec_write2_def,
+       exec_alloca_def, extract_venom_result_def] >>
+    gvs[AllCaseEqs()] >>
+    rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
+    fs[update_var_def, vfmStateTheory.lookup_account_def]];
 
 val mem_frame_tac =
   rpt strip_tac >>
@@ -416,17 +447,6 @@ Proof
   gvs[step_inst_non_invoke]
 QED
 
-(* Error results from pure binary operations are memory-independent. *)
-Theorem exec_pure2_mem_error[local]:
-  !f inst s e m.
-    exec_pure2 f inst s = Error e ==>
-    exec_pure2 f inst (s with vs_memory := m) = Error e
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `exec_pure2 f inst s = Error e` mp_tac >>
-  simp[exec_pure2_def, AllCaseEqs()]
-QED
-
 (* Error case: same error regardless of memory replacement *)
 Theorem step_inst_base_mem_error_frame[local]:
   !inst s e m.
@@ -461,8 +481,7 @@ Proof
   >- mem_frame_finish_tac
   >- mem_frame_finish_tac
   >- (qpat_x_assum `step_inst_base inst s = Error e` mp_tac >>
-      PURE_REWRITE_TAC[step_inst_base_def] >>
-      ASM_REWRITE_TAC[opcode_case_def] >>
+      step_inst_base_opcode_tac >>
       simp[exec_pure2_mem_error])
   >- mem_frame_finish_tac
   >- mem_frame_finish_tac
@@ -628,8 +647,7 @@ QED
 
 val trans_frame_finish_tac =
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  ASM_REWRITE_TAC[opcode_case_def] >>
+  step_inst_base_opcode_tac >>
   simp[exec_pure1_def, exec_pure2_def, exec_pure3_def,
        exec_read0_def, exec_read1_def, exec_write2_def,
        exec_alloca_def, extract_venom_result_def] >>
@@ -954,7 +972,8 @@ Proof
 QED
 
 val acct_frame_finish_tac =
-  with_opcode_clause fs >>
+  qpat_x_assum `step_inst_base inst s = _` mp_tac >>
+  step_inst_base_opcode_tac >> rpt strip_tac >>
   fs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
      exec_read0_def, exec_read1_def, exec_write2_def,
      exec_alloca_def, extract_venom_result_def] >>
