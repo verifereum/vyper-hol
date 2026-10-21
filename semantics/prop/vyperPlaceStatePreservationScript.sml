@@ -376,6 +376,160 @@ Proof
   simp[scope_entry_accfupds]
 QED
 
+
+Theorem record_pop_history_typed:
+  popped_history_typed tv history /\ value_has_type tv old /\
+  well_formed_type_value tv /\ evaluate_subscripts tv old path = INL arr /\
+  popped_value arr = INL p ==>
+  popped_history_typed tv (record_pop tv old path p history)
+Proof
+  strip_tac >>
+  `?ptv. subscripts_type tv path = SOME ptv /\
+         well_formed_type_value ptv /\ value_has_type ptv arr` by
+    metis_tac[evaluate_subscripts_declared_type_exists] >>
+  Cases_on `arr` >> gvs[vyperValueOperationTheory.popped_value_def] >>
+  Cases_on `a` >> gvs[vyperValueOperationTheory.popped_value_def] >>
+  Cases_on `ptv` >> gvs[value_has_type_def] >>
+  Cases_on `b` >> gvs[value_has_type_def, well_formed_type_value_def] >>
+  irule record_pop_history_typed_at_path >>
+  goal_assum (drule_at Any) >>
+  simp[value_has_type_def, vyperValueOperationTheory.popped_value_def]
+QED
+
+Theorem bind_arguments_history_typed:
+  !args tenv vals scope. bind_arguments tenv args vals = SOME scope ==>
+  scope_history_typed scope
+Proof
+  Induct >> simp[pairTheory.FORALL_PROD] >> rpt gen_tac >>
+  Cases_on `vals` >> simp[Once vyperInterpreterTheory.bind_arguments_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  irule scope_history_typed_update >> simp[] >> metis_tac[]
+QED
+
+Theorem assign_target_scoped_replace_history_typed:
+  state_history_typed st /\
+  assign_target cx (BaseTargetV (ScopedVar id) is) (Replace v) st = (res,st') ==>
+  state_history_typed st'
+Proof
+  strip_tac >>
+  Cases_on `find_containing_scope id st.scopes` >>
+  gvs[Once assign_target_def, bind_def, get_scopes_def, return_def,
+      lift_option_def, raise_def] >> PairCases_on `x` >>
+  gvs[bind_def, lift_sum_def, type_check_def, assert_def,
+      ignore_bind_def, set_scopes_def, assign_result_def, return_def, raise_def,
+      AllCaseEqs()] >>
+  drule vyperLookupTheory.find_containing_scope_structure >> strip_tac >>
+  gvs[state_history_typed_def, EVERY_APPEND, evaluation_state_accfupds] >>
+  Cases_on `assign_subscripts x2.type x2.value (REVERSE is) (Replace v)` >>
+  gvs[scope_history_typed_def, finite_mapTheory.FLOOKUP_UPDATE,
+      return_def, raise_def] >> rpt strip_tac >>
+  gvs[AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem assign_target_immutable_history_typed:
+  state_history_typed st /\
+  assign_target cx (BaseTargetV (ImmutableVar src id) is) ao st = (res,st') ==>
+  state_history_typed st'
+Proof
+  rw[Once assign_target_def, bind_def, ignore_bind_def,
+     get_immutables_def, get_address_immutables_def, lift_option_type_def,
+     lift_sum_def, return_def, raise_def, vyperMiscTheory.option_CASE_rator,
+     vyperMiscTheory.sum_CASE_rator, AllCaseEqs()] >>
+  imp_res_tac vyperScopePreservationTheory.assign_result_scopes >>
+  imp_res_tac vyperScopePreservationTheory.set_immutable_scopes >>
+  metis_tac[state_history_typed_scopes]
+QED
+
+Theorem assign_target_replace_history_typed_mutual:
+  (!cx gv ao. !v st res st'. ao = Replace v /\ state_history_typed st /\
+    assign_target cx gv ao st = (res,st') ==> state_history_typed st') /\
+  (!cx gs vs. !st res st'. state_history_typed st /\
+    assign_targets cx gs vs st = (res,st') ==> state_history_typed st')
+Proof
+  ho_match_mp_tac assign_target_ind >>
+  conj_tac >- metis_tac[assign_target_scoped_replace_history_typed] >>
+  conj_tac >- metis_tac[state_history_typed_scopes,
+    vyperScopePreservationTheory.assign_target_toplevel_scopes_immutables] >>
+  conj_tac >- metis_tac[assign_target_immutable_history_typed] >>
+  rpt conj_tac >> rpt gen_tac >>
+  simp[Once assign_target_def, bind_def, ignore_bind_def, return_def,
+       raise_def, check_def, type_check_def, assert_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem assign_result_history_typed:
+  popped_history_typed tv history /\ value_has_type tv old /\
+  well_formed_type_value tv /\ assign_result tv ao old path st = (INL result,st') ==>
+  st' = st /\ popped_history_typed tv
+    (case result of NONE => [] | SOME p => record_pop tv old path p history)
+Proof
+  Cases_on `ao` >>
+  rw[assign_result_def, bind_def, lift_sum_def, return_def, raise_def,
+     vyperMiscTheory.sum_CASE_rator, AllCaseEqs()] >>
+  simp[] >> metis_tac[record_pop_history_typed]
+QED
+
+Theorem assign_target_scoped_history_typed:
+  place_state_well_typed st /\
+  assign_target cx (BaseTargetV (ScopedVar id) is) ao st = (res,st') ==>
+  state_history_typed st'
+Proof
+  strip_tac >>
+  Cases_on `find_containing_scope id st.scopes` >>
+  gvs[Once assign_target_def, bind_def, get_scopes_def, return_def,
+      lift_option_def, raise_def, place_state_well_typed_def] >>
+  PairCases_on `x` >>
+  gvs[bind_def, lift_sum_def, type_check_def, assert_def,
+      ignore_bind_def, set_scopes_def, return_def, raise_def,
+      vyperMiscTheory.sum_CASE_rator, AllCaseEqs()] >>
+  drule vyperLookupTheory.find_containing_scope_structure >> strip_tac >>
+  gvs[state_history_typed_def, vyperTypeInvariantsTheory.state_well_typed_def,
+      EVERY_APPEND, evaluation_state_accfupds] >>
+  `value_has_type x2.type x2.value /\ well_formed_type_value x2.type /\
+   popped_history_typed x2.type x2.popped` by
+    metis_tac[vyperTypeInvariantsTheory.scope_well_typed_def, scope_history_typed_def] >>
+  imp_res_tac assign_result_history_typed >>
+  imp_res_tac vyperStatePreservationTheory.assign_result_state >>
+  gvs[] >>
+  gvs[scope_history_typed_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem assign_target_replace_history_typed:
+  state_history_typed st /\ assign_target cx gv (Replace v) st = (res,st') ==>
+  state_history_typed st'
+Proof
+  metis_tac[assign_target_replace_history_typed_mutual]
+QED
+
+Theorem assign_targets_history_typed:
+  state_history_typed st /\ assign_targets cx gs vs st = (res,st') ==>
+  state_history_typed st'
+Proof
+  metis_tac[assign_target_replace_history_typed_mutual]
+QED
+
+Theorem assign_target_base_history_typed:
+  place_state_well_typed st /\
+  assign_target cx (BaseTargetV loc is) ao st = (res,st') ==>
+  state_history_typed st'
+Proof
+  Cases_on `loc` >>
+  metis_tac[assign_target_scoped_history_typed, assign_target_immutable_history_typed,
+    vyperScopePreservationTheory.assign_target_toplevel_scopes_immutables,
+    state_history_typed_scopes, place_state_well_typed_def]
+QED
+
+Theorem assign_target_history_typed:
+  place_state_well_typed st /\ assign_target cx gv ao st = (res,st') ==>
+  state_history_typed st'
+Proof
+  Cases_on `gv` >- metis_tac[assign_target_base_history_typed] >>
+  Cases_on `ao` >- metis_tac[assign_target_replace_history_typed,
+                            place_state_well_typed_def] >>
+  rw[Once assign_target_def, raise_def, place_state_well_typed_def] >> simp[]
+QED
+
 val () = List.app (fn (name,th) =>
   let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
   in if List.all (fn s => s = "DISK_THM") oracles andalso null axioms
