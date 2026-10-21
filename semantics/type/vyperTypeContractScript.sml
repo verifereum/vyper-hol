@@ -251,6 +251,66 @@ Termination
   res_tac >> simp[]
 End
 
+(* Vyper accepts a default argument only from its RUNTIME_CONSTANT class
+   (check_modifiability in vyper/semantics/analysis/utils.py, required by
+   _parse_args in vyper/semantics/types/function.py).  Folded values arrive as
+   literals.  It admits operators (BinOp/Compare/UnaryOp, and BoolOp, which the
+   frontend turns into an IfExp with a literal branch), tuple, list and struct
+   literals, environment reads other than `self`, account reads of such an
+   address, constants, immutables and their subscripts and fields, and
+   empty(T).  Storage, transient and HashMap reads, flag members, ternaries and
+   all other calls are excluded; for example `self.x`, `self.balance`,
+   `len(msg.data)`, `max(block.number, 3)` and
+   `block.number if msg.value > 0 else 2` are rejected by Vyper and here. *)
+Definition declared_immutable_def:
+  declared_immutable mods src id <=>
+    ?tls vis ty init.
+      MEM (src,tls) mods /\
+      MEM (VariableDecl vis Immutable id ty init) tls
+End
+
+Definition runtime_constant_builtin_def:
+  runtime_constant_builtin Not = T /\
+  runtime_constant_builtin Neg = T /\
+  runtime_constant_builtin (MakeArray _ _) = T /\
+  runtime_constant_builtin (Bop op) =
+    (constant_binop op /\ op <> Min /\ op <> Max) /\
+  runtime_constant_builtin (Env item) = (item <> SelfAddr) /\
+  runtime_constant_builtin (Acc item) = (item <> Code) /\
+  runtime_constant_builtin _ = F
+End
+
+Definition bool_literal_expr_def:
+  bool_literal_expr (Literal _ (BoolL _)) = T /\
+  bool_literal_expr _ = F
+End
+
+Definition runtime_constant_expr_def:
+  runtime_constant_expr mods (TopLevelName _ (src,id)) =
+    (declared_constant mods src id \/ declared_immutable mods src id) /\
+  runtime_constant_expr mods (Literal _ _) = T /\
+  runtime_constant_expr mods (StructLit _ _ kes) =
+    EVERY (runtime_constant_expr mods) (MAP SND kes) /\
+  runtime_constant_expr mods (Subscript _ e1 e2) =
+    (runtime_constant_expr mods e1 /\ runtime_constant_expr mods e2) /\
+  runtime_constant_expr mods (Attribute _ e _) = runtime_constant_expr mods e /\
+  runtime_constant_expr mods (IfExp _ c a b) =
+    ((bool_literal_expr a \/ bool_literal_expr b) /\
+     runtime_constant_expr mods c /\ runtime_constant_expr mods a /\
+     runtime_constant_expr mods b) /\
+  runtime_constant_expr mods (Builtin _ bt es) =
+    (runtime_constant_builtin bt /\ EVERY (runtime_constant_expr mods) es) /\
+  runtime_constant_expr mods (TypeBuiltin _ tb _ es) =
+    (constant_type_builtin tb /\ EVERY (runtime_constant_expr mods) es) /\
+  runtime_constant_expr mods _ = F
+Termination
+  WF_REL_TAC `measure (\(_,e). expr_size e)` >>
+  rw[] >>
+  Induct_on `kes` >> rw[] >>
+  PairCases_on `h` >> rw[] >>
+  res_tac >> simp[]
+End
+
 Definition lookup_var_slot_in_layouts_def:
   lookup_var_slot_in_layouts layouts addr is_transient src var_name =
     case ALOOKUP layouts addr of
@@ -313,6 +373,7 @@ Definition check_function_body_def:
       (ret = NoneT \/ stmts_no_fallthrough body) /\
       stmts_no_control_escape body /\
       well_typed_exprs (defaults_env env) dflts /\
+      EVERY (runtime_constant_expr mods) dflts /\
       MAP expr_type dflts = MAP SND (DROP (LENGTH args - LENGTH dflts) args)
 End
 
