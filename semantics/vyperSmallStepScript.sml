@@ -68,7 +68,9 @@ Datatype:
   | RawLogK eval_continuation
   | RawRevertK eval_continuation
   | SelfDestructK eval_continuation
-  | CreateK (type list) create_kind bool bool eval_continuation
+  | CreateK (type list) create_kind bool bool (num option) eval_continuation
+  | BlueprintPrefixK (type list) create_kind bool bool (expr list) eval_continuation
+  | BlueprintSuffixK (value list) eval_continuation
   | IntCallK (nsid |-> type_args) nsid ((identifier # type) list) (expr list) type (stmt list) bool function_mutability eval_continuation
   | IntCallK1 (nsid |-> type_args) nsid ((identifier # type) list) (value list) (scope list) type (stmt list) bool function_mutability eval_continuation
   | IntCallK2 (scope list) type_value bool bool eval_continuation
@@ -136,6 +138,12 @@ val () = eval_base_target_cps_def
             option_CASE_rator, liftk1]
   |> cv_auto_trans;
 
+Triviality list_size_take_bound:
+  ∀es n. list_size expr_size (TAKE n es) ≤ list_size expr_size es
+Proof
+  Induct >> Cases_on `n` >> simp[]
+QED
+
 Definition eval_expr_cps_def:
   eval_expr_cps cx1 (Name _ id) st k =
     liftk cx1 ApplyTv
@@ -186,7 +194,13 @@ Definition eval_expr_cps_def:
   eval_expr_cps cx10 (Call _ SelfDestructTarget es _) st k =
     eval_exprs_cps cx10 es st (SelfDestructK k) ∧
   eval_expr_cps cx10 (Call ty (CreateTarget kind has_salt rof) es _) st k =
-    eval_exprs_cps cx10 es st (CreateK (MAP expr_type es) kind has_salt rof k) ∧
+    (case kind of
+       CreateFromBlueprint raw_args =>
+         eval_exprs_cps cx10 (TAKE (if has_salt then 4 else 3) es) st
+           (BlueprintPrefixK (MAP expr_type es) kind has_salt rof
+             (DROP (if has_salt then 4 else 3) es) k)
+     | _ => eval_exprs_cps cx10 es st
+         (CreateK (MAP expr_type es) kind has_salt rof NONE k)) ∧
   eval_expr_cps cx10 (Call _ (IntCall (ns, fn)) es _) st k =
     (case do
       type_check (no_recursion (ns, fn) cx10.stk) "recursion";
@@ -215,6 +229,13 @@ Termination
   \\ rw[expr1_size_map, SUM_MAP_expr2_size, list_size_SUM_MAP, MAP_MAP_o,
         list_size_pair_size_map, builtin_args_length_ok_def, check_def, type_check_def,
         assert_def, LENGTH_EQ_NUM_compute] \\ rw[]
+  \\ qmatch_goalsub_abbrev_tac `TAKE n es`
+  \\ irule LESS_EQ_LESS_TRANS
+  \\ qexists_tac `LENGTH es + SUM (MAP expr_size es)`
+  \\ conj_tac
+  \\ TRY (ACCEPT_TAC (REWRITE_RULE [list_size_SUM_MAP]
+       (Q.SPECL [`es`, `n`] list_size_take_bound)))
+  \\ simp[Abbr `n`]
 End
 
 val eval_expr_cps_pre_def = eval_expr_cps_def
@@ -402,7 +423,9 @@ Definition apply_exc_def:
   apply_exc cx ex st (RawLogK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (RawRevertK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (SelfDestructK k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (CreateK _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (CreateK _ _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (BlueprintPrefixK _ _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (BlueprintSuffixK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (IntCallK _ _ _ _ _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (IntCallK1 _ _ _ _ prev _ _ _ _ k) =
     liftk (cx with stk updated_by TL) (K (ApplyExc ex)) (set_scopes prev st) k ∧
@@ -801,8 +824,18 @@ Definition apply_vals_def:
     od st
     of (INR ex, st) => AK cx (ApplyExc ex) st k
      | (INL tv, st) => AK cx (ApplyTv tv) st k) ∧
-  apply_vals cx vs st (CreateK arg_tys kind has_salt rof k) =
-    (case eval_create cx kind has_salt rof arg_tys vs st of
+  apply_vals cx prefix st
+      (BlueprintPrefixK arg_tys kind has_salt rof suffix k) =
+    (case check_create_blueprint has_salt prefix st of
+       (INR ex, st) => AK cx (ApplyExc ex) st k
+     | (INL code_size, st) =>
+         eval_exprs_cps cx suffix st
+           (BlueprintSuffixK prefix
+             (CreateK arg_tys kind has_salt rof (SOME code_size) k))) ∧
+  apply_vals cx suffix st (BlueprintSuffixK prefix k) =
+    AK cx (ApplyVals (prefix ++ suffix)) st k ∧
+  apply_vals cx vs st (CreateK arg_tys kind has_salt rof blueprint_size k) =
+    (case eval_create cx kind has_salt rof arg_tys vs blueprint_size st of
        (INR ex, st) => AK cx (ApplyExc ex) st k
      | (INL tv, st) => AK cx (ApplyTv tv) st k) ∧
   apply_vals cx vs st DoneK = AK cx (ApplyVals vs) st DoneK ∧
@@ -840,13 +873,9 @@ val APPLY_VALS_PRE_CASE_TAC =
 Theorem apply_vals_pre[cv_pre]:
   ∀a b c d. apply_vals_pre a b c d
 Proof
-  ho_match_mp_tac apply_vals_ind \\ rw[] >|
-  [APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC,
-   APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC,
-   APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC,
-   APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC,
-   APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC,
-   APPLY_VALS_PRE_CASE_TAC] >>
+  ho_match_mp_tac apply_vals_ind \\ rw[] >>
+  TRY APPLY_VALS_PRE_CASE_TAC >>
+  gvs[check_create_blueprint_state, CaseEq"prod", CaseEq"sum"] >>
   TRY (Cases_on `vs` >> simp[]) >>
   rpt strip_tac >> gvs[optionTheory.IS_SOME_DEF]
 QED
@@ -1716,11 +1745,21 @@ Proof
     \\ rw[Once OWHILE_THM, nextk_def, stepk_def,
           apply_exc_def, apply_vals_def, ignore_bind_def, bind_def])
   \\ conj_tac >- (
-    rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def]
+    Cases_on `kind`
+    \\ rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def]
     \\ gvs[prod_CASE_rator, sum_CASE_rator, cont_def]
     \\ CASE_TAC \\ gvs[] \\ CASE_TAC \\ gvs[]
     \\ rw[Once OWHILE_THM, nextk_def, stepk_def,
-          apply_exc_def, apply_vals_def, ignore_bind_def, bind_def])
+          apply_exc_def, apply_vals_def, ignore_bind_def, bind_def]
+    \\ gvs[check_create_blueprint_state, CaseEq"prod", CaseEq"sum"]
+    \\ CASE_TAC \\ gvs[] \\ CASE_TAC \\ gvs[]
+    \\ TRY (qpat_x_assum `∀a b c d e f. _` drule_all
+            \\ strip_tac \\ gvs[])
+    \\ CASE_TAC \\ gvs[] \\ CASE_TAC \\ gvs[]
+    \\ rw[Once OWHILE_THM, nextk_def, stepk_def,
+          apply_exc_def, apply_vals_def, ignore_bind_def, bind_def]
+    \\ rw[Once OWHILE_THM, nextk_def, stepk_def,
+          apply_exc_def, apply_vals_def])
   \\ conj_tac >- rw[eval_expr_cps_def, evaluate_def, return_def] (* eval_exprs [] *)
   (* eval_exprs (e::es) *)
   \\ rw[eval_expr_cps_def, evaluate_def, bind_def]

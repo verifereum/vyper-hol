@@ -12,7 +12,7 @@
 Theory vyperCreate
 Ancestors
   arithmetic byte combin integer list option pair rich_list words
-  contractABI sptree vfmConstants vfmState vfmContext
+  contractABI sptree vfmTypes vfmConstants vfmState vfmContext
   vfmExecution[ignore_grammar] vyperAST vyperABI vyperMisc vyperValue
   vyperContext vyperState vyperEvmBoundary
 Libs
@@ -208,18 +208,49 @@ Definition create_copy_initcode_def:
     [0x3dw; 0x81w; 0x60w; 0x0bw; 0x3dw; 0x39w; 0xf3w] ++ code
 End
 
+Definition blueprint_copy_size_def:
+  blueprint_copy_size code_offset (code : byte list) =
+    w2n ((n2w (LENGTH code) - n2w code_offset) : bytes32)
+End
+
+(* The size is captured before constructor operands; EXTCODECOPY reads later. *)
 Definition blueprint_initcode_def:
-  blueprint_initcode code_offset code args_enc =
-    DROP code_offset code ++ args_enc
+  blueprint_initcode n code_offset (code : byte list) args_enc =
+    take_pad_0 n (DROP code_offset code) ++ args_enc
 End
 
 Definition raw_create_initcode_def:
   raw_create_initcode bytecode args_enc = bytecode ++ args_enc
 End
 
+Definition blueprint_size_ok_def:
+  blueprint_size_ok n = (0i < w2i (n2w n : bytes32))
+End
+
 Definition blueprint_code_ok_def:
   blueprint_code_ok code_offset code =
-    (0i < w2i ((n2w (LENGTH code) - n2w code_offset) : bytes32))
+    blueprint_size_ok (blueprint_copy_size code_offset code)
+End
+
+Definition blueprint_prefix_size_def:
+  blueprint_prefix_size has_salt vs accounts =
+    case dest_create_args (CreateFromBlueprint F) has_salt vs of
+    | NONE => NONE
+    | SOME ops =>
+        case (ops.co_code_src, ops.co_code_offset) of
+        | (AddressCodeSource target, SOME offset) =>
+            let n = blueprint_copy_size offset
+              (lookup_account target accounts).code in
+            if blueprint_size_ok n then SOME n else NONE
+        | _ => NONE
+End
+
+Definition check_create_blueprint_def:
+  check_create_blueprint has_salt vs = do
+    accounts <- get_accounts;
+    lift_option (blueprint_prefix_size has_salt vs accounts)
+      "create source has no deployable code"
+  od
 End
 
 Definition encode_create_ctor_args_def:
@@ -245,9 +276,43 @@ val () = cv_auto_trans minimal_proxy_forwarder_post_def;
 val () = cv_auto_trans minimal_proxy_runtime_def;
 val () = cv_auto_trans minimal_proxy_initcode_def;
 val () = cv_auto_trans create_copy_initcode_def;
+val () = cv_auto_trans blueprint_copy_size_def;
 val () = cv_auto_trans blueprint_initcode_def;
 val () = cv_auto_trans raw_create_initcode_def;
+val () = cv_auto_trans blueprint_size_ok_def;
 val () = cv_auto_trans blueprint_code_ok_def;
+val () = cv_auto_trans blueprint_prefix_size_def;
+val () = check_create_blueprint_def
+  |> SRULE [FUN_EQ_THM, bind_def, get_accounts_def, return_def,
+            lift_option_def, prod_CASE_rator, sum_CASE_rator,
+            option_CASE_rator, COND_RATOR]
+  |> cv_auto_trans;
+
+Theorem check_create_blueprint_state[simp]:
+  SND (check_create_blueprint has_salt vs st) = st
+Proof
+  simp[check_create_blueprint_def, bind_def, get_accounts_def,
+       lift_option_def, return_def, raise_def, AllCaseEqs()] >>
+  CASE_TAC >> simp[return_def, raise_def]
+QED
+
+Theorem check_create_blueprint_exception_is_error:
+  check_create_blueprint has_salt vs st = (INR ex, st') ==>
+  ?err. ex = Error err
+Proof
+  simp[check_create_blueprint_def, bind_def, get_accounts_def,
+       lift_option_def, return_def, raise_def, AllCaseEqs()] >>
+  CASE_TAC >> simp[return_def, raise_def]
+QED
+
+Theorem check_create_blueprint_no_type_error:
+  check_create_blueprint has_salt vs st = (res, st') ==>
+  !msg. res <> INR (Error (TypeError msg))
+Proof
+  simp[check_create_blueprint_def, bind_def, get_accounts_def,
+       lift_option_def, return_def, raise_def, AllCaseEqs()] >>
+  CASE_TAC >> rw[return_def, raise_def]
+QED
 val () = cv_auto_trans encode_create_ctor_args_def;
 val () = cv_auto_trans create_address_def;
 
@@ -270,25 +335,28 @@ Datatype:
   create_code = <|
     cc_initcode: byte list
   ; cc_source_ok: bool
+  ; cc_size_ok: bool
   |>
 End
 
 Definition build_create_code_def:
-  build_create_code tenv CreateMinimalProxy ops accounts ctor_tys =
+  build_create_code tenv CreateMinimalProxy ops accounts ctor_tys blueprint_size =
     (case ops.co_code_src of
      | AddressCodeSource target => SOME <|
          cc_initcode := minimal_proxy_initcode target;
-         cc_source_ok := T
+         cc_source_ok := T;
+         cc_size_ok := T
        |>
      | _ => NONE) /\
-  build_create_code tenv CreateCopyOf ops accounts ctor_tys =
+  build_create_code tenv CreateCopyOf ops accounts ctor_tys blueprint_size =
     (case ops.co_code_src of
      | AddressCodeSource target =>
          let code = (lookup_account target accounts).code in
-SOME <| cc_initcode := create_copy_initcode code;
-                    cc_source_ok := (code <> []) |>
+         SOME <| cc_initcode := create_copy_initcode code;
+                 cc_source_ok := (code <> []);
+                 cc_size_ok := T |>
      | _ => NONE) /\
-  build_create_code tenv (CreateFromBlueprint raw_args) ops accounts ctor_tys =
+  build_create_code tenv (CreateFromBlueprint raw_args) ops accounts ctor_tys blueprint_size =
     (case (ops.co_code_src, ops.co_code_offset) of
      | (AddressCodeSource target, SOME code_offset) =>
          let code = (lookup_account target accounts).code in
@@ -299,19 +367,27 @@ SOME <| cc_initcode := create_copy_initcode code;
          in
            (case args_enc_opt of
             | NONE => NONE
-            | SOME args_enc => SOME <|
-                cc_initcode := blueprint_initcode code_offset code args_enc;
-                cc_source_ok := blueprint_code_ok code_offset code
-              |>)
+            | SOME args_enc =>
+                let n = case blueprint_size of
+                        | NONE => blueprint_copy_size code_offset code
+                        | SOME n => n in
+                let size_ok = (n + LENGTH args_enc <= 2 * max_code_size) in
+                SOME <|
+                  cc_initcode := if size_ok then
+                    blueprint_initcode n code_offset code args_enc else [];
+                  cc_source_ok := blueprint_size_ok n;
+                  cc_size_ok := size_ok
+                |>)
      | _ => NONE) /\
-  build_create_code tenv RawCreate ops accounts ctor_tys =
+  build_create_code tenv RawCreate ops accounts ctor_tys blueprint_size =
     (case ops.co_code_src of
      | BytecodeCodeSource bytecode =>
          (case encode_create_ctor_args tenv ctor_tys ops.co_ctor_args of
           | NONE => NONE
           | SOME args_enc => SOME <|
               cc_initcode := raw_create_initcode bytecode args_enc;
-              cc_source_ok := T
+              cc_source_ok := T;
+              cc_size_ok := T
             |>)
      | _ => NONE)
 End
@@ -550,29 +626,25 @@ End
 
 val () = cv_auto_trans run_create_evm_def;
 
-(* Shared by the recursive interpreter and the CPS machine.  All operands have
-   already been evaluated before this helper is entered.  Vyper-specific
-   pre-creation checks (operand shape, source availability, balance, nonce,
-   initcode size, address collision) stay at this builtin boundary; the
-   creation itself is executed by Verifereum via run_create_evm, including
-   constructor effects, code deposit, and revert rollback.
-
-   revert_on_failure: every failure mode -- bad operands/source, insufficient
-   balance, collision, EVM exception, and a constructor that reverts -- reverts
-   the Vyper frame when rof holds, and yields the zero address when rof = F.
-   Constructor REVERT data is propagated as RevertData when rof holds. *)
+(* Shared execution boundary after operand evaluation. Blueprint callers pass
+   the copy size captured by check_create_blueprint before constructor operands;
+   direct callers use NONE to derive it from the supplied account state.
+   Source/size ASSERTs always revert, independently of revert_on_failure.
+   CREATE failure returns zero when rof = F; constructor REVERT data bubbles
+   as RevertData when rof holds. *)
 Definition eval_create_def:
-  eval_create cx kind has_salt rof arg_tys vs = do
+  eval_create cx kind has_salt rof arg_tys vs blueprint_size = do
     ops <- lift_option_type (dest_create_args kind has_salt vs)
       "create operand shape";
     ctor_tys <- lift_option_type (create_arg_ctor_types kind has_salt arg_tys)
       "create argument type shape";
     accounts <- get_accounts;
     code_info <- lift_option_type
-      (build_create_code (get_tenv cx) kind ops accounts ctor_tys)
+      (build_create_code (get_tenv cx) kind ops accounts ctor_tys blueprint_size)
       "create operands";
     (* copy-of/blueprint ASSERTs are emitted before CREATE and always revert. *)
     check code_info.cc_source_ok "create source has no deployable code";
+    check code_info.cc_size_ok "create initcode too large";
     self_acct <<- lookup_account cx.txn.target accounts;
     new_addr <<- create_address cx.txn.target self_acct.nonce ops.co_salt
       code_info.cc_initcode;
@@ -854,7 +926,7 @@ local
 
 in
   fun create_result_tac tail finish =
-    qpat_x_assum `eval_create _ _ _ _ _ _ _ = _` mp_tac >>
+    qpat_x_assum `eval_create _ _ _ _ _ _ _ _ = _` mp_tac >>
     create_paths (REWRITE_RULE [GSYM ignore_bind_def] tail) finish;
   val create_frame_tac =
     create_result_tac create_tail_preserves_scopes (create_state_finish frame_ss);
@@ -866,7 +938,7 @@ end;
 
 (* Constructor events extend, rather than preserve, the log sequence. *)
 Theorem eval_create_logs_extend:
-  eval_create cx kind has_salt rof arg_tys vs st = (res, st') ==>
+  eval_create cx kind has_salt rof arg_tys vs blueprint_size st = (res, st') ==>
   isPREFIX st.logs st'.logs
 Proof
   strip_tac >>
@@ -876,12 +948,12 @@ Proof
   Cases_on `create_arg_ctor_types kind has_salt arg_tys`
   >- create_logs_tac >>
   rename1 `create_arg_ctor_types kind has_salt arg_tys = SOME ctor_tys` >>
-  Cases_on `build_create_code (get_tenv cx) kind ops st.accounts ctor_tys` >>
+  Cases_on `build_create_code (get_tenv cx) kind ops st.accounts ctor_tys blueprint_size` >>
   create_logs_tac
 QED
 
 Theorem eval_create_preserves_scopes_immutables:
-  eval_create cx kind has_salt rof arg_tys vs st = (res, st') ==>
+  eval_create cx kind has_salt rof arg_tys vs blueprint_size st = (res, st') ==>
   st'.scopes = st.scopes /\ st'.immutables = st.immutables
 Proof
   strip_tac >>
@@ -891,7 +963,7 @@ Proof
   Cases_on `create_arg_ctor_types kind has_salt arg_tys`
   >- create_frame_tac >>
   rename1 `create_arg_ctor_types kind has_salt arg_tys = SOME ctor_tys` >>
-  Cases_on `build_create_code (get_tenv cx) kind ops st.accounts ctor_tys` >>
+  Cases_on `build_create_code (get_tenv cx) kind ops st.accounts ctor_tys blueprint_size` >>
   create_frame_tac
 QED
 
@@ -962,7 +1034,7 @@ Proof
 QED
 
 Theorem eval_create_exception_is_error:
-  eval_create cx kind has_salt rof arg_tys vs st = (INR ex, st') ==>
+  eval_create cx kind has_salt rof arg_tys vs blueprint_size st = (INR ex, st') ==>
   ?err. ex = Error err
 Proof
   strip_tac >>
@@ -972,16 +1044,16 @@ Proof
   Cases_on `create_arg_ctor_types kind has_salt arg_tys`
   >- create_exception_tac >>
   rename1 `create_arg_ctor_types kind has_salt arg_tys = SOME ctor_tys` >>
-  Cases_on `build_create_code (get_tenv cx) kind ops st.accounts ctor_tys` >>
+  Cases_on `build_create_code (get_tenv cx) kind ops st.accounts ctor_tys blueprint_size` >>
   create_exception_tac
 QED
 
 Theorem eval_create_no_type_error:
   dest_create_args kind has_salt vs = SOME ops /\
   create_arg_ctor_types kind has_salt arg_tys = SOME ctor_tys /\
-  build_create_code (get_tenv cx) kind ops st.accounts ctor_tys =
+  build_create_code (get_tenv cx) kind ops st.accounts ctor_tys blueprint_size =
     SOME code_info /\
-  eval_create cx kind has_salt rof arg_tys vs st = (res, st') ==>
+  eval_create cx kind has_salt rof arg_tys vs blueprint_size st = (res, st') ==>
   !msg. res <> INR (Error (TypeError msg))
 Proof
   strip_tac >> create_outcome_tac create_tail_no_type_error
