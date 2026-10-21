@@ -129,6 +129,116 @@ Proof
   metis_tac[evaluate_subscripts_type, read_popped_type]
 QED
 
+Theorem scope_history_typed_update:
+  scope_history_typed sc /\ popped_history_typed entry.type entry.popped ==>
+  scope_history_typed (sc |+ (id,entry))
+Proof
+  rw[scope_history_typed_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  gvs[AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem push_scope_history_typed:
+  state_history_typed st /\ push_scope st = (res,st') ==>
+  state_history_typed st'
+Proof
+  rw[push_scope_def, return_def, state_history_typed_def] >>
+  gvs[evaluation_state_accfupds]
+QED
+
+Theorem pop_scope_history_typed:
+  state_history_typed st /\ pop_scope st = (res,st') ==>
+  state_history_typed st'
+Proof
+  Cases_on `st.scopes` >>
+  gvs[pop_scope_def, return_def, raise_def, state_history_typed_def,
+      evaluation_state_accfupds] >> rpt strip_tac >> gvs[evaluation_state_accfupds]
+QED
+
+Theorem push_scope_with_var_history_typed:
+  state_history_typed st /\ push_scope_with_var id tv v st = (res,st') ==>
+  state_history_typed st'
+Proof
+  rw[push_scope_with_var_def, return_def, state_history_typed_def] >>
+  gvs[evaluation_state_accfupds] >>
+  irule scope_history_typed_update >> simp[]
+QED
+
+Theorem new_variable_history_typed:
+  state_history_typed st /\ new_variable id tv v st = (res,st') ==>
+  state_history_typed st'
+Proof
+  Cases_on `st.scopes` >>
+  rw[new_variable_def, bind_def, ignore_bind_def, return_def, raise_def,
+     get_scopes_def, set_scopes_def, type_check_def, assert_def, AllCaseEqs(),
+     state_history_typed_def] >>
+  gvs[evaluation_state_accfupds] >> irule scope_history_typed_update >> simp[]
+QED
+
+Theorem state_history_typed_scopes:
+  state_history_typed st /\ st'.scopes = st.scopes ==> state_history_typed st'
+Proof
+  simp[state_history_typed_def]
+QED
+
+Theorem set_immutable_history_typed:
+  state_history_typed st /\ set_immutable cx src id tv v st = (res,st') ==>
+  state_history_typed st'
+Proof
+  metis_tac[state_history_typed_scopes,
+    vyperScopePreservationTheory.set_immutable_scopes]
+QED
+
+Theorem write_storage_slot_history_typed:
+  state_history_typed st /\ write_storage_slot cx tr slot tv v st = (res,st') ==>
+  state_history_typed st'
+Proof
+  metis_tac[state_history_typed_scopes,
+    vyperScopePreservationTheory.write_storage_slot_scopes]
+QED
+
+Theorem set_scopes_history_typed:
+  EVERY scope_history_typed scopes /\ set_scopes scopes st = (res,st') ==>
+  state_history_typed st'
+Proof
+  rw[set_scopes_def, return_def, state_history_typed_def] >>
+  simp[evaluation_state_accfupds]
+QED
+
+Theorem record_pop_history_typed_at_path:
+  popped_history_typed tv history /\
+  subscripts_type tv path = SOME (ArrayTV etv (Dynamic n)) /\
+  well_formed_type_value etv /\
+  value_has_type (ArrayTV etv (Dynamic n)) arr /\
+  evaluate_subscripts tv old path = INL arr /\ popped_value arr = INL p ==>
+  popped_history_typed tv (record_pop tv old path p history)
+Proof
+  strip_tac >>
+  `value_has_type etv p` by
+    metis_tac[vyperTypeStatePreservationTheory.popped_value_well_typed] >>
+  Cases_on `arr` >> gvs[vyperValueOperationTheory.popped_value_def] >>
+  Cases_on `a` >> gvs[vyperValueOperationTheory.popped_value_def] >>
+  gvs[record_pop_def, popped_history_typed_cons, value_has_type_def] >>
+  qexists_tac `etv` >>
+  simp[subscripts_type_append, subscripts_type_def, subscript_type_def,
+       vyperASTTheory.bound_length_def] >>
+  `0 < n` by (Cases_on `l` >> gvs[] >> decide_tac) >> simp[]
+QED
+
+Theorem replace_memory_entry_type:
+  replace_memory_entry entry path v = INL entry' ==> entry'.type = entry.type
+Proof
+  rw[replace_memory_entry_def, AllCaseEqs()] >> simp[scope_entry_accfupds]
+QED
+
+Theorem replace_memory_entry_history_typed:
+  popped_history_typed entry.type entry.popped /\
+  replace_memory_entry entry path v = INL entry' ==>
+  popped_history_typed entry'.type entry'.popped
+Proof
+  rw[replace_memory_entry_def, AllCaseEqs()] >>
+  simp[scope_entry_accfupds]
+QED
+
 val () = List.app (fn (name,th) =>
   let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
   in if List.all (fn s => s = "DISK_THM") oracles andalso null axioms
