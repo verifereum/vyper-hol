@@ -583,6 +583,17 @@ Definition evaluate_convert_def:
     INL $ IntV (if b then 1 else 0) ∧
   evaluate_convert _ (BoolV b) (BaseT (UintT n)) =
     INL $ IntV (if b then 1 else 0) ∧
+  evaluate_convert _ (BoolV b) (BaseT DecimalT) =
+    INL $ DecimalV (if b then 10000000000 else 0) ∧
+  evaluate_convert _ (BoolV b) (BaseT (BytesT bd)) =
+    (case bd of
+     | Fixed m =>
+         if m ≤ 32
+         then INL $ BytesV
+           (DROP (32 - m)
+             (word_to_bytes_be ((n2w (if b then 1 else 0)):bytes32)))
+         else INR (RuntimeError "convert bool to bytes")
+     | Dynamic _ => INR (RuntimeError "convert bool to bytes")) ∧
   evaluate_convert _ (BytesV bs) (BaseT (BytesT (Fixed n))) =
     (if LENGTH bs ≤ n
      then INL $ BytesV (PAD_RIGHT 0w n bs)
@@ -656,6 +667,8 @@ Definition evaluate_convert_def:
     (if LENGTH bs ≤ n
      then INL $ StringV (MAP (CHR o w2n) bs)
      else INR (RuntimeError "convert bytes string")) ∧
+  evaluate_convert _ (StringV s) (BaseT BoolT) =
+    INL $ BoolV (EXISTS (λc. ORD c ≠ 0) s) ∧
   evaluate_convert _ (StringV s) (BaseT (StringT n)) =
     (if LENGTH s ≤ n
      then INL $ StringV s
@@ -681,6 +694,16 @@ Definition evaluate_convert_def:
     (if 0 ≤ i ∧ i ≤ (&(2 ** n) - 1) * 10000000000
      then INL $ IntV (i / 10000000000)
      else INR (RuntimeError "convert decimal uint")) ∧
+  evaluate_convert _ (DecimalV i) (BaseT BoolT) =
+    INL $ BoolV (i ≠ 0) ∧
+  evaluate_convert _ (DecimalV i) (BaseT (BytesT bd)) =
+    (case bd of
+     | Fixed m =>
+         if 21 ≤ m ∧ m ≤ 32
+         then INL $ BytesV
+           (DROP (32 - m) (word_to_bytes_be ((i2w i):bytes32)))
+         else INR (RuntimeError "convert decimal to bytes")
+     | Dynamic _ => INR (RuntimeError "convert decimal to bytes")) ∧
   evaluate_convert _ _ _ = INR (TypeError "convert")
 End
 

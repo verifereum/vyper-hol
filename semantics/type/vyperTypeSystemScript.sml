@@ -409,10 +409,17 @@ Definition valid_conversion_def:
   valid_conversion (BaseT (IntT _)) (BaseT BoolT) = T /\
   valid_conversion (BaseT BoolT) (BaseT (IntT _)) = T /\
   valid_conversion (BaseT BoolT) (BaseT (UintT _)) = T /\
+  valid_conversion (BaseT BoolT) (BaseT DecimalT) = T /\
+  valid_conversion (BaseT BoolT) (BaseT (BytesT (Fixed m))) =
+    (0 < m ∧ m ≤ 32) /\
   valid_conversion (BaseT (BytesT _)) (BaseT (BytesT _)) = T /\
   valid_conversion (BaseT (BytesT _)) (BaseT (UintT _)) = T /\
   valid_conversion (BaseT (BytesT _)) (BaseT (IntT _)) = T /\
   valid_conversion (BaseT (BytesT _)) (BaseT AddressT) = T /\
+  valid_conversion (BaseT (StringT _)) (BaseT BoolT) = T /\
+  valid_conversion (BaseT DecimalT) (BaseT BoolT) = T /\
+  valid_conversion (BaseT DecimalT) (BaseT (BytesT (Fixed m))) =
+    (21 ≤ m ∧ m ≤ 32) /\
   valid_conversion (BaseT (BytesT _)) (BaseT DecimalT) = T /\
   valid_conversion (BaseT (UintT _)) (BaseT (UintT _)) = T /\
   valid_conversion (BaseT (UintT _)) (BaseT (IntT _)) = T /\
