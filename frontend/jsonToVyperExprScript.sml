@@ -570,10 +570,13 @@ Definition make_name_target_def:
     else NameTarget id
 End
 
+(* Python lowers I(addr) to a stack value (_lower_interface_constructor), so
+   the address is loaded where the constructor appears. *)
 Definition interface_constructor_result_def:
   interface_constructor_result ty [Literal _ (BytesL bs)] =
     Literal ty (BytesL bs) /\
-  interface_constructor_result _ args = HD args
+  interface_constructor_result _ args =
+    Builtin (BaseT AddressT) (Acc Address) [HD args]
 End
 
 (* Cross-module flag result metadata may omit its declaration source. Recover
@@ -685,7 +688,7 @@ Definition translate_attribute_def:
       TopLevelName (lookup_toplevel_type ctx nsid ty) nsid
     else if attr = "balance" /\ base_type_name = SOME "address" then Builtin (BaseT (UintT 256)) (Acc Balance) [translated_base]
     else if attr = "address" /\ base_type_name = SOME "address" then Builtin (BaseT AddressT) (Acc Address) [translated_base]
-    else if attr = "address" /\ base_typeclass = SOME "interface" then translated_base (* interface.address = interface (identity) *)
+    else if attr = "address" /\ base_typeclass = SOME "interface" then Builtin (BaseT AddressT) (Acc Address) [translated_base]
     else if attr = "is_contract" /\ base_type_name = SOME "address" then Builtin (BaseT BoolT) (Acc IsContract) [translated_base]
     else if attr = "codesize" /\ base_type_name = SOME "address" then Builtin (BaseT (UintT 256)) (Acc Codesize) [translated_base]
     else if attr = "codehash" /\ base_type_name = SOME "address" then Builtin (BaseT (BytesT (Fixed 32))) (Acc Codehash) [translated_base]
@@ -1171,57 +1174,69 @@ End
 
 (* ===== Statement Translation ===== *)
 
+(* Local bindings enter the context after their initializer and stay within
+   their block; loop binders are visible only in the loop body. *)
 Definition translate_stmt_def:
-  (translate_stmt ctx JS_Pass = Pass) /\
-  (translate_stmt ctx JS_Break = Break) /\
-  (translate_stmt ctx JS_Continue = Continue) /\
-  (translate_stmt ctx (JS_Expr e) = Expr (translate_expr ctx e)) /\
-  (translate_stmt ctx (JS_Return NONE) = Return NONE) /\
-  (translate_stmt ctx (JS_Return (SOME e)) = Return (SOME (translate_expr ctx e))) /\
-  (translate_stmt ctx (JS_Raise NONE) = Raise RaiseBare) /\
-  (translate_stmt ctx (JS_Raise (SOME e)) = Raise (RaiseReason (translate_expr ctx e))) /\
-  (translate_stmt ctx (JS_Assert test NONE) =
+  (translate_stmt nominal_index all_import_maps ctx JS_Pass = Pass) /\
+  (translate_stmt nominal_index all_import_maps ctx JS_Break = Break) /\
+  (translate_stmt nominal_index all_import_maps ctx JS_Continue = Continue) /\
+  (translate_stmt nominal_index all_import_maps ctx (JS_Expr e) = Expr (translate_expr ctx e)) /\
+  (translate_stmt nominal_index all_import_maps ctx (JS_Return NONE) = Return NONE) /\
+  (translate_stmt nominal_index all_import_maps ctx (JS_Return (SOME e)) = Return (SOME (translate_expr ctx e))) /\
+  (translate_stmt nominal_index all_import_maps ctx (JS_Raise NONE) = Raise RaiseBare) /\
+  (translate_stmt nominal_index all_import_maps ctx (JS_Raise (SOME e)) = Raise (RaiseReason (translate_expr ctx e))) /\
+  (translate_stmt nominal_index all_import_maps ctx (JS_Assert test NONE) =
     Assert (translate_expr ctx test) AssertBare) /\
-  (translate_stmt ctx (JS_Assert test (SOME msg)) =
+  (translate_stmt nominal_index all_import_maps ctx (JS_Assert test (SOME msg)) =
     Assert (translate_expr ctx test) (AssertReason (translate_expr ctx msg))) /\
-  (translate_stmt ctx (JS_Log (alias_opt, src, name) args) =
+  (translate_stmt nominal_index all_import_maps ctx (JS_Log (alias_opt, src, name) args) =
     let nsid =
       case alias_opt of
         NONE => resolve_source_ref ctx src
       | SOME alias => resolve_module_alias ctx alias src
     in
       Log (nsid, name) (MAP (translate_expr ctx) args)) /\
-  (translate_stmt ctx (JS_If test body orelse) =
+  (translate_stmt nominal_index all_import_maps ctx (JS_If test body orelse) =
     If (translate_expr ctx test)
-       (MAP (translate_stmt ctx) body)
-       (MAP (translate_stmt ctx) orelse)) /\
-  (translate_stmt ctx (JS_For var ty ann iter body) =
-    let fallback_ty = translate_decl_type (expr_type_ctx ctx) ty ann in
-    let var_ty = lookup_local_type ctx var fallback_ty in
+       (translate_stmts nominal_index all_import_maps ctx body)
+       (translate_stmts nominal_index all_import_maps ctx orelse)) /\
+  (translate_stmt nominal_index all_import_maps ctx (JS_For var ty ann iter body) =
+    let var_ty = canonical_decl_type nominal_index all_import_maps
+      (expr_type_ctx ctx) ty ann in
+    let body_ctx = expr_with_local_types ctx
+      ((var, var_ty) :: expr_local_types ctx) in
     For var var_ty (translate_iter ctx var_ty iter)
-        (get_iter_bound iter) (MAP (translate_stmt ctx) body)) /\
-  (translate_stmt ctx (JS_Assign tgt val) =
+        (get_iter_bound iter)
+        (translate_stmts nominal_index all_import_maps body_ctx body)) /\
+  (translate_stmt nominal_index all_import_maps ctx (JS_Assign tgt val) =
     Assign (translate_target ctx tgt) (translate_expr ctx val)) /\
-  (translate_stmt ctx (JS_AnnAssign var ty ann val) =
+  (translate_stmt nominal_index all_import_maps ctx (JS_AnnAssign var ty ann val) =
     AnnAssign var
-      (lookup_local_type ctx var
-        (translate_decl_type (expr_type_ctx ctx) ty ann))
+      (canonical_decl_type nominal_index all_import_maps
+        (expr_type_ctx ctx) ty ann)
       (translate_expr ctx val)) /\
-  (translate_stmt ctx (JS_AugAssign tgt op val) =
+  (translate_stmt nominal_index all_import_maps ctx (JS_AugAssign tgt op val) =
     AugAssign (expr_type (translate_expr ctx val))
       (translate_base_target ctx tgt) (translate_binop op) (translate_expr ctx val)) /\
-  (translate_stmt ctx (JS_Append tgt val) =
-    Append (translate_base_target ctx tgt) (translate_expr ctx val))
+  (translate_stmt nominal_index all_import_maps ctx (JS_Append tgt val) =
+    Append (translate_base_target ctx tgt) (translate_expr ctx val)) /\
+  (translate_stmts nominal_index all_import_maps ctx [] = []) /\
+  (translate_stmts nominal_index all_import_maps ctx (stmt :: rest) =
+    let next_ctx =
+      case stmt of
+        JS_AnnAssign var ty ann _ =>
+          expr_with_local_types ctx
+            ((var, canonical_decl_type nominal_index all_import_maps
+              (expr_type_ctx ctx) ty ann) :: expr_local_types ctx)
+      | _ => ctx
+    in
+      translate_stmt nominal_index all_import_maps ctx stmt ::
+      translate_stmts nominal_index all_import_maps next_ctx rest)
 Termination
-  qexists_tac `measure (json_stmt_size o SND)` >>
-  conj_tac >- MATCH_ACCEPT_TAC prim_recTheory.WF_measure >>
-  PURE_REWRITE_TAC [prim_recTheory.measure_thm, combinTheory.o_DEF,
-                    pairTheory.SND] >>
-  rw[] >> simp[json_stmt_size_def] >>
-  qpat_x_assum `MEM a _` mp_tac >>
-  rename1 `MEM a stmts` >>
-  Induct_on `stmts` >> rw[json_stmt_size_def] >>
-  res_tac >> simp[]
+  WF_REL_TAC `measure (λitem. case item of
+      INL (_,_,_,stmt) => json_stmt_size stmt
+    | INR (_,_,_,stmts) => list_size json_stmt_size stmts)` >>
+  simp[json_stmt_size_def]
 End
 
 

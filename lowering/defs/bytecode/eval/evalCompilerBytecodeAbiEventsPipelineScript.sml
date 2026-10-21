@@ -24,11 +24,7 @@ val () = computeLib.upd_compset (computeLib.add_thms [i2w_pos])
 val () = Globals.max_print_depth := 20
 
 val () = computeLib.upd_compset
-  (computeLib.add_thms
-    [word_of_bytes_be_bytes32_mixed_event_types,
-     word_of_bytes_bytes32_mixed_event_types,
-     w2n_mixed_event_types_n2w,
-     contextTheory.compile_copy_memory_def])
+  (computeLib.add_thms [contextTheory.compile_copy_memory_def])
 
 Definition mixed_event_types_runtime_pipeline_def:
   mixed_event_types_runtime_pipeline tops =
@@ -246,38 +242,6 @@ val mixed_event_types_runtime_pipeline_rhs2 =
 val mixed_event_types_runtime_actual_run = find_term
   (can (match_term ``run_venom_pipeline a b c rp spec unit``))
   mixed_event_types_runtime_pipeline_rhs2
-fun mixed_event_types_pipeline_w2n_eval w =
-  if same_const (#1 (strip_comb w)) ``set_byte`` then let
-    val bytes_th = SIMP_CONV (srw_ss())
-      [word_to_bytes_be_bytes32_genlist_mixed_event_types,
-       get_byte_set_byte_bytes32_mixed_event_types,
-       get_byte_set_byte_irrelevant_bytes32_mixed_event_types]
-      ``word_to_bytes_be ^w``
-    val roundtrip = INST [``w:bytes32`` |-> w]
-      word_of_bytes_be_word_to_bytes_be_mixed_event_types
-    val step1 = BETA_RULE (AP_TERM ``λx:bytes32. w2n x`` (SYM roundtrip))
-    val step2 = BETA_RULE (AP_TERM
-      ``λbs. w2n (word_of_bytes_be bs : bytes32)`` bytes_th)
-    val decoded = TRANS step1 step2
-    val expose = SIMP_CONV bool_ss
-      [word_of_bytes_be_bytes32_mixed_event_types,
-       w2n_mixed_event_types_n2w] (rhs (concl decoded))
-  in TRANS decoded (TRANS expose (EVAL (rhs (concl expose)))) end
-  else EVAL ``w2n ^w``
-fun mixed_event_types_pipeline_normalize_word w = let
-  val w2n_th = mixed_event_types_pipeline_w2n_eval w
-  val numeral = rhs (concl w2n_th)
-  val normalized = ``mixed_event_types_n2w ^numeral``
-  val norm_step = INST [``n:num`` |-> numeral] w2n_mixed_event_types_n2w
-  val norm_w2n = TRANS norm_step (EVAL (rhs (concl norm_step)))
-in
-  EQ_MP (ISPECL [w,normalized] wordsTheory.w2n_11)
-    (TRANS w2n_th (SYM norm_w2n))
-end
-fun mixed_event_types_pipeline_literal_words tm =
-  List.foldl (fn (lit,ws) => let val w = #2 (dest_comb lit) in
-      if List.exists (aconv w) ws then ws else w::ws end) []
-    (find_terms (can (match_term ``Lit (set_byte a b w be : bytes32)``)) tm)
 val mixed_event_types_runtime_expected_run =
   lhs (concl mixed_event_types_pipeline_run_eval)
 val (mixed_event_types_runtime_actual_rator,
@@ -290,15 +254,7 @@ val mixed_event_types_runtime_actual_fn = rhs (concl (EVAL
   ``HD (^mixed_event_types_runtime_actual_unit).cu_context.ctx_functions``))
 val mixed_event_types_runtime_expected_fn = rhs (concl (EVAL
   ``HD (^mixed_event_types_runtime_expected_unit).cu_context.ctx_functions``))
-val mixed_event_types_runtime_fn_words =
-  mixed_event_types_pipeline_literal_words mixed_event_types_runtime_actual_fn @
-  mixed_event_types_pipeline_literal_words mixed_event_types_runtime_expected_fn
-val mixed_event_types_runtime_fn_normalizations =
-  map mixed_event_types_pipeline_normalize_word
-    (List.foldl (fn (w,ws) => if List.exists (aconv w) ws then ws else w::ws)
-      [] mixed_event_types_runtime_fn_words)
-val mixed_event_types_runtime_fn_eq_step = SIMP_CONV (srw_ss())
-  mixed_event_types_runtime_fn_normalizations
+val mixed_event_types_runtime_fn_eq_step = SIMP_CONV (srw_ss()) []
   ``^mixed_event_types_runtime_actual_fn =
     ^mixed_event_types_runtime_expected_fn``
 val mixed_event_types_runtime_fn_eq = EQT_ELIM

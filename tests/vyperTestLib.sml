@@ -348,8 +348,7 @@ val allowed_test_names = [
 
 (* Tests excluded by name - require architectural changes *)
 val excluded_test_names = [
-  (* Independent semantic mismatch in the currently admitted raw_call tests. *)
-  "test_checkable_raw_call",
+
 
   (* Tests using shift() builtin which is not yet translated.
      TODO: add shift builtin support *)

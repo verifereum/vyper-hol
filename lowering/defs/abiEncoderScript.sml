@@ -507,10 +507,7 @@ Definition compile_abi_decode_to_buf_def:
                              | _ => F) in
      do elem_src <-
           compile_getelemptr_abi src_op is_dyn abi_offset load_opc;
-        (* Python's builder canonicalizes the literal displacement to the left;
-           retaining that operand order is observable after DFT, especially
-           for the first member's zero displacement. *)
-        elem_dst <- emit_op ADD [Lit (n2w vyper_offset); dst];
+        elem_dst <- emit_op ADD [dst; Lit (n2w vyper_offset)];
         compile_abi_decode_to_buf elem_dst elem_src
                        load_opc hi_op ei;
         compile_abi_decode_complex_elems dst src_op load_opc hi_op

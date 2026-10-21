@@ -9,6 +9,13 @@
  *   bp_process_block_sound_proof          — block-level soundness
  *   bp_ptr_from_op_sound_proof            — singleton pointer ⇒ exact address
  *   bp_segment_from_ops_sound_proof       — alloca-backed mem_loc soundness
+ *   bp_normalize_covers, bp_normalize_matches — normalisation keeps matches
+ *   bp_eval_phis_sound_proof              — PHI prefix preserves bp_ptr_sound
+ *   bp_handle_inst_phi_stable_proof       — stable PHI covers its operands
+ *   bp_phis_closed_eval_phis_proof        — closed, stable PHIs preserve
+ *                                           soundness
+ *   bp_one_pass_unchanged_stable_proof    — unchanged pass ⇒ stable insts
+ *   bp_derives_complete_proof             — derived variables list the alloca
  *)
 
 Theory basePtrProofs
@@ -351,6 +358,74 @@ Proof
 QED
 
 (* ===================================================================
+   Normalisation of pointer sets
+   =================================================================== *)
+
+Theorem MEM_bp_normalize:
+  ∀ps q. MEM q (bp_normalize ps) ⇒ ∃p. MEM p ps ∧ ptr_base p = ptr_base q
+Proof
+  rw[bp_normalize_def, MEM_MAP] >>
+  BasicProvers.every_case_tac >> gvs[ptr_base_def, MEM_MAP] >>
+  metis_tac[]
+QED
+
+Theorem bp_normalize_eq_nil:
+  ∀ps. bp_normalize ps = [] ⇔ ps = []
+Proof
+  Cases >> simp[bp_normalize_def] >>
+  CCONTR_TAC >> gvs[] >>
+  `MEM (ptr_base h) (REVERSE (nub (REVERSE (MAP ptr_base (h::t)))))`
+    by simp[] >>
+  gvs[]
+QED
+
+Theorem ptr_matches_var_offset_none:
+  ∀a off v s. ptr_matches_var (Ptr a off) v s ⇒ ptr_matches_var (Ptr a NONE) v s
+Proof
+  Cases >> Cases >> rw[ptr_matches_var_def] >> metis_tac[]
+QED
+
+(* Normalisation keeps every pointer, or forgets its offset. *)
+Theorem bp_normalize_covers:
+  ∀ps p. MEM p ps ⇒
+    ∃q. MEM q (bp_normalize ps) ∧ (q = p ∨ q = Ptr (ptr_base p) NONE)
+Proof
+  rpt strip_tac >>
+  Cases_on `p` >> rename1 `Ptr a off` >>
+  qabbrev_tac `offs = nub (MAP ptr_off (FILTER (λp. ptr_base p = a) ps))` >>
+  `MEM off offs` by
+    (simp[Abbr `offs`, MEM_MAP, MEM_FILTER] >>
+     qexists_tac `Ptr a off` >> simp[ptr_base_def, ptr_off_def]) >>
+  qexists_tac `case offs of [off'] => Ptr a off' | _ => Ptr a NONE` >>
+  conj_tac
+  >- (simp[bp_normalize_def, MEM_MAP] >>
+      qexists_tac `a` >> simp[Abbr `offs`, MEM_MAP] >>
+      qexists_tac `Ptr a off` >> simp[ptr_base_def]) >>
+  Cases_on `offs` >> gvs[ptr_base_def] >>
+  Cases_on `t` >> gvs[]
+QED
+
+(* A pointer that covers a matching pointer matches too. *)
+Theorem ptr_matches_var_cover:
+  ∀p q v s.
+    ptr_matches_var p v s ∧ (q = p ∨ q = Ptr (ptr_base p) NONE) ⇒
+    ptr_matches_var q v s
+Proof
+  rpt strip_tac >> gvs[] >>
+  Cases_on `p` >> gvs[ptr_base_def] >>
+  metis_tac[ptr_matches_var_offset_none]
+QED
+
+(* Normalisation only forgets offsets, so a matching pointer survives it. *)
+Theorem bp_normalize_matches:
+  ∀ps p v s.
+    MEM p ps ∧ ptr_matches_var p v s ⇒
+    ∃q. MEM q (bp_normalize ps) ∧ ptr_matches_var q v s
+Proof
+  metis_tac[bp_normalize_covers, ptr_matches_var_cover]
+QED
+
+(* ===================================================================
    Soundness of transfer function.
 
    Alloca condition weakened: only requires preservation for aids already
@@ -374,6 +449,7 @@ Theorem bp_handle_inst_sound_proof:
     bp_ptr_sound bp' s'
 Proof
   rpt strip_tac >>
+  imp_res_tac step_inst_ok_imp_not_phi >>
   rw[bp_ptr_sound_def] >> rpt strip_tac >>
   Cases_on `inst_output inst`
   >- (
@@ -399,7 +475,7 @@ Proof
     >~ [`ALLOCA`] >- suspend "alloca"
     >~ [`ADD`] >- suspend "add"
     >~ [`SUB`] >- suspend "sub"
-    (* PHI case: auto-solved - bp_handle_inst PHI = (F, result), so bp_get_ptrs bp out = [] makes goal vacuous *)
+    (* PHI case: auto-solved - step_inst fails on a PHI *)
     >~ [`ASSIGN`] >- suspend "assign"
   )
   >- (
@@ -643,6 +719,18 @@ Proof
     Cases_on `t` >> gvs[] >>
     gvs[bp_get_ptrs_def, FLOOKUP_UPDATE, ptr_from_alloca_def]) >>
   disj1_tac >>
+  Cases_on `inst.inst_opcode = PHI`
+  >- (
+    fs[bp_handle_inst_def, venomInstTheory.inst_output_def] >>
+    Cases_on `inst.inst_outputs` >> gvs[] >>
+    Cases_on `t` >> gvs[LET_THM] >>
+    Cases_on `v = h` >> gvs[] >>
+    qpat_x_assum `MEM _ (bp_get_ptrs _ _)` mp_tac >>
+    rw[bp_get_ptrs_def, FLOOKUP_UPDATE] >> fs[GSYM bp_get_ptrs_def] >>
+    TRY (metis_tac[] >> NO_TAC) >>
+    drule MEM_bp_normalize >> strip_tac >>
+    Cases_on `p` >> gvs[ptr_base_def, MEM_FLAT, MEM_MAP] >>
+    metis_tac[]) >>
   (* Non-ALLOCA: all ptrs in r trace back to bp.
      Strategy: unfold bp_handle_inst pair to extract r,
      then case-split on opcode *)
@@ -937,9 +1025,7 @@ Proof
     qexists_tac `inst'` >> ASM_REWRITE_TAC[])
 QED
 
-(* After step_inst PHI, for any phi pair variable v:
-   PHI is now a no-op in both step_inst and bp_handle_inst,
-   so s1 = s0 and r = bp0. The hypothesis directly gives bp_get_ptrs bp0 v ≠ []. *)
+(* Vacuous: step_inst fails on a PHI (PHIs run in eval_phis at block entry). *)
 Theorem bp_handle_inst_phi_transfer[local]:
   ∀bp0 inst c r fuel ctx s0 s1 inst' insts v.
     bp_handle_inst bp0 inst = (c, r) ∧
@@ -956,19 +1042,7 @@ Theorem bp_handle_inst_phi_transfer[local]:
        bp_get_ptrs bp0 w ≠ []) ⇒
     bp_get_ptrs r v ≠ []
 Proof
-  rpt strip_tac >>
-  `r = bp0` by (
-    qpat_x_assum `bp_handle_inst bp0 inst = (c,r)` mp_tac >>
-    simp[bp_handle_inst_def, LET_THM] >>
-    Cases_on `inst_output inst` >> gvs[] >>
-    Cases_on `inst.inst_opcode` >> gvs[]) >>
-  `s1 = s0` by (
-    qpat_x_assum `step_inst fuel ctx inst s0 = OK s1` mp_tac >>
-    simp[venomExecSemanticsTheory.step_inst_non_invoke,
-         venomExecSemanticsTheory.step_inst_base_def]) >>
-  gvs[] >>
-  first_x_assum (qspecl_then [`inst'`, `v`] mp_tac) >>
-  simp[MEM]
+  metis_tac[step_inst_ok_imp_not_phi]
 QED
 
 Resume bp_process_block_sound_gen[non_terminator]:
@@ -1165,6 +1239,124 @@ Proof
       imp_res_tac inst_wf_outputs_some >> gvs[] >> res_tac)
 QED
 
+(* ===================================================================
+   PHIs: soundness across eval_phis.
+
+   step_inst fails on a PHI, so the block-level theorem only covers
+   blocks entered past their PHI prefix.  At block entry, each PHI output
+   takes the value of the operand from the actual predecessor.  This is
+   sound when the result covers every operand's pointers, which holds
+   once the analysis has converged (bp_handle_inst_phi_stable_proof).
+   =================================================================== *)
+
+(* After eval_phis, a variable keeps its value or holds the value of the
+   operand that one of its PHIs resolves to. *)
+Theorem eval_phis_lookup_cases:
+  ∀insts s s' x.
+    eval_phis s insts = OK s' ⇒
+    lookup_var x s' = lookup_var x s ∨
+    ∃inst prev op.
+      MEM inst insts ∧ inst.inst_opcode = PHI ∧ inst.inst_outputs = [x] ∧
+      s.vs_prev_bb = SOME prev ∧
+      resolve_phi prev inst.inst_operands = SOME op ∧
+      lookup_var x s' = eval_operand op s
+Proof
+  Induct >> rw[venomExecSemanticsTheory.eval_phis_def] >>
+  gvs[AllCaseEqs(), venomExecSemanticsTheory.eval_one_phi_def] >>
+  first_x_assum drule >> disch_then (qspec_then `x` strip_assume_tac) >>
+  gvs[venomStateTheory.update_var_def, venomStateTheory.lookup_var_def, FLOOKUP_UPDATE] >>
+  rw[] >> metis_tac[]
+QED
+
+Theorem bp_eval_phis_sound_proof:
+  ∀insts bp s s'.
+    bp_ptr_sound bp s ∧
+    eval_phis s insts = OK s' ∧
+    (∀inst. MEM inst insts ∧ inst.inst_opcode = PHI ⇒
+       phi_well_formed inst.inst_operands) ∧
+    (∀inst out v.
+       MEM inst insts ∧ inst.inst_opcode = PHI ∧
+       inst.inst_outputs = [out] ∧ bp_get_ptrs bp out ≠ [] ∧
+       MEM v (MAP SND (phi_pairs inst.inst_operands)) ∧
+       IS_SOME (lookup_var v s) ⇒
+       bp_get_ptrs bp v ≠ [] ∧
+       ∀p. MEM p (bp_get_ptrs bp v) ⇒
+         ∃q. MEM q (bp_get_ptrs bp out) ∧
+             (q = p ∨ q = Ptr (ptr_base p) NONE)) ⇒
+    bp_ptr_sound bp s'
+Proof
+  rw[bp_ptr_sound_def] >>
+  `s'.vs_allocas = s.vs_allocas` by metis_tac[eval_phis_preserves_alloca_fields] >>
+  drule eval_phis_lookup_cases >>
+  disch_then (qspec_then `v` strip_assume_tac)
+  >- (`∃p. MEM p (bp_get_ptrs bp v) ∧ ptr_matches_var p v s` by gvs[] >>
+      qexists_tac `p` >> simp[] >>
+      irule ptr_matches_var_preserved >> qexistsl_tac [`s`, `v`] >> simp[]) >>
+  `phi_well_formed inst.inst_operands` by metis_tac[] >>
+  drule_all resolve_phi_in_phi_pairs >> strip_tac >> gvs[venomStateTheory.eval_operand_def] >>
+  rename1 `MEM w (MAP SND _)` >>
+  first_x_assum (qspecl_then [`inst`, `v`, `w`] mp_tac) >> simp[] >>
+  strip_tac >>
+  `∃p. MEM p (bp_get_ptrs bp w) ∧ ptr_matches_var p w s` by gvs[] >>
+  first_x_assum drule >> strip_tac >>
+  qexists_tac `q` >> simp[] >>
+  irule ptr_matches_var_cover >> qexists_tac `p` >> simp[] >>
+  irule ptr_matches_var_preserved >> qexistsl_tac [`s`, `w`] >> simp[]
+QED
+
+(* Once a PHI is stable, its result covers the pointers of every operand. *)
+Theorem bp_handle_inst_phi_stable_proof:
+  ∀bp inst out v p.
+    FST (bp_handle_inst bp inst) = F ∧
+    inst.inst_opcode = PHI ∧ inst_output inst = SOME out ∧
+    MEM v (MAP SND (phi_pairs inst.inst_operands)) ∧
+    MEM p (bp_get_ptrs bp v) ⇒
+    ∃q. MEM q (bp_get_ptrs bp out) ∧ (q = p ∨ q = Ptr (ptr_base p) NONE)
+Proof
+  rpt strip_tac >>
+  qabbrev_tac `ps = bp_get_ptrs bp out ++
+     FLAT (MAP (bp_get_ptrs bp) (MAP SND (phi_pairs inst.inst_operands)))` >>
+  `MEM p ps` by
+    (simp[Abbr `ps`, MEM_FLAT, MEM_MAP, PULL_EXISTS] >> disj2_tac >>
+     gvs[MEM_MAP] >> metis_tac[]) >>
+  `bp_normalize ps ≠ []` by (strip_tac >> gvs[bp_normalize_eq_nil]) >>
+  `bp_get_ptrs bp out = bp_normalize ps` by
+    (qpat_x_assum `FST _ = F` mp_tac >>
+     simp[bp_handle_inst_def, LET_THM] >>
+     fs[markerTheory.Abbrev_def] >>
+     simp[bp_get_ptrs_def, FLOOKUP_UPDATE]) >>
+  metis_tac[bp_normalize_covers]
+QED
+
+(* eval_phis on a block of fn preserves soundness when fn's PHIs are closed
+   and every PHI with a tracked result is stable. *)
+Theorem bp_phis_closed_eval_phis_proof:
+  ∀bp fn insts s s'.
+    bp_phis_closed bp fn ∧
+    (∀inst. MEM inst insts ∧ inst.inst_opcode = PHI ⇒
+       inst_wf inst ∧
+       (∃bb. MEM bb fn.fn_blocks ∧ MEM inst bb.bb_instructions) ∧
+       ∀out. MEM out inst.inst_outputs ∧ bp_get_ptrs bp out ≠ [] ⇒
+         FST (bp_handle_inst bp inst) = F) ∧
+    bp_ptr_sound bp s ∧
+    eval_phis s insts = OK s' ⇒
+    bp_ptr_sound bp s'
+Proof
+  rpt strip_tac >>
+  irule bp_eval_phis_sound_proof >>
+  qexistsl_tac [`insts`, `s`] >> simp[] >>
+  rpt strip_tac >>
+  `inst_wf inst ∧ (∃bb. MEM bb fn.fn_blocks ∧ MEM inst bb.bb_instructions) ∧
+   ∀out. MEM out inst.inst_outputs ∧ bp_get_ptrs bp out ≠ [] ⇒
+     FST (bp_handle_inst bp inst) = F` by metis_tac[] >>
+  gvs[venomWfTheory.inst_wf_def]
+  >~ [`bp_get_ptrs bp v ≠ []`]
+  >- (gvs[bp_phis_closed_def] >> metis_tac[]) >>
+  irule bp_handle_inst_phi_stable_proof >>
+  qexistsl_tac [`inst`, `v`] >> simp[venomInstTheory.inst_output_def] >>
+  metis_tac[MEM]
+QED
+
 (* Singleton pointer ⇒ exact runtime address. *)
 Theorem bp_ptr_from_op_sound_proof:
   ∀bp v aid off s.
@@ -1253,7 +1445,8 @@ Theorem bp_handle_inst_tracking_output_ptrs:
     inst_wf inst /\
     out NOTIN FDOM bp1 /\ out NOTIN FDOM bp2 /\
     (inst.inst_opcode = ALLOCA \/ inst.inst_opcode = ADD \/
-     inst.inst_opcode = SUB \/ inst.inst_opcode = ASSIGN) /\
+     inst.inst_opcode = SUB \/ inst.inst_opcode = ASSIGN \/
+     inst.inst_opcode = PHI) /\
     (!v. v <> out ==> bp_get_ptrs bp1 v = bp_get_ptrs bp2 v) /\
     EVERY (\v. v <> out) (inst_uses inst) ==>
     bp_get_ptrs bp1' out = bp_get_ptrs bp2' out
@@ -1281,8 +1474,14 @@ Proof
   TRY (
     BasicProvers.EVERY_CASE_TAC >> gvs[bp_get_ptrs_def, FLOOKUP_UPDATE] >>
     gvs[inst_uses_def, operand_vars_def, operand_var_def] >> NO_TAC) >>
-  (* All other cases (PHI, etc.) now excluded by hypothesis *)
-  gvs[]
+  (* PHI: the operand vars are uses *)
+  `MAP (bp_get_ptrs bp1) (MAP SND (phi_pairs inst.inst_operands)) =
+   MAP (bp_get_ptrs bp2) (MAP SND (phi_pairs inst.inst_operands))` by
+    (irule MAP_CONG >> simp[] >> rpt strip_tac >>
+     first_x_assum irule >>
+     simp[inst_uses_def] >> metis_tac[phi_pairs_mem_operand_vars]) >>
+  gvs[] >> rw[bp_get_ptrs_def, FLOOKUP_UPDATE] >>
+  gvs[GSYM bp_get_ptrs_def]
 QED
 
 (* For non-tracking opcodes with output, bp_handle_inst doesn't modify bp. *)
@@ -1292,7 +1491,8 @@ Theorem bp_handle_inst_passthrough_output:
     inst_output inst = SOME out /\
     inst_wf inst /\
     inst.inst_opcode <> ALLOCA /\ inst.inst_opcode <> ADD /\
-    inst.inst_opcode <> SUB /\ inst.inst_opcode <> ASSIGN ==>
+    inst.inst_opcode <> SUB /\ inst.inst_opcode <> ASSIGN /\
+    inst.inst_opcode <> PHI ==>
     bp' = bp
 Proof
   rpt strip_tac >>
@@ -1302,4 +1502,138 @@ Proof
   asm_rewrite_tac[] >>
   simp_tac std_ss [LET_THM] >> BETA_TAC >>
   Cases_on `inst.inst_opcode` >> gvs[]
+QED
+
+(* ===================================================================
+   Completeness.
+
+   Once an instruction is stable (its transfer function changes nothing),
+   its output holds the pointers its transfer function computes.  So every
+   variable derived from an allocation through stable instructions lists
+   that allocation.  A pass that reports no change leaves every instruction
+   of the blocks it visits stable.
+   =================================================================== *)
+
+Theorem bp_get_ptrs_update:
+  ∀bp k x v.
+    bp_get_ptrs (bp |+ (k, x)) v = if v = k then x else bp_get_ptrs bp v
+Proof
+  rw[bp_get_ptrs_def, FLOOKUP_UPDATE]
+QED
+
+(* A stable instruction leaves every pointer set unchanged. *)
+Theorem bp_handle_inst_stable_ptrs:
+  ∀bp inst v.
+    FST (bp_handle_inst bp inst) = F ⇒
+    bp_get_ptrs (SND (bp_handle_inst bp inst)) v = bp_get_ptrs bp v
+Proof
+  rpt strip_tac >>
+  Cases_on `bp_handle_inst bp inst` >> gvs[] >>
+  Cases_on `inst_output inst = SOME v`
+  >- (qpat_x_assum `bp_handle_inst _ _ = _` mp_tac >>
+      simp[bp_handle_inst_def, LET_THM] >> rw[] >> gvs[]) >>
+  irule bp_handle_inst_other_var_proof >> metis_tac[]
+QED
+
+(* The transfer function only reads the map through bp_get_ptrs. *)
+Theorem bp_handle_inst_ptrs_ext:
+  ∀bp1 bp2 inst.
+    (∀v. bp_get_ptrs bp1 v = bp_get_ptrs bp2 v) ⇒
+    FST (bp_handle_inst bp1 inst) = FST (bp_handle_inst bp2 inst) ∧
+    ∀v. bp_get_ptrs (SND (bp_handle_inst bp1 inst)) v =
+        bp_get_ptrs (SND (bp_handle_inst bp2 inst)) v
+Proof
+  rpt gen_tac >> strip_tac >>
+  `bp_get_ptrs bp1 = bp_get_ptrs bp2` by simp[FUN_EQ_THM] >>
+  simp[bp_handle_inst_def, LET_THM] >>
+  Cases_on `inst_output inst` >> simp[] >>
+  Cases_on `inst.inst_opcode` >> simp[bp_get_ptrs_update] >>
+  BasicProvers.EVERY_CASE_TAC >> gvs[bp_get_ptrs_update] >>
+  rw[] >> gvs[bp_get_ptrs_update]
+QED
+
+Theorem bp_process_block_unchanged:
+  ∀insts bp.
+    FST (bp_process_block bp insts) = F ⇒
+    (∀inst. MEM inst insts ⇒ FST (bp_handle_inst bp inst) = F) ∧
+    ∀v. bp_get_ptrs (SND (bp_process_block bp insts)) v = bp_get_ptrs bp v
+Proof
+  Induct >> simp[bp_process_block_def] >>
+  rpt gen_tac >>
+  Cases_on `bp_handle_inst bp h` >> rename1 `_ = (c1, r1)` >>
+  Cases_on `bp_process_block r1 insts` >> rename1 `_ = (c2, r2)` >>
+  simp[] >> strip_tac >>
+  `∀v. bp_get_ptrs r1 v = bp_get_ptrs bp v` by
+    metis_tac[bp_handle_inst_stable_ptrs, pairTheory.FST, pairTheory.SND] >>
+  first_x_assum (qspec_then `r1` mp_tac) >> simp[] >> strip_tac >>
+  rw[] >> gvs[] >>
+  metis_tac[bp_handle_inst_ptrs_ext]
+QED
+
+(* A pass that reports no change leaves the instructions of every block it
+   visits stable. *)
+Theorem bp_one_pass_unchanged_stable_proof:
+  ∀fn order bp.
+    FST (bp_one_pass fn order bp) = F ⇒
+    ∀lbl bb inst.
+      MEM lbl order ∧ FIND (λbb. bb.bb_label = lbl) fn.fn_blocks = SOME bb ∧
+      MEM inst bb.bb_instructions ⇒
+      FST (bp_handle_inst bp inst) = F
+Proof
+  simp[bp_one_pass_def] >>
+  `∀order fn bp.
+     FST (bp_one_pass_aux fn bp order) = F ⇒
+     (∀lbl bb inst.
+        MEM lbl order ∧ FIND (λbb. bb.bb_label = lbl) fn.fn_blocks = SOME bb ∧
+        MEM inst bb.bb_instructions ⇒
+        FST (bp_handle_inst bp inst) = F) ∧
+     ∀v. bp_get_ptrs (SND (bp_one_pass_aux fn bp order)) v = bp_get_ptrs bp v`
+    suffices_by metis_tac[] >>
+  Induct >> simp[bp_one_pass_aux_def] >>
+  rpt gen_tac >>
+  Cases_on `FIND (λbb. bb.bb_label = h) fn.fn_blocks` >> simp[]
+  >- (strip_tac >> first_x_assum (qspecl_then [`fn`, `bp`] mp_tac) >>
+      simp[] >> strip_tac >> rpt strip_tac >> gvs[] >> metis_tac[]) >>
+  rename1 `_ = SOME bb0` >>
+  Cases_on `bp_process_block bp bb0.bb_instructions` >> rename1 `_ = (c1, r1)` >>
+  Cases_on `bp_one_pass_aux fn r1 order` >> rename1 `_ = (c2, r2)` >>
+  simp[] >> strip_tac >>
+  `(∀inst. MEM inst bb0.bb_instructions ⇒ FST (bp_handle_inst bp inst) = F) ∧
+   ∀v. bp_get_ptrs r1 v = bp_get_ptrs bp v` by
+    metis_tac[bp_process_block_unchanged, pairTheory.FST, pairTheory.SND] >>
+  first_x_assum (qspecl_then [`fn`, `r1`] mp_tac) >> simp[] >> strip_tac >>
+  rw[] >> gvs[] >>
+  metis_tac[bp_handle_inst_ptrs_ext]
+QED
+
+(* Every variable derived through stable instructions lists the allocation. *)
+Theorem bp_derives_complete_proof:
+  ∀bp P v a.
+    bp_derives bp P v a ⇒
+    (∀inst. P inst ⇒ FST (bp_handle_inst bp inst) = F) ⇒
+    ∃off. MEM (Ptr a off) (bp_get_ptrs bp v)
+Proof
+  ho_match_mp_tac bp_derives_ind >> rpt conj_tac >>
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  rename1 `inst_output inst = SOME out` >>
+  `FST (bp_handle_inst bp inst) = F` by res_tac >>
+  `bp_get_ptrs bp out = bp_get_ptrs (SND (bp_handle_inst bp inst)) out` by
+    metis_tac[bp_handle_inst_stable_ptrs] >>
+  TRY (qpat_x_assum `_ ==> ?off. _` mp_tac >>
+       impl_tac >- first_assum ACCEPT_TAC >> strip_tac) >>
+  rpt (qpat_x_assum `!inst. _` kall_tac) >>
+  TRY (rename1 `MEM (Ptr a off) (bp_get_ptrs bp x)` >>
+       `bp_get_ptrs bp x ≠ []` by (strip_tac >> gvs[])) >>
+  qpat_x_assum `bp_get_ptrs bp out = _` SUBST1_TAC >>
+  simp[bp_handle_inst_def, LET_THM, bp_get_ptrs_update, ptr_from_alloca_def] >>
+  TRY (qmatch_goalsub_abbrev_tac `bp_normalize ps` >>
+      `MEM (Ptr a off) ps` by
+        (simp[Abbr `ps`, MEM_FLAT, MEM_MAP, PULL_EXISTS] >> disj2_tac >>
+         gvs[MEM_MAP] >> metis_tac[]) >>
+      `bp_normalize ps ≠ []` by (strip_tac >> gvs[bp_normalize_eq_nil]) >>
+      simp[bp_get_ptrs_update] >>
+      drule bp_normalize_covers >> strip_tac >> gvs[ptr_base_def] >>
+      metis_tac[] >> NO_TAC) >>
+  simp[MEM_MAP, PULL_EXISTS] >>
+  metis_tac[offset_by_same_alloc, sub_offset_by_same_alloc]
 QED
