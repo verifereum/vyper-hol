@@ -903,9 +903,18 @@ fun d_json_expr () : term decoder = achoose "expr" [
               (func_name, func_src, arg_types, effective_ret, target, args, keywords))
         | NONE => fail "legacy interface return type disagrees with callsite")
 ]
-and d_json_keyword () : term decoder =
+and d_json_keyword () : term decoder = achoose "keyword" [
+  (* ABI method IDs are compile-time constants. Preserve the compiler-validated
+     four-byte folded value so jsonToVyper can attach it to AbiEncode. *)
+  check (field "arg" string) (fn s => s = "method_id") "not method_id" $
+  JSONDecode.map (fn (arg, (original, folded)) =>
+    mk_JKeyword(arg, mk_JE_Folded(original, folded))) $
+  tuple2 (field "arg" string,
+    tuple2 (field "value" (delay d_json_expr),
+            field "value" $ field "folded_value" (delay d_json_expr))),
   JSONDecode.map (fn (arg, v) => mk_JKeyword(arg, v)) $
   tuple2 (field "arg" string, field "value" (delay d_json_expr))
+]
 and d_calldata_raw_call_keyword () : term decoder = achoose "calldata raw_call keyword" [
   check (field "arg" string) (fn s => s = "max_outsize") "not max_outsize" $
   JSONDecode.map (fn (arg, (original, folded)) =>
