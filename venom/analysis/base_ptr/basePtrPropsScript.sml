@@ -21,7 +21,7 @@
  *                               PHI result covers its operands' pointers
  *   bp_handle_inst_phi_stable — a stable PHI result covers its operands
  *   bp_phis_closed_eval_phis  — eval_phis preserves soundness under
- *                               bp_phis_closed
+ *                               bp_phis_closed when tracked PHIs are stable
  *
  * Completeness:
  *   bp_derives_complete       — a variable derived from an allocation
@@ -209,7 +209,10 @@ Theorem bp_phis_closed_eval_phis:
   ∀bp fn insts s s'.
     bp_phis_closed bp fn ∧
     (∀inst. MEM inst insts ∧ inst.inst_opcode = PHI ⇒
-       inst_wf inst ∧ ∃bb. MEM bb fn.fn_blocks ∧ MEM inst bb.bb_instructions) ∧
+       inst_wf inst ∧
+       (∃bb. MEM bb fn.fn_blocks ∧ MEM inst bb.bb_instructions) ∧
+       ∀out. MEM out inst.inst_outputs ∧ bp_get_ptrs bp out ≠ [] ⇒
+         FST (bp_handle_inst bp inst) = F) ∧
     bp_ptr_sound bp s ∧
     eval_phis s insts = OK s' ⇒
     bp_ptr_sound bp s'

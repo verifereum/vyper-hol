@@ -12,7 +12,8 @@
  *   bp_normalize_covers, bp_normalize_matches — normalisation keeps matches
  *   bp_eval_phis_sound_proof              — PHI prefix preserves bp_ptr_sound
  *   bp_handle_inst_phi_stable_proof       — stable PHI covers its operands
- *   bp_phis_closed_eval_phis_proof        — closed PHIs preserve soundness
+ *   bp_phis_closed_eval_phis_proof        — closed, stable PHIs preserve
+ *                                           soundness
  *   bp_one_pass_unchanged_stable_proof    — unchanged pass ⇒ stable insts
  *   bp_derives_complete_proof             — derived variables list the alloca
  *)
@@ -1303,26 +1304,6 @@ Proof
   irule ptr_matches_var_preserved >> qexistsl_tac [`s`, `w`] >> simp[]
 QED
 
-(* eval_phis on a block of fn preserves soundness when fn's PHIs are closed. *)
-Theorem bp_phis_closed_eval_phis_proof:
-  ∀bp fn insts s s'.
-    bp_phis_closed bp fn ∧
-    (∀inst. MEM inst insts ∧ inst.inst_opcode = PHI ⇒
-       inst_wf inst ∧ ∃bb. MEM bb fn.fn_blocks ∧ MEM inst bb.bb_instructions) ∧
-    bp_ptr_sound bp s ∧
-    eval_phis s insts = OK s' ⇒
-    bp_ptr_sound bp s'
-Proof
-  rpt strip_tac >>
-  irule bp_eval_phis_sound_proof >>
-  qexistsl_tac [`insts`, `s`] >> simp[] >>
-  rpt strip_tac >>
-  `inst_wf inst ∧ ∃bb. MEM bb fn.fn_blocks ∧ MEM inst bb.bb_instructions`
-    by metis_tac[] >>
-  gvs[venomWfTheory.inst_wf_def, bp_phis_closed_def] >>
-  metis_tac[]
-QED
-
 (* Once a PHI is stable, its result covers the pointers of every operand. *)
 Theorem bp_handle_inst_phi_stable_proof:
   ∀bp inst out v p.
@@ -1345,6 +1326,35 @@ Proof
      fs[markerTheory.Abbrev_def] >>
      simp[bp_get_ptrs_def, FLOOKUP_UPDATE]) >>
   metis_tac[bp_normalize_covers]
+QED
+
+(* eval_phis on a block of fn preserves soundness when fn's PHIs are closed
+   and every PHI with a tracked result is stable. *)
+Theorem bp_phis_closed_eval_phis_proof:
+  ∀bp fn insts s s'.
+    bp_phis_closed bp fn ∧
+    (∀inst. MEM inst insts ∧ inst.inst_opcode = PHI ⇒
+       inst_wf inst ∧
+       (∃bb. MEM bb fn.fn_blocks ∧ MEM inst bb.bb_instructions) ∧
+       ∀out. MEM out inst.inst_outputs ∧ bp_get_ptrs bp out ≠ [] ⇒
+         FST (bp_handle_inst bp inst) = F) ∧
+    bp_ptr_sound bp s ∧
+    eval_phis s insts = OK s' ⇒
+    bp_ptr_sound bp s'
+Proof
+  rpt strip_tac >>
+  irule bp_eval_phis_sound_proof >>
+  qexistsl_tac [`insts`, `s`] >> simp[] >>
+  rpt strip_tac >>
+  `inst_wf inst ∧ (∃bb. MEM bb fn.fn_blocks ∧ MEM inst bb.bb_instructions) ∧
+   ∀out. MEM out inst.inst_outputs ∧ bp_get_ptrs bp out ≠ [] ⇒
+     FST (bp_handle_inst bp inst) = F` by metis_tac[] >>
+  gvs[venomWfTheory.inst_wf_def]
+  >~ [`bp_get_ptrs bp v ≠ []`]
+  >- (gvs[bp_phis_closed_def] >> metis_tac[]) >>
+  irule bp_handle_inst_phi_stable_proof >>
+  qexistsl_tac [`inst`, `v`] >> simp[venomInstTheory.inst_output_def] >>
+  metis_tac[MEM]
 QED
 
 (* Singleton pointer ⇒ exact runtime address. *)
@@ -1536,6 +1546,8 @@ Proof
   rpt gen_tac >> strip_tac >>
   `bp_get_ptrs bp1 = bp_get_ptrs bp2` by simp[FUN_EQ_THM] >>
   simp[bp_handle_inst_def, LET_THM] >>
+  Cases_on `inst_output inst` >> simp[] >>
+  Cases_on `inst.inst_opcode` >> simp[bp_get_ptrs_update] >>
   BasicProvers.EVERY_CASE_TAC >> gvs[bp_get_ptrs_update] >>
   rw[] >> gvs[bp_get_ptrs_update]
 QED
