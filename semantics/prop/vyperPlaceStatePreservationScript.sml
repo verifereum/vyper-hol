@@ -99,6 +99,69 @@ Proof
   metis_tac[evaluate_subscripts_type_metadata]
 QED
 
+Theorem oEL_some_bound[local]:
+  !ls j v. oEL j ls = SOME v ==> j < LENGTH ls
+Proof
+  Induct >> Cases_on `j` >> simp[oEL_def]
+QED
+
+Theorem sparse_lookup_bound[local]:
+  !ls etv n j v. sparse_has_type etv n ls /\ ALOOKUP ls j = SOME v ==> j < n
+Proof
+  Induct >> simp[value_has_type_def] >> gen_tac >> PairCases_on `h` >>
+  rw[value_has_type_def, alistTheory.ALOOKUP_def] >> gvs[] >> metis_tac[]
+QED
+
+Theorem values_have_types_length[local]:
+  !ts vs. values_have_types ts vs ==> LENGTH ts = LENGTH vs
+Proof
+  Induct >> Cases_on `vs` >> simp[value_has_type_def]
+QED
+
+Theorem array_index_declared_type_exists:
+  !tv mtv av i v.
+  (mtv = tv \/ mtv = NoneTV) /\ value_has_type tv (ArrayV av) /\
+  well_formed_type_value tv /\ array_index mtv av i = SOME v ==>
+  ?etv. subscript_type tv (ValueSubscript (IntV i)) = SOME etv
+Proof
+  Cases >> Cases_on `av` >>
+  simp[value_has_type_def] >> rpt gen_tac >> strip_tac >>
+  gvs[vyperValueOperationTheory.array_index_def, AllCaseEqs(), subscript_type_def] >>
+  TRY (Cases_on `b` >> gvs[value_has_type_def, subscript_type_def,
+       vyperValueOperationTheory.array_index_def, AllCaseEqs()]) >>
+  imp_res_tac oEL_some_bound >> imp_res_tac values_have_types_length >>
+  imp_res_tac sparse_lookup_bound >> gvs[value_has_type_def] >> decide_tac
+QED
+
+Theorem evaluate_subscripts_declared_type_exists:
+  !path tv mtv a v.
+    (mtv = tv \/ mtv = NoneTV) /\ value_has_type tv a /\
+    well_formed_type_value tv /\ evaluate_subscripts mtv a path = INL v ==>
+    ?ptv. subscripts_type tv path = SOME ptv /\
+          well_formed_type_value ptv /\ value_has_type ptv v
+Proof
+  Induct >> simp[subscripts_type_def, evaluate_subscripts_def] >>
+  gen_tac >> Cases_on `h`
+  >- (Cases_on `v` >> rpt gen_tac >> strip_tac >>
+      gvs[evaluate_subscripts_def, AllCaseEqs()] >>
+      rename1 `value_has_type root_tv (ArrayV av)` >>
+      `?etv. subscript_type root_tv (ValueSubscript (IntV i)) = SOME etv` by
+        metis_tac[array_index_declared_type_exists] >>
+      `well_formed_type_value etv` by metis_tac[subscript_type_well_formed] >>
+      `value_has_type etv v'` by metis_tac[array_index_type_metadata] >>
+      Cases_on `root_tv` >> gvs[subscript_type_def] >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >> gvs[evaluate_subscripts_def, AllCaseEqs()] >>
+  rename1 `value_has_type root_tv a` >>
+  Cases_on `a` >> gvs[evaluate_subscripts_def, AllCaseEqs()] >>
+  Cases_on `root_tv` >> gvs[value_has_type_def] >>
+  drule_all vyperAssignPreservesTypeTheory.struct_field_has_type >> strip_tac >>
+  rename1 `value_has_type field_tv field_v` >>
+  `well_formed_type_value field_tv` by
+    (irule subscript_type_well_formed >>
+     qexistsl_tac [`AttrSubscript s`, `StructTV l'`] >> simp[subscript_type_def]) >>
+  gvs[subscript_type_def] >> metis_tac[]
+QED
+
 Theorem read_popped_type:
   !history tv path ptv v.
     popped_history_typed tv history /\
@@ -224,10 +287,84 @@ Proof
   `0 < n` by (Cases_on `l` >> gvs[] >> decide_tac) >> simp[]
 QED
 
+Theorem array_set_index_type_metadata[local]:
+  !tv mtv av i etv v r.
+    (mtv = tv \/ mtv = NoneTV) /\ value_has_type tv (ArrayV av) /\
+    subscript_type tv (ValueSubscript (IntV i)) = SOME etv /\
+    value_has_type etv v /\ array_set_index mtv av i v = INL r ==>
+    value_has_type tv r
+Proof
+  rpt gen_tac >> strip_tac >> gvs[]
+  >- (Cases_on `mtv` >> gvs[subscript_type_def] >>
+      TRY (Cases_on `av` >>
+           gvs[value_has_type_def, vyperValueOperationTheory.array_set_index_def,
+               AllCaseEqs()] >> NO_TAC) >>
+      irule vyperAssignPreservesTypeTheory.array_set_index_preserves_type >>
+      goal_assum (drule_at Any) >> simp[]) >>
+  Cases_on `tv` >> Cases_on `av` >>
+  gvs[subscript_type_def, value_has_type_def,
+      vyperValueOperationTheory.array_set_index_def, AllCaseEqs()] >>
+  Cases_on `b` >> gvs[value_has_type_def] >>
+  irule vyperAssignPreservesTypeTheory.TAKE_DROP_all_have_type >> simp[]
+QED
+
+Theorem assign_subscripts_replace_type_metadata:
+  !path tv mtv a ptv v new.
+    (mtv = tv \/ mtv = NoneTV) /\ value_has_type tv a /\
+    well_formed_type_value tv /\ subscripts_type tv path = SOME ptv /\
+    value_has_type ptv v /\ assign_subscripts mtv a path (Replace v) = INL new ==>
+    value_has_type tv new
+Proof
+  Induct >> simp[subscripts_type_def, Once assign_subscripts_def] >>
+  gen_tac >> Cases_on `h`
+  >- (Cases_on `v` >> simp[subscripts_type_def, Once assign_subscripts_def] >>
+      rpt gen_tac >> strip_tac >>
+      gvs[subscripts_type_def, AllCaseEqs()] >>
+      rename1 `subscript_type root_tv (ValueSubscript (IntV i)) = SOME etv` >>
+      `well_formed_type_value etv` by metis_tac[subscript_type_well_formed] >>
+      `value_has_type etv v'` by metis_tac[array_index_type_metadata] >>
+      `value_has_type etv vj` by
+        (first_x_assum irule >> goal_assum (drule_at Any) >> simp[] >>
+         qmatch_asmsub_abbrev_tac `assign_subscripts child_mtv _ _ _` >>
+         qexistsl_tac [`v'`, `child_mtv`, `v`] >> simp[] >>
+         Cases_on `root_tv` >> gvs[subscript_type_def, Abbr `child_mtv`]) >>
+      irule array_set_index_type_metadata >> goal_assum (drule_at Any) >>
+      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >>
+  gvs[subscripts_type_def, AllCaseEqs()] >>
+  rename1 `subscript_type root_tv (AttrSubscript fld) = SOME etv` >>
+  Cases_on `root_tv` >> gvs[subscript_type_def] >>
+  Cases_on `a` >>
+  gvs[value_has_type_def, Once assign_subscripts_def, AllCaseEqs()] >>
+  rename1 `assign_subscripts _ fv path (Replace v) = INL new_fv` >>
+  `well_formed_type_value etv` by
+    metis_tac[subscript_type_well_formed, subscript_type_def] >>
+  `value_has_type etv fv` by
+    (drule vyperAssignPreservesTypeTheory.struct_field_has_type >>
+     disch_then drule >> strip_tac >> gvs[]) >>
+  `value_has_type etv new_fv` by
+    (first_x_assum irule >> goal_assum (drule_at Any) >> simp[] >>
+     metis_tac[]) >>
+  irule vyperAssignPreservesTypeTheory.AFUPDKEY_struct_has_type >> simp[] >>
+  qexists_tac `etv` >> rpt strip_tac >>
+  drule_all vyperAssignPreservesTypeTheory.struct_field_has_type >> strip_tac >> gvs[]
+QED
+
 Theorem replace_memory_entry_type:
   replace_memory_entry entry path v = INL entry' ==> entry'.type = entry.type
 Proof
   rw[replace_memory_entry_def, AllCaseEqs()] >> simp[scope_entry_accfupds]
+QED
+
+Theorem replace_memory_entry_value_type:
+  value_has_type entry.type entry.value /\ well_formed_type_value entry.type /\
+  subscripts_type entry.type path = SOME ptv /\ value_has_type ptv v /\
+  replace_memory_entry entry path v = INL entry' ==>
+  value_has_type entry'.type entry'.value
+Proof
+  rw[replace_memory_entry_def, AllCaseEqs()] >>
+  gvs[scope_entry_accfupds] >>
+  metis_tac[assign_subscripts_replace_type_metadata]
 QED
 
 Theorem replace_memory_entry_history_typed:
