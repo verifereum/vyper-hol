@@ -137,7 +137,55 @@ val checker_defs =
    pairTheory.SND,
    pairTheory.UNCURRY_DEF,
    listTheory.LIST_REL_def,
-   numposrepTheory.l2n_def]
+   numposrepTheory.l2n_def] @
+  (* Constants fold (contract_constants_ok): the constant evaluator, the
+     immutables load_contract installs, and the value operations the constant
+     builtins reach.  Other builtins' operations are deliberately absent;
+     constant_value rejects those builtins before evaluating them. *)
+  [contract_constants_ok_def,
+   constants_fold_def,
+   constants_fold_module_def,
+   merge_constant_imms_def,
+   constant_value_def,
+   constant_length_def,
+   constant_context_def,
+   empty_evaluation_context_def,
+   empty_call_txn_def,
+   get_tenv_def,
+   initial_immutables_def,
+   initial_immutables_module_def,
+   vyperStateTheory.update_immutable_def,
+   vyperStateTheory.empty_immutables_def,
+   vyperStateTheory.get_source_immutables_def,
+   vyperStateTheory.set_source_immutables_def,
+   vyperStateTheory.find_var_decl_by_name_def,
+   vyperStateTheory.evaluate_subscript_def,
+   builtin_args_length_ok_def,
+   type_builtin_args_length_ok_def,
+   evaluate_builtin_def,
+   evaluate_type_builtin_def,
+   vyperValueTheory.default_value_def,
+   vyperValueTheory.make_array_value_def,
+   vyperValueTheory.enumerate_static_array_def,
+   vyperValueOperationTheory.evaluate_literal_def,
+   vyperValueOperationTheory.array_index_def,
+   vyperValueOperationTheory.array_elements_def,
+   vyperValueOperationTheory.evaluate_attribute_def,
+   vyperValueOperationTheory.evaluate_in_array_def,
+   vyperValueOperationTheory.evaluate_binop_def,
+   vyperValueOperationTheory.binop_negate_def,
+   vyperValueOperationTheory.signed_int_mod_def,
+   vyperValueOperationTheory.wrapped_int_op_def,
+   vyperValueOperationTheory.bounded_int_op_def,
+   vyperValueOperationTheory.bounded_decimal_op_def,
+   vyperValueOperationTheory.evaluate_as_wei_value_def,
+   vyperValueOperationTheory.evaluate_max_value_def,
+   vyperValueOperationTheory.evaluate_min_value_def,
+   vyperASTTheory.type_to_int_bound_def,
+   vyperASTTheory.int_bound_bits_def,
+   vyperASTTheory.is_Unsigned_def,
+   alistTheory.ADELKEY_def,
+   optionTheory.OPTION_MAP_DEF]
 
 (* This is deliberately fixed rather than derived from the global TypeBase. *)
 val checker_datatypes =
@@ -155,6 +203,10 @@ val checker_datatypes =
    ``:vyperTypeSystem$typing_env``, ``:vyperTypeSystem$fn_sig``,
    ``:vyperAST$variable_mutability``, ``:vyperValue$type_args``,
    ``:vyperAST$bound``, ``:vyperAST$raw_call_flags``, ``:string$char``,
+   ``:vyperValue$type_value``, ``:vyperValue$value``,
+   ``:vyperValue$array_value``, ``:vyperState$toplevel_value``,
+   ``:vyperState$var_decl_info``, ``:vyperContext$evaluation_context``,
+   ``:vyperContext$call_txn``, ``:'a + 'b``,
    ``:'a list``, ``:'a option``, ``:'a # 'b``]
 
 fun build_checker_base () =

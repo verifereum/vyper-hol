@@ -640,3 +640,31 @@ val nested_map_both_keys_modules =
     : (num option # toplevel list) list``
 val () = check_accepts "nested map read, calls in both keys" false
   nested_map_layouts nested_map_both_keys_modules
+
+(* Constant initializers are folded at check time, as Vyper folds them at
+   compile time: an initializer that fails to evaluate is rejected, and so is
+   a forward reference, which the deployment fold's declaration order cannot
+   evaluate. *)
+val u256 = ``BaseT (UintT 256)``
+fun const_lit n = ``Literal ^u256 (IntL ^(intSyntax.term_of_int (Arbint.fromInt n)))``
+fun const_bop bop a b = ``Builtin ^u256 (Bop ^bop) [^a; ^b]``
+fun const_name id =
+  ``TopLevelName ^u256 (NONE, ^(stringSyntax.fromMLstring id))``
+fun const_decl id e =
+  ``VariableDecl Private (Constant ^e) ^(stringSyntax.fromMLstring id) ^u256 NONE``
+fun check_constants decls =
+  vyperCheckContractLib.check_contract_conv
+    ``check_contract F ^empty_layouts ^zero_address
+        [(NONE, ^(listSyntax.mk_list (decls, ``:toplevel``)))]``
+val max_u256 = ``TypeBuiltin ^u256 MaxValue ^u256 []``
+
+val () = assert_some (check_constants
+  [const_decl "A" (const_lit 1),
+   const_decl "B" (const_bop ``vyperAST$Add`` (const_name "A") (const_lit 2)),
+   const_decl "C" (const_bop ``vyperAST$Sub`` max_u256 (const_name "B"))])
+val () = List.app (assert_none o check_constants)
+  [[const_decl "X" (const_bop ``vyperAST$Div`` (const_lit 1) (const_lit 0))],
+   [const_decl "X" (const_bop ``vyperAST$Sub`` (const_lit 0) (const_lit 1))],
+   [const_decl "X" (const_bop ``vyperAST$Add`` max_u256 (const_lit 1))],
+   [const_decl "B" (const_bop ``vyperAST$Add`` (const_name "A") (const_lit 1)),
+    const_decl "A" (const_lit 1)]]
