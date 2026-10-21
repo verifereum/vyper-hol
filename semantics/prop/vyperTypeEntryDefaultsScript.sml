@@ -5,9 +5,10 @@
  *
  * Vyper accepts any RUNTIME_CONSTANT default (e.g. `msg.value - 1`), which can
  * revert at call time, so success is not a theorem.  The failing default is
- * characterised by its own `eval_expr` result: either a runtime error that is
- * not a TypeError, or a storage array reference, which `evaluate_defaults`
- * does not materialise.
+ * characterised by its own `eval_expr` result: a runtime error that is not a
+ * TypeError.  The checker requires defaults to be runtime-constant
+ * (`runtime_constant_expr`), so a default never reads storage and never
+ * yields a storage reference.
  *
  * The entry is the tuple selected by `lookup_exported_function` from the
  * initial call context, as in `call_external`.
@@ -272,6 +273,7 @@ Theorem checked_explicit_external_defaults_typed[local]:
   ALOOKUP mods src = SOME ts /\
   MEM (FunctionDecl External mut nr raw tx.function_name args dflts ret body) ts ==>
   well_typed_exprs (artifact_env art mods src) dflts /\
+  EVERY (runtime_constant_expr mods) dflts /\
   MAP expr_type dflts = MAP SND (DROP (LENGTH args - LENGTH dflts) args) /\
   (!arg. MEM arg args ==> assignable_type (type_env_all_modules mods) (SND arg)) /\
   (!e. MEM e dflts ==>
@@ -285,6 +287,7 @@ Proof
     metis_tac[check_contract_runtime_function_body_MEM] >>
   rpt conj_tac
   >- fs[check_function_body_def, defaults_env_function_entry_env]
+  >- fs[check_function_body_def]
   >- fs[check_function_body_def]
   >- (simp[FORALL_PROD] >>
       fs[check_function_body_def, params_ok_def, EVERY_MEM, FORALL_PROD]) >>
@@ -373,6 +376,7 @@ Theorem checked_selected_entry_defaults_setup[local]:
   lookup_exported_function cx am tx.function_name =
     SOME (mut,nr,args,dflts,ret,body) ==>
   well_typed_exprs (artifact_env art mods src) dflts /\
+  EVERY (runtime_constant_expr mods) dflts /\
   MAP expr_type dflts = MAP SND (DROP (LENGTH args - LENGTH dflts) args) /\
   (!arg. MEM arg args ==>
      ?tv. evaluate_type (type_env_all_modules mods) (SND arg) = SOME tv) /\
@@ -403,12 +407,89 @@ Proof
   metis_tac[well_formed_type_def, optionTheory.IS_SOME_EXISTS]
 QED
 
+(* ===== Runtime-constant defaults evaluate to values ===== *)
+
+(* A runtime-constant expression never evaluates to a storage or HashMap
+ * reference: its top-level names are constants and immutables, which
+ * lookup_global reads from the immutables map. *)
+Theorem runtime_constant_expr_eval_value[local]:
+  !mods e. runtime_constant_expr mods e ==>
+    !env cx st tv st'.
+      env_context_consistent env cx /\
+      (!src id. declared_constant mods src id \/ declared_immutable mods src id ==>
+         ?ty. FLOOKUP env.bare_globals (src,id) = SOME ty) /\
+      eval_expr cx e st = (INL tv, st') ==>
+      ?v. tv = Value v
+Proof
+  ho_match_mp_tac runtime_constant_expr_ind >>
+  rw[runtime_constant_expr_def]
+  >~ [`TopLevelName`]
+  >- (`?ty. FLOOKUP env.bare_globals (src,id) = SOME ty` by metis_tac[] >>
+      drule_all env_context_consistent_bare_global_find_NONE >> strip_tac >>
+      gvs[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
+          get_immutables_def, get_address_immutables_def, return_def,
+          raise_def, vyperMiscTheory.option_CASE_rator, vyperMiscTheory.sum_CASE_rator, AllCaseEqs()])
+  >~ [`TopLevelName`]
+  >- (`?ty. FLOOKUP env.bare_globals (src,id) = SOME ty` by metis_tac[] >>
+      drule_all env_context_consistent_bare_global_find_NONE >> strip_tac >>
+      gvs[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
+          get_immutables_def, get_address_immutables_def, return_def,
+          raise_def, vyperMiscTheory.option_CASE_rator, vyperMiscTheory.sum_CASE_rator, AllCaseEqs()])
+  >~ [`Subscript`]
+  >- (gvs[Once evaluate_def, bind_def, ignore_bind_def, return_def, raise_def,
+          lift_sum_def, lift_option_type_def, AllCaseEqs()] >>
+      rename1 `eval_expr cx e1 st = (INL tv1, s1)` >>
+      `?v1. tv1 = Value v1` by metis_tac[] >>
+      gvs[] >> Cases_on `v1` >> Cases_on `v2` >>
+      gvs[evaluate_subscript_def, return_def, raise_def, bind_def,
+          vyperMiscTheory.option_CASE_rator, vyperMiscTheory.sum_CASE_rator,
+          AllCaseEqs()])
+  >~ [`StructLit`]
+  >- (rename1 `StructLit _ nsid kes` >> Cases_on `nsid` >>
+      gvs[Once evaluate_def, bind_def, ignore_bind_def, return_def, raise_def,
+          AllCaseEqs()])
+  >~ [`IfExp`]
+  >- (gvs[Once evaluate_def, bind_def, switch_BoolV_def, return_def,
+          raise_def, COND_RATOR, AllCaseEqs()] >> metis_tac[])
+  >~ [`IfExp`]
+  >- (gvs[Once evaluate_def, bind_def, switch_BoolV_def, return_def,
+          raise_def, COND_RATOR, AllCaseEqs()] >> metis_tac[]) >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, return_def, raise_def,
+       lift_sum_def, type_check_def, assert_def] >>
+  rpt (CASE_TAC >> gvs[return_def, raise_def, runtime_constant_builtin_def]) >>
+  rw[] >> gvs[return_def, raise_def]
+QED
+
+(* Constants and immutables of a checked contract are bare globals of every
+ * module's artifact environment. *)
+Theorem checked_declared_globals_bare[local]:
+  check_contract F am.layouts tx.target mods = SOME art /\
+  ALOOKUP am.sources tx.target = SOME mods ==>
+  !src id. declared_constant mods src id \/ declared_immutable mods src id ==>
+    ?ty. FLOOKUP art.cta_bare_globals (src,id) = SOME ty
+Proof
+  rpt strip_tac >>
+  `contract_namespaces_ok F mods` by
+    (qpat_x_assum `check_contract _ _ _ _ = _` mp_tac >>
+     simp[check_contract_def] >> metis_tac[]) >>
+  `bare_globals_complete art.cta_bare_globals
+     (initial_evaluation_context am.sources am.layouts tx src)` by
+    (irule check_contract_bare_globals_complete_initial >> metis_tac[]) >>
+  gvs[declared_constant_def, declared_immutable_def, bare_globals_complete_def,
+      get_module_code_def, initial_evaluation_context_def] >>
+  `ALOOKUP mods src = SOME tls` by
+    (irule alistTheory.ALOOKUP_ALL_DISTINCT_MEM >>
+     gvs[contract_namespaces_ok_def]) >>
+  metis_tac[]
+QED
+
 (* Defaults dichotomy: under a checked contract, the needed default suffix of
  * the selected entry either evaluates to values of the remaining parameters'
  * types, or `evaluate_defaults` stops at a default `e`: every default before
  * it evaluated to a value, and `e`'s own evaluation fails with a runtime error
- * that is not a TypeError, or yields a storage array reference (which
- * `evaluate_defaults` does not materialise). *)
+ * that is not a TypeError.  A checked default is runtime-constant, so it
+ * cannot evaluate to a storage reference. *)
 Theorem checked_selected_entry_defaults_cases:
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\
@@ -432,11 +513,8 @@ Theorem checked_selected_entry_defaults_cases:
        pre ++ e::post /\
      EVERY (\e'. ?v. FST (eval_expr cx e' (initial_state am [FEMPTY])) =
                        INL (Value v)) pre /\
-     ((?err. FST (eval_expr cx e (initial_state am [FEMPTY])) = INR err /\
-             no_type_error_result (INR err : toplevel_value + exception)) \/
-      (?is_transient slot elem_tv bd.
-         FST (eval_expr cx e (initial_state am [FEMPTY])) =
-           INL (ArrayRef is_transient slot elem_tv bd))))
+     ?err. FST (eval_expr cx e (initial_state am [FEMPTY])) = INR err /\
+           no_type_error_result (INR err : toplevel_value + exception))
 Proof
   strip_tac >>
   drule_all checked_selected_entry_defaults_setup >> strip_tac >>
@@ -454,7 +532,23 @@ Proof
   >- (disj1_tac >> qexists_tac `vs` >> simp[] >>
       irule defaults_values_typed_args >>
       qexists_tac `needed` >> gvs[artifact_env_def]) >>
-  disj2_tac >> simp[] >> metis_tac[]
+  disj2_tac >> simp[] >>
+  qexistsl [`pre`, `e`, `post`] >> simp[] >>
+  (* The remaining case, a default yielding a storage reference, is
+     impossible for a runtime-constant default. *)
+  `MEM e needed` by (qpat_x_assum `_ = _ ++ _ :: _` SUBST1_TAC >> simp[]) >>
+  `MEM e dflts` by
+    (fs[markerTheory.Abbrev_def] >> metis_tac[rich_listTheory.MEM_DROP_IMP]) >>
+  `runtime_constant_expr mods e` by metis_tac[listTheory.EVERY_MEM] >>
+  `env_context_consistent (artifact_env art mods src) cx` by
+    gvs[env_consistent_def] >>
+  `ALOOKUP am.sources tx.target = SOME mods` by
+    gvs[checked_contract_runtime_ready_def] >>
+  `!s i. declared_constant mods s i \/ declared_immutable mods s i ==>
+          ?ty. FLOOKUP (artifact_env art mods src).bare_globals (s,i) = SOME ty` by
+    (drule checked_declared_globals_bare >> simp[artifact_env_def]) >>
+  Cases_on `eval_expr cx e (initial_state am [FEMPTY])` >> gvs[] >>
+  drule_all runtime_constant_expr_eval_value >> strip_tac >> gvs[]
 QED
 
 (* Binding corollary: when the needed defaults evaluate, the provided and
