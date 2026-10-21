@@ -1311,6 +1311,96 @@ val () = extend_place_def
   |> SRULE [FUN_EQ_THM, bind_def, ignore_bind_def, LET_RATOR]
   |> cv_auto_trans;
 
+(* Resolve global locations without loading storage; mapping roots await a key. *)
+Definition lookup_global_place_def:
+  lookup_global_place cx src_id_opt n = do
+    ts <- lift_option_type (get_module_code cx src_id_opt) "lookup_global get_module_code";
+    tenv <<- get_tenv cx;
+    case find_var_decl_by_name n ts of
+    | NONE => do
+        imms <- get_immutables cx src_id_opt;
+        case FLOOKUP imms n of
+        | SOME tvv => return (PlaceR (ImmutablePlace src_id_opt n []))
+        | NONE => raise $ Error (TypeError "lookup_global: var not found")
+      od
+    | SOME (StorageVarDecl tr typ, id) => do
+        slot <- lift_option_type (lookup_var_slot_from_layout cx tr src_id_opt id) "lookup_global var_slot";
+        tv <- lift_option_type (evaluate_type tenv typ) "lookup_global evaluate_type";
+        return (PlaceR (StoragePlace tr (n2w slot) tv))
+      od
+    | SOME (HashMapVarDecl tr kt vt, id) => do
+        slot <- lift_option_type (lookup_var_slot_from_layout cx tr src_id_opt id) "lookup_global hashmap var_slot";
+        return (ValueR (HashMapRef tr (n2w slot) kt vt))
+      od
+  od
+End
+
+val () = lookup_global_place_def
+  |> SRULE [bind_def, FUN_EQ_THM, option_CASE_rator,
+            prod_CASE_rator, var_decl_info_CASE_rator, UNCURRY, LET_THM]
+  |> cv_auto_trans;
+
+Definition get_place_def:
+  get_place (PlaceR p) = return p /\
+  get_place (ValueR tv) = raise (Error (TypeError "target is not a place"))
+End
+
+val () = get_place_def |> SRULE [FUN_EQ_THM] |> cv_auto_trans;
+
+Definition extend_target_place_def:
+  extend_target_place cx (PlaceR p) sb =
+    extend_place cx (BaseTV (UintT 256)) (PlaceR p) sb /\
+  extend_target_place cx (ValueR (HashMapRef tr slot kt vt)) sb =
+    extend_place cx (BaseTV (UintT 256)) (ValueR (HashMapRef tr slot kt vt)) sb /\
+  extend_target_place cx pv sb =
+    raise (Error (TypeError "extend_target_place"))
+End
+
+val () = extend_target_place_def |> SRULE [FUN_EQ_THM] |> cv_auto_trans;
+
+Theorem extend_place_hashmap_type_independent:
+  extend_place cx tv1 (ValueR (HashMapRef tr slot kt vt)) (ValueSubscript kv) =
+  extend_place cx tv2 (ValueR (HashMapRef tr slot kt vt)) (ValueSubscript kv)
+Proof
+  simp[extend_place_def, evaluate_subscript_def]
+QED
+
+Theorem get_place_unresolved_hashmap:
+  get_place (ValueR (HashMapRef tr slot kt vt)) =
+    raise (Error (TypeError "target is not a place"))
+Proof
+  simp[get_place_def]
+QED
+
+Theorem lookup_global_place_mapping:
+  get_module_code cx src = SOME ts /\
+  find_var_decl_by_name n ts = SOME (HashMapVarDecl tr kt vt, id) /\
+  lookup_var_slot_from_layout cx tr src id = SOME slot ==>
+  lookup_global_place cx src n st =
+    (INL (ValueR (HashMapRef tr (n2w slot) kt vt)), st)
+Proof
+  simp[lookup_global_place_def, bind_def, lift_option_type_def, return_def]
+QED
+
+Theorem extend_target_place_nested_mapping:
+  extend_target_place cx (ValueR (HashMapRef tr slot kt (HashMapT kt' vt')))
+    (ValueSubscript kv) st =
+  (INL (ValueR (HashMapRef tr (hashmap_slot slot (encode_hashmap_key kt kv)) kt' vt')), st)
+Proof
+  simp[extend_target_place_def, extend_place_def, evaluate_subscript_def,
+       lift_sum_def, bind_def, return_def, subscript_result_place_def]
+QED
+
+Theorem extend_target_place_mapping_leaf:
+  evaluate_type (get_tenv cx) typ = SOME tv ==>
+  extend_target_place cx (ValueR (HashMapRef tr slot kt (Type typ)))
+    (ValueSubscript kv) st =
+  (INL (PlaceR (StoragePlace tr (hashmap_slot slot (encode_hashmap_key kt kv)) tv)), st)
+Proof
+  simp[extend_target_place_def, extend_place_def, evaluate_subscript_def,
+       lift_sum_def, bind_def, return_def, subscript_result_place_def]
+QED
+
 Theorem find_containing_scope_reconstruct:
   !sc id pre env entry rest.
     find_containing_scope id sc = SOME (pre,env,entry,rest) ==>
@@ -1545,3 +1635,14 @@ Proof
          subscript_type_def, return_def]))
 QED
 
+
+(* Audit the new place-root boundary's kernel dependencies. *)
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if List.all (fn s => s = "DISK_THM") oracles andalso null axioms
+     then () else raise Fail "place-root boundary has admitted dependencies"
+  end)
+  [lookup_global_place_def, get_place_def, extend_target_place_def,
+   extend_place_hashmap_type_independent, get_place_unresolved_hashmap,
+   lookup_global_place_mapping, extend_target_place_nested_mapping,
+   extend_target_place_mapping_leaf];
