@@ -338,11 +338,11 @@ Definition bp_ptr_sound_def:
       ∃p. MEM p (bp_get_ptrs bp v) ∧ ptr_matches_var p v s
 End
 
-(* Every PHI whose result is tracked has tracked operands, and its result
-   covers their pointers, possibly with the offset forgotten.  The analysis
-   gives the cover at its fixpoint (bp_handle_inst_phi_stable); that the
-   operands are tracked is a property of the IR (Vyper never merges a memory
-   pointer with a non-pointer).  With it, eval_phis preserves bp_ptr_sound
+(* Every PHI whose result is tracked has tracked operands.  This is a
+   property of the IR (Vyper never merges a memory pointer with a
+   non-pointer).  The other half of what eval_phis needs, that the result
+   covers the operands' pointers, holds once the PHI is stable
+   (bp_handle_inst_phi_stable); with both, eval_phis preserves bp_ptr_sound
    (bp_phis_closed_eval_phis). *)
 Definition bp_phis_closed_def:
   bp_phis_closed (bp : bp_result) (fn : ir_function) ⇔
@@ -351,9 +351,7 @@ Definition bp_phis_closed_def:
       inst.inst_opcode = PHI ∧ inst.inst_outputs = [out] ∧
       bp_get_ptrs bp out ≠ [] ∧
       MEM v (MAP SND (phi_pairs inst.inst_operands)) ⇒
-      bp_get_ptrs bp v ≠ [] ∧
-      ∀p. MEM p (bp_get_ptrs bp v) ⇒
-        ∃q. MEM q (bp_get_ptrs bp out) ∧ (q = p ∨ q = Ptr (ptr_base p) NONE)
+      bp_get_ptrs bp v ≠ []
 End
 
 (* Every memory access through an alloca-backed pointer is fully within
