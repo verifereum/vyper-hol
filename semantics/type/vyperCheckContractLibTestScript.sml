@@ -1,7 +1,7 @@
 Theory vyperCheckContractLibTest
 Ancestors
   vyperTypeContract evalCompilerSubsetAbiBuiltins vyperABI vyperContext
-  vyperTypeSystem
+  vyperTypeSystem vyperTyping vyperValueOperation
 Libs
   vyperCheckContractLib cv_transLib
 
@@ -10,6 +10,43 @@ val empty_layouts =
 val empty_modules =
   ``([(NONE, [])] : (num option # toplevel list) list)``
 val zero_address = ``(0w : address)``
+
+(* AddressV is represented as twenty bytes. Wider destinations need different
+   padding from ordinary byte strings and deliberately remain unsupported. *)
+Theorem address_bytes_conversion_boundary:
+  valid_conversion (BaseT AddressT) (BaseT (BytesT bd)) <=> bd = Fixed 20
+Proof
+  Cases_on `bd` >> simp[valid_conversion_def]
+QED
+
+Theorem address_bytes20_preserves_value:
+  value_has_type (BaseTV AddressT) v ==>
+  evaluate_convert tenv v (BaseT (BytesT (Fixed 20))) = INL v
+Proof
+  Cases_on `v` >>
+  simp[value_has_type_def, evaluate_convert_def, listTheory.PAD_RIGHT] >>
+  strip_tac >> gvs[]
+QED
+
+Theorem address_bytes20_values_eval:
+  evaluate_convert FEMPTY (AddressV 0w) (BaseT (BytesT (Fixed 20))) =
+    INL (BytesV (REPLICATE 20 0w)) /\
+  evaluate_convert FEMPTY (AddressV 1w) (BaseT (BytesT (Fixed 20))) =
+    INL (BytesV (REPLICATE 19 0w ++ [1w])) /\
+  evaluate_convert FEMPTY (AddressV 1461501637330902918203684832716283019655932542975w)
+    (BaseT (BytesT (Fixed 20))) = INL (BytesV (REPLICATE 20 255w))
+Proof
+  EVAL_TAC
+QED
+
+Theorem address_bytes_conversion_widths_eval:
+  EVERY (λn. valid_conversion (BaseT AddressT) (BaseT (BytesT (Fixed n))) =
+             (n = 20)) (GENLIST SUC 32) /\
+  ¬valid_conversion (BaseT AddressT) (BaseT (BytesT (Dynamic 20))) /\
+  ¬valid_conversion (BaseT AddressT) (BaseT (BytesT (Dynamic 32)))
+Proof
+  EVAL_TAC
+QED
 
 (* ABI encoding's bound follows the evaluator's singleton wrapping mode.
    The unchanged encode_dynamic fixture has an inner bound of 192 bytes,
@@ -131,6 +168,27 @@ fun assert_some th =
 fun assert_none th =
   if optionSyntax.is_none (rhs (concl th)) then ()
   else raise Fail "expected rejected check_contract result"
+
+fun check_address_bytes bd in_deploy = let
+  val modules =
+    ``([(NONE,
+         [FunctionDecl External Pure F F "f"
+            [("a", BaseT AddressT)] [] (BaseT (BytesT ^bd))
+            [Return (SOME
+               (TypeBuiltin (BaseT (BytesT ^bd)) Convert
+                 (BaseT (BytesT ^bd)) [Name (BaseT AddressT) "a"]))]])]
+        : (num option # toplevel list) list)``
+in
+  vyperCheckContractLib.check_contract_conv
+    ``check_contract ^(if in_deploy then T else F) ^empty_layouts
+        ^zero_address ^modules``
+end
+
+val () = List.app (fn in_deploy =>
+  (assert_some (check_address_bytes ``Fixed 20`` in_deploy);
+   List.app (fn bd => assert_none (check_address_bytes bd in_deploy))
+     [``Fixed 19``, ``Fixed 21``, ``Fixed 32``,
+      ``Dynamic 20``, ``Dynamic 32``])) [false, true]
 
 (* Basic API and ML-Boolean construction. *)
 val empty_check = vyperCheckContractLib.check_contract
