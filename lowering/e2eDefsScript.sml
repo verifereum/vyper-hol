@@ -200,36 +200,6 @@ Proof
   metis_tac[]
 QED
 
-Theorem encode_indexed_event_topics_characterization:
-  encode_indexed_event_topics flags tys vals = SOME topics <=>
-  LENGTH flags = LENGTH tys /\
-  LENGTH flags = LENGTH vals /\
-  log_indexed_topics_equiv
-    (indexed_topic_flags flags (MAP is_bytestring_type tys))
-    (indexed_values flags vals) topics
-Proof
-  `!ty. is_event_bytestring_type ty = is_bytestring_type ty` by
-    (gen_tac >> Cases_on `ty` >> simp[is_event_bytestring_type_def,
-                                      is_bytestring_type_def] >>
-     Cases_on `b` >> simp[is_event_bytestring_type_def,
-                          is_bytestring_type_def] >>
-     Cases_on `b'` >> simp[is_event_bytestring_type_def,
-                           is_bytestring_type_def]) >>
-  qid_spec_tac `topics` >> qid_spec_tac `vals` >> qid_spec_tac `tys` >>
-  Induct_on `flags`
-  >- (Cases_on `tys` >> Cases_on `vals` >> Cases_on `topics` >>
-      simp[encode_indexed_event_topics_def, indexed_topic_flags_def,
-           indexed_values_def, log_indexed_topics_equiv_def])
-  >> qx_gen_tac `flag` >> qx_gen_tac `tys` >>
-  qx_gen_tac `vals` >> qx_gen_tac `topics` >>
-  Cases_on `tys` >> Cases_on `vals` >> Cases_on `flag` >>
-  Cases_on `topics` >>
-  gvs[encode_indexed_event_topics_def, indexed_topic_flags_def,
-      indexed_values_def, log_indexed_topics_equiv_def,
-      is_event_bytestring_type_def, is_bytestring_type_def,
-      encode_event_topic_eq_log_topic_equiv, AllCaseEqs()] >>
-  metis_tac[]
-QED
 
 Theorem non_indexed_event_args_characterization:
   non_indexed_event_args flags tys vals = SOME typed_vals <=>

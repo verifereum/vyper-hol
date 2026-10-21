@@ -98,6 +98,16 @@ Definition event_value_to_word_def:
   event_value_to_word _ = 0w
 End
 
+Definition event_value_to_word_for_type_def:
+  event_value_to_word_for_type (BaseT AddressT) (BytesV bs) =
+    word_of_bytes_be (PAD_LEFT 0w 32 bs) ∧
+  event_value_to_word_for_type (BaseT (BytesT (Fixed _))) (BytesV bs) =
+    word_of_bytes_be (PAD_RIGHT 0w 32 bs) ∧
+  event_value_to_word_for_type _ v = event_value_to_word v
+End
+
+val () = cv_auto_trans event_value_to_word_for_type_def;
+
 Definition encode_event_topic_def:
   encode_event_topic T (BytesV bs) =
     SOME (word_of_bytes_be (Keccak_256_w64 bs)) ∧
@@ -110,7 +120,9 @@ End
 Definition encode_indexed_event_topics_def:
   encode_indexed_event_topics [] [] [] = SOME ([] : bytes32 list) ∧
   encode_indexed_event_topics (T::fs) (ty::tys) (v::vs) =
-    (case encode_event_topic (is_event_bytestring_type ty) v of
+    (case if is_event_bytestring_type ty
+          then encode_event_topic T v
+          else SOME (event_value_to_word_for_type ty v) of
      | NONE => NONE
      | SOME topic =>
          OPTION_MAP (CONS topic) (encode_indexed_event_topics fs tys vs)) ∧
