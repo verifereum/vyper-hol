@@ -2671,7 +2671,8 @@ Definition compile_builtin_dispatch_body_def:
           let (start_op, st1) = lower_value compile_expr cenv
                                   (expr_type start_e) start_e st in
           as_ptr_val ret_ty LocMemory
-            (compile_slice_calldata start_op (Lit (n2w n)) (n + 32) st1))
+            (compile_slice_calldata start_op (Lit (n2w n))
+               (type_memory_bytes cenv ret_ty) st1))
      | Len =>
          (let e1 = HD args in
           if is_msg_data e1 then
@@ -2756,7 +2757,7 @@ Definition compile_builtin_dispatch_body_def:
           (LocatedValue ret_ty (base_ptr buf_op_alloc), st5))
      | Slice max_len =>
          (let src_e = HD args in let start_e = EL 1 args in let len_e = EL 2 args in
-          let out_size = max_len + 32 in
+          let out_size = type_memory_bytes cenv ret_ty in
           if is_msg_data src_e then
             (let (start_op, st1) = lower_value compile_expr cenv ty start_e st in
              let (len_op, st2) = lower_value compile_expr cenv ty len_e st1 in
@@ -2770,16 +2771,22 @@ Definition compile_builtin_dispatch_body_def:
              let (addr_op, st1) = lower_value compile_expr cenv ty addr_e st in
              let (start_op, st2) = lower_value compile_expr cenv ty start_e st1 in
              let (len_op, st3) = lower_value compile_expr cenv ty len_e st2 in
-             as_ptr_val ret_ty LocMemory (compile_slice_extcode addr_op start_op len_op out_size st3))
+             let ((out_buf, out_data), st4) = compile_slice_out_buf out_size st3 in
+             as_ptr_val ret_ty LocMemory
+               (compile_slice_extcode addr_op start_op len_op out_buf out_data st4))
           else
             let src_ty = expr_type src_e in
             (* lower_value handles ensure_in_memory for bytestrings *)
             (let (src_op, st1) = lower_value compile_expr cenv src_ty src_e st in
-             let (start_op, st2) = lower_value compile_expr cenv ty start_e st1 in
-             let (len_op, st3) = lower_value compile_expr cenv ty len_e st2 in
              if is_bytestring_type src_ty then
-               as_ptr_val ret_ty LocMemory (compile_slice_memory src_op start_op len_op out_size st3)
+               let ((src_len, src_data), st2) = compile_bytestring_src src_op st1 in
+               let (start_op, st3) = lower_value compile_expr cenv ty start_e st2 in
+               let (len_op, st4) = lower_value compile_expr cenv ty len_e st3 in
+               as_ptr_val ret_ty LocMemory
+                 (compile_slice_data src_len src_data start_op len_op out_size st4)
              else
+               let (start_op, st2) = lower_value compile_expr cenv ty start_e st1 in
+               let (len_op, st3) = lower_value compile_expr cenv ty len_e st2 in
                let m = fixed_bytes_size src_ty in
                               let (tmp_buf_alloc, st5) = compile_alloc_buffer 64 st3 in
                               let tmp_buf = tmp_buf_alloc.buf_operand in
@@ -2790,7 +2797,8 @@ Definition compile_builtin_dispatch_body_def:
      | Uint2Str max_len =>
          (let e1 = HD args in
           let (v, st1) = lower_value compile_expr cenv ty e1 st in
-          as_ptr_val ret_ty LocMemory (compile_uint2str v max_len st1))
+          as_ptr_val ret_ty LocMemory
+            (compile_uint2str v max_len (type_memory_bytes cenv ret_ty) st1))
      | AsWeiValue denom =>
          (let e1 = HD args in
           let arg_ty = expr_type e1 in
