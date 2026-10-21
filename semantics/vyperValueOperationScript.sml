@@ -639,12 +639,12 @@ Definition evaluate_convert_def:
        if 0 ≤ i ∧ Num i < 2 ** m then INL $ FlagV (Num i)
        else INR (RuntimeError "convert int flag bound")
      | _ => INR (TypeError "convert to unknown flag")) ∧
-  (* IntV → BytesT: extract upper m bytes of big-endian 32-byte encoding.
-     For Fixed m: TAKE m gives bytesM. For Dynamic n: full 32 bytes if n >= 32.
-     Mirrors Python: convert.py _to_Bytes for integer sources. *)
+  (* IntV → BytesT: retain the least-significant m bytes of the
+     big-endian 32-byte two's-complement encoding.  For Dynamic n, use the
+     full 32 bytes when n >= 32.  Mirrors Vyper integer conversion. *)
   evaluate_convert _ (IntV i) (BaseT (BytesT (Fixed m))) =
     (if m ≤ 32
-     then INL $ BytesV (TAKE m (word_to_bytes_be ((i2w i):bytes32)))
+     then INL $ BytesV (DROP (32 - m) (word_to_bytes_be ((i2w i):bytes32)))
      else INR (RuntimeError "convert int to bytes")) ∧
   evaluate_convert _ (IntV i) (BaseT (BytesT (Dynamic n))) =
     (if n ≥ 32
