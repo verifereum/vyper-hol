@@ -184,6 +184,19 @@ val checker_defs =
    vyperASTTheory.type_to_int_bound_def,
    vyperASTTheory.int_bound_bits_def,
    vyperASTTheory.is_Unsigned_def,
+   intExtensionTheory.SGN_def,
+   int_bitwiseTheory.int_and_def,
+   int_bitwiseTheory.int_or_def,
+   int_bitwiseTheory.int_xor_def,
+   int_bitwiseTheory.int_bitwise_def,
+   int_bitwiseTheory.int_shift_left_def,
+   int_bitwiseTheory.int_shift_right_def,
+   int_bitwiseTheory.int_not_def,
+   int_bitwiseTheory.bits_of_int_def,
+   int_bitwiseTheory.bits_of_num_def,
+   int_bitwiseTheory.int_of_bits_def,
+   int_bitwiseTheory.num_of_bits_def,
+   int_bitwiseTheory.bits_bitwise_def,
    alistTheory.ADELKEY_def,
    optionTheory.OPTION_MAP_DEF]
 
@@ -224,6 +237,8 @@ fun build_checker_base () =
   |> ASCIInumbersLib.add_ASCIInumbers_compset
   |> intReduce.add_int_compset
   |> wordsLib.add_words_compset false
+  |> integer_wordLib.add_integer_word_compset
+  |> bitLib.add_bit_compset
   |> finite_mapLib.add_finite_map_compset
   |> alistLib.add_alist_compset
   |> stringLib.add_string_compset

@@ -668,3 +668,35 @@ val () = List.app (assert_none o check_constants)
    [const_decl "X" (const_bop ``vyperAST$Add`` max_u256 (const_lit 1))],
    [const_decl "B" (const_bop ``vyperAST$Add`` (const_name "A") (const_lit 1)),
     const_decl "A" (const_lit 1)]]
+
+
+(* Every operation a constant initializer can use evaluates, rather than
+   leaving check_contract stuck. *)
+fun tdecl ty id e =
+  ``VariableDecl Private (Constant ^e) ^(stringSyntax.fromMLstring id) ^ty NONE``
+fun tbop ty bop a b = ``Builtin ^ty (Bop ^bop) [^a; ^b]``
+fun tname ty id = ``TopLevelName ^ty (NONE, ^(stringSyntax.fromMLstring id))``
+val dec = ``BaseT DecimalT``
+val b32 = ``BaseT (BytesT (Fixed 32))``
+fun dlit n =
+  ``Literal ^dec (DecimalL ^(intSyntax.term_of_int (Arbint.fromString n)))``
+fun int_const bop a b = [const_decl "X" (const_bop bop (const_lit a) (const_lit b))]
+fun dec_const bop =
+  [tdecl dec "X" (tbop dec bop (dlit "15000000000") (dlit "20000000000"))]
+val keccak_a =
+  ``Builtin ^b32 Keccak256 [Literal (BaseT (StringT 1)) (StringL "a")]``
+val () = List.app (assert_some o check_constants)
+  [int_const ``vyperAST$Div`` 7 2,
+   int_const ``vyperAST$Mod`` 7 3,
+   int_const ``vyperAST$Exp`` 10 18,
+   int_const ``vyperAST$And`` 6 3,
+   int_const ``vyperAST$Or`` 6 3,
+   int_const ``vyperAST$XOr`` 6 3,
+   int_const ``vyperAST$ShR`` 256 4,
+   [const_decl "X" (const_bop ``vyperAST$Sub``
+      (const_bop ``vyperAST$ShL`` (const_lit 1) (const_lit 160)) (const_lit 1))],
+   dec_const ``vyperAST$Mul``,
+   dec_const ``vyperAST$Div``,
+   [tdecl b32 "K" keccak_a,
+    tdecl ``BaseT BoolT`` "E"
+      ``Builtin (BaseT BoolT) (Bop Eq) [^(tname b32 "K"); ^(tname b32 "K")]``]]
