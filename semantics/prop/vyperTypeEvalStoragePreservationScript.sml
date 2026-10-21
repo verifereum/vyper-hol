@@ -3123,24 +3123,24 @@ Proof
     fs[env_consistent_def, env_context_consistent_def] >>
   `env_consistent (extend_local env id ty F) cx
      (st with scopes updated_by
-       CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v|>)))` by (
+       CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v; popped := []|>)))` by (
     irule push_scope_with_var_env_consistent >>
     metis_tac[]) >>
   `state_well_typed
      (st with scopes updated_by
-       CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v|>)))` by (
+       CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v; popped := []|>)))` by (
     gvs[runtime_storage_consistent_def, runtime_consistent_def,
         state_well_typed_def, scope_well_typed_def,
         finite_mapTheory.FLOOKUP_UPDATE]) >>
   `runtime_consistent (extend_local env id ty F) cx
      (st with scopes updated_by
-       CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v|>)))` by
+       CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v; popped := []|>)))` by
     (simp[runtime_consistent_def] >> metis_tac[runtime_consistent_def]) >>
   `contract_storage_well_formed cx st` by
     metis_tac[runtime_storage_consistent_storage] >>
   `contract_storage_well_formed cx
      (st with scopes updated_by
-       CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v|>)))` by (
+       CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v; popped := []|>)))` by (
     irule contract_storage_well_formed_storage_frame >>
     qexists_tac `st` >> simp[] >>
     gen_tac >> Cases_on `b` >>
@@ -3161,7 +3161,7 @@ Resume eval_all_storage_preservation_mutual[For_cons]:
   strip_tac >>
   `stp =
     st with scopes updated_by
-      CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v|>))` by
+      CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v; popped := []|>))` by
     simp[Abbr`stp`] >>
   `stp.scopes <> []` by simp[Abbr`stp`] >>
   qunabbrev_tac `loop_body` >>

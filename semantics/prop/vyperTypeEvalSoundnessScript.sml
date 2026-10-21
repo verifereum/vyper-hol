@@ -1298,7 +1298,7 @@ Theorem for_body_env_extends_consistent_after_pop:
   env_consistent env_body cx st_body /\
   eval_stmts cx body_stmts
     (st with scopes updated_by CONS
-       (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v|>))) =
+       (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v; popped := []|>))) =
     (res, st_body) ==>
   env_consistent env cx (st_body with scopes := TL st_body.scopes)
 Proof
@@ -1317,7 +1317,7 @@ Proof
     conj_tac >> rpt strip_tac
     >- (irule scope_bracket_var_type_head_none >>
         qexists_tac `cx` >> qexists_tac `env` >> qexists_tac `res` >>
-        qexists_tac `FEMPTY |+ (id, <|assignable := F; type := tyv; value := v|>)` >>
+        qexists_tac `FEMPTY |+ (id, <|assignable := F; type := tyv; value := v; popped := []|>)` >>
         qexists_tac `body_stmts` >> qexists_tac `st` >> qexists_tac `st_body` >>
         qexists_tac `tl` >> qexists_tac `ty'` >>
         simp[FLOOKUP_UPDATE, FDOM_FUPDATE]) >>
@@ -1325,7 +1325,7 @@ Proof
     Cases_on `FLOOKUP env.var_types id'` >> gvs[] >>
     irule scope_bracket_var_type_head_none >>
     qexists_tac `cx` >> qexists_tac `env` >> qexists_tac `res` >>
-    qexists_tac `FEMPTY |+ (id, <|assignable := F; type := tyv; value := v|>)` >>
+    qexists_tac `FEMPTY |+ (id, <|assignable := F; type := tyv; value := v; popped := []|>)` >>
     qexists_tac `body_stmts` >> qexists_tac `st` >> qexists_tac `st_body` >>
     qexists_tac `tl` >> qexists_tac `x` >>
     simp[FLOOKUP_UPDATE, FDOM_FUPDATE]) >>
@@ -1336,7 +1336,7 @@ Proof
       irule scope_bracket_new_var_tail_none >>
       qexists_tac `cx` >> qexists_tac `env` >> qexists_tac `h` >>
       qexists_tac `res` >>
-      qexists_tac `FEMPTY |+ (id, <|assignable := F; type := tyv; value := v|>)` >>
+      qexists_tac `FEMPTY |+ (id, <|assignable := F; type := tyv; value := v; popped := []|>)` >>
       qexists_tac `body_stmts` >> qexists_tac `st` >> qexists_tac `st_body` >> simp[]) >>
     irule env_extends_trans >>
     qexists_tac `extend_local env id ty F` >> simp[] >>
@@ -1347,7 +1347,7 @@ Proof
   pop_assum SUBST1_TAC >>
   irule eval_stmts_scope_bracket_gen_preserves_tv >> simp[] >>
   qexists_tac `res` >>
-  qexists_tac `FEMPTY |+ (id, <|assignable := F; type := tyv; value := v|>)` >>
+  qexists_tac `FEMPTY |+ (id, <|assignable := F; type := tyv; value := v; popped := []|>)` >>
   qexists_tac `body_stmts` >> simp[] >>
   irule (cj 2 eval_preserves_tv) >>
   qexists_tac `res` >> qexists_tac `body_stmts` >> simp[]
@@ -1366,7 +1366,7 @@ Theorem for_cons_popped_env_consistent_from_stmt_case:
   id NOTIN FDOM env.var_types ==>
   eval_stmts cx body_stmts
     (st with scopes updated_by CONS
-       (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v|>))) =
+       (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v; popped := []|>))) =
     (INR exn, st_body) ==>
   env_consistent env cx (st_body with scopes := TL st_body.scopes)
 Proof
@@ -1385,7 +1385,7 @@ Theorem for_body_env_consistent_after_pop:
   env_consistent env_after cx st_body /\
   eval_stmts cx body_stmts
     (st with scopes updated_by CONS
-       (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v|>))) =
+       (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v; popped := []|>))) =
     (res, st_body) ==>
   env_consistent env cx (st_body with scopes := TL st_body.scopes)
 Proof
@@ -1485,7 +1485,7 @@ Theorem for_body_decompose_for_cons_pushed[local]:
   !cx body_stmts st id tyv v res st' stp.
     stp =
       st with scopes updated_by
-        CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v|>)) /\
+        CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v; popped := []|>)) /\
     finally (try do eval_stmts cx body_stmts; return F od handle_loop_exception)
       pop_scope stp = (res, st') ==>
     ?res_body st_body.
@@ -1522,7 +1522,7 @@ Theorem for_cons_pushed_state_well_typed[local]:
   state_well_typed st /\ value_has_type tyv v /\ well_formed_type_value tyv ==>
   state_well_typed
     (st with scopes updated_by
-       CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v|>)))
+       CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v; popped := []|>)))
 Proof
   rw[state_well_typed_def, scope_well_typed_def, FLOOKUP_UPDATE]
 QED
@@ -3135,7 +3135,7 @@ Resume eval_all_type_sound_mutual[For_cons]:
   strip_tac >>
   `stp =
     st with scopes updated_by
-      CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v|>))` by
+      CONS (FEMPTY |+ (id, <|assignable := F; type := tyv; value := v; popped := []|>))` by
     simp[Abbr`stp`] >>
   qunabbrev_tac `loop_body` >>
   drule for_body_decompose_for_cons_pushed >>
@@ -3170,7 +3170,7 @@ Resume eval_all_type_sound_mutual[For_cons]:
     `state_well_typed (st_body with scopes := TL st_body.scopes)` by (
       irule scope_bracket_preserves_swt >> simp[] >>
       qexists_tac `cx` >> qexists_tac `INL x` >>
-      qexists_tac `FEMPTY |+ (id, <|assignable := F; type := tyv; value := v|>)` >>
+      qexists_tac `FEMPTY |+ (id, <|assignable := F; type := tyv; value := v; popped := []|>)` >>
       qexists_tac `body'` >> qexists_tac `st` >> simp[Abbr`stp`]) >>
     `accounts_well_typed (st_body with scopes := TL st_body.scopes).accounts` by
       simp[evaluation_state_component_equality] >>
@@ -3212,7 +3212,7 @@ Resume eval_all_type_sound_mutual[For_cons]:
   `state_well_typed (st_body with scopes := TL st_body.scopes)` by (
     irule scope_bracket_preserves_swt >> simp[] >>
     qexists_tac `cx` >> qexists_tac `INR y` >>
-    qexists_tac `FEMPTY |+ (id, <|assignable := F; type := tyv; value := v|>)` >>
+    qexists_tac `FEMPTY |+ (id, <|assignable := F; type := tyv; value := v; popped := []|>)` >>
     qexists_tac `body'` >> qexists_tac `st` >> simp[Abbr`stp`]) >>
   `accounts_well_typed (st_body with scopes := TL st_body.scopes).accounts` by
     simp[evaluation_state_component_equality] >>

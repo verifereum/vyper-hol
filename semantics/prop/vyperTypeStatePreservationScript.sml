@@ -229,7 +229,7 @@ QED
 
 Theorem scope_well_typed_update_value:
   scope_well_typed sc /\ FLOOKUP sc n = SOME entry /\ value_has_type entry.type v ==>
-  scope_well_typed (sc |+ (n, entry with value := v))
+  scope_well_typed (sc |+ (n, entry with <|value := v; popped := ps|>))
 Proof
   rw[scope_well_typed_def, FLOOKUP_UPDATE] >>
   Cases_on `n = id` >> gvs[] >>
@@ -258,8 +258,8 @@ QED
 Theorem lookup_scopes_update_existing_value_at_found_scope:
   !pre sc rest n entry v.
     lookup_scopes n pre = NONE /\ FLOOKUP sc n = SOME entry ==>
-    lookup_scopes n (pre ++ (sc |+ (n, entry with value := v))::rest) =
-    SOME (entry with value := v) /\
+    lookup_scopes n (pre ++ (sc |+ (n, entry with <|value := v; popped := ps|>))::rest) =
+    SOME (entry with <|value := v; popped := ps|>) /\
     lookup_scopes n (pre ++ sc::rest) = SOME entry
 Proof
   Induct >> simp[lookup_scopes_def, FLOOKUP_UPDATE] >>
@@ -271,7 +271,7 @@ QED
 Theorem lookup_scopes_update_existing_value_other:
   !pre sc rest n entry v id.
     lookup_scopes n pre = NONE /\ FLOOKUP sc n = SOME entry /\ id <> n ==>
-    lookup_scopes id (pre ++ (sc |+ (n, entry with value := v))::rest) =
+    lookup_scopes id (pre ++ (sc |+ (n, entry with <|value := v; popped := ps|>))::rest) =
     lookup_scopes id (pre ++ sc::rest)
 Proof
   Induct >> simp[lookup_scopes_def, FLOOKUP_UPDATE] >>
@@ -285,7 +285,7 @@ Theorem env_scopes_consistent_update_existing_value:
   env_scopes_consistent env cx (st with scopes := pre ++ sc::rest) /\
   lookup_scopes n pre = NONE /\ FLOOKUP sc n = SOME entry ==>
   env_scopes_consistent env cx
-    (st with scopes := pre ++ (sc |+ (n, entry with value := v))::rest)
+    (st with scopes := pre ++ (sc |+ (n, entry with <|value := v; popped := ps|>))::rest)
 Proof
   rw[env_scopes_consistent_def]
   >- (
@@ -309,7 +309,7 @@ Proof
     Cases_on `id = n`
     >- (
       drule_all lookup_scopes_update_existing_value_at_found_scope >> strip_tac >> gvs[] >>
-      qexists_tac `entry with value := v` >> gvs[]) >>
+      qexists_tac `entry with <|value := v; popped := ps|>` >> gvs[]) >>
     drule_all lookup_scopes_update_existing_value_other >> strip_tac >> gvs[] >>
     goal_assum drule >> simp[])
 QED
@@ -318,7 +318,7 @@ Theorem env_consistent_update_existing_scope_value:
   env_consistent env cx (st with scopes := pre ++ sc::rest) /\
   lookup_scopes n pre = NONE /\ FLOOKUP sc n = SOME entry ==>
   env_consistent env cx
-    (st with scopes := pre ++ (sc |+ (n, entry with value := v))::rest)
+    (st with scopes := pre ++ (sc |+ (n, entry with <|value := v; popped := ps|>))::rest)
 Proof
   simp[env_consistent_def] >>
   strip_tac >>
@@ -1178,7 +1178,7 @@ Resume assign_target_preserves_state_well_typed_mutual[ScopedVar]:
   drule find_containing_scope_structure >> strip_tac >> gvs[] >>
   drule find_containing_scope_pre_none >> strip_tac >> gvs[] >>
   simp[set_scopes_def, return_def, raise_def] >>
-  strip_tac >>
+  strip_tac >> gvs[AllCaseEqs()] >>
   drule assign_result_preserves_state >>
   strip_tac >> gvs[] >>
   gvs[runtime_consistent_def] >>

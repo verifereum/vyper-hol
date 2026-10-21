@@ -45,12 +45,12 @@ Proof
   rpt gen_tac >> Cases_on `vs` >> simp[Once bind_arguments_def] >>
   simp[AllCaseEqs(), PULL_EXISTS] >>
   rpt strip_tac
-  >- (qexists_tac `<|assignable := T; type := tv; value := v'|>` >>
+  >- (qexists_tac `<|assignable := T; type := tv; value := v'; popped := []|>` >>
       qpat_x_assum `id = q` SUBST_ALL_TAC >>
       qpat_x_assum `typ = r` SUBST_ALL_TAC >>
       rewrite_tac[FLOOKUP_UPDATE] >> simp[]) >>
   Cases_on `q = id`
-  >- (qexists_tac `<|assignable := T; type := tv; value := v'|>` >>
+  >- (qexists_tac `<|assignable := T; type := tv; value := v'; popped := []|>` >>
       `r = typ` by metis_tac[] >>
       qpat_x_assum `r = typ` SUBST_ALL_TAC >>
       asm_rewrite_tac[FLOOKUP_UPDATE] >> simp[]) >>
