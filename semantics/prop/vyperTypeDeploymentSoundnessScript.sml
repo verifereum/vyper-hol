@@ -26,6 +26,7 @@ Ancestors
   vyperTypeEntryReadiness vyperTypeContract vyperTypeContractStaticMaps
   vyperTypeContractContext vyperTypeContractSoundness
   vyperTypeSelectedEntrySoundness vyperTypeDeploymentMachine
+  vyperTypeCallGraph vyperTypeCallGraphSoundness vyperTypeCallStackSoundness
 
 val _ = Parse.hide "body";
 
@@ -116,6 +117,74 @@ Proof
   gvs[load_contract_def, call_external_function_def, call_external_body_def,
       evaluate_defaults_def, initial_evaluation_context_def] >>
   BasicProvers.EVERY_CASE_TAC >> gvs[]
+QED
+
+(* ===== Constructor static boundary ===== *)
+
+Theorem checked_constructor_args_distinct:
+  check_contract T layouts tx.target mods = SOME art /\
+  ALOOKUP mods NONE = SOME ts /\
+  lookup_function NONE tx.function_name Deploy ts =
+    SOME (mut,nr,args,dflts,ret,body) ==>
+  ALL_DISTINCT (MAP FST args)
+Proof
+  strip_tac >>
+  drule lookup_function_Deploy_SOME_cases >> strip_tac >> gvs[] >>
+  drule_all check_contract_deploy_function_body_MEM >>
+  simp[check_function_body_def, params_ok_def]
+QED
+
+Theorem checked_constructor_nonreentrant_slot:
+  check_contract T layouts tx.target mods = SOME art /\
+  ALOOKUP mods NONE = SOME ts /\
+  lookup_function NONE tx.function_name Deploy ts =
+    SOME (mut,nr,args,dflts,ret,body) /\
+  cx = (initial_evaluation_context sources layouts tx NONE with in_deploy := T) ==>
+  (nr ==> cx.nonreentrant_slot <> NONE)
+Proof
+  strip_tac >>
+  drule lookup_function_Deploy_SOME_cases >> strip_tac >> gvs[] >>
+  drule_all check_contract_deploy_function_body_MEM >>
+  simp[check_function_body_def, initial_evaluation_context_def] >>
+  Cases_on `lookup_nonreentrant_slot layouts tx.target` >> simp[]
+QED
+
+Theorem checked_constructor_no_control_escape:
+  check_contract T layouts tx.target mods = SOME art /\
+  ALOOKUP mods NONE = SOME ts /\
+  lookup_function NONE tx.function_name Deploy ts =
+    SOME (mut,nr,args,dflts,ret,body) ==>
+  stmts_no_control_escape body
+Proof
+  strip_tac >>
+  drule lookup_function_Deploy_SOME_cases >> strip_tac >> gvs[]
+  >- simp[stmt_no_control_escape_def] >>
+  drule_all check_contract_deploy_function_body_MEM >>
+  simp[check_function_body_def]
+QED
+
+Theorem checked_constructor_call_evaluation_safe:
+  check_contract T layouts tx.target mods = SOME art /\
+  ALOOKUP sources tx.target = SOME mods /\
+  ALOOKUP mods NONE = SOME ts /\
+  lookup_function NONE tx.function_name Deploy ts =
+    SOME (mut,nr,args,dflts,ret,body) /\
+  cx = (initial_evaluation_context sources layouts tx NONE with in_deploy := T) ==>
+  call_evaluation_safe cx (int_calls_stmts body)
+Proof
+  strip_tac >>
+  drule lookup_function_Deploy_SOME_cases >> strip_tac >> gvs[]
+  >- (`(initial_evaluation_context sources layouts tx NONE with in_deploy := T) =
+        ((initial_evaluation_context sources layouts tx NONE with in_deploy := T)
+           with stk := [(NONE,tx.function_name)])` by
+        simp[initial_evaluation_context_def] >>
+      pop_assum SUBST1_TAC >>
+      irule (INST_TYPE [``:'a`` |-> ``:num``]
+        checked_contract_call_evaluation_safe_singleton) >>
+      qexistsl [`art`,`layouts`,`mods`] >>
+      simp[initial_evaluation_context_def, calls_follow_call_graph_def]) >>
+  irule checked_constructor_body_call_evaluation_safe >>
+  qexistsl [`args`,`art`,`dflts`,`mods`,`mut`,`nr`,`raw`,`ret`,`ts`] >> simp[]
 QED
 
 (* ===== Composition ===== *)
