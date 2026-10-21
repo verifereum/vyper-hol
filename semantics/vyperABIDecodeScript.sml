@@ -151,24 +151,16 @@ Definition vyper_abi_valid_enc_def:
        ls = TAKE 32 (DROP off bs);
        rest = DROP (off + 32) bs;
        dn = dec_number (Uint 256) ls
-     in is_num_value dn ∧ let
-       n = dest_NumV dn;
-       pn = ceil32 n
-     in
-       n ≤ LENGTH rest ∧
-       EVERY ((=) 0w) (DROP n (TAKE pn rest))) ∧
+     in is_num_value dn ∧
+        dest_NumV dn ≤ LENGTH rest) ∧
   vyper_abi_valid_enc String bs off =
     (off + 32 ≤ LENGTH bs ∧
      let
        ls = TAKE 32 (DROP off bs);
        rest = DROP (off + 32) bs;
        dn = dec_number (Uint 256) ls
-     in is_num_value dn ∧ let
-       n = dest_NumV dn;
-       pn = ceil32 n
-     in
-       n ≤ LENGTH rest ∧
-       EVERY ((=) 0w) (DROP n (TAKE pn rest))) ∧
+     in is_num_value dn ∧
+        dest_NumV dn ≤ LENGTH rest) ∧
   vyper_abi_valid_enc (Bytes (SOME m)) bs off =
     (valid_bytes_bound (SOME m) ∧
      m ≤ LENGTH (DROP off bs) ∧
