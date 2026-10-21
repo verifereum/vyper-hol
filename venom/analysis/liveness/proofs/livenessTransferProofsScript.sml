@@ -262,7 +262,7 @@ Proof
   gvs[MEM_APPEND] >> metis_tac[MEM]
 QED
 
-Theorem foldl_passthrough[local]:
+Theorem foldl_passthrough:
   !base acc placed op_map matching w.
     MEM w base /\ FLOOKUP op_map w = NONE ==>
     MEM w (FST (FOLDL (\(acc, placed) w.
@@ -395,6 +395,115 @@ Proof
   >- (rpt strip_tac >> irule fn_all_vars_mem >>
       qexistsl_tac [`bb`, `inst`] >> simp[])
   >> metis_tac[]
+QED
+
+(* Compare complete backward folds, including their instruction slots. *)
+Theorem liveness_backward_mono[local]:
+  !instrs idx a b.
+    set a SUBSET set b ==>
+    set (FST (df_fold_backward (liveness_transfer bbs) lbl instrs idx a FEMPTY))
+      SUBSET
+    set (FST (df_fold_backward (liveness_transfer bbs) lbl instrs idx b FEMPTY)) /\
+    (!k. set (THE (FLOOKUP (SND (df_fold_backward (liveness_transfer bbs)
+                     lbl instrs idx a FEMPTY)) k)) SUBSET
+         set (THE (FLOOKUP (SND (df_fold_backward (liveness_transfer bbs)
+                     lbl instrs idx b FEMPTY)) k)))
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- (simp[df_fold_backward_def, FLOOKUP_UPDATE] >>
+      gen_tac >> IF_CASES_TAC >> simp[])
+  >> first_x_assum (qspecl_then [`idx + 1`, `a`, `b`] mp_tac) >>
+  simp[] >> strip_tac >>
+  Cases_on `df_fold_backward (liveness_transfer bbs) lbl instrs (idx + 1) a FEMPTY` >>
+  rename1 `df_fold_backward _ _ _ _ a _ = (entry_a, map_a)` >>
+  Cases_on `df_fold_backward (liveness_transfer bbs) lbl instrs (idx + 1) b FEMPTY` >>
+  rename1 `df_fold_backward _ _ _ _ b _ = (entry_b, map_b)` >>
+  gvs[] >> simp[df_fold_backward_def] >>
+  `set (liveness_transfer bbs h entry_a) SUBSET
+   set (liveness_transfer bbs h entry_b)` by
+     (irule liveness_transfer_mono >> simp[]) >>
+  simp[FLOOKUP_UPDATE] >> gen_tac >> IF_CASES_TAC >> simp[]
+QED
+
+Theorem liveness_fold_entry_mono:
+  set a SUBSET set b ==>
+  set (FST (df_fold_block Backward (liveness_transfer bbs) lbl instrs a)) SUBSET
+  set (FST (df_fold_block Backward (liveness_transfer bbs) lbl instrs b))
+Proof
+  simp[df_fold_block_def] >> metis_tac[liveness_backward_mono]
+QED
+
+Theorem liveness_fold_slot_mono:
+  set a SUBSET set b ==>
+  set (THE (FLOOKUP (SND (df_fold_block Backward (liveness_transfer bbs)
+               lbl instrs a)) (lbl,i))) SUBSET
+  set (THE (FLOOKUP (SND (df_fold_block Backward (liveness_transfer bbs)
+               lbl instrs b)) (lbl,i)))
+Proof
+  simp[df_fold_block_def] >> metis_tac[liveness_backward_mono]
+QED
+
+Theorem liveness_backward_bounded[local]:
+  !instrs idx a U.
+    (!v. MEM v a ==> MEM v U) /\
+    (!inst v. MEM inst instrs /\ MEM v (inst_uses inst) ==> MEM v U) ==>
+    (!v. MEM v (FST (df_fold_backward (liveness_transfer bbs)
+                      lbl instrs idx a FEMPTY)) ==> MEM v U) /\
+    (!k vs v. FLOOKUP (SND (df_fold_backward (liveness_transfer bbs)
+                      lbl instrs idx a FEMPTY)) k = SOME vs /\ MEM v vs ==>
+              MEM v U)
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- (simp[df_fold_backward_def, FLOOKUP_UPDATE] >>
+      rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[])
+  >> qpat_x_assum `!inst v. MEM inst (h::instrs) /\ _ ==> _` mp_tac >>
+  pure_rewrite_tac[MEM] >> strip_tac >>
+  first_x_assum (qspecl_then [`idx + 1`, `a`, `U`] mp_tac) >>
+  impl_tac >- (simp[] >> metis_tac[]) >> strip_tac >>
+  Cases_on `df_fold_backward (liveness_transfer bbs) lbl instrs (idx + 1) a FEMPTY` >>
+  rename1 `df_fold_backward _ _ _ _ a _ = (entry, im)` >>
+  gvs[] >> simp[df_fold_backward_def] >>
+  `!v. MEM v (liveness_transfer bbs h entry) ==> MEM v U` by
+    (metis_tac[liveness_transfer_bounded]) >>
+  simp[FLOOKUP_UPDATE] >> rpt strip_tac >>
+  gvs[AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem liveness_fold_entry_bounded:
+  (!v. MEM v a ==> MEM v U) /\
+  (!inst v. MEM inst instrs /\ MEM v (inst_uses inst) ==> MEM v U) ==>
+  !v. MEM v (FST (df_fold_block Backward (liveness_transfer bbs)
+                   lbl instrs a)) ==> MEM v U
+Proof
+  strip_tac >> simp[df_fold_block_def] >>
+  qspecl_then [`instrs`, `0`, `a`, `U`] mp_tac liveness_backward_bounded >>
+  (impl_tac >- metis_tac[]) >> strip_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem liveness_fold_map_bounded:
+  (!v. MEM v a ==> MEM v U) /\
+  (!inst v. MEM inst instrs /\ MEM v (inst_uses inst) ==> MEM v U) ==>
+  !k vs v. FLOOKUP (SND (df_fold_block Backward (liveness_transfer bbs)
+                   lbl instrs a)) k = SOME vs /\ MEM v vs ==> MEM v U
+Proof
+  strip_tac >> simp[df_fold_block_def] >>
+  qspecl_then [`instrs`, `0`, `a`, `U`] mp_tac liveness_backward_bounded >>
+  (impl_tac >- metis_tac[]) >> strip_tac >> first_assum ACCEPT_TAC
+QED
+
+Theorem liveness_fold_slot_bounded:
+  (!v. MEM v a ==> MEM v U) /\
+  (!inst v. MEM inst instrs /\ MEM v (inst_uses inst) ==> MEM v U) /\
+  i <= LENGTH instrs ==>
+  !v. MEM v (THE (FLOOKUP (SND (df_fold_block Backward (liveness_transfer bbs)
+                   lbl instrs a)) (lbl,i))) ==> MEM v U
+Proof
+  strip_tac >>
+  qspecl_then [`instrs`, `0`, `a`, `U`] mp_tac liveness_backward_bounded >>
+  (impl_tac >- metis_tac[]) >> strip_tac >>
+  Cases_on `df_fold_block Backward (liveness_transfer bbs) lbl instrs a` >>
+  drule backward_fold_lookup >> disch_then (qspec_then `i` mp_tac) >>
+  simp[] >> strip_tac >> gvs[df_fold_block_def] >> metis_tac[]
 QED
 
 (* Each exported set interface is kernel proved. *)
