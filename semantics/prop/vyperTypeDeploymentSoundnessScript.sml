@@ -27,6 +27,7 @@ Ancestors
   vyperTypeContractContext vyperTypeContractSoundness
   vyperTypeSelectedEntrySoundness vyperTypeDeploymentMachine
   vyperTypeCallGraph vyperTypeCallGraphSoundness vyperTypeCallStackSoundness
+  vyperTypeExternalCallMachine vyperTypeInvariants vyperTypeBindArguments
 
 val _ = Parse.hide "body";
 
@@ -267,6 +268,68 @@ Proof
   qexistsl [`am with exports updated_by CONS (tx.target,exps)`,`imms`,
     `am.layouts`,`runtime_art`,`(tx.target,mods)::am.sources`,`tx.target`,`tx`] >>
   simp[]
+QED
+
+Theorem checked_constructor_prefix_typing:
+  check_contract T am.layouts tx.target mods = SOME deploy_art /\
+  check_contract F am.layouts tx.target mods = SOME runtime_art /\
+  machine_well_typed am /\ ALOOKUP mods NONE = SOME ts /\
+  lookup_function NONE tx.function_name Deploy ts =
+    SOME (mut,nr,args,dflts,ret,body) /\
+  cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts tx
+          NONE with in_deploy := T) /\ context_well_typed cx /\
+  initial_immutables (type_env_all_modules mods) mods = SOME imms /\
+  evaluate_all_constants cx
+    (am with <|immutables updated_by CONS (tx.target,imms);
+               exports updated_by CONS (tx.target,exps)|>)
+    tx.target mods = SOME am_c /\
+  bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
+  (if nr then
+     case cx.nonreentrant_slot of
+       NONE => raise (Error (TypeError "nonreentrant slot missing"))
+     | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
+                      (mut = View \/ mut = Pure)
+   else return ())
+    (initial_state am_c [scope] with <|outcomes := orc; requests := rqs|>) =
+      (INL (),lock_st) /\
+  send_call_value mut cx lock_st = (INL (),body_st) ==>
+  ?env_body env_after.
+    type_stmts env_body ret body = SOME env_after /\
+    env_consistent env_body cx body_st /\
+    env_body.type_defs = type_env_all_modules mods /\
+    state_well_typed body_st /\ accounts_well_typed body_st.accounts /\
+    context_well_typed cx /\ functions_well_typed cx /\
+    call_evaluation_safe cx (int_calls_stmts body)
+Proof
+  strip_tac >>
+  `machine_well_typed am_c` by
+    (drule_all checked_constructor_constants_exist >>
+     disch_then (qspec_then `exps` mp_tac) >> strip_tac >> gvs[]) >>
+  `scope_well_typed scope` by
+    metis_tac[bind_arguments_scope_well_typed_from_success] >>
+  drule_all call_lock_send_success_components >> strip_tac >>
+  `env_immutables_consistent (artifact_env deploy_art mods NONE) cx body_st` by
+    (drule_all checked_constructor_initial_immutables_consistent >>
+     disch_then (qspecl_then [`scope`,`rqs`,`orc`] assume_tac) >>
+     irule (iffLR env_immutables_consistent_immutables_cong) >>
+     qexists `initial_state am_c [scope] with <|outcomes := orc; requests := rqs|>` >>
+     simp[initial_state_def]) >>
+  `ALL_DISTINCT (MAP FST args)` by
+    (drule_all checked_constructor_args_distinct >> simp[]) >>
+  `?env_body env_after.
+     type_stmts env_body ret body = SOME env_after /\
+     env_consistent env_body cx body_st /\
+     context_well_typed cx /\ functions_well_typed cx /\ state_well_typed body_st` by
+    (irule checked_constructor_body_setup >> simp[] >>
+     qexistsl [`args`,`deploy_art`,`dflts`,`am.layouts`,`mods`,`mut`,`nr`,
+       `runtime_art`,`(tx.target,mods)::am.sources`,`ts`,`tx`,`vals`] >>
+     gvs[]) >>
+  qexistsl [`env_body`,`env_after`] >> simp[] >> conj_tac
+  >- gvs[env_consistent_def, env_context_consistent_def,
+         get_tenv_def, initial_evaluation_context_def] >>
+  irule checked_constructor_call_evaluation_safe >>
+  qexistsl [`args`,`deploy_art`,`dflts`,`am.layouts`,`mods`,`mut`,`nr`,
+    `ret`,`(tx.target,mods)::am.sources`,`ts`,`tx`] >> simp[]
 QED
 
 (* ===== Composition ===== *)
