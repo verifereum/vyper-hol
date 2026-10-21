@@ -8,11 +8,7 @@ val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms [fmap_to_alist_FEMPTY])
 val () = computeLib.upd_compset (computeLib.add_thms [i2w_pos])
 val () = computeLib.upd_compset
-  (computeLib.add_thms
-    [word_of_bytes_be_bytes32_mixed_event_types,
-     word_of_bytes_bytes32_mixed_event_types,
-     w2n_mixed_event_types_n2w,
-     contextTheory.compile_copy_memory_def])
+  (computeLib.add_thms [contextTheory.compile_copy_memory_def])
 val () = Globals.max_print_depth := 20
 
 val mixed_event_types_rpolicy = optionSyntax.dest_some

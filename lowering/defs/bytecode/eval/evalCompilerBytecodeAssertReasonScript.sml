@@ -11,71 +11,8 @@ val () = computeLib.upd_compset (computeLib.add_thms [fmap_to_alist_FEMPTY])
 val () = computeLib.upd_compset (computeLib.add_thms [i2w_pos])
 val () = Globals.max_print_depth := 20
 
-(* Keep concrete words in numeral form while evaluating the checked pipeline.
-   The opaque wrapper is definitionally n2w, but avoids eagerly expanding a
-   256-bit numeral into nested set_byte terms. *)
-Definition assert_reason_n2w_def[nocompute]:
-  assert_reason_n2w n : bytes32 = n2w n
-End
-
-Theorem word_of_bytes_be_bytes32_assert_reason:
-  (word_of_bytes_be bs : bytes32) =
-    assert_reason_n2w
-      (num_of_bytes (be_bytes (dimindex (:256) DIV 8) [] bs))
-Proof
-  PURE_REWRITE_TAC[assert_reason_n2w_def] >>
-  irule word_of_bytes_be_eq_num_of_bytes >> EVAL_TAC
-QED
-
-Theorem word_of_bytes_bytes32_assert_reason:
-  (word_of_bytes T 0w bs : bytes32) =
-    assert_reason_n2w
-      (num_of_bytes (be_bytes (dimindex (:256) DIV 8) [] bs))
-Proof
-  simp[GSYM byteTheory.word_of_bytes_be_def,
-       word_of_bytes_be_bytes32_assert_reason]
-QED
-
-Theorem w2n_assert_reason_n2w[compute]:
-  w2n (assert_reason_n2w n) = n MOD dimword (:256)
-Proof
-  simp[assert_reason_n2w_def]
-QED
-
-Theorem get_byte_set_byte_bytes32_assert_reason:
-  get_byte a (set_byte a b (w : bytes32) be) be = b
-Proof
-  simp[byteTheory.get_byte_set_byte]
-QED
-
-Theorem get_byte_set_byte_irrelevant_bytes32_assert_reason:
-  w2n (a : bytes32) MOD 32 <> w2n a' MOD 32 ==>
-  get_byte a' (set_byte a b (w : bytes32) be) be = get_byte a' w be
-Proof
-  simp[byteTheory.get_byte_set_byte_irrelevant]
-QED
-
-Theorem word_to_bytes_be_bytes32_genlist_assert_reason:
-  word_to_bytes_be (w : bytes32) =
-    GENLIST (λi. get_byte (n2w i) w T) 32
-Proof
-  simp[listTheory.LIST_EQ_REWRITE, byteTheory.word_to_bytes_be_def,
-       byteTheory.word_to_bytes_def, byteTheory.EL_word_to_bytes_aux]
-QED
-
-Theorem word_of_bytes_be_word_to_bytes_be_assert_reason:
-  word_of_bytes_be (word_to_bytes_be (w : bytes32)) = w
-Proof
-  simp[byteTheory.word_to_bytes_be_def, byteTheory.word_of_bytes_be_def,
-       byteTheory.word_of_bytes_word_to_bytes]
-QED
-
 val () = computeLib.upd_compset
-  (computeLib.add_thms
-    [word_of_bytes_be_bytes32_assert_reason,
-     word_of_bytes_bytes32_assert_reason,
-     w2n_assert_reason_n2w,
-     contextTheory.compile_copy_memory_def])
+  (computeLib.add_thms [contextTheory.compile_copy_memory_def])
 
 Definition assert_reason_runtime_pipeline_def:
   assert_reason_runtime_pipeline tops =
@@ -202,28 +139,7 @@ fun assert_reason_insert_word (w,ws) =
 val assert_reason_push_words =
   List.foldl assert_reason_insert_word []
     (List.mapPartial assert_reason_dest_push_word assert_reason_ops)
-fun assert_reason_w2n_eval w =
-  if same_const (#1 (strip_comb w)) ``set_byte`` then let
-    val bytes_th = SIMP_CONV (srw_ss())
-      [word_to_bytes_be_bytes32_genlist_assert_reason,
-       get_byte_set_byte_bytes32_assert_reason,
-       get_byte_set_byte_irrelevant_bytes32_assert_reason]
-      ``word_to_bytes_be ^w``
-    val roundtrip = INST [``w:bytes32`` |-> w]
-      word_of_bytes_be_word_to_bytes_be_assert_reason
-    val step1 = BETA_RULE (AP_TERM ``λx:bytes32. w2n x``
-      (SYM roundtrip))
-    val step2 = BETA_RULE (AP_TERM
-      ``λbs. w2n (word_of_bytes_be bs : bytes32)`` bytes_th)
-    val decoded = TRANS step1 step2
-    val expose = SIMP_CONV bool_ss
-      [word_of_bytes_be_bytes32_assert_reason,
-       w2n_assert_reason_n2w] (rhs (concl decoded))
-    val numeral = EVAL (rhs (concl expose))
-  in
-    TRANS decoded (TRANS expose numeral)
-  end else
-    EVAL ``w2n ^w``
+fun assert_reason_w2n_eval w = EVAL ``w2n ^w``
 val assert_reason_w2n_evals =
   map assert_reason_w2n_eval assert_reason_push_words
 fun assert_reason_encode_eval w2n_th = let

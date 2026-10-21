@@ -140,8 +140,7 @@ def probe(repo: Path, fixtures: Path, output: Path, selected: list[str]) -> None
         'open HolKernel Parse boolLib bossLib;\n'
         'val _ = computeLib.upd_compset finite_mapLib.add_finite_map_compset;\n'
         'val _ = computeLib.upd_compset (computeLib.add_thms\n'
-        ' [alistTheory.fmap_to_alist_FEMPTY, integer_wordTheory.i2w_pos,\n'
-        '  byteTheory.set_byte_bit_field_insert]);\n' +
+        ' [alistTheory.fmap_to_alist_FEMPTY, integer_wordTheory.i2w_pos]);\n' +
         (helper / "evalCompilerBytecodeLib.sml").read_text() + ";\n" +
         (helper / "memoryStoreWitnessLib.sml").read_text() + ";\n" +
         'fun bounded name =\n'
