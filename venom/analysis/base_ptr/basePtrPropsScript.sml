@@ -17,6 +17,18 @@
  *   bp_ptr_from_op_sound      — singleton pointer ⇒ exact runtime address
  *   bp_segment_from_ops_sound — alloca-backed mem_loc ⇒ runtime address
  *   bp_segment_from_ops_lit_offset — literal offset mem_loc (trivial)
+ *   bp_eval_phis_sound        — PHI prefix preserves soundness when every
+ *                               PHI result covers its operands' pointers
+ *   bp_handle_inst_phi_stable — a stable PHI result covers its operands
+ *   bp_phis_closed_eval_phis  — eval_phis preserves soundness under
+ *                               bp_phis_closed
+ *
+ * Completeness:
+ *   bp_derives_complete       — a variable derived from an allocation
+ *                               through stable instructions lists it
+ *   bp_one_pass_unchanged_stable — a pass that reports no change leaves
+ *                               the instructions it visits stable
+ *   bp_converged_complete     — completeness of a converged analysis
  *)
 
 Theory basePtrProps
@@ -162,4 +174,81 @@ Theorem bp_segment_from_ops_lit_offset:
          iao_max_size := sz_op |>).ml_alloca = NONE
 Proof
   simp[bp_segment_from_ops_def, LET_THM]
+QED
+
+Theorem bp_eval_phis_sound:
+  ∀insts bp s s'.
+    bp_ptr_sound bp s ∧
+    eval_phis s insts = OK s' ∧
+    (∀inst. MEM inst insts ∧ inst.inst_opcode = PHI ⇒
+       phi_well_formed inst.inst_operands) ∧
+    (∀inst out v.
+       MEM inst insts ∧ inst.inst_opcode = PHI ∧
+       inst.inst_outputs = [out] ∧ bp_get_ptrs bp out ≠ [] ∧
+       MEM v (MAP SND (phi_pairs inst.inst_operands)) ∧
+       IS_SOME (lookup_var v s) ⇒
+       bp_get_ptrs bp v ≠ [] ∧
+       ∀p. MEM p (bp_get_ptrs bp v) ⇒
+         ∃q. MEM q (bp_get_ptrs bp out) ∧
+             (q = p ∨ q = Ptr (ptr_base p) NONE)) ⇒
+    bp_ptr_sound bp s'
+Proof ACCEPT_TAC basePtrProofsTheory.bp_eval_phis_sound_proof
+QED
+
+Theorem bp_handle_inst_phi_stable:
+  ∀bp inst out v p.
+    FST (bp_handle_inst bp inst) = F ∧
+    inst.inst_opcode = PHI ∧ inst_output inst = SOME out ∧
+    MEM v (MAP SND (phi_pairs inst.inst_operands)) ∧
+    MEM p (bp_get_ptrs bp v) ⇒
+    ∃q. MEM q (bp_get_ptrs bp out) ∧ (q = p ∨ q = Ptr (ptr_base p) NONE)
+Proof ACCEPT_TAC basePtrProofsTheory.bp_handle_inst_phi_stable_proof
+QED
+
+Theorem bp_phis_closed_eval_phis:
+  ∀bp fn insts s s'.
+    bp_phis_closed bp fn ∧
+    (∀inst. MEM inst insts ∧ inst.inst_opcode = PHI ⇒
+       inst_wf inst ∧ ∃bb. MEM bb fn.fn_blocks ∧ MEM inst bb.bb_instructions) ∧
+    bp_ptr_sound bp s ∧
+    eval_phis s insts = OK s' ⇒
+    bp_ptr_sound bp s'
+Proof ACCEPT_TAC basePtrProofsTheory.bp_phis_closed_eval_phis_proof
+QED
+
+Theorem bp_derives_complete:
+  ∀bp P v a.
+    bp_derives bp P v a ⇒
+    (∀inst. P inst ⇒ FST (bp_handle_inst bp inst) = F) ⇒
+    ∃off. MEM (Ptr a off) (bp_get_ptrs bp v)
+Proof ACCEPT_TAC basePtrProofsTheory.bp_derives_complete_proof
+QED
+
+Theorem bp_one_pass_unchanged_stable:
+  ∀fn order bp.
+    FST (bp_one_pass fn order bp) = F ⇒
+    ∀lbl bb inst.
+      MEM lbl order ∧ FIND (λbb. bb.bb_label = lbl) fn.fn_blocks = SOME bb ∧
+      MEM inst bb.bb_instructions ⇒
+      FST (bp_handle_inst bp inst) = F
+Proof ACCEPT_TAC basePtrProofsTheory.bp_one_pass_unchanged_stable_proof
+QED
+
+(* Completeness of a converged analysis: when one more pass over the blocks
+   of order changes nothing (e.g. bp_analyze_fuel stopped before running out
+   of fuel), every variable derived from an allocation in those blocks
+   lists that allocation. *)
+Theorem bp_converged_complete:
+  ∀fn order bp v a.
+    FST (bp_one_pass fn order bp) = F ∧
+    bp_derives bp
+      (λinst. ∃lbl bb.
+         MEM lbl order ∧
+         FIND (λbb. bb.bb_label = lbl) fn.fn_blocks = SOME bb ∧
+         MEM inst bb.bb_instructions) v a ⇒
+    ∃off. MEM (Ptr a off) (bp_get_ptrs bp v)
+Proof
+  rpt strip_tac >>
+  drule bp_derives_complete >> disch_then irule >>
+  rw[] >> metis_tac[bp_one_pass_unchanged_stable]
 QED
