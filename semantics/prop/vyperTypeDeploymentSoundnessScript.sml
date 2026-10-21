@@ -18,7 +18,7 @@
  *         check_contract_constructor_no_defaults,
  *         checked_constructor_{args_distinct, nonreentrant_slot,
  *           no_control_escape, call_evaluation_safe} (static facts),
- *         checked_constructor_{constants_ready, constants_exist,
+ *         checked_constructor_{constants_exist,
  *           initial_immutables_consistent} (constants setup),
  *         checked_constructor_prefix_{typing, no_type_error, return_typed,
  *           no_loop_control} (lock, value transfer and body run),
@@ -199,29 +199,6 @@ Proof
 QED
 
 (* ===== Constants setup boundary ===== *)
-
-Theorem checked_constructor_constants_ready:
-  check_contract T am.layouts tx.target mods = SOME deploy_art /\
-  check_contract F am.layouts tx.target mods = SOME runtime_art /\
-  machine_well_typed am /\
-  cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts tx
-          NONE with in_deploy := T) /\
-  context_well_typed cx /\
-  initial_immutables (type_env_all_modules mods) mods = SOME imms ==>
-  checked_deployment_constants_ready cx
-    (am with <|immutables updated_by CONS (tx.target,imms);
-               exports updated_by CONS (tx.target,exps)|>) tx.target mods
-Proof
-  rpt strip_tac >>
-  irule checked_deployment_constants_ready_from_check >>
-  simp[initial_evaluation_context_def] >>
-  conj_tac
-  >- (drule_all deployment_initial_machine_well_typed >>
-      disch_then (qspecl_then [`exps`,`tx.target`] mp_tac) >> simp[]) >>
-  drule_all checked_initial_immutables_constants_input_tags_agree >>
-  disch_then (qspec_then `am with exports updated_by CONS (tx.target,exps)`
-    mp_tac) >> simp[]
-QED
 
 Theorem checked_constructor_constants_exist:
   check_contract T am.layouts tx.target mods = SOME deploy_art /\
@@ -594,7 +571,7 @@ Theorem checked_load_contract_no_static_error:
     SOME (mut,nr,args,dflts,ret,body) /\
   cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts tx
           NONE with in_deploy := T) /\
-  context_well_typed cx /\
+  call_tx_well_typed tx /\
   LENGTH tx.args = LENGTH args /\
   provided_args_typed (type_env_all_modules mods) args tx.args ==>
   ?imms am_c scope.
@@ -621,6 +598,9 @@ Theorem checked_load_contract_no_static_error:
       exc <> BreakException /\ exc <> ContinueException
 Proof
   strip_tac >>
+  `context_well_typed cx` by
+    gvs[call_tx_well_typed_def, context_well_typed_def,
+        initial_evaluation_context_def] >>
   drule_all checked_constructor_bind_arguments >> strip_tac >>
   qpat_x_assum `dflts = []` SUBST_ALL_TAC >>
   drule check_contract_initial_immutables >> strip_tac >>

@@ -541,6 +541,31 @@ Proof
   simp[machine_well_typed_def]
 QED
 
+(* The deployment constants fold of load_contract is ready for a checked
+   contract (#617). *)
+Theorem checked_constructor_constants_ready:
+  check_contract T am.layouts tx.target mods = SOME deploy_art /\
+  check_contract F am.layouts tx.target mods = SOME runtime_art /\
+  machine_well_typed am /\
+  cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts tx
+          NONE with in_deploy := T) /\
+  context_well_typed cx /\
+  initial_immutables (type_env_all_modules mods) mods = SOME imms ==>
+  checked_deployment_constants_ready cx
+    (am with <|immutables updated_by CONS (tx.target,imms);
+               exports updated_by CONS (tx.target,exps)|>) tx.target mods
+Proof
+  rpt strip_tac >>
+  irule checked_deployment_constants_ready_from_check >>
+  simp[initial_evaluation_context_def] >>
+  conj_tac
+  >- (drule_all deployment_initial_machine_well_typed >>
+      disch_then (qspecl_then [`exps`,`tx.target`] mp_tac) >> simp[]) >>
+  drule_all checked_initial_immutables_constants_input_tags_agree >>
+  disch_then (qspec_then `am with exports updated_by CONS (tx.target,exps)`
+    mp_tac) >> simp[]
+QED
+
 Theorem load_contract_establishes_machine_well_typed:
   machine_well_typed am /\
   check_contract T am.layouts tx.target mods = SOME deploy_art /\
@@ -561,16 +586,8 @@ Proof
        (am with <|immutables updated_by CONS (tx.target,imms);
                   exports updated_by CONS (tx.target,exps)|>)
        tx.target mods` by
-    (rpt strip_tac >>
-     irule checked_deployment_constants_ready_from_check >>
-     simp[initial_evaluation_context_def] >>
-     conj_tac
-     >- (drule_all deployment_initial_machine_well_typed >>
-         disch_then (qspecl_then [`exps`,`tx.target`] mp_tac) >> simp[]) >>
-     drule_all checked_initial_immutables_constants_input_tags_agree >>
-     disch_then (qspec_then `am with exports updated_by CONS (tx.target,exps)`
-       mp_tac) >>
-     simp[]) >>
+    (rpt strip_tac >> irule checked_constructor_constants_ready >> simp[] >>
+     metis_tac[]) >>
   drule load_contract_success_cases >> strip_tac >> gvs[] >>
   `machine_well_typed
      (am with <|immutables updated_by CONS (tx.target,imms);
