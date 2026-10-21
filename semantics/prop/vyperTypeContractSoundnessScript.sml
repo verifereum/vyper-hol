@@ -2317,7 +2317,7 @@ Proof
   gvs[AllCaseEqs(), return_def, raise_def]
 QED
 
-Theorem unlock_action_no_control_c53[local]:
+Theorem unlock_action_no_control_c53:
   (if nr /\ mut <> View /\ mut <> Pure then
      case cx.nonreentrant_slot of
        NONE => return ()
@@ -2406,7 +2406,7 @@ QED
 
 
 
-Theorem unlock_action_no_type_error_c53[local]:
+Theorem unlock_action_no_type_error_c53:
 
   no_type_error_eval
     ((if nr /\ mut <> View /\ mut <> Pure then

@@ -29,6 +29,7 @@ Ancestors
   vyperTypeCallGraph vyperTypeCallGraphSoundness vyperTypeCallStackSoundness
   vyperTypeExternalCallMachine vyperTypeInvariants vyperTypeBindArguments
   vyperTypeStmtSoundness vyperTypeStmtResult vyperTypeEvalSoundness
+  vyperExprNoControl
 
 val _ = Parse.hide "body";
 
@@ -457,6 +458,117 @@ Proof
   `stmts_no_control_escape body` by
     (drule_all checked_constructor_no_control_escape >> simp[]) >>
   drule_all call_lock_send_eval_no_loop_control_c53 >> simp[]
+QED
+
+Theorem triple_identity[local]:
+  !p. (\(res,am_out,rqs). (res,am_out,rqs)) p = p
+Proof
+  Cases >> Cases_on `r` >> simp[]
+QED
+
+Theorem call_external_body_no_type_error_from_prefix:
+  prefix = (do
+    (if nr then case cx.nonreentrant_slot of
+       NONE => raise (Error (TypeError "nonreentrant slot missing"))
+     | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
+                      (mut = View \/ mut = Pure)
+     else return ());
+    send_call_value mut cx; eval_stmts cx body
+  od (initial_state am [scope] with <|outcomes := orc; requests := []|>)) /\
+  no_type_error_eval prefix /\
+  (!v st. prefix = (INR (ReturnException v),st) ==>
+    ?tv. evaluate_type tenv ret = SOME tv /\ value_has_type tv v) ==>
+  no_type_error_result
+    (FST (call_external_body orc am cx nr mut tenv scope body ret))
+Proof
+  strip_tac >>
+  qabbrev_tac `unlock_action = if nr /\ mut <> View /\ mut <> Pure then
+    case cx.nonreentrant_slot of NONE => return ()
+    | SOME slot => release_nonreentrant_lock cx.txn.target slot
+    else return ()` >>
+  `!st. no_type_error_eval (unlock_action st)` by
+    (qunabbrev_tac `unlock_action` >> simp[unlock_action_no_type_error_c53]) >>
+  simp[call_external_body_def, triple_identity] >>
+  qpat_assum `prefix = _` (fn th => rewrite_tac[GSYM th]) >>
+  PairCases_on `prefix` >> Cases_on `prefix0` >>
+  gvs[no_type_error_eval_def]
+  >- (Cases_on `unlock_action prefix1` >>
+      rename1 `_ = (unlock_res,unlock_st)` >> Cases_on `unlock_res` >>
+      first_x_assum (qspec_then `prefix1` mp_tac) >>
+      simp[no_type_error_eval_def, no_type_error_result_def]) >>
+  Cases_on `y` >> gvs[no_type_error_result_def] >>
+  simp[vyperTypingTheory.safe_cast_well_typed] >>
+  Cases_on `unlock_action prefix1` >>
+  rename1 `_ = (unlock_res,unlock_st)` >> Cases_on `unlock_res` >> simp[] >>
+  first_x_assum (qspec_then `prefix1` mp_tac) >> simp[]
+QED
+
+Theorem call_external_body_no_loop_control_from_prefix:
+  prefix = (do
+    (if nr then case cx.nonreentrant_slot of
+       NONE => raise (Error (TypeError "nonreentrant slot missing"))
+     | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
+                      (mut = View \/ mut = Pure)
+     else return ());
+    send_call_value mut cx; eval_stmts cx body
+  od (initial_state am [scope] with <|outcomes := orc; requests := []|>)) /\
+  (!exc st. prefix = (INR exc,st) ==>
+     exc <> BreakException /\ exc <> ContinueException) ==>
+  !exc. FST (call_external_body orc am cx nr mut tenv scope body ret) = INR exc ==>
+    exc <> BreakException /\ exc <> ContinueException
+Proof
+  strip_tac >>
+  qabbrev_tac `unlock_action = if nr /\ mut <> View /\ mut <> Pure then
+    case cx.nonreentrant_slot of NONE => return ()
+    | SOME slot => release_nonreentrant_lock cx.txn.target slot
+    else return ()` >>
+  `!st exc st'. unlock_action st = (INR exc,st') ==> no_control_exc exc` by
+    (qunabbrev_tac `unlock_action` >> metis_tac[unlock_action_no_control_c53]) >>
+  simp[call_external_body_def, triple_identity] >>
+  qpat_assum `prefix = _` (fn th => rewrite_tac[GSYM th]) >>
+  PairCases_on `prefix` >> Cases_on `prefix0` >> gvs[]
+  >- (Cases_on `unlock_action prefix1` >>
+      rename1 `_ = (unlock_res,unlock_st)` >> Cases_on `unlock_res` >>
+      gvs[] >> first_x_assum drule >> rw[no_control_exc_def] >> gvs[]) >>
+  Cases_on `y` >> gvs[] >>
+  Cases_on `unlock_action prefix1` >>
+  rename1 `_ = (unlock_res,unlock_st)` >> Cases_on `unlock_res` >> gvs[]
+  >- (Cases_on `evaluate_type tenv ret` >> gvs[] >>
+      Cases_on `safe_cast x v` >> gvs[]) >>
+  first_x_assum drule >> rw[no_control_exc_def] >> gvs[]
+QED
+
+Theorem checked_constructor_body_no_static_error:
+  check_contract T am.layouts tx.target mods = SOME deploy_art /\
+  check_contract F am.layouts tx.target mods = SOME runtime_art /\
+  machine_well_typed am /\ ALOOKUP mods NONE = SOME ts /\
+  lookup_function NONE tx.function_name Deploy ts =
+    SOME (mut,nr,args,dflts,ret,body) /\
+  cx = (initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts tx
+          NONE with in_deploy := T) /\ context_well_typed cx /\
+  initial_immutables (type_env_all_modules mods) mods = SOME imms /\
+  evaluate_all_constants cx
+    (am with <|immutables updated_by CONS (tx.target,imms);
+               exports updated_by CONS (tx.target,exps)|>)
+    tx.target mods = SOME am_c /\
+  bind_arguments (type_env_all_modules mods) args vals = SOME scope ==>
+  no_type_error_result
+    (FST (call_external_body orc am_c cx nr mut (type_env_all_modules mods)
+            scope body ret)) /\
+  (!exc. FST (call_external_body orc am_c cx nr mut (type_env_all_modules mods)
+               scope body ret) = INR exc ==>
+    exc <> BreakException /\ exc <> ContinueException)
+Proof
+  strip_tac >> conj_tac
+  >- (irule call_external_body_no_type_error_from_prefix >>
+      simp[NoAsms] >> conj_tac
+      >- (rpt strip_tac >> drule_all checked_constructor_prefix_return_typed >>
+          simp[]) >>
+      drule_all checked_constructor_prefix_no_type_error >> simp[]) >>
+  qx_gen_tac `exc` >> disch_tac >>
+  irule call_external_body_no_loop_control_from_prefix >>
+  simp[NoAsms] >> goal_assum (drule_at Any) >>
+  rpt strip_tac >> drule_all checked_constructor_prefix_no_loop_control >> simp[]
 QED
 
 (* ===== Composition ===== *)
