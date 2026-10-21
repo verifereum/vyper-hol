@@ -1166,19 +1166,48 @@ in
   ()
 end
 
+(* Optional source-side assertions cover state absent from upstream exports. *)
+fun regression_checks jsonp =
+  let
+    val prefix = test_exports_root ^ "/functional/codegen/vyper_hol_regression/"
+  in
+    if not (String.isPrefix prefix jsonp) then NONE
+    else
+      let
+        val relative = String.extract(jsonp, String.size prefix, NONE)
+        val path = OS.Path.concat("vyper-regression",
+          OS.Path.base relative ^ ".sml")
+      in
+        if not (OS.FileSys.access(path, [])) then NONE
+        else
+          let
+            val input = TextIO.openIn path
+            val contents = TextIO.inputAll input
+            val () = TextIO.closeIn input
+          in SOME contents end
+      end
+  end
+
 fun generate_test_scripts () = let
   val () = check_generate_dirs ()
   val files = test_files ()
   val gen_dir = generated_dir
   val () = cleanup_generated_scripts files
-  val () = List.app (fn (id, _) => let
+  val () = List.app (fn (id, jsonp) => let
     val thyname = String.concat["vyperTest_", id]
     val defsname = String.concat["vyperTestDefs_", id]
     val fname = OS.Path.concat(gen_dir, String.concat[thyname, "Script.sml"])
-    val contents = String.concat [
-      "Theory ", thyname, "[no_sig_docs]\nAncestors ", defsname,
-      "\nLibs vyperTestRunnerLib\nval () = List.app ",
-      "run_test_on_traces $ all_traces \"", defsname, "\";\n"]
+    val contents =
+      case regression_checks jsonp of
+        NONE => String.concat [
+          "Theory ", thyname, "[no_sig_docs]\nAncestors ", defsname,
+          "\nLibs vyperTestRunnerLib\nval () = List.app ",
+          "run_test_on_traces $ all_traces \"", defsname, "\";\n"]
+      | SOME checks => String.concat [
+          "Theory ", thyname, "[no_sig_docs]\nAncestors ", defsname,
+          " vyperRegressionState\nLibs vyperTestRunnerLib cv_transLib wordsLib\n",
+          "val regression_traces = all_traces \"", defsname, "\";\n",
+          "val () = List.app run_test_on_traces regression_traces;\n", checks]
     val out = TextIO.openOut(fname)
     val () = TextIO.output(out, contents)
     val () = TextIO.closeOut out

@@ -223,6 +223,11 @@ jobs:
           key: ${{ needs.export-vyper-tests.outputs.export-cache-key }}
           fail-on-cache-miss: true
 
+      - name: Generate test theories from pinned exports
+        run: |
+          holbuild build --skip-checkpoints --skip-proof-steps vyperTestLib
+          (cd tests && holbuild run --noconfig generateVyperTests.sml)
+
       - name: Build Vyper test coverage baseline
         if: matrix.group == 0
         run: holbuild build --skip-checkpoints --skip-proof-steps vyperTestCoverageReportTheory
