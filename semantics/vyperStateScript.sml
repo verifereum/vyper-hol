@@ -941,6 +941,72 @@ val () = assign_result_def
   |> SRULE [bind_def, FUN_EQ_THM, LET_THM]
   |> cv_auto_trans;
 
+Definition read_target_def:
+  read_target cx (BaseTargetV (ScopedVar id) is) = do
+    sc <- get_scopes;
+    (pre, env, entry, rest) <-
+      lift_option (find_containing_scope id sc) "read_target lookup";
+    type_check entry.assignable "read_target not assignable";
+    lift_sum $ evaluate_subscripts entry.type entry.value (REVERSE is)
+  od ∧
+  read_target cx (BaseTargetV (TopLevelVar src_id_opt id) is) = do
+    ni <<- id;
+    tv <- lookup_global cx src_id_opt ni;
+    ts <- lift_option_type (get_module_code cx src_id_opt)
+      "read_target get_module_code";
+    tenv <<- get_tenv cx;
+    case tv of
+    | Value v => do
+        var_tv <- lift_option_type
+          (OPTION_BIND (find_var_decl_by_name ni ts)
+             (λp. case FST p of
+                  StorageVarDecl _ typ => evaluate_type tenv typ
+                | _ => NONE))
+          "read_target TopLevelVar type";
+        lift_sum $ evaluate_subscripts var_tv v (REVERSE is)
+      od
+    | HashMapRef is_transient base_slot kt vt => do
+        (first_sub, rest_subs) <- lift_option_type
+          (case REVERSE is of x::xs => SOME (x, xs) | [] => NONE)
+          "read_target hashmap needs subscript";
+        (final_type, key_types, remaining_subs) <- lift_option_type
+          (split_hashmap_subscripts vt rest_subs)
+          "read_target split_hashmap_subscripts";
+        hashmap_subs <<-
+          first_sub :: TAKE (LENGTH rest_subs - LENGTH remaining_subs) rest_subs;
+        all_key_types <<- kt :: key_types;
+        final_slot <- lift_option_type
+          (compute_hashmap_slot base_slot all_key_types hashmap_subs)
+          "read_target compute_hashmap_slot";
+        final_tv <- lift_option_type (evaluate_type tenv final_type)
+          "read_target evaluate_type";
+        current_val <- read_storage_slot cx is_transient final_slot final_tv;
+        lift_sum $ evaluate_subscripts final_tv current_val remaining_subs
+      od
+    | ArrayRef is_transient base_slot elem_tv bd => do
+        (elem_slot, final_tv, remaining_subs) <-
+          resolve_array_element cx is_transient base_slot
+            (ArrayTV elem_tv bd) (REVERSE is);
+        current_val <- read_storage_slot cx is_transient elem_slot final_tv;
+        lift_sum $ evaluate_subscripts final_tv current_val remaining_subs
+      od
+  od ∧
+  read_target cx (BaseTargetV (ImmutableVar src_id_opt id) is) = do
+    imms <- get_immutables cx src_id_opt;
+    tva <- lift_option_type (FLOOKUP imms id) "read_target ImmutableVar";
+    lift_sum $ evaluate_subscripts (FST tva) (SND tva) (REVERSE is)
+  od ∧
+  read_target _ _ = raise (Error (TypeError "read_target"))
+End
+
+val () = read_target_def
+  |> SRULE [FUN_EQ_THM, bind_def, LET_RATOR, ignore_bind_def,
+            UNCURRY, prod_CASE_rator, option_CASE_rator,
+            toplevel_value_CASE_rator, lift_option_def,
+            type_value_CASE_rator, bound_CASE_rator,
+            sum_CASE_rator, list_CASE_rator]
+  |> cv_auto_trans;
+
 Definition assign_target_def:
   assign_target cx (BaseTargetV (ScopedVar id) is) ao = do
     sc <- get_scopes;

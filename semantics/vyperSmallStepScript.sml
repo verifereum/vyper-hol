@@ -34,7 +34,8 @@ Datatype:
   | AssignK assignment_target eval_continuation
   | AssignK1 value eval_continuation
   | AugAssignK type binop expr eval_continuation
-  | AugAssignK1 type base_target_value binop eval_continuation
+  | AugAssignK1 type base_target_value binop expr eval_continuation
+  | AugAssignK2 type base_target_value value binop eval_continuation
   | IfK (stmt list) (stmt list) eval_continuation
   | IfK1 toplevel_value (stmt list) (stmt list) eval_continuation
   | IfK2 eval_continuation
@@ -360,7 +361,8 @@ Definition apply_exc_def:
   apply_exc cx ex st (AssignK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (AssignK1 _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (AugAssignK _ _ _ k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (AugAssignK1 _ _ _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (AugAssignK1 _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
+  apply_exc cx ex st (AugAssignK2 _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (IfK _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (IfK1 _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (IfK2 k) =
@@ -450,7 +452,9 @@ Definition apply_base_target_def:
   apply_base_target cx btv st (SubscriptTargetK e k) =
     eval_expr_cps cx e st (SubscriptTargetK1 btv k) ∧
   apply_base_target cx btv st (AugAssignK ty bop e k) =
-    eval_expr_cps cx e st (AugAssignK1 ty btv bop k) ∧
+    liftk cx ApplyVal
+      (read_target cx (BaseTargetV (FST btv) (SND btv)) st)
+      (AugAssignK1 ty btv bop e k) ∧
   apply_base_target cx btv st (AppendK e k) =
     eval_expr_cps cx e st (AppendK1 btv k) ∧
   apply_base_target cx btv st (PopK k) =
@@ -581,8 +585,19 @@ Definition apply_val_def:
     liftk cx (K Apply) (new_variable id tyv v st) k ∧
   apply_val cx v st (AssignK g k) =
     eval_target_cps cx g st (AssignK1 v k) ∧
-  apply_val cx v st (AugAssignK1 ty (loc, sbs) bop k) =
-    liftk cx (K Apply) (assign_target cx (BaseTargetV loc sbs) (Update ty bop v) st) k ∧
+  apply_val cx old st (AugAssignK1 ty btv bop e k) =
+    eval_expr_cps cx e st (AugAssignK2 ty btv old bop k) ∧
+  apply_val cx v st (AugAssignK2 ty (loc, sbs) old bop k) =
+    liftk cx (K Apply)
+      (do
+         tyv <- lift_option_type (evaluate_type (get_tenv cx) ty)
+           "AugAssign evaluate_type";
+         bound <<-
+           case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0;
+         new <- lift_sum $ evaluate_binop bound tyv bop old v;
+         assign_target cx (BaseTargetV loc sbs) (Replace new);
+         return ()
+       od st) k ∧
   apply_val cx v st (AppendK1 (loc, sbs) k) =
     liftk cx (K Apply) (assign_target cx (BaseTargetV loc sbs) (AppendOp v) st) k ∧
   apply_val cx v st (ArrayK arr_typ k) = apply_val_array cx arr_typ v st k ∧
@@ -848,7 +863,7 @@ Proof
    APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC,
    APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC,
    APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC,
-   APPLY_VALS_PRE_CASE_TAC] >>
+   APPLY_VALS_PRE_CASE_TAC, APPLY_VALS_PRE_CASE_TAC] >>
   TRY (Cases_on `vs` >> simp[]) >>
   rpt strip_tac >> gvs[optionTheory.IS_SOME_DEF]
 QED
@@ -1167,8 +1182,13 @@ Proof
     rw[eval_stmt_cps_def, evaluate_def, bind_def, UNCURRY]
     \\ CASE_TAC \\ gs[cont_def] \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-    >> rw[Once OWHILE_THM, stepk_def, apply_base_target_def]
-    \\ qmatch_goalsub_rename_tac`AugAssignK1 _ p` \\ Cases_on`p`
+    >> rw[Once OWHILE_THM, stepk_def, apply_base_target_def, liftk1]
+    \\ qmatch_goalsub_rename_tac `AugAssignK1 _ p _ _ _` \\ Cases_on `p`
+    \\ CASE_TAC \\ reverse CASE_TAC
+    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+    >> rw[Once OWHILE_THM, stepk_def, apply_val_def]
+    \\ first_x_assum drule \\ rw[]
+    \\ gvs[]
     \\ first_x_assum drule \\ rw[]
     \\ CASE_TAC \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
@@ -1176,11 +1196,10 @@ Proof
     \\ CASE_TAC \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     \\ gvs[oneline get_Value_def, toplevel_value_CASE_rator,
-           CaseEq"toplevel_value", CaseEq"prod", raise_def, return_def]
+           CaseEq "toplevel_value", CaseEq "prod", raise_def, return_def]
     >> rw[Once OWHILE_THM, stepk_def, apply_val_def, liftk1, bind_def,
-          ignore_bind_def]
-    \\ CASE_TAC \\ reverse CASE_TAC
-    \\ rw[return_def])
+          ignore_bind_def, lift_option_type_def, lift_sum_def]
+    \\ rpt (CASE_TAC \\ gvs[return_def, raise_def]))
   \\ conj_tac >- ( (* If e ss1 ss2 *)
     rw[eval_stmt_cps_def, evaluate_def, bind_def, ignore_bind_def, UNCURRY]
     \\ CASE_TAC \\ gs[cont_def] \\ reverse CASE_TAC

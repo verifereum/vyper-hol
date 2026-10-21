@@ -1084,9 +1084,14 @@ Definition evaluate_def:
   od ∧
   eval_stmt cx (AugAssign ty t bop e) = do
     (loc, sbs) <- eval_base_target cx t;
+    old <- read_target cx (BaseTargetV loc sbs);
     tv <- eval_expr cx e;
     v <- get_Value tv;
-    assign_target cx (BaseTargetV loc sbs) (Update ty bop v);
+    tyv <- lift_option_type (evaluate_type (get_tenv cx) ty)
+      "AugAssign evaluate_type";
+    bound <<- case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0;
+    new <- lift_sum $ evaluate_binop bound tyv bop old v;
+    assign_target cx (BaseTargetV loc sbs) (Replace new);
     return ()
   od ∧
   eval_stmt cx (If e ss1 ss2) = do
