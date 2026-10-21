@@ -7,6 +7,7 @@
  * - check_contract_evaluate_all_constants
  *
  * Helper:
+ * - get_tenv_constant_context, get_tenv_sources
  * - evaluate_builtin_constant_context, evaluate_type_builtin_constant_context
  * - constant_length_toplevel_array_length, merge_constants_immutables
  * - constants_fold_module_constants_env
@@ -68,7 +69,7 @@ Proof
   simp[get_tenv_def]
 QED
 
-(* KEY LEMMA: a folded constant value is what eval_expr returns, without
+(* TOP-LEVEL: a folded constant value is what eval_expr returns, without
    changing the state, in any context whose contract code is mods and any
    state whose immutables for the contract are imms. *)
 Theorem constant_value_eval_expr:
@@ -162,6 +163,8 @@ Proof
   simp[]
 QED
 
+(* TOP-LEVEL: when the checker's fold succeeds, so does deployment's, leaving
+   the same immutables for the contract. *)
 Theorem constants_fold_evaluate_all_constants:
   !rest imms am imms'.
     constants_fold mods imms rest = SOME imms' /\
