@@ -13,10 +13,6 @@ val () = computeLib.upd_compset (computeLib.add_thms [i2w_pos])
 
 val () = Globals.max_print_depth := 20
 
-val env_message_core_compile_eval = EVAL
-  ``compile_vyper (K SOME) (o1_policy all_capabilities) env_message_core_program``
-val () = evalCompilerBytecodeLib.add_compile_eval env_message_core_compile_eval
-
 Theorem env_message_core_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     env_message_core_program =
@@ -24,10 +20,6 @@ Theorem env_message_core_matches_python_oracle:
 Proof
   EVAL_TAC
 QED
-
-val env_tx_chain_compile_eval = EVAL
-  ``compile_vyper (K SOME) (o1_policy all_capabilities) env_tx_chain_program``
-val () = evalCompilerBytecodeLib.add_compile_eval env_tx_chain_compile_eval
 
 Theorem env_tx_chain_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)

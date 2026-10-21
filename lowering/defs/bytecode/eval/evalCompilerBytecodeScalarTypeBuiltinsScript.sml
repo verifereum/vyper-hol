@@ -24,20 +24,12 @@ val () = computeLib.upd_compset
           scalar_decimal_hi_word_eq_word,
           word_eq_scalar_decimal_hi_word])
 
-val scalar_empty_compile_eval = EVAL
-  ``compile_vyper (K SOME) (o1_policy all_capabilities) scalar_empty_program``
-val () = evalCompilerBytecodeLib.add_compile_eval scalar_empty_compile_eval
-
 Theorem scalar_empty_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities) scalar_empty_program =
     SOME ^(evalCompilerBytecodeLib.read_hex_bytes "scalar_empty.hex")
 Proof
   EVAL_TAC
 QED
-
-val scalar_decimal_bounds_compile_eval = EVAL
-  ``compile_vyper (K SOME) (o1_policy all_capabilities) scalar_decimal_bounds_program``
-val () = evalCompilerBytecodeLib.add_compile_eval scalar_decimal_bounds_compile_eval
 
 Theorem scalar_decimal_bounds_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
@@ -46,10 +38,6 @@ Theorem scalar_decimal_bounds_matches_python_oracle:
 Proof
   EVAL_TAC
 QED
-
-val scalar_decimal_max_compile_eval = EVAL
-  ``compile_vyper (K SOME) (o1_policy all_capabilities) scalar_decimal_max_program``
-val () = evalCompilerBytecodeLib.add_compile_eval scalar_decimal_max_compile_eval
 
 Theorem scalar_decimal_max_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
@@ -62,10 +50,6 @@ QED
 val () = computeLib.upd_compset
   (computeLib.add_thms [compileEnvTheory.type_bounds_def])
 
-val scalar_integer_bounds_compile_eval = EVAL
-  ``compile_vyper (K SOME) (o1_policy all_capabilities) scalar_integer_bounds_program``
-val () = evalCompilerBytecodeLib.add_compile_eval scalar_integer_bounds_compile_eval
-
 Theorem scalar_integer_bounds_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_integer_bounds_program =
@@ -74,10 +58,6 @@ Proof
   EVAL_TAC
 QED
 
-val scalar_integer_min_uint8_compile_eval = EVAL
-  ``compile_vyper (K SOME) (o1_policy all_capabilities) scalar_integer_min_uint8_program``
-val () = evalCompilerBytecodeLib.add_compile_eval scalar_integer_min_uint8_compile_eval
-
 Theorem scalar_integer_min_uint8_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_integer_min_uint8_program =
@@ -85,10 +65,6 @@ Theorem scalar_integer_min_uint8_matches_python_oracle:
 Proof
   EVAL_TAC
 QED
-
-val scalar_integer_max_int256_compile_eval = EVAL
-  ``compile_vyper (K SOME) (o1_policy all_capabilities) scalar_integer_max_int256_program``
-val () = evalCompilerBytecodeLib.add_compile_eval scalar_integer_max_int256_compile_eval
 
 Theorem scalar_integer_max_int256_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
@@ -101,10 +77,6 @@ QED
 val () = computeLib.upd_compset
   (computeLib.add_thms [compileEnvTheory.type_bounds_def])
 
-val scalar_convert_integer_compile_eval = EVAL
-  ``compile_vyper (K SOME) (o1_policy all_capabilities) scalar_convert_integer_program``
-val () = evalCompilerBytecodeLib.add_compile_eval scalar_convert_integer_compile_eval
-
 Theorem scalar_convert_integer_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_convert_integer_program =
@@ -112,10 +84,6 @@ Theorem scalar_convert_integer_matches_python_oracle:
 Proof
   EVAL_TAC
 QED
-
-val scalar_convert_address_compile_eval = EVAL
-  ``compile_vyper (K SOME) (o1_policy all_capabilities) scalar_convert_address_program``
-val () = evalCompilerBytecodeLib.add_compile_eval scalar_convert_address_compile_eval
 
 Theorem scalar_convert_address_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
@@ -125,10 +93,6 @@ Proof
   EVAL_TAC
 QED
 
-val scalar_convert_bytes_fixed_compile_eval = EVAL
-  ``compile_vyper (K SOME) (o1_policy all_capabilities) scalar_convert_bytes_fixed_program``
-val () = evalCompilerBytecodeLib.add_compile_eval scalar_convert_bytes_fixed_compile_eval
-
 Theorem scalar_convert_bytes_fixed_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_convert_bytes_fixed_program =
@@ -136,10 +100,6 @@ Theorem scalar_convert_bytes_fixed_matches_python_oracle:
 Proof
   EVAL_TAC
 QED
-
-val scalar_convert_uint_to_bytes32_compile_eval = EVAL
-  ``compile_vyper (K SOME) (o1_policy all_capabilities) scalar_convert_uint_to_bytes32_program``
-val () = evalCompilerBytecodeLib.add_compile_eval scalar_convert_uint_to_bytes32_compile_eval
 
 Theorem scalar_convert_uint_to_bytes32_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
@@ -149,10 +109,6 @@ Proof
   EVAL_TAC
 QED
 
-val scalar_convert_bytes32_to_address_compile_eval = EVAL
-  ``compile_vyper (K SOME) (o1_policy all_capabilities) scalar_convert_bytes32_to_address_program``
-val () = evalCompilerBytecodeLib.add_compile_eval scalar_convert_bytes32_to_address_compile_eval
-
 Theorem scalar_convert_bytes32_to_address_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_convert_bytes32_to_address_program =
@@ -161,10 +117,6 @@ Proof
   EVAL_TAC
 QED
 
-val scalar_convert_bytes32_to_bytes4_compile_eval = EVAL
-  ``compile_vyper (K SOME) (o1_policy all_capabilities) scalar_convert_bytes32_to_bytes4_program``
-val () = evalCompilerBytecodeLib.add_compile_eval scalar_convert_bytes32_to_bytes4_compile_eval
-
 Theorem scalar_convert_bytes32_to_bytes4_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_convert_bytes32_to_bytes4_program =
@@ -172,10 +124,6 @@ Theorem scalar_convert_bytes32_to_bytes4_matches_python_oracle:
 Proof
   EVAL_TAC
 QED
-
-val scalar_convert_bytes_dynamic_compile_eval = EVAL
-  ``compile_vyper (K SOME) (o1_policy all_capabilities) scalar_convert_bytes_dynamic_program``
-val () = evalCompilerBytecodeLib.add_compile_eval scalar_convert_bytes_dynamic_compile_eval
 
 Theorem scalar_convert_bytes_dynamic_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)

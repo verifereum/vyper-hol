@@ -36,10 +36,3 @@ worktrees/
 .DS_Store
 *~
 verifereum-ref
-
-# Disposable construction-validation environments and computed diagnostics
-.venv-memory-validation/
-lowering/defs/bytecode/memory-construction-results/
-lowering/defs/bytecode/memory-construction-regenerated/
-lowering/defs/bytecode/memory-construction-matrix/hol/
-lowering/defs/bytecode/memory-*.log

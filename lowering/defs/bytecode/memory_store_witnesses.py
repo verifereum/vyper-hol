@@ -79,8 +79,7 @@ def prepare(repo: Path, output: Path, *, check: bool) -> None:
         "outputs": {
             path.name: hashlib.sha256(path.read_bytes()).hexdigest()
             for path in sorted(output.iterdir())
-            if path.suffix in (".hex", ".json")
-            and path.stem in set(names(corpus / "parity-fixtures.txt"))
+            if path.suffix in (".hex", ".json") and path.name != "provenance.json"
         },
     }
     (output / "provenance.json").write_text(json.dumps(provenance, indent=2) + "\n")
@@ -91,20 +90,8 @@ def prepare(repo: Path, output: Path, *, check: bool) -> None:
             name: digest for name, digest in provenance["outputs"].items()
             if Path(name).stem in retained
         }
-        expected["outputs"] = {
-            name: digest for name, digest in expected["outputs"].items()
-            if Path(name).stem in retained
-        }
         if provenance != expected:
             raise ValueError("independent oracle provenance changed")
-    # The canonical oracle directory retains only manifest fixtures; other
-    # generated probes belong in an explicit scratch output directory.
-    if output.resolve() == (corpus / "oracle").resolve():
-        retained = set(names(corpus / "parity-fixtures.txt"))
-        for source in (corpus / "sources").glob("*.vy"):
-            if source.stem not in retained:
-                for suffix in (".json", ".hex"):
-                    (output / (source.stem + suffix)).unlink(missing_ok=True)
 
 
 def probe(repo: Path, fixtures: Path, output: Path, selected: list[str]) -> None:

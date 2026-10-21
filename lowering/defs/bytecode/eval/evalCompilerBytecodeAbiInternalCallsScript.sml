@@ -52,11 +52,6 @@ Proof
   EVAL_TAC
 QED
 
-val internal_struct_call_compile_eval = EVAL
-  ``compile_vyper (K SOME) (o1_policy all_capabilities)
-      task090_internal_struct_call_program``
-val () = evalCompilerBytecodeLib.add_compile_eval internal_struct_call_compile_eval
-
 Theorem internal_struct_call_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     task090_internal_struct_call_program =

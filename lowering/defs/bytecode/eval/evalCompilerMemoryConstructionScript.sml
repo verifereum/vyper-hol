@@ -3,21 +3,12 @@ Theory evalCompilerMemoryConstruction
 Ancestors compileVyper supportedProgram concretizeMemLocDefs codegenReadyCompute alist byte integer_word option
 Libs memoryStoreWitnessLib vyperCheckContractFrontendLib jsonASTLib evalCompilerBytecodeLib finite_mapLib computeLib wordsLib
 
+fun holbuild_extra_deps (_ : string list) = ()
+val () = holbuild_extra_deps ["../memory-stores"]
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms
   [fmap_to_alist_FEMPTY, i2w_pos, byteTheory.set_byte_bit_field_insert])
-fun repository_root dir =
-  if OS.FileSys.access (OS.Path.concat (dir, "VYPER_PIN"), []) then dir
-  else let val parent = OS.Path.getParent dir in
-    if parent = dir then raise Fail "cannot locate repository VYPER_PIN"
-    else repository_root parent
-  end
-val repo_root = repository_root (OS.FileSys.getDir ())
-val fixture_root = OS.Path.concat (repo_root, "lowering/defs/bytecode/memory-stores/oracle")
-val output_root = OS.Path.concat (repo_root, "lowering/defs/bytecode/memory-construction-results")
-val () = (OS.FileSys.mkDir output_root handle OS.SysErr _ => ())
-val names = ["tup_nested_ret", "st_nested_lit", "arr_dyn_lit_word", "b20_dynarr_lit", "empty_string_ret", "empty_dynarr_local", "arr_local_elem_assign", "st_empty_ret", "c10_assign_empty_struct", "c11_annassign_empty_fixed_array", "c05_assign_empty_builtin_string"]
-val () = List.app (memoryStoreWitnessLib.probe fixture_root output_root) names
+val fixture_root = "../memory-stores/oracle"
 
 val tup_nested_ret = memoryStoreWitnessLib.evaluate fixture_root "tup_nested_ret"
 Theorem tup_nested_ret_matches_python_oracle:

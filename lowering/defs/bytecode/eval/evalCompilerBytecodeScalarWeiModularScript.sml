@@ -11,10 +11,6 @@ val () = computeLib.upd_compset (computeLib.add_thms [fmap_to_alist_FEMPTY])
 val () = computeLib.upd_compset (computeLib.add_thms [i2w_pos])
 val () = Globals.max_print_depth := 20
 
-val scalar_wei_small_compile_eval = EVAL
-  ``compile_vyper (K SOME) (o1_policy all_capabilities) scalar_wei_small_program``
-val () = evalCompilerBytecodeLib.add_compile_eval scalar_wei_small_compile_eval
-
 Theorem scalar_wei_small_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_wei_small_program =
@@ -22,10 +18,6 @@ Theorem scalar_wei_small_matches_python_oracle:
 Proof
   EVAL_TAC
 QED
-
-val scalar_wei_large_compile_eval = EVAL
-  ``compile_vyper (K SOME) (o1_policy all_capabilities) scalar_wei_large_program``
-val () = evalCompilerBytecodeLib.add_compile_eval scalar_wei_large_compile_eval
 
 Theorem scalar_wei_large_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)

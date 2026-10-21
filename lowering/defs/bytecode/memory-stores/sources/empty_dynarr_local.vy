@@ -1,3 +1,4 @@
+# empty(DynArray) assigned to a local after memory is dirtied
 @external
 @pure
 def f(a: uint256) -> DynArray[uint256, 3]:

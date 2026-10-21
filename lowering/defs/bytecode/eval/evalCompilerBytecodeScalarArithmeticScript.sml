@@ -42,10 +42,6 @@ val () = computeLib.upd_compset
      w2n_scalar_decimal_lo_word_eval,
      w2n_scalar_decimal_hi_word_eval])
 
-val scalar_arith_uint_compile_eval = EVAL
-  ``compile_vyper (K SOME) (o1_policy all_capabilities) scalar_arith_uint_program``
-val () = evalCompilerBytecodeLib.add_compile_eval scalar_arith_uint_compile_eval
-
 Theorem scalar_arith_uint_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_arith_uint_program =
@@ -53,10 +49,6 @@ Theorem scalar_arith_uint_matches_python_oracle:
 Proof
   EVAL_TAC
 QED
-
-val scalar_arith_pow_compile_eval = EVAL
-  ``compile_vyper (K SOME) (o1_policy all_capabilities) scalar_arith_pow_program``
-val () = evalCompilerBytecodeLib.add_compile_eval scalar_arith_pow_compile_eval
 
 Theorem scalar_arith_pow_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
@@ -66,10 +58,6 @@ Proof
   EVAL_TAC
 QED
 
-val scalar_arith_pow_base_compile_eval = EVAL
-  ``compile_vyper (K SOME) (o1_policy all_capabilities) scalar_arith_pow_base_program``
-val () = evalCompilerBytecodeLib.add_compile_eval scalar_arith_pow_base_compile_eval
-
 Theorem scalar_arith_pow_base_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_arith_pow_base_program =
@@ -77,10 +65,6 @@ Theorem scalar_arith_pow_base_matches_python_oracle:
 Proof
   EVAL_TAC
 QED
-
-val scalar_arith_int_compile_eval = EVAL
-  ``compile_vyper (K SOME) (o1_policy all_capabilities) scalar_arith_int_program``
-val () = evalCompilerBytecodeLib.add_compile_eval scalar_arith_int_compile_eval
 
 Theorem scalar_arith_int_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
@@ -90,10 +74,6 @@ Proof
   EVAL_TAC
 QED
 
-val scalar_arith_decimal_compile_eval = EVAL
-  ``compile_vyper (K SOME) (o1_policy all_capabilities) scalar_arith_decimal_program``
-val () = evalCompilerBytecodeLib.add_compile_eval scalar_arith_decimal_compile_eval
-
 Theorem scalar_arith_decimal_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_arith_decimal_program =
@@ -101,10 +81,6 @@ Theorem scalar_arith_decimal_matches_python_oracle:
 Proof
   EVAL_TAC
 QED
-
-val scalar_arith_decimal_sub_compile_eval = EVAL
-  ``compile_vyper (K SOME) (o1_policy all_capabilities) scalar_arith_decimal_sub_program``
-val () = evalCompilerBytecodeLib.add_compile_eval scalar_arith_decimal_sub_compile_eval
 
 Theorem scalar_arith_decimal_sub_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
@@ -114,10 +90,6 @@ Proof
   EVAL_TAC
 QED
 
-val scalar_arith_decimal_mul_compile_eval = EVAL
-  ``compile_vyper (K SOME) (o1_policy all_capabilities) scalar_arith_decimal_mul_program``
-val () = evalCompilerBytecodeLib.add_compile_eval scalar_arith_decimal_mul_compile_eval
-
 Theorem scalar_arith_decimal_mul_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_arith_decimal_mul_program =
@@ -125,10 +97,6 @@ Theorem scalar_arith_decimal_mul_matches_python_oracle:
 Proof
   EVAL_TAC
 QED
-
-val scalar_arith_decimal_div_compile_eval = EVAL
-  ``compile_vyper (K SOME) (o1_policy all_capabilities) scalar_arith_decimal_div_program``
-val () = evalCompilerBytecodeLib.add_compile_eval scalar_arith_decimal_div_compile_eval
 
 Theorem scalar_arith_decimal_div_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
@@ -138,10 +106,6 @@ Proof
   EVAL_TAC
 QED
 
-val scalar_arith_unsafe_uint_compile_eval = EVAL
-  ``compile_vyper (K SOME) (o1_policy all_capabilities) scalar_arith_unsafe_uint_program``
-val () = evalCompilerBytecodeLib.add_compile_eval scalar_arith_unsafe_uint_compile_eval
-
 Theorem scalar_arith_unsafe_uint_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)
     scalar_arith_unsafe_uint_program =
@@ -149,10 +113,6 @@ Theorem scalar_arith_unsafe_uint_matches_python_oracle:
 Proof
   EVAL_TAC
 QED
-
-val scalar_arith_unsafe_int_compile_eval = EVAL
-  ``compile_vyper (K SOME) (o1_policy all_capabilities) scalar_arith_unsafe_int_program``
-val () = evalCompilerBytecodeLib.add_compile_eval scalar_arith_unsafe_int_compile_eval
 
 Theorem scalar_arith_unsafe_int_matches_python_oracle:
   compile_vyper (K SOME) (o1_policy all_capabilities)

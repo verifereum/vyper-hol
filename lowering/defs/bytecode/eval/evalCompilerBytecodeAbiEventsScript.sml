@@ -2,20 +2,13 @@
 
 Theory evalCompilerBytecodeAbiEvents
 Ancestors evalCompilerBytecodeAbiEventsPipeline evalCompilerBytecodeAbiEventsLowering evalCompilerSubsetAbiEvents compileVyper concretizeMemLocDefs alist byte integer_word option cv_std
-Libs evalCompilerBytecodeLib finite_mapLib computeLib wordsLib intReduce
+Libs evalCompilerBytecodeLib finite_mapLib computeLib wordsLib
 
 fun holbuild_extra_deps (_ : string list) = ()
 val () = holbuild_extra_deps [".."]
 val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms [fmap_to_alist_FEMPTY])
 val () = computeLib.upd_compset (computeLib.add_thms [i2w_pos])
-val () = computeLib.upd_compset intReduce.add_int_compset
-Theorem mixed_event_integer_compute_probe[local]:
-  (-32:int) < 0 /\ Num (-(-32:int)) = 32 /\
-  w2n (i2w (-32:int) : bytes32) = 2 ** 256 - 32
-Proof
-  EVAL_TAC
-QED
 val () = Globals.max_print_depth := 20
 val () = computeLib.upd_compset
   (computeLib.add_thms
@@ -23,13 +16,6 @@ val () = computeLib.upd_compset
      word_of_bytes_bytes32_mixed_event_types,
      w2n_mixed_event_types_n2w,
      contextTheory.compile_copy_memory_def])
-
-Theorem mixed_event_i2w_neg_num[local]:
-  !n. i2w (-&n) = -n2w n
-Proof
-  Cases_on `n` >> simp[i2w_def]
-QED
-val () = computeLib.upd_compset (computeLib.add_thms [mixed_event_i2w_neg_num])
 
 (* Stage the three analyses consumed again by stack planning.  Each theorem is
    kernel-produced from the checked pipeline result; no oracle data is used. *)
@@ -107,15 +93,56 @@ val mixed_event_types_context_plan_step1 = SIMP_CONV (srw_ss())
   ``generate_context_plan (^mixed_event_types_unit).cu_context``
 val mixed_event_types_context_plan_step2 =
   EVAL (rhs (concl mixed_event_types_context_plan_step1))
+val mixed_event_types_actual_plan_call = find_term
+  (can (match_term ``generate_fn_plan f spill labels``))
+  (rhs (concl mixed_event_types_context_plan_step2))
+val mixed_event_types_actual_plan_args = #2 (strip_comb mixed_event_types_actual_plan_call)
+val mixed_event_types_actual_fn = hd mixed_event_types_actual_plan_args
+val mixed_event_types_actual_liveness_eval =
+  EVAL ``liveness_analyze ^mixed_event_types_actual_fn``
+val mixed_event_types_actual_dfg_eval =
+  EVAL ``dfg_build_function ^mixed_event_types_actual_fn``
+val mixed_event_types_actual_cfg_eval =
+  EVAL ``cfg_analyze ^mixed_event_types_actual_fn``
+val mixed_event_types_actual_liveness =
+  rhs (concl mixed_event_types_actual_liveness_eval)
+val mixed_event_types_actual_dfg = rhs (concl mixed_event_types_actual_dfg_eval)
+val mixed_event_types_actual_cfg = rhs (concl mixed_event_types_actual_cfg_eval)
+val mixed_event_types_actual_plan_eval = EVAL
+  ``generate_fn_plan_analyzed ^mixed_event_types_actual_liveness
+      ^mixed_event_types_actual_dfg ^mixed_event_types_actual_cfg
+      ^mixed_event_types_actual_fn ^mixed_event_types_max_eom 0``
+val mixed_event_types_actual_plan = rhs (concl mixed_event_types_actual_plan_eval)
+val mixed_event_types_actual_generate_step1 =
+  REWR_CONV stackPlanGenTheory.generate_fn_plan_def
+    ``generate_fn_plan ^mixed_event_types_actual_fn
+        ^mixed_event_types_max_eom 0``
+val mixed_event_types_actual_generate_step2 = PURE_REWRITE_CONV
+  [mixed_event_types_actual_liveness_eval,
+   mixed_event_types_actual_dfg_eval,
+   mixed_event_types_actual_cfg_eval]
+  (rhs (concl mixed_event_types_actual_generate_step1))
+val mixed_event_types_actual_generate_step3 =
+  REWR_CONV mixed_event_types_actual_plan_eval
+    (rhs (concl mixed_event_types_actual_generate_step2))
+val mixed_event_types_actual_generate_fn_plan =
+  TRANS mixed_event_types_actual_generate_step1
+    (TRANS mixed_event_types_actual_generate_step2
+      mixed_event_types_actual_generate_step3)
+val mixed_event_types_context_plan_step3 = PURE_REWRITE_CONV
+  [mixed_event_types_actual_generate_fn_plan]
+  (rhs (concl mixed_event_types_context_plan_step2))
 val mixed_event_types_context_plan_eval =
-  TRANS mixed_event_types_context_plan_step1 mixed_event_types_context_plan_step2
+  TRANS mixed_event_types_context_plan_step1
+    (TRANS mixed_event_types_context_plan_step2
+      (TRANS mixed_event_types_context_plan_step3
+        (EVAL (rhs (concl mixed_event_types_context_plan_step3)))))
 val mixed_event_types_context_plan = optionSyntax.dest_some
   (rhs (concl mixed_event_types_context_plan_eval))
-val mixed_event_types_all_plan_ops_eval = EVAL
-  ``context_plan_ops ^mixed_event_types_context_plan``
-val mixed_event_types_all_plan_ops =
-  rhs (concl mixed_event_types_all_plan_ops_eval)
-val mixed_event_types_plan_ops = mixed_event_types_all_plan_ops
+val mixed_event_types_plan = mixed_event_types_actual_plan
+val mixed_event_types_plan_value = optionSyntax.dest_some mixed_event_types_plan
+val mixed_event_types_plan_pair = pairSyntax.dest_pair mixed_event_types_plan_value
+val mixed_event_types_plan_ops = #1 mixed_event_types_plan_pair
 val mixed_event_types_ops = #1 (listSyntax.dest_list mixed_event_types_plan_ops)
 val mixed_event_types_sopush = #1 (dest_comb
   ``SOPush (Lit (0w : bytes32))``)
@@ -168,6 +195,10 @@ in
 end
 val mixed_event_types_encode_evals =
   map mixed_event_types_encode_eval mixed_event_types_w2n_evals
+val mixed_event_types_all_plan_ops_eval = EVAL
+  ``context_plan_ops ^mixed_event_types_context_plan``
+val mixed_event_types_all_plan_ops =
+  rhs (concl mixed_event_types_all_plan_ops_eval)
 val mixed_event_types_initial_fmp_eval = EVAL
   ``(^mixed_event_types_context_plan).cp_initial_fmp``
 val mixed_event_types_initial_fmp =
@@ -236,9 +267,6 @@ val mixed_event_types_codegen_assembly_eval =
 val mixed_event_types_runtime_accessors =
   CONJUNCTS venomCompilerTypesTheory.pipeline_output_accessors @
   CONJUNCTS venomCompilerTypesTheory.resolved_compiler_policy_accessors
-val mixed_event_types_finalize_eval = EVAL
-  ``finalize_codegen (K SOME) ^mixed_event_types_rpolicy ^mixed_event_types_unit``
-
 Theorem mixed_event_types_runtime_matches_python_oracle:
   mixed_event_types_runtime_compile task090_mixed_event_types_program =
     SOME (SND ^(evalCompilerBytecodeLib.read_hex_bytes "mixed_event_types.hex"))
@@ -254,7 +282,8 @@ Proof
       mixed_event_types_out_final_assembly_eval,
       mixed_event_types_rpolicy_final_assembly_eval] @
      mixed_event_types_runtime_accessors) >>
-  PURE_REWRITE_TAC [mixed_event_types_finalize_eval] >>
+  PURE_REWRITE_TAC [codegenTheory.finalize_codegen_identity] >>
+  PURE_REWRITE_TAC [mixed_event_types_codegen_assembly_eval] >>
   EVAL_TAC
 QED
 
@@ -279,21 +308,7 @@ Proof
        mixed_event_types_runtime_pipeline_def,
        mixed_event_types_deploy_compile_def,
        checked_unit_pipeline_def] >>
-  Cases_on `resolve_o1_policy (o1_policy all_capabilities)` >> gvs[] >>
-  rename1 `SOME policy` >>
-  Cases_on `lower_vyper_runtime_unit tops policy` >> gvs[] >>
-  rename1 `SOME unit` >>
-  Cases_on `run_venom_pipeline (K T) (K T) (K T) policy o1_pipeline_spec unit` >> gvs[] >>
-  rename1 `SOME out` >>
-  Cases_on `out.po_final_assembly <> policy.rpol_final_assembly` >> gvs[] >>
-  Cases_on `finalize_codegen (K SOME) policy out.po_unit` >> gvs[] >>
-  rename1 `SOME runtime` >>
-  Cases_on `lower_vyper_deploy_unit tops policy runtime` >> gvs[] >>
-  rename1 `SOME deploy_unit` >>
-  Cases_on `run_venom_pipeline (K T) (K T) (K T) policy o1_pipeline_spec deploy_unit` >> gvs[] >>
-  rename1 `SOME deploy_out` >>
-  Cases_on `deploy_out.po_final_assembly <> policy.rpol_final_assembly` >> gvs[] >>
-  Cases_on `finalize_codegen (K SOME) policy deploy_out.po_unit` >> gvs[]
+  rpt CASE_TAC >> gvs[]
 QED
 
 val () = evalCompilerBytecodeLib.add_staged_compile_eval
