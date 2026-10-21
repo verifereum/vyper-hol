@@ -496,7 +496,7 @@ Proof
   simp[finally_def, AllCaseEqs()] >>
   strip_tac >> gvs[bind_def, ignore_bind_def, pop_scope_def, return_def, raise_def, AllCaseEqs()] >>
   (* Use try_body_preserves_tl_dom to establish MAP FDOM preservation *)
-  sg `MAP FDOM (TL (st with scopes updated_by CONS (FEMPTY |+ (nm,<| assignable := F; type := tyv; value := v |>))).scopes) = MAP FDOM (TL s'³'.scopes)` >-
+  sg `MAP FDOM (TL (st with scopes updated_by CONS (FEMPTY |+ (nm,<| assignable := F; type := tyv; value := v; popped := [] |>))).scopes) = MAP FDOM (TL s'³'.scopes)` >-
   (qspecl_then [`cx`, `loop_body`, `nm`, `tyv`, `v`, `st`] mp_tac try_body_preserves_tl_dom >>
    impl_tac >- (rpt strip_tac >> gvs[push_scope_with_var_def, return_def] >> first_x_assum drule >> simp[]) >>
    simp[push_scope_with_var_def, return_def] >> strip_tac >>
@@ -506,8 +506,8 @@ Proof
   (* broke = T: return () *)
   (Cases_on `st.scopes` >> Cases_on `tl` >> gvs[]) >>
   (* broke = F: use recursive IH *)
-  qpat_x_assum `∀s'⁴' t s'⁵' t'. _ ⇒ _` (qspecl_then [`st`, `st with scopes updated_by CONS (FEMPTY |+ (nm,<| assignable := F; type := tyv; value := v |>))`,
-                                                       `st with scopes updated_by CONS (FEMPTY |+ (nm,<| assignable := F; type := tyv; value := v |>))`,
+  qpat_x_assum `∀s'⁴' t s'⁵' t'. _ ⇒ _` (qspecl_then [`st`, `st with scopes updated_by CONS (FEMPTY |+ (nm,<| assignable := F; type := tyv; value := v; popped := [] |>))`,
+                                                       `st with scopes updated_by CONS (FEMPTY |+ (nm,<| assignable := F; type := tyv; value := v; popped := [] |>))`,
                                                        `s'³' with scopes := tl`] mp_tac) >>
   simp[push_scope_with_var_def, return_def] >>
   simp[finally_def, AllCaseEqs(), bind_def, ignore_bind_def, pop_scope_def, return_def, raise_def] >>
