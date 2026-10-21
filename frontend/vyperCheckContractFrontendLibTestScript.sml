@@ -276,6 +276,7 @@ in
   else raise Fail ("frontend contract checker rejected " ^ path)
 end;
 
+val _ = check_fixture false "scoped_locals/main.json";
 val _ = check_fixture false "simple.json";
 val _ = check_fixture false "storage.json";
 val _ = check_fixture false "imported_struct/main.json";
