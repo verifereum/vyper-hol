@@ -6,10 +6,6 @@ Ancestors
   vyperEvalExprPreservesScopesDom vyperScopePreservation
   vyperMisc vyperImmutablesPreservation vyperStatePreservation
 
-val check_create_blueprint_result_state = prove (
-  ``check_create_blueprint has_salt vs st = (res,st') ==> st' = st``,
-  metis_tac[check_create_blueprint_state, pairTheory.SND]);
-
 (* Preserve the existing statement-list free variables against crypto's body. *)
 val _ = hide "body";
 

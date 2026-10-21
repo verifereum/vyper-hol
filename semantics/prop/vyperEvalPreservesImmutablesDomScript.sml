@@ -5,10 +5,6 @@ Ancestors
   vyperAssignTarget vyperEvalExprPreservesScopesDom
   vyperImmutablesPreservation vyperCallFrame vyperCallOutcomeFrame
 
-val check_create_blueprint_result_state = prove (
-  ``check_create_blueprint has_salt vs st = (res,st') ==> st' = st``,
-  metis_tac[check_create_blueprint_state, pairTheory.SND]);
-
 (* ========================================================================
    Preservation of immutables domain through eval_expr / eval_stmts.
 

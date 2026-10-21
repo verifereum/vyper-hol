@@ -4,10 +4,6 @@ Ancestors
   vyperScopePreservation vyperStatePreservation vyperCallFrame vyperCallOutcomeFrame
   vyperCallOutcome[ignore_grammar]
 
-val check_create_blueprint_result_state = prove (
-  ``check_create_blueprint has_salt vs st = (res,st') ==> st' = st``,
-  metis_tac[check_create_blueprint_state, pairTheory.SND]);
-
 (* ========================================================================
    Utility: eval_exprs preserves scopes dom from per-element IH
    (kept for downstream use)

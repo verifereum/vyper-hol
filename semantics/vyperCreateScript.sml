@@ -296,6 +296,12 @@ Proof
   CASE_TAC >> simp[return_def, raise_def]
 QED
 
+Theorem check_create_blueprint_result_state:
+  check_create_blueprint has_salt vs st = (res, st') ==> st' = st
+Proof
+  metis_tac[check_create_blueprint_state, pairTheory.SND]
+QED
+
 Theorem check_create_blueprint_exception_is_error:
   check_create_blueprint has_salt vs st = (INR ex, st') ==>
   ?err. ex = Error err

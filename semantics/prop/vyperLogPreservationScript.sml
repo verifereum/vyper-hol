@@ -5,10 +5,6 @@ Ancestors
   vyperState[ignore_grammar] vyperInterpreter[ignore_grammar] vyperCallOutcome[ignore_grammar]
   vyperCreate
 
-val check_create_blueprint_result_state = prove (
-  ``check_create_blueprint has_salt vs st = (res,st') ==> st' = st``,
-  metis_tac[check_create_blueprint_state, pairTheory.SND]);
-
 (* Keep existing free statement-list variables when importing oracle grammar. *)
 val _ = hide "body";
 
