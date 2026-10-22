@@ -210,16 +210,19 @@ QED
 (* Assert with reason + false condition: revert with Error(string) encoded data.
    The state reverted from is related to the source state after the
    condition and then the reason expression, SND (eval_expr cx reason_e es'):
-   the fail block evaluates the reason before reverting. *)
+   the fail block evaluates the reason before reverting.
+   ctx is existential for the same reason as in compile_assert_correct_true:
+   the condition and the reason may call internal functions. *)
 Theorem compile_assert_reason_correct_false:
-  ∀ cenv cx lctx ty cond_e reason_e es st st' es' ctx.
+  ∀ cenv cx lctx ty cond_e reason_e es st st' es'.
     eval_expr cx cond_e es = (INL (Value (BoolV F)), es') ∧
     compile_stmt cenv lctx ty (Assert cond_e (AssertReason reason_e)) st = ((), st')
     ⇒
-    frag_exec ctx st st' (state_rel cenv cx es) (λss. F)
-      (λr. ∃ss rd.
-             r = Abort Revert_abort (revert_state (set_returndata rd ss)) ∧
-             state_rel cenv cx (SND (eval_expr cx reason_e es')) ss)
+    ∃ctx.
+      frag_exec ctx st st' (state_rel cenv cx es) (λss. F)
+        (λr. ∃ss rd.
+               r = Abort Revert_abort (revert_state (set_returndata rd ss)) ∧
+               state_rel cenv cx (SND (eval_expr cx reason_e es')) ss)
 Proof
   cheat
 QED
