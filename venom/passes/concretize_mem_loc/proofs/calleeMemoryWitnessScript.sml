@@ -118,3 +118,29 @@ Theorem absent_liveset_keeps_metadata_Witness:
 Proof
   EVAL_TAC
 QED
+
+(* Imported occupancy can overlap itself; fresh fill must avoid its union. *)
+Theorem overlapping_import_fill_Witness:
+  complete_alloc_positions_with_imports [(Allocation 3,32)] FEMPTY []
+    [(0,32); (0,64); (32,32)] witness_one FEMPTY =
+    SOME (FEMPTY |+ (Allocation 3,64))
+Proof
+  EVAL_TAC
+QED
+
+Theorem empty_import_fill_Witness:
+  complete_alloc_positions_with_imports [(Allocation 3,32)] FEMPTY [] []
+    witness_one FEMPTY = SOME (FEMPTY |+ (Allocation 3,0))
+Proof
+  EVAL_TAC
+QED
+
+(* A candidate may overlap imported memory when their livesets do not meet.
+   Completion preserves that candidate rather than imposing global separation. *)
+Theorem preserved_import_overlap_Witness:
+  complete_alloc_positions_with_imports [(Allocation 3,32)] FEMPTY []
+    [(0,64); (0,32)] witness_one (FEMPTY |+ (Allocation 3,0)) =
+    SOME (FEMPTY |+ (Allocation 3,0))
+Proof
+  EVAL_TAC
+QED

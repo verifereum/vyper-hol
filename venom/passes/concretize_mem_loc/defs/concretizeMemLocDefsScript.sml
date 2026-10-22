@@ -676,6 +676,26 @@ Definition complete_alloc_positions_def:
         complete_alloc_positions_with_items items forced reserved fn positions
 End
 
+(* Imported intervals are occupied for dead-ALLOCA fill, not globally
+   pairwise-disjoint reservations: unrelated lifetimes can share positions. *)
+Definition complete_alloc_positions_with_imports_def:
+  complete_alloc_positions_with_imports items forced reserved imported fn
+      (positions : (allocation,num) fmap) =
+    if ~EVERY reserved_interval_wf imported \/
+       ~EVERY (\r. EVERY (reserved_intervals_disjoint r) reserved) imported
+    then NONE
+    else if ~forced_alloc_keys_valid (MAP FST items) forced \/
+            ~candidate_alloc_keys_valid (MAP FST items) positions then NONE
+    else case merge_forced_positions items forced positions of
+      NONE => NONE
+    | SOME merged =>
+        case checked_preserved_intervals items merged reserved of
+          NONE => NONE
+        | SOME occupied =>
+            complete_alloc_positions_aux (fn_insts fn) merged
+              (reserved ++ occupied ++ imported)
+End
+
 (* Liveness-aware allocation loop.
    already: (alloc, liveset, position, size) — pre-allocated
    to_alloc: (alloc, liveset, size) — sorted by |liveset| ascending
