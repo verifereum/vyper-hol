@@ -1805,6 +1805,86 @@ val () = send_call_value_def
             LET_RATOR, COND_RATOR]
   |> cv_auto_trans;
 
+(* External defaults run after value transfer, before formal argument binding.
+   Like internal-call defaults, they share one empty local scope, thread every
+   state effect and propagate the original exception.  Restore only the caller's
+   scopes; accounts, transient storage, outcomes and requests are not reset. *)
+Definition eval_external_defaults_def:
+  eval_external_defaults cx es = do
+    prev <- get_scopes;
+    finally
+      (do set_scopes [FEMPTY]; eval_exprs cx es od)
+      (set_scopes prev)
+  od
+End
+
+Theorem eval_external_defaults_run:
+  eval_external_defaults cx es st =
+    let (res, rt) = eval_exprs cx es (st with scopes := [FEMPTY]) in
+    (res, rt with scopes := st.scopes)
+Proof
+  simp[eval_external_defaults_def, bind_def, ignore_bind_def,
+       get_scopes_def, set_scopes_def, finally_def, return_def, raise_def,
+       AllCaseEqs()] >>
+  Cases_on `eval_exprs cx es (st with scopes := [FEMPTY])` >>
+  Cases_on `q` >> simp[ignore_bind_def, return_def, raise_def]
+QED
+
+Theorem eval_external_defaults_nil[simp]:
+  eval_external_defaults cx [] st = (INL [], st)
+Proof
+  simp[eval_external_defaults_run, evaluate_def, return_def]
+QED
+
+Theorem eval_external_defaults_length:
+  eval_external_defaults cx es st = (INL vs, rt) ==>
+  LENGTH vs = LENGTH es
+Proof
+  simp[eval_external_defaults_run, LET_THM] >>
+  Cases_on `eval_exprs cx es (st with scopes := [FEMPTY])` >>
+  simp[] >> strip_tac >> gvs[] >>
+  drule eval_exprs_length >> simp[]
+QED
+
+(* A cons exposes one materialised value followed by the rest of the list,
+   in the state produced by the first expression, not in the initial state. *)
+Theorem eval_external_defaults_cons:
+  eval_external_defaults cx (e::es) st =
+    (let (res, rt) =
+       (do tv <- eval_expr cx e;
+           v <- materialise cx tv;
+           vs <- eval_exprs cx es;
+           return (v::vs) od) (st with scopes := [FEMPTY]) in
+     (res, rt with scopes := st.scopes))
+Proof
+  simp[eval_external_defaults_run, Once evaluate_def]
+QED
+
+Theorem eval_external_defaults_cons_success:
+  eval_expr cx e (st with scopes := [FEMPTY]) = (INL tv, s1) /\
+  materialise cx tv s1 = (INL v, s2) /\
+  eval_exprs cx es s2 = (INL vs, s3) ==>
+  eval_external_defaults cx (e::es) st =
+    (INL (v::vs), s3 with scopes := st.scopes)
+Proof
+  strip_tac >> simp[eval_external_defaults_cons, bind_def, return_def]
+QED
+
+Theorem eval_external_defaults_error:
+  eval_exprs cx es (st with scopes := [FEMPTY]) = (INR ex, rt) ==>
+  eval_external_defaults cx es st = (INR ex, rt with scopes := st.scopes)
+Proof
+  simp[eval_external_defaults_run]
+QED
+
+Theorem eval_external_defaults_scopes:
+  eval_external_defaults cx es st = (res, rt) ==> rt.scopes = st.scopes
+Proof
+  simp[eval_external_defaults_run] >>
+  Cases_on `eval_exprs cx es (st with scopes := [FEMPTY])` >> simp[] >>
+  strip_tac >> gvs[]
+QED
+
 Definition evaluate_defaults_def:
   evaluate_defaults cx am [] = SOME [] ∧
   evaluate_defaults cx am (e::es) =
