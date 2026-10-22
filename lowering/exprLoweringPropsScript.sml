@@ -1207,13 +1207,156 @@ Proof
      simp[ci_mono_emit_op, ci_mono_emit_void])))
 QED
 
+Theorem ci_mono_compile_copy_memory[local]:
+  ∀ dst src sz sa. ci_mono sa (SND (compile_copy_memory dst src sz sa))
+Proof
+  rpt gen_tac >> Cases_on `sz` >>
+  rewrite_tac[contextTheory.compile_copy_memory_def] >>
+  simp[ci_mono_comp_return, ci_mono_emit_void]
+QED
+
+Theorem ci_mono_compile_copy_memory_dynamic[local]:
+  ∀ dst src len_op sa. ci_mono sa (SND (compile_copy_memory_dynamic dst src len_op sa))
+Proof
+  rpt gen_tac >>
+  rewrite_tac[contextTheory.compile_copy_memory_dynamic_def] >>
+  simp[ci_mono_emit_void]
+QED
+
+Theorem ci_mono_compile_with_byte_offset[local]:
+  ∀ base offset sa. ci_mono sa (SND (compile_with_byte_offset base offset sa))
+Proof
+  rw[contextTheory.compile_with_byte_offset_def] >>
+  simp[ci_mono_comp_return, ci_mono_emit_op]
+QED
+
+Theorem ci_mono_typed_memory_family[local]:
+  (∀cenv dst dst_ty src src_ty sa.
+    ci_mono sa (SND (compile_store_memory_typed cenv dst dst_ty src src_ty sa))) ∧
+  (∀cenv dst src dst_tys src_tys dst_off src_off sa.
+    ci_mono sa (SND (compile_typed_copy_fields cenv dst src dst_tys src_tys dst_off src_off sa))) ∧
+  (∀cenv dst dst_ty src src_ty count sa.
+    ci_mono sa (SND (compile_copy_sarray_typed cenv dst dst_ty src src_ty count sa))) ∧
+  (∀cenv dst dst_ty cap src src_ty sa.
+    ci_mono sa (SND (compile_copy_dynarray_typed cenv dst dst_ty cap src src_ty sa))) ∧
+  (∀cenv dst src dst_fields src_fields dst_off src_off sa.
+    ci_mono sa (SND (compile_struct_typed_copy cenv dst src dst_fields src_fields dst_off src_off sa)))
+Proof
+  ho_match_mp_tac contextTheory.compile_store_memory_typed_ind
+  >> rpt conj_tac
+  >- suspend "dispatch"
+  >- suspend "fields_nil"
+  >- suspend "fields_mismatch"
+  >- suspend "fields_cons"
+  >- suspend "sarray"
+  >- suspend "dynarray"
+  >- suspend "struct_nil"
+  >> suspend "struct_cons"
+QED
+
+Resume ci_mono_typed_memory_family[dispatch]:
+  rpt gen_tac >> strip_tac >>
+  Cases_on `is_word_type dst_ty`
+  >- (simp[Once contextTheory.compile_store_memory_typed_def] >>
+      irule ci_mono_bind >> simp[ci_mono_emit_op, ci_mono_emit_void]) >>
+  Cases_on `is_bytestring_type dst_ty ∧ is_bytestring_type src_ty`
+  >- simp[Once contextTheory.compile_store_memory_typed_def,
+           ci_mono_compile_store_bytestring] >>
+  Cases_on `acyclic_struct_metadata cenv.ce_struct_fields`
+  >- (Cases_on `dst_ty` >> Cases_on `src_ty` >>
+      TRY (rename1 `compile_store_memory_typed cenv dst (ArrayT dt db) src (ArrayT st sb)` >>
+           Cases_on `db` >> Cases_on `sb`) >> gvs[] >>
+      simp[Once contextTheory.compile_store_memory_typed_def, LET_THM,
+           ci_mono_compile_copy_memory] >> metis_tac[]) >>
+  simp[Once contextTheory.compile_store_memory_typed_def, ci_mono_emit_void]
+QED
+Resume ci_mono_typed_memory_family[fields_nil]:
+  simp[Once contextTheory.compile_store_memory_typed_def, ci_mono_comp_return]
+QED
+Resume ci_mono_typed_memory_family[fields_mismatch]:
+  simp[Once contextTheory.compile_store_memory_typed_def, ci_mono_comp_return]
+QED
+Resume ci_mono_typed_memory_family[fields_cons]:
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  simp[Once contextTheory.compile_store_memory_typed_def, LET_THM] >>
+  gen_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- simp[ci_mono_compile_with_byte_offset] >>
+  rpt gen_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- simp[ci_mono_compile_with_byte_offset] >>
+  rpt gen_tac >> ho_match_mp_tac ci_mono_ignore_bind >> simp[]
+QED
+Resume ci_mono_typed_memory_family[sarray]:
+  rpt gen_tac >> strip_tac >>
+  Cases_on `type_memory_bytes cenv dst_ty = type_memory_bytes cenv src_ty ∧
+            ¬is_abi_dynamic cenv.ce_struct_fields dst_ty` >> gvs[] >>
+  simp[Once contextTheory.compile_store_memory_typed_def, LET_THM,
+       ci_mono_compile_copy_memory] >>
+  IF_CASES_TAC >- metis_tac[] >>
+  rpt (ho_match_mp_tac ci_mono_bind ORELSE
+       ho_match_mp_tac ci_mono_ignore_bind ORELSE
+       (conj_tac >- simp[ci_mono_fresh_label, ci_mono_fresh_var,
+         ci_mono_emit_inst, ci_mono_new_block, ci_mono_emit_op,
+         ci_mono_comp_return]) ORELSE gen_tac) >>
+  simp[ci_mono_comp_return]
+QED
+Resume ci_mono_typed_memory_family[dynarray]:
+  rpt gen_tac >> strip_tac >>
+  Cases_on `type_memory_bytes cenv dst_ty = type_memory_bytes cenv src_ty ∧ dst_ty = src_ty` >> gvs[] >>
+  simp[Once contextTheory.compile_store_memory_typed_def, LET_THM] >>
+  rpt (ho_match_mp_tac ci_mono_bind ORELSE
+       ho_match_mp_tac ci_mono_ignore_bind ORELSE
+       (conj_tac >- simp[ci_mono_fresh_label, ci_mono_fresh_var,
+         ci_mono_emit_inst, ci_mono_new_block, ci_mono_emit_op, ci_mono_emit_void,
+         ci_mono_compile_copy_memory_dynamic, ci_mono_comp_return]) ORELSE gen_tac) >>
+  simp[ci_mono_compile_copy_memory_dynamic, ci_mono_comp_return] >>
+  IF_CASES_TAC >- metis_tac[] >>
+  rpt (ho_match_mp_tac ci_mono_bind ORELSE
+       ho_match_mp_tac ci_mono_ignore_bind ORELSE
+       (conj_tac >- simp[ci_mono_fresh_label, ci_mono_fresh_var,
+         ci_mono_emit_inst, ci_mono_new_block, ci_mono_emit_op,
+         ci_mono_compile_copy_memory_dynamic, ci_mono_comp_return]) ORELSE gen_tac) >>
+  simp[ci_mono_comp_return]
+QED
+Resume ci_mono_typed_memory_family[struct_nil]:
+  simp[Once contextTheory.compile_store_memory_typed_def, ci_mono_comp_return]
+QED
+Resume ci_mono_typed_memory_family[struct_cons]:
+  rpt gen_tac >> strip_tac >>
+  Cases_on `ALOOKUP src_fields name` >>
+  TRY (rename1 `SOME p` >> PairCases_on `p`) >> gvs[] >>
+  (simp[Once contextTheory.compile_store_memory_typed_def, LET_THM] >>
+   gen_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac
+   >- simp[ci_mono_compile_with_byte_offset] >>
+   rpt gen_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac
+   >- simp[ci_mono_compile_with_byte_offset] >>
+   rpt gen_tac >> ho_match_mp_tac ci_mono_ignore_bind >> simp[])
+QED
+Finalise ci_mono_typed_memory_family
+
+Theorem ci_mono_compile_store_memory[local]:
+  ∀cenv src dst dst_ty src_ty sa.
+    ci_mono sa (SND (compile_store_memory cenv src dst dst_ty src_ty sa))
+Proof
+  rpt gen_tac >>
+  simp[contextTheory.compile_store_memory_def] >>
+  rpt IF_CASES_TAC >>
+  simp[ci_mono_emit_void, ci_mono_compile_store_bytestring,
+       ci_mono_typed_memory_family, ci_mono_compile_copy_memory]
+QED
+
 Theorem ci_mono_compile_struct_lit_cfn[local]:
   ∀ cfn cenv ty fields buf_op cur_offset sa.
     (∀ cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
     ci_mono sa (SND (compile_struct_lit cfn cenv ty fields buf_op cur_offset sa))
 Proof
   Induct_on `fields` >> simp[compile_struct_lit_def, ci_mono_comp_return] >>
-  rpt gen_tac >> Cases_on `h` >> strip_tac >> simp[Once compile_struct_lit_def, LET_THM] >> rpt (CHANGED_TAC (rpt gen_tac >> TRY (irule ci_mono_bind >> conj_tac) >> TRY (irule ci_mono_ignore_bind >> conj_tac) >> TRY IF_CASES_TAC >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_store_bytestring] >> TRY (irule ci_mono_lower_value_cfn >> metis_tac[]) >> TRY (rpt strip_tac >> first_x_assum irule >> metis_tac[])))
+  rpt gen_tac >> Cases_on `h` >> strip_tac >>
+  simp[Once compile_struct_lit_def, LET_THM] >>
+  rpt (ho_match_mp_tac ci_mono_bind ORELSE
+       ho_match_mp_tac ci_mono_ignore_bind ORELSE
+       (conj_tac >- simp[ci_mono_emit_op, ci_mono_unwrap_value,
+                         ci_mono_compile_store_memory]) ORELSE gen_tac) >>
+  first_x_assum irule >> simp[]
 QED
 
 Theorem ci_mono_compile_concat_cfn[local]:
@@ -1232,17 +1375,53 @@ TRY (irule ci_mono_bind >> rpt strip_tac >> simp[ci_mono_emit_op, ci_mono_emit_v
 TRY (irule ci_mono_lower_value_cfn >> simp[])
 QED
 
-Theorem ci_mono_compile_make_array_cfn[local]:
-  ∀ cfn cenv es elem_size has_lw alloca_size buf_op cur_idx sa.
+Theorem ci_mono_compile_make_array_elems_cfn[local]:
+  ∀ cfn cenv es elem_ty elem_size has_lw buf_op cur_idx sa.
     (∀ cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
-    ci_mono sa (SND (compile_make_array cfn cenv es elem_size has_lw alloca_size buf_op cur_idx sa))
+    ci_mono sa (SND (compile_make_array_elems cfn cenv es elem_ty elem_size has_lw buf_op cur_idx sa))
 Proof
-  Induct_on `es` >> rpt strip_tac
-  >- (simp[compile_make_array_def, LET_THM] >> rw[] >>
-      simp[ci_mono_comp_return] >>
-      irule ci_mono_ignore_bind >> simp[ci_mono_emit_void, ci_mono_comp_return])
-  >> simp[Once compile_make_array_def, LET_THM]
-  >> ho_match_mp_tac ci_mono_bind >> conj_tac >- (rpt strip_tac >> irule ci_mono_lower_value_cfn >> simp[]) >> rpt strip_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac >- (rpt strip_tac >> IF_CASES_TAC >> simp[ci_mono_comp_return, ci_mono_emit_op]) >> rpt strip_tac >> ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- (rpt strip_tac >> IF_CASES_TAC >> simp[ci_mono_emit_void] >> IF_CASES_TAC >> simp[ci_mono_compile_store_bytestring, ci_mono_emit_void]) >> rpt strip_tac >> first_x_assum irule >> simp[]
+  Induct_on `es` >> simp[compile_make_array_elems_def, ci_mono_comp_return] >>
+  rpt gen_tac >> strip_tac >>
+  simp[Once compile_make_array_elems_def, LET_THM] >>
+  rpt (ho_match_mp_tac ci_mono_bind ORELSE
+       ho_match_mp_tac ci_mono_ignore_bind ORELSE
+       (conj_tac >- simp[ci_mono_emit_op, ci_mono_unwrap_value,
+                         ci_mono_compile_store_memory]) ORELSE gen_tac) >>
+  first_x_assum irule >> simp[]
+QED
+
+Theorem ci_mono_compile_make_array_cfn[local]:
+  ∀ cfn cenv es elem_ty elem_size has_lw buf_op sa.
+    (∀ cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
+    ci_mono sa (SND (compile_make_array cfn cenv es elem_ty elem_size has_lw buf_op sa))
+Proof
+  rpt strip_tac >> simp[compile_make_array_def] >>
+  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
+  >- (Cases_on `has_lw` >> simp[ci_mono_emit_void, ci_mono_comp_return]) >>
+  simp[ci_mono_compile_make_array_elems_cfn]
+QED
+
+Theorem ci_mono_compile_zero_words[local]:
+  ∀base n sa. ci_mono sa (SND (compile_zero_words base n sa))
+Proof
+  Induct_on `n` >> simp[builtinSimpleTheory.compile_zero_words_def,
+                         ci_mono_comp_return] >> rpt gen_tac >>
+  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[] >>
+  gen_tac >> ho_match_mp_tac ci_mono_bind >>
+  simp[ci_mono_emit_op, ci_mono_emit_void]
+QED
+
+Theorem ci_mono_compile_builtin_empty_complex[local]:
+  ∀size lw sa. ci_mono sa (SND (compile_builtin_empty_complex size lw sa))
+Proof
+  rpt gen_tac >>
+  simp[builtinSimpleTheory.compile_builtin_empty_complex_def, LET_THM] >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- simp[ci_mono_compile_alloc_buffer] >>
+  rpt gen_tac >> simp[comp_bind_def, comp_return_def] >>
+  Cases_on `lw` >> simp[] >>
+  (ho_match_mp_tac ci_mono_ignore_bind >>
+   simp[ci_mono_emit_void, ci_mono_compile_zero_words, ci_mono_comp_return])
 QED
 
 (* Reusable tactic for ci_mono composition through monadic expressions *)
@@ -1255,7 +1434,8 @@ val ci_mono_base_thms =
    ci_mono_compile_word_copy_loop, ci_mono_compile_storage_to_memory,
    ci_mono_compile_transient_to_memory, ci_mono_compile_code_to_memory,
    ci_mono_compile_dynarray_pop,
-   ci_mono_compile_store_bytestring,
+   ci_mono_compile_store_bytestring, ci_mono_compile_store_memory,
+   ci_mono_compile_builtin_empty_complex,
    ci_mono_refl];
 
 Theorem ci_mono_compile_multi_exprs[local]:
@@ -2168,81 +2348,9 @@ Proof
   rpt gen_tac >> once_rewrite_tac[exprLoweringTheory.compile_return_value_decode_def] >> BETA_TAC >> rpt (FIRST [irule ci_mono_bind, irule ci_mono_ignore_bind] >> conj_tac >| [rpt strip_tac >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_select], all_tac]) >> simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_select]
 QED
 
-Theorem ci_mono_compile_copy_memory[local]:
-  ∀ dst src sz sa. ci_mono sa (SND (compile_copy_memory dst src sz sa))
-Proof
-  rpt gen_tac >> Cases_on `sz` >>
-  rewrite_tac[contextTheory.compile_copy_memory_def] >>
-  simp[ci_mono_comp_return, ci_mono_emit_void]
-QED
 
-Theorem ci_mono_compile_copy_memory_dynamic[local]:
-  ∀ dst src len_op sa. ci_mono sa (SND (compile_copy_memory_dynamic dst src len_op sa))
-Proof
-  rpt gen_tac >>
-  rewrite_tac[contextTheory.compile_copy_memory_dynamic_def] >>
-  simp[ci_mono_emit_void]
-QED
-
-Theorem ci_mono_compile_with_byte_offset[local]:
-  ∀ base offset sa. ci_mono sa (SND (compile_with_byte_offset base offset sa))
-Proof
-  rw[contextTheory.compile_with_byte_offset_def] >>
-  simp[ci_mono_comp_return, ci_mono_emit_op]
-QED
-
-(* ci_mono for the mutually recursive layout-aware memory copy. *)
-Theorem ci_mono_compile_store_memory_typed[local]:
-  (∀cenv dst dst_ty src src_ty sa.
-     ci_mono sa
-       (SND (compile_store_memory_typed cenv dst dst_ty src src_ty sa))) ∧
-  (∀cenv dst src dst_tys src_tys dst_off src_off sa.
-     ci_mono sa
-       (SND (compile_typed_copy_fields cenv dst src dst_tys src_tys
-               dst_off src_off sa))) ∧
-  (∀cenv dst dst_elem_ty src src_elem_ty n sa.
-     ci_mono sa
-       (SND (compile_copy_sarray_typed cenv dst dst_elem_ty src src_elem_ty
-               n sa))) ∧
-  (∀cenv dst dst_elem_ty dst_capacity src src_elem_ty sa.
-     ci_mono sa
-       (SND (compile_copy_dynarray_typed cenv dst dst_elem_ty dst_capacity
-               src src_elem_ty sa))) ∧
-  (∀cenv dst src dst_fields src_fields dst_off src_off sa.
-     ci_mono sa
-       (SND (compile_struct_typed_copy cenv dst src dst_fields src_fields
-               dst_off src_off sa)))
-Proof
-  ho_match_mp_tac contextTheory.compile_store_memory_typed_ind >>
-  rpt conj_tac >> rpt strip_tac >>
-  once_rewrite_tac[contextTheory.compile_store_memory_typed_def] >>
-  simp_tac pure_ss [LET_THM] >> BETA_TAC >>
-  rpt (FIRST [
-    CHANGED_TAC (simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_emit_inst,
-      ci_mono_fresh_label, ci_mono_fresh_var, ci_mono_new_block,
-      ci_mono_comp_return, ci_mono_compile_copy_memory,
-      ci_mono_compile_copy_memory_dynamic, ci_mono_compile_store_bytestring,
-      ci_mono_compile_with_byte_offset]),
-    gen_tac,
-    ho_match_mp_tac ci_mono_bind >> conj_tac,
-    ho_match_mp_tac ci_mono_ignore_bind >> conj_tac,
-    IF_CASES_TAC,
-    TOP_CASE_TAC,
-    first_assum (fn ih =>
-      (irule (SRULE [] ih) >> fs[] >> NO_TAC) ORELSE
-      (* the struct IH may differ from the goal by commuted offsets *)
-      metis_tac[SRULE [] ih, arithmeticTheory.ADD_COMM])])
-QED
-
-Theorem ci_mono_compile_store_memory[local]:
-  ∀cenv src dst dst_ty src_ty sa.
-    ci_mono sa (SND (compile_store_memory cenv src dst dst_ty src_ty sa))
-Proof
-  rw[contextTheory.compile_store_memory_def] >>
-  simp[ci_mono_emit_void, ci_mono_compile_store_bytestring,
-       ci_mono_compile_copy_memory, cj 1 ci_mono_compile_store_memory_typed]
-QED
-
+(* Reuse ci_mono_typed_memory_family and ci_mono_compile_store_memory above
+   for both aggregate construction and external-call default materialization. *)
 Theorem ci_mono_compile_materialize_vv[local]:
   ∀cenv ty vv sa. ci_mono sa (SND (compile_materialize_vv cenv ty vv sa))
 Proof
@@ -3255,3 +3363,36 @@ Proof
     by (irule ci_mono_same_blocks_isPREFIX >> simp[]) >>
   gvs[GSYM prefix_drop_equiv, emitted_insts_def]
 QED
+
+(* Issue #560 integrity gate, including local proof-interface helpers. *)
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles then ()
+     else raise Fail "admitted memory-construction proof interface"
+  end)
+  [ci_mono_typed_memory_family, ci_mono_compile_store_memory,
+   ci_mono_compile_struct_lit_cfn, ci_mono_compile_make_array_elems_cfn,
+   ci_mono_compile_make_array_cfn, ci_mono_compile_zero_words,
+   ci_mono_compile_builtin_empty_complex,
+   builtinSimpleTheory.compile_zero_words_zero,
+   builtinSimpleTheory.compile_zero_words_one_order,
+   builtinSimpleTheory.compile_zero_words_two_order,
+   builtinSimpleTheory.compile_builtin_empty_complex_length_order,
+   builtinSimpleTheory.compile_builtin_empty_complex_fixed_order];
+
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles then ()
+     else raise Fail "admitted memory-construction regression theorem"
+  end)
+  [exprLoweringTheory.compile_empty_word_dispatch,
+   exprLoweringTheory.compile_empty_memory_dispatch,
+   exprLoweringTheory.compile_make_array_empty_length,
+   exprLoweringTheory.compile_make_array_word_order,
+   exprLoweringTheory.compile_make_fixed_array_word_order,
+   exprLoweringTheory.compile_make_tuple_word_order,
+   exprLoweringTheory.compile_struct_lit_word_order,
+   exprLoweringTheory.compile_make_array_empty_full_capacity,
+   exprLoweringTheory.compile_make_array_typed_tuple_order];
