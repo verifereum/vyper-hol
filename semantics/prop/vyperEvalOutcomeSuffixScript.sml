@@ -525,15 +525,17 @@ val outcomes_suffix_base_facts =
   outcomes_suffix_read :: outcomes_suffix_take :: outcomes_suffix_frame_simps;
 
 Theorem outcomes_suffix_ext_call:
-  outcomes_suffix (eval_ext_call cx is_static skip_check sig opts vs)
+  outcomes_suffix (eval_ext_call cx static skip_check sig opts vs)
 Proof
-  PairCases_on `sig` >> simp_tac bool_ss [eval_ext_call_def, LET_THM] >>
+  PairCases_on `sig` >> Cases_on `vs` >>
+  simp_tac bool_ss [eval_ext_call_def, LET_THM] >>
   rpt (outcomes_suffix_step outcomes_suffix_base_facts)
 QED
 
 Theorem outcomes_suffix_send:
   outcomes_suffix (eval_send cx has_gas vs)
 Proof
+  Cases_on `vs` >> TRY (Cases_on `t`) >>
   simp_tac bool_ss [eval_send_def, LET_THM] >>
   rpt (outcomes_suffix_step outcomes_suffix_base_facts)
 QED

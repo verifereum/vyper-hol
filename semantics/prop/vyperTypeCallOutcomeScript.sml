@@ -152,7 +152,7 @@ Theorem ExtCall_outcome_return_type_sound:
   state_well_typed st' /\ env_consistent env cx st' /\
   accounts_well_typed st'.accounts /\ no_type_error_result res /\
   case res of
-  | INL tv => expr_result_typed env (Call ret_type (ExtCall stat skc fsig) es drv) tv
+  | INL tv => expr_result_typed env (Call ret_type (ExtCall stat skc fsig opts) es drv) tv
   | INR _ => T
 Proof
   rpt gen_tac >> strip_tac >>
@@ -204,14 +204,14 @@ Theorem Send_outcome_type_sound:
   state_well_typed st' /\ env_consistent env cx st' /\
   accounts_well_typed st'.accounts /\ no_type_error_result res /\
   case res of
-  | INL tv => expr_result_typed env (Call NoneT Send es extra) tv
+  | INL tv => expr_result_typed env (Call NoneT (Send has_gas) es extra) tv
   | INR _ => T
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all (checked_call_outcome_type_sound |>
     INST_TYPE [alpha |-> ``:toplevel_value``] |> Q.INST
     [`Q` |-> `\res t. no_type_error_result res /\
-      case res of INL tv => expr_result_typed env (Call NoneT Send es extra) tv | INR _ => T`,
+      case res of INL tv => expr_result_typed env (Call NoneT (Send has_gas) es extra) tv | INR _ => T`,
      `k` |-> `\bs. vyperState$return (Value NoneV)`] |> SRULE
     [return_def, no_type_error_result_def, expr_result_typed_def,
      expr_runtime_typed_def, expr_type_def, toplevel_value_typed_def,

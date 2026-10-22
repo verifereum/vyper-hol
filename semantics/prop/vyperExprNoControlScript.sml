@@ -575,27 +575,31 @@ val close_lift_option_type =
 (* ===== Case 18: ExtCall and Send ===== *)
 
 Theorem eval_ext_call_no_control:
-  eval_ext_call cx is_static skip_check sig opts vs st = (INR exc, st') ==>
+  eval_ext_call cx static skip_check sig opts vs st = (INR exc, st') ==>
   no_control_exc exc
 Proof
-  PairCases_on `sig` >>
+  PairCases_on `sig` >> Cases_on `vs` >>
   simp[eval_ext_call_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, get_accounts_def,
        get_transient_storage_def, lift_option_def, lift_option_type_def,
        check_def, lift_sum_runtime_def, update_accounts_def,
        update_transient_def, append_logs_def, take_call_outcome_def,
-       adopt_call_outcome_def, LET_THM, UNCURRY] >>
+       adopt_call_outcome_def, LET_THM, UNCURRY,
+       COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
   strip_tac >> gvs[AllCaseEqs(), no_control_exc_def]
 QED
 
 Theorem eval_send_no_control:
   eval_send cx has_gas vs st = (INR exc, st') ==> no_control_exc exc
 Proof
+  Cases_on `vs` >- simp[eval_send_def, raise_def, no_control_exc_def] >>
+  Cases_on `t` >- simp[eval_send_def, raise_def, no_control_exc_def] >>
   simp[eval_send_def, bind_def, ignore_bind_def, type_check_def, assert_def,
        return_def, raise_def, lift_option_type_def, check_def,
-       take_call_outcome_def, adopt_call_outcome_def, LET_THM, UNCURRY] >>
+       take_call_outcome_def, adopt_call_outcome_def, LET_THM, UNCURRY,
+       COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
   strip_tac >> gvs[AllCaseEqs(), no_control_exc_def] >>
-  drule transfer_value_no_control >> simp[]
+  drule transfer_value_no_control >> simp[no_control_exc_def]
 QED
 
 (* ===== Case 19: IntCall ===== *)
@@ -825,7 +829,10 @@ Proof
     simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
          assert_def, return_def, raise_def, AllCaseEqs()] >>
     rpt strip_tac >> gvs[no_control_exc_def] >>
-    imp_res_tac eval_send_no_control >> res_tac) >>
+    imp_res_tac eval_send_no_control >> gvs[no_control_exc_def] >>
+    first_x_assum (qspecl_then [`s`, `s`] mp_tac) >>
+    simp[type_check_def, assert_def, return_def] >>
+    disch_then drule >> simp[]) >>
   conj_tac >- (
     rpt strip_tac >> pop_assum mp_tac >>
     simp[Once evaluate_def, bind_def, AllCaseEqs()] >>
