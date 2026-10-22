@@ -1030,7 +1030,7 @@ Theorem build_create_code_total:
   LIST_REL
     (\ty v. ?tv. evaluate_type tenv ty = SOME tv /\ value_has_type tv v)
     ctor_tys ops.co_ctor_args ==>
-  ?code_info. build_create_code tenv kind ops accounts ctor_tys = SOME code_info
+  ?code_info. build_create_code tenv kind ops accounts ctor_tys blueprint_size = SOME code_info
 Proof
   rpt strip_tac >>
   drule encode_create_ctor_args_total >> strip_tac >>
@@ -1135,7 +1135,7 @@ QED
 
 Theorem eval_create_accounts_well_typed:
   accounts_well_typed st.accounts /\
-  eval_create cx kind has_salt rof arg_tys vs st = (res, st') ==>
+  eval_create cx kind has_salt rof arg_tys vs blueprint_size st = (res, st') ==>
   accounts_well_typed st'.accounts
 Proof
   strip_tac >>
@@ -1145,12 +1145,14 @@ Proof
   Cases_on `create_arg_ctor_types kind has_salt arg_tys` >-
     gvs[eval_create_def, bind_def, lift_option_type_def, return_def, raise_def] >>
   rename1 `create_arg_ctor_types kind has_salt arg_tys = SOME ctor_tys` >>
-  Cases_on `build_create_code (get_tenv cx) kind ops st.accounts ctor_tys` >>
+  Cases_on `build_create_code (get_tenv cx) kind ops st.accounts ctor_tys blueprint_size` >>
   gvs[eval_create_def, bind_def, ignore_bind_def, lift_option_type_def,
       get_accounts_def, check_def, return_def,
       raise_def, AllCaseEqs()] >>
-  rename1 `build_create_code (get_tenv cx) kind ops st.accounts ctor_tys =
+  rename1 `build_create_code (get_tenv cx) kind ops st.accounts ctor_tys blueprint_size =
             SOME code_info` >>
+  (* An oversized initcode failure is a RuntimeError with unchanged state. *)
+  Cases_on `code_info.cc_size_ok` >>
   gvs[eval_create_def, bind_apply, ignore_bind_apply, lift_option_type_def,
       get_accounts_def, update_accounts_def, get_transient_storage_def,
       get_pending_deletions_def, update_transient_def,
@@ -1212,11 +1214,11 @@ Proof
 QED
 
 Theorem create_tail_result_sound_simp:
-  !env cx es vs st res st' kind has_salt rof.
+  !env cx es vs st res st' kind has_salt rof blueprint_size.
     runtime_consistent env cx st /\
     exprs_runtime_typed env es vs /\
     create_arg_types_ok kind has_salt (MAP expr_type es) /\
-    eval_create cx kind has_salt rof (MAP expr_type es) vs st = (res,st') ==>
+    eval_create cx kind has_salt rof (MAP expr_type es) vs blueprint_size st = (res,st') ==>
     state_well_typed st' /\ env_consistent env cx st' /\
     accounts_well_typed st'.accounts /\
     (!msg. res <> INR (Error (TypeError msg))) /\
@@ -1230,7 +1232,7 @@ Proof
   drule exprs_runtime_typed_LIST_REL_source_value >> strip_tac >>
   drule_all create_args_runtime_typed_decode >> strip_tac >>
   `?code_info.
-      build_create_code (get_tenv cx) kind ops st.accounts ctor_tys =
+      build_create_code (get_tenv cx) kind ops st.accounts ctor_tys blueprint_size =
         SOME code_info` by (
     qpat_x_assum `get_tenv cx = env.type_defs` (fn th => rewrite_tac[th]) >>
     irule build_create_code_total >> metis_tac[]) >>
@@ -1253,7 +1255,7 @@ Proof
          (Call (BaseT AddressT) (CreateTarget kind has_salt rof) es NONE) tv
      | INR _ => T` by (
     gvs[runtime_consistent_def] >>
-    qpat_x_assum `eval_create _ _ _ _ _ _ _ = _` mp_tac >>
+    qpat_x_assum `eval_create _ _ _ _ _ _ _ _ = _` mp_tac >>
     simp[eval_create_def, bind_def, ignore_bind_def, lift_option_type_def,
          get_accounts_def, update_accounts_def, get_pending_deletions_def,
          check_def, assert_def, create_soft_failure_def, return_def, raise_def] >>

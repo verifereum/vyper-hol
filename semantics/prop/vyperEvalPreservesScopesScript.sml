@@ -2005,14 +2005,12 @@ Proof
   (* CreateTarget *)
   conj_tac >- (
     rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-    qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-    simp[Once evaluate_def, bind_def] >>
-    Cases_on `eval_exprs cx es st` >> Cases_on `q` >> simp[] >>
-    strip_tac >>
-    first_x_assum drule >> strip_tac >>
-    drule eval_create_preserves_scopes_immutables >> strip_tac >>
-    irule preserves_tv_trans >> first_assum (irule_at Any) >>
-    gvs[preserves_tv_def]) >>
+    Cases_on `kind` >> gvs[] >>
+    gvs[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs()] >>
+    imp_res_tac check_create_blueprint_result_state >> gvs[] >>
+    res_tac >>
+    imp_res_tac eval_create_preserves_scopes_immutables >>
+    metis_tac[preserves_tv_trans, preserves_tv_eq]) >>
   (* eval_exprs [] *)
   conj_tac >- rw[evaluate_def, return_def] >>
   (* eval_exprs e::es *)

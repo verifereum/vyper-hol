@@ -12,7 +12,7 @@ Theory vyperTypeEvalSoundness
 Ancestors
   list rich_list pred_set prim_rec arithmetic finite_map option pair sum
   vyperAST vyperValue vyperValueOperation vyperMisc vyperABI
-  vyperInterpreter vyperState vyperContext vyperStorage vyperTyping vyperLookup
+  vyperCreate vyperInterpreter vyperState vyperContext vyperStorage vyperTyping vyperLookup
   vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeInvariants vyperTypeValues
   vyperTypeEnv vyperTypeEnvExtension vyperTypeEnvPreservation vyperTypeScopePop
   vyperTypeABI vyperTypeBindArguments vyperTypeExprResult vyperTypeStmtResult
@@ -223,6 +223,51 @@ Theorem well_typed_exprs_DROP:
 Proof
   gen_tac >> Induct >> simp[well_typed_expr_def] >>
   rpt strip_tac >> Cases_on `n` >> simp[well_typed_expr_def]
+QED
+
+Theorem well_typed_exprs_TAKE:
+  !env es n. well_typed_exprs env es ==> well_typed_exprs env (TAKE n es)
+Proof
+  gen_tac >> Induct >> simp[well_typed_expr_def] >>
+  rpt strip_tac >> Cases_on `n` >> simp[well_typed_expr_def]
+QED
+
+Theorem int_calls_exprs_APPEND[local]:
+  !es es'. int_calls_exprs (es ++ es') =
+    int_calls_exprs es ++ int_calls_exprs es'
+Proof
+  Induct >> simp[int_calls_expr_def, APPEND_ASSOC]
+QED
+
+Theorem call_evaluation_safe_exprs_TAKE:
+  !es n cx. call_evaluation_safe cx (int_calls_exprs es) ==>
+    call_evaluation_safe cx (int_calls_exprs (TAKE n es))
+Proof
+  rpt strip_tac >>
+  `int_calls_exprs es =
+     int_calls_exprs (TAKE n es) ++ int_calls_exprs (DROP n es)` by
+    metis_tac[int_calls_exprs_APPEND, TAKE_DROP] >>
+  metis_tac[call_evaluation_safe_append_left]
+QED
+
+Theorem call_evaluation_safe_exprs_DROP:
+  !es n cx. call_evaluation_safe cx (int_calls_exprs es) ==>
+    call_evaluation_safe cx (int_calls_exprs (DROP n es))
+Proof
+  rpt strip_tac >>
+  `int_calls_exprs es =
+     int_calls_exprs (TAKE n es) ++ int_calls_exprs (DROP n es)` by
+    metis_tac[int_calls_exprs_APPEND, TAKE_DROP] >>
+  metis_tac[call_evaluation_safe_append_right]
+QED
+
+Theorem exprs_runtime_typed_APPEND:
+  exprs_runtime_typed env es vs /\
+  exprs_runtime_typed env es' vs' ==>
+  exprs_runtime_typed env (es ++ es') (vs ++ vs')
+Proof
+  rw[exprs_runtime_typed_def] >>
+  qexists_tac `tvs ++ tvs'` >> metis_tac[LIST_REL_APPEND_suff]
 QED
 
 Theorem get_tenv_stk_irrelevant[local]:
@@ -9628,6 +9673,60 @@ Resume eval_all_type_sound_mutual[Expr_Call_CreateTarget]:
     drule create_call_evaluation_safe_args >> strip_tac >>
     qpat_x_assum `well_typed_expr env (Call _ (CreateTarget _ _ _) _ _)` mp_tac >>
     rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
+    Cases_on `kind` >| [ALL_TAC, ALL_TAC, (
+      rename1 `CreateFromBlueprint raw_args` >>
+      full_simp_tac bool_ss [create_kind_11, create_kind_distinct] >>
+      `well_typed_exprs env (TAKE (if has_salt then 4 else 3) es)` by
+        metis_tac[well_typed_exprs_TAKE] >>
+      `well_typed_exprs env (DROP (if has_salt then 4 else 3) es)` by
+        metis_tac[well_typed_exprs_DROP] >>
+      `call_evaluation_safe cx
+         (int_calls_exprs (TAKE (if has_salt then 4 else 3) es))` by
+        metis_tac[call_evaluation_safe_exprs_TAKE] >>
+      `call_evaluation_safe cx
+         (int_calls_exprs (DROP (if has_salt then 4 else 3) es))` by
+        metis_tac[call_evaluation_safe_exprs_DROP] >>
+      qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp_tac(srw_ss())[Once evaluate_def, bind_def] >>
+      Cases_on `eval_exprs cx (TAKE (if has_salt then 4 else 3) es) st` >>
+      rename1 `eval_exprs cx (TAKE (if has_salt then 4 else 3) es) st =
+                 (prefix_res,prefix_st)` >>
+      first_x_assum drule_all >> strip_tac >>
+      Cases_on `prefix_res` >> gvs[no_type_error_result_def]
+      >- (
+        rename1 `exprs_runtime_typed env
+                   (TAKE (if has_salt then 4 else 3) es) prefix` >>
+        Cases_on `check_create_blueprint has_salt prefix prefix_st` >>
+        rename1 `check_create_blueprint has_salt prefix prefix_st =
+                   (gate_res,gate_st)` >>
+        `gate_st = prefix_st` by (
+          qpat_x_assum `check_create_blueprint has_salt prefix prefix_st = _`
+            (mp_tac o Q.AP_TERM `SND`) >> simp[]) >>
+        gvs[] >>
+        Cases_on `gate_res` >> gvs[]
+        >- (
+          rename1 `check_create_blueprint has_salt prefix prefix_st =
+                     (INL code_size,prefix_st)` >>
+          Cases_on `eval_exprs cx (DROP (if has_salt then 4 else 3) es) prefix_st` >>
+          rename1 `eval_exprs cx (DROP (if has_salt then 4 else 3) es) prefix_st =
+                     (suffix_res,suffix_st)` >>
+          first_x_assum drule_all >> strip_tac >>
+          Cases_on `suffix_res` >> gvs[no_type_error_result_def]
+          >- (
+            rename1 `exprs_runtime_typed env
+                       (DROP (if has_salt then 4 else 3) es) suffix` >>
+            `exprs_runtime_typed env es (prefix ++ suffix)` by
+              metis_tac[exprs_runtime_typed_APPEND, TAKE_DROP] >>
+            `runtime_consistent env cx suffix_st` by
+              simp[runtime_consistent_def] >>
+            strip_tac >>
+            drule_all create_tail_result_sound_simp >>
+            simp[no_type_error_result_def]) >>
+          strip_tac >> gvs[]) >>
+        strip_tac >> gvs[] >>
+        metis_tac[check_create_blueprint_no_type_error]) >>
+      strip_tac >> gvs[]), ALL_TAC] >>
+    (full_simp_tac bool_ss [create_kind_11, create_kind_distinct] >>
     qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
     simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
                          type_check_def, assert_def, return_def, raise_def,
@@ -9638,14 +9737,14 @@ Resume eval_all_type_sound_mutual[Expr_Call_CreateTarget]:
     first_x_assum drule_all >> strip_tac >>
     Cases_on `args_res` >> gvs[no_type_error_result_def]
     >- (
-      rename1 `exprs_runtime_typed env es vs` >>
+      `runtime_consistent env cx args_st` by simp[runtime_consistent_def] >>
       strip_tac >>
-      qspecl_then [`env`, `cx`, `es`, `vs`, `args_st`, `res`, `st'`,
-                   `kind`, `has_salt`, `rof`]
-        mp_tac create_tail_result_sound_simp >>
-      simp[runtime_consistent_def]) >>
-    strip_tac >> gvs[]) >>
-  rpt strip_tac >> gvs[Once well_typed_expr_def]
+      drule_all create_tail_result_sound_simp >>
+      simp[no_type_error_result_def]) >>
+    strip_tac >> gvs[])) >>
+  rpt strip_tac >>
+  qpat_x_assum `type_place_expr env (Call _ _ _ _) = SOME _` mp_tac >>
+  simp[Once well_typed_expr_def]
 QED
 
 Resume eval_all_type_sound_mutual[Exprs_nil]:

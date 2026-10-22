@@ -1591,23 +1591,6 @@ Proof
   irule log_extends_eq_logs >> gvs[]
 QED
 
-Theorem case_expr_create_logs[local]:
-  (!s0 r s1. eval_exprs cx es s0 = (r,s1) ==> log_extends s0 s1) ==>
-  !st res st'.
-    eval_expr cx (Call ty (CreateTarget kind has_salt rof) es drv) st =
-      (res,st') ==> log_extends st st'
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[Once vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def,
-       AllCaseEqs()] >>
-  rpt strip_tac >> gvs[log_extends_refl] >>
-  imp_res_tac type_check_state >> imp_res_tac lift_option_type_state >>
-  first_x_assum drule >> strip_tac >>
-  irule log_extends_trans >> goal_assum drule >>
-  metis_tac[eval_create_logs_extend, log_extends_def]
-QED
-
 Theorem finally_log_extends[local]:
   finally f g st = (res,st') ==>
   (!r s1. f st = (r,s1) ==> log_extends st s1) ==>
@@ -2509,7 +2492,7 @@ in
      case_expr_flag_member_logs, lookup_global_log_extends,
      lookup_flag_mem_log_extends, case_expr_subscript_logs, case_expr_pop_logs,
      case_expr_builtin_logs, case_expr_if_logs, case_expr_struct_lit_logs,
-     case_expr_send_logs, case_expr_selfdestruct_logs, case_expr_create_logs,
+     case_expr_send_logs, case_expr_selfdestruct_logs,
      case_expr_ext_call_logs,
      case_expr_raw_call_logs, case_expr_raw_call_calldata_logs,
      case_expr_raw_log_logs, case_expr_raw_revert_logs,
@@ -2713,10 +2696,28 @@ Proof
           irule log_extends_trans >>
           qexists `r'⁴'` >>
           conj_tac >- asm "explicit_ext" MATCH_ACCEPT_TAC >>
-          first_assum MATCH_ACCEPT_TAC) >>
+          first_assum MATCH_ACCEPT_TAC) >~
+       [`_ ==> !st res st'.
+           eval_expr _ (Call _ (CreateTarget _ _ _) _ _) st = (res,st') ==>
+           log_extends st st'`] >-
+         suspend "CreateTarget" >>
      REST_ATOMIC_DISPATCH_TAC) >>
   strip_tac >> rpt conj_tac >> first_assum MATCH_ACCEPT_TAC
 QED
+
+Resume eval_mutual_log_extends[CreateTarget]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  Cases_on `kind` >> gvs[] >>
+  gvs[Once vyperInterpreterTheory.evaluate_def,
+      vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+      AllCaseEqs()] >>
+  imp_res_tac check_create_blueprint_result_state >> gvs[] >>
+  res_tac >>
+  imp_res_tac eval_create_logs_extend >>
+  metis_tac[log_extends_refl, log_extends_trans, log_extends_def]
+QED
+
+Finalise eval_mutual_log_extends
 
 Theorem eval_stmt_log_extends:
   !cx s st res st'.

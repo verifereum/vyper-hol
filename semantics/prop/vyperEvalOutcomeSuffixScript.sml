@@ -288,8 +288,14 @@ val OUTCOMES_FRAME_TAC =
     first_assum (irule_at Any),
     first_assum MATCH_MP_TAC, conj_tac, CASE_TAC]) g);
 
+Theorem outcomes_frame_check_create_blueprint[simp]:
+  outcomes_frame (check_create_blueprint has_salt vs)
+Proof
+  simp[outcomes_frame_def, check_create_blueprint_state]
+QED
+
 Theorem outcomes_frame_create[simp]:
-  outcomes_frame (eval_create cx kind has_salt rof arg_tys vs)
+  outcomes_frame (eval_create cx kind has_salt rof arg_tys vs blueprint_size)
 Proof
   simp_tac bool_ss [eval_create_def, create_soft_failure_def, LET_THM] >>
   (* Split the exposed run_create_evm option and result tuple incrementally;
@@ -499,6 +505,7 @@ val outcomes_suffix_frame_simps =
       [outcomes_frame_assignment, outcomes_frame_reads,
        outcomes_frame_primitives, outcomes_frame_handlers,
        outcomes_frame_return, outcomes_frame_raise, outcomes_frame_create,
+       outcomes_frame_check_create_blueprint,
        outcomes_frame_assign_result, outcomes_frame_resolve_array,
        outcomes_frame_adopt, outcomes_frame_raw_call]));
 
@@ -768,7 +775,9 @@ Resume eval_outcomes_suffix_mutual[eval_expr_Call_SelfDestructTarget]:
   simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
 QED
 Resume eval_outcomes_suffix_mutual[eval_expr_Call_CreateTarget]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
+  Cases_on `kind` >> Cases_on `has_salt` >> gvs[] >>
+  simp[Once evaluate_def] >>
+  OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
 QED
 Resume eval_outcomes_suffix_mutual[eval_exprs_NIL]:
   simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC

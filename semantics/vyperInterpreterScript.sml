@@ -446,6 +446,20 @@ Proof
   \\ simp[]
 QED
 
+Theorem exprs_bound_TAKE:
+  ∀ts n es. exprs_bound ts (TAKE n es) ≤ exprs_bound ts es
+Proof
+  Induct_on `es` >> Cases_on `n` >> simp[bound_def]
+QED
+
+Theorem exprs_bound_slices_lt[simp]:
+  exprs_bound ts (TAKE n es) < SUC (exprs_bound ts es) /\
+  exprs_bound ts (DROP n es) < SUC (exprs_bound ts es)
+Proof
+  mp_tac (Q.SPECL [`ts`, `n`, `es`] exprs_bound_TAKE) >>
+  mp_tac (Q.SPECL [`ts`, `n`, `es`] exprs_bound_DROP) >> simp[]
+QED
+
 (* Extract callable functions - for termination proof *)
 (* Internal and Deploy are separate so we can order Internal before Deploy *)
 Definition dest_Internal_Fn_def:
@@ -1618,13 +1632,22 @@ Definition evaluate_def:
        unless in same transaction as creation. We model the simple case. *)
     return $ Value NoneV
   od ∧
-  (* Creation operands use the kind-specific runtime layouts documented on
-     CreateTarget.  eval_exprs preserves their evaluation order and the shared
-     helper performs decoding, initcode/address derivation and account effects. *)
-  eval_expr cx (Call ty (CreateTarget kind has_salt rof) es _) = do
-    vs <- eval_exprs cx es;
-    eval_create cx kind has_salt rof (MAP expr_type es) vs
-  od ∧
+  (* Blueprint validation interrupts the runtime operand layout before ctor
+     arguments, retaining the modular copy size even if those arguments deploy
+     code at a previously empty target. *)
+  eval_expr cx (Call ty (CreateTarget kind has_salt rof) es _) =
+    (case kind of
+     | CreateFromBlueprint raw_args => do
+         prefix <- eval_exprs cx (TAKE (if has_salt then 4 else 3) es);
+         code_size <- check_create_blueprint has_salt prefix;
+         suffix <- eval_exprs cx (DROP (if has_salt then 4 else 3) es);
+         eval_create cx kind has_salt rof (MAP expr_type es)
+           (prefix ++ suffix) (SOME code_size)
+       od
+     | _ => do
+         vs <- eval_exprs cx es;
+         eval_create cx kind has_salt rof (MAP expr_type es) vs NONE
+       od) ∧
   eval_exprs cx [] = return [] ∧
   eval_exprs cx (e::es) = do
     tv <- eval_expr cx e;
@@ -1655,6 +1678,15 @@ Termination
   \\ simp[prim_recTheory.measure_def, relationTheory.inv_image_def]
   \\ rw[bound_def, MAX_DEF, MULT, IS_SOME_EXISTS] \\ gvs[]
   \\ rpt (FIRST [
+    (* Blueprint operand slices are bounded by the original argument list. *)
+    (qmatch_goalsub_abbrev_tac `exprs_bound fts (TAKE n es)`
+    \\ irule LESS_EQ_LESS_TRANS
+    \\ qexists_tac `exprs_bound fts es`
+    \\ simp[exprs_bound_TAKE] \\ NO_TAC),
+    (qmatch_goalsub_abbrev_tac `exprs_bound fts (DROP n es)`
+    \\ irule LESS_EQ_LESS_TRANS
+    \\ qexists_tac `exprs_bound fts es`
+    \\ simp[exprs_bound_DROP] \\ NO_TAC),
     (* For loop: compatible_bound case *)
     (rename1`compatible_bound`
     \\ gvs[compatible_bound_def, check_def, type_check_def, assert_def]
