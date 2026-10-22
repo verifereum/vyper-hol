@@ -1045,12 +1045,15 @@ val () = cv_auto_trans ext_call_opts_ok_def;
    unless skip_contract_check.  The outcome comes from the external-call
    oracle when st.outcomes is SOME, otherwise from running the callee. *)
 Definition eval_ext_call_def:
-  eval_ext_call cx is_static skip_check (func_name, arg_types, ret_type) opts vs = do
-    type_check (vs ≠ [] ∧ LENGTH vs = 1 + LENGTH arg_types + LENGTH opts ∧
+  eval_ext_call cx is_static skip_check (func_name, arg_types, ret_type) opts [] =
+    raise (Error (TypeError "ExtCall operands")) ∧
+  eval_ext_call cx is_static skip_check (func_name, arg_types, ret_type) opts
+                (target_v :: rest) = do
+    type_check (LENGTH rest = LENGTH arg_types + LENGTH opts ∧
                 ext_call_opts_ok is_static opts) "ExtCall operands";
-    target_addr <- lift_option_type (dest_AddressV (HD vs)) "ExtCall target not address";
-    arg_vals <<- TAKE (LENGTH arg_types) (TL vs);
-    kw_vals <<- DROP (LENGTH arg_types) (TL vs);
+    target_addr <- lift_option_type (dest_AddressV target_v) "ExtCall target not address";
+    arg_vals <<- TAKE (LENGTH arg_types) rest;
+    kw_vals <<- DROP (LENGTH arg_types) rest;
     value_opt <- (if is_static then return NONE else
       case ext_call_kwarg EKValue opts kw_vals of
       | NONE => return (SOME 0)
@@ -1080,22 +1083,27 @@ Definition eval_ext_call_def:
             (run_ext_call cx.txn.target target_addr calldata value_opt
                           accounts tStorage (vyper_to_tx_params cx.txn))
             "ExtCall run failed";
-          (success, returnData, accounts', tStorage', emitted_logs) <<- result;
+          success <<- FST result; result1 <<- SND result;
+          returnData <<- FST result1; result2 <<- SND result1;
+          accounts' <<- FST result2; result3 <<- SND result2;
+          tStorage' <<- FST result3; emitted_logs <<- SND result3;
           (if success then return () else raise $ Error $ RevertData returnData);
           update_accounts (K accounts');
           update_transient (K tStorage');
           append_logs emitted_logs;
           return returnData
         od);
-    if returnData = [] ∧ IS_SOME default_opt then do
-      accounts' <- get_accounts;
-      check (skip_check ∨ ext_call_has_code target_addr accounts')
-            "ExtCall target has no code";
-      return $ Value $ THE default_opt
-    od else do
-      ret_val <- lift_sum_runtime (evaluate_abi_decode_return tenv ret_type returnData);
-      return $ Value ret_val
-    od
+    case (if returnData = [] then default_opt else NONE) of
+    | SOME default_v => do
+        accounts' <- get_accounts;
+        check (skip_check ∨ ext_call_has_code target_addr accounts')
+              "ExtCall target has no code";
+        return $ Value default_v
+      od
+    | NONE => do
+        ret_val <- lift_sum_runtime (evaluate_abi_decode_return tenv ret_type returnData);
+        return $ Value ret_val
+      od
   od
 End
 
@@ -1108,10 +1116,10 @@ val () = eval_ext_call_def
 
 (* send(to, value[, gas=...]); vs = [to; value] ++ (if has_gas then [gas] else []) *)
 Definition eval_send_def:
-  eval_send cx has_gas vs = do
-    type_check (LENGTH vs = if has_gas then 3 else 2) "Send args";
-    toAddr <- lift_option_type (dest_AddressV $ EL 0 vs) "Send not AddressV";
-    amount <- lift_option_type (dest_NumV $ EL 1 vs) "Send not NumV";
+  eval_send cx has_gas (to_v :: amount_v :: gas_vs) = do
+    type_check (LENGTH gas_vs = if has_gas then 1 else 0) "Send args";
+    toAddr <- lift_option_type (dest_AddressV to_v) "Send not AddressV";
+    amount <- lift_option_type (dest_NumV amount_v) "Send not NumV";
     outcomes <- (λst. return st.outcomes st);
     case outcomes of
     | SOME _ => do
@@ -1124,7 +1132,8 @@ Definition eval_send_def:
       transfer_value cx.txn.target toAddr amount;
       return $ Value $ NoneV
     od
-  od
+  od ∧
+  eval_send cx has_gas _ = raise (Error (TypeError "Send args"))
 End
 
 val () = eval_send_def
@@ -1134,17 +1143,18 @@ val () = eval_send_def
   |> cv_auto_trans;
 
 Theorem eval_ext_call_preserves_non_accounts:
-  eval_ext_call cx is_static skip_check sig opts vs st = (res, st') ==>
+  eval_ext_call cx static skip_check sig opts vs st = (res, st') ==>
   st'.scopes = st.scopes /\ st'.immutables = st.immutables
 Proof
-  PairCases_on `sig` >>
+  PairCases_on `sig` >> Cases_on `vs` >>
   simp[eval_ext_call_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, get_accounts_def,
        get_transient_storage_def, lift_option_def, lift_option_type_def,
        check_def, lift_sum_runtime_def, update_accounts_def,
        update_transient_def, append_logs_def,
        vyperCallOutcomeTheory.take_call_outcome_def,
-       vyperCallOutcomeTheory.adopt_call_outcome_def, LET_THM, UNCURRY] >>
+       vyperCallOutcomeTheory.adopt_call_outcome_def, LET_THM, UNCURRY,
+       COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
   strip_tac >> gvs[AllCaseEqs()]
 QED
 
@@ -1152,11 +1162,14 @@ Theorem eval_send_preserves_non_accounts:
   eval_send cx has_gas vs st = (res, st') ==>
   st'.scopes = st.scopes /\ st'.immutables = st.immutables
 Proof
+  Cases_on `vs` >- simp[eval_send_def, raise_def] >>
+  Cases_on `t` >- simp[eval_send_def, raise_def] >>
   simp[eval_send_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, lift_option_type_def, check_def,
        transfer_value_def, get_accounts_def, update_accounts_def,
        vyperCallOutcomeTheory.take_call_outcome_def,
-       vyperCallOutcomeTheory.adopt_call_outcome_def, LET_THM, UNCURRY] >>
+       vyperCallOutcomeTheory.adopt_call_outcome_def, LET_THM, UNCURRY,
+       COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
   strip_tac >> gvs[AllCaseEqs()]
 QED
 

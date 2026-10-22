@@ -191,7 +191,7 @@ Theorem expr_callbacks_agree_take_drop:
   expr_callbacks_agree f g cenv (DROP n es)
 Proof
   rw[expr_callbacks_agree_def] >> first_x_assum irule >>
-  imp_res_tac MEM_TAKE_IMP >> imp_res_tac MEM_DROP_IMP >> simp[]
+  imp_res_tac rich_listTheory.MEM_TAKE >> imp_res_tac rich_listTheory.MEM_DROP_IMP >> simp[]
 QED
 
 Theorem compile_extcall_callback_contract:
@@ -209,7 +209,8 @@ Proof
     (Cases_on `default_ret` >> fs[call_callback_children_def]) >>
   drule_then (qspec_then `LENGTH arg_types` strip_assume_tac)
     expr_callbacks_agree_take_drop >>
-  drule compile_multi_vvs_callback_contract >>
+  qpat_x_assum `expr_callbacks_agree _ _ _ (TAKE _ _)`
+    (assume_tac o MATCH_MP compile_multi_vvs_callback_contract) >>
   qpat_x_assum `expr_callbacks_agree _ _ _ (DROP _ _)`
     (assume_tac o MATCH_MP compile_ext_call_kwargs_callback_contract) >>
   fs[] >> rpt strip_tac >>

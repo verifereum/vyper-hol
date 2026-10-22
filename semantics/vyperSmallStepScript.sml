@@ -1383,13 +1383,15 @@ Proof
     \\ gvs[] \\ first_x_assum drule \\ rw[]
     \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-    >> rw[Once OWHILE_THM, stepk_def, apply_vals_def, bind_def, liftk1] )
+    >> rw[Once OWHILE_THM, stepk_def, apply_vals_def, bind_def, liftk1]
+    >> gvs[apply_exc_def] )
   \\ conj_tac >- ( (* eval_expr (Call (ExtCall ...) es _) *)
     rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def]
     \\ gvs[prod_CASE_rator, sum_CASE_rator, cont_def]
     \\ CASE_TAC \\ gvs[] \\ CASE_TAC \\ gvs[]
     \\ rw[Once OWHILE_THM, nextk_def, stepk_def,
-          apply_exc_def, apply_vals_def, ignore_bind_def, bind_def])
+          apply_exc_def, apply_vals_def, ignore_bind_def, bind_def]
+    \\ simp[liftk1] \\ CASE_TAC \\ CASE_TAC \\ simp[])
   \\ conj_tac >- ( (* IntCall *)
     rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def,
        no_recursion_def]
