@@ -272,6 +272,84 @@ Definition add_module_var_locations_def:
     add_module_var_locations rest vars'
 End
 
+(* Immutable offsets use the same module namespace as storage variables. *)
+Definition add_immutable_locations_def:
+  add_immutable_locations sft ([] : toplevel list) (off : num) vars = vars /\
+  add_immutable_locations sft (top :: rest) off vars =
+    case top of
+      VariableDecl _ Immutable name ty _ =>
+        add_immutable_locations sft rest (off + type_mem_bytes sft ty)
+          (vars |+ (module_var_key (NONE, name), ImmutableLoc off))
+    | _ => add_immutable_locations sft rest off vars
+End
+
+Theorem compute_immutables_len_append:
+  !xs ys. compute_immutables_len sft (xs ++ ys) =
+    compute_immutables_len sft xs + compute_immutables_len sft ys
+Proof
+  Induct >> simp[compute_immutables_len_def] >>
+  Cases_on `h` >> simp[compute_immutables_len_def] >>
+  CASE_TAC >> decide_tac
+QED
+
+Theorem add_immutable_locations_append:
+  !xs ys off vars.
+    add_immutable_locations sft (xs ++ ys) off vars =
+    add_immutable_locations sft ys (off + compute_immutables_len sft xs)
+      (add_immutable_locations sft xs off vars)
+Proof
+  Induct >> simp[add_immutable_locations_def, compute_immutables_len_def] >>
+  rpt gen_tac >> Cases_on `h` >>
+  simp[add_immutable_locations_def, compute_immutables_len_def] >>
+  CASE_TAC >>
+  simp[add_immutable_locations_def, compute_immutables_len_def, arithmeticTheory.ADD_ASSOC]
+QED
+
+Theorem add_immutable_locations_lookup_unchanged:
+  !tops off vars key.
+    (!vis name ty slot.
+      MEM (VariableDecl vis Immutable name ty slot) tops ==>
+      module_var_key (NONE, name) <> key) ==>
+    FLOOKUP (add_immutable_locations sft tops off vars) key = FLOOKUP vars key
+Proof
+  Induct >- simp[add_immutable_locations_def] >>
+  rpt gen_tac >> strip_tac >> Cases_on `h` >>
+  gvs[add_immutable_locations_def] >>
+  (CASE_TAC ORELSE all_tac) >>
+  gvs[add_immutable_locations_def] >>
+  last_x_assum irule >> metis_tac[]
+QED
+
+Theorem add_immutable_locations_declaration_lookup:
+  (!vis' name' ty' slot'.
+    MEM (VariableDecl vis' Immutable name' ty' slot') suffix ==>
+    module_var_key (NONE, name') <> module_var_key (NONE, name)) ==>
+  FLOOKUP (add_immutable_locations sft
+    (prefix ++ VariableDecl vis Immutable name ty slot :: suffix) off vars)
+    (module_var_key (NONE, name)) =
+  SOME (ImmutableLoc (off + compute_immutables_len sft prefix))
+Proof
+  strip_tac >> simp[add_immutable_locations_append,
+    add_immutable_locations_def, add_immutable_locations_lookup_unchanged,
+    finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem immutable_declaration_interval_bound:
+  off + compute_immutables_len sft prefix + type_mem_bytes sft ty <=
+  off + compute_immutables_len sft
+    (prefix ++ VariableDecl vis Immutable name ty slot :: suffix)
+Proof
+  simp[compute_immutables_len_append, compute_immutables_len_def]
+QED
+
+Theorem last_immutable_region_end:
+  off + compute_immutables_len sft prefix + type_mem_bytes sft ty =
+  off + compute_immutables_len sft
+    (prefix ++ [VariableDecl vis Immutable name ty slot])
+Proof
+  simp[compute_immutables_len_append, compute_immutables_len_def]
+QED
+
 (* ===== Dynamic Array Capacity ===== *)
 
 Definition dynarray_capacity_of_type_def:
@@ -399,7 +477,8 @@ Definition build_compile_env_def:
     let is_external = (vis = External) in
     let rc = returns_stack_count sft_types ret_type in
     let has_return_buf = (rc = 0 ∧ ret_type ≠ NoneT) in
-    let module_vars = add_module_var_locations tops FEMPTY in
+    let module_vars = add_immutable_locations sft_fn tops 0
+      (add_module_var_locations tops FEMPTY) in
     let (arg_vars, args_end) = allocate_args sft_fn args 0 module_vars in
     let locals = collect_locals body in
     let (local_vars, locals_end) = allocate_args sft_fn locals args_end arg_vars in
