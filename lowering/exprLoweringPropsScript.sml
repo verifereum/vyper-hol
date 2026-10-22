@@ -3513,7 +3513,6 @@ Proof
   simp[]
 QED
 
-(* C1.4.2 family drafts, pending the new boundary interfaces.
 Theorem ci_mono_builtin_ec[local]:
   (∀ce t e s. ci_mono s (SND (f ce t e s))) ⇒
   ∀bi. (bi = ECRecover ∨ bi = ECAdd ∨ bi = ECMul) ⇒
@@ -3525,7 +3524,7 @@ Proof
        >- simp[ci_mono_lower_value_cfn, ci_mono_unwrap_value]
        >> rpt gen_tac >> BETA_TAC) >>
   simp[ci_mono_as_stack_val, ci_mono_as_ptr_val, ci_mono_compile_ecrecover,
-       ci_mono_compile_ecadd, ci_mono_compile_ecmul]
+       ci_mono_compile_ecadd_points, ci_mono_compile_ecmul_point]
 QED
 
 Theorem ci_mono_builtin_concat[local]:
@@ -3547,14 +3546,39 @@ Theorem ci_mono_builtin_makearray[local]:
 Proof
   strip_tac >> simp[compile_builtin_dispatch_body_def, LET_THM] >>
   Cases_on `elem_ty` >> simp[LET_THM] >>
-  irule ci_mono_uncurry >> reverse conj_tac
-  >- simp[ci_mono_compile_alloc_buffer] >>
-  rpt gen_tac >> BETA_TAC >>
+  rpt (irule ci_mono_uncurry >> reverse conj_tac
+       >- simp[ci_mono_compile_alloc_buffer]
+       >> rpt gen_tac >> BETA_TAC) >>
   simp[ci_mono_as_ptr_val, ci_mono_compile_make_array_cfn,
-       ci_mono_compile_make_tuple]
+       ci_mono_compile_make_tuple_cfn]
 QED
 
-*)
+Theorem ci_mono_builtin_slice[local]:
+  (∀ce t e s. ci_mono s (SND (f ce t e s))) ⇒
+  ci_mono st (SND (compile_builtin_dispatch_body f cenv ret_ty ty (Slice n) args st))
+Proof
+  strip_tac >> simp[compile_builtin_dispatch_body_def, LET_THM] >>
+  rpt IF_CASES_TAC >>
+  rpt (irule ci_mono_uncurry >> reverse conj_tac
+       >- simp[ci_mono_lower_value_cfn, ci_mono_compile_slice_out_buf,
+               ci_mono_compile_bytestring_src, ci_mono_compile_alloc_buffer,
+               ci_mono_emit_op, ci_mono_emit_void]
+       >> rpt gen_tac >> BETA_TAC) >>
+  rpt IF_CASES_TAC >>
+  rpt (irule ci_mono_uncurry >> reverse conj_tac
+       >- simp[ci_mono_lower_value_cfn, ci_mono_compile_slice_out_buf,
+               ci_mono_compile_bytestring_src, ci_mono_compile_alloc_buffer,
+               ci_mono_emit_op, ci_mono_emit_void]
+       >> rpt gen_tac >> BETA_TAC) >>
+  simp[ci_mono_as_ptr_val, ci_mono_compile_slice_calldata,
+       ci_mono_compile_slice_code, ci_mono_compile_slice_extcode,
+       ci_mono_compile_slice_data, ci_mono_compile_slice_memory] >>
+  pairarg_tac >> gvs[] >>
+  rpt (irule ci_mono_uncurry >> reverse conj_tac
+       >- simp[ci_mono_lower_value_cfn]
+       >> rpt gen_tac >> BETA_TAC) >>
+  simp[ci_mono_as_ptr_val, ci_mono_compile_slice_extcode, ci_mono_compile_slice_data]
+QED
 
 (* Why it holds: only emit (appends to cs_current_insts) and new_block
    (conses onto cs_blocks) write those two fields (compileEnvScript.sml);
