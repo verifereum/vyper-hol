@@ -149,14 +149,17 @@ QED
 
 Theorem compile_send_callback_contract:
   expr_callbacks_agree f g cenv args ⇒
-  compile_call f cenv ret_ty ty Send args default_ret st =
-  compile_call g cenv ret_ty ty Send args default_ret st
+  compile_call f cenv ret_ty ty (Send has_gas) args default_ret st =
+  compile_call g cenv ret_ty ty (Send has_gas) args default_ret st
 Proof
   Cases_on `args` >- simp[compile_call_def] >>
   rename1 `addr_e::rest` >> Cases_on `rest` >- simp[compile_call_def] >>
-  rename1 `addr_e::val_e::tail` >> Cases_on `tail` >>
+  rename1 `addr_e::val_e::gas_es` >>
+  Cases_on `LENGTH gas_es = if has_gas then 1 else 0` >>
   simp[compile_call_def] >> strip_tac >> fs[] >>
-  simp[lower_value_def, comp_bind_def]
+  `gas_es = [] \/ ?gas_e. gas_es = [gas_e]` by
+    (Cases_on `gas_es` >> gvs[AllCaseEqs()] >> Cases_on `t` >> gvs[]) >>
+  gvs[lower_value_def, comp_bind_def]
 QED
 
 (* msg.data has no expression callback; only the address and value are children. *)
@@ -172,20 +175,45 @@ Proof
   simp[lower_value_def, comp_bind_def]
 QED
 
+Theorem compile_ext_call_kwargs_callback_contract:
+  ∀ks es. expr_callbacks_agree f g cenv es ⇒
+    compile_ext_call_kwargs f cenv return_type ks es =
+    compile_ext_call_kwargs g cenv return_type ks es
+Proof
+  Induct >> Cases_on `es` >> simp[compile_ext_call_kwargs_def] >>
+  rpt strip_tac >> first_x_assum drule >>
+  gvs[expr_callbacks_agree_def, FUN_EQ_THM, comp_bind_def, lower_value_def]
+QED
+
+Theorem expr_callbacks_agree_take_drop:
+  expr_callbacks_agree f g cenv es ⇒
+  expr_callbacks_agree f g cenv (TAKE n es) ∧
+  expr_callbacks_agree f g cenv (DROP n es)
+Proof
+  rw[expr_callbacks_agree_def] >> first_x_assum irule >>
+  imp_res_tac MEM_TAKE_IMP >> imp_res_tac MEM_DROP_IMP >> simp[]
+QED
+
 Theorem compile_extcall_callback_contract:
   expr_callbacks_agree f g cenv (call_callback_children args default_ret) ⇒
-  compile_call f cenv ret_ty ty (ExtCall static_call skip_check (fn_name,arg_types,return_type))
+  compile_call f cenv ret_ty ty
+    (ExtCall static_call skip_check (fn_name,arg_types,return_type) opts)
     args default_ret st =
-  compile_call g cenv ret_ty ty (ExtCall static_call skip_check (fn_name,arg_types,return_type))
+  compile_call g cenv ret_ty ty
+    (ExtCall static_call skip_check (fn_name,arg_types,return_type) opts)
     args default_ret st
 Proof
   Cases_on `args` >- simp[compile_call_def] >>
-  rename1 `addr_e::rest` >>
-  Cases_on `default_ret` >> Cases_on `static_call` >>
-  simp[call_callback_children_def] >> strip_tac >> fs[] >>
-  Cases_on `rest` >> fs[] >>
-  TRY (drule compile_multi_vvs_callback_contract >> strip_tac) >>
-  simp[compile_call_def, lower_value_def, comp_bind_def, compile_multi_vvs_def]
+  rename1 `addr_e::rest` >> strip_tac >>
+  `expr_callbacks_agree f g cenv [addr_e] ∧ expr_callbacks_agree f g cenv rest` by
+    (Cases_on `default_ret` >> fs[call_callback_children_def]) >>
+  drule_then (qspec_then `LENGTH arg_types` strip_assume_tac)
+    expr_callbacks_agree_take_drop >>
+  drule compile_multi_vvs_callback_contract >>
+  qpat_x_assum `expr_callbacks_agree _ _ _ (DROP _ _)`
+    (assume_tac o MATCH_MP compile_ext_call_kwargs_callback_contract) >>
+  fs[] >> rpt strip_tac >>
+  simp[compile_call_def, lower_value_def, comp_bind_def]
 QED
 
 Theorem compile_call_callback_contract:
@@ -200,7 +228,7 @@ Proof
            fs[call_callback_children_def] >> Cases_on `default_ret` >> fs[],
          irule compile_raw_call_calldata_callback_contract >>
            fs[call_callback_children_def] >> Cases_on `default_ret` >> fs[],
-         rename1 `compile_call f _ _ _ (ExtCall _ _ signature)` >>
+         rename1 `compile_call f _ _ _ (ExtCall _ _ signature _)` >>
            PairCases_on `signature` >>
            irule compile_extcall_callback_contract >> simp[],
          simp[compile_call_def]]

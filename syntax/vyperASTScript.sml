@@ -160,6 +160,14 @@ End
 (* Resolved external call signature: (func_name, arg_types, return_type) *)
 Type ext_call_sig = “:identifier # (type list) # type”;
 
+(* The expression-valued keyword arguments of extcall/staticcall, in source
+   order.  skip_contract_check is a literal and lives in the ExtCall flags. *)
+Datatype:
+  ext_call_kw = EKValue | EKGas | EKDefault
+End
+
+Type ext_call_opts = “:ext_call_kw list”;
+
 Datatype:
   raw_call_flags = <|
     rcf_max_outsize: num
@@ -195,13 +203,15 @@ End
 Datatype:
   call_target
   = IntCall nsid
-  | ExtCall bool bool ext_call_sig (* is_static, skip_contract_check, resolved signature *)
-                                   (* is_static: T for staticcall (read-only), F for extcall *)
-                                   (* Convention for Call (ExtCall is_static sig) args:
-                                    - staticcall (T): args = [target; arg1; arg2; ...]
-                                    - extcall (F):    args = [target; value; arg1; arg2; ...]
-                                    where target is address and value is uint256 to send *)
-  | Send
+  (* ExtCall is_static skip_contract_check sig opts.
+     is_static: T for staticcall (read-only), F for extcall.
+     Operands, in Vyper's evaluation order:
+       target :: positional args ++ keyword args
+     where the keyword args are the value=, gas= and default_return_value=
+     expressions in source order and opts lists their kinds. *)
+  | ExtCall bool bool ext_call_sig ext_call_opts
+  (* Send has_gas: operands [to; value] ++ (if has_gas then [gas] else []) *)
+  | Send bool
   (* raw_call(to, data, max_outsize=0, gas=gas, value=0, ...)
      args = [to_addr; data_bytes; value]
      Keyword args (compile-time constants) are in raw_call_flags *)

@@ -127,7 +127,9 @@ QED
 
 Theorem supported_internal_send_pop_rows:
   supported_effect_expr expr_test_tops expr_test_internal /\
-  supported_effect_expr expr_test_tops (Call NoneT Send [expr_test_address; expr_test_uint] NONE) /\
+  supported_effect_expr expr_test_tops (Call NoneT (Send F) [expr_test_address; expr_test_uint] NONE) /\
+  supported_effect_expr expr_test_tops
+    (Call NoneT (Send T) [expr_test_address; expr_test_uint; expr_test_uint] NONE) /\
   supported_effect_expr expr_test_tops expr_test_pop /\
   EVERY (\e. ~supported_pure_expr expr_test_tops e /\ supported_expr expr_test_tops e)
     [expr_test_internal; expr_test_pop] /\
@@ -139,8 +141,9 @@ Theorem supported_internal_send_pop_rows:
     (Call NoneT (IntCall (NONE,"helper")) [] NONE) /\
   ~supported_expr [FunctionDecl Deploy Pure F F "helper" [] [] NoneT []]
     (Call NoneT (IntCall (NONE,"helper")) [] NONE) /\
-  ~supported_expr expr_test_tops (Call (BaseT (UintT 256)) Send [expr_test_address; expr_test_uint] NONE) /\
-  ~supported_expr expr_test_tops (Call NoneT Send [expr_test_address] NONE) /\
+  ~supported_expr expr_test_tops (Call (BaseT (UintT 256)) (Send F) [expr_test_address; expr_test_uint] NONE) /\
+  ~supported_expr expr_test_tops (Call NoneT (Send F) [expr_test_address] NONE) /\
+  ~supported_expr expr_test_tops (Call NoneT (Send T) [expr_test_address; expr_test_uint] NONE) /\
   ~supported_expr expr_test_tops (Pop (BaseT (UintT 256)) (TopLevelNameTarget (NONE,"fixed"))) /\
   ~supported_expr expr_test_tops (Pop (BaseT (IntT 256)) (NameTarget "dynamic")) /\
   ~supported_expr expr_test_tops (Pop (BaseT (IntT 256)) (TopLevelNameTarget (SOME 0,"dynamic"))) /\
@@ -152,35 +155,44 @@ QED
 
 Theorem supported_external_expression_row:
   supported_effect_expr expr_test_tops
-    (Call (BaseT (UintT 256)) (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)))
+    (Call (BaseT (UintT 256)) (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)) [])
       [expr_test_address; expr_test_uint] NONE) /\
   supported_effect_expr expr_test_tops
     (Call (TupleT [BaseT (UintT 256); BaseT BoolT])
-      (ExtCall F F ("remote",[BaseT (UintT 256)],TupleT [BaseT (UintT 256); BaseT BoolT]))
+      (ExtCall F F ("remote",[BaseT (UintT 256)],TupleT [BaseT (UintT 256); BaseT BoolT]) [EKValue])
       [expr_test_address; expr_test_uint; expr_test_uint] NONE) /\
   ~supported_expr expr_test_tops
-    (Call NoneT (ExtCall T F ("remote",[BaseT (UintT 256)],NoneT))
+    (Call NoneT (ExtCall T F ("remote",[BaseT (UintT 256)],NoneT) [])
       [expr_test_address; expr_test_uint] NONE) /\
   ~supported_expr expr_test_tops
-    (Call (BaseT (UintT 256)) (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)))
+    (Call (BaseT (UintT 256)) (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)) [])
       [expr_test_address] NONE) /\
   ~supported_expr expr_test_tops
-    (Call (BaseT (UintT 256)) (ExtCall F F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)))
+    (Call (BaseT (UintT 256)) (ExtCall F F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)) [EKValue])
       [expr_test_address; expr_test_uint] NONE) /\
   ~supported_expr expr_test_tops
-    (Call (BaseT (UintT 256)) (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)))
+    (Call (BaseT (UintT 256)) (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)) [])
       [expr_test_address; expr_test_uint; expr_test_uint] NONE) /\
   ~supported_expr expr_test_tops
-    (Call (BaseT (UintT 256)) (ExtCall T F ("remote",[BaseT (IntT 256)],BaseT (UintT 256)))
+    (Call (BaseT (UintT 256)) (ExtCall T F ("remote",[BaseT (IntT 256)],BaseT (UintT 256)) [])
       [expr_test_address; expr_test_int] NONE) /\
   ~supported_expr expr_test_tops
-    (Call (BaseT (UintT 256)) (ExtCall T F ("missing",[BaseT (UintT 256)],BaseT (UintT 256)))
+    (Call (BaseT (UintT 256)) (ExtCall T F ("missing",[BaseT (UintT 256)],BaseT (UintT 256)) [])
       [expr_test_address; expr_test_uint] NONE) /\
   ~supported_expr expr_test_tops
-    (Call (BaseT (UintT 256)) (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)))
-      [expr_test_address; expr_test_uint] (SOME expr_test_uint)) /\
+    (Call (BaseT (UintT 256)) (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)) [EKDefault])
+      [expr_test_address; expr_test_uint; expr_test_uint] NONE) /\
+  supported_effect_expr expr_test_tops
+    (Call (BaseT (UintT 256)) (ExtCall F F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)) [EKGas; EKValue])
+      [expr_test_address; expr_test_uint; expr_test_uint; expr_test_uint] NONE) /\
+  ~supported_expr expr_test_tops
+    (Call (BaseT (UintT 256)) (ExtCall F F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)) [EKValue; EKValue])
+      [expr_test_address; expr_test_uint; expr_test_uint; expr_test_uint] NONE) /\
+  ~supported_expr expr_test_tops
+    (Call (BaseT (UintT 256)) (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)) [EKValue])
+      [expr_test_address; expr_test_uint; expr_test_uint] NONE) /\
   EVERY (\ret. ~supported_expr expr_test_tops
-    (Call ret (ExtCall T F ("remote",[BaseT (UintT 256)],ret))
+    (Call ret (ExtCall T F ("remote",[BaseT (UintT 256)],ret) [])
       [expr_test_address; expr_test_uint] NONE))
     [TupleT []; BaseT (StringT 32); BaseT (BytesT (Dynamic 32));
      TupleT [BaseT (UintT 256); BaseT (StringT 32)];
@@ -192,7 +204,7 @@ QED
 Theorem supported_external_nonword_arguments_rejected:
   EVERY (\arg_ty. ~supported_effect_expr
     [InterfaceDecl "I" [("remote",[("arg",arg_ty)],BaseT (UintT 256),View)]]
-    (Call (BaseT (UintT 256)) (ExtCall T F ("remote",[arg_ty],BaseT (UintT 256)))
+    (Call (BaseT (UintT 256)) (ExtCall T F ("remote",[arg_ty],BaseT (UintT 256)) [])
       [expr_test_address; Name arg_ty "arg"] NONE))
     [BaseT (StringT 32); BaseT (BytesT (Dynamic 32)); BaseT (BytesT (Fixed 20));
      BaseT (UintT 7); TupleT [BaseT (UintT 256)];
@@ -206,29 +218,29 @@ Theorem supported_external_first_declaration_rule:
     [FunctionDecl External View F F "remote" [("u",BaseT (UintT 256))] []
        (BaseT (UintT 256)) [];
      InterfaceDecl "I" [("remote",[("u",BaseT (UintT 256))],BaseT (UintT 256),View)]]
-    (Call (BaseT (UintT 256)) (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)))
+    (Call (BaseT (UintT 256)) (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)) [])
       [expr_test_address; expr_test_uint] NONE) /\
   supported_effect_expr
     [InterfaceDecl "I" [("remote",[("u",BaseT (UintT 256))],BaseT (UintT 256),View)];
      FunctionDecl External View F F "remote" [] [] NoneT []]
-    (Call (BaseT (UintT 256)) (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)))
+    (Call (BaseT (UintT 256)) (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)) [])
       [expr_test_address; expr_test_uint] NONE) /\
   ~supported_effect_expr
     [InterfaceDecl "Bad" [("remote",[("i",BaseT (IntT 256))],BaseT (UintT 256),View)];
      InterfaceDecl "Good" [("remote",[("u",BaseT (UintT 256))],BaseT (UintT 256),View)]]
-    (Call (BaseT (UintT 256)) (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)))
+    (Call (BaseT (UintT 256)) (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)) [])
       [expr_test_address; expr_test_uint] NONE) /\
   ~supported_effect_expr
     [InterfaceDecl "I"
       [("remote",[("i",BaseT (IntT 256))],BaseT (UintT 256),View);
        ("remote",[("u",BaseT (UintT 256))],BaseT (UintT 256),View)]]
-    (Call (BaseT (UintT 256)) (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)))
+    (Call (BaseT (UintT 256)) (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)) [])
       [expr_test_address; expr_test_uint] NONE) /\
   supported_effect_expr
     [FunctionDecl Internal Pure F F "remote" [] [] NoneT [];
      InterfaceDecl "Other" [("other",[],NoneT,View)];
      InterfaceDecl "I" [("remote",[("u",BaseT (UintT 256))],BaseT (UintT 256),View)]]
-    (Call (BaseT (UintT 256)) (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)))
+    (Call (BaseT (UintT 256)) (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)) [])
       [expr_test_address; expr_test_uint] NONE)
 Proof
   EVAL_TAC
@@ -248,14 +260,14 @@ Theorem supported_effect_nesting_counterexamples:
      Subscript (BaseT (UintT 256)) (TopLevelName NoneT (NONE,"map")) expr_test_internal;
      Call (BaseT (UintT 256)) (IntCall (NONE,"helper")) [expr_test_pop] NONE;
      Call (BaseT (UintT 256)) (IntCall (NONE,"helper")) [expr_test_internal] NONE;
-     Call (BaseT (UintT 256)) (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)))
+     Call (BaseT (UintT 256)) (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)) [])
        [expr_test_internal; expr_test_uint] NONE;
-     Call (BaseT (UintT 256)) (ExtCall F F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)))
-       [expr_test_address; expr_test_internal; expr_test_uint] NONE;
-     Call (BaseT (UintT 256)) (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)))
+     Call (BaseT (UintT 256)) (ExtCall F F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)) [EKValue])
+       [expr_test_address; expr_test_uint; expr_test_internal] NONE;
+     Call (BaseT (UintT 256)) (ExtCall T F ("remote",[BaseT (UintT 256)],BaseT (UintT 256)) [])
        [expr_test_address; expr_test_internal] NONE;
-     Call NoneT Send [expr_test_internal; expr_test_uint] NONE;
-     Call NoneT Send [expr_test_address; expr_test_pop] NONE;
+     Call NoneT (Send F) [expr_test_internal; expr_test_uint] NONE;
+     Call NoneT (Send F) [expr_test_address; expr_test_pop] NONE;
      Call (BaseT (UintT 256)) (IntCall (NONE,"helper")) [expr_test_uint] (SOME expr_test_uint)]
 Proof
   EVAL_TAC

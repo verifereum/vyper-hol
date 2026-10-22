@@ -61,14 +61,21 @@ Definition supported_effect_expr_def:
       Call ty (IntCall id) args NONE =>
         IS_SOME (supported_function_decl tops id Internal) /\
         supported_pure_exprs tops args
-    | Call ty (ExtCall is_static skip_check (name, arg_types, ret)) args NONE =>
+    (* Operands: target :: positional args ++ value=/gas= in source order;
+       default_return_value= is not supported. *)
+    | Call ty (ExtCall is_static skip_check (name, arg_types, ret) opts) args NONE =>
         EVERY supported_word_type arg_types /\
         supported_external_return_type ret /\
-        LENGTH args = LENGTH arg_types + (if is_static then 1 else 2) /\
+        ALL_DISTINCT opts /\ ~MEM EKDefault opts /\
+        (is_static ==> ~MEM EKValue opts) /\
+        LENGTH args = 1 + LENGTH arg_types + LENGTH opts /\
         supported_external_call_signature tops name arg_types /\
         supported_pure_exprs tops args
-    | Call NoneT Send [a; v] NONE =>
+    | Call NoneT (Send F) [a; v] NONE =>
         supported_pure_expr tops a /\ supported_pure_expr tops v
+    | Call NoneT (Send T) [a; v; g] NONE =>
+        supported_pure_expr tops a /\ supported_pure_expr tops v /\
+        supported_pure_expr tops g
     | Pop ty (TopLevelNameTarget id) =>
         supported_storage_dynamic_array tops id
     | _ => F

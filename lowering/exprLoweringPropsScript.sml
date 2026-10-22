@@ -2601,6 +2601,20 @@ Proof
   simp[ci_mono_comp_return]
 QED
 
+Theorem ci_mono_compile_ext_call_kwargs[local]:
+  ∀ks es cfn cenv rt sa.
+    (∀cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
+    ci_mono sa (SND (compile_ext_call_kwargs cfn cenv rt ks es sa))
+Proof
+  Induct >> Cases_on `es` >> rpt strip_tac >>
+  simp[compile_ext_call_kwargs_def, ci_mono_comp_return] >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- (rpt strip_tac >> irule ci_mono_lower_value_cfn >> simp[]) >>
+  rpt strip_tac >> ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- (rpt strip_tac >> first_x_assum irule >> simp[]) >>
+  simp[pairTheory.UNCURRY, ci_mono_comp_return]
+QED
+
 Theorem ci_mono_compile_extcall_store_values[local]:
   ∀cenv vals buf_op offset sa.
     ci_mono sa
@@ -2827,6 +2841,8 @@ rpt strip_tac >> first_assum irule)
       (irule ci_mono_trans >>
        irule_at (Pos last) ci_mono_compile_multi_vvs >> simp[]) ORELSE
       (irule ci_mono_trans >>
+       irule_at (Pos last) ci_mono_compile_ext_call_kwargs >> simp[]) ORELSE
+      (irule ci_mono_trans >>
        irule_at (Pos last) ci_mono_compile_extcall_store_args >> simp[]) ORELSE
       (irule ci_mono_trans >>
        irule_at (Pos last) ci_mono_compile_alloc_buffer >> simp[]) ORELSE
@@ -2848,8 +2864,17 @@ rpt strip_tac >> first_assum irule)
   simp[Once compile_call_def, LET_THM] >>
   Cases_on `args` >> simp[pairTheory.UNCURRY, ci_mono_emit_inst] >>
   Cases_on `t` >> simp[pairTheory.UNCURRY, ci_mono_emit_inst] >>
-  Cases_on `t'` >> simp[pairTheory.UNCURRY, ci_mono_emit_inst] >>
-  irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_void >> irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_op >> irule ci_mono_trans >> irule_at (Pos last) ci_mono_lower_value_cfn >> (conj_tac >- simp[]) >> irule ci_mono_lower_value_cfn >> simp[]
+  rename1 `_::_::gas_es` >>
+  IF_CASES_TAC >> simp[pairTheory.UNCURRY, ci_mono_emit_inst] >>
+  `gas_es = [] \/ ?gas_e. gas_es = [gas_e]` by
+    (Cases_on `gas_es` >> gvs[AllCaseEqs()] >>
+     rename1 `_::rest` >> Cases_on `rest` >> gvs[]) >>
+  pop_assum strip_assume_tac >> gvs[] >>
+  irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_void >> irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_op >>
+  irule ci_mono_trans >> irule_at (Pos last) ci_mono_lower_value_cfn >> (conj_tac >- simp[]) >>
+  TRY (irule ci_mono_lower_value_cfn >> simp[] >> NO_TAC) >>
+  irule ci_mono_trans >> irule_at (Pos last) ci_mono_lower_value_cfn >> (conj_tac >- simp[]) >>
+  irule ci_mono_lower_value_cfn >> simp[]
 QED
 
 Theorem compile_expr_ci_mono[local]:

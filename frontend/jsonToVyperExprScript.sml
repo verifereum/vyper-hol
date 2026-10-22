@@ -241,6 +241,17 @@ Definition kwarg_method_id_def:
 End
 
 
+(* The value=, gas= and default_return_value= operands of extcall/staticcall,
+   in source order, which is the order Vyper evaluates them in. *)
+Definition ext_call_kwargs_def:
+  ext_call_kwargs ([] : (identifier # expr) list) = [] /\
+  ext_call_kwargs ((k,e)::kes) =
+    (if k = "value" then [(EKValue,e)]
+     else if k = "gas" then [(EKGas,e)]
+     else if k = "default_return_value" then [(EKDefault,e)]
+     else []) ++ ext_call_kwargs kes
+End
+
 Definition raw_call_flags_of_kwargs_def:
   raw_call_flags_of_kwargs kwargs =
     <| rcf_max_outsize := kwarg_num "max_outsize" kwargs 0;
@@ -285,7 +296,11 @@ Definition make_builtin_call_def:
     else if name = "pow_mod256" then Builtin ty PowMod256 args
     else if name = "min" then Builtin ty (Bop Min) args
     else if name = "max" then Builtin ty (Bop Max) args
-    else if name = "send" then Call ty Send args NONE
+    (* send(to, value, gas=0): the gas operand follows the positional ones. *)
+    else if name = "send" then
+      (case ALOOKUP kwargs "gas" of
+       | SOME g => Call ty (Send T) (args ++ [g]) NONE
+       | NONE => Call ty (Send F) args NONE)
     (* ===== Chain interaction builtins ===== *)
     (* raw_call(to, data, max_outsize=0, gas=gas, value=0,
                 is_delegate_call=F, is_static_call=F, revert_on_failure=T)
@@ -998,12 +1013,11 @@ Definition translate_expr_def:
     translate_call ctx func args' kwargs' ret_ty src_id_opt
       translated_pop_index) /\
 
-  (* ExtCall - mutating external call (is_static = F) *)
+  (* ExtCall - mutating external call (is_static = F).
+     Operands: target :: positional args ++ keyword args in source order. *)
   (translate_expr ctx
       (JE_ExtCall func_name func_src arg_types ret_ty target args keywords) =
-    let value_expr = case find_keyword "value" keywords of
-                     | SOME v => translate_expr ctx v
-                     | NONE => Literal (BaseT (UintT 256)) (IntL 0) in
+    let kws = ext_call_kwargs (translate_kwargs ctx keywords) in
     let skip_check = json_keyword_bool "skip_contract_check" keywords F in
     let sig_ctx = signature_type_ctx ctx func_src in
     let ret_ty' = translate_type sig_ctx ret_ty in
@@ -1015,15 +1029,14 @@ Definition translate_expr_def:
       (ExtCall F skip_check
         (func_name,
          external_argument_types sig_ctx arg_types args',
-         ret_ty'))
-      (translate_expr ctx target :: value_expr :: args')
-      (OPTION_MAP (translate_expr ctx)
-        (find_keyword "default_return_value" keywords))) /\
+         ret_ty') (MAP FST kws))
+      (translate_expr ctx target :: args' ++ MAP SND kws) NONE) /\
 
-  (* StaticCall - read-only external call (is_static = T).
-     No value operand: args = [target; arg1; ...]. *)
+  (* StaticCall - read-only external call (is_static = T); same operand
+     layout as ExtCall, and Vyper rejects value= here. *)
   (translate_expr ctx
       (JE_StaticCall func_name func_src arg_types ret_ty target args keywords) =
+    let kws = ext_call_kwargs (translate_kwargs ctx keywords) in
     let skip_check = json_keyword_bool "skip_contract_check" keywords F in
     let sig_ctx = signature_type_ctx ctx func_src in
     let ret_ty' = translate_type sig_ctx ret_ty in
@@ -1033,10 +1046,8 @@ Definition translate_expr_def:
       (ExtCall T skip_check
         (func_name,
          external_argument_types sig_ctx arg_types args',
-         ret_ty'))
-      (translate_expr ctx target :: args')
-      (OPTION_MAP (translate_expr ctx)
-        (find_keyword "default_return_value" keywords))) /\
+         ret_ty') (MAP FST kws))
+      (translate_expr ctx target :: args' ++ MAP SND kws) NONE) /\
 
   (* Helper for translating expression lists *)
   (translate_expr_list ctx [] = []) /\
