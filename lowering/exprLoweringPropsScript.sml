@@ -3477,6 +3477,85 @@ Proof
   simp[ci_mono_as_stack_val, ci_mono_compile_binop, ci_mono_emit_op]
 QED
 
+Theorem ci_mono_compile_ecadd_points[local]:
+  ∀p1 p2 st. ci_mono st (SND (compile_ecadd_points p1 p2 st))
+Proof
+  rpt gen_tac >> rewrite_tac[builtinMiscTheory.compile_ecadd_points_def, comp_ignore_bind_def] >> BETA_TAC >>
+  rpt (ho_match_mp_tac ci_mono_bind >> conj_tac
+       >- simp[ci_mono_compile_alloc_buffer, ci_mono_emit_op,
+               ci_mono_emit_void, ci_mono_comp_return]
+       >> rpt gen_tac >> BETA_TAC) >>
+  simp[ci_mono_comp_return]
+QED
+
+Theorem ci_mono_compile_ecmul_point[local]:
+  ∀p scalar st. ci_mono st (SND (compile_ecmul_point p scalar st))
+Proof
+  rpt gen_tac >> rewrite_tac[builtinMiscTheory.compile_ecmul_point_def, comp_ignore_bind_def] >> BETA_TAC >>
+  rpt (ho_match_mp_tac ci_mono_bind >> conj_tac
+       >- simp[ci_mono_compile_alloc_buffer, ci_mono_emit_op,
+               ci_mono_emit_void, ci_mono_comp_return]
+       >> rpt gen_tac >> BETA_TAC) >>
+  simp[ci_mono_comp_return]
+QED
+
+Theorem ci_mono_compile_make_tuple_cfn[local]:
+  ∀cfn cenv es buf_op cur_offset st.
+    (∀ce ty e s. ci_mono s (SND (cfn ce ty e s))) ⇒
+    ci_mono st (SND (compile_make_tuple cfn cenv es buf_op cur_offset st))
+Proof
+  gen_tac >> gen_tac >> Induct >> rpt gen_tac >> strip_tac
+  >- simp[compile_make_tuple_def, ci_mono_comp_return] >>
+  simp[Once compile_make_tuple_def, LET_THM, comp_ignore_bind_def] >> BETA_TAC >>
+  rpt (ho_match_mp_tac ci_mono_bind >> conj_tac
+       >- simp[ci_mono_emit_op, ci_mono_unwrap_value, ci_mono_compile_store_memory]
+       >> rpt gen_tac >> BETA_TAC) >>
+  simp[]
+QED
+
+(* C1.4.2 family drafts, pending the new boundary interfaces.
+Theorem ci_mono_builtin_ec[local]:
+  (∀ce t e s. ci_mono s (SND (f ce t e s))) ⇒
+  ∀bi. (bi = ECRecover ∨ bi = ECAdd ∨ bi = ECMul) ⇒
+  ci_mono st (SND (compile_builtin_dispatch_body f cenv ret_ty ty bi args st))
+Proof
+  strip_tac >> gen_tac >> Cases_on `bi` >> simp[] >>
+  simp[compile_builtin_dispatch_body_def, LET_THM] >>
+  rpt (irule ci_mono_uncurry >> reverse conj_tac
+       >- simp[ci_mono_lower_value_cfn, ci_mono_unwrap_value]
+       >> rpt gen_tac >> BETA_TAC) >>
+  simp[ci_mono_as_stack_val, ci_mono_as_ptr_val, ci_mono_compile_ecrecover,
+       ci_mono_compile_ecadd, ci_mono_compile_ecmul]
+QED
+
+Theorem ci_mono_builtin_concat[local]:
+  (∀ce t e s. ci_mono s (SND (f ce t e s))) ⇒
+  ci_mono st (SND (compile_builtin_dispatch_body f cenv ret_ty ty (Concat n) args st))
+Proof
+  strip_tac >> simp[compile_builtin_dispatch_body_def, LET_THM] >>
+  rpt (irule ci_mono_uncurry >> reverse conj_tac
+       >- simp[ci_mono_compile_alloc_buffer, ci_mono_emit_op,
+               ci_mono_compile_concat_cfn, ci_mono_emit_void]
+       >> rpt gen_tac >> BETA_TAC) >>
+  simp[ci_mono_refl]
+QED
+
+Theorem ci_mono_builtin_makearray[local]:
+  (∀ce t e s. ci_mono s (SND (f ce t e s))) ⇒
+  ci_mono st (SND
+    (compile_builtin_dispatch_body f cenv ret_ty ty (MakeArray elem_ty bnd) args st))
+Proof
+  strip_tac >> simp[compile_builtin_dispatch_body_def, LET_THM] >>
+  Cases_on `elem_ty` >> simp[LET_THM] >>
+  irule ci_mono_uncurry >> reverse conj_tac
+  >- simp[ci_mono_compile_alloc_buffer] >>
+  rpt gen_tac >> BETA_TAC >>
+  simp[ci_mono_as_ptr_val, ci_mono_compile_make_array_cfn,
+       ci_mono_compile_make_tuple]
+QED
+
+*)
+
 (* Why it holds: only emit (appends to cs_current_insts) and new_block
    (conses onto cs_blocks) write those two fields (compileEnvScript.sml);
    every other operation threads the state through comp_bind. compile_expr
