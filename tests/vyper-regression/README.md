@@ -11,10 +11,6 @@ Do not commit exported JSON, duplicated Vyper source, or generated HOL wrappers.
 
 From `tests/`, run `holbuild run --noconfig generateVyperTests.sml` after building
 `vyperTestLib` and exporting the tests. The generated `vyperTest_*` theories join
-the normal CI matrix.
-
-Upstream traces contain call results but not expected logs or final accounts.
-A same-named `.sml` file may add HOL state assertions for its pytest. These files
-use `regression_traces` (the generated trace constants) and the focused helpers in
-`vyperRegressionStateTheory`; they supplement, rather than replace, ordinary
-trace replay. Keep these checks until the upstream export records those fields.
+the normal CI matrix. Generation preserves existing definition scripts, including
+their JSON/CV proof boundaries, and creates definitions for newly exported
+regressions. Test wrappers are regenerated.

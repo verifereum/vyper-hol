@@ -1158,35 +1158,17 @@ fun generate_defn_scripts () = let
       "Theory ", thyname, "[no_sig_docs]\nAncestors jsonToVyper\nLibs vyperTestLib\n",
       "val () = holbuild_extra_deps [\"", jsonp_from_generated, "\"];\n",
       "val () = make_definitions_for_file (\"", id, "\", \"", jsonp_from_generated, "\");\n"]
-    val out = TextIO.openOut(fname)
-    val () = TextIO.output(out, contents)
-    val () = TextIO.closeOut out
-  in () end) files
+  in
+    (* Committed definitions may include proof boundaries for JSON/CV caching. *)
+    if OS.FileSys.access(fname, []) then () else let
+      val out = TextIO.openOut(fname)
+      val () = TextIO.output(out, contents)
+      val () = TextIO.closeOut out
+    in () end
+  end) files
 in
   ()
 end
-
-(* Optional source-side assertions cover state absent from upstream exports. *)
-fun regression_checks jsonp =
-  let
-    val prefix = test_exports_root ^ "/functional/codegen/vyper_hol_regression/"
-  in
-    if not (String.isPrefix prefix jsonp) then NONE
-    else
-      let
-        val relative = String.extract(jsonp, String.size prefix, NONE)
-        val path = OS.Path.concat("vyper-regression",
-          OS.Path.base relative ^ ".sml")
-      in
-        if not (OS.FileSys.access(path, [])) then NONE
-        else
-          let
-            val input = TextIO.openIn path
-            val contents = TextIO.inputAll input
-            val () = TextIO.closeIn input
-          in SOME contents end
-      end
-  end
 
 fun generate_test_scripts () = let
   val () = check_generate_dirs ()
@@ -1197,17 +1179,10 @@ fun generate_test_scripts () = let
     val thyname = String.concat["vyperTest_", id]
     val defsname = String.concat["vyperTestDefs_", id]
     val fname = OS.Path.concat(gen_dir, String.concat[thyname, "Script.sml"])
-    val contents =
-      case regression_checks jsonp of
-        NONE => String.concat [
-          "Theory ", thyname, "[no_sig_docs]\nAncestors ", defsname,
-          "\nLibs vyperTestRunnerLib\nval () = List.app ",
-          "run_test_on_traces $ all_traces \"", defsname, "\";\n"]
-      | SOME checks => String.concat [
-          "Theory ", thyname, "[no_sig_docs]\nAncestors ", defsname,
-          " vyperRegressionState\nLibs vyperTestRunnerLib cv_transLib wordsLib\n",
-          "val regression_traces = all_traces \"", defsname, "\";\n",
-          "val () = List.app run_test_on_traces regression_traces;\n", checks]
+    val contents = String.concat [
+      "Theory ", thyname, "[no_sig_docs]\nAncestors ", defsname,
+      "\nLibs vyperTestRunnerLib\nval () = List.app ",
+      "run_test_on_traces $ all_traces \"", defsname, "\";\n"]
     val out = TextIO.openOut(fname)
     val () = TextIO.output(out, contents)
     val () = TextIO.closeOut out
