@@ -17,6 +17,7 @@
  * TOP-LEVEL:
  *   venom_env_rel, initial_venom_state_rel -- PLAN 5.7 entry boundary
  *   external_call_result_rel, source_unit_execution_correct -- oracle boundary
+ *   compile_state_ok_initial -- label-space invariant of the initial compile state
  *   lower_vyper_runtime_unit_correct -- S1 (planned admission, Milestone 6)
  *   lower_vyper_runtime_unit_source_unit_ok -- S2 (Milestone 5)
  *   lower_vyper_runtime_unit_memory_ok -- S3 (Milestone 5)
@@ -156,6 +157,19 @@ Definition source_unit_execution_correct_def:
              (call_external (SOME vs.vs_outcomes) am tx)
              (run_context fuel unit.cu_context vs)
 End
+
+(* ===== Label-space invariant at the start of lowering ===== *)
+
+(* Initial compile_state is well-formed for any entry label that is not
+   itself a compiler-generated label (with any counter). The entry label
+   in practice is user/frontend-provided (e.g. "global"). *)
+Theorem compile_state_ok_initial:
+  ∀ entry_lbl.
+    entry_lbl ∉ compiler_labels_future 0
+    ⇒ compile_state_ok (initial_compile_state entry_lbl)
+Proof
+  simp[compile_state_ok_def, initial_compile_state_def, bound_labels_def]
+QED
 
 (* ===== Planned lowering stages (NOT certificates) ===== *)
 

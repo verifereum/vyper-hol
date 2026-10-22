@@ -17,6 +17,7 @@
  *   emitted_insts_emit_void         — what emit_void produces
  *   emitted_insts_chain             — composing emitted_insts through do-blocks
  *   fresh_label_output_inj          — fresh_label_output is injective
+ *   compiler_labels_future_antimono — future label space shrinks with the counter
  *   compile_state_ok_*              — label-space invariant through monad ops
  *   fresh_label_produces_external    — fresh_label returns an external label
  *   label_external_mono             — external labels survive extension
@@ -28,7 +29,7 @@
 
 Theory emitHelperProps
 Ancestors
-  exprLoweringProps emitHelper compileEnv vyperCompiler
+  exprLoweringProps emitHelper compileEnv
   venomExecSemantics venomState venomInst
   instIdxIndep vfmState freshLabelStringProps ASCIInumbers
   list pred_set arithmetic
@@ -2446,15 +2447,12 @@ Proof
   strip_tac >> qexistsl_tac [`suffix`, `n`] >> simp[]
 QED
 
-(* Initial compile_state is well-formed for any entry label that is not
-   itself a compiler-generated label (with any counter). The entry label
-   in practice is user/frontend-provided (e.g. "global"). *)
-Theorem compile_state_ok_initial:
-  ∀ entry_lbl.
-    entry_lbl ∉ compiler_labels_future 0
-    ⇒ compile_state_ok (initial_compile_state entry_lbl)
+(* The future fresh_label co-domain shrinks as the counter grows. *)
+Theorem compiler_labels_future_antimono:
+  m ≤ n ⇒ compiler_labels_future n ⊆ compiler_labels_future m
 Proof
-  simp[compile_state_ok_def, initial_compile_state_def, bound_labels_def]
+  simp[compiler_labels_future_def, SUBSET_DEF, PULL_EXISTS] >>
+  metis_tac[LESS_EQ_TRANS]
 QED
 
 (* emit_op preserves compile_state_ok, bound_labels, and label-space fields
@@ -2588,9 +2586,5 @@ Theorem label_external_mono:
     ⇒ label_external st' lbl
 Proof
   rw[label_external_def] >>
-  `compiler_labels_future st'.cs_next_label ⊆
-   compiler_labels_future st.cs_next_label`
-    by (simp[compiler_labels_future_def, SUBSET_DEF, PULL_EXISTS] >>
-        rpt strip_tac >> irule_at Any EQ_REFL >> fs[]) >>
-  metis_tac[SUBSET_DEF]
+  metis_tac[compiler_labels_future_antimono, SUBSET_DEF]
 QED
