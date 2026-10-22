@@ -3,7 +3,8 @@
  *
  * A compiled fragment is the code the compile monad emits between two
  * compile states st and st'.  frag_exec says what running that code does
- * inside any function that contains the code st' has emitted: from the point
+ * inside any function that contains it (the blocks finished between st and
+ * st', and the start of st''s current block): from the point
  * where st left off, execution reaches the point where st' leaves off, or
  * stops with Abort, Halt or IntRet.  Unlike running the fragment assembled
  * into a function of its own, the judgment composes, because the code after
@@ -12,13 +13,15 @@
  * TOP-LEVEL:
  *   run_from              — run a function from a state inside a block
  *   exit_result           — Abort, Halt or IntRet
- *   fn_has_code           — a function contains the code a compile state
- *                           emitted
+ *   emitted_blocks        — the blocks finished between two compile states
+ *   fn_has_code           — a function contains the code emitted between
+ *                           two compile states
  *   cs_extends            — a compile state only appended to another
  *   frag_exec             — the fragment judgment
  *   cs_appends            — a compile action only appends
  *   cs_extends_*, cs_appends_* — the compile-monad primitives only append
- *   fn_has_code_cs_extends — containment holds for earlier compile states
+ *   emitted_blocks_append — the new blocks of cs_extends are emitted_blocks
+ *   fn_has_code_split     — containment of a fragment holds for its parts
  *   frag_exec_seq         — sequential composition
  *   frag_exec_conseq, frag_exec_refl — consequence and the empty fragment
  *   frag_exec_run_inst_seq — lift a straight-line run_inst_seq result
@@ -57,13 +60,24 @@ Proof
   Cases >> rw[exit_result_def]
 QED
 
-(* fn contains the code st has emitted: every finished block, and a block
-   whose instructions start with the current block's instructions. *)
+(* The blocks finished between st and st', newest first: the front of
+   st'.cs_blocks that st did not have. *)
+Definition emitted_blocks_def:
+  emitted_blocks (st : compile_state) (st' : compile_state) =
+    TAKE (LENGTH st'.cs_blocks - LENGTH st.cs_blocks) st'.cs_blocks
+End
+
+(* fn contains the code emitted between st and st': every block finished in
+   between, and a block whose instructions start with st''s current
+   instructions.  Blocks emitted before st need not be in fn: a unit's
+   blocks are split into several functions (package_internal_blocks), and
+   only the fragment's own code has to be in the function running it. *)
 Definition fn_has_code_def:
-  fn_has_code (st : compile_state) (fn : ir_function) <=>
-    (!bb. MEM bb st.cs_blocks ==> lookup_block bb.bb_label fn.fn_blocks = SOME bb) /\
-    ?bb. lookup_block st.cs_current_bb fn.fn_blocks = SOME bb /\
-         isPREFIX st.cs_current_insts bb.bb_instructions
+  fn_has_code (st : compile_state) (st' : compile_state) (fn : ir_function) <=>
+    (!bb. MEM bb (emitted_blocks st st') ==>
+          lookup_block bb.bb_label fn.fn_blocks = SOME bb) /\
+    ?bb. lookup_block st'.cs_current_bb fn.fn_blocks = SOME bb /\
+         isPREFIX st'.cs_current_insts bb.bb_instructions
 End
 
 (* st' only appended to st: new finished blocks go in front (cs_blocks is
@@ -80,15 +94,16 @@ Definition cs_extends_def:
         isPREFIX st.cs_current_insts (LAST new).bb_instructions
 End
 
-(* The fragment judgment.  In every function containing the code st' has
-   emitted, from a state satisfying P at the point where st left off, either
+(* The fragment judgment.  In every function containing the code emitted
+   between st and st', from a state satisfying P at the point where st left
+   off, either
    - execution reaches the point where st' leaves off in a state satisfying
      Q, and every non-Error result from there is a result from the start, or
    - execution stops with an exit result satisfying R. *)
 Definition frag_exec_def:
   frag_exec ctx (st : compile_state) (st' : compile_state) P Q R <=>
     !fn s.
-      fn_has_code st' fn /\ P s /\
+      fn_has_code st st' fn /\ P s /\
       s.vs_current_bb = st.cs_current_bb /\
       s.vs_inst_idx = LENGTH st.cs_current_insts ==>
       (?s'. Q s' /\
@@ -100,12 +115,6 @@ Definition frag_exec_def:
 End
 
 (* ===== The compile monad only appends ===== *)
-
-Theorem isPREFIX_APPEND_EXISTS[local]:
-  !x y. isPREFIX x y <=> ?t. y = x ++ t
-Proof
-  Induct >> rw[] >> Cases_on `y` >> rw[] >> metis_tac[]
-QED
 
 Theorem cs_extends_refl:
   !st. cs_extends st st
@@ -211,15 +220,35 @@ Proof
   rw[cs_appends_prims, cs_appends_return]
 QED
 
-(* Code in a function for a later compile state is code for an earlier one. *)
-Theorem fn_has_code_cs_extends:
-  !st st' fn. cs_extends st st' /\ fn_has_code st' fn ==> fn_has_code st fn
+(* The new blocks of cs_extends are the emitted blocks. *)
+Theorem emitted_blocks_append:
+  !st st' new. st'.cs_blocks = new ++ st.cs_blocks ==> emitted_blocks st st' = new
 Proof
-  rpt strip_tac >> fs[cs_extends_def, fn_has_code_def] >>
-  Cases_on `new = []` >> fs[]
-  >- metis_tac[isPREFIX_TRANS] >>
-  qexists_tac `LAST new` >>
-  metis_tac[rich_listTheory.MEM_LAST_NOT_NIL, MEM_APPEND]
+  rpt strip_tac >> simp[emitted_blocks_def] >>
+  pop_assum (fn th => rewrite_tac[th]) >> simp[TAKE_LENGTH_APPEND]
+QED
+
+(* Code in a function for a fragment is code for each of its parts. *)
+Theorem fn_has_code_split:
+  !st1 st2 st3 fn.
+    cs_extends st1 st2 /\ cs_extends st2 st3 /\ fn_has_code st1 st3 fn ==>
+    fn_has_code st1 st2 fn /\ fn_has_code st2 st3 fn
+Proof
+  rpt gen_tac >> simp[cs_extends_def] >> strip_tac >>
+  rename1 `st2.cs_blocks = n12 ++ st1.cs_blocks` >>
+  rename1 `st3.cs_blocks = n23 ++ st2.cs_blocks` >>
+  `emitted_blocks st1 st2 = n12 /\ emitted_blocks st2 st3 = n23 /\
+   emitted_blocks st1 st3 = n23 ++ n12` by
+    (rpt conj_tac >> irule emitted_blocks_append >> fs[]) >>
+  qpat_x_assum `fn_has_code _ _ _` mp_tac >>
+  asm_rewrite_tac[fn_has_code_def, MEM_APPEND] >> strip_tac >>
+  rpt conj_tac
+  >- metis_tac[]
+  >- (Cases_on `n23 = []` >> fs[]
+      >- metis_tac[isPREFIX_TRANS] >>
+      metis_tac[rich_listTheory.MEM_LAST_NOT_NIL])
+  >- metis_tac[] >>
+  metis_tac[]
 QED
 
 (* ===== Judgment rules ===== *)
@@ -246,11 +275,12 @@ QED
 Theorem frag_exec_seq:
   !ctx st1 st2 st3 P Q Q2 R.
     frag_exec ctx st1 st2 P Q R /\ frag_exec ctx st2 st3 Q Q2 R /\
-    cs_extends st2 st3 ==>
+    cs_extends st1 st2 /\ cs_extends st2 st3 ==>
     frag_exec ctx st1 st3 P Q2 R
 Proof
   rpt gen_tac >> strip_tac >> simp[frag_exec_def] >> rpt strip_tac >>
-  `fn_has_code st2 fn` by metis_tac[fn_has_code_cs_extends] >>
+  `fn_has_code st1 st2 fn /\ fn_has_code st2 st3 fn` by
+    metis_tac[fn_has_code_split] >>
   qpat_x_assum `frag_exec ctx st1 st2 P Q R`
     (mp_tac o SIMP_RULE std_ss [frag_exec_def]) >>
   disch_then (qspecl_then [`fn`, `s`] mp_tac) >> simp[] >> strip_tac
@@ -356,12 +386,12 @@ Proof
   `?t. st'.cs_current_insts = st.cs_current_insts ++ t /\
        emitted_insts st st' = t` by
     (qpat_x_assum `isPREFIX st.cs_current_insts st'.cs_current_insts` mp_tac >>
-     simp[isPREFIX_APPEND_EXISTS] >> strip_tac >>
+     simp[IS_PREFIX_APPEND] >> strip_tac >>
      simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND]) >>
   `isPREFIX t (DROP s.vs_inst_idx bb.bb_instructions)` by
     (qpat_x_assum `isPREFIX st'.cs_current_insts _` mp_tac >>
-     simp[isPREFIX_APPEND_EXISTS] >> strip_tac >>
-     simp[isPREFIX_APPEND_EXISTS] >>
+     simp[IS_PREFIX_APPEND] >> strip_tac >>
+     simp[IS_PREFIX_APPEND] >>
      rewrite_tac[GSYM APPEND_ASSOC, rich_listTheory.DROP_LENGTH_APPEND] >>
      metis_tac[]) >>
   qpat_x_assum `emitted_insts st st' = t` (fn th => fs[th]) >>
