@@ -620,7 +620,7 @@ End
 
 Definition checked_first_fit_def:
   checked_first_fit occupied sz =
-    if reserved_intervals_wf occupied then
+    if EVERY reserved_interval_wf occupied then
       checked_first_fit_scan (sort_reserved_by_pos occupied) sz 0
     else NONE
 End
