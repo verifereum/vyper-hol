@@ -139,6 +139,11 @@ Definition translate_toplevel_def:
     SOME (EventDecl name (MAP (λ(a,idx).
       (translate_arg nominal_index all_import_maps type_ctx a, idx)) args))) /\
 
+  (translate_toplevel nominal_index all_import_maps expr_ctx type_ctx nr_default
+      (JTL_ErrorDef name args) =
+    SOME (ErrorDecl name
+      (MAP (translate_arg nominal_index all_import_maps type_ctx) args))) /\
+
   (translate_toplevel nominal_index all_import_maps expr_ctx type_ctx nr_default (JTL_StructDef name args) =
     SOME (StructDecl name
       (MAP (translate_arg nominal_index all_import_maps type_ctx) args))) /\

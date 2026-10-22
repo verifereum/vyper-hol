@@ -1593,6 +1593,7 @@ Proof
   >- (first_x_assum (qspecl_then [`acc`,`cenv`] mp_tac) >> simp[])
   >- (first_x_assum (qspecl_then [`acc`,`cenv`] mp_tac) >> simp[])
   >- (first_x_assum (qspecl_then [`acc`,`cenv`] mp_tac) >> simp[])
+  >- (first_x_assum (qspecl_then [`acc`,`cenv`] mp_tac) >> simp[])
 QED
 
 Theorem checked_evaluate_all_constants_preserves_invariants[local]:
