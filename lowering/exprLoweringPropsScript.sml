@@ -3212,6 +3212,83 @@ Proof
   IF_CASES_TAC >> simp[ci_mono_invalid_expr_call]
 QED
 
+(* Paired sequencing interface for the body definitions' explicit lets. *)
+Theorem ci_mono_uncurry[local]:
+  (∀s. ci_mono s (SND (m s))) ∧
+  (∀a s. ci_mono s (SND (k a s))) ⇒
+  ci_mono st (SND (UNCURRY k (m st)))
+Proof
+  strip_tac >>
+  qspecl_then [`m`, `k`, `st`] mp_tac ci_mono_bind >>
+  simp[comp_bind_def, LET_THM, pairTheory.UNCURRY]
+QED
+
+Theorem ci_mono_compile_expr_ifexp[local]:
+  (∀ce ty e s. ci_mono s (SND (f ce ty e s))) ⇒
+  ci_mono st (SND (compile_expr_body f g h cenv ty
+    (IfExp ann cond_e then_e else_e) st))
+Proof
+  strip_tac >> simp[compile_expr_body_def, LET_THM] >>
+  rpt (irule ci_mono_uncurry >> reverse conj_tac
+       >- simp[ci_mono_lower_value_cfn, ci_mono_fresh_var,
+               ci_mono_fresh_label, ci_mono_emit_inst, ci_mono_new_block]
+       >> rpt gen_tac >> BETA_TAC) >>
+  IF_CASES_TAC >> simp[ci_mono_refl]
+QED
+
+Theorem ci_mono_compile_expr_structlit[local]:
+  (∀ce ty e s. ci_mono s (SND (f ce ty e s))) ⇒
+  ci_mono st (SND (compile_expr_body f g h cenv ty
+    (StructLit ann name fields) st))
+Proof
+  strip_tac >> simp[compile_expr_body_def, LET_THM] >>
+  irule ci_mono_uncurry >> reverse conj_tac
+  >- simp[ci_mono_compile_alloc_buffer]
+  >> rpt gen_tac >> BETA_TAC >>
+  irule ci_mono_uncurry >> reverse conj_tac
+  >- simp[ci_mono_compile_struct_lit_cfn]
+  >> simp[ci_mono_refl]
+QED
+
+Theorem ci_mono_compile_expr_toplevelname[local]:
+  ci_mono st (SND (compile_expr_body f g h cenv ty
+    (TopLevelName ann nsid) st))
+Proof
+  simp[compile_expr_body_def, LET_THM] >>
+  Cases_on `FLOOKUP cenv.ce_vars (module_var_key nsid)`
+  >- (simp[] >> irule ci_mono_uncurry >> simp[ci_mono_emit_inst, ci_mono_refl])
+  >> rename1 `SOME loc` >> Cases_on `loc` >>
+  simp[ci_mono_refl] >>
+  irule ci_mono_uncurry >> simp[ci_mono_emit_inst, ci_mono_refl]
+QED
+
+Theorem ci_mono_compile_expr_pop[local]:
+  ci_mono st (SND (compile_expr_body f g h cenv ty (Pop ann target) st))
+Proof
+  simp[compile_expr_body_def, LET_THM] >>
+  Cases_on `target` >> simp[] >>
+  irule ci_mono_uncurry >>
+  simp[ci_mono_compile_dynarray_pop, ci_mono_refl]
+QED
+
+Theorem ci_mono_compile_named_modular[local]:
+  (∀ce rt at a bt b mt m s.
+    ci_mono s (SND (compile_addmod_names ce rt at a bt b mt m s))) ∧
+  (∀ce rt at a bt b mt m s.
+    ci_mono s (SND (compile_mulmod_names ce rt at a bt b mt m s))) ∧
+  (∀ce rt at a bt b s.
+    ci_mono s (SND (compile_powmod256_names ce rt at a bt b s)))
+Proof
+  rpt conj_tac >> rpt gen_tac >>
+  simp[compile_addmod_names_def, compile_mulmod_names_def,
+       compile_powmod256_names_def, LET_THM] >>
+  rpt (irule ci_mono_uncurry >> reverse conj_tac
+       >- simp[ci_mono_compile_name_vv, ci_mono_unwrap_value]
+       >> rpt gen_tac >> BETA_TAC) >>
+  simp[ci_mono_as_stack_val, ci_mono_compile_addmod,
+       ci_mono_compile_mulmod, ci_mono_compile_pow_mod256]
+QED
+
 (* Why it holds: only emit (appends to cs_current_insts) and new_block
    (conses onto cs_blocks) write those two fields (compileEnvScript.sml);
    every other operation threads the state through comp_bind. compile_expr
