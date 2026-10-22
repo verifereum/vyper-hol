@@ -183,19 +183,6 @@ Proof
   gvs[]
 QED
 
-Theorem extract_delegate_call_result_accounts_well_typed:
-  accounts_well_typed accounts /\
-  (case result of
-   | INR NONE => accounts_well_typed final_state.rollback.accounts
-   | _ => T) /\
-  extract_delegate_call_result accounts tStorage (result, final_state) =
-    SOME (success,retData,accounts',tStorage',emitted_logs) ==>
-  accounts_well_typed accounts'
-Proof
-  rw[extract_delegate_call_result_def, extract_call_result_def] >>
-  gvs[AllCaseEqs()]
-QED
-
 Theorem run_delegate_call_accounts_well_typed:
   accounts_well_typed accounts /\
   run_delegate_call cx target_addr calldata accounts tStorage =
@@ -203,11 +190,11 @@ Theorem run_delegate_call_accounts_well_typed:
   accounts_well_typed accounts'
 Proof
   rw[run_delegate_call_def] >> gvs[AllCaseEqs()] >>
-  qmatch_asmsub_abbrev_tac `extract_delegate_call_result _ _ outcome = SOME _` >>
+  qmatch_asmsub_abbrev_tac `extract_call_result _ _ outcome = SOME _` >>
   PairCases_on `outcome` >>
   drule ext_call_success_accounts_ok_imp_extract_premise >> strip_tac >>
   fs[] >>
-  drule_all extract_delegate_call_result_accounts_well_typed >> simp[]
+  drule_all extract_call_result_accounts_well_typed >> simp[]
 QED
 
 Theorem run_raw_call_accounts_well_typed:
