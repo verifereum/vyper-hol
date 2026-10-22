@@ -9398,18 +9398,56 @@ QED
 Resume eval_all_type_sound_mutual[Expr_Call_ExtCall_result]:
   rpt gen_tac >> strip_tac >>
   drule extcall_call_evaluation_safe_args >> strip_tac >>
+  rename1 `Call _ (ExtCall _ _ fsig _) _ _` >> PairCases_on `fsig` >>
   qpat_x_assum `well_typed_expr env (Call _ (ExtCall _ _ _ _) _ _)` mp_tac >>
   rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
+  `?ret_tv. evaluate_type env.type_defs fsig2 = SOME ret_tv` by
+    fs[well_formed_type_def, optionTheory.IS_SOME_EXISTS] >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp_tac(srw_ss())[Once evaluate_def, bind_def] >>
   Cases_on `eval_exprs cx es st` >>
   rename1 `eval_exprs cx es st = (args_res,args_st)` >>
-  goalStack.print_tac "PROBE_EXT" >> cheat
+  first_x_assum drule_all >> strip_tac >>
+  Cases_on `args_res` >> gvs[no_type_error_result_def]
+  >- (strip_tac >>
+      `runtime_consistent env cx args_st` by simp[runtime_consistent_def] >>
+      `MAP expr_type es =
+         BaseT AddressT :: fsig1 ++ MAP (ext_call_kw_type fsig2) opts` by fs[] >>
+      drule_all eval_ext_call_result_sound >> simp[no_type_error_result_def]) >>
+  strip_tac >> gvs[]
 QED
 
 Resume eval_all_type_sound_mutual[Expr_Call_Send]:
   rpt gen_tac >> strip_tac >>
-  goalStack.print_tac "PROBE_SEND" >> cheat
+  conj_tac
+  >- (
+    strip_tac >>
+    drule send_call_evaluation_safe_args >> strip_tac >>
+    qpat_x_assum `well_typed_expr env (Call _ (Send _) _ _)` mp_tac >>
+    rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
+    `LENGTH es = if has_gas then 3 else 2` by
+      (qpat_x_assum `MAP expr_type es = _` (mp_tac o Q.AP_TERM `LENGTH`) >>
+       rw[]) >>
+    qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+    asm_simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
+                           type_check_def, assert_def, return_def] >>
+    Cases_on `eval_exprs cx es st` >>
+    rename1 `eval_exprs cx es st = (args_res,args_st)` >>
+    qpat_x_assum `!s'' x t. type_check _ "Send args" s'' = (INL x,t) ==> _`
+      mp_tac >>
+    asm_simp_tac (srw_ss()) [type_check_def, assert_def] >>
+    disch_then (qspecl_then [`env`, `st`, `args_res`, `args_st`] mp_tac) >>
+    simp[] >> strip_tac >>
+    Cases_on `args_res` >> gvs[no_type_error_result_def]
+    >- (strip_tac >>
+        `runtime_consistent env cx args_st` by simp[runtime_consistent_def] >>
+        `MAP expr_type es = [BaseT AddressT; BaseT (UintT 256)] ++
+           (if has_gas then [BaseT (UintT 256)] else [])` by fs[] >>
+        drule_all eval_send_result_sound >> simp[no_type_error_result_def]) >>
+    strip_tac >> gvs[]) >>
+  rpt strip_tac >>
+  qpat_x_assum `type_place_expr _ _ = SOME _` mp_tac >>
+  simp[Once well_typed_expr_def]
 QED
 
 Resume eval_all_type_sound_mutual[Expr_Call_RawCallTarget]:
