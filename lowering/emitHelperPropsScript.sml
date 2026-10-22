@@ -29,7 +29,7 @@
 
 Theory emitHelperProps
 Ancestors
-  exprLoweringProps emitHelper compileEnv
+  exprLoweringProps localPtrsProps emitHelper compileEnv
   venomExecSemantics venomState venomInst
   instIdxIndep vfmState freshLabelStringProps ASCIInumbers
   list pred_set arithmetic
@@ -549,17 +549,8 @@ Theorem emitted_insts_seq2 = emitted_insts_append;
 
 (* ===== state_rel preservation ===== *)
 
-(* state_rel doesn't depend on vs_vars — only memory, accounts, contexts, etc.
-   So update_var preserves state_rel unconditionally. *)
-Theorem state_rel_update_var:
-  ∀ cenv cx es ss name w.
-    state_rel cenv cx es ss ⇒
-    state_rel cenv cx es (update_var name w ss)
-Proof
-  rw[state_rel_def, update_var_def, vars_rel_def, storage_rel_def,
-     transient_rel_def, immutables_rel_def, logs_rel_def, call_ctx_rel_def,
-     contract_storage_def, contract_transient_def]
-QED
+(* update_var keeps state_rel unless it overwrites a live local's pointer. *)
+Theorem state_rel_update_var = state_rel_update_var_local;
 
 (* ===== Fresh variable invariant ===== *)
 (* fresh_vars_wrt is defined in compileEnvScript.sml *)
