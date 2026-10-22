@@ -3161,6 +3161,13 @@ rpt strip_tac >> first_assum irule)
   irule ci_mono_lower_value_cfn >> simp[]
 QED
 
+(* Why it holds: only emit (appends to cs_current_insts) and new_block
+   (conses onto cs_blocks) write those two fields (compileEnvScript.sml);
+   every other operation threads the state through comp_bind. compile_expr
+   reaches its children only through expr/builtin/type_child_callback,
+   which either recurse on a strictly smaller argument or fall back to
+   invalid_expr_call (a single emit). The ci_mono_*_cfn lemmas above take
+   ci_mono of an arbitrary callback as a hypothesis. *)
 Theorem compile_expr_ci_mono[local]:
   (∀ cenv ty e st. ci_mono st (SND (compile_expr cenv ty e st))) ∧
   (∀ cenv ret_ty ty bi args st.
