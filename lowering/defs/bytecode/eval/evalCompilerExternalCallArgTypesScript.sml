@@ -27,3 +27,19 @@ Theorem e36_arg_bytes_literal_matches_python_oracle:
 Proof
   CONV_TAC (LAND_CONV (K (#evaluation e36_arg_bytes_literal))) >> EVAL_TAC
 QED
+
+val e26_arg_str_smaller = memoryStoreWitnessLib.evaluate fixture_root "e26_arg_str_smaller"
+Theorem e26_arg_str_smaller_matches_python_oracle:
+  ^(#term e26_arg_str_smaller) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "e26_arg_str_smaller")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation e26_arg_str_smaller))) >> EVAL_TAC
+QED
+
+val e27_arg_dyn_smaller = memoryStoreWitnessLib.evaluate fixture_root "e27_arg_dyn_smaller"
+Theorem e27_arg_dyn_smaller_matches_python_oracle:
+  ^(#term e27_arg_dyn_smaller) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "e27_arg_dyn_smaller")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation e27_arg_dyn_smaller))) >> EVAL_TAC
+QED

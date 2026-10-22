@@ -19,7 +19,7 @@ list and on the main module alone.
 
 The oracle is Vyper `0.5.0a4+cd74ce4f+commit.cd74ce4f`, pinned by `VYPER_PIN`.
 It was built with experimental codegen, no optimization, the Prague EVM version,
-and bytecode metadata disabled. The 23 retained JSON/bytecode fixtures in
+and bytecode metadata disabled. The 27 retained JSON/bytecode fixtures in
 `lowering/defs/bytecode/external-calls/oracle` and their dependency provenance
 reproduce byte for byte with `prepare --corpus external-calls --check`. The
 diagnostic probes used holbuild 0.11.4 with the stock checker and EVAL libraries
@@ -114,6 +114,22 @@ above also has one there.
 | `e45_default_ret_ifexp` | a conditional-expression default | MATCH (291 B) |
 | `s01_send` | `send` without `gas=` | MATCH (118 B) |
 | `s02_send_gas` | `send(r, msg.value, gas=2300)` | MATCH (107 B) |
+
+## Argument types
+
+These sources pass a positional argument whose type is narrower than the
+declared parameter type (#553, a06-06). Vyper lays the argument buffer out
+with the types of the lowered argument values, so the calldata length follows
+the call site; the type checker admits a bytestring or dynamic array with a
+smaller bound (`arg_type_fits`). All match the pinned Vyper bytecode exactly,
+with checked theorems in `evalCompilerExternalCallArgTypes`.
+
+| Source | What it covers | After |
+|---|---|---|
+| `e25_arg_strlit_short` | `"abc"` for a `String[40]` parameter | MATCH (376 B) |
+| `e26_arg_str_smaller` | a `String[5]` argument for a `String[40]` parameter | MATCH (364 B) |
+| `e27_arg_dyn_smaller` | a `DynArray[uint256, 2]` argument for a `DynArray[uint256, 8]` parameter | MATCH (346 B) |
+| `e36_arg_bytes_literal` | `b"\x01\x02"` for a `Bytes[40]` parameter | MATCH (376 B) |
 
 To reproduce, generate the oracle with the pinned Python environment, then run
 `probe` in the worktree being tested:
