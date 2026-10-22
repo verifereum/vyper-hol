@@ -1784,12 +1784,22 @@ QED
 Theorem ci_mono_compile_literal_vv[local]:
   ∀ ty l sa. ci_mono sa (SND (compile_literal_vv ty l sa))
 Proof
-  rpt gen_tac >> Cases_on `l` >>
-  rewrite_tac[exprLoweringTheory.compile_literal_vv_def, LET_THM] >> BETA_TAC >>
-  BasicProvers.every_case_tac >>
+  rpt gen_tac >> Cases_on `l`
+  >~ [`BoolL b`] >- (Cases_on `b` >>
+      simp[exprLoweringTheory.compile_literal_vv_def, ci_mono_comp_return])
+  >~ [`IntL n`] >- simp[exprLoweringTheory.compile_literal_vv_def, ci_mono_comp_return]
+  >~ [`DecimalL n`] >- simp[exprLoweringTheory.compile_literal_vv_def, ci_mono_comp_return]
+  >~ [`StringL s`] >- (simp[exprLoweringTheory.compile_literal_vv_def] >>
+      irule ci_mono_bind >>
+      simp[ci_mono_comp_return, ci_mono_compile_bytelike_literal])
+  >> Cases_on `ty` >>
+  simp[exprLoweringTheory.compile_literal_vv_def, ci_mono_comp_return] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >>
   simp[ci_mono_comp_return] >>
-  TRY (ho_match_mp_tac ci_mono_bind >> simp[ci_mono_comp_return, ci_mono_compile_bytelike_literal] >> NO_TAC) >>
-  Cases_on `b` >> simp[exprLoweringTheory.compile_literal_vv_def, ci_mono_comp_return]
+  rename1 `BytesT bd` >> Cases_on `bd` >>
+  simp[ci_mono_comp_return] >>
+  irule ci_mono_bind >>
+  simp[ci_mono_comp_return, ci_mono_compile_bytelike_literal]
 QED
 
 Theorem ci_mono_compile_name_vv[local]:
@@ -3163,6 +3173,8 @@ rpt strip_tac >> first_assum irule)
   irule ci_mono_trans >> irule_at (Pos last) ci_mono_lower_value_cfn >> (conj_tac >- simp[]) >>
   irule ci_mono_lower_value_cfn >> simp[]
 QED
+
+val _ = print_thm compile_expr_ind;
 
 (* Guarded callbacks preserve monotonicity even on invalid child calls. *)
 Theorem ci_mono_invalid_expr_call[local]:
