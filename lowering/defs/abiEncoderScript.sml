@@ -103,6 +103,19 @@ Definition needs_clamp_def:
   needs_clamp BoolClamp = T
 End
 
+(* Recursive validation classification. Static aggregates can use a bulk copy
+   only when every recursively contained member needs no clamp. Dynamicness is
+   checked separately by the caller. *)
+Definition dec_info_needs_clamp_def:
+  dec_info_needs_clamp (DecPrimWord c) = needs_clamp c ∧
+  dec_info_needs_clamp (DecBytestring n) = T ∧
+  dec_info_needs_clamp (DecDynArray ei a m d c) = T ∧
+  dec_info_needs_clamp (DecComplex d elems) = dec_infos_need_clamp elems ∧
+  dec_infos_need_clamp [] = F ∧
+  dec_infos_need_clamp ((ei,a,m)::rest) =
+    (dec_info_needs_clamp ei ∨ dec_infos_need_clamp rest)
+End
+
 (* ===== Element Pointer Navigation ===== *)
 (* Python _get_element_ptr always materializes the member pointer with ADD,
    including the first member at offset zero. *)

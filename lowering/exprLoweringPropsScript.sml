@@ -27,6 +27,48 @@ Ancestors
 Libs
   pairLib BasicProvers
 
+(* Recursive clamp-classification boundary probes. *)
+Theorem dec_info_needs_clamp_nested_static:
+  ~dec_info_needs_clamp
+    (DecComplex F [(DecComplex F [(DecPrimWord NoClamp,32,32);
+                                  (DecPrimWord NoClamp,32,32)],64,64)])
+Proof
+  simp[abiEncoderTheory.dec_info_needs_clamp_def, abiEncoderTheory.needs_clamp_def]
+QED
+
+Theorem dec_info_needs_clamp_nested_uint8:
+  dec_info_needs_clamp
+    (DecComplex F [(DecComplex F [(DecPrimWord NoClamp,32,32);
+                                  (DecPrimWord (IntClamp 8 F),32,32)],64,64)])
+Proof
+  simp[abiEncoderTheory.dec_info_needs_clamp_def, abiEncoderTheory.needs_clamp_def]
+QED
+
+Theorem type_to_abi_dec_info_flag_256:
+  cenv.ce_flag_n_members (nsid_to_string nsid) = 256 ==>
+  type_to_abi_dec_info sfields cenv (FlagT nsid) = DecPrimWord NoClamp /\
+  ~dec_info_needs_clamp (type_to_abi_dec_info sfields cenv (FlagT nsid))
+Proof
+  simp[type_to_abi_dec_info_def, abiEncoderTheory.dec_info_needs_clamp_def, abiEncoderTheory.needs_clamp_def]
+QED
+
+Theorem type_to_abi_dec_info_flag_255:
+  cenv.ce_flag_n_members (nsid_to_string nsid) = 255 ==>
+  type_to_abi_dec_info sfields cenv (FlagT nsid) = DecPrimWord (IntClamp 255 F) /\
+  dec_info_needs_clamp (type_to_abi_dec_info sfields cenv (FlagT nsid))
+Proof
+  simp[type_to_abi_dec_info_def, abiEncoderTheory.dec_info_needs_clamp_def, abiEncoderTheory.needs_clamp_def]
+QED
+
+(* These probes are kernel-closed independently of the legacy correctness
+   admissions below. Check that property whenever this theory is rebuilt. *)
+val _ = List.app (fn th =>
+  if List.all (fn s => s = "DISK_THM")
+       (fst (Tag.dest_tag (Thm.tag th))) then ()
+  else raise Fail "clamp classifier probe has oracle dependencies")
+  [dec_info_needs_clamp_nested_static, dec_info_needs_clamp_nested_uint8,
+   type_to_abi_dec_info_flag_256, type_to_abi_dec_info_flag_255];
+
 (* ===== Instruction Sequence Execution ===== *)
 
 (* Run a list of instructions sequentially via step_inst_base.
