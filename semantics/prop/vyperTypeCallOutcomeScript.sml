@@ -216,7 +216,7 @@ Proof
     [return_def, no_type_error_result_def, expr_result_typed_def,
      expr_runtime_typed_def, expr_type_def, toplevel_value_typed_def,
      evaluate_type_def, value_has_type_def, is_HashMapRef_def]) >>
-  disch_then (qspecl_then [`extra`,`es`] mp_tac) >>
+  disch_then (mp_tac o SPEC_ALL) >>
   simp[runtime_consistent_def, no_type_error_result_def,
        expr_result_typed_def, expr_runtime_typed_def, expr_type_def]
 QED

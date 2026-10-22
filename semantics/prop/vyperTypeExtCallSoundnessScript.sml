@@ -1507,7 +1507,15 @@ Theorem ext_call_operands_typed:
       (MAP (ext_call_kw_type ret_type) opts) kw_tvs /\
     LIST_REL value_has_type kw_tvs (DROP (LENGTH arg_types) rest)
 Proof
-  cheat
+  rw[exprs_runtime_typed_def] >>
+  drule LIST_REL_evaluate_expr_types >> simp[] >>
+  simp[listTheory.LIST_REL_CONS1, listTheory.LIST_REL_SPLIT1] >> strip_tac >>
+  gvs[listTheory.LIST_REL_CONS1, listTheory.LIST_REL_SPLIT1, evaluate_type_def] >>
+  drule_all value_has_type_Address_dest >> strip_tac >>
+  imp_res_tac listTheory.LIST_REL_LENGTH >>
+  simp[rich_listTheory.TAKE_APPEND, listTheory.DROP_APPEND,
+       values_have_types_LIST_REL_extcall] >>
+  fs[listTheory.LENGTH_MAP] >> metis_tac[]
 QED
 
 (* A keyword argument has the type its kind gives it. *)
@@ -1520,7 +1528,55 @@ Theorem ext_call_kwarg_typed:
     ?tv. evaluate_type tenv (ext_call_kw_type ret_type k) = SOME tv /\
          value_has_type tv v
 Proof
-  cheat
+  Induct >> simp[ext_call_kwarg_def] >>
+  rpt gen_tac >> Cases_on `kvs` >> simp[ext_call_kwarg_def] >>
+  rw[listTheory.LIST_REL_CONS1] >> gvs[] >>
+  metis_tac[]
+QED
+
+Theorem extcall_value_result_typed[local]:
+  evaluate_type env.type_defs ret_type = SOME ret_tv /\ value_has_type ret_tv v ==>
+  !stat skc fsig opts es drv.
+    expr_result_typed env (Call ret_type (ExtCall stat skc fsig opts) es drv) (Value v)
+Proof
+  simp[expr_result_typed_def, expr_runtime_typed_def, expr_type_def,
+       toplevel_value_typed_def, is_HashMapRef_def]
+QED
+
+Theorem extcall_decode_return_INL_typed[local]:
+  runtime_consistent env cx st /\
+  evaluate_type env.type_defs ret_type = SOME ret_tv /\
+  evaluate_abi_decode_return env.type_defs ret_type bs = INL v ==>
+  !stat skc fsig opts es drv.
+    expr_result_typed env (Call ret_type (ExtCall stat skc fsig opts) es drv) (Value v)
+Proof
+  rpt strip_tac >>
+  mp_tac (extcall_decode_return_sound |> Q.INST [`res` |-> `INL (Value v)`, `st'` |-> `st`]) >>
+  asm_simp_tac (srw_ss()) [bind_def, lift_sum_runtime_def, return_def]
+QED
+
+Theorem adopt_call_outcome_INR[local]:
+  (adopt_call_outcome rq co s = (INR e,s')) <=> F
+Proof
+  rw[vyperCallOutcomeTheory.adopt_call_outcome_def] >> pairarg_tac >> gvs[return_def]
+QED
+
+Theorem run_ext_call_update_runtime_consistent[local]:
+  runtime_consistent env cx s /\
+  run_ext_call caller callee calldata value_opt s.accounts s.tStorage txp =
+    SOME result ==>
+  runtime_consistent env cx
+    (s with <|logs := s.logs ++ SND (SND (SND (SND result)));
+              accounts := FST (SND (SND result));
+              tStorage := FST (SND (SND (SND result)))|>)
+Proof
+  PairCases_on `result` >> rw[] >>
+  `accounts_well_typed result2` by
+    metis_tac[run_ext_call_accounts_well_typed, runtime_consistent_def] >>
+  `runtime_consistent env cx (s with <|accounts := result2; tStorage := result3|>)`
+    by metis_tac[update_accounts_transient_runtime_consistent] >>
+  drule runtime_consistent_logs_append >>
+  disch_then (qspec_then `result4` mp_tac) >> simp[]
 QED
 
 Theorem eval_ext_call_result_sound:
@@ -1540,7 +1596,54 @@ Theorem eval_ext_call_result_sound:
          es drv) tv
   | INR _ => T
 Proof
-  cheat
+  strip_tac >>
+  drule_all ext_call_operands_typed >> strip_tac >> gvs[] >>
+  `get_tenv cx = env.type_defs` by metis_tac[runtime_consistent_get_tenv] >>
+  drule_all build_ext_calldata_typed >>
+  disch_then (qspec_then `func_name` strip_assume_tac) >>
+  `!v. ext_call_kwarg EKValue opts (DROP (LENGTH arg_types) rest) = SOME v ==>
+       ?n. dest_NumV v = SOME n` by (
+    rpt strip_tac >> drule_all ext_call_kwarg_typed >>
+    simp[ext_call_kw_type_def, evaluate_type_def] >>
+    metis_tac[value_has_type_Uint256_dest]) >>
+  `!v. ext_call_kwarg EKDefault opts (DROP (LENGTH arg_types) rest) = SOME v ==>
+       value_has_type ret_tv v` by (
+    rpt strip_tac >> drule_all ext_call_kwarg_typed >>
+    simp[ext_call_kw_type_def] >> strip_tac >> gvs[]) >>
+  qpat_x_assum `eval_ext_call _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[eval_ext_call_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, check_def, lift_option_type_def, lift_option_def,
+       lift_sum_runtime_def, get_accounts_def, get_transient_storage_def,
+       update_accounts_def, update_transient_def, append_logs_def,
+       return_def, raise_def,
+       COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  gvs[pairTheory.UNCURRY_RATOR, pairTheory.UNCURRY_EQ, combinTheory.C_THM,
+      combinTheory.o_THM, AllCaseEqs(), COND_RATOR, bind_def, return_def,
+      raise_def, adopt_call_outcome_INR] >>
+  TRY (qpat_x_assum `take_call_outcome _ _ _ _ = (INR _,_)` (fn th =>
+         assume_tac th >> assume_tac (MATCH_MP vyperCallOutcomeTheory.take_call_outcome_error th))) >>
+  TRY (drule_all take_adopt_call_outcome_runtime_consistent >> strip_tac) >>
+  TRY (drule_all take_call_outcome_runtime_consistent >> strip_tac) >>
+  TRY (drule_all run_ext_call_update_runtime_consistent >> strip_tac) >>
+  imp_res_tac extcall_value_result_typed >>
+  imp_res_tac extcall_decode_return_INL_typed >>
+  gvs[runtime_consistent_def, no_type_error_result_def]
+QED
+
+Theorem send_gas_args_runtime_typed_dest:
+  exprs_runtime_typed env es vs /\
+  MAP expr_type es =
+    [BaseT AddressT; BaseT (UintT 256)] ++
+    (if has_gas then [BaseT (UintT 256)] else []) ==>
+  ?to_v amount_v gas_vs toAddr amount.
+    vs = to_v :: amount_v :: gas_vs /\
+    LENGTH gas_vs = (if has_gas then 1 else 0) /\
+    dest_AddressV to_v = SOME toAddr /\ dest_NumV amount_v = SOME amount
+Proof
+  Cases_on `has_gas` >> rw[exprs_runtime_typed_def] >>
+  gvs[listTheory.MAP_EQ_CONS, listTheory.LIST_REL_CONS1, evaluate_type_def] >>
+  metis_tac[value_has_type_Uint256_dest, value_has_type_Address_dest]
 QED
 
 Theorem eval_send_result_sound:
@@ -1557,26 +1660,13 @@ Theorem eval_send_result_sound:
   | INR _ => T
 Proof
   strip_tac >>
-  `?to_v amount_v gas_vs. vs = to_v :: amount_v :: gas_vs /\
-     LENGTH gas_vs = (if has_gas then 1 else 0) /\
-     (?toAddr. dest_AddressV to_v = SOME toAddr) /\
-     (?amount. dest_NumV amount_v = SOME amount)` by
-    (gvs[exprs_runtime_typed_def] >>
-     Cases_on `es` >> gvs[] >> Cases_on `t` >> gvs[] >>
-     Cases_on `vs` >> gvs[] >> Cases_on `t` >> gvs[] >>
-     gvs[evaluate_type_def] >>
-     imp_res_tac listTheory.LIST_REL_LENGTH >>
-     rename1 `value_has_type (BaseTV AddressT) v_addr` >>
-     rename1 `value_has_type (BaseTV (UintT 256)) v_amt` >>
-     Cases_on `v_addr` >> gvs[value_has_type_def, dest_AddressV_def] >>
-     Cases_on `v_amt` >> gvs[value_has_type_def, dest_NumV_def] >>
-     Cases_on `has_gas` >> gvs[] >>
-     rename1 `0 <= i` >> `~(i < 0:int)` by intLib.ARITH_TAC >> simp[]) >>
+  drule_all send_gas_args_runtime_typed_dest >> strip_tac >>
   gvs[] >>
   qpat_x_assum `eval_send _ _ _ _ = _` mp_tac >>
-  simp[eval_send_def, bind_def, ignore_bind_def, type_check_def, assert_def,
-       return_def, lift_option_type_def] >>
-  Cases_on `st.outcomes` >> simp[] >> strip_tac
+  asm_simp_tac (srw_ss()) [eval_send_def, bind_def, ignore_bind_def,
+    type_check_def, assert_def, return_def, lift_option_type_def] >>
+  Cases_on `st.outcomes` >>
+  asm_simp_tac (srw_ss()) [bind_def, ignore_bind_def, return_def] >> strip_tac
   >- (drule_all (concrete_send_type_sound |>
         SRULE [bind_def, ignore_bind_def, return_def]) >> simp[]) >>
   drule_all (Send_outcome_type_sound |>
