@@ -28,7 +28,7 @@
 
 Theory emitHelperProps
 Ancestors
-  exprLoweringProps emitHelper compileEnv
+  exprLoweringProps localPtrsProps emitHelper compileEnv
   venomExecSemantics venomState venomInst
   instIdxIndep vfmState freshLabelStringProps ASCIInumbers
   list pred_set arithmetic
