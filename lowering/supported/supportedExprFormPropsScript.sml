@@ -182,7 +182,13 @@ Theorem supported_builtin_exclusion_coverage:
      Acc Balance; BlockHash; BlobHash; ECRecover; ECAdd; ECMul] /\
   ~supported_builtin_form [] (BaseT (UintT 256)) (Env Sender) [expr_test_uint] /\
   ~supported_builtin_form [] (BaseT (UintT 256)) ECRecover
-    [expr_test_uint; expr_test_uint; expr_test_uint]
+    [expr_test_uint; expr_test_uint; expr_test_uint] /\
+  supported_builtin_form [] (BaseT (StringT 78)) (Uint2Str 78) [expr_test_uint] /\
+  ~supported_builtin_form [] (BaseT (StringT 78)) (Uint2Str 78) [expr_test_int] /\
+  ~supported_builtin_form [] (BaseT (StringT 78)) (Uint2Str 78) [] /\
+  supported_builtin_form [] (BaseT (BytesT (Dynamic 4))) (CalldataSlice 4)
+    [expr_test_uint] /\
+  ~supported_builtin_form [] (BaseT (BytesT (Dynamic 4))) (CalldataSlice 4) []
 Proof
   EVAL_TAC
 QED

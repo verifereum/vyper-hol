@@ -16,3 +16,4 @@ Ancestors
   evalCompilerExternalCalls
   evalCompilerNameCollisions
   evalCompilerSliceBuffers
+  evalCompilerPhiPointers
