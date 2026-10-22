@@ -4,6 +4,8 @@
  * TOP-LEVEL:
  *   run_inst_seq             — run instruction sequence on Venom state
  *   emitted_insts            — extract new instructions from compile state
+ *   stmt_state_rel           — state_rel with the Venom-side facts a fragment
+ *                              keeps (fresh variables, alloca_inv)
  *   compile_expr_correct     — main expression lowering correctness
  *   compile_literal_vv_correct  — word literal case
  *   compile_name_correct     — variable lookup case
@@ -101,6 +103,18 @@ Definition well_annotated_def:
           type_to_int_bound (expr_type e1) = SOME u) ∧
      well_annotated e1 ∧ well_annotated e2) ∧
   well_annotated _ = T
+End
+
+(* state_rel at a point of the code compiled from st, with the Venom-side
+   facts a statement fragment needs and keeps:
+   - fresh_vars_wrt: the compiler variables fresh at st are unbound, so a
+     temporary of the fragment is no live local's pointer;
+   - alloca_inv: the recorded allocations are disjoint and below the
+     frontier, so a re-executed ALLOCA (a loop body, a branch) returns a
+     region no other live local holds. *)
+Definition stmt_state_rel_def:
+  stmt_state_rel func cenv cx (st:compile_state) vs ss ⇔
+    state_rel func cenv cx vs ss ∧ fresh_vars_wrt st ss ∧ alloca_inv ss
 End
 
 (* The expression lemmas relate states with stmt_state_rel func, where func
@@ -370,6 +384,24 @@ QED
    It was also false for a non-word annotation ann: compile_name_vv tags the
    pointer with ann, and unwrap_value loads only if is_word_type ann, else it
    returns the pointer; eval_expr ignores ann.  Fix: added is_word_type ann. *)
+(* A well-typed word value held in memory is the word at its base. *)
+Theorem word_val_in_memory_mem_word_at[local]:
+  ∀bt v off mem.
+    val_in_memory (BaseTV bt) v off mem ∧ value_has_type (BaseTV bt) v ∧
+    is_word_type (BaseT bt) ⇒
+    mem_word_at off mem = typed_val_to_w256 (BaseTV bt) v
+Proof
+  rpt strip_tac >> Cases_on `v` >> Cases_on `bt` >>
+  gvs[value_has_type_def, is_word_type_def]
+  >~ [`BytesT bd`]
+  >- (Cases_on `bd` >>
+      gvs[value_has_type_def, is_word_type_def,
+          valueEncodingPropsTheory.val_in_memory_fixed_bytes])
+  >~ [`BaseTV AddressT`]
+  >- gvs[valueEncodingPropsTheory.val_in_memory_address] >>
+  gvs[val_in_memory_def, typed_val_to_w256_def]
+QED
+
 Theorem compile_name_correct:
   ∀ func cenv cx ty ann id es ss st op st' v es' p size entry.
     state_rel func cenv cx es ss ∧
@@ -389,7 +421,31 @@ Theorem compile_name_correct:
       es' = es ∧
       same_blocks st st'
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `es' = es` by
+    (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+     simp[Once evaluate_def, bind_def, get_scopes_def, return_def,
+          lift_option_def, lift_option_type_def] >>
+     Cases_on `lookup_scopes_val id es.scopes` >> simp[return_def, raise_def]) >>
+  qpat_x_assum `lower_value _ _ _ _ _ = _` mp_tac >>
+  simp[lower_value_def, compile_expr_def, expr_type_def, compile_name_vv_def,
+       unwrap_value_def, contextTheory.mk_ptr_def,
+       contextTheory.compile_ptr_load_def, comp_bind_def,
+       comp_return_def] >>
+  strip_tac >>
+  drule emit_op_extends >> drule emitted_insts_emit_op_local >>
+  rpt strip_tac >> gvs[] >>
+  `∃w. lookup_var p ss = SOME w ∧
+       val_in_memory (BaseTV bt) entry.value (w2n w) ss.vs_memory` by
+    (fs[state_rel_def, local_ptrs_rel_def] >> first_x_assum drule_all >>
+     strip_tac >> qexists_tac `w` >> gvs[]) >>
+  `eval_operand (Var p) ss = SOME w` by simp[eval_operand_def] >>
+  drule step_MLOAD_local >> strip_tac >>
+  simp[run_inst_seq_def, eval_operand_def, lookup_var_def, update_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  `mload (w2n w) ss = mem_word_at (w2n w) ss.vs_memory` by
+    simp[mload_def, mem_word_at_def] >>
+  simp[] >> irule word_val_in_memory_mem_word_at >> simp[]
 QED
 
 (* --- BinOp (safe arithmetic) --- *)

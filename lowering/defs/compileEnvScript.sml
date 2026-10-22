@@ -973,18 +973,6 @@ Definition state_rel_def:
      vs.requests = ss.vs_requests)
 End
 
-(* state_rel at a point of the code compiled from st, with the Venom-side
-   facts a statement fragment needs and keeps:
-   - fresh_vars_wrt: the compiler variables fresh at st are unbound, so a
-     temporary of the fragment is no live local's pointer;
-   - alloca_inv: the recorded allocations are disjoint and below the
-     frontier, so a re-executed ALLOCA (a loop body, a branch) returns a
-     region no other live local holds. *)
-Definition stmt_state_rel_def:
-  stmt_state_rel func cenv cx (st:compile_state) vs ss ⇔
-    state_rel func cenv cx vs ss ∧ fresh_vars_wrt st ss ∧ alloca_inv ss
-End
-
 (* ===== Result Relation ===== *)
 
 (* Maps Vyper evaluation results to Venom exec_result.
