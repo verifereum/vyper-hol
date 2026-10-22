@@ -700,3 +700,50 @@ val () = List.app (assert_some o check_constants)
    [tdecl b32 "K" keccak_a,
     tdecl ``BaseT BoolT`` "E"
       ``Builtin (BaseT BoolT) (Bop Eq) [^(tname b32 "K"); ^(tname b32 "K")]``]]
+
+(* Event declaration regressions: indexed aggregates and duplicate event names
+   are rejected; field-name duplication and four indexed fields remain legal. *)
+Theorem event_declaration_regressions:
+  check_contract F [] 0w
+    [(NONE,[EventDecl "E" [(("a",ArrayT (BaseT (UintT 256)) (Fixed 2)),T)]])] = NONE /\
+  check_contract F [] 0w
+    [(NONE,[EventDecl "E" [(("a",BaseT (UintT 256)),F)];
+            EventDecl "E" [(("b",BaseT (UintT 256)),T)]])] = NONE /\
+  IS_SOME (check_contract F [] 0w
+    [(NONE,[EventDecl "E" [(("a",BaseT (UintT 256)),T);
+                          (("b",BaseT (UintT 256)),T);
+                          (("c",BaseT (UintT 256)),T);
+                          (("d",BaseT (UintT 256)),T)]])]) /\
+  IS_SOME (check_contract F [] 0w
+    [(NONE,[EventDecl "E" [(("a",BaseT (UintT 256)),F);
+                          (("a",BaseT BoolT),F)]])]) /\
+  IS_SOME (check_contract F [] 0w
+    [(NONE,[FlagDecl "F" ["A";"B"];
+            EventDecl "E" [(("a",FlagT (NONE,"F")),T);
+                          (("b",BaseT AddressT),T)]])])
+Proof
+  EVAL_TAC >> simp[finite_mapTheory.FLOOKUP_FUNION, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+val event_decl_rejections =
+  [``([(NONE,[EventDecl "E" [(("a",ArrayT (BaseT (UintT 256)) (Fixed 2)),T)]])]
+      : (num option # toplevel list) list)``,
+   ``([(NONE,[EventDecl "E" []; EventDecl "E" []])]
+      : (num option # toplevel list) list)``];
+val () = List.app (fn mods =>
+  let val th = vyperCheckContractLib.check_contract_conv
+        ``check_contract F ^empty_layouts ^zero_address ^mods``
+  in if aconv (rhs (concl th)) ``NONE : contract_type_artifact option`` then ()
+     else raise Fail "event declaration should be rejected"
+  end) event_decl_rejections;
+
+(* The event checker interface must remain kernel-closed. *)
+val () = List.app (fn th =>
+  let val (oracles, _) = Tag.dest_tag (Thm.tag th)
+  in if List.all (fn s => s = "DISK_THM") oracles then ()
+     else raise Fail "event checker theorem has oracle dependencies"
+  end)
+  [check_contract_event_fields, module_event_key_MEM,
+   module_event_keys_unique, contract_keys_module_distinct,
+   contract_namespaces_ok_event_decl_unique, check_contract_event_decl_unique,
+   event_declaration_regressions];

@@ -8483,10 +8483,12 @@ Proof
   rewrite_tac[sum_case_def] >> strip_tac >>
   `nr ==> cx.nonreentrant_slot <> NONE` by (
     `get_module_code cx src_id_opt = SOME ts` by
-      metis_tac[lift_option_type_INL_eq] >>
+      (qpat_assum `lift_option_type (get_module_code cx src_id_opt) _ _ = (INL ts,_)`
+         mp_tac >> simp[lift_option_type_INL_eq]) >>
     `lookup_callable_function cx.in_deploy fn ts =
        SOME (fm,nr,args,dflts,ret,fn_body)` by
-      metis_tac[lift_option_type_INL_eq] >>
+      (qpat_assum `lift_option_type (lookup_callable_function cx.in_deploy fn ts) _ _ = _`
+         mp_tac >> simp[lift_option_type_INL_eq]) >>
     drule_all callable_body_typing_from_env_consistent >> simp[]) >>
   qspecl_then [`env`, `cx`, `nr`, `fm = View \/ fm = Pure`,
                `dflt_st`, `INR y`, `lock_st`] mp_tac intcall_lock_attempt_sound_frame >>

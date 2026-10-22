@@ -53,6 +53,8 @@ val checker_defs =
    toplevel_vtype_keys_toplevel_def,
    flag_member_keys_toplevel_def,
    type_def_keys_toplevel_def,
+   event_keys_toplevel_def,
+   event_indexable_type_def,
    contract_call_graph_acyclic_def,
    rank_lt_def,
    edges_respect_rank_def,

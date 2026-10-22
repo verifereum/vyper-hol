@@ -14,7 +14,7 @@ Theory vyperTypeContract
 Ancestors
   list rich_list arithmetic finite_map option pair
   vyperAST vyperValue vyperMisc vyperContext vyperState vyperInterpreter
-  vyperTypeSystem vyperTypeCallGraph
+  vyperTypeSystem vyperTypeCallGraph vyperEvent
 Libs
   wordsLib
 
@@ -145,6 +145,11 @@ Definition type_def_keys_toplevel_def:
   type_def_keys_toplevel _ _ = []
 End
 
+Definition event_keys_toplevel_def:
+  event_keys_toplevel src (EventDecl id fields) = [(src,id)] /\
+  event_keys_toplevel _ _ = []
+End
+
 Definition contract_keys_def:
   contract_keys f mods = FLAT (MAP (\(src,tls). FLAT (MAP (f src) tls)) mods)
 End
@@ -155,7 +160,8 @@ Definition contract_namespaces_ok_def:
     ALL_DISTINCT (contract_keys (fn_sig_keys_toplevel in_deploy) mods) /\
     ALL_DISTINCT (contract_keys toplevel_vtype_keys_toplevel mods) /\
     ALL_DISTINCT (contract_keys flag_member_keys_toplevel mods) /\
-    ALL_DISTINCT (contract_keys type_def_keys_toplevel mods)
+    ALL_DISTINCT (contract_keys type_def_keys_toplevel mods) /\
+    ALL_DISTINCT (contract_keys event_keys_toplevel mods)
 End
 
 Definition params_ok_def:
@@ -471,6 +477,12 @@ Termination
   simp[value_type_size_def]
 End
 
+Definition event_indexable_type_def:
+  event_indexable_type (BaseT _) = T /\
+  event_indexable_type (FlagT _) = T /\
+  event_indexable_type _ = F
+End
+
 Definition check_toplevel_decl_def:
   check_toplevel_decl layouts addr mods art src tl =
     let tenv = type_env_all_modules mods in
@@ -498,7 +510,8 @@ Definition check_toplevel_decl_def:
         EVERY (\(fn,args,ret,mut).
           params_ok tenv args /\ well_formed_type tenv ret) funcs
     | EventDecl id fields =>
-        EVERY (\((_,ty),indexed). assignable_type tenv ty) fields
+        EVERY (\((_,ty),indexed). assignable_type tenv ty /\
+                                  (indexed ==> event_indexable_type ty)) fields
     | FunctionDecl vis _ _ _ _ args dflts ret _ =>
         params_ok tenv args /\ well_formed_type tenv ret /\
         (* Vyper: "Constructor may not use default arguments" *)
@@ -570,4 +583,70 @@ Proof
      (build_contract_type_artifact in_deploy mods) src (StructDecl id fields)`
     by metis_tac[] >>
   gvs[check_toplevel_decl_def]
+QED
+
+Theorem check_contract_event_fields:
+  check_contract in_deploy layouts addr mods = SOME art /\
+  MEM (src,tls) mods /\ MEM (EventDecl id fields) tls ==>
+  EVERY (\((_,ty),indexed).
+    assignable_type (type_env_all_modules mods) ty /\
+    (indexed ==> event_indexable_type ty)) fields
+Proof
+  strip_tac >> gvs[check_contract_def] >>
+  `check_module in_deploy layouts addr mods
+     (build_contract_type_artifact in_deploy mods) (src,tls)`
+    by fs[EVERY_MEM] >>
+  fs[check_module_def, EVERY_MEM] >>
+  `check_toplevel_decl layouts addr mods
+     (build_contract_type_artifact in_deploy mods) src (EventDecl id fields)`
+    by metis_tac[] >>
+  gvs[check_toplevel_decl_def] >> fs[EVERY_MEM]
+QED
+
+Theorem module_event_key_MEM:
+  MEM (EventDecl name fields) tls ==>
+  MEM (src,name) (FLAT (MAP (event_keys_toplevel src) tls))
+Proof
+  rw[MEM_FLAT, MEM_MAP] >>
+  qexists `event_keys_toplevel src (EventDecl name fields)` >>
+  simp[event_keys_toplevel_def] >>
+  qexists `EventDecl name fields` >> simp[event_keys_toplevel_def]
+QED
+
+Theorem module_event_keys_unique:
+  ALL_DISTINCT (FLAT (MAP (event_keys_toplevel src) tls)) ==>
+  event_decl_unique name tls
+Proof
+  Induct_on `tls` >- simp[event_decl_unique_def] >>
+  gen_tac >> Cases_on `h` >>
+  simp[event_keys_toplevel_def, event_decl_unique_def] >>
+  rpt strip_tac >> gvs[] >>
+  metis_tac[module_event_key_MEM, event_decl_unique_def]
+QED
+
+Theorem contract_keys_module_distinct:
+  ALL_DISTINCT (contract_keys f mods) /\ MEM (src,tls) mods ==>
+  ALL_DISTINCT (FLAT (MAP (f src) tls))
+Proof
+  Induct_on `mods` >- simp[] >>
+  Cases_on `h` >>
+  fs[contract_keys_def] >>
+  simp[ALL_DISTINCT_APPEND] >> metis_tac[]
+QED
+
+Theorem contract_namespaces_ok_event_decl_unique:
+  contract_namespaces_ok in_deploy mods /\ MEM (src,tls) mods ==>
+  event_decl_unique name tls
+Proof
+  rw[contract_namespaces_ok_def] >>
+  irule module_event_keys_unique >>
+  metis_tac[contract_keys_module_distinct]
+QED
+
+Theorem check_contract_event_decl_unique:
+  check_contract in_deploy layouts addr mods = SOME art /\
+  MEM (src,tls) mods ==> event_decl_unique name tls
+Proof
+  rw[check_contract_def] >>
+  metis_tac[contract_namespaces_ok_event_decl_unique]
 QED
