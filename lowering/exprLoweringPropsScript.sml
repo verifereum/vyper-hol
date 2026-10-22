@@ -3174,8 +3174,6 @@ rpt strip_tac >> first_assum irule)
   irule ci_mono_lower_value_cfn >> simp[]
 QED
 
-val _ = print_thm compile_expr_ind;
-
 (* Guarded callbacks preserve monotonicity even on invalid child calls. *)
 Theorem ci_mono_invalid_expr_call[local]:
   ci_mono st (SND (invalid_expr_call ty st))
