@@ -156,6 +156,24 @@ Definition checked_external_call_inputs_ready_def:
             (type_env_all_modules mods) cx am params dflts tx.args
 End
 
+(* Stateful defaults reuse the sequential expression-list soundness interface. *)
+Theorem eval_external_defaults_success_typed:
+  well_typed_exprs env es /\
+  env_consistent env cx (st with scopes := [FEMPTY]) /\
+  state_well_typed (st with scopes := [FEMPTY]) /\
+  context_well_typed cx /\ accounts_well_typed st.accounts /\
+  functions_well_typed cx /\
+  call_evaluation_safe cx (int_calls_exprs es) /\
+  eval_external_defaults cx es st = (INL vs, rt) ==>
+  exprs_runtime_typed env es vs
+Proof
+  rpt strip_tac >>
+  gvs[eval_external_defaults_run] >>
+  Cases_on `eval_exprs cx es (st with scopes := [FEMPTY])` >> gvs[] >>
+  `accounts_well_typed (st with scopes := [FEMPTY]).accounts` by simp[] >>
+  drule_all (cj 9 eval_all_type_sound_mutual) >> simp[]
+QED
+
 (* Successful evaluation of a well-typed default list returns values of the
  * defaults' expression types.  Each default is evaluated from the same entry
  * machine state by evaluate_defaults. *)

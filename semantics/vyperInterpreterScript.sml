@@ -1885,17 +1885,6 @@ Proof
   strip_tac >> gvs[]
 QED
 
-Definition evaluate_defaults_def:
-  evaluate_defaults cx am [] = SOME [] ∧
-  evaluate_defaults cx am (e::es) =
-    (case FST $ eval_expr cx e (initial_state am [FEMPTY]) of
-     | INL (Value v) =>
-         (case evaluate_defaults cx am es of
-          | SOME vs => SOME (v :: vs)
-          | NONE => NONE)
-     | _ => NONE)
-End
-
 Definition call_external_function_def:
   call_external_function orc am cx nr mut ts all_mods args dflts vals body ret =
   let all_tenv = type_env_all_modules all_mods in
@@ -1906,17 +1895,11 @@ Definition call_external_function_def:
     (INR $ Error (RuntimeError "call args length"), am, [])
   else
   let needed_dflts = DROP (LENGTH dflts - n_missing) dflts in
-  case evaluate_defaults cx am needed_dflts of
-  | NONE => (INR $ Error (RuntimeError "call evaluate_defaults"), am, [])
-  | SOME dflt_vs =>
-  case bind_arguments all_tenv args (vals ++ dflt_vs)
-  of NONE => (INR $ Error (RuntimeError "call bind_arguments"), am, [])
-   | SOME env =>
   (case (if cx.in_deploy then evaluate_all_constants cx am cx.txn.target all_mods
          else SOME am)
    of NONE => (INR $ Error (RuntimeError "call constants_env"), am, [])
     | SOME am_c =>
-   let st = initial_state am_c [env] with <| outcomes := orc; requests := [] |> in
+   let st = initial_state am_c [FEMPTY] with <| outcomes := orc; requests := [] |> in
    let srcs = am_c.sources in
    let exps = am_c.exports in
    let layouts = am_c.layouts in
@@ -1932,7 +1915,15 @@ Definition call_external_function_def:
      | SOME slot => release_nonreentrant_lock cx.txn.target slot
      else return () in
    let (res, am_out, rqs) =
-     (case do lock_action; send_call_value mut cx; eval_stmts cx body od st
+     (case do
+        send_call_value mut cx;
+        dflt_vs <- eval_external_defaults cx needed_dflts;
+        (case bind_arguments all_tenv args (vals ++ dflt_vs) of
+         | NONE => raise (Error (RuntimeError "call bind_arguments"))
+         | SOME env => do
+             set_scopes [env]; lock_action; eval_stmts cx body
+           od)
+      od st
       of
        | (INL (), st) =>
            (case unlock_action st of
