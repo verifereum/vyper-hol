@@ -2146,10 +2146,8 @@ Definition compile_attribute_def:
        let base_op = vv_operand base_vv in
        let base_loc = (case vv_location base_vv of
                          SOME l => l | NONE => LocMemory) in
-       let struct_name = (case base_e of
-                            Name _ id => (case cenv.ce_var_type id of
-                                            SOME (StructT sn) => nsid_to_string sn
-                                          | _ => "")
+       let struct_name = (case expr_type base_e of
+                            StructT sn => nsid_to_string sn
                           | _ => "") in
        let is_storage_loc = (case base_loc of
                                LocStorage => T
