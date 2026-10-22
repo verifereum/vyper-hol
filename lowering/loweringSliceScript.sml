@@ -7,7 +7,11 @@
  * local_ptrs_reserved.  The sub-fragments (a right-hand side, a condition,
  * branch bodies) enter as hypotheses of the same shape, stated at the
  * source state where they run, so the lemmas compose with each other and
- * with the general statement and expression induction.
+ * with the general statement and expression induction.  The exception is
+ * compile_annassign_word_frag: it also needs vs_alloca_next below 2 ** 256
+ * at its start, which stmt_state_rel does not carry (see the note on
+ * stmt_state_rel in stmtLoweringProps), so it does not yet chain after
+ * another declaration or sit inside an If body.
  *
  * TOP-LEVEL:
  *   expr_frag               — an expression's fragment, in the form the
@@ -80,8 +84,6 @@ Proof
   irule local_ptrs_rel_pop_scope >> qexists_tac `sc` >> gvs[]
 QED
 
-(* state_rel reads the Venom state only through the locals' memory and
-   the fields below. *)
 (* state_rel reads the Venom state only through the locals' memory and
    the fields below. *)
 Theorem state_rel_frame:
@@ -273,7 +275,10 @@ QED
    its end related at the source state after e, with the operand holding
    e's value, and keeps the variables handed out before it and the
    allocations made before it.  This is compile_expr_correct's conclusion
-   as a frag_exec, which frag_exec_run_inst_seq gives from it. *)
+   as a frag_exec; getting it from compile_expr_correct through
+   frag_exec_run_inst_seq also needs that a run_inst_seq without INVOKE
+   keeps the existing allocations, which compile_expr_correct does not
+   state. *)
 Definition expr_frag_def:
   expr_frag ctx func cenv cx ty e es R <=>
     !sa sb op v es' s0.
