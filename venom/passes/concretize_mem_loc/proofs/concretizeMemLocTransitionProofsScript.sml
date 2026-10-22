@@ -363,6 +363,18 @@ Proof
   rpt strip_tac >> gvs[apply_concretize_layout_metadata_transition]
 QED
 
+Theorem apply_context_concretize_layout_metadata_transition[local]:
+  fn_identity_metadata_eq (apply_context_concretize_layout ctx layout fn) fn /\
+  fn_fmp_convention_eq (apply_context_concretize_layout ctx layout fn) fn /\
+  (apply_context_concretize_layout ctx layout fn).fn_forced_alloc_positions = FEMPTY /\
+  (apply_context_concretize_layout ctx layout fn).fn_eom = SOME layout.cl_eom
+Proof
+  simp[apply_context_concretize_layout_def, apply_concretize_layout_def,
+       concretize_function_with_positions_def, clear_nops_function_def,
+       function_map_transform_def, fn_identity_metadata_eq_def,
+       fn_fmp_convention_eq_def]
+QED
+
 Theorem concretize_function_fuel_in_context_metadata_transition:
   concretize_function_fuel_in_context fuel ctx reserved fn = SOME fn' ==>
   fn_identity_metadata_eq fn' fn /\
@@ -373,11 +385,12 @@ Proof
   Cases_on `fn_has_static_layout fn`
   >- (rpt strip_tac >> gvs[fn_identity_metadata_eq_def,
                             fn_fmp_convention_eq_def]) >>
-  Cases_on `if fn_needs_liveness_allocation fn then
+  Cases_on `if fn_needs_liveness_allocation fn \/
+               imported_mems_used ctx fn <> [] then
               compute_function_layout_fuel_in_context fuel ctx reserved fn
             else compute_function_layout_eval reserved fn`
   >- gvs[] >>
-  rpt strip_tac >> gvs[apply_concretize_layout_metadata_transition]
+  rpt strip_tac >> gvs[apply_context_concretize_layout_metadata_transition]
 QED
 
 Theorem concretize_function_eval_metadata_transition:
@@ -414,11 +427,12 @@ Proof
   simp[concretize_function_fuel_in_context_def] >>
   Cases_on `fn_has_static_layout fn`
   >- (rpt strip_tac >> gvs[fn_has_static_layout_def]) >>
-  Cases_on `if fn_needs_liveness_allocation fn then
+  Cases_on `if fn_needs_liveness_allocation fn \/
+               imported_mems_used ctx fn <> [] then
               compute_function_layout_fuel_in_context fuel ctx reserved fn
             else compute_function_layout_eval reserved fn`
   >- gvs[] >>
-  rpt strip_tac >> gvs[apply_concretize_layout_metadata_transition]
+  rpt strip_tac >> gvs[apply_context_concretize_layout_metadata_transition]
 QED
 
 Theorem concretize_function_eval_sets_eom:
@@ -734,8 +748,8 @@ Theorem concretize_function_fuel_in_context_invoke_targets:
   concretize_function_fuel_in_context fuel ctx reserved fn = SOME fn' ==>
   MAP FST (fcg_scan_function fn') = MAP FST (fcg_scan_function fn)
 Proof
-  simp[concretize_function_fuel_in_context_def, apply_concretize_layout_def,
-       AllCaseEqs()] >>
+  simp[concretize_function_fuel_in_context_def, apply_context_concretize_layout_def,
+       apply_concretize_layout_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
   simp[fcg_scan_function_def, fn_insts_def] >>
   rewrite_tac[GSYM fn_insts_def, GSYM fcg_scan_function_def] >>
@@ -752,4 +766,41 @@ Proof
   simp[fcg_scan_function_def, fn_insts_def] >>
   rewrite_tac[GSYM fn_insts_def, GSYM fcg_scan_function_def] >>
   simp[concretize_function_with_positions_invoke_targets]
+QED
+
+(* Context occupancy can overlap, but the local certificate and every recorded
+   endpoint still pass the same checked word-bound interface. *)
+Theorem compute_function_layout_fuel_in_context_certificate:
+  compute_function_layout_fuel_in_context fuel ctx reserved fn = SOME layout ==>
+  static_fn_positions_wf reserved layout.cl_positions fn /\
+  layout.cl_eom < dimword (:256)
+Proof
+  simp[compute_function_layout_fuel_in_context_def,
+       mk_concretize_layout_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  conj_tac
+  >- (drule_all complete_alloc_positions_with_imports_success >> simp[]) >>
+  irule allocation_eom_fold_lt_dimword >>
+  goal_assum (drule_at Any) >>
+  drule global_reserved_end_lt_dimword >> simp[]
+QED
+
+Theorem mk_concretize_layout_interval_bound[local]:
+  mk_concretize_layout occupied positions fn = SOME layout /\
+  MEM (p,sz) occupied ==> p + sz <= layout.cl_eom
+Proof
+  simp[mk_concretize_layout_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  drule global_reserved_end_success >> strip_tac >>
+  drule allocation_eom_fold_acc_bound >> strip_tac >>
+  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem compute_function_layout_fuel_in_context_import_bound:
+  compute_function_layout_fuel_in_context fuel ctx reserved fn = SOME layout /\
+  MEM (a,p,sz) (imported_mems_used ctx fn) ==>
+  p + sz <= layout.cl_eom
+Proof
+  simp[compute_function_layout_fuel_in_context_def, AllCaseEqs()] >> strip_tac >>
+  irule mk_concretize_layout_interval_bound >>
+  goal_assum (drule_at Any) >> simp[MEM_MAP] >>
+  disj2_tac >> qexists `(a,p,sz)` >> simp[]
 QED

@@ -853,61 +853,16 @@ Definition imported_liveset_info_def:
       | SOME live => [(a,live,p,s)]) imports)
 End
 
-(* Convert allocation-keyed result to variable-keyed alloc_map *)
-(* An INVOKE keeps every static allocation of its callee live.  Once a callee
-   has been concretized, [fn_eom] is the compact frame occupied by that set;
-   reserving [0,eom) at an invoke is therefore the executable counterpart of
-   Python's persistent allocator state. *)
-Definition call_frame_at_addr_def:
-  call_frame_at_addr ctx fn (lbl,idx) =
-    case lookup_block lbl fn.fn_blocks of
-      NONE => []
-    | SOME bb =>
-        if idx < LENGTH bb.bb_instructions then
-          let inst = EL idx bb.bb_instructions in
-          if inst.inst_opcode = INVOKE then
-            case inst.inst_operands of
-              Label callee :: _ =>
-                (case lookup_function callee ctx.ctx_functions of
-                   SOME callee_fn =>
-                     (case callee_fn.fn_eom of
-                        SOME eom => if eom = 0 then [] else [((0:num),eom)]
-                      | NONE => [])
-                 | NONE => [])
-            | _ => []
-          else []
-        else []
-End
-
-Definition call_frame_reservations_def:
-  call_frame_reservations ctx fn live_insts =
-    FLAT (MAP (call_frame_at_addr ctx fn) live_insts)
-End
-
-Definition allocate_with_livesets_in_context_def:
-  allocate_with_livesets_in_context ctx fn global_reserved already [] result =
-    result /\
-  allocate_with_livesets_in_context ctx fn global_reserved already
-    ((alloc, live_insts, sz) :: rest) result =
-    let reserved = global_reserved ++ call_frame_reservations ctx fn live_insts ++
-      MAP (\(_, _, pos, asz). (pos, asz))
-        (FILTER (\(_, other_live, _, _).
-           sinter inst_addr_to other_live live_insts <> []) already) in
-    let (pos, _) = allocate_one reserved sz in
-    allocate_with_livesets_in_context ctx fn global_reserved
-      (already ++ [(alloc, live_insts, pos, sz)])
-      rest (result |+ (alloc, pos))
-End
+(* Context allocation uses imported fixed intervals at their own livesets,
+   rather than reserving an entire callee frame only at the INVOKE. *)
 
 Definition compute_alloc_map_fuel_in_context_def:
   compute_alloc_map_fuel_in_context fuel ctx fn bpr cfg
                          (pre_allocated : (allocation, num) fmap)
                          (global_reserved : (num # num) list) =
     let alloca_sz = get_alloca_size fn in
-    let alloca_sz_opt = \a. let sz = alloca_sz a in
-                            if sz = 0 then NONE else SOME sz in
-    let ls = mem_liveness_analyze_fuel fuel bpr (K ([] : allocation list))
-               alloca_sz_opt ([] : allocation list) cfg fn in
+    let imports = imported_mems_used ctx fn in
+    let ls = context_mem_livesets fuel ctx fn bpr cfg in
     let items = alloc_liveset_items fn ls in
     let pre_allocated_dom = FDOM pre_allocated in
     let already = FILTER (\(alloc, _). alloc IN pre_allocated_dom) items in
@@ -919,7 +874,8 @@ Definition compute_alloc_map_fuel_in_context_def:
       (alloc, live, pos, alloca_sz alloc)) already in
     let sorted_info = MAP (\(alloc, live).
       (alloc, live, alloca_sz alloc)) sorted in
-    allocate_with_livesets_in_context ctx fn global_reserved already_info
+    allocate_with_livesets global_reserved
+      (imported_liveset_info imports ls ++ already_info)
       sorted_info pre_allocated
 End
 
@@ -1064,10 +1020,12 @@ Definition compute_function_layout_fuel_in_context_def:
         let bpr = bp_analyze_fuel fuel cfg fn in
         let candidate =
           compute_alloc_map_fuel_in_context fuel ctx fn bpr cfg seed reserved in
-          case complete_alloc_positions_with_items items
-                 fn.fn_forced_alloc_positions reserved fn candidate of
+        let imported = MAP (\(_,p,s). (p,s)) (imported_mems_used ctx fn) in
+          case complete_alloc_positions_with_imports items
+                 fn.fn_forced_alloc_positions reserved imported fn candidate of
             NONE => NONE
-          | SOME completed => mk_concretize_layout reserved completed fn
+          | SOME completed =>
+              mk_concretize_layout (reserved ++ imported) completed fn
 End
 
 Theorem compute_function_layout_fuel_eq_reference:
@@ -1123,6 +1081,17 @@ Definition apply_concretize_layout_def:
          fn_eom := SOME layout.cl_eom |>
 End
 
+(* Capture source allocation identities before rewriting away the ALLOCAs.
+   Checked layout completion supplies every local position.  Callee metadata
+   already includes transitive imports; diamond sharing is recorded once. *)
+Definition apply_context_concretize_layout_def:
+  apply_context_concretize_layout ctx layout fn =
+    let items = case static_alloca_items fn of NONE => [] | SOME xs => xs in
+    let own = MAP (\(a,s). (a, THE (FLOOKUP layout.cl_positions a), s)) items in
+    (apply_concretize_layout layout fn) with
+      fn_mems_used := unique_mems_used (own ++ imported_mems_used ctx fn)
+End
+
 Definition concretize_memloc_fuel_def:
   concretize_memloc_fuel fn =
     4 * (LENGTH (fn_insts fn) + LENGTH fn.fn_blocks + 1)
@@ -1169,11 +1138,12 @@ Definition concretize_function_fuel_in_context_def:
       if ~fn_has_alloca fn /\ fn.fn_forced_alloc_positions = FEMPTY
       then SOME fn else NONE
     else
-      case (if fn_needs_liveness_allocation fn then
+      case (if fn_needs_liveness_allocation fn \/
+               imported_mems_used ctx fn <> [] then
               compute_function_layout_fuel_in_context fuel ctx reserved fn
             else compute_function_layout_eval reserved fn) of
         NONE => NONE
-      | SOME layout => SOME (apply_concretize_layout layout fn)
+      | SOME layout => SOME (apply_context_concretize_layout ctx layout fn)
 End
 
 Definition concretize_function_eval_def:

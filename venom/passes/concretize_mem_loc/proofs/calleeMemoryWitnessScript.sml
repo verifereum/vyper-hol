@@ -144,3 +144,42 @@ Theorem preserved_import_overlap_Witness:
 Proof
   EVAL_TAC
 QED
+
+(* Production context entry points must not bypass imports for zero/one locals. *)
+Theorem zero_local_context_layout_Witness:
+  OPTION_MAP (\f. (f.fn_eom, f.fn_mems_used))
+    (concretize_function_fuel_in_context 20 witness_ctx [] witness_zero) =
+  SOME (SOME 64, [(Allocation 100,0,32); (Allocation 101,32,32)])
+Proof
+  EVAL_TAC
+QED
+
+Theorem one_local_context_layout_Witness:
+  OPTION_MAP (\layout. (FLOOKUP layout.cl_positions (Allocation 3), layout.cl_eom))
+    (compute_function_layout_fuel_in_context 20 witness_ctx [] witness_one) =
+  SOME (SOME 64,96)
+Proof
+  EVAL_TAC
+QED
+
+Theorem one_local_context_metadata_Witness:
+  OPTION_MAP (\f. (f.fn_eom, f.fn_mems_used))
+    (concretize_function_fuel_in_context 20 witness_ctx [] witness_one) =
+  SOME (SOME 96,
+    [(Allocation 3,64,32); (Allocation 100,0,32); (Allocation 101,32,32)])
+Proof
+  EVAL_TAC
+QED
+
+Theorem dead_local_context_fill_Witness:
+  OPTION_MAP (\f. (f.fn_eom, f.fn_mems_used))
+    (concretize_function_fuel_in_context 20 witness_ctx []
+      (mk_raw_function "caller"
+        [<| bb_label := "entry"; bb_instructions :=
+          [mk_inst 3 ALLOCA [Lit (32w:256 word)] ["unused"];
+           witness_call 5 "leaf"; mk_inst 7 STOP [] []] |>])) =
+  SOME (SOME 96,
+    [(Allocation 3,64,32); (Allocation 100,0,32); (Allocation 101,32,32)])
+Proof
+  EVAL_TAC
+QED
