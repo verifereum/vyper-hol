@@ -2668,6 +2668,16 @@ Proof
   simp[ci_mono_comp_return]
 QED
 
+Theorem ci_mono_ext_call_gas_opt[local]:
+  ∀gas_opt sa s.
+    ci_mono sa s ⇒
+    ci_mono sa
+      (SND (case gas_opt of NONE => emit_op GAS [] s | SOME g => (g, s)))
+Proof
+  Cases >> simp[] >> rpt strip_tac >>
+  irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_op >> fs[]
+QED
+
 Theorem ci_mono_compile_ext_call_kwarg[local]:
   ∀cfn cenv rt k e sa.
     (∀cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
@@ -2913,10 +2923,9 @@ rpt strip_tac >> first_assum irule)
     PairCases_on `p` >> simp[compile_call_def, LET_THM, pairTheory.UNCURRY] >>
     Cases_on `args` >> simp[ci_mono_emit_inst] >>
     rpt IF_CASES_TAC >> gvs[] >>
-    Cases_on `default_ret` >> gvs[] >>
-    rpt IF_CASES_TAC >> gvs[] >>
     Cases_on `t` >> gvs[] >>
     rpt (CHANGED_TAC (
+      (irule ci_mono_ext_call_gas_opt) ORELSE
       (irule ci_mono_trans >>
        irule_at (Pos last) ci_mono_lower_value_cfn >> simp[]) ORELSE
       (irule ci_mono_trans >>
@@ -2947,11 +2956,11 @@ rpt strip_tac >> first_assum irule)
   simp[Once compile_call_def, LET_THM] >>
   Cases_on `args` >> simp[pairTheory.UNCURRY, ci_mono_emit_inst] >>
   Cases_on `t` >> simp[pairTheory.UNCURRY, ci_mono_emit_inst] >>
-  rename1 `_::_::gas_es` >>
   IF_CASES_TAC >> simp[pairTheory.UNCURRY, ci_mono_emit_inst] >>
+  qpat_x_assum `LENGTH _ = _` mp_tac >>
+  rename1 `LENGTH gas_es = if has_gas then _ else _` >> strip_tac >>
   `gas_es = [] \/ ?gas_e. gas_es = [gas_e]` by
-    (Cases_on `gas_es` >> gvs[AllCaseEqs()] >>
-     rename1 `_::rest` >> Cases_on `rest` >> gvs[]) >>
+    (Cases_on `has_gas` >> gvs[listTheory.LENGTH_EQ_NUM_compute]) >>
   pop_assum strip_assume_tac >> gvs[] >>
   irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_void >> irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_op >>
   irule ci_mono_trans >> irule_at (Pos last) ci_mono_lower_value_cfn >> (conj_tac >- simp[]) >>
