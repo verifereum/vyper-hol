@@ -12,6 +12,7 @@
  *   type_bounds      — (lo, hi) word256 bounds for type
  *   struct_field_offset — byte offset of struct field
  *   nsid_to_string   — namespace ID to lookup string
+ *   local_ptrs_rel   — live locals held through pointer variables match memory
  *   compile_state_ok — well-formedness: bound labels disjoint from future fresh labels
  *   label_external   — label not bound and not in future fresh-label co-domain
  *
@@ -19,6 +20,9 @@
  *   fresh_var, fresh_label, emit, new_block — compilation monad ops
  *   fresh_label_output   — canonical shape of compiler-generated labels (@suffix_k)
  *   fresh_vars_wrt       — compiler var counter ahead of existing venom vars
+ *   local_region         — a live local's region through its pointer variable
+ *   local_backed         — what backs a live local's region in the current frame
+ *   not_local_ptr        — a variable is not a live local's pointer
  *   bound_labels         — set of labels bound to blocks in compile state
  *   compiler_labels_future — co-domain of fresh_label for counter values ≥ n
  *)
@@ -651,6 +655,92 @@ Definition vars_rel_def:
       (* entry.type from scope provides correct type for val_in_memory dispatch
          (e.g., AddressT → right-aligned BytesV encoding). *)
       val_in_memory entry.type entry.value offset ss.vs_memory
+End
+
+(* ===== Locals held through allocations ===== *)
+(* After function lowering a local is PtrVar (Var p) sz: the ALLOCA emitted at
+   its declaration binds p to the base of a fresh region (emit_local_alloca,
+   compile_alloc_buffer), so the address depends on vs_allocas and
+   vs_alloca_next at run time.  vars_rel only covers MemLoc entries.
+   Parameters of internal functions are PtrVar (Var p) sz too
+   (materialize_internal_params): a stack-passed one is copied into an ALLOCA
+   of the callee, a memory-passed one is the PARAM output p pointing into the
+   caller's buffer, with no ALLOCA. *)
+
+(* name is a live local held in the region [base, base + sz): it is in scope,
+   and its pointer variable holds base. *)
+Definition local_region_def:
+  local_region cenv scopes (ss:venom_state) name base sz ⇔
+    ∃entry p w.
+      lookup_scopes name scopes = SOME entry ∧
+      FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ∧
+      lookup_var p ss = SOME w ∧ base = w2n w
+End
+
+(* x is not the pointer variable of a live local, so assigning it leaves the
+   locals in place. *)
+Definition not_local_ptr_def:
+  not_local_ptr cenv scopes x ⇔
+    ∀name entry sz.
+      lookup_scopes name scopes = SOME entry ⇒
+      FLOOKUP cenv.ce_vars name ≠ SOME (PtrVar (Var x) sz)
+End
+
+(* What backs a live local's region [base, base + sz) in the current frame
+   of func, the function running, when its pointer variable is p:
+   - the allocation recorded for an ALLOCA of func whose output is p (a
+     declared local or a stack-passed parameter; re-running that ALLOCA
+     returns the same base).  Naming the instruction lets a consumer tell
+     the local's allocation from any other ALLOCA's by instruction id
+     (fn_inst_ids_distinct, alloca_inv), or
+   - a buffer disjoint from every allocation of the frame (a memory-passed
+     parameter: the caller's buffer, below the frontier at the call, while
+     setup_callee starts the callee with vs_allocas = FEMPTY and every
+     allocation of the callee is fresh, at or above that frontier). *)
+Definition local_backed_def:
+  local_backed (func:ir_function) p (ss:venom_state) base sz ⇔
+    (∃inst.
+       MEM inst (fn_insts func) ∧ inst.inst_opcode = ALLOCA ∧
+       inst.inst_outputs = [p] ∧
+       FLOOKUP ss.vs_allocas inst.inst_id = SOME (base, sz)) ∨
+    (∀aid b sz'.
+       FLOOKUP ss.vs_allocas aid = SOME (b, sz') ⇒
+       regions_disjoint base sz b sz')
+End
+
+(* Live locals held through pointer variables match Venom memory.
+   For each local in scope whose entry is PtrVar (Var p) sz:
+   - p holds the base of a region of size sz, backed in func's frame as
+     local_backed says;
+   - the region lies below vs_alloca_next, so a fresh ALLOCA cannot overlap
+     it;
+   - the value fits the region and is well formed (val_wf), which is what
+     lets a write outside the region leave it unchanged;
+   - val_in_memory holds at the base.
+   And the regions of distinct live locals are disjoint, so writing one
+   local leaves the others unchanged.
+   Bump allocation alone gives this for ALLOCA, so it does not depend on the
+   frame layout of internal calls (#545).  It says nothing about vs_fmp:
+   DALLOCA buffers and DRET's packing bump vs_fmp independently of
+   vs_alloca_next, so keeping them off the live locals is left to the
+   consumer (see local_ptrs_rel_above_frontier). *)
+Definition local_ptrs_rel_def:
+  local_ptrs_rel func cenv scopes (ss:venom_state) ⇔
+    (∀name entry p sz.
+       lookup_scopes name scopes = SOME entry ∧
+       FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ⇒
+       ∃w.
+         lookup_var p ss = SOME w ∧
+         local_backed func p ss (w2n w) sz ∧
+         w2n w + sz ≤ ss.vs_alloca_next ∧
+         type_memory_size entry.type ≤ sz ∧
+         val_wf entry.type entry.value ∧
+         val_in_memory entry.type entry.value (w2n w) ss.vs_memory) ∧
+    (∀n1 n2 b1 sz1 b2 sz2.
+       n1 ≠ n2 ∧
+       local_region cenv scopes ss n1 b1 sz1 ∧
+       local_region cenv scopes ss n2 b2 sz2 ⇒
+       regions_disjoint b1 sz1 b2 sz2)
 End
 
 (* Storage is identical between Vyper accounts and Venom state *)
