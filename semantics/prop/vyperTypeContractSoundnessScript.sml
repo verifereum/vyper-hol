@@ -2170,7 +2170,7 @@ Proof
   simp[no_control_exc_def]
 QED
 
-Theorem send_call_value_no_type_error_c53[local]:
+Theorem send_call_value_no_type_error_c53:
   no_type_error_eval (send_call_value mut cx st)
 Proof
   rw[send_call_value_def, bind_def, ignore_bind_def, check_def,
@@ -2274,7 +2274,7 @@ Proof
   simp[no_control_exc_def]
 QED
 
-Theorem call_lock_send_eval_no_loop_control_c53[local]:
+Theorem call_lock_send_eval_no_loop_control_c53:
   stmts_no_control_escape body /\
   (do
      (if nr then
@@ -2298,7 +2298,7 @@ Proof
   gvs[no_control_exc_def]
 QED
 
-Theorem call_lock_action_no_type_error_c53[local]:
+Theorem call_lock_action_no_type_error_c53:
   (nr ==> cx.nonreentrant_slot <> NONE) ==>
   no_type_error_eval
     ((if nr then
@@ -2317,7 +2317,7 @@ Proof
   gvs[AllCaseEqs(), return_def, raise_def]
 QED
 
-Theorem unlock_action_no_control_c53[local]:
+Theorem unlock_action_no_control_c53:
   (if nr /\ mut <> View /\ mut <> Pure then
      case cx.nonreentrant_slot of
        NONE => return ()
@@ -2406,7 +2406,7 @@ QED
 
 
 
-Theorem unlock_action_no_type_error_c53[local]:
+Theorem unlock_action_no_type_error_c53:
 
   no_type_error_eval
     ((if nr /\ mut <> View /\ mut <> Pure then
