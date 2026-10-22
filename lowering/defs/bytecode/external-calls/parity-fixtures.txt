@@ -11,3 +11,11 @@ e22_static_default
 e30_default_ret_tuple
 e37_default_ret_string
 e38_default_ret_local_array
+e40_extcall_gas
+e41_staticcall_gas
+e42_extcall_gas_value_order
+e43_extcall_all_kwargs
+e44_skip_contract_check
+e45_default_ret_ifexp
+s01_send
+s02_send_gas

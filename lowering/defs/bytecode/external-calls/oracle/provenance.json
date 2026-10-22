@@ -33,12 +33,20 @@
     "e34_default_effect_internal.vy": "f99d62460ccfa7efc566a80e842c552392173b3e2b762d745f4376d2de2c4690",
     "e37_default_ret_string.vy": "80dbd0e893f7f3310795155eec11a49b01ecedaf25cc699936a223f260ab7a60",
     "e38_default_ret_local_array.vy": "955a780ee000747e10fd14a9a72eb58b749dfa1137329bf6f7170998ada195a5",
+    "e40_extcall_gas.vy": "4033540b90b110527930a78542b869d8da8ec925011543c36d20f8816dc4ca32",
+    "e41_staticcall_gas.vy": "80d66ebb4e374dc82e93ae4e244b4f1b206ffe99ef6b255c5fc1e5b754d4a1a2",
+    "e42_extcall_gas_value_order.vy": "0c6aca17ccb72dbded582209d5ac57b6b011ecc53b31cde4f3b5b846337b1092",
+    "e43_extcall_all_kwargs.vy": "acd46027a85f3710350d1b8d6afedc33fbde9d9d6bedfd59303a14f2a58f80f1",
+    "e44_skip_contract_check.vy": "09b165a6d4ead0ff073e00230b5035a4b20d0b15f24f9db3bbe3129e5f1a5305",
+    "e45_default_ret_ifexp.vy": "d489338fa9bf9fe6f61831f03dc59ba737bec67502db374eaf577a100b339adf",
     "i01_name_clash_ext.vy": "6e9500aaffa974d9b96837cf306043b9649dc1cb94ffe059f8c575aa9b3fcdda",
     "i02_iface_default_param.vy": "dbb307165ab35f7bff92bd727e408ac8ab92ec9d106e55355c335748a19967b3",
     "i03_two_ifaces_same_name.vy": "387370a5b8bcc322d819561c70d832ec1e79a02b2d240dad74742354878b0c55",
     "i09_iface_ret_iface.vy": "16f5a243083430980922184a09bc1b60b2db57d5deccecf69669e0d384f07849",
     "i13_ext_fn_before_iface.vy": "578c38bc00fd07530247b3dfbd0cbe62cae4f198c7318607b009eaacb1bfaa8a",
-    "i15_iface_ret_iface_direct.vy": "98f8bb3386ddda112ed0e4e1e52f45303f659a3e7efaa46fec9f6cac3aaa51f5"
+    "i15_iface_ret_iface_direct.vy": "98f8bb3386ddda112ed0e4e1e52f45303f659a3e7efaa46fec9f6cac3aaa51f5",
+    "s01_send.vy": "0cda737d9c821a45d3871aaea5c7548edda98413c01c3170906c81806703f3eb",
+    "s02_send_gas.vy": "2fe3d7857cb9f9f1d00bdd7c598ece11b0313a37df3a81b6d81dfb921a00a9b8"
   },
   "outputs": {
     "c03_iface_address_attr.hex": "4678b266ecd9d96d074fee5c82693f054379036a8972b0c178960b4070f0cbf5",
@@ -57,6 +65,18 @@
     "e37_default_ret_string.json": "c6bb1e008771d05f4f5f296a3791c87836ab6ed09ef8b88e6de1e781a83cf34d",
     "e38_default_ret_local_array.hex": "ce1303a847da30a683cf60f96103143dcff757725b9a4f4e55d8356530c80692",
     "e38_default_ret_local_array.json": "1a85eb01d4eb152cbed84ca25f59d4919851e5ce71c270ba111f90b79686a752",
+    "e40_extcall_gas.hex": "01c6ae15d92008d9d735558bf642a9efddac35b6916cfbb808d8fca6c4356306",
+    "e40_extcall_gas.json": "a02d593e1b59a5cada22f2d7f11bfca3c34624d95e02f5aecd04f84ed2c4555f",
+    "e41_staticcall_gas.hex": "728b8adcf99771543ba0702fe2a6eec66cca24cda9152b5f3b2fe3512de87248",
+    "e41_staticcall_gas.json": "6129fa17b35380e0bad8a1b0f3aaae23ad4ec268d13f9f1a634069538331eb19",
+    "e42_extcall_gas_value_order.hex": "ffad7c2ddf8552b495aeda5a4a9add53c40731e96ef12aea99b9361c495b04d3",
+    "e42_extcall_gas_value_order.json": "31e41cfbdea7ea9703877681c1dba22855cf773e879b00a32f62819fb7f9d30b",
+    "e43_extcall_all_kwargs.hex": "dc61c3c4efe26b0d178e7522dcc1d3810ad1d09c6dbd0c7ecdcee644b6760510",
+    "e43_extcall_all_kwargs.json": "4ce0d8d7b81c3eee510418c7cf816286f372dedd6f1f65985d23a5a71ee0efd3",
+    "e44_skip_contract_check.hex": "e9800346ddcbf80871df36bf1818c21accc0d66fc3ef0fac8e692318f029fa51",
+    "e44_skip_contract_check.json": "0b40673a54900f857ae6fdab74520affb971edb662c2bf085624c9474dd6eb92",
+    "e45_default_ret_ifexp.hex": "dd0d2a7b5543ef44c0f3013d64d752ad78c4049a95107ff10032b4d33d6fdfb0",
+    "e45_default_ret_ifexp.json": "2cce9fcd710f2c1d562f1e9394f966464bb43d4839efcbeea96a7aac8be2764f",
     "i02_iface_default_param.hex": "b899fd84a7fe14662ce3a423caf449374d1a841abd1b955a14506eeb1406d80b",
     "i02_iface_default_param.json": "fc2945ae3e2adafb85e0891ca4d8fee548df7e8f8f240b3d591e3a93b598739c",
     "i03_two_ifaces_same_name.hex": "4754598a79182f10cd9c32a9b8103e2fb67c8e313e4a7661bdd2fab87e3530ce",
@@ -66,6 +86,10 @@
     "i13_ext_fn_before_iface.hex": "426782ac2dc649ca1e449c576242cd69fbab053b5293a91f396401a32fa29e2c",
     "i13_ext_fn_before_iface.json": "d0f30225ed01958494eb6fab9b12825d86866a4abc1250f96db5749720d38cad",
     "i15_iface_ret_iface_direct.hex": "d076e9d8b8c7d6312f9586106cac1246c4bc5b8426001c77a81ce76a0a40a882",
-    "i15_iface_ret_iface_direct.json": "e19e0a78e0fa2a3f473bed7fb016a1e1d3e7e11c6f353f3004ca637e30f42924"
+    "i15_iface_ret_iface_direct.json": "e19e0a78e0fa2a3f473bed7fb016a1e1d3e7e11c6f353f3004ca637e30f42924",
+    "s01_send.hex": "53646e2814a7c229fd22376b6e60edb7bcb358573c627448bf6dfc41781082df",
+    "s01_send.json": "fc452f4a10f327874e2957a36435ac8c98a52cd9d5beb45c6a0f21d9d2a08ab3",
+    "s02_send_gas.hex": "c1811e982b99547cbb0aa144d90f85733f5f9a8fca288ea19549ffa98b4a710a",
+    "s02_send_gas.json": "f7cccc87807a08a10e1cd5d79ace2dc71c33ed4aa73dbf67b7f020b725b7ec24"
   }
 }
