@@ -331,32 +331,6 @@ Proof
   simp[]
 QED
 
-(* Concrete sibling of Send_outcome_type_sound. This is the actual live
-   transfer/return tail, with its implementation hidden from evaluator IHs. *)
-Theorem concrete_send_type_sound:
-  runtime_consistent env cx st /\
-  (do transfer_value fromAddr toAddr amount; return (Value NoneV) od) st =
-    (res,st') ==>
-  state_well_typed st' /\ env_consistent env cx st' /\
-  accounts_well_typed st'.accounts /\ no_type_error_result res /\
-  case res of
-  | INL tv => expr_result_typed env (Call NoneT (Send has_gas) es extra) tv
-  | INR _ => T
-Proof
-  simp[bind_def, ignore_bind_def, return_def] >>
-  Cases_on `transfer_value fromAddr toAddr amount st` >>
-  rename1 `transfer_value fromAddr toAddr amount st = (answer,mid)` >>
-  Cases_on `answer` >> simp[] >> rpt gen_tac >> strip_tac >> gvs[] >>
-  `runtime_consistent env cx mid` by
-    (drule transfer_value_runtime_consistent >>
-     disch_then (qspecl_then [`fromAddr`,`toAddr`,`amount`] mp_tac) >> simp[]) >>
-  gvs[runtime_consistent_def, no_type_error_result_def,
-      expr_result_typed_def, expr_runtime_typed_def, expr_type_def,
-      toplevel_value_typed_def, value_has_type_def, evaluate_type_def,
-      is_HashMapRef_def] >>
-  drule concrete_send_error >> rw[]
-QED
-
 Theorem evaluate_abi_decode_return_well_typed:
   !tenv ret_type bs v tv.
     evaluate_abi_decode_return tenv ret_type bs = INL v /\

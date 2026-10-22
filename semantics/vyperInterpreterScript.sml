@@ -751,7 +751,11 @@ val () = cv_auto_trans get_range_limits_def;
 (* Build a transaction record for initial_context via the shared EVM boundary
    helpers in vyperEvmBoundary. *)
 (* Build execution_state for an external call that forwards gas: as EVM
-   CALL does, the callee also gets the stipend when value is sent. *)
+   CALL does, the callee also gets the stipend when value is sent.
+   The callee starts with a fresh access set and with the accounts at the
+   call as its original storage, so it pays cold-access and clean-slot
+   prices where the EVM may charge warm or dirty ones. A call with limited
+   gas can therefore fail here where it completes on chain. *)
 Definition make_ext_call_state_def:
   make_ext_call_state caller callee code calldata value_opt gas
                       accounts tStorage txParams =

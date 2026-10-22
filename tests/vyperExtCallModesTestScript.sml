@@ -189,3 +189,34 @@ Proof
         DIRECT_CALL_SIMP) >>
   CONV_TAC cv_eval
 QED
+
+(* A recipient that needs 381 gas (LOG0) separates the stipend from the
+   forwarded gas: it runs on the stipend alone, which a zero-value call
+   does not get. A gas= above the model's limit forwards that limit. *)
+Definition log_state_def:
+  log_state = empty_state with accounts :=
+    update_account 0x99w
+      (empty_account_state with code := [0x60w; 0w; 0x60w; 0w; 0xA0w; 0w])
+      (update_account 0w (empty_account_state with balance := 10)
+         empty_accounts)
+End
+
+Definition send_value_expr_def:
+  send_value_expr v = Call NoneT (Send F)
+    [Literal (BaseT AddressT) (BytesL (REPLICATE 19 0w ++ [0x99w]));
+     Literal (BaseT (UintT 256)) (IntL v)] NONE
+End
+
+Theorem direct_call_stipend_and_cap:
+  FST (eval_expr empty_evaluation_context (send_value_expr 1) log_state) =
+    INL (Value NoneV) /\
+  FST (eval_expr empty_evaluation_context (send_value_expr 0) log_state) =
+    INR (Error (RuntimeError "send failed")) /\
+  FST (eval_expr empty_evaluation_context
+         (extcall_gas_expr (SOME (2 ** 256 - 1))) log_state) =
+    INL (Value NoneV)
+Proof
+  simp (send_value_expr_def :: extcall_gas_expr_def :: gas_kwarg_def ::
+        log_state_def :: DIRECT_CALL_SIMP) >>
+  CONV_TAC cv_eval
+QED
